@@ -149,6 +149,11 @@ func newExpectedCostFixture(t *testing.T) *expectedCostFixture {
 	unconverted := completedAdoption(t, "buy-eval-unconverted")
 	unconverted.Conversion = domain.ConversionStepReference{}
 	fixture.evaluations.adoptions["buy-eval-unconverted"] = unconverted
+	fixture.evaluations.adoptions["buy-eval-undeclared"] = ports.BuyEvaluationAdoption{
+		Evaluation:  billValue(t, domain.NewBuyEvaluationReference, "buy-eval-undeclared"),
+		Outcome:     ports.BuyEvaluationAmountUndeclared,
+		RuleVersion: billValue(t, domain.NewPurchaseRuleVersionReference, "buy-card/v3"),
+	}
 	return fixture
 }
 
@@ -294,6 +299,7 @@ func TestNonCompletedEvaluationsDoNotBecomeCosts(t *testing.T) {
 		"conflict":    {"buy-eval-conflict", application.EvaluationConflict, application.ExpectedCostUndecidedReasonNone},
 		"not formed":  {"buy-eval-not-formed", application.ExpectedCostUndecided, application.EvaluationNotFormed},
 		"unconverted": {"buy-eval-unconverted", application.ExpectedCostUndecided, application.ConversionStepMissing},
+		"undeclared":  {"buy-eval-undeclared", application.ExpectedCostUndecided, application.EvaluationAmountPrecisionUndeclared},
 		"completed":   {"buy-eval-1", application.ExpectedCostFormed, application.ExpectedCostUndecidedReasonNone},
 	}
 	for name, grade := range grades {
@@ -313,45 +319,61 @@ func TestNonCompletedEvaluationsDoNotBecomeCosts(t *testing.T) {
 		})
 	}
 
-	t.Run("dependency failures are undecided with their reasons", func(t *testing.T) {
+	t.Run("dependency failures are undecided with their reasons and root causes", func(t *testing.T) {
+		viewDown := errors.New("view down")
 		fixture := newExpectedCostFixture(t)
-		fixture.evaluations.err = errors.New("view down")
+		fixture.evaluations.err = viewDown
 		result, err := fixture.handler.Handle(context.Background(), expectedCostCommand(t, "cost-7/v1", "buy-eval-1"))
 		if err != nil {
 			t.Fatalf("handle: %v", err)
 		}
-		if result.Outcome() != application.ExpectedCostUndecided || result.UndecidedReason() != application.EvaluationViewUnavailable {
-			t.Fatalf("outcome = %q reason = %q", result.Outcome(), result.UndecidedReason())
+		if result.Outcome() != application.ExpectedCostUndecided || result.UndecidedReason() != application.EvaluationViewUnavailable ||
+			!errors.Is(result.UndecidedCause(), viewDown) {
+			t.Fatalf("outcome = %q reason = %q cause = %v", result.Outcome(), result.UndecidedReason(), result.UndecidedCause())
 		}
 
+		registryDown := errors.New("registry down")
 		fixture = newExpectedCostFixture(t)
-		fixture.registry.saveErr = errors.New("registry down")
+		fixture.registry.saveErr = registryDown
 		result, err = fixture.handler.Handle(context.Background(), expectedCostCommand(t, "cost-7/v1", "buy-eval-1"))
 		if err != nil {
 			t.Fatalf("handle: %v", err)
 		}
-		if result.Outcome() != application.ExpectedCostUndecided || result.UndecidedReason() != application.ExpectedCostRegistryUnavailable {
-			t.Fatalf("outcome = %q reason = %q", result.Outcome(), result.UndecidedReason())
+		if result.Outcome() != application.ExpectedCostUndecided || result.UndecidedReason() != application.ExpectedCostRegistryUnavailable ||
+			!errors.Is(result.UndecidedCause(), registryDown) {
+			t.Fatalf("outcome = %q reason = %q cause = %v", result.Outcome(), result.UndecidedReason(), result.UndecidedCause())
+		}
+
+		fixture = newExpectedCostFixture(t)
+		result, err = fixture.handler.Handle(context.Background(), expectedCostCommand(t, "cost-7/v1", "buy-eval-unconverted"))
+		if err != nil || !errors.Is(result.UndecidedCause(), domain.ErrConversionStepMissing) {
+			t.Fatalf("换算步骤缺席的根因 = %v err = %v, want 领域哨兵", result.UndecidedCause(), err)
+		}
+		result, err = fixture.handler.Handle(context.Background(), expectedCostCommand(t, "cost-7/v1", "buy-eval-pending"))
+		if err != nil || result.UndecidedCause() != nil {
+			t.Fatalf("评价自己待判断没有错误可交，根因 = %v err = %v", result.UndecidedCause(), err)
 		}
 	})
 
 	t.Run("the undecided reason set is closed", func(t *testing.T) {
 		labels := map[string]struct{}{}
-		for _, reason := range []application.ExpectedCostUndecidedReason{
+		reasons := []application.ExpectedCostUndecidedReason{
 			application.EvaluationViewUnavailable, application.EvaluationPending, application.EvaluationNotFormed,
 			application.ConversionStepMissing, application.ExpectedCostRegistryUnavailable,
-		} {
+			application.EvaluationAmountPrecisionUndeclared, application.BuyEvaluationRequestViewUnavailable,
+		}
+		for _, reason := range reasons {
 			label := reason.String()
 			if label == "" {
 				t.Fatalf("reason %d has no label", reason)
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 5 {
+		if len(labels) != len(reasons) {
 			t.Fatalf("labels collapsed into %d", len(labels))
 		}
 		if application.ExpectedCostUndecidedReason(len(labels)+1).String() != "" {
-			t.Fatal("第六个未决原因带了标签——封闭集合被悄悄放开")
+			t.Fatal("列表之外的未决原因带了标签——封闭集合被悄悄放开")
 		}
 	})
 }

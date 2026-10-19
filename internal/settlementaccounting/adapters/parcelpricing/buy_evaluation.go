@@ -3,8 +3,8 @@
 //
 // 它只翻译不判断：读提供方的评价库，把一份 BUY·SUPPLIER_COST 的 PricingEvaluation 译成 SA 的采用快照。
 // 金额从十进制到最小币单位是**单位换写不是算术**（ADR-0107 Decision 五）：位数取评价取整留痕里合计那一步
-// 的进位单位，换写只在恰好能整除时成立；没声明取整策略的卡（评价带 AMOUNT_PRECISION_UNDECLARED）一律拒，
-// 本包不编任何币种小数位表、不补一次取整。
+// 的进位单位，换写只在恰好能整除时成立；没声明取整策略的卡（评价带 AMOUNT_PRECISION_UNDECLARED）交回金额未声明
+// 那一格、不带金额，本包不编任何币种小数位表、不补一次取整。
 package parcelpricing
 
 import (
@@ -22,9 +22,6 @@ var (
 	// ErrNotABuyEvaluation 表示指名的评价不是 BUY·SUPPLIER_COST 方向：SA 只从采购方向的评价形成预期成本，
 	// 拿一份客户计费评价来是提交矛盾。
 	ErrNotABuyEvaluation = errors.New("settlement accounting parcelpricing adapter: evaluation is not BUY / SUPPLIER_COST")
-	// ErrAmountPrecisionUndeclared 表示评价带 AMOUNT_PRECISION_UNDECLARED：卡没声明金额取整策略，合计是精确十进制，
-	// 本包没有任何依据把它换写成最小币单位——补一次取整就是在评价之外另算一个数。
-	ErrAmountPrecisionUndeclared = errors.New("settlement accounting parcelpricing adapter: the price card declares no amount rounding policy")
 	// ErrUntranslatableAnswer 语义与其他消费方适配器的同名哨兵一致：某一侧交出了词汇表之外的内容。
 	ErrUntranslatableAnswer = errors.New("settlement accounting parcelpricing adapter: untranslatable answer")
 )
@@ -51,7 +48,7 @@ func NewBuyEvaluationAdapter(evaluations EvaluationSource) (*BuyEvaluationAdapte
 }
 
 // LoadBuyEvaluation 按评价引用查一份采用快照。别的租户的评价对本租户不存在（ADR-0003 的隔离）；方向不对拒；
-// 四种非完成结果逐格译、不带金额；已完成的评价金额按取整留痕换写。
+// 回指各格都带；非完成结果与金额未声明逐格译、不带金额；已完成的评价金额按取整留痕换写。
 func (adapter *BuyEvaluationAdapter) LoadBuyEvaluation(
 	ctx context.Context,
 	tenant sadomain.TenantID,
@@ -82,6 +79,13 @@ func (adapter *BuyEvaluationAdapter) LoadBuyEvaluation(
 		Outcome:     outcomeOf(evaluation.Status()),
 		RuleVersion: ruleVersion,
 	}
+	if requested, ok := evaluation.RequestReference(); ok {
+		request, err := sadomain.NewEvaluationRequestID(requested.String())
+		if err != nil {
+			return saports.BuyEvaluationAdoption{}, false, fmt.Errorf("%w: request reference: %v", ErrUntranslatableAnswer, err)
+		}
+		adoption.Request = request
+	}
 	if subject, ok := evaluation.Input().Subject(); ok {
 		adoption.SubjectKind = subject.Kind().String()
 	}
@@ -103,7 +107,8 @@ func (adapter *BuyEvaluationAdapter) LoadBuyEvaluation(
 	}
 	for _, issue := range evaluation.Issues() {
 		if issue.Code() == amountPrecisionUndeclared {
-			return saports.BuyEvaluationAdoption{}, false, fmt.Errorf("%w: evaluation %s", ErrAmountPrecisionUndeclared, reference)
+			adoption.Outcome = saports.BuyEvaluationAmountUndeclared
+			return adoption, true, nil
 		}
 	}
 	steps := evaluation.AmountRounding()

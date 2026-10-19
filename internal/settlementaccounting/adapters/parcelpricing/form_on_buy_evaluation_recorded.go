@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	sainbox "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/inbox"
+	saapplication "go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
 	sadomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	saports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
@@ -16,48 +17,58 @@ var (
 	ErrUntranslatableReference = errors.New(
 		"settlement accounting parcelpricing adapter: untranslatable buy evaluation reference")
 	// ErrEvaluationNotVisible 表示按信封引用在提供方还读不回那份评价。评价与信封在提供方同一事务落库，读不回
-	// 只剩可见性滞后一种成因：续办，重投会改变结果，不当毒丸拒收、也不当「指名了不存在的评价」那种提交矛盾。
-	// 读口自己答不出（库不可用）同格——等的都是提供方那一侧。生产装配把它登进 WithUndecidedSentinels。
+	// 本该只剩可见性滞后：续办，重投会改变结果，不当毒丸拒收、也不当「指名了不存在的评价」那种提交矛盾。读口
+	// 自己答不出（库不可用）同格——等的都是提供方那一侧；依赖的原错误一并包着。生产装配把它登进
+	// WithUndecidedSentinels。BuyEvaluationAdapter.LoadBuyEvaluation 把引用译不成计价侧标识、评价不属本租户也折成
+	// 读不回，这两种重投不自愈，会耗尽失败预算——与 SELL 那一路同一处已知的不精确。
 	ErrEvaluationNotVisible = errors.New(
 		"settlement accounting parcelpricing adapter: buy evaluation is not yet visible")
-	// ErrSourceReferencesUnrecorded 是裁决 (c) 那一格：形成预期成本的命令除评价外还要发生项、费用项目与供应商
-	// 协议的引用（FormSupplierExpectedCostCommand 头注），它们在 SA 请求评价那一步记进评价请求登记册
-	// （票 sa-cc/08），而评价回指评价请求标识是 PP 侧的事（票 11）；两者接上之前，本处理方对「命令齐不齐」
-	// 只能答未决并指名等评价请求记录——不为缺引用发明来源，不反查 TF 登记册（裁决对 (b) 的否决）。
-	// 生产装配同样把它登进 WithUndecidedSentinels：它等的是后继票，不是传输。
-	ErrSourceReferencesUnrecorded = errors.New(
-		"settlement accounting parcelpricing adapter: source references for the expected cost command are not recorded yet")
+	// ErrSupplierCostFormationUndecided 表示形成编排停在自己的依赖上（BUY 请求册、评价读口、预期成本库答不出）：形成
+	// 与否未知，整笔回滚等重投。停在哪个依赖写在错误正文里，依赖的原错误一并包着。生产装配同样把它登进
+	// WithUndecidedSentinels。
+	ErrSupplierCostFormationUndecided = errors.New(
+		"settlement accounting parcelpricing adapter: supplier expected cost formation is undecided")
 )
 
+// RequestedSupplierExpectedCostFormation 是本消费门转交的形成编排外层，生产装配接
+// saapplication.FormRequestedSupplierExpectedCostHandler。
+type RequestedSupplierExpectedCostFormation interface {
+	Handle(
+		ctx context.Context,
+		command saapplication.FormRequestedSupplierExpectedCostCommand,
+	) (saapplication.RequestedSupplierExpectedCostResult, error)
+}
+
 // FormOnBuyEvaluationRecordedAdapter 是 sainbox.BuyEvaluationRecordedConsumer 的真实处理方：按信封引用向提供方
-// 取评价，分辨是不是本消费者的评价，再看形成命令凑不凑得齐。
+// 取评价，分辨是不是本消费者的评价，是的就把采用快照交给形成编排外层，再把它的答案折成入账、未决或错误。
 //
 // 只译不判（票 sa-cc/01 红线）：金额、币种、换算步骤与规则版本整组出自评价，这里一个数字都不碰（ADR-0107）；
-// 评价的每一种结果（saports.BuyEvaluationOutcome）怎么分格是 FormSupplierExpectedCostHandler 的事——命令凑不齐时
-// 到不了它，所以今天这里没有那只编排的依赖：接一个永不被调用的口，与接一个「永远答不在」的来源替身，都是在
-// 生产装配里说假话。08 的登记册读口与 11 的回指接上之后，后继票在这里补「按回指取来源引用 → 命令 → 形成」那一段，
-// 消费者与本适配器的错误分格不变。
+// 评价的每一种结果怎么分格是形成编排的事，这里只按编排的答案决定消费门入不入账。
 type FormOnBuyEvaluationRecordedAdapter struct {
 	evaluations saports.BuyEvaluationView
+	formation   RequestedSupplierExpectedCostFormation
 }
 
 func NewFormOnBuyEvaluationRecordedAdapter(
 	evaluations saports.BuyEvaluationView,
+	formation RequestedSupplierExpectedCostFormation,
 ) (*FormOnBuyEvaluationRecordedAdapter, error) {
 	if evaluations == nil {
 		return nil, fmt.Errorf("settlement accounting parcelpricing adapter: buy evaluation view is nil")
 	}
-	return &FormOnBuyEvaluationRecordedAdapter{evaluations: evaluations}, nil
+	if formation == nil {
+		return nil, fmt.Errorf("settlement accounting parcelpricing adapter: supplier expected cost formation is nil")
+	}
+	return &FormOnBuyEvaluationRecordedAdapter{evaluations: evaluations, formation: formation}, nil
 }
 
 var _ sainbox.RecordedBuyEvaluationHandler = (*FormOnBuyEvaluationRecordedAdapter)(nil)
 
-// HandleRecordedBuyEvaluation 译引用 → 取评价 → 分辨方向 → 核命令。
+// HandleRecordedBuyEvaluation 译引用 → 取评价 → 分辨方向 → 交形成编排 → 折结果。
 //
-// 读口的三种拒绝各走各的格：ErrNotABuyEvaluation 是「不是本消费者的信封」，答 nil 让消费门入账不重投——提供方
-// 对 BUY 与 SELL 发同一种信封，SELL 那一半只能在这里安静地走掉；ErrUntranslatableAnswer 与
-// ErrAmountPrecisionUndeclared 重投不会变好（提供方形状变了 / 价卡没声明取整策略），原样上抛、不译成未决，
-// 装配把它们留在名单之外让失败码落 publish_failed；其余错误是读口答不出，与读不回同归可见性滞后。
+// 入账（答 nil）的各格都是这一封信的定局，重投同一封不会变：不是 BUY·供应商成本的评价（提供方对 BUY 与 SELL 发
+// 同一种信封，SELL 那一半由扇出的另一路接）、评价没有回指、预期成本已采用或同三维已有首版、评价采用不了。
+// ErrUntranslatableAnswer 与编排上抛的错误原样交回，落 publish_failed：提供方形状变了，或两侧说法矛盾，重投不自愈。
 func (adapter *FormOnBuyEvaluationRecordedAdapter) HandleRecordedBuyEvaluation(
 	ctx context.Context,
 	recorded sainbox.RecordedBuyEvaluation,
@@ -71,17 +82,38 @@ func (adapter *FormOnBuyEvaluationRecordedAdapter) HandleRecordedBuyEvaluation(
 		return fmt.Errorf("%w: evaluation: %v", ErrUntranslatableReference, err)
 	}
 
-	_, found, err := adapter.evaluations.LoadBuyEvaluation(ctx, tenant, reference)
+	adoption, found, err := adapter.evaluations.LoadBuyEvaluation(ctx, tenant, reference)
 	switch {
 	case errors.Is(err, ErrNotABuyEvaluation):
 		return nil
-	case errors.Is(err, ErrUntranslatableAnswer), errors.Is(err, ErrAmountPrecisionUndeclared):
+	case errors.Is(err, ErrUntranslatableAnswer):
 		return err
 	case err != nil:
-		return fmt.Errorf("%w: %v", ErrEvaluationNotVisible, err)
+		return fmt.Errorf("%w: evaluation %s: %w", ErrEvaluationNotVisible, reference, err)
 	case !found:
 		return fmt.Errorf("%w: evaluation %s", ErrEvaluationNotVisible, reference)
 	}
 
-	return fmt.Errorf("%w: evaluation %s", ErrSourceReferencesUnrecorded, reference)
+	result, err := adapter.formation.Handle(ctx, saapplication.FormRequestedSupplierExpectedCostCommand{
+		TenantID:   tenant,
+		Evaluation: adoption,
+	})
+	if err != nil {
+		return err
+	}
+	switch result.Outcome() {
+	case saapplication.RequestedSupplierExpectedCostAdopted,
+		saapplication.RequestedSupplierExpectedCostFirstVersionExists,
+		saapplication.RequestedSupplierExpectedCostEvaluationNotAdopted,
+		saapplication.RequestedSupplierExpectedCostNoBuyRequest:
+		return nil
+	case saapplication.RequestedSupplierExpectedCostUndecided:
+		undecided := fmt.Errorf("%w: evaluation %s: %s", ErrSupplierCostFormationUndecided, reference, result.UndecidedReason())
+		if cause := result.UndecidedCause(); cause != nil {
+			return fmt.Errorf("%w: %w", undecided, cause)
+		}
+		return undecided
+	default:
+		return fmt.Errorf("settlement accounting parcelpricing adapter: unexpected supplier expected cost outcome %d", result.Outcome())
+	}
 }

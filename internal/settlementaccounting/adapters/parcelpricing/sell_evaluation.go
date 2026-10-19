@@ -11,8 +11,8 @@ import (
 
 // SellEvaluationAdapter 实现 saports.SellEvaluationView。金额换写与 BUY 读口同一套，方向不同。
 //
-// 与 BUY 读口不同的一处：卡没声明金额取整时不报错，交回 saports.SellEvaluationAmountUndeclared 那一格（理由在那一格的
-// 头注），连同回指与费用代码。
+// 卡没声明金额取整时不报错，交回 saports.SellEvaluationAmountUndeclared 那一格（理由在那一格的头注），连同回指与费用
+// 代码；BUY 读口同此。
 type SellEvaluationAdapter struct {
 	evaluations EvaluationSource
 }

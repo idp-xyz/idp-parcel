@@ -204,11 +204,15 @@ type ExpectedCostView interface {
 	) (domain.SupplierExpectedCost, bool, error)
 }
 
-// BuyEvaluationOutcome 是一份 BUY `PricingEvaluation` 在 SA 眼里的封闭五格：已完成，与提供方
-// 的四种非完成结果——待判断（缺事实/缺汇率序列）、不可计价（价卡明确排除）、冲突、未形成
-// （技术）。四格逐一保留不合并：它们在 UC-SA-002 里各有自己的结束格（待判断 / 计价明确排除
-// 已接收 / 冲突 / 未形成），续办完全不同（补事实 / 不重试 / 等裁决 / 重试），折成一格就答不出
-// 该等谁；折成零金额更是把「算不出」写成「不要钱」（AT-SA-175）。
+// BuyEvaluationOutcome 是一份 BUY `PricingEvaluation` 在 SA 眼里的封闭集合：已完成，提供方的四种非完成
+// 结果——待判断（缺事实/缺汇率序列）、不可计价（价卡明确排除）、冲突、未形成（技术）——以及金额未声明。
+// 各格逐一保留不合并：它们在 UC-SA-002 里各有自己的结束格（待判断 / 计价明确排除已接收 / 冲突 / 未形成），
+// 续办完全不同，折成一格就答不出该等谁；折成零金额更是把「算不出」写成「不要钱」（AT-SA-175）。
+//
+// BuyEvaluationAmountUndeclared 与 SELL 那一侧的同名格同理（见 SellEvaluationOutcome 头注）：评价已完成，可价卡
+// 没声明金额取整（提供方问题项 AMOUNT_PRECISION_UNDECLARED），合计换写不成最小币单位（ADR-0107 决定五）。评价
+// 不可变，重读还是这一格，所以作结果交回、不作读口错误——报错就连回指一起丢了，形成编排答不出它出自哪份请求。
+// 这一格不带金额。
 type BuyEvaluationOutcome uint8
 
 const (
@@ -218,6 +222,7 @@ const (
 	BuyEvaluationUnratable
 	BuyEvaluationConflict
 	BuyEvaluationNotFormed
+	BuyEvaluationAmountUndeclared
 )
 
 func (outcome BuyEvaluationOutcome) String() string {
@@ -232,6 +237,8 @@ func (outcome BuyEvaluationOutcome) String() string {
 		return "CONFLICT"
 	case BuyEvaluationNotFormed:
 		return "NOT_FORMED"
+	case BuyEvaluationAmountUndeclared:
+		return "AMOUNT_PRECISION_UNDECLARED"
 	default:
 		return ""
 	}
@@ -245,9 +252,14 @@ func (outcome BuyEvaluationOutcome) String() string {
 // 计价基准时点（asOf）不在这里：它由评价固定在评价内，SA 以 Evaluation 引用回指，不复制
 // 第二份；发生项、费用项目与供应商协议也不在这里——它们归 TF/PC，随命令进入，与评价一起
 // 形成预期成本。RuleVersion 是评价命中的可执行价卡版本（GLOSSARY「价格规则版本」的 PP 半边）。
+//
+// Request 是评价回指的 BUY 评价请求标识，各格都带；评价没有回指（计价内部或测试路径形成）时是零值。它是不是真
+// 的一份 BUY 请求，由 BUY 评价请求册按标识回答，读口不认前缀、不猜。形成命令缺的发生项、费用项目与供应商协议
+// 引用就从那份请求取。
 type BuyEvaluationAdoption struct {
 	Evaluation         domain.BuyEvaluationReference
 	Outcome            BuyEvaluationOutcome
+	Request            domain.EvaluationRequestID
 	RuleVersion        domain.PurchaseRuleVersionReference
 	OriginalCurrency   domain.CurrencyCode
 	OriginalMinor      int64
@@ -267,10 +279,10 @@ type BuyEvaluationAdoption struct {
 // 缝的形状（mechanism-executor-triage/06 SA-c 裁定）：触发用提供方已发的
 // `parcel-pricing.evaluation.recorded`（指针载荷），内容按引用查回；适配器落在消费侧
 // internal/settlementaccounting/adapters/parcelpricing/（ADR-0025），读提供方的评价库翻译——
-// 方向/目的不是 BUY·SUPPLIER_COST 拒；四种非完成结果逐格译。金额的精度依据是提供方的取整留痕
+// 方向/目的不是 BUY·SUPPLIER_COST 拒；非完成结果逐格译。金额的精度依据是提供方的取整留痕
 // （ADR-0107）：声明了策略的卡，合计已按卡上进位单位取整，进位单位的 scale 就是最小币单位的依据；
-// 没声明的卡评价带 AMOUNT_PRECISION_UNDECLARED，适配器拒——**不得自己补一次取整**（label-channel/13
-// 已裁没有币种小数位表）。
+// 没声明的卡评价带 AMOUNT_PRECISION_UNDECLARED，适配器交回 BuyEvaluationAmountUndeclared、不带金额——
+// **不得自己补一次取整**（label-channel/13 已裁没有币种小数位表）。
 type BuyEvaluationView interface {
 	LoadBuyEvaluation(
 		ctx context.Context,

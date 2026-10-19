@@ -537,26 +537,23 @@ var dutyPaymentVerificationUndecidedSentinels = []error{
 	sacustoms.ErrAdoptionUndecided,
 }
 
-// buyEvaluationRecordedUndecidedSentinels 是 PP 评价已记录信封 → SA 供应商预期成本形成这条线（sa-cc/01，
-// 裁决 (c)「信封到未决」）登记的未决哨兵：
-//   - sapricing.ErrEvaluationNotVisible——信封所指的评价在提供方还读不回（评价与信封同事务落库，读不回只剩
-//     可见性滞后），或读口自己答不出；续办，重投会改变结果。
-//   - sapricing.ErrSourceReferencesUnrecorded——评价取回了，但形成命令还缺发生项 / 费用项目 / 供应商协议的
-//     引用：它们记在评价请求登记册（票 sa-cc/08），而评价回指评价请求标识归 PP 侧（票 11），今天两头没接上。
-//     按「未确认规则保持显式未决」停在这一格：不为缺引用发明来源、不反查 TF 登记册（裁决对 (b) 的否决）、
-//     零写入；恢复动作是等 08 的回指 / 11 与形成路后继票接上——接上之后这一格随之消失。
+// buyEvaluationRecordedUndecidedSentinels 是 PP 评价已记录信封 → SA 供应商预期成本形成这条线（sa-cc/01；
+// 票 demo-chain-gaps/08、ADR-0200）登记的未决哨兵，两枚的恢复动作都是等依赖、重投：
+//   - sapricing.ErrEvaluationNotVisible——信封所指的评价在提供方读不回，或读口自己答不出。读不回里混着两种重投
+//     不自愈的格，见那枚哨兵的头注。
+//   - sapricing.ErrSupplierCostFormationUndecided——BUY 请求册、评价读口或预期成本库答不出：形成与否未知，整笔
+//     回滚等重投。停在哪一个依赖上、它原样答了什么都在错误正文里。
 //
-// 不在名单里的几格，恢复动作各不相同：
-//   - 不是 BUY·SUPPLIER_COST 的评价不是错误——处理方答 nil，消费门入账不重投（做法 2「不处理不报错」）：提供方
-//     对两个方向发同一种信封，SELL 那一半在这里安静地走掉，由扇出的另一路（sellEvaluationRecordedUndecidedSentinels
-//     那一路）接住。
-//   - sapricing.ErrUntranslatableAnswer——提供方交出词汇表之外的内容，形状变了，重投不自愈。
-//   - sapricing.ErrAmountPrecisionUndeclared——价卡没声明金额取整策略（ADR-0107），这份评价按现卡永远采用不了，
-//     要改的是卡、再评价一份新的，不是重投这一封。
-//   - sapricing.ErrUntranslatableReference——引用坏了，编程错误。
+// 不在名单里的：
+//   - 入账定局的各格不是错误，处理方答 nil——不是 BUY·SUPPLIER_COST 的评价（SELL 那一半由扇出的另一路接）、没有
+//     回指的评价、预期成本已采用（含重放）或同三维已有首版、评价采用不了（不可计价、评价冲突、待判断、未形成、跨币种
+//     无换算步骤、卡没声明金额取整）。评价不可变，计价对同一份请求也不再形成第二份评价，重投这一封不会变。
+//   - sapricing.ErrUntranslatableAnswer、sapricing.ErrUntranslatableReference——提供方形状变了或引用坏了，重投不自愈。
+//   - 形成编排上抛的矛盾（回指的请求不在 BUY 请求册上、派生版本上已有另一份内容、刚读到`已完成`的评价形成时却
+//     未受理），落 publish_failed 等人看。
 var buyEvaluationRecordedUndecidedSentinels = []error{
 	sapricing.ErrEvaluationNotVisible,
-	sapricing.ErrSourceReferencesUnrecorded,
+	sapricing.ErrSupplierCostFormationUndecided,
 }
 
 // sellEvaluationRecordedUndecidedSentinels 是 PP 评价已记录信封 → SA 预估客户费用形成这条线（ADR-0190 决定五、六；
@@ -675,9 +672,8 @@ var sellEvaluationRequestSubmittedUndecidedSentinels = []error{
 // ADR-0197）、VE 投影派生 → 客户视图
 // （UC-VE-008 内部半边：账户维经 PS 按包裹反查填上，ADR-0060 三格）、SA 资金事实采用 → CC 入向
 // 登记（sa-cc/03）、CC 付款核对形成 → SA 结算输入采用（sa-cc/09；同一条缝的反方向，各记各的 inbox 账）、
-// PP 评价已记录 → FanOut（先 SA 供应商预期成本形成，sa-cc/01，裁决 (c) 范围只到「命令凑不齐 → 未决」，形成路等
-// 08 的回指 / 11 接上后由后继票补；再 SA 预估客户费用形成，ADR-0190 决定五、六。两路各认一个方向，另一个方向的评价
-// 在各自那一路入账走掉）。
+// PP 评价已记录 → FanOut（先 SA 供应商预期成本形成，sa-cc/01、ADR-0200；再 SA 预估客户费用形成，ADR-0190 决定五、六。
+// 两路各认一个方向，另一个方向的评价在各自那一路入账走掉）。
 // 各类 FanOut 同一 EventType 各投两个独立消费者，顺序一律先 VE 后 PS/NR，避免把投影或
 // 补派生堵在资格墙、终局规则墙或路由证据墙上；SA 发起 SELL 评价那一路排在既有那一路之后，
 // 计费不挡履约与追踪。
@@ -923,7 +919,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 		return nil, fmt.Errorf("parcel-dispatch: duty payment verification undecided translation: %w", err)
 	}
 
-	buyEvaluations, err := formSupplierExpectedCostOnBuyEvaluationConsumer(db, inboxStore)
+	buyEvaluations, err := formSupplierExpectedCostOnBuyEvaluationConsumer(db, inboxStore, clock)
 	if err != nil {
 		return nil, err
 	}
@@ -2780,19 +2776,18 @@ func adoptDutyPaymentVerificationConsumer(
 	return consumer, nil
 }
 
-// formSupplierExpectedCostOnBuyEvaluationConsumer 接 sa-cc/01 那条线：parcel-pricing 记下一份评价后交出的
-// `parcel-pricing.evaluation.recorded` 引用式信封 → SA 消费门 → 按（租户 + 评价标识）经 SA 的消费侧适配器读
-// PP 评价库（mech/06 SA-c 缝，ADR-0025）→ 分辨是不是 BUY·SUPPLIER_COST → 核形成命令齐不齐。跨上下文翻译只在
-// SA 的 `adapters/parcelpricing`；SA application 不 import PP。
+// formSupplierExpectedCostOnBuyEvaluationConsumer 接 sa-cc/01 那条线（票 demo-chain-gaps/08 接上形成路，ADR-0200）：
+// parcel-pricing 记下一份评价后交出的 `parcel-pricing.evaluation.recorded` 引用式信封 → SA 消费门 → 按（租户 + 评价
+// 标识）经 SA 的消费侧适配器读 PP 评价库（mech/06 SA-c 缝，ADR-0025）→ 不是 BUY·SUPPLIER_COST 的放过 → 形成编排外层
+// 按评价回指读回 BUY 评价请求，以请求上的三件来源引用与由请求派生的版本标识调既有的 FormSupplierExpectedCostHandler。
+// 跨上下文翻译只在 SA 的 `adapters/parcelpricing`；SA application 不 import PP。
 //
-// 裁决 (c) 把本票的范围钉在「信封到未决」：命令除评价外还要发生项 / 费用项目 / 供应商协议的引用，它们记在
-// 评价请求登记册（sa-cc/08）而评价回指评价请求标识归 PP 侧（票 11），今天两头没接上，处理方对每一封 BUY 信封
-// 都答 ErrSourceReferencesUnrecorded。所以这里**不装** `saapplication.NewFormSupplierExpectedCostHandler`：命令
-// 凑不齐时到不了它，接进来就是在组合根里装一只没人调的编排；用一个永远答「不在」的来源口顶上则是把替身放进
-// 生产装配。形成路接上那天，后继票在这里补预期成本登记面与那只编排，消费者与路由行不变。
+// 外层与本体读的是同一只 BUY 读口：外层只看回指，本体按评价引用自己再读结果与金额，命令上不带金额
+// （FormSupplierExpectedCostCommand 头注）。请求册与预期成本库都是真册；请求册不记状态，评价采用不了时不改记任何册。
 func formSupplierExpectedCostOnBuyEvaluationConsumer(
 	db *bentopg.DB,
 	inboxStore *inbox.Store,
+	clock systemClock,
 ) (dispatch.Consumer, error) {
 	evaluations, err := pppostgres.NewEvaluations(db)
 	if err != nil {
@@ -2802,7 +2797,27 @@ func formSupplierExpectedCostOnBuyEvaluationConsumer(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: buy evaluation view: %w", err)
 	}
-	processing, err := sapricing.NewFormOnBuyEvaluationRecordedAdapter(view)
+	costs, err := sapostgres.NewSupplierExpectedCosts(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: supplier expected cost store: %w", err)
+	}
+	requests, err := sapostgres.NewEvaluationRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: settlement evaluation request register: %w", err)
+	}
+	formation, err := saapplication.NewFormRequestedSupplierExpectedCostHandler(saapplication.FormRequestedSupplierExpectedCostDeps{
+		Requests: requests,
+		Costs: saapplication.NewFormSupplierExpectedCostHandler(saapplication.FormSupplierExpectedCostDeps{
+			Evaluations: view,
+			Costs:       costs,
+			Registry:    costs,
+			Clock:       clock,
+		}),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: form requested supplier expected cost: %w", err)
+	}
+	processing, err := sapricing.NewFormOnBuyEvaluationRecordedAdapter(view, formation)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: form on buy evaluation recorded: %w", err)
 	}

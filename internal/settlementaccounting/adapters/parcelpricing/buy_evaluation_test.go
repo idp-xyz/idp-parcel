@@ -14,8 +14,9 @@ import (
 )
 
 // 本文件证 SA-c 缝的消费侧适配器（票 pricing-amount-precision/02 第 3 项；ADR-0107 Decision 五）：金额从十进制到
-// 最小币单位只按评价取整留痕里的进位单位换写，未声明取整策略的评价拒而不补取整；方向不对拒；四种非完成结果
-// 逐格译；票级评价的主体种类与成员清单如实带过来（ADR-0111 Decision 三）。夹具全为 SYN 卡（S 级）。
+// 最小币单位只按评价取整留痕里的进位单位换写，未声明取整策略的评价交回金额未声明那一格而不补取整；方向不对拒；
+// 非完成结果逐格译；评价回指照 BUY 请求身份带过来（票 demo-chain-gaps/08）；票级评价的主体种类与成员清单如实带
+// 过来（ADR-0111 Decision 三）。夹具全为 SYN 卡（S 级）。
 
 type evaluationSourceDouble struct {
 	byID map[string]ppdomain.PricingEvaluation
@@ -112,6 +113,16 @@ func evaluate(t *testing.T, id string, plan ppdomain.PricingPlanVersion, input p
 	return pptest.Evaluate(t, id, plan, input)
 }
 
+// requestedEvaluation 真算一份回指 request 的评价，形照计价「按评价请求形成评价」带上回指那一步。
+func requestedEvaluation(t *testing.T, id, request string, plan ppdomain.PricingPlanVersion, zone string) ppdomain.PricingEvaluation {
+	t.Helper()
+	evaluationRequest := must[ppdomain.EvaluationRequest](t)(ppdomain.NewEvaluationRequest(
+		must[ppdomain.EvaluationID](t)(ppdomain.NewEvaluationID(id)), plan, packageInput(t, "tenant-1", zone), ppdomain.EvidenceSynthetic))
+	evaluationRequest = must[ppdomain.EvaluationRequest](t)(evaluationRequest.WithRequestReference(
+		must[ppdomain.EvaluationRequestReference](t)(ppdomain.NewEvaluationRequestReference(request))))
+	return ppdomain.EvaluatePricing(evaluationRequest)
+}
+
 func newAdapter(t *testing.T, evaluations ...ppdomain.PricingEvaluation) *adapter.BuyEvaluationAdapter {
 	t.Helper()
 	source := &evaluationSourceDouble{byID: map[string]ppdomain.PricingEvaluation{}}
@@ -148,15 +159,47 @@ func TestCompletedEvaluationIsAdoptedAtTheDeclaredIncrementScale(t *testing.T) {
 	if adoption.RuleVersion.String() != "SYN-BUY-CARD@v2" || adoption.SubjectKind != "ACCEPTED_PACKAGE" || len(adoption.MemberPackages) != 0 {
 		t.Fatalf("rule / subject = %#v", adoption)
 	}
+	if adoption.Request != (sadomain.EvaluationRequestID{}) {
+		t.Fatalf("没有回指的评价带出了请求标识 %q", adoption.Request)
+	}
 }
 
-// Covers: ADR-0107 Decision 五「未声明的卡……不得自己补一次取整」——评价带 AMOUNT_PRECISION_UNDECLARED 时拒，不给
-// 一个凑出来的分值。
-func TestUndeclaredPrecisionIsRefusedNotRounded(t *testing.T) {
-	evaluation := evaluate(t, "eval-buy-undeclared", buyPlan(t, ppdomain.PricingDirectionBuy, ppdomain.PricingPurposeSupplierCost, false), packageInput(t, "tenant-1", "Z1"))
-	_, _, err := load(t, newAdapter(t, evaluation), "tenant-1", "eval-buy-undeclared")
-	if !errors.Is(err, adapter.ErrAmountPrecisionUndeclared) {
-		t.Fatalf("err = %v, want ErrAmountPrecisionUndeclared", err)
+// Covers: 票 demo-chain-gaps/08——评价回指照 BUY 请求身份带过来，已完成与待判断都带：形成编排要凭它取来源引用，
+// 待判断那一格也要凭它答出这份评价出自哪份请求。
+func TestTheBuyAdoptionCarriesTheRequestReference(t *testing.T) {
+	plan := buyPlan(t, ppdomain.PricingDirectionBuy, ppdomain.PricingPurposeSupplierCost, true)
+	completed := requestedEvaluation(t, "eval-buy-ref", "EVREQ-SYN-1", plan, "Z1")
+	pending := requestedEvaluation(t, "eval-buy-ref-pending", "EVREQ-SYN-2", plan, "Z9")
+	view := newAdapter(t, completed, pending)
+
+	adoption, found, err := load(t, view, "tenant-1", "eval-buy-ref")
+	if err != nil || !found || adoption.Outcome != saports.BuyEvaluationCompleted || adoption.Request.String() != "EVREQ-SYN-1" ||
+		adoption.SettlementMinor != 1250 {
+		t.Fatalf("completed adoption = %#v found=%v err=%v", adoption, found, err)
+	}
+	adoption, found, err = load(t, view, "tenant-1", "eval-buy-ref-pending")
+	if err != nil || !found || adoption.Outcome != saports.BuyEvaluationPending || adoption.Request.String() != "EVREQ-SYN-2" {
+		t.Fatalf("pending adoption = %#v found=%v err=%v", adoption, found, err)
+	}
+}
+
+// Covers: ADR-0107 Decision 五「未声明的卡……不得自己补一次取整」——评价带 AMOUNT_PRECISION_UNDECLARED 时交回金额
+// 未声明那一格：不给一个凑出来的分值，回指照带。
+func TestUndeclaredPrecisionIsAnOutcomeNotARoundedAmount(t *testing.T) {
+	evaluation := requestedEvaluation(t, "eval-buy-undeclared", "EVREQ-SYN-3",
+		buyPlan(t, ppdomain.PricingDirectionBuy, ppdomain.PricingPurposeSupplierCost, false), "Z1")
+	if evaluation.Status() != ppdomain.EvaluationCompleted {
+		t.Fatalf("fixture status = %s %#v", evaluation.Status(), evaluation.Issues())
+	}
+	adoption, found, err := load(t, newAdapter(t, evaluation), "tenant-1", "eval-buy-undeclared")
+	if err != nil || !found {
+		t.Fatalf("load: found=%v err=%v", found, err)
+	}
+	if adoption.Outcome != saports.BuyEvaluationAmountUndeclared || adoption.Request.String() != "EVREQ-SYN-3" {
+		t.Fatalf("adoption = %#v, want 金额未声明那一格并带回指", adoption)
+	}
+	if adoption.SettlementMinor != 0 || adoption.OriginalMinor != 0 || adoption.SettlementCurrency != (sadomain.CurrencyCode{}) {
+		t.Fatalf("金额未声明却带出了金额：%#v", adoption)
 	}
 }
 

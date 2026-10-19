@@ -61,7 +61,10 @@ func (outcome ExpectedCostOutcome) String() string {
 }
 
 // ExpectedCostUndecidedReason 指名形成停在哪一步等谁。评价待判断等提供方以新评价补齐事实
-// 或汇率序列；评价未形成等重试；换算步骤缺席等提供方在评价内换算（AT-SA-177，不自行补算）。
+// 或汇率序列；评价未形成等重试；换算步骤缺席等提供方在评价内换算（AT-SA-177，不自行补算）；
+// 金额未声明等租户在价卡上声明金额取整、再评价一份（ADR-0107 决定五，不自行补取整）。
+// BuyEvaluationRequestViewUnavailable 只由按回指形成的那只外层编排交出（FormRequestedSupplierExpectedCostHandler），
+// 与本编排的各格同属「形成停在哪个依赖上」，所以同用一个词表，不另立第二套。
 type ExpectedCostUndecidedReason uint8
 
 const (
@@ -71,6 +74,8 @@ const (
 	EvaluationNotFormed
 	ConversionStepMissing
 	ExpectedCostRegistryUnavailable
+	EvaluationAmountPrecisionUndeclared
+	BuyEvaluationRequestViewUnavailable
 )
 
 func (reason ExpectedCostUndecidedReason) String() string {
@@ -85,6 +90,10 @@ func (reason ExpectedCostUndecidedReason) String() string {
 		return "CONVERSION_STEP_MISSING"
 	case ExpectedCostRegistryUnavailable:
 		return "EXPECTED_COST_REGISTRY_UNAVAILABLE"
+	case EvaluationAmountPrecisionUndeclared:
+		return "EVALUATION_AMOUNT_PRECISION_UNDECLARED"
+	case BuyEvaluationRequestViewUnavailable:
+		return "BUY_EVALUATION_REQUEST_VIEW_UNAVAILABLE"
 	default:
 		return ""
 	}
@@ -107,6 +116,7 @@ type FormSupplierExpectedCostCommand struct {
 type ExpectedCostResult struct {
 	outcome      ExpectedCostOutcome
 	reason       ExpectedCostUndecidedReason
+	cause        error
 	cost         domain.SupplierExpectedCost
 	hasCost      bool
 	continuation string
@@ -119,6 +129,12 @@ func (result ExpectedCostResult) Outcome() ExpectedCostOutcome {
 // UndecidedReason 只在`未决`时非零。
 func (result ExpectedCostResult) UndecidedReason() ExpectedCostUndecidedReason {
 	return result.reason
+}
+
+// UndecidedCause 是`未决`那一格的根因：依赖答不出时是它的原错误，形成门拒时是领域的哨兵。评价自己停在
+// 待判断、未形成或金额未声明时没有错误可交，为 nil——原因已在 UndecidedReason 里说全。
+func (result ExpectedCostResult) UndecidedCause() error {
+	return result.cause
 }
 
 // Cost 在已形成、重放与`已形成过首版`三格交回那份成本。
@@ -163,7 +179,7 @@ func (handler *FormSupplierExpectedCostHandler) Handle(
 
 	adoption, found, err := handler.deps.Evaluations.LoadBuyEvaluation(ctx, command.TenantID, command.Evaluation)
 	if err != nil {
-		return expectedCostUndecided(EvaluationViewUnavailable, command.Evaluation.String()), nil
+		return expectedCostUndecided(EvaluationViewUnavailable, command.Evaluation.String(), err), nil
 	}
 	if !found {
 		// 指名了不存在的评价：提交矛盾，改单重来——评价由提供方形成，本用例等不来它。
@@ -172,9 +188,12 @@ func (handler *FormSupplierExpectedCostHandler) Handle(
 	switch adoption.Outcome {
 	case ports.BuyEvaluationCompleted:
 	case ports.BuyEvaluationPending:
-		return expectedCostUndecided(EvaluationPending, command.Evaluation.String()), nil
+		return expectedCostUndecided(EvaluationPending, command.Evaluation.String(), nil), nil
 	case ports.BuyEvaluationNotFormed:
-		return expectedCostUndecided(EvaluationNotFormed, command.Evaluation.String()), nil
+		return expectedCostUndecided(EvaluationNotFormed, command.Evaluation.String(), nil), nil
+	case ports.BuyEvaluationAmountUndeclared:
+		// 价卡没声明金额取整：评价合计换写不成最小币单位，补一次取整就是在评价之外另算一个数（ADR-0107 决定五）。
+		return expectedCostUndecided(EvaluationAmountPrecisionUndeclared, command.Evaluation.String(), nil), nil
 	case ports.BuyEvaluationUnratable:
 		// 按该价卡不存在可成立的价格：保存排除依据（评价引用就是它），不形成任何成本行，
 		// 不转为待判断反复重试（AT-SA-175）。
@@ -204,7 +223,7 @@ func (handler *FormSupplierExpectedCostHandler) Handle(
 	if errors.Is(err, domain.ErrConversionStepMissing) {
 		// 原币与合同结算币不同而评价未携带换算步骤：保持待判断并记录缺口，不自行取汇率
 		// 补算，也不以原币金额充当结算币金额（AT-SA-177）。
-		return expectedCostUndecided(ConversionStepMissing, command.Evaluation.String()), nil
+		return expectedCostUndecided(ConversionStepMissing, command.Evaluation.String(), err), nil
 	}
 	if err != nil {
 		return ExpectedCostResult{outcome: ExpectedCostNotAccepted}, nil
@@ -214,7 +233,7 @@ func (handler *FormSupplierExpectedCostHandler) Handle(
 	// 结算中重复算价」的登记面）；这一查与登记之间的窄窗留给 Save 的`已登记`分支兜底。
 	existing, found, err := handler.deps.Costs.LoadExpectedCost(ctx, command.TenantID, command.Version)
 	if err != nil {
-		return expectedCostUndecided(ExpectedCostRegistryUnavailable, command.Version.String()), nil
+		return expectedCostUndecided(ExpectedCostRegistryUnavailable, command.Version.String(), err), nil
 	}
 	if found {
 		if expectedCostDigest(existing) != expectedCostDigest(cost) {
@@ -225,7 +244,7 @@ func (handler *FormSupplierExpectedCostHandler) Handle(
 
 	saved, err := handler.deps.Registry.Save(ctx, command.TenantID, cost, handler.deps.Clock.Now())
 	if err != nil {
-		return expectedCostUndecided(ExpectedCostRegistryUnavailable, command.Version.String()), nil
+		return expectedCostUndecided(ExpectedCostRegistryUnavailable, command.Version.String(), err), nil
 	}
 	switch saved {
 	case ports.ExpectedCostSaved:
@@ -246,7 +265,7 @@ func (handler *FormSupplierExpectedCostHandler) existingCost(
 ) (ExpectedCostResult, error) {
 	byVersion, found, err := handler.deps.Costs.LoadExpectedCost(ctx, command.TenantID, command.Version)
 	if err != nil {
-		return expectedCostUndecided(ExpectedCostRegistryUnavailable, command.Version.String()), nil
+		return expectedCostUndecided(ExpectedCostRegistryUnavailable, command.Version.String(), err), nil
 	}
 	if found {
 		if expectedCostDigest(byVersion) != expectedCostDigest(formed) {
@@ -257,17 +276,23 @@ func (handler *FormSupplierExpectedCostHandler) existingCost(
 	}
 	first, found, err := handler.deps.Registry.LoadFirstVersion(
 		ctx, command.TenantID, command.Occurrence.ID(), command.FeeItem, formed.RuleVersion())
-	if err != nil || !found {
-		return expectedCostUndecided(ExpectedCostRegistryUnavailable, command.Version.String()), nil
+	if err != nil {
+		return expectedCostUndecided(ExpectedCostRegistryUnavailable, command.Version.String(), err), nil
+	}
+	if !found {
+		// 登记面答了`已登记`，按版本与按三维却都读不回：两拍之间有人删行，或读写走了不同的库视图。
+		return expectedCostUndecided(ExpectedCostRegistryUnavailable, command.Version.String(),
+			fmt.Errorf("version %s was answered already recorded but neither it nor a first version reads back", command.Version)), nil
 	}
 	return ExpectedCostResult{outcome: ExpectedCostAlreadyFormed, cost: first, hasCost: true,
 		continuation: costContinuation("EXPECTED_COST_ALREADY_FORMED", first.Version().String())}, nil
 }
 
-func expectedCostUndecided(reason ExpectedCostUndecidedReason, subject string) ExpectedCostResult {
+func expectedCostUndecided(reason ExpectedCostUndecidedReason, subject string, cause error) ExpectedCostResult {
 	return ExpectedCostResult{
 		outcome:      ExpectedCostUndecided,
 		reason:       reason,
+		cause:        cause,
 		continuation: costContinuation(reason.String(), subject),
 	}
 }

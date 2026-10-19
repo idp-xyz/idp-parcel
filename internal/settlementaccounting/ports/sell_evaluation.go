@@ -29,9 +29,9 @@ type SellEvaluationTriggerView interface {
 	) (domain.SellEvaluationTriggerMoment, bool, error)
 }
 
-// SellEvaluationOutcome 是一份 SELL 评价在 SA 眼里的封闭结果。除金额未声明那一格，其余各格与 BUY 同形，但是另一条读口。
+// SellEvaluationOutcome 是一份 SELL 评价在 SA 眼里的封闭结果。各格与 BUY 同形，但是另一条读口。
 //
-// SellEvaluationAmountUndeclared 是 SELL 这一侧多出的一格：评价已完成，可价卡没声明金额取整（提供方问题项
+// SellEvaluationAmountUndeclared：评价已完成，可价卡没声明金额取整（提供方问题项
 // AMOUNT_PRECISION_UNDECLARED），合计是精确十进制，本上下文没有依据把它换写成最小币单位（ADR-0107 决定五）。
 // 它不是读口故障——评价不可变，重读一百次还是这一格——所以作结果交回、不作错误：SELL 形成编排要凭同一份采用
 // 快照里的回指在请求册上记`待判断`（ADR-0190 决定五），报错就连回指一起丢了。这一格不带金额。
