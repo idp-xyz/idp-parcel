@@ -23,8 +23,9 @@ type LoadAssignmentKey struct {
 // LoadAssignmentRecord 是一个分配版本连同它的对象范围越过提交边界留下的东西。
 //
 // **没有成员计数字段。** CONTEXT 要求申请量、接受量、预占量、分配量、释放量与实际装载量分别
-// 保存，而那几个量在容量池那一侧；本记录若再存一个「分配了几个」，它会与成员行漂移，且漂移
-// 时没有任何东西会报。要数就数成员。
+// 保存；分配量是逐池声明的那几行，随版本存在 Assignment 上（ADR-0203 决定二），其余几个量在容量池
+// 那一侧。本记录若再存一个「分配了几个」，它会与成员行漂移，且漂移时没有任何东西会报。要数就数成员；
+// 件数池取成员数的那一行，数也是按成员数出来的，得法另记。
 type LoadAssignmentRecord struct {
 	Key        LoadAssignmentKey
 	Assignment domain.LoadAssignment
