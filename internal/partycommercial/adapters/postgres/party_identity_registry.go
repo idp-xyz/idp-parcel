@@ -744,7 +744,7 @@ func relationshipFromSnapshot(raw []byte) (domain.PartyRelationshipRegistration,
 func partyRoleFrom(raw string) (domain.PartyRole, error) {
 	for _, role := range []domain.PartyRole{
 		domain.CustomerRole, domain.SupplierRole, domain.CarrierAgentRole,
-		domain.ResellerRole, domain.AccountHolderRole,
+		domain.ResellerRole, domain.AccountHolderRole, domain.AuthorizedDeliveringPartyRole,
 	} {
 		if role.String() == raw {
 			return role, nil

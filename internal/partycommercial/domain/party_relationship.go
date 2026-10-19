@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -77,10 +78,13 @@ const (
 	CarrierAgentRole
 	ResellerRole
 	AccountHolderRole
+	// AuthorizedDeliveringPartyRole：持有方是交付方，相对方是客户账户所属参与方，范围见 AuthorizedDeliveryScope
+	// （PC CONTEXT「参与方关系」，ADR-0212 决定一）。
+	AuthorizedDeliveringPartyRole
 )
 
 func (role PartyRole) valid() bool {
-	return role >= CustomerRole && role <= AccountHolderRole
+	return role >= CustomerRole && role <= AuthorizedDeliveringPartyRole
 }
 
 func (role PartyRole) String() string {
@@ -95,6 +99,8 @@ func (role PartyRole) String() string {
 		return "RESELLER"
 	case AccountHolderRole:
 		return "ACCOUNT_HOLDER"
+	case AuthorizedDeliveringPartyRole:
+		return "AUTHORIZED_DELIVERING_PARTY"
 	default:
 		return ""
 	}
@@ -162,6 +168,12 @@ func NewCandidateRelationship(spec PartyRelationshipSpec) (PartyRelationship, er
 	if !spec.Holder.valid() || !spec.Counterparty.valid() || spec.Holder == spec.Counterparty ||
 		!spec.Role.valid() || !spec.Scope.valid() || !spec.Basis.valid() || !spec.Effective.valid() {
 		return PartyRelationship{}, ErrInvalidPartyRelationship
+	}
+	// 授权交付判断要读出范围里的客户账户与节点，读不出的范围登进册里只会在判断时答否，而那时没人知道是写法错了。
+	if spec.Role == AuthorizedDeliveringPartyRole {
+		if _, err := ParseAuthorizedDeliveryScope(spec.Scope); err != nil {
+			return PartyRelationship{}, fmt.Errorf("%w: %w", ErrInvalidPartyRelationship, err)
+		}
 	}
 	return PartyRelationship{
 		holder:       spec.Holder,
@@ -245,6 +257,18 @@ func (relationship PartyRelationship) Role() PartyRole {
 
 func (relationship PartyRelationship) Scope() CommercialScopeReference {
 	return relationship.scope
+}
+
+// AuthorizedDeliveryScope 交回授权交付方关系的适用范围；别的角色的范围是不透明引用，答 false。
+func (relationship PartyRelationship) AuthorizedDeliveryScope() (AuthorizedDeliveryScope, bool) {
+	if relationship.role != AuthorizedDeliveringPartyRole {
+		return AuthorizedDeliveryScope{}, false
+	}
+	scope, err := ParseAuthorizedDeliveryScope(relationship.scope)
+	if err != nil {
+		return AuthorizedDeliveryScope{}, false
+	}
+	return scope, true
 }
 
 func (relationship PartyRelationship) Basis() RelationshipBasisReference {

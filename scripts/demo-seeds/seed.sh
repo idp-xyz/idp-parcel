@@ -72,6 +72,10 @@ echo "== 商业权威发布（party-commercial：发布批正文）与消费方�
 # 在此获得身份册登记，与上面发布批里的同名引用同指一物。停用批单独一笔，让法人页
 # 与参与方页的身份状态三格（已登记/已生效/已停用）都有真实例可显。
 "$BIN/parcel-commercial" register-parties -input "$SEEDS/commercial/register-parties.json"
+# 授权交付关系（PAR-NET-17，ADR-0212 决定一）：一个合成交付方替 SYN-ACCOUNT-01 向节点送站，范围只收到客户账户、不收到节点。
+# 排在参与方身份之后：关系的相对方要是 SYN-ACCOUNT-01 所属的参与方，登记用例对着上一行登的账户判。演示租户的合成取值，
+# 证据记 S；不登时本租户的送站交接确认答未配置。
+"$BIN/parcel-commercial" register-parties -input "$SEEDS/commercial/register-authorized-delivery.json"
 "$BIN/parcel-commercial" deactivate-party-identity \
   -input "$SEEDS/commercial/deactivate-party-retired-01.json"
 # 法人资料（票 legal-entity-profile/03）：SYN-LE-01 两笔修订，先不带开票资料、后补抬头，让资料页的「资料不全」与

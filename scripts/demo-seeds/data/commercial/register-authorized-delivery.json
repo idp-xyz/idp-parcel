@@ -1,0 +1,28 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "businessParties": [
+    {
+      "partyId": "SYN-PARTY-DELIVERER-01",
+      "name": "合成交付方一号（演示）",
+      "revision": 1,
+      "basis": "SYN-REG-BASIS-PARTY-DELIVERER-01",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    }
+  ],
+  "relationships": [
+    {
+      "relationshipId": "SYN-REL-AUTHORIZED-DELIVERY-01",
+      "revision": 1,
+      "holder": "SYN-PARTY-DELIVERER-01",
+      "counterparty": "SYN-PARTY-SHIPPER-01",
+      "role": "AUTHORIZED_DELIVERING_PARTY",
+      "scope": "customerAccount=SYN-ACCOUNT-01",
+      "basis": "SYN-DELIVERY-MANDATE-01",
+      "effectiveStartsAt": "2026-01-05T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-REL-DELIVERY-01",
+        "approvedAt": "2026-01-04T00:00:00Z"
+      }
+    }
+  ]
+}

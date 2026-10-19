@@ -340,7 +340,7 @@ func relationshipCommandFrom(tenant pcdomain.TenantID, item partyRelationshipDoc
 func partyRoleFromName(raw string) (pcdomain.PartyRole, error) {
 	for _, role := range []pcdomain.PartyRole{
 		pcdomain.CustomerRole, pcdomain.SupplierRole, pcdomain.CarrierAgentRole,
-		pcdomain.ResellerRole, pcdomain.AccountHolderRole,
+		pcdomain.ResellerRole, pcdomain.AccountHolderRole, pcdomain.AuthorizedDeliveringPartyRole,
 	} {
 		if role.String() == raw {
 			return role, nil

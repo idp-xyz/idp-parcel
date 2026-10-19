@@ -475,6 +475,15 @@ func (handler *RegisterPartyIdentityHandler) RegisterRelationship(
 			)), nil
 		}
 	}
+	if scope, ok := relationship.AuthorizedDeliveryScope(); ok {
+		refusal, err := handler.checkAuthorizedDeliveryAccount(ctx, command, scope)
+		if err != nil {
+			return PartyRegistryResult{}, fmt.Errorf("register party relationship: %w", err)
+		}
+		if refusal != "" {
+			return notAccepted(errors.New(refusal)), nil
+		}
+	}
 
 	registration, err := domain.NewPartyRelationshipRegistration(
 		command.Tenant, command.ID, command.Revision, relationship,
@@ -500,6 +509,35 @@ func (handler *RegisterPartyIdentityHandler) RegisterRelationship(
 		return PartyRegistryResult{}, fmt.Errorf("register party relationship: %w", err)
 	}
 	return registrationResult(outcome), nil
+}
+
+// checkAuthorizedDeliveryAccount 是授权交付方关系自己的引用门：范围里的客户账户要已登记、在关系生效起点已生效，且相对方
+// 就是它所属的参与方（PC CONTEXT「参与方关系」）。授权是账户所属参与方给的；相对方写成别人，册上就是一段由无关参与方
+// 替别人的账户授出的关系。非空的第一个返回值是给登记方看的拒绝理由，error 只留给读册的技术失败。
+func (handler *RegisterPartyIdentityHandler) checkAuthorizedDeliveryAccount(
+	ctx context.Context,
+	command RegisterPartyRelationshipCommand,
+	scope domain.AuthorizedDeliveryScope,
+) (string, error) {
+	account, found, err := handler.registry.LoadLatestCustomerAccount(ctx, command.Tenant, scope.CustomerAccount())
+	if err != nil {
+		return "", err
+	}
+	if !found {
+		return fmt.Sprintf("适用范围里的客户账户 %s 未登记，授权交付关系不钉悬空账户", scope.CustomerAccount()), nil
+	}
+	if status := account.Lifecycle().StatusAt(command.Spec.Effective.StartsAt()); status != domain.IdentityEffective {
+		return fmt.Sprintf(
+			"客户账户 %s 在关系生效起点状态为 %s，不支持新的授权交付关系登记", scope.CustomerAccount(), status,
+		), nil
+	}
+	if owner := account.Account().CustomerParty(); owner != command.Spec.Counterparty {
+		return fmt.Sprintf(
+			"客户账户 %s 属参与方 %s，授权交付关系的相对方须是它，收到 %s",
+			scope.CustomerAccount(), owner, command.Spec.Counterparty,
+		), nil
+	}
+	return "", nil
 }
 
 // Deactivate 停用一个身份：取最新修订，经领域转换生成下一笔修订落库。
