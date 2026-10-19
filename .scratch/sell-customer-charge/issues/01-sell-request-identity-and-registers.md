@@ -1,7 +1,7 @@
 # 01 结算：SELL 评价请求身份、包裹计费时点采用册与费用项目映射册
 
 Category: enhancement
-Status: 完工，待评审与进 main——分支 `claude-sell-01`（2026-10-19 Claude Code 会话立，用户「你作为业务和系统专家自决……解决所有的问题」授权；完工见文末「完成记录」）。
+Status: resolved——2026-10-19 进 main（至 `c18e694c`）。
 Blocked by: 无
 地盘：`internal/settlementaccounting` 的 domain、ports、application（只登记那几只）、adapters/postgres、adapters/registrationjson、adapters/identity；`migrations/settlement_accounting/` 0037–0039；`cmd/parcel-settlement-register`；`internal/architecture` 里分区主体、标识前缀两本登记的对应行。
 出处：[ADR-0190](../../../docs/adr/0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 决定一、三、五（映射册那一半）。
@@ -69,3 +69,13 @@ DSN `postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable`，在 re
 - `go test -p 1 -count=1 ./internal/settlementaccounting/... ./cmd/parcel-settlement-register/ ./internal/architecture/ ./migrations/...` 全部 `ok`。本票新增的真库用例逐条 `PASS`，没有 `SKIP`。
 - `go vet` 上述各包退 0，`gofmt -l` 空，`go build ./...` 退 0；第一笔单独检出也能 build、vet。
 - 新增用例：领域（时点封闭、请求各格缺一不成、自然键只取包裹与时点、状态词表与「只有已形成带费用」、采用元组、映射三格）；真库请求册（三口往返、同自然键另一 ID 答已存在且先到者不被覆盖、换时点另一份且按包裹读答最晚的、租户隔离、无事务拒、键与对象不符拒、登记冒充已形成拒、状态格与费用标识的 CHECK 和外键）；真库交接（契约字面、请求行与信封同生同灭、回滚两样都不留、重发不翻倍、无事务拒、按包裹同区、超长确定性拒收、缺件响亮报错）；两本册真库（登记、重放、冲突不覆盖、账户不在册上外键拒、租户隔离、无事务拒）；译装正反例；用例层透传；CLI 命令表与真库登记全链。
+
+## 评审与进 main 记录（2026-10-19）
+
+- 隔离子代理一次过两轴，结论如下：
+  - 代码轴无阻断。
+  - 唯一的阻断是机制清点没重生成，已在干净检出上重生成并随分支提交。那笔提交信息里钉的是 rebase 前的 `cc3a7485`；之后的 rebase 只跨过文档，代码树不变。
+  - 已修的非阻断：完成记录里的 SHA、外键先例与门禁说法；「评价未成形」不另立一格的裁定；分区键头注的理由。
+  - 留作后续：外键、参数登记册指针（随票 05）、登记口的冲突答复。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `230fe987`：143 包 ok，0 FAIL，0 SKIP。之后只有注释与文档修订，加上 rebase 跨过的文档，没重跑。
+- 快进推到 main：`92dc263e..c18e694c`。
