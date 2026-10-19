@@ -1,7 +1,7 @@
 # 06 有效时间判断：同一事实并发判断时版本链分叉且不自愈——回指列缺「一版至多被回指一次」，撞键一律答未决
 
 Category: bug
-Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-tfa06`）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-tfa06`）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment-effective-time-judgments
@@ -78,3 +78,34 @@ Blocked by: 无
 - [ ] `go build ./...`、`go vet ./...` 退出码 0，`gofmt -l .` 无输出；带 DSN 跑 `go test -p 1 -count=1 ./internal/transportfulfillment/... ./internal/visibilityexception/... ./cmd/parcel-api/... ./internal/architecture/...` 全部 ok。
 - [ ] 票 15 补记下追加回写行（只加行）。
 - [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：作者自验、非作者评审（两轴分开）、推送方在干净检出上带 DSN 跑全量。
+
+## 完成记录（2026-10-19，会话 idp-parcel-9b 的实施子代理，分支 claude-tfa06）
+
+基线 `32a9d03f`。提交：`3ff44878`（迁移与编排修复、编排单测）、`d36c2fd7`（真库回归）、`35263c35`（lc/20 加 Blocked by 行）、`2a83c0c3`（机制清点重生成）、本条。
+
+**落点**
+- 迁移 `migrations/transport_fulfillment/0023_external_carrier_tracking_fact_superseded_once.sql`：部分唯一索引 `external_carrier_tracking_fact_superseded_once` (tenant_id, fact_ref, supersedes_version) WHERE supersedes_version IS NOT NULL；建索引前的 DO 块按（租户，事实，前版）分组数后继，>1 即 RAISE 列出各前版与后继，不代删。
+- `JudgeEffectiveTimeHandler.Judge`：读当前版→判定→落版本走成有界循环（`judgmentAttempts`），Save 答`已登记`即重读 `FindCurrent` 再判；同值答 `ALREADY_JUDGED_AS_GIVEN` 回显赢家并重发其意图（`EnqueueOnce` 按版本去重，不多出一封），异值在赢家之上改判；仍撞答未决 `TRACKING_FACT_REGISTRY_UNAVAILABLE` 带续办。
+- `AdoptTrackingMaterialHandler.Adopt`：撞键先按（源，源事件）读回（读得到即重复投递，原行为）；读不到而本版回指前版，即调 `resolveCorrection` 重新解析到此刻的当前版再落，有界（`trackingCorrectionAttempts`），本次签的版本未落行，沿用。
+- `ExternalTrackingFacts.Save` 头注补上新索引这一种撞键（越出地盘的唯一一处，只改注释）。
+
+**各格对应用例**
+- 编排单测（替身照库面索引拒同一前版的第二个后继，`beforeSave` 摆出「另一方先提交」）：同值读回 `TestALosingConcurrentJudgmentWithTheSameTimeEchoesTheWinner`；异值改判 `TestALosingConcurrentJudgmentWithAnotherTimeIsJudgedOverTheWinner`；读回不通 `TestAJudgmentWhoseReadbackFailsIsUndecided`；有限重试 `TestAJudgmentThatKeepsLosingRetriesBoundedlyThenIsUndecided`；更正输给判断 `TestACorrectionThatLosesToAConcurrentJudgmentLandsOnTheWinner`。
+- 真库并发（`cmd/parcel-api/effective_time_judgment_single_chain_test.go`，生产装配、默认池）：赢家在事务里挂住、观察连接看到本口卡在锁上再放行——同值 `TestALosingConcurrentJudgmentWithTheSameTimeEchoesTheWinnerAgainstARealDatabase`、异值 `TestALosingConcurrentJudgmentWithAnotherTimeIsJudgedOverTheWinnerAgainstARealDatabase`（代替「读后屏障两路异值」，交错是确定的）；同一载荷六份并发四轮 `TestConcurrentIdenticalJudgmentsFormExactlyOneJudgedVersionAgainstARealDatabase`（恰一份已判断、其余回显赢家、当前版读面一条、每条事实判断意图一封）。
+- 收编更正与判断撞同一前版（`internal/transportfulfillment/adapters/postgres/external_tracking_fact_single_chain_test.go`）：`TestACorrectionLosingToAHeldJudgmentLandsOnTheWinnerAgainstARealDatabase`；索引本身 `TestASecondSuccessorOfOneVersionIsRefusedByTheRegistry`。
+
+**先红后绿**：用例先于实现写下并跑红，红都落在行为上——编排单测四例红（同值、异值答 `JUDGMENT_UNDECIDED`；更正答 `ADOPTION_UNDECIDED`；持续撞键「试了 1 次」），读回不通一例修复前后同答未决，作守门；真库五例红：同值输家答 `EFFECTIVE_TIME_JUDGED`、异值改判回指 `…/v1` 而非赢家、六份并发两份 `EFFECTIVE_TIME_JUDGED`、更正回指首版 `SYN-EXTV-TFA06-a`、第二个后继答 `SAVED`。票面现象（并发判断分叉）由此在新用例上复现，属 `S`。加迁移与修复后全绿，真库那几例连跑三遍皆绿。
+
+**迁移号** `0023`（取号时 fetch 过 origin，origin/main 与在途分支上 transport_fulfillment 最高为 0022）。存量分叉检查：干净库上 `migrate` 顺序跑通（`./migrations/...`、全部带 DSN 的包都从模板库跑过整套迁移）；拒绝分支另用一次性用例核过（未提交）——测试库删索引、造 SYN-V-a 两个后继后执行该 DO 块，答 `P0001`「external_carrier_tracking_fact 存在被回指了不止一次的版本……SYN-T/SYN-F 的 SYN-V-a（后继 SYN-V-b、SYN-V-c）……」。
+
+**门**：`gofmt -l` 无输出；`go build ./...`、`go vet ./...` 退 0；带 DSN `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-api ./internal/architecture/... ./migrations/...` 全 ok，另跑 `./internal/visibilityexception/...` 全 ok。机制清点重生成单独提交。全仓全量未跑。
+
+**未做或复现不了的格**
+- VE 侧（经 `DeriveOnExternalCarrierTrackingAdapter` 译后 `SupersessionForks` 为空、`CurrentlyEffective` 一份）未单独立用例：TF 链线性后每个前版至多一个后继，译过去的替代关系同形；需要派生管线全装配，留给评审定是否补。
+- 票 15 补记下追加回写行：不在本次授权地盘内，未动。
+- 端点层 201/200 未断言：真库用例断在生产装配的判断编排结果上，HTTP 映射未改。
+- 票面「复现」节列的 scratchpad 探针未重跑，复现以上述新用例为准。
+
+**证据层级** `S`（隔离合成，SYN- 值）。
+
+评审：待会话读 diff 审
