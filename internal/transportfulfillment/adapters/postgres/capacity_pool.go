@@ -231,7 +231,8 @@ func (repository *CapacityPools) loadReservations(
 	return snapshots, rows.Err()
 }
 
-// loadReleases 按所属预占分组读回本池全部显式释放，组内按落下的时点、再按释放引用排，与领域里追加的次序一致。
+// loadReleases 按所属预占分组读回本池全部显式释放，组内按释放时点、再按释放引用排，只为读回稳定。次序不带语义：领域里
+// 按提交先后追加，倒填的释放让两者不同；归还按各次自己的时点算，重建门核的是各次时点、引用不重与和，都不看次序。
 func (repository *CapacityPools) loadReleases(
 	ctx context.Context,
 	querier bentopg.Querier,

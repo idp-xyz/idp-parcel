@@ -498,7 +498,6 @@ func formedSchedule(t *testing.T, tenant, id string) ports.ScheduleRecord {
 	}
 }
 
-// establishedPoolRecord 在班次 schedule 的重量维上立一个空池；池身份由二者派生。
 // poolDemand 是夹具池（kg）上一份运营声明的需求量。
 func poolDemand(t *testing.T, quantity int64) domain.CapacityDemand {
 	t.Helper()
@@ -514,6 +513,7 @@ func poolDemand(t *testing.T, quantity int64) domain.CapacityDemand {
 	return demand
 }
 
+// establishedPoolRecord 在班次 schedule 的重量维上立一个空池；池身份由二者派生。
 func establishedPoolRecord(t *testing.T, tenant, schedule string, capacity int64) ports.CapacityPoolRecord {
 	t.Helper()
 	pool, err := domain.EstablishCapacityPool(domain.CapacityPoolSpec{
