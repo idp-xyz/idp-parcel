@@ -1,7 +1,7 @@
 # 01 同一外部条码出现在两件实物：第二件也唯一关联到同一包裹，不形成身份冲突（AT-NO-019 字面场景没有实现）
 
 Category: bug
-Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-nri01`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 0 研判）
+Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-nri01`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 0 研判）
 Blocked by: 无（operator-channel/29 已进 main）
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判簇 C2 第三张草案（AT-NO-019）
@@ -102,3 +102,15 @@ no-directional-basis/01 当前裁定的身份判断是「恰好关联到一个�
 **证据层级**：`S`（隔离合成夹具，`SYN-` 值）。
 
 评审：待会话读 diff 审
+
+## Comments
+
+### 评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审；2026-10-19，钉 `312493a0`）
+
+两轴合审，0 阻断。
+
+- **Spec**：裁定四条逐一落到。按关联到的包裹认（`FindOtherUnitIntakes` 只认收寄本身带的关联，排除同一作业实物）；后到那件答待识别、记身份冲突、候选是那件包裹、不问 PS、不交意图；先到那件只追加、原判断原样读回；两件经 `JudgeIdentityBasis` 都含身份冲突（真库用例经生产装配核过）。追加与后到那件同一笔事务：两条接线（`transactionalReception`、受控批量导入）都包在事务里，追加失败整笔回滚、答 5xx，重投从头再来。并发输家读回赢家时 `commit` 走 `existingResult`，结果不是待识别，不会重复追加。
+- **Standards**：注释中文、只写为什么；`scanReception` 抽出后 `FindByKey` 行为不变（错误前缀上移到调用方）；新读口走迁移 0004 已有的 `reception_intake_association_idx`，查询条件 `(intake ->> 'association') = $2` 对得上索引表达式。
+- **非阻断（已修于本评审提交）**：冲突形成之后，先到那件换个来源再收，按包裹读不到后到那件（它的行不带关联），照常答`节点收寄已形成`并交意图；方向依据靠册上的冲突行照停。ADR-0196「能力边界」原先没写这一格，补了一条。
+- **非阻断（另立票）**：两件实物并发送站互相看不到对方未提交的关联（ADR-0196 越权风险点 4）→ no-reception-identity/03。
+- **与 ps-external-mark-relations/04 的交叠**：那张票的三条真库用例走多候选或首件，不受本票影响；ADR-0184 复核记录「其二」说的唯一命中，在本票之后只对先到的那件成立，后到的同包裹实物答身份冲突——ADR-0196 自己写了，那边不改。
