@@ -1,7 +1,7 @@
 # 46 节点作业的承接与集运编排，自己的册读写失败时答 2xx`未决`、什么也没落：与收寄同形，一旦开了设备渠道，设备出队即丢
 
 Category: bug
-Status: ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 2 研判中发现）
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-oc46`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 2 研判中发现）
 Blocked by: 无
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判簇 C1 派生草案（承接与集运本方册读写失败）

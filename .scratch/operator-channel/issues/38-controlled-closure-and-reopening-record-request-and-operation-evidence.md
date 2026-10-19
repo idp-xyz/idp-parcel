@@ -1,8 +1,8 @@
 # 38 受控关闭与重开的请求证据与操作证据落在决定上（新 ADR 部分停用 ADR-0183 决定五首句与 ADR-0151 决定二受控关闭与重开一项的半句）
 
 Category: enhancement
-Status: ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 1 评审遗留；用户授权代决）
-Blocked by: operator-channel/37 进 main
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-oc38`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 1 评审遗留；用户授权代决）
+Blocked by: 无（operator-channel/37 已进 main）
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)。被评的是 [15](./15-operation-decision-faces-take-operator-intake.md) 之六（代码 `0e3bb7df`），规则出处是 [ADR-0183](../../../docs/adr/0183-operator-channel-addresses-controlled-closure-and-reopening-by-parcel-and-derives-the-shipper-from-the-accepted-request.md)。
 出处：
 - 票 15 Comments「评审 ← 会话 idp-parcel-9b 起的隔离子代理 · 钉 `0e3bb7df`」那一条的 Spec 非阻断 (1)；
