@@ -1,7 +1,7 @@
 # 20 BUY 评价请求的触发面
 
 Category: enhancement
-Status: needs-triage——2026-09-24 通道 2 立票（用户令通道 2 独立承接）；分诊时先定触发策略再转 ready-for-agent
+Status: resolved——2026-10-19 核实：触发策略已由 [ADR-0164](../../../docs/adr/0164-buy-evaluation-request-trigger-is-occurrence-formed.md) 裁定，触发面已在 `7c084917` 落地；从发生项已形成信封接到这个触发面的那一段由 [demo-chain-gaps/26](../../demo-chain-gaps/issues/26-settlement-consumes-charge-occurrence-formed-to-request-buy-evaluation.md) 收。见 [demo-chain-gaps/tf-chain-plan](../../demo-chain-gaps/tf-chain-plan.md)「已不成立或已修」07。此前 needs-triage——2026-09-24 通道 2 立票（用户令通道 2 独立承接）；分诊时先定触发策略再转 ready-for-agent
 Blocked by: 无
 地盘：`internal/settlementaccounting`（触发策略与入口）、`cmd/parcel-api` 或 `cmd/parcel-dispatch` 的装配。
 出处：[票 05](./05-demo-journey-criterion-evidence.md) 格 17。[票 12](./12-sa-amount-grammars-allocation-forms-and-accounting-connectors.md) 管金额文法与形态，不管这一格。

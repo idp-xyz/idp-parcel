@@ -1,7 +1,7 @@
 # 03 装载分配不核班次在册、不接容量预占
 
 Category: enhancement
-Status: needs-triage——2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自同日对演示动线余下各段的只读勘察（隔离子代理，证据 `S`）；下列现象与证据取自勘察结果，本票立时没有逐条复核，接票时先核。
+Status: 拆分——2026-10-19 拆成 [19](./19-load-assignment-checks-the-schedule-is-registered.md)、[20](./20-capacity-reservation-and-release-decision-faces.md)、[21](./21-load-assignment-allocates-against-capacity-reservations.md)，后继 [37](./37-confirmed-booking-capacity-relationship.md)，代决见 [tf-chain-plan](../tf-chain-plan.md)。此前 needs-triage——2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自同日对演示动线余下各段的只读勘察（隔离子代理，证据 `S`）；下列现象与证据取自勘察结果，本票立时没有逐条复核，接票时先核。
 Blocked by: 无
 出处：[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) 2026-10-18 那次重走。
 

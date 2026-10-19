@@ -1,7 +1,7 @@
 # 04 交接之后节点控制不转移，路由也收不到复核触发
 
 Category: enhancement
-Status: needs-triage——2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自同日对演示动线余下各段的只读勘察（隔离子代理，证据 `S`）；下列现象与证据取自勘察结果，本票立时没有逐条复核，接票时先核。
+Status: needs-triage——2026-10-19 会话 idp-parcel-9b 已交还，归本会话；待 TF 链第一波后接（见 [tf-chain-plan](../tf-chain-plan.md)「等 peer 的」）。此前 needs-triage——2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自同日对演示动线余下各段的只读勘察（隔离子代理，证据 `S`）；下列现象与证据取自勘察结果，本票立时没有逐条复核，接票时先核。
 Blocked by: 无
 出处：[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) 2026-10-18 那次重走。
 

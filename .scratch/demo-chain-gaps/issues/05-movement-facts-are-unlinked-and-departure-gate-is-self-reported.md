@@ -1,7 +1,7 @@
 # 05 移动事实与包裹不相连、没有下游；出发门禁由设备自报，不问关务
 
 Category: enhancement
-Status: needs-triage——2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自同日对演示动线余下各段的只读勘察（隔离子代理，证据 `S`）；下列现象与证据取自勘察结果，本票立时没有逐条复核，接票时先核。
+Status: 拆分——2026-10-19 拆成 [31](./31-customs-action-admission-judgement-and-node-customs-zones.md)、[32](./32-movement-facts-declare-segment-and-record-departure-gate-reading.md)、[33](./33-movement-fact-recorded-envelope-and-tracking-projection.md)，后继 [35](./35-network-routing-route-deviation-consumes-movement-facts.md)，代决见 [tf-chain-plan](../tf-chain-plan.md)。此前 needs-triage——2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自同日对演示动线余下各段的只读勘察（隔离子代理，证据 `S`）；下列现象与证据取自勘察结果，本票立时没有逐条复核，接票时先核。
 Blocked by: 无
 出处：[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) 2026-10-18 那次重走。
 

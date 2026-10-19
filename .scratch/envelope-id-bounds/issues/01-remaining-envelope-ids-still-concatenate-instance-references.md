@@ -68,3 +68,5 @@ Blocked by: 无
 - 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `d2ee98db`：143 包 ok，0 FAIL，0 SKIP。
 - 之后 rebase 跨过 ADR-0190 文档与对端会话的运输履约几笔。重跑了架构门禁、运输履约、`cmd/parcel-api`、`cmd/parcel-dispatch`，全部 ok。
 - 快进推到 main：`e564ecbd..20a06645`。机制清点在钉 `20a06645` 的干净树上重生成，另起一笔。
+
+2026-10-19 补：运输履约那一半另吸收容量消耗交接的事件 ID 与 `Consume` 重放幂等，裁定见 [demo-chain-gaps/tf-chain-plan](../../demo-chain-gaps/tf-chain-plan.md)「03 装载分配与容量」D03-7。

@@ -1,7 +1,7 @@
 # 07 运输收费发生项没有形成路径，也没有信封
 
 Category: enhancement
-Status: needs-triage——2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自同日对演示动线余下各段的只读勘察（隔离子代理，证据 `S`）；下列现象与证据取自勘察结果，本票立时没有逐条复核，接票时先核。
+Status: 拆分——2026-10-19 拆成 [27](./27-transport-charge-occurrences-are-registered-and-handed-off.md)、[28](./28-booking-and-cancellation-occurrences-and-procurement-context-from-adoption.md)、[29](./29-supplier-agreements-declare-charge-occurrence-conditions.md)（协议核对适配器在 [22](./22-supplier-agreement-version-point-read-and-tf-check-adapter.md)，SA 消费信封在 [26](./26-settlement-consumes-charge-occurrence-formed-to-request-buy-evaluation.md)），代决见 [tf-chain-plan](../tf-chain-plan.md)。此前 needs-triage——2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自同日对演示动线余下各段的只读勘察（隔离子代理，证据 `S`）；下列现象与证据取自勘察结果，本票立时没有逐条复核，接票时先核。
 Blocked by: 无
 出处：[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) 2026-10-18 那次重走。
 

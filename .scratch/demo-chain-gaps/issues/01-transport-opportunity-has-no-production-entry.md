@@ -1,7 +1,7 @@
 # 01 运输机会与班次没有生产入口：路由形成后运输履约不知道有包裹要运
 
 Category: enhancement
-Status: needs-triage——2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自同日对演示动线余下各段的只读勘察（隔离子代理，证据 `S`）；下列现象与证据取自勘察结果，本票立时没有逐条复核，接票时先核。
+Status: 拆分——2026-10-19 拆成 [16](./16-transport-schedule-templates-and-concrete-schedules-are-registered.md)、[17](./17-capacity-pools-are-registered.md)、[18](./18-transport-preparation-consumes-the-initial-route.md)，后继 [34](./34-network-routing-replanned-route-envelope-and-tf-preparation-consumer.md)、[36](./36-tf-authorized-re-preparation-request-face.md)，代决见 [tf-chain-plan](../tf-chain-plan.md)。此前 needs-triage——2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自同日对演示动线余下各段的只读勘察（隔离子代理，证据 `S`）；下列现象与证据取自勘察结果，本票立时没有逐条复核，接票时先核。
 Blocked by: 无
 出处：[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) 2026-10-18 那次重走。
 
