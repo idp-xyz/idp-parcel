@@ -25,6 +25,7 @@ Blocked by: [20](./20-capacity-reservation-and-release-decision-faces.md)
 
 - 已过期的预占列不列、怎么排（按判断时点还是按有效期）。
 - 释放明细放在预占行下还是另立一册。
+- **池行时刻的语义**（票 20 隔离评审并入）。`CapacityPools.Replace` 每次换存都把 `capacity_pool.recorded_at` 改写成此刻；票 20 给它接上生产调用方之后，每次预占或释放都改它，池登记口重放 `EXISTING_POOL` 回显的 `recordedAt` 与查阅册池行的时刻都成了最后一次换存的时刻，不再是建池时刻。二选一：池行时刻保持建池时刻（`Replace` 不动 `recorded_at`，编排 `replacePool` 也不改记录上的时刻，逐份预占的时刻由本册各行自带）；或保留「最后一次换存」，在池登记口与查阅册的文档里写明。前者让登记口重放稳定，倾向前者；交 TF owner 定。
 
 ## 既有票
 
