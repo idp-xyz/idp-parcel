@@ -225,16 +225,7 @@ func (handler *RegisterTransportHandoverHandler) Register(
 		return handoverRegistryUndecided(command.Object), nil
 	}
 	if found {
-		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedHandoverDigest(command)) {
-		case domain.SamePayload:
-			return handler.existingResult(ctx, existing), nil
-		case domain.DifferentPayload:
-			// 同一判断版本携带不同裁决或证据：冲突保留原判断——改判走更正入口换新版，
-			// 不按最后到达顶替。
-			return RegisterTransportHandoverResult{outcome: HandoverRegistrationConflict}, nil
-		default:
-			return handoverRegistryUndecided(command.Object), nil
-		}
+		return handler.answerOccupiedKey(ctx, existing, digest, unversionedHandoverDigest(command)), nil
 	}
 
 	result, err := handler.commit(ctx, ports.TransportHandoverRecord{
@@ -242,7 +233,7 @@ func (handler *RegisterTransportHandoverHandler) Register(
 		ContentDigest: digest,
 		Handover:      handover,
 		RecordedAt:    handler.deps.Clock.Now(),
-	}, HandoverRegistered)
+	}, unversionedHandoverDigest(command), HandoverRegistered)
 	if err != nil || result.outcome != HandoverRegistered {
 		return result, err
 	}
@@ -363,18 +354,29 @@ func (handler *RegisterTransportHandoverHandler) Correct(
 	if err != nil {
 		return RegisterTransportHandoverResult{}, err
 	}
+	key := ports.TransportHandoverKey{
+		TenantID: command.TenantID,
+		Object:   corrected.Object(),
+		Scope:    corrected.Scope(),
+		Version:  corrected.Version(),
+	}
+	unversioned := unversionedHandoverCorrectionDigest(command)
+	occupant, occupied, err := handler.deps.Handovers.FindByKey(ctx, key)
+	if err != nil {
+		return handoverRegistryUndecided(command.Object), nil
+	}
+	if occupied {
+		// 新版本键上已有一版：是这次更正的重放，还是同键异内容（换了证据、改了判、换了前版，或撞上一份首登的版本号）。
+		// 跨口撞键时两份摘要的 face 不同，自然落进冲突格。
+		return handler.answerOccupiedKey(ctx, occupant, correctionDigest, unversioned), nil
+	}
 
 	result, err := handler.commit(ctx, ports.TransportHandoverRecord{
-		Key: ports.TransportHandoverKey{
-			TenantID: command.TenantID,
-			Object:   corrected.Object(),
-			Scope:    corrected.Scope(),
-			Version:  corrected.Version(),
-		},
+		Key:           key,
 		ContentDigest: correctionDigest,
 		Handover:      corrected,
 		RecordedAt:    handler.deps.Clock.Now(),
-	}, HandoverCorrected)
+	}, unversioned, HandoverCorrected)
 	if err != nil || result.outcome != HandoverCorrected {
 		// 并发落败读回赢家、或登记未决：段那一半由真把版本落下去的那一方重派生。
 		return result, err
@@ -401,10 +403,12 @@ func (handler *RegisterTransportHandoverHandler) rederiveParticipation(
 	)
 }
 
-// commit 提交记录并交发布意图；并发下另一方先提交时读回赢家。
+// commit 提交记录并交发布意图；并发下另一方先提交时读回赢家，按赢家的已存摘要分重放与冲突。unversioned 是本次命令按
+// 无版本那一版算出的摘要，赢家是 TFC-1 之前入库的行时与它比。
 func (handler *RegisterTransportHandoverHandler) commit(
 	ctx context.Context,
 	record ports.TransportHandoverRecord,
+	unversioned string,
 	outcome HandoverRegistrationOutcome,
 ) (RegisterTransportHandoverResult, error) {
 	saved, err := handler.deps.Handovers.Save(ctx, record)
@@ -421,9 +425,27 @@ func (handler *RegisterTransportHandoverHandler) commit(
 		if err != nil || !found {
 			return handoverRegistryUndecided(record.Key.Object.String()), nil
 		}
-		return handler.existingResult(ctx, winner), nil
+		return handler.answerOccupiedKey(ctx, winner, record.ContentDigest, unversioned), nil
 	default:
 		return RegisterTransportHandoverResult{}, fmt.Errorf("%w: %d", ErrUnexpectedHandoverSave, saved)
+	}
+}
+
+// answerOccupiedKey 按在册那一版的已存摘要给同键的这一份分格：同内容是重放，交回原版并重发同一份意图；异内容是冲突，
+// 保留原判断（改判走更正换新版，不按最后到达顶替）；认不出的形状此刻判断不了，答登记册未决。
+func (handler *RegisterTransportHandoverHandler) answerOccupiedKey(
+	ctx context.Context,
+	occupant ports.TransportHandoverRecord,
+	digest string,
+	unversioned string,
+) RegisterTransportHandoverResult {
+	switch domain.CompareStoredDigest(occupant.ContentDigest, digest, unversioned) {
+	case domain.SamePayload:
+		return handler.existingResult(ctx, occupant)
+	case domain.DifferentPayload:
+		return RegisterTransportHandoverResult{outcome: HandoverRegistrationConflict}
+	default:
+		return handoverRegistryUndecided(occupant.Key.Object.String())
 	}
 }
 

@@ -78,13 +78,13 @@ func unversionedDigestCases(t *testing.T) []unversionedDigestCase {
 		pickupRegistrationUnversionedCase(t),
 		pickupCorrectionUnversionedCase(t),
 		handoverUnversionedCase(t),
+		handoverCorrectionUnversionedCase(t),
 		journeyUnversionedCase(t),
 	}
 }
 
 // Covers: ADR-0014「规范化版本不同不是冲突」——TFC-1 之前入库的记录存的是无版本摘要，同一条命令
-// 重放按无版本那一版重算再比，答已有结果；同身份换内容仍是内容冲突。比摘要的定形口逐口走一遍；
-// 交接更正口不比摘要（重放与撞键都走版本键），不在此列。
+// 重放按无版本那一版重算再比，答已有结果；同身份换内容仍是内容冲突。比摘要的定形口逐口走一遍。
 func TestRecordsStoredBeforeTFC1AreComparedUnderTheirOwnShape(t *testing.T) {
 	for _, testCase := range unversionedDigestCases(t) {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -407,6 +407,44 @@ func handoverUnversionedCase(t *testing.T) unversionedDigestCase {
 			changed := registerHandoverCommand(t)
 			changed.ReleasingEvidence = "evidence-release-2"
 			register(t, changed, application.HandoverRegistrationConflict)
+		},
+	}
+}
+
+// handoverCorrectionUnversionedCase 是交接更正口（票 operator-channel/41）：更正行在 TFC-1 之前存的是无版本摘要，
+// 撞上同一新版本键时与它比。
+func handoverCorrectionUnversionedCase(t *testing.T) unversionedDigestCase {
+	fixture := newHandoverFixture(t)
+	command := correctHandoverCommand(t, "handover-result/parcel-1/v1", "handover-result/parcel-1/v2")
+	correct := func(t *testing.T, command application.CorrectTransportHandoverCommand, want application.HandoverRegistrationOutcome) {
+		t.Helper()
+		result, err := fixture.handler.Correct(context.Background(), command)
+		wantOutcome(t, result.Outcome(), err, want)
+	}
+	return unversionedDigestCase{
+		name:        "CORRECT_TRANSPORT_HANDOVER",
+		unversioned: "99676a65c8e4bd4a0bd72335d6eb998326dd0f9d92cad3e8cfe013941895f1c8",
+		first: func(t *testing.T) (string, func(string)) {
+			registered, err := fixture.handler.Register(context.Background(), registerHandoverCommand(t))
+			wantOutcome(t, registered.Outcome(), err, application.HandoverRegistered)
+			correct(t, command, application.HandoverCorrected)
+			for key, stored := range fixture.registry.records {
+				if stored.Key.Version.String() != command.NewVersion {
+					continue
+				}
+				return stored.ContentDigest, func(rewritten string) {
+					stored.ContentDigest = rewritten
+					fixture.registry.records[key] = stored
+				}
+			}
+			t.Fatal("更正行不在登记册里")
+			return "", nil
+		},
+		replay: func(t *testing.T) { correct(t, command, application.HandoverExistingVersion) },
+		conflict: func(t *testing.T) {
+			changed := command
+			changed.Basis = "late-correction-2"
+			correct(t, changed, application.HandoverRegistrationConflict)
 		},
 	}
 }

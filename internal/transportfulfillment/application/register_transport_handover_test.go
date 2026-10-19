@@ -23,6 +23,8 @@ type handoverRegistryDouble struct {
 	saveResult  ports.HandoverSaveOutcome
 	forceResult bool
 	saves       int
+	// beforeSave 在落库判撞键之前跑一次，用来模拟另一方恰好先提交了同一键。
+	beforeSave func()
 }
 
 func newHandoverRegistry() *handoverRegistryDouble {
@@ -49,6 +51,10 @@ func (double *handoverRegistryDouble) Save(
 	record ports.TransportHandoverRecord,
 ) (ports.HandoverSaveOutcome, error) {
 	double.saves++
+	if hook := double.beforeSave; hook != nil {
+		double.beforeSave = nil
+		hook()
+	}
 	if double.saveErr != nil {
 		return ports.HandoverSaveOutcomeInvalid, double.saveErr
 	}

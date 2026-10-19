@@ -57,6 +57,11 @@ ADR-0100 把操作者渠道限在登记册配置写面与目录查阅面，并�
 4. **凭据本体属敏感实例**：客户端密钥、私钥、webhook 签名密钥都外置，产品只存客户端标识与凭据引用。
 5. **规范化形状逐口定**：未定形状的口不开真渠道，真渠道因此按口逐步开，而不是一次全开。
 
+## 复核记录（2026-10-18；决定原文不动）
+
+1. **POD 更正的线格式指名前版**（票 [operator-channel/41](../../.scratch/operator-channel/issues/41-tf-correction-faces-tell-replay-from-conflict.md) 裁定 (a)，会话 `idp-parcel-9b` 代决）：决定四说「摘要进信封，作同身份重放与内容冲突的判据」，`/transport-fulfillment/delivery-proof-corrections` 原先的载荷里没有任何不从内容派生的身份——原样重发每次再签一版、迟到的旧更正把当前 POD 改回去。载荷加必填的 `predecessorVersion`，与揽收更正同形：设备从首登或上一次更正答复的 `deliveryVersion` 取它；链线性，一版至多被更正一次；指名的前版已不是当前版时与当前版比，同内容答已有版本、异内容答冲突。比对形状是 TFC-1 的 `CORRECT_DELIVERY_PROOF`，两侧都从在册本体现算，册行摘要仍是首登那一份。这是端侧契约，改动当日没有调用方。
+2. **交接更正撞键分重放与冲突**（同票）：交接更正口原先撞上新版本键就读回赢家答已有版本，不比摘要；现按已存摘要经 `CompareStoredDigest` 分格，TFC-1 之前入库的更正行与无版本那一版比。交接首登的并发输家同样分格。
+
 ## Links
 
 - [ADR-0100](./0100-operator-identity-is-a-product-owned-access-channel-family.md)：本记录部分停用其决定四末段与决定五第一条的一半

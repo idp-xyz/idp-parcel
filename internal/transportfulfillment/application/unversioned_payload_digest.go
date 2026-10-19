@@ -12,8 +12,6 @@ import (
 // 本文件是各口在 TFC-1 之前的摘要算法，即「无版本」那一版。改动前入库的记录存的是它们算出的
 // 不带前缀的摘要，存量不回写（ADR-0014），所以它们只用来跟这类已存摘要比（domain.CompareStoredDigest），
 // 不再写进新记录。函数体一个字节都不能改：改了，同内容的旧记录就会被答成冲突。
-//
-// 交接更正口没有这一版：它的重放与撞键都走版本键，从不比摘要。
 
 // unversionedDispositionDigest 折叠承接决定的全部业务内容：同键异指纹即冒名冲突。
 func unversionedDispositionDigest(command AcceptRegulatoryDispositionCommand) string {
@@ -138,6 +136,21 @@ func unversionedHandoverDigest(command RegisterTransportHandoverCommand) string 
 		command.Rule,
 		command.Basis,
 		command.JudgedAt.UTC().Format(time.RFC3339Nano),
+	}, "\x00")))
+	return hex.EncodeToString(digest[:])
+}
+
+// unversionedHandoverCorrectionDigest 是交接更正口在 TFC-1 之前写进更正行的摘要，函数体照基 1121ba61 的 correctionDigest
+// 原样恢复。那时这一口只存不比；撞上同一新版本键时要分重放与冲突（票 operator-channel/41），存量更正行就得按它比。
+func unversionedHandoverCorrectionDigest(command CorrectTransportHandoverCommand) string {
+	digest := sha256.Sum256([]byte(strings.Join([]string{
+		fmt.Sprintf("%d", command.Verdict),
+		command.PredecessorVersion,
+		command.ReleasingEvidence,
+		command.ReceivingEvidence,
+		command.Rule,
+		command.Basis,
+		command.CorrectedAt.UTC().Format(time.RFC3339Nano),
 	}, "\x00")))
 	return hex.EncodeToString(digest[:])
 }
