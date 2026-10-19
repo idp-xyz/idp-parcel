@@ -260,6 +260,7 @@ go run ./cmd/parcel-dispatch
 | 关闭之后归入、归入已识别或记了多候选冲突的实物、客户对未关闭的交接单作结论 | `200 HANDOVER_NOTE_STATE_MISMATCH`，`stateMismatch` 为 `NOTE_CLOSED` / `UNIT_NOT_ASSIGNABLE` / `NOTE_NOT_CLOSED` |
 | 运营决定确认：交付方没有授权交付关系 / 本租户一条都没登记 | `200 NOT_IN_AUTHORIZED_DELIVERY_RELATIONSHIP` / `200 AUTHORIZED_DELIVERY_NOT_CONFIGURED`，不落结论 |
 | 交接单不存在、不是设备那个节点开立的、客户账户不在声称之列 | `404 DELIVERY_HANDOVER_NOTE_NOT_VISIBLE`，几种同答 |
+| 交接单关闭之后再带它的标识送站（收寄口） | `200 PENDING_IDENTIFICATION`，`UNVERIFIED` / `BASIS_NOT_APPLICABLE` / `NOT_A_HANDOVER_MEMBER`：关闭冻结成员，这一件不在名下，不借这张单的范围（ADR-0212 文末复核记录） |
 | 别族令牌 | 作业事实与运营决定口答 `401 OPERATOR_CREDENTIAL_REJECTED`，客户口答 `401 CUSTOMER_CLIENT_CREDENTIAL_REJECTED` |
 
 客户口的答复只回显交接单标识与自己那一个账户的结论，不回显声称了谁、范围成立没有。

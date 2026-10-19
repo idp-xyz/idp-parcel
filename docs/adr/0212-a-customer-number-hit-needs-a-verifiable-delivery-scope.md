@@ -192,6 +192,15 @@ UC-NO-002 早就设想过这一格。「参与者与协作」写交付方「提�
 
 授权交付判断的问句在实施时多了一格「开立节点」：参数登记册 `PAR-NET-17` 允许把授权交付关系收到节点，不带节点就判不了「有节点范围的也覆盖开立节点」。问句因此是（租户，交付方参与方，客户账户，开立节点，时刻）；CONTEXT-MAP `party-commercial → node-operations` 与 UC-NO-006 参与者表同句已随票 ps-external-mark-relations/10 改写，判断三格的判据见该票完成记录。
 
+## 复核记录（2026-10-19，票 ps-external-mark-relations/12 评审，决定原文不动）
+
+以送站交接单为依据推可验证交付范围时，这件作业实物须是该交接单名下的成员（收寄带来的或归入的都算）；不是成员，答「依据不适用」，决定五「依据不适用」的细分多一格「不是交接单成员」（线上名 `NOT_A_HANDOVER_MEMBER`）。成员判在绑定之前：不是成员，补齐绑定也补不出范围，恢复动作是把它归入一张开放的交接单。
+
+- **理由。** 决定三让客户渠道只对已关闭的交接单作结论，客户确认的是关闭那一刻冻结的成员清单。实施时推导只看收寄来源里的依据引用、不看成员，关闭之后才带着单号送来的件也拿到「已证」，等于绕过了客户的确认。NO CONTEXT「可验证交付范围」本来就写交接单「落到它名下的作业实物」，这一条把推导对齐到定义，不改定义。
+- **次序。** 交接单开放期间，带它标识的收寄先落成收寄带来的成员、再推导，成员即成立；关闭之后的收寄不再落成员（关闭冻结成员），推导答不是交接单成员，落范围未证的待识别、不关联。重核按此刻的成员册判，与收寄同一判法。
+- **既有行。** 这一条之前带交接单标识落下的收寄没有收寄成员，重核时答不是交接单成员；那段时间交接单没有命令口，这样的行只来自直写册的夹具。
+- **代决。** 会话 `idp-parcel-9b` 在票 12 评审里裁为阻断、就在票 12 修，授权同本记录 Status 行；判它是机制漏洞，不是租户取值。实施与用例见票 [ps-external-mark-relations/12](../../.scratch/ps-external-mark-relations/issues/12-handover-notes-are-opened-filled-closed-and-confirmed.md) 完成记录。
+
 ## Links
 
 - 票：[ps-external-mark-relations/07](../../.scratch/ps-external-mark-relations/issues/07-verifiable-delivery-scope-for-customer-numbers.md)；父票 [05](../../.scratch/ps-external-mark-relations/issues/05-a-unique-hit-in-someone-elses-number-space-is-not-enough.md)
