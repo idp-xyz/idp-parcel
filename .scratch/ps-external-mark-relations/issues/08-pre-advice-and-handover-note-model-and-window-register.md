@@ -1,7 +1,7 @@
 # 08 送站预报与送站交接单的领域模型和存储，可验证交付范围的推导，预报有效时窗册
 
 Category: enhancement
-Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-psxm08`，NO 迁移号 0013；与票 10 并行。此前 ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
+Status: resolved——2026-10-19 进 main（代码验证钉 `677cf250`），见「进 main 记录」。此前 in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-psxm08`，NO 迁移号 0013；与票 10 并行。此前 ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
 Blocked by: 无（ADR-0212 已接受）
 父票：[07](./07-verifiable-delivery-scope-for-customer-numbers.md)
 出处：[ADR-0212](../../../docs/adr/0212-a-customer-number-hit-needs-a-verifiable-delivery-scope.md) 决定一、二、三、五、九；NO CONTEXT「可验证交付范围」「送站预报」「送站交接单」与两段同名生命周期；[UC-NO-006](../../../docs/application/node-operations/UC-NO-006-ESTABLISH-A-VERIFIABLE-DELIVERY-SCOPE.md)。
@@ -57,7 +57,7 @@ Blocked by: 无（ADR-0212 已接受）
 - [x] 时窗册的写面与受控批量口：同一用例，重放答已有结果；未授予与未配置各答其格（ADR-0085）。
 - [x] 演示种子登一行时窗，`seed.sh` 退 0。
 - [x] Go 门禁：`go build ./...`、`go vet ./...` 退 0，`gofmt -l .` 无输出；带 DSN 跑 `internal/nodeoperations/...`、新 CLI、`cmd/parcel-api`、`migrations/...`、`internal/architecture/...` 全绿；机制清点重生成。
-- [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
+- [x] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
 
 ## 规模
 
@@ -166,3 +166,8 @@ M
 - **作者自定的格认可**：交接单在别的节点开立答依据不适用·节点不符；未证原因的细分只挂在「依据不适用」上；写口撞键一律答已在册并回显，重放与冲突由票 09、12 的命令口去比。
 - **Standards**：棘轮基线两份随新入口加行，底数钉 `a2ff42f6`；共享文件只追加。
 - **非阻断（另立票）**：时窗册登了终点为空的一行之后，这个租户再也登不进更晚起点的行（演示种子就是这样登的），换时窗只能动库 → ps-external-mark-relations/14（加「时窗收口」事实，代决已写）。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 分支 `claude-psxm08` rebase 到票 10 进 main 之后（只撞机制清点，在新树上重生成）快进推送。
+- 推送方全量一次：钉 `677cf250` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 150 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
