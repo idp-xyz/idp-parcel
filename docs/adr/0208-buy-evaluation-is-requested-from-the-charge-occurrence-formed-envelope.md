@@ -67,4 +67,5 @@ Date: 2026-10-19
 - [ADR-0025](./0025-cross-context-adapters-live-on-the-consumer-side.md)：跨上下文读经消费侧适配器
 - [ADR-0029](./0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md)、[ADR-0094](./0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md)：未配置入账，读不动未决
 - [UC-SA-002](../application/settlement-accounting/UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md)：步 2，`AT-SA-185` 至 `AT-SA-187`
+- [ADR-0207：运输收费发生项由运营决定显式登记](./0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md)：本信封的生产方，载荷三键与决定六的协议指称照写
 - 票 `.scratch/demo-chain-gaps/issues/26-settlement-consumes-charge-occurrence-formed-to-request-buy-evaluation.md`

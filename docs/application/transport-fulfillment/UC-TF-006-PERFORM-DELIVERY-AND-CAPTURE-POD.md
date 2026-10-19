@@ -82,7 +82,7 @@
 | 4 | `transport-fulfillment` | 收集 POD 和外部来源版本 | 证据不足保持待确认 |
 | 5 | `transport-fulfillment` | 按服务/合同规则判断有效交付 | 只有合格对象转移控制 |
 | 6 | `transport-fulfillment` | 结束已交付对象履约参与，保留未完成对象控制 | 交给终局或后续处置 |
-| 7 | `transport-fulfillment` | 对适用外包协议下已经发生的尝试形成运输收费发生项 | 只保存发生范围；金额交给 `settlement-accounting` |
+| 7 | `transport-fulfillment` | 对适用外包协议下已经发生的尝试形成运输收费发生项：经运营决定另行登记，不在本编排里形成（[ADR-0098](../../adr/0098-a-failed-attempt-charge-occurrence-is-not-formed-inside-the-pickup-orchestration.md)、[ADR-0207](../../adr/0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md)；登法与 AT 见 [`UC-TF-005`](./UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md) 步 9） | 只保存发生范围；金额交给 `settlement-accounting` |
 | 8 | `transport-fulfillment` | 保存审计、来源和发布意图 | 发布失败只重试原意图 |
 
 ## 派送与交付规则

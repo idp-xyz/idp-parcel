@@ -70,3 +70,4 @@ Date: 2026-09-02
 - [ADR-0096](0096-a-fulfillment-segment-identity-is-declared-not-derived.md)：「可能根本不存在的东西当不了推导的输入」同源判据
 - [ADR-0094](0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md)：静默不发生且无人重试的派生步骤，本 ADR 决定一第二条引它
 - [tf-unwired-seven/04](../../.scratch/tf-unwired-seven/issues/04-transport-charge-occurrence-registry.md)
+- [ADR-0207：运输收费发生项由运营决定显式登记](./0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md)：后继——落在本记录决定二之内，把决定一扩到实际履约，给出决定三不适用格的两种读法，接通 Consequences 所说未接通的生产触发链；本记录各条不变

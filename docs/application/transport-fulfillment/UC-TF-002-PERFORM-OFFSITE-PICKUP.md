@@ -112,7 +112,7 @@
 | 6A | `transport-fulfillment` | 接收且取得控制时形成场外揽收、履约参与和实际履约段起点 | 交给 `parcel-shipment` 判断有效网络收寄 |
 | 6B | `transport-fulfillment` | 未接收时形成失败或拒收结果 | 后续重试、改约或终止另行决定 |
 | 6C | `transport-fulfillment` | 证据不足或冲突时形成待确认 | 查询原来源，不创建实际段 |
-| 7 | `transport-fulfillment` | 对适用外包协议下已经发生的尝试形成运输收费发生项 | 只保存发生范围；金额交给 `settlement-accounting` |
+| 7 | `transport-fulfillment` | 对适用外包协议下已经发生的尝试形成运输收费发生项：经运营决定另行登记，不在本编排里形成（[ADR-0098](../../adr/0098-a-failed-attempt-charge-occurrence-is-not-formed-inside-the-pickup-orchestration.md)、[ADR-0207](../../adr/0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md)；登法与 AT 见 [`UC-TF-005`](./UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md) 步 9） | 只保存发生范围；金额交给 `settlement-accounting` |
 | 8 | `transport-fulfillment` | 原子提交对象级结果、控制、审计和对应发布意图 | 投递失败只重试原发布意图 |
 | 9 | `network-routing` | 消费已经确认的实际接货位置和控制依据 | 通过 `UC-NR-003` 复核剩余路由 |
 
