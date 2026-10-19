@@ -40,12 +40,19 @@ const (
 	LoadAssignmentVersionAlreadyRegistered
 )
 
-// LoadAssignmentRegistry 按（租户 + 分配 + 版本）找回并登记装载分配。
+// LoadAssignmentRegistry 按（租户 + 分配 + 版本）找回并登记装载分配，也按（租户 + 分配）取链头。
 //
 // **只插不改，本口没有也不会有 Update。** 变化与撤回在领域里各自形成新版本（ReviseMembers 与
 // Withdraw 都返回新值、原值不动），库面跟上的方式就是再插一行。给这个口开一个能改既有行的
 // 方法，「不修改分配历史」这条就在类型上表达不出来了——而它是 CONTEXT 的硬句。
 type LoadAssignmentRegistry interface {
 	FindByKey(ctx context.Context, key LoadAssignmentKey) (LoadAssignmentRecord, bool, error)
+	// FindChainHead 取回该分配此刻未被任何版本回指的那一版；分配还没有任何版本时只回 false。登记口靠它
+	// 认出「这次分配已经形成过」——按本次键查只看得见同一版本，看不见同一分配下的别的版本。
+	FindChainHead(
+		ctx context.Context,
+		tenant domain.TenantID,
+		assignment domain.LoadAssignmentReference,
+	) (LoadAssignmentRecord, bool, error)
 	Save(ctx context.Context, record LoadAssignmentRecord) (LoadAssignmentSaveOutcome, error)
 }

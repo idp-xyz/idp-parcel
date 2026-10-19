@@ -118,6 +118,47 @@ func (repository *LoadAssignments) FindByKey(
 	return ports.LoadAssignmentRecord{Key: key, Assignment: assignment, RecordedAt: recordedAt.UTC()}, true, nil
 }
 
+// FindChainHead 取回该分配此刻未被任何版本回指的那一版。「链头」是派生问答不是可变标记：表上没有 current 列。
+//
+// 本表的库面只守一分配一个首版（0021），不守「一版至多被回指一次」——变化与撤回的入口还没接
+// （tf-unwired-seven/05），并列的链尾今天造不出来。真出现时取最后登记的那一版，让答案可复现而不是看扫描顺序。
+func (repository *LoadAssignments) FindChainHead(
+	ctx context.Context,
+	tenant domain.TenantID,
+	assignment domain.LoadAssignmentReference,
+) (ports.LoadAssignmentRecord, bool, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return ports.LoadAssignmentRecord{}, false, fmt.Errorf("find load assignment chain head: %w", err)
+	}
+	var version string
+	err = querier.QueryRow(ctx,
+		`SELECT head.version
+		   FROM transport_fulfillment.load_assignment AS head
+		  WHERE head.tenant_id = $1 AND head.assignment_ref = $2
+		    AND NOT EXISTS (
+		        SELECT 1 FROM transport_fulfillment.load_assignment AS successor
+		         WHERE successor.tenant_id = head.tenant_id
+		           AND successor.assignment_ref = head.assignment_ref
+		           AND successor.corrects_version = head.version)
+		  ORDER BY head.recorded_at DESC, head.version DESC
+		  LIMIT 1`,
+		tenant.String(), assignment.String(),
+	).Scan(&version)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.LoadAssignmentRecord{}, false, nil
+	}
+	if err != nil {
+		return ports.LoadAssignmentRecord{}, false, fmt.Errorf("find load assignment chain head: %w", err)
+	}
+	head, err := domain.NewLoadAssignmentVersion(version)
+	if err != nil {
+		return ports.LoadAssignmentRecord{}, false, fmt.Errorf("find load assignment chain head: %w", err)
+	}
+	// 版本行只插不改，两次读之间链头若又长出后继，读回的这一版仍是它此前的原样。
+	return repository.FindByKey(ctx, ports.LoadAssignmentKey{TenantID: tenant, Assignment: assignment, Version: head})
+}
+
 // Save 登记一个版本连同它的对象范围。撞键答`已登记`（ADR-0031），编排据此读回原版本。
 //
 // 撞键只看版本那一行：成员挂在它下面，版本已在册就说明这一整版已经有人写过。

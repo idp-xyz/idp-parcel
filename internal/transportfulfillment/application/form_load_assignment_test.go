@@ -20,8 +20,11 @@ var (
 type loadAssignmentRegistryDouble struct {
 	records map[string]ports.LoadAssignmentRecord
 	findErr error
+	headErr error
 	saveErr error
 	saves   int
+	// rival 在本次插入之前落进另一位写入方的版本：编排读链头与写之间别人先提交了。
+	rival *ports.LoadAssignmentRecord
 }
 
 func newLoadAssignmentRegistry() *loadAssignmentRegistryDouble {
@@ -43,6 +46,29 @@ func (double *loadAssignmentRegistryDouble) FindByKey(
 	return record, found, nil
 }
 
+// FindChainHead 照库面的派生取链头：同一分配里没被任何版本回指的那一版。
+func (double *loadAssignmentRegistryDouble) FindChainHead(
+	_ context.Context,
+	tenant domain.TenantID,
+	assignment domain.LoadAssignmentReference,
+) (ports.LoadAssignmentRecord, bool, error) {
+	if double.headErr != nil {
+		return ports.LoadAssignmentRecord{}, false, double.headErr
+	}
+	corrected := map[domain.LoadAssignmentVersion]bool{}
+	for _, record := range double.records {
+		if prior, has := record.Assignment.Corrects(); has && record.Key.TenantID == tenant && record.Key.Assignment == assignment {
+			corrected[prior] = true
+		}
+	}
+	for _, record := range double.records {
+		if record.Key.TenantID == tenant && record.Key.Assignment == assignment && !corrected[record.Key.Version] {
+			return record, true, nil
+		}
+	}
+	return ports.LoadAssignmentRecord{}, false, nil
+}
+
 func (double *loadAssignmentRegistryDouble) Save(
 	_ context.Context,
 	record ports.LoadAssignmentRecord,
@@ -51,8 +77,21 @@ func (double *loadAssignmentRegistryDouble) Save(
 	if double.saveErr != nil {
 		return ports.LoadAssignmentSaveOutcomeInvalid, double.saveErr
 	}
+	if double.rival != nil {
+		double.records[loadAssignmentRegistryKey(double.rival.Key)] = *double.rival
+		double.rival = nil
+	}
 	if _, exists := double.records[loadAssignmentRegistryKey(record.Key)]; exists {
 		return ports.LoadAssignmentVersionAlreadyRegistered, nil
+	}
+	// 首版唯一索引的替身：同一分配已有一个不回指前版的版本，另一个首版同样撞上。
+	if _, corrects := record.Assignment.Corrects(); !corrects {
+		for _, other := range double.records {
+			_, otherCorrects := other.Assignment.Corrects()
+			if !otherCorrects && other.Key.TenantID == record.Key.TenantID && other.Key.Assignment == record.Key.Assignment {
+				return ports.LoadAssignmentVersionAlreadyRegistered, nil
+			}
+		}
 	}
 	double.records[loadAssignmentRegistryKey(record.Key)] = record
 	return ports.LoadAssignmentSaved, nil

@@ -171,6 +171,65 @@ func TestASecondSaveOfTheSameVersionKeepsTheOriginal(t *testing.T) {
 	}
 }
 
+// TestTheChainHeadIsTheVersionNoOtherCorrects 证按分配取链头：没有版本时读空；只有首版时是首版；变化与撤回之后是
+// 最后那一版——撤回版同样是链头，登记口靠它对已撤回的分配作答。别的租户下同名分配不串进来。
+func TestTheChainHeadIsTheVersionNoOtherCorrects(t *testing.T) {
+	repository, transactor, _ := newLoadAssignments(t)
+	ctx := t.Context()
+	tenant := segmentRef(t, domain.NewTenantID, "SYN-TENANT-01")
+	assignment := segmentRef(t, domain.NewLoadAssignmentReference, "SYN-LA-HEAD")
+
+	if _, found, err := repository.FindChainHead(ctx, tenant, assignment); err != nil || found {
+		t.Fatalf("没有版本的分配读出了链头：found=%v err=%v", found, err)
+	}
+
+	first := synLoadAssignmentRecord(t, "SYN-TENANT-01", "SYN-LA-HEAD", "v1", "SYN-PARCEL-1", "SYN-PARCEL-2")
+	mustSaveLoadAssignment(t, transactor, ctx, repository, first)
+	mustSaveLoadAssignment(t, transactor, ctx, repository,
+		synLoadAssignmentRecord(t, "SYN-TENANT-02", "SYN-LA-HEAD", "v9", "SYN-PARCEL-9"))
+	head, found, err := repository.FindChainHead(ctx, tenant, assignment)
+	if err != nil || !found || head.Key.Version.String() != "v1" || len(head.Assignment.Members()) != 2 {
+		t.Fatalf("只有首版时链头应是 v1：%+v found=%v err=%v", head.Key, found, err)
+	}
+
+	revised, err := first.Assignment.ReviseMembers(
+		[]domain.CarriedObjectReference{segmentRef(t, domain.NewCarriedObjectReference, "SYN-PARCEL-1")},
+		segmentRef(t, domain.NewLoadAssignmentVersion, "v2"), assignedAtDBFixture.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("变化：%v", err)
+	}
+	mustSaveLoadAssignment(t, transactor, ctx, repository, ports.LoadAssignmentRecord{
+		Key: loadAssignmentKeyFixture(t, "SYN-TENANT-01", "SYN-LA-HEAD", "v2"), Assignment: revised,
+		RecordedAt: assignedAtDBFixture.Add(time.Hour + time.Minute),
+	})
+	head, found, err = repository.FindChainHead(ctx, tenant, assignment)
+	if err != nil || !found || head.Key.Version.String() != "v2" {
+		t.Fatalf("变化之后链头应是 v2：%+v found=%v err=%v", head.Key, found, err)
+	}
+	if members := head.Assignment.Members(); len(members) != 1 || members[0].String() != "SYN-PARCEL-1" {
+		t.Fatalf("链头没有带回自己那一版的对象范围：%v", members)
+	}
+
+	withdrawnFirst := synLoadAssignmentRecord(t, "SYN-TENANT-01", "SYN-LA-HEAD-WD", "v1", "SYN-PARCEL-3")
+	mustSaveLoadAssignment(t, transactor, ctx, repository, withdrawnFirst)
+	withdrawn, err := withdrawnFirst.Assignment.Withdraw(
+		segmentRef(t, domain.NewLoadAssignmentVersion, "v2"), assignedAtDBFixture.Add(2*time.Hour))
+	if err != nil {
+		t.Fatalf("撤回：%v", err)
+	}
+	mustSaveLoadAssignment(t, transactor, ctx, repository, ports.LoadAssignmentRecord{
+		Key: loadAssignmentKeyFixture(t, "SYN-TENANT-01", "SYN-LA-HEAD-WD", "v2"), Assignment: withdrawn,
+		RecordedAt: assignedAtDBFixture.Add(2*time.Hour + time.Minute),
+	})
+	head, found, err = repository.FindChainHead(ctx, tenant, segmentRef(t, domain.NewLoadAssignmentReference, "SYN-LA-HEAD-WD"))
+	if err != nil || !found || head.Key.Version.String() != "v2" {
+		t.Fatalf("撤回之后链头应是撤回版 v2：%+v found=%v err=%v", head.Key, found, err)
+	}
+	if _, isWithdrawn := head.Assignment.Withdrawn(); !isWithdrawn {
+		t.Fatal("链头读回来不是撤回版")
+	}
+}
+
 // TestLoadAssignmentWritesRefuseToRunOutsideATransaction 证写口无环境事务即拒——版本行与
 // 成员行必须同笔落。断言指名 ErrTransactionRequired 而不是 err != nil。
 func TestLoadAssignmentWritesRefuseToRunOutsideATransaction(t *testing.T) {
@@ -294,6 +353,31 @@ func loadAssignmentRecord(t *testing.T, assignment, version string, members ...s
 	}
 	return ports.LoadAssignmentRecord{
 		Key:        loadAssignmentKeyFixture(t, "tenant-1", assignment, version),
+		Assignment: formed,
+		RecordedAt: assignedAtDBFixture.Add(time.Minute),
+	}
+}
+
+// synLoadAssignmentRecord 与 loadAssignmentRecord 同形，只是租户由调用方给——跨租户与跨分配的用例要它。
+func synLoadAssignmentRecord(t *testing.T, tenant, assignment, version string, members ...string) ports.LoadAssignmentRecord {
+	t.Helper()
+	objects := make([]domain.CarriedObjectReference, 0, len(members))
+	for _, member := range members {
+		objects = append(objects, segmentRef(t, domain.NewCarriedObjectReference, member))
+	}
+	formed, err := domain.FormLoadAssignment(domain.LoadAssignmentSpec{
+		TenantID:   segmentRef(t, domain.NewTenantID, tenant),
+		Assignment: segmentRef(t, domain.NewLoadAssignmentReference, assignment),
+		Schedule:   segmentRef(t, domain.NewScheduleReference, "SYN-SCHEDULE-1"),
+		Members:    objects,
+		Version:    segmentRef(t, domain.NewLoadAssignmentVersion, version),
+		AssignedAt: assignedAtDBFixture,
+	})
+	if err != nil {
+		t.Fatalf("形成分配夹具：%v", err)
+	}
+	return ports.LoadAssignmentRecord{
+		Key:        loadAssignmentKeyFixture(t, tenant, assignment, version),
 		Assignment: formed,
 		RecordedAt: assignedAtDBFixture.Add(time.Minute),
 	}

@@ -73,6 +73,25 @@ func (double *loadAssignmentRegistryDouble) FindByKey(
 	return record, found, nil
 }
 
+func (double *loadAssignmentRegistryDouble) FindChainHead(
+	_ context.Context,
+	tenant domain.TenantID,
+	assignment domain.LoadAssignmentReference,
+) (ports.LoadAssignmentRecord, bool, error) {
+	corrected := map[domain.LoadAssignmentVersion]bool{}
+	for _, record := range double.records {
+		if prior, has := record.Assignment.Corrects(); has && record.Key.TenantID == tenant && record.Key.Assignment == assignment {
+			corrected[prior] = true
+		}
+	}
+	for _, record := range double.records {
+		if record.Key.TenantID == tenant && record.Key.Assignment == assignment && !corrected[record.Key.Version] {
+			return record, true, nil
+		}
+	}
+	return ports.LoadAssignmentRecord{}, false, nil
+}
+
 func (double *loadAssignmentRegistryDouble) Save(
 	_ context.Context,
 	record ports.LoadAssignmentRecord,
