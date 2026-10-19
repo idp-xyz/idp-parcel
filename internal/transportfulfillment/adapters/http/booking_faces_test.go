@@ -40,7 +40,7 @@ type answerLedgerDouble struct {
 	records []ports.BookingAnswerRecord
 }
 
-func (double *answerLedgerDouble) FindAnswers(_ context.Context, key ports.BookingKey) ([]ports.BookingAnswerRecord, error) {
+func (double *answerLedgerDouble) FindAnswersForUpdate(_ context.Context, key ports.BookingKey) ([]ports.BookingAnswerRecord, error) {
 	var answers []ports.BookingAnswerRecord
 	for _, record := range double.records {
 		if record.Key == key {

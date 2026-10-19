@@ -138,7 +138,8 @@ func (repository *BookingRequests) Save(
 }
 
 // BookingAnswers 实现 ports.BookingAnswerStore 与 ports.BookingAnswerLedger。一次订舱至多一份候补、至多一份定局（迁移
-// 0029 的两条部分唯一索引）；INSERT 撞上任何一条唯一约束即`已有应答`，已接受的行不会被拒绝覆盖。
+// 0029 的两条部分唯一索引）；INSERT 撞上任何一条唯一约束即`已有应答`，已接受的行不会被拒绝覆盖。两份答复之间的先后
+// 索引钉不住，靠 FindAnswersForUpdate 那把锁把同一订舱的判定与写入串起来。
 type BookingAnswers struct {
 	db *bentopg.DB
 }
@@ -175,12 +176,28 @@ func (repository *BookingAnswers) FindByKey(
 	return records[0], true, nil
 }
 
-// FindAnswers 按订舱键取回名下全部答复，按答复时刻先后；同刻按落库先后。
-func (repository *BookingAnswers) FindAnswers(
+// FindAnswersForUpdate 先取（租户、订舱）这一键的事务级咨询锁，再按订舱键取回名下全部答复，按答复时刻先后；同刻按落库
+// 先后。
+//
+// 锁键各维以 chr(31) 分隔后取 hashtext，口径同 ChargeOccurrences.FindCovering 那把锁；哈希撞上只多等一会儿，不错判。
+// 事务隔离是读已提交，取到锁之后的下一条查询拿新快照，看得见先持锁那一笔已提交的答复。不在事务里调用由
+// RequireExecutor 拒——无锁的读答不了「此刻还没有定局」。
+func (repository *BookingAnswers) FindAnswersForUpdate(
 	ctx context.Context,
 	key ports.BookingKey,
 ) ([]ports.BookingAnswerRecord, error) {
-	return repository.query(ctx, key, "find booking answers",
+	const operation = "find booking answers for update"
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", operation, err)
+	}
+	if _, err := executor.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext('transport_fulfillment.booking_answer.booking'), hashtext($1 || chr(31) || $2))`,
+		key.TenantID.String(), key.Booking.String(),
+	); err != nil {
+		return nil, fmt.Errorf("%s: 取订舱锁：%w", operation, err)
+	}
+	return repository.query(ctx, key, operation,
 		`SELECT `+bookingAnswerColumns+`
 		   FROM transport_fulfillment.booking_answer
 		  WHERE tenant_id = $1

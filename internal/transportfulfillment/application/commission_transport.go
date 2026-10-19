@@ -503,7 +503,8 @@ func (handler *CommissionTransportHandler) AnswerBooking(
 	if err != nil {
 		return CommissionResult{}, err
 	}
-	answers, err := handler.deps.Answers.FindAnswers(ctx, key)
+	// 先锁后读：判后继要看见此刻的全部答复，锁到本笔事务结束，并发的另一份答复等这一笔落定再判。
+	answers, err := handler.deps.Answers.FindAnswersForUpdate(ctx, key)
 	if err != nil {
 		return commissionUndecided(AnswerStoreUnavailable, command.Booking), nil
 	}
@@ -534,8 +535,9 @@ func (handler *CommissionTransportHandler) AnswerBooking(
 	case ports.BookingAnswerSaved:
 		return CommissionResult{outcome: BookingAnswered, answer: record, hasRecord: true}, nil
 	case ports.BookingAlreadyAnswered:
-		// 并发下另一份答复先落：同一答复标识按摘要分重放与冲突；撞的是别的标识（另一份定局或候补先占了位）就是冲突。
-		winners, err := handler.deps.Answers.FindAnswers(ctx, key)
+		// 持锁之后仍撞约束，只能是不走本编排的写入先落：同一答复标识按摘要分重放与冲突；撞的是别的标识（另一份定局或
+		// 候补先占了位）就是冲突。
+		winners, err := handler.deps.Answers.FindAnswersForUpdate(ctx, key)
 		if err != nil {
 			return commissionUndecided(AnswerStoreUnavailable, command.Booking), nil
 		}

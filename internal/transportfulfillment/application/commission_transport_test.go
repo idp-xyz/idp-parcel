@@ -117,7 +117,7 @@ func answerStoreKey(record ports.BookingAnswerRecord) string {
 	return bookingStoreKey(record.Key) + "|" + record.Acceptance.Acceptance().String()
 }
 
-func (double *answerStoreDouble) FindAnswers(
+func (double *answerStoreDouble) FindAnswersForUpdate(
 	_ context.Context,
 	key ports.BookingKey,
 ) ([]ports.BookingAnswerRecord, error) {
