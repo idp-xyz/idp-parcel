@@ -63,7 +63,8 @@ func (catalogue *ReviewCatalogue) ListReceptions(
 		        (control->>'releasedAt')::timestamptz,
 		        service_markers,
 		        service_result_check,
-		        recorded_at
+		        recorded_at,
+		        identity_check
 		   FROM node_operations.reception
 		  WHERE tenant_id = $1
 		    AND kind IN ('INTAKE_FORMED', 'PENDING_IDENTIFICATION')
@@ -84,13 +85,14 @@ func (catalogue *ReviewCatalogue) ListReceptions(
 			releasedAt  *time.Time
 			markersJSON []byte
 			checkName   *string
+			identity    *string
 		)
 		if err := rows.Scan(
 			&row.SourceID, &row.Kind,
 			&row.Unit, &row.Node, &row.DeliveredBy, &row.ReceivedAt,
 			&row.ControlKind, &row.ControlEstablishedAt,
 			&row.ControlReleasedBy, &releasedAt,
-			&markersJSON, &checkName, &row.RecordedAt,
+			&markersJSON, &checkName, &row.RecordedAt, &identity,
 		); err != nil {
 			return nil, fmt.Errorf("list receptions: %w", err)
 		}
@@ -108,6 +110,10 @@ func (catalogue *ReviewCatalogue) ListReceptions(
 			return nil, fmt.Errorf("list receptions: source %q: %w", row.SourceID, err)
 		}
 		row.ServiceResultCheck = check
+		// 身份核对态同理，与按键读回共用 identityCheckFrom。
+		if row.IdentityCheck, err = identityCheckFrom(identity); err != nil {
+			return nil, fmt.Errorf("list receptions: source %q: %w", row.SourceID, err)
+		}
 		row.ReceivedAt = row.ReceivedAt.UTC()
 		row.ControlEstablishedAt = row.ControlEstablishedAt.UTC()
 		row.RecordedAt = row.RecordedAt.UTC()
@@ -150,7 +156,8 @@ func (catalogue *ReviewCatalogue) ListUnidentifiedItems(
 		        COALESCE((SELECT successor.judgment_version
 		                    FROM node_operations.reception AS successor
 		                   WHERE successor.tenant_id = r.tenant_id
-		                     AND successor.predecessor_version = r.judgment_version), '')
+		                     AND successor.predecessor_version = r.judgment_version), ''),
+		        r.identity_check
 		   FROM node_operations.reception AS r
 		  WHERE r.tenant_id = $1
 		    AND r.kind = 'PENDING_IDENTIFICATION'
@@ -169,15 +176,22 @@ func (catalogue *ReviewCatalogue) ListUnidentifiedItems(
 		var (
 			row            ports.UnidentifiedItemCatalogueRow
 			candidatesJSON []byte
+			identity       *string
 		)
 		if err := rows.Scan(
 			&row.SourceID, &row.Unit, &row.Node,
 			&candidatesJSON, &row.IdentityConflict,
 			&row.ReceivedAt, &row.Association, &row.RecordedAt,
 			&row.JudgmentVersion, &row.SourcePreserved, &row.Mark, &row.SucceededBy,
+			&identity,
 		); err != nil {
 			return nil, fmt.Errorf("list unidentified items: %w", err)
 		}
+		check, err := identityCheckFrom(identity)
+		if err != nil {
+			return nil, fmt.Errorf("list unidentified items: source %q: %w", row.SourceID, err)
+		}
+		row.IdentityCheck = check
 		if err := json.Unmarshal(candidatesJSON, &row.Candidates); err != nil {
 			return nil, fmt.Errorf("list unidentified items: %w", err)
 		}

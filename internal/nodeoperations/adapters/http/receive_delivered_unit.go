@@ -117,6 +117,10 @@ func NewReceiveDeliveredUnitEndpoint(intake ReceptionIntake, handler ReceptionHa
 // `outcome` 的前四格同一份词，但不进 `outcome`——设备照 `outcome` 出队，重投的处置不因原判断后来被接续而变。来源保全之前的
 // 未收寄与待确认行没有判断版本，`currentVersion` 缺席。
 //
+// `identityCheck` 只随待识别的记录出现（首答、重放与并入都带），同是信息格（ADR-0199 决定五）：CHECKED 是身份核对读口答复了，
+// UNCHECKED 是读口交回错误、没取得 PS 的答复——两条待识别的 outcome 与候选可以逐字相同，只有这一格说得清候选的空是「查无此号」
+// 还是「没问到」。设备照 `outcome` 出队，未核对与已核对的待识别对它是同一种处置，状态码同为 200；续上身份靠服务端的重核。
+//
 // 同一作业实物在同一节点已有当前收寄时，这次送站并入它（ADR-0199 决定四），答的同是已有结果：各格照并入的那一版判断转写，
 // 两格信息格也是那一版的。线上不另立「并入」一格——设备照 `outcome` 出队，并入与重投同一种处置；这次送站自带的拒收原因留在
 // 来源里，不进答复，答复说的是并入的那一条。
@@ -131,6 +135,7 @@ type receptionResponse struct {
 	RefusalReason      string   `json:"refusalReason,omitempty"`
 	ServiceMarkers     []string `json:"serviceMarkers,omitempty"`
 	ServiceResultCheck string   `json:"serviceResultCheck,omitempty"`
+	IdentityCheck      string   `json:"identityCheck,omitempty"`
 	RecordedOutcome    string   `json:"recordedOutcome,omitempty"`
 	CurrentVersion     string   `json:"currentVersion,omitempty"`
 }
@@ -174,6 +179,7 @@ func writeOutcome(response http.ResponseWriter, result application.ReceiveDelive
 		body.RefusalReason = record.RefusalReason
 		body.ServiceMarkers = append(body.ServiceMarkers, record.ServiceMarkers...)
 		body.ServiceResultCheck = record.ServiceResultCheck.String()
+		body.IdentityCheck = record.IdentityCheck.String()
 	}
 	body.RecordedOutcome = result.RecordedOutcome().String()
 	body.CurrentVersion = result.CurrentVersion().String()

@@ -550,11 +550,14 @@ func (handler *DisposeIdentityConflictHandler) dispositionVersion(
 		Control:         head.Control,
 		RecordedAt:      at,
 		Disposition:     disposition,
+		// 不带关联的处置版接续的是读口答复过的冲突版，身份核对态照它记已核对（ADR-0199 决定五）。
+		IdentityCheck: ports.IdentityChecked,
 	}
 	if associate {
 		spec.Association = disposition.Parcel
 		record.Kind = ports.RecordIntakeFormed
 		record.ServiceMarkers, record.ServiceResultCheck = markers, check
+		record.IdentityCheck = ports.IdentityCheckAbsent
 	}
 	if record.Intake, err = domain.FormNodeIntake(spec); err != nil {
 		return ports.ReceptionRecord{}, fmt.Errorf("form the disposition version: %w", err)

@@ -185,7 +185,8 @@ func (repository *Receptions) CurrentVersion(
 // receptionColumns 与 scanReception 的扫描顺序是同一份约定，两处一起改。
 const receptionColumns = `source_id, content_digest, kind, intake, control, candidates,
 		        identity_conflict, refusal_reason, service_markers, service_result_check, recorded_at,
-		        judgment_version, predecessor_version, source_document, merged_version, disposition_document`
+		        judgment_version, predecessor_version, source_document, merged_version, disposition_document,
+		        identity_check`
 
 // scanReception 把一行收寄册读回成记录：读回的一切经领域构造函数重建，一次坏写入在这里暴露，而不是变成一个看起来
 // 合法的收寄结果。
@@ -202,10 +203,12 @@ func scanReception(row pgx.Row, tenant domain.TenantID) (ports.ReceptionRecord, 
 		sourceJSON                  []byte
 		merged                      *string
 		dispositionJSON             []byte
+		identityCheckName           *string
 	)
 	if err := row.Scan(&sourceID, &digest, &kindName, &intakeJSON, &controlJSON, &candidatesJSON,
 		&identityConflict, &refusal, &markersJSON, &checkName, &recordedAt,
-		&judgment, &predecessor, &sourceJSON, &merged, &dispositionJSON); err != nil {
+		&judgment, &predecessor, &sourceJSON, &merged, &dispositionJSON,
+		&identityCheckName); err != nil {
 		return ports.ReceptionRecord{}, err
 	}
 
@@ -217,6 +220,10 @@ func scanReception(row pgx.Row, tenant domain.TenantID) (ports.ReceptionRecord, 
 	if err != nil {
 		return ports.ReceptionRecord{}, err
 	}
+	identityCheck, err := identityCheckFrom(identityCheckName)
+	if err != nil {
+		return ports.ReceptionRecord{}, err
+	}
 	record := ports.ReceptionRecord{
 		Key:                ports.ReceptionKey{TenantID: tenant, SourceID: sourceID},
 		ContentDigest:      digest,
@@ -224,6 +231,7 @@ func scanReception(row pgx.Row, tenant domain.TenantID) (ports.ReceptionRecord, 
 		IdentityConflict:   identityConflict,
 		RefusalReason:      refusal,
 		ServiceResultCheck: check,
+		IdentityCheck:      identityCheck,
 		RecordedAt:         recordedAt.UTC(),
 	}
 
@@ -337,8 +345,9 @@ func (repository *Receptions) Save(
 		`INSERT INTO node_operations.reception
 			(tenant_id, source_id, content_digest, kind, intake, control,
 			 candidates, identity_conflict, refusal_reason, service_markers, service_result_check, recorded_at,
-			 judgment_version, predecessor_version, source_document, merged_version, disposition_document)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+			 judgment_version, predecessor_version, source_document, merged_version, disposition_document,
+			 identity_check)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 		 ON CONFLICT (tenant_id, source_id) DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.SourceID,
@@ -357,6 +366,7 @@ func (repository *Receptions) Save(
 		sourceJSON,
 		versionColumn(record.MergedInto),
 		dispositionJSON,
+		identityCheckColumn(record.IdentityCheck),
 	)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "reception_predecessor_unique" {
@@ -556,6 +566,29 @@ func serviceResultCheckFrom(raw *string) (ports.ServiceResultCheck, error) {
 		return ports.ServiceResultsUnreadable, nil
 	default:
 		return 0, fmt.Errorf("unknown service result check %q", *raw)
+	}
+}
+
+// identityCheckColumn 把不带写成 NULL：只有待识别带身份核对态，这条形状规则由迁移 0011 的 CHECK 在库里再守一遍。
+func identityCheckColumn(check ports.IdentityCheck) *string {
+	name := check.String()
+	if name == "" {
+		return nil
+	}
+	return &name
+}
+
+func identityCheckFrom(raw *string) (ports.IdentityCheck, error) {
+	if raw == nil {
+		return ports.IdentityCheckAbsent, nil
+	}
+	switch *raw {
+	case ports.IdentityChecked.String():
+		return ports.IdentityChecked, nil
+	case ports.IdentityUnchecked.String():
+		return ports.IdentityUnchecked, nil
+	default:
+		return 0, fmt.Errorf("unknown identity check %q", *raw)
 	}
 }
 

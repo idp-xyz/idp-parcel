@@ -10,8 +10,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 )
 
-// ErrParcelIdentityUnreadable 说明身份核对读口没取得 PS 的答复。收寄与重核都据此不形成答案；重核的消费门把它记成等依赖，
-// 信封留在 inbox 退避重投（ADR-0199 决定三「身份核对仍读不动 → 不追加，交回 error」）。
+// ErrParcelIdentityUnreadable 说明身份核对读口没取得 PS 的答复。重核据此不形成答案，消费门把它记成等依赖，信封留在 inbox
+// 退避重投（ADR-0199 决定三「身份核对仍读不动 → 不追加，交回 error」）；收寄据此落身份核对态未核对的待识别（决定五），不交回
+// 这个错。
 var ErrParcelIdentityUnreadable = errors.New("node operations: parcel identity could not be read")
 
 // ErrRecheckSubjectNotFound 说明指名重核的那一版判断不在本租户的收寄册上。不区分「没有」与「属于别的租户」（ADR-0022 统一
@@ -21,8 +22,8 @@ var ErrRecheckSubjectNotFound = errors.New("node operations: the named judgment 
 // ErrRecheckCommandRejected 说明重核命令本身缺件（租户、判断版本或号码），重发同样的内容不会变好。
 var ErrRecheckCommandRejected = errors.New("node operations: identity recheck command rejected")
 
-// RecheckOutcome 是一次重核的应用结果（ADR-0199 决定三分格）。前两格追加了判断版本，第三格判断不变，第四格是重放，后三格
-// 说的是为什么不重核——它们都是形成了的答案，不是错误。
+// RecheckOutcome 是一次重核的应用结果（ADR-0199 决定三分格）。追加了判断版本的、判断不变的、重放的，以及说明为什么不重核的，
+// 都是形成了的答案，不是错误。
 type RecheckOutcome uint8
 
 const (
@@ -31,7 +32,8 @@ const (
 	RecheckIntakeFormed
 	// RecheckIdentityConflict：多候选、带歧义信号的一个候选，或唯一但包裹已关联到别的实物，追加了冲突版。
 	RecheckIdentityConflict
-	// RecheckStillUnidentified：仍是零候选（带不带歧义信号），判断不变、不追加。
+	// RecheckStillUnidentified：仍是零候选（带不带歧义信号），判断不变、不追加。被重核那一版是未核对时不落在这一格，见
+	// RecheckIdentityNowChecked。
 	RecheckStillUnidentified
 	// RecheckExistingResult：被重核那一版已有后继，或派生键已在册（并发里另一方先追加）；答当前有效那一版，不再追加。
 	RecheckExistingResult
@@ -41,6 +43,8 @@ const (
 	RecheckSourceNotPreserved
 	// RecheckNotPendingIdentification：指名的那一版不是待识别实物（已形成、未收寄或待确认）。
 	RecheckNotPendingIdentification
+	// RecheckIdentityNowChecked：被重核那一版是未核对，这一回问到了、仍是零候选，追加了一版「待识别 · 已核对」。
+	RecheckIdentityNowChecked
 )
 
 func (outcome RecheckOutcome) String() string {
@@ -59,6 +63,8 @@ func (outcome RecheckOutcome) String() string {
 		return "SOURCE_NOT_PRESERVED"
 	case RecheckNotPendingIdentification:
 		return "NOT_PENDING_IDENTIFICATION"
+	case RecheckIdentityNowChecked:
+		return "IDENTITY_NOW_CHECKED"
 	default:
 		return ""
 	}
@@ -70,8 +76,8 @@ type RecheckPendingIdentityCommand struct {
 	Version  domain.IntakeResultVersion
 }
 
-// RecheckPendingIdentityResult 是一次重核的结果。Record 交回这一格答复所说的那一版：追加的那一版（前两格），已有结果的当前有效
-// 那一版（第四格），其余是被重核的那一版本身。
+// RecheckPendingIdentityResult 是一次重核的结果。Record 交回这一格答复所说的那一版：追加了一版的各格是追加的那一版，已有结果是
+// 当前有效那一版，其余是被重核的那一版本身。
 type RecheckPendingIdentityResult struct {
 	outcome   RecheckOutcome
 	rechecked domain.IntakeResultVersion
@@ -219,8 +225,11 @@ func (handler *RecheckPendingIdentityHandler) recheck(
 	if err != nil {
 		return RecheckPendingIdentityResult{}, err
 	}
-	if !judgment.identified && !judgment.conflict() {
-		// 零候选（带不带歧义信号）：判断不变、不追加（ADR-0199 决定三）。唯一命中身份冲突处置排除过的那件也落在这里（ADR-0210 决定九）。
+	// 零候选（带不带歧义信号）：判断不变、不追加（ADR-0199 决定三）。唯一命中身份冲突处置排除过的那件也落在这里（ADR-0210 决定九）。
+	// 被重核那一版是未核对时例外：这一回问到了，追加一版「待识别 · 已核对」，册上从此说的是「查过了，查无此号」而不是「没问到」；
+	// 不追加，未核对那一行就一直把同租户的包裹答成`不可归属`（ParcelContainmentView）。
+	nowChecked := !judgment.identified && !judgment.conflict()
+	if nowChecked && record.IdentityCheck != ports.IdentityUnchecked {
 		return answered(RecheckStillUnidentified, record), nil
 	}
 
@@ -255,6 +264,9 @@ func (handler *RecheckPendingIdentityHandler) recheck(
 			return RecheckPendingIdentityResult{}, fmt.Errorf("hand off the rechecked intake: %w", err)
 		}
 		return answered(RecheckIntakeFormed, appended), nil
+	}
+	if nowChecked {
+		return answered(RecheckIdentityNowChecked, appended), nil
 	}
 	if len(judgment.others) > 0 {
 		if err := appendIdentityConflicts(ctx, handler.deps.Receptions, handler.deps.Versions, appended, judgment.others); err != nil {
@@ -295,6 +307,7 @@ func (handler *RecheckPendingIdentityHandler) appendedVersion(
 		Control:          record.Control,
 		Candidates:       judgment.candidates,
 		IdentityConflict: judgment.conflict(),
+		IdentityCheck:    ports.IdentityChecked,
 		RecordedAt:       handler.deps.Clock.Now(),
 	}
 	if judgment.identified {
@@ -302,6 +315,7 @@ func (handler *RecheckPendingIdentityHandler) appendedVersion(
 		appended.Kind = ports.RecordIntakeFormed
 		appended.ServiceMarkers = judgment.markers
 		appended.ServiceResultCheck = judgment.check
+		appended.IdentityCheck = ports.IdentityCheckAbsent
 	}
 	if appended.Intake, err = domain.FormNodeIntake(spec); err != nil {
 		return ports.ReceptionRecord{}, fmt.Errorf("form the rechecked intake: %w", err)

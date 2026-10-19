@@ -27,13 +27,14 @@ type intakeImporter struct {
 	transactor bentoapp.Transactor
 }
 
-// buildIntakeImporter 装配真实收寄链：收寄库、收寄结果版本签发、Outbox 意图交付走 NO
+// buildIntakeImporter 装配真实收寄链：收寄库、收寄结果版本签发、Outbox 意图交付与自投的重核门铃走 NO
 // 真库口，与 parcel-api 的 buildReceptionOrchestration 同一套件。身份核对由参数给出：生产传
 // parcelIdentityViewOf 装的 PS 关联册读口，测试可传能解析的替身直证关联收寄那一格。
 //
 // 跨上下文读口须经 savepoint 隔离：读口跟着走本行那一笔事务，一条 SQL 级读错误会把事务打进中止态、
-// 连带作废收寄的写。服务结果读口由 parcelServiceResultViewOf 包好（ADR-0186）；身份核对读口不包——
-// 它读不动本就不形成答案，整笔回滚、本行记未决正是要的结果。
+// 连带作废收寄的写。服务结果读口由 parcelServiceResultViewOf 包好（ADR-0186）；身份核对读口由
+// parcelIdentityViewOf 包好——它读不动时本行落未核对的待识别、照常记落地（ADR-0199 决定五），没有
+// 这层隔离，那一行连同门铃跟着整笔回滚。
 func buildIntakeImporter(db *bentopg.DB, clock ports.Clock, identity ports.ParcelIdentityView) (intakeImporter, error) {
 	receptions, err := nopostgres.NewReceptions(db)
 	if err != nil {
@@ -51,6 +52,10 @@ func buildIntakeImporter(db *bentopg.DB, clock ports.Clock, identity ports.Parce
 	if err != nil {
 		return intakeImporter{}, fmt.Errorf("收寄意图交付：%w", err)
 	}
+	doorbell, err := nopostgres.NewOutboxIdentityRecheckDoorbell(db, store, clock)
+	if err != nil {
+		return intakeImporter{}, fmt.Errorf("重核门铃：%w", err)
+	}
 	// 服务结果读口（票 operator-channel/25）：身份唯一成立的行向 PS 取取消与当前终局，落成标记。
 	serviceResults, err := parcelServiceResultViewOf(db)
 	if err != nil {
@@ -62,6 +67,7 @@ func buildIntakeImporter(db *bentopg.DB, clock ports.Clock, identity ports.Parce
 		Receptions:     receptions,
 		Versions:       versions,
 		Downstream:     downstream,
+		Doorbell:       doorbell,
 		Clock:          clock,
 	})
 	if err != nil {
@@ -74,7 +80,8 @@ func buildIntakeImporter(db *bentopg.DB, clock ports.Clock, identity ports.Parce
 }
 
 // parcelIdentityViewOf 装生产的身份核对读口：PS 的外部标识关联册经 NO 的防腐适配器读（ADR-0184 决定五），
-// 与 parcel-api 的 buildParcelIdentityView 同一套件。
+// 外面包一层 savepoint，读失败不连带本行收寄的写（ADR-0199 决定五）；ctx 不在事务里时直通。与 parcel-api 的
+// buildParcelIdentityView 同一套件。
 func parcelIdentityViewOf(db *bentopg.DB) (ports.ParcelIdentityView, error) {
 	identifiers, err := pspostgres.NewExternalIdentifiers(db)
 	if err != nil {
@@ -84,7 +91,11 @@ func parcelIdentityViewOf(db *bentopg.DB) (ports.ParcelIdentityView, error) {
 	if err != nil {
 		return nil, fmt.Errorf("身份核对读口：%w", err)
 	}
-	return view, nil
+	isolated, err := nopostgres.NewSavepointedParcelIdentityView(db, view)
+	if err != nil {
+		return nil, fmt.Errorf("身份核对读口 savepoint：%w", err)
+	}
+	return isolated, nil
 }
 
 // parcelServiceResultViewOf 装生产的服务结果读口：PS 的取消决定册与终局册经 NO 的防腐适配器读（票 operator-channel/25），
@@ -156,7 +167,8 @@ func importIntake(ctx context.Context, batch intakeBatch, importer intakeImporte
 
 // intakeRowDisposition 把 UC-NO-002 的六格结果译成去向，不增不减：
 //   - 收寄形成 / 待识别 / 未形成 → 已落地：三格都是越过提交边界的判断（未形成也是一条
-//     真实的拒收事实）；
+//     真实的拒收事实）；身份核对读不动的待识别同样已落地，明细写明未核对（ADR-0199 决定五），重跑不会让它变好，
+//     续上身份靠服务端的门铃重核；
 //   - 待确认且带记录 → 已落地：SCAN_ONLY 行的判断本就是「待确认」，记录已提交；
 //   - 待确认不带记录 → 未决：编排不再交回这一格，出现即实现缺陷；
 //   - 已有结果 → 重放：同一来源身份同一内容，原结果原样；明细带原判断种类与那条判断链此刻的当前有效版本（ADR-0199
@@ -236,6 +248,12 @@ func describeReception(record ports.ReceptionRecord) string {
 		}
 	case ports.ServiceResultsUnreadable:
 		parts = append(parts, "服务结果读不动：标记缺席不代表没有取消或终局")
+	}
+	switch {
+	case record.IdentityCheck == ports.IdentityUnchecked:
+		parts = append(parts, "身份未核对：候选缺席不代表查无此号，待服务端重核")
+	case record.IdentityCheck == ports.IdentityChecked && len(record.Candidates) == 0:
+		parts = append(parts, "身份已核对：查无此号")
 	}
 	if record.IdentityConflict {
 		parts = append(parts, fmt.Sprintf("身份冲突（%d 个候选），方向性作业暂停", len(record.Candidates)))

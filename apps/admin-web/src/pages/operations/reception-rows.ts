@@ -4,8 +4,9 @@
 // DOM。判读是纯函数就能拿 node:test 钉住（同 handover-scope-summary 的先例）。
 
 import { formatInstant } from '../catalogue-view';
+import { receptionKindCellOf } from './identity-check';
 import type { ReceptionRecord } from './records-api';
-import { controlKindLabels, labelOf, receptionKindLabels } from './presentation';
+import { controlKindLabels, labelOf } from './presentation';
 
 export interface ReceptionReviewRow {
   key: string;
@@ -47,7 +48,7 @@ export function receptionRowOf(record: ReceptionRecord): ReceptionReviewRow {
     key: `reception:${record.sourceId}`,
     values: {
       unit: record.unit,
-      kind: labelOf(receptionKindLabels, record.kind),
+      kind: receptionKindCellOf(record),
       node: record.node,
       deliveredBy: record.deliveredBy,
       receivedAt: formatInstant(record.receivedAt),

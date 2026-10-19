@@ -45,6 +45,11 @@ export interface ReceptionRecord {
    * 类型留 string 而不收成两值联合，同 kind：封闭集扩了、页面还没跟上时要如实露码。
    */
   serviceResultCheck?: string;
+  /**
+   * 身份核对态（ADR-0199 决定五）：CHECKED（已核对）/ UNCHECKED（未核对），只有 PENDING_IDENTIFICATION 行带，其余整键缺席。
+   * 类型留 string，理由同 serviceResultCheck。
+   */
+  identityCheck?: string;
   recordedAt: string;
 }
 
@@ -72,6 +77,11 @@ export interface UnidentifiedItemRecord {
   externalMark?: string;
   /** 直接接续这一版的那一版判断版本；缺席即这一版仍是它那条链的当前有效版本。 */
   succeededBy?: string;
+  /**
+   * 身份核对态（ADR-0199 决定五）：UNCHECKED 那一行的 candidates 是 []，说的是没问到 parcel-shipment，不是查无此号。
+   * 类型留 string，理由同收寄行的 serviceResultCheck。
+   */
+  identityCheck?: string;
 }
 
 /**

@@ -195,6 +195,20 @@ func (double *downstreamDouble) HandOffNodeIntake(
 	return nil
 }
 
+// doorbellDouble 记下自投的每一封重核门铃（ADR-0199 决定三第三个触发），err 非空时入不了队。
+type doorbellDouble struct {
+	rung []ports.IdentityRecheckDoorbellIntent
+	err  error
+}
+
+func (double *doorbellDouble) RingIdentityRecheck(_ context.Context, intent ports.IdentityRecheckDoorbellIntent) error {
+	if double.err != nil {
+		return double.err
+	}
+	double.rung = append(double.rung, intent)
+	return nil
+}
+
 type fixedClock struct{ at time.Time }
 
 func (clock fixedClock) Now() time.Time { return clock.at }
@@ -222,6 +236,7 @@ type receptionFixture struct {
 	receptions     *receptionStoreDouble
 	versions       *versionFactoryDouble
 	downstream     *downstreamDouble
+	doorbell       *doorbellDouble
 }
 
 func (fixture *receptionFixture) deps() application.ReceiveDeliveredUnitDeps {
@@ -231,6 +246,7 @@ func (fixture *receptionFixture) deps() application.ReceiveDeliveredUnitDeps {
 		Receptions:     fixture.receptions,
 		Versions:       fixture.versions,
 		Downstream:     fixture.downstream,
+		Doorbell:       fixture.doorbell,
 		Clock:          fixedClock{at: deliveredAt.Add(time.Minute)},
 	}
 }
@@ -245,6 +261,7 @@ func newReceptionFixture(t *testing.T) *receptionFixture {
 		receptions:     newReceptionStore(),
 		versions:       &versionFactoryDouble{},
 		downstream:     &downstreamDouble{},
+		doorbell:       &doorbellDouble{},
 	}
 	handler, err := application.NewReceiveDeliveredUnitHandler(fixture.deps())
 	if err != nil {
@@ -379,6 +396,7 @@ func TestAMissingDependencyIsRefusedAtConstruction(t *testing.T) {
 		"收寄库":    func(deps *application.ReceiveDeliveredUnitDeps) { deps.Receptions = nil },
 		"版本签发":   func(deps *application.ReceiveDeliveredUnitDeps) { deps.Versions = nil },
 		"意图交付":   func(deps *application.ReceiveDeliveredUnitDeps) { deps.Downstream = nil },
+		"重核门铃":   func(deps *application.ReceiveDeliveredUnitDeps) { deps.Doorbell = nil },
 		"时钟":     func(deps *application.ReceiveDeliveredUnitDeps) { deps.Clock = nil },
 	}
 	for name, drop := range cases {
@@ -392,12 +410,11 @@ func TestAMissingDependencyIsRefusedAtConstruction(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0186「身份核对读不动」与「NO 自身落不了册」——编排交回 error、不形成答案：零落册、零意图，也不拿空候选顶替
-// （ADR-0089）。端点据此答 5xx，设备留队重投；前线导入记未决。
+// Covers: ADR-0186 决定三「NO 自身落不了册」——编排交回 error、不形成答案：零落册、零意图。端点据此答 5xx，设备留队重投；前线
+// 导入记未决。身份核对读不动原先也在这一格，ADR-0199 决定五翻转之后落未核对的待识别，见 TestAnUnreadableIdentityCheckFormsAPendingUnitMarkedUnchecked。
 func TestDependencyFailuresFormNoAnswer(t *testing.T) {
 	failure := errors.New("dependency down")
 	cases := map[string]func(*receptionFixture){
-		"身份核对读口报错":         func(fixture *receptionFixture) { fixture.identity.err = failure },
 		"收寄库 FindByKey 报错": func(fixture *receptionFixture) { fixture.receptions.findErr = failure },
 		"收寄库 Save 报错":      func(fixture *receptionFixture) { fixture.receptions.saveErr = failure },
 		"并发读回赢家报错": func(fixture *receptionFixture) {

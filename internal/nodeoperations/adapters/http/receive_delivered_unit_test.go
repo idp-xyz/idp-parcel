@@ -119,6 +119,16 @@ func (double *downstreamDouble) HandOffNodeIntake(
 	return nil
 }
 
+// doorbellDouble 记下自投的重核门铃；本文件证的是传输面，门铃的取法另有编排的用例。
+type doorbellDouble struct {
+	rung []ports.IdentityRecheckDoorbellIntent
+}
+
+func (double *doorbellDouble) RingIdentityRecheck(_ context.Context, intent ports.IdentityRecheckDoorbellIntent) error {
+	double.rung = append(double.rung, intent)
+	return nil
+}
+
 type adapterClock struct{ at time.Time }
 
 func (clock adapterClock) Now() time.Time { return clock.at }
@@ -227,6 +237,7 @@ func newAdapterFixture(t *testing.T) *adapterFixture {
 		Receptions:     fixture.store,
 		Versions:       &versionFactoryDouble{},
 		Downstream:     fixture.handoff,
+		Doorbell:       &doorbellDouble{},
 		Clock:          adapterClock{at: time.Date(2026, 9, 5, 10, 0, 0, 0, time.UTC)},
 	})
 	if err != nil {
@@ -268,6 +279,7 @@ type receptionView struct {
 	Candidates         []string `json:"candidates"`
 	RefusalReason      string   `json:"refusalReason"`
 	ServiceResultCheck *string  `json:"serviceResultCheck"`
+	IdentityCheck      *string  `json:"identityCheck"`
 	RecordedOutcome    *string  `json:"recordedOutcome"`
 	CurrentVersion     *string  `json:"currentVersion"`
 }
@@ -563,20 +575,18 @@ func TestTransportProblemsCarryOnlyStableCodes(t *testing.T) {
 		}
 	})
 
-	// ADR-0186「身份核对读不动：编排交回 error，不形成答案」——答 500 且不带 outcome：2xx 会让设备出队，而这一次什么都
-	// 没落册。
-	t.Run("an identity view failure is 500 without an outcome", func(t *testing.T) {
+	// ADR-0199 决定五翻转了 ADR-0186 决定二这一格：身份核对读不动不再是传输问题，而是形成了的答案——200 待识别、身份核对态
+	// 未核对，设备照 outcome 出队；那一次接收已经落册，续上身份靠重核。
+	t.Run("an identity view failure is an unchecked pending answer, not a problem", func(t *testing.T) {
 		fixture := newAdapterFixture(t)
 		fixture.identity.err = errors.New("identity view down")
 		response := fixture.post(t, defaultBody())
-		if response.Code != http.StatusInternalServerError || !strings.Contains(response.Body.String(), "NO_ANSWER_FORMED") {
-			t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+		view := decodeReception(t, response)
+		if response.Code != http.StatusOK || view.Outcome != "PENDING_IDENTIFICATION" || view.IdentityCheck == nil || *view.IdentityCheck != "UNCHECKED" {
+			t.Fatalf("status = %d body = %s, want 200 PENDING_IDENTIFICATION identityCheck UNCHECKED", response.Code, response.Body.String())
 		}
-		if strings.Contains(response.Body.String(), "outcome") {
-			t.Fatalf("没形成答案却带了 outcome：%s", response.Body.String())
-		}
-		if fixture.store.saved != 0 {
-			t.Fatalf("saved = %d, want 0", fixture.store.saved)
+		if fixture.store.saved != 1 {
+			t.Fatalf("saved = %d, want 1", fixture.store.saved)
 		}
 	})
 

@@ -23,7 +23,8 @@ import (
 //
 // 跨上下文读口须经 savepoint 隔离：它们跟着走这一笔事务，一条 SQL 级读错误会把事务打进中止态、
 // 连带作废收寄的写。服务结果读口因此包在 SavepointedServiceResultView 里（ADR-0186）；身份核对
-// 读口不包——它读不动本就不形成答案，整笔回滚正是要的结果。
+// 读口包在 SavepointedParcelIdentityView 里——它读不动也要落未核对的待识别、同一笔自投重核门铃
+// （ADR-0199 决定五），没有这层隔离，那一行连同门铃跟着整笔回滚。
 //
 // 意图没交出去的收寄在这条路上不提交。编排把入队的 Go 层失败吞成续办引用、照常交回业务答案——前线导入靠它，报告把引用
 // 写给内勤，重跑同一文件重发同一份（ADR-0043 决定三）；这里没有人读它：响应里没有续办这一格，设备收到 2xx 就出队，不会
@@ -65,7 +66,7 @@ func (reception transactionalReception) Handle(
 // buildReceptionOrchestration 装配 `/node-operations/receptions` 的真编排（UC-NO-002；
 // 接线票 `.scratch/parcel-api-remaining-endpoint-wiring/issues/01`）。
 //
-// 机制半边全部接真：收寄库、收寄结果版本签发、Outbox 意图交付走 NO 真库口；身份核对读 PS 的外部标识关联册
+// 机制半边全部接真：收寄库、收寄结果版本签发、Outbox 意图交付与自投的重核门铃走 NO 真库口；身份核对读 PS 的外部标识关联册
 // （ADR-0184），服务结果读口读 PS 的取消与终局两册（票 operator-channel/25）。两个读口跟着收寄走同一笔事务只因
 // ctx 是同一个：PS 读不加锁，READ COMMITTED 下同事务读既无一致性收益也无代价。
 func buildReceptionOrchestration(db *bentopg.DB) (nodeopshttp.ReceptionHandler, error) {
@@ -97,6 +98,10 @@ func buildReceptionDeps(db *bentopg.DB) (nodeopsapp.ReceiveDeliveredUnitDeps, er
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: node intake handoff: %w", err)
 	}
+	doorbell, err := nopostgres.NewOutboxIdentityRecheckDoorbell(db, store, clock)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: identity recheck doorbell: %w", err)
+	}
 	identity, err := buildParcelIdentityView(db)
 	if err != nil {
 		return none, err
@@ -111,6 +116,7 @@ func buildReceptionDeps(db *bentopg.DB) (nodeopsapp.ReceiveDeliveredUnitDeps, er
 		Receptions:     receptions,
 		Versions:       versions,
 		Downstream:     downstream,
+		Doorbell:       doorbell,
 		Clock:          clock,
 	}, nil
 }
@@ -124,7 +130,9 @@ func receptionWithin(db *bentopg.DB, deps nodeopsapp.ReceiveDeliveredUnitDeps) (
 	return transactionalReception{transactor: db.Transactor(), inner: handler}, nil
 }
 
-// buildParcelIdentityView 装收寄编排的身份核对读口：PS 的外部标识关联册经 NO 的防腐适配器读（ADR-0184 决定五）。
+// buildParcelIdentityView 装收寄编排的身份核对读口：PS 的外部标识关联册经 NO 的防腐适配器读（ADR-0184 决定五），外面包一层
+// savepoint，读失败不连带收寄的写（ADR-0199 决定五，见 transactionalReception）。人工重核也经这里装：它读不动本就整笔回滚，
+// 隔离对它不改变答案。
 func buildParcelIdentityView(db *bentopg.DB) (noports.ParcelIdentityView, error) {
 	identifiers, err := pspostgres.NewExternalIdentifiers(db)
 	if err != nil {
@@ -134,7 +142,11 @@ func buildParcelIdentityView(db *bentopg.DB) (noports.ParcelIdentityView, error)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: parcel identity view: %w", err)
 	}
-	return view, nil
+	isolated, err := nopostgres.NewSavepointedParcelIdentityView(db, view)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: parcel identity savepoint: %w", err)
+	}
+	return isolated, nil
 }
 
 // buildParcelServiceResultView 装收寄编排的服务结果读口：PS 的取消决定册与终局册经 NO 的防腐适配器读（票 operator-channel/25），

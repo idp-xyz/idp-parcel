@@ -66,6 +66,10 @@ func importerWithSwitchableHandoff(t *testing.T) (*pgxpool.Pool, intakeImporter,
 	if err != nil {
 		t.Fatalf("收寄意图交付：%v", err)
 	}
+	doorbell, err := nopostgres.NewOutboxIdentityRecheckDoorbell(db, store, clock)
+	if err != nil {
+		t.Fatalf("重核门铃：%v", err)
+	}
 	serviceResults, err := parcelServiceResultViewOf(db)
 	if err != nil {
 		t.Fatalf("服务结果读口：%v", err)
@@ -81,6 +85,7 @@ func importerWithSwitchableHandoff(t *testing.T) (*pgxpool.Pool, intakeImporter,
 		Receptions:     receptions,
 		Versions:       versions,
 		Downstream:     switchable,
+		Doorbell:       doorbell,
 		Clock:          clock,
 	})
 	if err != nil {

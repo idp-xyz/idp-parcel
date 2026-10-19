@@ -41,6 +41,9 @@ import (
 // 少了这一格两者在册面上逐字相同，而后者的空不代表没有取消与终局，审阅者照空放行就可能放走一件已取消的包裹。
 // 它不像 Kind、ControlKind 那样以串转写，而用写侧同一个枚举：取值词表只在 ServiceResultCheck 一处定义，读面不另立
 // 一份串。这仍是照行转写——核对态是登记时就落下的一格，不是重建出的领域对象，目录也不据它形成判断。
+//
+// IdentityCheck 照行转写身份核对态（ADR-0199 决定五），只有 PENDING_IDENTIFICATION 行带：未核对那一行与零候选的已核对行在本册
+// 上逐字相同，少了这一格，审阅者会把「没问到」读成「查无此号」。取写侧同一个枚举，理由同 ServiceResultCheck。
 type ReceptionCatalogueRow struct {
 	SourceID             string
 	Kind                 string
@@ -54,6 +57,7 @@ type ReceptionCatalogueRow struct {
 	ControlReleasedAt    *time.Time
 	ServiceMarkers       []string
 	ServiceResultCheck   ServiceResultCheck
+	IdentityCheck        IdentityCheck
 	RecordedAt           time.Time
 }
 
@@ -70,6 +74,8 @@ type ReceptionCatalogueRow struct {
 // 来源文档在不在，Mark 是在时那一格外部标识观察原样（在线口带的空白照留）——来源保全之前落下的行号码从未留存，读面如实说
 // 「来源未保全」，不拿空串冒充「设备没报号」；SucceededBy 是直接接续这一版的那一版判断版本，空即这一版仍是它那条链的当前有效
 // 版本。同一件实物的待识别行不止一版时（重核、冲突各追加一版），审阅者靠它分得开哪一行已被接续。
+//
+// IdentityCheck 是这一行的身份核对态（ADR-0199 决定五）：未核对的候选为空不代表查无此号，同 ReceptionCatalogueRow 那一格。
 type UnidentifiedItemCatalogueRow struct {
 	SourceID         string
 	Unit             string
@@ -83,6 +89,7 @@ type UnidentifiedItemCatalogueRow struct {
 	SourcePreserved  bool
 	Mark             string
 	SucceededBy      string
+	IdentityCheck    IdentityCheck
 }
 
 // IdentityReviewUnitRow 是待识别实物页按实物列的一行（ADR-0210 决定八末项与越权风险点「逐链追加会写到操作者没看过的链上」）：

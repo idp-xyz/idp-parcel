@@ -44,8 +44,8 @@ type identityJudge struct {
 // judge 拿一次外部标识观察问 PS，判这件作业实物的身份。须在落册那一笔事务里调：唯一命中那一支按（租户、包裹）取锁（见
 // ports.ReceptionStore.FindOtherUnitIntakes），从读别的实物关联到那一笔落册之间，同一件包裹上的另一次判断等着。
 //
-// 身份核对读不动不拿空候选顶替（ADR-0089）：那会把可能已知的包裹落成待识别。错误带 ErrParcelIdentityUnreadable，重核的
-// 消费门据此把这一格记成等依赖，而不是发布失败。
+// 身份核对读不动不拿空候选顶替（ADR-0089）：那会把可能已知的包裹落成查无此号。错误带 ErrParcelIdentityUnreadable：收寄据此
+// 落身份核对态未核对的待识别（ADR-0199 决定五），重核的消费门据此把这一格记成等依赖，而不是发布失败。
 func (judge identityJudge) judge(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -59,7 +59,8 @@ func (judge identityJudge) judge(
 	judgment := identityJudgment{candidates: answer.Candidates}
 	// 号码唯一指向一件包裹，还要问这件包裹是否已关联到另一件作业实物：是，就是「同一外部条码出现在多个实物」（NO
 	// CONTEXT「实物身份与事实完整性」、ADR-0196）。按关联到的包裹认而不按号码认，不论先到那件此刻是否仍在节点控制下；
-	// 同一作业实物再来不在此列。读不动与身份核对读不动同样不形成答案。恰一个候选却带歧义信号的不是唯一命中（ADR-0195），
+	// 同一作业实物再来不在此列。这一问读不动就不形成答案，也不带 ErrParcelIdentityUnreadable：那是本方册读不动，不是没问到 PS，
+	// 不能落成未核对。恰一个候选却带歧义信号的不是唯一命中（ADR-0195），
 	// 与多候选同走身份冲突，不进这一问。
 	parcel, unique := answer.Unique()
 	if !unique {

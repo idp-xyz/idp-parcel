@@ -186,6 +186,8 @@ const sections: ReviewSection[] = [
       col('node', '登记节点', { mono: true }),
       col('externalMark', '外部标识观察（来源原样）', { mono: true }),
       col('candidates', '身份候选'),
+      // 身份核对一列紧挨候选：未核对那一行候选是空的，这一列说它是没问到、不是查无此号（ADR-0199 决定五）。
+      col('identityCheck', '身份核对'),
       col('identityConflict', '身份冲突', { className: 'w-[88px]' }),
       col('receivedAt', '收到时间', { mono: true }),
       col('association', '正式包裹关联（引用）', { mono: true }),

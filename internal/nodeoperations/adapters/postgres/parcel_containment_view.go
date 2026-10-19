@@ -23,6 +23,10 @@ import (
 //     「此刻在未关闭单元里」，不必再看单元的 phase；关闭时适配器删行，这一路自然读不到。
 //   - 两路都不算被身份冲突处置版接续过的行（ADR-0210 决定八，谓词见 succeededByDisposition）：被处置为「不是它」的实物不再
 //     算作那件包裹，处置版自己带的关联照算。还没处置过的照旧逐行读，不改读链头。
+//   - 未核对在袋件那一路不看包裹（ADR-0199 决定五）：未核对的待识别可能是任何一件包裹，同租户里有一件此刻在袋，凡没有已关联
+//     实物在袋的包裹都答`不可归属`。它只认链头——被重核接续过的未核对行（追加了已核对、关联或冲突版）说的已不是此刻的身份，
+//     接着算它，同租户的包裹就一直判不出「没装袋」。走 reception_unchecked_pending（迁移 0011）；谓词写字面量而不是参数，与
+//     那本部分索引的条件逐字同形，规划器才认得它。
 //
 // 只读，走 ReadExecutor。
 type ParcelContainmentView struct {
@@ -38,8 +42,8 @@ func NewParcelContainmentView(db *bentopg.DB) (*ParcelContainmentView, error) {
 
 var _ ports.ParcelContainmentView = (*ParcelContainmentView)(nil)
 
-// LoadParcelContainment 一次往返取两个布尔（已关联实物在袋里 / 候选实物在袋里），再按端口
-// 头注的分界折成三值：已关联在袋里压过一切；只有候选在袋里答`不可归属`；其余`不在`。
+// LoadParcelContainment 一次往返取三个布尔（已关联实物在袋里 / 候选实物在袋里 / 同租户有未核对实物在袋里），再按端口
+// 头注的分界折成三值：已关联在袋里压过一切；候选或未核对在袋里答`不可归属`；其余`不在`。
 func (view *ParcelContainmentView) LoadParcelContainment(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -50,7 +54,7 @@ func (view *ParcelContainmentView) LoadParcelContainment(
 		return ports.ParcelContainmentInvalid, fmt.Errorf("load parcel containment: %w", err)
 	}
 
-	var identifiedContained, candidateContained bool
+	var identifiedContained, candidateContained, uncheckedContained bool
 	err = querier.QueryRow(ctx,
 		`SELECT
 		     EXISTS (
@@ -73,9 +77,23 @@ func (view *ParcelContainmentView) LoadParcelContainment(
 		            AND r.kind = $3
 		            AND r.candidates @> jsonb_build_array($2::text)
 		            AND NOT `+succeededByDisposition("r")+`
-		     ) AS candidate_contained`,
+		     ) AS candidate_contained,
+		     EXISTS (
+		         SELECT 1
+		           FROM node_operations.reception r
+		           JOIN node_operations.containment_current c
+		             ON c.tenant_id = r.tenant_id
+		            AND c.member_id = (r.intake ->> 'unit')
+		          WHERE r.tenant_id = $1
+		            AND r.identity_check = 'UNCHECKED'
+		            AND NOT EXISTS (
+		                SELECT 1
+		                  FROM node_operations.reception AS successor
+		                 WHERE successor.tenant_id = r.tenant_id
+		                   AND successor.predecessor_version = r.judgment_version)
+		     ) AS unchecked_contained`,
 		tenant.String(), parcel.String(), ports.RecordPendingIdentification.String(),
-	).Scan(&identifiedContained, &candidateContained)
+	).Scan(&identifiedContained, &candidateContained, &uncheckedContained)
 	if err != nil {
 		return ports.ParcelContainmentInvalid, fmt.Errorf("load parcel containment: %w", err)
 	}
@@ -83,7 +101,7 @@ func (view *ParcelContainmentView) LoadParcelContainment(
 	switch {
 	case identifiedContained:
 		return ports.ParcelContained, nil
-	case candidateContained:
+	case candidateContained, uncheckedContained:
 		return ports.ParcelContainmentUnattributable, nil
 	default:
 		return ports.ParcelNotContained, nil

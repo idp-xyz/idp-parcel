@@ -16,7 +16,8 @@ import (
 )
 
 // recheckPendingIdentitiesConsumerName 是本消费者在 inbox 键上的稳定名。Inbox 键只由（消费者名 + 来源 + 事件 ID）认领，同包再起
-// 一个消费者要另取名字，否则两路互相把对方的投递当重复跳过。改名等于换消费者。
+// 一个消费者要另取名字，否则两路互相把对方的投递当重复跳过。改名等于换消费者。自投的重核门铃那一扇门（UncheckedPendingIdentityRecordedConsumer）
+// 用的就是这个名字：它是同一个重核消费者的另一扇门，信封来源是本上下文，与 PS 门铃的键不相交。
 const recheckPendingIdentitiesConsumerName = "node-operations/recheck-pending-identities"
 
 // ExternalIdentifierRelationFormedEventType 是 PS 外部标识关联册新形成一条标识包裹的关联时交出的门铃（ADR-0199 决定三）。消费方

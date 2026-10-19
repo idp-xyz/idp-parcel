@@ -127,6 +127,7 @@ func serveReceptions(
 			ControlReleasedAt:    optionalInstant(row.ControlReleasedAt),
 			ServiceMarkers:       append([]string{}, row.ServiceMarkers...),
 			ServiceResultCheck:   row.ServiceResultCheck.String(),
+			IdentityCheck:        row.IdentityCheck.String(),
 			RecordedAt:           rfc3339(row.RecordedAt),
 		})
 	}
@@ -162,6 +163,7 @@ func serveUnidentifiedItems(
 			JudgmentVersion:  row.JudgmentVersion,
 			SourcePreserved:  row.SourcePreserved,
 			SucceededBy:      row.SucceededBy,
+			IdentityCheck:    row.IdentityCheck.String(),
 		}
 		if row.SourcePreserved {
 			mark := row.Mark
@@ -237,6 +239,9 @@ type receptionCatalogueListResponse struct {
 // 空串或 null 兼表。封闭词原样透出不折成布尔，理由同 kind。它是信息格不是业务判别：UNREADABLE 那行照样是
 // INTAKE_FORMED，这一格告诉看的人那行 serviceMarkers 的 [] 不代表没有取消或终局；少了它，「已查、无标记」与
 // 「读不动」两行逐字相同（ADR-0186）。
+//
+// identityCheck 与收寄写侧答复同名同值：CHECKED / UNCHECKED，取 ports.IdentityCheck 的名字，只有待识别行带、其余整键不出现，
+// 缺席惯例同 serviceResultCheck。它让未核对的待识别与查无此号的那一行在册面上分得开（ADR-0199 决定五）。
 type receptionCatalogueBody struct {
 	SourceID             string   `json:"sourceId"`
 	Kind                 string   `json:"kind"`
@@ -250,6 +255,7 @@ type receptionCatalogueBody struct {
 	ControlReleasedAt    string   `json:"controlReleasedAt,omitempty"`
 	ServiceMarkers       []string `json:"serviceMarkers"`
 	ServiceResultCheck   string   `json:"serviceResultCheck,omitempty"`
+	IdentityCheck        string   `json:"identityCheck,omitempty"`
 	RecordedAt           string   `json:"recordedAt"`
 }
 
@@ -270,7 +276,8 @@ type unidentifiedItemListResponse struct {
 //
 // judgmentVersion 是人工重核指名用的那一版（ADR-0199 决定三）。sourcePreserved 恒在场：来源保全之前的行答 false，
 // externalMark 随之整键不出现——那一格号码从未留存，空串会被读成「设备没报号」；来源在时 externalMark 照来源文档原样带号，
-// 空号也带空串。succeededBy 只在这一版已被接续时出现，带直接接续它的那一版。
+// 空号也带空串。succeededBy 只在这一版已被接续时出现，带直接接续它的那一版。identityCheck 同收寄册那一格：UNCHECKED 那一行的
+// candidates 是 []，说的是没问到，不是查无此号（ADR-0199 决定五）。
 type unidentifiedItemBody struct {
 	SourceID         string   `json:"sourceId"`
 	Unit             string   `json:"unit"`
@@ -284,6 +291,7 @@ type unidentifiedItemBody struct {
 	SourcePreserved  bool     `json:"sourcePreserved"`
 	ExternalMark     *string  `json:"externalMark,omitempty"`
 	SucceededBy      string   `json:"succeededBy,omitempty"`
+	IdentityCheck    string   `json:"identityCheck,omitempty"`
 }
 
 type consolidationUnitListResponse struct {

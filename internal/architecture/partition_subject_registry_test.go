@@ -104,6 +104,7 @@ var declaredPartitionSubjects = map[string]string{
 	// —— node-operations ——
 	"internal/nodeoperations/adapters/postgres/collaboration_acceptance_handoff.go": partitionPerEnvelopePrefix + "键即信封 ID（协作事项决定）",
 	"internal/nodeoperations/adapters/postgres/execution_fact_handoff.go":           partitionPerEnvelopePrefix + "键即信封 ID（键取到动作，各动作独立成条）",
+	"internal/nodeoperations/adapters/postgres/identity_recheck_doorbell.go":        partitionSubjectPrefix + "租户/作业实物（定长指纹；自投重核门铃，同一件实物的门铃排一条队）",
 	"internal/nodeoperations/adapters/postgres/node_intake_handoff.go":              partitionPerEnvelopePrefix + "键即信封 ID（收寄键）",
 	"internal/nodeoperations/adapters/postgres/sealed_snapshot_handoff.go":          partitionSubjectPrefix + "租户/集运单元",
 

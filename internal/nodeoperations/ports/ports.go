@@ -156,8 +156,35 @@ func (check ServiceResultCheck) String() string {
 	}
 }
 
+// IdentityCheck 是一条待识别记录的身份核对态（ADR-0199 决定五），只有 PENDING_IDENTIFICATION 记录带。它让「查过了，查无此号」
+// 与「没问到」在记录上分得开——两者的候选都可能是空的，而后者的空不代表 PS 没有标识这个号的包裹（ADR-0089「绝不交回空候选
+// 顶替」）。
+//
+// 零值即不带：其余几种记录不是身份未定的待识别，这一格缺席是真话，库里由迁移的 CHECK 拦住待识别以外带核对态的行；
+// 待识别记录上是零值，是来源保全之前的测试夹具或写入方缺陷，读面如实写「未带核对态」，不替它猜。
+type IdentityCheck uint8
+
+const (
+	IdentityCheckAbsent IdentityCheck = iota
+	// IdentityChecked：身份核对读口答复了，结果是零候选、多候选或冲突。
+	IdentityChecked
+	// IdentityUnchecked：读口交回错误、没取得 PS 的答复；候选必为空、不记身份冲突，这份空不是「查无此号」。
+	IdentityUnchecked
+)
+
+func (check IdentityCheck) String() string {
+	switch check {
+	case IdentityChecked:
+		return "CHECKED"
+	case IdentityUnchecked:
+		return "UNCHECKED"
+	default:
+		return ""
+	}
+}
+
 // ReceptionRecord 是一次收寄判断留下的东西。收寄与控制只在形成/待识别两格在场；
-// 候选与身份冲突只在待识别格有意义；服务结果标记（已取消 / 终局，编排在身份唯一成立时向 PS 取，由
+// 候选、身份冲突与身份核对态（IdentityCheck，ADR-0199 决定五）只在待识别格有意义；服务结果标记（已取消 / 终局，编排在身份唯一成立时向 PS 取，由
 // ParcelServiceResults.Markers 合成）与核对态只在形成格在场——它们不阻止接收，只限制后续方向性作业。标记串原样保全，
 // 只给人看与审计，不得解析（ADR-0186）。
 //
@@ -185,6 +212,7 @@ type ReceptionRecord struct {
 	RefusalReason      string
 	ServiceMarkers     []string
 	ServiceResultCheck ServiceResultCheck
+	IdentityCheck      IdentityCheck
 	RecordedAt         time.Time
 	// Disposition 只在身份冲突处置版上在场（ADR-0210 决定三），零值即这一版不是处置版。处置版的 ContentDigest 是这次处置比对格的
 	// 摘要（domain.CanonicalizeIdentityDispositionComparison），同一次处置的各版同一个；文档本身不进摘要：依据引用、操作者与形成时刻
@@ -314,6 +342,18 @@ type NodeIntakeHandoffIntent struct {
 // （ADR-0043）。
 type NodeIntakeHandoff interface {
 	HandOffNodeIntake(ctx context.Context, intent NodeIntakeHandoffIntent) error
+}
+
+// IdentityRecheckDoorbellIntent 是落下未核对行时自投的那一封重核门铃（ADR-0199 决定三第三个触发）：指名那一版判断，重核只看
+// 那一件。
+type IdentityRecheckDoorbellIntent struct {
+	Record ReceptionRecord
+}
+
+// IdentityRecheckDoorbell 把门铃写入 Outbox，与未核对行同一笔事务。信封只带（租户，判断版本），身份由那一版认领，重放撞同一个
+// ID 不出第二封。门铃不是身份答案：接住它的一方照旧经身份核对读口问 PS。
+type IdentityRecheckDoorbell interface {
+	RingIdentityRecheck(ctx context.Context, intent IdentityRecheckDoorbellIntent) error
 }
 
 // CollaborationAcceptanceKey 是承接决定的幂等键：同一协作事项只决定一次，重放返回
@@ -513,7 +553,8 @@ type ContainmentIndex interface {
 //   - `不可归属`：没有已关联实物在单元里，但有一件仍待识别的实物，其候选关联里列着该包裹，
 //     且那件实物此刻在某个单元里。候选不是归属（CONTEXT「候选尚未确认时不得据此执行方向性
 //     作业」），本上下文说不出那件在袋里的东西是不是它——既不能答`在`（那是拿候选冒充关联），
-//     也不能答`不在`（那会让一个身份冲突尚未处置的包裹被读成「没装袋」）。
+//     也不能答`不在`（那会让一个身份冲突尚未处置的包裹被读成「没装袋」）。同租户里有一件身份核对态未核对的待识别实物此刻在
+//     某个单元里时，凡没有已关联实物在袋的包裹都在这一格（ADR-0199 决定五）：没问到 PS 的那件可能是任何一件包裹。
 //   - `不在`：其余情形，含本上下文从未把任何作业实物关联到该包裹。没有关联就没有可归属于
 //     它的装袋事实，这是对本上下文自己册子的如实回答，不是「不知道」——把它答成不知道，
 //     会让每一个尚未到站的包裹都判不出阶段。

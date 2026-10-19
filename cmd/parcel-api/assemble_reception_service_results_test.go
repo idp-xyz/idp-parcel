@@ -262,27 +262,3 @@ func TestTheWiredReceptionFormsTheIntakeWhenServiceResultsAreUnreadable(t *testi
 		t.Fatalf("重投后意图 %d 封, want 仍是 1", got)
 	}
 }
-
-// Covers: ADR-0186「身份核对读不动：编排交回 error，不形成答案」的生产装配面——PS 外部标识关联变更册被挪走：答 500
-// NO_ANSWER_FORMED、零行；挪回后同一来源重投答 201 INTAKE_FORMED、带关联、意图一封。
-func TestTheWiredReceptionFormsNoAnswerWhenIdentityIsUnreadable(t *testing.T) {
-	pool, reception, command := wiredIdentifiedReception(t, "SYN-DELIVERY-OC29-IDENTITY")
-	restore := moveTable(t, pool, "external_identifier_relation_change")
-
-	failed := postWiredReception(t, reception, command)
-	if failed.status != http.StatusInternalServerError || !strings.Contains(failed.raw, "NO_ANSWER_FORMED") || failed.Outcome != "" {
-		t.Fatalf("身份核对读不动 %d %s, want 500 NO_ANSWER_FORMED 且不带 outcome", failed.status, failed.raw)
-	}
-	if got := receptionRows(t, pool, command.SourceID); got != 0 {
-		t.Fatalf("收寄 %d 行, want 0", got)
-	}
-
-	restore()
-	retried := postWiredReception(t, reception, command)
-	if retried.status != http.StatusCreated || retried.Outcome != "INTAKE_FORMED" || retried.Association == "" {
-		t.Fatalf("挪回后重投 %d %s, want 201 INTAKE_FORMED 带关联", retried.status, retried.raw)
-	}
-	if got := nodeIntakeIntents(t, pool); got != 1 {
-		t.Fatalf("意图 %d 封, want 1", got)
-	}
-}

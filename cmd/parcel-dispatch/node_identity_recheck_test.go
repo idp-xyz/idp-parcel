@@ -190,6 +190,10 @@ func receivePendingForRecheck(t *testing.T, db *bentopg.DB, tenant nodomain.Tena
 	if err != nil {
 		t.Fatalf("构造收寄交接：%v", err)
 	}
+	doorbell, err := nopostgres.NewOutboxIdentityRecheckDoorbell(db, store, systemClock{})
+	if err != nil {
+		t.Fatalf("构造重核门铃：%v", err)
+	}
 	identifiers, err := pspostgres.NewExternalIdentifiers(db)
 	if err != nil {
 		t.Fatalf("构造关联册读面：%v", err)
@@ -204,7 +208,7 @@ func receivePendingForRecheck(t *testing.T, db *bentopg.DB, tenant nodomain.Tena
 	}
 	handler, err := noapplication.NewReceiveDeliveredUnitHandler(noapplication.ReceiveDeliveredUnitDeps{
 		Identity: identity, ServiceResults: services, Receptions: receptions, Versions: versions,
-		Downstream: downstream, Clock: systemClock{},
+		Downstream: downstream, Doorbell: doorbell, Clock: systemClock{},
 	})
 	if err != nil {
 		t.Fatalf("构造收寄编排：%v", err)

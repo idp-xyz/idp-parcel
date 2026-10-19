@@ -34,8 +34,9 @@ type IdentityRecheckHandler interface {
 	Recheck(ctx context.Context, command application.RecheckPendingIdentityCommand) (application.RecheckPendingIdentityResult, error)
 }
 
-// NewRecheckPendingIdentityEndpoint 交回人工重核的 HTTP 入口。按 ADR-0022 映射：追加了一版（关联收寄或冲突版）答 201；判断
-// 不变、已有结果与不重核的三格都是形成了的答案，答 200 带 outcome——服务端知道为什么不重核，这不是调用方的错（4xx），也不是
+// NewRecheckPendingIdentityEndpoint 交回人工重核的 HTTP 入口。按 ADR-0022 映射：追加了一版（关联收寄、冲突版，或未核对那一件
+// 问到了零候选而追加的「待识别 · 已核对」）答 201；判断不变、已有结果与不重核的各格都是形成了的答案，答 200 带 outcome——服务端
+// 知道为什么不重核，这不是调用方的错（4xx），也不是
 // 没形成答案（5xx）。指名本租户册上没有的版本答 404，与越权探针同答。身份核对读不动、落册或意图入队失败答 5xx：重核没形成
 // 答案，册上什么也没追加。
 func NewRecheckPendingIdentityEndpoint(intake IdentityRecheckIntake, handler IdentityRecheckHandler) http.Handler {
@@ -87,8 +88,9 @@ func writeIntakeProblem(response http.ResponseWriter, err error) {
 }
 
 // identityRecheckResponse 是本口的封闭响应形状。outcome 取重核结果枚举的原名。recheckedVersion 恒在场，是被重核的那一版；
-// judgmentVersion 只随追加了一版的两格出现，是追加的那一版；currentVersion 与 recordedOutcome 只随已有结果出现，是当前有效
-// 那一版与它的判断种类。unit 以下几格说的是答复所指的那一版（追加的、当前有效的，或被重核的那一版本身）。
+// judgmentVersion 只随追加了一版的各格出现，是追加的那一版；currentVersion 与 recordedOutcome 只随已有结果出现，是当前有效
+// 那一版与它的判断种类。unit 以下几格说的是答复所指的那一版（追加的、当前有效的，或被重核的那一版本身）；identityCheck 只在
+// 那一版是待识别时出现（ADR-0199 决定五）。
 type identityRecheckResponse struct {
 	Outcome            string   `json:"outcome"`
 	RecheckedVersion   string   `json:"recheckedVersion"`
@@ -102,6 +104,7 @@ type identityRecheckResponse struct {
 	IdentityConflict   bool     `json:"identityConflict,omitempty"`
 	ServiceMarkers     []string `json:"serviceMarkers,omitempty"`
 	ServiceResultCheck string   `json:"serviceResultCheck,omitempty"`
+	IdentityCheck      string   `json:"identityCheck,omitempty"`
 }
 
 func writeRecheckOutcome(response http.ResponseWriter, result application.RecheckPendingIdentityResult) {
@@ -114,7 +117,7 @@ func writeRecheckOutcome(response http.ResponseWriter, result application.Rechec
 	status := http.StatusOK
 	if record, present := result.Record(); present {
 		switch result.Outcome() {
-		case application.RecheckIntakeFormed, application.RecheckIdentityConflict:
+		case application.RecheckIntakeFormed, application.RecheckIdentityConflict, application.RecheckIdentityNowChecked:
 			body.JudgmentVersion = record.JudgmentVersion.String()
 			status = http.StatusCreated
 		case application.RecheckExistingResult:
@@ -134,6 +137,7 @@ func writeRecheckOutcome(response http.ResponseWriter, result application.Rechec
 		body.IdentityConflict = record.IdentityConflict
 		body.ServiceMarkers = append(body.ServiceMarkers, record.ServiceMarkers...)
 		body.ServiceResultCheck = record.ServiceResultCheck.String()
+		body.IdentityCheck = record.IdentityCheck.String()
 	}
 	writeJSON(response, status, body)
 }

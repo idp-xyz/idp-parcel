@@ -20,8 +20,8 @@ const serviceResultSavepoint = "node_operations_parcel_service_results"
 // 会把整笔事务打进中止态，收寄的写跟着作废，提交时只拿到 rollback——编排已经决定「服务结果读不动照常落册」，没有这层
 // 隔离那句话在库里不成立。内层失败就退回 savepoint、把错误原样交回，编排据此记读不动；成功就 RELEASE。
 //
-// ctx 不在事务里时直通：没有可保护的写，事务块外也开不了 savepoint。只包服务结果读口：身份核对读不动本就不形成答案，
-// 整笔回滚正是它要的结果。
+// ctx 不在事务里时直通：没有可保护的写，事务块外也开不了 savepoint。身份核对读口另由 SavepointedParcelIdentityView 包：
+// 它读不动也要落册（ADR-0199 决定五）。
 type SavepointedServiceResultView struct {
 	db    *bentopg.DB
 	inner ports.ParcelServiceResultView

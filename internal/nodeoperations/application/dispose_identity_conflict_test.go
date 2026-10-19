@@ -117,7 +117,8 @@ func newDispositionFixture(t *testing.T) *dispositionFixture {
 	var err error
 	fixture.receive, err = application.NewReceiveDeliveredUnitHandler(application.ReceiveDeliveredUnitDeps{
 		Identity: fixture.identity, ServiceResults: fixture.services, Receptions: fixture.store,
-		Versions: fixture.versions, Downstream: fixture.downstream, Clock: fixedClock{at: deliveredAt.Add(time.Minute)},
+		Versions: fixture.versions, Downstream: fixture.downstream, Doorbell: &doorbellDouble{},
+		Clock: fixedClock{at: deliveredAt.Add(time.Minute)},
 	})
 	if err != nil {
 		t.Fatalf("收寄编排：%v", err)

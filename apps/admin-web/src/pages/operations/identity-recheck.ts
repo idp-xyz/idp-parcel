@@ -6,13 +6,15 @@
 
 import { formatInstant } from '../catalogue-view';
 import type { IdentityRecheckResponseBody } from './identity-recheck-api';
+import { identityCheckCellOf } from './identity-check';
 import { labelOf, receptionKindLabels } from './presentation';
 import type { UnidentifiedItemRecord } from './records-api';
 
-/** 重核口结果代数七格（application RecheckOutcome）。 */
+/** 重核口结果代数（application RecheckOutcome）。 */
 export const recheckOutcomeLabels: Record<string, string> = {
   INTAKE_FORMED: '重核成立——追加一版节点收寄已形成',
   IDENTITY_CONFLICT: '重核结果是身份冲突——追加冲突版',
+  IDENTITY_NOW_CHECKED: '这回问到了，仍查无此号——追加一版待识别 · 已核对',
   STILL_UNIDENTIFIED: '仍查无此号——判断不变，未追加',
   EXISTING_RESULT: '这一件已有后续判断——不再追加',
   IDENTITY_CONFLICT_RECORDED: '不重核：这一件记着身份冲突',
@@ -69,6 +71,7 @@ export function unidentifiedRowOf(record: UnidentifiedItemRecord): UnidentifiedR
       receivedAt: formatInstant(record.receivedAt),
       association: record.association ?? '',
       judgmentVersion: record.judgmentVersion ?? '',
+      identityCheck: identityCheckCellOf(record),
     },
     recheck: recheckAvailabilityOf(record),
   };
@@ -109,6 +112,16 @@ export function describeRecheckAnswer(body: IdentityRecheckResponseBody): Rechec
         details: [
           `冲突版 ${body.judgmentVersion ?? '—'} 接续${rechecked}，候选 ${(body.candidates ?? []).join('、') || '—'}`,
           '身份冲突暂停方向性作业；号码唯一指向的包裹若已关联到另一件实物，那一件也追加了冲突版。身份冲突只经人工处置解除，再重核不会解开。',
+        ],
+      };
+    case 'IDENTITY_NOW_CHECKED':
+      return {
+        tone: 'answered',
+        landed: true,
+        headline,
+        details: [
+          `新版本 ${body.judgmentVersion ?? '—'} 接续${rechecked}：parcel-shipment 这回答复了，仍没有标识这个号的包裹`,
+          '那一件原先身份未核对（当时没问到），从此记为已核对、查无此号；收寄事实与控制照旧，原记录照留',
         ],
       };
     case 'STILL_UNIDENTIFIED':

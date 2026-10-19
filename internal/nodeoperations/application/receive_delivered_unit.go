@@ -156,7 +156,10 @@ type ReceiveDeliveredUnitDeps struct {
 	Receptions     ports.ReceptionStore
 	Versions       ports.IntakeIdentityFactory
 	Downstream     ports.NodeIntakeHandoff
-	Clock          ports.Clock
+	// Doorbell 在落下未核对的待识别时同一笔自投一封重核门铃（ADR-0199 决定三第三个触发）：翻转之后设备收到 2xx 就出队，不会再
+	// 重投，PS 恢复后续上身份只能靠它。
+	Doorbell ports.IdentityRecheckDoorbell
+	Clock    ports.Clock
 }
 
 type ReceiveDeliveredUnitHandler struct {
@@ -176,6 +179,8 @@ func NewReceiveDeliveredUnitHandler(deps ReceiveDeliveredUnitDeps) (*ReceiveDeli
 		return nil, errors.New("node operations: reception needs an intake result version factory")
 	case deps.Downstream == nil:
 		return nil, errors.New("node operations: reception needs a node intake handoff")
+	case deps.Doorbell == nil:
+		return nil, errors.New("node operations: reception needs an identity recheck doorbell")
 	case deps.Clock == nil:
 		return nil, errors.New("node operations: reception needs a clock")
 	}
@@ -186,8 +191,9 @@ func NewReceiveDeliveredUnitHandler(deps ReceiveDeliveredUnitDeps) (*ReceiveDeli
 // 决定四：有当前收寄即并入，有待确认即续办）→ 接收观察三态分派（拒收不建控制、仅扫描不建控制）→ 身份核对分关联/待识别/
 // 身份冲突 → 收寄与控制同一提交 → 发布意图。物理事实全程只增不删。
 //
-// 没形成答案（身份核对读不动、收寄库读写失败、已存摘要认不出、版本签发失败）一律交回 error，不答一格业务结果：
-// 什么都没落册时答`收寄待确认`，设备收到 2xx 就出队，这一次接收从此没有记录（ADR-0186、ADR-0022）。
+// 身份核对读不动是形成了的答案：落`待识别实物已建立`、身份核对态未核对，同一笔自投重核门铃（ADR-0199 决定五）。没形成答案
+// （收寄库读写失败、已存摘要认不出、版本签发失败、门铃入不了队）一律交回 error，不答一格业务结果：什么都没落册时答
+// `收寄待确认`，设备收到 2xx 就出队，这一次接收从此没有记录（ADR-0186、ADR-0022）。
 func (handler *ReceiveDeliveredUnitHandler) Handle(
 	ctx context.Context,
 	command ReceiveDeliveredUnitCommand,
@@ -297,6 +303,10 @@ func deliverySourceOf(command ReceiveDeliveredUnitCommand) domain.DeliverySource
 }
 
 // receive 走明确接收支：身份核对分派关联收寄或待识别，两格都成立收寄与控制。predecessor 非空即这次接收续办那条待确认。
+//
+// 身份核对读不动时落未核对的待识别（ADR-0199 决定五）：明确接收已经取得控制（CONTEXT），不能因为没问到 PS 就不落册；也不拿
+// 空候选顶替成「查无此号」（ADR-0089），核对态记未核对。不问服务结果（没有可问的包裹）、不交意图，同一笔自投重核门铃。判断里
+// 身份核对读口以外的失败（按包裹读别的实物收寄）仍不形成答案：那是本方册读不动，不是没问到 PS。
 func (handler *ReceiveDeliveredUnitHandler) receive(
 	ctx context.Context,
 	command ReceiveDeliveredUnitCommand,
@@ -309,7 +319,8 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 		services:   handler.deps.ServiceResults,
 		receptions: handler.deps.Receptions,
 	}.judge(ctx, command.TenantID, command.Mark, command.Unit)
-	if err != nil {
+	unchecked := errors.Is(err, ErrParcelIdentityUnreadable)
+	if err != nil && !unchecked {
 		return ReceiveDeliveredUnitResult{}, err
 	}
 	version, err := handler.deps.Versions.NextIntakeResultVersion(ctx)
@@ -328,10 +339,13 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 	}
 	// 唯一且证据充分：关联正式包裹，形成可交 PS 采用的收寄（AT-NO-015）。未知（零候选）：待识别实物——收寄与控制真实成立，
 	// 正式身份等版本化识别（AT-NO-018）。身份冲突（AT-NO-019）：各实物独立、暂停方向性作业；不猜身份，候选照记。
-	kind := ports.RecordPendingIdentification
-	if judgment.identified {
+	kind, identityCheck := ports.RecordPendingIdentification, ports.IdentityChecked
+	switch {
+	case unchecked:
+		identityCheck = ports.IdentityUnchecked
+	case judgment.identified:
 		spec.Association = judgment.parcel
-		kind = ports.RecordIntakeFormed
+		kind, identityCheck = ports.RecordIntakeFormed, ports.IdentityCheckAbsent
 	}
 
 	intake, err := domain.FormNodeIntake(spec)
@@ -367,12 +381,23 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 		IdentityConflict:   judgment.conflict(),
 		ServiceMarkers:     judgment.markers,
 		ServiceResultCheck: judgment.check,
+		IdentityCheck:      identityCheck,
 		RecordedAt:         handler.deps.Clock.Now(),
 	}
 	result, err := handler.commit(ctx, record)
-	// 只在本次真落了册时追加：并发里输给另一方的那次读回的是赢家，赢家已经追加过。
-	if err != nil || len(judgment.others) == 0 || result.Outcome() != UnitPendingIdentification {
+	// 门铃与冲突版都只在本次真落了册时追加：并发里输给另一方的那次读回的是赢家，赢家已经响过、追加过。
+	if err != nil || result.Outcome() != UnitPendingIdentification {
 		return result, err
+	}
+	if unchecked {
+		// 门铃入不了队就不形成答案：一条没有门铃的未核对行只能等人工重核，比翻转前设备退避重投、PS 恢复后自动续上倒退。
+		if err := handler.deps.Doorbell.RingIdentityRecheck(ctx, ports.IdentityRecheckDoorbellIntent{Record: record}); err != nil {
+			return ReceiveDeliveredUnitResult{}, fmt.Errorf("ring the identity recheck doorbell: %w", err)
+		}
+		return result, nil
+	}
+	if len(judgment.others) == 0 {
+		return result, nil
 	}
 	if err := appendIdentityConflicts(ctx, handler.deps.Receptions, handler.deps.Versions, record, judgment.others); err != nil {
 		return ReceiveDeliveredUnitResult{}, err
@@ -453,6 +478,7 @@ func appendIdentityConflicts(
 			Control:          earlier.Control,
 			Candidates:       late.Candidates,
 			IdentityConflict: true,
+			IdentityCheck:    ports.IdentityChecked,
 			RecordedAt:       late.RecordedAt,
 		}
 		saved, err := receptions.Save(ctx, record)

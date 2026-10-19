@@ -14,9 +14,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
-// 本文件对真实 PostgreSQL 证前线导入在跨上下文读口读不动时的去向（ADR-0186，隔离合成 S）：用 DDL 把 PS 的一张表挪走，
-// 不换服务结果读口、不改装配签名。服务结果读不动的行照常落地、明细写明读不动；身份核对读不动的行记未决、明细带真实原因，
-// 挪回后重跑同一份文件就落地。
+// 本文件对真实 PostgreSQL 证前线导入在跨上下文读口读不动时的去向（ADR-0186、ADR-0199 决定五，隔离合成 S）：用 DDL 把 PS 的
+// 一张表挪走，不换读口、不改装配签名。服务结果读不动的行照常落地、明细写明读不动；身份核对读不动的行照常落地成未核对的待识别、
+// 明细写明候选缺席不代表查无此号，挪回后重跑同一份文件答重放。
 
 func movableImporter(t *testing.T, identity ports.ParcelIdentityView) (*pgxpool.Pool, intakeImporter) {
 	t.Helper()
@@ -72,25 +72,43 @@ func TestFrontlineImportLandsTheReceivedRowWhenServiceResultsAreUnreadable(t *te
 	}
 }
 
-// Covers: ADR-0186「身份核对读不动：编排交回 error，不形成答案……前线导入记未决」——PS 外部标识关联变更册被挪走，`RECEIVED`
-// 行记未决、明细带真实原因，另两行不经身份核对照常落地；挪回后重跑同一份文件，那一行落地，另两行答重放。
-func TestFrontlineImportLeavesTheReceivedRowUndecidedWhenIdentityIsUnreadable(t *testing.T) {
+// Covers: `AT-NO-051` 与 ADR-0199 决定五的前线导入面（「前线导入明细写『身份未核对：候选缺席不代表查无此号』，这一行照常记成功、
+// 不再记未决」）——PS 外部标识关联变更册被挪走，`RECEIVED` 行落地成未核对的待识别、明细写明候选缺席不代表查无此号，另两行照常
+// 落地，退出码 0；同一笔自投门铃一封。挪回后重跑同一份文件，那一行答重放、明细仍写未核对（续上靠门铃重核，不靠重跑）。PS 读得
+// 动时同一个号查无此号，明细写已核对，两种待识别在明细上分得开。
+func TestFrontlineImportLandsTheReceivedRowUncheckedWhenIdentityIsUnreadable(t *testing.T) {
 	pool, importer := movableImporter(t, nil)
 	restore := movePSTable(t, pool, "external_identifier_relation_change")
 
 	results := importTemplate(t, importer, sampleTemplate(t))
-	if got := results[0]; got.Disposition != rowUndecided || !strings.Contains(got.Detail, "external_identifier_relation_change") {
-		t.Fatalf("第 1 行 → %s [%s]（%s），要未决且明细带真实原因", got.Outcome, got.Disposition, got.Detail)
+	assertDisposition(t, results, 0, rowLanded, "PENDING_IDENTIFICATION")
+	if !strings.Contains(results[0].Detail, "身份未核对：候选缺席不代表查无此号") {
+		t.Fatalf("明细没写明未核对：%s", results[0].Detail)
 	}
 	assertDisposition(t, results, 1, rowLanded, "INTAKE_NOT_FORMED")
-	if code := exitCodeFor(results); code != exitUndecided {
-		t.Fatalf("退出码 = %d，要 %d", code, exitUndecided)
+	if code := exitCodeFor(results); code != exitLanded {
+		t.Fatalf("退出码 = %d，要 %d（%+v）", code, exitLanded, results)
+	}
+	var doorbells int
+	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM `+migrate.SchemaBento+`.outbox WHERE event_type = $1`,
+		"node-operations.unchecked-pending-identity.recorded").Scan(&doorbells); err != nil || doorbells != 1 {
+		t.Fatalf("门铃 %d 封 err %v, want 1", doorbells, err)
 	}
 
 	restore()
 	rerun := importTemplate(t, importer, sampleTemplate(t))
-	assertDisposition(t, rerun, 0, rowLanded, "PENDING_IDENTIFICATION")
+	assertDisposition(t, rerun, 0, rowReplayed, "EXISTING_RESULT")
+	if !strings.Contains(rerun[0].Detail, "身份未核对") {
+		t.Fatalf("重放明细没写明未核对：%s", rerun[0].Detail)
+	}
 	assertDisposition(t, rerun, 1, rowReplayed, "EXISTING_RESULT")
+
+	_, readable := movableImporter(t, nil)
+	checked := importTemplate(t, readable, sampleTemplate(t))
+	assertDisposition(t, checked, 0, rowLanded, "PENDING_IDENTIFICATION")
+	if !strings.Contains(checked[0].Detail, "身份已核对") || strings.Contains(checked[0].Detail, "未核对") {
+		t.Fatalf("查无此号的明细 = %s, want 写已核对、不写未核对", checked[0].Detail)
+	}
 }
 
 // Covers: ADR-0186「输入缺陷两支，交回被拒类错误……前线导入记被拒」——模板译装挡在前面，这一支只在命令绕过译装时出现；
