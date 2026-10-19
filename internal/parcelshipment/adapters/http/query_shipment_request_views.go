@@ -178,7 +178,11 @@ func writeIntakeProblem(response http.ResponseWriter, err error) {
 		return
 	}
 	if errors.Is(err, ErrMalformedRequest) {
-		writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
+		problem := problemDetail{Code: codeMalformedRequest}
+		if malformed := (*malformedFieldError)(nil); errors.As(err, &malformed) {
+			problem.Detail = malformed.detail()
+		}
+		writeJSON(response, http.StatusBadRequest, problemResponse{Error: problem})
 		return
 	}
 	writeProblem(response, http.StatusInternalServerError, codeIntakeFailed)

@@ -564,10 +564,10 @@ func TestCustomerSubmissionIntakeTrimsOnlyTheEndsOfCustomerReferences(t *testing
 // Covers: 票 ps-external-mark-relations/06 裁定二——客户包裹参考去过两端空白后存不进外部标识关联册（超过 512 字节、带 NUL），
 // 这份草案立不成命令：答 ErrMalformedRequest，拒因点名那一格（parcels[1].customerParcelReference），不把号码本身抄进拒因。
 // 恰 512 字节的照收、逐字进配对。
-func TestIsolatedSubmissionIntakeRefusesACustomerParcelReferenceTheRegisterCannotStore(t *testing.T) {
-	intake := newIsolatedIntake(t, &permittingOwnershipDouble{revision: "SYN-REV-1"})
+func TestCustomerSubmissionIntakeRefusesACustomerParcelReferenceTheRegisterCannotStore(t *testing.T) {
+	intake := newCustomerIntake(t, &customerAuthenticatorDouble{}, &permittingOwnershipDouble{revision: "SYN-REV-1"})
 	withSecond := func(reference string) string {
-		return strings.Replace(strings.Replace(isolatedDraft, `"parcels": [`, `"parcels": [
+		return strings.Replace(strings.Replace(customerDraft, `"parcels": [`, `"parcels": [
     {"customerParcelReference": "SYN-PCLREF-0000"},`, 1), `"SYN-PCLREF-0001"`, `"`+reference+`"`, 1)
 	}
 	for name, reference := range map[string]string{

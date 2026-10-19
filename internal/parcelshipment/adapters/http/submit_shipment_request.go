@@ -23,8 +23,10 @@ import (
 // 它，会让一条本该重试的请求被丢掉。
 var ErrMalformedRequest = errors.New("parcel shipment http: malformed request")
 
-// malformedFieldError 是点得出是哪一格的坏报文：除了 ErrMalformedRequest 本身，还带着草案里那一格的路径，端点据此在答复的
-// `field` 里点名。路径出自调用方自己的报文形状，不是底层失败的措辞，所以它不碰 problemResponse 不带自由文本的那条理由。
+// malformedFieldError 是点得出是哪一格的坏报文：除了 ErrMalformedRequest 本身，还带着载荷里那一格的路径与拒因，
+// writeIntakeProblem 据此在答复的 `detail` 里点名。路径出自调用方自己的报文形状，拒因只说这一格错在哪、不带它的值，所以
+// 这段散文只谈调用方自己的载荷（ADR-0140 Decision 三给 `detail` 划的边界）。只有本包自己立的这一类带 `detail`：别处包着
+// ErrMalformedRequest 交上来的错，措辞不由本包把关。
 type malformedFieldError struct {
 	field string
 	cause error
@@ -40,6 +42,10 @@ func (malformed *malformedFieldError) Error() string {
 
 func (malformed *malformedFieldError) Unwrap() []error {
 	return []error{ErrMalformedRequest, malformed.cause}
+}
+
+func (malformed *malformedFieldError) detail() string {
+	return malformed.field + ": " + malformed.cause.Error()
 }
 
 // SubmissionIntake 把一次已认证的接入请求翻译成一条提交命令。
@@ -141,17 +147,17 @@ type ownershipView struct {
 	SuspensionReference          string `json:"suspensionReference,omitempty"`
 }
 
-// problemResponse 刻意不带自由文本消息。底层失败的措辞会捎带租户、客户账户或线路的存在性，
-// 而 `UC-PS-001` 要求错误信息不得泄露其他客户的存在、业务量或内容；调用方要分流靠稳定的
-// `code`，要细节去查带关联标识的服务端记录。
+// problemResponse 不带底层失败的措辞。那种措辞会捎带租户、客户账户或线路的存在性，而 `UC-PS-001` 要求错误信息不得泄露
+// 其他客户的存在、业务量或内容；调用方要分流靠稳定的 `code`，要细节去查带关联标识的服务端记录。
 type problemResponse struct {
 	Error problemDetail `json:"error"`
 }
 
 type problemDetail struct {
 	Code string `json:"code"`
-	// Field 只随能点名到格的 MALFORMED_REQUEST 在场：调用方报文里那一格的路径，改它才会好。没点名时整键不出现。
-	Field string `json:"field,omitempty"`
+	// Detail 只随「改请求才会好」的 MALFORMED_REQUEST 在场，只说调用方自己这份载荷错在哪一格、为什么（ADR-0140 Decision
+	// 三）。它是散文，客户端不据此分支；没有可说的时候整键不出现。
+	Detail string `json:"detail,omitempty"`
 }
 
 func writeOutcome(response http.ResponseWriter, result application.SubmitShipmentRequestResult) {

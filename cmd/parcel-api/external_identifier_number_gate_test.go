@@ -9,6 +9,8 @@ import (
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	"go.idp.xyz/idp-parcel/internal/accessidentity"
+	aipg "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/postgres"
 	nodomain "go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	noports "go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
@@ -16,14 +18,15 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
-// 本文件经生产装配在真库上钉外部标识关联册「号码存得下」的门（票 ps-external-mark-relations/06）：写的一侧是提交口，号码存
-// 不进册时答坏报文、点名那一格、委托不落；读的一侧是收寄，设备送来不可能在册的号答已核对的待识别，不落未核对、不响门铃。
+// 本文件经生产装配在真库上钉外部标识关联册「号码存得下」的门（票 ps-external-mark-relations/06）：写的一侧是首方提交口，号码
+// 存不进册时答坏报文、点名那一格、委托不落；读的一侧是收寄，设备送来不可能在册的号答已核对的待识别，不落未核对、不响门铃。
 // 面单渠道结果那条写册路的真库用例是 PS postgres 适配器包里的 TestAChannelResultWhoseNumberCannotEnterTheRegisterIsNotAccepted。
 // 夹具全为合成（S 级）。
 
-// gateDraft 是管理台提交页送来的一份草案，只有一件包裹；委托参考与客户包裹参考由用例给。
-func gateDraft(shipmentReference, parcelReference string) string {
+// gateDraft 是首方提交口的一份载荷，只有一件包裹；接入请求标识、委托参考与客户包裹参考由用例给。
+func gateDraft(accessRequestID, shipmentReference, parcelReference string) string {
 	return `{
+  "accessRequestId": "` + accessRequestID + `",
   "customerShipmentReference": "` + shipmentReference + `",
   "requestedServiceProduct": "SYN-PRODUCT-STANDARD",
   "senderRelation": "SYN-SENDER-01",
@@ -41,15 +44,16 @@ type gateSubmissionAnswer struct {
 	raw     string
 	Outcome string `json:"outcome"`
 	Error   struct {
-		Code  string `json:"code"`
-		Field string `json:"field"`
+		Code   string `json:"code"`
+		Detail string `json:"detail"`
 	} `json:"error"`
 }
 
-// Covers: 票 ps-external-mark-relations/06 裁定二与完成判据「越界的客户包裹件号答 400 点名该格，委托不落」——提交口经生产装配
-// （隔离提交 Intake、提交编排、真库、登记册里一条匹配的合成权威区间）：客户包裹参考 513 字节或带 NUL 时答 400
-// MALFORMED_REQUEST，error.field 点名 parcels[0].customerParcelReference，来源保全与委托一行都不落。修前 513 字节的照收、建单
-// 成立，号码进了快照，接受时才去撞册；带 NUL 的在落库那一步报错，答 500。恰 512 字节的照收：建单成立，快照里逐字是那个号。
+// Covers: 票 ps-external-mark-relations/06 裁定二与完成判据「越界的客户包裹件号答 400 点名该格，委托不落」——提交口经现行生产
+// 装配：首方客户渠道 Intake（发行方替身签首方受众的令牌，客户渠道册登一个合成客户端并授提交能力）、提交编排、真库；归属坐标
+// 取写开关那一格与登记册里一条匹配的合成区间，同 TestACustomerClientSubmitsThroughTheFirstPartyLineAgainstARealDatabase。客户
+// 包裹参考 513 字节或带 NUL 时答 400 MALFORMED_REQUEST，detail 点名 parcels[0].customerParcelReference、不抄号码本身，来源
+// 保全与委托一行都不落。恰 512 字节的照收：建单成立，快照里逐字是那个号。
 func TestTheWiredSubmissionRefusesACustomerParcelReferenceTheRegisterCannotStore(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -57,20 +61,45 @@ func TestTheWiredSubmissionRefusesACustomerParcelReferenceTheRegisterCannotStore
 		t.Fatalf("构造框架 DB：%v", err)
 	}
 	appendIsolatedAuthorityInterval(t, db)
-	admission := isolatedWriteAdmissionForTest(t)
-	submission, err := buildSubmissionOrchestration(db, admission, isolatedSelfAuthority)
+	registry, err := aipg.NewCustomerClientRegistry(db)
 	if err != nil {
-		t.Fatalf("装配隔离形态提交编排：%v", err)
+		t.Fatal(err)
 	}
-	intake, err := buildIsolatedSubmissionIntake(db, admission)
+	subject, err := accessidentity.NewCustomerClientSubject(syntheticCustomerIssuer, syntheticCustomerSubject)
 	if err != nil {
-		t.Fatalf("装配隔离提交 Intake：%v", err)
+		t.Fatal(err)
+	}
+	registerCustomerClient(t, db, registry, subject, "SYN-TENANT-01", syntheticCustomerAccount, "SYN-CUSTOMER-GRANT-PSXM06-01")
+	issuer := newCustomerIssuerDouble(t)
+	verifier, configured, err := buildCustomerClientCredentialVerifier(fakeGetenv(issuer.environment()))
+	if err != nil || !configured {
+		t.Fatalf("首方发行方参数：configured=%v err=%v", configured, err)
+	}
+	minter, err := buildCustomerClientMinter(verifier, registry, admissionScopeUnset())
+	if err != nil {
+		t.Fatal(err)
+	}
+	isolated := isolatedWriteAdmissionForTest(t)
+	ownership, err := buildProductionOwnership(db, isolated, isolatedSelfAuthority)
+	if err != nil {
+		t.Fatal(err)
+	}
+	intake, err := buildCustomerSubmissionIntake(minter, ownership)
+	if err != nil {
+		t.Fatalf("装配首方提交 Intake：%v", err)
+	}
+	submission, err := buildSubmissionOrchestration(db, isolated, isolatedSelfAuthority)
+	if err != nil {
+		t.Fatalf("装配提交编排：%v", err)
 	}
 	endpoint := shipmenthttp.NewSubmitShipmentRequestEndpoint(intake, submission)
+	token := issuer.token(t, syntheticCustomerAudience, syntheticCustomerSubject)
 	post := func(body string) gateSubmissionAnswer {
 		t.Helper()
+		request := httptest.NewRequest(http.MethodPost, "/shipment-requests", strings.NewReader(body))
+		request.Header.Set("Authorization", "Bearer "+token)
 		recorder := httptest.NewRecorder()
-		endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/shipment-requests", strings.NewReader(body)))
+		endpoint.ServeHTTP(recorder, request)
 		answer := gateSubmissionAnswer{status: recorder.Code, raw: recorder.Body.String()}
 		if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
 			t.Fatalf("解码响应 %q：%v", answer.raw, err)
@@ -82,19 +111,19 @@ func TestTheWiredSubmissionRefusesACustomerParcelReferenceTheRegisterCannotStore
 		return countRows(t, pool, `SELECT count(*) FROM parcel_shipment.`+table)
 	}
 
-	for _, refused := range []struct{ name, shipment, parcel string }{
-		{"513 字节", "SYN-CUSTREF-GATE-513", strings.Repeat("P", 513)},
-		{"带 NUL", "SYN-CUSTREF-GATE-NUL", `SYN-PCL\u0000REF`},
+	for _, refused := range []struct{ name, access, shipment, parcel string }{
+		{"513 字节", "SYN-ACCESS-REQUEST-PSXM06-513", "SYN-CUSTREF-GATE-513", strings.Repeat("P", 513)},
+		{"带 NUL", "SYN-ACCESS-REQUEST-PSXM06-NUL", "SYN-CUSTREF-GATE-NUL", `SYN-PCL\u0000REF`},
 	} {
 		t.Run(refused.name, func(t *testing.T) {
-			answer := post(gateDraft(refused.shipment, refused.parcel))
+			answer := post(gateDraft(refused.access, refused.shipment, refused.parcel))
 			if answer.status != http.StatusBadRequest || answer.Error.Code != "MALFORMED_REQUEST" {
 				t.Fatalf("答 %d %s, want 400 MALFORMED_REQUEST", answer.status, answer.raw)
 			}
-			if answer.Error.Field != "parcels[0].customerParcelReference" {
-				t.Fatalf("field %q, want 点名 parcels[0].customerParcelReference", answer.Error.Field)
+			if !strings.HasPrefix(answer.Error.Detail, "parcels[0].customerParcelReference: ") {
+				t.Fatalf("detail %q, want 点名 parcels[0].customerParcelReference", answer.Error.Detail)
 			}
-			if strings.Contains(answer.raw, "PPPP") {
+			if strings.Contains(answer.raw, "PPPP") || strings.Contains(answer.raw, "SYN-PCL") {
 				t.Fatalf("答复把号码本身抄了回来：%s", answer.raw)
 			}
 		})
@@ -104,7 +133,7 @@ func TestTheWiredSubmissionRefusesACustomerParcelReferenceTheRegisterCannotStore
 	}
 
 	longest := strings.Repeat("P", 512)
-	admitted := post(gateDraft("SYN-CUSTREF-GATE-512", longest))
+	admitted := post(gateDraft("SYN-ACCESS-REQUEST-PSXM06-512", "SYN-CUSTREF-GATE-512", longest))
 	if admitted.status >= 300 || admitted.Outcome != "SUBMITTED" {
 		t.Fatalf("512 字节：答 %d %s, want SUBMITTED", admitted.status, admitted.raw)
 	}
