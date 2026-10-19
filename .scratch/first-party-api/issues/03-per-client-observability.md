@@ -1,8 +1,8 @@
 # 按 client 的可观测性：`outcome` × client 维、`requestId` 对账、暂停出声
 
 Category: enhancement
-Status: draft
-Blocked by: ADR-0139 接受；ADR-0140 接受（`requestId` 进问题详情）
+Status: needs-triage——00 落地后第 1–3 项改 ready-for-agent；第 4 项「暂停出声」挂 ADR-0142 的实施票（2026-10-19 用户接受 ADR-0139–0142，修订后接受；首方 Intake 实施票为 [00](./00-first-party-customer-intake.md)）。此前 draft
+Blocked by: [00](./00-first-party-customer-intake.md)；`requestId` 进问题详情随 ADR-0140 的实施票
 
 取证基线 `a608536d`。
 

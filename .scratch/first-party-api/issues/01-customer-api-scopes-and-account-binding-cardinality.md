@@ -1,8 +1,8 @@
 # 客户 API 的 scope 模型与 1:N 账户绑定
 
 Category: enhancement
-Status: draft
-Blocked by: ADR-0139 接受；首方 Intake 实施票（ADR-0139 Consequences 首条）
+Status: needs-triage——00 落地后改 ready-for-agent。随 ADR-0139 接受已定的三格，激活时照办：令牌里的 `scope` 不作准入依据，由册上的授予作答（同另外两族）；首发 1:1，1:N 后加（ADR-0139 越权风险点 5 的复核建议）；「第三格」措辞改为 `CUSTOMER_CLIENT_NOT_GRANTED`。授予已并进 00，本票余下 1:N 与能力词表（2026-10-19 用户接受 ADR-0139–0142，修订后接受；首方 Intake 实施票为 [00](./00-first-party-customer-intake.md)）。此前 draft
+Blocked by: [00](./00-first-party-customer-intake.md)
 
 取证基线 `a608536d`。
 
