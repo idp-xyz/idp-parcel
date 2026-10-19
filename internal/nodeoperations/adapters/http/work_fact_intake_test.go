@@ -16,12 +16,15 @@ import (
 
 // 本文件证节点收寄口的操作者渠道 Intake（ADR-0149 决定二；票 operator-channel/10）的传输面：租户与节点两格只来自认证
 // 结果、设备与作业范围只从三个头来且种类只认 NODE、先认证后解载荷、事实身份与发生时间照 ADR-0023 从载荷如实收、自报
-// 租户即拒、形状错即拒。这组译装用例原挂在隔离命令 Intake 上，随它退场迁来（票 23；ADR-0150 决定三），期望值不变。
-// 期望值取自载荷字面量而不是重算：这里证的是「译装没换字」。
+// 租户即拒、形状错即拒。期望值取自载荷字面量而不是重算：这里证的是「译装没换字」。
 
 const (
 	workFactTenant = "SYN-TENANT-01"
-	workFactNode   = "SYN-NODE-SHA-HUB"
+	// workFactNode 是替身认证方交回的节点；presentedScopeReference 是请求头 Parcel-Work-Scope-Reference 出示的引用。两值刻意不同：
+	// 相同时 Intake 改拿头值铸节点也照样全绿，「节点只来自认证结果」那一格就测不出来。生产上铸造方核过设备的登记范围，
+	// 交回的正是出示的那一格，两值相等；这里让替身答一个别的节点只为测出差别，不是在模拟真实答复。
+	workFactNode            = "SYN-NODE-SZX-01"
+	presentedScopeReference = "SYN-NODE-SHA-HUB"
 )
 
 // receptionAuthenticatorFake 替身认证方：记下被问的设备与作业范围；带了令牌答合成租户与节点，没带答令牌不过，err 非空时答它。
@@ -68,7 +71,7 @@ func receptionRequest(body string) *http.Request {
 	request.Header.Set("Authorization", "Bearer presented.operator.token")
 	request.Header.Set("Parcel-Device-Id", "SYN-DEVICE-NODE")
 	request.Header.Set("Parcel-Work-Scope-Kind", "NODE")
-	request.Header.Set("Parcel-Work-Scope-Reference", workFactNode)
+	request.Header.Set("Parcel-Work-Scope-Reference", presentedScopeReference)
 	return request
 }
 
@@ -96,7 +99,7 @@ func TestWorkFactReceptionIntakeTranslatesReceptionWithTheAuthenticatedTenantAnd
 		t.Fatalf("TenantID = %q, want %q（认证结果，不是请求里的自报）", got, workFactTenant)
 	}
 	if got := command.Node.String(); got != workFactNode {
-		t.Fatalf("Node = %q, want %q（认证结果，不是请求里的自报）", got, workFactNode)
+		t.Fatalf("Node = %q, want %q（认证结果，不是请求头 Parcel-Work-Scope-Reference 出示的 %q）", got, workFactNode, presentedScopeReference)
 	}
 	if command.SourceID != "SYN-DEVICE-07/000123" {
 		t.Fatalf("SourceID = %q, want 载荷里设备签发的那一个", command.SourceID)
@@ -225,7 +228,7 @@ func TestWorkFactReceptionIntakeTakesDeviceAndScopeFromHeadersAndAuthenticatesFi
 	if _, err := intake.IntakeReception(context.Background(), receptionRequest(body)); err != nil {
 		t.Fatalf("合规出示被拒：%v", err)
 	}
-	if len(asked) != 1 || asked[0] != "SYN-DEVICE-NODE|NODE|"+workFactNode {
+	if len(asked) != 1 || asked[0] != "SYN-DEVICE-NODE|NODE|"+presentedScopeReference {
 		t.Fatalf("认证方被问 %v，want 三个头里的设备与作业范围", asked)
 	}
 	for name, mutate := range map[string]func(*http.Request){
