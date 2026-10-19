@@ -1,7 +1,7 @@
 # 集运加成员不核任何方向性依据：已取消、已终局、无路由、身份未定的实物都装得进袋
 
 Category: bug
-Status: 完工，待进 main——2026-10-18 Claude Code 会话，见「完成记录（偏离标记半边）」；读面那一半仍随作业端排。此前 in-progress——2026-10-16 用户令「你作为业务和系统专家自决……解决所有的问题，直到全部解决」，Claude Code 会话据此代决「裁定修订」末段两问，见「排期代决」：偏离标记半边先于作业端做，本笔认领，分支 `claude-ndb01dev` 基 `c68e4342`；读面仍随作业端排。此前 needs-info——2026-10-16 开工前核实时推翻了自己的裁定第 1 条，见「裁定修订」：门不该放在写口，该放在作业端动作之前的读面；读面唯一的消费方是一线作业端，而作业端还没排进开发主线（ADR-0021「两个端都等真实落地时才建」）。此前 ready-for-agent——2026-10-16 分诊并裁四问（用户「你帮我做决定吧」授权 Claude Code 会话代决），见「裁定」；排在 [ps-external-mark-relations/01](../../ps-external-mark-relations/issues/01-external-mark-relations-have-no-model-in-parcel-shipment.md) 之后。此前 needs-triage——2026-10-16 Claude Code 会话立（票 [operator-channel/25](../../operator-channel/issues/25-node-reception-carries-parcel-shipment-service-result-markers.md) 实施中量到）
+Status: in-progress——偏离标记半边 2026-10-18 已进 main（`9434ae74`，见文末「进 main 记录」）；读面那一半仍随一线作业端排（见「排期代决」），本票为它留开。此前 完工，待进 main——2026-10-18 Claude Code 会话，见「完成记录（偏离标记半边）」。此前 in-progress——2026-10-16 用户令「你作为业务和系统专家自决……解决所有的问题，直到全部解决」，Claude Code 会话据此代决「裁定修订」末段两问，见「排期代决」：偏离标记半边先于作业端做，本笔认领，分支 `claude-ndb01dev` 基 `c68e4342`；读面仍随作业端排。此前 needs-info——2026-10-16 开工前核实时推翻了自己的裁定第 1 条，见「裁定修订」：门不该放在写口，该放在作业端动作之前的读面；读面唯一的消费方是一线作业端，而作业端还没排进开发主线（ADR-0021「两个端都等真实落地时才建」）。此前 ready-for-agent——2026-10-16 分诊并裁四问（用户「你帮我做决定吧」授权 Claude Code 会话代决），见「裁定」；排在 [ps-external-mark-relations/01](../../ps-external-mark-relations/issues/01-external-mark-relations-have-no-model-in-parcel-shipment.md) 之后。此前 needs-triage——2026-10-16 Claude Code 会话立（票 [operator-channel/25](../../operator-channel/issues/25-node-reception-carries-parcel-shipment-service-result-markers.md) 实施中量到）
 Blocked by: 偏离标记这一半不挡；读面那一半挡在一线作业端进开发主线（排期已代决，见「排期代决」）
 出处：UC-NO-003 的业务规则「方向性作业必须取得当前有效路由指令；集运还必须取得成员级集运兼容判断」、输入表「包裹与服务」一行（`parcel-shipment` 的当前取消/终局结果）、`AT-NO-031` 与 `AT-NO-042`；NO CONTEXT「候选尚未确认时不得据此执行方向性作业」与「已取消、已经终局或当前无有效路由的包裹仍然到站时……」两条。
 
@@ -193,3 +193,9 @@ Standards 轴（BLOCK，阻断 4）：
 2. 报告新增的「身份不成立 N 行……未判」与重投行「方向依据判于 …」没有用例钉 —— 已补进导入垂直用例。
 3. 各格端到端用例的比对是空的 —— 改为逐格比取值与原因数。
 4. `review_catalogue.go` 的「ports 那份文件头」指向含糊 —— 改点名 `ports.ReviewCatalogueRead`；`recorded` 形状不认识那一路没有用例 —— 不补（与受理闸同一条代数，受理闸那一路已有钉值用例）。
+
+### 进 main 记录（2026-10-18）
+
+- 推送 `9434ae74`（rebase 到 `c783151b` 之后的各笔原样快进）。之前在干净的 detached 检出上带 DSN 跑 `go test -p 1 -count=1 ./...`：142 包 `ok`，0 `FAIL`。
+- 机制清点在干净检出上重生成，单独一笔。
+- 迁移 `node_operations/0005` 由本票先用；`idp-parcel-9b` 的 operator-channel/29 顺延 `0006`（双方约定）。
