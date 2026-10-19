@@ -159,3 +159,31 @@ func TestADecisionDemandsItsFullIdentity(t *testing.T) {
 		})
 	}
 }
+
+// Covers: 必备值拒含 NUL——登记册的 text 列存不下 NUL，放进来的那一份只会让写入在库面失败、整笔事务中止；空白照旧拒。
+// 必备值为本上下文各口共用，这里按凭证登记那几格与租户钉。
+func TestARequiredValueRefusesNUL(t *testing.T) {
+	constructors := map[string]func(string) error{
+		"租户":    func(raw string) error { _, err := domain.NewTenantID(raw); return err },
+		"凭证身份":  func(raw string) error { _, err := domain.NewCredentialID(raw); return err },
+		"签发机构":  func(raw string) error { _, err := domain.NewRegulatoryAuthorityReference(raw); return err },
+		"凭证持有人": func(raw string) error { _, err := domain.NewCredentialHolderReference(raw); return err },
+		"关务程序":  func(raw string) error { _, err := domain.NewCustomsProcedureReference(raw); return err },
+	}
+	for name, construct := range constructors {
+		t.Run(name, func(t *testing.T) {
+			if err := construct("SYN-TFA11\x00-01"); !errors.Is(err, domain.ErrValueContainsNUL) {
+				t.Fatalf("含 NUL：err = %v，want ErrValueContainsNUL", err)
+			}
+			if err := construct("\x00"); !errors.Is(err, domain.ErrValueContainsNUL) {
+				t.Fatalf("只有 NUL：err = %v，want ErrValueContainsNUL", err)
+			}
+			if err := construct("  "); !errors.Is(err, domain.ErrBlankValue) {
+				t.Fatalf("空白：err = %v，want ErrBlankValue", err)
+			}
+			if err := construct("SYN-TFA11-01"); err != nil {
+				t.Fatalf("正常值：err = %v", err)
+			}
+		})
+	}
+}
