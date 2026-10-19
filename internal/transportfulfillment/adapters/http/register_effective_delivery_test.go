@@ -130,7 +130,10 @@ func (double *deliveryStoreDouble) Supersede(
 	_ context.Context,
 	record ports.EffectiveDeliveryRecord,
 ) (bool, error) {
-	if _, exists := double.records[storeKey(record.Key)]; !exists {
+	// 与生产适配器同一条件：只有记录指名的前版此刻仍是当前版才翻得动。
+	current, exists := double.records[storeKey(record.Key)]
+	predecessor, corrects := record.Delivery.Corrects()
+	if !exists || !corrects || current.Delivery.Version() != predecessor {
 		return false, nil
 	}
 	double.records[storeKey(record.Key)] = record
@@ -185,10 +188,11 @@ type registerBody struct {
 }
 
 type correctBody struct {
-	Attempt     string `json:"attempt"`
-	Object      string `json:"object"`
-	NewProof    string `json:"newProof"`
-	CorrectedAt string `json:"correctedAt"`
+	Attempt            string `json:"attempt"`
+	Object             string `json:"object"`
+	PredecessorVersion string `json:"predecessorVersion"`
+	NewProof           string `json:"newProof"`
+	CorrectedAt        string `json:"correctedAt"`
 }
 
 type bodyIntake struct {
@@ -236,11 +240,12 @@ func (intake *bodyIntake) IntakeCorrection(
 		return application.CorrectDeliveryProofCommand{}, fmt.Errorf("%w: %v", tfhttp.ErrMalformedRequest, err)
 	}
 	return application.CorrectDeliveryProofCommand{
-		TenantID:    intake.tenant,
-		Attempt:     body.Attempt,
-		Object:      body.Object,
-		NewProof:    body.NewProof,
-		CorrectedAt: correctedAt,
+		TenantID:           intake.tenant,
+		Attempt:            body.Attempt,
+		Object:             body.Object,
+		PredecessorVersion: body.PredecessorVersion,
+		NewProof:           body.NewProof,
+		CorrectedAt:        correctedAt,
 	}, nil
 }
 
@@ -402,10 +407,11 @@ func TestCorrectExposesThePredecessorVersion(t *testing.T) {
 	}
 
 	response := postJSON(t, fixture.correct, correctBody{
-		Attempt:     "attempt-1",
-		Object:      "parcel-1",
-		NewProof:    "pod-corrected-2",
-		CorrectedAt: "2026-09-06T08:00:00Z",
+		Attempt:            "attempt-1",
+		Object:             "parcel-1",
+		PredecessorVersion: "delivery-result/v1",
+		NewProof:           "pod-corrected-2",
+		CorrectedAt:        "2026-09-06T08:00:00Z",
 	})
 
 	if response.Code != http.StatusCreated {
@@ -424,10 +430,11 @@ func TestCorrectExposesThePredecessorVersion(t *testing.T) {
 
 	t.Run("correcting an absent registration is an answer, not a transport error", func(t *testing.T) {
 		absent := postJSON(t, fixture.correct, correctBody{
-			Attempt:     "attempt-9",
-			Object:      "parcel-9",
-			NewProof:    "pod-x",
-			CorrectedAt: "2026-09-06T08:00:00Z",
+			Attempt:            "attempt-9",
+			Object:             "parcel-9",
+			PredecessorVersion: "delivery-result/v1",
+			NewProof:           "pod-x",
+			CorrectedAt:        "2026-09-06T08:00:00Z",
 		})
 		if absent.Code != http.StatusOK {
 			t.Fatalf("status = %d, want 200", absent.Code)

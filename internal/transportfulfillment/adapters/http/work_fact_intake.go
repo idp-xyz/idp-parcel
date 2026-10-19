@@ -274,12 +274,14 @@ func (payload OffsitePickupCorrectionPayload) Command(tenant domain.TenantID) (a
 	}, nil
 }
 
-// DeliveryProofCorrectionPayload 是 POD 更正的线格式。
+// DeliveryProofCorrectionPayload 是 POD 更正的线格式。predecessorVersion 指名被更正的那一版，设备从首登或上一次
+// 更正答复的 deliveryVersion 取；它是编排认「同一次更正」的锚，与揽收更正同形（票 operator-channel/41，ADR-0149 复核记录）。
 type DeliveryProofCorrectionPayload struct {
-	Attempt     string `json:"attempt"`
-	Object      string `json:"object"`
-	NewProof    string `json:"newProof"`
-	CorrectedAt string `json:"correctedAt"`
+	Attempt            string `json:"attempt"`
+	Object             string `json:"object"`
+	PredecessorVersion string `json:"predecessorVersion"`
+	NewProof           string `json:"newProof"`
+	CorrectedAt        string `json:"correctedAt"`
 }
 
 func (payload DeliveryProofCorrectionPayload) Command(tenant domain.TenantID) (application.CorrectDeliveryProofCommand, error) {
@@ -292,10 +294,11 @@ func (payload DeliveryProofCorrectionPayload) Command(tenant domain.TenantID) (a
 		return none, fmt.Errorf("%w: correctedAt: %v", ErrMalformedRequest, err)
 	}
 	return application.CorrectDeliveryProofCommand{
-		TenantID:    tenant,
-		Attempt:     payload.Attempt,
-		Object:      payload.Object,
-		NewProof:    payload.NewProof,
-		CorrectedAt: correctedAt,
+		TenantID:           tenant,
+		Attempt:            payload.Attempt,
+		Object:             payload.Object,
+		PredecessorVersion: payload.PredecessorVersion,
+		NewProof:           payload.NewProof,
+		CorrectedAt:        correctedAt,
 	}, nil
 }

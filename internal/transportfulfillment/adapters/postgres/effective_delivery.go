@@ -157,8 +157,9 @@ func (repository *EffectiveDeliveries) Save(
 	return ports.DeliverySaved, nil
 }
 
-// Supersede 落更正版本：同一事务里把当前行翻成历史，再插指回前版的新行。found=false
-// 表示没有可更正的登记——更正不出无中生有的交付。
+// Supersede 落更正版本：同一事务里把当前行翻成历史，再插指回前版的新行。只翻记录指名的那个前版——
+// 它此刻已不是当前版（另一份更正先落下了，或根本没有登记）就答 false。只按 is_current 翻会让读到旧当前版的
+// 那一份翻掉别人刚落下的版本，再回指一个已有后继的前版，链因此分叉（票 operator-channel/41）。
 func (repository *EffectiveDeliveries) Supersede(
 	ctx context.Context,
 	record ports.EffectiveDeliveryRecord,
@@ -167,6 +168,10 @@ func (repository *EffectiveDeliveries) Supersede(
 	if err != nil {
 		return false, fmt.Errorf("supersede effective delivery: %w", err)
 	}
+	predecessor, corrects := record.Delivery.Corrects()
+	if !corrects {
+		return false, errors.New("supersede effective delivery: the record does not name a predecessor")
+	}
 
 	tag, err := executor.Exec(ctx,
 		`UPDATE transport_fulfillment.effective_delivery
@@ -174,10 +179,12 @@ func (repository *EffectiveDeliveries) Supersede(
 		  WHERE tenant_id = $1
 		    AND object_ref = $2
 		    AND attempt_ref = $3
+		    AND delivery_version = $4
 		    AND is_current`,
 		record.Key.TenantID.String(),
 		record.Key.Object.String(),
 		record.Key.Attempt.String(),
+		predecessor.String(),
 	)
 	if err != nil {
 		return false, fmt.Errorf("supersede effective delivery: %w", err)

@@ -73,7 +73,8 @@ var workFactOperatorFaces = []workFactOperatorFace{
 	},
 	{
 		pattern: "/transport-fulfillment/delivery-proof-corrections", scopeKind: "OFFSITE", scopeRef: "SYN-OFFSITE-01", device: "SYN-DEVICE-OFFSITE",
-		body: `{"attempt":"SYN-ATTEMPT-08-10","object":"SYN-PARCEL-08-10","newProof":"SYN-POD/signature-10b","correctedAt":"2026-09-06T08:00:00Z"}`,
+		body: `{"attempt":"SYN-ATTEMPT-08-10","object":"SYN-PARCEL-08-10","predecessorVersion":"SYN-DRV-08-10-1",` +
+			`"newProof":"SYN-POD/signature-10b","correctedAt":"2026-09-06T08:00:00Z"}`,
 	},
 	{
 		pattern: "/transport-fulfillment/delivery-attempts", scopeKind: "OFFSITE", scopeRef: "SYN-OFFSITE-01", device: "SYN-DEVICE-OFFSITE",

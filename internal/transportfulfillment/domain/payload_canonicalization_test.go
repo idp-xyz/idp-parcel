@@ -37,6 +37,15 @@ func TestCommandPayloadsRoundTripAsTFC1(t *testing.T) {
 			},
 		},
 		{
+			// 票 operator-channel/41：两侧都从本体现算，更正时刻先折到登记册精度。
+			name:     "delivery proof correction",
+			document: `{"canonicalization":"TFC-1","face":"CORRECT_DELIVERY_PROOF","predecessor_version":"v1","new_proof":"POD2","corrected_at":"2026-03-05T02:11:12.345678Z"}`,
+			digest:   "TFC-1:352a6c1d6f2c2e8fc63050f5106e47fba91c68b2bed1facd40893482c4807b2d",
+			call: func() ([]byte, string, error) {
+				return domain.CanonicalizeDeliveryProofCorrectionPayload("v1", "POD2", at)
+			},
+		},
+		{
 			name:     "delivery",
 			document: `{"canonicalization":"TFC-1","face":"REGISTER_EFFECTIVE_DELIVERY","method":"SIGNED","recipient":"R","proof":"POD"}`,
 			digest:   "TFC-1:936622139fadc18c7db7b9e6f940c4750f36e5298ba3ef058b1f0e955d6b715e",
@@ -217,6 +226,26 @@ func TestCarrierPickupJudgmentBusinessTimeIsComparedToTheMicrosecond(t *testing.
 	}
 	if digest(given) == digest(given.Add(time.Microsecond)) {
 		t.Fatal("相差一微秒应是另一份内容")
+	}
+}
+
+// Covers: 票 operator-channel/41——POD 更正两侧都从本体现算，在册更正时刻只到微秒；纳秒尾巴不构成另一份更正，
+// 跨过一微秒才异。
+func TestDeliveryProofCorrectionTimeIsComparedToTheMicrosecond(t *testing.T) {
+	given := time.Date(2026, 9, 10, 9, 0, 0, 123456789, time.UTC)
+	digest := func(at time.Time) string {
+		t.Helper()
+		_, digest, err := domain.CanonicalizeDeliveryProofCorrectionPayload("v1", "POD2", at)
+		if err != nil {
+			t.Fatalf("canonicalize: %v", err)
+		}
+		return digest
+	}
+	if digest(given) != digest(given.Truncate(time.Microsecond)) {
+		t.Fatal("纳秒尾巴不应构成另一份更正")
+	}
+	if digest(given) == digest(given.Add(time.Microsecond)) {
+		t.Fatal("相差一微秒应是另一份更正")
 	}
 }
 

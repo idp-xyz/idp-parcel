@@ -153,6 +153,27 @@ func CanonicalizeEffectiveDeliveryPayload(method, recipient, proof string) ([]by
 	})
 }
 
+// CanonicalizeDeliveryProofCorrectionPayload 定形「更正交付证明」（票 operator-channel/41 裁定 (a)）。指名的前版、
+// 新 POD 与更正时刻构成内容；前版在内容里，是因为它是这次更正不从内容派生的锚——同一 POD 落在不同前版上是两次更正。
+//
+// 这一口不存摘要、两侧都从本体现算：在册行的 content_digest 是首登摘要，首登口拿它认首登的重放，更正改写它会让
+// 首登原样重放被答成冲突。更正时刻先经 AtRegistryPrecision 折到登记册精度，再照 canonicalInstant 成串。
+func CanonicalizeDeliveryProofCorrectionPayload(predecessorVersion, newProof string, correctedAt time.Time) ([]byte, string, error) {
+	return marshalPayload(struct {
+		Canonicalization   string `json:"canonicalization"`
+		Face               string `json:"face"`
+		PredecessorVersion string `json:"predecessor_version"`
+		NewProof           string `json:"new_proof"`
+		CorrectedAt        string `json:"corrected_at"`
+	}{
+		Canonicalization:   payloadCanonicalizationVersion,
+		Face:               "CORRECT_DELIVERY_PROOF",
+		PredecessorVersion: predecessorVersion,
+		NewProof:           newProof,
+		CorrectedAt:        canonicalInstant(AtRegistryPrecision(correctedAt)),
+	})
+}
+
 // CanonicalizeOffsitePickupRegistrationPayload 定形场外揽收的首次登记与更正共用的
 // 内容判据：任务、地点、控制、执行人、发生时刻。
 func CanonicalizeOffsitePickupRegistrationPayload(task, place, control, executedBy string, occurredAt time.Time) ([]byte, string, error) {

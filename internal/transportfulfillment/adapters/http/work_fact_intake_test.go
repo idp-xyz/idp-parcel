@@ -145,6 +145,23 @@ func TestWorkFactCommandIntakeTranslatesEffectiveDeliveryWithTheAuthenticatedTen
 	}
 }
 
+const workFactDeliveryProofCorrectionBody = `{"attempt":"SYN-ATTEMPT-08-10","object":"SYN-PARCEL-08-10",` +
+	`"predecessorVersion":"SYN-DRV-08-10-1","newProof":"SYN-POD/signature-10b","correctedAt":"2026-09-06T08:00:00Z"}`
+
+// Covers: 票 operator-channel/41 裁定 (a)——POD 更正的线格式指名前版，与揽收更正同形；前版逐字来自载荷，是编排认
+// 「同一次更正」的锚，租户来自认证结果。
+func TestWorkFactCommandIntakeTranslatesDeliveryProofCorrectionWithItsPredecessor(t *testing.T) {
+	command, err := workFactIntakeForTest(t).IntakeCorrection(context.Background(), commandRequest(workFactDeliveryProofCorrectionBody))
+	if err != nil {
+		t.Fatalf("intake：%v", err)
+	}
+	if command.TenantID.String() != workFactTenant || command.Attempt != "SYN-ATTEMPT-08-10" || command.Object != "SYN-PARCEL-08-10" ||
+		command.PredecessorVersion != "SYN-DRV-08-10-1" || command.NewProof != "SYN-POD/signature-10b" ||
+		!command.CorrectedAt.Equal(time.Date(2026, 9, 6, 8, 0, 0, 0, time.UTC)) {
+		t.Fatalf("command = %+v，与认证结果与载荷不符", command)
+	}
+}
+
 const workFactDeliveryDispatchTriggerBody = `{"segment":"SYN-SEGMENT-08-09","object":"SYN-PARCEL-08-09","occurredAt":"2026-09-25T07:00:00+08:00"}`
 
 // Covers: DeliveryDispatchTriggerIntake 契约「租户从信封给，段、对象与这一拍的业务时间从请求收」——请求里没有任何地点、

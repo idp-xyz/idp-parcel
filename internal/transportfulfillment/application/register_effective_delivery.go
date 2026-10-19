@@ -90,11 +90,12 @@ type RegisterEffectiveDeliveryCommand struct {
 // CorrectDeliveryProofCommand 携带更正入口的全部输入：更正走 CorrectProof 换新版本
 // 回指前版，原版本与原判断不动（领域已钉）。
 type CorrectDeliveryProofCommand struct {
-	TenantID    domain.TenantID
-	Attempt     string
-	Object      string
-	NewProof    string
-	CorrectedAt time.Time
+	TenantID           domain.TenantID
+	Attempt            string
+	Object             string
+	PredecessorVersion string
+	NewProof           string
+	CorrectedAt        time.Time
 }
 
 type RegisterEffectiveDeliveryResult struct {
@@ -290,6 +291,10 @@ var ErrParticipationEndUnsettled = errors.New("transport fulfillment: the partic
 
 // Correct 对已登记的交付生效落 POD 更正版本：CorrectProof 换新版回指前版（领域已钉
 // 同版本覆盖拒、更正早于交付拒），原版本链随本体保全；新版本随意图重新交付下游。
+//
+// 更正指名前版（票 operator-channel/41 裁定 (a)，与揽收更正同形）：链线性，一版至多被更正一次。指名的前版已不是
+// 当前版时，这一份要么是已落下那次更正的重放，要么是与它相左的另一份——与当前版比，同内容答已有版本，异内容答
+// 冲突，要改请对当前版提更正。锚在当前版而不追到前版的直接后继，是揽收更正那一套（票 tf-segment-lifecycle-closure/08）。
 func (handler *RegisterEffectiveDeliveryHandler) Correct(
 	ctx context.Context,
 	command CorrectDeliveryProofCommand,
@@ -302,13 +307,25 @@ func (handler *RegisterEffectiveDeliveryHandler) Correct(
 	if err != nil {
 		return RegisterEffectiveDeliveryResult{outcome: DeliveryNotAccepted}, nil
 	}
+	predecessor, err := domain.NewDeliveryResultVersion(command.PredecessorVersion)
+	if err != nil {
+		return RegisterEffectiveDeliveryResult{outcome: DeliveryNotAccepted}, nil
+	}
 
-	existing, found, err := handler.deps.Deliveries.FindByKey(ctx, key)
+	current, found, err := handler.deps.Deliveries.FindByKey(ctx, key)
 	if err != nil {
 		return deliveryStoreUndecided(command.Object), nil
 	}
 	if !found {
 		// 没有可更正的登记：更正不出无中生有的交付。
+		return RegisterEffectiveDeliveryResult{outcome: DeliveryNotAccepted}, nil
+	}
+	if current.Delivery.Version() != predecessor {
+		return handler.answerAgainstCurrent(ctx, current, predecessor, newProof, command.CorrectedAt)
+	}
+	if command.CorrectedAt.IsZero() || command.CorrectedAt.Before(current.Delivery.OccurredAt()) {
+		// 与 CorrectProof 同一道门，提到签号之前：签发在它之后，一份形成不了的更正不该烧掉一个版本号
+		// （pickupCorrectionFrom 同一条理由）。领域那道门照旧在，是第二道。
 		return RegisterEffectiveDeliveryResult{outcome: DeliveryNotAccepted}, nil
 	}
 
@@ -317,14 +334,15 @@ func (handler *RegisterEffectiveDeliveryHandler) Correct(
 		return RegisterEffectiveDeliveryResult{outcome: DeliveryUndecided, reason: DeliveryIdentityUnavailable,
 			continuation: deliveryContinuation("DELIVERY_IDENTITY_UNAVAILABLE", command.Object)}, nil
 	}
-	corrected, err := existing.Delivery.CorrectProof(newProof, version, command.CorrectedAt)
+	corrected, err := current.Delivery.CorrectProof(newProof, version, command.CorrectedAt)
 	if err != nil {
 		return RegisterEffectiveDeliveryResult{outcome: DeliveryNotAccepted}, nil
 	}
 
 	record := ports.EffectiveDeliveryRecord{
-		Key:           key,
-		ContentDigest: existing.ContentDigest,
+		Key: key,
+		// 册行摘要留首登那一份：首登口靠它认首登的重放。更正的内容比对两侧都从本体现算，不靠这一列。
+		ContentDigest: current.ContentDigest,
 		Delivery:      corrected,
 		RecordedAt:    handler.deps.Clock.Now(),
 	}
@@ -333,11 +351,44 @@ func (handler *RegisterEffectiveDeliveryHandler) Correct(
 		return deliveryStoreUndecided(command.Object), nil
 	}
 	if !superseded {
-		return RegisterEffectiveDeliveryResult{outcome: DeliveryNotAccepted}, nil
+		// 读到前版之后另一方先把它更正掉了：读回赢家，按同一套比对作答，不在前版上再分一枝。
+		winner, found, err := handler.deps.Deliveries.FindByKey(ctx, key)
+		if err != nil || !found || winner.Delivery.Version() == predecessor {
+			return deliveryStoreUndecided(command.Object), nil
+		}
+		return handler.answerAgainstCurrent(ctx, winner, predecessor, newProof, command.CorrectedAt)
 	}
 	out := RegisterEffectiveDeliveryResult{outcome: DeliveryCorrected, record: record, hasRecord: true}
 	out.handoff = handler.handOff(ctx, record)
 	return out, nil
+}
+
+// answerAgainstCurrent 在指名的前版已不是当前版时作答：当前版正是这份更正落下的那一版，就是重放，交回它并重发同一
+// 版本的意图（事件标识不变，下游按它去重）；否则是冲突。当前版是首登时没有更正内容可比，一律是冲突。
+func (handler *RegisterEffectiveDeliveryHandler) answerAgainstCurrent(
+	ctx context.Context,
+	current ports.EffectiveDeliveryRecord,
+	predecessor domain.DeliveryResultVersion,
+	proof domain.DeliveryProofReference,
+	correctedAt time.Time,
+) (RegisterEffectiveDeliveryResult, error) {
+	storedPredecessor, corrects := current.Delivery.Corrects()
+	storedCorrectedAt, _ := current.Delivery.CorrectedAt()
+	if !corrects {
+		return RegisterEffectiveDeliveryResult{outcome: DeliveryRegistrationConflict}, nil
+	}
+	_, stored, err := domain.CanonicalizeDeliveryProofCorrectionPayload(storedPredecessor.String(), current.Delivery.Proof().String(), storedCorrectedAt)
+	if err != nil {
+		return RegisterEffectiveDeliveryResult{}, err
+	}
+	_, submitted, err := domain.CanonicalizeDeliveryProofCorrectionPayload(predecessor.String(), proof.String(), correctedAt)
+	if err != nil {
+		return RegisterEffectiveDeliveryResult{}, err
+	}
+	if stored != submitted {
+		return RegisterEffectiveDeliveryResult{outcome: DeliveryRegistrationConflict}, nil
+	}
+	return handler.existingResult(ctx, current), nil
 }
 
 // deliveryKey 受理两入口共用的最小指名；立不起引用即未受理。

@@ -102,7 +102,7 @@ const (
 )
 
 // EffectiveDeliveryStore 按幂等键找回并保存交付生效（写入代数同 ADR-0031）。
-// Supersede 只在已有登记上落更正版本：found=false 表示没有可更正的登记。
+// Supersede 只在记录指名的前版仍是当前版时落更正版本：false 表示它此刻已不是当前版（含没有任何登记）。
 type EffectiveDeliveryStore interface {
 	FindByKey(ctx context.Context, key EffectiveDeliveryKey) (EffectiveDeliveryRecord, bool, error)
 	// FindByKeyAndVersion 取回指名的那一代，不问它是不是当前版。POD 更正只把旧行翻成

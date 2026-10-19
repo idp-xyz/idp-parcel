@@ -131,7 +131,16 @@ func TestACorrectionAppendsANewRowPointingBack(t *testing.T) {
 	}
 
 	t.Run("superseding an absent registration reports false", func(t *testing.T) {
-		absent := deliveryRecord(t, "pod-x", "delivery/v9")
+		absent := deliveryRecord(t, "pod-x", "delivery/v8")
+		absentCorrection, err := absent.Delivery.CorrectProof(
+			deliveryValue(t, domain.NewDeliveryProofReference, "pod-y"),
+			deliveryValue(t, domain.NewDeliveryResultVersion, "delivery/v9"),
+			deliveredAtFixture.Add(24*time.Hour),
+		)
+		if err != nil {
+			t.Fatalf("更正：%v", err)
+		}
+		absent.Delivery = absentCorrection
 		absent.Key.Object = deliveryValue(t, domain.NewCarriedObjectReference, "parcel-9")
 		mustWithinDeliveryTransaction(t, transactor, ctx, func(txCtx context.Context) error {
 			superseded, err := repository.Supersede(txCtx, absent)
@@ -144,6 +153,59 @@ func TestACorrectionAppendsANewRowPointingBack(t *testing.T) {
 			return nil
 		})
 	})
+}
+
+// Covers: 票 operator-channel/41 附录 F-6「读旧当前版时版本链分叉」的库面——更正只在它指名的前版仍是当前版时翻得动；
+// 前版已被另一份更正翻成历史，第二份落不下去，答 false，不把真正的当前版翻掉、不在前版上再分一枝。
+func TestSupersedingAPredecessorThatIsNoLongerCurrentReportsFalse(t *testing.T) {
+	repository, transactor, pool := newEffectiveDeliveries(t)
+	ctx := t.Context()
+
+	first := deliveryRecord(t, "pod-1", "delivery/v1")
+	mustSaveDelivery(t, transactor, ctx, repository, first)
+	correctV1 := func(proof, version string) ports.EffectiveDeliveryRecord {
+		t.Helper()
+		corrected, err := first.Delivery.CorrectProof(
+			deliveryValue(t, domain.NewDeliveryProofReference, proof),
+			deliveryValue(t, domain.NewDeliveryResultVersion, version),
+			deliveredAtFixture.Add(24*time.Hour),
+		)
+		if err != nil {
+			t.Fatalf("更正：%v", err)
+		}
+		record := first
+		record.Delivery = corrected
+		return record
+	}
+	supersede := func(record ports.EffectiveDeliveryRecord) bool {
+		t.Helper()
+		var superseded bool
+		mustWithinDeliveryTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+			var err error
+			superseded, err = repository.Supersede(txCtx, record)
+			return err
+		})
+		return superseded
+	}
+
+	if !supersede(correctV1("pod-2", "delivery/v2")) {
+		t.Fatal("前版是当前版却顶替失败")
+	}
+	if supersede(correctV1("pod-3", "delivery/v3")) {
+		t.Fatal("前版已被更正过，第二份更正却落下去了——链在 v1 处分叉")
+	}
+
+	var total, successors int
+	var current string
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*), count(*) FILTER (WHERE corrects_version = 'delivery/v1'),
+		        max(delivery_version) FILTER (WHERE is_current)
+		   FROM transport_fulfillment.effective_delivery`).Scan(&total, &successors, &current); err != nil {
+		t.Fatalf("统计版本行：%v", err)
+	}
+	if total != 2 || successors != 1 || current != "delivery/v2" {
+		t.Fatalf("rows = %d successors(v1) = %d current = %q, want 2/1/delivery/v2", total, successors, current)
+	}
 }
 
 // TestFindByKeyAndVersionReadsBackASupersededGeneration 证按版本读不问 is_current：

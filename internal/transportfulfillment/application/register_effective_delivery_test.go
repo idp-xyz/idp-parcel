@@ -78,13 +78,14 @@ func (double *deliveryViewDouble) LoadDeliveryResult(
 }
 
 type deliveryStoreDouble struct {
-	records       map[string]ports.EffectiveDeliveryRecord
-	findErr       error
-	saveErr       error
-	saveResult    ports.DeliverySaveOutcome
-	forceResult   bool
-	missSupersede bool
-	saves         int
+	records     map[string]ports.EffectiveDeliveryRecord
+	findErr     error
+	saveErr     error
+	saveResult  ports.DeliverySaveOutcome
+	forceResult bool
+	saves       int
+	// beforeSupersede 在顶替判前版之前跑一次，用来模拟另一方的更正恰好先提交。
+	beforeSupersede func()
 }
 
 func newDeliveryStore() *deliveryStoreDouble {
@@ -142,11 +143,14 @@ func (double *deliveryStoreDouble) Supersede(
 	if double.saveErr != nil {
 		return false, double.saveErr
 	}
-	if double.missSupersede {
-		// 模拟并发窗口：读到了登记，但顶替时它已不在。
-		return false, nil
+	if hook := double.beforeSupersede; hook != nil {
+		double.beforeSupersede = nil
+		hook()
 	}
-	if _, exists := double.records[deliveryKey(record.Key)]; !exists {
+	// 与生产适配器同一条件：只有记录指名的前版此刻仍是当前版才翻得动。
+	current, exists := double.records[deliveryKey(record.Key)]
+	predecessor, corrects := record.Delivery.Corrects()
+	if !exists || !corrects || current.Delivery.Version() != predecessor {
 		return false, nil
 	}
 	double.records[deliveryKey(record.Key)] = record
@@ -305,11 +309,12 @@ func TestACorrectionSupersedesWithTheVersionChain(t *testing.T) {
 
 	tenant, _ := domain.NewTenantID("tenant-1")
 	corrected, err := fixture.handler.Correct(context.Background(), application.CorrectDeliveryProofCommand{
-		TenantID:    tenant,
-		Attempt:     "attempt-1",
-		Object:      "parcel-1",
-		NewProof:    "pod-2",
-		CorrectedAt: deliveryRecordedAt.Add(24 * time.Hour),
+		TenantID:           tenant,
+		Attempt:            "attempt-1",
+		Object:             "parcel-1",
+		PredecessorVersion: "delivery-result/v1",
+		NewProof:           "pod-2",
+		CorrectedAt:        deliveryRecordedAt.Add(24 * time.Hour),
 	})
 	if err != nil {
 		t.Fatalf("correct: %v", err)
@@ -331,11 +336,12 @@ func TestACorrectionSupersedesWithTheVersionChain(t *testing.T) {
 
 	t.Run("correcting an absent registration is refused", func(t *testing.T) {
 		missing, err := fixture.handler.Correct(context.Background(), application.CorrectDeliveryProofCommand{
-			TenantID:    tenant,
-			Attempt:     "attempt-9",
-			Object:      "parcel-9",
-			NewProof:    "pod-3",
-			CorrectedAt: deliveryRecordedAt.Add(24 * time.Hour),
+			TenantID:           tenant,
+			Attempt:            "attempt-9",
+			Object:             "parcel-9",
+			PredecessorVersion: "delivery-result/v1",
+			NewProof:           "pod-3",
+			CorrectedAt:        deliveryRecordedAt.Add(24 * time.Hour),
 		})
 		if err != nil {
 			t.Fatalf("correct absent: %v", err)
@@ -345,31 +351,14 @@ func TestACorrectionSupersedesWithTheVersionChain(t *testing.T) {
 		}
 	})
 
-	t.Run("a supersede miss does not claim a correction", func(t *testing.T) {
-		fixture.store.missSupersede = true
-		defer func() { fixture.store.missSupersede = false }()
-		result, err := fixture.handler.Correct(context.Background(), application.CorrectDeliveryProofCommand{
-			TenantID:    tenant,
-			Attempt:     "attempt-1",
-			Object:      "parcel-1",
-			NewProof:    "pod-5",
-			CorrectedAt: deliveryRecordedAt.Add(48 * time.Hour),
-		})
-		if err != nil {
-			t.Fatalf("correct: %v", err)
-		}
-		if result.Outcome() != application.DeliveryNotAccepted {
-			t.Fatalf("outcome = %q; 顶替没落地却宣称更正成功", result.Outcome())
-		}
-	})
-
 	t.Run("a correction before the delivery time is refused by the domain", func(t *testing.T) {
 		early, err := fixture.handler.Correct(context.Background(), application.CorrectDeliveryProofCommand{
-			TenantID:    tenant,
-			Attempt:     "attempt-1",
-			Object:      "parcel-1",
-			NewProof:    "pod-4",
-			CorrectedAt: deliveryArrivedAt.Add(-time.Hour),
+			TenantID:           tenant,
+			Attempt:            "attempt-1",
+			Object:             "parcel-1",
+			PredecessorVersion: "delivery-result/v2",
+			NewProof:           "pod-4",
+			CorrectedAt:        deliveryArrivedAt.Add(-time.Hour),
 		})
 		if err != nil {
 			t.Fatalf("correct early: %v", err)

@@ -73,12 +73,14 @@ func TestTheWiredDeliveryAnswersHonestlyAgainstARealDatabase(t *testing.T) {
 		t.Fatalf("outcome = %v, want EXISTING_VERSION——重放没走已有版本，首笔事务的落库没有提交", got)
 	}
 
+	registeredRecord, _ := registered.Record()
 	corrected, err := delivery.Correct(t.Context(), tfapp.CorrectDeliveryProofCommand{
-		TenantID:    mustValue(t, tfdomain.NewTenantID, "SYN-TENANT-1"),
-		Attempt:     "SYN-ATTEMPT-1",
-		Object:      "SYN-PARCEL-1",
-		NewProof:    "SYN-POD-CORRECTED-1",
-		CorrectedAt: deliveryAttemptArrivedAt.Add(2 * time.Hour),
+		TenantID:           mustValue(t, tfdomain.NewTenantID, "SYN-TENANT-1"),
+		Attempt:            "SYN-ATTEMPT-1",
+		Object:             "SYN-PARCEL-1",
+		PredecessorVersion: registeredRecord.Delivery.Version().String(),
+		NewProof:           "SYN-POD-CORRECTED-1",
+		CorrectedAt:        deliveryAttemptArrivedAt.Add(2 * time.Hour),
 	})
 	if err != nil {
 		t.Fatalf("POD 更正：%v", err)
