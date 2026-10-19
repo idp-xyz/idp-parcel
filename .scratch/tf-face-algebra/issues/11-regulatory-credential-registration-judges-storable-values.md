@@ -1,7 +1,7 @@
 # 11 监管凭证登记按登记册存得下的值判：亚微秒有效期原样重放答 CONTENT_CONFLICT，零时刻毒行让整租户凭证列面 500，同一微秒有效期、越界额度与 NUL 答 500
 
 Category: bug
-Status: needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: in-progress——2026-10-18 作者子代理完工，待评审。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/customs-regulatory-credential-registrations
@@ -76,3 +76,46 @@ Blocked by: 无
 - [ ] 新增生产文件后，在干净检出上重生成 `docs/product/MECHANISM-INVENTORY.md`，随笔提交。
 - [ ] 票 15 补记下追加回写行（只加行）。
 - [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：作者自验；非作者评审，两轴分开；推送方在干净检出上带 DSN 跑全量。
+
+## 完成记录（2026-10-18，会话 idp-parcel-9b 的实施子代理，分支 claude-tfa11）
+
+基线 `7272f6cd`，代码 tip `e2e62db2`。照「修复方向（机制）」五条落，未另裁。
+
+### 落点
+1. `internal/customscompliance/domain/registry_precision.go` 新增 `AtRegistryPrecision`（`at.UTC().Truncate(time.Microsecond)`），头注写成 CC 自己的决定，按符号名引 `transportfulfillment/domain` 的 `AtRegistryPrecision` 与 `accessidentity/adapters/postgres` 的 `sameInstant` 作同族先例；不进 platform。
+2. `CanonicalizeCredentialRegistrationPayload` 的期限两端先过它再拼串；`canonicalInstant` 未动。凭证登记那两格 CCC-1 金样随之改写（摘要从不落库，两侧现算）。
+3. `RegisterCredential` 的「非零」与「终点晚于起点」两侧先折到登记册精度再判；额度加 `uses > maxRegistryCredentialUses`（`math.MaxInt32`，额度列 `integer`）门；均答 `ErrInvalidCredential`，编排已映射 `NOT_ACCEPTED`。存值仍是原值。
+4. `newRequiredValue` 拒含 NUL，新哨兵 `ErrValueContainsNUL`。受影响的口：凡经下列构造的 CC 各口——`NewTenantID`、`NewRegulatoryDecisionID`、`NewRegulatoryAuthorityReference`、`NewLegalActionReference`、`NewDecisionScopeReference`、`NewExecutorReference`、`NewExecutionFactReference`、`NewCredentialID`、`NewCredentialHolderReference`、`NewComplianceTopicReference`、`NewComplianceRuleVersionReference`、`NewCredentialGateBasisReference`、`NewResponsibleRoleReference`、`NewOperationsScopeReference`、`NewRouteCandidateReference`、`NewLegalObligorReference`、`NewPaymentRequirementSource`、`NewResponsibilityTargetReference`、`NewFundsFactVersion`、`ProvidedFundsPayer`、`NewDeclarationUnitID`、`NewDeclaredParcelReference`、`NewCustomsProcedureReference`、`NewReadinessBasisReference`、`NewSubmissionVersionID`、`NewDossierSnapshotReference`、`NewRoleSnapshotReference`、`NewSubmissionAuthorityReference`、`NewSafeResendReference`、`NewCustomsCaseID`、`NewRegulatoryJurisdictionReference`、`NewObligationScopeReference`、`NewSourceAuthorityRole`、`NewInterpretationRuleReference`、`NewFollowUpTriggerReference`、`NewAssessedDutyReference`、`NewExternalFundsFactReference`、`NewPreconditionReference`、`NewExternalManifestID`、`NewManifestSourceVersion`、`NewCarrierResponsibilityReference`、`NewCustomsPortReference`、`NewDeclarationPathReference`、`NewDeclarationModeReference`、`NewRestrictionID`、`NewRegulatoryReleaseReference`。含 NUL 的值在各口答该口对空白值的那一格（译装期构造的口即 400 `MALFORMED_REQUEST`），不再进库答 500。
+5. 存量毒行不在产品内修。查存量（已在真库上对一行零点毒行、一行正常行验过，只命中前者）：
+   ```sql
+   SELECT tenant_id, credential_id, valid_from, valid_to
+   FROM customs_compliance.regulatory_credential
+   WHERE valid_from = timestamptz '0001-01-01 00:00:00+00'
+      OR valid_to   = timestamptz '0001-01-01 00:00:00+00'
+   ORDER BY tenant_id, credential_id;
+   ```
+
+### 各格对应用例
+- 精度函数：`domain/registry_precision_test.go` · `TestTheRegistryPrecisionKeepsMicrosecondsAndDropsTheTail`（去尾、跨一微秒判不同、非 UTC 与其 UTC 同值）。
+- 构造门：`domain/compliance_judgment_test.go` · `TestCredentialRegistrationJudgesTheValuesTheRegistryCanStore`（同一微秒区间、零点后不足一微秒、`MaxInt32+1` 各答 `ErrInvalidCredential`；整秒、`.123456Z`、跨一微秒、零点后恰一微秒、额度恰在上限、未提供照常）。
+- CCC-1 判等：`domain/payload_canonicalization_test.go` · `TestCredentialRegistrationShapeJudgesValidityAtRegistryPrecision`（纳秒版对微秒版、微秒版对换偏移的纳秒版判同；起点、终点各跨一微秒判异）。
+- NUL：`domain/disposition_verification_test.go` · `TestARequiredValueRefusesNUL`。
+- 真库：`adapters/postgres/credential_registry_precision_test.go`——`.1234567Z`、`.123456789Z`、`.000000001Z` 重放 `EXISTING`、+1µs `CONTENT_CONFLICT`；先登正常凭证再投零点毒行答 `NOT_ACCEPTED` 且列面照常；同一微秒区间 `NOT_ACCEPTED` 册上零行。
+- HTTP 真渠道：`cmd/parcel-api/assemble_integration_client_credential_precision_test.go`（链路复用票 operator-channel/52 的 `integrationClientChannelOnRealDB`）——重放三格 200 `EXISTING`、+1µs 200 `CONTENT_CONFLICT`；同一微秒区间、零点毒行、`uses=2147483648` 两遍都 200 `NOT_ACCEPTED`；NUL 于凭证身份、机构、持有人；册上零行。
+- CLI 真库：`cmd/parcel-customs-register/credential_precision_test.go`——`.123456789Z` 第二遍退出码 0、打印 EXISTING。
+
+### 先红后绿
+- 红（修复前代码，领域格用恒等桩 overlay 补出未定义符号）：领域四组全红；真库重放三格 `CONTENT_CONFLICT`，零点毒行 `REGISTERED` 后列面报「rebuild credential catalogue: customs compliance: invalid regulatory credential」，同一微秒区间「commit unexpectedly resulted in rollback」；HTTP 重放 200 `CONTENT_CONFLICT`，同一微秒、额度、三处 NUL 都 500 `NO_ANSWER_FORMED`，零点毒行首投 201、重投 500；CLI 第二遍退出码 2 `CONTENT_CONFLICT`。现象 1–3 全部复现。
+- 绿：上列用例全过。
+- 变异自检（overlay 换入单处改动）：拼串改回纳秒→金样、判等、真库重放、HTTP 重放、CLI 转红；构造门改回纳秒→构造门两格、真库毒行与同一微秒、HTTP 两格转红；撤额度门→构造门额度格、HTTP 额度格转红；撤 NUL 门→NUL 五格、HTTP 三格转红。
+
+### 与完成判据的出入
+- NUL 一格答的是 400 `MALFORMED_REQUEST`，不是判据写的 200 `NOT_ACCEPTED`：修复方向把门放在 `newRequiredValue`，引用在 Intake 译装时构造，拒绝走的是空白引用那条路。用例钉的是「与空白引用同一格、不是 500、册上零行」。同属「改输入」，按 ADR-0031 不是 500。
+- 「票 15 补记下追加回写行」不在本票地盘，未做，留会话。
+
+### 门
+`gofmt -l`（改动的 .go）无输出；`go build ./...`、`go vet ./...` 退 0；带 DSN `go test -p 1 -count=1 ./internal/customscompliance/... ./cmd/parcel-customs-register/... ./cmd/parcel-api/... ./internal/architecture/...` 12 包 ok、0 FAIL，`-v` 下 CC `adapters/postgres` 无 `--- SKIP`。机制清点在本分支重生成，有差（customscompliance 生产 +1、测试 +2，`cmd/` 测试 +2），单独提交 `e2e62db2`。未跑全仓全量。
+
+证据层级：`S`（隔离合成，SYN- 值）。
+
+评审：待会话读 diff 审。
