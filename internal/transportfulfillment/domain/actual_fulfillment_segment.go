@@ -341,17 +341,16 @@ func (segment ActualFulfillmentSegment) JoinWithPickup(
 }
 
 // JoinWithHandover 让对象凭`已交接`的权威交接加入段。拒收与待确认不转出控制，自然也
-// 立不起参与——那正是 TransferOutBasis 只在已交接给出的原因。
+// 立不起参与——那正是 ParticipationBasis 只在已交接给出的原因。
 func (segment ActualFulfillmentSegment) JoinWithHandover(
 	handover TransportHandover,
 	planned PlannedSegmentReference,
 ) (ActualFulfillmentSegment, error) {
-	reference, transfers := handover.TransferOutBasis()
-	if !transfers {
+	if !handover.TransfersControl() {
 		return ActualFulfillmentSegment{}, ErrSegmentNeedsAControlFact
 	}
-	basis, err := NewParticipationBasisReference(reference)
-	if err != nil {
+	basis, formed := handover.ParticipationBasis()
+	if !formed {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
 	}
 	return segment.join(FulfillmentParticipation{
@@ -434,10 +433,13 @@ func (segment ActualFulfillmentSegment) RederiveParticipationWithPickup(pickup O
 
 // RederiveParticipationWithHandover 以更正后的交接在同段内形成下一版参与。更正仍`已交接`时是替代版本
 // （ADR-0112 决定一）；更正撤回了控制转移（改成拒收或待确认）时是**失效版本**（决定四，票
-// tf-segment-lifecycle-closure/11 裁决 1）：同一条链、同一道门，回指前版，入场依据取撤回控制那一版的引用
-// `TRANSPORT-HANDOVER/<新版本>`——TransferOutBasis 对它不给，但版本引用本身是有的，它是「这一版判断说了
-// 什么」的身份；入场种类照前版；起点沿用被失效那一版——失效版本没有控制起点，它记的是「起于 T 的那条
-// 参与失效了」，T 是它回指的事实，沿用不引入第二个时刻。
+// tf-segment-lifecycle-closure/11 裁决 1）：同一条链、同一道门，回指前版，入场依据取撤回控制那一版按交接键铸的
+// 依据——ParticipationBasis 对它不给，但这一版的交接键本身是有的，它是「这一版判断说了什么」的身份；入场种类照
+// 前版；起点沿用被失效那一版——失效版本没有控制起点，它记的是「起于 T 的那条参与失效了」，T 是它回指的事实，
+// 沿用不引入第二个时刻。
+//
+// 被替代的那一条按被更正版本的交接键认，旧拼法的存量按版本加起点认（ADR-0221）：回指写的是它在册的入场依据原串，
+// 两种拼法各回指各的，存量不改写。
 //
 // 「有没有可替代的参与」先于「更正撤回了控制」判：失效格说的是**这个段里该对象凭前版入场的那条参与**
 // 失去了依据——对象不在本段、或本段的当前参与不是凭被更正的那一版入场，本段就没有东西可失效，答的是
@@ -451,24 +453,18 @@ func (segment ActualFulfillmentSegment) RederiveParticipationWithHandover(handov
 	if !corrected {
 		return ActualFulfillmentSegment{}, ErrNoParticipationToRederive
 	}
-	replaced, err := NewParticipationBasisReference(transportHandoverBasisHead + corrects.String())
-	if err != nil {
-		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
-	}
-	current, present := segment.currentParticipationEnteredBy(handover.Object(), EnteredByTransportHandover, replaced)
-	if !present {
+	current, present := segment.ParticipationFor(handover.Object())
+	if !present || current.entryKind != EnteredByTransportHandover ||
+		handover.basisNamesHandover(current.entryBasis, current.enteredAt, corrects) == ControlFactUnmatched {
 		return ActualFulfillmentSegment{}, ErrNoParticipationToRederive
 	}
-	if reference, transfers := handover.TransferOutBasis(); transfers {
-		basis, err := NewParticipationBasisReference(reference)
-		if err != nil {
-			return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
-		}
-		return segment.rederive(handover.TenantID(), handover.Object(), EnteredByTransportHandover, replaced, basis, handover.JudgedAt(), false)
-	}
-	basis, err := NewParticipationBasisReference(transportHandoverBasisHead + handover.Version().String())
+	replaced := current.entryBasis
+	basis, err := handoverKeyBasis(handover.Object(), handover.Scope(), handover.Version())
 	if err != nil {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
+	}
+	if handover.TransfersControl() {
+		return segment.rederive(handover.TenantID(), handover.Object(), EnteredByTransportHandover, replaced, basis, handover.JudgedAt(), false)
 	}
 	return segment.rederive(handover.TenantID(), handover.Object(), EnteredByTransportHandover, replaced, basis, current.enteredAt, true)
 }
@@ -579,12 +575,11 @@ func (segment ActualFulfillmentSegment) EndParticipationWithDelivery(
 func (segment ActualFulfillmentSegment) EndParticipationWithNextHandover(
 	handover TransportHandover,
 ) (ActualFulfillmentSegment, error) {
-	reference, transfers := handover.TransferOutBasis()
-	if !transfers {
+	if !handover.TransfersControl() {
 		return ActualFulfillmentSegment{}, ErrSegmentNeedsAControlFact
 	}
-	basis, err := NewParticipationBasisReference(reference)
-	if err != nil {
+	basis, formed := handover.ParticipationBasis()
+	if !formed {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
 	}
 	return segment.end(handover.Object(), EndedByNextHandover, basis, handover.JudgedAt())

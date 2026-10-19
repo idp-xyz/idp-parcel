@@ -236,7 +236,7 @@ func TestAPickupCorrectionRederivesIntoAClosedSegmentWithoutReopeningIt(t *testi
 	}
 }
 
-// Covers: ADR-0112 决定一、二在交接一路——仍`已交接`的更正形成替代参与版本（入场依据换成新版本的转出引用，
+// Covers: ADR-0112 决定一、二在交接一路——仍`已交接`的更正形成替代参与版本（入场依据换成新版本按交接键铸的依据，
 // 起点沿用裁决业务时间）；两条来源共用同一道门，所以行为与揽收一路逐字一致。
 func TestAHandoverCorrectionThatStillTransfersControlRederivesTheParticipation(t *testing.T) {
 	fixture := newHandoverSegmentFixture(t)
@@ -263,10 +263,10 @@ func TestAHandoverCorrectionThatStillTransfersControlRederivesTheParticipation(t
 	record := fixture.segments.saved(t, "tenant-1", "segment-1")
 	parcel := objectRef(t, "parcel-1")
 	current, _ := record.Segment.ParticipationFor(parcel)
-	if current.EntryBasis().String() != "TRANSPORT-HANDOVER/handover-result/parcel-1/v2" || current.EntryKind() != domain.EnteredByTransportHandover {
-		t.Fatalf("当前参与 = %+v, want 新版本的转出引用", current)
+	if current.EntryBasis().String() != "TRANSPORT-HANDOVER-KEY/8:parcel-1/16:handover-scope-1/27:handover-result/parcel-1/v2" || current.EntryKind() != domain.EnteredByTransportHandover {
+		t.Fatalf("当前参与 = %+v, want 新版本按交接键铸的依据", current)
 	}
-	if supersedes, chained := current.Supersedes(); !chained || supersedes.String() != "TRANSPORT-HANDOVER/handover-result/parcel-1/v1" {
+	if supersedes, chained := current.Supersedes(); !chained || supersedes.String() != "TRANSPORT-HANDOVER-KEY/8:parcel-1/16:handover-scope-1/27:handover-result/parcel-1/v1" {
 		t.Fatalf("替代版本没回指原参与：%v %v", supersedes, chained)
 	}
 	if !current.EnteredAt().Equal(handoverJudgedTime) {
@@ -315,17 +315,17 @@ func TestAHandoverCorrectionThatWithdrawsControlVoidsTheParticipation(t *testing
 			if !present || !tail.Voided() || tail.Active() {
 				t.Fatalf("链尾不是失效版本：present=%v voided=%v active=%v", present, tail.Voided(), tail.Active())
 			}
-			if tail.EntryBasis().String() != "TRANSPORT-HANDOVER/handover-result/parcel-1/v2" || tail.EntryKind() != domain.EnteredByTransportHandover {
+			if tail.EntryBasis().String() != "TRANSPORT-HANDOVER-KEY/8:parcel-1/16:handover-scope-1/27:handover-result/parcel-1/v2" || tail.EntryKind() != domain.EnteredByTransportHandover {
 				t.Fatalf("失效版本的入场依据或种类走样：%+v", tail)
 			}
-			if supersedes, chained := tail.Supersedes(); !chained || supersedes.String() != "TRANSPORT-HANDOVER/handover-result/parcel-1/v1" {
+			if supersedes, chained := tail.Supersedes(); !chained || supersedes.String() != "TRANSPORT-HANDOVER-KEY/8:parcel-1/16:handover-scope-1/27:handover-result/parcel-1/v1" {
 				t.Fatalf("失效版本没回指原参与：%v %v", supersedes, chained)
 			}
 			if !tail.EnteredAt().Equal(handoverJudgedTime) {
 				t.Fatalf("失效版本的起点该沿用被失效那一版 %s，得到 %s", handoverJudgedTime, tail.EnteredAt())
 			}
 			history := record.Segment.ParticipationHistory(parcel)
-			if len(history) != 2 || history[0].EntryBasis().String() != "TRANSPORT-HANDOVER/handover-result/parcel-1/v1" ||
+			if len(history) != 2 || history[0].EntryBasis().String() != "TRANSPORT-HANDOVER-KEY/8:parcel-1/16:handover-scope-1/27:handover-result/parcel-1/v1" ||
 				!history[0].Superseded() || history[0].Voided() || !history[0].EnteredAt().Equal(handoverJudgedTime) {
 				t.Fatalf("原参与被动了或没被标为已被替代：%+v", history)
 			}
@@ -376,7 +376,7 @@ func TestARederivationLandsOnTheSegmentWhoseCurrentParticipationCarriesTheCorrec
 	parcel := objectRef(t, "parcel-1")
 	previous := fixture.segments.saved(t, "tenant-1", "segment-1")
 	tail, _ := previous.Segment.ParticipationFor(parcel)
-	if tail.EntryBasis().String() != "TRANSPORT-HANDOVER/handover-result/parcel-1/v2" || tail.Active() {
+	if tail.EntryBasis().String() != "TRANSPORT-HANDOVER-KEY/8:parcel-1/16:handover-scope-1/27:handover-result/parcel-1/v2" || tail.Active() {
 		t.Fatalf("前一段的替代版本走样（该回指 v1 且继承离场）：%+v", tail)
 	}
 	next := fixture.segments.saved(t, "tenant-1", "segment-2")

@@ -216,21 +216,49 @@ type occurrenceClock struct{}
 
 func (occurrenceClock) Now() time.Time { return occurrenceNow }
 
-// endedParticipation 是一条凭交接入场、以下一次交接离场的参与；ended 为假时仍在场。
+// endedParticipation 是一条凭交接入场、以下一次交接离场的参与；ended 为假时仍在场。终点依据与 handedOverAtSIN 登的那一版
+// 是同一次交接。
 func participationRow(t *testing.T, object string, ended bool) domain.RehydrateParticipationSpec {
 	t.Helper()
 	row := domain.RehydrateParticipationSpec{
 		Object:     occurrenceValue(t, domain.NewCarriedObjectReference, object),
 		EntryKind:  domain.EnteredByTransportHandover,
-		EntryBasis: occurrenceValue(t, domain.NewParticipationBasisReference, "TRANSPORT-HANDOVER/SYN-HO-SZX-"+object),
+		EntryBasis: handoverParticipationBasis(t, object, "SYN-HANDOVER-SCOPE-SZX", "SYN-HO-SZX-"+object),
 		EnteredAt:  occurrenceEnteredAt,
 	}
 	if ended {
 		row.EndKind = domain.EndedByNextHandover
-		row.EndBasis = occurrenceValue(t, domain.NewParticipationBasisReference, "TRANSPORT-HANDOVER/SYN-HO-SIN-"+object)
+		row.EndBasis = handoverParticipationBasis(t, object, "SYN-HANDOVER-SCOPE-SIN", "SYN-HO-SIN-"+object)
 		row.EndedAt = occurrenceEndedAt
 	}
 	return row
+}
+
+// handoverParticipationBasis 是（对象、范围、版本）那一版`已交接`作参与依据时记下的串。由领域铸（ADR-0221），夹具不另写
+// 一份拼法；拼法本身钉在领域的测试里。
+func handoverParticipationBasis(t *testing.T, object, scope, version string) domain.ParticipationBasisReference {
+	t.Helper()
+	handover, err := domain.FormTransportHandover(domain.TransportHandoverSpec{
+		TenantID:          occurrenceValue(t, domain.NewTenantID, occurrenceTenant),
+		Object:            occurrenceValue(t, domain.NewCarriedObjectReference, object),
+		Scope:             occurrenceValue(t, domain.NewHandoverScopeReference, scope),
+		ReleasedBy:        occurrenceValue(t, domain.NewHandoverPartyReference, "SYN-RELEASED-BY"),
+		ReceivedBy:        occurrenceValue(t, domain.NewHandoverPartyReference, "SYN-RECEIVED-BY"),
+		Verdict:           domain.ObjectHandedOver,
+		ReleasingEvidence: occurrenceValue(t, domain.NewHandoverEvidenceReference, "SYN-EVIDENCE-RELEASE"),
+		ReceivingEvidence: occurrenceValue(t, domain.NewHandoverEvidenceReference, "SYN-EVIDENCE-RECEIVE"),
+		Rule:              occurrenceValue(t, domain.NewHandoverRuleReference, "SYN-HANDOVER-RULE/v1"),
+		Version:           occurrenceValue(t, domain.NewHandoverResultVersion, version),
+		JudgedAt:          occurrenceEnteredAt,
+	})
+	if err != nil {
+		t.Fatalf("交接夹具：%v", err)
+	}
+	basis, formed := handover.ParticipationBasis()
+	if !formed {
+		t.Fatal("`已交接`给不出参与依据")
+	}
+	return basis
 }
 
 func trunkSegmentWith(t *testing.T, rows ...domain.RehydrateParticipationSpec) segmentViewDouble {

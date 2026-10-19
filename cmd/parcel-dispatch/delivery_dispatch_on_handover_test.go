@@ -226,10 +226,18 @@ func dispatchTaskRows(t *testing.T, db *bentopg.DB) int {
 }
 
 // handoverDispatchTaskReference 照执行器的 v2 铸法拼出（段，对象，入场依据）那一拍的任务引用：段、对象、入场依据各写
-// 「/字节长度:原串」。这里另拼一份而不调执行器，是要让占用者恰好立在执行器会铸的那一串上。
+// 「/字节长度:原串」。入场依据照交接键的铸法（ADR-0221）拼：对象、范围、版本也各写「字节长度:原串」，以斜杠相连。这里另拼
+// 一份而不调执行器，是要让占用者恰好立在执行器会铸的那一串上。
 func handoverDispatchTaskReference(object string, ordinal int) string {
+	basis := "TRANSPORT-HANDOVER-KEY/"
+	for index, part := range []string{object, handoverDispatchScope, handoverDispatchVersion(object, ordinal)} {
+		if index > 0 {
+			basis += "/"
+		}
+		basis += strconv.Itoa(len(part)) + ":" + part
+	}
 	reference := "DELIVERY-DISPATCH/v2"
-	for _, part := range []string{handoverDispatchSegment, object, "TRANSPORT-HANDOVER/" + handoverDispatchVersion(object, ordinal)} {
+	for _, part := range []string{handoverDispatchSegment, object, basis} {
 		reference += "/" + strconv.Itoa(len(part)) + ":" + part
 	}
 	return reference

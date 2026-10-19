@@ -465,12 +465,12 @@ func TestARederivationOnlyAttachesToTheCurrentParticipation(t *testing.T) {
 		t.Fatalf("rederive with handover: %v", err)
 	}
 	current, _ := rederivedHandover.ParticipationFor(handover.Object())
-	if current.EntryBasis().String() != "TRANSPORT-HANDOVER/handover-result/parcel-2/v2" || current.EntryKind() != domain.EnteredByTransportHandover {
+	if current.EntryBasis().String() != "TRANSPORT-HANDOVER-KEY/8:parcel-2/16:handover-scope-1/27:handover-result/parcel-2/v2" || current.EntryKind() != domain.EnteredByTransportHandover {
 		t.Fatalf("交接更正的替代版本走样：%+v", current)
 	}
 }
 
-// withdrawingCorrection 把一条`已交接`更正成拒收或待确认——新版本不再转出控制（TransferOutBasis 不给），
+// withdrawingCorrection 把一条`已交接`更正成拒收或待确认——新版本不再转出控制（ParticipationBasis 不给），
 // 段那一侧走的是失效格而不是替代格。
 func withdrawingCorrection(t *testing.T, handover domain.TransportHandover, verdict domain.HandoverVerdict, version string) domain.TransportHandover {
 	t.Helper()
@@ -518,13 +518,13 @@ func TestAControlWithdrawingCorrectionVoidsTheParticipation(t *testing.T) {
 			if !tail.Voided() || tail.Active() {
 				t.Fatalf("失效版本 voided=%v active=%v", tail.Voided(), tail.Active())
 			}
-			if tail.EntryBasis().String() != "TRANSPORT-HANDOVER/handover-result/parcel-1/v2" {
+			if tail.EntryBasis().String() != "TRANSPORT-HANDOVER-KEY/8:parcel-1/16:handover-scope-1/27:handover-result/parcel-1/v2" {
 				t.Fatalf("失效版本的入场依据 = %s，want 撤回控制那一版的引用", tail.EntryBasis())
 			}
 			if tail.EntryKind() != domain.EnteredByTransportHandover {
 				t.Fatalf("失效版本的入场种类 = %s，want 照前版 TRANSPORT_HANDOVER", tail.EntryKind())
 			}
-			if supersedes, chained := tail.Supersedes(); !chained || supersedes.String() != "TRANSPORT-HANDOVER/handover-result/parcel-1/v1" {
+			if supersedes, chained := tail.Supersedes(); !chained || supersedes.String() != "TRANSPORT-HANDOVER-KEY/8:parcel-1/16:handover-scope-1/27:handover-result/parcel-1/v1" {
 				t.Fatalf("失效版本没回指被失效那一版：%v %v", supersedes, chained)
 			}
 			if !tail.EnteredAt().Equal(handoverJudgedAt) {
@@ -539,7 +539,7 @@ func TestAControlWithdrawingCorrectionVoidsTheParticipation(t *testing.T) {
 
 			// 原参与一字不动，只是不再是当前；值语义下原聚合也不动。
 			history := voided.ParticipationHistory(object)
-			if len(history) != 2 || history[0].EntryBasis().String() != "TRANSPORT-HANDOVER/handover-result/parcel-1/v1" ||
+			if len(history) != 2 || history[0].EntryBasis().String() != "TRANSPORT-HANDOVER-KEY/8:parcel-1/16:handover-scope-1/27:handover-result/parcel-1/v1" ||
 				!history[0].Superseded() || history[0].Voided() || history[0].Active() {
 				t.Fatalf("原参与不在历史里、没被标为已被替代、或被改成失效：%+v", history)
 			}
@@ -593,10 +593,10 @@ func TestAControlWithdrawingCorrectionVoidsTheParticipation(t *testing.T) {
 				t.Fatalf("从失效版本长出替代版本：%v", err)
 			}
 			current, _ := revived.ParticipationFor(object)
-			if current.Voided() || !current.Active() || current.EntryBasis().String() != "TRANSPORT-HANDOVER/handover-result/parcel-1/v3" {
+			if current.Voided() || !current.Active() || current.EntryBasis().String() != "TRANSPORT-HANDOVER-KEY/8:parcel-1/16:handover-scope-1/27:handover-result/parcel-1/v3" {
 				t.Fatalf("参与没重新在场：%+v", current)
 			}
-			if supersedes, _ := current.Supersedes(); supersedes.String() != "TRANSPORT-HANDOVER/handover-result/parcel-1/v2" {
+			if supersedes, _ := current.Supersedes(); supersedes.String() != "TRANSPORT-HANDOVER-KEY/8:parcel-1/16:handover-scope-1/27:handover-result/parcel-1/v2" {
 				t.Fatalf("替代版本没回指失效版本：%v", supersedes)
 			}
 			if revived.ActiveParticipations() != 1 || len(revived.ParticipationHistory(object)) != 3 {

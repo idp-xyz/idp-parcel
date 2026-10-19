@@ -141,6 +141,33 @@ func (fixture *deliveryGateFixture) enteredByHandover(t *testing.T, releasing st
 	return handover
 }
 
+// enteredByLegacyHandover 摆一条 ADR-0221 之前的存量：参与凭`已交接`进段，入场依据是只带版本的旧拼法
+// `TRANSPORT-HANDOVER/<版本>`，起点是那次交接的业务时间。
+func (fixture *deliveryGateFixture) enteredByLegacyHandover(t *testing.T, releasing string) domain.TransportHandover {
+	t.Helper()
+	handover := deliveryEntryHandover(t, "handover-scope-1", releasing, deliveryArrivedAt.Add(-2*time.Hour))
+	basis, err := domain.NewParticipationBasisReference("TRANSPORT-HANDOVER/" + handover.Version().String())
+	if err != nil {
+		t.Fatalf("旧拼法依据：%v", err)
+	}
+	segment, err := domain.RehydrateActualFulfillmentSegment(domain.RehydrateActualFulfillmentSegmentSpec{
+		TenantID: handover.TenantID(),
+		Segment:  deliverySegmentReference(t),
+		Participations: []domain.RehydrateParticipationSpec{{
+			Object:     handover.Object(),
+			EntryKind:  domain.EnteredByTransportHandover,
+			EntryBasis: basis,
+			EnteredAt:  handover.JudgedAt(),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("重建存量段：%v", err)
+	}
+	fixture.placeSegment(t, segment)
+	fixture.handovers.handovers = append(fixture.handovers.handovers, handover)
+	return handover
+}
+
 func (fixture *deliveryGateFixture) placeSegment(t *testing.T, segment domain.ActualFulfillmentSegment) {
 	t.Helper()
 	key := ports.FulfillmentSegmentKey{TenantID: segment.TenantID(), Segment: deliverySegmentReference(t)}
@@ -385,7 +412,8 @@ func entryPickup(t *testing.T) domain.OffsitePickup {
 }
 
 // Covers: `AT-TF-262`——其余取不到节点或读不动的几格各自具名、照登、不问关务：对象此刻不在任何段里；进段依据指名的交接
-// 不在册（库面不一致），或在册上对上不止一版（同版本号在两个范围、业务时间也相同），两种分开具名；派送尝试读面、段册、交接册在写事务之前读不动。登不出
+// 不在册（库面不一致），或在册上对上不止一版（ADR-0221 之前只带版本的存量依据，同版本号在两个范围、业务时间也相同），两种
+// 分开具名；派送尝试读面、段册、交接册在写事务之前读不动。登不出
 // 交付的命令不带读数；对象同时在两段里在场是库面不一致，响亮报错。
 func TestTheOtherDeliveryNodeStopsAreNamedAndRegister(t *testing.T) {
 	cases := map[string]struct {
@@ -403,9 +431,9 @@ func TestTheOtherDeliveryNodeStopsAreNamedAndRegister(t *testing.T) {
 			},
 			want: domain.DeliveryEntryHandoverNotOnRegister,
 		},
-		"two scopes reuse the version at the same instant": {
+		"a legacy entry basis meets two scopes reusing the version at the same instant": {
 			arrange: func(t *testing.T, fixture *deliveryGateFixture) {
-				entry := fixture.enteredByHandover(t, "SYN-NODE-SIN-HUB")
+				entry := fixture.enteredByLegacyHandover(t, "SYN-NODE-SIN-HUB")
 				fixture.handovers.handovers = append(fixture.handovers.handovers,
 					deliveryEntryHandover(t, "handover-scope-2", "SYN-NODE-SZX-GATE", entry.JudgedAt()))
 			},
@@ -482,6 +510,25 @@ func readerWithAttemptView(t *testing.T, fixture *deliveryGateFixture, view port
 		t.Fatalf("交付门禁读数：%v", err)
 	}
 	return reader
+}
+
+// Covers: `AT-TF-271`（ADR-0221）——入场依据由交接键铸之后，同一对象在两个范围同用一个版本号、业务时间也相同，交付门禁照样
+// 认得出进段的那一次：取它声明的交出节点问关务，不停在 ENTRY_HANDOVER_AMBIGUOUS。
+func TestAKeyedEntryBasisTellsTwoScopesReusingTheVersionApart(t *testing.T) {
+	fixture := newDeliveryGateFixture(t)
+	entry := fixture.enteredByHandover(t, "SYN-NODE-SIN-HUB")
+	fixture.handovers.handovers = append([]domain.TransportHandover{
+		deliveryEntryHandover(t, "handover-scope-0", "SYN-NODE-SZX-GATE", entry.JudgedAt()),
+	}, fixture.handovers.handovers...)
+
+	reading := fixture.registerAndRead(t)
+
+	if node, asked := reading.Node(); !asked || node.String() != "SYN-NODE-SIN-HUB" {
+		t.Fatalf("at = %q（读数 %s），want 进段那一次声明的交出节点", node, reading.Answer())
+	}
+	if len(fixture.customs.queries) != 1 {
+		t.Fatalf("问关务 %d 次，want 1", len(fixture.customs.queries))
+	}
 }
 
 // Covers: `AT-TF-263`——同内容重放在写事务之前就认出来，回显首次读数，不重问关务；交付之后参与已结束，按此刻重读会读成

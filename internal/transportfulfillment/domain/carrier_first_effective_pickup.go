@@ -420,7 +420,7 @@ func (pickup CarrierFirstEffectivePickup) valid() bool {
 }
 
 // carrierPickupBasisReference 是参与关系入场依据引用的拼法：`CARRIER-FIRST-EFFECTIVE-PICKUP/<版本>`，
-// 与 `OFFSITE-PICKUP/<版本>`、`TRANSPORT-HANDOVER/<版本>` 同一条纪律——分隔符归拼接处所有。
+// 与 `OFFSITE-PICKUP/<版本>` 同一条纪律——分隔符归拼接处所有。
 func carrierPickupBasisReference(version CarrierFirstEffectivePickupVersion) (ParticipationBasisReference, error) {
 	return NewParticipationBasisReference("CARRIER-FIRST-EFFECTIVE-PICKUP/" + strings.TrimSpace(version.String()))
 }

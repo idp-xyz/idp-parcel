@@ -31,7 +31,8 @@ import (
 const ActualFulfillmentFormationRegistrant = "idp-parcel/transport-fulfillment#form-actual-fulfillment-on-participation-end"
 
 // ErrParticipationEndedInSeveralSegments 说明同一件控制事实在不止一个段里结束了这个对象的参与。一件交接或交付只结束对象
-// 此刻那一条在场参与（一对象同时只在一个共同控制范围里，CONTEXT），多于一条是库面不一致；不挑一段去计费，响亮报错。
+// 此刻那一条在场参与（一对象同时只在一个共同控制范围里，CONTEXT），依据逐字对上的多于一条是库面不一致；不挑一段去计费，
+// 响亮报错。旧拼法的交接依据对上多条不在此列，那是依据本身认不全（FormationEndedParticipationAmbiguous）。
 var ErrParticipationEndedInSeveralSegments = errors.New("transport fulfillment: one control fact ended the object's participation in several segments")
 
 // ActualFulfillmentFormationOutcome 是「一封交接或交付信封到了 → 形成实际履约发生项」的结果代数。
@@ -39,6 +40,9 @@ var ErrParticipationEndedInSeveralSegments = errors.New("transport fulfillment: 
 // 只有`已交给登记用例`一格要往下看登记的答复（Registration）；其余各格在交给登记用例之前就答了。交接不是`已交接`、
 // 这件事实没有结束任何参与、段没有采用委托，三格都是这封信不导致自动形成，分开是因为人去查的地方不同：交接裁决、段登记册、
 // 采用连线。
+//
+// FormationEndedParticipationAmbiguous 只出自 ADR-0221 之前的存量：那时交接作终点的依据只带版本，同一对象在两个范围用了
+// 同一版本号、业务时间又相同，就认不出结束的是哪一条。不挑一段去计费；重投不会变，入账，那一段的发生项要人工登记。
 type ActualFulfillmentFormationOutcome uint8
 
 const (
@@ -49,6 +53,7 @@ const (
 	FormationSegmentNotAdopted
 	FormationNotAccepted
 	FormationUndecided
+	FormationEndedParticipationAmbiguous
 )
 
 func (outcome ActualFulfillmentFormationOutcome) String() string {
@@ -65,6 +70,8 @@ func (outcome ActualFulfillmentFormationOutcome) String() string {
 		return "INPUT_NOT_ACCEPTED"
 	case FormationUndecided:
 		return "ACTUAL_FULFILLMENT_FORMATION_UNDECIDED"
+	case FormationEndedParticipationAmbiguous:
+		return "ENDED_PARTICIPATION_AMBIGUOUS"
 	default:
 		return ""
 	}
@@ -172,7 +179,8 @@ func (result FormActualFulfillmentResult) Registration() RegisterChargeOccurrenc
 // 时落进缺陷响起来，而不是悄悄入账吞掉一笔成本来源。
 func (result FormActualFulfillmentResult) Disposition() ActualFulfillmentFormationDisposition {
 	switch result.outcome {
-	case FormationHandoverNotHandedOver, FormationNoParticipationEnded, FormationSegmentNotAdopted:
+	case FormationHandoverNotHandedOver, FormationNoParticipationEnded, FormationSegmentNotAdopted,
+		FormationEndedParticipationAmbiguous:
 		return FormationSettled
 	case FormationUndecided:
 		return FormationRetry
@@ -250,7 +258,8 @@ func NewFormActualFulfillmentOnParticipationEndHandler(
 	return &FormActualFulfillmentOnParticipationEndHandler{deps: deps}
 }
 
-// OnHandover 跑交接那一路：受理键 → 读回那一版交接（须是`已交接`，转出依据由交接自己交出）→ 找它结束的参与 → 形成。
+// OnHandover 跑交接那一路：受理键 → 读回那一版交接（须是`已交接`）→ 找它结束的参与（终点依据由交接自己认，新旧两种拼法
+// 都认，ADR-0221）→ 形成。
 func (handler *FormActualFulfillmentOnParticipationEndHandler) OnHandover(
 	ctx context.Context,
 	command FormActualFulfillmentOnHandoverCommand,
@@ -266,15 +275,19 @@ func (handler *FormActualFulfillmentOnParticipationEndHandler) OnHandover(
 	if !found {
 		return formationUndecided(FormationHandoverNotVisible), nil
 	}
-	reference, transfers := record.Handover.TransferOutBasis()
-	if !transfers {
+	handover := record.Handover
+	if !handover.TransfersControl() {
 		return FormActualFulfillmentResult{outcome: FormationHandoverNotHandedOver}, nil
 	}
-	basis, err := domain.NewParticipationBasisReference(reference)
-	if err != nil {
-		return FormActualFulfillmentResult{}, fmt.Errorf("form actual fulfillment on handover: transfer-out basis: %w", err)
+	basis, formed := handover.ParticipationBasis()
+	if !formed {
+		return FormActualFulfillmentResult{}, fmt.Errorf("form actual fulfillment on handover: participation basis of %s/%s/%s",
+			key.Object, key.Scope, key.Version)
 	}
-	return handler.formFor(ctx, key.TenantID, key.Object, domain.EndedByNextHandover, basis)
+	return handler.formFor(ctx, key.TenantID, key.Object, basis,
+		func(segment domain.ActualFulfillmentSegment) (domain.FulfillmentParticipation, domain.ControlFactMatch) {
+			return segment.ParticipationEndedByHandover(handover)
+		})
 }
 
 // OnDelivery 跑有效交付那一路：受理键 → 由信封所指的那一版交付结果得出终点依据 → 找它结束的参与 → 形成。不读交付登记册：
@@ -301,7 +314,13 @@ func (handler *FormActualFulfillmentOnParticipationEndHandler) OnDelivery(
 	if err != nil {
 		return FormActualFulfillmentResult{outcome: FormationNotAccepted}, nil
 	}
-	return handler.formFor(ctx, command.TenantID, object, domain.EndedByEffectiveDelivery, basis)
+	return handler.formFor(ctx, command.TenantID, object, basis,
+		func(segment domain.ActualFulfillmentSegment) (domain.FulfillmentParticipation, domain.ControlFactMatch) {
+			if current, matched := segment.ParticipationEndedBy(object, domain.EndedByEffectiveDelivery, basis); matched {
+				return current, domain.ControlFactMatchedExactly
+			}
+			return domain.FulfillmentParticipation{}, domain.ControlFactUnmatched
+		})
 }
 
 // formFor 是两路共用的后半：在对象有过参与的各段里找终点恰是这件事实的那一条 → 段须已采用委托 → 定旅程 → 交登记用例。
@@ -310,22 +329,27 @@ func (handler *FormActualFulfillmentOnParticipationEndHandler) OnDelivery(
 // 只有终点依据说得清结束的是哪一条。没找到就是这件事实没结束任何参与——拒收与待确认不转出控制、更正出的新版本没有结束
 // 什么、对象本就不在段里，都落这一格。
 //
+// 逐字对上的优先：它一定是这件事实。旧拼法只对上版本与时刻的，只在没有逐字对上的一条时才算，且只认恰一条——多于一条
+// 是旧依据认不全，答 FormationEndedParticipationAmbiguous，不挑；逐字对上多于一条才是库面不一致（ADR-0221）。
+//
 // 成员只有这一个对象：一件交接或交付结束的是一个对象的参与，同一段上别的成员在各自的事实上各形成各的（按件计时逐件，
 // 按段计时第一件盖住整段、其余答范围已计过，ADR-0209 决定四）。
 func (handler *FormActualFulfillmentOnParticipationEndHandler) formFor(
 	ctx context.Context,
 	tenant domain.TenantID,
 	object domain.CarriedObjectReference,
-	kind domain.ParticipationEndKind,
 	basis domain.ParticipationBasisReference,
+	endedBy func(domain.ActualFulfillmentSegment) (domain.FulfillmentParticipation, domain.ControlFactMatch),
 ) (FormActualFulfillmentResult, error) {
 	keys, err := handler.deps.Segments.FindSegmentsForObject(ctx, tenant, object)
 	if err != nil {
 		return formationUndecided(FormationSegmentRegistryUnavailable), nil
 	}
-	var segment domain.FulfillmentSegmentReference
-	var participation domain.FulfillmentParticipation
-	ended := 0
+	type endedHere struct {
+		segment       domain.FulfillmentSegmentReference
+		participation domain.FulfillmentParticipation
+	}
+	var exact, loose []endedHere
 	for _, key := range keys {
 		record, found, err := handler.deps.Segments.FindByKey(ctx, key)
 		if err != nil {
@@ -336,18 +360,27 @@ func (handler *FormActualFulfillmentOnParticipationEndHandler) formFor(
 			return FormActualFulfillmentResult{}, fmt.Errorf(
 				"form actual fulfillment: segment %s listed for object %s is not registered", key.Segment, object)
 		}
-		if current, matched := record.Segment.ParticipationEndedBy(object, kind, basis); matched {
-			segment, participation = key.Segment, current
-			ended++
+		switch current, match := endedBy(record.Segment); match {
+		case domain.ControlFactMatchedExactly:
+			exact = append(exact, endedHere{key.Segment, current})
+		case domain.ControlFactMatchedByVersionAndTime:
+			loose = append(loose, endedHere{key.Segment, current})
 		}
 	}
-	switch ended {
-	case 0:
-		return FormActualFulfillmentResult{outcome: FormationNoParticipationEnded}, nil
-	case 1:
-	default:
+	var found endedHere
+	switch {
+	case len(exact) > 1:
 		return FormActualFulfillmentResult{}, fmt.Errorf("%w: object %s, basis %s", ErrParticipationEndedInSeveralSegments, object, basis)
+	case len(exact) == 1:
+		found = exact[0]
+	case len(loose) == 1:
+		found = loose[0]
+	case len(loose) > 1:
+		return FormActualFulfillmentResult{outcome: FormationEndedParticipationAmbiguous}, nil
+	default:
+		return FormActualFulfillmentResult{outcome: FormationNoParticipationEnded}, nil
 	}
+	segment, participation := found.segment, found.participation
 
 	_, adopted, err := handler.deps.Adoptions.FindBySegment(ctx, ports.SegmentCommissionAdoptionKey{TenantID: tenant, Segment: segment})
 	if err != nil {

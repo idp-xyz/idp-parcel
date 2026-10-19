@@ -75,7 +75,8 @@ func EffectiveDeliveryEndBasis(version DeliveryResultVersion) (ParticipationBasi
 }
 
 // ParticipationEndedBy 答这个对象在本段的当前参与是不是恰由指名的那件控制事实结束的：链尾、不是失效版本、终点的种类与
-// 依据都对得上。替代版本继承前版的终点（rederive），所以按链尾判，更正入场不会让「被谁结束」读丢。
+// 依据都对得上。替代版本继承前版的终点（rederive），所以按链尾判，更正入场不会让「被谁结束」读丢。交接那一路走
+// ParticipationEndedByHandover：交接作终点的依据有新旧两种拼法，逐字比只认得出新的那一种。
 func (segment ActualFulfillmentSegment) ParticipationEndedBy(
 	object CarriedObjectReference,
 	kind ParticipationEndKind,
@@ -90,4 +91,18 @@ func (segment ActualFulfillmentSegment) ParticipationEndedBy(
 		return FulfillmentParticipation{}, false
 	}
 	return current, true
+}
+
+// ParticipationEndedByHandover 是交接那一路的同一问：链尾、不是失效版本、终点是这一版`已交接`（EndedByHandover）。交回对上
+// 的方式，旧拼法的存量只对上版本与时刻，调用方要知道这一格认得不全。
+func (segment ActualFulfillmentSegment) ParticipationEndedByHandover(handover TransportHandover) (FulfillmentParticipation, ControlFactMatch) {
+	current, present := segment.ParticipationFor(handover.Object())
+	if !present || current.Voided() {
+		return FulfillmentParticipation{}, ControlFactUnmatched
+	}
+	match := current.EndedByHandover(handover)
+	if match == ControlFactUnmatched {
+		return FulfillmentParticipation{}, ControlFactUnmatched
+	}
+	return current, match
 }

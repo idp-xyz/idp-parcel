@@ -150,7 +150,7 @@ func TestTheWiredAdoptionFaceStartsTheCommissionOfASegmentEstablishedByHandover(
 		  WHERE tenant_id = 'SYN-TENANT-01' AND commission_id = 'SYN-COMMISSION-TRUNK-DCG25'`).Scan(&startedBasis, &startedAt); err != nil {
 		t.Fatalf("读委托行：%v", err)
 	}
-	if startedBasis != "TRANSPORT-HANDOVER/SYN-HANDOVER-RESULT/SZX-TRUNK-DCG25/v1" || !startedAt.Equal(trunkHandoverJudgedAt) {
+	if startedBasis != "TRANSPORT-HANDOVER-KEY/19:SYN-PARCEL-DCG25-01/34:SYN-HANDOVER-SCOPE-SZX-TRUNK-DCG25/38:SYN-HANDOVER-RESULT/SZX-TRUNK-DCG25/v1" || !startedAt.Equal(trunkHandoverJudgedAt) {
 		t.Fatalf("委托的开始 = (%s, %s)，want 那一次交接", startedBasis, startedAt)
 	}
 

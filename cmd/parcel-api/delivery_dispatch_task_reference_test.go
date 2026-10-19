@@ -152,7 +152,8 @@ func newTaskReferenceRig(t *testing.T) *taskReferenceRig {
 	}
 }
 
-// enter 让 object 凭`已交接`进入 segment。入场依据是「TRANSPORT-HANDOVER/」加交接版本，撞键用例靠段引用与交接版本构造。
+// enter 让 object 凭`已交接`进入 segment。入场依据由对象、范围与交接版本铸（entryBasis，ADR-0221），撞键用例靠段引用与
+// 交接版本构造。
 func (rig *taskReferenceRig) enter(t *testing.T, object, segment, scope, version string, action tfdomain.SegmentServiceAction) {
 	t.Helper()
 	command := registerHandoverCommand(t, object, segment, "")
@@ -222,14 +223,32 @@ func (rig *taskReferenceRig) formsItsOwnTask(t *testing.T, segment, object strin
 	return view
 }
 
+// entryBasis 照交接键的铸法（ADR-0221）手算参与的入场依据：对象、范围、版本各写「字节长度:原串」，以斜杠相连。另拼一份
+// 而不调领域，与 executorReference 同一个理由；领域的单测另钉了字面例子。
+func entryBasis(object, scope, version string) string {
+	return fmt.Sprintf("TRANSPORT-HANDOVER-KEY/%d:%s/%d:%s/%d:%s", len(object), object, len(scope), scope, len(version), version)
+}
+
 // executorReference 照新铸法手算执行器的任务引用；application 的编排单测另钉了一个字面例子。
-func executorReference(segment, object, version string) string {
-	basis := "TRANSPORT-HANDOVER/" + version
+func executorReference(segment, object, scope, version string) string {
+	basis := entryBasis(object, scope, version)
 	return fmt.Sprintf("DELIVERY-DISPATCH/v2/%d:%s/%d:%s/%d:%s", len(segment), segment, len(object), object, len(basis), basis)
 }
 
-func legacyExecutorReference(segment, object, version string) string {
-	return "DELIVERY-DISPATCH/" + segment + "/" + object + "/TRANSPORT-HANDOVER/" + version
+// legacyExecutorReference 是任务引用的旧拼法：段、对象、入场依据以斜杠直拼。
+func legacyExecutorReference(segment, object, scope, version string) string {
+	return "DELIVERY-DISPATCH/" + segment + "/" + object + "/" + entryBasis(object, scope, version)
+}
+
+// collidingEntries 构造一对（段，交接版本），让两件对象的入场依据在任务引用的旧拼法下拼出同一串：第一次交接的版本以
+// 「/第二件/第二件的入场依据」结尾，第二段的引用是「第一段/第一件/第一件入场依据去掉那截尾巴」。对象取什么都构造得出——
+// 入场依据带着对象，所以撞键要靠段引用与版本两头去凑。
+func collidingEntries(firstObject, firstScope, secondObject, secondScope string) (firstSegment, firstVersion, secondSegment, secondVersion string) {
+	firstSegment, secondVersion = "SYN-SEG-09-COLLIDE", "Y"
+	tail := "/" + secondObject + "/" + entryBasis(secondObject, secondScope, secondVersion)
+	firstVersion = "X" + tail
+	secondSegment = firstSegment + "/" + firstObject + "/" + strings.TrimSuffix(entryBasis(firstObject, firstScope, firstVersion), tail)
+	return firstSegment, firstVersion, secondSegment, secondVersion
 }
 
 // stockTask 经任务编排（不经 HTTP 载荷翻译）在库里立一项任务。保留起头拦在手工口的载荷翻译里、不在编排里，存量里指名过
@@ -264,14 +283,14 @@ func TestTheManualFaceCannotTakeTheExecutorsReferenceAndAStockOccupantIsAnswered
 	rig := newTaskReferenceRig(t)
 	const object, segment, version = "SYN-PARCEL-09-01", "SYN-DELIVERY-SEGMENT-09-01", "SYN-HANDOVER-RESULT/09-01/v1"
 	rig.enter(t, object, segment, "SYN-HANDOVER-SCOPE-09-01", version, tfdomain.SegmentServesFinalDelivery)
-	reference := executorReference(segment, object, version)
+	reference := executorReference(segment, object, "SYN-HANDOVER-SCOPE-09-01", version)
 
 	operations, err := buildSegmentOperations(rig.db)
 	if err != nil {
 		t.Fatalf("装配段运营编排：%v", err)
 	}
 	manual := tfhttp.NewOpenDispatchTaskEndpoint(operatorDecisionTransportForTest(t, rig.db), operations.opener)
-	for _, named := range []string{reference, legacyExecutorReference(segment, object, version)} {
+	for _, named := range []string{reference, legacyExecutorReference(segment, object, "SYN-HANDOVER-SCOPE-09-01", version)} {
 		request := httptest.NewRequest(http.MethodPost, "/transport-fulfillment-dispatch-task-registrations", strings.NewReader(fmt.Sprintf(
 			`{"task":%q,"kind":"PICKUP","objects":["SYN-PARCEL-OTHER-99"],"place":"SYN-PLACE/elsewhere",`+
 				`"windowFrom":"2026-10-18T09:00:00+08:00","windowTo":"2026-10-18T12:00:00+08:00","conditions":"SYN-CONDITION/other",`+
@@ -311,9 +330,10 @@ func TestStockTasksOnTheLegacySpellingAreRecognisedOrStepAround(t *testing.T) {
 	const segment = "SYN-DELIVERY-SEGMENT-09-02"
 	rig.enter(t, formedObject, segment, "SYN-HANDOVER-SCOPE-09-02", "SYN-HANDOVER-RESULT/09-02/v1", tfdomain.SegmentServesFinalDelivery)
 	rig.enter(t, blockedObject, segment, "SYN-HANDOVER-SCOPE-09-03", "SYN-HANDOVER-RESULT/09-03/v1", tfdomain.SegmentServesFinalDelivery)
-	legacyFormed := legacyExecutorReference(segment, formedObject, "SYN-HANDOVER-RESULT/09-02/v1")
+	legacyFormed := legacyExecutorReference(segment, formedObject, "SYN-HANDOVER-SCOPE-09-02", "SYN-HANDOVER-RESULT/09-02/v1")
 	stockTask(t, rig.db, legacyFormed, tfdomain.DeliveryDispatch, formedObject)
-	stockTask(t, rig.db, legacyExecutorReference(segment, blockedObject, "SYN-HANDOVER-RESULT/09-03/v1"), tfdomain.PickupDispatch, "SYN-PARCEL-OTHER-99")
+	stockTask(t, rig.db, legacyExecutorReference(segment, blockedObject, "SYN-HANDOVER-SCOPE-09-03", "SYN-HANDOVER-RESULT/09-03/v1"),
+		tfdomain.PickupDispatch, "SYN-PARCEL-OTHER-99")
 
 	code, view, raw := rig.tick(t, segment, formedObject, "2026-10-19T07:00:00+08:00")
 	if code != http.StatusOK || view.Outcome != "DISPATCH_TASK_ALREADY_FORMED" || view.Task != legacyFormed {
@@ -324,7 +344,7 @@ func TestStockTasksOnTheLegacySpellingAreRecognisedOrStepAround(t *testing.T) {
 	}
 
 	formed := rig.formsItsOwnTask(t, segment, blockedObject)
-	if formed.Task != executorReference(segment, blockedObject, "SYN-HANDOVER-RESULT/09-03/v1") {
+	if formed.Task != executorReference(segment, blockedObject, "SYN-HANDOVER-SCOPE-09-03", "SYN-HANDOVER-RESULT/09-03/v1") {
 		t.Fatalf("新任务引用 = %s，want 新铸法那一串", formed.Task)
 	}
 	if rows := rig.taskRows(t); rows != 3 {
@@ -332,20 +352,24 @@ func TestStockTasksOnTheLegacySpellingAreRecognisedOrStepAround(t *testing.T) {
 	}
 }
 
-// Covers: 票 tf-face-algebra/09 完成判据「真渠道真库回归」下「拼接撞键：两个对象各自形成任务」。段 `…/A` 加对象
-// `SYN-CU-77` 与段 `…` 加对象 `A/SYN-CU-77`，交接版本同为 v1（交接键含对象，不同对象同版本合法）。
+// Covers: 票 tf-face-algebra/09 完成判据「真渠道真库回归」下「拼接撞键：两个对象各自形成任务」。对象 `SYN-CU-77` 与
+// `A/SYN-CU-77`（拼接撞键那组对象），交接版本同为 v1（交接键含对象，不同对象同版本合法）；入场依据带着对象之后（ADR-0221），
+// 段与版本由 collidingEntries 去凑。
 func TestConcatenationCollidingObjectsEachFormTheirOwnTask(t *testing.T) {
 	rig := newTaskReferenceRig(t)
-	rig.enter(t, "SYN-CU-77", "SYN-SEG-09/A", "SYN-HANDOVER-SCOPE-CAT", "v1", tfdomain.SegmentServesFinalDelivery)
-	rig.enter(t, "A/SYN-CU-77", "SYN-SEG-09", "SYN-HANDOVER-SCOPE-CAT", "v1", tfdomain.SegmentServesFinalDelivery)
-	if legacyExecutorReference("SYN-SEG-09/A", "SYN-CU-77", "v1") != legacyExecutorReference("SYN-SEG-09", "A/SYN-CU-77", "v1") {
+	const first, second = "SYN-CU-77", "A/SYN-CU-77"
+	firstSegment, firstVersion, secondSegment, secondVersion := collidingEntries(first, "SYN-HANDOVER-SCOPE-CAT", second, "SYN-HANDOVER-SCOPE-CAT")
+	rig.enter(t, first, firstSegment, "SYN-HANDOVER-SCOPE-CAT", firstVersion, tfdomain.SegmentServesFinalDelivery)
+	rig.enter(t, second, secondSegment, "SYN-HANDOVER-SCOPE-CAT", secondVersion, tfdomain.SegmentServesFinalDelivery)
+	if legacyExecutorReference(firstSegment, first, "SYN-HANDOVER-SCOPE-CAT", firstVersion) !=
+		legacyExecutorReference(secondSegment, second, "SYN-HANDOVER-SCOPE-CAT", secondVersion) {
 		t.Fatal("夹具没构造出旧拼法下的撞键")
 	}
 
-	first := rig.formsItsOwnTask(t, "SYN-SEG-09/A", "SYN-CU-77")
-	second := rig.formsItsOwnTask(t, "SYN-SEG-09", "A/SYN-CU-77")
-	if first.Task == second.Task {
-		t.Fatalf("两个对象铸出同一个引用 %s", first.Task)
+	firstTask := rig.formsItsOwnTask(t, firstSegment, first)
+	secondTask := rig.formsItsOwnTask(t, secondSegment, second)
+	if firstTask.Task == secondTask.Task {
+		t.Fatalf("两个对象铸出同一个引用 %s", firstTask.Task)
 	}
 	if rows := rig.taskRows(t); rows != 2 {
 		t.Fatalf("任务行 = %d，want 2", rows)
@@ -353,15 +377,16 @@ func TestConcatenationCollidingObjectsEachFormTheirOwnTask(t *testing.T) {
 }
 
 // Covers: 票 tf-face-algebra/09 完成判据「真渠道真库回归」下「生产形状对象撞键：两个对象各自形成任务」。对象取不含
-// 斜杠的生产形状，只靠精心构造的段引用与交接版本让旧拼法撞上：第二段的引用嵌第一个对象，第一次交接的版本嵌第二个对象。
+// 斜杠的生产形状，只靠精心构造的段引用与交接版本让旧拼法撞上：第二段的引用嵌第一个对象，第一次交接的版本嵌第二个对象
+// （collidingEntries）。
 func TestProductionShapedObjectsCraftedToCollideEachFormTheirOwnTask(t *testing.T) {
 	rig := newTaskReferenceRig(t)
 	const first, second = "SYN-DPCL-0901", "SYN-DPCL-0902"
-	firstSegment, firstVersion := "SYN-SEG-09-V", "X/"+second+"/TRANSPORT-HANDOVER/Y"
-	secondSegment, secondVersion := "SYN-SEG-09-V/"+first+"/TRANSPORT-HANDOVER/X", "Y"
+	firstSegment, firstVersion, secondSegment, secondVersion := collidingEntries(first, "SYN-SCOPE-09-V1", second, "SYN-SCOPE-09-V2")
 	rig.enter(t, first, firstSegment, "SYN-SCOPE-09-V1", firstVersion, tfdomain.SegmentServesFinalDelivery)
 	rig.enter(t, second, secondSegment, "SYN-SCOPE-09-V2", secondVersion, tfdomain.SegmentServesFinalDelivery)
-	if legacyExecutorReference(firstSegment, first, firstVersion) != legacyExecutorReference(secondSegment, second, secondVersion) {
+	if legacyExecutorReference(firstSegment, first, "SYN-SCOPE-09-V1", firstVersion) !=
+		legacyExecutorReference(secondSegment, second, "SYN-SCOPE-09-V2", secondVersion) {
 		t.Fatal("夹具没构造出旧拼法下的撞键")
 	}
 
@@ -380,9 +405,9 @@ func TestProductionShapedObjectsCraftedToCollideEachFormTheirOwnTask(t *testing.
 func TestTheSameObjectInASecondDeliverySegmentFormsItsOwnTask(t *testing.T) {
 	rig := newTaskReferenceRig(t)
 	const parcel = "SYN-DPCL-0903"
-	firstSegment, firstVersion := "SYN-SEG-09-U", "X/"+parcel+"/TRANSPORT-HANDOVER/Y"
-	secondSegment, secondVersion := "SYN-SEG-09-U/"+parcel+"/TRANSPORT-HANDOVER/X", "Y"
-	if legacyExecutorReference(firstSegment, parcel, firstVersion) != legacyExecutorReference(secondSegment, parcel, secondVersion) {
+	firstSegment, firstVersion, secondSegment, secondVersion := collidingEntries(parcel, "SYN-SCOPE-09-U1", parcel, "SYN-SCOPE-09-U2")
+	if legacyExecutorReference(firstSegment, parcel, "SYN-SCOPE-09-U1", firstVersion) !=
+		legacyExecutorReference(secondSegment, parcel, "SYN-SCOPE-09-U2", secondVersion) {
 		t.Fatal("夹具没构造出旧拼法下的撞键")
 	}
 

@@ -96,7 +96,7 @@ func (outcome ParticipationEndOutcome) String() string {
 // EndFulfillmentParticipationCommand 携带结束一条参与关系的全部输入。
 //
 // **交接那一路只收指名一条已登记交接的键，不收依据串。** 依据由那条交接自己交出
-// （`TransferOutBasis`）——收调用方自报的引用就等于让任何人凭一次并未发生的交接把对象移出本段。
+// （`ParticipationBasis`）——收调用方自报的引用就等于让任何人凭一次并未发生的交接把对象移出本段。
 // 终止那一路的依据只能由调用方给（它指向本上下文之外的处置决定），那是两条路真正的不对称，
 // 不是疏漏。
 type EndFulfillmentParticipationCommand struct {

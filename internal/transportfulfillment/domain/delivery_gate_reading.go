@@ -3,7 +3,6 @@ package domain
 import (
 	"errors"
 	"fmt"
-	"strings"
 )
 
 // 本文件是交付门禁读数（ADR-0213 决定五）：一份有效交付落册时与它同一笔保存的「当时关务对这次交付怎么答」。读数不挡
@@ -49,7 +48,8 @@ const (
 	// 仍只记未决、不挡交付：交付已经发生，挡下它修不好段册。
 	DeliveryEntryHandoverNotOnRegister
 	// DeliveryEntryHandoverAmbiguous：入场依据指名的那一版在册上对上不止一版`已交接`——同一对象在不同交接范围用了同一个
-	// 版本号、业务时间也相同（入场依据只带版本、不带范围）。不猜其中一版。
+	// 版本号、业务时间也相同。只出自 ADR-0221 之前只带版本、不带范围的存量入场依据；按交接键铸的依据对不上第二版。
+	// 不猜其中一版。
 	DeliveryEntryHandoverAmbiguous
 	// DeliveryRecordedBeforeGateReading 只出现在迁移前就已落册的有效交付上（TF 迁移 0043 的存量回填）：那时没问过关务，
 	// 如实答未决而不是猜一格。新登记的交付不会停在这里，构造门拒它。
@@ -213,30 +213,4 @@ func (reading DeliveryGateReading) placedOn(delivery EffectiveDelivery, rehydrat
 		return ErrDeliveryGateReadingMisplaced
 	}
 	return nil
-}
-
-// EntryHandoverVersion 交回这条参与凭`已交接`进段时那一版交接的版本：入场种类是权威交接、入场依据是那一截拼写加版本。
-// 别的入场种类答 false。依据里只有版本、没有交接范围——按版本找回的交接还要经 EnteredByHandover 认一遍。
-func (participation FulfillmentParticipation) EntryHandoverVersion() (HandoverResultVersion, bool) {
-	if participation.entryKind != EnteredByTransportHandover {
-		return HandoverResultVersion{}, false
-	}
-	raw, cut := strings.CutPrefix(participation.entryBasis.String(), transportHandoverBasisHead)
-	if !cut {
-		return HandoverResultVersion{}, false
-	}
-	version, err := NewHandoverResultVersion(raw)
-	return version, err == nil
-}
-
-// EnteredByHandover 说这条参与是不是凭这一版交接进的段：这一版是`已交接`、同一件对象，参与的入场依据正是它的转出依据、
-// 起点正是它的业务时间（JoinWithHandover 与替代版本都按它立起点）。入场依据只带版本，同一对象在两个交接范围用了同一
-// 版本号时，业务时间再分一次。
-func (participation FulfillmentParticipation) EnteredByHandover(handover TransportHandover) bool {
-	reference, transfers := handover.TransferOutBasis()
-	return transfers &&
-		participation.entryKind == EnteredByTransportHandover &&
-		participation.object == handover.object &&
-		participation.entryBasis.String() == reference &&
-		sameOnRegistry(participation.enteredAt, handover.judgedAt)
 }

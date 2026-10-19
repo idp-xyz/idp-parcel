@@ -19,9 +19,9 @@ var (
 // FindHandedOverByVersion 按（租户、对象、交接版本）交回`已交接`的各版，供交付门禁读数找对象进段的那次交接
 // （ports.DeliveryGateEntryHandoverView，ADR-0213 决定五）。
 //
-// 交接的键还有一维范围，参与的入场依据却只带版本，所以这里按主键前缀（租户、对象）取、再按版本筛，可能不止一行：如实全
-// 交回，哪一版是进段那一次由领域认（FulfillmentParticipation.EnteredByHandover），在 SQL 里再按业务时间筛就是同一条规则
-// 的第二个口径。拒收与待确认在 SQL 里就不取——它们立不起参与，这一条是裁决的封闭集，不是认法。读回经同一道重建门。
+// 交接的键还有一维范围，ADR-0221 之前的存量入场依据却只带版本，所以这里按主键前缀（租户、对象）取、再按版本筛，可能不止
+// 一行：如实全交回，哪一版是进段那一次由领域认（FulfillmentParticipation.EnteredByHandover），在 SQL 里再按范围或业务时间
+// 筛就是同一条规则的第二个口径。拒收与待确认在 SQL 里就不取——它们立不起参与，这一条是裁决的封闭集，不是认法。读回经同一道重建门。
 func (repository *TransportHandovers) FindHandedOverByVersion(
 	ctx context.Context,
 	tenant domain.TenantID,

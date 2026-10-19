@@ -335,7 +335,7 @@ func TestAPickupCorrectionForAnObjectOutsideAnySegmentAnswersNoParticipationToRe
 }
 
 // Covers: ADR-0112 决定一、二在交接来源上的正格——仍`已交接`的更正形成替代参与版本，链尾凭
-// `TRANSPORT-HANDOVER/<新版本>` 入场、回指 `TRANSPORT-HANDOVER/<前版>`；起点是交接的判断时刻（更正不改业务时间）。
+// 新版本的交接键铸的依据入场、回指前版的那一串（ADR-0221）；起点是交接的判断时刻（更正不改业务时间）。
 func TestAHandoverCorrectionThatStillHandsOverSupersedesTheParticipationInTheDatabase(t *testing.T) {
 	registries := newRederivationRegistries(t)
 	ctx := t.Context()
@@ -349,10 +349,10 @@ func TestAHandoverCorrectionThatStillHandsOverSupersedesTheParticipationInTheDat
 
 	segment := registries.readSegment(t, ctx, "SEG-RD-3")
 	current, present := segment.ParticipationFor(object)
-	if !present || current.EntryBasis().String() != "TRANSPORT-HANDOVER/handover-result/parcel-3/v2" {
+	if !present || current.EntryBasis().String() != "TRANSPORT-HANDOVER-KEY/8:parcel-3/14:scope-parcel-3/27:handover-result/parcel-3/v2" {
 		t.Fatalf("当前参与不是替代版本：present=%v basis=%s", present, current.EntryBasis())
 	}
-	if supersedes, chained := current.Supersedes(); !chained || supersedes.String() != "TRANSPORT-HANDOVER/handover-result/parcel-3/v1" {
+	if supersedes, chained := current.Supersedes(); !chained || supersedes.String() != "TRANSPORT-HANDOVER-KEY/8:parcel-3/14:scope-parcel-3/27:handover-result/parcel-3/v1" {
 		t.Fatalf("替代版本没有回指首登：chained=%v supersedes=%s", chained, supersedes)
 	}
 	if !current.EnteredAt().Equal(rederivationEnteredAt) || current.EntryKind() != domain.EnteredByTransportHandover || !current.Active() || current.Voided() {
@@ -388,10 +388,10 @@ func TestAHandoverCorrectionThatWithdrawsControlVoidsTheParticipationInTheDataba
 	if !present || !tail.Voided() || tail.Active() {
 		t.Fatalf("链尾不是失效版本：present=%v voided=%v active=%v", present, tail.Voided(), tail.Active())
 	}
-	if tail.EntryBasis().String() != "TRANSPORT-HANDOVER/handover-result/parcel-4/v2" || tail.EntryKind() != domain.EnteredByTransportHandover {
+	if tail.EntryBasis().String() != "TRANSPORT-HANDOVER-KEY/8:parcel-4/14:scope-parcel-4/27:handover-result/parcel-4/v2" || tail.EntryKind() != domain.EnteredByTransportHandover {
 		t.Fatalf("失效版本的入场依据或种类走样：basis=%s kind=%v", tail.EntryBasis(), tail.EntryKind())
 	}
-	if supersedes, chained := tail.Supersedes(); !chained || supersedes.String() != "TRANSPORT-HANDOVER/handover-result/parcel-4/v1" {
+	if supersedes, chained := tail.Supersedes(); !chained || supersedes.String() != "TRANSPORT-HANDOVER-KEY/8:parcel-4/14:scope-parcel-4/27:handover-result/parcel-4/v1" {
 		t.Fatalf("失效版本没有回指首登：chained=%v supersedes=%s", chained, supersedes)
 	}
 	if !tail.EnteredAt().Equal(rederivationEnteredAt) {
@@ -412,7 +412,7 @@ func TestAHandoverCorrectionThatWithdrawsControlVoidsTheParticipationInTheDataba
 	if err := registries.pool.QueryRow(ctx,
 		`SELECT voided, supersedes_entry_basis FROM transport_fulfillment.fulfillment_participation
 		  WHERE tenant_id = 'tenant-1' AND segment_ref = 'SEG-RD-4' AND object_ref = 'parcel-4'
-		    AND entry_basis = 'TRANSPORT-HANDOVER/handover-result/parcel-4/v1'`,
+		    AND entry_basis = 'TRANSPORT-HANDOVER-KEY/8:parcel-4/14:scope-parcel-4/27:handover-result/parcel-4/v1'`,
 	).Scan(&rootVoided, &rootSupersedes); err != nil {
 		t.Fatalf("读首登行：%v", err)
 	}
@@ -422,7 +422,7 @@ func TestAHandoverCorrectionThatWithdrawsControlVoidsTheParticipationInTheDataba
 	if err := registries.pool.QueryRow(ctx,
 		`SELECT voided FROM transport_fulfillment.fulfillment_participation
 		  WHERE tenant_id = 'tenant-1' AND segment_ref = 'SEG-RD-4' AND object_ref = 'parcel-4'
-		    AND entry_basis = 'TRANSPORT-HANDOVER/handover-result/parcel-4/v2'`,
+		    AND entry_basis = 'TRANSPORT-HANDOVER-KEY/8:parcel-4/14:scope-parcel-4/27:handover-result/parcel-4/v2'`,
 	).Scan(&tailVoided); err != nil || !tailVoided {
 		t.Fatalf("失效版本那一行 voided 列不为真：voided=%v err=%v", tailVoided, err)
 	}
@@ -460,10 +460,10 @@ func TestAHandoverCorrectionThatWithdrawsControlVoidsTheParticipationInTheDataba
 	}
 	revived := registries.readSegment(t, ctx, "SEG-RD-4")
 	current, _ := revived.ParticipationFor(object)
-	if current.Voided() || !current.Active() || current.EntryBasis().String() != "TRANSPORT-HANDOVER/handover-result/parcel-4/v3" {
+	if current.Voided() || !current.Active() || current.EntryBasis().String() != "TRANSPORT-HANDOVER-KEY/8:parcel-4/14:scope-parcel-4/27:handover-result/parcel-4/v3" {
 		t.Fatalf("参与没重新在场：voided=%v active=%v basis=%s", current.Voided(), current.Active(), current.EntryBasis())
 	}
-	if supersedes, _ := current.Supersedes(); supersedes.String() != "TRANSPORT-HANDOVER/handover-result/parcel-4/v2" {
+	if supersedes, _ := current.Supersedes(); supersedes.String() != "TRANSPORT-HANDOVER-KEY/8:parcel-4/14:scope-parcel-4/27:handover-result/parcel-4/v2" {
 		t.Fatalf("替代版本没回指失效版本：%s", supersedes)
 	}
 	if revived.ActiveParticipations() != 1 || len(revived.ParticipationHistory(object)) != 3 {

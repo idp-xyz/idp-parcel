@@ -18,9 +18,10 @@ type DeliveryGateSegmentView interface {
 	FindByKey(ctx context.Context, key FulfillmentSegmentKey) (FulfillmentSegmentRecord, bool, error)
 }
 
-// DeliveryGateEntryHandoverView 按（租户、对象、交接版本）找回`已交接`的那几版。参与的入场依据只带版本、不带交接范围，
-// 所以这一问不按幂等键问：同一对象在不同范围用了同一个版本号时如实全交回，哪一版是进段那一次由领域
-// （FulfillmentParticipation.EnteredByHandover）认，本口不挑。拒收与待确认不交回——它们立不起参与。
+// DeliveryGateEntryHandoverView 按（租户、对象、交接版本）找回`已交接`的那几版。ADR-0221 之前的存量参与，入场依据只带
+// 版本、不带交接范围，所以这一问不按幂等键问：同一对象在不同范围用了同一个版本号时如实全交回，哪一版是进段那一次由领域
+// （FulfillmentParticipation.EnteredByHandover）认，本口不挑；按交接键铸的依据在那一处只认得出范围相同的一版。拒收与
+// 待确认不交回——它们立不起参与。
 type DeliveryGateEntryHandoverView interface {
 	FindHandedOverByVersion(
 		ctx context.Context,

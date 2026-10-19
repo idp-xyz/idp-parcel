@@ -239,7 +239,7 @@ func TestTriggeringADeliveryDispatchFormsTheTaskWithTheOwnersPlaceReference(t *t
 func TestATakenTaskReferenceIsAFormedAnswerEchoingTheOccupant(t *testing.T) {
 	fixture := newTriggerFixture(t, "parcel-1")
 	seedHandoverParticipation(t, fixture.segments, "parcel-1")
-	const reference = "DELIVERY-DISPATCH/v2/9:segment-1/8:parcel-1/46:TRANSPORT-HANDOVER/handover-result/parcel-1/v1"
+	const reference = "DELIVERY-DISPATCH/v2/9:segment-1/8:parcel-1/84:TRANSPORT-HANDOVER-KEY/8:parcel-1/16:handover-scope-1/27:handover-result/parcel-1/v1"
 	opener := application.NewOpenDispatchTaskHandler(application.OpenDispatchTaskDeps{Tasks: fixture.tasks, Clock: tfClock{at: time.Date(2026, 9, 5, 8, 0, 0, 0, time.UTC)}})
 	occupied, err := opener.Open(t.Context(), application.OpenDispatchTaskCommand{
 		TenantID: tenantOne(t), Task: reference, Kind: domain.PickupDispatch, Objects: []string{"parcel-other-9"}, Place: "place-elsewhere",

@@ -292,7 +292,7 @@ func (handler *RegisterTransportHandoverHandler) endPreviousParticipation(
 // establishSegment 让这次交接的对象进入实际履约段（CONTEXT 生命周期①②）。
 //
 // 本编排只提供交接那一侧的两道领域门：三裁决里只有`已交接`转出控制，拒收与待确认在
-// TransferOutBasis 上就被挡住，这里不重判一遍。其余判断（要不要进段、段是否已成立、
+// ParticipationBasis 上就被挡住，这里不重判一遍。其余判断（要不要进段、段是否已成立、
 // 失败算不算欠账）与收寄那一侧逐字相同，收在 enterFulfillmentSegment 里。
 func (handler *RegisterTransportHandoverHandler) establishSegment(
 	ctx context.Context,

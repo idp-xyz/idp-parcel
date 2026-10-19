@@ -3,6 +3,7 @@ package application_test
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,7 +28,7 @@ func legacyShapeReference(segment, object, basis string) string {
 }
 
 // enterSegmentByHandover 让 object 凭`已交接`进入 segment（首个对象成立段时声明为末端派送）。交接版本由调用方给：
-// 入场依据是「TRANSPORT-HANDOVER/」加这个版本，撞键用例要靠它构造。
+// 入场依据由对象、范围（handover-scope-1）与这个版本铸（ADR-0221），撞键用例要靠它构造。
 func (fixture *dispatchTriggerFixture) enterSegmentByHandover(t *testing.T, segment, object, version string) {
 	t.Helper()
 	command := registerHandoverCommand(t)
@@ -95,17 +96,19 @@ func TestTheTaskReferenceSpellsEachPartWithItsLength(t *testing.T) {
 		t.Fatalf("触发：%v %q", err, result.Outcome())
 	}
 	record, _ := result.Record()
-	const want = "DELIVERY-DISPATCH/v2/9:segment-1/8:parcel-1/46:TRANSPORT-HANDOVER/handover-result/parcel-1/v1"
+	const want = "DELIVERY-DISPATCH/v2/9:segment-1/8:parcel-1/84:TRANSPORT-HANDOVER-KEY/8:parcel-1/16:handover-scope-1/27:handover-result/parcel-1/v1"
 	if got := record.Key.Task.String(); got != want {
 		t.Fatalf("任务引用 = %q, want %q", got, want)
 	}
-	if want != newShapeReference("segment-1", "parcel-1", "TRANSPORT-HANDOVER/handover-result/parcel-1/v1") {
+	if want != newShapeReference("segment-1", "parcel-1", "TRANSPORT-HANDOVER-KEY/8:parcel-1/16:handover-scope-1/27:handover-result/parcel-1/v1") {
 		t.Fatal("用例里的手算铸法与字面例子不一致")
 	}
 }
 
 // Covers: 票 tf-face-algebra/09 完成判据「编排单测」下「新铸法单射，对拼接撞键那组输入铸出不同引用」。段 `seg/A` 加对象
-// `CU-77` 与段 `seg` 加对象 `A/CU-77`、交接版本同为 v1——斜杠直拼时两者铸出同一串，后到的对象首拍就被答成「已形成」。
+// `CU-77` 与段 `seg` 加对象 `A/CU-77`、交接版本同为 v1——入场依据是 ADR-0221 之前的旧拼法 `TRANSPORT-HANDOVER/v1` 时，
+// 斜杠直拼两者铸出同一串，后到的对象首拍就被答成「已形成」。此后的依据带着对象，两件的依据本就不同；任务引用的铸法照样
+// 要单射，不靠依据替它分，存量参与的依据仍是旧拼法。
 func TestConcatenationCollidingInputsMintDifferentTaskReferences(t *testing.T) {
 	fixture := newDispatchTriggerFixture(t)
 	fixture.enterSegmentByHandover(t, "seg/A", "CU-77", "v1")
@@ -140,7 +143,7 @@ func TestConcatenationCollidingInputsMintDifferentTaskReferences(t *testing.T) {
 // Covers: 票 tf-face-algebra/09 完成判据「编排单测」下「旧拼法在册任务兼认」，与裁定
 // 「单射铸法：取长度前缀，带形状标记」——先查新键，查不到再查旧键，命中且种类与对象集核得过才算已在册；存量不回写。
 func TestALegacySpelledTaskIsStillRecognised(t *testing.T) {
-	const basis = "TRANSPORT-HANDOVER/handover-result/parcel-1/v1"
+	const basis = "TRANSPORT-HANDOVER-KEY/8:parcel-1/16:handover-scope-1/27:handover-result/parcel-1/v1"
 
 	t.Run("旧拼法在册的就是本拍那一项：答已在册并交回它，不取件、不写", func(t *testing.T) {
 		fixture := newDispatchTriggerFixture(t)
@@ -185,15 +188,18 @@ func TestALegacySpelledTaskIsStillRecognised(t *testing.T) {
 	// 入场依据）在新铸法下的任务，同一对象跨段时种类与对象集都对得上，核对拦不住。
 	t.Run("旧拼法串本身合新形状：不按旧拼法认", func(t *testing.T) {
 		fixture := newDispatchTriggerFixture(t)
-		otherBasis := "TRANSPORT-HANDOVER/x/parcel-1/TRANSPORT-HANDOVER/y"
-		fixture.enterSegmentByHandover(t, "a", "parcel-1", "x/parcel-1/TRANSPORT-HANDOVER/y")
+		// 版本 x 以「/parcel-1/」加版本 y 的入场依据结尾，段 a 那一条的依据于是也以它结尾，旧拼法才拼得出同一串。
+		laterBasis := handoverParticipationBasis(t, "parcel-1", "handover-scope-1", "y").String()
+		earlierVersion := "x/parcel-1/" + laterBasis
+		otherBasis := handoverParticipationBasis(t, "parcel-1", "handover-scope-1", earlierVersion).String()
+		fixture.enterSegmentByHandover(t, "a", "parcel-1", earlierVersion)
 		earlier, err := fixture.handler().Trigger(t.Context(), triggerOn(t, "a", "parcel-1"))
 		if err != nil || earlier.Outcome() != application.DeliveryDispatchTaskFormed {
 			t.Fatalf("段 a 那一拍：%v %q", err, earlier.Outcome())
 		}
-		crafted := fmt.Sprintf("v2/1:a/8:parcel-1/%d:TRANSPORT-HANDOVER/x", len(otherBasis))
+		crafted := fmt.Sprintf("v2/1:a/8:parcel-1/%d:%s", len(otherBasis), strings.TrimSuffix(otherBasis, "/parcel-1/"+laterBasis))
 		fixture.enterSegmentByHandover(t, crafted, "parcel-1", "y")
-		if legacyShapeReference(crafted, "parcel-1", "TRANSPORT-HANDOVER/y") != newShapeReference("a", "parcel-1", otherBasis) {
+		if legacyShapeReference(crafted, "parcel-1", laterBasis) != newShapeReference("a", "parcel-1", otherBasis) {
 			t.Fatal("夹具没构造出「旧拼法串等于另一拍的新引用」")
 		}
 
@@ -209,7 +215,7 @@ func TestALegacySpelledTaskIsStillRecognised(t *testing.T) {
 // 键上已有一项任务，但种类不是末端派送或对象集不恰为本对象：答 `DISPATCH_TASK_REFERENCE_TAKEN` 并交回占用者；不写、
 // 不另铸、不向所有者取件。
 func TestAReferenceTakenByAnotherTaskIsAnsweredAsTaken(t *testing.T) {
-	const basis = "TRANSPORT-HANDOVER/handover-result/parcel-1/v1"
+	const basis = "TRANSPORT-HANDOVER-KEY/8:parcel-1/16:handover-scope-1/27:handover-result/parcel-1/v1"
 	occupants := map[string]struct {
 		kind    domain.DispatchTaskKind
 		objects []string
