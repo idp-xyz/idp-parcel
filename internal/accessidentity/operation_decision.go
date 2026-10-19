@@ -39,6 +39,10 @@ const (
 	DecisionTransportCommissionSubmission       DecisionKind = "TRANSPORT_COMMISSION_SUBMISSION"
 )
 
+// DecisionTransportChargeOccurrenceRegistration 是运输收费发生项登记（ADR-0207 决定六）：对已发生的履约事实作一次
+// 采购判断——断言采用协议的发生条件已满足、指名服务方与协议版本。它不是现场作业事实，所以归运营决定而不归作业事实面。
+const DecisionTransportChargeOccurrenceRegistration DecisionKind = "TRANSPORT_CHARGE_OCCURRENCE_REGISTRATION"
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -47,6 +51,7 @@ var decisionKinds = []DecisionKind{
 	DecisionPendingIdentityRecheck,
 	DecisionIdentityConflictDisposition,
 	DecisionTransportCommissionSubmission,
+	DecisionTransportChargeOccurrenceRegistration,
 }
 
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。

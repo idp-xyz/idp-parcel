@@ -202,6 +202,30 @@ func TestOperationDecisionGrantRoundTripsItsDecisionKind(t *testing.T) {
 	}
 }
 
+// Covers: 票 demo-chain-gaps/27——运输收费发生项登记这一种决定过得了库上的决定种类 CHECK（迁移 access_identity/0009
+// 重建的全集），授予往返后只答这一种。
+func TestTransportChargeOccurrenceRegistrationGrantPassesTheDecisionKindCheck(t *testing.T) {
+	register := newOperatorRegister(t)
+	subject := subjectOf(t, "https://id.syn.example/dex", "SYN-OPERATOR-27")
+	expectOutcome(t, "bind", register.bind(t, bindingOf(t, subject, "SYN-TENANT-01", "SYN-BIND-BASIS")), accessidentity.OperatorRegistrationRecorded)
+	interval, err := accessidentity.NewEffectiveInterval(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	grant, err := accessidentity.NewOperationDecisionGrant("SYN-TENANT-01", "SYN-DECISION-27", subject,
+		accessidentity.DecisionTransportChargeOccurrenceRegistration, interval, "SYN-GRANT-BASIS")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectOutcome(t, "charge occurrence decision grant", register.grant(t, grant), accessidentity.OperatorRegistrationRecorded)
+	at := time.Date(2026, 10, 19, 0, 0, 0, 0, time.UTC)
+	standing := register.standing(t, subject)
+	if !standing.HoldsDecisionAt(accessidentity.DecisionTransportChargeOccurrenceRegistration, at) ||
+		standing.HoldsDecisionAt(accessidentity.DecisionLoadAssignment, at) {
+		t.Fatalf("decision kind did not round-trip: grants = %+v", standing.Grants())
+	}
+}
+
 func TestSubjectBoundToOneTenantIsRefusedByEveryOtherTenant(t *testing.T) {
 	register := newOperatorRegister(t)
 	subject := subjectOf(t, syntheticIssuer, "SYN-OPERATOR-01")
