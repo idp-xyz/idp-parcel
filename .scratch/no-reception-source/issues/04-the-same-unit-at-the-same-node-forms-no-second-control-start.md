@@ -1,7 +1,7 @@
 # 04 第四期：同一作业实物在同一节点已有当前收寄时并入、不另起控制起点；仅扫描的待确认由后来的明确接收或拒收续办
 
 Category: enhancement
-Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（02、03 进 main 后开工），分支 `claude-nrs04`，NO 迁移号 0009；与 no-reception-identity/06 并行。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）
+Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（02、03 进 main 后开工），分支 `claude-nrs04`，NO 迁移号 0009；与 no-reception-identity/06 并行。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）
 Blocked by: 03 进 main。功能上只依 02（来源文档给出待确认与拒收行的作业实物，前版机制给出续办）；与 03 同改收寄编排、PG 适配器与迁移号，按票号串行落。
 父票：[01](./01-node-reception-preserves-the-delivery-source.md)
 出处：票 01 裁定分期之「四、同一作业实物重复控制起点的挡法」与「同一作业实物按什么认」「仅扫描的待确认怎样续办」两问；ADR-0199 决定四。落地次序排在第三期（票 05）之前：翻转的前提里有一项就是本票的挡法。
@@ -150,3 +150,14 @@ Blocked by: 03 进 main。功能上只依 02（来源文档给出待确认与拒
   - no-reception-identity/06 的迁移 0010 排在 0009 之后。它若重建 `reception_kind_closed`，词表要带上 `MERGED_INTO_EXISTING_INTAKE`；若新增种类，要与 `reception_merge_shaped` 相容（非并入行不带 `merged_version`）。
   - 06 若往 `ReceptionStore` 加方法，本票新加方法的那几只替身（编排用例与 HTTP 用例的 `receptionStoreDouble`、`recheckStore`）同样要补。
   - 06 的处置版接在链上、带收寄与控制。本票的 `FindCurrentJudgmentsAtNode` 会把它读成链头、并入它，这与「并入当前有效版本」同义，不用另改。
+
+## Comments
+
+### 评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审；2026-10-19，钉 `8f327db4`）
+
+两轴合审，0 阻断。
+
+- **Spec**：ADR-0199 决定四落到。同一作业实物在同一节点有当前收寄时并入，新种类 `MERGED_INTO_EXISTING_INTAKE` 落一行保全这次来源、指名并入的那一版，不另起控制起点、不再问 PS，答 200 `EXISTING_RESULT` 照并入那一版填；仅扫描的待确认由后来的明确接收或拒收以前版续办。迁移 0009 重建种类封闭集、加并入版本列与形状约束、按（租户，实物，节点）的部分索引。ADR-0196 两句按约定部分停用（Status 与 Links 前向指针、复核记录三、README 标注）。
+- **作者自定的格认可**：锁次序先实物后包裹，重核不取实物锁（按号重核一笔事务逐件做，取实物锁会与收寄交叉等待），有「两把锁同时有人等不死锁」的并发用例；第一期之前的拒收与仅扫描旧行认不出实物，不续办、不补签，代价写明。
+- **Standards**：并入行不进任何版本链，现有各读面逐一用例核过不受影响；新代码另起文件，共享文件只追加。
+- **已知（不另立票）**：控制转出没有生产接线，实物离开节点再回来会被并入旧收寄——no-reception-source/01 已记，归控制转出那条线。
