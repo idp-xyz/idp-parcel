@@ -226,7 +226,7 @@ type chargeOccurrenceFact struct {
 
 // Register 取事实 → 派生身份 → 判自营 → 核协议 → 形成 → 落册并交意图。
 //
-// 身份在采购上下文之前派生：声明自营的那一格也要先问册上有没有同一件事已经登成了外包，否则同一件事会同时被答成
+// 身份在采购上下文之前派生：自营的两格也要先问册上有没有同一件事已经登成了外包，否则同一件事会同时被答成
 // 「有外部成本」与「不适用」。协议按业务时间核——协议在那一刻是否支持采购，后来到期或终止不改写已发生的事实。
 func (handler *RegisterChargeOccurrenceHandler) Register(
 	ctx context.Context,
@@ -271,7 +271,7 @@ func (handler *RegisterChargeOccurrenceHandler) Register(
 		if procurementGiven {
 			return chargeNotAccepted(SelfOperationContradicted), nil
 		}
-		return handler.selfOperated(ctx, key, continuation)
+		return handler.selfOperated(ctx, key, continuation, SelfOperatedDeclared)
 	}
 
 	if fact.hasSegment {
@@ -280,7 +280,7 @@ func (handler *RegisterChargeOccurrenceHandler) Register(
 			return chargeUndecided(CarrierJudgmentUnavailable, continuation), nil
 		}
 		if judgedSelf {
-			return RegisterChargeOccurrenceResult{outcome: ChargeOccurrenceNotApplicable, detail: ActualCarrierJudgedSelfOperated}, nil
+			return handler.selfOperated(ctx, key, continuation, ActualCarrierJudgedSelfOperated)
 		}
 	}
 
@@ -343,12 +343,14 @@ func (handler *RegisterChargeOccurrenceHandler) Register(
 	return RegisterChargeOccurrenceResult{outcome: ChargeOccurrenceRegistered, record: record, hasRecord: true}, nil
 }
 
-// selfOperated 答声明自营的那一格。册上已有同一件事的发生项时答冲突并回显它：同一件事不能既有外部成本又不适用，
-// 要改的是先前那一次登记（更正走有效性修订），不是这一次声明。
+// selfOperated 答自营的两格（声明自营、实际承运商判为自营）。册上已有同一件事的发生项时答冲突并回显它：同一件事
+// 不能既有外部成本又不适用，要改的是先前那一次登记（更正走有效性修订），不是这一次答复。判断那一格同样先问册：
+// 承运商判断可以在登记之后才改判成自营法人，那时直接答不适用，就把册上那一份外部成本静默地说成了没有。
 func (handler *RegisterChargeOccurrenceHandler) selfOperated(
 	ctx context.Context,
 	key ports.ChargeOccurrenceKey,
 	continuation string,
+	detail ChargeOccurrenceDetail,
 ) (RegisterChargeOccurrenceResult, error) {
 	existing, found, err := handler.deps.Occurrences.FindByKey(ctx, key)
 	if err != nil {
@@ -357,7 +359,7 @@ func (handler *RegisterChargeOccurrenceHandler) selfOperated(
 	if found {
 		return RegisterChargeOccurrenceResult{outcome: ChargeOccurrenceConflict, record: existing, hasRecord: true}, nil
 	}
-	return RegisterChargeOccurrenceResult{outcome: ChargeOccurrenceNotApplicable, detail: SelfOperatedDeclared}, nil
+	return RegisterChargeOccurrenceResult{outcome: ChargeOccurrenceNotApplicable, detail: detail}, nil
 }
 
 // segmentJudgedSelfOperated 问这一段当前的实际承运商判断是不是自营法人（ADR-0098 决定三的第二种读法）。没有判断、

@@ -442,6 +442,19 @@ func TestMissingProcurementIsNotAcceptedWhileOnlyDeclaredOrJudgedSelfOperationIs
 		}
 	})
 
+	t.Run("a carrier judged self operated after registration is a conflict", func(t *testing.T) {
+		rig := newOccurrenceRig(t)
+		rig.register(t, actualFulfillmentCommand(t))
+		rig.judgments = judgedCarrier(t, domain.OwnOperatingLegalEntity, trunkLegalEntity)
+		result := rig.register(t, actualFulfillmentCommand(t))
+		if result.Outcome() != application.ChargeOccurrenceConflict {
+			t.Fatalf("outcome = %q, want CONFLICT", result.Outcome())
+		}
+		if _, present := result.Record(); !present {
+			t.Fatal("冲突没有回显册上原有的那一项")
+		}
+	})
+
 	t.Run("declaring self operation over a registered occurrence is a conflict", func(t *testing.T) {
 		rig := newOccurrenceRig(t)
 		rig.register(t, actualFulfillmentCommand(t))
