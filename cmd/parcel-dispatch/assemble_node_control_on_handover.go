@@ -14,7 +14,7 @@ import (
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 )
 
-// nodeControlOnHandoverUndecidedSentinels 只给「交接 → NO 节点控制转出」这一路（ADR-0214 决定六）。与同一封信上其余各路的名单分开
+// nodeControlOnHandoverUndecidedSentinels 只给「交接 → NO 节点控制转出与转入」这一路（ADR-0214 决定六）。与同一封信上其余各路的名单分开
 // 列：各路各记各的 inbox 账，本路只会停在交接登记册上，合用一份会把别路的格子也宣布成「等依赖」。
 //
 // 不在名单里：notf.ErrControlTransferDefect（信封键过不了本上下文的构造门、编排答出封闭集合以外的格）、
@@ -24,8 +24,9 @@ var nodeControlOnHandoverUndecidedSentinels = []error{
 	notf.ErrControlTransferUndecided,
 }
 
-// transferNodeControlOnHandoverConsumer 接 TF 权威交接登记 → NO 节点控制转出（ADR-0214，UC-NO-005）：信封只带交接键，消费侧适配器按
-// 键读回那一版，编排按正式包裹身份对上作业实物、取实物锁、转出它此刻唯一在身的控制或入账不推进。
+// transferNodeControlOnHandoverConsumer 接 TF 权威交接登记 → NO 节点控制推进（ADR-0214，UC-NO-005）：信封只带交接键，消费侧适配器按
+// 键读回那一版，编排按正式包裹身份对上作业实物、取实物锁、转出它此刻唯一在身的控制，再在声明的接收节点立 HANDOVER_IN 控制；
+// 推进不了的入账不推进。转入一半没有自己的未决：它与转出读的是同一版交接，读不动时两半一起停。
 //
 // 不另包事务：消费门已在 inbox 那一笔事务里调处理方，实物锁、转移行与 inbox 的已处理同笔提交；同一 ctx 带着同一笔。转移册与对象认法
 // 是同一只适配器：两问都读收寄册与转移册。
