@@ -131,6 +131,16 @@ func (restriction RegulatoryRestriction) Current() bool {
 	return !restriction.effectiveAt.IsZero() && restriction.releasedAt.IsZero()
 }
 
+// InForceAt 报告限制在给定业务时点是否有效：那一刻已生效、且尚未解除。动作准入判断按动作发生的时点问
+// （ADR-0206）——离线补登的出发事后才到，若按「此刻」判，一条在出发之后才解除的限制会被读成当时就不在，
+// 违规出发就成了放行。
+func (restriction RegulatoryRestriction) InForceAt(at time.Time) bool {
+	if restriction.effectiveAt.IsZero() || at.IsZero() || at.Before(restriction.effectiveAt) {
+		return false
+	}
+	return restriction.releasedAt.IsZero() || at.Before(restriction.releasedAt)
+}
+
 // Release 报告解除依据与时刻，只在已解除的限制上给出。
 func (restriction RegulatoryRestriction) Release() (RegulatoryReleaseReference, time.Time, bool) {
 	return restriction.releasedBy, restriction.releasedAt, !restriction.releasedAt.IsZero()
@@ -168,12 +178,37 @@ func JudgeActionAdmissibility(
 	scope DecisionScopeReference,
 	restrictions []RegulatoryRestriction,
 ) (ActionAdmissibility, error) {
+	return judgeAdmissibility(action, scope, restrictions, RegulatoryRestriction.Current)
+}
+
+// JudgeActionAdmissibilityAt 同上，但按给定业务时点取有效限制（InForceAt）。两者共用一份折法，只换「哪条
+// 限制算数」：同一决策只在 judgeAdmissibility 一处定义。
+func JudgeActionAdmissibilityAt(
+	action GuardedAction,
+	scope DecisionScopeReference,
+	restrictions []RegulatoryRestriction,
+	at time.Time,
+) (ActionAdmissibility, error) {
+	if at.IsZero() {
+		return ActionAdmissibility{}, ErrInvalidAdmissibility
+	}
+	return judgeAdmissibility(action, scope, restrictions, func(restriction RegulatoryRestriction) bool {
+		return restriction.InForceAt(at)
+	})
+}
+
+func judgeAdmissibility(
+	action GuardedAction,
+	scope DecisionScopeReference,
+	restrictions []RegulatoryRestriction,
+	inForce func(RegulatoryRestriction) bool,
+) (ActionAdmissibility, error) {
 	if !action.valid() || !scope.valid() {
 		return ActionAdmissibility{}, ErrInvalidAdmissibility
 	}
 	blocked := make([]RestrictionID, 0, len(restrictions))
 	for _, restriction := range restrictions {
-		if !restriction.Current() || restriction.scope != scope {
+		if !inForce(restriction) || restriction.scope != scope {
 			continue
 		}
 		for _, constrained := range restriction.constrains {

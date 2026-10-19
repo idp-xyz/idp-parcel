@@ -175,69 +175,25 @@ func (handler *VerifyReleaseGateHandler) Handle(
 		return VerifyReleaseGateResult{outcome: GateVerificationNotAccepted}, nil
 	}
 
-	findings, configured, err := handler.deps.Conditions.LoadPreconditionFindings(
-		ctx, command.TenantID, command.Scope, command.Action, command.Boundary)
+	assessment, err := assessReleaseGate(ctx, releaseGateSources{
+		conditions:        handler.deps.Conditions,
+		dutyRules:         handler.deps.DutyRules,
+		dutyVerifications: handler.deps.DutyVerifications,
+	}, command.TenantID, command.Scope, command.Action, command.Boundary)
 	if err != nil {
-		return gateUndecided(GateConditionViewUnavailable), nil
+		return VerifyReleaseGateResult{}, err
 	}
-	if !configured {
-		return gateUndecided(GateCatalogNotConfigured), nil
+	if assessment.reason != VerifyGateUndecidedReasonNone {
+		return gateUndecided(assessment.reason), nil
 	}
-
-	rule, found, err := handler.deps.DutyRules.LoadDutyPaymentGateRule(
-		ctx, command.TenantID, command.Scope, command.Action, command.Boundary)
-	if err != nil {
-		return gateUndecided(DutyPaymentGateRuleViewUnavailable), nil
-	}
-	if !found {
-		return gateUndecided(DutyPaymentGateRuleNotConfigured), nil
-	}
-	for _, finding := range findings {
-		if finding.Precondition == domain.DutyPaymentPrecondition {
-			// 这一道登规则不登认定（ADR-0137 决定三）；册上两样都有，说的是两件事，等登记方收掉
-			// 认定那一行——不替它选一边。
-			return gateUndecided(DutyPaymentFindingRegisteredBesideRule), nil
-		}
-	}
-
-	var reading domain.DutyPaymentGateReading
-	applied := false
-	if !rule.NotAPrecondition() {
-		record, found, err := handler.deps.DutyVerifications.LoadCurrentDutyVerification(ctx, command.TenantID, command.Scope)
-		if err != nil {
-			return gateUndecided(DutyVerificationViewUnavailable), nil
-		}
-		if !found {
-			return gateUndecided(DutyVerificationAbsent), nil
-		}
-		reading, err = rule.Judge(record.Verification)
-		switch {
-		case errors.Is(err, domain.ErrDutyPaymentGateUndecided):
-			return gateUndecided(DutyVerificationPending), nil
-		case err != nil:
-			// 规则与核对都经领域构造把过门，走到这里是编程错误，不折成任何业务格。
-			return VerifyReleaseGateResult{}, err
-		}
-		reading.Verification.Version = record.Key.Digest
-		findings = append(findings, domain.PreconditionFinding{
-			Precondition: domain.DutyPaymentPrecondition,
-			State:        reading.State,
-		})
-		applied = true
-	}
-
-	conclusion, err := domain.FoldGateConclusion(findings)
-	if err != nil {
+	if assessment.foldRefused {
 		return VerifyReleaseGateResult{outcome: GateVerificationNotAccepted}, nil
 	}
-	preconditions := make([]domain.PreconditionReference, 0, len(findings))
-	for _, finding := range findings {
-		preconditions = append(preconditions, finding.Precondition)
-	}
+	findings, reading, applied := assessment.findings, assessment.reading, assessment.applied
 
 	gate, err := domain.VerifyReleaseGate(
 		command.Scope, command.Action, command.Boundary,
-		preconditions, conclusion, handler.deps.Clock.Now())
+		assessment.preconditions(), assessment.conclusion, handler.deps.Clock.Now())
 	if err != nil {
 		return VerifyReleaseGateResult{outcome: GateVerificationNotAccepted}, nil
 	}
@@ -297,4 +253,107 @@ func (handler *VerifyReleaseGateHandler) handOffGate(
 		return ""
 	}
 	return "CONT-GATE/" + key.Scope.String() + "/" + key.Action.String()
+}
+
+// releaseGateSources 是一道门禁读数要问的三口。放行门禁核对与动作准入判断（ADR-0206）各自把自己那三口交进来，
+// 读法只在 assessReleaseGate 一处定义——两条编排各写一遍，就是同一道门两种判法。
+type releaseGateSources struct {
+	conditions        ports.GateConditionView
+	dutyRules         ports.DutyPaymentGateRuleView
+	dutyVerifications ports.CurrentDutyVerificationView
+}
+
+// releaseGateAssessment 是一道门禁读到哪一步、读出了什么。reason 非零即停在那个停点（含依赖读不动）；
+// foldRefused 说认定清单折不出结论（读回的认定不合法），核对编排把它答成未受理，与此前一字不差。
+type releaseGateAssessment struct {
+	reason      VerifyGateUndecidedReason
+	foldRefused bool
+	findings    []domain.PreconditionFinding
+	conclusion  domain.GateConclusion
+	reading     domain.DutyPaymentGateReading
+	applied     bool
+}
+
+func (assessment releaseGateAssessment) preconditions() []domain.PreconditionReference {
+	preconditions := make([]domain.PreconditionReference, 0, len(assessment.findings))
+	for _, finding := range assessment.findings {
+		preconditions = append(preconditions, finding.Precondition)
+	}
+	return preconditions
+}
+
+// assessReleaseGate 读一道门禁：盘前置条件逐项判断（目录未登记即停——没有清单的门禁判断无从复核；空清单是
+// 「此动作在此边界不受门禁」的如实答案）→ 取「税费付款」那一道的登记规则（没有即「规则未配置」停点，不取任何
+// 默认折法）→ 规则要读核对时取当前那一版、按接受集合折出这一道（无核对 / 三态待确认或冲突各自停点）→ 领域
+// 折叠（冲突压过满足与未满足）。error 只留给编程错误。
+func assessReleaseGate(
+	ctx context.Context,
+	sources releaseGateSources,
+	tenant domain.TenantID,
+	scope domain.DecisionScopeReference,
+	action domain.GuardedAction,
+	boundary domain.CustomsProcedureReference,
+) (releaseGateAssessment, error) {
+	stop := func(reason VerifyGateUndecidedReason) (releaseGateAssessment, error) {
+		return releaseGateAssessment{reason: reason}, nil
+	}
+	findings, configured, err := sources.conditions.LoadPreconditionFindings(ctx, tenant, scope, action, boundary)
+	if err != nil {
+		return stop(GateConditionViewUnavailable)
+	}
+	if !configured {
+		return stop(GateCatalogNotConfigured)
+	}
+
+	rule, found, err := sources.dutyRules.LoadDutyPaymentGateRule(ctx, tenant, scope, action, boundary)
+	if err != nil {
+		return stop(DutyPaymentGateRuleViewUnavailable)
+	}
+	if !found {
+		return stop(DutyPaymentGateRuleNotConfigured)
+	}
+	for _, finding := range findings {
+		if finding.Precondition == domain.DutyPaymentPrecondition {
+			// 这一道登规则不登认定（ADR-0137 决定三）；册上两样都有，说的是两件事，等登记方收掉
+			// 认定那一行——不替它选一边。
+			return stop(DutyPaymentFindingRegisteredBesideRule)
+		}
+	}
+
+	var reading domain.DutyPaymentGateReading
+	applied := false
+	if !rule.NotAPrecondition() {
+		record, found, err := sources.dutyVerifications.LoadCurrentDutyVerification(ctx, tenant, scope)
+		if err != nil {
+			return stop(DutyVerificationViewUnavailable)
+		}
+		if !found {
+			return stop(DutyVerificationAbsent)
+		}
+		reading, err = rule.Judge(record.Verification)
+		switch {
+		case errors.Is(err, domain.ErrDutyPaymentGateUndecided):
+			return stop(DutyVerificationPending)
+		case err != nil:
+			// 规则与核对都经领域构造把过门，走到这里是编程错误，不折成任何业务格。
+			return releaseGateAssessment{}, err
+		}
+		reading.Verification.Version = record.Key.Digest
+		findings = append(findings, domain.PreconditionFinding{
+			Precondition: domain.DutyPaymentPrecondition,
+			State:        reading.State,
+		})
+		applied = true
+	}
+
+	conclusion, err := domain.FoldGateConclusion(findings)
+	if err != nil {
+		return releaseGateAssessment{foldRefused: true}, nil
+	}
+	return releaseGateAssessment{
+		findings:   findings,
+		conclusion: conclusion,
+		reading:    reading,
+		applied:    applied,
+	}, nil
 }
