@@ -175,20 +175,8 @@ func (request ShipmentRequest) DisposeUnderAuthority(spec DisposeUnderAuthorityS
 	if !spec.Disposition.recorded() {
 		return ShipmentRequest{}, ErrInvalidAuthorizedDisposition
 	}
-	if request.decisionFormed {
-		return ShipmentRequest{}, ErrDecisionAlreadyFormed
-	}
-	if request.state != ShipmentRequestSubmitted {
-		return ShipmentRequest{}, ErrInvalidShipmentRequest
-	}
-	if !request.acceptanceTask.running() {
-		return ShipmentRequest{}, ErrAcceptanceTaskComplete
-	}
-	if request.acceptanceTask.authorizedDisposition.recorded() {
-		return ShipmentRequest{}, ErrAuthorizedDispositionAlreadyRecorded
-	}
-	if request.acceptanceTask.waitingOn != ResumeByAuthorizedDisposition {
-		return ShipmentRequest{}, ErrNotWaitingOnAuthorizedDisposition
+	if err := request.AuthorizedDispositionAdmissible(); err != nil {
+		return ShipmentRequest{}, err
 	}
 
 	switch spec.Disposition.choice {
@@ -212,4 +200,26 @@ func (request ShipmentRequest) DisposeUnderAuthority(spec DisposeUnderAuthorityS
 	}
 	request.acceptanceTask.authorizedDisposition = spec.Disposition
 	return request, nil
+}
+
+// AuthorizedDispositionAdmissible 只读地答「此刻还能不能对这份委托作授权处置」，答案就是 DisposeUnderAuthority 的
+// 前置，各项的含义与先后见那里——转移自己先过这一道，两处说不出两套话。编排在签发决定标识之前问它，理由同
+// ActiveRejectionAdmissible：`拒绝`去向撞上前置还去领标识，一次重放就白耗一个稀缺身份。
+func (request ShipmentRequest) AuthorizedDispositionAdmissible() error {
+	if request.decisionFormed {
+		return ErrDecisionAlreadyFormed
+	}
+	if request.state != ShipmentRequestSubmitted {
+		return ErrInvalidShipmentRequest
+	}
+	if !request.acceptanceTask.running() {
+		return ErrAcceptanceTaskComplete
+	}
+	if request.acceptanceTask.authorizedDisposition.recorded() {
+		return ErrAuthorizedDispositionAlreadyRecorded
+	}
+	if request.acceptanceTask.waitingOn != ResumeByAuthorizedDisposition {
+		return ErrNotWaitingOnAuthorizedDisposition
+	}
+	return nil
 }

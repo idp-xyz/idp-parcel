@@ -354,6 +354,30 @@ func TestEveryDispositionRefusalLandsOnItsOwnOutcome(t *testing.T) {
 		fixture.assertNothingWritten(t)
 	})
 
+	t.Run("rejection replayed", func(t *testing.T) {
+		fixture := newDispositionFixture(t)
+		first, err := fixture.handler.Handle(context.Background(), fixture.command(t, domain.DisposeByRejection))
+		if err != nil || first.Outcome() != application.AuthorizedDispositionRecorded {
+			t.Fatalf("first = %q, err = %v; want RECORDED", first.Outcome(), err)
+		}
+		fixture.requests.request = *fixture.requests.saved
+
+		replay, err := fixture.handler.Handle(context.Background(), fixture.command(t, domain.DisposeByRejection))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if replay.Outcome() != application.AuthorizedDispositionTaskAlreadyClosed {
+			t.Fatalf("outcome = %q, want TASK_ALREADY_CLOSED", replay.Outcome())
+		}
+		decision, _ := replay.AcceptanceDecision()
+		if trail, active := decision.ActiveRejection(); !active || trail.Decider().String() != "CREDIT-OFFICER-1" {
+			t.Fatalf("trail = %+v (active=%v); the replay must read the first rejection", trail, active)
+		}
+		if fixture.identities.issued != 1 {
+			t.Fatalf("issued %d decision identities, want 1——重放消耗了稀缺身份", fixture.identities.issued)
+		}
+	})
+
 	t.Run("not waiting on disposition", func(t *testing.T) {
 		fixture := newDispositionFixture(t)
 		fixture.requests.request = submittedRequest(t)
@@ -452,11 +476,11 @@ func (fixture *dispositionFixture) command(
 	}
 }
 
-// assertNothingWritten 钉「未获授权 / 撞门的那几格什么也不落库」：不保存、不释放。决定标识不在这里断言：
-// 授权那三格在签发之前就答了（各自另断），撞领域门的几格与主动拒绝同形——标识在授权之后、转移之前签发，
-// 撞上已成立的决定时已经领过一个。
+// assertNothingWritten 钉「未获授权 / 撞门的那几格什么也不落库」：不签决定标识、不保存、不释放。撞领域门的几格
+// 也不签：前置在签发之前判出（ADR-0183 复核记录二「认在签发标识之前，重放不消耗标识」）。
 func (fixture *dispositionFixture) assertNothingWritten(t *testing.T) {
 	t.Helper()
+	fixture.assertNoIdentityIssued(t)
 	if fixture.requests.saved != nil {
 		t.Fatal("这一格不该碰聚合，却保存了")
 	}
@@ -465,11 +489,11 @@ func (fixture *dispositionFixture) assertNothingWritten(t *testing.T) {
 	}
 }
 
-// assertNoIdentityIssued 钉「授权先于签发」：一次未获授权的尝试不该消耗一个本上下文签发的稀缺身份。
+// assertNoIdentityIssued 钉「先判后签」：一次未获授权、或撞上处置前置的尝试都不该消耗一个本上下文签发的稀缺身份。
 func (fixture *dispositionFixture) assertNoIdentityIssued(t *testing.T) {
 	t.Helper()
 	if fixture.identities.issued != 0 {
-		t.Fatalf("issued %d decision identities, want 0——授权之前不得签发决定标识", fixture.identities.issued)
+		t.Fatalf("issued %d decision identities, want 0——本轮不形成决定，不得签发决定标识", fixture.identities.issued)
 	}
 }
 

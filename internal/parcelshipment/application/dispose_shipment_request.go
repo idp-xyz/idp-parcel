@@ -212,10 +212,13 @@ func (handler *DisposeShipmentRequestHandler) Handle(
 		// 必带；走到这里还缺就是装配或编程错误。
 		return DisposeShipmentRequestResult{}, fmt.Errorf("dispose shipment request: %w", err)
 	}
+	if err := request.AuthorizedDispositionAdmissible(); err != nil {
+		return handler.inadmissible(request, current, err)
+	}
 	spec := domain.DisposeUnderAuthoritySpec{Disposition: disposition}
 	if command.Choice == domain.DisposeByRejection {
-		// 决定标识只在`拒绝`去向签发，且在授权之后：一次未获授权的尝试不该消耗一个本上下文签发的
-		// 稀缺身份；`交客户补充`不形成决定，不领标识。
+		// 决定标识只在`拒绝`去向签发，且在授权与处置前置都判过之后：一次未获授权、或撞上前置（重放、
+		// 换去向重来）的尝试都不该消耗一个本上下文签发的稀缺身份；`交客户补充`不形成决定，不领标识。
 		decisionID, err := handler.deps.Identities.NextAcceptanceDecisionID(ctx)
 		if err != nil {
 			return DisposeShipmentRequestResult{}, fmt.Errorf("dispose shipment request: decision identity: %w", err)
@@ -225,34 +228,8 @@ func (handler *DisposeShipmentRequestHandler) Handle(
 
 	disposed, err := request.DisposeUnderAuthority(spec)
 	if err != nil {
-		switch {
-		case errors.Is(err, domain.ErrAuthorizedDispositionAlreadyRecorded):
-			existing, _ := task.AuthorizedDisposition()
-			return DisposeShipmentRequestResult{
-				outcome:        AuthorizedDispositionAlreadyRecorded,
-				state:          request.State(),
-				disposition:    existing,
-				hasDisposition: true,
-				currentVersion: current,
-			}, nil
-		case errors.Is(err, domain.ErrDecisionAlreadyFormed), errors.Is(err, domain.ErrAcceptanceTaskComplete):
-			decision, formed := request.AcceptanceDecision()
-			return DisposeShipmentRequestResult{
-				outcome:        AuthorizedDispositionTaskAlreadyClosed,
-				state:          request.State(),
-				decision:       decision,
-				hasDecision:    formed,
-				currentVersion: current,
-			}, nil
-		case errors.Is(err, domain.ErrNotWaitingOnAuthorizedDisposition):
-			return DisposeShipmentRequestResult{
-				outcome:        AuthorizedDispositionNotWaiting,
-				state:          request.State(),
-				currentVersion: current,
-			}, nil
-		default:
-			return DisposeShipmentRequestResult{}, fmt.Errorf("dispose under authority: %w", err)
-		}
+		// 前置刚问过，这里再撞上只会是防御；转移的答复仍按同一张表译。
+		return handler.inadmissible(request, current, err)
 	}
 
 	saved, err := handler.deps.Requests.Save(ctx, command.Identity, disposed)
@@ -281,6 +258,42 @@ func (handler *DisposeShipmentRequestHandler) Handle(
 		currentVersion: current,
 		compensation:   handler.releaseOccupation(ctx, command),
 	}, nil
+}
+
+// inadmissible 把处置前置的领域答复译成本命令的结果格，分格理由见 AuthorizedDispositionOutcome。
+func (handler *DisposeShipmentRequestHandler) inadmissible(
+	request domain.ShipmentRequest,
+	current domain.SubmissionVersionID,
+	err error,
+) (DisposeShipmentRequestResult, error) {
+	switch {
+	case errors.Is(err, domain.ErrAuthorizedDispositionAlreadyRecorded):
+		existing, _ := request.AcceptanceDecisionTask().AuthorizedDisposition()
+		return DisposeShipmentRequestResult{
+			outcome:        AuthorizedDispositionAlreadyRecorded,
+			state:          request.State(),
+			disposition:    existing,
+			hasDisposition: true,
+			currentVersion: current,
+		}, nil
+	case errors.Is(err, domain.ErrDecisionAlreadyFormed), errors.Is(err, domain.ErrAcceptanceTaskComplete):
+		decision, formed := request.AcceptanceDecision()
+		return DisposeShipmentRequestResult{
+			outcome:        AuthorizedDispositionTaskAlreadyClosed,
+			state:          request.State(),
+			decision:       decision,
+			hasDecision:    formed,
+			currentVersion: current,
+		}, nil
+	case errors.Is(err, domain.ErrNotWaitingOnAuthorizedDisposition):
+		return DisposeShipmentRequestResult{
+			outcome:        AuthorizedDispositionNotWaiting,
+			state:          request.State(),
+			currentVersion: current,
+		}, nil
+	default:
+		return DisposeShipmentRequestResult{}, fmt.Errorf("dispose under authority: %w", err)
+	}
 }
 
 // releaseOccupation 在处置落库后按原关联解除本版本的资金控制，形照 RejectShipmentRequestHandler 的同名
