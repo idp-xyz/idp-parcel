@@ -1,7 +1,7 @@
 # 31 演示租户的合成集成客户端：演示发行方要签得出客户端凭据令牌
 
 Category: enhancement
-Status: ready-for-agent——2026-10-18 Claude Code 会话立并分诊（用户「你作为业务和系统专家自决……解决所有的问题」授权）。从 [30](./30-demo-tenant-registers-work-devices-and-work-fact-grants.md) 拆出：30 只做作业事实那一半。
+Status: 完工，待评审与进 main——2026-10-18 Claude Code 会话立、分诊并实施，分支 `claude-psb31`。立票时（用户「你作为业务和系统专家自决……解决所有的问题」授权）。从 [30](./30-demo-tenant-registers-work-devices-and-work-fact-grants.md) 拆出：30 只做作业事实那一半。
 Blocked by: 无
 地盘：`scripts/demo-seeds/operator-channel/`（`dex.yaml`、`compose.yaml`、新取令牌脚本）；`scripts/demo-seeds/data/access/` 新增的集成客户端行文件；`scripts/demo-seeds/seed.sh` 只加调用行（照 30 与 `idp-parcel-9b` 的约定，加完把 SHA 告诉它）；[合成演示动线](../../../docs/design/synthetic-demo-journey-script.md)「前置」。
 出处：[ADR-0149](../../../docs/adr/0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md) 决定三；[ADR-0150](../../../docs/adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md) 决定一、二；[ADR-0180](../../../docs/adr/0180-admission-scope-tenant-mapping-is-an-access-identity-register-and-self-authority-is-a-deployment-parameter.md)。
@@ -34,3 +34,24 @@ Blocked by: 无
 
 - 55432 上自己命名的一次性库干净灌种子，退 0。
 - 照动线「前置」起进程，带集成客户端令牌：外部结果、凭证、资金事实各口越过渠道，答业务校验或业务结果，不再是 `403`。证据只记 `S`。走完删库。
+
+## 完成记录（2026-10-18，Claude Code 会话，分支 `claude-psb31`）
+
+- 走的是退路：另起一只发行方，不换操作者族那只。
+  - 补核过：v2.45.1 在服务端列上客户端凭据、再加特性开关，仍答 `unsupported_grant_type`。v2.46.0 不开特性开关也签得出。
+  - 操作者族那只钉在 v2.45.1 有它的理由：v2.46.0 口令用户换刷新令牌会把存储锁死。所以不能整只升级。
+- 发行方：`compose.yaml` 加第二个服务 `integration-issuer`（`ghcr.io/dexidp/dex:v2.46.0`，`127.0.0.1:5558`），配置 `integration-dex.yaml`。
+  - 只开客户端凭据许可，不登口令用户。
+  - 受众客户端 `idp-parcel-integration` 以 `trustedPeers` 认两台合成客户端。它们取令牌时带 `audience:server:client_id:idp-parcel-integration`，令牌的 `aud` 含本产品的集成受众，也含客户端自己。
+  - 两族受众不同，一族的令牌过不了另一族的校验（ADR-0149 决定三）。
+- 客户端与授予：
+  - `data/access/05-integration-clients.json`：合成报关服务商、合成银行各一台。主体取这只发行方签出的 `sub`，要求证书绑定令牌填 `false`。
+  - `06-integration-client-grants.json`：报关服务商授外部结果与监管凭证，银行授外部资金事实。
+  - `seed.sh` 加两行调用。
+- 取令牌脚本 `operator-channel/integration-token.sh`。README 加「集成客户端渠道」一节，组成表补两份文件。动线「前置」补三件参数，「取证」那句改成能越过渠道的说法。
+- 实走（`S`，一次性库 `c8_walk31`，走完已删）：
+  - 灌种子退 0，两台客户端与三条授予都 `RECORDED`。
+  - 带集成客户端三件起 `parcel-api`，日志出现集成客户端发行方已配置那一行。
+  - 报关服务商打外部结果答 `200 SOURCE_NOT_ACCEPTED`，打监管凭证登记答 `400 MALFORMED_REQUEST`；银行打外部资金事实登记答 `400 MALFORMED_REQUEST`。都越过了渠道，空体走到业务受理或报文校验。
+  - 对照组：银行打外部结果、报关服务商打资金事实，都答 `403 INTEGRATION_CLIENT_NOT_GRANTED`；操作者令牌与不带令牌都答 `401 INTEGRATION_CLIENT_CREDENTIAL_REJECTED`。
+- 产品代码一处未改。

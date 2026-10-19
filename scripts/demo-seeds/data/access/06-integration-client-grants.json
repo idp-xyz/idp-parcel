@@ -1,0 +1,29 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "grants": [
+    {
+      "grantId": "SYN-GRANT-INTEGRATION-BROKER-EXTERNAL-RESULT-01",
+      "issuer": "http://127.0.0.1:5558/dex",
+      "subject": "CiFzeW4taW50ZWdyYXRpb24tY3VzdG9tcy1icm9rZXItMDE",
+      "factType": "CUSTOMS_EXTERNAL_RESULT",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-INTEGRATION-GRANT-BASIS-01"
+    },
+    {
+      "grantId": "SYN-GRANT-INTEGRATION-BROKER-CREDENTIAL-01",
+      "issuer": "http://127.0.0.1:5558/dex",
+      "subject": "CiFzeW4taW50ZWdyYXRpb24tY3VzdG9tcy1icm9rZXItMDE",
+      "factType": "REGULATORY_CREDENTIAL",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-INTEGRATION-GRANT-BASIS-01"
+    },
+    {
+      "grantId": "SYN-GRANT-INTEGRATION-BANK-FUNDS-01",
+      "issuer": "http://127.0.0.1:5558/dex",
+      "subject": "ChdzeW4taW50ZWdyYXRpb24tYmFuay0wMQ",
+      "factType": "EXTERNAL_FUNDS_FACT",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-INTEGRATION-GRANT-BASIS-01"
+    }
+  ]
+}

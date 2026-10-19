@@ -1,0 +1,46 @@
+# 演示环境集成客户端族的发行方（票 product-strategy-boundary/31）：只签 OAuth 2.0 客户端凭据许可的令牌，parcel-api
+# 按它公布的公钥集校验（ADR-0149 决定三）。只为隔离演示环境准备，不是部署描述符；客户端口令是合成值。
+#
+# 与操作者族的发行方（dex.yaml）分开起：两族的信任锚是两组部署参数，受众也不同，一族的令牌过不了另一族的校验。
+issuer: http://127.0.0.1:5558/dex
+
+storage:
+  type: memory
+
+web:
+  http: 0.0.0.0:5556
+
+oauth2:
+  grantTypes:
+    - client_credentials
+  skipApprovalScreen: true
+
+staticClients:
+  # 本产品在这只发行方那里的受众。它自己不取令牌；两只合成客户端取令牌时带 audience:server:client_id 范围，
+  # 令牌的 aud 才含它——parcel-api 的集成客户端受众参数就取这一串。trustedPeers 列的是被允许这样做的客户端。
+  - id: idp-parcel-integration
+    name: 包裹网络集成接口（演示受众）
+    secret: syn-integration-audience-secret
+    redirectURIs:
+      - http://127.0.0.1/unused
+    trustedPeers:
+      - syn-integration-customs-broker-01
+      - syn-integration-bank-01
+  # 一个客户端只代表一个外部方（accessidentity.IntegrationClientBinding）：报关服务商与银行各一台。
+  - id: syn-integration-customs-broker-01
+    name: 合成报关服务商 01
+    secret: syn-customs-broker-secret
+    redirectURIs:
+      - http://127.0.0.1/unused
+    grantTypes:
+      - client_credentials
+  - id: syn-integration-bank-01
+    name: 合成银行 01
+    secret: syn-bank-secret
+    redirectURIs:
+      - http://127.0.0.1/unused
+    grantTypes:
+      - client_credentials
+
+# Dex 至少要一只连接器才肯起；这里不登任何口令用户，口令连接器只是占位。
+enablePasswordDB: true

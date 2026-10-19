@@ -32,3 +32,21 @@ services:
       timeout: 3s
       retries: 20
       start_period: 3s
+
+  integration-issuer:
+    # 集成客户端族的发行方（票 product-strategy-boundary/31，integration-dex.yaml）。用 v2.46.0：v2.45.1 不认客户端凭据
+    # 许可，任何配置下都答 unsupported_grant_type（实测）。上面那条 v2.46.0 存储锁死的毛病出在口令用户换刷新令牌，
+    # 这只发行方不登口令用户、客户端凭据许可也不发刷新令牌，碰不到它。
+    image: ghcr.io/dexidp/dex:v2.46.0
+    container_name: idp-parcel-demo-integration-issuer
+    command: ["dex", "serve", "/etc/dex/dex.yaml"]
+    volumes:
+      - ./integration-dex.yaml:/etc/dex/dex.yaml:ro
+    ports:
+      - "127.0.0.1:5558:5556"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5556/dex/keys"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 3s
