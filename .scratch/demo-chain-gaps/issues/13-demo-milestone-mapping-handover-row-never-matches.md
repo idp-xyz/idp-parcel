@@ -36,3 +36,4 @@ none
 - 演示映射 v1 就地改：交接那一行的类型词改为 `handover-handed-over`；拒收与待确认不映，照未归类。已灌过的库要 `--reset`，种子 README 那一句同步。
 - 新用例 `TestAHandedOverTransportHandoverClassifiesAsInTransitUnderTheDemoMapping`（`cmd/parcel-dispatch`，真库）：经生产翻译与登记用例登真种子文件，一封已交出的交接经生产路由表一拍，归 `IN_TRANSIT`。把种子换回旧行，这条转红（实测）。
 - 证据级别 `S`。
+- 只改了种子一行与一条用例，没跑全量：推送 tip 上跑了 `internal/architecture`、`cmd/parcel-dispatch`、`scripts/demo-seeds/...`、`internal/visibilityexception/...`，17 包 ok。与 TF 链方案及立票同一次推送。
