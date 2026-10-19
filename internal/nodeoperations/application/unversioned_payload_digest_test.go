@@ -88,8 +88,8 @@ func TestNewRecordsAreStoredUnderNOC1(t *testing.T) {
 	}
 }
 
-// Covers: 认不出的形状版本不答冲突——按该处读失败的既有答复作答（承接口是存储未决）。
-func TestAnUnknownStoredShapeIsUndecidedNotAConflict(t *testing.T) {
+// Covers: 认不出的形状版本不答冲突——按该处读失败的既有答复作答（承接口是交回 error，ADR-0186 决定三的同形）。
+func TestAnUnknownStoredShapeIsNoAnswerNotAConflict(t *testing.T) {
 	fixture := newCollabFixture(t)
 	command := acceptCommand(t)
 	wantOutcome(t, mustAccept(fixture, command).Outcome(), nil, application.CollaborationDecided)
@@ -100,9 +100,8 @@ func TestAnUnknownStoredShapeIsUndecidedNotAConflict(t *testing.T) {
 	rewrite("NOC-9:9938edb9fffaab6f67866d4ed949ee826323c990a1a5ffc322c9b7f3ad19b430")
 
 	result, err := fixture.handler.Accept(context.Background(), command)
-	wantOutcome(t, result.Outcome(), err, application.CollaborationUndecided)
-	if result.UndecidedReason() != application.AcceptanceStoreUnavailable {
-		t.Fatalf("reason = %q", result.UndecidedReason())
+	if err == nil {
+		t.Fatalf("outcome = %q，error 为 nil——认不出的形状要交回 error", result.Outcome())
 	}
 }
 

@@ -16,10 +16,15 @@ var (
 	collabRecordedAt = time.Date(2026, 8, 13, 12, 30, 0, 0, time.UTC)
 )
 
+// 两只册替身的失败注入：findErr 让每次按键读都失败；findErrs 逐次给出按键读的答复，用完即放行，好让「先读得到、
+// 撞键后读回失败」这种只坏后半程的形状能摆出来；raceOnSave 让写答`已有记录`而不落，摆出并发另一半先提交的样子。
 type acceptanceStoreDouble struct {
-	records map[string]ports.CollaborationAcceptanceRecord
-	findErr error
-	saves   int
+	records    map[string]ports.CollaborationAcceptanceRecord
+	findErr    error
+	findErrs   []error
+	saveErr    error
+	raceOnSave bool
+	saves      int
 }
 
 func newAcceptanceStore() *acceptanceStoreDouble {
@@ -34,8 +39,8 @@ func (double *acceptanceStoreDouble) FindByKey(
 	_ context.Context,
 	key ports.CollaborationAcceptanceKey,
 ) (ports.CollaborationAcceptanceRecord, bool, error) {
-	if double.findErr != nil {
-		return ports.CollaborationAcceptanceRecord{}, false, double.findErr
+	if err := nextFindErr(double.findErr, &double.findErrs); err != nil {
+		return ports.CollaborationAcceptanceRecord{}, false, err
 	}
 	record, found := double.records[acceptanceKey(key)]
 	return record, found, nil
@@ -46,7 +51,10 @@ func (double *acceptanceStoreDouble) Save(
 	record ports.CollaborationAcceptanceRecord,
 ) (ports.AcceptanceSaveOutcome, error) {
 	double.saves++
-	if _, exists := double.records[acceptanceKey(record.Key)]; exists {
+	if double.saveErr != nil {
+		return ports.AcceptanceSaveOutcome(0), double.saveErr
+	}
+	if _, exists := double.records[acceptanceKey(record.Key)]; exists || double.raceOnSave {
 		return ports.AcceptanceAlreadyDecided, nil
 	}
 	double.records[acceptanceKey(record.Key)] = record
@@ -54,9 +62,24 @@ func (double *acceptanceStoreDouble) Save(
 }
 
 type factStoreDouble struct {
-	records map[string]ports.ExecutionFactRecord
-	findErr error
-	saves   int
+	records    map[string]ports.ExecutionFactRecord
+	findErr    error
+	findErrs   []error
+	saveErr    error
+	raceOnSave bool
+	saves      int
+}
+
+func nextFindErr(always error, queued *[]error) error {
+	if always != nil {
+		return always
+	}
+	if len(*queued) == 0 {
+		return nil
+	}
+	next := (*queued)[0]
+	*queued = (*queued)[1:]
+	return next
 }
 
 func newFactStore() *factStoreDouble {
@@ -71,8 +94,8 @@ func (double *factStoreDouble) FindByKey(
 	_ context.Context,
 	key ports.ExecutionFactKey,
 ) (ports.ExecutionFactRecord, bool, error) {
-	if double.findErr != nil {
-		return ports.ExecutionFactRecord{}, false, double.findErr
+	if err := nextFindErr(double.findErr, &double.findErrs); err != nil {
+		return ports.ExecutionFactRecord{}, false, err
 	}
 	record, found := double.records[factKey(key)]
 	return record, found, nil
@@ -83,7 +106,10 @@ func (double *factStoreDouble) Save(
 	record ports.ExecutionFactRecord,
 ) (ports.ExecutionFactSaveOutcome, error) {
 	double.saves++
-	if _, exists := double.records[factKey(record.Key)]; exists {
+	if double.saveErr != nil {
+		return ports.ExecutionFactSaveOutcome(0), double.saveErr
+	}
+	if _, exists := double.records[factKey(record.Key)]; exists || double.raceOnSave {
 		return ports.ExecutionFactAlreadyRecorded, nil
 	}
 	double.records[factKey(record.Key)] = record
@@ -248,19 +274,6 @@ func TestOneDecisionPerCollaborationItem(t *testing.T) {
 			t.Fatalf("outcome = %q, want SOURCE_NOT_ACCEPTED", result.Outcome())
 		}
 	})
-
-	t.Run("a store failure is undecided", func(t *testing.T) {
-		fixture := newCollabFixture(t)
-		fixture.acceptances.findErr = errors.New("store down")
-		result, err := fixture.handler.Accept(context.Background(), acceptCommand(t))
-		if err != nil {
-			t.Fatalf("accept: %v", err)
-		}
-		if result.Outcome() != application.CollaborationUndecided ||
-			result.UndecidedReason() != application.AcceptanceStoreUnavailable {
-			t.Fatalf("outcome = %q reason = %q", result.Outcome(), result.UndecidedReason())
-		}
-	})
 }
 
 // 执行事实登记：承接为界（拒接/越权各归业务负向格，领域把门编排分格），幂等按
@@ -387,22 +400,113 @@ func TestExecutionFactsAreRecordedWithinTheDecision(t *testing.T) {
 		}
 	})
 
-	t.Run("the undecided reason set is closed", func(t *testing.T) {
-		labels := map[string]struct{}{}
-		for _, reason := range []application.CollaborationUndecidedReason{
-			application.AcceptanceStoreUnavailable, application.FactStoreUnavailable,
-		} {
-			label := reason.String()
-			if label == "" {
-				t.Fatalf("reason %d has no label", reason)
+}
+
+var errCollabStoreDown = errors.New("store down")
+
+// Covers: ADR-0186 决定三在承接口的同形（票 operator-channel/46）——承接册与执行事实册读写失败、已存摘要的形状
+// 认不出、并发读回失败，都交回 error，什么也不落、不交意图。依据是 ADR-0022「返回 error 就是没形成」与 UC-NO-001
+// 「节点协作结果未形成……不得伪装成拒绝、待补充、任务失败或执行完成」：答 2xx 的`未决`，设备收到就出队，这一次
+// 作业事实在服务端从此没有记录。
+func TestCollaborationOwnStoreFailuresFormNoAnswer(t *testing.T) {
+	accept := func(t *testing.T, fixture *collabFixture) {
+		t.Helper()
+		if result, err := fixture.handler.Accept(context.Background(), acceptCommand(t)); err != nil ||
+			result.Outcome() != application.CollaborationDecided {
+			t.Fatalf("accept = %q, %v", result.Outcome(), err)
+		}
+	}
+	record := func(t *testing.T, fixture *collabFixture) {
+		t.Helper()
+		accept(t, fixture)
+		if result, err := fixture.handler.RecordExecution(context.Background(), executeCommand(t)); err != nil ||
+			result.Outcome() != application.ExecutionRecorded {
+			t.Fatalf("record = %q, %v", result.Outcome(), err)
+		}
+	}
+	runAccept := func(t *testing.T, fixture *collabFixture) (application.CollaborationResult, error) {
+		return fixture.handler.Accept(context.Background(), acceptCommand(t))
+	}
+	runRecord := func(t *testing.T, fixture *collabFixture) (application.CollaborationResult, error) {
+		return fixture.handler.RecordExecution(context.Background(), executeCommand(t))
+	}
+	unknownShape := "NOC-9:9938edb9fffaab6f67866d4ed949ee826323c990a1a5ffc322c9b7f3ad19b430"
+
+	for _, testCase := range []struct {
+		name  string
+		setup func(t *testing.T, fixture *collabFixture)
+		run   func(t *testing.T, fixture *collabFixture) (application.CollaborationResult, error)
+	}{
+		{"承接册读不动", func(t *testing.T, fixture *collabFixture) {
+			fixture.acceptances.findErr = errCollabStoreDown
+		}, runAccept},
+		{"承接册写失败", func(t *testing.T, fixture *collabFixture) {
+			fixture.acceptances.saveErr = errCollabStoreDown
+		}, runAccept},
+		{"承接撞已有决定而读回失败", func(t *testing.T, fixture *collabFixture) {
+			fixture.acceptances.raceOnSave = true
+			fixture.acceptances.findErrs = []error{nil, errCollabStoreDown}
+		}, runAccept},
+		{"承接撞已有决定却读不回", func(t *testing.T, fixture *collabFixture) {
+			fixture.acceptances.raceOnSave = true
+		}, runAccept},
+		{"已存承接摘要的形状认不出", func(t *testing.T, fixture *collabFixture) {
+			accept(t, fixture)
+			command := acceptCommand(t)
+			_, rewrite := storedDigest(t, fixture.acceptances.records, acceptanceKey(ports.CollaborationAcceptanceKey{
+				TenantID: command.TenantID,
+				Item:     mustValue(t, domain.NewCollaborationItemReference, command.Item),
+			}), func(record *ports.CollaborationAcceptanceRecord) *string { return &record.ContentDigest })
+			rewrite(unknownShape)
+		}, runAccept},
+		{"执行时承接册读不动", func(t *testing.T, fixture *collabFixture) {
+			accept(t, fixture)
+			fixture.acceptances.findErr = errCollabStoreDown
+		}, runRecord},
+		{"执行事实册读不动", func(t *testing.T, fixture *collabFixture) {
+			accept(t, fixture)
+			fixture.facts.findErr = errCollabStoreDown
+		}, runRecord},
+		{"执行事实册写失败", func(t *testing.T, fixture *collabFixture) {
+			accept(t, fixture)
+			fixture.facts.saveErr = errCollabStoreDown
+		}, runRecord},
+		{"执行事实撞已有记录而读回失败", func(t *testing.T, fixture *collabFixture) {
+			accept(t, fixture)
+			fixture.facts.raceOnSave = true
+			fixture.facts.findErrs = []error{nil, errCollabStoreDown}
+		}, runRecord},
+		{"已存执行事实摘要的形状认不出", func(t *testing.T, fixture *collabFixture) {
+			record(t, fixture)
+			command := executeCommand(t)
+			_, rewrite := storedDigest(t, fixture.facts.records, factKey(ports.ExecutionFactKey{
+				TenantID: command.TenantID,
+				Item:     mustValue(t, domain.NewCollaborationItemReference, command.Item),
+				Unit:     mustValue(t, domain.NewHandlingUnitID, command.Unit),
+				Action:   command.Action,
+			}), func(record *ports.ExecutionFactRecord) *string { return &record.ContentDigest })
+			rewrite(unknownShape)
+		}, runRecord},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			fixture := newCollabFixture(t)
+			testCase.setup(t, fixture)
+			acceptances, facts := len(fixture.acceptances.records), len(fixture.facts.records)
+			acknowledged, executed := len(fixture.acknowledge.intents), len(fixture.executions.intents)
+
+			result, err := testCase.run(t, fixture)
+			if err == nil {
+				t.Fatalf("outcome = %q，error 为 nil——本方册失败要交回 error，不答`未决`", result.Outcome())
 			}
-			labels[label] = struct{}{}
-		}
-		if len(labels) != 2 {
-			t.Fatalf("labels collapsed into %d", len(labels))
-		}
-		if application.CollaborationUndecidedReason(len(labels)+1).String() != "" {
-			t.Fatal("第三个未决原因带了标签——封闭集合被悄悄放开")
-		}
-	})
+			if result.Outcome() != application.CollaborationOutcomeInvalid {
+				t.Fatalf("交回 error 时还带了结果格 %q", result.Outcome())
+			}
+			if len(fixture.acceptances.records) != acceptances || len(fixture.facts.records) != facts {
+				t.Fatal("没形成答案却落了册")
+			}
+			if len(fixture.acknowledge.intents) != acknowledged || len(fixture.executions.intents) != executed {
+				t.Fatal("没形成答案却交了意图")
+			}
+		})
+	}
 }
