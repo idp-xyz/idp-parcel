@@ -8,6 +8,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	tfcustoms "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/customscompliance"
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	tfapp "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
@@ -18,8 +19,14 @@ import (
 // 交付失败不翻结果——编排把它吞成续办引用后照常交回业务答案，事务照常提交，重放重发
 // 同一份；编排返回错误时整笔回滚。一个类型顶两个端点：首登与更正共用 DeliveryHandler，
 // 与 unwiredDelivery 同一个理由。
+//
+// 首登先在写事务之外问交付门禁读数，读数随交付同一笔落册（ADR-0213 决定五）；同内容重放不重问，取在册那一版的读数
+// （RecordedDeliveryGateReading 说明为什么）。读数不进写事务的理由同 transactionalHandover：关务的判断在它自己的事务里
+// 记下，嵌进来即拒；读段册、交接册在写事务里出一次 SQL 级错误，整笔进中止态，读不动反而挡住了交付落册。更正不问：
+// POD 更正照前版承继读数。
 type transactionalDelivery struct {
 	transactor bentoapp.Transactor
+	gate       *tfapp.DeliveryGateReader
 	inner      *tfapp.RegisterEffectiveDeliveryHandler
 }
 
@@ -29,9 +36,16 @@ func (delivery transactionalDelivery) Register(
 	ctx context.Context,
 	command tfapp.RegisterEffectiveDeliveryCommand,
 ) (tfapp.RegisterEffectiveDeliveryResult, error) {
+	reading, replayed := delivery.inner.RecordedDeliveryGateReading(ctx, command)
+	if !replayed {
+		var err error
+		if reading, err = delivery.gate.ReadRegistration(ctx, command); err != nil {
+			return tfapp.RegisterEffectiveDeliveryResult{}, err
+		}
+	}
 	var result tfapp.RegisterEffectiveDeliveryResult
 	err := delivery.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-		handled, handleErr := delivery.inner.Register(txCtx, command)
+		handled, handleErr := delivery.inner.RegisterWithGateReading(txCtx, command, reading)
 		if handleErr != nil {
 			return handleErr
 		}
@@ -69,7 +83,7 @@ func (delivery transactionalDelivery) Correct(
 //
 // 四条缝全接真：派送尝试读面（只读，尝试由执行侧登记——交付入口不造尝试）、交付
 // 登记库、结果版本签发、Outbox 意图交付。本笔没有「显式未配置」缝：交付生效引用的
-// 都是本上下文自己的事实，没有等租户参数的实例半边。
+// 都是本上下文自己的事实，没有等租户参数的实例半边。交付门禁读数那一侧另装（buildDeliveryGateReader）。
 func buildDeliveryOrchestration(db *bentopg.DB) (tfhttp.DeliveryHandler, error) {
 	attempts, err := tfpostgres.NewDeliveryAttempts(db)
 	if err != nil {
@@ -96,6 +110,10 @@ func buildDeliveryOrchestration(db *bentopg.DB) (tfhttp.DeliveryHandler, error) 
 	if err != nil {
 		return nil, err
 	}
+	gate, err := buildDeliveryGateReader(db, attempts)
+	if err != nil {
+		return nil, err
+	}
 	handler := tfapp.NewRegisterEffectiveDeliveryHandler(tfapp.RegisterEffectiveDeliveryDeps{
 		Attempts:          attempts,
 		Deliveries:        deliveries,
@@ -104,7 +122,39 @@ func buildDeliveryOrchestration(db *bentopg.DB) (tfhttp.DeliveryHandler, error) 
 		Clock:             clock,
 		ParticipationEnds: participationEnds,
 	})
-	return transactionalDelivery{transactor: db.Transactor(), inner: handler}, nil
+	return transactionalDelivery{transactor: db.Transactor(), gate: gate, inner: handler}, nil
+}
+
+// buildDeliveryGateReader 装交付门禁读数那一侧：派送尝试读面（交付的业务时间）、段登记册与交接登记册（at 取哪个节点），
+// 以及关务动作准入判断的消费侧适配器。关务那一口另装一份，理由同 buildHandoverGateReader。另成一个函数，让与生产装配同形的
+// 测试装配取的是同一份。
+func buildDeliveryGateReader(db *bentopg.DB, attempts *tfpostgres.DeliveryAttempts) (*tfapp.DeliveryGateReader, error) {
+	segments, err := tfpostgres.NewFulfillmentSegments(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: delivery gate: fulfillment segments: %w", err)
+	}
+	handovers, err := tfpostgres.NewTransportHandovers(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: delivery gate: transport handovers: %w", err)
+	}
+	customsAdmission, err := buildCustomsAdmissionOrchestration(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: delivery gate: %w", err)
+	}
+	customs, err := tfcustoms.NewDeliveryGateView(customsAdmission.actionAdmission)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: delivery gate: %w", err)
+	}
+	gate, err := tfapp.NewDeliveryGateReader(tfapp.DeliveryGateReadDeps{
+		Attempts:  attempts,
+		Segments:  segments,
+		Handovers: handovers,
+		Customs:   customs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: delivery gate: %w", err)
+	}
+	return gate, nil
 }
 
 // transactionalDeliveryAttempt 把派送尝试登记包进一笔事务：尝试父行与逐对象结果子行要一起成立，写口按框架合同

@@ -451,7 +451,7 @@ func (segment ActualFulfillmentSegment) RederiveParticipationWithHandover(handov
 	if !corrected {
 		return ActualFulfillmentSegment{}, ErrNoParticipationToRederive
 	}
-	replaced, err := NewParticipationBasisReference("TRANSPORT-HANDOVER/" + corrects.String())
+	replaced, err := NewParticipationBasisReference(transportHandoverBasisHead + corrects.String())
 	if err != nil {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
 	}
@@ -466,7 +466,7 @@ func (segment ActualFulfillmentSegment) RederiveParticipationWithHandover(handov
 		}
 		return segment.rederive(handover.TenantID(), handover.Object(), EnteredByTransportHandover, replaced, basis, handover.JudgedAt(), false)
 	}
-	basis, err := NewParticipationBasisReference("TRANSPORT-HANDOVER/" + handover.Version().String())
+	basis, err := NewParticipationBasisReference(transportHandoverBasisHead + handover.Version().String())
 	if err != nil {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
 	}

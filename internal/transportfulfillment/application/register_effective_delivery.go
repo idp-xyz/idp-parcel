@@ -169,12 +169,27 @@ func NewRegisterEffectiveDeliveryHandler(deps RegisterEffectiveDeliveryDeps) *Re
 	return &RegisterEffectiveDeliveryHandler{deps: deps}
 }
 
-// Register 首登一次交付生效：幂等按（租户+对象+尝试）分重放/冲突 → 读回尝试与对象
-// 结果 → FormEffectiveDelivery（失败结果进不来，领域硬句编排不绕）→ 原子提交 →
-// 意图交 PS 终局。
+// Register 是 RegisterWithGateReading 不带读数的那一种。登不出新交付的各条路（重放、冲突、未生效、未受理、未决）用不上
+// 读数，照常作答；要新落一份交付却没带读数是接线错误，上抛 ErrDeliveryGateReadingMisplaced——交付门禁读数的 at 取自段册
+// 与交接册（ADR-0213 决定五），不在这一份交付上，编排凭命令定不出它，也就不替组合根补一格。
 func (handler *RegisterEffectiveDeliveryHandler) Register(
 	ctx context.Context,
 	command RegisterEffectiveDeliveryCommand,
+) (RegisterEffectiveDeliveryResult, error) {
+	return handler.RegisterWithGateReading(ctx, command, domain.DeliveryGateReading{})
+}
+
+// RegisterWithGateReading 首登一次交付生效：幂等按（租户+对象+尝试）分重放/冲突 → 读回尝试与对象
+// 结果 → FormEffectiveDelivery（失败结果进不来，领域硬句编排不绕）→ 带上交付门禁读数 → 原子提交 →
+// 意图交 PS 终局。
+//
+// reading 是组合根在写事务之前用 DeliveryGateReader 问好的交付门禁读数（ADR-0213 决定五）。重放与冲突用不上它——在册
+// 那一版早已带着首登时问来的读数，同身份再到只比内容，不另记一份；读数是判断，不进摘要。登不出交付的各条路同样不用它：
+// 写事务之前读派送尝试读不动时读数也会交来，而那时还不知道是不是妥投。
+func (handler *RegisterEffectiveDeliveryHandler) RegisterWithGateReading(
+	ctx context.Context,
+	command RegisterEffectiveDeliveryCommand,
+	reading domain.DeliveryGateReading,
 ) (RegisterEffectiveDeliveryResult, error) {
 	key, attemptRef, objectRef, result := handler.deliveryKey(command.TenantID, command.Attempt, command.Object)
 	if result != nil {
@@ -227,6 +242,9 @@ func (handler *RegisterEffectiveDeliveryHandler) Register(
 	}
 	if err != nil {
 		return RegisterEffectiveDeliveryResult{outcome: DeliveryNotAccepted}, nil
+	}
+	if delivery, err = withDeliveryGateReading(delivery, reading); err != nil {
+		return RegisterEffectiveDeliveryResult{}, err
 	}
 
 	record := ports.EffectiveDeliveryRecord{
@@ -397,19 +415,69 @@ func (handler *RegisterEffectiveDeliveryHandler) deliveryKey(
 	attempt string,
 	object string,
 ) (ports.EffectiveDeliveryKey, domain.AttemptReference, domain.CarriedObjectReference, *RegisterEffectiveDeliveryResult) {
-	notAccepted := &RegisterEffectiveDeliveryResult{outcome: DeliveryNotAccepted}
+	key, accepted := deliveryKeyFrom(tenant, attempt, object)
+	if !accepted {
+		return ports.EffectiveDeliveryKey{}, domain.AttemptReference{}, domain.CarriedObjectReference{},
+			&RegisterEffectiveDeliveryResult{outcome: DeliveryNotAccepted}
+	}
+	return key, key.Attempt, key.Object, nil
+}
+
+// deliveryKeyFrom 是登记编排与写事务之前问读数那一侧共用的指名受理：两边对同一条命令认出同一个键，读数才问得到登记
+// 要落的那一份。
+func deliveryKeyFrom(tenant domain.TenantID, attempt string, object string) (ports.EffectiveDeliveryKey, bool) {
 	if strings.TrimSpace(tenant.String()) == "" {
-		return ports.EffectiveDeliveryKey{}, domain.AttemptReference{}, domain.CarriedObjectReference{}, notAccepted
+		return ports.EffectiveDeliveryKey{}, false
 	}
 	attemptRef, err := domain.NewAttemptReference(attempt)
 	if err != nil {
-		return ports.EffectiveDeliveryKey{}, domain.AttemptReference{}, domain.CarriedObjectReference{}, notAccepted
+		return ports.EffectiveDeliveryKey{}, false
 	}
 	objectRef, err := domain.NewCarriedObjectReference(object)
 	if err != nil {
-		return ports.EffectiveDeliveryKey{}, domain.AttemptReference{}, domain.CarriedObjectReference{}, notAccepted
+		return ports.EffectiveDeliveryKey{}, false
 	}
-	return ports.EffectiveDeliveryKey{TenantID: tenant, Object: objectRef, Attempt: attemptRef}, attemptRef, objectRef, nil
+	return ports.EffectiveDeliveryKey{TenantID: tenant, Object: objectRef, Attempt: attemptRef}, true
+}
+
+// RecordedDeliveryGateReading 答这条首登命令是不是在册那一份的同内容重放；是则交回在册那一版的读数。
+//
+// 组合根在问读数之前先问它，理由同 RecordedHandoverGateReading：重放终归回显首次读数，重问关务只是多做一笔判断；交付之后
+// 参与已被结束，按此刻重读段册还会读出「此刻不在任何段里」，与首次那一份对不上。查不了册、不在册、内容不同或受理不了都
+// 答 false：照常问读数，答复仍由 RegisterWithGateReading 在写事务里按在册那一份定。
+func (handler *RegisterEffectiveDeliveryHandler) RecordedDeliveryGateReading(
+	ctx context.Context,
+	command RegisterEffectiveDeliveryCommand,
+) (domain.DeliveryGateReading, bool) {
+	key, accepted := deliveryKeyFrom(command.TenantID, command.Attempt, command.Object)
+	if !accepted {
+		return domain.DeliveryGateReading{}, false
+	}
+	_, digest, err := domain.CanonicalizeEffectiveDeliveryPayload(command.Method, command.Recipient, command.Proof)
+	if err != nil {
+		return domain.DeliveryGateReading{}, false
+	}
+	existing, found, err := handler.deps.Deliveries.FindByKey(ctx, key)
+	if err != nil || !found {
+		return domain.DeliveryGateReading{}, false
+	}
+	if domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedDeliveryContentDigest(command)) != domain.SamePayload {
+		return domain.DeliveryGateReading{}, false
+	}
+	return existing.Delivery.GateReading()
+}
+
+// withDeliveryGateReading 给将要落册的那一份交付带上交付门禁读数。没带是接线错误：读数的 at 要读段册与交接册，编排凭命令
+// 定不出，补一格未决会把漏接的门禁演成一串看似正常的读数。
+func withDeliveryGateReading(
+	delivery domain.EffectiveDelivery,
+	reading domain.DeliveryGateReading,
+) (domain.EffectiveDelivery, error) {
+	if reading.Answer() == domain.GateAnswerInvalid {
+		return domain.EffectiveDelivery{}, fmt.Errorf("%w: the effective delivery was formed but its gate was not read",
+			domain.ErrDeliveryGateReadingMisplaced)
+	}
+	return delivery.WithGateReading(reading)
 }
 
 func deliverySpecFrom(command RegisterEffectiveDeliveryCommand) (domain.EffectiveDeliverySpec, bool) {

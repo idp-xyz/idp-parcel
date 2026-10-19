@@ -832,14 +832,14 @@ func handoverCorrectionEndpoint(t *testing.T, intake *tfhttp.WorkFactCommandInta
 func deliveryProofCorrectionEndpoint(t *testing.T, intake *tfhttp.WorkFactCommandIntake) correctionEndpoint {
 	t.Helper()
 	store := newDeliveryStore()
-	handler := application.NewRegisterEffectiveDeliveryHandler(application.RegisterEffectiveDeliveryDeps{
+	handler := gatedDelivery{inner: application.NewRegisterEffectiveDeliveryHandler(application.RegisterEffectiveDeliveryDeps{
 		Attempts:          &deliveryViewDouble{outcome: domain.ObjectDelivered},
 		Deliveries:        store,
 		Versions:          &deliveryVersionFactory{},
 		Downstream:        deliveryHandoffDouble{},
 		Clock:             tfClock{at: time.Date(2026, 9, 24, 6, 0, 0, 0, time.UTC)},
 		ParticipationEnds: participationEnderDouble{outcome: application.ParticipationNoActiveParticipation},
-	})
+	}), reading: stoppedDeliveryGateReading(t)}
 	seed := serveWorkFact(tfhttp.NewRegisterEffectiveDeliveryEndpoint(intake, handler), workFactEffectiveDeliveryBody)
 	if seed.Code != http.StatusCreated {
 		t.Fatalf("登前版：status = %d body = %s", seed.Code, seed.Body.String())

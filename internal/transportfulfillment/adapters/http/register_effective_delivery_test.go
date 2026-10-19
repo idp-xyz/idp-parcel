@@ -258,18 +258,25 @@ type tfFixture struct {
 
 func newTFFixture(t *testing.T) *tfFixture {
 	t.Helper()
+	return newTFFixtureReading(t, stoppedDeliveryGateReading(t))
+}
+
+// newTFFixtureReading 与 newTFFixture 同形，只是首登带的交付门禁读数由调用方给——读数在组合根问，这里照组合根的样子交给
+// RegisterWithGateReading（gatedDelivery）。
+func newTFFixtureReading(t *testing.T, reading domain.DeliveryGateReading) *tfFixture {
+	t.Helper()
 	fixture := &tfFixture{
 		intake: &bodyIntake{tenant: httpValue(t, domain.NewTenantID, "tenant-1")},
 		view:   &deliveryViewDouble{outcome: domain.ObjectDelivered},
 	}
-	handler := application.NewRegisterEffectiveDeliveryHandler(application.RegisterEffectiveDeliveryDeps{
+	handler := gatedDelivery{inner: application.NewRegisterEffectiveDeliveryHandler(application.RegisterEffectiveDeliveryDeps{
 		Attempts:          fixture.view,
 		Deliveries:        newDeliveryStore(),
 		Versions:          &deliveryVersionFactory{},
 		Downstream:        deliveryHandoffDouble{},
 		Clock:             tfClock{at: time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)},
 		ParticipationEnds: participationEnderDouble{outcome: application.ParticipationNoActiveParticipation},
-	})
+	}), reading: reading}
 	fixture.register = tfhttp.NewRegisterEffectiveDeliveryEndpoint(fixture.intake, handler)
 	fixture.correct = tfhttp.NewCorrectDeliveryProofEndpoint(fixture.intake, handler)
 	return fixture

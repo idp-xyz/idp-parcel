@@ -1,6 +1,6 @@
 // Package customscompliance 是 transport-fulfillment 消费 customs-compliance 的适配器（ADR-0025 消费方侧）：出发登记
 // 时向关务的动作准入判断问「这一件此刻能不能从 A 出发到 B」（ADR-0205、ADR-0206），交接登记时问「这一件此刻能不能在
-// A 交出、往 B 去」（ADR-0213 决定四）。只翻译不判断——三源怎么折、适用哪些受门禁动作、跨不跨关务区域，都由关务答；
+// A 交出、往 B 去」（ADR-0213 决定四），有效交付登记时问「这一件此刻能不能在 A 交付」（ADR-0213 决定五）。只翻译不判断——三源怎么折、适用哪些受门禁动作、跨不跨关务区域，都由关务答；
 // 本包只把答复按格译回、把依据原文带回。
 package customscompliance
 
@@ -15,11 +15,12 @@ import (
 )
 
 // ErrUntranslatableAnswer 语义与其他消费方适配器的同名哨兵一致：一侧交出了本适配器词汇表之外的东西，是编程错误而
-// 不是业务答案。它以 error 交出、不冒充关务的读不动，并包住两个端口各自的译不回来（出发与交出）：事实照记、那一件记
-// 读不动，但依据种类与调用失败分开——这一类重问一万次也是同一个结果，要查的是两边的口径。两个端口共用一份对照（answerFor、
-// basesFor），译不回来也就是同一件事，两边各认各的哨兵即可。
-var ErrUntranslatableAnswer = fmt.Errorf("transport fulfillment customscompliance adapter: untranslatable answer: %w; %w",
-	tfports.ErrDepartureGateAnswerUntranslatable, tfports.ErrHandoverGateAnswerUntranslatable)
+// 不是业务答案。它以 error 交出、不冒充关务的读不动，并包住各端口各自的译不回来（出发、交出与交付）：事实照记、那一件记
+// 读不动，但依据种类与调用失败分开——这一类重问一万次也是同一个结果，要查的是两边的口径。各端口共用一份对照（answerFor、
+// basesFor），译不回来也就是同一件事，各端口各认各的哨兵即可。
+var ErrUntranslatableAnswer = fmt.Errorf("transport fulfillment customscompliance adapter: untranslatable answer: %w; %w; %w",
+	tfports.ErrDepartureGateAnswerUntranslatable, tfports.ErrHandoverGateAnswerUntranslatable,
+	tfports.ErrDeliveryGateAnswerUntranslatable)
 
 // ActionAdmissionJudge 是关务动作准入判断编排的那一口。生产上接组合根给它包的那层自带事务的壳：判断在关务自己的
 // 事务里记下，在调用方事务里调用即拒（ADR-0206 决定六）。这里只声明问的那一口，测试替身不必背上整个编排。
@@ -61,7 +62,7 @@ func (view *DepartureGateView) ReadDepartureGate(
 	return findingFromResult(query.Object, result)
 }
 
-// findingFromResult 把关务的一次答复译成那件对象的一格。出发与交出同一份对照：意图不同，答复的形状与五格的对照不分意图。
+// findingFromResult 把关务的一次答复译成那件对象的一格。出发、交出与交付同一份对照：意图不同，答复的形状与五格的对照不分意图。
 func findingFromResult(object tfdomain.CarriedObjectReference, result ccapp.JudgeActionAdmissionResult) (tfdomain.GateFinding, error) {
 	none := tfdomain.GateFinding{}
 	switch result.Outcome() {
@@ -118,7 +119,7 @@ func admissionCommandFor(query tfports.DepartureGateQuery) (ccapp.JudgeActionAdm
 	return ccapp.JudgeActionAdmissionCommand{TenantID: tenant, Object: object, Intent: intent, At: query.At}, nil
 }
 
-// answerFor 是关务答复（ccdomain.AdmissionAnswer）到门禁读数各格的对照，出发与交出共用。关务的`未配置`落未决，理由见
+// answerFor 是关务答复（ccdomain.AdmissionAnswer）到门禁读数各格的对照，出发、交出与交付共用。关务的`未配置`落未决，理由见
 // ADR-0205 决定二；依据原文里的种类仍说得出缺的是配置。不认得的那一格是译不回来，不猜。
 func answerFor(answer ccdomain.AdmissionAnswer) (tfdomain.GateAnswer, error) {
 	switch answer {

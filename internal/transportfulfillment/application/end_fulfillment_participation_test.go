@@ -48,14 +48,14 @@ func (fixture *participationFixture) registerDelivery(t *testing.T, object, atte
 	t.Helper()
 	// 这里只登交付、不触发结束参与（stub）：本文件的用例要的是「登了交付之后再显式 End」那条路，
 	// 触发本身由 delivery_ends_participation_test 守。
-	handler := application.NewRegisterEffectiveDeliveryHandler(application.RegisterEffectiveDeliveryDeps{
+	handler := gatedDeliveryHandler{application.NewRegisterEffectiveDeliveryHandler(application.RegisterEffectiveDeliveryDeps{
 		Attempts:          &deliveryViewDouble{outcome: domain.ObjectDelivered, found: true},
 		Deliveries:        fixture.deliveries,
 		Versions:          &deliveryVersionFactory{},
 		Downstream:        &deliveryHandoffDouble{},
 		Clock:             deliveryClock{at: deliveryRecordedAt},
 		ParticipationEnds: &participationEnderStub{},
-	})
+	})}
 	command := registerCommand(t)
 	command.Object = object
 	command.Attempt = attempt

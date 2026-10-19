@@ -312,7 +312,7 @@ func (catalogue *ReviewCatalogue) ListEffectiveDeliveries(
 		`SELECT object_ref, attempt_ref, delivery_version,
 		        place_ref, method_ref, recipient_ref, proof_ref,
 		        COALESCE(corrects_version, ''),
-		        corrected_at, occurred_at, recorded_at
+		        corrected_at, occurred_at, recorded_at, gate_reading
 		   FROM transport_fulfillment.effective_delivery
 		  WHERE tenant_id = $1
 		    AND is_current
@@ -336,7 +336,7 @@ func (catalogue *ReviewCatalogue) ListEffectiveDeliveries(
 			&row.Object, &row.Attempt, &row.Version,
 			&row.Place, &row.Method, &row.Recipient, &row.Proof,
 			&row.CorrectsVersion,
-			&correctedAt, &row.OccurredAt, &row.RecordedAt,
+			&correctedAt, &row.OccurredAt, &row.RecordedAt, &row.GateReading,
 		); err != nil {
 			return nil, fmt.Errorf("list effective deliveries: %w", err)
 		}

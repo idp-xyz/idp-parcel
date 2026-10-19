@@ -298,10 +298,12 @@ func TestPODRequiredIsPinnedInTheDatabase(t *testing.T) {
 		`INSERT INTO transport_fulfillment.effective_delivery
 			(tenant_id, object_ref, attempt_ref, delivery_version,
 			 place_ref, method_ref, recipient_ref, proof_ref,
-			 corrects_version, corrected_at, occurred_at, content_digest, is_current)
+			 corrects_version, corrected_at, occurred_at, content_digest, is_current,
+			 gate_reading, gate_reading_detail)
 		 VALUES ('tenant-1', 'parcel-1', 'attempt-1', 'delivery/v1',
 		         'door-1', 'signature', 'recipient-1', '   ',
-		         NULL, NULL, now(), 'digest-1', true)`)
+		         NULL, NULL, now(), 'digest-1', true,
+		         'UNDECIDED', '{"node": null, "stop": "NO_ACTIVE_SEGMENT", "finding": null}'::jsonb)`)
 	if err == nil {
 		t.Fatal("一行没有交付证明的「交付」进了库")
 	}
@@ -415,15 +417,16 @@ func deliveryKeyFixture(t *testing.T, tenant string) ports.EffectiveDeliveryKey 
 func deliveryRecord(t *testing.T, proof, version string) ports.EffectiveDeliveryRecord {
 	t.Helper()
 	delivery, err := domain.RehydrateEffectiveDelivery(domain.RehydrateEffectiveDeliverySpec{
-		TenantID:   deliveryValue(t, domain.NewTenantID, "tenant-1"),
-		Object:     deliveryValue(t, domain.NewCarriedObjectReference, "parcel-1"),
-		Attempt:    deliveryValue(t, domain.NewAttemptReference, "attempt-1"),
-		Place:      deliveryValue(t, domain.NewAttemptPlaceReference, "door-1"),
-		Method:     deliveryValue(t, domain.NewDeliveryMethodReference, "signature"),
-		Recipient:  deliveryValue(t, domain.NewReceivingPartyReference, "recipient-1"),
-		Proof:      deliveryValue(t, domain.NewDeliveryProofReference, proof),
-		Version:    deliveryValue(t, domain.NewDeliveryResultVersion, version),
-		OccurredAt: deliveredAtFixture,
+		TenantID:    deliveryValue(t, domain.NewTenantID, "tenant-1"),
+		Object:      deliveryValue(t, domain.NewCarriedObjectReference, "parcel-1"),
+		Attempt:     deliveryValue(t, domain.NewAttemptReference, "attempt-1"),
+		Place:       deliveryValue(t, domain.NewAttemptPlaceReference, "door-1"),
+		Method:      deliveryValue(t, domain.NewDeliveryMethodReference, "signature"),
+		Recipient:   deliveryValue(t, domain.NewReceivingPartyReference, "recipient-1"),
+		Proof:       deliveryValue(t, domain.NewDeliveryProofReference, proof),
+		Version:     deliveryValue(t, domain.NewDeliveryResultVersion, version),
+		OccurredAt:  deliveredAtFixture,
+		GateReading: deliveryGateReadingFixture(t),
 	})
 	if err != nil {
 		t.Fatalf("重建交付夹具：%v", err)
@@ -434,4 +437,15 @@ func deliveryRecord(t *testing.T, proof, version string) ports.EffectiveDelivery
 		Delivery:      delivery,
 		RecordedAt:    deliveredAtFixture,
 	}
+}
+
+// deliveryGateReadingFixture 是直写登记册的夹具挂的交付门禁读数：照编排的样子，每一版都带一份（迁移 0043）。取一种不问
+// 关务的停点，夹具不必背上关务那一侧。
+func deliveryGateReadingFixture(t *testing.T) domain.DeliveryGateReading {
+	t.Helper()
+	reading, err := domain.FormDeliveryGateReading(domain.DeliveryGateReadingSpec{Stop: domain.DeliveryNoActiveSegment})
+	if err != nil {
+		t.Fatalf("交付门禁读数夹具：%v", err)
+	}
+	return reading
 }

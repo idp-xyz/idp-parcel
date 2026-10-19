@@ -195,7 +195,29 @@ type deliveryFixture struct {
 	store    *deliveryStoreDouble
 	versions *deliveryVersionFactory
 	handoff  *deliveryHandoffDouble
-	handler  *application.RegisterEffectiveDeliveryHandler
+	handler  gatedDeliveryHandler
+}
+
+// gatedDeliveryHandler 照组合根的样子给首登带一份交付门禁读数（ADR-0213 决定五）：组合根在写事务之前问好读数，再交给
+// RegisterWithGateReading。同包里的交付用例证的是登记编排自己的规则，读数取一种不问关务的停点；读数怎样问由
+// read_delivery_gate_test.go 守，不带读数时怎样答由 TestANewDeliveryWithoutAGateReadingIsAWiringError 守。
+type gatedDeliveryHandler struct {
+	*application.RegisterEffectiveDeliveryHandler
+}
+
+func (handler gatedDeliveryHandler) Register(
+	ctx context.Context,
+	command application.RegisterEffectiveDeliveryCommand,
+) (application.RegisterEffectiveDeliveryResult, error) {
+	return handler.RegisterWithGateReading(ctx, command, stoppedDeliveryGateReading())
+}
+
+func stoppedDeliveryGateReading() domain.DeliveryGateReading {
+	reading, err := domain.FormDeliveryGateReading(domain.DeliveryGateReadingSpec{Stop: domain.DeliveryNoActiveSegment})
+	if err != nil {
+		panic(err)
+	}
+	return reading
 }
 
 func newDeliveryFixture(t *testing.T) *deliveryFixture {
@@ -206,14 +228,14 @@ func newDeliveryFixture(t *testing.T) *deliveryFixture {
 		versions: &deliveryVersionFactory{},
 		handoff:  &deliveryHandoffDouble{},
 	}
-	fixture.handler = application.NewRegisterEffectiveDeliveryHandler(application.RegisterEffectiveDeliveryDeps{
+	fixture.handler = gatedDeliveryHandler{application.NewRegisterEffectiveDeliveryHandler(application.RegisterEffectiveDeliveryDeps{
 		Attempts:          fixture.view,
 		Deliveries:        fixture.store,
 		Versions:          fixture.versions,
 		Downstream:        fixture.handoff,
 		Clock:             deliveryClock{at: deliveryRecordedAt},
 		ParticipationEnds: &participationEnderStub{},
-	})
+	})}
 	return fixture
 }
 

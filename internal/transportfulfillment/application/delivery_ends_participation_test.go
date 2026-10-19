@@ -25,16 +25,16 @@ func (stub *participationEnderStub) End(
 	return application.EndFulfillmentParticipationResult{}, stub.err
 }
 
-func (fixture *participationFixture) deliveryHandlerEndingParticipations(t *testing.T) *application.RegisterEffectiveDeliveryHandler {
+func (fixture *participationFixture) deliveryHandlerEndingParticipations(t *testing.T) gatedDeliveryHandler {
 	t.Helper()
-	return application.NewRegisterEffectiveDeliveryHandler(application.RegisterEffectiveDeliveryDeps{
+	return gatedDeliveryHandler{application.NewRegisterEffectiveDeliveryHandler(application.RegisterEffectiveDeliveryDeps{
 		Attempts:          &deliveryViewDouble{outcome: domain.ObjectDelivered, found: true},
 		Deliveries:        fixture.deliveries,
 		Versions:          &deliveryVersionFactory{},
 		Downstream:        &deliveryHandoffDouble{},
 		Clock:             deliveryClock{at: deliveryRecordedAt},
 		ParticipationEnds: fixture.handler,
-	})
+	})}
 }
 
 // Covers: 票 tf-segment-lifecycle-closure/06 裁决 (i)——有效交付落库后**同一编排内**结束该对象的履约参与
@@ -89,14 +89,14 @@ func TestADeliveryWhoseParticipationEndFailsFormsNoAnswer(t *testing.T) {
 	t.Run("the ender errors", func(t *testing.T) {
 		fixture := newParticipationFixture(t)
 		stub := &participationEnderStub{err: errors.New("segment registry inconsistent")}
-		handler := application.NewRegisterEffectiveDeliveryHandler(application.RegisterEffectiveDeliveryDeps{
+		handler := gatedDeliveryHandler{application.NewRegisterEffectiveDeliveryHandler(application.RegisterEffectiveDeliveryDeps{
 			Attempts:          &deliveryViewDouble{outcome: domain.ObjectDelivered, found: true},
 			Deliveries:        fixture.deliveries,
 			Versions:          &deliveryVersionFactory{},
 			Downstream:        &deliveryHandoffDouble{},
 			Clock:             deliveryClock{at: deliveryRecordedAt},
 			ParticipationEnds: stub,
-		})
+		})}
 		if _, err := handler.Register(t.Context(), deliveryCommandFor(t, "parcel-1", "attempt-1")); err == nil {
 			t.Fatal("结束参与报错时交付却形成了答案")
 		}
@@ -122,13 +122,13 @@ func TestADeliveryWhoseParticipationEndFailsFormsNoAnswer(t *testing.T) {
 // 库面状态，与 End 失败同格（error → 5xx，事务边界据以回滚），而不是一个 201 里的格。
 func TestADeliveryWithoutAParticipationEnderFormsNoAnswer(t *testing.T) {
 	fixture := newParticipationFixture(t)
-	handler := application.NewRegisterEffectiveDeliveryHandler(application.RegisterEffectiveDeliveryDeps{
+	handler := gatedDeliveryHandler{application.NewRegisterEffectiveDeliveryHandler(application.RegisterEffectiveDeliveryDeps{
 		Attempts:   &deliveryViewDouble{outcome: domain.ObjectDelivered, found: true},
 		Deliveries: fixture.deliveries,
 		Versions:   &deliveryVersionFactory{},
 		Downstream: &deliveryHandoffDouble{},
 		Clock:      deliveryClock{at: deliveryRecordedAt},
-	})
+	})}
 	result, err := handler.Register(t.Context(), deliveryCommandFor(t, "parcel-1", "attempt-1"))
 	if !errors.Is(err, application.ErrParticipationEndsNotWired) {
 		t.Fatalf("err = %v, want ErrParticipationEndsNotWired", err)

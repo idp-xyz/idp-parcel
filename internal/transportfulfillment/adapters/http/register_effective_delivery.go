@@ -184,6 +184,34 @@ type deliveryResponse struct {
 	// ParticipationEnd 是交付落库后结束该对象履约参与那一半的答案（票 06）：PARTICIPATION_ENDED 或
 	// NO_ACTIVE_PARTICIPATION 等；更正与重放时为空。
 	ParticipationEnd string `json:"participationEnd,omitempty"`
+	// GateReading 是在册那一版随记的交付门禁读数（ADR-0213 决定五）：重放交回的是首登时问来的那一份，不是此刻重问的；
+	// 更正交回从前版承继的那一份。阻断也照样 201。没有在册那一版的答复（冲突、未生效、未受理、未决）上缺席。
+	GateReading *deliveryGateReadingView `json:"gateReading,omitempty"`
+}
+
+// deliveryGateReadingView 是交付门禁读数回给登记方的线格式，与出发、交出读数同形：整格、问关务时交付意图的 at、本上下文
+// 这一侧的停点与那件对象的那一格。交付意图没有去向，所以没有 onward。
+//
+// 关务判断标识与依据原文不回给登记方，只随交付落册供运营与 VE 查，口径同出发读数（ADR-0205 决定一）。
+type deliveryGateReadingView struct {
+	Answer  string                    `json:"answer"`
+	At      string                    `json:"at,omitempty"`
+	Stops   []string                  `json:"stops,omitempty"`
+	Objects []departureGateObjectView `json:"objects,omitempty"`
+}
+
+func deliveryGateReadingViewOf(reading domain.DeliveryGateReading) *deliveryGateReadingView {
+	view := &deliveryGateReadingView{Answer: reading.Answer().String()}
+	if node, asked := reading.Node(); asked {
+		view.At = node.String()
+	}
+	if stop, stopped := reading.Stop(); stopped {
+		view.Stops = []string{stop.String()}
+	}
+	if finding, asked := reading.Finding(); asked {
+		view.Objects = []departureGateObjectView{{Object: finding.Object().String(), Answer: finding.Answer().String()}}
+	}
+	return view
 }
 
 // problemResponse 刻意不带自由文本消息。底层失败的措辞会捎带租户、对象或尝试的存在
@@ -215,13 +243,17 @@ func writeOutcome(response http.ResponseWriter, result application.RegisterEffec
 		if predecessor, corrected := record.Delivery.Corrects(); corrected {
 			body.Corrects = predecessor.String()
 		}
+		if reading, read := record.Delivery.GateReading(); read {
+			body.GateReading = deliveryGateReadingViewOf(reading)
+		}
 	}
 	if continuation := result.ContinuationReference(); continuation != "" {
 		body.ContinuationReference = continuation
 	}
 
 	// ADR-0022：状态码只报有没有新落一版。首登与更正都持久化了新版本用 201；
-	// 未生效（NOT_EFFECTIVE）、冲突、已有结果、未决、未受理都是形成了的答案（200）。
+	// 未生效（NOT_EFFECTIVE）、冲突、已有结果、未决、未受理都是形成了的答案（200）。交付门禁读数是阻断也照样 201：
+	// 交付落册了，读数是记录里的一格，不是这一次登记的答复（ADR-0213 决定五）。
 	status := http.StatusOK
 	if result.Outcome() == application.DeliveryRegistered ||
 		result.Outcome() == application.DeliveryCorrected {

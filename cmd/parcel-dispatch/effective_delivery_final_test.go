@@ -210,16 +210,23 @@ func recordRegisteredEffectiveDelivery(t *testing.T, fixture *synVerticalFixture
 	object := mustTF(t, tfdomain.NewCarriedObjectReference, effectiveDeliveryObject)
 	attempt := mustTF(t, tfdomain.NewAttemptReference, effectiveDeliveryAttempt)
 	occurredAt := time.Now().UTC().Add(-2 * time.Minute)
+	// 照登记编排的样子挂一份交付门禁读数（ADR-0213 决定五，迁移 0043 起每一版都带）；取不问关务的停点，本用例证的是
+	// 消费侧，不背关务那一侧。
+	gateReading, err := tfdomain.FormDeliveryGateReading(tfdomain.DeliveryGateReadingSpec{Stop: tfdomain.DeliveryNoActiveSegment})
+	if err != nil {
+		t.Fatalf("交付门禁读数：%v", err)
+	}
 	delivery, err := tfdomain.RehydrateEffectiveDelivery(tfdomain.RehydrateEffectiveDeliverySpec{
-		TenantID:   tenant,
-		Object:     object,
-		Attempt:    attempt,
-		Place:      mustTF(t, tfdomain.NewAttemptPlaceReference, "SYN-DOOR-01"),
-		Method:     mustTF(t, tfdomain.NewDeliveryMethodReference, "SYN-METHOD-01"),
-		Recipient:  mustTF(t, tfdomain.NewReceivingPartyReference, "SYN-RECIPIENT-01"),
-		Proof:      mustTF(t, tfdomain.NewDeliveryProofReference, "SYN-POD-01"),
-		Version:    mustTF(t, tfdomain.NewDeliveryResultVersion, effectiveDeliveryVersion),
-		OccurredAt: occurredAt,
+		TenantID:    tenant,
+		Object:      object,
+		Attempt:     attempt,
+		Place:       mustTF(t, tfdomain.NewAttemptPlaceReference, "SYN-DOOR-01"),
+		Method:      mustTF(t, tfdomain.NewDeliveryMethodReference, "SYN-METHOD-01"),
+		Recipient:   mustTF(t, tfdomain.NewReceivingPartyReference, "SYN-RECIPIENT-01"),
+		Proof:       mustTF(t, tfdomain.NewDeliveryProofReference, "SYN-POD-01"),
+		Version:     mustTF(t, tfdomain.NewDeliveryResultVersion, effectiveDeliveryVersion),
+		OccurredAt:  occurredAt,
+		GateReading: gateReading,
 	})
 	if err != nil {
 		t.Fatalf("重建有效交付：%v", err)

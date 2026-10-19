@@ -309,6 +309,7 @@ func serveEffectiveDeliveries(
 			CorrectedAt:     optionalInstant(row.CorrectedAt),
 			OccurredAt:      rfc3339(row.OccurredAt),
 			RecordedAt:      rfc3339(row.RecordedAt),
+			GateReading:     row.GateReading,
 		})
 	}
 	writeJSON(response, http.StatusOK, effectiveDeliveryListResponse{
@@ -545,7 +546,8 @@ type effectiveDeliveryListResponse struct {
 //
 // proof 是交付证明引用不是证据内容——证据构成属交付证明本体，列面只指名，不把
 // 「已签收」演成一个可直接修改的状态。corrects 两键在场即这行是更正版本：更正翻旧
-// 插新，本册只列当前版，历史版本按键与版本走详情读口。
+// 插新，本册只列当前版，历史版本按键与版本走详情读口。gateReading 是这一版随记的交付门禁读数整格（ADR-0213
+// 决定五），每一版都有。
 type effectiveDeliveryBody struct {
 	Object          string `json:"object"`
 	Attempt         string `json:"attempt"`
@@ -558,6 +560,7 @@ type effectiveDeliveryBody struct {
 	CorrectedAt     string `json:"correctedAt,omitempty"`
 	OccurredAt      string `json:"occurredAt"`
 	RecordedAt      string `json:"recordedAt"`
+	GateReading     string `json:"gateReading"`
 }
 
 type carrierMasterDocumentListResponse struct {

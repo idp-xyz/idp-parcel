@@ -47,13 +47,15 @@ func (repository *EffectiveDeliveries) FindByKey(
 		return ports.EffectiveDeliveryRecord{}, false, fmt.Errorf("find effective delivery: %w", err)
 	}
 
-	var version, place, method, recipient, proof, digest string
+	var version, place, method, recipient, proof, digest, gateReading string
 	var corrects *string
 	var correctedAt *time.Time
 	var occurredAt, recordedAt time.Time
+	var gateDetail []byte
 	err = querier.QueryRow(ctx,
 		`SELECT delivery_version, place_ref, method_ref, recipient_ref, proof_ref,
-		        corrects_version, corrected_at, occurred_at, content_digest, recorded_at
+		        corrects_version, corrected_at, occurred_at, content_digest, recorded_at,
+		        gate_reading, gate_reading_detail
 		   FROM transport_fulfillment.effective_delivery
 		  WHERE tenant_id = $1
 		    AND object_ref = $2
@@ -63,7 +65,8 @@ func (repository *EffectiveDeliveries) FindByKey(
 		key.Object.String(),
 		key.Attempt.String(),
 	).Scan(&version, &place, &method, &recipient, &proof,
-		&corrects, &correctedAt, &occurredAt, &digest, &recordedAt)
+		&corrects, &correctedAt, &occurredAt, &digest, &recordedAt,
+		&gateReading, &gateDetail)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.EffectiveDeliveryRecord{}, false, nil
 	}
@@ -71,7 +74,8 @@ func (repository *EffectiveDeliveries) FindByKey(
 		return ports.EffectiveDeliveryRecord{}, false, fmt.Errorf("find effective delivery: %w", err)
 	}
 
-	delivery, err := rehydrateDelivery(key, version, place, method, recipient, proof, corrects, correctedAt, occurredAt)
+	delivery, err := rehydrateDelivery(key, version, place, method, recipient, proof, corrects, correctedAt, occurredAt,
+		gateReading, gateDetail)
 	if err != nil {
 		return ports.EffectiveDeliveryRecord{}, false, fmt.Errorf("find effective delivery: %w", err)
 	}
@@ -95,13 +99,15 @@ func (repository *EffectiveDeliveries) FindByKeyAndVersion(
 		return ports.EffectiveDeliveryRecord{}, false, fmt.Errorf("find effective delivery version: %w", err)
 	}
 
-	var place, method, recipient, proof, digest string
+	var place, method, recipient, proof, digest, gateReading string
 	var corrects *string
 	var correctedAt *time.Time
 	var occurredAt, recordedAt time.Time
+	var gateDetail []byte
 	err = querier.QueryRow(ctx,
 		`SELECT place_ref, method_ref, recipient_ref, proof_ref,
-		        corrects_version, corrected_at, occurred_at, content_digest, recorded_at
+		        corrects_version, corrected_at, occurred_at, content_digest, recorded_at,
+		        gate_reading, gate_reading_detail
 		   FROM transport_fulfillment.effective_delivery
 		  WHERE tenant_id = $1
 		    AND object_ref = $2
@@ -112,7 +118,8 @@ func (repository *EffectiveDeliveries) FindByKeyAndVersion(
 		key.Attempt.String(),
 		version.String(),
 	).Scan(&place, &method, &recipient, &proof,
-		&corrects, &correctedAt, &occurredAt, &digest, &recordedAt)
+		&corrects, &correctedAt, &occurredAt, &digest, &recordedAt,
+		&gateReading, &gateDetail)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.EffectiveDeliveryRecord{}, false, nil
 	}
@@ -121,7 +128,7 @@ func (repository *EffectiveDeliveries) FindByKeyAndVersion(
 	}
 
 	delivery, err := rehydrateDelivery(
-		key, version.String(), place, method, recipient, proof, corrects, correctedAt, occurredAt)
+		key, version.String(), place, method, recipient, proof, corrects, correctedAt, occurredAt, gateReading, gateDetail)
 	if err != nil {
 		return ports.EffectiveDeliveryRecord{}, false, fmt.Errorf("find effective delivery version: %w", err)
 	}
@@ -144,10 +151,11 @@ func (repository *EffectiveDeliveries) Save(
 		return ports.DeliverySaveOutcomeInvalid, fmt.Errorf("save effective delivery: %w", err)
 	}
 
-	tag, err := executor.Exec(ctx,
-		insertDeliverySQL+` ON CONFLICT DO NOTHING`,
-		deliveryArguments(record)...,
-	)
+	arguments, err := deliveryArguments(record)
+	if err != nil {
+		return ports.DeliverySaveOutcomeInvalid, fmt.Errorf("save effective delivery: %w", err)
+	}
+	tag, err := executor.Exec(ctx, insertDeliverySQL+` ON CONFLICT DO NOTHING`, arguments...)
 	if err != nil {
 		return ports.DeliverySaveOutcomeInvalid, fmt.Errorf("save effective delivery: %w", err)
 	}
@@ -172,6 +180,11 @@ func (repository *EffectiveDeliveries) Supersede(
 	if !corrects {
 		return false, errors.New("supersede effective delivery: the record does not name a predecessor")
 	}
+	// 在翻旧行之前备好新行：备不出来（例如没带读数）就不该把前版翻成历史。
+	arguments, err := deliveryArguments(record)
+	if err != nil {
+		return false, fmt.Errorf("supersede effective delivery: %w", err)
+	}
 
 	tag, err := executor.Exec(ctx,
 		`UPDATE transport_fulfillment.effective_delivery
@@ -193,22 +206,27 @@ func (repository *EffectiveDeliveries) Supersede(
 		return false, nil
 	}
 
-	if _, err := executor.Exec(ctx, insertDeliverySQL, deliveryArguments(record)...); err != nil {
+	if _, err := executor.Exec(ctx, insertDeliverySQL, arguments...); err != nil {
 		return false, fmt.Errorf("supersede effective delivery: %w", err)
 	}
 	return true, nil
 }
 
 // insertDeliverySQL 是首登与更正共用的插入语句：两条路都插「一行一版本」的新行，
-// 差别只在更正行带前版引用（由记录本体携带）。
+// 差别只在更正行带前版引用（由记录本体携带）。交付门禁读数两列每一行都有：更正版带的是从前版承继来的那一份。
 const insertDeliverySQL = `INSERT INTO transport_fulfillment.effective_delivery
 	(tenant_id, object_ref, attempt_ref, delivery_version,
 	 place_ref, method_ref, recipient_ref, proof_ref,
-	 corrects_version, corrected_at, occurred_at, content_digest, is_current)
- VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true)`
+	 corrects_version, corrected_at, occurred_at, content_digest, is_current,
+	 gate_reading, gate_reading_detail)
+ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true, $13, $14)`
 
-func deliveryArguments(record ports.EffectiveDeliveryRecord) []any {
+func deliveryArguments(record ports.EffectiveDeliveryRecord) ([]any, error) {
 	delivery := record.Delivery
+	gateReading, gateDetail, err := deliveryGateReadingColumns(delivery)
+	if err != nil {
+		return nil, err
+	}
 	var corrects *string
 	var correctedAt *time.Time
 	if predecessor, corrected := delivery.Corrects(); corrected {
@@ -232,7 +250,9 @@ func deliveryArguments(record ports.EffectiveDeliveryRecord) []any {
 		correctedAt,
 		delivery.OccurredAt().UTC(),
 		record.ContentDigest,
-	}
+		gateReading,
+		gateDetail,
+	}, nil
 }
 
 func rehydrateDelivery(
@@ -241,6 +261,8 @@ func rehydrateDelivery(
 	corrects *string,
 	correctedAt *time.Time,
 	occurredAt time.Time,
+	gateReading string,
+	gateDetail []byte,
 ) (domain.EffectiveDelivery, error) {
 	spec := domain.RehydrateEffectiveDeliverySpec{
 		TenantID:   key.TenantID,
@@ -249,6 +271,9 @@ func rehydrateDelivery(
 		OccurredAt: occurredAt,
 	}
 	var err error
+	if spec.GateReading, err = deliveryGateReadingFrom(gateReading, gateDetail); err != nil {
+		return domain.EffectiveDelivery{}, err
+	}
 	if spec.Place, err = domain.NewAttemptPlaceReference(place); err != nil {
 		return domain.EffectiveDelivery{}, err
 	}

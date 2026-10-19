@@ -27,13 +27,15 @@ type RehydrateEffectiveDeliverySpec struct {
 	OccurredAt  time.Time
 	Corrects    DeliveryResultVersion
 	CorrectedAt time.Time
+	// GateReading 是这一版落册时随记的交付门禁读数：每一版都带（迁移之前的存量回填为未决）。
+	GateReading DeliveryGateReading
 }
 
 // RehydrateEffectiveDelivery 从库里读到的产物重建一份交付生效。
 //
 // 校验对齐构造与更正两道门的不变量：POD/方式/接收方缺一不可（没有符合当时规则的
 // 交付证明就没有生效交付）；版本链要么整体缺席（首登），要么回指前版且不自指、更正
-// 时间不早于交付。
+// 时间不早于交付。交付门禁读数与 WithGateReading 同一道归属门，只多收存量回填那一种停点。
 func RehydrateEffectiveDelivery(spec RehydrateEffectiveDeliverySpec) (EffectiveDelivery, error) {
 	if !spec.TenantID.valid() || !spec.Object.valid() || !spec.Attempt.valid() ||
 		!spec.Place.valid() || !spec.Version.valid() || spec.OccurredAt.IsZero() {
@@ -53,7 +55,7 @@ func RehydrateEffectiveDelivery(spec RehydrateEffectiveDeliverySpec) (EffectiveD
 			return EffectiveDelivery{}, rehydratedDeliveryRefusal("更正时间早于交付")
 		}
 	}
-	return EffectiveDelivery{
+	delivery := EffectiveDelivery{
 		tenantID:    spec.TenantID,
 		object:      spec.Object,
 		attempt:     spec.Attempt,
@@ -65,7 +67,12 @@ func RehydrateEffectiveDelivery(spec RehydrateEffectiveDeliverySpec) (EffectiveD
 		occurredAt:  spec.OccurredAt.UTC(),
 		corrects:    spec.Corrects,
 		correctedAt: spec.CorrectedAt.UTC(),
-	}, nil
+	}
+	if err := spec.GateReading.placedOn(delivery, true); err != nil {
+		return EffectiveDelivery{}, rehydratedDeliveryRefusal(fmt.Sprintf("交付门禁读数缺失或不属于这一份：%v", err))
+	}
+	delivery.gateReading = spec.GateReading
+	return delivery, nil
 }
 
 func rehydratedDeliveryRefusal(reason string) error {

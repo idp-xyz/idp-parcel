@@ -126,6 +126,8 @@ type TransportHandoverCatalogueRow struct {
 //
 // Proof 是交付证明引用不是证据内容：证据构成（签名、照片、验证码…）属交付证明
 // 本体，列面只指名。CorrectsVersion 两件在场即这行是更正版本，指回被更正的那一版。
+// GateReading 是这一版随记的交付门禁读数的整格（ADR-0213 决定五，五格封闭词同出发读数），每一版都在场；停点、at
+// 与关务判断标识不上列面，按键读回交付看。
 type EffectiveDeliveryCatalogueRow struct {
 	Object          string
 	Attempt         string
@@ -138,6 +140,7 @@ type EffectiveDeliveryCatalogueRow struct {
 	CorrectedAt     *time.Time
 	OccurredAt      time.Time
 	RecordedAt      time.Time
+	GateReading     string
 }
 
 // CarrierMasterDocumentCatalogueRow 是总单登记册上列的一行：一行一版本——撤销、替代、

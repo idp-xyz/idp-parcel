@@ -369,7 +369,7 @@ func (handover TransportHandover) TransferOutBasis() (string, bool) {
 	if !handover.TransfersControl() {
 		return "", false
 	}
-	return "TRANSPORT-HANDOVER/" + handover.version.String(), true
+	return transportHandoverBasisHead + handover.version.String(), true
 }
 
 // HandoverScopeSummary 是同一交接范围内对象级结果的派生汇总。它只有计数与派生问答，

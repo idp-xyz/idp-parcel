@@ -186,6 +186,9 @@ type EffectiveDelivery struct {
 	occurredAt  time.Time
 	corrects    DeliveryResultVersion
 	correctedAt time.Time
+	// gateReading 是登记时随记的交付门禁读数（ADR-0213 决定五）。FormEffectiveDelivery 形成的那一份还没有它：读数在写
+	// 事务之前问，由编排经 WithGateReading 带上；在册的每一版都有。
+	gateReading DeliveryGateReading
 }
 
 // FormEffectiveDelivery 只接受妥投结果：无人签收、地址错误、收件人拒收都进不来——

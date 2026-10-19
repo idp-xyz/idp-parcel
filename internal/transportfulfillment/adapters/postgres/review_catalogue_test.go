@@ -164,15 +164,16 @@ func catalogueDeliveryRecord(
 ) ports.EffectiveDeliveryRecord {
 	t.Helper()
 	spec := domain.RehydrateEffectiveDeliverySpec{
-		TenantID:   deliveryValue(t, domain.NewTenantID, tenant),
-		Object:     deliveryValue(t, domain.NewCarriedObjectReference, object),
-		Attempt:    deliveryValue(t, domain.NewAttemptReference, attempt),
-		Place:      deliveryValue(t, domain.NewAttemptPlaceReference, "door-1"),
-		Method:     deliveryValue(t, domain.NewDeliveryMethodReference, "signature"),
-		Recipient:  deliveryValue(t, domain.NewReceivingPartyReference, "recipient-1"),
-		Proof:      deliveryValue(t, domain.NewDeliveryProofReference, proof),
-		Version:    deliveryValue(t, domain.NewDeliveryResultVersion, version),
-		OccurredAt: occurredAt,
+		TenantID:    deliveryValue(t, domain.NewTenantID, tenant),
+		Object:      deliveryValue(t, domain.NewCarriedObjectReference, object),
+		Attempt:     deliveryValue(t, domain.NewAttemptReference, attempt),
+		Place:       deliveryValue(t, domain.NewAttemptPlaceReference, "door-1"),
+		Method:      deliveryValue(t, domain.NewDeliveryMethodReference, "signature"),
+		Recipient:   deliveryValue(t, domain.NewReceivingPartyReference, "recipient-1"),
+		Proof:       deliveryValue(t, domain.NewDeliveryProofReference, proof),
+		Version:     deliveryValue(t, domain.NewDeliveryResultVersion, version),
+		OccurredAt:  occurredAt,
+		GateReading: deliveryGateReadingFixture(t),
 	}
 	if corrects != "" {
 		spec.Corrects = deliveryValue(t, domain.NewDeliveryResultVersion, corrects)
