@@ -101,6 +101,20 @@ func TestDecodeTemplateToleratesBOMAndColumnOrder(t *testing.T) {
 	}
 }
 
+// TestDecodeTemplateTrimsTheObservedMarkCell 钉住受控批量口的现状：模板逐格去两端空白，mark 格也在内，
+// 两端带空格与 Tab 的号进命令时已是干净的号。这是 CSV 模板的形状纪律；在线收寄口反过来原样保留设备上报的
+// 观察（TestWorkFactReceptionIntakeKeepsTheObservedMarkVerbatim），两口的分工见 UC-NO-002「输入语义契约」表后那段。
+func TestDecodeTemplateTrimsTheObservedMarkCell(t *testing.T) {
+	row := strings.Replace(receivedRow("SYN-SLIP-1", "SYN-HU-1"), "SYN-MARK-SYN-HU-1", " \tSYN-MARK-SYN-HU-1\t ", 1)
+	batch, err := decodeIntakeTemplate(synTenant(t), []byte(templateHeader+row))
+	if err != nil {
+		t.Fatalf("mark 格两端带空白的模板被拒：%v", err)
+	}
+	if got := batch.Rows[0].Command.Mark.Mark; got != "SYN-MARK-SYN-HU-1" {
+		t.Fatalf("mark 格没去两端空白：%q", got)
+	}
+}
+
 // TestDecodeTemplateRejectsShapeErrors 证整批拒绝的各格：任一格错就整批不开工，且错误带
 // ErrIntakeTemplate 与能定位的行号或列名。
 func TestDecodeTemplateRejectsShapeErrors(t *testing.T) {
