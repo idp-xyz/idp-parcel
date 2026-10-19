@@ -72,6 +72,9 @@ var _ tfports.DeliveryWindowSource = (*DeliveryWindows)(nil)
 //   - NR 返 error → 原样上抛，执行器读成 DELIVERY_WINDOW_SOURCE_UNAVAILABLE 重跑本拍——把「读不到」折成「没有」会让
 //     一次故障长成一个业务答案，两者恢复动作不同（ADR-0029）。
 //
+// 段种类同样不分支（ADR-0217）：NR 计划末尾的交付段与节点间段一样按引用答 RESOLVED。引用指的是不是交付段，是登记方
+// 声明的事；本缝若只认交付段，就成了按段种类推「尾程」，ADR-0114 决定一禁的正是这种推法。
+//
 // 租户按原值传过去——跨越租户必须在签名上看得见（ADR-0003），适配器不替换也不省略它。依据（Basis）不交：任务口今天
 // 只收首尾两点，依据留在 NR 那一侧由需要它的人按引用取。
 func (adapter *DeliveryWindows) LoadDeliveryWindow(

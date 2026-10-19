@@ -110,6 +110,9 @@ func (adapter *PrepareOnInitialRoute) HandleFormedInitialRoute(ctx context.Conte
 
 // preparationCommandOf 把判断译成准备命令。对象取判断键上的声明包裹：TF 的载运对象引用就是正式包裹身份的引用，拼写
 // 不改。段引用由 NR 一处定义的「版本#序位」拼出（ADR-0131 决定一），序位自首段起计。
+//
+// 只译节点间段（ADR-0217）：交付段不走网络连接，没有班次可备；译它只会在 connectionOf 上答「说不清连接」，把每一封
+// 带交付段的信封变成毒丸。交付段只在段链末尾，跳过它不动前面各段的序位。
 func preparationCommandOf(record nrports.InitialRouteRecord) (tfapplication.PrepareOnPlannedLegsCommand, error) {
 	none := tfapplication.PrepareOnPlannedLegsCommand{}
 	tenant, err := tfdomain.NewTenantID(record.Key.TenantID.String())
@@ -125,7 +128,7 @@ func preparationCommandOf(record nrports.InitialRouteRecord) (tfapplication.Prep
 		return command, nil
 	}
 	command.Route = tfapplication.PlannedRouteFormed
-	for index, leg := range record.Plan.Legs() {
+	for index, leg := range record.Plan.NodeLegs() {
 		translated, err := preparationLegOf(record.Plan.Version(), index+1, leg)
 		if err != nil {
 			return none, err

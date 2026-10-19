@@ -200,3 +200,37 @@ func TestUnreadableOrUntranslatableRoutesFailWithTheirOwnSentinels(t *testing.T)
 		t.Fatalf("读不回或译不过去时调了编排 %d 次", trigger.calls)
 	}
 }
+
+// Covers: AT-TF-201 的翻译半边（ADR-0217）——计划末尾的交付段不译成准备腿：它的窗口依据指交付节点日历、不指连接，
+// 译它只会答说不清连接、把信封变成毒丸。前面的节点间段照译，序位不变。
+func TestTheDeliveryLegIsNotTranslatedIntoAPreparationLeg(t *testing.T) {
+	window, err := nrdomain.NewPlannedTimeWindow(routeJudgedAt.Add(12*time.Hour), routeJudgedAt.Add(15*time.Hour),
+		nr(t, nrdomain.NewWindowBasisReference, "NODE/SYN-NODE-SIN-LM@2"))
+	if err != nil {
+		t.Fatalf("交付段窗口：%v", err)
+	}
+	delivery, err := nrdomain.NewDeliveryLeg(nrdomain.DeliveryLegSpec{
+		From:        nr(t, nrdomain.NewPlanNodeReference, "SYN-NODE-SIN-LM"),
+		Scope:       nr(t, nrdomain.NewServiceAreaVersionReference, "SYN-AREA-SG@1"),
+		Responsible: nr(t, nrdomain.NewResponsiblePartyReference, "SYN-AREA-SG@1"),
+		Window:      window,
+	})
+	if err != nil {
+		t.Fatalf("交付段：%v", err)
+	}
+	record := formedRecord(t,
+		legOn(t, "CONNECTION/SYN-CONN-SZX-SIN@1", "SYN-NODE-SZX-GATE", "SYN-NODE-SIN-HUB", 0),
+		legOn(t, "CONNECTION/SYN-CONN-SIN-LM@1", "SYN-NODE-SIN-HUB", "SYN-NODE-SIN-LM", 4*time.Hour),
+		delivery,
+	)
+	trigger := &preparationTriggerStub{}
+	if err := handle(t, routeFinderStub{record: record, found: true}, trigger); errors.Is(err, adapter.ErrUntranslatableAnswer) {
+		t.Fatalf("交付段让整封信封译不过去：%v", err)
+	}
+	if trigger.calls != 1 || len(trigger.command.Legs) != 2 {
+		t.Fatalf("交编排 %d 次、%d 段，想要一次、只有两段节点间段", trigger.calls, len(trigger.command.Legs))
+	}
+	if got := trigger.command.Legs[1].Reference().String(); got != "RPV-7#2" {
+		t.Fatalf("第二段引用 = %s，跳过交付段不该动前面的序位", got)
+	}
+}
