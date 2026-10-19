@@ -98,7 +98,8 @@ func NewRecordMovementFactEndpoint(intake MovementFactIntake, handler MovementFa
 
 // movementFactResponse 是移动事实口的封闭响应形状。`outcome` 取应用枚举原名，`DEPARTURE_GATE_BLOCKED`
 // 与 `INPUT_NOT_ACCEPTED` 各自成格不合并——前者去取放行结果，后者去改输入（理由在
-// application.MovementFactOutcome）。`gateClearance` 只在出发那一格有意义，照实透出不做判断。
+// application.MovementFactOutcome）。`gateClearance` 只在出发那一格有意义，照实透出不做判断。`SOURCE_CONFLICT` 只有 `outcome`：
+// 编排不交回在册那一份，它可能是另一作业范围登的。
 type movementFactResponse struct {
 	Outcome               string `json:"outcome"`
 	Fact                  string `json:"fact,omitempty"`
@@ -138,7 +139,7 @@ func writeMovementFactOutcome(response http.ResponseWriter, result application.R
 		}
 	}
 
-	// ADR-0022：只有新落一版用 201；重放、门禁未放行、未受理、未决都是形成了的答案（200）。
+	// ADR-0022：只有新落一版用 201；重放、内容冲突、门禁未放行、未受理、未决都是形成了的答案（200）。
 	status := http.StatusOK
 	if result.Outcome() == application.MovementFactRecorded {
 		status = http.StatusCreated
