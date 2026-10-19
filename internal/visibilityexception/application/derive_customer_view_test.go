@@ -146,16 +146,21 @@ func viewCustomer(t *testing.T) domain.CustomerAccountReference {
 	return mustValue(t, domain.NewCustomerAccountReference, "customer-1")
 }
 
-// trackedProjection 造一份最小的有效投影版本：单事实、已归类。
-func trackedProjection(t *testing.T, version string) domain.TrackingProjection {
+// viewEntry 造投影里的一条：揽收归入里程碑；终局不是里程碑，留作未归类。
+func viewEntry(
+	t *testing.T,
+	source domain.SourceContext,
+	fact string,
+	kind string,
+	milestone string,
+) domain.MilestoneClassification {
 	t.Helper()
-	parcel := mustValue(t, domain.NewTrackedParcelReference, "parcel-1")
-	fact, err := domain.NewAcceptedSourceFact(domain.AcceptedSourceFactSpec{
-		Source:      domain.SourceNodeOperations,
-		Parcel:      parcel,
-		Fact:        mustValue(t, domain.NewSourceFactReference, "fact-1"),
-		Kind:        mustValue(t, domain.NewSourceFactKind, "node-intake"),
-		Version:     mustValue(t, domain.NewSourceFactVersion, "fact-1/v1"),
+	accepted, err := domain.NewAcceptedSourceFact(domain.AcceptedSourceFactSpec{
+		Source:      source,
+		Parcel:      mustValue(t, domain.NewTrackedParcelReference, "parcel-1"),
+		Fact:        mustValue(t, domain.NewSourceFactReference, fact),
+		Kind:        mustValue(t, domain.NewSourceFactKind, kind),
+		Version:     mustValue(t, domain.NewSourceFactVersion, fact+"/v1"),
 		OccurredAt:  factOccurredAt,
 		EffectiveAt: factOccurredAt,
 		ReceivedAt:  factOccurredAt.Add(time.Minute),
@@ -163,18 +168,37 @@ func trackedProjection(t *testing.T, version string) domain.TrackingProjection {
 	if err != nil {
 		t.Fatalf("new accepted source fact: %v", err)
 	}
-	classification, err := domain.ClassifyMilestone(
-		fact,
-		mustValue(t, domain.NewMilestoneReference, "PICKED_UP"),
-		mustValue(t, domain.NewMappingVersionReference, "milestone-map/v1"),
-	)
+	mapping := mustValue(t, domain.NewMappingVersionReference, "milestone-map/v1")
+	if milestone == "" {
+		entry, err := domain.LeaveUnclassified(accepted, mapping)
+		if err != nil {
+			t.Fatalf("leave unclassified: %v", err)
+		}
+		return entry
+	}
+	entry, err := domain.ClassifyMilestone(accepted, mustValue(t, domain.NewMilestoneReference, milestone), mapping)
 	if err != nil {
 		t.Fatalf("classify milestone: %v", err)
 	}
+	return entry
+}
+
+func intakeEntry(t *testing.T) domain.MilestoneClassification {
+	t.Helper()
+	return viewEntry(t, domain.SourceNodeOperations, "fact-1", "node-intake", "PICKED_UP")
+}
+
+func finalEntry(t *testing.T, kind string) domain.MilestoneClassification {
+	t.Helper()
+	return viewEntry(t, domain.SourceParcelShipment, "final-outcome/parcel-1/EFFECTIVE_DELIVERY", kind, "")
+}
+
+func projectionOf(t *testing.T, version string, entries ...domain.MilestoneClassification) domain.TrackingProjection {
+	t.Helper()
 	projection, err := domain.DeriveTrackingProjection(
 		mustValue(t, domain.NewProjectionVersionID, version),
-		parcel,
-		[]domain.MilestoneClassification{classification},
+		mustValue(t, domain.NewTrackedParcelReference, "parcel-1"),
+		entries,
 		factOccurredAt.Add(time.Hour),
 	)
 	if err != nil {
@@ -183,12 +207,30 @@ func trackedProjection(t *testing.T, version string) domain.TrackingProjection {
 	return projection
 }
 
+// trackedProjection 造一份终局已采用的投影版本：揽收一条加 PS 已采用终局一条。四维全准
+// 时四维全展示，不看终局的各用例都从这里起。
+func trackedProjection(t *testing.T, version string) domain.TrackingProjection {
+	t.Helper()
+	return projectionOf(t, version, intakeEntry(t), finalEntry(t, domain.FinalOutcomeAdoptedFactKind))
+}
+
+// inTransitProjection 造一份还没有终局的投影版本：只有揽收。
+func inTransitProjection(t *testing.T, version string) domain.TrackingProjection {
+	t.Helper()
+	return projectionOf(t, version, intakeEntry(t))
+}
+
 func viewCommand(t *testing.T, projectionVersion string) application.DeriveCustomerViewCommand {
+	t.Helper()
+	return commandOver(t, trackedProjection(t, projectionVersion))
+}
+
+func commandOver(t *testing.T, projection domain.TrackingProjection) application.DeriveCustomerViewCommand {
 	t.Helper()
 	return application.DeriveCustomerViewCommand{
 		TenantID:   mustValue(t, domain.NewTenantID, "tenant-1"),
 		Customer:   viewCustomer(t),
-		Projection: trackedProjection(t, projectionVersion),
+		Projection: projection,
 	}
 }
 
@@ -299,6 +341,102 @@ func TestANonDisclosableDimensionIsWithheldAloneWithoutHidingTheOthers(t *testin
 		dimensions.Final.State() != domain.DimensionShown ||
 		dimensions.Note.State() != domain.DimensionShown {
 		t.Fatal("withholding one dimension suppressed the others")
+	}
+}
+
+// Covers: CONTEXT 生命周期「当前投影、客户可见 ETA、客户服务终局或已批准披露内容首次
+// 满足展示条件 → 形成……客户视图版本」与「某一维信息待确认……只对该维返回待确认」——
+// 策略准许展示终局，包裹在途时终局一维仍答待确认、不带内容，其余三维照策略展示；终局
+// 采用进投影后新版本视图指回前版、终局一维转为展示。点名 `AT-VE-160`「只有有效交付扫描
+// 但终局尚未形成→不显示包裹服务终局已完成」与 `AT-VE-159`「已形成当前有效客户服务终局
+// →展示终局」。
+func TestAPermittedFinalPendsUntilTheProjectionCarriesTheAdoptedFinal(t *testing.T) {
+	fixture := newViewFixture(t)
+	ctx := context.Background()
+
+	inTransit, err := fixture.handler.Handle(ctx, commandOver(t, inTransitProjection(t, "projection-1")))
+	if err != nil {
+		t.Fatalf("in-transit handle: %v", err)
+	}
+	if inTransit.Outcome() != application.CustomerViewPublished {
+		t.Fatalf("outcome = %q, want PUBLISHED", inTransit.Outcome())
+	}
+	before, _ := inTransit.View()
+	dimensions := before.Dimensions()
+	if dimensions.Final.State() != domain.DimensionPendingConfirmation {
+		t.Fatalf("final = %q before the final formed, want PENDING_CONFIRMATION", dimensions.Final.State())
+	}
+	if _, has := dimensions.Final.Content(); has {
+		t.Fatal("the final dimension carried content before any final formed")
+	}
+	if dimensions.Milestones.State() != domain.DimensionShown ||
+		dimensions.ETA.State() != domain.DimensionShown ||
+		dimensions.Note.State() != domain.DimensionShown {
+		t.Fatal("pending the final pulled the other dimensions down with it")
+	}
+
+	delivered, err := fixture.handler.Handle(ctx, commandOver(t, projectionOf(t, "projection-2",
+		intakeEntry(t), finalEntry(t, domain.FinalOutcomeAdoptedFactKind))))
+	if err != nil {
+		t.Fatalf("delivered handle: %v", err)
+	}
+	if delivered.Outcome() != application.CustomerViewPublished {
+		t.Fatalf("outcome = %q, want PUBLISHED", delivered.Outcome())
+	}
+	after, _ := delivered.View()
+	content, shown := after.Dimensions().Final.Content()
+	if !shown || content.String() != "final/v1" {
+		t.Fatalf("final = %q content %q, want SHOWN with the content the policy approved",
+			after.Dimensions().Final.State(), content)
+	}
+	if prior, superseding := after.PriorVersion(); !superseding || prior != before.Version() {
+		t.Fatalf("prior version = %q, want the in-transit view %q kept as history", prior, before.Version())
+	}
+}
+
+// Covers: CONTEXT「客户服务终局只能来自 `parcel-shipment`」——不采用判断同样来自 PS，说的
+// 却是那份来源没有成为终局；投影里只有它时，策略准许也不展示终局。
+func TestANotAdoptedFinalJudgmentDoesNotShowTheFinal(t *testing.T) {
+	fixture := newViewFixture(t)
+
+	result, err := fixture.handler.Handle(context.Background(), commandOver(t, projectionOf(t, "projection-1",
+		intakeEntry(t), finalEntry(t, domain.FinalOutcomeNotAdoptedFactKind))))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	view, _ := result.View()
+	if view.Dimensions().Final.State() != domain.DimensionPendingConfirmation {
+		t.Fatalf("final = %q, want PENDING_CONFIRMATION; a refusal to adopt is not a final",
+			view.Dimensions().Final.State())
+	}
+}
+
+// Covers: CONTEXT「只展示适用服务与授权允许的……终局」——终局已经形成，策略不准看的仍不
+// 展示，策略待确认的仍待确认；投影只能把展示压成待确认，不能把别的答复抬成展示。
+func TestAFinalThePolicyDoesNotShowStaysUnshownAfterItForms(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		final ports.DimensionDisclosure
+		want  domain.DimensionState
+	}{
+		{"不展示", ports.DimensionDisclosure{State: domain.DimensionNotDisclosed}, domain.DimensionNotDisclosed},
+		{"待确认", ports.DimensionDisclosure{State: domain.DimensionPendingConfirmation}, domain.DimensionPendingConfirmation},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture := newViewFixture(t)
+			fixture.policy.answer.Final = tc.final
+
+			result, err := fixture.handler.Handle(context.Background(), viewCommand(t, "projection-1"))
+			if err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+
+			view, _ := result.View()
+			if view.Dimensions().Final.State() != tc.want {
+				t.Fatalf("final = %q, want %q", view.Dimensions().Final.State(), tc.want)
+			}
+		})
 	}
 }
 

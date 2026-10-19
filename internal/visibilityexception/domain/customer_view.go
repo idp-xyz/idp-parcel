@@ -74,6 +74,20 @@ func WithholdDimension() ViewDimension {
 	return ViewDimension{state: DimensionNotDisclosed}
 }
 
+// FinalDimensionOver 把披露策略对终局一维的答复落到一份投影上。策略回答「准不准给这位
+// 客户看终局」，回答不了「终局形成了没有」——那只有投影里 PS 已采用的终局能答。
+//
+// 准许展示而投影里还没有终局时，这一维答待确认：如实说等，不虚构终局（CONTEXT「不得
+// 从……单一交付扫描自行推导终局」、`AT-VE-160`）。不答不展示——那会把一次没人作过的
+// 披露决定说成有人作过，而终局一形成，同一份策略就要展示它。待确认与不展示原样放行：
+// 策略不准看的，终局形成了也不给看。
+func FinalDimensionOver(permitted ViewDimension, projection TrackingProjection) ViewDimension {
+	if permitted.state != DimensionShown || projection.CarriesCustomerServiceFinal() {
+		return permitted
+	}
+	return PendDimension()
+}
+
 func (dimension ViewDimension) State() DimensionState {
 	return dimension.state
 }

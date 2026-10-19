@@ -115,8 +115,8 @@ func NewDeriveCustomerViewHandler(deps DeriveCustomerViewDeps) *DeriveCustomerVi
 
 // Handle 把一个投影新版本推进到客户视图版本：受理（账户与投影身份缺一即未受理，不读
 // 任何依赖）→ 幂等按投影版本（同一投影版本不重发视图，只重发同一份意图）→ 披露策略
-// 答复译成四维（未配置即四维全部待确认，如实说等，不虚构可见性）→ 首版发布或替代指回
-// 前版 → 提交与发布意图。视图只基于当前投影形成，本编排不读内部案件或原始来源消息——
+// 答复译成四维（未配置即四维全部待确认，如实说等，不虚构可见性；终局一维另看投影里
+// 有没有终局）→ 首版发布或替代指回前版 → 提交与发布意图。视图只基于当前投影形成，本编排不读内部案件或原始来源消息——
 // 依赖清单里根本没有那些端口。
 func (handler *DeriveCustomerViewHandler) Handle(
 	ctx context.Context,
@@ -153,7 +153,7 @@ func (handler *DeriveCustomerViewHandler) Handle(
 		// 空白，混起来会让一次故障被读成租户还没登记披露规则。
 		return DeriveCustomerViewResult{outcome: CustomerViewUndecided, reason: DisclosurePolicyUnavailable}, nil
 	}
-	dimensions, err := dimensionsFrom(answer, configured)
+	dimensions, err := dimensionsFrom(answer, configured, command.Projection)
 	if err != nil {
 		return DeriveCustomerViewResult{}, err
 	}
@@ -215,7 +215,15 @@ func (handler *DeriveCustomerViewHandler) handOff(
 // dimensionsFrom 把策略答复译成四个展示维。未配置时四维全部待确认——真实披露范围属
 // 待登记实例参数，如实说等；不虚构可见性，也不把没人作过的披露决定说成「不展示」。
 // 已配置时逐维经领域构造器翻译，展示无内容在构造期立不起来，上抛而不吞。
-func dimensionsFrom(answer ports.DisclosureAnswer, configured bool) (domain.CustomerViewDimensions, error) {
+//
+// 终局一维再过一道投影：策略只说准不准看，终局形成没有由投影答（domain.FinalDimensionOver）。
+// 终局的事实归 PS，进投影时有固定的事实类型可认，所以能在这里补。ETA 一维要的是
+// `UC-VE-003` 的对客可见判断（`AT-VE-158`），那份判断不在投影里，不在这里补。
+func dimensionsFrom(
+	answer ports.DisclosureAnswer,
+	configured bool,
+	projection domain.TrackingProjection,
+) (domain.CustomerViewDimensions, error) {
 	if !configured {
 		return domain.CustomerViewDimensions{
 			Milestones: domain.PendDimension(),
@@ -241,7 +249,12 @@ func dimensionsFrom(answer ports.DisclosureAnswer, configured bool) (domain.Cust
 	if err != nil {
 		return domain.CustomerViewDimensions{}, fmt.Errorf("note dimension: %w", err)
 	}
-	return domain.CustomerViewDimensions{Milestones: milestones, ETA: eta, Final: final, Note: note}, nil
+	return domain.CustomerViewDimensions{
+		Milestones: milestones,
+		ETA:        eta,
+		Final:      domain.FinalDimensionOver(final, projection),
+		Note:       note,
+	}, nil
 }
 
 // dimensionFrom 逐取值分派，不留兜底：策略端口日后新增一种维度答复时这里报错，而不是

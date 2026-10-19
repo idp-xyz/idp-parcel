@@ -134,3 +134,94 @@ func TestSupersessionKeepsThePublishedHistory(t *testing.T) {
 		t.Fatalf("err = %v; 重号的替代分不出两版", err)
 	}
 }
+
+// unclassifiedEntry 造一条未归类条目：终局不是里程碑，映射目录登不登它都不改变终局
+// 有没有形成，夹具因此刻意不归类。
+func unclassifiedEntry(
+	t *testing.T,
+	source domain.SourceContext,
+	fact string,
+	kind string,
+) domain.MilestoneClassification {
+	t.Helper()
+	spec := factSpec(t)
+	spec.Source = source
+	spec.Fact = mustValue(t, domain.NewSourceFactReference, fact)
+	spec.Kind = mustValue(t, domain.NewSourceFactKind, kind)
+	accepted, err := domain.NewAcceptedSourceFact(spec)
+	if err != nil {
+		t.Fatalf("new accepted source fact: %v", err)
+	}
+	entry, err := domain.LeaveUnclassified(
+		accepted, mustValue(t, domain.NewMappingVersionReference, "milestone-map/v1"))
+	if err != nil {
+		t.Fatalf("leave unclassified: %v", err)
+	}
+	return entry
+}
+
+func projectionWith(t *testing.T, entries ...domain.MilestoneClassification) domain.TrackingProjection {
+	t.Helper()
+	projection, err := domain.DeriveTrackingProjection(
+		mustValue(t, domain.NewProjectionVersionID, "projection-1/v1"),
+		mustValue(t, domain.NewTrackedParcelReference, "parcel-1"),
+		entries,
+		publishedAt,
+	)
+	if err != nil {
+		t.Fatalf("derive tracking projection: %v", err)
+	}
+	return projection
+}
+
+// Covers: VE CONTEXT「客户全程追踪视图只基于……`parcel-shipment` 提供的客户服务终局……
+// 形成。它不得从内部案件、原始来源消息或单一交付扫描自行推导终局」与「某一维信息待
+// 确认……只对该维返回待确认」——策略准许展示终局，终局一维仍要投影里有 PS 已采用的
+// 终局才展示；不采用判断、别的上下文借用同一类型字面量都不算。点名 `AT-VE-159`
+// 「已形成当前有效客户服务终局→展示终局」与 `AT-VE-160`「只有有效交付扫描但终局尚未
+// 形成→不显示包裹服务终局已完成」。策略不准看的，终局形成了也不给看。
+func TestTheFinalDimensionShowsOnlyWhenTheProjectionCarriesAnAdoptedFinal(t *testing.T) {
+	permitted, err := domain.ShowDimension(mustValue(t, domain.NewViewContentReference, "final/v1"))
+	if err != nil {
+		t.Fatalf("show final: %v", err)
+	}
+	intake := classified(t, "parcel-1")
+	delivered := unclassifiedEntry(t, domain.SourceTransportFulfillment,
+		"effective-delivery/parcel-1/attempt-1", "effective-delivery")
+	adopted := unclassifiedEntry(t, domain.SourceParcelShipment,
+		"final-outcome/parcel-1/EFFECTIVE_DELIVERY", domain.FinalOutcomeAdoptedFactKind)
+	notAdopted := unclassifiedEntry(t, domain.SourceParcelShipment,
+		"final-outcome/parcel-1/EFFECTIVE_DELIVERY", domain.FinalOutcomeNotAdoptedFactKind)
+	borrowed := unclassifiedEntry(t, domain.SourceTransportFulfillment,
+		"final-outcome/parcel-1/EFFECTIVE_DELIVERY", domain.FinalOutcomeAdoptedFactKind)
+
+	cases := []struct {
+		name       string
+		permitted  domain.ViewDimension
+		projection domain.TrackingProjection
+		want       domain.DimensionState
+	}{
+		{"在途", permitted, projectionWith(t, intake), domain.DimensionPendingConfirmation},
+		{"只有有效交付", permitted, projectionWith(t, intake, delivered), domain.DimensionPendingConfirmation},
+		{"终局已采用", permitted, projectionWith(t, intake, delivered, adopted), domain.DimensionShown},
+		{"只有不采用判断", permitted, projectionWith(t, intake, notAdopted), domain.DimensionPendingConfirmation},
+		{"别的上下文借用已采用字面量", permitted, projectionWith(t, intake, borrowed), domain.DimensionPendingConfirmation},
+		{"策略不展示", domain.WithholdDimension(), projectionWith(t, intake, adopted), domain.DimensionNotDisclosed},
+		{"策略待确认", domain.PendDimension(), projectionWith(t, intake, adopted), domain.DimensionPendingConfirmation},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := domain.FinalDimensionOver(tc.permitted, tc.projection)
+			if got.State() != tc.want {
+				t.Fatalf("final = %q, want %q", got.State(), tc.want)
+			}
+			content, shown := got.Content()
+			if shown != (tc.want == domain.DimensionShown) {
+				t.Fatalf("content shown = %v under state %q", shown, got.State())
+			}
+			if shown && content.String() != "final/v1" {
+				t.Fatalf("content = %q; 展示的内容来处只能是策略批的那一份", content)
+			}
+		})
+	}
+}

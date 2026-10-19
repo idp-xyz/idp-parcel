@@ -213,9 +213,9 @@ func finalProjectionCommand(record psports.FinalOutcomeRecord) (veapplication.De
 // 终局类型目录），把它炼进字面量等于让机制半边依赖一份还不存在的实例值。它作为不透明
 // 身份串留在终局本体里，不进这里。
 func kindForFinalRecord(record psports.FinalOutcomeRecord) (vedomain.SourceFactKind, error) {
-	raw := "final-outcome-not-adopted"
+	raw := vedomain.FinalOutcomeNotAdoptedFactKind
 	if record.Finalized {
-		raw = "final-outcome-adopted"
+		raw = vedomain.FinalOutcomeAdoptedFactKind
 	}
 	kind, err := vedomain.NewSourceFactKind(raw)
 	if err != nil {

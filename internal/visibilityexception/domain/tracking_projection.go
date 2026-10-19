@@ -118,6 +118,16 @@ func NewSourceFactKind(value string) (SourceFactKind, error) {
 	return SourceFactKind{required}, err
 }
 
+// 终局采用判断进投影时的两格事实类型。事实类型本是源上下文拥有的开放集合，本上下文
+// 不认其中任何一格；这两格例外：客户视图的终局一维只能来自 parcel-shipment 已采用的
+// 客户服务终局（CONTEXT），视图派生因此必须认得出「已采用」。PS 适配器翻译时写入、
+// 投影回答有没有终局时认读，同用这一处定义——各抄一份字面量，一边改名另一边就永远
+// 认不出终局，而没有任何东西会报。
+const (
+	FinalOutcomeAdoptedFactKind    = "final-outcome-adopted"
+	FinalOutcomeNotAdoptedFactKind = "final-outcome-not-adopted"
+)
+
 // AcceptedSourceFactSpec 是一份已接受源事实引用所需的全部输入。
 type AcceptedSourceFactSpec struct {
 	Source  SourceContext
@@ -350,6 +360,23 @@ func (projection TrackingProjection) DerivedAt() time.Time {
 // PriorVersion 只在重派生版本上给出，指回被替代的那一版。
 func (projection TrackingProjection) PriorVersion() (ProjectionVersionID, bool) {
 	return projection.priorVersion, projection.priorVersion.valid()
+}
+
+// CarriesCustomerServiceFinal 回答这份投影里有没有 parcel-shipment 已采用的客户服务
+// 终局。只认来源为 PS、类型为已采用的条目：不采用判断同样来自 PS，说的却恰是那份来源
+// 没有成为终局；有效交付是终局的上游来源，不是终局本身——只有交付、没有终局时不得
+// 显示终局已完成（`AT-VE-160`）。归类与否不进判断：终局是 PS 的事实，不是里程碑，
+// 映射目录没登这一类也不改变终局已经形成。
+//
+// 条目只含当前有效事实（派生前已滤掉被替代的），所以这里不再看替代关系。
+func (projection TrackingProjection) CarriesCustomerServiceFinal() bool {
+	for _, entry := range projection.entries {
+		if entry.fact.source == SourceParcelShipment &&
+			entry.fact.kind.String() == FinalOutcomeAdoptedFactKind {
+			return true
+		}
+	}
+	return false
 }
 
 // Rederive 依据迟到事实、来源更正或映射版本变化形成新的当前投影（CONTEXT 生命周期）：
