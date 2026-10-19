@@ -452,8 +452,8 @@ func TestUnreadableDependenciesAreRetriedWithoutWriting(t *testing.T) {
 	})
 }
 
-// Covers: AT-TF-254——登记用例答的业务格照入账：迁移 0038 之前提交的委托没记下协议版本，答缺采购上下文；协议按段计时同一段
-// 第二件包裹的参与结束答范围已计过——第一件已盖住整段。
+// Covers: AT-TF-254——登记用例答的业务格照入账：迁移 0038 之前提交的委托没记下协议版本，答缺采购上下文；委托那一版在业务
+// 时间未生效，照协议否定格答；协议按段计时同一段第二件包裹的参与结束答范围已计过——第一件已盖住整段。
 func TestRegistrationBusinessAnswersSettle(t *testing.T) {
 	t.Run("委托没记下协议版本", func(t *testing.T) {
 		occurrences := adoptedTrunkRig(t, trunkCommission(t, commissionShape{startedAt: occurrenceEnteredAt, legacy: true}))
@@ -462,6 +462,17 @@ func TestRegistrationBusinessAnswersSettle(t *testing.T) {
 		if result.Registration().Outcome() != application.ChargeOccurrenceInputNotAccepted ||
 			result.Registration().Detail() != application.ProcurementContextMissing {
 			t.Fatalf("登记 = %s/%s", result.Registration().Outcome(), result.Registration().Detail())
+		}
+		assertFormationDisposition(t, result, application.FormationSettled)
+		assertNothingWritten(t, occurrences)
+	})
+	t.Run("委托那一版在业务时间未生效", func(t *testing.T) {
+		occurrences := adoptedTrunkRig(t, adoptedCommission(t))
+		occurrences.agreements.check.Standing = ports.SupplierAgreementNotEffective
+		rig := newFormationRig(t, occurrences)
+		result := rig.onHandover(t, rig.handedOverAtSIN(t, trunkParcel, domain.ObjectHandedOver))
+		if result.Registration().Outcome() != application.ChargeOccurrenceAgreementNotEffective {
+			t.Fatalf("登记 = %s", result.Registration().Outcome())
 		}
 		assertFormationDisposition(t, result, application.FormationSettled)
 		assertNothingWritten(t, occurrences)
@@ -483,7 +494,7 @@ func TestRegistrationBusinessAnswersSettle(t *testing.T) {
 }
 
 // Covers: AT-TF-255——本上下文自己的缺陷响亮失败：自家键过不了自家门、同一件事实在两个段里都结束了参与、旅程册同一刻开始
-// 两趟、登记用例答出本路不该见的格（不适用、缺采购上下文以外的未受理）。
+// 两趟、登记用例答出本路不该见的格（不适用、缺采购上下文以外的未受理、协议不在册、供应商不符、采购上下文冲突）。
 func TestFormationDefectsAreNeitherSettledNorRetried(t *testing.T) {
 	t.Run("自家键不受理", func(t *testing.T) {
 		rig := newFormationRig(t, adoptedTrunkRig(t, adoptedCommission(t)))
@@ -539,6 +550,9 @@ func TestFormationDefectsAreNeitherSettledNorRetried(t *testing.T) {
 	for name, canned := range map[string]application.RegisterChargeOccurrenceResult{
 		"不适用":       cannedRegistration(t, application.ChargeOccurrenceNotApplicable),
 		"参与未结束的未受理": cannedRegistration(t, application.ChargeOccurrenceInputNotAccepted),
+		"协议不在册":     cannedRegistration(t, application.ChargeOccurrenceAgreementNotRegistered),
+		"供应商不符":     cannedRegistration(t, application.ChargeOccurrenceProviderMismatch),
+		"采购上下文冲突":   cannedRegistration(t, application.ChargeOccurrenceConflict),
 		"集外一格":      {},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -550,7 +564,9 @@ func TestFormationDefectsAreNeitherSettledNorRetried(t *testing.T) {
 	}
 }
 
-// cannedRegistration 造一份登记用例的答复，只为证处置怎样折它：经真登记用例答出来——不适用由声明自营得出，未受理由空成员得出。
+// cannedRegistration 造一份登记用例的答复，只为证处置怎样折它：经真登记用例答出来——不适用由声明自营得出，未受理由参与未结束
+// 得出，协议不在册与供应商不符由人工报协议的那一路得出，冲突取段已采用委托而报来另一家服务方的采购上下文冲突。这几格本路都
+// 走不到，只能借人工那一路的命令造出来。
 func cannedRegistration(t *testing.T, outcome application.ChargeOccurrenceOutcome) application.RegisterChargeOccurrenceResult {
 	t.Helper()
 	rig := newOccurrenceRig(t)
@@ -561,10 +577,23 @@ func cannedRegistration(t *testing.T, outcome application.ChargeOccurrenceOutcom
 		command.Provider, command.AgreementObject, command.AgreementVersion = "", "", ""
 	case application.ChargeOccurrenceInputNotAccepted:
 		rig.segments = trunkSegmentWith(t, participationRow(t, trunkParcel, false))
+	case application.ChargeOccurrenceAgreementNotRegistered:
+		rig.agreements.check = ports.SupplierAgreementCheck{Standing: ports.SupplierAgreementNotRegistered}
+	case application.ChargeOccurrenceProviderMismatch:
+		rig.agreements.check = ports.SupplierAgreementCheck{
+			Standing: ports.SupplierAgreementProviderMismatch,
+			Supplier: occurrenceValue(t, domain.NewServiceProviderReference, "SYN-PARTY-CARRIER-LASTMILE-01"),
+		}
+	case application.ChargeOccurrenceConflict:
+		rig = adoptedTrunkRig(t, adoptedCommission(t))
+		command.Provider = "SYN-PARTY-CARRIER-LM-01"
 	}
 	result := rig.register(t, command)
 	if result.Outcome() != outcome {
 		t.Fatalf("夹具答复 = %s, want %s", result.Outcome(), outcome)
+	}
+	if outcome == application.ChargeOccurrenceConflict && result.Detail() != application.ProcurementContextConflict {
+		t.Fatalf("夹具细格 = %s, want PROCUREMENT_CONTEXT_CONFLICT", result.Detail())
 	}
 	return result
 }

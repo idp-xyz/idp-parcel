@@ -184,23 +184,30 @@ func (result FormActualFulfillmentResult) Disposition() ActualFulfillmentFormati
 }
 
 // registrationDisposition 判登记的答复：
-//   - 入账：形成、已存在、冲突（同一身份异内容、成员或范围已被计过——册上那一项不因重投改变）、协议四个否定格、未配置、
-//     不计费；以及未受理「缺采购上下文」——迁移 0038 之前提交的委托没记下协议版本，要人登记时报出，重投报不出来。
+//   - 入账：形成、已存在、冲突（同一身份异内容、成员或范围已被计过——册上那一项不因重投改变）、协议未生效与已终止（委托
+//     那一版在业务时间的如实答案）、未配置、不计费；以及未受理「缺采购上下文」——迁移 0038 之前提交的委托没记下协议版本，
+//     要人登记时报出，重投报不出来。
 //   - 重投：登记用例的未决，某一口此刻读不动。
-//   - 缺陷：其余未受理（本编排交的命令过不了登记用例的门，或找到的已结束参与在登记时不认）与不适用（本编排只交已采用
-//     委托的段、不声明自营，登记用例不会答它）。
+//   - 缺陷：本路走不到、走到了就说明两边走岔的格。其余未受理（本编排交的命令过不了登记用例的门，或找到的已结束参与在登记
+//     时不认）；不适用（本编排只交已采用委托的段、不声明自营）；协议不在册、供应商不符与采购上下文冲突——本编排不报服务方、
+//     协议与自营，段又已采用委托，登记用例在委托记着版本时把前两格上抛、没记着时先答缺采购上下文，三格都轮不到。登记用例
+//     日后在这几格上改了行为，本路要响起来让人重看，不能静默入账。
 func registrationDisposition(registered RegisterChargeOccurrenceResult) ActualFulfillmentFormationDisposition {
 	switch registered.Outcome() {
 	case ChargeOccurrenceRegistered,
 		ChargeOccurrenceExisting,
-		ChargeOccurrenceConflict,
-		ChargeOccurrenceAgreementNotRegistered,
 		ChargeOccurrenceAgreementNotEffective,
 		ChargeOccurrenceAgreementTerminated,
-		ChargeOccurrenceProviderMismatch,
 		ChargeOccurrenceNotConfigured,
 		ChargeOccurrenceNotCharged:
 		return FormationSettled
+	case ChargeOccurrenceConflict:
+		if registered.Detail() == ProcurementContextConflict {
+			return FormationDefect
+		}
+		return FormationSettled
+	case ChargeOccurrenceAgreementNotRegistered, ChargeOccurrenceProviderMismatch:
+		return FormationDefect
 	case ChargeOccurrenceInputNotAccepted:
 		if registered.Detail() == ProcurementContextMissing {
 			return FormationSettled
