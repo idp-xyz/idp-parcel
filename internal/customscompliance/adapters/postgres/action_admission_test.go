@@ -2,8 +2,11 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
+
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	adapter "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/application"
@@ -351,4 +354,40 @@ func TestActionAdmissionJudgementTableRefusesOutOfVocabularyRows(t *testing.T) {
 	fixture.rejects(t, "出发缺终点", insert, "DEPARTURE", nil, "SAME_ZONE", "ADMITTED", `[{}]`)
 	fixture.rejects(t, "答复词表外", insert, "DELIVERY", nil, "NOT_ASKED", "RELEASED", `[{}]`)
 	fixture.rejects(t, "没有逐动作答复", insert, "DELIVERY", nil, "NOT_ASKED", "ADMITTED", `[]`)
+}
+
+// PBC-08 行为面负向证据：本票两只写口在无事务上下文必须被 RequireExecutor 拒绝。判断册写口先核词表、后取执行器，
+// 所以喂一份合法的判断让它走到守卫。
+func TestActionAdmissionWritesRefuseToRunOutsideATransaction(t *testing.T) {
+	fixture := newViewFixture(t)
+	ctx := t.Context()
+
+	zones, err := adapter.NewNodeCustomsZoneRegistrations(fixture.db)
+	if err != nil {
+		t.Fatalf("构造区域写口：%v", err)
+	}
+	if _, err := zones.RegisterNodeCustomsZone(ctx, domain.TenantID{}, domain.NetworkNodeReference{}, domain.CustomsZoneReference{}, admissionDBAt); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务登区域应返回 ErrTransactionRequired，实得：%v", err)
+	}
+
+	judgements, err := adapter.NewActionAdmissionJudgements(fixture.db)
+	if err != nil {
+		t.Fatalf("构造判断册：%v", err)
+	}
+	intent, err := domain.NewDeliveryIntent(viewValue(t, domain.NewNetworkNodeReference, "SYN-NODE-SIN-LM"))
+	if err != nil {
+		t.Fatalf("构造交付意图：%v", err)
+	}
+	judgement, err := domain.JudgeActionAdmission(domain.ActionAdmissionInput{
+		Object:   viewValue(t, domain.NewDeclaredParcelReference, admissionParcel),
+		Intent:   intent,
+		At:       admissionDBAt,
+		JudgedAt: admissionDBAt,
+	})
+	if err != nil {
+		t.Fatalf("构造判断：%v", err)
+	}
+	if _, err := judgements.SaveActionAdmissionJudgement(ctx, viewValue(t, domain.NewTenantID, admissionTenant), "AADJ-guard", judgement); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务记判断应返回 ErrTransactionRequired，实得：%v", err)
+	}
 }
