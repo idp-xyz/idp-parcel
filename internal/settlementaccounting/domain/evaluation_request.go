@@ -207,7 +207,7 @@ func (request EvaluationRequest) RequestedBy() RequesterReference {
 const supplierExpectedCostVersionPrefix = "BUYSC"
 
 // SupplierExpectedCostVersionID 是这份请求至多形成的那一份供应商预期成本首版的版本标识：类别段 `BUYSC`、一道横线、
-// 请求标识原文（票 demo-chain-gaps/08 代决，与 SELL 请求派生预估客户费用标识同一做法）。
+// 请求标识原文（ADR-0200 决定二，与 SELL 请求派生预估客户费用标识同一做法）。
 //
 // 派生成立靠的是计价按回指至多为一份请求形成一份评价：评价已记录信封重投、或两拍并发，算出的都是同一个标识，预期
 // 成本库主键（租户、版本）当场挡住第二份。派生的只是首版——计价纠错换评价也换版本，那一版的标识由纠错那条路给，

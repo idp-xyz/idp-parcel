@@ -98,7 +98,7 @@ type FormRequestedSupplierExpectedCostDeps struct {
 	Costs    *FormSupplierExpectedCostHandler
 }
 
-// FormRequestedSupplierExpectedCostHandler 是 UC-SA-002 步 5 BUY 方向的形成编排外层（票 demo-chain-gaps/08）：BUY·供应商
+// FormRequestedSupplierExpectedCostHandler 是 UC-SA-002 步 5 BUY 方向的形成编排外层（ADR-0200）：BUY·供应商
 // 成本评价已记录之后，按评价回指读回 BUY 评价请求，以请求上的合格来源引用与由请求派生的版本标识调形成编排。请求册
 // 没有状态列，本编排不改记请求：评价采用不了的那几格在计价那一侧的评价上可查（评价状态与问题项，按回指读），本侧
 // 只是不形成成本行。
@@ -170,7 +170,7 @@ func (handler *FormRequestedSupplierExpectedCostHandler) Handle(
 }
 
 // foldUndecidedFormation 把形成编排的`未决`按原因分两边：依赖答不出的仍是未决、带上根因；评价自己停下的各格是定局。
-// 不留 default：形成编排日后多一个原因时这里要报错，而不是静默落进某一边——那一边决定的是烧不烧重投预算。
+// default 报错，不静默落进任一边：形成编排日后多一个原因时要有人来定它归哪边——那一边决定的是烧不烧重投预算。
 func foldUndecidedFormation(
 	formed ExpectedCostResult,
 	version domain.SupplierCostVersionID,

@@ -1,7 +1,7 @@
 # 08 BUY 评价已记录的消费门对每一封都答来源引用未登记，供应商预期成本编排没装配
 
 Category: enhancement
-Status: 完工，待评审与进 main——分支 `claude-dcg08`（基于 `81a4c418`；2026-10-19 作者子代理落地，见文末「代决」与「完成记录」）。此前 needs-triage——2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自同日对演示动线余下各段的只读勘察（隔离子代理，证据 `S`）。
+Status: in-progress——完工待进 main，分支 `claude-dcg08`；评审记录见文末（基于 `81a4c418`；2026-10-19 作者子代理落地，见文末「代决」与「完成记录」）。此前 needs-triage——2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自同日对演示动线余下各段的只读勘察（隔离子代理，证据 `S`）。
 Blocked by: 无
 出处：[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) 2026-10-18 那次重走。
 
@@ -108,3 +108,16 @@ none（票 05 格 18 去处 sa-cc/11 已 resolved，票 05 重走一节已记「
 4. **读不回里混着不自愈的格**：读口把引用译不成计价侧标识、评价不属本租户也折成读不回、按未决重投。与 SELL 那一路同一处不精确，没在本票改。
 5. **演示动线仍到不了 BUY 成本**：形成路已接上，但演示租户的 BUY 链上游还缺运输收费发生项的生产路径（[07](07-transport-charge-occurrences-have-no-production-path.md)）与 BUY 触发册登记（[10](10-demo-tenant-buy-and-sell-trigger-registers-are-empty.md)）；演示 BUY 卡若仍没声明金额取整（[09](09-demo-price-cards-declare-no-amount-rounding.md)），到了这里也只会落「采用不了」。端到端不在本票。
 6. 机制清点没重生成；`CONTEXT-MAP` 的 `parcel-pricing → settlement-accounting` 一段没改（它没写 BUY 消费门的现状，不过时）。
+
+## 评审与进 main 记录（2026-10-19）
+
+- 隔离子代理一次过两轴，判 0 阻断。逐项核过的：`BUYSC-<请求标识>` 派生的前提（计价迁移的部分唯一索引「一份请求至多一份评价」；版本标识在账单与审核里是不透明值；应用层今天没有 `AppendCorrection` 调用方）；外层各格去向；派发的未决名单；退役哨兵已无引用。
+- 已修的非阻断：
+  - `AT-SA-183` 写全本路的例外：生命周期表「待判断/冲突/未受理/未形成」一行、`AT-SA-175`、`AT-SA-177`。`AT-SA-184` 补「已完成却未受理」一格。
+  - 三处代码注释改引 ADR-0200 决定二，不引票。
+  - `foldUndecidedFormation` 的注释与它的 `default` 对齐。
+  - 装配头注的主语改为消费门。
+  - ADR-0200 越权风险点 3、4 说的「另立票」立成 [14](./14-buy-request-stuck-after-an-unadoptable-evaluation.md)、[15](./15-occurrence-revision-does-not-drive-a-cost-correction.md)。
+  - [09](./09-demo-price-cards-declare-no-amount-rounding.md) 的证据句同步。
+- 与 [11](./11-external-result-received-has-no-subscriber.md) 合成一批，rebase 到 main 后整批快进推送，与本记录同一次推送。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 @@PIN@@：@@N@@ 包 ok，0 FAIL。机制清点在同一 tip 上重生成。

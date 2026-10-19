@@ -185,8 +185,8 @@
 | `AT-SA-180` | 包裹计费时点那一路，SELL·客户费用评价失败 | SELL 请求停在已提交、不改记，入账不重投。这是生命周期表「未形成」一行要求失败阶段和续办入口的例外（[ADR-0198](../../adr/0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md) 决定一与越权风险点 1） |
 | `AT-SA-181` | 包裹计费时点那一路，评价回指的 SELL 请求不在册上，或评价结算币种与请求快照不同 | 不形成费用、不改记请求，作两侧矛盾上抛为可见的发布失败，不按待判断或不归本路静默入账（[ADR-0198](../../adr/0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md) 决定四） |
 | `AT-SA-182` | BUY·供应商成本评价已完成，回指一份在册的 BUY 评价请求 | 以请求上的发生项、费用项目、供应商协议与评价形成供应商预期成本首版，版本标识由请求标识派生；同一封重投或另一封指同一份评价都不多形成（[ADR-0200](../../adr/0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md) 决定一、二） |
-| `AT-SA-183` | 回指在册请求的 BUY 评价不可计价、冲突、待判断、失败、跨币种没带换算步骤，或价卡没声明金额取整 | 不形成任何成本行，不换写金额，入账不重投；BUY 请求册不记状态，这是生命周期表「未形成」一行要求失败阶段和续办入口的例外（[ADR-0200](../../adr/0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md) 决定三与越权风险点 1） |
-| `AT-SA-184` | BUY 评价回指的请求不在 BUY 请求册上，或派生版本上已有另一份内容 | 不形成成本，作两侧矛盾上抛为可见的发布失败，不按不归本路静默入账（[ADR-0200](../../adr/0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md) 决定四） |
+| `AT-SA-183` | 回指在册请求的 BUY 评价不可计价、冲突、待判断、失败、跨币种没带换算步骤，或价卡没声明金额取整 | 不形成任何成本行，不换写金额，入账不重投；BUY 请求册不记状态。生命周期表「待判断/冲突/未受理/未形成」一行要求的缺口、冲突、失败阶段和续办入口，以及 `AT-SA-175` 保存排除依据、`AT-SA-177` 记录缺口，在本路都是例外（[ADR-0200](../../adr/0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md) 决定三与越权风险点 1、2） |
+| `AT-SA-184` | BUY 评价回指的请求不在 BUY 请求册上，派生版本上已有另一份内容，或评价已完成而形成时未受理（例如合计为零） | 不形成成本，作两侧矛盾上抛为可见的发布失败，不按不归本路静默入账（[ADR-0200](../../adr/0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md) 决定四） |
 
 ## 生产参数与待决风险
 

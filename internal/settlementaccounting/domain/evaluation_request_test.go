@@ -199,7 +199,7 @@ func TestAnEvaluationRequestRefusesAnyMissingPiece(t *testing.T) {
 	}
 }
 
-// Covers: 票 demo-chain-gaps/08 代决「供应商预期成本首版的版本标识由 BUY 评价请求标识确定性派生」——同一份请求派生
+// Covers: ADR-0200 决定二「版本标识由请求派生，写作 `BUYSC-<请求标识>`」——同一份请求派生
 // 同一个标识；只依请求标识，换来源引用或范围不变，换请求就变。
 func TestTheSupplierExpectedCostVersionIsDerivedFromTheRequestIDAlone(t *testing.T) {
 	sources := evaluationRequestSources(t, "syn-occ-1", "v1", "syn-fee-1", "syn-agreement-1")

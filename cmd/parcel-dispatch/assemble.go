@@ -2782,7 +2782,7 @@ func adoptDutyPaymentVerificationConsumer(
 // 按评价回指读回 BUY 评价请求，以请求上的合格来源引用与由请求派生的版本标识调既有的 FormSupplierExpectedCostHandler。
 // 跨上下文翻译只在 SA 的 `adapters/parcelpricing`；SA application 不 import PP。
 //
-// 外层与本体读的是同一只 BUY 读口：外层只看回指，本体按评价引用自己再读结果与金额，命令上不带金额
+// 消费门与本体读的是同一只 BUY 读口：消费门取回指交外层，本体按评价引用自己再读结果与金额，命令上不带金额
 // （FormSupplierExpectedCostCommand 头注）。请求册与预期成本库都是真册；请求册不记状态，评价采用不了时不改记任何册。
 func formSupplierExpectedCostOnBuyEvaluationConsumer(
 	db *bentopg.DB,
