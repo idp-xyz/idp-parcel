@@ -18,16 +18,16 @@
 
 | 桶 | 数量 |
 |---|---|
-| ① 已钉住 | 328 |
+| ① 已钉住 | 329 |
 | ② 机制候选 | 224 |
 | ③ 实例/闸门 | 143 |
 | ④ 机制未落地 | 425 |
-| 合计 | 1120 |
+| 合计 | 1121 |
 
 | 前缀 | 总数 | ① | ② | ③ | ④ |
 |---|---|---|---|---|---|
 | CC | 425 | 35 | 0 | 89 | 301 |
-| NO | 61 | 33 | 21 | 7 | 0 |
+| NO | 62 | 34 | 21 | 7 | 0 |
 | NR | 53 | 24 | 28 | 1 | 0 |
 | PC | 36 | 35 | 1 | 0 | 0 |
 | PS | 93 | 66 | 25 | 2 | 0 |
@@ -107,6 +107,7 @@
 | `AT-NO-059` | internal/nodeoperations/application/dispose_identity_conflict_test.go::TestAThirdArrivalAfterADispositionConflictsOnlyWithTheUnitAssociatedNow；internal/nodeoperations/adapters/postgres/reception_disposition_test.go::TestOtherUnitIntakesStopAtADisposition；internal/nodeoperations/adapters/postgres/reception_disposition_test.go::TestParcelContainmentStopsAtADisposition；cmd/parcel-api/identity_disposition_test.go::TestADispositionAndAnotherUnitsReceptionSerializeOnTheParcel（并发半边） |
 | `AT-NO-060` | internal/nodeoperations/application/dispose_identity_conflict_test.go::TestADispositionAppendsOnEveryChainOfTheUnit |
 | `AT-NO-061` | internal/nodeoperations/domain/directional_basis_test.go::TestIdentityBasisReadsEachJudgmentChainHead；cmd/parcel-api/reception_one_mark_two_units_test.go::TestTheWiredReceptionTurnsOneMarkOnTwoUnitsIntoAnIdentityConflict（真库面：一码两物之后两件的原因集） |
+| `AT-NO-062` | internal/nodeoperations/application/identity_conflict_cause_test.go::TestAnAmbiguityOnlyConflictIsReleasedOnceTheDeclarationIsGone；internal/nodeoperations/application/identity_conflict_cause_test.go::TestAnAmbiguityOnlyConflictStaysWhileADeclarationRemains；cmd/parcel-dispatch/node_identity_ambiguity_release_test.go::TestTheWiredDispatchReleasesAnAmbiguityOnlyConflictOnceTheDeclarationIsGone；cmd/parcel-dispatch/node_identity_ambiguity_release_test.go::TestTheWiredDispatchKeepsConflictsTheRetiredDeclarationDidNotCause |
 | `AT-NR-001` | internal/networkrouting/application/create_initial_route_test.go::TestThreeParcelsKeepThreeIndependentResults；internal/networkrouting/domain/initial_route_plan_test.go::TestAnInitialRoutePlanCarriesItsFullSelectionBasis；internal/networkrouting/domain/route_ranking_test.go::TestSelectionFollowsTheStrategysDeclaredCriterionOrder |
 | `AT-NR-002` | internal/networkrouting/application/create_initial_route_test.go::TestTwoParcelsFormTwoIndependentPlans |
 | `AT-NR-003` | internal/networkrouting/application/create_initial_route_test.go::TestAReplayReturnsExistingResultsAndAConflictOverwritesNothing |
@@ -1236,6 +1237,8 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 追记十二（票 no-reception-source/05，2026-10-19）：`AT-NO-051`「身份核对读不动」随身份核对读不动翻成待识别加「未核对」落地点名入①（编排面、HTTP 面、存储面的 `ParcelContainmentView` 两条、生产装配真库面、受控批量口面），由②移出。①320→321（NO 32→33）、②225→224（NO 22→21），合计不变。
 
 2026-10-19 追记（票 demo-chain-gaps/32）：UC-TF-005 新立 `AT-TF-110`–`116`（出发门禁读数），随票在领域、编排、适配器、真库与装配用例上补 Covers 点名，全部入①；半边覆盖在行内注明。①309→316（TF 30→37），TF 总数 97→104，合计 1113→1120；②③④不变。号取 110 起而不接 105：同波票 17 占 105–106、票 23 占 105–107，两票先进 main 时合起来占 105–109；票 27 自取 120 起。进 main 时仍按 `AT-TF-1(0[5-9]|1[0-9])` 全仓 grep 复核一遍。
+
+追记十三（票 no-reception-identity/07，2026-10-19）：票 no-reception-identity/07 在 UC-NO-002 新增 `AT-NO-062`「只因歧义信号落下的身份冲突，声明它的委托被拒绝或撤回」，随冲突来由、重核对象放宽与 PS 声明撤除门铃同票落地，点名直接入①（编排面、生产装配真库面）。①328→329（NO 33→34），合计 1120→1121（NO 61→62，`docs/application` 的 AT 全集随 UC-NO-002 扩了这一行）。
 
 ### 两盘之间新落的硬句测试面（不入①，逐面列出供领票比对）
 
