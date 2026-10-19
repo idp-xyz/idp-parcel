@@ -1,7 +1,7 @@
 # 38 受控关闭与重开的请求证据与操作证据落在决定上（新 ADR 部分停用 ADR-0183 决定五首句与 ADR-0151 决定二受控关闭与重开一项的半句）
 
 Category: enhancement
-Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-oc38`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 1 评审遗留；用户授权代决）
+Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-oc38`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 1 评审遗留；用户授权代决）
 Blocked by: 无（operator-channel/37 已进 main）
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)。被评的是 [15](./15-operation-decision-faces-take-operator-intake.md) 之六（代码 `0e3bb7df`），规则出处是 [ADR-0183](../../../docs/adr/0183-operator-channel-addresses-controlled-closure-and-reopening-by-parcel-and-derives-the-shipper-from-the-accepted-request.md)。
 出处：
@@ -175,44 +175,88 @@ Blocked by: 无（operator-channel/37 已进 main）
 
 **文档**
 
-- [ ] 新 ADR 已落盘，含候选与反方及部分停用的适用场景；adr/README 新行与 0151、0183 两行的标注齐全；0151、0183 的 Status 行与 Links 有前向指针，正文 `git diff` 只动这两处。
-- [ ] CONTEXT、GLOSSARY、SCENARIOS 的改句在代码之前那一笔里。
+- [x] 新 ADR 已落盘，含候选与反方及部分停用的适用场景；adr/README 新行与 0151、0183 两行的标注齐全；0151、0183 的 Status 行与 Links 有前向指针，正文 `git diff` 只动这两处。
+- [x] CONTEXT、GLOSSARY、SCENARIOS 的改句在代码之前那一笔里。
 
 **领域用例**
 
-- [ ] 形成门：「有请求方无证据」「有证据无请求方」都拒，两者同缺照收。
-- [ ] 重建门：照收「有请求方无证据」，拒「有证据无请求方」，后者答 `ErrInvalidRehydratedContinuedAttemptRegister`。
-- [ ] `RecordedRequest` 同内容异证据照样认出。
+- [x] 形成门：「有请求方无证据」「有证据无请求方」都拒，两者同缺照收。
+- [x] 重建门：照收「有请求方无证据」，拒「有证据无请求方」，后者答 `ErrInvalidRehydratedContinuedAttemptRegister`。
+- [x] `RecordedRequest` 同内容异证据照样认出。
 
 **编排用例**
 
-- [ ] 坏形状答 `DECISION_INVALID`：授权询问不增、`identities.next` 不变、册不写；与册上原关闭同内容时也不答 `EXISTING_RESULT`。
-- [ ] 接入层形状（没带证据，请求方缺席）照旧答 `SHIPPER_REAUTHORIZATION_MISSING` 与 `RESPONSIBILITY_SOURCE_UNKNOWN`。
-- [ ] 两份证据去两端空白后落在决定上；决定方与授权角色只取授权答复，永不等于操作证据。
-- [ ] 换证据、换提交人原样重投，答 `EXISTING_RESULT` 并交回带原证据的原决定：不签标识、不写册、不发意图。
+- [x] 坏形状答 `DECISION_INVALID`：授权询问不增、`identities.next` 不变、册不写；与册上原关闭同内容时也不答 `EXISTING_RESULT`。
+- [x] 接入层形状（没带证据，请求方缺席）照旧答 `SHIPPER_REAUTHORIZATION_MISSING` 与 `RESPONSIBILITY_SOURCE_UNKNOWN`。
+- [x] 两份证据去两端空白后落在决定上；决定方与授权角色只取授权答复，永不等于操作证据。
+- [x] 换证据、换提交人原样重投，答 `EXISTING_RESULT` 并交回带原证据的原决定：不签标识、不写册、不发意图。
 
 **Intake 用例**
 
-- [ ] 货主指令没带或全空白的 `shipperInstructionEvidence` 答坏报文，另两种来源带了也答坏报文，而且都先于寻址（包裹查不到也是 400）。
-- [ ] 两条命令的 `OperationEvidence` 都等于 `OPERATOR/` 加认证出的操作者。
-- [ ] 载荷夹带 `operationEvidence` 之类的格，仍被封闭解码拒绝。
+- [x] 货主指令没带或全空白的 `shipperInstructionEvidence` 答坏报文，另两种来源带了也答坏报文，而且都先于寻址（包裹查不到也是 400）。
+- [x] 两条命令的 `OperationEvidence` 都等于 `OPERATOR/` 加认证出的操作者。
+- [x] 载荷夹带 `operationEvidence` 之类的格，仍被封闭解码拒绝。
 
 **真库用例**
 
-- [ ] 两份证据往返不丢。
-- [ ] 去掉两键（模拟旧版写回）后照样读得回，包裹判断不变。
-- [ ] 有证据无请求方的行在重建门上报错。
-- [ ] `TestClosureAndReopeningThroughTheOperatorChannelAgainstARealDatabase` 扩一段：请求证据来自载荷、操作证据来自信封、回执带回 `requestEvidence`；换证据重投答 `EXISTING_RESULT`，回执带回的是原证据。
+- [x] 两份证据往返不丢。
+- [x] 去掉两键（模拟旧版写回）后照样读得回，包裹判断不变。
+- [x] 有证据无请求方的行在重建门上报错。
+- [x] `TestClosureAndReopeningThroughTheOperatorChannelAgainstARealDatabase` 扩一段：请求证据来自载荷、操作证据来自信封、回执带回 `requestEvidence`；换证据重投答 `EXISTING_RESULT`，回执带回的是原证据。
 
 **残留注释与迁移**
 
-- [ ] `git grep -n '不进命令\|不进任何一格\|证据引用不落册\|只有关闭这一格允许缺席\|Requester 证据随查询进 PC' -- internal/parcelshipment cmd/parcel-api` 零命中。
-- [ ] `git diff --stat origin/main -- migrations/` 为空。
+- [x] `git grep -n '不进命令\|不进任何一格\|证据引用不落册\|只有关闭这一格允许缺席\|Requester 证据随查询进 PC' -- internal/parcelshipment cmd/parcel-api` 零命中。
+- [x] `git diff --stat origin/main -- migrations/` 为空。
 
 **Go 门禁与流程**
 
-- [ ] `gofmt -l .` 无输出；`go build ./...`、`go vet ./...` 退 0。
-- [ ] 带 DSN 跑 `go test -p 1 -count=1 ./internal/parcelshipment/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./internal/architecture/...`，全 ok。
-- [ ] 机制清点在本笔的干净检出上重生成，有差就单独成笔说明。
+- [x] `gofmt -l .` 无输出；`go build ./...`、`go vet ./...` 退 0。
+- [x] 带 DSN 跑 `go test -p 1 -count=1 ./internal/parcelshipment/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./internal/architecture/...`，全 ok。
+- [x] 机制清点在本笔的干净检出上重生成，有差就单独成笔说明。
 - [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审（两轴分开）、推送方在干净检出上带 DSN 跑全量。
-- [ ] 证据层级记 `S`。
+- [x] 证据层级记 `S`。
+
+## 完成记录（2026-10-19，会话 idp-parcel-9b 的实施子代理，分支 claude-oc38）
+
+基线 `ccbab34f`。提交（自旧到新）：`cd530e69` 文档（ADR-0187 与改句）→ `aea570e2` 领域、编排、接入 → `93c8b619` 快照两键 → `f8809521` 真库用例 → `1c60f1e3` 注释改口 → `b71336e5` 票 15 / lc/30 / 票 26 记录 → 本记录。
+
+**落点**
+
+- 文档（先于代码，同一笔）：新 [ADR-0187](../../../docs/adr/0187-controlled-closure-and-reopening-record-request-and-operation-evidence-on-the-decision.md)（Status 写裁决能力边界；Context、候选与反方、决定一至七、Consequences、越权风险点照簇 C5 终裁 Q1）；adr/README 加 0187 行，0151、0183 两行按部分停用机制补被停原句、适用场景与「其余各条不变」，0183 行另注「复核记录二」比较格不变；0151、0183 正文 `git diff` 只动 Status 行与 Links；PS CONTEXT 定义句与 Rules 那条、GLOSSARY 词条、SCENARIOS 那一步照「做什么」4 至 6 改句。
+- 领域：`ContinuedAttemptRequestEvidenceReference`、`ContinuedAttemptOperationEvidenceReference`；规格与决定各加两格与访问器；`RequestEvidenceAccompaniesRequester` 一处定义；`Append` 先核再交内部 `appendDecision`，`decisionFrom` 只拒有证据无请求方；`RehydrateContinuedAttemptRegister` 走内部追加，头注写明为何照收有请求方无证据；`ContinuedAttemptRequest`、`RecordedRequest` 头注指向决定四；`Requester` 头注改口。
+- 编排：两条命令加证据格；`evidenceTrail` 由 `formation` 另带、交 `decisionSpecOf`，构造失败答 `DECISION_INVALID`；同在同缺与缺项同处、在问授权之前；`HasShipperAuthorizationEvidence` 改名 `HasRequestEvidence`（http 调用点同改）；三处改口。
+- 接入：`controlledClosurePayload.shipperInstructionEvidence` 两道纯载荷校验排在 `locateParcel` 之前；两条命令 `OperationEvidence: operatorEvidence(operator)`；回执加 `requestEvidence`（omitempty，头注写例外理由）；`OperatorDecisionIntake` 头注去掉口数。
+- 快照：`continuedAttemptDecisionDoc` 加 `requestEvidence`、`operationEvidence`（omitempty）并读回；「四个可缺项」改成不带数的列举。
+- 注释改口：`ContinuedAttemptDecisionRequestCoordinates` 头注一句、`endpoints.go` 两行行注。
+
+**完成判据逐格对应用例**
+
+- 形成门两向 / 两者同缺照收：`domain.TestTheFormationGateRequiresARequesterAndItsEvidenceTogether`。
+- 重建门照收有请求方无证据、拒有证据无请求方：`domain.TestTheRehydrationGateAdmitsAnEarlierRequesterWithoutEvidence`。
+- `RecordedRequest` 同内容异证据认出：`domain.TestTheReplayComparisonIgnoresBothEvidences`。
+- 坏形状答 `DECISION_INVALID`、不问 PC、不签标识、不写册、同内容也不答 `EXISTING_RESULT`：`application.TestARequesterWithoutEvidenceIsRefusedBeforeAuthorizationAndIsNeverAReplay`。
+- 接入层形状照旧答 `SHIPPER_REAUTHORIZATION_MISSING` / `RESPONSIBILITY_SOURCE_UNKNOWN`：`TestReopeningAShipperInstructedClosureRequiresTheSameShippersNewAuthorization`「证据缺席即拒」与 `TestReopeningAClosureWhoseResponsibilitySourceKindCannotBeReadIsNotAccepted`（夹具改用请求方缺席的形状）。
+- 证据去两端空白落册、决定方与授权角色不等于操作证据：`application.TestBothEvidencesLandTrimmedAndNeverStandInForTheDecider`。
+- 换证据、换提交人重投答 `EXISTING_RESULT` 交回原证据、什么都不写：`application.TestADifferentEvidenceOnTheSameRequestIsAReplayThatKeepsTheOriginal`。
+- 货主指令没带 / 全空白、另两种来源带了都答 400 且先于寻址：`http.TestABadClosurePayloadAnswers400EvenWhenTheParcelIsUnknown`；`OperationEvidence` 等于 `OPERATOR/` 加认证出的操作者、夹带 `operationEvidence` / `requestEvidence` 被封闭解码拒：`TestControlledClosureTakesTheShipperFromTheAcceptedRequestOfTheParcel`、`TestReopeningTakesTheShipperAccountFromTheAcceptedRequestOfTheParcel`。
+- 真库：往返不丢 `postgres.TestAContinuedAttemptRegisterRoundTripsWholly`；去掉两键读得回、判断不变 `TestARegisterWrittenWithoutTheEvidenceKeysStillReadsBack`；有证据无请求方报错 `TestAnEvidenceWithoutARequesterFailsRehydration`；操作者渠道经真库 `cmd/parcel-api.TestClosureAndReopeningThroughTheOperatorChannelAgainstARealDatabase` 扩段（请求证据来自载荷、操作证据 `OPERATOR/https://id.syn.example/dex#SYN-OPERATOR-01` 来自信封、回执带回 `requestEvidence`、换证据重投回执带回原证据、重开证据落册）。
+
+**先红后绿**
+
+- 领域：类型、格与访问器在、门未接时三条新用例按行为失败（「有请求方无请求证据应被拒，实得 <nil>」「有请求证据无请求方应答重建错误，实得 <nil>」「交回的证据 = "" / ""」）。
+- 编排：命令格在、未接线时夹具关闭答 `INPUT_NOT_ACCEPTED / DECISION_INVALID`，新三条与依赖夹具的旧用例按行为失败。
+- 接入：`json: unknown field "shipperInstructionEvidence"`、「reopening operation evidence = ""」、货主指令无证据答 403 而非 400。
+- 快照：往返读回证据为空、孤证据行被照收（「实得 <nil>」）。
+- cmd 真库：实现已在前几笔，以变异核验——去掉回执的 `requestEvidence` 即失败（「回执 ""」）。
+- 领域门一接，编排、接入与 cmd 夹具同时转红，所以领域、编排、接入三层合成一笔（`aea570e2`），保证每笔检出全绿。
+
+**迁移号**：无。票面裁定第 2 条「不加守卫迁移」、完成判据「`git diff --stat origin/main -- migrations/` 为空」；本分支相对基线 `ccbab34f` 不动 `migrations/`（origin/main 此后另有迁移进来，与本票无关）。派单口头要点里「加一份只含守卫的迁移」与票面相左，照「以票面裁定为准」不做。
+
+**ADR**：0187（新）；0151、0183 只改 Status 行与 Links。
+
+**门**：`gofmt -l .` 无输出；`go build ./...`、`go vet ./...` 退 0；带 DSN `go test -p 1 -count=1 ./internal/parcelshipment/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./internal/architecture/... ./migrations/...` 全 ok；残留注释 `git grep` 零命中；机制清点在本分支重生成无差。全仓全量与推送方干净检出全量未跑（归推送方）。
+
+**证据层级**：`S`（合成 `SYN-` 数据、演示租户 `SYN-TENANT-01`、本机 PostgreSQL 55432）。
+
+评审：待会话读 diff 审。
