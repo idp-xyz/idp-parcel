@@ -206,7 +206,7 @@ func TestTheEarliestSufficientCandidateIsPrepared(t *testing.T) {
 	tieEarlier := adHocSchedule(t, "S-3", "CONN", "A", "B", legWindowStart.Add(2*time.Hour), time.Hour)
 
 	reserved, err := poolOn(t, insufficient, domain.CapacityWeight, "KG", 10).
-		Reserve(mustValue(t, domain.NewCapacityReservationReference, "R-1"), 9, legWindowStart.Add(24*time.Hour), legWindowStart.Add(-2*time.Hour))
+		Reserve(mustValue(t, domain.NewCapacityReservationReference, "R-1"), demandIn(t, 9, "KG"), legWindowStart.Add(24*time.Hour), legWindowStart.Add(-2*time.Hour))
 	if err != nil {
 		t.Fatalf("预占：%v", err)
 	}
