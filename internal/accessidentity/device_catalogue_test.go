@@ -8,8 +8,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 )
 
-// Covers: 票 operator-channel/21 做什么第 1 条——查阅行只有设备标识、作业范围、登记还是停用；停用行带停用时刻，
-// 登记行不带。依据留在登记行上，不进查阅行。
+// Covers: 票 operator-channel/21 做什么「每行只有设备标识、作业范围、登记还是停用；停用了的带停用时刻」——
+// 查阅行只有设备标识、作业范围、登记还是停用；停用行带停用时刻，登记行不带。依据留在登记行上，不进查阅行。
 func TestCatalogueRowKeepsOnlyTheListedFields(t *testing.T) {
 	scope := nodeScope(t)
 	registered := recordedDevice(t, operatorTenant, workDeviceID, scope, time.Time{})

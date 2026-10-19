@@ -37,8 +37,8 @@ func mirrorRequest(token, body string) *http.Request {
 	return request
 }
 
-// Covers: 票 operator-channel/18 做什么第 1、2 条——在线口与受控批量口对同一项译出同一条命令：租户是认证出的那一个（批文
-// 里没有这一格），批准三格与角色确认是批文里的，不是信封里的主体。
+// Covers: 票 operator-channel/18「批文译装下沉」与「`/commercial-publications` 换操作者 Intake」——在线口与受控批量口对
+// 同一项译出同一条命令：租户是认证出的那一个（批文里没有这一格），批准三格与角色确认是批文里的，不是信封里的主体。
 func TestPublicationMirrorTranslatesAsTheControlledBatchWithTheAuthenticatedTenant(t *testing.T) {
 	intake := publicationOperatorIntake(t, envelopeOperators{})
 	online, err := intake.IntakeCommercialPublication(context.Background(),

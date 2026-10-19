@@ -12,9 +12,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
 )
 
-// 本文件证「按委托提交版本形成受理前试算」的入口（票 product-strategy-boundary/25 第 2 条；ADR-0179 决定三、四）：按（租户、计价范围、
-// SELL、客户费用、判断时点）解析唯一在用价卡，逐件用提交版本上的申报造声明，交给定价卡的试算入口；未配置、适用冲突、缺件各自成格，
-// 不挑卡、不顶值。
+// 本文件证「按委托提交版本形成受理前试算」的入口（票 product-strategy-boundary/25「PP 受理前试算入口」；ADR-0179 决定三、四）：
+// 按（租户、计价范围、SELL、客户费用、判断时点）解析唯一在用价卡，逐件用提交版本上的申报造声明，交给定价卡的试算入口；
+// 未配置、适用冲突、缺件各自成格，不挑卡、不顶值。
 
 // preAcceptanceJudgedAt 是控制回显的判断时点，刻意与补齐读数的时钟不同：选卡与计价基准都按它，不按时钟。
 var preAcceptanceJudgedAt = time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC)

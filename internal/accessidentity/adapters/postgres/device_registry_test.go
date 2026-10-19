@@ -116,8 +116,8 @@ func expectDeviceOutcome(t *testing.T, label string, got, want accessidentity.De
 	}
 }
 
-// Covers: 票 operator-channel/10 做什么第 2 条——设备首登落册；同内容重放答原结果；同标识异作业范围或异依据答冲突且
-// 册上那一行原样不动；别的租户登同一标识是另一台设备，照常登；不在册答 found=false 而不是 error。
+// Covers: 票 operator-channel/10 做什么「设备册：设备标识、所属租户与作业范围」——设备首登落册；同内容重放答原结果；
+// 同标识异作业范围或异依据答冲突且册上那一行原样不动；别的租户登同一标识是另一台设备，照常登；不在册答 found=false 而不是 error。
 func TestDeviceRegistrationRecordsReplaysAndNeverOverwrites(t *testing.T) {
 	register := newDeviceRegister(t)
 	node := scopeOf(t, accessidentity.WorkScopeNode, "SYN-NODE-SZX-01")
@@ -153,7 +153,7 @@ func TestDeviceRegistrationRecordsReplaysAndNeverOverwrites(t *testing.T) {
 	}
 }
 
-// Covers: 票 operator-channel/10 做什么第 2 条「状态（登记 / 停用）」——停用自停用时刻起生效、之前照常（带亚微秒的时刻
+// Covers: 票 operator-channel/10 做什么「状态（登记 / 停用）」——停用自停用时刻起生效、之前照常（带亚微秒的时刻
 // 重放也认得出）；停用同内容重放答原结果、异时刻答冲突；停一台本租户册上没有的设备答未登记，别的租户拿同一标识也
 // 停不动。
 func TestDeviceDeactivationEndsUseFromItsInstant(t *testing.T) {
@@ -187,7 +187,7 @@ func TestDeviceDeactivationEndsUseFromItsInstant(t *testing.T) {
 	}
 }
 
-// Covers: 票 operator-channel/10 做什么第 1 条——「作业事实登记」授予带着作业范围落册与读回；同内容重放答原结果，同标识
+// Covers: 票 operator-channel/10 做什么「授予按租户 × 作业范围」——「作业事实登记」授予带着作业范围落册与读回；同内容重放答原结果，同标识
 // 只换范围种类、只换范围引用各答冲突（两列各自都在比）；读回的现状只在授予的那个作业范围上答持有，整格问一律答否。
 func TestWorkFactRegistrationGrantRoundTripsItsWorkScope(t *testing.T) {
 	register := newDeviceRegister(t).operators
@@ -231,7 +231,8 @@ func TestWorkFactRegistrationGrantRoundTripsItsWorkScope(t *testing.T) {
 	}
 }
 
-// Covers: 票 operator-channel/10 做什么第 1、2 条的表结构一侧，守法同 01 做什么第 2 条「结构与 CHECK 守上面的不变量」——
+// Covers: 票 operator-channel/10 做什么「授予按租户 × 作业范围」与「设备册：设备标识、所属租户与作业范围」的表结构一侧，
+// 守法同票 operator-channel/01 做什么「结构与 CHECK 守上面的不变量」——
 // 绕过登记口直接写：作业事实登记授予缺作业范围或缺引用、别的格带作业范围、未知范围种类；设备缺件、未知范围种类；停一台
 // 不存在的设备、一台设备停两次、停用空依据——都进不了库。
 func TestWorkFactAndDeviceTablesGuardTheInvariantsThemselves(t *testing.T) {
@@ -308,8 +309,8 @@ func TestDeviceRegistrationWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	}
 }
 
-// Covers: 票 operator-channel/21 做什么第 1 条——按租户列出已登记设备，含已停用的；别的租户的同名设备不在其中；
-// 空册答空切片；空租户拒绝。查阅行不带依据。
+// Covers: 票 operator-channel/21 做什么「设备册增一个按租户列出已登记设备的读口」——按租户列出已登记设备，含已停用的；
+// 别的租户的同名设备不在其中；空册答空切片；空租户拒绝。查阅行不带依据。
 func TestListDevicesReturnsOnlyThatTenantsRows(t *testing.T) {
 	register := newDeviceRegister(t)
 	node := scopeOf(t, accessidentity.WorkScopeNode, "SYN-NODE-SZX-01")

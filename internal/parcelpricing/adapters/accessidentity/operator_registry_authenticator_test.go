@@ -82,7 +82,7 @@ func TestRegistryWriterAuthenticatesToTheBoundTenantWithoutAnAdmissionCheck(t *t
 	}
 }
 
-// Covers: 票 price-card-import/04 第 2 条——批准门要的授予集由这里从信封译出：持有的能力面逐格译成授予名，没持有的不进。
+// Covers: 票 price-card-import/04「操作者主体消费面」——批准门要的授予集由这里从信封译出：持有的能力面逐格译成授予名，没持有的不进。
 func TestTheGrantSetCarriesTheFacesTheEnvelopeHolds(t *testing.T) {
 	both := authenticator(t, operatorVerifier{}, operatorRegister{faces: []identity.CapabilityFace{
 		identity.CapabilityRegistryConfigurationWrite, identity.CapabilityMasterDataAndOperationsRead,

@@ -207,8 +207,8 @@ func decodePickupRegistration(t *testing.T, recorder *httptest.ResponseRecorder)
 	return view
 }
 
-// Covers: 票 04 专钉第 1 条在揽收登记口——Intake 给的 `segment`/`plannedSegment` 让对象真的进了段；
-// ADR-0022 首登新落一版 201，版本由编排签发后透出。
+// Covers: 票 tf-segment-lifecycle-closure/04「端点测试要专钉的」之「三入口各一条」在揽收登记口——
+// Intake 给的 `segment`/`plannedSegment` 让对象真的进了段；ADR-0022 首登新落一版 201，版本由编排签发后透出。
 func TestRegisterOffsitePickupReportsCreatedAndEntersTheNamedSegment(t *testing.T) {
 	fixture := newPickupRegistrationFixture(t)
 	body := defaultPickupRegistrationBody()
@@ -315,7 +315,9 @@ func TestRegisterOffsitePickupReportsOKForEveryAnswerThatRegisteredNothing(t *te
 	}
 }
 
-// Covers: 票 04 专钉第 2 条在揽收登记口——段登记册故障时收寄照登（201），`segmentContinuationReference` 非空。
+// Covers: 票 tf-segment-lifecycle-closure/04「端点测试要专钉的」之
+// 「响应透出 `segmentContinuationReference`（两个单对象口）」在揽收登记口——段登记册故障时收寄照登（201），
+// `segmentContinuationReference` 非空。
 func TestRegisterOffsitePickupExposesTheSegmentDebtWhenTheRegistryIsDown(t *testing.T) {
 	fixture := newPickupRegistrationFixture(t)
 	fixture.segments.findErr = errors.New("segment registry down")

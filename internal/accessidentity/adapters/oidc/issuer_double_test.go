@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-// 发行方替身：进程内签发令牌、经 httptest 发布 JWKS（票 operator-channel/02 做什么第 3 条）。
+// 发行方替身：进程内签发令牌、经 httptest 发布 JWKS（票 operator-channel/02 做什么「测试用进程内签发与 JWKS 替身」）。
 // 它只替身发行方的两样对外可见物——签出的令牌与公钥集——不替身校验器的任何一部分。
 
 const (

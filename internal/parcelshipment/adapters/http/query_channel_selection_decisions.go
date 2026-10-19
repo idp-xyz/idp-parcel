@@ -86,7 +86,7 @@ const viewTiedChannelSelections = "tied"
 // 传输形状，先于 Intake；读它不构成读业务内容——未配置 Intake 对两条分支同答 403，分支选择不泄露任何东西。
 //
 // 列表分支：`view=tied` 必备；`scope` 与 `mapping` 要么都给（按对象收窄）、要么都不给，只给一半是说不清对象的
-// 请求。不做任何按时间的隐式截断（票 23「先答再开工」第二条）：窄口由查询参数显式给，今天只有对象一维。
+// 请求。不做任何按时间的隐式截断（票 label-channel/23「先答再开工」里「保留期与读面」）：窄口由查询参数显式给，今天只有对象一维。
 func NewQueryChannelSelectionDecisionsEndpoint(
 	intake ChannelSelectionDecisionQueryIntake,
 	reader ChannelSelectionDecisionsReader,

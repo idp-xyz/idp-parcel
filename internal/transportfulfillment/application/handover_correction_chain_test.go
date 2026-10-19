@@ -49,8 +49,9 @@ func TestAPredecessorThatAlreadyHasASuccessorIsNotCorrectedAgain(t *testing.T) {
 	}
 }
 
-// Covers: 票 tf-face-algebra/07 修复方向第二条——读时前版还没有后继，落库时另一方的更正先占了它（库面部分唯一索引
-// 撞上，按新键读回是空的）：按前版读回那份后继再分格，不答未决、不一律答已有版本。
+// Covers: 票 tf-face-algebra/07 修复方向「所以要改成按（前版）读回那份后继，再用〈交接更正冲突〉那套比对分格」——读时前版
+// 还没有后继，落库时另一方的更正先占了它（库面部分唯一索引撞上，按新键读回是空的）：按前版读回那份后继再分格，不答未决、
+// 不一律答已有版本。
 func TestACorrectionThatLostTheRaceForThePredecessorIsComparedWithTheWinner(t *testing.T) {
 	v1 := "handover-result/parcel-1/v1"
 	for name, want := range map[string]application.HandoverRegistrationOutcome{

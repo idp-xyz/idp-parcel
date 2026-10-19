@@ -39,8 +39,8 @@ func progressRequest(path, token, body string) *http.Request {
 	return request
 }
 
-// Covers: 票 04 第 2、5 条——批准者主体由 Intake 把信封译成：引用取认证出的操作者，授予集取信封里持有的授予名；租户同取
-// 认证结果；载荷只收草稿引用。
+// Covers: 票 price-card-import/04「操作者主体消费面」与「载荷只收草稿引用」——批准者主体由 Intake 把信封译成：引用取认证出的
+// 操作者，授予集取信封里持有的授予名；租户同取认证结果；载荷只收草稿引用。
 func TestTheApprovalIntakeTakesTheApproverFromTheEnvelope(t *testing.T) {
 	intake, err := pricinghttp.NewOperatorRegistryIntake(grantedAuthenticator{grants: []string{"REGISTRY_CONFIGURATION_WRITE", "SYN-GRANT-PRICING-SUPERVISOR"}})
 	if err != nil {

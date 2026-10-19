@@ -93,7 +93,7 @@ func TestApprovalIsGatedByTheApprovalDutyRule(t *testing.T) {
 	}
 }
 
-// Covers: 票 04 第 3 条「只接`已校验`」——`草稿`没有可批的内容，`已批准`与`已发布`已过了这一格，三者都不重复批。
+// Covers: 票 price-card-import/04「批准：只接 `已校验`」——`草稿`没有可批的内容，`已批准`与`已发布`已过了这一格，三者都不重复批。
 func TestOnlyAValidatedDraftCanBeApproved(t *testing.T) {
 	validated := validatedDraft(t)
 	drafts := map[string]domain.PriceCardDraft{

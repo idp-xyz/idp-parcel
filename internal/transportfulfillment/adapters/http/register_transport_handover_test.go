@@ -301,9 +301,9 @@ func decodeHandover(t *testing.T, recorder *httptest.ResponseRecorder) handoverV
 	return view
 }
 
-// Covers: 票 04 专钉第 1 条——Intake 交出的 `segment`/`plannedSegment` 要原样到编排，判据不是
-// 看命令镜像，而是看对象**真的进了那个段**：段登记册里有 (tenant-1, segment-1)，parcel-1 的
-// 参与关系带 planned-1。HTTP 适配器若在中间立一个自己的请求形状漏掉那一格，这里就红——
+// Covers: 票 tf-segment-lifecycle-closure/04「端点测试要专钉的」之「三入口各一条」——Intake 交出的
+// `segment`/`plannedSegment` 要原样到编排，判据不是看命令镜像，而是看对象**真的进了那个段**：段登记册里有
+// (tenant-1, segment-1)，parcel-1 的参与关系带 planned-1。HTTP 适配器若在中间立一个自己的请求形状漏掉那一格，这里就红——
 // 那正是「编排接上了、端点没让它接上」（票 08 那个缝）。同时钉 ADR-0022：首登新落一版 201。
 func TestRegisterHandoverReportsCreatedAndEntersTheNamedSegment(t *testing.T) {
 	fixture := newHandoverFixture(t)
@@ -459,8 +459,9 @@ func TestRegisterHandoverReportsOKForEveryAnswerThatRegisteredNothing(t *testing
 	}
 }
 
-// Covers: 票 04 专钉第 2 条——段那一半的欠账要透出。段立不起来（写不进）时交接照登（201），响应里
-// `segmentContinuationReference` 非空；这一格被传输层吞掉，调用方就会以为对象已经进段。
+// Covers: 票 tf-segment-lifecycle-closure/04「端点测试要专钉的」之
+// 「响应透出 `segmentContinuationReference`（两个单对象口）」——段那一半的欠账要透出。段立不起来（写不进）时交接照登
+// （201），响应里 `segmentContinuationReference` 非空；这一格被传输层吞掉，调用方就会以为对象已经进段。
 // 用 saveErr 而不是 findErr：票 06 之后按对象找段那一步读不回是整笔不落（5xx），不再是欠账。
 func TestRegisterHandoverExposesTheSegmentDebtWhenTheRegistryIsDown(t *testing.T) {
 	fixture := newHandoverFixture(t)

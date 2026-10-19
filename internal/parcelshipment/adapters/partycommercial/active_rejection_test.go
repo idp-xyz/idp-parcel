@@ -128,7 +128,7 @@ func TestActiveRejectionDoesNotCallTheProviderWhenTheRequestCannotBeFormed(t *te
 // Covers: 本口只问「许不许主动拒绝」——映射若折出了别的动作（如人工复核），一条只授复核权的规则会被读成
 // 拒绝权，而获准复核并不等于获准直接拒掉这单业务（PC CONTEXT）。这是词汇表之外的输入，按
 // ErrUntranslatableAnswer 拒且不问提供方；折出拒绝动作的映射则照常交给提供方（用读失败的哨兵证它到了那里）。
-// 守卫与 ManualReviewAuthorizationAdapter 那道同形（票 ps-port-remainder/08 第 3 件）。
+// 守卫与 ManualReviewAuthorizationAdapter 那道同形（票 ps-port-remainder/08「对称的动作守卫」）。
 func TestActiveRejectionOnlyTranslatesAMappingThatFormsTheRejectionAction(t *testing.T) {
 	providerAsked := errors.New("提供方被问到了")
 

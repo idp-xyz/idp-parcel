@@ -116,8 +116,8 @@ func TestALateStaleCorrectionDoesNotTurnTheCurrentPODBack(t *testing.T) {
 	}
 }
 
-// Covers: 票 operator-channel/41「做什么」第三条——POD 更正先过完备性再签号，照 pickupCorrectionFrom 的「一份形成不了
-// 的更正不该烧掉一个版本号」。
+// Covers: 票 operator-channel/41 做什么「POD 更正在签版本号之前先过完备性检查」——POD 更正先过完备性再签号，
+// 照 pickupCorrectionFrom 的「一份形成不了的更正不该烧掉一个版本号」。
 func TestARefusedPODCorrectionMintsNoVersion(t *testing.T) {
 	refused := map[string]func(*application.CorrectDeliveryProofCommand){
 		"no correction time": func(command *application.CorrectDeliveryProofCommand) { command.CorrectedAt = time.Time{} },

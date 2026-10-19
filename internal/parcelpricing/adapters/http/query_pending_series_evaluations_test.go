@@ -12,8 +12,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
 )
 
-// 本文件对被挂起评价联动端点（ADR-0105 Decision 五；票 05 第 2 项）证传输面：方法门、未配置 403、asOf 回显、
-// 空册答空数组而不是缺席、读口故障答 NO_ANSWER_FORMED。
+// 本文件对被挂起评价联动端点（ADR-0105 Decision 五；票 pricing-reference-series-operations/05「被挂起评价联动」）证传输面：
+// 方法门、未配置 403、asOf 回显、空册答空数组而不是缺席、读口故障答 NO_ANSWER_FORMED。
 
 type pendingCountsReaderDouble struct {
 	tenant domain.TenantID

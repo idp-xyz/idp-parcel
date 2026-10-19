@@ -42,9 +42,9 @@ func TestOpenDispatchTaskAnswersEchoTheRegisteredConditions(t *testing.T) {
 	}
 }
 
-// Covers: 票 tf-face-algebra/09 裁定第 4 条——`DELIVERY-DISPATCH/` 起头的任务引用归派送发起执行器铸，手工建任务口指名它
-// 就是坏输入，照该口现行坏报文答法拒（400 MALFORMED_REQUEST，不进编排）。只认这一个起头：只是长得像的引用照常翻译，
-// 它们与执行器铸出的串字面上不可能相同。
+// Covers: 票 tf-face-algebra/09 裁定「手工建任务口拒执行器的保留前缀」——`DELIVERY-DISPATCH/` 起头的
+// 任务引用归派送发起执行器铸，手工建任务口指名它就是坏输入，照该口现行坏报文答法拒（400 MALFORMED_REQUEST，不进编排）。
+// 只认这一个起头：只是长得像的引用照常翻译，它们与执行器铸出的串字面上不可能相同。
 func TestTheDispatchTaskPayloadRefusesTheDeliveryDispatchReservedReference(t *testing.T) {
 	tenant := httpValue(t, domain.NewTenantID, "SYN-TENANT-01")
 	payload := tfhttp.DispatchTaskPayload{

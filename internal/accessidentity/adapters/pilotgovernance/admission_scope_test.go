@@ -12,7 +12,8 @@ import (
 	pgdomain "go.idp.xyz/idp-parcel/internal/pilotgovernance/domain"
 )
 
-// 本文件证准入范围桥（票 operator-channel/19 完成判据第一条）：对照已登且区间覆盖才放行；对照未登、或登了而区间不覆盖
+// 本文件证准入范围桥（票 operator-channel/19 完成判据「对照已登且区间覆盖 → 铸成」）：对照已登且区间覆盖才放行；对照未登、
+// 或登了而区间不覆盖
 // （别的权威、已关、未始、别的对象范围）答不在准入范围；对照读不动、区间读不动答依赖故障格，经铸造器出来不被「不在
 // 准入范围」认出。区间那一半用真的 AuthorityCoverage，只把登记册换成内存替身。
 

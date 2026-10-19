@@ -258,8 +258,8 @@ func assertPushMintedAsTheBoundClient(t *testing.T, envelope accessidentity.Inte
 	}
 }
 
-// Covers: 票面完成判据「两种签名形态各有用例」之 HMAC 共享密钥一形，与做什么第 2 条「校验通过后以该推送源绑定的集成
-// 客户端身份铸信封」——租户、客户端与来源身份只取自集成客户端册上的绑定。
+// Covers: 票 operator-channel/12 完成判据「两种签名形态各有用例」之 HMAC 共享密钥一形，与做什么
+// 「校验通过后以该推送源绑定的集成客户端身份铸信封」——租户、客户端与来源身份只取自集成客户端册上的绑定。
 func TestHMACSignedPushIsMintedAsTheBoundIntegrationClient(t *testing.T) {
 	key := newHMACPushKey(t, "SYN-PUSH-KEY-HMAC-01")
 	minter := newPushMinter(t, grantedPushParts(t, pushStandingWith(t, openKey(key)), key))
@@ -311,7 +311,7 @@ func assertPushGrade(t *testing.T, err error, want string) {
 	}
 }
 
-// Covers: 票面做什么第 2 条「签名不过、时间戳越窗、重放各答其格」之前两格与依赖故障——推送源未登记、钥不对、请求体被改、
+// Covers: 票 operator-channel/12 做什么「签名不过、时间戳越窗、重放各答其格」之前两格与依赖故障——推送源未登记、钥不对、请求体被改、
 // 签名形态与在册密钥对不上、钥未生效或已停用同答签名不过，不说哪一半不对；签名成立而时间戳早于窗口或晚于时钟偏差答
 // 越窗；推送源册、受限存储、重放账、集成客户端册读写不动各答依赖故障；受限存储没配答未配置。
 func TestSignedPushAnswerGradesDoNotStandInForEachOther(t *testing.T) {

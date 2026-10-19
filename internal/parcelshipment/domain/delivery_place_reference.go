@@ -17,7 +17,7 @@ var (
 // 旧串仍按 DPR-1 解读。
 const deliveryPlaceReferenceShapeVersion = "DPR-1"
 
-// deliveryPlaceDataGroupWord 是本上下文对「收件」资料组的自有原词（票 ps-port-remainder/06 要落的第 4 条）。
+// deliveryPlaceDataGroupWord 是本上下文对「收件」资料组的自有原词（票 ps-port-remainder/06「收件资料范围怎么指名」）。
 // `SourceDataGroupReference` 是开放引用（ADR-0120 决定七），矩阵登记侧（`PAR-COM-13`）用什么词是实例
 // 半边；引用里要能写出这一段，机制半边就得有一个词。两侧对不上时读口按这个词查，查不到修订版本就答
 // 基线锚——那是如实答案（本上下文没见过那个范围上的修订），不是默认。

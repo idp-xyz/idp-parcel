@@ -49,9 +49,9 @@ func (grant OperatorGrant) String() string { return grant.name }
 
 func (grant OperatorGrant) valid() bool { return trimmed(grant.name) }
 
-// OperatorSubject 是本上下文消费操作者信封的那一个面（票 04 第 2 条）：主体引用加它持有的授予集，由 Intake 把信封译成
-// 它。主体引用与草稿上的录入者同一种写法，批准门才比得了「是不是同一个人」。授予集可以为空——没带授予不是错，只是
-// 批不了要求授予的草稿。
+// OperatorSubject 是本上下文消费操作者信封的那一个面（票 price-card-import/04「操作者主体消费面」）：主体引用加它持有的
+// 授予集，由 Intake 把信封译成它。主体引用与草稿上的录入者同一种写法，批准门才比得了「是不是同一个人」。授予集可以为空——
+// 没带授予不是错，只是批不了要求授予的草稿。
 type OperatorSubject struct {
 	reference string
 	grants    []OperatorGrant

@@ -36,7 +36,7 @@ const outcomeReferenceSeriesCoverageListed = "REFERENCE_SERIES_COVERAGE_LISTED"
 
 // NewQueryReferenceSeriesCoverageEndpoint 交回参考序列覆盖地平线查阅的 HTTP 入口
 // (GET /pricing-reference-series-coverage,ADR-0077 读面通例;票
-// pricing-reference-series-operations/05 第 1 项;最终路径归装配票)。
+// pricing-reference-series-operations/05「伴生读口 `ReferenceSeriesCoverageRead`」;最终路径归装配票)。
 //
 // 一条序列一行,不是一版一行——一版一行的问法归 /pricing-reference-series。
 func NewQueryReferenceSeriesCoverageEndpoint(

@@ -21,7 +21,7 @@ const outcomePendingSeriesEvaluationsCounted = "PENDING_SERIES_EVALUATIONS_COUNT
 
 // NewQueryPendingSeriesEvaluationsEndpoint 交回「因序列未解析而待判断的评价数，按序列种类分组」的 HTTP 入口
 // （GET /pricing-pending-series-evaluations；ADR-0105 Decision 五；票 pricing-reference-series-operations/05
-// 第 2 项）。读面通例照 ADR-0077：租户级、未配置即拒、空册如实答空。
+// 「被挂起评价联动」）。读面通例照 ADR-0077：租户级、未配置即拒、空册如实答空。
 //
 // asOf 与覆盖端点同一时刻源回显——这一格的数进摘要条与覆盖地平线并排，两个数说的是不是同一刻要说出来。
 // 不收 limit：分组键是序列种类的封闭集，行数有上界。

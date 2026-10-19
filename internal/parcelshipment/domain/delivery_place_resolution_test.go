@@ -134,7 +134,7 @@ func TestAForkedAmendmentChainLeavesTheDeliveryPlaceUndetermined(t *testing.T) {
 }
 
 // Covers: ADR-0130 决定二「对象不属于任何已接受委托的成员集合……按统一不可见结果答『没有收件地点』」。
-// 成员集合是接受基线（票面要落的第 3 条：经 AcceptanceBaseline 走声明成员）；未接受的委托没有基线，
+// 成员集合是接受基线（票 ps-port-remainder/06「包裹 → 委托的路」：经 AcceptanceBaseline 走声明成员）；未接受的委托没有基线，
 // 其成员同样答没有——责任起点在接受之后，接受前没有可派送的收件地点。
 func TestAnObjectOutsideTheAcceptanceBaselineHasNoDeliveryPlace(t *testing.T) {
 	accepted := acceptedWithDeliveryPlaceVersions(t, [2]string{"data-version-1", ""})
@@ -152,7 +152,7 @@ func TestAnObjectOutsideTheAcceptanceBaselineHasNoDeliveryPlace(t *testing.T) {
 	}
 }
 
-// Covers: 票面要落的第 4 条——读口按本上下文的原词查收件范围，别的资料组上的修订不动收件地点的锚。
+// Covers: 票 ps-port-remainder/06「收件资料范围怎么指名」——读口按本上下文的原词查收件范围，别的资料组上的修订不动收件地点的锚。
 // 一份写在 CONSIGNEE_ADDRESS（矩阵侧另一个词）上的版本，读口不认；收件范围上没有版本就答基线锚，
 // 这是如实答案不是默认。
 func TestAmendmentsOnAnotherDataGroupDoNotMoveTheDeliveryPlaceAnchor(t *testing.T) {

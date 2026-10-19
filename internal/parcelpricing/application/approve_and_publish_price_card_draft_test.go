@@ -197,8 +197,8 @@ func TestApprovalAnswersNotConfiguredWhileTheTenantHasNoRule(t *testing.T) {
 	}
 }
 
-// Covers: 票 04 第 3 条——规则在场时逐格裁：主体相同、授予不足各答一格且草稿不动；两格都过即转`已批准`，记下批准者与批准
-// 时刻（取编排的时钟）。
+// Covers: 票 price-card-import/04「主体相同或授予不足各答一格」——规则在场时逐格裁：主体相同、授予不足各答一格且草稿不动；
+// 两格都过即转`已批准`，记下批准者与批准时刻（取编排的时钟）。
 func TestApprovalGateAnswersEachCellOfTheRule(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -247,7 +247,7 @@ func TestApprovalGateAnswersEachCellOfTheRule(t *testing.T) {
 	}
 }
 
-// Covers: 票 04 第 3 条「只接`已校验`」——状态不对按草稿此刻在哪一格答，不读规则、不重复批；册上没有这一版答不在。
+// Covers: 票 price-card-import/04「批准：只接 `已校验`」——状态不对按草稿此刻在哪一格答，不读规则、不重复批；册上没有这一版答不在。
 func TestApprovalAnswersFromTheCellTheDraftIsIn(t *testing.T) {
 	validated := validatedPriceCardDraft(t)
 	approved := approvedPriceCardDraft(t)
@@ -404,7 +404,7 @@ func TestEveryRegistrationAnswerIsHandedBackAsIs(t *testing.T) {
 	}
 }
 
-// Covers: 票 04 第 4 条「只接`已批准`」——`草稿`与`已校验`答未批准、`已发布`答已发布，三者都不交给登记用例；册上没有答不在。
+// Covers: 票 price-card-import/04「发布：只接 `已批准`」——`草稿`与`已校验`答未批准、`已发布`答已发布，三者都不交给登记用例；册上没有答不在。
 func TestPublishingAnswersFromTheCellTheDraftIsIn(t *testing.T) {
 	validated := validatedPriceCardDraft(t)
 	published, err := approvedPriceCardDraft(t).MarkPublished(progressClockAt.Add(time.Minute))

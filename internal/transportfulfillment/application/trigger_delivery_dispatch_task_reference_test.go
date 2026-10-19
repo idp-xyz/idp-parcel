@@ -83,8 +83,9 @@ func objectsOf(record ports.DispatchTaskRecord) []string {
 	return objects
 }
 
-// Covers: 票 09 裁定第 1 条——新引用以 `DELIVERY-DISPATCH/` 起头，后接形状标记，再把段、对象、入场依据各写成「字节
-// 长度 + 分隔符 + 原串」。原串照抄不取摘要：引用出现在答复、日志与管理台上，人要读得出它指的是哪个段哪个对象。
+// Covers: 票 tf-face-algebra/09 裁定「单射铸法：取长度前缀，带形状标记」——新引用以 `DELIVERY-DISPATCH/` 起头，
+// 后接形状标记，再把段、对象、入场依据各写成「字节长度 + 分隔符 + 原串」。原串照抄不取摘要：引用出现在答复、日志与
+// 管理台上，人要读得出它指的是哪个段哪个对象。
 func TestTheTaskReferenceSpellsEachPartWithItsLength(t *testing.T) {
 	fixture := newDispatchTriggerFixture(t)
 	fixture.enterByHandover(t, "parcel-1", "FINAL_DELIVERY", handoverJudgedTime)
@@ -103,8 +104,8 @@ func TestTheTaskReferenceSpellsEachPartWithItsLength(t *testing.T) {
 	}
 }
 
-// Covers: 票 09 完成判据「编排单测：新铸法单射，对拼接撞键那组输入铸出不同引用」。段 `seg/A` 加对象 `CU-77` 与段 `seg`
-// 加对象 `A/CU-77`、交接版本同为 v1——斜杠直拼时两者铸出同一串，后到的对象首拍就被答成「已形成」。
+// Covers: 票 tf-face-algebra/09 完成判据「编排单测」下「新铸法单射，对拼接撞键那组输入铸出不同引用」。段 `seg/A` 加对象
+// `CU-77` 与段 `seg` 加对象 `A/CU-77`、交接版本同为 v1——斜杠直拼时两者铸出同一串，后到的对象首拍就被答成「已形成」。
 func TestConcatenationCollidingInputsMintDifferentTaskReferences(t *testing.T) {
 	fixture := newDispatchTriggerFixture(t)
 	fixture.enterSegmentByHandover(t, "seg/A", "CU-77", "v1")
@@ -136,8 +137,8 @@ func TestConcatenationCollidingInputsMintDifferentTaskReferences(t *testing.T) {
 	}
 }
 
-// Covers: 票 09 完成判据「编排单测：旧拼法在册任务兼认」与裁定第 1 条——先查新键，查不到再查旧键，命中且种类与对象集
-// 核得过才算已在册；存量不回写。
+// Covers: 票 tf-face-algebra/09 完成判据「编排单测」下「旧拼法在册任务兼认」，与裁定
+// 「单射铸法：取长度前缀，带形状标记」——先查新键，查不到再查旧键，命中且种类与对象集核得过才算已在册；存量不回写。
 func TestALegacySpelledTaskIsStillRecognised(t *testing.T) {
 	const basis = "TRANSPORT-HANDOVER/handover-result/parcel-1/v1"
 
@@ -204,8 +205,9 @@ func TestALegacySpelledTaskIsStillRecognised(t *testing.T) {
 	})
 }
 
-// Covers: 票 09 完成判据「编排单测：被手工口占用答新格」与裁定第 2 条——键上已有一项任务，但种类不是末端派送或对象集
-// 不恰为本对象：答 `DISPATCH_TASK_REFERENCE_TAKEN` 并交回占用者；不写、不另铸、不向所有者取件。
+// Covers: 票 tf-face-algebra/09 完成判据「编排单测」下「被手工口占用答新格」，与裁定「在册核对作第二道防线」——
+// 键上已有一项任务，但种类不是末端派送或对象集不恰为本对象：答 `DISPATCH_TASK_REFERENCE_TAKEN` 并交回占用者；不写、
+// 不另铸、不向所有者取件。
 func TestAReferenceTakenByAnotherTaskIsAnsweredAsTaken(t *testing.T) {
 	const basis = "TRANSPORT-HANDOVER/handover-result/parcel-1/v1"
 	occupants := map[string]struct {
@@ -261,9 +263,10 @@ func TestAReferenceTakenByAnotherTaskIsAnsweredAsTaken(t *testing.T) {
 	})
 }
 
-// Covers: 票 09 完成判据「编排单测：在册后不再取件（所有者替身计数为零）」与裁定第 3 条——查在册在参与在场判断之前、
-// 读回段与确认链尾凭已交接之后；在册就不再向所有者取件。同一拍原样重放不随所有者的后续改答漂移，参与离场之后重放
-// 也答已在册（不形成新任务，ADR-0114 决定二「已离场的参与不触发」照样守住）。
+// Covers: 票 tf-face-algebra/09 完成判据「编排单测」下「在册后不再取件（所有者替身计数为零）」，与裁定
+// 「先查在册再取件：查在册放在参与 `Active` 判断之前」——查在册在参与在场判断之前、读回段与确认链尾凭已交接之后；
+// 在册就不再向所有者取件。同一拍原样重放不随所有者的后续改答漂移，参与离场之后重放也答已在册（不形成新任务，ADR-0114
+// 决定二「已离场的参与不触发」照样守住）。
 func TestARegisteredTaskIsAnsweredWithoutAskingTheOwnersAgain(t *testing.T) {
 	fixture := newDispatchTriggerFixture(t)
 	fixture.enterByHandover(t, "parcel-1", "FINAL_DELIVERY", handoverJudgedTime)

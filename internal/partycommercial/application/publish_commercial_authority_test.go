@@ -615,8 +615,8 @@ func TestRepublishingDifferentContentIsAConflict(t *testing.T) {
 // cmd/parcel-commercial 那个逐项各起事务的循环整个包进一个事务」这类回归照不出来。
 // 那要一条对真库跑 runPublish 的用例，今天没有（记于 syn-wall-door-audit 票 03）。
 //
-// 断言取自封存现场 db81745 的同名判定（dead-session-salvage 票 02 裁定第 3 条的吸收
-// 扫描），以本处理器的单对象形状重写。
+// 断言取自封存现场 db81745 的同名判定（dead-session-salvage 并回清册 branch-merge-census-2026-08-21「裁定」里
+// 「`mcp1-pc-publication`:弃」那一条的吸收扫描），以本处理器的单对象形状重写。
 func TestAConflictingItemDoesNotRetractAnEarlierSavedItem(t *testing.T) {
 	loaded := domain.NewCommercialRegistry()
 	contractSpec := publishSpec(t, domain.CustomerContractObject, "contract-1", "v1")

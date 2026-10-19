@@ -22,9 +22,9 @@ var ErrUnexpectedDispatchTaskOutcome = errors.New("transport fulfillment: unexpe
 // `已形成`与`已在册`分开：后者是本拍要的那一项任务已经在册——同一拍重跑，任务引用确定性铸出撞上它——交回它而不重建。
 // `引用被占`是本拍的任务引用上立着的不是本拍那一项（种类不是末端派送，或对象集不恰为本对象）：交回占用者，不写、不另铸；
 // 它不并进`已在册`，因为那一格对调用方说的是「这个对象已经有派送任务了」，而占用者并不是（票 tf-face-algebra/09 裁定
-// 第 2 条）。`不是触发事实`是领域答案——段不是派送段、对象不在段里或已不在场、进段凭的不是`已交接`，重跑不会变，哪一格由
-// DeliveryTriggerRefusal 点名。`要求缺失`是所有者答「没有」：任务保持待形成，不填默认（ADR-0114 决定三）。`未决`是缝没接
-// 或读不到：原样重跑本拍就可能过，理由里点名是哪一条缝。
+// 「在册核对作第二道防线」）。`不是触发事实`是领域答案——段不是派送段、对象不在段里或已不在场、进段凭的不是`已交接`，
+// 重跑不会变，哪一格由 DeliveryTriggerRefusal 点名。`要求缺失`是所有者答「没有」：任务保持待形成，不填默认（ADR-0114
+// 决定三）。`未决`是缝没接或读不到：原样重跑本拍就可能过，理由里点名是哪一条缝。
 type DeliveryDispatchTriggerOutcome uint8
 
 const (
@@ -247,9 +247,10 @@ func NewTriggerDeliveryDispatchHandler(deps TriggerDeliveryDispatchDeps) *Trigge
 // Trigger 跑一拍：受理形状 → 读回段（必须是派送段、对象在段里有未失效的参与、链尾凭`已交接`入场）→ 按本拍的键查在册
 // → 参与在场 → 三条缝都接了才去问 → 三件各取一次、缺的逐件点名 → 调任务口。
 //
-// 查在册排在参与在场之前、读回段与确认链尾之后（票 tf-face-algebra/09 裁定第 3 条）。键由段、对象与链尾的入场依据定，
-// 前两步省不掉；在册了就是同一拍的重放：答复不随所有者后来的改答漂移，也不白读所有者。参与离场之后的重放同样交回在册
-// 那一项，它不形成新任务，ADR-0114 决定二「已离场的参与不触发」照样成立。
+// 查在册排在参与在场之前、读回段与确认链尾之后（票 tf-face-algebra/09 裁定
+// 「先查在册再取件：查在册放在参与 `Active` 判断之前」）。键由段、对象与链尾的入场依据定，前两步省不掉；在册了就是
+// 同一拍的重放：答复不随所有者后来的改答漂移，也不白读所有者。参与离场之后的重放同样交回在册那一项，它不形成新任务，
+// ADR-0114 决定二「已离场的参与不触发」照样成立。
 func (handler *TriggerDeliveryDispatchHandler) Trigger(
 	ctx context.Context,
 	command TriggerDeliveryDispatchCommand,
@@ -423,11 +424,11 @@ func requirementFault(resolution ports.RequirementResolution, err error) bool {
 
 // registeredTask 按本拍的键查在册，answered 为真时 result 就是这一拍的答复。
 //
-// 先查新铸法的键，查不到再查旧拼法的键（票 tf-face-algebra/09 裁定第 1 条）：旧拼法铸下的任务留在原键上，已落库的身份
-// 不追溯改写（ADR-0014 同一纪律），演示租户的存量也照此（ADR-0150 决定一）。新键上有任务就以它为准，核得过答`已在册`，
-// 核不过答`引用被占`。旧键上的任务只有核得过才算本拍那一项；核不过说明它是别的任务（手工建任务口指名过这一串，或别的段
-// 与对象在斜杠直拼下撞上了它），本拍不算在册，照新键往下走——旧键只是兼认的去处，不是本拍的身份。读不回答未决：在不在册
-// 还没定，不去问所有者。
+// 先查新铸法的键，查不到再查旧拼法的键（票 tf-face-algebra/09 裁定「单射铸法：取长度前缀，带形状标记」）：
+// 旧拼法铸下的任务留在原键上，已落库的身份不追溯改写（ADR-0014 同一纪律），演示租户的存量也照此（ADR-0150 决定一）。
+// 新键上有任务就以它为准，核得过答`已在册`，核不过答`引用被占`。旧键上的任务只有核得过才算本拍那一项；核不过说明它是别的
+// 任务（手工建任务口指名过这一串，或别的段与对象在斜杠直拼下撞上了它），本拍不算在册，照新键往下走——旧键只是兼认的去处，
+// 不是本拍的身份。读不回答未决：在不在册还没定，不去问所有者。
 func (handler *TriggerDeliveryDispatchHandler) registeredTask(
 	ctx context.Context,
 	command TriggerDeliveryDispatchCommand,
@@ -442,7 +443,8 @@ func (handler *TriggerDeliveryDispatchHandler) registeredTask(
 		return deliveryDispatchRegisteredAnswer(task, object), true
 	}
 	// 段与入场依据是调用方给的不透明串，旧拼法串因此可能恰好合新形状；那样的串上若有任务，是新铸法下另一组（段，对象，
-	// 入场依据）的，同一对象跨段时种类与对象集都对得上，核对拦不住。新旧两种拼法字面上不得相同（裁定第 1 条），在这里守。
+	// 入场依据）的，同一对象跨段时种类与对象集都对得上，核对拦不住。新旧两种拼法字面上不得相同，在这里守
+	// （票 tf-face-algebra/09 裁定「单射铸法：取长度前缀，带形状标记」）。
 	if _, newShape := parseDeliveryDispatchTaskReference(legacy); newShape {
 		return TriggerDeliveryDispatchResult{}, false
 	}
@@ -470,8 +472,9 @@ func (handler *TriggerDeliveryDispatchHandler) findTask(
 	return handler.deps.Tasks.FindByKey(ctx, ports.DispatchTaskKey{TenantID: tenant, Task: task})
 }
 
-// deliveryDispatchRegisteredAnswer 核本拍键上那一项是不是本拍要的任务（裁定第 2 条）：种类须是末端派送，对象集须恰为
-// 本对象。单靠这道核对拦不住同一对象跨段撞键，主修是单射铸法；它是第二道防线，兜住存量里指名执行器引用的手工任务。
+// deliveryDispatchRegisteredAnswer 核本拍键上那一项是不是本拍要的任务（票 tf-face-algebra/09 裁定
+// 「在册核对作第二道防线」）：种类须是末端派送，对象集须恰为本对象。单靠这道核对拦不住同一对象跨段撞键，主修是单射铸法；
+// 它是第二道防线，兜住存量里指名执行器引用的手工任务。
 func deliveryDispatchRegisteredAnswer(task ports.DispatchTaskRecord, object domain.CarriedObjectReference) TriggerDeliveryDispatchResult {
 	if isThisObjectsDeliveryTask(task, object) {
 		return TriggerDeliveryDispatchResult{outcome: DeliveryDispatchTaskAlreadyFormed, record: task, hasRecord: true}
@@ -485,8 +488,8 @@ func isThisObjectsDeliveryTask(task ports.DispatchTaskRecord, object domain.Carr
 }
 
 const (
-	// deliveryDispatchTaskReferenceRoot 起头的任务引用归本执行器铸，手工建任务口拒指名它（裁定第 4 条）。新旧两种拼法
-	// 都以它起头，所以挡它一处就把两种都挡住了。
+	// deliveryDispatchTaskReferenceRoot 起头的任务引用归本执行器铸，手工建任务口拒指名它（票 tf-face-algebra/09 裁定
+	// 「手工建任务口拒执行器的保留前缀」）。新旧两种拼法都以它起头，所以挡它一处就把两种都挡住了。
 	deliveryDispatchTaskReferenceRoot = "DELIVERY-DISPATCH/"
 	// deliveryDispatchTaskReferenceShape 是形状标记。旧拼法没有标记，段紧跟在起头之后。
 	deliveryDispatchTaskReferenceShape = "v2"
@@ -504,7 +507,8 @@ func IsReservedDeliveryDispatchTaskReference(task string) bool {
 //
 // 三件都是只拒空白的不透明串，可以含斜杠，交接版本跨对象还可以相同；以斜杠直拼时不同的三件能拼出同一串，后到的对象首拍
 // 就被答成「已形成」。写上长度之后每一件在哪里结束是定的，读回唯一，铸法单射（parseDeliveryDispatchTaskReference 就是那个
-// 读回）。不取摘要：引用出现在答复、日志与管理台上，人要读得出它指的是哪个段哪个对象（票 tf-face-algebra/09 裁定第 1 条）。
+// 读回）。不取摘要：引用出现在答复、日志与管理台上，人要读得出它指的是哪个段哪个对象（票 tf-face-algebra/09 裁定
+// 「单射铸法：取长度前缀，带形状标记」）。
 //
 // 入场依据在键里是因为同一对象经来源更正后替代入场（ADR-0112）是另一版参与——它的任务要不要另立由那一拍自己判，这里
 // 不让它撞上前一版的任务；照 ADR 字面铸，是否该按（段，对象）铸以免更正后重开任务列为越权风险点供 owner 复核。

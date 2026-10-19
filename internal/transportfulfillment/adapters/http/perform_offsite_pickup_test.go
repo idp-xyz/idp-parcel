@@ -247,9 +247,10 @@ func decodePickupAttempt(t *testing.T, recorder *httptest.ResponseRecorder) pick
 	return view
 }
 
-// Covers: 票 04 专钉第 1 条在多对象口——**两层段引用都要到编排**：整次到访的 `segment` 与逐对象的
-// `plannedSegment`。两成一败：成功对象各带自己的计划段进同一个段，失败对象不进段（CONTEXT「失败结果
-// 不制造实际履约段」）；响应逐对象透出成败与版本（UC-TF-002：任务汇总只能由对象结果派生）。
+// Covers: 票 tf-segment-lifecycle-closure/04「端点测试要专钉的」之「三入口各一条」在多对象口——
+// **两层段引用都要到编排**：整次到访的 `segment` 与逐对象的 `plannedSegment`。两成一败：成功对象各带自己的计划段进
+// 同一个段，失败对象不进段（CONTEXT「失败结果不制造实际履约段」）；响应逐对象透出成败与版本（UC-TF-002：任务汇总只能由
+// 对象结果派生）。
 func TestPerformOffsitePickupEntersEachPickedUpObjectWithItsOwnPlannedSegment(t *testing.T) {
 	fixture := newPickupAttemptFixture(t)
 	body := defaultPickupAttemptBody(
@@ -303,8 +304,9 @@ func TestPerformOffsitePickupEntersEachPickedUpObjectWithItsOwnPlannedSegment(t 
 	}
 }
 
-// Covers: 票 04 专钉第 2 条在多对象口——段登记册故障时到访照登（201），`segmentEntries` **逐对象**列出
-// 欠账，且只列成功对象：失败对象本来就不进段，不算欠账。
+// Covers: 票 tf-segment-lifecycle-closure/04「端点测试要专钉的」之
+// 「响应透出 `segmentContinuationReference`（两个单对象口）与 `segmentEntries`（多对象口）」在多对象口——
+// 段登记册故障时到访照登（201），`segmentEntries` **逐对象**列出欠账，且只列成功对象：失败对象本来就不进段，不算欠账。
 func TestPerformOffsitePickupExposesPerObjectSegmentDebt(t *testing.T) {
 	fixture := newPickupAttemptFixture(t)
 	fixture.segments.findErr = errors.New("segment registry down")

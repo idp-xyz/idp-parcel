@@ -456,10 +456,10 @@ func TestOperatorRegistryIntakeTranslatesDeactivationUnderTheAuthenticatedTenant
 	}
 }
 
-// Covers: 票 admin-web-group-legal-entities/07 要做的第 1 条——一份载荷只许一个文档。尾随的第二个 JSON 值不是本载荷
-// 的一部分，放过它就是无声丢掉一段输入：与下面 exactlyOne 对「无声丢掉」的立场相反，也与同包发布口对同一形状的答复
-// 相反。两份外壳（登记 / 停用）各投一次：它们各走一遍解码，一处改了另一处未必跟着改。在 HTTP 缝上证，钉的是登记方
-// 看得见的三样：400、MALFORMED_REQUEST、无 outcome；编排一次也不该被调到。
+// Covers: 票 admin-web-group-legal-entities/07「身份口对带尾随 JSON 值的载荷答 400 `MALFORMED_REQUEST`」——一份载荷只许
+// 一个文档。尾随的第二个 JSON 值不是本载荷的一部分，放过它就是无声丢掉一段输入：与下面 exactlyOne 对「无声丢掉」的立场
+// 相反，也与同包发布口对同一形状的答复相反。两份外壳（登记 / 停用）各投一次：它们各走一遍解码，一处改了另一处未必跟着改。
+// 在 HTTP 缝上证，钉的是登记方看得见的三样：400、MALFORMED_REQUEST、无 outcome；编排一次也不该被调到。
 func TestPartyIdentityIntakeRefusesTrailingContentAfterThePayload(t *testing.T) {
 	intake := operatorIntake(t)
 	legalEntity := `{"legalEntities":[{"legalEntityId":"SYN-LE-02","partyId":"SYN-PARTY-02","revision":1,"basis":"b","effectiveFrom":"2026-09-16T00:00:00Z"}]}`
@@ -500,10 +500,11 @@ func TestPartyIdentityIntakeRefusesTrailingContentAfterThePayload(t *testing.T) 
 	}
 }
 
-// Covers: 票 admin-web-group-legal-entities/11 要做的第 1 条——形状拒绝的 400 把 Intake 已经写在错误里的理由交到线上：
-// `error.detail` 在场、非空、点得出是哪一种错。多种形状错只交 code 时在线上长一张脸，页面只能显一句通用说明，操作者要
-// 靶着每一种可能挨个试。判据同 `cause`：detail 是散文，这里只钉「非空且含关键字」，不钉全文——全文属 encoding/json
-// 与本包的措辞自由，改一个字不该让这条变红。哨兵自己的英文原句不该重复进 detail：登记方要读的是哨兵之后那半。
+// Covers: 票 admin-web-group-legal-entities/11「只在 `registration_transport.go` 的 `ErrMalformedRequest` 分支交 detail」——
+// 形状拒绝的 400 把 Intake 已经写在错误里的理由交到线上：`error.detail` 在场、非空、点得出是哪一种错。多种形状错只交
+// code 时在线上长一张脸，页面只能显一句通用说明，操作者要靶着每一种可能挨个试。判据同 `cause`：detail 是散文，这里只钉
+// 「非空且含关键字」，不钉全文——全文属 encoding/json 与本包的措辞自由，改一个字不该让这条变红。哨兵自己的英文原句不该
+// 重复进 detail：登记方要读的是哨兵之后那半。
 func TestMalformedRegistrationRefusalCarriesTheReasonAsDetail(t *testing.T) {
 	intake := operatorIntake(t)
 	item := `{"legalEntityId":"SYN-LE-02","partyId":"SYN-PARTY-02","revision":1,"basis":"b","effectiveFrom":"2026-09-16T00:00:00Z"}`

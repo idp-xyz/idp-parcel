@@ -82,8 +82,8 @@ func mintClient(minter *accessidentity.IntegrationClientMinter, request accessid
 		accessidentity.NewIntegrationClientCredential("presented.client.token", nil), request)
 }
 
-// Covers: 票面做什么第 3 条「集成客户端信封：租户、客户端、来源身份、授予集」——身份三件只取自册上的绑定；授予集是铸造
-// 那一刻生效的各类事实，不只所请求的那一类。
+// Covers: 票 operator-channel/11 做什么「集成客户端信封：租户、客户端、来源身份、授予集」——身份三件只取自册上的绑定；
+// 授予集是铸造那一刻生效的各类事实，不只所请求的那一类。
 func TestGrantedIntegrationClientIsMintedIntoAnIntegrationClientEnvelope(t *testing.T) {
 	standing := clientStandingWith(t, false, accessidentity.FactExternalFunds, accessidentity.FactCustomsExternalResult)
 	minter := newClientMinter(t, clientVerifierFake{verified: verifiedToken(t, false)}, clientRegistryFake{standing: standing, found: true}, clientMintAt)
@@ -198,7 +198,7 @@ func TestIntegrationClientAnswerGradesDoNotStandInForEachOther(t *testing.T) {
 	}
 }
 
-// Covers: 票面做什么第 2 条「可选 mTLS 绑定」——要求证书绑定的客户端出示绑定且对得上的令牌照常铸成。
+// Covers: 票 operator-channel/11 做什么「可选 mTLS 绑定」——要求证书绑定的客户端出示绑定且对得上的令牌照常铸成。
 func TestCertificateBoundTokenSatisfiesAClientThatRequiresIt(t *testing.T) {
 	minter := newClientMinter(t, clientVerifierFake{verified: verifiedToken(t, true)},
 		clientRegistryFake{standing: clientStandingWith(t, true, accessidentity.FactExternalFunds), found: true}, clientMintAt)

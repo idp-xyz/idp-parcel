@@ -26,7 +26,7 @@ type IntegrationClientRequest struct {
 }
 
 // IntegrationClientEnvelope 是经铸造的集成客户端身份：租户、客户端主体、来源身份，与铸造那一刻生效的授予集
-// （ADR-0149 决定三；票 operator-channel/11 做什么第 3 条）。
+// （ADR-0149 决定三；票 operator-channel/11 做什么「集成客户端信封：租户、客户端、来源身份、授予集」）。
 //
 // 它与 OperatorEnvelope、SourceEnvelope 分型：外部系统的身份不是操作者也不是客户委托的来源，拿它去铸客户委托或
 // 换操作者口，编译期就走不通。字段不导出、包外没有构造函数；零值不可用——Minted 为假、租户与来源为空、不持有任何

@@ -233,8 +233,9 @@ func TestTriggeringADeliveryDispatchFormsTheTaskWithTheOwnersPlaceReference(t *t
 	}
 }
 
-// Covers: 票 tf-face-algebra/09 裁定第 2 条在传输层——本拍的任务引用上已是别的任务（这里是一项揽收任务，对象也不同）：
-// 200 `DISPATCH_TASK_REFERENCE_TAKEN`，任务那几格回显的是占用者，调用方据此看得出键被谁占着；不是 201，也不冒充已形成。
+// Covers: 票 tf-face-algebra/09 裁定「在册核对作第二道防线」在传输层——本拍的任务引用上已是别的任务（这里是一项揽收
+// 任务，对象也不同）：200 `DISPATCH_TASK_REFERENCE_TAKEN`，任务那几格回显的是占用者，调用方据此看得出键被谁占着；
+// 不是 201，也不冒充已形成。
 func TestATakenTaskReferenceIsAFormedAnswerEchoingTheOccupant(t *testing.T) {
 	fixture := newTriggerFixture(t, "parcel-1")
 	seedHandoverParticipation(t, fixture.segments, "parcel-1")

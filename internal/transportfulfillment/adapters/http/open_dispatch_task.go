@@ -35,7 +35,8 @@ type DispatchTaskPayload struct {
 // 都是坏报文（400）；种类空着照零值交进去，工作范围齐不齐由编排答`输入未受理`。
 //
 // 保留起头在这里拒而不在编排里拒：执行器形成任务走的也是那条编排，拒在那里会把执行器自己挡住。存量里已经指名过保留引用
-// 的手工任务不动，执行器认在册时核种类与对象集兜住它们（票 tf-face-algebra/09 裁定第 2、4 条）。
+// 的手工任务不动，执行器认在册时核种类与对象集兜住它们（票 tf-face-algebra/09 裁定「在册核对作第二道防线」
+// 「手工建任务口拒执行器的保留前缀」）。
 func (payload DispatchTaskPayload) Command(tenant domain.TenantID) (application.OpenDispatchTaskCommand, error) {
 	none := application.OpenDispatchTaskCommand{}
 	if tenant.String() == "" {

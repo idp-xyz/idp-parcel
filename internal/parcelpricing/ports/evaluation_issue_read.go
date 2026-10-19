@@ -7,7 +7,7 @@ import (
 )
 
 // 本文件是被挂起评价联动的伴生读端口（ADR-0105 Decision 五；票 pricing-reference-series-operations/05
-// 第 2 项）。不拓宽 EvaluationCatalogueRead——扩写既有接口会拆全部替身（evaluation_read.go 头注那条）。
+// 「被挂起评价联动」）。不拓宽 EvaluationCatalogueRead——扩写既有接口会拆全部替身（evaluation_read.go 头注那条）。
 //
 // 它只读问题项子表与父表的列（状态、租户），按（状态 = 待判断，原因码 ∈ REFERENCE_SERIES_UNRESOLVED /
 // EXCHANGE_RATE_UNRESOLVED）筛、按序列种类分组数**评价**（不是问题项——一次评价同一种类可能带多条）。

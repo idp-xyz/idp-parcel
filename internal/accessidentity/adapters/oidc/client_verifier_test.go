@@ -79,7 +79,7 @@ func thumbprint(der []byte) string {
 	return b64(sum[:])
 }
 
-// Covers: 票面做什么第 2 条「OAuth 2.0 client credentials 令牌校验」——合格令牌交回（发行方、sub）为客户端主体；
+// Covers: 票 operator-channel/11 做什么「OAuth 2.0 client credentials 令牌校验」——合格令牌交回（发行方、sub）为客户端主体；
 // 不带 cnf 的是持有者令牌，答未绑定。
 func TestQualifiedClientTokenYieldsTheClientSubject(t *testing.T) {
 	keySet := newKeySetDouble(t, rsaKeyA())
@@ -138,7 +138,7 @@ func TestClientTokenIsVerifiedLikeAnOperatorTokenFirst(t *testing.T) {
 	}
 }
 
-// Covers: 票面做什么第 2 条「可选 mTLS 绑定」（RFC 8705 第 3 节）——令牌带 cnf 的 x5t#S256 时，只有这次连接出示的正是它
+// Covers: 票 operator-channel/11 做什么「可选 mTLS 绑定」（RFC 8705 第 3 节）——令牌带 cnf 的 x5t#S256 时，只有这次连接出示的正是它
 // 绑定的那张证书才过、并答已绑定；换一张证书、没出示证书、摘要不成形都拒。带本校验器验不了的确认方法（如 DPoP 的
 // jkt）同样拒：那枚令牌不是持有者令牌，当持有者令牌收就丢了它要求的持有证明。
 func TestCertificateBoundClientTokenNeedsTheCertificateItIsBoundTo(t *testing.T) {
