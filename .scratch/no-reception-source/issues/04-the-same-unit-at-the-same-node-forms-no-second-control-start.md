@@ -1,7 +1,7 @@
 # 04 第四期：同一作业实物在同一节点已有当前收寄时并入、不另起控制起点；仅扫描的待确认由后来的明确接收或拒收续办
 
 Category: enhancement
-Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（02、03 进 main 后开工），分支 `claude-nrs04`，NO 迁移号 0009；与 no-reception-identity/06 并行。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）
+Status: resolved——2026-10-19 进 main（代码验证钉 `def15e73`），见「进 main 记录」。此前 in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（02、03 进 main 后开工），分支 `claude-nrs04`，NO 迁移号 0009；与 no-reception-identity/06 并行。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）
 Blocked by: 03 进 main。功能上只依 02（来源文档给出待确认与拒收行的作业实物，前版机制给出续办）；与 03 同改收寄编排、PG 适配器与迁移号，按票号串行落。
 父票：[01](./01-node-reception-preserves-the-delivery-source.md)
 出处：票 01 裁定分期之「四、同一作业实物重复控制起点的挡法」与「同一作业实物按什么认」「仅扫描的待确认怎样续办」两问；ADR-0199 决定四。落地次序排在第三期（票 05）之前：翻转的前提里有一项就是本票的挡法。
@@ -56,7 +56,7 @@ Blocked by: 03 进 main。功能上只依 02（来源文档给出待确认与拒
 - [x] 读面用例：复核目录、方向依据身份一格、`ParcelContainmentView`、`FindOtherUnitIntakes` 各一条，「并入」行不被读成收寄或关联。
 - [x] ADR-0196 文末复核记录已追加、adr/README 0196 一行已加部分停用注；`git diff` 对 ADR-0196 只有追加行。（例外一处：Status 行照 adr/README「部分停用」约定加前向指针，那一行是改不是追加；决定原文与此前各节逐字未动，见完成记录「越出地盘的改动」。）
 - [x] Go 门禁：`go build ./...`、`go vet ./...` 退 0，`gofmt -l .` 无输出；带 DSN 跑 `internal/nodeoperations/...`、`cmd/parcel-api`、`cmd/parcel-frontline-import`、`internal/architecture/...`、`migrations/...` 全绿；机制清点在本笔的干净检出上重生成。
-- [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
+- [x] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
 
 ## 完成记录（2026-10-19，会话 idp-parcel-9b 的作者子代理，分支 `claude-nrs04`；在 `claude-nrs03` tip `3d6d971c` 上写成，收口前 rebase 到 main `d7283946`）
 
@@ -161,3 +161,8 @@ Blocked by: 03 进 main。功能上只依 02（来源文档给出待确认与拒
 - **作者自定的格认可**：锁次序先实物后包裹，重核不取实物锁（按号重核一笔事务逐件做，取实物锁会与收寄交叉等待），有「两把锁同时有人等不死锁」的并发用例；第一期之前的拒收与仅扫描旧行认不出实物，不续办、不补签，代价写明。
 - **Standards**：并入行不进任何版本链，现有各读面逐一用例核过不受影响；新代码另起文件，共享文件只追加。
 - **已知（不另立票）**：控制转出没有生产接线，实物离开节点再回来会被并入旧收寄——no-reception-source/01 已记，归控制转出那条线。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 分支 `claude-nrs04`（作者已用 `--onto` 把本票四笔重放到 no-reception-source/03 进 main 之后）直接叠在远端 main 之上快进推送；机制清点重生成零差。
+- 推送方全量一次：钉 `def15e73` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 147 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
