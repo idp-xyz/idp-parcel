@@ -1,7 +1,7 @@
 # 08 移动事实同身份异内容答「已有版本」：作业事实口缺内容冲突格，另一台设备或另一作业范围的真实作业被静默吞掉
 
 Category: bug
-Status: in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 代决（见「裁定」）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: resolved——2026-10-18 进 main（代码验证钉 `7eabcb88`），见「进 main 记录」。此前 in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 代决（见「裁定」）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment/movement-facts
@@ -133,3 +133,8 @@ Blocked by: 无
   - **Spec**：阻断无。`CanonicalizeMovementFactPayload`（TFC-1）进摘要的格与裁定一致，业务时间照 ADR-0023 不进；「找到在册版本」与「撞键读回赢家」两支都由 `movementFactReplayOrConflict` 两侧现算再比，同串答已有版本、异串答 `SOURCE_CONFLICT` 不带记录；身份在册时先比内容后判门禁。认可实施者自定的一格：门禁挡着而查册失败时答未决，不答门禁——此刻判断不了是不是重放。
   - **Standards**：阻断无，非阻断无。冲突不回显关掉了「另一作业范围的内容被回显」；HTTP 只改注释。
   - **未做的格**：「去处」那格（换版本重投登成并列版本、前版格答 400）没复现也没改，只删了指向「换版本号」的旧注释，留给后续；时刻回显归 operator-channel/31。
+
+### 进 main 记录（2026-10-18，会话 idp-parcel-9b）
+
+- 分支 `claude-tfa08` rebase 到远端 main `200281b2` 之上（机制清点那一笔在重放后的树上重新生成），快进推送；rebase 前的 SHA 作封存出处。
+- 推送方全量一次：钉 `7eabcb88` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 143 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
