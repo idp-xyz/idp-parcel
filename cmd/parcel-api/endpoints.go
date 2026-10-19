@@ -177,6 +177,7 @@ func assembleBusinessEndpoints(
 	workDevices http.Handler,
 	operatorBinding http.Handler,
 	nodeCustomsZoneRegistration customshttp.NodeCustomsZoneRegistrar,
+	identityRecheck nodeopshttp.IdentityRecheckHandler,
 ) []httpapi.BusinessEndpoint {
 	// 缺省朝拦：真渠道与隔离入参都缺席时，下面这组变量全取未配置即拒。
 	//
@@ -330,6 +331,9 @@ func assembleBusinessEndpoints(
 		// 决定登记册本尊（两个契约一只适配器）。择优编排今天无生产装配点，接线前这一口读到的是空册，空册是如实答案。
 		{Pattern: "/channel-selection-decisions", Handler: shipmenthttp.NewQueryChannelSelectionDecisionsEndpoint(channelSelectionDecisionIntake, channelSelectionDecisions)},
 		{Pattern: "/node-operations/receptions", Handler: nodeopshttp.NewReceiveDeliveredUnitEndpoint(receptionIntake, reception)},
+		// 人工重核命令口（ADR-0199 决定三；票 no-reception-source/03）：复核页上指名一件待识别实物按存下的号再问一次 PS。管理台上
+		// 作判断的口，挂操作者渠道的「运营决定」能力面（ADR-0151 决定一），决定种类`待识别重核`；隔离开关换不了这一行。
+		{Pattern: "/node-operations/identity-rechecks", Handler: nodeopshttp.NewRecheckPendingIdentityEndpoint(operatorDecisions.nodeOperations, identityRecheck)},
 		// 节点作业与运输履约查阅页（票 admin-skeleton-closure-batch/05）各一口按 registry 分派：分派对应「一页里的页签」。
 		// 命令行挂各自上下文的作业事实渠道；查阅行挂本上下文的操作者查阅读（票 operator-channel/35），两个隔离开关都换不了
 		// 这几行。

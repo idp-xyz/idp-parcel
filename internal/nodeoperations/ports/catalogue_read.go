@@ -65,6 +65,11 @@ type ReceptionCatalogueRow struct {
 // Unit 是节点签发的作业实物标识：待识别实物没有正式包裹身份，该标识即页面「内部
 // 作业标签」列的内容（CONTEXT：节点可以自行生成和更换内部作业标签）。发现位置与
 // 状况观察在收寄登记上没有登记格，本行刻意没有那两个字段（票 05 Comments 记明）。
+//
+// 后四格为复核页人工重核而立（ADR-0199 决定三）：JudgmentVersion 是这一行的判断版本，人工重核按它指名；SourcePreserved 说
+// 来源文档在不在，Mark 是在时那一格外部标识观察原样（在线口带的空白照留）——来源保全之前落下的行号码从未留存，读面如实说
+// 「来源未保全」，不拿空串冒充「设备没报号」；SucceededBy 是直接接续这一版的那一版判断版本，空即这一版仍是它那条链的当前有效
+// 版本。同一件实物的待识别行不止一版时（重核、冲突各追加一版），审阅者靠它分得开哪一行已被接续。
 type UnidentifiedItemCatalogueRow struct {
 	SourceID         string
 	Unit             string
@@ -74,6 +79,10 @@ type UnidentifiedItemCatalogueRow struct {
 	ReceivedAt       time.Time
 	Association      string
 	RecordedAt       time.Time
+	JudgmentVersion  string
+	SourcePreserved  bool
+	Mark             string
+	SucceededBy      string
 }
 
 // ConsolidationUnitCatalogueRow 是集运单元登记册上列的一行：实例阶段是三相封闭词

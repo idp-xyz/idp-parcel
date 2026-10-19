@@ -120,7 +120,8 @@ func (catalogue *ReviewCatalogue) ListReceptions(
 }
 
 // ListUnidentifiedItems 上列待识别实物册：收寄登记里 PENDING_IDENTIFICATION 那一格
-// 的身份视角，新近登记在前。
+// 的身份视角，新近登记在前。来源文档里的号码照行转写（来源文档为空即来源未保全）；直接接续这一版的那一版按（租户，前版）
+// 取，走 reception_predecessor_unique。
 func (catalogue *ReviewCatalogue) ListUnidentifiedItems(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -135,18 +136,25 @@ func (catalogue *ReviewCatalogue) ListUnidentifiedItems(
 	}
 
 	rows, err := querier.Query(ctx,
-		`SELECT source_id,
-		        intake->>'unit',
-		        intake->>'node',
-		        candidates,
-		        identity_conflict,
-		        (intake->>'receivedAt')::timestamptz,
-		        COALESCE(intake->>'association', ''),
-		        recorded_at
-		   FROM node_operations.reception
-		  WHERE tenant_id = $1
-		    AND kind = 'PENDING_IDENTIFICATION'
-		  ORDER BY recorded_at DESC, source_id
+		`SELECT r.source_id,
+		        r.intake->>'unit',
+		        r.intake->>'node',
+		        r.candidates,
+		        r.identity_conflict,
+		        (r.intake->>'receivedAt')::timestamptz,
+		        COALESCE(r.intake->>'association', ''),
+		        r.recorded_at,
+		        COALESCE(r.judgment_version, ''),
+		        r.source_document IS NOT NULL,
+		        COALESCE(r.source_document->>'mark', ''),
+		        COALESCE((SELECT successor.judgment_version
+		                    FROM node_operations.reception AS successor
+		                   WHERE successor.tenant_id = r.tenant_id
+		                     AND successor.predecessor_version = r.judgment_version), '')
+		   FROM node_operations.reception AS r
+		  WHERE r.tenant_id = $1
+		    AND r.kind = 'PENDING_IDENTIFICATION'
+		  ORDER BY r.recorded_at DESC, r.source_id
 		  LIMIT $2`,
 		tenant.String(),
 		limit,
@@ -166,6 +174,7 @@ func (catalogue *ReviewCatalogue) ListUnidentifiedItems(
 			&row.SourceID, &row.Unit, &row.Node,
 			&candidatesJSON, &row.IdentityConflict,
 			&row.ReceivedAt, &row.Association, &row.RecordedAt,
+			&row.JudgmentVersion, &row.SourcePreserved, &row.Mark, &row.SucceededBy,
 		); err != nil {
 			return nil, fmt.Errorf("list unidentified items: %w", err)
 		}

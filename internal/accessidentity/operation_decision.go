@@ -15,7 +15,8 @@ var ErrDecisionKindRequired = errors.New("access identity: operation decision gr
 
 // DecisionKind 是「运营决定」能力面下的决定种类（ADR-0151 决定一）。
 //
-// 种类是册的列，由产品的角色模型定；某租户把哪位操作者授予哪一种决定，才是租户取值。
+// 种类是册的列，由产品的角色模型定；某租户把哪位操作者授予哪一种决定，才是租户取值。待识别重核是复核页上对指名的一件待识别
+// 实物按存下的号再问一次 PS（ADR-0199 决定三），管理台上作判断的口照决定一归这一面。
 type DecisionKind string
 
 const (
@@ -30,6 +31,7 @@ const (
 	DecisionParticipationTermination            DecisionKind = "PARTICIPATION_TERMINATION"
 	DecisionEffectiveTimeJudgment               DecisionKind = "EFFECTIVE_TIME_JUDGMENT"
 	DecisionCarrierFirstEffectivePickupJudgment DecisionKind = "CARRIER_FIRST_EFFECTIVE_PICKUP_JUDGMENT"
+	DecisionPendingIdentityRecheck              DecisionKind = "PENDING_IDENTITY_RECHECK"
 )
 
 var decisionKinds = []DecisionKind{
@@ -37,6 +39,7 @@ var decisionKinds = []DecisionKind{
 	DecisionControlledClosure, DecisionControlledReopening,
 	DecisionSegmentClosure, DecisionDispatchTaskRegistration, DecisionLoadAssignment, DecisionParticipationTermination,
 	DecisionEffectiveTimeJudgment, DecisionCarrierFirstEffectivePickupJudgment,
+	DecisionPendingIdentityRecheck,
 }
 
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。

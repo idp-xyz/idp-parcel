@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { Button } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn, type TemplateViewState } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { chipClass } from '../../components/registration';
+import { OperatorRefusalNote } from '../../components/states';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import {
   listNodeOperationsRecords,
@@ -11,6 +13,13 @@ import {
 } from './records-api';
 import { consolidationPhaseLabels, labelOf } from './presentation';
 import { receptionRowOf } from './reception-rows';
+import { recheckPendingIdentity, type IdentityRecheckResponseBody } from './identity-recheck-api';
+import {
+  describeRecheckAnswer,
+  recheckProblemNote,
+  unidentifiedRowOf,
+  type RecheckAvailability,
+} from './identity-recheck';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['node-operations-review'];
@@ -18,7 +27,9 @@ const info = moduleInfoById['node-operations-review'];
 /**
  * 节点作业的治理查阅面。五区栏目取 node-operations CONTEXT.md 原词。实时现场作业
  * （扫描/点验/装卸）属一线作业端（ADR-0021），本页只查阅已发生的作业事实，不下发
- * 任务、不录事实、不确认身份。
+ * 任务、不录事实、不确认身份。唯一的写动作是待识别实物区的「重核」（POST
+ * /node-operations/identity-rechecks，ADR-0199 决定三）：运营决定，叫服务端按存下的号
+ * 再问 parcel-shipment 一次，身份照旧由那边答。
  *
  * 三区接真（GET /node-operations-records，票 admin-skeleton-closure-batch/05）：
  * 节点收寄、集运单元、待识别实物。实际测量与节点侧交接证据两区在存储上还没有
@@ -29,6 +40,8 @@ const info = moduleInfoById['node-operations-review'];
 interface ReviewRow {
   key: string;
   values: Readonly<Record<string, string>>;
+  /** 只在待识别实物区的行上在场：「重核」动作能不能发起。 */
+  recheck?: RecheckAvailability;
 }
 
 function col(
@@ -157,15 +170,21 @@ const sections: ReviewSection[] = [
     registry: 'unidentified-item',
     // 待识别实物与实物身份候选、冲突是本上下文拥有的对象(CONTEXT)。本区无任何
     // 「确认身份/选一个为准」动作——身份确认由 parcel-shipment 以版本化关联形成,
-    // 末列只放登记时已有的关联引用;识别成功不回写本行(行是永久作业记录),缺席
-    // 说的是「登记那一刻还没有」。
+    // 「正式包裹关联」一列只放登记时已有的关联引用;识别成功不回写本行(行是永久作业
+    // 记录),缺席说的是「登记那一刻还没有」。
+    //
+    // 「重核」也不确认身份:它只叫服务端拿来源里存下的号再问一次 parcel-shipment
+    // (ADR-0199 决定三),结果唯一才追加一版关联收寄,原行照留。外部标识观察一列是重核
+    // 拿去问的那一格,原样示出;判断版本一列是重核指名的那一版。
     columns: [
       col('unit', '内部作业标签', { mono: true }),
       col('node', '登记节点', { mono: true }),
+      col('externalMark', '外部标识观察（来源原样）', { mono: true }),
       col('candidates', '身份候选'),
       col('identityConflict', '身份冲突', { className: 'w-[88px]' }),
       col('receivedAt', '收到时间', { mono: true }),
       col('association', '正式包裹关联（引用）', { mono: true }),
+      col('judgmentVersion', '判断版本', { mono: true }),
     ],
   },
 ];
@@ -175,17 +194,7 @@ function rowsOf(body: NodeOperationsListResponseBody): ReviewRow[] {
     case 'RECEPTIONS_LISTED':
       return body.receptions.map(receptionRowOf);
     case 'UNIDENTIFIED_ITEMS_LISTED':
-      return body.items.map((record) => ({
-        key: `unidentified:${record.sourceId}`,
-        values: {
-          unit: record.unit,
-          node: record.node,
-          candidates: record.candidates.join('、'),
-          identityConflict: record.identityConflict ? '有冲突' : '无冲突',
-          receivedAt: formatInstant(record.receivedAt),
-          association: record.association ?? '',
-        },
-      }));
+      return body.items.map(unidentifiedRowOf);
     case 'CONSOLIDATION_UNITS_LISTED':
       return body.units.map((record) => ({
         key: `unit:${record.unitId}`,
@@ -208,8 +217,39 @@ function rowsOf(body: NodeOperationsListResponseBody): ReviewRow[] {
   }
 }
 
+// 「重核」动作列单独拼装：它要 setState，而上面的区定义是模块级常量。不能发起的行照列为什么，不给一个必然答「不重核」的按钮。
+function recheckColumn(onRecheck: (judgmentVersion: string) => void, busy: string | null): ListColumn<ReviewRow> {
+  return {
+    id: 'recheck',
+    header: '动作',
+    align: 'center',
+    className: 'w-[160px]',
+    render: (row) => {
+      const recheck = row.recheck;
+      if (!recheck) return '—';
+      if (recheck.kind === 'unavailable') {
+        return <span className="text-xs text-idpxyz-textMuted">{recheck.reason}</span>;
+      }
+      return (
+        <Button
+          variant="outline"
+          disabled={busy !== null}
+          onClick={() => onRecheck(recheck.judgmentVersion)}
+        >
+          {busy === recheck.judgmentVersion ? '重核中…' : '重核'}
+        </Button>
+      );
+    },
+  };
+}
+
+type RecheckState =
+  | { kind: 'submitting'; judgmentVersion: string }
+  | { kind: 'answered'; judgmentVersion: string; answer: ApiResult<IdentityRecheckResponseBody> };
+
 export function NodeOperationsReviewPage() {
   const [sectionId, setSectionId] = useState<SectionId>(sections[0].id);
+  const [recheck, setRecheck] = useState<RecheckState | null>(null);
   const [keyword, setKeyword] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [loaded, setLoaded] = useState<{
@@ -241,6 +281,18 @@ export function NodeOperationsReviewPage() {
       )
     : rows;
   const retry = () => setReloadKey((value) => value + 1);
+  const startRecheck = (judgmentVersion: string) => {
+    setRecheck({ kind: 'submitting', judgmentVersion });
+    void recheckPendingIdentity({ judgmentVersion }).then((answer) => {
+      setRecheck({ kind: 'answered', judgmentVersion, answer });
+      // 追加了一版（关联收寄或冲突版）才重读：册上多了行、被重核那一行有了接续。
+      if (answer.kind === 'outcome' && describeRecheckAnswer(answer.body).landed) retry();
+    });
+  };
+  const columns =
+    section.id === 'unidentified-items'
+      ? [...section.columns, recheckColumn(startRecheck, recheck?.kind === 'submitting' ? recheck.judgmentVersion : null)]
+      : section.columns;
 
   const viewState: TemplateViewState = section.absence
     ? {
@@ -258,36 +310,96 @@ export function NodeOperationsReviewPage() {
       });
 
   return (
-    <ListPageTemplate<ReviewRow>
-      title={info.title}
-      description={`${info.owner} · 实时现场作业属一线作业端（ADR-0021），本页为治理查阅面，只读已发生的作业事实。`}
-      search={{
-        value: keyword,
-        onChange: setKeyword,
-        placeholder: '按作业实物或节点检索',
-      }}
-      filters={
-        <>
-          {sections.map((candidate) => (
-            <button
-              key={candidate.id}
-              type="button"
-              className={chipClass(candidate.id === sectionId)}
-              onClick={() => setSectionId(candidate.id)}
-            >
-              {candidate.word}
-            </button>
-          ))}
-        </>
-      }
-      filterSummary={
-        // 计数只在拿到业务答案后显示,未配置/无册态不报「0 行」。
-        body ? `${section.word} ${visibleRows.length} 行` : undefined
-      }
-      columns={section.columns}
-      rows={visibleRows}
-      rowKey={(row) => row.key}
-      viewState={viewState}
-    />
+    <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+      <ListPageTemplate<ReviewRow>
+        title={info.title}
+        description={`${info.owner} · 实时现场作业属一线作业端（ADR-0021），本页为治理查阅面，只读已发生的作业事实；待识别实物可指名重核（按存下的号再问 parcel-shipment）。`}
+        search={{
+          value: keyword,
+          onChange: setKeyword,
+          placeholder: '按作业实物或节点检索',
+        }}
+        filters={
+          <>
+            {sections.map((candidate) => (
+              <button
+                key={candidate.id}
+                type="button"
+                className={chipClass(candidate.id === sectionId)}
+                onClick={() => setSectionId(candidate.id)}
+              >
+                {candidate.word}
+              </button>
+            ))}
+          </>
+        }
+        filterSummary={
+          // 计数只在拿到业务答案后显示,未配置/无册态不报「0 行」。
+          body ? `${section.word} ${visibleRows.length} 行` : undefined
+        }
+        columns={columns}
+        rows={visibleRows}
+        rowKey={(row) => row.key}
+        viewState={viewState}
+      />
+      {section.id === 'unidentified-items' && recheck?.kind === 'answered' ? (
+        <RecheckAnswerNote judgmentVersion={recheck.judgmentVersion} answer={recheck.answer} />
+      ) : null}
+    </div>
   );
+}
+
+function RecheckAnswerNote({
+  judgmentVersion,
+  answer,
+}: {
+  judgmentVersion: string;
+  answer: ApiResult<IdentityRecheckResponseBody>;
+}) {
+  const frame = 'mx-4 mb-4 text-xs';
+  const target = <span className="font-mono">{judgmentVersion}</span>;
+  switch (answer.kind) {
+    case 'outcome': {
+      const note = describeRecheckAnswer(answer.body);
+      const tone = note.tone === 'answered' ? 'text-idpxyz-textMuted' : 'text-idpxyz-danger';
+      return (
+        <div className={`${frame} ${tone}`}>
+          <p>
+            重核 {target}：{note.headline}
+          </p>
+          {note.details.length > 0 ? (
+            <ul className="mt-0.5 ml-4 list-disc">
+              {note.details.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      );
+    }
+    case 'unconfigured':
+      return (
+        <p className={`${frame} text-idpxyz-textMuted`}>
+          重核 {target}：接入渠道未配置（403 ACCESS_CHANNEL_NOT_CONFIGURED）。重核端点已建立并装配，操作者渠道的发行方参数
+          未设，服务端如实拒绝——这是诚实答案不是尚未实现，改请求或重试都不会改变结果。
+        </p>
+      );
+    case 'loginRequired':
+    case 'notGranted':
+      return <OperatorRefusalNote kind={answer.kind} what="重核" className={`${frame} text-idpxyz-textMuted`} />;
+    case 'callerProblem':
+      return (
+        <p className={`${frame} text-idpxyz-danger`}>
+          重核 {target}：调用方式问题（HTTP {answer.status}）：{recheckProblemNote(answer.code)}
+        </p>
+      );
+    case 'noAnswer':
+      return (
+        <p className={`${frame} text-idpxyz-danger`}>
+          重核 {target}：服务端未形成答案（HTTP {answer.status}）：{recheckProblemNote(answer.code)}
+        </p>
+      );
+    case 'transport':
+      return <p className={`${frame} text-idpxyz-danger`}>重核 {target}：请求未到达 parcel-api：{answer.message}</p>;
+  }
 }

@@ -25,14 +25,19 @@ import (
 // 本适配器今天没有生产写入方。写入方是渠道适配器，而首发基线明写「独立面单渠道服务不进入
 // 首发生产」——机制先立起来，墙降那天写编排对着的不是一张裸表。
 type LabelTransactions struct {
-	db *bentopg.DB
+	db       *bentopg.DB
+	doorbell *ExternalIdentifierDoorbell
 }
 
 func NewLabelTransactions(db *bentopg.DB) (*LabelTransactions, error) {
 	if db == nil {
 		return nil, fmt.Errorf("parcel shipment postgres: db is nil")
 	}
-	return &LabelTransactions{db: db}, nil
+	doorbell, err := NewExternalIdentifierDoorbell(db)
+	if err != nil {
+		return nil, err
+	}
+	return &LabelTransactions{db: db, doorbell: doorbell}, nil
 }
 
 // 同一个类型同时是仓储与按包裹的只读口：包裹终局的跨交易判断只该拿到后者。
@@ -233,11 +238,16 @@ func (repository *LabelTransactions) Save(
 	}
 	// 渠道包裹件号与它的适用变化随交易快照同一条事务写进外部标识关联册（ADR-0184 决定三、七）：结果与作废落了库
 	// 而号没进册（或作废了的号仍在册里答身份），是同一种半截。关联先写、变化后写——作废选中的正是本交易刚形成的
-	// 那一条。只在 Save 里写：新建立的交易还没有结果，Insert 没有可写的。两者都按键幂等。
-	if err := insertExternalIdentifierRelations(ctx, executor, transaction.ExternalIdentifierRelationsFormedByChannelResults()); err != nil {
+	// 那一条。只在 Save 里写：新建立的交易还没有结果，Insert 没有可写的。两者都按键幂等。门铃在变化之后响：同一笔里形成
+	// 又作废的关联已是终态，不响（ADR-0199 决定三）。
+	formed, err := insertExternalIdentifierRelations(ctx, executor, transaction.ExternalIdentifierRelationsFormedByChannelResults())
+	if err != nil {
 		return none, fmt.Errorf("save label transaction: %w", err)
 	}
 	if err := insertExternalIdentifierChanges(ctx, executor, transaction.ExternalIdentifierChanges()); err != nil {
+		return none, fmt.Errorf("save label transaction: %w", err)
+	}
+	if err := ringFormed(ctx, repository.doorbell, formed); err != nil {
 		return none, fmt.Errorf("save label transaction: %w", err)
 	}
 	return ports.LabelTransactionSaveResult{Outcome: ports.LabelTransactionSaved, Revision: revision}, nil

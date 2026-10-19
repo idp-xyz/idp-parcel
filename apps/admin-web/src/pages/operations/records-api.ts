@@ -61,6 +61,17 @@ export interface UnidentifiedItemRecord {
   receivedAt: string;
   association?: string;
   recordedAt: string;
+  /** 这一行的判断版本，人工重核按它指名（ADR-0199 决定三）。 */
+  judgmentVersion?: string;
+  /**
+   * 来源文档在不在。来源保全之前落下的行为 false，externalMark 随之整键缺席——那一格号码从未留存，
+   * 页面写「来源未保全」，不拿空白冒充「设备没报号」。
+   */
+  sourcePreserved: boolean;
+  /** 来源文档里的外部标识观察，原样（两端空白、Tab 照留）；设备没报号时是空串。 */
+  externalMark?: string;
+  /** 直接接续这一版的那一版判断版本；缺席即这一版仍是它那条链的当前有效版本。 */
+  succeededBy?: string;
 }
 
 /**

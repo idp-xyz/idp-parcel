@@ -2,8 +2,11 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
 
+	"github.com/jackc/pgx/v5"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
@@ -92,21 +95,24 @@ func (view *ExternalIdentifiers) FindParcelsByExternalIdentifier(
 	return answer, nil
 }
 
-// insertExternalIdentifierRelations 在调用方的事务里写下一组关联。键含形成依据（ADR-0185）：别的来源事实再签同一个
-// 号是另一条关联。ON CONFLICT DO NOTHING 是重放语义：来源事实每次经仓储保存都会把同一组关联再交来一次，同键即同一
-// 条关联，不是冲突。
+// insertExternalIdentifierRelations 在调用方的事务里写下一组关联，交回这一笔真插入的那几条。键含形成依据（ADR-0185）：别的来源
+// 事实再签同一个号是另一条关联。ON CONFLICT DO NOTHING 是重放语义：来源事实每次经仓储保存都会把同一组关联再交来一次，同键即
+// 同一条关联，不是冲突。真插入与重放要分得开：只有新形成的关联才响门铃（ADR-0199 决定三），RETURNING 只在真插入时带回一行。
 func insertExternalIdentifierRelations(
 	ctx context.Context,
 	executor bentopg.Executor,
 	relations []domain.ExternalIdentifierRelation,
-) error {
+) ([]formedExternalIdentifier, error) {
+	var formed []formedExternalIdentifier
 	for _, relation := range relations {
-		if _, err := executor.Exec(ctx,
+		var recordedAt time.Time
+		err := executor.QueryRow(ctx,
 			`INSERT INTO parcel_shipment.external_identifier_relation
 			     (tenant_id, identifier_kind, allocator, identifier_number,
 			      object_kind, object_ref, scope, basis, formed_at)
 			 VALUES ($1, $2, $3, $4, 'PARCEL', $5, $6, $7, $8)
-			 ON CONFLICT (tenant_id, identifier_kind, allocator, identifier_number, object_ref, basis) DO NOTHING`,
+			 ON CONFLICT (tenant_id, identifier_kind, allocator, identifier_number, object_ref, basis) DO NOTHING
+			 RETURNING recorded_at`,
 			relation.Tenant().String(),
 			relation.Kind().String(),
 			relation.Allocator().String(),
@@ -115,11 +121,16 @@ func insertExternalIdentifierRelations(
 			relation.Scope().String(),
 			relation.Basis().String(),
 			relation.FormedAt().UTC(),
-		); err != nil {
-			return fmt.Errorf("insert external identifier relation: %w", err)
+		).Scan(&recordedAt)
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue
 		}
+		if err != nil {
+			return nil, fmt.Errorf("insert external identifier relation: %w", err)
+		}
+		formed = append(formed, formedExternalIdentifier{relation: relation, recordedAt: recordedAt})
 	}
-	return nil
+	return formed, nil
 }
 
 // insertExternalIdentifierChanges 在调用方的事务里写下一组适用状态变化。每一格按（租户，类型，形成依据，包裹）选中

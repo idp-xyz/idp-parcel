@@ -24,14 +24,19 @@ import (
 // `已拒绝`/`已撤回`得到 ErrRehydrationStateNotSupported——不带商业依据的拒绝也走得到那扇门，
 // 依据缺席只对拒绝决定放宽；已接受缺产物则是坏快照，走 ErrInvalidRehydratedShipmentRequest。
 type ShipmentRequests struct {
-	db *bentopg.DB
+	db       *bentopg.DB
+	doorbell *ExternalIdentifierDoorbell
 }
 
 func NewShipmentRequests(db *bentopg.DB) (*ShipmentRequests, error) {
 	if db == nil {
 		return nil, fmt.Errorf("parcel shipment postgres: db is nil")
 	}
-	return &ShipmentRequests{db: db}, nil
+	doorbell, err := NewExternalIdentifierDoorbell(db)
+	if err != nil {
+		return nil, err
+	}
+	return &ShipmentRequests{db: db, doorbell: doorbell}, nil
 }
 
 // FindBySourceIdentity 按完整来源身份取回委托聚合。
@@ -184,8 +189,13 @@ func (repository *ShipmentRequests) Save(
 		return ports.ShipmentRequestRevisionConflict, nil
 	}
 	// 已接受委托的客户包裹件号与快照同一条事务写进外部标识关联册（ADR-0184 决定三），与上面那两列投影
-	// 同一先例：分两次写，就有一个时刻委托已接受而节点认不出它的包裹。未接受交空，按键幂等。
-	if err := insertExternalIdentifierRelations(ctx, executor, request.ExternalIdentifierRelationsFormedByAcceptance(identity)); err != nil {
+	// 同一先例：分两次写，就有一个时刻委托已接受而节点认不出它的包裹。未接受交空，按键幂等。新形成的关联同一笔响门铃，
+	// 叫节点作业按号重核待识别实物（ADR-0199 决定三）。
+	formed, err := insertExternalIdentifierRelations(ctx, executor, request.ExternalIdentifierRelationsFormedByAcceptance(identity))
+	if err != nil {
+		return ports.ShipmentRequestSaveOutcomeInvalid, fmt.Errorf("save shipment request: %w", err)
+	}
+	if err := ringFormed(ctx, repository.doorbell, formed); err != nil {
 		return ports.ShipmentRequestSaveOutcomeInvalid, fmt.Errorf("save shipment request: %w", err)
 	}
 	return ports.ShipmentRequestSaved, nil

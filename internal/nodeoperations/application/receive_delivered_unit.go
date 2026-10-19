@@ -278,39 +278,13 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 	key ports.ReceptionKey,
 	digest string,
 ) (ReceiveDeliveredUnitResult, error) {
-	// 身份核对读不动不拿空候选顶替（ADR-0089）：那会把可能已知的包裹落成待识别。
-	answer, err := handler.deps.Identity.ResolveParcelIdentity(ctx, command.TenantID, command.Mark)
+	judgment, err := identityJudge{
+		identity:   handler.deps.Identity,
+		services:   handler.deps.ServiceResults,
+		receptions: handler.deps.Receptions,
+	}.judge(ctx, command.TenantID, command.Mark, command.Unit)
 	if err != nil {
-		return ReceiveDeliveredUnitResult{}, fmt.Errorf("resolve parcel identity: %w", err)
-	}
-	candidates := answer.Candidates
-	// 号码唯一指向一件包裹，还要问这件包裹是否已关联到另一件作业实物：是，就是「同一外部条码出现在多个实物」（NO
-	// CONTEXT「实物身份与事实完整性」、ADR-0196）。按关联到的包裹认而不按号码认，不论先到那件此刻是否仍在节点控制下；
-	// 同一作业实物再来不在此列，同一份送站重投在上面按幂等键走已有结果。读不动与身份核对读不动同样不形成答案。
-	// 恰一个候选却带歧义信号的不是唯一命中（ADR-0195），与多候选同走身份冲突，不进这一问。
-	parcel, unique := answer.Unique()
-	var others []ports.ReceptionRecord
-	if unique {
-		others, err = handler.deps.Receptions.FindOtherUnitIntakes(ctx, command.TenantID, parcel, command.Unit)
-		if err != nil {
-			return ReceiveDeliveredUnitResult{}, fmt.Errorf("find other units associated with the parcel: %w", err)
-		}
-	}
-	identified := unique && len(others) == 0
-
-	// 身份唯一成立才有可问的包裹：向 PS 取它此刻的服务结果，落成标记（UC-NO-002「对已取消、终局、无路由或受限实物
-	// 标记相应引用」）。读不动不挡已经发生的物理事实——照常落册，核对态记读不动、标记留空，不补查（ADR-0186）；空标记
-	// 因此只在已查时才说「没有取消与终局」。
-	var markers []string
-	check := ports.ServiceResultCheckAbsent
-	if identified {
-		results, err := handler.deps.ServiceResults.FindParcelServiceResults(ctx, command.TenantID, parcel)
-		if err != nil {
-			check = ports.ServiceResultsUnreadable
-		} else {
-			check = ports.ServiceResultsChecked
-			markers = results.Markers()
-		}
+		return ReceiveDeliveredUnitResult{}, err
 	}
 	version, err := handler.deps.Versions.NextIntakeResultVersion(ctx)
 	if err != nil {
@@ -326,19 +300,12 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 		Version:     version,
 		ReceivedAt:  command.OccurredAt,
 	}
+	// 唯一且证据充分：关联正式包裹，形成可交 PS 采用的收寄（AT-NO-015）。未知（零候选）：待识别实物——收寄与控制真实成立，
+	// 正式身份等版本化识别（AT-NO-018）。身份冲突（AT-NO-019）：各实物独立、暂停方向性作业；不猜身份，候选照记。
 	kind := ports.RecordPendingIdentification
-	conflict := false
-	switch {
-	case identified:
-		// 唯一且证据充分：关联正式包裹，形成可交 PS 采用的收寄（AT-NO-015）。
-		spec.Association = parcel
+	if judgment.identified {
+		spec.Association = judgment.parcel
 		kind = ports.RecordIntakeFormed
-	case len(candidates) == 0:
-		// 未知：待识别实物——收寄与控制真实成立，正式身份等版本化识别（AT-NO-018）。
-	default:
-		// 号码在册里标识多件包裹，或唯一那件带歧义信号（ADR-0195），或唯一指向的那件包裹已关联到另一件作业实物（一码
-		// 多物，AT-NO-019）：各实物独立、身份冲突暂停方向性作业；不猜身份，候选照记。
-		conflict = true
 	}
 
 	intake, err := domain.FormNodeIntake(spec)
@@ -369,18 +336,18 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 		Source:             deliverySourceOf(command),
 		Intake:             intake,
 		Control:            control,
-		Candidates:         candidates,
-		IdentityConflict:   conflict,
-		ServiceMarkers:     markers,
-		ServiceResultCheck: check,
+		Candidates:         judgment.candidates,
+		IdentityConflict:   judgment.conflict(),
+		ServiceMarkers:     judgment.markers,
+		ServiceResultCheck: judgment.check,
 		RecordedAt:         handler.deps.Clock.Now(),
 	}
 	result, err := handler.commit(ctx, record)
 	// 只在本次真落了册时追加：并发里输给另一方的那次读回的是赢家，赢家已经追加过。
-	if err != nil || len(others) == 0 || result.Outcome() != UnitPendingIdentification {
+	if err != nil || len(judgment.others) == 0 || result.Outcome() != UnitPendingIdentification {
 		return result, err
 	}
-	if err := handler.appendIdentityConflicts(ctx, record, others); err != nil {
+	if err := appendIdentityConflicts(ctx, handler.deps.Receptions, handler.deps.Versions, record, judgment.others); err != nil {
 		return ReceiveDeliveredUnitResult{}, err
 	}
 	return result, nil
@@ -398,8 +365,10 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 // 前版就是上一版冲突版，不是原判断——指原判断就成了一版两个后继。读链在包裹锁之后（FindOtherUnitIntakes 取的锁），并发的
 // 另一件送站已追加的那一版此刻读得到。来源保全之前追加的冲突版没有指名前版，链上看不见它，这里会从原判断接下去（ADR-0199
 // 决定二「不回填」）。
-func (handler *ReceiveDeliveredUnitHandler) appendIdentityConflicts(
+func appendIdentityConflicts(
 	ctx context.Context,
+	receptions ports.ReceptionStore,
+	versions ports.IntakeIdentityFactory,
 	late ports.ReceptionRecord,
 	others []ports.ReceptionRecord,
 ) error {
@@ -418,12 +387,12 @@ func (handler *ReceiveDeliveredUnitHandler) appendIdentityConflicts(
 	}
 	for _, unit := range order {
 		earlier := latest[unit]
-		version, err := handler.deps.Versions.NextIntakeResultVersion(ctx)
+		version, err := versions.NextIntakeResultVersion(ctx)
 		if err != nil {
 			return fmt.Errorf("next intake result version for identity conflict: %w", err)
 		}
 		// 被依的那一行带着关联，是形成格，它的判断版本就是收寄结果版本。
-		predecessor, err := handler.deps.Receptions.CurrentVersion(ctx, late.Key.TenantID, earlier.Intake.Version())
+		predecessor, err := receptions.CurrentVersion(ctx, late.Key.TenantID, earlier.Intake.Version())
 		if err != nil {
 			return fmt.Errorf("current version before identity conflict: %w", err)
 		}
@@ -457,7 +426,7 @@ func (handler *ReceiveDeliveredUnitHandler) appendIdentityConflicts(
 			IdentityConflict: true,
 			RecordedAt:       late.RecordedAt,
 		}
-		saved, err := handler.deps.Receptions.Save(ctx, record)
+		saved, err := receptions.Save(ctx, record)
 		if err != nil {
 			return fmt.Errorf("record identity conflict version: %w", err)
 		}
@@ -486,7 +455,7 @@ func (handler *ReceiveDeliveredUnitHandler) commit(
 	switch saved {
 	case ports.ReceptionSaved:
 		result := resultForRecord(record)
-		result.handoff, result.handoffErr = handler.handOff(ctx, record)
+		result.handoff, result.handoffErr = handOffIntake(ctx, handler.deps.Downstream, record)
 		return result, nil
 	case ports.ReceptionAlreadyRecorded:
 		winner, found, err := handler.deps.Receptions.FindByKey(ctx, record.Key)
@@ -517,7 +486,7 @@ func (handler *ReceiveDeliveredUnitHandler) existingResult(
 		}
 		result.currentVersion = current
 	}
-	result.handoff, result.handoffErr = handler.handOff(ctx, record)
+	result.handoff, result.handoffErr = handOffIntake(ctx, handler.deps.Downstream, record)
 	return result, nil
 }
 
@@ -540,17 +509,18 @@ func outcomeOfKind(kind ports.ReceptionRecordKind) ReceptionOutcome {
 	}
 }
 
-// handOff 交发布意图。只有形成了可供下游消费的收寄（关联收寄）才交——待识别、未收寄
+// handOffIntake 交发布意图。只有形成了可供下游消费的收寄（关联收寄）才交——待识别、未收寄
 // 与待确认没有 PS 能采用的东西；失败不翻结果，留续办引用重发同一份（AT-NO-027），入队的错一并交出，提交还是回滚由调用方
 // 按有没有人读续办来定。
-func (handler *ReceiveDeliveredUnitHandler) handOff(
+func handOffIntake(
 	ctx context.Context,
+	downstream ports.NodeIntakeHandoff,
 	record ports.ReceptionRecord,
 ) (string, error) {
 	if record.Kind != ports.RecordIntakeFormed {
 		return "", nil
 	}
-	err := handler.deps.Downstream.HandOffNodeIntake(ctx, ports.NodeIntakeHandoffIntent{Record: record})
+	err := downstream.HandOffNodeIntake(ctx, ports.NodeIntakeHandoffIntent{Record: record})
 	if err == nil {
 		return "", nil
 	}

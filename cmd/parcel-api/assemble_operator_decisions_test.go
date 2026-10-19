@@ -287,6 +287,8 @@ var swappedDecisionFaces = map[string]accessidentity.DecisionKind{
 	// 受控关闭与重开：按包裹寻址、请求方由服务端推出（ADR-0183），此前没有隔离放行。
 	"/shipment-requests/continued-attempt-closures":   accessidentity.DecisionControlledClosure,
 	"/shipment-requests/continued-attempt-reopenings": accessidentity.DecisionControlledReopening,
+	// 人工重核：复核页上对指名的一件待识别实物发起（ADR-0199 决定三，票 no-reception-source/03）。
+	"/node-operations/identity-rechecks": accessidentity.DecisionPendingIdentityRecheck,
 }
 
 // Covers: 票 operator-channel/15 完成判据「无此决定种类的授予」那一格——授予按决定种类各自成立：持有别的每一种

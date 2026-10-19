@@ -27,6 +27,7 @@ import (
 	nrapplication "go.idp.xyz/idp-parcel/internal/networkrouting/application"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	nrports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
+	noinbox "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/inbox"
 	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
 	ppidentity "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/identity"
 	ppinbox "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/inbox"
@@ -1093,6 +1094,11 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 		return nil, fmt.Errorf("parcel-dispatch: customer view undecided translation: %w", err)
 	}
 
+	identityRechecks, err := recheckPendingIdentitiesConsumer(db, outboxStore, inboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+
 	publisher, err := dispatch.NewDirectPublisher(
 		map[eventing.EventType]dispatch.Consumer{
 			psinbox.ShipmentRequestSubmittedEventType:              routedChain,
@@ -1123,6 +1129,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 			veinbox.ExternalResultReceivedEventType:                veExternalResultRouted,
 			veinbox.TrackingProjectionDerivedEventType:             veCustomerViewRouted,
 			sainbox.ChargeOccurrenceFormedEventType:                routedBuyOnOccurrences,
+			noinbox.ExternalIdentifierRelationFormedEventType:      identityRechecks,
 
 			// 键比上面各行都长，单起一段：并进去 gofmt 会重排整块的对齐，共享接线文件上多出一片别人的行。
 			psinbox.PreAcceptanceEstimateAdoptionRegisteredEventType: routedEstimateAdoption,

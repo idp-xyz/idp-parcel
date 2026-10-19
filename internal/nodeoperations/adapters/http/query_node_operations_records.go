@@ -145,7 +145,7 @@ func serveUnidentifiedItems(
 	}
 	bodies := make([]unidentifiedItemBody, 0, len(rows))
 	for _, row := range rows {
-		bodies = append(bodies, unidentifiedItemBody{
+		body := unidentifiedItemBody{
 			SourceID:         row.SourceID,
 			Unit:             row.Unit,
 			Node:             row.Node,
@@ -154,7 +154,15 @@ func serveUnidentifiedItems(
 			ReceivedAt:       rfc3339(row.ReceivedAt),
 			Association:      row.Association,
 			RecordedAt:       rfc3339(row.RecordedAt),
-		})
+			JudgmentVersion:  row.JudgmentVersion,
+			SourcePreserved:  row.SourcePreserved,
+			SucceededBy:      row.SucceededBy,
+		}
+		if row.SourcePreserved {
+			mark := row.Mark
+			body.ExternalMark = &mark
+		}
+		bodies = append(bodies, body)
 	}
 	writeJSON(response, http.StatusOK, unidentifiedItemListResponse{
 		Outcome: outcomeUnidentifiedItemsListed,
@@ -245,6 +253,10 @@ type unidentifiedItemListResponse struct {
 // 关联引用，缺席即整键不出现——身份确认由 parcel-shipment 以版本化关联形成，识别
 // 成功不回写本行（识别不删除原实物记录），所以缺席说的是「登记那一刻还没有」，
 // 不是「至今没有」。unit 是节点签发的作业实物标识，即页面「内部作业标签」列。
+//
+// judgmentVersion 是人工重核指名用的那一版（ADR-0199 决定三）。sourcePreserved 恒在场：来源保全之前的行答 false，
+// externalMark 随之整键不出现——那一格号码从未留存，空串会被读成「设备没报号」；来源在时 externalMark 照来源文档原样带号，
+// 空号也带空串。succeededBy 只在这一版已被接续时出现，带直接接续它的那一版。
 type unidentifiedItemBody struct {
 	SourceID         string   `json:"sourceId"`
 	Unit             string   `json:"unit"`
@@ -254,6 +266,10 @@ type unidentifiedItemBody struct {
 	ReceivedAt       string   `json:"receivedAt"`
 	Association      string   `json:"association,omitempty"`
 	RecordedAt       string   `json:"recordedAt"`
+	JudgmentVersion  string   `json:"judgmentVersion,omitempty"`
+	SourcePreserved  bool     `json:"sourcePreserved"`
+	ExternalMark     *string  `json:"externalMark,omitempty"`
+	SucceededBy      string   `json:"succeededBy,omitempty"`
 }
 
 type consolidationUnitListResponse struct {

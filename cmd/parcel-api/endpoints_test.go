@@ -43,6 +43,7 @@ var businessEndpointProbes = map[string]businessEndpointProbe{
 	"/label-transactions":                                                      {method: http.MethodGet, target: "/label-transactions"},
 	"/channel-selection-decisions":                                             {method: http.MethodGet, target: "/channel-selection-decisions?view=tied"},
 	"/node-operations/receptions":                                              {method: http.MethodPost, target: "/node-operations/receptions"},
+	"/node-operations/identity-rechecks":                                       {method: http.MethodPost, target: "/node-operations/identity-rechecks"},
 	"/node-operations-records":                                                 {method: http.MethodGet, target: "/node-operations-records?registry=reception"},
 	"/transport-fulfillment/deliveries":                                        {method: http.MethodPost, target: "/transport-fulfillment/deliveries"},
 	"/transport-fulfillment/delivery-proof-corrections":                        {method: http.MethodPost, target: "/transport-fulfillment/delivery-proof-corrections"},
@@ -406,6 +407,7 @@ func assembleUnwiredBusinessEndpointsWithOperatorIntakes(
 		nil,
 		nil,
 		unwiredNodeCustomsZoneRegistration{},
+		unwiredIdentityRecheck{},
 	)
 }
 

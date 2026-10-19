@@ -20,7 +20,7 @@ const (
 
 var (
 	ErrOperatorCredentialRejected    = errors.New("node operations http: operator credential rejected")
-	ErrOperatorNotGranted            = errors.New("node operations http: operator holds no work fact grant for this scope")
+	ErrOperatorNotGranted            = errors.New("node operations http: operator holds no grant for the capability face, scope or decision this endpoint needs")
 	ErrDeviceNotInUse                = errors.New("node operations http: device is not registered for this work scope or has been deactivated")
 	ErrIdentityDependencyUnavailable = errors.New("node operations http: identity dependency unavailable")
 )

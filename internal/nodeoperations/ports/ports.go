@@ -217,6 +217,25 @@ type ReceptionStore interface {
 	) (domain.IntakeResultVersion, error)
 }
 
+// PendingIdentityLookup 找待重核的待识别实物（ADR-0199 决定三）。与 ReceptionStore 分立：收寄编排既不按判断版本、也不按号码
+// 找记录，扩它的接口就要连带改所有只为收寄而写的替身；生产上两者是同一只收寄库适配器。
+type PendingIdentityLookup interface {
+	// FindByJudgmentVersion 交回本租户判断版本为 version 的那一行；没有交回 false。人工重核与按判断版本自投的门铃都只指名
+	// 这一件。读不动作为错误返回。
+	FindByJudgmentVersion(
+		ctx context.Context,
+		tenant domain.TenantID,
+		version domain.IntakeResultVersion,
+	) (ReceptionRecord, bool, error)
+	// FindRecheckableByMark 交回本租户里当前有效版本是待识别、不带关联、不记身份冲突，且来源文档的外部标识观察与 mark 逐字
+	// 相等的各行，按来源标识定序；没有交回空切片。来源文档缺席的旧行不在其中：号码从未在册上留存，无从按号匹配。
+	FindRecheckableByMark(
+		ctx context.Context,
+		tenant domain.TenantID,
+		mark string,
+	) ([]ReceptionRecord, error)
+}
+
 // ErrPredecessorAlreadySucceeded 说明 Save 写的一版所指名的前版在本租户已有后继：一版至多一个后继（ADR-0199 决定二）。它不译成
 // ReceptionAlreadyRecorded——那一格说的是同一来源已在册，读回赢家作答；这里来源不同，读回什么都不是这一版的答案。
 var ErrPredecessorAlreadySucceeded = errors.New("node operations: the predecessor judgment version already has a successor")

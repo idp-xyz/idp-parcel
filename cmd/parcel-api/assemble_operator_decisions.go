@@ -32,10 +32,12 @@ import (
 	visibilityhttp "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/http"
 )
 
-// operatorDecisionIntakes 是操作者渠道「运营决定」能力面在两个上下文的 Intake（ADR-0151；票 operator-channel/15）。
+// operatorDecisionIntakes 是操作者渠道「运营决定」能力面在各上下文的 Intake（ADR-0151；票 operator-channel/15）。nodeOperations
+// 是复核页人工重核待识别实物（ADR-0199 决定三；票 no-reception-source/03）。
 type operatorDecisionIntakes struct {
-	shipment  *shipmenthttp.OperatorDecisionIntake
-	transport *tfhttp.OperatorDecisionIntake
+	shipment       *shipmenthttp.OperatorDecisionIntake
+	transport      *tfhttp.OperatorDecisionIntake
+	nodeOperations *nodeopshttp.OperatorDecisionIntake
 }
 
 // buildOperatorMinter 建本进程唯一一只操作者铸造器：运营决定与登记写面各口共用它。
@@ -138,7 +140,15 @@ func buildOperatorDecisionIntakes(
 	if err != nil {
 		return operatorDecisionIntakes{}, err
 	}
-	return operatorDecisionIntakes{shipment: shipment, transport: transport}, nil
+	nodeOperationsAuthenticator, err := noaccess.NewOperatorDecisionAuthenticator(minter)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	nodeOperations, err := nodeopshttp.NewOperatorDecisionIntake(nodeOperationsAuthenticator)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	return operatorDecisionIntakes{shipment: shipment, transport: transport, nodeOperations: nodeOperations}, nil
 }
 
 // operatorRegistryIntakes 是操作者渠道登记册配置写能力面在各上下文的 Intake（ADR-0100 决定四；票 operator-channel/04）。

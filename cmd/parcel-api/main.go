@@ -271,6 +271,11 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 人工重核编排（ADR-0199 决定三）：接真不等操作者授予——运营决定 Intake 拒在编排之前，授予与准入范围是租户取值。
+	identityRecheck, err := buildIdentityRecheckOrchestration(db)
+	if err != nil {
+		return err
+	}
 	delivery, err := buildDeliveryOrchestration(db)
 	if err != nil {
 		return err
@@ -699,6 +704,7 @@ func run(logger *slog.Logger) error {
 			workDeviceCatalogue,
 			operatorBinding,
 			customsAdmission.nodeZoneRegistration,
+			identityRecheck,
 		)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
