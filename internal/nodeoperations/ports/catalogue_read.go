@@ -35,6 +35,12 @@ import (
 // （NODE_INTAKE / HANDOVER_IN，domain.ControlEstablishmentKind）；Released 两件成对
 // 缺席表示实物仍在节点控制中——零值时刻是合法时间，用指针分「未转出」与「转出」
 // 两态，不用零时刻兼表没发生。
+//
+// ServiceResultCheck 照行转写收寄登记的服务结果核对态（ADR-0186）：只有 INTAKE_FORMED 行带，待识别行恒为零值
+// ServiceResultCheckAbsent（库里由迁移的 CHECK 守）。「已查、无标记」与「读不动」两行的 ServiceMarkers 同为空，
+// 少了这一格两者在册面上逐字相同，而后者的空不代表没有取消与终局，审阅者照空放行就可能放走一件已取消的包裹。
+// 它不像 Kind、ControlKind 那样以串转写，而用写侧同一个枚举：取值词表只在 ServiceResultCheck 一处定义，读面不另立
+// 一份串。这仍是照行转写——核对态是登记时就落下的一格，不是重建出的领域对象，目录也不据它形成判断。
 type ReceptionCatalogueRow struct {
 	SourceID             string
 	Kind                 string
@@ -47,6 +53,7 @@ type ReceptionCatalogueRow struct {
 	ControlReleasedBy    string
 	ControlReleasedAt    *time.Time
 	ServiceMarkers       []string
+	ServiceResultCheck   ServiceResultCheck
 	RecordedAt           time.Time
 }
 

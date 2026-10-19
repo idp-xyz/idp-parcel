@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -106,6 +107,63 @@ func TestReviewCatalogueListsReceptionsNewestFirstWithinTenant(t *testing.T) {
 	limited, err := catalogue.ListReceptions(ctx, ref(t, domain.NewTenantID, "tenant-a"), 1)
 	if err != nil || len(limited) != 1 || limited[0].SourceID != "scan-1" {
 		t.Errorf("页大小未生效：rows=%+v err=%v", limited, err)
+	}
+}
+
+// Covers: ADR-0186 核对态的查阅面——「已查、有标记」「已查、无标记」「读不动」三种形成行转写出来各不相同，后两者的
+// 标记同为空，只靠核对态分得开；待识别行不带核对态。标记都由 ports 的合成入口产出，不手写词表外的串。
+func TestReviewCatalogueTranscribesTheServiceResultCheck(t *testing.T) {
+	catalogue, receptions, _, transactor := newReviewCatalogue(t)
+	ctx := t.Context()
+
+	marked := formedRecord(t, "tenant-a", "scan-1")
+	marked.ServiceMarkers = ports.ParcelServiceResults{Cancellation: "SYN-CANCEL-1"}.Markers()
+	marked.RecordedAt = receivedAt.Add(4 * time.Minute)
+	unmarked := formedRecord(t, "tenant-a", "scan-2")
+	unmarked.ServiceMarkers = ports.ParcelServiceResults{}.Markers()
+	unmarked.RecordedAt = receivedAt.Add(3 * time.Minute)
+	unreadable := formedRecord(t, "tenant-a", "scan-3")
+	unreadable.ServiceMarkers = nil
+	unreadable.ServiceResultCheck = ports.ServiceResultsUnreadable
+	unreadable.RecordedAt = receivedAt.Add(2 * time.Minute)
+	pending := pendingRecord(t, "tenant-a", "scan-4")
+	pending.RecordedAt = receivedAt.Add(time.Minute)
+	saveReceptions(t, transactor, ctx, receptions, marked, unmarked, unreadable, pending)
+
+	rows, err := catalogue.ListReceptions(ctx, ref(t, domain.NewTenantID, "tenant-a"), 10)
+	if err != nil {
+		t.Fatalf("上列收寄册：%v", err)
+	}
+	if len(rows) != 4 {
+		t.Fatalf("册面行数 = %d，want 4：%+v", len(rows), rows)
+	}
+
+	wants := []struct {
+		sourceID string
+		kind     string
+		markers  []string
+		check    ports.ServiceResultCheck
+	}{
+		{"scan-1", "INTAKE_FORMED", marked.ServiceMarkers, ports.ServiceResultsChecked},
+		{"scan-2", "INTAKE_FORMED", nil, ports.ServiceResultsChecked},
+		{"scan-3", "INTAKE_FORMED", nil, ports.ServiceResultsUnreadable},
+		{"scan-4", "PENDING_IDENTIFICATION", nil, ports.ServiceResultCheckAbsent},
+	}
+	seen := map[string]string{}
+	for index, want := range wants {
+		row := rows[index]
+		if row.SourceID != want.sourceID || row.Kind != want.kind {
+			t.Fatalf("第 %d 行 = %s %s，want %s %s", index, row.SourceID, row.Kind, want.sourceID, want.kind)
+		}
+		if fmt.Sprint(row.ServiceMarkers) != fmt.Sprint(want.markers) || row.ServiceResultCheck != want.check {
+			t.Errorf("%s 转写为 标记 %v 核对态 %q，want 标记 %v 核对态 %q",
+				row.SourceID, row.ServiceMarkers, row.ServiceResultCheck, want.markers, want.check)
+		}
+		transcribed := fmt.Sprintf("%s|%v|%s", row.Kind, row.ServiceMarkers, row.ServiceResultCheck)
+		if earlier, clash := seen[transcribed]; clash {
+			t.Errorf("%s 与 %s 转写同形：%s", row.SourceID, earlier, transcribed)
+		}
+		seen[transcribed] = row.SourceID
 	}
 }
 

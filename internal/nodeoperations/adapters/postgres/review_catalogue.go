@@ -62,6 +62,7 @@ func (catalogue *ReviewCatalogue) ListReceptions(
 		        COALESCE(control->>'releasedBy', ''),
 		        (control->>'releasedAt')::timestamptz,
 		        service_markers,
+		        service_result_check,
 		        recorded_at
 		   FROM node_operations.reception
 		  WHERE tenant_id = $1
@@ -82,13 +83,14 @@ func (catalogue *ReviewCatalogue) ListReceptions(
 			row         ports.ReceptionCatalogueRow
 			releasedAt  *time.Time
 			markersJSON []byte
+			checkName   *string
 		)
 		if err := rows.Scan(
 			&row.SourceID, &row.Kind,
 			&row.Unit, &row.Node, &row.DeliveredBy, &row.ReceivedAt,
 			&row.ControlKind, &row.ControlEstablishedAt,
 			&row.ControlReleasedBy, &releasedAt,
-			&markersJSON, &row.RecordedAt,
+			&markersJSON, &checkName, &row.RecordedAt,
 		); err != nil {
 			return nil, fmt.Errorf("list receptions: %w", err)
 		}
@@ -99,6 +101,13 @@ func (catalogue *ReviewCatalogue) ListReceptions(
 		if err := json.Unmarshal(markersJSON, &row.ServiceMarkers); err != nil {
 			return nil, fmt.Errorf("list receptions: %w", err)
 		}
+		// 核对态与按键读回共用 serviceResultCheckFrom：词表只认一份，集外取值让整页答不出，不悄悄折成「不带」——
+		// 形成行缺了这一格，审阅者又分不出标记的空是查过了还是没读到。
+		check, err := serviceResultCheckFrom(checkName)
+		if err != nil {
+			return nil, fmt.Errorf("list receptions: source %q: %w", row.SourceID, err)
+		}
+		row.ServiceResultCheck = check
 		row.ReceivedAt = row.ReceivedAt.UTC()
 		row.ControlEstablishedAt = row.ControlEstablishedAt.UTC()
 		row.RecordedAt = row.RecordedAt.UTC()

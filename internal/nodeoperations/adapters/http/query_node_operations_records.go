@@ -121,6 +121,7 @@ func serveReceptions(
 			ControlReleasedBy:    row.ControlReleasedBy,
 			ControlReleasedAt:    optionalInstant(row.ControlReleasedAt),
 			ServiceMarkers:       append([]string{}, row.ServiceMarkers...),
+			ServiceResultCheck:   row.ServiceResultCheck.String(),
 			RecordedAt:           rfc3339(row.RecordedAt),
 		})
 	}
@@ -210,6 +211,13 @@ type receptionCatalogueListResponse struct {
 // control 三件照登记转写：controlKind 是控制建立来源的封闭词（NODE_INTAKE /
 // HANDOVER_IN）；released 两件成对缺席表示实物仍在节点控制中——转出只能由权威交接
 // 引用建立（domain.PhysicalControl），本读面不代判「在库/出库」一类派生状态词。
+//
+// serviceResultCheck 与收寄写侧答复 receptionResponse 同名同值：CHECKED / UNREADABLE，取
+// ports.ServiceResultCheck 的名字，传输层不另起词——设备与管理台读到的是同一个词。只有 INTAKE_FORMED 行带，
+// 待识别行整键不出现：照本册 controlReleased* 与待识别册 association 的惯例，「这一格不适用」用缺席表达，不用
+// 空串或 null 兼表。封闭词原样透出不折成布尔，理由同 kind。它是信息格不是业务判别：UNREADABLE 那行照样是
+// INTAKE_FORMED，这一格告诉看的人那行 serviceMarkers 的 [] 不代表没有取消或终局；少了它，「已查、无标记」与
+// 「读不动」两行逐字相同（ADR-0186）。
 type receptionCatalogueBody struct {
 	SourceID             string   `json:"sourceId"`
 	Kind                 string   `json:"kind"`
@@ -222,6 +230,7 @@ type receptionCatalogueBody struct {
 	ControlReleasedBy    string   `json:"controlReleasedBy,omitempty"`
 	ControlReleasedAt    string   `json:"controlReleasedAt,omitempty"`
 	ServiceMarkers       []string `json:"serviceMarkers"`
+	ServiceResultCheck   string   `json:"serviceResultCheck,omitempty"`
 	RecordedAt           string   `json:"recordedAt"`
 }
 

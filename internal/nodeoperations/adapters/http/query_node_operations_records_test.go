@@ -274,6 +274,11 @@ func TestNodeOperationsRecordsQueryAnswers500WhenTheRegisterFails(t *testing.T) 
 // 服务标记是空数组不是 null；时刻按 RFC 3339 转写；读口收到的是接入面裁决的键。
 func TestReceptionRegistryTranscribesRows(t *testing.T) {
 	releasedAt := catalogueBaseAt.Add(6 * time.Hour)
+	markers := ports.ParcelServiceResults{Cancellation: "SYN-CANCEL-1"}.Markers()
+	wantMarkers, err := json.Marshal(markers)
+	if err != nil {
+		t.Fatalf("encode markers: %v", err)
+	}
 	register := &stubReviewCatalogue{
 		receptions: []ports.ReceptionCatalogueRow{
 			{
@@ -287,7 +292,8 @@ func TestReceptionRegistryTranscribesRows(t *testing.T) {
 				ControlEstablishedAt: catalogueBaseAt,
 				ControlReleasedBy:    "HANDOVER/TF-9",
 				ControlReleasedAt:    &releasedAt,
-				ServiceMarkers:       []string{"CANCELLED_BEFORE_ARRIVAL"},
+				ServiceMarkers:       markers,
+				ServiceResultCheck:   ports.ServiceResultsChecked,
 				RecordedAt:           catalogueBaseAt.Add(time.Minute),
 			},
 			{
@@ -331,7 +337,7 @@ func TestReceptionRegistryTranscribesRows(t *testing.T) {
 		string(formed["controlKind"]) != `"NODE_INTAKE"` ||
 		string(formed["controlReleasedBy"]) != `"HANDOVER/TF-9"` ||
 		string(formed["controlReleasedAt"]) != `"`+releasedAt.Format(time.RFC3339Nano)+`"` ||
-		string(formed["serviceMarkers"]) != `["CANCELLED_BEFORE_ARRIVAL"]` {
+		string(formed["serviceMarkers"]) != string(wantMarkers) {
 		t.Fatalf("形成格转写走样：%s", response.Body.String())
 	}
 	pending := body.Receptions[1]
@@ -344,6 +350,71 @@ func TestReceptionRegistryTranscribesRows(t *testing.T) {
 	if string(pending["kind"]) != `"PENDING_IDENTIFICATION"` ||
 		string(pending["serviceMarkers"]) != `[]` {
 		t.Fatalf("待识别格转写走样：%s", response.Body.String())
+	}
+}
+
+// Covers: ADR-0186 核对态的查阅面 — 形成行带 serviceResultCheck（已查 CHECKED、读不动 UNREADABLE），待识别行整键
+// 不出现，不是空串也不是 null。「已查、无标记」与「读不动」两行的 serviceMarkers 同为 []，只靠这一格分得开。
+func TestReceptionRegistryCarriesTheServiceResultCheckOnFormedRowsOnly(t *testing.T) {
+	formedRow := func(sourceID string, markers []string, check ports.ServiceResultCheck) ports.ReceptionCatalogueRow {
+		return ports.ReceptionCatalogueRow{
+			SourceID:             sourceID,
+			Kind:                 "INTAKE_FORMED",
+			Unit:                 "unit-1",
+			Node:                 "node-1",
+			DeliveredBy:          "courier-1",
+			ReceivedAt:           catalogueBaseAt,
+			ControlKind:          "NODE_INTAKE",
+			ControlEstablishedAt: catalogueBaseAt,
+			ServiceMarkers:       markers,
+			ServiceResultCheck:   check,
+			RecordedAt:           catalogueBaseAt,
+		}
+	}
+	register := &stubReviewCatalogue{
+		receptions: []ports.ReceptionCatalogueRow{
+			formedRow("scan-1", ports.ParcelServiceResults{Cancellation: "SYN-CANCEL-1"}.Markers(), ports.ServiceResultsChecked),
+			formedRow("scan-2", ports.ParcelServiceResults{}.Markers(), ports.ServiceResultsChecked),
+			formedRow("scan-3", nil, ports.ServiceResultsUnreadable),
+			{
+				SourceID:             "scan-4",
+				Kind:                 "PENDING_IDENTIFICATION",
+				Unit:                 "unit-2",
+				Node:                 "node-1",
+				DeliveredBy:          "courier-1",
+				ReceivedAt:           catalogueBaseAt,
+				ControlKind:          "NODE_INTAKE",
+				ControlEstablishedAt: catalogueBaseAt,
+				RecordedAt:           catalogueBaseAt,
+			},
+		},
+	}
+	response := serveGet(recordsEndpoint(register), recordsTarget)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+	}
+	var body struct {
+		Receptions []map[string]json.RawMessage `json:"receptions"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode %s: %v", response.Body.Bytes(), err)
+	}
+	if len(body.Receptions) != 4 {
+		t.Fatalf("响应走样：%s", response.Body.String())
+	}
+	for index, want := range []string{`"CHECKED"`, `"CHECKED"`, `"UNREADABLE"`} {
+		row := body.Receptions[index]
+		if got, present := row["serviceResultCheck"]; !present || string(got) != want {
+			t.Errorf("%s 的 serviceResultCheck = %s（在场 %v），want %s", row["sourceId"], got, present, want)
+		}
+	}
+	unmarked, unreadable := body.Receptions[1], body.Receptions[2]
+	if string(unmarked["serviceMarkers"]) != `[]` || string(unreadable["serviceMarkers"]) != `[]` {
+		t.Errorf("已查无标记与读不动的标记都该是 []：%s", response.Body.String())
+	}
+	if got, present := body.Receptions[3]["serviceResultCheck"]; present {
+		t.Errorf("待识别行不该带 serviceResultCheck 键，得到 %s：%s", got, response.Body.String())
 	}
 }
 
