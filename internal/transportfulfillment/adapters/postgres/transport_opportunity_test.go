@@ -158,7 +158,8 @@ func TestPreparationAnswersEveryOutcomeOnTheRegisters(t *testing.T) {
 	if err := stores.transactor.WithinTransaction(t.Context(), func(txCtx context.Context) error {
 		var err error
 		reserved, err = stores.opportunity.Reserve(txCtx, application.ReserveCapacityCommand{
-			TenantID: tenant, Pool: "SYN-TPL-UN/2026-10-21/WEIGHT", Reservation: "SYN-RES-1", Quantity: 1,
+			TenantID: tenant, Pool: "SYN-TPL-UN/2026-10-21/WEIGHT", Reservation: "SYN-RES-1", Quantity: 1, Unit: "KG",
+			SourceKind: "OPERATOR_DECLARATION", SourceReference: "SYN-DEMAND-DECL-1/v1",
 			ValidUntil: departure.Add(48 * time.Hour), At: time.Date(2026, 10, 19, 0, 0, 0, 0, time.UTC),
 		})
 		return err
