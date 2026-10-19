@@ -189,6 +189,20 @@ var transportCommandLines = map[string]transportCommandLine{
 		status:  http.StatusOK,
 		outcome: "INPUT_NOT_ACCEPTED",
 	},
+	// 设备出发前门禁问询（ADR-0219）：班次不在册、段没声明，问到的读数停在本侧答未决——问询照样形成答案，200
+	// DEPARTURE_GATE_PREVIEWED；只读，不落任何东西。
+	"/transport-fulfillment/departure-gate-previews": {
+		endpoint: func(t *testing.T, db *bentopg.DB, decisions *tfhttp.OperatorDecisionIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
+			preview, err := buildDepartureGatePreview(db)
+			if err != nil {
+				t.Fatalf("装配出发前问询：%v", err)
+			}
+			return tfhttp.NewPreviewDepartureGateEndpoint(work, preview)
+		},
+		body:    `{"schedule":"SYN-SCHEDULE/linehaul-06","departsAt":"2026-09-24T14:00:00+08:00"}`,
+		status:  http.StatusOK,
+		outcome: "DEPARTURE_GATE_PREVIEWED",
+	},
 }
 
 // operationDecisionTransportFaces 是本表里走「运营决定」各口的决定种类。
