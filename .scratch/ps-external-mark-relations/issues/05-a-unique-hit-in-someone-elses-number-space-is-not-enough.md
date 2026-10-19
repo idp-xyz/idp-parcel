@@ -1,7 +1,7 @@
 # 05 号码只在一份已接受委托里在册时，别人贴着同号的实物送站被唯一关联到那一件
 
 Category: bug
-Status: ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 0 研判）
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（ADR 用号 0195），分支 `claude-psxm05`。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 0 研判）
 Blocked by: 无
 父票：[01](./01-external-mark-relations-have-no-model-in-parcel-shipment.md)；[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判簇 C2 第二张草案

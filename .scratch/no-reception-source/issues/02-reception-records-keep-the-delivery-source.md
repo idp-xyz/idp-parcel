@@ -1,7 +1,7 @@
 # 02 第一期：收寄记录保全本次交付的来源文档，三种接收观察都存；每版判断有版本、追加版指名前版，已有结果带回原判断种类与当前有效版本
 
 Category: enhancement
-Status: ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-nrs02`（与 ps-external-mark-relations/05 并行，同碰收寄编排）。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）
 Blocked by: 01 进 main（ADR-0199、NO CONTEXT 与 UC-NO-002 先落）。同改收寄编排与 PG 适配器的 operator-channel/45、no-reception-identity/03 已于 main `91ea0883` 进 main，以它们为底。
 父票：[01](./01-node-reception-preserves-the-delivery-source.md)
 出处：票 01 裁定分期之「一、来源保全」与「已有结果的答复带回原判断种类与当前有效版本」那一问；ADR-0199 决定一、决定二。
