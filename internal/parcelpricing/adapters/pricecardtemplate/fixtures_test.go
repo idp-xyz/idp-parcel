@@ -97,6 +97,7 @@ func costCard() filled {
 			"baseChargeCode": "BASE_FREIGHT", "periodStartsAt": synStart, "rateTableId": "SYN-TABLE-CN-SG-COST-01",
 			"weightPolicyId": "SYN-WEIGHT-CN-SG-COST-01", "weightPolicyVersion": "v1", "weightMethod": "ACTUAL_ONLY",
 			"directionAuthorizationId": "SYN-AUTH-COST-DIR-01", "directionAuthorizationVersion": "v1",
+			"amountRoundingMode": "HALF_UP", "amountRoundingIncrement": "0.01", "amountRoundingPoints": "TOTAL",
 		},
 		data: map[string]rows{
 			sheetTables: {{"tableId": "SYN-TABLE-CN-SG-COST-01", "tableVersion": "v1", "family": "WEIGHT_ZONE",

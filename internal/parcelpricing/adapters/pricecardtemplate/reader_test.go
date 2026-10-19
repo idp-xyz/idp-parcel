@@ -254,7 +254,7 @@ func TestProblemsCarryTheirCoordinates(t *testing.T) {
 		"列表重复": {func(card *filled) {
 			card.card["amountRoundingMode"], card.card["amountRoundingIncrement"], card.card["amountRoundingPoints"] = "HALF_UP", "0.01", "TOTAL;TOTAL"
 		}, at{sheetCard, 0, "amountRoundingPoints", ports.TemplateCellInvalid}},
-		"三格缺一": {func(card *filled) { card.card["amountRoundingMode"] = "HALF_UP" },
+		"三格缺一": {func(card *filled) { delete(card.card, "amountRoundingIncrement") },
 			at{sheetCard, 0, "amountRoundingIncrement", ports.TemplateCellRequired}},
 	}
 	for name, testCase := range cases {

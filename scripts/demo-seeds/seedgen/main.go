@@ -232,11 +232,21 @@ func buyCardSnapshot() []byte {
 	)
 	must("成本计费重策略", err)
 
+	// 金额取整与售价卡同值，同是演示租户的取值：结算由 BUY 评价形成供应商预期成本时要这一格，没声明的卡在那一侧
+	// 入账为金额未声明、不形成成本（ADR-0200 决定三）。改的是 v1 本身而不另发 v2：两版适用期都无上界，在用解析
+	// （PriceCards.ResolveInForce）遇两版同时适用答适用冲突，路由取候选（LoadApplicable）遇同一方案两版报歧义，
+	// 而价卡版本没有退役口可以给 v1 截期。
+	amountRounding, err := domain.NewAmountRoundingPolicy(
+		domain.RoundingHalfUp, money("0.01", cny), []domain.AmountRoundingPoint{domain.AmountRoundingTotal})
+	must("成本金额取整", err)
+	structures, err := domain.PricingPlanStructures{}.WithAmountRounding(amountRounding)
+	must("成本方案结构声明金额取整", err)
+
 	plan, err := domain.NewPricingPlanVersion(
 		reference(domain.ArtifactPricingPlan, "SYN-PLAN-CN-SG-COST-01", "v1"),
 		pricingScope(), domain.PricingDirectionBuy, domain.PricingPurposeSupplierCost,
 		chargeCode("BASE_FREIGHT"), period("2026-01-01"),
-		table, weightPolicy, nil, domain.PricingPlanStructures{},
+		table, weightPolicy, nil, structures,
 	)
 	must("成本方案", err)
 

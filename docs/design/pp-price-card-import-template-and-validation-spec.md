@@ -330,7 +330,7 @@
 
 演示种子 `scripts/demo-seeds/seedgen` 里的两张卡，用本模板原样表达，作为实现的样例与验收：
 
-- `SYN-PLAN-CN-SG-COST-01` `v1`：采购成本卡。`BUY`、`SUPPLIER_COST`，`WEIGHT_ZONE` 族，一个分区三段区间，只按实际重计，`CEILING` 进位 0.5 KG，没有附加费。
+- `SYN-PLAN-CN-SG-COST-01` `v1`：采购成本卡。`BUY`、`SUPPLIER_COST`，`WEIGHT_ZONE` 族，一个分区三段区间，只按实际重计，`CEILING` 进位 0.5 KG，没有附加费；金额取整按合计点 0.01 CNY `HALF_UP`。
 - `SYN-PLAN-CN-SG-01` `v1`：客户售价卡。`SELL`、`CUSTOMER_CHARGE`，`FIRST_CONTINUE` 族，两个分区，`MAX` 计费重（体积重除数 5000、`CM`，体积重 `CEILING` 进位 0.1 KG），一条固定费用，绑燃油序列。
 
 **验收判据**：把这两份样例交给导入器，立出的方案内容摘要必须与种子经领域构造立出的逐字节相等。两条构造路径互相独立，相等即证明翻译没有漏格、没有改值。
@@ -356,6 +356,9 @@
 | weightMethod | ACTUAL_ONLY |
 | directionAuthorizationId | SYN-AUTH-COST-DIR-01 |
 | directionAuthorizationVersion | v1 |
+| amountRoundingMode | HALF_UP |
+| amountRoundingIncrement | 0.01 |
+| amountRoundingPoints | TOTAL |
 
 `tables`：
 
