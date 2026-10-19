@@ -90,6 +90,7 @@ func assembleBusinessEndpoints(
 	carrierPickupChain tfhttp.CarrierPickupChainReader,
 	carrierPickupJudgment tfhttp.CarrierPickupJudge,
 	masterDocumentRegistration tfhttp.MasterDocumentRegistrar,
+	transportScheduleRegistration tfhttp.TransportScheduleRegistrar,
 	trackingViews visibilityhttp.TrackingViewReader,
 	projectionViews visibilityhttp.OperationsProjectionReader,
 	claims visibilityhttp.ClaimReceiver,
@@ -397,6 +398,11 @@ func assembleBusinessEndpoints(
 		// 就成了 parcel-pricing 主单级评价可引的身份（ADR-0111），这两行不能让隔离读开关换值。
 		{Pattern: "/transport-fulfillment-carrier-master-document-registrations", Handler: tfhttp.NewRegisterCarrierMasterDocumentEndpoint(operatorRegistries.transport, masterDocumentRegistration)},
 		{Pattern: "/transport-fulfillment-carrier-master-document-revisions", Handler: tfhttp.NewReviseCarrierMasterDocumentEndpoint(operatorRegistries.transport, masterDocumentRegistration)},
+		// 周期安排与具体班次登记两口（ADR-0201 决定一）：建班次不搬包裹、不形成生产事实，挂操作者渠道的「登记册配置写」
+		// 能力面（ADR-0151 定族判据）；受控 CLI parcel-transport-register 调的是同一个编排。具体班次一口既按（周期安排、
+		// 运行日期）物化，也登临时班次。
+		{Pattern: "/transport-fulfillment-transport-schedule-template-registrations", Handler: tfhttp.NewRegisterScheduleTemplateEndpoint(operatorRegistries.transport, transportScheduleRegistration)},
+		{Pattern: "/transport-fulfillment-transport-schedule-registrations", Handler: tfhttp.NewRegisterTransportScheduleEndpoint(operatorRegistries.transport, transportScheduleRegistration)},
 		{Pattern: "/transport-fulfillment-records", Handler: tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(transportCatalogueIntake, transportFulfillmentRecords)},
 		// 交接范围汇总（票 admin-web-audit-followups/06，读面来自 tf-unwired-seven/03）。
 		// 它是本装配表上第一行第二参不是读口而是**应用读用例**的查阅端点：汇总是派生量，
