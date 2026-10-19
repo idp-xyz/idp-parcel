@@ -1,7 +1,7 @@
 # 12 送站交接单：作业事实登记开立、归入、关闭；客户渠道与运营决定两路确认绑定；范围成立时自投门铃重核
 
 Category: enhancement
-Status: ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（08、10、11 已进 main），分支 `claude-psxm12`；access_identity 迁移 0016、node_operations 迁移 0016、治理种子 governance/37。此前 ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
 Blocked by:
 - [08](./08-pre-advice-and-handover-note-model-and-window-register.md) 进 main：交接单的领域与册。
 - [10](./10-authorized-delivery-relationship-in-party-commercial.md) 进 main：授权交付判断与 NO 侧适配器。
