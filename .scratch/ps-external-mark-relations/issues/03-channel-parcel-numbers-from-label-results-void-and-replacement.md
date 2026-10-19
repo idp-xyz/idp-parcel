@@ -41,3 +41,7 @@ Blocked by: 02
 - 分支 `claude-psxm` 七笔叠在远端 main `49ae7568` 之上，快进进 main、推的就是这个 SHA：`d8e60661`（实现）/ `58c4c496`（第一轮修补，ADR-0185）/ `d8030e69`（第二轮修补）/ `83ca983b`（ADR-0184 复核记录）/ `3fc6fee4`（第三轮修补）/ `c9a3f800`（清点）/ `0f5b4293`（记录）。完工之后远端前进了三笔纯文档（子代理改裁、票 26 认领、立票 27），本分支重放了一次，内容一字未改；三轮评审钉的是重放前的 `11f9f84b`、`d671cb6e`、`466b8abf`，与上面对应各笔内容相同，上文完成记录里的 SHA 已换成重放后的。
 - 推送方全量：钉 `0f5b4293` 的干净 detached 检出，带 DSN，`go test -p 1 -count=1 -v ./...` 退 0——有测试的包 142 个 ok、0 FAIL，`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）；同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0。
 - 评审：三轮隔离子代理两轴评审（见完成记录），末轮无阻断。
+
+## Comments
+
+- **2026-10-19 · 票 [04](./04-ticket-02-review-follow-ups-records-and-pinned-behavior.md)**：ADR-0185 后果节的原地改写已在其复核记录补记。

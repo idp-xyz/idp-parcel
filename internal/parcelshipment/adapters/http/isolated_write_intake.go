@@ -252,8 +252,9 @@ func (intake *IsolatedSubmissionIntake) IntakeSubmission(
 }
 
 // customerParcelNumbers 把逐件的客户包裹参考与现签的内部标识按次序配成客户包裹件号（ADR-0184 决定四）。
-// 次序就是配对依据：内部标识按草案包裹的次序现签，与画像挂到内部成员上同一个口径。号码照客户给的原样
-// （customerDeclaredReferences 只去两端空白，那是草案的形状纪律，不是条码折算）。
+// 次序就是配对依据：内部标识按草案包裹的次序现签，与画像挂到内部成员上同一个口径。号码取
+// customerDeclaredReferences 定下的声明值：两端空白已去，号码本身的字符一个不动。为什么这不算条码折算，
+// 见 ADR-0184 复核记录「越权风险点 2 的事实更正」。
 func customerParcelNumbers(
 	customerParcels, members []domain.DeclaredParcelID,
 ) ([]domain.CustomerParcelNumberDeclaration, error) {
