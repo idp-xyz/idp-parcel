@@ -226,7 +226,7 @@ go run ./cmd/parcel-dispatch
 > 2026-10-19 补记（票 `demo-chain-gaps/98`，[psb/05](../../.scratch/product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)「重走（钉 `8197fa2f`，2026-10-19）」停点一、六，与「逐段」里「初始路由与运输准备」那一条）：上面各条交接、自营段、装载分配与运输准备的补记，各只列了自己新增的几格，照抄会撞上下面几处。它们的实走证据不变，写法自此照这一条补全来读。
 >
 > - **`已交接`的载荷要全**。`POST /transport-fulfillment/handovers` 登`已交接`（`"verdict":"HANDED_OVER"`），必须带 `releasingEvidence`、`receivingEvidence` 与 `rule`，不得带 `basis`：`basis` 只给`已拒收`与`待确认`。缺一格或多带 `basis` 都答 `200 SOURCE_NOT_ACCEPTED`，答复不指名是哪一格。
-> - **每次交接用自己的 `scope`**。`scope` 是这一次交接的链身份，每次交接各起一个；`version` 只给更正用。同一 `scope` 换个版本号另登，交接口照样答 `201`，节点作业却当它是前一次的更正，在身控制会在错的那次交接转出（票 [95](../../.scratch/demo-chain-gaps/issues/95-node-operations-reads-a-new-handover-under-the-same-scope-as-a-correction.md)）。上面票 62 补记的 `SYN-HO-62-A`、`-B`、`-C`、`-D` 就是这样写的，只是没说出来。
+> - **每次交接用自己的 `scope`**。`scope` 是这一次交接的共同范围（一车、一批、一次交出），演示里每次交接各起一个；`version` 只给更正用，更正走更正口、回指前版。范围汇总按 `scope` 计，同一包裹在同一 `scope` 下首登两次，今天会算两次（票 [95](../../.scratch/demo-chain-gaps/issues/95-node-operations-reads-a-new-handover-under-the-same-scope-as-a-correction.md) 的后继票 99 待裁）。上面票 62 补记的 `SYN-HO-62-A`、`-B`、`-C`、`-D` 就是这样写的，只是没说出来。
 > - **自营段 SHA→SZX 分四步**。上面票 32 补记写「交接口带 `segment` 立段」再出发，票 62 补记第一步把上海交出与深圳口岸接收合成一次交接；两处拼起来，出发没有位置。自此读作：
 >   1. 上海交给自营干线、立段。华东场外设备（`SYN-DEVICE-OFFSITE-CN-EAST-01`，`OFFSITE` / `SYN-OFFSITE-CN-EAST`）登一次`已交接`，带 `segment`、`plannedSegment`（计划第一段）、`"releasingNode":"SYN-NODE-SHA-HUB"` 与 `"onwardNode":"SYN-NODE-SZX-GATE"`。答 `201`，交出门禁读数 `NOT_GUARDED`。
 >   2. 出发前问询：`POST /transport-fulfillment/departure-gate-previews`，答 `200 DEPARTURE_GATE_PREVIEWED`，`NOT_GUARDED`。
@@ -242,7 +242,7 @@ go run ./cmd/parcel-dispatch
 >    "segmentServiceAction":"LINEHAUL","releasingNode":"SYN-NODE-SHA-HUB","onwardNode":"SYN-NODE-SZX-GATE"}
 >   ```
 >
-> - **装载分配的重量行写整数**。上面票 21 补记那份载荷里，`quantity` 只收整数，`quantityFromMembers` 只许落在件数池那一行。演示包裹申报 1.50 KG，重量行要声明一个整数（下面实走写 2）。写 `1.5` 答 `400 MALFORMED_REQUEST`；重量行写 `quantityFromMembers` 答 `200 INPUT_NOT_ACCEPTED`，不指名原因。
+> - **装载分配的重量行写整数**。上面票 21 补记那份载荷里，`quantity` 只收整数，`quantityFromMembers` 只许落在件数池那一行。演示包裹申报 1.50 KG，重量行要声明一个整数（下面实走写 2）；这是当前机制的形状，不是产品规则，对不齐的那一格归票 [107](../../.scratch/demo-chain-gaps/issues/107-capacity-quantities-are-whole-numbers-while-preparation-demand-is-decimal.md)。写 `1.5` 答 `400 MALFORMED_REQUEST`；重量行写 `quantityFromMembers` 答 `200 INPUT_NOT_ACCEPTED`，不指名原因。
 > - **三段运输准备都有一班**。种子另登了深圳→新加坡快班与新加坡枢纽→末端穿梭，取值与为什么这样排只写在种子 README 组成表 `data/transport/07`–`23` 那一行。上面票 18 补记里「后两段……答 `NO_CURRENT_OPPORTUNITY`」自此读作：不论提交落在哪一刻，三段都答 `OPPORTUNITY_PREPARED`。后两段选中的多半是评估时物化的快班或穿梭（候选 `version` 为 0）。干线订舱照旧订在种子显式登记的 `SYN-SCHED-SZX-SIN-DAILY/2026-10-21` 上：准备选中哪一班，不替运营决定订哪一班。
 > - **集成客户端发行方**。共享那只答 `invalid_client` 时，不要重建它，另起一只私有的。做法只写在种子 README「集成客户端渠道」一节「另起一只私有的」那一条，这里不复述。
 >
