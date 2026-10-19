@@ -47,7 +47,7 @@ func candidateCells(candidates []ports.ExternalIdentifierCandidate) []string {
 }
 
 // Covers: ADR-0212 决定四「候选照旧在租户内按号码逐字取、全部交回（ADR-0184 决定六不废），逐候选带范围相容」与「比的是适用范围、
-// 不是分配方」——两个客户账户的已接受委托用了同一个号：带客户账户一核对，两件都交回，只有客户账户一那件范围相容；两个账户都带，
+// 不是分配方」（`AT-NO-064` 的 PS 读口半边）——两个客户账户的已接受委托用了同一个号：带客户账户一核对，两件都交回，只有客户账户一那件范围相容；两个账户都带，
 // 两件都相容；不带范围，只经客户包裹件号命中的两件都不相容。别的租户、大小写不同照旧零候选。
 func TestAScopedCheckReturnsEveryCandidateAndAnswersCompatibilityPerCandidate(t *testing.T) {
 	fixture := newExternalIdentifierFixture(t)
@@ -79,7 +79,7 @@ func TestAScopedCheckReturnsEveryCandidateAndAnswersCompatibilityPerCandidate(t 
 	}
 }
 
-// Covers: ADR-0212 决定四「渠道包裹件号不需要范围」——渠道签发的号在渠道服务方内算数，带不带范围、带的是哪个客户账户，它的命中都
+// Covers: ADR-0212 决定四「渠道包裹件号不需要范围」（`AT-NO-067` 的 PS 读口半边）——渠道签发的号在渠道服务方内算数，带不带范围、带的是哪个客户账户，它的命中都
 // 范围相容。
 func TestAChannelNumberHitIsAlwaysScopeCompatible(t *testing.T) {
 	fixture := newChannelFixture(t)
@@ -103,7 +103,7 @@ func TestAChannelNumberHitIsAlwaysScopeCompatible(t *testing.T) {
 }
 
 // Covers: ADR-0212 决定四「歧义信号：给了客户账户时，只认这些账户的`已提交`委托所作的声明；没给时照 ADR-0195」与决定八「范围内
-// 同一客户账户两份委托重复用号，照旧是冲突」——客户账户一那件在册，客户账户二另有一份`已提交`委托也报了它：带客户账户一核对不带
+// 同一客户账户两份委托重复用号，照旧是冲突」（`AT-NO-064` 的信号半边）——客户账户一那件在册，客户账户二另有一份`已提交`委托也报了它：带客户账户一核对不带
 // 信号，带客户账户二、两个都带或不带范围都带信号。客户账户一自己另交一份`已提交`委托重复用号，带客户账户一也带信号。
 func TestTheSignalNarrowsToTheScopeAccounts(t *testing.T) {
 	fixture := newExternalIdentifierFixture(t)

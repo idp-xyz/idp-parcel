@@ -192,6 +192,7 @@ func assertScopeUnverifiedPending(t *testing.T, name string, outcome application
 // Covers: `AT-NO-063`（ADR-0212 决定四新增那一格、决定五）——号码经客户包裹件号在册里只标识一件、没有歧义信号，送站没有可验证交付
 // 范围：没带依据、依据不在册、预报没列这个号、节点不符、业务时间在时窗外、预报已撤回，各答待识别、候选记那一件、不记冲突，交付
 // 范围核对态记未证并附原因；接收、控制与来源照常，不关联、不问服务结果、不交意图、不响门铃。身份核对读口被问时一个客户账户都不带。
+// 已撤回那一格同是 UC-NO-006 `AT-NO-070` 的收寄半边。
 func TestACustomerNumberHitWithoutAVerifiableScopeIsPendingAndUnverified(t *testing.T) {
 	for name, testCase := range map[string]struct {
 		arrange func(*testing.T, *receptionFixture) domain.DeliveryScopeBasisReference

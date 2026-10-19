@@ -95,7 +95,7 @@ func (view scopedIdentityView) ResolveParcelIdentity(
 	}, nil
 }
 
-// Covers: 受控批量口的真库面（ADR-0212 决定四、七）——生产装配的导入链按模板里的依据读 NO 的预报册与时窗册（真库）推导范围：带客户
+// Covers: 受控批量口的真库面（ADR-0212 决定四、七；`AT-NO-063` 的受控批量口面）——生产装配的导入链按模板里的依据读 NO 的预报册与时窗册（真库）推导范围：带客户
 // 账户一预报的那一行唯一识别、落地；同一批里没带依据的那一行答待识别、核对态未证；依据原样落在来源文档里。
 func TestTheIntakeImportJudgesTheScopeFromTheTemplateBasis(t *testing.T) {
 	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))

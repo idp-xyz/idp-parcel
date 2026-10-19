@@ -82,7 +82,7 @@ func textOf(value *string) string {
 	return *value
 }
 
-// Covers: ADR-0212 决定五「收寄答复带交付范围核对态」——不带依据送站，只经客户包裹件号命中的那一件答待识别，答复带核对态未证、原因
+// Covers: ADR-0212 决定五「收寄答复带交付范围核对态」（`AT-NO-063` 的 HTTP 面）——不带依据送站，只经客户包裹件号命中的那一件答待识别，答复带核对态未证、原因
 // 没有依据；渠道包裹件号那种照常形成的收寄也带。身份核对读不动的未核对待识别没做成核对，三键都不出现。
 func TestTheDeliveryScopeCheckTravelsWithTheReceptionAnswer(t *testing.T) {
 	pending := newAdapterFixture(t)
