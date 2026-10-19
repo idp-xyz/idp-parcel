@@ -1,6 +1,6 @@
 # ADR-0202：运输委托、订舱与承运答复的入口族与协议核对——委托与订舱各口每口一种运营决定，承运答复走集成客户端，委托在提交时点核供应商协议并从协议快照采购责任法人
 
-Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 [demo-chain-gaps/23](../../.scratch/demo-chain-gaps/issues/23-transport-commission-submission-face.md) 起草并落决定一（委托提交那一种）、三、四、六、七，决定二与决定五由票 24 落，决定一其余各种由票 24、25 落。越权风险点见文末，待 TF、access-identity owner 复核，PC owner 知会。）
+Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 [demo-chain-gaps/23](../../.scratch/demo-chain-gaps/issues/23-transport-commission-submission-face.md) 起草并落决定一（委托提交那一种）、三、四、六、七，决定二与决定五由票 24 落，决定一其余各种由票 24、25 落。越权风险点见文末，待 TF、access-identity owner 复核，PC owner 知会。票 24 落地时的补充裁定见文末补记。）
 
 Date: 2026-10-19
 
@@ -105,3 +105,25 @@ Date: 2026-10-19
 - ADR-0204（票 25 起草，号已占）：履约段采用运输委托，决定一最后一种决定的语义
 - [UC-TF-004](../application/transport-fulfillment/UC-TF-004-COMMISSION-AND-ACCEPT-TRANSPORT.md)：步 1 至 3，`AT-TF-107` 至 `AT-TF-109`
 - 计划 `.scratch/demo-chain-gaps/tf-chain-plan.md`「02 委托、订舱、承运答复」；票 `.scratch/demo-chain-gaps/issues/22-…`、`23-…`、`24-…`、`25-…`
+
+## 补记：票 24 落地时的补充裁定（2026-10-19，Claude Code 会话代决，待 TF、access-identity owner 复核）
+
+正文不改。决定一的订舱提交一种、决定二与决定五由票 [demo-chain-gaps/24](../../.scratch/demo-chain-gaps/issues/24-booking-references-a-schedule-and-carrier-answers-via-integration-client.md) 落地；计划与正文都没裁、又必须定下的几格记在这里，越权风险点接正文编号续写。
+
+- **订舱的核对次序与格**（机制）：订舱过构造门 → 按（租户、订舱）分重放与冲突 → 委托在册 → 委托未取消 → 班次在册 → 落库。重放判在两项核对之前，理由同决定七：那一格答的是「这次订舱是谁」，委托事后取消了，原样重放仍是原订舱。委托不在册答 `COMMISSION_NOT_FOUND`，委托已取消答 `COMMISSION_NOT_BOOKABLE`（已开始的委托不挡：开始之后仍可能为剩余范围订舱），班次不在册答 `SCHEDULE_NOT_FOUND`，三格都答 200、零写入，续办两两不同，不并进`未受理`（ADR-0029）。他租户名下的同名委托与班次按本租户的键读不回，落「不在册」那一格。委托册与班次登记读不动答未决（`COMMISSION_STORE_UNAVAILABLE`、`SCHEDULE_STORE_UNAVAILABLE`），装配整笔回滚后交回那一份未决，同决定三末段。班次只核在册（有当前版），不核它的方向是否落在委托的运输范围里，也不核它由谁运营（风险点 12）。
+- **候补之后可接一份定局**（产品策略）：一份答复的身份是（租户、订舱、答复标识），答复标识由承运方给。一次订舱至多一份候补、至多一份定局。候补之后可以接一份定局答复，定局不早于候补，两份都留——候补那一份仍是那段时间里承运方确实说过的话（TF CONTEXT 生命周期「后续替代不覆盖原申请」）。定局之后不再有后继，候补之后不再接候补。只内置这一种形（风险点 13）。读法：订舱名下没有任何答复读作`待确认`；当前那一份是候补读作`候补`；接受量小于申请量读作部分确认。读面不在本票（风险点 15）。
+- **承运答复的次序与格**（机制）：答复方的来源身份取自集成客户端绑定，缺它是装配违约（500）→ 订舱在册，否则 `BOOKING_NOT_FOUND` → 答复方的来源身份等于订舱所属委托的服务提供方，否则 `SOURCE_NOT_SERVICE_PROVIDER` → 同一答复标识分重放（`EXISTING_ANSWER`）与冲突（`ANSWER_CONFLICT`）→ 答复过构造门，否则 `INPUT_NOT_ACCEPTED` → 已有答复时只接候补的合格后继，否则 `ANSWER_CONFLICT` → 落库。来源核对排在重放之前：同一租户下另一个承运商拿别人的答复标识原样重放，不该读回别人的答复；来源不符与冲突都不回显在册的答复。来源与服务方按同一串字面比，不归一（决定四同一条纪律）。订舱在册而它的委托读不回是数据违约（500），不答订舱不在册——那会让承运方去核一个确实存在的订舱。
+- **答复的未受理不另立来源格**（机制）：答复口沿用 TF 运营决定各口同名的 `INPUT_NOT_ACCEPTED`。续办同是改载荷，与提交方属哪一族无关；要分的是续办不同的那几格，已在上一条逐格分开（回答票 23 完成记录代决 5）。
+- **订舱与答复都不入队**（机制）：今天两者都没有消费者（计划「跨票通则」X3）；出站订舱连接器不在本口（计划 D02-8）。
+- **线格式**（机制）：订舱提交 `POST /transport-fulfillment-booking-request-submissions`，载荷 `booking`、`commission`、`schedule`、`quantity`、`unit`、`requestedAt`。承运答复 `POST /transport-fulfillment/booking-answers`：承运方回传口取控制事实那组的 `/transport-fulfillment/` 前缀，不取运营决定的 `transport-fulfillment-` 前缀；载荷 `booking`、`answer`（答复标识）、`outcome`（五值之一，之外的词是坏报文）、`quantity`（只随接受）、`basis`（随其余四值）、`decidedAt`。租户与来源身份不收载荷给的。集成客户端族在 TF 各口的认证失败用本族自己的码（`INTEGRATION_CLIENT_CREDENTIAL_REJECTED` 401、`INTEGRATION_CLIENT_NOT_GRANTED` 403），与操作者渠道的两格分开；未配置、不在准入范围、依赖读不动三格两族同码。
+- **迁移**：access_identity 0013 同笔重建决定种类与外部事实类型两条约束（决定种类取此前各份的并集）；TF 0029 给订舱加班次一列、答复主键改为（租户、订舱、答复标识）并以两条部分唯一索引钉「至多一份候补、至多一份定局」，两表有行即拒绝施加。
+- **摘要形状**：订舱摘要加班次一键，形状版本仍是 `TFC-1`，订舱口退役无版本那一形；决定七里委托摘要改收协议对象与版本标签是同一种做法。两处同以「表在接线前没有写入方、迁移在有行时拒绝施加」为前提，部分停用 [ADR-0014](./0014-versioned-canonicalization-shape-for-content-digest.md) Consequences「每次变化都要新增一个规范化版本并长期支持它」一句，**适用场景**仅限运输委托一册与订舱一册这两次（风险点 16）。
+
+越权风险点（续上文编号）：
+
+12. **订舱不核班次与委托的运输范围、不核班次运营方**（TF owner）。只要班次在册，末端委托下也订得到干线那一班（2026-10-19 一次性库实测过）。委托上没有运输范围一格（与风险点 3 同源），班次上没有运营方一格。
+13. **候补只内置一种形**（TF owner）。一份候补、一份定局：承运方更新候补位次、候补后先部分接受再补接受，都进不来，只能另起订舱。
+14. **同一租户的承运商之间可探知订舱标识**（TF / access-identity owner）。`SOURCE_NOT_SERVICE_PROVIDER` 与 `BOOKING_NOT_FOUND` 分格，一个承运商据此判断得出某个订舱标识在本租户下存在，内容不泄。分格的理由是续办不同：前者永远不归它答，后者可能只是运营侧还没把订舱录进来；代价是这一位信息。
+15. **订舱与答复没有读面**（TF owner）。`待确认`、`候补`的读法只写在这里与 UC-TF-004；查阅口与管理台今天读不到订舱册与答复册，演示只能看两口的答复。查阅口的文件归车道 A，另立票。
+16. **两册改摘要形状不换号**（TF owner；ADR-0014 的规范化版本纪律）。前提是迁移 0025、0029 拒绝在有行的库上施加；绕过拒绝留下的旧行按 `TFC-1` 比会全部失配，原样重交答冲突。
+17. **接受量不对班次余量判**（TF owner）。订舱不占容量，确认订舱的容量关系归后继票 37（[tf-chain-plan](../../.scratch/demo-chain-gaps/tf-chain-plan.md)「票拆分」的后继票一表，尚未立票）；在它之前，承运方接受的量可以超过那一班池上的余量，答复时刻也只判不早于订舱申请时刻、不对班次出发时刻判。

@@ -401,10 +401,10 @@ func TestACommissionSubmitsOnceWithItsSnapshots(t *testing.T) {
 	})
 }
 
-// Covers: CONTEXT「承运接受……不等于容量已经预占、载运对象已经分配或实际承运商已经
-// 收寄」与「只有接受成约；拒绝/失效/撤回分格带原因」的编排面——一次订舱一个应答：
-// 已接受的订舱不能再被拒绝（同键异应答冲突不覆盖，原接受保留）；同应答重放返原；
-// 应答四格完备性由 FormCarrierAcceptance 把门（超量接受、拒绝免因都未受理）。
+// Covers: `AT-TF-152`（编排面）、CONTEXT「承运接受……不等于容量已经预占、载运对象已经分配或实际承运商已经
+// 收寄」与「只有接受成约；拒绝/失效/撤回/候补分格带原因」的编排面——一次订舱一份定局：
+// 已接受的订舱不能再被拒绝（同标识异内容冲突不覆盖，原接受保留）；同答复重放返原；
+// 答复各格完备性由 FormCarrierAcceptance 把门（超量接受、拒绝免因都未受理）。
 func TestABookingAnswerCannotBeOverwritten(t *testing.T) {
 	fixture := newBookedFixture(t)
 
