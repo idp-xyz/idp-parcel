@@ -1,6 +1,6 @@
 # ADR-0196：一码两物按关联到的包裹认——后到那件答身份冲突，先到那件只追加一版身份冲突判断
 
-Status: Accepted（2026-10-19。用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」；该会话代 NO owner 裁定，裁定原文落在票 [no-reception-identity/01](../../.scratch/no-reception-identity/issues/01-one-barcode-on-two-units-forms-an-identity-conflict.md)「裁定（2026-10-18，会话 idp-parcel-9b 代决）」一节，本记录照它写成并补上实施时定下的形状。）部分停用：几句由 [ADR-0210](./0210-identity-conflicts-are-disposed-by-an-operation-decision-and-the-identity-basis-reads-chain-heads.md) 停用，随票 no-reception-identity/05、06 进 main 各自生效；被停的原句见本记录文末「复核记录二」与 adr/README 该行。
+Status: Accepted（2026-10-19。用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」；该会话代 NO owner 裁定，裁定原文落在票 [no-reception-identity/01](../../.scratch/no-reception-identity/issues/01-one-barcode-on-two-units-forms-an-identity-conflict.md)「裁定（2026-10-18，会话 idp-parcel-9b 代决）」一节，本记录照它写成并补上实施时定下的形状。）部分停用：几句由 [ADR-0210](./0210-identity-conflicts-are-disposed-by-an-operation-decision-and-the-identity-basis-reads-chain-heads.md) 停用，随票 no-reception-identity/05、06 进 main 各自生效；被停的原句见本记录文末「复核记录二」与 adr/README 该行。另有两句由 [ADR-0199](./0199-node-reception-preserves-the-delivery-source-and-rechecks-pending-identities.md) 决定四停用，只限同一节点上有当前收寄的情形，随票 no-reception-source/04 进 main 生效；原句见本记录文末「复核记录三」与 adr/README 该行。
 
 Date: 2026-10-19
 
@@ -72,6 +72,16 @@ no-directional-basis/01 的身份一格（`domain.JudgeIdentityBasis`）以「�
 2. **决定六的读法自票 no-reception-identity/06 进 main 起收窄。** 「按租户与包裹关联读别的作业实物的收寄，只认收寄本身带的关联」：被身份冲突处置版接续过的行，它的关联不再算那件实物的关联，处置版自己带的关联照算（ADR-0210 决定八「处置截断」）。还没有处置过的实物照原读法。决定一「这件包裹已有另一件作业实物的收寄关联」随之同读。
 3. **「Consequences」里「解除要等身份冲突的处置能力（未立票）」**已有去处：ADR-0210，实施票 no-reception-identity/05、06。决定五「已被 PS 采用的那次采用不回滚，交 VE 协调」不变；ADR-0210 决定七写明处置不撤回已交出的意图。
 
+## 复核记录三（2026-10-19，ADR-0199 决定四部分停用两句；决定原文不动）
+
+ADR-0199 决定四（同一作业实物在同一节点不另起控制起点）由票 [no-reception-source/04](../../.scratch/no-reception-source/issues/04-the-same-unit-at-the-same-node-forms-no-second-control-start.md) 落地（会话 `idp-parcel-9b` 代 NO owner 裁定，授权同 Status 行）。自该票进 main 起停用本记录两句，**适用场景**只限同一节点上有当前收寄：这件实物在这个节点上有一条判断链的当前有效版本是`节点收寄已形成`或`待识别实物已建立`，且那一版的控制没有转出。
+
+1. **决定一末句「同一件实物换个来源再收一次照常形成收寄」。** 适用场景里，换来源再来的明确接收、明确拒收与仅扫描都并入那条当前收寄：落一行「并入已有收寄」，来源照存，答`已有结果`，信息格带那一版的判断种类与当前有效版本；不形成收寄，不另起控制起点，不交发布意图。适用场景之外照原句：到了另一个节点、那条收寄的控制已转出、或这个节点上此前只有`节点收寄未形成`，再收一次照常形成收寄。同条「同一作业实物不在此列」（同一件实物再来不认成一码多物）与「同一份送站重投按幂等键走已有结果」不变。
+2. **「能力边界」里冲突形成之后先到那件换来源再收「照常答`节点收寄已形成`、交发布意图」一句。** 先到那件在原节点的当前收寄此刻是追加的那一版冲突版（待识别、记身份冲突、控制照原判断），换来源再来并入它：答`已有结果`，原判断种类`待识别实物已建立`，当前有效版本是那一版冲突版，不交意图。先到那件到了另一个节点时照原句。同条其余几句不变：后到那件的收寄行不带关联、按包裹读不到它；方向依据仍判身份冲突。
+
+两句改钉的用例：`TestTheSameUnitDeliveredAgainIsNotAnIdentityConflict`（同一节点换来源再来并入、冲突之后先到那件再来并入冲突版），`TestTheSameUnitElsewhereOrAfterARefusalFormsAFreshJudgment`（另一个节点照常形成收寄）。
+
 ## Links
 
 - 部分停用于 [ADR-0210](./0210-identity-conflicts-are-disposed-by-an-operation-decision-and-the-identity-basis-reads-chain-heads.md)。
+- 部分停用于 [ADR-0199](./0199-node-reception-preserves-the-delivery-source-and-rechecks-pending-identities.md)（决定四）。
