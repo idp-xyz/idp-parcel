@@ -36,6 +36,7 @@ import (
 	pptransport "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/transportfulfillment"
 	ppapplication "go.idp.xyz/idp-parcel/internal/parcelpricing/application"
 	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+	ppports "go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
 	psidentity "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/identity"
 	psinbox "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/labelfinal"
@@ -593,6 +594,26 @@ var sellEvaluationOnFinalOutcomeUndecidedSentinels = []error{
 	saparcelshipment.ErrSellEvaluationRequestUndecided,
 }
 
+// sellEvaluationRequestSubmittedUndecidedSentinels 是 SA SELL 评价请求已提交信封 → PP「按评价请求形成评价」这条线
+// （ADR-0190 决定四）登记的未决哨兵。处理方与 BUY 那一路共用同一套哨兵与折法，各格的恢复动作也同：
+//   - ErrEvaluationRequestNotVisible——SELL 请求在 SA 还读不回（请求与信封同事务落库），续办。
+//   - ErrPriceCardNotConfigured——（租户、计价范围、SELL、客户费用、计价基准时点）下没有在用价卡。缺的是价卡，租户
+//     取值；登了卡之后重投就形成，本组合根不替它配、不种默认卡。
+//   - ErrPriceCardApplicabilityConflict——多于一版同时在用，交人裁，不挑。
+//   - ErrPricingInputUnavailable——按包裹造不出快照：包裹不在已接受委托上、没有申报重量、单位在计价单位表外、没有
+//     收件邮编。缺的是小包托运那一侧的事实，补正之后重投会变。
+//   - ErrEvaluationFormationUndecided——依赖故障，形成与否未知。
+//
+// 落 publish_failed 的与 BUY 那一路同：引用坏了、SELL 请求记录译不成命令（例如结算币种不在计价的币种形里）、入口答
+// 未受理或上抛结构性错误。
+var sellEvaluationRequestSubmittedUndecidedSentinels = []error{
+	ppsettlement.ErrEvaluationRequestNotVisible,
+	ppsettlement.ErrPriceCardNotConfigured,
+	ppsettlement.ErrPriceCardApplicabilityConflict,
+	ppsettlement.ErrPricingInputUnavailable,
+	ppsettlement.ErrEvaluationFormationUndecided,
+}
+
 // wireDispatcher 接依赖图。它与读环境分开，是为了让组合根能对着真库整体验一遍——
 // 一个只能靠进程起停验证的装配点，等于没有验证。
 //
@@ -884,6 +905,16 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 		return nil, fmt.Errorf("parcel-dispatch: evaluation request submitted undecided translation: %w", err)
 	}
 
+	sellEvaluationRequests, err := formEvaluationOnSellEvaluationRequestConsumer(db, outboxStore, inboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+	routedSellEvaluationRequests, err := dispatch.WithUndecidedSentinels(
+		sellEvaluationRequests, sellEvaluationRequestSubmittedUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: sell evaluation request submitted undecided translation: %w", err)
+	}
+
 	veHandover, err := deriveHandoverConsumer(db, inboxStore, projectionDerive)
 	if err != nil {
 		return nil, err
@@ -993,6 +1024,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 			sainbox.DutyPaymentVerificationFormedEventType:         routedVerifications,
 			sainbox.BuyEvaluationRecordedEventType:                 routedBuyEvaluations,
 			ppinbox.EvaluationRequestSubmittedEventType:            routedEvaluationRequests,
+			ppinbox.SellEvaluationRequestSubmittedEventType:        routedSellEvaluationRequests,
 			veinbox.TransportHandoverRegisteredEventType:           veHandoverRouted,
 			veinbox.ExternalCarrierTrackingJudgedEventType:         veExternalTrackingRouted,
 			veinbox.FinalOutcomeFormedEventType:                    finalOutcomeFan,
@@ -1454,7 +1486,7 @@ const preAcceptanceTrialEvidence = ppdomain.EvidenceSynthetic
 
 // preAcceptanceTrials 接结算的受理前试算口（ADR-0179 决定一、三、四）：SA 的 PP 消费侧适配器 → PP「按委托提交版本形成受理前
 // 试算」入口 → 在用 SELL·客户费用价卡解析、PS 提交版本申报读口（经 PP 的 PS 消费侧适配器）与对给定价卡形成试算的入口。补齐读数
-// 那两对与正式评价（formEvaluationOnEvaluationRequestConsumer）同源同形：估价与随后的客户费用按同一版本清单作答，靠的就是这一点。
+// 那两对与正式评价（formEvaluationFromRequest）同源同形：估价与随后的客户费用按同一版本清单作答，靠的就是这一点。
 // 这条链上没有评价库写口与交付口：试算只算不存、不交付（ADR-0152 决定二）。
 func preAcceptanceTrials(db *bentopg.DB, clock systemClock) (*sapricing.PreAcceptanceTrials, error) {
 	cards, err := pppostgres.NewPriceCards(db)
@@ -2708,15 +2740,102 @@ const evaluationRequestFormationEvidence = ppdomain.EvidenceSynthetic
 // Inputs 装的是消费侧解析器（ADR-0171）：发生项成员走 TF，申报测量与地址要素走 PS。节点实测登记册还没有
 // （pp-pricing-input-seams/04），Measured 保持 nil——没有实测时用申报，并在事实引用里标明来源是申报。
 // 不接一只永远答「不在」的替身。
-//
-// EvaluatePricingHandler 的序列 / 目录两对在用解析成对装齐（ADR-0099 决定四、ADR-0109 Decision 三）：卡绑了序列或
-// 目录时评价前按在用版本补齐取值，解析不到留说明落待判断；只装一半构造期就拒。
 func formEvaluationOnEvaluationRequestConsumer(
 	db *bentopg.DB,
 	outboxStore *outbox.Store,
 	inboxStore *inbox.Store,
 	clock systemClock,
 ) (dispatch.Consumer, error) {
+	occurrences, err := tfpostgres.NewChargeOccurrences(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: charge occurrence members: %w", err)
+	}
+	shipments, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: declared measurement and address elements: %w", err)
+	}
+	inputs, err := pptransport.NewResolver(pptransport.ResolverDeps{
+		Members:   occurrences,
+		Declared:  shipments,
+		Addresses: shipments,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: pricing input resolver: %w", err)
+	}
+	form, err := formEvaluationFromRequest(db, outboxStore, clock, inputs)
+	if err != nil {
+		return nil, err
+	}
+	requests, err := sapostgres.NewEvaluationRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: settlement evaluation request view: %w", err)
+	}
+	processing, err := ppsettlement.NewFormOnEvaluationRequestSubmittedAdapter(requests, form, evaluationRequestFormationEvidence)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: form on evaluation request submitted: %w", err)
+	}
+	consumer, err := ppinbox.NewEvaluationRequestSubmittedConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: evaluation request submitted consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// formEvaluationOnSellEvaluationRequestConsumer 接 ADR-0190 决定四那条线：SA 在包裹计费时点登记一份 SELL 评价请求后
+// 同事务交出的 `settlement-accounting.sell-evaluation-request.submitted` → PP 消费门 → 按（租户 + SELL 请求标识）经 PP 的
+// 消费侧适配器读 SA SELL 请求册的只读半边 → 译成 SELL·客户费用命令交同一只「按评价请求形成评价」入口。评价已记录
+// 之后形成预估客户费用是 SA 那一侧的另一只编排。
+//
+// Inputs 装按包裹的解析器：SELL 请求点名包裹，快照不经发生项，所以不接 TF 的成员读口。申报测量与地址要素走 PS；
+// Measured 同 BUY 那一路保持 nil——没有实测时用申报并标明来源，这是 ADR-0190 决定四对 ADR-0171 决定五在 SELL·客户费用
+// 预估那一格的作答。证据层级与 BUY 那一路同一个常量，理由见它的头注。
+func formEvaluationOnSellEvaluationRequestConsumer(
+	db *bentopg.DB,
+	outboxStore *outbox.Store,
+	inboxStore *inbox.Store,
+	clock systemClock,
+) (dispatch.Consumer, error) {
+	shipments, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: declared measurement and address elements: %w", err)
+	}
+	inputs, err := pptransport.NewParcelResolver(pptransport.ParcelResolverDeps{
+		Declared:  shipments,
+		Addresses: shipments,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: parcel pricing input resolver: %w", err)
+	}
+	form, err := formEvaluationFromRequest(db, outboxStore, clock, inputs)
+	if err != nil {
+		return nil, err
+	}
+	requests, err := sapostgres.NewSellEvaluationRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: settlement sell evaluation request view: %w", err)
+	}
+	processing, err := ppsettlement.NewFormOnSellEvaluationRequestSubmittedAdapter(requests, form, evaluationRequestFormationEvidence)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: form on sell evaluation request submitted: %w", err)
+	}
+	consumer, err := ppinbox.NewSellEvaluationRequestSubmittedConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: sell evaluation request submitted consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// formEvaluationFromRequest 装「按评价请求形成评价」入口。BUY 与 SELL 两路各装一只，只差 Inputs：评价库与交接、价卡
+// 在用解析、铸造口和 EvaluatePricingHandler 两路同源同形，选卡与补齐读数因此只有一种装法。
+//
+// EvaluatePricingHandler 的序列 / 目录两对在用解析成对装齐（ADR-0099 决定四、ADR-0109 Decision 三）：卡绑了序列或
+// 目录时评价前按在用版本补齐取值，解析不到留说明落待判断；只装一半构造期就拒。
+func formEvaluationFromRequest(
+	db *bentopg.DB,
+	outboxStore *outbox.Store,
+	clock systemClock,
+	inputs ppports.PricingInputResolver,
+) (*ppapplication.FormEvaluationFromRequestHandler, error) {
 	evaluations, err := pppostgres.NewEvaluations(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: pricing evaluation store: %w", err)
@@ -2758,22 +2877,6 @@ func formEvaluationOnEvaluationRequestConsumer(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: pricing evaluation identities: %w", err)
 	}
-	occurrences, err := tfpostgres.NewChargeOccurrences(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: charge occurrence members: %w", err)
-	}
-	shipments, err := pspostgres.NewShipmentRequests(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: declared measurement and address elements: %w", err)
-	}
-	inputs, err := pptransport.NewResolver(pptransport.ResolverDeps{
-		Members:   occurrences,
-		Declared:  shipments,
-		Addresses: shipments,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: pricing input resolver: %w", err)
-	}
 	form, err := ppapplication.NewFormEvaluationFromRequestHandler(ppapplication.FormEvaluationFromRequestDeps{
 		Evaluations: evaluations,
 		PriceCards:  cards,
@@ -2784,19 +2887,7 @@ func formEvaluationOnEvaluationRequestConsumer(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: form evaluation from request: %w", err)
 	}
-	requests, err := sapostgres.NewEvaluationRequests(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: settlement evaluation request view: %w", err)
-	}
-	processing, err := ppsettlement.NewFormOnEvaluationRequestSubmittedAdapter(requests, form, evaluationRequestFormationEvidence)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: form on evaluation request submitted: %w", err)
-	}
-	consumer, err := ppinbox.NewEvaluationRequestSubmittedConsumer(db.Transactor(), inboxStore, processing)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: evaluation request submitted consumer: %w", err)
-	}
-	return consumer, nil
+	return form, nil
 }
 
 // sellEvaluationRequester 装 ADR-0190 决定二、三的发起编排。包裹到结算账户那条链三段都接真读口：PS 委托仓储兼答
