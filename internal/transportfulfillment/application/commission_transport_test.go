@@ -274,7 +274,7 @@ func answerBookingCommand(t *testing.T, outcome domain.CarrierAcceptanceOutcome)
 	return command
 }
 
-// Covers: `AT-TF-106`（编排面）、CONTEXT 243「保存……协议、条件、角色和责任依据快照，不修改商业版本」的
+// Covers: `AT-TF-108`（编排面）、TF CONTEXT「Boundaries and ownership」「保存……协议、条件、角色和责任依据快照，不修改商业版本」的
 // 编排面（UC-TF-004 步 2、3）——协议快照与采购责任法人取自核对结果、不由登记方给，随记录保全；
 // 核协议用的是登记方指名的那一版、服务方与提交时刻；同一委托标识只提交一次，重放返原、
 // 异内容同键冲突；「委托已提交」意图随提交交出、重放重发同一份。

@@ -15,7 +15,8 @@ import (
 )
 
 // TransportCommissions 实现 ports.TransportCommissionStore。Save 登记；Replace 只写
-// 取消或开始两列——协议/条件/角色/责任快照、采购责任法人与成员只在 INSERT 出现（CONTEXT 243）。
+// 取消或开始两列——协议/条件/角色/责任快照、采购责任法人与成员只在 INSERT 出现（TF CONTEXT「Boundaries and
+// ownership」party-commercial 那条：「保存运输委托及实际履约采用的协议、条件、角色和责任依据快照，不修改商业版本」）。
 type TransportCommissions struct {
 	db *bentopg.DB
 }

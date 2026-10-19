@@ -50,7 +50,7 @@ func NewResponsibilitySnapshotReference(value string) (ResponsibilitySnapshotRef
 // TransportCommission 是向外部运输服务提供方提出的明确运输范围与条件请求（CONTEXT
 // 「运输委托」：引用供应商商业协议和履约条件快照，但不等于订舱、承运接受、实际履约段
 // 或供应商账单）。协议、条件、角色与责任依据都是**快照引用**——版本生命周期属
-// party-commercial，本类型持有的只是引用，结构上改不了商业版本（CONTEXT 243）。
+// party-commercial，本类型持有的只是引用，结构上改不了商业版本（CONTEXT「Boundaries and ownership」：「不修改商业版本」）。
 type TransportCommission struct {
 	tenantID       TenantID
 	commission     TransportCommissionReference
