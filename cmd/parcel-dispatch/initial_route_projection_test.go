@@ -10,6 +10,7 @@ import (
 	nrpostgres "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/postgres"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	nrports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	vepostgres "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
 	vedomain "go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 	veports "go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
@@ -29,11 +30,12 @@ const (
 	initialRouteFactRef            = "initial-route/" + initialRouteParcel + "/" + initialRoutePurpose
 )
 
-// synInitialRouteEventID 与 OutboxInitialRouteHandoff 的信封 ID 同构：判断键加类型段
+// synInitialRouteEventID 与 OutboxInitialRouteHandoff 的信封 ID 同构：判断键六维的指纹加口名前缀
 // （ADR-0043 意图由判断键认领）。
 func synInitialRouteEventID(fixture *synVerticalFixture) string {
-	return fixture.identity.TenantID().String() + "/initial-route/" + fixture.requestID.String() + "/" +
-		initialRouteParcel + "/" + initialRouteBaseline + "/" + initialRoutePurpose
+	return string(outboxintent.FingerprintEventID("initial-route",
+		fixture.identity.TenantID().String(), fixture.identity.CustomerAccountID().String(), fixture.requestID.String(),
+		initialRouteParcel, initialRouteBaseline, initialRoutePurpose))
 }
 
 // Covers: 生产 wireDispatcher 一拍——计划支派生未归类投影，初始路由信封定稿

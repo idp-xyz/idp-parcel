@@ -56,7 +56,21 @@ type initialRoutePayload struct {
 	Correlation       string `json:"correlation"`
 }
 
-func initialRouteEventID(key domain.InitialRouteJudgmentKey) string {
+// initialRouteEventIDPort 是本口指纹 ID 的口名前缀。
+const initialRouteEventIDPort = "initial-route"
+
+// initialRouteEventID 把判断键六维折成 outboxintent.FingerprintEventID 的定长形。原样串接时，演示委托的真实标识
+// （委托、包裹、提交版本各二十六位编码）就拼出一百三十多字节，越过信封 ID 上限，入队被确定性拒收；交接只留下
+// 一条没人重发的续办引用，初始路由信封一封也发不出去。
+func initialRouteEventID(key domain.InitialRouteJudgmentKey) eventing.EventID {
+	return outboxintent.FingerprintEventID(initialRouteEventIDPort,
+		key.TenantID.String(), key.CustomerAccountID.String(), key.ShipmentRequestID.String(),
+		key.DeclaredParcelID.String(), key.AcceptanceBaseline.String(), key.ServicePurpose.String())
+}
+
+// initialRoutePartitionKey 是换成指纹 ID 之前兼作分区键的那一串，一字不变：分区键是顺序语义，改它会让换形前后
+// 同一判断键落进两个分区（先例 customsCasePartitionKey）。超 eventing.MaxPartitionKeyLength 由框架校验响亮拒收。
+func initialRoutePartitionKey(key domain.InitialRouteJudgmentKey) string {
 	return key.TenantID.String() + "/initial-route/" + key.ShipmentRequestID.String() + "/" +
 		key.DeclaredParcelID.String() + "/" + key.AcceptanceBaseline.String() + "/" +
 		key.ServicePurpose.String()
@@ -94,16 +108,15 @@ func (handoff *OutboxInitialRouteHandoff) HandOffInitialRoute(
 	}
 
 	now := handoff.clock.Now().UTC()
-	eventID := initialRouteEventID(key)
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(eventID),
+		ID:           initialRouteEventID(key),
 		Source:       nrEventSource,
 		Type:         initialRouteEventType,
 		Version:      1,
 		Scope:        key.TenantID.String(),
 		Subject:      key.DeclaredParcelID.String(),
-		PartitionKey: eventID,
+		PartitionKey: initialRoutePartitionKey(key),
 		OccurredAt:   occurredAt,
 		RecordedAt:   now,
 		ContentType:  eventing.JSONContentType,
