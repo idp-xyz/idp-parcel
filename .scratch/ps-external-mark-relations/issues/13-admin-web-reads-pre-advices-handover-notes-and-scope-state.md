@@ -1,7 +1,7 @@
 # 13 管理台读面：送站预报与送站交接单的查阅，待识别实物显示交付范围核对态，交接单详情带「确认绑定」动作
 
 Category: enhancement
-Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（09、11、12 已进 main），分支 `claude-psxm13`，走 Go 那条路。此前 ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
+Status: resolved——2026-10-19 进 main（代码验证钉 `b7bf59e8`），见「进 main 记录」。此前 in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（09、11、12 已进 main），分支 `claude-psxm13`，走 Go 那条路。此前 ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
 Blocked by:
 - [09](./09-pre-advice-submission-on-the-first-party-customer-channel.md) 进 main：预报要先有来路，读面才有东西可看。
 - [11](./11-identity-check-judges-the-verifiable-delivery-scope.md) 进 main：交付范围核对态落册之后，复核目录才带得出它。
@@ -37,7 +37,7 @@ Blocked by:
 - [x] 复核目录用例：交付范围核对态、未证原因、依据引用与归入的交接单都带出。
 - [x] admin-web 三道门退 0；核对态判读、确认动作的载荷拼法与各格答复的呈现有用例（落在判读纯函数上，照 identity-disposition 的先例）。
 - [x] Go 门禁：`go build ./...`、`go vet ./...` 退 0，`gofmt -l .` 无输出；带 DSN 跑 `internal/nodeoperations/...`、`cmd/parcel-api`、`internal/architecture/...` 全绿；机制清点重生成。
-- [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
+- [x] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
 
 ## 规模
 
@@ -171,3 +171,8 @@ M
 - **作者自定的格认可**：参与方目录读不动时允许手填交付方参与方（越权风险点已列）；持读授予者看得到作结论方。
 - **Standards**：共享文件只追加，两次 rebase 两边都保留；注释里的序数与计数引用已改成符号名。
 - **未做（不另立票）**：两条列表查询没加索引（要协调迁移号，数据量起来时随 NO 读面性能票做）；没有浏览器实走与截图。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 分支 `claude-psxm13`（作者已 rebase 到另一会话 demo-chain-gaps/61 等之后）直接叠在远端 main 之上快进推送；机制清点重生成零差。管理台三道门由作者在本分支跑过（590/590），推送后由 CI 的 admin-web job 复核。
+- 推送方全量一次：钉 `b7bf59e8` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 153 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
