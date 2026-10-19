@@ -184,7 +184,7 @@ Blocked by: 无——2026-10-16 核得 19 已 resolved（进 main 至 `8e1e9777`
 
 ### 补记（2026-10-16，票 operator-channel/28）：受控关闭与重开两口凭哪条重放代数
 
-本票做什么第 2 条要逐口记下凭哪条代数，这两口当时漏记、也确实没有（票 28 现象节）。现在凭 ADR-0183「复核记录二」与 `domain.ContinuedAttemptRegister.RecordedRequest`：册上已有同类、请求内容逐格相同的决定即同一次请求的重放，答 `EXISTING_RESULT` 交回原决定。与 TFC-1 / CCC-1 一类「同键同内容是重放、同键异内容是冲突」不同属，三点要分清：**异内容即新决定**，照旧经领域追加；**没有内容冲突那一支**；**比对扫全册**，不只看生效中的那一条。
+本票「做什么」要求「逐口记下凭哪条代数」，这两口当时漏记、也确实没有（票 28 现象节）。现在凭 ADR-0183「复核记录二」与 `domain.ContinuedAttemptRegister.RecordedRequest`：册上已有同类、请求内容逐格相同的决定即同一次请求的重放，答 `EXISTING_RESULT` 交回原决定。与 TFC-1 / CCC-1 一类「同键同内容是重放、同键异内容是冲突」不同属，三点要分清：**异内容即新决定**，照旧经领域追加；**没有内容冲突那一支**；**比对扫全册**，不只看生效中的那一条。
 
 
 - **回写（2026-10-18，票 [operator-channel/33](./33-rejected-shipment-requests-persist-and-read-back.md)，分支 `claude-oc33`，待评审）**：之三、之四那三口（主动拒绝、授权处置、复核完成）凭的「撞上已有决定交回那一个」代数，在真库上此前读不回`已拒绝`委托，替身仓储上才成立。现在快照决定上有了主动拒绝留痕，重建门按 [ADR-0188](../../../docs/adr/0188-rejected-shipment-request-rehydration-by-snapshot-expressiveness.md) 开到`已拒绝`。处置`拒绝`重放答 `TASK_ALREADY_CLOSED`，续办信封撞上已拒绝委托交回既有决定，两条都已在真库上取证。主动拒绝口与处置口撞上已有决定时的答复格和重放耗标识，仍归 [36](./36-active-rejection-replays-answer-the-existing-decision.md)。
@@ -192,3 +192,91 @@ Blocked by: 无——2026-10-16 核得 19 已 resolved（进 main 至 `8e1e9777`
 - **回写（2026-10-19，票 [operator-channel/37](./37-shipper-requester-and-closure-source-vocabulary-live-in-application.md)，分支 `claude-oc37`，待评审）**：钉 `0e3bb7df` 那次评审 Standards 非阻断三条的去向。(1) `buildOperatorDecisionIntakes` 头注不再数 `shipmenthttp` 包里的口，改点名 `operatorDecisionIntakes` 与 `shipmenthttp.OperatorDecisionIntake`。(2) 适配器的 `shipperOf` 删去，「代货主」请求方与货主指令关闭的责任主体改由 application 的 `ShipperRequesterOf` / `ShipperInstructionSubjectOf` 唯一推出，种类段只在 application 的不导出常量里。(3) 关闭责任来源种类词表只列在 application 的 `ParseClosureResponsibilitySourceKind` 里，适配器只把认不出译成坏报文。行为不变，线上契约 `CUSTOMER-ACCOUNT/<客户账户标识>` 原样。
 - **回写（2026-10-19，票 [operator-channel/38](./38-controlled-closure-and-reopening-record-request-and-operation-evidence.md)，分支 `claude-oc38`，待评审）**：钉 `0e3bb7df` 那次评审 Spec 非阻断 (1) 的去向。冒用残余在 PS 内不该堵、也堵不住（[ADR-0187](../../../docs/adr/0187-controlled-closure-and-reopening-record-request-and-operation-evidence-on-the-decision.md) 决定六）；PS 做到的是请求有据可查、经手人可追——请求证据（货主指令关闭的 `shipperInstructionEvidence`、重开的 `shipperAuthorizationEvidence`）落在决定上、与请求方同在同缺，提交操作者以 `OPERATOR/<发行方>#<sub>` 落进操作证据一格。真正的堵点归客户渠道（ADR-0139）、授予（租户取值）、角色模型 product-strategy-boundary/07 与租户内控。
 - **补记之后（2026-10-19，票 [operator-channel/38](./38-controlled-closure-and-reopening-record-request-and-operation-evidence.md)）**：请求证据与操作证据不进重放身份——这两口的重放比对格仍以 ADR-0183「复核记录二」为准，证据不在其内（ADR-0151 决定三「逐口核」，凭 [ADR-0187](../../../docs/adr/0187-controlled-closure-and-reopening-record-request-and-operation-evidence-on-the-decision.md) 决定四）；换证据、换提交人原样重投答 `EXISTING_RESULT`，交回带原证据的原决定。
+
+### 补记（2026-10-19，票 operator-channel/39、50）：复核完成、主动拒绝、授权处置三口凭哪条重放代数；其余各口的逐口结论
+
+本票「做什么」要求「逐口记下凭哪条代数……未核完的口不开真渠道」。这三口在之三（`44ef6a4a`）建 Intake、之四（`dc439417`）换上操作者 Intake 时，都没有核对记录；这条规则由 `71e41e6d` 写入，早于这两笔。漏掉的结构原因：「完成判据」里没有这一格，完成记录逐格打勾时没有地方能发现；之三、之四只有作者自审，票 26 的补评表也不含它们。2026-10-16 会话 idp-parcel-9b 补核（证据层级 `S`）：三口都不补规范化形状、不加冲突格，判据见 ADR-0151 复核记录（2026-10-19）。不成立的地方各立修复票。
+
+- 复核完成 ❌ → operator-channel/34。凭：ADR-0132 决定二「……撞上换代答`版本已换代`，撞上已成立的决定答`任务已完结`并交回那一个——与 `CompleteManualReview` 的分格同形」；ADR-0030 Context 中「复核只能一次」的不变式；`ShipmentRequest.CompleteManualReview`（「同一提交版本也只接受一次完成」）和 `CompleteManualReviewHandler.Handle` 的分格——同身份异内容答 `ALREADY_COMPLETED`，并回显先到的那一份。身份是「委托 × 调用方指名的提交版本」；`IntakeManualReviewCompletion` 取的是服务端当前版本，这个前提不成立。之三判断项里「复核完成……的提交版本取服务端当前版本」这一项，据此裁为由调用方指名。
+- 主动拒绝 ❌ → operator-channel/33、operator-channel/36。凭：PS CONTEXT「当前提交版本只能有一个合法决定；接受或拒绝提交后，另一方只能读取既有结果，不能追加相反决定」，以及 `ShipmentRequest.RejectByAuthority` 的 `ErrDecisionAlreadyFormed`。不成立的地方：生产仓储读不回`已拒绝`，主动拒绝的留痕不落库（operator-channel/33）；撞上已有决定仍答 `FORMED`（201），不回显，重放还耗掉决定标识（operator-channel/36）。
+- 授权处置。凭：ADR-0132 决定二「处置记录追加在接受判断任务上、一版至多一次、不覆盖」，以及 `ShipmentRequest.DisposeUnderAuthority` 的前置次序；版本取草案指名的那一份。「交客户补充」去向 ✅ **只核对**（真库原样重放答 `ALREADY_DISPOSED`，不重发释放）。「拒绝」去向 ❌ → operator-channel/33（读回）、operator-channel/36（重放耗标识、回显）。
+- 之四同一笔换上的 TF 装载分配、终止参与两口没有核过：票 13「未定形状」TF 一行点名了 `FormLoadAssignment`、`EndFulfillmentParticipation`，票 20「不做」把它们排除在外 → operator-channel/50，归 TF owner。
+- 本补记不覆盖、交 PS owner 的：之三判断项里证据格的取法；管理台输入框的自由文本送进`结构化原因`格（`RejectionReasonReference` 头注「是结构化原因，不是自由文本」）；主动拒绝要不要绑定操作员看过的那一版。
+
+其余各口取 operator-channel/50 附录「逐口结论原稿」各行的结论（取证与对抗核验见该票附录与各修复票，证据层级 `S`），〈占位名〉已换成票号，对应表见 operator-channel/50 完成记录。复核完成、主动拒绝、授权处置三口见上，不重记。
+
+- 受控关闭 ✅ **只核对**（不在本节重记）：凭 `domain.ContinuedAttemptRegister.RecordedRequest`，见上方「补记（2026-10-16，票 operator-channel/28）」与 ADR-0183「复核记录二」。本轮钉 `c68e4342` 带 DSN 复跑 `TestClosureAndReopeningThroughTheOperatorChannelAgainstARealDatabase`，照过。生产上授权映射为空，停在 `UNDECIDED / AUTHORITY_UNAVAILABLE`。
+- 受控重开 ✅ **只核对**（不在本节重记）：与受控关闭同凭 `RecordedRequest`，比对到所指关闭为止；在货主重授权门和签发标识之前就认出重放。钉 `c68e4342` 复跑既有用例，含「重开重投答已有结果」那一格，照过。
+- 关段 ✅ **只核对**（「发现二」回写已记）：凭 `CloseFulfillmentSegmentHandler.Close`，已关答 `SEGMENT_ALREADY_CLOSED` 并回显在册关闭时刻，并发输家读回赢家（票 20「裁定记录」）。回显只到秒 → operator-channel/31。
+- 建派送任务 ✅ **只核对**（「发现二」回写已记），补一格 ❌ → tf-face-algebra/10。凭 `OpenDispatchTaskHandler.Open`：同一任务交回原任务，「差异调用方自己比」（票 20「裁定记录」）。但 `dispatchTaskResponse` 不带 `conditions`，这一格比不出。回显只到秒 → operator-channel/31。手工口能占用派送发起的确定性引用 → tf-face-algebra/09。
+- 装载分配 ❌ → tf-face-algebra/02、tf-face-algebra/01。凭 `FormLoadAssignmentHandler.Form`「同一版本重投：交回原版本」，这一半照票 20 判据够用，待 TF owner 并裁。不成立：同一分配换版本号，会另起一个无前版的首版，撤回之后仍能起活跃新根；零时刻之后不足一微秒的分配时刻首投落库，读回时被重建门拒，此后永远答 `LOAD_ASSIGNMENT_UNDECIDED`。本口在 `dc439417` 开真渠道时没有核对记录。
+- 终止参与 ❌ → tf-face-algebra/03、tf-face-algebra/05、tf-face-algebra/04。
+  - 凭 `EndFulfillmentParticipationHandler.End`：终点是链尾参与上的单向槽，`!current.Active()` 即答 `PARTICIPATION_ALREADY_ENDED`，不落库、不发意图、不签标识。
+  - 不成立：
+    - 已离场与异依据、异时刻、被下一次交接结束同答，且不回显在册终点（票 20 对关段的同类裁法以补回显为代价）；
+    - 并发输家在链尾被替代时不读回就答已离场；
+    - 与交接更正并发时终点丢失；
+    - 凭实际承运商首次有效收寄入场的段读不回。
+  - 本口在 `dc439417` 开真渠道时没有核对记录。
+- 有效时间判断 ✅ 代数照「发现二」原记录成立（秒到微秒实测）；❌ → operator-channel/30（亚微秒原样重放多签一版）、tf-face-algebra/06（同一事实并发判断时版本链分叉，其后改判不收敛，VE 不再立冲突信号）。两格都潜伏：生产上没有外部承运轨迹事实的写入方；拉取节拍票 label-channel-service-first-release/20 接上之前须修。
+- 承运商首次有效收寄判断 ✅ **只核对**（「发现二」回写已记，票 27 修失效重放）。凭 `replayOrConflictOnTheSameBasis` 与 TFC-1 `CanonicalizeCarrierFirstEffectivePickupPayload`（业务时间按微秒）。回显只到秒 → operator-channel/31。经本口立起的段按键读不回 → tf-face-algebra/04。
+- 收寄（NO）✅ **只核对**。凭 NOC-1：`ReceiveDeliveredUnitHandler.Handle` 按（租户、来源标识）幂等，`domain.CanonicalizeDeliveryPayload` 经 `CompareStoredDigest` 比对，同答 `EXISTING_RESULT`、异答 `SOURCE_CONFLICT`。摘要不含交付人、证据、拒收原因，沿用原判据。
+- 交付首登 ✅ **只核对**。凭 TFC-1：`RegisterEffectiveDeliveryHandler.Register` 按（租户、对象、尝试）幂等，用 `CanonicalizeEffectiveDeliveryPayload` 比已存摘要，同答 `EXISTING_VERSION`、异答 `SOURCE_CONFLICT`。观察：并发输家 `DeliveryAlreadyRegistered` 读回赢家后不比摘要，未实测、未立票。
+- POD 更正 ❌ → operator-channel/41。没有可凭的代数：`RegisterEffectiveDeliveryHandler.Correct` 每次现签结果版本、回指此刻的当前版，命令里既无前版也无请求键。
+  - 原样重投：每次 201，再签一版、再交一份意图。
+  - 与原请求重叠的重投：答 `SOURCE_NOT_ACCEPTED`，并耗掉一个版本号。
+  - 读在对方提交前、写在其后：版本链分叉。
+  - 意图交付失败后的重投：另签一版，原版本的意图永不交出。
+  - 迟到的旧更正：把当前 POD 改回去。
+  - 本口在 `ec00b795` 开真渠道，票 13「未定形状」列着 `CorrectDeliveryProof`。
+- 派送尝试 ✅ 代数成立（秒、毫秒、微秒实测）。凭 `RecordDeliveryAttemptHandler.Handle` → `answerFromExisting` / `deliveryAttemptContent`：两侧都从领域记录现算，内容相同答 `EXISTING_RESULT` 并回显在册，不同答 `SOURCE_CONFLICT`，比对锚覆盖命令每一格。❌ → operator-channel/30（亚微秒原样重放答冲突、同一微秒计划窗答 500）；tf-face-algebra/01（证据带 NUL 答 500）。本口在 `ec00b795` 开真渠道，票 13「未定形状」列着 `RecordDeliveryAttempt`。
+- 交接首登 ✅ 串行 **只核对**。凭 TFC-1：`RegisterTransportHandoverHandler.Register` 先读后比 `CompareStoredDigest`，异内容答 `SOURCE_CONFLICT`。❌ → operator-channel/41：并发输家经 `commit` 读回赢家后不比摘要，同版本异内容答 `EXISTING_VERSION`（真库并发实测，各对都如此）。
+- 交接更正 ❌ → operator-channel/41、tf-face-algebra/07。
+  - 票 13「已定形」与同票阻断修复记录（「交接更正口只走版本键、不比摘要，未动」）互相矛盾，以后者为实：`RegisterTransportHandoverHandler.Correct` 算了 `CanonicalizeHandoverCorrectionPayload` 并落库，但撞键后从不比。
+  - 同一 newVersion 下换证据、换规则、换更正时刻、改判、换前版或撞上另一份首登，都答 `EXISTING_VERSION`。
+  - 同一前版还能被更正成两个新版本。
+- 场外揽收首登 ✅ **只核对**。凭 TFC-1：用 `CanonicalizeOffsitePickupRegistrationPayload` 比已存摘要，同答 `EXISTING_VERSION`、异答 `SOURCE_CONFLICT`。观察：并发输家 `OffsitePickupAlreadyRegistered` 读回赢家后不比摘要，未实测，未立票。
+- 场外揽收更正 ✅ **只核对**。凭 TFC-1，与首登用同一内容判据：指名的前版已不是当前版时，与当前版的已存摘要比，同答 `EXISTING_VERSION`、异答 `SOURCE_CONFLICT`；比对锚在当前版（「要改请对当前版提更正」，属设计）。
+- 场外揽收执行 ✅ **只核对**。凭 TFC-1：`PerformOffsitePickupHandler.Handle` 按（租户、来源标识）幂等，用 `CanonicalizeOffsitePickupPayload` 比已存摘要，同答已有结果，异答 `PickupSourceConflict`。摘要不含执行人、地点、计划窗、证据、改约来源，沿用原判据。
+- 移动事实 ❌ → tf-face-algebra/08、tf-face-algebra/01。
+  - 可凭的只有身份那一半：`RecordMovementFactHandler.Record` 按（租户、事实、版本）查到即答 `MOVEMENT_FACT_VERSION_EXISTS`，交回原版（ADR-0023「同一身份重复到达返回原结果」）。
+  - 不成立：同身份异内容（种类、地点、班次、业务时间、放行）也答已有版本，新内容静默丢失；另一台设备、另一作业范围带同一（事实、版本）来，同样被吞（实测）。作业事实族调用方是离线队列，「回显自比」不适用。
+  - 另：零时刻之后不足一微秒的业务时间写得进、读不回；地点带 NUL 答 500。
+  - 本口在 `ec00b795` 开真渠道，票 13「未定形状」列着 `RecordMovementFact`。
+- 派送发起 ✅ 主路径 **只核对**：凭 ADR-0114 决定二的确定性任务引用，加 `OpenDispatchTaskHandler.Open` 的已在册支。原样重放与异 `occurredAt` 答 `DISPATCH_TASK_ALREADY_FORMED` 并回显在册；并发首拍读回赢家。
+  ❌ → tf-face-algebra/09：
+  - 已在册只按键认，键既不独占（手工建任务口能占用），也不单射（段、对象、入场依据以斜杠直拼）。被撞的对象在入场依据不变期间答「已形成」，却没有派送任务。
+  - 在册要等重拉所有者之后才认，所有者改答时原样重放不回显。
+  - 本口在 `ec00b795` 开真渠道，票 13「未定形状」列着 `TriggerDeliveryDispatch`。
+- 外部结果（CC）✅ **只核对**。凭 CCC-1：`ReceiveExternalResultHandler.Handle` 按（租户、来源标识）幂等，用 `CanonicalizeExternalResultPayload` 比已存摘要，相同答 `EXISTING_RESULT`、不同答 `SOURCE_CONFLICT`。租户只取认证结果：`externalResultDocument` 没有租户格，大小写变体都按未知字段答 400（读码）。摘要不含角色，沿用原判据。
+- 监管凭证登记 ❌ → tf-face-algebra/11、operator-channel/52。
+  - 凭 CCC-1 REGISTER_CREDENTIAL（`b4d28563`）：撞键后 `sameCredentialContent` 两侧现算，相同答 `EXISTING`、不同答 `CONTENT_CONFLICT`；整秒与微秒实测成立。
+  - 不成立：
+    - 有效期带非零亚微秒位时，原样重放答 `CONTENT_CONFLICT`；
+    - 零时刻之后不足一微秒的有效期写得进、读不回，并让该租户凭证列面答 500；
+    - 同一微秒内的有效期、越出 `integer` 的额度、引用带 NUL，都答 500；
+    - 载荷带 `tenantid` 一类大小写变体，即改写认证租户。
+  - 本口开真渠道时未定形，随票 13（`b4d28563`）补形。
+- 资金事实采用（SA）✅ 代数 **只核对**：凭 SAC-1，`MapExternalFundsHandler.AdoptFact` 按（租户、事实、版本）比 `adoptDigest`，相同答 `EXISTING_FUNDS_FACT`，不同答 `FUNDS_FACT_CONFLICT`。❌ 身份前提 → operator-channel/52：`snapshotWithAuthenticatedTenant` 只拒精确键 `tenantId`，载荷带 `tenantid` 一类变体会改写命令租户（Intake 层实测）。
+- 资金事实更正（SA）✅ 代数 **只核对**：凭 SAC-1，`MapExternalFundsHandler.CorrectFact` 先按新版本比 `correctDigest`，再查链头。❌ 身份前提 → operator-channel/52：同采用口。
+
+- **回写（2026-10-19，票 operator-channel/39）**：下列修复票的 Status 都是 resolved，已进 main（核于 `b57531cc`，推送方全量见各票「进 main 记录」）。上文的 ❌ 逐格改记如下，上文正文不改。
+  - 复核完成 ✅ ← [operator-channel/34](./34-manual-review-completion-names-its-submission-version.md)：线格式带必填的 `submissionVersionId`，Intake 取载荷指名的提交版本，「委托 × 调用方指名的提交版本」这一身份前提成立（修复笔 `0820cdfd`）。
+  - 主动拒绝 ✅ ← [operator-channel/33](./33-rejected-shipment-requests-persist-and-read-back.md)（主动拒绝留痕落库，`已拒绝`读得回）、[operator-channel/36](./36-active-rejection-replays-answer-the-existing-decision.md)（撞上已有决定答 200 `TASK_ALREADY_CLOSED` 并回显在册决定，重放不耗决定标识）。
+  - 授权处置「拒绝」去向 ✅ ← operator-channel/33（读回）、operator-channel/36（回显、不耗标识）。
+  - TF 装载分配、终止参与两口的核对 ← [operator-channel/50](./50-tf-load-assignment-and-participation-termination-algebra.md) 已裁（2026-10-19，代 TF owner）：装载分配同版本重放只核对；终止参与现有格够用、补回显。
+  - 装载分配 ✅ ← [tf-face-algebra/02](../../tf-face-algebra/issues/02-load-assignment-versions-form-a-single-chain.md)（换版本号答 `LOAD_ASSIGNMENT_ALREADY_FORMED` 并回显链头，库面一分配一个首版）、[tf-face-algebra/01](../../tf-face-algebra/issues/01-tf-constructor-gates-accept-only-storable-values.md)（零时刻之后不足一微秒的分配时刻、引用带 NUL，都答`未受理`）。仍 ❌（潜伏）：链头是撤回版时，答复看不出分配已撤回 → tf-face-algebra/13。
+  - 终止参与 ✅ ← [tf-face-algebra/03](../../tf-face-algebra/issues/03-participation-termination-echoes-the-recorded-end.md)（已离场回显 `endKind` / `endBasis` / `endedAt`，并发输家读回再答）、[tf-face-algebra/05](../../tf-face-algebra/issues/05-termination-survives-a-concurrent-handover-correction.md)（与交接更正并发不丢终点）、[tf-face-algebra/04](../../tf-face-algebra/issues/04-carrier-pickup-entry-kind-reads-back.md)（凭承运商首次有效收寄入场的段读得回）。
+  - 关段、建派送任务、承运商首次有效收寄判断：回显只到秒 ✅ ← [operator-channel/31](./31-tf-command-answers-echo-instants-at-registry-precision.md)（答复时刻经登记册精度带小数秒）。
+  - 建派送任务：答复不带 `conditions`，仍 ❌ → tf-face-algebra/10（needs-triage，未修）。
+  - 承运商首次有效收寄判断：经本口立起的段按键读不回 ✅ ← tf-face-algebra/04。
+  - 有效时间判断 ✅ ← [operator-channel/30](./30-tf-registry-instants-compare-at-microsecond-precision.md)（亚微秒原样重放不再多签一版）、[tf-face-algebra/06](../../tf-face-algebra/issues/06-effective-time-judgment-chain-does-not-fork.md)（一版至多被回指一次，并发判断不再分叉）。
+  - POD 更正 ✅ ← [operator-channel/41](./41-tf-correction-faces-tell-replay-from-conflict.md)（载荷指名 `predecessorVersion`；原样重投答 `EXISTING_VERSION`，异内容与迟到的旧更正答 `SOURCE_CONFLICT`，被拒的更正不签号，并发不分叉）。意图交付失败后的续办重投只在编排层取证，真库没造失败的 Outbox（见 41 完成记录）。
+  - 派送尝试 ✅ ← operator-channel/30（亚微秒原样重放、同一微秒内的计划窗）、tf-face-algebra/01（证据带 NUL）。
+  - 交接首登 ✅ ← operator-channel/41（并发输家读回赢家后比摘要）。
+  - 交接更正 ✅ ← operator-channel/41（撞键按已存摘要分 `EXISTING_VERSION` 与 `SOURCE_CONFLICT`）、[tf-face-algebra/07](../../tf-face-algebra/issues/07-handover-correction-chain-stays-linear.md)（一版至多被更正一次）。
+  - 移动事实 ✅ ← [tf-face-algebra/08](../../tf-face-algebra/issues/08-movement-fact-same-identity-different-content-conflicts.md)（同身份异内容答 `SOURCE_CONFLICT`，不回显、不落库）、tf-face-algebra/01（零时刻、地点带 NUL）。08 照 ADR-0023 字面让业务时间不进摘要：只差业务时间的同身份重投读作重放，不按上文「业务时间」那一格答冲突，取舍见 08 裁定的越权风险点。
+  - 派送发起：仍 ❌ → tf-face-algebra/09（needs-triage，未修）。
+  - 监管凭证登记 ✅ ← [tf-face-algebra/11](../../tf-face-algebra/issues/11-regulatory-credential-registration-judges-storable-values.md)（亚微秒、零时刻、同一微秒内的有效期、越界额度、NUL；NUL 答 400 `MALFORMED_REQUEST`，与空白引用同格）、[operator-channel/52](./52-integration-client-intake-refuses-every-case-variant-of-the-tenant-key.md)（租户键的大小写变体一律拒）。
+  - 资金事实采用、资金事实更正：身份前提 ✅ ← operator-channel/52。
+  - 地盘外同病，仍 ❌：tf-face-algebra/01 读码清点出，履约段（含终止参与所用的 `FulfillmentParticipation.End`）、承运商判断、揽派任务、交接、场外揽收等处的时刻非零门仍按纳秒判，`CarrierEvidenceSpec.Material`、`CarrierFirstEffectivePickupSpec.Material`、`RegulatoryTransportDispositionSpec.DeclineBasis` 不拒 NUL → [tf-face-algebra/14](../../tf-face-algebra/issues/14-remaining-tf-gates-judge-zero-and-nul-at-registry-terms.md)（in-progress，本回写时未进 main）。
