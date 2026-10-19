@@ -181,3 +181,27 @@ func TestNewIntegrationClientIntakeRejectsAMissingAuthenticator(t *testing.T) {
 		t.Fatal("缺认证方被接受")
 	}
 }
+
+// tenantKeyCaseVariants 是 encoding/json 会解进 `json:"tenantId"` 格的那些键：它匹配字段名不分大小写，所以
+// 拒自报只认精确键，变体就会顶着认证租户落到别的租户（票 operator-channel/52）。
+var tenantKeyCaseVariants = []string{"tenantId", "TenantId", "tenantID", "tenantid", "tenantiD", "TENANTID"}
+
+func TestIntegrationClientIntakeRefusesEveryLetterCaseOfASelfReportedTenantOnFundsFacts(t *testing.T) {
+	intake := fundsIntakeForTest(t, nil)
+	adoptRest := strings.TrimPrefix(externalFundsFactBody, "{")
+	correctionRest := strings.TrimPrefix(externalFundsCorrectionBody, "{")
+	for _, key := range tenantKeyCaseVariants {
+		t.Run(key, func(t *testing.T) {
+			adopt, err := intake.IntakeExternalFundsFactRegistration(context.Background(),
+				commandRequest(`{"`+key+`":"SYN-TENANT-OTHER",`+adoptRest))
+			if !errors.Is(err, settlementhttp.ErrMalformedRequest) {
+				t.Fatalf("采用口键 %q：err = %v，命令租户 %q；want ErrMalformedRequest", key, err, adopt.TenantID.String())
+			}
+			correction, err := intake.IntakeExternalFundsFactCorrectionRegistration(context.Background(),
+				commandRequest(`{"`+key+`":"SYN-TENANT-OTHER",`+correctionRest))
+			if !errors.Is(err, settlementhttp.ErrMalformedRequest) {
+				t.Fatalf("更正口键 %q：err = %v，命令租户 %q；want ErrMalformedRequest", key, err, correction.TenantID.String())
+			}
+		})
+	}
+}

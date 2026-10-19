@@ -246,3 +246,21 @@ func TestNewIntegrationClientIntakeRejectsMissingDependencies(t *testing.T) {
 		t.Fatal("缺时钟被接受")
 	}
 }
+
+// tenantKeyCaseVariants 是 encoding/json 会解进 `json:"tenantId"` 格的那些键：它匹配字段名不分大小写，所以
+// 拒自报只认精确键，变体就会顶着认证租户落到别的租户（票 operator-channel/52）。
+var tenantKeyCaseVariants = []string{"tenantId", "TenantId", "tenantID", "tenantid", "tenantiD", "TENANTID"}
+
+func TestIntegrationClientIntakeRefusesEveryLetterCaseOfASelfReportedTenantOnCredentials(t *testing.T) {
+	intake := clientIntakeForTest(t, nil)
+	rest := strings.TrimPrefix(regulatoryCredentialBody, "{")
+	for _, key := range tenantKeyCaseVariants {
+		t.Run(key, func(t *testing.T) {
+			body := `{"` + key + `":"SYN-TENANT-OTHER",` + rest
+			command, err := intake.IntakeRegulatoryCredentialRegistration(context.Background(), commandRequest(body))
+			if !errors.Is(err, customshttp.ErrMalformedRequest) {
+				t.Fatalf("键 %q：err = %v，命令租户 %q；want ErrMalformedRequest", key, err, command.TenantID.String())
+			}
+		})
+	}
+}
