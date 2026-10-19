@@ -1,7 +1,7 @@
 # 01 TF 构造门按登记册存得下的值收：零时刻之后不足一微秒的业务时间写得进、读不回，引用里的 NUL 答 500
 
 Category: bug
-Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 代决并认领（分支 `claude-tfa01`）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: in-progress——2026-10-19 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 代决并认领（分支 `claude-tfa01`）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment-load-assignment-registrations, /transport-fulfillment/movement-facts, /transport-fulfillment/delivery-attempts
@@ -155,3 +155,10 @@ Blocked by: 无
 证据层级：`S`（隔离合成，`SYN-` 值）。
 
 评审：待会话读 diff 审。
+
+## Comments
+
+- **评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审）· 钉 `3fca0462`（基线 `62683e80`）· 2026-10-19**：代码出自本会话起的实施子代理，会话读 diff 审，不算非作者评审，如实记下。
+  - **Spec**：阻断无。装载分配 `FormLoadAssignment` / `ReviseMembers` / `Withdraw` 与移动事实 `RecordMovementFact` / `Correct` 的时刻非零门改按 `AtRegistryPrecision` 判、存值不变；`AtRegistryPrecision` 头注补「时刻非零门同属此类」；`newRequiredValue` 拒 NUL（`ErrValueContainsNUL`），各构造门照旧折成未受理。票面各格复现，变异自检逐处转红。
+  - **Standards**：阻断无。派送尝试的未受理在线上是该口原有的 `SOURCE_NOT_ACCEPTED`，不改。
+  - **地盘外同病**：立 tf-face-algebra/14（其余各口判零、三处自由文本不拒 NUL、移动事实更正门与重建门口径不一）。
