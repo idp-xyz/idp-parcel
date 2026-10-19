@@ -15,11 +15,11 @@ var (
 	ErrDuplicateRelease = errors.New("transport fulfillment: the release reference is already taken")
 )
 
-// CapacityDemandSourceKind 说一份需求量从哪来（ADR-0203 决定三）。封闭词就是下面两种：运营人员声明的一版需求，或运输
-// 准备结果固定下来的需求快照。
+// CapacityDemandSourceKind 说一份需求量从哪来（ADR-0203 决定三）。封闭词就是下面这几种：运营人员声明的一版需求，或
+// 运输准备结果固定下来的需求快照。
 //
 // 封闭而不收自由串：CONTEXT 要每次容量申请固定「采用的测量/数量版本」，来源种类是读的人回头核这个量的入口——自由串
-// 拼错一次，这份预占就再也对不回它的依据。要第三种来源是产品改动，不是租户取值。
+// 拼错一次，这份预占就再也对不回它的依据。再加一种来源是产品改动，不是租户取值。
 type CapacityDemandSourceKind uint8
 
 const (

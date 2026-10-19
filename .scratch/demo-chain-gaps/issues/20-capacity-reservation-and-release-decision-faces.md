@@ -40,7 +40,7 @@ M
 2. **单位须等于池的单位**：按字面比，不换算、不归一大小写，不符答新格 `UNIT_MISMATCH` 并交回池。单位要声明，不从池上默认。
 3. **硬上限按预占整段判**：预占从判断时点起占到有效期满，释放从它的时点起归还；新预占在 [判断时点, 有效期] 每一刻都不得超上限，取整段最紧那一刻判（领域 `CapacityPool.AvailableThrough`），`CAPACITY_EXCEEDED` 报的余量就是那一刻的。没取服务端时钟：ADR-0023 业务时间由提交方给，按整段判已经不需要时钟。
 4. **释放有身份**：释放引用在池内唯一（库面主键同），同引用同预占同内容答 `EXISTING_RELEASE`、不再还一份；异内容或挪到另一份预占答 `RELEASE_CONFLICT`。预占重放改为整份比对（数量、单位、来源、判断时点、有效期），此前只比数量。
-5. **新格与改名**：`POOL_NOT_FOUND`、`RESERVATION_NOT_FOUND`、`UNIT_MISMATCH`、`EXISTING_RELEASE`、`RELEASE_CONFLICT`；冲突、单位不符、超出、过期、守恒撞线各格都交回池（与那一份预占）。容量编排`未受理`的线上名 `SOURCE_NOT_ACCEPTED` 改为 `INPUT_NOT_ACCEPTED`，与 TF 其余运营决定口、登记口同名；容量池登记口随之改名（全仓只有它的一条 tfhttp 用例钉这个词，管理台与 CLI 都不消费）。
+5. **新格与改名**：`POOL_NOT_FOUND`、`RESERVATION_NOT_FOUND`、`UNIT_MISMATCH`、`EXISTING_RELEASE`、`RELEASE_CONFLICT`；冲突、单位不符、超出、过期、守恒撞线各格都交回池（与那一份预占）。容量编排`未受理`的线上名 `SOURCE_NOT_ACCEPTED` 改为 `INPUT_NOT_ACCEPTED`，与 TF 其余运营决定口、登记口同名；容量池登记口随之改名（取证于 `38916b00`：钉这个词的只有容量池登记口的 tfhttp 用例，管理台与 CLI 都不消费）。
 6. **并发**：读池一律 `FOR UPDATE`（事务里锁到结束，事务外随语句放）。先写过「只在写事务里加锁」，要先问一次写执行器，`FindByKey` 就被 PBC-08 门禁认成无事务即拒的写口，改成一律加锁。没走乐观版本列：要改 `ports.go` 的容量池端口签名（方案 X4）。
 7. **次序**：载荷构造门（不读池）→ 读池 → 重放与冲突 → （释放）预占在册 → 单位 → 上限或过期、守恒 → 落池。重放判在单位与上限之前，池满时原样重交仍答已有。
 8. **迁移 TF 0030**：取协调方分的号。预占表有行即拒绝施加（此前没有生产写入口）；预占加来源两列与判断时点、有效期须晚于判断时点；新 `capacity_release` 子表，释放引用池内唯一、随预占删。`released` 列保留给查阅册求和，它与明细之和相等由领域重建门核（库面不钉跨表）。
@@ -55,7 +55,7 @@ M
 
 ### 越权风险点
 
-见 ADR-0203 文末十条（无池即无保护、声明值、来源不回读、软超配归 psb/09、粒度、判断时点由声明方给、读池一律加锁、逐份预占无查阅册、种类粒度、缩容后余量可为负）。本票另有：
+见 ADR-0203 文末越权风险点（无池即无保护、声明值、来源不回读、软超配归 psb/09、粒度、判断时点由声明方给、读池一律加锁、逐份预占无查阅册、种类粒度、缩容后余量可为负）。本票另有：
 
 1. **容量池登记口`未受理`改名**（TF owner、前端 owner）：`SOURCE_NOT_ACCEPTED` → `INPUT_NOT_ACCEPTED`。仓内没有别的消费者；仓外若有人按旧词判，会认不出。
 2. **读锁对同波票 18 的影响**（TF owner）：准备评估若在事务里经 `FindByKey` 读池，会与并发的预占在池行上串行；只读评估不该长时间持锁。
@@ -64,7 +64,7 @@ M
 ### 做了什么
 
 - 领域：新 `domain/capacity_demand.go`（`CapacityDemandSourceKind` 封闭两词、`CapacityDemandSourceReference`、`CapacityDemandSource`、`CapacityDemand`、`CapacityReleaseReference`，哨兵 `ErrInvalidCapacityDemand`、`ErrCapacityUnitMismatch`、`ErrDuplicateRelease`）；`transport_schedule_capacity.go` 预占加单位、来源、判断时点与释放明细，`CapacityRelease`，`Declares` 整份比对，占用按判断时点起算、释放按时点归还，`AvailableThrough`，`Reserve`、`Release` 改收需求量，`ReleaseFor`，快照与重建门带来源、判断时点与释放明细并核和。
-- 编排：`prepare_transport_opportunity.go` 的 `Reserve`、`Release` 带需求来源与新次序、五个新格、`未受理`改名，`OpportunityResult.Reservation`、`Release`；`loadPool` 只受理池引用，不在册答 `POOL_NOT_FOUND`。
+- 编排：`prepare_transport_opportunity.go` 的 `Reserve`、`Release` 带需求来源与新次序、新格、`未受理`改名，`OpportunityResult.Reservation`、`Release`；`loadPool` 只受理池引用，不在册答 `POOL_NOT_FOUND`。
 - postgres：`capacity_pool.go` 读写来源、判断时点与释放明细，读池 `FOR UPDATE`；迁移 `migrations/transport_fulfillment/0030_capacity_reservation_demand_and_release.sql`。
 - access-identity：`operation_decision.go` 追加两种；迁移 `migrations/access_identity/0012_capacity_reservation_and_release_decisions.sql`。
 - tfhttp：新 `reserve_capacity.go`、`release_capacity.go`；`operator_decision_intake.go` 追加两个决定常量与接口断言。

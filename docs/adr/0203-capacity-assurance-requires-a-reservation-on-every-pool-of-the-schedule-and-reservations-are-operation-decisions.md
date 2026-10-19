@@ -68,7 +68,7 @@ Date: 2026-10-19
 
 ## Consequences
 
-- 代码（票 20）：access-identity 决定种类 `DecisionCapacityReservation`、`DecisionCapacityRelease`；TF 领域新 `CapacityDemand`、`CapacityDemandSource`（种类封闭）、`CapacityReleaseReference`、`CapacityRelease`，`CapacityPool.Reserve`、`Release` 改收需求量，新 `AvailableThrough`；编排 `Reserve`、`Release` 带需求来源，多五格（`POOL_NOT_FOUND`、`RESERVATION_NOT_FOUND`、`EXISTING_RELEASE`、`RELEASE_CONFLICT`、`UNIT_MISMATCH`）；tfhttp 新预占口与释放口；容量池册读池加行锁。
+- 代码（票 20）：access-identity 决定种类 `DecisionCapacityReservation`、`DecisionCapacityRelease`；TF 领域新 `CapacityDemand`、`CapacityDemandSource`（种类封闭）、`CapacityReleaseReference`、`CapacityRelease`，`CapacityPool.Reserve`、`Release` 改收需求量，新 `AvailableThrough`；编排 `Reserve`、`Release` 带需求来源，新格（`POOL_NOT_FOUND`、`RESERVATION_NOT_FOUND`、`EXISTING_RELEASE`、`RELEASE_CONFLICT`、`UNIT_MISMATCH`）；tfhttp 新预占口与释放口；容量池册读池加行锁。
 - 迁移：TF `0030`（预占加来源与判断时点、有效期须晚于判断时点，新释放明细子表、释放引用池内唯一、随预占删；预占表有行即拒绝施加）；access-identity `0012`（决定种类约束重建，列各份重建的并集，另预列 ADR-0202 已定名的 `BOOKING_REQUEST_SUBMISSION`）。
 - 接口：`POST /transport-fulfillment-capacity-reservations`、`POST /transport-fulfillment-capacity-releases`，挂操作者渠道的运营决定面；装配另立 `cmd/parcel-api/assemble_capacity_reservation.go`，每次决定一笔事务。
 - 演示种子：配置员两种决定的授予、准入对照与权威区间各两行；种子不预登预占。

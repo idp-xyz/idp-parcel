@@ -463,7 +463,7 @@ func (handler *PrepareTransportOpportunityHandler) Release(
 	return out, err
 }
 
-// capacityDemandFrom 把命令里的需求量四格过构造门。哪一格不成立都是改载荷，不分格。
+// capacityDemandFrom 把命令里的需求量各格过构造门。哪一格不成立都是改载荷，不分格。
 func capacityDemandFrom(quantity int64, unit, sourceKind, sourceReference string) (domain.CapacityDemand, error) {
 	unitRef, err := domain.NewQuantityUnitReference(unit)
 	if err != nil {
