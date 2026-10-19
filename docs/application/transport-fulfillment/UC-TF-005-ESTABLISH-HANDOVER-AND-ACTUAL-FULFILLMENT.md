@@ -92,7 +92,7 @@
 | 6 | 执行方/伙伴接入 | 接收出发、移动、到达、中断和资源变化事实；出发在写入之前逐对象向 `customs-compliance` 拉取门禁读数 | 保存来源，不直接修改计划；出发与读数同一笔落册 |
 | 7 | `transport-fulfillment` | 形成下一次交接或控制结束结果 | 结束相应对象参与关系，其他对象继续 |
 | 8 | `transport-fulfillment` | 发布稳定事实引用给路由、追踪、异常和 `parcel-shipment` | 发布失败只重试同一意图 |
-| 9 | `transport-fulfillment`（段已采用委托）/ 运输运营（运营决定） | 段已采用运输委托的，派发进程随交接与有效交付信封找出被这件事实结束的参与，经同一个登记用例自动形成实际履约发生项，旅程取参与入场时已开始的替代 / 退运旅程、否则派生 `JRN/<包裹>`，登记者是本上下文的系统身份；没有采用连线的段不自动形成、不推断自营（[ADR-0218](../../adr/0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md)）。其余由运营决定在参与结束之后另行登记实际履约的运输收费发生项：事实取段内已结束的参与，采购上下文由登记方给出并经协议核对，发生条件、数量与单位按采用的那一版协议声明的收费发生条件定，段已采用运输委托时采购上下文取委托快照、登记方可以不给，发生项与已形成信封同笔落地（[ADR-0207](../../adr/0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md)、[ADR-0209](../../adr/0209-supplier-agreements-declare-charge-occurrence-conditions-and-registration-judges-by-them.md)；ADR-0207 文末补记） | 只固定发生事实，金额交给 `parcel-pricing` 与 `settlement-accounting`；不内联进交接或交付编排；协议没声明答未配置；自动形成读不动时信封重投，不回滚交接与交付 |
+| 9 | `transport-fulfillment`（段已采用委托）/ 运输运营（运营决定） | 段已采用运输委托的，由派发进程随交接与有效交付信封经同一个登记用例自动形成实际履约发生项（找哪一条参与、旅程与登记者的取法见 [ADR-0218](../../adr/0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md)）。其余由运营决定在参与结束之后另行登记实际履约的运输收费发生项：事实取段内已结束的参与，采购上下文由登记方给出并经协议核对，发生条件、数量与单位按采用的那一版协议声明的收费发生条件定，段已采用运输委托时采购上下文取委托快照、登记方可以不给，发生项与已形成信封同笔落地（[ADR-0207](../../adr/0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md)、[ADR-0209](../../adr/0209-supplier-agreements-declare-charge-occurrence-conditions-and-registration-judges-by-them.md)；ADR-0207 文末补记） | 只固定发生事实，金额交给 `parcel-pricing` 与 `settlement-accounting`；不内联进交接或交付编排；协议没声明答未配置；自动形成读不动时信封重投，不回滚交接与交付 |
 
 ## 交接与实际履约规则
 
@@ -201,8 +201,8 @@
 | `AT-TF-251` | 交接是拒收或待确认；`已交接`但对象不在任何段里，或在段里的参与没被它结束 | 没有参与被这件事实结束，入账，不交登记用例 |
 | `AT-TF-252` | 对象在参与入场之前已开始一趟替代或退运旅程 | 发生项挂在开始最晚、且不晚于入场的那一趟上；没有就派生 `JRN/<包裹>`；同一刻开始两趟响亮失败 |
 | `AT-TF-253` | 交接读不回或读不动，段登记册、采用连线、旅程册或协议核对口读不动 | 未决，登本路哨兵重投；发生项、已形成信封与 inbox 已处理整笔回滚；读得动后重投形成 |
-| `AT-TF-254` | 委托在迁移 0038 之前提交、没记下协议版本；或协议按段计、同一段第二件的参与结束 | 分别答缺采购上下文、范围已计过，都入账 |
-| `AT-TF-255` | 本上下文交出的键过不了自己的门，同一件事实在多个段里结束了参与，或登记用例答不适用、缺采购上下文以外的未受理 | 响亮失败，不入账也不登哨兵 |
+| `AT-TF-254` | 委托在迁移 0038 之前提交、没记下协议版本；委托那一版在业务时间未生效；或协议按段计、同一段第二件的参与结束 | 分别答缺采购上下文、协议未生效、范围已计过，都入账 |
+| `AT-TF-255` | 本上下文交出的键过不了自己的门，同一件事实在多个段里结束了参与，或登记用例答不适用、缺采购上下文以外的未受理、协议不在册、供应商不符、采购上下文冲突 | 响亮失败，不入账也不登哨兵 |
 
 ## 给开发的交接
 
