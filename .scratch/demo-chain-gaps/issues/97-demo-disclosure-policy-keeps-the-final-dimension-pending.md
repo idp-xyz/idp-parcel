@@ -1,7 +1,7 @@
 # 97 演示披露策略把 `SYN-ACCOUNT-01` 的终局一维登成待确认，有效交付之后客户视图的终局仍不展示
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg97（2026-10-19 Claude Code 子代理立：演示动线重走，[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)「重走（钉 `8197fa2f`，2026-10-19）」停点三）。
+Status: resolved——2026-10-19 进 main（全量钉 `fe5a198c`：153 ok / 0 FAIL；psb/05 重走停点修复同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg97（2026-10-19 Claude Code 子代理立：演示动线重走，[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)「重走（钉 `8197fa2f`，2026-10-19）」停点三）。
 Blocked by: 无（客户在动线上看得见这一维，要等 [96](./96-customer-tracking-view-has-no-first-party-customer-intake.md)）
 地盘：种子 `scripts/demo-seeds/data/visibility/`（披露策略新一版）、`seed.sh` 一行、种子 README 组成表 `data/visibility/` 那一行。
 出处：VE CONTEXT 生命周期「当前投影、客户可见 ETA、客户服务终局或已批准披露内容首次满足展示条件 → 形成……客户视图版本」；[UC-VE-008](../../../docs/application/visibility-exception/UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md)。
@@ -122,3 +122,9 @@ S（种子）
 5. **票 103「要裁的」第二条**：已注明。今天 `FormParcelFinalHandler` 只在同来源种类时走重派生，换种类走不采用，这一格只在 ADR-0138（Proposed）落地后才可能出现。
 
 复跑：`go build ./...`；`go vet ./internal/visibilityexception/...`；`gofmt -l` 干净。真库 `-p 1 -count=1` 下 `./internal/visibilityexception/...` 与 `./internal/architecture/` 全过。变异检查：`FinalDimensionOver` 改成恒放行后，领域表驱动里策略准许而没有已采用终局的各格全部失败，编排的 `TestAPermittedFinalPendsUntilTheProjectionCarriesTheAdoptedFinal` 与 `TestANotAdoptedFinalJudgmentDoesNotShowTheFinal` 失败；改回即过。种子与机制清点本轮没动。
+
+## 进 main 记录（2026-10-19）
+
+- 与 95、96、97、98、routing-first-cut/20、demo-chain-gaps/43 合成一批（psb/05 重走钉 8197fa2f 的停点修复），按 95 → 96 → 97 → routing-first-cut/20 → 43 → 98 叠到 main 上，整批快进推送，与本记录同一次推送。只有演示动线文档与 AT 覆盖盘点的追加段要合，两边都留；票 98 立的 107、108 与票 97 立的 107 撞号，改为 109、110。
+- 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `fe5a198c`：153 包 ok，0 FAIL，0 SKIP。机制清点在同一 tip 上重生成。

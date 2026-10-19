@@ -1,7 +1,7 @@
 # 96 客户追踪视图口还挂字面量未配置，首方客户渠道读不到已形成的客户视图
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg96（2026-10-19 作者子代理，见文末「完成记录」与「评审记录」；隔离评审 0 阻断，非阻断已按评审记录处置）。此前 needs-triage——2026-10-19 Claude Code 子代理立（演示动线重走，[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)「重走（钉 `8197fa2f`，2026-10-19）」停点二）。
+Status: resolved——2026-10-19 进 main（全量钉 `fe5a198c`：153 ok / 0 FAIL；psb/05 重走停点修复同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg96（2026-10-19 作者子代理，见文末「完成记录」与「评审记录」；隔离评审 0 阻断，非阻断已按评审记录处置）。此前 needs-triage——2026-10-19 Claude Code 子代理立（演示动线重走，[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)「重走（钉 `8197fa2f`，2026-10-19）」停点二）。
 Blocked by: 无
 地盘：首方客户族的查询 Intake（`internal/accessidentity` 或 VE `adapters/http`，照提交口那一口的分法）；`cmd/parcel-api/endpoints.go` 里 `/customer-tracking-view` 那一行；能力词表；种子 `scripts/demo-seeds/data/access/08` 一行授予与 README 授予说明。
 出处：[ADR-0139](../../../docs/adr/0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md) 决定四（覆盖面点名查阅面的 `/customer-tracking-view`，逐端点换）、决定八（查阅口不判准入范围）；[UC-VE-008](../../../docs/application/visibility-exception/UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md)。
@@ -161,3 +161,9 @@ S–M
 - `go build ./...`、`go vet`（`./internal/accessidentity/...`、`./internal/visibilityexception/...`、`./cmd/parcel-api/`）、`gofmt -l internal cmd` 都干净。
 - 带 DSN、`-p 1 -count=1` 跑 `./internal/accessidentity/...`、`./internal/visibilityexception/...`、`./cmd/parcel-api/`、`./internal/architecture/`，全部 ok。`cmd/parcel-api` 的真库用例单跑 `-v` 确认实跑、没有跳过。
 - 种子与迁移本轮没改，没重灌。全量与机制清点照约定留到进 main。
+
+## 进 main 记录（2026-10-19）
+
+- 与 95、96、97、98、routing-first-cut/20、demo-chain-gaps/43 合成一批（psb/05 重走钉 8197fa2f 的停点修复），按 95 → 96 → 97 → routing-first-cut/20 → 43 → 98 叠到 main 上，整批快进推送，与本记录同一次推送。只有演示动线文档与 AT 覆盖盘点的追加段要合，两边都留；票 98 立的 107、108 与票 97 立的 107 撞号，改为 109、110。
+- 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `fe5a198c`：153 包 ok，0 FAIL，0 SKIP。机制清点在同一 tip 上重生成。

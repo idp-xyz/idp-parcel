@@ -1,7 +1,7 @@
 # 43 演示成本卡绑分区目录：干线发生项往下的 BUY 评价越过 ZONE_UNRESOLVED，形成供应商预期成本
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcgrfc20（2026-10-19 作者子代理，与 routing-first-cut/20 同一分支、在它之后落，见文末「完成记录」与「评审记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [27](./27-transport-charge-occurrences-are-registered-and-handed-off.md) 的隔离评审：27 的完成判据「BUY 评价 → ADR-0200 形成供应商预期成本」没有走通，移交本票。Blocked by 解除之前不认领。
+Status: resolved——2026-10-19 进 main（全量钉 `fe5a198c`：153 ok / 0 FAIL；psb/05 重走停点修复同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcgrfc20（2026-10-19 作者子代理，与 routing-first-cut/20 同一分支、在它之后落，见文末「完成记录」与「评审记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [27](./27-transport-charge-occurrences-are-registered-and-handed-off.md) 的隔离评审：27 的完成判据「BUY 评价 → ADR-0200 形成供应商预期成本」没有走通，移交本票。Blocked by 解除之前不认领。
 Blocked by: 无（[routing-first-cut/20](../../routing-first-cut/issues/20-bound-cost-cards-fold-zones-through-the-parcel-postal-route.md) 同一分支先落）
 地盘：同票 [30](./30-buy-cost-card-declares-amount-rounding.md)——`scripts/demo-seeds/data/pricing/price-card-cn-sg-cost.json`、`scripts/demo-seeds/seedgen` 里成本卡与模板夹具同摘要的那一处、`seed.sh` 一行（若需要）；README「已知边界」里票 27 记的那一条。
 出处：票 27 完成记录「偏离与待裁」第 2 条（甲路）；票 30 完成记录「待裁」；[ADR-0189](../../../docs/adr/0189-leg-pricing-zones-are-supplied-per-card-and-unbound-cards-take-a-registered-leg-zone.md) 决定一第一条、越权风险点 3。
@@ -103,3 +103,9 @@ Blocked by: 无（[routing-first-cut/20](../../routing-first-cut/issues/20-bound
 - **代决「段计价区域的种子三行保留」理由过时**——修了。原理由「删要动 `seed.sh` 既有行与 `data/network/`，那是在途票 64 的地盘」不成立：票 64 在基 `5f0aa66d` 上已进 main。改为「段计价区域册只增不改，去留随票 104 一并裁」，保留三行的结论不变。眼下改 `seed.sh` 与 README 的在途分支是 `claude-dcg96`、`dcg97`、`dcg98`，进 main 时 README 的冲突按这三支来预期，不再按 `claude-dcg64`。
 
 评审那一侧还有一项和本票有关，修在票 20：演示成本卡绑了目录之后，票 18 那条真库用例改走目录那一路；「没绑目录的卡照旧取段计价区域」另补了一条真库用例。演示种子没改，没重灌。
+
+## 进 main 记录（2026-10-19）
+
+- 与 95、96、97、98、routing-first-cut/20、demo-chain-gaps/43 合成一批（psb/05 重走钉 8197fa2f 的停点修复），按 95 → 96 → 97 → routing-first-cut/20 → 43 → 98 叠到 main 上，整批快进推送，与本记录同一次推送。只有演示动线文档与 AT 覆盖盘点的追加段要合，两边都留；票 98 立的 107、108 与票 97 立的 107 撞号，改为 109、110。
+- 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `fe5a198c`：153 包 ok，0 FAIL，0 SKIP。机制清点在同一 tip 上重生成。

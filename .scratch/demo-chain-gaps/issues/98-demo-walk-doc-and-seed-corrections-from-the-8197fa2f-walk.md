@@ -1,7 +1,7 @@
 # 98 照 `8197fa2f` 那次重走改演示动线与种子：交接载荷、自营段四步、重量行整数、私有集成客户端发行方，后两段运输准备落空
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg98（完成记录与评审记录见文末）。此前 ready-for-agent——2026-10-19 Claude Code 子代理立（演示动线重走，[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)「重走（钉 `8197fa2f`，2026-10-19）」停点六，与「逐段」里「初始路由与运输准备」那一条），同一子代理接手。用户「你作为业务和系统专家自决……解决所有的问题」授权。
+Status: resolved——2026-10-19 进 main（全量钉 `fe5a198c`：153 ok / 0 FAIL；psb/05 重走停点修复同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg98（完成记录与评审记录见文末）。此前 ready-for-agent——2026-10-19 Claude Code 子代理立（演示动线重走，[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)「重走（钉 `8197fa2f`，2026-10-19）」停点六，与「逐段」里「初始路由与运输准备」那一条），同一子代理接手。用户「你作为业务和系统专家自决……解决所有的问题」授权。
 Blocked by: 无
 地盘：`docs/design/synthetic-demo-journey-script.md`（只追加补记）；`scripts/demo-seeds/README.md`（组成表、数据故事第 8 条与「集成客户端渠道」一节只追加）；`scripts/demo-seeds/data/transport/` 新增周期安排；`scripts/demo-seeds/seed.sh` 追加一节。不改代码。
 出处：psb/05 那一节停点六的建议句，与停点一里「动线文档该补一句」那一条；运输准备的停点在「逐段」的「初始路由与运输准备」。
@@ -145,3 +145,9 @@ S
 - 一次性库 `dcg98_review` 上 `seed.sh` 灌入退 0，`07`–`23` 逐份 `TEMPLATE_REGISTERED`；用完 `DROP DATABASE … WITH (FORCE)`。
 - `git merge-tree`：与 claude-dcg96、claude-dcg97 无冲突；与 claude-dcg95 在动线上仍有内容冲突。两支都在同一位置追加补记，这一处冲突躲不开，合法见「偏离与待裁」。
 - 没有重走动线：本轮只改文字与注释，补记里的实走证据不变。
+
+## 进 main 记录（2026-10-19）
+
+- 与 95、96、97、98、routing-first-cut/20、demo-chain-gaps/43 合成一批（psb/05 重走钉 8197fa2f 的停点修复），按 95 → 96 → 97 → routing-first-cut/20 → 43 → 98 叠到 main 上，整批快进推送，与本记录同一次推送。只有演示动线文档与 AT 覆盖盘点的追加段要合，两边都留；票 98 立的 107、108 与票 97 立的 107 撞号，改为 109、110。
+- 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `fe5a198c`：153 包 ok，0 FAIL，0 SKIP。机制清点在同一 tip 上重生成。

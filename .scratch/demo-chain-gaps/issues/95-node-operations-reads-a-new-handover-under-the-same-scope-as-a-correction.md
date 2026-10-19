@@ -1,7 +1,7 @@
 # 95 同一（对象，范围）下另起一次交接：TF 当独立首登，NO 当前一次的更正，在身控制在错的那次交接转出
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-dcg95（基于 `origin/main` `5f0aa66d`），见文末「完成记录」；隔离评审 0 阻断，非阻断 4 项全修，见文末「评审记录」。此前 needs-triage——2026-10-19 Claude Code 子代理立（演示动线重走，[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)「重走（钉 `8197fa2f`，2026-10-19）」停点一）。
+Status: resolved——2026-10-19 进 main（全量钉 `fe5a198c`：153 ok / 0 FAIL；psb/05 重走停点修复同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg95（基于 `origin/main` `5f0aa66d`），见文末「完成记录」；隔离评审 0 阻断，非阻断 4 项全修，见文末「评审记录」。此前 needs-triage——2026-10-19 Claude Code 子代理立（演示动线重走，[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)「重走（钉 `8197fa2f`，2026-10-19）」停点一）。
 Blocked by: 无
 地盘：二选一，见「要裁的」——TF `application/register_transport_handover.go` 首登那一步；或 NO `adapters/postgres/physical_control_transition.go` 的 `FindAdvancedInHandoverChain` 与 `application/transfer_control_on_handover.go`。文档 ADR-0214 补记、UC-NO-005。
 出处：[ADR-0214](../../../docs/adr/0214-node-control-transfers-out-and-in-on-an-authoritative-transport-handover.md) 越权风险点「同链按（对象，范围）认」；[UC-NO-005](../../../docs/application/node-operations/UC-NO-005-ADVANCE-NODE-CONTROL-ON-AN-AUTHORITATIVE-TRANSPORT-HANDOVER.md)。
@@ -159,3 +159,9 @@ S–M
 地盘说明：协调方的协作边界把 `internal/nodeoperations/**` 列为 idp-parcel-9b 的在途地盘。本轮只改本票已经改过的那几个 NO 文件里的注释，没有新增文件，也没有改代码行；`cmd/parcel-dispatch/assemble_node_control_on_handover.go` 不在热点名单内，本票此前没有改过它，这次只改了注释。
 
 修后验证：`go build ./...` 干净；`gofmt -l internal cmd migrations` 干净；`go vet ./internal/nodeoperations/... ./cmd/parcel-dispatch/ ./internal/architecture/` 干净；`IDP_PARCEL_POSTGRES_DSN=… go test -p 1 -count=1 ./internal/nodeoperations/... ./internal/architecture/ ./cmd/parcel-dispatch/` 全 ok。改动只在注释与文档，演示种子未动，未复跑演示，没重生成机制清点。
+
+## 进 main 记录（2026-10-19）
+
+- 与 95、96、97、98、routing-first-cut/20、demo-chain-gaps/43 合成一批（psb/05 重走钉 8197fa2f 的停点修复），按 95 → 96 → 97 → routing-first-cut/20 → 43 → 98 叠到 main 上，整批快进推送，与本记录同一次推送。只有演示动线文档与 AT 覆盖盘点的追加段要合，两边都留；票 98 立的 107、108 与票 97 立的 107 撞号，改为 109、110。
+- 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `fe5a198c`：153 包 ok，0 FAIL，0 SKIP。机制清点在同一 tip 上重生成。

@@ -1,7 +1,7 @@
 # 20 绑了分区目录的成本卡：候选成本经包裹邮编路线与 parcel-pricing 读数补全取区
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcgrfc20（2026-10-19 作者子代理，见文末「完成记录」与「评审记录」）。此前 ready-for-agent——2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决」授权），ADR-0189 决定四拆出的那一步。
+Status: resolved——2026-10-19 进 main（全量钉 `fe5a198c`：153 ok / 0 FAIL；psb/05 重走停点修复同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcgrfc20（2026-10-19 作者子代理，见文末「完成记录」与「评审记录」）。此前 ready-for-agent——2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决」授权），ADR-0189 决定四拆出的那一步。
 Blocked by: 无（[18](./18-leg-endpoints-folded-into-price-card-zones.md) 已落段计价区域那一路）
 出处：[ADR-0189](../../../docs/adr/0189-leg-pricing-zones-are-supplied-per-card-and-unbound-cards-take-a-registered-leg-zone.md) 决定一第一条、决定四；ADR-0152 决定三（估价与正式评价同一份读数补全）。
 
@@ -113,3 +113,9 @@ ADR-0189 文末补记接正文编号续写，这里只列标题：
 - 演示种子没改，没在一次性库上重灌；没跑全量，没重生成机制清点。
 - 号：立票自取 `105`。协调方这批没给本票预分票号，评审要求「号接现有最大号」。本树最大是 104；查过在途分支 `claude-dcg95`–`dcg98`、`claude-psxm14` 的新票号（最高到 108，其中 106–108 已占），105 都没有占用。没有新取 AT 号、迁移号或 ADR 号。
 - 没有被权限检查拦下的改动。
+
+## 进 main 记录（2026-10-19）
+
+- 与 95、96、97、98、routing-first-cut/20、demo-chain-gaps/43 合成一批（psb/05 重走钉 8197fa2f 的停点修复），按 95 → 96 → 97 → routing-first-cut/20 → 43 → 98 叠到 main 上，整批快进推送，与本记录同一次推送。只有演示动线文档与 AT 覆盖盘点的追加段要合，两边都留；票 98 立的 107、108 与票 97 立的 107 撞号，改为 109、110。
+- 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `fe5a198c`：153 包 ok，0 FAIL，0 SKIP。机制清点在同一 tip 上重生成。
