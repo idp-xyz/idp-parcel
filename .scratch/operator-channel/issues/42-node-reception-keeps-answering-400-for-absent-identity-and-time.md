@@ -1,7 +1,7 @@
 # 42 作业事实面上缺席的身份与时刻答哪一格：NO 收寄答 400，TF 交编排答未受理——NO 一侧与票 08「缺席交编排」不符
 
 Category: task
-Status: in-progress——2026-10-19 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-oc42`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 5 研判）
+Status: resolved——2026-10-19 进 main（与 tf-face-algebra/01、operator-channel/37、42 同批，代码验证钉 `003a1f36`），见「进 main 记录」。此前 in-progress——2026-10-19 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-oc42`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 5 研判）
 Blocked by: operator-channel/29 已进 main（ADR-0186 在场）
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判簇 C4 第六张草案
@@ -55,3 +55,8 @@ NO 收寄缺席的事实身份与发生时刻，答哪一格：
 ## Comments
 
 - **评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审）· 钉 `10c2583c`（基线 `32a9d03f`）· 2026-10-19**：出自本会话起的子代理，会话读 diff 审，不算非作者评审。ADR-0186 文末追加复核记录三条、Decision 原文未动，与裁定 (b) 一致；票 08 Comments 只加一行；新用例 `TestWorkFactReceptionAnswers400ForAbsentFactIdentityOrOccurrenceTime` 钉现状（缺事实身份、空白事实身份、缺发生时刻、空发生时刻各答 400），首跑即绿、非先红后绿，完成记录如实写。阻断无，非阻断无。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 同批三张（tf-face-algebra/01、operator-channel/37、42）依次重放到远端 main `32a9d03f` 之上，机制清点在重放后的树上重生成；原分支 SHA 作封存出处。
+- 推送方全量一次：钉 `003a1f36` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 143 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
