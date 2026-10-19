@@ -1,7 +1,7 @@
 # 05 第三期：身份核对读不动翻成`待识别实物已建立` + 身份核对态「未核对」——ADR-0186 决定二（草案 C1-T1）身份支的 5xx 由本票翻转
 
 Category: enhancement
-Status: ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）；Blocked by 里原挂的用户决定已于 2026-10-19 由会话 idp-parcel-9b 代决
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（04 已进 main），分支 `claude-nrs05`；与 no-reception-identity/06 并行，后者先进 main 时本分支 rebase。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）；Blocked by 里原挂的用户决定已于 2026-10-19 由会话 idp-parcel-9b 代决
 Blocked by:
 - 04 进 main（前提「挡住同一作业实物重复形成控制起点」）；02、03 经它已在 main。
 - ~~用户决定~~ 已解：未核对行由什么续上，2026-10-19 会话 idp-parcel-9b 代决取「落未核对行的同一笔事务自投重核门铃」，见 ADR-0199 决定三与越权风险点「未核对行由自投门铃续上」。
