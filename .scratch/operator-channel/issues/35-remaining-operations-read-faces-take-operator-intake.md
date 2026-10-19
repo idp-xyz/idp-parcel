@@ -1,7 +1,7 @@
 # 35 运营查阅面余下各族换操作者 Intake：委托侧、节点、运输、追踪、代收、结算与治理的查阅
 
 Category: enhancement
-Status: 完工，待评审与进 main——2026-10-18 Claude Code 会话，见「完成记录」。此前 in-progress——2026-10-16 Claude Code 会话认领（工作流派单），隔离工作树分支 `claude-oc35`，基 `627dde00`；受众逐口核过，见「受众核对」。此前 ready-for-agent——2026-10-16 Claude Code 会话立并分诊（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [no-directional-basis/01](../../no-directional-basis/issues/01-consolidation-adds-members-without-any-directional-basis.md) 偏离标记半边「运营今天就该看得见」：节点作业查阅在生产装配里仍是未配置 Intake，真实租户访问答 `403 ACCESS_CHANNEL_NOT_CONFIGURED`。
+Status: 完工，待第二轮评审与进 main——2026-10-18 Claude Code 会话，见「完成记录」与「评审与处置」。此前 in-progress——2026-10-16 Claude Code 会话认领（工作流派单），隔离工作树分支 `claude-oc35`，基 `627dde00`；受众逐口核过，见「受众核对」。此前 ready-for-agent——2026-10-16 Claude Code 会话立并分诊（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [no-directional-basis/01](../../no-directional-basis/issues/01-consolidation-adds-members-without-any-directional-basis.md) 偏离标记半边「运营今天就该看得见」：节点作业查阅在生产装配里仍是未配置 Intake，真实租户访问答 `403 ACCESS_CHANNEL_NOT_CONFIGURED`。
 Blocked by: 无
 父票：无。[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 已于 2026-10-16 收口；本票接的是 [05](./05-catalogue-read-faces-take-operator-intake.md) 完成记录里「节点、运输、追踪、代收、结算、治理的查阅仍走隔离读」那一半。
 地盘：`cmd/parcel-api` 端点表里这几只查阅变量的装配行、行注与装配测试（含隔离读用例）；[合成演示动线](../../../docs/design/synthetic-demo-journey-script.md)「前置」与「取证」两节。`endpoints.go` 与 `idp-parcel-9b` 会话约定：改前报行号范围；换完把「节点作业查阅」那一行写着「经写开关放行」的行注改成实情。
@@ -87,3 +87,20 @@ Blocked by: 无
 
 - 委托查阅三口的运营整租户读面与隔离读开关整体退场：[53](./53-shipment-request-views-tenant-wide-operator-read-and-isolated-read-switch-retires.md)。
 - PS、代收、结算、治理四族的认证方与 Intake 只由装配层三格用例覆盖（同 05 对目录四族的做法），没有各包单测；节点、运输、追踪三族另有包内单测。
+
+### 评审与处置（第 1 轮，隔离子代理，Spec 与 Standards 各一；rebase 到 `5959fd08` 后范围改为其后各笔）
+
+Spec 轴（BLOCK，阻断 2）：
+
+1. 委托包的隔离读类型还带面单交易、渠道择优两口的方法、断言与用例，违 ADR-0150 决定三，53 的「只剩委托查阅的方法」也因此失实 —— **已修**：撤两个方法、两条接口断言与那条用例；渠道择优真库用例改由持查阅读授予的合成操作者去读。
+2. `TestIsolatedReadAdmissionIgnoresSelfReportedIdentity` 打的口已撤出放行面，403 比 403 空过 —— **已修**：改打 `/shipment-request-views`，并先断言基线越过了 Intake。
+3. 演示动线「对照组」前两行失实 —— **已修**：改写成发行方、令牌与读开关三态。
+4. 取证表只加了现状注记、没有按新答复格重取 —— **不改**：表锚在 `627d339`，行数是当时的论点；重取随演示动线下一次重走（psb/05）。
+5. 管理台 `apps/admin-web/src/pages/governance/api.ts` 头注仍说治理作用域由隔离读开关配置 —— **记后续**：管理台归前端切片，一人在 main 上直接改，随下一次管理台改动带上。
+
+Standards 轴（BLOCK，阻断 4）：
+
+- B1 同 Spec 2 —— 已修。B2 同 Spec 1 —— 已修。
+- B3 本票实现的几只 Intake 接口头注仍说「真 Intake 未就位」—— **已修**：代收、结算、治理、面单交易、渠道择优各接口改说真实现是 `OperatorOperationsReadIntake`。
+- B4 新注释里的跨文件计数（「委托查阅三口」「结算与核算四页」）—— **已修**：改「委托查阅及其子集视图」「各页」。
+- N1 `endpoints.go` 漏改的失实句（VE 两册写面、价卡与序列写面、商业发布预览的悬空引用）—— 已修。N2 隔离读开关与用例措辞 —— 已修（用例名保留，多处历史票面引它）。N3 变更说明 —— 已修。N4 各 `ErrAccessChannelNotConfigured` 头注 —— 本票改过的几族已修；计价、网络、关务、商业四族同句随 53。N5 演示动线前置的日志说法 —— 已修，分开写缺发行方、缺治理自授权、缺隔离读三种后果。N6 铸造器接口命名 —— 代收、治理改 `Minter`；结算已有 `ClientMinter`，留 `OperatorMinter` 与之并列。
