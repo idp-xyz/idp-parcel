@@ -1,7 +1,7 @@
 # 12 送站交接单：作业事实登记开立、归入、关闭；客户渠道与运营决定两路确认绑定；范围成立时自投门铃重核
 
 Category: enhancement
-Status: in-progress——2026-10-19 评审 0 阻断（阻断一条已修，会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理修完评审阻断（以送站交接单为依据推范围须是它的成员），待复审。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（08、10、11 已进 main），分支 `claude-psxm12`；access_identity 迁移 0016、node_operations 迁移 0016、治理种子 governance/37。此前 ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
+Status: resolved——2026-10-19 进 main（代码验证钉 `ec3dc885`），见「进 main 记录」。此前 in-progress——2026-10-19 评审 0 阻断（阻断一条已修，会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理修完评审阻断（以送站交接单为依据推范围须是它的成员），待复审。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（08、10、11 已进 main），分支 `claude-psxm12`；access_identity 迁移 0016、node_operations 迁移 0016、治理种子 governance/37。此前 ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
 Blocked by:
 - [08](./08-pre-advice-and-handover-note-model-and-window-register.md) 进 main：交接单的领域与册。
 - [10](./10-authorized-delivery-relationship-in-party-commercial.md) 进 main：授权交付判断与 NO 侧适配器。
@@ -65,7 +65,7 @@ Blocked by:
 - [x] 信封各格：作业事实登记、运营决定、客户面三族各自的未配置、令牌无效、未授予、不在准入范围；别族令牌一律拒。
 - [x] 演示实走（`S`）：不带预报送一件，落待识别 → 开交接单并归入 → 运营决定确认 → 识别。
 - [x] Go 门禁：`go build ./...`、`go vet ./...` 退 0，`gofmt -l .` 无输出；带 DSN 跑 `internal/accessidentity/...`、`internal/nodeoperations/...`、`internal/partycommercial/...`、`cmd/parcel-api`、`cmd/parcel-dispatch`、`cmd/parcel-access-register`、`migrations/...`、`scripts/demo-seeds/...`、`internal/architecture/...` 全绿；机制清点重生成。
-- [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
+- [x] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
 
 ## 规模
 
@@ -256,3 +256,8 @@ rebase 到 `8e5125c2` 之后：`gofmt -l .` 无输出；`go build ./...`、`go v
 - **Spec 其余**：ADR-0212 的交接单三步与两路确认落到。作业事实登记三口只在 NODE 作业范围、按三种事实判准入；运营决定确认先看已有结论再问 PC 授权交付判断（问句含开立节点），答否或未配置不落结论、读不动不形成答案；客户渠道只对已关闭、声称了自己账户的交接单下结论，余者同答 404；结论按（交接单，客户账户）只比结论。最后一个账户确认时与归入已成立的交接单时各交「交付范围成立」门铃，落结论取交接单行排他锁、并发确认恰一笔看到成立（反证实测）。重核按交接单只重核可重核的成员。
 - **作者自定的格认可**：两处字面量取 `DELIVERY_HANDOVER_CONFIRMATION`（与预报一族同名）；收寄带交接单标识即落收寄成员（不落则门铃找不到这件）。
 - **与另一会话的共享文件**：`cmd/parcel-api` 四份、`cmd/parcel-dispatch/assemble.go`、`internal/accessidentity` 枚举、`seed.sh` 只追加；access_identity 0016 以 main 上全集为底、治理种子 37–41。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 分支 `claude-psxm12`（作者已 rebase 到 `8e5125c2` 并修评审阻断）直接叠在远端 main 之上快进推送；机制清点重生成零差。
+- 推送方全量一次：钉 `ec3dc885` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 152 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
