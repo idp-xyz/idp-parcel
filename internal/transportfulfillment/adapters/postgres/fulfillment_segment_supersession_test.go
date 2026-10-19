@@ -347,3 +347,38 @@ func TestSupersedeRefusesToRunOutsideATransaction(t *testing.T) {
 		t.Errorf("Supersede 无事务应返回 ErrTransactionRequired，实得：%v", err)
 	}
 }
+
+// TestACarrierPickupEntryRoundTripsBesideOtherMembers 证第三个入场词（ADR-0135 决定五）落得进也读得回：
+// 迁移 0020 的 CHECK 收下 `CARRIER_FIRST_EFFECTIVE_PICKUP`，按键读回却不认它的话，这一名成员会让整段的
+// 终止、交接与进段都读不回段而停住。同段放一名揽收入场的成员，并给承运商那一名接一个替代版本，钉住
+// 「混段」与「替代链」两种读回都走得通。
+func TestACarrierPickupEntryRoundTripsBesideOtherMembers(t *testing.T) {
+	repository, transactor, _ := newSegmentRegistry(t)
+	ctx := t.Context()
+
+	byPickup := activeMember(t, "parcel-1")
+	byCarrier := activeMember(t, "parcel-2")
+	byCarrier.EntryKind = domain.EnteredByCarrierFirstEffectivePickup
+	byCarrier.EntryBasis = segmentRef(t, domain.NewParticipationBasisReference, "CARRIER-FIRST-EFFECTIVE-PICKUP/parcel-2")
+	corrected := supersedingMember(t, byCarrier, "v2", segmentEnteredAtFixture.Add(time.Hour))
+	mustSaveSegment(t, transactor, ctx, repository, segmentRecord(t, "SEG-S010", byPickup, byCarrier, corrected))
+
+	found, present, err := repository.FindByKey(ctx, segmentKeyFixture(t, "tenant-1", "SEG-S010"))
+	if err != nil || !present {
+		t.Fatalf("按键读回凭承运商首次有效收寄入场的段：present=%v err=%v", present, err)
+	}
+	carrierObject := segmentRef(t, domain.NewCarriedObjectReference, "parcel-2")
+	history := found.Segment.ParticipationHistory(carrierObject)
+	if len(history) != 2 {
+		t.Fatalf("承运商那一名的链没有往返：%+v", history)
+	}
+	for _, version := range history {
+		if version.EntryKind() != domain.EnteredByCarrierFirstEffectivePickup {
+			t.Fatalf("入场词没有往返：got %v", version.EntryKind())
+		}
+	}
+	pickupObject := segmentRef(t, domain.NewCarriedObjectReference, "parcel-1")
+	if current, ok := found.Segment.ParticipationFor(pickupObject); !ok || current.EntryKind() != domain.EnteredByOffsitePickup {
+		t.Fatalf("同段揽收入场的那一名没有往返：ok=%v %+v", ok, current)
+	}
+}
