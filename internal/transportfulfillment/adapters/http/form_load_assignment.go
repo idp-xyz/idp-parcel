@@ -39,6 +39,11 @@ func NewFormLoadAssignmentEndpoint(intake LoadAssignmentIntake, assigner LoadAss
 
 // loadAssignmentResponse 是装载分配口的封闭响应形状。**没有任何「已装载」字段**：分配是执行意图不是已经
 // 发生的装载，实际装载、短装、多装或错装是与分配版本比较的独立事实（移动事实那一口）。
+//
+// withdrawn 与 withdrawnAt 两键成对：回显的版本是撤回版时一起在场，否则一起缺席。`分配已形成`回显的是链头，
+// 链头可能是撤回版；缺了这两键，调用方会把已撤回的分配读成仍在生效、转去变化入口，而撤回之后只能另起分配。
+// 非撤回版整键缺席而不答 false 或空串：本包的可空格一律以缺席表「未发生」（optionalInstant 的头注、
+// transportHandoverBody 的 corrects 两键），这里若另用 false 占位，调用方就得为同一种「没有」认两种写法。
 type loadAssignmentResponse struct {
 	Outcome               string   `json:"outcome"`
 	Assignment            string   `json:"assignment,omitempty"`
@@ -46,6 +51,8 @@ type loadAssignmentResponse struct {
 	Members               []string `json:"members,omitempty"`
 	Version               string   `json:"version,omitempty"`
 	AssignedAt            string   `json:"assignedAt,omitempty"`
+	Withdrawn             bool     `json:"withdrawn,omitempty"`
+	WithdrawnAt           string   `json:"withdrawnAt,omitempty"`
 	ContinuationReference string   `json:"continuationReference,omitempty"`
 }
 
@@ -64,6 +71,10 @@ func writeLoadAssignmentOutcome(response http.ResponseWriter, result application
 		}
 		body.Version = record.Assignment.Version().String()
 		body.AssignedAt = rfc3339(record.Assignment.AssignedAt())
+		if withdrawnAt, withdrawn := record.Assignment.Withdrawn(); withdrawn {
+			body.Withdrawn = true
+			body.WithdrawnAt = rfc3339(withdrawnAt)
+		}
 	}
 	// ADR-0022：只有新形成了一版用 201；同版本已在册、分配已形成、未受理、未决都是形成了的答案（200）。
 	// 分配已形成回显的是链头，不是这次送来的那一份。
