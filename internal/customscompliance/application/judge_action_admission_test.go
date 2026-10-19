@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -332,5 +333,60 @@ func TestAdmissionRefusesARequestMissingItsCoordinates(t *testing.T) {
 func TestTheAdmissionHandlerNamesWhichDependencyIsMissing(t *testing.T) {
 	if _, err := application.NewJudgeActionAdmissionHandler(application.JudgeActionAdmissionDeps{}); !errors.Is(err, application.ErrNilDependency) {
 		t.Fatalf("缺依赖：err = %v", err)
+	}
+}
+
+// 判断册拒收这次写入本身（词表外、缺事务）是编程或接线错，原样上抛；只有库读写不动才答读不动——前者重投不会好。
+func TestAStoreRejectionIsAProgrammingErrorNotAnUnreadableStore(t *testing.T) {
+	fixture := newAdmissionFixture()
+	fixture.store.saveErr = fmt.Errorf("wrapped: %w", ports.ErrActionAdmissionJudgementRejected)
+	result, err := fixture.handler(t).Handle(t.Context(), admissionCommand(t, "SYN-NODE-SHA-HUB", "SYN-NODE-SZX-GATE"))
+	if !errors.Is(err, ports.ErrActionAdmissionJudgementRejected) {
+		t.Fatalf("拒收要原样上抛：%s / %v", result.Outcome(), err)
+	}
+}
+
+// 认定清单折不出结论：目录读口交回了领域构造造不出的认定，归那一口读不动，不是 Go error、也不折进五格。
+func TestFindingsThatDoNotFoldNameTheGateConditionView(t *testing.T) {
+	fixture := newAdmissionFixture()
+	fixture.inUnit(t)
+	fixture.conditions.findings = []domain.PreconditionFinding{{
+		Precondition: mustValue(t, domain.NewPreconditionReference, "SYN-PRE-EXPORT-DECL-RELEASED"),
+		State:        domain.PreconditionStateInvalid,
+	}}
+	result, err := fixture.handler(t).Handle(t.Context(), admissionCommand(t, "SYN-NODE-SHA-HUB", "SYN-NODE-SZX-GATE"))
+	if err != nil {
+		t.Fatalf("读口交回坏行不是编程错误：%v", err)
+	}
+	if result.Outcome() != application.ActionAdmissionUnreadable ||
+		result.UnreadableReason() != application.AdmissionGateConditionsUnavailable {
+		t.Fatalf("= %s / %s，要读不动 / %s", result.Outcome(), result.UnreadableReason(), application.AdmissionGateConditionsUnavailable)
+	}
+}
+
+// 动作时点按微秒入标识：库只存到微秒，消费方读回时点重问不带亚微秒位，仍要命中首次那一份。
+func TestAdmissionAtIsTruncatedToTheMicrosecondTheStoreKeeps(t *testing.T) {
+	fixture := newAdmissionFixture()
+	handler := fixture.handler(t)
+	precise := admissionCommand(t, "SYN-NODE-SHA-HUB", "SYN-NODE-SZX-GATE")
+	precise.At = admissionAppAt.Add(1234567 * time.Nanosecond)
+
+	first, err := handler.Handle(t.Context(), precise)
+	if err != nil || first.Outcome() != application.ActionAdmissionJudged {
+		t.Fatalf("首判 = %s，err = %v", first.Outcome(), err)
+	}
+	judgement, id := judged(t, first)
+	if want := admissionAppAt.Add(1234 * time.Microsecond); !judgement.At().Equal(want) {
+		t.Fatalf("判断记下的时点 = %s，要截到微秒 %s", judgement.At(), want)
+	}
+
+	readBack := precise
+	readBack.At = admissionAppAt.Add(1234 * time.Microsecond)
+	replay, err := handler.Handle(t.Context(), readBack)
+	if err != nil || replay.Outcome() != application.ActionAdmissionExisting {
+		t.Fatalf("读回时点重问 = %s，err = %v", replay.Outcome(), err)
+	}
+	if _, replayID := judged(t, replay); replayID != id {
+		t.Fatalf("同一次询问派生了两个标识：%s vs %s", replayID, id)
 	}
 }

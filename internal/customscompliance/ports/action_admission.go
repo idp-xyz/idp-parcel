@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"strings"
 	"time"
 
@@ -80,6 +81,11 @@ type ReleaseOutcomeView interface {
 
 type ActionAdmissionSaveOutcome uint8
 
+// ErrActionAdmissionJudgementRejected 说判断册写口拒的是这次写入本身——取值在词表外、写口不在事务里——而不是库读写
+// 不动。两者对消费方的意义相反：读不动重投可能就好，这一类重投一百次还是同一个错，只能改代码或接线。编排认出它就
+// 原样上抛，不答读不动。
+var ErrActionAdmissionJudgementRejected = errors.New("customs compliance: action admission judgement rejected by the store")
+
 const (
 	ActionAdmissionSaveOutcomeInvalid ActionAdmissionSaveOutcome = iota
 	ActionAdmissionSaved
@@ -107,8 +113,12 @@ type ActionAdmissionJudgementStore interface {
 const actionAdmissionJudgementPrefix = "AADJ"
 
 // ActionAdmissionJudgementID 由判断内容派生标识：请求（租户、对象、意图、动作时点）、区域读数与逐动作的答复
-// 及依据各成一行，判断时刻不进——同一请求在同样的三源上重放得同一标识，三源一变（限制解除、放行到达、区域
-// 换版）答复或依据随之变、标识随之换，记成新的一份而不覆盖旧的。
+// 及同格依据各成一行，判断时刻不进——同一请求在同样的三源上重放得同一标识。答复、同格依据或区域读数一变，
+// 标识就换，记成新的一份而不覆盖旧的；进不了答复的来源变化不换标识（限制正挡着时到了一份部分放行，答复仍是
+// 阻断、依据仍是那条限制），重放答`已有判断`——册上记的是「当时凭什么这么答」，不是来源的流水。
+//
+// 动作时点按微秒入标识：库里 timestamptz 只存到微秒，消费方从自己的库读回时点再问时带不回更细的位，标识里多
+// 那几位，同一次询问就会派生出两个标识、记成两行。编排在受理门截到微秒，这里与落库用的是同一个值。
 func ActionAdmissionJudgementID(tenant domain.TenantID, judgement domain.ActionAdmissionJudgement) string {
 	intent := judgement.Intent()
 	onward, _ := intent.Onward()

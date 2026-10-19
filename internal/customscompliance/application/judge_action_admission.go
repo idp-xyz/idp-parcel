@@ -174,6 +174,9 @@ func (handler *JudgeActionAdmissionHandler) Handle(
 		command.At.IsZero() {
 		return JudgeActionAdmissionResult{outcome: ActionAdmissionNotAccepted}, nil
 	}
+	// 截到微秒再用：判断册与消费方的库都只存到微秒，标识若带着更细的位，消费方读回时点重问就派生出另一个标识
+	// （见 ports.ActionAdmissionJudgementID）。区域、限制、放行也按这个值读，判断与它记下的时点是同一刻。
+	command.At = command.At.Truncate(time.Microsecond)
 
 	zones := make([]domain.NodeZoneReading, 0, 2)
 	for _, node := range command.Intent.ZoneNodes() {
@@ -269,6 +272,9 @@ func (handler *JudgeActionAdmissionHandler) Handle(
 
 	judgementID := ports.ActionAdmissionJudgementID(command.TenantID, judgement)
 	saved, err := handler.deps.Store.SaveActionAdmissionJudgement(ctx, command.TenantID, judgementID, judgement)
+	if errors.Is(err, ports.ErrActionAdmissionJudgementRejected) {
+		return JudgeActionAdmissionResult{}, err
+	}
 	if err != nil {
 		return admissionUnreadable(ActionAdmissionStoreUnavailable), nil
 	}
@@ -290,7 +296,9 @@ func (handler *JudgeActionAdmissionHandler) Handle(
 	}
 }
 
-// readGate 读一个单元在其程序下对一个动作的门禁，把门禁编排的停点译成领域读数；依赖故障译成读不动。
+// readGate 读一个单元在其程序下对一个动作的门禁，把门禁编排的停点译成领域读数；依赖故障译成读不动。认定清单
+// 折不出结论也归读不动、指名门禁目录那一口：目录读口交回的认定本该都经领域构造重建过，折不出就是那一口交回了
+// 坏行，与放行读口读到坏行同一归法——救它要去查那一口，不是改编排。
 func readGate(
 	ctx context.Context,
 	sources releaseGateSources,
@@ -306,9 +314,7 @@ func readGate(
 	switch assessment.reason {
 	case VerifyGateUndecidedReasonNone:
 		if assessment.foldRefused {
-			// 目录读口交回的认定都经领域构造重建过，折不出结论只能是读口坏了。
-			return domain.GateReading{}, ActionAdmissionUnreadableReasonNone,
-				fmt.Errorf("customs compliance: gate findings for %s %s %s do not fold", unit.Scope, action, unit.Procedure)
+			return domain.GateReading{}, AdmissionGateConditionsUnavailable, nil
 		}
 		reading.State = domain.GateReadingFormed
 		reading.Conclusion = assessment.conclusion

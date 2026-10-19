@@ -261,7 +261,8 @@ type releaseGateSources struct {
 }
 
 // releaseGateAssessment 是一道门禁读到哪一步、读出了什么。reason 非零即停在那个停点（含依赖读不动）；
-// foldRefused 说认定清单折不出结论（读回的认定不合法），核对编排把它答成未受理，与此前一字不差。
+// foldRefused 说认定清单折不出结论（读回的认定不合法）。它不并进 reason：两条编排各按自己的答复格归它，
+// 门禁读法不替它们选格。
 type releaseGateAssessment struct {
 	reason      VerifyGateUndecidedReason
 	foldRefused bool

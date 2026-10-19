@@ -387,7 +387,12 @@ func TestActionAdmissionWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("构造判断：%v", err)
 	}
-	if _, err := judgements.SaveActionAdmissionJudgement(ctx, viewValue(t, domain.NewTenantID, admissionTenant), "AADJ-guard", judgement); !errors.Is(err, bentopg.ErrTransactionRequired) {
+	_, err = judgements.SaveActionAdmissionJudgement(ctx, viewValue(t, domain.NewTenantID, admissionTenant), "AADJ-guard", judgement)
+	if !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务记判断应返回 ErrTransactionRequired，实得：%v", err)
+	}
+	// 缺事务是接线错，不是判断册读写不动：标成拒收，编排才不会把它答成读不动让消费方重投。
+	if !errors.Is(err, ports.ErrActionAdmissionJudgementRejected) {
+		t.Errorf("无事务记判断应标 ErrActionAdmissionJudgementRejected，实得：%v", err)
 	}
 }
