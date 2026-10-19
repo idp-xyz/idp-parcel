@@ -26,8 +26,8 @@ type RegistryQuery struct {
 // RegistryQueryIntake 把一次已认证的运营查阅请求翻译成查询。
 //
 // 它是接口而非解析代码：请求方身份必须核对，运营接入面的认证归操作者渠道
-// （ADR-0100），真实现是 OperatorOperationsReadIntake；本包不带任何采信自报身份的实现，包括「开发用」版本。另一个
-// 实现是未配置（如实拒）。
+// （ADR-0100），真实现是 OperatorOperationsReadIntake，渠道未配置时由 UnconfiguredIntake 如实拒；本包不带任何采信自报
+// 身份的实现，包括「开发用」版本。
 type RegistryQueryIntake interface {
 	IntakeRegistryQuery(ctx context.Context, request *http.Request) (RegistryQuery, error)
 }

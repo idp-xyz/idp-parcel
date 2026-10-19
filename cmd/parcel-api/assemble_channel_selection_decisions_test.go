@@ -66,11 +66,11 @@ func TestTheWiredChannelSelectionDecisionReadAnswersHonestlyAgainstARealDatabase
 		}
 	}
 
-	reader2, err := buildOperatorMinter(acceptingVerifier{}, tenantOperationsReaderRegister{tenant: tenant}, admissionScopeUnset())
+	minter, err := buildOperatorMinter(acceptingVerifier{}, tenantOperationsReaderRegister{tenant: tenant}, admissionScopeUnset())
 	if err != nil {
 		t.Fatalf("构造查阅读铸造器：%v", err)
 	}
-	reads, err := buildOperatorRegistryIntakes(reader2)
+	reads, err := buildOperatorRegistryIntakes(minter)
 	if err != nil {
 		t.Fatalf("构造查阅读 Intake：%v", err)
 	}

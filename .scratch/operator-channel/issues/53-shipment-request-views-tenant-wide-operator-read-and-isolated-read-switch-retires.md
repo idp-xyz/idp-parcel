@@ -29,7 +29,9 @@ Blocked by: 无
    - `IDP_PARCEL_ISOLATED_READ_TENANT` 与它的解析、启动日志、`isolatedReadIntakes`；
    - 隔离写那条两开关一致性校验，以及隔离写借用读开关常量的那两处：`isolatedReadTenantEnv`、`isolatedReadCustomerAccount`；
    - 各包残余的 `IsolatedOperationsReadIntake` 类型：PS 那一只（只剩委托查阅的方法），以及 05 换口后留下的计价、网络、关务、商业四只。四只自 05 起无装配使用者，35 已把 `cmd/parcel-api` 里构造它们的四格删掉。各包「隔离读 Intake 装不进写口」的类型锁用例要改挂操作者查阅读 Intake，不要连同性质一起删；
-   - 演示动线脚本「前置」里的读开关一行。
+   - 演示动线脚本「前置」里的读开关一行，「对照组」里读开关那一行；
+   - 计价、网络、关务、商业四族 `unconfigured_intake.go` 里 `ErrAccessChannelNotConfigured` 头注「真 Intake 未就位」那一句（35 已改过的各族不再有）；
+   - 管理台 `apps/admin-web/src/pages/governance/api.ts` 头注说治理作用域由隔离读开关配置的那一句（前端切片，一人在 main 上直接改）。
 
 ## 不做
 
