@@ -236,6 +236,11 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 客户追踪视图查阅口的首方 Intake（ADR-0139 决定四；票 demo-chain-gaps/96）：铸造器与提交口同一只，查阅不判准入范围。
+	customerTrackingView, err := buildCustomerTrackingViewIntake(customerClientMinter)
+	if err != nil {
+		return err
+	}
 	// 送站交接单五口的 Intake 与编排（ADR-0212 决定三；票 ps-external-mark-relations/12）：作业事实三口与收寄口同一组核验方、操作者册、
 	// 设备册与准入范围，客户结论口用提交口那一只首方铸造器。
 	deliveryHandoverNotes, err := buildDeliveryHandoverNoteFaces(db, operatorVerifier, operatorRegistry, deviceRegistry, admission, customerClientMinter)
@@ -817,6 +822,7 @@ func run(logger *slog.Logger) error {
 			deliveryHandoverNotes,
 			departureGatePreview,
 			deliveryScopeRecords,
+			customerTrackingView,
 		)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,

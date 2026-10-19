@@ -449,6 +449,7 @@ func assembleUnwiredBusinessEndpointsWithOperatorIntakes(
 		deliveryHandoverNoteFaces{handler: unwiredDeliveryHandoverNotes{}},
 		unwiredDepartureGatePreview{},
 		unwiredDeliveryScopeRecords{},
+		nil,
 	)
 }
 
