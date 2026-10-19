@@ -52,7 +52,6 @@ type isolatedWriteAdmission struct {
 	// tenant 是开关的值本身。归属那一格用不到它（治理登记册无租户维），提交口用得到：
 	// 来源信封的租户维就是它。
 	tenant string
-	// 主链各上下文的隔离命令 Intake 已随真渠道逐口撤下：运输履约那一格随票 operator-channel/15、节点作业那一格随票 23。
 }
 
 // isolatedWriteAdmittedCommandLines 是写开关到此刻为止换上隔离 Intake 的命令面，供启动日志出声
