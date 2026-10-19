@@ -1,7 +1,7 @@
 # 05 方向依据的身份一格改读每条判断链的当前有效版本——不再对全部行取或
 
 Category: enhancement
-Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（04 已进 main），分支 `claude-nri05`；与 no-reception-source/03 并行。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 04 拆出（代决，用户 2026-10-16 授权「你作为业务和系统专家你来自决」）
+Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（04 已进 main），分支 `claude-nri05`；与 no-reception-source/03 并行。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 04 拆出（代决，用户 2026-10-16 授权「你作为业务和系统专家你来自决」）
 Blocked by: 04 进 main（ADR-0210、NO CONTEXT「判断链与当前有效版本」与 UC-NO-004 先落）。不依 no-reception-source/03：本票只碰身份读口与方向依据领域件，与它的地盘不交叉，可以先行或并行。
 父票：[04](./04-identity-conflicts-have-a-disposition-and-release.md)
 出处：票 04 裁定里「方向依据的身份一格改读每条判断链的当前有效版本，不再对全部行取或」那一点；[ADR-0210](../../../docs/adr/0210-identity-conflicts-are-disposed-by-an-operation-decision-and-the-identity-basis-reads-chain-heads.md) 决定五与「与已接受决定的关系」。
@@ -48,8 +48,70 @@ Blocked by: 04 进 main（ADR-0210、NO CONTEXT「判断链与当前有效版本
 
 ## 完成判据
 
-- [ ] 领域用例：上列各格各一条，先红后绿。
-- [ ] 读口用例（`adapters/postgres`）：前版读回逐字一致；没有前版的旧行读回为缺席。
-- [ ] 真库用例：一码两物之后两件的身份一格各是缺少·{待识别, 身份冲突}（`AT-NO-061`）；no-reception-identity/01、03 与 no-directional-basis/01 的既有用例照旧绿，改钉的逐条列在完成记录。
-- [ ] Go 门禁：`go build ./...`、`go vet ./...` 退 0，`gofmt -l .` 无输出；带 DSN 跑 `internal/nodeoperations/...`、`cmd/parcel-api`、`cmd/parcel-frontline-import`、`internal/architecture/...`、`migrations/...` 全绿；机制清点在本笔的干净检出上重生成。
+- [x] 领域用例：上列各格各一条，先红后绿。
+- [x] 读口用例（`adapters/postgres`）：前版读回逐字一致；没有前版的旧行读回为缺席。
+- [x] 真库用例：一码两物之后两件的身份一格各是缺少·{待识别, 身份冲突}（`AT-NO-061`）；no-reception-identity/01、03 与 no-directional-basis/01 的既有用例照旧绿，改钉的逐条列在完成记录。
+- [x] Go 门禁：`go build ./...`、`go vet ./...` 退 0，`gofmt -l .` 无输出；带 DSN 跑 `internal/nodeoperations/...`、`cmd/parcel-api`、`cmd/parcel-frontline-import`、`internal/architecture/...`、`migrations/...` 全绿；机制清点在本笔的干净检出上重生成。
 - [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
+
+## 完成记录（2026-10-19，会话 idp-parcel-9b 的作者子代理，分支 `claude-nri05`，基于 main `dee3a79c`）
+
+### 落点
+
+| 提交 | 内容 |
+|---|---|
+| `2be4d5ac` | 领域、读口与各层用例（下表） |
+| 本笔 | AT 盘点追记八；本票完成记录 |
+
+- `internal/nodeoperations/domain/directional_basis.go`：`IntakeIdentityObservation` 加 `Predecessor`（缺席即不接续任何版本）；`JudgeIdentityBasis` 先经新的 `judgmentChainHeads` 挑链头，再照原折法折，所依收寄只在带关联的链头里挑；头注改写，引 ADR-0210 决定五与 NO CONTEXT「判断链与当前有效版本」。
+- `internal/nodeoperations/adapters/postgres/intake_identity_view.go`：`FindIntakeIdentities` 多读 `predecessor_version`，经 `versionFrom`（与收寄库读回前版同一个译法）交回；查询条件与索引不变。
+- 机制清点在代码提交之后的干净工作树上重生成，与 main 无差，没有单独一笔。
+
+### 各完成判据格对应的用例
+
+| 格 | 用例 | 红时的现象 |
+|---|---|---|
+| 一码两物先到那件：冲突版指名原判断 → 缺少·{待识别, 身份冲突} | `domain` `TestIdentityBasisReadsEachJudgmentChainHead/一码两物先到那件：冲突版指名原判断为前版` | `MISSING [IDENTITY_CONFLICT]` |
+| 第一期之前的形状：冲突版没有前版 → 缺少·身份冲突 | 同上 `/第一期之前的形状：冲突版没有前版` | 照旧绿（读法本就不变，钉回归） |
+| 零候选待识别被带关联的重核版接续 → 成立，所依重核版 | 同上 `/零候选的待识别被带关联的重核版接续` | 照旧绿（ADR-0199 决定五的结论维持） |
+| 两条链：一条成立、一条链头记冲突 → 缺少·身份冲突 | 同上 `/两条链：一条链头成立、一条链头记冲突` | 照旧绿 |
+| 冲突版之后接带关联、不记冲突的版本 → 成立 | 同上 `/冲突版之后接一版带关联、不记冲突的处置版`（构造的观察，不依票 06；所依收寄须是处置版——来源标识排成被接续的原判断在同刻定序里占先） | `MISSING [IDENTITY_CONFLICT]` |
+| 冲突版之后接不带关联、不记冲突的版本 → 缺少·待识别 | 同上 `/冲突版之后接一版不带关联、不记冲突的处置版` | `MISSING [IDENTITY_CONFLICT]` |
+| 前版指向组外的行照常是链头 | 同上 `/前版指向组外的行` | 照旧绿 |
+| 坏形状：同一前版被两行指名、一行指名自己 | `domain` `TestIdentityBasisRefusesMalformedJudgmentChains/同一前版被两行指名`、`/一行指名自己` | `err = <nil>` |
+| 坏形状交到编排记`读不动` | `application` `TestDirectionalBasisUnreadableSourcesAreRecordedNotRaised/收寄册读回两行指名同一前版` | `IDENTITY answer = ESTABLISHED, want UNREADABLE` |
+| 读口：前版逐字读回、没有前版的行读回缺席 | `adapters/postgres` `TestIntakeIdentitiesReadsThePredecessorOfEachVersion`（另把读回的一组交给领域，断言缺少·{待识别, 身份冲突}） | 冲突版 `Predecessor:` 为空 |
+| 真库 `AT-NO-061` | `cmd/parcel-api` `TestTheWiredReceptionTurnsOneMarkOnTwoUnitsIntoAnIdentityConflict` | `SYN-UNIT-NRI01-A 的身份一格 = MISSING [IDENTITY_CONFLICT]（2 行）` |
+
+**改钉的既有用例**（原只断言「含身份冲突」，改为逐个断言缺少·{待识别, 身份冲突}）：
+
+- `cmd/parcel-api` `TestTheWiredReceptionTurnsOneMarkOnTwoUnitsIntoAnIdentityConflict`（票 no-reception-identity/01），头注加 `AT-NO-061` 点名；
+- `cmd/parcel-api` `TestConcurrentDeliveriesOfOneMarkSerializeOnTheParcel`（票 no-reception-identity/03），红时 `SYN-UNIT-NRI03-A 的身份一格 = MISSING [IDENTITY_CONFLICT]（2 行）`。
+
+全仓按原因集逐个断言、又会被新读法改变结论的既有用例，只有这两份；`application` 的 `TestOneMarkOnTwoUnitsFormsAnIdentityConflict` 仍只断言「含身份冲突」，照旧绿，它的观察拼装辅助 `identityReasonsOf` 补带前版（观察形状变了）。no-directional-basis/01 的既有用例（`judge_directional_basis_test.go`、`adapters/postgres/directional_basis_test.go`、`adapters/http` 目录用例）不改，照旧绿。
+
+**ADR-0196 先到那件的原因集**：ADR-0199 第一期之前追加、没有前版的冲突版——原判断与冲突版各是链头，缺少·{身份冲突}，照旧；第一期之后追加、指名原判断的冲突版——链头只剩冲突版，缺少·{待识别, 身份冲突}。后到那件两种情形都是缺少·{待识别, 身份冲突}。
+
+### 先红后绿
+
+- 红：`/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/nri05-red.log`。第一轮只改测试、领域还没有前版一格，`go vet` 报 `Predecessor undefined`；第二轮领域只加这一格、折法与读口未改，上表「红时的现象」即这一轮的原话。
+- 绿：`/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/nri05-green.log`。
+- 门：`/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/nri05-gate.log`。
+
+### 门
+
+在 `2be4d5ac` 上：`gofmt -l .` 无输出；`go build ./...`、`go vet ./...` 退 0；带 DSN 跑 `go test -p 1 -count=1 ./internal/nodeoperations/... ./cmd/parcel-api/... ./cmd/parcel-dispatch/... ./cmd/parcel-frontline-import/... ./internal/architecture/... ./migrations/...` 全 ok。`JudgeIdentityBasis` 与 `IntakeIdentityObservation` 的用处只在 `internal/nodeoperations` 与 `cmd/parcel-api`，没有别的上下文读它。没跑全量 `./...`。
+
+证据层级：`S`（夹具全为合成，`SYN-` 值）。
+
+### 越出票面的地方
+
+- **坏形状多一种：成环。** 票面列了两种；几行互相接续成环，库面（（租户，前版）唯一与「前版不是自己」）拦不住，全在环里时会被读成「无收寄记录」、与别的链混着时会被静默略过。照收寄库 `CurrentVersion` 走到环报错的同一待遇，一并交回 `ErrInvalidDirectionalBasis`，有用例 `TestIdentityBasisRefusesMalformedJudgmentChains/成环`。
+- `judge_directional_basis_test.go` 不只改辅助：在既有读不动用例里加了一个子用例，钉「坏形状由编排记`读不动`」。
+- 读口用例落在 `adapters/postgres/directional_basis_test.go`：既有的身份读口用例本就在那份文件里，没有另开文件。
+
+### 没做
+
+- `receive_delivered_unit.go` 里 `appendIdentityConflicts` 头注「方向依据的身份一格读到这一版就落成身份冲突」没改：那份文件是并行的 no-reception-source/03 的地盘。新读法下原因集仍含身份冲突，这句没有说错，只是没写全；`ports.IntakeIdentityView` 的头注同理不动，仍然成立。
+- `AT-NO-061` 后半「零候选的待识别已被重核版接续 → 成立」只有领域面：真库面要等 no-reception-source/03 的重核编排进 main。
+- 「走 Go 那条路」一格只做到分支与作者自验；非作者评审与推送方在干净检出上带 DSN 跑全量未做，该格不勾。

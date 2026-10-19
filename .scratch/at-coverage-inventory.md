@@ -18,16 +18,16 @@
 
 | 桶 | 数量 |
 |---|---|
-| ① 已钉住 | 292 |
-| ② 机制候选 | 228 |
+| ① 已钉住 | 294 |
+| ② 机制候选 | 236 |
 | ③ 实例/闸门 | 143 |
 | ④ 机制未落地 | 425 |
-| 合计 | 1088 |
+| 合计 | 1098 |
 
 | 前缀 | 总数 | ① | ② | ③ | ④ |
 |---|---|---|---|---|---|
 | CC | 410 | 20 | 0 | 89 | 301 |
-| NO | 51 | 19 | 25 | 7 | 0 |
+| NO | 61 | 21 | 33 | 7 | 0 |
 | NR | 53 | 24 | 28 | 1 | 0 |
 | PC | 36 | 35 | 1 | 0 | 0 |
 | PS | 93 | 66 | 25 | 2 | 0 |
@@ -78,6 +78,8 @@
 | `AT-NO-040` | internal/nodeoperations/application/consolidate_parcels_test.go::TestSealingFreezesTheSnapshotAndClosureIsFinal |
 | `AT-NO-047` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestEveryObservationKeepsItsDeliverySource；cmd/parcel-api/reception_delivery_source_test.go::TestTheWiredReceptionKeepsTheDeliverySourceOfEveryObservation |
 | `AT-NO-048` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestAReplayAfterAnIdentityConflictAnswersTheCurrentVersion；internal/nodeoperations/application/receive_delivered_unit_test.go::TestAReplayOfAnUndecidedOrRefusedJudgmentAnswersItsOwnVersion；cmd/parcel-api/reception_delivery_source_test.go::TestTheWiredReplayAfterAnIdentityConflictAnswersTheCurrentVersion |
+| `AT-NO-052` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestAUniqueHitThatAnUnacceptedRequestAlsoDeclaresIsAnIdentityConflict |
+| `AT-NO-061` | internal/nodeoperations/domain/directional_basis_test.go::TestIdentityBasisReadsEachJudgmentChainHead；cmd/parcel-api/reception_one_mark_two_units_test.go::TestTheWiredReceptionTurnsOneMarkOnTwoUnitsIntoAnIdentityConflict（真库面：一码两物之后两件的原因集） |
 | `AT-NR-001` | internal/networkrouting/application/create_initial_route_test.go::TestThreeParcelsKeepThreeIndependentResults；internal/networkrouting/domain/initial_route_plan_test.go::TestAnInitialRoutePlanCarriesItsFullSelectionBasis；internal/networkrouting/domain/route_ranking_test.go::TestSelectionFollowsTheStrategysDeclaredCriterionOrder |
 | `AT-NR-002` | internal/networkrouting/application/create_initial_route_test.go::TestTwoParcelsFormTwoIndependentPlans |
 | `AT-NR-003` | internal/networkrouting/application/create_initial_route_test.go::TestAReplayReturnsExistingResultsAndAConflictOverwritesNothing |
@@ -361,6 +363,14 @@
 | `AT-NO-049` | 同一作业实物换来源，再次交到已有当前收寄的同一节点 | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
 | `AT-NO-050` | 只有到站扫描的待确认之后，同一实物来了明确接收或拒收 | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
 | `AT-NO-051` | 身份核对读不动 | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
+| `AT-NO-053` | 一码两物之后，持授予的操作者指定后到那件是那件包裹，同一次处置把先到那件列为连带实物 | UC-NO-004-DISPOSE-AN-IDENTITY-CONFLICT.md |
+| `AT-NO-054` | 多候选、或恰一个候选带歧义信号的待识别实物，处置确认不是其中任何一件 | UC-NO-004-DISPOSE-AN-IDENTITY-CONFLICT.md |
+| `AT-NO-055` | 指定的包裹此刻关联在另一件作业实物上，处置没把它列为连带实物，或列了不相干的实物 | UC-NO-004-DISPOSE-AN-IDENTITY-CONFLICT.md |
+| `AT-NO-056` | 同一处置原样重投；换结果或换指定的包裹重投；所处置的版本已被第三件到站追加的冲突版接续 | UC-NO-004-DISPOSE-AN-IDENTITY-CONFLICT.md |
+| `AT-NO-057` | 指定处置候选之外的包裹；指名的实物没有身份冲突 | UC-NO-004-DISPOSE-AN-IDENTITY-CONFLICT.md |
+| `AT-NO-058` | 未持授予、发行方未配置、不在准入范围、请求自带租户或操作者、指名别的租户的实物 | UC-NO-004-DISPOSE-AN-IDENTITY-CONFLICT.md |
+| `AT-NO-059` | 处置之后，又一件贴同号的作业实物到站 | UC-NO-004-DISPOSE-AN-IDENTITY-CONFLICT.md |
+| `AT-NO-060` | 一件实物在两条判断链上都有当前有效版本，处置指名其中一版 | UC-NO-004-DISPOSE-AN-IDENTITY-CONFLICT.md |
 | `AT-NR-007` | 产品明确允许待路由，委托已接受但当前仍无可行候选 | UC-NR-001-CREATE-INITIAL-ROUTE.md |
 | `AT-NR-008` | 候选参考某班次可用性和容量风险后被选中 | UC-NR-001-CREATE-INITIAL-ROUTE.md |
 | `AT-NR-013` | 客户声明偏好某线路，但合同和产品未承诺该偏好 | UC-NR-001-CREATE-INITIAL-ROUTE.md |
@@ -1191,6 +1201,8 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 同日追记六（HTTP 接入面首两票）：VE 客户追踪视图查询 HTTP 处理器点名 `AT-VE-150`、`AT-VE-151`、`AT-VE-153`（翻译半边）、`AT-VE-168`（读侧半边）——四条自③实例/闸门迁①（查询/权限面随 HTTP 处理器解禁，ADR-0017「应用层成型后自然解除」）；索赔受理 HTTP 处理器零新点（受理回执面无对应行）。并行 SA 批再盖 `AT-SA-055` 并动 14 行 SA/TF 归属，均已同步。①284→289（VE 27→31、SA 66→67）、②227→226、③147→143、④425 不变，合计 1083 守恒。
 
 追记七（票 no-reception-source/02，2026-10-19）：票 no-reception-source/01 在 UC-NO-002 新增 `AT-NO-047` 至 `AT-NO-051`，本表当时未随之扩，照扫描口径补进：`AT-NO-047`、`AT-NO-048` 随收寄来源保全与判断版本落地点名入①（编排面与真库面），`AT-NO-049`、`AT-NO-050`、`AT-NO-051` 未被测试引用、属 NO 机制面、行文无实例关键词，入②（分别待票 no-reception-source/04、04、05）。①290→292（NO 17→19）、②225→228（NO 22→25），合计 1083→1088（NO 46→51，`docs/application` 的 AT 全集随 UC-NO-002 扩了这几行）。
+
+追记八（票 no-reception-identity/05，2026-10-19）：票 no-reception-identity/04 新立 UC-NO-004（`AT-NO-053` 至 `AT-NO-061`），票 ps-external-mark-relations/05 在 UC-NO-002 新增 `AT-NO-052`，本表都未随之扩，照扫描口径补进：`AT-NO-052` 在票 ps-external-mark-relations/05 落地时已由编排用例点名、只是没入表，`AT-NO-061` 随身份一格读链头落地点名（领域面与真库面），两条入①；`AT-NO-053` 至 `AT-NO-060` 未被测试引用、属 NO 机制面，入②（待票 no-reception-identity/06）。①292→294（NO 19→21）、②228→236（NO 25→33），合计 1088→1098（NO 51→61，`docs/application` 的 AT 全集随 UC-NO-002 与 UC-NO-004 扩了这几行）。
 
 ### 两盘之间新落的硬句测试面（不入①，逐面列出供领票比对）
 
