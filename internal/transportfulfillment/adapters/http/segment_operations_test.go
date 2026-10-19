@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -412,6 +413,25 @@ func TestParticipationTerminationEndsOneObjectOnly(t *testing.T) {
 	stranger := postTo(t, fixture.terminate, "/transport-fulfillment-participation-terminations", map[string]any{"segment": "segment-1", "object": "parcel-9", "basis": "b", "endedAt": "2026-09-05T12:30:00Z"})
 	if stranger.Code != http.StatusOK || decodeOperation(t, stranger).Outcome != "OBJECT_NOT_IN_SEGMENT" {
 		t.Fatalf("status = %d body = %s", stranger.Code, stranger.Body.String())
+	}
+}
+
+// Covers: 票 tf-face-algebra/03——已离场的答复带在册终点三件（endKind / endBasis / endedAt），取在册那一份而不是
+// 本次命令的；时刻与本包其余回显同一格式，整秒值逐字节相同。首次结束的 201 不带这三格。
+func TestParticipationTerminationAlreadyEndedEchoesTheRecordedEnd(t *testing.T) {
+	fixture := newSegmentOperationsFixture(t, "parcel-1")
+	first := map[string]any{"segment": "segment-1", "object": "parcel-1", "basis": "control-termination/case-1", "endedAt": "2026-09-05T12:30:00Z"}
+	ended := postTo(t, fixture.terminate, "/transport-fulfillment-participation-terminations", first)
+	if ended.Code != http.StatusCreated || strings.Contains(ended.Body.String(), "endKind") {
+		t.Fatalf("首次结束：status = %d body = %s", ended.Code, ended.Body.String())
+	}
+
+	other := map[string]any{"segment": "segment-1", "object": "parcel-1", "basis": "control-termination/case-2", "endedAt": "2026-09-05T23:00:00+08:00"}
+	replay := postTo(t, fixture.terminate, "/transport-fulfillment-participation-terminations", other)
+	want := `{"outcome":"PARTICIPATION_ALREADY_ENDED","segment":"segment-1","object":"parcel-1",` +
+		`"endKind":"CONTROL_TERMINATED","endBasis":"control-termination/case-1","endedAt":"2026-09-05T12:30:00Z"}`
+	if replay.Code != http.StatusOK || strings.TrimSpace(replay.Body.String()) != want {
+		t.Fatalf("异内容重投：status = %d body = %s, want %s", replay.Code, replay.Body.String(), want)
 	}
 }
 

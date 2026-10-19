@@ -70,10 +70,17 @@ func NewTerminateFulfillmentParticipationEndpoint(intake ParticipationTerminatio
 // participationTerminationResponse 是终止口的封闭响应形状。四个否定格（已离场 / 对象不在段内 / 段不在册 /
 // 控制事实不在册）各自成格：续办动作两两不同，传输层不合并。没有 nextSegmentContinuationReference：终止之后
 // 没有下一段，那一格在这个口上永远为空，透出一个恒空的格只会让调用方去等一件不会发生的事。
+//
+// `endKind` / `endBasis` / `endedAt` 只随`已离场`出现，是在册链尾的终点、不是本次命令给的（票 tf-face-algebra/03）：
+// 同一次终止的重投、异依据或异时刻的重投、参与已被交接或交付结束，答的都是`已离场`，调用方拿在册那一份比对才分得开。
+// 时刻与关段口的 `closedAt` 同格式，RFC 3339 UTC。
 type participationTerminationResponse struct {
 	Outcome               string `json:"outcome"`
 	Segment               string `json:"segment,omitempty"`
 	Object                string `json:"object,omitempty"`
+	EndKind               string `json:"endKind,omitempty"`
+	EndBasis              string `json:"endBasis,omitempty"`
+	EndedAt               string `json:"endedAt,omitempty"`
 	ContinuationReference string `json:"continuationReference,omitempty"`
 }
 
@@ -89,6 +96,9 @@ func writeParticipationTerminationOutcome(response http.ResponseWriter, answer p
 	}
 	if answer.result.Outcome() != application.ParticipationEndNotAccepted {
 		body.Segment, body.Object = answer.segment, answer.object
+	}
+	if kind, basis, endedAt, ended := answer.result.End(); ended {
+		body.EndKind, body.EndBasis, body.EndedAt = kind.String(), basis.String(), endedAt.UTC().Format(time.RFC3339)
 	}
 	// ADR-0022：只有这次真把那一条参与结束了用 201；已离场、不在段内、段不在册、未受理、未决都是形成了的答案（200）。
 	status := http.StatusOK
