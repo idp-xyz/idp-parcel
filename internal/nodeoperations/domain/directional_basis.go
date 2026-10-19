@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// 方向依据记录（NO CONTEXT「方向依据记录」；票 no-directional-basis/01「偏离标记半边：设计代决」）：加成员事实落册时，
+// 方向依据记录（NO CONTEXT「方向依据记录」；票 no-directional-basis/01「偏离标记半边：设计代决」）：移入事实落册时，
 // 同一笔记下该作业实物当时的方向依据。它只是事实旁边的依据快照——缺依据不拒收、读不动不挡落册；偏离的判断与追责
 // 归 network-routing 的路由偏离判断与 visibility-exception 的异常，本上下文只留事实与当时的依据。
 
@@ -373,7 +373,7 @@ func routingBasisOf(answer DirectionalBasisAnswer, reasons []DirectionalBasisRea
 	return RoutingBasis{cell: cell}, nil
 }
 
-// DirectionalBasisRecord 是方向依据记录。零值是「没有记录」：这一格出现之前落的加成员事实读回来就是它，读作
+// DirectionalBasisRecord 是方向依据记录。零值是「没有记录」：这一格出现之前落的移入事实读回来就是它，读作
 // `未记录`，绝不当作依据齐全。
 type DirectionalBasisRecord struct {
 	identity      IdentityBasis

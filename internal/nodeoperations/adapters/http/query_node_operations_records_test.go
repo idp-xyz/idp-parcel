@@ -177,12 +177,12 @@ func TestNodeOperationsRecordsQueryRefusesNonGetMethods(t *testing.T) {
 }
 
 // Covers: ADR-0055/ADR-0077 Decision 三 — 未配置 Intake 一律 403 +
-// ACCESS_CHANNEL_NOT_CONFIGURED，三本册子一致，读口不被触到，不带业务结果格。
+// ACCESS_CHANNEL_NOT_CONFIGURED，各本册子一致，读口不被触到，不带业务结果格。
 func TestUnconfiguredIntakeRefusesEveryNodeOperationsRecordsRequest(t *testing.T) {
 	endpoint := nodeopshttp.NewQueryNodeOperationsRecordsEndpoint(
 		nodeopshttp.UnconfiguredIntake{}, unreachableReviewCatalogue{t: t},
 	)
-	for _, registry := range []string{"reception", "unidentified-item", "consolidation-unit"} {
+	for _, registry := range []string{"reception", "unidentified-item", "consolidation-unit", "consolidation-member"} {
 		t.Run(registry, func(t *testing.T) {
 			response := serveGet(endpoint, "/node-operations-records?registry="+registry)
 
@@ -257,7 +257,7 @@ func TestNodeOperationsRecordsIntakeFailuresKeepTheirGrades(t *testing.T) {
 
 // Covers: ADR-0022 — 读库失败没有形成答案：500 + NO_ANSWER_FORMED，不带业务结果格。
 func TestNodeOperationsRecordsQueryAnswers500WhenTheRegisterFails(t *testing.T) {
-	for _, registry := range []string{"reception", "unidentified-item", "consolidation-unit"} {
+	for _, registry := range []string{"reception", "unidentified-item", "consolidation-unit", "consolidation-member"} {
 		t.Run(registry, func(t *testing.T) {
 			register := &stubReviewCatalogue{err: errors.New("database is down")}
 			response := serveGet(recordsEndpoint(register), "/node-operations-records?registry="+registry)
@@ -589,7 +589,7 @@ func TestConsolidationMemberRegistryTranscribesRows(t *testing.T) {
 }
 
 // Covers: ADR-0077 Decision 四 — 空登记册是内容不是错误：200 + 空数组（不是 null），
-// 三本册子一致。写入方是收寄命令端点的真渠道，未配置时册子就是空的，读面不代答续办。
+// 各本册子一致。写入方是收寄命令端点的真渠道，未配置时册子就是空的，读面不代答续办。
 func TestEmptyRegistersAnswerEmptyArrays(t *testing.T) {
 	for registry, key := range map[string]string{
 		"reception":            "receptions",

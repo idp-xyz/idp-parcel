@@ -259,7 +259,7 @@ func TestDirectionalBasisUnreadableSourcesAreRecordedNotRaised(t *testing.T) {
 	})
 }
 
-// Covers: 方向依据记录只随新形成的加成员事实落册；缺依据照常 MEMBER_ADDED（UC-NO-003「已经发生的错误分拣保留为
+// Covers: 方向依据记录只随新形成的移入事实落册；缺依据照常 MEMBER_ADDED（UC-NO-003「已经发生的错误分拣保留为
 // 事实并形成偏离，不回写为未发生」）；同一来源重投交回册上那一份，不用本次刚判的。
 func TestAddMemberRecordsTheJudgedBasisWithTheFactAndReplaysTheStoredOne(t *testing.T) {
 	fixture := newConsolidateFixture(t)
@@ -301,8 +301,55 @@ func TestAddMemberRecordsTheJudgedBasisWithTheFactAndReplaysTheStoredOne(t *test
 		t.Fatalf("replay outcome = %q", replayed.Outcome())
 	}
 	assertCell(t, replayed.DirectionalBasis().ServiceResult().Cell(), domain.BasisMissing, domain.ReasonCancelled)
-	if fixture.facts.saved != 2 { // 开单元一条、加成员一条
+	if fixture.facts.saved != 2 { // 开单元一条、移入一条
 		t.Fatalf("facts saved = %d", fixture.facts.saved)
+	}
+}
+
+// Covers: 完成判据「各格均照常 MEMBER_ADDED」——AddMember 只问记录在不在，不看任何一格的取值：身份三种缺少、读不动、
+// 已取消、已终局、两者并列、路由依据未配置，各自落成事实并原样带着记录。
+func TestAddMemberRecordsEveryKindOfBasisAsTheFactHappened(t *testing.T) {
+	pending := domain.IntakeIdentityObservation{
+		SourceID: "src-pending", Version: mustValue(t, domain.NewIntakeResultVersion, "v-pending"), ReceivedAt: consolidationAt,
+	}
+	conflicted := pending
+	conflicted.IdentityConflict = true
+	identityCases := map[string][]domain.IntakeIdentityObservation{
+		"无收寄记录": nil,
+		"待识别":   {pending},
+		"身份冲突":  {conflicted},
+	}
+	established := []domain.IntakeIdentityObservation{associatedIntake(t, "src-intake", "DPCL-1")}
+	serviceCases := map[string]ports.ParcelServiceResults{
+		"已取消":  {Cancellation: "CANCEL-1"},
+		"已终局":  {FinalKind: "RETURNED", FinalVersion: "FINAL-2"},
+		"两者并列": {Cancellation: "CANCEL-1", FinalKind: "RETURNED", FinalVersion: "FINAL-2"},
+		"依据齐备": {},
+	}
+	var records []domain.DirectionalBasisRecord
+	for _, observations := range identityCases {
+		records = append(records, newJudgeFixture(intakeIdentityViewDouble{observations: observations}).judge(t))
+	}
+	records = append(records, newJudgeFixture(intakeIdentityViewDouble{err: errors.New("down")}).judge(t))
+	for _, results := range serviceCases {
+		fixture := newJudgeFixture(intakeIdentityViewDouble{observations: established})
+		fixture.service.results = results
+		records = append(records, fixture.judge(t))
+	}
+	fixture := newConsolidateFixture(t)
+	openUnit(t, fixture, "unit-1")
+	for index, record := range records {
+		command := addMemberCommand(t, "src-every-kind")
+		command.Source = workSource(t, "src-every-kind-"+string(rune('a'+index)), consolidationAt)
+		command.Member = handlingUnit(t, "hu-kind-"+string(rune('a'+index)))
+		added, err := fixture.handler.AddMember(context.Background(), command, record)
+		if err != nil || added.Outcome() != application.MemberAdded {
+			t.Fatalf("record %v: outcome = %v err = %v", record.Cells(), added.Outcome(), err)
+		}
+		stored := fixture.facts.byKey[ports.ConsolidationFactKey{TenantID: command.TenantID, SourceID: command.Source.SourceID()}]
+		if !stored.DirectionalBasis.JudgedAt().Equal(record.JudgedAt()) || len(stored.DirectionalBasis.Cells()) != len(record.Cells()) {
+			t.Fatalf("stored basis differs from the judged one: %v vs %v", stored.DirectionalBasis.Cells(), record.Cells())
+		}
 	}
 }
 
@@ -347,7 +394,10 @@ func TestAddMemberRaceLoserAnswersWithTheWinnersBasis(t *testing.T) {
 	if err != nil {
 		t.Fatalf("identity: %v", err)
 	}
-	established, _ := domain.JudgeServiceResultBasis("", "", "")
+	established, err := domain.JudgeServiceResultBasis("", "", "")
+	if err != nil {
+		t.Fatalf("service result: %v", err)
+	}
 	loser, err := domain.RecordDirectionalBasis(identity, established, domain.NotConfiguredRoutingBasis(), judgedAt.Add(time.Second))
 	if err != nil {
 		t.Fatalf("record: %v", err)
@@ -387,4 +437,34 @@ func (store *racingFactStore) Save(ctx context.Context, record ports.Consolidati
 		return ports.ConsolidationFactAlreadyRecorded, nil
 	}
 	return store.consolidationFactStoreDouble.Save(ctx, record)
+}
+
+// Covers: 撞键读回的赢家是同一来源的另一份内容时，输家答来源冲突，不借赢家的记录答已有结果——与受理闸同一条代数。
+func TestAddMemberRaceLoserWithDifferentContentAnswersSourceConflict(t *testing.T) {
+	fixture := newConsolidateFixture(t)
+	openUnit(t, fixture, "unit-1")
+	command := addMemberCommand(t, "src-race-conflict")
+	_, otherDigest, err := domain.CanonicalizeAddMemberPayload(command.Source, command.Unit, handlingUnit(t, "hu-other"))
+	if err != nil {
+		t.Fatalf("canonicalize: %v", err)
+	}
+	key := ports.ConsolidationFactKey{TenantID: command.TenantID, SourceID: "src-race-conflict"}
+	racing := &racingFactStore{consolidationFactStoreDouble: fixture.facts, key: key, winner: ports.ConsolidationFactRecord{
+		Key: key, ContentDigest: otherDigest, Action: domain.AddMemberAction, Unit: command.Unit,
+		Member: handlingUnit(t, "hu-other"), DirectionalBasis: judgedBasis(t),
+	}}
+	fixture.handler = application.NewConsolidateParcelsHandler(application.ConsolidateParcelsDeps{
+		Store:       fixture.store,
+		Facts:       racing,
+		Containment: &containmentIndexDouble{store: fixture.store},
+		Downstream:  fixture.downstream,
+		Clock:       fixedClock{at: consolidationAt},
+	})
+	result, err := fixture.handler.AddMember(context.Background(), command, judgedBasis(t))
+	if err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if result.Outcome() != application.ConsolidationSourceConflict || result.DirectionalBasis().Recorded() {
+		t.Fatalf("outcome = %q, basis recorded = %v", result.Outcome(), result.DirectionalBasis().Recorded())
+	}
 }

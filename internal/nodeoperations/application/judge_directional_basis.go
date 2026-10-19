@@ -12,7 +12,7 @@ import (
 type DirectionalBasisDeps struct {
 	// Intakes 是本上下文自己的收寄册：身份只问它。
 	Intakes ports.IntakeIdentityView
-	// ServiceResults 与收寄编排问的是同一个读口、同一只防腐适配器（票 operator-channel/25）。加成员要的是此刻的结果，
+	// ServiceResults 与收寄编排问的是同一个读口、同一只防腐适配器（票 operator-channel/25）。移入要的是此刻的结果，
 	// 所以现问 PS，不读收寄记录上的服务结果标记——那是收寄那一刻的快照，之后才形成的取消与终局在标记上读不到。
 	ServiceResults ports.ParcelServiceResultView
 	// Routing 是路由依据端口；生产装配显式未配置。
@@ -23,12 +23,12 @@ type DirectionalBasisDeps struct {
 // DirectionalBasisJudge 判一件作业实物此刻的方向依据，供 ConsolidateParcelsHandler.AddMember 与事实同一笔落册。
 //
 // 它由组合根在写事务之前、用外层 ctx 调：读在池上，不在写事务里。跨上下文读在写事务里出一次 SQL 级错误，整笔
-// 事务就进了中止态，读不动于是挡住了落册——而已经发生的加成员必须照记，读不动只是记录里的一格。
+// 事务就进了中止态，读不动于是挡住了落册——而已经发生的移入必须照记，读不动只是记录里的一格。
 type DirectionalBasisJudge struct {
 	deps DirectionalBasisDeps
 }
 
-// NewDirectionalBasisJudge 构造期拒缺件：漏装的来源到第一条加成员才暴露，会被记成一格`读不动`，把装配缺陷演成
+// NewDirectionalBasisJudge 构造期拒缺件：漏装的来源到第一条移入才暴露，会被记成一格`读不动`，把装配缺陷演成
 // 依赖故障。
 func NewDirectionalBasisJudge(deps DirectionalBasisDeps) (*DirectionalBasisJudge, error) {
 	if deps.Intakes == nil || deps.ServiceResults == nil || deps.Routing == nil || deps.Clock == nil {

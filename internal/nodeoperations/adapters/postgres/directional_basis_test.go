@@ -2,8 +2,11 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
@@ -14,7 +17,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
-// 本文件对真实 PostgreSQL 16 证方向依据记录的库面（票 no-directional-basis/01，迁移 0005）：随加成员事实原样读回、
+// 本文件对真实 PostgreSQL 16 证方向依据记录的库面（票 no-directional-basis/01，迁移 0005）：随移入事实原样读回、
 // 这一列出现之前的旧行读作`未记录`、绕过适配器写进来的坏形状由 CHECK 拦，以及按作业实物读收寄册。
 
 var basisJudgedAt = time.Date(2026, 10, 16, 9, 30, 0, 0, time.UTC)
@@ -56,8 +59,8 @@ func establishedWithCancelledAndFinal(t *testing.T) domain.DirectionalBasisRecor
 	return record
 }
 
-// TestADirectionalBasisRecordRoundTripsWithTheAddMemberFact 证记录随加成员事实同一行落、经领域重建门原样读回：
-// 三格取值与原因、身份所依的收寄、服务结果引用、判断时刻；身份不成立的一份另两格读回`未判`；不带记录写下的加成员
+// TestADirectionalBasisRecordRoundTripsWithTheAddMemberFact 证记录随移入事实同一行落、经领域重建门原样读回：
+// 三格取值与原因、身份所依的收寄、服务结果引用、判断时刻；身份不成立的一份另两格读回`未判`；不带记录写下的移入
 // 行（这一列出现之前的样子）读回零值，读作`未记录`。
 func TestADirectionalBasisRecordRoundTripsWithTheAddMemberFact(t *testing.T) {
 	facts, units, transactor, _ := newConsolidationFacts(t)
@@ -124,7 +127,7 @@ func TestADirectionalBasisRecordRoundTripsWithTheAddMemberFact(t *testing.T) {
 	}
 }
 
-// TestDirectionalBasisColumnRejectsImpossibleRows 守迁移 0005 的两条 CHECK：绕过适配器直接写库的一行——迁移脚本、
+// TestDirectionalBasisColumnRejectsImpossibleRows 守迁移 0005 加在这一列上的 CHECK：绕过适配器直接写库的一行——迁移脚本、
 // 运维改数、日后另写的适配器——领域构造器一次都不会经过，这是它们唯一过的门。
 func TestDirectionalBasisColumnRejectsImpossibleRows(t *testing.T) {
 	_, units, transactor, pool := newConsolidationFacts(t)
@@ -152,7 +155,7 @@ func TestDirectionalBasisColumnRejectsImpossibleRows(t *testing.T) {
 		member any
 		basis  string
 	}{
-		"非加成员行带记录": {"OPEN_UNIT", nil, good},
+		"非移入行带记录": {"OPEN_UNIT", nil, good},
 		"缺判断时刻": {"ADD_MEMBER", "hu-1", `{"identity":{"answer":"MISSING","reasons":["NO_INTAKE_RECORD"]},` +
 			`"serviceResult":` + unjudged + `,"routing":` + unjudged + `}`},
 		"缺一格": {"ADD_MEMBER", "hu-1", `{"judgedAt":"2026-10-16T09:30:00Z",` +
@@ -172,12 +175,18 @@ func TestDirectionalBasisColumnRejectsImpossibleRows(t *testing.T) {
 			`,"routing":{"answer":"MISSING","reasons":["NO_CURRENT_ROUTE"]}}`},
 	}
 	for name, row := range rejected {
-		if err := insert("bad-"+name, row.action, row.member, row.basis); err == nil {
-			t.Errorf("一行「%s」溜进了作业事实登记", name)
+		err := insert("bad-"+name, row.action, row.member, row.basis)
+		want := "consolidation_fact_directional_basis_shaped"
+		if row.action != "ADD_MEMBER" {
+			want = "consolidation_fact_directional_basis_add_member_only"
+		}
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.ConstraintName != want {
+			t.Errorf("一行「%s」该被 %s 拦下，实得：%v", name, want, err)
 		}
 	}
 	if err := insert("good-add", "ADD_MEMBER", "hu-1", good); err != nil {
-		t.Errorf("合法的一行被拒，上面的拒绝因此说明不了是这两条 CHECK 在起作用：%v", err)
+		t.Errorf("合法的一行被拒，上面的拒绝因此说明不了是这一列的 CHECK 在起作用：%v", err)
 	}
 }
 

@@ -13,7 +13,7 @@ import (
 // ErrUnexpectedConsolidationSave 说明集运库交回了封闭集合以外的写入结果。
 var ErrUnexpectedConsolidationSave = errors.New("node operations: unexpected consolidation save outcome")
 
-// ErrNoDirectionalBasisRecord 说明加成员的调用方没交方向依据记录。这是装配缺陷，不是业务答案：真缺依据是记录里
+// ErrNoDirectionalBasisRecord 说明移入的调用方没交方向依据记录。这是装配缺陷，不是业务答案：真缺依据是记录里
 // 一格的取值，照样落册；没判就交进来，落下去的只能是一条读作`未记录`的新事实，而那一格留给的是它出现之前的旧事实。
 var ErrNoDirectionalBasisRecord = errors.New("node operations: add member needs the directional basis judged before the write")
 
@@ -150,9 +150,9 @@ func (result ConsolidationResult) HandoffReference() string {
 	return result.handoffRef
 }
 
-// DirectionalBasis 交回加成员事实所带的方向依据记录：新形成时是与事实同一笔落册的那一份，`已有结果`时是册上
-// 原样的那一份——不重判，判断时刻也是当时的。其余结果交回零值；加成员的`已有结果`交回零值，说的是那条事实落册
-// 时还不记方向依据（`未记录`），不是依据齐全。
+// DirectionalBasis 交回移入事实所带的方向依据记录：新形成时是与事实同一笔落册的那一份，`已有结果`时是册上
+// 原样的那一份，判断时刻也是当时的——本次调用方交进来的那一份不落册、不交回。`已有结果`交回零值时，说的是那条
+// 移入事实落册时还不记方向依据（`未记录`），不是依据齐全；其余结果恒为零值。
 func (result ConsolidationResult) DirectionalBasis() domain.DirectionalBasisRecord {
 	return result.basis
 }
@@ -219,7 +219,7 @@ func (handler *ConsolidateParcelsHandler) Open(
 // 本单元是幂等重放、在别的未关闭单元里是业务负向带对方标识（恢复动作是先从那里
 // 移出，不是重试）；封装/关闭态由领域拦。
 //
-// basis 是调用方在写事务之前判好的方向依据记录（DirectionalBasisJudge），只在形成新加成员事实时与事实同一笔
+// basis 是调用方在写事务之前判好的方向依据记录（DirectionalBasisJudge），只在形成新的移入事实时与事实同一笔
 // 落册。它不挡事实：缺依据、读不动都照常 MEMBER_ADDED——UC-NO-003「已经发生的错误分拣保留为事实并形成偏离，
 // 不回写为未发生」，偏离的判断归 network-routing，异常归 visibility-exception。
 func (handler *ConsolidateParcelsHandler) AddMember(
@@ -490,12 +490,20 @@ func (handler *ConsolidateParcelsHandler) recorded(
 		return ConsolidationResult{outcome: ConsolidationUndecided}
 	}
 	if saved == ports.ConsolidationFactAlreadyRecorded {
-		// 交回的方向依据记录得是先到那一份落在册上的，不是本次刚判的：读回赢家再答。
+		// 交回的方向依据记录得是先到那一份落在册上的，不是本次刚判的：读回赢家再答。赢家是同一来源的另一份内容时，
+		// 答来源冲突而不是已有结果——与受理闸同一条代数。
 		winner, found, err := handler.deps.Facts.FindByKey(ctx, gate.key)
 		if err != nil || !found {
 			return ConsolidationResult{outcome: ConsolidationUndecided}
 		}
-		return handler.existingResult(ctx, winner)
+		switch domain.CompareStoredDigest(winner.ContentDigest, gate.digest, gate.unversioned) {
+		case domain.SamePayload:
+			return handler.existingResult(ctx, winner)
+		case domain.DifferentPayload:
+			return ConsolidationResult{outcome: ConsolidationSourceConflict}
+		default:
+			return ConsolidationResult{outcome: ConsolidationUndecided}
+		}
 	}
 	return result
 }

@@ -17,8 +17,8 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 证集运导入的方向依据记录（票 no-directional-basis/01 偏离标记半边，隔离合成 S）：已经
-// 发生的加成员照记、记录与事实同一行落、导入报告如实写缺少与读不动；PS 读口在 SQL 层出错时事实照落——判断在本行
-// 写事务之前，读在池上，一次读错连累不到写事务。
+// 发生的移入照记、记录与事实同一行落、导入报告如实写缺少与读不动；PS 读口在 SQL 层出错时事实照落（判断在本行
+// 写事务之前，见 application.DirectionalBasisJudge）。
 
 const (
 	sourceIDAddFirst  = "FTI/CONSOLIDATION-1/SYN-BATCH-20260908-PM/SYN-WORK-0002"
@@ -134,7 +134,7 @@ func mustRef[T any](t *testing.T, construct func(string) (T, error), raw string)
 	return built
 }
 
-// TestImportedMembersCarryTheirDirectionalBasis 用样例九行：SYN-HU-0001 有收寄、识别到正式包裹，PS 上没有取消与
+// TestImportedMembersCarryTheirDirectionalBasis 用样例模板：SYN-HU-0001 有收寄、识别到正式包裹，PS 上没有取消与
 // 终局，身份与服务结果成立、路由依据未配置；SYN-HU-0002 在收寄册上查无此物，身份缺少·无收寄记录，另两格未判。两行
 // 都照常落地，退出码不变；报告逐行写缺少依据，路由依据未配置只在汇总说一次；重跑交回册上那一份。
 func TestImportedMembersCarryTheirDirectionalBasis(t *testing.T) {
@@ -172,7 +172,7 @@ func TestImportedMembersCarryTheirDirectionalBasis(t *testing.T) {
 	if strings.Contains(results[1].Detail, "路由依据") {
 		t.Fatalf("路由依据未配置逐行写了出来：%q", results[1].Detail)
 	}
-	if !strings.Contains(report, "加成员 2 行，缺少依据 1 行（无收寄记录 1）") || !strings.Contains(report, "路由依据未配置 1 行") {
+	if !strings.Contains(report, "移入 2 行，缺少依据 1 行（无收寄记录 1）") || !strings.Contains(report, "路由依据未配置 1 行") {
 		t.Fatalf("汇总行：\n%s", report)
 	}
 

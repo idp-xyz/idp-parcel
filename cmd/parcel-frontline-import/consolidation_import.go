@@ -22,9 +22,8 @@ import (
 // 写口无事务即拒），一行一笔——理由同收寄口，这里还多一层：集运行之间有先后依赖（开启
 // 在前、移入在后、封装再后），一行被拒不该连累它前面已合法形成的作业事实。
 //
-// 与收寄口不同，集运六口不挡在身份核对上：成员是作业实物号，不经 PS 侧解析，样例各行今天就能全部落地。加成员
-// 行另判一份方向依据记录随事实落册（票 no-directional-basis/01）：判在本行事务之前，读在池上——跨上下文读在写
-// 事务里出一次 SQL 级错误，整笔事务就进了中止态，读不动于是挡住了已经发生的加成员。
+// 与收寄口不同，集运各口不挡在身份核对上：成员是作业实物号，不经 PS 侧解析，样例各行今天就能全部落地。移入
+// 行另判一份方向依据记录随事实落册（票 no-directional-basis/01）：判在本行事务之前，理由在 DirectionalBasisJudge。
 type consolidationImporter struct {
 	handler    *application.ConsolidateParcelsHandler
 	judge      *application.DirectionalBasisJudge
@@ -104,7 +103,7 @@ func executeConsolidation(ctx context.Context, batch consolidationBatch, importe
 	return exitCodeFor(results)
 }
 
-// importConsolidation 逐行推进：加成员行先判方向依据（本行事务之前，外层 ctx）→ 一行一笔事务 → 按命令类型交
+// importConsolidation 逐行推进：移入行先判方向依据（本行事务之前，外层 ctx）→ 一行一笔事务 → 按命令类型交
 // 对应的集运口 → 应用结果译成去向。编排返回 Go 错误时整笔回滚，该行记未决；其他行照常继续。
 func importConsolidation(
 	ctx context.Context,

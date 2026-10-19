@@ -106,7 +106,7 @@ func (repository *ConsolidationFacts) FindByKey(
 		}
 		record.Seal = seal
 	}
-	// NULL 是这一列出现之前落的加成员事实（或非加成员行）：零值记录，读作`未记录`。
+	// NULL 是这一列出现之前落的移入事实（或非移入行）：零值记录，读作`未记录`。
 	if directionalBasis != nil {
 		basis, err := rebuildDirectionalBasis(directionalBasis)
 		if err != nil {

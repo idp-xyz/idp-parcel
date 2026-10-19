@@ -30,8 +30,8 @@ var _ ports.IntakeIdentityView = (*IntakeIdentities)(nil)
 // FindIntakeIdentities 交回这件实物在册上每一行带收寄的记录（收寄已形成与待识别两格；另两格不带收寄，也就没有
 // 作业实物可按）。查无此物交回空切片。
 //
-// 走 ReadExecutor：方向依据由组合根在写事务之前判，外层 ctx 不绑事务，读落在池上——这正是要的；在事务里读也
-// 照样成立，只是那样一次读错会连累写事务。行上的值逐个过领域构造器，坏行作为错误交回，编排把它记成`读不动`。
+// 走 ReadExecutor：调用方不绑事务时读落在池上（为什么要在写事务之前读，见 application.DirectionalBasisJudge）。
+// 行上的值逐个过领域构造器，坏行作为错误交回，编排把它记成`读不动`。
 func (view *IntakeIdentities) FindIntakeIdentities(
 	ctx context.Context,
 	tenant domain.TenantID,

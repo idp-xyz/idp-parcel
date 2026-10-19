@@ -231,9 +231,9 @@ type ConsolidationFactKey struct {
 // Member 只在移入/移出两格在场，Seal 只在封装格在场——其余格上它们缺席是真话，不是漏填。
 // OccurredAt 是现场自带的业务时间，RecordedAt 是服务端的记录时刻，两者分列（ADR-0023）。
 //
-// DirectionalBasis 只在移入格上有值：形成新加成员事实时同一笔记下的方向依据记录（票 no-directional-basis/01）。
+// DirectionalBasis 只在移入格上有值：形成新的移入事实时同一笔记下的方向依据记录（票 no-directional-basis/01）。
 // 它不进内容指纹——那是服务端在判断时刻所知，不是来源报来的内容；进了指纹，PS 状态一变，同一来源重投就成了
-// 来源冲突。零值读作`未记录`（这一格出现之前落的加成员事实），不读作依据齐全。
+// 来源冲突。零值读作`未记录`（这一格出现之前落的移入事实），不读作依据齐全。
 type ConsolidationFactRecord struct {
 	Key              ConsolidationFactKey
 	ContentDigest    string

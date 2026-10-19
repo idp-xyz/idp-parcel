@@ -50,7 +50,7 @@ const (
 	registryConsolidationMember = "consolidation-member"
 )
 
-// NewQueryNodeOperationsRecordsEndpoint 交回节点作业查阅页三本册子的 HTTP 入口
+// NewQueryNodeOperationsRecordsEndpoint 交回节点作业查阅页各本册子的 HTTP 入口
 // （GET /node-operations-records，票 admin-skeleton-closure-batch/05）。
 //
 // 本页是治理查阅面，不是一线作业端（ADR-0021）：实时现场作业走设备渠道的命令端点，

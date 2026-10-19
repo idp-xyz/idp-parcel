@@ -9,7 +9,7 @@ import (
 
 // directionalBasisRow 是 consolidation_fact.directional_basis 这一 jsonb 列的行模型（迁移 0005 的形状 CHECK 照它
 // 的键写）。三格同一个形，引用随格：身份成立带所依收寄，服务结果缺少带结果引用。写侧、按键读回与查阅目录共用
-// 这一份，不在三处各立一套键名。
+// 这一份，不各立一套键名。
 type directionalBasisRow struct {
 	JudgedAt      time.Time               `json:"judgedAt"`
 	Identity      directionalBasisCellRow `json:"identity"`
