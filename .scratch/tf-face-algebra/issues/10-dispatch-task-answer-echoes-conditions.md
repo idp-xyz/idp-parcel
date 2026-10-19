@@ -1,7 +1,7 @@
 # 10 建派送任务的答复不回显 conditions：票 20 判「回显让调用方自己比」够用，所凭的回显缺一格
 
 Category: bug
-Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 代决并认领：照「修复方向（机制）」办，无取舍（答复形状补一格，不动编排）；分支 `claude-tfa121310`（与 12、13 同一分支，先 12、13 后 10）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 代决并认领：照「修复方向（机制）」办，无取舍（答复形状补一格，不动编排）；分支 `claude-tfa121310`（与 12、13 同一分支，先 12、13 后 10）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment-dispatch-task-registrations
@@ -73,3 +73,13 @@ Blocked by: 无
 ### 未做
 - 「票 15 补记下追加回写行」：**留给推送方**（票 15 正在另一条分支改，合并时补）。
 - 「走 Go 那条路」的非作者评审与推送方干净检出全量：属会话与推送方。
+
+## Comments
+
+### 评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审；2026-10-19，钉 `ea540e94`）
+
+两轴合审，0 阻断。
+
+- **Spec**：`conditions` 从在册任务取，201 与 `DISPATCH_TASK_ALREADY_OPEN` 同形；格序与派送发起口的任务那几格一致。HTTP 单测逐字节比对（含整秒时刻格式）；真渠道真库以 A 建、以 B 重投答 200 回显 A、库里一行仍是 A。编排不动。
+- **Standards**：头注写为什么（少一格调用方比不出差异）。
+- 票 15 回写行由推送方在进 main 时补。
