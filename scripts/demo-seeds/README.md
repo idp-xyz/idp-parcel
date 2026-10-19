@@ -283,12 +283,9 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
    一项，第二项答 `SCOPE_ALREADY_CHARGED`。
 
    2026-10-19 起（票 demo-chain-gaps/28，ADR-0207 文末补记）干线协议再发 `v3`（发布批里紧跟 `v2` 的那一项，批准
-   `SYN-APPROVAL-2026-021`）：在 `v2` 的两条之上声明订舱与取消按订舱计，`v2` 原样在册。演示的委托、段采用与发生项
-   登记自此指名 `v3`。订舱被承运方接受之后登 `BOOKING` 发生项，事实给订舱与委托里的包裹；订舱取消（委托尚未开始）
-   之后登 `CANCELLATION`。两种原因都不必给服务方与协议，取订舱所属委托的；干线段采用了委托时 `ACTUAL_FULFILLMENT` 同理。
-   给了而与委托不一致答 `CONFLICT` / `PROCUREMENT_CONTEXT_CONFLICT`。BUY 触发册只登实际履约一行，订舱费与取消费形成
-   之后结算答未配置——演示租户没配那两行，不是缺陷。载荷与各答只写在 `docs/design/synthetic-demo-journey-script.md`
-   「第 3 步」的票 28 补记里，这里不复述。
+   `SYN-APPROVAL-2026-021`），`v2` 原样在册；演示的委托、段采用与发生项登记自此指名 `v3`。`v3` 声明了什么、订舱费与
+   取消费怎么登、各格怎么答，只写在[演示动线](../../docs/design/synthetic-demo-journey-script.md)「第 3 步」的票 28
+   补记里，这里不复述。
 
 ## 已知边界（如实记录，不是缺陷）
 
