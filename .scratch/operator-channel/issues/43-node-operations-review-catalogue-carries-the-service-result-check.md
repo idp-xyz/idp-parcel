@@ -1,7 +1,7 @@
 # 43 节点作业复核目录透出收寄的服务结果核对态，让「读不动」与「已查、无标记」在查阅答复里分得开
 
 Category: enhancement
-Status: ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 2 评审遗留；用户授权代决）
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（两道 Blocked by 都已进 main：operator-channel/29、no-directional-basis/01 偏离标记半边），分支 `claude-oc43`。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 2 评审遗留；用户授权代决）
 Blocked by: operator-channel/29 进 main；no-directional-basis/01 偏离标记半边进 main（同改复核目录三份文件）
 父票：operator-channel/29（收寄遇依赖读不动的主修复票）。
 出处：
