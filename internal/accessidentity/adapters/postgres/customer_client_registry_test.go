@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -278,6 +279,29 @@ func TestCustomerClientGrantIsEffectiveOnlyInsideItsIntervalAndUntilRevoked(t *t
 			(issuer, subject, tenant_id, customer_account_id, credential_ref, certificate_bound_token_required, basis_ref)
 		 VALUES ($1, 'SYN-CUSTOMER-CLIENT-09', $2, ' ', 'SYN-X', false, 'SYN-X')`,
 		syntheticIssuer, tenantOne)
+}
+
+// Covers: PBC-08——三个写口只经框架事务，拿不到事务句柄时答 ErrTransactionRequired，不退回连接池自动提交。
+func TestCustomerClientRegistrationWritesRefuseToRunOutsideATransaction(t *testing.T) {
+	register := newCustomerRegister(t)
+	subject := customerSubjectOf(t, syntheticIssuer, "SYN-CUSTOMER-CLIENT-01")
+	ctx := t.Context()
+
+	if _, err := register.registry.RegisterCustomerClient(ctx,
+		customerBindingOf(t, subject, defaultCustomerBinding(tenantOne))); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务登记主体：err = %v, want ErrTransactionRequired", err)
+	}
+	if _, err := register.registry.RegisterCustomerClientGrant(ctx,
+		customerGrantOf(t, tenantOne, "SYN-CUSTOMER-GRANT-01", subject, grantStartsAt, time.Time{})); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务登记授予：err = %v, want ErrTransactionRequired", err)
+	}
+	if _, err := register.registry.RegisterCustomerClientRevocation(ctx,
+		revocationOf(t, tenantOne, "SYN-CUSTOMER-GRANT-01", grantStartsAt, "SYN-REVOKE-BASIS-01")); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务登记撤销：err = %v, want ErrTransactionRequired", err)
+	}
+	if _, found, err := register.registry.FindCustomerClient(ctx, subject); found || err != nil {
+		t.Fatalf("无事务登记之后：found %v, err %v; want 未落册", found, err)
+	}
 }
 
 func registerDB(t *testing.T, pool *pgxpool.Pool) *bentopg.DB {
