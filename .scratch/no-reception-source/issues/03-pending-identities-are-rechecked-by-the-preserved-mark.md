@@ -1,7 +1,7 @@
 # 03 第二期：待识别实物按存下的号重核（AT-NO-026）——PS 关联册新形成关联时交出信封、复核页人工发起，结果唯一即追加关联版
 
 Category: enhancement
-Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 评审补完工（推送方裁定两件：演示种子补齐、ADR-0199 追加复核记录；rebase 到 main `e8ef2398`），待评审。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（02 已进 main），分支 `claude-nrs03`；碰 cmd/parcel-dispatch/assemble.go 与 cmd/parcel-api/endpoints.go 已与另一会话对齐次序（本票先进）。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）
+Status: resolved——2026-10-19 进 main（代码验证钉 `3d6d971c`），见「进 main 记录」。此前 in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 评审补完工（推送方裁定两件：演示种子补齐、ADR-0199 追加复核记录；rebase 到 main `e8ef2398`），待评审。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（02 已进 main），分支 `claude-nrs03`；碰 cmd/parcel-dispatch/assemble.go 与 cmd/parcel-api/endpoints.go 已与另一会话对齐次序（本票先进）。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）
 Blocked by: 02 进 main（重核拿的是 02 存下的来源文档；追加版要指名前版）
 父票：[01](./01-node-reception-preserves-the-delivery-source.md)
 出处：票 01 裁定分期之「二、按存下的号重核」与「重核由什么触发」那一问；ADR-0199 决定三。`AT-NO-026` 在 `.scratch/at-coverage-inventory.md` 里是机制候选，今天没有票、也没有人工关联口。
@@ -56,7 +56,7 @@ Blocked by: 02 进 main（重核拿的是 02 存下的来源文档；追加版�
 - [x] PS 侧适配器用例：关联重放（ON CONFLICT 不插）不重复入队；适用终态不入队。
 - [x] admin-web 三道门退 0（口径见 [workflow 本机环境](../../../docs/agents/workflow.md#本机环境)）。
 - [x] Go 门禁：`go build ./...`、`go vet ./...` 退 0，`gofmt -l .` 无输出；带 DSN 跑 `internal/nodeoperations/...`、`internal/parcelshipment/...`、`cmd/parcel-api`、`cmd/parcel-dispatch`、`cmd/parcel-frontline-import`、`internal/architecture/...`、`migrations/...` 全绿；机制清点在本笔的干净检出上重生成。
-- [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
+- [x] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
 
 ## 完成记录（2026-10-19，会话 idp-parcel-9b 的作者子代理，分支 `claude-nrs03`，基于 main `4f11563c`）
 
@@ -270,3 +270,8 @@ Blocked by: 02 进 main（重核拿的是 02 存下的来源文档；追加版�
 - **评审补（推送方裁定，已做于 `1deb9017`、`44e0c02c`、`0f1a3bd9`）**：演示种子照其余运营决定同形补授予、准入对照与治理区间（另在 `seed.sh` 加一行灌入新区间），临时库实灌核对过；决定种类的留痕只记一处，ADR-0199 文末追加复核记录；`appendIdentityConflicts` 头注照链头读法写全，「冲突行不重核」的理由改引 ADR-0210。
 - **与另一会话的共享文件**：`cmd/parcel-dispatch/assemble.go`、`cmd/parcel-api/endpoints.go`、`main.go` 只加行，与对方约定本票先进。
 - **已知（作者记在「发现」，不另立票）**：PS 关联册按号码建的 btree 索引有长度上限，超长号码写不进——本票之前就有，号码进册无长度门；真渠道接单入口上线前随 PS 侧入口校验收。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 分支 `claude-nrs03` rebase 到远端 main 之上快进推送。期间另一会话的 TF 链第一波（demo-chain-gaps/16、19、22、26、30、31）先进了 main，`cmd/parcel-api/endpoints.go`、`endpoints_test.go`、`main.go` 的参数表与 `cmd/parcel-dispatch/assemble.go` 的路由表撞了相邻追加行，两边都留（对方在前、本票在后，参数表与调用处次序一致）；AT 覆盖盘点按新基数重算（追记九随之改）；机制清点在新树上重生成。
+- 推送方全量一次：钉 `3d6d971c` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 147 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
