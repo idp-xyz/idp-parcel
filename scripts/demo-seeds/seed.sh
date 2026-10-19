@@ -280,8 +280,8 @@ echo "== 试点治理登记（pilot-governance：权威区间、暂停、恢复�
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/31-authority-interval-external-fact-carrier-booking-answer.json"
 # 送站预报两口（ADR-0212 决定二；票 ps-external-mark-relations/09）是首方客户族的生产写，准入范围在铸造侧判（ADR-0139 决定八）：
 # 能力 CUSTOMER_COMMAND，事实类型取客户面能力词，对象范围另起一个客户面的合成范围。
-"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/32-authority-interval-customer-command-delivery-pre-advice-submission.json"
-"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/33-authority-interval-customer-command-delivery-pre-advice-withdrawal.json"
+"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/35-authority-interval-customer-command-delivery-pre-advice-submission.json"
+"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/36-authority-interval-customer-command-delivery-pre-advice-withdrawal.json"
 
 echo "== 操作者册登记（access-identity：合成操作者主体与能力面授予；票 operator-channel/01、17） =="
 # 合成主体绑演示租户：配置员扮运营主管，持有全部运营决定（票 operator-channel/24「裁定」）——授登记册配置写、主数据与
