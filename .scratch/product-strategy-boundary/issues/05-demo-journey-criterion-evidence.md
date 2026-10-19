@@ -343,3 +343,77 @@ Claude Code 会话做，同一授权。格 19 今天在 main 上走得通：
 取证细节与库上读数只记在 [sell-customer-charge/05](../../sell-customer-charge/issues/05-demo-tenant-forms-an-estimated-customer-charge.md) 的完成记录，这里不复写。
 
 格 17、18、20、21 仍停在原处：BUY 那一侧见 [demo-chain-gaps/07](../../demo-chain-gaps/issues/07-transport-charge-occurrences-have-no-production-path.md)、[08](../../demo-chain-gaps/issues/08-buy-evaluation-recorded-consumer-never-forms-supplier-expected-cost.md)。
+
+## 重走（钉 `8197fa2f`，2026-10-19）
+
+Claude Code 子代理做，只读代码、不改代码。worktree 分支 `claude-demo-walk`，检出 `8197fa2f`（当时的 `origin/main`）。一次性库 `walk1019`，`seed.sh` 原样灌入退 0。操作者发行方用共享的 5556。共享的集成客户端发行方仍答 `invalid_client`，合成货主系统与合成干线承运客户端都不认；另起一只私有 Dex，用同一份 `integration-dex.yaml`，宿主端口 5569，`iss` 串不变。`parcel-api` 照动线「前置」起：读写隔离开关同取 `SYN-TENANT-01`，设治理自授权，三族发行方都设，集成客户端族与首方族的 JWKS 指 5569。`parcel-dispatch` 七个变量照「前置」，拍间隔 2s。取证时段 20:33Z–20:48Z。实测只记 `S`；走完已停进程、删私有 Dex 容器、删库，二进制与令牌已清。
+
+**结论**：实物主链与 SELL 一侧从首方客户提交一路走到包裹终局 `EFFECTIVE_DELIVERY`。往下这几处没走通或走偏：
+
+- BUY 停在计价 `ZONE_UNRESOLVED`；
+- 客户视图读不出来；
+- 关务旁路停在立案入口；
+- 自营段与干线之间撞出 TF 与 NO 对「交接链」认法不一致的机制缺口。
+
+### 逐段
+
+- **提交与受理**：`submit-one-shipment.sh` 经首方客户渠道答 `201 SUBMITTED`，委托 `SHR-EUIQ7PBH3MY5H56EOZSI7E6MWQ`，包裹 `DPCL-FRVC5MAXIPKBQHYKMXQGOATJUE`。dispatch 下一拍成`已接受`：冻结 `FRZ-0001` 金额 9600，估价留痕一行。
+- **初始路由与运输准备**：`GET /route-plans?register=initial-route` 一行 `ROUTE_FORMED`，计划 `RPV-000000000001`。
+  - `#4` 种类 `DELIVERY`，`SYN-NODE-SIN-LM → SYN-AREA-SG@1`，窗口 2026-10-21T18:00Z–22:00Z，依据 `NODE/SYN-NODE-SIN-LM@2`。
+  - 运输准备 `#1` 答 `OPPORTUNITY_PREPARED`，选 `SYN-SCHED-SHA-SZX-EXPRESS-1200/2026-10-20`（候选 `version` 0）。
+  - `#2` 答 `NO_CURRENT_OPPORTUNITY`：种子物化的干线 `…/2026-10-21` 到达 07:00Z，晚于窗口终点 06:00Z，判 `ARRIVES_AFTER_WINDOW`。
+  - `#3` 答 `NO_CURRENT_OPPORTUNITY`。
+- **预报、收寄、采用**：
+  - `submit-one-pre-advice.sh` 签出 `PREADV-A7PCQWDIGNGQREOGGEHVW5DIHU`。带它 `receive-one-delivery.sh` 答 `201 INTAKE_FORMED`，关联那件包裹，核对态 `VERIFIED`。
+  - `network-intake.recorded` 发布。SELL 时点是收寄，SELL 请求、评价、预估客户费用依次形成：`/settlement-charges?registry=customer-charge` 一行 `ESTIMATED` 9600。
+  - 投影多一条 `node-intake` → `PICKED_UP`。复核册一行 `STILL_APPLICABLE`（`intake/…`）。
+- **自营段 SHA→SZX**：
+  - 运力：`POST /transport-fulfillment-transport-schedule-registrations` 登那一班，答 `201 SCHEDULE_REGISTERED`，带两池。两池各预占一份（`10 KG`、`5 PCS`），答 `201 CAPACITY_RESERVED`。装载分配带两行预占引用，答 `201 LOAD_ASSIGNMENT_FORMED`：重量行声明 `2 KG`，件数行 `quantityFromMembers` 得 1。
+  - 交出：华东场外设备在 SHA 登交接 `H1/v1`，带 `segment`、`plannedSegment` `#1`、`releasingNode` SHA、`onwardNode` SZX。答 `201`，交出门禁读数 `NOT_GUARDED`。NO 上海那一份 `OUT`·`ADVANCED`。
+  - 出发：先问询，答 `200 DEPARTURE_GATE_PREVIEWED` `NOT_GUARDED`。同一时点报出发，答 `201 MOVEMENT_FACT_RECORDED`，读数逐字相同。投影多一条 `DEPARTED`。
+  - 交进深圳口岸 `H2/v1`，只声明 `receivingNode`。答 `201`，读数 `UNDECIDED` / `RELEASING_NODE_NOT_DECLARED`，参与结束。NO 深圳口岸 `IN`·`ADVANCED`·`HANDOVER_IN`。复核册多一行 `STILL_APPLICABLE`（`handover/…`）。
+- **干线 SZX→SIN**：
+  - 委托与订舱：干线委托指名 `v3`，答 `201 COMMISSION_SUBMITTED`，法人 `SYN-LE-01`；它的信封照 ADR-0066 落 `no_subscriber` → `ABANDONED`。订舱引种子物化那一班，答 `201 BOOKING_SUBMITTED`。合成干线承运客户端答 `ACCEPTED`，答 `201 BOOKING_ANSWERED`。
+  - 订舱费：登记答 `201 REGISTERED`，`BOOKING`，1 `BOOKING`，依据 `CARRIER-ACCEPTANCE/…`。BUY 触发册没登这一原因，结算不发请求，照票 28 补记属演示租户没配。
+  - 立段与采用：SZX 交给干线承运商立干线段 `H3/v1`，答 `201`，读数 `UNDECIDED`（跨区、无案）。段采用答 `201 COMMISSION_ADOPTED`，开始依据 `TRANSPORT-HANDOVER/H3/v1`。
+  - 交进新加坡枢纽：新加坡尾程设备登承运商交进 SIN-HUB `H4/v1`，答 `201`、`PARTICIPATION_ENDED`。下一拍实际履约发生项自动形成：登记者 `…#form-actual-fulfillment-on-participation-end`，旅程 `JRN/<包裹号>`，协议 `…/v3`。
+  - BUY：请求一份，费用项目 `SYN-FEE-ITEM-TRUNK-COST-01`。计价评价答 `PENDING` / `ZONE_UNRESOLVED`，供应商预期成本零行。
+  - NO 新加坡枢纽 `IN`·`ADVANCED`，复核册多一行 `STILL_APPLICABLE`。这一段 NO 转移册有一处不对，见停点一。
+- **末端与终局**：
+  - 尾程交接：SIN-HUB 交给自营尾程 `H5/v1`，`plannedSegment` `#4`，`FINAL_DELIVERY`，`releasingNode` SIN-HUB。答 `201`，读数 `NOT_GUARDED`。NO 新加坡枢纽那一份转出。
+  - 派送：下一拍派送任务随交接信封形成，窗口即 `#4` 的窗口；补拍口答 `200 DISPATCH_TASK_ALREADY_FORMED`。派送尝试答 `201 ATTEMPT_RECORDED`。
+  - 交付：有效交付答 `201 DELIVERY_REGISTERED`，`gateReading` `NOT_GUARDED`、`at` 为 SIN-HUB，`PARTICIPATION_ENDED`。
+  - 终局：PS 终局 `EFFECTIVE_DELIVERY` 一行，`final-outcome.formed` 发布。SELL 终局那一路只入账，客户费用仍是一笔。投影多 `DELIVERED` 与 `final-outcome-adopted` 两条。
+  - 客户视图：VE 已形成，里程碑与 ETA `SHOWN`，终局 `PENDING_CONFIRMATION`，说明 `NOT_DISCLOSED`。`GET /customer-tracking-view` 用配置员令牌、首方客户令牌都答 `403 ACCESS_CHANNEL_NOT_CONFIGURED`。
+- **关务旁路**：库上没有案件、没有申报提交。合成报关服务商的集成客户端令牌打 `POST /customs/external-results`（`RELEASE_RESULT`，声称一个没提交过的版本），答 `200 UNATTRIBUTABLE`：留存不猜，不交意图。立案与提交申报仍没有生产入口。
+- 已知没有订阅者的信封照旧落 `ABANDONED` / `dispatch.no_subscriber`：可达性判断、运输委托已提交、客户视图已发布。
+
+### 停点
+
+1. **同一（对象，范围）另起一次交接，NO 当它是前一次的更正**——机制。
+   - 现象：`H2/v1` 与 `H3/v1` 都写 `scope` `SZX`，TF 各答 `201 HANDOVER_REGISTERED`，两版之间没有更正回指。NO 转出那一半按（对象，范围）认链，剔掉 `H2/v1` 立起的深圳口岸控制，`H3/v1` 落 `OUT`·`NOT_ADVANCED`·`NO_ACTIVE_CONTROL`。下一次交接 `H4/v1`（`scope` `SIN`，不声明交出节点）把深圳口岸那一份转出。控制在错的那次交接转出，册上看不出错。
+   - 证据：对照件 `DPCL-7VJZ4RRIS66IV6FQW4RYKPANDI` 同一段三次交接各用自己的范围，深圳口岸交给干线承运商那一次落 `OUT`·`ADVANCED`·`SYN-NODE-SZX-GATE`。ADR-0214 越权风险点「同链按（对象，范围）认」预先写过这一格，此前没有承接票。
+   - 去处：新票 [demo-chain-gaps/95](../../demo-chain-gaps/issues/95-node-operations-reads-a-new-handover-under-the-same-scope-as-a-correction.md)。
+   - 动线文档该补一句（第 3 步交接首次出现处）：「交接载荷的 `scope` 是这次交接的链身份，每次交接各起一个；`version` 只给更正用，同一 `scope` 换个版本号另登，节点作业会当它是前一次的更正。」票 62 补记里 `SYN-HO-62-A/v1`、`SYN-HO-62-B/v1` 的写法就是这样，只是没说出来。
+2. **客户追踪视图口挂字面量未配置**——机制。
+   - 现象：`/customer-tracking-view` 两族令牌都答 `403 ACCESS_CHANNEL_NOT_CONFIGURED`。`assembleBusinessEndpoints` 里这一口的 Intake 是 `visibilityhttp.UnconfiguredIntake{}`，VE 已经形成的视图读不出来。ADR-0139 决定四点名了这一口。
+   - 去处：新票 [demo-chain-gaps/96](../../demo-chain-gaps/issues/96-customer-tracking-view-has-no-first-party-customer-intake.md)。
+3. **演示披露策略把 `SYN-ACCOUNT-01` 的终局一维登成待确认**——种子。
+   - 现象：有效交付、PS 终局之后，客户视图的终局一维仍是 `PENDING_CONFIRMATION`。种子 `data/visibility/07` 的 `SYN-VE-DISCLOSE-V1` 给两户的终局都是待确认，视图逐维照策略取。
+   - 归类：租户取值。终局一维要不要同时看投影里有没有终局，是 VE 的判法，归票里「要裁的」。
+   - 去处：新票 [demo-chain-gaps/97](../../demo-chain-gaps/issues/97-demo-disclosure-policy-keeps-the-final-dimension-pending.md)。停点二不解，这一维在动线上看不见。
+4. **BUY 计价 `ZONE_UNRESOLVED`，供应商预期成本零行**——种子，等机制。
+   - 与票 27 的记录同一停点（票 29、67 用的是合成包裹号，停在更前面的计价输入不可得）。
+   - 去处：[demo-chain-gaps/43](../../demo-chain-gaps/issues/43-demo-cost-card-binds-the-zone-catalogue.md)（`ready-for-agent`，Blocked by [routing-first-cut/20](../../routing-first-cut/issues/20-bound-cost-cards-fold-zones-through-the-parcel-postal-route.md)，后者 `ready-for-agent`）。不另立票。
+5. **关务立案与提交申报没有生产入口**——机制。
+   - 外部结果口本身通（`UNATTRIBUTABLE`），只是没有案件可归。
+   - 去处：[票 18](./18-customs-case-and-declaration-submission-entry.md)（`needs-triage`）。不另立票。
+6. **动线文档与种子 README 的写法**——文档。这几处不挡路，照文档原样写会撞上。
+   - 交接载荷：`已交接`必须带 `releasingEvidence`、`receivingEvidence`、`rule`，不得带 `basis`，带了答 `200 SOURCE_NOT_ACCEPTED`，答复不指名原因。动线各条交接补记只列段与节点几格。建议第 3 步交接首次出现处给一份完整载荷，与停点一那句并写。
+   - 自营段顺序：票 32 补记写「交接口带 `segment` 立 SHA→SZX 自营段」再出发；票 62 补记第一步把 SHA 交出与深圳口岸接收合成一次交接。两处拼起来，出发没有位置。建议写成四步：
+     1. SHA 交给自营干线立段，声明 `releasingNode` SHA、`onwardNode` SZX；
+     2. 出发前问询；
+     3. 出发；
+     4. 交进深圳口岸，只声明 `receivingNode`，读数 `UNDECIDED` / `RELEASING_NODE_NOT_DECLARED` 属预期。
+   - 装载分配：重量池的分配量只收整数，`quantityFromMembers` 只许落在件数池。演示包裹 1.5 KG，重量行要声明整数，本次写 2。重量行写 `quantityFromMembers` 答 `200 INPUT_NOT_ACCEPTED`，答复不指名原因。建议票 21 补记加一句。
+   - 集成客户端发行方：共享的那只容器挂的是另一棵树里的旧配置，答 `invalid_client`。种子 README「集成客户端渠道」一节只给了 `--force-recreate`，那会让别的会话手里的令牌作废；各次实走都另起私有 Dex。建议 README 把这条路写进去：同一份 `integration-dex.yaml`、另一宿主端口、`iss` 不变；`customer-token.sh` 与 `integration-token.sh` 分别用 `IDP_PARCEL_DEMO_CUSTOMER_ISSUER`、`IDP_PARCEL_DEMO_INTEGRATION_ISSUER` 指过去；`parcel-api` 两族的 JWKS 指同一端口。
