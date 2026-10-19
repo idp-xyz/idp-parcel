@@ -1,7 +1,7 @@
 # 07 交接更正链不线性：同一前版能被更正成两个新版本，范围汇总把一个对象数两次
 
 Category: bug
-Status: needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: in-progress——2026-10-18 会话 `idp-parcel-9b` 代决并认领（分支 `claude-oc41tfa07`，与 operator-channel/41 同一分支，排在其后）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment/handover-corrections
@@ -12,6 +12,10 @@ Blocked by: 无
 - cmd/parcel-api/（新增真库回归测试文件）
 
 代决依据：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」。
+
+## 裁定（2026-10-18，会话 idp-parcel-9b 代决）
+
+照「修复方向」三条做：链必须线性，一版最多被更正一次，照揽收更正的先例（迁移 0015 与票 tf-segment-lifecycle-closure/08）。编排先判「前版已有后继」，同内容答已有版本、异内容答冲突，比对用 operator-channel/41 交接更正那一半立起来的那套；库面部分唯一索引只作兜底，建索引前先查存量分叉，有就如实报出、不静默删。迁移取 `migrations/transport_fulfillment/` 下一个空号。属机制。
 
 ## 现象
 首登 v1，更正 v1→v2，再以 v1 作前版更正成 v2-retry（换放行证据）：两次更正都答 201 `HANDOVER_CORRECTED`，链在 v1 处分叉。用生产 `TransportHandovers.ListByScope` 读该范围，再交 `domain.SummarizeHandovers` 汇总，得 handedOver=2、total=2；而该范围只有一个对象。

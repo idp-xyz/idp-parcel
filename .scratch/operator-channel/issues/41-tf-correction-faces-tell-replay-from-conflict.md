@@ -1,7 +1,7 @@
 # 41 TF 更正口的重放代数不全：POD 更正原样重发会追加新版本，交接更正同一新版本换内容答已有版本
 
 Category: bug
-Status: ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 5 研判；逐口核实测补强）
+Status: in-progress——2026-10-18 会话 `idp-parcel-9b` 认领（分支 `claude-oc41tfa07`，tf-face-algebra/07 随后在同一分支）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 5 研判；逐口核实测补强）
 Blocked by: 无
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判簇 C4 第四张草案；逐口核研判 POD 更正、交接更正两口
