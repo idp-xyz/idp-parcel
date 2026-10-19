@@ -1,4 +1,4 @@
-// 送站交接单区与交接单详情上的「确认」（票 ps-external-mark-relations/13「做什么」第 1、3 项；UC-NO-006 步骤 5B、ADR-0212 决定三）。
+// 送站交接单区与交接单详情上的「确认」（票 ps-external-mark-relations/13「做什么」的「查阅读口」「确认绑定动作」两项；UC-NO-006 步骤 5B、ADR-0212 决定三）。
 //
 // 单独成模块而不写在页面里，理由同 identity-disposition：最容易错的几格是纯函数——没下结论的账户与否认的账户长成一样、确认按钮出现在已有
 // 结论的账户上；载荷漏了交付方参与方或依据引用；「未配置」与「不在授权交付关系内」被当成失败，或写成同一个恢复动作。页面组件要 React 与
@@ -16,19 +16,19 @@ import type {
 } from './delivery-scope-api';
 import { labelOf } from './presentation';
 
-/** 绑定结论两值（domain HandoverBindingConclusion）；没有结论的写「待确认」，那是 UC-NO-006 未决结束的原词，不是领域里的第三个结论。 */
+/** 绑定结论的封闭词表（domain HandoverBindingConclusion）；没有结论的写「待确认」，那是 UC-NO-006 未决结束的原词，不是领域里的第三个结论。 */
 export const bindingConclusionLabels: Record<string, string> = {
   CONFIRMED: '已确认',
   DENIED: '已否认',
 };
 
-/** 结论途径两值（domain HandoverBindingRoute）。 */
+/** 结论途径的封闭词表（domain HandoverBindingRoute）。 */
 export const bindingRouteLabels: Record<string, string> = {
   CUSTOMER_CHANNEL: '客户渠道',
   OPERATION_DECISION: '运营决定',
 };
 
-/** 成员形成方式两值（domain HandoverMembershipKind）。 */
+/** 成员形成方式的封闭词表（domain HandoverMembershipKind）。 */
 export const membershipLabels: Record<string, string> = {
   RECEPTION: '收寄带来',
   ASSIGNMENT: '归入',

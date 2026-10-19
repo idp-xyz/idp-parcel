@@ -266,7 +266,7 @@ type receptionCatalogueBody struct {
 	ServiceResultCheck   string   `json:"serviceResultCheck,omitempty"`
 	IdentityCheck        string   `json:"identityCheck,omitempty"`
 	RecordedAt           string   `json:"recordedAt"`
-	// 交付范围核对态三键与收寄答复同名同值（ADR-0212 决定五「收寄答复与复核目录都带它」），这一版没记时整键缺席。
+	// 交付范围核对态各键与收寄答复同名同值（deliveryScopeCheckFields；ADR-0212 决定五「收寄答复与复核目录都带它」），这一版没记时整键缺席。
 	deliveryScopeCheckFields
 }
 
@@ -306,7 +306,7 @@ type unidentifiedItemBody struct {
 	IdentityCheck    string   `json:"identityCheck,omitempty"`
 	// identityConflictCause 的读法见类型头注。
 	IdentityConflictCause string `json:"identityConflictCause,omitempty"`
-	// 交付范围核对态三键同收寄册那一格；deliveryScopeBasis 是这一版来源里上报的依据引用，与收寄载荷同一个 {kind, id} 形，来源没带即
+	// 交付范围核对态各键同收寄册那一格；deliveryScopeBasis 是这一版来源里上报的依据引用，与收寄载荷同一个 {kind, id} 形，来源没带即
 	// 整键缺席；assignedHandoverNote 是这件实物此刻最后归入的交接单，没归入过即整键缺席。两样分开给的理由在 ports 那一格的注释。
 	deliveryScopeCheckFields
 	DeliveryScopeBasis   *deliveryScopeBasisDocument `json:"deliveryScopeBasis,omitempty"`

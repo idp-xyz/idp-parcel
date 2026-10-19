@@ -11,7 +11,7 @@ import {
 } from './delivery-pre-advice';
 import type { DeliveryPreAdviceRecord } from './delivery-scope-api';
 
-// 送站预报区（票 ps-external-mark-relations/13「做什么」第 1 项）。最容易错的是「预计送达日」：读口只收瞬间，一日从哪一刻起算随看的人
+// 送站预报区（票 ps-external-mark-relations/13「做什么」的「查阅读口」）。最容易错的是「预计送达日」：读口只收瞬间，一日从哪一刻起算随看的人
 // 所在的时区，页面把日子换成那一日本地零点到次日零点的左闭右开区间；换错一格，零点那一份就落进前一日。
 
 function preAdvice(overrides: Partial<DeliveryPreAdviceRecord> = {}): DeliveryPreAdviceRecord {

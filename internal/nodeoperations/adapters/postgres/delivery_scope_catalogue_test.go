@@ -95,7 +95,7 @@ func preAdviceIDsOf(states []domain.DeliveryPreAdviceState) []string {
 	return ids
 }
 
-// Covers: 票 ps-external-mark-relations/13「做什么」第 1 项（预报）——按节点与预计送达时刻筛，区间左闭右开，新近在前；撤回的那份带撤回；
+// Covers: 票 ps-external-mark-relations/13「做什么」的「查阅读口」（预报）——按节点与预计送达时刻筛，区间左闭右开，新近在前；撤回的那份带撤回；
 // 页大小由读口执行；别的租户同标识的预报不出现，按标识读交回本租户那一份，别的租户才有的标识与查无此预报同答（found=false）。
 func TestPreAdvicesAreListedByNodeAndExpectedArrivalWithinTheTenant(t *testing.T) {
 	fixture := newDeliveryScopeCatalogueFixture(t)
@@ -287,7 +287,7 @@ func noteIDsOf(rows []ports.DeliveryHandoverNoteCatalogueRow) []string {
 	return ids
 }
 
-// Covers: 票 ps-external-mark-relations/13「做什么」第 1 项（交接单）——按节点与开立时刻筛、新近在前；每行带关闭、成员数与各账户的结论，
+// Covers: 票 ps-external-mark-relations/13「做什么」的「查阅读口」（交接单）——按节点与开立时刻筛、新近在前；每行带关闭、成员数与各账户的结论，
 // 范围成立与否由领域按结论派生；详情另带成员与各自的形成方式，按落册先后；别的租户的同名交接单不出现，按标识读与查无此单同答。
 func TestHandoverNotesAreListedByNodeAndOpeningWithClaimsAndMembers(t *testing.T) {
 	fixture := newDeliveryScopeCatalogueFixture(t)

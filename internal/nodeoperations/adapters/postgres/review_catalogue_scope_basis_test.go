@@ -14,7 +14,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
-// Covers: 票 ps-external-mark-relations/13「做什么」第 2 项的存储面（ADR-0212 决定五、七）——待识别册每行带这一版记下的交付范围核对态、
+// Covers: 票 ps-external-mark-relations/13「做什么」的「复核目录」的存储面（ADR-0212 决定五、七）——待识别册每行带这一版记下的交付范围核对态、
 // 来源里的交付范围依据引用，与这件实物此刻最后归入的交接单：来源没带依据的读作没有；归入只看归入、不看收寄带来的成员，按业务时间取
 // 最后一次；别的租户同名实物的归入不串进来。
 func TestUnidentifiedItemsCarryTheScopeBasisAndTheLastAssignedNote(t *testing.T) {

@@ -15,7 +15,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 )
 
-// 本文件钉送站预报与送站交接单运营查阅读的传输面（票 ps-external-mark-relations/13「做什么」第 1 项；UC-NO-006「权限、隔离与审计」）：
+// 本文件钉送站预报与送站交接单运营查阅读的传输面（票 ps-external-mark-relations/13「做什么」的「查阅读口」；UC-NO-006「权限、隔离与审计」）：
 // 方法门、信封各格、筛选参数的封闭形状、列表与详情的转写，与「查无与跨租户同答」在传输层的那一半（读口答 found=false，端点只有一种答法）。
 
 var scopeReadAt = time.Date(2026, 10, 20, 9, 0, 0, 0, time.UTC)
@@ -293,7 +293,7 @@ func decodeObject(t *testing.T, raw []byte) map[string]json.RawMessage {
 	return fields
 }
 
-// Covers: 票 13「做什么」第 1 项（预报）的转写——列表与详情同一个形：标识、客户账户、节点、预计送达、号码集合（照交来的顺序）、交付方线索
+// Covers: 票 13「做什么」的「查阅读口」（预报）的转写——列表与详情同一个形：标识、客户账户、节点、预计送达、号码集合（照交来的顺序）、交付方线索
 // （没给即整键缺席）、形成时刻与撤回与否（撤回才带撤回时刻）；空册答 []；详情查无答 404 DELIVERY_PRE_ADVICE_NOT_VISIBLE，与跨租户同答。
 func TestPreAdviceReadsTranscribeTheRegister(t *testing.T) {
 	withdrawn := preAdviceStateForRead(t, "SYN-PREADV-2", "", scopeReadAt.Add(time.Hour), "SYN-NUMBER-3")
@@ -404,7 +404,7 @@ func bindingForRead(t *testing.T, note, account string, conclusion domain.Handov
 	return binding
 }
 
-// Covers: 票 13「做什么」第 1 项（交接单）的转写——列表每行带交付方线索、开立、关闭（事实身份与时刻）、成员数、声称的每个账户各一格
+// Covers: 票 13「做什么」的「查阅读口」（交接单）的转写——列表每行带交付方线索、开立、关闭（事实身份与时刻）、成员数、声称的每个账户各一格
 // （结论与途径、作结论方、运营决定另带交付方参与方与依据引用，没结论的只带账户）、范围成立与否（成立才带时刻）；详情另带成员与各自的
 // 形成方式；查无答 404 DELIVERY_HANDOVER_NOTE_NOT_VISIBLE，与跨租户同答。
 func TestHandoverNoteReadsCarryClaimsClosureMembersAndScope(t *testing.T) {
@@ -490,8 +490,8 @@ func TestHandoverNoteReadsCarryClaimsClosureMembersAndScope(t *testing.T) {
 	assertNoOutcome(t, missing)
 }
 
-// Covers: 票 13「做什么」第 2 项的传输面（ADR-0212 决定五）——待识别册每行带交付范围核对态三键（与收寄答复同名同值）、来源里的依据引用
-// （与收寄载荷同一个 {kind, id} 形）与此刻归入的交接单；这一版没记、来源没带、没归入过的各自整键缺席；收寄册的行也带核对态三键。
+// Covers: 票 13「做什么」的「复核目录」的传输面（ADR-0212 决定五）——待识别册每行带交付范围核对态各键（与收寄答复同名同值）、来源里的依据引用
+// （与收寄载荷同一个 {kind, id} 形）与此刻归入的交接单；这一版没记、来源没带、没归入过的各自整键缺席；收寄册的行也带核对态各键。
 func TestUnidentifiedItemsCarryTheScopeCheckBasisAndAssignedNote(t *testing.T) {
 	check, err := domain.NewDeliveryScopeCheck(domain.DeliveryScopeUnverified, domain.ScopeBasisNotApplicable, domain.ScopeNotAHandoverMember)
 	if err != nil {

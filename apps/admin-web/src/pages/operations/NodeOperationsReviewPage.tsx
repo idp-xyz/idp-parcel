@@ -42,7 +42,7 @@ const info = moduleInfoById['node-operations-review'];
  * 「无处可登」演成「登记册为空」。
  *
  * 送站预报与送站交接单两区各走自己的读口（GET /node-operations-delivery-pre-advices、/node-operations-delivery-handover-notes，
- * 票 ps-external-mark-relations/13），筛选与详情各在自己的组件里；交接单详情上的「确认」是第三样运营决定（送站交接确认，UC-NO-006
+ * 票 ps-external-mark-relations/13），筛选与详情各在自己的组件里；交接单详情上的「确认」是又一样运营决定（送站交接确认，UC-NO-006
  * 步骤 5B），依授权交付关系确认一个账户的绑定，不确认身份。
  */
 interface ReviewRow {

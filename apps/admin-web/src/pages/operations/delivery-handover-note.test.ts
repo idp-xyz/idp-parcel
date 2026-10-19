@@ -13,7 +13,7 @@ import {
 } from './delivery-handover-note';
 import type { DeliveryHandoverConfirmationResponseBody, DeliveryHandoverNoteRecord } from './delivery-scope-api';
 
-// 送站交接单区与详情上的「确认」（票 ps-external-mark-relations/13「做什么」第 1、3 项；UC-NO-006 步骤 5B）。最容易错的几格：没下结论的
+// 送站交接单区与详情上的「确认」（票 ps-external-mark-relations/13「做什么」的「查阅读口」「确认绑定动作」两项；UC-NO-006 步骤 5B）。最容易错的几格：没下结论的
 // 账户与否认的账户长成一样、确认按钮出现在已有结论的账户上；载荷里漏了交付方参与方或依据引用；「未配置」与「不在授权交付关系内」被当成
 // 失败，或两句写成同一个恢复动作。
 

@@ -1,4 +1,4 @@
-// 交付范围核对态在管理台上的写法（票 ps-external-mark-relations/13「做什么」第 2 项；ADR-0212 决定五）。
+// 交付范围核对态在管理台上的写法（票 ps-external-mark-relations/13「做什么」的「复核目录」；ADR-0212 决定五）。
 //
 // 单独成模块：待识别实物区的「为何待识别」「交付范围核对」「依据 · 此刻归入」三列都要读核对态，词只在这里定一份。最容易错的是把四件事
 // 写成一个样——「缺范围」（候选在、没有可验证交付范围）、「范围成立但冲突」、「零候选」与「未核对」——它们候选列可以一样、冲突列可以一样，
@@ -6,14 +6,14 @@
 
 import type { UnidentifiedItemRecord } from './records-api';
 
-/** 核对态封闭三值（domain DeliveryScopeCheckState）。 */
+/** 核对态的封闭词表（domain DeliveryScopeCheckState）。 */
 export const deliveryScopeStateLabels: Record<string, string> = {
   VERIFIED: '已证',
   UNVERIFIED: '未证',
   UNCONFIGURED: '未配置',
 };
 
-/** 未证的原因封闭五值（domain DeliveryScopeUnverifiedReason），中文取 ADR-0212 决定五的原词。 */
+/** 未证原因的封闭词表（domain DeliveryScopeUnverifiedReason），中文取 ADR-0212 决定五的原词。 */
 export const deliveryScopeReasonLabels: Record<string, string> = {
   NO_BASIS: '没有依据',
   BASIS_NOT_REGISTERED: '依据不在册',
@@ -22,7 +22,7 @@ export const deliveryScopeReasonLabels: Record<string, string> = {
   BINDINGS_NOT_ALL_CONFIRMED: '交接单绑定未全部确认',
 };
 
-/** 「依据不适用」的细分封闭四值（domain DeliveryScopeInapplicability）。 */
+/** 「依据不适用」细分的封闭词表（domain DeliveryScopeInapplicability）。 */
 export const deliveryScopeInapplicabilityLabels: Record<string, string> = {
   NODE_MISMATCH: '节点不符',
   OUTSIDE_WINDOW: '在时窗外',
@@ -30,7 +30,7 @@ export const deliveryScopeInapplicabilityLabels: Record<string, string> = {
   NOT_A_HANDOVER_MEMBER: '不是交接单成员',
 };
 
-/** 依据种类封闭两值（domain DeliveryScopeBasisKind）。 */
+/** 依据种类的封闭词表（domain DeliveryScopeBasisKind）。 */
 export const deliveryScopeBasisKindLabels: Record<string, string> = {
   DELIVERY_PRE_ADVICE: '送站预报',
   DELIVERY_HANDOVER_NOTE: '送站交接单',

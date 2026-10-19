@@ -38,7 +38,7 @@ export interface IdentityRecheckResponseBody {
   serviceMarkers?: string[];
   serviceResultCheck?: string;
   identityCheck?: string;
-  /** 答复所指那一版的交付范围核对态三键（ADR-0212 决定五），读法同 records-api 的同名三格；那一版没记时都缺席。 */
+  /** 答复所指那一版的交付范围核对态各键（ADR-0212 决定五），读法同 records-api 的同名各格；那一版没记时都缺席。 */
   deliveryScopeCheck?: string;
   deliveryScopeUnverifiedReason?: string;
   deliveryScopeInapplicability?: string;
