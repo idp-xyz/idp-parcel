@@ -109,6 +109,7 @@ Date: 2026-10-19
 - [ADR-0022](./0022-http-status-carries-answer-formed-not-business-verdict.md)：2xx 即出队
 - [ADR-0049](./0049-publish-channel-is-in-process-delivery-until-load-evidence.md)：接得住才登记
 - 票 `.scratch/demo-chain-gaps/issues/32-movement-facts-declare-segment-and-record-departure-gate-reading.md`、`05-movement-facts-are-unlinked-and-departure-gate-is-self-reported.md`
+- [ADR-0213](./0213-a-transport-handover-declares-its-releasing-receiving-and-onward-nodes.md)：决定四与文末补记，交出门禁读数与本记录同一封闭集；五格与逐对象那一格自票 demo-chain-gaps/65 起是两种读数的共用内核（`domain/gate_reading.go`），本记录所列出发一侧的名字留作别名，出发的答复与明细不变
 
 ## 补记：票 33 落地时的补充裁定（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」，待 TF、VE owner 复核）
 
