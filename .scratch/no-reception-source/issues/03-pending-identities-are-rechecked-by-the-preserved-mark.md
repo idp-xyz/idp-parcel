@@ -1,7 +1,7 @@
 # 03 第二期：待识别实物按存下的号重核（AT-NO-026）——PS 关联册新形成关联时交出信封、复核页人工发起，结果唯一即追加关联版
 
 Category: enhancement
-Status: ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（02 已进 main），分支 `claude-nrs03`；碰 cmd/parcel-dispatch/assemble.go 与 cmd/parcel-api/endpoints.go 已与另一会话对齐次序（本票先进）。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）
 Blocked by: 02 进 main（重核拿的是 02 存下的来源文档；追加版要指名前版）
 父票：[01](./01-node-reception-preserves-the-delivery-source.md)
 出处：票 01 裁定分期之「二、按存下的号重核」与「重核由什么触发」那一问；ADR-0199 决定三。`AT-NO-026` 在 `.scratch/at-coverage-inventory.md` 里是机制候选，今天没有票、也没有人工关联口。
