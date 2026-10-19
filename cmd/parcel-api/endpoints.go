@@ -387,9 +387,9 @@ func assembleBusinessEndpoints(
 		// 终止口只能铸终止那一路（tfhttp.ParticipationTermination 比应用命令窄），交付与交接两路是内部触发。
 		{Pattern: "/transport-fulfillment-segment-closures", Handler: tfhttp.NewCloseFulfillmentSegmentEndpoint(operatorDecisions.transport, segmentCloser)},
 		{Pattern: "/transport-fulfillment-dispatch-task-registrations", Handler: tfhttp.NewOpenDispatchTaskEndpoint(operatorDecisions.transport, dispatchTaskOpener)},
-		// 末端派送任务内部触发执行器的生产入口（ADR-0114 决定二末句；票 tf-segment-lifecycle-closure/12「生产入口」）：谁按拍调、
-		// 拍频多大属调用方（实例半边）；这一口挂作业事实渠道（ADR-0149；它不在 ADR-0151 决定六改归运营决定的那几口里），
-		// 只让一拍能被调用、不替调用方定拍频。与上一行手工建任务是两件事。
+		// 末端派送任务内部触发执行器的补拍口（ADR-0216 决定四）：进程内的那一拍由派发进程随交接登记信封发起，这一口留给
+		// 那一拍之后还要再发起的情形——所有者补齐了要求，没有别的东西会回头再发起。挂作业事实渠道（ADR-0149；它不在
+		// ADR-0151 决定六改归运营决定的那几口里）。与上一行手工建任务是两件事。
 		{Pattern: "/transport-fulfillment-delivery-dispatch-triggers", Handler: tfhttp.NewTriggerDeliveryDispatchEndpoint(deliveryDispatchTriggerIntake, deliveryDispatchTrigger)},
 		{Pattern: "/transport-fulfillment-load-assignment-registrations", Handler: tfhttp.NewFormLoadAssignmentEndpoint(operatorDecisions.transport, loadAssigner)},
 		{Pattern: "/transport-fulfillment-participation-terminations", Handler: tfhttp.NewTerminateFulfillmentParticipationEndpoint(operatorDecisions.transport, participationEnder)},

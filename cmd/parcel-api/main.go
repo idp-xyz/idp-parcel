@@ -341,8 +341,8 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	// 末端派送任务内部触发执行器（ADR-0114 决定二；票 tf-segment-lifecycle-closure/12「生产入口」）：地点缝接
-	// parcel-shipment 真适配器，时间窗与条件两缝留空让执行器如实停在下一处未接线；拍频属调用方，Intake 未配置。
+	// 末端派送任务内部触发执行器（ADR-0114 决定二），只给补拍口用：进程内的那一拍由派发进程随交接登记信封发起
+	// （ADR-0216）。三条派送要求缝的接法见 buildDeliveryDispatchTrigger。
 	deliveryDispatchTrigger, err := buildDeliveryDispatchTrigger(db)
 	if err != nil {
 		return err

@@ -166,8 +166,8 @@ func (reason DeliveryDispatchUndecidedReason) String() string {
 //
 // 任务的成立时间取 OccurredAt 而不取对象进段的时刻：CONTEXT 写的是「控制事实先如实落库，任务在下一拍形成」，任务是
 // 在这一拍成立的，进段是它的触发事实不是它的成立时刻。它由调用方给而不是这里取时钟，与 OpenDispatchTaskCommand 同一
-// 条通例——任务是何时成立的，不由写库那一刻决定。谁按拍调本编排、拍频多大，随第一条派送要求缝的实施票立（ADR-0114
-// 决定二末句），这里不预设。
+// 条通例——任务是何时成立的，不由写库那一刻决定。调用方有两个（ADR-0216）：派发进程里随交接登记信封发起的那一路，给的
+// 是处理那封信那一刻的派发时钟；作业事实口的补拍，给的是请求里报的时刻。一拍一对象，没有拍频可选。
 type TriggerDeliveryDispatchCommand struct {
 	TenantID   domain.TenantID
 	Segment    string
@@ -209,7 +209,7 @@ func (result TriggerDeliveryDispatchResult) Record() (ports.DispatchTaskRecord, 
 	return result.record, result.hasRecord
 }
 
-// ContinuationReference 只在`未决`时非空，供按拍调本编排的一方重跑同一拍。
+// ContinuationReference 只在`未决`时非空，供调用方重跑同一拍时对上号：派发进程那一路随 inbox 重投重跑，补拍口交回报拍的一方。
 func (result TriggerDeliveryDispatchResult) ContinuationReference() string {
 	return result.continuation
 }

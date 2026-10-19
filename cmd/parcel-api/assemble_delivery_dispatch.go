@@ -49,8 +49,10 @@ func (trigger transactionalDeliveryDispatchTrigger) Trigger(
 	return result, nil
 }
 
-// buildDeliveryDispatchTrigger 装配 `/transport-fulfillment-delivery-dispatch-triggers` 背后的真执行器（ADR-0114 决定二；
-// 票 tf-segment-lifecycle-closure/12「生产入口」节——第一条派送要求缝的实施票立执行器的生产入口，票 13 / 14 不重立）。
+// buildDeliveryDispatchTrigger 装配 `/transport-fulfillment-delivery-dispatch-triggers` 背后的真执行器（ADR-0114 决定二）。
+// 这一口是补拍：进程内的那一拍由派发进程随交接登记信封逐对象发起（ADR-0216），调的是同一个执行器。派发进程那一路照这里
+// 另接一份三条缝（cmd/parcel-dispatch 的 triggerDeliveryDispatchOnHandoverConsumer，两份为何要一致见那里），改这里的缝
+// 要同改那一份。
 //
 // 派送要求三条缝**全部接真**：`Places` 是 adapters/parcelshipment 的真适配器，窄口交 PS 自己的委托仓储（它兼实现 PS 的
 // 收件地点引用读口，读的是委托快照本尊，同一只库）；`Windows` 是 adapters/networkrouting 的真适配器（票
@@ -60,7 +62,7 @@ func (trigger transactionalDeliveryDispatchTrigger) Trigger(
 // （判据同 NewCarrierIdentityDirectory）。自此执行器不再有 *_SOURCE_NOT_WIRED 的停点，每条缝的所有者答什么就是什么
 // （ADR-0114 决定三：所有者答「没有」任务保持待形成，不填默认）。
 //
-// 谁按拍调这一口、拍频多大，是租户运营节拍的实例半边，仓内不写默认。端点挂作业事实渠道的 Intake（ADR-0149 决定二；
+// 一拍一对象，没有拍频可选（ADR-0216 决定二）。端点挂作业事实渠道的 Intake（ADR-0149 决定二；
 // 派送发起口为何留在那一族，见 ADR-0151 越权风险点 7），渠道没配时那一口如实答未配置（ADR-0055）。
 func buildDeliveryDispatchTrigger(db *bentopg.DB) (transactionalDeliveryDispatchTrigger, error) {
 	shipmentRequests, err := pspostgres.NewShipmentRequests(db)

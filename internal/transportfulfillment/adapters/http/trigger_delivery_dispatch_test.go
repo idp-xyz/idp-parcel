@@ -18,7 +18,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// 票 tf-segment-lifecycle-closure/12「生产入口」：末端派送任务内部触发执行器的端点。本文件证传输层——未配置 403 不读体、
+// 末端派送任务内部触发执行器的补拍口（ADR-0216 决定四）。本文件证传输层——未配置 403 不读体、
 // 方法门、编排 error 5xx 无 outcome、结果代数逐格透出（不是触发事实带 refusal / 未决带续办引用 / 已形成 201 带任务且
 // Place 是 PS 引用串逐字）。执行器自己的规则在 application 测试守。
 
@@ -343,7 +343,7 @@ func TestTriggerEndpointKeepsTheAnswerFormedDistinction(t *testing.T) {
 }
 
 // Covers: ADR-0055 / ADR-0085 决定二——写准入不另立形；装字面量 UnconfiguredIntake 时 403、不读体、不构造命令、
-// 执行器不被调。这正是「拍频作配置不作默认、值留空如实答未配置」在传输层的样子。
+// 执行器不被调。补拍口同样只对配好的渠道开，进程内那一拍已经有了不是放宽它的理由。
 func TestAnUnconfiguredTriggerIntakeRefusesWithoutReadingTheBody(t *testing.T) {
 	endpoint := tfhttp.NewTriggerDeliveryDispatchEndpoint(tfhttp.UnconfiguredIntake{}, unreachableTriggerer{t: t})
 	probe := &readProbe{}
