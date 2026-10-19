@@ -1,9 +1,9 @@
 # 78 ADR 索引里 ADR-0206、0207、0209、0210 也各登了两行
 
 Category: bug
-Status: needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [59](./59-handover-declares-releasing-receiving-and-onward-nodes.md) 落 ADR-0206 前向指针时所见。
+Status: resolved——2026-10-19 main 上已无事可做：`3a790071` 把 ADR-0206、0207、0209、0210（连同 0217）各两行合成一行，ADR-0205 的两行由票 74 在 `b39fc02b` 合成一行（见文末「关闭记录」）。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [59](./59-handover-declares-releasing-receiving-and-onward-nodes.md) 落 ADR-0206 前向指针时所见。
 Blocked by: 无
-出处：票 59 完成记录「偏离与待裁」。同类的 ADR-0205 由票 74 立（在分支 `claude-dcg68` 上，尚未进 main）。
+出处：票 59 完成记录「偏离与待裁」。同类的 ADR-0205 由票 74 立，已随交接与派送 A 波进 main。
 
 ## 现象
 
@@ -22,3 +22,9 @@ Blocked by: 无
 ## 要裁的
 
 无。
+
+## 关闭记录（2026-10-19，票 59 作者子代理，评审修订时）
+
+票 59 rebase 到 `origin/main` `de9e3ad9` 时，`docs/adr/README.md` 在 ADR-0206 一处冲突：main 那边只剩一行。查 README 的历史，`3a790071`（「ADR-0206、0207、0209、0210、0217 各两行合成一行……留信息更全的那一版」）已经做了本票「最小的诚实修法」要做的事，ADR-0205 那一对由票 74 在 `b39fc02b` 合掉。rebase 后在分支上重跑「现象」一节的命令，输出为空。
+
+票 59 的「挂法已答」后缀只接在留下的那一行 ADR-0206 上。本票没有改任何文件，也没有余事。
