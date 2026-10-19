@@ -1,7 +1,7 @@
 # 03 终止参与：「已离场」不回显在册终点，并发输家不读回就答「已离场」，坏命令随参与状态改答——异依据重投、被别处结束与原样重放分不出
 
 Category: bug
-Status: in-progress——2026-10-18 会话 `idp-parcel-9b` 代决并认领（分支 `claude-tfa0305`）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 代决并认领（分支 `claude-tfa0305`）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment-participation-terminations
@@ -83,3 +83,17 @@ Blocked by: 无
 - [ ] Go 门禁：`go build ./...`、`go vet ./...` 退出码 0，`gofmt -l .` 无输出；带 DSN 跑 `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-api/... ./internal/architecture/...` 全部 ok。
 - [ ] 在票 15 补记下追加回写行（只加行）。
 - [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：作者自验，非作者评审（两轴分开），推送方在干净检出上带 DSN 跑全量。
+
+## 完成记录（2026-10-18，会话 idp-parcel-9b 的实施子代理，分支 claude-tfa0305）
+
+- 落点：`35ddcc8c`（编排 `End`：结果加 `End()` 回显读回链尾的终点三件；窄口写空回到读段，读回已离场答已离场并回显、仍在场在新链尾上重走，写满 `participationEndWrites` 仍不成就答未决带续办；终止的依据与时刻成形校验挪到读段之前，`终止早于入场` 在已离场那一支补判）、`e3cf4332`（HTTP 响应加 `endKind` / `endBasis` / `endedAt`，时刻照 `closedAt` 现行格式 RFC 3339 UTC；`cmd/parcel-api/participation_termination_echo_test.go` 真渠道真库回归）。`End` 是三路共用的编排，交付与交接两路的已离场结果也带上终点，两路调用方只读 `Outcome`，行为不变。
+- 各格对应用例：
+  - 现象 1 → `TestAnAlreadyEndedAnswerEchoesTheRecordedEnd`（编排）、`TestParticipationTerminationAlreadyEndedEchoesTheRecordedEnd`（HTTP，整秒值逐字节比对）、`TestATerminationReplayEchoesTheRecordedEndAndWritesNothing` 与 `TestATerminationAfterTheNextHandoverEndedItEchoesThatHandover`（真渠道真库，含全库表内容摘要与序列不变，指纹含 `bento.outbox`）。
+  - 现象 2 → `TestAConcurrentLoserReadsBackBeforeAnswering` 四个子格（编排）、`TestAConcurrentTerminationLoserBehindASupersedingCorrectionDoesNotClaimTheEnd`（真库钩子：读段后另一事务提交仍为已交接的交接更正）。
+  - 现象 3 → `TestAMalformedTerminationIsNotAcceptedWhateverTheParticipationState`（缺依据、依据全空白、缺时刻、终止早于入场 × 已离场 / 在场）与真库用例的坏命令段。
+- 先红后绿：编排红 /tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/tfa03-app-red.log；HTTP 红 /tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/tfa03-http-red.log；真库三条用例经 overlay 换回基线实现跑红 /tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/tfa03-base/、日志 /tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/tfa03-cmd-red-on-base.log；修后全绿（见门）。
+- 复现不了的格：无。现象 4（链尾失效后重放答 `OBJECT_NOT_IN_SEGMENT`）属「不做」，未动。
+- 未做：完成判据「在票 15 补记下追加回写行」越出本票地盘，留给收口方；非作者评审与推送方全量不归作者。
+- 门：改动 .go 过 gofmt；`go build ./...`、`go vet ./...` 退 0；带 DSN `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-api/... ./internal/architecture/...` 全 ok（与 05 同一次跑，日志 /tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/tfa-gates.log）；机制清点重生成 `045d66cb`。
+- 证据层级：S（隔离合成 SYN- 数据，真库为本机测试库）。
+- 评审：待会话读 diff 审。

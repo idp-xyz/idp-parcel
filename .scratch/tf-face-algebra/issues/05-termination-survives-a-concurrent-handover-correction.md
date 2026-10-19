@@ -1,7 +1,7 @@
 # 05 终止参与与交接更正并发时终点丢失：终止写在被替代的旧链尾上、答 201，更正派生的新链尾没有终点，参与又成了在场
 
 Category: bug
-Status: in-progress——2026-10-18 会话 `idp-parcel-9b` 代决并认领（分支 `claude-tfa0305`）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 代决并认领（分支 `claude-tfa0305`）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment-participation-terminations, /transport-fulfillment/handover-corrections
@@ -64,3 +64,21 @@ Blocked by: 无
 - [ ] Go 门禁：`go build ./...`、`go vet ./...` 退出码 0，`gofmt -l .` 无输出；带 DSN 跑 `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-api/... ./internal/architecture/...` 全部 ok。
 - [ ] 票 15 补记下追加回写行（只加行）。
 - [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：作者自验、非作者评审（两轴分开）、推送方在干净检出上带 DSN 跑全量。
+
+## 完成记录（2026-10-18，会话 idp-parcel-9b 的实施子代理，分支 claude-tfa0305）
+
+- 落点：`c9140d96`。`Supersede` 落笔前 `SELECT … FOR UPDATE` 锁住被替代的链尾，新版本离场三列取锁后在册值（`lockedInheritedEnd`），其余各格仍取调用方交来的参与；继承终点早于更正后起点时交错误让编排记欠账，不去撞 0006 的 CHECK 作废整笔事务。
+- 越出裁定字面的一处（同文件、同一机制）：`EndParticipation` 先单独 `SELECT … FOR UPDATE` 锁行、再以新语句判在场并写。只锁替代口不够——更正已落替代版本未提交时到来的终止，UPDATE 在行锁上等到对方提交后不重判链尾谓词就照写，终点仍落在旧链尾；实测见下。
+- 各格对应用例（`cmd/parcel-api/participation_termination_handover_race_test.go`，钩子包生产段登记册，另一方走生产编排、另一条连接；等对方时用池外独立连接看 `pg_stat_activity` 的等锁，日志记「卡在行锁上，放行」或「没被挡住」，全部带 10 秒超时）：
+  - 终止写后未提交时更正到来（票面现象）→ `TestAHandoverCorrectionArrivingInsideAnOpenTerminationKeepsTheEnd`
+  - 反序·更正读后终止提交、更正再落笔 → `TestATerminationCommittedBetweenACorrectionsReadAndItsSupersedeIsKept`
+  - 反序·更正落笔未提交时终止到来 → `TestATerminationArrivingWhileACorrectionHoldsTheTailKeepsTheEnd`
+  - 三条共同判据：终止答 201 则链尾带它的终点；随后同一终止重放答已离场，全库表内容与序列不变。
+  - 适配器：`TestSupersedeInheritsAnEndCommittedAfterTheCallerRead`、`TestSupersedeRefusesWhenTheInheritedEndPrecedesTheCorrectedStart`（拒写后同一事务仍可用）。
+  - 既有格：`TestAConcurrentTerminationLoserBehindASupersedingCorrectionDoesNotClaimTheEnd`（03 收）照过。
+- 先红后绿：适配器红 /tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/tfa05-adapter-red.log；三条并发用例在修前登记册上全红（终点丢在旧链尾）/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/tfa05-cmd-red.log；只修替代口时第三条仍红 /tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/tfa05-cmd-partial.log；全修后三条绿、两条等锁格均观察到「卡在行锁上」/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/tfa05-cmd-green.log。
+- 复现不了的格：无。
+- 未做：完成判据「票 15 补记下追加回写行」越出本票地盘；非作者评审与推送方全量不归作者。
+- 门：同 03（/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/tfa-gates.log，全 ok）；gofmt、build、vet 干净。
+- 证据层级：S。
+- 评审：待会话读 diff 审。
