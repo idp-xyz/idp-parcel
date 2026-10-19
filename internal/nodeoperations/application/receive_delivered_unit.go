@@ -216,7 +216,7 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 			return ReceiveDeliveredUnitResult{outcome: ReceptionUndecided,
 				continuation: receptionContinuation("SERVICE_RESULT_VIEW_UNAVAILABLE", command.SourceID)}, nil
 		}
-		markers = serviceMarkersOf(results)
+		markers = results.Markers()
 	}
 	version, err := handler.deps.Versions.NextIntakeResultVersion(ctx)
 	if err != nil {
@@ -347,21 +347,6 @@ func (handler *ReceiveDeliveredUnitHandler) handOff(
 		return ""
 	}
 	return receptionContinuation("NODE_INTAKE_HANDOFF", record.Key.TenantID.String(), record.Key.SourceID)
-}
-
-// serviceMarkersOf 是收寄记录上服务结果标记的封闭词表（票 operator-channel/25 裁定第 2 条）：`CANCELLED/<取消决定>` 与
-// `FINAL/<终局种类>/<终局版本>`，带结果引用与版本（UC-NO-002「服务结果引用」）。「无路由」「受限」不是 PS 的服务结果，
-// 不在这里。顺序固定先取消后终局，同一答复落成同一组标记。可供程序分辨的只有首个 `/` 之前的前缀：终局种类是租户
-// 配置的引用、版本也是引用，两者都可能自带 `/`，尾部是给人与审计看的结果引用，不能再拆回种类与版本。
-func serviceMarkersOf(results ports.ParcelServiceResults) []string {
-	var markers []string
-	if results.Cancellation != "" {
-		markers = append(markers, "CANCELLED/"+results.Cancellation)
-	}
-	if results.FinalKind != "" || results.FinalVersion != "" {
-		markers = append(markers, "FINAL/"+results.FinalKind+"/"+results.FinalVersion)
-	}
-	return markers
 }
 
 func receptionContinuation(parts ...string) string {

@@ -72,6 +72,29 @@ type ParcelServiceResults struct {
 	FinalVersion string
 }
 
+// 标记串的两种前缀只在这里出现：合成入口只有 Markers 一处，别处既不拼也不拆（ADR-0186）。
+const (
+	serviceMarkerCancelledPrefix = "CANCELLED/"
+	serviceMarkerFinalPrefix     = "FINAL/"
+)
+
+// Markers 是收寄记录上服务结果标记的唯一合成入口：`CANCELLED/<取消决定>` 与 `FINAL/<终局种类>/<终局版本>`，带结果引用
+// 与版本（UC-NO-002「服务结果引用」）。「无路由」「受限」不是 PS 的服务结果，不在这里。顺序固定先取消后终局，同一答复落成
+// 同一组标记；没有取消也没有终局时交回空。
+//
+// 标记串只给人看与审计，不得解析：终局种类是租户配置的引用、版本也是引用，两者都可能自带 `/`，串拆不回种类与版本。
+// 程序要知道一件包裹此刻有没有取消或终局，经 ParcelServiceResultView 现问（ADR-0186）。
+func (results ParcelServiceResults) Markers() []string {
+	var markers []string
+	if results.Cancellation != "" {
+		markers = append(markers, serviceMarkerCancelledPrefix+results.Cancellation)
+	}
+	if results.FinalKind != "" || results.FinalVersion != "" {
+		markers = append(markers, serviceMarkerFinalPrefix+results.FinalKind+"/"+results.FinalVersion)
+	}
+	return markers
+}
+
 // ParcelServiceResultView 按（租户，正式包裹关联）读 PS 的当前服务结果（PS 侧只读引用，同 ParcelIdentityView）。
 // 依赖读不动作为错误返回：「没有限制」与「没查到」是两件事，空答复只表示前者。
 type ParcelServiceResultView interface {
@@ -82,20 +105,48 @@ type ParcelServiceResultView interface {
 	) (ParcelServiceResults, error)
 }
 
+// ServiceResultCheck 是一次关联收寄向 PS 取服务结果的核对态，只有 INTAKE_FORMED 记录带（ADR-0186）。它让「查过了，PS 没有
+// 取消与终局」与「没取得 PS 的答复」在记录上分得开——两者的标记都是空的，而后者的空不代表没有限制。
+//
+// 零值即不带：其余三种记录没有可问的包裹，这一格缺席是真话；INTAKE_FORMED 记录上是零值就是写入方缺陷，库里由迁移的
+// CHECK 再拦一遍。
+type ServiceResultCheck uint8
+
+const (
+	ServiceResultCheckAbsent ServiceResultCheck = iota
+	// ServiceResultsChecked：读口答复了，标记照答复合成（可能为空）。
+	ServiceResultsChecked
+	// ServiceResultsUnreadable：读口交回错误、没取得 PS 的答复；标记必为空，且这份空不是「没有取消与终局」。
+	ServiceResultsUnreadable
+)
+
+func (check ServiceResultCheck) String() string {
+	switch check {
+	case ServiceResultsChecked:
+		return "CHECKED"
+	case ServiceResultsUnreadable:
+		return "UNREADABLE"
+	default:
+		return ""
+	}
+}
+
 // ReceptionRecord 是一次收寄判断留下的东西。收寄与控制只在形成/待识别两格在场；
-// 候选与身份冲突只在待识别格有意义；服务结果标记（已取消 / 终局，编排在身份唯一成立时向 PS 取，
-// 词表见 application 的 serviceMarkersOf）原样保全——它们不阻止接收，只限制后续方向性作业。
+// 候选与身份冲突只在待识别格有意义；服务结果标记（已取消 / 终局，编排在身份唯一成立时向 PS 取，由
+// ParcelServiceResults.Markers 合成）与核对态只在形成格在场——它们不阻止接收，只限制后续方向性作业。标记串原样保全，
+// 只给人看与审计，不得解析（ADR-0186）。
 type ReceptionRecord struct {
-	Key              ReceptionKey
-	ContentDigest    string
-	Kind             ReceptionRecordKind
-	Intake           domain.NodeIntake
-	Control          domain.PhysicalControl
-	Candidates       []domain.ParcelAssociationReference
-	IdentityConflict bool
-	RefusalReason    string
-	ServiceMarkers   []string
-	RecordedAt       time.Time
+	Key                ReceptionKey
+	ContentDigest      string
+	Kind               ReceptionRecordKind
+	Intake             domain.NodeIntake
+	Control            domain.PhysicalControl
+	Candidates         []domain.ParcelAssociationReference
+	IdentityConflict   bool
+	RefusalReason      string
+	ServiceMarkers     []string
+	ServiceResultCheck ServiceResultCheck
+	RecordedAt         time.Time
 }
 
 type ReceptionSaveOutcome uint8
