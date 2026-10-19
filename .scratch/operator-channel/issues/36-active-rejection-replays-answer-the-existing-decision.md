@@ -1,7 +1,7 @@
 # 36 主动拒绝撞上既有决定仍答「已形成」201、不回显；主动拒绝与处置「拒绝」去向的重放白耗决定标识
 
 Category: bug
-Status: in-progress——2026-10-18 作者子代理完工，待评审。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 15 之三、之四补核发现；用户授权代决）
+Status: in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 15 之三、之四补核发现；用户授权代决）
 Blocked by: operator-channel/33 进 main（真库重放要读回已拒绝委托）；operator-channel/34 进 main（同改 apps/admin-web/src/pages/shipment-request/api.ts 与 cmd/parcel-api/assemble_review_test.go）
 父票：[15](./15-operation-decision-faces-take-operator-intake.md)
 出处：票 26 遗留研判中补核票 15 之三、之四（簇 C6）发现；补记随 operator-channel/39。
@@ -107,3 +107,10 @@ HTTP 201 是读代码得出的（`writeActiveRejectionOutcome`）；在真库上
 **证据层级**：`S`，全部输入是合成数据。
 
 评审：待会话读 diff 审。
+
+## Comments
+
+- **评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审）· 钉 `08d021f3`（基线 `0b74ff1e`）· 2026-10-18**：用户选「精简续做」，评审由会话本身读 diff 做；代码出自本会话起的实施子代理，不算非作者评审，如实记下。
+  - **Spec**：阻断无。领域只读判定 `ActiveRejectionAdmissible` / `AuthorizedDispositionAdmissible` 就是转移的状态前置，转移先过同一道；编排在授权之后、签发标识之前问它，重放不再白耗决定标识；撞上已决委托答 `TASK_ALREADY_CLOSED` 并交回在册决定，`FORMED` 只留给确实形成拒绝的那一次；HTTP 回显决定方与原因（`decisionEcho` 两口共用）；管理台 `api.ts` 照新字段改、页面不改。
+  - **Standards**：阻断无。越出地盘的 `rejectionOrchestrationWith`、`dispositionOrchestrationWith` 两处拆分只为真库用例递进合成映射与授权器，生产照旧传 nil / 未配置，照 `manualReviewOrchestrationWith` 先例，认可。
+  - **留意**：回显按决定上有没有主动拒绝留痕来定，`FORMED`、`RECORDED` 带留痕时同样回显，合裁定「回显让调用方自己比」。
