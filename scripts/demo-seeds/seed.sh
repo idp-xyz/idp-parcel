@@ -278,6 +278,10 @@ echo "== 试点治理登记（pilot-governance：权威区间、暂停、恢复�
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/29-authority-interval-operation-decision-capacity-release.json"
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/30-authority-interval-operation-decision-booking-request-submission.json"
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/31-authority-interval-external-fact-carrier-booking-answer.json"
+# 送站预报两口（ADR-0212 决定二；票 ps-external-mark-relations/09）是首方客户族的生产写，准入范围在铸造侧判（ADR-0139 决定八）：
+# 能力 CUSTOMER_COMMAND，事实类型取客户面能力词，对象范围另起一个客户面的合成范围。
+"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/32-authority-interval-customer-command-delivery-pre-advice-submission.json"
+"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/33-authority-interval-customer-command-delivery-pre-advice-withdrawal.json"
 
 echo "== 操作者册登记（access-identity：合成操作者主体与能力面授予；票 operator-channel/01、17） =="
 # 合成主体绑演示租户：配置员扮运营主管，持有全部运营决定（票 operator-channel/24「裁定」）——授登记册配置写、主数据与
@@ -307,7 +311,8 @@ echo "== 操作者册登记（access-identity：合成操作者主体与能力�
 "$BIN/parcel-access-register" integration-client-grant -input "$SEEDS/access/06-integration-client-grants.json"
 # 首方客户族（ADR-0139 决定二；票 first-party-api/00）：提交口要「客户端 × 授予」对上。合成货主系统一台，主体是演示发行方
 # （operator-channel/integration-dex.yaml，与集成客户端族同一只、受众不同）签出的 sub，绑 SYN-ACCOUNT-01——与隔离读面注入的
-# 可见账户同一个，提交的委托才在委托查阅上看得见（读开关退场前）。授予按客户面能力给，此刻只有提交一项。
+# 可见账户同一个，提交的委托才在委托查阅上看得见（读开关退场前）。授予按客户面能力给：委托提交，与送站预报的提交、撤回
+# （票 ps-external-mark-relations/09）；预报两口的准入对照随下面的准入范围对照一起登。
 "$BIN/parcel-access-register" customer-client-register -input "$SEEDS/access/07-customer-clients.json"
 "$BIN/parcel-access-register" customer-client-grant -input "$SEEDS/access/08-customer-client-grants.json"
 # 准入范围对照（ADR-0180 决定一、二；票 operator-channel/19）：演示租户在上面那几种（能力、事实类型）上的生产写

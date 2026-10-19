@@ -176,6 +176,22 @@
       "objectScope": "SYN-PILOT-SCOPE/external-facts@v1",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "basis": "SYN-MAP-BASIS-02"
+    },
+    {
+      "mappingId": "SYN-MAP-CC-DELIVERY-PRE-ADVICE-SUBMISSION-01",
+      "capability": "CUSTOMER_COMMAND",
+      "factKind": "DELIVERY_PRE_ADVICE_SUBMISSION",
+      "objectScope": "SYN-PILOT-SCOPE/customer-commands@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-03"
+    },
+    {
+      "mappingId": "SYN-MAP-CC-DELIVERY-PRE-ADVICE-WITHDRAWAL-01",
+      "capability": "CUSTOMER_COMMAND",
+      "factKind": "DELIVERY_PRE_ADVICE_WITHDRAWAL",
+      "objectScope": "SYN-PILOT-SCOPE/customer-commands@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-03"
     }
   ]
 }

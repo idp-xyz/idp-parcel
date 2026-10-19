@@ -30,7 +30,7 @@ $env:IDP_PARCEL_GOVERNANCE_SELF_AUTHORITY='SYN-AUTH/idp-parcel-pilot'
 $env:IDP_PARCEL_INTEGRATION_CLIENT_OIDC_ISSUER='http://127.0.0.1:5558/dex'
 $env:IDP_PARCEL_INTEGRATION_CLIENT_OIDC_JWKS_URL='http://127.0.0.1:5558/dex/keys'
 $env:IDP_PARCEL_INTEGRATION_CLIENT_OIDC_AUDIENCE='idp-parcel-integration'
-# 首方客户渠道（ADR-0139）：提交口走它；发行方与集成客户端族同一只，受众另是一个（票 first-party-api/00）
+# 首方客户渠道（ADR-0139）：提交口与送站预报两口走它；发行方与集成客户端族同一只，受众另是一个（票 first-party-api/00、ps-external-mark-relations/09）
 $env:IDP_PARCEL_CUSTOMER_API_OIDC_ISSUER='http://127.0.0.1:5558/dex'
 $env:IDP_PARCEL_CUSTOMER_API_OIDC_JWKS_URL='http://127.0.0.1:5558/dex/keys'
 $env:IDP_PARCEL_CUSTOMER_API_OIDC_AUDIENCE='idp-parcel-customer-api'
@@ -191,6 +191,25 @@ go run ./cmd/parcel-dispatch
 > 2026-10-19 补记（票 `demo-chain-gaps/18`，[ADR-0201](../adr/0201-schedule-templates-materialize-concrete-schedules-by-date-and-preparation-answers-not-configured-on-an-empty-register.md) 决定六至八与票 18 补记）：提交一单之后，初始路由信封除了投追踪投影，也投运输履约逐段准备。`GET /transport-fulfillment-records?registry=transport-preparation` （操作者渠道，查阅员即可）列出这一件的三段：每段带结论、段窗口、按申报取的需求量（`1.50 KG`、外廓乘出的 `3000 CM3`、`1 PCS`）与候选依据。首段 `SHA-HUB→SZX-GATE` 答 `OPPORTUNITY_PREPARED`，选中的班次是评估时按日期物化的那一班（候选 `version` 为 0，要订舱或装载分配先显式登记它）；种子另登了上海→深圳快线（班期见 `scripts/demo-seeds/README.md` 组成表的 `data/transport/` 几行），首段窗口不论提交落在哪一刻都含一班。后两段与按日那两份的班期大多错开，答 `NO_CURRENT_OPPORTUNITY`，那是如实答案。准备不预占、不建班次、不发信封；初始路由信封在 VE 与 TF 两个 inbox 名下各入账一行。2026-10-19（14:27Z 提交，上海当地 22:27）在一次性库上按 `seed.sh` 灌入退 0，起 `parcel-api` 与 `parcel-dispatch`，经首方客户渠道提交一单，操作者渠道读回三段：`RPV-000000000001#1` 准备在 `SYN-SCHED-SHA-SZX-EXPRESS-1200/2026-10-20`，`#2`、`#3` 无当前运输机会（实测，只记 `S`），走完已停进程并删库。
 
 三堵墙对应的机制票都在 `.scratch/syn-wall-door-audit/issues/`（依次为 01、13、04），墙面清单见同目录 `report.md`。
+
+#### 送站预报：客户在送站之前交
+
+客户账户经首方客户渠道交送站预报（[ADR-0212](../adr/0212-a-customer-number-hit-needs-a-verifiable-delivery-scope.md) 决定二；票 [ps-external-mark-relations/09](../../.scratch/ps-external-mark-relations/issues/09-pre-advice-submission-on-the-first-party-customer-channel.md)）：`POST /node-operations/delivery-pre-advices` 交，`POST /node-operations/delivery-pre-advice-withdrawals` 撤。同一台合成货主系统、同一枚首方令牌，各要自己那一格授予，种子都登了。预报是节点的到货计划，不形成也不改变委托；节点作业签发预报标识答回客户，送站时随交付出示。
+
+预报是生产写，准入范围在铸造侧判（ADR-0139 决定八）：除首方族三件，起进程还要设 `IDP_PARCEL_GOVERNANCE_SELF_AUTHORITY`（上面「前置」那一件），种子里能力为 `CUSTOMER_COMMAND` 的两条对照与两条权威区间才认得上；不设答 `403 OUTSIDE_ADMISSION_SCOPE`。两个隔离开关都换不了这两口。演示用 `scripts/demo-seeds/submit-one-pre-advice.sh [客户包裹件号 ...]`：取令牌、交一份，把签发的标识单独一行打到标准输出。给号码时就用 `submit-one-shipment.sh` 那一笔的客户包裹参考。
+
+| 请求 | 答复 |
+|---|---|
+| 不带令牌 | `401 CUSTOMER_CLIENT_CREDENTIAL_REJECTED` |
+| 载荷自报 `tenantId` 或 `customerAccountId`、号码为空或重复 | `400 MALFORMED_REQUEST` |
+| 首次交 | `201`，`DELIVERY_PRE_ADVICE_REGISTERED`，带 `preAdviceId` |
+| 同一接入请求原样重投 / 换了内容 | `200`，`EXISTING_RESULT` / `SOURCE_CONFLICT`，回显在册那一份 |
+| 撤自己的 / 再撤一次 | `201 DELIVERY_PRE_ADVICE_WITHDRAWN` / `200 EXISTING_RESULT` |
+| 撤别的客户账户的，或一份不存在的 | `404 DELIVERY_PRE_ADVICE_NOT_VISIBLE`，两种同答 |
+
+收寄带预报标识、按预报判范围归票 11。在那之前，交了预报也不改变收寄的身份判断；有效时窗（种子 `node-operations/01`）也是在收寄判范围时才读。
+
+> 2026-10-19 实走（票 ps-external-mark-relations/09 作者子代理；实测，只记 `S`）：一次性库 `psxm09_demo`，`seed.sh` 退 0，客户端两格授予、两条对照、两条区间都答 `RECORDED` / `REGISTERED`。共享的集成客户端发行方容器是按旧配置起的，不认合成货主系统，所以另起一只私有 Dex，用同一份 `integration-dex.yaml`，发布在 `127.0.0.1:5562`；issuer 串仍是 `http://127.0.0.1:5558/dex`，没有重启别的会话在用的容器。`parcel-api` 只带首方族三件（JWKS 指 5562）与治理自授权起，脚本答 `201 DELIVERY_PRE_ADVICE_REGISTERED`，签出 `PREADV-BGOJWJ3AE7XUSBEIUHTQFA5YGU`，来源是 `http://127.0.0.1:5558/dex#ChZzeW4tY3VzdG9tZXItY2xpZW50LTAx` 加接入请求标识。同一进程上：不带令牌答 401，自报租户答 400，撤回答 201、重投 200，撤不存在的答 404。同一 UTC 秒内用别的号码再跑脚本，撞同一接入请求标识，答 `SOURCE_CONFLICT`，脚本退 1；隔一秒再跑，签出 `PREADV-T7VC26KBK6DXBVUU4DDMDYQ2S4`。册上两行预报、一行撤回。走完已停进程、删容器、删库，`psb26_walk` 未碰。
 
 ## 对照组：证明门是真的
 
