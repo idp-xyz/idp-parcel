@@ -48,3 +48,31 @@ func (factory *EvaluationRequestIdentities) MintEvaluationRequestID(_ context.Co
 	}
 	return domain.NewEvaluationRequestID(minted)
 }
+
+// sellEvaluationRequestPrefix 让 SELL 评价请求 ID 在日志与工单里与 BUY 的 EVREQ 一眼分得开，不参与任何判断。
+const sellEvaluationRequestPrefix = "SELLREQ"
+
+// SellEvaluationRequestIdentities 实现 ports.SellEvaluationRequestIdentityFactory（ADR-0190 决定一：SELL 评价请求的
+// 身份是铸造的 ID，自然键只守幂等）。取随机铸造的理由与 EvaluationRequestIdentities 同一条，见包头注。
+type SellEvaluationRequestIdentities struct {
+	minter platformidentity.Minter
+}
+
+func NewSellEvaluationRequestIdentities(options ...platformidentity.Option) (*SellEvaluationRequestIdentities, error) {
+	minter, err := platformidentity.NewMinter(sellEvaluationRequestPrefix, options...)
+	if err != nil {
+		return nil, fmt.Errorf("settlement accounting identity: %w", err)
+	}
+	return &SellEvaluationRequestIdentities{minter: minter}, nil
+}
+
+var _ ports.SellEvaluationRequestIdentityFactory = (*SellEvaluationRequestIdentities)(nil)
+
+// MintSellEvaluationRequestID 签发一个新的 SELL 评价请求 ID。签不出来时如实上抛，拿一个可预测的替代值顶上会撞号。
+func (factory *SellEvaluationRequestIdentities) MintSellEvaluationRequestID(_ context.Context) (domain.SellEvaluationRequestID, error) {
+	minted, err := factory.minter.Next()
+	if err != nil {
+		return domain.SellEvaluationRequestID{}, fmt.Errorf("mint sell evaluation request ID: %w", err)
+	}
+	return domain.NewSellEvaluationRequestID(minted)
+}

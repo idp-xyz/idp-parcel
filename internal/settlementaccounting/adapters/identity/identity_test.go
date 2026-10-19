@@ -54,3 +54,38 @@ func TestANilEntropySourceIsRefusedAtConstruction(t *testing.T) {
 		t.Fatal("空熵源构造成功了")
 	}
 }
+
+func TestMintedSellEvaluationRequestIDsAreValidAndNeverRepeat(t *testing.T) {
+	factory, err := identity.NewSellEvaluationRequestIdentities()
+	if err != nil {
+		t.Fatalf("构造 SELL 评价请求标识工厂：%v", err)
+	}
+	ctx := t.Context()
+
+	seen := make(map[string]bool, 512)
+	for range 512 {
+		minted, err := factory.MintSellEvaluationRequestID(ctx)
+		if err != nil {
+			t.Fatalf("签发 SELL 评价请求标识：%v", err)
+		}
+		value := minted.String()
+		if !strings.HasPrefix(value, "SELLREQ-") {
+			t.Fatalf("SELL 评价请求标识没带前缀：%s", value)
+		}
+		if seen[value] {
+			t.Fatalf("SELL 评价请求标识重号：%s", value)
+		}
+		seen[value] = true
+	}
+}
+
+func TestAStarvedEntropySourceRefusesToIssueASellEvaluationRequestID(t *testing.T) {
+	starved, err := identity.NewSellEvaluationRequestIdentities(
+		platformidentity.WithEntropy(bytes.NewReader([]byte{1, 2, 3})))
+	if err != nil {
+		t.Fatalf("构造：%v", err)
+	}
+	if _, err := starved.MintSellEvaluationRequestID(t.Context()); err == nil {
+		t.Fatal("熵源只给了三个字节，签发却成功了")
+	}
+}

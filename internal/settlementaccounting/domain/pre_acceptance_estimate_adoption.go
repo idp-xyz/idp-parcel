@@ -34,7 +34,8 @@ func PreAcceptanceEstimateFormFromName(name string) (PreAcceptanceEstimateForm, 
 	}
 }
 
-// EstimatePricingScope 回指 parcel-pricing 的一个计价范围：受理前试算按它选卡（ADR-0179 决定三、五）。由登记方指名——本上下文的
+// EstimatePricingScope 回指 parcel-pricing 的一个计价范围：受理前试算与包裹计费时点的 SELL 评价都按它选卡（ADR-0179 决定三、五；
+// ADR-0190 决定四取同一口径，所以共一个类型）。由登记方指名——本上下文的
 // 主要计费范围与计价范围是不是同一标识空间没有裁，这里不从任何一格推。
 type EstimatePricingScope struct{ requiredValue }
 
