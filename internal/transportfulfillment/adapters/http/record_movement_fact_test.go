@@ -271,6 +271,30 @@ func TestRecordMovementFactReportsOKForEveryAnswerThatRecordedNothing(t *testing
 	}
 }
 
+// Covers: 票 tf-face-algebra/08——同身份异内容是 200 的形成答案 SOURCE_CONFLICT，响应只有 outcome：在册那一份不回显，
+// 另一台设备或另一作业范围就读不到这条事实的内容。
+func TestRecordMovementFactAnswersASourceConflictWithoutTheRecord(t *testing.T) {
+	fixture := newMovementFactFixture(t)
+	if first := postTo(t, fixture.record, "/transport-fulfillment/movement-facts", defaultMovementFactBody()); first.Code != http.StatusCreated {
+		t.Fatalf("首登 status = %d; body = %s", first.Code, first.Body.String())
+	}
+	different := defaultMovementFactBody()
+	different.Location = "hub-9"
+
+	response := postTo(t, fixture.record, "/transport-fulfillment/movement-facts", different)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", response.Code, response.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body) != 1 || body["outcome"] != "SOURCE_CONFLICT" {
+		t.Fatalf("body = %s, want 只有 outcome=SOURCE_CONFLICT", response.Body.String())
+	}
+}
+
 func TestRecordMovementFactOrchestrationErrorFormsNoAnswer(t *testing.T) {
 	fixture := newMovementFactFixture(t)
 	endpoint := tfhttp.NewRecordMovementFactEndpoint(fixture.intake, failingMovementFactHandler{})

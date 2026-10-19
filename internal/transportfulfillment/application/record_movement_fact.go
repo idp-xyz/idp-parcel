@@ -22,6 +22,7 @@ const (
 	MovementFactOutcomeInvalid MovementFactOutcome = iota
 	MovementFactRecorded
 	MovementFactVersionExists
+	MovementFactSourceConflict
 	MovementFactGateBlocked
 	MovementFactNotAccepted
 	MovementFactUndecided
@@ -33,6 +34,8 @@ func (outcome MovementFactOutcome) String() string {
 		return "MOVEMENT_FACT_RECORDED"
 	case MovementFactVersionExists:
 		return "MOVEMENT_FACT_VERSION_EXISTS"
+	case MovementFactSourceConflict:
+		return "SOURCE_CONFLICT"
 	case MovementFactGateBlocked:
 		return "DEPARTURE_GATE_BLOCKED"
 	case MovementFactNotAccepted:

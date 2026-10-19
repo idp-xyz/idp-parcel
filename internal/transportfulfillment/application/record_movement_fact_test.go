@@ -58,6 +58,17 @@ func (double *movementFactRegistryDouble) Save(
 	return ports.MovementFactSaved, nil
 }
 
+func (double *movementFactRegistryDouble) only(t *testing.T) (ports.MovementFactRecord, bool) {
+	t.Helper()
+	if len(double.records) != 1 {
+		t.Fatalf("登记册行数 = %d, want 1", len(double.records))
+	}
+	for _, record := range double.records {
+		return record, true
+	}
+	return ports.MovementFactRecord{}, false
+}
+
 func newMovementFactHandler(registry *movementFactRegistryDouble) *application.RecordMovementFactHandler {
 	return application.NewRecordMovementFactHandler(application.RecordMovementFactDeps{
 		Facts: registry,
@@ -161,28 +172,188 @@ func TestAClearedGatedDepartureIsRecordedWithItsClearance(t *testing.T) {
 	}
 }
 
-// 同一版本重投交回原版本，不顶替——更正走新版本，原记录与其派生历史不被改写。
-func TestASecondRecordOfTheSameVersionKeepsTheOriginal(t *testing.T) {
+// 同身份（租户、事实、版本）再到，按内容分两格（票 tf-face-algebra/08）：同内容是重放，交回原版本、不再写库；异内容是
+// SOURCE_CONFLICT，不回显、不落库、不另起版本。作业事实族的调用方是离线队列、2xx 即出队，把异内容答成已有版本会让另一台
+// 设备的真实作业被静默吞掉（ADR-0023 后果节说的判错方向）。
+//
+// 业务时间照 ADR-0023 不进摘要，所以只差发生时间仍是重放；来源由这一面注入、GateRequired 是门禁判断的输入，两者也不构成内容。
+func TestTheSameVersionIsAReplayOnlyWhenItsContentIsTheSame(t *testing.T) {
+	arrival := func(t *testing.T) application.RecordMovementFactCommand { return recordMovementCommand(t) }
+	clearedDeparture := func(t *testing.T) application.RecordMovementFactCommand {
+		command := recordMovementCommand(t)
+		command.Kind = domain.DepartureFact
+		command.GateRequired = true
+		command.GateClearance = "cc-clearance/v1"
+		return command
+	}
+	cases := []struct {
+		name   string
+		first  func(*testing.T) application.RecordMovementFactCommand
+		change func(*application.RecordMovementFactCommand)
+		want   application.MovementFactOutcome
+	}{
+		{"原样重投", arrival, func(*application.RecordMovementFactCommand) {}, application.MovementFactVersionExists},
+		{"只差整秒发生时间", arrival, func(command *application.RecordMovementFactCommand) {
+			command.OccurredAt = command.OccurredAt.Add(time.Second)
+		}, application.MovementFactVersionExists},
+		{"只差亚秒发生时间", arrival, func(command *application.RecordMovementFactCommand) {
+			command.OccurredAt = command.OccurredAt.Add(250 * time.Millisecond)
+		}, application.MovementFactVersionExists},
+		{"只差来源", arrival, func(command *application.RecordMovementFactCommand) {
+			command.Source = "other-scan/v2"
+		}, application.MovementFactVersionExists},
+		{"带放行的出发只差 GateRequired", clearedDeparture, func(command *application.RecordMovementFactCommand) {
+			command.GateRequired = false
+		}, application.MovementFactVersionExists},
+		{"改种类", arrival, func(command *application.RecordMovementFactCommand) {
+			command.Kind = domain.InTransitFact
+		}, application.MovementFactSourceConflict},
+		{"改地点", arrival, func(command *application.RecordMovementFactCommand) {
+			command.Location = "hub-9"
+		}, application.MovementFactSourceConflict},
+		{"改班次", arrival, func(command *application.RecordMovementFactCommand) {
+			command.Schedule = "schedule-9"
+		}, application.MovementFactSourceConflict},
+		{"换放行引用", clearedDeparture, func(command *application.RecordMovementFactCommand) {
+			command.GateClearance = "cc-clearance/v2"
+		}, application.MovementFactSourceConflict},
+		{"去掉门禁与放行", clearedDeparture, func(command *application.RecordMovementFactCommand) {
+			command.GateRequired = false
+			command.GateClearance = ""
+		}, application.MovementFactSourceConflict},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			registry := newMovementFactRegistry()
+			handler := newMovementFactHandler(registry)
+			first := testCase.first(t)
+			if result, err := handler.Record(t.Context(), first); err != nil || result.Outcome() != application.MovementFactRecorded {
+				t.Fatalf("首登：outcome=%q err=%v", result.Outcome(), err)
+			}
+			original, _ := registry.only(t)
+
+			again := testCase.first(t)
+			testCase.change(&again)
+			result, err := handler.Record(t.Context(), again)
+			if err != nil {
+				t.Fatalf("再投：%v", err)
+			}
+			if result.Outcome() != testCase.want {
+				t.Fatalf("outcome = %q, want %q", result.Outcome(), testCase.want)
+			}
+			record, echoed := result.Record()
+			switch testCase.want {
+			case application.MovementFactVersionExists:
+				if !echoed || !record.Fact.OccurredAt().Equal(original.Fact.OccurredAt()) || record.Fact.Source() != original.Fact.Source() {
+					t.Fatalf("重放没有交回原版本：echoed=%v record=%+v", echoed, record)
+				}
+			default:
+				if echoed {
+					t.Fatalf("冲突回显了在册内容：%+v", record)
+				}
+			}
+			if registry.saves != 1 {
+				t.Fatalf("再投写了库：saves=%d", registry.saves)
+			}
+			if kept, _ := registry.only(t); kept.Fact.Location() != original.Fact.Location() || kept.Fact.Kind() != original.Fact.Kind() {
+				t.Fatalf("在册版本被顶替：%+v", kept)
+			}
+		})
+	}
+}
+
+// 身份在册时先比内容、后判门禁：在册是一条没带放行的出发，同身份再到时多声称一句「要门禁」，内容（班次、种类、地点、放行
+// 缺席）仍同，是重放；若先判门禁，这条重放会被支去取放行。
+func TestARegisteredIdentityIsComparedBeforeTheDepartureGate(t *testing.T) {
 	registry := newMovementFactRegistry()
 	handler := newMovementFactHandler(registry)
-
-	if _, err := handler.Record(t.Context(), recordMovementCommand(t)); err != nil {
-		t.Fatalf("首登：%v", err)
+	departure := recordMovementCommand(t)
+	departure.Kind = domain.DepartureFact
+	if result, err := handler.Record(t.Context(), departure); err != nil || result.Outcome() != application.MovementFactRecorded {
+		t.Fatalf("首登：outcome=%q err=%v", result.Outcome(), err)
 	}
 
-	replay := recordMovementCommand(t)
-	replay.Location = "hub-9"
-	result, err := handler.Record(t.Context(), replay)
+	departure.GateRequired = true
+	result, err := handler.Record(t.Context(), departure)
 	if err != nil {
-		t.Fatalf("重投：%v", err)
+		t.Fatalf("再投：%v", err)
 	}
 	if result.Outcome() != application.MovementFactVersionExists {
 		t.Fatalf("outcome = %q, want MOVEMENT_FACT_VERSION_EXISTS", result.Outcome())
 	}
-	record, _ := result.Record()
-	if record.Fact.Location().String() != "hub-1" {
-		t.Fatalf("重投顶替了原地点：%q", record.Fact.Location())
+}
+
+// 门禁挡着而身份查不了册：此刻判断不了这是不是一条在册版本的重放，答未决而不答门禁格——答门禁格会把一条可能的重放支去取放行。
+func TestAGatedDepartureWhoseIdentityCannotBeLookedUpIsUndecided(t *testing.T) {
+	registry := newMovementFactRegistry()
+	registry.findErr = movementRegistryDown
+	command := recordMovementCommand(t)
+	command.Kind = domain.DepartureFact
+	command.GateRequired = true
+
+	result, err := newMovementFactHandler(registry).Record(t.Context(), command)
+	if err != nil {
+		t.Fatalf("登记册故障不该上抛：%v", err)
 	}
+	if result.Outcome() != application.MovementFactUndecided || result.ContinuationReference() == "" {
+		t.Fatalf("outcome = %q continuation=%q, want MOVEMENT_FACT_UNDECIDED 带续办引用", result.Outcome(), result.ContinuationReference())
+	}
+}
+
+// 并发输家：首读时赢家还没提交，撞键后读回赢家，同样按内容分两格——读回那一支若不比，输家带的另一份内容就被吞掉。
+func TestACollisionLoserIsComparedWithTheWinner(t *testing.T) {
+	cases := map[string]struct {
+		change func(*application.RecordMovementFactCommand)
+		want   application.MovementFactOutcome
+	}{
+		"同内容": {func(*application.RecordMovementFactCommand) {}, application.MovementFactVersionExists},
+		"异内容": {func(command *application.RecordMovementFactCommand) { command.Location = "hub-9" }, application.MovementFactSourceConflict},
+	}
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			registry := newMovementFactRegistry()
+			if _, err := newMovementFactHandler(registry).Record(t.Context(), recordMovementCommand(t)); err != nil {
+				t.Fatalf("赢家：%v", err)
+			}
+			loser := application.NewRecordMovementFactHandler(application.RecordMovementFactDeps{
+				Facts: &staleFirstReadRegistry{movementFactRegistryDouble: registry},
+				Clock: dispatchTaskClock{at: movementRecordedAt},
+			})
+			command := recordMovementCommand(t)
+			testCase.change(&command)
+
+			result, err := loser.Record(t.Context(), command)
+			if err != nil {
+				t.Fatalf("输家：%v", err)
+			}
+			if result.Outcome() != testCase.want {
+				t.Fatalf("outcome = %q, want %q", result.Outcome(), testCase.want)
+			}
+			if _, echoed := result.Record(); echoed != (testCase.want == application.MovementFactVersionExists) {
+				t.Fatalf("回显 = %v：重放交回赢家，冲突不回显", echoed)
+			}
+			if kept, _ := registry.only(t); kept.Fact.Location().String() != "hub-1" {
+				t.Fatalf("赢家被顶替：%q", kept.Fact.Location())
+			}
+		})
+	}
+}
+
+// staleFirstReadRegistry 让首读答「没有」，模拟输家的首读落在赢家提交之前。
+type staleFirstReadRegistry struct {
+	*movementFactRegistryDouble
+	read bool
+}
+
+func (stale *staleFirstReadRegistry) FindByKey(
+	ctx context.Context,
+	key ports.MovementFactKey,
+) (ports.MovementFactRecord, bool, error) {
+	if !stale.read {
+		stale.read = true
+		return ports.MovementFactRecord{}, false, nil
+	}
+	return stale.movementFactRegistryDouble.FindByKey(ctx, key)
 }
 
 // 缺任一必备件不受理，且一次库都不碰。**把放行依据挂到移动或到达上也在这一格**——那等于
