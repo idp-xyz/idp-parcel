@@ -15,8 +15,8 @@ import (
 )
 
 // transportCommandLine 是运输履约主链一口的真库取证：怎么用生产装配拼出这一口的端点、一份合成载荷、该答的状态与 outcome。
-// 作业事实各口走作业事实渠道（work），运营决定四口走操作者渠道的「运营决定」能力面（decisions）——两者都是真渠道，
-// 表里已没有经隔离写放行的行（ADR-0150 决定三；票 operator-channel/10 余下半边、票 15 余下四口）。
+// 作业事实各口走作业事实渠道（work），运营决定行走操作者渠道的「运营决定」能力面（decisions）——两者都是真渠道，
+// 写开关换不了表里任何一行（ADR-0150 决定三）。
 type transportCommandLine struct {
 	endpoint func(t *testing.T, db *bentopg.DB, decisions *tfhttp.OperatorDecisionIntake, work *tfhttp.WorkFactCommandIntake) http.Handler
 	body     string
@@ -191,7 +191,7 @@ var transportCommandLines = map[string]transportCommandLine{
 	},
 }
 
-// operationDecisionTransportFaces 是本表里走「运营决定」的四口各自的决定种类。
+// operationDecisionTransportFaces 是本表里走「运营决定」各口的决定种类。
 var operationDecisionTransportFaces = []accessidentity.DecisionKind{
 	accessidentity.DecisionSegmentClosure,
 	accessidentity.DecisionDispatchTaskRegistration,
@@ -199,9 +199,9 @@ var operationDecisionTransportFaces = []accessidentity.DecisionKind{
 	accessidentity.DecisionCarrierFirstEffectivePickupJudgment,
 }
 
-// operatorDecisionTransportForTest 装 TF 运营决定口的操作者渠道 Intake，准入走生产的准入范围桥（ADR-0180）：四种决定
-// 各登一行对照与本产品的权威区间（与演示种子同一种登法），合成操作者持有这四种授予。与生产装配的差别只在核验方与操作者册
-// 是替身——令牌签发归演示发行方，操作者册的真库往返另有 accessidentity 的用例。
+// operatorDecisionTransportForTest 装 TF 运营决定口的操作者渠道 Intake，准入走生产的准入范围桥（ADR-0180）：
+// operationDecisionTransportFaces 里每种决定各登一行对照与本产品的权威区间（与演示种子同一种登法），合成操作者持有这几种
+// 授予。与生产装配的差别只在核验方与操作者册是替身——令牌签发归演示发行方，操作者册的真库往返另有 accessidentity 的用例。
 func operatorDecisionTransportForTest(t *testing.T, db *bentopg.DB) *tfhttp.OperatorDecisionIntake {
 	t.Helper()
 	registerOperationDecisionAdmission(t, db, isolatedSelfAuthority, operationDecisionTransportFaces...)
@@ -220,10 +220,10 @@ func operatorDecisionTransportForTest(t *testing.T, db *bentopg.DB) *tfhttp.Oper
 	return decisions.transport
 }
 
-// Covers: 票 operator-channel/10 完成判据第二条与票 15 完成判据第三、四条——作业事实各口走作业事实渠道（作业事实登记授予 +
-// 在用设备），运营决定四口走操作者渠道（决定授予 + 准入对照 + 本产品区间），越过 Intake 都答业务结果；四口的隔离写放行已撤，
-// 这几行就是改写后的真渠道答复格用例（ADR-0150 决定三）。编排走生产装配，中间是生产的端点构造函数。每口另投一份带 tenantId
-// 的载荷，Intake 就拒、不带 outcome。测试输入是合成数据，只记 `S`。
+// Covers: 票 operator-channel/15 完成判据「越过 Intake 之后：TF 各口答业务结果」——作业事实行走作业事实渠道（作业事实登记授予 +
+// 在用设备），运营决定行走操作者渠道（决定授予 + 准入对照 + 本产品区间），越过 Intake 都答业务结果；写开关换不了这几行
+// （ADR-0150 决定三）。编排走生产装配，中间是生产的端点构造函数。每口另投一份带 tenantId 的载荷，Intake 就拒、不带 outcome。
+// 测试输入是合成数据，只记 `S`。
 func TestTransportFulfillmentCommandLinesAnswerBusinessOutcomesAgainstARealDatabase(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
