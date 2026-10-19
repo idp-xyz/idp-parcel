@@ -43,4 +43,4 @@ BUY 评价请求的触发面已经单独登记（ADR-0164）。那条身份不�
 - [ADR-0164](./0164-buy-evaluation-request-trigger-is-occurrence-formed.md)：BUY 触发面
 - [UC-SA-002](../application/settlement-accounting/UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md)
 - 票 `.scratch/product-strategy-boundary/issues/12-sa-amount-grammars-allocation-forms-and-accounting-connectors.md` 第 9 项
-- [ADR-0190](./0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md)：后继，补包裹计费时点与独立的 SELL 请求身份，取代 Consequences 第二条与决定四末句
+- [ADR-0190](./0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md)：后继，补包裹计费时点与独立的 SELL 请求身份，取代 Consequences「形成编排不进 `cmd/parcel-dispatch`」与决定四「也不在本记录里把形成编排接进进程」；「不把 BUY 请求编排接过来」与「消费门指名缺这一引用，不发明费用项目」照旧

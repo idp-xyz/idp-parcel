@@ -10,8 +10,8 @@ Blocked by: 无
 
 1. **SELL 评价请求**（决定一）：领域 `SellEvaluationRequest`。
    - 铸造标识，新前缀，过标识前缀门禁。自然键（租户、包裹、计费时点）。
-   - 字段：租户、包裹、结算账户、计价范围、计费时点、来源事实引用、计价基准时点。
-   - 册 `sell_evaluation_request`（迁移 0037），状态格留给形成那一半写：已形成、待判断、不可计价、冲突。
+   - 字段：租户、包裹、结算账户、结算币种（登记时从不可变的结算账户行快照）、计价范围、计费时点、来源事实引用、计价基准时点。
+   - 册 `sell_evaluation_request`（迁移 0037；号被占就取下一个空号），状态格留给形成那一半写：已提交、已形成、待判断、不可计价、冲突；已形成时另记那笔预估客户费用的标识。
    - 端口：登记（同自然键答已存在）、按标识读、按包裹读当前请求。
    - Outbox 交接：信封 `settlement-accounting.sell-evaluation-request.submitted`，载荷只有（租户、请求标识），ID 走 `outboxintent.FingerprintEventID`，分区键（租户/包裹）。
 2. **SELL 计费时点采用册**（决定三，迁移 0038）：键（租户、结算账户），值（计费时点、计价范围），不可变元组，照受理前估价采用册的先例。计费时点是封闭词：`NETWORK_INTAKE_ADOPTED`、`EFFECTIVE_DELIVERY_FINALIZED`。

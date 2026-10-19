@@ -2,7 +2,7 @@
 
 Category: enhancement
 Status: ready-for-agent——2026-10-19 Claude Code 会话立。
-Blocked by: [01](./01-sell-request-identity-and-registers.md)
+Blocked by: [01](./01-sell-request-identity-and-registers.md)。02、03、04 都改 `cmd/parcel-dispatch` 的路由表，按 02 → 03 → 04 串行做。
 地盘：`internal/settlementaccounting` 的 application、adapters/inbox、新目录 adapters/parcelshipment（若无）、adapters/partycommercial；`cmd/parcel-dispatch` 的路由表与装配。
 出处：[ADR-0190](../../../docs/adr/0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 决定二、三、六。
 
