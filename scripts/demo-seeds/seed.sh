@@ -243,22 +243,23 @@ echo "== 试点治理登记（pilot-governance：权威区间、暂停、恢复�
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/14-authority-interval-external-fact-customs-external-result.json"
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/15-authority-interval-external-fact-regulatory-credential.json"
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/16-authority-interval-external-fact-external-funds-fact.json"
-# TF 余下四种运营决定随换口补（票 operator-channel/15）：关段、建派送任务、有效时间判断、承运商首次有效收寄判断。
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/17-authority-interval-operation-decision-segment-closure.json"
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/18-authority-interval-operation-decision-dispatch-task-registration.json"
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/19-authority-interval-operation-decision-effective-time-judgment.json"
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/20-authority-interval-operation-decision-carrier-first-effective-pickup-judgment.json"
-# 委托侧受控关闭与重开随换口补（票 operator-channel/15；ADR-0183）。
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/21-authority-interval-operation-decision-controlled-closure.json"
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/22-authority-interval-operation-decision-controlled-reopening.json"
 
 echo "== 操作者册登记（access-identity：合成操作者主体与能力面授予；票 operator-channel/01、17） =="
-# 两个合成主体绑演示租户：配置员扮运营主管，授登记册配置写、主数据与运营查阅读两格，另授全部十一种运营决定——TF 六种
-# （装载分配、终止参与、关段、建派送任务、有效时间判断、承运商首次有效收寄判断）与委托侧五种（复核完成、主动拒绝、
-# 授权处置、受控关闭、受控重开；票 operator-channel/24）。授予只开门：决定方、授权角色与授权依据快照仍全由 party-commercial
-# 的授权答复给出，委托侧各口越过 Intake 后如实停在各自的授权缺口上。查阅员只授查阅读，继续证「授予不覆盖即拒」。
+# 合成主体绑演示租户：配置员扮运营主管，持有全部运营决定（票 operator-channel/24「裁定」）——授登记册配置写、主数据与
+# 运营查阅读，运营决定按 accessidentity 的 decisionKinds 逐种各授一行（各种名目见 README 授予表）；decisionKinds 多一种，
+# data/access/02 的授予、03 的准入范围对照与 data/governance/ 的权威区间各补一行。授予只开门，不替任何人形成决定；
+# 决定方从哪来逐口照 ADR-0151 决定二：复核完成、主动拒绝、授权处置取信封里的提交操作者作复核人、决定人、处置人，他有
+# 没有权、凭哪一份授权由编排问 party-commercial；受控关闭与重开的命令里没有提交操作者，决定方、授权角色与授权依据快照
+# 都由授权答复给出。委托侧各口越过 Intake 的前提与停点见 README「操作者渠道」一节授予表后的说明。查阅员只授查阅读，
+# 继续证「授予不覆盖即拒」。
 # 证据层级只记 S，不登任何真实操作者。发行方是演示发行方 Dex（operator-channel/compose.yaml），主体是
-# 它给 dex.yaml 里两个静态用户真签出的令牌里的 sub（operator-token.sh … claims 读出），不按配置推算。
+# 它给 dex.yaml 里静态用户真签出的令牌里的 sub（operator-token.sh … claims 读出），不按配置推算。
 # 只登演示部署信任的那只发行方签得出的主体：iss 没有任何发行方签得出的主体，在册上与能登录的主体
 # 长得一模一样，却永远登不进来。册上的主体不能改指到新发行方：换发行方就按新发行方的标识另登一批，
 # 授予号与依据也另起。
@@ -266,8 +267,9 @@ echo "== 操作者册登记（access-identity：合成操作者主体与能力�
 "$BIN/parcel-access-register" operator-grant -input "$SEEDS/access/02-grants.json"
 # 准入范围对照（ADR-0180 决定一、二；票 operator-channel/19）：演示租户在上面那几种（能力、事实类型）上的生产写
 # 落在哪个治理对象范围。对照住接入身份、与操作者授予同处，不进 data/governance/；它只换坐标，区间才答「谁在写
-# 生产」。演示租户越过准入范围只有这一条普通登记的路（ADR-0150 决定一）。配置员的十一种运营决定都在这里有对照：
-# 管理台上的各运营决定口经它走，终止参与另供 probe-operator-channel.sh 取证。
+# 生产」。演示租户越过准入范围只有这一条普通登记的路（ADR-0150 决定一）。配置员持有哪一种运营决定，这里就要有那一种
+# 的对照，少了那一行，那一口授予齐备也答 OUTSIDE_ADMISSION_SCOPE；运营决定各口不论由管理台的页面调还是直接调 API 都经
+# 它走，终止参与另供 probe-operator-channel.sh 取证。
 "$BIN/parcel-access-register" admission-scope-mapping-register -input "$SEEDS/access/03-admission-scope-mappings.json"
 
 echo "== 结算账户与受理前估价采用登记（settlement-accounting：演示租户货主的应收结算账户与它采用的估价形态；票 routing-first-cut/16、product-strategy-boundary/26） =="
