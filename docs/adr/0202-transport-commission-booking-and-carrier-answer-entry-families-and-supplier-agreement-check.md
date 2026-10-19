@@ -31,6 +31,8 @@ Date: 2026-10-19
 - 三项检查按序：这一版在册（壳与正文都登了）；在提交时点支持新的采购决定（问 PC 自己的 `SupportsProcurementAt`）；协议的供应商就是本次的服务提供方。先不过的那一项定结论。
 - 不过时分四格答业务结果（HTTP 200，ADR-0022）：`AGREEMENT_NOT_REGISTERED`、`AGREEMENT_NOT_EFFECTIVE`、`AGREEMENT_TERMINATED`、`PROVIDER_MISMATCH`。续办两两不同（去 PC 发布或补正文、换一版此刻生效的、取得新协议、改服务方），不并进`未受理`（ADR-0029）；服务方不符另带协议约定的供应商。四格都不落委托、不交意图。
 - PC 读不动答`未决`（`SUPPLIER_AGREEMENT_UNAVAILABLE`），登记方稍后原样重交。PC 侧坏数据与读不动在值上分不开，命令面续办相同，不另分格。
+- 核对口交回的 error 一律答`未决`（`SUPPLIER_AGREEMENT_UNAVAILABLE`），包括适配器译不了 PC 答复时包上的不可译哨兵（所答非所问、未知的生命周期位置、正文挂错版本）。那枚哨兵定义在适配器包里，编排认不出；PC 侧坏数据既已落未决，单把适配器侧的确定性违约挑出来，也换不来「未决就是重试会好」（风险点 10）。编排自己看得见的违约（交回封闭集外的格、在册格缺快照或法人）答没形成答案（HTTP 500）。
+- 读口在事务里报 SQL 错误时事务已中止，照常提交只换回提交错误。装配在编排答未决时整笔回滚，再交回那一份未决，线上答的仍是本条写的格，不是 500。
 - 「提交时点」取登记方给的提交时刻（ADR-0023 时间由提交方给），不取服务端时钟。
 - 条件、角色、责任仍是登记方声明的快照引用，本记录不核它们，作为已知缺口记下（风险点 2），不做假核对。判法只用 PC 拥有的事实，先例是 PS 的 `agreementOf`。
 
@@ -43,7 +45,7 @@ Date: 2026-10-19
 
 **五、订舱与承运答复的词表（票 24 落）。** 订舱必须引用一个在册的具体班次，不在册答 `SCHEDULE_NOT_FOUND`（UC-TF-004 步 1 校验运输机会）。承运答复的封闭集在接受、拒绝、失效、撤回之外加 `WAITLISTED`（候补）。`待确认`、`待补充`是订舱请求还没有答复时的读法，不是答复值。逐对象接受、委托级接受都不做，记为缺口。
 
-**六、委托信封接上 Outbox、不登路由（机制）。** 「委托已提交」意图与委托同一笔入队，载荷只带（租户、委托）引用，信封 ID 照 `outboxintent.FingerprintEventID` 铸（口名前缀 `transport-commission`），分区键保留可读的「租户/委托/口名」。派发路由表照 ADR-0066 决定四的「缓」不登记这个类型，派发如实答 `dispatch.no_subscriber`，烧完失败预算落 `ABANDONED`（ADR-0049 决定三）。入队不能省：后继消费者要的就是这份按委托认领的意图（ADR-0043），不入队等于把它丢掉。编排与端口注释里「交 SA 作成本预期源」改成现状：供应商成本的来源是运输收费发生项加 BUY 评价（ADR-0164、ADR-0208），不是委托。
+**六、委托信封接上 Outbox、不登路由（机制）。** 「委托已提交」意图与委托同一笔入队，载荷只带（租户、委托）引用，信封 ID 照 `outboxintent.FingerprintEventID` 铸（口名前缀 `transport-commission`），分区键保留可读的「租户/委托/口名」（越限的残余见风险点 11）。派发路由表照 ADR-0066 决定四的「缓」不登记这个类型，派发如实答 `dispatch.no_subscriber`，烧完失败预算落 `ABANDONED`（ADR-0049 决定三）。入队不能省：后继消费者要的就是这份按委托认领的意图（ADR-0043），不入队等于把它丢掉。编排与端口注释里「交 SA 作成本预期源」改成现状：供应商成本的来源是运输收费发生项加 BUY 评价（ADR-0164、ADR-0208），不是委托。
 
 **七、提交编排的次序（机制）。** 委托草稿过构造门 → 按（租户、委托）分重放与冲突 → 核协议 → 以核出的快照与法人提交 → 与意图同笔落库。
 
@@ -68,10 +70,10 @@ Date: 2026-10-19
 ## Consequences
 
 - 代码（票 23）：access-identity 决定种类 `DecisionTransportCommissionSubmission`；TF 领域 `TransportCommissionDraft`（`DraftTransportCommission`、`Submit`）成为成立委托的唯一入口，`TransportCommission.LegalEntity`；编排 `CommissionTransportHandler.SubmitCommission` 多四个否定格、未决原因 `SUPPLIER_AGREEMENT_UNAVAILABLE`，`CommissionNotAccepted` 的线上名改为 `INPUT_NOT_ACCEPTED`（与 TF 其余运营决定口同名）；`CanonicalizeCommissionPayload` 改收协议对象与版本标签；委托口退役无版本摘要；委托信封 ID 改指纹，信封 ID 门禁例外清单剪掉这一行。
-- 迁移：access-identity `0008`（决定种类约束重建，列出截至本迁移的全集）；TF `0025`（委托加采购责任法人列，表里有行即拒绝施加）。
-- 接口：`POST /transport-fulfillment-transport-commission-submissions`，挂操作者渠道的运营决定面；装配另立 `cmd/parcel-api/assemble_transport_commission.go`，整次提交一笔事务。
+- 迁移：access-identity `0008`（决定种类约束重建，列各份重建的并集：迁移不按编号先后施加，在已施加 `0011` 的库上本份后施加，只列本份之前的全集会删掉后来的种类）；TF `0025`（委托加采购责任法人列，表里有行即拒绝施加）。
+- 接口：`POST /transport-fulfillment-transport-commission-submissions`，挂操作者渠道的运营决定面；装配另立 `cmd/parcel-api/assemble_transport_commission.go`，整次提交一笔事务，编排答未决时整笔回滚。
 - 演示种子：配置员授运输委托提交、准入对照与本产品权威区间各一行。
-- 文档：UC-TF-004 补 `AT-TF-105` 至 `AT-TF-107`；ADR-0149 Links 加前向指针；演示文档补委托一节。
+- 文档：UC-TF-004 补 `AT-TF-107` 至 `AT-TF-109`；ADR-0149 Links 加前向指针；演示文档补委托一节。
 
 ## 越权风险点
 
@@ -84,6 +86,8 @@ Date: 2026-10-19
 7. **「终止」对到版本退役**（PC owner）。PC 没有明文把供应商协议的终止对到版本生命周期的退役；「从未发布」与「发布时漏登正文」落同一格未在册。
 8. **种类粒度**（psb/07）。五种决定是本记录按「授予粒度等于权力粒度」定的，种类数属于产品角色模型。
 9. **提交时刻由登记方给**（TF owner）。核协议用的是登记方给的提交时刻，倒填到协议有效期内就能用一版已终止的协议提交。与 ADR-0023 同一取舍：服务端不代铸业务时间。
+10. **核对口的确定性违约有一部分答未决**（TF owner；知会 PC owner）。适配器侧的不可译答复与 PC 侧坏数据都落 `SUPPLIER_AGREEMENT_UNAVAILABLE`，登记方照「稍后原样重交」只会原样再撞。要分开，先把适配器的不可译哨兵挪进 TF `ports`、由 PC 给坏数据一个哨兵，编排再按 `errors.Is` 改答没形成答案。
+11. **分区键越限时同一笔不成立**（TF owner）。分区键与 Subject 随租户、委托标识变长；越过 `eventing.MaxPartitionKeyLength` 时信封在入队前被确定性拒收，事务不中止，委托落册而意图不在 Outbox，重放每次原样再撞。去处是票 [demo-chain-gaps/40](../../.scratch/demo-chain-gaps/issues/40-transport-commission-handoff-does-not-separate-deterministic-rejection.md)；先例是 SELL 评价请求交接口的确定性拒收哨兵。
 
 ## Links
 
@@ -99,5 +103,5 @@ Date: 2026-10-19
 - [ADR-0080](./0080-commercial-closure-resolves-the-contract-first-and-keys-settlement-by-it.md)：决定七，「对象/版本」指称只由 PC 一处拼
 - [ADR-0164](./0164-buy-evaluation-request-trigger-is-occurrence-formed.md)、[ADR-0208](./0208-buy-evaluation-is-requested-from-the-charge-occurrence-formed-envelope.md)：供应商成本的来源是发生项，不是委托
 - ADR-0204（票 25 起草，号已占）：履约段采用运输委托，决定一最后一种决定的语义
-- [UC-TF-004](../application/transport-fulfillment/UC-TF-004-COMMISSION-AND-ACCEPT-TRANSPORT.md)：步 1 至 3，`AT-TF-105` 至 `AT-TF-107`
+- [UC-TF-004](../application/transport-fulfillment/UC-TF-004-COMMISSION-AND-ACCEPT-TRANSPORT.md)：步 1 至 3，`AT-TF-107` 至 `AT-TF-109`
 - 计划 `.scratch/demo-chain-gaps/tf-chain-plan.md`「02 委托、订舱、承运答复」；票 `.scratch/demo-chain-gaps/issues/22-…`、`23-…`、`24-…`、`25-…`

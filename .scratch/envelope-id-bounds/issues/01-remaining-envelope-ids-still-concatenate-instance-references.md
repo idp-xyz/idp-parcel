@@ -15,6 +15,7 @@ Blocked by: 无
 - pilot-governance：`resumptionEventID`、`suspensionEventID`、`takeoverEventID`
 - settlement-accounting：`chargeConfirmationEventID`、`supplierBillEventID`
 - transport-fulfillment：`capacityConsumptionEventID`、`carrierFirstEffectivePickupEventID`、`dispositionExecutionEventID`、`effectiveDeliveryEventID`、`exceptionJourneyEventID`、`externalTrackingFactEventID`、`offsitePickupEventID`、`offsitePickupRegistrationEventID`、`regulatoryAcceptanceEventID`、`transportCommissionEventID`、`transportHandoverRegistrationEventID`
+  - 2026-10-19 补（票 demo-chain-gaps/23）：其中 `transportCommissionEventID` 已在该票改走 `FingerprintEventID`（该口第一次有生产方），信封 ID 门禁的例外清单随之剪掉这一行；运输履约半边做时跳过它。
 - visibility-exception：`triageEventID`、`visibilityGapEventID`
 
 不经具名函数、在信封构造处原地串接的（全在 settlement-accounting 的 postgres 适配器里）：

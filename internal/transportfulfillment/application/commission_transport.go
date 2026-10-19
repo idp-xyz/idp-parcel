@@ -19,7 +19,7 @@ var (
 	// ErrUnexpectedBookingSave 说明订舱库交回了封闭集合以外的写入结果。
 	ErrUnexpectedBookingSave = errors.New("transport fulfillment: unexpected booking save outcome")
 	// ErrUnexpectedAgreementCheck 说明协议核对口交回了封闭集合以外的格，或在册格缺了快照与法人——核对口违约，
-	// 不是登记方能改的输入，也不是稍后再交就会好的依赖故障。
+	// 不是登记方能改的输入，也不是稍后再交就会好的依赖故障。只认本层看得见的这几种；核对口以 error 交回的违约落未决。
 	ErrUnexpectedAgreementCheck = errors.New("transport fulfillment: unexpected supplier agreement check")
 )
 
@@ -255,7 +255,8 @@ func (handler *CommissionTransportHandler) SubmitCommission(
 
 	check, err := handler.deps.Agreements.CheckSupplierAgreement(ctx, command.TenantID, draft.Agreement(), draft.Provider(), draft.SubmittedAt())
 	if err != nil {
-		// 读不动与 PC 侧坏数据在值上分不开（ports.SupplierAgreementSource 的头注），对命令面续办相同：稍后原样重交。
+		// 读不动与 PC 侧坏数据在值上分不开（ports.SupplierAgreementSource 的头注），对命令面续办相同：稍后原样重交。适配器
+		// 侧的不可译答复也落这一格：它的哨兵在适配器包里，本层认不出（ADR-0202 决定三与风险点 10）。
 		return commissionUndecided(SupplierAgreementUnavailable, command.Commission), nil
 	}
 	switch check.Standing {
