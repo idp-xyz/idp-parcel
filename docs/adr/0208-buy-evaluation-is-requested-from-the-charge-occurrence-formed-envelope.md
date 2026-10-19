@@ -19,21 +19,22 @@ Date: 2026-10-19
 
 **三、费用项目来自 BUY 触发册的新格。** 触发册每行（租户、原因）加一格「费用项目」，属租户取值，可缺（迁移 `settlement_accounting/0040_buy_evaluation_trigger_fee_item.sql`）。没登这个原因、或登了却没登费用项目，答`未配置`并入账，不重投；补登之后，已入账的那一份不回补。册不设修订：同原因换一个费用项目或给没登的行补登，都答冲突。
 
-**四、主要范围取那一版协议的商业范围，经结算→参与方与商业的读口取。** 参与方与商业新开一个只交范围的窄读口：按「对象/版本」两段式指称（`NewQualifiedVersionLabel` 那一处拼出的形状）答那一版协议正文上的适用范围（`ports.SupplierAgreementScopeView`）。读不动答未决、整笔回滚重投；读回查无是两侧矛盾——发生项登记时已核过协议——上抛为发布失败，不重投，不替它挑一个范围。不核协议此刻是否生效：协议终止不改写在它之下已经发生的事实。
+**四、主要范围取那一版协议的商业范围，经结算→参与方与商业的读口取。** 参与方与商业新开一个只交范围的窄读口：按「对象/版本」两段式指称（`NewQualifiedVersionLabel` 那一处拼出的形状）答那一版协议正文上的适用范围（`ports.SupplierAgreementScopeView`）。取的是正文上的适用范围，不是版本壳上的范围（两者分开存，见候选与反方）。读不动答未决、整笔回滚重投；读回查无是两侧矛盾——发生项登记时已核过协议——上抛为发布失败，不重投，不替它挑一个范围；一份指称比中不止一版协议（对象标识或版本自带斜杠时两段式指称本身有歧义）同样上抛，不挑一行。不核协议此刻是否生效：协议终止不改写在它之下已经发生的事实。
 
-**五、各格的去向。** 已发起（含同一份重放答已存在）、未配置的两格、修订版不发起，都入账。修订版指有效性修订产生的那一版（失效或替代）：本路不为它发起，修订怎样驱动纠错归票 demo-chain-gaps/15。只有依赖答不出才是未决，登进派发的未决哨兵：发生项读不回或登记册读不动、触发册、协议范围读口、请求册、铸造口或交信封任一答不出（[ADR-0029](./0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md)、[ADR-0094](./0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md)）。交信封失败在这一路答未决：请求编排在事务外的用法里留续办引用、照答已请求，那个形状在消费事务里会让请求行提交而信封缺席。读回的发生项与键对不上、词汇表外、本路译出的命令被拒，都上抛为发布失败。
+**五、各格的去向。** 已发起（含同一份重放答已存在）、未配置的两格、修订版不发起，都入账。修订版指有效性修订产生的那一版（失效或替代）：本路不为它发起，修订怎样驱动纠错归票 demo-chain-gaps/15。只有依赖答不出才是未决，登进派发的未决哨兵：发生项读不回或登记册读不动、触发册、协议范围读口、请求册、铸造口或交信封任一答不出（[ADR-0029](./0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md)、[ADR-0094](./0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md)）。交信封失败在这一路答未决：请求编排在事务外的用法里留续办引用、照答已请求，那个形状在消费事务里会让请求行提交而信封缺席。读回的发生项与键对不上、词汇表外（含协议范围读口答出的译不过去与指称歧义）、本路译出的命令被拒，都上抛为发布失败——这几种重投同一份永远同一个结果，进未决名单只会以未决之名耗尽失败预算。
 
 **六、协议指称串的形状由本记录定给生产方。** 发生项上的 `agreement_ref` 必须是参与方与商业的两段式指称「对象/版本」，例如 `SYN-SUPPLIER-TRUNK-CN-SG-01/v1`。票 27 登记发生项时照此写。
 
 **七、请求方是本路自己。** 本路登在请求上的请求方是固定名 `settlement-accounting/buy-evaluation-on-occurrence-formed`，不是任何租户的人。
 
-三类：一、二、五、六是**机制**；三、四是**产品策略**（不看任何租户的合同就答得了怎样取费用项目与主要范围）；触发册的行与行上的费用项目是**租户取值**，演示租户由种子登 `SYN-` 值，证据记 `S`。
+三类：一、二、五、六、七是**机制**；三、四是**产品策略**（不看任何租户的合同就答得了怎样取费用项目与主要范围）；触发册的行与行上的费用项目是**租户取值**，演示租户由种子登 `SYN-` 值，证据记 `S`。
 
 ## 候选与反方
 
 - **费用项目取价卡费目或发生项原因。** 那是把计价或运输的词当成结算的费用项目，第二个口径。否决。
 - **费用项目按（原因、协议）分行。** 更准，但演示只有一份干线协议，现在立两维册是替还没出现的租户定形。留给 owner，见风险点 1。
 - **主要范围取发生项的主要业务范围。** 那是运输一侧的范围（一段履约），计价拿它解析价卡只会零命中。否决。
+- **主要范围取版本壳上的范围（`commercial_version.scope_ref`）。** 版本壳的范围回答「这一版商业对象登在哪个范围下、装载按它过滤」；正文上的适用范围（`supplier_agreement.agreement_scope_ref`）回答「这份协议在哪个范围内绑定了哪份采购定价方案」，计价按主要范围选的正是那份方案所在的卡。两者分开存（迁移 `party_commercial/0021_supplier_agreement.sql` 头注），演示里同值。取壳上的范围，等于拿登记位置顶约定范围。否决，见风险点 2。
 - **主要范围由触发册再登一格。** 又一处要租户维护、又会与协议的商业范围分歧的值。否决。
 - **借票 22 的协议版本点读口（版本壳加正文）。** 本路只要范围，拿整份正文就把生效判断、供应商与法人一并交给一个用不着它们的消费方；票 22 与本票也是两条并行车道。另开只交范围的窄口，见风险点 8。
 - **修订版照样发起。** 失效的那一版也会被估成本；纠错的形状在票 15 才定。否决。
@@ -41,16 +42,16 @@ Date: 2026-10-19
 
 ## Consequences
 
-- 代码：结算 `sainbox.ChargeOccurrenceFormedConsumer`、`adapters/transportfulfillment.RequestOnChargeOccurrenceFormedAdapter`（哨兵 `ErrChargeOccurrenceNotVisible`、`ErrBuyEvaluationTriggerUndecided`）、`adapters/partycommercial.SupplierAgreementScope`、`application.TriggerBuyEvaluationOnOccurrenceFormedHandler`（矛盾哨兵 `ErrOccurrenceAgreementNotRegistered`）；触发结果多出`未决`与「修订版不发起」两格，`未配置`点名缺哪一格。`ports.BuyEvaluationTriggerView` 交回整行。参与方与商业 `ports.SupplierAgreementScopeView` 与 `postgres.SupplierAgreementScopes`。派发的路由表登 `transport-fulfillment.charge-occurrence.formed`，哨兵名单 `chargeOccurrenceFormedUndecidedSentinels`。
+- 代码：结算 `sainbox.ChargeOccurrenceFormedConsumer`、`adapters/transportfulfillment.RequestOnChargeOccurrenceFormedAdapter`（哨兵 `ErrChargeOccurrenceNotVisible`、`ErrBuyEvaluationTriggerUndecided`）、`adapters/partycommercial.SupplierAgreementScope`、`application.TriggerBuyEvaluationOnOccurrenceFormedHandler`（矛盾哨兵 `ErrOccurrenceAgreementNotRegistered`）；协议范围的确定性坏答案哨兵：结算 `ports.ErrSupplierAgreementScopeUntranslatable`、参与方与商业 `ports.ErrSupplierAgreementLabelAmbiguous`；触发结果多出`未决`与「修订版不发起」两格，`未配置`点名缺哪一格。`ports.BuyEvaluationTriggerView` 交回整行。参与方与商业 `ports.SupplierAgreementScopeView` 与 `postgres.SupplierAgreementScopes`。派发的路由表登 `transport-fulfillment.charge-occurrence.formed`，哨兵名单 `chargeOccurrenceFormedUndecidedSentinels`。
 - 迁移 `settlement_accounting/0040_buy_evaluation_trigger_fee_item.sql`；`parcel-settlement-register buy-evaluation-trigger` 的输入多一个可选键 `feeItem`。
 - 演示租户登一行：`ACTUAL_FULFILLMENT` 采用发生项形成，费用项目 `SYN-FEE-ITEM-TRUNK-COST-01`。
 - UC-SA-002 步 2 与 `AT-SA-185` 至 `AT-SA-187`；结算 `CONTEXT` 一句；`CONTEXT-MAP` 运输履约→结算一条。
-- 生产方未上线之前，本路一封也收不到。端到端证据随票 27。
+- 没有生产方交出这一类信封时，本路一封也收不到。端到端证据随票 27。
 
 ## 越权风险点
 
 1. **一个原因只映一个费用项目，不分协议**（SA owner）。同一原因在两份协议下该记成不同费用项目时，本册表达不了。
-2. **主要范围等同协议的商业范围**（SA、PC owner）。一份协议覆盖多条线、各线另有成本卡时不够用；计价按它选卡，选到的是那个范围里唯一在用的卡。
+2. **主要范围等同协议的商业范围**（SA、PC owner）。一份协议覆盖多条线、各线另有成本卡时不够用；计价按它选卡，选到的是那个范围里唯一在用的卡。取的是正文上的适用范围而不是版本壳上的范围；两者在某个租户那里分了家时，owner 可另裁。
 3. **`Request` 仍可被直调**，不经任何触发面（同 ADR-0164 越权风险点 3，SA owner）。
 4. **触发册不设修订**（SA owner）。补登或改费用项目答冲突，只能由 owner 另裁修订形状。
 5. **修订版不发起**（SA、TF owner）。发生项更正怎样驱动预期成本纠错，归票 demo-chain-gaps/15。

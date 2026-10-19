@@ -189,7 +189,7 @@
 | `AT-SA-184` | BUY 评价回指的请求不在 BUY 请求册上，派生版本上已有另一份内容，或评价已完成而形成时未受理（例如合计为零） | 不形成成本，作两侧矛盾上抛为可见的发布失败，不按不归本路静默入账（[ADR-0200](../../adr/0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md) 决定四） |
 | `AT-SA-185` | 运输履约交出一份首版发生项已形成信封，原因在 BUY 触发册上登了「发生项形成」与费用项目 | 按引用回读发生项，以发生项、它固定的供应商协议、触发册的费用项目和协议的商业范围登记恰一份 BUY 评价请求并交信封；同一封重投答已存在，不登第二份（[ADR-0208](../../adr/0208-buy-evaluation-is-requested-from-the-charge-occurrence-formed-envelope.md) 决定一至四） |
 | `AT-SA-186` | 同上，但原因没登、或登了没登费用项目，或这一版是有效性修订产生的 | 不发起请求、不问协议，入账不重投；未配置点名缺哪一格，补登之后这一份不回补（[ADR-0208](../../adr/0208-buy-evaluation-is-requested-from-the-charge-occurrence-formed-envelope.md) 决定三、五） |
-| `AT-SA-187` | 同上，但发生项读不回、触发册或协议范围读口读不动，或发生项上的协议在参与方与商业查无 | 前几种是未决，整笔回滚重投；协议查无是两侧矛盾，上抛为可见的发布失败，不替它挑一个范围（[ADR-0208](../../adr/0208-buy-evaluation-is-requested-from-the-charge-occurrence-formed-envelope.md) 决定四、五） |
+| `AT-SA-187` | 同上，但发生项读不回、触发册或协议范围读口读不动，或发生项上的协议在参与方与商业查无、协议指称比中不止一版 | 前几种是未决，整笔回滚重投；协议查无是两侧矛盾、指称歧义是确定性坏答案，都上抛为可见的发布失败，不替它挑一个范围（[ADR-0208](../../adr/0208-buy-evaluation-is-requested-from-the-charge-occurrence-formed-envelope.md) 决定四、五） |
 
 ## 生产参数与待决风险
 
