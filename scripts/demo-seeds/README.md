@@ -79,6 +79,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 配置员另持运营决定「运输收费发生项登记」（ADR-0207；`data/access/02` 的授予、`03` 的对照与 `data/governance/25` 的
 权威区间各一行）。种子不登任何发生项：发生项是对已发生履约事实的一次采购判断，要等干线段的参与结束之后经
 `POST /transport-fulfillment-charge-occurrence-registrations` 登记，登法见下面「数据故事」第 8 步的补记。
+段已采用委托的，参与结束之后由派发进程自动形成，不必登（票 demo-chain-gaps/67，ADR-0218）。
 
 配置员另持运营决定「容量预占」与「容量释放」两种（ADR-0203；`data/access/02` 的授予、`03` 的对照与
 `data/governance/28`、`29` 的权威区间各两行）。种子不登任何预占：预占是为一个业务范围占住一个池的一段容量，由配置员
@@ -300,6 +301,11 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
    `SYN-APPROVAL-2026-021`），`v2` 原样在册；演示的委托、段采用与发生项登记自此指名 `v3`。`v3` 声明了什么、订舱费与
    取消费怎么登、各格怎么答，只写在[演示动线](../../docs/design/synthetic-demo-journey-script.md)「第 3 步」的票 28
    补记里，这里不复述。
+
+   2026-10-19 起（票 demo-chain-gaps/67，ADR-0218）干线段采用了委托之后，参与在 SIN-HUB 以下一次交接结束，派发进程就自动
+   形成那一件的 `ACTUAL_FULFILLMENT` 发生项，配置员不必再登；没有采用委托的段照旧人工登。演示约定的旅程自此写派生拼写
+   `JRN/<包裹号>`，不再写 `SYN-JRN-<包裹号>`：照旧拼写人工登同一段同一件，会与自动形成的那一项撞成冲突。演示怎么走只写在
+   [演示动线](../../docs/design/synthetic-demo-journey-script.md)「第 3 步」的票 67 补记里，这里不复述。
 
 ## 已知边界（如实记录，不是缺陷）
 
