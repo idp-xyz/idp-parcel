@@ -1,7 +1,7 @@
 # 42 作业事实面上缺席的身份与时刻答哪一格：NO 收寄答 400，TF 交编排答未受理——NO 一侧与票 08「缺席交编排」不符
 
 Category: task
-Status: in-progress——2026-10-19 子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-oc42`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 5 研判）
+Status: in-progress——2026-10-19 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-oc42`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 5 研判）
 Blocked by: operator-channel/29 已进 main（ADR-0186 在场）
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判簇 C4 第六张草案
@@ -51,3 +51,7 @@ NO 收寄缺席的事实身份与发生时刻，答哪一格：
 - **用例**：`c7357f34`——`work_fact_intake_test.go` 新增 `TestWorkFactReceptionAnswers400ForAbsentFactIdentityOrOccurrenceTime`：生产 `WorkFactReceptionIntake` 接端点，编排侧装 `failingHandler`（漏过 Intake 就成 500），四个子用例（缺事实身份、事实身份为空白、缺发生时刻、发生时刻为空串）各断言 400 `MALFORMED_REQUEST`，头注引上述复核记录。既有 `TestWorkFactReceptionIntakeRefusesMalformedReceptionPayloads` 只在 Intake 层断言缺事实身份，没有缺发生时刻一格，故补这一条。这是钉现状：首跑即绿，没有先红。
 - **门**：`gofmt -l internal/nodeoperations` 无输出；`go vet ./internal/nodeoperations/...` 退 0；`go test -count=1 ./internal/nodeoperations/adapters/http/` ok。
 - 评审：待会话读 diff 审。
+
+## Comments
+
+- **评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审）· 钉 `10c2583c`（基线 `32a9d03f`）· 2026-10-19**：出自本会话起的子代理，会话读 diff 审，不算非作者评审。ADR-0186 文末追加复核记录三条、Decision 原文未动，与裁定 (b) 一致；票 08 Comments 只加一行；新用例 `TestWorkFactReceptionAnswers400ForAbsentFactIdentityOrOccurrenceTime` 钉现状（缺事实身份、空白事实身份、缺发生时刻、空发生时刻各答 400），首跑即绿、非先红后绿，完成记录如实写。阻断无，非阻断无。
