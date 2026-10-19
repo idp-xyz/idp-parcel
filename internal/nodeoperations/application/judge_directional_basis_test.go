@@ -347,8 +347,11 @@ func TestAddMemberRecordsEveryKindOfBasisAsTheFactHappened(t *testing.T) {
 			t.Fatalf("record %v: outcome = %v err = %v", record.Cells(), added.Outcome(), err)
 		}
 		stored := fixture.facts.byKey[ports.ConsolidationFactKey{TenantID: command.TenantID, SourceID: command.Source.SourceID()}]
-		if !stored.DirectionalBasis.JudgedAt().Equal(record.JudgedAt()) || len(stored.DirectionalBasis.Cells()) != len(record.Cells()) {
-			t.Fatalf("stored basis differs from the judged one: %v vs %v", stored.DirectionalBasis.Cells(), record.Cells())
+		got, want := stored.DirectionalBasis.Cells(), record.Cells()
+		for cell := range want {
+			if got[cell].Answer() != want[cell].Answer() || len(got[cell].Reasons()) != len(want[cell].Reasons()) {
+				t.Fatalf("stored basis differs from the judged one: %v vs %v", got, want)
+			}
 		}
 	}
 }

@@ -19,7 +19,7 @@ import (
 // 响亮），检索列面把登记的字段原样透出。jsonb 字段在 SQL 里就地展开成列
 // （intake/control 的键形状由本包写侧的 intakeRow/controlRow 固定），时刻经
 // ::timestamptz 还原——写侧以 RFC 3339 序列化，两侧共一份形状，不在 Go 里二次解码。
-// 例外在 ListConsolidationMembers：方向依据记录经领域重建门读回，理由在 ports 那份文件头。
+// 例外在 ListConsolidationMembers：方向依据记录经领域重建门读回，理由在 ports.ReviewCatalogueRead 所在文件的头注。
 //
 // 所有语句显式携带租户条件（ADR-0003）；读走 ReadExecutor，事务外用显式注入的
 // 连接池。

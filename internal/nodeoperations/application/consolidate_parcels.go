@@ -470,8 +470,9 @@ func (handler *ConsolidateParcelsHandler) admit(
 	return gate, false
 }
 
-// recorded 在作业真的发生之后留下来源事实。并发下同一来源身份的另一半先提交时，
-// 读回它并按已有结果作答——本次的领域动作已被领域自己的三相拦在前面。
+// recorded 在作业真的发生之后留下来源事实。并发下同一来源身份的另一半先提交时，读回它：同一内容按已有结果作答，
+// 另一份内容答来源冲突。本次单元那一步（Store.Update）已在同一事务里写下，并发两份异内容时它不被撤回——这是
+// 单元写口没有版本校验的既有缺口（票 no-consolidation-fact-provenance/02）。
 func (handler *ConsolidateParcelsHandler) recorded(
 	ctx context.Context,
 	gate admissionGate,

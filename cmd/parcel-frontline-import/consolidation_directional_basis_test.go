@@ -5,6 +5,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -172,13 +173,15 @@ func TestImportedMembersCarryTheirDirectionalBasis(t *testing.T) {
 	if strings.Contains(results[1].Detail, "路由依据") {
 		t.Fatalf("路由依据未配置逐行写了出来：%q", results[1].Detail)
 	}
-	if !strings.Contains(report, "移入 2 行，缺少依据 1 行（无收寄记录 1）") || !strings.Contains(report, "路由依据未配置 1 行") {
+	if !strings.Contains(report, "移入 2 行，缺少依据 1 行（无收寄记录 1）") || !strings.Contains(report, "路由依据未配置 1 行") ||
+		!strings.Contains(report, "身份不成立 1 行，服务结果与路由依据未判") {
 		t.Fatalf("汇总行：\n%s", report)
 	}
 
 	replayed, _ := vertical.run(t)
 	assertDisposition(t, replayed, 2, rowReplayed, "EXISTING_RESULT")
-	if !strings.Contains(replayed[2].Detail, "缺少依据：身份·无收寄记录") {
+	if !strings.Contains(replayed[2].Detail, "缺少依据：身份·无收寄记录") ||
+		!strings.Contains(replayed[2].Detail, "方向依据判于 "+mustInstant(t, "2026-09-08T18:00:00+08:00").UTC().Format(time.RFC3339)) {
 		t.Fatalf("重放说明：%q", replayed[2].Detail)
 	}
 }
