@@ -18,11 +18,11 @@
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 208 | 150 | 34 | 63 | 12 | 9 |
-| transportfulfillment | 221 | 221 | 38 | 43 | 13 | 43 |
+| transportfulfillment | 225 | 225 | 39 | 43 | 13 | 43 |
 | visibilityexception | 108 | 104 | 12 | 31 | 8 | 11 |
-| **合计** | 1451 | 1373 | 187 | 340 | 62 | 189 |
+| **合计** | 1455 | 1377 | 188 | 340 | 62 | 189 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 105、测试 210。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 106、测试 211。
 
 ## 跨上下文消费缝：48 组，140 个生产文件
 
@@ -94,7 +94,7 @@
 | transport_fulfillment | 37 |
 | visibility_exception | 27 |
 
-## 接线面：接入面端点 165 个，消费适配器 50 个生产文件，直投路由表 34 条
+## 接线面：接入面端点 165 个，消费适配器 51 个生产文件，直投路由表 34 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -124,9 +124,9 @@
 | parcelpricing | 2 | 0 | 0 | 0 | 2 |
 | parcelshipment | 13 | 1 | 1 | 0 | 15 |
 | settlementaccounting | 6 | 0 | 0 | 0 | 6 |
-| transportfulfillment | 2 | 0 | 0 | 0 | 2 |
+| transportfulfillment | 3 | 0 | 0 | 0 | 3 |
 | visibilityexception | 14 | 0 | 0 | 2 | 16 |
-| **合计** | 46 | 1 | 1 | 2 | 50 |
+| **合计** | 47 | 1 | 1 | 2 | 51 |
 
 直投路由表按 `cmd/` 生产文件里 `map[eventing.EventType]dispatch.Consumer` 字面量的条目数，按条目键（事件类型常量）所属的消费门包归属。路由表只随消费者一起长（ADR-0049 第三条），本表只报它此刻多长。
 
@@ -141,7 +141,7 @@
 | visibilityexception | 10 |
 | **合计** | 34 |
 
-## 端口：声明 538 个；基线口径缺 37，精确口径缺 2
+## 端口：声明 539 个；基线口径缺 37，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
