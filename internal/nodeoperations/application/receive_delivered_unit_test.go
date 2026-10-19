@@ -26,15 +26,17 @@ func mustValue[T interface{ String() string }](t *testing.T, construct func(stri
 
 type identityViewDouble struct {
 	candidates []domain.ParcelAssociationReference
-	err        error
+	// ambiguous 是 PS 随候选答出的歧义信号（ADR-0195）。
+	ambiguous bool
+	err       error
 }
 
 func (double *identityViewDouble) ResolveParcelIdentity(
 	_ context.Context,
 	_ domain.TenantID,
 	_ ports.ExternalMarkObservation,
-) ([]domain.ParcelAssociationReference, error) {
-	return double.candidates, double.err
+) (ports.ParcelIdentityAnswer, error) {
+	return ports.ParcelIdentityAnswer{Candidates: double.candidates, Ambiguous: double.ambiguous}, double.err
 }
 
 type receptionStoreDouble struct {
@@ -589,6 +591,80 @@ func TestUnknownAndConflictedIdentitiesStayPending(t *testing.T) {
 		record, _ := result.Record()
 		if !record.IdentityConflict || len(record.Candidates) != 2 {
 			t.Fatalf("conflict = %v candidates = %d; 冲突必须带全部候选", record.IdentityConflict, len(record.Candidates))
+		}
+	})
+}
+
+// Covers: `AT-NO-052` 与 ADR-0195——身份核对答恰一个候选、同时答出歧义信号（号码另被一份未接受的委托报过），这不是唯一
+// 命中：答待识别、记身份冲突、候选只记那一件，不问 PS 服务结果、不交意图。它也不走一码两物那一支，因为 ADR-0196 只管
+// 唯一命中：那件包裹已关联到先到的另一件实物时，先到那件不追加冲突版。零候选带信号照旧是待识别、不记冲突——记了冲突，
+// 那份委托接受之后的重核会把它跳过。多候选带信号与不带信号同答。
+func TestAUniqueHitThatAnUnacceptedRequestAlsoDeclaresIsAnIdentityConflict(t *testing.T) {
+	t.Run("唯一候选带信号", func(t *testing.T) {
+		fixture := newReceptionFixture(t)
+		parcel := fixture.identity.candidates[0]
+		first, err := fixture.handler.Handle(context.Background(), receiveCommand(t))
+		if err != nil || first.Outcome() != application.NodeIntakeFormed {
+			t.Fatalf("先到那件：outcome = %q err = %v, want INTAKE_FORMED——那时还没有歧义信号", first.Outcome(), err)
+		}
+
+		fixture.identity.ambiguous = true
+		command := receiveCommand(t)
+		command.SourceID = "delivery-2"
+		command.Unit = mustValue(t, domain.NewHandlingUnitID, "unit-2")
+		result, err := fixture.handler.Handle(context.Background(), command)
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.UnitPendingIdentification {
+			t.Fatalf("outcome = %q, want PENDING_IDENTIFICATION——带歧义信号的唯一命中不算唯一", result.Outcome())
+		}
+		record, _ := result.Record()
+		if _, identified := record.Intake.Association(); identified {
+			t.Fatal("带歧义信号的唯一命中被关联到了正式包裹")
+		}
+		if !record.IdentityConflict || len(record.Candidates) != 1 || record.Candidates[0] != parcel {
+			t.Fatalf("conflict = %v candidates = %v, want 身份冲突、候选只记那一件", record.IdentityConflict, record.Candidates)
+		}
+		if !record.Control.Active() || record.ServiceResultCheck != ports.ServiceResultCheckAbsent {
+			t.Fatalf("control = %v check = %q, want 控制成立、不带核对态", record.Control.Active(), record.ServiceResultCheck)
+		}
+		if len(fixture.serviceResults.asked) != 1 || len(fixture.downstream.intents) != 1 {
+			t.Fatalf("问 PS %d 次、意图 %d 份, want 都只为先到那件", len(fixture.serviceResults.asked), len(fixture.downstream.intents))
+		}
+		if rows := fixture.receptions.recordsOfUnit("unit-1"); len(rows) != 1 || rows[0].IdentityConflict {
+			t.Fatalf("先到那件在册 %+v, want 只有原判断一行——带信号的唯一命中不走一码两物那一支", rows)
+		}
+	})
+
+	t.Run("零候选带信号", func(t *testing.T) {
+		fixture := newReceptionFixture(t)
+		fixture.identity.candidates = nil
+		fixture.identity.ambiguous = true
+		result, err := fixture.handler.Handle(context.Background(), receiveCommand(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		record, _ := result.Record()
+		if result.Outcome() != application.UnitPendingIdentification || record.IdentityConflict || len(record.Candidates) != 0 {
+			t.Fatalf("outcome = %q conflict = %v candidates = %v, want 待识别、不记冲突、零候选——声明不进候选",
+				result.Outcome(), record.IdentityConflict, record.Candidates)
+		}
+	})
+
+	t.Run("多候选带信号", func(t *testing.T) {
+		fixture := newReceptionFixture(t)
+		fixture.identity.candidates = append(fixture.identity.candidates,
+			mustValue(t, domain.NewParcelAssociationReference, "parcel-2"))
+		fixture.identity.ambiguous = true
+		result, err := fixture.handler.Handle(context.Background(), receiveCommand(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		record, _ := result.Record()
+		if result.Outcome() != application.UnitPendingIdentification || !record.IdentityConflict || len(record.Candidates) != 2 {
+			t.Fatalf("outcome = %q conflict = %v candidates = %v, want 待识别、身份冲突、两个候选",
+				result.Outcome(), record.IdentityConflict, record.Candidates)
 		}
 	})
 }

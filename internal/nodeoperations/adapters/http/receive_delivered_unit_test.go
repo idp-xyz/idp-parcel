@@ -35,8 +35,8 @@ func (double *identityViewDouble) ResolveParcelIdentity(
 	_ context.Context,
 	_ domain.TenantID,
 	_ ports.ExternalMarkObservation,
-) ([]domain.ParcelAssociationReference, error) {
-	return double.candidates, double.err
+) (ports.ParcelIdentityAnswer, error) {
+	return ports.ParcelIdentityAnswer{Candidates: double.candidates}, double.err
 }
 
 type receptionStoreDouble struct {

@@ -20,14 +20,32 @@ type ExternalMarkObservation struct {
 	Mark string
 }
 
-// ParcelIdentityView 用正式包裹与外部标识关联核对身份（PS 侧只读引用）。候选数决定
-// 走向：恰一个→关联；零个→待识别；多个→身份冲突。依赖调不通作为错误返回。
+// ParcelIdentityView 用正式包裹与外部标识关联核对身份（PS 侧只读引用）。答复决定走向：唯一命中→关联；零个候选→
+// 待识别；其余→身份冲突。依赖调不通作为错误返回。
 type ParcelIdentityView interface {
 	ResolveParcelIdentity(
 		ctx context.Context,
 		tenant domain.TenantID,
 		observation ExternalMarkObservation,
-	) ([]domain.ParcelAssociationReference, error)
+	) (ParcelIdentityAnswer, error)
+}
+
+// ParcelIdentityAnswer 是一次身份核对的答复：PS 交回的包裹候选，加 PS 随候选答出的歧义信号。
+type ParcelIdentityAnswer struct {
+	Candidates []domain.ParcelAssociationReference
+	// Ambiguous 说号码另被一份还在`已提交`的委托报过（ADR-0195），那份委托没接受，也没被拒绝或撤回。报过的那件不是
+	// 正式包裹，不在候选里；这一格只让恰一个候选不再算唯一命中——客户给的号只在它自己的编号空间里算数，别人也报了
+	// 这个号，命中的那一件可能不是这件实物。
+	Ambiguous bool
+}
+
+// Unique 交回唯一命中的那件包裹：恰一个候选，且没有歧义信号。认唯一只经它，不数候选——收寄与重核走同一份身份判断
+// （ADR-0199 决定三），数候选的那一处会漏掉信号。
+func (answer ParcelIdentityAnswer) Unique() (domain.ParcelAssociationReference, bool) {
+	if len(answer.Candidates) != 1 || answer.Ambiguous {
+		return domain.ParcelAssociationReference{}, false
+	}
+	return answer.Candidates[0], true
 }
 
 // ReceptionKey 是收寄判断的幂等键：同一来源身份和内容返回已有处理结果。

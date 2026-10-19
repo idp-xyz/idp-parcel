@@ -131,16 +131,66 @@ func (fixture externalIdentifierFixture) insertAndAccept(t *testing.T, request d
 
 func (fixture externalIdentifierFixture) parcelsOf(t *testing.T, tenant, number string) []string {
 	t.Helper()
-	parcels, err := fixture.identifiers.FindParcelsByExternalIdentifier(t.Context(),
+	parcels, _ := fixture.answerOf(t, tenant, number)
+	return parcels
+}
+
+// answerOf 交回按号码核对的两半：候选包裹，与歧义信号（ADR-0195）。
+func (fixture externalIdentifierFixture) answerOf(t *testing.T, tenant, number string) ([]string, bool) {
+	t.Helper()
+	answer, err := fixture.identifiers.FindParcelsByExternalIdentifier(t.Context(),
 		mustBuild(t, domain.NewTenantID, tenant), mustBuild(t, domain.NewExternalIdentifierNumber, number))
 	if err != nil {
 		t.Fatalf("按号码查 %s：%v", number, err)
 	}
-	values := make([]string, len(parcels))
-	for index, parcel := range parcels {
+	values := make([]string, len(answer.Parcels))
+	for index, parcel := range answer.Parcels {
 		values[index] = parcel.String()
 	}
-	return values
+	return values, answer.DeclaredBySubmittedRequest
+}
+
+// end 读回一份委托，按 decide 推到终局并保存。
+func (fixture externalIdentifierFixture) end(
+	t *testing.T,
+	request domain.ShipmentRequest,
+	want domain.ShipmentRequestState,
+	decide func(domain.ShipmentRequest) (domain.ShipmentRequest, error),
+) {
+	t.Helper()
+	ctx := t.Context()
+	identity := request.CurrentSubmissionVersion().SourceSubmission().Identity()
+	loaded, found, err := fixture.requests.FindBySourceIdentity(ctx, identity)
+	if err != nil || !found {
+		t.Fatalf("读回：found = %v, err = %v", found, err)
+	}
+	ended, err := decide(loaded)
+	if err != nil || ended.State() != want {
+		t.Fatalf("终结：state = %q err = %v, want %q", ended.State(), err, want)
+	}
+	mustSave(t, fixture.transactor, ctx, fixture.requests, identity, ended)
+}
+
+func rejectByContract(t *testing.T) func(domain.ShipmentRequest) (domain.ShipmentRequest, error) {
+	return func(request domain.ShipmentRequest) (domain.ShipmentRequest, error) {
+		return request.Decide(domain.AcceptanceDecisionSpec{
+			DecisionID: mustBuild(t, domain.NewAcceptanceDecisionID, "reject-1"),
+			Checks:     []domain.AcceptanceCheck{versionCheck(t, domain.LegalEntityAndContractCheck, domain.CheckFailed, "NO_APPLICABLE_BASIS")},
+			DecidedAt:  submittedAtFixture.Add(time.Hour),
+		})
+	}
+}
+
+func withdrawByCustomer(t *testing.T) func(domain.ShipmentRequest) (domain.ShipmentRequest, error) {
+	return func(request domain.ShipmentRequest) (domain.ShipmentRequest, error) {
+		return request.WithdrawByCustomer(domain.WithdrawalSpec{
+			DecisionID: mustBuild(t, domain.NewAcceptanceDecisionID, "withdraw-1"),
+			Authority:  mustBuild(t, domain.NewWithdrawalAuthorityReference, "PC-WITHDRAW-ROLE-1"),
+			Requester:  mustBuild(t, domain.NewWithdrawalRequesterReference, "CUSTOMER-CONTACT-1"),
+			Reason:     mustBuild(t, domain.NewWithdrawalReasonReference, "CUSTOMER_NO_LONGER_REQUIRES_SERVICE"),
+			DecidedAt:  submittedAtFixture.Add(time.Hour),
+		})
+	}
 }
 
 func (fixture externalIdentifierFixture) relationRows(t *testing.T) int {
@@ -207,6 +257,85 @@ func TestTheSameNumberFromTwoCustomersAnswersBothParcelsVerbatimWithinTheTenant(
 	}
 	if got := fixture.parcelsOf(t, "tenant-2", "SHARED-01"); len(got) != 0 {
 		t.Fatalf("他租户查得到：%v", got)
+	}
+}
+
+// Covers: ADR-0195 与 PS CONTEXT「按外部标识核对包裹身份」的歧义信号——号码同时被本租户一份`已提交`委托声明为客户包裹
+// 件号时，读口答出信号，声明不进候选。跨客户账户与同一客户账户都答；册里没有、只有声明时，零候选带信号；号码逐字比，
+// 大小写不同不答；他租户的声明不算。
+func TestASubmittedDeclarationSignalsAmbiguityWithoutBecomingACandidate(t *testing.T) {
+	fixture := newExternalIdentifierFixture(t)
+	ctx := t.Context()
+	fixture.insertAndAccept(t, numberedRequest(t, "tenant-1", "customer-1", "req-key-a", "request-a",
+		[]string{"parcel-a"}, map[string]string{"parcel-a": "SHARED-01"}))
+	if parcels, signalled := fixture.answerOf(t, "tenant-1", "SHARED-01"); !slices.Equal(parcels, []string{"parcel-a"}) || signalled {
+		t.Fatalf("只有已接受那一份时答 %v / %v, want [parcel-a] 不带信号", parcels, signalled)
+	}
+
+	mustInsert(t, fixture.transactor, ctx, fixture.requests, numberedRequest(t, "tenant-1", "customer-2", "req-key-b", "request-b",
+		[]string{"parcel-b"}, map[string]string{"parcel-b": "SHARED-01"}))
+	if parcels, signalled := fixture.answerOf(t, "tenant-1", "SHARED-01"); !slices.Equal(parcels, []string{"parcel-a"}) || !signalled {
+		t.Fatalf("跨客户账户另有已提交声明时答 %v / %v, want [parcel-a] 带信号", parcels, signalled)
+	}
+	if parcels, signalled := fixture.answerOf(t, "tenant-1", "shared-01"); len(parcels) != 0 || signalled {
+		t.Fatalf("大小写不同答 %v / %v, want 零候选不带信号", parcels, signalled)
+	}
+	if parcels, signalled := fixture.answerOf(t, "tenant-2", "SHARED-01"); len(parcels) != 0 || signalled {
+		t.Fatalf("他租户答 %v / %v, want 零候选不带信号", parcels, signalled)
+	}
+
+	fixture.insertAndAccept(t, numberedRequest(t, "tenant-1", "customer-1", "req-key-c", "request-c",
+		[]string{"parcel-c"}, map[string]string{"parcel-c": "REUSED-01"}))
+	mustInsert(t, fixture.transactor, ctx, fixture.requests, numberedRequest(t, "tenant-1", "customer-1", "req-key-d", "request-d",
+		[]string{"parcel-d"}, map[string]string{"parcel-d": "REUSED-01"}))
+	if parcels, signalled := fixture.answerOf(t, "tenant-1", "REUSED-01"); !slices.Equal(parcels, []string{"parcel-c"}) || !signalled {
+		t.Fatalf("同一客户账户另一份已提交委托重复用号时答 %v / %v, want [parcel-c] 带信号", parcels, signalled)
+	}
+
+	mustInsert(t, fixture.transactor, ctx, fixture.requests, numberedRequest(t, "tenant-2", "customer-9", "req-key-x", "request-x",
+		[]string{"parcel-x"}, map[string]string{"parcel-x": "DECLARED-02"}))
+	if parcels, signalled := fixture.answerOf(t, "tenant-2", "DECLARED-02"); len(parcels) != 0 || !signalled {
+		t.Fatalf("册里没有、只有声明时答 %v / %v, want 零候选带信号", parcels, signalled)
+	}
+	if parcels, signalled := fixture.answerOf(t, "tenant-1", "DECLARED-02"); len(parcels) != 0 || signalled {
+		t.Fatalf("他租户的声明在本租户答 %v / %v, want 零候选不带信号", parcels, signalled)
+	}
+}
+
+// Covers: ADR-0195 歧义信号只认`已提交`——声明它的委托被拒绝、被撤回之后不再算；被接受之后也不再是信号，它的号进了册，
+// 是候选。
+func TestADeclarationStopsSignallingOnceItsRequestIsDecided(t *testing.T) {
+	fixture := newExternalIdentifierFixture(t)
+	ctx := t.Context()
+	fixture.insertAndAccept(t, numberedRequest(t, "tenant-1", "customer-1", "req-key-a", "request-a",
+		[]string{"parcel-a"}, map[string]string{"parcel-a": "SHARED-01"}))
+
+	for _, ending := range []struct {
+		name     string
+		customer string
+		state    domain.ShipmentRequestState
+		decide   func(domain.ShipmentRequest) (domain.ShipmentRequest, error)
+	}{
+		{"被拒绝", "customer-2", domain.ShipmentRequestRejected, rejectByContract(t)},
+		{"被撤回", "customer-3", domain.ShipmentRequestWithdrawn, withdrawByCustomer(t)},
+	} {
+		key, parcel := "req-key-"+ending.customer, "parcel-"+ending.customer
+		declared := numberedRequest(t, "tenant-1", ending.customer, key, "request-"+ending.customer,
+			[]string{parcel}, map[string]string{parcel: "SHARED-01"})
+		mustInsert(t, fixture.transactor, ctx, fixture.requests, declared)
+		if _, signalled := fixture.answerOf(t, "tenant-1", "SHARED-01"); !signalled {
+			t.Fatalf("%s之前没有信号", ending.name)
+		}
+		fixture.end(t, declared, ending.state, ending.decide)
+		if parcels, signalled := fixture.answerOf(t, "tenant-1", "SHARED-01"); !slices.Equal(parcels, []string{"parcel-a"}) || signalled {
+			t.Fatalf("%s之后答 %v / %v, want [parcel-a] 不带信号", ending.name, parcels, signalled)
+		}
+	}
+
+	fixture.insertAndAccept(t, numberedRequest(t, "tenant-1", "customer-4", "req-key-e", "request-e",
+		[]string{"parcel-e"}, map[string]string{"parcel-e": "SHARED-01"}))
+	if parcels, signalled := fixture.answerOf(t, "tenant-1", "SHARED-01"); !slices.Equal(parcels, []string{"parcel-a", "parcel-e"}) || signalled {
+		t.Fatalf("另一份接受之后答 %v / %v, want 两个候选不带信号", parcels, signalled)
 	}
 }
 
@@ -373,13 +502,13 @@ func (fixture channelFixture) recordChannel(
 
 func (fixture channelFixture) parcelsOf(t *testing.T, number string) []string {
 	t.Helper()
-	parcels, err := fixture.identifiers.FindParcelsByExternalIdentifier(t.Context(),
+	answer, err := fixture.identifiers.FindParcelsByExternalIdentifier(t.Context(),
 		mustBuild(t, domain.NewTenantID, "tenant-a"), mustBuild(t, domain.NewExternalIdentifierNumber, number))
 	if err != nil {
 		t.Fatalf("按号码查 %s：%v", number, err)
 	}
-	values := make([]string, len(parcels))
-	for index, parcel := range parcels {
+	values := make([]string, len(answer.Parcels))
+	for index, parcel := range answer.Parcels {
 		values[index] = parcel.String()
 	}
 	return values

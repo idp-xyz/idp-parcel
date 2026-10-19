@@ -6,14 +6,23 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
-// ParcelExternalIdentifierView 按（租户，号码）答此刻适用、被标识对象为包裹的外部标识关联所指的包裹（ADR-0184
-// 决定五）。号码逐字比对；命中多件即交回多件、去重，不按形成时间、来源或分配方挑一件——消费方据候选数判身份。
-// 只交回包裹，不交分配方、客户账户或委托（CONTEXT-MAP `parcel-shipment → node-operations`）。查无交空；依赖读不动
-// 作为错误返回，空与「没查到」不是一回事。
+// ParcelExternalIdentifierView 按（租户，号码）核对包裹身份（ADR-0184 决定五、ADR-0195）。号码逐字比对；命中多件即
+// 交回多件、去重，不按形成时间、来源或分配方挑一件——消费方据候选与歧义信号判身份。不交分配方、客户账户或委托
+// （CONTEXT-MAP `parcel-shipment → node-operations`）。查无交空；依赖读不动作为错误返回，空与「没查到」不是一回事。
 type ParcelExternalIdentifierView interface {
 	FindParcelsByExternalIdentifier(
 		ctx context.Context,
 		tenant domain.TenantID,
 		number domain.ExternalIdentifierNumber,
-	) ([]domain.DeclaredParcelID, error)
+	) (ExternalIdentifierParcels, error)
+}
+
+// ExternalIdentifierParcels 是一次按号码核对的答复。两半出自同一次读：分两次读，一份委托恰在两次之间被接受，就会
+// 前一半没看见它的关联、后一半又看见它已不是`已提交`，唯一命中于是不带信号。
+type ExternalIdentifierParcels struct {
+	// Parcels 是此刻适用、标识包裹的关联所指的包裹。次序只为稳定，不表示谁优先。
+	Parcels []domain.DeclaredParcelID
+	// DeclaredBySubmittedRequest 是歧义信号：号码此刻同时被本租户里一份`已提交`委托声明为客户包裹件号（PS CONTEXT
+	// 「歧义信号」）。声明不是关联，那件声明包裹不进 Parcels；信号也不说是哪份委托、哪个客户账户。
+	DeclaredBySubmittedRequest bool
 }

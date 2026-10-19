@@ -33,8 +33,8 @@ func (view resolvingParcelIdentityView) ResolveParcelIdentity(
 	context.Context,
 	domain.TenantID,
 	ports.ExternalMarkObservation,
-) ([]domain.ParcelAssociationReference, error) {
-	return []domain.ParcelAssociationReference{view.association}, nil
+) (ports.ParcelIdentityAnswer, error) {
+	return ports.ParcelIdentityAnswer{Candidates: []domain.ParcelAssociationReference{view.association}}, nil
 }
 
 // 样例模板三行的来源身份。写成字面量而不是调 intakeSourceID 拼：这里要证的正是落库的

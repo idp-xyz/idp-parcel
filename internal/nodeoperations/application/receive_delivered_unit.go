@@ -279,21 +279,24 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 	digest string,
 ) (ReceiveDeliveredUnitResult, error) {
 	// 身份核对读不动不拿空候选顶替（ADR-0089）：那会把可能已知的包裹落成待识别。
-	candidates, err := handler.deps.Identity.ResolveParcelIdentity(ctx, command.TenantID, command.Mark)
+	answer, err := handler.deps.Identity.ResolveParcelIdentity(ctx, command.TenantID, command.Mark)
 	if err != nil {
 		return ReceiveDeliveredUnitResult{}, fmt.Errorf("resolve parcel identity: %w", err)
 	}
+	candidates := answer.Candidates
 	// 号码唯一指向一件包裹，还要问这件包裹是否已关联到另一件作业实物：是，就是「同一外部条码出现在多个实物」（NO
 	// CONTEXT「实物身份与事实完整性」、ADR-0196）。按关联到的包裹认而不按号码认，不论先到那件此刻是否仍在节点控制下；
 	// 同一作业实物再来不在此列，同一份送站重投在上面按幂等键走已有结果。读不动与身份核对读不动同样不形成答案。
+	// 恰一个候选却带歧义信号的不是唯一命中（ADR-0195），与多候选同走身份冲突，不进这一问。
+	parcel, unique := answer.Unique()
 	var others []ports.ReceptionRecord
-	if len(candidates) == 1 {
-		others, err = handler.deps.Receptions.FindOtherUnitIntakes(ctx, command.TenantID, candidates[0], command.Unit)
+	if unique {
+		others, err = handler.deps.Receptions.FindOtherUnitIntakes(ctx, command.TenantID, parcel, command.Unit)
 		if err != nil {
 			return ReceiveDeliveredUnitResult{}, fmt.Errorf("find other units associated with the parcel: %w", err)
 		}
 	}
-	identified := len(candidates) == 1 && len(others) == 0
+	identified := unique && len(others) == 0
 
 	// 身份唯一成立才有可问的包裹：向 PS 取它此刻的服务结果，落成标记（UC-NO-002「对已取消、终局、无路由或受限实物
 	// 标记相应引用」）。读不动不挡已经发生的物理事实——照常落册，核对态记读不动、标记留空，不补查（ADR-0186）；空标记
@@ -301,7 +304,7 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 	var markers []string
 	check := ports.ServiceResultCheckAbsent
 	if identified {
-		results, err := handler.deps.ServiceResults.FindParcelServiceResults(ctx, command.TenantID, candidates[0])
+		results, err := handler.deps.ServiceResults.FindParcelServiceResults(ctx, command.TenantID, parcel)
 		if err != nil {
 			check = ports.ServiceResultsUnreadable
 		} else {
@@ -328,13 +331,13 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 	switch {
 	case identified:
 		// 唯一且证据充分：关联正式包裹，形成可交 PS 采用的收寄（AT-NO-015）。
-		spec.Association = candidates[0]
+		spec.Association = parcel
 		kind = ports.RecordIntakeFormed
 	case len(candidates) == 0:
 		// 未知：待识别实物——收寄与控制真实成立，正式身份等版本化识别（AT-NO-018）。
 	default:
-		// 号码在册里标识多件包裹，或唯一指向的那件包裹已关联到另一件作业实物（一码多物，AT-NO-019）：各实物独立、
-		// 身份冲突暂停方向性作业；不猜身份，候选照记。
+		// 号码在册里标识多件包裹，或唯一那件带歧义信号（ADR-0195），或唯一指向的那件包裹已关联到另一件作业实物（一码
+		// 多物，AT-NO-019）：各实物独立、身份冲突暂停方向性作业；不猜身份，候选照记。
 		conflict = true
 	}
 

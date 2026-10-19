@@ -33,57 +33,63 @@ func NewExternalIdentifiers(db *bentopg.DB) (*ExternalIdentifiers, error) {
 //
 // 不按委托状态过滤：关联只随它的来源事实写下（客户包裹件号随委托接受，渠道包裹件号随面单交易包裹结果受理），接受
 // 后的取消、终局也不改它的适用状态（PS CONTEXT Rules）——已取消的包裹到站仍要被认出来，节点才落得下`已取消`标记。ORDER BY 只为候选次序稳定，不表示谁优先。
+//
+// 歧义信号与候选在同一条语句里取：同一个快照里，一份委托要么还是`已提交`（算信号），要么已接受、关联已在册（是
+// 候选），因为接受与关联同一笔事务写下。信号只认`已提交`，取值由领域常量传参，SQL 只比较不拥有编号；谓词与迁移
+// 0026 的部分索引同形。客户包裹件号只在快照里（ADR-0184 决定四），按包含查，不展开数组。
 func (view *ExternalIdentifiers) FindParcelsByExternalIdentifier(
 	ctx context.Context,
 	tenant domain.TenantID,
 	number domain.ExternalIdentifierNumber,
-) ([]domain.DeclaredParcelID, error) {
+) (ports.ExternalIdentifierParcels, error) {
 	if tenant.String() == "" || number.String() == "" {
-		return nil, fmt.Errorf("find parcels by external identifier: tenant and number are required")
+		return ports.ExternalIdentifierParcels{}, fmt.Errorf("find parcels by external identifier: tenant and number are required")
 	}
 	querier, err := view.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("find parcels by external identifier: %w", err)
+		return ports.ExternalIdentifierParcels{}, fmt.Errorf("find parcels by external identifier: %w", err)
 	}
-	rows, err := querier.Query(ctx,
-		`SELECT DISTINCT relation.object_ref
-		   FROM parcel_shipment.external_identifier_relation AS relation
-		  WHERE relation.tenant_id = $1
-		    AND relation.identifier_number = $2
-		    AND relation.object_kind = 'PARCEL'
-		    AND NOT EXISTS (
+	var raws []string
+	var declared bool
+	if err := querier.QueryRow(ctx,
+		`SELECT ARRAY(
+		        SELECT DISTINCT relation.object_ref
+		          FROM parcel_shipment.external_identifier_relation AS relation
+		         WHERE relation.tenant_id = $1
+		           AND relation.identifier_number = $2
+		           AND relation.object_kind = 'PARCEL'
+		           AND NOT EXISTS (
+		               SELECT 1
+		                 FROM parcel_shipment.external_identifier_relation_change AS change
+		                WHERE change.tenant_id = relation.tenant_id
+		                  AND change.identifier_kind = relation.identifier_kind
+		                  AND change.allocator = relation.allocator
+		                  AND change.identifier_number = relation.identifier_number
+		                  AND change.object_ref = relation.object_ref
+		                  AND change.basis = relation.basis)
+		         ORDER BY relation.object_ref),
+		        EXISTS (
 		        SELECT 1
-		          FROM parcel_shipment.external_identifier_relation_change AS change
-		         WHERE change.tenant_id = relation.tenant_id
-		           AND change.identifier_kind = relation.identifier_kind
-		           AND change.allocator = relation.allocator
-		           AND change.identifier_number = relation.identifier_number
-		           AND change.object_ref = relation.object_ref
-		           AND change.basis = relation.basis)
-		  ORDER BY relation.object_ref`,
+		          FROM parcel_shipment.shipment_request AS request
+		         WHERE request.tenant_id = $1
+		           AND request.state = $3
+		           AND (request.snapshot -> 'customerParcelNumbers')
+		               @> jsonb_build_array(jsonb_build_object('number', $2::text)))`,
 		tenant.String(),
 		number.String(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("find parcels by external identifier: %w", err)
+		uint8(domain.ShipmentRequestSubmitted),
+	).Scan(&raws, &declared); err != nil {
+		return ports.ExternalIdentifierParcels{}, fmt.Errorf("find parcels by external identifier: %w", err)
 	}
-	defer rows.Close()
-	var parcels []domain.DeclaredParcelID
-	for rows.Next() {
-		var raw string
-		if err := rows.Scan(&raw); err != nil {
-			return nil, fmt.Errorf("find parcels by external identifier: %w", err)
-		}
+	answer := ports.ExternalIdentifierParcels{DeclaredBySubmittedRequest: declared}
+	for _, raw := range raws {
 		parcel, err := domain.NewDeclaredParcelID(raw)
 		if err != nil {
-			return nil, fmt.Errorf("find parcels by external identifier: %w", err)
+			return ports.ExternalIdentifierParcels{}, fmt.Errorf("find parcels by external identifier: %w", err)
 		}
-		parcels = append(parcels, parcel)
+		answer.Parcels = append(answer.Parcels, parcel)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("find parcels by external identifier: %w", err)
-	}
-	return parcels, nil
+	return answer, nil
 }
 
 // insertExternalIdentifierRelations 在调用方的事务里写下一组关联。键含形成依据（ADR-0185）：别的来源事实再签同一个
