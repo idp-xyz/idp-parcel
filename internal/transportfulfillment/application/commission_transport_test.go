@@ -102,6 +102,22 @@ func (double *bookingStoreDouble) Save(
 	return ports.BookingSaved, nil
 }
 
+// Replace 照 BookingCancellationStore 的契约只落尚未取消的那一行。
+func (double *bookingStoreDouble) Replace(
+	_ context.Context,
+	record ports.BookingRecord,
+) (bool, error) {
+	stored, exists := double.records[bookingStoreKey(record.Key)]
+	if !exists {
+		return false, nil
+	}
+	if _, cancelled := stored.Booking.Cancelled(); cancelled {
+		return false, nil
+	}
+	double.records[bookingStoreKey(record.Key)] = record
+	return true, nil
+}
+
 // answerStoreDouble 照迁移 0029 的三条唯一约束办：同一答复标识、同一订舱第二份候补、第二份定局都答已有应答。
 type answerStoreDouble struct {
 	records map[string]ports.BookingAnswerRecord
@@ -264,13 +280,14 @@ func newCommissionFixture(t *testing.T) *commissionFixture {
 		handoff:     &commissionHandoffDouble{},
 	}
 	fixture.handler = application.NewCommissionTransportHandler(application.CommissionTransportDeps{
-		Commissions: fixture.commissions,
-		Bookings:    fixture.bookings,
-		Answers:     fixture.answers,
-		Schedules:   fixture.schedules,
-		Agreements:  fixture.agreements,
-		Downstream:  fixture.handoff,
-		Clock:       commissionClock{at: commissionNowAt},
+		Commissions:          fixture.commissions,
+		Bookings:             fixture.bookings,
+		BookingCancellations: fixture.bookings,
+		Answers:              fixture.answers,
+		Schedules:            fixture.schedules,
+		Agreements:           fixture.agreements,
+		Downstream:           fixture.handoff,
+		Clock:                commissionClock{at: commissionNowAt},
 	})
 	return fixture
 }
@@ -492,8 +509,9 @@ func newBookedFixture(t *testing.T) *commissionFixture {
 
 // Covers: CONTEXT「首个有效出发或移动事实形成前可以取消……之后只能形成中断、改降、
 // 折返或其他实际结果」与 195「尚未消耗的运输委托或订舱范围可以取消」的编排面——
-// 未开始取消成功；已开始 → TRANSPORT_STARTED 业务负向（ErrTransportAlreadyStarted
-// 哨兵分格，恢复动作是按事实形成实际结果而非改单）；已取消重放返原不二取。
+// 未开始取消成功；已开始 → TRANSPORT_ALREADY_STARTED 业务负向（与 ErrTransportAlreadyStarted
+// 同名分格，恢复动作是按事实形成实际结果而非改单，AT-TF-092）；已取消重放返原不二取；委托不在册
+// 答 COMMISSION_NOT_FOUND，不并进未受理（ADR-0204 决定三）。
 func TestCancellationOnlyReachesUnstartedCommissions(t *testing.T) {
 	fixture := newCommissionFixture(t)
 	if _, err := fixture.handler.SubmitCommission(context.Background(), submitCommissionCommand(t)); err != nil {
@@ -551,12 +569,15 @@ func TestCancellationOnlyReachesUnstartedCommissions(t *testing.T) {
 		if err != nil {
 			t.Fatalf("cancel started: %v", err)
 		}
-		if result.Outcome() != application.CommissionTransportStarted {
-			t.Fatalf("outcome = %q, want TRANSPORT_STARTED（只能按事实形成中断等实际结果）", result.Outcome())
+		if result.Outcome() != application.CommissionTransportStarted || result.Outcome().String() != "TRANSPORT_ALREADY_STARTED" {
+			t.Fatalf("outcome = %q, want TRANSPORT_ALREADY_STARTED（只能按事实形成中断等实际结果）", result.Outcome())
+		}
+		if record, present := result.Commission(); !present || record.Commission.Commission().String() != "commission-1" {
+			t.Fatal("运输已开始没有回显在册那一份委托")
 		}
 	})
 
-	t.Run("cancelling an absent commission is not accepted", func(t *testing.T) {
+	t.Run("cancelling an absent commission answers commission not found", func(t *testing.T) {
 		result, err := fixture.handler.CancelCommission(context.Background(), application.CancelCommissionCommand{
 			TenantID:    tenant,
 			Commission:  "commission-9",
@@ -565,8 +586,8 @@ func TestCancellationOnlyReachesUnstartedCommissions(t *testing.T) {
 		if err != nil {
 			t.Fatalf("cancel absent: %v", err)
 		}
-		if result.Outcome() != application.CommissionNotAccepted {
-			t.Fatalf("outcome = %q", result.Outcome())
+		if result.Outcome() != application.CommissionNotFound {
+			t.Fatalf("outcome = %q, want COMMISSION_NOT_FOUND", result.Outcome())
 		}
 	})
 }

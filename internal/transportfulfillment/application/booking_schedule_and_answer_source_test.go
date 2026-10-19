@@ -80,7 +80,7 @@ func TestABookingNeedsARegisteredCommissionAndSchedule(t *testing.T) {
 			arrange: func(_ *testing.T, _ *commissionFixture, command *application.SubmitBookingCommand) {
 				command.Commission = "commission-9"
 			},
-			want: application.BookingCommissionNotFound,
+			want: application.CommissionNotFound,
 		},
 		"委托已取消": {
 			arrange: func(t *testing.T, fixture *commissionFixture, _ *application.SubmitBookingCommand) {

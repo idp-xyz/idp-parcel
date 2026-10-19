@@ -37,6 +37,9 @@ var (
 // 订舱与承运答复的引用格同一条纪律：委托不在册（去提交委托或改引用）、委托已取消（另起委托）、班次不在册（去登记班次或
 // 改引在册班次）、订舱不在册（核订舱标识，或等运营侧把订舱录进来再答）、答复方不是该订舱所属委托的服务提供方（这份
 // 答复不归它答）各自续办不同，不并进`未受理`。他租户名下的同名委托、班次与订舱按本租户的键读不回，同落「不在册」那一格。
+//
+// 取消两口沿用同一套格（ADR-0204 决定三）：委托不在册与订舱不在册各是一格，不并进`未受理`；运输已开始答
+// `TRANSPORT_ALREADY_STARTED`，与领域哨兵 ErrTransportAlreadyStarted 同名（AT-TF-092）。
 type CommissionOutcome uint8
 
 const (
@@ -58,11 +61,12 @@ const (
 	CommissionAgreementNotEffective
 	CommissionAgreementTerminated
 	CommissionProviderMismatch
-	BookingCommissionNotFound
+	CommissionNotFound
 	BookingCommissionNotBookable
 	BookingScheduleNotFound
 	BookingNotFound
 	BookingSourceNotProvider
+	BookingCancelled
 )
 
 func (outcome CommissionOutcome) String() string {
@@ -88,7 +92,7 @@ func (outcome CommissionOutcome) String() string {
 	case CommissionCancelled:
 		return "COMMISSION_CANCELLED"
 	case CommissionTransportStarted:
-		return "TRANSPORT_STARTED"
+		return "TRANSPORT_ALREADY_STARTED"
 	case CommissionNotAccepted:
 		return "INPUT_NOT_ACCEPTED"
 	case CommissionUndecided:
@@ -101,7 +105,7 @@ func (outcome CommissionOutcome) String() string {
 		return "AGREEMENT_TERMINATED"
 	case CommissionProviderMismatch:
 		return "PROVIDER_MISMATCH"
-	case BookingCommissionNotFound:
+	case CommissionNotFound:
 		return "COMMISSION_NOT_FOUND"
 	case BookingCommissionNotBookable:
 		return "COMMISSION_NOT_BOOKABLE"
@@ -111,6 +115,8 @@ func (outcome CommissionOutcome) String() string {
 		return "BOOKING_NOT_FOUND"
 	case BookingSourceNotProvider:
 		return "SOURCE_NOT_SERVICE_PROVIDER"
+	case BookingCancelled:
+		return "BOOKING_CANCELLED"
 	default:
 		return ""
 	}
@@ -192,6 +198,13 @@ type CancelCommissionCommand struct {
 	CancelledAt time.Time
 }
 
+// CancelBookingCommand 携带订舱取消请求：只及尚未随运输开始而消耗的订舱范围。取消时刻照 ADR-0023 由提交方给。
+type CancelBookingCommand struct {
+	TenantID    domain.TenantID
+	Booking     string
+	CancelledAt time.Time
+}
+
 type CommissionResult struct {
 	outcome           CommissionOutcome
 	reason            CommissionUndecidedReason
@@ -240,13 +253,14 @@ func (result CommissionResult) AgreementSupplier() (domain.ServiceProviderRefere
 }
 
 type CommissionTransportDeps struct {
-	Commissions ports.TransportCommissionStore
-	Bookings    ports.BookingStore
-	Answers     ports.BookingAnswerLedger
-	Schedules   ports.TransportScheduleReader
-	Agreements  ports.SupplierAgreementSource
-	Downstream  ports.TransportCommissionHandoff
-	Clock       ports.Clock
+	Commissions          ports.TransportCommissionStore
+	Bookings             ports.BookingStore
+	BookingCancellations ports.BookingCancellationStore
+	Answers              ports.BookingAnswerLedger
+	Schedules            ports.TransportScheduleReader
+	Agreements           ports.SupplierAgreementSource
+	Downstream           ports.TransportCommissionHandoff
+	Clock                ports.Clock
 }
 
 type CommissionTransportHandler struct {
@@ -399,7 +413,7 @@ func (handler *CommissionTransportHandler) SubmitBooking(
 		return commissionUndecided(CommissionStoreUnavailable, command.Booking), nil
 	}
 	if !found {
-		return CommissionResult{outcome: BookingCommissionNotFound}, nil
+		return CommissionResult{outcome: CommissionNotFound}, nil
 	}
 	if _, cancelled := commission.Commission.Cancelled(); cancelled {
 		// 委托取消停止的正是尚未消耗的运输意图（CONTEXT 生命周期「尚未消耗的运输委托或订舱范围可以取消」），在它下面新订舱
@@ -585,8 +599,12 @@ func answerFromStoredAnswer(stored ports.BookingAnswerRecord, digest string, com
 	}
 }
 
-// CancelCommission 取消未开始的运输意图：已开始 → TRANSPORT_STARTED 业务负向（只能
-// 按事实形成中断等实际结果）；已取消重放 → 返回原取消。
+// CancelCommission 取消未开始的运输意图（ADR-0204 决定三）：委托在册 → 已取消即重放 → 领域判开始与时刻 → 落取消。已开始
+// 答`运输已开始`（AT-TF-092）：委托下的运输一经段采用就开始了，取消不了，只能按事实形成中断、改降、折返等实际结果；已经
+// 形成的订舱、承运接受与容量预占各按自己的规则保留，取消不碰它们（CONTEXT 生命周期「尚未消耗的运输委托或订舱范围可以
+// 取消」）。
+//
+// 已取消的重放答原取消、不二取，哪怕这次给的取消时刻不同：取消只有一次，第二个时刻没有可落的地方。
 func (handler *CommissionTransportHandler) CancelCommission(
 	ctx context.Context,
 	command CancelCommissionCommand,
@@ -602,18 +620,13 @@ func (handler *CommissionTransportHandler) CancelCommission(
 		return commissionUndecided(CommissionStoreUnavailable, command.Commission), nil
 	}
 	if !found {
-		return CommissionResult{outcome: CommissionNotAccepted}, nil
+		return CommissionResult{outcome: CommissionNotFound}, nil
 	}
-	if _, cancelled := existing.Commission.Cancelled(); cancelled {
-		// 已取消重放：返回原取消，不二取。
-		return CommissionResult{outcome: CommissionExistingResult, commission: existing, hasRecord: true}, nil
+	if answered, settled := answerFromSettledCommission(existing); settled {
+		return answered, nil
 	}
 
 	cancelled, err := existing.Commission.Cancel(command.CancelledAt)
-	if errors.Is(err, domain.ErrTransportAlreadyStarted) {
-		// 实际运输已开始：取消不了——业务负向，后续按事实形成中断/改降/折返。
-		return CommissionResult{outcome: CommissionTransportStarted}, nil
-	}
 	if err != nil {
 		return CommissionResult{outcome: CommissionNotAccepted}, nil
 	}
@@ -625,10 +638,109 @@ func (handler *CommissionTransportHandler) CancelCommission(
 	if err != nil {
 		return commissionUndecided(CommissionStoreUnavailable, command.Commission), nil
 	}
-	if !ok {
+	if ok {
+		return CommissionResult{outcome: CommissionCancelled, commission: replaced, hasRecord: true}, nil
+	}
+	// 读到时既未开始也未取消，落的那一刻却没落上：另一笔在中间先开始（段采用了它）或先取消了它。读回按此刻答，不答未受理
+	// ——并发里先到的那一笔才是事实。
+	current, found, err := handler.deps.Commissions.FindByKey(ctx, key)
+	if err != nil {
+		return commissionUndecided(CommissionStoreUnavailable, command.Commission), nil
+	}
+	if !found {
+		return CommissionResult{}, fmt.Errorf("%w: commission %s vanished during cancellation", ErrUnexpectedCommissionSave, commissionRef)
+	}
+	if answered, settled := answerFromSettledCommission(current); settled {
+		return answered, nil
+	}
+	return CommissionResult{}, fmt.Errorf("%w: commission %s neither started nor cancelled after a refused cancellation", ErrUnexpectedCommissionSave, commissionRef)
+}
+
+// answerFromSettledCommission 对已开始或已取消的委托作取消的答复：已开始答运输已开始，已取消答原取消（回显在册那一份）。
+func answerFromSettledCommission(record ports.TransportCommissionRecord) (CommissionResult, bool) {
+	if _, _, started := record.Commission.TransportStarted(); started {
+		return CommissionResult{outcome: CommissionTransportStarted, commission: record, hasRecord: true}, true
+	}
+	if _, cancelled := record.Commission.Cancelled(); cancelled {
+		return CommissionResult{outcome: CommissionExistingResult, commission: record, hasRecord: true}, true
+	}
+	return CommissionResult{}, false
+}
+
+// CancelBooking 取消尚未消耗的订舱范围（ADR-0204 决定三）：订舱在册 → 已取消即重放 → 订舱所属委托下的运输已开始、且这次
+// 订舱申请不晚于开始，答`运输已开始` → 领域判取消时刻 → 落取消。
+//
+// 「已开始」按订舱申请时刻对委托的开始时刻判：开始之前申请的舱位，可能正是已经开始的那一程在用的，取消不了；开始之后
+// 仍可为剩余范围订舱（票 24 的核对次序不挡已开始的委托），那样的订舱尚未消耗，可以取消。逐订舱的消耗关系本上下文没有
+// 记，这是能判出「尚可停止」的最近一层事实（ADR-0204 越权风险点）。
+//
+// 委托已取消不挡取消订舱：上游取消只对下游尚未消耗的范围发出取消，下游按自己的规则分别形成结果（CONTEXT「上游运输意图
+// 取消……」），取消订舱正是那个下游结果。已形成的承运答复不因取消而改写，接受是独立对象，本编排碰不到它。
+func (handler *CommissionTransportHandler) CancelBooking(
+	ctx context.Context,
+	command CancelBookingCommand,
+) (CommissionResult, error) {
+	bookingRef, err := domain.NewBookingReference(command.Booking)
+	if err != nil {
 		return CommissionResult{outcome: CommissionNotAccepted}, nil
 	}
-	return CommissionResult{outcome: CommissionCancelled, commission: replaced, hasRecord: true}, nil
+	key := ports.BookingKey{TenantID: command.TenantID, Booking: bookingRef}
+
+	existing, found, err := handler.deps.Bookings.FindByKey(ctx, key)
+	if err != nil {
+		return commissionUndecided(BookingStoreUnavailable, command.Booking), nil
+	}
+	if !found {
+		return CommissionResult{outcome: BookingNotFound}, nil
+	}
+	if _, cancelled := existing.Booking.Cancelled(); cancelled {
+		return CommissionResult{outcome: BookingExistingResult, booking: existing, hasRecord: true}, nil
+	}
+	commission, found, err := handler.deps.Commissions.FindByKey(ctx, ports.TransportCommissionKey{
+		TenantID:   command.TenantID,
+		Commission: existing.Booking.Commission(),
+	})
+	if err != nil {
+		return commissionUndecided(CommissionStoreUnavailable, command.Booking), nil
+	}
+	if !found {
+		return CommissionResult{}, fmt.Errorf("%w: booking %s, commission %s", ErrBookingWithoutCommission,
+			bookingRef, existing.Booking.Commission())
+	}
+	if bookingConsumedByStart(existing.Booking, commission.Commission) {
+		return CommissionResult{outcome: CommissionTransportStarted, booking: existing, hasRecord: true}, nil
+	}
+
+	cancelled, err := existing.Booking.Cancel(command.CancelledAt)
+	if err != nil {
+		return CommissionResult{outcome: CommissionNotAccepted}, nil
+	}
+	replaced := existing
+	replaced.Booking = cancelled
+	ok, err := handler.deps.BookingCancellations.Replace(ctx, replaced)
+	if err != nil {
+		return commissionUndecided(BookingStoreUnavailable, command.Booking), nil
+	}
+	if ok {
+		return CommissionResult{outcome: BookingCancelled, booking: replaced, hasRecord: true}, nil
+	}
+	// 读到时尚未取消，落的那一刻却没落上：另一笔先取消了它。读回答原取消。
+	current, found, err := handler.deps.Bookings.FindByKey(ctx, key)
+	if err != nil {
+		return commissionUndecided(BookingStoreUnavailable, command.Booking), nil
+	}
+	if found {
+		if _, cancelled := current.Booking.Cancelled(); cancelled {
+			return CommissionResult{outcome: BookingExistingResult, booking: current, hasRecord: true}, nil
+		}
+	}
+	return CommissionResult{}, fmt.Errorf("%w: booking %s not cancelled after a refused cancellation", ErrUnexpectedBookingSave, bookingRef)
+}
+
+// bookingConsumedByStart 答订舱所属委托下的运输开始时，这次订舱是否已经提出：已提出的就可能正被那一程消耗。
+func bookingConsumedByStart(booking domain.BookingRequest, commission domain.TransportCommission) bool {
+	_, startedAt, started := commission.TransportStarted()
+	return started && !booking.RequestedAt().After(startedAt)
 }
 
 func commissionDraftFrom(command SubmitCommissionCommand) (domain.TransportCommissionDraft, error) {
