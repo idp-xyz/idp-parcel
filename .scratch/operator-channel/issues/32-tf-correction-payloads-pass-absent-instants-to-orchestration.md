@@ -1,7 +1,7 @@
 # 32 TF 更正载荷缺时刻答 400，与本包「缺席交编排、解不出才 400」相左；作业事实与运营决定 Intake 的逐口用例和头注补齐
 
 Category: bug
-Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 续做：分支 `claude-oc32` 上的两笔先 rebase 到最新 main 并核一遍，再做完余下的格。此前 ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-oc32`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-oc32`）上留有2 笔（更正载荷缺时刻交编排、作业事实表补更正各口），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 5、序 4 评审遗留；用户授权代决）；分支 `claude-oc32`
+Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 续做：分支 `claude-oc32` 上的两笔先 rebase 到最新 main 并核一遍，再做完余下的格。此前 ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-oc32`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-oc32`）上留有2 笔（更正载荷缺时刻交编排、作业事实表补更正各口），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 5、序 4 评审遗留；用户授权代决）；分支 `claude-oc32`
 Blocked by: 无
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)（序 4、序 5 的非阻断）。
 出处：
@@ -222,3 +222,13 @@ m5a、m5b 都只问认证方一次，答复留到判完头部或种类再交，�
 
 - 完成判据「走 Go 那条路」里的非作者评审，以及推送方在干净检出上带 DSN 跑全量。
 - 「不做」各条照守：编排、领域与 `cmd/parcel-api` 未动；判断载荷两处内联分格未收拢；POD 重放代数、交接更正内容冲突、POD 缺时刻也签版本号都未碰；NO 收寄分格未碰；带 OnEveryLine 的用例没改名；替身的令牌为空分支与 `HandoverIntake`、`DeliveryIntake` 合集接口都没删；`cmd` 真库表没补更正各行。
+
+## Comments
+
+### 评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审；2026-10-19，钉 `82dc38ea`）
+
+两轴合审，0 阻断。
+
+- **Spec**：三份更正载荷的时刻改走 `parseOptionalInstant`，缺席、空串、纯空白交零值给编排，解不出才 400 并点名该键；交接更正结论空着时交 `HandoverVerdictInvalid` 零值，编排答未受理，与首登口 `HandoverRegistrationPayload.Command` 同形。端点层三口缺 `correctedAt` 答 200 `SOURCE_NOT_ACCEPTED`、册上不多一行。★三组用 overlay 换回 main 版先红（22 条 FAIL）。变异九个全杀，m3c 在 main 版测试下本就被票 41 的用例杀，完成记录照实写了。
+- **Standards**：`work_fact_intake.go` 不再有 `time.Parse(`；`HandoverIntake`、`DeliveryIntake` 头注按票面改，没拿 ADR-0151 未裁的越权风险点当理由。与票 41 同名常量的语义冲突以 main 为准，只改时刻写法（同一刻），断言未动。
+- 「不做」各条照守：编排、领域、`cmd/parcel-api` 都没动。
