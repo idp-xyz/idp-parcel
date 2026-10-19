@@ -1,4 +1,4 @@
-# 89 交接与已接受委托的消费侧适配器把坏行重建失败当成未决重投，烧完预算才停
+# 90 交接与已接受委托的消费侧适配器把坏行重建失败当成未决重投，烧完预算才停
 
 Category: bug
 Status: needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [63](./63-network-routing-reassesses-on-a-handover-into-a-node.md) 的隔离评审。

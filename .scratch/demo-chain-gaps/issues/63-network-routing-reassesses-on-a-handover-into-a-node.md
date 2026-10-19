@@ -160,12 +160,12 @@ M
    - 越权风险点 1 改为「首次从委托聚合取地理维」，并写明此前只有初始路由经同一个读法读聚合，按包裹反查也是新的；
    - adr/README 的 0075、0215 两行与 CONTEXT-MAP 的 PS→NR 边措辞同步改；
    - 顺手把 ADR-0215 里的「Consequences 末条」「Alternatives 末条」换成按条目原文指认：补了一条 Consequences 之后，「末条」就已经指错了。
-7. **坏行重建失败被折进未决哨兵。** 本票保持现状。这与 VE 交接一路是同一种既有折法，收紧要先由提供方仓储把重建失败做成单独的哨兵。另立票 [89](./89-handover-consumers-retry-deterministic-rebuild-failures-as-undecided.md)，TF、PS 两个提供方与各消费侧一并处理。
+7. **坏行重建失败被折进未决哨兵。** 本票保持现状。这与 VE 交接一路是同一种既有折法，收紧要先由提供方仓储把重建失败做成单独的哨兵。另立票 [90](./90-handover-consumers-retry-deterministic-rebuild-failures-as-undecided.md)，TF、PS 两个提供方与各消费侧一并处理。
 8. **CONTEXT-MAP 的 `node-operations / transport-fulfillment → network-routing` 边上，「（ADR-0215）」是纯文本。** 已改成链接。
 
 ### 号
 
-新立票 89，评审要求「号接现有最大号」。取号时盘过各分支：main 与 origin/main 最大号 79，`claude-dcg61` 81，`claude-dcg63` 84，`claude-dcg65` 87，`claude-dcg67` 88，`claude-dcg69` 79。协调方没有给这一号，进 main 时请核对是否撞号。
+新立票 90，评审要求「号接现有最大号」。取号时盘过各分支：main 与 origin/main 最大号 79，`claude-dcg61` 81，`claude-dcg63` 84，`claude-dcg65` 87，`claude-dcg67` 88，`claude-dcg69` 79。协调方没有给这一号，进 main 时请核对是否撞号。
 
 ### 验证
 
@@ -175,5 +175,5 @@ M
 
 - `a453e237`：文档。CONTEXT、CONTEXT-MAP、ADR-0215、adr/README。
 - `5187678d`：注释不再计数。
-- `c7b8392a`：立票 89。
+- `c7b8392a`：立票 90。
 - 本笔：评审记录。
