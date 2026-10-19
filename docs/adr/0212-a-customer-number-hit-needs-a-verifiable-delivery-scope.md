@@ -188,6 +188,10 @@ UC-NO-002 早就设想过这一格。「参与者与协作」写交付方「提�
 - **交付范围依据引用进内容指纹。** 不取，理由见决定七。
 - **授权交付关系归 NO。** 不取：NO 会成了参与方关系的第二个所有者，与 NO CONTEXT「Boundaries and ownership」相抵。
 
+## 复核记录（2026-10-19，决定原文不动）
+
+授权交付判断的问句在实施时多了一格「开立节点」：参数登记册 `PAR-NET-17` 允许把授权交付关系收到节点，不带节点就判不了「有节点范围的也覆盖开立节点」。问句因此是（租户，交付方参与方，客户账户，开立节点，时刻）；CONTEXT-MAP `party-commercial → node-operations` 与 UC-NO-006 参与者表同句已随票 ps-external-mark-relations/10 改写，判断三格的判据见该票完成记录。
+
 ## Links
 
 - 票：[ps-external-mark-relations/07](../../.scratch/ps-external-mark-relations/issues/07-verifiable-delivery-scope-for-customer-numbers.md)；父票 [05](../../.scratch/ps-external-mark-relations/issues/05-a-unique-hit-in-someone-elses-number-space-is-not-enough.md)
