@@ -18,11 +18,11 @@
 
 | 桶 | 数量 |
 |---|---|
-| ① 已钉住 | 321 |
+| ① 已钉住 | 328 |
 | ② 机制候选 | 224 |
 | ③ 实例/闸门 | 143 |
 | ④ 机制未落地 | 425 |
-| 合计 | 1113 |
+| 合计 | 1120 |
 
 | 前缀 | 总数 | ① | ② | ③ | ④ |
 |---|---|---|---|---|---|
@@ -32,7 +32,7 @@
 | PC | 36 | 35 | 1 | 0 | 0 |
 | PS | 93 | 66 | 25 | 2 | 0 |
 | SA | 178 | 67 | 89 | 22 | 0 |
-| TF | 97 | 30 | 60 | 7 | 0 |
+| TF | 104 | 37 | 60 | 7 | 0 |
 | VE | 170 | 31 | 0 | 15 | 124 |
 
 ## ① 已钉住（AT → 测试）
@@ -329,6 +329,13 @@
 | `AT-TF-079` | internal/transportfulfillment/domain/alternate_journey_test.go::TestAnAlternateJourneyIsLinkedButIndependent |
 | `AT-TF-080` | internal/transportfulfillment/application/start_alternate_journey_test.go::TestARegulatoryJourneyFeedsBothChains；internal/transportfulfillment/domain/alternate_journey_test.go::TestRegulatoryReturnIsMarkedByItsBasisKind |
 | `AT-TF-094` | internal/transportfulfillment/domain/transport_charge_occurrence_test.go::TestFailedAttemptOccurrenceTakesItsFactFromTheResult |
+| `AT-TF-105` | cmd/parcel-api/assemble_movement_fact_test.go::TestADemoSelfOperatedDepartureFromShanghaiToShenzhenAnswersCreatedNotGuarded；internal/transportfulfillment/adapters/customscompliance/departure_gate_test.go::TestADomesticDepartureReadsNotGuardedAndACrossZoneDepartureReadsUndecided（适配器半边）；internal/transportfulfillment/application/read_departure_gate_test.go::TestADepartureAsksCustomsForEveryObjectUnderControlWithTheScheduleDirection（编排半边） |
+| `AT-TF-106` | cmd/parcel-api/assemble_movement_fact_test.go::TestEveryGateReadingIsRecordedInTheSameRowAsItsDeparture；internal/transportfulfillment/application/record_movement_fact_test.go::TestADepartureIsRecordedWhateverTheGateReadingSays；internal/transportfulfillment/domain/load_assignment_movement_test.go::TestADepartureAlwaysRecordsWithItsGateReading（领域半边） |
+| `AT-TF-107` | cmd/parcel-api/assemble_movement_fact_test.go::TestEveryGateReadingIsRecordedInTheSameRowAsItsDeparture；internal/transportfulfillment/application/read_departure_gate_test.go::TestACustomsFailureIsRecordedAsUnreadableForThatObjectOnly（编排半边） |
+| `AT-TF-108` | internal/transportfulfillment/application/record_movement_fact_test.go::TestTheDeviceGateFlagIsNotReadAndItsClearanceIsKeptAsEvidence；internal/transportfulfillment/application/read_departure_gate_test.go::TestADepartureAsksCustomsForEveryObjectUnderControlWithTheScheduleDirection |
+| `AT-TF-109` | internal/transportfulfillment/application/read_departure_gate_test.go::TestADepartureStopsBeforeCustomsWhenItCannotSayWhatOrWhere；cmd/parcel-api/assemble_movement_fact_test.go::TestEveryGateReadingIsRecordedInTheSameRowAsItsDeparture（段不在册那一支） |
+| `AT-TF-110` | internal/transportfulfillment/domain/departure_gate_reading_test.go::TestTheHeaviestObjectAnswerIsTheDepartureAnswer；internal/transportfulfillment/domain/departure_gate_reading_test.go::TestObjectsUnderControlAreTakenAtTheDepartureInstant |
+| `AT-TF-111` | internal/transportfulfillment/application/record_movement_fact_test.go::TestAReplayedDepartureEchoesItsFirstReading |
 | `AT-VE-038` | internal/visibilityexception/application/derive_projection_test.go::TestFactsDeriveAndRederiveTheProjection |
 | `AT-VE-039` | internal/visibilityexception/application/derive_projection_test.go::TestReplayConflictAndUnconfiguredMappingStayHonest |
 | `AT-VE-040` | internal/visibilityexception/application/derive_projection_test.go::TestReplayConflictAndUnconfiguredMappingStayHonest |
@@ -1227,6 +1234,8 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 追记十一（票 no-reception-identity/06，2026-10-19）：`AT-NO-053` 至 `AT-NO-060`（UC-NO-004 身份冲突处置）随处置命令口、编排、处置截断与重核例外落地点名入①（编排面、HTTP 面、存储面、真库面；`AT-NO-059` 另有真库并发半边），由②移出。①312→320（NO 24→32）、②233→225（NO 30→22），合计不变。
 
 追记十二（票 no-reception-source/05，2026-10-19）：`AT-NO-051`「身份核对读不动」随身份核对读不动翻成待识别加「未核对」落地点名入①（编排面、HTTP 面、存储面的 `ParcelContainmentView` 两条、生产装配真库面、受控批量口面），由②移出。①320→321（NO 32→33）、②225→224（NO 22→21），合计不变。
+
+2026-10-19 追记（票 demo-chain-gaps/32）：UC-TF-005 新立 `AT-TF-105`–`111`（出发门禁读数），随票在领域、编排、适配器、真库与装配用例上补 Covers 点名，全部入①；半边覆盖在行内注明。①309→316（TF 30→37），TF 总数 97→104，合计 1113→1120；②③④不变。号若与同波票（23、27）撞，进 main 时随 UC 一并改号。
 
 ### 两盘之间新落的硬句测试面（不入①，逐面列出供领票比对）
 
