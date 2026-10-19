@@ -18,9 +18,9 @@
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 192 | 133 | 30 | 63 | 12 | 9 |
-| transportfulfillment | 157 | 150 | 28 | 36 | 11 | 30 |
+| transportfulfillment | 157 | 154 | 28 | 36 | 11 | 30 |
 | visibilityexception | 101 | 98 | 11 | 30 | 8 | 11 |
-| **合计** | 1273 | 1166 | 162 | 308 | 60 | 168 |
+| **合计** | 1273 | 1170 | 162 | 308 | 60 | 168 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 81、测试 145。
 
