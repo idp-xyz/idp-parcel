@@ -12,6 +12,7 @@ import (
 
 var (
 	ErrBlankValue           = errors.New("transport fulfillment: blank value")
+	ErrValueContainsNUL     = errors.New("transport fulfillment: value contains NUL")
 	ErrInvalidOffsitePickup = errors.New("transport fulfillment: invalid offsite pickup")
 )
 
@@ -19,9 +20,14 @@ type requiredValue struct {
 	value string
 }
 
+// newRequiredValue 是本上下文各口必备值的共同构造。含 NUL 的值拒：登记册的 text 列存不下 NUL，放进来只会让写入在库面
+// 失败、整笔事务中止而答不出业务结论；存不进去的输入要在构造期答「改输入」，不能落到编排的`未决`那一格。
 func newRequiredValue(name, value string) (requiredValue, error) {
 	if strings.TrimSpace(value) == "" {
 		return requiredValue{}, fmt.Errorf("%w: %s", ErrBlankValue, name)
+	}
+	if strings.IndexByte(value, 0) >= 0 {
+		return requiredValue{}, fmt.Errorf("%w: %s", ErrValueContainsNUL, name)
 	}
 	return requiredValue{value: value}, nil
 }
