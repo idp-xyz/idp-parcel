@@ -80,7 +80,8 @@ func awaitAdvisoryLockWaitOrDone(t *testing.T, pool *pgxpool.Pool, done <-chan s
 // Covers: `AT-NO-019`「同一外部条码出现在两件实物——两件实物保持独立，形成身份冲突并暂停方向性作业」的并发半边（票
 // no-reception-identity/03，ADR-0196 越权风险点「并发未串行」）。号码在关联册里只标识一件包裹；A 经挂住的装配读完别的
 // 实物关联（空）后挂起，B 经生产装配送站，等在那件包裹的锁上；A 提交后 B 答待识别、记身份冲突、候选是那件包裹，A 答
-// 收寄已形成且原判断原样，A 那件被追加一版身份冲突判断——方向依据的身份读口读这本册，两件都含身份冲突。
+// 收寄已形成且原判断原样，A 那件被追加一版身份冲突判断——方向依据的身份读口读这本册，两件的身份一格都是缺少·{待识别,
+// 身份冲突}：A 那件的冲突版指名了原判断，身份一格只读链头（ADR-0210 决定五），原判断上的关联不再参与。
 func TestConcurrentDeliveriesOfOneMarkSerializeOnTheParcel(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -170,8 +171,9 @@ func TestConcurrentDeliveriesOfOneMarkSerializeOnTheParcel(t *testing.T) {
 		if err != nil {
 			t.Fatalf("判 %s 的身份：%v", unit, err)
 		}
-		if reasons := basis.Cell().Reasons(); !slices.Contains(reasons, nodomain.ReasonIdentityConflict) {
-			t.Fatalf("%s 的身份一格 = %v（%d 行）, want 含身份冲突", unit, reasons, len(observations))
+		want := []nodomain.DirectionalBasisReason{nodomain.ReasonPendingIdentification, nodomain.ReasonIdentityConflict}
+		if reasons := basis.Cell().Reasons(); basis.Cell().Answer() != nodomain.BasisMissing || !slices.Equal(reasons, want) {
+			t.Fatalf("%s 的身份一格 = %s %v（%d 行）, want 缺少·%v", unit, basis.Cell().Answer(), reasons, len(observations), want)
 		}
 	}
 }

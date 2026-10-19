@@ -162,10 +162,13 @@ func directionalBasisCellOf(
 }
 
 // IntakeIdentityObservation 是收寄册上带收寄的一行（收寄已形成与待识别两格）对一件作业实物身份说了什么。
-// Association 缺席即这一行待识别；IdentityConflict 照收寄判断当时所记。
+// Association 缺席即这一行待识别；IdentityConflict 照收寄判断当时所记。Version 是这一版的判断版本——这两格的判断
+// 版本就是收寄结果版本，不另签；Predecessor 是它接续的前版（ADR-0199 决定二），缺席即这一版不接续任何版本：首判，
+// 或前版机制之前追加、不回填的旧行。
 type IntakeIdentityObservation struct {
 	SourceID         string
 	Version          IntakeResultVersion
+	Predecessor      IntakeResultVersion
 	Association      ParcelAssociationReference
 	IdentityConflict bool
 	ReceivedAt       time.Time
@@ -198,34 +201,42 @@ func (basis IdentityBasis) IntakeVersion() IntakeResultVersion {
 }
 
 // JudgeIdentityBasis 把收寄册上这件实物的各行折成身份一格。今天正式包裹 → 作业实物的映射只有收寄判断里识别成功
-// 建立的版本化关联，所以身份只看这本册：
+// 建立的版本化关联，所以身份只看这本册；而且只看每条判断链的当前有效版本（ADR-0210 决定五，NO CONTEXT「判断链与
+// 当前有效版本」）：被组里另一行指名为前版的行已被接续，不再参与。对全部行取或，冲突版一落这一格就再也解不开——
+// 接在它后面的处置版推不翻一行已记的冲突。这两格的后继只会是这两格（冲突版、重核版、处置版都是），所以组里就算得出
+// 链头；前版指向组外的行（例如续办接在一条不带收寄的待确认之后）照常是链头。链头再照原折法折：
 //
 //   - 一行都没有：缺少·无收寄记录。未取得控制的，与经交接进来、在本上下文没有收寄行的，都落在这里。
-//   - 有行记了身份冲突，或带关联的行指向不同的正式包裹：缺少·身份冲突（CONTEXT：身份冲突「暂停方向性作业」）。
-//   - 没有一行带关联：缺少·待识别（CONTEXT「候选尚未确认时不得据此执行方向性作业」）。它可以与身份冲突并列：
-//     待识别实物的多个候选正是冲突的来路。
-//   - 其余为成立。所依收寄取带关联的行里业务时间最晚的那一行，同刻按来源标识定序——同一件实物收过两次时，
-//     后一次才是此刻的控制来由。
+//   - 有一版链头记了身份冲突，或带关联的链头指向不同的正式包裹：缺少·身份冲突（CONTEXT：身份冲突「暂停方向性
+//     作业」）。前版机制之前追加、没有前版的冲突版自成一条链，照旧判冲突，不回填。
+//   - 没有一版链头带关联：缺少·待识别（CONTEXT「候选尚未确认时不得据此执行方向性作业」）。它可以与身份冲突并列：
+//     待识别实物的多个候选正是冲突的来路；一码两物里先到那件的冲突版指名了原判断时，链头只剩冲突版，也落在这里。
+//   - 其余为成立。所依收寄取带关联的链头里业务时间最晚的那一版，同刻按来源标识定序——同一件实物收过两次时，
+//     后一次才是此刻的控制来由。被接续的版本不当所依收寄：它已不是此刻的判断。
+//
+// 组里一版被两行指名为前版、一行指名自己、几行互相接续成环，哪一版是链头都说不准，交回 ErrInvalidDirectionalBasis，
+// 不替它挑一个。前两种库面拦着，读回见到即说明有绕过编排的写入；环库面拦不住，与收寄库的 CurrentVersion 走到环时
+// 同一待遇：报错，不挑。
 func JudgeIdentityBasis(observations []IntakeIdentityObservation) (IdentityBasis, error) {
 	if len(observations) == 0 {
 		return identityBasisOf(BasisMissing, []DirectionalBasisReason{ReasonNoIntakeRecord},
 			ParcelAssociationReference{}, "", IntakeResultVersion{})
 	}
+	heads, err := judgmentChainHeads(observations)
+	if err != nil {
+		return IdentityBasis{}, err
+	}
 	parcels := map[ParcelAssociationReference]bool{}
 	conflict := false
 	var basedOn *IntakeIdentityObservation
-	for index := range observations {
-		observation := &observations[index]
-		if strings.TrimSpace(observation.SourceID) == "" || !observation.Version.valid() {
-			return IdentityBasis{}, ErrInvalidDirectionalBasis
-		}
-		conflict = conflict || observation.IdentityConflict
-		if !observation.Association.valid() {
+	for _, head := range heads {
+		conflict = conflict || head.IdentityConflict
+		if !head.Association.valid() {
 			continue
 		}
-		parcels[observation.Association] = true
-		if basedOn == nil || laterIntake(*observation, *basedOn) {
-			basedOn = observation
+		parcels[head.Association] = true
+		if basedOn == nil || laterIntake(*head, *basedOn) {
+			basedOn = head
 		}
 	}
 	var reasons []DirectionalBasisReason
@@ -239,6 +250,42 @@ func JudgeIdentityBasis(observations []IntakeIdentityObservation) (IdentityBasis
 		return identityBasisOf(BasisMissing, reasons, ParcelAssociationReference{}, "", IntakeResultVersion{})
 	}
 	return identityBasisOf(BasisEstablished, nil, basedOn.Association, basedOn.SourceID, basedOn.Version)
+}
+
+// judgmentChainHeads 交回组里没有后继的各行，并验链的形状。
+func judgmentChainHeads(observations []IntakeIdentityObservation) ([]*IntakeIdentityObservation, error) {
+	successorOf := map[IntakeResultVersion]int{}
+	for index, observation := range observations {
+		if strings.TrimSpace(observation.SourceID) == "" || !observation.Version.valid() {
+			return nil, ErrInvalidDirectionalBasis
+		}
+		if !observation.Predecessor.valid() {
+			continue
+		}
+		if _, taken := successorOf[observation.Predecessor]; taken || observation.Predecessor == observation.Version {
+			return nil, ErrInvalidDirectionalBasis
+		}
+		successorOf[observation.Predecessor] = index
+	}
+	var heads []*IntakeIdentityObservation
+	for index := range observations {
+		// 每一行沿后继走，都得在组里走到头；走过的步数够绕全组一圈还没到头，就是在环里。
+		version := observations[index].Version
+		for steps := 0; ; steps++ {
+			next, succeeded := successorOf[version]
+			if !succeeded {
+				break
+			}
+			if steps == len(observations) {
+				return nil, ErrInvalidDirectionalBasis
+			}
+			version = observations[next].Version
+		}
+		if _, succeeded := successorOf[observations[index].Version]; !succeeded {
+			heads = append(heads, &observations[index])
+		}
+	}
+	return heads, nil
 }
 
 func laterIntake(candidate, current IntakeIdentityObservation) bool {

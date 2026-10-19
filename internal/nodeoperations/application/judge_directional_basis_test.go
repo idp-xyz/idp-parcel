@@ -215,12 +215,28 @@ func TestDirectionalBasisServiceResultIsAskedOfParcelShipmentNow(t *testing.T) {
 }
 
 // Covers: 来源答不出就记那一格`读不动`，记录照样成立——读不动不挡落册（设计代决「不挡事实」）。收寄册读不动时身份
-// 不成立，另两格`未判`；PS 或路由依据读不动只落在它自己那一格。
+// 不成立，另两格`未判`；收寄册读回的判断链分了叉（ADR-0210 决定五的坏形状）同样记身份读不动；PS 或路由依据读不动
+// 只落在它自己那一格。
 func TestDirectionalBasisUnreadableSourcesAreRecordedNotRaised(t *testing.T) {
 	broken := errors.New("connection reset")
 
 	t.Run("收寄册读不动", func(t *testing.T) {
 		fixture := newJudgeFixture(intakeIdentityViewDouble{err: broken})
+		record := fixture.judge(t)
+		assertCell(t, record.Identity().Cell(), domain.BasisUnreadable)
+		assertCell(t, record.ServiceResult().Cell(), domain.BasisNotJudged)
+		assertCell(t, record.Routing().Cell(), domain.BasisNotJudged)
+	})
+	t.Run("收寄册读回两行指名同一前版", func(t *testing.T) {
+		original := associatedIntake(t, "src-intake", "DPCL-1")
+		successor := func(source string) domain.IntakeIdentityObservation {
+			observation := associatedIntake(t, source, "DPCL-1")
+			observation.Predecessor = original.Version
+			return observation
+		}
+		fixture := newJudgeFixture(intakeIdentityViewDouble{observations: []domain.IntakeIdentityObservation{
+			original, successor("src-successor-1"), successor("src-successor-2"),
+		}})
 		record := fixture.judge(t)
 		assertCell(t, record.Identity().Cell(), domain.BasisUnreadable)
 		assertCell(t, record.ServiceResult().Cell(), domain.BasisNotJudged)

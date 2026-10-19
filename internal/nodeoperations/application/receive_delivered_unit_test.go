@@ -858,6 +858,7 @@ func identityReasonsOf(t *testing.T, records []ports.ReceptionRecord) []domain.D
 		observation := domain.IntakeIdentityObservation{
 			SourceID:         record.Key.SourceID,
 			Version:          record.Intake.Version(),
+			Predecessor:      record.Predecessor,
 			IdentityConflict: record.IdentityConflict,
 			ReceivedAt:       record.Intake.ReceivedAt(),
 		}

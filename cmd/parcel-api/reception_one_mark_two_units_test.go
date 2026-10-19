@@ -17,7 +17,11 @@ import (
 // Covers: `AT-NO-019`「同一外部条码出现在两件实物——两件实物保持独立，形成身份冲突并暂停方向性作业」的真库面（票
 // no-reception-identity/01、ADR-0196）：委托经真编排带客户包裹件号建单并接受，号码在关联册里只标识那一件包裹；两件作业
 // 实物先后贴着它经生产装配送站。先到那件形成收寄；后到那件答待识别、记身份冲突；先到那件的原判断原样读回，册上另多一版
-// 身份冲突判断；方向依据的身份读口读这本册，两件都落成身份冲突。重放后到那件走已有结果。夹具全为合成（S 级）。
+// 身份冲突判断；方向依据的身份读口读这本册，两件的身份一格都含身份冲突。重放后到那件走已有结果。夹具全为合成（S 级）。
+//
+// 同时钉 `AT-NO-061` 的真库面（票 no-reception-identity/05、ADR-0210 决定五）：身份一格只读各链当前有效版本。先到那件的
+// 冲突版指名了原判断，链头只剩冲突版，原因集是{待识别, 身份冲突}，不再只是身份冲突；后到那件只有自己那一版，原因集照旧
+// 是{待识别, 身份冲突}。
 func TestTheWiredReceptionTurnsOneMarkOnTwoUnitsIntoAnIdentityConflict(t *testing.T) {
 	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
@@ -79,8 +83,9 @@ func TestTheWiredReceptionTurnsOneMarkOnTwoUnitsIntoAnIdentityConflict(t *testin
 		if err != nil {
 			t.Fatalf("判 %s 的身份：%v", unit, err)
 		}
-		if reasons := basis.Cell().Reasons(); !slices.Contains(reasons, nodomain.ReasonIdentityConflict) {
-			t.Fatalf("%s 的身份一格 = %v（%d 行）, want 含身份冲突", unit, reasons, len(observations))
+		want := []nodomain.DirectionalBasisReason{nodomain.ReasonPendingIdentification, nodomain.ReasonIdentityConflict}
+		if reasons := basis.Cell().Reasons(); basis.Cell().Answer() != nodomain.BasisMissing || !slices.Equal(reasons, want) {
+			t.Fatalf("%s 的身份一格 = %s %v（%d 行）, want 缺少·%v", unit, basis.Cell().Answer(), reasons, len(observations), want)
 		}
 	}
 

@@ -246,6 +246,77 @@ func TestIntakeIdentitiesReadsTheUnitsIntakeRows(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0210 决定五的读口面——按作业实物读收寄册时连前版一并读回：追加的一版所指名的前版逐字一致，没有前版的
+// 行（首判，或前版机制之前落下的行）读回为缺席。读回的这一组交给领域，链头只剩那一版冲突版，落成缺少·{待识别, 身份
+// 冲突}。夹具全为合成（S 级）。
+func TestIntakeIdentitiesReadsThePredecessorOfEachVersion(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	receptions, err := adapter.NewReceptions(db)
+	if err != nil {
+		t.Fatalf("构造收寄库：%v", err)
+	}
+	view, err := adapter.NewIntakeIdentities(db)
+	if err != nil {
+		t.Fatalf("构造读口：%v", err)
+	}
+
+	original := formedRecord(t, "SYN-TENANT-NRI05", "SYN-DELIVERY-NRI05-A")
+	original.JudgmentVersion = original.Intake.Version()
+	conflict := pendingRecord(t, "SYN-TENANT-NRI05", "SYN-DELIVERY-NRI05-B")
+	intake, err := domain.FormNodeIntake(domain.NodeIntakeSpec{
+		TenantID:    original.Key.TenantID,
+		Unit:        original.Intake.Unit(),
+		Node:        original.Intake.Node(),
+		DeliveredBy: original.Intake.DeliveredBy(),
+		Evidence:    original.Intake.Evidence(),
+		Version:     ref(t, domain.NewIntakeResultVersion, "SYN-INTAKEV-NRI05-CONFLICT"),
+		ReceivedAt:  original.Intake.ReceivedAt(),
+	})
+	if err != nil {
+		t.Fatalf("构造冲突版收寄：%v", err)
+	}
+	conflict.Intake = intake
+	conflict.Candidates = []domain.ParcelAssociationReference{ref(t, domain.NewParcelAssociationReference, "parcel-1/link-v1")}
+	conflict.JudgmentVersion = intake.Version()
+	conflict.Predecessor = original.JudgmentVersion
+	ctx := t.Context()
+	inTx(t, db.Transactor(), ctx, func(txCtx context.Context) error {
+		for _, record := range []ports.ReceptionRecord{original, conflict} {
+			if _, err := receptions.Save(txCtx, record); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	observations, err := view.FindIntakeIdentities(ctx, original.Key.TenantID, original.Intake.Unit())
+	if err != nil {
+		t.Fatalf("find unit-1: %v", err)
+	}
+	if len(observations) != 2 {
+		t.Fatalf("unit-1 observations = %+v, want 原判断与冲突版两行", observations)
+	}
+	if first := observations[0]; first.SourceID != "SYN-DELIVERY-NRI05-A" || first.Predecessor.String() != "" {
+		t.Fatalf("原判断 = %+v, want 前版缺席", first)
+	}
+	if second := observations[1]; second.SourceID != "SYN-DELIVERY-NRI05-B" ||
+		second.Version.String() != "SYN-INTAKEV-NRI05-CONFLICT" || second.Predecessor.String() != "intake/v1" {
+		t.Fatalf("冲突版 = %+v, want 前版逐字是原判断的版本 intake/v1", second)
+	}
+	basis, err := domain.JudgeIdentityBasis(observations)
+	if err != nil {
+		t.Fatalf("judge: %v", err)
+	}
+	reasons := basis.Cell().Reasons()
+	if len(reasons) != 2 || reasons[0] != domain.ReasonPendingIdentification || reasons[1] != domain.ReasonIdentityConflict {
+		t.Fatalf("身份一格 = %s %v, want 缺少·{待识别, 身份冲突}", basis.Cell().Answer(), reasons)
+	}
+}
+
 // TestConsolidationMemberCatalogueListsAddAndRemoveFacts 证「集运成员关系」册只列移入与移出两种来源事实，按记录时刻
 // 倒序；移入行的方向依据记录原样读回，没有记录的移入行与移出行都交回零值。
 func TestConsolidationMemberCatalogueListsAddAndRemoveFacts(t *testing.T) {

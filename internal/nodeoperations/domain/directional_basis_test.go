@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -36,6 +37,130 @@ func TestIdentityBasisTakesTheLatestIntakeOfOneParcel(t *testing.T) {
 	}
 	if identity.Cell().Answer() != domain.BasisEstablished || identity.IntakeSourceID() != "src-late" {
 		t.Fatalf("identity = %s based on %q", identity.Cell().Answer(), identity.IntakeSourceID())
+	}
+}
+
+// succeeding 让 observed 接续 predecessor 那一行（ADR-0199 决定二的前版）。
+func succeeding(t *testing.T, observed, predecessor domain.IntakeIdentityObservation) domain.IntakeIdentityObservation {
+	t.Helper()
+	observed.Predecessor = predecessor.Version
+	return observed
+}
+
+func conflicted(observed domain.IntakeIdentityObservation) domain.IntakeIdentityObservation {
+	observed.IdentityConflict = true
+	return observed
+}
+
+// Covers: `AT-NO-061` 的领域面与 ADR-0210 决定五——身份一格只读每条判断链的当前有效版本，被组里另一行指名为前版的行
+// 不再参与。一码两物先到那件的冲突版指名了原判断时，链头只剩冲突版，落成缺少·{待识别, 身份冲突}；第一期之前没有前版的
+// 冲突版自成一条链，照旧判冲突、不回填；零候选的待识别被重核版接续即成立；冲突版之后接的处置版（这里用构造的观察，
+// 不依处置编排）带关联即成立、不带即待识别，所依收寄是处置版而不是被接续的原判断；另一条链头记冲突照样挡住。前版指向
+// 组外的行照常是链头。来源标识特意排成被接续的那一行在同刻定序里占先，挑错链头就会依错收寄。
+func TestIdentityBasisReadsEachJudgmentChainHead(t *testing.T) {
+	original := observation(t, "src-1-original", "DPCL-1", basisAt)
+	conflict := succeeding(t, conflicted(observation(t, "src-2-conflict", "", basisAt)), original)
+	pending := observation(t, "src-1-pending", "", basisAt)
+	cases := []struct {
+		name         string
+		observations []domain.IntakeIdentityObservation
+		answer       domain.DirectionalBasisAnswer
+		reasons      []domain.DirectionalBasisReason
+		basedOn      string
+	}{
+		{
+			name:         "一码两物先到那件：冲突版指名原判断为前版",
+			observations: []domain.IntakeIdentityObservation{original, conflict},
+			answer:       domain.BasisMissing,
+			reasons:      []domain.DirectionalBasisReason{domain.ReasonPendingIdentification, domain.ReasonIdentityConflict},
+		},
+		{
+			name: "第一期之前的形状：冲突版没有前版",
+			observations: []domain.IntakeIdentityObservation{
+				original, conflicted(observation(t, "src-2-legacy-conflict", "", basisAt)),
+			},
+			answer:  domain.BasisMissing,
+			reasons: []domain.DirectionalBasisReason{domain.ReasonIdentityConflict},
+		},
+		{
+			name: "零候选的待识别被带关联的重核版接续",
+			observations: []domain.IntakeIdentityObservation{
+				pending, succeeding(t, observation(t, "src-2-recheck", "DPCL-1", basisAt), pending),
+			},
+			answer:  domain.BasisEstablished,
+			basedOn: "src-2-recheck",
+		},
+		{
+			name: "两条链：一条链头成立、一条链头记冲突",
+			observations: []domain.IntakeIdentityObservation{
+				observation(t, "src-0-other-chain", "DPCL-1", basisAt.Add(time.Hour)), original, conflict,
+			},
+			answer:  domain.BasisMissing,
+			reasons: []domain.DirectionalBasisReason{domain.ReasonIdentityConflict},
+		},
+		{
+			name: "冲突版之后接一版带关联、不记冲突的处置版",
+			observations: []domain.IntakeIdentityObservation{
+				original, conflict, succeeding(t, observation(t, "src-3-disposed", "DPCL-1", basisAt), conflict),
+			},
+			answer:  domain.BasisEstablished,
+			basedOn: "src-3-disposed",
+		},
+		{
+			name: "冲突版之后接一版不带关联、不记冲突的处置版",
+			observations: []domain.IntakeIdentityObservation{
+				original, conflict, succeeding(t, observation(t, "src-3-disposed", "", basisAt), conflict),
+			},
+			answer:  domain.BasisMissing,
+			reasons: []domain.DirectionalBasisReason{domain.ReasonPendingIdentification},
+		},
+		{
+			name: "前版指向组外的行",
+			observations: []domain.IntakeIdentityObservation{
+				succeeding(t, observation(t, "src-continued", "DPCL-1", basisAt), observation(t, "src-awaiting", "", basisAt)),
+			},
+			answer:  domain.BasisEstablished,
+			basedOn: "src-continued",
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			identity, err := domain.JudgeIdentityBasis(testCase.observations)
+			if err != nil {
+				t.Fatalf("judge: %v", err)
+			}
+			cell := identity.Cell()
+			if cell.Answer() != testCase.answer || !slices.Equal(cell.Reasons(), testCase.reasons) ||
+				identity.IntakeSourceID() != testCase.basedOn {
+				t.Fatalf("identity = %s %v based on %q, want %s %v based on %q",
+					cell.Answer(), cell.Reasons(), identity.IntakeSourceID(), testCase.answer, testCase.reasons, testCase.basedOn)
+			}
+		})
+	}
+}
+
+// Covers: ADR-0210 决定五的坏形状——同一前版被组里两行指名、一行指名自己、几行互相接续成环，哪一版是链头都说不准，
+// 交回 ErrInvalidDirectionalBasis（编排把它记成`读不动`），不替它挑一个链头。前两种库面已拦，读回见到即说明有绕过
+// 编排的写入；环库面拦不住。
+func TestIdentityBasisRefusesMalformedJudgmentChains(t *testing.T) {
+	original := observation(t, "src-original", "DPCL-1", basisAt)
+	looping := observation(t, "src-loop-a", "", basisAt)
+	closing := succeeding(t, observation(t, "src-loop-b", "", basisAt), looping)
+	cases := map[string][]domain.IntakeIdentityObservation{
+		"同一前版被两行指名": {
+			original,
+			succeeding(t, conflicted(observation(t, "src-conflict-1", "", basisAt)), original),
+			succeeding(t, conflicted(observation(t, "src-conflict-2", "", basisAt)), original),
+		},
+		"一行指名自己": {original, succeeding(t, observation(t, "src-self", "DPCL-1", basisAt), observation(t, "src-self", "", basisAt))},
+		"成环":     {original, succeeding(t, looping, closing), closing},
+	}
+	for name, observations := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, err := domain.JudgeIdentityBasis(observations); !errors.Is(err, domain.ErrInvalidDirectionalBasis) {
+				t.Fatalf("err = %v, want ErrInvalidDirectionalBasis", err)
+			}
+		})
 	}
 }
 

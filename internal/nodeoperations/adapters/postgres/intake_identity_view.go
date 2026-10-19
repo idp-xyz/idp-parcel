@@ -28,7 +28,8 @@ func NewIntakeIdentities(db *bentopg.DB) (*IntakeIdentities, error) {
 var _ ports.IntakeIdentityView = (*IntakeIdentities)(nil)
 
 // FindIntakeIdentities 交回这件实物在册上每一行带收寄的记录（收寄已形成与待识别两格；另两格不带收寄，也就没有
-// 作业实物可按）。查无此物交回空切片。
+// 作业实物可按），连同各行的前版。查无此物交回空切片。被接续的行照样交回：哪一版是链头由领域在这一组里挑
+// （domain.JudgeIdentityBasis），读口不在 SQL 里先筛，查询条件与索引因此不随链变。
 //
 // 走 ReadExecutor：调用方不绑事务时读落在池上（为什么要在写事务之前读，见 application.DirectionalBasisJudge）。
 // 行上的值逐个过领域构造器，坏行作为错误交回，编排把它记成`读不动`。
@@ -42,7 +43,7 @@ func (view *IntakeIdentities) FindIntakeIdentities(
 		return nil, fmt.Errorf("find intake identities: %w", err)
 	}
 	rows, err := querier.Query(ctx,
-		`SELECT source_id, intake, identity_conflict
+		`SELECT source_id, intake, identity_conflict, predecessor_version
 		   FROM node_operations.reception
 		  WHERE tenant_id = $1
 		    AND intake IS NOT NULL
@@ -59,14 +60,15 @@ func (view *IntakeIdentities) FindIntakeIdentities(
 	observations := []domain.IntakeIdentityObservation{}
 	for rows.Next() {
 		var (
-			sourceID string
-			raw      []byte
-			conflict bool
+			sourceID    string
+			raw         []byte
+			conflict    bool
+			predecessor *string
 		)
-		if err := rows.Scan(&sourceID, &raw, &conflict); err != nil {
+		if err := rows.Scan(&sourceID, &raw, &conflict, &predecessor); err != nil {
 			return nil, fmt.Errorf("find intake identities: %w", err)
 		}
-		observation, err := intakeIdentityOf(sourceID, raw, conflict)
+		observation, err := intakeIdentityOf(sourceID, raw, conflict, predecessor)
 		if err != nil {
 			return nil, fmt.Errorf("find intake identities: source %q: %w", sourceID, err)
 		}
@@ -78,8 +80,9 @@ func (view *IntakeIdentities) FindIntakeIdentities(
 	return observations, nil
 }
 
-// intakeIdentityOf 只取身份要用的几样：版本、关联（待识别行缺席）、业务时间。行模型与收寄册写侧同一份 intakeRow。
-func intakeIdentityOf(sourceID string, raw []byte, conflict bool) (domain.IntakeIdentityObservation, error) {
+// intakeIdentityOf 只取身份要用的几样：版本、前版、关联（待识别行缺席）、业务时间。行模型与收寄册写侧同一份
+// intakeRow；前版一列为空即这一版不接续任何版本，读回缺席，与收寄库读回前版同一个译法。
+func intakeIdentityOf(sourceID string, raw []byte, conflict bool, predecessor *string) (domain.IntakeIdentityObservation, error) {
 	var row intakeRow
 	if err := json.Unmarshal(raw, &row); err != nil {
 		return domain.IntakeIdentityObservation{}, err
@@ -88,9 +91,14 @@ func intakeIdentityOf(sourceID string, raw []byte, conflict bool) (domain.Intake
 	if err != nil {
 		return domain.IntakeIdentityObservation{}, err
 	}
+	previous, err := versionFrom(predecessor)
+	if err != nil {
+		return domain.IntakeIdentityObservation{}, err
+	}
 	observation := domain.IntakeIdentityObservation{
 		SourceID:         sourceID,
 		Version:          version,
+		Predecessor:      previous,
 		IdentityConflict: conflict,
 		ReceivedAt:       row.ReceivedAt.UTC(),
 	}
