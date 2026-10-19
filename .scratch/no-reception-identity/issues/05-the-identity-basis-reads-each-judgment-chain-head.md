@@ -1,7 +1,7 @@
 # 05 方向依据的身份一格改读每条判断链的当前有效版本——不再对全部行取或
 
 Category: enhancement
-Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（04 已进 main），分支 `claude-nri05`；与 no-reception-source/03 并行。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 04 拆出（代决，用户 2026-10-16 授权「你作为业务和系统专家你来自决」）
+Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（04 已进 main），分支 `claude-nri05`；与 no-reception-source/03 并行。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 04 拆出（代决，用户 2026-10-16 授权「你作为业务和系统专家你来自决」）
 Blocked by: 04 进 main（ADR-0210、NO CONTEXT「判断链与当前有效版本」与 UC-NO-004 先落）。不依 no-reception-source/03：本票只碰身份读口与方向依据领域件，与它的地盘不交叉，可以先行或并行。
 父票：[04](./04-identity-conflicts-have-a-disposition-and-release.md)
 出处：票 04 裁定里「方向依据的身份一格改读每条判断链的当前有效版本，不再对全部行取或」那一点；[ADR-0210](../../../docs/adr/0210-identity-conflicts-are-disposed-by-an-operation-decision-and-the-identity-basis-reads-chain-heads.md) 决定五与「与已接受决定的关系」。
@@ -115,3 +115,14 @@ Blocked by: 04 进 main（ADR-0210、NO CONTEXT「判断链与当前有效版本
 - `receive_delivered_unit.go` 里 `appendIdentityConflicts` 头注「方向依据的身份一格读到这一版就落成身份冲突」没改：那份文件是并行的 no-reception-source/03 的地盘。新读法下原因集仍含身份冲突，这句没有说错，只是没写全；`ports.IntakeIdentityView` 的头注同理不动，仍然成立。
 - `AT-NO-061` 后半「零候选的待识别已被重核版接续 → 成立」只有领域面：真库面要等 no-reception-source/03 的重核编排进 main。
 - 「走 Go 那条路」一格只做到分支与作者自验；非作者评审与推送方在干净检出上带 DSN 跑全量未做，该格不勾。
+
+## Comments
+
+### 评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审；2026-10-19，钉 `e248c1c3`）
+
+两轴合审，0 阻断。
+
+- **Spec**：ADR-0210 决定五落到。`JudgeIdentityBasis` 先由 `judgmentChainHeads` 挑出组里没有后继的各行，再照原折法折；所依收寄只在带关联的链头里挑。前版指向组外的行照常是链头；第一期之前没有前版的旧冲突行自成一条链、照旧判冲突，不回填。ADR-0196 先到那件在一期之后落成缺少·{待识别, 身份冲突}，两份既有真库用例由「含身份冲突」收紧成逐件断言，是有意的结论变更。读口只多读前版一列，查询条件与索引不变。
+- **作者多出的一格认可**：成环库面拦不住，与 `CurrentVersion` 走到环同一待遇报错不挑；编排把它记成身份一格读不动，不抛。
+- **Standards**：头注写为什么（取或会让冲突版一落就再也解不开）。
+- **非阻断（不另立票）**：`appendIdentityConflicts` 头注「方向依据的身份一格读到这一版就落成身份冲突」没写全（新读法下原因集还含待识别），那份文件归 no-reception-source/03 在途，随它或 no-reception-identity/06 顺手改；`AT-NO-061` 的「零候选被重核版接续」真库面等 no-reception-source/03 进 main。
