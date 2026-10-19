@@ -138,9 +138,9 @@ echo "== 网络目录登记（network-routing：演示租户采用参考配置 n
 # 这一格——冻结段数是租户取值，参考配置不带。没有它，收寄后的路由复核在计划仍适用时答冻结形态未配置（票
 # product-strategy-boundary/34）。
 "$BIN/parcel-network-register" -kind route-strategy -file "$SEEDS/network/23-route-strategy-cn-sg-v2.json"
-# 新加坡末端日历修订 2 也是采用之后的租户修订（ADR-0217）：处理时长照修订 1 的 240 分钟重登，另登派送时长 240 分钟——
-# 合成值，不是任何地区的惯例。登了它，计划在末端之后多一段交付段，末端交接声明这一段，派送任务窗口就取它；没登时
-# 计划止于末端，与修订 1 相同。修订 2 无终点，登记时接续闭合修订 1，判断时点只有一版适用。
+# 新加坡末端日历修订 2 也是采用之后的租户修订（ADR-0217）：照修订 1 重登处理时长，另登派送时长——合成值，不是任何
+# 地区的惯例，取值见 README 组成表 24-calendar-node-sin-lm-v2.json 一行。登了它，计划在末端之后多一段交付段，末端交接
+# 声明这一段，派送任务窗口就取它；没登时计划止于末端。修订 2 无终点，登记时接续闭合修订 1，判断时点只有一版适用。
 "$BIN/parcel-network-register" -kind service-calendar -file "$SEEDS/network/24-calendar-node-sin-lm-v2.json"
 
 echo "== 关务案件配置登记（customs-compliance：就绪/授权/规则/义务/门禁/建案/口岸/路径/凭证/协作） =="
