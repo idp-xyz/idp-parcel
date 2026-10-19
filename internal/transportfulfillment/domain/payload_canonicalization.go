@@ -430,3 +430,7 @@ func CanonicalizeEstablishPoolPayload(schedule, unit string, capacity int64) ([]
 		Capacity:         capacity,
 	})
 }
+
+func CanonicalizeMovementFactPayload(schedule ScheduleReference, kind MovementFactKind, location MovementLocationReference, gateClearance GateClearanceReference) ([]byte, string, error) {
+	return nil, "", nil
+}

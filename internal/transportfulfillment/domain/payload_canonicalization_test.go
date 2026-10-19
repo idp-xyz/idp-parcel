@@ -145,6 +145,32 @@ func TestCommandPayloadsRoundTripAsTFC1(t *testing.T) {
 				return domain.CanonicalizeCarrierFirstEffectivePickupPayload(false, subject, at)
 			},
 		},
+		{
+			// 票 tf-face-algebra/08：业务时间照 ADR-0023 不进摘要；来源与 GateRequired 不是参数，文档上也就没有这几格。
+			name:     "movement fact with gate clearance",
+			document: `{"canonicalization":"TFC-1","face":"RECORD_MOVEMENT_FACT","schedule":"SCH","kind":"DEPARTURE","location":"LOC","gate_clearance":"GATE"}`,
+			digest:   "TFC-1:ebe62f9cff78fc476f8f342b665cf3c5e4cb8bc57599a6901bf02a06c4831e60",
+			call: func() ([]byte, string, error) {
+				schedule, location, clearance, err := movementFactContent("SCH", "LOC", "GATE")
+				if err != nil {
+					return nil, "", err
+				}
+				return domain.CanonicalizeMovementFactPayload(schedule, domain.DepartureFact, location, clearance)
+			},
+		},
+		{
+			// 放行缺席写 null 而不写空串：「没有门禁依据」是一格内容，不是一个空的引用。
+			name:     "movement fact without gate clearance",
+			document: `{"canonicalization":"TFC-1","face":"RECORD_MOVEMENT_FACT","schedule":"SCH","kind":"ARRIVAL","location":"LOC","gate_clearance":null}`,
+			digest:   "TFC-1:d8a427cf3f95a44bbefcdfaff188584b6e06d44adec6e9572b3d81489a7ce390",
+			call: func() ([]byte, string, error) {
+				schedule, location, _, err := movementFactContent("SCH", "LOC", "GATE")
+				if err != nil {
+					return nil, "", err
+				}
+				return domain.CanonicalizeMovementFactPayload(schedule, domain.ArrivalFact, location, domain.GateClearanceReference{})
+			},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -218,4 +244,17 @@ func TestStoredDigestIsComparedWithinItsOwnShape(t *testing.T) {
 			}
 		})
 	}
+}
+
+func movementFactContent(schedule, location, clearance string) (domain.ScheduleReference, domain.MovementLocationReference, domain.GateClearanceReference, error) {
+	scheduleRef, err := domain.NewScheduleReference(schedule)
+	if err != nil {
+		return domain.ScheduleReference{}, domain.MovementLocationReference{}, domain.GateClearanceReference{}, err
+	}
+	locationRef, err := domain.NewMovementLocationReference(location)
+	if err != nil {
+		return domain.ScheduleReference{}, domain.MovementLocationReference{}, domain.GateClearanceReference{}, err
+	}
+	clearanceRef, err := domain.NewGateClearanceReference(clearance)
+	return scheduleRef, locationRef, clearanceRef, err
 }
