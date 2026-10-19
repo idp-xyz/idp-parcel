@@ -120,4 +120,4 @@ none（票 05 格 18 去处 sa-cc/11 已 resolved，票 05 重走一节已记「
   - ADR-0200 越权风险点 3、4 说的「另立票」立成 [14](./14-buy-request-stuck-after-an-unadoptable-evaluation.md)、[15](./15-occurrence-revision-does-not-drive-a-cost-correction.md)。
   - [09](./09-demo-price-cards-declare-no-amount-rounding.md) 的证据句同步。
 - 与 [11](./11-external-result-received-has-no-subscriber.md) 合成一批，rebase 到 main 后整批快进推送，与本记录同一次推送。
-- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `d4cf5411`：144 包 ok，0 FAIL。机制清点在同一 tip 上重生成。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `d4cf5411`：144 包 ok，0 FAIL。之后 main 进了 operator-channel/54（frontline-import 与 NO 适配器，与本批文件不相交），本批改放到它上面重叠一次：README 的 ADR 行按号合并；机制清点在推送 tip 上重生成；`internal/architecture`、`cmd/parcel-dispatch`、`cmd/parcel-ve-register`、`cmd/parcel-frontline-import`、`scripts/demo-seeds/...` 与 SA、VE、CC、NO 各包在推送 tip 上重跑，48 包 ok。没在推送 tip 上重跑全量。
