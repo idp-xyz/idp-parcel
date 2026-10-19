@@ -164,6 +164,10 @@ func NewCarrierEvidence(spec CarrierEvidenceSpec) (CarrierEvidence, error) {
 		return CarrierEvidence{}, ErrInvalidCarrierEvidence
 	}
 	material := strings.TrimSpace(spec.Material)
+	// 名称素材可缺席，不经 newRequiredValue，NUL 门在这里另守：登记册的 text 列收不下 NUL。
+	if strings.IndexByte(material, 0) >= 0 {
+		return CarrierEvidence{}, fmt.Errorf("%w: name material: %w", ErrInvalidCarrierEvidence, ErrValueContainsNUL)
+	}
 	if spec.Subject.valid() == (material != "") {
 		return CarrierEvidence{}, fmt.Errorf("%w: exactly one of a registered subject or name material", ErrInvalidCarrierEvidence)
 	}

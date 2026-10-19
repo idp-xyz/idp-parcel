@@ -210,6 +210,11 @@ func FormCarrierFirstEffectivePickup(spec CarrierFirstEffectivePickupSpec) (Carr
 
 // HoldCarrierFirstEffectivePickupPending 是待确认首登版本的构造门：原因在封闭两支内、依据至少一条。
 func HoldCarrierFirstEffectivePickupPending(spec PendingCarrierFirstEffectivePickupSpec) (CarrierFirstEffectivePickup, error) {
+	// 名称素材只在待确认上在场，不经 newRequiredValue，NUL 门在这里另守：登记册的 text 列收不下 NUL。
+	// 链尾再长一版待确认也走这道门。
+	if strings.IndexByte(spec.Material, 0) >= 0 {
+		return CarrierFirstEffectivePickup{}, fmt.Errorf("%w: name material: %w", ErrInvalidCarrierFirstEffectivePickup, ErrValueContainsNUL)
+	}
 	pickup := CarrierFirstEffectivePickup{
 		tenantID: spec.TenantID,
 		object:   spec.Object,

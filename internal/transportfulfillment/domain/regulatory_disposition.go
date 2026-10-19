@@ -2,6 +2,8 @@ package domain
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 )
 
@@ -99,6 +101,11 @@ func FormRegulatoryTransportDisposition(
 		!spec.Kind.valid() ||
 		AtRegistryPrecision(spec.DecidedAt).IsZero() {
 		return RegulatoryTransportDisposition{}, ErrInvalidRegulatoryDisposition
+	}
+	// 拒因是自由文本、可缺席，不经 newRequiredValue，NUL 门在这里另守：登记册的 text 列收不下 NUL。排在三格各守
+	// 其形之前，含 NUL 的部分承接答未受理，不答待补授权。
+	if strings.IndexByte(spec.DeclineBasis, 0) >= 0 {
+		return RegulatoryTransportDisposition{}, fmt.Errorf("%w: decline basis: %w", ErrInvalidRegulatoryDisposition, ErrValueContainsNUL)
 	}
 
 	switch spec.Kind {
