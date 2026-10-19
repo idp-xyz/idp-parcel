@@ -117,7 +117,7 @@ func TestCustomerSubmissionIntakeTakesTheEnvelopeFromAuthenticationAndHasNoPlace
 	}
 }
 
-// Covers: 票 first-party-api/00 做什么 2「先认证」——认证那一侧的格原样交回，载荷一个字节都没读；Bearer 令牌与本次 TLS
+// Covers: 票 first-party-api/00 做什么「首方铸造器」那一项的「先认证」——认证那一侧的格原样交回，载荷一个字节都没读；Bearer 令牌与本次 TLS
 // 连接出示的客户端证书交给认证方，证书取自连接、不取自任何头部。
 func TestCustomerSubmissionIntakeAuthenticatesBeforeReadingThePayload(t *testing.T) {
 	refused := &customerAuthenticatorDouble{err: fmt.Errorf("%w: token expired", shipmenthttp.ErrCustomerClientCredentialRejected)}
@@ -174,7 +174,7 @@ func TestCustomerSubmissionAccessRequestIdentifierIsEnvelopeMetadataNotContent(t
 	}
 }
 
-// Covers: 类型注释第二条 —— 摘要只吃客户声明的引用，不吃本包现签的内部标识。同一份内容
+// Covers: 类型注释「载荷摘要与要素子段」那一条 —— 摘要只吃客户声明的引用，不吃本包现签的内部标识。同一份内容
 // 重发两次必须得到同一个摘要，否则重放会被判成`接入冲突`；换一处客户声明的内容则必须变。
 //
 // 这条同时是「内部标识现签」那个取舍的安全网：现签让两次命令的标识不同，若摘要跟着标识
@@ -212,9 +212,10 @@ func TestCustomerSubmissionIntakeDigestsCustomerContentNotMintedIdentities(t *te
 	}
 }
 
-// Covers: 类型注释第四条与 `UC-PS-001` 步骤 3B —— 期望规则修订向归属权威预取，原样带进命令；拟受理范围按（租户、客户账户）
-// 立快照，问归属与带进命令的是同一份。修订若不取自权威，门禁会在提交时点判`决定已过期`，而那一格与「归属真的未确定」在
-// 结果上都是 OWNERSHIP_UNRESOLVED，分不出来。另一个客户账户的提交得到另一份快照。
+// Covers: 类型注释「期望规则修订」那一条与 `UC-PS-001` 步骤 3B —— 期望规则修订向归属权威预取，原样带进命令；拟受理
+// 范围按（租户、客户账户）立快照，问归属与带进命令的是同一份，且认得回这一组。修订若不取自权威，门禁会在提交时点判
+// `决定已过期`，而那一格与「归属真的未确定」在结果上都是 OWNERSHIP_UNRESOLVED，分不出来。另一个客户账户的提交得到另一
+// 份快照。
 func TestCustomerSubmissionIntakeTakesTheExpectedRevisionFromTheOwnershipAuthority(t *testing.T) {
 	authority := &permittingOwnershipDouble{revision: "SYN-REV-FROM-AUTHORITY"}
 	intake := newCustomerIntake(t, &customerAuthenticatorDouble{}, authority)
@@ -226,8 +227,8 @@ func TestCustomerSubmissionIntakeTakesTheExpectedRevisionFromTheOwnershipAuthori
 	if got := command.ExpectedRevision.String(); got != "SYN-REV-FROM-AUTHORITY" {
 		t.Fatalf("期望修订 = %q, want 来自归属权威的那个", got)
 	}
-	if got := command.AdmissionScope.Reference().String(); got != "customer-account:"+customerTenant+"/"+customerAccount {
-		t.Fatalf("拟受理范围 = %q", got)
+	if tenant, account, ok := command.AdmissionScope.CustomerAccount(); !ok || tenant.String() != customerTenant || account.String() != customerAccount {
+		t.Fatalf("拟受理范围 = %q，认回 (%q, %q, %v)", command.AdmissionScope.Reference(), tenant, account, ok)
 	}
 	if authority.asked != 1 {
 		t.Fatalf("问归属 %d 次, want 1", authority.asked)

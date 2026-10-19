@@ -2,8 +2,6 @@ package shipmenthttp
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -65,7 +63,8 @@ type CustomerClientAuthenticator interface {
 //   - **载荷摘要与要素子段**：把载荷译成 `SubmissionPayloadSpec` 再走领域侧的 `CanonicalizeSubmission`（ADR-0014；
 //     pp-seams/05 裁决 3——摘要与寄 / 收地址要素一次产出、一起进命令）。摘要只吃客户声明的内容，不吃本包现签的内部标识，
 //     也不吃接入请求标识——否则同一份内容重发两次会得到两个摘要，重放就被判成`接入冲突`。
-//   - **拟受理范围**：按这次提交的（租户、客户账户）立快照，见 customerAccountAdmissionScope。
+//   - **拟受理范围**：按这次提交的（租户、客户账户）立快照，形状归领域侧的 NewCustomerAccountAdmissionScope。范围到治理
+//     坐标的换算归生产归属目录（PS 生产归属那一票）；在它立起之前，生产形态下归属先于读册答`权威未确定`。
 //   - **期望规则修订**：向归属权威预取。`UC-PS-001` 步骤 3B 把「准入范围与期望规则修订」判给试点准入控制装配，本包据此
 //     照办；编排随后在提交时点重判一次，门禁仍拦得住预取与提交之间登记册发生的变化。
 //
@@ -182,7 +181,7 @@ func (intake *CustomerSubmissionIntake) IntakeSubmission(
 	if err != nil {
 		return application.SubmitShipmentRequestCommand{}, err
 	}
-	scope, err := customerAccountAdmissionScope(identity)
+	scope, err := domain.NewCustomerAccountAdmissionScope(identity.TenantID(), identity.CustomerAccountID())
 	if err != nil {
 		return application.SubmitShipmentRequestCommand{}, err
 	}
@@ -369,29 +368,6 @@ func decodeSubmissionDraft(body io.Reader, draft *submissionDraft) error {
 	return nil
 }
 
-// customerAccountScopeShape 是拟受理范围快照的形状版本，进摘要：形状一改，新旧快照的摘要就不会相等。
-const customerAccountScopeShape = "PS-CUSTOMER-ACCOUNT-ADMISSION-SCOPE/1"
-
-// customerAccountAdmissionScope 立这次首方提交的拟受理范围快照：（租户、客户账户）。
-//
-// 本用例的客户来源批次只覆盖一个明确货主客户账户（`UC-PS-001`），而首方族一个客户端绑唯一的客户账户，所以这一个账户就是
-// 这次提交能确定的完整范围。范围到治理坐标的换算归生产归属目录（PS 生产归属那一票）；在它立起之前，生产形态下归属照旧
-// 先于读册答`权威未确定`，这份快照只作决定记录与门禁里的范围摘要。
-func customerAccountAdmissionScope(identity domain.SourceIdentity) (domain.AdmissionScope, error) {
-	tenant := identity.TenantID().String()
-	account := identity.CustomerAccountID().String()
-	reference, err := domain.NewAdmissionScopeReference("customer-account:" + tenant + "/" + account)
-	if err != nil {
-		return domain.AdmissionScope{}, err
-	}
-	sum := sha256.Sum256([]byte(customerAccountScopeShape + "\n" + tenant + "\n" + account))
-	digest, err := domain.NewAdmissionScopeDigest("sha256:" + hex.EncodeToString(sum[:]))
-	if err != nil {
-		return domain.AdmissionScope{}, err
-	}
-	return domain.NewAdmissionScope(reference, digest)
-}
-
 func presentedClientCredential(request *http.Request) PresentedClientCredential {
 	var certificate []byte
 	if request.TLS != nil && len(request.TLS.PeerCertificates) > 0 {
@@ -416,7 +392,7 @@ func declaredEffectiveAt(draft submissionDraft) (time.Time, error) {
 }
 
 // customerDeclaredReferences 取客户声明的委托参考与逐件包裹参考。摘要吃的是这一组，不是
-// 本包现签的内部标识——理由在类型注释的第二条。
+// 本包现签的内部标识——理由在类型注释「载荷摘要与要素子段」那一条。
 func customerDeclaredReferences(
 	draft submissionDraft,
 ) (domain.ShipmentRequestID, []domain.DeclaredParcelID, error) {

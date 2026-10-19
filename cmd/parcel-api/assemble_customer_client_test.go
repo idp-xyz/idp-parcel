@@ -96,7 +96,8 @@ func TestCustomerChannelWithoutIssuerParametersAnswersNotConfigured(t *testing.T
 	}
 }
 
-// Covers: 票 first-party-api/00 完成判据「三件参数只设一部分启动拒」与做什么 3「受众必须与操作者族、集成客户端族都不同」。
+// Covers: 票 first-party-api/00 完成判据「三件参数只设一部分启动拒」与做什么「部署参数」那一项「受众必须与操作者族、集成客户端族
+// 都不同」。
 func TestCustomerChannelParametersRefuseToStartWhenPartialOrSharingAnAudience(t *testing.T) {
 	complete := map[string]string{
 		customerAPIIssuerEnv:   syntheticCustomerIssuer,
@@ -131,11 +132,11 @@ func TestCustomerChannelParametersRefuseToStartWhenPartialOrSharingAnAudience(t 
 	}
 	distinct := with(map[string]string{operatorAudienceEnv: syntheticOperatorAudience, integrationClientAudienceEnv: "idp-parcel-integration"})
 	if _, configured, err := buildCustomerClientCredentialVerifier(fakeGetenv(distinct)); err != nil || !configured {
-		t.Fatalf("三族受众各不相同：configured=%v err=%v", configured, err)
+		t.Fatalf("操作者族、集成客户端族、首方客户族受众各不相同：configured=%v err=%v", configured, err)
 	}
 }
 
-// Covers: 票 first-party-api/00 完成判据「首方族未配置时提交口答 ACCESS_CHANNEL_NOT_CONFIGURED」——与换口之前未配置即拒的那份
+// Covers: 票 first-party-api/00 完成判据「首方族未配置时提交口答 ACCESS_CHANNEL_NOT_CONFIGURED」——与字面量未配置即拒那一份
 // 字节相同，且一个字节的载荷都没读。
 func TestSubmissionLineAnswersNotConfiguredByteForByteWhenTheCustomerFamilyIsUnset(t *testing.T) {
 	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWith(nil, unconfiguredCustomerSubmission(t)))
@@ -261,8 +262,8 @@ func TestSubmissionLineAnswersTheCustomerChannelGrades(t *testing.T) {
 	}
 }
 
-// customerIssuerDouble 是同一个发行方：它签三族的令牌，parcel-api 的首方族按它公布的公钥集验——三族落在同一个发行方实例上
-// 是部署决定（ADR-0139 决定二），那时一枚令牌过得了哪一族只看受众。
+// customerIssuerDouble 是同一个发行方：操作者族、集成客户端族、首方客户族的令牌都由它签，parcel-api 的首方族按它公布的公钥
+// 集验——各族落不落在同一个发行方实例上是部署决定（ADR-0139 决定二），落在同一个上时一枚令牌过得了哪一族只看受众。
 type customerIssuerDouble struct {
 	key  *rsa.PrivateKey
 	jwks *httptest.Server
@@ -356,7 +357,7 @@ func TestACustomerClientSubmitsThroughTheFirstPartyLineAgainstARealDatabase(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	registerCustomerClient(t, db, registry, subject)
+	registerCustomerClient(t, db, registry, subject, "SYN-TENANT-01", syntheticCustomerAccount, "SYN-CUSTOMER-GRANT-SUBMISSION-01")
 
 	issuer := newCustomerIssuerDouble(t)
 	verifier, _, err := buildCustomerClientCredentialVerifier(fakeGetenv(issuer.environment()))
@@ -421,13 +422,106 @@ func TestACustomerClientSubmitsThroughTheFirstPartyLineAgainstARealDatabase(t *t
 	}
 }
 
-func registerCustomerClient(t *testing.T, db *bentopg.DB, registry *aipg.CustomerClientRegistry, subject accessidentity.CustomerClientSubject) {
+// Covers: ADR-0091 决定六「也不因它出现而获得任何真实租户」——写开关开着、登记册里有匹配的合成权威区间时经首方口提交：
+// 开关租户的客户端答 201 SUBMITTED；别的租户的客户端（另一个合成租户、一个不带合成前缀的租户）答 OWNERSHIP_UNRESOLVED，
+// 归属`权威未确定`、原因是规则不可用，修订里没有隔离形态的权威串——与生产形态同一个答法。提交口挂的是真渠道，哪个租户
+// 的客户端都走得到归属这一步，挡住它们的只有隔离目录认租户这一格。
+func TestTheWriteSwitchLendsItsCoordinatesOnlyToItsOwnTenant(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	appendIsolatedAuthorityInterval(t, db)
+	registry, err := aipg.NewCustomerClientRegistry(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issuer := newCustomerIssuerDouble(t)
+	verifier, _, err := buildCustomerClientCredentialVerifier(fakeGetenv(issuer.environment()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	minter, err := buildCustomerClientMinter(verifier, registry, admissionScopeUnset())
+	if err != nil {
+		t.Fatal(err)
+	}
+	isolated := isolatedWriteAdmissionForTest(t)
+	ownership, err := buildProductionOwnership(db, isolated, isolatedSelfAuthority)
+	if err != nil {
+		t.Fatal(err)
+	}
+	intake, err := buildCustomerSubmissionIntake(minter, ownership)
+	if err != nil {
+		t.Fatal(err)
+	}
+	submission, err := buildSubmissionOrchestration(db, isolated, isolatedSelfAuthority)
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint := shipmenthttp.NewSubmitShipmentRequestEndpoint(intake, submission)
+
+	for _, testCase := range []struct {
+		name, subject, tenant, account string
+		status                         int
+		outcome                        string
+	}{
+		{"switch tenant", "SYN-CUSTOMER-CLIENT-01", isolated.tenant, syntheticCustomerAccount, http.StatusCreated, "SUBMITTED"},
+		{"another synthetic tenant", "SYN-CUSTOMER-CLIENT-02", "SYN-TENANT-02", syntheticCustomerAccount, http.StatusOK, "OWNERSHIP_UNRESOLVED"},
+		{"tenant without the synthetic prefix", "CUSTOMER-CLIENT-PROD-1", "TENANT-PROD-1", "ACCOUNT-PROD-1", http.StatusOK, "OWNERSHIP_UNRESOLVED"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			subject, err := accessidentity.NewCustomerClientSubject(syntheticCustomerIssuer, testCase.subject)
+			if err != nil {
+				t.Fatal(err)
+			}
+			registerCustomerClient(t, db, registry, subject, testCase.tenant, testCase.account, "SYN-CUSTOMER-GRANT-"+testCase.subject)
+
+			request := httptest.NewRequest(http.MethodPost, "/shipment-requests", strings.NewReader(customerDraftBody("SYN-ACCESS-REQUEST-"+testCase.subject)))
+			request.Header.Set("Authorization", "Bearer "+issuer.token(t, syntheticCustomerAudience, testCase.subject))
+			response := httptest.NewRecorder()
+			endpoint.ServeHTTP(response, request)
+
+			var body struct {
+				Outcome             string `json:"outcome"`
+				ProductionOwnership struct {
+					Authority        string `json:"authority"`
+					Revision         string `json:"revision"`
+					UnresolvedReason string `json:"unresolvedReason"`
+				} `json:"productionOwnership"`
+			}
+			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode %s: %v", response.Body.Bytes(), err)
+			}
+			if response.Code != testCase.status || body.Outcome != testCase.outcome {
+				t.Fatalf("提交 = %d %s, want %d %s", response.Code, response.Body.String(), testCase.status, testCase.outcome)
+			}
+			if testCase.outcome != "OWNERSHIP_UNRESOLVED" {
+				return
+			}
+			if body.ProductionOwnership.Authority != "UNRESOLVED" || body.ProductionOwnership.UnresolvedReason != "RULE_UNAVAILABLE" {
+				t.Fatalf("归属 = %+v, want UNRESOLVED / RULE_UNAVAILABLE——与生产形态目录缺席同一个答法", body.ProductionOwnership)
+			}
+			if strings.Contains(body.ProductionOwnership.Revision, isolatedSelfAuthority) {
+				t.Fatalf("修订 %q 带着隔离形态的权威串——非开关租户拿到了合成坐标", body.ProductionOwnership.Revision)
+			}
+		})
+	}
+}
+
+func registerCustomerClient(
+	t *testing.T,
+	db *bentopg.DB,
+	registry *aipg.CustomerClientRegistry,
+	subject accessidentity.CustomerClientSubject,
+	tenant, account, grantID string,
+) {
 	t.Helper()
 	reference, err := accessidentity.NewCredentialReference("SYN-CREDENTIAL-STORE/customer-01")
 	if err != nil {
 		t.Fatal(err)
 	}
-	binding, err := accessidentity.NewCustomerClientBinding(subject, "SYN-TENANT-01", syntheticCustomerAccount, reference, false, "SYN-CUSTOMER-CLIENT-BASIS-01")
+	binding, err := accessidentity.NewCustomerClientBinding(subject, tenant, account, reference, false, "SYN-CUSTOMER-CLIENT-BASIS-01")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -435,7 +529,7 @@ func registerCustomerClient(t *testing.T, db *bentopg.DB, registry *aipg.Custome
 	if err != nil {
 		t.Fatal(err)
 	}
-	grant, err := accessidentity.NewCustomerClientGrant("SYN-TENANT-01", "SYN-CUSTOMER-GRANT-SUBMISSION-01", subject,
+	grant, err := accessidentity.NewCustomerClientGrant(tenant, grantID, subject,
 		accessidentity.CustomerCapabilityShipmentRequestSubmission, interval, "SYN-CUSTOMER-GRANT-BASIS-01")
 	if err != nil {
 		t.Fatal(err)

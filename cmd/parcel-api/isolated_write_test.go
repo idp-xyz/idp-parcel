@@ -35,9 +35,10 @@ func TestBuildIsolatedWriteAdmissionRefusesRealLookingTenant(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0091 决定二与决定五 — 合成租户合规时两格都就位：目录与自身权威串。
+// Covers: ADR-0091 决定二与决定五 — 合成租户合规时目录与自身权威串都就位。
 // 缺任一格，`ProductionOwnershipAdapter.governanceScope` 都会先于读登记册早退，
-// 表现是启用了却仍答`权威未确定`。
+// 表现是启用了却仍答`权威未确定`。目录认的租户就是开关的值（决定六），见
+// TestTheWriteSwitchLendsItsCoordinatesOnlyToItsOwnTenant。
 func TestBuildIsolatedWriteAdmissionGrantsBothGrids(t *testing.T) {
 	admission, err := buildIsolatedWriteAdmission(fakeGetenv(map[string]string{
 		isolatedWriteTenantEnv: "SYN-TENANT-01",
@@ -50,6 +51,9 @@ func TestBuildIsolatedWriteAdmissionGrantsBothGrids(t *testing.T) {
 	}
 	if admission.governanceDirectory == nil {
 		t.Fatal("范围目录为空——归属会先于读登记册早退")
+	}
+	if admission.tenant != "SYN-TENANT-01" {
+		t.Fatalf("开关租户 = %q, want 开关的值", admission.tenant)
 	}
 	if admission.selfAuthority == "" {
 		t.Fatal("自身权威串为空——无从判断命中的区间是不是自己的")
@@ -103,7 +107,7 @@ func TestBuildIsolatedWriteAdmissionRefusesTenantMismatch(t *testing.T) {
 }
 
 // Covers: ADR-0150 决定三与票 first-party-api/00「隔离提交放行已撤」——写开关开着、首方客户族没配时，`/shipment-requests`
-// 答的是首方族的未配置，与生产形态逐字节相同：写开关不再进业务端点的装配，它换不了任何命令面。读开关同样换不了这一行
+// 答的是首方族的未配置，与生产形态逐字节相同：写开关不进业务端点的装配，它换不了任何命令面。读开关同样换不了这一行
 // （ADR-0091 决定四）。
 func TestNeitherIsolatedSwitchOpensTheSubmissionLine(t *testing.T) {
 	if admission, err := buildIsolatedWriteAdmission(fakeGetenv(map[string]string{

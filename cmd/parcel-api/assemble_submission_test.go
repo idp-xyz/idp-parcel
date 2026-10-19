@@ -277,7 +277,7 @@ func TestIsolatedSubmissionCrossesOwnershipOnceTheRegisterHasAMatchingInterval(t
 		t.Fatalf("装配隔离形态提交编排：%v", err)
 	}
 
-	probe, err := submission.Handle(t.Context(), submissionCommand(t))
+	probe, err := submission.Handle(t.Context(), switchTenantCommand(t, "SYN-KEY-1"))
 	if err != nil {
 		t.Fatalf("首次提交：%v", err)
 	}
@@ -286,8 +286,7 @@ func TestIsolatedSubmissionCrossesOwnershipOnceTheRegisterHasAMatchingInterval(t
 		t.Fatal("被拦的提交没带归属决定——调用方无从知道该带哪个修订回来")
 	}
 
-	command := submissionCommand(t)
-	command.Identity = secondIdentity(t)
+	command := switchTenantCommand(t, "SYN-KEY-3")
 	command.ShipmentRequestID = mustValue(t, domain.NewShipmentRequestID, "syn-request-2")
 	command.ExpectedRevision = decision.Revision()
 
@@ -316,7 +315,7 @@ func TestIsolatedSubmissionStillAnswersUnresolvedOnAnEmptyRegister(t *testing.T)
 		t.Fatalf("装配隔离形态提交编排：%v", err)
 	}
 
-	result, err := submission.Handle(t.Context(), submissionCommand(t))
+	result, err := submission.Handle(t.Context(), switchTenantCommand(t, "SYN-KEY-1"))
 	if err != nil {
 		t.Fatalf("空册上提交：%v", err)
 	}
@@ -349,6 +348,31 @@ func isolatedWriteAdmissionForTest(t *testing.T) *isolatedWriteAdmission {
 	return admission
 }
 
+// switchTenantCommand 是写开关那个租户的一份提交：隔离目录只答这个租户的拟受理范围，范围按首方 Intake 立快照的同一形状
+// 立。来源请求键由调用方给，同一客户换一份来源身份是为了绕开重放判重，不是为了换客户。
+func switchTenantCommand(t *testing.T, requestKey string) shipmentapp.SubmitShipmentRequestCommand {
+	t.Helper()
+	tenant := mustValue(t, domain.NewTenantID, "SYN-TENANT-01")
+	account := mustValue(t, domain.NewCustomerAccountID, "SYN-CUSTOMER-1")
+	identity, err := domain.NewSourceIdentity(
+		tenant,
+		account,
+		mustValue(t, domain.NewSource, "SYN-SOURCE-A"),
+		mustValue(t, domain.NewSourceRequestKey, requestKey),
+	)
+	if err != nil {
+		t.Fatalf("new switch tenant source identity: %v", err)
+	}
+	scope, err := domain.NewCustomerAccountAdmissionScope(tenant, account)
+	if err != nil {
+		t.Fatalf("new switch tenant admission scope: %v", err)
+	}
+	command := submissionCommand(t)
+	command.Identity = identity
+	command.AdmissionScope = scope
+	return command
+}
+
 // appendIsolatedAuthorityInterval 往治理登记册里放一条匹配的合成权威区间。四维取装配点
 // 那组常量而不是字面量重抄一遍：常量与登记行对不上的后果不是报错，是查不到那一行。
 func appendIsolatedAuthorityInterval(t *testing.T, db *bentopg.DB) {
@@ -370,21 +394,6 @@ func appendIsolatedAuthorityInterval(t *testing.T, db *bentopg.DB) {
 	if err != nil {
 		t.Fatalf("登记合成权威区间：%v", err)
 	}
-}
-
-// secondIdentity 是同一客户的第二份来源身份：换身份是为了绕开重放判重，不是为了换客户。
-func secondIdentity(t *testing.T) domain.SourceIdentity {
-	t.Helper()
-	identity, err := domain.NewSourceIdentity(
-		mustValue(t, domain.NewTenantID, "SYN-TENANT-1"),
-		mustValue(t, domain.NewCustomerAccountID, "SYN-CUSTOMER-1"),
-		mustValue(t, domain.NewSource, "SYN-SOURCE-A"),
-		mustValue(t, domain.NewSourceRequestKey, "SYN-KEY-3"),
-	)
-	if err != nil {
-		t.Fatalf("new second source identity: %v", err)
-	}
-	return identity
 }
 
 // Covers: wbr/11 完成判据 2——生产装配下 `其他权威` 决定的 HTTP 答复带续办引用。真实治理桥在目录

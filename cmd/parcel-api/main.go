@@ -66,10 +66,10 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 	if isolatedWrite != nil {
-		// 放行什么也要出声（ADR-0078 决定三、ADR-0091 决定四）：写开关只剩委托受理的归属坐标，不放行任何命令面——提交口走
-		// 首方客户渠道，要带首方客户端的令牌（ADR-0150 决定三）。
-		logger.Info("Isolated write admission enabled (ADR-0091): production ownership resolves against the governance register with injected synthetic coordinates; no command line is admitted, submissions go through the first-party customer channel",
-			"tenant", os.Getenv(isolatedWriteTenantEnv),
+		// 放行什么也要出声（ADR-0078 决定三、ADR-0091 决定四）：写开关只剩委托受理的归属坐标，且只给开关租户的拟受理范围，
+		// 不放行任何命令面——提交口走首方客户渠道，要带首方客户端的令牌（ADR-0150 决定三）。
+		logger.Info("Isolated write admission enabled (ADR-0091): production ownership resolves against the governance register with injected synthetic coordinates for the switch tenant's admission scopes only; no command line is admitted, submissions go through the first-party customer channel",
+			"tenant", isolatedWrite.tenant,
 			"selfAuthority", isolatedWrite.selfAuthority)
 	}
 
@@ -115,7 +115,8 @@ func run(logger *slog.Logger) error {
 		logger.Info("Integration client channel not configured (ADR-0149): issuer parameters unset, integration client family answers ACCESS_CHANNEL_NOT_CONFIGURED")
 	}
 
-	// 首方客户族的信任锚（ADR-0139 决定二）与另两族同处开池之前：参数只设一部分、或受众撞了另一族，都要带原因退出。
+	// 首方客户族的信任锚（ADR-0139 决定二）与操作者族、集成客户端族同处开池之前：参数只设一部分、或受众撞了另一族，都要
+	// 带原因退出。
 	customerClientVerifier, customerClientChannelConfigured, err := buildCustomerClientCredentialVerifier(os.Getenv)
 	if err != nil {
 		return err
