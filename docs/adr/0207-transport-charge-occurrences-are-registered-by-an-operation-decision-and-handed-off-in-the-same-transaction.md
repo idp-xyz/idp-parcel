@@ -103,7 +103,7 @@ Date: 2026-10-19
 越权风险点（续上文编号）：
 
 8. **订舱费只认整次订舱的接受**（TF owner）。部分接受的订舱按订舱计照样是一项；按件计时成员由登记方指名，不核接受量与成员件数是否相符。逐对象接受不做（ADR-0202 D02-9 已记的缺口）。
-9. **取消只认订舱一级**（TF、PC owner）。整份委托的取消、尚未订舱时的取消费没有登法；ADR-0209 越权风险点 2 那一格由此定为不登。租户协议若对委托取消收费，要另定依据与数量形。
+9. **取消只认订舱一级**（TF、PC owner）。整份委托的取消、尚未订舱时的取消费没有登法；ADR-0209 越权风险点 2 那一格由此定为不登。租户协议若对委托取消收费，要另定依据与数量形。去处是票 [demo-chain-gaps/76](../../.scratch/demo-chain-gaps/issues/76-cancellation-charge-only-registers-at-booking-level.md)，风险点 8 一并。
 10. **「尚未开始」按委托的开始判**（TF owner）。同 ADR-0204 越权风险点 3：没有逐订舱的消费关系。委托的开始被前移之后，此前已形成的取消发生项不重判，可能与此刻的判法相左；今天没有发生项修订的生产入口（Consequences「已知限制」）。
 11. **段采用后不问承运商判断**（TF owner）。转包回自营法人实际承运的段仍按委托计外部成本；若实情是委托落空、改由自营承运，要先更正采用（票 [demo-chain-gaps/57](../../.scratch/demo-chain-gaps/issues/57-segment-commission-adoption-has-no-correction-and-start-does-not-rederive.md)），今天改不了。
 12. **实际履约从委托取上下文时不核成员**（TF owner）。不核段上的成员是不是委托的成员（同 ADR-0204 越权风险点 4，票 [demo-chain-gaps/58](../../.scratch/demo-chain-gaps/issues/58-adoption-does-not-check-commission-members-against-segment-objects.md)）；订舱与取消则核成员在委托里。
