@@ -147,7 +147,7 @@ func commissionBody(commission, provider, agreement, version, submittedAt string
 //     「对象/版本」、采购责任法人是种子里协议正文的法人；同一份原样重交答 200 EXISTING_COMMISSION（首笔事务真的提交了）。
 //   - 委托与 Outbox 同一笔：委托行与「委托已提交」信封同一个事务号（xmin 相同），信封载荷只带引用。
 //   - 演示：服务方填末端承运商答 200 PROVIDER_MISMATCH，带协议约定的供应商；没发布的版本答 AGREEMENT_NOT_REGISTERED；
-//     生效前的提交时刻答 AGREEMENT_NOT_EFFECTIVE。四格都零写入。
+//     生效前的提交时刻答 AGREEMENT_NOT_EFFECTIVE。这几格都零写入。
 func TestTheWiredTransportCommissionSubmissionChecksTheSeededAgreements(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))

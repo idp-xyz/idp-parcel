@@ -46,7 +46,7 @@ func (submitter transactionalTransportCommissionSubmitter) SubmitCommission(
 
 // buildTransportCommissionSubmission 装配 `/transport-fulfillment-transport-commission-submissions` 背后的真编排（票
 // demo-chain-gaps/23，ADR-0202）。缝全接真：委托册、供应商协议核对（PC 的版本点读口经 TF 消费侧适配器，ADR-0025）、
-// Outbox 意图交付与时钟。订舱与承运应答两本册子留给票 24 接：本口只提交委托，编排的那两条缝在这里不装。
+// Outbox 意图交付与时钟。订舱与承运应答的册子留给票 24 接：本口只提交委托，编排的那几条缝在这里不装。
 //
 // 「委托已提交」信封照 ADR-0066 不登派发路由，派发对它如实答 `dispatch.no_subscriber` 直到失败预算耗尽——那是记录里认下
 // 的代价，不是装配缺口（ADR-0202 决定六）。

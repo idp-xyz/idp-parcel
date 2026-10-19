@@ -72,7 +72,7 @@ func NewSubmitTransportCommissionEndpoint(intake TransportCommissionSubmissionIn
 	}, writeTransportCommissionSubmissionOutcome)
 }
 
-// transportCommissionSubmissionResponse 是委托提交口的封闭响应形状。协议核对的四个否定格各自成格，续办两两不同（去
+// transportCommissionSubmissionResponse 是委托提交口的封闭响应形状。协议核对不过的各格各自成格，续办两两不同（去
 // party-commercial 发布或补正文 / 换一版此刻生效的 / 取得新协议 / 改服务方），传输层不合并。`agreementSupplier` 只随
 // `PROVIDER_MISMATCH` 出现，是那一版协议约定的供应商。`handoffReference` 非空说明委托已提交而意图还没交出去，原样重交
 // 会重发同一份。
@@ -134,7 +134,7 @@ func writeTransportCommissionSubmissionOutcome(response http.ResponseWriter, res
 			RecordedAt:     rfc3339(record.RecordedAt),
 		}
 	}
-	// ADR-0022：只有新提交了一份委托用 201；已有委托、冲突、协议核对的四个否定格、未受理、未决都是形成了的答案（200）。
+	// ADR-0022：只有新提交了一份委托用 201；已有委托、冲突、协议核对不过的各格、未受理、未决都是形成了的答案（200）。
 	status := http.StatusOK
 	if result.Outcome() == application.CommissionSubmitted {
 		status = http.StatusCreated

@@ -24,7 +24,7 @@ var (
 )
 
 // CommissionOutcome 是委托/订舱编排的应用处理结果。`运输已开始`是业务负向格——已
-// 开始的委托取消不了，只能按事实形成中断等实际结果（领域硬句编排分格）。协议核对的四个否定格同是业务答案：
+// 开始的委托取消不了，只能按事实形成中断等实际结果（领域硬句编排分格）。协议核对不过的各格同是业务答案：
 // 续办各不相同（去 party-commercial 发布或补正文、换一版此刻生效的、取得新协议、改服务方），折成一格登记方就只能
 // 去猜（ADR-0029），所以逐格分开，不并进`未受理`。
 type CommissionOutcome uint8
@@ -229,7 +229,7 @@ func NewCommissionTransportHandler(deps CommissionTransportDeps) *CommissionTran
 // 登记方指名的那一版供应商协议 → 以核出的快照与采购责任法人提交 → 意图与委托同笔入队。
 //
 // 重放判在核协议之前：同一份委托原样再交答原委托，哪怕那一版协议此后已到期或终止；也不为一次重放去问
-// party-commercial。协议核对的四个否定格不落任何行，登记方按格续办后原样重交即可。
+// party-commercial。协议核对不过的各格不落任何行，登记方按格续办后原样重交即可。
 func (handler *CommissionTransportHandler) SubmitCommission(
 	ctx context.Context,
 	command SubmitCommissionCommand,
