@@ -74,7 +74,7 @@ func (handler *TransferControlOnHandoverHandler) Advance(
 	return AdvanceControlOnHandoverResult{out: out, in: in}, nil
 }
 
-// establishIn 是转入一半（ADR-0214 决定七）。次序与转出一半同一套，只差三处：
+// establishIn 是转入一半（ADR-0214 决定七）。次序照转出一半，转入一侧自己的讲究是：
 //
 //   - 没声明接收节点最先答：没有节点可以转入，零写入。更正承继前版的节点声明，所以这条更正链在转入方向上从没推进过，后面几步都
 //     不必再问。
