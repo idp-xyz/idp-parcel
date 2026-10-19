@@ -1,7 +1,7 @@
 # 02 收寄现场观察的号码：在线收寄口原样交核对，受控批量口逐格去两端空白——扫描后缀与两口口径归 NO 定
 
 Category: task
-Status: in-progress——2026-10-19 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-nri02`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 0 研判）
+Status: resolved——2026-10-19 进 main（与 operator-channel/46、no-reception-identity/02 同批，代码验证钉 `cd368b16`），见「进 main 记录」。此前 in-progress——2026-10-19 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-nri02`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 0 研判）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判簇 C2 第四张草案
@@ -73,3 +73,8 @@ Blocked by: 无
 ## Comments
 
 - **评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审）· 钉 `b7212074`（基线 `c4c89a8c`）· 2026-10-19**：出自本会话起的子代理，会话读 diff 审，不算非作者评审。UC-NO-002「输入语义契约」表后一段只引 ADR-0023 与 PS CONTEXT，不复述；`receptionDocument` 头注只改注释；在线口原样保留用例 `TestWorkFactReceptionIntakeKeepsTheObservedMarkVerbatim` 钉现状。子代理漏了完成判据点名的批量口用例，会话补 `TestDecodeTemplateTrimsTheObservedMarkCell`（钉现状，首跑即绿）。阻断无，非阻断无。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 同批两张（operator-channel/46、no-reception-identity/02）依次重放到远端 main `3940ac6b` 之上；原分支 SHA 作封存出处。
+- 推送方全量一次：钉 `cd368b16` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 143 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。

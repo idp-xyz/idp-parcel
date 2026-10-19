@@ -1,7 +1,7 @@
 # 46 节点作业的承接与集运编排，自己的册读写失败时答 2xx`未决`、什么也没落：与收寄同形，一旦开了设备渠道，设备出队即丢
 
 Category: bug
-Status: in-progress——2026-10-19 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-oc46`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 2 研判中发现）
+Status: resolved——2026-10-19 进 main（与 operator-channel/46、no-reception-identity/02 同批，代码验证钉 `cd368b16`），见「进 main 记录」。此前 in-progress——2026-10-19 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-oc46`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 2 研判中发现）
 Blocked by: 无
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判簇 C1 派生草案（承接与集运本方册读写失败）
@@ -99,3 +99,8 @@ Blocked by: 无
   - **Spec**：阻断无。承接与集运编排的本方册读写失败、摘要形状认不出、并发读回失败都交回 error，`UNDECIDED` 一格与续办引用删去；两只构造器缺依赖在构造期拒；前线导入整行回滚记未决。方向依据读不动那一半未动。认可票面未列的一格一并改：领域拒后复查登记读不动答 error 而非未受理。
   - **Standards**：阻断无。越出地盘的两处测试改动只随签名与断言改，认可。会话在 `70ffacc8` 给 ADR-0186 复核记录追加第 4 条，写明决定三扩到承接与集运（决定原文不动）。
   - **未做的格**：两只编排今天没有端点，HTTP 5xx 无从实测。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 同批两张（operator-channel/46、no-reception-identity/02）依次重放到远端 main `3940ac6b` 之上；原分支 SHA 作封存出处。
+- 推送方全量一次：钉 `cd368b16` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 143 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
