@@ -1,7 +1,7 @@
 # 02 装载分配登记口能在同一分配下另起并列首版：版本链成了森林，抢占变化入口要用的版本号，撤回之后还能起活跃新根
 
 Category: bug
-Status: in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 代决并认领（分支 `claude-tfa02`）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 代决并认领（分支 `claude-tfa02`）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment-load-assignment-registrations
@@ -116,3 +116,10 @@ Blocked by: 无
 - **未做**：票 15 补记下的回写行（越出本票地盘，留给会话）；非作者评审；推送方全量。
 - **证据层级**：`S`（隔离合成，`SYN-` 夹具）。
 - 评审：待会话读 diff 审。
+
+## Comments
+
+- **评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审）· 钉 `15174149`（基线 `59403e6f`）· 2026-10-18**：用户选「精简续做」，评审由会话本身读 diff 做；代码出自本会话起的实施子代理，不算非作者评审，如实记下。
+  - **Spec**：阻断无。编排先按键查（原样重放仍答 `LOAD_ASSIGNMENT_VERSION_EXISTS`），键不在再读链头 `FindChainHead`，分配已有版本即答 `LOAD_ASSIGNMENT_ALREADY_FORMED` 并回显链头、不落库；读链头失败答未决。迁移 0021 先查存量并列首版、有就列出并拒绝迁移、不代删，再建部分唯一索引；撞索引时按分配读链头。真渠道现象一、三复现后转绿，并发两条用例稳定。
+  - **Standards**：阻断无，非阻断无。
+  - **票外发现（建议另立）**：(1) 领域 `LoadAssignment.Withdraw` 撤回变化版时照抄前版 `revisedAt`，存库会撞 0009 的 `revision_xor_withdrawal`，撤回入口接上之前要修。(2) 链头是撤回版时答复里没有撤回标记，调用方看不出分配已撤回。
