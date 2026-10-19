@@ -354,8 +354,7 @@ func (handler *JudgeCarrierFirstEffectivePickupHandler) formOrHold(
 }
 
 // replayOrConflictOnTheSameBasis 按 TFC-1 形状比同一依据上的两份判断（票 operator-channel/20）。册上不存摘要，两侧都从
-// 本体现算，同 customs-compliance 凭证登记口的 CCC-1 先例，没有无版本的旧摘要要认。链尾一侧的读法由结果反推（已形成 ↔
-// 表达，失效 ↔ 不表达），主体与业务时间取版本上的。
+// 本体现算，没有无版本的旧摘要要认。链尾一侧的读法由结果反推（已形成 ↔ 表达，失效 ↔ 不表达），主体与业务时间取版本上的。
 //
 // 命令一侧的主体与首判 resolveSubject 同一口径，只在读法表达控制时才立（票 operator-channel/27）：读法不表达时 TFC-1 本就
 // 只有读法，命令里给了主体也不构成内容——若照样去立，失效命令带引用不带种类时首判过得去（更正那条路只看读法）、重放

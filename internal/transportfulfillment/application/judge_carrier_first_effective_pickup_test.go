@@ -336,7 +336,8 @@ func TestAReplayAnswersAlreadyRecordedAndAMissingSegmentReferenceStillRegistersA
 // 业务时间不同答`内容冲突`，带回链尾、不动链、不发意图。同一依据走不到更正那条路（更正要带新的来源版本），
 // 所以这一格不能交给更正去表达。
 func TestASameBasisWithDifferentContentAnswersContentConflict(t *testing.T) {
-	assertConflictLeavesTheChain := func(t *testing.T, fixture *carrierPickupFixture, result application.JudgeCarrierFirstEffectivePickupResult, tail ports.CarrierFirstEffectivePickupRecord) {
+	// 行数与意图数写死成冲突之前的绝对数：两者只比彼此的话，冲突路误落一版又误发一份意图时同时加一，照样相等。
+	assertConflictLeavesTheChain := func(t *testing.T, fixture *carrierPickupFixture, result application.JudgeCarrierFirstEffectivePickupResult, tail ports.CarrierFirstEffectivePickupRecord, rows, intents int) {
 		t.Helper()
 		if result.Outcome() != application.CarrierPickupContentConflict {
 			t.Fatalf("outcome = %s，期望 CONTENT_CONFLICT", result.Outcome())
@@ -345,8 +346,12 @@ func TestASameBasisWithDifferentContentAnswersContentConflict(t *testing.T) {
 		if !present || record.Key != tail.Key {
 			t.Fatalf("内容冲突应带回链尾那一版：%v %+v", present, record.Key)
 		}
-		if len(fixture.pickups.rows) != len(fixture.handoff.intents) || result.HandoffReference() != "" {
-			t.Fatalf("内容冲突不落版本、不发意图：行数 %d，意图 %d", len(fixture.pickups.rows), len(fixture.handoff.intents))
+		if len(fixture.pickups.rows) != rows || len(fixture.handoff.intents) != intents || result.HandoffReference() != "" {
+			t.Fatalf("内容冲突不落版本、不发意图：行数 %d（期望 %d），意图 %d（期望 %d）", len(fixture.pickups.rows), rows, len(fixture.handoff.intents), intents)
+		}
+		current, found, err := fixture.pickups.FindCurrentByObject(t.Context(), mustTenant(t, "tenant-1"), mustRefValue(t, domain.NewCarriedObjectReference, "PCL-1"))
+		if err != nil || !found || current.Key != tail.Key {
+			t.Fatalf("内容冲突后链尾应仍是原链尾：%v %v %+v", err, found, current.Key)
 		}
 	}
 	formOnTrackingFact := func(t *testing.T) (*carrierPickupFixture, ports.CarrierFirstEffectivePickupRecord) {
@@ -373,14 +378,14 @@ func TestASameBasisWithDifferentContentAnswersContentConflict(t *testing.T) {
 		fixture, tail := formOnTrackingFact(t)
 		command := trackingPickupCommand(t)
 		command.ExpressesControl = false
-		assertConflictLeavesTheChain(t, fixture, fixture.judge(t, command), tail)
+		assertConflictLeavesTheChain(t, fixture, fixture.judge(t, command), tail, 1, 1)
 	})
 
 	t.Run("a different carrier", func(t *testing.T) {
 		fixture, tail := formOnTrackingFact(t)
 		command := trackingPickupCommand(t)
 		command.SubjectReference = "party/carrier-y"
-		assertConflictLeavesTheChain(t, fixture, fixture.judge(t, command), tail)
+		assertConflictLeavesTheChain(t, fixture, fixture.judge(t, command), tail, 1, 1)
 	})
 
 	t.Run("a different business time given with the evidence", func(t *testing.T) {
@@ -399,7 +404,7 @@ func TestASameBasisWithDifferentContentAnswersContentConflict(t *testing.T) {
 		}
 		later := scan
 		later.OccurredAt = carrierPickupEffectiveAt.Add(time.Minute)
-		assertConflictLeavesTheChain(t, fixture, fixture.judge(t, later), tail)
+		assertConflictLeavesTheChain(t, fixture, fixture.judge(t, later), tail, 1, 1)
 	})
 
 	t.Run("on a voided tail", func(t *testing.T) {
@@ -420,7 +425,7 @@ func TestASameBasisWithDifferentContentAnswersContentConflict(t *testing.T) {
 		}
 		reread := voiding
 		reread.ExpressesControl = true
-		assertConflictLeavesTheChain(t, fixture, fixture.judge(t, reread), tail)
+		assertConflictLeavesTheChain(t, fixture, fixture.judge(t, reread), tail, 2, 2)
 	})
 }
 

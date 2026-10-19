@@ -65,6 +65,10 @@ func marshalPayload(document any) ([]byte, string, error) {
 	return encoded, canonicalPayloadDigest(encoded), nil
 }
 
+// canonicalInstant 按纳秒成串，不折到登记册精度：经 CompareStoredDigest 比对的口，摘要是落库前由命令原值算出的，
+// 原样重放必然同串；已存摘要不在原处改写（ADR-0014），所以它不能原地折到微秒，要折就得换形状版本。由此留下一处
+// 有意的不对称：存摘要的口按纳秒比，两侧现算的口按微秒比（AtRegistryPrecision）。原样重放在两类口上都认作重放，
+// 只有亚微秒不同的两份命令答法不同——存摘要的口答冲突，现算的口答重放。
 func canonicalInstant(at time.Time) string {
 	return at.UTC().Format(time.RFC3339Nano)
 }
@@ -362,12 +366,11 @@ func CanonicalizeRegulatoryDispositionPayload(basis string, movementAction strin
 
 // CanonicalizeCarrierFirstEffectivePickupPayload 定形「判断实际承运商首次有效收寄」（票 operator-channel/20 的裁定）。
 // 读法表达取得控制时，承运主体两键与业务时间连同读法构成内容；不表达时只有读法——失效版本上没有主体与时间，
-// 命令里给了也不构成内容。租户、对象与依据是身份，进段三格同 CanonicalizeHandoverPayload 不进摘要；名称素材也不进：
-// 它只在待确认版本上，而重放比对只发生在非待确认链尾上，已形成版本上没有它可算。
+// 命令里给了也不构成内容。租户、对象与依据是身份；命令上的进段引用（JudgeCarrierFirstEffectivePickupCommand 的 Segment、
+// PlannedSegment、SegmentServiceAction）同 CanonicalizeHandoverPayload 不进摘要；名称素材也不进：它只在待确认版本上，
+// 而重放比对只发生在非待确认链尾上，已形成版本上没有它可算。
 //
-// 业务时间按微秒取，与别的口照 canonicalInstant 取纳秒不同：这一口不存摘要、两侧都从本体现算，而在册那一份只到微秒
-// （对真库实测），按纳秒比会把同一条带纳秒时刻的命令的重放判成冲突。别的口存的是落库前算好的摘要，不受此影响，
-// 也因此 canonicalInstant 本身不能改——改了就与已存摘要对不上。
+// 这一口不存摘要、两侧都从本体现算，业务时间先经 AtRegistryPrecision 折到登记册精度，再照 canonicalInstant 成串。
 func CanonicalizeCarrierFirstEffectivePickupPayload(expressesControl bool, subject CarrierSubject, occurredAt time.Time) ([]byte, string, error) {
 	if !expressesControl {
 		return marshalPayload(struct {
@@ -392,7 +395,7 @@ func CanonicalizeCarrierFirstEffectivePickupPayload(expressesControl bool, subje
 		ExpressesControl: true,
 		SubjectKind:      subject.Kind().String(),
 		SubjectReference: subject.Reference(),
-		OccurredAt:       canonicalInstant(occurredAt.Truncate(time.Microsecond)),
+		OccurredAt:       canonicalInstant(AtRegistryPrecision(occurredAt)),
 	})
 }
 
