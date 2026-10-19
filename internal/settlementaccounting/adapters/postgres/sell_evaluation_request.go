@@ -14,8 +14,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
-// SellEvaluationRequests 实现 ports.SellEvaluationRequestRegistry（登记面）与 ports.SellEvaluationRequestView（只读
-// 半边），同一张表、同一份行模型——分开实现就是第二处定义。
+// SellEvaluationRequests 实现 ports.SellEvaluationRequestRegistry（登记面）、ports.SellEvaluationRequestView（只读半边）
+// 与 ports.SellEvaluationRequestConclusionRecorder（形成那一半的改记口），同一张表、同一份行模型——分开实现就是第二处
+// 定义。
 //
 // 幂等由库上的唯一约束守：主键（租户+铸造 ID）拦同一份重放，自然键（租户+包裹+计费时点）拦另一个 ID 带同一件包裹
 // 同一时点再来（ADR-0190 决定一、二）。撞上哪一条都答`已存在`、不覆盖先到者（写入代数同 ADR-0031）。
@@ -31,8 +32,9 @@ func NewSellEvaluationRequests(db *bentopg.DB) (*SellEvaluationRequests, error) 
 }
 
 var (
-	_ ports.SellEvaluationRequestRegistry = (*SellEvaluationRequests)(nil)
-	_ ports.SellEvaluationRequestView     = (*SellEvaluationRequests)(nil)
+	_ ports.SellEvaluationRequestRegistry           = (*SellEvaluationRequests)(nil)
+	_ ports.SellEvaluationRequestView               = (*SellEvaluationRequests)(nil)
+	_ ports.SellEvaluationRequestConclusionRecorder = (*SellEvaluationRequests)(nil)
 )
 
 // Save 登记一份 SELL 评价请求，状态格落`已提交`。撞主键或撞自然键唯一约束都交回`已存在`而不是错误：那是业务答案，
@@ -91,6 +93,64 @@ func (registry *SellEvaluationRequests) Save(
 		return ports.EvaluationRequestAlreadyRequested, nil
 	}
 	return ports.EvaluationRequestSaved, nil
+}
+
+// RecordConclusion 把一份`已提交`的请求改记为结论（ADR-0190 决定五）。UPDATE 只认`已提交`那一行：改得到就是写下了；
+// 改不到就读回比内容，同一份结论答重放，另一份答另有结论，都不覆盖。并发的两拍里后到者在行锁上等先到者提交，
+// 再按提交后的行判，所以不需要先读后写。
+//
+// 状态格与费用标识的配对由 domain.SellEvaluationRequestConclusion 的构造守，库上的 CHECK 守同一条；`已形成`的费用
+// 标识另有外键指向客户费用，费用行没在同一事务里先落，这一笔就报错、整笔回滚。
+func (registry *SellEvaluationRequests) RecordConclusion(
+	ctx context.Context,
+	key ports.SellEvaluationRequestKey,
+	conclusion domain.SellEvaluationRequestConclusion,
+) (ports.SellEvaluationRequestConclusionEffect, error) {
+	none := ports.SellEvaluationRequestConclusionEffectInvalid
+	if strings.TrimSpace(key.TenantID.String()) == "" || strings.TrimSpace(key.Request.String()) == "" {
+		return none, fmt.Errorf("record sell evaluation request conclusion: the tenant or the request ID in the key is blank")
+	}
+	if conclusion.State() == domain.SellEvaluationRequestStateInvalid {
+		return none, fmt.Errorf("record sell evaluation request conclusion: the conclusion is the zero value")
+	}
+
+	executor, err := registry.db.RequireExecutor(ctx)
+	if err != nil {
+		return none, fmt.Errorf("record sell evaluation request conclusion: %w", err)
+	}
+	var charge *string
+	if formed, ok := conclusion.FormedCharge(); ok {
+		value := formed.String()
+		charge = &value
+	}
+	tag, err := executor.Exec(ctx,
+		`UPDATE settlement_accounting.sell_evaluation_request
+		    SET state = $3, customer_charge_id = $4
+		  WHERE tenant_id = $1 AND request_id = $2 AND state = $5`,
+		key.TenantID.String(),
+		key.Request.String(),
+		conclusion.State().String(),
+		charge,
+		domain.SellRequestSubmitted.String(),
+	)
+	if err != nil {
+		return none, fmt.Errorf("record sell evaluation request conclusion: %w", err)
+	}
+	if tag.RowsAffected() == 1 {
+		return ports.SellEvaluationRequestConcluded, nil
+	}
+
+	stored, found, err := registry.FindByID(ctx, key)
+	if err != nil {
+		return none, fmt.Errorf("record sell evaluation request conclusion: %w", err)
+	}
+	if !found {
+		return none, fmt.Errorf("record sell evaluation request conclusion: request %s is not in the register", key.Request)
+	}
+	if conclusion.Same(stored.State, stored.FormedCharge) {
+		return ports.SellEvaluationRequestConclusionReplayed, nil
+	}
+	return ports.SellEvaluationRequestConcludedOtherwise, nil
 }
 
 // FindByID 按（租户+铸造 ID）取回。否定结果不区分「不存在」与「属于另一个租户」：租户条件写在 SQL 里，越权探到的

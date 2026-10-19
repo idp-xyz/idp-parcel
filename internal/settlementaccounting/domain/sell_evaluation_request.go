@@ -155,3 +155,56 @@ func SellEvaluationRequestStateFromName(name string) (SellEvaluationRequestState
 	}
 	return SellEvaluationRequestStateInvalid, fmt.Errorf("%w: sell evaluation request state %q", ErrInvalidSellEvaluationRequest, name)
 }
+
+// estimatedCustomerChargePrefix 是由 SELL 请求派生的预估客户费用标识的类别段。它不是铸造前缀，但照样以 Prefix
+// 结尾，让全仓标识前缀门禁替它守唯一：费用标识与各上下文铸造的标识在日志与工单里混看，撞名的代价一样。
+const estimatedCustomerChargePrefix = "SELLCC"
+
+// EstimatedCustomerChargeID 是这份请求至多形成的那一笔预估客户费用的标识（ADR-0190 决定五「费用标识由 SELL 请求
+// 标识确定性派生，同一请求至多一笔预估客户费用」）：类别段 `SELLCC`、一道横线、请求标识原文。
+//
+// 派生而不铸造：同一封评价已记录信封重投、或两拍并发，算出的都是同一个标识，费用库主键（租户、费用标识）当场挡住
+// 第二笔，不必另立一张「请求 → 费用」对照表。拼接而不取指纹：请求标识由本上下文铸造、长度有界，拼出来仍有界，
+// 读的人从费用标识一眼看得出它出自哪份请求。
+func (request SellEvaluationRequest) EstimatedCustomerChargeID() CustomerChargeID {
+	return CustomerChargeID{requiredValue{value: estimatedCustomerChargePrefix + "-" + request.id.String()}}
+}
+
+// SellEvaluationRequestConclusion 是形成那一半给一份请求下的结论：状态格，以及只在`已形成`时才有的那笔预估客户
+// 费用标识。两格成对构造——拆开写就能写出「已形成却没有费用」或「待判断却带着费用」，库上的 CHECK 守的是同一条，
+// 这里让它在写之前就过不了构造。`已提交`不是结论：那是登记时的起点，形成那一半不会把请求改回去。
+type SellEvaluationRequestConclusion struct {
+	state  SellEvaluationRequestState
+	charge CustomerChargeID
+}
+
+// NewSellEvaluationRequestConclusion 收状态格与费用标识。`已形成`必须带费用标识，`待判断`、`不可计价`、`冲突`必须
+// 不带（传零值）；`已提交`与词表外的状态一律拒。
+func NewSellEvaluationRequestConclusion(
+	state SellEvaluationRequestState,
+	charge CustomerChargeID,
+) (SellEvaluationRequestConclusion, error) {
+	switch state {
+	case SellRequestFormed, SellRequestPendingJudgment, SellRequestUnratable, SellRequestConflict:
+	default:
+		return SellEvaluationRequestConclusion{}, fmt.Errorf("%w: %q is not a conclusion", ErrInvalidSellEvaluationRequest, state.String())
+	}
+	if state.RecordsFormedCharge() != charge.valid() {
+		return SellEvaluationRequestConclusion{}, fmt.Errorf("%w: %s with charge %q", ErrInvalidSellEvaluationRequest, state, charge.String())
+	}
+	return SellEvaluationRequestConclusion{state: state, charge: charge}, nil
+}
+
+func (conclusion SellEvaluationRequestConclusion) State() SellEvaluationRequestState {
+	return conclusion.state
+}
+
+// FormedCharge 交回`已形成`时的费用标识；其余各格第二个返回值为假。
+func (conclusion SellEvaluationRequestConclusion) FormedCharge() (CustomerChargeID, bool) {
+	return conclusion.charge, conclusion.state.RecordsFormedCharge()
+}
+
+// Same 比两份结论的状态格与费用标识。册上已是同一份结论时，再记一次是重放。
+func (conclusion SellEvaluationRequestConclusion) Same(state SellEvaluationRequestState, charge CustomerChargeID) bool {
+	return conclusion.state == state && conclusion.charge.String() == charge.String()
+}

@@ -53,6 +53,45 @@ type SellEvaluationRequestView interface {
 	) (SellEvaluationRequestRecord, bool, error)
 }
 
+// SellEvaluationRequestConclusionEffect 是在请求册上记一份结论的落点。
+type SellEvaluationRequestConclusionEffect uint8
+
+const (
+	SellEvaluationRequestConclusionEffectInvalid SellEvaluationRequestConclusionEffect = iota
+	// SellEvaluationRequestConcluded：请求原是`已提交`，这份结论写下了。
+	SellEvaluationRequestConcluded
+	// SellEvaluationRequestConclusionReplayed：册上已是同一份结论（状态与费用标识都相同），没有再写。
+	SellEvaluationRequestConclusionReplayed
+	// SellEvaluationRequestConcludedOtherwise：册上已是另一份结论，不覆盖——一份请求只下一次结论（ADR-0190 越权
+	// 风险点 3「请求卡死」）。
+	SellEvaluationRequestConcludedOtherwise
+)
+
+func (effect SellEvaluationRequestConclusionEffect) String() string {
+	switch effect {
+	case SellEvaluationRequestConcluded:
+		return "CONCLUDED"
+	case SellEvaluationRequestConclusionReplayed:
+		return "REPLAYED"
+	case SellEvaluationRequestConcludedOtherwise:
+		return "CONCLUDED_OTHERWISE"
+	default:
+		return ""
+	}
+}
+
+// SellEvaluationRequestConclusionRecorder 是请求册的改记口，归形成那一半（ADR-0190 决定五）：把一份`已提交`的请求改记为
+// 结论，`已形成`时同一行写下费用标识。只从`已提交`往外走，撞上已有结论按内容分重放与另有结论，都不覆盖。要求环境
+// 事务：`已形成`的费用标识有外键指向客户费用，费用行与这一笔改记必须同生同灭。请求不在册上是错误，不是一种落点——
+// 编排只在同一事务里读到了这份请求之后才来记。
+type SellEvaluationRequestConclusionRecorder interface {
+	RecordConclusion(
+		ctx context.Context,
+		key SellEvaluationRequestKey,
+		conclusion domain.SellEvaluationRequestConclusion,
+	) (SellEvaluationRequestConclusionEffect, error)
+}
+
 // SellEvaluationRequestIdentityFactory 为新请求签发铸造 ID。
 type SellEvaluationRequestIdentityFactory interface {
 	MintSellEvaluationRequestID(ctx context.Context) (domain.SellEvaluationRequestID, error)

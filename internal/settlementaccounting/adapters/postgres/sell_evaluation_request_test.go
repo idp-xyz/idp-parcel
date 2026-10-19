@@ -258,8 +258,8 @@ func TestSavingASellEvaluationRequestWhoseKeyDisagreesWithItsRequestIsRefused(t 
 }
 
 // Covers: 状态格（ADR-0190 决定五）——形成那一半改记之后读口原样交回；`已形成`带的预估客户费用必须真在费用册上，且只有
-// `已形成`带费用标识，两条都由库上的约束守。按包裹读就能找到当前有效的预估客户费用。这里用 SQL 直接改记，模拟票 04
-// 的写口，只证列与约束的形。
+// `已形成`带费用标识，两条都由库上的约束守。按包裹读就能找到当前有效的预估客户费用。这里用 SQL 直接改记、绕过写口，
+// 只证列与约束的形；写口 RecordConclusion 的用例在 sell_evaluation_request_conclusion_test.go。
 func TestTheRequestStateCellCarriesTheFormedChargeOnlyWhenFormed(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
