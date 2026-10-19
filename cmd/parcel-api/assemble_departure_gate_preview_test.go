@@ -32,7 +32,7 @@ func newPreviewLine(t *testing.T) *previewLine {
 	channel := workFactTransportForTest(t)
 	return &previewLine{
 		departureLine: line,
-		preview:       tfhttp.NewPreviewDepartureGateEndpoint(departureGatePreviewIntake(channel), preview),
+		preview:       tfhttp.NewPreviewDepartureGateEndpoint(channel, preview),
 		movement:      tfhttp.NewRecordMovementFactEndpoint(channel, line.movement),
 	}
 }

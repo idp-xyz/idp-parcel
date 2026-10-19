@@ -25,12 +25,3 @@ func buildDepartureGatePreview(db *bentopg.DB) (tfhttp.DepartureGatePreviewer, e
 	}
 	return preview, nil
 }
-
-// departureGatePreviewIntake 取问询口的 Intake：作业事实渠道就位时就是移动事实口那一只（同一份认证与授予，代决 C17），
-// 没就位时如实答未配置。挂在这里而不是端点表开头那组变量里，是为了让端点表这一口只多一行。
-func departureGatePreviewIntake(workFactTransport *tfhttp.WorkFactCommandIntake) tfhttp.DepartureGatePreviewIntake {
-	if workFactTransport == nil {
-		return tfhttp.UnconfiguredIntake{}
-	}
-	return workFactTransport
-}

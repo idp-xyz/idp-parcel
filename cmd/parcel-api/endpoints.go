@@ -282,9 +282,11 @@ func assembleBusinessEndpoints(
 	deliveryRegistrationIntake := tfhttp.DeliveryRegistrationIntake(tfhttp.UnconfiguredIntake{})
 	deliveryCorrectionIntake := tfhttp.DeliveryProofCorrectionIntake(tfhttp.UnconfiguredIntake{})
 	deliveryAttemptIntake := tfhttp.DeliveryAttemptIntake(tfhttp.UnconfiguredIntake{})
+	departureGatePreviewIntake := tfhttp.DepartureGatePreviewIntake(tfhttp.UnconfiguredIntake{})
 	// 作业事实各口挂操作者渠道的「作业事实登记」能力面：首登（ADR-0149 决定二）与更正（随原事实归族，ADR-0151 决定四）；
 	// 写开关换不了它们（ADR-0150 决定三）。关段、建派送任务、有效时间判断、承运商首次有效收寄判断归运营决定（ADR-0151
 	// 决定六），端点行直接挂 operatorDecisions.transport，不在这组变量里。
+	// 出发前门禁问询只读、不形成事实，随移动事实口挂这一面（ADR-0219 决定四）。
 	if workFactTransport != nil {
 		pickupRegistrationIntake = workFactTransport
 		pickupAttemptIntake = workFactTransport
@@ -296,6 +298,7 @@ func assembleBusinessEndpoints(
 		deliveryRegistrationIntake = workFactTransport
 		deliveryCorrectionIntake = workFactTransport
 		deliveryAttemptIntake = workFactTransport
+		departureGatePreviewIntake = workFactTransport
 	}
 	// 外部结果、监管凭证与外部资金事实（含更正）走集成客户端族（ADR-0149、ADR-0151 决定四）。发行方参数未设时
 	// 核验方答未配置，与换口之前的 403 同字节；写开关换不了这几行（ADR-0150 决定三）。
@@ -761,6 +764,6 @@ func assembleBusinessEndpoints(
 		{Pattern: "/node-operations/delivery-handover-conclusions", Handler: nodeopshttp.NewConcludeDeliveryHandoverEndpoint(deliveryHandoverNotes.conclusionIntake(), deliveryHandoverNotes.handler)},
 		// 设备出发前门禁问询口（ADR-0219）：只读，交回与随后同参出发同一套读数，本上下文不落任何东西。挂作业事实渠道、与移动事实口
 		// 同一份认证与授予——能报出发就能问出发前那一问，不另立能力种类；写开关换不了它（ADR-0150 决定三）。
-		{Pattern: "/transport-fulfillment/departure-gate-previews", Handler: tfhttp.NewPreviewDepartureGateEndpoint(departureGatePreviewIntake(workFactTransport), departureGatePreview)},
+		{Pattern: "/transport-fulfillment/departure-gate-previews", Handler: tfhttp.NewPreviewDepartureGateEndpoint(departureGatePreviewIntake, departureGatePreview)},
 	}
 }
