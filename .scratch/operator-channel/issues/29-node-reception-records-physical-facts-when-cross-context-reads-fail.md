@@ -1,7 +1,7 @@
 # 29 收寄遇依赖读不动时答了不落册的`收寄待确认`：改为服务结果读不动照常形成收寄并记「读不动」，身份核对读不动或本方册读写失败时不形成答案
 
 Category: bug
-Status: in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 2 评审遗留；用户授权代决）；分支 `claude-oc29`
+Status: resolved——2026-10-18 进 main（代码验证钉 `4a6ea695`），见「进 main 记录」。此前 resolved——2026-10-18 进 main（代码验证钉 `4a6ea695`），见「进 main 记录」。此前 in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 2 评审遗留；用户授权代决）；分支 `claude-oc29`
 Blocked by: 无
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)，评审欠账序 2。被取代的那句裁定在 [25](./25-node-reception-carries-parcel-shipment-service-result-markers.md)。
 出处：
@@ -191,3 +191,15 @@ Blocked by: 无
   - **Spec**：阻断无。服务结果读不动照常形成收寄、核对态记 `UNREADABLE`、标记为空；身份读不动与本方落册失败交回 error（5xx / 前线导入未决）；输入缺陷经 `ErrReceptionCommandRejected` 答 400；续办引用格删去；装配缺依赖在构造期拒。savepoint 只包服务结果读口（`SavepointedServiceResultView`），不在事务里直通；parcel-api 与前线导入（新抽 `parcelServiceResultViewOf`，集运 `buildDirectionalBasisJudge` 同改）都装上。迁移 0006 封闭 CHECK、读不动不带标记、既有形成行回填「已查」。ADR-0186 Accepted，写明授权与能力边界。
   - **Standards**：阻断无。非阻断 2：(1) 迁移不拦「INTAKE_FORMED 不带核对态」（读回映射为「不带」），生产写方恒带；要在库里拦得改 parcel-dispatch 等处地盘外的夹具，留作后续。(2) ADR-0186 Alternatives 里票 25 原方案的措辞是实施者按票 25 原文复原的，会话读过，与研判原稿方向一致。
   - **越出地盘**：`review_catalogue_test.go` 断言随共用夹具改比夹具值；`consolidation_import.go` 那处调用经对端同意。
+
+### 进 main 记录（2026-10-18，会话 idp-parcel-9b）
+
+- 分支 `claude-oc29` 直接叠在远端 main `320d2900` 之上，快进，SHA 未改写；迁移用 `node_operations/0006`（对端 no-directional-basis/01 已用 0005）。
+- 推送方全量一次：钉 `4a6ea695` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 142 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上改动 `.go` 的 `gofmt -l` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
+- 评审见 Comments。
+
+### 进 main 记录（2026-10-18，会话 idp-parcel-9b）
+
+- 分支 `claude-oc29` 直接叠在远端 main `320d2900` 之上，快进，SHA 未改写；迁移用 `node_operations/0006`（对端 no-directional-basis/01 已用 0005）。
+- 推送方全量一次：钉 `4a6ea695` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 143 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上改动 `.go` 的 `gofmt -l` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
+- 评审见 Comments。
