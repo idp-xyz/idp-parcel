@@ -64,14 +64,14 @@ Date: 2026-10-19
 ## Consequences
 
 - 运输履约：
-  - `application/read_departure_gate.go`：读数路径收成一条，出发登记与问询共用。
+  - `application/read_departure_gate.go`：读数路径收成一条，出发登记与问询共用；两口的受理也收成一处 `departureGateIntentOf`，出发登记的 `movementFactSpecFrom` 与它共用班次与段的受理。
   - 新 `application/preview_departure_gate.go`：问询编排与结果代数（`DEPARTURE_GATE_PREVIEWED` / `INPUT_NOT_ACCEPTED`）。
-  - 新 `adapters/http/preview_departure_gate.go`：Intake 形、载荷、端点、未配置与作业事实两种答法。
+  - 新 `adapters/http/preview_departure_gate.go`：Intake 形、载荷、端点与未配置答法；作业事实那一种答法与其余各口同在 `work_fact_intake.go`。
   - 不加端口、迁移与信封。
 - 装配：
   - 新 `cmd/parcel-api/assemble_departure_gate_preview.go`。
   - 读数编排的构造收成 `buildDepartureGateReader`，出发登记与问询共用。
-  - 端点表加一行。
+  - 端点表加这一口的 Intake 变量（进作业事实那一组）与一行端点。
 - 关务：代码不改。CC CONTEXT「动作准入判断」词条、GLOSSARY「动作准入判断」所有者一条、CONTEXT-MAP `transport-fulfillment → customs-compliance` 与 UC-CC-013 的目标、触发各补一句，指到本记录；ADR-0206 的 Status 与 Links 加前向指针，正文不动。
 - 文档：
   - UC-TF-005 加一条规则与 `AT-TF-226`–`231`。
