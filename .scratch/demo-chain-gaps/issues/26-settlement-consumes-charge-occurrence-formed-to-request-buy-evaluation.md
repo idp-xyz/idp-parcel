@@ -110,7 +110,7 @@ M
 5. **注释里写了「生产方还没上线」这类时点状态**（已修，`5fad4ee0`）。改了三处：
    - 消费门 `ChargeOccurrenceFormedEventType` 头注、派发用例文件头、`assemble.go` 路由说明，都改成只陈述 ADR-0049 和「谁钉得住两串相等」；ADR-0208 Consequences 那一句也一并改。
    - 「测试改用真交接口入队并钉两串相等」写进票 [27](./27-transport-charge-occurrences-are-registered-and-handed-off.md) 的完成判据，同一条带上 `agreement_ref` 照 ADR-0208 决定六写。
-6. **BUY 请求交接口没有确定性拒收哨兵**（未修，立票 [38](./38-buy-evaluation-request-handoff-does-not-separate-deterministic-rejection.md)，`6005e30d`）。
+6. **BUY 请求交接口没有确定性拒收哨兵**（未修，立票 [39](./39-buy-evaluation-request-handoff-does-not-separate-deterministic-rejection.md)，`6005e30d`）。
    - 不在本票修的理由：哨兵要从 `RequestBuyEvaluationHandler` 透出来。这只编排同时服务 ADR-0164 那条触发面和 `cmd/parcel-api` 的评价请求端点，两处今天对任何交信封失败都答「已请求、留续办引用」。改了会动那两处的答法，属 SA owner 的形状问题；`cmd/parcel-api` 目录也有别的会话在改注释。
    - ADR-0208 越权风险点 6 已指向票 38。
 7. **机制清点没有重生成**（未做）。任务口径规定进 main 时统一重生成，分支上不做。本分支多了迁移 SA 0040，进 main 时须带上。
