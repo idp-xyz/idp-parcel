@@ -159,6 +159,10 @@ ADR-0199 第一期已经让收寄册上每一版判断都有判断版本，追�
 - **处置口并进 UC-NO-002。** 不取，见决定十。
 - **授予之外再问 `party-commercial` 授权。** 不取，见决定一与越权风险点 3。
 
+## 复核记录（2026-10-19，决定原文不动）
+
+决定一的处置命令口落成 `POST /node-operations/identity-dispositions`，运营决定种类 `IDENTITY_CONFLICT_DISPOSITION`，准入照 ADR-0151 决定三；答复各格与处置文档的形状见票 [no-reception-identity/06](../../.scratch/no-reception-identity/issues/06-an-operator-disposes-an-identity-conflict.md) 完成记录，不在此复述。
+
 ## Links
 
 - 票：[no-reception-identity/04](../../.scratch/no-reception-identity/issues/04-identity-conflicts-have-a-disposition-and-release.md)（裁定与完成记录）、[05](../../.scratch/no-reception-identity/issues/05-the-identity-basis-reads-each-judgment-chain-head.md)、[06](../../.scratch/no-reception-identity/issues/06-an-operator-disposes-an-identity-conflict.md)
