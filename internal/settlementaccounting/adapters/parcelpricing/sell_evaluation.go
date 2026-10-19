@@ -2,7 +2,6 @@ package parcelpricing
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
@@ -10,11 +9,14 @@ import (
 	saports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
-// ErrNotASellEvaluation 表示指名的评价不是 SELL·CUSTOMER_CHARGE。BUY 评价不从这条读口形成客户费用。
-var ErrNotASellEvaluation = errors.New(
-	"settlement accounting parcelpricing adapter: evaluation is not SELL / CUSTOMER_CHARGE")
+// ErrNotASellEvaluation 表示指名的评价不是 SELL·CUSTOMER_CHARGE。BUY 评价不从这条读口形成客户费用。它就是端口上的
+// 那一枚哨兵：SELL 形成编排在应用层按它分辨「不是本门的评价」，适配器另立一枚就得在两层之间再译一次。
+var ErrNotASellEvaluation = saports.ErrNotASellEvaluation
 
 // SellEvaluationAdapter 实现 saports.SellEvaluationView。金额换写与 BUY 读口同一套，方向不同。
+//
+// 与 BUY 读口不同的一处：卡没声明金额取整时不报错，交回 saports.SellEvaluationAmountUndeclared 那一格（理由在那一格的
+// 头注），连同回指与费用代码。
 type SellEvaluationAdapter struct {
 	evaluations EvaluationSource
 }
@@ -50,6 +52,20 @@ func (adapter *SellEvaluationAdapter) LoadSellEvaluation(
 	if outcome == saports.SellEvaluationOutcomeInvalid {
 		return saports.SellEvaluationAdoption{}, false, fmt.Errorf("%w: evaluation status %q", ErrUntranslatableAnswer, evaluation.Status())
 	}
+	if requested, ok := evaluation.RequestReference(); ok {
+		request, err := sadomain.NewSellEvaluationRequestID(requested.String())
+		if err != nil {
+			return saports.SellEvaluationAdoption{}, false, fmt.Errorf("%w: request reference: %v", ErrUntranslatableAnswer, err)
+		}
+		adoption.Request = request
+	}
+	for _, line := range evaluation.ChargeLines() {
+		code, err := sadomain.NewPricingChargeCode(line.Code().String())
+		if err != nil {
+			return saports.SellEvaluationAdoption{}, false, fmt.Errorf("%w: charge line %s: %v", ErrUntranslatableAnswer, line.ID(), err)
+		}
+		adoption.ChargeCodes = append(adoption.ChargeCodes, code)
+	}
 	if outcome != saports.SellEvaluationCompleted {
 		return adoption, true, nil
 	}
@@ -59,7 +75,8 @@ func (adapter *SellEvaluationAdapter) LoadSellEvaluation(
 	}
 	for _, issue := range evaluation.Issues() {
 		if issue.Code() == amountPrecisionUndeclared {
-			return saports.SellEvaluationAdoption{}, false, fmt.Errorf("%w: evaluation %s", ErrAmountPrecisionUndeclared, reference)
+			adoption.Outcome = saports.SellEvaluationAmountUndeclared
+			return adoption, true, nil
 		}
 	}
 	steps := evaluation.AmountRounding()
