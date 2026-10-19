@@ -382,3 +382,82 @@ func TestACarrierPickupEntryRoundTripsBesideOtherMembers(t *testing.T) {
 		t.Fatalf("同段揽收入场的那一名没有往返：ok=%v %+v", ok, current)
 	}
 }
+
+// TestSupersedeInheritsAnEndCommittedAfterTheCallerRead 证替代口按锁住之后的被替代链尾派生（票 tf-face-algebra/05）：
+// 调用方读段、派生替代版本时链尾还在场，落笔之前另一事务把它结束并提交了——新链尾照领域重派生的规则继承那份
+// 终点，而不是按过时的读法落一版没有终点的，让参与重新在场。
+func TestSupersedeInheritsAnEndCommittedAfterTheCallerRead(t *testing.T) {
+	repository, transactor, _ := newSegmentRegistry(t)
+	ctx := t.Context()
+
+	key := segmentKeyFixture(t, "tenant-1", "SEG-S010")
+	root := activeMember(t, "parcel-1")
+	mustSaveSegment(t, transactor, ctx, repository, segmentRecord(t, "SEG-S010", root))
+	staleTail := rebuiltChainTail(t, "SEG-S010", root, supersedingMember(t, root, "v2", segmentEnteredAtFixture.Add(time.Hour)))
+
+	endedRoot := root
+	endedRoot.EndKind = domain.EndedByControlTermination
+	endedRoot.EndBasis = segmentRef(t, domain.NewParticipationBasisReference, "CONTROL-TERMINATION/case-1")
+	endedRoot.EndedAt = segmentEnteredAtFixture.Add(3 * time.Hour)
+	mustWithinSegmentTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		_, err := repository.EndParticipation(txCtx, key, rebuiltParticipation(t, "SEG-S010", endedRoot))
+		return err
+	})
+
+	var outcome ports.ParticipationSupersedeOutcome
+	mustWithinSegmentTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		var err error
+		outcome, err = repository.Supersede(txCtx, key, staleTail, segmentEnteredAtFixture.Add(4*time.Hour))
+		return err
+	})
+	if outcome != ports.ParticipationSuperseded {
+		t.Fatalf("outcome = %d, want ParticipationSuperseded", outcome)
+	}
+	found, _, err := repository.FindByKey(ctx, key)
+	if err != nil {
+		t.Fatalf("取回：%v", err)
+	}
+	tail, _ := found.Segment.ParticipationFor(root.Object)
+	kind, basis, at, ended := tail.End()
+	if tail.EntryBasis() != staleTail.EntryBasis() || !ended || kind != endedRoot.EndKind || basis != endedRoot.EndBasis || !at.Equal(endedRoot.EndedAt) {
+		t.Fatalf("新链尾没有继承被替代链尾的终点：%+v", tail)
+	}
+}
+
+// TestSupersedeRefusesWhenTheInheritedEndPrecedesTheCorrectedStart 证继承下来的终点早于更正后的起点时替代口拒写：
+// 领域在新鲜读法上会答「更正后的起点晚于继承的终点」，这里答不出那一格，只交一个错误让编排记欠账——而且不靠库面
+// CHECK 撞出来，CHECK 失败会让调用方的整笔事务作废，连来源更正一起丢掉。
+func TestSupersedeRefusesWhenTheInheritedEndPrecedesTheCorrectedStart(t *testing.T) {
+	repository, transactor, pool := newSegmentRegistry(t)
+	ctx := t.Context()
+
+	key := segmentKeyFixture(t, "tenant-1", "SEG-S011")
+	root := activeMember(t, "parcel-1")
+	mustSaveSegment(t, transactor, ctx, repository, segmentRecord(t, "SEG-S011", root))
+	staleTail := rebuiltChainTail(t, "SEG-S011", root, supersedingMember(t, root, "v2", segmentEnteredAtFixture.Add(5*time.Hour)))
+
+	endedRoot := root
+	endedRoot.EndKind = domain.EndedByControlTermination
+	endedRoot.EndBasis = segmentRef(t, domain.NewParticipationBasisReference, "CONTROL-TERMINATION/case-1")
+	endedRoot.EndedAt = segmentEnteredAtFixture.Add(3 * time.Hour)
+	mustWithinSegmentTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		_, err := repository.EndParticipation(txCtx, key, rebuiltParticipation(t, "SEG-S011", endedRoot))
+		return err
+	})
+
+	var supersedeErr error
+	mustWithinSegmentTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		_, supersedeErr = repository.Supersede(txCtx, key, staleTail, segmentEnteredAtFixture.Add(6*time.Hour))
+		// 同一笔事务还要接着用：拒写不得让它作废。
+		_, _, err := repository.FindByKey(txCtx, key)
+		return err
+	})
+	if supersedeErr == nil {
+		t.Fatal("继承的终点早于更正后的起点，替代口却落了笔")
+	}
+	var rows int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM transport_fulfillment.fulfillment_participation
+		WHERE tenant_id = 'tenant-1' AND segment_ref = 'SEG-S011'`).Scan(&rows); err != nil || rows != 1 {
+		t.Fatalf("行数 = %d err=%v, want 1（只有根）", rows, err)
+	}
+}

@@ -171,7 +171,7 @@ func (repository *FulfillmentSegments) Save(
 
 	for _, participation := range record.Segment.Participations() {
 		if _, err := insertParticipationRow(
-			ctx, executor, record.Key, participation, record.RecordedAt, false,
+			ctx, executor, record.Key, participation, endColumnsOf(participation), record.RecordedAt, false,
 		); err != nil {
 			return ports.SegmentSaveOutcomeInvalid, fmt.Errorf("save fulfillment segment: %w", err)
 		}
@@ -198,7 +198,7 @@ func (repository *FulfillmentSegments) Join(
 		return ports.SegmentJoinOutcomeInvalid,
 			errors.New("join fulfillment segment: a superseding participation enters through Supersede")
 	}
-	tag, err := insertParticipationRow(ctx, executor, key, participation, recordedAt, true)
+	tag, err := insertParticipationRow(ctx, executor, key, participation, endColumnsOf(participation), recordedAt, true)
 	if err != nil {
 		return ports.SegmentJoinOutcomeInvalid, fmt.Errorf("join fulfillment segment: %w", err)
 	}
@@ -216,6 +216,12 @@ func (repository *FulfillmentSegments) Join(
 // 失效、只出自交接更正」由 0019 的 CHECK 与领域重建门守，本口不另判。
 //
 // 不校验段是否已关闭：段已关闭照样长替代版本，那是 CONTEXT 封存例外格，领域门也不拒。
+//
+// **落笔前先锁住被替代的链尾，新版本的离场三件取锁住之后读到的那一份**（票 tf-face-algebra/05）。调用方的派生
+// 基于一次不加锁的读：读完到落笔之间，终止的窄口写可能已在被替代链尾上提交，或正挂着未提交——按旧读法落一版
+// 没有终点的新链尾，终点就留在已被替代的版本上，参与重新在场。锁让替代排在那次写之后；离场三件是参与行上唯一会被
+// 改写的列，也是领域重派生从被替代版本继承的全部（ActualFulfillmentSegment.rederive），所以只在这三列上按锁后的
+// 在册值重派生，其余各格仍是调用方交来的。
 func (repository *FulfillmentSegments) Supersede(
 	ctx context.Context,
 	key ports.FulfillmentSegmentKey,
@@ -226,11 +232,16 @@ func (repository *FulfillmentSegments) Supersede(
 	if err != nil {
 		return ports.ParticipationSupersedeOutcomeInvalid, fmt.Errorf("supersede participation: %w", err)
 	}
-	if _, chained := participation.Supersedes(); !chained {
+	replaced, chained := participation.Supersedes()
+	if !chained {
 		return ports.ParticipationSupersedeOutcomeInvalid,
 			errors.New("supersede participation: the participation supersedes nothing")
 	}
-	tag, err := insertParticipationRow(ctx, executor, key, participation, recordedAt, true)
+	end, err := lockedInheritedEnd(ctx, executor, key, participation, replaced)
+	if err != nil {
+		return ports.ParticipationSupersedeOutcomeInvalid, fmt.Errorf("supersede participation: %w", err)
+	}
+	tag, err := insertParticipationRow(ctx, executor, key, participation, end, recordedAt, true)
 	if err != nil {
 		return ports.ParticipationSupersedeOutcomeInvalid, fmt.Errorf("supersede participation: %w", err)
 	}
@@ -238,6 +249,46 @@ func (repository *FulfillmentSegments) Supersede(
 		return ports.ParticipationAlreadySuperseded, nil
 	}
 	return ports.ParticipationSuperseded, nil
+}
+
+// lockedInheritedEnd 以 FOR UPDATE 锁住被替代的那一行，交回新版本应带的离场三列：被替代版本在册的那一份。
+//
+// 被替代的行不在册时交回调用方自带的那一份，不在这里报错——自引用外键会在插入时拒它，「回指一个不存在的前版」
+// 的口径留在那一处。
+//
+// 继承的终点早于新版本的起点即先结束再进入，领域在新鲜读法上会拒（ErrCorrectedStartAfterInheritedEnd）。这里
+// 答不出那一格，只交错误让编排记欠账；不放给 0006 的 CHECK 去撞，CHECK 失败会让调用方整笔事务作废，连同一笔
+// 里的来源更正一起丢掉。
+func lockedInheritedEnd(
+	ctx context.Context,
+	executor bentopg.Executor,
+	key ports.FulfillmentSegmentKey,
+	participation domain.FulfillmentParticipation,
+	replaced domain.ParticipationBasisReference,
+) (participationEndColumns, error) {
+	carried := endColumnsOf(participation)
+	var locked participationEndColumns
+	err := executor.QueryRow(ctx,
+		`SELECT end_kind, end_basis, ended_at
+		   FROM transport_fulfillment.fulfillment_participation
+		  WHERE tenant_id = $1 AND segment_ref = $2 AND object_ref = $3 AND entry_basis = $4
+		    FOR UPDATE`,
+		key.TenantID.String(), key.Segment.String(), participation.Object().String(), replaced.String(),
+	).Scan(&locked.kind, &locked.basis, &locked.at)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return carried, nil
+	}
+	if err != nil {
+		return participationEndColumns{}, err
+	}
+	// 终点只增不改（在场谓词），被替代版本在册无终点而新版本带着一份，只能是调用方交错了参与。
+	if locked.at == nil && carried.at != nil {
+		return participationEndColumns{}, errors.New("the superseding participation carries an end its superseded version does not have")
+	}
+	if locked.at != nil && participation.EnteredAt().After(*locked.at) {
+		return participationEndColumns{}, errors.New("the corrected start falls after the end inherited from the superseded version")
+	}
+	return locked, nil
 }
 
 // currentParticipationPredicate 是「这一行是该对象在段内的当前参与（链尾）」在 SQL 上的写法：没有任何
@@ -344,6 +395,20 @@ func (repository *FulfillmentSegments) EndParticipation(
 			errors.New("end participation: the participation carries no end")
 	}
 
+	// 先单独锁住这一行，再用一条新语句判在场并写（票 tf-face-algebra/05）。READ COMMITTED 下 UPDATE 的链尾判据
+	// 按语句开始时的快照求值；它若排在替代口锁住这一行的事务后面，对方提交时这一行本身没改，UPDATE 不重判就照写，
+	// 终点落到刚被替代的版本上。锁先拿到，后面的 UPDATE 才看得见对方刚落的新链尾、写中 0 行，交编排读回重走。
+	if _, err := executor.Exec(ctx,
+		`SELECT 1
+		   FROM transport_fulfillment.fulfillment_participation
+		  WHERE tenant_id = $1 AND segment_ref = $2 AND object_ref = $3 AND entry_basis = $4
+		    FOR UPDATE`,
+		key.TenantID.String(), key.Segment.String(), participation.Object().String(),
+		participation.EntryBasis().String(),
+	); err != nil {
+		return ports.ParticipationEndOutcomeInvalid, fmt.Errorf("end participation: %w", err)
+	}
+
 	tag, err := executor.Exec(ctx,
 		`UPDATE transport_fulfillment.fulfillment_participation participation
 		    SET end_kind = $1, end_basis = $2, ended_at = $3
@@ -402,6 +467,7 @@ func insertParticipationRow(
 	executor bentopg.Executor,
 	key ports.FulfillmentSegmentKey,
 	participation domain.FulfillmentParticipation,
+	end participationEndColumns,
 	recordedAt time.Time,
 	ignoreConflict bool,
 ) (int64, error) {
@@ -409,13 +475,6 @@ func insertParticipationRow(
 	if planned, has := participation.PlannedSegment(); has {
 		value := planned.String()
 		plannedRef = &value
-	}
-
-	var endKind, endBasis *string
-	var endedAt *time.Time
-	if kind, basis, at, ended := participation.End(); ended {
-		kindName, basisValue, endMoment := kind.String(), basis.String(), at.UTC()
-		endKind, endBasis, endedAt = &kindName, &basisValue, &endMoment
 	}
 
 	var supersedes *string
@@ -440,9 +499,9 @@ func insertParticipationRow(
 		participation.EntryKind().String(),
 		participation.EntryBasis().String(),
 		participation.EnteredAt().UTC(),
-		endKind,
-		endBasis,
-		endedAt,
+		end.kind,
+		end.basis,
+		end.at,
 		recordedAt.UTC(),
 		supersedes,
 		participation.Voided(),
@@ -451,6 +510,23 @@ func insertParticipationRow(
 		return 0, err
 	}
 	return tag.RowsAffected(), nil
+}
+
+// participationEndColumns 是离场三列在库面的样子，三者同在或同缺（0006 的 CHECK）。离场三列与参与的其余各格
+// 分开传，是因为替代口要按锁后的在册值落这三列，其余各格仍取调用方交来的参与（lockedInheritedEnd）。
+type participationEndColumns struct {
+	kind  *string
+	basis *string
+	at    *time.Time
+}
+
+func endColumnsOf(participation domain.FulfillmentParticipation) participationEndColumns {
+	kind, basis, at, ended := participation.End()
+	if !ended {
+		return participationEndColumns{}
+	}
+	kindName, basisValue, endMoment := kind.String(), basis.String(), at.UTC()
+	return participationEndColumns{kind: &kindName, basis: &basisValue, at: &endMoment}
 }
 
 // participationRow 是参与关系在库面的一行。
