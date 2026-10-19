@@ -1,7 +1,7 @@
 # 52 集成客户端 Intake 拒自报租户只认精确键：载荷带 `tenantid` 一类大小写变体即改写认证租户——跨租户登凭证与资金事实、探询他租户在册内容、给他租户植入毒行
 
 Category: bug
-Status: in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（操作者与集成客户端渠道逐口核代数时发现；跨租户写入，已可触发，优先；用户授权代决）；分支 `claude-oc52`
+Status: in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（操作者与集成客户端渠道逐口核代数时发现；跨租户写入，已可触发，优先；用户授权代决）；分支 `claude-oc52`
 Blocked by: 无
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)（票 26 评审遗留研判的逐口核）
 出处：逐口核代数研判（workflow review26-face-algebra-sweep）监管凭证登记口一行，探针与日志路径见「复现」。
@@ -110,3 +110,10 @@ Blocked by: 无
 顺带看到，未动：`internal/networkrouting/adapters/registrationjson` 的拒自报只认 `tenant_id` 精确键，`internal/parcelpricing/domain/registered_price_card.go` 只认 `tenant` 精确键。是否走注入、会不会越租户，都没核。
 
 评审：待会话读 diff 审。
+
+## Comments
+
+- **评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审）· 钉 `6c986d74`（基线 `c783151b`）· 2026-10-18**：用户选「精简续做」，评审由会话本身读 diff 做；代码出自本会话起的实施子代理，不算非作者评审，如实记下。
+  - **Spec**：阻断无。认证租户不再拼回 JSON 再解；三个在线译装（`RegulatoryCredentialFromJSONForTenant`、`ExternalFundsFactFromJSONForTenant`、`ExternalFundsFactCorrectionFromJSONForTenant`）解不含租户格的内容类型，任何大小写的租户键都是未知字段，严格解码拒成 400；拒自报改 `strings.EqualFold` 只管提示。真库回归在旧代码上红（`tenantid`、`tenantiD` 把凭证与资金事实写进他租户），修后绿；变异自检证实真正挡住变体的是严格解码。
+  - **Standards**：阻断无。非阻断 2：(1) VE `refuseSelfReportedTenant` 同改 EqualFold，出了地盘，但同类同改、有先红后绿，留下。(2) `internal/networkrouting/adapters/registrationjson/translate.go · refuseSelfReportedTenant` 只认 `tenant_id`、`internal/parcelpricing/domain · RehydratePriceCardRegistrationForTenant` 只认 `tenant`；会话读码核过两处都由调用方给的租户注入命令、文档里的租户格不被采用，不越租户，只是变体自报被悄悄收下——建议另立一张卫生票同改 EqualFold。
+  - **未做的格**：票 15 补记不适用——本票是集成客户端口，不是操作者决定口。
