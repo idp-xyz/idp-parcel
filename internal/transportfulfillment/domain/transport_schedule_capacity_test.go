@@ -35,6 +35,31 @@ func reservationRef(t *testing.T, value string) domain.CapacityReservationRefere
 	return mustValue(t, domain.NewCapacityReservationReference, value)
 }
 
+func releaseRef(t *testing.T, value string) domain.CapacityReleaseReference {
+	t.Helper()
+	return mustValue(t, domain.NewCapacityReleaseReference, value)
+}
+
+// declaredDemand 是一份运营声明的需求量，单位同夹具池（kg）。
+func declaredDemand(t *testing.T, quantity int64) domain.CapacityDemand {
+	t.Helper()
+	return demandIn(t, quantity, "kg")
+}
+
+func demandIn(t *testing.T, quantity int64, unit string) domain.CapacityDemand {
+	t.Helper()
+	source, err := domain.NewCapacityDemandSource(domain.CapacityDemandOperatorDeclaration,
+		mustValue(t, domain.NewCapacityDemandSourceReference, "SYN-DEMAND-DECL-1/v1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	demand, err := domain.NewCapacityDemand(quantity, mustValue(t, domain.NewQuantityUnitReference, unit), source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return demand
+}
+
 // Covers: CONTEXT「具体班次」与「承运接受……不等于容量已经预占」——班次是执行体，班次存在≠容量可用≠已订舱：
 // 类型上没有任何容量、预占或订舱字段（结构防线）；周期安排不是班次，班次的方向、出发与到达、服务范围缺一不可
 // （AT-TF-027 的身份半边）。
@@ -86,7 +111,7 @@ func TestAScheduleCarriesNoCapacityOrBooking(t *testing.T) {
 func TestReservationsDrawDownFinitePoolCapacity(t *testing.T) {
 	pool := establishedPool(t, 100)
 
-	pool, err := pool.Reserve(reservationRef(t, "reservation-1"), 60, reservedUntil, reservedAt)
+	pool, err := pool.Reserve(reservationRef(t, "reservation-1"), declaredDemand(t, 60), reservedUntil, reservedAt)
 	if err != nil {
 		t.Fatalf("reserve 60: %v", err)
 	}
@@ -94,11 +119,11 @@ func TestReservationsDrawDownFinitePoolCapacity(t *testing.T) {
 		t.Fatalf("available = %d, want 40", available)
 	}
 
-	if _, err := pool.Reserve(reservationRef(t, "reservation-2"), 50, reservedUntil, reservedAt); !errors.Is(err, domain.ErrCapacityExceeded) {
+	if _, err := pool.Reserve(reservationRef(t, "reservation-2"), declaredDemand(t, 50), reservedUntil, reservedAt); !errors.Is(err, domain.ErrCapacityExceeded) {
 		t.Fatalf("error = %v, want ErrCapacityExceeded（60+50 > 100）", err)
 	}
 
-	pool, err = pool.Reserve(reservationRef(t, "reservation-3"), 40, reservedUntil, reservedAt)
+	pool, err = pool.Reserve(reservationRef(t, "reservation-3"), declaredDemand(t, 40), reservedUntil, reservedAt)
 	if err != nil {
 		t.Fatalf("reserve exact remainder: %v", err)
 	}
@@ -107,13 +132,13 @@ func TestReservationsDrawDownFinitePoolCapacity(t *testing.T) {
 	}
 
 	t.Run("a duplicate reservation reference is refused", func(t *testing.T) {
-		if _, err := pool.Reserve(reservationRef(t, "reservation-1"), 1, reservedUntil, reservedAt); !errors.Is(err, domain.ErrDuplicateReservation) {
+		if _, err := pool.Reserve(reservationRef(t, "reservation-1"), declaredDemand(t, 1), reservedUntil, reservedAt); !errors.Is(err, domain.ErrDuplicateReservation) {
 			t.Fatalf("error = %v, want ErrDuplicateReservation", err)
 		}
 	})
 
 	t.Run("a window not after the reservation instant is refused", func(t *testing.T) {
-		if _, err := establishedPool(t, 100).Reserve(reservationRef(t, "reservation-x"), 10, reservedAt, reservedAt); !errors.Is(err, domain.ErrInvalidCapacityPool) {
+		if _, err := establishedPool(t, 100).Reserve(reservationRef(t, "reservation-x"), declaredDemand(t, 10), reservedAt, reservedAt); !errors.Is(err, domain.ErrInvalidCapacityPool) {
 			t.Fatalf("error = %v; 没有未来窗口的预占占不了任何时段", err)
 		}
 	})
@@ -124,13 +149,13 @@ func TestReservationsDrawDownFinitePoolCapacity(t *testing.T) {
 // 归还未消耗剩余；三条出路各自分明。
 func TestReleaseExpiryAndConsumptionAreSeparateExits(t *testing.T) {
 	pool := establishedPool(t, 100)
-	pool, err := pool.Reserve(reservationRef(t, "reservation-1"), 60, reservedUntil, reservedAt)
+	pool, err := pool.Reserve(reservationRef(t, "reservation-1"), declaredDemand(t, 60), reservedUntil, reservedAt)
 	if err != nil {
 		t.Fatalf("reserve: %v", err)
 	}
 
 	// 部分释放 20：归还可用量（40 → 60）。
-	pool, err = pool.Release(reservationRef(t, "reservation-1"), 20, reservedAt.Add(time.Hour))
+	pool, err = pool.Release(releaseRef(t, "release-1"), reservationRef(t, "reservation-1"), declaredDemand(t, 20), reservedAt.Add(time.Hour))
 	if err != nil {
 		t.Fatalf("release 20: %v", err)
 	}
@@ -161,7 +186,7 @@ func TestReleaseExpiryAndConsumptionAreSeparateExits(t *testing.T) {
 	}
 
 	t.Run("an expired reservation can neither release nor consume", func(t *testing.T) {
-		if _, err := pool.Release(reservationRef(t, "reservation-1"), 5, afterExpiry); !errors.Is(err, domain.ErrReservationExpired) {
+		if _, err := pool.Release(releaseRef(t, "release-2"), reservationRef(t, "reservation-1"), declaredDemand(t, 5), afterExpiry); !errors.Is(err, domain.ErrReservationExpired) {
 			t.Fatalf("release error = %v, want ErrReservationExpired", err)
 		}
 		if _, err := pool.Consume(reservationRef(t, "reservation-1"), 5,
@@ -172,7 +197,7 @@ func TestReleaseExpiryAndConsumptionAreSeparateExits(t *testing.T) {
 
 	t.Run("a consumed pool stays occupied for later reservations", func(t *testing.T) {
 		full := establishedPool(t, 100)
-		full, err := full.Reserve(reservationRef(t, "reservation-a"), 100, reservedUntil, reservedAt)
+		full, err := full.Reserve(reservationRef(t, "reservation-a"), declaredDemand(t, 100), reservedUntil, reservedAt)
 		if err != nil {
 			t.Fatalf("reserve: %v", err)
 		}
@@ -181,7 +206,7 @@ func TestReleaseExpiryAndConsumptionAreSeparateExits(t *testing.T) {
 		if err != nil {
 			t.Fatalf("consume: %v", err)
 		}
-		if _, err := full.Reserve(reservationRef(t, "reservation-b"), 10, reservedUntil.Add(24*time.Hour), reservedUntil.Add(time.Hour)); !errors.Is(err, domain.ErrCapacityExceeded) {
+		if _, err := full.Reserve(reservationRef(t, "reservation-b"), declaredDemand(t, 10), reservedUntil.Add(24*time.Hour), reservedUntil.Add(time.Hour)); !errors.Is(err, domain.ErrCapacityExceeded) {
 			t.Fatalf("error = %v; 已消耗容量被当成了空闲", err)
 		}
 	})
@@ -201,17 +226,17 @@ func TestConsumptionAndReleaseAreIrreversibleAndConserved(t *testing.T) {
 	}
 
 	pool := establishedPool(t, 100)
-	pool, err := pool.Reserve(reservationRef(t, "reservation-1"), 50, reservedUntil, reservedAt)
+	pool, err := pool.Reserve(reservationRef(t, "reservation-1"), declaredDemand(t, 50), reservedUntil, reservedAt)
 	if err != nil {
 		t.Fatalf("reserve: %v", err)
 	}
-	pool, err = pool.Release(reservationRef(t, "reservation-1"), 30, reservedAt.Add(time.Hour))
+	pool, err = pool.Release(releaseRef(t, "release-3"), reservationRef(t, "reservation-1"), declaredDemand(t, 30), reservedAt.Add(time.Hour))
 	if err != nil {
 		t.Fatalf("release: %v", err)
 	}
 
 	t.Run("over-conversion of the same range is refused", func(t *testing.T) {
-		if _, err := pool.Release(reservationRef(t, "reservation-1"), 30, reservedAt.Add(2*time.Hour)); !errors.Is(err, domain.ErrReservationOverdrawn) {
+		if _, err := pool.Release(releaseRef(t, "release-4"), reservationRef(t, "reservation-1"), declaredDemand(t, 30), reservedAt.Add(2*time.Hour)); !errors.Is(err, domain.ErrReservationOverdrawn) {
 			t.Fatalf("release error = %v, want ErrReservationOverdrawn（30+30 > 50）", err)
 		}
 		if _, err := pool.Consume(reservationRef(t, "reservation-1"), 30,
@@ -228,7 +253,7 @@ func TestConsumptionAndReleaseAreIrreversibleAndConserved(t *testing.T) {
 	})
 
 	t.Run("an unknown reservation cannot be converted", func(t *testing.T) {
-		if _, err := pool.Release(reservationRef(t, "reservation-9"), 1, reservedAt.Add(time.Hour)); !errors.Is(err, domain.ErrReservationNotFound) {
+		if _, err := pool.Release(releaseRef(t, "release-5"), reservationRef(t, "reservation-9"), declaredDemand(t, 1), reservedAt.Add(time.Hour)); !errors.Is(err, domain.ErrReservationNotFound) {
 			t.Fatalf("error = %v, want ErrReservationNotFound", err)
 		}
 	})
@@ -239,7 +264,7 @@ func TestConsumptionAndReleaseAreIrreversibleAndConserved(t *testing.T) {
 		if released != 30 {
 			t.Fatalf("released = %d, want 30", released)
 		}
-		if _, err := pool.Release(reservationRef(t, "reservation-1"), 20, reservedAt.Add(3*time.Hour)); err != nil {
+		if _, err := pool.Release(releaseRef(t, "release-6"), reservationRef(t, "reservation-1"), declaredDemand(t, 20), reservedAt.Add(3*time.Hour)); err != nil {
 			t.Fatalf("release remainder: %v", err)
 		}
 		again, _ := pool.ReservationFor(reservationRef(t, "reservation-1"))
@@ -260,12 +285,19 @@ func TestRehydrateCapacityPoolRestoresReservationsWithoutReplayingConversions(t 
 		Unit:      mustValue(t, domain.NewQuantityUnitReference, "kg"),
 		Capacity:  100,
 	}
+	source := declaredDemand(t, 1).Source()
 	snapshots := []domain.CapacityReservationSnapshot{{
 		Reference:  reservationRef(t, "reservation-1"),
 		Quantity:   60,
 		Released:   20,
 		Consumed:   30,
 		ValidUntil: reservedUntil,
+		Source:     source,
+		ReservedAt: reservedAt,
+		Releases: []domain.CapacityReleaseSnapshot{
+			{Reference: releaseRef(t, "release-1"), Quantity: 15, Source: source, ReleasedAt: reservedAt.Add(time.Hour)},
+			{Reference: releaseRef(t, "release-2"), Quantity: 5, Source: source, ReleasedAt: reservedAt.Add(2 * time.Hour)},
+		},
 	}}
 	pool, err := domain.RehydrateCapacityPool(spec, snapshots)
 	if err != nil {

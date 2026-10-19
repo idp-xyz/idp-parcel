@@ -96,7 +96,7 @@ func TestCapacityPoolEndpointAnswersEachGrade(t *testing.T) {
 		t.Fatalf("异内容再登 = %d %s", response.Code, response.Body.String())
 	}
 	response, fields = postSchedule(t, endpoint, strings.Replace(capacityPoolBody, `"WEIGHT"`, `"weight"`, 1))
-	if response.Code != http.StatusOK || string(fields["outcome"]) != `"SOURCE_NOT_ACCEPTED"` {
+	if response.Code != http.StatusOK || string(fields["outcome"]) != `"INPUT_NOT_ACCEPTED"` {
 		t.Fatalf("文法外的维度 = %d %s（形成了的业务答案，不是坏报文）", response.Code, response.Body.String())
 	}
 

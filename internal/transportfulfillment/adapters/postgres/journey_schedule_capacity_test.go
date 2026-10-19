@@ -161,14 +161,15 @@ func TestACapacityPoolRoundTripsReservationsAndReplaceDoesNotRewriteIdentity(t *
 
 	reserved, err := found.Pool.Reserve(
 		deliveryValue(t, domain.NewCapacityReservationReference, "reservation-1"),
-		60, reservedUntil, reservedAt,
+		poolDemand(t, 60), reservedUntil, reservedAt,
 	)
 	if err != nil {
 		t.Fatalf("reserve: %v", err)
 	}
 	reserved, err = reserved.Release(
+		deliveryValue(t, domain.NewCapacityReleaseReference, "release-1"),
 		deliveryValue(t, domain.NewCapacityReservationReference, "reservation-1"),
-		20, reservedAt.Add(time.Hour),
+		poolDemand(t, 20), reservedAt.Add(time.Hour),
 	)
 	if err != nil {
 		t.Fatalf("release: %v", err)
@@ -498,6 +499,21 @@ func formedSchedule(t *testing.T, tenant, id string) ports.ScheduleRecord {
 }
 
 // establishedPoolRecord 在班次 schedule 的重量维上立一个空池；池身份由二者派生。
+// poolDemand 是夹具池（kg）上一份运营声明的需求量。
+func poolDemand(t *testing.T, quantity int64) domain.CapacityDemand {
+	t.Helper()
+	source, err := domain.NewCapacityDemandSource(domain.CapacityDemandOperatorDeclaration,
+		deliveryValue(t, domain.NewCapacityDemandSourceReference, "SYN-DEMAND-DECL-1/v1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	demand, err := domain.NewCapacityDemand(quantity, deliveryValue(t, domain.NewQuantityUnitReference, "kg"), source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return demand
+}
+
 func establishedPoolRecord(t *testing.T, tenant, schedule string, capacity int64) ports.CapacityPoolRecord {
 	t.Helper()
 	pool, err := domain.EstablishCapacityPool(domain.CapacityPoolSpec{

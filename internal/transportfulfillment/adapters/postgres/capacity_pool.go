@@ -28,11 +28,15 @@ func NewCapacityPools(db *bentopg.DB) (*CapacityPools, error) {
 
 // FindByKey 按（租户+池）取回容量池及其预占。否定结果只回 false。读回经重建门
 // 复验三量守恒，不重放 Reserve/Release/Consume。
+//
+// 在写事务里读时锁住池那一行（FOR UPDATE），直到事务结束。池按值换存：两笔预占各自读到同一个旧池、各算各的余量、
+// 先后换存，后到的那一笔会把先到的预占整份删掉——硬上限与先到者的预占一起丢。锁住读，第二笔就等第一笔落定再读，
+// 读到的是含第一笔的池（ADR-0203 决定四）。不在事务里的读（查阅、读口）不锁。
 func (repository *CapacityPools) FindByKey(
 	ctx context.Context,
 	key ports.CapacityPoolKey,
 ) (ports.CapacityPoolRecord, bool, error) {
-	querier, err := repository.db.ReadExecutor(ctx)
+	querier, lock, err := repository.poolReader(ctx)
 	if err != nil {
 		return ports.CapacityPoolRecord{}, false, fmt.Errorf("find capacity pool: %w", err)
 	}
@@ -44,7 +48,7 @@ func (repository *CapacityPools) FindByKey(
 		`SELECT schedule_id, dimension, unit_ref, capacity, content_digest, recorded_at
 		   FROM transport_fulfillment.capacity_pool
 		  WHERE tenant_id = $1
-		    AND pool_id = $2`,
+		    AND pool_id = $2`+lock,
 		key.TenantID.String(),
 		key.Pool.String(),
 	).Scan(&scheduleID, &dimension, &unit, &capacity, &digest, &recordedAt)
@@ -94,6 +98,15 @@ func (repository *CapacityPools) FindByKey(
 	}, true, nil
 }
 
+// poolReader 在写事务里交回事务执行器与行锁子句，否则交回只读执行器、不加锁。
+func (repository *CapacityPools) poolReader(ctx context.Context) (bentopg.Querier, string, error) {
+	if executor, err := repository.db.RequireExecutor(ctx); err == nil {
+		return executor, "\n\t\t    FOR UPDATE", nil
+	}
+	querier, err := repository.db.ReadExecutor(ctx)
+	return querier, "", err
+}
+
 // Save 建一份容量池。同标识已有记录时答`已建立`，不覆盖先到者。
 func (repository *CapacityPools) Save(
 	ctx context.Context,
@@ -130,8 +143,8 @@ func (repository *CapacityPools) Save(
 	return ports.PoolSaved, nil
 }
 
-// Replace 只落预占子表与记录时刻。UPDATE 不含班次/维度/单位/容量。0 行（没有可转换的池）
-// 答 false。
+// Replace 只落预占子表（连同释放明细，外键随预占删）与记录时刻。UPDATE 不含班次/维度/单位/容量。0 行（没有可转换
+// 的池）答 false。
 func (repository *CapacityPools) Replace(
 	ctx context.Context,
 	record ports.CapacityPoolRecord,
@@ -178,8 +191,12 @@ func (repository *CapacityPools) loadReservations(
 	querier bentopg.Querier,
 	key ports.CapacityPoolKey,
 ) ([]domain.CapacityReservationSnapshot, error) {
+	releases, err := repository.loadReleases(ctx, querier, key)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := querier.Query(ctx,
-		`SELECT reservation_id, quantity, valid_until, released, consumed
+		`SELECT reservation_id, quantity, valid_until, released, consumed, source_kind, source_ref, reserved_at
 		   FROM transport_fulfillment.capacity_reservation
 		  WHERE tenant_id = $1 AND pool_id = $2
 		  ORDER BY reservation_id`,
@@ -193,13 +210,17 @@ func (repository *CapacityPools) loadReservations(
 
 	var snapshots []domain.CapacityReservationSnapshot
 	for rows.Next() {
-		var reservationID string
+		var reservationID, sourceKind, sourceRef string
 		var quantity, released, consumed int64
-		var validUntil time.Time
-		if err := rows.Scan(&reservationID, &quantity, &validUntil, &released, &consumed); err != nil {
+		var validUntil, reservedAt time.Time
+		if err := rows.Scan(&reservationID, &quantity, &validUntil, &released, &consumed, &sourceKind, &sourceRef, &reservedAt); err != nil {
 			return nil, err
 		}
 		reference, err := domain.NewCapacityReservationReference(reservationID)
+		if err != nil {
+			return nil, err
+		}
+		source, err := demandSourceFrom(sourceKind, sourceRef)
 		if err != nil {
 			return nil, err
 		}
@@ -209,9 +230,69 @@ func (repository *CapacityPools) loadReservations(
 			Released:   released,
 			Consumed:   consumed,
 			ValidUntil: validUntil,
+			Source:     source,
+			ReservedAt: reservedAt,
+			Releases:   releases[reservationID],
 		})
 	}
 	return snapshots, rows.Err()
+}
+
+// loadReleases 按所属预占分组读回本池全部显式释放，组内按落下的时点、再按释放引用排，与领域里追加的次序一致。
+func (repository *CapacityPools) loadReleases(
+	ctx context.Context,
+	querier bentopg.Querier,
+	key ports.CapacityPoolKey,
+) (map[string][]domain.CapacityReleaseSnapshot, error) {
+	rows, err := querier.Query(ctx,
+		`SELECT reservation_id, release_id, quantity, source_kind, source_ref, released_at
+		   FROM transport_fulfillment.capacity_release
+		  WHERE tenant_id = $1 AND pool_id = $2
+		  ORDER BY reservation_id, released_at, release_id`,
+		key.TenantID.String(),
+		key.Pool.String(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	releases := map[string][]domain.CapacityReleaseSnapshot{}
+	for rows.Next() {
+		var reservationID, releaseID, sourceKind, sourceRef string
+		var quantity int64
+		var releasedAt time.Time
+		if err := rows.Scan(&reservationID, &releaseID, &quantity, &sourceKind, &sourceRef, &releasedAt); err != nil {
+			return nil, err
+		}
+		reference, err := domain.NewCapacityReleaseReference(releaseID)
+		if err != nil {
+			return nil, err
+		}
+		source, err := demandSourceFrom(sourceKind, sourceRef)
+		if err != nil {
+			return nil, err
+		}
+		releases[reservationID] = append(releases[reservationID], domain.CapacityReleaseSnapshot{
+			Reference:  reference,
+			Quantity:   quantity,
+			Source:     source,
+			ReleasedAt: releasedAt,
+		})
+	}
+	return releases, rows.Err()
+}
+
+func demandSourceFrom(kind, reference string) (domain.CapacityDemandSource, error) {
+	sourceKind, err := domain.ParseCapacityDemandSourceKind(kind)
+	if err != nil {
+		return domain.CapacityDemandSource{}, err
+	}
+	sourceRef, err := domain.NewCapacityDemandSourceReference(reference)
+	if err != nil {
+		return domain.CapacityDemandSource{}, err
+	}
+	return domain.NewCapacityDemandSource(sourceKind, sourceRef)
 }
 
 func insertReservations(
@@ -222,8 +303,9 @@ func insertReservations(
 	for _, snapshot := range record.Pool.ReservationSnapshots() {
 		if _, err := executor.Exec(ctx,
 			`INSERT INTO transport_fulfillment.capacity_reservation
-				(tenant_id, pool_id, reservation_id, quantity, valid_until, released, consumed)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+				(tenant_id, pool_id, reservation_id, quantity, valid_until, released, consumed,
+				 source_kind, source_ref, reserved_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 			record.Key.TenantID.String(),
 			record.Key.Pool.String(),
 			snapshot.Reference.String(),
@@ -231,8 +313,28 @@ func insertReservations(
 			snapshot.ValidUntil.UTC(),
 			snapshot.Released,
 			snapshot.Consumed,
+			snapshot.Source.Kind().String(),
+			snapshot.Source.Reference().String(),
+			snapshot.ReservedAt.UTC(),
 		); err != nil {
 			return err
+		}
+		for _, release := range snapshot.Releases {
+			if _, err := executor.Exec(ctx,
+				`INSERT INTO transport_fulfillment.capacity_release
+					(tenant_id, pool_id, release_id, reservation_id, quantity, source_kind, source_ref, released_at)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+				record.Key.TenantID.String(),
+				record.Key.Pool.String(),
+				release.Reference.String(),
+				snapshot.Reference.String(),
+				release.Quantity,
+				release.Source.Kind().String(),
+				release.Source.Reference().String(),
+				release.ReleasedAt.UTC(),
+			); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

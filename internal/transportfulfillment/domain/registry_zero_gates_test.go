@@ -454,7 +454,8 @@ func TestTransportChargeOccurrenceGatesJudgeZeroOnTheRegistry(t *testing.T) {
 	})
 }
 
-// Covers: 票 tf-face-algebra/14 判零——班次发运时间与预占有效期。预占与转换的调用时刻不入册，不在此列。
+// Covers: 票 tf-face-algebra/14 判零——班次发运时间与预占有效期；预占的判断时点与释放的时点随 ADR-0203 入册，一并判零。
+// 消耗的调用时刻不入册，不在此列。
 func TestScheduleAndCapacityGatesJudgeZeroOnTheRegistry(t *testing.T) {
 	t.Run("FormTransportSchedule 发运时间", func(t *testing.T) {
 		pinRegistryZeroGate(t, domain.ErrInvalidTransportSchedule, func(at time.Time) error {
@@ -473,7 +474,28 @@ func TestScheduleAndCapacityGatesJudgeZeroOnTheRegistry(t *testing.T) {
 		pool := establishedPool(t, 100)
 		reference := reservationRef(t, "SYN-RESERVATION-1")
 		pinRegistryZeroGate(t, domain.ErrInvalidCapacityPool, func(at time.Time) error {
-			_, err := pool.Reserve(reference, 10, at, zeroInstant.Add(-time.Microsecond))
+			_, err := pool.Reserve(reference, declaredDemand(t, 10), at, zeroInstant.Add(-time.Microsecond))
+			return err
+		})
+	})
+	t.Run("Reserve 判断时点", func(t *testing.T) {
+		pool := establishedPool(t, 100)
+		reference := reservationRef(t, "SYN-RESERVATION-1")
+		pinRegistryZeroGate(t, domain.ErrInvalidCapacityPool, func(at time.Time) error {
+			_, err := pool.Reserve(reference, declaredDemand(t, 10), reservedUntil, at)
+			return err
+		})
+	})
+	t.Run("Release 时点", func(t *testing.T) {
+		pool := establishedPool(t, 100)
+		reference := reservationRef(t, "SYN-RESERVATION-1")
+		// 预占声明在零点前，这样零点之后的释放才落在预占的时段里，判零是唯一会拒它的那道门。
+		pool, err := pool.Reserve(reference, declaredDemand(t, 10), reservedUntil, zeroInstant.Add(-time.Microsecond))
+		if err != nil {
+			t.Fatal(err)
+		}
+		pinRegistryZeroGate(t, domain.ErrInvalidCapacityPool, func(at time.Time) error {
+			_, err := pool.Release(releaseRef(t, "SYN-RELEASE-1"), reference, declaredDemand(t, 1), at)
 			return err
 		})
 	})

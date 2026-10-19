@@ -65,7 +65,7 @@ func TestEachDimensionIsItsOwnPoolOnTheSameSchedule(t *testing.T) {
 		t.Fatalf("同一（班次、维度）再立 = %s %v", again.Pool(), err)
 	}
 
-	reserved, err := weight.Reserve(reservationRef(t, "reservation-1"), 4000, reservedUntil, reservedAt)
+	reserved, err := weight.Reserve(reservationRef(t, "reservation-1"), demandIn(t, 4000, "KG"), reservedUntil, reservedAt)
 	if err != nil {
 		t.Fatal(err)
 	}

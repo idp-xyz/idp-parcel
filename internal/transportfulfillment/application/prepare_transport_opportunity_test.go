@@ -17,9 +17,10 @@ var (
 )
 
 type poolStoreDouble struct {
-	records map[string]ports.CapacityPoolRecord
-	findErr error
-	saves   int
+	records  map[string]ports.CapacityPoolRecord
+	findErr  error
+	saves    int
+	replaces int
 	// raceWith 非空时，下一次落池前先让「另一方」落下这一份同身份的池。
 	raceWith *ports.CapacityPoolRecord
 }
@@ -66,6 +67,7 @@ func (double *poolStoreDouble) Replace(
 	if _, exists := double.records[poolKey(record.Key)]; !exists {
 		return false, nil
 	}
+	double.replaces++
 	double.records[poolKey(record.Key)] = record
 	return true, nil
 }
@@ -150,12 +152,31 @@ func poolCommand(t *testing.T) application.EstablishPoolCommand {
 func reserveCommand(t *testing.T, quantity int64) application.ReserveCapacityCommand {
 	t.Helper()
 	return application.ReserveCapacityCommand{
-		TenantID:    opportunityTenant(t),
-		Pool:        fixturePool,
-		Reservation: "reservation-1",
-		Quantity:    quantity,
-		ValidUntil:  reserveValidUntil,
-		At:          reserveAt,
+		TenantID:        opportunityTenant(t),
+		Pool:            fixturePool,
+		Reservation:     "reservation-1",
+		Quantity:        quantity,
+		Unit:            "kg",
+		SourceKind:      "OPERATOR_DECLARATION",
+		SourceReference: "SYN-DEMAND-DECL-1/v1",
+		ValidUntil:      reserveValidUntil,
+		At:              reserveAt,
+	}
+}
+
+// releaseCommand 是夹具预占 reservation-1 上的一次释放，单位与来源同 reserveCommand。
+func releaseCommand(t *testing.T, release string, quantity int64, at time.Time) application.ReleaseCapacityCommand {
+	t.Helper()
+	return application.ReleaseCapacityCommand{
+		TenantID:        opportunityTenant(t),
+		Pool:            fixturePool,
+		Reservation:     "reservation-1",
+		Release:         release,
+		Quantity:        quantity,
+		Unit:            "kg",
+		SourceKind:      "OPERATOR_DECLARATION",
+		SourceReference: "SYN-DEMAND-DECL-1/v2",
+		At:              at,
 	}
 }
 
@@ -226,13 +247,7 @@ func TestConversionsSplitByTheirSentinels(t *testing.T) {
 		t.Fatalf("reserve: %v", err)
 	}
 
-	released, err := fixture.handler.Release(context.Background(), application.ReleaseCapacityCommand{
-		TenantID:    opportunityTenant(t),
-		Pool:        fixturePool,
-		Reservation: "reservation-1",
-		Quantity:    20,
-		At:          reserveAt.Add(time.Hour),
-	})
+	released, err := fixture.handler.Release(context.Background(), releaseCommand(t, "release-1", 20, reserveAt.Add(time.Hour)))
 	if err != nil {
 		t.Fatalf("release: %v", err)
 	}
@@ -259,13 +274,7 @@ func TestConversionsSplitByTheirSentinels(t *testing.T) {
 	}
 
 	t.Run("a second conversion over the reserved range hits conservation", func(t *testing.T) {
-		result, err := fixture.handler.Release(context.Background(), application.ReleaseCapacityCommand{
-			TenantID:    opportunityTenant(t),
-			Pool:        fixturePool,
-			Reservation: "reservation-1",
-			Quantity:    1,
-			At:          reserveAt.Add(3 * time.Hour),
-		})
+		result, err := fixture.handler.Release(context.Background(), releaseCommand(t, "release-2", 1, reserveAt.Add(3*time.Hour)))
 		if err != nil {
 			t.Fatalf("second release: %v", err)
 		}
@@ -313,19 +322,18 @@ func TestConversionsSplitByTheirSentinels(t *testing.T) {
 		}
 	})
 
-	t.Run("an unknown reservation is not accepted", func(t *testing.T) {
-		result, err := fixture.handler.Release(context.Background(), application.ReleaseCapacityCommand{
-			TenantID:    opportunityTenant(t),
-			Pool:        fixturePool,
-			Reservation: "reservation-9",
-			Quantity:    1,
-			At:          reserveAt.Add(3 * time.Hour),
-		})
+	t.Run("an unknown reservation is its own grade", func(t *testing.T) {
+		result, err := fixture.handler.Release(context.Background(), func() application.ReleaseCapacityCommand {
+			command := releaseCommand(t, "release-3", 1, reserveAt.Add(3*time.Hour))
+			command.Reservation = "reservation-9"
+			return command
+		}())
 		if err != nil {
 			t.Fatalf("release: %v", err)
 		}
-		if result.Outcome() != application.OpportunityNotAccepted {
-			t.Fatalf("outcome = %q", result.Outcome())
+		// 续办是改指在册的那一份预占，与改载荷不同（ADR-0203 决定六）。
+		if result.Outcome() != application.ReservationNotFound {
+			t.Fatalf("outcome = %q, want RESERVATION_NOT_FOUND", result.Outcome())
 		}
 	})
 }

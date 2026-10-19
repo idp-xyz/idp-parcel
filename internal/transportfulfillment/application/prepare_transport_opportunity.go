@@ -19,7 +19,9 @@ var ErrUnexpectedPoolSave = errors.New("transport fulfillment: unexpected capaci
 // OpportunityOutcome 是运输机会准备的应用处理结果。容量三格是业务负向（ADR-0029）：
 // 超额预留带余量（等容量或换班次）、预占过期（重新预占）、守恒撞线（同一范围不得二次
 // 转换）——都是已知答案，不是改单也不是等依赖。建池时班次不在册也是一格业务负向：
-// 续办是先登班次，与改载荷不同。
+// 续办是先登班次，与改载荷不同。预占与释放成了运营决定之后（ADR-0203 决定六），池不在册、
+// 预占不在册、单位不是池的单位各成一格，续办分别是先登池或改指池、改指预占、按池的单位
+// 重述数量，都不并进`未受理`。`未受理`的线上名与 TF 其余运营决定口、登记口同名。
 type OpportunityOutcome uint8
 
 const (
@@ -38,6 +40,11 @@ const (
 	OpportunityNotAccepted
 	OpportunityUndecided
 	PoolScheduleNotFound
+	PoolNotFound
+	ReservationNotFound
+	ReleaseExistingResult
+	ReleaseConflict
+	DemandUnitMismatch
 )
 
 func (outcome OpportunityOutcome) String() string {
@@ -65,11 +72,21 @@ func (outcome OpportunityOutcome) String() string {
 	case ReservationOverdrawnOutcome:
 		return "RESERVATION_OVERDRAWN"
 	case OpportunityNotAccepted:
-		return "SOURCE_NOT_ACCEPTED"
+		return "INPUT_NOT_ACCEPTED"
 	case OpportunityUndecided:
 		return "OPPORTUNITY_UNDECIDED"
 	case PoolScheduleNotFound:
 		return "SCHEDULE_NOT_FOUND"
+	case PoolNotFound:
+		return "POOL_NOT_FOUND"
+	case ReservationNotFound:
+		return "RESERVATION_NOT_FOUND"
+	case ReleaseExistingResult:
+		return "EXISTING_RELEASE"
+	case ReleaseConflict:
+		return "RELEASE_CONFLICT"
+	case DemandUnitMismatch:
+		return "UNIT_MISMATCH"
 	default:
 		return ""
 	}
@@ -105,21 +122,32 @@ type EstablishPoolCommand struct {
 	Capacity  int64
 }
 
+// ReserveCapacityCommand 是一次预占决定（ADR-0203 决定三）：在哪个池、用哪个预占引用、为多少需求量占到何时。需求量
+// 带单位与来源——来源种类取 domain.CapacityDemandSourceKind 的封闭词，引用指名运营声明的那一版或准备结果的需求快照。
+// At 是判断时点，由声明方给。
 type ReserveCapacityCommand struct {
-	TenantID    domain.TenantID
-	Pool        string
-	Reservation string
-	Quantity    int64
-	ValidUntil  time.Time
-	At          time.Time
+	TenantID        domain.TenantID
+	Pool            string
+	Reservation     string
+	Quantity        int64
+	Unit            string
+	SourceKind      string
+	SourceReference string
+	ValidUntil      time.Time
+	At              time.Time
 }
 
+// ReleaseCapacityCommand 是一次释放决定：释放引用认领这一次释放（重放的键），其余同预占，来源说的是为什么不再需要这些量。
 type ReleaseCapacityCommand struct {
-	TenantID    domain.TenantID
-	Pool        string
-	Reservation string
-	Quantity    int64
-	At          time.Time
+	TenantID        domain.TenantID
+	Pool            string
+	Reservation     string
+	Release         string
+	Quantity        int64
+	Unit            string
+	SourceKind      string
+	SourceReference string
+	At              time.Time
 }
 
 type ConsumeCapacityCommand struct {
@@ -136,6 +164,8 @@ type OpportunityResult struct {
 	reason       OpportunityUndecidedReason
 	pool         ports.CapacityPoolRecord
 	hasRecord    bool
+	reservation  domain.CapacityReservationReference
+	release      domain.CapacityReleaseReference
 	available    int64
 	continuation string
 	handoff      string
@@ -154,7 +184,26 @@ func (result OpportunityResult) Pool() (ports.CapacityPoolRecord, bool) {
 	return result.pool, result.hasRecord && result.pool.Key.Pool.String() != ""
 }
 
-// AvailableQuantity 在超额预留时报告当时余量——拒绝要带着答案，调用方据此改量或换班次。
+// Reservation 交回这一格说的那一份预占，取自交回的池：新立的、重放认出的、冲突里挡路的、释放所落的那一份。
+func (result OpportunityResult) Reservation() (domain.CapacityReservation, bool) {
+	record, present := result.Pool()
+	if !present || result.reservation.String() == "" {
+		return domain.CapacityReservation{}, false
+	}
+	return record.Pool.ReservationFor(result.reservation)
+}
+
+// Release 交回这一格说的那一次释放与它所落的预占，取自交回的池：新落的、重放认出的、冲突里挡路的那一次。
+func (result OpportunityResult) Release() (domain.CapacityReservationReference, domain.CapacityRelease, bool) {
+	record, present := result.Pool()
+	if !present || result.release.String() == "" {
+		return domain.CapacityReservationReference{}, domain.CapacityRelease{}, false
+	}
+	return record.Pool.ReleaseFor(result.release)
+}
+
+// AvailableQuantity 在超额预留时报告当时余量——拒绝要带着答案，调用方据此改量或换班次。余量取预占整段里最紧那一刻的
+// （ADR-0203 决定四），所以它可能小于判断时点那一刻的余量。
 func (result OpportunityResult) AvailableQuantity() int64 {
 	return result.available
 }
@@ -313,55 +362,126 @@ func saveCapacityPool(
 	}
 }
 
-// Reserve 建立预占：同引用同量重放返原、同引用异量冲突；超硬上限 → CAPACITY_EXCEEDED
-// 业务负向带当时余量（拒绝带答案，不能以审批绕过）。
+// Reserve 建立一份预占（ADR-0203 决定三至六）。次序：载荷过构造门 → 读池 → 按预占引用分重放与冲突 → 单位与池比 →
+// 硬上限 → 落池。
+//
+// 重放判在单位与上限之前：同一份预占原样重交答原预占，哪怕此刻池已经占满——它占的就是那一份。冲突与单位不符都交回
+// 库里的池（冲突另指挡路的那一份预占），声明方要看见挡住他的是什么。超硬上限答`容量超出`并带预占整段里最紧那一刻的
+// 余量；本编排没有任何越过上限的入口，审批也不行（AT-TF-031）。
 func (handler *PrepareTransportOpportunityHandler) Reserve(
 	ctx context.Context,
 	command ReserveCapacityCommand,
 ) (OpportunityResult, error) {
-	record, reservationRef, result := handler.loadPool(ctx, command.TenantID, command.Pool, command.Reservation)
+	reservationRef, err := domain.NewCapacityReservationReference(command.Reservation)
+	if err != nil {
+		return OpportunityResult{outcome: OpportunityNotAccepted}, nil
+	}
+	demand, err := capacityDemandFrom(command.Quantity, command.Unit, command.SourceKind, command.SourceReference)
+	at := domain.AtRegistryPrecision(command.At)
+	if err != nil || at.IsZero() || !domain.AtRegistryPrecision(command.ValidUntil).After(at) {
+		return OpportunityResult{outcome: OpportunityNotAccepted}, nil
+	}
+	record, result := handler.loadPool(ctx, command.TenantID, command.Pool)
 	if result != nil {
 		return *result, nil
 	}
 	if existing, exists := record.Pool.ReservationFor(reservationRef); exists {
-		reserved, _, _ := existing.Quantities()
-		if reserved == command.Quantity {
-			// 同引用同量：预占重放，返回原池不重扣。
-			return OpportunityResult{outcome: ReservationExistingResult, pool: record, hasRecord: true}, nil
+		outcome := ReservationConflict
+		if existing.Declares(demand, command.ValidUntil, command.At) {
+			outcome = ReservationExistingResult
 		}
-		return OpportunityResult{outcome: ReservationConflict}, nil
+		return OpportunityResult{outcome: outcome, pool: record, hasRecord: true, reservation: reservationRef}, nil
 	}
 
-	reservedPool, err := record.Pool.Reserve(reservationRef, command.Quantity, command.ValidUntil, command.At)
-	if errors.Is(err, domain.ErrCapacityExceeded) {
+	reservedPool, err := record.Pool.Reserve(reservationRef, demand, command.ValidUntil, command.At)
+	switch {
+	case errors.Is(err, domain.ErrCapacityUnitMismatch):
+		return OpportunityResult{outcome: DemandUnitMismatch, pool: record, hasRecord: true}, nil
+	case errors.Is(err, domain.ErrCapacityExceeded):
 		return OpportunityResult{
 			outcome:   CapacityExceededOutcome,
-			available: record.Pool.AvailableAt(command.At),
+			pool:      record,
+			hasRecord: true,
+			available: record.Pool.AvailableThrough(command.At, command.ValidUntil),
 		}, nil
-	}
-	if err != nil {
+	case err != nil:
 		return OpportunityResult{outcome: OpportunityNotAccepted}, nil
 	}
-	return handler.replacePool(ctx, record, reservedPool, CapacityReserved, command.Pool)
+	out, err := handler.replacePool(ctx, record, reservedPool, CapacityReserved, command.Pool)
+	out.reservation = reservationRef
+	return out, err
 }
 
-// Release 显式释放未消耗范围。过期与守恒的领域哨兵各归业务负向一格。
+// Release 显式释放一份预占上未消耗的范围（ADR-0203 决定三、五、六）。次序：载荷过构造门 → 读池 → 按释放引用分重放与
+// 冲突 → 预占在册 → 单位 → 过期与守恒 → 落池。释放引用在池内认领：同一引用原样重交答原释放，改了数量、来源、时点或
+// 挪到另一份预占上都是冲突——不认领的话，每重交一次就多还一份容量。
 func (handler *PrepareTransportOpportunityHandler) Release(
 	ctx context.Context,
 	command ReleaseCapacityCommand,
 ) (OpportunityResult, error) {
-	record, reservationRef, result := handler.loadPool(ctx, command.TenantID, command.Pool, command.Reservation)
+	reservationRef, err := domain.NewCapacityReservationReference(command.Reservation)
+	if err != nil {
+		return OpportunityResult{outcome: OpportunityNotAccepted}, nil
+	}
+	releaseRef, err := domain.NewCapacityReleaseReference(command.Release)
+	if err != nil {
+		return OpportunityResult{outcome: OpportunityNotAccepted}, nil
+	}
+	demand, err := capacityDemandFrom(command.Quantity, command.Unit, command.SourceKind, command.SourceReference)
+	if err != nil || domain.AtRegistryPrecision(command.At).IsZero() {
+		return OpportunityResult{outcome: OpportunityNotAccepted}, nil
+	}
+	record, result := handler.loadPool(ctx, command.TenantID, command.Pool)
 	if result != nil {
 		return *result, nil
 	}
-	releasedPool, err := record.Pool.Release(reservationRef, command.Quantity, command.At)
+	if on, existing, taken := record.Pool.ReleaseFor(releaseRef); taken {
+		outcome := ReleaseConflict
+		if on == reservationRef && existing.Declares(demand, command.At) {
+			outcome = ReleaseExistingResult
+		}
+		return OpportunityResult{outcome: outcome, pool: record, hasRecord: true, reservation: on, release: releaseRef}, nil
+	}
+	if _, exists := record.Pool.ReservationFor(reservationRef); !exists {
+		return OpportunityResult{outcome: ReservationNotFound, pool: record, hasRecord: true}, nil
+	}
+
+	releasedPool, err := record.Pool.Release(releaseRef, reservationRef, demand, command.At)
+	if errors.Is(err, domain.ErrCapacityUnitMismatch) {
+		return OpportunityResult{outcome: DemandUnitMismatch, pool: record, hasRecord: true, reservation: reservationRef}, nil
+	}
 	if mapped := capacitySentinel(err); mapped != OpportunityOutcomeInvalid {
-		return OpportunityResult{outcome: mapped}, nil
+		// 过期与守恒撞线都交回那一份预占：三量在上面，声明方据此看还能释放多少。
+		return OpportunityResult{outcome: mapped, pool: record, hasRecord: true, reservation: reservationRef}, nil
 	}
 	if err != nil {
 		return OpportunityResult{outcome: OpportunityNotAccepted}, nil
 	}
-	return handler.replacePool(ctx, record, releasedPool, CapacityReleased, command.Pool)
+	out, err := handler.replacePool(ctx, record, releasedPool, CapacityReleased, command.Pool)
+	out.reservation = reservationRef
+	out.release = releaseRef
+	return out, err
+}
+
+// capacityDemandFrom 把命令里的需求量四格过构造门。哪一格不成立都是改载荷，不分格。
+func capacityDemandFrom(quantity int64, unit, sourceKind, sourceReference string) (domain.CapacityDemand, error) {
+	unitRef, err := domain.NewQuantityUnitReference(unit)
+	if err != nil {
+		return domain.CapacityDemand{}, err
+	}
+	kind, err := domain.ParseCapacityDemandSourceKind(sourceKind)
+	if err != nil {
+		return domain.CapacityDemand{}, err
+	}
+	reference, err := domain.NewCapacityDemandSourceReference(sourceReference)
+	if err != nil {
+		return domain.CapacityDemand{}, err
+	}
+	source, err := domain.NewCapacityDemandSource(kind, reference)
+	if err != nil {
+		return domain.CapacityDemand{}, err
+	}
+	return domain.NewCapacityDemand(quantity, unitRef, source)
 }
 
 // Consume 依据装载分配确认消耗，成功后把消耗交给装载分配链。
@@ -369,7 +489,11 @@ func (handler *PrepareTransportOpportunityHandler) Consume(
 	ctx context.Context,
 	command ConsumeCapacityCommand,
 ) (OpportunityResult, error) {
-	record, reservationRef, result := handler.loadPool(ctx, command.TenantID, command.Pool, command.Reservation)
+	reservationRef, err := domain.NewCapacityReservationReference(command.Reservation)
+	if err != nil {
+		return OpportunityResult{outcome: OpportunityNotAccepted}, nil
+	}
+	record, result := handler.loadPool(ctx, command.TenantID, command.Pool)
 	if result != nil {
 		return *result, nil
 	}
@@ -401,31 +525,26 @@ func (handler *PrepareTransportOpportunityHandler) Consume(
 	return out, nil
 }
 
-// loadPool 受理池与预占引用并读回当前池值。
+// loadPool 受理池引用并读回当前池值。池不在册（含他租户的池——按本租户的键读不回）答`池不在册`：续办是先登池或改指
+// 在册的池，与改载荷不同。
 func (handler *PrepareTransportOpportunityHandler) loadPool(
 	ctx context.Context,
 	tenant domain.TenantID,
 	pool string,
-	reservation string,
-) (ports.CapacityPoolRecord, domain.CapacityReservationReference, *OpportunityResult) {
-	notAccepted := &OpportunityResult{outcome: OpportunityNotAccepted}
+) (ports.CapacityPoolRecord, *OpportunityResult) {
 	poolRef, err := domain.NewCapacityPoolReference(pool)
 	if err != nil {
-		return ports.CapacityPoolRecord{}, domain.CapacityReservationReference{}, notAccepted
-	}
-	reservationRef, err := domain.NewCapacityReservationReference(reservation)
-	if err != nil {
-		return ports.CapacityPoolRecord{}, domain.CapacityReservationReference{}, notAccepted
+		return ports.CapacityPoolRecord{}, &OpportunityResult{outcome: OpportunityNotAccepted}
 	}
 	record, found, err := handler.deps.Pools.FindByKey(ctx, ports.CapacityPoolKey{TenantID: tenant, Pool: poolRef})
 	if err != nil {
 		undecided := opportunityUndecided(PoolStoreUnavailable, pool)
-		return ports.CapacityPoolRecord{}, domain.CapacityReservationReference{}, &undecided
+		return ports.CapacityPoolRecord{}, &undecided
 	}
 	if !found {
-		return ports.CapacityPoolRecord{}, domain.CapacityReservationReference{}, notAccepted
+		return ports.CapacityPoolRecord{}, &OpportunityResult{outcome: PoolNotFound}
 	}
-	return record, reservationRef, nil
+	return record, nil
 }
 
 // replacePool 把转换后的池换值入库。
@@ -449,13 +568,15 @@ func (handler *PrepareTransportOpportunityHandler) replacePool(
 }
 
 // capacitySentinel 把容量转换的领域哨兵透出为业务负向格：过期重新预占、守恒撞线不得
-// 二次转换；查无预占是提交矛盾，交回零值由调用方落未受理。
+// 二次转换、查无预占改指在册的那一份；其余交回零值由调用方落未受理。
 func capacitySentinel(err error) OpportunityOutcome {
 	switch {
 	case errors.Is(err, domain.ErrReservationExpired):
 		return ReservationExpiredOutcome
 	case errors.Is(err, domain.ErrReservationOverdrawn):
 		return ReservationOverdrawnOutcome
+	case errors.Is(err, domain.ErrReservationNotFound):
+		return ReservationNotFound
 	default:
 		return OpportunityOutcomeInvalid
 	}

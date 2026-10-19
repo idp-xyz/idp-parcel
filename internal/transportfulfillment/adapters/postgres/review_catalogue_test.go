@@ -238,11 +238,11 @@ func TestReviewCatalogueSumsCapacityPoolQuantities(t *testing.T) {
 
 	reservedPool := establishedPoolRecord(t, "tenant-1", "schedule-2", 100)
 	first := deliveryValue(t, domain.NewCapacityReservationReference, "r-1")
-	pool, err := reservedPool.Pool.Reserve(first, 10, reservedAt.Add(24*time.Hour), reservedAt)
+	pool, err := reservedPool.Pool.Reserve(first, poolDemand(t, 10), reservedAt.Add(24*time.Hour), reservedAt)
 	if err != nil {
 		t.Fatalf("预占：%v", err)
 	}
-	pool, err = pool.Release(first, 2, reservedAt.Add(time.Hour))
+	pool, err = pool.Release(deliveryValue(t, domain.NewCapacityReleaseReference, "rel-1"), first, poolDemand(t, 2), reservedAt.Add(time.Hour))
 	if err != nil {
 		t.Fatalf("释放：%v", err)
 	}
@@ -254,7 +254,7 @@ func TestReviewCatalogueSumsCapacityPoolQuantities(t *testing.T) {
 	}
 	pool, err = pool.Reserve(
 		deliveryValue(t, domain.NewCapacityReservationReference, "r-2"),
-		5, reservedAt.Add(24*time.Hour), reservedAt)
+		poolDemand(t, 5), reservedAt.Add(24*time.Hour), reservedAt)
 	if err != nil {
 		t.Fatalf("第二笔预占：%v", err)
 	}
