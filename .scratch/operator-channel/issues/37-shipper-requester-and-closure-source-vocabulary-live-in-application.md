@@ -1,7 +1,7 @@
 # 37 受控关闭与重开：「代货主」那一对与关闭责任来源词表收归 application 一处，装配头注去计数，票 28 遗留头注改口
 
 Category: enhancement
-Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-oc37`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 1 评审遗留；用户授权代决）
+Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-oc37`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 1 评审遗留；用户授权代决）
 Blocked by: 无（operator-channel/34 已进 main）
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)。被评的是 [15](./15-operation-decision-faces-take-operator-intake.md) 之六（代码 `0e3bb7df`），规则出处是 [ADR-0183](../../../docs/adr/0183-operator-channel-addresses-controlled-closure-and-reopening-by-parcel-and-derives-the-shipper-from-the-accepted-request.md)。
 出处：
@@ -97,13 +97,43 @@ Blocked by: 无（operator-channel/34 已进 main）
 
 ## 完成判据
 
-- [ ] 非测试 Go 源码里，`CUSTOMER-ACCOUNT` 只出现在 application 的 `customerAccountRequesterKind`（用 `git grep -n 'CUSTOMER-ACCOUNT' -- '*.go' ':!*_test.go'` 核）。
-- [ ] 关闭责任来源种类的枚举遍历，在非测试源码里只在 `ParseClosureResponsibilitySourceKind`。
-- [ ] 适配器里不再出现 `identity.CustomerAccountID()`。
-- [ ] 上列新用例都在；http 那两条线上契约用例原样绿。
+- [x] 非测试 Go 源码里，`CUSTOMER-ACCOUNT` 只出现在 application 的 `customerAccountRequesterKind`（用 `git grep -n 'CUSTOMER-ACCOUNT' -- '*.go' ':!*_test.go'` 核）。
+- [x] 关闭责任来源种类的枚举遍历，在非测试源码里只在 `ParseClosureResponsibilitySourceKind`。
+- [x] 适配器里不再出现 `identity.CustomerAccountID()`。
+- [x] 上列新用例都在；http 那两条线上契约用例原样绿。
 - [ ] `git grep -n '内容可以逐字相同\|关闭这一格允许缺席' -- internal/parcelshipment` 零命中；`buildOperatorDecisionIntakes` 头注不再数别包的口。
-- [ ] `gofmt -l .` 无输出；`go build ./...`、`go vet ./...` 退 0。
-- [ ] 带 DSN 跑 `go test -p 1 -count=1 ./internal/parcelshipment/... ./cmd/parcel-api/ ./internal/architecture/...`，全 ok，其中包括真库用例 `TestClosureAndReopeningThroughTheOperatorChannelAgainstARealDatabase`。
-- [ ] 机制清点在本笔的干净检出上重生成；有差就单独成笔说明。
+- [x] `gofmt -l .` 无输出；`go build ./...`、`go vet ./...` 退 0。
+- [x] 带 DSN 跑 `go test -p 1 -count=1 ./internal/parcelshipment/... ./cmd/parcel-api/ ./internal/architecture/...`，全 ok，其中包括真库用例 `TestClosureAndReopeningThroughTheOperatorChannelAgainstARealDatabase`。
+- [x] 机制清点在本笔的干净检出上重生成；有差就单独成笔说明。
 - [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审（空闲通道，或 `/code-review` 的隔离子代理）、推送方在干净检出上带 DSN 跑全量。
-- [ ] 票 15 Comments 已记下 Standards (1)(2)(3) 的去向。
+- [x] 票 15 Comments 已记下 Standards (1)(2)(3) 的去向。
+
+## 完成记录（2026-10-19，会话 idp-parcel-9b 的实施子代理，分支 claude-oc37）
+
+**基线**：`9d9ac2d4`（已含票 28、34、36）。代码一笔 `97b7579c`，本记录一笔在其后。机制清点在 `97b7579c` 上重生成无差，不另成笔。
+
+**落点**：
+- application `form_continued_attempt_decision.go`：紧挨 `HasShipperAuthorizationEvidence` 导出 `ShipperRequesterOf`、`ShipperInstructionSubjectOf`；种类段为不导出常量 `customerAccountRequesterKind`（不以 Prefix 结尾）；分隔符改名 `kindSegmentSeparator`，头注写明`关闭责任来源`与「代货主」请求方引用同形、共用；导出 `ParseClosureResponsibilitySourceKind`，种类词表只在它里面，`closureResponsibilitySourceKindOf` 先切再调它；`closureResponsibilitySourceOf` 仍不导出。
+- adapters/http `operator_decision_intake.go`：删 `shipperOf`；`IntakeControlledClosure` 货主指令分支与 `IntakeReopening` 改调 application，错误仍包「parcel shipment http: shipper requester」；`parseClosureResponsibilitySource` 只把 Invalid 译成 `ErrMalformedRequest`、报文带出原词。
+- `cmd/parcel-api/assemble_operator_decisions.go`：`buildOperatorDecisionIntakes` 头注照做什么第 3 条改写。
+- 接手票 28 遗留头注：`ports.ContinuedAttemptDecisionIdentity`、adapters/identity `ContinuedAttemptDecisions` 改为「铸在认重放之后……再关是另一次请求」；`ports.ContinuedAttemptDecisionAuthorizationQuery` 改为请求方可缺席（ADR-0183 决定三、四）。
+- **越出地盘**（最小改动）：`internal/parcelshipment/domain/continued_attempt.go` 里 `ContinuedAttemptDecisionSpec.Requester` 注释也写「只有关闭这一格允许缺席」，同一句遗留，改口同上；只动注释。
+
+**用例**：
+- 做什么 5 认词：`TestParseClosureResponsibilitySourceKindRecognisesEachNamedKindAndNothingElse`（外部测试包；空串、`OTHER`、小写词、带主体整串都交 Invalid）。
+- 做什么 5 串形：`TestTheShipperRequesterAndInstructionSubjectComeFromTheCustomerAccount`。
+- 做什么 5 重放与重开门：`TestAShipperPairDerivedInOnePlaceReplaysAndPassesTheReopeningGate`。
+- 包内往返随改名：`TestClosureResponsibilitySourceComposesAndParsesBackToTheSameKind`。
+- http 坏词 400：`TestAnUnrecognisedResponsibilitySourceWordAnswers400CarryingTheWord`，先在旧适配器上跑绿（钉现行行为）再换实现。线上契约钉 `TestControlledClosureTakesTheShipperFromTheAcceptedRequestOfTheParcel`、`TestReopeningTakesTheShipperAccountFromTheAcceptedRequestOfTheParcel` 未改一字，绿。
+
+**grep 核对**（钉 `97b7579c`）：
+- `git grep -n 'CUSTOMER-ACCOUNT' -- '*.go' ':!*_test.go'` 只命中 application 的 `customerAccountRequesterKind`。
+- 种类枚举遍历在非测试源码里只在 `ParseClosureResponsibilitySourceKind`。
+- `adapters/http` 非测试源码里无 `CustomerAccountID()`。
+- `git grep -n '内容可以逐字相同\|关闭这一格允许缺席' -- internal/parcelshipment`：`关闭这一格允许缺席` 零命中；`内容可以逐字相同` 剩两处，都说的是`渠道选择决定`（adapters/identity 的渠道选择标识工厂与 `domain/channel_selection_decision.go`），重跑两次本就是两条记录，不是票 28 遗留，如实保留。该格判据字面过宽，故不打勾。
+
+**门**（Linux（WSL2），真库为 55432 门禁库）：`gofmt -l` 改动文件无输出；`go build ./...`、`go vet ./...` 退 0；带 DSN `go test -p 1 -count=1 ./internal/parcelshipment/... ./cmd/parcel-api/ ./internal/architecture/...` 全 ok（含真库 `TestClosureAndReopeningThroughTheOperatorChannelAgainstARealDatabase` PASS）。未跑全仓全量。
+
+**证据层级**：`S`（合成数据、替身与门禁库）。
+
+评审：待会话读 diff 审。
