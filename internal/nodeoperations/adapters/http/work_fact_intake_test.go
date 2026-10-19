@@ -213,6 +213,29 @@ func TestWorkFactReceptionIntakeRefusesMalformedReceptionPayloads(t *testing.T) 
 	}
 }
 
+// Covers: 事实身份与发生时刻缺席，经生产 Intake 走到端点答 400 `MALFORMED_REQUEST`，不交零值给编排——见 ADR-0186
+// 「复核记录（2026-10-19，决定原文不动）」：事实身份是判重键，缺了连重放都认不出，与决定四「输入缺陷」同一格。TF 作业
+// 事实口那种「缺席交编排、答未受理」在这里不适用；改成交编排时这条先红。编排一侧装的是只会报错的替身：漏过 Intake 就成
+// 500，不会碰巧也是 400。
+func TestWorkFactReceptionAnswers400ForAbsentFactIdentityOrOccurrenceTime(t *testing.T) {
+	endpoint := nodeopshttp.NewReceiveDeliveredUnitEndpoint(receptionIntakeForTest(t), failingHandler{})
+	const rest = `"deliveredBy":"SYN-COURIER-01","handlingUnit":"SYN-HU-0011","claim":"SCAN_ONLY","mark":"SYN-MARK-0011"`
+	for name, body := range map[string]string{
+		"缺事实身份":   `{` + rest + `,"occurredAt":"2026-09-24T09:45:00+08:00"}`,
+		"事实身份为空白": `{"sourceId":" ",` + rest + `,"occurredAt":"2026-09-24T09:45:00+08:00"}`,
+		"缺发生时刻":   `{"sourceId":"SYN-DEVICE-07/000131",` + rest + `}`,
+		"发生时刻为空串": `{"sourceId":"SYN-DEVICE-07/000132",` + rest + `,"occurredAt":""}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			endpoint.ServeHTTP(recorder, receptionRequest(body))
+			if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), "MALFORMED_REQUEST") {
+				t.Fatalf("status = %d body = %s, want 400 MALFORMED_REQUEST", recorder.Code, recorder.Body.String())
+			}
+		})
+	}
+}
+
 // Covers: 缺席的认证方在构造时拒，不等第一个请求。
 func TestNewWorkFactReceptionIntakeRejectsAMissingAuthenticator(t *testing.T) {
 	if _, err := nodeopshttp.NewWorkFactReceptionIntake(nil); err == nil {
