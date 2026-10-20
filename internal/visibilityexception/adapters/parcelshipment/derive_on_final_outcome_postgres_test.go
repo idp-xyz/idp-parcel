@@ -75,11 +75,29 @@ type fixedProjectionClock struct{ at time.Time }
 
 func (clock fixedProjectionClock) Now() time.Time { return clock.at }
 
+// outcomeRecordingProjection 留下派生编排每次的结论：消费门把 EXISTING_RESULT 与
+// SOURCE_CONFLICT 都按已消费确认，只看消费口的返回分不出重投落在哪一格。
+type outcomeRecordingProjection struct {
+	inner    adapter.FinalProjectionHandler
+	outcomes []veapplication.DeriveProjectionOutcome
+}
+
+func (recorder *outcomeRecordingProjection) Handle(
+	ctx context.Context, command veapplication.DeriveProjectionCommand,
+) (veapplication.DeriveProjectionResult, error) {
+	result, err := recorder.inner.Handle(ctx, command)
+	if err == nil {
+		recorder.outcomes = append(recorder.outcomes, result.Outcome())
+	}
+	return result, err
+}
+
 type finalChainFixture struct {
 	finals      *pspostgres.FinalOutcomes
 	facts       *vepostgres.AcceptedFacts
 	projections *vepostgres.Projections
 	transactor  bentoapp.Transactor
+	derive      *outcomeRecordingProjection
 	subject     *adapter.DeriveOnFinalOutcomeAdapter
 }
 
@@ -116,7 +134,8 @@ func newFinalChainFixture(t *testing.T) *finalChainFixture {
 		Downstream:    acceptingProjectionHandoff{},
 		Clock:         fixedProjectionClock{at: finalAdoptedAt.Add(3 * time.Hour)},
 	})
-	subject, err := adapter.NewDeriveOnFinalOutcomeAdapter(finals, derive)
+	recorder := &outcomeRecordingProjection{inner: derive}
+	subject, err := adapter.NewDeriveOnFinalOutcomeAdapter(finals, recorder)
 	if err != nil {
 		t.Fatalf("构造译装器：%v", err)
 	}
@@ -125,6 +144,7 @@ func newFinalChainFixture(t *testing.T) *finalChainFixture {
 		facts:       facts,
 		projections: projections,
 		transactor:  db.Transactor(),
+		derive:      recorder,
 		subject:     subject,
 	}
 }
@@ -266,5 +286,27 @@ func TestALatePredecessorFinalNeverBecomesCurrentAgain(t *testing.T) {
 	fixture.consume(t, formedRederivedFinalRef())
 	fixture.consume(t, formedFinalRef())
 
+	fixture.assertOnlyTheCorrectedFinalIsCurrent(t)
+}
+
+// Covers: AT-VE-174（重投）——同一封重派生信封再投一次答已有结果，不形成新的投影版本。前身进
+// 事实内容指纹，所以它必须取自 PS 那一行不可变的采用键；若改成随读取时刻现算（比如读当前位），
+// 重投时前身一格就变了，派生编排会把它判成同版本的来源冲突。
+func TestARedeliveredRederivedFinalIsTheExistingResult(t *testing.T) {
+	fixture := newFinalChainFixture(t)
+	fixture.adoptCorrectionChain(t)
+	fixture.consume(t, formedFinalRef())
+	fixture.consume(t, formedRederivedFinalRef())
+	settled := fixture.currentProjection(t)
+
+	fixture.consume(t, formedRederivedFinalRef())
+
+	outcomes := fixture.derive.outcomes
+	if last := outcomes[len(outcomes)-1]; last != veapplication.FactExistingResult {
+		t.Fatalf("重投的结论 = %s, want EXISTING_RESULT", last)
+	}
+	if again := fixture.currentProjection(t); again.Version() != settled.Version() {
+		t.Fatal("重投形成了新的投影版本")
+	}
 	fixture.assertOnlyTheCorrectedFinalIsCurrent(t)
 }
