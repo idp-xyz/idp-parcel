@@ -20,7 +20,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
-// 本文件对真实 PostgreSQL 证送站预报与送站交接单两条查阅列表带节点的读法经迁移 0021 那两条索引读册表（票 ps-external-mark-relations/15）。
+// 本文件对真实 PostgreSQL 证送站预报与送站交接单两条查阅列表的各种读法经迁移 0021 各自那条索引读册表（票 ps-external-mark-relations/15）。
 //
 // EXPLAIN 的是读口自己发出的那条语句与那组参数：经连接池的查询追踪原样记下，不在测试里另抄一份 SQL——抄的那份会在查询改动时
 // 留在这里变旧，而计划照旧好看。参数随语句绑定，规划器拿得到实参，「参数为空即不设这一界」那几支在规划时就折掉，计划与读口执行
@@ -30,13 +30,15 @@ const (
 	planTenant      = "SYN-TENANT-PSXM15"
 	planOtherTenant = "SYN-TENANT-PSXM15-OTHER"
 	planNodes       = 8
-	// 每个租户每本册的行数。量取到带节点的两种读法上规划器选索引不在两可之间（实测索引那条计划的估价不到顺序扫描的一半），再多
-	// 只拖慢用例。
+	// 每个租户每本册的行数。量取到四种读法上规划器都自己选了索引（带节点两种实测索引那条计划的估价不到顺序扫描的一半），再多只
+	// 拖慢用例。
 	planRowsPerTenant = 2000
 	planPageSize      = 50
 
-	preAdviceListIndex    = "delivery_pre_advice_by_node_expected_arrival"
-	handoverNoteListIndex = "delivery_handover_note_by_node_opening"
+	preAdviceNodeIndex      = "delivery_pre_advice_by_node_expected_arrival"
+	preAdviceTenantIndex    = "delivery_pre_advice_by_expected_arrival"
+	handoverNoteNodeIndex   = "delivery_handover_note_by_node_opening"
+	handoverNoteTenantIndex = "delivery_handover_note_by_opening"
 )
 
 var planEpoch = time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
@@ -218,6 +220,15 @@ func planSummary(plan explainedNode) string {
 	return strings.Join(parts, " → ")
 }
 
+// limitOverIndexScan 报告计划是不是「Limit 下直接一个按该索引的索引扫描」：按键序读满一页即停的那个形状。
+func limitOverIndexScan(plan explainedNode, index string) bool {
+	if plan.NodeType != "Limit" || len(plan.Plans) != 1 {
+		return false
+	}
+	scan := plan.Plans[0]
+	return (scan.NodeType == "Index Scan" || scan.NodeType == "Index Only Scan") && scan.IndexName == index
+}
+
 type listedRow struct {
 	id   string
 	node string
@@ -246,13 +257,11 @@ func checkListed(t *testing.T, rows []listedRow, filter ports.DeliveryScopeCatal
 	}
 }
 
-// Covers: 票 ps-external-mark-relations/15「完成判据」的用例——两个租户各灌同形的合成预报与交接单，读口两条列表带节点的读法（节点与
-// 一日、只按节点）发出的语句，规划器不改任何设置就经迁移 0021 的那条索引读册表，不是顺序扫描；只按节点那一读按键序读满一页即停，
-// 计划里没有排序——索引的列向与查询的排序对得上。灌量之后的答复照旧是筛选与次序本身。
-//
-// 不带节点的全租户读不在断言里：这条索引对它给得出的只有租户前缀，与主键一样。规划器在这份数据上选顺序扫描；关掉顺序扫描，它在
-// 主键与这条索引之间估价贴近、选哪条不稳，断言「经新索引」证不出什么（迁移 0021 头注）。
-func TestPreAdviceAndHandoverNoteListsReadThroughTheirNodeIndexes(t *testing.T) {
+// Covers: 票 ps-external-mark-relations/15「完成判据」与「裁定补」的用例——两个租户各灌同形的合成预报与交接单，读口两条列表的四种读法
+// 发出的语句，规划器不改任何设置就经迁移 0021 为那种读法建的索引读册表，不是顺序扫描：带节点（节点与一日、只按节点）走（租户，节点，
+// 业务时刻，标识）那条，不带节点（全租户一日、全租户）走（租户，业务时刻，标识）那条。不带区间的两种读法按键序读满一页即停，计划就是
+// Limit 下一个索引扫描，没有排序——索引的列向与查询的排序对得上。灌量之后的答复照旧是筛选与次序本身。
+func TestPreAdviceAndHandoverNoteListsReadThroughTheirIndexes(t *testing.T) {
 	fixture := newCataloguePlanFixture(t)
 	fixture.seed(t)
 	ctx := t.Context()
@@ -260,23 +269,28 @@ func TestPreAdviceAndHandoverNoteListsReadThroughTheirNodeIndexes(t *testing.T) 
 	node := must(t, domain.NewNodeReference, planNodeName(3))
 	day := planEpoch.AddDate(0, 0, 9)
 
-	// 节点与一日那一读只有十来行，规划器取位图扫描再排这十来行，比按键序逐行回表便宜，所以只有只按节点那一读断言不排序。
+	// 带一日的两种读法只有十来行到八十来行，规划器可以取位图扫描再排这几十行，比按键序逐行回表便宜，所以只有不带区间的两种读法断言
+	// 不排序。
 	variants := []struct {
 		name           string
 		filter         ports.DeliveryScopeCatalogueFilter
+		wholeTenant    bool
 		orderedByIndex bool
 	}{
 		{name: "节点与一日", filter: ports.DeliveryScopeCatalogueFilter{Node: node, From: day, Until: day.AddDate(0, 0, 1)}},
 		{name: "只按节点", filter: ports.DeliveryScopeCatalogueFilter{Node: node}, orderedByIndex: true},
+		{name: "全租户一日", filter: ports.DeliveryScopeCatalogueFilter{From: day, Until: day.AddDate(0, 0, 1)}, wholeTenant: true},
+		{name: "全租户", filter: ports.DeliveryScopeCatalogueFilter{}, wholeTenant: true, orderedByIndex: true},
 	}
 	lists := []struct {
-		name     string
-		relation string
-		index    string
-		list     func(*testing.T, ports.DeliveryScopeCatalogueFilter) ([]listedRow, error)
+		name        string
+		relation    string
+		nodeIndex   string
+		tenantIndex string
+		list        func(*testing.T, ports.DeliveryScopeCatalogueFilter) ([]listedRow, error)
 	}{
 		{
-			name: "预报", relation: "delivery_pre_advice", index: preAdviceListIndex,
+			name: "预报", relation: "delivery_pre_advice", nodeIndex: preAdviceNodeIndex, tenantIndex: preAdviceTenantIndex,
 			list: func(t *testing.T, filter ports.DeliveryScopeCatalogueFilter) ([]listedRow, error) {
 				states, err := fixture.catalogue.ListDeliveryPreAdvices(ctx, tenant, filter, planPageSize)
 				rows := make([]listedRow, 0, len(states))
@@ -289,7 +303,7 @@ func TestPreAdviceAndHandoverNoteListsReadThroughTheirNodeIndexes(t *testing.T) 
 			},
 		},
 		{
-			name: "交接单", relation: "delivery_handover_note", index: handoverNoteListIndex,
+			name: "交接单", relation: "delivery_handover_note", nodeIndex: handoverNoteNodeIndex, tenantIndex: handoverNoteTenantIndex,
 			list: func(t *testing.T, filter ports.DeliveryScopeCatalogueFilter) ([]listedRow, error) {
 				notes, err := fixture.catalogue.ListDeliveryHandoverNotes(ctx, tenant, filter, planPageSize)
 				rows := make([]listedRow, 0, len(notes))
@@ -319,20 +333,26 @@ func TestPreAdviceAndHandoverNoteListsReadThroughTheirNodeIndexes(t *testing.T) 
 					t.Errorf("不带区间读回 %d 行，want 满页 %d", len(rows), planPageSize)
 				}
 
+				index := list.nodeIndex
+				if variant.wholeTenant {
+					index = list.tenantIndex
+				}
 				plan := fixture.explain(t, fixture.listQuery(t, list.relation))
 				summary := planSummary(plan)
 				t.Logf("计划：%s", summary)
 				var usesIndex, seqScan, sorted bool
 				walkPlan(plan, func(node explainedNode) {
-					usesIndex = usesIndex || node.IndexName == list.index
+					usesIndex = usesIndex || node.IndexName == index
 					seqScan = seqScan || (node.NodeType == "Seq Scan" && node.RelationName == list.relation)
 					sorted = sorted || node.NodeType == "Sort" || node.NodeType == "Incremental Sort"
 				})
 				if seqScan || !usesIndex {
-					t.Errorf("计划没有经 %s 读 %s：%s", list.index, list.relation, summary)
+					t.Errorf("计划没有经 %s 读 %s：%s", index, list.relation, summary)
 				}
-				if variant.orderedByIndex && sorted {
-					t.Errorf("按节点读满一页还要排序——索引的列向与查询的排序对不上：%s", summary)
+				if variant.orderedByIndex {
+					if sorted || !limitOverIndexScan(plan, index) {
+						t.Errorf("不带区间的读不是 Limit 下按 %s 键序读满一页——索引的列向与查询的排序对不上：%s", index, summary)
+					}
 				}
 			})
 		}
