@@ -34,8 +34,8 @@ func init() {
 			return deliveryPreAdviceWiring{customerPreAdvice: customerPreAdvice, deliveryPreAdvices: deliveryPreAdvices}, err
 		},
 		mount: func(_ endpointChannels, wiring deliveryPreAdviceWiring) []httpapi.BusinessEndpoint {
-			// 送站预报两口挂首方客户渠道的 Intake（ADR-0212 决定二；票 ps-external-mark-relations/09），理由同提交口那段：单独的变量，两个
-			// 隔离开关都换不了它们。customerPreAdvice 缺席时两行是字面量未配置即拒。
+			// 送站预报两口挂首方客户渠道的 Intake（ADR-0212 决定二；票 ps-external-mark-relations/09），理由同 endpoints_submission.go 里
+			// submissionIntake 那段注释：单独的变量，两个隔离开关都换不了它们。customerPreAdvice 缺席时两行是字面量未配置即拒。
 			preAdviceSubmissionIntake, preAdviceWithdrawalIntake := customerPreAdviceIntakes(wiring.customerPreAdvice)
 			return []httpapi.BusinessEndpoint{
 				// 送站预报的提交口与撤回口（ADR-0212 决定二；UC-NO-006）：节点作业在客户面开的写口，挂首方客户渠道族，一口一项客户面能力。

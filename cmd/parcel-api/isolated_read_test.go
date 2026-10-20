@@ -68,6 +68,25 @@ func isolatedReadAdmittedPatterns() map[string]bool {
 	return admitted
 }
 
+// isolatedReadAdmissionCeiling 是隔离读放行面的上界。放行面由登记处派生之后，把一行新的委托查阅视图声明成隔离读、挂上
+// shipmentViews，放行面就跟着长，TestIsolatedReadAdmissionSwitchesOnlyOperationsReadLines 照绿；而隔离形态是逐口退场的
+// 过渡（ADR-0150 决定三），每多放一口就是日后要随真渠道撤下的一行，扩面得是一次有意的改动。声明里多出一口，下面的用例红，
+// 改的人得在这里写上那一行。某一口换上真渠道时，照 ADR-0150 决定三同笔删掉这里那一行；漏删不红，只是上界松了一格。
+var isolatedReadAdmissionCeiling = map[string]bool{
+	"/shipment-request-views":       true,
+	"/acceptance-review-queue":      true,
+	"/authorized-disposition-queue": true,
+}
+
+// Covers: ADR-0078 Decision 一、ADR-0150 决定三 — 声明为隔离读的行不越出上界。
+func TestIsolatedReadAdmissionStaysWithinItsCeiling(t *testing.T) {
+	for pattern := range isolatedReadAdmittedPatterns() {
+		if !isolatedReadAdmissionCeiling[pattern] {
+			t.Fatalf("%s 声明为隔离读，不在 isolatedReadAdmissionCeiling 里：扩隔离读放行面要在那里写明", pattern)
+		}
+	}
+}
+
 // Covers: ADR-0078 Decision 一、二 — 启用态只放委托查阅一族。unwired* 读口交回稳定
 // 错误，于是「越过了 Intake」在传输层可观察为 NO_ANSWER_FORMED（5xx）而不再是
 // ACCESS_CHANNEL_NOT_CONFIGURED（403）：两态在同一探针下签名不同，恰是本测试要钉的

@@ -25,8 +25,10 @@ import (
 // 生产装配（assembleBusinessEndpoints）与装配测试（endpoints_test.go）展开的是同一张表、同一个 mount。加一个端点
 // 只动那个特性的文件，不动这里。
 
-// endpointLine 是一行端点在登记处的声明。接入面由装配测试逐面核对（TestEachLineOpensOnlyOnItsDeclaredAccessFace），
-// 所以它与 mount 那一行写的 Intake 漂不开。
+// endpointLine 是一行端点在登记处的声明。Intake 经 endpointChannels 来的行，接入面那一族由装配测试逐族核对
+// （TestEachLineOpensOnlyOnItsDeclaredAccessFace），声明与 mount 那一行写的 Intake 漂不开；决定种类、作业范围种类与外部
+// 事实种类各由读它的那条换口用例核。核不到的有两处：ownIntake 的行在装配测试里恒为未配置，族写错了也照绿；首方客户的
+// 能力细分格没有用例读它。这两处靠各特性自己的测试另证（ADR-0222 越权风险点 6）。
 type endpointLine struct {
 	method string
 	face   accessFace
@@ -107,7 +109,8 @@ type endpointSources struct {
 	db            *bentopg.DB
 	isolatedWrite *isolatedWriteAdmission
 	selfAuthority string
-	// 作业事实与送站交接单三口自建铸造器用的那一组：核验方、操作者册、设备册与准入范围，与收寄口同一组。
+	// 送站交接单的作业事实各口自建铸造器（buildDeliveryHandoverNoteFaces）用的那一组：核验方、操作者册、设备册与准入范围，
+	// 与收寄口的作业事实渠道（buildWorkFactIntakes）同一组。设备册另喂作业设备册（buildWorkDeviceCatalogue）。
 	operatorVerifier accessidentity.OperatorCredentialVerifier
 	operatorRegistry accessidentity.OperatorRegistry
 	deviceRegistry   *aipg.DeviceRegistry
@@ -129,7 +132,7 @@ type endpointChannels struct {
 	// 核验方答未配置，与换口之前的 403 同字节；写开关换不了这几行（ADR-0150 决定三）。
 	integrationClients integrationClientIntakes
 	// 主链命令面每口一个变量、每条真渠道一个 if（各特性在自己的 mount 里立），不并进下面查阅方法里任何一个 if——理由同
-	// 提交口那段。入参是具体类型：它此刻实现了哪几口，各特性就只换得了哪几行。
+	// endpoints_submission.go 里 submissionIntake 那段注释。入参是具体类型：它此刻实现了哪几口，各特性就只换得了哪几行。
 	//
 	// 作业事实各口挂操作者渠道的「作业事实登记」能力面：首登（ADR-0149 决定二）与更正（随原事实归族，ADR-0151 决定四）；
 	// 写开关换不了它们（ADR-0150 决定三）。关段、建派送任务、有效时间判断、承运商首次有效收寄判断归运营决定（ADR-0151
