@@ -77,13 +77,41 @@ Blocked by: 无（但须等另一会话 idp-parcel-9b 的票 ps-external-mark-re
 
 - **端点**：编排写在 `assemble_<特性>.go`；新建 `endpoints_<特性>.go`，`init` 里 `registerEndpoints(endpointFeature[<特性>Wiring]{lines, build, mount})`；新建 `endpoints_<特性>_test.go`，`init` 里 `registerUnwired(<特性>Wiring{...})`，作业事实行另 `registerWorkFactProbe(路径, 载荷)`。落在已有特性上就只改那一对文件。不改 `endpoints.go`、`main.go`、`endpoints_test.go` 与任何换口清单。
 - **路由**：消费者写在 `assemble_<特性>.go`；新建 `routes_<特性>.go`，哨兵名单写在这里，`init` 里 `registerRoutes`，每路一项 `routeLeg{event, position, consumer, sentinels | untranslated, label}`；给已有事件类型加一路时照锚点加偏移取名次。不改 `assemble.go`、`routes.go` 与别的 `routes_*.go`。
-- **ps-external-mark-relations/14 的 `/node-operations-pre-advice-window-closures`**：`endpoints_pre_advice_window.go` 的 `lines` 加 `"/node-operations-pre-advice-window-closures": {method: http.MethodPost, face: registryWriteFace()}`，`mount` 加一行；关闭若是另一只编排，`preAdviceWindowWiring` 加字段、`build` 装它，`endpoints_pre_advice_window_test.go` 的占位同步加。不必再改 `endpoints_test.go` 的探针表与 `swappedRegistryFaces`——两者由登记处导出，会自动包含它。
+- **ps-external-mark-relations/14 的 `/node-operations-pre-advice-window-closures`**：已在合并 `de892c5d` 里照这个配方落地（见评审记录），可作在途分支的样例：`endpoints_pre_advice_window.go` 的 `lines` 加它（登记写面），`preAdviceWindowWiring` 加 `preAdviceWindowClosure`、`build` 调 `buildPreAdviceWindowClosure`、`mount` 挂它，测试侧占位加 `unwiredPreAdviceWindowClosure{}`。`endpoints_test.go` 的探针表与 `swappedRegistryFaces` 由登记处导出，自动包含它。
 
 ### 偏离与待裁
 
-- **开工时点**：本票 `Blocked by` 写着等 ps-external-mark-relations/14 进 main 再开工；按协调方指示先基于 `origin/main` 开工，14 进 main 时由协调方照上面的配方吸收。
+- **开工时点**：本票 `Blocked by` 写着等 ps-external-mark-relations/14 进 main 再开工；按协调方指示先基于 `origin/main`（`f91f29a4`）开工。14 随后进了 main，本分支在 `de892c5d` 合入 main `a45f4b1e` 时照上面的配方吸收（见评审记录），不再留给协调方。
 - **合并热点**：凡改旧形 `assembleBusinessEndpoints` 参数表、`main.go` 按位传参、`endpoints_test.go` 按位调用与探针表、`assemble_operator_decisions_test.go` 两张换口清单、`cmd/parcel-dispatch/assemble.go` 里 `wireDispatcher` 函数体的在途 hunk，进 main 时都要按配方改写，不能照抄。
-- **未重生成** `MECHANISM-INVENTORY.md`（按要求进 main 时统一做）：重生成会看到 `cmd/` 文件数与路由一栏说明两处变化，数字其余不变。CI 的「Mechanism inventory is current」一步在本分支上会因此红，进 main 那一笔重生成后即绿。
+- **未重生成** `MECHANISM-INVENTORY.md`（按要求进 main 时统一做）：重生成会看到 `cmd/` 文件数与路由一栏说明两处变化，数字其余不变（合并之后的对照见评审记录「没采纳」）。CI 的「Mechanism inventory is current」一步在本分支上会因此红，进 main 那一笔重生成后即绿。
 - **开发主线**（`PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md`）横切那一格仍把 `cmd/parcel-api/endpoints.go` 当证据位置；那一格的状态本身早已过时（操作者渠道已落地），由开发主线下一轮盘点一并改，本票不代改。
 - **CI**：未改 `.github/workflows/`；CI 的测试分片覆盖 `go list ./...`，本票没有新增包，新增的真库用例（生产装配）随 `cmd/parcel-api` 所在那一片跑，无需改流程。
 
+## 评审记录（2026-10-19，隔离评审钉 `9b0e896a`；修补者为作者子代理，分支 `claude-is02`）
+
+阻断 0 项；非阻断 8 项，其中 3 项标了「进 main 前改」。评审独立复现了等价对照（API 64 种渠道配置 × 169 行逐字节同、派发 `wiredBeat` 反射展开逐字节同、旧手列清单都是派生清单的子集），此处不重抄。
+
+### 已修
+
+1. **与 main 合并（进 main 前改）**：`de892c5d` 把 main `a45f4b1e` 合进本分支，走 merge 不走 rebase——评审钉的 `9b0e896a` 与票面、ADR 引的 SHA 都不失效。冲突在 `cmd/parcel-api` 的 `endpoints.go`、`main.go`、`endpoints_test.go`、`assemble_operator_decisions_test.go` 与 `docs/adr/README.md`：四份 Go 文件取分支侧（main 在这几处的改动只有 ps-external-mark-relations/14 的收口口那一行的参数、实参、探针与换口清单项），收口口照 ADR-0222 配方改挂 `endpoints_pre_advice_window.go`（见完成记录「新端点 / 新路由怎么加」），main 上原端点行与 `main.go` 构造处的注释随行搬来；ADR 索引两行都留。对照：main 上手列的探针表与合并后由登记处导出的探针表逐行相同（170 行，方法 + 探测目标，钉 `a45f4b1e` 对 `de892c5d`）；登记写换口清单 main 手列 58 行、导出 60 行，多出的就是代决 4 那两口。
+2. **`endpointLine` 注释言过其实（进 main 前改）**：`015eeaa7` 收窄为：Intake 经 `endpointChannels` 的行，族由闭合用例核；决定种类、作业范围种类、外部事实种类各由读它的换口用例核；`ownIntake` 的行与首方客户的能力格核不到，指 ADR-0222 越权风险点 6。`3f6d4223` 把能力格补进该点；已核每一项客户面能力都在各自的 `assemble_*_test.go` 里被读。
+3. **隔离读放行面派生后可无声变宽**：`015eeaa7` 加手列上界 `isolatedReadAdmissionCeiling` 与 `TestIsolatedReadAdmissionStaysWithinItsCeiling`，派生出的放行面越出上界即红，退场照 ADR-0150 决定三同笔删上界那一行。变异核对：从上界删掉 `/acceptance-review-queue` 即红，改回即绿。ADR-0222 决定三补了这一句。
+4. **跨文件计数与模糊指引**：`015eeaa7` 把 `endpointSources` 字段注释改按 `buildDeliveryHandoverNoteFaces`、`buildWorkFactIntakes`、`buildWorkDeviceCatalogue` 指，去掉计数；`endpointChannels` 的「理由同提交口那段」改指 `endpoints_submission.go` 里 `submissionIntake` 那段注释，`endpoints_delivery_pre_advice.go` 里同形的一句评审没点名，一并改。`3f6d4223` 把 ADR-0222 越权风险点 6 里的「作业事实三口」改成「各口」。
+5. **扇出偏移注释写成了沿革**：`5fe32065` 三处改写成理由：先后没有业务含义，偏移只为把次序写明（与锚点同名次装配即拒）。节点控制转出与路由复核两路沿用旧头注的原话「FanOut 每一路都调，各路各记 inbox 账」；两路评价已核两只消费者的依赖：同读 PP 评价，各写各的（供应商预期成本与评价请求册一边，客户费用、SELL 评价请求册与费项映射一边），谁也不读对方写下的。
+6. **ADR-0222 措辞**：`3f6d4223` 越权风险点 2 改为只有 `pspostgres.NewShipmentRequestViews` 多建一只（核法：改前改后 `cmd/parcel-api` 生产文件里每个 `New*` / `build*` 调用计数逐项比，只有它一处变了）；「近四分之一」钉 `f91f29a4`（169 行里 38 行）；收口口的例子改写成已落地的形状；索引行随改。
+
+### 没采纳
+
+- **重生成 `MECHANISM-INVENTORY.md`（进 main 前改）**：协调方明令「不要重生成，进 main 时统一做」，`docs/agents/parallel-sessions.md` 也规定清点在落地那一笔的 tip 上重生成；在分支上先生成，同批的 infra-speed/03、04 落地时还得再生成一遍，徒增冲突。已在合并后的分支上把清点跑到临时文件，与 main `a45f4b1e` 上的清点比：只有 `cmd/` 文件数（生产 107→193、测试 219→279）与路由一栏说明两处变化；接入面端点 170、直投路由 34，按上下文 / 消费方各格不变。CI 那一步在进 main 之前在分支上红。
+- **开发主线横切一格**：照旧不代改。那一格的论断本身（操作者渠道没有落地、命令行一律挂 `UnconfiguredIntake{}`）早已不成立；只把证据位置换成登记处，等于给一句过时的话换上新出处、看着更可信。整格要按现状重写，归开发主线下一轮盘点。
+
+### 代决与越权风险点（修订新增，接完成记录的编号）
+
+9. **在分支上合入 main，不留给协调方**：冲突的解法要懂 ADR-0222 的配方，作者在场解最稳，还能在真实的合并结果上跑全量；走 merge 是为了不改写已评审、已引用的 SHA（先例 `26e237a5`）。越权风险点：协调方若按「重放」惯例 cherry-pick 本分支区间，会撞上合并提交，要改走 merge 或快进；main 在 `a45f4b1e` 之后再前进的话，进 main 时仍要再合一次。
+10. **隔离读重新有了一张手列清单**：只作上界、只许删。与「加端点不改共享测试」相抵的只有「新开一个隔离读口」这一种；ADR-0150 决定三说每多放一口就是日后要随真渠道撤下的一行，这一种改动本就该是有意的一笔。越权风险点：某口退场时漏删上界那一行不会红，上界只会变松，不会错拦。
+
+### 验证（修订后）
+
+- `go build ./...`、`go vet ./...`、`gofmt -l` 干净；`tools/mechanism-inventory` 模块 `go vet` / `go test` 绿。
+- 合并之后 `scripts/test-full.sh ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./internal/architecture/...` 绿；全量 `scripts/test-full.sh` 钉 `3f6d4223`：153 ok / 0 FAIL。其后只有本票面一笔。
+- `internal/architecture` 基线未动。对 main `a45f4b1e` 比，`internal/`、`.github/` 与另一会话地盘（`assemble_reception*`、`assemble_pre_advice_window*`、`cmd/parcel-dispatch/assemble_node_identity_recheck.go`、`cmd/parcel-frontline-import`、`internal/nodeoperations`、`apps/admin-web`）无 diff；`assemble_pre_advice_window*.go` 在本分支上的变化全部来自合入的 main。
