@@ -60,6 +60,51 @@ func TestTwoCandidatesPriceIndependentlyWithTheirOwnCards(t *testing.T) {
 	}
 }
 
+// Covers: `AT-NR-073` 的取数侧半边（票 demo-chain-gaps/105）——几条候选都出价时，每条出处认得出属于哪条候选，段号按各自
+// 的段链从 1 计；待判断的候选没有出处。取数侧不知道哪一条会被选中，选的那一份由编排按候选取。
+func TestEachCitationNamesTheCandidateWhoseLegItPrices(t *testing.T) {
+	source := newAdapter(t,
+		map[string][]nrports.LineSegmentCostBasis{
+			"line-cheap": {{SegmentIndex: 0, Kind: nrports.SupplierBuyPlanBasis, Reference: "plan-cheap/v1"}},
+			"line-costly": {
+				{SegmentIndex: 0, Kind: nrports.SupplierBuyPlanBasis, Reference: "plan-costly/v1"},
+				{SegmentIndex: 1, Kind: nrports.SupplierBuyPlanBasis, Reference: "plan-costly/v1"},
+			},
+		},
+		map[string]ppdomain.PricingPlanVersion{
+			"plan-cheap/v1":  syntheticBuyPlan(t, "plan-cheap", "v1", "5"),
+			"plan-costly/v1": syntheticBuyPlan(t, "plan-costly", "v1", "8"),
+		},
+	)
+
+	costs, err := source.LoadCandidateCosts(context.Background(), judgmentKey(t), evidenceWithComparison(t, "USD",
+		pathOf(t, "line-cheap", 1), pathOf(t, "line-costly", 2), pathOf(t, "line-unbased", 1)))
+	if err != nil {
+		t.Fatalf("取候选成本：%v", err)
+	}
+	for candidate, want := range map[string]struct {
+		plan string
+		legs int
+	}{
+		"line-cheap":   {"plan-cheap/v1", 1},
+		"line-costly":  {"plan-costly/v1", 2},
+		"line-unbased": {"", 0},
+	} {
+		citations := costs.CitationsOf(lineCandidate(t, candidate))
+		if len(citations) != want.legs {
+			t.Fatalf("%s 的出处 %d 条，want %d：%+v", candidate, len(citations), want.legs, citations)
+		}
+		for index, citation := range citations {
+			if citation.Ordinal() != index+1 || citation.PlanReference() != want.plan {
+				t.Fatalf("%s 的第 %d 条出处 = %+v，want 段号 %d、出自 %s", candidate, index+1, citation, index+1, want.plan)
+			}
+		}
+	}
+	if len(costs.Citations) != 3 {
+		t.Fatalf("出处共 %d 条，want 两条出价候选的三段各一条：%+v", len(costs.Citations), costs.Citations)
+	}
+}
+
 // Covers: 决定四.3 的取整纪律——两段 5.005 相加若逐段先取整得 10.02，先不舍入相加、
 // 合计后取整一次得 10.01。并列判断会被这两种算法改变答案。
 func TestLegAmountsAreSummedBeforeTheSingleRounding(t *testing.T) {

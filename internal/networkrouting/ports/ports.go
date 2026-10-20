@@ -237,17 +237,36 @@ type InitialRouteEvidenceView interface {
 // 缺输入不走这一格：只缺某一段的区域，那一段待判断；缺包裹事实，各段都待判断。候选随之缺成本依据。
 var ErrRouteCostSourceNotConfigured = errors.New("network routing: route cost source not configured")
 
-// RouteCandidateCosts 是取数侧为一次判断交回的成本族：逐候选三态事实 + 逐段评价出处。
+// RouteCandidateCosts 是取数侧为一次判断交回的成本族：逐候选三态事实 + 逐候选逐段评价出处。
 type RouteCandidateCosts struct {
 	Facts     []domain.CandidateCostFact
-	Citations []domain.PlannedLegCostCitation
+	Citations []CandidateLegCostCitation
+}
+
+// CandidateLegCostCitation 是一条候选某一段的成本出处。出处本身只带段号，候选要在这里另带：取数侧交回时还不知道哪一条
+// 会被选中（排序在编排里），而计划只留选中候选那几段、段号按那条候选的段链计。不带候选，几条都出价的候选各自的第 1 段
+// 是同一个段号，计划形成必拒（票 demo-chain-gaps/105）；评价标识由 parcel-pricing 派生，从它也认不出候选。
+type CandidateLegCostCitation struct {
+	Candidate domain.CandidateID
+	domain.PlannedLegCostCitation
+}
+
+// CitationsOf 交回一条候选的逐段出处，段序照取数侧交回的。没出价的候选没有出处，答空。
+func (costs RouteCandidateCosts) CitationsOf(candidate domain.CandidateID) []domain.PlannedLegCostCitation {
+	var citations []domain.PlannedLegCostCitation
+	for _, citation := range costs.Citations {
+		if citation.Candidate == candidate {
+			citations = append(citations, citation.PlannedLegCostCitation)
+		}
+	}
+	return citations
 }
 
 // RouteCandidateCostSource 为一次初始路由判断取回候选成本（routing-first-cut/10，ADR-0148
 // 决定四）。事实族在取数侧兑现：逐段向 parcel-pricing 取评价、按比较币种不舍入求和取整一次，
-// 合成每候逐一格三态事实；出处（评价标识、方案引用、内部政策引用与全精度比较金额）随事实
-// 交回，由编排并入计划留痕。整条取数路径没接时以 ErrRouteCostSourceNotConfigured 如实作答；
-// 缺某一段的输入只让那一段待判断，不整判断停下。
+// 合成每候逐一格三态事实；出处（评价标识、方案引用、内部政策引用与全精度比较金额）逐条标明
+// 候选、随事实交回，编排选出候选后只把选中那一条的出处并入计划留痕。整条取数路径没接时以
+// ErrRouteCostSourceNotConfigured 如实作答；缺某一段的输入只让那一段待判断，不整判断停下。
 //
 // carried 是随这次判断请求携带的内容，与证据视图收到的是同一份：绑了分区目录的卡要包裹的邮编
 // 路线才解得出区域（ADR-0189 决定一），路线只在请求里，本上下文不另开读地址的口（ADR-0075）。
