@@ -21,29 +21,29 @@ Date: 2026-10-19
 **一、每个命令一张包级登记表，由特性文件在 `init` 里追加构造函数。**（机制）
 
 - `init` 只追加闭包：不碰库、不读环境、不构造任何东西，也就不会失败。构造在开池之后由装配点逐项调用。
-- parcel-api：`registerEndpoints(endpointFeature[D]{lines, build, unwired, mount})`。
+- parcel-api：`registerEndpoints(endpointFeature[D]{lines, build, mount})`。
   - `lines`：本特性每一行的方法、接入面（决定三）与装配测试的探测目标。
-  - `build`：从生产共享件（`endpointSources`：库、隔离写开关、本产品权威串、各族核验方与铸造器、操作者册、设备册、准入范围）装本特性的编排与读口，交回命名字段的依赖结构 `D`。
-  - `unwired`：交回同形的未接线占位，装配测试用。
+  - `build`：从生产共享件（`endpointSources`：库、隔离写开关、本产品权威串、操作者族核验方、操作者册、设备册、准入范围、操作者与首方两族的铸造器）装本特性的编排与读口，交回命名字段的依赖结构 `D`。
   - `mount`：拿各特性共用的接入渠道（`endpointChannels`：隔离读、首方提交、操作者运营决定与登记写、集成客户端、作业事实两只）与 `D`，交回 `[]httpapi.BusinessEndpoint` 字面量。
-  - 生产：`assembleBusinessEndpoints(sources, channels)` 逐特性 `build` 再 `mount`；装配测试：同一张表逐特性 `unwired` 再 `mount`。两边走的是同一个 `mount`，生产与测试不再各列一份端点表。
+  - 装配测试用的未接线占位与 `D` 同形，由同名的 `endpoints_<特性>_test.go` 在 `init` 里 `registerUnwired(D{...})` 登记：占位是测试才用的类型，不进生产文件。登记表按 `(*D)(nil)` 认出各特性的占位，不靠反射；哪个特性没登占位，装配测试当场停。
+  - 生产：`assembleBusinessEndpoints(sources, channels)` 逐特性 `build` 再 `mount`；装配测试：同一张表逐特性取占位再 `mount`。两边走的是同一个 `mount`，生产与测试不再各列一份端点表。
 - parcel-dispatch：`registerRoutes(func(dispatchSources) ([]routeLeg, error))`。
-  - `routeLeg`：事件类型、扇出名次（决定四）、本路在路由条目处翻译的未决哨兵、消费者。
+  - `routeLeg`：事件类型、扇出名次（决定七）、消费者，以及本路在路由条目处翻译的未决哨兵——或显式声明本路不在路由条目处翻译（消费者自己翻了，或它没有未决面）。两样都不写是漏写，装配即拒：漏翻的未决会塌成 `dispatch.publish_failed`。
   - `dispatchSources`：库、outbox 与 inbox 两只存储、部署形态参数、时钟，以及 VE 各投影共用的那一只租户绑定派生。
   - `wireDispatcher` 逐特性构造，按事件类型归组、按名次排、逐路包哨兵，一路的直接进路由表，多于一路才 `FanOut`，再交 `NewDirectPublisher`。
 
 **二、文件约定。**（机制）
 
 - parcel-api：一个特性的端点行（连同原先写在端点表与 `main.go` 构造处的注释）在 `endpoints_<特性>.go`；编排的装配仍在 `assemble_<特性>.go`。`endpoints.go` 只剩登记处、共享渠道与查阅变量组；`main.go` 只剩部署参数、各族渠道的构造与装配调用。
-- parcel-dispatch：一条路由的登记与本路的未决哨兵名单在 `routes_<特性>.go`；消费者的构造仍在 `assemble*.go`。`assemble.go` 只剩部署参数、装配点、登记处的展开与消费者构造。
-- 特性按「一只编排或一只读口带出的那几行」切，不按上下文切。
+- parcel-dispatch：一条路由的登记在 `routes_<特性>.go`，展开登记处的代码在 `routes.go`；消费者的构造仍在 `assemble*.go`。新路由的未决哨兵名单写在它自己的文件里。既有的哨兵名单留在 `assemble.go` 与各 `assemble_<特性>.go`：它们的头注彼此按位置互指（「与上面那份分开列」一类），搬开就得改写论证；加新路由不碰它们。`wireDispatcher` 只剩开存储、展开登记处与建派发器。
+- 特性按改前装配点里成组挂的那几行切（一只编排带出的几口，或同一页的几只读口），不按上下文切。
 
 **三、每行声明接入面；装配测试的各张清单由登记处导出。**（机制）
 
 - 接入面按能打开这一行的那一族取值：未配置即拒、隔离读、首方客户（带客户面能力）、主数据与运营查阅读、登记册配置写、运营决定（带决定种类）、作业事实登记（带作业范围种类）、集成客户端（带外部事实种类）。另记一格：Intake 由本特性从生产共享件自建（作业设备册、送站预报、送站交接单、客户追踪视图等），装配测试里它恒为未配置。
 - 探针表与各张换口清单（登记写、运营决定、运营查阅、集成客户端、隔离读、作业事实）改由登记处按接入面导出，不再手列。
 - 声明与 `mount` 写的 Intake 可能不一致，所以另立一条闭合用例：逐个渠道单独打开，只有声明了那一面的行答复离开「接入渠道未配置」。声明错了，不是那条用例红，就是对应那一面的用例红。
-- 作业事实各行要一份能越过载荷译装的探测载荷，那是测试数据，由同名的 `endpoints_<特性>_test.go` 在 `init` 里登记；登记处里有作业事实行而没有载荷，装配测试红。
+- 作业事实各行要一份能越过载荷译装的探测载荷，那是测试数据，与未接线占位一样由同名的 `endpoints_<特性>_test.go` 在 `init` 里登记；登记处里有作业事实行而没有载荷，装配测试红。
 
 **四、未配置即拒与「没有一行真 Intake」照旧成立。**（机制）
 
@@ -60,7 +60,8 @@ Date: 2026-10-19
 
 - parcel-api：开池之后先在 `main.go` 构造各族渠道，再按登记表逐特性 `build`。任一失败原样交回，`run` 返回错误，进程以非零码退出，与改前逐个 `if err != nil { return err }` 是同一条路。只为启动即查而装、不挂端点的那几只编排（面单渠道、请求评价、结算编排）留在 `main.go`，不进登记表。
 - 同一路径登记两次：装配点答错误中止。改前路由层让后一个静默盖掉前一个，只有装配测试看得见。
-- parcel-dispatch：同一事件类型两路名次相同，装配答错误中止——扇出次序不许由文件名定。
+- 缺件（行、构造、挂载）与两个特性共用一种依赖结构是编程错误，在 `init` 里就 panic：每一次测试运行都会先撞上它。
+- parcel-dispatch：同一事件类型两路名次相同、一路既不列哨兵也不声明不翻译，装配答错误中止——扇出次序不许由文件名定。
 - 特性之间的构造顺序随文件名（Go 按编译时的文件次序跑 `init`）。端点表与路由表各自的排列因此与改前不同：路由层按路径匹配、不看次序；派发按事件类型取路由；同一类信封上各路的次序由名次定，与改前逐条相同。
 
 **七、扇出名次。**（机制）
@@ -76,7 +77,7 @@ Date: 2026-10-19
 
 ## 对已接受记录的作用
 
-- 不停用任何条款。ADR-0055、0078、0085、0091、0100、0139、0140、0149、0150、0151 正文里的「装配点」「`assembleBusinessEndpoints`」「端点表」此后指端点登记处：`assembleBusinessEndpoints` 仍是生产装配的入口，展开的是登记表；「在装配点逐端点替换」的那一行现在在 `endpoints_<特性>.go`。
+- 不停用任何条款。已接受记录正文里的「装配点」「`assembleBusinessEndpoints`」「端点表」此后指端点登记处：`assembleBusinessEndpoints` 仍是生产装配的入口，展开的是登记表；「在装配点逐端点替换」的那一行现在在 `endpoints_<特性>.go`。
 - ADR-0049 决定三「没有订阅者的事件类型显式失败并入账、接得住才登记」不变：只登记本进程接得住的类型，这一判断现在由加路由的那个特性文件做。
 
 ## 候选与反方
@@ -85,34 +86,37 @@ Date: 2026-10-19
 - **只把位置参数换成一个大的命名字段结构。** 否决。消掉了按位错位，但结构体与 `main.go` 的构造仍是每加一个端点都改的共享处，热点只换了个形状。
 - **一个上下文一个登记文件。** 否决。运输履约一家就占端点表近四分之一，热点只是换了个文件。
 - **反射式装配（按类型自动注入）。** 否决。组合根要读得出每条接线，反射把接线藏进运行期，门禁也就看不见了；本票明令不引入。
-- **探针与接入面清单留在测试侧，按特性拆开。** 否决。「这一行挂哪一面」是生产事实，与 `mount` 写在同一个文件里才不会漂开；拆到测试侧仍要两处同步，还要给每个没有测试文件的特性新开一个。作业事实的探测载荷是测试数据，单独按特性留在测试侧（决定三）。
+- **探针与接入面清单留在测试侧，按特性拆开。** 否决。「这一行挂哪一面」是生产事实，与 `mount` 写在同一个文件里才不会漂开；拆到测试侧就是两处同步。未接线占位与作业事实的探测载荷是测试数据，按特性留在测试侧（决定一、三）。
 - **扇出次序按登记先后（文件名）定。** 否决。次序有业务含义（先 VE、计费在后、实际履约殿后），文件改名不该改次序。
 
 ## Consequences
 
 - **新端点怎么加：**
-  1. 编排装配写在 `assemble_<特性>.go`（`build<特性>(db)`）；要新的未接线占位类型时写在同一文件。
-  2. 新建 `endpoints_<特性>.go`，`init` 里 `registerEndpoints(endpointFeature[D]{...})`：`lines` 每行一项（方法、接入面，带分派参数或路径参数时写探测目标）；`build` 调第一步；`unwired` 交占位；`mount` 写 `[]httpapi.BusinessEndpoint` 字面量，Intake 从 `channels` 取，或在本特性里照「缺省未配置、渠道就位才换」立变量。
-  3. 新行落在已有特性上时只改那一个 `endpoints_<特性>.go`：`lines` 加一项、`mount` 加一行，`D` 要加字段时同文件改 `build` 与 `unwired`。
-  4. 不改 `endpoints.go`、`main.go`、`endpoints_test.go` 与任何换口清单；作业事实行另在 `endpoints_<特性>_test.go` 登一份探测载荷。
-  - 例：在途的 `/node-operations-pre-advice-window-closures` 落在 `endpoints_pre_advice_window.go`：`lines` 加 `{method: POST, face: registryWriteFace()}`，`mount` 加一行，`D` 加关闭编排的字段。登记写的换口用例自动包含它。
+  1. 编排装配写在 `assemble_<特性>.go`（`build<特性>(db)`）。
+  2. 新建 `endpoints_<特性>.go`，`init` 里 `registerEndpoints(endpointFeature[D]{...})`：`lines` 每行一项（方法、接入面，带分派参数或路径参数时写探测目标）；`build` 调第一步；`mount` 写 `[]httpapi.BusinessEndpoint` 字面量，Intake 从 `channels` 取，或在本特性里照「缺省未配置、渠道就位才换」立变量。
+  3. 新建 `endpoints_<特性>_test.go`，`init` 里 `registerUnwired(D{...})` 登占位（占位类型写在这个测试文件或本特性别的测试文件里）；作业事实行另用 `registerWorkFactProbe` 登一份探测载荷。
+  4. 新行落在已有特性上时只改那一对文件：`lines` 加一项、`mount` 加一行；`D` 要加字段时同文件改 `build`，测试文件里的占位同步加。
+  5. 不改 `endpoints.go`、`main.go`、`endpoints_test.go` 与任何换口清单。
+  - 例：在途的 `/node-operations-pre-advice-window-closures` 落在 `endpoints_pre_advice_window.go`：`lines` 加 `{method: http.MethodPost, face: registryWriteFace()}`，`mount` 加一行；关闭若是另一只编排，`preAdviceWindowWiring` 加字段、`build` 装它，`endpoints_pre_advice_window_test.go` 的占位同步加。登记写的换口用例与闭合用例自动包含它。
 - **新路由怎么加：**
   1. 消费者构造写在 `assemble_<特性>.go`。
-  2. 新建 `routes_<特性>.go`：本路的未决哨兵名单写在这里，`init` 里 `registerRoutes`，每路一项 `routeLeg{event, position, sentinels, consumer}`。
+  2. 新建 `routes_<特性>.go`：本路的未决哨兵名单写在这里（或第一步那个文件），`init` 里 `registerRoutes`，每路一项 `routeLeg{event, position, consumer, sentinels, label}`；消费者自己翻了未决的写 `untranslated: true` 代替 `sentinels`。
   3. 给已有事件类型加一路：照决定七取名次。两路同名次，装配即拒。
-  4. 不改 `assemble.go` 的装配点与别的 `routes_*.go`。
+  4. 不改 `assemble.go`、`routes.go` 与别的 `routes_*.go`。
 - 在途分支：凡改 `assembleBusinessEndpoints` 参数表、`main.go` 按位传参、`endpoints_test.go` 按位调用、探针表、换口清单或 `wireDispatcher` 函数体的，进 main 前都要换成上面的形态。
 - 生产装配第一次有了真库用例：`assembleProductionEndpoints` 在未配置环境下对真库装配整张表，断言每一行都在、都答未配置。改前生产装配只在进程启动时走得到。
 - 仍是共享处、加端点不必改的：各族渠道的构造（`main.go`、`assemble_operator_decisions.go` 等）与 `endpointChannels`。只有新开一个接入渠道族，或给一个新上下文开操作者 Intake 时才改。
-- 未接线占位留在 `unwired_orchestration.go`；它们现在由各特性登记的 `unwired` 引用，只在装配测试那条路上被调到。
+- 既有的未接线占位留在 `unwired_orchestration.go`（生产文件）与各特性的测试文件里；现在由各 `endpoints_<特性>_test.go` 的 `registerUnwired` 引用，只在装配测试那条路上被调到。
+- 装配测试里各张换口清单由登记处导出之后，有几口第一次进了对应的换口用例（节点关务区域登记口、价卡导入预览口进登记写那两条；运营决定一族全部进「作业事实渠道装不进运营决定」那一条），各格答复与改前同一套。
 
 ## 越权风险点
 
-1. **测试用的探测目标写在生产文件里**（parcel-api owner）。`lines` 的探测目标带 `SYN-` 合成标识（路径参数与分派参数），只给装配测试用，生产装配不读。好处是一行的声明只有一处；代价是生产文件里多一格测试才用的数据。
+1. **测试用的探测目标写在生产文件里**（parcel-api owner）。`lines` 的探测目标带 `SYN-` 合成标识（路径参数与分派参数），只给装配测试用，生产装配不读。好处是一行的声明只有一处；代价是生产文件里多一格测试才用的数据。探测载荷与未接线占位是测试数据，没有进生产文件。
 2. **无状态读适配器从共用一只改为各特性各建一只**（parcel-api owner）。委托查阅、商业目录、案件复核等读适配器改前在 `main.go` 建一只、按位传给几行；现在每个特性在自己的 `build` 里建。它们都只包着库、不带状态，答复相同；日后若哪只读适配器带缓存，各建一只就是各一份缓存。
 3. **特性之间的构造顺序随文件名**（两个命令的 owner）。今天各 `build` 与消费者构造都只组装适配器、不改库，顺序不影响结果；日后若有构造依赖先后，要显式写进同一个特性，不能靠文件名。
 4. **清点口径改了措辞**（产品基线 owner）。`tools/mechanism-inventory` 的路由一栏改为「登记的不同事件类型数」，数与改前相同；重生成 `MECHANISM-INVENTORY.md` 时那句说明会换措辞。
 5. **第一次在本仓用 `init`**（两个命令的 owner）。只在两个 `package main` 里、只做追加，不读环境、不碰库；`internal/` 里照旧一个都没有。
+6. **自建 Intake 的行没有闭合用例核声明**（parcel-api owner）。作业设备册、操作者绑定、送站预报、送站交接单的作业事实三口与客户结论口、客户追踪视图的 Intake 由各自特性从生产共享件建，装配测试里恒为未配置，闭合用例只能核到它们「哪个共享渠道都打不开」；声明的那一面由各特性自己的测试另证，生产装配真库用例只核到它们都在、都答未配置。
 
 ## Links
 
