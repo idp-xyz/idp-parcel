@@ -1,7 +1,7 @@
 # 02 组合根按文件自登记：加一个端点或一条派发路由不再改共享清单
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——完工待进 main，分支 claude-is02
 Blocked by: 无（但须等另一会话 idp-parcel-9b 的票 ps-external-mark-relations/14 进 main 后再基于 origin/main 开工，见「协作」）
 地盘：`cmd/parcel-api/`（`endpoints.go` 的 `assembleBusinessEndpoints`、`main.go` 的构造与调用、`endpoints_test.go` 及其它调它的测试）、`cmd/parcel-dispatch/`（`assemble.go` 的 `assembleDispatcher` / `wireDispatcher` 路由表）；新 ADR-0222
 出处：用户 2026-10-19 同意「热点清单冲突」基础设施票。近两周提交频次（`git log --since=2026-10-05`）：`cmd/parcel-api/endpoints.go` 40、`cmd/parcel-dispatch/assemble.go` 37、`cmd/parcel-api/main.go` 32、`cmd/parcel-api/endpoints_test.go` 25——每张加端点或加路由的票都改这几处的同一段，重放时反复冲突，且有一类冲突要手补 `if err != nil` 才编得过。
@@ -32,3 +32,58 @@ Blocked by: 无（但须等另一会话 idp-parcel-9b 的票 ps-external-mark-re
 ## 验证
 
 `scripts/test-full.sh`（infra-speed/01）跑全量一遍——本票动的是全部真库装配，受影响范围就是全仓；外加上面的路由清单对照。
+
+## 完成记录
+
+分支 `claude-is02`（基于 `f91f29a4`）。写法与取舍以 [ADR-0222](../../../docs/adr/0222-composition-roots-register-endpoints-and-routes-per-feature-file.md) 为准，此处只记做了什么、代决、怎么验的与偏离。
+
+### 做了什么
+
+- **ADR-0222**（`f0cd7b24`，`7c6fb943` 跟上实现）：两个命令各一张包级登记表，特性文件在 `init` 里只追加构造函数；ADR 索引补一行。
+- **parcel-api**（`4037d770`、`44974af0`）：
+  - `assembleBusinessEndpoints` 的位置参数表、`main.go` 的按位传参与装配测试的按位调用拆成 `endpoints_<特性>.go` 的 `registerEndpoints`：`lines` 声明每行的方法、接入面（决定种类 / 作业范围 / 外部事实 / 客户面能力）与探测目标，`build` 装生产依赖（命名字段的 `<特性>Wiring`），`mount` 出 `[]httpapi.BusinessEndpoint` 字面量。原端点表上与 `main.go` 构造处的注释随各行搬进各特性文件。
+  - `endpoints.go` 只剩登记处、`endpointSources` / `endpointChannels` 与「缺省朝拦」那组查阅变量（改为 `endpointChannels` 的方法）；`main.go` 的开池之后那一段收成 `assembleProductionEndpoints`（各族渠道 + 只为启动即查的三只编排 + 展开登记处）。
+  - 测试侧：未接线占位与作业事实探测载荷由同名 `endpoints_<特性>_test.go` 登记（`registerUnwired`、`registerWorkFactProbe`）；探针表、`swappedRegistryFaces`、`swappedDecisionFaces`、运营查阅、集成客户端、隔离读、作业事实与运营决定各清单改由登记处导出。新增四条用例：每个特性挂的恰是它声明的行、逐渠道单独打开只有声明那一面离开未配置（闭合用例）、生产装配对真库整张接得起来且全答未配置、同一路径登两次装配即拒。
+- **parcel-dispatch**（`2fe199df`）：`wireDispatcher` 里逐条列出的路由、哨兵包装与 FanOut 拆成 `routes_<特性>.go` 的 `registerRoutes`；`routes.go` 展开登记处（按事件类型归组、按名次排、逐路包哨兵、多于一路才扇出）。名次四个锚点（投影 / 主业务 / 计费 / 殿后）加偏移；同名次、一路既不列哨兵也不声明 `untranslated` 装配即拒。新增三条装配期护栏用例。
+- **清点工具**（`28b92322`）：`tools/mechanism-inventory` 的直投路由一栏改数登记的不同事件类型（`routeLeg` 的 `event` 与旧形表的键并认、按导入路径去重），加一条用例。
+- **文档**：业务流程指南的端点快照改指登记处（`7c6fb943`）。
+
+### 代决与越权风险点
+
+用户原话「你作为业务和系统专家自决……解决所有的问题」，2026-10-19 同意先做本票。以下由本会话代决，待 owner 复核；越权风险点 1–6 的全文在 ADR-0222 文末，这里只列本票落地时多出的几条。
+
+1. **`init` 包级登记，不取生成清单**（ADR-0222 候选与反方）。
+2. **端点行与编排分文件**：`endpoints_<特性>.go` 只放登记，编排仍在 `assemble_<特性>.go`。另一会话地盘里的 `assemble_reception*.go`、`assemble_pre_advice_window*.go` 内容一字未动，它们那几行登在 `endpoints_reception.go`、`endpoints_pre_advice_window.go`（不在两个通配里）。`cmd/parcel-dispatch/assemble_node_identity_recheck.go` 同样未动，登记在 `routes_node_identity_recheck.go`。
+3. **接入面写在生产的行声明里，占位与载荷归测试侧**。越权风险点：生产文件里有只给装配测试用的探测目标（ADR-0222 越权风险点 1）。
+4. **换口清单派生后变宽**：节点关务区域登记口与价卡导入预览口第一次进登记写那两条用例，运营决定一族全部进「作业事实渠道装不进运营决定」那一条（原清单只列运输履约六口）。各格答复与改前同一套，没有改任何断言值。越权风险点：日后某一口的答复格与同族不同（比如载荷译装先于认证），要在它自己的测试里另证、并把那一口从派生条件里排除，不能回到手列清单。
+5. **既有哨兵名单不搬**：`assemble.go` 里那批名单的头注彼此按位置互指（「与上面那份分开列」「与上面四份分开列」），搬开就得改写论证；只有新路由把哨兵写进自己的文件。越权风险点：`assemble.go` 编辑既有路由的哨兵时仍会碰这一处，热度只降不清。
+6. **`wireDispatcher` 头注那段逐条枚举路由的长注释拆到各 `routes_*.go`**：每条路由「登了什么、只投 VE 还是不投 PS、为什么」写在它自己的登记处；那段枚举之后的「上面几处一律按名字指……」一段随枚举一起删，它讲的是那段枚举自己的维护。`swappedDecisionFaces` 各条目旁的历史小注（「下面四口换口时同笔撤下隔离写放行」等）随手列清单一起删：条目改由登记处导出，各口为什么挂运营决定写在各自端点行的注释里。越权风险点：被删的几句是换口时的过程记录，读历史要回 git。
+7. **只为启动即查、不挂端点的三只编排留在 `main.go`**，不进登记表；加这一类时仍改 `main.go`（低频）。
+8. **路由清单的「分区键来源」一列**：派发进程不读不改分区键，分区由各交接口入队时定、登记在 `internal/architecture` 的分区主体登记表，本票不碰那一侧；对照里这一列前后都是「信封自带」，与分区阻塞相关的是扇出次序，已在对照里逐条比。
+
+### 验证
+
+- **API 路由清单（方法 + 路径 + 接入面）逐条对照**：改前在 `f91f29a4` 上用一次性测试辅助（不提交）对装配测试路由逐行探——169 行 × 34 种渠道配置（全未配置、隔离读开、首方客户开、操作者册五种授予形态、集成客户端两种、作业事实两种作业范围、22 种单一决定种类授予）× 有无令牌，外加错方法的 405 与 `Allow`；改后同一辅助再跑，输出逐字节相同（`diff` 为空）。接入面以各渠道下的答复格表达，比声明更硬。
+- **API 静态对照**：从两棵树的生产文件 AST 取每个 `[]httpapi.BusinessEndpoint` 条目——169 条路径与构造函数逐条相同；实参按「查阅变量名 ↔ `endpointChannels` 方法」归一后逐条相同；每个依赖字段的生产来源（改前 `main.go` 按位实参追到构造调用，改后 `build` 里的字段追到构造调用）144 个参数逐个相同。
+- **派发路由清单（路由键 + 消费者 + 未决哨兵 + 扇出次序）逐条对照**：改前改后各用一次性测试辅助对真库装配的生产派发器（`wiredBeat`）反射展开路由表，写出路由键、扇出各路次序、各路哨兵正文、消费者类型树（深度 7，共享实例标号）与发布器超时 / 配置：34 条路由（其中 9 条扇出共 22 路）逐字节相同，含投影派生件与重核消费者的共享关系。
+- **机制清点**：改前改后各跑一次 `tools/mechanism-inventory`（`-ports=false`，输出到临时文件，未重生成 `docs/product/MECHANISM-INVENTORY.md`）：接入面端点 169、直投路由表 34，按上下文 / 消费方各格相同；只有 `cmd/` 文件数（生产 107→193、测试 218→279）与路由一栏说明的措辞变了。
+- **变异核对**：把 `/label-transactions` 的声明改成未配置，闭合用例红；把 `/claims` 的声明改成登记写，登记写两条用例与闭合用例红；改回即绿。
+- `go build ./...`、`go vet ./...`、`gofmt -l` 干净；`internal/architecture` 全绿、基线文件未动；`tools/mechanism-inventory` 模块 `go vet` / `go test` 绿。
+- **全量**：`scripts/test-full.sh` 钉 `44974af0`，153 ok / 0 FAIL。
+
+### 新端点 / 新路由怎么加
+
+在途分支照这个改（权威在 ADR-0222 Consequences，此处为便于照做抄一份要点）：
+
+- **端点**：编排写在 `assemble_<特性>.go`；新建 `endpoints_<特性>.go`，`init` 里 `registerEndpoints(endpointFeature[<特性>Wiring]{lines, build, mount})`；新建 `endpoints_<特性>_test.go`，`init` 里 `registerUnwired(<特性>Wiring{...})`，作业事实行另 `registerWorkFactProbe(路径, 载荷)`。落在已有特性上就只改那一对文件。不改 `endpoints.go`、`main.go`、`endpoints_test.go` 与任何换口清单。
+- **路由**：消费者写在 `assemble_<特性>.go`；新建 `routes_<特性>.go`，哨兵名单写在这里，`init` 里 `registerRoutes`，每路一项 `routeLeg{event, position, consumer, sentinels | untranslated, label}`；给已有事件类型加一路时照锚点加偏移取名次。不改 `assemble.go`、`routes.go` 与别的 `routes_*.go`。
+- **ps-external-mark-relations/14 的 `/node-operations-pre-advice-window-closures`**：`endpoints_pre_advice_window.go` 的 `lines` 加 `"/node-operations-pre-advice-window-closures": {method: http.MethodPost, face: registryWriteFace()}`，`mount` 加一行；关闭若是另一只编排，`preAdviceWindowWiring` 加字段、`build` 装它，`endpoints_pre_advice_window_test.go` 的占位同步加。不必再改 `endpoints_test.go` 的探针表与 `swappedRegistryFaces`——两者由登记处导出，会自动包含它。
+
+### 偏离与待裁
+
+- **开工时点**：本票 `Blocked by` 写着等 ps-external-mark-relations/14 进 main 再开工；按协调方指示先基于 `origin/main` 开工，14 进 main 时由协调方照上面的配方吸收。
+- **合并热点**：凡改旧形 `assembleBusinessEndpoints` 参数表、`main.go` 按位传参、`endpoints_test.go` 按位调用与探针表、`assemble_operator_decisions_test.go` 两张换口清单、`cmd/parcel-dispatch/assemble.go` 里 `wireDispatcher` 函数体的在途 hunk，进 main 时都要按配方改写，不能照抄。
+- **未重生成** `MECHANISM-INVENTORY.md`（按要求进 main 时统一做）：重生成会看到 `cmd/` 文件数与路由一栏说明两处变化，数字其余不变。CI 的「Mechanism inventory is current」一步在本分支上会因此红，进 main 那一笔重生成后即绿。
+- **开发主线**（`PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md`）横切那一格仍把 `cmd/parcel-api/endpoints.go` 当证据位置；那一格的状态本身早已过时（操作者渠道已落地），由开发主线下一轮盘点一并改，本票不代改。
+- **CI**：未改 `.github/workflows/`；CI 的测试分片覆盖 `go list ./...`，本票没有新增包，新增的真库用例（生产装配）随 `cmd/parcel-api` 所在那一片跑，无需改流程。
+
