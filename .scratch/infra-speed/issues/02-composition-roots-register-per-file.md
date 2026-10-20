@@ -1,7 +1,7 @@
 # 02 组合根按文件自登记：加一个端点或一条派发路由不再改共享清单
 
 Category: enhancement
-Status: in-progress——完工待进 main，分支 claude-is02
+Status: resolved——2026-10-19 进 main（全量钉 `a34f8852`：`scripts/test-full.sh` 156 ok / 0 FAIL；02、03、04 同批，见文末「进 main 记录」）。此前 in-progress——完工待进 main，分支 claude-is02
 Blocked by: 无（但须等另一会话 idp-parcel-9b 的票 ps-external-mark-relations/14 进 main 后再基于 origin/main 开工，见「协作」）
 地盘：`cmd/parcel-api/`（`endpoints.go` 的 `assembleBusinessEndpoints`、`main.go` 的构造与调用、`endpoints_test.go` 及其它调它的测试）、`cmd/parcel-dispatch/`（`assemble.go` 的 `assembleDispatcher` / `wireDispatcher` 路由表）；新 ADR-0222
 出处：用户 2026-10-19 同意「热点清单冲突」基础设施票。近两周提交频次（`git log --since=2026-10-05`）：`cmd/parcel-api/endpoints.go` 40、`cmd/parcel-dispatch/assemble.go` 37、`cmd/parcel-api/main.go` 32、`cmd/parcel-api/endpoints_test.go` 25——每张加端点或加路由的票都改这几处的同一段，重放时反复冲突，且有一类冲突要手补 `if err != nil` 才编得过。
@@ -115,3 +115,7 @@ Blocked by: 无（但须等另一会话 idp-parcel-9b 的票 ps-external-mark-re
 - `go build ./...`、`go vet ./...`、`gofmt -l` 干净；`tools/mechanism-inventory` 模块 `go vet` / `go test` 绿。
 - 合并之后 `scripts/test-full.sh ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./internal/architecture/...` 绿；全量 `scripts/test-full.sh` 钉 `3f6d4223`：153 ok / 0 FAIL。其后只有本票面一笔。
 - `internal/architecture` 基线未动。对 main `a45f4b1e` 比，`internal/`、`.github/` 与另一会话地盘（`assemble_reception*`、`assemble_pre_advice_window*`、`cmd/parcel-dispatch/assemble_node_identity_recheck.go`、`cmd/parcel-frontline-import`、`internal/nodeoperations`、`apps/admin-web`）无 diff；`assemble_pre_advice_window*.go` 在本分支上的变化全部来自合入的 main。
+
+## 进 main 记录
+
+2026-10-19 协调方合入，02、03、04 同批：分支含一笔合 main 的合并提交（作者为保住已评审 SHA 而合并、未变基），协调方在其上快进再叠 03、04。叠合后按新步骤重生成 ADR 索引、重算 AT 盘点计数、重生成机制清点，各自单独成笔；`adr-index -check` 与 `at-coverage-counts -check` 退 0；在干净树上对 `a34f8852` 跑 `scripts/test-full.sh` 全量，156 ok、0 FAIL。

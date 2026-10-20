@@ -1,7 +1,7 @@
 # 03 ADR 索引与 AT 盘点计数由工具生成，票不再手改
 
 Category: enhancement
-Status: in-progress——完工待进 main，分支 claude-is03
+Status: resolved——2026-10-19 进 main（全量钉 `a34f8852`：`scripts/test-full.sh` 156 ok / 0 FAIL；02、03、04 同批，见文末「进 main 记录」）。此前 in-progress——完工待进 main，分支 claude-is03
 Blocked by: 无
 地盘：`tools/adr-index/`（新，形态照 `tools/mechanism-inventory`）、`docs/adr/README.md`、各 ADR 的 `Status` 行（只改这一行）、`.scratch/at-coverage-inventory.md` 的「总览」两张计数表、`docs/agents/workflow.md` 或 `parallel-sessions.md` 里进 main 步骤中「重生成机制清点」那一处（追加同类两步）
 出处：用户 2026-10-19 同意「热点清单冲突」基础设施票。近两周提交频次：`docs/adr/README.md` 68、`.scratch/at-coverage-inventory.md` 41。前者每张带新 ADR 的票都往同一个列表末尾追加，两票同批必撞；部分停用注记两侧同改一行时，自动解法曾留下同一 ADR 的新旧两行（2026-10-19 进 main 时 0205、0206、0207、0209、0210、0217 各出过一次重复）。后者每张点名 AT 的票都改同两张计数表。
@@ -71,3 +71,7 @@ Blocked by: 无
 - 票面写「部分停用与取代的注记」，实际扩成全部注记（代决 2）。
 - 票面写「一对标记」，实际两对（代决 3）。
 - CI 门未加，待裁触发方式（票 08）；Status 行里的重复留待票 07。
+
+## 进 main 记录
+
+2026-10-19 协调方合入，02、03、04 同批：ADR-0140 的 Status 行与 101 加的前向指针同行冲突，合成「101 的指针 + 本票的索引注记」；ADR-0222、0223 立于本票开工之后，其 README 行注记由协调方原样搬进各自 Status 行，重生成后两行与手写行逐字相同。叠合后按新步骤重生成 ADR 索引、重算 AT 盘点计数、重生成机制清点，各自单独成笔；`adr-index -check` 与 `at-coverage-counts -check` 退 0；在干净树上对 `a34f8852` 跑 `scripts/test-full.sh` 全量，156 ok、0 FAIL。

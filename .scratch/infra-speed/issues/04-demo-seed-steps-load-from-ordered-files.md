@@ -1,7 +1,7 @@
 # 04 演示种子按序加载步骤文件，`seed.sh` 不再是共享清单
 
 Category: enhancement
-Status: in-progress——完工待进 main，分支 claude-is04
+Status: resolved——2026-10-19 进 main（全量钉 `a34f8852`：`scripts/test-full.sh` 156 ok / 0 FAIL；02、03、04 同批，见文末「进 main 记录」）。此前 in-progress——完工待进 main，分支 claude-is04
 Blocked by: 无
 地盘：`scripts/demo-seeds/seed.sh`、`scripts/demo-seeds/steps/`（新）、`scripts/demo-seeds/README.md` 里讲「怎么加一条种子」的那段
 出处：用户 2026-10-19 同意「热点清单冲突」基础设施票。近两周 `scripts/demo-seeds/seed.sh` 提交 48 次：每张加种子的票都往同一个脚本的同一节追加命令与注释。
@@ -59,3 +59,7 @@ Blocked by: 无
 - **进 main 时若有冲突**：若这期间 main 上另有票往旧 `seed.sh` 某节追加了命令，合并会在 `seed.sh` 冲突。处理：把那几行连同注释搬进对应的步骤文件，或按 README 新起一个取空档号的文件；再跑 `compare-seed-calls.sh <那张票进 main 后的 main> <合并结果>`，应当相同。
 - 票面没要求、本票多做了两件：比对时也比标准输出，加载器加了命名守卫（代决 4、5）。
 - `docs/product/MECHANISM-INVENTORY.md` 未重生成，留给进 main 时统一做；它的生成不读 `seed.sh`。
+
+## 进 main 记录
+
+2026-10-19 协调方合入，02、03、04 同批：合入时 seed.sh 自本票基点未被别票改过；`compare-seed-calls.sh origin/main HEAD` 四项相同，一次性库实灌退 0。叠合后按新步骤重生成 ADR 索引、重算 AT 盘点计数、重生成机制清点，各自单独成笔；`adr-index -check` 与 `at-coverage-counts -check` 退 0；在干净树上对 `a34f8852` 跑 `scripts/test-full.sh` 全量，156 ok、0 FAIL。
