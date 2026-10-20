@@ -173,6 +173,7 @@ test('角色选项从 partyRoleLabels 派生', () => {
     Object.keys(partyRoleLabels),
   );
   deepEqual(options[0], { value: 'CUSTOMER', label: '客户 · CUSTOMER' });
+  deepEqual(options[options.length - 1], { value: 'AUTHORIZED_DELIVERING_PARTY', label: '授权交付方 · AUTHORIZED_DELIVERING_PARTY' });
 });
 
 // Covers: 认领的路径表与 partyRelationshipDocument 的键（含嵌套的 approval 各格）一一对应。

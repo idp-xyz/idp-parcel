@@ -1,7 +1,7 @@
 # 16 管理台不认「授权交付方」这一参与方角色：关系列表显示原码，登记表单的角色下拉里没有它
 
 Category: bug
-Status: ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立并代决
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 的作者子代理认领，照前端切片在 `main` 上直接做。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立并代决
 Blocked by: 无
 父票：[10](./10-authorized-delivery-relationship-in-party-commercial.md)
 出处：票 10 完成记录「没做」。
