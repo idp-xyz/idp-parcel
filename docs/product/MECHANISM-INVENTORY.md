@@ -11,7 +11,7 @@
 | collectionremittance | 23 | 9 | 4 | 6 | 0 | 3 |
 | customscompliance | 119 | 114 | 22 | 47 | 10 | 16 |
 | networkrouting | 80 | 80 | 9 | 14 | 2 | 7 |
-| nodeoperations | 105 | 110 | 14 | 28 | 4 | 15 |
+| nodeoperations | 107 | 114 | 15 | 28 | 4 | 16 |
 | parcelpricing | 133 | 122 | 17 | 16 | 1 | 23 |
 | parcelshipment | 209 | 203 | 20 | 39 | 10 | 19 |
 | partycommercial | 165 | 177 | 13 | 42 | 1 | 38 |
@@ -20,7 +20,7 @@
 | settlementaccounting | 208 | 150 | 34 | 63 | 12 | 9 |
 | transportfulfillment | 232 | 232 | 40 | 45 | 13 | 43 |
 | visibilityexception | 110 | 106 | 12 | 31 | 8 | 12 |
-| **合计** | 1470 | 1397 | 190 | 343 | 62 | 191 |
+| **合计** | 1472 | 1401 | 191 | 343 | 62 | 192 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 107、测试 218。
 
@@ -77,7 +77,7 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 6 |
 
-## 迁移：12 个模块共 268 份 SQL
+## 迁移：12 个模块共 269 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -85,7 +85,7 @@
 | collection_remittance | 1 |
 | customs_compliance | 24 |
 | network_routing | 20 |
-| node_operations | 17 |
+| node_operations | 18 |
 | parcel_pricing | 12 |
 | parcel_shipment | 26 |
 | party_commercial | 39 |
@@ -94,7 +94,7 @@
 | transport_fulfillment | 38 |
 | visibility_exception | 27 |
 
-## 接线面：接入面端点 169 个，消费适配器 51 个生产文件，直投路由表 34 条
+## 接线面：接入面端点 170 个，消费适配器 51 个生产文件，直投路由表 34 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -104,7 +104,7 @@
 | collectionremittance | 1 |
 | customscompliance | 17 |
 | networkrouting | 9 |
-| nodeoperations | 16 |
+| nodeoperations | 17 |
 | parcelpricing | 17 |
 | parcelshipment | 15 |
 | partycommercial | 32 |
@@ -112,7 +112,7 @@
 | settlementaccounting | 6 |
 | transportfulfillment | 38 |
 | visibilityexception | 15 |
-| **合计** | 169 |
+| **合计** | 170 |
 
 消费适配器按 `internal/<消费方>/adapters/` 下 `inbox`、`adoptconsume`、`finalconsume`、`veconsume` 四类目录的生产文件数。它与上面的「跨上下文消费缝」是两种东西：那一栏数的是消费方为某个提供方写的防腐层，这一栏数的是接进程内直投信封的消费门。
 
