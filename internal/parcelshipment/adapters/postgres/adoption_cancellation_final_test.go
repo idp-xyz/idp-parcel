@@ -3,6 +3,7 @@ package postgres_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -395,6 +396,80 @@ func TestAFinalOutcomeRoundTripsAndRederivesInPlace(t *testing.T) {
 	})
 	if staleOutcome != ports.FinalOutcomeAlreadyRecorded {
 		t.Fatalf("stale rederive outcome = %d, want ALREADY_RECORDED", staleOutcome)
+	}
+}
+
+// TestAFinalOutcomeIsFoundAgainByItsFinalVersion 证按终局版本的读口（FindByFinalVersion）：
+// 已翻下当前位的前一代照样读得回，读回的是它自己那一行的采用键——下游把重派生的前后关系译成
+// 自己的前身，靠的就是这一格；他包裹、他租户、没签过的版本都找不到；同一包裹内一个终局版本
+// 只能落在一行上，换一个包裹则不相干。
+func TestAFinalOutcomeIsFoundAgainByItsFinalVersion(t *testing.T) {
+	_, _, finals, transactor, pool := newJudgmentStores(t)
+	ctx := t.Context()
+
+	first := firstFinalRecord(t, "tenant-1", "parcel-1", "ORV-1", "digest-1")
+	mustSaveFinal(t, transactor, ctx, finals, first)
+	mustSaveFinal(t, transactor, ctx, finals, rederivedFinalRecord(t, first, "ORV-2", "digest-2"))
+
+	tenant := psTenant(t, "tenant-1")
+	firstVersion := mustBuild(t, domain.NewFinalOutcomeVersionID, "FIN-0001")
+	prior, present, err := finals.FindByFinalVersion(ctx, tenant, first.Key.Parcel, firstVersion)
+	if err != nil || !present {
+		t.Fatalf("按终局版本读前一代：present=%v err=%v", present, err)
+	}
+	if prior.Key != first.Key || !prior.Finalized || prior.Final.Version() != firstVersion {
+		t.Fatalf("读回的不是前一代自己那一行：key=%+v final=%q", prior.Key, prior.Final.Version().String())
+	}
+
+	next, present, err := finals.FindByFinalVersion(ctx, tenant, first.Key.Parcel,
+		mustBuild(t, domain.NewFinalOutcomeVersionID, "FIN-0002"))
+	if err != nil || !present || next.Key.Version.String() != "ORV-2" {
+		t.Fatalf("按终局版本读当前那一代：present=%v err=%v key=%+v", present, err, next.Key)
+	}
+	if back, has := next.Final.PriorVersion(); !has || back != firstVersion {
+		t.Fatal("当前那一代读回后没有指回前一代")
+	}
+
+	for name, probe := range map[string]struct {
+		tenant  string
+		parcel  string
+		version string
+	}{
+		"他包裹":    {"tenant-1", "parcel-2", "FIN-0001"},
+		"他租户":    {"tenant-b", "parcel-1", "FIN-0001"},
+		"没签过的版本": {"tenant-1", "parcel-1", "FIN-0009"},
+	} {
+		if _, present, err := finals.FindByFinalVersion(ctx, psTenant(t, probe.tenant),
+			mustBuild(t, domain.NewDeclaredParcelID, probe.parcel),
+			mustBuild(t, domain.NewFinalOutcomeVersionID, probe.version)); err != nil || present {
+			t.Errorf("%s按终局版本读到了东西：present=%v err=%v", name, present, err)
+		}
+	}
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO parcel_shipment.final_outcome
+			(tenant_id, parcel_id, outcome_kind, outcome_version,
+			 content_digest, finalized, is_current,
+			 final_version, final_kind, rule_version,
+			 decision_ref, execution_ref, occurred_at, adopted_at)
+		 VALUES ('tenant-1', 'parcel-1', 'EFFECTIVE_DELIVERY', 'ORV-3',
+		         'digest-x', true, false,
+		         'FIN-0001', 'DELIVERED_FINAL', 'rule-v1',
+		         'decision-1', 'evidence-1', now(), now())`); err == nil ||
+		!strings.Contains(err.Error(), "final_outcome_version_unique") {
+		t.Fatalf("同一包裹的第二行占用已签出的终局版本，没有被版本唯一约束挡下（按版本读回从此不唯一）：%v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO parcel_shipment.final_outcome
+			(tenant_id, parcel_id, outcome_kind, outcome_version,
+			 content_digest, finalized, is_current,
+			 final_version, final_kind, rule_version,
+			 decision_ref, execution_ref, occurred_at, adopted_at)
+		 VALUES ('tenant-1', 'parcel-2', 'EFFECTIVE_DELIVERY', 'ORV-1',
+		         'digest-y', true, true,
+		         'FIN-0001', 'DELIVERED_FINAL', 'rule-v1',
+		         'decision-1', 'evidence-1', now(), now())`); err != nil {
+		t.Fatalf("另一个包裹上的同号终局被唯一约束挡下（约束只该在包裹内成立）：%v", err)
 	}
 }
 

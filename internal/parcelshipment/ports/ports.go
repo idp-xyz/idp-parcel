@@ -600,6 +600,23 @@ type FinalOutcomeStore interface {
 	Save(ctx context.Context, record FinalOutcomeRecord) (FinalOutcomeSaveOutcome, error)
 }
 
+// FinalOutcomeByVersionView 是终局采用账按终局版本的读半边，已翻下当前位的历史版照样读得回。
+// 重派生的终局只以终局版本（ParcelFinalOutcome.PriorVersion）指回前一代，而前一代的采用键
+// ——尤其它的责任结果版本——只在那一行上；消费方要把这层前后关系译成自己的语言（追踪投影
+// 的来源事实替代关系就是这样），只能按终局版本找回那一行。不采用记录没有终局版本，永远不
+// 从这里出来。
+//
+// 包裹进参数而不只给版本：前后两代必在同一包裹（Rederive 不换包裹），带上包裹，读口就不必
+// 依赖签发器铸号的全局唯一。
+type FinalOutcomeByVersionView interface {
+	FindByFinalVersion(
+		ctx context.Context,
+		tenant domain.TenantID,
+		parcel domain.DeclaredParcelID,
+		version domain.FinalOutcomeVersionID,
+	) (FinalOutcomeRecord, bool, error)
+}
+
 // FinalIdentityFactory 签发终局判断版本标识。
 type FinalIdentityFactory interface {
 	NextFinalOutcomeVersionID(ctx context.Context) (domain.FinalOutcomeVersionID, error)

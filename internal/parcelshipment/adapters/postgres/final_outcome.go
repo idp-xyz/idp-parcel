@@ -81,6 +81,33 @@ func (repository *FinalOutcomes) FindCurrentFinal(
 	return scanFinal(tenant, row)
 }
 
+var _ ports.FinalOutcomeByVersionView = (*FinalOutcomes)(nil)
+
+// FindByFinalVersion 按终局版本找回一行终局采用判断，不论它此刻是不是当前位。一个终局版本
+// 在包裹内只落在一行上，由库面唯一索引 final_outcome_version_unique 承担；不采用行的终局版本
+// 列为空，按版本永远找不到它。否定结果同 FindByKey 只回 false。
+func (repository *FinalOutcomes) FindByFinalVersion(
+	ctx context.Context,
+	tenant domain.TenantID,
+	parcel domain.DeclaredParcelID,
+	version domain.FinalOutcomeVersionID,
+) (ports.FinalOutcomeRecord, bool, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return ports.FinalOutcomeRecord{}, false, fmt.Errorf("find final outcome by version: %w", err)
+	}
+	row := querier.QueryRow(ctx,
+		findFinalSQL+`
+		 WHERE tenant_id = $1
+		   AND parcel_id = $2
+		   AND final_version = $3`,
+		tenant.String(),
+		parcel.String(),
+		version.String(),
+	)
+	return scanFinal(tenant, row)
+}
+
 // Save 写下一次终局判断。三条写入路各有各的撞法，全部译写入代数不译错误：
 //
 //   - 不采用记录：普通插入，撞主键即`已有记录`；
