@@ -1,7 +1,7 @@
 # 105 两条以上候选都出价时，未选中候选的成本出处也交给计划，段号重复，初始路由计划形成报错
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-dcg105（2026-10-19 作者子代理，见文末「完成记录」）。此前 ready-for-agent——2026-10-19 分诊为 A（挡演示/上线），批次见 [triage-2026-10-19](../triage-2026-10-19.md)。此前 needs-triage——2026-10-19 Claude Code 作者子代理立（出自票 [routing-first-cut/20](../../routing-first-cut/issues/20-bound-cost-cards-fold-zones-through-the-parcel-postal-route.md) 的隔离评审；用户「你作为业务和系统专家自决……解决所有的问题」授权）。
+Status: in-progress——完工待评审与进 main，分支 claude-dcg105（2026-10-19 作者子代理，见文末「完成记录」；隔离评审一轮阻断 0，见文末「评审记录」；进 main 时由协调方转 resolved 并注合入 SHA）。此前 ready-for-agent——2026-10-19 分诊为 A（挡演示/上线），批次见 [triage-2026-10-19](../triage-2026-10-19.md)。此前 needs-triage——2026-10-19 Claude Code 作者子代理立（出自票 [routing-first-cut/20](../../routing-first-cut/issues/20-bound-cost-cards-fold-zones-through-the-parcel-postal-route.md) 的隔离评审；用户「你作为业务和系统专家自决……解决所有的问题」授权）。
 Blocked by: 无
 地盘：NR `adapters/parcelpricing/cost_source.go`（`LoadCandidateCosts` 的合成）、`ports` 的 `RouteCandidateCosts`、`application/create_initial_route.go`（`planRecord`）。
 出处：票 [routing-first-cut/10](../../routing-first-cut/issues/10-candidate-cost-from-leg-buy-evaluations.md) 完成记录「出处留痕：选中候选逐段……随计划 jsonb 一并落」；[ADR-0189](../../../docs/adr/0189-leg-pricing-zones-are-supplied-per-card-and-unbound-cards-take-a-registered-leg-zone.md) 文末补记越权风险点 6。
@@ -80,3 +80,21 @@ routing-first-cut/10（逐段成本出处随计划留痕）、routing-first-cut/
 - `go build ./...`、`go vet ./...`、`gofmt -l` 都干净。
 - `scripts/test-full.sh`，跑的包：`./cmd/parcel-api/`、`./cmd/parcel-dispatch/`、`./cmd/parcel-network-register/`、`./internal/networkrouting/...`、`./internal/parcelshipment/adapters/networkrouting/`、`./internal/transportfulfillment/adapters/networkrouting/`、`./internal/visibilityexception/adapters/networkrouting/`、`./internal/architecture/...`，全部 ok。
 - 演示种子、迁移和接线都没改；`docs/product/MECHANISM-INVENTORY.md` 没有重生成。
+
+## 评审记录（2026-10-19，隔离评审一轮）
+
+阻断 0 项。非阻断 2 项：建议进 main 前修的 1 项归协调方，进 main 时办；另 1 项修订时补跑了真库，已落实。本轮代码没改，只改票面。
+
+### 建议进 main 前修的
+
+1. **Status 还是 in-progress**（未改，留给协调方）。评审给的修法本来就指定协调方：进 main 时把 Status 转 resolved，并注明合入的 SHA。作者这边写不出合入 SHA，任务口径也要求作者收工时停在 in-progress。所以本轮只在 Status 行补一句，交代进 main 时谁来转、转时注什么。分诊表与 ADR-0189 越权风险点 6 都链到本票，转 resolved 之前，它们看到的本票仍是未完。
+
+### 其余非阻断
+
+2. **生产装配真库用例只编过、没起真库重跑**（已补跑）。评审只用 `go vet` 确认这两份用例编得过。修订时用 `scripts/test-full.sh -v -run` 把 `reference_network_wiring_test.go` 和 `route_cost_reading_completion_wiring_test.go` 里的用例逐个点名重跑，`-v` 输出里每个都是 PASS，没有跳过的。评审说进 main 的全量会顺带跑到它们，这一条不变。
+
+### 验证（修订后）
+
+- `go build ./...`、`go vet ./...` 干净；本分支改动的 Go 文件 `gofmt -l` 为空。
+- `scripts/test-full.sh`，跑的包：`./cmd/parcel-api/`、`./cmd/parcel-dispatch/`、`./cmd/parcel-network-register/`、`./internal/networkrouting/...`、`./internal/parcelshipment/adapters/networkrouting/`、`./internal/transportfulfillment/adapters/networkrouting/`、`./internal/visibilityexception/adapters/networkrouting/`、`./internal/architecture/...`，全部 ok。这组包是改动包的全部反向依赖，修订时用 `go list` 重新算过，和完成记录里那组一样。
+- 没跑全量，没重生成 `docs/product/MECHANISM-INVENTORY.md`；演示种子、迁移和接线都没改。
