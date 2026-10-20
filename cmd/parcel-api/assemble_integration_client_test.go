@@ -16,12 +16,29 @@ import (
 
 const integrationClientUnconfiguredBody = `{"error":{"code":"ACCESS_CHANNEL_NOT_CONFIGURED"}}` + "\n"
 
-var integrationClientFaces = []string{
-	"/customs/external-results",
-	"/customs-regulatory-credential-registrations",
-	"/settlement-external-funds-fact-registrations",
-	"/settlement-external-funds-fact-correction-registrations",
-	"/transport-fulfillment/booking-answers",
+// integrationClientFaces 由登记处导出：挂集成客户端族的各行。
+func integrationClientFaces() []string {
+	return declaredPatterns(func(line endpointLine) bool { return line.face.family == faceIntegrationClient })
+}
+
+// integrationClientFacesOutside 是授予里没有 fact 这一种外部事实时进不去的那几行。
+func integrationClientFacesOutside(fact accessidentity.ExternalFactType) []string {
+	return declaredPatterns(func(line endpointLine) bool {
+		return line.face.family == faceIntegrationClient && line.face.fact != fact
+	})
+}
+
+// integrationClientFactTypes 是集成客户端各行声明的外部事实种类，各一份。
+func integrationClientFactTypes() []accessidentity.ExternalFactType {
+	seen := map[accessidentity.ExternalFactType]bool{}
+	var facts []accessidentity.ExternalFactType
+	for _, line := range declaredEndpointLines() {
+		if line.face.family == faceIntegrationClient && !seen[line.face.fact] {
+			seen[line.face.fact] = true
+			facts = append(facts, line.face.fact)
+		}
+	}
+	return facts
 }
 
 type absentClientRegister struct{}
@@ -145,7 +162,7 @@ func TestIntegrationClientChannelWithIncompleteIssuerParametersRefusesToStart(t 
 
 func TestIntegrationClientFacesStayUnconfiguredWhenTheIssuerIsUnset(t *testing.T) {
 	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnconfiguredBusinessEndpoints())
-	for _, pattern := range integrationClientFaces {
+	for _, pattern := range integrationClientFaces() {
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, pattern, strings.NewReader(`{"any":"body"}`)))
 		if response.Code != http.StatusForbidden || response.Body.String() != integrationClientUnconfiguredBody {
@@ -157,12 +174,7 @@ func TestIntegrationClientFacesStayUnconfiguredWhenTheIssuerIsUnset(t *testing.T
 func TestIntegrationClientFacesAnswerTheChannelGrades(t *testing.T) {
 	now := time.Now()
 	open := clientFactRegister{
-		facts: []accessidentity.ExternalFactType{
-			accessidentity.FactCustomsExternalResult,
-			accessidentity.FactRegulatoryCredential,
-			accessidentity.FactExternalFunds,
-			accessidentity.FactCarrierBookingAnswer,
-		},
+		facts: integrationClientFactTypes(),
 		start: now.Add(-time.Hour),
 		end:   now.Add(time.Hour),
 	}
@@ -201,7 +213,7 @@ func TestIntegrationClientFacesAnswerTheChannelGrades(t *testing.T) {
 		"funds grant does not cover customs facts": {
 			verifier: acceptingClientVerifier{}, registry: fundsOnly, token: "presented.client.token",
 			status: http.StatusForbidden, code: "INTEGRATION_CLIENT_NOT_GRANTED",
-			only: []string{"/customs/external-results", "/customs-regulatory-credential-registrations", "/transport-fulfillment/booking-answers"},
+			only: integrationClientFacesOutside(accessidentity.FactExternalFunds),
 		},
 	}
 	for name, testCase := range cases {
@@ -209,7 +221,7 @@ func TestIntegrationClientFacesAnswerTheChannelGrades(t *testing.T) {
 			router := integrationClientRouter(t, testCase.verifier, testCase.registry)
 			faces := testCase.only
 			if faces == nil {
-				faces = integrationClientFaces
+				faces = integrationClientFaces()
 			}
 			for _, pattern := range faces {
 				request := httptest.NewRequest(http.MethodPost, pattern, strings.NewReader(`{}`))

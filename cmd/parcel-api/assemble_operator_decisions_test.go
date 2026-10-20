@@ -116,64 +116,12 @@ func (registryWriterRegister) FindOperator(_ context.Context, subject accessiden
 	return standing, err == nil, err
 }
 
-var swappedRegistryFaces = []string{
-	"/visibility-catalogue-milestone-mapping-registrations",
-	"/visibility-catalogue-triage-rule-registrations",
-	"/visibility-catalogue-notification-policy-registrations",
-	"/visibility-catalogue-claim-eligibility-registrations",
-	"/visibility-catalogue-claim-authorization-registrations",
-	"/visibility-catalogue-disclosure-policy-registrations",
-	"/visibility-catalogue-exception-disclosure-rule-registrations",
-	"/visibility-catalogue-conflict-signal-rule-registrations",
-	"/customs-interpretation-rule-registrations",
-	"/customs-gate-catalog-registrations",
-	"/customs-candidate-port-registrations",
-	"/customs-declaration-path-registrations",
-	"/customs-case-requirement-registrations",
-	"/customs-duty-collaboration-registrations",
-	"/customs-duty-payment-verification-registrations",
-	"/network-catalog-node-registrations",
-	"/network-catalog-connection-registrations",
-	"/network-catalog-line-registrations",
-	"/network-catalog-service-area-registrations",
-	"/network-catalog-service-calendar-registrations",
-	"/network-catalog-availability-adjustment-registrations",
-	"/network-catalog-route-strategy-registrations",
-	"/pricing-price-card-registrations",
-	"/pricing-reference-series-registrations",
-	"/pricing-reference-series-reviews",
-	"/pricing-reference-series-previews",
-	"/pricing-reference-catalogue-registrations",
-	"/pricing-price-card-drafts",
-	"/pricing-price-card-draft-approvals",
-	"/pricing-price-card-draft-publications",
-	"/pricing-evaluation-replays",
-	"/commercial-publications",
-	"/commercial-publication-previews",
-	"/commercial-publication-drafts",
-	"/commercial-publication-draft-approvals",
-	"/commercial-publication-draft-publications",
-	"/commercial-service-product-form-registrations",
-	"/commercial-product-channel-mapping-registrations",
-	"/commercial-registration-number-type-registrations",
-	"/commercial-registration-number-type-deactivations",
-	"/commercial-channel-account-use-registrations",
-	"/commercial-channel-account-use-revocations",
-	"/commercial-business-party-registrations",
-	"/commercial-legal-entity-registrations",
-	"/commercial-customer-account-registrations",
-	"/commercial-party-relationship-registrations",
-	"/commercial-party-identity-deactivations",
-	"/commercial-legal-entity-profile-registrations",
-	"/transport-fulfillment-external-carrier-credential-registrations",
-	"/transport-fulfillment-external-carrier-credential-applicability-changes",
-	"/transport-fulfillment-effective-time-rule-registrations",
-	"/transport-fulfillment-carrier-master-document-registrations",
-	"/transport-fulfillment-carrier-master-document-revisions",
-	"/transport-fulfillment-transport-schedule-template-registrations",
-	"/transport-fulfillment-transport-schedule-registrations",
-	"/transport-fulfillment-capacity-pool-registrations",
-	"/node-operations-pre-advice-window-registrations",
+// swappedRegistryFaces 由登记处导出：挂操作者渠道「登记册配置写」能力面、经共享渠道的写行（POST）。同族的读行（草稿查阅、
+// 发布词表）只答 GET，各自的特性测试另证。
+func swappedRegistryFaces() []string {
+	return declaredPatterns(func(line endpointLine) bool {
+		return line.face.family == faceRegistryWrite && line.method == http.MethodPost && !line.ownIntake
+	})
 }
 
 // failingRegister 是读不动的操作者册；readerRegister 只有查阅授予、没有登记写授予。
@@ -225,7 +173,7 @@ func TestSwappedRegistryFacesMapTheRefusalAndDependencyGrades(t *testing.T) {
 			t.Fatal(err)
 		}
 		router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(unconfiguredOperatorDecisions(), registries, unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil))
-		for _, pattern := range swappedRegistryFaces {
+		for _, pattern := range swappedRegistryFaces() {
 			request := httptest.NewRequest(http.MethodPost, pattern, strings.NewReader(`{}`))
 			request.Header.Set("Authorization", "Bearer presented.operator.token")
 			response := httptest.NewRecorder()
@@ -248,7 +196,7 @@ func TestSwappedRegistryFacesAnswerFromTheOperatorChannel(t *testing.T) {
 	}
 	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(unconfiguredOperatorDecisions(), registries, unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil))
 
-	for _, pattern := range swappedRegistryFaces {
+	for _, pattern := range swappedRegistryFaces() {
 		cases := map[string]struct {
 			token  string
 			status int
@@ -275,47 +223,24 @@ func TestSwappedRegistryFacesAnswerFromTheOperatorChannel(t *testing.T) {
 	}
 }
 
-var swappedDecisionFaces = map[string]accessidentity.DecisionKind{
-	"/shipment-requests/manual-review-completions":         accessidentity.DecisionManualReviewCompletion,
-	"/shipment-requests/rejections":                        accessidentity.DecisionActiveRejection,
-	"/shipment-requests/authorized-dispositions":           accessidentity.DecisionAuthorizedDisposition,
-	"/transport-fulfillment-load-assignment-registrations": accessidentity.DecisionLoadAssignment,
-	"/transport-fulfillment-participation-terminations":    accessidentity.DecisionParticipationTermination,
-	// 下面四口换口时同笔撤下隔离写放行（ADR-0150 决定三；票 operator-channel/15 余下四口）。
-	"/transport-fulfillment-segment-closures":                         accessidentity.DecisionSegmentClosure,
-	"/transport-fulfillment-dispatch-task-registrations":              accessidentity.DecisionDispatchTaskRegistration,
-	"/transport-fulfillment-effective-time-judgments":                 accessidentity.DecisionEffectiveTimeJudgment,
-	"/transport-fulfillment-carrier-first-effective-pickup-judgments": accessidentity.DecisionCarrierFirstEffectivePickupJudgment,
-	// 运输委托提交（ADR-0202 决定一）：生来就在运营决定面上，没有隔离放行可撤。
-	"/transport-fulfillment-transport-commission-submissions": accessidentity.DecisionTransportCommissionSubmission,
-	// 订舱提交（ADR-0202 决定一）：同委托提交，生来就在运营决定面上。
-	"/transport-fulfillment-booking-request-submissions": accessidentity.DecisionBookingRequestSubmission,
-	// 履约段采用运输委托、取消委托、取消订舱（ADR-0204；ADR-0202 决定一）：同委托提交，生来就在运营决定面上。
-	"/transport-fulfillment-segment-commission-adoptions":       accessidentity.DecisionFulfillmentSegmentCommissionAdoption,
-	"/transport-fulfillment-transport-commission-cancellations": accessidentity.DecisionTransportCommissionCancellation,
-	"/transport-fulfillment-booking-request-cancellations":      accessidentity.DecisionBookingRequestCancellation,
-	// 受控关闭与重开：按包裹寻址、请求方由服务端推出（ADR-0183），此前没有隔离放行。
-	"/shipment-requests/continued-attempt-closures":   accessidentity.DecisionControlledClosure,
-	"/shipment-requests/continued-attempt-reopenings": accessidentity.DecisionControlledReopening,
-	// 人工重核：复核页上对指名的一件待识别实物发起（ADR-0199 决定三，票 no-reception-source/03）。
-	"/node-operations/identity-rechecks": accessidentity.DecisionPendingIdentityRecheck,
-	// 身份冲突处置：复核页上对一件判身份冲突的作业实物指定一件或确认都不是（ADR-0210 决定六，票 no-reception-identity/06）。
-	"/node-operations/identity-dispositions": accessidentity.DecisionIdentityConflictDisposition,
-	// 运输收费发生项登记（ADR-0207 决定六）。
-	"/transport-fulfillment-charge-occurrence-registrations": accessidentity.DecisionTransportChargeOccurrenceRegistration,
-	// 容量预占与容量释放（ADR-0203 决定三，`AT-TF-144`）：两种各自授予，持预占的在释放口答 403。
-	"/transport-fulfillment-capacity-reservations": accessidentity.DecisionCapacityReservation,
-	"/transport-fulfillment-capacity-releases":     accessidentity.DecisionCapacityRelease,
-	// 送站交接确认（ADR-0212 决定三，票 ps-external-mark-relations/12）：依授权交付关系确认交接单对一个客户账户的绑定。
-	"/node-operations/delivery-handover-confirmations": accessidentity.DecisionDeliveryHandoverConfirmation,
+// swappedDecisionFaces 由登记处导出：挂操作者渠道「运营决定」能力面的各口及各自的决定种类。
+func swappedDecisionFaces() map[string]accessidentity.DecisionKind {
+	faces := map[string]accessidentity.DecisionKind{}
+	for pattern, line := range declaredEndpointLines() {
+		if line.face.family == faceOperationDecision && !line.ownIntake {
+			faces[pattern] = line.face.decision
+		}
+	}
+	return faces
 }
 
 // Covers: 票 operator-channel/15 完成判据「无此决定种类的授予」那一格——授予按决定种类各自成立：持有别的每一种
 // 运营决定、唯独没有这一口那一种的操作者，在这一口答 403 OPERATOR_NOT_GRANTED，走不到准入范围那一格，也不进编排。
 func TestSwappedDecisionFacesRefuseAGrantOfAnotherDecisionKind(t *testing.T) {
-	for pattern, kind := range swappedDecisionFaces {
+	decisionFaces := swappedDecisionFaces()
+	for pattern, kind := range decisionFaces {
 		var others []accessidentity.DecisionKind
-		for _, other := range swappedDecisionFaces {
+		for _, other := range decisionFaces {
 			if other != kind {
 				others = append(others, other)
 			}
@@ -341,8 +266,9 @@ func TestSwappedDecisionFacesRefuseAGrantOfAnotherDecisionKind(t *testing.T) {
 }
 
 func TestSwappedDecisionFacesAnswerFromTheOperatorChannel(t *testing.T) {
+	decisionFaces := swappedDecisionFaces()
 	var kinds []accessidentity.DecisionKind
-	for _, kind := range swappedDecisionFaces {
+	for _, kind := range decisionFaces {
 		kinds = append(kinds, kind)
 	}
 	minter, err := buildOperatorMinter(acceptingVerifier{}, decisionRegister{kinds: kinds}, admissionScopeUnset())
@@ -355,7 +281,7 @@ func TestSwappedDecisionFacesAnswerFromTheOperatorChannel(t *testing.T) {
 	}
 	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(decisions, unconfiguredOperatorRegistries(), unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil))
 
-	for pattern := range swappedDecisionFaces {
+	for pattern := range decisionFaces {
 		cases := map[string]struct {
 			token  string
 			status int

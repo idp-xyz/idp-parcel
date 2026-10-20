@@ -12,63 +12,13 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
 
-// swappedCatalogueReadFaces 是 ADR-0077 那一族目录查阅。隔离读放行已撤，答复走操作者查阅读。
-var swappedCatalogueReadPatterns = []string{
-	"/pricing-price-cards",
-	"/pricing-reference-series",
-	"/pricing-reference-series-coverage",
-	"/pricing-pending-series-evaluations",
-	"/pricing-evaluations",
-	"/network-catalog",
-	"/route-plans",
-	"/customs-compliance-rules",
-	"/customs-case-registers",
-	"/customs-gate-conditions",
-	"/customs-ports-paths",
-	"/customs-credentials",
-	"/customs-duty-collaborations",
-	"/customs-duty-verifications",
-	"/commercial-service-products",
-	"/commercial-policies",
-	"/commercial-customer-contracts",
-	"/commercial-supplier-agreements",
-	"/commercial-business-parties",
-	"/commercial-business-parties/{partyId}/revisions",
-	"/commercial-group-legal-entities",
-	"/commercial-group-legal-entities/{legalEntityId}/revisions",
-	"/commercial-group-legal-entities/{legalEntityId}/profile-revisions",
-	"/commercial-group-legal-entities/{legalEntityId}/profile-resolution",
-	"/commercial-party-relationships",
-	"/commercial-customer-accounts",
-	"/commercial-product-channel-mappings",
-	"/commercial-registration-number-types",
-}
-
-// swappedOperationsReadPatterns 是运营查阅面余下各族（票 operator-channel/35）：面单交易、渠道择优、节点作业、运输履约、
-// 追踪与异常、代收、结算、治理。委托查阅及其子集视图不在其中，仍挂隔离读（票 operator-channel/53）。
-var swappedOperationsReadPatterns = []string{
-	"/label-transactions",
-	"/channel-selection-decisions",
-	"/node-operations-records",
-	"/transport-fulfillment-records",
-	"/transport-fulfillment-handover-scope-summary",
-	"/transport-fulfillment-external-tracking-facts",
-	"/transport-fulfillment-carrier-first-effective-pickups",
-	"/tracking-projections",
-	"/visibility-catalogues",
-	"/exception-triage-records",
-	"/exception-case-records",
-	"/claims-recovery-records",
-	"/collection-subledgers",
-	"/settlement-charges",
-	"/settlement-statements",
-	"/settlement-funds-applications",
-	"/settlement-operating-results",
-	"/governance-registers",
-	"/node-operations-delivery-pre-advices",
-	"/node-operations-delivery-pre-advices/{preAdviceId}",
-	"/node-operations-delivery-handover-notes",
-	"/node-operations-delivery-handover-notes/{noteId}",
+// swappedReadPatterns 由登记处导出：挂操作者渠道「主数据与运营查阅读」能力面、经共享渠道的查阅行（GET）——ADR-0077 那一族
+// 目录查阅（隔离读放行已撤，答复走操作者查阅读），与运营查阅面余下各族（票 operator-channel/35）：面单交易、渠道择优、节点作业、
+// 运输履约、追踪与异常、代收、结算、治理。委托查阅及其子集视图不在其中，仍挂隔离读（票 operator-channel/53）。
+func swappedReadPatterns() []string {
+	return declaredPatterns(func(line endpointLine) bool {
+		return line.face.family == faceOperationsRead && line.method == http.MethodGet && !line.ownIntake
+	})
 }
 
 // operationsReaderRegister 持有主数据与运营查阅读，不持登记写。
@@ -135,8 +85,9 @@ func TestSwappedCatalogueReadFacesAnswerFromTheOperatorChannel(t *testing.T) {
 		router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(
 			unconfiguredOperatorDecisions(), testCase.registries, unconfiguredIntegrationClientIntakes(),
 			isolated, nil, nil, nil))
-		for _, pattern := range append(append([]string{}, swappedCatalogueReadPatterns...), swappedOperationsReadPatterns...) {
-			probe, ok := businessEndpointProbes[pattern]
+		probes := businessEndpointProbes()
+		for _, pattern := range swappedReadPatterns() {
+			probe, ok := probes[pattern]
 			if !ok {
 				t.Fatalf("探针表没有 %s", pattern)
 			}

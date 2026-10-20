@@ -53,16 +53,19 @@ func TestBuildIsolatedReadIntakesGrantsTheShipmentViews(t *testing.T) {
 	}
 }
 
-// isolatedReadAdmittedPatterns 是 ADR-0078 Decision 一的放行面：委托查阅与它的子集视图，共用一只 Intake 变量。它与
-// 下面的两态测试互为对照：这里多列一个端点，启用态断言会在该端点上撞到 403 而失败；少列一个，会在「其余端点仍拒」的
-// 断言上失败——枚举漂移在两个方向上都有测试信号。运营查阅其余各族挂操作者查阅读（ADR-0150 决定三），答复格由
+// isolatedReadAdmittedPatterns 是 ADR-0078 Decision 一的放行面，由登记处导出：声明为隔离读的行——委托查阅与它的子集视图，共用
+// 一只 Intake 变量。它与下面的两态测试互为对照：声明里多一个端点，启用态断言会在该端点上撞到 403 而失败；少一个，会在「其余
+// 端点仍拒」的断言上失败——声明漂移在两个方向上都有测试信号。运营查阅其余各族挂操作者查阅读（ADR-0150 决定三），答复格由
 // TestSwappedCatalogueReadFacesAnswerFromTheOperatorChannel 钉。
-var isolatedReadAdmittedPatterns = map[string]bool{
-	"/shipment-request-views": true,
-	// 复核队列与授权处置队列是委托查阅面的子集视图，在装配上共用同一个 Intake 变量，启用态必然随它一起放行——漏了
-	// 就等于断言「同一个 Intake 会给出两种答案」，那是装不出来的形状。
-	"/acceptance-review-queue":      true,
-	"/authorized-disposition-queue": true,
+//
+// 复核队列与授权处置队列是委托查阅面的子集视图，在装配上共用同一个 Intake 变量，启用态必然随它一起放行——漏了
+// 就等于断言「同一个 Intake 会给出两种答案」，那是装不出来的形状。
+func isolatedReadAdmittedPatterns() map[string]bool {
+	admitted := map[string]bool{}
+	for _, pattern := range declaredPatterns(func(line endpointLine) bool { return line.face.family == faceIsolatedRead }) {
+		admitted[pattern] = true
+	}
+	return admitted
 }
 
 // Covers: ADR-0078 Decision 一、二 — 启用态只放委托查阅一族。unwired* 读口交回稳定
@@ -79,11 +82,12 @@ func TestIsolatedReadAdmissionSwitchesOnlyOperationsReadLines(t *testing.T) {
 	}
 	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpoints(intakes))
 
-	for pattern, probe := range businessEndpointProbes {
+	admitted := isolatedReadAdmittedPatterns()
+	for pattern, probe := range businessEndpointProbes() {
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, httptest.NewRequest(probe.method, probe.target, nil))
 
-		if isolatedReadAdmittedPatterns[pattern] {
+		if admitted[pattern] {
 			if response.Code != http.StatusInternalServerError {
 				t.Fatalf("%s: status = %d, want %d (granted intake must reach the unwired reader)",
 					pattern, response.Code, http.StatusInternalServerError)

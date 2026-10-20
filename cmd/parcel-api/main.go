@@ -10,22 +10,13 @@ import (
 	"syscall"
 	"time"
 
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
+
+	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	aipg "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/postgres"
-	crpostgres "go.idp.xyz/idp-parcel/internal/collectionremittance/adapters/postgres"
-	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
-	nrpostgres "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/postgres"
-	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
-	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
-	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
-	commercialapp "go.idp.xyz/idp-parcel/internal/partycommercial/application"
-	govpg "go.idp.xyz/idp-parcel/internal/pilotgovernance/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/platform/buildinfo"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
-	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
-	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
-	tfapp "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
-	vepostgres "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
 )
 
 const (
@@ -142,688 +133,21 @@ func run(logger *slog.Logger) error {
 	}
 	defer closeDB()
 
-	submission, err := buildSubmissionOrchestration(db, isolatedWrite, selfAuthority)
+	endpoints, err := assembleProductionEndpoints(db, startupChannels{
+		isolatedRead:              isolatedRead,
+		isolatedWrite:             isolatedWrite,
+		selfAuthority:             selfAuthority,
+		operatorVerifier:          operatorVerifier,
+		integrationClientVerifier: integrationClientVerifier,
+		customerClientVerifier:    customerClientVerifier,
+	})
 	if err != nil {
 		return err
 	}
-	withdrawal, err := buildWithdrawalOrchestration(db)
-	if err != nil {
-		return err
-	}
-	requestViews, err := pspostgres.NewShipmentRequestViews(db)
-	if err != nil {
-		return err
-	}
-	// 运营决定口的操作者 Intake（ADR-0151；票 operator-channel/15）：委托侧的寻址读口就是委托查阅适配器
-	// （ports.OperatorDecisionTargets 在其上补齐，同表、整租户可见）。受控关闭与重开按包裹寻址，读口是委托仓储上
-	// 那只按包裹反查当前已接受委托的口（ADR-0183 决定一）。
-	parcelTargets, err := pspostgres.NewShipmentRequests(db)
-	if err != nil {
-		return err
-	}
-	operatorRegistry, err := aipg.NewOperatorRegistry(db)
-	if err != nil {
-		return err
-	}
-	// 准入范围操作者与集成客户端两族共用一只（ADR-0180）：权威串没设时是未配置那一只，对照与区间一行都不读。
-	admission, err := buildAdmissionScope(db, selfAuthority)
-	if err != nil {
-		return err
-	}
-	operatorMinter, err := buildOperatorMinter(operatorVerifier, operatorRegistry, admission)
-	if err != nil {
-		return err
-	}
-	deviceRegistry, err := aipg.NewDeviceRegistry(db)
-	if err != nil {
-		return err
-	}
-	workDeviceCatalogue, err := buildWorkDeviceCatalogue(operatorMinter, deviceRegistry)
-	if err != nil {
-		return err
-	}
-	operatorBinding, err := buildOperatorBinding(operatorMinter)
-	if err != nil {
-		return err
-	}
-	workFactReception, workFactTransport, err := buildWorkFactIntakes(operatorVerifier, operatorRegistry, deviceRegistry, admission)
-	if err != nil {
-		return err
-	}
-	operatorDecisions, err := buildOperatorDecisionIntakes(operatorMinter, requestViews, parcelTargets)
-	if err != nil {
-		return err
-	}
-	operatorRegistries, err := buildOperatorRegistryIntakes(operatorMinter)
-	if err != nil {
-		return err
-	}
-	integrationClientRegistry, err := aipg.NewIntegrationClientRegistry(db)
-	if err != nil {
-		return err
-	}
-	integrationClientMinter, err := buildIntegrationClientMinter(integrationClientVerifier, integrationClientRegistry, admission)
-	if err != nil {
-		return err
-	}
-	integrationClients, err := buildIntegrationClientIntakes(integrationClientMinter)
-	if err != nil {
-		return err
-	}
-	// 提交口的首方 Intake（ADR-0139 决定四；票 first-party-api/00）：预取期望修订用的归属权威与提交编排同一组坐标。
-	customerClientRegistry, err := aipg.NewCustomerClientRegistry(db)
-	if err != nil {
-		return err
-	}
-	customerClientMinter, err := buildCustomerClientMinter(customerClientVerifier, customerClientRegistry, admission)
-	if err != nil {
-		return err
-	}
-	submissionOwnership, err := buildProductionOwnership(db, isolatedWrite, selfAuthority)
-	if err != nil {
-		return err
-	}
-	customerSubmission, err := buildCustomerSubmissionIntake(customerClientMinter, submissionOwnership)
-	if err != nil {
-		return err
-	}
-	// 送站预报两口的首方 Intake 与编排（ADR-0212 决定二；票 ps-external-mark-relations/09）：铸造器与提交口同一只。
-	customerPreAdvice, err := buildCustomerPreAdviceIntake(customerClientMinter)
-	if err != nil {
-		return err
-	}
-	deliveryPreAdvices, err := buildDeliveryPreAdviceOrchestration(db)
-	if err != nil {
-		return err
-	}
-	// 客户追踪视图查阅口的首方 Intake（ADR-0139 决定四；票 demo-chain-gaps/96）：铸造器与提交口同一只，查阅不判准入范围。
-	customerTrackingView, err := buildCustomerTrackingViewIntake(customerClientMinter)
-	if err != nil {
-		return err
-	}
-	// 送站交接单五口的 Intake 与编排（ADR-0212 决定三；票 ps-external-mark-relations/12）：作业事实三口与收寄口同一组核验方、操作者册、
-	// 设备册与准入范围，客户结论口用提交口那一只首方铸造器。
-	deliveryHandoverNotes, err := buildDeliveryHandoverNoteFaces(db, operatorVerifier, operatorRegistry, deviceRegistry, admission, customerClientMinter)
-	if err != nil {
-		return err
-	}
-	manualReview, err := buildManualReviewOrchestration(db)
-	if err != nil {
-		return err
-	}
-	rejection, err := buildRejectionOrchestration(db)
-	if err != nil {
-		return err
-	}
-	// 授权处置编排（ADR-0132）：处置授权那一格今天如实未配置（PC 授权动作词汇没有这一格），接进装配后
-	// 停在`等待授权处置`的委托才有生产入口，停点从「没有入口」变成「说得出停在授权未配置」。
-	disposition, err := buildDispositionOrchestration(db)
-	if err != nil {
-		return err
-	}
-	// 受控补充编排（ADR-0106 Decision 四）：此前它只活在测试里，接进装配后「新提交版本已形成」
-	// 信封才有生产发布方，停在`等待受控补充`并已入账的委托才有人续办。
-	supplement, err := buildCustomerSupplementOrchestration(db)
-	if err != nil {
-		return err
-	}
-	// 资料修订编排（UC-PS-002；票 ps-port-remainder/04）：此前它只活在测试里，接进装配后修订请求
-	// 才有生产入口——今天越过 Intake 后停在授权未决，那是提供方那两半（PC）未立的如实停点。
-	amendment, err := buildCustomerAmendmentOrchestration(db)
-	if err != nil {
-		return err
-	}
-	// 复核队列读口就是委托查阅适配器（ports.AcceptanceReviewQueue 在其上补齐，同表同
-	// 作用域纪律）；判断读口与形成决定读的是同一批判断行。
-	reviewJudgments, err := pspostgres.NewAcceptanceJudgments(db)
-	if err != nil {
-		return err
-	}
-	// 面单交易查阅读的是自己那张表（票 admin-skeleton-closure-batch/08）：与委托查阅
-	// 不同表、不同作用域维度（只有租户），因此另立适配器而不是往上面那只补方法。
-	labelTransactions, err := pspostgres.NewLabelTransactionViews(db)
-	if err != nil {
-		return err
-	}
-	// 渠道择优决定查阅读的是决定登记册本尊（票 label-channel/23）：两个契约一只适配器，读面不是编排。
-	channelSelectionDecisions, err := buildChannelSelectionDecisionRead(db)
-	if err != nil {
-		return err
-	}
-	// 面单渠道写链（票 label-channel/34）：启动时装配**只为 fail-fast**——组合根里 PC / PS 的读适配器与 outbox
-	// 任一构造失败，进程在此带原因退出（同函数开池段那条纪律），而不是等到某天接上触发面才发现。产物今天没有
-	// 消费者（乙路无运营端点、无进程内触发面；谁在什么业务时点发起一笔面单交易的建立是产品题，触发面另票），
-	// 构造即丢；实例半边缝全部显式未配置，接受时解析回指装接受决定读口，不为此变绿种任何行。
-	if _, err := buildLabelChannelOrchestration(db); err != nil {
-		return err
-	}
-	// 请求评价编排（票 sa-cc/08）：启动时装配只为 fail-fast。触发面是编排上的 Trigger：发生项原因没登记答未配置，
-	// 不发起请求。构造结果不挂端点；三件来源引用仍由调用方交进来，不为此种任何行。
-	if _, err := buildEvaluationRequestOrchestration(db); err != nil {
-		return err
-	}
-	// 结算编排入口（票 product-strategy-boundary/12「结算编排的生产入口与触发面」）：七个构造接在这里。确认与截单没登记答未配置。
-	if _, err := buildSettlementOrchestrations(db); err != nil {
-		return err
-	}
-	cancellation, err := buildCancellationOrchestration(db)
-	if err != nil {
-		return err
-	}
-	continuedAttemptDecisions, err := buildContinuedAttemptDecisionOrchestration(db)
-	if err != nil {
-		return err
-	}
-	reception, err := buildReceptionOrchestration(db)
-	if err != nil {
-		return err
-	}
-	// 人工重核编排（ADR-0199 决定三）：接真不等操作者授予——运营决定 Intake 拒在编排之前，授予与准入范围是租户取值。
-	identityRecheck, err := buildIdentityRecheckOrchestration(db)
-	if err != nil {
-		return err
-	}
-	// 身份冲突处置编排（UC-NO-004）：同上，接真不等授予——谁持有「身份冲突处置」授予是租户取值，生产装配不配任何默认。
-	identityDisposition, err := buildIdentityDispositionOrchestration(db)
-	if err != nil {
-		return err
-	}
-	delivery, err := buildDeliveryOrchestration(db)
-	if err != nil {
-		return err
-	}
-	deliveryAttempt, err := buildDeliveryAttemptOrchestration(db)
-	if err != nil {
-		return err
-	}
-	controlFacts, err := buildControlFactOrchestrations(db)
-	if err != nil {
-		return err
-	}
-	pickupCorrection, err := buildOffsitePickupCorrectionOrchestration(db)
-	if err != nil {
-		return err
-	}
-	movementFact, err := buildMovementFactOrchestration(db)
-	if err != nil {
-		return err
-	}
-	// 设备出发前门禁问询（ADR-0219）：与出发登记同一处读数构造，只读。
-	departureGatePreview, err := buildDepartureGatePreview(db)
-	if err != nil {
-		return err
-	}
-	segmentOps, err := buildSegmentOperations(db)
-	if err != nil {
-		return err
-	}
-	// 末端派送任务内部触发执行器（ADR-0114 决定二），只给补拍口用：进程内的那一拍由派发进程随交接登记信封发起
-	// （ADR-0216）。三条派送要求缝的接法见 buildDeliveryDispatchTrigger。
-	deliveryDispatchTrigger, err := buildDeliveryDispatchTrigger(db)
-	if err != nil {
-		return err
-	}
-	credentialRegistration, err := buildExternalCarrierCredentialRegistration(db)
-	if err != nil {
-		return err
-	}
-	masterDocumentRegistration, err := buildMasterDocumentRegistration(db)
-	if err != nil {
-		return err
-	}
-	transportScheduleRegistration, err := buildTransportScheduleRegistration(db)
-	if err != nil {
-		return err
-	}
-	capacityPoolRegistration, err := buildCapacityPoolRegistration(db)
-	if err != nil {
-		return err
-	}
-	transportCommissionSubmission, err := buildTransportCommissionSubmission(db)
-	if err != nil {
-		return err
-	}
-	effectiveTimeRuleRegistration, err := buildEffectiveTimeRuleRegistration(db)
-	if err != nil {
-		return err
-	}
-	// 外部承运轨迹事实的判断面（票 label-channel/21）：读口取事实登记册本尊——它同时实现写侧的幂等存取与
-	// ports.ExternalTrackingFactReviewRead，两个契约一只适配器（判据同交接范围汇总那格）；写编排另建，事务边界
-	// 归装配点。
-	externalTrackingFactReview, err := tfpostgres.NewExternalTrackingFacts(db)
-	if err != nil {
-		return err
-	}
-	effectiveTimeJudgment, err := buildEffectiveTimeJudgment(db)
-	if err != nil {
-		return err
-	}
-	// 实际承运商首次有效收寄的判断面（票 label-channel/31）：写编排与读口出自同一次装配——读口就是收寄登记册本尊。
-	carrierPickupJudgment, carrierPickupChain, err := buildCarrierPickupJudgment(db)
-	if err != nil {
-		return err
-	}
-	trackingViews, err := vepostgres.NewCustomerViews(db)
-	if err != nil {
-		return err
-	}
-	// 运营追踪查阅读的就是投影库本身（ADR-0076）：同一适配器同时是派生编排的
-	// ProjectionStore 与查阅端点的读面，不造第二份数据。
-	projectionViews, err := vepostgres.NewProjections(db)
-	if err != nil {
-		return err
-	}
-	claims, err := buildClaimsOrchestration(db)
-	if err != nil {
-		return err
-	}
-	results, err := buildExternalResultsOrchestration(db)
-	if err != nil {
-		return err
-	}
-
-	// 主数据目录查阅直接接所属上下文的存储读面（ADR-0077），不绕进应用编排。
-	// 同一上下文的多个端点共享同一只读适配器，读的仍是各登记写口背后的那份库。
-	pricingCatalog, err := pppostgres.NewOperationsCatalogue(db)
-	if err != nil {
-		return err
-	}
-	// 覆盖地平线读口（票 pricing-reference-series-operations/05「伴生读口 `ReferenceSeriesCoverageRead`」）：
-	// 与目录读面同库，但它要连版本与复核两张表，且在用版本由领域按时刻挑，故自成一只适配器。
-	referenceSeriesCoverage, err := pppostgres.NewReferenceSeriesCoverage(db)
-	if err != nil {
-		return err
-	}
-	// 被挂起评价联动读口（ADR-0105 Decision 五）：只读问题项子表 evaluation_issue，不扫评价快照。
-	pendingSeriesEvaluations, err := pppostgres.NewPendingSeriesEvaluations(db)
-	if err != nil {
-		return err
-	}
-	// 评价册与路由判断两册是业务事实册的查阅面（票 admin-skeleton-closure-batch/03）：
-	// 与目录读面同上下文同库，但行形状归各自用例，适配器各自成形。
-	pricingEvaluations, err := pppostgres.NewEvaluationCatalogue(db)
-	if err != nil {
-		return err
-	}
-	// 价卡与序列登记写面编排（ADR-0085，票 admin-write-faces/01）：接真不等墙降——
-	// 未配置 Intake 拒在编排之前，墙降那笔工作在装配点换的只是 Intake。
-	priceCardRegistration, err := buildPriceCardRegistrationOrchestration(db)
-	if err != nil {
-		return err
-	}
-	referenceSeriesRegistration, err := buildReferenceSeriesRegistrationOrchestration(db)
-	if err != nil {
-		return err
-	}
-	referenceSeriesReview, err := buildReferenceSeriesReviewOrchestration(db)
-	if err != nil {
-		return err
-	}
-	referenceSeriesPreview, err := buildReferenceSeriesPreviewOrchestration(db)
-	if err != nil {
-		return err
-	}
-	referenceCatalogueRegistration, err := buildReferenceCatalogueRegistrationOrchestration(db)
-	if err != nil {
-		return err
-	}
-	// 评价回放编排（ADR-0124，票 wiring-baseline-remainder/06）：接真不等操作者 Intake——未配置
-	// Intake 拒在编排之前，换真那笔工作在装配点换的只是 Intake。
-	evaluationReplay, err := buildEvaluationReplayOrchestration(db)
-	if err != nil {
-		return err
-	}
-	// 运营试算编排（ADR-0152）：接真不等操作者 Intake，判据同回放——未配置 Intake 拒在编排之前。
-	pricingEstimate, err := buildPricingEstimateOrchestration(db)
-	if err != nil {
-		return err
-	}
-	// 价卡导入预览编排（ADR-0101）：不碰库，接真不等操作者 Intake，判据同试算。
-	priceCardPreview, err := buildPriceCardImportPreview()
-	if err != nil {
-		return err
-	}
-	// 价卡录入编排与草稿册读口（ADR-0101 决定三）：两口挂操作者渠道的登记册 Intake，判据同预览。
-	priceCardDraftSubmission, err := buildPriceCardDraftSubmission(db)
-	if err != nil {
-		return err
-	}
-	priceCardDrafts, err := pppostgres.NewPriceCardDrafts(db)
-	if err != nil {
-		return err
-	}
-	// 价卡草稿批准与发布编排（ADR-0101 决定五、六）：两口同挂操作者渠道的登记册 Intake；审批职责规则未登记时批准答`未配置`。
-	priceCardDraftApproval, err := buildPriceCardDraftApproval(db)
-	if err != nil {
-		return err
-	}
-	priceCardDraftPublication, err := buildPriceCardDraftPublication(db)
-	if err != nil {
-		return err
-	}
-	networkCatalog, err := nrpostgres.NewNetworkCatalog(db)
-	if err != nil {
-		return err
-	}
-	routePlans, err := nrpostgres.NewRoutePlanCatalogue(db)
-	if err != nil {
-		return err
-	}
-	// 网络七族、关务四类与 VE 六类登记写面编排（票 admin-write-faces/02 切片
-	// 02a/02b/02d）：判据同价卡首切片，接真不等墙降。
-	networkCatalogRegistration, err := buildNetworkCatalogRegistrationOrchestration(db)
-	if err != nil {
-		return err
-	}
-	customsRegistration, err := buildCustomsRegistrationOrchestration(db)
-	if err != nil {
-		return err
-	}
-	// 节点关务区域登记口与动作准入判断（ADR-0206）。
-	customsAdmission, err := buildCustomsAdmissionOrchestration(db)
-	if err != nil {
-		return err
-	}
-	// 运输收费发生项登记口（ADR-0207）。
-	chargeOccurrenceRegistration, err := buildChargeOccurrenceRegistration(db)
-	if err != nil {
-		return err
-	}
-	// 预报有效时窗登记口（ADR-0212 决定二末项）。
-	preAdviceWindowRegistration, err := buildPreAdviceWindowRegistration(db)
-	if err != nil {
-		return err
-	}
-	// 容量预占口与释放口（ADR-0203）。
-	capacityDecisions, err := buildCapacityDecisions(db)
-	if err != nil {
-		return err
-	}
-	// 订舱提交与承运答复两口（ADR-0202 决定一、二、五）。
-	bookingFaces, err := buildBookingFaces(db)
-	if err != nil {
-		return err
-	}
-	// 履约段采用运输委托口（ADR-0204）。
-	segmentCommissionAdoption, err := buildSegmentCommissionAdoption(db)
-	if err != nil {
-		return err
-	}
-	// 取消委托与取消订舱两口（ADR-0204 决定三）。
-	cancellationFaces, err := buildCancellationFaces(db)
-	if err != nil {
-		return err
-	}
-	veRegistration, err := buildVERegistrationOrchestration(db)
-	if err != nil {
-		return err
-	}
-	commercialRegistration, err := buildCommercialRegistrationOrchestration(db)
-	if err != nil {
-		return err
-	}
-	complianceRules, err := ccpostgres.NewRuleCatalogue(db)
-	if err != nil {
-		return err
-	}
-	caseRegisters, err := ccpostgres.NewCaseRegisterCatalogue(db)
-	if err != nil {
-		return err
-	}
-	gateConditions, err := ccpostgres.NewGateConditionCatalogue(db)
-	if err != nil {
-		return err
-	}
-	portsPaths, err := ccpostgres.NewPortsPathsCatalogue(db)
-	if err != nil {
-		return err
-	}
-	credentials, err := ccpostgres.NewCredentialCatalogue(db)
-	if err != nil {
-		return err
-	}
-	// 协作事项与付款核对两册共用一个读适配器（同一迁移的两张表），接两个读口参数
-	// ——传两次的是同一个对象，两口各按自己的接口消费（票 sa-cc/10）。
-	dutyReconciliation, err := ccpostgres.NewDutyReconciliationCatalogue(db)
-	if err != nil {
-		return err
-	}
-	commercialCatalog, err := pcpostgres.NewOperationsCatalogue(db)
-	if err != nil {
-		return err
-	}
-	// 法人资料修订历史读口在资料登记册适配器上，不在商业目录适配器上（LegalEntityProfiles 同时实现写口与两个读口）。
-	// 写编排另构造自己的一只：适配器只包着 db、不带状态，两只读写同一张表。
-	legalEntityProfiles, err := pcpostgres.NewLegalEntityProfiles(db)
-	if err != nil {
-		return err
-	}
-	// 法人资料按时点解析（票 legal-entity-profile/05）交入的是应用读用例：它读法人最新修订与整条资料修订链，交领域判。
-	// 法人那一侧读身份登记册——资料的写入与解析都经窄口 LegalEntityRegistrationLookup 看法人，同一只适配器。
-	partyIdentityRegistrations, err := pcpostgres.NewPartyIdentityRegistrations(db)
-	if err != nil {
-		return err
-	}
-	legalEntityProfileResolver := commercialapp.NewResolveLegalEntityProfileHandler(legalEntityProfiles, partyIdentityRegistrations)
-	visibilityCatalogues, err := vepostgres.NewOperationsCatalogue(db)
-	if err != nil {
-		return err
-	}
-	codSubledgers, err := crpostgres.NewCodSubledgerCatalogue(db)
-	if err != nil {
-		return err
-	}
-	// 结算与核算四页各接自己的读适配器：四本目录读的是同一份库，但行形状与所属用例
-	// 各不相同，合成一个适配器就得把四组读口挤进一个类型（判据同各读口的分册裁决）。
-	settlementCharges, err := sapostgres.NewChargeCatalogue(db)
-	if err != nil {
-		return err
-	}
-	settlementStatements, err := sapostgres.NewStatementCatalogue(db)
-	if err != nil {
-		return err
-	}
-	settlementFundsApplications, err := sapostgres.NewFundsApplicationCatalogue(db)
-	if err != nil {
-		return err
-	}
-	settlementOperatingResults, err := sapostgres.NewOperatingCatalogue(db)
-	if err != nil {
-		return err
-	}
-	// 外部资金事实采用 / 更正在线登记面编排（票 sa-cc/31，27 裁决 2 第二步）：接真不等操作者
-	// Intake——未配置 Intake 拒在编排之前，换真那笔工作在装配点换的只是 Intake；判据同关务登记写面。
-	settlementRegistration, err := buildSettlementRegistrationOrchestration(db)
-	if err != nil {
-		return err
-	}
-	// 治理登记册读面（票 admin-skeleton-closure-batch/02）：读口无租户参是设计
-	// （ADR-0083），适配器读的就是治理登记 CLI 写入的那三张表。
-	governanceRegisters, err := govpg.NewGovernanceRegisters(db)
-	if err != nil {
-		return err
-	}
-	// VE 案件侧三页读面（票 admin-skeleton-closure-batch/06）：一个适配器实现三读口，
-	// 分诊、案件与理赔追偿六本册子照行转写。
-	caseReview, err := vepostgres.NewCaseReview(db)
-	if err != nil {
-		return err
-	}
-	// 节点作业与运输履约查阅页读面（票 admin-skeleton-closure-batch/05）：只是查阅
-	// 读口，与上面 buildReceptionOrchestration/buildDeliveryOrchestration 构造的命令
-	// 编排互不相知——读面不是编排，查阅不触发判断、派生或披露。
-	nodeOperationsRecords, err := nopostgres.NewReviewCatalogue(db)
-	if err != nil {
-		return err
-	}
-	transportFulfillmentRecords, err := tfpostgres.NewReviewCatalogue(db)
-	if err != nil {
-		return err
-	}
-	// 送站预报与送站交接单的运营查阅读口（票 ps-external-mark-relations/13），同上是读口，不是编排。
-	deliveryScopeRecords, err := nopostgres.NewDeliveryScopeCatalogue(db)
-	if err != nil {
-		return err
-	}
-	// 交接范围汇总读用例（票 admin-web-audit-followups/06）。读口取交接登记册本尊：它同时
-	// 实现写侧的幂等存取与 ports.HandoverScopeView，两个契约一只适配器（分口的理由在
-	// ports.HandoverScopeView 注释）。这一格与上面几只不同——交入装配点的是应用用例不是
-	// 读口，因为计数只能由领域派生；在这里预先数一遍就等于为同一形状立第二个口径。
-	transportHandovers, err := tfpostgres.NewTransportHandovers(db)
-	if err != nil {
-		return err
-	}
-	handoverScopeSummary := tfapp.NewSummarizeHandoverScopeHandler(transportHandovers)
 
 	server := &http.Server{
-		Addr: address,
-		Handler: httpapi.NewWithEndpoints(buildinfo.Current(), assembleBusinessEndpoints(
-			submission,
-			withdrawal,
-			requestViews,
-			manualReview,
-			rejection,
-			disposition,
-			supplement,
-			amendment,
-			requestViews,
-			reviewJudgments,
-			// 授权处置队列读口就是委托查阅适配器（ports.AuthorizedDispositionQueue 在其上补齐，同表同作用域纪律）。
-			requestViews,
-			labelTransactions,
-			channelSelectionDecisions,
-			cancellation,
-			continuedAttemptDecisions,
-			reception,
-			nodeOperationsRecords,
-			delivery,
-			transportFulfillmentRecords,
-			handoverScopeSummary,
-			controlFacts.handover,
-			controlFacts.pickupRegistration,
-			pickupCorrection,
-			controlFacts.pickupAttempt,
-			deliveryAttempt,
-			movementFact,
-			segmentOps.closer,
-			segmentOps.opener,
-			deliveryDispatchTrigger,
-			segmentOps.assign,
-			segmentOps.enderOf,
-			credentialRegistration,
-			effectiveTimeRuleRegistration,
-			externalTrackingFactReview,
-			effectiveTimeJudgment,
-			carrierPickupChain,
-			carrierPickupJudgment,
-			masterDocumentRegistration,
-			transportScheduleRegistration,
-			capacityPoolRegistration,
-			transportCommissionSubmission,
-			trackingViews,
-			projectionViews,
-			claims,
-			results,
-			pricingCatalog,
-			pricingCatalog,
-			referenceSeriesCoverage,
-			pendingSeriesEvaluations,
-			pricingEvaluations,
-			priceCardRegistration,
-			referenceSeriesRegistration,
-			referenceSeriesReview,
-			referenceSeriesPreview,
-			referenceCatalogueRegistration,
-			evaluationReplay,
-			pricingEstimate,
-			priceCardPreview,
-			priceCardDraftSubmission,
-			priceCardDrafts,
-			priceCardDraftApproval,
-			priceCardDraftPublication,
-			networkCatalog,
-			routePlans,
-			networkCatalogRegistration,
-			complianceRules,
-			caseRegisters,
-			gateConditions,
-			portsPaths,
-			credentials,
-			dutyReconciliation,
-			dutyReconciliation,
-			customsRegistration.interpretationRule,
-			customsRegistration.gateCatalog,
-			customsRegistration.candidatePort,
-			customsRegistration.declarationPath,
-			customsRegistration.caseRequirement,
-			customsRegistration.regulatoryCredential,
-			customsRegistration.dutyCollaboration,
-			customsRegistration.dutyPaymentVerification,
-			commercialCatalog,
-			commercialCatalog,
-			commercialCatalog,
-			commercialCatalog,
-			commercialCatalog,
-			commercialCatalog,
-			commercialCatalog,
-			legalEntityProfiles,
-			legalEntityProfileResolver,
-			commercialRegistration.publication,
-			commercialRegistration.publicationPreview,
-			commercialRegistration.publicationDrafts,
-			commercialRegistration.partyIdentity,
-			commercialRegistration.productChannel,
-			commercialRegistration.registrationNumberType,
-			commercialRegistration.legalEntityProfile,
-			commercialRegistration.channelAccountUse,
-			visibilityCatalogues,
-			veRegistration.milestoneMapping,
-			veRegistration.triageRules,
-			veRegistration.notificationPolicy,
-			veRegistration.claimEligibility,
-			veRegistration.claimAuthorization,
-			veRegistration.disclosurePolicy,
-			veRegistration.exceptionDisclosureRules,
-			veRegistration.conflictSignalRule,
-			caseReview,
-			caseReview,
-			caseReview,
-			codSubledgers,
-			settlementCharges,
-			settlementStatements,
-			settlementFundsApplications,
-			settlementOperatingResults,
-			settlementRegistration.externalFundsFact,
-			settlementRegistration.externalFundsFactCorrection,
-			governanceRegisters,
-			isolatedRead,
-			customerSubmission,
-			operatorDecisions,
-			operatorRegistries,
-			integrationClients,
-			workFactReception,
-			workFactTransport,
-			workDeviceCatalogue,
-			operatorBinding,
-			customsAdmission.nodeZoneRegistration,
-			identityRecheck,
-			identityDisposition,
-			chargeOccurrenceRegistration,
-			preAdviceWindowRegistration,
-			capacityDecisions,
-			capacityDecisions,
-			bookingFaces,
-			bookingFaces,
-			customerPreAdvice,
-			deliveryPreAdvices,
-			segmentCommissionAdoption,
-			cancellationFaces,
-			cancellationFaces,
-			deliveryHandoverNotes,
-			departureGatePreview,
-			deliveryScopeRecords,
-			customerTrackingView,
-		)),
+		Addr:              address,
+		Handler:           httpapi.NewWithEndpoints(buildinfo.Current(), endpoints),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
@@ -852,4 +176,127 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 	return nil
+}
+
+// startupChannels 是开池之前就解析好的部署参数：两道隔离开关、本产品权威串、三族核验方。它们在 run 里带启动日志解析，
+// 参数不合规时在开池之前就带原因退出。
+type startupChannels struct {
+	isolatedRead              *isolatedReadIntakes
+	isolatedWrite             *isolatedWriteAdmission
+	selfAuthority             string
+	operatorVerifier          accessidentity.OperatorCredentialVerifier
+	integrationClientVerifier accessidentity.IntegrationClientCredentialVerifier
+	customerClientVerifier    accessidentity.CustomerClientCredentialVerifier
+}
+
+// assembleProductionEndpoints 是开池之后的那一段生产装配：先建各族接入渠道，再装只为启动即查的几只编排，最后展开端点
+// 登记处（ADR-0222）。任一步失败原样交回，run 带着原因退出——部署坏了不先挂上监听端口。它与 run 分开，是为了让生产装配
+// 能对着真库整体验一遍。
+func assembleProductionEndpoints(db *bentopg.DB, startup startupChannels) ([]httpapi.BusinessEndpoint, error) {
+	// 运营决定口的操作者 Intake（ADR-0151；票 operator-channel/15）：委托侧的寻址读口就是委托查阅适配器
+	// （ports.OperatorDecisionTargets 在其上补齐，同表、整租户可见）。受控关闭与重开按包裹寻址，读口是委托仓储上
+	// 那只按包裹反查当前已接受委托的口（ADR-0183 决定一）。
+	requestViews, err := pspostgres.NewShipmentRequestViews(db)
+	if err != nil {
+		return nil, err
+	}
+	parcelTargets, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return nil, err
+	}
+	operatorRegistry, err := aipg.NewOperatorRegistry(db)
+	if err != nil {
+		return nil, err
+	}
+	// 准入范围操作者与集成客户端两族共用一只（ADR-0180）：权威串没设时是未配置那一只，对照与区间一行都不读。
+	admission, err := buildAdmissionScope(db, startup.selfAuthority)
+	if err != nil {
+		return nil, err
+	}
+	operatorMinter, err := buildOperatorMinter(startup.operatorVerifier, operatorRegistry, admission)
+	if err != nil {
+		return nil, err
+	}
+	deviceRegistry, err := aipg.NewDeviceRegistry(db)
+	if err != nil {
+		return nil, err
+	}
+	workFactReception, workFactTransport, err := buildWorkFactIntakes(startup.operatorVerifier, operatorRegistry, deviceRegistry, admission)
+	if err != nil {
+		return nil, err
+	}
+	operatorDecisions, err := buildOperatorDecisionIntakes(operatorMinter, requestViews, parcelTargets)
+	if err != nil {
+		return nil, err
+	}
+	operatorRegistries, err := buildOperatorRegistryIntakes(operatorMinter)
+	if err != nil {
+		return nil, err
+	}
+	integrationClientRegistry, err := aipg.NewIntegrationClientRegistry(db)
+	if err != nil {
+		return nil, err
+	}
+	integrationClientMinter, err := buildIntegrationClientMinter(startup.integrationClientVerifier, integrationClientRegistry, admission)
+	if err != nil {
+		return nil, err
+	}
+	integrationClients, err := buildIntegrationClientIntakes(integrationClientMinter)
+	if err != nil {
+		return nil, err
+	}
+	// 提交口的首方 Intake（ADR-0139 决定四；票 first-party-api/00）：预取期望修订用的归属权威与提交编排同一组坐标。
+	customerClientRegistry, err := aipg.NewCustomerClientRegistry(db)
+	if err != nil {
+		return nil, err
+	}
+	customerClientMinter, err := buildCustomerClientMinter(startup.customerClientVerifier, customerClientRegistry, admission)
+	if err != nil {
+		return nil, err
+	}
+	submissionOwnership, err := buildProductionOwnership(db, startup.isolatedWrite, startup.selfAuthority)
+	if err != nil {
+		return nil, err
+	}
+	customerSubmission, err := buildCustomerSubmissionIntake(customerClientMinter, submissionOwnership)
+	if err != nil {
+		return nil, err
+	}
+
+	// 面单渠道写链（票 label-channel/34）：启动时装配**只为 fail-fast**——组合根里 PC / PS 的读适配器与 outbox
+	// 任一构造失败，进程在此带原因退出（同函数开池段那条纪律），而不是等到某天接上触发面才发现。产物今天没有
+	// 消费者（乙路无运营端点、无进程内触发面；谁在什么业务时点发起一笔面单交易的建立是产品题，触发面另票），
+	// 构造即丢；实例半边缝全部显式未配置，接受时解析回指装接受决定读口，不为此变绿种任何行。
+	if _, err := buildLabelChannelOrchestration(db); err != nil {
+		return nil, err
+	}
+	// 请求评价编排（票 sa-cc/08）：启动时装配只为 fail-fast。触发面是编排上的 Trigger：发生项原因没登记答未配置，
+	// 不发起请求。构造结果不挂端点；三件来源引用仍由调用方交进来，不为此种任何行。
+	if _, err := buildEvaluationRequestOrchestration(db); err != nil {
+		return nil, err
+	}
+	// 结算编排入口（票 product-strategy-boundary/12「结算编排的生产入口与触发面」）：七个构造接在这里。确认与截单没登记答未配置。
+	if _, err := buildSettlementOrchestrations(db); err != nil {
+		return nil, err
+	}
+
+	return assembleBusinessEndpoints(endpointSources{
+		db:                   db,
+		isolatedWrite:        startup.isolatedWrite,
+		selfAuthority:        startup.selfAuthority,
+		operatorVerifier:     startup.operatorVerifier,
+		operatorRegistry:     operatorRegistry,
+		deviceRegistry:       deviceRegistry,
+		admission:            admission,
+		operatorMinter:       operatorMinter,
+		customerClientMinter: customerClientMinter,
+	}, endpointChannels{
+		isolatedRead:       startup.isolatedRead,
+		customerSubmission: customerSubmission,
+		operatorDecisions:  operatorDecisions,
+		operatorRegistries: operatorRegistries,
+		integrationClients: integrationClients,
+		workFactReception:  workFactReception,
+		workFactTransport:  workFactTransport,
+	})
 }
