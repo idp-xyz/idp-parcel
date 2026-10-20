@@ -1,6 +1,6 @@
 # ADR-0219：设备出发前门禁问询——作业事实渠道上的只读一问，交回与随后同参出发同一套读数；运输履约不落记录，关务照记判断
 
-Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/69，统一代决见 `.scratch/demo-chain-gaps/handover-dispatch-plan.md`「代决」C17 与「需要的 ADR」ADR-0219。回答 [ADR-0205](./0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md) 越权风险点 1「挡下要靠设备在动作之前问；那个读口……等 peer 收工后另立票」，无条款停用。越权风险点见文末，待各条括注的 owner 复核。）
+Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/69，统一代决见 `.scratch/demo-chain-gaps/handover-dispatch-plan.md`「代决」C17 与「需要的 ADR」ADR-0219。回答 [ADR-0205](./0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md) 越权风险点 1「挡下要靠设备在动作之前问；那个读口……等 peer 收工后另立票」，无条款停用。越权风险点见文末，待各条括注的 owner 复核。）<!-- 索引注记 -->｜**已接受**（2026-10-19，用户原话「你作为业务和系统专家自决」，Claude Code 会话代 TF、CC owner 裁定；票 demo-chain-gaps/69）。**问询口**：`POST /transport-fulfillment/departure-gate-previews`，载荷只收班次、可缺的段与拟出发时点（封闭解码，时点缺席答未受理、不补服务端时钟），答复一律 200（`DEPARTURE_GATE_PREVIEWED` 带 `gateReading`，或 `INPUT_NOT_ACCEPTED`），`gateReading` 与移动事实口同一线格式。**同参同读数**：两口受理后收成同一组（租户、班次、段、时点）走同一条读数路径，受理与否也一致；同格只在两问之间册子与三源不变时成立。**不落记录**：运输履约不写册、不入队、不记谁问过，问询读数不交给随后的出发；关务照 ADR-0206 决定六记判断，同参出发命中同一判断。**授予**：与移动事实口同一只作业事实 Intake，不新增能力种类。**不挡出发**：挡不挡归一线客户端。回答 ADR-0205 越权风险点 1，无条款停用。越权风险点含读到放行不等于出发那一刻仍放行、用写授予开读口、客户端处置未定、关务判断册随轮询增长、段里有什么可零成本探知、不记谁问过，待 TF、CC owner 复核
 Date: 2026-10-19
 
 ## Context

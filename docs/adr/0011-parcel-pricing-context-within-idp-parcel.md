@@ -1,6 +1,6 @@
 # ADR-0011: 在 idp-parcel 内建立小包计价上下文
 
-Status: Superseded by [ADR-0012](./0012-parcel-pricing-context-within-idp-parcel.md)  
+Status: Superseded by [ADR-0012](./0012-parcel-pricing-context-within-idp-parcel.md)<!-- 索引注记 -->：同一边界决策改写为不依赖外部参考设计目录的自洽形式。  
 Date: 2026-08-06  
 Superseded: 2026-08-07
 

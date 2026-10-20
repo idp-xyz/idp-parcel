@@ -1,6 +1,6 @@
 # ADR-0124: 评价回放的治理触发面是 `parcel-api` 端点表上的一条命令行（`POST /pricing-evaluation-replays`）带未配置格，不开 CLI；新评价引用与证据层级由触发方声明、不给默认；回放结果不交结算
 
-Status: Accepted（2026-09-07，用户经 IDP 队列通道 1 派单 `task-269d98b6` 授权 owner「自决口径：硬句一字不改、每个决定写理由、拿不准或跨上下文归属的点单列越权风险点」，据此对 [wiring-baseline-remainder/06](../../.scratch/wiring-baseline-remainder/issues/06-pp-replay-pricing-evaluation-has-no-executor.md) 第三件「治理触发面」的形状作出裁决。裁决能力边界见文末）
+Status: Accepted（2026-09-07，用户经 IDP 队列通道 1 派单 `task-269d98b6` 授权 owner「自决口径：硬句一字不改、每个决定写理由、拿不准或跨上下文归属的点单列越权风险点」，据此对 [wiring-baseline-remainder/06](../../.scratch/wiring-baseline-remainder/issues/06-pp-replay-pricing-evaluation-has-no-executor.md) 第三件「治理触发面」的形状作出裁决。裁决能力边界见文末）<!-- 索引注记 -->｜**身份缝判据**：触发者是谁来自 `OperatorEnvelope`（ADR-0100），端点的 Intake 缝正是信封落地处，CLI 只能从文件里读一个自报的触发者；W02 逐对象批量重放是实例半边、今天无输入可跑，批量口将来消费同一用例。**适用场景**：回放与争议复核的触发；新引用由触发方铸兼幂等键、证据层级由触发方按数据来源声明（`S` 不升级由领域门守），面上一样不默认；`outcome` 只说编排，重现 / 冲突 / 未形成在回放评价自己的状态里；`ReplayPricingEvaluationDeps` 结构上没有交付口——一份带新引用的回放交给 SA 就是第二笔费用采用（`AT-SA-173`）
 Date: 2026-09-07
 
 ## Context

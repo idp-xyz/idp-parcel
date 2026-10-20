@@ -1,6 +1,6 @@
 # ADR-0081: 接受判断由信封驱动——提交落库即交出「委托已提交」，推进落在派发一拍；提交事务随之改两段边界
 
-Status: Accepted（部分停用：决定六里「结算账户目录留 nil」这一格由 [ADR-0158](./0158-settlement-account-register-is-an-immutable-tuple.md) 停用——生产装配接结算账户登记册。决定六其余各格不由该记录停用。）
+Status: Accepted（部分停用：决定六里「结算账户目录留 nil」这一格由 [ADR-0158](./0158-settlement-account-register-is-an-immutable-tuple.md) 停用——生产装配接结算账户登记册。决定六其余各格不由该记录停用。）<!-- 索引注记 -->｜**部分停用**：决定六「结算账户目录留 nil」由 [ADR-0158](./0158-settlement-account-register-is-an-immutable-tuple.md) 停用；决定六其余各格仍有效
 Date: 2026-08-27
 
 ## Context

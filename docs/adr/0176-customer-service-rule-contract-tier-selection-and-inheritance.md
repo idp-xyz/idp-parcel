@@ -1,6 +1,6 @@
 # ADR-0176：客户服务规则挂合同的一格按「合同优先解析 + 行级继承产品版」接入——同一范围产品版与合同版并存可解，消费侧按合同点核
 
-Status: Accepted（2026-10-08，经 `/grill-with-docs` 设计树四轮采访、用户逐问裁决；由票 party-commercial-customer-service-rule-contract-applicability/01「申请领域建模」引出。接受后对 ADR-0104 的承接线见本记录 Consequences 与 ADR-0104 的 Links 节前向指针）
+Status: Accepted（2026-10-08，经 `/grill-with-docs` 设计树四轮采访、用户逐问裁决；由票 party-commercial-customer-service-rule-contract-applicability/01「申请领域建模」引出。接受后对 ADR-0104 的承接线见本记录 Consequences 与 ADR-0104 的 Links 节前向指针）<!-- 索引注记 -->｜**合同优先判据**：有恰挂这份合同的版本就采纳它、行级无行继承产品版该行，没有才整体落产品版；「未尽事项以产品标准为准」是差异条款合同的通行形态，「整本替换」会让只改一处的合同失真。**适用场景**：同范围挂产品与挂合同的客户服务规则并存时的解析与 VE 索赔资格读取；闭包仍唯一采纳一版，「唯一适用」硬句不破。
 Date: 2026-10-08
 
 ## Context

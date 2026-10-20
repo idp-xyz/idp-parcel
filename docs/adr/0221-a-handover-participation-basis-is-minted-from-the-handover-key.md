@@ -1,6 +1,6 @@
 # ADR-0221：权威交接作参与依据时由交接键铸——对象、范围、版本三节长度前缀，另起一个起头；只带版本的存量照读、按版本加时刻认，NO 的转出引用不随之换
 
-Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/111，出自 `.scratch/product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md`「重走（钉 `76686b7b`，2026-10-19）」停点一与文末「另记一处观察」。**部分停用** [ADR-0218](./0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md) 决定一两句与决定六「响亮失败」下一条，被停条款与适用场景见「对已接受记录的作用」。越权风险点见文末，待 TF owner 复核，第 3 点同时待 NO owner 会签。）
+Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/111，出自 `.scratch/product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md`「重走（钉 `76686b7b`，2026-10-19）」停点一与文末「另记一处观察」。**部分停用** [ADR-0218](./0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md) 决定一两句与决定六「响亮失败」下一条，被停条款与适用场景见「对已接受记录的作用」。越权风险点见文末，待 TF owner 复核，第 3 点同时待 NO owner 会签。）<!-- 索引注记 -->｜**已接受**（2026-10-19，用户原话「你作为业务和系统专家自决」，Claude Code 会话代 TF owner 裁定；票 demo-chain-gaps/111）。**铸法**：`TRANSPORT-HANDOVER-KEY/` 后接对象、范围、版本各一节「字节长度:原串」，用于进段、结束与重派生长出的各版；只有`已交接`给得出；另起起头，新旧串集合不相交。**存量**照读不改写：逐字对上的一定是那一次，旧拼法按版本加按它立下的时刻认。**自动形成**：逐字对上的优先，多于一条仍响亮失败；旧拼法对上多于一条答`结束的参与认不出`、入账。**交付门禁与重派生**同一套认法，`ENTRY_HANDOVER_AMBIGUOUS` 自此只出自存量。**NO 的转出引用不变**，换不换归票 112。别的控制事实（场外揽收、实际承运商首次有效收寄、有效交付）的版本由本上下文按全局序列铸、本身唯一，依据只带版本不在此列。部分停用 ADR-0218 决定一两句与决定六一条。越权风险点含存量歧义仍在、旧拼法恰一条也要时刻对上、同一次交接两串、派送任务引用变长，待 TF owner 复核，NO owner 会签第 3 点
 Date: 2026-10-19
 
 ## Context

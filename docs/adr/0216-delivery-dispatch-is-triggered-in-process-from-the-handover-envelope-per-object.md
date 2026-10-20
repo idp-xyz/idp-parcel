@@ -1,6 +1,6 @@
 # ADR-0216：派送发起随交接信封在进程内逐对象发起——TF 自消费交接登记信封，按对象此刻在场的段调既有触发执行器，任务成立时间取派发时钟；要求缺失入账不重投，补拍口保留
 
-Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/60，统一代决见 `.scratch/demo-chain-gaps/handover-dispatch-plan.md`「代决」C10 与「需要的 ADR」ADR-0216。回答 [ADR-0114](./0114-delivery-dispatch-is-triggered-by-entering-a-declared-delivery-segment-and-pulls-requirements-by-reference.md) 决定二末句，参数登记册 `PAR-NET-09` 的拍频格随之退役。越权风险点见文末，待 TF owner 复核。）
+Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/60，统一代决见 `.scratch/demo-chain-gaps/handover-dispatch-plan.md`「代决」C10 与「需要的 ADR」ADR-0216。回答 [ADR-0114](./0114-delivery-dispatch-is-triggered-by-entering-a-declared-delivery-segment-and-pulls-requirements-by-reference.md) 决定二末句，参数登记册 `PAR-NET-09` 的拍频格随之退役。越权风险点见文末，待 TF owner 复核。）<!-- 索引注记 -->｜**已接受**（2026-10-19，用户原话「你作为业务和系统专家自决」，Claude Code 会话代 TF owner 裁定；票 demo-chain-gaps/60）。**事件驱动**：派发进程把 `transport-fulfillment.transport-handover.registered` 扇出给 VE 投影与 TF 派送发起两路（VE 在前、各记各的 inbox 账）；派送发起读回那一版交接，不是`已交接`入账，是则按对象找此刻在场的段交既有执行器，零个入账、多个响亮失败；派送段、在场、入场依据与查在册仍由执行器判。**时刻**：任务成立时间取派发处理时钟，这一拍就是 CONTEXT 的「下一拍」，`PAR-NET-09` 拍频格退役、不出按拍批量形态。**处置**：形成、已在册、不是触发、引用被占、要求缺失入账不重投；读不动登本路未决哨兵重投；自家键不受理、执行器不受理或越出封闭集、缝没接线、对象多段在场响亮失败；三格由应用层 `Disposition` 判。**补拍**：作业事实口保留，同（段，对象，入场依据）答已在册。回答 ADR-0114 决定二末句，无条款停用。越权风险点含要求缺失不会自愈、段取此刻在场的段、交接更正自动另立任务，待 TF owner 复核
 Date: 2026-10-19
 
 ## Context

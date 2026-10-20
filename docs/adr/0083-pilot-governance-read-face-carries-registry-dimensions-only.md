@@ -1,6 +1,6 @@
 # ADR-0083: 试点治理读面按登记册实有维度成形——无租户维是设计；隔离读放行沿用同一开关，注入不带租户的产品级作用域；呈现面留在管理台并明示实例级作用域
 
-Status: Accepted（2026-08-31，批 admin-skeleton-closure 票 01 指令产出本裁决；用户同日指示「全部解决」骨架页机制半边，授权来源句记于该批 spec）
+Status: Accepted（2026-08-31，批 admin-skeleton-closure 票 01 指令产出本裁决；用户同日指示「全部解决」骨架页机制半边，授权来源句记于该批 spec）<!-- 索引注记 -->｜**部分停用**：决定四里接管格「第二批未开」由 [ADR-0155](./0155-takeover-register-read-opens-on-the-existing-catalogue.md) 停用；阶段评审格与无租户维仍有效
 Date: 2026-08-31
 
 ## Context

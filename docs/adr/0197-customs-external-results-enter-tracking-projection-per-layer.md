@@ -1,6 +1,6 @@
 # ADR-0197：关务外部结果按层进全程追踪投影——事实类型词逐层分开、放行再按全部/部分/附条件分开，沿结果范围指名的申报单元逐成员展开，同层冲突的那份不进投影；参考映射只把全部放行映成清关
 
-Status: Accepted（2026-10-19。用户授权「你作为业务和系统专家自决，解决所有的问题」；Claude Code 会话代 VE、CC owner 裁定，落在票 [demo-chain-gaps/11](../../.scratch/demo-chain-gaps/issues/11-external-result-received-has-no-subscriber.md)。越权风险点待 VE、CC owner 复核。）
+Status: Accepted（2026-10-19。用户授权「你作为业务和系统专家自决，解决所有的问题」；Claude Code 会话代 VE、CC owner 裁定，落在票 [demo-chain-gaps/11](../../.scratch/demo-chain-gaps/issues/11-external-result-received-has-no-subscriber.md)。越权风险点待 VE、CC owner 复核。）<!-- 索引注记 -->｜**已接受**（2026-10-19，用户授权「你作为业务和系统专家自决」，Claude Code 会话代 VE、CC owner 裁定，落在票 demo-chain-gaps/11）。**消费方**：VE 投影订阅 `customs-compliance.external-result.received`，只投 VE；CC 放行门禁核对按动作请求驱动、不订阅。**类型词**：按层分开，放行层再按全部/部分/附条件分开，不设跨层词、没有「清关成功」；里程碑归映射目录，未登记即未归类。**展开**：结果范围→申报单元→组成逐成员，引用含成员与来源标识，版本取提交版本。**不派生**：同层冲突的那份入账不派生；归属不上、放行三件与层次不配为不变量已破。**参考映射**：演示租户只把全部放行映成 `CUSTOMS_CLEARED`。越权风险点待 VE、CC owner 复核
 
 Date: 2026-10-19
 

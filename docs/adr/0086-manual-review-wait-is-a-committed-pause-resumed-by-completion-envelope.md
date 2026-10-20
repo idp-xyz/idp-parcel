@@ -1,6 +1,6 @@
 # ADR-0086: 等待人工复核是入账暂停——暂停与等待态同事务落库，续办由「复核已完成」信封另行驱动
 
-Status: Accepted（部分停用：Context 把`等待受控补充`判在「回滚重投是对的」一侧的那一半，已由 [ADR-0106](./0106-customer-supplement-wait-is-a-committed-pause-resumed-by-the-new-submission-version-envelope.md) 停用——该等待态改为提交入账、由「新提交版本已形成」信封驱动续办；`等待内部续办`的分侧与 Decision 一至四不变）
+Status: Accepted（部分停用：Context 把`等待受控补充`判在「回滚重投是对的」一侧的那一半，已由 [ADR-0106](./0106-customer-supplement-wait-is-a-committed-pause-resumed-by-the-new-submission-version-envelope.md) 停用——该等待态改为提交入账、由「新提交版本已形成」信封驱动续办；`等待内部续办`的分侧与 Decision 一至四不变）<!-- 索引注记 -->｜**部分停用**：其 Context 把`等待受控补充`判在「回滚重投是对的」那一侧的分侧——原句「等待受控补充 / 等待内部续办：重投重跑同一轮，等的依赖（客户新提交版本、抖动的内部依赖）会自己回来」中关于**客户新提交版本**的那一半——已由 [ADR-0106](./0106-customer-supplement-wait-is-a-committed-pause-resumed-by-the-new-submission-version-envelope.md) 停用，理由是代码证实新版本不会自己回来、回来了也不是在途那封信封受益。**适用场景**：只停`等待受控补充`那一半；`等待内部续办`的分侧与 Decision 一至四不变，其余各条不变
 Date: 2026-08-31
 
 ## Context

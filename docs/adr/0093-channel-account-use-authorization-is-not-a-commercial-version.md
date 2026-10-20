@@ -1,6 +1,6 @@
 # ADR-0093: 渠道账号使用授权不是商业版本，走自己的修订式登记册
 
-Status: Accepted  
+Status: Accepted<!-- 索引注记 -->｜**归族判据**：判一个对象进不进 `CommercialObjectKind`，看它的生命周期是不是版本演进（有没有「新版本取代旧版本、旧版本留在册上」），持不持有 `CommercialVersion` 只是这件事在代码里的表现，不是判据本身。**适用场景**：`party-commercial` 新增对象的归族；票 04 的客户服务规则版本须按同一判据重问一次，且很可能得出相反答案  
 Date: 2026-09-02
 
 ## Context

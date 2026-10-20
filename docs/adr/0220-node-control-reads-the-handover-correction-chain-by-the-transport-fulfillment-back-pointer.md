@@ -1,6 +1,6 @@
 # ADR-0220：节点控制认交接更正链只按运输履约的更正回指——同一（对象，范围）下另起的首登是另一次交接，不是前一次的更正
 
-Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/95，出自 `.scratch/product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md`「重走（钉 `8197fa2f`，2026-10-19）」停点一。部分停用 [ADR-0214](./0214-node-control-transfers-out-and-in-on-an-authoritative-transport-handover.md) 决定五「同链认法」一句，回答它的越权风险点「同链按（对象，范围）认」与文末补记的越权风险点「一次交接不转出它自己立起的控制，靠的仍是同链按（对象，范围）认」。越权风险点见文末，待 NO owner 复核，TF owner 会签。）
+Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/95，出自 `.scratch/product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md`「重走（钉 `8197fa2f`，2026-10-19）」停点一。部分停用 [ADR-0214](./0214-node-control-transfers-out-and-in-on-an-authoritative-transport-handover.md) 决定五「同链认法」一句，回答它的越权风险点「同链按（对象，范围）认」与文末补记的越权风险点「一次交接不转出它自己立起的控制，靠的仍是同链按（对象，范围）认」。越权风险点见文末，待 NO owner 复核，TF owner 会签。）<!-- 索引注记 -->｜**已接受**（2026-10-19，用户原话「你作为业务和系统专家自决」，Claude Code 会话代 NO owner 裁定、TF owner 会签；票 demo-chain-gaps/95）。**认链**：一版交接的更正链是它与它沿 TF 更正回指上溯的各前版；同一（对象，范围）只是链上各版共有的性质，不是判据，同一范围下另起的首登在两个方向上都按它自己判。**上溯**：消费侧适配器读回那一版后沿回指逐版按键读回前版，不加 TF 读口；前版读不动登本路既有未决哨兵重投，读不回、与键不符、回指成环响亮失败；编排立链再核一次形状。**转移册**：「链上推进过没有」只取链上各版，同一范围下可有多行推进，不加迁移。**TF 首登口不改**：不拒同一（对象，范围）下另起的首登；「范围每次交接各起一个」是用法约定。**存量**不改写、不重判，处置归票 demo-chain-gaps/81。部分停用 ADR-0214 决定五一句。越权风险点含 TF 范围汇总对同一对象两次首登算两次、存量认错的行留在册上、补拍旧信封答复会变、每封信多读 TF、前版读不回按缺陷、更正换范围时立链会拒，待 NO owner 复核、TF owner 会签
 Date: 2026-10-19
 
 ## Context

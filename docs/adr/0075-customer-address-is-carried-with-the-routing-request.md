@@ -1,6 +1,6 @@
 # ADR-0075: 客户地址随判断请求在请求期携带过界，network-routing 不建读取端口
 
-Status: Accepted。部分停用：[ADR-0215](./0215-a-handover-into-a-node-triggers-route-reassessment-and-reads-the-baseline-geo-projection.md) 决定二（被停条款：决定一「`network-routing` 不建立读取 `parcel-shipment` 地址的端口」；适用场景只限受理之后、不由小包托运信封触发的路由复核，NR 经消费侧适配器读受理基线那一版提交的地理投影、只到地理维；适用场景与停用前提见 adr/README 该行，其余各条不变，本记录正文不改写）  
+Status: Accepted。部分停用：[ADR-0215](./0215-a-handover-into-a-node-triggers-route-reassessment-and-reads-the-baseline-geo-projection.md) 决定二（被停条款：决定一「`network-routing` 不建立读取 `parcel-shipment` 地址的端口」；适用场景只限受理之后、不由小包托运信封触发的路由复核，NR 经消费侧适配器读受理基线那一版提交的地理投影、只到地理维；适用场景与停用前提见 adr/README 该行，其余各条不变，本记录正文不改写）<!-- 索引注记 -->｜**部分停用**（2026-10-19）：决定一「`network-routing` 不建立读取 `parcel-shipment` 地址的端口」已由 [ADR-0215](./0215-a-handover-into-a-node-triggers-route-reassessment-and-reads-the-baseline-geo-projection.md) 决定二停用。**适用场景**：仅限受理之后、不由小包托运信封触发的路由复核（今天只有权威运输交接进入节点这一种），NR 经消费侧适配器按（租户，包裹）取受理基线那一版提交的地理投影，只取用地理维，地址本体不取用、不落——停用理由的前提是受理基线一经固定不再改写，读回的那一版与判断键上的基线同版，本记录防的异版窗口在这里不存在；可达性判断、初始路由与收寄采用触发的复核照旧随请求携带。决定二、决定三与决定一其余部分不变，其余各条不变  
 Date: 2026-08-24
 
 > 裁决授权：用户 2026-08-24 授权本会话（MCP-1）代为拍板（用户指示：作为技术与业务专家代表

@@ -1,6 +1,6 @@
 # ADR-0105：评价问题项带结构化的「涉及序列」主体，进快照不进规范化文档；问题项落子表不落数组，读面按序列种类分组只读子表
 
-Status: Accepted（2026-09-03，用户经 IDP 队列通道 3 授权本会话「有全部权限」自决并向各会话派工。裁决能力边界：读过票 [pricing-reference-series-operations/05](../../.scratch/pricing-reference-series-operations/issues/05-coverage-horizon-and-blocked-evaluations-read-face.md) 全文（含 MCP-1 摆出的两件待裁）、`internal/parcelpricing/domain` 的 `EvaluationIssue`、`resolveSeries`、`ReferenceSeriesBinding`、评价快照文档与规范化文档中问题项那一段、`ports/evaluation_read.go`、`migrations/parcel_pricing/0001_evaluation.sql`；未重读 parcel-pricing `CONTEXT.md` 全文与 [ADR-0014](./0014-versioned-canonicalization-shape-for-content-digest.md) 之外的规范化相关记录——本记录因此只裁**问题项的结构与落库形状**，不改任何评价语义、不动结果代数、不动状态五格）
+Status: Accepted（2026-09-03，用户经 IDP 队列通道 3 授权本会话「有全部权限」自决并向各会话派工。裁决能力边界：读过票 [pricing-reference-series-operations/05](../../.scratch/pricing-reference-series-operations/issues/05-coverage-horizon-and-blocked-evaluations-read-face.md) 全文（含 MCP-1 摆出的两件待裁）、`internal/parcelpricing/domain` 的 `EvaluationIssue`、`resolveSeries`、`ReferenceSeriesBinding`、评价快照文档与规范化文档中问题项那一段、`ports/evaluation_read.go`、`migrations/parcel_pricing/0001_evaluation.sql`；未重读 parcel-pricing `CONTEXT.md` 全文与 [ADR-0014](./0014-versioned-canonicalization-shape-for-content-digest.md) 之外的规范化相关记录——本记录因此只裁**问题项的结构与落库形状**，不改任何评价语义、不动结果代数、不动状态五格）<!-- 索引注记 -->｜**两份文档判据**：快照文档供重建、规范化文档供摘要，同一件信息的类型化重述进前者不进后者，规范化版本因此不升。**适用场景**：评价问题项要按某一维分组或检索时，加领域主体 + 子表 + 伴生读口，不扫 JSONB、不加数组列、不从 `message` 反解析
 Date: 2026-09-03
 
 ## Context

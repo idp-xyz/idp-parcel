@@ -1,6 +1,6 @@
 # ADR-0111: 按票、按 MAWB 计费的项目在 `parcel-pricing` 有自己的评价主体与聚合方式，`settlement-accounting` 用既有分摊把票级 / 主单级金额归因到包裹；主单主体引用 `transport-fulfillment` 的承运总单身份，那本登记册今天不存在
 
-Status: Accepted
+Status: Accepted<!-- 索引注记 -->｜**落点判据**：SA CONTEXT「不拥有可执行价卡或第二套算价规则」——费率只能在 PP 算，归因才归 SA；CONTEXT-MAP 把承运总单身份判给 TF——主体身份各引其所有者，PP 不铸。**适用场景**：评价对象从两种扩到四种（加委托、承运总单），快照带成员清单进语义摘要；主单级那一半形状定、身份来源缺，等 TF 立承运总单登记册（应立而未立），此前 E2 不平摊不折进按件；换号与 ADR-0107–0110 同期合并
 Date: 2026-09-04
 
 ## Context

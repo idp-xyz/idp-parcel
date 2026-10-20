@@ -1,6 +1,6 @@
 # ADR-0094: 未决重投与否由领域的 `ResumePath` 决定，并增设「等运营登记」第四格
 
-Status: Accepted（部分停用：Decision 三对 `ResumeByCustomerSupplement` 的「维持回滚重投」一格，已由 [ADR-0106](./0106-customer-supplement-wait-is-a-committed-pause-resumed-by-the-new-submission-version-envelope.md) 改为提交入账——那一格写明「另立取证票，不在本记录裁」，取证票 first-tenant-runway/09 的三问已从代码答出；Decision 一、二、四、五与其余三格不变）
+Status: Accepted（部分停用：Decision 三对 `ResumeByCustomerSupplement` 的「维持回滚重投」一格，已由 [ADR-0106](./0106-customer-supplement-wait-is-a-committed-pause-resumed-by-the-new-submission-version-envelope.md) 改为提交入账——那一格写明「另立取证票，不在本记录裁」，取证票 first-tenant-runway/09 的三问已从代码答出；Decision 一、二、四、五与其余三格不变）<!-- 索引注记 -->｜**分格判据**：看恢复动作，不看缺了什么——重试、客户补件、人工复核都推不动、只有一次登记动作推得动的，是新的第四格。**适用场景**：接受判断链的未决处置；新增未决原因时先答它的恢复动作，消费门不再持有原因字面量｜**部分停用**：其 Decision 三对 `ResumeByCustomerSupplement` 的「维持回滚重投」一格——原句「`ResumeByCustomerSupplement` → **维持回滚重投**。ADR-0086 的 Context 判过这一格……本记录**不改它**」——已由 [ADR-0106](./0106-customer-supplement-wait-is-a-committed-pause-resumed-by-the-new-submission-version-envelope.md) 停用；该格当时写明「另立取证票，不在本记录裁」，取证票即 first-tenant-runway/09，证据齐后改为提交入账。**适用场景**：只停那一格的处置；Decision 一、二、四、五与其余三格不变，其余各条不变
 Date: 2026-09-02
 
 ## Context

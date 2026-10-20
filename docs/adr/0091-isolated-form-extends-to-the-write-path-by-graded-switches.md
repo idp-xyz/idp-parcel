@@ -1,6 +1,6 @@
 # ADR-0091：隔离形态从查阅面扩到写路径，按分级开关放行——入格判据取代枚举；写面有持久化，可分辨物由 `SYN-` 前缀承担
 
-Status: Accepted（2026-09-02，用户经 IDP 队列通道 5 在四路范围选项间裁定「一份 ADR 同时裁两格」；本记录据此把写面 Intake 与生产归属范围目录合并裁决）；**部分停用**：决定六「隔离形态不因真渠道出现而自动退场」一句已由 [ADR-0150](./0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md) 停用——隔离形态是真渠道缺位时的过渡，某一口真渠道 Intake 落地即在同一笔撤下该口的隔离放行；同句「也不因它出现而获得任何真实租户」与其余各条不变
+Status: Accepted（2026-09-02，用户经 IDP 队列通道 5 在四路范围选项间裁定「一份 ADR 同时裁两格」；本记录据此把写面 Intake 与生产归属范围目录合并裁决）；**部分停用**：决定六「隔离形态不因真渠道出现而自动退场」一句已由 [ADR-0150](./0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md) 停用——隔离形态是真渠道缺位时的过渡，某一口真渠道 Intake 落地即在同一笔撤下该口的隔离放行；同句「也不因它出现而获得任何真实租户」与其余各条不变<!-- 索引注记 -->｜**部分停用**：其决定六「隔离形态不因真渠道出现而自动退场」一句已由 [ADR-0150](./0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md) 停用——隔离形态是真渠道缺位时的过渡，某一口真渠道 Intake 落地即在同一笔撤下该口的隔离放行。同句「也不因它出现而获得任何真实租户」与其余各条不变
 Date: 2026-09-02
 
 ## Context

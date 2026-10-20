@@ -1,6 +1,6 @@
 # ADR-0156：可达性资格的闭包标识从本轮已采用的商业解析回指
 
-Status: Accepted（2026-09-30。本项是机制。[ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定一：「机制与产品策略同属产品交付轨道，开发方现在就做。」通道 2 按 ADR-0064 的同一形补可达性这一条，不造解析号，不填租户截点。用户在本通道对「下一刀做 psb/16 第 1 项」的答复是检查队列，不是本记录的接受依据。）
+Status: Accepted（2026-09-30。本项是机制。[ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定一：「机制与产品策略同属产品交付轨道，开发方现在就做。」通道 2 按 ADR-0064 的同一形补可达性这一条，不造解析号，不填租户截点。用户在本通道对「下一刀做 psb/16 第 1 项」的答复是检查队列，不是本记录的接受依据。）<!-- 索引注记 -->｜**回指**：解析标识随可达性命令带过，不进判断键，不另造映射。空引用仍是未形成。部分停用 ADR-0064 后果里可达性那一句与 Context 里「`ReachabilityClosureIdentity` 仍属实例半边」那一句。2026-09-30。本项是机制，接受依据是 ADR-0146 决定一「机制与产品策略同属产品交付轨道，开发方现在就做」，不是通道里的「继续」。
 Date: 2026-09-30
 
 ## Context

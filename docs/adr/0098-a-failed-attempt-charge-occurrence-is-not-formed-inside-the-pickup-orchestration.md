@@ -1,6 +1,6 @@
 # ADR-0098: 失败尝试费发生项不在揽收编排里形成，采购上下文显式给出而不推导
 
-Status: Accepted（**部分停用**：决定四「**今天不建**：建它等于在没有任何租户实证的情况下先定一种采购组织方式（揽收是挂在委托下、还是各自独立由第三方关系相连）」已由 [ADR-0204](./0204-a-fulfillment-segment-adopts-a-transport-commission-by-declaration-and-a-started-commission-cannot-be-cancelled.md) 决定五停用，适用场景只限实际履约段与运输委托之间的连线；揽收任务与尝试 ↔ 委托仍不建，其余各条不变，本记录正文不改写。）
+Status: Accepted（**部分停用**：决定四「**今天不建**：建它等于在没有任何租户实证的情况下先定一种采购组织方式（揽收是挂在委托下、还是各自独立由第三方关系相连）」已由 [ADR-0204](./0204-a-fulfillment-segment-adopts-a-transport-commission-by-declaration-and-a-started-commission-cannot-be-cancelled.md) 决定五停用，适用场景只限实际履约段与运输委托之间的连线；揽收任务与尝试 ↔ 委托仍不建，其余各条不变，本记录正文不改写。）<!-- 索引注记 -->｜**位置判据**：CONTEXT 禁「任一对象的成功、失败或取消被压缩成其他对象的状态」，而把派生塞进一个必须照常成功的登记编排，会造出静默不发生且无人重试的一步（同 ADR-0094 那一类）。**适用场景**：一个派生事实该在哪个编排里形成；「不适用」与「未决」「报错」三格恢复动作不同必须分开；揽收↔委托的连线显式留空待租户实证｜**部分停用**：其决定四「**今天不建**：建它等于在没有任何租户实证的情况下先定一种采购组织方式（揽收是挂在委托下、还是各自独立由第三方关系相连）」已由 [ADR-0204](./0204-a-fulfillment-segment-adopts-a-transport-commission-by-declaration-and-a-started-commission-cannot-be-cancelled.md) 决定五停用。**适用场景**：仅限实际履约段与运输委托之间的连线——停用理由的前提是「先定一种采购组织方式」，而那条连线由登记方逐段声明、产品不替租户定组织方式；揽收任务与尝试 ↔ 委托仍不建（失败尝试不成段，段级连线够不着它）。其余各条不变
 Date: 2026-09-02
 
 ## Context

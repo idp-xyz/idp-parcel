@@ -1,6 +1,6 @@
 # ADR-0018: 产品内客户端应用与后端共享发布边界并落在顶层 `apps/`
 
-Status: Superseded by [ADR-0019](./0019-product-ships-tenant-facing-operator-clients.md)  
+Status: Superseded by [ADR-0019](./0019-product-ships-tenant-facing-operator-clients.md)<!-- 索引注记 -->：落位结论有效但立在了低一层，改写为先决定产品是否自带界面，并据此排除跨租户运维后台。  
 Date: 2026-08-10  
 Superseded: 2026-08-10
 

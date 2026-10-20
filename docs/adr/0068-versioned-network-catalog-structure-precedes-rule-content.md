@@ -1,6 +1,6 @@
 # ADR-0068: 版本化网络目录结构先行——七表由 CONTEXT 硬句推导，内容列与折叠规则等 PAR-NET-14
 
-Status: Accepted（**部分停用**：决定六「三个证据视图仍不读本目录」一句与其半句「目录修订与视图修订的合流属解析层设计，届时再裁」已由 [ADR-0148](./0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定六停用，自票 routing-first-cut/07 落地的那一笔起——可达性证据视图从本目录折出事实，`未配置`改由目录修订锚与判断时点适用于该服务目的的路由策略版本答，视图修订就是目录修订锚，0007 的定义登记册不再被读；初始路由证据视图同一条判法答`未配置`，已配置时在 routing-first-cut/09 之前照旧响亮上抛。护栏两处中迁移 `0008` 头注按 checksum 固定不改，改由迁移 `0011` 头注与 `NetworkCatalog` 类型注释承载。其余各条不变）  
+Status: Accepted（**部分停用**：决定六「三个证据视图仍不读本目录」一句与其半句「目录修订与视图修订的合流属解析层设计，届时再裁」已由 [ADR-0148](./0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定六停用，自票 routing-first-cut/07 落地的那一笔起——可达性证据视图从本目录折出事实，`未配置`改由目录修订锚与判断时点适用于该服务目的的路由策略版本答，视图修订就是目录修订锚，0007 的定义登记册不再被读；初始路由证据视图同一条判法答`未配置`，已配置时在 routing-first-cut/09 之前照旧响亮上抛。护栏两处中迁移 `0008` 头注按 checksum 固定不改，改由迁移 `0011` 头注与 `NetworkCatalog` 类型注释承载。其余各条不变）<!-- 索引注记 -->｜**部分停用**：其决定六「三个证据视图仍不读本目录」一句（连同「目录修订与视图修订的合流属解析层设计，届时再裁」半句）已由 [ADR-0148](./0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定六停用（自 routing-first-cut/07 落地起）——可达性证据视图从本目录折出事实，视图修订就是目录修订锚。其余各条不变  
 Date: 2026-08-20
 
 ## Context

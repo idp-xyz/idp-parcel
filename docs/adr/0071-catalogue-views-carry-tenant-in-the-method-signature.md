@@ -1,6 +1,6 @@
 # ADR-0071: visibility-exception 的目录与策略视图把租户放进方法签名，不在构造期绑定
 
-Status: Proposed  
+Status: Proposed<!-- 索引注记 -->｜**草案**：Status 为 Proposed，尚非依据  
 Date: 2026-08-21
 
 ## Context

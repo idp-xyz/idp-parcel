@@ -1,6 +1,6 @@
 # ADR-0108: 版本引用的身份是（种类，标识，版本）三元；digest 退出身份与指纹，成为可选的「声明时附带的指纹」，不进规范化文档
 
-Status: Accepted
+Status: Accepted<!-- 索引注记 -->｜**身份判据**：领域自己的去重键（`NewVersionManifest` 的 `referenceIdentity`）早已不含 digest，且没有任何读法拿它比对过内容——类型跟上去重键，而不是让一个叫 digest 的槽装三种不是 digest 的东西。**适用场景**：`VersionReference` 的相等、去重、排序与规范化只看三元；指纹可选、进快照不进规范化；过渡令牌 `declared:` 退役；规范化换号一次，与 ADR-0107 同期实施时合并为一次
 Date: 2026-09-04
 
 ## Context

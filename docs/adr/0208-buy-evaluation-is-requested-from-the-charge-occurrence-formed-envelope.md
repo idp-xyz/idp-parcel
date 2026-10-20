@@ -1,6 +1,6 @@
 # ADR-0208：BUY 评价由发生项已形成信封发起——发生项与协议取自发生项，费用项目取触发册，主要范围取协议的商业范围
 
-Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/26，代决出自 `.scratch/demo-chain-gaps/tf-chain-plan.md` 的「BUY 发起（接 08，收 10）」一节。越权风险点见文末，待 SA owner 复核，第 2、8 点同时待 PC owner、第 5、7 点同时待 TF owner。）
+Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/26，代决出自 `.scratch/demo-chain-gaps/tf-chain-plan.md` 的「BUY 发起（接 08，收 10）」一节。越权风险点见文末，待 SA owner 复核，第 2、8 点同时待 PC owner、第 5、7 点同时待 TF owner。）<!-- 索引注记 -->｜**已接受**（2026-10-19，用户原话「你作为业务和系统专家自决」，Claude Code 会话代 SA owner 裁定；票 demo-chain-gaps/26）。结算在派发里消费 `transport-fulfillment.charge-occurrence.formed`（消费者先登路由），按引用回读发生项；发生项、原因、版本、业务时间与供应商协议取自发生项，部分停用 ADR-0164 决定一末句（限本路径）；费用项目取 BUY 触发册新格，缺行或缺费用项目答未配置入账；主要范围取协议的商业范围（PC 新开只交范围的窄读口），读不动未决、查无是矛盾；修订版不发起。越权风险点待 SA owner 复核，部分同时待 PC、TF owner
 Date: 2026-10-19
 
 ## Context

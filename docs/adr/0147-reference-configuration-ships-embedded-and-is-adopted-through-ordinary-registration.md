@@ -1,6 +1,6 @@
 # ADR-0147：参考配置随产品版本嵌入发布——仓库根 `referenceconfig/` 下一版一文件、发布即不可改写；登记依据格以 `REFCFG-1:标识@版本` 引用；采用走各登记册既有的登记用例，不另造旁路
 
-Status: Accepted（2026-09-24，通道 4 实施票 `product-strategy-boundary/03` 时立；该票派单写明「第 1 步的形态若属难逆转取舍，按 AGENTS.md 走 ADR」，用户同日在 IDP 队列授权通道 4「作为业务和系统专家自决」。裁决能力边界：读过 [ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 全文、[ADR-0145](./0145-legal-entity-attributes-split-into-identity-layer-and-dated-profile.md) 决定一与越权风险点 2、`migrations/migrations.go` 的嵌入与校验和写法、party-commercial 注册号类型目录的领域、应用与 CLI 全文（票 legal-entity-profile/01、02 所落）。没读：其余各登记册的依据格实现——它们能否装下本记录的引用串，由票 03 完成记录列清单交各 owner 复核。）
+Status: Accepted（2026-09-24，通道 4 实施票 `product-strategy-boundary/03` 时立；该票派单写明「第 1 步的形态若属难逆转取舍，按 AGENTS.md 走 ADR」，用户同日在 IDP 队列授权通道 4「作为业务和系统专家自决」。裁决能力边界：读过 [ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 全文、[ADR-0145](./0145-legal-entity-attributes-split-into-identity-layer-and-dated-profile.md) 决定一与越权风险点 2、`migrations/migrations.go` 的嵌入与校验和写法、party-commercial 注册号类型目录的领域、应用与 CLI 全文（票 legal-entity-profile/01、02 所落）。没读：其余各登记册的依据格实现——它们能否装下本记录的引用串，由票 03 完成记录列清单交各 owner 复核。）<!-- 索引注记 -->｜**采用即登记**：参考配置只给判断方法与公开标准的实例数据，租户取值由采用方显式给、依据格由采用路径写成引用串；已发布版本由摘要清单守住不可改写，首个样板是注册号类型目录的 CN、SG 两份。2026-09-24 通道 4 实施票 product-strategy-boundary/03 时立，越权风险点待评审复核
 Date: 2026-09-24
 
 ## Context

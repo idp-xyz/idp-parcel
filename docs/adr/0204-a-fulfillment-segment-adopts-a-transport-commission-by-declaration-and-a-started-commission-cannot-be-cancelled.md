@@ -1,6 +1,6 @@
 # ADR-0204：履约段采用运输委托——声明式连线，采用即以段的首个参与标委托开始，开始之后不可取消
 
-Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 [demo-chain-gaps/25](../../.scratch/demo-chain-gaps/issues/25-segment-adopts-transport-commission-and-cancellation-faces.md) 起草并落全部条款。部分停用 [ADR-0098](./0098-a-failed-attempt-charge-occurrence-is-not-formed-inside-the-pickup-orchestration.md) 决定四，适用场景只限实际履约段。越权风险点见文末，待 TF owner 复核，access-identity owner 知会。）
+Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 [demo-chain-gaps/25](../../.scratch/demo-chain-gaps/issues/25-segment-adopts-transport-commission-and-cancellation-faces.md) 起草并落全部条款。部分停用 [ADR-0098](./0098-a-failed-attempt-charge-occurrence-is-not-formed-inside-the-pickup-orchestration.md) 决定四，适用场景只限实际履约段。越权风险点见文末，待 TF owner 复核，access-identity owner 知会。）<!-- 索引注记 -->｜**已接受**（2026-10-19，用户原话「你作为业务和系统专家自决」，Claude Code 会话代 TF owner 裁定，access-identity owner 知会；票 demo-chain-gaps/25）。履约段采用运输委托是一种运营决定，声明（段、委托、服务方）：段在册、委托在册、服务方等于委托的服务提供方、委托未取消（取消不早于段的首个参与另答取消晚于开始）、段有当前参与且首个参与不早于委托提交，不满足的各答一格；一段至多采用一份委托，同段原样再交答已有、换委托答冲突，采用之后不改不解除，一份委托可被多段采用。采用即以段的首个当前参与（替代与失效版本不算）标委托开始，委托的开始取已采用各段首个参与里最早的那一条、只前移；连线先落、委托后写，同一笔，采用成立以外整笔回滚。取消委托、取消订舱两面就此开放：已开始答 `TRANSPORT_ALREADY_STARTED`，订舱以申请不晚于委托开始判已开始，重放答 `EXISTING_CANCELLATION`；采用与取消的先后按业务时间判，判出取消晚于开始只挂起待更正、不自动撤回（对 UC-TF-004 一条规则的有意收窄）。连线是声明不是推导，没有连线的段不读作自营。部分停用 ADR-0098 决定四，限实际履约段，揽收任务与尝试 ↔ 委托仍不建。越权风险点待 TF owner 复核。
 
 Date: 2026-10-19
 

@@ -1,6 +1,6 @@
 # ADR-0198：包裹计费时点那一路，SELL 请求怎样下结论，矛盾怎样上抛
 
-Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 sell-customer-charge/04 落地与评审时遇到的、[ADR-0190](./0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 没裁的几格。部分停用 [ADR-0169](./0169-sell-evaluation-forms-a-customer-charge.md) 决定四「信封上还没有费用项目时，消费门指名缺这一引用」，**适用场景**仅限包裹计费时点那一路，即回指一份 SELL 请求的 SELL·客户费用评价。越权风险点见文末，待 SA owner 复核。）
+Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 sell-customer-charge/04 落地与评审时遇到的、[ADR-0190](./0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 没裁的几格。部分停用 [ADR-0169](./0169-sell-evaluation-forms-a-customer-charge.md) 决定四「信封上还没有费用项目时，消费门指名缺这一引用」，**适用场景**仅限包裹计费时点那一路，即回指一份 SELL 请求的 SELL·客户费用评价。越权风险点见文末，待 SA owner 复核。）<!-- 索引注记 -->｜**已接受**（2026-10-19，用户原话「你作为业务和系统专家自决」，Claude Code 会话代 SA owner 裁定）。评价失败停在`已提交`；卡没声明金额取整、映射不全记`待判断`，缺口不落库；回指不在册、结算币种不符、另有结论、已完成却未受理一律上抛；没有回指零写入。部分停用 ADR-0169 决定四一句，限本路。越权风险点 5 条待 SA owner 复核。
 Date: 2026-10-19
 
 ## Context

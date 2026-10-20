@@ -1,6 +1,6 @@
 # ADR-0190：包裹计费时点发起 SELL 评价，形成预估客户费用——独立的 SELL 请求身份，内置「有效网络收寄已采用」「有效交付已终局」两种时点，按结算账户登记采用
 
-Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」，其后又令「继续」，按会话里报告过的次序先做客户费用。取代 [ADR-0169](./0169-sell-evaluation-forms-a-customer-charge.md) Consequences「形成编排不进 `cmd/parcel-dispatch`」与决定四「也不在本记录里把形成编排接进进程」，以及 [ADR-0170](./0170-settlement-orchestrations-enter-through-parcel-api.md) Context「SELL 评价形成客户费用的编排不进 `cmd/parcel-dispatch`」与「候选与反方」里否决「把 SELL 形成编排接进派发」那一条；为 [ADR-0171](./0171-pricing-input-resolver-uses-declaration-until-a-measurement-port-exists.md) 决定五在 SELL·客户费用预估这一格作答。越权风险点见文末，待 SA、PP owner 复核。）
+Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」，其后又令「继续」，按会话里报告过的次序先做客户费用。取代 [ADR-0169](./0169-sell-evaluation-forms-a-customer-charge.md) Consequences「形成编排不进 `cmd/parcel-dispatch`」与决定四「也不在本记录里把形成编排接进进程」，以及 [ADR-0170](./0170-settlement-orchestrations-enter-through-parcel-api.md) Context「SELL 评价形成客户费用的编排不进 `cmd/parcel-dispatch`」与「候选与反方」里否决「把 SELL 形成编排接进派发」那一条；为 [ADR-0171](./0171-pricing-input-resolver-uses-declaration-until-a-measurement-port-exists.md) 决定五在 SELL·客户费用预估这一格作答。越权风险点见文末，待 SA、PP owner 复核。）<!-- 索引注记 -->｜**已接受**（2026-10-19，用户原话「你作为业务和系统专家自决」，Claude Code 会话代 SA、PP owner 裁定）。**独立 SELL 请求身份**，不动 BUY。**内置两种计费时点**：有效网络收寄已采用、有效交付已终局，结算账户登记采用哪一种与计价范围，没登记答未配置。**选卡同受理前试算**，预估阶段没有实测时用申报并标明来源。**一份评价映一个费用项目**才形成预估客户费用。编排住 `cmd/parcel-dispatch`，取代 ADR-0169、0170 里「不进派发」的句子。**越权风险点**待 SA、PP owner 复核。
 
 Date: 2026-10-19
 

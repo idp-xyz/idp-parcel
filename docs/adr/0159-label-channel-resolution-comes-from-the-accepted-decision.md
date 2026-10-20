@@ -1,6 +1,6 @@
 # ADR-0159：面单择优的接受时解析回指从接受决定上读
 
-Status: Accepted（2026-09-30。本项是机制。[ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定一：「机制与产品策略同属产品交付轨道，开发方现在就做。」通道 2 补面单择优这一条，不造解析号，不填租户截点。）
+Status: Accepted（2026-09-30。本项是机制。[ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定一：「机制与产品策略同属产品交付轨道，开发方现在就做。」通道 2 补面单择优这一条，不造解析号，不填租户截点。）<!-- 索引注记 -->｜**回指**：择优查询带来源身份与声明包裹，解析标识从该成员的接受决定读，不另造映射。空身份或未接受仍是未形成。2026-09-30。本项是机制，接受依据是 ADR-0146 决定一「机制与产品策略同属产品交付轨道，开发方现在就做」。
 Date: 2026-09-30
 
 ## Context

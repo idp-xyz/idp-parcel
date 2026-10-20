@@ -1,6 +1,6 @@
 # ADR-0019: 产品自带面向租户的作业与治理界面，跨租户运维后台不属于产品
 
-Status: Superseded by [ADR-0020](./0020-tenant-admin-client-in-product-workers-are-processes.md)  
+Status: Superseded by [ADR-0020](./0020-tenant-admin-client-in-product-workers-are-processes.md)<!-- 索引注记 -->：`worker` 被误读为一线作业人员，据此写入的「自带一线作业面」不成立；更正为 worker 即后台进程、落 `cmd/`，一线作业界面退回未决。  
 Date: 2026-08-10  
 Superseded: 2026-08-10
 
