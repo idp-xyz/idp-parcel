@@ -154,8 +154,9 @@ func writeWiring(b *strings.Builder, wiring WiringCensus) {
 	}
 	fmt.Fprintf(b, " %d |\n\n", wiring.ConsumerTotal)
 
-	b.WriteString("直投路由表按 `cmd/` 生产文件里 `map[eventing.EventType]dispatch.Consumer` 字面量的条目数，")
-	b.WriteString("按条目键（事件类型常量）所属的消费门包归属。路由表只随消费者一起长（ADR-0049 第三条），本表只报它此刻多长。\n\n")
+	b.WriteString("直投路由表按 `cmd/` 生产文件里登记的不同事件类型数（`routeLeg` 字面量的 `event` 与 `map[eventing.EventType]dispatch.Consumer` ")
+	b.WriteString("字面量的键并认，同一事件类型扇出给几路只算一条），按事件类型常量所属的消费门包归属。")
+	b.WriteString("路由表只随消费者一起长（ADR-0049 第三条），本表只报它此刻多长。\n\n")
 	b.WriteString("| 事件类型所属消费方 | 条目 |\n|---|---|\n")
 	for _, tally := range wiring.Routes {
 		fmt.Fprintf(b, "| %s | %d |\n", tally.Context, tally.Count)

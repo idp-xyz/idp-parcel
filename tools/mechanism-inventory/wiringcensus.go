@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/parser"
+	"go/printer"
 	"go/token"
 	"io/fs"
 	"path"
@@ -19,10 +20,13 @@ import (
 //     即是两个端点一个处理器）。
 //   - 消费适配器：`internal/<消费方>/adapters/` 下四类消费门目录的生产文件。「跨上下文消费缝」
 //     那一栏按提供方目录名是不是另一个上下文来认，这四个目录名都不是上下文，因此一个都数不到。
-//   - 直投路由表：`cmd/` 下生产文件里 `map[eventing.EventType]dispatch.Consumer` 字面量的条目。
+//   - 直投路由表：`cmd/` 下生产文件里登记的不同事件类型。派发进程按特性文件登记各路（ADR-0222），键写在
+//     `routeLeg` 字面量的 `event` 字段上；旧形的 `map[eventing.EventType]dispatch.Consumer` 字面量的键也认。同一事件类型
+//     扇出给几路只算一条——路由表的一条就是一类信封，几路是它的扇出。
 //
 // 三处都按类型认字面量而不按函数名或文件名认：装配点改名、拆成几个函数、挪到别的文件，数照样对；
-// 换一种字面量类型才会数不到，而那种改动本来就该顺手回来改这里。
+// 换一种字面量类型才会数不到，而那种改动本来就该顺手回来改这里。`routeLeg` 是 cmd/parcel-dispatch 自己的类型，按名字认，
+// 理由同此。
 
 // consumerDirs 是消费门目录名单。写死是有意的，理由同 nonBusinessDirs：判「这个目录是不是消费门」
 // 要领域知识，工具没有也不该替它猜；新开一类消费门目录时由开目录的人在这里补一项。
@@ -85,6 +89,16 @@ func CensusWiring(root fs.FS) (WiringCensus, error) {
 
 	endpoints := map[string]int{}
 	routes := map[string]int{}
+	seenRoutes := map[string]bool{}
+	countRoute := func(parsed parsedFile, key ast.Expr) {
+		identity := parsed.qualifiedName(key)
+		if seenRoutes[identity] {
+			return
+		}
+		seenRoutes[identity] = true
+		census.RouteTotal++
+		routes[parsed.contextOf(key, anyAdapterPath)]++
+	}
 	err := fs.WalkDir(root, "cmd", func(p string, entry fs.DirEntry, err error) error {
 		if err != nil || entry.IsDir() || !isProductionGo(p) {
 			return err
@@ -106,8 +120,21 @@ func CensusWiring(root fs.FS) (WiringCensus, error) {
 				}
 			case parsed.isRouteTable(lit):
 				for _, elt := range lit.Elts {
-					census.RouteTotal++
-					routes[parsed.routeContext(elt)]++
+					if kv, ok := elt.(*ast.KeyValueExpr); ok {
+						countRoute(parsed, kv.Key)
+					}
+				}
+			case isRouteLegSlice(lit):
+				for _, elt := range lit.Elts {
+					if leg, ok := elt.(*ast.CompositeLit); ok {
+						if key := routeLegEvent(leg); key != nil {
+							countRoute(parsed, key)
+						}
+					}
+				}
+			case isRouteLeg(lit):
+				if key := routeLegEvent(lit); key != nil {
+					countRoute(parsed, key)
 				}
 			}
 			return true
@@ -260,13 +287,47 @@ func (parsed parsedFile) endpointContext(elt ast.Expr) string {
 	return unattributed
 }
 
-// routeContext 由路由条目键（某消费门包导出的事件类型常量）所在包推出消费方上下文。
-func (parsed parsedFile) routeContext(elt ast.Expr) string {
-	kv, ok := elt.(*ast.KeyValueExpr)
-	if !ok {
-		return unattributed
+// isRouteLegSlice 认 `[]routeLeg{...}`，isRouteLeg 认 `routeLeg{...}`。
+func isRouteLegSlice(lit *ast.CompositeLit) bool {
+	array, ok := lit.Type.(*ast.ArrayType)
+	if !ok || array.Len != nil {
+		return false
 	}
-	return parsed.contextOf(kv.Key, anyAdapterPath)
+	ident, ok := array.Elt.(*ast.Ident)
+	return ok && ident.Name == "routeLeg"
+}
+
+func isRouteLeg(lit *ast.CompositeLit) bool {
+	ident, ok := lit.Type.(*ast.Ident)
+	return ok && ident.Name == "routeLeg"
+}
+
+// routeLegEvent 取一路登记的 `event` 字段；没写的交回 nil，不数。
+func routeLegEvent(leg *ast.CompositeLit) ast.Expr {
+	for _, field := range leg.Elts {
+		kv, ok := field.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+		if key, ok := kv.Key.(*ast.Ident); ok && key.Name == "event" {
+			return kv.Value
+		}
+	}
+	return nil
+}
+
+// qualifiedName 是路由键的身份：`<别名>.<名字>` 按导入路径展开，各文件别名不同也认得出是同一个常量；认不出的按原文。
+func (parsed parsedFile) qualifiedName(expr ast.Expr) string {
+	if selector, ok := expr.(*ast.SelectorExpr); ok {
+		if pkg, ok := selector.X.(*ast.Ident); ok {
+			if importPath, ok := parsed.imports[pkg.Name]; ok {
+				return importPath + "." + selector.Sel.Name
+			}
+		}
+	}
+	var text strings.Builder
+	_ = printer.Fprint(&text, token.NewFileSet(), expr)
+	return text.String()
 }
 
 // contextOf 把 `<别名>.<名字>` 里的别名解析成导入路径，再按 pattern 取出上下文名。

@@ -140,6 +140,44 @@ func TestRoutesCountTableEntriesByConsumerContext(t *testing.T) {
 	}
 }
 
+// 按特性文件登记的各路（ADR-0222）按事件类型数：同一事件类型扇出几路、或旧形表里已有，都只算一条；别名不同认得出是
+// 同一个常量。
+func TestRouteLegsCountDistinctEventTypes(t *testing.T) {
+	fixture := wiringFixture()
+	fixture["cmd/parcel-dispatch/routes_extra.go"] = &fstest.MapFile{Data: []byte(`package main
+
+import (
+	shipments "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
+	vinbox "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/inbox"
+)
+
+func init() {
+	registerRoutes(func(sources dispatchSources) ([]routeLeg, error) {
+		return []routeLeg{
+			{event: shipments.ShipmentRequestSubmittedEventType, untranslated: true},
+			{event: vinbox.TransportHandoverRegisteredEventType, position: positionProjection},
+			{event: vinbox.TransportHandoverRegisteredEventType, position: positionPrimary},
+		}, nil
+	})
+}
+
+var single = routeLeg{event: vinbox.FinalOutcomeFormedEventType}
+`)}
+	census, err := CensusWiring(fixture)
+	if err != nil {
+		t.Fatalf("清点失败：%v", err)
+	}
+	if census.RouteTotal != 5 {
+		t.Errorf("路由 = %d，想要 5（旧表 3 条，新登记的两类各一条，重复的不算）", census.RouteTotal)
+	}
+	if got := tallyOf(t, census.Routes, "visibilityexception"); got != 2 {
+		t.Errorf("visibilityexception 路由 = %d，想要 2", got)
+	}
+	if got := tallyOf(t, census.Routes, "parcelshipment"); got != 2 {
+		t.Errorf("parcelshipment 路由 = %d，想要 2（另一别名下的同一常量不重算）", got)
+	}
+}
+
 // 消费适配器只认 adapters/ 下四类目录的生产文件：测试文件不算，postgres 不算，不在 adapters/
 // 下的同名目录不算。
 func TestConsumersCountOnlyTheFourGateDirectories(t *testing.T) {
