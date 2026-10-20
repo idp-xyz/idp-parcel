@@ -21,12 +21,13 @@ import (
 )
 
 var (
-	// ErrFinalNotVisible 表示按信封引用还读不回终局采用登记。可见性滞后是续办，重投
-	// 会改变结果；不当毒丸拒收。
+	// ErrFinalNotVisible 表示按信封引用还读不回终局采用登记，或重派生那一代的前一代读时
+	// 依赖调不通。可见性滞后与依赖不通都是续办，重投会改变结果；不当毒丸拒收。
 	ErrFinalNotVisible = errors.New(
 		"visibility exception parcelshipment adapter: final outcome is not yet visible")
-	// ErrFinalRecordInconsistent 表示按键取回的登记指着另一个键，或采认时刻为零。
-	// 仓储不变量已破（ADR-0029），不是等谁。禁止进 WithUndecidedSentinels。
+	// ErrFinalRecordInconsistent 表示按键取回的登记指着另一个键、采认时刻为零，或重派生
+	// 指回的前一代找不到、不是本包裹同一责任结果种类的已采用终局。仓储不变量已破
+	// （ADR-0029），不是等谁。禁止进 WithUndecidedSentinels。
 	ErrFinalRecordInconsistent = errors.New(
 		"visibility exception parcelshipment adapter: final outcome disagrees with its key")
 	// ErrFinalUntranslatableAnswer 表示引用译不成领域标识。引用坏了，不是等谁。
@@ -38,13 +39,14 @@ var (
 	ErrFinalProjectionHandoffPending = veconsume.ErrProjectionHandoffPending
 )
 
-// FinalOutcomeFinder 按终局采用幂等键取回登记。由 PS 的 FinalOutcomeStore 满足。
-// 只取一法：本适配器不写 PS 的库。
+// FinalOutcomeFinder 按终局采用幂等键取回登记，并按终局版本找回重派生指回的前一代。由 PS
+// 的 FinalOutcomes 满足。只有读法：本适配器不写 PS 的库。
 type FinalOutcomeFinder interface {
 	FindByKey(
 		ctx context.Context,
 		key psports.FinalAdoptionKey,
 	) (psports.FinalOutcomeRecord, bool, error)
+	psports.FinalOutcomeByVersionView
 }
 
 // FinalProjectionHandler 是派生编排在终局适配器侧的窄口。
@@ -113,7 +115,11 @@ func (adapter *DeriveOnFinalOutcomeAdapter) HandleFormedFinalOutcome(
 			ErrFinalRecordInconsistent, formed.Parcel, formed.Kind, formed.Version)
 	}
 
-	command, err := finalProjectionCommand(record)
+	predecessor, superseding, err := adapter.predecessorOf(ctx, record)
+	if err != nil {
+		return err
+	}
+	command, err := finalProjectionCommand(record, predecessor, superseding)
 	if err != nil {
 		return err
 	}
@@ -122,6 +128,56 @@ func (adapter *DeriveOnFinalOutcomeAdapter) HandleFormedFinalOutcome(
 		return err
 	}
 	return veconsume.Consumption(result)
+}
+
+// predecessorOf 交回本代终局在投影那一维上的前身：前一代的采用版本。
+//
+// PS 的重派生只以终局版本（PriorVersion）指回前一代，投影的事实版本却是采用键的责任结果
+// 版本——两套号。按终局版本找回前一代的采用记录、取它键上的版本，才是同一事实引用下 VE
+// 认得的前身。不译，同种重派生之后两代已采用终局在当前有效集里同时在场，CONTEXT「被替代
+// 的条目……不参与派生」就破了；替代关系只能由源上下文给出，所以这里只译 PS 指名的那一代，
+// 不按到达先后或业务时间去猜。
+//
+// 前一代必须是同包裹、同责任结果种类的已采用终局。种类进事实引用，换了种类两代就不在同一
+// 引用下，照 CONTEXT「只在同一源上下文、同一事实引用的版本之间成立」替代不成立，那是冲突。
+// 今天 FormParcelFinalHandler 只在来源同种时重派生，异种一律不采用，所以走到那一格只能是账
+// 坏了，按不一致拒收；ADR-0138（Proposed）的终局失效后按剩余依据改判若让异种接续成为正常
+// 路径，那时另裁怎样进投影，不在这里静默译成一份无前身的首登。
+func (adapter *DeriveOnFinalOutcomeAdapter) predecessorOf(
+	ctx context.Context,
+	record psports.FinalOutcomeRecord,
+) (psdomain.ResponsibilityOutcomeVersion, bool, error) {
+	none := psdomain.ResponsibilityOutcomeVersion{}
+	if !record.Finalized {
+		return none, false, nil
+	}
+	prior, rederived := record.Final.PriorVersion()
+	if !rederived {
+		return none, false, nil
+	}
+	key := record.Key
+	predecessor, found, err := adapter.finals.FindByFinalVersion(ctx, key.TenantID, key.Parcel, prior)
+	if err != nil {
+		return none, false, fmt.Errorf("%w: predecessor %q of parcel %q kind %q version %q: %v",
+			ErrFinalNotVisible, prior, key.Parcel, key.Kind, key.Version, err)
+	}
+	// 读不到不是滞后：前一代在本代提交之前就已在账上（本代正是从它那一行翻过来的），本代
+	// 读得到而它读不到，只能是账坏了。
+	if !found {
+		return none, false, fmt.Errorf("%w: predecessor %q of parcel %q kind %q version %q is missing",
+			ErrFinalRecordInconsistent, prior, key.Parcel, key.Kind, key.Version)
+	}
+	if !predecessor.Finalized ||
+		predecessor.Final.Version() != prior ||
+		predecessor.Key.TenantID != key.TenantID ||
+		predecessor.Key.Parcel != key.Parcel ||
+		predecessor.Key.Kind != key.Kind ||
+		predecessor.Key.Version == key.Version {
+		return none, false, fmt.Errorf("%w: predecessor %q of parcel %q kind %q version %q is parcel %q kind %q version %q",
+			ErrFinalRecordInconsistent, prior, key.Parcel, key.Kind, key.Version,
+			predecessor.Key.Parcel, predecessor.Key.Kind, predecessor.Key.Version)
+	}
+	return predecessor.Key.Version, true, nil
 }
 
 // finalKeyFor 把信封四维译回采用键。种类是封闭枚举，反解析用 PS 领域包导出的那一份
@@ -153,7 +209,11 @@ func finalKeyFor(formed veinbox.FormedFinalOutcome) (psports.FinalAdoptionKey, e
 	}, nil
 }
 
-func finalProjectionCommand(record psports.FinalOutcomeRecord) (veapplication.DeriveProjectionCommand, error) {
+func finalProjectionCommand(
+	record psports.FinalOutcomeRecord,
+	predecessor psdomain.ResponsibilityOutcomeVersion,
+	superseding bool,
+) (veapplication.DeriveProjectionCommand, error) {
 	none := veapplication.DeriveProjectionCommand{}
 	tenant, err := vedomain.NewTenantID(record.Key.TenantID.String())
 	if err != nil {
@@ -179,6 +239,14 @@ func finalProjectionCommand(record psports.FinalOutcomeRecord) (veapplication.De
 	if err != nil {
 		return none, err
 	}
+	// 前身与本代同一事实引用，版本维同译法：首派生与不采用都没有前身，留零值。
+	var supersedes vedomain.SourceFactVersion
+	if superseding {
+		supersedes, err = vedomain.NewSourceFactVersion(predecessor.String())
+		if err != nil {
+			return none, fmt.Errorf("%w: superseded responsibility outcome version: %v", ErrFinalUntranslatableAnswer, err)
+		}
+	}
 
 	// 采认判定本身就是这份事实的业务时刻——同 JudgedAt 之于交接，不是拿处理时间顶替
 	// 业务时间。AdoptedAt 由 PS 应用层的 Clock 端口记录，不是库默认时间戳。
@@ -198,6 +266,7 @@ func finalProjectionCommand(record psports.FinalOutcomeRecord) (veapplication.De
 			Fact:        fact,
 			Kind:        kind,
 			Version:     version,
+			Supersedes:  supersedes,
 			OccurredAt:  occurred,
 			EffectiveAt: effective,
 			ReceivedAt:  record.AdoptedAt,
