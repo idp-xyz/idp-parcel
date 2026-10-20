@@ -11,7 +11,7 @@
 | collectionremittance | 23 | 9 | 4 | 6 | 0 | 3 |
 | customscompliance | 119 | 114 | 22 | 47 | 10 | 16 |
 | networkrouting | 80 | 80 | 9 | 14 | 2 | 7 |
-| nodeoperations | 107 | 114 | 15 | 28 | 4 | 16 |
+| nodeoperations | 107 | 115 | 15 | 28 | 4 | 16 |
 | parcelpricing | 133 | 122 | 17 | 16 | 1 | 23 |
 | parcelshipment | 209 | 203 | 20 | 39 | 10 | 19 |
 | partycommercial | 165 | 177 | 13 | 42 | 1 | 38 |
@@ -20,7 +20,7 @@
 | settlementaccounting | 208 | 150 | 34 | 63 | 12 | 9 |
 | transportfulfillment | 232 | 232 | 40 | 45 | 13 | 43 |
 | visibilityexception | 110 | 106 | 12 | 31 | 8 | 12 |
-| **合计** | 1472 | 1401 | 191 | 343 | 62 | 192 |
+| **合计** | 1472 | 1402 | 191 | 343 | 62 | 192 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 107、测试 218。
 
@@ -77,7 +77,7 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 6 |
 
-## 迁移：12 个模块共 269 份 SQL
+## 迁移：12 个模块共 270 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -85,7 +85,7 @@
 | collection_remittance | 1 |
 | customs_compliance | 24 |
 | network_routing | 20 |
-| node_operations | 18 |
+| node_operations | 19 |
 | parcel_pricing | 12 |
 | parcel_shipment | 26 |
 | party_commercial | 39 |
