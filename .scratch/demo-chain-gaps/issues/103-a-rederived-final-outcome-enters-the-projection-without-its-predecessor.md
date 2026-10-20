@@ -1,7 +1,7 @@
 # 103 PS 终局重派生进追踪投影时不带前身，新旧两代终局同时算当前有效
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-dcg103（2026-10-19，见文末「完成记录」；隔离评审 0 阻断，修订见「评审记录」）。此前 ready-for-agent——2026-10-19 分诊为 A（挡演示/上线），批次见 [triage-2026-10-19](../triage-2026-10-19.md)。此前 needs-triage——2026-10-19 Claude Code 子代理立（票 [97](./97-demo-disclosure-policy-keeps-the-final-dimension-pending.md) 实现时读代码发现；没有实走，证据只是代码阅读，钉 `5f0aa66d`）。
+Status: resolved——2026-10-19 进 main（全量钉 `cc7fc206`：`scripts/test-full.sh` 153 ok / 0 FAIL；105、103、101 同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg103（2026-10-19，见文末「完成记录」；隔离评审 0 阻断，修订见「评审记录」）。此前 ready-for-agent——2026-10-19 分诊为 A（挡演示/上线），批次见 [triage-2026-10-19](../triage-2026-10-19.md)。此前 needs-triage——2026-10-19 Claude Code 子代理立（票 [97](./97-demo-disclosure-policy-keeps-the-final-dimension-pending.md) 实现时读代码发现；没有实走，证据只是代码阅读，钉 `5f0aa66d`）。
 Blocked by: 无
 地盘：`internal/visibilityexception/adapters/parcelshipment/derive_on_final_outcome.go`（终局译装器）；要裁的那一格可能还碰 PS 终局采用账的读口。
 出处：VE CONTEXT「被替代条目留档不参与派生」与「终局事实有效性变化也不能被伪装为人工重开」；PS 终局同源重派生（`FormParcelFinalHandler.rederive`，ADR-0117 纪律半「按来源声明的更正关系回指前版成链」）；[ADR-0138](../../../docs/adr/0138-voided-carrier-pickup-voids-the-label-service-final-as-a-third-ledger-record-and-rejudges-on-remaining-basis.md)（Proposed，终局失效）。
@@ -92,3 +92,7 @@ S–M（译装器一处加反查；若改 PS 读口则 M）。
 评审修订的提交：`7273a8ec`（重投真库用例）、`6bcf224b`（AT 盘点追记）、`810d6d4c`（票 114 补登）、本票面一笔。
 
 进 main 时（协调方）：PS 0027 在合入时仍空（票 101 未用迁移），已 `git mv` 为 `0027_final_outcome_version_unique.sql`；代码与注释不引用迁移号，只改了上文完成记录那一处。
+
+## 进 main 记录
+
+2026-10-19 协调方把分支 `claude-dcg103` 重放到 origin/main，与 105、103、101 同批；103 的迁移在合入时由 0028 改号为 0027（PS 0027 仍空）；机制清点在叠合后重生成；在干净树上对 `cc7fc206` 跑 `scripts/test-full.sh` 全量，153 ok、0 FAIL。

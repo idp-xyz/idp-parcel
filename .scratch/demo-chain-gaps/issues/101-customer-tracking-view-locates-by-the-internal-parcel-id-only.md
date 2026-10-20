@@ -1,7 +1,7 @@
 # 101 客户追踪视图只认正式包裹号，客户系统经首方渠道拿不到这个号
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg101（完成记录与评审记录见文末；隔离评审 0 阻断，非阻断已按评审记录处置）。此前 ready-for-agent——2026-10-19 分诊为 A（挡演示/上线），批次见 [triage-2026-10-19](../triage-2026-10-19.md)。此前 needs-triage——2026-10-19 Claude Code 子代理立（票 [96](./96-customer-tracking-view-has-no-first-party-customer-intake.md) 实现时发现）。
+Status: resolved——2026-10-19 进 main（全量钉 `cc7fc206`：`scripts/test-full.sh` 153 ok / 0 FAIL；105、103、101 同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg101（完成记录与评审记录见文末；隔离评审 0 阻断，非阻断已按评审记录处置）。此前 ready-for-agent——2026-10-19 分诊为 A（挡演示/上线），批次见 [triage-2026-10-19](../triage-2026-10-19.md)。此前 needs-triage——2026-10-19 Claude Code 子代理立（票 [96](./96-customer-tracking-view-has-no-first-party-customer-intake.md) 实现时发现）。
 Blocked by: 无
 地盘：VE 查阅口的定位（`internal/visibilityexception/adapters/http` 的 `CustomerTrackingViewIntake` 与查询键），或 PS 首方提交答复带回包裹号（`internal/parcelshipment/adapters/http`）；二选一或都做，看裁决。
 出处：[UC-VE-008](../../../docs/application/visibility-exception/UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md)「输入和结果语义」查询标识一行（「包裹内部引用、授权客户参考号或版本化外部标识；标识只用于定位候选，不是访问凭证」）与主流程步骤 2；[ADR-0139](../../../docs/adr/0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md) 决定四、五。
@@ -139,3 +139,7 @@ UC-PS-001 `AT-PS-101`–`105`，各自的 `Covers:` 落在：
   - 后进 main 的一方解冲突。
   - is03 若先进、README 索引成了生成物，ADR-0223 那一行重跑生成器得到，不手补。ADR-0140 Status 行末的「补充」前向指针按 is03 的新样式重放。
 - **复验**（修订后，钉 `694e6fd9`）：`go build ./...`、`go vet ./...`、`gofmt -l` 干净。`scripts/test-full.sh ./internal/parcelshipment/... ./cmd/parcel-api/... ./cmd/parcel-dispatch/... ./tests/bentocontract/... ./internal/architecture/...` 全绿。本轮只改注释与文档，没动行为，演示种子与 `submit-one-shipment.sh` 没动，不重走。
+
+## 进 main 记录
+
+2026-10-19 协调方把分支 `claude-dcg101` 重放到 origin/main，与 105、103、101 同批；机制清点在叠合后重生成；在干净树上对 `cc7fc206` 跑 `scripts/test-full.sh` 全量，153 ok、0 FAIL。

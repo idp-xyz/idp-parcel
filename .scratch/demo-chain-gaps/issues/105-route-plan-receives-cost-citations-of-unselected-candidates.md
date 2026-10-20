@@ -1,7 +1,7 @@
 # 105 两条以上候选都出价时，未选中候选的成本出处也交给计划，段号重复，初始路由计划形成报错
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-dcg105（2026-10-19 作者子代理，见文末「完成记录」；隔离评审一轮阻断 0，见文末「评审记录」；进 main 时由协调方转 resolved 并注合入 SHA）。此前 ready-for-agent——2026-10-19 分诊为 A（挡演示/上线），批次见 [triage-2026-10-19](../triage-2026-10-19.md)。此前 needs-triage——2026-10-19 Claude Code 作者子代理立（出自票 [routing-first-cut/20](../../routing-first-cut/issues/20-bound-cost-cards-fold-zones-through-the-parcel-postal-route.md) 的隔离评审；用户「你作为业务和系统专家自决……解决所有的问题」授权）。
+Status: resolved——2026-10-19 进 main（全量钉 `cc7fc206`：`scripts/test-full.sh` 153 ok / 0 FAIL；105、103、101 同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg105（2026-10-19 作者子代理，见文末「完成记录」；隔离评审一轮阻断 0，见文末「评审记录」；进 main 时由协调方转 resolved 并注合入 SHA）。此前 ready-for-agent——2026-10-19 分诊为 A（挡演示/上线），批次见 [triage-2026-10-19](../triage-2026-10-19.md)。此前 needs-triage——2026-10-19 Claude Code 作者子代理立（出自票 [routing-first-cut/20](../../routing-first-cut/issues/20-bound-cost-cards-fold-zones-through-the-parcel-postal-route.md) 的隔离评审；用户「你作为业务和系统专家自决……解决所有的问题」授权）。
 Blocked by: 无
 地盘：NR `adapters/parcelpricing/cost_source.go`（`LoadCandidateCosts` 的合成）、`ports` 的 `RouteCandidateCosts`、`application/create_initial_route.go`（`planRecord`）。
 出处：票 [routing-first-cut/10](../../routing-first-cut/issues/10-candidate-cost-from-leg-buy-evaluations.md) 完成记录「出处留痕：选中候选逐段……随计划 jsonb 一并落」；[ADR-0189](../../../docs/adr/0189-leg-pricing-zones-are-supplied-per-card-and-unbound-cards-take-a-registered-leg-zone.md) 文末补记越权风险点 6。
@@ -98,3 +98,7 @@ routing-first-cut/10（逐段成本出处随计划留痕）、routing-first-cut/
 - `go build ./...`、`go vet ./...` 干净；本分支改动的 Go 文件 `gofmt -l` 为空。
 - `scripts/test-full.sh`，跑的包：`./cmd/parcel-api/`、`./cmd/parcel-dispatch/`、`./cmd/parcel-network-register/`、`./internal/networkrouting/...`、`./internal/parcelshipment/adapters/networkrouting/`、`./internal/transportfulfillment/adapters/networkrouting/`、`./internal/visibilityexception/adapters/networkrouting/`、`./internal/architecture/...`，全部 ok。这组包是改动包的全部反向依赖，修订时用 `go list` 重新算过，和完成记录里那组一样。
 - 没跑全量，没重生成 `docs/product/MECHANISM-INVENTORY.md`；演示种子、迁移和接线都没改。
+
+## 进 main 记录
+
+2026-10-19 协调方把分支 `claude-dcg105` 重放到 origin/main，与 105、103、101 同批；机制清点在叠合后重生成；在干净树上对 `cc7fc206` 跑 `scripts/test-full.sh` 全量，153 ok、0 FAIL。
