@@ -21,7 +21,7 @@ func init() {
 				event: sainbox.BuyEvaluationRecordedEventType, position: positionPrimary, consumer: buyEvaluations,
 				sentinels: buyEvaluationRecordedUndecidedSentinels, label: "buy evaluation recorded",
 			},
-			// 排在供应商预期成本那一路之后：两路各认一个方向，次序沿用该扇出立起时的先后。
+			// 两路各认一个方向、互不读对方的结果，先后没有业务含义；偏移只为把次序写明——与主业务锚点同名次装配即拒。
 			{
 				event: sainbox.BuyEvaluationRecordedEventType, position: positionPrimary + 10, consumer: sellEvaluations,
 				sentinels: sellEvaluationRecordedUndecidedSentinels, label: "sell evaluation recorded",

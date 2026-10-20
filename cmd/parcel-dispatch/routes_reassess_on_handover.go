@@ -12,7 +12,7 @@ func init() {
 			return nil, err
 		}
 		return []routeLeg{
-			// 不靠它在扇出里的位置，理由同节点控制转出那一路；名次只保住此前的先后。
+			// 不靠它在扇出里的位置，理由同 routes_node_control_on_handover.go 那一路；先后没有业务含义，偏移只为把次序写明。
 			{
 				event: veinbox.TransportHandoverRegisteredEventType, position: positionPrimary + 20, consumer: nrHandover,
 				sentinels: reassessOnHandoverUndecidedSentinels, label: "reassess on handover",
