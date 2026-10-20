@@ -35,7 +35,8 @@ const (
 	PreAdviceWindowRegistered
 	// PreAdviceWindowExisting：同一行原样再登（ADR-0085「重放答已有结果」），回显的是第一次落下的那一行。
 	PreAdviceWindowExisting
-	// PreAdviceWindowOverlapping：与在册行区间重叠，什么也没落，回显撞上的那一行。册只增，没有替换：要换值，登一段不重叠的。
+	// PreAdviceWindowOverlapping：与在册行区间重叠，什么也没落，回显撞上的那一行。册只增，没有替换：要换值，登一段不重叠的；撞上的
+	// 是开放终点的那一行时，先经收口编排（ClosePreAdviceWindowHandler）给它收口，再登起点不早于收口时刻的一段。
 	PreAdviceWindowOverlapping
 )
 

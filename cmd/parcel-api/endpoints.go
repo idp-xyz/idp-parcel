@@ -196,6 +196,7 @@ func assembleBusinessEndpoints(
 	departureGatePreview tfhttp.DepartureGatePreviewer,
 	deliveryScopeRecords nodeopshttp.DeliveryScopeCatalogueReader,
 	customerTrackingView *visibilityhttp.CustomerTrackingViewIntake,
+	preAdviceWindowClosure nodeopshttp.PreAdviceWindowCloser,
 ) []httpapi.BusinessEndpoint {
 	// 缺省朝拦：真渠道与隔离入参都缺席时，下面这组变量全取未配置即拒。
 	//
@@ -774,5 +775,7 @@ func assembleBusinessEndpoints(
 		{Pattern: "/node-operations-delivery-pre-advices/{preAdviceId}", Handler: nodeopshttp.NewQueryDeliveryPreAdviceEndpoint(nodeOperationsCatalogueIntake, deliveryScopeRecords)},
 		{Pattern: "/node-operations-delivery-handover-notes", Handler: nodeopshttp.NewQueryDeliveryHandoverNotesEndpoint(nodeOperationsCatalogueIntake, deliveryScopeRecords)},
 		{Pattern: "/node-operations-delivery-handover-notes/{noteId}", Handler: nodeopshttp.NewQueryDeliveryHandoverNoteEndpoint(nodeOperationsCatalogueIntake, deliveryScopeRecords)},
+		// 预报有效时窗收口口（票 ps-external-mark-relations/14）：给开放终点的那一行追加收口，与时窗登记口同一能力面、同一 Intake。
+		{Pattern: "/node-operations-pre-advice-window-closures", Handler: nodeopshttp.NewClosePreAdviceWindowEndpoint(operatorRegistries.nodeOperations, preAdviceWindowClosure)},
 	}
 }

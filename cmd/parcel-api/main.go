@@ -554,6 +554,11 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 预报有效时窗收口口（票 ps-external-mark-relations/14）。
+	preAdviceWindowClosure, err := buildPreAdviceWindowClosure(db)
+	if err != nil {
+		return err
+	}
 	veRegistration, err := buildVERegistrationOrchestration(db)
 	if err != nil {
 		return err
@@ -823,6 +828,7 @@ func run(logger *slog.Logger) error {
 			departureGatePreview,
 			deliveryScopeRecords,
 			customerTrackingView,
+			preAdviceWindowClosure,
 		)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
