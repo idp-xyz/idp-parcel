@@ -1,7 +1,7 @@
 # 53 先于段登记的移动事实永远进不了全程追踪
 
 Category: enhancement
-Status: needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [33](./33-movement-fact-recorded-envelope-and-tracking-projection.md) 的完成记录（代决与越权风险点）。
+Status: ready-for-agent——2026-10-19 分诊为 A（挡演示/上线），批次见 [triage-2026-10-19](../triage-2026-10-19.md)。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [33](./33-movement-fact-recorded-envelope-and-tracking-projection.md) 的完成记录（代决与越权风险点）。
 Blocked by: 无
 出处：[ADR-0205](../../../docs/adr/0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md) 决定四（段不在册照记）与文末补记越权风险点 14。
 

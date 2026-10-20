@@ -10,6 +10,7 @@ import {
   partyRelationshipStatusFilterOptions,
   sortPartyRelationships,
 } from './party-relationship-list';
+import { labelOf, partyRoleLabels } from './presentation';
 
 // 本文件钉的是关系册的筛选与排序都只在已取回的行上做（README 列表页上列通则：不下推成查询参数），
 // 且「筛出为空」与「登记册为空」是两个事实——票 09 完成判据点名的那一格：关系签筛「候选关系」得筛空文案而不是「0 段」。
@@ -84,6 +85,17 @@ test('角色与状态筛选精确匹配封闭词且可叠加', () => {
   deepEqual(ids(filterPartyRelationships(rows, { ...all, status: 'CANDIDATE' })), []);
 });
 
+// Covers: 票 16——授权交付方在关系册上显中文显示名而不是原码，角色筛选筛得出它的行。
+test('授权交付方显中文显示名、按它筛得出行', () => {
+  equal(labelOf(partyRoleLabels, 'AUTHORIZED_DELIVERING_PARTY'), '授权交付方');
+  const delivery = record({
+    relationshipId: 'SYN-REL-05',
+    role: 'AUTHORIZED_DELIVERING_PARTY',
+    scope: 'customerAccount=SYN-ACCOUNT-01&node=SYN-NODE-SHA-HUB',
+  });
+  deepEqual(ids(filterPartyRelationships([...rows, delivery], { ...all, role: 'AUTHORIZED_DELIVERING_PARTY' })), ['SYN-REL-05']);
+});
+
 // Covers: 默认按生效起新→旧（票 09 裁决 1 同判据）；关系标识升序按字典序。排序不改原数组。
 test('两种排序各按其键，且不改原数组', () => {
   const before = ids(rows);
@@ -119,11 +131,11 @@ test('筛选与排序选项表', () => {
   equal(partyRelationshipSortOptions[0].value, 'effective-start-desc');
   deepEqual(
     partyRelationshipRoleFilterOptions.map((option) => option.value),
-    ['ALL', 'CUSTOMER', 'SUPPLIER', 'CARRIER_AGENT', 'RESELLER', 'ACCOUNT_HOLDER'],
+    ['ALL', 'CUSTOMER', 'SUPPLIER', 'CARRIER_AGENT', 'RESELLER', 'ACCOUNT_HOLDER', 'AUTHORIZED_DELIVERING_PARTY'],
   );
   deepEqual(
     partyRelationshipRoleFilterOptions.map((option) => option.label),
-    ['全部角色', '客户', '供应商', '承运商代理', '转售', '渠道账号持有'],
+    ['全部角色', '客户', '供应商', '承运商代理', '转售', '渠道账号持有', '授权交付方'],
   );
   deepEqual(
     partyRelationshipStatusFilterOptions.map((option) => option.value),

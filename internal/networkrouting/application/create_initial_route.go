@@ -441,7 +441,7 @@ func (handler *CreateInitialRouteHandler) judgeParcel(
 	switch ranking.Outcome() {
 	case domain.RankingSelected:
 		selected, _ := ranking.Selected()
-		return handler.planRecord(ctx, key, selected, candidates, evidence, costs.Citations, judgedAt)
+		return handler.planRecord(ctx, key, selected, candidates, evidence, costs.CitationsOf(selected), judgedAt)
 	case domain.RankingNoQualifiedCandidate:
 		return handler.noRouteRecord(key, candidates, evidence, judgedAt)
 	case domain.RankingTied:
@@ -468,6 +468,9 @@ func (handler *CreateInitialRouteHandler) judgeParcel(
 
 // planRecord 为选中候选形成待提交的计划记录。选中候选的逐段成本出处随计划一并留痕
 // （票 routing-first-cut/10）：审计回得到原币与汇率，不必重放整条取数链。
+//
+// 交进来的只是选中候选那一份。未选中候选的金额作为候选成本事实参与了排序，出处却不随计划留痕：计划的出处只按段号
+// 对段链，没有候选维（票 demo-chain-gaps/105）。
 func (handler *CreateInitialRouteHandler) planRecord(
 	ctx context.Context,
 	key domain.InitialRouteJudgmentKey,

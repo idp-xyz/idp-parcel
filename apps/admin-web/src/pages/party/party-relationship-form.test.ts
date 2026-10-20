@@ -137,6 +137,34 @@ test('本地只报编码层问题', () => {
   );
 });
 
+// Covers: 票 16——选授权交付方时适用范围由「客户账户」「节点」两格拼成服务端认的那一种串，手填的 scope 残值不进
+// 载荷；两格拼不出（账户空）是编码失败：scope 键缺席、问题报在 scope 路径上，表单不送。
+test('授权交付方：适用范围由两格拼，拼不出不送', () => {
+  const delivery = (over: Partial<PartyRelationshipDraft>) =>
+    draft({ role: 'AUTHORIZED_DELIVERING_PARTY', scope: 'SYN-SCOPE-CN-01', ...over });
+
+  equal(
+    partyRelationshipPayloadOf(delivery({ scopeCustomerAccount: 'SYN-ACCOUNT-01' }), 'UTC').relationships[0].scope,
+    'customerAccount=SYN-ACCOUNT-01',
+  );
+  const narrowed = delivery({ scopeCustomerAccount: 'A&B=C', scopeNode: 'N/1 2' });
+  equal(partyRelationshipPayloadOf(narrowed, 'UTC').relationships[0].scope, 'customerAccount=A%26B%3DC&node=N%2F1+2');
+  deepEqual(partyRelationshipLocalProblems(narrowed, 'UTC'), {});
+
+  const missing = delivery({ scopeCustomerAccount: '', scopeNode: 'SYN-NODE-SHA-HUB' });
+  equal('scope' in partyRelationshipPayloadOf(missing, 'UTC').relationships[0], false);
+  deepEqual(partyRelationshipLocalProblems(missing, 'UTC'), {
+    'relationships[0].scope': ['客户账户要填：授权交付方的适用范围至少收到一个客户账户'],
+  });
+});
+
+// Covers: 其余角色照旧——scope 原样带，授权交付方那两格的残值既不进载荷也不报问题。
+test('其余角色的适用范围照旧原样带', () => {
+  const other = draft({ role: 'CUSTOMER', scope: ' SYN-SCOPE-CN-01 ', scopeCustomerAccount: '', scopeNode: ' ' });
+  equal(partyRelationshipPayloadOf(other, 'UTC').relationships[0].scope, ' SYN-SCOPE-CN-01 ');
+  deepEqual(partyRelationshipLocalProblems(other, 'UTC'), {});
+});
+
 // Covers: 建议修订号按 relationshipId 数关系册——在册取最新 + 1，不在册 / 列表 null / 标识空一律 1；按原串比不裁空白。
 test('建议修订号取关系册最新修订加一，不在册或列表未取到为一', () => {
   const rows: PartyRelationshipRecord[] = [
@@ -173,6 +201,7 @@ test('角色选项从 partyRoleLabels 派生', () => {
     Object.keys(partyRoleLabels),
   );
   deepEqual(options[0], { value: 'CUSTOMER', label: '客户 · CUSTOMER' });
+  deepEqual(options[options.length - 1], { value: 'AUTHORIZED_DELIVERING_PARTY', label: '授权交付方 · AUTHORIZED_DELIVERING_PARTY' });
 });
 
 // Covers: 认领的路径表与 partyRelationshipDocument 的键（含嵌套的 approval 各格）一一对应。

@@ -10,7 +10,8 @@ import {
   type PartyRelationshipRecord,
 } from './api';
 import { problemNote, registrationTitles } from './presentation';
-import { Field, ReferencePickerFor, selectClass } from './PublicationFormFields';
+import { Field, ReferencePickerFor, fieldLabel, selectClass } from './PublicationFormFields';
+import { authorizedDeliveringPartyRole } from './authorized-delivery-scope';
 import {
   RevisionField,
   SnapshotJsonDetails,
@@ -19,6 +20,7 @@ import {
   useRegistrationForm,
 } from './party-registration-fields';
 import {
+  deliveryScopeSpellingOf,
   emptyPartyRelationshipDraft,
   partyRelationshipLocalProblems,
   partyRelationshipPayloadOf,
@@ -39,6 +41,9 @@ import {
  * 双方用 ReferencePickerFor 从参与方册选：候选显名称 · 标识 · 状态，不按状态过滤，读面不可用退回手填。候选取的是
  * 页面持有的那份参与方列表答案，不另读——页面在登记册答 REGISTERED 后重取，刚在「参与方身份」册登进去的那一个随
  * 新答案立刻出现在这里的候选里，两只 Picker 不再各自重读一遍（票 10 评审 N5）。
+ *
+ * 选了授权交付方时，适用范围一格换成「客户账户」「节点（可选）」两个输入，下面显出将送的那一串：这一角色的范围
+ * 服务端只认一种拼法，由 authorized-delivery-scope.ts 拼（票 ps-external-mark-relations/16）。别的角色照旧手填引用。
  */
 export interface PartyRelationshipRegistrationFormProps {
   /** 页面已取回的关系列表（给修订号建议用）；没取到传 null，建议一律为 1。 */
@@ -71,6 +76,7 @@ export function PartyRelationshipRegistrationForm({
   const { draft, patch, problems, locked, timeZone } = form;
 
   const known = knownRelationships?.find((row) => row.relationshipId === draft.relationshipId);
+  const deliveryScope = draft.role === authorizedDeliveringPartyRole ? deliveryScopeSpellingOf(draft) : null;
 
   return (
     <div className="flex-1 overflow-auto p-4 flex flex-col gap-4">
@@ -155,15 +161,50 @@ export function PartyRelationshipRegistrationForm({
               </span>
             </Field>
 
-            <Field label="适用范围 *" path="relationships[0].scope" problems={problems}>
-              <Input
-                value={draft.scope}
-                readOnly={locked}
-                className="font-mono text-[13px]"
-                placeholder="商业范围引用"
-                onChange={(event) => patch({ scope: event.target.value })}
-              />
-            </Field>
+            {deliveryScope ? (
+              <Field label="适用范围 *" path="relationships[0].scope" problems={problems} as="div">
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="block">
+                    <span className={fieldLabel}>客户账户 *</span>
+                    <Input
+                      value={draft.scopeCustomerAccount}
+                      readOnly={locked}
+                      className="font-mono text-[13px]"
+                      placeholder="如 SYN-ACCOUNT-01"
+                      onChange={(event) => patch({ scopeCustomerAccount: event.target.value })}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className={fieldLabel}>节点（可选）</span>
+                    <Input
+                      value={draft.scopeNode}
+                      readOnly={locked}
+                      className="font-mono text-[13px]"
+                      placeholder="留空即不收窄到节点"
+                      onChange={(event) => patch({ scopeNode: event.target.value })}
+                    />
+                  </label>
+                </div>
+                <span className="block text-[11px] text-idpxyz-textMuted mt-1">
+                  持有方是交付方，相对方是这个客户账户所属的参与方；范围收到这个客户账户，可再收到一个节点。
+                  {deliveryScope.ok ? (
+                    <>
+                      {' '}将送 <span className="font-mono break-all">{deliveryScope.scope}</span>
+                    </>
+                  ) : null}
+                </span>
+              </Field>
+            ) : (
+              <Field label="适用范围 *" path="relationships[0].scope" problems={problems}>
+                <Input
+                  value={draft.scope}
+                  readOnly={locked}
+                  className="font-mono text-[13px]"
+                  placeholder="商业范围引用"
+                  onChange={(event) => patch({ scope: event.target.value })}
+                />
+              </Field>
+            )}
 
             <Field label="依据 *" path="relationships[0].basis" problems={problems}>
               <Input

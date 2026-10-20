@@ -203,7 +203,11 @@ func (adapter *RouteCandidateCostAdapter) LoadCandidateCosts(
 		if err != nil {
 			return none, err
 		}
-		out.Citations = append(out.Citations, citations...)
+		for _, citation := range citations {
+			out.Citations = append(out.Citations, nrports.CandidateLegCostCitation{
+				Candidate: path.Candidate, PlannedLegCostCitation: citation,
+			})
+		}
 		switch {
 		case pending:
 			fact, err := nrdomain.NewPendingCandidateCost(path.Candidate)

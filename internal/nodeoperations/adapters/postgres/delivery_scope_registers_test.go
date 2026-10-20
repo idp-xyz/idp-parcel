@@ -407,8 +407,8 @@ func windowOf(t *testing.T, from, until time.Time, grace time.Duration) domain.P
 	return window
 }
 
-// Covers: ADR-0212 决定二末项——时窗行只增；同租户生效区间重叠在登记时拒（库面排他约束），撞上的那一行回显，调用方据此分重放
-// 与重叠；首尾相接的下一段登得进；按时点读生效行，那一刻没有生效行答没有。
+// Covers: ADR-0212 决定二末项——时窗行只增；同租户生效区间重叠在登记时拒，撞上的那一行回显，调用方据此分重放与重叠；首尾相接的
+// 下一段登得进；按时点读生效行，那一刻没有生效行答没有。
 func TestValidityWindowsRefuseOverlapAtRegistration(t *testing.T) {
 	_, _, windows, transactor := newDeliveryScopeRegisters(t)
 	ctx := context.Background()
@@ -460,7 +460,7 @@ func TestValidityWindowsRefuseOverlapAtRegistration(t *testing.T) {
 	}
 }
 
-// Covers: 重叠拒在库面——两笔并发登记各自查不到对方时，排他约束只放进一笔，另一笔撞上回显，不靠应用层先查后写。
+// Covers: 重叠在并发下也只放进一笔——两笔并发登记各自查不到对方时，同租户的咨询锁让后一笔在前一笔提交之后才查，另一笔撞上回显。
 func TestConcurrentOverlappingWindowsLandOnlyOnce(t *testing.T) {
 	_, _, windows, transactor := newDeliveryScopeRegisters(t)
 	jan := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)

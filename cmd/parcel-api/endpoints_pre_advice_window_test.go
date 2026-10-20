@@ -1,5 +1,8 @@
 package main
 
 func init() {
-	registerUnwired(preAdviceWindowWiring{preAdviceWindowRegistration: unwiredPreAdviceWindowRegistration{}})
+	registerUnwired(preAdviceWindowWiring{
+		preAdviceWindowRegistration: unwiredPreAdviceWindowRegistration{},
+		preAdviceWindowClosure:      unwiredPreAdviceWindowClosure{},
+	})
 }

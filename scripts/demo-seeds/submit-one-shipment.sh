@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # 步 0（票 seed-completeness/04）：对已经在跑的 parcel-api 打一次真提交，断言答复是已提交，
 # 再从委托查阅把同一笔读回来。
+# 答复的 parcels 逐件带回包裹号，配草案里的客户包裹参考（ADR-0223）：本脚本断言草案那一件带回来了，末行打出包裹号——
+# 客户追踪视图 GET /customer-tracking-view?parcel=<包裹号> 用的就是它，不用再经操作者渠道去读。
 #
 # 提交走首方客户渠道（票 first-party-api/00，ADR-0139）：先替合成货主系统向演示发行方取一枚客户端凭据令牌
 # （operator-channel/customer-token.sh；设了 IDP_PARCEL_CUSTOMER_TOKEN 就直接用它），再带 Bearer 令牌提交。载荷里的
@@ -78,9 +80,9 @@ post_code="$(curl -sS -o "$post_file" -w '%{http_code}' -X POST \
   -H 'Content-Type: application/json' -H "Authorization: Bearer ${token}" \
   --data "$body" "${base}/shipment-requests")"
 
-python3 - "$post_code" "$post_file" "$access_request" <<'PY'
+python3 - "$post_code" "$post_file" "$access_request" "$parcel_ref" <<'PY'
 import json, sys
-code, path, ref = sys.argv[1], sys.argv[2], sys.argv[3]
+code, path, ref, parcel_ref = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 raw = open(path, encoding="utf-8").read()
 if code == "401":
     sys.exit("提交口 401：首方客户端令牌没过校验（发行方、受众或有效期）。本脚本不绕过。应答：\n" + raw)
@@ -95,11 +97,15 @@ if body.get("outcome") != "SUBMITTED":
 request_id = body.get("shipmentRequestId") or ""
 if not request_id:
     sys.exit("201 里没有 shipmentRequestId。应答：\n" + raw)
-open(path, "w", encoding="utf-8").write(request_id + "\n" + ref + "\n")
+parcels = body.get("parcels") or []
+if len(parcels) != 1 or parcels[0].get("customerParcelReference") != parcel_ref or not parcels[0].get("parcelId"):
+    sys.exit(f"201 的 parcels 没有把草案那一件（{parcel_ref}）连同包裹号带回来。应答：\n" + raw)
+open(path, "w", encoding="utf-8").write(request_id + "\n" + ref + "\n" + parcels[0]["parcelId"] + "\n")
 PY
 
 request_id="$(sed -n '1p' "$post_file")"
 ref="$(sed -n '2p' "$post_file")"  # 来源请求键：首方族由接入请求标识铸成
+parcel_id="$(sed -n '3p' "$post_file")"
 
 list_file="$(mktemp)"
 trap 'rm -f "$post_file" "$list_file"' EXIT
@@ -124,9 +130,9 @@ detail_file="$(mktemp)"
 trap 'rm -f "$post_file" "$list_file" "$detail_file"' EXIT
 detail_code="$(curl -sS -o "$detail_file" -w '%{http_code}' \
   --get "${base}/shipment-request-views" --data-urlencode "shipmentRequestId=${request_id}")"
-python3 - "$detail_code" "$detail_file" "$request_id" "$ref" <<'PY'
+python3 - "$detail_code" "$detail_file" "$request_id" "$ref" "$parcel_id" "$parcel_ref" <<'PY'
 import json, sys
-code, path, request_id, ref = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+code, path, request_id, ref, parcel_id, parcel_ref = sys.argv[1:7]
 raw = open(path, encoding="utf-8").read()
 if code == "403":
     sys.exit("委托详情 403：读 Intake 仍未配置。本脚本不绕过。应答：\n" + raw)
@@ -138,5 +144,8 @@ if body.get("outcome") != "REQUEST_VIEW" or request.get("shipmentRequestId") != 
     sys.exit(f"详情不是这一笔已提交委托。应答：\n" + raw)
 if request.get("sourceRequestKey") != ref:
     sys.exit(f"详情来源键 = {request.get('sourceRequestKey')!r}，要 {ref!r}。应答：\n" + raw)
-print(f"已提交 {request_id} 来源键 {ref}；列表与详情都读到 SUBMITTED")
+declared = [parcel.get("parcelId") for parcel in request.get("declaredParcels") or []]
+if declared != [parcel_id]:
+    sys.exit(f"详情里的声明包裹 = {declared!r}，要提交答复带回的 [{parcel_id!r}]。应答：\n" + raw)
+print(f"已提交 {request_id} 来源键 {ref}；列表与详情都读到 SUBMITTED；包裹号 {parcel_id}（客户包裹参考 {parcel_ref}）")
 PY

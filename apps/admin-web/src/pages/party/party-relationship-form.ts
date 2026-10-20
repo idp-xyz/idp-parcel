@@ -11,8 +11,13 @@
 // 本地，两种情形都不让一个零时刻过线。
 //
 // 各格不裁首尾空白、载荷不带租户格，理由同 business-party-form.ts。
+//
+// 适用范围一格原样带，只有授权交付方例外：它的范围服务端只认一种拼法，手写查询串容易拼成第二种写法而被拒，所以
+// 这一角色改填客户账户与节点两格，由 authorized-delivery-scope.ts 拼；拼不出（如账户空）是编码失败，与修订号编不出
+// 同办。
 
 import type { PartyRelationshipRecord } from './api';
+import { authorizedDeliveringPartyRole, spellAuthorizedDeliveryScope } from './authorized-delivery-scope';
 import { wallTimeToRfc3339 } from '../moment';
 import { partyRoleLabels } from './presentation';
 import { revisionOf, suggestedNextRevision } from './registration-form';
@@ -26,7 +31,12 @@ export interface PartyRelationshipDraft {
   counterparty: string;
   /** partyRoleLabels 的键之一；空串是「未选」，照送让服务端点名，表单不预选。 */
   role: string;
+  /** 适用范围原值，授权交付方以外的角色用；选授权交付方时不进载荷，切回别的角色时原值还在。 */
   scope: string;
+  /** 授权交付方的适用范围收到的客户账户原值；只在选了这一角色时用。 */
+  scopeCustomerAccount: string;
+  /** 授权交付方的适用范围可再收到的节点原值；留空即不收窄到节点。 */
+  scopeNode: string;
   basis: string;
   /** `datetime-local` 原值（操作者本地墙钟）。 */
   effectiveStartsAt: string;
@@ -51,7 +61,8 @@ export interface PartyRelationshipRegistrationItem {
   holder: string;
   counterparty: string;
   role: string;
-  scope: string;
+  /** 授权交付方的两格拼不出时缺席，由 partyRelationshipLocalProblems 拦在送之前。 */
+  scope?: string;
   basis: string;
   effectiveStartsAt?: string;
   effectiveEndsAt?: string;
@@ -70,6 +81,8 @@ export function emptyPartyRelationshipDraft(): PartyRelationshipDraft {
     counterparty: '',
     role: '',
     scope: '',
+    scopeCustomerAccount: '',
+    scopeNode: '',
     basis: '',
     effectiveStartsAt: '',
     effectiveEndsAt: '',
@@ -101,6 +114,18 @@ export function partyRoleOptions(): PickerOption[] {
   return Object.entries(partyRoleLabels).map(([code, label]) => ({ value: code, label: `${label} · ${code}` }));
 }
 
+/** 授权交付方那两格的拼法结果；组件拿它显「将送的适用范围」，载荷与问题表也从它取，三处不各拼一遍。 */
+export function deliveryScopeSpellingOf(draft: PartyRelationshipDraft) {
+  return spellAuthorizedDeliveryScope({ customerAccount: draft.scopeCustomerAccount, node: draft.scopeNode });
+}
+
+/** 本草稿送出去的适用范围：授权交付方由两格拼，拼不出 → undefined（键缺席）；其余角色原样带 scope。 */
+function scopeOf(draft: PartyRelationshipDraft): string | undefined {
+  if (draft.role !== authorizedDeliveringPartyRole) return draft.scope;
+  const spelled = deliveryScopeSpellingOf(draft);
+  return spelled.ok ? spelled.scope : undefined;
+}
+
 // 墙钟留空 → undefined（键缺席）；换出来 → RFC 3339；换不出来也 → undefined，由问题表拦住不送。
 function momentOf(wallTime: string, timeZone: string): string | undefined {
   if (wallTime.trim() === '') return undefined;
@@ -120,9 +145,10 @@ export function partyRelationshipPayloadOf(
     holder: draft.holder,
     counterparty: draft.counterparty,
     role: draft.role,
-    scope: draft.scope,
     basis: draft.basis,
   };
+  const scope = scopeOf(draft);
+  if (scope !== undefined) item.scope = scope;
   const revision = revisionOf(draft.revision);
   if (revision !== undefined) item.revision = revision;
   const startsAt = momentOf(draft.effectiveStartsAt, timeZone);
@@ -139,8 +165,9 @@ export function partyRelationshipPayloadOf(
 }
 
 /**
- * 本地能判的**编码层**问题，按 JSON 路径归组；空对象即可送。修订号编不进正整数、各时刻填了却换不成 RFC 3339；
- * 批准时刻只在勾了已批准时才看——不勾时那一格根本不进载荷。角色未选、双方为空、区间倒置都是服务端的话。
+ * 本地能判的**编码层**问题，按 JSON 路径归组；空对象即可送。修订号编不进正整数、各时刻填了却换不成 RFC 3339、
+ * 授权交付方的两格拼不成那一种适用范围；批准时刻只在勾了已批准时才看——不勾时那一格根本不进载荷。角色未选、
+ * 双方为空、区间倒置都是服务端的话。
  */
 export function partyRelationshipLocalProblems(
   draft: PartyRelationshipDraft,
@@ -149,6 +176,10 @@ export function partyRelationshipLocalProblems(
   const problems: Record<string, string[]> = {};
   if (revisionOf(draft.revision) === undefined) {
     problems['relationships[0].revision'] = ['修订号要填正整数'];
+  }
+  if (draft.role === authorizedDeliveringPartyRole) {
+    const spelled = deliveryScopeSpellingOf(draft);
+    if (!spelled.ok) problems['relationships[0].scope'] = spelled.problems;
   }
   const unparseable = (wallTime: string) => wallTime.trim() !== '' && wallTimeToRfc3339(wallTime, timeZone) === null;
   if (unparseable(draft.effectiveStartsAt)) {

@@ -57,3 +57,47 @@ func buildPreAdviceWindowRegistration(db *bentopg.DB) (nodeopshttp.PreAdviceWind
 	}
 	return transactionalPreAdviceWindowRegistrar{transactor: db.Transactor(), inner: handler}, nil
 }
+
+// transactionalPreAdviceWindowCloser 把每次时窗收口包进一笔事务，理由同 transactionalPreAdviceWindowRegistrar。
+type transactionalPreAdviceWindowCloser struct {
+	transactor bentoapp.Transactor
+	inner      *nodeopsapp.ClosePreAdviceWindowHandler
+}
+
+var _ nodeopshttp.PreAdviceWindowCloser = transactionalPreAdviceWindowCloser{}
+
+func (closer transactionalPreAdviceWindowCloser) Handle(
+	ctx context.Context,
+	command nodeopsapp.ClosePreAdviceWindowCommand,
+) (nodeopsapp.PreAdviceWindowClosureResult, error) {
+	var result nodeopsapp.PreAdviceWindowClosureResult
+	err := closer.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		handled, handleErr := closer.inner.Handle(txCtx, command)
+		if handleErr != nil {
+			return handleErr
+		}
+		result = handled
+		return nil
+	})
+	if err != nil {
+		return nodeopsapp.PreAdviceWindowClosureResult{}, err
+	}
+	return result, nil
+}
+
+// buildPreAdviceWindowClosure 装配 `/node-operations-pre-advice-window-closures` 背后的真编排（票 ps-external-mark-relations/14）。缝
+// 与登记口同一本册、同一只时钟；受控 CLI parcel-node-operations-register 的 pre-advice-window-closure 族装的是同一个编排。
+func buildPreAdviceWindowClosure(db *bentopg.DB) (nodeopshttp.PreAdviceWindowCloser, error) {
+	windows, err := nopostgres.NewPreAdviceWindows(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: pre-advice windows: %w", err)
+	}
+	handler, err := nodeopsapp.NewClosePreAdviceWindowHandler(nodeopsapp.ClosePreAdviceWindowDeps{
+		Windows: windows,
+		Clock:   systemClock{},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: pre-advice window closure: %w", err)
+	}
+	return transactionalPreAdviceWindowCloser{transactor: db.Transactor(), inner: handler}, nil
+}

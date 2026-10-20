@@ -9,23 +9,32 @@ import (
 
 type preAdviceWindowWiring struct {
 	preAdviceWindowRegistration nodeopshttp.PreAdviceWindowRegistrar
+	preAdviceWindowClosure      nodeopshttp.PreAdviceWindowCloser
 }
 
 func init() {
 	registerEndpoints(endpointFeature[preAdviceWindowWiring]{
 		lines: map[string]endpointLine{
 			"/node-operations-pre-advice-window-registrations": {method: http.MethodPost, face: registryWriteFace()},
+			"/node-operations-pre-advice-window-closures":      {method: http.MethodPost, face: registryWriteFace()},
 		},
 		build: func(sources endpointSources) (preAdviceWindowWiring, error) {
 			// 预报有效时窗登记口（ADR-0212 决定二末项）。
 			registration, err := buildPreAdviceWindowRegistration(sources.db)
-			return preAdviceWindowWiring{preAdviceWindowRegistration: registration}, err
+			if err != nil {
+				return preAdviceWindowWiring{}, err
+			}
+			// 预报有效时窗收口口（票 ps-external-mark-relations/14）。
+			closure, err := buildPreAdviceWindowClosure(sources.db)
+			return preAdviceWindowWiring{preAdviceWindowRegistration: registration, preAdviceWindowClosure: closure}, err
 		},
 		mount: func(channels endpointChannels, wiring preAdviceWindowWiring) []httpapi.BusinessEndpoint {
 			return []httpapi.BusinessEndpoint{
 				// 预报有效时窗登记口（ADR-0212 决定二末项；ADR-0085 决定一）：节点作业登记写面的第一格，挂操作者渠道的登记册 Intake，写开关换
 				// 不了它（ADR-0150 决定三）。事物词取登记 CLI parcel-node-operations-register 的族名 pre-advice-window。
 				{Pattern: "/node-operations-pre-advice-window-registrations", Handler: nodeopshttp.NewRegisterPreAdviceWindowEndpoint(channels.operatorRegistries.nodeOperations, wiring.preAdviceWindowRegistration)},
+				// 预报有效时窗收口口（票 ps-external-mark-relations/14）：给开放终点的那一行追加收口，与时窗登记口同一能力面、同一 Intake。
+				{Pattern: "/node-operations-pre-advice-window-closures", Handler: nodeopshttp.NewClosePreAdviceWindowEndpoint(channels.operatorRegistries.nodeOperations, wiring.preAdviceWindowClosure)},
 			}
 		},
 	})

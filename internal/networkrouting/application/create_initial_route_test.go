@@ -409,6 +409,129 @@ func TestTheCarriedProjectionReachesTheCostSource(t *testing.T) {
 	}
 }
 
+// citingCosts 照 passthroughCosts 交回证据里的事实，另按候选交回各自逐段的出处：几条候选都出价时取数侧就这样交。
+type citingCosts struct {
+	citations []ports.CandidateLegCostCitation
+}
+
+func (costs citingCosts) LoadCandidateCosts(
+	_ context.Context,
+	_ domain.InitialRouteJudgmentKey,
+	evidence ports.InitialRouteEvidence,
+	_ ports.RequestCarriedContent,
+) (ports.RouteCandidateCosts, error) {
+	return ports.RouteCandidateCosts{Facts: evidence.CandidateCosts, Citations: costs.citations}, nil
+}
+
+// legCostCitations 给一条候选逐段造出处。评价标识带候选名，计划里留下的是谁的一眼认得出。
+func legCostCitations(t *testing.T, candidate string, legs int) []ports.CandidateLegCostCitation {
+	t.Helper()
+	citations := make([]ports.CandidateLegCostCitation, 0, legs)
+	for ordinal := 1; ordinal <= legs; ordinal++ {
+		citation, err := domain.NewPlannedLegCostCitation(domain.PlannedLegCostCitationSpec{
+			Ordinal:            ordinal,
+			EvaluationID:       "EST-" + candidate + "-" + string(rune('0'+ordinal)),
+			PlanReference:      "plan-" + candidate + "/v1",
+			ComparisonAmount:   "5",
+			ComparisonCurrency: "CNY",
+		})
+		if err != nil {
+			t.Fatalf("new leg cost citation: %v", err)
+		}
+		citations = append(citations, ports.CandidateLegCostCitation{
+			Candidate:              value(t, domain.NewCandidateID, candidate),
+			PlannedLegCostCitation: citation,
+		})
+	}
+	return citations
+}
+
+// legChain 造一条首尾相接的节点间段链，段数由调用方定。
+func legChain(t *testing.T, legs int) []domain.PlannedLeg {
+	t.Helper()
+	window, err := domain.NewPlannedTimeWindow(routeJudgedAt, routeJudgedAt.Add(48*time.Hour),
+		value(t, domain.NewWindowBasisReference, "CALENDAR-V1/BUFFER-V1"))
+	if err != nil {
+		t.Fatalf("new window: %v", err)
+	}
+	chain := make([]domain.PlannedLeg, 0, legs)
+	from := "node-origin"
+	for ordinal := 1; ordinal <= legs; ordinal++ {
+		to := "node-" + string(rune('0'+ordinal))
+		leg, err := domain.NewPlannedLeg(domain.PlannedLegSpec{
+			From:        value(t, domain.NewPlanNodeReference, from),
+			To:          value(t, domain.NewPlanNodeReference, to),
+			Responsible: value(t, domain.NewResponsiblePartyReference, "party-1"),
+			Window:      window,
+		})
+		if err != nil {
+			t.Fatalf("new leg: %v", err)
+		}
+		chain = append(chain, leg)
+		from = to
+	}
+	return chain
+}
+
+// Covers: `AT-NR-073`（票 demo-chain-gaps/105）——两条候选都已出价、选中便宜的那条：计划形成，逐段成本出处只有选中候选
+// 那几段，段号按它的段链计。另一条的出处不随计划留痕：段数相同时它的第 1 段与选中候选的第 1 段同一个段号，段数更多时它
+// 的末段还越过选中候选的段链，两样都会让计划形成拒收、整次处理报错。
+func TestTwoPricedCandidatesFormAPlanCitingOnlyTheSelectedOne(t *testing.T) {
+	for name, test := range map[string]struct{ selectedLegs, otherLegs int }{
+		"段数相同":     {1, 1},
+		"选中那条段数更少": {1, 2},
+		"选中那条段数更多": {2, 1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fixture := newRouteFixture(t)
+			fixture.handler = application.NewCreateInitialRouteHandler(application.CreateInitialRouteDeps{
+				Applicability: fixture.applicability,
+				Evidence:      fixture.evidence,
+				Costs: citingCosts{citations: append(
+					legCostCitations(t, "candidate-1", test.otherLegs),
+					legCostCitations(t, "candidate-2", test.selectedLegs)...)},
+				Store:      fixture.store,
+				Log:        fixture.log,
+				Downstream: fixture.downstream,
+				Identities: &routeIdentityDouble{},
+				Clock:      fixedClock{at: routeJudgedAt},
+			})
+			evidence := routableEvidence(t)
+			evidence.ServiceAreas = coveringAreas(t, "candidate-1", "candidate-2")
+			evidence.CandidateCosts = []domain.CandidateCostFact{
+				pricedCandidateCost(t, "candidate-1", 1000, "CNY"),
+				pricedCandidateCost(t, "candidate-2", 400, "CNY"),
+			}
+			evidence.Paths = []ports.CandidatePath{
+				{Candidate: value(t, domain.NewCandidateID, "candidate-1"), Legs: legChain(t, test.otherLegs)},
+				{Candidate: value(t, domain.NewCandidateID, "candidate-2"), Legs: legChain(t, test.selectedLegs)},
+			}
+			fixture.evidence.byParcel["parcel-1"] = evidence
+
+			result, err := fixture.handler.Handle(context.Background(), routeCommand(t, "parcel-1"))
+			if err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+			plan, formed := result.Parcels()[0].Plan()
+			if !formed || plan.SelectedCandidate().String() != "candidate-2" {
+				t.Fatalf("parcel = %+v，want 形成计划、选中便宜的 candidate-2", result.Parcels()[0])
+			}
+			citations := plan.CostCitations()
+			if len(citations) != test.selectedLegs {
+				t.Fatalf("计划出处 %d 条，want 选中候选的 %d 段各一条：%+v", len(citations), test.selectedLegs, citations)
+			}
+			for index, citation := range citations {
+				if citation.Ordinal() != index+1 || citation.PlanReference() != "plan-candidate-2/v1" {
+					t.Fatalf("计划出处第 %d 条 = %+v，want 段号 %d、出自选中候选", index+1, citation, index+1)
+				}
+			}
+			if fixture.store.saved != 1 || len(fixture.downstream.intents) != 1 {
+				t.Fatalf("saved = %d intents = %d，want 计划落库一次、交一份意图", fixture.store.saved, len(fixture.downstream.intents))
+			}
+		})
+	}
+}
+
 // Covers: `AT-NR-012`「同一委托三个包裹分别可路由、确定无路由和依赖未决——三个包裹分别
 // 保留计划、无路由和未决结果；任一结果不回滚或掩盖其他结果」，兼 `AT-NR-001`（计划保留
 // 全部候选依据）与 `AT-NR-005`（无路由保存逐候选淘汰依据）的编排半边。

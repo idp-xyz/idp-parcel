@@ -1,7 +1,7 @@
 # 42 出发门禁读数不展开集运单元成员：一袋被扣包裹的境内出发读成不受门禁
 
 Category: enhancement
-Status: needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [32](./32-movement-facts-declare-segment-and-record-departure-gate-reading.md) 的隔离评审（非阻断项，评审建议进 main 前写明后果、另立票）。
+Status: ready-for-agent——2026-10-19 分诊为 A（挡演示/上线），批次见 [triage-2026-10-19](../triage-2026-10-19.md)。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [32](./32-movement-facts-declare-segment-and-record-departure-gate-reading.md) 的隔离评审（非阻断项，评审建议进 main 前写明后果、另立票）。
 Blocked by: 无（NO 那一侧的端口在另一会话 idp-parcel-9b 的地盘里变动，落地前要与那边对齐读口形状）
 出处：[ADR-0205](../../../docs/adr/0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md) 越权风险点 5；[ADR-0206](../../../docs/adr/0206-customs-action-admission-judgement-folds-three-sources-and-judges-cross-zone-by-node-customs-zones.md) 越权风险点「对象只认包裹」（「展开成员由消费方做」）。
 

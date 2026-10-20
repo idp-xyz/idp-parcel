@@ -25,6 +25,7 @@ type OperatorRegistryIntake struct {
 }
 
 var _ PreAdviceWindowRegistrationIntake = (*OperatorRegistryIntake)(nil)
+var _ PreAdviceWindowClosureIntake = (*OperatorRegistryIntake)(nil)
 
 func NewOperatorRegistryIntake(authenticator OperatorRegistryAuthenticator) (*OperatorRegistryIntake, error) {
 	if authenticator == nil {
@@ -42,6 +43,19 @@ func (intake *OperatorRegistryIntake) IntakePreAdviceWindowRegistration(ctx cont
 	var payload PreAdviceWindowRegistrationPayload
 	if err := decodeClosedDocument(request, &payload); err != nil {
 		return application.RegisterPreAdviceWindowCommand{}, err
+	}
+	return payload.Command(tenant)
+}
+
+// IntakePreAdviceWindowClosure 译预报有效时窗收口（`/node-operations-pre-advice-window-closures`）。
+func (intake *OperatorRegistryIntake) IntakePreAdviceWindowClosure(ctx context.Context, request *http.Request) (application.ClosePreAdviceWindowCommand, error) {
+	tenant, err := intake.authenticator.AuthenticateRegistryWrite(ctx, httpapi.BearerToken(request))
+	if err != nil {
+		return application.ClosePreAdviceWindowCommand{}, err
+	}
+	var payload PreAdviceWindowClosurePayload
+	if err := decodeClosedDocument(request, &payload); err != nil {
+		return application.ClosePreAdviceWindowCommand{}, err
 	}
 	return payload.Command(tenant)
 }

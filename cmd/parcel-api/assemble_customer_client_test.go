@@ -408,12 +408,25 @@ func TestACustomerClientSubmitsThroughTheFirstPartyLineAgainstARealDatabase(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, found, err := requests.FindBySourceIdentity(t.Context(), identity); err != nil || !found {
+	stored, found, err := requests.FindBySourceIdentity(t.Context(), identity)
+	if err != nil || !found {
 		t.Fatalf("按首方信封的来源身份找委托：found %v, err %v", found, err)
 	}
+	// AT-PS-101（ADR-0223）在真库与真接单入口上：答复里的号是首方入口现签、随委托落库的那一枚，配草案里客户给的件号。
+	answered := submittedParcelsOf(t, first)
+	members := stored.CurrentSubmissionVersion().DeclaredParcelIDs()
+	if len(answered) != 1 || len(members) != 1 || answered[0].ParcelID != members[0].String() ||
+		!strings.HasPrefix(answered[0].ParcelID, "DPCL-") || answered[0].CustomerParcelReference != "SYN-PCLREF-FPA-0001" {
+		t.Fatalf("首答 parcels = %+v，落库成员 = %v；want 落库那一枚 DPCL- 号配 SYN-PCLREF-FPA-0001", answered, members)
+	}
 
-	if replay := post(customerDraftBody("SYN-ACCESS-REQUEST-FPA-0001")); replay.Code != http.StatusOK || outcomeOf(t, replay) != "EXISTING_RESULT" {
+	replay := post(customerDraftBody("SYN-ACCESS-REQUEST-FPA-0001"))
+	if replay.Code != http.StatusOK || outcomeOf(t, replay) != "EXISTING_RESULT" {
 		t.Fatalf("同一请求重发 = %d %s, want 200 EXISTING_RESULT", replay.Code, replay.Body.String())
+	}
+	// AT-PS-102：接单入口这一次又现签了一枚，答复交回的仍是落库那一枚。
+	if again := submittedParcelsOf(t, replay); len(again) != 1 || again[0] != answered[0] {
+		t.Fatalf("重放 parcels = %+v, want 首答的 %+v", again, answered)
 	}
 
 	revokeCustomerGrant(t, db, registry)
@@ -572,4 +585,21 @@ func outcomeOf(t *testing.T, response *httptest.ResponseRecorder) string {
 		t.Fatalf("decode %s: %v", response.Body.Bytes(), err)
 	}
 	return body.Outcome
+}
+
+// answeredParcel 是提交答复 `parcels` 里的一件，键名照首方契约（ADR-0223 决定一）。
+type answeredParcel struct {
+	ParcelID                string `json:"parcelId"`
+	CustomerParcelReference string `json:"customerParcelReference"`
+}
+
+func submittedParcelsOf(t *testing.T, response *httptest.ResponseRecorder) []answeredParcel {
+	t.Helper()
+	var body struct {
+		Parcels []answeredParcel `json:"parcels"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode %s: %v", response.Body.Bytes(), err)
+	}
+	return body.Parcels
 }

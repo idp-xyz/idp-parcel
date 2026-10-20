@@ -194,13 +194,14 @@ export const relationshipStatusLabels = {
 
 export type RelationshipStatusCode = keyof typeof relationshipStatusLabels;
 
-// 参与方角色封闭五格(domain PartyRole),中文取 CONTEXT 原词。
+// 参与方角色封闭集(domain PartyRole),中文取 CONTEXT 原词。
 export const partyRoleLabels = {
   CUSTOMER: '客户',
   SUPPLIER: '供应商',
   CARRIER_AGENT: '承运商代理',
   RESELLER: '转售',
   ACCOUNT_HOLDER: '渠道账号持有',
+  AUTHORIZED_DELIVERING_PARTY: '授权交付方',
 } as const satisfies Record<string, string>;
 
 export type PartyRoleCode = keyof typeof partyRoleLabels;

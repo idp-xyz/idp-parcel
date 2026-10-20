@@ -19,11 +19,11 @@ const (
 	DeliveryScopeAppendInvalid DeliveryScopeAppendOutcome = iota
 	// DeliveryScopeAppended：新落一行，回显的就是它。
 	DeliveryScopeAppended
-	// DeliveryScopeAlreadyRecorded：撞上册上已有的一行（同一来源请求键、同一事实身份、同一结论键，或时窗区间重叠），回显那一行，什么
-	// 也没落。
+	// DeliveryScopeAlreadyRecorded：撞上册上已有的一行（同一来源请求键、同一事实身份、同一结论键，或时窗区间重叠），或要收口的那一行
+	// 时窗已有终点，回显那一行，什么也没落。
 	DeliveryScopeAlreadyRecorded
-	// DeliveryScopeTargetNotFound：指名的预报或交接单在本租户查不到，或撤回方不是预报的客户账户、结论的客户账户不在声称之列。几种
-	// 同答，不泄露别的客户账户的东西在不在（UC-NO-006「权限、隔离与审计」）。
+	// DeliveryScopeTargetNotFound：指名的预报、交接单或要收口的那一行时窗在本租户查不到，或撤回方不是预报的客户账户、结论的客户账户
+	// 不在声称之列。几种同答，不泄露别的客户账户的东西在不在（UC-NO-006「权限、隔离与审计」）。
 	DeliveryScopeTargetNotFound
 	// DeliveryScopeNoteClosed：向已关闭的交接单加成员。关闭冻结成员；同一事实在关闭前已落的，照旧答已在册。
 	DeliveryScopeNoteClosed
@@ -87,13 +87,17 @@ type HandoverReceptionMembership interface {
 	AppendDeliveryHandoverMember(ctx context.Context, member domain.DeliveryHandoverMember) (domain.DeliveryHandoverMember, DeliveryScopeAppendOutcome, error)
 }
 
-// PreAdviceWindowRegister 是预报有效时窗册（PAR-NET-18）。写口要求环境事务。
+// PreAdviceWindowRegister 是预报有效时窗册（PAR-NET-18）与追加给它的收口（票 ps-external-mark-relations/14）。写口要求环境事务，
+// 同租户的两个写口互相串行：并发两笔各自查不到对方，也只按先后各判一次。
 type PreAdviceWindowRegister interface {
 	// RegisterPreAdviceWindow 落一行时窗。同租户生效区间与在册行重叠时什么也不落，回显撞上的那一行（不止一行时取起点最早的）——
-	// 原样重登撞上的就是它自己。重叠由库面排他约束拒，并发两笔各自查不到对方也只进一笔。
+	// 原样重登撞上的就是它自己。在册行收过口的，按收口时刻当终点比重叠。
 	RegisterPreAdviceWindow(ctx context.Context, window domain.PreAdviceValidityWindow) (domain.PreAdviceValidityWindow, DeliveryScopeAppendOutcome, error)
-	// FindPreAdviceWindowAt 读租户在时刻 at 生效的那一行。found=false 即那一刻没有生效行：推导据此答未配置，不拿别的行或默认时长
-	// 顶替。
+	// ClosePreAdviceWindow 给同租户起点为 closure.WindowFrom() 的那一行落一份收口，回显收口之后的那一行。那一行登记时带终点或已收过
+	// 口，什么也不落，答已在册并回显那一行（带着它已有的收口）；本租户没有那一行答查无此行。
+	ClosePreAdviceWindow(ctx context.Context, closure domain.PreAdviceWindowClosure) (domain.PreAdviceValidityWindow, DeliveryScopeAppendOutcome, error)
+	// FindPreAdviceWindowAt 读租户在时刻 at 生效的那一行，收过口的按收口时刻当终点、带着收口交回。found=false 即那一刻没有生效行：
+	// 推导据此答未配置，不拿别的行或默认时长顶替。
 	FindPreAdviceWindowAt(ctx context.Context, tenant domain.TenantID, at time.Time) (domain.PreAdviceValidityWindow, bool, error)
 }
 

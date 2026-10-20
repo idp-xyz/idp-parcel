@@ -151,6 +151,7 @@
 | `AT-NR-067` | internal/networkrouting/adapters/transportfulfillment/reassess_on_handover_test.go::TestUnreadableDependenciesRollBackAndDefectsAreLoud；internal/networkrouting/adapters/parcelshipment/accepted_carried_geo_test.go::TestAnUnreadableShipmentAnswerIsRetryableAndAContradictionIsLoud（取投影半边）；internal/networkrouting/adapters/inbox/transport_handover_consumer_test.go::TestAFailedTransportHandoverHandlerRollsBackAndTheRedeliveryRetries（消费门半边）；cmd/parcel-dispatch/reassess_on_handover_test.go::TestAnUndecidedReassessmentOnAHandoverRollsBackOnTheDatabase |
 | `AT-NR-068` | internal/networkrouting/adapters/transportfulfillment/reassess_on_handover_test.go::TestTheSameHandoverDeliveredAgainAnswersTheExistingResult；internal/networkrouting/adapters/inbox/transport_handover_consumer_test.go::TestATransportHandoverDeliveryIsProcessedExactlyOnce（消费门半边）；cmd/parcel-dispatch/reassess_on_handover_test.go::TestAHandoverIntoANodeReassessesTheAcceptedParcelsRouteOnTheDatabase |
 | `AT-NR-069` | internal/networkrouting/adapters/transportfulfillment/reassess_on_handover_test.go::TestACorrectionIsReassessedAgainAndAWithdrawalLeavesEarlierReassessmentsAlone |
+| `AT-NR-073` | internal/networkrouting/application/create_initial_route_test.go::TestTwoPricedCandidatesFormAPlanCitingOnlyTheSelectedOne；internal/networkrouting/adapters/parcelpricing/cost_source_test.go::TestEachCitationNamesTheCandidateWhoseLegItPrices（取数侧半边） |
 | `AT-PC-001` | internal/partycommercial/domain/party_relationship_test.go::TestLegalEntityReferenceAndCustomerPartyAreFormedSeparately |
 | `AT-PC-002` | internal/partycommercial/domain/commercial_registry_test.go::TestRegisteringTheSameContentTwiceIsAReplay |
 | `AT-PC-003` | internal/partycommercial/domain/commercial_registry_test.go::TestSameVersionWithChangedContentConflicts |
@@ -456,6 +457,9 @@
 | `AT-VE-171` | internal/visibilityexception/adapters/http/customer_tracking_view_intake_test.go::TestCustomerTrackingViewQueryStringIsClosed；cmd/parcel-api/assemble_customer_tracking_view_test.go::TestACustomerClientReadsItsOwnTrackingViewAgainstARealDatabase |
 | `AT-VE-172` | internal/accessidentity/customer_client_query_test.go::TestTrackingViewQueryNeedsItsOwnGrant；internal/visibilityexception/adapters/accessidentity/customer_tracking_view_authenticator_test.go::TestTrackingViewQueryGradesTranslateIntoVisibilityGrades；cmd/parcel-api/assemble_customer_tracking_view_test.go::TestCustomerTrackingViewLineRefusesOtherFamiliesAndClientsWithoutTheGrant |
 | `AT-VE-173` | internal/accessidentity/customer_client_query_test.go::TestTrackingViewQueryDoesNotAskTheAdmissionScope；internal/visibilityexception/adapters/accessidentity/customer_tracking_view_authenticator_test.go::TestTrackingViewQueryAuthenticatesToTheBoundCustomerAccount；cmd/parcel-api/assemble_customer_tracking_view_test.go::TestACustomerClientReadsItsOwnTrackingViewAgainstARealDatabase |
+| `AT-VE-174` | internal/visibilityexception/adapters/parcelshipment/derive_on_final_outcome_postgres_test.go::TestACorrectedFinalOutcomeLeavesOnlyOneGenerationCurrentInTheProjection；同文件::TestALatePredecessorFinalNeverBecomesCurrentAgain（到达先后）；同文件::TestARedeliveredRederivedFinalIsTheExistingResult（重投）；internal/visibilityexception/adapters/parcelshipment/derive_on_final_outcome_test.go::TestARederivedFinalOutcomeSupersedesItsPredecessorsAdoptionVersion（译装半边） |
+| `AT-VE-175` | internal/visibilityexception/adapters/parcelshipment/derive_on_final_outcome_test.go::TestAnUnreadablePredecessorIsContinuableUndecided |
+| `AT-VE-176` | internal/visibilityexception/adapters/parcelshipment/derive_on_final_outcome_test.go::TestAMissingOrForeignPredecessorIsInconsistentNotUndecided |
 
 ## ② 机制候选（补 Covers 或小块测试）
 
@@ -1378,3 +1382,7 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-10-19 追记（票 routing-first-cut/20）：UC-NR-001 新立 `AT-NR-070`–`072`（候选成本经包裹邮编路线与 parcel-pricing 读数补全取区、按在用序列换算，ADR-0189 决定一），随票在编排、成本取数侧适配器与生产装配真库用例上补 Covers 点名，全部入①；半边覆盖在行内注明。①、NR 与合计各加 3，②③④不变；绝对数进 main 时随同波票按批重算。号取 070 起：AT-NR 是全上下文一条序列，`AT-NR-069` 已由票 demo-chain-gaps/63 立在 UC-NR-003；协调方没预分号段，与在途的 NR 票撞号时进 main 再顺延。
 
 2026-10-19 追记（票 demo-chain-gaps/111）：UC-TF-005 新立 `AT-TF-266`–`270`、`AT-TF-272`，UC-TF-006 新立 `AT-TF-271`（权威交接作参与依据时由交接键铸，存量按版本加时刻认，ADR-0221），随票在领域、编排与派发生产路由真库用例上补 Covers 点名，全部入①；半边覆盖在行内注明。①、TF 与合计各加 7，②③④不变；绝对数进 main 时随同波票按批重算（号段 266–275 由协调方预分，本票用 266–272，273–275 未用）。
+
+2026-10-19 追记（票 demo-chain-gaps/105）：UC-NR-001 新立 `AT-NR-073`（几条候选都出价时计划只留选中候选的逐段成本出处，取数侧出处逐条带候选），号段由协调方预分（073–076，本票只用 073）；编排用例与成本取数侧适配器用例点名，入①。①、NR 与合计各加 1，②③④不变；绝对数进 main 时随同波票按批重算。
+
+2026-10-19 追记（票 demo-chain-gaps/103）：UC-VE-002 新立 `AT-VE-174`–`176`（终局同种重派生进投影时按前一代的采用版本登记来源事实替代；前一代读不通答未决，找不到或对不上按来源记录不一致拒收），随票在 VE 终局译装器的替身用例与真库用例上补 Covers 点名，全部入①；半边覆盖在行内注明。①、VE 与合计各加 3，②③④不变；绝对数进 main 时随同波票按批重算（号段由协调方预分，UC-VE 原最大号 173）。

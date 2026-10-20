@@ -121,7 +121,8 @@ func NewRegisterPreAdviceWindowEndpoint(intake PreAdviceWindowRegistrationIntake
 	})
 }
 
-// preAdviceWindowResponse 是本口的封闭响应形状：outcome 取编排结果的原名，window 是答案所指的那一行（新落的、已在册的或撞上的）。
+// preAdviceWindowResponse 是本口与收口口共用的封闭响应形状：outcome 取编排结果的原名，window 是答案所指的那一行（新落的、已在册的、
+// 撞上的，或收口之后的）。
 type preAdviceWindowResponse struct {
 	Outcome string                 `json:"outcome"`
 	Window  preAdviceWindowDetails `json:"window"`
@@ -134,6 +135,14 @@ type preAdviceWindowDetails struct {
 	EffectiveUntil *time.Time `json:"effectiveUntil,omitempty"`
 	Basis          string     `json:"basis"`
 	RegisteredAt   time.Time  `json:"registeredAt"`
+	// Closure 只随收过口的行在场。effectiveUntil 是登记时给的终点，收口不改它；收口之后的终点读这一格。
+	Closure *preAdviceWindowClosureDetails `json:"closure,omitempty"`
+}
+
+type preAdviceWindowClosureDetails struct {
+	ClosedAt     time.Time `json:"closedAt"`
+	Basis        string    `json:"basis"`
+	RegisteredAt time.Time `json:"registeredAt"`
 }
 
 func windowBody(window domain.PreAdviceValidityWindow) preAdviceWindowDetails {
@@ -146,6 +155,13 @@ func windowBody(window domain.PreAdviceValidityWindow) preAdviceWindowDetails {
 	}
 	if until, bounded := window.EffectiveUntil(); bounded {
 		details.EffectiveUntil = &until
+	}
+	if closure, closed := window.Closure(); closed {
+		details.Closure = &preAdviceWindowClosureDetails{
+			ClosedAt:     closure.ClosedAt(),
+			Basis:        closure.Basis(),
+			RegisteredAt: closure.RegisteredAt(),
+		}
 	}
 	return details
 }

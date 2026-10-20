@@ -201,6 +201,10 @@ UC-NO-002 早就设想过这一格。「参与者与协作」写交付方「提�
 - **既有行。** 这一条之前带交接单标识落下的收寄没有收寄成员，重核时答不是交接单成员；那段时间交接单没有命令口，这样的行只来自直写册的夹具。
 - **代决。** 会话 `idp-parcel-9b` 在票 12 评审里裁为阻断、就在票 12 修，授权同本记录 Status 行；判它是机制漏洞，不是租户取值。实施与用例见票 [ps-external-mark-relations/12](../../.scratch/ps-external-mark-relations/issues/12-handover-notes-are-opened-filled-closed-and-confirmed.md) 完成记录。
 
+## 复核记录（2026-10-19，预报有效时窗的收口；决定原文不动）
+
+预报有效时窗册只追加，登了终点为空的一行之后，同租户再也登不进更晚起点的行。票 ps-external-mark-relations/14 加一种事实「时窗收口」：对终点为空的那一行追加一条收口，写明收口时刻与依据，读「某时刻适用哪一行」时以收口时刻为那一行的终点；不取「登新行即隐式截断前一行」。库面排他约束读不到收口，迁移 `node_operations/0020` 撤去它（用户 2026-10-19 答「允许」），同租户不重叠改由时窗册两个写口取同一把按租户的事务级咨询锁、按收口后的有效终点查重叠来守。形状与答复见该票完成记录。
+
 ## Links
 
 - 票：[ps-external-mark-relations/07](../../.scratch/ps-external-mark-relations/issues/07-verifiable-delivery-scope-for-customer-numbers.md)；父票 [05](../../.scratch/ps-external-mark-relations/issues/05-a-unique-hit-in-someone-elses-number-space-is-not-enough.md)
