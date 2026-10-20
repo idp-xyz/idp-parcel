@@ -1,7 +1,7 @@
 # 14 预报有效时窗册：不设终点的一行登下之后，这个租户再也换不了时窗
 
 Category: bug
-Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-psxm14`，NO 迁移号 0020；与票 09 并行。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立并代决（票 08 评审遗留）
+Status: resolved——2026-10-19 进 main（代码验证钉 `dca742e0`），见「进 main 记录」。此前 in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-psxm14`，NO 迁移号 0020；与票 09 并行。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立并代决（票 08 评审遗留）
 Blocked by: 08 进 main
 父票：[08](./08-pre-advice-and-handover-note-model-and-window-register.md)
 出处：票 08 完成记录「没做」末条与评审。
@@ -27,7 +27,7 @@ Blocked by: 08 进 main
 - [x] 推导：收口之后的业务时间不再落进前一行的时窗。
 - [x] 在线口与 CLI 同一份编排，各一条用例。
 - [x] Go 门禁照常；机制清点重生成。
-- [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）。
+- [x] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）。
 
 ## 完成记录（2026-10-19，会话 idp-parcel-9b 的作者子代理，分支 `claude-psxm14`）
 
@@ -159,3 +159,9 @@ Blocked by: 08 进 main
 - **删排他约束（用户 2026-10-19 答「允许」）**：排他约束只能比同一行的列、读不到收口，开放终点那一行会拒掉一切后继；迁移 `node_operations/0020` 撤去它，不重叠改由两个写口先取同一把按租户的事务级咨询锁、再按有效终点查重叠，首插并发同样串行，票 08 原有并发用例与新并发用例在锁下都过。迁移原占 0014、编号落在已施加的 0015–0018 之前，推送方改为 0020。
 - **评审补（推送方，已做）**：ADR-0212 文末追加复核记录记收口与守法的改变，NO CONTEXT 与参数登记册不另写（同一处权威）。
 - **未做（不另立票）**：演示种子没登收口（种子那一行照旧开放终点，需要时经新口收口）。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 分支 `claude-psxm14` rebase 到远端 main `f91f29a4`（另一会话的 infra-speed/01 等已进）快进推送；机制清点重生成零差。
+- 第一次推送方全量（钉 `28e6707f`，经共用库 55432、`-p 1`）有 9 行 FAIL，全是 parcelpricing 两个包的 `connection reset by peer`（握手阶段），与本票无关：同一时段另一会话的全量也压在 55432 上。单包重跑与整套重跑（`int41-fulltest-2`）都 0 FAIL。排查结论见本会话与用户的对话：库未崩、未拒连，重置在经 Docker 端口代理的连接层；另一会话随后落的 `scripts/test-full.sh` 给每一跑起专用一次性实例、走 Unix socket，根除这一类。
+- 推送方全量（以本记录为准）：钉 `dca742e0` 的隔离 detached 检出，`bash scripts/test-full.sh`（专用一次性 PostgreSQL、Unix socket、`-p 8`）退 0——有测试的包 153 个 ok、0 FAIL。同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
