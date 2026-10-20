@@ -1,7 +1,7 @@
 # 15 送站预报与送站交接单的两条列表查询没有索引
 
 Category: enhancement
-Status: in-progress——2026-10-19 作者子代理完工（裁定补），待评审。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 立并代决、认领，分支 `claude-psxm15`，NO 迁移号 0021
+Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工（裁定补），待评审。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 立并代决、认领，分支 `claude-psxm15`，NO 迁移号 0021
 Blocked by: 无
 父票：[13](./13-admin-web-reads-pre-advices-handover-notes-and-scope-state.md)
 出处：票 13 完成记录「没做」与评审。
@@ -120,3 +120,13 @@ Blocked by: 无
 **没做**
 
 - `CONCURRENTLY`：仍是 `migrate.applyStep` 头注那条显式未决，照裁定。
+
+## Comments
+
+### 评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审；2026-10-19，首轮钉 `d39a0111`，裁定补后钉 `0e6be7f6`）
+
+两轴合审，0 阻断。
+
+- **首轮发现（作者自报，已处理）**：只按节点建索引时，管理台两区块默认打开（不带节点）的全租户读仍是全表扫描。推送方取甲方案，同一份迁移 0021 每表再加（租户，时刻倒序，标识）一条。
+- **Spec**：四条索引各对一条读法，列序与方向照查询的排序（多带标识列是因为同刻按标识定序，缺了就出 Incremental Sort，作者实测）。用例按适配器实际发出的 SQL 与参数 EXPLAIN（经 pgx tracer 截取，不在测试里抄查询），不改计划器设置，八格都走到对应索引；去掉新两条时全租户四格红、节点四格照绿。查询本身不改。
+- **Standards**：迁移头注写清各索引服务哪条读、为何节点索引不能兼顾全租户读；在事务内建（执行器约束，表今天还小）。
