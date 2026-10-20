@@ -1,7 +1,7 @@
 # 101 客户追踪视图只认正式包裹号，客户系统经首方渠道拿不到这个号
 
 Category: enhancement
-Status: needs-triage——2026-10-19 Claude Code 子代理立（票 [96](./96-customer-tracking-view-has-no-first-party-customer-intake.md) 实现时发现）。
+Status: ready-for-agent——2026-10-19 分诊为 A（挡演示/上线），批次见 [triage-2026-10-19](../triage-2026-10-19.md)。此前 needs-triage——2026-10-19 Claude Code 子代理立（票 [96](./96-customer-tracking-view-has-no-first-party-customer-intake.md) 实现时发现）。
 Blocked by: 无
 地盘：VE 查阅口的定位（`internal/visibilityexception/adapters/http` 的 `CustomerTrackingViewIntake` 与查询键），或 PS 首方提交答复带回包裹号（`internal/parcelshipment/adapters/http`）；二选一或都做，看裁决。
 出处：[UC-VE-008](../../../docs/application/visibility-exception/UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md)「输入和结果语义」查询标识一行（「包裹内部引用、授权客户参考号或版本化外部标识；标识只用于定位候选，不是访问凭证」）与主流程步骤 2；[ADR-0139](../../../docs/adr/0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md) 决定四、五。

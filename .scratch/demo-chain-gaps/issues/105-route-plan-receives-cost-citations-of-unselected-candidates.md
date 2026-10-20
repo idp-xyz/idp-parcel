@@ -1,7 +1,7 @@
 # 105 两条以上候选都出价时，未选中候选的成本出处也交给计划，段号重复，初始路由计划形成报错
 
 Category: bug
-Status: needs-triage——2026-10-19 Claude Code 作者子代理立（出自票 [routing-first-cut/20](../../routing-first-cut/issues/20-bound-cost-cards-fold-zones-through-the-parcel-postal-route.md) 的隔离评审；用户「你作为业务和系统专家自决……解决所有的问题」授权）。
+Status: ready-for-agent——2026-10-19 分诊为 A（挡演示/上线），批次见 [triage-2026-10-19](../triage-2026-10-19.md)。此前 needs-triage——2026-10-19 Claude Code 作者子代理立（出自票 [routing-first-cut/20](../../routing-first-cut/issues/20-bound-cost-cards-fold-zones-through-the-parcel-postal-route.md) 的隔离评审；用户「你作为业务和系统专家自决……解决所有的问题」授权）。
 Blocked by: 无
 地盘：NR `adapters/parcelpricing/cost_source.go`（`LoadCandidateCosts` 的合成）、`ports` 的 `RouteCandidateCosts`、`application/create_initial_route.go`（`planRecord`）。
 出处：票 [routing-first-cut/10](../../routing-first-cut/issues/10-candidate-cost-from-leg-buy-evaluations.md) 完成记录「出处留痕：选中候选逐段……随计划 jsonb 一并落」；[ADR-0189](../../../docs/adr/0189-leg-pricing-zones-are-supplied-per-card-and-unbound-cards-take-a-registered-leg-zone.md) 文末补记越权风险点 6。

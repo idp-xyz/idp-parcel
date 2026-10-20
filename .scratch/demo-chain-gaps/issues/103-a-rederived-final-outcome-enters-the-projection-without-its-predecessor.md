@@ -1,7 +1,7 @@
 # 103 PS 终局重派生进追踪投影时不带前身，新旧两代终局同时算当前有效
 
 Category: bug
-Status: needs-triage——2026-10-19 Claude Code 子代理立（票 [97](./97-demo-disclosure-policy-keeps-the-final-dimension-pending.md) 实现时读代码发现；没有实走，证据只是代码阅读，钉 `5f0aa66d`）。
+Status: ready-for-agent——2026-10-19 分诊为 A（挡演示/上线），批次见 [triage-2026-10-19](../triage-2026-10-19.md)。此前 needs-triage——2026-10-19 Claude Code 子代理立（票 [97](./97-demo-disclosure-policy-keeps-the-final-dimension-pending.md) 实现时读代码发现；没有实走，证据只是代码阅读，钉 `5f0aa66d`）。
 Blocked by: 无
 地盘：`internal/visibilityexception/adapters/parcelshipment/derive_on_final_outcome.go`（终局译装器）；要裁的那一格可能还碰 PS 终局采用账的读口。
 出处：VE CONTEXT「被替代条目留档不参与派生」与「终局事实有效性变化也不能被伪装为人工重开」；PS 终局同源重派生（`FormParcelFinalHandler.rederive`，ADR-0117 纪律半「按来源声明的更正关系回指前版成链」）；[ADR-0138](../../../docs/adr/0138-voided-carrier-pickup-voids-the-label-service-final-as-a-third-ledger-record-and-rejudges-on-remaining-basis.md)（Proposed，终局失效）。

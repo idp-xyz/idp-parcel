@@ -2,7 +2,7 @@
 
 Category: bug
 Status: needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [11](./11-external-result-received-has-no-subscriber.md) 的隔离评审。
-Blocked by: 无
+Blocked by: [product-strategy-boundary/18](../../product-strategy-boundary/issues/18-customs-case-and-declaration-submission-entry.md)（关务立案与申报提交入口；那张开工时本票须同期或先修，见 [triage-2026-10-19](../triage-2026-10-19.md)）
 出处：[ADR-0197](../../../docs/adr/0197-customs-external-results-enter-tracking-projection-per-layer.md) 越权风险点 5。
 
 ## 现象
