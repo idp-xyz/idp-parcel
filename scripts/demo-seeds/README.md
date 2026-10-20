@@ -22,6 +22,22 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 灌过的库上这一笔是没有身份层的旧形状，重跑会答内容冲突（2），同样用 `--reset`。
 里程碑映射 `SYN-VE-MAP-V1` 自票 demo-chain-gaps/11 起关务那一行只登全部放行（`external-result-release-full` → `CUSTOMS_CLEARED`，类型词表见 ADR-0197），自票 demo-chain-gaps/13 起交接那一行只登已交出（`handover-handed-over` → `IN_TRANSIT`），自票 demo-chain-gaps/33 起多一行出发（`movement-departure` → `DEPARTED`，类型词表见 ADR-0205 文末补记；移动与到达不映）；在那之前灌过的库上版本号已占，重跑答 `REFUSED VERSION_NOT_OVERWRITABLE`、退出码 2，`seed.sh` 随之中止，库里仍是旧行；同样用 `--reset`。
 
+## 加一条种子
+
+`seed.sh` 只做前导：读参数、编译登记 CLI、施加迁移。灌入的命令都在 `steps/` 下，一节一个文件，`seed.sh` 按文件名的
+C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/<上下文>/<文件>"`，首行照既有各步打一行
+`echo "== 节标题 =="`，注释写在它说明的那条命令上方；文件不带 shebang、不设可执行位。
+
+- **新种子优先新增步骤文件**，不改既有步骤文件，也不改 `seed.sh`。文件名是三位数前缀、连字符、上下文与内容的短名，
+  形如既有的 `250-customs.sh`；没有三位数前缀的文件 `seed.sh` 拒跑。
+- 不依赖既有任何一节的，取最后一个文件之后的号。**必须排在既有序列中间时取空档号**：排在依赖的那一节之后、
+  被依赖的那一节之前。现有各节号按 50 递增，节与节之间的号都是空档。
+- 两张并行的票取了同一个号不报错，按全名的 C 序先后跑。各自看不见对方的种子，本来就不该互相依赖；真有先后，后者另取更大的号。
+- 只有新命令必须夹在某个既有文件内部两条命令之间时才动那个文件：在插入点切成两份，后一份取空档号，只搬不改。
+  `compare-seed-calls.sh <基准 rev> [<对照 rev>]` 把各 CLI 换成只记「程序名 + 参数」的桩，比两版 `seed.sh` 的调用序列
+  是否逐字节相同——这类只搬不改的重排用它证明，加种子的改动本来就会让它报不同。
+- 新上一个登记 CLI 时才改 `seed.sh` 的编译清单。
+
 ## 操作者渠道：演示发行方与起 parcel-api
 
 票 `operator-channel/17`。管理台的登录门与操作者族各口（端点表里挂 `operatorRegistries.*` 的登记写面与运营决定那几口）

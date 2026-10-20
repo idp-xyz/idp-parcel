@@ -1,0 +1,21 @@
+echo "== 深圳→新加坡快班与新加坡枢纽→末端穿梭周期安排（transport-fulfillment：让后两段也在任何提交时刻都有运输机会可准备；票 demo-chain-gaps/98） =="
+# 后两段的窗口由前一段的到达加节点处理时长与连接缓冲推出，比首段窄得多，只有按日一班时整天几乎都答无当前运输机会。
+# 同上海→深圳快线那一节（票 demo-chain-gaps/18），只调演示租户的班期（合成值），不改匹配规则（ADR-0201 决定六）；
+# 取值、排法与什么时候要重算只写在 README 组成表 data/transport/07–23 那一行。
+"$BIN/parcel-transport-register" schedule-template -input "$SEEDS/transport/07-schedule-template-szx-sin-express-0200.json"
+"$BIN/parcel-transport-register" schedule-template -input "$SEEDS/transport/08-schedule-template-szx-sin-express-0400.json"
+"$BIN/parcel-transport-register" schedule-template -input "$SEEDS/transport/09-schedule-template-szx-sin-express-0900.json"
+"$BIN/parcel-transport-register" schedule-template -input "$SEEDS/transport/10-schedule-template-szx-sin-express-1200.json"
+"$BIN/parcel-transport-register" schedule-template -input "$SEEDS/transport/11-schedule-template-szx-sin-express-1400.json"
+"$BIN/parcel-transport-register" schedule-template -input "$SEEDS/transport/12-schedule-template-szx-sin-express-1600.json"
+"$BIN/parcel-transport-register" schedule-template -input "$SEEDS/transport/13-schedule-template-szx-sin-express-1800.json"
+"$BIN/parcel-transport-register" schedule-template -input "$SEEDS/transport/14-schedule-template-sin-lm-shuttle-0030.json"
+"$BIN/parcel-transport-register" schedule-template -input "$SEEDS/transport/15-schedule-template-sin-lm-shuttle-0200.json"
+"$BIN/parcel-transport-register" schedule-template -input "$SEEDS/transport/16-schedule-template-sin-lm-shuttle-0330.json"
+"$BIN/parcel-transport-register" schedule-template -input "$SEEDS/transport/17-schedule-template-sin-lm-shuttle-0500.json"
+"$BIN/parcel-transport-register" schedule-template -input "$SEEDS/transport/18-schedule-template-sin-lm-shuttle-0630.json"
+"$BIN/parcel-transport-register" schedule-template -input "$SEEDS/transport/19-schedule-template-sin-lm-shuttle-1330.json"
+"$BIN/parcel-transport-register" schedule-template -input "$SEEDS/transport/20-schedule-template-sin-lm-shuttle-1500.json"
+"$BIN/parcel-transport-register" schedule-template -input "$SEEDS/transport/21-schedule-template-sin-lm-shuttle-1630.json"
+"$BIN/parcel-transport-register" schedule-template -input "$SEEDS/transport/22-schedule-template-sin-lm-shuttle-2130.json"
+"$BIN/parcel-transport-register" schedule-template -input "$SEEDS/transport/23-schedule-template-sin-lm-shuttle-2300.json"
