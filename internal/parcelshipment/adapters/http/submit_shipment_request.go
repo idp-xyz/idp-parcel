@@ -114,10 +114,19 @@ func NewSubmitShipmentRequestEndpoint(intake SubmissionIntake, handler Submissio
 // submitResponse 是本端点的封闭响应形状。`outcome` 取应用结果枚举的原名，传输层不合并、
 // 不改名，也没有「其他」这一格——留那一格就是给下一次合成一格开的门。
 type submitResponse struct {
-	Outcome             string         `json:"outcome"`
-	ShipmentRequestID   string         `json:"shipmentRequestId,omitempty"`
-	ProductionOwnership *ownershipView `json:"productionOwnership,omitempty"`
-	GateBlockReasons    []string       `json:"gateBlockReasons,omitempty"`
+	Outcome             string                `json:"outcome"`
+	ShipmentRequestID   string                `json:"shipmentRequestId,omitempty"`
+	Parcels             []submittedParcelView `json:"parcels,omitempty"`
+	ProductionOwnership *ownershipView        `json:"productionOwnership,omitempty"`
+	GateBlockReasons    []string              `json:"gateBlockReasons,omitempty"`
+}
+
+// submittedParcelView 是答复里的一件（ADR-0223 决定一）。`customerParcelReference` 与草案 `parcels[]` 那一格同名，客户系统
+// 按它把自己的件对上 `parcelId`，再拿 `parcelId` 去查客户追踪视图；回显的只是这份委托自己声明过的号。没声明号的件整键
+// 不出现，不拿空串或内部标识顶替——顶替了，客户系统会把一个不是它给的号记成它的参考。
+type submittedParcelView struct {
+	ParcelID                string `json:"parcelId"`
+	CustomerParcelReference string `json:"customerParcelReference,omitempty"`
 }
 
 // ownershipView 交回归属决定本身而不只是一个结论字符串。`UC-PS-001` 的结果语义要求非本产品
@@ -172,6 +181,13 @@ func writeOutcome(response http.ResponseWriter, result application.SubmitShipmen
 	body := submitResponse{Outcome: outcome}
 	if requestID, present := result.ShipmentRequestID(); present {
 		body.ShipmentRequestID = requestID.String()
+	}
+	for _, parcel := range result.Parcels() {
+		view := submittedParcelView{ParcelID: parcel.Parcel().String()}
+		if number, declared := parcel.CustomerParcelNumber(); declared {
+			view.CustomerParcelReference = number.String()
+		}
+		body.Parcels = append(body.Parcels, view)
 	}
 	if decision, present := result.OwnershipDecision(); present {
 		body.ProductionOwnership = newOwnershipView(decision)

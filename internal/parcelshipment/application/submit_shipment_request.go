@@ -119,9 +119,27 @@ type SubmitShipmentRequestResult struct {
 	outcome           SubmitOutcome
 	shipmentRequestID domain.ShipmentRequestID
 	hasRequest        bool
+	parcels           []SubmittedParcel
 	ownershipDecision domain.ProductionOwnershipDecision
 	hasDecision       bool
 	gateBlockReasons  []domain.FutureSubmissionBlockReason
+}
+
+// SubmittedParcel 是结果所指名委托上的一件声明包裹：它的内部标识，配上客户为它声明的包裹件号（ADR-0184 决定四；没声明
+// 就缺席）。内部标识是声明包裹的永久标识，委托接受后就是正式包裹的标识、不换号（PS CONTEXT「声明包裹在委托接受时进入
+// 固定成员基线，并保持永久内部标识」）；客户系统凭它查客户追踪视图（ADR-0223）。
+type SubmittedParcel struct {
+	parcel         domain.DeclaredParcelID
+	customerNumber domain.ExternalIdentifierNumber
+	hasNumber      bool
+}
+
+func (parcel SubmittedParcel) Parcel() domain.DeclaredParcelID {
+	return parcel.parcel
+}
+
+func (parcel SubmittedParcel) CustomerParcelNumber() (domain.ExternalIdentifierNumber, bool) {
+	return parcel.customerNumber, parcel.hasNumber
 }
 
 func (result SubmitShipmentRequestResult) Outcome() SubmitOutcome {
@@ -130,6 +148,41 @@ func (result SubmitShipmentRequestResult) Outcome() SubmitOutcome {
 
 func (result SubmitShipmentRequestResult) ShipmentRequestID() (domain.ShipmentRequestID, bool) {
 	return result.shipmentRequestID, result.hasRequest
+}
+
+// Parcels 交回所指名委托的逐件包裹（拷贝）；没有指名委托时为空。
+func (result SubmitShipmentRequestResult) Parcels() []SubmittedParcel {
+	return append([]SubmittedParcel(nil), result.parcels...)
+}
+
+// naming 让结果指名一份委托，连同它的逐件包裹。建成、重放、并发建单撞已存在三条路都经这里，件与号一律从委托读、不从
+// 命令读：接单入口每次都现签一组新标识，重放时那一组走不到建单（`CustomerSubmissionIntake.mintInternalIdentities` 的
+// 注释），从命令读就会把一组从没落库的号交给客户（ADR-0223 决定二）。
+func (result SubmitShipmentRequestResult) naming(request domain.ShipmentRequest) SubmitShipmentRequestResult {
+	result.shipmentRequestID = request.ShipmentRequestID()
+	result.hasRequest = true
+	result.parcels = submittedParcelsOf(request)
+	return result
+}
+
+// submittedParcelsOf 按首个提交版本的成员次序排：接单入口按草案包裹的次序现签内部标识，首个版本照这个次序立成员；受控
+// 补充的新版本只要求成员集合等值、不管次序（domain 的 supersessionMembers），取当前版本，同一份委托的重放会在补充前后
+// 交回两种次序。
+func submittedParcelsOf(request domain.ShipmentRequest) []SubmittedParcel {
+	members := request.CurrentSubmissionVersion().DeclaredParcelIDs()
+	if prior := request.PriorSubmissionVersions(); len(prior) > 0 {
+		members = prior[0].DeclaredParcelIDs()
+	}
+	numbers := make(map[domain.DeclaredParcelID]domain.ExternalIdentifierNumber)
+	for _, declaration := range request.CustomerParcelNumbers() {
+		numbers[declaration.Parcel()] = declaration.Number()
+	}
+	parcels := make([]SubmittedParcel, 0, len(members))
+	for _, member := range members {
+		number, declared := numbers[member]
+		parcels = append(parcels, SubmittedParcel{parcel: member, customerNumber: number, hasNumber: declared})
+	}
+	return parcels
 }
 
 func (result SubmitShipmentRequestResult) OwnershipDecision() (domain.ProductionOwnershipDecision, bool) {
@@ -285,11 +338,9 @@ func (handler *SubmitShipmentRequestHandler) Handle(
 	case ports.ShipmentRequestInserted:
 		return SubmitShipmentRequestResult{
 			outcome:           OutcomeSubmitted,
-			shipmentRequestID: request.ShipmentRequestID(),
-			hasRequest:        true,
 			ownershipDecision: decision,
 			hasDecision:       true,
-		}, nil
+		}.naming(request), nil
 	case ports.ShipmentRequestAlreadyExists:
 		// 并发下另一方先建了单。回去按重放规则重答；本次已经 Preserve 过自己那一份，
 		// 不再走 AppendObservation（那条路是给「未保全、只是又看见」用的）。
@@ -328,8 +379,7 @@ func (handler *SubmitShipmentRequestHandler) resolvePreserved(
 		return SubmitShipmentRequestResult{}, fmt.Errorf("find existing shipment request: %w", err)
 	}
 	if found {
-		result.shipmentRequestID = request.ShipmentRequestID()
-		result.hasRequest = true
+		result = result.naming(request)
 	}
 	return result, nil
 }
@@ -363,8 +413,7 @@ func (handler *SubmitShipmentRequestHandler) resolveAfterInsertConflict(
 		return SubmitShipmentRequestResult{}, fmt.Errorf("find existing shipment request: %w", err)
 	}
 	if found {
-		result.shipmentRequestID = request.ShipmentRequestID()
-		result.hasRequest = true
+		result = result.naming(request)
 	}
 	return result, nil
 }
