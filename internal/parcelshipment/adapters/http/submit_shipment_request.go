@@ -122,8 +122,10 @@ type submitResponse struct {
 }
 
 // submittedParcelView 是答复里的一件（ADR-0223 决定一）。`customerParcelReference` 与草案 `parcels[]` 那一格同名，客户系统
-// 按它把自己的件对上 `parcelId`，再拿 `parcelId` 去查客户追踪视图；回显的只是这份委托自己声明过的号。没声明号的件整键
-// 不出现，不拿空串或内部标识顶替——顶替了，客户系统会把一个不是它给的号记成它的参考。
+// 按它把自己的件对上 `parcelId`，再拿 `parcelId` 去查客户追踪视图；回显的只是这份委托自己声明过的号。回显的是委托上的
+// 声明值，接单入口已去掉单元格两端空白（ADR-0184「越权风险点 2 的事实更正」定的入口纪律），客户系统按去过两端空白的值
+// 配对；这里不再折算，也不回送原样字节——委托只有这一个声明值。没声明号的件整键不出现，不拿空串或内部标识顶替——顶替了，
+// 客户系统会把一个不是它给的号记成它的参考。
 type submittedParcelView struct {
 	ParcelID                string `json:"parcelId"`
 	CustomerParcelReference string `json:"customerParcelReference,omitempty"`

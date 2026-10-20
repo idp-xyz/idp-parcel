@@ -127,7 +127,8 @@ type SubmitShipmentRequestResult struct {
 
 // SubmittedParcel 是结果所指名委托上的一件声明包裹：它的内部标识，配上客户为它声明的包裹件号（ADR-0184 决定四；没声明
 // 就缺席）。内部标识是声明包裹的永久标识，委托接受后就是正式包裹的标识、不换号（PS CONTEXT「声明包裹在委托接受时进入
-// 固定成员基线，并保持永久内部标识」）；客户系统凭它查客户追踪视图（ADR-0223）。
+// 固定成员基线，并保持永久内部标识」）；真实拆分或合并除外——新物理服务件另用新的内部标识，客户手里这个号留作历史身份
+// （GLOSSARY「包裹内部标识」），后继怎么展示归 VE 的身份谱系。客户系统凭它查客户追踪视图（ADR-0223）。
 type SubmittedParcel struct {
 	parcel         domain.DeclaredParcelID
 	customerNumber domain.ExternalIdentifierNumber
@@ -155,9 +156,9 @@ func (result SubmitShipmentRequestResult) Parcels() []SubmittedParcel {
 	return append([]SubmittedParcel(nil), result.parcels...)
 }
 
-// naming 让结果指名一份委托，连同它的逐件包裹。建成、重放、并发建单撞已存在三条路都经这里，件与号一律从委托读、不从
-// 命令读：接单入口每次都现签一组新标识，重放时那一组走不到建单（`CustomerSubmissionIntake.mintInternalIdentities` 的
-// 注释），从命令读就会把一组从没落库的号交给客户（ADR-0223 决定二）。
+// naming 让结果指名一份委托，连同它的逐件包裹。建成、重放、并发建单撞已存在都经这里，件与号一律从委托读、不从命令读：
+// 接单入口每次都现签一组新标识，重放时那一组走不到建单（`CustomerSubmissionIntake.mintInternalIdentities` 的注释），
+// 从命令读就会把一组从没落库的号交给客户（ADR-0223 决定二）。
 func (result SubmitShipmentRequestResult) naming(request domain.ShipmentRequest) SubmitShipmentRequestResult {
 	result.shipmentRequestID = request.ShipmentRequestID()
 	result.hasRequest = true
