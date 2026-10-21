@@ -374,7 +374,7 @@ func (decision ProductionOwnershipDecision) WithSafeHandoff(assessment SafeHando
 //
 // 只在已记的评估未确认、新评估出自同一次尝试（同一尝试身份、同一范围、同一对方）时成立：重发一份「他方、交接未确认」的提交，
 // 要接着问的是那一次尝试交过去没有，不是另判一次归属——另判可能因登记册翻转而落到本产品，同一范围就会一边交给他方、一边
-// 在本地建单（ADR-0128 决定二「同一份决定对应同一次尝试」）。已确认的评估不换：确认之后范围已归他方，没有再查的余地。
+// 在本地建单（ADR-0128 决定二：尝试身份由决定派生，同一份决定只对应一次尝试）。已确认的评估不换：确认之后范围已归他方，没有再查的余地。
 func (decision ProductionOwnershipDecision) WithReassessedHandoff(assessment SafeHandoffAssessment) (ProductionOwnershipDecision, error) {
 	if !decision.valid() ||
 		!decision.hasSafeHandoff ||
