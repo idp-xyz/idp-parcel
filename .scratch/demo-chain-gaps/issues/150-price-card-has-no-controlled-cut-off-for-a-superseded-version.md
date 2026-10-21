@@ -1,7 +1,7 @@
 # 150 价卡没有截止旧版的受控口，补登卡上取值只能靠期间不重叠的新版
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg150。此前 in-progress——2026-10-21 认领。此前 ready-for-agent——2026-10-21 协调方分诊升为上线前必修（R1），见 [triage-2026-10-19](../triage-2026-10-19.md) 末节「票 14 落地时追加的上线前必修（2026-10-21）」。此前 needs-triage——2026-10-21 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权），出自票 [14](./14-buy-request-stuck-after-an-unadoptable-evaluation.md) 实现时的发现。
+Status: resolved——2026-10-21 进 main（全量钉 `895e8018`：`scripts/test-full.sh` 158 ok / 0 FAIL，见文末「进 main 记录」）；跨方案退役转票 [168](./168-price-card-has-no-retirement-without-a-same-plan-successor.md)，管理台收尾表单与目录渲染转票 [169](./169-admin-web-price-card-closure-forms.md)，NR 线路按版本点读不折收尾转票 [173](./173-route-cost-basis-reads-price-cards-by-version-without-folding-closures.md)（落地前运营约束见 ADR-0234）。此前 in-progress——完工待评审与进 main，分支 claude-dcg150。此前 in-progress——2026-10-21 认领。此前 ready-for-agent——2026-10-21 协调方分诊升为上线前必修（R1），见 [triage-2026-10-19](../triage-2026-10-19.md) 末节「票 14 落地时追加的上线前必修（2026-10-21）」。此前 needs-triage——2026-10-21 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权），出自票 [14](./14-buy-request-stuck-after-an-unadoptable-evaluation.md) 实现时的发现。
 Blocked by: 无
 出处：[ADR-0229](../../../docs/adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 越权风险点 6。
 
@@ -98,3 +98,6 @@ none
 - `scripts/test-full.sh ./internal/parcelpricing/... ./internal/settlementaccounting/adapters/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./cmd/parcel-pricing-register/ ./internal/networkrouting/adapters/parcelpricing/... ./internal/architecture/... ./migrations/...`：29 个包 ok、0 FAIL。
 - 种子数据与步骤未改，没有重灌。
 
+## 进 main 记录
+
+2026-10-21 协调方合入。作者评审修订后把分支变基到 `7b598e47`（即当时 main），不需重放，分支 SHA 原样进 main（`e25c3862`…`cb76effa`）。隔离评审无阻断；NR 缺口立为票 173，运营约束写进 ADR-0234。本票改了种子调用的价卡登记口，在 55432 一次性库上 `seed.sh` 全程退 0，用完 `DROP … WITH (FORCE)`。其上按 parallel-sessions.md 重生成 ADR 索引、重算 AT 盘点计数、重生成机制清点（`895e8018`），各自单独成笔；`adr-index -check` 与 `at-coverage-counts -check` 退 0。在干净的隔离树上对 `895e8018` 跑 `go build ./...`、`go vet ./...`、`gofmt -l` 干净，`scripts/test-full.sh` 全量 158 ok、0 FAIL（`-count=1`，无缓存）；推 `895e8018:main`。迁移落号 `parcel_pricing/0013`（连号）。
