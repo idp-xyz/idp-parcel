@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
@@ -11,12 +12,13 @@ import (
 
 var (
 	// ErrAcceptedParcelUnreadable 说明此刻读不动 parcel-shipment：读口报错，或反查命中了一份已接受委托、聚合却读不回
-	// 或已不在已接受。后两种是两次读之间委托在动，重投时反查会给出一致的答案。生产装配把它登进交接触发那一路的未决
-	// 哨兵。
+	// 或已不在已接受。后两种是两次读之间委托在动，重投时反查会给出一致的答案。生产装配把它登进交接触发与收寄采用两路
+	// 复核的未决哨兵。
 	ErrAcceptedParcelUnreadable = errors.New(
 		"network routing parcelshipment adapter: the current accepted parcel is not readable right now")
-	// ErrAcceptedRequestInconsistent 说明读回的已接受委托自相矛盾：没有受理基线，基线指的提交版本在聚合里找不到，或
-	// 聚合与反查指着两份委托。仓储不变量已破，重投不会变，禁止进未决哨兵（ADR-0029）。
+	// ErrAcceptedRequestInconsistent 说明读回的已接受委托自相矛盾：没有受理基线、基线没有固定时刻，基线指的提交版本在
+	// 聚合里找不到，聚合与反查指着两份委托，或与一份收寄采用记录指着两份委托、两条基线。仓储不变量已破，重投不会变，
+	// 禁止进未决哨兵（ADR-0029）。
 	ErrAcceptedRequestInconsistent = errors.New(
 		"network routing parcelshipment adapter: the accepted shipment request contradicts itself")
 )
@@ -31,13 +33,16 @@ type CurrentAcceptedParcelLookup interface {
 	) (psdomain.CurrentAcceptedParcelTarget, bool, error)
 }
 
-// AcceptedCarriedGeo 是一件当前已接受包裹在路由判断键上的各维（缺服务目的，那是装配参数）与受理基线那一版提交的
-// 地理解析投影。只有地理维：地址本体与身份内容都不在这里（ADR-0075 决定二仍成立）。
+// AcceptedCarriedGeo 是一件当前已接受包裹在路由判断键上的各维（缺服务目的，那是装配参数）、委托接受的时刻与受理基线
+// 那一版提交的地理解析投影。只有地理维：地址本体与身份内容都不在这里（ADR-0075 决定二仍成立）。
 type AcceptedCarriedGeo struct {
 	CustomerAccountID  nrdomain.CustomerAccountID
 	ShipmentRequestID  nrdomain.ShipmentRequestID
 	AcceptanceBaseline nrdomain.AcceptanceBaselineReference
-	Geo                nrdomain.GeoResolutionProjection
+	// AcceptedAt 是接受基线固定的时刻，与初始路由交接带来的接受时刻同源：复核拿它作业务时间下限（ADR-0279），两处
+	// 取法一不同，初始计划的生效与复核的下限就对不上。
+	AcceptedAt time.Time
+	Geo        nrdomain.GeoResolutionProjection
 }
 
 // AcceptedCarriedGeoSource 是受理之后、不由 PS 信封触发的复核取所携地理投影的地方（ADR-0215，部分停用 ADR-0075
@@ -114,6 +119,10 @@ func (source *AcceptedCarriedGeoSource) LoadAcceptedCarriedGeo(
 	if !baselineCovers(baseline, psParcel) {
 		return none, false, nil
 	}
+	if baseline.FixedAt().IsZero() {
+		return none, false, fmt.Errorf("%w: accepted request %q has an acceptance baseline without a fixed time",
+			ErrAcceptedRequestInconsistent, target.ShipmentRequestID())
+	}
 	submission, present := request.SubmissionVersionByID(baseline.SubmissionVersionID())
 	if !present {
 		return none, false, fmt.Errorf("%w: baseline submission version %q is not in request %q",
@@ -138,6 +147,7 @@ func (source *AcceptedCarriedGeoSource) LoadAcceptedCarriedGeo(
 		CustomerAccountID:  customer,
 		ShipmentRequestID:  shipment,
 		AcceptanceBaseline: reference,
+		AcceptedAt:         baseline.FixedAt(),
 		Geo:                geoFromProjection(submission.GeoProjection()),
 	}, true, nil
 }

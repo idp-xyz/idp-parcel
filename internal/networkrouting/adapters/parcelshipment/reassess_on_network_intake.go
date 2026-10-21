@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	nrinbox "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/inbox"
 	nrapplication "go.idp.xyz/idp-parcel/internal/networkrouting/application"
+	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	nrports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
@@ -31,28 +33,43 @@ type AdoptedIntakeSource interface {
 	) (psports.IntakeAdoptionRecord, bool, error)
 }
 
+// AcceptedParcelLookup 按（租户，包裹）读回当前已接受委托在判断键上的各维与接受时刻。真实装配是
+// AcceptedCarriedGeoSource，与交接那一路同一份读法。
+type AcceptedParcelLookup interface {
+	LoadAcceptedCarriedGeo(
+		ctx context.Context,
+		tenant nrdomain.TenantID,
+		parcel nrdomain.DeclaredParcelID,
+	) (AcceptedCarriedGeo, bool, error)
+}
+
 // ReassessOnNetworkIntakeAdapter 把 PS 采用结果信封接到 NR 的复核编排，是
 // nrinbox.NetworkIntakeConsumer 的真实处理方。
 //
 // 它与 ReassessOnIntakeAdapter 分成两层：那一层拥有 ADR-0025 的翻译缝（采用记录逐维
-// 译成复核触发），本层只做信封那一侧的两件事——按引用重新取回记录、把复核结论折成
-// 消费门认得的两格。翻译不在这里重写一遍，两处各译一次迟早分家。
+// 译成复核触发），本层只做信封那一侧的事——按引用重新取回记录、读回这件委托接受的
+// 时刻、把复核结论折成消费门认得的两格。翻译不在这里重写一遍，两处各译一次迟早分家。
 type ReassessOnNetworkIntakeAdapter struct {
 	adoptions AdoptedIntakeSource
+	accepted  AcceptedParcelLookup
 	reassess  *ReassessOnIntakeAdapter
 }
 
 func NewReassessOnNetworkIntakeAdapter(
 	adoptions AdoptedIntakeSource,
+	accepted AcceptedParcelLookup,
 	reassess *ReassessOnIntakeAdapter,
 ) (*ReassessOnNetworkIntakeAdapter, error) {
 	if adoptions == nil {
 		return nil, fmt.Errorf("network routing parcelshipment adapter: adoption source is nil")
 	}
+	if accepted == nil {
+		return nil, fmt.Errorf("network routing parcelshipment adapter: accepted parcel lookup is nil")
+	}
 	if reassess == nil {
 		return nil, fmt.Errorf("network routing parcelshipment adapter: reassessment adapter is nil")
 	}
-	return &ReassessOnNetworkIntakeAdapter{adoptions: adoptions, reassess: reassess}, nil
+	return &ReassessOnNetworkIntakeAdapter{adoptions: adoptions, accepted: accepted, reassess: reassess}, nil
 }
 
 var _ nrinbox.NetworkIntakeHandler = (*ReassessOnNetworkIntakeAdapter)(nil)
@@ -80,7 +97,16 @@ func (adapter *ReassessOnNetworkIntakeAdapter) HandleAdoptedNetworkIntake(
 			ErrEnvelopeContradictsAuthority, intake.Parcel, intake.Version)
 	}
 
-	result, err := adapter.reassess.TriggerReassessment(ctx, record, nrports.RequestCarriedContent{Geo: geoFromCarried(intake.Geo)})
+	// `不采用`没有要复核的收寄事实，不为它去读委托；接受时刻留空，翻译层按不采用答。
+	var acceptedAt time.Time
+	if record.Adopted {
+		acceptedAt, err = adapter.acceptedAtOf(ctx, record)
+		if err != nil {
+			return err
+		}
+	}
+	result, err := adapter.reassess.TriggerReassessment(ctx, record, acceptedAt,
+		nrports.RequestCarriedContent{Geo: geoFromCarried(intake.Geo)})
 	if err != nil {
 		// `不采用`是提供方的终局业务答案：没有责任起点成立，路由没有要复核的收寄事实。
 		// 入账收工——让它回滚重投会把一份合法的`不采用`永远卡在队列里。
@@ -90,6 +116,40 @@ func (adapter *ReassessOnNetworkIntakeAdapter) HandleAdoptedNetworkIntake(
 		return err
 	}
 	return reassessmentToConsumption(result)
+}
+
+// acceptedAtOf 读回采用记录指着的那份已接受委托的接受时刻，复核拿它作业务时间下限（ADR-0279）。采用信封不带它，PS 也不在
+// 采用时比业务时间与接受：这一格由 NR 在复核时比，PS 采用时拒在所有权上不对，也盖不到交接那一路。
+//
+// 采用以「当前已接受委托声明了这件包裹」为前提（ADR-0060），已接受是终态、基线一经固定不再改，所以读不着、读到另一份委托
+// 或另一条基线都是不变量破了，响亮上抛、不进未决哨兵；读不动才是重投推得动的那一格。
+func (adapter *ReassessOnNetworkIntakeAdapter) acceptedAtOf(
+	ctx context.Context,
+	record psports.IntakeAdoptionRecord,
+) (time.Time, error) {
+	tenant, err := nrdomain.NewTenantID(record.Key.TenantID.String())
+	if err != nil {
+		return time.Time{}, fmt.Errorf("%w: tenant: %v", ErrUntranslatableAnswer, err)
+	}
+	parcel, err := nrdomain.NewDeclaredParcelID(record.Key.Parcel.String())
+	if err != nil {
+		return time.Time{}, fmt.Errorf("%w: parcel: %v", ErrUntranslatableAnswer, err)
+	}
+	accepted, found, err := adapter.accepted.LoadAcceptedCarriedGeo(ctx, tenant, parcel)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if !found {
+		return time.Time{}, fmt.Errorf("%w: adopted intake of parcel %q has no current accepted request declaring it",
+			ErrAcceptedRequestInconsistent, record.Key.Parcel)
+	}
+	if accepted.ShipmentRequestID.String() != record.ShipmentRequestID.String() ||
+		accepted.AcceptanceBaseline.String() != record.Intake.Baseline().String() {
+		return time.Time{}, fmt.Errorf("%w: adopted intake names request %q baseline %q, accepted parcel reads %q baseline %q",
+			ErrAcceptedRequestInconsistent, record.ShipmentRequestID, record.Intake.Baseline(),
+			accepted.ShipmentRequestID, accepted.AcceptanceBaseline)
+	}
+	return accepted.AcceptedAt, nil
 }
 
 // adoptionKeyOf 把信封的四维引用译回采用键。来源类型逐格翻译、default 报错不吸收

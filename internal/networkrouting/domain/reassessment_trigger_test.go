@@ -17,6 +17,7 @@ func triggerSpec(t *testing.T, control domain.ControlEvidenceKind) domain.Reasse
 		Location:      mustValue(t, domain.NewActualLocationReference, "node-actual"),
 		SourceVersion: mustValue(t, domain.NewSourceFactVersionReference, "intake-fact/v1"),
 		OccurredAt:    time.Date(2026, 8, 9, 8, 0, 0, 0, time.UTC),
+		AcceptedAt:    time.Date(2026, 8, 8, 8, 0, 0, 0, time.UTC),
 	}
 }
 
@@ -59,6 +60,10 @@ func TestASourceHintNeverTriggersReassessment(t *testing.T) {
 			spec.OccurredAt = time.Time{}
 			return spec
 		},
+		"no acceptance time": func(spec domain.ReassessmentTriggerSpec) domain.ReassessmentTriggerSpec {
+			spec.AcceptedAt = time.Time{}
+			return spec
+		},
 		"no control kind": func(spec domain.ReassessmentTriggerSpec) domain.ReassessmentTriggerSpec {
 			spec.Control = domain.ControlEvidenceKindInvalid
 			return spec
@@ -93,6 +98,36 @@ func TestATriggerPrecedesThePositionOnlyWhenItsBusinessTimeIsStrictlyEarlier(t *
 	} {
 		if got := trigger.PrecedesPosition(tc.positionAt); got != tc.want {
 			t.Errorf("%s：PrecedesPosition = %v, want %v", name, got, tc.want)
+		}
+	}
+}
+
+// Covers: AT-NR-087（领域那一半）——触发只在业务时间严格早于这一判断键的委托接受时刻时才算早于接受；同一时刻不算更早，
+// 较晚的更不算。比的是业务时间：接受时刻换了时区写法也是同一时刻。
+func TestATriggerPrecedesTheAcceptanceOnlyWhenItsBusinessTimeIsStrictlyEarlier(t *testing.T) {
+	shanghai := time.FixedZone("UTC+8", 8*60*60)
+	at := time.Date(2026, 8, 9, 8, 0, 0, 0, time.UTC)
+	for name, tc := range map[string]struct {
+		acceptedAt time.Time
+		want       bool
+	}{
+		"接受更晚":       {at.Add(time.Minute), true},
+		"同一时刻":       {at, false},
+		"同一时刻换了时区写法": {at.In(shanghai), false},
+		"接受更早":       {at.Add(-time.Minute), false},
+	} {
+		spec := triggerSpec(t, domain.NodeIntakeControl)
+		spec.OccurredAt = at
+		spec.AcceptedAt = tc.acceptedAt
+		trigger, err := domain.NewReassessmentTrigger(spec)
+		if err != nil {
+			t.Fatalf("%s：new trigger: %v", name, err)
+		}
+		if got := trigger.PrecedesAcceptance(); got != tc.want {
+			t.Errorf("%s：PrecedesAcceptance = %v, want %v", name, got, tc.want)
+		}
+		if !trigger.AcceptedAt().Equal(tc.acceptedAt) {
+			t.Errorf("%s：AcceptedAt = %s, want %s", name, trigger.AcceptedAt(), tc.acceptedAt)
 		}
 	}
 }

@@ -166,7 +166,7 @@ func (adapter *ReassessOnHandoverAdapter) HandleRegisteredTransportHandover(
 }
 
 // triggerSpecFor 把交接译成复核触发：控制依据是权威运输交接，位置是接收节点，来源版本与业务时间取交接那一版
-// （ADR-0215 决定一）。
+// （ADR-0215 决定一）；委托接受的时刻取同一次读回的已接受委托，复核拿它作业务时间下限（ADR-0279）。
 func (adapter *ReassessOnHandoverAdapter) triggerSpecFor(
 	handover tfdomain.TransportHandover,
 	receiving tfdomain.NetworkNodeReference,
@@ -201,6 +201,7 @@ func (adapter *ReassessOnHandoverAdapter) triggerSpecFor(
 		Location:      location,
 		SourceVersion: sourceVersion,
 		OccurredAt:    handover.JudgedAt(),
+		AcceptedAt:    accepted.AcceptedAt,
 	}, nil
 }
 

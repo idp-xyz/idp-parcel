@@ -23,6 +23,9 @@ import (
 
 var handedOverAt = time.Date(2026, 10, 20, 6, 0, 0, 0, time.UTC)
 
+// handoverAcceptedAt 是这件委托接受的时刻，取路由历史里那份计划的生效时刻，早于各用例的交接（ADR-0279）。
+var handoverAcceptedAt = handedOverAt.Add(-72 * time.Hour)
+
 const (
 	planOrigin   = "SYN-NODE-SHA-HUB"
 	planTransfer = "SYN-NODE-SIN-HUB"
@@ -159,6 +162,7 @@ func acceptedParcel(t *testing.T) *acceptedLookupDouble {
 		CustomerAccountID:  value(t, nrdomain.NewCustomerAccountID, "customer-1"),
 		ShipmentRequestID:  value(t, nrdomain.NewShipmentRequestID, "request-1"),
 		AcceptanceBaseline: value(t, nrdomain.NewAcceptanceBaselineReference, "version-1"),
+		AcceptedAt:         handoverAcceptedAt,
 		Geo:                baselineGeo(),
 	}}
 }
@@ -759,6 +763,33 @@ func TestACorrectionOfAHandoverEarlierThanTheCurrentPositionIsNotJudged(t *testi
 		if noted.Reason != nrports.NotJudgedTriggerPrecedesCurrentPosition ||
 			!noted.TriggerOccurredAt.Equal(handedOverAt) || !noted.CurrentPositionAt.Equal(handedOverAt.Add(time.Hour)) {
 			t.Fatalf("未判 = %+v, want 更正那一版早于当前位置 %s", noted, handedOverAt.Add(time.Hour))
+		}
+	}
+}
+
+// Covers: AT-NR-087（交接一路）——交接的判断时刻早于委托接受：本层把读回的已接受委托的接受时刻交给复核，复核入账为「触发早于
+// 委托接受」，交回 nil，不登本路未决哨兵；零复核、适用性不动，原因落未判登记并点名比较所用的委托接受时刻。
+func TestAHandoverEarlierThanTheAcceptanceSettlesNotJudged(t *testing.T) {
+	handover := formHandover(t, handoverSpec{
+		object: "parcel-1", version: "handover/v1", verdict: tfdomain.ObjectHandedOver, receiving: "SYN-NODE-KUL-HUB",
+	})
+	accepted := acceptedParcel(t)
+	accepted.accepted.AcceptedAt = handedOverAt.Add(time.Hour)
+	built := newSubject(t, newHandoverFinder(handover), accepted, true)
+
+	if err := built.deliver(t, handover); err != nil {
+		t.Fatalf("deliver = %v, want 入账", err)
+	}
+	if n := len(built.reassessments.byCorrelation); n != 0 || len(built.applicabilities.byPlan) != 0 {
+		t.Fatalf("早于接受却落了 %d 条复核、%d 份适用性", n, len(built.applicabilities.byPlan))
+	}
+	if len(built.reassessments.notJudged) != 1 {
+		t.Fatalf("未判登记 = %d 行, want 1", len(built.reassessments.notJudged))
+	}
+	for _, noted := range built.reassessments.notJudged {
+		if noted.Reason != nrports.NotJudgedTriggerPrecedesShipmentAcceptance ||
+			!noted.TriggerOccurredAt.Equal(handedOverAt) || !noted.ShipmentAcceptedAt.Equal(handedOverAt.Add(time.Hour)) {
+			t.Fatalf("未判登记 = %+v, want 早于委托接受 %s", noted, handedOverAt.Add(time.Hour))
 		}
 	}
 }

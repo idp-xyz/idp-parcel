@@ -81,6 +81,10 @@ type ReassessmentTriggerSpec struct {
 	Location      ActualLocationReference
 	SourceVersion SourceFactVersionReference
 	OccurredAt    time.Time
+	// AcceptedAt 是这一判断键的委托接受时刻（接受基线固定的那一刻），由消费侧适配器从 parcel-shipment 读来。它是复核能
+	// 判的业务时间下限（ADR-0279）：初始路由从接受起生效，早于它的触发据以离场会早于生效。不进触发指纹：它是判断键那条
+	// 基线的属性，不是这次触发的内容。
+	AcceptedAt time.Time
 }
 
 // ReassessmentTrigger 是 UC-NR-003 复核层次 1 已经验证过的触发：权威控制依据、实际位置、
@@ -93,6 +97,7 @@ type ReassessmentTrigger struct {
 	location      ActualLocationReference
 	sourceVersion SourceFactVersionReference
 	occurredAt    time.Time
+	acceptedAt    time.Time
 }
 
 // NewReassessmentTrigger 拒绝两类输入：缺件的（位置、版本、时间齐备才可关联）与线索级
@@ -109,7 +114,8 @@ func NewReassessmentTrigger(spec ReassessmentTriggerSpec) (ReassessmentTrigger, 
 		!spec.Key.MinimumIdentityEstablished() ||
 		!spec.Location.valid() ||
 		!spec.SourceVersion.valid() ||
-		spec.OccurredAt.IsZero() {
+		spec.OccurredAt.IsZero() ||
+		spec.AcceptedAt.IsZero() {
 		return ReassessmentTrigger{}, ErrInvalidReassessmentTrigger
 	}
 	return ReassessmentTrigger{
@@ -119,6 +125,7 @@ func NewReassessmentTrigger(spec ReassessmentTriggerSpec) (ReassessmentTrigger, 
 		location:      spec.Location,
 		sourceVersion: spec.SourceVersion,
 		occurredAt:    spec.OccurredAt.UTC(),
+		acceptedAt:    spec.AcceptedAt.UTC(),
 	}, nil
 }
 
@@ -144,6 +151,17 @@ func (trigger ReassessmentTrigger) SourceVersion() SourceFactVersionReference {
 
 func (trigger ReassessmentTrigger) OccurredAt() time.Time {
 	return trigger.occurredAt
+}
+
+func (trigger ReassessmentTrigger) AcceptedAt() time.Time {
+	return trigger.acceptedAt
+}
+
+// PrecedesAcceptance 答这次触发的业务时间是否早于这一判断键的委托接受时刻（ADR-0279）。初始路由从接受起生效，早于接受的
+// 触发判出失效或替代，离场就早于生效；「原先无当前有效路由」那条线上又会形成一份早于接受就生效的首个计划。业务时间不会
+// 变，重投永远推不动，所以入账不判。同一时刻不算更早，口径同 PrecedesPosition。
+func (trigger ReassessmentTrigger) PrecedesAcceptance() bool {
+	return trigger.occurredAt.Before(trigger.acceptedAt)
 }
 
 // PrecedesPosition 答这次触发是否早于路由历史里最近一次已判控制触发的业务时间（ADR-0235）。CONTEXT 要求按业务时间

@@ -1407,8 +1407,17 @@ func networkIntakeConsumer(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: intake adoptions: %w", err)
 	}
+	requests, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: network intake shipment requests: %w", err)
+	}
+	accepted, err := nrparcelshipment.NewAcceptedCarriedGeoSource(requests, requests)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: network intake accepted parcel source: %w", err)
+	}
 	intakes, err := nrparcelshipment.NewReassessOnNetworkIntakeAdapter(
 		adoptions,
+		accepted,
 		nrparcelshipment.NewReassessOnIntakeAdapter(reassessHandler, settings.purpose),
 	)
 	if err != nil {

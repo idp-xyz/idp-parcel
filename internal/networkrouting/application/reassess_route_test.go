@@ -14,6 +14,10 @@ import (
 
 var reassessedAt = time.Date(2026, 8, 9, 9, 0, 0, 0, time.UTC)
 
+// reassessAcceptedAt 是复核夹具里委托接受的时刻，早于各用例的触发与手放的计划：复核只判不早于接受的触发（ADR-0279），
+// 专测早于接受的用例另给。
+var reassessAcceptedAt = routeJudgedAt
+
 func reassessKey(t *testing.T) domain.InitialRouteJudgmentKey {
 	t.Helper()
 	return domain.InitialRouteJudgmentKey{
@@ -44,6 +48,7 @@ func reassessCommand(t *testing.T, location string) application.ReassessRouteCom
 		Location:      value(t, domain.NewActualLocationReference, location),
 		SourceVersion: value(t, domain.NewSourceFactVersionReference, "intake-fact/v1"),
 		OccurredAt:    reassessedAt,
+		AcceptedAt:    reassessAcceptedAt,
 	}}
 }
 

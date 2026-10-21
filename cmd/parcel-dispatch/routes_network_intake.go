@@ -18,10 +18,12 @@ func init() {
 		}
 		return []routeLeg{
 			// 两条链各带各的未决哨兵：合用一个失败码，运维就分不出该去查初始路由那条还是
-			// 复核这条等的依赖。
+			// 复核这条等的依赖。复核这条读 PS 取委托接受的时刻（ADR-0279），PS 读不动同样等依赖；
+			// 读回的委托与采用记录对不上是不变量破了，不在名单里。
 			{
 				event: nrinbox.AdoptedNetworkIntakeEventType, position: positionPrimary, consumer: intakes,
-				sentinels: []error{nrparcelshipment.ErrReassessmentUndecided}, label: "reassessment",
+				sentinels: []error{nrparcelshipment.ErrReassessmentUndecided, nrparcelshipment.ErrAcceptedParcelUnreadable},
+				label:     "reassessment",
 			},
 			{
 				event: nrinbox.AdoptedNetworkIntakeEventType, position: positionBilling, consumer: sellOnIntakes,

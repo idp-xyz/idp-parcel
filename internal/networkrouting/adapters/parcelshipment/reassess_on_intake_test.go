@@ -17,6 +17,9 @@ import (
 
 var intakeAt = time.Date(2026, 8, 9, 7, 30, 0, 0, time.UTC)
 
+// intakeAcceptedAt 是这件委托接受的时刻，取路由历史里那份计划的生效时刻，早于收寄（ADR-0279）。
+var intakeAcceptedAt = intakeAt.Add(-time.Hour)
+
 func value[T interface{ String() string }](t *testing.T, construct func(string) (T, error), raw string) T {
 	t.Helper()
 	built, err := construct(raw)
@@ -308,7 +311,7 @@ func TestAnAdoptedIntakeTriggersARealReassessment(t *testing.T) {
 		nrdomain.NewGeoResolutionSide("CN", true, "200000", true),
 		nrdomain.NewGeoResolutionSide("SG", true, "018956", true),
 	)}
-	result, err := subject.TriggerReassessment(context.Background(), adoptedRecord(t), carried)
+	result, err := subject.TriggerReassessment(context.Background(), adoptedRecord(t), intakeAcceptedAt, carried)
 	if err != nil {
 		t.Fatalf("trigger reassessment: %v", err)
 	}
@@ -341,12 +344,12 @@ func TestRefusalsAndMissingPurposeDoNotTrigger(t *testing.T) {
 	refused := adoptedRecord(t)
 	refused.Adopted = false
 	subject := adapter.NewReassessOnIntakeAdapter(handler, value(t, nrdomain.NewServicePurpose, "NETWORK_SERVICE"))
-	if _, err := subject.TriggerReassessment(context.Background(), refused, nrports.RequestCarriedContent{}); !errors.Is(err, adapter.ErrRefusalDoesNotTrigger) {
+	if _, err := subject.TriggerReassessment(context.Background(), refused, time.Time{}, nrports.RequestCarriedContent{}); !errors.Is(err, adapter.ErrRefusalDoesNotTrigger) {
 		t.Fatalf("err = %v, want ErrRefusalDoesNotTrigger", err)
 	}
 
 	unconfigured := adapter.NewReassessOnIntakeAdapter(handler, nrdomain.ServicePurpose{})
-	if _, err := unconfigured.TriggerReassessment(context.Background(), adoptedRecord(t), nrports.RequestCarriedContent{}); !errors.Is(err, adapter.ErrUntranslatableAnswer) {
+	if _, err := unconfigured.TriggerReassessment(context.Background(), adoptedRecord(t), intakeAcceptedAt, nrports.RequestCarriedContent{}); !errors.Is(err, adapter.ErrUntranslatableAnswer) {
 		t.Fatalf("err = %v, want ErrUntranslatableAnswer", err)
 	}
 }

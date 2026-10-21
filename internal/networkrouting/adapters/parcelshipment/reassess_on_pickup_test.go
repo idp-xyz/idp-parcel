@@ -104,7 +104,7 @@ func alternativeEvidence(t *testing.T) nrports.InitialRouteEvidence {
 func TestAnAdoptedOffsitePickupKeepsThePlanWhoseHardConstraintsHold(t *testing.T) {
 	subject, stores := pickupReassessor(t, alternativeEvidence(t))
 
-	result, err := subject.TriggerReassessment(context.Background(), pickupAdoptedRecord(t), nrports.RequestCarriedContent{})
+	result, err := subject.TriggerReassessment(context.Background(), pickupAdoptedRecord(t), intakeAcceptedAt, nrports.RequestCarriedContent{})
 	if err != nil {
 		t.Fatalf("trigger reassessment: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestAnAdoptedOffsitePickupWithARestrictedPlanOnlySuggests(t *testing.T) {
 	evidence.HardConstraints = []nrdomain.HardConstraintFinding{finding}
 	subject, _ := pickupReassessor(t, evidence)
 
-	result, err := subject.TriggerReassessment(context.Background(), pickupAdoptedRecord(t), nrports.RequestCarriedContent{})
+	result, err := subject.TriggerReassessment(context.Background(), pickupAdoptedRecord(t), intakeAcceptedAt, nrports.RequestCarriedContent{})
 	if err != nil {
 		t.Fatalf("trigger reassessment: %v", err)
 	}

@@ -3,6 +3,7 @@ package parcelshipment_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -109,13 +110,49 @@ func reassessorWithUnreadableEvidence(t *testing.T) *adapter.ReassessOnIntakeAda
 	return adapter.NewReassessOnIntakeAdapter(handler, value(t, nrdomain.NewServicePurpose, "NETWORK_SERVICE"))
 }
 
+// acceptedParcelDouble 顶 PS 已接受委托的读口：交回判断键各维与委托接受的时刻。
+type acceptedParcelDouble struct {
+	accepted adapter.AcceptedCarriedGeo
+	found    bool
+	err      error
+	asked    int
+}
+
+func (double *acceptedParcelDouble) LoadAcceptedCarriedGeo(
+	_ context.Context, _ nrdomain.TenantID, _ nrdomain.DeclaredParcelID,
+) (adapter.AcceptedCarriedGeo, bool, error) {
+	double.asked++
+	return double.accepted, double.found, double.err
+}
+
+// acceptedParcelAt 是 adoptedRecord 那件委托的已接受读回，接受时刻取 at。
+func acceptedParcelAt(t *testing.T, at time.Time) *acceptedParcelDouble {
+	t.Helper()
+	return &acceptedParcelDouble{found: true, accepted: adapter.AcceptedCarriedGeo{
+		CustomerAccountID:  value(t, nrdomain.NewCustomerAccountID, "customer-1"),
+		ShipmentRequestID:  value(t, nrdomain.NewShipmentRequestID, "request-1"),
+		AcceptanceBaseline: value(t, nrdomain.NewAcceptanceBaselineReference, "version-1"),
+		AcceptedAt:         at,
+	}}
+}
+
 func subjectFor(
 	t *testing.T,
 	source *adoptionSourceDouble,
 	reassess *adapter.ReassessOnIntakeAdapter,
 ) *adapter.ReassessOnNetworkIntakeAdapter {
 	t.Helper()
-	subject, err := adapter.NewReassessOnNetworkIntakeAdapter(source, reassess)
+	return subjectAccepting(t, source, acceptedParcelAt(t, intakeAcceptedAt), reassess)
+}
+
+func subjectAccepting(
+	t *testing.T,
+	source *adoptionSourceDouble,
+	accepted *acceptedParcelDouble,
+	reassess *adapter.ReassessOnIntakeAdapter,
+) *adapter.ReassessOnNetworkIntakeAdapter {
+	t.Helper()
+	subject, err := adapter.NewReassessOnNetworkIntakeAdapter(source, accepted, reassess)
 	if err != nil {
 		t.Fatalf("construct adapter: %v", err)
 	}
@@ -199,10 +236,14 @@ func TestAnUnknownSourceKindIsLoudAndNeverQueries(t *testing.T) {
 func TestARefusedAdoptionIsRecordedNotRetried(t *testing.T) {
 	refused := adoptedRecord(t)
 	refused.Adopted = false
-	subject := subjectFor(t, sourceHolding(refused), reassessorWithHistory(t))
+	accepted := acceptedParcelAt(t, intakeAcceptedAt)
+	subject := subjectAccepting(t, sourceHolding(refused), accepted, reassessorWithHistory(t))
 
 	if err := subject.HandleAdoptedNetworkIntake(context.Background(), envelopeFor(t)); err != nil {
 		t.Fatalf("`不采用`应入账收工，而不是回滚重投：%v", err)
+	}
+	if accepted.asked != 0 {
+		t.Fatalf("读已接受委托 %d 次, want 0——不采用没有要复核的收寄事实", accepted.asked)
 	}
 }
 
@@ -233,5 +274,77 @@ func TestAReassessmentWithoutRoutingHistorySettlesWithItsReason(t *testing.T) {
 		if noted.Reason != nrports.NotJudgedNoRoutingHistory {
 			t.Fatalf("未判原因 = %s, want NO_ROUTING_HISTORY", noted.Reason)
 		}
+	}
+}
+
+// Covers: AT-NR-087（收寄采用一路）——收寄的业务时间早于委托接受：采用信封不带接受时刻，本层按（租户，包裹）读回那份已接受
+// 委托的接受时刻交给复核；复核入账为「触发早于委托接受」，交回 nil，不登本路未决哨兵，原因落未判登记。
+func TestAnIntakeEarlierThanTheAcceptanceSettlesNotJudged(t *testing.T) {
+	store := &reassessStoreDouble{byCorrelation: map[nrdomain.RequestCorrelationID]nrports.ReassessmentRecord{}}
+	handler := nrapplication.NewReassessRouteHandler(nrapplication.ReassessRouteDeps{
+		Routes: &routeStoreDouble{records: map[nrdomain.InitialRouteJudgmentKey]nrports.InitialRouteRecord{
+			reassessKey(t): planOnFile(t),
+		}},
+		Evidence:      evidenceDouble{evidence: evidenceWithOpenFreeze(t)},
+		Applicability: &applicabilityStoreDouble{byPlan: map[nrdomain.RoutePlanVersionID]nrdomain.PlanApplicability{}},
+		Store:         store,
+		Log:           &logDouble{digests: map[nrdomain.RequestCorrelationID]string{}},
+		Identities:    &identityDouble{},
+		Clock:         fixedClock{at: intakeAt.Add(3 * time.Hour)},
+	})
+	accepted := acceptedParcelAt(t, intakeAt.Add(time.Hour))
+	subject := subjectAccepting(t, sourceHolding(adoptedRecord(t)), accepted,
+		adapter.NewReassessOnIntakeAdapter(handler, value(t, nrdomain.NewServicePurpose, "NETWORK_SERVICE")))
+
+	if err := subject.HandleAdoptedNetworkIntake(context.Background(), envelopeFor(t)); err != nil {
+		t.Fatalf("早于委托接受应入账，而不是回滚重投：%v", err)
+	}
+	if len(store.byCorrelation) != 0 || len(store.notJudged) != 1 {
+		t.Fatalf("复核 %d 条、未判 %d 行, want 0 与 1", len(store.byCorrelation), len(store.notJudged))
+	}
+	for _, noted := range store.notJudged {
+		if noted.Reason != nrports.NotJudgedTriggerPrecedesShipmentAcceptance ||
+			!noted.ShipmentAcceptedAt.Equal(intakeAt.Add(time.Hour)) || !noted.TriggerOccurredAt.Equal(intakeAt) {
+			t.Fatalf("未判 = %+v, want 早于委托接受 %s", noted, intakeAt.Add(time.Hour))
+		}
+	}
+}
+
+// Covers: 读已接受委托的三格——读不动交 ErrAcceptedParcelUnreadable（本路未决哨兵，回滚重投）；读不着，或读到的委托、
+// 基线与采用记录对不上，是不变量破了，交 ErrAcceptedRequestInconsistent（不进哨兵）。三格都不走到复核。
+func TestTheAcceptanceReadOfAnAdoptedIntakeIsSplitByRecovery(t *testing.T) {
+	mismatched := func(mutate func(*adapter.AcceptedCarriedGeo)) *acceptedParcelDouble {
+		double := acceptedParcelAt(t, intakeAcceptedAt)
+		mutate(&double.accepted)
+		return double
+	}
+	for name, tc := range map[string]struct {
+		accepted *acceptedParcelDouble
+		want     error
+	}{
+		"读不动": {&acceptedParcelDouble{err: fmt.Errorf("%w: pool closed", adapter.ErrAcceptedParcelUnreadable)},
+			adapter.ErrAcceptedParcelUnreadable},
+		"读不着": {&acceptedParcelDouble{}, adapter.ErrAcceptedRequestInconsistent},
+		"另一份委托": {mismatched(func(geo *adapter.AcceptedCarriedGeo) {
+			geo.ShipmentRequestID = value(t, nrdomain.NewShipmentRequestID, "request-2")
+		}), adapter.ErrAcceptedRequestInconsistent},
+		"另一条基线": {mismatched(func(geo *adapter.AcceptedCarriedGeo) {
+			geo.AcceptanceBaseline = value(t, nrdomain.NewAcceptanceBaselineReference, "version-2")
+		}), adapter.ErrAcceptedRequestInconsistent},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := &reassessStoreDouble{byCorrelation: map[nrdomain.RequestCorrelationID]nrports.ReassessmentRecord{}}
+			subject := subjectAccepting(t, sourceHolding(adoptedRecord(t)), tc.accepted, reassessorWithoutHistory(t, store))
+			err := subject.HandleAdoptedNetworkIntake(context.Background(), envelopeFor(t))
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("err = %v, want %v", err, tc.want)
+			}
+			if retryable := errors.Is(err, adapter.ErrAcceptedParcelUnreadable); retryable != (tc.want == adapter.ErrAcceptedParcelUnreadable) {
+				t.Fatalf("err = %v：可重投 %v，与格子不符", err, retryable)
+			}
+			if len(store.notJudged) != 0 || len(store.byCorrelation) != 0 {
+				t.Fatal("读不回已接受委托就不该走到复核")
+			}
+		})
 	}
 }

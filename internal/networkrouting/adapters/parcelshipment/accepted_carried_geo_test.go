@@ -100,7 +100,8 @@ func loadGeo(t *testing.T, source *adapter.AcceptedCarriedGeoSource, parcel stri
 }
 
 // Covers: AT-NR-064（取投影那一半）——当前已接受包裹交回判断键各维，基线引用是基线的提交版本标识（与初始路由、收寄复核
-// 同源），投影是基线那一版提交的地理维，摘要与按同一份取值组成的投影相同。
+// 同源），投影是基线那一版提交的地理维，摘要与按同一份取值组成的投影相同。AT-NR-087（取接受时刻那一半）：接受时刻是接受基线
+// 固定的那一刻，与初始路由交接带来的同源。
 func TestAnAcceptedParcelAnswersItsJudgmentKeyAndTheBaselineVersionsGeo(t *testing.T) {
 	request := acceptedShipmentRequestDeclaring(t, declaredCNToSG(t))
 	targets := &parcelTargetDouble{target: targetFor(t, request, "request-1"), found: true}
@@ -113,6 +114,9 @@ func TestAnAcceptedParcelAnswersItsJudgmentKeyAndTheBaselineVersionsGeo(t *testi
 	if got.CustomerAccountID.String() != "customer-1" || got.ShipmentRequestID.String() != "request-1" ||
 		got.AcceptanceBaseline.String() != "version-1" {
 		t.Fatalf("判断键各维 = %+v", got)
+	}
+	if baseline, _ := request.AcceptanceBaseline(); got.AcceptedAt.IsZero() || !got.AcceptedAt.Equal(baseline.FixedAt()) {
+		t.Fatalf("接受时刻 = %s, want 接受基线固定的 %s", got.AcceptedAt, baseline.FixedAt())
 	}
 	want := nrdomain.NewGeoResolutionProjection(
 		nrdomain.NewGeoResolutionSide("CN", true, "200000", true),

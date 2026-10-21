@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	nrapplication "go.idp.xyz/idp-parcel/internal/networkrouting/application"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
@@ -39,12 +40,14 @@ func NewReassessOnIntakeAdapter(
 	return &ReassessOnIntakeAdapter{reassess: reassess, purpose: purpose}
 }
 
-// TriggerReassessment 翻译并转交一份采用记录，连同采用信封携带的内容（复核按它取证据，ADR-0075）。
+// TriggerReassessment 翻译并转交一份采用记录，连同采用信封携带的内容（复核按它取证据，ADR-0075）与这件委托接受的时刻
+// （复核的业务时间下限，ADR-0279；由调用方从 parcel-shipment 读来）。
 // 控制依据按来源类型逐格译：节点收寄是节点控制，建立当前可控节点；场外揽收译成揽收那一格，照复核却不建立可控节点，
 // 揽收地点是客户场所、原样作复核位置（ADR-0249）。普通扫描在提供方的采用判断里就进不来。
 func (adapter *ReassessOnIntakeAdapter) TriggerReassessment(
 	ctx context.Context,
 	record psports.IntakeAdoptionRecord,
+	acceptedAt time.Time,
 	carried nrports.RequestCarriedContent,
 ) (nrapplication.ReassessRouteResult, error) {
 	if !adapter.purpose.Valid() {
@@ -58,6 +61,7 @@ func (adapter *ReassessOnIntakeAdapter) TriggerReassessment(
 	if err != nil {
 		return nrapplication.ReassessRouteResult{}, err
 	}
+	trigger.AcceptedAt = acceptedAt
 	return adapter.reassess.Handle(ctx, nrapplication.ReassessRouteCommand{Trigger: trigger, Carried: carried})
 }
 
