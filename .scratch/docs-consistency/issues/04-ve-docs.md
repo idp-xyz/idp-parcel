@@ -50,7 +50,7 @@ Blocked by: 无（01 进 main 后开工）
 | VE-02 ETA 维无判断也答展示 | C | 已有代码票 [code/06](../code/06-customer-view-shows-dimensions-without-a-visible-judgement.md)；它交来的文档半边已改：UC-VE-008「客户追踪视图」一行写明四维三态与 `contentRef` 指名披露策略允许展示的内容集、不是内容本身 |
 | VE-03 被替代条目不在投影版本里 | C | 已有票 [demo-chain-gaps/117](../../demo-chain-gaps/issues/117-projection-entries-are-stored-without-their-supersession.md)。文档是现行规则（ADR-0065 决定七），不改；裁向写进 117：连同 CONTEXT 前半一起落 |
 | VE-04 分叉先按业务时间裁决 | B | 代决 [ADR-0245](../../../docs/adr/0245-a-forked-supersession-chain-is-never-ordered-by-business-time-and-stays-pending-in-the-projection-version.md)；CONTEXT 分叉一条与 Lifecycles 一行、UC-VE-002 主流程第 5 步与 `AT-VE-043` 已改；ADR-0065 挂读法注；代码票 [code/30](../code/30-forked-supersession-is-judged-by-business-time-and-not-kept-pending.md) |
-| VE-05 视图未形成与无权合成一格 | B | 代决 [ADR-0246](../../../docs/adr/0246-the-customer-tracking-query-answers-no-visible-result-for-a-parcel-attributed-to-the-requesting-account-before-its-view-forms.md)；CONTEXT 账户核对一条与 Lifecycles 一行、UC-VE-008 元数据、结果语义、主流程第 8 步已改，新立 `AT-VE-188`；ADR-0223 挂「已答」；代码票 [code/31](../code/31-customer-tracking-query-cannot-say-no-visible-result-for-its-own-parcel.md) |
+| VE-05 视图未形成与无权合成一格 | B | 代决 [ADR-0246](../../../docs/adr/0246-the-customer-tracking-query-answers-no-visible-result-for-a-parcel-attributed-to-the-requesting-account-before-its-view-forms.md)；CONTEXT 账户核对一条与 Lifecycles 一行、UC-VE-008 元数据、结果语义、主流程第 8 步已改，新立 `AT-VE-188`；部分停用 ADR-0223 决定三一句（委托已接受、视图未形成、包裹唯一归属请求方时），同时回答其越权风险点 3，两头挂指针；代码票 [code/31](../code/31-customer-tracking-query-cannot-say-no-visible-result-for-its-own-parcel.md) |
 | VE-06 `AT-VE-169` 重号 | A | 已改：UC-VE-003 的 ETA 那一行改号为 `AT-VE-187`（全仓 AT-VE 最大号 186 之后的下一个；该行没有任何代码引用）；UC-VE-008 那行保留 169（测试与十余处注释都点它）。AT 盘点 ④ 移行、① 补 169 |
 | VE-07 CONTEXT 缺「入账不派生」 | A | 已改：CONTEXT「追踪投影与里程碑」立「入账不派生」一条，列三族情形（源上下文已判同层冲突的那一份、没有可投对象的移动事实、补派生时没有可补的移动事实），各引 ADR-0197、0205、0224、0226；Lifecycles 投影一节补一行；UC-VE-002 结果表补「入账不派生」一格 |
 | VE-08 关务同层冲突不形成待确认与信号 | C | 已有票 [demo-chain-gaps/124](../../demo-chain-gaps/issues/124-customs-layer-conflict-relation-and-tracking-signal.md)；UC-VE-001 `AT-VE-006` 表后注明现状缺口、指向 124，预期结果不变 |
@@ -81,12 +81,13 @@ Blocked by: 无（01 进 main 后开工）
   - 以链头计比今天的检测宽，「再更正一次就恢复」不再成立；
   - 客户视图那一维的待确认依赖 code/06；
   - 跨源冲突仍没有发现机制。
-- **ADR-0246（VE-05）**：客户查询的业务结果分三格，`CURRENT_VIEW` / `NO_VISIBLE_RESULT` / `VIEW_NOT_FOUND`。只在读不到视图时经 PS 归属反查口问一次「这件归不归你」。委托接受之前与标识冲突对外仍合并。越权风险点：
+- **ADR-0246（VE-05）**：客户查询的业务结果分三格，`CURRENT_VIEW` / `NO_VISIBLE_RESULT` / `VIEW_NOT_FOUND`。只在读不到视图时经 PS 归属反查口问一次「这件归不归你」。委托接受之前与标识冲突对外仍合并。部分停用 ADR-0223 决定三「在那之前，客户查自己的号也答 `VIEW_NOT_FOUND`，与不存在不分」一句，同时回答其越权风险点 3。越权风险点：
   - 查询面多一次 PS 读（待 PS owner 会签）；
   - 对归属方说出了「已归属」一位；
   - 时延差不做常数时间；
   - 投影形不成时 `NO_VISIBLE_RESULT` 会长期不变；
-  - 应赶在首方契约基线发布前落地。
+  - 应赶在首方契约基线发布前落地；
+  - 已受理委托的声明方查得 `VIEW_NOT_FOUND` 而非 `NO_VISIBLE_RESULT`，推得出「这件不唯一归我」（多重声明或归属转走）；件号由服务端现签、只交回提交方，不构成枚举口。
 - **ADR-0247（VE-15）**：运营追踪查阅面归操作者渠道族，能力面「主数据与运营查阅读」，答复照 ADR-0100 决定四三格；ADR-0055 Decision 五两项未决对它不适用。越权风险点：
   - 追踪查阅与目录查阅共用一格授予（待接入身份 owner 会签）；
   - VE 其他运营查阅口按今天的装配一并归族；
@@ -98,16 +99,45 @@ Blocked by: 无（01 进 main 后开工）
 
 ### 代码票编号
 
-code/30–28 接 02 留下的最大号 25。票 03、05 与本票并行，也可能在 code/ 下立票，进 main 时若撞号，由协调方顺延其一；本票各处引用都带完整文件名，改号要连带改的有：ADR-0245 与 ADR-0246 的 Status 行、Consequences 与 Links，票 117 的裁向一节，本节与上表，AT 盘点追记，以及 code/32 自己。
+03、04、05 三组并行时都从 code/26 起立票，撞号。协调方分配：03 用 code/26–27，05 用 28–29，本票用 **code/30–32**。本票原立的三张依次改为 30（分叉）、31（客户查询当前无可见结果）、32（VE 注释），文件名、票内标题与全部引用处（ADR-0245、ADR-0246、UC-VE-002、UC-VE-008、AT 盘点、票 117、本票）已一并改；全仓 grep 不再有本票的旧号。
 
 ### 检查
 
-- `go run ./tools/adr-index` 重生成后 `-check` 退 0；索引只多出 0245–0247 三行，0065、0076、0100、0223 四行的注记各多一段。
+- `go run ./tools/adr-index`：在 scratchpad 的 `git archive HEAD` 副本上重生成后 `-check` 退 0；索引只多出 0245–0247 三行，0065、0076、0100、0223 四行的注记各多一段。分支上的 `docs/adr/README.md` 保持 main 的版本，落地时由协调方重生成。
 - `go run ./tools/at-coverage-counts -check` 退 1（只报总览计数过期，没有格式错）：本票只移行、加行，总览计数由协调方进 main 时重算。
-- 本分支改过的全部 `.md` 里的相对链接逐条解析，都能解析。唯一报不中的是 `docs/adr/README.md` 手写规则里那处以省略号作目标的占位链接写法，main 上原样就有，不是真链接。
-- `git diff main --stat`：只动了 VE CONTEXT、`docs/application/visibility-exception/` 下五份 UC、ADR-0245–0247 及 0065、0076、0100、0223 的 Status 行与 Links、`docs/adr/README.md`（生成物）、AT 盘点、本票、code/30–28、票 demo-chain-gaps/117。没有动代码、种子、GLOSSARY、CONTEXT-MAP、SCENARIOS、`docs/product/`、`docs/agents/` 与别组文件。
+- 本分支改过的全部 `.md` 里的相对链接逐条解析，都能解析。
+- 被停原句逐字核：0065、0076、0100、0223 新加注记里引被停记录的每一句，都在被停记录正文（去掉 Status 行）里逐字找到；报不中的只有别份记录的原词（ADR-0100 的能力面名「主数据与运营查阅读」）与注记自指的前文。
+- `git diff main --stat`：只动了 VE CONTEXT、`docs/application/visibility-exception/` 下五份 UC、ADR-0245–0247 及 0065、0076、0100、0223 的 Status 行与 Links、AT 盘点、本票、code/30–32、票 demo-chain-gaps/117。没有动代码、种子、GLOSSARY、CONTEXT-MAP、SCENARIOS、`docs/product/`、`docs/agents/` 与别组文件。
 - 新写的 CONTEXT、UC 文字不用行号、跨文件计数与跨文件位置引用。CONTEXT 里两处同文件指称用的是引文（「多个有效事实冲突时」那一条、「冲突仍无法裁决时」那一条）。
 
 ### 提交
 
-分支 `claude-dc04`，基于 main `205eb254`，各笔见 `git log main..claude-dc04`：认领；code/30–28；ADR 与指针、索引；CONTEXT；UC；AT 盘点；票 117 裁向；本记录；完工状态。
+分支 `claude-dc04`，已 rebase 到 main `f928c5ba`，各笔见 `git log main..claude-dc04`：认领；VE 代码票；ADR 与指针；CONTEXT；UC；AT 盘点；票 117 裁向；本记录；完工状态；评审修订四笔与本记录更新。
+
+## 评审记录
+
+### 隔离评审一轮（2026-10-21）与作者回应
+
+阻断：
+
+- **B1 ADR-0246 实为部分停用 ADR-0223 决定三一句，不只是回答越权风险点 3**：已修。ADR-0246 前段改为「部分停用 ADR-0223 决定三一句，同时回答其越权风险点 3」，Context、决定五、Consequences 与 Links 同步。ADR-0223 的注记由「已答」改为部分停用，逐字引被停原句「在那之前，客户查自己的号也答 `VIEW_NOT_FOUND`，与不存在不分」，写适用场景：委托已接受、客户视图未形成、包裹唯一归属请求方。注记里写明接受之前不变、越权风险点 3 同时由它回答、其余不变；Links 同步。
+- **B2 C 类「文档不迁就代码」的几处 UC 没有现状注**：已修，照 UC-VE-001、002 已有的写法逐处加，CONTEXT 不动。
+  - UC-VE-008：`AT-VE-161` → code/05；`AT-VE-158` 与结果语义「客户追踪视图」一行 → code/06；「当前无可见结果」一行与 `AT-VE-188` → code/31。
+  - UC-VE-002：`AT-VE-044` 与主流程第 5 步「被替代条目保留」→ 票 117，顺带注明 `AT-VE-192` 的回指前版在真库上同病；`AT-VE-043` → code/30。
+
+建议：
+
+- **N1**：已修。UC-VE-008「目标与边界」首段的结果集合改为新口径。「身份谱系待确认」只留在结果语义「信息待确认」一行（归维上，ADR-0246 决定四）；元数据「待判断结束」只留外部标识或客户归属冲突，其余待确认指向那一行。
+- **N2**：已修。ADR-0246 补越权风险点 6，写出现条件（多重声明或归属转走，只对自己声明过的包裹成立）、不构成枚举口的理由（首方口件号由服务端现签、只交回提交方）与续办。决定五「标识冲突」的理由改为只对非声明方成立，并写明对声明方交出的只是「不唯一归我」这一位。
+- **N3**：已修。CONTEXT「入账不派生」第二条里补派生那一句句首加「段不在册的那一条，」。
+- **N4**：已修。`docs/adr/README.md` 恢复为 main 的版本；adr-index 的生成与核对改在 scratchpad 副本上做。
+- **N5**：已修。code/31 的规模与修法列上 `scripts/demo-seeds/README.md`「之前查它答 `VIEW_NOT_FOUND`」一句，与 `docs/design/synthetic-demo-journey-script.md` 首方查询表两处同步。
+- **N6**：已修。
+  - CONTEXT 事实类型词表末句改为「本表之外的词不由任何源产出」。
+  - ADR-0247「九天后」改「十天后」。
+  - AT 盘点 `AT-VE-191`、`194` 的叠括号合一，同组 `AT-VE-189`–`195` 一并合。
+  - ADR-0247 Context 的口列表删掉 `/visibility-catalogues`，另注一句它属 ADR-0077 目录族、已在 ADR-0100 决定四覆盖面内。
+- **改号**：已修，见「完成记录」中「代码票编号」一节。
+- **跨组约定（票 10 第 5 条）**：本票没有在 CONTEXT 的单条规则上挂票号；差距注都在 UC 的验收表后。
+
+未采纳：无。
