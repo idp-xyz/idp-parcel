@@ -388,7 +388,7 @@ func TestConcurrentCutsOnOnePredecessorQueueOnItsRow(t *testing.T) {
 	}
 }
 
-// Covers: AT-PP-010 的交接口半边——收尾那一封与两版各自登记那一封标识不同（同一个标识会被当成重发吞掉）；截止与退役各一封；
+// Covers: AT-PP-012 的交接口半边——收尾那一封与两版各自登记那一封标识不同（同一个标识会被当成重发吞掉）；截止与退役各一封；
 // 缺收尾格就拒。
 func TestAClosureIsHandedOffApartFromTheCardRegistrations(t *testing.T) {
 	handoffs, db := newResumptionHandoffs(t)

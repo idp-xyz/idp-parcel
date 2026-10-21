@@ -393,8 +393,9 @@ func TestAStallWhoseAccountAdoptsAnotherMomentIsClosed(t *testing.T) {
 }
 
 // Covers: AT-SA-189、AT-SA-195——卡没绑分区目录、发生项也没带分区，计价答目录读不出：这一格只有绑了目录的新一版卡解得开
-// （没有目录信封会落到这张卡的范围上）。租户在同一范围上登一张绑了分区目录的卡，价卡登记的信封按范围与方向续办出第二代；
-// 第一代原样；第二代因旧卡退不了场停在适用冲突。
+// （没有目录信封会落到这张卡的范围上）。租户在同一范围上另登一个方案、绑了分区目录，价卡登记的信封按范围与方向续办出
+// 第二代；第一代原样；第二代因旧卡退不了场停在适用冲突——两张卡是不同的定价方案，收尾口只在同一方案的两版之间收尾
+// （ADR-0234 决定七）。登成同一方案的新一版再收尾就续办得出评价，见 TestARequestStalledOnAMissingWeightBandResumesOnceTheOldCardIsClosed。
 func TestARequestStalledOnAnUnboundZoneCatalogueResumesOnACardThatBindsIt(t *testing.T) {
 	fixture, beat, store := buyResumptionFixture(t)
 	registerBuyTriggers(t, fixture.db, demoTenant)
@@ -424,8 +425,8 @@ func TestARequestStalledOnAnUnboundZoneCatalogueResumesOnACardThatBindsIt(t *tes
 		!strings.HasPrefix(lineage[1].basis, "PARAMREG/PRICE_CARD/") {
 		t.Fatalf("登了绑目录的卡之后 = %+v，want 第一代原样、凭价卡登记续办出第二代", lineage)
 	}
-	// 旧卡退不了场：同一范围上两张卡同时适用，第二代照实停在适用冲突，等票 150 的截止口（ADR-0229 越权风险点「要换一版卡
-	// 才解得开的几格，今天续办不出评价」）。
+	// 旧卡退不了场：同一范围上两个方案同时适用，第二代照实停在适用冲突；让位给另一方案的退役归 ADR-0234 越权风险点 5 记下
+	// 的后继票。
 	if lineage[1].stopCause != "PRICE_CARD_APPLICABILITY_CONFLICT" {
 		t.Fatalf("第二代停因 = %q，want PRICE_CARD_APPLICABILITY_CONFLICT", lineage[1].stopCause)
 	}
