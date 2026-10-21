@@ -171,7 +171,7 @@
 | ID | 场景 | 预期结果 |
 |---|---|---|
 | `AT-NR-033` | 客户送站形成有效网络收寄，实际节点与初始计划一致；策略版本已声明冻结形态，没有超过改善阈值的候选 | 记录复核依据并保留原路由，不创建重复计划 |
-| `AT-NR-034` | 场外揽收交接已采用，尚未到节点；选中候选的硬约束仍满足 | 原计划继续适用；揽收地点原样记入复核依据，不与计划节点比；不建立当前可控节点，不判冻结、不试改善切换，不落「冻结形态未配置」；不虚构节点实测或到站（[ADR-0249](../../adr/0249-offsite-pickup-reassessment-checks-hard-constraints-only-and-does-not-establish-a-controllable-node.md)；现状缺口已由票 [docs-consistency/code/16](../../../.scratch/docs-consistency/code/16-pickup-reassessment-compares-the-pickup-place-with-plan-nodes.md) 补齐，2026-10-21；揽收地点随触发原样保全、进触发指纹，复核册不另存，经触发关联指回收寄采用记录） |
+| `AT-NR-034` | 场外揽收交接已采用，尚未到节点；选中候选的硬约束仍满足 | 原计划继续适用；揽收地点原样记入复核依据，不与计划节点比；不建立当前可控节点，不判冻结、不试改善切换，不落「冻结形态未配置」；不虚构节点实测或到站（[ADR-0249](../../adr/0249-offsite-pickup-reassessment-checks-hard-constraints-only-and-does-not-establish-a-controllable-node.md)；现状缺口已由票 [docs-consistency/code/16](../../../.scratch/docs-consistency/code/16-pickup-reassessment-compares-the-pickup-place-with-plan-nodes.md) 补齐，2026-10-21；NR 不存地点，经触发关联指回 PS 收寄采用记录取地点，地点进触发指纹） |
 | `AT-NR-035` | 有效网络收寄发生在非计划但已确认控制的节点 | 原计划按实际节点与计划不符失效、评估替代候选，形成偏离，不把节点回填进旧计划（偏离未实现，见 [demo-chain-gaps/35](../../../.scratch/demo-chain-gaps/issues/35-network-routing-route-deviation-consumes-movement-facts.md)） |
 | `AT-NR-036` | 当前有效实测仍满足原计划硬限制；策略版本已声明冻结形态 | 原计划继续适用，测量事实不被路由复制或修改（实测触发未实现，见「给开发的交接」） |
 | `AT-NR-037` | 原线路不再合格（有效硬限制或当前有效实测），包裹在当前可控节点上，存在替代候选且允许自动改路 | 替代候选比失效计划便宜、差额严格大于阈值时形成改路决定与新计划，保留旧计划及已执行前缀；差额不超过阈值时只形成建议，阻塞原因 `IMPROVEMENT_BELOW_THRESHOLD`（[ADR-0173](../../adr/0173-auto-reroute-is-folded-from-the-strategy-version.md) 决定三）。新路由指令与实测触发未实现，见「给开发的交接」 |
@@ -220,6 +220,7 @@
 
 | 能力 | 现状 | 承接 |
 |---|---|---|
+| 原计划失效之后的复核走「原先无当前有效路由」那条线（ADR-0249 决定二与越权风险点 3、步骤 4） | 复核以初始路由那一行为起点：失效后限制仍在时答未决、回滚重投，限制已解除时对已失效的计划答仍适用；自动改路形成的新计划也不当起点。依赖 code/52 | [docs-consistency/code/52](../../../.scratch/docs-consistency/code/52-reassessment-reads-the-initial-route-row-instead-of-the-current-plan-or-no-route.md) |
 | 适用性看不清入账未判（`AT-NR-051`） | 今天答未决、回滚重投 | [docs-consistency/code/28](../../../.scratch/docs-consistency/code/28-unclear-plan-applicability-in-reassessment-is-retried-instead-of-settled.md) |
 | 复核取候选成本（`AT-NR-039`、`AT-NR-053`、步骤 6B/7B/7C） | 复核没有成本取数口，有合格候选时排序报错或候选评估一律记未决 | [demo-chain-gaps/115](../../../.scratch/demo-chain-gaps/issues/115-route-reassessment-never-loads-candidate-costs.md) |
 | 仍适用线形成改路建议（步骤 7C、`AT-NR-042`） | 只有失效线形成建议 | [docs-consistency/code/17](../../../.scratch/docs-consistency/code/17-still-applicable-plan-never-forms-a-reroute-suggestion.md) |
