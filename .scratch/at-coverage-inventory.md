@@ -231,7 +231,7 @@
 | `AT-PP-001` | cmd/parcel-dispatch/evaluation_resumption_loop_test.go::TestTheResumptionLanesListOnlyDependenciesThatHealOnRetry |
 | `AT-PP-002` | internal/parcelpricing/adapters/settlementaccounting/form_on_evaluation_request_submitted_test.go::TestAnUnformableRequestHandsOffUnformedAndSettles |
 | `AT-PP-003` | internal/parcelpricing/application/register_price_card_test.go::TestARegisteredPriceCardAnnouncesItsScope |
-| `AT-PP-004` | internal/parcelpricing/application/review_reference_series_test.go::TestAnApprovedReviewAnnouncesTheSeriesAsRegistered |
+| `AT-PP-004` | internal/parcelpricing/application/review_reference_series_test.go::TestAnApprovedReviewAnnouncesTheSeriesOnEveryScopeThatBindsIt |
 | `AT-PP-005` | cmd/parcel-dispatch/evaluation_resumption_loop_test.go::TestABuyRequestStalledOnAMissingPriceCardResumesAfterTheCardIsRegistered |
 | `AT-PP-006` | internal/parcelpricing/adapters/settlementaccounting/form_on_evaluation_request_submitted_test.go::TestAFailedUnformedHandoffIsUndecidedUnlessRejected |
 | `AT-PS-001` | internal/parcelshipment/domain/acceptance_decision_test.go::TestAllChecksPassingAcceptsAndFixesBaselineAndCommitment |
