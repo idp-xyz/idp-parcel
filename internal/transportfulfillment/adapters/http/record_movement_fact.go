@@ -137,9 +137,12 @@ type departureGateReadingView struct {
 	Objects []departureGateObjectView `json:"objects,omitempty"`
 }
 
+// departureGateObjectView 的 `members` 只在集运单元那一格上有（ADR-0225）：袋里各直接成员在同一份读数里另有一格，设备据它知道
+// 被挡的那一件装在哪一袋里。空单元写成空数组——键在不在就说这一格是不是一袋。
 type departureGateObjectView struct {
-	Object string `json:"object"`
-	Answer string `json:"answer"`
+	Object  string    `json:"object"`
+	Answer  string    `json:"answer"`
+	Members *[]string `json:"members,omitempty"`
 }
 
 func departureGateReadingViewOf(reading domain.DepartureGateReading) *departureGateReadingView {
@@ -151,7 +154,15 @@ func departureGateReadingViewOf(reading domain.DepartureGateReading) *departureG
 		view.Stops = append(view.Stops, stop.String())
 	}
 	for _, finding := range reading.Findings() {
-		view.Objects = append(view.Objects, departureGateObjectView{Object: finding.Object().String(), Answer: finding.Answer().String()})
+		object := departureGateObjectView{Object: finding.Object().String(), Answer: finding.Answer().String()}
+		if members, unit := finding.ConsolidationUnit(); unit {
+			names := make([]string, 0, len(members))
+			for _, member := range members {
+				names = append(names, member.String())
+			}
+			object.Members = &names
+		}
+		view.Objects = append(view.Objects, object)
 	}
 	return view
 }
