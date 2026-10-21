@@ -15,7 +15,7 @@ ADR-0148 决定四第 7 条引同一句；UC-NR-003 目标与边界一节写「�
 
 115 把它留作过渡做法（见 115 完成记录的评审修订代决），没有改成「没有物理事实即成本待判断」：那样复核一律排不了序，115 修的问题原样回来。
 
-## 证据（读码，钉 `14419d5e3`，证据 `S`）
+## 证据（读码，钉 `378b9b2dc`，证据 `S`）
 
 - `cmd/parcel-dispatch/assemble_reassess_on_handover.go` 的 `reassessRouteHandler` 接 `routeCosts(db, clock)`；`routeCosts`（`assemble.go`）的包裹事实取 `routeParcelFacts`，即 `nrpricing.NewDeclaredParcelFacts`。
 - `internal/networkrouting/adapters/parcelpricing/declared_parcel_facts.go`：`DeclaredParcelFacts` 按判断键问 parcel-shipment 的客户声明，头注写明对应 CONTEXT「预路由使用客户声明快照」。

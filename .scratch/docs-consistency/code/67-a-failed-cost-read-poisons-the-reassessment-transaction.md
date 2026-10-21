@@ -17,7 +17,7 @@ Blocked by: 无
 
 只有不碰事务的读不回（取数侧的翻译类错误，如认不出的评价形状）才真落进「候选评估未决、入账」与「保留原计划」。
 
-## 证据（读码，钉 `14419d5e3`，证据 `S`）
+## 证据（读码，钉 `378b9b2dc`，证据 `S`）
 
 - `internal/networkrouting/application/reassess_route.go`：`reviewCandidates`、`tryImprovementReroute` 遇 `candidateCosts` 答读不回时分别记候选评估未决、交回原记录，随后 `commit` 落册；`commit` 遇写库错误答 `ReassessStoreUnavailable`。
 - `cmd/parcel-dispatch/assemble.go` 的 `routeCosts`：目录、价卡、内部政策、包裹事实各口都是 `bentopg.DB` 上的仓储。
