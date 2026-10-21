@@ -10,7 +10,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/collectionremittance/domain"
 )
 
-// PBC-08 行为面负向证据：本包七个写口在无事务上下文必须被 RequireExecutor 拒绝。
+// PBC-08 行为面负向证据：本包各写口在无事务上下文必须被 RequireExecutor 拒绝。
 //
 // 入参一律用构造门造出来的有效值而不是零值——AcceptCollectionFact、
 // RegisterDiscrepancyItem、AppendPosting、FormBatch 与 HandOverBatchForPayment 都把
@@ -55,6 +55,10 @@ func TestCollectionRemittanceWritesRefuseToRunOutsideATransaction(t *testing.T) 
 		12000, domain.BasisCollectionFact, "SYN-FACT-1", "2026-08-24T01:10:00Z"),
 	); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务追加记账应返回 ErrTransactionRequired，实得：%v", err)
+	}
+	// 分户账锁离了环境事务就是一把立刻放掉的锁，挡不住任何人；拒绝比假装锁住诚实。
+	if err := subledgers.LockLedger(ctx, tenant, fixtureLedgerKey(t)); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务取分户账锁应返回 ErrTransactionRequired，实得：%v", err)
 	}
 
 	remittances, err := adapter.NewRemittanceStore(db)
