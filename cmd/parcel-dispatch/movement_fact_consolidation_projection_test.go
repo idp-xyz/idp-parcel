@@ -137,7 +137,7 @@ func assertDepartedOntoBagMembers(t *testing.T, fixture *synVerticalFixture, fac
 			t.Fatalf("%s 这一版事实 %d 份, want 1", parcel, n)
 		}
 	}
-	// 只数这条出发：袋凭交接进段时，交接那一封本身另有投影那一路，不在本文件的口径里。
+	// 只数这条出发：袋凭交接进段时交接那一路也不给袋立投影，由补派生那条用例另核。
 	for _, absent := range []string{consolidationBag, consolidationParcelOut, consolidationParcelLate, "SYN-HU-123-UNRECEIVED"} {
 		for _, entry := range projectionEntries(t, fixture, absent) {
 			if entry.Fact().Fact().String() == "movement-fact/"+absent+"/"+fact {
@@ -189,6 +189,7 @@ func TestABagDepartureReachesEveryMemberThroughTheProductionRoute(t *testing.T) 
 
 // Covers: AT-VE-196 真库半边（补派生）——出发先于段登记，一袋随后经生产登记编排`已交接`进段、立起段；交接那一封上的补派生把出发
 // 补到袋里出发那一刻的成员身上，袋本身不补。
+// Covers: AT-VE-199 真库半边（交接经生产路由一拍）——同一封交接信上的交接投影那一路入账，袋上一个条目也没有。
 func TestABagHandedIntoTheSegmentAfterItsDepartureBackfillsEveryMember(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
 	registerDemoMilestoneMapping(t, fixture)
@@ -210,4 +211,10 @@ func TestABagHandedIntoTheSegmentAfterItsDepartureBackfillsEveryMember(t *testin
 		t.Fatalf("补派生 inbox 行数 = %d, want 1；失败码 = %q", n, recordedFailureCode(t, fixture.db, handoverEvent))
 	}
 	assertDepartedOntoBagMembers(t, fixture, consolidationMoveBackfill)
+	if n := fixture.countInbox(t, deriveHandoverConsumerName, handoverEvent); n != 1 {
+		t.Fatalf("交接投影 inbox 行数 = %d, want 1；失败码 = %q", n, recordedFailureCode(t, fixture.db, handoverEvent))
+	}
+	if entries := projectionEntries(t, fixture, consolidationBag); len(entries) != 0 {
+		t.Fatalf("袋被当成一件追踪包裹立了投影，条目 %d 个", len(entries))
+	}
 }
