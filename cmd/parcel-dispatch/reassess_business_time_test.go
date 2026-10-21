@@ -47,7 +47,7 @@ func newReassessBothLanesFixture(t *testing.T) *reassessBothLanesFixture {
 }
 
 // reassessBothLanesOver 接交接与收寄采用两路到同一份复核编排上：交接那一路走生产的 Over 与哨兵名单，收寄采用那一路按生产
-// 同样的三层接（采用仓储 → 两层适配器 → 消费门）。委托与路由历史由调用方先备好。
+// 同样的接法（采用仓储 → 适配器 → 消费门）。委托与路由历史由调用方先备好。
 func reassessBothLanesOver(t *testing.T, syn *synVerticalFixture) *reassessBothLanesFixture {
 	t.Helper()
 	outboxStore, err := outbox.NewStore(syn.db)
