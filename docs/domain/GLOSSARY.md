@@ -712,7 +712,7 @@ Status: Confirmed
 
 `customs-compliance` 对明确对象、一次动作意图（出发、交出或交付）和动作时点，先定适用的受门禁动作，再逐动作把内部合规限制、放行门禁核对和外部放行结果折成的封闭答复：放行、阻断、不受门禁、未决或未配置。
 
-- 所有者：`customs-compliance`；运输履约等动作执行方在动作时请求并随自己的事实保存答复，不自折三源、不自判是否跨关务区域。出发之前的[出发前门禁问询](#出发前门禁问询)同样请求一次判断、关务照记，运输履约只翻译交回、不保存，随后的出发在它自己那一刻重问（[ADR-0219](../adr/0219-a-device-previews-the-departure-gate-before-departing-and-reads-what-the-departure-will-record.md)）。
+- 所有者：`customs-compliance`；运输履约等动作执行方在动作时请求并随自己的事实保存答复，不自折三源、不自判是否跨关务区域。出发之前的[出发前门禁问询](#出发前门禁问询)同样请求一次判断、关务照记，运输履约只翻译交回、不保存，随后的出发在它自己那一刻重问（[ADR-0219](../adr/0219-a-device-previews-the-departure-gate-before-departing-and-reads-what-the-departure-will-record.md)）。派送出发之前的[交付前门禁问询](#交付前门禁问询)同此，随后的交付在它自己那一刻重问（[ADR-0238](../adr/0238-a-courier-previews-the-delivery-gate-before-dispatching-and-reads-what-the-delivery-will-record.md)）。
 - 答放行只说这一步此刻可走，不是监管放行结果；门禁满足不答放行，外部放行不解内部限制。
 - 避免使用：清关通过、放行判断、门禁结果。
 
@@ -738,6 +738,14 @@ Status: Confirmed
 - 所有者：`transport-fulfillment` 拥有问询口与读数路径；答复与依据仍属 `customs-compliance` 的动作准入判断，关务照记判断。
 - 问到的读数不是放行许可：出发照样在它自己那一刻重问，读数随出发落册；挡不挡发车归执行方与现场。
 - 避免使用：出发预检、门禁预审、出发许可。
+
+### 交付前门禁问询
+
+尾程执行方在派送出发之前按对象与拟交付时点问的那一次交付门禁：交回与随后同参有效交付同一套读数，运输履约不落任何记录。
+
+- 所有者：`transport-fulfillment` 拥有问询口与读数路径；答复与依据仍属 `customs-compliance` 的动作准入判断，关务照记判断。
+- 问到的读数不是交付许可：有效交付照样在它自己那一刻重问，读数随交付落册；带不带走、交不交归执行方与现场（[ADR-0238](../adr/0238-a-courier-previews-the-delivery-gate-before-dispatching-and-reads-what-the-delivery-will-record.md)）。
+- 避免使用：派送预检、交付预审、交付许可。
 
 ### 关务案件关闭核对
 

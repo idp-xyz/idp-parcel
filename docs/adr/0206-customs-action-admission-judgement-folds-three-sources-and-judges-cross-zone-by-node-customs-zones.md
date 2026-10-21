@@ -123,6 +123,7 @@ Date: 2026-10-19
 - [ADR-0213](./0213-a-transport-handover-declares-its-releasing-receiving-and-onward-nodes.md)：回答 Consequences「挂法等 peer」与越权风险点 9——交接声明交出、接收、去向节点，交出门禁按（交出节点，去向节点）问交出意图，交付门禁按进入派送段那次交接的交出节点问交付意图
 - [ADR-0219](./0219-a-device-previews-the-departure-gate-before-departing-and-reads-what-the-departure-will-record.md)：出发前门禁问询也是一次请求——问询方只翻译交回、不保存，本上下文照决定六记判断
 - [ADR-0225](./0225-the-departure-gate-reading-asks-through-consolidation-unit-members-at-the-moment-of-departure.md)：回答越权风险点 8 的出发那一半——出发门禁读数按成员展开集运单元，单元不交给本判断
+- [ADR-0238](./0238-a-courier-previews-the-delivery-gate-before-dispatching-and-reads-what-the-delivery-will-record.md)：派送出发前的交付门禁问询也是一次请求——问询方只翻译交回、不保存，本上下文照决定六记判断
 
 ## 复核记录（2026-10-20，Claude Code 会话代决，非 owner 本人复核）
 
