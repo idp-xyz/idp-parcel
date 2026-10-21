@@ -1,7 +1,7 @@
 # 09 SA+CR（settlement-accounting、collection-remittance）：CONTEXT 写出现行规则、UC 与之一致、矛盾裁清
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dc09。此前 ready-for-agent——2026-10-21 协调方立（文档自洽修订，见 [README](../README.md)「修订执行」）
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dc09。此前 ready-for-agent——2026-10-21 协调方立（文档自洽修订，见 [README](../README.md)「修订执行」）
 Blocked by: 无（01 进 main 后开工；票 57+15 已进 main）
 出处：[audit/sa-cr.md](../audit/sa-cr.md)（sa-cr.md）；[02 的完成记录](./02-code-defects-from-the-audit.md)里「交修订票」一表中交给本票的条目；[01](./01-adr-suspension-chains.md) 的「交后续」一节里交给本票的条目。
 
@@ -158,3 +158,8 @@ Blocked by: 无（01 进 main 后开工；票 57+15 已进 main）
 
 检查：scratchpad 副本上 `go run ./tools/adr-index` 后 `-check` 退 0；改过的 `.md` 链接与锚点全部能解析。
 
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-dc09` tip `454b46ee2` 在 main `a304507b3` 上快进；三轮隔离评审的阻断全部消掉（第三轮自算四组金额全部落得了账或按规停住）。
+- 协调方随后在 tip 上单独提交：重生成 `docs/adr/README.md`、重算 AT 盘点总览计数；两者 `-check` 退 0。机制清点重生成无变化；`go build ./...` 干净。本票只动文档，未跑全量真库测试。
+- 去向：代码票 code/45、46、47；code/11、14 写了裁向；交横切 X1–X10 交票 10（X5：票 10 立 UC-CR-001 并迁 CR CONTEXT 交接表）。
