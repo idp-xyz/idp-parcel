@@ -425,6 +425,8 @@
 | `AT-TF-270` | internal/transportfulfillment/application/form_actual_fulfillment_handover_basis_test.go::TestAnExactEndBasisWinsOverALegacyOneThatAlsoMatches |
 | `AT-TF-271` | internal/transportfulfillment/application/read_delivery_gate_test.go::TestAKeyedEntryBasisTellsTwoScopesReusingTheVersionApart |
 | `AT-TF-272` | internal/transportfulfillment/domain/handover_participation_basis_test.go::TestAHandoverCorrectionRederivesAStockParticipationOnTheLegacyBasis |
+| `AT-TF-273` | internal/transportfulfillment/adapters/postgres/movement_fact_segment_lookup_test.go::TestMovementFactsDeclaringASegmentAreListedInRecordingOrder |
+| `AT-TF-274` | internal/transportfulfillment/adapters/postgres/movement_fact_segment_lookup_test.go::TestASegmentNoFactDeclaresListsEmptyAndAnUnreadableRowFailsTheListing |
 | `AT-VE-038` | internal/visibilityexception/application/derive_projection_test.go::TestFactsDeriveAndRederiveTheProjection |
 | `AT-VE-039` | internal/visibilityexception/application/derive_projection_test.go::TestReplayConflictAndUnconfiguredMappingStayHonest |
 | `AT-VE-040` | internal/visibilityexception/application/derive_projection_test.go::TestReplayConflictAndUnconfiguredMappingStayHonest |
@@ -462,6 +464,11 @@
 | `AT-VE-174` | internal/visibilityexception/adapters/parcelshipment/derive_on_final_outcome_postgres_test.go::TestACorrectedFinalOutcomeLeavesOnlyOneGenerationCurrentInTheProjection；同文件::TestALatePredecessorFinalNeverBecomesCurrentAgain（到达先后）；同文件::TestARedeliveredRederivedFinalIsTheExistingResult（重投）；internal/visibilityexception/adapters/parcelshipment/derive_on_final_outcome_test.go::TestARederivedFinalOutcomeSupersedesItsPredecessorsAdoptionVersion（译装半边） |
 | `AT-VE-175` | internal/visibilityexception/adapters/parcelshipment/derive_on_final_outcome_test.go::TestAnUnreadablePredecessorIsContinuableUndecided |
 | `AT-VE-176` | internal/visibilityexception/adapters/parcelshipment/derive_on_final_outcome_test.go::TestAMissingOrForeignPredecessorIsInconsistentNotUndecided |
+| `AT-VE-178` | internal/visibilityexception/adapters/transportfulfillment/backfill_movement_facts_test.go::TestAHandoverIntoTheSegmentBackfillsTheFactRecordedBeforeIt、::TestAPickupIntoTheSegmentBackfillsTheFactRecordedBeforeIt；internal/visibilityexception/adapters/inbox/movement_fact_backfill_consumer_test.go::TestTheBackfillLaneKeepsItsOwnLedgerOnTheHandoverEnvelope、::TestTheBackfillLaneKeepsItsOwnLedgerOnThePickupEnvelope（消费门半边）；cmd/parcel-dispatch/movement_fact_backfill_test.go::TestADepartureRecordedBeforeItsSegmentReachesTrackingOnceTheHandoverEstablishesIt、::TestADepartureRecordedBeforeItsSegmentReachesTrackingOnceAPickupEstablishesIt（真库半边） |
+| `AT-VE-179` | internal/visibilityexception/adapters/transportfulfillment/backfill_movement_facts_test.go::TestTheBackfillAndTheNormalPathLeaveOneEntryInEitherOrder；cmd/parcel-dispatch/movement_fact_backfill_test.go::TestADepartureRecordedBeforeItsSegmentReachesTrackingOnceTheHandoverEstablishesIt（真库半边） |
+| `AT-VE-180` | internal/visibilityexception/adapters/transportfulfillment/backfill_movement_facts_test.go::TestAHandoverThatDoesNotPutTheObjectUnderControlAtTheFactBackfillsNothing、::TestAPickupThatPutsNoObjectIntoTheSegmentBackfillsNothing；internal/transportfulfillment/domain/pickup_participation_basis_test.go::TestAParticipationTellsWhichPickupItEnteredBy（领域半边） |
+| `AT-VE-181` | internal/visibilityexception/adapters/transportfulfillment/backfill_movement_facts_test.go::TestBackfillFailuresKeepTheirSentinels、::TestAPickupThatPutsNoObjectIntoTheSegmentBackfillsNothing（揽收读不回）；internal/visibilityexception/adapters/inbox/movement_fact_backfill_consumer_test.go::TestAPoisonHandoverEnvelopeIsRejectedOnTheBackfillLane（消费门半边）；cmd/parcel-dispatch/movement_fact_backfill_test.go::TestMovementFactBackfillFailuresLandInTheRightPartition（派发半边） |
+| `AT-VE-182` | internal/visibilityexception/adapters/transportfulfillment/backfill_movement_facts_test.go::TestABackfilledCorrectionChainKeepsItsSupersession |
 
 ## ② 机制候选（补 Covers 或小块测试）
 
@@ -1388,3 +1395,5 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-10-19 追记（票 demo-chain-gaps/105）：UC-NR-001 新立 `AT-NR-073`（几条候选都出价时计划只留选中候选的逐段成本出处，取数侧出处逐条带候选），号段由协调方预分（073–076，本票只用 073）；编排用例与成本取数侧适配器用例点名，入①。①、NR 与合计各加 1，②③④不变；绝对数进 main 时随同波票按批重算。
 
 2026-10-19 追记（票 demo-chain-gaps/103）：UC-VE-002 新立 `AT-VE-174`–`176`（终局同种重派生进投影时按前一代的采用版本登记来源事实替代；前一代读不通答未决，找不到或对不上按来源记录不一致拒收），随票在 VE 终局译装器的替身用例与真库用例上补 Covers 点名，全部入①；半边覆盖在行内注明。①、VE 与合计各加 3，②③④不变；绝对数进 main 时随同波票按批重算（号段由协调方预分，UC-VE 原最大号 173）。
+
+2026-10-20 追记（票 demo-chain-gaps/53）：UC-VE-002 新立 `AT-VE-178`–`182`（先于段登记的移动事实由交接或对象级揽收那一封补派生：补出、两路同键只留一份、不补的各格、失败分格、更正链与不补信号，ADR-0224），UC-TF-005 新立 `AT-TF-273`–`274`（按段列出声明了这一段的在册移动事实）。随票在 VE 补派生适配器的替身用例、VE 消费门与 TF 登记册的真库用例、派发生产路由真库用例上补 Covers 点名，全部入①；半边覆盖在行内注明。①、VE 加 5、TF 加 2、合计加 7，②③④不变；绝对数进 main 时随同波票按批重算（号段由协调方预分：AT-VE-178–182 全用；AT-TF-273–277 本票用 273–274，275–277 未用）。

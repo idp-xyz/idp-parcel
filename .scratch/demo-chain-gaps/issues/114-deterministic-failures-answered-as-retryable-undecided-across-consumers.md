@@ -16,6 +16,8 @@ Blocked by: 无
 
 票 [103](./103-a-rederived-final-outcome-enters-the-projection-without-its-predecessor.md) 评审补（2026-10-19）：VE 终局译装器（`internal/visibilityexception/adapters/parcelshipment/derive_on_final_outcome.go`）读 PS 终局采用账时，`FindByKey` 与 `predecessorOf` 里的 `FindByFinalVersion` 把仓储交回的一切错误都包成 `ErrFinalNotVisible`，进本路未决名单。读到行之后解码或重建失败（行坏了、重派生痕迹对不上）是确定性的，也被一并重投。`FindByKey` 那条路是既有的，`FindByFinalVersion` 照它的写法接上；两处同形，随本票统一判据时一起收。
 
+票 [53](./53-movement-facts-recorded-before-their-segment-never-reach-tracking.md) 实施补（2026-10-20，ADR-0224 越权风险点 8）：VE 移动事实补派生（`internal/visibilityexception/adapters/transportfulfillment/backfill_movement_facts.go`）新开的几处包装同形——`FindBySegment` 整列表失败（含某一行装不回，TF 侧 `movementFactRow.record` 重建失败）一律包成 `ErrMovementFactsOfSegmentNotVisible`；对象的段 `FindSegmentsForObject` 失败与段 `FindByKey` 失败（含段行装不回）一律包成 `ErrObjectSegmentsNotVisible`。三者都进各自路由的未决哨兵名单（`cmd/parcel-dispatch/routes_movement_fact_backfill.go`），确定性坏行于是反复重投。本票定统一判据时一并点名这几处。
+
 ## 为什么合并
 
 分散在 SA、TF、NR、VE、PS 各处，单看每处都「只在坏数据时触发、最终会弃置」，所以没人会顺手修；而形状一致，合起来一次能定一条统一判据：确定性错误不进未决哨兵名单（这条在派发规范里已有），以及读口重建失败归哪一格。
