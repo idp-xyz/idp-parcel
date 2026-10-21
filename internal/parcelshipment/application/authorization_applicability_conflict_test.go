@@ -10,8 +10,9 @@ import (
 )
 
 // 本文件证各编排遇授权`适用冲突`（ADR-0261 决定三：同一刻多于一条授予允许、或委派方不同的多条委派命中）时的落点：
-// 有未决格的四只停在未决、原因指名授权适用冲突；没有未决格的两只各答 AUTHORITY_APPLICABILITY_CONFLICT。六只都不读作
-// 已授权（什么都不写、不签标识），也不读作拒绝（不落`未获授权`）；与`授权规则未配置`分得开。
+// 主动拒绝、撤回、资料修订、受控关闭与重开有未决格，停在未决、原因指名授权适用冲突；授权处置与完成人工复核没有
+// 未决格，各答 AUTHORITY_APPLICABILITY_CONFLICT。都不读作已授权（什么都不写、不签标识），也不读作拒绝（不落
+// `未获授权`）；与`授权规则未配置`分得开。
 
 // Covers: ADR-0261 越权风险点 3——主动拒绝停在未决，原因 REJECTION_AUTHORITY_APPLICABILITY_CONFLICT。
 func TestAnApplicabilityConflictStallsTheRejection(t *testing.T) {

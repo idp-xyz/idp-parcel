@@ -32,7 +32,7 @@ func assertConflictOutcome(t *testing.T, outcome psports.AuthorizationOutcome, e
 	}
 }
 
-// Covers: ADR-0261 越权风险点 3 的消费方半边——主动拒绝、人工复核、撤回三只经 PC 裁定询问的适配器把适用冲突译成同名一格，
+// Covers: ADR-0261 越权风险点 3 的消费方半边——主动拒绝、人工复核、撤回经 PC 裁定询问的适配器把适用冲突译成同名一格，
 // 不带授权引用。
 func TestTheGrantAdaptersTranslateAnApplicabilityConflict(t *testing.T) {
 	t.Run("active rejection", func(t *testing.T) {
