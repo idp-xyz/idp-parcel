@@ -1,0 +1,21 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "retirements": [
+    {
+      "kind": "SUPPLIER_AGREEMENT",
+      "scope": "SYN-SCOPE-01",
+      "objectId": "SYN-SUPPLIER-TRUNK-CN-SG-01",
+      "version": "v1",
+      "successorVersion": "v2",
+      "reference": "SYN-REISSUE-TRUNK-CN-SG-01-V2"
+    },
+    {
+      "kind": "SUPPLIER_AGREEMENT",
+      "scope": "SYN-SCOPE-01",
+      "objectId": "SYN-SUPPLIER-TRUNK-CN-SG-01",
+      "version": "v2",
+      "successorVersion": "v3",
+      "reference": "SYN-REISSUE-TRUNK-CN-SG-01-V3"
+    }
+  ]
+}
