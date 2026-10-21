@@ -314,7 +314,7 @@ Status: Confirmed
 - 订舱、取消、尝试或履约事实满足采用协议要求的发生条件 -> 形成运输收费发生项，固定原因、范围、数量、单位、时点、协议和来源；是否存在金额由结算另行判断。
 - 同一业务动作存在部分结果 -> 按已经发生、已经取消、未发生或待确认的明确范围分别形成发生项或保持未决，不用整单结果覆盖成员差异。
 - 来源事实或适用性被更正 -> 原发生项继续保留，并形成失效、替代或范围更正；下游成本和应付只通过追加结果调整。
-- 已登记 -> 失效：运营决定说这一项的范围不成立，链头长出下一版失效版本、回指它，信封随之交出。失效之后同一件事实再登 -> 替代：从失效版本长出替代版本，内容取这一次的判断，不回退到更早的有效版本（[ADR-0232](../../adr/0232-a-segment-commission-adoption-is-withdrawn-by-decision-only-before-occurrences-form-and-occurrence-revision-drives-the-supplier-cost-correction.md)）。
+- 已登记 -> 失效：运营决定说这一项的范围不成立，链头长出下一版失效版本、回指它，信封随之交出。失效之后同一件事实再登 -> 替代：从失效版本长出替代版本，内容取这一次的判断，不回退到更早的有效版本；自动形成不凭同一份证据把失效过的那一项长回来，除非这一段在失效之后才落下当前的采用（[ADR-0232](../../adr/0232-a-segment-commission-adoption-is-withdrawn-by-decision-only-before-occurrences-form-and-occurrence-revision-drives-the-supplier-cost-correction.md)）。
 
 ### 容量预占与装载分配
 
