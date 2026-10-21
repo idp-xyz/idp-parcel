@@ -255,8 +255,8 @@ func (line *departureLine) seed(sql string, args ...any) {
 }
 
 // Covers: AT-TF-110（演示判据，证据 S）——自营 SHA→SZX：按演示种子登了节点区域与周期安排，交接立段后，一线设备在生产渠道上报出发
-// 答 201，读数不受门禁：关务按区域只适用装载出发，包裹不在任何案卷里。起讫取班次方向；答复里逐对象只有对象与那一格，关务判断
-// 标识与依据原文落在库面那一行（ADR-0205 决定一）。
+// 答 201，读数不受门禁：关务按区域只适用装载出发，包裹不在任何案卷里。起讫取班次方向；那件包裹得出了放行，答复里没有逐对象那一格
+// （ADR-0237），关务判断标识与依据原文落在库面那一行（ADR-0205 决定一）。
 func TestADemoSelfOperatedDepartureFromShanghaiToShenzhenAnswersCreatedNotGuarded(t *testing.T) {
 	line := newDepartureLine(t)
 	line.handOver("SYN-SEG-SHA-SZX-DEMO", "SYN-PARCEL-DEMO-01")
@@ -290,9 +290,8 @@ func TestADemoSelfOperatedDepartureFromShanghaiToShenzhenAnswersCreatedNotGuarde
 		reading.From != "SYN-NODE-SHA-HUB" || reading.To != "SYN-NODE-SZX-GATE" {
 		t.Fatalf("答复 = %s", response.Body.String())
 	}
-	if len(reading.Objects) != 1 || reading.Objects[0]["object"] != "SYN-PARCEL-DEMO-01" || reading.Objects[0]["answer"] != "NOT_GUARDED" ||
-		len(reading.Objects[0]) != 2 {
-		t.Fatalf("逐对象那一格只该有对象与答复 = %+v", reading.Objects)
+	if len(reading.Objects) != 0 {
+		t.Fatalf("得出放行的那件包裹不该回给设备 = %+v", reading.Objects)
 	}
 	if stored := storedGateReading(t, line.pool, "SYN-MOVE-DEMO-01"); stored != "NOT_GUARDED" {
 		t.Fatalf("库面读数 = %q", stored)

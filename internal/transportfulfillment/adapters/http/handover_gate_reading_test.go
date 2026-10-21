@@ -111,7 +111,7 @@ func gateBody(t *testing.T, object string) string {
 
 // Covers: AT-TF-245；AT-TF-236、AT-TF-237、AT-TF-238、AT-TF-239、AT-TF-241 的线格式半边——`已交接`的答复带交出门禁读数：整格、问关务时的 at / onward 与那件对象的那一格，不带关务判断标识与
 // 依据原文；阻断照样 201；没声明去向写明 onwardNotDeclared；没声明交出节点是停点「交出节点未声明」；拒收不带读数；原样
-// 重发回显首次读数、不重问关务。
+// 重发回显首次读数、不重问关务。那件对象得出了放行（不受门禁）时逐对象那一格不列它，整格照实（AT-TF-320 线格式半边，ADR-0237）。
 func TestTheHandoverEndpointRepliesWithTheGateReading(t *testing.T) {
 	customs := &customsGateStub{answer: domain.GateBlocked}
 	endpoint := nodeHandoverEndpointAsking(t, customs)
@@ -137,7 +137,8 @@ func TestTheHandoverEndpointRepliesWithTheGateReading(t *testing.T) {
 	}
 
 	status, fields = handoverAnswer(t, endpoint, bodyWith(t, gateBody(t, "SYN-PARCEL-65-02"), "releasingNode", "SYN-NODE-SZX-GATE"))
-	if reading, _ := gateReadingOf(t, fields); status != http.StatusCreated || reading.Answer != "NOT_GUARDED" || !reading.OnwardNotDeclared || reading.Onward != "" {
+	if reading, _ := gateReadingOf(t, fields); status != http.StatusCreated || reading.Answer != "NOT_GUARDED" || !reading.OnwardNotDeclared ||
+		reading.Onward != "" || len(reading.Objects) != 0 || strings.Contains(string(fields["gateReading"]), `"objects"`) {
 		t.Fatalf("没声明去向 status = %d gateReading = %s", status, fields["gateReading"])
 	}
 

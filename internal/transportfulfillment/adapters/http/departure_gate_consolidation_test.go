@@ -3,6 +3,7 @@ package tfhttp_test
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,10 +24,11 @@ func bagMemberships(t *testing.T) movementMembershipsDouble {
 	}}
 }
 
-// Covers: AT-TF-276 线格式半边（ADR-0225 决定六）——袋那一格在逐对象那几格里带 `members`，列出袋里在同一份读数里各有一格的成员；
-// 成员那几格照旧只有对象与答复。出发与问询是同一个线格式，问询里的那一段逐字节相同（AT-TF-280 线格式半边）。
+// Covers: AT-TF-276 线格式半边（ADR-0225 决定六）——袋那一格在逐对象那几格里带 `members`；成员那几格照旧只有对象与答复。袋里一件
+// 阻断、一件不受门禁：袋那一格与被挡那一件在列，`members` 只指名被挡那一件，不受门禁那一件哪儿都不出现（AT-TF-318 线格式半边，
+// ADR-0237）。出发与问询是同一个线格式，问询里的那一段逐字节相同（AT-TF-280 线格式半边）。
 func TestTheBagCellListsItsMembersOnTheWire(t *testing.T) {
-	customs := &movementCustomsDouble{answer: domain.GateBlocked}
+	customs := &movementCustomsDouble{answer: domain.GateBlocked, answers: map[string]domain.GateAnswer{"PCL-B": domain.GateNotGuarded}}
 	handler := application.NewRecordMovementFactHandler(application.RecordMovementFactDeps{
 		Facts:   newMovementFactRegistry(),
 		Handoff: movementHandoffDouble{},
@@ -43,7 +45,7 @@ func TestTheBagCellListsItsMembersOnTheWire(t *testing.T) {
 		t.Fatalf("status = %d; body = %s", departed.Code, departed.Body.String())
 	}
 	reading := decodeMovementFact(t, departed).GateReading
-	if reading == nil || reading.Answer != "BLOCKED" || len(reading.Objects) != 3 {
+	if reading == nil || reading.Answer != "BLOCKED" || len(reading.Objects) != 2 {
 		t.Fatalf("gateReading = %s", departed.Body.String())
 	}
 	cells := map[string]map[string]any{}
@@ -51,11 +53,14 @@ func TestTheBagCellListsItsMembersOnTheWire(t *testing.T) {
 		cells[object["object"].(string)] = object
 	}
 	members, _ := json.Marshal(cells["parcel-1"]["members"])
-	if string(members) != `["PCL-A","PCL-B"]` || cells["parcel-1"]["answer"] != "BLOCKED" {
+	if string(members) != `["PCL-A"]` || cells["parcel-1"]["answer"] != "BLOCKED" {
 		t.Fatalf("袋那一格 = %+v", cells["parcel-1"])
 	}
-	if len(cells["PCL-A"]) != 2 || len(cells["PCL-B"]) != 2 {
-		t.Fatalf("成员那几格只该有对象与答复：%+v %+v", cells["PCL-A"], cells["PCL-B"])
+	if len(cells["PCL-A"]) != 2 || cells["PCL-A"]["answer"] != "BLOCKED" {
+		t.Fatalf("成员那一格只该有对象与答复：%+v", cells["PCL-A"])
+	}
+	if strings.Contains(departed.Body.String(), "PCL-B") {
+		t.Fatalf("不受门禁的成员出现在答复里：%s", departed.Body.String())
 	}
 
 	preview, err := application.NewPreviewDepartureGateHandler(movementGateReaderOver(t, customs, bagMemberships(t)))

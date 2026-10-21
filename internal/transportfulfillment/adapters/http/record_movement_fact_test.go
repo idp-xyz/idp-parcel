@@ -76,10 +76,18 @@ func (double movementSchedulesDouble) FindByKey(_ context.Context, key ports.Sch
 	return ports.ScheduleRecord{Key: key, Schedule: double.schedule}, true, nil
 }
 
-type movementCustomsDouble struct{ answer domain.DepartureGateAnswer }
+// movementCustomsDouble 一律按 answer 答；answers 里点名的对象改按那一格答。
+type movementCustomsDouble struct {
+	answer  domain.DepartureGateAnswer
+	answers map[string]domain.DepartureGateAnswer
+}
 
 func (double *movementCustomsDouble) ReadDepartureGate(_ context.Context, query ports.DepartureGateQuery) (domain.DepartureGateFinding, error) {
-	return domain.NewDepartureGateFinding(query.Object, double.answer, "AADJ-1",
+	answer, named := double.answers[query.Object.String()]
+	if !named {
+		answer = double.answer
+	}
+	return domain.NewDepartureGateFinding(query.Object, answer, "AADJ-1",
 		[]domain.DepartureGateBasis{{Action: "LOADING_DEPARTURE", Cause: "SOME_CAUSE", Sources: []string{"SRC-1"}}})
 }
 
@@ -349,6 +357,32 @@ func TestRecordMovementFactAnswersCreatedForEveryDepartureAndShowsItsGateReading
 	}
 	if strings.Contains(response.Body.String(), "AADJ-1") || strings.Contains(response.Body.String(), "SRC-1") {
 		t.Fatalf("响应带出了关务判断标识或依据来源：%s", response.Body.String())
+	}
+}
+
+// Covers: AT-TF-317 线格式半边（ADR-0237）——段里那件对象不受门禁：出发照样 201，整格与起讫照实，逐对象那一格不列它，答复里连
+// `objects` 键都没有。读数本身仍问过它、落册的那一份记着它（真库那一半在 cmd/parcel-api）。
+func TestADepartureThatPassesShowsTheExecutorNoObjects(t *testing.T) {
+	fixture := newMovementFactFixture(t)
+	departure := defaultMovementFactBody()
+	departure.Kind, departure.Fact, departure.Segment = "DEPARTURE", "movement-fact-dep-clean", "segment-1"
+
+	response := postTo(t, fixture.record, "/transport-fulfillment/movement-facts", departure)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body = %s", response.Code, response.Body.String())
+	}
+	reading := decodeMovementFact(t, response).GateReading
+	if reading == nil || reading.Answer != "NOT_GUARDED" || reading.From != "NODE-SHA" || reading.To != "NODE-SZX" ||
+		len(reading.Stops) != 0 || len(reading.Objects) != 0 || strings.Contains(response.Body.String(), `"objects"`) {
+		t.Fatalf("gateReading = %s", response.Body.String())
+	}
+	if len(fixture.registry.records) != 1 {
+		t.Fatalf("登记册 %d 条，want 这一条出发", len(fixture.registry.records))
+	}
+	for _, record := range fixture.registry.records {
+		if recorded, _ := record.Fact.GateReading(); len(recorded.Findings()) != 1 || recorded.Findings()[0].Object().String() != "parcel-1" {
+			t.Fatalf("落册的读数 = %+v，要照旧记着那一件", recorded.Findings())
+		}
 	}
 }
 

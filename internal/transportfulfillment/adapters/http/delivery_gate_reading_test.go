@@ -88,8 +88,9 @@ func decodeDeliveryGateReading(t *testing.T, raw []byte) (deliveryGateReadingWir
 	return *body.GateReading, true
 }
 
-// Covers: `AT-TF-263`、`AT-TF-265`（线格式半边）——首登 201 带 gateReading：整格、at 与那件对象的那一格；关务判断标识与依据原文不回给
-// 登记方。原样重放 200 `EXISTING_VERSION` 回显同一份；POD 更正 201 回显从前版承继的那一份。
+// Covers: `AT-TF-263`、`AT-TF-265`（线格式半边）——首登 201 带 gateReading：整格与 at；那件对象不受门禁，回给登记方的逐对象那一格
+// 不列它（`AT-TF-321` 线格式半边，ADR-0237）；关务判断标识与依据原文不回给登记方。原样重放 200 `EXISTING_VERSION` 回显同一份；
+// POD 更正 201 回显从前版承继的那一份。
 func TestTheDeliveryAnswerCarriesTheGateReadingAndItsReplayEchoesIt(t *testing.T) {
 	fixture := newTFFixtureReading(t, askedDeliveryGateReading(t, domain.GateNotGuarded))
 
@@ -99,8 +100,11 @@ func TestTheDeliveryAnswerCarriesTheGateReadingAndItsReplayEchoesIt(t *testing.T
 	}
 	reading, present := decodeDeliveryGateReading(t, first.Body.Bytes())
 	if !present || reading.Answer != "NOT_GUARDED" || reading.At != "SYN-NODE-SIN-HUB" || len(reading.Stops) != 0 ||
-		len(reading.Objects) != 1 || reading.Objects[0].Object != "parcel-1" || reading.Objects[0].Answer != "NOT_GUARDED" {
+		len(reading.Objects) != 0 {
 		t.Fatalf("gateReading = %+v (present %v)", reading, present)
+	}
+	if strings.Contains(first.Body.String(), `"objects"`) {
+		t.Fatalf("得出放行的那件对象出现在答复里：%s", first.Body.String())
 	}
 	if strings.Contains(first.Body.String(), "AADJ-STUB") || strings.Contains(first.Body.String(), "OUTSIDE_CUSTOMS_BOOKS") {
 		t.Fatalf("答复带出了关务判断标识或依据原文：%s", first.Body.String())
@@ -110,7 +114,8 @@ func TestTheDeliveryAnswerCarriesTheGateReadingAndItsReplayEchoesIt(t *testing.T
 	if replay.Code != http.StatusOK || decodeDelivery(t, replay).Outcome != "EXISTING_VERSION" {
 		t.Fatalf("重放 status = %d body = %s", replay.Code, replay.Body.String())
 	}
-	if echoed, _ := decodeDeliveryGateReading(t, replay.Body.Bytes()); echoed.Answer != "NOT_GUARDED" || echoed.At != "SYN-NODE-SIN-HUB" {
+	if echoed, _ := decodeDeliveryGateReading(t, replay.Body.Bytes()); echoed.Answer != "NOT_GUARDED" || echoed.At != "SYN-NODE-SIN-HUB" ||
+		len(echoed.Objects) != 0 {
 		t.Fatalf("重放回显的读数 = %+v", echoed)
 	}
 
@@ -124,20 +129,22 @@ func TestTheDeliveryAnswerCarriesTheGateReadingAndItsReplayEchoesIt(t *testing.T
 	if correction.Code != http.StatusCreated {
 		t.Fatalf("更正 status = %d body = %s", correction.Code, correction.Body.String())
 	}
-	if inherited, _ := decodeDeliveryGateReading(t, correction.Body.Bytes()); inherited.Answer != "NOT_GUARDED" || inherited.At != "SYN-NODE-SIN-HUB" {
+	if inherited, _ := decodeDeliveryGateReading(t, correction.Body.Bytes()); inherited.Answer != "NOT_GUARDED" || inherited.At != "SYN-NODE-SIN-HUB" ||
+		len(inherited.Objects) != 0 {
 		t.Fatalf("更正回显的读数 = %+v，want 承继前版那一份", inherited)
 	}
 }
 
-// Covers: `AT-TF-257`、`AT-TF-260`、`AT-TF-265`（线格式半边）——阻断照样 201；停在本上下文这一侧的读数只带整格与停点，不带 at 与对象。
-// 登不出交付的答复（未生效）不带 gateReading。
+// Covers: `AT-TF-257`、`AT-TF-260`、`AT-TF-265`（线格式半边）——阻断照样 201，那件对象列在逐对象那一格里（`AT-TF-321` 线格式半边）；
+// 停在本上下文这一侧的读数只带整格与停点，不带 at 与对象。登不出交付的答复（未生效）不带 gateReading。
 func TestABlockedOrStoppedDeliveryGateReadingStillRegisters(t *testing.T) {
 	blocked := newTFFixtureReading(t, askedDeliveryGateReading(t, domain.GateBlocked))
 	response := postJSON(t, blocked.register, defaultRegisterBody())
 	if response.Code != http.StatusCreated {
 		t.Fatalf("阻断 status = %d body = %s", response.Code, response.Body.String())
 	}
-	if reading, _ := decodeDeliveryGateReading(t, response.Body.Bytes()); reading.Answer != "BLOCKED" {
+	if reading, _ := decodeDeliveryGateReading(t, response.Body.Bytes()); reading.Answer != "BLOCKED" ||
+		len(reading.Objects) != 1 || reading.Objects[0].Object != "parcel-1" || reading.Objects[0].Answer != "BLOCKED" {
 		t.Fatalf("阻断读数 = %+v", reading)
 	}
 

@@ -72,7 +72,8 @@ func registerDemoNodeZones(t *testing.T, db *bentopg.DB, appliesFrom time.Time, 
 // Covers: AT-TF-236、AT-TF-239、AT-TF-241、AT-TF-242、AT-TF-245 生产装配真库半边，票 demo-chain-gaps/65 完成判据的演示一条——深圳口岸交给干线承运商
 // （releasingNode=SYN-NODE-SZX-GATE、onwardNode=SYN-NODE-SIN-HUB）：答 201 `HANDOVER_REGISTERED`，gateReading 未决，依据
 // 是跨关务区域移动无案（对象不在任何案卷）；关务判断落进关务的判断册，依据原文随交接落册、不回给登记方。之后把新加坡枢纽
-// 改登进 CN、让关务对同一问改答不受门禁：原样重发答 200 `EXISTING_VERSION`、回显首次读数，关务判断册不多一行——没有重问。
+// 改登进 CN、让关务对同一问改答不受门禁：原样重发答 200 `EXISTING_VERSION`、回显首次读数，关务判断册不多一行——没有重问；
+// 另一件随之答不受门禁，逐对象那一格不列它（AT-TF-320 真库半边，ADR-0237）。
 // 待确认更正成`已交接`经同一装配照承继的意图问关务，更正版带自己的读数；查阅册列出整格。
 func TestTheWiredHandoverRecordsTheOutboundReleaseGateReadingAgainstARealDatabase(t *testing.T) {
 	orchestrations, pool := wiredHandoverOrchestrations(t)
@@ -153,8 +154,8 @@ func TestTheWiredHandoverRecordsTheOutboundReleaseGateReadingAgainstARealDatabas
 		t.Fatalf("原样重发重问了关务：判断 %d 行", got)
 	}
 	status, answer = postWorkFact(t, register, "/transport-fulfillment/handovers", handoverNodesBody(t, "SYN-PARCEL-DCG65-02", toTrunk))
-	if fresh := gateReadingIn(t, answer); status != http.StatusCreated || fresh.Answer != "NOT_GUARDED" {
-		t.Fatalf("改登区域之后另一件 HTTP %d %v，want 关务改答不受门禁（证明上面的重发确实没重问）", status, answer)
+	if fresh := gateReadingIn(t, answer); status != http.StatusCreated || fresh.Answer != "NOT_GUARDED" || len(fresh.Objects) != 0 {
+		t.Fatalf("改登区域之后另一件 HTTP %d %v，want 关务改答不受门禁（证明上面的重发确实没重问），得出放行的那件不回给设备", status, answer)
 	}
 
 	pending := map[string]string{"verdict": "PENDING_CONFIRMATION", "rule": "", "basis": "SYN-BASIS-DCG65-COUNT"}

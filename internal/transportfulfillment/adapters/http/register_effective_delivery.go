@@ -190,7 +190,7 @@ type deliveryResponse struct {
 }
 
 // deliveryGateReadingView 是交付门禁读数回给登记方的线格式，与出发、交出读数同形：整格、问关务时交付意图的 at、本上下文
-// 这一侧的停点与那件对象的那一格。交付意图没有去向，所以没有 onward。
+// 这一侧的停点与那件对象的那一格（得出了放行就不列，判法同出发读数）。交付意图没有去向，所以没有 onward。
 //
 // 关务判断标识与依据原文不回给登记方，只随交付落册供运营与 VE 查，口径同出发读数（ADR-0205 决定一）。
 type deliveryGateReadingView struct {
@@ -209,7 +209,7 @@ func deliveryGateReadingViewOf(reading domain.DeliveryGateReading) *deliveryGate
 		view.Stops = []string{stop.String()}
 	}
 	if finding, asked := reading.Finding(); asked {
-		view.Objects = []departureGateObjectView{{Object: finding.Object().String(), Answer: finding.Answer().String()}}
+		view.Objects = gateObjectViewsOf([]domain.GateFinding{finding})
 	}
 	return view
 }

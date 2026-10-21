@@ -116,7 +116,7 @@ func (rig deliveryGateRig) redeliver(t *testing.T, object string) (int, map[stri
 // Covers: `AT-TF-256`、`AT-TF-263`、`AT-TF-265` 生产装配真库半边，票 demo-chain-gaps/66 完成判据的演示一条——
 // 新加坡枢纽交给尾程（releasingNode=SYN-NODE-SIN-HUB）立起尾程段，之后有效交付答 201 `DELIVERY_REGISTERED`，gateReading
 // 为 `NOT_GUARDED`，at 是新加坡枢纽：包裹不在任何关务案卷，关务只适用最终交付那一道、答不受门禁；判断落进关务的判断册，
-// 依据原文随交付落册、不回给登记方。参与随交付结束，交付意图照常入队交给 PS 终局。原样重发答 200
+// 依据原文随交付落册、不回给登记方，得出放行的那件对象也不列在逐对象那一格里（`AT-TF-321` 真库半边，ADR-0237）。参与随交付结束，交付意图照常入队交给 PS 终局。原样重发答 200
 // `EXISTING_VERSION`、回显首次读数，关务判断册不多一行——此刻参与已结束，重读只会读成「不在任何段里」。查阅册列出整格。
 func TestTheWiredDeliveryRecordsAFinalDeliveryGateReadingAgainstARealDatabase(t *testing.T) {
 	rig, judgements := newDeliveryGateRig(t)
@@ -126,8 +126,7 @@ func TestTheWiredDeliveryRecordsAFinalDeliveryGateReadingAgainstARealDatabase(t 
 	status, answer := rig.deliver(t, object)
 	reading := deliveryGateIn(t, answer)
 	if status != http.StatusCreated || answer["outcome"] != "DELIVERY_REGISTERED" || reading.Answer != "NOT_GUARDED" ||
-		reading.At != "SYN-NODE-SIN-HUB" || len(reading.Stops) != 0 ||
-		len(reading.Objects) != 1 || reading.Objects[0].Object != object || reading.Objects[0].Answer != "NOT_GUARDED" {
+		reading.At != "SYN-NODE-SIN-HUB" || len(reading.Stops) != 0 || len(reading.Objects) != 0 {
 		t.Fatalf("有效交付 HTTP %d %v", status, answer)
 	}
 	if answer["participationEnd"] != "PARTICIPATION_ENDED" {
@@ -201,7 +200,7 @@ func TestTheWiredDeliveryRecordsAFinalDeliveryGateReadingAgainstARealDatabase(t 
 }
 
 // Covers: `AT-TF-257`、`AT-TF-261`、`AT-TF-262` 生产装配真库半边——阻断照样 201：包裹上落了最终交付限制，读数
-// 阻断，交付照登、参与照常结束。进段那次交接没声明交出节点：未决「交出节点未声明」，不问关务。对象从没进过段：未决「此刻
+// 阻断、那件对象列在逐对象那一格里（`AT-TF-321` 真库半边），交付照登、参与照常结束。进段那次交接没声明交出节点：未决「交出节点未声明」，不问关务。对象从没进过段：未决「此刻
 // 不在任何段里」，不问关务，交付照登。
 func TestTheWiredDeliveryRegistersWhateverTheGateReads(t *testing.T) {
 	rig, judgements := newDeliveryGateRig(t)
@@ -217,7 +216,8 @@ func TestTheWiredDeliveryRegistersWhateverTheGateReads(t *testing.T) {
 	}
 	status, answer := rig.deliver(t, blocked)
 	if reading := deliveryGateIn(t, answer); status != http.StatusCreated || answer["outcome"] != "DELIVERY_REGISTERED" ||
-		reading.Answer != "BLOCKED" || answer["participationEnd"] != "PARTICIPATION_ENDED" {
+		reading.Answer != "BLOCKED" || answer["participationEnd"] != "PARTICIPATION_ENDED" ||
+		len(reading.Objects) != 1 || reading.Objects[0].Object != blocked || reading.Objects[0].Answer != "BLOCKED" {
 		t.Fatalf("阻断 HTTP %d %v", status, answer)
 	}
 

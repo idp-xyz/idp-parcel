@@ -136,3 +136,54 @@ func (finding GateFinding) Bases() []GateBasis {
 	}
 	return bases
 }
+
+// ExecutorGateCell 是门禁读数回给执行方的逐对象那一格（ADR-0237）：对象与它的格；集运单元那一格另带它的直接成员里同样回给执行方
+// 的那几件。它是读数的投影，不是一格读数：关务判断标识与依据原文不在里面——那些只随事实落册（ADR-0205 决定一）——单元的成员
+// 也只剩同样回给执行方的那几件，所以不能拿它推回单元那一格。
+type ExecutorGateCell struct {
+	Object  CarriedObjectReference
+	Answer  GateAnswer
+	Unit    bool
+	Members []CarriedObjectReference
+}
+
+// ExecutorGateCells 是「执行方看得到哪几格」的唯一判法（ADR-0237）：各门禁读数回给设备的逐对象那一格都只从这里取，读数本身
+// 与落册的那一份照旧记全。
+//
+// 只列没得出放行的对象：阻断、读不动、未决。放行与不受门禁的那几件执行方不必动它们，列出来只会把同车别的客户的包裹交给一台
+// 未必运着它们的设备——问询不按作业范围限段（ADR-0219 越权风险点 5）。读不动与未决同列，是因为执行方对它们要做的事与阻断
+// 一样是先把那一件拿下或转人工，整格是读不动时说不出是哪一件，设备就只能整车不走。
+//
+// 集运单元那一格的格是成员里最重的一格（ADR-0225 决定三），成员没得出放行，单元也就没得出放行：列出的成员总能沿单元一路找到
+// 段里在控的那一件，执行方据此知道被挡的那一件装在哪一袋里。单元那一格只指名同样列出的成员，放行的成员不随单元带出去；
+// 单元因本侧问不到的成员（身份不成立、读不动、成环）或空袋而没得出放行时，它在列、成员为空。
+//
+// 次序照读数里逐对象那几格的次序，不另排。
+func ExecutorGateCells(findings []GateFinding) []ExecutorGateCell {
+	shown := make(map[CarriedObjectReference]bool, len(findings))
+	for _, finding := range findings {
+		if !finding.answer.passes() {
+			shown[finding.object] = true
+		}
+	}
+	cells := make([]ExecutorGateCell, 0, len(shown))
+	for _, finding := range findings {
+		if !shown[finding.object] {
+			continue
+		}
+		cell := ExecutorGateCell{Object: finding.object, Answer: finding.answer, Unit: finding.unit}
+		for _, member := range finding.members {
+			if shown[member] {
+				cell.Members = append(cell.Members, member)
+			}
+		}
+		cells = append(cells, cell)
+	}
+	return cells
+}
+
+// passes 说这一格是不是得出了放行：放行与不受门禁。显式列出两格而不按压制次序比大小——次序是压格用的（ADR-0205 决定二），
+// 哪几格算得出放行是另一个问题，次序日后若挪，这一问不该跟着变。
+func (answer GateAnswer) passes() bool {
+	return answer == GateAdmitted || answer == GateNotGuarded
+}

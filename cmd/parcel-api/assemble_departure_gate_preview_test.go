@@ -65,7 +65,8 @@ func (line *previewLine) snapshot() map[string]string {
 }
 
 // Covers: AT-TF-226（演示判据，证据 S）与 AT-TF-229——演示动线上自营 SHA→SZX：设备出发前问询答 200 `DEPARTURE_GATE_PREVIEWED`，
-// 读数 `NOT_GUARDED`；问询之后整库只有关务的动作准入判断册多了一行（本上下文零写入，信封表不动）。随即同参出发答 201，
+// 读数 `NOT_GUARDED`，那件包裹得出了放行、不回给设备（ADR-0237）；问询之后整库只有关务的动作准入判断册多了一行（本上下文零写入，
+// 信封表不动）。随即同参出发答 201，
 // `gateReading` 与问询逐字节相同；关务对同参出发命中问询那一次记下的判断（ADR-0206 决定六「已有判断」），判断册不再多行，
 // 出发落册的逐对象依据指回的正是那一行。
 func TestADemoDeviceAsksBeforeDepartingAndTheDepartureReadsTheSame(t *testing.T) {
@@ -91,8 +92,7 @@ func TestADemoDeviceAsksBeforeDepartingAndTheDepartureReadsTheSame(t *testing.T)
 	}
 	reading := answer.GateReading
 	if answer.Outcome != "DEPARTURE_GATE_PREVIEWED" || reading.Answer != "NOT_GUARDED" ||
-		reading.From != "SYN-NODE-SHA-HUB" || reading.To != "SYN-NODE-SZX-GATE" ||
-		len(reading.Objects) != 1 || reading.Objects[0]["object"] != "SYN-PARCEL-69-01" || len(reading.Objects[0]) != 2 {
+		reading.From != "SYN-NODE-SHA-HUB" || reading.To != "SYN-NODE-SZX-GATE" || len(reading.Objects) != 0 {
 		t.Fatalf("问询答复 = %s", asked.Body.String())
 	}
 	afterPreview := line.snapshot()

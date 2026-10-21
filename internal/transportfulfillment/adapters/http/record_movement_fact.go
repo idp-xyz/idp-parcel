@@ -125,7 +125,8 @@ type movementFactResponse struct {
 }
 
 // departureGateReadingView 是出发门禁读数回给报事实一方的线格式：整格、问关务时的起讫、本上下文这一侧的停点与逐对象的
-// 那一格。逐对象列出而不只给整格：执行方要知道车上被挡的是哪一件，才能去处置那一件而不是整车。
+// 那一格。逐对象那一格不只给整格：执行方要知道车上被挡的是哪一件，才能去处置那一件而不是整车；但只列没得出放行的那几件，
+// 判法只在 domain.ExecutorGateCells（ADR-0237）。整格与停点照实给全：放行的对象不列，不等于读数没问它们。
 //
 // 关务判断标识与依据原文（限制标识、放行来源、申报单元或程序引用）不回给设备，只随事实落册供运营与 VE 查：同段可能
 // 是跨客户共同运输，执行方只拿当前履约所需的最小范围（UC-TF-005 规则，ADR-0205 决定一）。
@@ -137,12 +138,29 @@ type departureGateReadingView struct {
 	Objects []departureGateObjectView `json:"objects,omitempty"`
 }
 
-// departureGateObjectView 的 `members` 只在集运单元那一格上有（ADR-0225）：袋里各直接成员在同一份读数里另有一格，设备据它知道
-// 被挡的那一件装在哪一袋里。空单元写成空数组——键在不在就说这一格是不是一袋。
+// departureGateObjectView 的 `members` 只在集运单元那一格上有（ADR-0225）：袋里那几件同样列出的直接成员在同一份答复里另有一格，
+// 设备据它知道被挡的那一件装在哪一袋里。一件也不列时写成空数组——键在不在就说这一格是不是一袋。
 type departureGateObjectView struct {
 	Object  string    `json:"object"`
 	Answer  string    `json:"answer"`
 	Members *[]string `json:"members,omitempty"`
+}
+
+// gateObjectViewsOf 是各门禁读数回给设备的逐对象那一格：只经 domain.ExecutorGateCells 取，本包不另判哪几格可以给。
+func gateObjectViewsOf(findings []domain.GateFinding) []departureGateObjectView {
+	var views []departureGateObjectView
+	for _, cell := range domain.ExecutorGateCells(findings) {
+		object := departureGateObjectView{Object: cell.Object.String(), Answer: cell.Answer.String()}
+		if cell.Unit {
+			names := make([]string, 0, len(cell.Members))
+			for _, member := range cell.Members {
+				names = append(names, member.String())
+			}
+			object.Members = &names
+		}
+		views = append(views, object)
+	}
+	return views
 }
 
 func departureGateReadingViewOf(reading domain.DepartureGateReading) *departureGateReadingView {
@@ -153,17 +171,7 @@ func departureGateReadingViewOf(reading domain.DepartureGateReading) *departureG
 	for _, stop := range reading.Stops() {
 		view.Stops = append(view.Stops, stop.String())
 	}
-	for _, finding := range reading.Findings() {
-		object := departureGateObjectView{Object: finding.Object().String(), Answer: finding.Answer().String()}
-		if members, unit := finding.ConsolidationUnit(); unit {
-			names := make([]string, 0, len(members))
-			for _, member := range members {
-				names = append(names, member.String())
-			}
-			object.Members = &names
-		}
-		view.Objects = append(view.Objects, object)
-	}
+	view.Objects = gateObjectViewsOf(reading.Findings())
 	return view
 }
 

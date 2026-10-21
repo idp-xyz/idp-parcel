@@ -187,9 +187,9 @@ type handoverResponse struct {
 }
 
 // handoverGateReadingView 是交出门禁读数回给登记方的线格式，与出发读数（departureGateReadingView）同形：整格、问关务时的
-// 那一份意图（at 交出节点、onward 去向节点，代出发的 from / to）、本上下文这一侧的停点与那件对象的那一格。问了关务而
-// 这一版没声明去向时写明 onwardNotDeclared：跨关务区域那一道因此不在答复里，读到「不受门禁」的人得知道那不是关务核过跨区
-// （ADR-0213 越权风险点 7）。
+// 那一份意图（at 交出节点、onward 去向节点，代出发的 from / to）、本上下文这一侧的停点与那件对象的那一格（得出了放行就不列，
+// 判法同出发读数）。问了关务而这一版没声明去向时写明 onwardNotDeclared：跨关务区域那一道因此不在答复里，读到「不受门禁」
+// 的人得知道那不是关务核过跨区（ADR-0213 越权风险点 7）。
 //
 // 关务判断标识与依据原文不回给登记方，只随交接落册供运营与 VE 查，口径同出发读数（ADR-0205 决定一）。
 type handoverGateReadingView struct {
@@ -213,7 +213,7 @@ func handoverGateReadingViewOf(reading domain.HandoverGateReading) *handoverGate
 		view.Stops = []string{stop.String()}
 	}
 	if finding, asked := reading.Finding(); asked {
-		view.Objects = []departureGateObjectView{{Object: finding.Object().String(), Answer: finding.Answer().String()}}
+		view.Objects = gateObjectViewsOf([]domain.GateFinding{finding})
 	}
 	return view
 }
