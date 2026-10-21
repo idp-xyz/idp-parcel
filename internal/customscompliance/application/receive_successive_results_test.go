@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -171,6 +172,24 @@ func TestAMismatchedBookedFactFailsLoudly(t *testing.T) {
 	_, err := fixture.handler.Handle(context.Background(), successiveRelease(t, "source-full", domain.FullRelease, laterOccurredAt))
 	if !errors.Is(err, domain.ErrInvalidExternalResult) {
 		t.Fatalf("err = %v；在册事实配不上层次该响亮报错", err)
+	}
+	if fixture.store.saves != 0 || len(fixture.handoff.intents) != 0 {
+		t.Fatalf("saves = %d intents = %d；报错就不该落记录或交意图", fixture.store.saves, len(fixture.handoff.intents))
+	}
+}
+
+// 结果库说在册的某一行装不回来（ports.ErrLayerFactInconsistent），与在册事实配不上层次同一格：整笔报错，不答读不动的
+// 未决——那会带着续办引用让来源重投到底，而重投多少次都是同一行坏。
+func TestAnUnrebuildableBookedFactFailsLoudlyNotUndecided(t *testing.T) {
+	fixture := newResultFixture(t)
+	fixture.store.factsErr = fmt.Errorf("load external results: resp-9: %w: unknown result layer", ports.ErrLayerFactInconsistent)
+
+	result, err := fixture.handler.Handle(context.Background(), successiveRelease(t, "source-full", domain.FullRelease, laterOccurredAt))
+	if !errors.Is(err, ports.ErrLayerFactInconsistent) {
+		t.Fatalf("err = %v；坏行该响亮报错", err)
+	}
+	if result.Outcome() == application.ResultUndecided || result.ContinuationReference() != "" {
+		t.Fatalf("outcome = %q continuation = %q；坏行不是读不动", result.Outcome(), result.ContinuationReference())
 	}
 	if fixture.store.saves != 0 || len(fixture.handoff.intents) != 0 {
 		t.Fatalf("saves = %d intents = %d；报错就不该落记录或交意图", fixture.store.saves, len(fixture.handoff.intents))

@@ -199,10 +199,7 @@ func TestLoadForSubmissionReturnsOnlyThatSubmissionsFacts(t *testing.T) {
 		return nil
 	})
 
-	results, err := repository.LoadForSubmission(ctx, tenant, make2(t, domain.NewSubmissionVersionID, "submission-1"))
-	if err != nil {
-		t.Fatalf("读回提交事实：%v", err)
-	}
+	results := loadForSubmission(t, repository, transactor, tenant, "submission-1")
 	if len(results) != 2 {
 		t.Fatalf("读回 %d 条，应为 2（他租户、他提交与留存记录都不进来）", len(results))
 	}
@@ -283,5 +280,68 @@ func TestRollbackLeavesNothingBehind(t *testing.T) {
 	}
 	if exists {
 		t.Error("回滚后接收记录仍在")
+	}
+}
+
+// loadForSubmission 在一笔事务里读同层一致性读面——读面取提交版本锁，事务外调用由 RequireExecutor 拒。
+func loadForSubmission(
+	t *testing.T,
+	repository *adapter.ExternalResults,
+	transactor bentoapp.Transactor,
+	tenant domain.TenantID,
+	version string,
+) []domain.LayerFact {
+	t.Helper()
+	var facts []domain.LayerFact
+	inTx2(t, transactor, t.Context(), func(txCtx context.Context) error {
+		var err error
+		facts, err = repository.LoadForSubmission(txCtx, tenant, make2(t, domain.NewSubmissionVersionID, version))
+		return err
+	})
+	return facts
+}
+
+// 同层一致性读面在事务外被拒：锁随事务释放，事务外取的锁在那条语句结束就放掉，读完到落册之间不再串行。
+func TestLoadForSubmissionRefusesToRunOutsideATransaction(t *testing.T) {
+	repository, _ := newExternalResults(t)
+	_, err := repository.LoadForSubmission(t.Context(), make2(t, domain.NewTenantID, "tenant-a"),
+		make2(t, domain.NewSubmissionVersionID, "submission-1"))
+	if !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("事务外的比对读该被拒：%v", err)
+	}
+}
+
+// 在册的一行装不回领域对象即仓储不变量已破：交出 ErrLayerFactInconsistent，与读不动分开，编排据此整笔报错而不是
+// 答未决让来源重投到底。
+func TestAnUnrebuildableBookedFactIsInconsistentNotUnavailable(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	repository, err := adapter.NewExternalResults(db)
+	if err != nil {
+		t.Fatalf("构造登记册：%v", err)
+	}
+	transactor := db.Transactor()
+	ctx := t.Context()
+	record := attributedRecord(t, "tenant-a", "resp-1", "submission-1")
+	inTx2(t, transactor, ctx, func(txCtx context.Context) error {
+		_, err := repository.Save(txCtx, record)
+		return err
+	})
+	if _, err := pool.Exec(ctx,
+		`UPDATE customs_compliance.external_result SET result = jsonb_set(result, '{layer}', '"NO_SUCH_LAYER"')
+		  WHERE tenant_id = 'tenant-a' AND source_id = 'resp-1'`); err != nil {
+		t.Fatalf("改坏在册行：%v", err)
+	}
+
+	_ = transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		_, err = repository.LoadForSubmission(txCtx, make2(t, domain.NewTenantID, "tenant-a"),
+			make2(t, domain.NewSubmissionVersionID, "submission-1"))
+		return err
+	})
+	if !errors.Is(err, ports.ErrLayerFactInconsistent) {
+		t.Fatalf("坏行该答不变量已破：%v", err)
 	}
 }

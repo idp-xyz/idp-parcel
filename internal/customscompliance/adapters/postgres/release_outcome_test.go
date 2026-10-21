@@ -150,11 +150,7 @@ func TestLoadForSubmissionCarriesEachReleaseKind(t *testing.T) {
 		return nil
 	})
 
-	facts, err := repository.LoadForSubmission(ctx, make2(t, domain.NewTenantID, "tenant-a"),
-		make2(t, domain.NewSubmissionVersionID, "submission-release"))
-	if err != nil {
-		t.Fatalf("读回提交事实：%v", err)
-	}
+	facts := loadForSubmission(t, repository, transactor, make2(t, domain.NewTenantID, "tenant-a"), "submission-release")
 	kinds := map[string]domain.ReleaseKind{}
 	for _, fact := range facts {
 		if fact.Release == nil {

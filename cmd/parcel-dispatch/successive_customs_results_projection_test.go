@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
@@ -12,6 +14,7 @@ import (
 	ccdomain "go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
+	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	vepostgres "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
 	vedomain "go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 )
@@ -336,6 +339,100 @@ func TestReplayingTheFullReleaseFormsNothingNew(t *testing.T) {
 	for _, member := range []string{externalResultMemberOne, externalResultMemberTwo} {
 		if entries := fixture.memberEntries(t, member); len(entries) != 2 {
 			t.Fatalf("成员 %s 条目 = %d, want 2", member, len(entries))
+		}
+	}
+}
+
+// Covers: AT-CC-434 的并发半边——同一提交版本上两份相互矛盾的同层结果（同一时刻的全部与部分放行）并发到达，恰有
+// 一份记冲突。先到那笔持着提交版本锁落下全部放行、尚未提交时，后到那笔的比对读挂在锁上，不读到缺了对方的在册事实；
+// 先到那笔提交之后它读得见全部放行，判冲突。不串行的话，两笔在读已提交下互相读不到，双双记成无冲突。
+func TestTwoContradictingResultsArrivingConcurrentlyRecordExactlyOneConflict(t *testing.T) {
+	fixture := newSuccessiveResultsFixture(t)
+	ctx := t.Context()
+	at := fixture.now.Add(-20 * time.Minute)
+	full := fixture.releaseCommand(t, "SYN-RESULT-FULL-01", ccdomain.FullRelease, at)
+	partial := fixture.releaseCommand(t, "SYN-RESULT-PARTIAL-01", ccdomain.PartialRelease, at)
+
+	observer, err := pgx.Connect(ctx, pgtest.AdminDSN(t))
+	if err != nil {
+		t.Fatalf("开观察连接：%v", err)
+	}
+	t.Cleanup(func() { _ = observer.Close(context.Background()) })
+	database := fixture.pool.Config().ConnConfig.Database
+
+	type answered struct {
+		result customsapp.ReceiveExternalResultResult
+		err    error
+	}
+	held, release := make(chan struct{}), make(chan struct{})
+	first := make(chan answered, 1)
+	// 放行登记进清理：放行之前任何一处 Fatal，先到那笔会一直占着连接，连接池清理挂到 go test 超时。
+	var releaseOnce sync.Once
+	releaseFirst := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(releaseFirst)
+	go func() {
+		var got customsapp.ReceiveExternalResultResult
+		err := fixture.transactor.WithinTransaction(context.Background(), func(txCtx context.Context) error {
+			var handleErr error
+			got, handleErr = fixture.receive.Handle(txCtx, full)
+			close(held)
+			<-release
+			return handleErr
+		})
+		first <- answered{got, err}
+	}()
+	<-held
+
+	second := make(chan answered, 1)
+	go func() {
+		var got customsapp.ReceiveExternalResultResult
+		err := fixture.transactor.WithinTransaction(context.Background(), func(txCtx context.Context) error {
+			var handleErr error
+			got, handleErr = fixture.receive.Handle(txCtx, partial)
+			return handleErr
+		})
+		second <- answered{got, err}
+	}()
+
+	for deadline := time.Now().Add(10 * time.Second); ; {
+		select {
+		case early := <-second:
+			t.Fatalf("先到那笔提交之前，后到那笔就答了 %q（%v）——比对读没有串行", early.result.Outcome(), early.err)
+		default:
+		}
+		var waiting int
+		if err := observer.QueryRow(ctx,
+			`SELECT count(*) FROM pg_stat_activity
+			  WHERE datname = $1 AND wait_event_type = 'Lock' AND wait_event = 'advisory'`, database).Scan(&waiting); err != nil {
+			t.Fatalf("看锁等待：%v", err)
+		}
+		if waiting > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("后到那笔既没答也没挂在锁上")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	releaseFirst()
+
+	answers := []answered{<-first, <-second}
+	for _, answer := range answers {
+		if answer.err != nil {
+			t.Fatalf("并发接收：%v", answer.err)
+		}
+	}
+	requireOutcome(t, answers[0].result, customsapp.ResultRecorded)
+	requireOutcome(t, answers[1].result, customsapp.ResultLayerConflict)
+	if n := fixture.countSQL(t, `SELECT count(*) FROM customs_compliance.external_result WHERE layer_conflict`); n != 1 {
+		t.Fatalf("记冲突的接收 = %d 份, want 恰 1 份", n)
+	}
+	if _, err := fixture.beat.DispatchOnce(ctx); err != nil {
+		t.Fatalf("派发：%v", err)
+	}
+	for _, member := range []string{externalResultMemberOne, externalResultMemberTwo} {
+		if entries := fixture.memberEntries(t, member); len(entries) != 1 {
+			t.Fatalf("成员 %s 条目 = %v，want 只有先到的全部放行", member, entries)
 		}
 	}
 }

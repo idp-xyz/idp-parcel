@@ -57,6 +57,11 @@ const (
 // ExternalResultStore 按幂等键找回并保存接收记录（写入代数同 ADR-0031），并按提交
 // 版本读回同一提交已保存的各层事实供同层一致性比对。读回的放行层事实带着同一次接收
 // 拆出的放行事实：放行层的先后按放行种类判，少了它就分不出推进与回退。
+//
+// LoadForSubmission 必须在随后落册的那笔事务里调，并从这一刻起到事务结束把同一（租户，
+// 提交版本）上的另一次比对读挡在外面。读已提交下两份同层结果并发到达时，各自读不到对方
+// 尚未提交的那一行，不串行就会双双判「不矛盾」（ADR-0226 决定二）。某一行重建不起来
+// 时交出 ErrLayerFactInconsistent。
 type ExternalResultStore interface {
 	FindByKey(ctx context.Context, key ExternalResultKey) (ExternalResultRecord, bool, error)
 	Save(ctx context.Context, record ExternalResultRecord) (ExternalResultSaveOutcome, error)
@@ -66,6 +71,10 @@ type ExternalResultStore interface {
 		version domain.SubmissionVersionID,
 	) ([]domain.LayerFact, error)
 }
+
+// ErrLayerFactInconsistent 说同层一致性读面读回的某一行装不回领域对象（分层事实或放行事实的列坏了）：仓储
+// 不变量已破，重投多少次都是同一行坏。编排认出它就整笔报错，不答读不动——与在册事实的放行事实配不上层次同一格。
+var ErrLayerFactInconsistent = errors.New("customs compliance: a booked layer fact cannot be rebuilt")
 
 // SubmissionIndex 按版本找回原提交是否存在。found=false 表示响应声称的提交在本系统
 // 没有对应版本——归属不上，留存不猜。

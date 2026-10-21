@@ -341,6 +341,11 @@ func (handler *ReceiveExternalResultHandler) Handle(
 	}
 
 	layerFacts, err := handler.deps.Results.LoadForSubmission(ctx, command.TenantID, version)
+	if errors.Is(err, ports.ErrLayerFactInconsistent) {
+		// 在册的某一行装不回来，重投多少次都是同一行坏：与在册事实配不上层次（同层一致性核对交出
+		// ErrInvalidExternalResult）同一格，不答读不动。
+		return ReceiveExternalResultResult{}, fmt.Errorf("customs compliance: layer facts of %s: %w", version, err)
+	}
 	if err != nil {
 		return ReceiveExternalResultResult{outcome: ResultUndecided, reason: LayerFactsUnavailable,
 			continuation: resultContinuation("LAYER_FACTS_UNAVAILABLE", command.SourceID)}, nil

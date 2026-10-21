@@ -252,18 +252,34 @@ func releaseKindFrom(raw string) (domain.ReleaseKind, error) {
 // 关系在两份事实之间，被标的那份仍要参与比对（判法见 domain.CheckLayerConsistency）。
 // 放行层连同放行事实一起读回；放行事实落点建立之前的放行层存量没有那一行，如实不带。
 // 顺序按入库序稳定。
+//
+// 查询之前按（租户、提交版本）取事务级咨询锁，把「读同一提交的在册事实 → 判同层一致性 →
+// 落册」串起来：读已提交下两份同层结果在两笔并发事务里到达，各自读不到对方尚未提交的那一行，
+// 会双双判不矛盾、都记无冲突。后到的一方等在锁上，先到的提交后才查；这条查询另取快照，读得到
+// 刚提交的那一行。锁随事务释放，所以走 RequireExecutor：没有事务时锁在取锁那条语句结束就放掉，
+// 读完到落册之间不再串行，静默放过比报错更糟。粒度取提交版本，因为比对本就只在同一提交版本内
+// 做；锁键各维以 chr(31) 分隔后取 hashtext，口径同 TF 的 BookingAnswers.FindAnswersForUpdate，
+// 哈希撞上只多等一会儿，不错判。
+//
+// 某一行装不回领域对象即仓储不变量已破，交出 ports.ErrLayerFactInconsistent，与读不动分开。
 func (repository *ExternalResults) LoadForSubmission(
 	ctx context.Context,
 	tenant domain.TenantID,
 	version domain.SubmissionVersionID,
 ) ([]domain.LayerFact, error) {
-	querier, err := repository.db.ReadExecutor(ctx)
+	executor, err := repository.db.RequireExecutor(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load external results: %w", err)
 	}
+	if _, err := executor.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext('customs_compliance.external_result.submission_version'), hashtext($1 || chr(31) || $2))`,
+		tenant.String(), version.String(),
+	); err != nil {
+		return nil, fmt.Errorf("load external results: 取提交版本锁：%w", err)
+	}
 
-	rows, err := querier.Query(ctx,
-		`SELECT e.result, r.kind, r.authority_ref, r.scope_ref, r.condition, r.received_at
+	rows, err := executor.Query(ctx,
+		`SELECT e.source_id, e.result, r.kind, r.authority_ref, r.scope_ref, r.condition, r.received_at
 		   FROM customs_compliance.external_result e
 		   LEFT JOIN customs_compliance.release_outcome r
 		     ON r.tenant_id = e.tenant_id AND r.source_id = e.source_id
@@ -281,25 +297,28 @@ func (repository *ExternalResults) LoadForSubmission(
 	var facts []domain.LayerFact
 	for rows.Next() {
 		var (
+			sourceID                          string
 			resultJSON                        []byte
 			kind, authority, scope, condition *string
 			releaseReceivedAt                 *time.Time
 		)
-		if err := rows.Scan(&resultJSON, &kind, &authority, &scope, &condition, &releaseReceivedAt); err != nil {
+		if err := rows.Scan(&sourceID, &resultJSON, &kind, &authority, &scope, &condition, &releaseReceivedAt); err != nil {
 			return nil, fmt.Errorf("load external results: %w", err)
 		}
 		result, err := rebuildResult(resultJSON)
 		if err != nil {
-			return nil, fmt.Errorf("load external results: %w", err)
+			return nil, fmt.Errorf("load external results: %s: %w: %w", sourceID, ports.ErrLayerFactInconsistent, err)
 		}
 		fact := domain.LayerFact{Result: result}
 		if kind != nil {
 			if authority == nil || scope == nil || condition == nil || releaseReceivedAt == nil {
-				return nil, fmt.Errorf("load external results: %s: release outcome row is incomplete", result.SourceID())
+				return nil, fmt.Errorf("load external results: %s: %w: release outcome row is incomplete",
+					sourceID, ports.ErrLayerFactInconsistent)
 			}
 			release, err := rebuildReleaseOutcome(*kind, *authority, *scope, *condition, *releaseReceivedAt)
 			if err != nil {
-				return nil, fmt.Errorf("load external results: %s: release outcome: %w", result.SourceID(), err)
+				return nil, fmt.Errorf("load external results: %s: %w: release outcome: %w",
+					sourceID, ports.ErrLayerFactInconsistent, err)
 			}
 			fact.Release = &release
 		}
