@@ -57,7 +57,7 @@
 | 动作时点 | 动作执行方 | 动作发生或拟发生的业务时刻 | 不以请求到达时刻代替；限制、放行、区域都按它读 |
 | 节点关务区域 | `customs-compliance` 登记册 | 节点、区域、生效区间 | 未登记不推定同区或异区 |
 | 对象范围 | `customs-compliance` 申报单元与案件册 | 当前单元及其程序；在案未成单元的程序 | 不向执行方要范围 |
-| 三源 | 限制（监管限制册；内部合规限制首发没有册）、门禁目录与付款核对、放行事实 | 各自既有语义 | 只读；同层冲突的放行不算 |
+| 三源 | 限制（监管限制册；内部合规限制尚无册（实现缺口））、门禁目录与付款核对、放行事实 | 各自既有语义 | 只读；同层冲突的放行不算 |
 
 ## 结果语义契约
 
@@ -111,5 +111,5 @@
 
 - 节点区域取值：`PAR-CUS-08`，演示以 `SYN-ZONE-CN` / `SYN-ZONE-SG` 合成（证据 `S`）。
 - 逐件建案口已由 [ADR-0227](../../adr/0227-customs-case-and-declaration-submission-enter-production-through-operator-decision-faces.md) 提供；默认演示动线上出不出现放行，取决于是否灌外部放行结果。
-- 内部合规限制首发没有模型与写入口，限制一源只读监管限制，而监管限制也还没有生产写入（ADR-0241 决定四、ADR-0206 越权风险点 1）；内部合规限制待确认或冲突答未决那一格随 UC-CC-011 接线补 AT（票 [docs-consistency/code/27](../../../.scratch/docs-consistency/code/27-customs-restriction-comments-call-the-regulatory-restriction-internal-and-internal-restrictions-have-no-model.md)）。
+- 实现缺口：内部合规限制尚无模型与写入口（首发范围仍要求它，见 UC-CC-011「首发试点约束」），限制一源只读监管限制，而监管限制也还没有生产写入（ADR-0241 决定四、ADR-0206 越权风险点 1）；内部合规限制待确认或冲突答未决那一格随 UC-CC-011 接线补 AT（票 [docs-consistency/code/27](../../../.scratch/docs-consistency/code/27-customs-restriction-comments-call-the-regulatory-restriction-internal-and-internal-restrictions-have-no-model.md)）。
 - 待决风险以 ADR-0206「越权风险点」为准，此处不复述。

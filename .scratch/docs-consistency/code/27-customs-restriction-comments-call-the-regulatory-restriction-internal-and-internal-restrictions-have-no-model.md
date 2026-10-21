@@ -1,7 +1,7 @@
 # 27 CC 准入代码把监管限制叫作内部合规限制；内部合规限制没有模型
 
 Category: enhancement
-Status: ready-for-agent——R3（不急）：限制册在生产上没有写入（`ManageRestrictionHandler` 未装配，ADR-0206 越权风险点 1），内部合规限制没有任何入口，今天没有生产路径；**UC-CC-011 接线之前必须先做第 2 项**，否则内部合规限制要么被塞进 `RegulatoryRestriction`（让监管限制可以不凭监管结果解除），要么挡不住动作。2026-10-21 文档自洽 03 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc03。
+Status: ready-for-agent——R3（不急）：限制册在生产上没有写入（`ManageRestrictionHandler` 未装配，ADR-0206 越权风险点 1），内部合规限制没有任何入口，今天没有生产路径；**UC-CC-011 接线之前必须先做第 2 项**，否则内部合规限制要么被塞进 `RegulatoryRestriction`（让监管限制可以不凭监管结果解除），要么挡不住动作。R3 只说缺陷本身今天不出事；内部合规限制的模型是首发范围要求的实现缺口（PILOT-SCOPE 要求验证内部合规限制、关务专项基线切片 1 含它），不因 R3 而移出首发。2026-10-21 文档自洽 03 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc03。
 Blocked by: 无（裁向已由 [ADR-0241](../../../docs/adr/0241-action-admission-restrictions-are-regulatory-or-internal-and-only-regulatory-restrictions-exist-today.md) 定）
 出处：[audit/cc.md](../audit/cc.md) H3（B，审计钉 `6b0074d0`；2026-10-21 按 main `205eb254` 复核，现象仍在）；[02 的完成记录](../issues/02-code-defects-from-the-audit.md)「其余条件性 B 类」一句把它交给修订票 03 裁后按裁向立票。
 

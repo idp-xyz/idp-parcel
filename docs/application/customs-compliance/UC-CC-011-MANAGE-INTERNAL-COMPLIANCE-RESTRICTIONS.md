@@ -1,6 +1,6 @@
 # UC-CC-011 管理内部合规限制及解除
 
-状态：开发基线已形成；内部限制的范围化形成、来源解除和下游消费边界已确认，真实限制来源、动作矩阵、解除条件和权限参数待提供；首发没有模型与写入口，代码里的限制是监管限制、不是本用例的对象（[ADR-0241](../../adr/0241-action-admission-restrictions-are-regulatory-or-internal-and-only-regulatory-restrictions-exist-today.md)）
+状态：开发基线已形成；内部限制的范围化形成、来源解除和下游消费边界已确认，真实限制来源、动作矩阵、解除条件和权限参数待提供；实现缺口：尚无模型与写入口（首发范围仍要求本用例），代码里的限制是监管限制、不是本用例的对象（[ADR-0241](../../adr/0241-action-admission-restrictions-are-regulatory-or-internal-and-only-regulatory-restrictions-exist-today.md)）
 
 ## 目标与边界
 
@@ -26,7 +26,7 @@
 
 内部合规限制是对特定动作施加的内部业务决定，不是“清关状态”或全局冻结。限制解除只恢复相关动作可以重新申请、校验或授权的资格，不自动形成申报就绪、监管放行、业务重开、案件关闭或任何物理动作。
 
-本用例的对象不是代码里的 `RegulatoryRestriction`。那是监管限制：依据已接受的监管过程决定（扣留等）形成，只能凭责任来源接受的监管结果整条解除；它与内部合规限制互不改名、互不解除（[ADR-0241](../../adr/0241-action-admission-restrictions-are-regulatory-or-internal-and-only-regulatory-restrictions-exist-today.md)）。首发内部合规限制没有领域对象、登记册与写入口，`UC-CC-013` 动作准入的限制一源只读监管限制，这不是「当前无内部限制」的结论。本用例接线时另立对象与册，不在 `RegulatoryRestriction` 上加覆盖项、责任来源解除或部分解除，并在同一笔把内部合规限制并进准入：`UC-CC-013` 按动作时点读当前适用性，有效限制答阻断，待确认或冲突答未决并指名那条限制（ADR-0241 决定三，票 [docs-consistency/code/27](../../../.scratch/docs-consistency/code/27-customs-restriction-comments-call-the-regulatory-restriction-internal-and-internal-restrictions-have-no-model.md)）。
+本用例的对象不是代码里的 `RegulatoryRestriction`。那是监管限制：依据已接受的监管过程决定（扣留等）形成，只能凭责任来源接受的监管结果整条解除；它与内部合规限制互不改名、互不解除（[ADR-0241](../../adr/0241-action-admission-restrictions-are-regulatory-or-internal-and-only-regulatory-restrictions-exist-today.md)）。实现现状：内部合规限制还没有领域对象、登记册与写入口，`UC-CC-013` 动作准入的限制一源只读监管限制，这不是「当前无内部限制」的结论；这是缺口，不收窄首发范围——「首发试点约束」一节对本用例的要求照旧。本用例接线时另立对象与册，不在 `RegulatoryRestriction` 上加覆盖项、责任来源解除或部分解除，并在同一笔把内部合规限制并进准入：`UC-CC-013` 按动作时点读当前适用性，有效限制答阻断，待确认或冲突答未决并指名那条限制（ADR-0241 决定三，票 [docs-consistency/code/27](../../../.scratch/docs-consistency/code/27-customs-restriction-comments-call-the-regulatory-restriction-internal-and-internal-restrictions-have-no-model.md)）。
 
 ## 元数据
 
