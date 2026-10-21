@@ -38,6 +38,15 @@ func TestPricingWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, err := cards.Register(ctx, domain.PriceCardRegistration{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务登记价卡应返回 ErrTransactionRequired，实得：%v", err)
 	}
+	if _, err := cards.LockPriceCardVersionForClosure(ctx, domain.TenantID{}, domain.VersionReference{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务锁价卡版本行应返回 ErrTransactionRequired，实得：%v", err)
+	}
+	if _, err := cards.SavePriceCardCut(ctx, domain.PriceCardCut{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务落价卡截止应返回 ErrTransactionRequired，实得：%v", err)
+	}
+	if _, err := cards.SavePriceCardRetirement(ctx, domain.PriceCardRetirement{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务落价卡退役应返回 ErrTransactionRequired，实得：%v", err)
+	}
 
 	series, err := adapter.NewReferenceSeriesVersions(db)
 	if err != nil {

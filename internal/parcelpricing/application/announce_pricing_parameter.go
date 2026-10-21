@@ -19,17 +19,24 @@ func announcePricingParameter(
 	registration domain.VersionReference,
 	scopes []ports.PricedScope,
 ) error {
+	return announceOnScopes(ctx, handoff,
+		ports.PricingParameterRegisteredIntent{Tenant: tenant, Kind: kind, Registration: registration}, scopes)
+}
+
+// announceOnScopes 把同一次登记按各面交出，每一面一封：template 给租户、种类、那一版与收尾身份，各面补范围与方向。
+func announceOnScopes(
+	ctx context.Context,
+	handoff ports.PricingParameterRegisteredHandoff,
+	template ports.PricingParameterRegisteredIntent,
+	scopes []ports.PricedScope,
+) error {
 	for _, scope := range scopes {
 		if scope.Direction != domain.PricingDirectionBuy && scope.Direction != domain.PricingDirectionSell {
 			continue
 		}
-		if err := handoff.HandOffPricingParameterRegistered(ctx, ports.PricingParameterRegisteredIntent{
-			Tenant:       tenant,
-			Kind:         kind,
-			Registration: registration,
-			Scope:        scope.Scope,
-			Direction:    scope.Direction,
-		}); err != nil {
+		intent := template
+		intent.Scope, intent.Direction = scope.Scope, scope.Direction
+		if err := handoff.HandOffPricingParameterRegistered(ctx, intent); err != nil {
 			return err
 		}
 	}

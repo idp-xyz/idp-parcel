@@ -77,12 +77,51 @@ func (kind PricingParameterKind) String() string {
 // PricingParameterRegisteredIntent 是一次计价参数落库在一个计价范围上的那一面：租户、种类、哪一版（进信封标识，认领同一次
 // 登记的重放）、受影响的计价范围与方向（进载荷，结算按它只续办问这个范围、这一路的请求）。价卡一版一面；序列与目录
 // 一版按绑了它的卡各一面——没有卡绑它，就没有等着它的请求，一面都不交。方向只有 BUY 与 SELL：结算的评价请求只有这两路。
+//
+// Closure 非零说明这一面出自一次价卡收尾（ADR-0234），Registration 是被收尾的那一版。
 type PricingParameterRegisteredIntent struct {
 	Tenant       domain.TenantID
 	Kind         PricingParameterKind
 	Registration domain.VersionReference
 	Scope        domain.PricingScopeID
 	Direction    domain.PricingDirection
+	Closure      PriceCardClosureOccasion
+}
+
+// PriceCardClosureKind 是价卡收尾的两种，封闭集。
+type PriceCardClosureKind uint8
+
+const (
+	PriceCardClosureKindInvalid PriceCardClosureKind = iota
+	PriceCardCutClosure
+	PriceCardRetirementClosure
+)
+
+func (kind PriceCardClosureKind) String() string {
+	switch kind {
+	case PriceCardCutClosure:
+		return "CUT"
+	case PriceCardRetirementClosure:
+		return "RETIREMENT"
+	default:
+		return ""
+	}
+}
+
+// PriceCardClosureOccasion 是一次价卡收尾的身份：哪一种、让位给哪一版、凭什么。零值即这一面不是收尾。
+//
+// 它只进信封标识，不进载荷：结算按种类、范围与方向续办，不问是哪一种价卡登记。进标识是因为收尾那一封必须与旧版、后继
+// 各自登记时交的那两封分开——标识撞上会被当成重发吞掉，而后继登记那一封续办出来的请求在两版同时适用时只会停在适用冲突上，
+// 能续办出后继的只有收尾这一封。
+type PriceCardClosureOccasion struct {
+	Kind      PriceCardClosureKind
+	Successor string
+	Reference string
+}
+
+// Present 答这一面是不是出自收尾。
+func (occasion PriceCardClosureOccasion) Present() bool {
+	return occasion.Kind != PriceCardClosureKindInvalid
 }
 
 // PricedScope 是一张卡问的计价范围与方向。

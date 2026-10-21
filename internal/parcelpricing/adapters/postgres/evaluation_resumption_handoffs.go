@@ -19,8 +19,12 @@ import (
 // 各的字面；两串漂开撞 dispatch.no_subscriber，由 cmd/parcel-dispatch 那几条用本包交接口入队的用例揪红。
 const pricingParameterRegisteredEventType eventing.EventType = "parcel-pricing.pricing-parameter.registered"
 
-// pricingParameterRegisteredEventIDPort 是信封 ID 指纹的口名前缀，只求本来源名下几只口的 ID 空间互不相交。
-const pricingParameterRegisteredEventIDPort = "pricing-parameter"
+// pricingParameterRegisteredEventIDPort 是信封 ID 指纹的口名前缀，只求本来源名下几只口的 ID 空间互不相交。价卡收尾那几面
+// 另取一个前缀：它们与卡自己登记的那一面同类型、同载荷，标识空间却必须分开（ports.PriceCardClosureOccasion）。
+const (
+	pricingParameterRegisteredEventIDPort = "pricing-parameter"
+	priceCardClosedEventIDPort            = "price-card-closure"
+)
 
 // OutboxEvaluationResumptionHandoffs 实现「评价未形成」与「参数已登记」两只交接口：都是计价交给结算续办那一路的信封，
 // 一只适配器、两个文件——两口的分区主体不同，各在自己的文件里声明（「评价未形成」那一口见
@@ -54,9 +58,10 @@ type pricingParameterRegisteredPayload struct {
 	Direction        string `json:"direction"`
 }
 
-// HandOffPricingParameterRegistered 把一次「参数已登记」的一面入队。ID 取（租户 / 种类 / 那一版 / 范围 / 方向）的定长指纹：
-// 同一面重放重发同一封、由 EnqueueOnce 吞掉，一版序列绑在两个范围上是两封；结算拿这封信的标识当续办依据，同一次登记
-// 重放不会把同一条代次链推两代。范围或方向缺席、方向不是 BUY 或 SELL，都是装配缺陷，响亮报错不入队。
+// HandOffPricingParameterRegistered 把一次「参数已登记」的一面入队。ID 取（租户 / 种类 / 那一版 / 范围 / 方向）的定长指纹，
+// 价卡收尾那一面另加收尾的种类、后继与依据：同一面重放重发同一封、由 EnqueueOnce 吞掉，一版序列绑在两个范围上是两封；
+// 结算拿这封信的标识当续办依据，同一次登记重放不会把同一条代次链推两代。范围或方向缺席、方向不是 BUY 或 SELL、收尾缺格，
+// 都是装配缺陷，响亮报错不入队。
 func (handoffs *OutboxEvaluationResumptionHandoffs) HandOffPricingParameterRegistered(
 	ctx context.Context,
 	intent ports.PricingParameterRegisteredIntent,
@@ -78,11 +83,19 @@ func (handoffs *OutboxEvaluationResumptionHandoffs) HandOffPricingParameterRegis
 	if err != nil {
 		return fmt.Errorf("hand off pricing parameter registered: %w", err)
 	}
+	id := outboxintent.FingerprintEventID(pricingParameterRegisteredEventIDPort,
+		tenant, intent.Kind.String(), version, intent.Scope.String(), intent.Direction.String())
+	if closure := intent.Closure; closure.Present() {
+		if closure.Kind.String() == "" || closure.Successor == "" || closure.Reference == "" {
+			return fmt.Errorf("hand off pricing parameter registered: price card closure needs its kind, successor and reference")
+		}
+		id = outboxintent.FingerprintEventID(priceCardClosedEventIDPort, tenant, intent.Kind.String(), version,
+			closure.Kind.String(), closure.Successor, closure.Reference, intent.Scope.String(), intent.Direction.String())
+	}
 	now := handoffs.clock.Now().UTC()
 	return handoffs.enqueue(ctx, eventing.Envelope{
 		SpecVersion: eventing.SpecVersion,
-		ID: outboxintent.FingerprintEventID(pricingParameterRegisteredEventIDPort,
-			tenant, intent.Kind.String(), version, intent.Scope.String(), intent.Direction.String()),
+		ID:          id,
 		// 分区装租户，与结算、party-commercial 的登记续办口同一个字符串：同一租户的续办一轮接一轮，不会两轮并发去推
 		// 同一条代次链。
 		Source:       ppEventSource,

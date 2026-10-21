@@ -30,7 +30,7 @@ const (
 )
 
 // ErrAmbiguousPriceCard 是 LoadApplicable 契约里「同一方案身份在该时点有两个及以上适用版本」那一格的哨兵。它是登记册
-// 数据错误（发布责任方没完成替代关系），不是业务答案；消费方要按恢复动作分格时 errors.Is 它——哨兵放在端口上，应用层
+// 数据错误（发布责任方没收尾旧版，ADR-0234），不是业务答案；消费方要按恢复动作分格时 errors.Is 它——哨兵放在端口上，应用层
 // 才不必去认某个适配器的同名变量。
 var ErrAmbiguousPriceCard = errors.New("parcel pricing: a price card plan has more than one applicable version")
 

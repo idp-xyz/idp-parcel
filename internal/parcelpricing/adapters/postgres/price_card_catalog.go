@@ -17,7 +17,8 @@ import (
 //
 // 它是错误而不是业务答案（先例：NR 目录的 ErrAmbiguousNetworkCatalog）：多份**不同**
 // 方案同时适用是正当的多候选形态，但同一方案的两个版本同时适用意味着发布责任方没有
-// 完成替代关系，挑任何一版都是替它作决定。数据要修登记册，不能靠挑一版把它藏起来。
+// 完成替代关系，挑任何一版都是替它作决定。数据要修登记册（指名后继收尾旧版，ADR-0234），
+// 不能靠挑一版把它藏起来。
 var ErrAmbiguousPriceCard = fmt.Errorf(
 	"parcel pricing postgres: 同一方案身份在该时点有多个适用版本: %w", ports.ErrAmbiguousPriceCard)
 
@@ -166,9 +167,11 @@ func (catalog *PriceCards) Register(
 }
 
 // LoadApplicable 取（方向 + 适用范围 + 计价基准时点）下的全部适用价卡版本。方向
-// 隔离在查询谓词上（BUY 的册面不进 SELL 的答案）；选版按 [effective_from,
-// effective_to) 含 asOf。读回逐行经领域整图重验（含按规范化版本重算内容摘要自校），
-// 再与比对列交叉核——列与快照分岔说明行被改过。
+// 隔离在查询谓词上（BUY 的册面不进 SELL 的答案）；选版按此刻的选用区间含 asOf——发布时的
+// [effective_from, effective_to) 在 SQL 里预筛，册上的截止与退役由 selectablePriceCardRow 折进来
+// （ADR-0234），与 ResolveInForce 同一口径：试算答适用冲突时要回头问那一口要候选，两口折法不同就会
+// 互相对不上。读回逐行经领域整图重验（含按规范化版本重算内容摘要自校），再与比对列交叉核——列与
+// 快照分岔说明行被改过。
 func (catalog *PriceCards) LoadApplicable(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -185,8 +188,8 @@ func (catalog *PriceCards) LoadApplicable(
 	}
 
 	rows, err := querier.Query(ctx,
-		`SELECT `+priceCardRowColumns+`
-		   FROM parcel_pricing.price_card_version
+		`SELECT `+priceCardRowColumns+`, `+priceCardClosureColumns+`
+		   FROM parcel_pricing.price_card_version v
 		  WHERE tenant_id = $1 AND direction = $2 AND scope = $3
 		    AND effective_from <= $4
 		    AND (effective_to IS NULL OR effective_to > $4)
@@ -201,10 +204,18 @@ func (catalog *PriceCards) LoadApplicable(
 	var plans []domain.PricingPlanVersion
 	previousPlanID := ""
 	for rows.Next() {
-		row, err := scanPriceCardRow(rows)
+		selectable, err := scanSelectablePriceCardRow(rows)
 		if err != nil {
 			return nil, fmt.Errorf("load price cards: %w", err)
 		}
+		selects, err := selectable.selectsAt(asOf)
+		if err != nil {
+			return nil, fmt.Errorf("load price cards: %w", err)
+		}
+		if !selects {
+			continue
+		}
+		row := selectable.priceCardRow
 		// 同一方案身份两版同时适用：交回错误，不挑一版（行按 plan_id 有序，相邻
 		// 比较即可）。
 		if row.planID == previousPlanID {
@@ -232,6 +243,8 @@ func (catalog *PriceCards) LoadApplicable(
 // 范围与时点条件——重放不选卡，原评价已经选过了。读回同经 priceCardRow.plan 那道整图重验与
 // 比对列交叉核。不在册答 false；引用种类不是 pricing-plan 答 error——那是调用方拿错了引用，
 // 答 false 会让它读成「那一版不在册」而去登记一张本就不该存在的卡。
+//
+// 也不折截止与退役（ADR-0234）：那一版后来被收尾，改的是此后的新选择，不是原评价当时用的是哪一版。
 func (catalog *PriceCards) FindByReference(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -288,6 +301,9 @@ var _ ports.PricingParameterBindingView = (*PriceCards)(nil)
 // FindPricedScopesBinding 读这个租户的全部卡、逐张经领域整图重验，挑出绑了这条序列或这份目录的，交回它们的计价范围与
 // 方向（ports.PricingParameterBindingView）。绑定只在快照里：列面没有绑定列，按列筛就得给每一种绑定加一列检索面，
 // 而这一问只在序列或目录通过复核时问一次。读走 ReadExecutor：调用方在复核那一笔事务里问，读到的是同一个快照。
+//
+// 已退役的那一版不算（ADR-0234）：它此后不会再被任何请求选中，停着的请求不是在等它绑的序列或目录。截止过的那一版照算——
+// 截止点之前它仍是那一段选得中的卡。
 func (catalog *PriceCards) FindPricedScopesBinding(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -325,8 +341,8 @@ func (catalog *PriceCards) FindPricedScopesBinding(
 		return nil, fmt.Errorf("find priced scopes binding: %w", err)
 	}
 	rows, err := querier.Query(ctx,
-		`SELECT `+priceCardRowColumns+`
-		   FROM parcel_pricing.price_card_version
+		`SELECT `+priceCardRowColumns+`, `+priceCardClosureColumns+`
+		   FROM parcel_pricing.price_card_version v
 		  WHERE tenant_id = $1
 		  ORDER BY scope, direction, plan_id, plan_version`,
 		tenant.String(),
@@ -339,11 +355,16 @@ func (catalog *PriceCards) FindPricedScopesBinding(
 	var scopes []ports.PricedScope
 	seen := map[ports.PricedScope]bool{}
 	for rows.Next() {
-		row, err := scanPriceCardRow(rows)
+		selectable, err := scanSelectablePriceCardRow(rows)
 		if err != nil {
 			return nil, fmt.Errorf("find priced scopes binding: %w", err)
 		}
-		plan, err := row.plan(tenant)
+		if _, selects, err := selectable.selection(); err != nil {
+			return nil, fmt.Errorf("find priced scopes binding: %w", err)
+		} else if !selects {
+			continue
+		}
+		plan, err := selectable.plan(tenant)
 		if err != nil {
 			return nil, fmt.Errorf("find priced scopes binding: %w", err)
 		}
