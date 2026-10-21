@@ -152,16 +152,74 @@ func TestAnImprovementRerouteComparesCostsTheSourceLoads(t *testing.T) {
 	assertCitesOnly(t, switched.NewPlan, "candidate-2")
 }
 
-// Covers: 票 demo-chain-gaps/115「要裁的」——成本取数侧没接与读不回按恢复动作分格。读不回是依赖故障，重投推得动：无路由那
-// 条线答未决 REASSESS_COST_SOURCE_UNAVAILABLE，不落复核、不入账未判。没接重投推不动：无路由那条线照常入账，仍无当前有效
-// 路由、候选评估记未决，不形成首个计划。失效线上两格都不拦失效落库，候选评估记未决、不挂建议；仍适用线上两格都只是不试
-// 改善，原计划照旧保留。
-func TestCostSourceGapsSettlePerLine(t *testing.T) {
-	unreadable := errors.New("parcel pricing read timed out")
+// Covers: 票 demo-chain-gaps/115「要裁的」——成本读不回是依赖故障，重投推得动。无路由那条线答未决
+// REASSESS_COST_SOURCE_UNAVAILABLE，不落复核、不入账未判。失效线上不拦失效落库，候选评估记未决、不挂建议；仍适用线上
+// 只是不试改善，原计划照旧保留。这里的读不回不碰事务；库里读失败让事务中毒的那一种归票 docs-consistency/code/67。
+func TestAnUnreadableCostSourceSettlesPerLine(t *testing.T) {
+	unreadable := errors.New("parcel pricing answered an untranslatable evaluation")
+	t.Run("无路由线", func(t *testing.T) {
+		fixture := newReassessFixture(t)
+		record := currentPlanRecord(t)
+		fixture.routes.records[record.Key] = record
+		fixture.evidence.byParcel["parcel-1"] = withoutCosts(restrictedSelectedCandidate(t, evidenceBeforeFreeze(t)))
+		lapsedOnPickup(t, fixture)
+		fixture.costs.err = unreadable
+
+		fixture.evidence.byParcel["parcel-1"] = withoutCosts(cheaperAlternative(t, 100))
+		result := handleOK(t, fixture, reassessCommandAt(t, "trigger-2", "node-origin", reassessedAt.Add(time.Hour)))
+		if result.Outcome() != application.ReassessUndecided ||
+			result.UndecidedReason() != application.ReassessCostSourceUnavailable {
+			t.Fatalf("outcome = %q/%q, want UNDECIDED/REASSESS_COST_SOURCE_UNAVAILABLE", result.Outcome(), result.UndecidedReason())
+		}
+		if _, recorded := fixture.store.byCorrelation[value(t, domain.NewRequestCorrelationID, "trigger-2")]; recorded ||
+			len(fixture.store.notJudged) != 0 {
+			t.Fatalf("未决却落了复核 %v 或未判 %d 行", recorded, len(fixture.store.notJudged))
+		}
+	})
+	t.Run("失效线", func(t *testing.T) {
+		fixture := rerouteFixture(t)
+		fixture.costs.err = unreadable
+		fixture.evidence.byParcel["parcel-1"] = withoutCosts(declareCostImprovement(cheaperAlternative(t, 100), 0))
+
+		result := handleOK(t, fixture, reassessCommand(t, "node-actual-elsewhere"))
+		record, _ := result.Record()
+		if result.Outcome() != application.ReassessedPlanLapsed || record.CandidateState != ports.CandidateReviewUndecided ||
+			record.HasSuggestion || record.HasNewPlan {
+			t.Fatalf("outcome = %q、候选评估 %q、建议 %v、新计划 %v, want 失效照落、候选评估未决、不挂建议",
+				result.Outcome(), record.CandidateState, record.HasSuggestion, record.HasNewPlan)
+		}
+		if state := fixture.applicability.byPlan[value(t, domain.NewRoutePlanVersionID, "plan-1/v1")].State(); state != domain.PlanLapsed {
+			t.Fatalf("原计划适用性 = %q, want LAPSED", state)
+		}
+	})
+	t.Run("仍适用线", func(t *testing.T) {
+		fixture := newReassessFixture(t)
+		fixture.costs.err = unreadable
+		record := currentPlanRecord(t)
+		fixture.routes.records[record.Key] = record
+		evidence := withoutCosts(declareCostImprovement(cheaperAlternative(t, 100), 0))
+		limit := 0
+		evidence.FreezeForm = domain.RemainingSegmentCountFreeze
+		evidence.FreezeRemainingSegmentLimit = &limit
+		fixture.evidence.byParcel["parcel-1"] = evidence
+
+		result := handleOK(t, fixture, reassessCommand(t, "node-origin"))
+		kept, _ := result.Record()
+		if result.Outcome() != application.ReassessedStillApplicable || kept.HasNewPlan {
+			t.Fatalf("outcome = %q、新计划 %v, want STILL_APPLICABLE、原计划保留", result.Outcome(), kept.HasNewPlan)
+		}
+		if len(fixture.applicability.saved) != 0 {
+			t.Fatalf("适用性写了 %d 次, want 不动", len(fixture.applicability.saved))
+		}
+	})
+}
+
+// Covers: 复核要排序时没有成本取数侧可问——装配没给，或取数侧答整条取数路径没接：只有装配缺漏到得了，三条线都响亮报错，
+// 不折成看似业务结论的候选评估未决。
+func TestAMissingCostSourceIsLoudOnEveryLine(t *testing.T) {
 	gaps := map[string]func(*reassessFixture){
-		"读不回": func(fixture *reassessFixture) { fixture.costs.err = unreadable },
-		"没接":  func(fixture *reassessFixture) { fixture.costs.err = ports.ErrRouteCostSourceNotConfigured },
-		"没装配": func(fixture *reassessFixture) {
+		"取数侧答没接": func(fixture *reassessFixture) { fixture.costs.err = ports.ErrRouteCostSourceNotConfigured },
+		"装配没给": func(fixture *reassessFixture) {
 			fixture.handler = application.NewReassessRouteHandler(application.ReassessRouteDeps{
 				Routes:        fixture.routes,
 				Evidence:      fixture.evidence,
@@ -173,52 +231,24 @@ func TestCostSourceGapsSettlePerLine(t *testing.T) {
 			})
 		},
 	}
-	for name, gap := range gaps {
-		t.Run("无路由线/"+name, func(t *testing.T) {
+	lines := map[string]func(t *testing.T, gap func(*reassessFixture)) (*reassessFixture, application.ReassessRouteCommand){
+		"无路由线": func(t *testing.T, gap func(*reassessFixture)) (*reassessFixture, application.ReassessRouteCommand) {
 			fixture := newReassessFixture(t)
 			record := currentPlanRecord(t)
 			fixture.routes.records[record.Key] = record
 			fixture.evidence.byParcel["parcel-1"] = withoutCosts(restrictedSelectedCandidate(t, evidenceBeforeFreeze(t)))
 			lapsedOnPickup(t, fixture)
 			gap(fixture)
-
 			fixture.evidence.byParcel["parcel-1"] = withoutCosts(cheaperAlternative(t, 100))
-			result := handleOK(t, fixture, reassessCommandAt(t, "trigger-2", "node-origin", reassessedAt.Add(time.Hour)))
-			_, recorded := fixture.store.byCorrelation[value(t, domain.NewRequestCorrelationID, "trigger-2")]
-			if name == "读不回" {
-				if result.Outcome() != application.ReassessUndecided ||
-					result.UndecidedReason() != application.ReassessCostSourceUnavailable {
-					t.Fatalf("outcome = %q/%q, want UNDECIDED/REASSESS_COST_SOURCE_UNAVAILABLE", result.Outcome(), result.UndecidedReason())
-				}
-				if recorded || len(fixture.store.notJudged) != 0 {
-					t.Fatalf("未决却落了复核 %v 或未判 %d 行", recorded, len(fixture.store.notJudged))
-				}
-				return
-			}
-			stayed, _ := result.Record()
-			if result.Outcome() != application.ReassessedPlanLapsed || stayed.HasNewPlan ||
-				stayed.CandidateState != ports.CandidateReviewUndecided {
-				t.Fatalf("outcome = %q、新计划 %v、候选评估 %q, want PLAN_LAPSED、无新计划、CANDIDATE_REVIEW_UNDECIDED",
-					result.Outcome(), stayed.HasNewPlan, stayed.CandidateState)
-			}
-		})
-		t.Run("失效线/"+name, func(t *testing.T) {
+			return fixture, reassessCommandAt(t, "trigger-2", "node-origin", reassessedAt.Add(time.Hour))
+		},
+		"失效线": func(t *testing.T, gap func(*reassessFixture)) (*reassessFixture, application.ReassessRouteCommand) {
 			fixture := rerouteFixture(t)
 			gap(fixture)
-			fixture.evidence.byParcel["parcel-1"] = withoutCosts(declareCostImprovement(cheaperAlternative(t, 100), 0))
-
-			result := handleOK(t, fixture, reassessCommand(t, "node-actual-elsewhere"))
-			record, _ := result.Record()
-			if result.Outcome() != application.ReassessedPlanLapsed || record.CandidateState != ports.CandidateReviewUndecided ||
-				record.HasSuggestion || record.HasNewPlan {
-				t.Fatalf("outcome = %q、候选评估 %q、建议 %v、新计划 %v, want 失效照落、候选评估未决、不挂建议",
-					result.Outcome(), record.CandidateState, record.HasSuggestion, record.HasNewPlan)
-			}
-			if state := fixture.applicability.byPlan[value(t, domain.NewRoutePlanVersionID, "plan-1/v1")].State(); state != domain.PlanLapsed {
-				t.Fatalf("原计划适用性 = %q, want LAPSED", state)
-			}
-		})
-		t.Run("仍适用线/"+name, func(t *testing.T) {
+			fixture.evidence.byParcel["parcel-1"] = withoutCosts(cheaperAlternative(t, 100))
+			return fixture, reassessCommand(t, "node-actual-elsewhere")
+		},
+		"仍适用线": func(t *testing.T, gap func(*reassessFixture)) (*reassessFixture, application.ReassessRouteCommand) {
 			fixture := newReassessFixture(t)
 			gap(fixture)
 			record := currentPlanRecord(t)
@@ -228,15 +258,40 @@ func TestCostSourceGapsSettlePerLine(t *testing.T) {
 			evidence.FreezeForm = domain.RemainingSegmentCountFreeze
 			evidence.FreezeRemainingSegmentLimit = &limit
 			fixture.evidence.byParcel["parcel-1"] = evidence
+			return fixture, reassessCommand(t, "node-origin")
+		},
+	}
+	for gapName, gap := range gaps {
+		for lineName, line := range lines {
+			t.Run(lineName+"/"+gapName, func(t *testing.T) {
+				fixture, command := line(t, gap)
+				_, err := fixture.handler.Handle(context.Background(), command)
+				if !errors.Is(err, application.ErrReassessCostSourceNotConfigured) {
+					t.Fatalf("err = %v, want ErrReassessCostSourceNotConfigured", err)
+				}
+			})
+		}
+	}
+}
 
-			result := handleOK(t, fixture, reassessCommand(t, "node-origin"))
-			kept, _ := result.Record()
-			if result.Outcome() != application.ReassessedStillApplicable || kept.HasNewPlan {
-				t.Fatalf("outcome = %q、新计划 %v, want STILL_APPLICABLE、原计划保留", result.Outcome(), kept.HasNewPlan)
-			}
-			if len(fixture.applicability.saved) != 0 {
-				t.Fatalf("适用性写了 %d 次, want 不动", len(fixture.applicability.saved))
-			}
-		})
+// Covers: 排序形态没声明时复核不问成本取数侧——排序在比成本之前就答形态未声明，原先无路由的包裹照常入账、候选评估记未决。
+func TestAnUndeclaredRankingFormNeverAsksForCosts(t *testing.T) {
+	fixture := newReassessFixture(t)
+	record := currentPlanRecord(t)
+	fixture.routes.records[record.Key] = record
+	fixture.evidence.byParcel["parcel-1"] = withoutCosts(restrictedSelectedCandidate(t, evidenceBeforeFreeze(t)))
+	lapsedOnPickup(t, fixture)
+	asked := len(fixture.costs.carried)
+
+	evidence := withoutCosts(cheaperAlternative(t, 100))
+	evidence.RankingForm = domain.RankingFormUndeclared
+	fixture.evidence.byParcel["parcel-1"] = evidence
+	result := handleOK(t, fixture, reassessCommandAt(t, "trigger-2", "node-origin", reassessedAt.Add(time.Hour)))
+	stayed, _ := result.Record()
+	if result.Outcome() != application.ReassessedPlanLapsed || stayed.CandidateState != ports.CandidateReviewUndecided {
+		t.Fatalf("outcome = %q、候选评估 %q, want PLAN_LAPSED、CANDIDATE_REVIEW_UNDECIDED", result.Outcome(), stayed.CandidateState)
+	}
+	if len(fixture.costs.carried) != asked {
+		t.Fatalf("取数侧被问了 %d 次, want 不问", len(fixture.costs.carried)-asked)
 	}
 }

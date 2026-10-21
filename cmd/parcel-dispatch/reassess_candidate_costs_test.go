@@ -144,9 +144,13 @@ func acceptDemoParcelWithGeoAndWeight(t *testing.T, syn *synVerticalFixture) {
 
 // Covers: AT-NR-039（生产装配那一半）——演示租户采用了演示网络，登了一张与演示成本卡同身份的 CNY 成本卡（三段各 Z1 85 CNY），
 // 委托已接受且带客户声明 2.5 KG。证据视图、关务来源、候选成本取数侧与复核编排全是生产接法，经生产路由表一拍：
-//  1. 交进吉隆坡枢纽（不在计划上）：原计划失效，候选评估用取数侧出的价判出有候选（修前恒记未决），没声明自动改路，形成建议；
+//  1. 交进吉隆坡枢纽（不在计划上）：原计划失效，候选评估用取数侧出的价判出有候选，没声明自动改路，形成建议；
 //  2. 交进新加坡枢纽：走无路由那条线，形成首个当前有效路由计划，选中演示线路，三段出处都指那张成本卡、评价标识出自
-//     parcel-pricing 的试算入口（修前排序报错，整封信封失败）。
+//     parcel-pricing 的试算入口。
+//
+// 成本卡没照抄演示种子那张（种子卡绑了分区目录）：复核交给取数侧的输入与初始路由的相同，绑目录的卡怎么经邮编路线解区已由
+// route_cost_reading_completion_wiring_test.go 钉住，这里只证复核接上了取数侧。包裹事实取客户声明是过渡做法，见
+// reassessRouteHandler 的注释。
 func TestAfterALapseTheDemoNetworkFormsTheFirstPlanThroughTheProductionRoute(t *testing.T) {
 	syn := newSYNVerticalFixture(t)
 	acceptDemoParcelWithGeoAndWeight(t, syn)

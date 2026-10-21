@@ -148,7 +148,7 @@ type ReassessRouteDeps struct {
 	Routes   ports.InitialRouteStore
 	Evidence ports.InitialRouteEvidenceView
 	// Costs 是候选成本取数侧，与初始路由同一口：证据视图不折成本（CatalogInitialRouteEvidence），排序要的成本事实只从
-	// 这里来。没接时复核照样判适用性，只是排不了序（candidateCosts）。
+	// 这里来。只判适用性的复核不问它；要排序时它为 nil 是装配缺漏，响亮报错（candidateCosts）。
 	Costs         ports.RouteCandidateCostSource
 	Applicability ports.PlanApplicabilityStore
 	Store         ports.ReassessmentStore
@@ -450,7 +450,10 @@ func (handler *ReassessRouteHandler) reassessPlan(
 			return handler.undecided(key, ApplicabilityStoreUnavailable), nil
 		}
 
-		review := handler.reviewCandidates(ctx, key, evidence, carried)
+		review, err := handler.reviewCandidates(ctx, key, evidence, carried)
+		if err != nil {
+			return ReassessRouteResult{}, err
+		}
 		record := ports.ReassessmentRecord{
 			Correlation:    trigger.Correlation(),
 			Key:            key,
@@ -648,9 +651,13 @@ func (handler *ReassessRouteHandler) tryImprovementReroute(
 	if err != nil || undecided {
 		return record, nil
 	}
-	// 成本取不到就判不出改善，原计划照旧保留，与取号故障同一处置：仍适用本身已判定，切换只是可选的那一步。
-	evidence, costs, read := handler.candidateCosts(ctx, trigger.Key(), evidence, carried)
-	if read != candidateCostsRead {
+	// 成本读不回就判不出改善，原计划照旧保留，与取号故障同一处置：仍适用本身已判定，切换只是可选的那一步。读不回若是
+	// 库里读失败，事务已经中毒，随后落册失败、整笔回滚（票 docs-consistency/code/67）。
+	evidence, costs, unavailable, err := handler.candidateCosts(ctx, trigger.Key(), evidence, carried)
+	if err != nil {
+		return ports.ReassessmentRecord{}, err
+	}
+	if unavailable {
 		return record, nil
 	}
 	selection, err := handler.formPlanFromEvidence(ctx, trigger, candidates, evidence, costs)
@@ -829,29 +836,28 @@ func (handler *ReassessRouteHandler) reassessNoRoute(
 	carried ports.RequestCarriedContent,
 ) (ReassessRouteResult, error) {
 	key := trigger.Key()
-	// 原先就无当前有效路由：结论仍是无路由，候选评估未决单独记录。
-	reviewUndecided := ports.ReassessmentRecord{
-		Correlation:    trigger.Correlation(),
-		Key:            key,
-		Conclusion:     ports.ReassessmentPlanLapsed,
-		CandidateState: ports.CandidateReviewUndecided,
-		ReassessedAt:   handler.deps.Clock.Now(),
-	}
 	candidates, undecided, err := handler.evaluateCandidates(evidence)
 	if err != nil {
 		return ReassessRouteResult{}, err
 	}
 	if undecided {
-		return handler.commit(ctx, trigger, reviewUndecided)
+		record := ports.ReassessmentRecord{
+			Correlation:    trigger.Correlation(),
+			Key:            key,
+			Conclusion:     ports.ReassessmentPlanLapsed,
+			CandidateState: ports.CandidateReviewUndecided,
+			ReassessedAt:   handler.deps.Clock.Now(),
+		}
+		// 原先就无当前有效路由：结论仍是无路由，候选评估未决单独记录。
+		return handler.commit(ctx, trigger, record)
 	}
-	// 这条线上没有已定的失效要先落，成本读不回就整笔回滚重投，等依赖恢复再判；没接重投推不动，候选评估记未决入账。
-	evidence, costs, read := handler.candidateCosts(ctx, key, evidence, carried)
-	switch read {
-	case candidateCostsRead:
-	case candidateCostsUnavailable:
+	// 这条线上没有已定的失效要先落，成本读不回就整笔回滚重投，等依赖恢复再判。
+	evidence, costs, unavailable, err := handler.candidateCosts(ctx, key, evidence, carried)
+	if err != nil {
+		return ReassessRouteResult{}, err
+	}
+	if unavailable {
 		return handler.undecided(key, ReassessCostSourceUnavailable), nil
-	default:
-		return handler.commit(ctx, trigger, reviewUndecided)
 	}
 
 	selection, err := handler.formPlanFromEvidence(ctx, trigger, candidates, evidence, costs)
@@ -942,25 +948,30 @@ type candidateReview struct {
 
 // reviewCandidates 在失效路径上给出候选评估状态（另存，不拦失效）。并列算有候选：候选可行，
 // 只是要授权角色裁；排不出唯一一条的各格与证据装配坏了都记未决，不冒充「没有合格候选」这个
-// 业务结论。成本取数侧没接或读不回同记未决：失效已经落了适用性，这里不能回滚重投。
+// 业务结论。成本读不回同记未决，因为候选评估未决不得拦失效落库（硬句）；读不回若是库里读失败，
+// 事务已经中毒，失效随整笔一起回滚，这一格只在不碰事务的读不回上成立（票 docs-consistency/code/67）。
+// 只有成本取数侧装配缺漏才交错误。
 func (handler *ReassessRouteHandler) reviewCandidates(
 	ctx context.Context,
 	key domain.InitialRouteJudgmentKey,
 	evidence ports.InitialRouteEvidence,
 	carried ports.RequestCarriedContent,
-) candidateReview {
+) (candidateReview, error) {
 	undecided := candidateReview{state: ports.CandidateReviewUndecided}
 	candidates, unknown, err := handler.evaluateCandidates(evidence)
 	if err != nil || unknown {
-		return undecided
+		return undecided, nil
 	}
-	evidence, costs, read := handler.candidateCosts(ctx, key, evidence, carried)
-	if read != candidateCostsRead {
-		return undecided
+	evidence, costs, unavailable, err := handler.candidateCosts(ctx, key, evidence, carried)
+	if err != nil {
+		return candidateReview{}, err
+	}
+	if unavailable {
+		return undecided, nil
 	}
 	ranking, err := domain.RankRouteCandidates(evidence.RankingForm, candidates, evidence.CandidateCosts)
 	if err != nil {
-		return undecided
+		return undecided, nil
 	}
 	reviewed := candidateReview{evidence: evidence, costs: costs}
 	switch ranking.Outcome() {
@@ -978,40 +989,42 @@ func (handler *ReassessRouteHandler) reviewCandidates(
 		// 候选评估状态里只有它不下结论，不会让失效记录冒出一个没人判过的「有候选」或「无候选」。
 		reviewed.state = ports.CandidateReviewUndecided
 	}
-	return reviewed
+	return reviewed, nil
 }
 
-// candidateCostsReading 是向成本取数侧要一次成本的结局。没接与读不回分两格，因为恢复动作不同（ADR-0235 按恢复动作分
-// 格）：读不回是依赖故障，重投推得动；没接要等装配，重投推不动。各条线怎么落这两格，在各自调用处写。
-type candidateCostsReading uint8
-
-const (
-	candidateCostsRead candidateCostsReading = iota
-	candidateCostSourceNotConfigured
-	candidateCostsUnavailable
-)
+// ErrReassessCostSourceNotConfigured 说复核要排序时没有候选成本取数侧可问。只有装配缺漏到得了这里：生产装配总接着
+// 取数侧，装配期失败也由取数侧在调用时交错误、落读不回那一格。所以响亮报错，不折成候选评估未决——那一格是给运营看的
+// 业务结论，折进去等于把缺一根线报成「候选还在评估」。
+var ErrReassessCostSourceNotConfigured = errors.New("network routing: reassessment has no route candidate cost source")
 
 // candidateCosts 向候选成本取数侧要这次判断的成本族，事实填进证据交回（成本族在取数侧兑现，routing-first-cut/10）。与
 // 初始路由同一口、同一份携带内容：绑了分区目录的卡要随请求携带的邮编路线才解得出区。只在候选空间已收敛、要排序时调：
-// 取数侧逐段问 parcel-pricing，不该为一次只判适用性的复核付这笔开销，也不该让它的故障拦住适用性判断。
+// 取数侧逐段问 parcel-pricing，不该为一次只判适用性的复核付这笔开销，也不该让它的故障拦住适用性判断。排序形态没声明时
+// 也不问：排序在比成本之前就答形态未声明。
+//
+// unavailable 为真即读不回，是依赖故障、重投推得动，各条线怎么落在各自调用处写。取数侧答「整条取数路径没接」与没装配
+// 同一处置，响亮报错。
 func (handler *ReassessRouteHandler) candidateCosts(
 	ctx context.Context,
 	key domain.InitialRouteJudgmentKey,
 	evidence ports.InitialRouteEvidence,
 	carried ports.RequestCarriedContent,
-) (ports.InitialRouteEvidence, ports.RouteCandidateCosts, candidateCostsReading) {
+) (ports.InitialRouteEvidence, ports.RouteCandidateCosts, bool, error) {
+	if evidence.RankingForm == domain.RankingFormUndeclared {
+		return evidence, ports.RouteCandidateCosts{}, false, nil
+	}
 	if handler.deps.Costs == nil {
-		return evidence, ports.RouteCandidateCosts{}, candidateCostSourceNotConfigured
+		return evidence, ports.RouteCandidateCosts{}, false, ErrReassessCostSourceNotConfigured
 	}
 	costs, err := handler.deps.Costs.LoadCandidateCosts(ctx, key, evidence, carried)
 	if errors.Is(err, ports.ErrRouteCostSourceNotConfigured) {
-		return evidence, ports.RouteCandidateCosts{}, candidateCostSourceNotConfigured
+		return evidence, ports.RouteCandidateCosts{}, false, fmt.Errorf("%w: %w", ErrReassessCostSourceNotConfigured, err)
 	}
 	if err != nil {
-		return evidence, ports.RouteCandidateCosts{}, candidateCostsUnavailable
+		return evidence, ports.RouteCandidateCosts{}, true, nil
 	}
 	evidence.CandidateCosts = costs.Facts
-	return evidence, costs, candidateCostsRead
+	return evidence, costs, false, nil
 }
 
 // commit 提交复核记录。并发下另一方先提交时读回赢家。触发的业务时间在这里一处写上：每条提交路都经过这里，

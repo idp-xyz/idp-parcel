@@ -81,9 +81,10 @@ func reassessOnHandoverConsumerOver(
 }
 
 // reassessRouteHandler 是 UC-NR-003 复核编排的生产接法。收寄采用那一路（networkIntakeConsumer）与交接这一路共用这一份：
-// 各种触发复核的是同一份路由判断，证据、候选成本与判断库接法一处定义，不会一路改了另一路还停在旧接法上。证据视图与候选
-// 成本取数侧都与初始路由同一种装法：复核排序比的成本与受理后选路比的同出一处，生产证据视图不折成本，不接取数侧复核就排
-// 不了序（票 demo-chain-gaps/115）。
+// 各种触发复核的是同一份路由判断，证据、候选成本与判断库接法一处定义，不会一路改了另一路还停在旧接法上。生产证据视图不折
+// 成本，不接取数侧复核就排不了序（票 demo-chain-gaps/115）。候选成本取数侧暂与初始路由同一种装法，包裹事实取的是客户声明：
+// 这是过渡做法，与 network-routing CONTEXT「首次收寄复核使用当时已经取得的物理事实，到站复核使用当前有效物理实测」不符，
+// 本上下文今天读不到节点作业的物理事实；改取物理事实归票 docs-consistency/code/66。
 func reassessRouteHandler(db *bentopg.DB, clock systemClock) (*nrapplication.ReassessRouteHandler, error) {
 	evidence, err := initialRouteEvidence(db, clock, customsApplicabilitySource(db))
 	if err != nil {
