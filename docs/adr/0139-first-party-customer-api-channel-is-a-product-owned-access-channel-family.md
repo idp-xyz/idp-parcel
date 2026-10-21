@@ -153,3 +153,4 @@ ADR-0055 **不动**：其 Alternatives 对「为接入渠道建运行时登记�
 - `cmd/parcel-api` 的 `assembleBusinessEndpoints`：客户业务面各行（`/shipment-requests` 经隔离提交开关换值除外）今天挂字面量 `UnconfiguredIntake{}` 的出处，本记录 Decision 四的替换点
 - `internal/visibilityexception/adapters/http/receive_claim.go`：`/claims` 是 `UC-VE-007` 索赔提交的命令口——本记录把它归入命令面的出处
 - 来源：IDP 队列通道 5 的质疑与「起草」指令（2026-09-16）；通道 1 的复核与用户「按建议处置」指令（同日，草案修订）；Claude Code 会话复核（2026-10-19），用户在会话里答「接受」，修订后接受
+- [ADR-0078](./0078-isolated-environment-operations-reads-admit-by-assembly-injection.md)：决定一收窄其 Decision 一「那正是 `PAR-INT-01` 拥有的实例半边语义」一句所据的归属（理由收窄，不停用排除结论；指针 2026-10-21 补）

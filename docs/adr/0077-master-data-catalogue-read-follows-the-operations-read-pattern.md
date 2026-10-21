@@ -1,6 +1,6 @@
 # ADR-0077: 主数据登记目录查阅沿运营读口通例——独立查询端点、每上下文自立租户级作用域、未配置即拒;空目录如实答空
 
-Status: Accepted  
+Status: Accepted<!-- 索引注记 -->｜**部分停用**（指针 2026-10-21 补）：其 Decision 三「运营接入认证属接入渠道实例半边、未登记」与「一律 403 `ACCESS_CHANNEL_NOT_CONFIGURED`」两句已由 [ADR-0100](./0100-operator-identity-is-a-product-owned-access-channel-family.md) 决定四停用——本族目录查阅端点的真 Intake 就是操作者渠道 Intake，属机制半边，在装配点逐端点换，答复按恢复动作分三格（发行方未配置 / 令牌无效 / 无授予），不得合并。**适用场景**：本记录那一族目录查阅端点；同条「禁落任何「开发用」采信实现」「作用域只在真 Intake 之后由认证结果铸造」与其余各条不变  
 Date: 2026-08-25
 
 ## Context
@@ -49,3 +49,4 @@ Date: 2026-08-25
 - [ADR-0068](./0068-versioned-network-catalog-structure-precedes-rule-content.md):0007 登记册合流判给解析层的出处(服务区域页边界)
 - [ADR-0070](./0070-customs-rule-registries-split-recording-from-selection.md):关务规则登记册记录侧与选择侧的分界(合规规则库票的对照依据)
 - [master-data-wiring 规格](../../.scratch/master-data-wiring/spec.md):范围取证、授权来源句与票序
+- [ADR-0100](./0100-operator-identity-is-a-product-owned-access-channel-family.md)：前向指针——决定四部分停用本记录 Decision 三「运营接入认证属接入渠道实例半边、未登记」与「一律 403 `ACCESS_CHANNEL_NOT_CONFIGURED`」两句
