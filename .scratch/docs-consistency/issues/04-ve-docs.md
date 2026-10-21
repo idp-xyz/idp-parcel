@@ -113,7 +113,7 @@ Blocked by: 无（01 进 main 后开工）
 
 ### 提交
 
-分支 `claude-dc04`，已 rebase 到 main `f329f505`，各笔见 `git log main..claude-dc04`：认领；VE 代码票；ADR 与指针；CONTEXT；UC；AT 盘点；票 117 裁向；本记录；完工状态；评审修订四笔与本记录更新。
+分支 `claude-dc04`，已 rebase 到 main `73a2c4a7`，各笔见 `git log main..claude-dc04`：认领；VE 代码票；ADR 与指针；CONTEXT；UC；AT 盘点；票 117 裁向；本记录；完工状态；评审修订四笔与本记录更新。
 
 ## 评审记录
 
@@ -159,6 +159,6 @@ Blocked by: 无（01 进 main 后开工）
 - **6**：已修。ADR-0246 Consequences 改为指称被停那一句，逐字原句只留在 Links（与 Context 的取证引文）。
 - **7**：已修。VE CONTEXT 头部加「规则与实现的差距见各 UC「给开发的交接」。」，与 NR、NO 两份 CONTEXT 逐字一致。
 
-rebase 到 main `f329f505` 时有两处冲突。`docs/adr/README.md` 取 main 的版本，分支上不提交重生成。AT 盘点文末追记段与 05 的追记段两段都留。
+rebase 到 main（先 `f329f505`，再 `73a2c4a7`）时有冲突。`docs/adr/README.md` 取 main 的版本，分支上不提交重生成。AT 盘点文末追记段与 05 的追记段两段都留。
 
 未采纳：无。
