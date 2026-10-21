@@ -129,6 +129,7 @@ func (catalogue *OperationsCatalogue) ListServiceProducts(
 	rows, err := querier.Query(ctx,
 		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
 		        version.effective_starts_at, version.effective_ends_at, version.published_at,
+		        `+retiredColumn("version")+`,
 		        product.form,`+deliveryConditionColumns+`
 		   FROM party_commercial.commercial_version AS version
 		   LEFT JOIN party_commercial.service_product_form AS product
@@ -153,21 +154,20 @@ func (catalogue *OperationsCatalogue) ListServiceProducts(
 	for rows.Next() {
 		var row ports.ServiceProductCatalogueRow
 		var status int16
+		var retired bool
 		var endsAt *time.Time
 		var form *string
 		var delivery deliveryConditionScan
 		targets := append([]any{
 			&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
-			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt, &form,
+			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt, &retired, &form,
 		}, delivery.targets()...)
 		if err := rows.Scan(targets...); err != nil {
 			return nil, fmt.Errorf("list service products: %w", err)
 		}
-		statusWord := domain.CommercialVersionStatus(status).String()
-		if statusWord == "" {
-			return nil, fmt.Errorf("list service products: 版本状态 %d 不在封闭集内", status)
+		if row.Status, err = catalogueStatusWord("list service products", status, retired); err != nil {
+			return nil, err
 		}
-		row.Status = statusWord
 		if endsAt != nil {
 			row.EffectiveEndsAt = *endsAt
 			row.HasEffectiveEnd = true
@@ -639,6 +639,7 @@ func (catalogue *OperationsCatalogue) ListCustomerContracts(
 	rows, err := querier.Query(ctx,
 		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
 		        version.effective_starts_at, version.effective_ends_at, version.published_at,
+		        `+retiredColumn("version")+`,
 		        content.rule_package_id, content.declared_at,
 		        COALESCE(
 		            json_agg(
@@ -664,7 +665,8 @@ func (catalogue *OperationsCatalogue) ListCustomerContracts(
 		         AND binding.version_label = content.version_label`+deliveryConditionJoin+`
 		  WHERE version.tenant_id   = $1
 		    AND version.object_kind = $2
-		  GROUP BY version.object_id, version.version_label, version.scope_ref, version.status,
+		  GROUP BY version.tenant_id, version.object_kind,
+		           version.object_id, version.version_label, version.scope_ref, version.status,
 		           version.effective_starts_at, version.effective_ends_at, version.published_at,
 		           content.rule_package_id, content.declared_at,
 		           delivery.tenant_id, delivery.object_kind, delivery.object_id, delivery.version_label,
@@ -685,6 +687,7 @@ func (catalogue *OperationsCatalogue) ListCustomerContracts(
 	for rows.Next() {
 		var row ports.CustomerContractCatalogueRow
 		var status int16
+		var retired bool
 		var endsAt *time.Time
 		var rulePackage *string
 		var declaredAt *time.Time
@@ -692,17 +695,15 @@ func (catalogue *OperationsCatalogue) ListCustomerContracts(
 		var delivery deliveryConditionScan
 		targets := append([]any{
 			&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
-			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt,
+			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt, &retired,
 			&rulePackage, &declaredAt, &bindingsJSON,
 		}, delivery.targets()...)
 		if err := rows.Scan(targets...); err != nil {
 			return nil, fmt.Errorf("list customer contracts: %w", err)
 		}
-		statusWord := domain.CommercialVersionStatus(status).String()
-		if statusWord == "" {
-			return nil, fmt.Errorf("list customer contracts: 版本状态 %d 不在封闭集内", status)
+		if row.Status, err = catalogueStatusWord("list customer contracts", status, retired); err != nil {
+			return nil, err
 		}
-		row.Status = statusWord
 		if endsAt != nil {
 			row.EffectiveEndsAt = *endsAt
 			row.HasEffectiveEnd = true
@@ -801,6 +802,7 @@ func (catalogue *OperationsCatalogue) ListAuthorizationRules(
 	rows, err := querier.Query(ctx,
 		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
 		        version.effective_starts_at, version.effective_ends_at, version.published_at,
+		        `+retiredColumn("version")+`,
 		        content.declared_at,
 		        (SELECT COALESCE(
 		                    json_agg(
@@ -840,21 +842,20 @@ func (catalogue *OperationsCatalogue) ListAuthorizationRules(
 	for rows.Next() {
 		var row ports.AuthorizationRuleRow
 		var status int16
+		var retired bool
 		var endsAt *time.Time
 		var declaredAt *time.Time
 		var authoritiesJSON []byte
 		if err := rows.Scan(
 			&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
-			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt,
+			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt, &retired,
 			&declaredAt, &authoritiesJSON,
 		); err != nil {
 			return nil, fmt.Errorf("list authorization rules: %w", err)
 		}
-		statusWord := domain.CommercialVersionStatus(status).String()
-		if statusWord == "" {
-			return nil, fmt.Errorf("list authorization rules: 版本状态 %d 不在封闭集内", status)
+		if row.Status, err = catalogueStatusWord("list authorization rules", status, retired); err != nil {
+			return nil, err
 		}
-		row.Status = statusWord
 		if endsAt != nil {
 			row.EffectiveEndsAt = *endsAt
 			row.HasEffectiveEnd = true
@@ -900,6 +901,29 @@ func cancellationAuthorityRowsFromJSON(raw []byte) ([]ports.CancellationAuthorit
 	return authorities, nil
 }
 
+// retiredColumn 是目录上列「这一版退役没有」的标量子查询（ADR-0233）。版本行的状态列随发布固定，退役另册保存；不折进来，
+// 管理台就会在退役之后照旧显示`已生效`，与解析和点读答的两样。alias 是外层查询里版本行的别名。
+func retiredColumn(alias string) string {
+	return `EXISTS (SELECT 1
+		          FROM party_commercial.commercial_version_retirement AS retired
+		         WHERE retired.tenant_id     = ` + alias + `.tenant_id
+		           AND retired.object_kind   = ` + alias + `.object_kind
+		           AND retired.object_id     = ` + alias + `.object_id
+		           AND retired.version_label = ` + alias + `.version_label)`
+}
+
+// catalogueStatusWord 把版本行的状态列折成目录上的那一格：退役了就是`已退役`，与整册装载施加退役之后的位置相同。
+func catalogueStatusWord(operation string, status int16, retired bool) (string, error) {
+	word := domain.CommercialVersionStatus(status).String()
+	if word == "" {
+		return "", fmt.Errorf("%s: 版本状态 %d 不在封闭集内", operation, status)
+	}
+	if retired {
+		return domain.CommercialVersionRetired.String(), nil
+	}
+	return word, nil
+}
+
 // ListSupplierAgreements 上列供应商协议版本壳,正文(0021)左连接。
 //
 // 装载方向与 ListCustomerContracts 同派:版本侧驱动,正文左连接——壳可先入册、正文随发布
@@ -923,13 +947,15 @@ func (catalogue *OperationsCatalogue) ListSupplierAgreements(
 		        version.effective_starts_at, version.effective_ends_at, version.published_at,
 		        content.supplier_party_id, content.legal_entity_ref, content.purchase_plan_ref,
 		        content.agreement_scope_ref, content.effective_starts_at, content.effective_ends_at,
-		        content.registered_at
+		        content.registered_at,
+		        latest_correction.corrected_ends_at, retirement.successor_label, retirement.retired_at
 		   FROM party_commercial.commercial_version AS version
 		   LEFT JOIN party_commercial.supplier_agreement AS content
 		          ON content.tenant_id     = version.tenant_id
 		         AND content.object_kind   = version.object_kind
 		         AND content.object_id     = version.object_id
 		         AND content.version_label = version.version_label
+		   `+versionClosureJoins("version")+`
 		  WHERE version.tenant_id   = $1
 		    AND version.object_kind = $2
 		  ORDER BY version.published_at DESC, version.object_id, version.version_label
@@ -950,19 +976,30 @@ func (catalogue *OperationsCatalogue) ListSupplierAgreements(
 		var endsAt *time.Time
 		var supplier, legalEntity, purchasePlan, agreementScope *string
 		var agreementStartsAt, agreementEndsAt, registeredAt *time.Time
+		var cutAt, retiredAt *time.Time
+		var successor *string
 		if err := rows.Scan(
 			&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
 			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt,
 			&supplier, &legalEntity, &purchasePlan, &agreementScope,
 			&agreementStartsAt, &agreementEndsAt, &registeredAt,
+			&cutAt, &successor, &retiredAt,
 		); err != nil {
 			return nil, fmt.Errorf("list supplier agreements: %w", err)
 		}
-		statusWord := domain.CommercialVersionStatus(status).String()
-		if statusWord == "" {
-			return nil, fmt.Errorf("list supplier agreements: 版本状态 %d 不在封闭集内", status)
+		if row.Status, err = catalogueStatusWord("list supplier agreements", status, retiredAt != nil); err != nil {
+			return nil, err
 		}
-		row.Status = statusWord
+		// 收尾照版本点读的口径折进来（ADR-0233 决定五）：退役改状态并回显后继与时刻，截止回显最新一条更正的终点；原区间
+		// 照旧是那一格，不拿收尾覆盖它。
+		if cutAt != nil {
+			row.SelectionEndsAt = *cutAt
+			row.HasSelectionCut = true
+		}
+		if retiredAt != nil && successor != nil {
+			row.RetiredAt = *retiredAt
+			row.Successor = *successor
+		}
 		if endsAt != nil {
 			row.EffectiveEndsAt = *endsAt
 			row.HasEffectiveEnd = true

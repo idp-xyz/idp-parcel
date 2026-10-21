@@ -209,6 +209,11 @@ type supplierAgreementBody struct {
 	AgreementEffectiveStartsAt string `json:"agreementEffectiveStartsAt,omitempty"`
 	AgreementEffectiveEndsAt   string `json:"agreementEffectiveEndsAt,omitempty"`
 	RegisteredAt               string `json:"registeredAt,omitempty"`
+
+	// 收尾（ADR-0233）：截止回显最新一条更正的终点，退役回显后继与时刻；没收尾时三格缺席。
+	SelectionEndsAt  string `json:"selectionEndsAt,omitempty"`
+	SuccessorVersion string `json:"successorVersion,omitempty"`
+	RetiredAt        string `json:"retiredAt,omitempty"`
 }
 
 func supplierAgreementBodyOf(row ports.SupplierAgreementCatalogueRow) supplierAgreementBody {
@@ -234,6 +239,13 @@ func supplierAgreementBodyOf(row ports.SupplierAgreementCatalogueRow) supplierAg
 		if row.HasAgreementEffectiveEnd {
 			body.AgreementEffectiveEndsAt = rfc3339(row.AgreementEffectiveEndsAt)
 		}
+	}
+	if row.HasSelectionCut {
+		body.SelectionEndsAt = rfc3339(row.SelectionEndsAt)
+	}
+	if row.Successor != "" {
+		body.SuccessorVersion = row.Successor
+		body.RetiredAt = rfc3339(row.RetiredAt)
 	}
 	return body
 }

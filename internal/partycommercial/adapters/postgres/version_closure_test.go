@@ -466,6 +466,25 @@ func TestASameStartRetirementLeavesOnlyTheSuccessorInTheStore(t *testing.T) {
 	if rows != 1 {
 		t.Fatalf("退役册 %d 行, want 1", rows)
 	}
+
+	// 管理台合同目录的状态格折进退役（评审 3）。
+	catalogue, err := adapter.NewOperationsCatalogue(fixture.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	contracts, err := catalogue.ListCustomerContracts(t.Context(), old.Tenant(), 10)
+	if err != nil {
+		t.Fatalf("合同目录：%v", err)
+	}
+	for _, row := range contracts {
+		want := domain.CommercialVersionEffective.String()
+		if row.VersionLabel == "v1" {
+			want = domain.CommercialVersionRetired.String()
+		}
+		if row.Status != want {
+			t.Fatalf("合同目录 %s 的状态 = %q, want %q", row.VersionLabel, row.Status, want)
+		}
+	}
 }
 
 // Covers: `AT-PC-058` 在真库上的 PC 那一半——供应商协议的版本点读口与正文点读口都折进截止与退役（代决复核 M16）：截止后
@@ -516,6 +535,31 @@ func TestSupplierAgreementPointReadsFoldTheVersionClosure(t *testing.T) {
 	successor, err := contents.LoadSupplierAgreementVersion(ctx, v3.Tenant(), v3.ObjectID(), v3.Version())
 	if err != nil || !successor.HasAgreement || !successor.Agreement.SupportsProcurementAt(cutRowAfter) {
 		t.Fatalf("后继 v3 不支持采购：%+v %v", successor, err)
+	}
+
+	// 管理台目录照同一口径（评审 3）：v1 仍已生效、回显截止点；v2 已退役、回显后继与时刻；v3 不带收尾。
+	catalogue, err := adapter.NewOperationsCatalogue(fixture.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed, err := catalogue.ListSupplierAgreements(ctx, v1.Tenant(), 10)
+	if err != nil {
+		t.Fatalf("目录上列：%v", err)
+	}
+	byVersion := map[string]int{}
+	for index, row := range listed {
+		byVersion[row.VersionLabel] = index
+	}
+	if row := listed[byVersion["v1"]]; row.Status != domain.CommercialVersionEffective.String() || !row.HasSelectionCut ||
+		!row.SelectionEndsAt.Equal(cutRowSuccessorStart) || row.Successor != "" {
+		t.Fatalf("目录 v1 = %+v, want 已生效且截止于 v2 的生效时点", row)
+	}
+	if row := listed[byVersion["v2"]]; row.Status != domain.CommercialVersionRetired.String() || row.Successor != "v3" ||
+		!row.RetiredAt.Equal(cutRowRegisteredAt) {
+		t.Fatalf("目录 v2 = %+v, want 已退役、让位给 v3", row)
+	}
+	if row := listed[byVersion["v3"]]; row.Status != domain.CommercialVersionEffective.String() || row.HasSelectionCut || row.Successor != "" {
+		t.Fatalf("目录 v3 = %+v, want 已生效、不带收尾", row)
 	}
 }
 

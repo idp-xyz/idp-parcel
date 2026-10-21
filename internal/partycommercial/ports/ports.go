@@ -1763,6 +1763,13 @@ type SupplierAgreementCatalogueRow struct {
 	AgreementEffectiveEndsAt   time.Time
 	HasAgreementEffectiveEnd   bool
 	RegisteredAt               time.Time
+
+	// 收尾（ADR-0233）：HasSelectionCut 时 SelectionEndsAt 是壳上最新一条区间更正的终点，此后按版本点读答未生效；Successor
+	// 非空时这一版已同起点退役，自 RetiredAt 起让位给它（Status 同时是`已退役`）。原区间仍在 Effective* 两格。
+	SelectionEndsAt time.Time
+	HasSelectionCut bool
+	RetiredAt       time.Time
+	Successor       string
 }
 
 // CommercialRelationCatalogueRead 是商业关系载体目录的伴生列表读端口(ADR-0077):

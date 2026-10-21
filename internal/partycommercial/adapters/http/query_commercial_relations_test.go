@@ -92,3 +92,41 @@ func TestSupplierAgreementsEndpointTranscribesContentOnlyWhenRegistered(t *testi
 		t.Fatalf("壳字段没有照列:%v", shell)
 	}
 }
+
+// Covers: 评审 3——供应商协议目录回显收尾（ADR-0233 决定五）：截止回显 selectionEndsAt，退役回显后继与退役时刻；没收尾的行
+// 三键一个不长。
+func TestSupplierAgreementsEndpointEchoesTheVersionClosure(t *testing.T) {
+	query := catalogueQuery(t)
+	reader := &relationReaderDouble{
+		tenant: query.Scope.Tenant(),
+		agreements: []ports.SupplierAgreementCatalogueRow{
+			{ObjectID: "agreement-1", VersionLabel: "v1", Scope: "scope-1", Status: "EFFECTIVE",
+				EffectiveStartsAt: catBaseAt, PublishedAt: catBaseAt,
+				SelectionEndsAt: catBaseAt.Add(24 * time.Hour), HasSelectionCut: true},
+			{ObjectID: "agreement-1", VersionLabel: "v2", Scope: "scope-1", Status: "RETIRED",
+				EffectiveStartsAt: catBaseAt, PublishedAt: catBaseAt,
+				Successor: "v3", RetiredAt: catBaseAt.Add(48 * time.Hour)},
+			{ObjectID: "agreement-1", VersionLabel: "v3", Scope: "scope-1", Status: "EFFECTIVE",
+				EffectiveStartsAt: catBaseAt, PublishedAt: catBaseAt},
+		},
+	}
+	endpoint := commercialhttp.NewQuerySupplierAgreementsEndpoint(intakeDouble{query: query}, reader)
+	recorder := httptest.NewRecorder()
+	endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/commercial-supplier-agreements", nil))
+	rows, _ := decodeBody(t, recorder)["agreements"].([]any)
+	if len(rows) != 3 {
+		t.Fatalf("agreements = %v", rows)
+	}
+	cut, retired, plain := rows[0].(map[string]any), rows[1].(map[string]any), rows[2].(map[string]any)
+	if cut["selectionEndsAt"] == nil || cut["successorVersion"] != nil {
+		t.Fatalf("截止的行 = %v", cut)
+	}
+	if retired["status"] != "RETIRED" || retired["successorVersion"] != "v3" || retired["retiredAt"] == nil {
+		t.Fatalf("退役的行 = %v", retired)
+	}
+	for _, key := range []string{"selectionEndsAt", "successorVersion", "retiredAt"} {
+		if _, has := plain[key]; has {
+			t.Fatalf("没收尾的行长出了 %q：%v", key, plain)
+		}
+	}
+}
