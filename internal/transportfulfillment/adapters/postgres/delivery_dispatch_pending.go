@@ -119,16 +119,19 @@ func (register *DeliveryDispatchPendings) SettleLapsed(
 	return nil
 }
 
-// HoldFormation 取这一件（租户，段，对象）的事务级咨询锁，事务结束时自动放。键按三件拼成一串取 64 位散列：撞上别的键只会让两件
-// 不相干的派送多等一下，不会让该串的两拍并行。不锁段行：段册的写路有自己的锁序，这里另起一把只给派送发起用的锁，不与它们交缠。
+// HoldFormation 取这一件（租户，段，对象）的事务级咨询锁，事务结束时自动放。照本仓其余事务级锁的双 int 形式：第一键是本锁的
+// 空间名散列，第二键是三件以 chr(31) 拼接的散列。双 int 键与单 bigint 键（迁移执行器的会话锁用它）在锁表里是两个空间，互不相撞；
+// 同一空间里第二键撞上，只让两件不相干的派送多等一下，不会让同一件的两拍并行。不锁段行：段册的写路有自己的锁序，这把锁只给
+// 派送发起用，不与它们交缠。
 func (register *DeliveryDispatchPendings) HoldFormation(ctx context.Context, key ports.DeliveryDispatchPendingKey) error {
 	executor, err := register.db.RequireExecutor(ctx)
 	if err != nil {
 		return pendingWriteFailure("hold delivery dispatch formation", err)
 	}
 	if _, err := executor.Exec(ctx,
-		`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
-		"transport_fulfillment.delivery_dispatch\x1f"+key.TenantID.String()+"\x1f"+key.Segment.String()+"\x1f"+key.Object.String(),
+		`SELECT pg_advisory_xact_lock(hashtext('transport_fulfillment.delivery_dispatch.formation'),
+		                              hashtext($1 || chr(31) || $2 || chr(31) || $3))`,
+		key.TenantID.String(), key.Segment.String(), key.Object.String(),
 	); err != nil {
 		return pendingWriteFailure("hold delivery dispatch formation", err)
 	}
