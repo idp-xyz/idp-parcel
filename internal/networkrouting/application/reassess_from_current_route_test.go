@@ -203,6 +203,35 @@ func TestAnImprovementRerouteIsTheNextStartingPoint(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0272 决定二——改善替代时，被替代计划在接班计划生效的那一刻离场：两份适用性的转移时刻都是触发的业务时间，
+// 不是处理时钟。处理时钟比触发晚半小时（积压），好让两者分得开。阈值 0 是本测试交入的租户取值。
+func TestASupersededPlanLeavesAtTheTriggerBusinessTime(t *testing.T) {
+	fixture := newReassessFixture(t)
+	record := currentPlanRecord(t)
+	fixture.routes.records[record.Key] = record
+	evidence := declareCostImprovement(cheaperAlternative(t, 100), 0)
+	limit := 0
+	evidence.FreezeForm = domain.RemainingSegmentCountFreeze
+	evidence.FreezeRemainingSegmentLimit = &limit
+	fixture.evidence.byParcel["parcel-1"] = evidence
+	triggeredAt := reassessedAt.Add(-30 * time.Minute)
+
+	switched := handleOK(t, fixture, reassessCommandAt(t, "trigger-1", "node-origin", triggeredAt))
+	if switched.Outcome() != application.ReassessedRerouted {
+		t.Fatalf("outcome = %q, want REROUTED", switched.Outcome())
+	}
+	successor, _ := switched.Record()
+	superseded := fixture.applicability.byPlan[record.Plan.Version()]
+	if superseded.State() != domain.PlanSuperseded || !superseded.TransitionedAt().Equal(triggeredAt) {
+		t.Fatalf("被替代计划 = %s @ %s, want SUPERSEDED @ 触发业务时间 %s（处理时钟 %s）",
+			superseded.State(), superseded.TransitionedAt(), triggeredAt, reassessedAt)
+	}
+	succeeding := fixture.applicability.byPlan[successor.NewPlan.Version()]
+	if succeeding.State() != domain.PlanCurrentlyEffective || !succeeding.TransitionedAt().Equal(triggeredAt) {
+		t.Fatalf("接班计划 = %s @ %s, want CURRENTLY_EFFECTIVE @ 同一刻 %s", succeeding.State(), succeeding.TransitionedAt(), triggeredAt)
+	}
+}
+
 // Covers: 起点自相矛盾是坏数据，响亮报错：路由历史里的计划已被替代，接班的却不在路由历史里——这件包裹答不出当前计划还是
 // 无路由；按任何一边判都是凭空假定。
 func TestASupersededPlanWhoseSuccessorIsMissingIsLoud(t *testing.T) {
@@ -355,16 +384,29 @@ func TestUnderABacklogAFormedPlanLapsesAtItsTriggersBusinessTime(t *testing.T) {
 	}
 }
 
-// Covers: 复核册里的计划重建不出来是坏数据：响亮报错，不折成「路由历史读不回」的未决、回滚重投。
-func TestAnUnrebuildableFormedPlanIsLoud(t *testing.T) {
-	fixture := newReassessFixture(t)
-	record := currentPlanRecord(t)
-	fixture.routes.records[record.Key] = record
-	fixture.evidence.byParcel["parcel-1"] = evidenceBeforeFreeze(t)
-	fixture.store.newPlanErr = fmt.Errorf("formed plans: %w", ports.ErrStoredRoutePlanUnreadable)
+// Covers: 路由历史里落了册的一行重建不出来是坏数据：初始路由那一行、复核册形成过的计划、计划适用性，三处都响亮报错，不折成
+// 「路由历史读不回」或「适用性登记读不回」的未决、回滚重投；不落复核、不动适用性。
+func TestAnUnrebuildableRoutingRecordIsLoud(t *testing.T) {
+	unreadable := fmt.Errorf("stored row: %w", ports.ErrStoredRouteRecordUnreadable)
+	for name, spoil := range map[string]func(*reassessFixture){
+		"初始路由":    func(fixture *reassessFixture) { fixture.routes.findErr = unreadable },
+		"复核形成的计划": func(fixture *reassessFixture) { fixture.store.newPlanErr = unreadable },
+		"计划适用性":   func(fixture *reassessFixture) { fixture.applicability.findErr = unreadable },
+	} {
+		t.Run(name, func(t *testing.T) {
+			fixture := newReassessFixture(t)
+			record := currentPlanRecord(t)
+			fixture.routes.records[record.Key] = record
+			fixture.evidence.byParcel["parcel-1"] = evidenceBeforeFreeze(t)
+			spoil(fixture)
 
-	if _, err := fixture.handler.Handle(context.Background(), reassessCommand(t, "node-origin")); !errors.Is(err, ports.ErrStoredRoutePlanUnreadable) {
-		t.Fatalf("err = %v, want ErrStoredRoutePlanUnreadable", err)
+			if _, err := fixture.handler.Handle(context.Background(), reassessCommand(t, "node-origin")); !errors.Is(err, ports.ErrStoredRouteRecordUnreadable) {
+				t.Fatalf("err = %v, want ErrStoredRouteRecordUnreadable", err)
+			}
+			if fixture.store.saved != 0 || len(fixture.applicability.saved) != 0 {
+				t.Fatalf("复核 %d 条、适用性写 %d 次, want 都是 0", fixture.store.saved, len(fixture.applicability.saved))
+			}
+		})
 	}
 }
 

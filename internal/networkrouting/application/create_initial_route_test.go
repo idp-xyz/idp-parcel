@@ -184,6 +184,7 @@ type routeStoreDouble struct {
 	records     map[domain.InitialRouteJudgmentKey]ports.InitialRouteRecord
 	saveOutcome map[string]ports.InitialRouteSaveOutcome
 	saved       int
+	findErr     error
 }
 
 func newRouteStore() *routeStoreDouble {
@@ -197,6 +198,9 @@ func (double *routeStoreDouble) FindByKey(
 	_ context.Context,
 	key domain.InitialRouteJudgmentKey,
 ) (ports.InitialRouteRecord, bool, error) {
+	if double.findErr != nil {
+		return ports.InitialRouteRecord{}, false, double.findErr
+	}
 	record, found := double.records[key]
 	return record, found, nil
 }

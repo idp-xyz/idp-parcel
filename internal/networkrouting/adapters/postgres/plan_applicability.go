@@ -57,7 +57,8 @@ func (repository *PlanApplicabilities) FindByPlan(
 
 	applicability, err := rebuildPlanApplicability(plan, stateName, transitionedAt, basis, successor)
 	if err != nil {
-		return domain.PlanApplicability{}, false, fmt.Errorf("find plan applicability: %w", err)
+		return domain.PlanApplicability{}, false, fmt.Errorf("find plan applicability: %w: %v",
+			ports.ErrStoredRouteRecordUnreadable, err)
 	}
 	return applicability, true, nil
 }

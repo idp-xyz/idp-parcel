@@ -128,7 +128,7 @@ func (repository *InitialRoutes) FindByKey(
 	case conclusionRouteFormed:
 		plan, err := rebuildPlan(key, planJSON)
 		if err != nil {
-			return ports.InitialRouteRecord{}, false, fmt.Errorf("find initial route: %w", err)
+			return ports.InitialRouteRecord{}, false, fmt.Errorf("find initial route: %w: %v", ports.ErrStoredRouteRecordUnreadable, err)
 		}
 		return ports.InitialRouteRecord{
 			Key: key, Plan: plan, HasPlan: true, RecordedAt: recordedAt.UTC(),
@@ -136,14 +136,14 @@ func (repository *InitialRoutes) FindByKey(
 	case conclusionNoCurrentRoute:
 		judgment, err := rebuildNoRoute(key, noRouteJSON)
 		if err != nil {
-			return ports.InitialRouteRecord{}, false, fmt.Errorf("find initial route: %w", err)
+			return ports.InitialRouteRecord{}, false, fmt.Errorf("find initial route: %w: %v", ports.ErrStoredRouteRecordUnreadable, err)
 		}
 		return ports.InitialRouteRecord{
 			Key: key, NoRoute: judgment, HasNoRoute: true, RecordedAt: recordedAt.UTC(),
 		}, true, nil
 	default:
 		return ports.InitialRouteRecord{}, false, fmt.Errorf(
-			"find initial route: unknown conclusion %q", conclusion)
+			"find initial route: %w: unknown conclusion %q", ports.ErrStoredRouteRecordUnreadable, conclusion)
 	}
 }
 

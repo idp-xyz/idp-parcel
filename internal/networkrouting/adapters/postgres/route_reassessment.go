@@ -377,7 +377,7 @@ func (repository *RouteReassessments) FormedPlans(
 		}
 		plan, err := rebuildPlan(key, planJSON)
 		if err != nil {
-			return nil, fmt.Errorf("reassessment formed plans: %w: %v", ports.ErrStoredRoutePlanUnreadable, err)
+			return nil, fmt.Errorf("reassessment formed plans: %w: %v", ports.ErrStoredRouteRecordUnreadable, err)
 		}
 		plans = append(plans, plan)
 	}

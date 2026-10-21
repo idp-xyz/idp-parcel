@@ -316,6 +316,8 @@ const (
 
 // InitialRouteStore 按判断键找回并保存包裹级结果。键含接受基线与服务目的——「同一接受
 // 基线、同一包裹和同一初始路由目的只能形成一个当前有效初始路由结果」由键的选维承担。
+//
+// FindByKey 读回的计划或无路由判断重建不出来时交 ErrStoredRouteRecordUnreadable。
 type InitialRouteStore interface {
 	FindByKey(
 		ctx context.Context,
@@ -361,7 +363,7 @@ type RouteIdentityFactory interface {
 }
 
 // PlanApplicabilityStore 按计划版本存取适用性记录。计划本体不可变、适用性另立记录，
-// 两者分开存正是「改后者不动前者」的存储面。
+// 两者分开存正是「改后者不动前者」的存储面。FindByPlan 读回的行重建不出来时交 ErrStoredRouteRecordUnreadable。
 type PlanApplicabilityStore interface {
 	FindByPlan(
 		ctx context.Context,
@@ -586,9 +588,11 @@ type ReassessmentStore interface {
 	LatestTriggerAt(ctx context.Context, key domain.InitialRouteJudgmentKey) (time.Time, bool, error)
 	// FormedPlans 交回这一判断键在册复核里形成过的全部新计划（`已改路`或`首个计划`那一行），按触发业务时间排，只为读来
 	// 可复现，先后不作判断依据。复核据它与初始路由定判断起点，所以要在 LatestTriggerAt 取的判断键锁里读：锁外读到的起点，
-	// 落册之前可能已被另一次复核换掉。在册计划重建不出来时交 ErrStoredRoutePlanUnreadable。
+	// 落册之前可能已被另一次复核换掉。在册计划重建不出来时交 ErrStoredRouteRecordUnreadable。
 	FormedPlans(ctx context.Context, key domain.InitialRouteJudgmentKey) ([]domain.InitialRoutePlan, error)
 }
 
-// ErrStoredRoutePlanUnreadable 说明册里的一份计划重建不出来：那是坏数据，重投推不动，调用方不得折成「读不回」的未决。
-var ErrStoredRoutePlanUnreadable = errors.New("network routing: a stored route plan does not rebuild")
+// ErrStoredRouteRecordUnreadable 说明路由历史里落了册的一行经领域构造门重建不出来：初始路由的计划或无路由判断、复核
+// 形成的新计划、计划适用性。那是坏数据，重投推不动；与「读不回」（依赖故障，重投推得动）分开交，调用方才分得出该等依赖
+// 恢复还是该修数据。
+var ErrStoredRouteRecordUnreadable = errors.New("network routing: a stored routing record does not rebuild")

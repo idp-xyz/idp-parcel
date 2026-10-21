@@ -219,6 +219,9 @@ func (handler *ReassessRouteHandler) Handle(
 	}
 
 	history, found, err := handler.deps.Routes.FindByKey(ctx, key)
+	if errors.Is(err, ports.ErrStoredRouteRecordUnreadable) {
+		return ReassessRouteResult{}, fmt.Errorf("load routing history: %w", err)
+	}
 	if err != nil {
 		return handler.undecided(key, RoutingHistoryUnavailable), nil
 	}
@@ -275,7 +278,7 @@ func (handler *ReassessRouteHandler) startingPoint(
 	history ports.InitialRouteRecord,
 ) (routeStart, ReassessUndecidedReason, error) {
 	formed, err := handler.deps.Store.FormedPlans(ctx, key)
-	if errors.Is(err, ports.ErrStoredRoutePlanUnreadable) {
+	if errors.Is(err, ports.ErrStoredRouteRecordUnreadable) {
 		return routeStart{}, ReassessUndecidedReasonNone, fmt.Errorf("load formed plans: %w", err)
 	}
 	if err != nil {
@@ -292,6 +295,9 @@ func (handler *ReassessRouteHandler) startingPoint(
 	var current []routeStart
 	for _, plan := range plans {
 		applicability, registered, err := handler.deps.Applicability.FindByPlan(ctx, plan.Version())
+		if errors.Is(err, ports.ErrStoredRouteRecordUnreadable) {
+			return routeStart{}, ReassessUndecidedReasonNone, fmt.Errorf("load plan applicability: %w", err)
+		}
 		if err != nil {
 			return routeStart{}, ApplicabilityStoreUnavailable, nil
 		}

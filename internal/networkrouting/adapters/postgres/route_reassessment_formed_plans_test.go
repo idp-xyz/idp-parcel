@@ -12,7 +12,7 @@ import (
 
 // 本文件对真实 PostgreSQL 16 证复核判断起点的库面（票 docs-consistency/code/52）：复核册里形成过的新计划按判断键全部
 // 读回，不带新计划的复核、别的判断键与别的租户都不掺进来；迁移 0022 之前没有业务时间的行也在其中；读回的是整份计划，
-// 重建不出来的计划交 ErrStoredRoutePlanUnreadable。
+// 重建不出来的计划交 ErrStoredRouteRecordUnreadable。
 
 func firstPlanFormedAt(
 	t *testing.T, key domain.InitialRouteJudgmentKey, correlation, version string, at time.Time,
@@ -97,7 +97,7 @@ func TestFormedPlansAreReadPerJudgmentKey(t *testing.T) {
 	})
 }
 
-// Covers: 在册计划重建不出来是坏数据，交 ErrStoredRoutePlanUnreadable，好让编排响亮报错，不折成「路由历史读不回」那一格
+// Covers: 在册计划重建不出来是坏数据，交 ErrStoredRouteRecordUnreadable，好让编排响亮报错，不折成「路由历史读不回」那一格
 // 未决、回滚重投。
 func TestAnUnrebuildableFormedPlanIsReportedAsSuch(t *testing.T) {
 	_, reassessments, transactor, pool := newRouteStores(t)
@@ -110,9 +110,39 @@ func TestAnUnrebuildableFormedPlanIsReportedAsSuch(t *testing.T) {
 		t.Fatalf("改坏计划：%v", err)
 	}
 	within(t, transactor, ctx, func(txCtx context.Context) error {
-		if _, err := reassessments.FormedPlans(txCtx, key); !errors.Is(err, ports.ErrStoredRoutePlanUnreadable) {
-			t.Fatalf("err = %v, want ErrStoredRoutePlanUnreadable", err)
+		if _, err := reassessments.FormedPlans(txCtx, key); !errors.Is(err, ports.ErrStoredRouteRecordUnreadable) {
+			t.Fatalf("err = %v, want ErrStoredRouteRecordUnreadable", err)
 		}
 		return nil
 	})
+}
+
+// Covers: 路由历史另两处的库面——初始路由那一行的计划重建不出来、计划适用性那一行重建不出来，也交
+// ErrStoredRouteRecordUnreadable，与读不回分开。适用性那一行有 CHECK 护着封闭态与逐态形状，这里在本用例独占的库上拆掉两条再写坏。
+func TestUnrebuildableInitialRouteAndApplicabilityRowsAreReportedAsSuch(t *testing.T) {
+	routes, _, transactor, pool := newRouteStores(t)
+	ctx := t.Context()
+	key := routeKey(t, "tenant-1", "parcel-1")
+	saveRoute(t, transactor, ctx, routes, ports.InitialRouteRecord{Key: key, Plan: formedPlan(t, key, "RPV-0001"), HasPlan: true})
+	if _, err := pool.Exec(ctx, `UPDATE network_routing.initial_route SET plan = '{}'::jsonb
+		WHERE tenant_id = 'tenant-1' AND declared_parcel_id = 'parcel-1'`); err != nil {
+		t.Fatalf("改坏初始路由：%v", err)
+	}
+	if _, _, err := routes.FindByKey(ctx, key); !errors.Is(err, ports.ErrStoredRouteRecordUnreadable) {
+		t.Fatalf("初始路由 err = %v, want ErrStoredRouteRecordUnreadable", err)
+	}
+
+	applicabilities, _, applicabilityPool := newApplicabilityStore(t)
+	if _, err := applicabilityPool.Exec(ctx, `ALTER TABLE network_routing.plan_applicability
+		DROP CONSTRAINT plan_applicability_state_closed,
+		DROP CONSTRAINT plan_applicability_state_shaped`); err != nil {
+		t.Fatalf("拆适用性约束：%v", err)
+	}
+	if _, err := applicabilityPool.Exec(ctx, `INSERT INTO network_routing.plan_applicability (plan_id, state, transitioned_at, basis)
+		VALUES ('RPV-0001', 'WITHDRAWN', now(), 'basis-1')`); err != nil {
+		t.Fatalf("写坏适用性：%v", err)
+	}
+	if _, _, err := applicabilities.FindByPlan(ctx, scalar(t, domain.NewRoutePlanVersionID, "RPV-0001")); !errors.Is(err, ports.ErrStoredRouteRecordUnreadable) {
+		t.Fatalf("适用性 err = %v, want ErrStoredRouteRecordUnreadable", err)
+	}
 }
