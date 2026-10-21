@@ -106,7 +106,7 @@ func countRows(t *testing.T, db *bentopg.DB, query string, args ...any) int {
 	return rows
 }
 
-// Covers: AT-SA-206、AT-SA-209、AT-SA-210 的生产装配半边——见文件头。
+// Covers: AT-SA-206、AT-SA-210 的生产装配半边——见文件头；同一版失效再交撤下编排答重放、不多一版。
 func TestAnInvalidatedOccurrenceWithdrawsItsSupplierCostAndTheReestablishedOneIsEvaluatedAgain(t *testing.T) {
 	const tenant = "tenant-a"
 	beat, db, store := wiredBeat(t)
