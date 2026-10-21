@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	"go.idp.xyz/idp-bento-go/eventing"
@@ -17,6 +18,9 @@ import (
 // 本文件是本上下文消费自己交出的补形成门铃、补形成实际履约发生项的消费门（ADR-0231 决定一、五）：采用成立一扇、委托换版一扇。处理方
 // 直接是应用编排，编排答出的处置（入账 / 重投 / 缺陷）在这里落成 inbox 的三种动作；未决与缺陷沿用自动形成消费门的哨兵
 // （ErrActualFulfillmentFormationUndecided、ErrActualFulfillmentFormationDefect）——停住的是同一个形成后半，续办相同。
+//
+// 记进未形成册的数据缺陷那一件是入账，信封不失败，所以每一件另打一条 error 级日志、带完整错误：缺陷不再表现为发布失败，运维要靠日志
+// 与查阅页看见它。
 
 // 消费者名各自分家，理由同自动形成的消费门。改名等于换消费者。
 const (
@@ -60,8 +64,9 @@ func NewActualFulfillmentCatchUpOnAdoptionConsumer(
 	transactor bentoapp.Transactor,
 	store *inbox.Store,
 	catchUp ActualFulfillmentCatchUp,
+	logger *slog.Logger,
 ) (*ActualFulfillmentCatchUpOnAdoptionConsumer, error) {
-	if err := catchUpConsumerDeps(transactor, store, catchUp); err != nil {
+	if err := catchUpConsumerDeps(transactor, store, catchUp, logger); err != nil {
 		return nil, err
 	}
 	gate, err := inboxconsume.New(inboxconsume.Spec[RegisteredSegmentCommissionAdoption]{
@@ -75,7 +80,7 @@ func NewActualFulfillmentCatchUpOnAdoptionConsumer(
 			if err != nil {
 				return fmt.Errorf("%w: tenant: %v", ErrActualFulfillmentFormationDefect, err)
 			}
-			return settleCatchUp(fmt.Sprintf("segment %s adopted %s", registered.Segment, registered.Commission))(
+			return settleCatchUp(ctx, logger, fmt.Sprintf("segment %s adopted %s", registered.Segment, registered.Commission))(
 				catchUp.CatchUpOnAdoption(ctx, application.CatchUpActualFulfillmentOnAdoptionCommand{TenantID: tenant, Segment: registered.Segment}))
 		},
 		UnexpectedType: "transport fulfillment inbox",
@@ -101,8 +106,9 @@ func NewActualFulfillmentCatchUpOnRevisionConsumer(
 	transactor bentoapp.Transactor,
 	store *inbox.Store,
 	catchUp ActualFulfillmentCatchUp,
+	logger *slog.Logger,
 ) (*ActualFulfillmentCatchUpOnRevisionConsumer, error) {
-	if err := catchUpConsumerDeps(transactor, store, catchUp); err != nil {
+	if err := catchUpConsumerDeps(transactor, store, catchUp, logger); err != nil {
 		return nil, err
 	}
 	gate, err := inboxconsume.New(inboxconsume.Spec[RevisedCommissionAgreement]{
@@ -116,7 +122,7 @@ func NewActualFulfillmentCatchUpOnRevisionConsumer(
 			if err != nil {
 				return fmt.Errorf("%w: tenant: %v", ErrActualFulfillmentFormationDefect, err)
 			}
-			return settleCatchUp(fmt.Sprintf("commission %s revision %d", revised.Commission, revised.Revision))(
+			return settleCatchUp(ctx, logger, fmt.Sprintf("commission %s revision %d", revised.Commission, revised.Revision))(
 				catchUp.CatchUpOnRevision(ctx, application.CatchUpActualFulfillmentOnRevisionCommand{
 					TenantID: tenant, Commission: revised.Commission, Revision: revised.Revision,
 				}))
@@ -135,7 +141,7 @@ func (consumer *ActualFulfillmentCatchUpOnRevisionConsumer) Consume(ctx context.
 	return consumer.gate.Consume(ctx, envelope)
 }
 
-func catchUpConsumerDeps(transactor bentoapp.Transactor, store *inbox.Store, catchUp ActualFulfillmentCatchUp) error {
+func catchUpConsumerDeps(transactor bentoapp.Transactor, store *inbox.Store, catchUp ActualFulfillmentCatchUp, logger *slog.Logger) error {
 	if transactor == nil {
 		return fmt.Errorf("transport fulfillment inbox: transactor is nil")
 	}
@@ -145,17 +151,36 @@ func catchUpConsumerDeps(transactor bentoapp.Transactor, store *inbox.Store, cat
 	if catchUp == nil {
 		return fmt.Errorf("transport fulfillment inbox: actual fulfillment catch-up is nil")
 	}
+	if logger == nil {
+		return fmt.Errorf("transport fulfillment inbox: actual fulfillment catch-up logger is nil")
+	}
 	return nil
 }
 
 // settleCatchUp 按编排答出的处置落账，理由同 settleFormation：处理方与消费门同一事务，未决与缺陷都整笔回滚。subject 是给运维读的那一封
 // 门铃的键。
-func settleCatchUp(subject string) func(application.CatchUpActualFulfillmentResult, error) error {
+//
+// 记进册的每一件数据缺陷都打日志，不论整封此刻落哪种处置：整封重投时那几条随整笔回滚，下一次再记再打；整封烧完预算落 ABANDONED 时，
+// 册上留不下，日志是唯一说得出那几件停在哪里的地方。disposition 一维说明这一次那几条落没落进册。
+func settleCatchUp(ctx context.Context, logger *slog.Logger, subject string) func(application.CatchUpActualFulfillmentResult, error) error {
 	return func(result application.CatchUpActualFulfillmentResult, err error) error {
 		if err != nil {
 			return err
 		}
-		switch result.Disposition() {
+		disposition := result.Disposition()
+		for _, formed := range result.Formations() {
+			if formed.Outcome() != application.FormationDefectRecorded {
+				continue
+			}
+			logger.ErrorContext(ctx, "actual fulfillment catch-up recorded a formation defect",
+				slog.String("doorbell", subject),
+				slog.String("segment", formed.Segment()),
+				slog.String("object", formed.Object()),
+				slog.String("disposition", disposition.String()),
+				slog.String("error", formed.Defect().Error()),
+			)
+		}
+		switch disposition {
 		case application.FormationSettled:
 			return nil
 		case application.FormationRetry:
