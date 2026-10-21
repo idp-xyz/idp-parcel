@@ -66,7 +66,7 @@ func TestABookingIsReadBackWithItsCommissionsProviderInOneStatement(t *testing.T
 	}
 }
 
-// Covers: ADR-0239 决定二的拒收册——一次拒收立一行；同键再来只加次数、推后最近一次时刻，首次时刻不动；依据不同另起一行；
+// Covers: `AT-TF-327`（存取面）、ADR-0239 决定二的拒收册——一次拒收立一行；同键再来只加次数、推后最近一次时刻，首次时刻不动；依据不同另起一行；
 // 只在事务里写，事务回滚不留痕；封闭集外的依据与空来源在写之前就拒。
 func TestARefusedAnswerIsCountedOnItsOwnRowPerBasis(t *testing.T) {
 	pool := pgtest.Pool(t)
