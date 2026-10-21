@@ -1,7 +1,7 @@
 # 60 NR 初始路由计划按处理时钟生效，复核形成的计划按触发业务时间生效：口径不一，原计划离场会被离场门拒
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code60。R1（上线前必修；2026-10-21 由 R2 升级，协调方据 code/53 隔离评审裁定）。升级理由：code/53 之后，改善替代一路落得了复核册，触发面从「硬约束失效 + 初始路由交接积压」放宽到「任一更便宜候选 + 初始路由交接积压」，声明了自动改路的租户在可控节点上的每次触发都可能走到离场门；失败时整封信封到 `ABANDONED`、占住分区；没有绕法；规模 S。code/53 的上线闸门不改挂到本票：离场门不专属自动改路，挂在闸门上挡错了对象。此前建议 R2（上线后尽快）：响亮失败；首发链路上通常撞不上，纯失效一路积压、离线补登时撞得上。初始路由计划的生效时刻取 NR 处理初始路由交接那一刻的处理时钟；ADR-0272 起，复核形成的计划从所判触发的业务时间起生效，被替代的计划也在那一刻离场。原计划经复核离场（改善替代、硬依据失效）时，若触发的业务时间早于初始路由的处理时刻，领域离场门拒（`leaveCurrent` 头注「离场必须带依据与不早于生效的时刻」），整封信封响亮失败、占着分区重投到 `ABANDONED`。改善替代一路写得进复核册已由 code/53 补齐（2026-10-21），失效线上自动改路复核取得到候选成本已由 demo-chain-gaps/115 补齐；纯失效一路今天就在：首发链路上受理与首个控制触发之间通常隔几小时，通常撞不上；初始路由交接积压、离线补登时撞得上。绕法：无。2026-10-21 协调方据 code/52 隔离评审 N1 立，作者会话起草（用户「你作为业务和系统专家自决」授权）。
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code60。R1（上线前必修；2026-10-21 由 R2 升级，协调方据 code/53 隔离评审裁定）。升级理由：code/53 之后，改善替代一路落得了复核册，触发面从「硬约束失效 + 初始路由交接积压」放宽到「任一更便宜候选 + 初始路由交接积压」，声明了自动改路的租户在可控节点上的每次触发都可能走到离场门；失败时整封信封到 `ABANDONED`、占住分区；没有绕法；规模 S。code/53 的上线闸门不改挂到本票：离场门不专属自动改路，挂在闸门上挡错了对象。此前建议 R2（上线后尽快）：响亮失败；首发链路上通常撞不上，纯失效一路积压、离线补登时撞得上。初始路由计划的生效时刻取 NR 处理初始路由交接那一刻的处理时钟；ADR-0272 起，复核形成的计划从所判触发的业务时间起生效，被替代的计划也在那一刻离场。原计划经复核离场（改善替代、硬依据失效）时，若触发的业务时间早于初始路由的处理时刻，领域离场门拒（`leaveCurrent` 头注「离场必须带依据与不早于生效的时刻」），整封信封响亮失败、占着分区重投到 `ABANDONED`。改善替代一路写得进复核册已由 code/53 补齐（2026-10-21），失效线上自动改路复核取得到候选成本已由 demo-chain-gaps/115 补齐；纯失效一路今天就在：首发链路上受理与首个控制触发之间通常隔几小时，通常撞不上；初始路由交接积压、离线补登时撞得上。绕法：无。2026-10-21 协调方据 code/52 隔离评审 N1 立，作者会话起草（用户「你作为业务和系统专家自决」授权）。
 Blocked by: 无
 出处：docs-consistency/code/52 隔离评审 N1；[ADR-0272](../../../docs/adr/0272-a-plan-formed-by-route-reassessment-takes-effect-at-the-trigger-business-time.md) 越权风险点 2。
 
@@ -106,3 +106,10 @@ UC-NR-001 立 `AT-NR-086`：路由交接积压，本上下文晚于委托接受�
 - `TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/networkrouting/... ./cmd/parcel-dispatch ./cmd/parcel-api ./cmd/parcel-network-register ./internal/parcelshipment/adapters/networkrouting ./internal/transportfulfillment/adapters/networkrouting ./internal/visibilityexception/adapters/networkrouting ./internal/visibilityexception/... ./internal/architecture/... ./migrations/...`：退 0，35 个包 ok，1 个包无测试文件。
 - 三条新用例 `-count=3`（同一脚本，`-run 'TestUnderAHandoffBacklog|TestAnUnrebuildableInitialRouteRowIsLoud'`，两个包）：全过，9 次 PASS。
 - 没跑全量；没重生成 ADR 索引、AT 计数与机制清点（`go run ./tools/adr-index -check` 因 ADR-0272 注记变了而退 1，留推送方重生成）。
+
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-code60` 由协调方 rebase 到 main `22d66b9c8`（无冲突）后快进，tip `9779882f1`；隔离评审无阻断；协调方另提交评审 N3（夹具头注去计数）。
+- 协调方在 tip 上单独提交重生成的 ADR 索引（ADR-0272 注记「越权风险点 2 已答」）、AT 计数（AT-NR-086）与机制清点，检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净。无迁移、无种子改动（种子不造 `initial_route` 行）。
+- 去向：协调方立 [code/68](./68-ve-and-tf-fold-an-unrebuildable-initial-route-row-into-a-waitable-undecided.md)（VE、TF 坏行折成未决，R2）、[code/69](./69-a-trigger-earlier-than-the-shipment-acceptance-is-rejected-by-the-leave-gate.md)（早于接受的触发撞离场门，R2，裁向已给）。
