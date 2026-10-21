@@ -11,7 +11,8 @@ import (
 var ErrInvalidRehydratedResolution = errors.New("party commercial: invalid rehydrated commercial resolution")
 
 // RehydrateAdoptedBasisSpec 是闭包里一项已采用依据在库里的样子。版本身份始终固定；
-// 服务产品（ADR-0050）、结算政策（ADR-0044）与信用依据（ADR-0127）快照在场时一并重建。
+// 服务产品（ADR-0050）、结算政策（ADR-0044）、信用依据（ADR-0127）与客户服务规则的继承底座（ADR-0268）
+// 快照在场时一并重建。
 //
 // 价格政策不在其中：`NewCommercialPricePolicy` 要方案方向与跨向转换两个入参才立得起来，
 // 而 `CommercialPricePolicy` 并不留存它们——照本形状重建就得跳过那道绑定校验，或者在
@@ -30,6 +31,11 @@ type RehydrateAdoptedBasisSpec struct {
 	HasSettlementPolicy bool
 	CreditLimit         CreditLimit
 	HasCreditBasis      bool
+	// ProductBaseFixed 说快照里这一项有没有底座一格（ADR-0268 决定一）；ProductBase 只在 HasProductBase 时有意义。
+	// 三格分开收：固定了一版、固定了没有、没有这一格（ADR-0268 之前的快照，决定三），后两格不可互相顶替。
+	ProductBase      CommercialVersion
+	HasProductBase   bool
+	ProductBaseFixed bool
 }
 
 // RehydrateCommercialClosureSpec 是一次已固定解析在库里的样子。字段一律当数据收下，
@@ -105,6 +111,14 @@ func RehydrateCommercialClosure(spec RehydrateCommercialClosureSpec) (Commercial
 			}
 			basis.hasCreditBasis = true
 		}
+		if item.ProductBaseFixed || item.HasProductBase {
+			if err := admitsFixedProductBase(item); err != nil {
+				return CommercialClosure{}, err
+			}
+			basis.productBase = item.ProductBase
+			basis.hasProductBase = item.HasProductBase
+			basis.productBaseFixed = true
+		}
 		adopted = append(adopted, basis)
 	}
 
@@ -116,6 +130,34 @@ func RehydrateCommercialClosure(spec RehydrateCommercialClosureSpec) (Commercial
 		viewRevision: spec.ViewRevision,
 		adopted:      adopted,
 	}, nil
+}
+
+// admitsFixedProductBase 拒本上下文写不出的底座形状：底座只随挂合同的那一版客户服务规则固定，它自己是同租户、
+// 同范围、壳上不指名客户合同的客户服务规则（与 customerServiceRuleTiers 的产品层同一判据）。照收一份挂合同的底座，
+// 层次读口就会把别户的条款拼进这一户；照收「在场却未固定」，读的人分不出它是不是 ADR-0268 之前的那一种。
+func admitsFixedProductBase(item RehydrateAdoptedBasisSpec) error {
+	if item.HasProductBase && !item.ProductBaseFixed {
+		return rehydratedResolutionRefusal("继承底座在场却没标已固定")
+	}
+	if item.Kind != CustomerServiceRuleObject || item.Version.kind != CustomerServiceRuleObject {
+		return rehydratedResolutionRefusal("继承底座挂在不是客户服务规则的一格上")
+	}
+	if _, contractTier := item.Version.ReferenceTo(CustomerContractObject); !contractTier {
+		return rehydratedResolutionRefusal("继承底座挂在产品层那一版上")
+	}
+	if !item.HasProductBase {
+		return nil
+	}
+	base := item.ProductBase
+	if base.kind != CustomerServiceRuleObject ||
+		base.status == CommercialVersionStatusInvalid || base.status == CommercialVersionDraft ||
+		base.tenant != item.Version.tenant || base.scope != item.Version.scope {
+		return rehydratedResolutionRefusal("继承底座不是同租户同范围的已发布客户服务规则")
+	}
+	if _, namesContract := base.ReferenceTo(CustomerContractObject); namesContract {
+		return rehydratedResolutionRefusal("继承底座的壳指名了客户合同")
+	}
+	return nil
 }
 
 func rehydratedResolutionRefusal(reason string) error {

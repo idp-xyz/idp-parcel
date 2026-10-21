@@ -316,10 +316,15 @@ type Resolution struct {
 	hasSettlementPolicy bool
 	creditBasis         CreditBasis
 	hasCreditBasis      bool
-	viewRevision        AuthorityViewRevision
-	reason              ResolutionReason
-	continuation        ContinuationReference
-	candidateCount      int
+	// productBase 只在采纳挂合同那一版客户服务规则时由 resolveCustomerServiceRuleBasis 填（ADR-0268 决定一），
+	// 闭包把它原样记到那一项采纳上；其余依据与单依据解析恒缺席。
+	productBase      CommercialVersion
+	hasProductBase   bool
+	productBaseFixed bool
+	viewRevision     AuthorityViewRevision
+	reason           ResolutionReason
+	continuation     ContinuationReference
+	candidateCount   int
 }
 
 func (resolution Resolution) Outcome() ResolutionOutcome {
@@ -594,6 +599,11 @@ func resolveCreditPolicyBasis(registry *CommercialRegistry, key ResolutionKey) R
 // 产品层。同层多候选是`适用冲突`，两层皆零是`无适用依据`，采纳的始终只有一版。
 //
 // 合同层冲突时不回落：那等于把这一户已经另定的条款静静换回产品标准。
+//
+// 采纳合同层那一版时，同一次分层里的产品层就是它的继承底座（ADR-0268 决定一）：恰一版记下随闭包固定，零版记
+// 「固定了、没有」，多版这一项答`适用冲突`。底座在这里选而不留到读的时候，是因为同一份键与锚点此刻读到的登记册
+// 才是接受时那一份；读时再选，底座一被截止、退役或有效性更正，已接受委托继承来的那一行就改口。底座不是第二个
+// 已采用依据，采纳的仍只有合同版。
 func resolveCustomerServiceRuleBasis(
 	registry *CommercialRegistry,
 	key ResolutionKey,
@@ -611,6 +621,17 @@ func resolveCustomerServiceRuleBasis(
 	}
 	result.candidateCount = len(tier)
 	version, outcome := soleCandidate(tier)
+	if outcome == UniquelyResolved && len(contractTier) > 0 {
+		base, baseOutcome := soleCandidate(productTier)
+		switch baseOutcome {
+		case UniquelyResolved:
+			result.productBase = base
+			result.hasProductBase = true
+		case ApplicabilityConflict:
+			outcome = ApplicabilityConflict
+		}
+		result.productBaseFixed = outcome == UniquelyResolved
+	}
 	result.outcome = outcome
 	if outcome == UniquelyResolved {
 		result.adopted = version
@@ -621,9 +642,11 @@ func resolveCustomerServiceRuleBasis(
 }
 
 // CustomerServiceRuleProductBase 选「同范围挂服务产品、锚点生效」的那一版客户服务规则：恰一版答
-// `唯一解析`并交回它，多版答`适用冲突`，零版答`无适用依据`。闭包在合同层零候选时回落的就是这一层，
-// ADR-0176 决定二的层次读口拿它当行级继承的底座——闭包回落与层次读口读同一份分层（customerServiceRuleTiers），
-// 「哪一版算产品底座」只有一种答法。
+// `唯一解析`并交回它，多版答`适用冲突`，零版答`无适用依据`。闭包在合同层零候选时回落的、采纳合同版时固定为
+// 继承底座的，都是这一层（customerServiceRuleTiers），「哪一版算产品底座」只有一种答法。
+//
+// 它此刻读的是调用方交来的登记册，不是接受时那一份：已接受委托的底座读闭包上固定的那一版（ADR-0268 决定一）。
+// 层次读口只在闭包快照没有底座一格（ADR-0268 之前形成）时才用它现选，见 ADR-0268 决定三。
 //
 // declaredProduct 是委托声明的服务产品，可缺席；在场时壳上指名了别的服务产品的版本落选，收窄规则同
 // ResolutionKey 同名字段。

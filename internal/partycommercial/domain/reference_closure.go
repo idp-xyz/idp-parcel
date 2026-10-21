@@ -178,6 +178,9 @@ type AdoptedBasis struct {
 	hasCreditBasis      bool
 	serviceProduct      ServiceProduct
 	hasServiceProduct   bool
+	productBase         CommercialVersion
+	hasProductBase      bool
+	productBaseFixed    bool
 }
 
 func (adopted AdoptedBasis) Kind() CommercialObjectKind {
@@ -209,6 +212,22 @@ func (adopted AdoptedBasis) CreditBasis() (CreditBasis, bool) {
 // 依据缺席。只登了版本而没登产品时交回 false——缺席是不可观察，不是某种默认形态。
 func (adopted AdoptedBasis) ServiceProduct() (ServiceProduct, bool) {
 	return adopted.serviceProduct, adopted.hasServiceProduct
+}
+
+// InheritedProductBase 交回采纳挂合同那一版客户服务规则时随闭包固定的继承底座（ADR-0268 决定一）。fixed 说这一项
+// 有没有固定过底座：为真时 hasBase 为假是「固定了、没有」，合同版没写的行如实未登记；为假是采纳的不是合同版，或
+// 快照形成于 ADR-0268 之前、没有这一格——那时没有可读的底座，不等于没有底座，读的人要自己按决定三处置。
+func (adopted AdoptedBasis) InheritedProductBase() (base CommercialVersion, hasBase bool, fixed bool) {
+	return adopted.productBase, adopted.hasProductBase, adopted.productBaseFixed
+}
+
+// namingVersions 是这一项里正文指名引用要受核对的版本：采用的那一版，加上随它固定的继承底座。底座的条款要拼进
+// 这一户的索赔资格，它指名了别的服务产品就与采用的成员指名错了同一格（ADR-0268 决定一）。
+func (adopted AdoptedBasis) namingVersions() []CommercialVersion {
+	if adopted.hasProductBase {
+		return []CommercialVersion{adopted.version, adopted.productBase}
+	}
+	return []CommercialVersion{adopted.version}
 }
 
 // CommercialClosure 是解析引用闭包的全有或全无结果。只要不是唯一解析成功，它就
@@ -393,6 +412,8 @@ func ResolveCommercialClosure(
 				basis.serviceProduct = product
 				basis.hasServiceProduct = true
 			}
+			basis.productBase, basis.hasProductBase, basis.productBaseFixed =
+				result.productBase, result.hasProductBase, result.productBaseFixed
 			adopted = append(adopted, basis)
 		case ApplicabilityConflict:
 			closure.conflicting = append(closure.conflicting, kind)
@@ -514,19 +535,24 @@ func adoptedContractVersion(adopted []AdoptedBasis) (CommercialVersion, bool) {
 //
 // 只核本次要采用的那些类别。正文指名了一个调用方没有请求的对象时不在此确认：那类对象本次
 // 一个都不采用，不存在采用错的风险，而一并要求就等于闭包替调用方扩大了请求范围。
+//
+// 随某一项固定的继承底座同受这道核（namingVersions），但它不进 adoptedByKind：底座不是已采用依据，别的成员
+// 指名客户服务规则时比的仍是采纳的那一版。
 func namedReferencesConfirmed(adopted []AdoptedBasis) bool {
 	adoptedByKind := make(map[CommercialObjectKind]CommercialObjectID, len(adopted))
 	for _, basis := range adopted {
 		adoptedByKind[basis.kind] = basis.version.objectID
 	}
 	for _, basis := range adopted {
-		for _, reference := range basis.version.references {
-			adoptedID, alsoResolvedHere := adoptedByKind[reference.kind]
-			if !alsoResolvedHere {
-				continue
-			}
-			if adoptedID != reference.objectID {
-				return false
+		for _, version := range basis.namingVersions() {
+			for _, reference := range version.references {
+				adoptedID, alsoResolvedHere := adoptedByKind[reference.kind]
+				if !alsoResolvedHere {
+					continue
+				}
+				if adoptedID != reference.objectID {
+					return false
+				}
 			}
 		}
 	}
