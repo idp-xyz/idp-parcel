@@ -201,7 +201,7 @@ func customsSubmissionBody(caseID string) string {
 		`"members":["` + customsDecisionParcel + `"],"dossier":"SYN-DOSSIER-PSB18","roles":"SYN-ROLES-PSB18","target":"SYN-CHANNEL-CN-EXPORT"}`
 }
 
-// Covers: AT-CC-437、AT-CC-440、AT-CC-442、AT-CC-443、AT-CC-441、AT-CC-107、AT-CC-122（生产装配半边）——经生产端点：建案口按已接受
+// Covers: AT-CC-437、AT-CC-439、AT-CC-440、AT-CC-442、AT-CC-441、AT-CC-107、AT-CC-122（生产装配半边）——经生产端点：建案口按已接受
 // 包裹建出案件（客户归属与来源引用取自 PS 那份已接受委托），重放答已有案件；授权确认之前提交执行答未决并指名授权未配置，不留
 // 任何单元、版本或尝试；业务角色确认之后形成授权，重放答已有授权；提交执行固定提交版本，版本的授权依据带确认人，首次尝试是
 // `已登记待发送`、库里 sent_at 为空；提交重放答已有版本，尝试与意图都不翻倍。
