@@ -88,8 +88,9 @@ func NewAnswerBookingEndpoint(intake BookingAnswerIntake, answerer BookingAnswer
 	}, writeBookingAnswerOutcome)
 }
 
-// bookingAnswerResponse 是承运答复口的封闭响应形状。订舱不在册与答复方不是服务提供方各自成格：前者续办是核订舱标识或
-// 等运营侧录入订舱，后者是这份答复不归它答。冲突不回显在册的答复——在册那一份可能出自另一次出示，回显就成了读口。
+// bookingAnswerResponse 是承运答复口的封闭响应形状。答复方不是服务提供方与订舱不在册是同一格、同一副响应（ADR-0239 决定一），
+// 编排交回的结果里也没有分得开它们的东西，这里不另加任何一格。冲突不回显在册的答复——在册那一份可能出自另一次出示，回显就
+// 成了读口。
 type bookingAnswerResponse struct {
 	Outcome               string             `json:"outcome"`
 	UndecidedReason       string             `json:"undecidedReason,omitempty"`
@@ -133,7 +134,7 @@ func writeBookingAnswerOutcome(response http.ResponseWriter, result application.
 			body.Answer.Basis = basis.String()
 		}
 	}
-	// ADR-0022：只有新登了一份答复用 201；已有答复、冲突、订舱不在册、来源不是服务方、未受理、未决都是形成了的答案（200）。
+	// ADR-0022：只有新登了一份答复用 201；已有答复、冲突、订舱不在册、未受理、未决都是形成了的答案（200）。
 	status := http.StatusOK
 	if result.Outcome() == application.BookingAnswered {
 		status = http.StatusCreated

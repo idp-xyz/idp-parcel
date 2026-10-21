@@ -64,6 +64,30 @@ func (double *answerLedgerDouble) Save(_ context.Context, record ports.BookingAn
 	return ports.BookingAnswerSaved, nil
 }
 
+// bookingWithProviderDouble 从订舱与委托两个替身里连读，契约同 ports.BookingWithProviderReader。
+type bookingWithProviderDouble struct {
+	bookings    *bookingRegistryDouble
+	commissions *commissionRegistryDouble
+}
+
+func (double bookingWithProviderDouble) FindBookingWithProvider(ctx context.Context, key ports.BookingKey) (ports.BookingWithProvider, bool, error) {
+	booking, found, _ := double.bookings.FindByKey(ctx, key)
+	if !found {
+		return ports.BookingWithProvider{}, false, nil
+	}
+	addressed := ports.BookingWithProvider{Booking: booking}
+	commission, registered, _ := double.commissions.FindByKey(ctx, ports.TransportCommissionKey{TenantID: key.TenantID, Commission: booking.Booking.Commission()})
+	if registered {
+		addressed.Provider, addressed.CommissionRegistered = commission.Commission.Provider(), true
+	}
+	return addressed, true, nil
+}
+
+// refusalLedgerStub 收下每一次拒收：线格式这一层只看两条拒收路答出来的字节，册上记了什么由编排与真库用例钉。
+type refusalLedgerStub struct{}
+
+func (refusalLedgerStub) RecordRefusal(context.Context, ports.BookingAnswerRefusal) error { return nil }
+
 type scheduleRegisterStub struct{ registered string }
 
 func (stub scheduleRegisterStub) FindByKey(_ context.Context, key ports.ScheduleKey) (ports.ScheduleRecord, bool, error) {
@@ -81,14 +105,18 @@ const (
 // bookingHandler 交回一只已提交过干线委托（服务方干线承运方）的编排：订舱与答复两口共用它。
 func bookingHandler(t *testing.T) *application.CommissionTransportHandler {
 	t.Helper()
+	commissions := &commissionRegistryDouble{records: map[string]ports.TransportCommissionRecord{}}
+	bookings := &bookingRegistryDouble{records: map[string]ports.BookingRecord{}}
 	handler := application.NewCommissionTransportHandler(application.CommissionTransportDeps{
-		Commissions: &commissionRegistryDouble{records: map[string]ports.TransportCommissionRecord{}},
-		Bookings:    &bookingRegistryDouble{records: map[string]ports.BookingRecord{}},
-		Answers:     &answerLedgerDouble{},
-		Schedules:   scheduleRegisterStub{registered: trunkSchedule},
-		Agreements:  agreementCheckStub{supplier: trunkCarrier},
-		Downstream:  commissionHandoffStub{},
-		Clock:       fixedCommissionClock{},
+		Commissions:          commissions,
+		Bookings:             bookings,
+		BookingsWithProvider: bookingWithProviderDouble{bookings: bookings, commissions: commissions},
+		Answers:              &answerLedgerDouble{},
+		AnswerRefusals:       refusalLedgerStub{},
+		Schedules:            scheduleRegisterStub{registered: trunkSchedule},
+		Agreements:           agreementCheckStub{supplier: trunkCarrier},
+		Downstream:           commissionHandoffStub{},
+		Clock:                fixedCommissionClock{},
 	})
 	tenant, err := domain.NewTenantID(operatorTenant)
 	if err != nil {
@@ -113,17 +141,23 @@ const bookingRequestBody = `{"booking": "SYN-BOOKING-01", "commission": "SYN-COM
 
 func postBookingFace(t *testing.T, endpoint http.Handler, path, token, body string) (int, map[string]any) {
 	t.Helper()
+	status, raw := postBookingFaceRaw(endpoint, path, token, body)
+	var answer map[string]any
+	if err := json.Unmarshal([]byte(raw), &answer); err != nil {
+		t.Fatalf("decode %s: %v", raw, err)
+	}
+	return status, answer
+}
+
+// postBookingFaceRaw 交回状态与原样的响应体：比两次答复是否逐字相同时用它，解码会把字段次序与空白抹平。
+func postBookingFaceRaw(endpoint http.Handler, path, token, body string) (int, string) {
 	request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
 	if token != "" {
 		request.Header.Set("Authorization", "Bearer "+token)
 	}
 	response := httptest.NewRecorder()
 	endpoint.ServeHTTP(response, request)
-	var answer map[string]any
-	if err := json.Unmarshal(response.Body.Bytes(), &answer); err != nil {
-		t.Fatalf("decode %s: %v", response.Body.String(), err)
-	}
-	return response.Code, answer
+	return response.Code, response.Body.String()
 }
 
 // Covers: ADR-0202 决定一、五的线格式——订舱提交口按「运营决定」的订舱提交认证、租户只取认证结果；就在册班次订舱答 201，
@@ -205,9 +239,10 @@ func clientIntake(t *testing.T, authenticator tfhttp.IntegrationClientAuthentica
 const acceptedAnswerBody = `{"booking": "SYN-BOOKING-01", "answer": "SYN-CARRIER-ANSWER-01", "outcome": "ACCEPTED",
 	"quantity": 100, "decidedAt": "2026-10-19T09:00:00Z"}`
 
-// Covers: ADR-0202 决定二、五的线格式——承运答复口按集成客户端认证，来源身份取自绑定；服务方自己答接受 201、回显接受量；
-// 原样重交 200 已有答复；别的承运商答 200 SOURCE_NOT_SERVICE_PROVIDER、不回显在册答复；订舱不在册 200 BOOKING_NOT_FOUND；
-// 五值之外的词、自报租户或来源、时刻写坏是坏报文（400）；没令牌 401、无授予 403，各用集成客户端族自己的码。
+// Covers: ADR-0202 决定二、五与 ADR-0239 决定一的线格式（`AT-TF-326` 线格式面）——承运答复口按集成客户端认证，来源身份取自
+// 绑定；服务方自己答接受 201、回显接受量；原样重交 200 已有答复；别的承运商答在册订舱与服务方答不在册订舱都是 200
+// BOOKING_NOT_FOUND，响应体逐字相同、不回显在册答复；五值之外的词、自报租户或来源、时刻写坏是坏报文（400）；没令牌 401、
+// 无授予 403，各用集成客户端族自己的码。
 func TestTheBookingAnswerFaceAnswersOnTheWire(t *testing.T) {
 	handler := bookingHandler(t)
 	booking := tfhttp.NewSubmitBookingRequestEndpoint(operatorIntake(t, authenticatorFake{}), handler)
@@ -218,11 +253,14 @@ func TestTheBookingAnswerFaceAnswersOnTheWire(t *testing.T) {
 	carrier := tfhttp.NewAnswerBookingEndpoint(clientIntake(t, carrierAuthenticatorFake{source: trunkCarrier}), handler)
 	stranger := tfhttp.NewAnswerBookingEndpoint(clientIntake(t, carrierAuthenticatorFake{source: "SYN-PARTY-CARRIER-LM-01"}), handler)
 
-	status, answer := postBookingFace(t, stranger, path, "presented.client.token", acceptedAnswerBody)
-	if status != http.StatusOK || answer["outcome"] != "SOURCE_NOT_SERVICE_PROVIDER" {
-		t.Fatalf("别的承运商答 = %d %v", status, answer)
+	missing := strings.Replace(acceptedAnswerBody, `"SYN-BOOKING-01"`, `"SYN-BOOKING-77"`, 1)
+	strangerStatus, strangerBody := postBookingFaceRaw(stranger, path, "presented.client.token", acceptedAnswerBody)
+	missingStatus, missingBody := postBookingFaceRaw(carrier, path, "presented.client.token", missing)
+	if strangerStatus != http.StatusOK || strings.TrimSpace(strangerBody) != `{"outcome":"BOOKING_NOT_FOUND"}` ||
+		missingStatus != strangerStatus || missingBody != strangerBody {
+		t.Fatalf("别的承运商答在册订舱 = %d %s；服务方答不在册订舱 = %d %s——两条拒收路分得开", strangerStatus, strangerBody, missingStatus, missingBody)
 	}
-	status, answer = postBookingFace(t, carrier, path, "presented.client.token", acceptedAnswerBody)
+	status, answer := postBookingFace(t, carrier, path, "presented.client.token", acceptedAnswerBody)
 	if status != http.StatusCreated || answer["outcome"] != "BOOKING_ANSWERED" {
 		t.Fatalf("服务方答接受 = %d %v", status, answer)
 	}
@@ -233,13 +271,8 @@ func TestTheBookingAnswerFaceAnswersOnTheWire(t *testing.T) {
 	if status, answer := postBookingFace(t, carrier, path, "presented.client.token", acceptedAnswerBody); status != http.StatusOK || answer["outcome"] != "EXISTING_ANSWER" {
 		t.Fatalf("原样重交 = %d %v", status, answer)
 	}
-	if status, answer := postBookingFace(t, stranger, path, "presented.client.token", acceptedAnswerBody); status != http.StatusOK ||
-		answer["outcome"] != "SOURCE_NOT_SERVICE_PROVIDER" || answer["answer"] != nil {
-		t.Fatalf("别的承运商原样重放 = %d %v——读回了别人的答复", status, answer)
-	}
-	missing := strings.Replace(acceptedAnswerBody, `"SYN-BOOKING-01"`, `"SYN-BOOKING-77"`, 1)
-	if status, answer := postBookingFace(t, carrier, path, "presented.client.token", missing); status != http.StatusOK || answer["outcome"] != "BOOKING_NOT_FOUND" {
-		t.Fatalf("订舱不在册 = %d %v", status, answer)
+	if status, body := postBookingFaceRaw(stranger, path, "presented.client.token", acceptedAnswerBody); status != missingStatus || body != missingBody {
+		t.Fatalf("别的承运商在服务方答过之后原样重放 = %d %s——读回了别人的答复，或与订舱不在册分得开", status, body)
 	}
 
 	for name, body := range map[string]string{

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
@@ -276,7 +278,7 @@ const trunkAcceptedAnswer = `{"booking": "SYN-BOOKING-TRUNK-DCG24", "answer": "S
 //   - 演示：干线委托提交后，对种子物化的 SZX→SIN 那一班订舱答 201，库里订舱行带着那一班；对不在册的班次订舱答 200
 //     SCHEDULE_NOT_FOUND、零写入。
 //   - 演示：合成干线承运客户端（来源身份即干线承运方）用令牌答 ACCEPTED 答 201；原样重交答 200 EXISTING_ANSWER，不多一行。
-//   - 末端承运客户端答同一订舱答 200 SOURCE_NOT_SERVICE_PROVIDER，不回显干线那份答复、不落行。
+//   - 末端承运客户端答同一订舱答 200 BOOKING_NOT_FOUND（ADR-0239 决定一），不回显干线那份答复、不落行。
 func TestTheWiredBookingFacesBookTheSeededTrunkScheduleAndTakeTheCarriersAnswer(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -313,7 +315,7 @@ func TestTheWiredBookingFacesBookTheSeededTrunkScheduleAndTakeTheCarriersAnswer(
 		t.Fatalf("原样重交 = %d %v", status, answer)
 	}
 	status, answer = postWithToken(t, endpoints.lastMile, bookingAnswerPath, "presented.client.token", trunkAcceptedAnswer)
-	if status != http.StatusOK || answer["outcome"] != "SOURCE_NOT_SERVICE_PROVIDER" || answer["answer"] != nil {
+	if status != http.StatusOK || answer["outcome"] != "BOOKING_NOT_FOUND" || answer["answer"] != nil {
 		t.Fatalf("末端承运客户端答干线订舱 = %d %v", status, answer)
 	}
 
@@ -334,6 +336,133 @@ func TestTheWiredBookingFacesBookTheSeededTrunkScheduleAndTakeTheCarriersAnswer(
 	}
 	if schedule != seededTrunkSchedule || bookings != 1 || outcome != "ACCEPTED" || answers != 1 {
 		t.Fatalf("库里：班次 %q、订舱 %d 行、答复 %s、答复 %d 行", schedule, bookings, outcome, answers)
+	}
+}
+
+func postWithTokenRaw(endpoint http.Handler, path, token, body string) (int, string) {
+	request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+	request.Header.Set("Authorization", "Bearer "+token)
+	response := httptest.NewRecorder()
+	endpoint.ServeHTTP(response, request)
+	return response.Code, response.Body.String()
+}
+
+// refusalRows 交拒收册上本租户的全部行，按答复方、订舱、答复标识、依据排：每行「答复方|订舱|答复标识|依据|次数」。
+func refusalRows(t *testing.T, pool *pgxpool.Pool) []string {
+	t.Helper()
+	rows, err := pool.Query(t.Context(),
+		`SELECT source_ref, booking_id, acceptance_id, refusal_basis, refusal_count
+		   FROM transport_fulfillment.booking_answer_refusal
+		  WHERE tenant_id = 'SYN-TENANT-01'
+		  ORDER BY source_ref, booking_id, acceptance_id, refusal_basis`)
+	if err != nil {
+		t.Fatalf("读拒收册：%v", err)
+	}
+	defer rows.Close()
+	var got []string
+	for rows.Next() {
+		var source, booking, acceptance, basis string
+		var count int64
+		if err := rows.Scan(&source, &booking, &acceptance, &basis, &count); err != nil {
+			t.Fatalf("读拒收册：%v", err)
+		}
+		got = append(got, fmt.Sprintf("%s|%s|%s|%s|%d", source, booking, acceptance, basis, count))
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("读拒收册：%v", err)
+	}
+	return got
+}
+
+// Covers: `AT-TF-326`、`AT-TF-327`、`AT-TF-328` 真库面，票 demo-chain-gaps/145 完成判据（S）——
+//   - 末端承运客户端答干线订舱、末端与干线承运客户端各答一个不在册的订舱：三次都是 200，响应体逐字相同（BOOKING_NOT_FOUND）。
+//   - 拒收册分得清：末端答干线订舱记「不是服务提供方」，答不在册订舱记「订舱不在册」，各带答复方、订舱与答复标识；末端原样重交
+//     只把那一行的次数加到 2。答复册一行不落。
+//   - 干线承运客户端先答一个还没录的订舱被拒；运营录入之后同一份答复重交 201，原样再交 200 EXISTING_ANSWER；拒收册那一行照留。
+func TestTheWiredBookingAnswerFaceAnswersANonProviderAsBookingNotFoundAndKeepsTheBasis(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	seeded := publishSeededSupplierAgreements(t, db)
+	trunk := seeded["SYN-SUPPLIER-TRUNK-CN-SG-01"]
+	registerSeededTrunkSchedule(t, db)
+	endpoints := bookingFacesForTest(t, db)
+	if status, answer := postWithToken(t, endpoints.commission, commissionSubmissionPath, "presented.operator.token",
+		commissionBody("SYN-COMMISSION-TRUNK-DCG24", trunk.Declarations.SupplierAgreementBody.Supplier, trunk.ObjectID, trunk.Version, "2026-10-19T08:00:00Z")); status != http.StatusCreated {
+		t.Fatalf("干线委托 = %d %v", status, answer)
+	}
+	if status, answer := postWithToken(t, endpoints.booking, bookingSubmissionPath, "presented.operator.token",
+		trunkBookingBody("SYN-BOOKING-TRUNK-DCG24", seededTrunkSchedule)); status != http.StatusCreated {
+		t.Fatalf("干线订舱 = %d %v", status, answer)
+	}
+
+	absentAnswer := strings.Replace(trunkAcceptedAnswer, "SYN-BOOKING-TRUNK-DCG24", "SYN-BOOKING-DCG145-NOWHERE", 1)
+	refusedStatus, refusedBody := postWithTokenRaw(endpoints.lastMile, bookingAnswerPath, "presented.client.token", trunkAcceptedAnswer)
+	if refusedStatus != http.StatusOK || strings.TrimSpace(refusedBody) != `{"outcome":"BOOKING_NOT_FOUND"}` {
+		t.Fatalf("末端承运客户端答干线订舱 = %d %s", refusedStatus, refusedBody)
+	}
+	for name, endpoint := range map[string]http.Handler{"末端承运客户端": endpoints.lastMile, "干线承运客户端": endpoints.trunk} {
+		if status, body := postWithTokenRaw(endpoint, bookingAnswerPath, "presented.client.token", absentAnswer); status != refusedStatus || body != refusedBody {
+			t.Fatalf("%s答不在册订舱 = %d %s，与不是服务方那一次 %d %s 分得开", name, status, body, refusedStatus, refusedBody)
+		}
+	}
+	if status, body := postWithTokenRaw(endpoints.lastMile, bookingAnswerPath, "presented.client.token", trunkAcceptedAnswer); status != refusedStatus || body != refusedBody {
+		t.Fatalf("末端原样重交 = %d %s", status, body)
+	}
+	want := []string{
+		"SYN-PARTY-CARRIER-LM-01|SYN-BOOKING-DCG145-NOWHERE|SYN-CARRIER-ANSWER-DCG24|BOOKING_NOT_REGISTERED|1",
+		"SYN-PARTY-CARRIER-LM-01|SYN-BOOKING-TRUNK-DCG24|SYN-CARRIER-ANSWER-DCG24|SOURCE_NOT_SERVICE_PROVIDER|2",
+		"SYN-PARTY-CARRIER-TRUNK-01|SYN-BOOKING-DCG145-NOWHERE|SYN-CARRIER-ANSWER-DCG24|BOOKING_NOT_REGISTERED|1",
+	}
+	if got := refusalRows(t, pool); strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("拒收册 =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	var answers int
+	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM transport_fulfillment.booking_answer`).Scan(&answers); err != nil || answers != 0 {
+		t.Fatalf("答复册 %d 行（%v），want 0", answers, err)
+	}
+
+	if status, answer := postWithToken(t, endpoints.booking, bookingSubmissionPath, "presented.operator.token",
+		trunkBookingBody("SYN-BOOKING-DCG145-NOWHERE", seededTrunkSchedule)); status != http.StatusCreated {
+		t.Fatalf("录入那一次订舱 = %d %v", status, answer)
+	}
+	if status, answer := postWithToken(t, endpoints.trunk, bookingAnswerPath, "presented.client.token", absentAnswer); status != http.StatusCreated || answer["outcome"] != "BOOKING_ANSWERED" {
+		t.Fatalf("录入之后干线重交 = %d %v", status, answer)
+	}
+	if status, answer := postWithToken(t, endpoints.trunk, bookingAnswerPath, "presented.client.token", absentAnswer); status != http.StatusOK || answer["outcome"] != "EXISTING_ANSWER" {
+		t.Fatalf("原样再交 = %d %v", status, answer)
+	}
+	if got := refusalRows(t, pool); strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("受理之后拒收册被改写：\n%s", strings.Join(got, "\n"))
+	}
+}
+
+// 拒收册写不动时 PostgreSQL 把整笔事务置为 aborted：照常提交只换回提交错误，线上落成 500。这里让拒收册在真库上写不进（改表名），
+// 钉住答复方拿到的是未决、指名等答复册，不是订舱不在册，且答复册一行不落。
+// Covers: `AT-TF-327`「拒收册写不动答未决、不答订舱不在册」那一支（真库面，事务已中止）。
+func TestTheWiredBookingAnswerFaceAnswersUndecidedWhenTheRefusalCannotBeKept(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	endpoints := bookingFacesForTest(t, db)
+	if _, err := pool.Exec(t.Context(),
+		`ALTER TABLE transport_fulfillment.booking_answer_refusal RENAME TO booking_answer_refusal_unreachable`); err != nil {
+		t.Fatalf("让拒收册写不进：%v", err)
+	}
+	status, answer := postWithToken(t, endpoints.lastMile, bookingAnswerPath, "presented.client.token", trunkAcceptedAnswer)
+	if status != http.StatusOK || answer["outcome"] != "COMMISSION_UNDECIDED" || answer["undecidedReason"] != "ANSWER_STORE_UNAVAILABLE" {
+		t.Fatalf("拒收册写不动 = %d %v，want 200 COMMISSION_UNDECIDED / ANSWER_STORE_UNAVAILABLE", status, answer)
+	}
+	var answers, refusals int
+	if err := pool.QueryRow(t.Context(),
+		`SELECT (SELECT count(*) FROM transport_fulfillment.booking_answer),
+		        (SELECT count(*) FROM transport_fulfillment.booking_answer_refusal_unreachable)`).Scan(&answers, &refusals); err != nil ||
+		answers != 0 || refusals != 0 {
+		t.Fatalf("答复册 %d 行、拒收册 %d 行（%v），want 0/0", answers, refusals, err)
 	}
 }
 

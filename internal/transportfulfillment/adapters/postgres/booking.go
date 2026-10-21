@@ -36,62 +36,128 @@ func (repository *BookingRequests) FindByKey(
 		return ports.BookingRecord{}, false, fmt.Errorf("find booking request: %w", err)
 	}
 
-	var commissionID, scheduleID, unit, digest string
-	var quantity int64
-	var requestedAt, recordedAt time.Time
-	var cancelledAt *time.Time
+	var row bookingRequestRow
 	err = querier.QueryRow(ctx,
-		`SELECT commission_id, schedule_id, quantity, unit_ref, requested_at, cancelled_at,
-		        content_digest, recorded_at
+		`SELECT `+bookingRequestColumns+`
 		   FROM transport_fulfillment.booking_request
 		  WHERE tenant_id = $1
 		    AND booking_id = $2`,
 		key.TenantID.String(),
 		key.Booking.String(),
-	).Scan(&commissionID, &scheduleID, &quantity, &unit, &requestedAt, &cancelledAt, &digest, &recordedAt)
+	).Scan(row.targets()...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.BookingRecord{}, false, nil
 	}
 	if err != nil {
 		return ports.BookingRecord{}, false, fmt.Errorf("find booking request: %w", err)
 	}
+	record, err := row.rehydrate(key)
+	if err != nil {
+		return ports.BookingRecord{}, false, fmt.Errorf("find booking request: %w", err)
+	}
+	return record, true, nil
+}
 
-	commissionRef, err := domain.NewTransportCommissionReference(commissionID)
+var _ ports.BookingWithProviderReader = (*BookingRequests)(nil)
+
+// FindBookingWithProvider 按（租户+订舱）取回已提交申请连同所属委托的服务提供方，一条语句（ports.BookingWithProviderReader）。
+// 委托以左连接取：订舱在册而委托行不在时照样交回订舱，由编排认出数据违约，不在这里答「订舱不在册」。
+func (repository *BookingRequests) FindBookingWithProvider(
+	ctx context.Context,
+	key ports.BookingKey,
+) (ports.BookingWithProvider, bool, error) {
+	const operation = "find booking request with provider"
+	querier, err := repository.db.ReadExecutor(ctx)
 	if err != nil {
-		return ports.BookingRecord{}, false, fmt.Errorf("find booking request: %w", err)
+		return ports.BookingWithProvider{}, false, fmt.Errorf("%s: %w", operation, err)
 	}
-	scheduleRef, err := domain.NewScheduleReference(scheduleID)
-	if err != nil {
-		return ports.BookingRecord{}, false, fmt.Errorf("find booking request: %w", err)
+
+	var row bookingRequestRow
+	var provider *string
+	err = querier.QueryRow(ctx,
+		`SELECT `+qualifiedBookingRequestColumns+`, commission.provider_ref
+		   FROM transport_fulfillment.booking_request AS booking
+		   LEFT JOIN transport_fulfillment.transport_commission AS commission
+		     ON commission.tenant_id = booking.tenant_id
+		    AND commission.commission_id = booking.commission_id
+		  WHERE booking.tenant_id = $1
+		    AND booking.booking_id = $2`,
+		key.TenantID.String(),
+		key.Booking.String(),
+	).Scan(append(row.targets(), &provider)...)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.BookingWithProvider{}, false, nil
 	}
-	unitRef, err := domain.NewQuantityUnitReference(unit)
 	if err != nil {
-		return ports.BookingRecord{}, false, fmt.Errorf("find booking request: %w", err)
+		return ports.BookingWithProvider{}, false, fmt.Errorf("%s: %w", operation, err)
+	}
+	record, err := row.rehydrate(key)
+	if err != nil {
+		return ports.BookingWithProvider{}, false, fmt.Errorf("%s: %w", operation, err)
+	}
+	found := ports.BookingWithProvider{Booking: record}
+	if provider != nil {
+		if found.Provider, err = domain.NewServiceProviderReference(*provider); err != nil {
+			return ports.BookingWithProvider{}, false, fmt.Errorf("%s: %w", operation, err)
+		}
+		found.CommissionRegistered = true
+	}
+	return found, true, nil
+}
+
+const bookingRequestColumns = `commission_id, schedule_id, quantity, unit_ref, requested_at, cancelled_at, content_digest, recorded_at`
+
+const qualifiedBookingRequestColumns = `booking.commission_id, booking.schedule_id, booking.quantity, booking.unit_ref,
+		        booking.requested_at, booking.cancelled_at, booking.content_digest, booking.recorded_at`
+
+// bookingRequestRow 是订舱申请一行的列，次序同 bookingRequestColumns。
+type bookingRequestRow struct {
+	commissionID, scheduleID, unit, digest string
+	quantity                               int64
+	requestedAt, recordedAt                time.Time
+	cancelledAt                            *time.Time
+}
+
+func (row *bookingRequestRow) targets() []any {
+	return []any{&row.commissionID, &row.scheduleID, &row.quantity, &row.unit, &row.requestedAt, &row.cancelledAt, &row.digest, &row.recordedAt}
+}
+
+func (row bookingRequestRow) rehydrate(key ports.BookingKey) (ports.BookingRecord, error) {
+	commissionRef, err := domain.NewTransportCommissionReference(row.commissionID)
+	if err != nil {
+		return ports.BookingRecord{}, err
+	}
+	scheduleRef, err := domain.NewScheduleReference(row.scheduleID)
+	if err != nil {
+		return ports.BookingRecord{}, err
+	}
+	unitRef, err := domain.NewQuantityUnitReference(row.unit)
+	if err != nil {
+		return ports.BookingRecord{}, err
 	}
 	booking, err := domain.SubmitBookingRequest(domain.BookingRequestSpec{
 		TenantID:    key.TenantID,
 		Booking:     key.Booking,
 		Commission:  commissionRef,
 		Schedule:    scheduleRef,
-		Quantity:    quantity,
+		Quantity:    row.quantity,
 		Unit:        unitRef,
-		RequestedAt: requestedAt,
+		RequestedAt: row.requestedAt,
 	})
 	if err != nil {
-		return ports.BookingRecord{}, false, fmt.Errorf("find booking request: %w", err)
+		return ports.BookingRecord{}, err
 	}
-	if cancelledAt != nil {
-		booking, err = booking.Cancel(cancelledAt.UTC())
-		if err != nil {
-			return ports.BookingRecord{}, false, fmt.Errorf("find booking request: %w", err)
+	if row.cancelledAt != nil {
+		if booking, err = booking.Cancel(row.cancelledAt.UTC()); err != nil {
+			return ports.BookingRecord{}, err
 		}
 	}
 	return ports.BookingRecord{
 		Key:           key,
-		ContentDigest: digest,
+		ContentDigest: row.digest,
 		Booking:       booking,
-		RecordedAt:    recordedAt.UTC(),
-	}, true, nil
+		RecordedAt:    row.recordedAt.UTC(),
+	}, nil
 }
 
 // Save 写下一次订舱申请。同键已有记录时答`已登记`。

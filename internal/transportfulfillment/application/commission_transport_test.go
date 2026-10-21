@@ -118,6 +118,69 @@ func (double *bookingStoreDouble) Replace(
 	return true, nil
 }
 
+// bookingWithProviderDouble 照 BookingWithProviderReader 的契约从订舱与委托两个替身里连读：订舱在、委托不在时照样交回订舱，
+// 标出委托不在。reads 数的是答复编排读了几次——两条拒收路都只该读一次。
+type bookingWithProviderDouble struct {
+	bookings    *bookingStoreDouble
+	commissions *commissionStoreDouble
+	findErr     error
+	reads       int
+}
+
+func (double *bookingWithProviderDouble) FindBookingWithProvider(
+	_ context.Context,
+	key ports.BookingKey,
+) (ports.BookingWithProvider, bool, error) {
+	double.reads++
+	if double.findErr != nil {
+		return ports.BookingWithProvider{}, false, double.findErr
+	}
+	booking, found := double.bookings.records[bookingStoreKey(key)]
+	if !found {
+		return ports.BookingWithProvider{}, false, nil
+	}
+	addressed := ports.BookingWithProvider{Booking: booking}
+	commission, registered := double.commissions.records[commissionStoreKey(ports.TransportCommissionKey{
+		TenantID: key.TenantID, Commission: booking.Booking.Commission(),
+	})]
+	if registered {
+		addressed.Provider = commission.Commission.Provider()
+		addressed.CommissionRegistered = true
+	}
+	return addressed, true, nil
+}
+
+// answerRefusalDouble 照拒收册的契约按（租户、答复方、订舱、答复标识、依据）计次；writes 数写了几次，不论成不成。
+type answerRefusalDouble struct {
+	counts map[string]int
+	err    error
+	writes int
+}
+
+func newAnswerRefusals() *answerRefusalDouble {
+	return &answerRefusalDouble{counts: map[string]int{}}
+}
+
+func refusalKey(source, booking, acceptance string, basis ports.BookingAnswerRefusalBasis) string {
+	return strings.Join([]string{"tenant-1", source, booking, acceptance, basis.String()}, "|")
+}
+
+func (double *answerRefusalDouble) RecordRefusal(_ context.Context, refusal ports.BookingAnswerRefusal) error {
+	double.writes++
+	if double.err != nil {
+		return double.err
+	}
+	double.counts[strings.Join([]string{
+		refusal.Key.TenantID.String(), refusal.Source, refusal.Key.Booking.String(), refusal.Acceptance.String(), refusal.Basis.String(),
+	}, "|")]++
+	return nil
+}
+
+// countOf 交本租户下某一（答复方、订舱、答复标识、依据）被拒了几次。
+func (double *answerRefusalDouble) countOf(source, booking, acceptance string, basis ports.BookingAnswerRefusalBasis) int {
+	return double.counts[refusalKey(source, booking, acceptance, basis)]
+}
+
 // answerStoreDouble 照迁移 0029 的三条唯一约束办：同一答复标识、同一订舱第二份候补、第二份定局都答已有应答。
 type answerStoreDouble struct {
 	records map[string]ports.BookingAnswerRecord
@@ -260,13 +323,15 @@ type commissionClock struct{ at time.Time }
 func (clock commissionClock) Now() time.Time { return clock.at }
 
 type commissionFixture struct {
-	commissions *commissionStoreDouble
-	bookings    *bookingStoreDouble
-	answers     *answerStoreDouble
-	schedules   *scheduleReaderDouble
-	agreements  *agreementSourceDouble
-	handoff     *commissionHandoffDouble
-	handler     *application.CommissionTransportHandler
+	commissions  *commissionStoreDouble
+	bookings     *bookingStoreDouble
+	withProvider *bookingWithProviderDouble
+	answers      *answerStoreDouble
+	refusals     *answerRefusalDouble
+	schedules    *scheduleReaderDouble
+	agreements   *agreementSourceDouble
+	handoff      *commissionHandoffDouble
+	handler      *application.CommissionTransportHandler
 }
 
 func newCommissionFixture(t *testing.T) *commissionFixture {
@@ -275,15 +340,19 @@ func newCommissionFixture(t *testing.T) *commissionFixture {
 		commissions: newCommissionStore(),
 		bookings:    newBookingStore(),
 		answers:     newAnswerStore(),
+		refusals:    newAnswerRefusals(),
 		schedules:   &scheduleReaderDouble{registered: map[string]bool{"tenant-1|schedule-1": true}},
 		agreements:  &agreementSourceDouble{check: registeredAgreement(t)},
 		handoff:     &commissionHandoffDouble{},
 	}
+	fixture.withProvider = &bookingWithProviderDouble{bookings: fixture.bookings, commissions: fixture.commissions}
 	fixture.handler = application.NewCommissionTransportHandler(application.CommissionTransportDeps{
 		Commissions:          fixture.commissions,
 		Bookings:             fixture.bookings,
 		BookingCancellations: fixture.bookings,
+		BookingsWithProvider: fixture.withProvider,
 		Answers:              fixture.answers,
+		AnswerRefusals:       fixture.refusals,
 		Schedules:            fixture.schedules,
 		Agreements:           fixture.agreements,
 		Downstream:           fixture.handoff,
@@ -481,7 +550,7 @@ func TestABookingAnswerCannotBeOverwritten(t *testing.T) {
 		}
 	})
 
-	t.Run("answering an absent booking is its own cell", func(t *testing.T) {
+	t.Run("answering an absent booking is not a payload refusal", func(t *testing.T) {
 		missing := answerBookingCommand(t, domain.BookingAccepted)
 		missing.Booking = "booking-9"
 		result, err := fixture.handler.AnswerBooking(context.Background(), missing)
@@ -489,7 +558,7 @@ func TestABookingAnswerCannotBeOverwritten(t *testing.T) {
 			t.Fatalf("answer: %v", err)
 		}
 		if result.Outcome() != application.BookingNotFound {
-			t.Fatalf("outcome = %q, want BOOKING_NOT_FOUND（续办是核订舱标识，不是改载荷）", result.Outcome())
+			t.Fatalf("outcome = %q, want BOOKING_NOT_FOUND（续办是找租户核对订舱标识，不是改载荷）", result.Outcome())
 		}
 	})
 }

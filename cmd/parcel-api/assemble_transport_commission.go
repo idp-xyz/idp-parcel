@@ -96,9 +96,9 @@ func buildTransportCommissionSubmission(db *bentopg.DB) (tfhttp.TransportCommiss
 	return transactionalTransportCommissionSubmitter{transactor: db.Transactor(), inner: handler}, nil
 }
 
-// transactionalBookingFaces 把订舱提交与承运答复各包进一笔事务，理由与未决时整笔回滚的做法同委托提交那只壳：订舱册与答复册
-// 的写口按框架合同无事务即拒；读口（委托、班次、订舱、答复）在事务里报了 SQL 错误，PostgreSQL 就把整笔事务置为 aborted，
-// 照常提交只换回提交错误。`未决`各格都不落库，回滚不丢东西。
+// transactionalBookingFaces 把订舱提交与承运答复各包进一笔事务，理由与未决时整笔回滚的做法同委托提交那只壳：订舱册、答复册与
+// 承运答复拒收册的写口按框架合同无事务即拒，拒收与那一次答复同笔；读口（委托、班次、订舱、答复）或拒收册在事务里报了 SQL
+// 错误，PostgreSQL 就把整笔事务置为 aborted，照常提交只换回提交错误。`未决`各格都不落库，回滚不丢东西。
 type transactionalBookingFaces struct {
 	transactor bentoapp.Transactor
 	inner      *tfapp.CommissionTransportHandler
@@ -150,9 +150,10 @@ func (faces transactionalBookingFaces) within(
 }
 
 // buildBookingFaces 装配 `/transport-fulfillment-booking-request-submissions` 与 `/transport-fulfillment/booking-answers`
-// 背后的真编排（票 demo-chain-gaps/24，ADR-0202 决定二、五）。缝全接真：委托册（订舱核委托在册，答复核服务方）、订舱册、
-// 答复册、班次登记（只读口）与时钟。与委托提交口不共用一只编排实例：这一只不装协议核对与委托意图交付——两口都不提交
-// 委托，装了也只是让这只实例多一条够不着的路。订舱与答复都不入队：今天没有它们的消费者。
+// 背后的真编排（票 demo-chain-gaps/24，ADR-0202 决定二、五）。缝全接真：委托册（订舱核委托在册）、订舱册（答复口把订舱连同
+// 服务方一次读回，ADR-0239 决定三）、答复册、承运答复拒收册、班次登记（只读口）与时钟。与委托提交口不共用一只编排实例：
+// 这一只不装协议核对与委托意图交付——两口都不提交委托，装了也只是让这只实例多一条够不着的路。订舱与答复都不入队：今天没有
+// 它们的消费者。
 func buildBookingFaces(db *bentopg.DB) (transactionalBookingFaces, error) {
 	commissions, err := tfpostgres.NewTransportCommissions(db)
 	if err != nil {
@@ -166,16 +167,22 @@ func buildBookingFaces(db *bentopg.DB) (transactionalBookingFaces, error) {
 	if err != nil {
 		return transactionalBookingFaces{}, fmt.Errorf("parcel-api: booking answers: %w", err)
 	}
+	refusals, err := tfpostgres.NewBookingAnswerRefusals(db)
+	if err != nil {
+		return transactionalBookingFaces{}, fmt.Errorf("parcel-api: booking answer refusals: %w", err)
+	}
 	schedules, err := tfpostgres.NewTransportSchedules(db)
 	if err != nil {
 		return transactionalBookingFaces{}, fmt.Errorf("parcel-api: transport schedules: %w", err)
 	}
 	handler := tfapp.NewCommissionTransportHandler(tfapp.CommissionTransportDeps{
-		Commissions: commissions,
-		Bookings:    bookings,
-		Answers:     answers,
-		Schedules:   schedules,
-		Clock:       systemClock{},
+		Commissions:          commissions,
+		Bookings:             bookings,
+		BookingsWithProvider: bookings,
+		Answers:              answers,
+		AnswerRefusals:       refusals,
+		Schedules:            schedules,
+		Clock:                systemClock{},
 	})
 	return transactionalBookingFaces{transactor: db.Transactor(), inner: handler}, nil
 }
