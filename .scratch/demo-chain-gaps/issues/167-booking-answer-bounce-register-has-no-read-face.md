@@ -12,8 +12,9 @@ Blocked by: 无（文件与票 [48](./48-booking-requests-and-carrier-answers-ha
 ## 做什么
 
 - 查阅口加 `registry=booking-answer-bounce`：每行一个（答复方、订舱、答复标识、依据），带首次与最近一次挡回时刻、次数；按最近一次挡回时刻倒序。
-- 依据照册上两值原样透出（`BOOKING_NOT_REGISTERED`、`SOURCE_NOT_SERVICE_PROVIDER`）。这是运营读面，不是承运方读面：只挂操作者渠道，不得开给集成客户端族——开给承运方就把 ADR-0239 决定一合并掉的那一位又交了回去。
+- 依据按 `ports.BookingAnswerBounceBasis` 的词透出（`BOOKING_NOT_REGISTERED`、`SOURCE_NOT_SERVICE_PROVIDER`）；库里存的是定宽码，由仓储一处译，读面不另抄一份码表。这是运营读面，不是承运方读面：只挂操作者渠道，不得开给集成客户端族——开给承运方就把 ADR-0239 决定一合并掉的那一位又交了回去。
 - 可按订舱、按答复方筛；有了票 48 的订舱查阅之后，订舱那一行能链到它名下的挡回。
+- 建页时在 TF CONTEXT 立「承运答复挡回」词条（先例是 ADR-0230 立的「派送待形成」）：写明它与交接的`已拒收`、收件人拒收、构造门上的`未受理`都不是一回事。名字的取舍见 ADR-0239 决定二。
 
 ## 完成判据
 
