@@ -95,6 +95,15 @@ const (
 // 已在途委托的协议版本，所以另成一种。
 const DecisionTransportCommissionAgreementRevision DecisionKind = "TRANSPORT_COMMISSION_AGREEMENT_REVISION"
 
+// 解除履约段采用与运输收费发生项失效（ADR-0232 决定一、四）：两者都是对已登记声明的更正，各成一种。解除采用撤掉一段与一份委托之间
+// 那条声明，委托的开始随之撤回或重新派生；发生项失效说一项已登记的发生项所说的范围不成立，结算据此追加纠错。两者分开授予：能让
+// 发生项失效的不因此能改采购组织，能解除采用的也不因此能撤一笔已形成的成本来源——解除被挡在已形成的发生项上，正是要那一步由
+// 持后一种授予的人显式做。能采用、能登记的也不因此能更正，更正与登记分开授予，先例是受控关闭与重开分成两种。
+const (
+	DecisionFulfillmentSegmentCommissionAdoptionWithdrawal DecisionKind = "FULFILLMENT_SEGMENT_COMMISSION_ADOPTION_WITHDRAWAL"
+	DecisionTransportChargeOccurrenceInvalidation          DecisionKind = "TRANSPORT_CHARGE_OCCURRENCE_INVALIDATION"
+)
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -112,6 +121,7 @@ var decisionKinds = []DecisionKind{
 	DecisionDeliveryDispatchReask,
 	DecisionExternalFundsFactAdoption, DecisionRegulatoryCredentialRegistration,
 	DecisionTransportCommissionAgreementRevision,
+	DecisionFulfillmentSegmentCommissionAdoptionWithdrawal, DecisionTransportChargeOccurrenceInvalidation,
 }
 
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。
