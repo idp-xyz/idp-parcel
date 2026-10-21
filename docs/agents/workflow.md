@@ -84,8 +84,8 @@ flowchart TD
  **完成**：票面「评审记录」写明钉的 SHA 与结论。
 3. **修订轮**：有阻断回作者在同一分支修；评审用来取证的探针（脚本、检索、对照）在修完的 tip 上重跑一遍，不只读作者的回应。 
  **完成**：阻断清零，重跑结果写进评审记录。
-4. **推送方**在隔离树上把分支重放到 `main` tip（rebase 或 cherry-pick 后快进，不在共享树上 rebase，见 parallel-sessions「别人分支上的活怎么进 main」），再在新 tip 上重生成 ADR 索引（`go run ./tools/adr-index`）、重算 AT 盘点计数（`go run ./tools/at-coverage-counts`）、重生成机制清点（`tools/mechanism-inventory`），**各单独成笔**。 
- **完成**：三者 `-check` 退 0。
+4. **推送方**在隔离树上把分支重放到 `main` tip（rebase 或 cherry-pick 后快进，不在共享树上 rebase，见 parallel-sessions「别人分支上的活怎么进 main」），再在新 tip 上重生成 ADR 索引（`go run ./tools/adr-index`）、重算 AT 盘点计数（`go run ./tools/at-coverage-counts`）、重生成机制清点（照 `ci.yml`「Mechanism inventory is current」一步：`(cd tools/mechanism-inventory && go run . -dir "$REPO" -out "$REPO/docs/product/MECHANISM-INVENTORY.md")`，`$REPO` 是检出根目录，`ci.yml` 里写作 `$GITHUB_WORKSPACE`），**有变化才单独成笔**。 
+ **完成**：前两件 `-check` 退 0；机制清点重生成后 `git status --porcelain -- docs/product/MECHANISM-INVENTORY.md` 为空。
 5. **全量真库测试**：对那个 tip 跑 `scripts/test-full.sh`（含 DSN、`-count=1`）。只动 `.md` 的票可免，进 main 记录如实写「未跑」。 
  **完成**：退 0。
 6. **种子灌一次性库**：`scripts/demo-seeds/seed.sh` 灌进一次性库，用后删库；只动 `.md` 的票同上。 
