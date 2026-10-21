@@ -49,3 +49,13 @@ S：只改注释，`go build`、`go vet` 不受影响。
 - `application/commission_transport.go` 的 `SubmitBooking` 头注「确认订舱与容量的关系另归一张票」一句：改为确认订舱不读池、不要预占引用，容量保障只挂在装载分配上（ADR-0264 决定一、二）。
 
 同一条注释里「委托在册且未取消」「订舱不占容量」等其余说法不变。
+
+文档自洽 08 改写了 TF CONTEXT 的几句原句，下面这些 Go 注释还逐字引着改前的句子（取证于 `claude-dc08` 基 main `3619f5c0e`），一并改成引改后的小节名与原句，或符号名：
+
+- `application/commission_transport.go` 的 `SubmitBooking` 体内，引 CONTEXT 生命周期「尚未消耗的运输委托或订舱范围可以取消」：今天的生命周期写「尚未开始的运输委托可以整份取消」。
+- 同文件 `CancelCommission` 头注，引同一句与「上游运输意图取消只对尚未消耗的下游范围发出取消或释放请求」：后一句已改写为委托取消整份、不向下游传（TF CONTEXT「运输委托、订舱、容量与装载」），头注里「下游那一步本编排没做」的说法改为那就是现行规则（ADR-0204 决定三）。
+- `domain/transport_commission.go` 的 `FormCarrierAcceptance` 头注，引「承运接受可以部分或附条件成立」：今天 Language「承运接受」写「承运接受可以只接受一部分」。
+- 同文件 `CarrierAcceptanceOutcome` 头注，引生命周期「订舱申请 → 待确认、候补、部分确认、已确认、拒绝或失效：每次结果保留数量和来源，后续替代不覆盖原申请」：今天生命周期按五值写，含撤回。
+- 同文件 `CarrierAcceptance.AdmitsSuccessor` 头注，引「后续替代不覆盖原申请」：今天写「后继不覆盖候补，也不覆盖原申请」。
+- `domain/transport_charge_occurrence.go` 的 `ErrCancelledAfterTransportStart` 注释与 `ChargeOccurrenceReason` 头注，引「尚未执行服务的取消费」：今天 TF CONTEXT「运输收费发生项与成本来源」写原因封闭四种、「尚未随运输开始而消耗的订舱的取消费」。
+- `domain/transport_schedule_capacity.go` 的 `CapacityPool` 头注「CONTEXT 说的多维运力范围」：今天 Language「容量池」就是一池一维、一班的多维运力是一组池，这半句改为直接引它。
