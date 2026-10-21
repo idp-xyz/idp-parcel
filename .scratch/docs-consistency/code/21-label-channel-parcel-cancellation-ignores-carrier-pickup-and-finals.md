@@ -38,4 +38,4 @@ M：取消编排在提交边界上加两道读——当前有效终局、按服�
 
 ## 裁向（2026-10-21，文档自洽 06）
 
-- 晚到那一格已由 [ADR-0254](../../../docs/adr/0254-cancellation-and-boundary-fact-order-is-judged-by-their-business-times-and-a-late-earlier-boundary-fact-is-a-fact-conflict.md) 裁定：取消与边界事实按两者的业务时间比，取消已提交之后才到、发生不晚于取消的承运商首次有效收寄是事实冲突，面单终局判断停在未决。那一半连同冲突的解开决定面归 [code/35](./35-cancellation-and-boundary-fact-order-conflict-has-no-label-half-and-no-resolution-face.md)；本票照旧只管提交边界上已在册的事实（ADR-0254 决定二第 1 格），范围不变，Blocked by 仍为无。
+- 晚到那一格已由 [ADR-0254](../../../docs/adr/0254-cancellation-and-boundary-fact-order-is-judged-by-their-business-times-and-a-late-earlier-boundary-fact-is-a-fact-conflict.md) 裁定：取消与边界事实按两者的业务时间比，取消已提交之后才到、发生不晚于取消的承运商首次有效收寄是事实冲突，面单终局判断不形成终局、指名冲突（`LABEL_SERVICE_NOT_FINAL` 加一格原因）。那一半连同冲突的解开决定面归 [code/35](./35-cancellation-and-boundary-fact-order-conflict-has-no-label-half-and-no-resolution-face.md)；本票照旧只管提交边界上已在册的事实（ADR-0254 决定二第 1 格），范围不变，Blocked by 仍为无。
