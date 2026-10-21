@@ -1,9 +1,11 @@
 # ADR-0270：费用阶段由形成它的那一步给出，不随服务发生自动推进；包裹计费时点那一路形成的客户费用停在预估，直到确认
 
-Status: Accepted（2026-10-21，Claude Code 会话代 SA owner 决：用户 2026-10-21 原话「需要修改文档，确保自洽，正确」，常设授权「你作为业务和系统专家自决」；票 docs-consistency/09，出处审计 [audit/sa-cr.md](../../.scratch/docs-consistency/audit/sa-cr.md) L8。回答 [ADR-0190](./0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 越权风险点 7，无条款停用：相抵的是 settlement-accounting CONTEXT「预估 → 暂估」一条的读法，代码与 ADR-0190 一致。不改代码。越权风险点见文末，待 SA owner 复核。）<!-- 索引注记 -->｜**阶段是结论**：预估与暂估都是形成费用的那一步按它的依据给出的结论，不是到了某个时点自动迁入的状态；形成之后只有「→ 确认」与追加版本。**暂估要一次判断**：服务已经发生或责任基础已经形成、只差确认依据时，形成那一路才可以给出暂估。**包裹计费时点**：那一路形成预估，不作暂估判断，费用停在预估直到确认；首发没有形成暂估的路
+Status: Accepted（2026-10-21，Claude Code 会话代 SA owner 决：用户 2026-10-21 原话「需要修改文档，确保自洽，正确」，常设授权「你作为业务和系统专家自决」；票 docs-consistency/09，出处审计 [audit/sa-cr.md](../../.scratch/docs-consistency/audit/sa-cr.md) L8。回答 [ADR-0190](./0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 越权风险点 7，无条款停用：相抵的是 settlement-accounting CONTEXT「预估 → 暂估」一条的读法，代码与 ADR-0190 一致。不改代码。越权风险点见文末，待 SA owner 复核。）<!-- 索引注记 -->｜**阶段是结论**：预估与暂估都是形成费用的那一步按它的依据给出的结论，不是到了某个时点自动迁入的状态；形成之后只有「→ 确认」、追加版本或调整、失效与替代。**暂估要一次判断**：服务已经发生或责任基础已经形成、只差确认依据时，形成那一路才可以给出暂估。**包裹计费时点**：那一路形成预估，不作暂估判断，费用停在预估直到确认；首发没有形成暂估的路
 Date: 2026-10-21
 
 ## Context
+
+以下所引 settlement-accounting CONTEXT 原文是本记录接受前的文字，已随本记录改写（见 Consequences）。
 
 - settlement-accounting CONTEXT「费用明细」生命周期写：「预估 → 暂估：服务已经发生或责任基础已经形成，但仍缺少允许最终确认的计量、履约、账单或其他依据。」读成状态迁移，就是时点一到预估就该变成暂估。
 - [ADR-0190](./0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 越权风险点 7：「两种时点都在责任起点或之后，照 settlement-accounting `CONTEXT` 的生命周期已够得上暂估。本记录沿 ADR-0169 决定二只形成预估客户费用，预估到暂估的转移不在本记录。」2026-10-20 复核记录维持这一点。
@@ -14,7 +16,7 @@ Date: 2026-10-21
 
 **一、阶段是形成费用那一步的结论。**（机制）
 
-- 预估与暂估都由形成费用的那一步按它采用的依据给出；形成之后的去向只有：满足确认条件时「→ 确认」，或由唯一创建用例追加新版本、调整。
+- 预估与暂估都由形成费用的那一步按它采用的依据给出；形成之后的去向只有：满足确认条件时「→ 确认」；由唯一创建用例追加新版本或调整；预估失效、暂估不再成立或被新版本替代时追加失效或替代关系，原记录保留（settlement-accounting CONTEXT「费用明细」生命周期）。
 - 预估不因服务已经发生、责任起点已到或计费时点到来自动转为暂估。
 
 **二、暂估要一次判断。**（产品策略）

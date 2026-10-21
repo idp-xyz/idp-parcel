@@ -1,6 +1,6 @@
 # ADR-0269：业务时区与截单时刻只登在结算账户的对账安排上，归属日判定与截单同用这一份；费用项目只登归属日形态，归属日随费用确认形成，截单按它纳入
 
-Status: Accepted（2026-10-21，Claude Code 会话代 SA owner 决：用户 2026-10-21 原话「需要修改文档，确保自洽，正确」，常设授权「你作为业务和系统专家自决」；票 docs-consistency/09，出处审计 [audit/sa-cr.md](../../.scratch/docs-consistency/audit/sa-cr.md) M11，兼答 M7 的裁向。部分停用 [ADR-0168](./0168-charge-attribution-date-is-a-registered-form.md) 决定二「形态、时区与截单时刻按费用项目另册登记。」一句里「时区与截单时刻」那一半，与决定三「截单编排仍只读已经形成的归属日，本记录不改纳入与发布。」一句里「截单编排仍只读已经形成的归属日」那一半，并回答其越权风险点 3，被停原句与适用场景见「对已接受记录的作用」；ADR-0168 正文不改，只在其 Status 行与 Links 加前向指针。代码随票 [docs-consistency/code/11](../../.scratch/docs-consistency/code/11-statement-cut-does-not-check-the-settlement-attribution-date.md)。越权风险点见文末，待 SA owner 复核。）<!-- 索引注记 -->｜**单一权威**：业务时区与截单时刻登在对账安排上，按（租户、结算账户）登记，归属日判定与截单同读这一份；没登记答未配置。对账安排可追加新一版，只作用于此后形成的归属日。**形态**：费用项目一册只登来源发生或费用确认。**形成**：归属日随费用确认形成、落库后不变；确认时判不出不挡确认，截单时当场判、判出即落库。**纳入**：截单命令点名本期最后一个归属日，归属日晚于它的费用不入本期并指名，判不出的答未配置并指名缺哪一册，不按调用方列出的清单放行
+Status: Accepted（2026-10-21，Claude Code 会话代 SA owner 决：用户 2026-10-21 原话「需要修改文档，确保自洽，正确」，常设授权「你作为业务和系统专家自决」；票 docs-consistency/09，出处审计 [audit/sa-cr.md](../../.scratch/docs-consistency/audit/sa-cr.md) M11，兼答 M7 的裁向。部分停用 [ADR-0168](./0168-charge-attribution-date-is-a-registered-form.md) 决定二「形态、时区与截单时刻按费用项目另册登记。」一句里「时区与截单时刻」那一半，与决定三「截单编排仍只读已经形成的归属日，本记录不改纳入与发布。」一句里「截单编排仍只读已经形成的归属日」那一半，并回答其越权风险点 3，被停原句与适用场景见「对已接受记录的作用」；ADR-0168 正文不改，只在其 Status 行与 Links 加前向指针。代码随票 [docs-consistency/code/11](../../.scratch/docs-consistency/code/11-statement-cut-does-not-check-the-settlement-attribution-date.md)。越权风险点见文末，待 SA owner 复核。）<!-- 索引注记 -->｜**单一权威**：业务时区与截单时刻登在对账安排上，按（租户、结算账户）登记，归属日判定与截单同读这一份；没登记答未配置。对账安排可追加新一版，只作用于此后形成的归属日。**形态**：费用项目一册只登来源发生或费用确认。**形成**：归属日随费用确认形成、落库后不变；确认时判不出不挡确认，截单时当场判、判出即落库。**纳入**：截单命令点名本期最后一个归属日，归属日晚于它的费用不入本期并指名，判不出的答未配置并指名缺哪一册，不按调用方列出的清单放行；其余合格费用照常成稿，一件都入不了本期时整笔答未配置
 Date: 2026-10-21
 
 ## Context
@@ -8,7 +8,7 @@ Date: 2026-10-21
 - 业务时区与截单时刻归谁，已接受的记录说法不一：
   - [ADR-0158](./0158-settlement-account-register-is-an-immutable-tuple.md) 决定二：「对账周期、业务时区、截单时刻、付款条件不进这一行：前三格是对账安排，付款条件是商业结算政策，再存一份就有了第二权威」。settlement-accounting CONTEXT 的「截单快照」词条写「在结算账户的明确时区和截单时刻」，UC-SA-003 `AT-SA-062` 写「按账户时区和截单时刻形成范围」。
   - [ADR-0168](./0168-charge-attribution-date-is-a-registered-form.md) 决定二：「形态、时区与截单时刻按费用项目另册登记。」
-- 代码只有后一处：`domain.ChargeAttributionRegistration` 按费用项目存 `timeZone` 与 `cutoffMinute`，登记口是 `parcel-settlement-register charge-attribution`；没有任何对账安排登记册。同一结算账户下不同费用项目可以登出不同的时区或截单时刻，一张对账单的「本期」在不同行上指不同的日界。一个租户同时服务不同时区的客户时，按费用项目登的时区也表达不了按户的差别。
+- 代码只有 ADR-0168 那一处：`domain.ChargeAttributionRegistration` 按费用项目存 `timeZone` 与 `cutoffMinute`，登记口是 `parcel-settlement-register charge-attribution`；没有任何对账安排登记册。同一结算账户下不同费用项目可以登出不同的时区或截单时刻，一张对账单的「本期」在不同行上指不同的日界。一个租户同时服务不同时区的客户时，按费用项目登的时区也表达不了按户的差别。
 - 截单不看归属日：`domain.CutStatementDraft` 只核 `charge.Stage() != ChargeConfirmed`、币种与去重；`CutOffPublishStatementHandler` 的费用清单来自命令的 `ChargeIDs`，`CutOffAt` 由调用方给；`application.JudgeChargeAttributionHandler` 在 `cmd/` 下没有构造。ADR-0168 越权风险点 3 已认下：「截单编排不调用这次判定。」CONTEXT 却把「形成结算归属日、尚未出账且落入截单快照」写成进入对账单的条件。
 - 没有演示种子登过归属日形态。
 
@@ -38,6 +38,7 @@ Date: 2026-10-21
 
 - 截单命令点名本期最后一个归属日。命令列出的费用里，归属日晚于它的不入本期，逐件指名；已出账的不再纳入。
 - 归属日判不出的不入本期，答未配置并指名缺哪一册；不按调用方列出的清单放行。
+- 有费用不入本期时，其余合格费用照常纳入、草稿照常形成；命令列出的费用一件都入不了本期（例如对账安排没登记）时不形成草稿，整笔答未配置并指名缺哪一册。
 - 截单时刻（命令的 `CutOffAt`）照旧记在草稿与快照上，作为截单这一动作的业务时点；它不再参与判哪一件费用属于本期。
 
 ## 候选与反方
@@ -57,7 +58,7 @@ Date: 2026-10-21
 
 ## Consequences
 
-- settlement-accounting CONTEXT：「结算账户、对账与争议」一节写对账安排与归属日的各条随本记录改写，进入对账单的条件一条补上截单按归属日纳入。
+- settlement-accounting CONTEXT：新立「对账安排」词条，「截单快照」词条改按本期最后一个归属日；「结算账户、对账与争议」一节写对账安排与归属日的各条随本记录改写，进入对账单的条件一条补上截单按归属日纳入。
 - UC-SA-002 主流程确认一步补归属日随确认形成；UC-SA-003 输入语义契约的「结算账户」一行拆出对账安排与付款条件，元数据补未配置结束，主流程读归属日与形成纳入快照的步骤随之改，新立 `AT-SA-212`、`AT-SA-213`；UC-SA-002、UC-SA-003 的「给开发的交接」列现状缺口。
 - 代码随 code/11：对账安排登记册（迁移另取号，`parcel-settlement-register` 另立登记命令），归属日判定改读它，费用项目一册的时区与截单时刻两列退场；费用确认同笔形成归属日；截单命令点名本期最后一个归属日，`CutStatementDraft` 按归属日纳入并逐件指名；`JudgeChargeAttributionHandler` 接进截单。费用项目一册今天没有任何种子行，迁移不必搬数。
 

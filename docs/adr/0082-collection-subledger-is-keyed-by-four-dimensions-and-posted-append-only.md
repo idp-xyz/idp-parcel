@@ -63,3 +63,4 @@ Date: 2026-08-28
 - [统一领域语言](../domain/GLOSSARY.md)：「代收货款」的四层来源硬句，决定五第二条门的出处
 - [ADR-0031：自有仓储写入结果是封闭代数而不是 error](./0031-owned-repository-write-outcome-is-a-closed-algebra-not-an-error.md)：不 UPSERT、冲突判定靠编排读回，本上下文全部登记册沿用
 - [ADR-0078：隔离环境运营读面按装配注入准入](./0078-isolated-environment-operations-reads-admit-by-assembly-injection.md)：`SYN-` 合成实例的准入门禁，本上下文的验证值一律走它
+- [ADR-0271](./0271-collection-principal-enters-the-ledger-only-on-the-channel-collection-report-and-shortfall-comes-only-from-in-transit.md)：在本记录的依据门上另加门——入账只凭渠道代收报告、真实到账按指令只做移位记账、短款与溢款的来源位置；本记录各条不变

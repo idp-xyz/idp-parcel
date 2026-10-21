@@ -39,7 +39,7 @@
 | 成功结束 | 对明确主要计费范围形成估价、冻结、费用明细或追加调整，并保存计算展开 |
 | 负向结束 | 适用规则明确证明该范围不产生相应费用或控制结果不适用 |
 | 待判断结束 | 来源测量、计价时点、规则、责任、账户、币种或报告币换算依据不足；原币与合同结算币不同而评价未携带换算步骤时同样保持待判断，不由本用例补算 |
-| 未配置结束 | 发起评价之前租户取值没登记：BUY 答 `BUY_EVALUATION_TRIGGER_UNCONFIGURED`（没登原因或没登费用项目），SELL 答 `SELL_EVALUATION_REQUEST_UNCONFIGURED`（结算政策没采用、结算账户不在册或计费时点没采用）；不发起请求，记进发起停办册，补登之后续办，结算政策没采用没有续办路（[ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定四与越权风险点 13） |
+| 未配置结束 | 租户取值没登记，如实答未配置、不填默认值，补登之后再办。按编排：BUY 发起（`TriggerBuyEvaluationHandler`）答 `BUY_EVALUATION_TRIGGER_UNCONFIGURED`，原因 `OCCURRENCE_REASON_NOT_REGISTERED` 或 `FEE_ITEM_NOT_REGISTERED`，记进 BUY 发起停办册；SELL 发起（`RequestSellEvaluationOnParcelMomentHandler`）答 `SELL_EVALUATION_REQUEST_UNCONFIGURED`，原因 `SETTLEMENT_POLICY_NOT_ADOPTED`、`SETTLEMENT_ACCOUNT_NOT_REGISTERED` 或 `SELL_BILLING_MOMENT_NOT_ADOPTED` 时记进 SELL 发起停办册（结算政策没采用没有续办路，[ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定四与越权风险点 13），原因 `SELL_BILLING_MOMENT_DIFFERS`（这一户采用了别的时点）同答这一格但不记停办（`AT-SA-191`）；确认触发门（`AdmitSettlementMomentHandler`）答 `SETTLEMENT_MOMENT_UNCONFIGURED`，不调用确认（[ADR-0170](../../adr/0170-settlement-orchestrations-enter-through-parcel-api.md) 决定二）；确认（`ConfirmChargeHandler`）答 `CONFIRM_UNDECIDED`，原因 `CONDITION_UNCONFIGURED` 或 `CONFIRMATION_FACTS_UNCONFIGURED`；接受前控制（`ApplyPreAcceptanceControlHandler`）答 `CONTROL_NOT_FORMED`，原因 `CONTROL_POLICY_NOT_CONFIGURED`、`CREDIT_BASIS_NOT_CONFIGURED`、`CONTROL_AMOUNT_NOT_CONFIGURED` 或 `ESTIMATE_PRICE_CARD_NOT_CONFIGURED` |
 | 冲突结束 | 合格输入对相同范围、版本或金额互相矛盾，无法依据已确认规则裁决 |
 | 未受理结束 | 请求主体、租户、责任法人、客户账户、主要范围或权限不能合法关联 |
 | 未形成结束 | 计算、判断、持久化或结果发布因技术原因未完成；与 SELL 请求上的`未形成`结论不是一回事，那是评价失败或计价没形成评价（`AT-SA-180`、`AT-SA-198`） |
@@ -108,7 +108,7 @@
 
 ### 费用明细
 
-- `预估 → 暂估 → 确认` 只在该费用类型的条件满足时转换；不适用的阶段可以直接形成确认或不成立，但必须保存依据。预估与暂估是形成那一步给出的结论，预估不随服务发生或计费时点到来自动转为暂估；包裹计费时点那一路形成预估，停在预估直到确认（[ADR-0270](../../adr/0270-a-charge-stage-is-given-by-the-judgement-that-forms-it-and-an-estimate-does-not-become-provisional-with-time.md)）。
+- 预估或暂估 → 确认只在该费用类型的条件满足时发生；阶段由形成那一步给出，预估不随服务发生或计费时点到来自动转为暂估，包裹计费时点那一路形成预估、停在预估直到确认（[ADR-0270](../../adr/0270-a-charge-stage-is-given-by-the-judgement-that-forms-it-and-an-estimate-does-not-become-provisional-with-time.md)）。不适用的阶段可以直接形成确认或不成立，但必须保存依据。
 - 同一主要计费范围和截至时点存在多个客户预估版本时，按有效性、更正和替代关系派生当前有效客户预估费用；新预估、失效或替代只形成新采用结果，不覆盖原预估版本。
 - 已确认普通客户费用遇到迟到事实或计价规则更正时追加计价纠错；有效商业授权降低普通客户费用时追加商业让利。渠道作废或退款结果本身不产生调整，只有适用计价或让利规则成立时才能形成非索赔客户费用退款。
 - 供应商预期成本的计价纠错仍由本用例形成，但不得修改供应商账单主张或审核应付；供应商账单贷项由 `UC-SA-004` 形成。客户赔付、索赔费用退款、应追偿金额、追偿认可金额及其调整由 `UC-SA-007` 形成。
@@ -161,7 +161,7 @@
 | `AT-SA-047` | 接受已成立但事件投递失败 | 保留合法冻结和接受前结果，只恢复同一发布意图 |
 | `AT-SA-048` | 最终费用高于冻结 | 完整形成确认费用，差额形成欠款/信用暴露，不截断费用 |
 | `AT-SA-049` | 合同明确接受前无财务控制 | 保存商业不适用依据，不制造零金额冻结或信用通过 |
-| `AT-SA-050` | 规则或币种版本缺失 | 不形成费用，不使用默认价格、币种或汇率；包裹计费时点那一路与 BUY 那一路上没有在用价卡见 `AT-SA-198` |
+| `AT-SA-050` | 规则或币种版本缺失 | 不形成费用，不使用默认价格、币种或汇率；规则缺失时，包裹计费时点那一路与 BUY 那一路上没有在用价卡见 `AT-SA-198`；币种或汇率缺失时，原币与合同结算币不同而评价没带汇率序列版本或换算步骤见 `AT-SA-177` |
 | `AT-SA-051` | 同一请求身份携带不同金额 | 形成请求冲突，原结果不被覆盖 |
 | `AT-SA-052` | 同一测量通过两个来源重复到达 | 只采用一次；重复来源保留引用，不重复计费 |
 | `AT-SA-053` | 客户计费规则更正但供应商规则未变 | 只追加客户费用计价纠错，供应商预期成本保持原版本 |

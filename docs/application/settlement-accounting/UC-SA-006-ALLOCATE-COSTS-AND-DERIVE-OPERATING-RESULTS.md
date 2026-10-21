@@ -33,7 +33,7 @@
 | 成功结束 | 形成守恒分摊、内部应收/应付或版本化经营结果 |
 | 负向结束 | 来源金额明确不适用分摊或不进入经营口径 |
 | 待判断结束 | 分摊范围、分母、规则、币种、截至时点或金额来源不足 |
-| 未配置结束 | 分摊规则版本的分法没登记：答未配置（`ALLOCATION_FORM_UNCONFIGURED`），不算出份额、不改走均摊 |
+| 未配置结束 | 租户取值没登记，如实答未配置、不填默认值。按编排：成本分摊（`AllocateCostsHandler`）在分摊规则没登记时答 `OPERATING_UNDECIDED`，原因 `RULE_UNCONFIGURED`，不分摊、不默认均摊；分法份额（`ApportionCostsHandler`）在分摊规则版本的分法没登记时答 `ALLOCATION_FORM_UNCONFIGURED`，不算出份额、不改走均摊 |
 | 冲突结束 | 多个规则/内部协议对同一来源范围适用且无法裁决 |
 | 未受理结束 | 权限、法人、客户或分析范围不能合法关联 |
 | 未形成结束 | 分摊、换算、派生或发布因技术原因未完成 |
@@ -81,7 +81,7 @@
 | 步骤 | 责任方 | 处理 | 结果 |
 |---:|---|---|---|
 | 1 | `settlement-accounting` | 校验来源金额、法人、客户/产品/线路范围、权限和口径 | 已受理或未受理 |
-| 2 | `settlement-accounting` | 采用分摊规则、内部协议、法人间方向结算账户、币种和截至时点版本 | 规则可用、待判断或冲突 |
+| 2 | `settlement-accounting` | 采用分摊规则、内部协议、法人间方向结算账户、币种和截至时点版本；分摊规则没登记答未配置（`OPERATING_UNDECIDED`，原因 `RULE_UNCONFIGURED`） | 规则可用、未配置、待判断或冲突 |
 | 3 | `settlement-accounting` | 采用已登记的分法建立合格分母和权重。分法没登记答未配置（`ALLOCATION_FORM_UNCONFIGURED`），不默认按重或均摊（[ADR-0162](../../adr/0162-cost-allocation-forms-are-weight-piece-and-revenue.md) 决定四）。明确登记本期不适用则不启用分摊 | 分母有效、未分摊、未配置、待判断或不适用 |
 | 4 | `settlement-accounting` | 按该分法计算理论金额、取整、最大余数尾差和实际分摊。余数相同按目标标识升序 | 分摊结果与未分摊余额 |
 | 5 | `settlement-accounting` | 按内部协议分别固定内部应收与内部应付的方向结算账户，并独立形成法人间应收/应付 | 关联内部结算结果 |
