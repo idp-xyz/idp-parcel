@@ -127,3 +127,29 @@ M：重放那条路要分得出「保全过、建成了」「保全过、归属�
 - 新用例与改动用例 `-count=3 -v` 另跑（`cmd/parcel-api`、PS `adapters/postgres`、`application`、`domain`、`adapters/http`、`tests/bentocontract`）：全部 PASS，未跳过。
 - `go build ./...`、`go vet ./...`、`gofmt -l` 干净。
 - 守卫第一版（写入另取连接）在两连接的测试池上互等至 10 分钟超时，已改为写入并进守卫那一笔事务；改后同一套全绿。
+
+### 第 2 轮（协调方转达，rebase 于 main `e8cd3de65`）
+
+串行化与重放的代码核过正确，全量与 `-race` 通过。阻断 2 条（只涉文档），建议 9 条，逐条去向：
+
+| 条目 | 去向 |
+|---|---|
+| B1 ADR-0266 对 ADR-0128 是「接上」却没挂来向 | 已修。ADR-0128 Status 注记加「部分停用（接上）」一段，逐字引决定二「本上下文不持久化交接尝试」与 Consequences「若将来决定记录落库，评估一格随之」两句，Links 加 0266。ADR-0266 Status 前段与「对已接受记录的作用」改为部分停用（接上）ADR-0128 |
+| B2 「他方、交接未确认、重发」两套结果 | 已修。UC-PS-001「重发接着办」那段、「一致性、幂等与并发」一条、「给开发的交接」ADR-0256 一行，PS CONTEXT 重放一条，ADR-0081 新注记的适用场景，ADR-0266 Status、表格、「对已接受记录的作用」，都补上「交接未确认的他方归属除外：按记着的尝试重投重查，不重判」 |
+| N1 ADR-0256 注记 SHA 占位 | 已修，只留「已由票 code/39 补齐」 |
+| N2 ADR-0266 用词 | 已修。「决定一第 2 格」改直引「重发必须接着办」；风险点改引标题「提交编排保全之后出错答 5xx 而不是未决」；Context 去掉数字 |
+| N3 交接用例头注 | 已修，改直引 ADR-0128「同一份决定重复走到这里必须得到同一次尝试」；编排里重投那段注释同改 |
+| N4 两处边界壳注释 | 已修（`tests/bentocontract` 的 `submissionAnswerBoundary` 与 `submissionBoundary`，`cmd/parcel-api` 的 `submissionBoundary`） |
+| N5 词表外的拒绝 | 已修。`standing` 读回 `refusalOutcome(...) == OutcomeInvalid` 时报 `ErrUntranslatableRefusal`；补 `TestAReplayOverAnUntranslatableRefusalFormsNoAnswer` |
+| N6 「不开写事务」 | 已修，`resolveExclusively` 注释与 ADR-0266 决定二改为「不进续办守卫那一笔事务」，并注明观察照旧在锁外追加 |
+| N7 简报「事务边界」 | 已修，补一句指向 ADR-0266 决定二 |
+| N8 AT 措辞 | 已修。`AT-PS-113` 改「上一次答……」；`AT-PS-114` 补「确认之后再重发答已有结果，带原结果」 |
+| N9（可选）锁与并发用例 | 已做。锁用例补另一租户、客户、来源三支。并发用例改用屏障：第一路在判归属里停住，另开一条连接用本包既有的 `waitForAdvisoryLockWaiter` 看见第二路在等咨询锁，才放第一路落笔 |
+
+未采纳：无。`TestAClosedAgreementVersionIsTracedAndRecoveredByRevision` 按协调方说法另立票，本票不管。
+
+验证（代码同 `38681afcc`）：
+- `TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/parcelshipment/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./tests/bentocontract/... ./internal/architecture/... ./migrations/...`：24 ok、2 无测试文件、0 FAIL。
+- 改动用例 `-count=3` 另跑：`cmd/parcel-api`、PS `adapters/postgres`、`application` 全 ok。
+- `go build ./...`、`go vet ./...`、`gofmt -l` 干净。
+- scratchpad 副本上 `go run ./tools/adr-index` 生成后 `-check` 退 0；`docs/adr/README.md` 未手改。
