@@ -22,7 +22,8 @@ type ConsolidationMemberKind uint8
 
 const (
 	ConsolidationMemberKindInvalid ConsolidationMemberKind = iota
-	// ConsolidationMemberParcel：认出了正式包裹，Object 是那件包裹的引用，可以拿去问关务。
+	// ConsolidationMemberParcel：认出了正式包裹，Object 是那件包裹的引用。它与某件单元同串时仍按单元判，所以编排照样先问它是不是
+	// 单元，再拿去问关务。
 	ConsolidationMemberParcel
 	// ConsolidationMemberUnit：成员本身是集运单元，Object 是它的引用，要再展开一层。
 	ConsolidationMemberUnit

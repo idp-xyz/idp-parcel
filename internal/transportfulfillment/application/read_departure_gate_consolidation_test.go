@@ -169,6 +169,31 @@ func TestNestedBagsAreExpandedToParcelsOnceAndACycleEnds(t *testing.T) {
 	}
 }
 
+// Covers: AT-TF-278 编排半边（ADR-0225 决定一、四，ADR-0214 决定二）——袋里一件成员认出的包裹号恰与段里另一件单元同串，且袋先被展开：
+// 那个号照样先问是不是单元、按单元展开，不按包裹问关务；后到的段里那件取到的是单元那一格，不是一格先记下的不受门禁。
+func TestAMemberParcelNamedLikeAUnitIsStillReadAsTheUnit(t *testing.T) {
+	fixture := newDepartureGateFixture(t, "bag-1", "unit-x")
+	fixture.memberships.units["bag-1"] = []ports.ConsolidationMember{parcelMember(t, "hu-1", "unit-x")}
+	fixture.memberships.units["unit-x"] = []ports.ConsolidationMember{parcelMember(t, "hu-2", "parcel-held")}
+	fixture.customs.answers["parcel-held"] = domain.GateBlocked
+
+	reading, err := fixture.reader(t).Read(t.Context(), departureCommand(t))
+	if err != nil {
+		t.Fatalf("读数：%v", err)
+	}
+	if asked := askedObjects(fixture.customs); !slices.Equal(asked, []string{"parcel-held"}) {
+		t.Fatalf("问关务的对象 = %v，同串的那个号要按单元展开、不按包裹问", asked)
+	}
+	cells := cellsOf(reading)
+	if names, unit := memberNames(cells["unit-x"]); !unit || cells["unit-x"].Answer() != domain.GateBlocked ||
+		!slices.Equal(names, []string{"parcel-held"}) {
+		t.Fatalf("unit-x = %s %v unit=%v，要按单元展开到被扣的那一件", cells["unit-x"].Answer(), names, unit)
+	}
+	if cells["bag-1"].Answer() != domain.GateBlocked || reading.Answer() != domain.GateBlocked {
+		t.Fatalf("袋 %s、整格 %s，要沿 unit-x 取到阻断", cells["bag-1"].Answer(), reading.Answer())
+	}
+}
+
 // 成员落在封闭集外是适配器坏了，上抛而不记成一格。
 func TestAMemberOfNoKnownKindIsAnError(t *testing.T) {
 	fixture := newDepartureGateFixture(t, "bag-1")

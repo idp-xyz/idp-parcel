@@ -185,7 +185,9 @@ func (reader *DepartureGateReader) readIntent(ctx context.Context, intent depart
 // 包裹问关务；是就按出发那一刻的直接成员逐件问，嵌套单元一层层展开到包裹，单元自己那一格由领域取成员里最重的一格
 // （domain.FormConsolidationUnitGateFinding）。不问关务单元本身：关务按包裹认对象，问它只会答出一格假的干净读数。
 //
-// 每件对象只问一次、只有一格：同一件包裹既直接在段里、又在某一袋里，或几袋都指名同一件，问来的是同一格，读数里也只记一格。展开
+// 每件对象只问一次、只有一格：同一件包裹既直接在段里、又在某一袋里，或几袋都指名同一件，问来的是同一格，读数里也只记一格。一格按
+// 对象引用记，所以每个引用都先经 object 认种类，成员认出的包裹也不例外：成员的包裹号若恰与段里另一件单元同串，先按包裹问关务记下
+// 那一格，那件单元随后取到它就永不展开——同串按单元判（ADR-0214 决定二），先问的一侧不能替后到的一侧定种类。展开
 // 只沿这一条路径防环：嵌套成员已在路径上，就记成那一袋的缘由、不再回头；对象与成员都按定序走，同样的三源展开出同样的读数——出发
 // 前问询与随后同参出发靠的就是这一点（ADR-0219 决定二）。
 type departureGateExpansion struct {
@@ -197,7 +199,7 @@ type departureGateExpansion struct {
 	onPath map[domain.CarriedObjectReference]bool
 }
 
-// object 为一件不知种类的对象形成它那一格：段里在控的对象，与成员关系册说「它本身是单元」的嵌套成员，都从这里进。
+// object 为一件不知种类的对象形成它那一格：段里在控的对象与各直接成员（认出的包裹、嵌套单元）都从这里进。
 func (expansion *departureGateExpansion) object(ctx context.Context, object domain.CarriedObjectReference) (domain.GateFinding, error) {
 	if cell, formed := expansion.cells[object]; formed {
 		return cell, nil
@@ -242,11 +244,7 @@ func (expansion *departureGateExpansion) unit(
 				sources[domain.ConsolidationMembershipCycle] = append(sources[domain.ConsolidationMembershipCycle], member.Object.String())
 				continue
 			}
-			ask := expansion.object
-			if member.Kind == ports.ConsolidationMemberParcel {
-				ask = expansion.parcel
-			}
-			cell, err := ask(ctx, member.Object)
+			cell, err := expansion.object(ctx, member.Object)
 			if err != nil {
 				return domain.GateFinding{}, err
 			}
@@ -272,11 +270,9 @@ func (expansion *departureGateExpansion) unit(
 	return expansion.keep(domain.FormConsolidationUnitGateFinding(unit, cells, gaps))
 }
 
-// parcel 按包裹问关务那一件。关务那一问没形成本上下文认得的答复时那一件记读不动，依据种类按救法分开（本文件头上的常量）。
+// parcel 按包裹问关务那一件，只由 object 在认出「不是单元」之后调。关务那一问没形成本上下文认得的答复时那一件记读不动，依据种类按
+// 救法分开（本文件头上的常量）。
 func (expansion *departureGateExpansion) parcel(ctx context.Context, object domain.CarriedObjectReference) (domain.GateFinding, error) {
-	if cell, formed := expansion.cells[object]; formed {
-		return cell, nil
-	}
 	finding, err := expansion.reader.deps.Customs.ReadDepartureGate(ctx, ports.DepartureGateQuery{
 		TenantID: expansion.intent.tenant,
 		Object:   object,
