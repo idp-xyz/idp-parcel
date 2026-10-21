@@ -303,12 +303,12 @@ func (registry *CommercialRegistry) selectionInterval(version CommercialVersion)
 }
 
 // bodyExcludedAt 答自带区间的正文（价格、结算、信用政策）选候选时，版本壳上的收尾有没有把 at 排除在这一版之外：壳已不在
-// `已生效`（如同起点退役，ADR-0233），或壳上有区间更正而 at 不在更正后的区间里。正文按自己的区间参选，壳上的收尾只
-// 收窄它。
+// `已生效`（如同起点退役，ADR-0233），或 at 不早于壳上最新一条区间更正的终点。正文按自己的区间参选，壳上的收尾只收窄它。
 //
 // 壳仍生效又没更正时不排除：正文自带的区间照旧是唯一判据，不拿壳上的原区间去收窄它——两者从未被要求相等，今天按
-// 正文区间选中的版本不能因为多了这一道而落选。有更正时取交而不取代：更正改的是壳的选用区间，取代会让正文起点晚于
-// 壳的那一段反被放宽。
+// 正文区间选中的版本不能因为多了这一道而落选。有更正时只按更正的终点收窄，不拿更正的起点去裁正文的前段：截止只截
+// 终点（起点取壳此刻的选用起点），而正文起点可以早于壳的起点（发布允许），按整段取交会把那一段旧版唯一可选的时段
+// 截成无依据。改起点、延终点的更正今天没有生产写入方，它们怎样作用到正文上归后继票。
 func (registry *CommercialRegistry) bodyExcludedAt(version CommercialVersion, at time.Time) bool {
 	if registry == nil {
 		return false
@@ -317,11 +317,17 @@ func (registry *CommercialRegistry) bodyExcludedAt(version CommercialVersion, at
 	if registered, found := registry.versions[key]; found && registered.status != CommercialVersionEffective {
 		return true
 	}
+	end, cut := registry.correctionEndOf(key)
+	return cut && !at.Before(end)
+}
+
+// correctionEndOf 取一版壳上最新一条区间更正的终点；没有更正，或最新那条开放结束，cut 为假。
+func (registry *CommercialRegistry) correctionEndOf(key commercialVersionKey) (end time.Time, cut bool) {
 	list := registry.corrections[key]
 	if len(list) == 0 {
-		return false
+		return time.Time{}, false
 	}
-	return !list[len(list)-1].corrected.Contains(at)
+	return list[len(list)-1].corrected.EndsAt()
 }
 
 // ViewRevision 是租户+范围级的权威视图修订：一个按内容单调变化的引用，用于证明某范围

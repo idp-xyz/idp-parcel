@@ -25,8 +25,8 @@ var (
 	// ErrClosureNotEffective：旧版或后继不在`已生效`。已计划生效的后继在只增仓储里不会自己翻到已生效（发布用例到界才
 	// 取效），收尾旧版会让后继生效时点之后一版都选不中；不在已生效的旧版本来就不参选，没有可收的。
 	ErrClosureNotEffective = errors.New("party commercial: the predecessor and the successor must both be effective")
-	// ErrClosureLeavesGap：后继的选用区间（自带区间的政策正文同样）到不了旧版此刻的选用终点。收尾之后那一段原本由
-	// 旧版唯一选中，会变成`无适用依据`。
+	// ErrClosureLeavesGap：后继接不住旧版此后的那一段——选用区间（自带区间的政策正文同样）到不了旧版此刻的选用终点，
+	// 或同起点退役时后继正文起点晚于旧版的。收尾之后那一段原本由旧版唯一选中，会变成`无适用依据`。
 	ErrClosureLeavesGap = errors.New("party commercial: the successor does not reach the end of the predecessor's selection")
 	// ErrSuccessorCutOutsideInterval：后继的生效时点不严格落在旧版此刻的选用区间之内。不晚于旧版起点——截下来旧版
 	// 一刻都不剩，同起点的那一格走同起点退役；不早于旧版终点——两版本来不重叠，或旧版已在那一刻截止过。
@@ -176,11 +176,11 @@ func (registry *CommercialRegistry) CutAtSuccessorStart(
 		return ValidityCorrection{}, false, fmt.Errorf("%w: successor %s starts at %s, predecessor %s selects from %s",
 			ErrSuccessorCutOutsideInterval, successor, cut.Format(time.RFC3339), predecessor, describeInterval(current))
 	}
-	if body, carried := registry.policyBodyIntervalOf(next); carried && !body.StartsAt().Equal(cut) {
+	if body, carried, selects := registry.bodySelectionOf(next); carried && selects && !body.StartsAt().Equal(cut) {
 		return ValidityCorrection{}, false, fmt.Errorf("%w: successor %s body starts at %s, its version at %s",
 			ErrSuccessorCutBodyStartsElsewhere, successor, body.StartsAt().Format(time.RFC3339), cut.Format(time.RFC3339))
 	}
-	if err := registry.requireTakeOver(old, next); err != nil {
+	if err := registry.requireTakeOver(old, next, false); err != nil {
 		return ValidityCorrection{}, false, err
 	}
 	interval, err := NewEffectiveInterval(current.StartsAt(), cut)
@@ -235,7 +235,7 @@ func (registry *CommercialRegistry) RetireAtSameStartSuccessor(
 		return VersionRetirement{}, false, fmt.Errorf("%w: successor %s starts at %s, predecessor %s at %s",
 			ErrSameStartRetirementStartsDiffer, successor, nextStart.Format(time.RFC3339), predecessor, oldStart.Format(time.RFC3339))
 	}
-	if err := registry.requireTakeOver(old, next); err != nil {
+	if err := registry.requireTakeOver(old, next, true); err != nil {
 		return VersionRetirement{}, false, err
 	}
 	retirement, err = old.RetireInFavourOf(successor, reference, at)
@@ -279,23 +279,57 @@ func requireEffective(old, next CommercialVersion) error {
 	return nil
 }
 
-// requireTakeOver 判后继接不接得住旧版此后的那一段：壳的选用终点，以及自带区间的政策正文的终点。旧版登了正文而
-// 后继没登，后继在这几类里根本选不中，同样接不住。
-func (registry *CommercialRegistry) requireTakeOver(old, next CommercialVersion) error {
+// requireTakeOver 判后继接不接得住旧版此后的那一段：壳的选用终点，以及自带区间的政策正文——两边都按解析此刻实际看到的
+// 那一段比（bodySelectionOf），不按发布时的原区间：旧版若先被截止过，原区间比它此刻还能被选中的那一段长，按原区间比会
+// 把一个正好接得住的后继误拒。旧版登了正文而后继没登、或后继的正文此刻一刻也选不中，后继在这几类里根本接不住。
+//
+// fromStart 为真（同起点退役）时另要求后继的正文起点不晚于旧版的：退役让旧版整版不再参选，壳同起点而后继正文起点更晚，
+// 旧版正文起点到后继正文起点那一段就会从唯一可选变成无依据。截止不要这一格：截止点之前旧版照旧可选。
+func (registry *CommercialRegistry) requireTakeOver(old, next CommercialVersion, fromStart bool) error {
 	oldSelection, nextSelection := registry.selectionInterval(old), registry.selectionInterval(next)
 	if !reachesEndOf(nextSelection, oldSelection) {
 		return fmt.Errorf("%w: successor %s selects %s, predecessor %s %s",
 			ErrClosureLeavesGap, next.version, describeInterval(nextSelection), old.version, describeInterval(oldSelection))
 	}
-	oldBody, oldCarried := registry.policyBodyIntervalOf(old)
-	if !oldCarried {
+	oldBody, oldCarried, oldSelects := registry.bodySelectionOf(old)
+	if !oldCarried || !oldSelects {
 		return nil
 	}
-	nextBody, nextCarried := registry.policyBodyIntervalOf(next)
-	if !nextCarried || !reachesEndOf(nextBody, oldBody) {
+	nextBody, nextCarried, nextSelects := registry.bodySelectionOf(next)
+	switch {
+	case !nextCarried || !nextSelects:
+		return fmt.Errorf("%w: the successor %s carries no selectable policy body", ErrClosureLeavesGap, next.version)
+	case fromStart && nextBody.StartsAt().After(oldBody.StartsAt()):
+		return fmt.Errorf("%w: the successor's policy body starts at %s, the predecessor's at %s",
+			ErrClosureLeavesGap, nextBody.StartsAt().Format(time.RFC3339), oldBody.StartsAt().Format(time.RFC3339))
+	case !reachesEndOf(nextBody, oldBody):
 		return fmt.Errorf("%w: the successor's policy body does not reach the end of the predecessor's", ErrClosureLeavesGap)
 	}
 	return nil
+}
+
+// bodySelectionOf 取一版自带区间的政策正文此刻在解析里还能被选中的那一段：正文区间被壳上最新一条区间更正的终点收窄，
+// 判法与 bodyExcludedAt 同一条（只截终点）。carried 为假是这一版没登正文或不是这几类；selects 为假是收窄之后一刻也不剩。
+func (registry *CommercialRegistry) bodySelectionOf(version CommercialVersion) (interval EffectiveInterval, carried, selects bool) {
+	body, carried := registry.policyBodyIntervalOf(version)
+	if !carried {
+		return EffectiveInterval{}, false, false
+	}
+	end, cut := registry.correctionEndOf(keyOf(version))
+	if !cut {
+		return body, true, true
+	}
+	if !end.After(body.StartsAt()) {
+		return EffectiveInterval{}, true, false
+	}
+	if bodyEnd, bounded := body.EndsAt(); bounded && !bodyEnd.After(end) {
+		return body, true, true
+	}
+	narrowed, err := NewEffectiveInterval(body.StartsAt(), end)
+	if err != nil {
+		return EffectiveInterval{}, true, false
+	}
+	return narrowed, true, true
 }
 
 // reachesEndOf 答 outer 是否一直延续到 inner 的终点（含开放结束）。
@@ -323,8 +357,8 @@ func (registry *CommercialRegistry) lookupInScope(
 	return version, true
 }
 
-// policyBodyIntervalOf 取一版登在册上的、自带区间的政策正文的区间：这几类的选候选看的是它（bodyExcludedAt 只在
-// 其上收窄）。别的类别、或这一版没登正文，carried 为假。
+// policyBodyIntervalOf 取一版登在册上的、自带区间的政策正文发布时的原区间；此刻还能被选中的那一段问 bodySelectionOf。
+// 别的类别、或这一版没登正文，carried 为假。
 func (registry *CommercialRegistry) policyBodyIntervalOf(version CommercialVersion) (EffectiveInterval, bool) {
 	for _, policy := range registry.policies {
 		if policy.version.SameVersionAs(version) {

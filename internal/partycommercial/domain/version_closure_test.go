@@ -638,3 +638,107 @@ func mustRetire(t *testing.T, registry *domain.CommercialRegistry, old, next dom
 	}
 	return retirement
 }
+
+// Covers: `AT-PC-057` 正文那一格（评审补）——同起点退役时后继正文起点晚于旧版正文起点：两版壳同起点，退役放行就会让旧版
+// 正文起点到后继正文起点那一段从唯一可选变成无依据，答 ErrClosureLeavesGap，旧版照旧可选。
+func TestASameStartRetirementRefusesASuccessorBodyStartingLater(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	old := liveVersionFrom(t, registry, domain.SettlementPolicyObject, "settlement-1", "v1", "scope-a", cutPredecessorStart)
+	next := liveVersionFrom(t, registry, domain.SettlementPolicyObject, "settlement-1", "v2", "scope-a", cutPredecessorStart)
+	registerSettlementBody(t, registry, old, old.Effective())
+	registerSettlementBody(t, registry, next, intervalBetween(t, cutSuccessorStart, closureTestEnd))
+	_, _, err := registry.RetireAtSameStartSuccessor(old.Tenant(), old.Scope(), old.Kind(), old.ObjectID(), old.Version(), next.Version(),
+		commercialValue(t, domain.NewRetirementReference, "SYN-REISSUE-1"), retiredAtRegistration)
+	if !errors.Is(err, domain.ErrClosureLeavesGap) {
+		t.Fatalf("err = %v, want ErrClosureLeavesGap", err)
+	}
+	if got := domain.ResolveCommercialBasis(registry, policyKeyAt(t, domain.SettlementPolicyObject, beforeCut), nil); got.Outcome() != domain.UniquelyResolved {
+		t.Fatalf("被拒之后 outcome = %q, want 旧版照旧唯一可选", got.Outcome())
+	}
+}
+
+// Covers: `AT-PC-054` 正文那一格（评审补）——旧版正文起点早于壳起点（发布允许）时截止只截终点：截止点之后答新版，正文起点
+// 到壳起点那一段照旧唯一选中旧版，不被更正的起点裁掉。
+func TestACutLeavesTheFrontOfABodyStartingBeforeItsShell(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	shellStart := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+	old := liveVersionFrom(t, registry, domain.SettlementPolicyObject, "settlement-1", "v1", "scope-a", shellStart)
+	next := liveVersionFrom(t, registry, domain.SettlementPolicyObject, "settlement-1", "v2", "scope-a", cutSuccessorStart)
+	registerSettlementBody(t, registry, old, intervalBetween(t, cutPredecessorStart, closureTestEnd))
+	registerSettlementBody(t, registry, next, next.Effective())
+	correction, _ := mustCut(t, registry, old, next, "SYN-CUT-FRONT")
+	if _, err := registry.RegisterValidityCorrection(correction); err != nil {
+		t.Fatal(err)
+	}
+	early := time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC)
+	for at, want := range map[time.Time]domain.CommercialVersionLabel{early: old.Version(), beforeCut: old.Version(), anchorAt: next.Version()} {
+		got := domain.ResolveCommercialBasis(registry, policyKeyAt(t, domain.SettlementPolicyObject, at), nil)
+		adopted, _ := got.AdoptedVersion()
+		if got.Outcome() != domain.UniquelyResolved || adopted.Version() != want {
+			t.Fatalf("at %v outcome = %q adopted = %q, want %q", at, got.Outcome(), adopted.Version(), want)
+		}
+	}
+}
+
+// Covers: 「接得住」按此刻还能选中的那一段比（评审补）——旧版先被截止过、正文开放结束，再同起点退役给一版区间正好是截止后
+// 那一段的后继：放行，不因正文原区间更长而误拒。
+func TestATakeOverIsJudgedOnWhatTheResolutionStillSelects(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	old := liveVersionFrom(t, registry, domain.SettlementPolicyObject, "settlement-1", "v1", "scope-a", cutPredecessorStart)
+	later := liveVersionFrom(t, registry, domain.SettlementPolicyObject, "settlement-1", "v2", "scope-a", cutSuccessorStart)
+	registerSettlementBody(t, registry, old, intervalBetween(t, cutPredecessorStart, time.Time{}))
+	registerSettlementBody(t, registry, later, intervalBetween(t, cutSuccessorStart, time.Time{}))
+	correction, _ := mustCut(t, registry, old, later, "SYN-CUT-1")
+	if _, err := registry.RegisterValidityCorrection(correction); err != nil {
+		t.Fatal(err)
+	}
+	reissue := liveVersionBetween(t, registry, domain.SettlementPolicyObject, "settlement-1", "v1b", "scope-a", cutPredecessorStart, cutSuccessorStart)
+	registerSettlementBody(t, registry, reissue, reissue.Effective())
+	retirement := mustRetire(t, registry, old, reissue, "SYN-REISSUE-1")
+	if _, err := registry.RegisterRetirement(retirement); err != nil {
+		t.Fatal(err)
+	}
+	got := domain.ResolveCommercialBasis(registry, policyKeyAt(t, domain.SettlementPolicyObject, beforeCut), nil)
+	adopted, _ := got.AdoptedVersion()
+	if got.Outcome() != domain.UniquelyResolved || adopted.Version() != reissue.Version() {
+		t.Fatalf("outcome = %q adopted = %q, want 唯一解析到重发的 v1b", got.Outcome(), adopted.Version())
+	}
+}
+
+// Covers: `AT-PC-058` 正文起点那一格（评审补）——供应商协议正文起点早于壳起点时，折进截止也只截终点：正文起点到壳起点那一段
+// 照旧支持采购。
+func TestASupplierAgreementCutKeepsTheBodyFront(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	shellStart := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+	old := liveVersionFrom(t, registry, domain.SupplierAgreementObject, "agreement-1", "v1", "scope-a", shellStart)
+	next := liveVersionFrom(t, registry, domain.SupplierAgreementObject, "agreement-1", "v2", "scope-a", cutSuccessorStart)
+	agreement, err := domain.NewSupplierAgreement(old,
+		commercialValue(t, domain.NewPartyID, "supplier-1"),
+		commercialValue(t, domain.NewLegalEntityReference, "legal-1"),
+		commercialValue(t, domain.NewCommercialScopeReference, "scope-a"),
+		commercialValue(t, domain.NewPricingPlanReference, "plan-buy-1"),
+		intervalBetween(t, cutPredecessorStart, closureTestEnd))
+	if err != nil {
+		t.Fatal(err)
+	}
+	correction, _ := mustCut(t, registry, old, next, "SYN-CUT-AGREEMENT")
+	narrowed, err := agreement.NarrowedBy(correction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	early := time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC)
+	if !narrowed.SupportsProcurementAt(early) || narrowed.SupportsProcurementAt(anchorAt) {
+		t.Fatal("截止后的协议没有只截终点")
+	}
+}
+
+var closureTestEnd = time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
+
+func intervalBetween(t *testing.T, startsAt, endsAt time.Time) domain.EffectiveInterval {
+	t.Helper()
+	interval, err := domain.NewEffectiveInterval(startsAt, endsAt)
+	if err != nil {
+		t.Fatalf("new effective interval: %v", err)
+	}
+	return interval
+}

@@ -22,11 +22,10 @@ type SupplierAgreement struct {
 	effective     EffectiveInterval
 	terminatedAt  time.Time
 	terminationOn RelationshipBasisReference
-	// selectionCap 是壳上最新一条区间更正的区间（NarrowedBy），capped 标出它在场；retired 标出壳已同起点退役（EndedBy）。
-	// 三者都是点读时从版本册折进来的，不是发布时的正文。
-	selectionCap EffectiveInterval
-	capped       bool
-	retired      bool
+	// cutAt 是壳上最新一条区间更正的终点（NarrowedBy），零值即没截；retired 标出壳已同起点退役（EndedBy）。两者都是点读时
+	// 从版本册折进来的，不是发布时的正文。
+	cutAt   time.Time
+	retired bool
 	// chargeConditions 是可缺的收费发生条件一节（ADR-0209）。零值即没声明：运输履约按这一版登记发生项时答`未配置`。
 	chargeConditions ChargeOccurrenceConditions
 }
@@ -126,15 +125,17 @@ func (agreement SupplierAgreement) TerminatedAt() (time.Time, bool) {
 	return agreement.terminatedAt, true
 }
 
-// NarrowedBy 交回被版本壳上的区间更正收窄的同一版正文（ADR-0233 决定五）：此后按版本点读的核对也照更正后的区间判，
-// 与闭包选候选同一口径（ADR-0038 决定二）。正文自带的区间不改写，更正与它取交，判法同 bodyExcludedAt。
+// NarrowedBy 交回被版本壳上的区间更正收窄的同一版正文（ADR-0233 决定五）：此后按版本点读的核对也照更正判，与闭包选
+// 候选同一口径（ADR-0038 决定二）。正文自带的区间不改写；只按更正的终点收窄，不拿更正的起点裁正文的前段，判法与理由
+// 同 CommercialRegistry.bodyExcludedAt。开放结束的更正不收窄。
 func (agreement SupplierAgreement) NarrowedBy(correction ValidityCorrection) (SupplierAgreement, error) {
 	if !sameVersionKey(agreement.version, correction.tenant, correction.kind, correction.objectID, correction.version) ||
 		!correction.corrected.valid() {
 		return SupplierAgreement{}, ErrInvalidSupplierAgreement
 	}
-	agreement.selectionCap = correction.corrected
-	agreement.capped = true
+	if end, bounded := correction.corrected.EndsAt(); bounded {
+		agreement.cutAt = end
+	}
 	return agreement, nil
 }
 
@@ -166,7 +167,7 @@ func (agreement SupplierAgreement) SupportsProcurementAt(at time.Time) bool {
 	if !agreement.terminatedAt.IsZero() && !at.Before(agreement.terminatedAt) {
 		return false
 	}
-	if agreement.capped && !agreement.selectionCap.Contains(at) {
+	if !agreement.cutAt.IsZero() && !at.Before(agreement.cutAt) {
 		return false
 	}
 	return agreement.effective.Contains(at)
