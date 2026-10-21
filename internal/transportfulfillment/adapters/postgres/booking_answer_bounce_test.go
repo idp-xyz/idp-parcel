@@ -2,6 +2,8 @@ package postgres_test
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"strings"
 	"sync"
@@ -194,15 +196,16 @@ func newBounceLedger(t *testing.T) (*adapter.BookingAnswerBounces, *bentopg.DB, 
 func TestBothBasesWriteKeysOfTheSameWidthAtTheByteBound(t *testing.T) {
 	bounces, db, pool := newBounceLedger(t)
 	ctx := t.Context()
-	longest := strings.Repeat("A", 512)
+	// 随机十六进制串：重复的字符可压缩，索引行压缩之后远短于界，测不到键最长的那一形。
+	booking, acceptance := randomHex(t, 512), randomHex(t, 512)
 	for _, basis := range []ports.BookingAnswerBounceBasis{ports.BouncedBookingNotRegistered, ports.BouncedSourceNotServiceProvider} {
 		bounce := ports.BookingAnswerBounce{
 			Key: ports.BookingKey{
 				TenantID: deliveryValue(t, domain.NewTenantID, "SYN-TENANT-01"),
-				Booking:  deliveryValue(t, domain.NewBookingReference, longest),
+				Booking:  deliveryValue(t, domain.NewBookingReference, booking),
 			},
 			Source:     "SYN-PARTY-CARRIER-LM-01",
-			Acceptance: deliveryValue(t, domain.NewCarrierAcceptanceReference, longest),
+			Acceptance: deliveryValue(t, domain.NewCarrierAcceptanceReference, acceptance),
 			Basis:      basis,
 			BouncedAt:  time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC),
 		}
@@ -314,8 +317,8 @@ func TestTwoConcurrentIdenticalBouncesCountTwiceOnOneRow(t *testing.T) {
 	}
 }
 
-// Covers: 迁移 0050 的拒绝门——订舱册、答复册或承运总单里有超过字节界的订舱标识、答复标识或答复依据时不施加：界立起来之后，
-// 这样的行从门里读不回来，不替任何人截短。
+// Covers: 迁移 0050 的拒绝门——订舱册、答复册或承运总单里有超过字节界的订舱标识或答复标识时不施加：界立起来之后，这样的行从
+// 门里读不回来，不替任何人截短。答复依据不受界，长的答复依据不挡迁移（走过拒绝门、撞上已建的表）。
 func TestMigration0050RefusesStoredReferencesOverTheByteBound(t *testing.T) {
 	pool := pgtest.Pool(t)
 	ctx := t.Context()
@@ -333,26 +336,44 @@ func TestMigration0050RefusesStoredReferencesOverTheByteBound(t *testing.T) {
 		t.Fatal("找不到迁移 0050")
 	}
 	long := strings.Repeat("A", 513)
-	for name, probe := range map[string]string{
-		"订舱册的订舱标识": `INSERT INTO transport_fulfillment.booking_request
-			(tenant_id, booking_id, commission_id, schedule_id, quantity, unit_ref, requested_at, content_digest, recorded_at)
-			VALUES ('SYN-TENANT-01', '` + long + `', 'C-1', 'S-1', 1, 'KG', now(), 'd', now())`,
-		"答复册的答复依据": `INSERT INTO transport_fulfillment.booking_answer
+	answerRow := func(acceptance, basis string) string {
+		return `INSERT INTO transport_fulfillment.booking_answer
 			(tenant_id, booking_id, acceptance_id, outcome, quantity, basis, decided_at, content_digest, recorded_at)
-			VALUES ('SYN-TENANT-01', 'B-1', 'A-1', 'REFUSED', 0, '` + long + `', now(), 'd', now())`,
+			VALUES ('SYN-TENANT-01', 'B-1', '` + acceptance + `', 'REFUSED', 0, '` + basis + `', now(), 'd', now())`
+	}
+	for name, testCase := range map[string]struct {
+		probe   string
+		refused bool
+	}{
+		"订舱册的订舱标识": {`INSERT INTO transport_fulfillment.booking_request
+			(tenant_id, booking_id, commission_id, schedule_id, quantity, unit_ref, requested_at, content_digest, recorded_at)
+			VALUES ('SYN-TENANT-01', '` + long + `', 'C-1', 'S-1', 1, 'KG', now(), 'd', now())`, true},
+		"答复册的答复标识": {answerRow(long, "no-capacity"), true},
+		"答复册的答复依据": {answerRow("A-1", strings.Repeat("订", 1000)), false},
 	} {
 		tx, err := pool.Begin(ctx)
 		if err != nil {
 			t.Fatalf("开事务：%v", err)
 		}
-		if _, err := tx.Exec(ctx, probe); err != nil {
+		if _, err := tx.Exec(ctx, testCase.probe); err != nil {
 			_ = tx.Rollback(context.Background())
 			t.Fatalf("%s：插探针行：%v", name, err)
 		}
 		_, err = tx.Exec(ctx, bounceRegister)
 		_ = tx.Rollback(context.Background())
-		if err == nil || !strings.Contains(err.Error(), "超过 512 字节") {
-			t.Fatalf("%s 超界时 0050 应拒绝施加：%v", name, err)
+		refused := err != nil && strings.Contains(err.Error(), "超过 512 字节")
+		if refused != testCase.refused || err == nil {
+			t.Fatalf("%s 超长时 0050：%v，want 拒绝门%v", name, err, map[bool]string{true: "拦下", false: "放过"}[testCase.refused])
 		}
 	}
+}
+
+// randomHex 交 n 个字符的随机十六进制串。
+func randomHex(t *testing.T, n int) string {
+	t.Helper()
+	raw := make([]byte, (n+1)/2)
+	if _, err := rand.Read(raw); err != nil {
+		t.Fatal(err)
+	}
+	return hex.EncodeToString(raw)[:n]
 }

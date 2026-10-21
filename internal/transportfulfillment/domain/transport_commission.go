@@ -419,7 +419,7 @@ func NewCarrierAcceptanceReference(value string) (CarrierAcceptanceReference, er
 type AcceptanceBasisReference struct{ requiredValue }
 
 func NewAcceptanceBasisReference(value string) (AcceptanceBasisReference, error) {
-	required, err := newStoredReference("acceptance basis reference", value)
+	required, err := newRequiredValue("acceptance basis reference", value)
 	return AcceptanceBasisReference{required}, err
 }
 

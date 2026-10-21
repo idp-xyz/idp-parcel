@@ -15,19 +15,19 @@
 -- **本表是台账，不是事实来源。** 挡回不形成答复，订舱的当前读法（`待确认`、`候补`）不读本表；答复的内容（五值、接受量、时刻）不在
 -- 这里——那是一份没有被收下的报文，收下的那一份在答复册。
 --
--- 订舱与答复标识、答复依据从本迁移起有字节界（domain 的 storedReferenceMaxBytes）：它们进订舱册、答复册与本表的键，不设界就会
--- 在写入那一刻整笔回滚、答不出业务结论。界立起来之前已经落库、超过界的行，此后从门里读不回来，所以有这样的行就拒绝施加，不替
--- 任何人截短一个标识——那是提交它的一方才改得了的。
+-- 订舱标识与答复标识从本迁移起有字节界（domain 的 storedReferenceMaxBytes）：订舱标识进订舱册、答复册与本表的键，答复标识进
+-- 答复册与本表的键，不设界就会在写入那一刻整笔回滚、答不出业务结论。界只由领域构造门守，库上不另加 CHECK，与 parcel-shipment
+-- 外部标识号码的字节界同一先例：一个数只定义在一处。界立起来之前已经落库、超过界的行，此后过不了那道门——承运总单读回它指名的
+-- 订舱、答复册读回答复标识都要再过一遍——所以有这样的行就拒绝施加，不替任何人截短一个标识，那是提交它的一方才改得了的。
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM transport_fulfillment.booking_request WHERE octet_length(booking_id) > 512)
        OR EXISTS (SELECT 1 FROM transport_fulfillment.booking_answer
                    WHERE octet_length(booking_id) > 512
-                      OR octet_length(acceptance_id) > 512
-                      OR octet_length(basis) > 512)
+                      OR octet_length(acceptance_id) > 512)
        OR EXISTS (SELECT 1 FROM transport_fulfillment.carrier_master_document WHERE octet_length(booking_ref) > 512) THEN
         RAISE EXCEPTION USING MESSAGE =
-            '订舱册、答复册或承运总单里有超过 512 字节的订舱标识、答复标识或答复依据：请导出这些行备查，由提交它们的一方以不超过'
+            '订舱册、答复册或承运总单里有超过 512 字节的订舱标识或答复标识：请导出这些行备查，由提交它们的一方以不超过'
             || ' 512 字节的标识重新提交后删去原行，再重跑本迁移。';
     END IF;
 END

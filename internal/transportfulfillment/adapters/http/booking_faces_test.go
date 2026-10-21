@@ -309,7 +309,7 @@ func TestTheBookingAnswerFaceAnswersOnTheWire(t *testing.T) {
 }
 
 // Covers: `AT-TF-326` 线格式面（字节界那一支）——超界的答复标识，答在册订舱与答不在册订舱都是 200 INPUT_NOT_ACCEPTED、响应体
-// 逐字相同；载荷超过读取上限是坏报文（400），订舱提交口同一道闸。
+// 逐字相同；载荷恰好 1 MiB 照收，多一个字节是坏报文（400），订舱提交口同一道闸。
 func TestTheBookingAnswerFaceBoundsWhatItReads(t *testing.T) {
 	handler := bookingHandler(t)
 	booking := tfhttp.NewSubmitBookingRequestEndpoint(operatorIntake(t, authenticatorFake{}), handler)
@@ -329,15 +329,20 @@ func TestTheBookingAnswerFaceBoundsWhatItReads(t *testing.T) {
 		t.Fatalf("超界答复标识：答在册订舱 %d %s，答不在册订舱 %d %s", bookedStatus, bookedBody, absentStatus, absentBody)
 	}
 
-	padding := strings.Repeat(" ", 1<<20)
+	// 尾随空白不算第二个文档，补到恰好一个界长，越界只差那一个字节。
+	padTo := func(body string, size int) string { return body + strings.Repeat(" ", size-len(body)) }
+	if status, answer := postBookingFace(t, stranger, path, "presented.client.token", padTo(acceptedAnswerBody, 1<<20)); status != http.StatusOK ||
+		answer["outcome"] != "BOOKING_NOT_FOUND" {
+		t.Fatalf("载荷恰好 1 MiB = %d %v, want 照收（200 BOOKING_NOT_FOUND）", status, answer)
+	}
 	for name, testCase := range map[string]struct {
 		endpoint http.Handler
 		path     string
 		token    string
 		body     string
 	}{
-		"承运答复": {stranger, path, "presented.client.token", acceptedAnswerBody + padding},
-		"订舱提交": {booking, "/transport-fulfillment-booking-request-submissions", "presented.operator.token", bookingRequestBody + padding},
+		"承运答复": {stranger, path, "presented.client.token", padTo(acceptedAnswerBody, 1<<20+1)},
+		"订舱提交": {booking, "/transport-fulfillment-booking-request-submissions", "presented.operator.token", padTo(bookingRequestBody, 1<<20+1)},
 	} {
 		status, answer := postBookingFace(t, testCase.endpoint, testCase.path, testCase.token, testCase.body)
 		problem, _ := answer["error"].(map[string]any)
