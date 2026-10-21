@@ -216,3 +216,9 @@ UC-NO-002 早就设想过这一格。「参与者与协作」写交付方「提�
 - [ADR-0184](./0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md)（部分停用决定五、决定六各一句）、[ADR-0195](./0195-a-submitted-declaration-of-the-same-number-turns-a-unique-hit-into-an-identity-conflict.md)（部分停用决定一、决定三）、[ADR-0199](./0199-node-reception-preserves-the-delivery-source-and-rechecks-pending-identities.md)（部分停用决定一、决定三）、[ADR-0196](./0196-one-mark-on-two-units-is-an-identity-conflict-judged-by-the-associated-parcel.md)、[ADR-0210](./0210-identity-conflicts-are-disposed-by-an-operation-decision-and-the-identity-basis-reads-chain-heads.md)、[ADR-0211](./0211-an-ambiguity-only-identity-conflict-releases-by-recheck-once-the-declaration-is-gone.md)（冲突来由与声明撤除门铃）
 - [ADR-0139](./0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md)（首方客户渠道族）、[ADR-0149](./0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md)（作业事实登记）、[ADR-0151](./0151-unassigned-command-faces-get-their-families.md)（运营决定）、[ADR-0085](./0085-registry-write-faces-enter-the-endpoint-table-with-unconfigured-grade.md)（登记写面与受控批量口）
 - 参数登记册 `PAR-NET-17`、`PAR-NET-18`：[../product/PILOT-PARAMETER-REGISTER.md](../product/PILOT-PARAMETER-REGISTER.md)
+
+## 复核记录（2026-10-20，Claude Code 会话代决，非 owner 本人复核）
+
+用户 2026-10-20 原话「要我裁定的部分，你作为业务和系统专家，请你自决吧」。本记录的越权风险点已经 [代决复核报告](../../.scratch/owner-review-20261020/report.md) 逐条复核，其余各条维持；正文与 Decision 不变。
+
+- **R13**：首发接受没有预报、也没有全部确认的交接单时，客户包裹件号送站一律落待识别，不另开自动识别的路，维持。

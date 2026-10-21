@@ -72,3 +72,9 @@ ADR-0100 把操作者渠道限在登记册配置写面与目录查阅面，并�
 - 票 [operator-channel/09](../../.scratch/operator-channel/issues/09-decision-production-channel-for-business-command-faces.md)：本记录承接的决策票
 - [ADR-0151](./0151-unassigned-command-faces-get-their-families.md)：部分停用本记录决定一列举里「派送任务」「段关闭」「有效时间判断」三项对管理台三口的适用——三口与装载分配、终止参与同为管理台上的运营决定与判断，归「运营决定」能力面
 - [ADR-0202](./0202-transport-commission-booking-and-carrier-answer-entry-families-and-supplier-agreement-check.md)：决定二把承运答复（外部事实类型 `CARRIER_BOOKING_ANSWER`）补进本记录决定三的集成客户端列举，客户端来源身份须等于该订舱所属委托的服务提供方；本记录各条不变
+
+## 复核记录（2026-10-20，Claude Code 会话代决，非 owner 本人复核）
+
+用户 2026-10-20 原话「要我裁定的部分，你作为业务和系统专家，请你自决吧」。本记录的越权风险点已经 [代决复核报告](../../.scratch/owner-review-20261020/report.md) 逐条复核，其余各条维持；正文与 Decision 不变。
+
+- **R1**：生产上允许租户财务、关务人员在管理台手工采用外部资金事实与监管凭证——操作者渠道另开入口、按决定种类单独授予、记提交操作者，与集成客户端族并存。落地见票 demo-chain-gaps/140。

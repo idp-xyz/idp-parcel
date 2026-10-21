@@ -81,3 +81,9 @@ Date: 2026-10-19
 - [ADR-0164：BUY 评价请求的触发面是发生项形成，原因没登记就不发起](./0164-buy-evaluation-request-trigger-is-occurrence-formed.md)：BUY 那一半不动
 - 票：[sell-customer-charge](../../.scratch/sell-customer-charge/issues/)
 - [ADR-0198：包裹计费时点那一路，SELL 请求怎样下结论，矛盾怎样上抛](./0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md)：决定五没裁的几格（评价失败、金额未声明、矛盾格、无回指）在那里作答
+
+## 复核记录（2026-10-20，Claude Code 会话代决，非 owner 本人复核）
+
+用户 2026-10-20 原话「要我裁定的部分，你作为业务和系统专家，请你自决吧」。本记录的越权风险点已经 [代决复核报告](../../.scratch/owner-review-20261020/report.md) 逐条复核，其余各条维持；正文与 Decision 不变。
+
+- **R2**：计价基准时点认定为产品策略、由内置时点给出；SA CONTEXT 与 GLOSSARY 的对应句随之改（票 demo-chain-gaps/141）。

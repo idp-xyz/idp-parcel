@@ -110,3 +110,10 @@ Date: 2026-10-19
 - [network-routing CONTEXT](../domain/network-routing/CONTEXT.md)：「当前可控节点」词条与复核规则
 - [UC-NR-003](../application/network-routing/UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md)：触发、输入契约与 `AT-NR-064`–`069`
 - 票 `.scratch/demo-chain-gaps/issues/63-network-routing-reassesses-on-a-handover-into-a-node.md`；统一代决 `.scratch/demo-chain-gaps/handover-dispatch-plan.md`「代决」C8、C9
+
+## 复核记录（2026-10-20，Claude Code 会话代决，非 owner 本人复核）
+
+用户 2026-10-20 原话「要我裁定的部分，你作为业务和系统专家，请你自决吧」。本记录的越权风险点已经 [代决复核报告](../../.scratch/owner-review-20261020/report.md) 逐条复核，其余各条维持；正文与 Decision 不变。
+
+- **R6**：NR 经 PS 现有读法读回整份委托聚合、只取受理基线地理维，作为过渡维持；PS「受理基线地理投影」端口另立票 demo-chain-gaps/143。
+- 越权风险点 9、10（复核未决不分原因一律重投）与 11（复核不按业务时间排序）复核为应修订，分别见票 demo-chain-gaps/131、132。

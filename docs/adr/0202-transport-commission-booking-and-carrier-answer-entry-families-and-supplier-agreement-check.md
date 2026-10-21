@@ -127,3 +127,10 @@ Date: 2026-10-19
 15. **订舱与答复没有读面**（TF owner）。`待确认`、`候补`的读法只写在这里与 UC-TF-004；查阅口与管理台今天读不到订舱册与答复册，演示只能看两口的答复。查阅口的文件归车道 A，去处是票 [demo-chain-gaps/48](../../.scratch/demo-chain-gaps/issues/48-booking-requests-and-carrier-answers-have-no-read-face.md)。
 16. **两册改摘要形状不换号**（TF owner；ADR-0014 的规范化版本纪律）。前提是迁移 0025、0029 拒绝在有行的库上施加；绕过拒绝留下的旧行按 `TFC-1` 比会全部失配，原样重交答冲突。
 17. **接受量不对班次余量判**（TF owner）。订舱不占容量，确认订舱的容量关系归后继票 37（[tf-chain-plan](../../.scratch/demo-chain-gaps/tf-chain-plan.md)「票拆分」的后继票一表，尚未立票）；在它之前，承运方接受的量可以超过那一班池上的余量，答复时刻也只判不早于订舱申请时刻、不对班次出发时刻判。
+
+## 复核记录（2026-10-20，Claude Code 会话代决，非 owner 本人复核）
+
+用户 2026-10-20 原话「要我裁定的部分，你作为业务和系统专家，请你自决吧」。本记录的越权风险点已经 [代决复核报告](../../.scratch/owner-review-20261020/report.md) 逐条复核，其余各条维持；正文与 Decision 不变。
+
+- **R8**：承运答复口按现形作为对承运商的首版集成契约；集成说明写明现形限制（票 demo-chain-gaps/144）。
+- **R9**：越权风险点 14 所留「非本服务方答 `SOURCE_NOT_SERVICE_PROVIDER`、与 `BOOKING_NOT_FOUND` 分两格」**不维持**，改为一律答 `BOOKING_NOT_FOUND`（同租户承运商常互为竞争方，分格只多泄露一位信息），须在首版集成契约发布前落地（票 demo-chain-gaps/145）；那一格的停用随该票的 ADR 记。

@@ -143,3 +143,12 @@ Date: 2026-10-19
 
 29. **后两段的班期也是凑的，且零余量咬合**（演示租户；NR owner 知会）。排法只写在上面指的 README 那一行。没有余量：参考配置或租户修订改了处理时长、截单或缓冲，就会有提交时刻无声落空；守卫用例归票 [demo-chain-gaps/108](../../.scratch/demo-chain-gaps/issues/110-demo-transport-seeds-have-no-guard-for-three-leg-preparation-coverage.md)，落地之前没有用例先红。
 30. **准备选中的班与演示订舱的班不同**（TF owner）。怎样不同只写在[演示动线](../design/synthetic-demo-journey-script.md)第 5 步票 98 补记「三段运输准备都有一班」那一条；这与风险点 23「准备不替运营登班次」同源，不是不一致。
+
+## 复核记录（2026-10-20，Claude Code 会话代决，非 owner 本人复核）
+
+用户 2026-10-20 原话「要我裁定的部分，你作为业务和系统专家，请你自决吧」。本记录的越权风险点已经 [代决复核报告](../../.scratch/owner-review-20261020/report.md) 逐条复核，其余各条维持；正文与 Decision 不变。
+
+- **R3**：`network-routing.initial-route.formed` 扇出给 VE 与 TF 两个消费者，维持。
+- **R4**：计划段窗口依据里恰有一格 `CONNECTION/<代码>@<版本>`、同一连接代码跨版本只改起讫，认作 NR 对 TF 的契约；NR 侧补守拼写的用例（票 demo-chain-gaps/142）。
+- **R5**：采用判断待复核时 TF 把 PS 的「未定」当终局、不自动重备，维持。
+- **更正**：越权风险点 29 正文所写「票 demo-chain-gaps/108」应为 110（票 demo-chain-gaps/138 一并改种子 README）。

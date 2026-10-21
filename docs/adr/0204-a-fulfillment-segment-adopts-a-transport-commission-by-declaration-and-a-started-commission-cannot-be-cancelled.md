@@ -108,3 +108,9 @@ UC-TF-004「一致性、幂等与并发」要求取消与节点交接等并发�
 - [ADR-0023](./0023-work-fact-identity-and-time-are-minted-by-the-device.md)：取消时刻由提交方给
 - [UC-TF-004](../application/transport-fulfillment/UC-TF-004-COMMISSION-AND-ACCEPT-TRANSPORT.md)：`AT-TF-092`、`AT-TF-181` 至 `AT-TF-189`；「一致性、幂等与并发」以业务时间裁决那一条由决定三「采用与取消的先后」收窄
 - 计划 `.scratch/demo-chain-gaps/tf-chain-plan.md`「02 委托、订舱、承运答复」D02-6；票 `.scratch/demo-chain-gaps/issues/25-…`、`28-…`
+
+## 复核记录（2026-10-20，Claude Code 会话代决，非 owner 本人复核）
+
+用户 2026-10-20 原话「要我裁定的部分，你作为业务和系统专家，请你自决吧」。本记录的越权风险点已经 [代决复核报告](../../.scratch/owner-review-20261020/report.md) 逐条复核，其余各条维持；正文与 Decision 不变。
+
+- **R10**：解除采用后，委托再无别的已采用段时撤回「已开始」回到「已提交」（以更正事实记录，原开始与解除都留历史）；还有别的已采用段时按其余段最早的首个参与重新派生。这会部分停用本记录决定一末两句与决定二「只前移不后移」，停用在票 demo-chain-gaps/57 的新 ADR 里记，本记录正文不动。

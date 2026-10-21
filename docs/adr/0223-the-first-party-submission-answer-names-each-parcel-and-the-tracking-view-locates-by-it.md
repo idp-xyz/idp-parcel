@@ -87,3 +87,9 @@ Date: 2026-10-19
 - [GLOSSARY](../domain/GLOSSARY.md)「包裹内部标识」：拆分合并另起新标识；内部标识不要求展示给客户
 - [PS CONTEXT](../domain/parcel-shipment/CONTEXT.md)：声明包裹的永久内部标识；包裹内部标识在同一物理服务件存续期间不变；外部标识关联随接受形成
 - 票 `.scratch/demo-chain-gaps/issues/101-customer-tracking-view-locates-by-the-internal-parcel-id-only.md`；后续票 `119`
+
+## 复核记录（2026-10-20，Claude Code 会话代决，非 owner 本人复核）
+
+用户 2026-10-20 原话「要我裁定的部分，你作为业务和系统专家，请你自决吧」。本记录的越权风险点已经 [代决复核报告](../../.scratch/owner-review-20261020/report.md) 逐条复核，其余各条维持；正文与 Decision 不变。
+
+- **R7**：首方契约把包裹内部标识（`parcels[].parcelId`）定为客户长期持有的键、用于客户追踪视图定位，维持（含 VE 会签那一格）。
