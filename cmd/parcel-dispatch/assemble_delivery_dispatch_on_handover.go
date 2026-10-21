@@ -23,12 +23,16 @@ import (
 // 同一封信扇出给两路、各记各的 inbox 账，本路还会停在三条派送要求缝与任务登记册上，合用一份会把 VE 没有的格子也宣布成
 // 「等依赖」。
 //
+// tfapplication.ErrDeliveryDispatchPendingUnavailable 在名单里：答复得出了、派送待形成册写不动，整拍随 inbox 那一笔回滚，册读写得
+// 动之后原样重投即过（ADR-0230 决定一）。
+//
 // 不在名单里：tfinbox.ErrDeliveryDispatchOnHandoverDefect（本上下文自己交出的键或命令过不了自己的门、装配缺一条缝、执行器
 // 答出封闭集合以外的格）、tfapplication.ErrObjectActiveInSeveralSegments（库面不一致）、
-// tfapplication.ErrUnexpectedDispatchTaskOutcome——重投都不会变。`要求缺失`不在任何名单里：它入账不重投，不是错误
-// （ADR-0216 决定三）。
+// tfapplication.ErrUnexpectedDispatchTaskOutcome、tfapplication.ErrDeliveryDispatchPendingRegisterNotWired（装配没交册）——重投
+// 都不会变。`要求缺失`不在任何名单里：它入账不重投，不是错误（ADR-0216 决定三）。
 var deliveryDispatchOnHandoverUndecidedSentinels = []error{
 	tfinbox.ErrDeliveryDispatchOnHandoverUndecided,
+	tfapplication.ErrDeliveryDispatchPendingUnavailable,
 }
 
 // triggerDeliveryDispatchOnHandoverConsumer 接 TF 权威交接登记 → TF 派送发起（ADR-0216）：信封只带交接键，处理方按键读回
@@ -72,7 +76,7 @@ func triggerDeliveryDispatchOnHandoverConsumer(
 // deliveryDispatchOnHandoverConsumerOver 把交接登记册、段登记册与任务登记册接到给定的三条派送要求缝上。三条缝之外的接线
 // 只有这一处：生产装配交真适配器，真库用例交替身，两边的交接、段、任务与消费门是同一份接法。
 //
-// 不另包事务：消费门已在 inbox 那一笔事务里调处理方，任务口落库与 inbox 的已处理同笔提交；同一 ctx 带着同一笔。查在册的
+// 不另包事务：消费门已在 inbox 那一笔事务里调处理方，任务口落库、派送待形成册那一行与 inbox 的已处理同笔提交；同一 ctx 带着同一笔。查在册的
 // 读口与任务口落库用同一只任务登记册，理由同 cmd/parcel-api 的 deliveryDispatchTriggerOver。
 func deliveryDispatchOnHandoverConsumerOver(
 	db *bentopg.DB,
@@ -94,6 +98,10 @@ func deliveryDispatchOnHandoverConsumerOver(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: delivery dispatch tasks: %w", err)
 	}
+	pendings, err := tfpostgres.NewDeliveryDispatchPendings(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: delivery dispatch pendings: %w", err)
+	}
 	trigger := tfapplication.NewTriggerDeliveryDispatchHandler(tfapplication.TriggerDeliveryDispatchDeps{
 		Segments:   segments,
 		Tasks:      tasks,
@@ -101,6 +109,7 @@ func deliveryDispatchOnHandoverConsumerOver(
 		Windows:    windows,
 		Conditions: conditions,
 		Dispatch:   tfapplication.NewOpenDispatchTaskHandler(tfapplication.OpenDispatchTaskDeps{Tasks: tasks, Clock: clock}),
+		Pending:    pendings,
 	})
 	handler := tfapplication.NewTriggerDispatchOnHandoverHandler(tfapplication.TriggerDispatchOnHandoverDeps{
 		Handovers: handovers,

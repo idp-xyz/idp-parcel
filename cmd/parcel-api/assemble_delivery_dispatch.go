@@ -96,7 +96,8 @@ func buildDeliveryDispatchTrigger(db *bentopg.DB) (transactionalDeliveryDispatch
 // 这一处：生产装配交真适配器，真库回归交替身，两边的段、任务与事务是同一份接法。
 //
 // 查在册的读口与任务口落库用的是同一只任务登记册：执行器先按本拍的键查在册、查到就不再向所有者取件，读的必须就是
-// 任务口写的那张表。任务口不包事务：本函数交出的包装已在事务里，同一 ctx 带着同一笔（判据同 buildParticipationEnder）。
+// 任务口写的那张表。任务口不包事务：本函数交出的包装已在事务里，同一 ctx 带着同一笔（判据同 buildParticipationEnder）。派送待
+// 形成册同在这一笔里（ADR-0230 决定一）：这一拍答出的要求缺失、形成或作罢与册上那一行一起提交或一起回滚。
 func deliveryDispatchTriggerOver(
 	db *bentopg.DB,
 	places tfports.DeliveryPlaceSource,
@@ -111,6 +112,10 @@ func deliveryDispatchTriggerOver(
 	if err != nil {
 		return transactionalDeliveryDispatchTrigger{}, fmt.Errorf("parcel-api: dispatch tasks: %w", err)
 	}
+	pendings, err := tfpostgres.NewDeliveryDispatchPendings(db)
+	if err != nil {
+		return transactionalDeliveryDispatchTrigger{}, fmt.Errorf("parcel-api: delivery dispatch pendings: %w", err)
+	}
 	handler := tfapp.NewTriggerDeliveryDispatchHandler(tfapp.TriggerDeliveryDispatchDeps{
 		Segments:   segments,
 		Tasks:      tasks,
@@ -118,6 +123,7 @@ func deliveryDispatchTriggerOver(
 		Windows:    windows,
 		Conditions: conditions,
 		Dispatch:   tfapp.NewOpenDispatchTaskHandler(tfapp.OpenDispatchTaskDeps{Tasks: tasks, Clock: systemClock{}}),
+		Pending:    pendings,
 	})
 	return transactionalDeliveryDispatchTrigger{transactor: db.Transactor(), inner: handler}, nil
 }

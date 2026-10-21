@@ -167,8 +167,24 @@ func newTriggerFixture(t *testing.T, members ...string) *triggerFixture {
 		Windows:    resolvedWindow{from: time.Date(2026, 9, 6, 9, 0, 0, 0, time.UTC), to: time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)},
 		Conditions: resolvedConditions{reference: "delivery-conditions/contract-1/v3"},
 		Dispatch:   application.NewOpenDispatchTaskHandler(application.OpenDispatchTaskDeps{Tasks: fixture.tasks, Clock: tfClock{at: time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)}}),
+		Pending:    pendingRegisterSink{},
 	}
 	return fixture
+}
+
+// pendingRegisterSink 收下执行器对派送待形成册的写入、什么也不留：本文件证的是补拍口的线格式，册怎么写由执行器自己的用例证。
+type pendingRegisterSink struct{}
+
+func (pendingRegisterSink) RecordMissing(context.Context, ports.DeliveryDispatchPendingKey, domain.ParticipationBasisReference, []string, time.Time) error {
+	return nil
+}
+
+func (pendingRegisterSink) SettleFormed(context.Context, ports.DeliveryDispatchPendingKey, domain.DispatchTaskReference, time.Time) error {
+	return nil
+}
+
+func (pendingRegisterSink) SettleLapsed(context.Context, ports.DeliveryDispatchPendingKey, string, time.Time) error {
+	return nil
 }
 
 func (fixture *triggerFixture) endpoint(t *testing.T) http.Handler {

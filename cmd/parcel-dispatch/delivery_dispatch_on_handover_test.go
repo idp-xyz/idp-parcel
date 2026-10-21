@@ -320,19 +320,31 @@ func TestTheHandoverLaneFormsOneTaskAndNeitherRedeliveryNorARetickRebuildsIt(t *
 		t.Fatalf("任务成立时间 = %s, want 派发这一拍的时钟 %s", record.Task.OpenedAt(), handoverDispatchAt)
 	}
 
-	retick := retickDeliveryDispatch(t, fixture)
-	result, err := retick.Trigger(t.Context(), tfapplication.TriggerDeliveryDispatchCommand{
-		TenantID:   mustTF(t, tfdomain.NewTenantID, handoverDispatchTenant),
-		Segment:    handoverDispatchSegment,
-		Object:     "SYN-PARCEL-60-B",
-		OccurredAt: handoverDispatchAt.Add(time.Hour),
-	})
+	result, err := fixture.retick(t, "SYN-PARCEL-60-B", handoverDispatchAt.Add(time.Hour))
 	if err != nil || result.Outcome() != tfapplication.DeliveryDispatchTaskAlreadyFormed {
 		t.Fatalf("补拍 = %s err = %v, want DISPATCH_TASK_ALREADY_FORMED", result.Outcome(), err)
 	}
 	if again, _ := result.Record(); again.Key.Task.String() != reference || dispatchTaskRows(t, fixture.db) != 1 {
 		t.Fatalf("补拍交回 %s, want 同一项 %s 且库仍 1 项", again.Key.Task, reference)
 	}
+}
+
+// retick 经补拍口背后的那个执行器对（段，对象）打一拍，包在一笔事务里：补拍口的装配包着事务，执行器写派送待形成册要它。
+func (fixture *handoverDispatchFixture) retick(t *testing.T, object string, at time.Time) (tfapplication.TriggerDeliveryDispatchResult, error) {
+	t.Helper()
+	retick := retickDeliveryDispatch(t, fixture)
+	var result tfapplication.TriggerDeliveryDispatchResult
+	err := fixture.db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		var err error
+		result, err = retick.Trigger(txCtx, tfapplication.TriggerDeliveryDispatchCommand{
+			TenantID:   mustTF(t, tfdomain.NewTenantID, handoverDispatchTenant),
+			Segment:    handoverDispatchSegment,
+			Object:     object,
+			OccurredAt: at,
+		})
+		return err
+	})
+	return result, err
 }
 
 // retickDeliveryDispatch 是补拍口背后的那个执行器，接法与本路同一组登记册与所有者——补拍与进程内那一拍互相认，靠的就是这个。
@@ -346,9 +358,14 @@ func retickDeliveryDispatch(t *testing.T, fixture *handoverDispatchFixture) *tfa
 	if err != nil {
 		t.Fatalf("任务登记库：%v", err)
 	}
+	pendings, err := tfpostgres.NewDeliveryDispatchPendings(fixture.db)
+	if err != nil {
+		t.Fatalf("派送待形成册：%v", err)
+	}
 	return tfapplication.NewTriggerDeliveryDispatchHandler(tfapplication.TriggerDeliveryDispatchDeps{
 		Segments: segments, Tasks: tasks, Places: fixture.owners, Windows: fixture.owners, Conditions: fixture.owners,
 		Dispatch: tfapplication.NewOpenDispatchTaskHandler(tfapplication.OpenDispatchTaskDeps{Tasks: tasks, Clock: systemClock{}}),
+		Pending:  pendings,
 	})
 }
 

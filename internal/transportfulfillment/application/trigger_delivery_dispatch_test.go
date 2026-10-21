@@ -89,6 +89,7 @@ type dispatchTriggerFixture struct {
 	places     *deliveryPlaceStub
 	windows    *deliveryWindowStub
 	conditions *deliveryConditionStub
+	pending    *pendingRegisterDouble
 	deps       application.TriggerDeliveryDispatchDeps
 }
 
@@ -100,6 +101,7 @@ func newDispatchTriggerFixture(t *testing.T) *dispatchTriggerFixture {
 		places:     &deliveryPlaceStub{place: "delivery-place/"},
 		windows:    &deliveryWindowStub{from: deliveryWindowFrom, to: deliveryWindowTo},
 		conditions: &deliveryConditionStub{conditions: "delivery-conditions/contract-1/v3"},
+		pending:    newPendingRegister(),
 	}
 	fixture.deps = application.TriggerDeliveryDispatchDeps{
 		Segments:   fixture.handovers.segments,
@@ -108,6 +110,7 @@ func newDispatchTriggerFixture(t *testing.T) *dispatchTriggerFixture {
 		Windows:    fixture.windows,
 		Conditions: fixture.conditions,
 		Dispatch:   newDispatchTaskHandler(fixture.tasks),
+		Pending:    fixture.pending,
 	}
 	return fixture
 }

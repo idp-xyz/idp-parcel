@@ -17,6 +17,15 @@ import (
 // ErrUnexpectedDispatchTaskOutcome 说明既有任务口交回了封闭集合以外的结果。
 var ErrUnexpectedDispatchTaskOutcome = errors.New("transport fulfillment: unexpected dispatch task outcome")
 
+var (
+	// ErrDeliveryDispatchPendingRegisterNotWired 说明装配没交派送待形成册。它不是一格答复：缺了它，`要求缺失`就又回到只在那一次
+	// 答复里出现一次（ADR-0230 决定一），宁可这一拍不答。
+	ErrDeliveryDispatchPendingRegisterNotWired = errors.New("transport fulfillment: delivery dispatch pending register is not wired")
+	// ErrDeliveryDispatchPendingUnavailable 说明这一拍的答复已经得出，写进派送待形成册时读写不动。整拍不答、随事务回滚：册上
+	// 那一行与这一拍的任务同笔，答复出去了而册没跟上，就是一件没人看得见的待形成。原样重跑这一拍即可。
+	ErrDeliveryDispatchPendingUnavailable = errors.New("transport fulfillment: delivery dispatch pending register unavailable")
+)
+
 // DeliveryDispatchTriggerOutcome 是「对象凭`已交接`进入派送段 → 形成末端派送任务」这一拍的结果代数（ADR-0114 决定二）。
 //
 // `已形成`与`已在册`分开：后者是本拍要的那一项任务已经在册——同一拍重跑，任务引用确定性铸出撞上它——交回它而不重建。
@@ -195,6 +204,8 @@ type TriggerDeliveryDispatchResult struct {
 	record       ports.DispatchTaskRecord
 	hasRecord    bool
 	continuation string
+	// entryBasis 只在`要求缺失`时给出：那一拍链尾参与的入场依据，记进派送待形成册。
+	entryBasis domain.ParticipationBasisReference
 }
 
 func (result TriggerDeliveryDispatchResult) Outcome() DeliveryDispatchTriggerOutcome {
@@ -235,6 +246,9 @@ type DispatchTaskOpener interface {
 // （ADR-0114 决定三）。段登记册、任务登记册读口与任务口必备。读口与任务口分开给：查在册只读，在册了就停在这里，走不到
 // 任务口落库那一步；装配点交的必须是任务口写的那一张登记册。没有时钟：本编排不铸任何时间，成立时间由命令带、登记时刻
 // 由任务口取。
+//
+// Pending 必备，是派送待形成册的写口（ADR-0230 决定一）：执行器是`要求缺失`唯一的答出处，册也就只在这里写——随交接信封、补拍、
+// 按册重问三种调用方都调本执行器，三者写的是同一本册，不各写一份。
 type TriggerDeliveryDispatchDeps struct {
 	Segments   ports.ActualFulfillmentSegmentRegistry
 	Tasks      ports.DispatchTaskReader
@@ -242,6 +256,7 @@ type TriggerDeliveryDispatchDeps struct {
 	Windows    ports.DeliveryWindowSource
 	Conditions ports.DeliveryConditionSource
 	Dispatch   DispatchTaskOpener
+	Pending    ports.DeliveryDispatchPendingRegister
 }
 
 // TriggerDeliveryDispatchHandler 是末端派送任务的内部触发执行器：以「对象凭`已交接`进入派送段」为输入，按派送要求
@@ -263,7 +278,59 @@ func NewTriggerDeliveryDispatchHandler(deps TriggerDeliveryDispatchDeps) *Trigge
 // 「先查在册再取件：查在册放在参与 `Active` 判断之前」）。键由段、对象与链尾的入场依据定，前两步省不掉；在册了就是
 // 同一拍的重放：答复不随所有者后来的改答漂移，也不白读所有者。参与离场之后的重放同样交回在册那一项，它不形成新任务，
 // ADR-0114 决定二「已离场的参与不触发」照样成立。
+//
+// 答复得出之后照它写派送待形成册（keepPendingRegister），与这一拍其余的写入同笔。
 func (handler *TriggerDeliveryDispatchHandler) Trigger(
+	ctx context.Context,
+	command TriggerDeliveryDispatchCommand,
+) (TriggerDeliveryDispatchResult, error) {
+	if handler.deps.Pending == nil {
+		return TriggerDeliveryDispatchResult{}, ErrDeliveryDispatchPendingRegisterNotWired
+	}
+	result, err := handler.answer(ctx, command)
+	if err != nil {
+		return TriggerDeliveryDispatchResult{}, err
+	}
+	if err := handler.keepPendingRegister(ctx, command, result); err != nil {
+		return TriggerDeliveryDispatchResult{}, fmt.Errorf("%w: %v", ErrDeliveryDispatchPendingUnavailable, err)
+	}
+	return result, nil
+}
+
+// keepPendingRegister 照这一拍的答复写派送待形成册（ADR-0230 决定一）。只有三种答复动册：`要求缺失`立或刷新那一条；`已形成`
+// 与`已在册`了结它；`不是触发事实`里对象已不在段里的两格（链尾失效、已离场）作罢——这一件再问也形成不了。其余答复不动册：
+// `未决`还没有答案；`引用被占`与`不受理`是要人去看的异常，册上那一条照旧待形成；段不在、不是派送段、不凭交接入场三格对册上
+// 那一件不会出现（它进册时这三件都成立，段的服务动作与入场种类之后不改）；不是这一次交接带对象进段，说的是那封信，不是这一件。
+func (handler *TriggerDeliveryDispatchHandler) keepPendingRegister(
+	ctx context.Context,
+	command TriggerDeliveryDispatchCommand,
+	result TriggerDeliveryDispatchResult,
+) error {
+	segment, object, accepted := deliveryTriggerTargetFrom(command)
+	if !accepted {
+		return nil
+	}
+	key := ports.DeliveryDispatchPendingKey{TenantID: command.TenantID, Segment: segment, Object: object}
+	switch result.outcome {
+	case DeliveryDispatchRequirementMissing:
+		names := make([]string, 0, len(result.missing))
+		for _, requirement := range result.missing {
+			names = append(names, requirement.String())
+		}
+		return handler.deps.Pending.RecordMissing(ctx, key, result.entryBasis, names, command.OccurredAt)
+	case DeliveryDispatchTaskFormed, DeliveryDispatchTaskAlreadyFormed:
+		return handler.deps.Pending.SettleFormed(ctx, key, result.record.Task.Task(), command.OccurredAt)
+	case DeliveryDispatchNotTriggered:
+		switch result.refusal {
+		case DeliveryTriggerRefusedObjectNotInSegment, DeliveryTriggerRefusedParticipationNotActive:
+			return handler.deps.Pending.SettleLapsed(ctx, key, result.refusal.String(), command.OccurredAt)
+		}
+	}
+	return nil
+}
+
+// answer 是一拍的判断本身，见 Trigger。
+func (handler *TriggerDeliveryDispatchHandler) answer(
 	ctx context.Context,
 	command TriggerDeliveryDispatchCommand,
 ) (TriggerDeliveryDispatchResult, error) {
@@ -320,7 +387,11 @@ func (handler *TriggerDeliveryDispatchHandler) Trigger(
 		return *undecided, nil
 	}
 	if len(requirements.missing) > 0 {
-		return TriggerDeliveryDispatchResult{outcome: DeliveryDispatchRequirementMissing, missing: requirements.missing}, nil
+		return TriggerDeliveryDispatchResult{
+			outcome:    DeliveryDispatchRequirementMissing,
+			missing:    requirements.missing,
+			entryBasis: participation.EntryBasis(),
+		}, nil
 	}
 
 	opened, err := handler.deps.Dispatch.Open(ctx, OpenDispatchTaskCommand{
