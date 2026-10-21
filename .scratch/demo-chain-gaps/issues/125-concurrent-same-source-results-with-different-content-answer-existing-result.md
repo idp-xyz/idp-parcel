@@ -15,13 +15,15 @@ CC 收外部结果时先按幂等键读已有记录：读到了就比内容摘�
 
 `internal/customscompliance/application/receive_external_result.go`：`Handle` 开头 `FindByKey` 读到记录时经 `domain.CompareStoredDigest` 区分已有与来源冲突；落册那一步遇 `ports.ExternalResultAlreadyRecorded` 时读回赢家，交给 `existingResult` 作答，不再比摘要。
 
+同形追记（2026-10-21，协调方；出自 [product-strategy-boundary/18](../../product-strategy-boundary/issues/18-customs-case-and-declaration-submission-entry.md) 的隔离评审）：`internal/customscompliance/application/submit_declaration.go` 的 `SubmitDeclarationHandler.commit` 遇 `ports.DeclarationSubmissionAlreadyRecorded` 时同样读回赢家、交给 `existingResult` 答 `EXISTING_VERSION`，不比内容指纹。票 18 给提交执行开了生产口（`POST /customs-declaration-submissions`），这一格因此生产可达：两份内容不同的提交并发到达，后到那份答已有版本而不是来源冲突。修法同下，一并改。
+
 ## 三类
 
 机制。规模 S。
 
 ## 最小的诚实修法
 
-落册撞键、读回赢家之后，照开头那一步同样比内容摘要：一致答 `EXISTING_RESULT`，不一致答 `SOURCE_CONFLICT`。补一条真库并发用例：同一来源标识、内容不同的两份并发到达，恰有一份落册，另一份答 `SOURCE_CONFLICT`。顺带核一下 CC 别的接收口（申报回执等）在撞键分支上是否同病。
+落册撞键、读回赢家之后，照开头那一步同样比内容摘要：一致答 `EXISTING_RESULT`，不一致答 `SOURCE_CONFLICT`。补一条真库并发用例：同一来源标识、内容不同的两份并发到达，恰有一份落册，另一份答 `SOURCE_CONFLICT`。申报提交执行那一路（上面同形追记）同改；顺带核一下 CC 别的接收口（申报回执等）在撞键分支上是否同病。
 
 ## 要裁的
 
