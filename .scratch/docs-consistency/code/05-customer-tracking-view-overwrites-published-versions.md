@@ -61,7 +61,7 @@ M：迁移另取号，把 `customer_view` 改成版本表加当前标记（照 `
 
 ### 代决
 
-1. **「所依据的投影版本」记在当前标记上，不记在版本行上**（票面推荐「当前版上原地更新这一列」，另裁）。版本行的 `based_on_projection` 是那一版形成时所依据的投影，一经写入不改；标记上的那一格是当前版最近一次按之确认四维未变的投影。理由：客户追踪响应体带着 `basedOnProjection`，它随版本一起对客发布过；在版本行上原地改它，就是改写一行已发布的版本，与本票要守的「只增不改写」正面相撞，也丢掉「这一版当初依据哪一份投影形成」。把可变的那一格放在本来就可变的当前标记上，版本行一列都不必改。读法随之：`FindCurrent` 答标记上的依据，`FindVersion` 答形成时的依据。
+1. **（评审后改写，协调方裁定）客户追踪响应体不带所依据的投影版本，客户的采用版本由 `version` 承担；形成时依据与确认依据在领域上分两格。** 版本行的 `based_on_projection` 是那一版形成时所依据的投影，一经写入不改，`CustomerTrackingView.BasedOn` 答它；当前标记上的那一格是当前版最近一次按之确认四维未变的投影，`ConfirmedOn` 答它，`Reaffirm` 只前移这一格，派生编排的幂等判断读它。`FindCurrent` 带出标记上的确认依据；`FindVersion` 读到的恰是当前版时同样带出，读到已被替代的版本时确认依据退回形成时依据。初稿把可变的那一格放在标记上、却仍由 `basedOnProjection` 对客答出，同一个 `version` 会对客户答出不同的投影版本——那就是改写已发布内容，只是位置挪到了标记上（评审 N1）。依据：VE CONTEXT「留存投影版本的按版本读回属运营追踪查阅，不属客户发布物」；docs 与 admin-web 都没有把 `basedOnProjection` 列为对客字段（2026-10-21 全仓 grep，只有 HTTP 适配器及其用例读写它）。
 2. **换不换代只看四维（逐维三态加内容引用）是否相同。** 票面「内容或披露依据变化」里的「披露依据」，视图今天不存披露策略版本，可观察的只有策略逐维的答复；策略换版而四维答复不变，不换代。
 3. **存量行的前版指回原样迁入，不抹成首版。** 指令里「迁成各自的首版」读作「各自成为版本表里存下来的第一行」。那一版确曾替代过别的版本、客户读到过 `priorVersion`；抹掉等于改写已发布的替代关系。它指的那一行读不回，是旧形状已经造成的事实，照 0016 对投影的处理如实留存。
 4. **重新确认答 `EXISTING_RESULT`，不新增结果枚举。** 对客户而言当前版没变；意图仍由同一视图版本认领，`outboxintent.EnqueueOnce` 按信封 ID 去重，不多发一份。没有新信封，因此不涉及 `FingerprintEventID`，也没有新派发路由。
@@ -69,8 +69,8 @@ M：迁移另取号，把 `customer_view` 改成版本表加当前标记（照 `
 
 ### 越权风险点
 
-1. 同一视图版本按当前读与按版本读，`BasedOn` 可能不同（当前读是最近确认的那份投影，按版本读是形成时那份）。客户先后两次查询可能看到同一 `version`、不同 `basedOnProjection`。若 VE owner 认为 `basedOnProjection` 属对客发布内容、变了就该换代，则代决 1、2 要改为投影一换就换代——那又与 CONTEXT「投影重新派生本身不要求形成新的客户视图版本」冲突，需要 VE owner 裁。
-2. 一版被替代之后，它曾经跟上过哪些投影（标记上的依据）随标记移动而不留；只留形成时那份。审计若要「每一版被哪些投影确认过」，要另加一张确认记录表。
+1. **对客 HTTP 契约删字段**：客户追踪响应体删去 `basedOnProjection`。首方 API 尚未发布兼容性基线（ADR-0140 Decision 五），今天删不破坏任何集成方；基线之后再删就是破坏性变更。客户再要「这一版依据哪份投影」，只能经运营追踪查阅，客户面答不出。客户面 HTTP 契约票 [code/22](./22-customer-face-http-contract-misses-accepted-adrs.md) 没有列这个字段（2026-10-21 查），不必在那张票上加说明。
+2. 一版被替代之后，它曾经跟上过哪些投影（标记上的确认依据）随标记移动而不留；只留形成时那份。审计若要「每一版被哪些投影确认过」，要另加一张确认记录表。
 3. 视图不存披露策略版本：策略换版、答复相同，不换代，事后也答不出某一版视图依据哪一版策略。若审计要这一格，要给版本行加列。
 4. 存量行的悬空前版指针保留；按它 `FindVersion` 答查无。今天没有租户、没有生产数据，演示库重灌即无此类行。
 5. 迁移删旧表 `customer_view`：仓内引用已全部改指新表（`cmd/parcel-dispatch` 里按表数行的用例）；仓外若有人直接读这张表（运维脚本、报表），会断。
@@ -84,4 +84,16 @@ M：迁移另取号，把 `customer_view` 改成版本表加当前标记（照 `
 - `go build ./...`、`go vet ./...`、`gofmt -l ./cmd ./internal ./migrations` 干净。
 - `scripts/test-full.sh ./internal/visibilityexception/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./cmd/parcel-ve-register/ ./internal/architecture/... ./migrations/... ./internal/platform/migrate/...`：21 个包 ok，退出码 0（`cmd/parcel-ve-register` 是改动包的反向依赖）。
 - 一次性库 `code05seed` 上 `scripts/demo-seeds/seed.sh` 灌完（迁移链含 0028 施加通过），用完已删。演示种子数据未改。
+
+## 评审记录
+
+### 第 1 轮（2026-10-21，隔离评审；协调方转达，无阻断）
+
+| 条 | 意见 | 处理 |
+|---|---|---|
+| N1 | 同一 `version` 会对客户答出不同的 `basedOnProjection`，按代决 1 的前提就是改写已发布内容 | 采纳协调方裁定 (a)：响应体删去 `basedOnProjection`；领域分出 `ConfirmedOn`，`BasedOn` 只答形成时依据；幂等判断读 `ConfirmedOn`；代决 1 与越权风险点 1 改写。code/22 没有列这个字段，未加说明。admin-web 与演示种子都不读它（grep 确认） |
+| N3 | 测试缺口 | 补：乐观锁输家之后版本行数不变、输家签出的版本 `FindVersion` 查无；同号重写以 `customer_view_version_pkey` 主键冲突报错（`TestRewritingAStoredVersionIsRefusedByItsKey`）；`cmd/parcel-dispatch` 真库端到端 `TestASecondProjectionWithUnchangedDimensionsKeepsTheCustomerViewVersion`（版本 1 行、确认依据前移到 P2、形成时依据仍是 P1、意图 1 份）与 `TestASecondProjectionThatChangesTheDimensionsSupersedesTheCustomerView`（版本 2 行、指回前版、意图 2 份）；迁移用例比全四维、内容与发布时间，并证标记外键拒绝悬空版本；内存替身注释写明真库用例才是凭据 |
+| N4 | 旧投影迟到的竞态窗口 | 不在本票，另立 [code/50](./50-customer-view-derivation-can-be-carried-back-by-a-concurrent-stale-projection-envelope.md)，建议 R2 |
+
+验证（修订后，同一分支）：`go build ./...`、`go vet ./...`、`gofmt -l` 干净；`scripts/test-full.sh ./internal/visibilityexception/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./internal/architecture/... ./migrations/...` 19 个包 ok，退出码 0。
 

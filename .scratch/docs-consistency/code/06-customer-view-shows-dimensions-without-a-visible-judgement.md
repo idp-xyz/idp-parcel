@@ -49,26 +49,40 @@ S–M：ETA 维加一道与 `FinalDimensionOver` 同形的兜底（读 UC-VE-003
 - 领域 `domain.ETADimensionWithoutVisibilityJudgement`：策略准许展示 ETA 时这一维答待确认、不带内容；策略不展示与待确认原样放行。
 - 领域 `domain.MilestonesDimensionOver` 与 `TrackingProjection.CarriesClassifiedMilestone`：策略准许展示里程碑、投影里却没有一条已归类为标准追踪里程碑的条目时答待确认；有一条已归类即照策略展示；只收窄不放宽。
 - 派生编排 `dimensionsFrom`：里程碑、ETA 两维与终局一维同样再过一道；头注改写，删去「那份判断不在投影里，不在这里补」。
-- 测试：领域 `TestTheETADimensionPendsWithoutACustomerVisibleETAJudgement`、`TestTheMilestonesDimensionPendsUntilTheProjectionCarriesAClassifiedMilestone`；编排 `TestAPermittedETAPendsWithoutACustomerVisibleETAJudgement`、`TestPermittedMilestonesPendUntilTheProjectionCarriesAClassifiedMilestone`（里程碑维由待确认转展示时四维变了、换代指回前版，与 code/05 的换代判据衔接）。先写用例、确认红（编排用例答 `SHOWN`），再实现。首版用例与终局用例里「ETA 照策略展示」的期望随改。
-- 文档：UC-VE-008 `AT-VE-158` 与结果语义「客户追踪视图」一行的现状缺口注改为已补，写明 ETA 一维要能答展示仍待 ETA 客户可见性判断落地（`AT-VE-187`）。
+- 测试（不点 `AT-VE-158`，见 AT 一节）：领域 `TestTheETADimensionPendsWithoutACustomerVisibleETAJudgement`、`TestTheMilestonesDimensionPendsUntilTheProjectionCarriesAClassifiedMilestone`；编排 `TestAPermittedETAPendsWithoutACustomerVisibleETAJudgement`、`TestPermittedMilestonesPendUntilTheProjectionCarriesAClassifiedMilestone`（里程碑维由待确认转展示时四维变了、换代指回前版，与 code/05 的换代判据衔接）。先写用例、确认红（编排用例答 `SHOWN`），再实现。首版用例与终局用例里「ETA 照策略展示」的期望随改。
+- 文档：UC-VE-008 `AT-VE-158` 与结果语义「客户追踪视图」一行的现状缺口注改为「已收窄、未补齐」，写明「不展示」那一格随 ETA 客户可见性判断落地（`AT-VE-187`）由 code/51 补齐。
 
 ### 代决
 
 1. **不接 `NewFormETAHandler`，也不加读 ETA 库的端口。** 「要裁的」第二格的端口形状不在本票定。理由：ETA 库里存的是内部预测（`ETAPrediction`），本上下文没有 `UC-VE-003` 的「ETA 客户可见性判断」这一对象（`AT-VE-187` 无实现）；从预测库取一份当成可见判断，正撞 UC-VE-008 主流程「不能使用计划时间或内部预测填充」。生产上本就从不形成 ETA，所以「ETA 维一律待确认」就是票面「最小的诚实修法」第 1 条说的如实答案。不动生产装配，接线棘轮不涉及。端口形状留到 ETA 客户可见性判断建模时一起定，那时 `ETADimensionWithoutVisibilityJudgement` 改为收那份判断，而不是另起一道。
 2. **里程碑维的判据是「至少一条已归类条目」。** 按里程碑逐条筛「允许对客的公开里程碑」（`PAR-VIS-09` 普通追踪公开规则）不在本票：那份规则今天没有建模，视图也只带内容引用、不列里程碑本身。
 3. **演示种子不改。** 演示策略给 `SYN-ACCOUNT-01` 的 `eta` 登的是展示，这是租户取值（准许展示），仍然成立；派生出的视图如今答待确认，是机制如实的答复。种子步骤里没有断言视图 ETA 态的地方。
+4. **（评审后补）没有 ETA 客户可见性判断时答待确认，不答不展示。** `AT-VE-158` 的预期「不展示 ETA」对的是判断已形成、答未达门槛那一格；今天连判断对象都没有，答不展示是把一个没人作过的披露判断说成作过，与 `domain.FinalDimensionOver` 不答不展示同理。终局一维与里程碑一维同样收成待确认。
 
 ### 越权风险点
 
-1. 租户把 ETA 维登成展示，在 ETA 客户可见性判断落地之前也永远读到待确认；本票没有在登记那一侧加任何提示。今天仓里没有为「ETA 客户可见性判断建模并接入客户视图」立的票，宜由协调方立票（`AT-VE-170`、`AT-VE-187` 同在 ④）。
+1. 租户把 ETA 维登成展示，在 ETA 客户可见性判断落地之前也永远读到待确认；本票没有在登记那一侧加任何提示。评审后已立 [code/51](./51-eta-customer-visibility-judgement-is-not-modelled-or-read-by-the-customer-view.md)（Blocked by code/07）。
 2. 里程碑维只看「有没有已归类条目」：某一类事实归进了里程碑、却不该对客（内部节点里程碑），这一维照样答展示。逐里程碑的对客过滤待 `PAR-VIS-09` 建模。
 3. 已经发布过的、ETA 维为展示的视图，下一次派生时四维变了（ETA 转待确认），会换一代并指回前版；客户会看到一次「ETA 由展示转待确认」的替代。今天没有租户，演示库重灌即无存量。
+4. **待确认与 `AT-VE-158` 字面「不展示」不同**（代决 4）：对客户而言，待确认是「这一维还没到能看的程度」，不展示是「这一维按规则不给看」。若 VE owner 认为没有判断就该答不展示，改一处即可（`ETADimensionWithoutVisibilityJudgement`），机制不变；待 VE owner 裁，[code/51](./51-eta-customer-visibility-judgement-is-not-modelled-or-read-by-the-customer-view.md) 的「要裁的」一并列了这一问。
 
 ### AT
 
-- `AT-VE-158`：AT 盘点由 ④ 移入 ①，点名编排与领域两条用例。总览计数未动，由协调方进 main 时重算。
+- `AT-VE-158`：留在 ④（评审 N2：本分支钉住的是「没有判断对象 → 待确认」，不是「判断答未达门槛 → 不展示」），行尾写了现状说明，待 code/51 钉住。两条 ETA 用例的 Covers 注释写明它们不覆盖 `AT-VE-158` 本身。AT 盘点总览计数未动。
 
 ### 验证（分支 claude-code05）
 
 同 code/05 完成记录的验证一节（同一分支、同一跑）：`go build ./...`、`go vet ./...`、`gofmt -l` 干净；`scripts/test-full.sh` 跑 `internal/visibilityexception/...`、`cmd/parcel-api`、`cmd/parcel-dispatch`、`cmd/parcel-ve-register`、`internal/architecture/...`、`migrations/...`、`internal/platform/migrate/...`，21 个包 ok。
+
+## 评审记录
+
+### 第 1 轮（2026-10-21，隔离评审；协调方转达，无阻断）
+
+| 条 | 意见 | 处理 |
+|---|---|---|
+| N2 | `AT-VE-158` 移入 ① 属于多报 | 采纳：`AT-VE-158` 留 ④，行尾写现状说明；补代决 4「无判断答待确认而非不展示」与越权风险点 4；两条 ETA 用例与领域函数头注不再写成覆盖 `AT-VE-158`；UC-VE-008 缺口注改为「已收窄、未补齐」 |
+| N5 | `dimensionsFrom` 头注把 ETA 判断的 AT 写成 `AT-VE-158` | 采纳：改指 `AT-VE-187` |
+| — | ETA 判断票 | 立 [code/51](./51-eta-customer-visibility-judgement-is-not-modelled-or-read-by-the-customer-view.md)，Blocked by code/07，建议 R2 |
+
+验证同 code/05 评审记录。
 
