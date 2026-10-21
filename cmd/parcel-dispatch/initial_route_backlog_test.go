@@ -41,6 +41,42 @@ func (routingRequired) AssessRoutingApplicability(
 // 生效，判断时刻是处理时钟。随后场外揽收的业务时间落在接受与处理之间、选中候选被有效硬限制淘汰：原计划在揽收的业务时间
 // 失效，过得了离场门，信封入账，不回滚重投到 ABANDONED。
 func TestUnderAHandoffBacklogTheInitialPlanTakesEffectAtAcceptanceOnTheDatabase(t *testing.T) {
+	fixture, acceptedAt, plan := backloggedInitialRoute(t)
+	syn := fixture.syn
+	evidence := &fixture.evidence.evidence
+
+	restriction, err := nrdomain.NewHardConstraintFinding(nrdomain.HardConstraintFindingSpec{
+		Candidate:   mustNR(t, nrdomain.NewCandidateID, "SYN-CANDIDATE-01"),
+		Outcome:     nrdomain.RestrictionApplies,
+		Restriction: mustNR(t, nrdomain.NewRestrictionReference, "CUSTOMS-ELIGIBILITY/SYN-CC-60"),
+	})
+	if err != nil {
+		t.Fatalf("硬限制：%v", err)
+	}
+	evidence.HardConstraints = []nrdomain.HardConstraintFinding{restriction}
+	pickedUpAt := acceptedAt.Add(handoffBacklog / 2).Truncate(time.Microsecond)
+	pickup := fixture.intakeAt(t, psdomain.OffsitePickupSource, pickupReassessVersion, pickupReassessPlace, pickedUpAt)
+	deliver(t, syn, fixture.intake, pickup, pickup)
+	if lapsed := reassessmentOf(t, syn, pickupReassessCorrel); lapsed.Conclusion != nrports.ReassessmentPlanLapsed ||
+		lapsed.ReviewedPlan != plan.Version() {
+		t.Fatalf("揽收复核 = %s / %s, want PLAN_LAPSED、复核 %s", lapsed.Conclusion, lapsed.ReviewedPlan, plan.Version())
+	}
+	applicabilities, err := nrpostgres.NewPlanApplicabilities(syn.db)
+	if err != nil {
+		t.Fatalf("构造适用性库：%v", err)
+	}
+	applicability, found, err := applicabilities.FindByPlan(t.Context(), plan.Version())
+	if err != nil || !found || applicability.State() != nrdomain.PlanLapsed || !applicability.TransitionedAt().Equal(pickedUpAt) {
+		t.Fatalf("原计划适用性 = %s @ %s（found %v err %v）, want LAPSED @ 揽收业务时间 %s",
+			applicability.State(), applicability.TransitionedAt(), found, err, pickedUpAt)
+	}
+}
+
+// backloggedInitialRoute 在 PS 真形成的接受决定上，经生产形状的初始路由消费门、积压 handoffBacklog 判出初始路由：计划沿上海
+// 枢纽 → 新加坡枢纽 → 新加坡末端，选中候选在证据替身里有服务区域、成本与路径。交回两路复核夹具、接受基线固定的时刻与那份
+// 计划，并已断言计划从接受起生效、判断不早于接受之后 handoffBacklog。
+func backloggedInitialRoute(t *testing.T) (*reassessBothLanesFixture, time.Time, nrdomain.InitialRoutePlan) {
+	t.Helper()
 	syn := newSYNVerticalFixture(t)
 	acceptWithDeclaredGeo(t, syn)
 	fixture := reassessBothLanesOver(t, syn)
@@ -89,32 +125,7 @@ func TestUnderAHandoffBacklogTheInitialPlanTakesEffectAtAcceptanceOnTheDatabase(
 		t.Fatalf("计划生效 %s、判断 %s, want 从接受 %s 起生效、判断不早于接受之后 %s",
 			plan.EffectiveFrom(), plan.JudgedAt(), acceptedAt, handoffBacklog)
 	}
-
-	restriction, err := nrdomain.NewHardConstraintFinding(nrdomain.HardConstraintFindingSpec{
-		Candidate:   mustNR(t, nrdomain.NewCandidateID, "SYN-CANDIDATE-01"),
-		Outcome:     nrdomain.RestrictionApplies,
-		Restriction: mustNR(t, nrdomain.NewRestrictionReference, "CUSTOMS-ELIGIBILITY/SYN-CC-60"),
-	})
-	if err != nil {
-		t.Fatalf("硬限制：%v", err)
-	}
-	evidence.HardConstraints = []nrdomain.HardConstraintFinding{restriction}
-	pickedUpAt := acceptedAt.Add(handoffBacklog / 2).Truncate(time.Microsecond)
-	pickup := fixture.intakeAt(t, psdomain.OffsitePickupSource, pickupReassessVersion, pickupReassessPlace, pickedUpAt)
-	deliver(t, syn, fixture.intake, pickup, pickup)
-	if lapsed := reassessmentOf(t, syn, pickupReassessCorrel); lapsed.Conclusion != nrports.ReassessmentPlanLapsed ||
-		lapsed.ReviewedPlan != plan.Version() {
-		t.Fatalf("揽收复核 = %s / %s, want PLAN_LAPSED、复核 %s", lapsed.Conclusion, lapsed.ReviewedPlan, plan.Version())
-	}
-	applicabilities, err := nrpostgres.NewPlanApplicabilities(syn.db)
-	if err != nil {
-		t.Fatalf("构造适用性库：%v", err)
-	}
-	applicability, found, err := applicabilities.FindByPlan(t.Context(), plan.Version())
-	if err != nil || !found || applicability.State() != nrdomain.PlanLapsed || !applicability.TransitionedAt().Equal(pickedUpAt) {
-		t.Fatalf("原计划适用性 = %s @ %s（found %v err %v）, want LAPSED @ 揽收业务时间 %s",
-			applicability.State(), applicability.TransitionedAt(), found, err, pickedUpAt)
-	}
+	return fixture, acceptedAt, plan
 }
 
 // routeBacklogged 把 PS 交出的那封接受决定信封投给生产形状的初始路由消费门（接受决定消费门 → PS 委托仓储 → 初始路由编排
