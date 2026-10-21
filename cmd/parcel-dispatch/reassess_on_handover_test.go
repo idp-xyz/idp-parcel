@@ -38,8 +38,8 @@ const (
 	reassessHandoverReceiving      = "SYN-NODE-SIN-HUB"
 )
 
-// reassessHandoverAt 落在委托接受之后：夹具里的接受决定按真实时钟形成，复核不判早于接受的触发（ADR-0279），而各用例的控制
-// 触发与手放的计划都从这一刻往前最多数到三天。取整点，落库读回的时刻与它逐微秒相等。
+// reassessHandoverAt 落在委托接受之后：夹具里的接受决定按真实时钟形成，复核不判早于接受的触发（ADR-0279），各用例的控制
+// 触发与手放的计划相对它往前取时刻，触发不得早于接受，这里留足余量。取整点，落库读回的时刻与它逐微秒相等。
 var reassessHandoverAt = time.Now().UTC().Truncate(time.Hour).Add(96 * time.Hour)
 
 // carriedGeoEvidence 是证据视图替身：交回给定的证据，并记下复核取证据时所携的投影。err 演取数依赖故障（重投推得动），

@@ -10,9 +10,9 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 证复核的业务时间下限（ADR-0279）：初始路由从委托接受起生效，一次业务时间早于接受的控制触发在
-// 初始路由形成之后才处理，复核本会判出失效——离场早于生效，被离场门拒，整封信封响亮失败、重投到 ABANDONED。改后入账为
-// 「触发早于委托接受」，不判、不回滚、不重投。接受决定由 PS 真形成，初始路由经生产形状的消费门判出；收寄采用与交接两路接
-// 同一份复核编排，接受时刻由两路适配器各自从 PS 委托仓储读来。夹具全部合成，只记 `S`。
+// 初始路由形成之后才处理时，入账为「触发早于委托接受」，不判、不回滚、不重投——据它判出失效，离场就早于生效。接受决定由
+// PS 真形成，初始路由经生产形状的消费门判出；收寄采用与交接两路接同一份复核编排，接受时刻由两路适配器各自从 PS 委托仓储
+// 读来。夹具全部合成，只记 `S`。
 
 // notJudgedAcceptanceOf 读一行未判的原因与比较所用的委托接受时刻；读不着即失败。接受时刻取自 parcel-shipment、带纳秒，落库
 // 只留到微秒，比对时同样截到微秒。
@@ -75,8 +75,8 @@ func TestAHandoverEarlierThanTheAcceptanceIsNotJudgedOnTheDatabase(t *testing.T)
 }
 
 // Covers: AT-NR-087（真库，收寄采用一路）——委托接受之后形成初始路由，一份业务时间早于接受两小时的场外揽收采用在那之后才
-// 处理，选中候选被有效硬限制淘汰：本会让原计划在揽收时刻失效，离场早于生效。改后入账为「触发早于委托接受」，复核册零行，
-// 原计划不失效；收寄采用信封入账 PROCESSED。
+// 处理，选中候选被有效硬限制淘汰：入账为「触发早于委托接受」，复核册零行，原计划不失效——据这次揽收失效，离场就早于
+// 生效；收寄采用信封入账 PROCESSED。
 func TestAnIntakeEarlierThanTheAcceptanceIsNotJudgedOnTheDatabase(t *testing.T) {
 	fixture, acceptedAt, plan := backloggedInitialRoute(t)
 	syn := fixture.syn
