@@ -187,8 +187,8 @@ func TestProcessDecisionsFormASequenceAndOtherLayersHoldOneConclusion(t *testing
 }
 
 // Covers: AT-CC-432 的领域半边——判断对两份事实对称，所以一组两两不矛盾的同层事实不论按什么顺序到达都
-// 一份也不记冲突；不同层、不同范围、不同提交版本的事实各归各位。
-func TestTheJudgmentIsSymmetricSoArrivalOrderCannotMatter(t *testing.T) {
+// 一份也不记冲突；不同层、不同范围的事实各归各位。真矛盾时标哪一份取决于到达先后，这里不证它与顺序无关。
+func TestTheJudgmentIsSymmetricAndAConsistentChainRecordsNoConflictInAnyOrder(t *testing.T) {
 	pool := []domain.LayerFact{
 		release(t, "r-1", domain.PartialRelease, earlierAt),
 		release(t, "r-2", domain.FullRelease, laterAt),
@@ -221,6 +221,22 @@ func TestTheJudgmentIsSymmetricSoArrivalOrderCannotMatter(t *testing.T) {
 				t.Fatalf("到达顺序 %v 上 %s 被判 %v", order, chain[index].Result.SourceID(), err)
 			}
 			booked = append(booked, chain[index])
+		}
+	}
+
+	// 矛盾不传递：部分、附条件、全部依次发生，全部与另两份都不矛盾，部分与附条件矛盾——被标的是两者中后到的那份。
+	partial := release(t, "n-1", domain.PartialRelease, earlierAt)
+	conditional := release(t, "n-2", domain.ConditionalRelease, laterAt)
+	full := release(t, "n-3", domain.FullRelease, laterAt.Add(time.Minute))
+	for name, order := range map[string]struct {
+		booked  []domain.LayerFact
+		flagged domain.LayerFact
+	}{
+		"部分先到":  {[]domain.LayerFact{partial, full}, conditional},
+		"附条件先到": {[]domain.LayerFact{conditional, full}, partial},
+	} {
+		if err := domain.CheckLayerConsistency(order.booked, order.flagged); !errors.Is(err, domain.ErrLayerConflict) {
+			t.Fatalf("%s：后到的 %s 该记冲突：%v", name, order.flagged.Result.SourceID(), err)
 		}
 	}
 

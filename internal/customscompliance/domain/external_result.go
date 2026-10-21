@@ -177,8 +177,10 @@ type LayerFact struct {
 // 那一条，取舍见 ADR-0226。不同层或不同范围的事实各归各位。
 //
 // 在册事实里那些已经记了冲突的也照样比：冲突关系在两份事实之间，被标的那份仍是留存的
-// 来源事实。这样未记冲突的事实两两都比过、两两不矛盾，读当前判断的一方拿到的就是一条
-// 自洽的序列，与到达先后无关。
+// 来源事实。这样未记冲突的事实两两都比过、两两不矛盾，按业务时间排成的序列自洽（两两都比过
+// 要靠调用方把比对读与落册串行，见 ports.ExternalResultStore）。矛盾不传递：部分、附条件、
+// 全部三份依次发生时，全部与另两份都不矛盾，部分与附条件却矛盾，被标的是两者中后到的那份
+// ——真矛盾时标哪一份仍取决于到达先后。
 func CheckLayerConsistency(existing []LayerFact, incoming LayerFact) error {
 	if err := incoming.wellFormed(); err != nil {
 		return err
