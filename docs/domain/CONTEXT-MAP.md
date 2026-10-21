@@ -10,6 +10,8 @@ Status: Confirmed
 
 本地图中的限界上下文表达语言、规则、生命周期和数据所有权边界。**限界上下文不等于微服务、独立进程、代码模块或数据库实例**；本地图不预设技术拓扑，但任何实现都不得直接修改其他上下文拥有的数据。
 
+试点治理能力（代码 `internal/pilotgovernance`）是 PN-01 / PN-08 的治理记录与编排能力，不是限界上下文：它答[生产归属](./GLOSSARY.md#生产归属)与[准入控制](./GLOSSARY.md#准入控制)，不拥有物流业务事实，`parcel-shipment` 消费它的答复后才建立委托，本地图不为它立一节。
+
 ## 核心区分
 
 - 提交批次只是多份委托的提交归组；委托接受基线冻结客户声明范围，真实物理拆分或合并通过包裹身份谱系表达。
@@ -49,13 +51,13 @@ Status: Confirmed
 **拥有**：
 
 - 定价方案、价表、计价规则工件、价格方向隔离、版本清单、纯 `PricingEvaluation`、评价解释、回放和价卡治理案例的业务语义与生命周期。
-- 计价参考序列（燃油费率与汇率）的登记、版本化、发布治理，以及按计价基准时点的解析结果。
+- 计价参考序列（燃油费率、汇率与按期公布的定额附加金额，[ADR-0110](../adr/0110-date-windowed-and-periodically-published-surcharge-amounts-are-a-third-reference-series-kind.md)）与计价参考目录（分区表与偏远档位表，[ADR-0109](../adr/0109-zip-classification-facts-are-owned-by-parcel-pricing-as-a-versioned-reference-catalogue.md)）的登记、版本化、发布治理，以及按计价基准时点的解析结果。
 
 **不拥有**：
 
 - 客户合同、供应商协议、商业适用性、价格方案绑定和授权；这些由 `party-commercial` 拥有。
 - 原始测量、地址、包裹、渠道选择、路由、实际履约或运输收费发生项；这些由来源上下文拥有。
-- 计价参考序列的数值本身及其商业口径：燃油费率由承运商公布，汇率牌价类型、取值时点和加点规则由 `party-commercial` 的商业价格政策声明。
+- 计价参考序列与目录的数值和内容本身及汇率的商业口径：燃油费率、定额附加金额与分区、档位表由承运商公布，汇率牌价由财务侧提供；汇率口径由 `party-commercial` 的商业价格政策声明、经序列取值登记的口径引用指名，评价不读政策正文、不执行取值时点规则、不加点（[ADR-0260](../adr/0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md) 决定三）。
 - 费用项目、计费重量的财务采用、费用、应收应付、对账、核销、付款或毛利；这些由 `settlement-accounting` 或外部财务系统拥有。
 
 ### [`parcel-shipment`](./parcel-shipment/CONTEXT.md)：小包托运
@@ -89,7 +91,7 @@ Status: Confirmed
 - 有向网络连接、由连接组成的线路，以及业务时区、服务日历、截单条件和临时网络可用性调整。
 - 节点经营方、线路责任方、可使用法人、服务产品范围和合同资格的网络适用关系；参与方、产品和合同身份仍引用 `party-commercial`。
 - 路由策略版本、路由候选、逻辑可达性判断、选择与淘汰依据。
-- 多份供应商价卡并存时，为计划履约段选定外包伙伴的择优决定。择优消费 `parcel-pricing` 对每个候选形成的 `BUY` 评价作为成本维度，按版本化策略裁决；它不改写任何评价，未被选中的候选评价继续有效并留痕。该归属的依据是本上下文已拥有线路责任方的网络适用关系与路由候选的选择淘汰依据，择优是其实例而非新能力。它与 `parcel-shipment` 拥有的「具体渠道选择」不是同一件事：后者走产品—渠道映射到渠道产品再到面单交易这条链，可被客户合同锁定；前者是运营企业组织外包履约的内部成本决定。两者在同一票上可以并存，必须分别成立，不得互相替代或以其一推导另一。
+- 路由候选按成本单维的择优：外包段取 `parcel-pricing` 对该段形成的 `BUY` 评价、自营段（含集团内另一法人承运的段）取 `INTERNAL` 方向评价，按比较币种合成为候选成本事实，按版本化策略裁决，结果可以是唯一选中或并列冲突、并列交授权角色（[ADR-0148](../adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定四）；它不改写任何评价，未被选中的候选评价继续有效并留痕。该归属的依据是本上下文已拥有线路责任方的网络适用关系与路由候选的选择淘汰依据，择优是其实例而非新能力。它与 `parcel-shipment` 拥有的「具体渠道选择」不是同一件事：后者走产品—渠道映射到渠道产品再到面单交易这条链，可被客户合同锁定；前者是运营企业组织外包履约的内部成本决定。两者在同一票上可以并存，必须分别成立，不得互相替代或以其一推导另一。
 - 包裹级路由计划、计划适用性、计划节点、计划履约段、计划时间窗口、路由指令、路由偏离判断、集运兼容判断及受控改路历史。
 
 **不拥有**：
@@ -148,6 +150,7 @@ Status: Confirmed
 - 经字段级追溯形成的正式申报资料快照、不可覆盖的提交版本、提交尝试，以及更正、补充、撤销重报关系。
 - 承运商外部监管舱单的已接受引用、来源版本关系、申报范围关联和当前采用判断；外部舱单形成与提交仍由承运商拥有，运输总单、运输舱单及实际运输事实仍由运输履约拥有。
 - 禁限运、归类、原产地、申报价值、监管凭证适用性等规则化合规判断及其规则版本、依据和决定方式。
+- 对路由候选的关务适用性判断：候选能否用在册的口岸与申报路径过关务边界，答可用、不可用或状态未知。
 - 关务限制及其明确的适用对象、依据、责任来源和解除结果。
 - 查验、扣留和监管处置的关务执行协作事项、交接关系及处置执行核对判断。
 - 监管核定税费及其版本、税费法定义务人和法定义务范围，以及税费付款协作事项、税费付款核对和绑定明确拟执行动作与监管边界的放行门禁核对。
@@ -205,9 +208,9 @@ Status: Confirmed
 
 **拥有**：
 
-- 依据客户代收服务要求建立的代收资金义务，以及依据已接受履约侧代收证据或支付事实形成的代收分户账结果。
-- 收件人应付代收款、已接受实收金额和渠道回款范围。
-- 渠道在途代收款、待清分款、应付客户款、客户汇付和代收短款。
+- 依据客户代收服务要求建立的代收指令，以及依据已接受代收事实形成的代收分户账结果。
+- 代收事实的接受判断：收件人付款、渠道代收报告、渠道回款通知与运营企业真实到账四层分别保存，真实到账凭 `settlement-accounting` 已采用的外部资金事实引用登记。
+- 代收分户账的资金位置（渠道在途、待清分、应付客户、已汇付、短款、溢款）、差异事项、回汇批次与汇付主张。
 - 代收本金在客户、责任法人、币种和代收渠道之间的隔离与对账关系。
 
 **不拥有**：
@@ -233,20 +236,20 @@ flowchart LR
 
     PC -->|客户、合同、产品、接单规则与财务控制策略| PS
     PC -->|参与方、法人、产品与合同资格依据| NR
-    PC -->|供应商商业协议和采购条件| TF
+    PC -->|供应商商业协议、采购条件、交付条件引用与承运主体身份| TF
     PC -->|参与方、法人、报关服务商与账号授权| CC
     PC -->|客户、合同、产品与异常服务规则| VE
-    PC -->|商业协议、价格政策、方向授权与方案绑定| PP
+    PC -->|价格方向授权与 INTERNAL 政策的方案绑定| PP
     PC -->|授权交付关系| NO
     PP -->|不可变评价、版本清单与解释| SA
     PC -->|商业协议、结算政策与调整授权| SA
     PC -->|代收商业责任和结算约束| CR
     PS -->|包裹、地址、服务要求与声明快照| NR
     PS -->|包裹身份与节点作业要求| NO
-    PS -->|面单交易、底层承运网络与服务要求| TF
+    PS -->|面单交易、底层承运网络、服务要求与收件地点引用| TF
     PS -->|包裹身份与版本化客户原始资料| CC
     PS -->|包裹身份谱系、客户承诺与终局结果| VE
-    PS -->|提交版本、财务控制请求、客户承诺和计费来源| SA
+    PS -->|委托提交版本、财务控制请求、客户承诺和计费来源| SA
     SA -->|接受前估价、冻结、信用暴露与限制结果| PS
     PS -->|包裹和代收要求快照| CR
     NR -->|当前路由、计划节点与版本化路由指令| NO
@@ -278,6 +281,12 @@ flowchart LR
     TF -->|运输收费发生项和履约成本依据| SA
     TF -->|收费发生项、协议快照和承运商认定来源| PP
     PS -->|包裹、服务要求和客户声明快照| PP
+    PP -->|渠道择优候选成本| PS
+    PP -->|路由候选的 BUY 与 INTERNAL 评价| NR
+    NR -->|可达性判断与当前路由| PS
+    SA -->|已采用外部资金事实| CC
+    SA -->|评价请求| PP
+    SA -->|已采用外部资金事实引用| CR
     CC -->|监管核定、税费义务与付款核对依据| SA
     TF -->|履约侧代收证据和渠道回款依据| CR
     SA -->|COD 服务费和合法抵扣金额| CR
@@ -286,27 +295,30 @@ flowchart LR
 
 ### 关系约束
 
+下列各条与上图的箭头一律从提供方指向消费方：箭头左边提供事实、请求或答复，右边消费并形成自己的判断。
+
 - `party-commercial → parcel-shipment`：参与方与商业拥有商业版本发布及唯一解析，提供客户、客户合同版本、服务产品版本、接单规则包及其下游判断时点策略、接受前财务控制策略、接受与主动拒绝授权、面单服务终局规则、责任法人授权治理、角色权限等级、合同委派、关闭责任来源规则、可复用渠道约束、产品—渠道映射、渠道账号使用授权和参与方关系。小包托运先提供由独立策略形成的商业选择锚点；商业基线和规则包唯一解析后，再为具体提交逐项形成后续判断的 `asOf` 语义和值并保存实际采用依据。小包托运独立拥有委托接受或拒绝决定、具体包裹的请求与决定证据、权威业务截断边界、逐包裹批量结果和终局判断。后续商业变化不覆盖既有快照或决定历史；渠道范围、映射或账号资格变化也不自动形成包裹级关闭或重开。
 - `party-commercial → network-routing`：参与方与商业提供法人、服务产品、客户合同、商业渠道约束和网络使用资格依据；网络与路由据此判断候选范围，但不取得产品、合同、客户价格或商业渠道锁定的所有权。
-- `party-commercial → transport-fulfillment`：参与方与商业拥有参与方、运营法人、供应商商业协议、采购价格、责任和结算条件的版本生命周期；运输履约保存实际运输委托采用的协议、履约条件及角色快照并形成履约和成本来源事实，不得修改商业版本。自营履约记录真实运营法人，但不虚构外部供应商协议。协议正文可声明收费发生条件（逐原因计不计费、计费的数量形），运输履约登记收费发生项时按采用的那一版判，不自立条件册（[ADR-0209](../adr/0209-supplier-agreements-declare-charge-occurrence-conditions-and-registration-judges-by-them.md)）。
-- `party-commercial → customs-compliance`：参与方与商业提供参与方与法人身份、业务关系、报关服务商关系及申报渠道账号使用授权；关务按案件和提交版本保存货物相关主体、进出口责任主体、申报人、报关服务商、账号持有人、税费法定义务人、实际付款方和运营责任法人的角色与资格快照。角色不得由企业类型或其他角色自动推导，后续商业变化不得覆盖既有快照。
+- `party-commercial → transport-fulfillment`：参与方与商业拥有参与方、运营法人、供应商商业协议、采购价格、责任和结算条件的版本生命周期；运输履约保存实际运输委托采用的协议、履约条件及角色快照并形成履约和成本来源事实，不得修改商业版本。派送任务持参与方与商业的交付条件引用，实际承运商判断的承运主体身份引用参与方与商业的参与方登记。自营履约记录真实运营法人，但不虚构外部供应商协议。协议正文可声明收费发生条件（逐原因计不计费、计费的数量形），运输履约登记收费发生项时按采用的那一版判，不自立条件册（[ADR-0209](../adr/0209-supplier-agreements-declare-charge-occurrence-conditions-and-registration-judges-by-them.md)）。
+- `party-commercial → customs-compliance`：参与方与商业提供参与方与法人身份、业务关系、报关服务商关系及申报渠道账号使用授权；关务按案件和申报提交版本保存货物相关主体、进出口责任主体、申报人、报关服务商、账号持有人、税费法定义务人、实际付款方和运营责任法人的角色与资格快照。角色不得由企业类型或其他角色自动推导，后续商业变化不得覆盖既有快照。
 - `party-commercial → settlement-accounting`：参与方与商业拥有客户及供应商商业协议、商业价格政策、定价方案绑定、结算政策、税务分类依据、信用政策和人工调整授权规则的版本；结算保存实际采用依据并形成金额、余额、对账和经营指标，不得回写商业版本或绕过 `parcel-pricing` 自行解释价卡。
-- `party-commercial → parcel-pricing`：参与方与商业提供客户/供应商合同和协议、服务/渠道范围、商业价格政策、价格方向授权、定价方案绑定、计价基准时点、结算币种/税务约束和当前修订标识；计价校验引用闭包并形成可执行评价，但不得选择或修改合同、政策、绑定或授权。
+- `party-commercial → parcel-pricing`：参与方与商业签发价格方向授权，价卡登记引用它；`INTERNAL` 方向商业价格政策的定价方案绑定经路由自营段得出评价所用的方案（[ADR-0148](../adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定四）。计价按范围选卡、计价条款只从价卡读，评价不引用参与方与商业的解析（[ADR-0260](../adr/0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md)）；计价基准时点是产品内置的时点，不由商业政策声明。计价不得选择或修改合同、政策、绑定或授权。
 - `party-commercial → node-operations`：参与方与商业拥有授权交付关系——哪个参与方可以在什么适用范围与有效期间里替哪个客户账户向物流节点送站，是参与方关系的一种；节点作业在运营决定确认送站交接单时按（租户，交付方参与方，客户账户，开立节点，开立时刻）问它，只得是、否、未配置三种答复之一（交付方就是该客户账户所属参与方本身时答是），不登记、不修改，也不据设备上报的交付方自行推定（[ADR-0212](../adr/0212-a-customer-number-hit-needs-a-verifiable-delivery-scope.md)）。
-- `parcel-pricing ↔ 外部数值来源`：承运商公布燃油费率，财务侧提供汇率牌价，两者都是计价之外的事实。计价按计价参考序列登记来源标识、生效区间和取值，按计价基准时点解析并写入版本清单，不生产也不修正这些数值；口径由 `party-commercial` 的商业价格政策版本化声明。计价消费汇率是为了让 `SELL` 成本加成评价在形成时就产出结算币种金额，从而保持「同输入同版本清单产生相同结果」覆盖到最终金额，不是取得汇率所有权。
-- `parcel-pricing → network-routing`：同一票存在多份适用供应商价卡时，计价对每个候选分别形成 `BUY` 评价，各自携带完整版本清单与解释；网络与路由把这些评价作为成本维度并入择优，形成唯一的候选选择。计价不知道也不决定谁被选中，评价之间没有优劣关系；择优不改写评价，未被选中的候选评价同样留痕并保持有效。候选评价为待判断或不可计价时，该候选按缺少成本依据处置，不得以零金额或其他候选的金额顶替。路由候选的成本怎样由逐段评价合成、比较币种与自营段的成本依据，见 [ADR-0148](../adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定四。
-- `parcel-pricing → settlement-accounting`：计价提供不可变 `PricingEvaluation`、计价输入/版本清单、费用行、计价重量结果和解释；结算据此按费用确认条件和责任范围形成计费重量采用快照、费用、预期成本、应收应付、调整、对账和核销，不能把评价金额直接当作金额责任，也不能发布或改写价卡。计价返回`不可计价`时，结算保存排除依据但不形成任何费用行（含零金额），也不把它当作可补齐的缺口反复重试；该结论只表示按该价卡无法形成价格，不推导包裹终局、拒绝接单或退运决定。
-- `parcel-pricing → transport-fulfillment`：计价按运输收费发生项的键读取那一版的成员载运对象与业务时点，用来形成计价输入快照的评价对象（[ADR-0171](../adr/0171-pricing-input-resolver-uses-declaration-until-a-measurement-port-exists.md)）。不展开集运成员，不写发生项，不替小包托运或节点作业解释标识。
-- `parcel-pricing → parcel-shipment`：计价按声明包裹身份读取申报测量与地址要素。没有节点实测时，实重与尺寸取申报并在事实引用里标明来源；目的邮编必备，起点邮编可缺。不算分区。对象在这两口上答「无」（含集运单元）时，快照停在输入不可得，不新增评价对象种类。节点实测那条消费边等 `pp-pricing-input-seams/04`。
-- `parcel-pricing → parcel-shipment`（提交版本申报）：受理前试算按（租户、委托、提交版本）读那一版逐件的申报测量与寄收两段邮编（[ADR-0179](../adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 决定四），不经接受基线——受理前还没有接受基线，上一条的两口那时答「无」，这一口不拓宽它们。输入快照由计价一侧造；分区按价卡绑定的分区目录从邮编路线解析，小包托运不给分区。
+- `parcel-pricing ↔ 外部数值来源`：承运商公布燃油费率、按期公布的定额附加金额与分区、档位表，财务侧提供汇率牌价，它们都是计价之外的事实。计价按计价参考序列与目录登记来源标识、生效区间和取值，按计价基准时点解析并写入版本清单，不生产也不修正这些数值；汇率口径由 `party-commercial` 的商业价格政策版本化声明、经序列取值登记的口径引用指名，评价期次按计价基准时点取，不执行政策上的取值时点规则，不加点（[ADR-0260](../adr/0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md) 决定三）。计价消费汇率是为了让 `SELL` 成本加成评价在形成时就产出结算币种金额，从而保持「同输入同版本清单产生相同结果」覆盖到最终金额，不是取得汇率所有权。
+- `parcel-pricing → network-routing`：路由候选择优时，计价对每个候选的各段分别形成评价——外包段 `BUY`、自营段 `INTERNAL`——各自携带完整版本清单与解释；网络与路由按比较币种合成为候选成本事实再比，择优结果可以是唯一选中，也可以是最低成本并列的冲突，并列交授权角色裁决。计价不知道也不决定谁被选中，评价之间没有优劣关系；择优不改写评价，未被选中的候选评价同样留痕并保持有效。候选评价为待判断或不可计价时，该候选按缺少成本依据处置，不得以零金额或其他候选的金额顶替。路由候选的成本怎样由逐段评价合成、比较币种与自营段的成本依据，见 [ADR-0148](../adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定四。
+- `parcel-pricing → settlement-accounting`：计价提供不可变 `PricingEvaluation`、计价输入/版本清单、费用行、计价重量结果和解释；结算据此按费用确认条件和责任范围形成计费重量采用快照、费用、预期成本、应收应付、调整、对账和核销，不能把评价金额直接当作金额责任，也不能发布或改写价卡。计价返回`不可计价`时，结算不形成任何费用行（含零金额），也不把它当作可补齐的缺口反复重试：不自动重试，登了新一版价卡之后经续办另起一代（[ADR-0229](../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定五），排除依据留在评价上、请求册只记停因（[ADR-0198](../adr/0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md) 越权风险点 3）；该结论只表示按该价卡无法形成价格，不推导包裹终局、拒绝接单或退运决定。
+- `transport-fulfillment → parcel-pricing`（发生项成员读口）：计价按运输收费发生项的键读取那一版的成员载运对象与业务时点，用来形成计价输入快照的评价对象（[ADR-0171](../adr/0171-pricing-input-resolver-uses-declaration-until-a-measurement-port-exists.md)）。不展开集运成员，不写发生项，不替小包托运或节点作业解释标识。
+- `parcel-shipment → parcel-pricing`（声明测量与地址要素读口）：计价按声明包裹身份读取声明测量与地址要素。没有节点实测时，实重与尺寸取申报并在事实引用里标明来源；目的邮编必备，起点邮编可缺。不算分区。对象在这两口上答「无」（含集运单元）时，快照停在输入不可得，不新增评价对象种类。节点实测那条消费边等 `pp-pricing-input-seams/04`。
+- `parcel-shipment → parcel-pricing`（委托提交版本声明读口）：受理前试算按（租户、委托、委托提交版本）读那一版逐件的声明测量与寄收两段邮编（[ADR-0179](../adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 决定四），不经接受基线——受理前还没有接受基线，声明测量与地址要素那两口那时答「无」，这一口不拓宽它们。输入快照由计价一侧造；分区按价卡绑定的分区目录从邮编路线解析，小包托运不给分区。
+- `parcel-pricing → parcel-shipment`（渠道择优成本）：小包托运为面单渠道择优向计价逐候选要成本，计价按候选的 `BUY` 价卡答已出价、待判断或不可计价；出局、并列与选中在小包托运的渠道择优里判，计价不知道也不决定谁被选中。它与路由候选择优是两件事，见 `network-routing` 一节。
 - `party-commercial / settlement-accounting → parcel-shipment`：参与方与商业先按独立商业选择锚点唯一解析产品、合同、责任法人、服务或关务范围、接单规则包、接受前财务控制策略及决定授权；规则包选出后，小包托运才为本次控制形成逐项 `asOf`。结算按适用策略和该 `asOf` 形成实际估价、冻结、信用暴露或业务限制结果，并校验、回显判断标识、判断时间、实际 `asOf`、采用版本、有效区间和当前修订标识。小包托运保存采用版本与结果，在所有适用控制成立后独立形成接受或拒绝决定；结算不能接受或拒绝委托，小包托运也不能修改金额、余额、冻结或信用结果。合同明确无接受前财务控制时必须保存商业不适用依据，不能用缺失结果或默认通过代替。
-- `settlement-accounting → parcel-shipment`（结算账户已登记的交接）：结算登记一笔结算账户后，与账户行同一事务经 Outbox 交出只带租户与登记种类的「参数已登记」类信封；小包托运以 inbox 消费者接收，按租户把停在`等待运营登记`的委托逐份重驱（[ADR-0094](../adr/0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md) 决定四），接受前财务控制在作用域那一步照旧向结算的账户册读口问账户。信封不带账户的法人、相对方、币种或结算政策，小包托运不据它判断账户对不对得上，结算也不知道哪份委托在等。
-- `parcel-shipment → node-operations`：小包托运提供接受基线、正式包裹身份、外部标识关联和作业要求（节点按现场观察到的号码核对身份，可以带上这件实物的可验证交付范围——节点作业由送站预报或已确认的送站交接单得出的一组客户账户；小包托运在租户内按号码交回此刻适用关联所标识的全部包裹候选，不因范围收窄，逐候选答范围相容，并答出歧义信号——号码是否同时被一份`已提交`委托声明为客户包裹件号，带了范围时只认范围内客户账户的委托，没带时认本租户的；不交号码的分配方、客户账户或委托，所比的客户账户由节点作业自己给出。没有可验证交付范围时，恰一个候选、没有歧义信号且候选范围相容才是唯一命中，带信号的一个候选按身份冲突处理，[ADR-0195](../adr/0195-a-submitted-declaration-of-the-same-number-turns-a-unique-hit-into-an-identity-conflict.md)，只经客户包裹件号的唯一命中建立待识别实物、不记冲突；有可验证交付范围时，范围相容的候选恰一个且没有范围内歧义信号才是唯一命中，[ADR-0212](../adr/0212-a-customer-number-hit-needs-a-verifiable-delivery-scope.md)）；节点作业拥有客户送站形成的节点收寄、待识别实物、测量、重包装及真实拆分合并事实。识别成功后以版本化关联连接正式包裹，节点不删除原实物记录；小包托运依据有效物理事实维护正式包裹身份和谱系。
+- `settlement-accounting → parcel-shipment`（结算账户或受理前估价采用已登记的交接）：结算登记一笔结算账户或一行受理前估价采用（[ADR-0179](../adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md)）后，与登记行同一事务经 Outbox 交出只带租户与登记种类的「参数已登记」类信封；小包托运以 inbox 消费者接收，按租户把停在`等待运营登记`的委托逐份重驱（[ADR-0094](../adr/0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md) 决定四），接受前财务控制在作用域那一步照旧向结算的读口问账户与采用。参与方与商业在商业授权运营登记完成时交同一类信封（`party-commercial.commercial-authority.operator-registration-completed`，ADR-0094 决定四），小包托运用同一续办口接收。信封不带账户的法人、相对方、币种或结算政策，小包托运不据它判断账户对不对得上，结算也不知道哪份委托在等。
+- `parcel-shipment → node-operations`：小包托运提供接受基线、正式包裹身份、外部标识关联和作业要求（节点按现场观察到的号码核对身份，可以带上这件实物的可验证交付范围——节点作业由送站预报或已确认的送站交接单得出的一组客户账户；小包托运在租户内按号码交回此刻适用关联所标识的全部包裹候选，不因范围收窄，逐候选答范围相容，并答出歧义信号——号码是否同时被一份`已提交`委托声明为客户包裹件号，带了范围时只认范围内客户账户的委托，没带时认本租户的；不交号码的分配方、客户账户或委托，所比的客户账户由节点作业自己给出。没有可验证交付范围时，恰一个候选、没有歧义信号且候选范围相容才是唯一命中，带信号的一个候选按身份冲突处理，[ADR-0195](../adr/0195-a-submitted-declaration-of-the-same-number-turns-a-unique-hit-into-an-identity-conflict.md)，只经客户包裹件号命中的恰一个候选（不范围相容）建立待识别实物、保存该候选、不记冲突；有可验证交付范围时，范围相容的候选恰一个且没有范围内歧义信号才是唯一命中，[ADR-0212](../adr/0212-a-customer-number-hit-needs-a-verifiable-delivery-scope.md)）；节点作业拥有客户送站形成的节点收寄、待识别实物、测量、重包装及真实拆分合并事实。识别成功后以版本化关联连接正式包裹，节点不删除原实物记录；小包托运依据有效物理事实维护正式包裹身份和谱系。
 - `parcel-shipment → node-operations`（外部标识关联已形成的交接）：小包托运的外部标识关联册新形成一条标识包裹的关联时，与关联同一事务经 Outbox 交出只带租户与号码的信封；节点作业以 inbox 消费者接收，对来源里保全了这个号、仍待识别且未形成身份冲突（或只因歧义信号形成身份冲突，[ADR-0211](../adr/0211-an-ambiguity-only-identity-conflict-releases-by-recheck-once-the-declaration-is-gone.md) 决定二）的作业实物重核，重核照旧经身份核对读口问小包托运，候选、范围相容与歧义信号的判法同收寄（[ADR-0199](../adr/0199-node-reception-preserves-the-delivery-source-and-rechecks-pending-identities.md) 决定三）。信封不是身份答案，不带包裹、分配方、标识类型或委托；关联的适用终态不交信封。
 - `parcel-shipment → node-operations`（客户包裹件号声明撤除的交接）：一份带客户包裹件号的委托由`已提交`转为`已拒绝`或`已撤回`时，小包托运与状态变化同一事务经 Outbox，按它声明的每个号交出只带租户与号码的信封——那份声明从此不再算歧义信号。节点作业用同一个 inbox 重核消费者接收，按号重核，只因歧义信号形成的身份冲突由此可能答出唯一命中而解开（[ADR-0211](../adr/0211-an-ambiguity-only-identity-conflict-releases-by-recheck-once-the-declaration-is-gone.md) 决定三）。信封不是身份答案，不带委托、客户账户、声明包裹或撤下的原因；委托被接受不交这一封，交的是外部标识关联已形成的那一封。
-- `parcel-shipment → transport-fulfillment`：小包托运拥有包裹身份、面单交易及其渠道角色快照；运输履约引用包裹作为载运对象，并拥有实际履约段、实际承运商判断及其收寄、交接和交付事实。渠道服务方、代理商、签约服务商或底层承运商不能仅凭渠道结果被认定为实际承运商。
+- `parcel-shipment → transport-fulfillment`：小包托运拥有包裹身份、面单交易及其渠道角色快照，并为派送提供收件地点引用；运输履约引用包裹作为载运对象，并拥有实际履约段、实际承运商判断及其收寄、交接和交付事实。渠道服务方、代理商、签约服务商或底层承运商不能仅凭渠道结果被认定为实际承运商。
 - `transport-fulfillment → parcel-shipment`：运输履约提供场外揽收、实际承运商首次有效收寄、交接和履约的有效事实；小包托运把场外揽收与节点送站收寄统一解释为适用的有效网络收寄结果，并据首次有效收寄另行判断面单服务包裹的取消边界和默认终局。证据冲突或实际承运商待确认时不得提前触发该边界，两种判断也不能合并；面单交易责任仍来自渠道确认结果与适用合同。
-- `parcel-shipment → network-routing`：接受前，小包托运提供委托当前提交版本、包裹身份、客户地址、服务要求、声明快照，以及为本次可达性判断解析的明确 `asOf` 语义和值，网络与路由按包裹形成可达性判断；接受后，小包托运再提供接受基线，网络与路由在存在可行候选时形成初始路由及后续版本，允许待路由但仍无候选时形成无当前有效路由。同一委托中的包裹可以具有不同路由，接受前不得提前构造接受基线。客户地址随判断请求在请求期携带服务区域解析所需的地理内容投影，与地理解析无关的个人身份内容不过界；网络与路由不建立读取小包托运地址的端口，当次解析依据以判断对象引用、所用服务区域版本和所携投影的版本化内容摘要留痕，地址本体不落 `network-routing`。服务要求与承诺上界同样随请求携带，见 [ADR-0148](../adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定一、二。受理之后不由小包托运请求触发的复核（权威运输交接进入节点）没有请求可随带投影，由网络与路由的消费侧适配器取受理基线那一版提交的同一份地理投影，只取用地理维，见 [ADR-0215](../adr/0215-a-handover-into-a-node-triggers-route-reassessment-and-reads-the-baseline-geo-projection.md)。
+- `parcel-shipment → network-routing`：接受前，小包托运提供委托当前提交版本、包裹身份、客户地址、服务要求、声明快照，以及为本次可达性判断解析的明确 `asOf` 语义和值，网络与路由按包裹形成可达性判断；接受后，小包托运再提供接受基线，并在有效网络收寄采用后经信封交出采用结果、触发收寄复核（[UC-NR-003](../application/network-routing/UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md)）；网络与路由在存在可行候选时形成初始路由及后续版本，允许待路由但仍无候选时形成无当前有效路由。同一委托中的包裹可以具有不同路由，接受前不得提前构造接受基线。客户地址随判断请求在请求期携带服务区域解析所需的地理内容投影，与地理解析无关的个人身份内容不过界；在接受前与小包托运信封触发的判断里，网络与路由不建立读取小包托运地址的端口，当次解析依据以判断对象引用、所用服务区域版本和所携投影的版本化内容摘要留痕，地址本体不落 `network-routing`。服务要求与承诺上界同样随请求携带，见 [ADR-0148](../adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定一、二。受理之后不由小包托运请求触发的复核（权威运输交接进入节点）没有请求可随带投影，由网络与路由的消费侧适配器取受理基线那一版提交的同一份地理投影，只取用地理维，见 [ADR-0215](../adr/0215-a-handover-into-a-node-triggers-route-reassessment-and-reads-the-baseline-geo-projection.md)。
 - `network-routing → parcel-shipment`：网络与路由校验小包托运提供的判断时点，并返回可达性判断及其判断标识、可达/不可达/资料不足结果、判断时间、实际采用的 `asOf` 语义和值、采用版本、有效区间和当前修订标识，以及当前有效路由计划和无当前有效路由判断；标准网络服务的可达结果参与委托接受判断，关键依据在接受提交前失效时由小包托运请求重判。服务本就不要求运营企业形成可达性判断时，网络与路由返回不适用并携带商业不适用依据，不返回三值判断之一；小包托运必须保存该依据，不能用缺失判断、默认可达或无休止重判代替，与接受前财务控制的不适用同一处理。路由结果不能修改委托身份、服务产品、商业渠道锁定或客户承诺。
 - `parcel-shipment → customs-compliance`：小包托运提供包裹身份、接受基线和 `UC-PS-002` 形成的版本化客户原始资料；关务只读引用当前适用范围，结合节点实测、合规判断及其他合法依据形成字段级可追溯的正式申报资料快照和不可覆盖的提交版本。客户资料新版本不覆盖已形成正式资料或提交；申报单元独立于包裹和其他物理或运输归组；受控跨客户合报不得混合逐包裹的客户、货物、价值、税费、责任和监管结果。
 - `parcel-shipment → settlement-accounting`（包裹计费时点）：小包托运发出有效网络收寄的采用结果与包裹终局，结算以 inbox 消费者接收，按采用键或终局键回读记录，按包裹读接受时固定的商业解析回指，再经参与方与商业的闭包找到结算账户（[ADR-0190](../adr/0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md)）。小包托运不知道哪件包裹在哪个时点计费；结算不改写采用、终局或解析。
@@ -314,15 +326,15 @@ flowchart LR
 - `node-operations → parcel-shipment`：节点作业按正式包裹提供当前是否已装入集运单元的装袋事实（[ADR-0118](../adr/0118-amendment-stage-facts-enter-parcel-shipment-through-consumer-side-read-ports.md)），经识别成功后的版本化关联答，不由小包托运拿包裹标识冒充作业实物去问；小包托运把它与自有的面单交易包裹结果并成「已制签或已装袋」一格，不取得集运单元或作业事实的所有权。
 - `各限制源 → parcel-shipment`：关务、安全、资格、账号授权及其他硬限制的源上下文提供当前限制、适用范围和有效解除结果，小包托运只据此判断新交易或重开的适用资格，不取得限制或解除决定的所有权。原关闭责任来源对应或覆盖完整面单服务范围的限制未解除时不得重开；只覆盖单一渠道的限制不阻断包裹级重开，但仍阻断该渠道的新交易；限制解除不自动形成包裹级重开。
 - `network-routing → node-operations / transport-fulfillment`：路由计划、计划节点、计划履约段、时间窗口和路由指令表达版本化执行意图，集运兼容判断表达拟共同进入下一节点或计划履约段的适用性；节点作业和运输履约分别记录实际执行。实际履约段通过逐对象履约参与关系关联适用计划段，允许一条计划段由零个、一个或多个实际段完成，双方均不得覆盖另一层历史。
-- `node-operations / transport-fulfillment → network-routing`：节点作业提供节点收寄、当前有效实测、节点控制、物理拆分合并、非计划节点和物理装载事实；运输履约提供场外揽收、权威运输交接和实际移动事实。网络与路由据已知实际接货位置及当时有效证据复核，在包裹进入节点并形成有效节点实测后再按实际节点和实测复核，但不覆盖收寄、控制、测量或履约事实。权威运输交接以`已交接`把包裹交进声明的接收节点时，网络与路由从该节点复核（[ADR-0215](../adr/0215-a-handover-into-a-node-triggers-route-reassessment-and-reads-the-baseline-geo-projection.md)）。
+- `node-operations / transport-fulfillment → network-routing`：节点作业提供节点收寄、当前有效实测、节点控制、物理拆分合并、非计划节点和物理装载事实（收寄复核的触发经小包托运的有效网络收寄采用到达，见 `parcel-shipment → network-routing`；实测与控制节点的读口等节点作业的实测登记册，`pp-pricing-input-seams/04`）；运输履约提供场外揽收、权威运输交接和实际移动事实。场外揽收触发复核但不建立当前可控节点，交进声明的接收节点的权威运输交接才建立（[ADR-0249](../adr/0249-offsite-pickup-reassessment-checks-hard-constraints-only-and-does-not-establish-a-controllable-node.md)、[ADR-0215](../adr/0215-a-handover-into-a-node-triggers-route-reassessment-and-reads-the-baseline-geo-projection.md)）。网络与路由据已知实际接货位置及当时有效证据复核，在包裹进入节点并形成有效节点实测后再按实际节点和实测复核，但不覆盖收寄、控制、测量或履约事实。权威运输交接以`已交接`把包裹交进声明的接收节点时，网络与路由从该节点复核（[ADR-0215](../adr/0215-a-handover-into-a-node-triggers-route-reassessment-and-reads-the-baseline-geo-projection.md)）；触发的业务时间早于路由历史里最近一次已判控制触发时只入账、不判（[ADR-0235](../adr/0235-route-reassessment-settles-what-a-retry-cannot-change-and-does-not-judge-triggers-older-than-the-current-position.md)）。
 - `transport-fulfillment → network-routing`：运输履约提供班次与多维容量可用性信号、订舱、容量预占或装载分配结果、运输控制边界和实际移动事实；网络与路由不预占容量，单次分配失败也不自动等于逻辑路径失效。
 - `transport-fulfillment → customs-compliance`：运输履约提供运输总单、运输舱单及其版本、实际承运商、运输交接和实际移动事实；首发出口和进口监管舱单由承运商在外部形成并提交，关务通过 [UC-CC-012](../application/customs-compliance/UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md) 接受外部引用并据此关联或复核申报资料和监管适用性，但不取得运输单证、实际运输事实或承运商舱单形成/提交权。物理同袋、同总单、同舱单或同班次也不自动构成受控跨客户合报资格。
-- `customs-compliance ↔ network-routing`：关务提供合规候选区域、口岸、申报路径、限制及解除结果；路由只在合格候选中选择。拟改路改变关务区域、口岸或报关服务方时，必须先请求新的关务适用性判断，不能沿用原申报或放行结果。路由按候选取关务适用性、判断口补上之前怎么答，见 [ADR-0148](../adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定三。
+- `customs-compliance ↔ network-routing`：关务提供合规候选区域、口岸、申报路径、限制及解除结果；路由只在合格候选中选择。拟改路改变关务区域、口岸或报关服务方时，必须先请求新的关务适用性判断，不能沿用原申报或放行结果。路由按候选向关务取关务适用性判断，三格答复（可用、不可用、状态未知）与理由、成因见 [customs-compliance/CONTEXT.md](./customs-compliance/CONTEXT.md)「关务适用性判断」。
 - `node-operations ↔ transport-fulfillment`：节点作业拥有集运单元、备货、点验、物理装卸以及节点侧交出或接收证据；运输履约唯一拥有节点与运输方之间逐对象成立的权威交接结果，以及班次、装载分配和节点间移动。双方引用同一交接范围，整批结果由成员结果派生，不共同编辑一个结果；只有“已交接”结果转移控制，已拒收或待确认均保持原控制，扫描、位置和装卸不能单独转移控制。节点作业按交接对象经自己的当前关联认作业实物、转出它此刻唯一在身的控制，交接声明了接收节点时在那个节点成立交接转入的控制，转移记在自己的节点控制转移册上；运输履约的交接更正不使节点控制回退，哪一版是更正只看运输履约的更正回指、不看交接范围（[UC-NO-005](../application/node-operations/UC-NO-005-ADVANCE-NODE-CONTROL-ON-AN-AUTHORITATIVE-TRANSPORT-HANDOVER.md)）。运输履约的出发门禁读数按节点作业集运成员关系里出发那一刻的直接成员展开集运单元，成员是哪件包裹按节点作业的收寄身份认，只读不改（[ADR-0225](../adr/0225-the-departure-gate-reading-asks-through-consolidation-unit-members-at-the-moment-of-departure.md)）。
 - `node-operations → customs-compliance`：节点作业通过 [UC-NO-001](../application/node-operations/UC-NO-001-ACCEPT-AND-EXECUTE-CUSTOMS-NODE-COLLABORATION.md) 独立形成节点监管协作承接决定，并提供当前有效实测、状况观察、查验协作和监管处置的实际执行事实及证据；关务据此形成或复核正式申报资料、合规判断、当前协作判断和处置执行核对，但不得覆盖客户原始资料、节点承接决定或执行事实，也不得把任务完成冒充监管查验结果。关务拥有已接收监管决定、范围化执行协作事项和交接依据，节点作业拥有物理开封、隔离、重封、销毁、退运装载等执行事实；指令下达、承接、部分执行或内部核对均不自动终结监管义务。
 - `customs-compliance → node-operations / transport-fulfillment`：关务提供已接收且适用范围明确的限制、查验或处置决定、范围化协作依据、绑定拟执行动作与监管边界的放行门禁判断及外部监管结果；监管机构仍拥有最终决定和授权权力。节点作业通过 [UC-NO-001](../application/node-operations/UC-NO-001-ACCEPT-AND-EXECUTE-CUSTOMS-NODE-COLLABORATION.md) 拥有现场协作承接和执行事实；运输履约只对明确要求实际移动的范围通过 [UC-TF-001](../application/transport-fulfillment/UC-TF-001-ACCEPT-AND-FULFILL-REGULATORY-TRANSPORT-DISPOSITION.md) 拥有监管运输承接、权威交接和移动事实。两者只能消费与当前对象、拟执行动作和监管边界匹配的门禁及外部结果，并只阻断受约束的出库、装载出发、跨关务区域移动、交付等方向性动作，不得复用其他动作的门禁或通过异常关闭绕过限制。未放行不阻止接收、隔离、测量、查验协作及具有有效依据的处置执行；外部监管放行也不自动解除仍有效的内部合规限制，只有各限制来源分别解除后，相应受限动作才可继续。
 - `transport-fulfillment → customs-compliance`（动作准入判断）：运输履约在出发、交出、交付等方向性动作时（出发还有动作之前的出发前门禁问询，[ADR-0219](../adr/0219-a-device-previews-the-departure-gate-before-departing-and-reads-what-the-departure-will-record.md)；交付还有派送出发之前的交付前门禁问询，[ADR-0238](../adr/0238-a-courier-previews-the-delivery-gate-before-dispatching-and-reads-what-the-delivery-will-record.md)），经消费侧适配器同步向关务交对象、动作意图与动作时点（拉取，不订阅），关务按节点关务区域定适用的受门禁动作、按自己的册子解析对象范围，把限制、门禁核对与外部放行折成封闭答复交回（[ADR-0206](../adr/0206-customs-action-admission-judgement-folds-three-sources-and-judges-cross-zone-by-node-customs-zones.md)）。运输履约只翻译答复，动作时随自己的事实保存，两种问询时只交回、不保存（问询与动作时的请求关务都照记判断），不自折三源、不自判是否跨关务区域；答复不是放行结果，运输履约也不据它改写关务事实。
-- `party-commercial / parcel-shipment → visibility-exception`：参与方与商业提供货主客户账户、责任法人、服务产品、客户合同、客户查询授权及适用异常服务规则；小包托运提供包裹身份谱系、客户承诺和终局服务结果。全程追踪保存实际采用的追踪公开、响应、披露和责任依据，形成客户账户隔离的普通全程追踪视图，不修改商业版本、包裹身份、承诺或终局。
+- `party-commercial / parcel-shipment → visibility-exception`：参与方与商业提供货主客户账户、责任法人、服务产品、客户合同及适用异常服务规则；客户查询授权由共享身份能力的客户渠道册给出（[ADR-0139](../adr/0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md) 决定二、四），不是参与方与商业的对象；小包托运提供包裹身份谱系、客户承诺和终局服务结果。全程追踪保存实际采用的追踪公开、响应、披露和责任依据，形成客户账户隔离的普通全程追踪视图，不修改商业版本、包裹身份、承诺或终局。
 - `各事实源 → visibility-exception`：小包托运、网络与路由、节点作业、运输履约和关务上下文拥有各自业务事实、有效性及更正关系；全程追踪只基于已经接受的事实形成标准追踪里程碑、全程追踪投影、ETA、异常信号和案件。关务相关异常、协调和客户披露通过 [UC-VE-001](../application/visibility-exception/UC-VE-001-COORDINATE-CUSTOMS-EXCEPTIONS-AND-CUSTOMER-DISCLOSURE.md) 消费 `customs-compliance` 已接受的事实或判断，不能把原始监管消息、异常信号或客户意见反向改写为关务事实。来源冲突无法裁决时保持待确认并协调核实，不成为第二事实源。
 - `network-routing → visibility-exception`：网络与路由拥有路由计划与实际事实的偏离判断，并提供路由版本、选择依据、无当前有效路由和路由偏离结果；全程追踪拥有由此形成的可见投影、异常信号和异常案件，但不能反向改写路由计划或实际事实。
 - `visibility-exception → 业务上下文`：异常处置只能提出带目标、范围和依据的改路、重作业、重新履约或重新申报等请求；发送、接受和实际完成分别记录，是否生效及执行事实仍由拥有相应对象的上下文决定。
@@ -334,12 +346,12 @@ flowchart LR
 - `customs-compliance → settlement-accounting`：关务提供监管核定税费、法定义务人、外部资金事实引用、税费付款核对和责任依据；结算通过 [UC-SA-001](../application/settlement-accounting/UC-SA-001-ASSESS-ACTUAL-ADVANCE-AND-FORM-CUSTOMER-RECOVERY.md) 结合付款方身份、外部资金事实和有效合同责任，独立确认实际代垫是否成立，再形成客户代垫回收及运营结算。关务服务费由 `parcel-pricing` 依据销售商业依据形成纯评价，再由结算采用独立费用项目形成，不因代垫成立自动生成；任何一方不得把监管核定或付款事实直接改写为代垫成立或回收金额。
 - `customs-compliance → settlement-accounting`（付款核对的交接）：关务形成一版税费付款核对后经 Outbox 交出只带引用（租户、申报范围、税费引用、资金事实引用、版本指纹）的信封；结算以 inbox 消费者接收，按同一组引用向关务的只读口核信封所指那一版在册（不取 latest），登为结算输入版本里「付款核对」一格的采用版本——只存核对版本引用与采用时刻。覆盖、差额、有效性三态与关联依据留在关务，结算不复制结论作第二处权威；采用一版核对是「结算输入已接收」，不是实际代垫成立，代垫判断仍由 `UC-SA-001` 在全部输入到齐后独立形成。
 - `settlement-accounting → customs-compliance`：结算是外部资金事实进入本产品的唯一采用口（[ADR-0137](../adr/0137-customs-gate-judgments-are-registered-facts-driven-by-assessment-requests-payment-gate-rule-is-registered-and-funds-facts-are-minted-only-in-settlement-accounting.md) 决定四）；采用一条事实后经 Outbox 交出只带引用（租户、事实引用、采用版本，更正版本带回指）的采用信封，关务以 inbox 消费者接收，按引用向结算的只读口取信封所指那一版的内容（来源身份、来源提供的付款人、金额、币种、业务时间），登为税费付款核对的入向资金事实引用。关务不复制金额作第二处权威、不在消费时关联或核对；结算不判断付款人也不替关务核对。
-- `settlement-accounting → parcel-pricing`：结算按 [UC-SA-002](../application/settlement-accounting/UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md) 步 2 向计价请求评价：先登记一份评价请求——结算提交主要范围、计算目的与合格来源引用（运输收费发生项、费用项目、供应商协议版本）；在由调用方交齐的那条触发面上（[ADR-0164](../adr/0164-buy-evaluation-request-trigger-is-occurrence-formed.md)），这几样由结算作业或上游编排交进来，结算不从来源上下文的登记册推导；发生项已形成信封那一路不在此限，发生项与供应商协议按引用回读那一份发生项自身固定的事实，主要范围取那一版协议的商业范围（[ADR-0208](../adr/0208-buy-evaluation-is-requested-from-the-charge-occurrence-formed-envelope.md)，见「`transport-fulfillment → settlement-accounting`（发生项已形成的交接）」一条）——再在同一事务里经 Outbox 交出只带引用（租户、评价请求标识）的提交信封；计价以 inbox 消费者接收，按标识向结算的只读口取回引用形成计价输入快照，形成的评价回指评价请求标识。评价请求的身份是铸造标识，自然键（范围、目的、引用集合摘要）只守幂等；请求里没有金额、币种或换算，计价也不改写请求。计价这一侧按（租户、主要范围、方向、计算目的、发生项业务时点）解析在用价卡：唯一命中才形成，零命中是`未配置`、多于一版是`适用冲突`，两格都交回结算侧续办，计价不替租户挑卡、不种任何优先级；合格来源引用指不到包裹主体、分区或计费重量时，评价停在显式未决`输入不可得`并点名缺哪一只只读口——那些读口归拥有事实的上下文（运输履约的发生项成员、节点作业 / 小包托运的实重尺寸、小包托运的邮编路线）那一侧立，计价不猜、不填、不拿默认值顶；同一评价请求至多形成一份评价，重放按回指答`已存在`。SELL·客户费用另有一路按包裹计费时点发起（[ADR-0190](../adr/0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md)）：请求点名包裹而不点名发生项，计价按包裹建快照（实重尺寸照 ADR-0171 取源、邮编路线、请求上快照的结算币种），选卡口径同受理前试算。
-- `parcel-pricing → settlement-accounting`（评价未形成与参数已登记）：计价对一份评价请求答不出评价（`未配置`、`适用冲突`、`输入不可得`）时不形成评价、不按未决重投，经 Outbox 交「评价未形成」（租户、请求、方向、停在哪一格），结算在请求上记停因；价卡登记与序列、目录复核通过时同笔交「参数已登记」（带受影响的计价范围与方向，序列与目录按绑了它的卡），结算按停因与收窄格另起新一代请求再问，旧请求与旧评价不改写。结算自己的几本评价参数册与结算账户登记同样交信封给结算自己的续办门（[ADR-0229](../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md)）。
+- `settlement-accounting → parcel-pricing`：结算按 [UC-SA-002](../application/settlement-accounting/UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md) 步 2 向计价请求评价：先登记一份评价请求——结算提交主要范围、计算目的与合格来源引用（运输收费发生项、费用项目、供应商协议版本）；在由调用方交齐的那条触发面上（[ADR-0164](../adr/0164-buy-evaluation-request-trigger-is-occurrence-formed.md)），这几样由结算作业或上游编排交进来，结算不从来源上下文的登记册推导；发生项已形成信封那一路不在此限，发生项与供应商协议按引用回读那一份发生项自身固定的事实，主要范围取那一版协议的商业范围（[ADR-0208](../adr/0208-buy-evaluation-is-requested-from-the-charge-occurrence-formed-envelope.md)，见「`transport-fulfillment → settlement-accounting`（发生项已形成的交接）」一条）——再在同一事务里经 Outbox 交出只带引用（租户、评价请求标识）的提交信封；计价以 inbox 消费者接收，按标识向结算的只读口取回引用形成计价输入快照，形成的评价回指评价请求标识。评价请求的身份是铸造标识，按（自然键、代次）唯一，自然键是范围、目的与引用集合摘要，续办出来的一代回指前一代（[ADR-0229](../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定一）；请求里没有金额、币种或换算，计价也不改写请求。计价这一侧按（租户、主要范围、方向、计算目的、发生项业务时点）解析在用价卡：唯一命中才形成，零命中是`未配置`、多于一版是`适用冲突`，两格都交回结算侧续办，计价不替租户挑卡、不种任何优先级；合格来源引用指不到包裹主体、分区或实重尺寸时，计价不形成评价，经「评价未形成」交回、结算在请求上记停因 `PRICING_INPUT_UNAVAILABLE`，不按未决重投（[ADR-0229](../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定三）；缺的那只只读口——那些读口归拥有事实的上下文（运输履约的发生项成员、节点作业 / 小包托运的实重尺寸、小包托运的邮编路线）那一侧立，计价不猜、不填、不拿默认值顶；同一评价请求至多形成一份评价，重放按回指答`已存在`。SELL·客户费用另有一路按包裹计费时点发起（[ADR-0190](../adr/0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md)）：请求点名包裹而不点名发生项，计价按包裹建快照（实重尺寸照 ADR-0171 取源、邮编路线、请求上快照的结算币种），选卡口径同受理前试算。
+- `parcel-pricing → settlement-accounting`（评价未形成与参数已登记）：计价对一份评价请求答不出评价（`未配置`、`适用冲突`、`输入不可得`）时不形成评价、不按未决重投，经 Outbox 交「评价未形成」（租户、请求、方向、停在哪一格），结算在请求上记停因；价卡登记、价卡收尾（[ADR-0234](../adr/0234-an-older-price-card-version-leaves-new-selections-only-through-an-explicit-closure-for-a-named-successor.md)）与序列、目录复核通过时同笔交「参数已登记」（带受影响的计价范围与方向，序列与目录按绑了它的卡），结算按停因与收窄格另起新一代请求再问，旧请求与旧评价不改写。结算自己的几本评价参数册与结算账户登记同样交信封给结算自己的续办门（[ADR-0229](../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md)）。
 - `settlement-accounting → parcel-pricing`（受理前试算）：接受前财务控制要金额时，结算按该结算账户的受理前估价采用行向计价要一次受理前试算（[ADR-0179](../adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 决定一至四）：结算给计价范围（取采用行）、委托与提交版本（小包托运的标识原样）、控制判断时点与结算币种（取控制作用域）。计价按（租户、计价范围、`SELL`、客户费用、该时点）解析唯一在用价卡——与正式 `SELL` 客户费用评价同一口径，未配置与适用冲突各自停、不挑卡——再对这一版的每一件声明包裹各形成一份试算评价，与正式评价共用补齐读数；试算只算不存、不交付。结算按采用的形态合计成控制金额、任一件缺件或没有合计、任一份币种不是作用域的币种都不形成，不换算；估价连同价卡版本、逐件评价标识与版本清单随控制结果留痕。试算评价不进入结算形成任何费用、预估费用或应收应付。
 - `settlement-accounting ↔ 财务、税务、银行和支付系统`：结算拥有物流运营分户账，外部系统拥有真实收付款、银行清算、法定税额与发票、会计应收应付、坏账、总账和法定报表。双方通过可追溯事实及映射协作，不共同维护一个可覆盖余额。
-- `parcel-shipment / transport-fulfillment → collection-remittance`：小包托运拥有并提供包裹与客户代收服务要求快照；运输履约拥有并提供履约侧代收证据、渠道代收报告和渠道回款通知，但这些来源都不等于运营企业真实到账。代收与清分关联适用证据及银行或支付事实后形成代收本金的应收、已收、在途、清分、应付客户、短款、溢款和汇付分户账结果，不取得客户要求、履约证据或银行事实所有权。
-- `settlement-accounting ↔ collection-remittance`：结算拥有 COD 服务费和有效协议允许的运费抵扣金额，代收与清分拥有代收本金及汇付。未实际收到的代收款不得进入可付客户余额，代收本金也不得计入经营口径物流收入或普通运营结算余额。
+- `parcel-shipment / transport-fulfillment → collection-remittance`：小包托运拥有并提供包裹与客户代收服务要求快照；运输履约拥有并提供履约侧代收证据、渠道代收报告和渠道回款通知，但这些来源都不等于运营企业真实到账。代收与清分据此登记代收指令与代收事实，形成代收分户账结果（资金位置见 [GLOSSARY「代收分户账」](./GLOSSARY.md#代收分户账)），不取得客户要求、履约证据或银行事实所有权。
+- `settlement-accounting ↔ collection-remittance`：结算拥有 COD 服务费和有效协议允许的运费抵扣金额，代收与清分拥有代收本金及汇付。运营企业真实到账同样只经结算的唯一采用口进入本产品：代收与清分登记这一层代收事实时，证据引用指向一条结算已采用的外部资金事实，按引用向结算的只读口读回那一版核对，引用同一条事实的各条真实到账金额之和不超过它（[ADR-0274](../adr/0274-collected-principal-bank-arrival-enters-through-the-settlement-accounting-funds-adoption.md)）。未实际收到的代收款不得进入可付客户余额，代收本金也不得计入经营口径物流收入或普通运营结算余额。
 
 ## 文档关系
 
