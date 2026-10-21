@@ -92,3 +92,13 @@ UC-NR-003 立 `AT-NR-087`。Covers 指它的用例：
 - 迁移：一次性库 `code69seed` 随 `scripts/demo-seeds/seed.sh` 全量灌入，退 0。另在同一库上回退 0024、按旧封闭集插入四种既有原因各一行，再单独施加 0024，成功，四行 `shipment_accepted_at` 皆空。用完 `DROP DATABASE … WITH (FORCE)`。
 - 收口自检：scratchpad 副本上 `go run ./tools/adr-index`、`-check` 均退 0；两句被停原句在 ADR-0235 正文里逐字存在；ADR-0235 除 Status 行（原行是新行的前缀）与 Links 新加一行外逐字节不变。
 - 没跑全量；没重生成 ADR 索引、AT 计数与机制清点，留推送方。
+
+### 评审后修订（2026-10-21，作者会话，rebase 到 main `3e3b08300`）
+
+- 隔离评审无阻断；协调方核过 `assemble.go` 那一处装配，改的是已有的消费者构造，不违背 ADR-0222。
+- ADR-0279「对已接受记录的作用」补「ADR-0249：无条款停用」，Links 补一行，0249 那一侧不挂指针。ADR-0235 注记改写为「已由 [ADR-0279](…) 停用（扩成）」。
+- `networkIntakeConsumer` 头注的链条补「读回已接受委托取接受时刻」一步；派发测试注释去掉变更叙述。
+- 迁移 0024 头注改写两边时刻的精度，约束名改为 `route_reassessment_not_judged_acceptance_iff_not_after`。协调方给的前提是「两边都从库里读回、只到微秒」，核下来只对了触发那一边：触发的业务时间读自交接册、收寄采用册的 timestamptz 列，只到微秒；接受时刻读自 PS 委托文档 jsonb 里的 `fixedAt` 时间串，带纳秒（`pspostgres` 委托文档的 `FixedAt` 字段，真库用例读回的值实测带纳秒）。所以 `<=` 不只是防御：触发恰在接受那一微秒里时，`<` 会写不进。
+- AT 盘点 rebase 冲突取并集。
+- 验证：同一组包重跑退 0，22 个包 ok；迁移改过，在一次性库上随种子重灌一遍，退 0，新约束名在库里，用完已删。scratchpad 副本上 `adr-index`、`-check` 退 0；ADR-0235 正文除 Status 行与 Links 外逐字节不变。
+
