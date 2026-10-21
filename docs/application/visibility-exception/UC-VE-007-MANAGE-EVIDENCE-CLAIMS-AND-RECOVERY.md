@@ -129,6 +129,6 @@
 
 ## 给开发的交接
 
-把证据项、索赔批次、索赔项、三个独立期限、撤回、责任结论、追偿事项、外部通知/主张动作、对方响应、金额引用和到账/核销引用分别建模。首次索赔期限与最低材料两维取自挂客户合同的那一版而它没写某一维时，今天取的是索赔时按锚点现选的产品底座，不是接受时随闭包固定的那一版；底座被截止、退役或有效性更正之后会改口。规则不变（VE CONTEXT 索赔资格时点一条，[ADR-0268](../../adr/0268-a-contract-tier-service-rule-inherits-from-a-product-base-fixed-with-the-acceptance-time-closure.md)），缺口随 [code/61](../../../.scratch/docs-consistency/code/61-a-contract-tier-service-rule-reads-its-product-base-at-claim-time.md)。
+把证据项、索赔批次、索赔项、三个独立期限、撤回、责任结论、追偿事项、外部通知/主张动作、对方响应、金额引用和到账/核销引用分别建模。首次索赔期限与最低材料两维取自挂客户合同的那一版而它没写某一维时，取接受时随闭包固定的那一版产品底座，已补（[code/61](../../../.scratch/docs-consistency/code/61-a-contract-tier-service-rule-reads-its-product-base-at-claim-time.md)）：底座此后被截止、退役或有效性更正都不改口；拼进来的每份正文核其所挂合同等于同一份闭包采用的客户合同（VE CONTEXT 索赔资格时点一条，[ADR-0268](../../adr/0268-a-contract-tier-service-rule-inherits-from-a-product-base-fixed-with-the-acceptance-time-closure.md)）。
 
 完成本用例只证明 VE 的资格、外部动作和责任链可追溯，不证明赔付或追偿金额已经形成，更不证明资金已经收付或核销。
