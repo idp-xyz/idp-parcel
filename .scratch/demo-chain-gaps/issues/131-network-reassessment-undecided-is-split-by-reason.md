@@ -1,7 +1,7 @@
 # 131 NR 复核未决不分原因一律重投，不会自愈的几格堵住交接分区直到 ABANDONED
 
 Category: bug
-Status: in-progress——隔离评审无阻断项、评审修订完，待进 main，分支 claude-dcg131（2026-10-21，见文末「完成记录」「评审记录」）。此前完工待评审；此前 2026-10-21 认领（131、132 同批）；此前 ready-for-agent——2026-10-20 代决复核立（上线前必修），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: resolved——2026-10-21 进 main（全量钉 `77ea36fa`：`scripts/test-full.sh` 158 ok / 0 FAIL，见文末「进 main 记录」）；未判三格入账之后的续办转票 [154](./154-network-reassessment-not-judged-triggers-resume-after-registration.md)，初始路由同病转票 [155](./155-initial-route-unconfigured-undecided-burns-the-acceptance-partition.md)。此前 in-progress——隔离评审无阻断项、评审修订完，待进 main，分支 claude-dcg131（2026-10-21，见文末「完成记录」「评审记录」）。此前完工待评审；此前 2026-10-21 认领（131、132 同批）；此前 ready-for-agent——2026-10-20 代决复核立（上线前必修），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 M10；ADR-0215 越权风险点 9、10
 
@@ -77,3 +77,7 @@ M10 的现象逐条成立：两路适配器的 `reassessmentToConsumption` 把�
 **未采纳**：无。
 
 **修订后验证**：于 `d0e888b8`，`go build ./...`、`go vet ./...`、`gofmt -l cmd internal migrations tools` 干净；修订那笔代码提交 `cf0ca77e` 单独 build、vet 通过。`scripts/test-full.sh` 跑了 `./internal/networkrouting/...`、`./cmd/parcel-dispatch/`、`./cmd/parcel-api/`、`./cmd/parcel-network-register/`，PS、TF、VE 各自的 `adapters/networkrouting`，`./internal/platform/inboxconsume/`、`./internal/architecture/...`、`./migrations/...`，22 个包全绿，0 FAIL。之后的提交只动 ADR 与票面。
+
+## 进 main 记录
+
+2026-10-21 协调方合入，131、132 同批。分支基点 `cb087e5a`，其后 main 多了票 50（PC 版本收尾），与本分支只在 `.scratch/at-coverage-inventory.md` 重叠；cherry-pick 14 笔按原序到 `c1828dd1` 无冲突，其余各文件与分支逐字相同；SHA 随之换新（分支 `3c2ffc58`…`6980e1aa` 作封存出处，main 上为 `c49803e7`…`f09cc9de`）。其上按 parallel-sessions.md 重生成 ADR 索引、重算 AT 盘点计数、重生成机制清点（`77ea36fa`），各自单独成笔；`adr-index -check` 与 `at-coverage-counts -check` 退 0。在干净的隔离树上对 `77ea36fa` 跑 `go build ./...`、`go vet ./...`、`gofmt -l` 干净，`scripts/test-full.sh` 全量 158 ok、0 FAIL（`-count=1`，无缓存）；推 `77ea36fa:main`。迁移落号 `network_routing/0021`、`0022`（连号）。
