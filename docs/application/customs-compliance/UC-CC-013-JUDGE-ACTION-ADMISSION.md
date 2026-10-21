@@ -1,6 +1,6 @@
 # UC-CC-013 判断动作准入
 
-状态：开发基线已形成；判断方法、节点关务区域登记册与判断记录已交付（[ADR-0206](../../adr/0206-customs-action-admission-judgement-folds-three-sources-and-judges-cross-zone-by-node-customs-zones.md)），真实节点区域取值待提供（`PAR-CUS-08`），生产消费方接线随运输履约出发登记一票
+状态：开发基线已形成；判断方法、节点关务区域登记册与判断记录已交付（[ADR-0206](../../adr/0206-customs-action-admission-judgement-folds-three-sources-and-judges-cross-zone-by-node-customs-zones.md)），真实节点区域取值待提供（`PAR-CUS-08`）；生产消费方出发（[ADR-0205](../../adr/0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md)）、交出与交付（[ADR-0213](../../adr/0213-a-transport-handover-declares-its-releasing-receiving-and-onward-nodes.md)）已接线
 
 ## 目标与边界
 
@@ -10,7 +10,7 @@
 
 - 按动作意图与节点关务区域定适用的受门禁动作；
 - 按本上下文自己的申报单元与案件册解析对象的申报范围与程序；
-- 逐动作把内部合规限制、放行门禁核对与外部放行结果三源折成封闭答复；
+- 逐动作把限制（监管限制与内部合规限制，[ADR-0241](../../adr/0241-action-admission-restrictions-are-regulatory-or-internal-and-only-regulatory-restrictions-exist-today.md)）、放行门禁核对与外部放行结果三源折成封闭答复；
 - 按内容派生判断标识记下判断，重放回到同一份；
 - 维护节点关务区域登记册。
 
@@ -18,10 +18,10 @@
 
 本用例不执行：
 
-- 形成、解除或覆盖内部合规限制（[UC-CC-011](./UC-CC-011-MANAGE-INTERNAL-COMPLIANCE-RESTRICTIONS.md)）；
+- 形成、解除或覆盖内部合规限制（[UC-CC-011](./UC-CC-011-MANAGE-INTERNAL-COMPLIANCE-RESTRICTIONS.md)）或监管限制；
 - 登记放行门禁核对，或发 `customs-compliance.gate-verification.recorded`（[UC-CC-009](./UC-CC-009-RECONCILE-TAX-PAYMENT-RECOVERY-AND-RELEASE-GATE.md)）；
 - 接收或解释外部放行结果（[UC-CC-006](./UC-CC-006-RECEIVE-AND-RECONCILE-EXTERNAL-RESULTS.md)）；
-- 阻止或撤销已经发生的物理动作——是否照记、怎样标记违规，归动作执行方（ADR-0205，票 demo-chain-gaps/32 起草）；
+- 阻止或撤销已经发生的物理动作——是否照记、怎样标记违规，归动作执行方（ADR-0205）；
 - 入队任何信封。
 
 ## 元数据
@@ -41,8 +41,8 @@
 
 | 引用键 | 权威内容 | 来源 |
 |---|---|---|
-| `CC-ADMISSION` | 适用动作、跨区判据、对象范围解析、三源折法与判断记录 | [CC CONTEXT「动作准入判断」](../../domain/customs-compliance/CONTEXT.md#动作准入判断)、ADR-0206 |
-| `CC-LANG` | 动作准入判断、节点关务区域、放行门禁核对、内部合规限制、放行结果 | [CC CONTEXT：Language](../../domain/customs-compliance/CONTEXT.md#language) |
+| `CC-ADMISSION` | 适用动作、跨区判据、对象范围解析、三源折法与判断记录 | [CC CONTEXT「动作准入判断」](../../domain/customs-compliance/CONTEXT.md#动作准入判断)、ADR-0206；限制一源的两种限制见 ADR-0241 |
+| `CC-LANG` | 动作准入判断、节点关务区域、放行门禁核对、监管限制、内部合规限制、放行结果 | [CC CONTEXT：Language](../../domain/customs-compliance/CONTEXT.md#language) |
 | `CC-GATE` | 门禁读法与「税费付款」那一道的规则 | [UC-CC-009](./UC-CC-009-RECONCILE-TAX-PAYMENT-RECOVERY-AND-RELEASE-GATE.md)、ADR-0137 决定三 |
 | `CC-RESULT` | 放行结果按层接收 | [UC-CC-006](./UC-CC-006-RECEIVE-AND-RECONCILE-EXTERNAL-RESULTS.md)、ADR-0197 |
 | `CTX-REL` | 运输履约向关务拉取准入判断 | [CONTEXT-MAP](../../domain/CONTEXT-MAP.md#关系约束) |
@@ -57,7 +57,7 @@
 | 动作时点 | 动作执行方 | 动作发生或拟发生的业务时刻 | 不以请求到达时刻代替；限制、放行、区域都按它读 |
 | 节点关务区域 | `customs-compliance` 登记册 | 节点、区域、生效区间 | 未登记不推定同区或异区 |
 | 对象范围 | `customs-compliance` 申报单元与案件册 | 当前单元及其程序；在案未成单元的程序 | 不向执行方要范围 |
-| 三源 | 限制册、门禁目录与付款核对、放行事实 | 各自既有语义 | 只读；同层冲突的放行不算 |
+| 三源 | 限制（监管限制册；内部合规限制首发没有册）、门禁目录与付款核对、放行事实 | 各自既有语义 | 只读；同层冲突的放行不算 |
 
 ## 结果语义契约
 
@@ -98,7 +98,7 @@
 | `AT-CC-415` | 对象在出口单元内，跨区门禁满足，动作时点前有一份全部放行 | 跨关务区域移动答放行，依据指回那份放行 |
 | `AT-CC-416` | 同上但没有放行 | 答阻断（未取得放行）；门禁满足不答放行 |
 | `AT-CC-417` | 同上只有部分放行，另有一份同层冲突的全部放行 | 答未决（只有部分放行）；同层冲突那份不算 |
-| `AT-CC-418` | 门禁满足、已全部放行，包裹上有一条动作时点有效、约束跨区移动的限制 | 答阻断，依据指名限制；外部放行不解内部限制 |
+| `AT-CC-418` | 门禁满足、已全部放行，包裹上有一条动作时点有效、约束跨区移动的监管限制 | 答阻断，依据指名限制；外部放行不自动解除限制 |
 | `AT-CC-419` | 限制在动作时点之后才解除 | 仍答阻断；按动作时点判 |
 | `AT-CC-420` | 对象在单元内，单元的门禁目录未登记 | 答未配置（门禁目录未登记） |
 | `AT-CC-421` | 终点节点未登记区域，对象的单元登了跨区门禁且不是不受门禁 | 跨关务区域移动答未配置，指名未登记的节点 |
@@ -110,5 +110,6 @@
 ## 生产参数与待决风险
 
 - 节点区域取值：`PAR-CUS-08`，演示以 `SYN-ZONE-CN` / `SYN-ZONE-SG` 合成（证据 `S`）。
-- 逐件建案等 psb/18：此前演示包裹不在册，演示动线上不出现放行。
+- 逐件建案口已由 [ADR-0227](../../adr/0227-customs-case-and-declaration-submission-enter-production-through-operator-decision-faces.md) 提供；默认演示动线上出不出现放行，取决于是否灌外部放行结果。
+- 内部合规限制首发没有模型与写入口，限制一源只读监管限制，而监管限制也还没有生产写入（ADR-0241 决定四、ADR-0206 越权风险点 1）；内部合规限制待确认或冲突答未决那一格随 UC-CC-011 接线补 AT（票 [docs-consistency/code/27](../../../.scratch/docs-consistency/code/27-customs-restriction-comments-call-the-regulatory-restriction-internal-and-internal-restrictions-have-no-model.md)）。
 - 待决风险以 ADR-0206「越权风险点」为准，此处不复述。
