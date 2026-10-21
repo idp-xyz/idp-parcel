@@ -541,13 +541,8 @@ func (handler *ReassessRouteHandler) rerouteAfterLapse(
 		}
 		switch selection.ranking.Outcome() {
 		case domain.RankingSelected:
-			improved, comparable := costImprovement(
-				evidence.CandidateCosts,
-				lapsedPlan.SelectedCandidate(),
-				selection.plan.SelectedCandidate(),
-			)
-			threshold := evidence.AutoRerouteImprovementThresholdMinor
-			if !comparable || threshold == nil || improved <= int64(*threshold) {
+			// 失效线改路的依据是失效依据，改善只是自动条件之一，不进记录。
+			if _, over := improvementBasisOf(evidence, lapsedPlan, selection.plan); !over {
 				return handler.suggestionOnly(record, trigger.Key(), triggerRef, candidates, now,
 					[]string{"IMPROVEMENT_BELOW_THRESHOLD"})
 			}
@@ -670,11 +665,8 @@ func (handler *ReassessRouteHandler) tryImprovementReroute(
 	if selection.ranking.Outcome() != domain.RankingSelected {
 		return record, nil
 	}
-	improved, comparable := costImprovement(
-		evidence.CandidateCosts, plan.SelectedCandidate(), selection.plan.SelectedCandidate(),
-	)
-	threshold := evidence.AutoRerouteImprovementThresholdMinor
-	if !comparable || threshold == nil || improved <= int64(*threshold) {
+	improvement, over := improvementBasisOf(evidence, plan, selection.plan)
+	if !over {
 		return record, nil
 	}
 	triggerRef, err := domain.NewRerouteTriggerReference(trigger.Correlation().String())
@@ -712,7 +704,11 @@ func (handler *ReassessRouteHandler) tryImprovementReroute(
 	if err := handler.deps.Applicability.Save(ctx, successor); err != nil {
 		return ports.ReassessmentRecord{}, err
 	}
+	// 原计划仍可执行，没有失效依据；这次改路的依据是改善本身。选出了唯一候选，候选评估就是有候选。
 	record.Conclusion = ports.ReassessmentRerouted
+	record.CandidateState = ports.CandidatesAvailable
+	record.ImprovementBasis = improvement
+	record.HasImprovementBasis = true
 	record.RerouteState = authority
 	record.NewPlan = selection.plan
 	record.HasNewPlan = true
@@ -744,21 +740,26 @@ func structuralAutoReroute(
 	return authority, blockers, nil
 }
 
-func costImprovement(costs []domain.CandidateCostFact, current, next domain.CandidateID) (int64, bool) {
+// improvementBasisOf 按这次判断现取的候选成本，比原计划所选候选与新计划所选候选，够格时交回改善依据。两份成本缺一
+// 即不够格。
+func improvementBasisOf(
+	evidence ports.InitialRouteEvidence,
+	current, next domain.InitialRoutePlan,
+) (domain.CostImprovementBasis, bool) {
 	var currentFact, nextFact domain.CandidateCostFact
 	var haveCurrent, haveNext bool
-	for _, cost := range costs {
-		if cost.Candidate() == current {
+	for _, cost := range evidence.CandidateCosts {
+		if cost.Candidate() == current.SelectedCandidate() {
 			currentFact, haveCurrent = cost, true
 		}
-		if cost.Candidate() == next {
+		if cost.Candidate() == next.SelectedCandidate() {
 			nextFact, haveNext = cost, true
 		}
 	}
 	if !haveCurrent || !haveNext {
-		return 0, false
+		return domain.CostImprovementBasis{}, false
 	}
-	return domain.CostImprovementMinor(currentFact, nextFact)
+	return domain.JudgeCostImprovement(currentFact, nextFact, evidence.AutoRerouteImprovementThresholdMinor)
 }
 
 // errRouteIdentityUnavailable 让调用方把「取号依赖故障」与领域故障分开转成未决续办。
