@@ -31,5 +31,5 @@ S：只改注释，`go build`、`go vet` 不受影响。
 ## 最小的诚实修法
 
 - 上列各处的「（NNN）」换成 CONTEXT 小节名加句首引文（如「CONTEXT「单个案件不存在部分关闭」」）。修完在 `internal/customscompliance` 与 `cmd/parcel-customs-register` 下用 `grep -nE '（[0-9]{3}）'` 再扫一遍，只剩 HTTP 状态码一类的括注。
-- 「引文随 CONTEXT 改写而过期」那几处换成 CONTEXT 新句。
+- 「引文随 CONTEXT 改写而过期」那几处换成 CONTEXT 新句；`TestReadinessAndAuthorityAreTwoSeparateTracks` 的 `Covers:` 同一笔补点名 `AT-CC-448`（UC-CC-005，ADR-0243 新立，AT 盘点已按这条测试入①）。
 - CLI 包头注去掉「五本」，「一处列全」已指向 `allCommands`；参数区间改为指名参数登记册「关务」一节，不写编号区间。
