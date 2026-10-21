@@ -42,7 +42,7 @@ M：两个装载连上退役册与最新区间更正册（与 ADR-0233 给版本
 
 [ADR-0261](../../../docs/adr/0261-authority-grants-and-contract-delegations-follow-the-closure-of-their-version-and-several-hits-are-an-applicability-conflict.md) 取上文「最小的诚实修法」第一支（随版本收尾），并把「取首个命中」那一格一并裁成适用冲突。照此实施：
 
-1. `LoadEffectiveGrants` 装载的授予折进退役册（`party_commercial.commercial_version_retirement`）与壳上最新一条区间更正：版本已退役的授予不交出；有更正的，判用区间终点取更正终点与授予自身终点中较早的一个，只截终点（与 ADR-0233 决定五给自带区间的政策正文的折法同一口径，宜复用同一处折法）。「范围加时刻有没有现行规则」按折后的授予判。
+1. `LoadEffectiveGrants` 装载的授予折进退役册（`party_commercial.commercial_version_retirement`）与壳上最新一条区间更正：版本已退役的授予不交出；有更正的，判用区间终点取更正终点与授予自身终点中较早的一个，只截终点（与 ADR-0233 决定五给自带区间的政策正文的折法同一口径，宜复用同一处折法）。范围加时刻有没有现行规则，按折后的授予判。
 2. `LoadEffectiveDelegations` 对所挂客户合同版本同一折法。
 3. `domain.Authorize`：折后命中多于一条授予即交回新的具名错误（适用冲突），不取首个；`resolveDecider`：命中多条委派而委派方不同同答适用冲突，委派方相同取那一个决定方。新错误要与 `ErrNotAuthorized`、`ErrAuthorityRulesNotConfigured` 分得开（按恢复动作分格，ADR-0029）。
 4. `parcel-shipment` 的各授权适配器（主动拒绝、人工复核、资料修订、受控关闭与重开、撤回）把适用冲突译成各自的未决，不落`不允许`、不当作已授权。
