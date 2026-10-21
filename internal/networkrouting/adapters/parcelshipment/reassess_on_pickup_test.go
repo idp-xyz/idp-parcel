@@ -53,6 +53,7 @@ func pickupReassessor(t *testing.T, evidence nrports.InitialRouteEvidence) (*ada
 	handler := nrapplication.NewReassessRouteHandler(nrapplication.ReassessRouteDeps{
 		Routes:        &routeStoreDouble{records: map[nrdomain.InitialRouteJudgmentKey]nrports.InitialRouteRecord{reassessKey(t): planOnFile(t)}},
 		Evidence:      evidenceDouble{evidence: evidence},
+		Costs:         costPassthrough{},
 		Applicability: stores.applicability,
 		Store:         stores.store,
 		Log:           &logDouble{digests: map[nrdomain.RequestCorrelationID]string{}},

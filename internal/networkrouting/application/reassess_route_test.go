@@ -219,6 +219,7 @@ type reassessFixture struct {
 	applicability *applicabilityStoreDouble
 	store         *reassessmentStoreDouble
 	log           *handoffLogDouble
+	costs         *reassessCosts
 }
 
 func newReassessFixture(t *testing.T) *reassessFixture {
@@ -229,10 +230,12 @@ func newReassessFixture(t *testing.T) *reassessFixture {
 		applicability: newApplicabilityStore(),
 		store:         newReassessmentStore(),
 		log:           newHandoffLog(),
+		costs:         &reassessCosts{},
 	}
 	fixture.handler = application.NewReassessRouteHandler(application.ReassessRouteDeps{
 		Routes:        fixture.routes,
 		Evidence:      fixture.evidence,
+		Costs:         fixture.costs,
 		Applicability: fixture.applicability,
 		Store:         fixture.store,
 		Log:           fixture.log,

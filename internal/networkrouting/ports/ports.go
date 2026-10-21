@@ -32,8 +32,8 @@ type NetworkEvidence struct {
 }
 
 // RequestCarriedContent 是随判断请求携带、由发起方交来的判断对象内容（ADR-0148 决定一「随请求携带」一路，
-// ADR-0075 同款，判据是同版性）：它是判断对象那一版的内容，本上下文只用它判断，不回读、不保存本体。首版只含
-// 地理解析投影；服务要求与承诺上界随 routing-first-cut/08、09 加入。零值即发起方什么都没带。
+// ADR-0075 同款，判据是同版性）：它是判断对象那一版的内容，本上下文只用它判断，不回读、不保存本体。现含地理解析
+// 投影与承诺上界，ADR-0148 决定一同列的服务要求还不在其中。零值即发起方什么都没带。
 type RequestCarriedContent struct {
 	Geo        domain.GeoResolutionProjection
 	Commitment domain.CommittedTimeBound
@@ -190,6 +190,8 @@ func (path CandidatePath) PlanLegs() []domain.PlannedLeg {
 //
 // RankingForm 是 Strategy 所指那一版声明的排序形态，零值即该版未声明；CandidateCosts 按
 // 形态要的维度给出逐候选事实，每个合格候选恰一条——待判断与不可计价各有一格，不以缺席表达。
+// 证据视图不折 CandidateCosts：它经端口取（ADR-0148 决定一），由编排向 RouteCandidateCostSource 要来再填上，初始路由
+// 与复核同一口。
 type InitialRouteEvidence struct {
 	ServiceAreas      []domain.ServiceAreaResolution
 	RouteRequirements []domain.RouteRequirement
