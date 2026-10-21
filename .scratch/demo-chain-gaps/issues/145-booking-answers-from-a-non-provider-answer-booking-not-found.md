@@ -1,7 +1,7 @@
 # 145 非本服务方的承运商答复与订舱不存在分两格作答，泄露一位信息
 
 Category: bug
-Status: in-progress——评审 B1 已修，待复评与进 main，分支 claude-dcg145（已变基到 main `b290b777`）。2026-10-21 认领；此前 ready-for-agent——2026-10-20 代决复核立（上线前必修），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: in-progress——二轮评审无阻断，二轮修订已做，待进 main，分支 claude-dcg145（基于 main `b290b777`）。2026-10-21 认领；此前 ready-for-agent——2026-10-20 代决复核立（上线前必修），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 R9；ADR-0202 越权风险点 14
 
@@ -11,7 +11,7 @@ Blocked by: 无
 
 代决「否」：一律答 `BOOKING_NOT_FOUND`；须在首版集成契约发布前落地，并在 ADR-0202 补复核记录说明这一格的停用。
 
-## 完成记录（2026-10-21，Claude Code 作者子代理，分支 claude-dcg145；评审 B1 修订后改定）
+## 完成记录（2026-10-21，Claude Code 作者子代理，分支 claude-dcg145；评审 B1 与二轮修订后改定）
 
 裁定的单一权威是代决复核报告 R9；决定写成 [ADR-0239](../../../docs/adr/0239-a-carrier-answer-from-a-non-provider-is-answered-booking-not-found-and-the-basis-is-kept-on-a-bounce-register.md)。它部分停用 ADR-0202 文末补记「承运答复的次序与格」里 `SOURCE_NOT_SERVICE_PROVIDER` 那一格，ADR-0202 只在 Status 行与 Links 加前向指针。
 
@@ -24,7 +24,7 @@ Blocked by: 无
   - 编排 `bounceAnswer` 与那一次答复同笔写；写不动答未决 `ANSWER_STORE_UNAVAILABLE`、整笔回滚。
 - **两条挡回路一样多的事**（决定三）：
   - 端口 `BookingWithProviderReader`、实现 `BookingRequests.FindBookingWithProvider`，一条语句左连接读回订舱与委托的服务提供方；`FindByKey` 与它共用一份行重建。两条挡回路都是一读一写，写的键等长。
-  - 领域 `domain/stored_reference.go`：订舱标识、承运答复标识与答复依据过 512 字节界（`ErrValueTooLongToStore`），超界在查库之前答 `INPUT_NOT_ACCEPTED`。迁移 0050 遇已有超界行拒绝施加。
+  - 领域 `domain/stored_reference.go`：订舱标识与承运答复标识过 512 字节界（`ErrValueTooLongToStore`），答复依据不受界，超界在查库之前答 `INPUT_NOT_ACCEPTED`。迁移 0050 遇已有超界行拒绝施加。
   - TF 解码门 `decodeClosedPayload` 限读 1 MiB，超限 400 `MALFORMED_REQUEST`。
   - 读不动同答 `BOOKING_STORE_UNAVAILABLE`；答复口不再单读委托。
 - **装配**：`cmd/parcel-api/assemble_transport_commission.go` 的 `buildBookingFaces` 接上两口；没碰 endpoints/main/assemble/routes。
@@ -33,6 +33,7 @@ Blocked by: 无
   - UC-TF-004 改写 `AT-TF-149`、`AT-TF-153` 的结果，增 `AT-TF-326`–`328`；
   - 演示种子 README 第 4 步、演示动线补记；
   - AT 盘点①加三行与追记（总览不动）；
+  - TF CONTEXT Language 一节立「承运答复挡回」词条；
   - 票 144 补注一节；立后继票 [167](./167-booking-answer-bounce-register-has-no-read-face.md)（查阅面）、[170](./170-booking-answer-bounce-register-has-no-retention-or-aggregation.md)（保留期与聚合）。
 
 ### 代决（用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」与常设指令「你作为业务和系统专家自决……解决所有的问题」）
@@ -57,8 +58,8 @@ Blocked by: 无
    - 越权风险点：有超界旧行的库要先人工处理这些行才迁得过去。
 9. **订舱在册而委托读不回仍答 500、不记挡回**：照 ADR-0202 补记。
    - 越权风险点：这一格对任何答复方暴露订舱存在（风险点 3），只在库被绕过编排改坏时出现。
-10. **改名「挡回」，不在 TF CONTEXT 立词条**：「拒收」在 TF 已指交接`已拒收`与收件人拒收，英文 Refusal 也已用于段进入拒收、交接拒收与 `REFUSED`；评审建议的「不受理」在 TF 代码里又泛指构造门上的输入不受理。挡回册今天没有运营页，CONTEXT 词条随票 167 建页时立，已写进 167 的「做什么」。
-    - 越权风险点：owner 若要现在就立词条，补在 TF CONTEXT 的 Language 一节；若不喜欢「挡回」这个词，改名要连表名一起改（表还没进 main，进 main 之前改最便宜）。
+10. **改名「挡回」，并在 TF CONTEXT 立词条**：「拒收」在 TF 已指交接`已拒收`与收件人拒收，英文 Refusal 也已用于段进入拒收、交接拒收与 `REFUSED`；评审建议的「不受理」在 TF 代码里又泛指构造门上的输入不受理。UC-TF-004 的 AT 已在用这个词，照 ADR-0230 立「派送待形成」的先例，二轮在 TF CONTEXT Language 一节立「承运答复挡回」词条；票 167 只做查阅面。
+    - 越权风险点：owner 若不喜欢「挡回」这个词，改名要连表名、CONTEXT 词条一起改（表还没进 main，进 main 之前改最便宜）。
 11. **`AT-TF-149` 原地改写结果，不退号另立**：场景没变，变的是结果；新行为另立 `AT-TF-326`–`328`，字节界那一支并进 `AT-TF-326`。
     - 越权风险点：读旧号的人要按新结果读。149 与 153 不在 AT 盘点里（归票 139），本票没替它们加行。
 12. **ADR-0202 文末「复核记录」R9 那一行不改**：它已写「那一格的停用随该票的 ADR 记」。停用照「部分停用」写法记在 ADR-0202 的 Status 行与 Links。
@@ -70,7 +71,7 @@ Blocked by: 无
 
 ### 用例
 
-- 领域 `internal/transportfulfillment/domain/stored_reference_test.go::TestBookingAnswerReferencesHaveAStorableByteBound`：三种引用 512 字节收、513 字节拒，按 UTF-8 字节计；全空白照旧拒。
+- 领域 `internal/transportfulfillment/domain/stored_reference_test.go::TestBookingAnswerReferencesHaveAStorableByteBound`：订舱标识与答复标识 512 字节收、513 字节拒，按 UTF-8 字节计；答复依据 3000 字节照收；全空白照旧拒。
 - 编排 `internal/transportfulfillment/application/booking_schedule_and_answer_source_test.go`：
   - `TestOnlyTheCommissionedProviderAnswersItsBooking`（149）
   - `TestANonProviderAndAnAbsentBookingAreAnsweredAlike`（326）：三条挡回路结果 `reflect.DeepEqual` 相同；各一读一写、不碰答复册；读不动与册写不动各答同一原因。
@@ -80,13 +81,13 @@ Blocked by: 无
   - `TestAnAnswerRecoveryDiscipline`（153 与恢复面）：数据违约不记挡回。
 - 线格式 `internal/transportfulfillment/adapters/http/booking_faces_test.go`：
   - `TestTheBookingAnswerFaceAnswersOnTheWire`：别的承运商答在册订舱，与服务方答不在册订舱，状态与响应体逐字节相同；服务方答过之后别人原样重放也一样。
-  - `TestTheBookingAnswerFaceBoundsWhatItReads`：超界答复标识两条路同为 200 `INPUT_NOT_ACCEPTED`、逐字节相同；答复口与订舱提交口载荷超过 1 MiB 答 400。
+  - `TestTheBookingAnswerFaceBoundsWhatItReads`：超界答复标识两条路同为 200 `INPUT_NOT_ACCEPTED`、逐字节相同；载荷恰好 1 MiB 照收；答复口与订舱提交口多一个字节答 400。
 - 存取（真库）`internal/transportfulfillment/adapters/postgres/booking_answer_bounce_test.go`：
   - `TestABookingIsReadBackWithItsCommissionsProviderInOneStatement`：在册、不在册、他租户、委托读不回四格；连读交回的订舱与单读相同。
   - `TestABouncedAnswerIsCountedOnItsOwnRowPerBasis`：计次、首末时刻、依据分行且存码、无事务拒（`ErrTransactionRequired`）、回滚不留、封闭集外与空来源先拒。
-  - `TestBothBasesWriteKeysOfTheSameWidthAtTheByteBound`：订舱与答复标识都 512 字节，两种依据都写得进，两行键宽相同。
+  - `TestBothBasesWriteKeysOfTheSameWidthAtTheByteBound`：订舱与答复标识都是 512 字节的随机十六进制串（不可压缩，测最坏情形），两种依据都写得进，两行键宽相同。
   - `TestTwoConcurrentIdenticalBouncesCountTwiceOnOneRow`：后到一笔停在主键上，先到提交后并进同一行，次数 2、首次取早的那一刻。
-  - `TestMigration0050RefusesStoredReferencesOverTheByteBound`：订舱册或答复册有超界行时 0050 拒绝施加。
+  - `TestMigration0050RefusesStoredReferencesOverTheByteBound`：订舱册的订舱标识或答复册的答复标识超界时 0050 拒绝施加；长的答复依据不挡。
 - 生产装配（真库）`cmd/parcel-api/assemble_booking_faces_test.go`：
   - `TestTheWiredBookingAnswerFaceAnswersANonProviderAsBookingNotFoundAndKeepsTheBasis`（326–328）：末端承运客户端答干线订舱，末端与干线各答一个不在册订舱，三次响应逐字节相同；挡回册三行依据分清，重交计 2；答复册零行；录入订舱后干线重交 201、再交 200 `EXISTING_ANSWER`，挡回册不变。
   - `TestTheWiredBookingAnswerFaceAnswersAlikeWhateverTheIdentifiersLength`（326 字节界那一支，评审 B1 的回归）：答复标识 512 字节、订舱与答复标识都 512 字节，两条路都答 `BOOKING_NOT_FOUND`、逐字节相同、各落一行；513 字节与评审校准的 2605 字节，两条路都答 `INPUT_NOT_ACCEPTED`、逐字节相同、零行。
@@ -95,13 +96,14 @@ Blocked by: 无
 
 ### 验证
 
-- 已变基到 main `b290b777`。代码钉 `23f33e7a`，此后只改文档与票面：
+- 基于 main `b290b777`。代码钉 `35edae55`（二轮），此后只改文档与票面：
   - `go build ./...`、`go vet ./...` 干净，变更的 Go 文件 `gofmt -l` 干净。
-  - 每一笔提交都经 `git archive` 导出到 scratchpad，单独 `go build ./...`、`go vet ./...` 通过。三笔代码提交（`0b2dbf95`、`a36fe5da`、`23f33e7a`）另单独跑持久化写口门禁，都绿。
-- `scripts/test-full.sh` 跑了以下 26 个包，全绿：
+  - 每一笔提交都经 `git archive` 导出到 scratchpad，单独 `go build ./...`、`go vet ./...` 通过。代码提交（`0b2dbf95`、`a36fe5da`、`23f33e7a`、`35edae55`）另单独跑持久化写口门禁，都绿。
+- 一轮修订钉 `23f33e7a`，`scripts/test-full.sh` 跑了以下 26 个包，全绿：
   - `./internal/transportfulfillment/...`（12 个有测试的包）；
   - 反向依赖 `./cmd/parcel-api/...`、`cmd/parcel-dispatch`、`cmd/parcel-transport-register`，以及 NR、NO、PP、PS、SA、VE 各自的 `adapters/transportfulfillment`；
   - `./internal/architecture/...`、`./migrations/...`、`./tools/...`。
+- 二轮钉 `35edae55`，`scripts/test-full.sh ./internal/transportfulfillment/... ./cmd/parcel-api/... ./cmd/parcel-transport-register/ ./cmd/parcel-dispatch/ ./internal/architecture/... ./migrations/...`，17 个包全绿。
 - 变异检验：
   - 让 `bounceAnswer` 对「不是服务提供方」不写册，编排三条用例与真库装配用例即红；
   - 把字节界抬到 1 MiB，真库装配的字节界用例即红（513 字节答成 `BOOKING_NOT_FOUND`）；
@@ -110,7 +112,7 @@ Blocked by: 无
 
 ### 没做与去向
 
-- 挡回册查阅面与 TF CONTEXT 词条：后继票 [167](./167-booking-answer-bounce-register-has-no-read-face.md)，与票 48 同一车道。
+- 挡回册查阅面：后继票 [167](./167-booking-answer-bounce-register-has-no-read-face.md)，与票 48 同一车道。
 - 挡回册保留期与聚合：后继票 [170](./170-booking-answer-bounce-register-has-no-retention-or-aggregation.md)。
 - 首版集成说明（票 144）：还没进 main，补注已写，集成说明随 144 写。
 - 迁移号 `0050`：变基时 main 上 TF 迁移止于 `0046`，在途分支占着 `0047`、`0048`，`0050` 仍空，照用。
@@ -133,3 +135,15 @@ Blocked by: 无
 - **10 并发同键的真库用例**：已补 `TestTwoConcurrentIdenticalBouncesCountTwiceOnOneRow`。
 
 未采纳：无。评审举的名字没有照用，理由见第 6 条。
+
+### 二轮（2026-10-21，无阻断；同一分支小修，`35edae55` 与其后的文档提交）
+
+- **1 ADR-0239 风险点 8 点错了载荷**：交接登记只带一个对象，撞不到 1 MiB。已改为点名列表字段并给量级：委托提交与装载分配的 `members`（按演示长度约 4 万个到顶），承运总单的 `associations`（每条约 52 字节、约 2 万条到顶，逐件关联包裹的总单最可能先撞上）；超限答 400 `MALFORMED_REQUEST`。
+- **2 词条进 TF CONTEXT**：Language 一节立「承运答复挡回」。写明与那一次答复同笔写入，是台账不是事实来源，不进订舱当前读法，与`已拒收`、收件人拒收、`未受理`不同。票 167 改为只做查阅面。
+- **3 答复依据退出字节界**：它不进任何键、不进挡回册，只在服务方那条路、来源核对之后才判。`NewAcceptanceBasisReference` 回到既有构造门（非空、无 NUL）；迁移 0050 的拒绝门不再查 `octet_length(basis)`；用例、ADR-0239 决定三与风险点 7 同步。
+- **4 迁移 0050 头注改准**：写清订舱标识进订舱册、答复册与挡回册的键，答复标识进答复册与挡回册的键，答复依据不进键。界只由领域构造门守，库上不加 CHECK（与 PS 先例一致，一个数只定义在一处）。
+- **5 ADR-0239 风险点 9 补后果**：依据定宽之后，租户与来源身份在两条挡回路上是同一个值，再长也分不开两条路，过长只会两条路一起答未决——是可用性问题，不是泄露残余。
+- **6 测试**：
+  - `TestTheBookingAnswerFaceBoundsWhatItReads` 补「恰好 1 MiB 照收」，越界改为只多一个字节；
+  - `TestBothBasesWriteKeysOfTheSameWidthAtTheByteBound` 改用随机十六进制串；
+  - 迁移拒绝门用例加「长答复依据不挡」一格。
