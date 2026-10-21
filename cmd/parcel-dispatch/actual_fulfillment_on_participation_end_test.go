@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -39,9 +40,15 @@ const (
 )
 
 // formationAt 把业务时刻钉在刚过去的真实时间上：派发一拍按真实时钟认领，入队时刻写成未来会一封都取不到。
+// 锚点整个进程只取一次：同一用例里先后两次取同一偏移必须得同一时刻——委托的提交时刻与换版的起用时刻各取一次，
+// 中间跨过整秒就差一秒，领域按「换版起用早于提交」拒收，用例随库快慢时红时绿。往前留的四小时足够本包跑完。
 func formationAt(offset time.Duration) time.Time {
-	return beatInstant().Add(-4 * time.Hour).Add(offset).Truncate(time.Second)
+	return formationAnchor().Add(offset)
 }
+
+var formationAnchor = sync.OnceValue(func() time.Time {
+	return beatInstant().Add(-4 * time.Hour).Truncate(time.Second)
+})
 
 // saveTrunkCommission 照提交口落下的形状落一份干线委托：指名 v1、记着那一版，成员是给定的包裹。不经提交口：那一口会另交一封
 // 委托信封，本进程没有它的消费者（transport_commission_unrouted_test.go 钉着），与本文件要证的无关。
