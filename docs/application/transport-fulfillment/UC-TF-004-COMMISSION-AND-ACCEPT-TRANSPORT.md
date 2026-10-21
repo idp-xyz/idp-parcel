@@ -123,6 +123,7 @@
 - 同一委托/订舱/外部结果版本只能形成一个采用结果；相同身份内容不同形成冲突。
 - 取消、释放、承运接受和节点交接并发时以业务时间和有效边界裁决；已发生事实不回退。
 - 取消委托与履约段采用委托的先后按 [ADR-0204](../../adr/0204-a-fulfillment-segment-adopts-a-transport-commission-by-declaration-and-a-started-commission-cannot-be-cancelled.md) 决定三「采用与取消的先后」：业务时间判谁在先，判出取消晚于开始时只挂起待更正，不自动撤回已成立的取消（`AT-TF-187`）。
+- 解除采用与发生项形成、与同一份委托上另一段的采用并发时，各在发生项范围锁、委托的开始锁上排成先后，两者不会都凭对方还没提交的样子判通过（[ADR-0232](../../adr/0232-a-segment-commission-adoption-is-withdrawn-by-decision-only-before-occurrences-form-and-occurrence-revision-drives-the-supplier-cost-correction.md) 决定六）。
 - 容量释放只能归还尚未消耗的有效预占；实装和已交接范围不得被释放动作覆盖。
 - 同一份委托的换版先取换版锁再读委托：两笔并发的换版一前一后各成一版，同一份依据并发重放落回同一版（[ADR-0231](../../adr/0231-actual-fulfillment-left-unformed-is-caught-up-by-doorbells-and-a-commission-agreement-revision.md) 决定三）。
 - 结果提交不确定时查询原结果和发布意图，不盲目重复外部提交或创建第二份委托。
@@ -215,6 +216,12 @@
 | `AT-TF-326` | 不是本服务方的答复方答一个在册订舱；任何答复方答一个在本租户下不在册的订舱；答复方挑任意长度的订舱标识与答复标识 | 两者答同一格订舱不在册（200）、响应体逐字相同，都不回显在册答复、不落答复；两条路各把订舱连同服务方读一次、各写一次挡回册，写的键等长；读不动两条路答同一个未决原因（订舱册），挡回册写不动也答同一个（答复册）。订舱标识或答复标识超过字节界（512 字节）时，两条路在查库之前同样答未受理、不落行；载荷超过读取上限答坏报文（[ADR-0239](../../adr/0239-a-carrier-answer-from-a-non-provider-is-answered-booking-not-found-and-the-basis-is-kept-on-a-bounce-register.md) 决定一、三） |
 | `AT-TF-327` | 运营或审计要分清一次订舱不在册的答复是「不归它答」还是「订舱没录」 | 每一次挡回与那一次答复同笔记进承运答复挡回册：（答复方、订舱、答复标识、依据）一行，依据分「订舱不在册」「不是服务提供方」，带首末挡回时刻与次数；同一份原样重交只加次数；挡回册写不动答未决、整笔不落，不答订舱不在册（[ADR-0239](../../adr/0239-a-carrier-answer-from-a-non-provider-is-answered-booking-not-found-and-the-basis-is-kept-on-a-bounce-register.md) 决定二） |
 | `AT-TF-328` | 运营侧还没录订舱时服务方先答，订舱录入之后同一份答复重交 | 先答订舱不在册、挡回册记「订舱不在册」；录入之后同一份答复照常受理，原样再交答已有答复、不多落一份；挡回册那一行照留，不因受理改写，也不进订舱的当前读法（[ADR-0239](../../adr/0239-a-carrier-answer-from-a-non-provider-is-answered-booking-not-found-and-the-basis-is-kept-on-a-bounce-register.md) 决定二） |
+| `AT-TF-306` | 持「解除履约段采用」授予的操作者点名段与它采用的委托解除；段上此刻没有采用，或采用的是另一份委托；只持采用与登记授予的人来解除 | 解除成立答 201，解除另记一行、记下解除人，采用那一行不改；没有采用答不在册（最近一次解的正是这一份时答重放），另一份答委托不符并回显在册那一份；没有授予答 403 `OPERATOR_NOT_GRANTED`（[ADR-0232](../../adr/0232-a-segment-commission-adoption-is-withdrawn-by-decision-only-before-occurrences-form-and-occurrence-revision-drives-the-supplier-cost-correction.md) 决定一） |
+| `AT-TF-307` | 解除的那一段是这份委托唯一的已采用段 | 委托的开始撤回、回到已提交，此后取消委托答 201；原开始留在采用上，解除记下之前的开始与变法 `WITHDRAWN`（[ADR-0232](../../adr/0232-a-segment-commission-adoption-is-withdrawn-by-decision-only-before-occurrences-form-and-occurrence-revision-drives-the-supplier-cost-correction.md) 决定二） |
+| `AT-TF-308` | 委托还被别的段采用：解除的是开始所依的那一段；或解除的是另一段 | 前者开始改按其余各段采用上记的开始里最早的那一条（可以比原来晚，变法 `REDERIVED`）；后者开始不动（`KEPT`）（[ADR-0232](../../adr/0232-a-segment-commission-adoption-is-withdrawn-by-decision-only-before-occurrences-form-and-occurrence-revision-drives-the-supplier-cost-correction.md) 决定二） |
+| `AT-TF-309` | 段上已按这份委托形成了一项仍有效的实际履约发生项；或段上那一项的服务方与协议不是这份委托的 | 前者答 `OCCURRENCES_FORMED` 并回显那一项，不落解除也不动委托，续办是先经发生项失效口失效；后者不挡解除（[ADR-0232](../../adr/0232-a-segment-commission-adoption-is-withdrawn-by-decision-only-before-occurrences-form-and-occurrence-revision-drives-the-supplier-cost-correction.md) 决定一） |
+| `AT-TF-310` | 同一次解除原样再交；解除之后同一段再采用 | 前者答 `EXISTING_WITHDRAWAL`、不多一行；后者落成这一段的第二代采用，委托随之重新开始（[ADR-0232](../../adr/0232-a-segment-commission-adoption-is-withdrawn-by-decision-only-before-occurrences-form-and-occurrence-revision-drives-the-supplier-cost-correction.md) 决定一） |
+| `AT-TF-315` | 一段的采用（开始更晚、不写委托）与同一份委托上另一段的解除并发 | 两者在委托的开始锁上排成先后，解除读得到那一段、开始改按它重新派生，不撤回到已提交（[ADR-0232](../../adr/0232-a-segment-commission-adoption-is-withdrawn-by-decision-only-before-occurrences-form-and-occurrence-revision-drives-the-supplier-cost-correction.md) 决定六） |
 
 ## 给开发的交接
 
