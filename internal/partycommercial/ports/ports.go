@@ -144,7 +144,7 @@ type CreditPolicyContentView interface {
 // 适用范围与采购定价方案。
 //
 // 分界与三格含义同 CreditPolicyContentView。它交回的协议不带协议层的终止（Terminate）：那是生效后的一次事件，不是发布
-// 时的正文，本口只登正文（票 party-commercial-context-gaps/03「两件明确不做」）。版本层的收尾（ADR-0233 决定四）照折：
+// 时的正文，本口只登正文（票 party-commercial-context-gaps/03「两件明确不做」）。版本层的收尾（ADR-0233 决定五）照折：
 // 壳上最新一条区间更正收窄正文的判用区间，壳已同起点退役则正文不再支持任何新的采购决定、终止时刻读作退役时刻——
 // 调用方对 SupportsProcurementAt 的答案因此与闭包选候选同一口径（ADR-0038 决定二）。
 type SupplierAgreementContentView interface {
@@ -166,7 +166,7 @@ type SupplierAgreementContentView interface {
 //
 // 本口**不判**「这一版此刻能不能用于新的采购决定」：那由 SupplierAgreement.SupportsProcurementAt 与壳的生命周期
 // 位置回答，消费方拿本口交回的值去问它们。在这里先折成一格，消费方就看不见是未生效、已收尾还是正文缺席，而三者
-// 的续办不同。版本层的收尾照折（ADR-0233 决定四）：壳已同起点退役，交回的就是`已退役`的壳、只交壳；壳上有区间
+// 的续办不同。版本层的收尾照折（ADR-0233 决定五）：壳已同起点退役，交回的就是`已退役`的壳、只交壳；壳上有区间
 // 更正，交回的正文按更正后的区间答 SupportsProcurementAt。不折的话，旧版截止或退役之后按版本点读的核对照旧收它，
 // 与闭包给出两种答案。
 //

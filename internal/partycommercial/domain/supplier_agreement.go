@@ -126,7 +126,7 @@ func (agreement SupplierAgreement) TerminatedAt() (time.Time, bool) {
 	return agreement.terminatedAt, true
 }
 
-// NarrowedBy 交回被版本壳上的区间更正收窄的同一版正文（ADR-0233 决定四）：此后按版本点读的核对也照更正后的区间判，
+// NarrowedBy 交回被版本壳上的区间更正收窄的同一版正文（ADR-0233 决定五）：此后按版本点读的核对也照更正后的区间判，
 // 与闭包选候选同一口径（ADR-0038 决定二）。正文自带的区间不改写，更正与它取交，判法同 bodyExcludedAt。
 func (agreement SupplierAgreement) NarrowedBy(correction ValidityCorrection) (SupplierAgreement, error) {
 	if !sameVersionKey(agreement.version, correction.tenant, correction.kind, correction.objectID, correction.version) ||
@@ -138,7 +138,7 @@ func (agreement SupplierAgreement) NarrowedBy(correction ValidityCorrection) (Su
 	return agreement, nil
 }
 
-// EndedBy 交回壳已同起点退役（ADR-0233 决定三）的同一版正文：它不再支持任何新的采购决定，终止时刻读作退役时刻。
+// EndedBy 交回壳已同起点退役（ADR-0233 决定三、五）的同一版正文：它不再支持任何新的采购决定，终止时刻读作退役时刻。
 // 退役只管退役之后作出的决定，而问到这里的决定都在其后，所以与业务时点无关地一律不支持——旧版的整段时间都由同起点
 // 的后继接着。
 func (agreement SupplierAgreement) EndedBy(retirement VersionRetirement) (SupplierAgreement, error) {

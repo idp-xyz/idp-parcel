@@ -252,7 +252,7 @@ func (repository *SupplierAgreementContents) LoadSupplierAgreement(
 	return content, true, nil
 }
 
-// foldVersionClosure 把版本层的收尾折进一版协议正文（ADR-0233 决定四）：最新一条区间更正收窄判用区间，退役让它不再
+// foldVersionClosure 把版本层的收尾折进一版协议正文（ADR-0233 决定五）：最新一条区间更正收窄判用区间，退役让它不再
 // 支持新的采购决定。shell 是快照重建出来、尚未施加退役的那一版——退役的构造门要的就是它。
 func foldVersionClosure(
 	content domain.SupplierAgreement,
@@ -351,7 +351,7 @@ func (repository *SupplierAgreementContents) LoadSupplierAgreementVersion(
 		snapshot.ObjectID() != agreement || snapshot.Version() != version {
 		return none, fmt.Errorf("load supplier agreement version: %s/%s 的快照记的是另一版", agreement, version)
 	}
-	// 退役施加在壳上（ADR-0233 决定四）：交回`已退役`的壳，下面的生命周期分格就只交壳，核对方按已收尾答。
+	// 退役施加在壳上（ADR-0233 决定五）：交回`已退役`的壳，下面的生命周期分格就只交壳，核对方按已收尾答。
 	shell, err := closure.retiredShell(snapshot)
 	if err != nil {
 		return none, fmt.Errorf("load supplier agreement version: %w", err)

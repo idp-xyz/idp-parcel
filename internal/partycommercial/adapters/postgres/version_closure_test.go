@@ -519,7 +519,7 @@ func TestSupplierAgreementPointReadsFoldTheVersionClosure(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0233 决定四在内部成本政策点读口上的那一格——同起点退役的那一版价格政策此后答「没这份正文」，后继照常交回。
+// Covers: ADR-0233 决定五在内部成本政策点读口上的那一格——同起点退役的那一版价格政策此后答「没这份正文」，后继照常交回。
 func TestInternalCostPolicyReadFoldsTheRetirement(t *testing.T) {
 	fixture := newCutFixture(t)
 	old := cutVersion(t, domain.PriceRuleObject, "internal-cost-1", "v1", cutRowPredecessorStart)

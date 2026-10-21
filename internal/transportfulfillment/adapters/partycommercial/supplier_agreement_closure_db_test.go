@@ -17,7 +17,7 @@ import (
 	tfports "go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// 本文件对真实 PostgreSQL 16 证代决复核 M16（ADR-0233 决定四）在核对缝上的那一格：PC 把旧版截止或退役之后，本包适配器
+// 本文件对真实 PostgreSQL 16 证代决复核 M16（ADR-0233 决定五）在核对缝上的那一格：PC 把旧版截止或退役之后，本包适配器
 // 一行不改，经 PC 版本点读口核出来的就是收尾之后的口径——截止点之后答未生效，退役之后答已终止。
 
 const (

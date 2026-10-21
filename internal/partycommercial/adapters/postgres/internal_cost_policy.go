@@ -75,7 +75,7 @@ func (repository *CommercialPublications) LoadInternalCostPolicy(
 	if err != nil {
 		return domain.CommercialPricePolicy{}, false, fmt.Errorf("load internal cost policy: %w", err)
 	}
-	// 退役施加在壳上（ADR-0233 决定四）：同起点退役的那一版此后不在已生效，下面那一格照「没这份正文」答，与整册装载里
+	// 退役施加在壳上（ADR-0233 决定五）：同起点退役的那一版此后不在已生效，下面那一格照「没这份正文」答，与整册装载里
 	// 它的正文落选同一口径。本口不按区间判，区间更正在这里与原区间一样不起作用，不折。
 	version, err := retirement.retiredShell(snapshot)
 	if err != nil {
