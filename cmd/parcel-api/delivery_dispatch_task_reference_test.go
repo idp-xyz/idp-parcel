@@ -23,8 +23,8 @@ import (
 	tfports "go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// 本文件在真渠道真库上证票 tf-face-algebra/09：派送发起铸出的任务引用是忠实身份。触发走作业事实渠道的生产 Intake 与
-// 生产端点构造，执行器经 deliveryDispatchTriggerOver 装配——段登记册、任务登记册与事务是生产那一份接法，只有三条派送
+// 本文件在真渠道真库上证票 tf-face-algebra/09：派送发起铸出的任务引用是忠实身份。触发走运营决定渠道（ADR-0230 决定七）的
+// 生产 Intake 与生产端点构造，执行器经 deliveryDispatchTriggerOver 装配——段登记册、任务登记册与事务是生产那一份接法，只有三条派送
 // 要求缝换成可改答、可计数的替身：真缝在空库上只会答「没有」，走不到撞键那一步（真缝的答法另由
 // TestTheWiredDeliveryDispatchTriggerReachesTheOwnersAndReportsWhatTheyLack 钉住）。手工建任务口走运营决定渠道。
 // 测试输入是隔离合成，只记 `S`。
