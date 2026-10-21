@@ -1,7 +1,7 @@
 # 70 SA 冻结与暴露账本按作用域整册回写，并发下丢失更新，已释放的钱被静默占回去
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code70（见文末「完成记录」）。此前 ready-for-agent——R1（上线前必修）：碰钱、静默。同一结算作用域下两份委托的控制或释放并发时，后提交的那一笔把它读到的整册快照写回，先提交那一笔刚落的释放（或冻结）被压回去；客户可用余额或额度被吃掉，不报任何错。问题早于 code/20；code/20 让接受链对被取代版本每一轮都请求一次释放，整册回写的次数变多了。2026-10-21 协调方据 code/20 隔离评审 N1 立。
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code70（见文末「完成记录」）。此前 ready-for-agent——R1（上线前必修）：碰钱、静默。同一结算作用域下两份委托的控制或释放并发时，后提交的那一笔把它读到的整册快照写回，先提交那一笔刚落的释放（或冻结）被压回去；客户可用余额或额度被吃掉，不报任何错。问题早于 code/20；code/20 让接受链对被取代版本每一轮都请求一次释放，整册回写的次数变多了。2026-10-21 协调方据 code/20 隔离评审 N1 立。
 Blocked by: 无
 出处：code/20 隔离评审 N1；code/20 完成记录「评审记录」。
 
@@ -104,3 +104,8 @@ M：改两本账的写入与一条读写路径，补真库并发用例（两连�
 
 验证（rebase 于 main `f4a7e226a` 之后）：`TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/settlementaccounting/...` 退 0；`go build ./...`、`go vet ./...`、`gofmt -l` 干净。rebase 无冲突。
 
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-code70` tip `41e4a27f0` 在 main `f4a7e226a` 上快进；隔离评审无阻断，死锁已实测（今天不可达；接上 parcel-api 作用域映射后可达但 PG 约 1s 中止一路、重试自愈），两条小改已收。
+- 协调方在 tip 上单独提交重生成的机制清点；ADR 索引与 AT 计数无变化；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净；演示种子在一次性库上灌通，用后删库。无迁移。
