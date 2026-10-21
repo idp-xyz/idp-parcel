@@ -123,3 +123,9 @@ Date: 2026-10-19
 - [ADR-0213](./0213-a-transport-handover-declares-its-releasing-receiving-and-onward-nodes.md)：回答 Consequences「挂法等 peer」与越权风险点 9——交接声明交出、接收、去向节点，交出门禁按（交出节点，去向节点）问交出意图，交付门禁按进入派送段那次交接的交出节点问交付意图
 - [ADR-0219](./0219-a-device-previews-the-departure-gate-before-departing-and-reads-what-the-departure-will-record.md)：出发前门禁问询也是一次请求——问询方只翻译交回、不保存，本上下文照决定六记判断
 - [ADR-0225](./0225-the-departure-gate-reading-asks-through-consolidation-unit-members-at-the-moment-of-departure.md)：回答越权风险点 8 的出发那一半——出发门禁读数按成员展开集运单元，单元不交给本判断
+
+## 复核记录（2026-10-20，Claude Code 会话代决，非 owner 本人复核）
+
+用户 2026-10-20 原话「要我裁定的部分，你作为业务和系统专家，请你自决吧」。本记录的越权风险点已经 [代决复核报告](../../.scratch/owner-review-20261020/report.md) 逐条复核，其余各条维持；正文与 Decision 不变。
+
+- **R12**：对已登记过至少一个节点关务区域的租户，不在册对象起讫有一端未登区域时，跨区那一道改答「未配置」并指名那个未登的节点，不再不列；一条区域都没登的租户不受影响。落地与对决定二的部分停用见票 demo-chain-gaps/147。

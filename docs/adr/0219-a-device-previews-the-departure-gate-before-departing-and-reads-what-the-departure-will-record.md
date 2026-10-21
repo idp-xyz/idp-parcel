@@ -105,3 +105,9 @@ Date: 2026-10-19
 - [CC CONTEXT](../domain/customs-compliance/CONTEXT.md)「动作准入判断」词条、[GLOSSARY](../domain/GLOSSARY.md)「动作准入判断」「出发前门禁问询」、[CONTEXT-MAP](../domain/CONTEXT-MAP.md) `transport-fulfillment → customs-compliance`、[UC-CC-013](../application/customs-compliance/UC-CC-013-JUDGE-ACTION-ADMISSION.md)：请求时机各补一句
 - 票 `.scratch/demo-chain-gaps/issues/69-devices-preview-the-departure-gate-before-departing.md`
 - [ADR-0225](./0225-the-departure-gate-reading-asks-through-consolidation-unit-members-at-the-moment-of-departure.md)：出发读数按成员展开集运单元，问询同受；读数所取决的源多两本
+
+## 复核记录（2026-10-20，Claude Code 会话代决，非 owner 本人复核）
+
+用户 2026-10-20 原话「要我裁定的部分，你作为业务和系统专家，请你自决吧」。本记录的越权风险点已经 [代决复核报告](../../.scratch/owner-review-20261020/report.md) 逐条复核，其余各条维持；正文与 Decision 不变。
+
+- **R11（越权风险点 5）**：出发前门禁问询与出发两口回给设备的逐对象那一格，趁一线客户端未接入一起收窄成只列被阻断或未决的对象，落册仍记全，回到 AT-TF-063 要求的最小范围，列为上线前必修（票 demo-chain-gaps/146）。
