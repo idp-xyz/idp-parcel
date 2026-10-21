@@ -251,3 +251,35 @@ func TestThePendingTableRefusesRowsTheRegisterCannotGive(t *testing.T) {
 		})
 	}
 }
+
+// Covers: AT-TF-284（ADR-0230 决定三）——查阅页那一格读的就是待形成队列：只列本租户待形成的，别的租户同段同对象那一条不出现，
+// 了结的不出现。
+func TestTheReviewCatalogueListsOnlyThisTenantsPendingDeliveries(t *testing.T) {
+	register, transactor, db := newDeliveryDispatchPendings(t)
+	catalogue, err := adapter.NewReviewCatalogue(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mine := pendingKey(t, "SYN-TENANT-01", "SYN-SEG-70", "SYN-PARCEL-70-J")
+	settled := pendingKey(t, "SYN-TENANT-01", "SYN-SEG-70", "SYN-PARCEL-70-K")
+	theirs := pendingKey(t, "SYN-TENANT-02", "SYN-SEG-70", "SYN-PARCEL-70-J")
+	task, err := domain.NewDispatchTaskReference("DELIVERY-DISPATCH/task-k")
+	if err != nil {
+		t.Fatal(err)
+	}
+	withinPendingTransaction(t, transactor, func(ctx context.Context) error {
+		for _, key := range []ports.DeliveryDispatchPendingKey{mine, settled, theirs} {
+			if err := register.RecordMissing(ctx, key, pendingBasis(t, "basis/v1"), []string{"DELIVERY_CONDITION"}, pendingAnsweredAt); err != nil {
+				return err
+			}
+		}
+		return register.SettleFormed(ctx, settled, task, pendingAnsweredAt.Add(time.Hour))
+	})
+	rows, err := catalogue.ListDeliveryDispatchPendings(t.Context(), mine.TenantID, 25)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].Key != mine {
+		t.Fatalf("查阅页列出 %+v, want 只有本租户待形成的 %v", rows, mine)
+	}
+}

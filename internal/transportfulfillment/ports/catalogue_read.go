@@ -252,4 +252,11 @@ type ReviewCatalogueRead interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]TransportPreparationCatalogueRow, error)
+	// ListDeliveryDispatchPendings 上列派送待形成册里待形成的那几件（ADR-0230 决定三），与按册重问读的是同一个队列、同一个排序：
+	// 运营人员看到的清单就是重问会去问的那几件。
+	ListDeliveryDispatchPendings(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]DeliveryDispatchPendingRecord, error)
 }

@@ -479,6 +479,14 @@ func (unwiredTransportFulfillmentRecords) ListCarrierMasterDocuments(
 	return nil, errOrchestrationNotWired
 }
 
+func (unwiredTransportFulfillmentRecords) ListDeliveryDispatchPendings(
+	context.Context,
+	tfdomain.TenantID,
+	int,
+) ([]tfports.DeliveryDispatchPendingRecord, error) {
+	return nil, errOrchestrationNotWired
+}
+
 func (unwiredTransportFulfillmentRecords) ListTransportPreparations(
 	context.Context,
 	tfdomain.TenantID,

@@ -113,6 +113,13 @@ func (stub unreachableReviewCatalogue) ListTransportPreparations(
 	return nil, nil
 }
 
+func (stub unreachableReviewCatalogue) ListDeliveryDispatchPendings(
+	context.Context, domain.TenantID, int,
+) ([]ports.DeliveryDispatchPendingRecord, error) {
+	stub.refuse("delivery dispatch pending")
+	return nil, nil
+}
+
 // stubReviewCatalogue 是各本册子的读口替身，记下读口收到的键。
 type stubReviewCatalogue struct {
 	schedules       []ports.TransportScheduleCatalogueRow
@@ -122,6 +129,7 @@ type stubReviewCatalogue struct {
 	deliveries      []ports.EffectiveDeliveryCatalogueRow
 	masterDocuments []ports.CarrierMasterDocumentCatalogueRow
 	preparations    []ports.TransportPreparationCatalogueRow
+	pendings        []ports.DeliveryDispatchPendingRecord
 	err             error
 
 	gotTenant string
@@ -177,6 +185,13 @@ func (stub *stubReviewCatalogue) ListTransportPreparations(
 	return stub.preparations, stub.err
 }
 
+func (stub *stubReviewCatalogue) ListDeliveryDispatchPendings(
+	_ context.Context, tenant domain.TenantID, limit int,
+) ([]ports.DeliveryDispatchPendingRecord, error) {
+	stub.gotTenant, stub.gotLimit = tenant.String(), limit
+	return stub.pendings, stub.err
+}
+
 func recordsEndpoint(register *stubReviewCatalogue) http.Handler {
 	return tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(grantedIntake(), register)
 }
@@ -205,7 +220,7 @@ func arrayAt(t *testing.T, response *httptest.ResponseRecorder, key string) stri
 
 var fulfillmentRegistries = []string{
 	"transport-schedule", "transport-schedule-template", "capacity-pool", "transport-handover", "effective-delivery",
-	"carrier-master-document", "transport-preparation",
+	"carrier-master-document", "transport-preparation", "delivery-dispatch-pending",
 }
 
 const fulfillmentTarget = "/transport-fulfillment-records?registry=transport-schedule"
@@ -708,12 +723,13 @@ func TestCarrierMasterDocumentRegistryTranscribesVersionChain(t *testing.T) {
 // 总单一格自 ADR-0113 立册起属这一族：空册说的是「登记册为空」，不再是「无处可登」。
 func TestEmptyFulfillmentRegistersAnswerEmptyArrays(t *testing.T) {
 	for registry, key := range map[string]string{
-		"transport-schedule":      "schedules",
-		"capacity-pool":           "pools",
-		"transport-handover":      "handovers",
-		"effective-delivery":      "deliveries",
-		"carrier-master-document": "masterDocuments",
-		"transport-preparation":   "preparations",
+		"transport-schedule":        "schedules",
+		"capacity-pool":             "pools",
+		"transport-handover":        "handovers",
+		"effective-delivery":        "deliveries",
+		"carrier-master-document":   "masterDocuments",
+		"transport-preparation":     "preparations",
+		"delivery-dispatch-pending": "pendings",
 	} {
 		t.Run(registry, func(t *testing.T) {
 			register := &stubReviewCatalogue{}

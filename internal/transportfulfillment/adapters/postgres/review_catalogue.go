@@ -485,6 +485,16 @@ func (catalogue *ReviewCatalogue) ListTransportPreparations(
 	return list, nil
 }
 
+// ListDeliveryDispatchPendings 上列派送待形成册里待形成的那几件（ADR-0230 决定三）。不另写一条查询：清单就是按册重问的那个队列，
+// 筛法与排序只在 DeliveryDispatchPendings.ListPending 一处。
+func (catalogue *ReviewCatalogue) ListDeliveryDispatchPendings(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]ports.DeliveryDispatchPendingRecord, error) {
+	return (&DeliveryDispatchPendings{db: catalogue.db}).ListPending(ctx, tenant, time.Time{}, limit)
+}
+
 func preparationDemandRows(raw []byte) ([]ports.PreparationDemandRow, error) {
 	var stored []storedDemandQuantity
 	if err := json.Unmarshal(raw, &stored); err != nil {

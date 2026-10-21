@@ -47,29 +47,36 @@ type ReviewCatalogueReader interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]ports.TransportPreparationCatalogueRow, error)
+	ListDeliveryDispatchPendings(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]ports.DeliveryDispatchPendingRecord, error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
 var _ ReviewCatalogueReader = ports.ReviewCatalogueRead(nil)
 
 const (
-	outcomeTransportSchedulesListed     = "TRANSPORT_SCHEDULES_LISTED"
-	outcomeScheduleTemplatesListed      = "SCHEDULE_TEMPLATES_LISTED"
-	outcomeCapacityPoolsListed          = "CAPACITY_POOLS_LISTED"
-	outcomeTransportHandoversListed     = "TRANSPORT_HANDOVERS_LISTED"
-	outcomeEffectiveDeliveriesListed    = "EFFECTIVE_DELIVERIES_LISTED"
-	outcomeCarrierMasterDocumentsListed = "CARRIER_MASTER_DOCUMENTS_LISTED"
-	outcomeTransportPreparationsListed  = "TRANSPORT_PREPARATIONS_LISTED"
+	outcomeTransportSchedulesListed       = "TRANSPORT_SCHEDULES_LISTED"
+	outcomeScheduleTemplatesListed        = "SCHEDULE_TEMPLATES_LISTED"
+	outcomeCapacityPoolsListed            = "CAPACITY_POOLS_LISTED"
+	outcomeTransportHandoversListed       = "TRANSPORT_HANDOVERS_LISTED"
+	outcomeEffectiveDeliveriesListed      = "EFFECTIVE_DELIVERIES_LISTED"
+	outcomeCarrierMasterDocumentsListed   = "CARRIER_MASTER_DOCUMENTS_LISTED"
+	outcomeTransportPreparationsListed    = "TRANSPORT_PREPARATIONS_LISTED"
+	outcomeDeliveryDispatchPendingsListed = "DELIVERY_DISPATCH_PENDINGS_LISTED"
 )
 
 const (
-	registryTransportSchedule     = "transport-schedule"
-	registryScheduleTemplate      = "transport-schedule-template"
-	registryCapacityPool          = "capacity-pool"
-	registryTransportHandover     = "transport-handover"
-	registryEffectiveDelivery     = "effective-delivery"
-	registryCarrierMasterDocument = "carrier-master-document"
-	registryTransportPreparation  = "transport-preparation"
+	registryTransportSchedule       = "transport-schedule"
+	registryScheduleTemplate        = "transport-schedule-template"
+	registryCapacityPool            = "capacity-pool"
+	registryTransportHandover       = "transport-handover"
+	registryEffectiveDelivery       = "effective-delivery"
+	registryCarrierMasterDocument   = "carrier-master-document"
+	registryTransportPreparation    = "transport-preparation"
+	registryDeliveryDispatchPending = "delivery-dispatch-pending"
 )
 
 // NewQueryTransportFulfillmentRecordsEndpoint 交回运输履约查阅页各本册子的 HTTP
@@ -99,7 +106,8 @@ func NewQueryTransportFulfillmentRecordsEndpoint(
 			registry != registryTransportHandover &&
 			registry != registryEffectiveDelivery &&
 			registry != registryCarrierMasterDocument &&
-			registry != registryTransportPreparation {
+			registry != registryTransportPreparation &&
+			registry != registryDeliveryDispatchPending {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
@@ -124,6 +132,8 @@ func NewQueryTransportFulfillmentRecordsEndpoint(
 			serveCarrierMasterDocuments(response, request, reader, tenant, query.Limit)
 		case registryTransportPreparation:
 			serveTransportPreparations(response, request, reader, tenant, query.Limit)
+		case registryDeliveryDispatchPending:
+			serveDeliveryDispatchPendings(response, request, reader, tenant, query.Limit)
 		}
 	})
 }
@@ -588,6 +598,51 @@ type carrierMasterDocumentBody struct {
 	AssociationCount string `json:"associationCount"`
 	ChangedAt        string `json:"changedAt,omitempty"`
 	RecordedAt       string `json:"recordedAt"`
+}
+
+// serveDeliveryDispatchPendings 上列派送待形成的那几件（ADR-0230 决定三）：哪个段里的哪个对象、凭哪条入场依据、缺哪几件、首次
+// 与最近一次答复时刻。只列待形成的；了结与作罢的不上列——这一页是要人去催所有者的清单，不是派送的历史。
+func serveDeliveryDispatchPendings(
+	response http.ResponseWriter,
+	request *http.Request,
+	reader ReviewCatalogueReader,
+	tenant domain.TenantID,
+	limit int,
+) {
+	rows, err := reader.ListDeliveryDispatchPendings(request.Context(), tenant, limit)
+	if err != nil {
+		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+		return
+	}
+	bodies := make([]deliveryDispatchPendingBody, 0, len(rows))
+	for _, row := range rows {
+		bodies = append(bodies, deliveryDispatchPendingBody{
+			Segment:         row.Key.Segment.String(),
+			Object:          row.Key.Object.String(),
+			EntryBasis:      row.EntryBasis.String(),
+			Missing:         append([]string{}, row.Missing...),
+			FirstAnsweredAt: rfc3339(row.FirstAnsweredAt),
+			LastAnsweredAt:  rfc3339(row.LastAnsweredAt),
+		})
+	}
+	writeJSON(response, http.StatusOK, deliveryDispatchPendingListResponse{
+		Outcome:  outcomeDeliveryDispatchPendingsListed,
+		Pendings: bodies,
+	})
+}
+
+type deliveryDispatchPendingListResponse struct {
+	Outcome  string                        `json:"outcome"`
+	Pendings []deliveryDispatchPendingBody `json:"pendings"`
+}
+
+type deliveryDispatchPendingBody struct {
+	Segment         string   `json:"segment"`
+	Object          string   `json:"object"`
+	EntryBasis      string   `json:"entryBasis"`
+	Missing         []string `json:"missing"`
+	FirstAnsweredAt string   `json:"firstAnsweredAt"`
+	LastAnsweredAt  string   `json:"lastAnsweredAt"`
 }
 
 type transportPreparationListResponse struct {
