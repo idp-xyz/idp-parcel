@@ -11,7 +11,7 @@ import (
 )
 
 // Covers: AT-TF-304 的线格式那一半（ADR-0231 决定六）——查阅页实际履约未形成那一格逐格转写：段、对象、委托与作答的那一版的号、哪一格、
-// 问的那一版协议、参与终点、首次与最近一次答复时刻；缺采购上下文那一行不出协议两键；租户取认证结果，读口收到的就是它；空册答 []。
+// 问的那一版协议、参与终点、首次与最近一次答复时刻；缺采购上下文那一行不出协议两键；缺陷那一行带停在哪里、问到委托之前停住的不带号；租户取认证结果，读口收到的就是它；空册答 []。
 func TestTheActualFulfillmentUnformedRegistryTranscribesRows(t *testing.T) {
 	ended := time.Date(2026, 10, 19, 6, 0, 0, 0, time.UTC)
 	answered := time.Date(2026, 10, 21, 3, 0, 0, 0, time.UTC)
@@ -19,6 +19,7 @@ func TestTheActualFulfillmentUnformedRegistryTranscribesRows(t *testing.T) {
 	segment, _ := domain.NewFulfillmentSegmentReference("SYN-SEG-88")
 	object, _ := domain.NewCarriedObjectReference("SYN-PARCEL-88")
 	other, _ := domain.NewCarriedObjectReference("SYN-PARCEL-88-LEGACY")
+	tied, _ := domain.NewCarriedObjectReference("SYN-PARCEL-88-TIED")
 	commission, _ := domain.NewTransportCommissionReference("SYN-COMMISSION-88")
 	agreement, _ := domain.NewSupplierAgreementVersion("SYN-SUPPLIER-TRUNK-CN-SG-01", "v1")
 	register := &stubReviewCatalogue{unformed: []ports.ActualFulfillmentUnformedRecord{
@@ -33,6 +34,13 @@ func TestTheActualFulfillmentUnformedRegistryTranscribesRows(t *testing.T) {
 			Entry: ports.ActualFulfillmentUnformedEntry{
 				Key:        ports.ActualFulfillmentUnformedKey{TenantID: tenant, Segment: segment, Object: other},
 				Commission: commission, Revision: 1, EndedAt: ended, Reason: ports.UnformedProcurementContextMissing,
+			},
+			FirstAnsweredAt: answered, LastAnsweredAt: answered, State: ports.ActualFulfillmentUnformed,
+		},
+		{
+			Entry: ports.ActualFulfillmentUnformedEntry{
+				Key:        ports.ActualFulfillmentUnformedKey{TenantID: tenant, Segment: segment, Object: tied},
+				Commission: commission, EndedAt: ended, Reason: ports.UnformedFormationDefect, Defect: "AMBIGUOUS_JOURNEY",
 			},
 			FirstAnsweredAt: answered, LastAnsweredAt: answered, State: ports.ActualFulfillmentUnformed,
 		},
@@ -51,7 +59,7 @@ func TestTheActualFulfillmentUnformedRegistryTranscribesRows(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if body.Outcome != "ACTUAL_FULFILLMENT_UNFORMED_LISTED" || len(body.Unformed) != 2 {
+	if body.Outcome != "ACTUAL_FULFILLMENT_UNFORMED_LISTED" || len(body.Unformed) != 3 {
 		t.Fatalf("答复 = %s", response.Body.String())
 	}
 	row := body.Unformed[0]
@@ -66,6 +74,13 @@ func TestTheActualFulfillmentUnformedRegistryTranscribesRows(t *testing.T) {
 		t.Fatalf("缺采购上下文那一行 = %+v", legacy)
 	} else if _, asked := legacy["agreementObject"]; asked {
 		t.Fatalf("没问 PC 的那一行带了协议：%+v", legacy)
+	}
+	defect := body.Unformed[2]
+	if _, numbered := defect["commissionRevision"]; defect["reason"] != "FORMATION_DEFECT" || defect["defect"] != "AMBIGUOUS_JOURNEY" || numbered {
+		t.Fatalf("缺陷那一行 = %+v, want 带 defect、不带号", defect)
+	}
+	if _, present := row["defect"]; present {
+		t.Fatalf("别的格带了 defect：%+v", row)
 	}
 
 	empty := serveGet(recordsEndpoint(&stubReviewCatalogue{}), "/transport-fulfillment-records?registry=actual-fulfillment-unformed")
