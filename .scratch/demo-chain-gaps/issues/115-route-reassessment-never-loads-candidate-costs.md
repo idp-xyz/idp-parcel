@@ -1,7 +1,7 @@
 # 115 路由复核不取候选成本：证据里的候选成本恒空，成本单维下候选评估恒未决、无路由那条线报错
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-dcg115（2026-10-21 作者子代理，见文末「完成记录」；进 main 时由协调方转 resolved 并注合入 SHA）。此前 needs-triage——2026-10-19 Claude Code 作者子代理立（票 [105](./105-route-plan-receives-cost-citations-of-unselected-candidates.md) 落地时读码发现；用户「你作为业务和系统专家自决……解决所有的问题」授权）。
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg115（2026-10-21 作者子代理，见文末「完成记录」；进 main 时由协调方转 resolved 并注合入 SHA）。此前 needs-triage——2026-10-19 Claude Code 作者子代理立（票 [105](./105-route-plan-receives-cost-citations-of-unselected-candidates.md) 落地时读码发现；用户「你作为业务和系统专家自决……解决所有的问题」授权）。
 Blocked by: 无
 地盘：NR `application/reassess_route.go`（`ReassessRouteDeps`、`reviewCandidates`、`formPlanFromEvidence`）；生产装配 `cmd/parcel-dispatch/assemble_reassess_on_handover.go` 给复核接成本取数侧。
 出处：票 [routing-first-cut/10](../../routing-first-cut/issues/10-candidate-cost-from-leg-buy-evaluations.md)（成本族在取数侧兑现）；`ports.InitialRouteEvidence` 的注释「CandidateCosts 按形态要的维度给出逐候选事实，每个合格候选恰一条」。
@@ -138,3 +138,10 @@ Status 改为 R1，加上线闸门：code/53 落地之前，任何租户不得�
 - `TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh`，跑同一组包：`./internal/networkrouting/...`、`./cmd/parcel-dispatch/`、`./cmd/parcel-api/`、`./cmd/parcel-network-register/`、`./internal/parcelshipment/adapters/networkrouting/...`、`./internal/transportfulfillment/adapters/networkrouting/...`、`./internal/visibilityexception/adapters/networkrouting/...`、`./internal/architecture/...`、`./migrations/...`。结果 21 ok、0 FAIL。
 - 改动与新增的用例另跑 `-count=3`：编排七条、派发两条，ok。
 - rebase 时 AT 盘点文末追记与 main 上 10a 的追记撞在同一处，两段都留，各成一段。
+
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-dcg115` tip `b18f662bc` 在 main `79a70dbba` 上快进；隔离评审 1 条阻断（复核用客户声明出价未披露）按协调方裁定以过渡做法披露并立 code/66；修订轮代码改动（取数侧缺席响亮、排序形态未声明不取成本）有用例。
+- 协调方在 tip 上单独提交重算的 AT 计数与重生成的机制清点；ADR 索引无变化；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净。无迁移、无种子改动（种子不走复核取成本）。
+- 去向：code/53（升 R1，上线闸门：落地前任何租户不得声明自动改路）、code/66（复核取物理事实）、code/67（失效线与仍适用线读失败的事务中毒，需保存点）。
