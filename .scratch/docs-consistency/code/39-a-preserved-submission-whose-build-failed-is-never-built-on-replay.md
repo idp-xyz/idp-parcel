@@ -35,62 +35,95 @@ M：重放那条路要分得出「保全过、建成了」「保全过、归属�
 
 - 归属挡下（`OWNERSHIP_UNRESOLVED`、`ADMISSION_PAUSED`）之后的重发今天也只答已有结果、不重判；UC-PS-001 写归属未决「可安全续办」，而首发试点叠加条件写暂停「不自动恢复」。两格要不要随重发重判，本票落地时提出，交 PS owner 定；本票的必修只是「什么都没形成」那一格。
 
-## 完成记录（2026-10-21，分支 claude-code39，基于 main `544e41de1`）
+## 完成记录（2026-10-21，分支 claude-code39，rebase 于 main `35d181d1c`；隔离评审后按协调方裁定重写）
 
 ### 做了什么
 
-- `d36769430` 判得的生产归属答案落库：新端口 `ports.SubmissionOwnershipAnswers`（追加、取最近一次、按委托号取建单所据那一次）与 PostgreSQL 适配器 `SubmissionOwnershipAnswers`，迁移 `migrations/parcel_shipment/0028_submission_ownership_answer.sql`（只追加；放行与「有将要建的委托号」两格由库约束守成同真同假；外键挂已保全来源）。决定整份进 jsonb，读回经 `NewProductionOwnershipDecision`、`AssessSafeHandoff`、`WithSafeHandoff` 重建；交接评估经新加的 `SafeHandoffAssessment.FormationSpec` 原样存取（部分确认那种被读口收起的确认引用也不丢）。
-- `7c67c7186` 提交编排重发接着办：`Handle` 保全之后那一段抽成 `proceed`，首次与续办共用；`resolvePreserved` 按上一次走到的位置作答——委托已在答`已有结果`、指名并带建单所据的原归属结果；最近一次答案是`准入暂停`或`非本产品生产归属`（由 `settledOnReplay` 一处判定）答`已有结果`带原归属结果与门禁原因、不重判；其余（什么都没留下、放行了却没建成、`生产归属未决`）走 `proceed` 接着判归属与建单。挡下的答案记下了才答，放行的答案在建单之前、建单那一笔之外记下（装配 `ownershipAnswerBoundary` 逐笔开事务）。并发撞「已存在」时也带胜者建单所据的答案。构造器加一参，调用点随改（`cmd/parcel-api` 装配与测试、`cmd/parcel-dispatch` 两个测试、`tests/bentocontract` 夹具、HTTP 适配器测试、应用测试）。
-- `e87caf4f4` UC-PS-001：提交答复表「已有结果」限到原处理已形成结果，「非本产品生产归属」「生产归属未决」「准入暂停」三行写明重发怎么答；表下文「重发接着办」一段替掉现状缺口句；幂等一条改为重放分两路；`AT-PS-003`、`AT-PS-104` 限定，新立 `AT-PS-111`–`AT-PS-113`；「给开发的交接」code/39 两行改为已补。PS CONTEXT 重放一条同改并指 ADR-0256 决定一。ADR-0256 正文未动。
-- `76953566d` AT 盘点：①加 `AT-PS-111`–`AT-PS-113` 三行，文末追记一条；总览计数未改。
+第一轮（rebase 后 SHA）：
+- `ab7a33e5c` 判得的生产归属答案落库：端口、PostgreSQL 适配器与迁移 0028，`SafeHandoffAssessment.FormationSpec`。
+- `887549359` 提交编排重发接着办：保全之后那一段抽成 `proceed`，按上一次答案作答。
+- `b0089408d` UC-PS-001 与 PS CONTEXT；`9dd53f281` AT 盘点；`bd4d03c40` 第一轮完成记录。
 
-### 代决
+评审修订：
+- `894bd69a9` 领域补 `ProductionOwnershipDecision.WithReassessedHandoff`：只把同一次尝试（同一尝试身份、同一范围与对方）的重查评估换到一份交接未确认的他方决定上。
+- `2bdf452d8` 编排与存储改按 ADR-0266：
+  - 表改名 `parcel_shipment.submission_answer`（迁移 `migrations/parcel_shipment/0028_submission_answer.sql`，未进 main，原地改）。三格拒绝（输入未受理、原委托不可见、关联不适用）也留存；端口改名 `ports.SubmissionAnswers`，加 `SubmissionRefusal`。
+  - 重放答`已有结果`带原结果：新访问器 `PriorOutcome`，首方答复加 `priorOutcome`。只有生产归属未决重判；他方且交接未确认时重投同一次尝试、不重判。
+  - 新端口 `ports.SubmissionContinuationGuard`，装配 `submissionContinuationGuard` 在 `cmd/parcel-api/assemble_submission.go`：开一笔事务取来源身份的咨询锁（适配器 `LockSubmission`），判归属、记答案、建单、信封并进这一笔。已定的重放在锁外只读作答。
+  - `tests/bentocontract` 夹具的计数器与「提交不确定」注入口改包在守卫上；`SubmissionIdentityFactory` 端口注释写明收敛依赖接单入口每次现签委托号。
+- `f3b4227e9` 注释里一处把转述写成了 ADR-0128 引文，改掉。
+- `8578b561a` 新立 ADR-0266，部分停用 ADR-0081 一句；ADR-0081 Status 注记与 Links 加来向，ADR-0256 索引注记加「缺口已补」（SHA 待填）。
+- `07f0c7588` UC-PS-001、PS CONTEXT 与首个消费者切片简报随 ADR-0266 改。
+- `28de01a93` AT 盘点。
 
-用户授权「你作为业务和系统专家自决……解决所有的问题」；协调方先行裁定本票「要裁的」各格，本票照办并逐条落在 UC-PS-001 提交答复表：
+### 代决（按协调方评审裁定重写）
 
-1. 什么都没形成（保全已落、无归属判断、无委托）→ 重发续办：照首次提交继续判归属与建单，并发下由建单唯一键（`shipment_request` 主键即来源身份）保证只建一份。
-2. `OWNERSHIP_UNRESOLVED` → 重发重判归属；判得出照常建单，仍判不出再答原格（带这一次的决定）。
-3. `ADMISSION_PAUSED` → 重发答`已有结果`带原归属结果，不重判（首发试点叠加条件「不自动恢复」）。
-4. 委托已建 → 照旧`已有结果`指名委托，并补上原归属结果。
+用户授权「你作为业务和系统专家自决……解决所有的问题」。重放格局由协调方两轮裁定，立 ADR-0266 落定（会话代 PS owner 决）：
 
-本票另行代决（协调方裁定没写到的细节）：
+1. 委托已建 → `已有结果`，指名委托并带建单所据的原归属结果。
+2. 答出过的拒绝（输入未受理、原委托不可见、关联不适用）→ `已有结果`带原结果，不再判。三格的答案留存，保住 ADR-0081「重放一份曾被业务拒绝的输入答已有结果」。第一轮「这三种不留存、重发再判」一条作废。
+3. 准入暂停、交接已确认的非本产品生产归属 → `已有结果`带原归属结果与门禁原因，不重判、不再交接。
+4. 他方而交接未确认 → 按记着的尝试身份重投、重查，不重判。确认了这一次才答`非本产品生产归属`，仍未确认答`生产归属未决`。协调方原话「确认了就答原结果」，本票读作「答原那份他方决定，这一次交接确认」：首次确认那一次答`非本产品生产归属`，此后重发答`已有结果`。
+5. 生产归属未决 → 重判，按这一次的结果作答。这一格部分停用 ADR-0081 那一句。
+6. 没有形成答案（5xx 那一格）→ 续办；续办建成答`已提交`。「没有形成答案」只指 5xx 那一格。
+7. 同一来源身份的续办串行。本票选 `pg_advisory_xact_lock`，不选 `SELECT … FOR UPDATE`：守卫要持锁到建单落下，FOR UPDATE 会挡住别的重放在锁外追加观察（外键共享锁）。锁与写入并进同一笔事务：第一版让写入另取连接，真库并发用例在两连接的测试池上互等至超时，生产上排队的几路一样会把连接池占满。「记答案前复查」在进锁那一刻做：进锁后同一来源身份不会再有别路落笔。
+8. 留存的答案在守卫那一笔事务里与委托、信封同生共死：建单失败，答案一起回滚，重发按没有形成答案接着办。
+9. `已有结果`带 `priorOutcome`（首方契约新增字段，只增不改）：拒绝那几格没有归属决定可带，少了它客户不知道上一次答了什么。
+10. 续办据保全在册的首次到达那份来源事实立版本；答案记不下即没有形成答案，答 5xx。
+11. 建单答「已存在」却按来源身份读不回委托（撞委托号唯一键）由答空的已有结果改为上抛。
+12. PS CONTEXT 重放一条与首个消费者切片简报同键同摘要一条，改为指向 ADR-0256 决定一、ADR-0266 决定一与 UC-PS-001「重发接着办」一段。
 
-5. `非本产品生产归属`（交接已确认）与准入暂停同格：重发答`已有结果`带原归属结果，不重判、不再投递——UC-PS-001「不得同时投递多个生产系统」。交接未确认的`其他权威`答的是`生产归属未决`，照第 2 条重判、重投同一次尝试（尝试身份由决定派生，对方据它认领重放）。
-6. 归属答案只追加、每一次判断留一行（UC-PS-001「归属未决时保留缺口与续办记录」）；放行的答案带将要建的委托号、在建单之前记下，委托已在时按委托号取最早那一次，不取最近一次。
-7. 关联互证（`PRIOR_REQUEST_NOT_FOUND`、`LINK_INELIGIBLE`）与输入校验（`INPUT_NOT_ACCEPTED`）的答案不留存，重发按同一请求再判一次——今天无处可读「原接入处理结果」，答一个空的已有结果正是本票要堵的样子。
-8. 续办建成委托时答`已提交`（不是`已有结果`）：客户上一次拿到的是 5xx 或未决，这一次才真建成。
-9. 续办据保全在册的那份来源事实立当前提交版本（首次到达的 `occurredAt`/`receivedAt`），这一次的观察只追加在旁边。
-10. 归属答案记不下即没有形成答案，上抛 5xx（ADR-0256 决定一：提交编排保全之后出错答 5xx）——挡下的答案不记就答，重发会把一次暂停重判成放行。
-11. 建单答「已存在」却按来源身份读不回委托（撞的是委托号唯一键）由答不指名委托的`已有结果`改为上抛：那份提交并没建成，客户原样重发、接单入口另签号即可接着办。
-12. PS CONTEXT 重放一条改写为两路并指 ADR-0256 决定一：原句「与相同规范化内容摘要返回已有结果」与已接受的 ADR-0256「不得因来源已保全就短路成已有结果」相抵，按 AGENTS「冲突时 ADR 优先于用例」把 CONTEXT 对齐到 ADR，不另立 ADR。
-13. `tests/bentocontract` PBC-07 回滚方向用例 `TestCommitUncertainOverARollbackAnswersTruthfullyByStableCorrelation` 原本钉的是旧口径（重发答不附委托的已有结果、不再开提交事务），改为接着办：重发建成那份委托、提交事务恰好再开一次、一行委托一份意图——仍是框架合同「先查原结果，确认不存在才重执行」。`cmd/parcel-api` 两个真库用例（目录未配置的未决、跨客户指名的查无原委托）的重放断言同改为照原格再答、追加一次观察。
+### 越权风险点（待 PS owner 复核；ADR-0266 越权风险点同列）
 
-### 越权风险点（待 PS owner 复核）
-
-1. **暂停之后同一请求键永远不建单**：暂停解除之后，客户原样重发拿到的仍是那份暂停的已有结果；要入单得换一个来源请求键重新提交。若要「明确恢复决定之后原请求可续办」，需要恢复决定能指名受影响的已保全提交——那是新机制。
-2. **未决之后重发可能隔很久才建单**：委托的提交时刻是续办那一刻，当前提交版本记的系统接收时间却是首次到达，两者可以相隔很远；「提交接收」时点形态按后者取值。
-3. **关联互证重判可能换答案**：首次答`关联不适用`、其后原委托到了终态，重发会建成关联新委托；首次答`原委托不可见`同理。按客户意图这是对的，但与「已有结果返回原接入处理结果」的字面不同。
-4. **答案留存之前建成的委托**重发只指名委托、不带原归属结果——库里没有那一次的记录，不拿别的一次顶替。
-5. **答案行随失败的重试增长**：放行之后建单屡次失败，每次重发都记一行放行答案；并发续办的落败方也留一行指着从未建成的委托号。读口按委托号取，答复不受影响，只是历史里多几行。
-6. **并发下登记册恰在两路之间变化**：一路放行建单、另一路判成暂停，后者照实答`准入暂停`而委托已在；此后再重发按委托在答`已有结果`。答案各自如实，但同一请求两路答复不同。
-7. **「已有结果」一行「已经建单时再附原委托及接受/拒绝/未决结果」**：今天重发指名委托与逐件包裹，不带接受判断结果；不在本票缺口内，本票未动，如需补另立票。
-8. `SafeHandoffAssessment.FormationSpec` 交回含部分确认引用的原始输入，只供持久化读回；业务代码若拿它判「交过去没有」会把部分确认当确认。
+1. **暂停或拒绝之后同一请求键永远答原结果**：暂停解除、或关联指名的原委托后来到了终态，原样重发仍答那份已有结果，要入单得换来源请求键。
+2. **未决之后重发可能隔很久才建单**：提交时刻是续办那一刻，系统接收时间是首次到达。
+3. **串行守不住的窗口**：守卫排住的是经提交编排的同一来源身份。
+   - 剩下一格：他方投递已发出、本方记下答案之前进程崩溃或那一笔事务回滚，答案不在。重发按没有形成答案重判，登记册若此间翻成本产品，就会一边已投给他方、一边在本地建单。
+   - 缓解：尝试身份由决定派生，他方据它认领；对账要按来源身份把两边对上。
+   - 另：一路续办在锁里占一条连接直到建单落下，判归属与对外投递都在锁里；同一来源身份的重放排队等它。
+4. **迁移 0028 之前保全的来源**：那时答过准入暂停、交接已确认的他方归属或三格拒绝的，库里没有答案行，重发按没有形成答案重判；那时已建成的委托，重发不带原归属结果。无法回填，只影响演示数据（UC-PS-001「给开发的交接」已列）。
+5. **答案行随重判、重查增长**：读口取最近一次或按委托号取，答复不受影响。
+6. **`priorOutcome` 是首方契约新增字段**：管理台今天不读它。
+7. **「已有结果」一行「已经建单时再附原委托及接受/拒绝/未决结果」**：重发不带接受判断结果，不在本票缺口内。
+8. `SafeHandoffAssessment.FormationSpec` 交回含部分确认引用的原始输入，只供持久化读回；业务代码若拿它判「交过去没有」会误读。
 
 ### AT
 
-- 新立并钉住：`AT-PS-111`（真库 `TestAReplayAfterTheBuildTransactionRolledBackBuildsTheRequestOnce`、`TestAReplayAfterTheOwnershipDependencyFailedDecidesAgain`、`TestTwoConcurrentReplaysAfterARolledBackBuildBuildOnce`，应用层两条）、`AT-PS-112`（真库一条、应用层两条）、`AT-PS-113`（真库一条、应用层两条）。
-- 改写：`AT-PS-003`（限到原处理已经建单、带建单所据的原归属结果；真库 `TestAReplayOfABuiltRequestNamesItWithTheOwnershipItWasBuiltOn` 点它，盘点里该行未改）、`AT-PS-104`（重放一支限到这次也没有建单）。
-- 盘点总览计数、`docs/product/MECHANISM-INVENTORY.md` 与 ADR 索引未重生成，由推送方处理。
+- `AT-PS-111`：真库三条，含两路并发只建一份、后到者不判；应用层两条。
+- `AT-PS-112`：真库一条、应用层三条。
+- `AT-PS-113`：真库一条、HTTP 一条、应用层三条。
+- `AT-PS-114`（新）：真库一条、应用层一条。
+- `AT-PS-003` 盘点行补点真库 `TestAReplayOfABuiltRequestNamesItWithTheOwnershipItWasBuiltOn`；`AT-PS-104` 限定。
+- 盘点总览计数、`docs/product/MECHANISM-INVENTORY.md`、`docs/adr/README.md` 索引都未重生成。`go run ./tools/adr-index` 在 scratchpad 副本上生成后 `-check` 通过。
 
-### 验证（代码同 `7c67c7186`）
+### 验证
 
-- `go build ./...`、`go vet ./...`、`gofmt -l`（全部已跟踪 Go 文件）干净。
-- `scripts/test-full.sh` 跑受影响的 41 个包（`internal/parcelshipment/...`、`internal/architecture/...`、`cmd/parcel-api`、`tests/bentocontract`，以及代码或测试直接导入 PS `domain`、`ports`、`application`、`adapters/postgres` 的全部包，含 `cmd/parcel-dispatch`）：39 ok、2 包无测试文件、0 FAIL。
-- 新真库用例另以 `-count=3 -v` 跑一遍，均 PASS（未跳过）。
-- 未跑全量；未灌演示种子（种子不走提交编排的重放路）。
-- 迁移号取 0028：基于 main `544e41de1` 时 `migrations/parcel_shipment/` 最大号 0027；进 main 前若别的分支先占 0028 需改号。
+见下文「评审记录」末段。
 
-### 未决
+## 评审记录
 
-- 撤回、资料修订两只编排的同类短路仍归 [code/44](./44-withdrawal-and-amendment-replays-short-circuit-after-an-undecided-round.md)。
-- ADR-0256 越权风险点 3 写「code/39 落地之前重发得到一个不指名委托的已有结果」，本票落地后那句成为历史描述；按「不改写已接受 ADR」未动，要不要挂注记由推送方或 PS owner 定。
+### 第 1 轮（隔离评审，协调方转达）
+
+代码正确性与并发收敛核过无问题。阻断 1 条，建议 10 条，逐条去向：
+
+| 条目 | 去向 |
+|---|---|
+| B1 ADR-0081 那一句被改无停用指针 | 已修。三格拒绝留存、重放答原结果，`TestARefusedSubmissionStillPreservesItsSource` 改回 ADR-0081 原口径（另断言 `priorOutcome`）。新立 ADR-0266 部分停用 ADR-0081 那一句，只限生产归属未决；UC「重发接着办」与 CONTEXT 不再把已答出的答案归进没有形成答案。`TestTheWiredSubmissionAnswersHonestlyAgainstARealDatabase` 没改回：它停在生产归属未决，正是 ADR-0266 部分停用的那一格，重放重判仍答 `OWNERSHIP_UNRESOLVED`，头注改指 ADR-0266 |
+| N1 本方建单与他方交接并存 | 已修。续办守卫（咨询锁，与写入同一笔事务，进锁复查）；他方交接未确认重投同一次尝试、不重判。真库补 `TestTwoConcurrentReplaysAfterARolledBackBuildBuildOnceAndJudgeOnce`（后到者若判会判成他方，断言只判一次、零投递）与 `TestAReplayAfterAnUnconfirmedHandoffRedeliversTheSameAttemptInsteadOfDeciding`；适配器补 `TestSubmissionLockSerializesOneSourceIdentity`；越权风险点 3 写剩余窗口 |
+| N2 迁移前数据 | 已修。越权风险点 4；UC「给开发的交接」加一行（不承接，无法回填） |
+| N3 未决一行与 `AT-PS-112`、`AT-PS-111` 前提 | 已修 |
+| N4 逐次留存不算第二份归属记录 | 已修。「已有结果」一行禁止行为补一句，ADR-0266 决定三 |
+| N5 简报「输入与幂等」 | 已修。同键同摘要一条只引 UC-PS-001「重发接着办」那段 |
+| N6 `AT-PS-003` 盘点行 | 已修 |
+| N7 测试头注「三个」 | 已修 |
+| N8 `SubmissionIdentityFactory` 端口注释 | 已修 |
+| N9 往返补两种交接评估 | 已修。用例随表改名为 `TestSubmissionAnswersRoundTripWholly`，补「通往他方的通道未配置」「他方超时未答」两格，并补三格拒绝 |
+| N10 ADR-0256 注记 | 已修。索引注记追加「缺口已补」，进 main 提交 SHA 留「待填」，正文不动 |
+
+未采纳：无。`TestTheWiredSubmission…` 不改回的理由见 B1 一行。
+
+验证（代码同 `2bdf452d8`，此后只改注释与文档）：
+- `TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/parcelshipment/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./tests/bentocontract/... ./internal/architecture/... ./migrations/...`：在 `2bdf452d8` 上 24 ok、2 无测试文件、0 FAIL。收口前（文档提交之后）重跑一遍：23 ok，`cmd/parcel-dispatch` 红在 `TestAClosedAgreementVersionIsTracedAndRecoveredByRevision/同起点退役`（TF 实际履约补形成，「换版到 v2 = APPLIES_BEFORE_SUBMISSION」）。这个用例不经提交编排；在 main `35d181d1c` 的源码快照（`git archive`）上单跑四次三次红，是既有的不稳定用例，不是本票引入的。单独重跑 `cmd/parcel-dispatch` 整包为 ok。
+- 新用例与改动用例 `-count=3 -v` 另跑（`cmd/parcel-api`、PS `adapters/postgres`、`application`、`domain`、`adapters/http`、`tests/bentocontract`）：全部 PASS，未跳过。
+- `go build ./...`、`go vet ./...`、`gofmt -l` 干净。
+- 守卫第一版（写入另取连接）在两连接的测试池上互等至 10 分钟超时，已改为写入并进守卫那一笔事务；改后同一套全绿。
