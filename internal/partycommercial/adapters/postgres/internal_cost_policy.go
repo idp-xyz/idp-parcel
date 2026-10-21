@@ -31,24 +31,27 @@ func (repository *CommercialPublications) LoadInternalCostPolicy(
 
 	var raw []byte
 	row := scannedPricePolicy{}
+	var retirement scannedRetirement
 	err = querier.QueryRow(ctx,
 		`SELECT version.snapshot,
 		        price.direction, price.plan_ref, price.plan_direction, price.binding_conversion,
-		        price.policy_scope_ref, price.effective_starts_at, price.effective_ends_at
+		        price.policy_scope_ref, price.effective_starts_at, price.effective_ends_at,
+		        `+retirementColumns+`
 		   FROM party_commercial.commercial_version AS version
 		   LEFT JOIN party_commercial.commercial_price_policy AS price
 		          ON price.tenant_id     = version.tenant_id
 		         AND price.object_kind   = version.object_kind
 		         AND price.object_id     = version.object_id
 		         AND price.version_label = version.version_label
+		   `+retirementJoin("version")+`
 		  WHERE version.tenant_id = $1
 		    AND version.object_kind = $2
 		    AND version.object_id = $3
 		    AND version.version_label = $4`,
 		tenant.String(), uint8(domain.PriceRuleObject), objectID.String(), versionLabel.String(),
-	).Scan(&raw,
+	).Scan(append([]any{&raw,
 		&row.direction, &row.planRef, &row.planDirection, &row.conversion,
-		&row.scope, &row.startsAt, &row.endsAt)
+		&row.scope, &row.startsAt, &row.endsAt}, retirement.targets()...)...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// 版本行本身没有：这版政策从未发布过。
 		return domain.CommercialPricePolicy{}, false, nil
@@ -68,7 +71,13 @@ func (repository *CommercialPublications) LoadInternalCostPolicy(
 	if err := json.Unmarshal(raw, &document); err != nil {
 		return domain.CommercialPricePolicy{}, false, fmt.Errorf("load internal cost policy: 快照不是本适配器写下的形状：%w", err)
 	}
-	version, err := document.version()
+	snapshot, err := document.version()
+	if err != nil {
+		return domain.CommercialPricePolicy{}, false, fmt.Errorf("load internal cost policy: %w", err)
+	}
+	// 退役施加在壳上（ADR-0233 决定四）：同起点退役的那一版此后不在已生效，下面那一格照「没这份正文」答，与整册装载里
+	// 它的正文落选同一口径。本口不按区间判，区间更正在这里与原区间一样不起作用，不折。
+	version, err := retirement.retiredShell(snapshot)
 	if err != nil {
 		return domain.CommercialPricePolicy{}, false, fmt.Errorf("load internal cost policy: %w", err)
 	}

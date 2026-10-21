@@ -143,9 +143,10 @@ type CreditPolicyContentView interface {
 // SupplierAgreementContentView 取已唯一选出的供应商商业协议版本的正文：供应商、责任法人、
 // 适用范围与采购定价方案。
 //
-// 分界与三格含义同 CreditPolicyContentView。它交回的协议**不带终止**：终止是生效后的一次
-// 事件，不是发布时的正文，本票只登正文（票 party-commercial-context-gaps/03「两件明确不做」）；
-// 调用方对 SupportsProcurementAt 的答案因此只覆盖生效与区间两条。
+// 分界与三格含义同 CreditPolicyContentView。它交回的协议不带协议层的终止（Terminate）：那是生效后的一次事件，不是发布
+// 时的正文，本口只登正文（票 party-commercial-context-gaps/03「两件明确不做」）。版本层的收尾（ADR-0233 决定四）照折：
+// 壳上最新一条区间更正收窄正文的判用区间，壳已同起点退役则正文不再支持任何新的采购决定、终止时刻读作退役时刻——
+// 调用方对 SupportsProcurementAt 的答案因此与闭包选候选同一口径（ADR-0038 决定二）。
 type SupplierAgreementContentView interface {
 	LoadSupplierAgreement(
 		ctx context.Context,
@@ -165,8 +166,9 @@ type SupplierAgreementContentView interface {
 //
 // 本口**不判**「这一版此刻能不能用于新的采购决定」：那由 SupplierAgreement.SupportsProcurementAt 与壳的生命周期
 // 位置回答，消费方拿本口交回的值去问它们。在这里先折成一格，消费方就看不见是未生效、已收尾还是正文缺席，而三者
-// 的续办不同。交回的正文同 SupplierAgreementContentView 不带终止；区间更正（ADR-0038）也不折进来——它改的是
-// 解析选不选得中这一版，本口不做选择。
+// 的续办不同。版本层的收尾照折（ADR-0233 决定四）：壳已同起点退役，交回的就是`已退役`的壳、只交壳；壳上有区间
+// 更正，交回的正文按更正后的区间答 SupportsProcurementAt。不折的话，旧版截止或退役之后按版本点读的核对照旧收它，
+// 与闭包给出两种答案。
 //
 // 读取失败与坏数据（快照立不起来、壳与所问的键不符、正文行不完整、正文挂在尚未生效的壳上）走 error，不折成
 // 「没有」——那会把一份写坏的协议伪装成从未发布。本口不提供默认协议。租户显式入参，同本包其余端口（ADR-0003）。
@@ -508,6 +510,58 @@ func (outcome ValidityCorrectionSaveOutcome) String() string {
 		return "SAVED"
 	case ValidityCorrectionAlreadyRegistered:
 		return "ALREADY_REGISTERED"
+	default:
+		return ""
+	}
+}
+
+// VersionClosureRegistry 是按后继收尾旧版两口（截止与同起点退役，ADR-0233）的持久化面：先锁旧版那一行，再读回整册
+// 判收尾成不成立，最后写一条区间更正或一次退役。截止不另立更正册，写的就是 PublicationRegistry 上那一条通道；三段都在
+// 调用方的同一笔事务里。
+//
+// 锁要在读整册之前。收尾的判据（截止点严格落在旧版此刻的选用区间之内、后继接得住旧版此后的那一段）是对整册的一次读，
+// 只靠写入那一刻的行锁（ADR-0056 决定三）守不住它：两笔对同一旧版的收尾各自读到未收尾的册、各自判过，后提交的那条
+// 照样落下，留下串行执行时会被拒的状态。
+type VersionClosureRegistry interface {
+	CommercialPublicationView
+	// LockVersionForClosure 锁住这一版的版本行，直到调用方事务结束。found=false 是本租户下没有这一版，不是故障。
+	LockVersionForClosure(
+		ctx context.Context,
+		tenant domain.TenantID,
+		kind domain.CommercialObjectKind,
+		objectID domain.CommercialObjectID,
+		version domain.CommercialVersionLabel,
+	) (found bool, err error)
+	SaveValidityCorrection(
+		ctx context.Context,
+		correction domain.ValidityCorrection,
+	) (ValidityCorrectionSaveOutcome, error)
+	// SaveVersionRetirement 登记一次同起点退役。一版只退一次：同一个决定（同一后继、同一决定引用）答`已登记`，
+	// 异内容答`内容冲突`，原行不动。
+	SaveVersionRetirement(
+		ctx context.Context,
+		retirement domain.VersionRetirement,
+	) (VersionRetirementSaveOutcome, error)
+}
+
+// VersionRetirementSaveOutcome 是一次同起点退役在持久化面的落点。
+type VersionRetirementSaveOutcome uint8
+
+const (
+	VersionRetirementSaveOutcomeInvalid VersionRetirementSaveOutcome = iota
+	VersionRetirementSaved
+	VersionRetirementAlreadyRegistered
+	VersionRetirementContentConflict
+)
+
+func (outcome VersionRetirementSaveOutcome) String() string {
+	switch outcome {
+	case VersionRetirementSaved:
+		return "SAVED"
+	case VersionRetirementAlreadyRegistered:
+		return "ALREADY_REGISTERED"
+	case VersionRetirementContentConflict:
+		return "CONTENT_CONFLICT"
 	default:
 		return ""
 	}

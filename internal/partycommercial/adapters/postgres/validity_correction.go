@@ -3,8 +3,11 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
@@ -19,6 +22,42 @@ type correctionDocument struct {
 	EndsAt      *time.Time `json:"endsAt"`
 	Reference   string     `json:"reference"`
 	CorrectedAt time.Time  `json:"correctedAt"`
+}
+
+var _ ports.VersionClosureRegistry = (*CommercialPublications)(nil)
+
+// LockVersionForClosure 锁住一版的版本行，锁到调用方事务结束。锁的是 SaveValidityCorrection 那条语句锁的同一行
+// （ADR-0056 决定三），同一事务里再锁一次不会自己等自己；先锁在前，是为了让调用方随后那一次整册读回看见先它提交的
+// 截止或退役（理由在 ports.VersionClosureRegistry）。
+func (repository *CommercialPublications) LockVersionForClosure(
+	ctx context.Context,
+	tenant domain.TenantID,
+	kind domain.CommercialObjectKind,
+	objectID domain.CommercialObjectID,
+	version domain.CommercialVersionLabel,
+) (bool, error) {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return false, fmt.Errorf("lock version for closure: %w", err)
+	}
+	var locked int
+	err = executor.QueryRow(ctx,
+		`SELECT 1
+		   FROM party_commercial.commercial_version
+		  WHERE tenant_id     = $1
+		    AND object_kind   = $2
+		    AND object_id     = $3
+		    AND version_label = $4
+		    FOR UPDATE`,
+		tenant.String(), uint8(kind), objectID.String(), version.String(),
+	).Scan(&locked)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("lock version for closure: %w", err)
+	}
+	return true, nil
 }
 
 // SaveValidityCorrection 登记一条区间更正。只增不覆盖：同内容撞唯一键是重放，不同内容

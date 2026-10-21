@@ -197,8 +197,8 @@ var _ ports.SupplierAgreementContentView = (*SupplierAgreementContents)(nil)
 // LoadSupplierAgreement 取回协议正文。
 //
 // found=false = 正文未登记（无行）。显式租户与版本必须同一身份，否则 error 且不交内容。读回
-// 的每一行都过 NewSupplierAgreement 重建，不按列直接拼结构体。交回的协议不带终止（本表不登
-// 终止，见 0021 头注）。
+// 的每一行都过 NewSupplierAgreement 重建，不按列直接拼结构体。交回的协议不带协议层的终止（本表
+// 不登终止，见 0021 头注）；版本层的收尾照折（foldVersionClosure）。
 func (repository *SupplierAgreementContents) LoadSupplierAgreement(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -218,16 +218,23 @@ func (repository *SupplierAgreementContents) LoadSupplierAgreement(
 	}
 
 	var row scannedSupplierAgreement
+	var closure scannedVersionClosure
 	err = querier.QueryRow(ctx,
-		`SELECT supplier_party_id, legal_entity_ref, agreement_scope_ref, purchase_plan_ref,
-		        effective_starts_at, effective_ends_at, `+supplierAgreementChargeConditionsColumn("supplier_agreement")+`
+		`SELECT supplier_agreement.supplier_party_id, supplier_agreement.legal_entity_ref,
+		        supplier_agreement.agreement_scope_ref, supplier_agreement.purchase_plan_ref,
+		        supplier_agreement.effective_starts_at, supplier_agreement.effective_ends_at,
+		        `+supplierAgreementChargeConditionsColumn("supplier_agreement")+`,
+		        `+versionClosureColumns+`
 		   FROM party_commercial.supplier_agreement
-		  WHERE tenant_id = $1 AND object_kind = $2 AND object_id = $3 AND version_label = $4`,
+		   `+versionClosureJoins("supplier_agreement")+`
+		  WHERE supplier_agreement.tenant_id = $1 AND supplier_agreement.object_kind = $2
+		    AND supplier_agreement.object_id = $3 AND supplier_agreement.version_label = $4`,
 		tenant.String(),
 		uint8(domain.SupplierAgreementObject),
 		agreement.ObjectID().String(),
 		agreement.Version().String(),
-	).Scan(&row.supplier, &row.legalEntity, &row.scope, &row.purchasePlan, &row.startsAt, &row.endsAt, &row.conditions)
+	).Scan(append([]any{&row.supplier, &row.legalEntity, &row.scope, &row.purchasePlan, &row.startsAt, &row.endsAt, &row.conditions},
+		closure.targets()...)...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return none, false, nil
 	}
@@ -239,7 +246,38 @@ func (repository *SupplierAgreementContents) LoadSupplierAgreement(
 	if err != nil {
 		return none, false, fmt.Errorf("load supplier agreement: %w", err)
 	}
+	if content, err = foldVersionClosure(content, agreement, closure); err != nil {
+		return none, false, fmt.Errorf("load supplier agreement: %w", err)
+	}
 	return content, true, nil
+}
+
+// foldVersionClosure 把版本层的收尾折进一版协议正文（ADR-0233 决定四）：最新一条区间更正收窄判用区间，退役让它不再
+// 支持新的采购决定。shell 是快照重建出来、尚未施加退役的那一版——退役的构造门要的就是它。
+func foldVersionClosure(
+	content domain.SupplierAgreement,
+	shell domain.CommercialVersion,
+	closure scannedVersionClosure,
+) (domain.SupplierAgreement, error) {
+	correction, corrected, err := closure.correctionFor(shell)
+	if err != nil {
+		return domain.SupplierAgreement{}, err
+	}
+	if corrected {
+		if content, err = content.NarrowedBy(correction); err != nil {
+			return domain.SupplierAgreement{}, err
+		}
+	}
+	retirement, retired, err := closure.retirementFor(shell)
+	if err != nil {
+		return domain.SupplierAgreement{}, err
+	}
+	if retired {
+		if content, err = content.EndedBy(retirement); err != nil {
+			return domain.SupplierAgreement{}, err
+		}
+	}
+	return content, nil
 }
 
 var _ ports.SupplierAgreementVersionView = (*SupplierAgreementContents)(nil)
@@ -270,17 +308,20 @@ func (repository *SupplierAgreementContents) LoadSupplierAgreementVersion(
 	var raw, conditions []byte
 	var supplier, legalEntity, scope, purchasePlan *string
 	var startsAt, endsAt *time.Time
+	var closure scannedVersionClosure
 	err = querier.QueryRow(ctx,
 		`SELECT version.snapshot,
 		        content.supplier_party_id, content.legal_entity_ref, content.agreement_scope_ref,
 		        content.purchase_plan_ref, content.effective_starts_at, content.effective_ends_at,
-		        `+supplierAgreementChargeConditionsColumn("content")+`
+		        `+supplierAgreementChargeConditionsColumn("content")+`,
+		        `+versionClosureColumns+`
 		   FROM party_commercial.commercial_version AS version
 		   LEFT JOIN party_commercial.supplier_agreement AS content
 		          ON content.tenant_id     = version.tenant_id
 		         AND content.object_kind   = version.object_kind
 		         AND content.object_id     = version.object_id
 		         AND content.version_label = version.version_label
+		   `+versionClosureJoins("version")+`
 		  WHERE version.tenant_id     = $1
 		    AND version.object_kind   = $2
 		    AND version.object_id     = $3
@@ -289,7 +330,8 @@ func (repository *SupplierAgreementContents) LoadSupplierAgreementVersion(
 		uint8(domain.SupplierAgreementObject),
 		agreement.String(),
 		version.String(),
-	).Scan(&raw, &supplier, &legalEntity, &scope, &purchasePlan, &startsAt, &endsAt, &conditions)
+	).Scan(append([]any{&raw, &supplier, &legalEntity, &scope, &purchasePlan, &startsAt, &endsAt, &conditions},
+		closure.targets()...)...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return none, nil
 	}
@@ -301,13 +343,18 @@ func (repository *SupplierAgreementContents) LoadSupplierAgreementVersion(
 	if err := json.Unmarshal(raw, &document); err != nil {
 		return none, fmt.Errorf("load supplier agreement version: 快照不是本适配器写下的形状：%w", err)
 	}
-	shell, err := document.version()
+	snapshot, err := document.version()
 	if err != nil {
 		return none, fmt.Errorf("load supplier agreement version: %w", err)
 	}
-	if shell.Tenant() != tenant || shell.Kind() != domain.SupplierAgreementObject ||
-		shell.ObjectID() != agreement || shell.Version() != version {
+	if snapshot.Tenant() != tenant || snapshot.Kind() != domain.SupplierAgreementObject ||
+		snapshot.ObjectID() != agreement || snapshot.Version() != version {
 		return none, fmt.Errorf("load supplier agreement version: %s/%s 的快照记的是另一版", agreement, version)
+	}
+	// 退役施加在壳上（ADR-0233 决定四）：交回`已退役`的壳，下面的生命周期分格就只交壳，核对方按已收尾答。
+	shell, err := closure.retiredShell(snapshot)
+	if err != nil {
+		return none, fmt.Errorf("load supplier agreement version: %w", err)
 	}
 	read := ports.SupplierAgreementVersionRead{Version: shell, HasVersion: true}
 
@@ -339,6 +386,9 @@ func (repository *SupplierAgreementContents) LoadSupplierAgreementVersion(
 		conditions:   conditions,
 	})
 	if err != nil {
+		return none, fmt.Errorf("load supplier agreement version: %w", err)
+	}
+	if content, err = foldVersionClosure(content, snapshot, closure); err != nil {
 		return none, fmt.Errorf("load supplier agreement version: %w", err)
 	}
 	read.Agreement = content

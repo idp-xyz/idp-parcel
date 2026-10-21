@@ -39,6 +39,14 @@ func TestDeclarationContentWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, err := publications.SaveValidityCorrection(ctx, domain.ValidityCorrection{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务登记有效性更正应返回 ErrTransactionRequired，实得：%v", err)
 	}
+	// 收尾的锁只在调用方事务里有意义：锁住立刻放掉，后面那一次整册读回就守不住判据（ports.VersionClosureRegistry）。
+	if _, err := publications.LockVersionForClosure(ctx, domain.TenantID{}, domain.CustomerContractObject,
+		domain.CommercialObjectID{}, domain.CommercialVersionLabel{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务锁收尾的版本行应返回 ErrTransactionRequired，实得：%v", err)
+	}
+	if _, err := publications.SaveVersionRetirement(ctx, domain.VersionRetirement{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务登记同起点退役应返回 ErrTransactionRequired，实得：%v", err)
+	}
 	if _, err := publications.SaveCreditPolicy(ctx, domain.CreditPolicy{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务登记信用政策正文应返回 ErrTransactionRequired，实得：%v", err)
 	}

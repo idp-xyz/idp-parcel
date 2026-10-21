@@ -48,7 +48,8 @@ var _ ports.CommercialPublicationView = (*CommercialPublications)(nil)
 // 形态行与价格/结算/信用政策行都以版本四元组为主键、与版本一一对应，左连接后仍是每个版本
 // 一行（信用政策自 ADR-0127 起进整册：闭包解析在信用政策之间选，正文不进册它就选不出额度）。
 // 区间更正按 D-5 只增多条，直接左连接会放大结果集、把其余正文件登记重复进册。
-// 因此更正以 LATERAL 聚成 JSON 数组挂在版本行上，登记顺序随 registration_id 保留。
+// 因此更正以 LATERAL 聚成 JSON 数组挂在版本行上，登记顺序随 registration_id 保留。退役一版至多一行（主键即版本
+// 四元组），直接左连接。
 func (repository *CommercialPublications) LoadForScope(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -69,7 +70,8 @@ func (repository *CommercialPublications) LoadForScope(
 		        credit.legal_entity_ref, credit.authority_level_ref, credit.charge_type_ref,
 		        credit.limit_minor, credit.limit_ratio_bps, credit.ratio_base,
 		        credit.effective_starts_at, credit.effective_ends_at,
-		        contract.customer_account_id
+		        contract.customer_account_id,
+		        `+retirementColumns+`
 		   FROM party_commercial.commercial_version AS version
 		   LEFT JOIN party_commercial.service_product_form AS product
 		          ON product.tenant_id     = version.tenant_id
@@ -115,6 +117,7 @@ func (repository *CommercialPublications) LoadForScope(
 		           AND c.object_id     = version.object_id
 		           AND c.version_label = version.version_label
 		   ) AS correction ON TRUE
+		   `+retirementJoin("version")+`
 		  WHERE version.tenant_id = $1
 		    AND version.scope_ref = $2
 		  ORDER BY version.object_kind, version.object_id, version.version_label`,
@@ -135,7 +138,8 @@ func (repository *CommercialPublications) LoadForScope(
 		var settlement scannedSettlementPolicy
 		var credit joinedCreditPolicy
 		var contractAccount *string
-		if err := rows.Scan(
+		var retirement scannedRetirement
+		if err := rows.Scan(append([]any{
 			&raw, &rawForm, &rawCorrections,
 			&price.direction, &price.planRef, &price.planDirection, &price.conversion,
 			&price.scope, &price.startsAt, &price.endsAt,
@@ -145,7 +149,7 @@ func (repository *CommercialPublications) LoadForScope(
 			&credit.legalEntity, &credit.level, &credit.chargeType,
 			&credit.limitMinor, &credit.limitBps, &credit.ratioBase, &credit.startsAt, &credit.endsAt,
 			&contractAccount,
-		); err != nil {
+		}, retirement.targets()...)...); err != nil {
 			return nil, fmt.Errorf("load publication registry: %w", err)
 		}
 		var document versionDocument
@@ -158,6 +162,16 @@ func (repository *CommercialPublications) LoadForScope(
 		}
 		if _, err := registry.Register(version); err != nil {
 			return nil, fmt.Errorf("load publication registry: %w", err)
+		}
+		// 退役先于各正文施加（ADR-0233）：下面各正文的重建只认`已生效`的壳，已退役那一版的正文因此不进整册，自带区间的
+		// 政策正文随壳落选。退役立不起来是坏数据，整册上抛，不按未退役放它参选。
+		if built, retired, err := retirement.retirementFor(version); err != nil {
+			return nil, fmt.Errorf("load publication registry: %w", err)
+		} else if retired {
+			if _, err := registry.RegisterRetirement(built); err != nil {
+				return nil, fmt.Errorf("load publication registry: %w", err)
+			}
+			version, _ = registry.Lookup(version.Tenant(), version.Kind(), version.ObjectID(), version.Version())
 		}
 		if rawForm != nil {
 			if err := registerServiceProduct(registry, version, *rawForm); err != nil {

@@ -43,12 +43,13 @@ type OperatorRegistryAuthenticator interface {
 }
 
 // OperatorRegistryIntake 是操作者渠道在本包登记写面各口的 Intake（ADR-0100 决定四；票 operator-channel/04）：服务形态、
-// 产品—渠道映射、注册号类型目录、渠道账号使用授权，以及参与方身份族（四类登记、停用与法人资料登记）。运营操作者面发布
+// 产品—渠道映射、注册号类型目录、渠道账号使用授权、按后继收尾旧版的截止与同起点退役（ADR-0233），以及参与方身份族（四类登记、
+// 停用与法人资料登记）。运营操作者面发布
 // 路径的预览、载体的录入、批准与发布口与词表读口也挂它（票 operator-channel/06），受控批文的在线发布口同（票
 // operator-channel/18），译法各在该口自己的文件里。
 //
 // 线格式照本包在线口的惯例：镜像受控 CLI 的批文，去掉整批的 tenantId——键在场即拒（理由在
-// partyIdentityBatchDocument.TenantID），本口恰一项、别的口的项拒；租户格填认证结果。服务形态、映射与注册号类型的外壳与
+// partyIdentityBatchDocument.TenantID），本口恰一项、别的口的项拒；租户格填认证结果。服务形态、映射、注册号类型与按后继收尾旧版的外壳与
 // 逐项翻译就是受控 CLI 那一份（registrationjson），两口对同一项译出同一条命令；身份族的外壳与逐项翻译在
 // party_identity_payload.go，与受控 CLI 的一项逐字同形；使用授权族没有受控 CLI，载荷只有在线这一份
 // （channel_account_use_payload.go）。先认证、后解载荷。
@@ -70,6 +71,8 @@ var (
 	_ PartyRelationshipRegistrationIntake      = (*OperatorRegistryIntake)(nil)
 	_ PartyIdentityDeactivationIntake          = (*OperatorRegistryIntake)(nil)
 	_ LegalEntityProfileRegistrationIntake     = (*OperatorRegistryIntake)(nil)
+	_ SuccessorCutIntake                       = (*OperatorRegistryIntake)(nil)
+	_ SameStartRetirementIntake                = (*OperatorRegistryIntake)(nil)
 )
 
 func NewOperatorRegistryIntake(authenticator OperatorRegistryAuthenticator) (*OperatorRegistryIntake, error) {
@@ -150,6 +153,30 @@ func (intake *OperatorRegistryIntake) IntakeChannelAccountUseRevocation(ctx cont
 		return application.RevokeChannelAccountUseCommand{}, err
 	}
 	return malformedUnless(document.command(tenant))
+}
+
+func (intake *OperatorRegistryIntake) IntakeSuccessorCut(ctx context.Context, request *http.Request) (application.CutCommercialVersionAtSuccessorCommand, error) {
+	var none application.CutCommercialVersionAtSuccessorCommand
+	tenant, document, err := authenticateAndDecode[registrationjson.VersionClosureBatchDocument](ctx, intake, request, versionClosureBatchTenant)
+	if err != nil {
+		return none, err
+	}
+	if err := exactlyOneItem("cuts", len(document.Cuts), len(document.Cuts)+len(document.Retirements)); err != nil {
+		return none, err
+	}
+	return malformedUnless(registrationjson.SuccessorCutCommand(tenant, document.Cuts[0]))
+}
+
+func (intake *OperatorRegistryIntake) IntakeSameStartRetirement(ctx context.Context, request *http.Request) (application.RetireCommercialVersionAtSameStartCommand, error) {
+	var none application.RetireCommercialVersionAtSameStartCommand
+	tenant, document, err := authenticateAndDecode[registrationjson.VersionClosureBatchDocument](ctx, intake, request, versionClosureBatchTenant)
+	if err != nil {
+		return none, err
+	}
+	if err := exactlyOneItem("retirements", len(document.Retirements), len(document.Cuts)+len(document.Retirements)); err != nil {
+		return none, err
+	}
+	return malformedUnless(registrationjson.SameStartRetirementCommand(tenant, document.Retirements[0]))
 }
 
 // 身份族各口的逐项翻译自己就把形状错包成 ErrMalformedRequest 并带上字段路径（party_identity_payload.go），所以下面
@@ -260,6 +287,10 @@ func numberTypeBatchTenant(document registrationjson.RegistrationNumberTypeBatch
 func channelAccountUseTenant(document channelAccountUseDocument) []byte { return document.TenantID }
 
 func channelAccountUseRevocationTenant(document channelAccountUseRevocationDocument) []byte {
+	return document.TenantID
+}
+
+func versionClosureBatchTenant(document registrationjson.VersionClosureBatchDocument) []byte {
 	return document.TenantID
 }
 
