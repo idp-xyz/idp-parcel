@@ -1,6 +1,6 @@
 # ADR-0280：一个结算账户的 SELL 客户费用只按一份计价范围选卡——受理前估价采用与 SELL 计费时点采用两本册上同一户的计价范围必须相同，后登的一本不同即冲突
 
-Status: Accepted（2026-10-21，Claude Code 会话代 SA owner 决：用户 2026-10-21 原话「需要修改文档，确保自洽，正确」，常设授权「你作为业务和系统专家自决」；票 docs-consistency/11，出处审计 [audit/cross.md](../../.scratch/docs-consistency/audit/cross.md) B2·B2-10。部分停用 [ADR-0190](./0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 越权风险点 9 一句并回答这一点，被停原句与适用场景见「对已接受记录的作用」；ADR-0190 正文不改，只在其 Status 行与 Links 加前向指针。[ADR-0179](./0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 无条款停用。代码随票 [docs-consistency/code/62](../../.scratch/docs-consistency/code/62-the-estimate-and-billing-moment-adoptions-may-register-different-pricing-scopes.md)。越权风险点见文末，待 SA owner 复核，PP owner 知会。）<!-- 索引注记 -->｜**一份范围**：同一（租户、结算账户）在受理前估价采用册与 SELL 计费时点采用册上登的计价范围必须相同；受理前估价与随后形成的预估客户费用因此不只按同一条规则、也按同一个范围选卡。**登记时核**：登任一本时，另一本已有这一户且计价范围不同，答冲突、不落行、不交那一本的登记信封；另一本没有这一户，照常登记；同一户在两本上的登记串行，并发的两笔不能各自通过。**不变**：两本册各自的键、值形与不设修订照旧，只登一本的户不受影响；选哪个范围仍是租户取值
+Status: Accepted（2026-10-21，Claude Code 会话代 SA owner 决：用户 2026-10-21 原话「需要修改文档，确保自洽，正确」，常设授权「你作为业务和系统专家自决」；票 docs-consistency/11，出处审计 [audit/cross.md](../../.scratch/docs-consistency/audit/cross.md) B2·B2-10。回答 [ADR-0190](./0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 越权风险点 9，无条款停用；[ADR-0179](./0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 无条款停用；理由见「对已接受记录的作用」。两份正文不改，只在其 Status 行与 Links 加前向指针。代码随票 [docs-consistency/code/62](../../.scratch/docs-consistency/code/62-the-estimate-and-billing-moment-adoptions-may-register-different-pricing-scopes.md)。越权风险点见文末，待 SA owner 复核，PP owner 知会。）<!-- 索引注记 -->｜**一份范围**：同一（租户、结算账户）在受理前估价采用册与 SELL 计费时点采用册上登的计价范围必须相同；受理前估价与随后形成的预估客户费用因此不只按同一条规则、也按同一个范围选卡。**登记时核**：登任一本时，另一本已有这一户且计价范围不同，答冲突、不落行、不交那一本的登记信封；另一本没有这一户，照常登记；同一户在两本上的登记串行，并发的两笔不能各自通过。**不变**：两本册各自的键、值形与不设修订照旧，只登一本的户不受影响；选哪个范围仍是租户取值
 
 Date: 2026-10-21
 
@@ -38,12 +38,12 @@ Date: 2026-10-21
 
 ## 对已接受记录的作用
 
-- **部分停用** ADR-0190 越权风险点 9「同一个结算账户在 ADR-0179 的估价采用册与本册各登一份计价范围，两册允许不同」一句，并回答这一点。**适用场景**：两本册都有同一（租户、结算账户）的行时——两册的计价范围必须相同，后登的一本不同即冲突；ADR-0190 决定三的键、值形与不设修订不变，Consequences「验收：同一件包裹的预估客户费用与受理前冻结同额。」自此有了前提；其余各条不变。
+- **回答** ADR-0190 越权风险点 9（「同一个结算账户在 ADR-0179 的估价采用册与本册各登一份计价范围，两册允许不同」）：两本册都有同一（租户、结算账户）的行时，计价范围必须相同，后登的一本不同即冲突。无条款停用：「两册允许不同」写在越权风险点里，是对那时登记面的陈述，不是一条决定；ADR-0179 决定五与 ADR-0190 决定三只定了各自一册的键、值形与不设修订，都没有定登记在什么情形下答冲突，本记录加的是两册之间的一道核，没有改它们的哪一句。ADR-0190 Consequences「验收：同一件包裹的预估客户费用与受理前冻结同额。」自此有了前提。
 - ADR-0179：无条款停用。决定三「估价与随后形成的客户费用因此按同一条规则选卡。」由本记录在范围那一维兑现；决定五的键、值形不变。
 
 ## Consequences
 
-- 代码随票 [code/62](../../.scratch/docs-consistency/code/62-the-estimate-and-billing-moment-adoptions-may-register-different-pricing-scopes.md)：两只登记编排在同一笔事务里读另一本、按（租户、结算账户）取锁，范围不同答冲突；受控 CLI 与 HTTP 登记面照编排的答复透出；补编排与真库用例。
+- 代码随票 [code/62](../../.scratch/docs-consistency/code/62-the-estimate-and-billing-moment-adoptions-may-register-different-pricing-scopes.md)：两只登记编排在同一笔事务里读另一本、按（租户、结算账户）取锁，范围不同答冲突；受控 CLI 登记面照编排的答复透出（两本册今天没有 HTTP 登记面）；补编排与真库用例。
 - settlement-accounting CONTEXT 受理前冻结那一条补一句；UC-SA-002「接受前财务控制」与「给开发的交接」各补一行。
 - ADR-0190 的 Status 行与 Links 补指针。
 
@@ -56,7 +56,7 @@ Date: 2026-10-21
 ## Links
 
 - [ADR-0179](./0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md)：决定三「同一条规则选卡」由本记录在范围那一维兑现；决定五估价采用册
-- [ADR-0190](./0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md)：部分停用越权风险点 9 一句并回答；决定三 SELL 计费时点采用册
+- [ADR-0190](./0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md)：回答越权风险点 9，无条款停用；决定三 SELL 计费时点采用册
 - [ADR-0158](./0158-settlement-account-register-is-an-immutable-tuple.md)：不可变元组先例
 - [ADR-0229](./0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md)：「评价参数已登记」信封
 - [ADR-0260](./0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md)：按范围选卡

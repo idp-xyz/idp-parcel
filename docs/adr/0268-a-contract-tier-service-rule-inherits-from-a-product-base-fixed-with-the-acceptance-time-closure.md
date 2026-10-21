@@ -1,6 +1,6 @@
 # ADR-0268：合同版客户服务规则继承的产品底座随接受时的闭包一并固定，已接受委托读底座不再按锚点现选；VE 的合同点核比闭包采用的客户合同，不比查询携带的合同
 
-Status: Accepted（2026-10-21，Claude Code 会话代 PC、VE owner 决：用户 2026-10-21 原话「需要修改文档，确保自洽，正确」，常设授权「你作为业务和系统专家自决」；票 docs-consistency/11，出处审计 [audit/cross.md](../../.scratch/docs-consistency/audit/cross.md) B3·2、B3·3。部分停用 [ADR-0176](./0176-customer-service-rule-contract-tier-selection-and-inheritance.md) 决定二一句与决定四一句，被停原句与适用场景见「对已接受记录的作用」；ADR-0176 正文不改，只在其 Status 行与 Links 加前向指针。[ADR-0136](./0136-claim-rule-resolution-key-is-the-acceptance-time-commercial-resolution-reference.md)、[ADR-0104](./0104-customer-service-rule-content-is-owned-by-party-commercial-and-first-ships-two-items.md) 无条款停用。代码随票 [docs-consistency/code/61](../../.scratch/docs-consistency/code/61-a-contract-tier-service-rule-reads-its-product-base-at-claim-time.md)。越权风险点见文末，待 PC、VE owner 复核。）<!-- 索引注记 -->｜**底座固定**：闭包采纳挂合同的那一版客户服务规则时，同一次解析按同一份键与锚点选出它的继承底座（同范围、壳上不指名客户合同、容得下声明的服务产品、锚点生效），恰一版即随闭包一并固定；零版记没有底座，合同版没写的行如实未登记；多版是客户服务规则这一项的`适用冲突`，在解析时就答。底座不是第二个已采用依据，闭包对这一类仍只采纳一版。底座与采用的成员同受指名引用核对。已接受委托读底座只读闭包上固定的那一版，底座此后被截止、退役或有效性更正都不改口。**点核**：VE 对拼进来的每份正文（采纳的那一版与底座）核其所挂合同等于同一份闭包采用的客户合同，不比 `EligibilityQuery.Contract`；挂产品的不核。**存量**：本记录之前形成、没有底座一格的闭包快照，照旧按锚点现选
+Status: Accepted（2026-10-21，Claude Code 会话代 PC、VE owner 决：用户 2026-10-21 原话「需要修改文档，确保自洽，正确」，常设授权「你作为业务和系统专家自决」；票 docs-consistency/11，出处审计 [audit/cross.md](../../.scratch/docs-consistency/audit/cross.md) B3·2、B3·3。部分停用（含扩成）[ADR-0176](./0176-customer-service-rule-contract-tier-selection-and-inheritance.md) 决定一一句、决定二一句与决定四一句，被停原句与适用场景见「对已接受记录的作用」；ADR-0176 正文不改，只在其 Status 行与 Links 加前向指针。[ADR-0136](./0136-claim-rule-resolution-key-is-the-acceptance-time-commercial-resolution-reference.md)、[ADR-0104](./0104-customer-service-rule-content-is-owned-by-party-commercial-and-first-ships-two-items.md) 无条款停用。代码随票 [docs-consistency/code/61](../../.scratch/docs-consistency/code/61-a-contract-tier-service-rule-reads-its-product-base-at-claim-time.md)。越权风险点见文末，待 PC、VE owner 复核。）<!-- 索引注记 -->｜**底座固定**：闭包采纳挂合同的那一版客户服务规则时，同一次解析按同一份键与锚点选出它的继承底座（同范围、壳上不指名客户合同、容得下声明的服务产品、锚点生效），恰一版即随闭包一并固定；零版记没有底座，合同版没写的行如实未登记；多版是客户服务规则这一项的`适用冲突`，在解析时就答。底座不是第二个已采用依据，闭包对这一类仍只采纳一版。底座与采用的成员同受指名引用核对。已接受委托读底座只读闭包上固定的那一版，底座此后被截止、退役或有效性更正都不改口。**点核**：VE 对拼进来的每份正文（采纳的那一版与底座）核其所挂合同等于同一份闭包采用的客户合同，不比 `EligibilityQuery.Contract`；挂产品的不核。**存量**：本记录之前形成、没有底座一格的闭包快照，照旧按锚点现选
 
 Date: 2026-10-21
 
@@ -8,7 +8,7 @@ Date: 2026-10-21
 
 - [ADR-0136](./0136-claim-rule-resolution-key-is-the-acceptance-time-commercial-resolution-reference.md) 决定一：「索赔资格规则（首次索赔期限、最低材料两维）的适用规则版本，是该索赔项目标包裹所属委托被接受时固定的商业依据里已采用的客户服务规则版本」。决定二：「VE 不再走 PC 第一阶段解析」，以及「读一份已固定的闭包没有`适用冲突` / `解析未决` / `输入未受理`可答」。判据是 PC CONTEXT「委托被接受时固定其适用的…」：按索赔提交时刻选，客户会拿到一份他下单时不存在的规则。
 - [ADR-0176](./0176-customer-service-rule-contract-tier-selection-and-inheritance.md) 在其后立了合同版与产品版的行级继承。决定二：「底座版在层次读口内选「同范围挂服务产品、锚点生效」的版本，多候选照`适用冲突`纪律答。」合同版没写的行，取自一份不在接受时闭包里、读的时候才选出来的版本，这一选还可能答`适用冲突`。它的 Consequences 又写「已接受的委托按接受时固定的版本读取，不受后续发布影响」。ADR-0176 全文不提 ADR-0136。
-- ADR-0176 决定四：「VE 适配器点读后核「正文挂合同必须等于查询携带的」（原文折行续「合同」），以及「挂产品的版本不核」，理由是查询无产品维、由解析唯一性保证。ADR-0136 决定二写 `EligibilityQuery.Contract`「本记录不动它、不拿它去 PC 过滤」，越权风险点 5 写「`EligibilityQuery.Contract` 与闭包采用的合同版本不核一致」。[ADR-0104](./0104-customer-service-rule-content-is-owned-by-party-commercial-and-first-ships-two-items.md) 决定四要求「消费方点读之后核「这一版挂的是不是我手上这份产品 / 合同」」；ADR-0176 只停用过 ADR-0104 的一个前提，没有碰决定四。
+- ADR-0176 决定四：「VE 适配器点读后核「正文挂合同必须等于查询携带的合同」」，以及「挂产品的版本不核」，理由是查询无产品维、由解析唯一性保证。ADR-0136 决定二写 `EligibilityQuery.Contract`「本记录不动它、不拿它去 PC 过滤」，越权风险点 5 写「`EligibilityQuery.Contract` 与闭包采用的合同版本不核一致」。[ADR-0104](./0104-customer-service-rule-content-is-owned-by-party-commercial-and-first-ships-two-items.md) 决定四要求「消费方点读之后核「这一版挂的是不是我手上这份产品 / 合同」」；ADR-0176 只停用过 ADR-0104 的一个前提，没有碰决定四。
 - 代码（取证于 main `b18f662bc`）：
   - `internal/partycommercial/application/customer_service_rule_layers.go` 的 `LoadCustomerServiceRuleLayers` 每次读都向权威视图 `LoadScope` 取此刻的登记册，经 `CommercialRegistry.CustomerServiceRuleProductBase` 现选底座；选法里的 `applicable` 只收状态为生效、选用区间（经有效性更正之后的区间）含锚点的版本。锚点与声明产品取冻结闭包上的，登记册取此刻的。ADR-0233 起旧版可被截止或同起点退役，退役的版本此后不参选。
   - 端口头注自认：「底座不随闭包冻结，按传入的锚点读时选；已接受委托的底座只靠锚点固定与版本不回溯生效保持不变。」VE 适配器 `internal/visibilityexception/adapters/partycommercial/claim_service_rules.go` 的 `productBase` 头注：「底座不随闭包冻结，按锚点读时选；有效性更正改了底座区间时这里会改口」；底座答`适用冲突`时它报 `ErrUntranslatableAnswer`。同一文件 `adoptedRuleVersion` 头注照写 ADR-0136 决定二「读一份已固定的闭包没有`适用冲突`」，两说并存。
@@ -47,7 +47,8 @@ Date: 2026-10-21
 ## 对已接受记录的作用
 
 - **部分停用** ADR-0176 决定二「底座版在层次读口内选「同范围挂服务产品、锚点生效」的版本，多候选照`适用冲突`纪律答。」一句。**适用场景**：闭包采纳挂合同那一版的已接受委托——底座在接受时的同一次解析里按同一选法选出、随闭包固定，层次读口按闭包上固定的那一版读，不再按锚点现选；多候选在解析时答`适用冲突`。合同版有行用合同版、无行取底座那一行的拼法，与决定二其余各句不变。
-- **部分停用** ADR-0176 决定四「VE 适配器点读后核「正文挂合同必须等于查询携带的」（原文折行续「合同」）一句里比较对象那一半。**适用场景**：VE 对它读到并拼接的每份客户服务规则正文——比较对象是同一份闭包采用的客户合同对象，不是查询携带的那一格；「挂产品的版本不核」与「壳 ↔ 正文一致」那一道不变。
+- **部分停用（扩成）** ADR-0176 决定一「有合同版采纳合同版」一句。**适用场景**：闭包在合同层恰有一版时——自此还要求它的继承底座不多于一版，多于一版这一项答`适用冲突`（决定一），零版照旧采纳合同版、记没有底座；合同层零候选回落产品层与决定一其余各句不变。
+- **部分停用** ADR-0176 决定四「VE 适配器点读后核「正文挂合同必须等于查询携带的合同」」一句里比较对象那一半。**适用场景**：VE 对它读到并拼接的每份客户服务规则正文——比较对象是同一份闭包采用的客户合同对象，不是查询携带的那一格；「挂产品的版本不核」与「壳 ↔ 正文一致」那一道不变。
 - ADR-0176 决定四「挂产品的版本不核」（理由是查询无产品维、由解析唯一性保证），是对 ADR-0104 决定四「消费方点读之后核「这一版挂的是不是我手上这份产品 / 合同」」里产品那一半的部分停用，ADR-0176 正文没写；本记录认定，指针补在 ADR-0176 的 Status 行前段（去向）与 ADR-0104 的索引注记（来向），适用场景限客户服务规则正文的产品那一半，合同那一半仍由消费方核。
 - ADR-0176 Consequences「已接受的委托按接受时固定的版本读取，不受后续发布影响」：由决定一兑现到继承来的行，不改。
 - ADR-0136：无条款停用。决定一、二由决定一在继承底座上兑现：底座也随接受时闭包固定，读一份已固定的闭包没有`适用冲突`可答。决定三「由 PC 闭包解析时的指名引用核对守，VE 不重核」说的是壳上的指名引用，决定一把底座也纳入这道核；VE 的合同点核核的是正文所挂的合同，是 ADR-0176 决定四另立的一层，不是重做这道核。越权风险点 5 照旧成立。
@@ -68,7 +69,7 @@ Date: 2026-10-21
 ## Links
 
 - [ADR-0136](./0136-claim-rule-resolution-key-is-the-acceptance-time-commercial-resolution-reference.md)：决定一、二由本记录在继承底座上兑现；决定三的指名引用核对扩到底座；越权风险点 5 照旧
-- [ADR-0176](./0176-customer-service-rule-contract-tier-selection-and-inheritance.md)：部分停用决定二「底座版在层次读口内选……」一句与决定四比较对象那一半；认定决定四「挂产品的版本不核」部分停用 ADR-0104 决定四产品那一半
+- [ADR-0176](./0176-customer-service-rule-contract-tier-selection-and-inheritance.md)：部分停用（扩成）决定一「有合同版采纳合同版」一句，部分停用决定二「底座版在层次读口内选……」一句与决定四比较对象那一半；认定决定四「挂产品的版本不核」部分停用 ADR-0104 决定四产品那一半
 - [ADR-0104](./0104-customer-service-rule-content-is-owned-by-party-commercial-and-first-ships-two-items.md)：决定四「这一版挂的是不是我手上这份产品 / 合同」
 - [ADR-0233](./0233-an-older-commercial-version-is-closed-for-a-named-successor-by-a-cut-or-a-same-start-retirement.md)：截止与同起点退役，底座事后离开新选择的来路
 - [party-commercial CONTEXT](../domain/party-commercial/CONTEXT.md)「客户服务规则」各条与 Rules「委托被接受时固定其适用的…」、[visibility-exception CONTEXT](../domain/visibility-exception/CONTEXT.md)「证据、客户索赔与追偿」索赔资格时点一条
