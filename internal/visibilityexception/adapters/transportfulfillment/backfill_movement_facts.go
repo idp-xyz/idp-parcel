@@ -9,6 +9,7 @@ import (
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	tfports "go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 	veinbox "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/inbox"
+	veports "go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
 var (
@@ -52,6 +53,7 @@ type BackfillMovementFactsAdapter struct {
 	pickups   OffsitePickupFinder
 	segments  ObjectSegmentFinder
 	facts     SegmentMovementFactLister
+	members   veports.ConsolidationMembershipView
 	derive    MovementProjectionHandler
 }
 
@@ -60,6 +62,7 @@ func NewBackfillMovementFactsAdapter(
 	pickups OffsitePickupFinder,
 	segments ObjectSegmentFinder,
 	facts SegmentMovementFactLister,
+	members veports.ConsolidationMembershipView,
 	derive MovementProjectionHandler,
 ) (*BackfillMovementFactsAdapter, error) {
 	if handovers == nil {
@@ -74,11 +77,14 @@ func NewBackfillMovementFactsAdapter(
 	if facts == nil {
 		return nil, fmt.Errorf("visibility exception transportfulfillment adapter: movement fact lister is nil")
 	}
+	if members == nil {
+		return nil, fmt.Errorf("visibility exception transportfulfillment adapter: consolidation membership view is nil")
+	}
 	if derive == nil {
 		return nil, fmt.Errorf("visibility exception transportfulfillment adapter: projection handler is nil")
 	}
 	return &BackfillMovementFactsAdapter{
-		handovers: handovers, pickups: pickups, segments: segments, facts: facts, derive: derive,
+		handovers: handovers, pickups: pickups, segments: segments, facts: facts, members: members, derive: derive,
 	}, nil
 }
 
@@ -175,8 +181,9 @@ func (adapter *BackfillMovementFactsAdapter) segmentEnteredBy(
 	return none, false, nil
 }
 
-// backfill 按段列出声明了它的在册移动事实，逐版在这件对象上补派生。次序取读口交回的次序——同一条事实按登记先后——因为正常
-// 路径当初也是按登记先后逐封收到各版的：更正版的替代关系因而落在前版之后，中间各版投影与正常路径同形。
+// backfill 按段列出声明了它的在册移动事实，逐版在这件对象上补派生；这件对象是集运单元时，补到它在那一版事实发生那一刻的成员
+// 身上，展开与正常路径同一处（trackedParcelsAt）。次序取读口交回的次序——同一条事实按登记先后——因为正常路径当初也是按登记先后
+// 逐封收到各版的：更正版的替代关系因而落在前版之后，中间各版投影与正常路径同形。
 func (adapter *BackfillMovementFactsAdapter) backfill(
 	ctx context.Context,
 	key tfports.FulfillmentSegmentKey,
@@ -204,8 +211,15 @@ func (adapter *BackfillMovementFactsAdapter) backfill(
 		if err != nil {
 			return err
 		}
-		if err := deriveMovementFactOnto(ctx, adapter.derive, record, kind, object); err != nil {
+		parcels, err := trackedParcelsAt(ctx, adapter.members, key.TenantID,
+			[]tfdomain.CarriedObjectReference{object}, record.Fact.OccurredAt())
+		if err != nil {
 			return err
+		}
+		for _, parcel := range parcels {
+			if err := deriveMovementFactOnto(ctx, adapter.derive, record, kind, parcel); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

@@ -93,6 +93,7 @@ type backfillFixture struct {
 	pickups   *pickupRegistryDouble
 	segments  *objectSegmentsDouble
 	facts     *segmentFactsDouble
+	members   *membershipDouble
 	derive    *veapplication.DeriveProjectionHandler
 	store     *handoverFactStoreDouble
 	views     *handoverProjectionStoreDouble
@@ -115,12 +116,13 @@ func newBackfillFixture(t *testing.T, mapping handoverMappingViewDouble) *backfi
 		facts: &segmentFactsDouble{bySegment: map[tfports.FulfillmentSegmentKey][]tfports.MovementFactRecord{
 			segment.Key: {movementRecord(t, tfdomain.DepartureFact)},
 		}},
-		derive: derive,
-		store:  store,
-		views:  views,
+		members: &membershipDouble{},
+		derive:  derive,
+		store:   store,
+		views:   views,
 	}
 	subject, err := adapter.NewBackfillMovementFactsAdapter(
-		fixture.handovers, fixture.pickups, fixture.segments, fixture.facts, derive)
+		fixture.handovers, fixture.pickups, fixture.segments, fixture.facts, fixture.members, derive)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -185,7 +187,7 @@ func TestTheBackfillAndTheNormalPathLeaveOneEntryInEitherOrder(t *testing.T) {
 		record := movementRecord(t, tfdomain.DepartureFact)
 		normal, err := adapter.NewDeriveOnMovementFactAdapter(
 			&movementFinderDouble{records: map[tfports.MovementFactKey]tfports.MovementFactRecord{record.Key: record}},
-			&movementSegmentDouble{record: segment, found: true}, fixture.derive,
+			&movementSegmentDouble{record: segment, found: true}, fixture.members, fixture.derive,
 			&movementSignalDouble{t: t, answer: signalAnswering(movementRuleDouble{configured: false})})
 		if err != nil {
 			t.Fatalf("构造正常路径：%v", err)
@@ -393,26 +395,30 @@ func TestABackfilledCorrectionChainKeepsItsSupersession(t *testing.T) {
 func TestTheBackfillAdapterRefusesMissingDependencies(t *testing.T) {
 	derive, _, _ := handoverDeriveHandler(t, handoverMappingViewDouble{}, handoverProjectionDownstreamDouble{})
 	handovers, pickups := &handoverFinderDouble{}, &pickupRegistryDouble{}
-	segments, facts := &objectSegmentsDouble{}, &segmentFactsDouble{}
+	segments, facts, members := &objectSegmentsDouble{}, &segmentFactsDouble{}, &membershipDouble{}
 	for name, build := range map[string]func() error{
 		"缺交接读口": func() error {
-			_, err := adapter.NewBackfillMovementFactsAdapter(nil, pickups, segments, facts, derive)
+			_, err := adapter.NewBackfillMovementFactsAdapter(nil, pickups, segments, facts, members, derive)
 			return err
 		},
 		"缺揽收读口": func() error {
-			_, err := adapter.NewBackfillMovementFactsAdapter(handovers, nil, segments, facts, derive)
+			_, err := adapter.NewBackfillMovementFactsAdapter(handovers, nil, segments, facts, members, derive)
 			return err
 		},
 		"缺段读口": func() error {
-			_, err := adapter.NewBackfillMovementFactsAdapter(handovers, pickups, nil, facts, derive)
+			_, err := adapter.NewBackfillMovementFactsAdapter(handovers, pickups, nil, facts, members, derive)
 			return err
 		},
 		"缺按段列事实": func() error {
-			_, err := adapter.NewBackfillMovementFactsAdapter(handovers, pickups, segments, nil, derive)
+			_, err := adapter.NewBackfillMovementFactsAdapter(handovers, pickups, segments, nil, members, derive)
+			return err
+		},
+		"缺成员关系读口": func() error {
+			_, err := adapter.NewBackfillMovementFactsAdapter(handovers, pickups, segments, facts, nil, derive)
 			return err
 		},
 		"缺派生": func() error {
-			_, err := adapter.NewBackfillMovementFactsAdapter(handovers, pickups, segments, facts, nil)
+			_, err := adapter.NewBackfillMovementFactsAdapter(handovers, pickups, segments, facts, members, nil)
 			return err
 		},
 	} {

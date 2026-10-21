@@ -11,6 +11,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/veconsume"
 	veapplication "go.idp.xyz/idp-parcel/internal/visibilityexception/application"
 	vedomain "go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
+	veports "go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
 var (
@@ -65,13 +66,15 @@ type DepartureGateSignalRaiser interface {
 }
 
 // DeriveOnMovementFactAdapter 是 veinbox.MovementFactConsumer 的真实处理方：按键重读 TF 移动事实，沿它声明的段取出那一刻在控
-// 的对象，逐对象派生投影（ADR-0066 消费侧循环拆分）；出发读数里被关务判为阻断的那几件，各形成一次异常信号（ADR-0205 决定五）。
+// 的对象，集运单元按那一刻的成员展开到包裹（trackedParcelsAt），逐件派生投影（ADR-0066 消费侧循环拆分）；出发读数里被关务判为
+// 阻断的那几件，各形成一次异常信号（ADR-0205 决定五）。
 //
 // 跨上下文翻译留在消费方（ADR-0025）。投影只引用源事实：不复制门禁读数，也不把出发当成控制转移——移动不结束段，控制只随
-// 交接与交付转移。种类词、展开口径与信号的取舍在 ADR-0205 文末补记。
+// 交接与交付转移。种类词、展开口径与信号的取舍在 ADR-0205 文末补记；段里在控的集运单元怎样展开到成员，只在 trackedParcelsAt。
 type DeriveOnMovementFactAdapter struct {
 	facts    MovementFactFinder
 	segments MovementSegmentFinder
+	members  veports.ConsolidationMembershipView
 	derive   MovementProjectionHandler
 	signals  DepartureGateSignalRaiser
 }
@@ -79,6 +82,7 @@ type DeriveOnMovementFactAdapter struct {
 func NewDeriveOnMovementFactAdapter(
 	facts MovementFactFinder,
 	segments MovementSegmentFinder,
+	members veports.ConsolidationMembershipView,
 	derive MovementProjectionHandler,
 	signals DepartureGateSignalRaiser,
 ) (*DeriveOnMovementFactAdapter, error) {
@@ -88,18 +92,22 @@ func NewDeriveOnMovementFactAdapter(
 	if segments == nil {
 		return nil, fmt.Errorf("visibility exception transportfulfillment adapter: segment finder is nil")
 	}
+	if members == nil {
+		return nil, fmt.Errorf("visibility exception transportfulfillment adapter: consolidation membership view is nil")
+	}
 	if derive == nil {
 		return nil, fmt.Errorf("visibility exception transportfulfillment adapter: projection handler is nil")
 	}
 	if signals == nil {
 		return nil, fmt.Errorf("visibility exception transportfulfillment adapter: departure gate signal raiser is nil")
 	}
-	return &DeriveOnMovementFactAdapter{facts: facts, segments: segments, derive: derive, signals: signals}, nil
+	return &DeriveOnMovementFactAdapter{facts: facts, segments: segments, members: members, derive: derive, signals: signals}, nil
 }
 
 var _ veinbox.RecordedMovementFactHandler = (*DeriveOnMovementFactAdapter)(nil)
 
-// HandleRecordedMovementFact 按信封键取回移动事实，对段里那一刻在控的对象逐个派生投影，再为阻断的那几件形成信号。
+// HandleRecordedMovementFact 按信封键取回移动事实，对段里那一刻在控的对象（集运单元展开到那一刻的成员）逐件派生投影，再为阻断的
+// 那几件形成信号。
 //
 // 一封信一笔事务：任一对象未决、意图未交或信号搁置即整封报错回滚、重投从头再跑（ADR-0066 认下的头端阻塞）；单对象业务终局
 // （冲突、不接受）入账继续。业务发生时间取事实的 OccurredAt，有效时间同发生时间，接收时间取 RecordedAt，不用信封时间。
@@ -131,8 +139,12 @@ func (adapter *DeriveOnMovementFactAdapter) HandleRecordedMovementFact(
 	if err != nil {
 		return err
 	}
-	for _, object := range objects {
-		if err := deriveMovementFactOnto(ctx, adapter.derive, record, kind, object); err != nil {
+	parcels, err := trackedParcelsAt(ctx, adapter.members, fact.TenantID(), objects, fact.OccurredAt())
+	if err != nil {
+		return err
+	}
+	for _, parcel := range parcels {
+		if err := deriveMovementFactOnto(ctx, adapter.derive, record, kind, parcel); err != nil {
 			return err
 		}
 	}
@@ -147,7 +159,7 @@ func movementFactRecordAgrees(record tfports.MovementFactRecord, key tfports.Mov
 		!fact.OccurredAt().IsZero() && !record.RecordedAt.IsZero()
 }
 
-// deriveMovementFactOnto 在一件对象上派生这一版事实。正常路径与补派生（ADR-0224）都走这一处：引用、版本、发生/有效/接收时间与
+// deriveMovementFactOnto 在一件追踪包裹上派生这一版事实。正常路径与补派生（ADR-0224）都走这一处：引用、版本、发生/有效/接收时间与
 // 替代关系只由 movementProjectionCommand 定，两路交进派生编排的是同一把幂等键与同一份内容，谁先到谁派生，后到的一路答已有结果，
 // 不出第二个条目。
 func deriveMovementFactOnto(
@@ -155,9 +167,9 @@ func deriveMovementFactOnto(
 	derive MovementProjectionHandler,
 	record tfports.MovementFactRecord,
 	kind vedomain.SourceFactKind,
-	object tfdomain.CarriedObjectReference,
+	parcel vedomain.TrackedParcelReference,
 ) error {
-	command, err := movementProjectionCommand(record, kind, object)
+	command, err := movementProjectionCommand(record, kind, parcel)
 	if err != nil {
 		return err
 	}
@@ -260,7 +272,7 @@ func movementFactKeyFor(recorded veinbox.RecordedMovementFact) (tfports.Movement
 func movementProjectionCommand(
 	record tfports.MovementFactRecord,
 	kind vedomain.SourceFactKind,
-	object tfdomain.CarriedObjectReference,
+	parcel vedomain.TrackedParcelReference,
 ) (veapplication.DeriveProjectionCommand, error) {
 	none := veapplication.DeriveProjectionCommand{}
 	fact := record.Fact
@@ -268,12 +280,9 @@ func movementProjectionCommand(
 	if err != nil {
 		return none, fmt.Errorf("%w: tenant: %v", ErrMovementFactUntranslatableAnswer, err)
 	}
-	parcel, err := vedomain.NewTrackedParcelReference(object.String())
-	if err != nil {
-		return none, fmt.Errorf("%w: carried object: %v", ErrMovementFactUntranslatableAnswer, err)
-	}
-	// 对象维进引用（ADR-0066 决定二）：一条移动事实在每件对象上各是一份事实；前缀把它与同包交接、揽收、交付错开。
-	reference, err := vedomain.NewSourceFactReference("movement-fact/" + object.String() + "/" + fact.Fact().String())
+	// 对象维进引用（ADR-0066 决定二）：一条移动事实在每件包裹上各是一份事实；前缀把它与同包交接、揽收、交付错开。袋里的成员取
+	// 成员自己的包裹引用，与它直接在段里时同一把键——同一件不论经哪一路投到，都只有一份。
+	reference, err := vedomain.NewSourceFactReference("movement-fact/" + parcel.String() + "/" + fact.Fact().String())
 	if err != nil {
 		return none, fmt.Errorf("%w: source fact: %v", ErrMovementFactUntranslatableAnswer, err)
 	}

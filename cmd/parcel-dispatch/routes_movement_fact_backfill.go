@@ -6,23 +6,26 @@ import (
 )
 
 // 交接信封与揽收信封上移动事实补派生各一路的未决哨兵（ADR-0224）。与同一封信上的投影那一份分开列：补派生还要读对象所在的段、
-// 按段列移动事实，又不走信号；交接那份与揽收那份只差回读控制事实那一站。
+// 按段列移动事实、问集运单元那一刻的成员，又不走信号；交接那份与揽收那份只差回读控制事实那一站。
 //
 // 不在名单里：ErrHandoverRecordInconsistent、ErrPickupRecordInconsistent 与 ErrMovementFactRecordInconsistent（仓储不变量已破，
 // 含按对象列得出、按键却答没有的段，以及按段列出却没声明这一段或装不回的事实）、ErrHandoverUntranslatableAnswer、
-// ErrPickupUntranslatableAnswer 与 ErrMovementFactUntranslatableAnswer（引用坏了）、ErrProjectionHandoffPending（要查 outbox
-// 下游）、veconsume.ErrUnexpectedProjectionOutcome（封闭集合外）。
+// ErrPickupUntranslatableAnswer 与 ErrMovementFactUntranslatableAnswer（引用坏了）、ErrConsolidationMembershipInconsistent（节点
+// 作业的答复立不成成员，重问同一个结果）、ErrProjectionHandoffPending（要查 outbox 下游）、veconsume.ErrUnexpectedProjectionOutcome
+// （封闭集合外）。
 var (
 	veMovementFactBackfillOnHandoverUndecidedSentinels = []error{
 		vetf.ErrHandoverNotVisible,
 		vetf.ErrObjectSegmentsNotVisible,
 		vetf.ErrMovementFactsOfSegmentNotVisible,
+		vetf.ErrConsolidationMembershipNotVisible,
 		vetf.ErrProjectionUndecided,
 	}
 	veMovementFactBackfillOnPickupUndecidedSentinels = []error{
 		vetf.ErrPickupNotVisible,
 		vetf.ErrObjectSegmentsNotVisible,
 		vetf.ErrMovementFactsOfSegmentNotVisible,
+		vetf.ErrConsolidationMembershipNotVisible,
 		vetf.ErrProjectionUndecided,
 	}
 )

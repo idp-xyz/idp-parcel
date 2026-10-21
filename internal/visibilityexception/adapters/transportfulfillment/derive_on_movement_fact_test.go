@@ -198,6 +198,7 @@ type movementFixture struct {
 	facts       *handoverFactStoreDouble
 	projections *handoverProjectionStoreDouble
 	segments    *movementSegmentDouble
+	members     *membershipDouble
 	signals     *movementSignalDouble
 }
 
@@ -205,14 +206,17 @@ func newMovementFixture(t *testing.T, record tfports.MovementFactRecord) *moveme
 	t.Helper()
 	derive, facts, projections := handoverDeriveHandler(t, handoverMappingViewDouble{}, handoverProjectionDownstreamDouble{})
 	segments := &movementSegmentDouble{record: movementSegment(t), found: true}
+	members := &membershipDouble{}
 	signals := &movementSignalDouble{t: t, answer: signalAnswering(movementRuleDouble{configured: false})}
 	subject, err := adapter.NewDeriveOnMovementFactAdapter(
 		&movementFinderDouble{records: map[tfports.MovementFactKey]tfports.MovementFactRecord{record.Key: record}},
-		segments, derive, signals)
+		segments, members, derive, signals)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
-	return &movementFixture{subject: subject, facts: facts, projections: projections, segments: segments, signals: signals}
+	return &movementFixture{
+		subject: subject, facts: facts, projections: projections, segments: segments, members: members, signals: signals,
+	}
 }
 
 func (fixture *movementFixture) factsOf(parcel string) []veports.FactRecord {
@@ -344,7 +348,7 @@ func TestMovementFactFailuresKeepTheirSentinels(t *testing.T) {
 	t.Run("事实册读不动", func(t *testing.T) {
 		derive, _, _ := handoverDeriveHandler(t, handoverMappingViewDouble{}, handoverProjectionDownstreamDouble{})
 		subject, err := adapter.NewDeriveOnMovementFactAdapter(&movementFinderDouble{err: errors.New("down")},
-			&movementSegmentDouble{}, derive, &movementSignalDouble{t: t})
+			&movementSegmentDouble{}, &membershipDouble{}, derive, &movementSignalDouble{t: t})
 		if err != nil {
 			t.Fatalf("构造：%v", err)
 		}
@@ -402,7 +406,7 @@ func TestMovementFactFailuresKeepTheirSentinels(t *testing.T) {
 		subject, err := adapter.NewDeriveOnMovementFactAdapter(
 			&movementFinderDouble{records: map[tfports.MovementFactKey]tfports.MovementFactRecord{
 				movementRecord(t, tfdomain.DepartureFact).Key: movementRecord(t, tfdomain.DepartureFact)}},
-			&movementSegmentDouble{record: movementSegment(t), found: true}, derive, &movementSignalDouble{t: t})
+			&movementSegmentDouble{record: movementSegment(t), found: true}, &membershipDouble{}, derive, &movementSignalDouble{t: t})
 		if err != nil {
 			t.Fatalf("构造：%v", err)
 		}
@@ -446,21 +450,26 @@ func TestACorrectedDepartureProjectsWithItsSupersessionButRaisesNoSecondSignal(t
 func TestTheMovementFactAdapterRefusesMissingDependencies(t *testing.T) {
 	derive, _, _ := handoverDeriveHandler(t, handoverMappingViewDouble{}, handoverProjectionDownstreamDouble{})
 	finder, segments, signals := &movementFinderDouble{}, &movementSegmentDouble{}, &movementSignalDouble{t: t}
+	members := &membershipDouble{}
 	for name, build := range map[string]func() error{
 		"缺事实读口": func() error {
-			_, err := adapter.NewDeriveOnMovementFactAdapter(nil, segments, derive, signals)
+			_, err := adapter.NewDeriveOnMovementFactAdapter(nil, segments, members, derive, signals)
 			return err
 		},
 		"缺段读口": func() error {
-			_, err := adapter.NewDeriveOnMovementFactAdapter(finder, nil, derive, signals)
+			_, err := adapter.NewDeriveOnMovementFactAdapter(finder, nil, members, derive, signals)
+			return err
+		},
+		"缺成员关系读口": func() error {
+			_, err := adapter.NewDeriveOnMovementFactAdapter(finder, segments, nil, derive, signals)
 			return err
 		},
 		"缺派生": func() error {
-			_, err := adapter.NewDeriveOnMovementFactAdapter(finder, segments, nil, signals)
+			_, err := adapter.NewDeriveOnMovementFactAdapter(finder, segments, members, nil, signals)
 			return err
 		},
 		"缺信号": func() error {
-			_, err := adapter.NewDeriveOnMovementFactAdapter(finder, segments, derive, nil)
+			_, err := adapter.NewDeriveOnMovementFactAdapter(finder, segments, members, derive, nil)
 			return err
 		},
 	} {

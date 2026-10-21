@@ -8,31 +8,36 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/inbox"
 
+	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/platform/dispatch"
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	veinbox "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/inbox"
+	venodeops "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/nodeoperations"
 	vepostgres "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
 	vetf "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/transportfulfillment"
 	veapplication "go.idp.xyz/idp-parcel/internal/visibilityexception/application"
 )
 
 // veMovementFactUndecidedSentinels 只给 VE 移动事实投影这一路（ADR-0205 决定五）。本路不 FanOut：NR 的路由偏离消费移动事实
-// 另立票 demo-chain-gaps/35，接得住之前不挂（ADR-0049：接得住才登记）。与交接那份分开列：本路多两站——事实声明的段，以及阻断
-// 读数那一步的信号规则与分诊。
+// 另立票 demo-chain-gaps/35，接得住之前不挂（ADR-0049：接得住才登记）。与交接那份分开列：本路多三站——事实声明的段、段里集运
+// 单元那一刻的成员，以及阻断读数那一步的信号规则与分诊。
 //
 // 不在名单里：ErrMovementFactRecordInconsistent（仓储不变量已破，含段册答非所问）、ErrMovementFactUntranslatableAnswer（引用
-// 坏了）、ErrDepartureGateSignalHandoffPending 与 ErrProjectionHandoffPending（要查 outbox 下游）、
-// veconsume.ErrUnexpectedProjectionOutcome 与 veapplication.ErrUnexpectedDepartureGateSignalOutcome（封闭集合外）。
+// 坏了）、ErrConsolidationMembershipInconsistent（节点作业的答复立不成成员，重问同一个结果）、ErrDepartureGateSignalHandoffPending
+// 与 ErrProjectionHandoffPending（要查 outbox 下游）、veconsume.ErrUnexpectedProjectionOutcome 与
+// veapplication.ErrUnexpectedDepartureGateSignalOutcome（封闭集合外）。
 var veMovementFactUndecidedSentinels = []error{
 	vetf.ErrMovementFactNotVisible,
 	vetf.ErrMovementSegmentNotVisible,
+	vetf.ErrConsolidationMembershipNotVisible,
 	vetf.ErrDepartureGateSignalUndecided,
 	vetf.ErrProjectionUndecided,
 }
 
 // deriveMovementFactConsumer 接 TF 移动事实已形成 → VE 投影与阻断信号（ADR-0205 决定五）。信封只带事实键三维；处理适配器按键
-// 重读移动事实，沿它声明的段取那一刻在控的对象逐个派生（ADR-0066），读数里阻断的那几件交分诊——权威事实留在
-// transport-fulfillment。交回的 Consumer 已包好本路的未决哨兵，路由表上直接挂。
+// 重读移动事实，沿它声明的段取那一刻在控的对象、集运单元按那一刻的成员展开到包裹，逐件派生（ADR-0066），读数里阻断的那几件交
+// 分诊——权威事实留在 transport-fulfillment，成员关系与收寄身份留在 node-operations。交回的 Consumer 已包好本路的未决哨兵，
+// 路由表上直接挂。
 func deriveMovementFactConsumer(
 	db *bentopg.DB,
 	inboxStore *inbox.Store,
@@ -46,7 +51,12 @@ func deriveMovementFactConsumer(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: projection movement segments: %w", err)
 	}
-	processing, err := vetf.NewDeriveOnMovementFactAdapter(facts, segments, derive, tenantBoundDepartureGateSignals{derive: derive})
+	members, err := projectionConsolidationMembers(db)
+	if err != nil {
+		return nil, err
+	}
+	processing, err := vetf.NewDeriveOnMovementFactAdapter(facts, segments, members, derive,
+		tenantBoundDepartureGateSignals{derive: derive})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: derive on movement fact: %w", err)
 	}
@@ -59,6 +69,24 @@ func deriveMovementFactConsumer(
 		return nil, fmt.Errorf("parcel-dispatch: movement fact projection undecided translation: %w", err)
 	}
 	return routed, nil
+}
+
+// projectionConsolidationMembers 装全程追踪问节点作业集运成员关系与收寄身份的那一口：两本册只读，移动事实那一路与补派生两路
+// 各装一份，展开同一处判法。
+func projectionConsolidationMembers(db *bentopg.DB) (*venodeops.ConsolidationMembershipView, error) {
+	memberships, err := nopostgres.NewConsolidationMembershipsAt(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: projection consolidation memberships: %w", err)
+	}
+	identities, err := nopostgres.NewIntakeIdentities(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: projection intake identities: %w", err)
+	}
+	members, err := venodeops.NewConsolidationMembershipView(memberships, identities)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: projection consolidation members: %w", err)
+	}
+	return members, nil
 }
 
 var _ vetf.MovementProjectionHandler = (*tenantBoundProjectionDerive)(nil)
