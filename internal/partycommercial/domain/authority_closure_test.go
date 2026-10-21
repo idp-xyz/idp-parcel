@@ -347,7 +347,7 @@ func TestADelegationFollowsTheClosureOfItsContractVersion(t *testing.T) {
 	})
 }
 
-// Covers: ADR-0261 决定三委派那一半——多条委派命中而委派方不同答适用冲突；委派方相同（同一委派方在换版未收尾的两版合同
+// Covers: `AT-PC-042` 委派那一半（ADR-0261 决定三）——多条委派命中而委派方不同答适用冲突；委派方相同（同一委派方在换版未收尾的两版合同
 // 上各声明一次）即同一个实际决定方，不算冲突。
 func TestDelegationsNamingDifferentDelegatorsAreAnApplicabilityConflict(t *testing.T) {
 	whole := closureInterval(t, closureRuleStart, closureRuleEnd)
