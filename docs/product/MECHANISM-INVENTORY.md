@@ -13,16 +13,16 @@
 | networkrouting | 81 | 92 | 9 | 14 | 2 | 7 |
 | nodeoperations | 109 | 116 | 15 | 29 | 4 | 16 |
 | parcelpricing | 142 | 129 | 19 | 19 | 1 | 24 |
-| parcelshipment | 210 | 209 | 20 | 40 | 10 | 19 |
+| parcelshipment | 211 | 210 | 21 | 40 | 10 | 19 |
 | partycommercial | 171 | 182 | 14 | 43 | 1 | 39 |
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 229 | 168 | 38 | 67 | 13 | 10 |
 | transportfulfillment | 279 | 281 | 50 | 57 | 15 | 50 |
 | visibilityexception | 112 | 111 | 12 | 31 | 8 | 12 |
-| **合计** | 1569 | 1525 | 210 | 365 | 65 | 204 |
+| **合计** | 1570 | 1526 | 211 | 365 | 65 | 204 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 217、测试 320。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 217、测试 321。
 
 ## 跨上下文消费缝：50 组，150 个生产文件
 
