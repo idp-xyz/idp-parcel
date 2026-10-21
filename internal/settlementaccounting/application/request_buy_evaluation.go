@@ -70,6 +70,8 @@ func (reason EvaluationRequestUndecidedReason) String() string {
 // 本编排不替它从 TF 登记册推——推导出来的匹配不是「合格来源引用」（票面红线）。计算目的不在命令上：
 // 本编排请求的只有 BUY 供应商成本这一格，词表由领域封闭。金额、币种、换算一格都没有——它们整组
 // 出自评价（ADR-0107 / ADR-0013），命令带得了它们就有了第二套数字。
+//
+// ResumeBasis 只在续办重跑一份发起停办时在场：发出的首代请求记下凭的依据（ADR-0229 决定四）。
 type RequestBuyEvaluationCommand struct {
 	TenantID    domain.TenantID
 	Scope       domain.PrimaryScopeReference
@@ -77,6 +79,7 @@ type RequestBuyEvaluationCommand struct {
 	FeeItem     domain.FeeItemReference
 	Agreement   domain.SupplierAgreementReference
 	RequestedBy domain.RequesterReference
+	ResumeBasis domain.ResumeBasis
 }
 
 type RequestBuyEvaluationResult struct {
@@ -188,6 +191,7 @@ func (handler *RequestBuyEvaluationHandler) Handle(
 		Sources:     sources,
 		RequestedAt: now,
 		RequestedBy: command.RequestedBy,
+		ResumeBasis: command.ResumeBasis,
 	})
 	if err != nil {
 		return RequestBuyEvaluationResult{outcome: EvaluationRequestNotAccepted}, nil

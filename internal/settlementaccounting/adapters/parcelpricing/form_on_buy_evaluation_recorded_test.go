@@ -33,6 +33,24 @@ type buyGateRequests struct {
 	err     error
 }
 
+// RecordStop 把停因写回那一份请求，只从「没有停因」往外走，与真册同一口径。
+func (requests *buyGateRequests) RecordStop(
+	_ context.Context, key saports.EvaluationRequestKey, cause sadomain.EvaluationStopCause, _ time.Time,
+) (saports.EvaluationRequestStopEffect, error) {
+	index := key.TenantID.String() + "/" + key.Request.String()
+	record := requests.records[index]
+	switch record.StopCause {
+	case sadomain.EvaluationStopCauseInvalid:
+		record.StopCause = cause
+		requests.records[index] = record
+		return saports.EvaluationRequestStopped, nil
+	case cause:
+		return saports.EvaluationRequestStopReplayed, nil
+	default:
+		return saports.EvaluationRequestStoppedOtherwise, nil
+	}
+}
+
 func (requests *buyGateRequests) FindByID(_ context.Context, key saports.EvaluationRequestKey) (saports.EvaluationRequestRecord, bool, error) {
 	if requests.err != nil {
 		return saports.EvaluationRequestRecord{}, false, requests.err
@@ -137,7 +155,7 @@ func (fixture *buyGateFixture) formation(t *testing.T, view saports.BuyEvaluatio
 		Evaluations: view, Costs: fixture.costs, Registry: fixture.costs, Clock: buyGateClock{},
 	})
 	return must[*saapplication.FormRequestedSupplierExpectedCostHandler](t)(saapplication.NewFormRequestedSupplierExpectedCostHandler(
-		saapplication.FormRequestedSupplierExpectedCostDeps{Requests: fixture.requests, Costs: inner}))
+		saapplication.FormRequestedSupplierExpectedCostDeps{Requests: fixture.requests, Costs: inner, Stops: fixture.requests, Clock: buyGateClock{}}))
 }
 
 func (fixture *buyGateFixture) handle(t *testing.T, evaluation string) error {

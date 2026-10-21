@@ -69,7 +69,7 @@ func registrationFixture(t *testing.T) domain.PriceCardRegistration {
 }
 
 func registerHandler(double *priceCardCatalogDouble) *application.RegisterPriceCardHandler {
-	return application.NewRegisterPriceCardHandler(application.RegisterPriceCardDeps{Catalog: double})
+	return application.NewRegisterPriceCardHandler(application.RegisterPriceCardDeps{Catalog: double, Registered: &pricingParameterDouble{}})
 }
 
 // TestRegisterPriceCardRecordsNewVersion 证新版本入册答`已登记`且登记原样交给仓储。
@@ -143,5 +143,50 @@ func TestRegisterPriceCardSurfacesCatalogFailure(t *testing.T) {
 	}
 	if outcome != application.PriceCardRegistrationUndecided {
 		t.Fatalf("outcome = %s, 想要 UNDECIDED", outcome)
+	}
+}
+
+// Covers: AT-PP-003 一版卡落库（或重放命中同一版）同笔交「参数已登记」，带卡的计价范围，结算按它只续办问这个范围的
+// 请求；冲突与形状不同不交——那一版没写进册；交不出整笔报错让登记口回滚；装配漏了交接口就不受理。
+func TestARegisteredPriceCardAnnouncesItsScope(t *testing.T) {
+	for _, tc := range []struct {
+		saved    ports.PriceCardRegistrationOutcome
+		announce bool
+	}{
+		{ports.PriceCardRegistered, true},
+		{ports.PriceCardAlreadyRegistered, true},
+		{ports.PriceCardContentConflict, false},
+		{ports.PriceCardCanonicalizationDiffers, false},
+	} {
+		registered := &pricingParameterDouble{}
+		handler := application.NewRegisterPriceCardHandler(application.RegisterPriceCardDeps{
+			Catalog: &priceCardCatalogDouble{outcome: tc.saved}, Registered: registered,
+		})
+		registration := registrationFixture(t)
+		if _, err := handler.Handle(t.Context(), application.RegisterPriceCardCommand{Registration: registration}); err != nil {
+			t.Fatalf("%v：%v", tc.saved, err)
+		}
+		if got := len(registered.intents) == 1; got != tc.announce {
+			t.Fatalf("%v 交了 %d 封, want announce=%v", tc.saved, len(registered.intents), tc.announce)
+		}
+		if tc.announce {
+			intent := registered.intents[0]
+			if intent.Kind != ports.PricingParameterPriceCard || intent.Scope != registration.Plan().Scope() ||
+				intent.Registration != registration.Plan().Reference() || intent.Tenant != registration.Tenant() {
+				t.Fatalf("intent = %+v", intent)
+			}
+		}
+	}
+
+	failing := application.NewRegisterPriceCardHandler(application.RegisterPriceCardDeps{
+		Catalog: &priceCardCatalogDouble{outcome: ports.PriceCardRegistered}, Registered: &pricingParameterDouble{err: errors.New("outbox down")},
+	})
+	if outcome, err := failing.Handle(t.Context(), application.RegisterPriceCardCommand{Registration: registrationFixture(t)}); err == nil ||
+		outcome != application.PriceCardRegistrationUndecided {
+		t.Fatalf("交不出 outcome = %s err = %v", outcome, err)
+	}
+	unwired := application.NewRegisterPriceCardHandler(application.RegisterPriceCardDeps{Catalog: &priceCardCatalogDouble{outcome: ports.PriceCardRegistered}})
+	if _, err := unwired.Handle(t.Context(), application.RegisterPriceCardCommand{Registration: registrationFixture(t)}); !errors.Is(err, application.ErrPriceCardRegistrationHandoffMissing) {
+		t.Fatalf("漏装交接口 err = %v", err)
 	}
 }

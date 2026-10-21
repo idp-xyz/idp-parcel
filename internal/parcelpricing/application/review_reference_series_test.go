@@ -74,22 +74,25 @@ func fuelRegistrationForReview(t *testing.T) domain.ReferenceSeriesRegistration 
 }
 
 type reviewFixture struct {
-	handler *application.ReviewReferenceSeriesHandler
-	loader  *versionLoaderDouble
-	reviews *reviewRegisterDouble
+	handler    *application.ReviewReferenceSeriesHandler
+	loader     *versionLoaderDouble
+	reviews    *reviewRegisterDouble
+	registered *pricingParameterDouble
 }
 
 func newReviewFixture(t *testing.T) *reviewFixture {
 	t.Helper()
 	registration := fuelRegistrationForReview(t)
 	fixture := &reviewFixture{
-		loader:  &versionLoaderDouble{registrations: map[string]domain.ReferenceSeriesRegistration{"SYN-FUEL@v1": registration}},
-		reviews: &reviewRegisterDouble{outcome: ports.ReferenceSeriesReviewRecorded},
+		loader:     &versionLoaderDouble{registrations: map[string]domain.ReferenceSeriesRegistration{"SYN-FUEL@v1": registration}},
+		reviews:    &reviewRegisterDouble{outcome: ports.ReferenceSeriesReviewRecorded},
+		registered: &pricingParameterDouble{},
 	}
 	fixture.handler = application.NewReviewReferenceSeriesHandler(application.ReviewReferenceSeriesDeps{
-		Versions: fixture.loader,
-		Reviews:  fixture.reviews,
-		Clock:    fixedClock{at: formedAt},
+		Versions:   fixture.loader,
+		Reviews:    fixture.reviews,
+		Clock:      fixedClock{at: formedAt},
+		Registered: fixture.registered,
 	})
 	return fixture
 }
@@ -170,5 +173,44 @@ func TestReviewOutcomesFollowRecoveryActions(t *testing.T) {
 	fixture.loader.err = errors.New("version store down")
 	if outcome, err := fixture.handler.Handle(context.Background(), reviewCommand("SYN-REVIEWER", "v1", domain.SeriesReviewApproved)); err == nil || outcome != application.SeriesReviewUndecided {
 		t.Fatalf("loader down: outcome = %q err = %v", outcome, err)
+	}
+}
+
+// Covers: AT-PP-004 一版序列通过复核才交「参数已登记」（种类 REFERENCE_SERIES、那一版的引用，不带计价范围）；退回的
+// 那一版不在用，不交；交不出整笔报错让登记口回滚；装配漏了交接口就不受理。
+func TestAnApprovedReviewAnnouncesTheSeriesAsRegistered(t *testing.T) {
+	fixture := newReviewFixture(t)
+	if _, err := fixture.handler.Handle(context.Background(), reviewCommand("SYN-REVIEWER", "v1", domain.SeriesReviewApproved)); err != nil {
+		t.Fatalf("复核：%v", err)
+	}
+	if len(fixture.registered.intents) != 1 {
+		t.Fatalf("交了 %d 封参数已登记, want 1", len(fixture.registered.intents))
+	}
+	intent := fixture.registered.intents[0]
+	if intent.Kind != ports.PricingParameterReferenceSeries || intent.Registration.ID() != "SYN-FUEL" ||
+		intent.Registration.Version() != "v1" || intent.Scope.String() != "" || intent.Tenant.String() != "tenant-1" {
+		t.Fatalf("intent = %+v", intent)
+	}
+
+	returned := newReviewFixture(t)
+	if _, err := returned.handler.Handle(context.Background(), reviewCommand("SYN-REVIEWER", "v1", domain.SeriesReviewReturned)); err != nil {
+		t.Fatalf("退回：%v", err)
+	}
+	if len(returned.registered.intents) != 0 {
+		t.Fatal("退回的那一版交了参数已登记")
+	}
+
+	failing := newReviewFixture(t)
+	failing.registered.err = errors.New("outbox down")
+	if outcome, err := failing.handler.Handle(context.Background(), reviewCommand("SYN-REVIEWER", "v1", domain.SeriesReviewApproved)); err == nil ||
+		outcome != application.SeriesReviewUndecided {
+		t.Fatalf("交不出 outcome = %s err = %v, want 未决与错误", outcome, err)
+	}
+
+	unwired := application.NewReviewReferenceSeriesHandler(application.ReviewReferenceSeriesDeps{
+		Versions: fixture.loader, Reviews: fixture.reviews, Clock: fixedClock{at: formedAt},
+	})
+	if _, err := unwired.Handle(context.Background(), reviewCommand("SYN-REVIEWER", "v1", domain.SeriesReviewApproved)); !errors.Is(err, application.ErrSeriesReviewHandoffMissing) {
+		t.Fatalf("漏装交接口 err = %v", err)
 	}
 }

@@ -10,7 +10,10 @@
 // `allocation-form` 只登记一条分摊规则版本选用的分法，不登权重，也不在这里把来源金额展开成份额。
 // `accounting-connector` 只登记某个对方采用规范文书。没登记的外部交换不在这里放行，本口也不解析账单文件或财务系统报文。
 // `sell-billing-moment-adoption` 与 `fee-item-mapping` 登 ADR-0190 的两本租户取值册：一户采用哪种包裹计费时点、计价费用代码
-// 映到哪个费用项目。本口不预选时点、不代拟映射，没登记的由读口答未找到。
+// 映到哪个费用项目。本口不预选时点、不代拟映射，没登记的由读口答未找到。这两本册与 `buy-evaluation-trigger` 落行时同笔交
+// 「评价参数已登记」，停着的评价请求由它续办（ADR-0229 决定五）。
+// `evaluation-resume` 是运营续办口（ADR-0229 决定六）：点名一件包裹或一版发生项、给一个续办引用，续办在它上面停着的
+// 每一件；同一个引用重跑是重放。它不登任何租户取值，缺的取值补登之前续办只会照实再停一次。
 //
 // 本口只开人工 / 受控批量的门，不自动采用：任何回调 / 文件到达都不在这里（UC-SA-005 输入表「不因接收回调
 // 自动采用」；真实财务系统来源仍 `No-Go / 待参数化`，PAR-INT-05）。输入全部来自 -input 指定的 JSON 文件，未知
@@ -81,6 +84,7 @@ type registrar struct {
 	adoptions    *application.RegisterPreAcceptanceEstimateAdoptionHandler
 	sellMoments  *application.RegisterSellBillingMomentAdoptionHandler
 	feeMappings  *application.RegisterFeeItemMappingHandler
+	resumes      *application.OperatorResumeEvaluationHandler
 	transactor   bentoapp.Transactor
 }
 
@@ -254,11 +258,17 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造越权升级上限登记：%w", err)
 	}
+	// 「评价参数已登记」交接口同上：BUY 触发册、SELL 计费时点采用册与费用项目映射册的行与信封落在同一笔环境事务里，
+	// 停在发起之前或映射不全的评价请求等的就是这封信（ADR-0229 决定五）。
+	parameterHandoff, err := sapostgres.NewOutboxEvaluationParameterRegisteredHandoff(db, outboxStore, systemClock{})
+	if err != nil {
+		return none, fmt.Errorf("构造评价参数已登记交接口：%w", err)
+	}
 	triggerStore, err := sapostgres.NewBuyEvaluationTriggers(db)
 	if err != nil {
 		return none, fmt.Errorf("构造评价请求触发登记册：%w", err)
 	}
-	triggerHandler, err := application.NewRegisterBuyEvaluationTriggerHandler(triggerStore, systemClock{})
+	triggerHandler, err := application.NewRegisterBuyEvaluationTriggerHandler(triggerStore, parameterHandoff, systemClock{})
 	if err != nil {
 		return none, fmt.Errorf("构造评价请求触发登记：%w", err)
 	}
@@ -320,7 +330,7 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造 SELL 计费时点采用册：%w", err)
 	}
-	sellMomentHandler, err := application.NewRegisterSellBillingMomentAdoptionHandler(sellMomentStore, systemClock{})
+	sellMomentHandler, err := application.NewRegisterSellBillingMomentAdoptionHandler(sellMomentStore, parameterHandoff, systemClock{})
 	if err != nil {
 		return none, fmt.Errorf("构造 SELL 计费时点采用登记：%w", err)
 	}
@@ -328,11 +338,16 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造费用项目映射册：%w", err)
 	}
-	feeItemMappingHandler, err := application.NewRegisterFeeItemMappingHandler(feeItemMappingStore, systemClock{})
+	feeItemMappingHandler, err := application.NewRegisterFeeItemMappingHandler(feeItemMappingStore, parameterHandoff, systemClock{})
 	if err != nil {
 		return none, fmt.Errorf("构造费用项目映射登记：%w", err)
 	}
+	resumes, err := buildEvaluationResume(db, outboxStore)
+	if err != nil {
+		return none, err
+	}
 	return registrar{
+		resumes:      resumes,
 		funds:        funds,
 		accounts:     accountHandler,
 		catalogues:   catalogueHandler,

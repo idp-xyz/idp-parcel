@@ -17,6 +17,9 @@ var (
 	// ErrSupplierCostVersionContradiction 说明由请求派生的版本标识上已有另一份内容。计价按回指至多为一份请求形成一份
 	// 评价，请求与评价都不可变，同一标识只可能对应同一份内容；撞上另一份是库被改过或另有一条路占了这个标识。
 	ErrSupplierCostVersionContradiction = errors.New("settlement accounting: the derived supplier cost version already carries other content")
+	// ErrBuyEvaluationRequestStoppedOtherwise 说明 BUY 请求册上已是另一个停因。同一份评价折出的停因是确定的，撞上另一个
+	// 只可能是册被改过，或另一条路给同一份请求记了停因；不覆盖，作错误交人看。
+	ErrBuyEvaluationRequestStoppedOtherwise = errors.New("settlement accounting: the buy evaluation request already carries another stop cause")
 	// ErrUnexpectedRequestedExpectedCostFormation 说明形成编排答了本外层不认的格：未受理（例如评价已完成而合计为零，
 	// 形成门要求金额大于零），或封闭集合以外的结果与未决原因。评价不可变，重投还是同一个答案，所以不作未决。
 	ErrUnexpectedRequestedExpectedCostFormation = errors.New("settlement accounting: unexpected requested supplier expected cost formation")
@@ -32,9 +35,10 @@ const (
 	// RequestedSupplierExpectedCostFirstVersionExists：同一发生项、费用项目与规则版本已有另一个版本标识的首版（例如
 	// 另一份点名同一发生项新版本的请求先形成了）。不得重复形成首版；要重述走计价纠错，不在本编排。
 	RequestedSupplierExpectedCostFirstVersionExists
-	// RequestedSupplierExpectedCostEvaluationNotAdopted：这份评价形成不了预期成本，零写入——不可计价、评价冲突、评价
-	// 待判断、评价未形成、跨币种却没带换算步骤、价卡没声明金额取整。评价不可变，计价对同一份请求也不再形成第二份
-	// 评价，重投这一封不会变；哪一格看 Formation。
+	// RequestedSupplierExpectedCostEvaluationNotAdopted：这份评价形成不了预期成本，不写成本行，只在 BUY 请求册上记停因——
+	// 不可计价、评价冲突、评价待判断、评价未形成、跨币种却没带换算步骤、价卡没声明金额取整。评价不可变，计价对同一份
+	// 请求也不再形成第二份评价，重投这一封不会变；补登之后由「参数已登记」按停因另起下一代（ADR-0229 决定二、三）。
+	// 哪一格看 Formation 与 StopCause。
 	RequestedSupplierExpectedCostEvaluationNotAdopted
 	// RequestedSupplierExpectedCostNoBuyRequest：评价没有回指（计价内部或测试路径形成）。不归本编排，零写入。
 	RequestedSupplierExpectedCostNoBuyRequest
@@ -71,8 +75,14 @@ type FormRequestedSupplierExpectedCostCommand struct {
 type RequestedSupplierExpectedCostResult struct {
 	outcome   RequestedSupplierExpectedCostOutcome
 	formation ExpectedCostResult
+	stopCause domain.EvaluationStopCause
 	reason    ExpectedCostUndecidedReason
 	cause     error
+}
+
+// StopCause 在`评价采用不了`一格交回记在请求册上的停因；其余各格第二个返回值为假。
+func (result RequestedSupplierExpectedCostResult) StopCause() (domain.EvaluationStopCause, bool) {
+	return result.stopCause, result.stopCause != domain.EvaluationStopCauseInvalid
 }
 
 func (result RequestedSupplierExpectedCostResult) Outcome() RequestedSupplierExpectedCostOutcome {
@@ -92,22 +102,23 @@ func (result RequestedSupplierExpectedCostResult) UndecidedCause() error {
 }
 
 // FormRequestedSupplierExpectedCostDeps 是本编排的依赖。Costs 是既有的形成编排本体：读评价、分格、建成本、登记都归它，
-// 本编排只决定调不调它、拿哪份请求的来源引用与哪个版本标识调。
+// 本编排只决定调不调它、拿哪份请求的来源引用与哪个版本标识调。Stops 记评价采用不了时的停因，Clock 给停下的时刻。
 type FormRequestedSupplierExpectedCostDeps struct {
 	Requests ports.EvaluationRequestView
 	Costs    *FormSupplierExpectedCostHandler
+	Stops    ports.EvaluationRequestStopRecorder
+	Clock    ports.Clock
 }
 
 // FormRequestedSupplierExpectedCostHandler 是 UC-SA-002 步 5 BUY 方向的形成编排外层（ADR-0200）：BUY·供应商
-// 成本评价已记录之后，按评价回指读回 BUY 评价请求，以请求上的合格来源引用与由请求派生的版本标识调形成编排。请求册
-// 没有状态列，本编排不改记请求：评价采用不了的那几格在计价那一侧的评价上可查（评价状态与问题项，按回指读），本侧
-// 只是不形成成本行。
+// 成本评价已记录之后，按评价回指读回 BUY 评价请求，以请求上的合格来源引用与由请求派生的版本标识调形成编排。评价采用
+// 不了的那几格在请求册上记停因（ADR-0229 决定三）；评价状态与问题项仍在计价那一侧的评价上，按回指读。
 type FormRequestedSupplierExpectedCostHandler struct {
 	deps FormRequestedSupplierExpectedCostDeps
 }
 
 func NewFormRequestedSupplierExpectedCostHandler(deps FormRequestedSupplierExpectedCostDeps) (*FormRequestedSupplierExpectedCostHandler, error) {
-	if deps.Requests == nil || deps.Costs == nil {
+	if deps.Requests == nil || deps.Costs == nil || deps.Stops == nil || deps.Clock == nil {
 		return nil, fmt.Errorf("%w: requested supplier expected cost", ErrNilDependency)
 	}
 	return &FormRequestedSupplierExpectedCostHandler{deps: deps}, nil
@@ -116,8 +127,8 @@ func NewFormRequestedSupplierExpectedCostHandler(deps FormRequestedSupplierExpec
 // Handle 读回指 → 读请求 → 组命令 → 形成 → 折结果。
 //
 // 去向按恢复动作分（ADR-0029、ADR-0094「失败预算只花在真会自愈的依赖上」）：只有读口、登记面答不出才是未决、整笔
-// 回滚等重投；评价本身停下的各格都入账——评价不可变，计价按回指对同一份请求也不再形成第二份评价，重投这一封只会
-// 读到同一个答案。
+// 回滚等重投；评价本身停下的各格记停因后入账——评价不可变，计价按回指对同一份请求也不再形成第二份评价，重投这一封
+// 只会读到同一个答案，要再问是下一代的事。
 func (handler *FormRequestedSupplierExpectedCostHandler) Handle(
 	ctx context.Context,
 	command FormRequestedSupplierExpectedCostCommand,
@@ -157,10 +168,16 @@ func (handler *FormRequestedSupplierExpectedCostHandler) Handle(
 		return RequestedSupplierExpectedCostResult{outcome: RequestedSupplierExpectedCostAdopted, formation: formed}, nil
 	case ExpectedCostAlreadyFormed:
 		return RequestedSupplierExpectedCostResult{outcome: RequestedSupplierExpectedCostFirstVersionExists, formation: formed}, nil
-	case ExpectedCostUnratable, EvaluationConflict:
-		return RequestedSupplierExpectedCostResult{outcome: RequestedSupplierExpectedCostEvaluationNotAdopted, formation: formed}, nil
+	case ExpectedCostUnratable:
+		return handler.stop(ctx, key, formed, domain.StopEvaluationUnratable)
+	case EvaluationConflict:
+		return handler.stop(ctx, key, formed, domain.StopEvaluationConflict)
 	case ExpectedCostUndecided:
-		return foldUndecidedFormation(formed, version)
+		folded, err := foldUndecidedFormation(formed, version)
+		if err != nil || folded.outcome != RequestedSupplierExpectedCostEvaluationNotAdopted {
+			return folded, err
+		}
+		return handler.stop(ctx, key, formed, folded.stopCause)
 	case ExpectedCostConflict:
 		return RequestedSupplierExpectedCostResult{}, fmt.Errorf("%w: version %s", ErrSupplierCostVersionContradiction, version)
 	default:
@@ -183,10 +200,51 @@ func foldUndecidedFormation(
 			reason:    formed.UndecidedReason(),
 			cause:     formed.UndecidedCause(),
 		}, nil
-	case EvaluationPending, EvaluationNotFormed, ConversionStepMissing, EvaluationAmountPrecisionUndeclared:
-		return RequestedSupplierExpectedCostResult{outcome: RequestedSupplierExpectedCostEvaluationNotAdopted, formation: formed}, nil
+	case EvaluationPending:
+		return notAdopted(formed, domain.StopEvaluationPendingJudgment), nil
+	case EvaluationNotFormed:
+		return notAdopted(formed, domain.StopEvaluationFailed), nil
+	case ConversionStepMissing:
+		return notAdopted(formed, domain.StopConversionStepMissing), nil
+	case EvaluationAmountPrecisionUndeclared:
+		return notAdopted(formed, domain.StopAmountRoundingUndeclared), nil
 	default:
 		return RequestedSupplierExpectedCostResult{}, fmt.Errorf("%w: undecided reason %q for version %s",
 			ErrUnexpectedRequestedExpectedCostFormation, formed.UndecidedReason(), version)
+	}
+}
+
+func notAdopted(formed ExpectedCostResult, cause domain.EvaluationStopCause) RequestedSupplierExpectedCostResult {
+	return RequestedSupplierExpectedCostResult{
+		outcome:   RequestedSupplierExpectedCostEvaluationNotAdopted,
+		formation: formed,
+		stopCause: cause,
+	}
+}
+
+// stop 在请求册上记停因。记不下是依赖答不出，答未决整笔回滚；册上已是另一个停因是两侧说法矛盾——同一份评价折出的停因
+// 是确定的——作错误上抛。
+func (handler *FormRequestedSupplierExpectedCostHandler) stop(
+	ctx context.Context,
+	key ports.EvaluationRequestKey,
+	formed ExpectedCostResult,
+	cause domain.EvaluationStopCause,
+) (RequestedSupplierExpectedCostResult, error) {
+	effect, err := handler.deps.Stops.RecordStop(ctx, key, cause, handler.deps.Clock.Now())
+	if err != nil {
+		return RequestedSupplierExpectedCostResult{
+			outcome: RequestedSupplierExpectedCostUndecided, formation: formed,
+			reason: BuyEvaluationRequestRegisterUnavailable, cause: err,
+		}, nil
+	}
+	switch effect {
+	case ports.EvaluationRequestStopped, ports.EvaluationRequestStopReplayed:
+		return notAdopted(formed, cause), nil
+	case ports.EvaluationRequestStoppedOtherwise:
+		return RequestedSupplierExpectedCostResult{}, fmt.Errorf("%w: request %s, wanted %s",
+			ErrBuyEvaluationRequestStoppedOtherwise, key.Request, cause)
+	default:
+		return RequestedSupplierExpectedCostResult{}, fmt.Errorf("%w: stop effect %d for request %s",
+			ErrUnexpectedRequestedExpectedCostFormation, effect, key.Request)
 	}
 }

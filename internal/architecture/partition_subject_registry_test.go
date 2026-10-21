@@ -113,6 +113,9 @@ var declaredPartitionSubjects = map[string]string{
 
 	// —— parcel-pricing ——
 	"internal/parcelpricing/adapters/postgres/evaluation_handoff.go": partitionPerEnvelopePrefix + "租户段+评价标识（与 ID 不同表达式，粒度仍一评价一区）",
+	// 「参数已登记」与结算、party-commercial 的登记续办口同主体同字符串，同队有意（ADR-0229）。
+	"internal/parcelpricing/adapters/postgres/evaluation_resumption_handoffs.go":      partitionSubjectPrefix + "租户（运营登记续办）" + partitionRulingMark + "ADR-0229 决定五：与结算、party-commercial 的登记续办口同字符串同队，同一租户的续办一轮接一轮、不会两轮并发去推同一条代次链",
+	"internal/parcelpricing/adapters/postgres/evaluation_request_unformed_handoff.go": partitionSubjectPrefix + "租户/评价未形成（按方向与请求，一份请求至多一封；与 SA 请求信封的分区不是同一字符串、不同队）",
 
 	// —— parcel-shipment ——
 	// 采用链三口与 VE 四口同名同值：租户段之后拼的都是同一个包裹身份字符串，FanOut 之下
@@ -170,6 +173,8 @@ var declaredPartitionSubjects = map[string]string{
 	// 「结算账户已登记」与 party-commercial「参数已登记」同主体同字符串（票 routing-first-cut/19），同队的理由写在
 	// operator_registration_completed_handoff.go 那一行的裁段里。
 	"internal/settlementaccounting/adapters/postgres/settlement_account_registered_handoff.go": partitionSubjectPrefix + "租户（运营登记续办）" + partitionRulingMark + "待裁——与 party-commercial 参数已登记口同队有意（理由在 operator_registration_completed_handoff.go 那一行），无裁定记录",
+	// 「评价参数已登记」（ADR-0229 决定五）与计价的续办两口、上一行同主体同字符串，同队有意。
+	"internal/settlementaccounting/adapters/postgres/evaluation_parameter_registered_handoff.go": partitionSubjectPrefix + "租户（运营登记续办）" + partitionRulingMark + "ADR-0229 决定五：与计价的「评价未形成」「参数已登记」两口、结算账户已登记口同字符串同队，同一租户的评价续办一轮接一轮、不会两轮并发去推同一条代次链",
 	// 「受理前估价采用已登记」同上一行（票 product-strategy-boundary/25）。
 	"internal/settlementaccounting/adapters/postgres/pre_acceptance_estimate_adoption_registered_handoff.go": partitionSubjectPrefix + "租户（运营登记续办）" + partitionRulingMark + "待裁——与 party-commercial 参数已登记口、结算账户已登记口同队有意（理由在 operator_registration_completed_handoff.go 那一行），无裁定记录",
 	// SELL 评价请求（ADR-0190 决定一）按包裹排队，键带 /sell-evaluation-request/ 段：与 PS 采用链、VE 各口的「租户/包裹」

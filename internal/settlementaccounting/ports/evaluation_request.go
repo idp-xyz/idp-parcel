@@ -13,11 +13,13 @@ type EvaluationRequestKey struct {
 	Request  domain.EvaluationRequestID
 }
 
-// EvaluationRequestRecord 是一次「请求评价」越过提交边界留下的东西（UC-SA-002 步 2 的 SA 半边）。
+// EvaluationRequestRecord 是一次「请求评价」越过提交边界留下的东西（UC-SA-002 步 2 的 SA 半边）。StopCause 是册上的
+// 停因格：登记时没有，请求停下之后由记停因的那一口写下（EvaluationRequestStopRecorder）。
 type EvaluationRequestRecord struct {
 	Key        EvaluationRequestKey
 	Request    domain.EvaluationRequest
 	RecordedAt time.Time
+	StopCause  domain.EvaluationStopCause
 }
 
 type EvaluationRequestSaveOutcome uint8
@@ -39,9 +41,10 @@ func (outcome EvaluationRequestSaveOutcome) String() string {
 	}
 }
 
-// EvaluationRequestRegistry 是评价请求的登记面。Save 的写入代数同 ADR-0031：撞身份键或撞自然键唯一
-// 约束都答`已存在`、不覆盖先到者——自然键（租户 + 主要范围 + 计算目的 + 引用集合摘要）上的唯一约束
-// 在库上，幂等由它守；FindByNaturalKey 让编排在撞上时读回先到者、交回原 ID，而不是答失败。
+// EvaluationRequestRegistry 是评价请求的登记面。Save 的写入代数同 ADR-0031：撞身份键、撞（自然键、代次）或撞前一代
+// 唯一约束都答`已存在`、不覆盖先到者——自然键（租户 + 主要范围 + 计算目的 + 引用集合摘要）加代次上的唯一约束在库上，
+// 幂等由它守，一份请求至多一个下一代也由它守（ADR-0229 决定一）；FindByNaturalKey 交回这条代次链上最新的那一代，
+// 让编排在撞上时读回先到者、交回原 ID，而不是答失败。Save 收到带停因的记录即拒：停因只由记停因的那一口写。
 type EvaluationRequestRegistry interface {
 	Save(ctx context.Context, record EvaluationRequestRecord) (EvaluationRequestSaveOutcome, error)
 	FindByNaturalKey(

@@ -148,11 +148,16 @@ type ReviewReferenceCatalogueCommand struct {
 	ReviewedAt       time.Time
 }
 
+// ReviewReferenceCatalogueDeps 是目录复核的依赖。Registered 在一版目录通过复核时交「参数已登记」，理由同序列复核。
 type ReviewReferenceCatalogueDeps struct {
-	Versions ports.ReferenceCatalogueVersionLoader
-	Reviews  ports.ReferenceCatalogueReviewRegister
-	Clock    ports.Clock
+	Versions   ports.ReferenceCatalogueVersionLoader
+	Reviews    ports.ReferenceCatalogueReviewRegister
+	Clock      ports.Clock
+	Registered ports.PricingParameterRegisteredHandoff
 }
+
+// ErrCatalogueReviewHandoffMissing 说明装配没给目录复核接「参数已登记」交接口。
+var ErrCatalogueReviewHandoffMissing = errors.New("parcel pricing: reference catalogue review has no pricing parameter registered handoff")
 
 type ReviewReferenceCatalogueHandler struct {
 	deps ReviewReferenceCatalogueDeps
@@ -169,6 +174,9 @@ func (handler *ReviewReferenceCatalogueHandler) Handle(
 ) (ReviewReferenceCatalogueOutcome, error) {
 	if command.Tenant.String() == "" || command.CatalogueID == "" || command.CatalogueVersion == "" {
 		return CatalogueReviewNotAccepted, nil
+	}
+	if handler.deps.Registered == nil {
+		return CatalogueReviewUndecided, ErrCatalogueReviewHandoffMissing
 	}
 	registration, found, err := handler.deps.Versions.LoadVersion(ctx, command.Tenant, command.CatalogueID, command.CatalogueVersion)
 	if err != nil {
@@ -194,9 +202,9 @@ func (handler *ReviewReferenceCatalogueHandler) Handle(
 	}
 	switch saved {
 	case ports.ReferenceCatalogueReviewRecorded:
-		return CatalogueReviewRecorded, nil
+		return handler.announce(ctx, review, CatalogueReviewRecorded)
 	case ports.ReferenceCatalogueReviewAlreadyRecorded:
-		return CatalogueReviewAlreadyOnRegister, nil
+		return handler.announce(ctx, review, CatalogueReviewAlreadyOnRegister)
 	case ports.ReferenceCatalogueReviewConflict:
 		return CatalogueReviewConflict, nil
 	case ports.ReferenceCatalogueReviewVersionUnknown:
@@ -204,4 +212,23 @@ func (handler *ReviewReferenceCatalogueHandler) Handle(
 	default:
 		return ReviewReferenceCatalogueOutcomeInvalid, fmt.Errorf("%w: %d", ErrUnexpectedCatalogueReviewOutcome, saved)
 	}
+}
+
+// announce 只在复核通过时交「参数已登记」，理由同 ReviewReferenceSeriesHandler.announce。
+func (handler *ReviewReferenceCatalogueHandler) announce(
+	ctx context.Context,
+	review domain.CatalogueReview,
+	outcome ReviewReferenceCatalogueOutcome,
+) (ReviewReferenceCatalogueOutcome, error) {
+	if review.Decision() != domain.SeriesReviewApproved {
+		return outcome, nil
+	}
+	if err := handler.deps.Registered.HandOffPricingParameterRegistered(ctx, ports.PricingParameterRegisteredIntent{
+		Tenant:       review.Tenant(),
+		Kind:         ports.PricingParameterReferenceCatalogue,
+		Registration: review.Reference(),
+	}); err != nil {
+		return CatalogueReviewUndecided, fmt.Errorf("review reference catalogue: %w", err)
+	}
+	return outcome, nil
 }

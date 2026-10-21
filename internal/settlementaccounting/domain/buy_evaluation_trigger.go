@@ -89,3 +89,13 @@ func (registration BuyEvaluationTriggerRegistration) SameRegistration(other BuyE
 	return registration.reason == other.reason && registration.moment == other.moment &&
 		registration.feeItem == other.feeItem && registration.moment.triggers()
 }
+
+// Revises 答这一份登记能不能作为 current 的下一版追加（ADR-0229 决定七）：同原因、同时点，current 没登费用项目，这一份
+// 登了。这是本册唯一的修订形——补上一格缺位的租户取值；已登的费用项目换成另一个仍答冲突，那会让已经按旧费用项目形成的
+// 预期成本与此后形成的对不上，换法要 owner 另裁。旧版留在册上作历史，不改写。
+func (registration BuyEvaluationTriggerRegistration) Revises(current BuyEvaluationTriggerRegistration) bool {
+	_, currentHasFeeItem := current.FeeItem()
+	_, hasFeeItem := registration.FeeItem()
+	return registration.reason == current.reason && registration.moment == current.moment &&
+		registration.moment.triggers() && !currentHasFeeItem && hasFeeItem
+}

@@ -18,8 +18,9 @@ import (
 // 与 ports.SellEvaluationRequestConclusionRecorder（形成那一半的改记口），同一张表、同一份行模型——分开实现就是第二处
 // 定义。
 //
-// 幂等由库上的唯一约束守：主键（租户+铸造 ID）拦同一份重放，自然键（租户+包裹+计费时点）拦另一个 ID 带同一件包裹
-// 同一时点再来（ADR-0190 决定一、二）。撞上哪一条都答`已存在`、不覆盖先到者（写入代数同 ADR-0031）。
+// 幂等由库上的唯一约束守：主键（租户+铸造 ID）拦同一份重放，（自然键、代次）拦另一个 ID 带同一件包裹同一时点同一代
+// 再来（ADR-0190 决定一、二），前一代上的唯一约束拦同一份请求的第二个下一代（ADR-0229 决定一）。撞上哪一条都答
+// `已存在`、不覆盖先到者（写入代数同 ADR-0031）。
 type SellEvaluationRequests struct {
 	db *bentopg.DB
 }
@@ -35,6 +36,7 @@ var (
 	_ ports.SellEvaluationRequestRegistry           = (*SellEvaluationRequests)(nil)
 	_ ports.SellEvaluationRequestView               = (*SellEvaluationRequests)(nil)
 	_ ports.SellEvaluationRequestConclusionRecorder = (*SellEvaluationRequests)(nil)
+	_ ports.SellEvaluationRequestSuccessorView      = (*SellEvaluationRequests)(nil)
 )
 
 // Save 登记一份 SELL 评价请求，状态格落`已提交`。撞主键或撞自然键唯一约束都交回`已存在`而不是错误：那是业务答案，
@@ -56,10 +58,11 @@ func (registry *SellEvaluationRequests) Save(
 			fmt.Errorf("save sell evaluation request: key %q disagrees with the request %q it claims to index",
 				record.Key.Request.String(), record.Request.ID().String())
 	}
-	if record.State != domain.SellRequestSubmitted || record.FormedCharge.String() != "" {
+	if record.State != domain.SellRequestSubmitted || record.FormedCharge.String() != "" ||
+		record.StopCause != domain.EvaluationStopCauseInvalid {
 		return ports.EvaluationRequestSaveOutcomeInvalid,
-			fmt.Errorf("save sell evaluation request: a registration is %s without a charge, got %q with charge %q",
-				domain.SellRequestSubmitted, record.State.String(), record.FormedCharge.String())
+			fmt.Errorf("save sell evaluation request: a registration is %s without a charge or a stop cause, got %q with charge %q and stop cause %q",
+				domain.SellRequestSubmitted, record.State.String(), record.FormedCharge.String(), record.StopCause.String())
 	}
 
 	executor, err := registry.db.RequireExecutor(ctx)
@@ -68,11 +71,13 @@ func (registry *SellEvaluationRequests) Save(
 	}
 
 	request := record.Request
+	previous, basis := sellRequestLineageColumns(request)
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO settlement_accounting.sell_evaluation_request
 			(tenant_id, request_id, parcel_id, account_id, settlement_currency, pricing_scope_id,
-			 billing_moment, source_fact_ref, pricing_basis_at, recorded_at, state)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			 billing_moment, source_fact_ref, pricing_basis_at, recorded_at, state,
+			 generation, previous_request_id, resume_basis)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Request.String(),
@@ -85,6 +90,9 @@ func (registry *SellEvaluationRequests) Save(
 		request.PricingBasisAt().UTC(),
 		record.RecordedAt.UTC(),
 		domain.SellRequestSubmitted.String(),
+		request.Generation(),
+		previous,
+		basis,
 	)
 	if err != nil {
 		return ports.EvaluationRequestSaveOutcomeInvalid, fmt.Errorf("save sell evaluation request: %w", err)
@@ -95,7 +103,21 @@ func (registry *SellEvaluationRequests) Save(
 	return ports.EvaluationRequestSaved, nil
 }
 
-// RecordConclusion 把一份`已提交`的请求改记为结论（ADR-0190 决定五）。UPDATE 只认`已提交`那一行：改得到就是写下了；
+// sellRequestLineageColumns 交回前一代与依据两列的写值；首代与没有依据的那一格写 NULL，不写空串——库上的 CHECK 拒空串。
+func sellRequestLineageColumns(request domain.SellEvaluationRequest) (*string, *string) {
+	var previous, basis *string
+	if id, has := request.Previous(); has {
+		value := id.String()
+		previous = &value
+	}
+	if resume := request.ResumeBasis(); resume.Present() {
+		value := resume.String()
+		basis = &value
+	}
+	return previous, basis
+}
+
+// RecordConclusion 把一份`已提交`的请求改记为结论（ADR-0190 决定五、ADR-0229 决定三）。UPDATE 只认`已提交`那一行：改得到就是写下了；
 // 改不到就读回比内容，同一份结论答重放，另一份答另有结论，都不覆盖。并发的两拍里后到者在行锁上等先到者提交，
 // 再按提交后的行判，所以不需要先读后写。
 //
@@ -118,20 +140,30 @@ func (registry *SellEvaluationRequests) RecordConclusion(
 	if err != nil {
 		return none, fmt.Errorf("record sell evaluation request conclusion: %w", err)
 	}
-	var charge *string
+	var (
+		charge, cause *string
+		stoppedAt     *time.Time
+	)
 	if formed, ok := conclusion.FormedCharge(); ok {
 		value := formed.String()
 		charge = &value
 	}
+	if stopped, ok := conclusion.StopCause(); ok {
+		value := stopped.String()
+		at := conclusion.StoppedAt().UTC()
+		cause, stoppedAt = &value, &at
+	}
 	tag, err := executor.Exec(ctx,
 		`UPDATE settlement_accounting.sell_evaluation_request
-		    SET state = $3, customer_charge_id = $4
+		    SET state = $3, customer_charge_id = $4, stop_cause = $6, stopped_at = $7
 		  WHERE tenant_id = $1 AND request_id = $2 AND state = $5`,
 		key.TenantID.String(),
 		key.Request.String(),
 		conclusion.State().String(),
 		charge,
 		domain.SellRequestSubmitted.String(),
+		cause,
+		stoppedAt,
 	)
 	if err != nil {
 		return none, fmt.Errorf("record sell evaluation request conclusion: %w", err)
@@ -147,7 +179,7 @@ func (registry *SellEvaluationRequests) RecordConclusion(
 	if !found {
 		return none, fmt.Errorf("record sell evaluation request conclusion: request %s is not in the register", key.Request)
 	}
-	if conclusion.Same(stored.State, stored.FormedCharge) {
+	if conclusion.Same(stored.State, stored.FormedCharge, stored.StopCause) {
 		return ports.SellEvaluationRequestConclusionReplayed, nil
 	}
 	return ports.SellEvaluationRequestConcludedOtherwise, nil
@@ -164,14 +196,15 @@ func (registry *SellEvaluationRequests) FindByID(
 		key.TenantID.String(), key.Request.String())
 }
 
-// FindByNaturalKey 按（租户+包裹+计费时点）取回先到者。编排在 Save 答`已存在`时走这里读回赢家。
+// FindByNaturalKey 按（租户+包裹+计费时点）取回这条代次链上最新的那一代。编排在 Save 答`已存在`时走这里读回赢家，
+// 计费时点重放时走这里认出已发起过。
 func (registry *SellEvaluationRequests) FindByNaturalKey(
 	ctx context.Context,
 	tenant domain.TenantID,
 	key domain.SellEvaluationRequestNaturalKey,
 ) (ports.SellEvaluationRequestRecord, bool, error) {
 	return registry.findOne(ctx, tenant,
-		`WHERE tenant_id = $1 AND parcel_id = $2 AND billing_moment = $3`,
+		`WHERE tenant_id = $1 AND parcel_id = $2 AND billing_moment = $3 ORDER BY generation DESC LIMIT 1`,
 		tenant.String(), key.Parcel.String(), key.Moment.String())
 }
 
@@ -182,8 +215,18 @@ func (registry *SellEvaluationRequests) FindCurrentByParcel(
 	parcel domain.ParcelReference,
 ) (ports.SellEvaluationRequestRecord, bool, error) {
 	return registry.findOne(ctx, tenant,
-		`WHERE tenant_id = $1 AND parcel_id = $2 ORDER BY recorded_at DESC, request_id DESC LIMIT 1`,
+		`WHERE tenant_id = $1 AND parcel_id = $2 ORDER BY recorded_at DESC, generation DESC, request_id DESC LIMIT 1`,
 		tenant.String(), parcel.String())
+}
+
+// FindSuccessor 按前一代取回下一代。前一代上的唯一约束保证至多一份。
+func (registry *SellEvaluationRequests) FindSuccessor(
+	ctx context.Context,
+	key ports.SellEvaluationRequestKey,
+) (ports.SellEvaluationRequestRecord, bool, error) {
+	return registry.findOne(ctx, key.TenantID,
+		`WHERE tenant_id = $1 AND previous_request_id = $2`,
+		key.TenantID.String(), key.Request.String())
 }
 
 func (registry *SellEvaluationRequests) findOne(
@@ -198,25 +241,29 @@ func (registry *SellEvaluationRequests) findOne(
 	}
 
 	var (
-		columns sellEvaluationRequestColumns
-		charge  *string
+		columns                        sellEvaluationRequestColumns
+		charge, previous, basis, cause *string
+		stoppedAt                      *time.Time
 	)
 	err = querier.QueryRow(ctx,
 		`SELECT request_id, parcel_id, account_id, settlement_currency, pricing_scope_id,
-		        billing_moment, source_fact_ref, pricing_basis_at, recorded_at, state, customer_charge_id
+		        billing_moment, source_fact_ref, pricing_basis_at, recorded_at, state, customer_charge_id,
+		        generation, previous_request_id, resume_basis, stop_cause, stopped_at
 		   FROM settlement_accounting.sell_evaluation_request `+where,
 		args...,
 	).Scan(&columns.requestID, &columns.parcel, &columns.account, &columns.currency, &columns.pricingScope,
-		&columns.moment, &columns.source, &columns.pricingBasisAt, &columns.recordedAt, &columns.state, &charge)
+		&columns.moment, &columns.source, &columns.pricingBasisAt, &columns.recordedAt, &columns.state, &charge,
+		&columns.generation, &previous, &basis, &cause, &stoppedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.SellEvaluationRequestRecord{}, false, nil
 	}
 	if err != nil {
 		return ports.SellEvaluationRequestRecord{}, false, fmt.Errorf("find sell evaluation request: %w", err)
 	}
-	if charge != nil {
-		columns.charge = *charge
-	}
+	columns.charge = derefText(charge)
+	columns.previous = derefText(previous)
+	columns.basis = derefText(basis)
+	columns.cause = derefText(cause)
 
 	record, err := rebuildSellEvaluationRequest(tenant, columns)
 	if err != nil {
@@ -239,6 +286,26 @@ type sellEvaluationRequestColumns struct {
 	recordedAt     time.Time
 	state          string
 	charge         string
+	generation     int
+	previous       string
+	basis          string
+	cause          string
+}
+
+// derefText 把可空文本列读成串，NULL 读成空串：可空列有没有值由各自的配对判，不由指针判。
+func derefText(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+// rebuildResumeBasis 把依据一列折回领域值，空串读成零值。
+func rebuildResumeBasis(value string) (domain.ResumeBasis, error) {
+	if value == "" {
+		return domain.ResumeBasis{}, nil
+	}
+	return domain.ResumeBasisFromName(value)
 }
 
 // rebuildSellEvaluationRequest 把一行折回记录。请求没有独立的重建门：SubmitSellEvaluationRequest 不相信任何输入，
@@ -276,6 +343,16 @@ func rebuildSellEvaluationRequest(
 	if err != nil {
 		return none, err
 	}
+	var previous domain.SellEvaluationRequestID
+	if columns.previous != "" {
+		if previous, err = domain.NewSellEvaluationRequestID(columns.previous); err != nil {
+			return none, err
+		}
+	}
+	basis, err := rebuildResumeBasis(columns.basis)
+	if err != nil {
+		return none, err
+	}
 	request, err := domain.SubmitSellEvaluationRequest(domain.SellEvaluationRequestSpec{
 		ID:                 id,
 		Parcel:             parcel,
@@ -285,6 +362,9 @@ func rebuildSellEvaluationRequest(
 		Moment:             moment,
 		Source:             source,
 		PricingBasisAt:     columns.pricingBasisAt,
+		Generation:         columns.generation,
+		Previous:           previous,
+		ResumeBasis:        basis,
 	})
 	if err != nil {
 		return none, err
@@ -302,11 +382,23 @@ func rebuildSellEvaluationRequest(
 	} else if columns.charge != "" {
 		return none, fmt.Errorf("%s is %s yet carries charge %q", columns.requestID, state, columns.charge)
 	}
+	var cause domain.EvaluationStopCause
+	if columns.cause != "" {
+		if cause, err = domain.EvaluationStopCauseFromName(columns.cause); err != nil {
+			return none, err
+		}
+		if domain.SellRequestStateOf(cause) != state {
+			return none, fmt.Errorf("%s is %s yet carries stop cause %s", columns.requestID, state, cause)
+		}
+	} else if state != domain.SellRequestSubmitted && state != domain.SellRequestFormed {
+		return none, fmt.Errorf("%s is %s without a stop cause", columns.requestID, state)
+	}
 	return ports.SellEvaluationRequestRecord{
 		Key:          ports.SellEvaluationRequestKey{TenantID: tenant, Request: request.ID()},
 		Request:      request,
 		RecordedAt:   columns.recordedAt.UTC(),
 		State:        state,
 		FormedCharge: charge,
+		StopCause:    cause,
 	}, nil
 }

@@ -20,6 +20,31 @@ type buyRequestViewDouble struct {
 	records map[string]ports.EvaluationRequestRecord
 	err     error
 	calls   int
+	stopErr error
+}
+
+// RecordStop 把停因写回读口那一份，与真册一样只从「没有停因」往外走。
+func (double *buyRequestViewDouble) RecordStop(
+	_ context.Context, key ports.EvaluationRequestKey, cause domain.EvaluationStopCause, _ time.Time,
+) (ports.EvaluationRequestStopEffect, error) {
+	if double.stopErr != nil {
+		return ports.EvaluationRequestStopEffectInvalid, double.stopErr
+	}
+	index := key.TenantID.String() + "/" + key.Request.String()
+	record, found := double.records[index]
+	if !found {
+		return ports.EvaluationRequestStopEffectInvalid, errors.New("request not in the register")
+	}
+	switch record.StopCause {
+	case domain.EvaluationStopCauseInvalid:
+		record.StopCause = cause
+		double.records[index] = record
+		return ports.EvaluationRequestStopped, nil
+	case cause:
+		return ports.EvaluationRequestStopReplayed, nil
+	default:
+		return ports.EvaluationRequestStoppedOtherwise, nil
+	}
 }
 
 func (double *buyRequestViewDouble) FindByID(_ context.Context, key ports.EvaluationRequestKey) (ports.EvaluationRequestRecord, bool, error) {
@@ -79,7 +104,7 @@ func newRequestedCostFixture(t *testing.T) *requestedCostFixture {
 	}
 	fixture.requests.register(t, "EVREQ-SYN-1", "occurrence-7/v1")
 	outer, err := application.NewFormRequestedSupplierExpectedCostHandler(application.FormRequestedSupplierExpectedCostDeps{
-		Requests: fixture.requests, Costs: fixture.handler,
+		Requests: fixture.requests, Costs: fixture.handler, Stops: fixture.requests, Clock: fixedClock{at: costOccurredAt},
 	})
 	if err != nil {
 		t.Fatalf("外层：%v", err)
@@ -180,20 +205,21 @@ func TestTheRequestBackReferenceDecidesWhetherThisOrchestrationOwnsTheEvaluation
 }
 
 // Covers: AT-SA-175、AT-SA-177 与评价停下的其余各格——不可计价、评价冲突、待判断、未形成、跨币种无换算步骤、金额
-// 未声明都是这份评价的定局：零写入，形成编排那一层的格照原样交回；不是未决（评价不可变，计价对同一份请求也不再
-// 形成第二份评价，重投无益）。
+// 未声明都是这份评价的定局：不写成本行，形成编排那一层的格照原样交回；不是未决（评价不可变，计价对同一份请求也不再
+// 形成第二份评价，重投无益）。AT-SA-192：每一格在 BUY 请求册上记各自的停因（ADR-0229 决定三），记不下才是未决。
 func TestEvaluationsThatCannotBeAdoptedAreSettledWithoutWrites(t *testing.T) {
 	for _, grade := range []struct {
 		evaluation string
 		formation  application.ExpectedCostOutcome
 		reason     application.ExpectedCostUndecidedReason
+		cause      domain.EvaluationStopCause
 	}{
-		{"buy-eval-unratable", application.ExpectedCostUnratable, application.ExpectedCostUndecidedReasonNone},
-		{"buy-eval-conflict", application.EvaluationConflict, application.ExpectedCostUndecidedReasonNone},
-		{"buy-eval-pending", application.ExpectedCostUndecided, application.EvaluationPending},
-		{"buy-eval-not-formed", application.ExpectedCostUndecided, application.EvaluationNotFormed},
-		{"buy-eval-unconverted", application.ExpectedCostUndecided, application.ConversionStepMissing},
-		{"buy-eval-undeclared", application.ExpectedCostUndecided, application.EvaluationAmountPrecisionUndeclared},
+		{"buy-eval-unratable", application.ExpectedCostUnratable, application.ExpectedCostUndecidedReasonNone, domain.StopEvaluationUnratable},
+		{"buy-eval-conflict", application.EvaluationConflict, application.ExpectedCostUndecidedReasonNone, domain.StopEvaluationConflict},
+		{"buy-eval-pending", application.ExpectedCostUndecided, application.EvaluationPending, domain.StopEvaluationPendingJudgment},
+		{"buy-eval-not-formed", application.ExpectedCostUndecided, application.EvaluationNotFormed, domain.StopEvaluationFailed},
+		{"buy-eval-unconverted", application.ExpectedCostUndecided, application.ConversionStepMissing, domain.StopConversionStepMissing},
+		{"buy-eval-undeclared", application.ExpectedCostUndecided, application.EvaluationAmountPrecisionUndeclared, domain.StopAmountRoundingUndeclared},
 	} {
 		t.Run(grade.evaluation, func(t *testing.T) {
 			fixture := newRequestedCostFixture(t)
@@ -209,7 +235,32 @@ func TestEvaluationsThatCannotBeAdoptedAreSettledWithoutWrites(t *testing.T) {
 			if result.UndecidedReason() != application.ExpectedCostUndecidedReasonNone || fixture.registry.saves != 0 {
 				t.Fatalf("定局却带了未决原因 %s，或写了 %d 次", result.UndecidedReason(), fixture.registry.saves)
 			}
+			if got, stopped := result.StopCause(); !stopped || got != grade.cause {
+				t.Fatalf("停因 = %s %v，want %s", got, stopped, grade.cause)
+			}
+			if stored := fixture.requests.records["tenant-1/EVREQ-SYN-1"]; stored.StopCause != grade.cause {
+				t.Fatalf("请求册停因 = %s，want %s", stored.StopCause, grade.cause)
+			}
+			if replayed, err := fixture.handle(t, grade.evaluation, "EVREQ-SYN-1"); err != nil ||
+				replayed.Outcome() != application.RequestedSupplierExpectedCostEvaluationNotAdopted {
+				t.Fatalf("重放 = %s err = %v，want 同一停因重放入账", replayed.Outcome(), err)
+			}
 		})
+	}
+
+	fixture := newRequestedCostFixture(t)
+	fixture.requests.stopErr = errors.New("request register down")
+	result, err := fixture.handle(t, "buy-eval-pending", "EVREQ-SYN-1")
+	if err != nil || result.Outcome() != application.RequestedSupplierExpectedCostUndecided ||
+		result.UndecidedReason() != application.BuyEvaluationRequestRegisterUnavailable {
+		t.Fatalf("停因记不下 = %s / %s err = %v，want 未决", result.Outcome(), result.UndecidedReason(), err)
+	}
+	other := newRequestedCostFixture(t)
+	if _, err := other.handle(t, "buy-eval-pending", "EVREQ-SYN-1"); err != nil {
+		t.Fatalf("先记一个停因：%v", err)
+	}
+	if _, err := other.handle(t, "buy-eval-conflict", "EVREQ-SYN-1"); !errors.Is(err, application.ErrBuyEvaluationRequestStoppedOtherwise) {
+		t.Fatalf("册上已是另一个停因 err = %v，want 矛盾上抛", err)
 	}
 }
 
@@ -269,8 +320,10 @@ func TestContradictionsAreErrorsNotUndecided(t *testing.T) {
 func TestTheRequestedExpectedCostHandlerRefusesNilDependencies(t *testing.T) {
 	fixture := newExpectedCostFixture(t)
 	for name, deps := range map[string]application.FormRequestedSupplierExpectedCostDeps{
-		"缺请求册":  {Costs: fixture.handler},
-		"缺形成编排": {Requests: &buyRequestViewDouble{}},
+		"缺请求册":  {Costs: fixture.handler, Stops: &buyRequestViewDouble{}, Clock: fixedClock{}},
+		"缺形成编排": {Requests: &buyRequestViewDouble{}, Stops: &buyRequestViewDouble{}, Clock: fixedClock{}},
+		"缺停因写口": {Requests: &buyRequestViewDouble{}, Costs: fixture.handler, Clock: fixedClock{}},
+		"缺时钟":   {Requests: &buyRequestViewDouble{}, Costs: fixture.handler, Stops: &buyRequestViewDouble{}},
 	} {
 		if _, err := application.NewFormRequestedSupplierExpectedCostHandler(deps); !errors.Is(err, application.ErrNilDependency) {
 			t.Fatalf("%s：err = %v", name, err)

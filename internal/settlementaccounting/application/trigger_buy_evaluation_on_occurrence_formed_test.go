@@ -84,6 +84,8 @@ func newOccurrenceFormedTrigger(
 		Triggers:   view,
 		Agreements: scopes,
 		Requests:   fixture.handler,
+		Stalls:     fixture.stalls,
+		Clock:      fixedClock{at: time.Date(2026, 10, 19, 7, 0, 0, 0, time.UTC)},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -135,6 +137,7 @@ func TestAFormedOccurrenceFiresABuyEvaluationRequestFromItsOwnFacts(t *testing.T
 }
 
 // Covers: 未配置两格——没登这个原因、登了却没登费用项目——都入账：不问协议、不铸 ID、不交信封，并点名缺哪一格。
+// AT-SA-191 的 BUY 半边：两格都在 BUY 发起停办册上记下这一版发生项与它的协议（ADR-0229 决定四）。
 func TestAnUnregisteredReasonOrFeeItemStaysUnconfiguredWithoutAskingTheAgreement(t *testing.T) {
 	withoutFeeItem := registeredFulfillmentRow()
 	withoutFeeItem.feeItem = ""
@@ -159,6 +162,15 @@ func TestAnUnregisteredReasonOrFeeItemStaysUnconfiguredWithoutAskingTheAgreement
 		}
 		if scopes.calls != 0 || fixture.identity.next != 0 || len(fixture.handoff.intents) != 0 {
 			t.Fatalf("%s: 未配置仍问了协议 %d 次、铸了 %d 个 ID、交了 %d 封信", name, scopes.calls, fixture.identity.next, len(fixture.handoff.intents))
+		}
+		command := occurrenceFormedCommand(t)
+		stall, found := fixture.stalls.buy[buyStallKey(command.TenantID, command.Occurrence.ID(), command.Occurrence.Version())]
+		wantCause := domain.StopOccurrenceReasonNotRegistered
+		if testCase.want == application.BuyEvaluationTriggerFeeItemNotRegistered {
+			wantCause = domain.StopTriggerFeeItemNotRegistered
+		}
+		if !found || stall.Cause() != wantCause || stall.Agreement() != command.Agreement || stall.Occurrence() != command.Occurrence {
+			t.Fatalf("%s: 发起停办 = %+v found=%v", name, stall, found)
 		}
 	}
 }
@@ -251,9 +263,11 @@ func TestARevisedOccurrenceAndAMalformedCommandFireNothing(t *testing.T) {
 func TestTheOccurrenceFormedTriggerRefusesMissingDependencies(t *testing.T) {
 	fixture := newEvaluationRequestFixture(t)
 	for name, deps := range map[string]application.TriggerBuyEvaluationOnOccurrenceFormedDeps{
-		"触发册":  {Agreements: trunkScope(), Requests: fixture.handler},
-		"协议范围": {Triggers: registeredFulfillmentRow(), Requests: fixture.handler},
-		"请求编排": {Triggers: registeredFulfillmentRow(), Agreements: trunkScope()},
+		"触发册":   {Agreements: trunkScope(), Requests: fixture.handler, Stalls: newStallRegister(), Clock: fixedClock{}},
+		"协议范围":  {Triggers: registeredFulfillmentRow(), Requests: fixture.handler, Stalls: newStallRegister(), Clock: fixedClock{}},
+		"请求编排":  {Triggers: registeredFulfillmentRow(), Agreements: trunkScope(), Stalls: newStallRegister(), Clock: fixedClock{}},
+		"发起停办册": {Triggers: registeredFulfillmentRow(), Agreements: trunkScope(), Requests: fixture.handler, Clock: fixedClock{}},
+		"时钟":    {Triggers: registeredFulfillmentRow(), Agreements: trunkScope(), Requests: fixture.handler, Stalls: newStallRegister()},
 	} {
 		if _, err := application.NewTriggerBuyEvaluationOnOccurrenceFormedHandler(deps); !errors.Is(err, application.ErrNilDependency) {
 			t.Fatalf("%s 缺席：err = %v", name, err)

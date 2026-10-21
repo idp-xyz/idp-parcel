@@ -52,8 +52,8 @@ var _ sainbox.RecordedSellEvaluationHandler = (*FormOnSellEvaluationRecordedAdap
 
 // HandleRecordedSellEvaluation 译引用 → 取评价 → 分辨方向 → 交形成编排 → 折结果。
 //
-// 入账（答 nil）的各格：不是 SELL·CUSTOMER_CHARGE、评价没有回指、请求记下了结论或早有结论、评价失败而请求停在
-// `已提交`——都是这一封信的定局，重投同一封不会变。ErrUntranslatableAnswer 与编排上抛的错误原样交回，落
+// 入账（答 nil）的各格：不是 SELL·CUSTOMER_CHARGE、评价没有回指、请求记下了结论（含停下连同停因）或早有结论——都是
+// 这一封信的定局，重投同一封不会变；停下的请求等「参数已登记」或运营续办另起下一代（ADR-0229）。ErrUntranslatableAnswer 与编排上抛的错误原样交回，落
 // publish_failed：提供方形状变了，或两侧说法矛盾（回指的请求不在册上、结算币种对不上），重投不自愈。
 func (adapter *FormOnSellEvaluationRecordedAdapter) HandleRecordedSellEvaluation(
 	ctx context.Context,
@@ -89,8 +89,7 @@ func (adapter *FormOnSellEvaluationRecordedAdapter) HandleRecordedSellEvaluation
 	switch result.Outcome() {
 	case saapplication.EstimatedCustomerChargeConcluded,
 		saapplication.EstimatedCustomerChargeAlreadyConcluded,
-		saapplication.EstimatedCustomerChargeNoSellRequest,
-		saapplication.EstimatedCustomerChargeEvaluationNotFormed:
+		saapplication.EstimatedCustomerChargeNoSellRequest:
 		return nil
 	case saapplication.EstimatedCustomerChargeUndecided:
 		return fmt.Errorf("%w: evaluation %s: %s: %v", ErrSellChargeFormationUndecided, reference, result.UndecidedReason(), result.UndecidedCause())

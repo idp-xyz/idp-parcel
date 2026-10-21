@@ -41,6 +41,9 @@ type SellEvaluationRequestNaturalKey struct {
 //
 // Source 是来源事实引用：`有效网络收寄已采用`那一格是收寄采用键，`有效交付已终局`那一格是终局键。两种键在本上下文
 // 都只是引用，所以共一个类型；它是计价输入的来源事实，不是评价本身（SourceFactReference 头注）。
+//
+// Generation、Previous 与 ResumeBasis 是代次三格（ADR-0229 决定一）：同一件包裹在同一时点的请求按代次排成一条链，
+// 续办出来的那一代指名前一代并带凭的依据。零值的 Generation 当首代读。
 type SellEvaluationRequestSpec struct {
 	ID                 SellEvaluationRequestID
 	Parcel             ParcelReference
@@ -50,6 +53,9 @@ type SellEvaluationRequestSpec struct {
 	Moment             ParcelBillingMoment
 	Source             SourceFactReference
 	PricingBasisAt     time.Time
+	Generation         int
+	Previous           SellEvaluationRequestID
+	ResumeBasis        ResumeBasis
 }
 
 // SellEvaluationRequest 是结算向 parcel-pricing 提出的一次 SELL·客户费用评价：哪件包裹、哪个结算账户与它的结算币种、
@@ -63,6 +69,9 @@ type SellEvaluationRequest struct {
 	pricingScope       EstimatePricingScope
 	source             SourceFactReference
 	pricingBasisAt     time.Time
+	generation         int
+	previous           SellEvaluationRequestID
+	resumeBasis        ResumeBasis
 }
 
 // SubmitSellEvaluationRequest 形成一份 SELL 评价请求。每一格都必备：计价按（租户、计价范围、SELL、客户费用、计价基准
@@ -73,6 +82,13 @@ func SubmitSellEvaluationRequest(spec SellEvaluationRequestSpec) (SellEvaluation
 		!spec.PricingScope.valid() || !spec.Moment.valid() || !spec.Source.valid() || spec.PricingBasisAt.IsZero() {
 		return SellEvaluationRequest{}, ErrInvalidSellEvaluationRequest
 	}
+	generation, err := normalizeLineage(spec.Generation, spec.Previous.valid(), spec.ResumeBasis)
+	if err != nil {
+		return SellEvaluationRequest{}, fmt.Errorf("%w: %w", ErrInvalidSellEvaluationRequest, err)
+	}
+	if spec.Previous.valid() && spec.Previous == spec.ID {
+		return SellEvaluationRequest{}, fmt.Errorf("%w: a request cannot follow itself", ErrInvalidSellEvaluationRequest)
+	}
 	return SellEvaluationRequest{
 		id:                 spec.ID,
 		naturalKey:         SellEvaluationRequestNaturalKey{Parcel: spec.Parcel, Moment: spec.Moment},
@@ -81,7 +97,30 @@ func SubmitSellEvaluationRequest(spec SellEvaluationRequestSpec) (SellEvaluation
 		pricingScope:       spec.PricingScope,
 		source:             spec.Source,
 		pricingBasisAt:     spec.PricingBasisAt.UTC(),
+		generation:         generation,
+		previous:           spec.Previous,
+		resumeBasis:        spec.ResumeBasis,
 	}, nil
+}
+
+// Resume 由这一份停下的请求起下一代（ADR-0229 决定二）：问的还是同一个问题——同一件包裹、同一结算账户与结算币种、同一
+// 计价范围、同一时点、同一来源事实、同一计价基准时点——只换标识、代次加一、指名本份为前一代、记下凭的依据。不重走
+// 包裹到结算账户那条链：账户与采用都是不可变元组，重走答的还是同一组；换了的只是计价或映射那一侧的登记。本份不被
+// 改写。
+func (request SellEvaluationRequest) Resume(id SellEvaluationRequestID, basis ResumeBasis) (SellEvaluationRequest, error) {
+	return SubmitSellEvaluationRequest(SellEvaluationRequestSpec{
+		ID:                 id,
+		Parcel:             request.naturalKey.Parcel,
+		Account:            request.account,
+		SettlementCurrency: request.settlementCurrency,
+		PricingScope:       request.pricingScope,
+		Moment:             request.naturalKey.Moment,
+		Source:             request.source,
+		PricingBasisAt:     request.pricingBasisAt,
+		Generation:         request.generation + 1,
+		Previous:           request.id,
+		ResumeBasis:        basis,
+	})
 }
 
 func (request SellEvaluationRequest) ID() SellEvaluationRequestID { return request.id }
@@ -106,9 +145,21 @@ func (request SellEvaluationRequest) NaturalKey() SellEvaluationRequestNaturalKe
 	return request.naturalKey
 }
 
+// Generation 是这份请求在它自然键上的代次，从一起数。
+func (request SellEvaluationRequest) Generation() int { return request.generation }
+
+// Previous 交回前一代的标识；首代第二个返回值为假。
+func (request SellEvaluationRequest) Previous() (SellEvaluationRequestID, bool) {
+	return request.previous, request.previous.valid()
+}
+
+// ResumeBasis 交回这一代凭的续办依据；原始那一拍发起的首代没有。
+func (request SellEvaluationRequest) ResumeBasis() ResumeBasis { return request.resumeBasis }
+
 // SellEvaluationRequestState 是请求册上的状态格（ADR-0190 决定五）。登记时是`已提交`；评价回来之后由形成那一半改记
 // 其余各格之一：形成了预估客户费用是`已形成`，映不全或映到多个费用项目是`待判断`（AT-SA-174），评价不可计价或
-// 适用冲突各记一格。状态留在册上，入账不重投之后仍可查。
+// 适用冲突各记一格；计价没形成评价、或形成的是一份失败的评价，记`未形成`（ADR-0229 决定三）。除`已提交`与`已形成`
+// 外，每一格都带停因，状态是停因的粗分。状态留在册上，入账不重投之后仍可查。
 type SellEvaluationRequestState uint8
 
 const (
@@ -118,6 +169,7 @@ const (
 	SellRequestPendingJudgment
 	SellRequestUnratable
 	SellRequestConflict
+	SellRequestNotFormed
 )
 
 func (state SellEvaluationRequestState) String() string {
@@ -132,6 +184,8 @@ func (state SellEvaluationRequestState) String() string {
 		return "UNRATABLE"
 	case SellRequestConflict:
 		return "CONFLICT"
+	case SellRequestNotFormed:
+		return "NOT_FORMED"
 	default:
 		return ""
 	}
@@ -148,6 +202,7 @@ func (state SellEvaluationRequestState) RecordsFormedCharge() bool {
 func SellEvaluationRequestStateFromName(name string) (SellEvaluationRequestState, error) {
 	for _, candidate := range []SellEvaluationRequestState{
 		SellRequestSubmitted, SellRequestFormed, SellRequestPendingJudgment, SellRequestUnratable, SellRequestConflict,
+		SellRequestNotFormed,
 	} {
 		if candidate.String() == name {
 			return candidate, nil
@@ -170,30 +225,67 @@ func (request SellEvaluationRequest) EstimatedCustomerChargeID() CustomerChargeI
 	return CustomerChargeID{requiredValue{value: estimatedCustomerChargePrefix + "-" + request.id.String()}}
 }
 
-// SellEvaluationRequestConclusion 是形成那一半给一份请求下的结论：状态格，以及只在`已形成`时才有的那笔预估客户
-// 费用标识。两格成对构造——拆开写就能写出「已形成却没有费用」或「待判断却带着费用」，库上的 CHECK 守的是同一条，
-// 这里让它在写之前就过不了构造。`已提交`不是结论：那是登记时的起点，形成那一半不会把请求改回去。
-type SellEvaluationRequestConclusion struct {
-	state  SellEvaluationRequestState
-	charge CustomerChargeID
+// sellRequestStateOf 是停因到 SELL 请求册状态格的粗分：三种`待判断`（评价待判断、卡没声明金额取整、映射不全）与
+// 迁移留下的那一格并作`待判断`，不可计价与评价冲突各一格，计价没形成评价与评价失败并作`未形成`。BUY 一侧独有的
+// 停因与发起之前的停因在这本册上不出现，交回无效。
+func sellRequestStateOf(cause EvaluationStopCause) SellEvaluationRequestState {
+	if !cause.OccursIn(SellEvaluationDirection) || cause.Stage() == StopBeforeRequest {
+		return SellEvaluationRequestStateInvalid
+	}
+	switch cause {
+	case StopEvaluationPendingJudgment, StopAmountRoundingUndeclared, StopFeeItemMappingIncomplete,
+		StopPendingJudgmentCauseUnrecorded:
+		return SellRequestPendingJudgment
+	case StopEvaluationUnratable:
+		return SellRequestUnratable
+	case StopEvaluationConflict:
+		return SellRequestConflict
+	case StopEvaluationFailed, StopPriceCardNotConfigured, StopPriceCardApplicabilityConflict, StopPricingInputUnavailable:
+		return SellRequestNotFormed
+	default:
+		return SellEvaluationRequestStateInvalid
+	}
 }
 
-// NewSellEvaluationRequestConclusion 收状态格与费用标识。`已形成`必须带费用标识，`待判断`、`不可计价`、`冲突`必须
-// 不带（传零值）；`已提交`与词表外的状态一律拒。
-func NewSellEvaluationRequestConclusion(
-	state SellEvaluationRequestState,
-	charge CustomerChargeID,
-) (SellEvaluationRequestConclusion, error) {
-	switch state {
-	case SellRequestFormed, SellRequestPendingJudgment, SellRequestUnratable, SellRequestConflict:
-	default:
-		return SellEvaluationRequestConclusion{}, fmt.Errorf("%w: %q is not a conclusion", ErrInvalidSellEvaluationRequest, state.String())
-	}
-	if state.RecordsFormedCharge() != charge.valid() {
-		return SellEvaluationRequestConclusion{}, fmt.Errorf("%w: %s with charge %q", ErrInvalidSellEvaluationRequest, state, charge.String())
-	}
-	return SellEvaluationRequestConclusion{state: state, charge: charge}, nil
+// SellRequestStateOf 是同一张粗分表的导出口，供适配器重建册上的行时核状态格与停因配不配。
+func SellRequestStateOf(cause EvaluationStopCause) SellEvaluationRequestState {
+	return sellRequestStateOf(cause)
 }
+
+// SellEvaluationRequestConclusion 是给一份请求下的结论：`已形成`连同那笔预估客户费用的标识，或停下连同停因。状态格由
+// 停因推出，不另收——分开收就能写出「不可计价却记着映射不全」。库上的 CHECK 守同一组配对。`已提交`不是结论：那是
+// 登记时的起点，结论不会把请求改回去。
+type SellEvaluationRequestConclusion struct {
+	state     SellEvaluationRequestState
+	charge    CustomerChargeID
+	cause     EvaluationStopCause
+	stoppedAt time.Time
+}
+
+// NewFormedSellEvaluationRequestConclusion 是`已形成`那一格，必须带费用标识。
+func NewFormedSellEvaluationRequestConclusion(charge CustomerChargeID) (SellEvaluationRequestConclusion, error) {
+	if !charge.valid() {
+		return SellEvaluationRequestConclusion{}, fmt.Errorf("%w: a formed conclusion needs its charge", ErrInvalidSellEvaluationRequest)
+	}
+	return SellEvaluationRequestConclusion{state: SellRequestFormed, charge: charge}, nil
+}
+
+// NewStoppedSellEvaluationRequestConclusion 是停下的那几格：停因必须是能出现在 SELL 请求册上的计价或采用那两段之一。
+// 迁移留下的那一格不收：它只说「当时没记」，编排此刻知道是哪一种，就记哪一种。stoppedAt 是记下停因的时刻，续办队列
+// 按它定先后。
+func NewStoppedSellEvaluationRequestConclusion(cause EvaluationStopCause, stoppedAt time.Time) (SellEvaluationRequestConclusion, error) {
+	state := sellRequestStateOf(cause)
+	if state == SellEvaluationRequestStateInvalid || cause == StopPendingJudgmentCauseUnrecorded {
+		return SellEvaluationRequestConclusion{}, fmt.Errorf("%w: %q is not a stop cause of a sell request", ErrInvalidSellEvaluationRequest, cause.String())
+	}
+	if stoppedAt.IsZero() {
+		return SellEvaluationRequestConclusion{}, fmt.Errorf("%w: a stop needs its moment", ErrInvalidSellEvaluationRequest)
+	}
+	return SellEvaluationRequestConclusion{state: state, cause: cause, stoppedAt: stoppedAt.UTC()}, nil
+}
+
+// StoppedAt 是记下停因的时刻；`已形成`为零值。
+func (conclusion SellEvaluationRequestConclusion) StoppedAt() time.Time { return conclusion.stoppedAt }
 
 func (conclusion SellEvaluationRequestConclusion) State() SellEvaluationRequestState {
 	return conclusion.state
@@ -204,7 +296,16 @@ func (conclusion SellEvaluationRequestConclusion) FormedCharge() (CustomerCharge
 	return conclusion.charge, conclusion.state.RecordsFormedCharge()
 }
 
-// Same 比两份结论的状态格与费用标识。册上已是同一份结论时，再记一次是重放。
-func (conclusion SellEvaluationRequestConclusion) Same(state SellEvaluationRequestState, charge CustomerChargeID) bool {
-	return conclusion.state == state && conclusion.charge.String() == charge.String()
+// StopCause 交回停下时的停因；`已形成`第二个返回值为假。
+func (conclusion SellEvaluationRequestConclusion) StopCause() (EvaluationStopCause, bool) {
+	return conclusion.cause, conclusion.cause != EvaluationStopCauseInvalid
+}
+
+// Same 比两份结论的状态格、费用标识与停因。册上已是同一份结论时，再记一次是重放。
+func (conclusion SellEvaluationRequestConclusion) Same(
+	state SellEvaluationRequestState,
+	charge CustomerChargeID,
+	cause EvaluationStopCause,
+) bool {
+	return conclusion.state == state && conclusion.charge.String() == charge.String() && conclusion.cause == cause
 }

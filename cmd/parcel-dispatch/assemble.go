@@ -548,7 +548,9 @@ var dutyPaymentVerificationUndecidedSentinels = []error{
 // 不在名单里的：
 //   - 入账定局的各格不是错误，处理方答 nil——不是 BUY·SUPPLIER_COST 的评价（SELL 那一半由扇出的另一路接）、没有
 //     回指的评价、预期成本已采用（含重放）或同三维已有首版、评价采用不了（不可计价、评价冲突、待判断、未形成、跨币种
-//     无换算步骤、卡没声明金额取整）。评价不可变，计价对同一份请求也不再形成第二份评价，重投这一封不会变。
+//     无换算步骤、卡没声明金额取整）。评价不可变，计价对同一份请求也不再形成第二份评价，重投这一封不会变；采用不了的
+//     那几格在 BUY 请求册上记停因，补登之后由「参数已登记」另起下一代（ADR-0229）。记停因时请求册答不出，仍折进
+//     ErrSupplierCostFormationUndecided 重投。
 //   - sapricing.ErrUntranslatableAnswer、sapricing.ErrUntranslatableReference——提供方形状变了或引用坏了，重投不自愈。
 //   - 形成编排上抛的矛盾（回指的请求不在 BUY 请求册上、派生版本上已有另一份内容、刚读到`已完成`的评价形成时却
 //     未受理），落 publish_failed 等人看。
@@ -565,9 +567,9 @@ var buyEvaluationRecordedUndecidedSentinels = []error{
 //
 // 不在名单里的：
 //   - 入账定局的各格不是错误，处理方答 nil——不是 SELL·客户费用的评价、没有回指的评价、请求记下了结论（`已形成`、
-//     `待判断`、`不可计价`、`冲突`）或早有结论、评价失败而请求停在`已提交`。`待判断`里含费用行映不全或映到多个费用项目
-//     与卡没声明金额取整：缺的是租户取值（映射行、卡上的取整声明），评价不可变，重投这一封不会变；补登之后这一份也
-//     不回补（ADR-0190 越权风险点 3）。
+//     `待判断`、`不可计价`、`冲突`、`未形成`）或早有结论。`待判断`里含费用行映不全或映到多个费用项目与卡没声明金额
+//     取整：缺的是租户取值（映射行、卡上的取整声明），评价不可变，重投这一封不会变；结论连同停因记在请求册上，补登
+//     之后由「参数已登记」另起下一代（ADR-0229）。
 //   - sapricing.ErrUntranslatableAnswer、sapricing.ErrUntranslatableReference——提供方形状变了或引用坏了，重投不自愈。
 //   - 形成编排上抛的矛盾（回指的请求不在册上、结算币种对不上请求快照、请求册上另有结论、刚读到`已完成`的评价形成时
 //     却未受理），落 publish_failed 等人看。
@@ -579,26 +581,17 @@ var sellEvaluationRecordedUndecidedSentinels = []error{
 // （sa-cc/11 裁决 5）登记的未决哨兵，每一枚是入口停在的一格「等谁」，恢复动作各不相同，所以分开列：
 //   - ppsettlement.ErrEvaluationRequestNotVisible——信封所指的请求在 SA 还读不回（请求与信封同事务落库，读不回
 //     只剩可见性滞后），或读口自己答不出；续办，重投会改变结果。
-//   - ppsettlement.ErrPriceCardNotConfigured——（租户、范围、方向、目的、时点）下没有价卡。缺的是价卡，实例半边
-//     （PAR-SET-03）；等租户登记一张，本组合根不替它配、不种默认卡。
-//   - ppsettlement.ErrPriceCardApplicabilityConflict——多于一版价卡同时适用，交人裁；不挑最新、不挑先登记的。
-//   - ppsettlement.ErrPricingInputUnavailable——造不出计价输入快照（裁决 4）：包裹主体 / 分区 / 计费重量三样各归
-//     一只本上下文今天没有的读口（TF 发生项成员对象、NO / PS 实重尺寸、PS 邮编路线），入口点名之后停在这里。
-//     按「未确认规则保持显式未决」：不猜不填不拿默认重量顶、零写入；恢复动作是等提供方那一侧的只读口接上
-//     ——后继票，不是传输。今天每一封 BUY 请求信封都停在形成之前；到得了价卡解析的那些，范围下没卡停
-//     ErrPriceCardNotConfigured、多卡停 ErrPriceCardApplicabilityConflict、有恰一张卡的停在
-//     ErrPricingInputUnavailable——真库装配例证的正例断的正是 ErrPricingInputUnavailable。
-//   - ppsettlement.ErrEvaluationFormationUndecided——依赖故障（回指读口 / 铸造口 / 评价库），形成与否未知；
-//     含同租户同回指第二份撞迁移 0010 唯一索引那一格，重投按回指命中`已存在`定稿。
+//   - ppsettlement.ErrEvaluationFormationUndecided——依赖故障（回指读口 / 铸造口 / 评价库 / 交「评价未形成」信封），
+//     形成与否未知；含同租户同回指第二份撞迁移 0010 唯一索引那一格，重投按回指命中`已存在`定稿。
+//
+// 不在名单里、入账的：入口答不出评价的三格——范围下没卡、多卡同时适用、造不出计价输入快照。重投不会让它们变好，
+// 处理方经「评价未形成」信封交给 SA 记停因后答 nil（ADR-0229 决定三）；补登之后由 SA 按停因另起下一代请求。
 //
 // 不在名单里、落 publish_failed 的：ppsettlement.ErrUntranslatableReference（引用坏了，编程错误）、
 // ppsettlement.ErrUntranslatableAnswer（SA 记录译不成 PP 命令 / 译出的命令被入口答未受理——两侧词汇表分歧，
-// 重投不会变好）、入口上抛的结构性错误（封闭集之外的结果、替身装错）。
+// 重投不会变好）、「评价未形成」信封被框架确定性拒收、入口上抛的结构性错误（封闭集之外的结果、替身装错）。
 var evaluationRequestSubmittedUndecidedSentinels = []error{
 	ppsettlement.ErrEvaluationRequestNotVisible,
-	ppsettlement.ErrPriceCardNotConfigured,
-	ppsettlement.ErrPriceCardApplicabilityConflict,
-	ppsettlement.ErrPricingInputUnavailable,
 	ppsettlement.ErrEvaluationFormationUndecided,
 }
 
@@ -628,21 +621,13 @@ var sellEvaluationOnFinalOutcomeUndecidedSentinels = []error{
 // sellEvaluationRequestSubmittedUndecidedSentinels 是 SA SELL 评价请求已提交信封 → PP「按评价请求形成评价」这条线
 // （ADR-0190 决定四）登记的未决哨兵。处理方与 BUY 那一路共用同一套哨兵与折法，各格的恢复动作也同：
 //   - ErrEvaluationRequestNotVisible——SELL 请求在 SA 还读不回（请求与信封同事务落库），续办。
-//   - ErrPriceCardNotConfigured——（租户、计价范围、SELL、客户费用、计价基准时点）下没有在用价卡。缺的是价卡，租户
-//     取值；登了卡之后重投就形成，本组合根不替它配、不种默认卡。
-//   - ErrPriceCardApplicabilityConflict——多于一版同时在用，交人裁，不挑。
-//   - ErrPricingInputUnavailable——按包裹造不出快照：包裹不在已接受委托上、没有申报重量、单位在计价单位表外、没有
-//     收件邮编。缺的是小包托运那一侧的事实，多半不会自愈；重投只在补正赶在失败预算耗尽之前时才会变，耗尽之后
-//     信封留着原因，SA 那份请求停在「已提交」。
 //   - ErrEvaluationFormationUndecided——依赖故障，形成与否未知。
 //
-// 落 publish_failed 的与 BUY 那一路同：引用坏了、SELL 请求记录译不成命令（例如结算币种不在计价的币种形里）、入口答
-// 未受理或上抛结构性错误。
+// 入口答不出评价的三格（没有在用价卡、多于一版同时在用、按包裹造不出快照）与 BUY 那一路同样经「评价未形成」交给 SA、
+// 入账。落 publish_failed 的与 BUY 那一路同：引用坏了、SELL 请求记录译不成命令（例如结算币种不在计价的币种形里）、
+// 入口答未受理或上抛结构性错误。
 var sellEvaluationRequestSubmittedUndecidedSentinels = []error{
 	ppsettlement.ErrEvaluationRequestNotVisible,
-	ppsettlement.ErrPriceCardNotConfigured,
-	ppsettlement.ErrPriceCardApplicabilityConflict,
-	ppsettlement.ErrPricingInputUnavailable,
 	ppsettlement.ErrEvaluationFormationUndecided,
 }
 
@@ -655,7 +640,8 @@ var sellEvaluationRequestSubmittedUndecidedSentinels = []error{
 //
 // 不在名单里的：
 //   - 入账定局的各格不是错误，处理方答 nil——已发起（含已存在）、没登这个原因、登了却没登费用项目、修订版不经本路发起。
-//     未配置缺的是租户取值，补登之后这一份不回补。
+//     未配置缺的是租户取值，这一拍记进 BUY 发起停办册，补登触发册之后由「参数已登记」续办（ADR-0229）；记不下折进
+//     ErrBuyEvaluationTriggerUndecided 重投。
 //   - saapplication.ErrOccurrenceAgreementNotRegistered——发生项上的协议 PC 不认，两侧矛盾，落 publish_failed 等人看。
 //   - SA 的 ports.ErrSupplierAgreementScopeUntranslatable——协议范围读口答出确定性坏答案（译不过去、指称比中不止一版），
 //     编排原样上抛，不折进 ErrBuyEvaluationTriggerUndecided。
@@ -2399,6 +2385,8 @@ func formSupplierExpectedCostOnBuyEvaluationConsumer(
 			Registry:    costs,
 			Clock:       clock,
 		}),
+		Stops: requests,
+		Clock: clock,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: form requested supplier expected cost: %w", err)
@@ -2519,7 +2507,11 @@ func formEvaluationOnEvaluationRequestConsumer(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: settlement evaluation request view: %w", err)
 	}
-	processing, err := ppsettlement.NewFormOnEvaluationRequestSubmittedAdapter(requests, form, evaluationRequestFormationEvidence)
+	unformed, err := pppostgres.NewOutboxEvaluationResumptionHandoffs(db, outboxStore, clock)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: evaluation request unformed handoff: %w", err)
+	}
+	processing, err := ppsettlement.NewFormOnEvaluationRequestSubmittedAdapter(requests, form, unformed, evaluationRequestFormationEvidence)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: form on evaluation request submitted: %w", err)
 	}
@@ -2563,7 +2555,11 @@ func formEvaluationOnSellEvaluationRequestConsumer(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: settlement sell evaluation request view: %w", err)
 	}
-	processing, err := ppsettlement.NewFormOnSellEvaluationRequestSubmittedAdapter(requests, form, evaluationRequestFormationEvidence)
+	unformed, err := pppostgres.NewOutboxEvaluationResumptionHandoffs(db, outboxStore, clock)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: evaluation request unformed handoff: %w", err)
+	}
+	processing, err := ppsettlement.NewFormOnSellEvaluationRequestSubmittedAdapter(requests, form, unformed, evaluationRequestFormationEvidence)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: form on sell evaluation request submitted: %w", err)
 	}
@@ -2686,6 +2682,10 @@ func sellEvaluationRequester(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: sell evaluation request handoff: %w", err)
 	}
+	stalls, err := sapostgres.NewEvaluationResumptions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: sell evaluation initiation stalls: %w", err)
+	}
 	requester, err := saapplication.NewRequestSellEvaluationOnParcelMomentHandler(saapplication.RequestSellEvaluationOnParcelMomentDeps{
 		Resolutions: resolutions,
 		Terms:       terms,
@@ -2694,6 +2694,7 @@ func sellEvaluationRequester(
 		Registry:    requests,
 		Identity:    identities,
 		Downstream:  handoff,
+		Stalls:      stalls,
 		Clock:       clock,
 	})
 	if err != nil {
@@ -2766,46 +2767,9 @@ func requestBuyEvaluationOnChargeOccurrenceFormedConsumer(
 	inboxStore *inbox.Store,
 	clock systemClock,
 ) (dispatch.Consumer, error) {
-	registry, err := sapostgres.NewEvaluationRequests(db)
+	trigger, err := buyEvaluationOnOccurrenceTrigger(db, outboxStore, clock)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: evaluation requests for charge occurrences: %w", err)
-	}
-	identities, err := saidentity.NewEvaluationRequestIdentities()
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: evaluation request identities for charge occurrences: %w", err)
-	}
-	handoff, err := sapostgres.NewOutboxEvaluationRequestHandoff(db, outboxStore, clock)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: evaluation request handoff for charge occurrences: %w", err)
-	}
-	requests, err := saapplication.NewRequestBuyEvaluationHandler(saapplication.RequestBuyEvaluationDeps{
-		Registry:   registry,
-		Identity:   identities,
-		Downstream: handoff,
-		Clock:      clock,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: request buy evaluation for charge occurrences: %w", err)
-	}
-	triggers, err := sapostgres.NewBuyEvaluationTriggers(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: buy evaluation triggers: %w", err)
-	}
-	agreementScopes, err := pcpostgres.NewSupplierAgreementScopes(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: supplier agreement scopes: %w", err)
-	}
-	scopes, err := sapartycommercial.NewSupplierAgreementScope(agreementScopes)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: supplier agreement scope for buy evaluation: %w", err)
-	}
-	trigger, err := saapplication.NewTriggerBuyEvaluationOnOccurrenceFormedHandler(saapplication.TriggerBuyEvaluationOnOccurrenceFormedDeps{
-		Triggers:   triggers,
-		Agreements: scopes,
-		Requests:   requests,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: trigger buy evaluation on charge occurrence formed: %w", err)
+		return nil, err
 	}
 	occurrences, err := tfpostgres.NewChargeOccurrences(db)
 	if err != nil {

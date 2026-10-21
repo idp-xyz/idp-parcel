@@ -31,6 +31,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	adapter "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/sourcefeed"
@@ -158,6 +159,15 @@ func assemble(db *bentopg.DB, sourceRoot string, clock ports.Clock, observer por
 	if err != nil {
 		return assembly{}, fmt.Errorf("构造连接器登记表：%w", err)
 	}
+	// 免复核的一版由连接器身份代写通过、那一刻起在用，与复核行同一笔事务交「参数已登记」（ADR-0229 决定五）。
+	outboxStore, err := outbox.NewStore(db)
+	if err != nil {
+		return assembly{}, fmt.Errorf("构造 Outbox Store：%w", err)
+	}
+	registered, err := adapter.NewOutboxEvaluationResumptionHandoffs(db, outboxStore, clock)
+	if err != nil {
+		return assembly{}, fmt.Errorf("构造参数已登记交接口：%w", err)
+	}
 	return assembly{
 		feed: application.NewFeedReferenceSeriesHandler(application.FeedReferenceSeriesDeps{
 			Bindings:   bindings,
@@ -169,6 +179,7 @@ func assemble(db *bentopg.DB, sourceRoot string, clock ports.Clock, observer por
 			Reviews:    reviews,
 			Clock:      clock,
 			Observer:   observer,
+			Registered: registered,
 		}),
 		bindings: application.NewRegisterSourceConnectorBindingHandler(application.RegisterSourceConnectorBindingDeps{Bindings: bindings}),
 	}, nil

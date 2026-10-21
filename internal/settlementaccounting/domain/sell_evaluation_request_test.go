@@ -130,6 +130,7 @@ func TestASellEvaluationRequestMissingAnyCellIsNotFormed(t *testing.T) {
 }
 
 // Covers: ADR-0190 决定五的状态格——登记时`已提交`，其余各格由形成那一半记；只有`已形成`带费用标识；词表外的拒。
+// `未形成`一格由 ADR-0229 决定三加进来。
 func TestTheSellEvaluationRequestStateIsAClosedSetWhereOnlyFormedCarriesACharge(t *testing.T) {
 	for name, want := range map[string]domain.SellEvaluationRequestState{
 		"SUBMITTED":        domain.SellRequestSubmitted,
@@ -137,6 +138,7 @@ func TestTheSellEvaluationRequestStateIsAClosedSetWhereOnlyFormedCarriesACharge(
 		"PENDING_JUDGMENT": domain.SellRequestPendingJudgment,
 		"UNRATABLE":        domain.SellRequestUnratable,
 		"CONFLICT":         domain.SellRequestConflict,
+		"NOT_FORMED":       domain.SellRequestNotFormed,
 	} {
 		got, err := domain.SellEvaluationRequestStateFromName(name)
 		if err != nil || got != want || got.String() != name {
@@ -146,7 +148,7 @@ func TestTheSellEvaluationRequestStateIsAClosedSetWhereOnlyFormedCarriesACharge(
 			t.Fatalf("%s 带费用标识 = %v，只有已形成该带", name, got.RecordsFormedCharge())
 		}
 	}
-	for _, name := range []string{"", "NOT_FORMED", "formed", "COMPLETED"} {
+	for _, name := range []string{"", "STALLED", "formed", "COMPLETED"} {
 		if _, err := domain.SellEvaluationRequestStateFromName(name); !errors.Is(err, domain.ErrInvalidSellEvaluationRequest) {
 			t.Fatalf("状态 %q err = %v，想要拒", name, err)
 		}
@@ -184,39 +186,61 @@ func TestTheEstimatedCustomerChargeIDIsDerivedFromTheRequestIDAlone(t *testing.T
 	}
 }
 
-// Covers: 结论成对构造——`已形成`必带费用标识，`待判断`、`不可计价`、`冲突`必不带，`已提交`与零值不是结论。
-func TestASellEvaluationRequestConclusionPairsFormedWithItsChargeOnly(t *testing.T) {
+// Covers: 结论成对构造——`已形成`必带费用标识、不带停因；停下的各格由停因推出状态格，不带费用；`已提交`、零值与发起之前
+// 或 BUY 独有的停因都不是 SELL 请求的结论（ADR-0229 决定三）。
+func TestASellEvaluationRequestConclusionPairsFormedWithItsChargeAndStopsWithTheirCause(t *testing.T) {
 	charge := mustRef(t, domain.NewCustomerChargeID, "SELLCC-SELLREQ-SYN-1")
-	formed, err := domain.NewSellEvaluationRequestConclusion(domain.SellRequestFormed, charge)
+	formed, err := domain.NewFormedSellEvaluationRequestConclusion(charge)
 	if err != nil {
 		t.Fatalf("已形成带费用：%v", err)
 	}
 	if got, ok := formed.FormedCharge(); !ok || got != charge || formed.State() != domain.SellRequestFormed {
 		t.Fatalf("已形成结论 = %v / %v %v", formed.State(), got, ok)
 	}
-	if !formed.Same(domain.SellRequestFormed, charge) || formed.Same(domain.SellRequestPendingJudgment, domain.CustomerChargeID{}) {
-		t.Fatal("Same 没按状态与费用一起比")
+	if _, stopped := formed.StopCause(); stopped {
+		t.Fatal("已形成结论带了停因")
 	}
-	if _, err := domain.NewSellEvaluationRequestConclusion(domain.SellRequestFormed, domain.CustomerChargeID{}); !errors.Is(err, domain.ErrInvalidSellEvaluationRequest) {
+	if !formed.Same(domain.SellRequestFormed, charge, domain.EvaluationStopCauseInvalid) ||
+		formed.Same(domain.SellRequestPendingJudgment, domain.CustomerChargeID{}, domain.StopEvaluationPendingJudgment) {
+		t.Fatal("Same 没按状态、费用与停因一起比")
+	}
+	if _, err := domain.NewFormedSellEvaluationRequestConclusion(domain.CustomerChargeID{}); !errors.Is(err, domain.ErrInvalidSellEvaluationRequest) {
 		t.Fatalf("已形成却没有费用 err = %v，想要拒", err)
 	}
-	for _, state := range []domain.SellEvaluationRequestState{
-		domain.SellRequestPendingJudgment, domain.SellRequestUnratable, domain.SellRequestConflict,
+	for cause, state := range map[domain.EvaluationStopCause]domain.SellEvaluationRequestState{
+		domain.StopEvaluationPendingJudgment:      domain.SellRequestPendingJudgment,
+		domain.StopAmountRoundingUndeclared:       domain.SellRequestPendingJudgment,
+		domain.StopFeeItemMappingIncomplete:       domain.SellRequestPendingJudgment,
+		domain.StopEvaluationUnratable:            domain.SellRequestUnratable,
+		domain.StopEvaluationConflict:             domain.SellRequestConflict,
+		domain.StopEvaluationFailed:               domain.SellRequestNotFormed,
+		domain.StopPriceCardNotConfigured:         domain.SellRequestNotFormed,
+		domain.StopPriceCardApplicabilityConflict: domain.SellRequestNotFormed,
+		domain.StopPricingInputUnavailable:        domain.SellRequestNotFormed,
 	} {
-		conclusion, err := domain.NewSellEvaluationRequestConclusion(state, domain.CustomerChargeID{})
+		conclusion, err := domain.NewStoppedSellEvaluationRequestConclusion(cause, sellPricingBasisAt)
 		if err != nil {
-			t.Fatalf("%s 不带费用：%v", state, err)
+			t.Fatalf("%s：%v", cause, err)
 		}
 		if _, ok := conclusion.FormedCharge(); ok || conclusion.State() != state {
-			t.Fatalf("%s 结论交出了费用或换了状态", state)
+			t.Fatalf("%s 结论交出了费用或状态 = %s，want %s", cause, conclusion.State(), state)
 		}
-		if _, err := domain.NewSellEvaluationRequestConclusion(state, charge); !errors.Is(err, domain.ErrInvalidSellEvaluationRequest) {
-			t.Fatalf("%s 带了费用 err = %v，想要拒", state, err)
+		if got, ok := conclusion.StopCause(); !ok || got != cause || !conclusion.StoppedAt().Equal(sellPricingBasisAt) {
+			t.Fatalf("%s 结论的停因 = %s %v", cause, got, ok)
 		}
 	}
-	for _, state := range []domain.SellEvaluationRequestState{domain.SellRequestSubmitted, domain.SellEvaluationRequestStateInvalid} {
-		if _, err := domain.NewSellEvaluationRequestConclusion(state, domain.CustomerChargeID{}); !errors.Is(err, domain.ErrInvalidSellEvaluationRequest) {
-			t.Fatalf("%q 当结论 err = %v，想要拒", state.String(), err)
+	for _, cause := range []domain.EvaluationStopCause{
+		domain.EvaluationStopCauseInvalid,
+		domain.StopSettlementAccountNotRegistered,
+		domain.StopConversionStepMissing,
+		domain.StopTriggerFeeItemNotRegistered,
+		domain.StopPendingJudgmentCauseUnrecorded,
+	} {
+		if _, err := domain.NewStoppedSellEvaluationRequestConclusion(cause, sellPricingBasisAt); !errors.Is(err, domain.ErrInvalidSellEvaluationRequest) {
+			t.Fatalf("%q 当 SELL 结论 err = %v，想要拒", cause.String(), err)
 		}
+	}
+	if _, err := domain.NewStoppedSellEvaluationRequestConclusion(domain.StopEvaluationFailed, time.Time{}); !errors.Is(err, domain.ErrInvalidSellEvaluationRequest) {
+		t.Fatalf("没有停下时刻 err = %v，想要拒", err)
 	}
 }

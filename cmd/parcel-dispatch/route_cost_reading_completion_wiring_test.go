@@ -147,7 +147,9 @@ func registerCostCard(t *testing.T, db *bentopg.DB, registration ppdomain.PriceC
 	if err != nil {
 		t.Fatalf("构造价卡库：%v", err)
 	}
-	handler := ppapplication.NewRegisterPriceCardHandler(ppapplication.RegisterPriceCardDeps{Catalog: cards})
+	handler := ppapplication.NewRegisterPriceCardHandler(ppapplication.RegisterPriceCardDeps{
+		Catalog: cards, Registered: pricingParameterHandoffForTest(t, db),
+	})
 	var outcome ppapplication.RegisterPriceCardOutcome
 	err = db.Transactor().WithinTransaction(t.Context(), func(ctx context.Context) error {
 		result, registerErr := handler.Handle(ctx, ppapplication.RegisterPriceCardCommand{Registration: registration})
@@ -190,7 +192,7 @@ func registerDemoZoneCatalogue(t *testing.T, db *bentopg.DB) {
 	}
 	decodeSeedDocument(t, readDemoPricingSeed(t, "reference-catalogue-zone-cn-sg-review.json"), &review)
 	reviewHandler := ppapplication.NewReviewReferenceCatalogueHandler(ppapplication.ReviewReferenceCatalogueDeps{
-		Versions: catalogues, Reviews: reviews, Clock: systemClock{},
+		Versions: catalogues, Reviews: reviews, Clock: systemClock{}, Registered: pricingParameterHandoffForTest(t, db),
 	})
 	var registered ppapplication.RegisterReferenceCatalogueOutcome
 	var reviewed ppapplication.ReviewReferenceCatalogueOutcome
@@ -236,7 +238,7 @@ func registerDemoExchangeRateSeries(t *testing.T, db *bentopg.DB) {
 	}
 	decodeSeedDocument(t, readDemoPricingSeed(t, "reference-series-fx-cny-sgd-review.json"), &review)
 	reviewHandler := ppapplication.NewReviewReferenceSeriesHandler(ppapplication.ReviewReferenceSeriesDeps{
-		Versions: versions, Reviews: reviews, Clock: systemClock{},
+		Versions: versions, Reviews: reviews, Clock: systemClock{}, Registered: pricingParameterHandoffForTest(t, db),
 	})
 	var registered ppapplication.RegisterReferenceSeriesOutcome
 	var reviewed ppapplication.ReviewReferenceSeriesOutcome

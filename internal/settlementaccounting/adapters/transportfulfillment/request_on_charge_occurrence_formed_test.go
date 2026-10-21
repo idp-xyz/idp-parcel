@@ -239,6 +239,19 @@ func (handoffDouble) HandOffEvaluationRequest(context.Context, saports.Evaluatio
 	return nil
 }
 
+// stallDouble 收下 BUY 发起停办、不读回：本包只证消费格，停办册的口径由真库用例钉。
+type stallDouble struct{}
+
+func (stallDouble) RecordBuyInitiationStall(context.Context, sadomain.TenantID, sadomain.BuyEvaluationInitiationStall) error {
+	return nil
+}
+
+func (stallDouble) FindBuyInitiationStall(
+	context.Context, sadomain.TenantID, sadomain.ChargeOccurrenceID, sadomain.OccurrenceVersion,
+) (sadomain.BuyEvaluationInitiationStall, bool, error) {
+	return sadomain.BuyEvaluationInitiationStall{}, false, nil
+}
+
 type fixedClock struct{}
 
 func (fixedClock) Now() time.Time { return occurredAt.Add(time.Minute) }
@@ -250,7 +263,9 @@ func realTrigger(t *testing.T, view triggerViewDouble, scopes scopeViewDouble) (
 		Registry: registry, Identity: identityDouble{}, Downstream: handoffDouble{}, Clock: fixedClock{},
 	}))
 	trigger := must[*saapplication.TriggerBuyEvaluationOnOccurrenceFormedHandler](t)(saapplication.NewTriggerBuyEvaluationOnOccurrenceFormedHandler(
-		saapplication.TriggerBuyEvaluationOnOccurrenceFormedDeps{Triggers: view, Agreements: scopes, Requests: requests}))
+		saapplication.TriggerBuyEvaluationOnOccurrenceFormedDeps{
+			Triggers: view, Agreements: scopes, Requests: requests, Stalls: stallDouble{}, Clock: fixedClock{},
+		}))
 	return trigger, registry
 }
 

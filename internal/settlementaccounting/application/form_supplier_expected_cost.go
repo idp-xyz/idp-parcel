@@ -63,8 +63,9 @@ func (outcome ExpectedCostOutcome) String() string {
 // ExpectedCostUndecidedReason 指名形成停在哪一步等谁。评价待判断等提供方以新评价补齐事实
 // 或汇率序列；评价未形成等重试；换算步骤缺席等提供方在评价内换算（AT-SA-177，不自行补算）；
 // 金额未声明等租户在价卡上声明金额取整、再评价一份（ADR-0107 决定五，不自行补取整）。
-// BuyEvaluationRequestViewUnavailable 只由按回指形成的那只外层编排交出（FormRequestedSupplierExpectedCostHandler），
-// 与本编排的各格同属「形成停在哪个依赖上」，所以同用一个词表，不另立第二套。
+// BuyEvaluationRequestViewUnavailable 与 BuyEvaluationRequestRegisterUnavailable 只由按回指形成的那只外层编排交出
+// （FormRequestedSupplierExpectedCostHandler：读不回请求、记不下停因），与本编排的各格同属「形成停在哪个依赖上」，所以
+// 同用一个词表，不另立第二套。
 type ExpectedCostUndecidedReason uint8
 
 const (
@@ -76,6 +77,7 @@ const (
 	ExpectedCostRegistryUnavailable
 	EvaluationAmountPrecisionUndeclared
 	BuyEvaluationRequestViewUnavailable
+	BuyEvaluationRequestRegisterUnavailable
 )
 
 func (reason ExpectedCostUndecidedReason) String() string {
@@ -94,6 +96,8 @@ func (reason ExpectedCostUndecidedReason) String() string {
 		return "EVALUATION_AMOUNT_PRECISION_UNDECLARED"
 	case BuyEvaluationRequestViewUnavailable:
 		return "BUY_EVALUATION_REQUEST_VIEW_UNAVAILABLE"
+	case BuyEvaluationRequestRegisterUnavailable:
+		return "BUY_EVALUATION_REQUEST_REGISTER_UNAVAILABLE"
 	default:
 		return ""
 	}

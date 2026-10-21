@@ -97,6 +97,8 @@ type FeedReferenceSeriesDeps struct {
 	// Observer 由装配方注入（ADR-0095 决定二形状）；nil 即不出声——受控批量口必须注入，抓取失败
 	// 的「一条可观察记录」是它承诺的。
 	Observer ports.SourceFeedObserver
+	// Registered 交给代写复核那一步：免复核的一版由连接器身份代写通过，那一刻起在用，同样要交「参数已登记」。
+	Registered ports.PricingParameterRegisteredHandoff
 }
 
 // FeedReferenceSeriesHandler 编排来源喂价（ADR-0099 决定六）：抓取 → 存放本体 → 转录 → 走同一
@@ -115,7 +117,7 @@ func NewFeedReferenceSeriesHandler(deps FeedReferenceSeriesDeps) *FeedReferenceS
 		deps:      deps,
 		registrar: NewRegisterReferenceSeriesHandler(RegisterReferenceSeriesDeps{Register: deps.Register}),
 		reviewer: NewReviewReferenceSeriesHandler(ReviewReferenceSeriesDeps{
-			Versions: deps.Versions, Reviews: deps.Reviews, Clock: deps.Clock,
+			Versions: deps.Versions, Reviews: deps.Reviews, Clock: deps.Clock, Registered: deps.Registered,
 		}),
 	}
 }

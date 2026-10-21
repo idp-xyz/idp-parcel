@@ -66,6 +66,7 @@ func (double *sellRequestRegisterDouble) RecordConclusion(
 	record := double.records[index]
 	record.State = conclusion.State()
 	record.FormedCharge, _ = conclusion.FormedCharge()
+	record.StopCause, _ = conclusion.StopCause()
 	double.records[index] = record
 	return ports.SellEvaluationRequestConcluded, nil
 }
@@ -227,11 +228,22 @@ func (fixture *estimatedChargeFixture) storedState(t *testing.T) ports.SellEvalu
 	return fixture.requests.records[fixture.tenant.String()+"/"+sellRequestID]
 }
 
-// assertPendingWithoutCharge 断言请求记了`待判断`、费用库零写入。
-func (fixture *estimatedChargeFixture) assertPendingWithoutCharge(t *testing.T, result application.EstimatedCustomerChargeResult, err error) {
+// assertPendingWithoutCharge 断言请求记了`待判断`连同这一种停因、费用库零写入。
+func (fixture *estimatedChargeFixture) assertPendingWithoutCharge(
+	t *testing.T,
+	result application.EstimatedCustomerChargeResult,
+	err error,
+	cause domain.EvaluationStopCause,
+) {
 	t.Helper()
 	if err != nil || result.Outcome() != application.EstimatedCustomerChargeConcluded || result.State() != domain.SellRequestPendingJudgment {
 		t.Fatalf("结果 = %s / %s err = %v，want 记待判断", result.Outcome(), result.State(), err)
+	}
+	if got, stopped := result.StopCause(); !stopped || got != cause {
+		t.Fatalf("停因 = %s %v，want %s", got, stopped, cause)
+	}
+	if stored := fixture.storedState(t); stored.StopCause != cause {
+		t.Fatalf("请求册停因 = %s，want %s", stored.StopCause, cause)
 	}
 	if _, has := result.Charge(); has {
 		t.Fatal("待判断带了费用标识")
@@ -284,7 +296,7 @@ func TestEveryChargeLineMappingToOneFeeItemFormsTheEstimatedCustomerCharge(t *te
 func TestAChargeLineWithoutAMappingLeavesTheRequestPendingJudgment(t *testing.T) {
 	fixture := newEstimatedChargeFixture(t, map[string]string{"BASE_FREIGHT": "SYN-FEE-FREIGHT"})
 	result, err := fixture.handle(t)
-	fixture.assertPendingWithoutCharge(t, result, err)
+	fixture.assertPendingWithoutCharge(t, result, err, domain.StopFeeItemMappingIncomplete)
 }
 
 // Covers: AT-SA-174——全部费用行映到多于一个费用项目，记`待判断`，不挑其中一个。
@@ -293,19 +305,19 @@ func TestChargeLinesMappingToTwoFeeItemsLeaveTheRequestPendingJudgment(t *testin
 		"BASE_FREIGHT": "SYN-FEE-FREIGHT", "REMOTE_AREA_SURCHARGE": "SYN-FEE-REMOTE",
 	})
 	result, err := fixture.handle(t)
-	fixture.assertPendingWithoutCharge(t, result, err)
+	fixture.assertPendingWithoutCharge(t, result, err, domain.StopFeeItemMappingIncomplete)
 }
 
 // Covers: 映射册上这一租户一行都没登（租户取值缺席）同样是`待判断`；评价没有费用行也映不到一个项目。
 func TestAnUnregisteredMappingOrNoChargeLinesLeaveTheRequestPendingJudgment(t *testing.T) {
 	fixture := newEstimatedChargeFixture(t, nil)
 	result, err := fixture.handle(t)
-	fixture.assertPendingWithoutCharge(t, result, err)
+	fixture.assertPendingWithoutCharge(t, result, err, domain.StopFeeItemMappingIncomplete)
 
 	empty := newEstimatedChargeFixture(t, map[string]string{"BASE_FREIGHT": "SYN-FEE-FREIGHT"})
 	empty.adoption.ChargeCodes = nil
 	result, err = empty.handle(t)
-	empty.assertPendingWithoutCharge(t, result, err)
+	empty.assertPendingWithoutCharge(t, result, err, domain.StopFeeItemMappingIncomplete)
 }
 
 // Covers: AT-SA-179、AT-SA-181——卡没声明金额取整（租户取值缺席，ADR-0107）记`待判断`，不重投；评价结算币种对不上请求
@@ -316,7 +328,7 @@ func TestAnUndeclaredAmountPrecisionLeavesThePendingJudgmentAndAForeignSettlemen
 	})
 	undeclared.adoption.Outcome = ports.SellEvaluationAmountUndeclared
 	result, err := undeclared.handle(t)
-	undeclared.assertPendingWithoutCharge(t, result, err)
+	undeclared.assertPendingWithoutCharge(t, result, err, domain.StopAmountRoundingUndeclared)
 
 	foreign := newEstimatedChargeFixture(t, map[string]string{
 		"BASE_FREIGHT": "SYN-FEE-FREIGHT", "REMOTE_AREA_SURCHARGE": "SYN-FEE-FREIGHT",
@@ -332,34 +344,29 @@ func TestAnUndeclaredAmountPrecisionLeavesThePendingJudgmentAndAForeignSettlemen
 }
 
 // Covers: AT-SA-180——ADR-0190 决定五：评价待判断、不可计价、冲突各照记一格，入账不重投，不形成任何费用（AT-SA-175）；
-// 评价失败时请求停在`已提交`、不改记（请求册不设「未形成」那一格）。
-func TestPendingUnratableAndConflictEvaluationsAreRecordedAndAFailedOneLeavesTheRequestSubmitted(t *testing.T) {
-	for outcome, want := range map[ports.SellEvaluationOutcome]domain.SellEvaluationRequestState{
-		ports.SellEvaluationPending:   domain.SellRequestPendingJudgment,
-		ports.SellEvaluationUnratable: domain.SellRequestUnratable,
-		ports.SellEvaluationConflict:  domain.SellRequestConflict,
+// 评价失败记`未形成`（ADR-0229 决定三，取代 ADR-0198 决定一「停在已提交」）。每一格都带停因，续办按它来。
+func TestPendingUnratableConflictAndFailedEvaluationsAreRecordedWithTheirStopCause(t *testing.T) {
+	for outcome, want := range map[ports.SellEvaluationOutcome]struct {
+		state domain.SellEvaluationRequestState
+		cause domain.EvaluationStopCause
+	}{
+		ports.SellEvaluationPending:   {domain.SellRequestPendingJudgment, domain.StopEvaluationPendingJudgment},
+		ports.SellEvaluationUnratable: {domain.SellRequestUnratable, domain.StopEvaluationUnratable},
+		ports.SellEvaluationConflict:  {domain.SellRequestConflict, domain.StopEvaluationConflict},
+		ports.SellEvaluationNotFormed: {domain.SellRequestNotFormed, domain.StopEvaluationFailed},
 	} {
 		fixture := newEstimatedChargeFixture(t, map[string]string{"BASE_FREIGHT": "SYN-FEE-FREIGHT"})
 		fixture.adoption.Outcome = outcome
 		fixture.adoption.ChargeCodes = nil
 		result, err := fixture.handle(t)
-		if err != nil || result.Outcome() != application.EstimatedCustomerChargeConcluded || result.State() != want {
-			t.Fatalf("%s：结果 = %s / %s err = %v，want 记 %s", outcome, result.Outcome(), result.State(), err, want)
+		if err != nil || result.Outcome() != application.EstimatedCustomerChargeConcluded || result.State() != want.state {
+			t.Fatalf("%s：结果 = %s / %s err = %v，want 记 %s", outcome, result.Outcome(), result.State(), err, want.state)
 		}
-		if stored := fixture.storedState(t); stored.State != want || len(fixture.charges.saved) != 0 || len(fixture.mappings.asked) != 0 {
-			t.Fatalf("%s：请求册 = %s，费用 %d 笔，问映射 %v", outcome, stored.State, len(fixture.charges.saved), fixture.mappings.asked)
+		stored := fixture.storedState(t)
+		if stored.State != want.state || stored.StopCause != want.cause || len(fixture.charges.saved) != 0 || len(fixture.mappings.asked) != 0 {
+			t.Fatalf("%s：请求册 = %s / %s，费用 %d 笔，问映射 %v", outcome, stored.State, stored.StopCause,
+				len(fixture.charges.saved), fixture.mappings.asked)
 		}
-	}
-
-	failed := newEstimatedChargeFixture(t, map[string]string{"BASE_FREIGHT": "SYN-FEE-FREIGHT"})
-	failed.adoption.Outcome = ports.SellEvaluationNotFormed
-	failed.adoption.ChargeCodes = nil
-	result, err := failed.handle(t)
-	if err != nil || result.Outcome() != application.EstimatedCustomerChargeEvaluationNotFormed {
-		t.Fatalf("失败评价：结果 = %s err = %v，want 停在已提交", result.Outcome(), err)
-	}
-	if stored := failed.storedState(t); stored.State != domain.SellRequestSubmitted || len(failed.requests.concluded) != 0 {
-		t.Fatalf("失败评价改记了请求：%s，记了 %d 次", stored.State, len(failed.requests.concluded))
 	}
 }
 

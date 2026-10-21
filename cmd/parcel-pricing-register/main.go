@@ -32,6 +32,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	adapter "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/application"
@@ -219,17 +220,29 @@ func main() {
 		fmt.Fprintf(os.Stderr, "构造目录复核册：%v\n", err)
 		os.Exit(exitUndecided)
 	}
+	// 「参数已登记」交接口与登记册同一只 db：价卡登记与序列、目录复核通过的那一行与信封落在 execute 给的同一笔事务里，
+	// 结算那一侧停着的评价请求等的就是这封信（ADR-0229 决定五）。
+	outboxStore, err := outbox.NewStore(db)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "构造 Outbox Store：%v\n", err)
+		os.Exit(exitUndecided)
+	}
+	registered, err := adapter.NewOutboxEvaluationResumptionHandoffs(db, outboxStore, systemClock{})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "构造参数已登记交接口：%v\n", err)
+		os.Exit(exitUndecided)
+	}
 
 	message, code := execute(ctx, *kind, raw,
-		application.NewRegisterPriceCardHandler(application.RegisterPriceCardDeps{Catalog: cards}),
+		application.NewRegisterPriceCardHandler(application.RegisterPriceCardDeps{Catalog: cards, Registered: registered}),
 		application.NewRegisterReferenceSeriesHandler(application.RegisterReferenceSeriesDeps{Register: series}),
 		application.NewReviewReferenceSeriesHandler(application.ReviewReferenceSeriesDeps{
-			Versions: series, Reviews: reviews, Clock: systemClock{},
+			Versions: series, Reviews: reviews, Clock: systemClock{}, Registered: registered,
 		}),
 		catalogueRegistrars{
 			register: application.NewRegisterReferenceCatalogueHandler(application.RegisterReferenceCatalogueDeps{Register: catalogues}),
 			review: application.NewReviewReferenceCatalogueHandler(application.ReviewReferenceCatalogueDeps{
-				Versions: catalogues, Reviews: catalogueReviews, Clock: systemClock{},
+				Versions: catalogues, Reviews: catalogueReviews, Clock: systemClock{}, Registered: registered,
 			}),
 		},
 		db.Transactor(),

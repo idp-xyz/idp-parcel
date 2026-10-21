@@ -183,6 +183,7 @@ type parcelMomentFixture struct {
 	registry    *sellRequestRegistryDouble
 	identity    *sellRequestIdentityDouble
 	handoff     *sellRequestHandoffDouble
+	stalls      *stallRegisterDouble
 	handler     *application.RequestSellEvaluationOnParcelMomentHandler
 }
 
@@ -216,6 +217,7 @@ func newParcelMomentFixture(t *testing.T, adopted domain.ParcelBillingMoment) *p
 		registry:  newSellRequestRegistry(),
 		identity:  &sellRequestIdentityDouble{},
 		handoff:   &sellRequestHandoffDouble{intents: map[string]ports.SellEvaluationRequestIntent{}},
+		stalls:    newStallRegister(),
 	}
 	if adopted != domain.ParcelBillingMomentInvalid {
 		adoption, err := domain.NewSellBillingMomentAdoption(account, adopted, value(t, domain.NewEstimatePricingScope, "SYN-SCOPE-SELL-1"))
@@ -232,6 +234,7 @@ func newParcelMomentFixture(t *testing.T, adopted domain.ParcelBillingMoment) *p
 		Registry:    fixture.registry,
 		Identity:    fixture.identity,
 		Downstream:  fixture.handoff,
+		Stalls:      fixture.stalls,
 		Clock:       fixedClock{at: parcelMomentNow},
 	})
 	if err != nil {
@@ -400,21 +403,24 @@ func TestALosingConcurrentRequestAnswersWithTheWinner(t *testing.T) {
 }
 
 // Covers: 链上三格的「没有」各归其格，都不发起：包裹不属任何已接受委托是`包裹无商业解析`，闭包没采用结算政策与账户
-// 不在册上是`未配置`。
+// 不在册上是`未配置`。AT-SA-191：三格都在 SELL 发起停办册上记下这一拍与停因（ADR-0229 决定四），记不下答未决。
 func TestEachGapOnTheParcelToAccountChainStopsWithoutRequesting(t *testing.T) {
 	cases := map[string]struct {
 		breakChain func(*parcelMomentFixture)
 		outcome    application.SellEvaluationRequestOutcome
 		reason     application.SellEvaluationRequestUnconfiguredReason
+		cause      domain.EvaluationStopCause
 	}{
 		"包裹无商业解析": {
 			breakChain: func(fixture *parcelMomentFixture) { delete(fixture.resolutions.resolutions, "SYN-PARCEL-1") },
 			outcome:    application.SellEvaluationRequestParcelUnresolved,
+			cause:      domain.StopParcelCommercialResolutionAbsent,
 		},
 		"闭包没采用结算政策": {
 			breakChain: func(fixture *parcelMomentFixture) { delete(fixture.terms.terms, "SYN-RES-1") },
 			outcome:    application.SellEvaluationRequestUnconfigured,
 			reason:     application.SellRequestSettlementPolicyNotAdopted,
+			cause:      domain.StopSettlementPolicyNotAdopted,
 		},
 		"账户不在册上": {
 			breakChain: func(fixture *parcelMomentFixture) {
@@ -422,18 +428,48 @@ func TestEachGapOnTheParcelToAccountChainStopsWithoutRequesting(t *testing.T) {
 			},
 			outcome: application.SellEvaluationRequestUnconfigured,
 			reason:  application.SellRequestSettlementAccountNotRegistered,
+			cause:   domain.StopSettlementAccountNotRegistered,
 		},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			fixture := newParcelMomentFixture(t, domain.BillingMomentNetworkIntakeAdopted)
 			tc.breakChain(fixture)
-			result := fixture.handle(t, parcelMomentCommand(t, domain.BillingMomentNetworkIntakeAdopted, "SYN-SOURCE-1", parcelMomentNow))
+			command := parcelMomentCommand(t, domain.BillingMomentNetworkIntakeAdopted, "SYN-SOURCE-1", parcelMomentNow)
+			result := fixture.handle(t, command)
 			if result.Outcome() != tc.outcome || result.UnconfiguredReason() != tc.reason {
 				t.Fatalf("outcome = %q reason = %q, want %q / %q", result.Outcome(), result.UnconfiguredReason(), tc.outcome, tc.reason)
 			}
 			fixture.assertNothingRequested(t)
+			if got, stalled := result.StopCause(); !stalled || got != tc.cause {
+				t.Fatalf("停因 = %s %v，want %s", got, stalled, tc.cause)
+			}
+			stall, found := fixture.stalls.sell[sellStallKey(command.TenantID,
+				domain.SellEvaluationRequestNaturalKey{Parcel: command.Parcel, Moment: command.Moment})]
+			if !found || stall.Cause() != tc.cause || stall.Source() != command.Source ||
+				!stall.PricingBasisAt().Equal(command.PricingBasisAt) || stall.Basis().Present() {
+				t.Fatalf("发起停办 = %+v found=%v", stall, found)
+			}
+
+			fixture.stalls.err = errors.New("stall register down")
+			again := fixture.handle(t, command)
+			if again.Outcome() != application.SellEvaluationRequestUndecided ||
+				again.UndecidedReason() != application.SellRequestStallRegisterUnavailable {
+				t.Fatalf("发起停办册记不下 outcome = %q reason = %q，want 未决", again.Outcome(), again.UndecidedReason())
+			}
 		})
+	}
+}
+
+// Covers: `采用了别的时点`不是停下：这一户登的那一行就是不在这一拍计费，不记发起停办。
+func TestAMomentTheAccountDidNotAdoptIsNotAStall(t *testing.T) {
+	fixture := newParcelMomentFixture(t, domain.BillingMomentEffectiveDeliveryFinalized)
+	result := fixture.handle(t, parcelMomentCommand(t, domain.BillingMomentNetworkIntakeAdopted, "SYN-SOURCE-1", parcelMomentNow))
+	if result.UnconfiguredReason() != application.SellRequestBillingMomentDiffers {
+		t.Fatalf("reason = %q", result.UnconfiguredReason())
+	}
+	if _, stalled := result.StopCause(); stalled || len(fixture.stalls.sell) != 0 {
+		t.Fatalf("采用了别的时点记了发起停办：%v", fixture.stalls.sell)
 	}
 }
 

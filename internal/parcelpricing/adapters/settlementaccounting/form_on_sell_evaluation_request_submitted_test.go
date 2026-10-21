@@ -10,6 +10,7 @@ import (
 	adapter "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/settlementaccounting"
 	ppapplication "go.idp.xyz/idp-parcel/internal/parcelpricing/application"
 	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+	ppports "go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/pptest"
 	saports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
@@ -46,7 +47,17 @@ func newFormOnSellSubmitted(
 	former *formerDouble,
 ) *adapter.FormOnSellEvaluationRequestSubmittedAdapter {
 	t.Helper()
-	handler, err := adapter.NewFormOnSellEvaluationRequestSubmittedAdapter(source, former, ppdomain.EvidenceSynthetic)
+	return newFormOnSellSubmittedWith(t, source, former, &unformedDouble{})
+}
+
+func newFormOnSellSubmittedWith(
+	t *testing.T,
+	source *sellRequestSourceDouble,
+	former *formerDouble,
+	unformed *unformedDouble,
+) *adapter.FormOnSellEvaluationRequestSubmittedAdapter {
+	t.Helper()
+	handler, err := adapter.NewFormOnSellEvaluationRequestSubmittedAdapter(source, former, unformed, ppdomain.EvidenceSynthetic)
 	if err != nil {
 		t.Fatalf("construct: %v", err)
 	}
@@ -82,18 +93,18 @@ func TestASellRequestEnvelopeHandsTheTranslatedCommandToTheFormerAndSettles(t *t
 	}
 }
 
-// Covers: 停在形成之前的各格各是一枚哨兵、与 BUY 那一路同一枚——未配置、适用冲突、输入不可得、未决；请求还读不回
-// （读不到或读口答不出）同样未决且不调入口。
-func TestEachWaitingSellOutcomeIsItsOwnUndecidedSentinel(t *testing.T) {
+// Covers: AT-PP-002 的 SELL 半边——入口答不出评价的三格与 BUY 那一路同样交「评价未形成」后入账，方向是 SELL；未决
+// 仍是那一枚哨兵；请求还读不回（读不到或读口答不出）同样未决且不调入口。
+func TestEachUnformableSellOutcomeHandsOffUnformedAndWaitingOnesStayUndecided(t *testing.T) {
 	candidate := pptest.IdentityReference(t, ppdomain.ArtifactPricingPlan, "SYN-SELL-PLAN-B", "v1")
 	for name, tc := range map[string]struct {
 		result   ppapplication.FormEvaluationFromRequestResult
-		sentinel error
+		cause    ppports.EvaluationRequestUnformedCause
 		mentions string
 	}{
 		"未配置": {
 			result:   ppapplication.FormEvaluationFromRequestResult{Outcome: ppapplication.RequestPriceCardNotConfigured},
-			sentinel: adapter.ErrPriceCardNotConfigured,
+			cause:    ppports.UnformedPriceCardNotConfigured,
 			mentions: "SELL/CUSTOMER_CHARGE",
 		},
 		"适用冲突": {
@@ -101,7 +112,7 @@ func TestEachWaitingSellOutcomeIsItsOwnUndecidedSentinel(t *testing.T) {
 				Outcome:    ppapplication.RequestPriceCardApplicabilityConflict,
 				Candidates: []ppdomain.VersionReference{candidate},
 			},
-			sentinel: adapter.ErrPriceCardApplicabilityConflict,
+			cause:    ppports.UnformedPriceCardApplicabilityConflict,
 			mentions: "SYN-SELL-PLAN-B@v1",
 		},
 		"输入不可得": {
@@ -109,28 +120,34 @@ func TestEachWaitingSellOutcomeIsItsOwnUndecidedSentinel(t *testing.T) {
 				Outcome: ppapplication.RequestPricingInputUnavailable,
 				Missing: []string{"parcel-shipment: destination postal code is absent"},
 			},
-			sentinel: adapter.ErrPricingInputUnavailable,
+			cause:    ppports.UnformedPricingInputUnavailable,
 			mentions: "destination postal code",
-		},
-		"未决": {
-			result: ppapplication.FormEvaluationFromRequestResult{
-				Outcome: ppapplication.RequestEvaluationUndecided,
-				Reason:  ppapplication.RequestEvaluationRegistryUnavailable,
-			},
-			sentinel: adapter.ErrEvaluationFormationUndecided,
-			mentions: "EVALUATION_REGISTRY_UNAVAILABLE",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
+			unformed := &unformedDouble{}
 			former := &formerDouble{result: tc.result}
-			err := newFormOnSellSubmitted(t, foundSellRecord(t), former).HandleSubmittedSellEvaluationRequest(t.Context(), submittedSell())
-			if !errors.Is(err, tc.sentinel) {
-				t.Fatalf("err = %v, want %v", err, tc.sentinel)
+			err := newFormOnSellSubmittedWith(t, foundSellRecord(t), former, unformed).HandleSubmittedSellEvaluationRequest(t.Context(), submittedSell())
+			if err != nil {
+				t.Fatalf("err = %v, want nil", err)
 			}
-			if !strings.Contains(err.Error(), tc.mentions) {
-				t.Fatalf("err %q does not mention %q", err, tc.mentions)
+			if len(unformed.intents) != 1 || unformed.intents[0].Cause != tc.cause ||
+				unformed.intents[0].Direction != ppdomain.PricingDirectionSell || unformed.intents[0].Request.String() != "SELLREQ-SYN-1" {
+				t.Fatalf("intents = %+v", unformed.intents)
+			}
+			if !strings.Contains(strings.Join(unformed.intents[0].Detail, "; "), tc.mentions) {
+				t.Fatalf("说明 %v 没提 %q", unformed.intents[0].Detail, tc.mentions)
 			}
 		})
+	}
+
+	undecided := &formerDouble{result: ppapplication.FormEvaluationFromRequestResult{
+		Outcome: ppapplication.RequestEvaluationUndecided,
+		Reason:  ppapplication.RequestEvaluationRegistryUnavailable,
+	}}
+	err := newFormOnSellSubmitted(t, foundSellRecord(t), undecided).HandleSubmittedSellEvaluationRequest(t.Context(), submittedSell())
+	if !errors.Is(err, adapter.ErrEvaluationFormationUndecided) || !strings.Contains(err.Error(), "EVALUATION_REGISTRY_UNAVAILABLE") {
+		t.Fatalf("入口未决 err = %v", err)
 	}
 
 	for name, source := range map[string]*sellRequestSourceDouble{
@@ -174,13 +191,16 @@ func TestABrokenSellReferenceOrAnUntranslatableRecordIsLoud(t *testing.T) {
 }
 
 func TestTheSellAdapterRefusesNilDependenciesAndAnUndeclaredEvidenceKind(t *testing.T) {
-	if _, err := adapter.NewFormOnSellEvaluationRequestSubmittedAdapter(nil, &formerDouble{}, ppdomain.EvidenceSynthetic); err == nil {
+	if _, err := adapter.NewFormOnSellEvaluationRequestSubmittedAdapter(nil, &formerDouble{}, &unformedDouble{}, ppdomain.EvidenceSynthetic); err == nil {
 		t.Fatal("nil source accepted")
 	}
-	if _, err := adapter.NewFormOnSellEvaluationRequestSubmittedAdapter(&sellRequestSourceDouble{}, nil, ppdomain.EvidenceSynthetic); err == nil {
+	if _, err := adapter.NewFormOnSellEvaluationRequestSubmittedAdapter(&sellRequestSourceDouble{}, nil, &unformedDouble{}, ppdomain.EvidenceSynthetic); err == nil {
 		t.Fatal("nil former accepted")
 	}
-	if _, err := adapter.NewFormOnSellEvaluationRequestSubmittedAdapter(&sellRequestSourceDouble{}, &formerDouble{}, ""); err == nil {
+	if _, err := adapter.NewFormOnSellEvaluationRequestSubmittedAdapter(&sellRequestSourceDouble{}, &formerDouble{}, nil, ppdomain.EvidenceSynthetic); err == nil {
+		t.Fatal("nil unformed handoff accepted")
+	}
+	if _, err := adapter.NewFormOnSellEvaluationRequestSubmittedAdapter(&sellRequestSourceDouble{}, &formerDouble{}, &unformedDouble{}, ""); err == nil {
 		t.Fatal("undeclared evidence kind accepted")
 	}
 }

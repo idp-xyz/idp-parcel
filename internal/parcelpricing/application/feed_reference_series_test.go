@@ -226,6 +226,7 @@ func (fixture *feedFixture) handler() *application.FeedReferenceSeriesHandler {
 		Observer: func(observation ports.SourceFeedObservation) {
 			fixture.observations = append(fixture.observations, observation)
 		},
+		Registered: &pricingParameterDouble{},
 	})
 }
 

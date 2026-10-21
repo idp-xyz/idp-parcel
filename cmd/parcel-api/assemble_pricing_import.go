@@ -145,7 +145,11 @@ func buildPriceCardDraftPublication(db *bentopg.DB) (transactionalPriceCardDraft
 	if err != nil {
 		return transactionalPriceCardDraftPublication{}, fmt.Errorf("parcel-api: price card catalog: %w", err)
 	}
-	registrar := pricingapp.NewRegisterPriceCardHandler(pricingapp.RegisterPriceCardDeps{Catalog: catalog})
+	registered, err := pricingParameterRegisteredHandoff(db)
+	if err != nil {
+		return transactionalPriceCardDraftPublication{}, err
+	}
+	registrar := pricingapp.NewRegisterPriceCardHandler(pricingapp.RegisterPriceCardDeps{Catalog: catalog, Registered: registered})
 	handler, err := pricingapp.NewPublishPriceCardDraftHandler(drafts, registrar, systemClock{})
 	if err != nil {
 		return transactionalPriceCardDraftPublication{}, fmt.Errorf("parcel-api: price card draft publication: %w", err)

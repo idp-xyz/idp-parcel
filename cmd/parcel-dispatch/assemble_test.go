@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -962,10 +963,10 @@ func saTestValue[T any](t *testing.T, construct func(string) (T, error), raw str
 // Covers: 路由表的 SA 评价请求已提交一条（sa-cc/11 裁决 5）与完成判据 3「真库装配用例一正一反」——在生产依赖图上：
 // 正：SA 用真登记册落一份 BUY 评价请求、用真 Outbox 适配器把信封入队（事件类型由提供方写，路由表按消费方自写的常量
 // 认——两串相等在这里被真库钉住）；PP 册上有一张适用的 SYN BUY 卡 → PP 消费者按引用回查 SA 登记册 → 入口解析到卡 →
-// 造快照停在「输入不可得」并点名三只读口（裁决 4）→ dispatch.consumer_undecided：inbox 无账、parcel_pricing.evaluation
-// 零行，等读口接上后重投。今天生产图上形成不了任何一份评价，这条正例证的就是「诚实地停在那一格」。
-// 反：另一份请求的范围下没有卡 → 未配置同样未决、零写入，观察口交出的原文说的是缺价卡不是缺输入；信封指着 SA 还
-// 没有的请求 → 可见性滞后未决；载荷缺请求 ID → 毒丸入账定稿。
+// 造快照停在「输入不可得」并点名读口（裁决 4）。另一份请求的范围下没有卡 → 未配置。两格都不随重投变好：PP 入账、交
+// 「评价未形成」，下一拍 SA 在两份请求上各记停因（ADR-0229 决定三、AT-PP-002），parcel_pricing.evaluation 零行。此前这
+// 两格按未决重投到失败预算耗尽、信封即弃，请求在 SA 那一侧永远停在`已提交`。
+// 反：信封指着 SA 还没有的请求 → 可见性滞后，仍是未决；载荷缺请求 ID → 毒丸入账定稿。
 //
 // 「重投不翻倍」不在这里假装：形成路今天到不了入册，重投同一封在应用层按回指命中`已存在`
 // （application 用例 TestFormEvaluationFromRequestAnswersExistingByBackReference），库上由迁移 0010 的部分唯一索引守
@@ -1095,24 +1096,45 @@ func TestASubmittedEvaluationRequestStopsHonestlyAtThePricingInputSeamThroughThe
 	}
 	cardedID := string(outboxintent.FingerprintEventID("evaluation-request", "tenant-a/evaluation-request/EVREQ-SYN-CARDED/submitted"))
 	uncardedID := string(outboxintent.FingerprintEventID("evaluation-request", "tenant-a/evaluation-request/EVREQ-SYN-NOCARD/submitted"))
-	if published != 1 {
-		t.Fatalf("published = %d, want 1（正：有卡的停在输入不可得；反：没卡的未配置、缺席请求未决、毒丸入账）；有卡的失败码 = %q 原文 = %v",
-			published, recordedFailureCode(t, db, cardedID), observed[cardedID])
+	if published != 3 {
+		t.Fatalf("published = %d, want 3（有卡的停在输入不可得、没卡的未配置，两封都交「评价未形成」入账；毒丸入账；缺席请求未决）；"+
+			"有卡的失败码 = %q 原文 = %v", published, recordedFailureCode(t, db, cardedID), observed[cardedID])
 	}
-	for _, eventID := range []string{cardedID, uncardedID, "EVREQ-SYN-MISSING"} {
-		if got := recordedFailureCode(t, db, eventID); got != "dispatch.consumer_undecided" {
-			t.Fatalf("%s：failure_code = %q, want dispatch.consumer_undecided；原文 = %v", eventID, got, observed[eventID])
+	for _, eventID := range []string{cardedID, uncardedID} {
+		if got := recordedFailureCode(t, db, eventID); got != "" {
+			t.Fatalf("%s：failure_code = %q，答不出评价不该再按未决重投；原文 = %v", eventID, got, observed[eventID])
 		}
 	}
-	// 三封未决各停在哪一格，观察口交出的原文要分得开——失败码按恢复动作取值，本来答不出这一层。
-	if err := observed[cardedID]; !errors.Is(err, ppsettlement.ErrPricingInputUnavailable) || !strings.Contains(err.Error(), "transport-fulfillment") {
-		t.Fatalf("有卡的请求没停在「输入不可得」或没点名读口：%v", err)
-	}
-	if err := observed[uncardedID]; !errors.Is(err, ppsettlement.ErrPriceCardNotConfigured) {
-		t.Fatalf("没卡的请求没停在「未配置」：%v", err)
+	if got := recordedFailureCode(t, db, "EVREQ-SYN-MISSING"); got != "dispatch.consumer_undecided" {
+		t.Fatalf("EVREQ-SYN-MISSING：failure_code = %q, want dispatch.consumer_undecided；原文 = %v", got, observed["EVREQ-SYN-MISSING"])
 	}
 	if err := observed["EVREQ-SYN-MISSING"]; !errors.Is(err, ppsettlement.ErrEvaluationRequestNotVisible) {
 		t.Fatalf("SA 还没有的请求没停在「还看不见」：%v", err)
+	}
+	unformed := unformedEnvelopes(t, db)
+	if got := unformed["EVREQ-SYN-CARDED"]; got.Cause != "PRICING_INPUT_UNAVAILABLE" || got.Direction != "BUY" ||
+		!strings.Contains(strings.Join(got.Detail, "; "), "transport-fulfillment") {
+		t.Fatalf("有卡的请求没交「输入不可得」或没点名读口：%+v", got)
+	}
+	if got := unformed["EVREQ-SYN-NOCARD"]; got.Cause != "PRICE_CARD_NOT_CONFIGURED" || got.Direction != "BUY" {
+		t.Fatalf("没卡的请求没交「未配置」：%+v", got)
+	}
+
+	// 下一拍：SA 收「评价未形成」，在两份请求上各记停因。
+	if published, err := beat.DispatchOnce(t.Context()); err != nil || published < 2 {
+		t.Fatalf("第二拍 published = %d err = %v, want 至少两封评价未形成", published, err)
+	}
+	for request, want := range map[string]sadomain.EvaluationStopCause{
+		"EVREQ-SYN-CARDED": sadomain.StopPricingInputUnavailable,
+		"EVREQ-SYN-NOCARD": sadomain.StopPriceCardNotConfigured,
+	} {
+		record, found, err := requests.FindByID(t.Context(), saports.EvaluationRequestKey{
+			TenantID: saValue(t, sadomain.NewTenantID, "tenant-a"),
+			Request:  saValue(t, sadomain.NewEvaluationRequestID, request),
+		})
+		if err != nil || !found || record.StopCause != want {
+			t.Fatalf("%s 停因 = %s（found=%v err=%v），want %s", request, record.StopCause, found, err, want)
+		}
 	}
 
 	querier, err := db.ReadExecutor(t.Context())
@@ -1138,14 +1160,53 @@ func TestASubmittedEvaluationRequestStopsHonestlyAtThePricingInputSeamThroughThe
 		}
 		return count
 	}
-	for _, eventID := range []string{cardedID, uncardedID, "EVREQ-SYN-MISSING"} {
-		if n := inboxRows(eventID); n != 0 {
-			t.Fatalf("%s 未决必须回滚：inbox 行数 = %d, want 0", eventID, n)
+	for _, eventID := range []string{cardedID, uncardedID} {
+		if n := inboxRows(eventID); n != 1 {
+			t.Fatalf("%s 答不出评价要入账：inbox 行数 = %d, want 1", eventID, n)
 		}
+	}
+	if n := inboxRows("EVREQ-SYN-MISSING"); n != 0 {
+		t.Fatalf("未决必须回滚：inbox 行数 = %d, want 0", n)
 	}
 	if n := inboxRows("EVREQ-SYN-POISON"); n != 1 {
 		t.Fatalf("毒丸要拒收入账不重投：inbox 行数 = %d, want 1", n)
 	}
+}
+
+// unformedEnvelope 是 outbox 里一封「评价未形成」的载荷，按请求标识取。
+type unformedEnvelope struct {
+	Request   string   `json:"evaluationRequestId"`
+	Direction string   `json:"direction"`
+	Cause     string   `json:"cause"`
+	Detail    []string `json:"detail"`
+}
+
+// unformedEnvelopes 读回 outbox 里全部「评价未形成」，按请求标识交回。
+func unformedEnvelopes(t *testing.T, db *bentopg.DB) map[string]unformedEnvelope {
+	t.Helper()
+	querier, err := db.ReadExecutor(t.Context())
+	if err != nil {
+		t.Fatalf("取读执行器：%v", err)
+	}
+	rows, err := querier.Query(t.Context(),
+		`SELECT payload FROM `+migrate.SchemaBento+`.outbox WHERE event_type = 'parcel-pricing.evaluation-request.unformed'`)
+	if err != nil {
+		t.Fatalf("读评价未形成：%v", err)
+	}
+	defer rows.Close()
+	found := map[string]unformedEnvelope{}
+	for rows.Next() {
+		var payload []byte
+		if err := rows.Scan(&payload); err != nil {
+			t.Fatalf("读载荷：%v", err)
+		}
+		var envelope unformedEnvelope
+		if err := json.Unmarshal(payload, &envelope); err != nil {
+			t.Fatalf("解载荷：%v", err)
+		}
+		found[envelope.Request] = envelope
+	}
+	return found
 }
 
 // saValue 是 SA 值对象构造器的测试速记：构造失败即用例失败。

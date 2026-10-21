@@ -6,6 +6,7 @@ import (
 
 	ppinbox "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/inbox"
 	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+	ppports "go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
 	sadomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	saports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
@@ -14,10 +15,12 @@ import (
 // 决定四）：按信封引用向 SA 的 SELL 请求册取那一份，译成命令交「按评价请求形成评价」入口——与 BUY 那一路同一只入口，
 // 选卡、按回指幂等、入册与交付都在那里——再把入口的结果照 BUY 那一路同一套折法落成消费两格。
 //
-// 哨兵与 BUY 那一路共用：每一枚说的是入口停在哪一格、等谁，与请求出自哪本册无关；装配为两路各登一份未决名单。
+// 哨兵与 BUY 那一路共用：每一枚说的是入口停在哪一格、等谁，与请求出自哪本册无关；装配为两路各登一份未决名单。答不出
+// 评价的那三格同样经「评价未形成」交给结算。
 type FormOnSellEvaluationRequestSubmittedAdapter struct {
 	requests SellEvaluationRequestSource
 	former   EvaluationFormer
+	unformed ppports.EvaluationRequestUnformedHandoff
 	evidence ppdomain.EvidenceKind
 }
 
@@ -25,6 +28,7 @@ type FormOnSellEvaluationRequestSubmittedAdapter struct {
 func NewFormOnSellEvaluationRequestSubmittedAdapter(
 	requests SellEvaluationRequestSource,
 	former EvaluationFormer,
+	unformed ppports.EvaluationRequestUnformedHandoff,
 	evidence ppdomain.EvidenceKind,
 ) (*FormOnSellEvaluationRequestSubmittedAdapter, error) {
 	if requests == nil {
@@ -33,10 +37,13 @@ func NewFormOnSellEvaluationRequestSubmittedAdapter(
 	if former == nil {
 		return nil, fmt.Errorf("parcel pricing settlementaccounting adapter: evaluation former is nil")
 	}
+	if unformed == nil {
+		return nil, fmt.Errorf("parcel pricing settlementaccounting adapter: evaluation request unformed handoff is nil")
+	}
 	if !evidence.Declared() {
 		return nil, fmt.Errorf("parcel pricing settlementaccounting adapter: evidence kind %q is not one of S / R / P", evidence)
 	}
-	return &FormOnSellEvaluationRequestSubmittedAdapter{requests: requests, former: former, evidence: evidence}, nil
+	return &FormOnSellEvaluationRequestSubmittedAdapter{requests: requests, former: former, unformed: unformed, evidence: evidence}, nil
 }
 
 var _ ppinbox.SubmittedSellEvaluationRequestHandler = (*FormOnSellEvaluationRequestSubmittedAdapter)(nil)
@@ -72,5 +79,5 @@ func (adapter *FormOnSellEvaluationRequestSubmittedAdapter) HandleSubmittedSellE
 	if err != nil {
 		return fmt.Errorf("form evaluation from sell request %s: %w", requestID, err)
 	}
-	return foldFormation(command, requestID.String(), result)
+	return foldFormation(ctx, adapter.unformed, command, requestID.String(), result)
 }

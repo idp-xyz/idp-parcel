@@ -9,31 +9,23 @@ import (
 	ppinbox "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/inbox"
 	ppapplication "go.idp.xyz/idp-parcel/internal/parcelpricing/application"
 	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+	ppports "go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
 	sadomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	saports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
-// 未决哨兵：每一枚是入口停在的一格「等谁」，恢复动作各不相同，所以不合成一枚——合成之后运维只知道「未决」，不知道
-// 该去登记价卡、找人裁、等别的上下文的读口，还是等依赖恢复。生产装配把它们都登进 WithUndecidedSentinels：重投会
-// 改变结果（卡登了 / 裁了 / 读口接上了 / 依赖回来了），不当毒丸、不当发布失败。
+// 未决哨兵：每一枚是入口停在的一格「等谁」，恢复动作各不相同，所以不合成一枚。生产装配把它们都登进
+// WithUndecidedSentinels：重投会改变结果（请求看得见了 / 依赖回来了），不当毒丸、不当发布失败。
+//
+// 入口答得出但答不出评价的那三格——没有在用价卡、多于一版同时适用、造不出计价输入快照——不在这里：重投不会让它们
+// 变好，经「评价未形成」信封交给结算记停因，入账（ADR-0229 决定三）。补登之后由结算按停因另起下一代请求。
 var (
 	// ErrEvaluationRequestNotVisible 表示按信封引用在 SA 还读不回那份请求。请求与信封在 SA 同一事务落库，读不回只剩
 	// 可见性滞后一种成因；读口自己答不出（库不可用）同格——等的都是提供方那一侧。
 	ErrEvaluationRequestNotVisible = errors.New(
 		"parcel pricing settlementaccounting adapter: evaluation request is not yet visible")
-	// ErrPriceCardNotConfigured 是入口的「未配置」：（租户、范围、方向、目的、时点）下没有价卡。恢复动作是登记一张
-	// 卡——实例半边（PAR-SET-03），本上下文不替租户配。
-	ErrPriceCardNotConfigured = errors.New(
-		"parcel pricing settlementaccounting adapter: no price card is in force for the evaluation request")
-	// ErrPriceCardApplicabilityConflict 是入口的「适用冲突」：多于一版价卡同时适用。恢复动作是人裁——不种任何选择规则。
-	ErrPriceCardApplicabilityConflict = errors.New(
-		"parcel pricing settlementaccounting adapter: more than one price card applies to the evaluation request")
-	// ErrPricingInputUnavailable 是入口的「输入不可得」（裁决 4）：造不出计价输入快照，缺哪几只读口或哪一格事实随消息
-	// 点名。恢复动作在提供方那一侧：BUY 那一路多半是等 TF / NO / PS 的只读口接上；SELL 那一路多半是包裹事实本身缺
-	// （不在已接受委托上、没有申报重量、单位在表外、没有收件邮编），要小包托运补正，不是传输。
-	ErrPricingInputUnavailable = errors.New(
-		"parcel pricing settlementaccounting adapter: the pricing input for the evaluation request is not obtainable")
-	// ErrEvaluationFormationUndecided 是入口的「未决」：依赖故障，形成与否未知，停在哪一口随消息带出。
+	// ErrEvaluationFormationUndecided 是入口的「未决」：依赖故障，形成与否未知，停在哪一口随消息带出。交「评价未形成」
+	// 信封暂时失败也落这一格：入账跟着回滚，下一次重投再交。
 	ErrEvaluationFormationUndecided = errors.New(
 		"parcel pricing settlementaccounting adapter: evaluation formation is undecided")
 )
@@ -51,14 +43,16 @@ type EvaluationFormer interface {
 type FormOnEvaluationRequestSubmittedAdapter struct {
 	requests EvaluationRequestSource
 	former   EvaluationFormer
+	unformed ppports.EvaluationRequestUnformedHandoff
 	evidence ppdomain.EvidenceKind
 }
 
 // NewFormOnEvaluationRequestSubmittedAdapter 构造期拒 nil；证据层级同样在构造期核——它是这条路今天形成的每一份评价
-// 的属性，装配方不说、这里不替它说。
+// 的属性，装配方不说、这里不替它说。「评价未形成」交接口缺席时，答不出评价的那几格就没有地方去，所以同样必备。
 func NewFormOnEvaluationRequestSubmittedAdapter(
 	requests EvaluationRequestSource,
 	former EvaluationFormer,
+	unformed ppports.EvaluationRequestUnformedHandoff,
 	evidence ppdomain.EvidenceKind,
 ) (*FormOnEvaluationRequestSubmittedAdapter, error) {
 	if requests == nil {
@@ -67,10 +61,13 @@ func NewFormOnEvaluationRequestSubmittedAdapter(
 	if former == nil {
 		return nil, fmt.Errorf("parcel pricing settlementaccounting adapter: evaluation former is nil")
 	}
+	if unformed == nil {
+		return nil, fmt.Errorf("parcel pricing settlementaccounting adapter: evaluation request unformed handoff is nil")
+	}
 	if !evidence.Declared() {
 		return nil, fmt.Errorf("parcel pricing settlementaccounting adapter: evidence kind %q is not one of S / R / P", evidence)
 	}
-	return &FormOnEvaluationRequestSubmittedAdapter{requests: requests, former: former, evidence: evidence}, nil
+	return &FormOnEvaluationRequestSubmittedAdapter{requests: requests, former: former, unformed: unformed, evidence: evidence}, nil
 }
 
 var _ ppinbox.SubmittedEvaluationRequestHandler = (*FormOnEvaluationRequestSubmittedAdapter)(nil)
@@ -108,12 +105,15 @@ func (adapter *FormOnEvaluationRequestSubmittedAdapter) HandleSubmittedEvaluatio
 	if err != nil {
 		return fmt.Errorf("form evaluation from request %s: %w", requestID, err)
 	}
-	return foldFormation(command, requestID.String(), result)
+	return foldFormation(ctx, adapter.unformed, command, requestID.String(), result)
 }
 
-// foldFormation 把入口的封闭结果折成消费两格：已形成 / 已存在答 nil 入账不重投，其余各格一枚哨兵或原样上抛。
-// BUY 与 SELL 两路共用这一套：结果格与恢复动作都是入口的，与请求出自哪一本册无关，两套折法只会各自走样。
+// foldFormation 把入口的封闭结果折成消费两格：已形成 / 已存在答 nil 入账不重投；答不出评价的三格交「评价未形成」后入账；
+// 其余各格一枚哨兵或原样上抛。BUY 与 SELL 两路共用这一套：结果格与恢复动作都是入口的，与请求出自哪一本册无关，两套
+// 折法只会各自走样。
 func foldFormation(
+	ctx context.Context,
+	unformed ppports.EvaluationRequestUnformedHandoff,
 	command ppapplication.FormEvaluationFromRequestCommand,
 	requestID string,
 	result ppapplication.FormEvaluationFromRequestResult,
@@ -122,18 +122,48 @@ func foldFormation(
 	case ppapplication.RequestEvaluationFormed, ppapplication.RequestEvaluationExisting:
 		return nil
 	case ppapplication.RequestPriceCardNotConfigured:
-		return fmt.Errorf("%w: tenant %s scope %s %s/%s at %s", ErrPriceCardNotConfigured,
-			command.Tenant, command.Scope, command.Direction, command.Purpose, command.BasisAt.UTC().Format("2006-01-02T15:04:05Z07:00"))
+		return handOffUnformed(ctx, unformed, command, ppports.UnformedPriceCardNotConfigured, []string{
+			fmt.Sprintf("no price card in force for scope %s %s/%s at %s",
+				command.Scope, command.Direction, command.Purpose, command.BasisAt.UTC().Format("2006-01-02T15:04:05Z07:00")),
+		})
 	case ppapplication.RequestPriceCardApplicabilityConflict:
-		return fmt.Errorf("%w: candidates %s", ErrPriceCardApplicabilityConflict, describeCandidates(result.Candidates))
+		return handOffUnformed(ctx, unformed, command, ppports.UnformedPriceCardApplicabilityConflict, []string{
+			"candidates " + describeCandidates(result.Candidates),
+		})
 	case ppapplication.RequestPricingInputUnavailable:
-		return fmt.Errorf("%w: %s", ErrPricingInputUnavailable, strings.Join(result.Missing, "; "))
+		return handOffUnformed(ctx, unformed, command, ppports.UnformedPricingInputUnavailable, result.Missing)
 	case ppapplication.RequestEvaluationUndecided:
 		return fmt.Errorf("%w: %s", ErrEvaluationFormationUndecided, result.Reason)
 	case ppapplication.RequestEvaluationNotAccepted:
 		return fmt.Errorf("%w: the translated command for evaluation request %s was not accepted by parcel-pricing", ErrUntranslatableAnswer, requestID)
 	default:
 		return fmt.Errorf("%w: formation outcome %q", ErrUntranslatableAnswer, result.Outcome)
+	}
+}
+
+// handOffUnformed 交「评价未形成」。被框架确定性拒收是硬失败：重交永远同一个结果，落 publish_failed 等人看；别的失败是
+// 依赖暂时不可用，答未决、入账跟着回滚，下一次重投再交。
+func handOffUnformed(
+	ctx context.Context,
+	unformed ppports.EvaluationRequestUnformedHandoff,
+	command ppapplication.FormEvaluationFromRequestCommand,
+	cause ppports.EvaluationRequestUnformedCause,
+	detail []string,
+) error {
+	err := unformed.HandOffEvaluationRequestUnformed(ctx, ppports.EvaluationRequestUnformedIntent{
+		Tenant:    command.Tenant,
+		Request:   command.Request,
+		Direction: command.Direction,
+		Cause:     cause,
+		Detail:    append([]string(nil), detail...),
+	})
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, ppports.ErrEvaluationRequestUnformedHandoffRejected):
+		return fmt.Errorf("evaluation request %s unformed (%s): %w", command.Request, cause, err)
+	default:
+		return fmt.Errorf("%w: hand off evaluation request %s unformed (%s): %v", ErrEvaluationFormationUndecided, command.Request, cause, err)
 	}
 }
 

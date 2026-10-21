@@ -11,8 +11,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
-// 本文件钉 ADR-0190 两本租户取值册的登记用例：落库时刻取时钟、册的落点原样交回、缺租户在碰册之前拒、缺依赖构造不出来。
-// 重放与冲突的判定在册上（真库用例），这里不重判。
+// 本文件钉 ADR-0190 两本租户取值册的登记用例：落库时刻取时钟、册的落点原样交回、缺租户在碰册之前拒、缺依赖构造不出来；
+// `已登记`与`重放`同笔交「评价参数已登记」，`冲突`不交（ADR-0229 决定五）。重放与冲突的判定在册上（真库用例），这里不重判。
 
 var sellRegisterAt = time.Date(2026, 10, 19, 9, 0, 0, 0, time.UTC)
 
@@ -45,12 +45,29 @@ func (double *feeItemMappingRegisterDouble) SaveFeeItemMapping(
 	return double.effect, nil
 }
 
+// parameterHandoffDouble 记下交出的「评价参数已登记」，可令它失败。
+type parameterHandoffDouble struct {
+	intents []ports.EvaluationParameterRegisteredIntent
+	err     error
+}
+
+func (double *parameterHandoffDouble) HandOffEvaluationParameterRegistered(
+	_ context.Context, intent ports.EvaluationParameterRegisteredIntent,
+) error {
+	double.intents = append(double.intents, intent)
+	return double.err
+}
+
 func TestRegisteringASellBillingMomentAdoptionPassesTheRegisterAnswerThrough(t *testing.T) {
-	if _, err := application.NewRegisterSellBillingMomentAdoptionHandler(nil, fixedClock{at: sellRegisterAt}); !errors.Is(err, application.ErrNilDependency) {
+	if _, err := application.NewRegisterSellBillingMomentAdoptionHandler(nil, &parameterHandoffDouble{}, fixedClock{at: sellRegisterAt}); !errors.Is(err, application.ErrNilDependency) {
 		t.Fatalf("缺采用册 err = %v", err)
 	}
+	if _, err := application.NewRegisterSellBillingMomentAdoptionHandler(&sellMomentRegisterDouble{}, nil, fixedClock{at: sellRegisterAt}); !errors.Is(err, application.ErrNilDependency) {
+		t.Fatalf("缺交接口 err = %v", err)
+	}
 	register := &sellMomentRegisterDouble{effect: ports.CatalogueConflict}
-	handler, err := application.NewRegisterSellBillingMomentAdoptionHandler(register, fixedClock{at: sellRegisterAt})
+	handoff := &parameterHandoffDouble{}
+	handler, err := application.NewRegisterSellBillingMomentAdoptionHandler(register, handoff, fixedClock{at: sellRegisterAt})
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -72,6 +89,23 @@ func TestRegisteringASellBillingMomentAdoptionPassesTheRegisterAnswerThrough(t *
 	if err != nil || effect != ports.CatalogueConflict || !register.at.Equal(sellRegisterAt) {
 		t.Fatalf("effect = %d err = %v at = %v，想要册的落点原样交回、时刻取时钟", effect, err, register.at)
 	}
+	if len(handoff.intents) != 0 {
+		t.Fatalf("冲突交了 %d 封评价参数已登记", len(handoff.intents))
+	}
+	register.effect = ports.CatalogueRegistered
+	if _, err := handler.Register(t.Context(), application.RegisterSellBillingMomentAdoptionCommand{
+		Tenant: mustAccountValue(t, domain.NewTenantID, "SYN-T1"), Adoption: adoption,
+	}); err != nil || len(handoff.intents) != 1 || handoff.intents[0].Kind != domain.ParameterSellBillingMomentAdoption ||
+		handoff.intents[0].Subject != "SYN-ACCT-1" || !handoff.intents[0].RegisteredAt.Equal(sellRegisterAt) {
+		t.Fatalf("已登记 err = %v intents = %+v", err, handoff.intents)
+	}
+	handoff.err = errors.New("outbox down")
+	if _, err := handler.Register(t.Context(), application.RegisterSellBillingMomentAdoptionCommand{
+		Tenant: mustAccountValue(t, domain.NewTenantID, "SYN-T1"), Adoption: adoption,
+	}); !errors.Is(err, handoff.err) {
+		t.Fatalf("交不出 err = %v，想要上抛让登记回滚", err)
+	}
+	handoff.err = nil
 
 	register.err = domain.ErrCatalogueTargetMissing
 	if _, err := handler.Register(t.Context(), application.RegisterSellBillingMomentAdoptionCommand{
@@ -82,11 +116,12 @@ func TestRegisteringASellBillingMomentAdoptionPassesTheRegisterAnswerThrough(t *
 }
 
 func TestRegisteringAFeeItemMappingPassesTheRegisterAnswerThrough(t *testing.T) {
-	if _, err := application.NewRegisterFeeItemMappingHandler(&feeItemMappingRegisterDouble{}, nil); !errors.Is(err, application.ErrNilDependency) {
+	if _, err := application.NewRegisterFeeItemMappingHandler(&feeItemMappingRegisterDouble{}, &parameterHandoffDouble{}, nil); !errors.Is(err, application.ErrNilDependency) {
 		t.Fatalf("缺时钟 err = %v", err)
 	}
 	register := &feeItemMappingRegisterDouble{effect: ports.CatalogueReplay}
-	handler, err := application.NewRegisterFeeItemMappingHandler(register, fixedClock{at: sellRegisterAt})
+	handoff := &parameterHandoffDouble{}
+	handler, err := application.NewRegisterFeeItemMappingHandler(register, handoff, fixedClock{at: sellRegisterAt})
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -105,5 +140,8 @@ func TestRegisteringAFeeItemMappingPassesTheRegisterAnswerThrough(t *testing.T) 
 	effect, err := handler.RegisterFeeItemMapping(t.Context(), mustAccountValue(t, domain.NewTenantID, "SYN-T1"), mapping)
 	if err != nil || effect != ports.CatalogueReplay || !register.at.Equal(sellRegisterAt) {
 		t.Fatalf("effect = %d err = %v at = %v，想要册的落点原样交回、时刻取时钟", effect, err, register.at)
+	}
+	if len(handoff.intents) != 1 || handoff.intents[0].Kind != domain.ParameterFeeItemMapping || handoff.intents[0].Subject != "BASE_FREIGHT" {
+		t.Fatalf("重放要重交同一封评价参数已登记：%+v", handoff.intents)
 	}
 }

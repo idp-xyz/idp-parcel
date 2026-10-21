@@ -138,7 +138,8 @@ func EvaluationRequestNaturalKeyOf(
 	}, nil
 }
 
-// EvaluationRequestSpec 是提交一份评价请求所需的全部输入。
+// EvaluationRequestSpec 是提交一份评价请求所需的全部输入。Generation、Previous 与 ResumeBasis 是代次三格，口径与 SELL
+// 那一份相同（ADR-0229 决定一）：同一自然键上的请求按代次排成一条链，零值的 Generation 当首代读。
 type EvaluationRequestSpec struct {
 	ID          EvaluationRequestID
 	Scope       PrimaryScopeReference
@@ -146,6 +147,9 @@ type EvaluationRequestSpec struct {
 	Sources     EligibleSourceReferences
 	RequestedAt time.Time
 	RequestedBy RequesterReference
+	Generation  int
+	Previous    EvaluationRequestID
+	ResumeBasis ResumeBasis
 }
 
 // EvaluationRequest 是 UC-SA-002 步 2「请求评价」留在本上下文的登记：本上下文向 parcel-pricing 提交了
@@ -157,6 +161,9 @@ type EvaluationRequest struct {
 	sources     EligibleSourceReferences
 	requestedAt time.Time
 	requestedBy RequesterReference
+	generation  int
+	previous    EvaluationRequestID
+	resumeBasis ResumeBasis
 }
 
 // SubmitEvaluationRequest 形成一份评价请求。每一件都必备：缺任何一件 parcel-pricing 都形成不了计价
@@ -169,14 +176,56 @@ func SubmitEvaluationRequest(spec EvaluationRequestSpec) (EvaluationRequest, err
 	if err != nil {
 		return EvaluationRequest{}, err
 	}
+	generation, err := normalizeLineage(spec.Generation, spec.Previous.valid(), spec.ResumeBasis)
+	if err != nil {
+		return EvaluationRequest{}, fmt.Errorf("%w: %w", ErrInvalidEvaluationRequest, err)
+	}
+	if spec.Previous.valid() && spec.Previous == spec.ID {
+		return EvaluationRequest{}, fmt.Errorf("%w: a request cannot follow itself", ErrInvalidEvaluationRequest)
+	}
 	return EvaluationRequest{
 		id:          spec.ID,
 		naturalKey:  naturalKey,
 		sources:     spec.Sources,
 		requestedAt: spec.RequestedAt.UTC(),
 		requestedBy: spec.RequestedBy,
+		generation:  generation,
+		previous:    spec.Previous,
+		resumeBasis: spec.ResumeBasis,
 	}, nil
 }
+
+// Resume 由这一份停下的请求起下一代（ADR-0229 决定二）：主要范围、计算目的与三件合格来源引用原样不动——问的还是
+// 同一个问题——只换标识、代次加一、指名本份为前一代、记下凭的依据与这一次请求的时刻和请求方。本份不被改写。
+func (request EvaluationRequest) Resume(
+	id EvaluationRequestID,
+	basis ResumeBasis,
+	requestedAt time.Time,
+	requestedBy RequesterReference,
+) (EvaluationRequest, error) {
+	return SubmitEvaluationRequest(EvaluationRequestSpec{
+		ID:          id,
+		Scope:       request.naturalKey.Scope,
+		Purpose:     request.naturalKey.Purpose,
+		Sources:     request.sources,
+		RequestedAt: requestedAt,
+		RequestedBy: requestedBy,
+		Generation:  request.generation + 1,
+		Previous:    request.id,
+		ResumeBasis: basis,
+	})
+}
+
+// Generation 是这份请求在它自然键上的代次，从一起数。
+func (request EvaluationRequest) Generation() int { return request.generation }
+
+// Previous 交回前一代的标识；首代第二个返回值为假。
+func (request EvaluationRequest) Previous() (EvaluationRequestID, bool) {
+	return request.previous, request.previous.valid()
+}
+
+// ResumeBasis 交回这一代凭的续办依据；原始那一拍发起的首代没有。
+func (request EvaluationRequest) ResumeBasis() ResumeBasis { return request.resumeBasis }
 
 func (request EvaluationRequest) ID() EvaluationRequestID {
 	return request.id

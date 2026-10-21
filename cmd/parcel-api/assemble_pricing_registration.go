@@ -6,6 +6,7 @@ import (
 
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	pricinghttp "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/http"
 	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
@@ -148,7 +149,11 @@ func buildPriceCardRegistrationOrchestration(db *bentopg.DB) (transactionalPrice
 	if err != nil {
 		return transactionalPriceCardRegistration{}, fmt.Errorf("parcel-api: price card catalog: %w", err)
 	}
-	handler := pricingapp.NewRegisterPriceCardHandler(pricingapp.RegisterPriceCardDeps{Catalog: catalog})
+	registered, err := pricingParameterRegisteredHandoff(db)
+	if err != nil {
+		return transactionalPriceCardRegistration{}, err
+	}
+	handler := pricingapp.NewRegisterPriceCardHandler(pricingapp.RegisterPriceCardDeps{Catalog: catalog, Registered: registered})
 	return transactionalPriceCardRegistration{transactor: db.Transactor(), inner: handler}, nil
 }
 
@@ -178,12 +183,31 @@ func buildReferenceSeriesReviewOrchestration(db *bentopg.DB) (transactionalRefer
 	if err != nil {
 		return transactionalReferenceSeriesReview{}, fmt.Errorf("parcel-api: reference series review register: %w", err)
 	}
+	registered, err := pricingParameterRegisteredHandoff(db)
+	if err != nil {
+		return transactionalReferenceSeriesReview{}, err
+	}
 	handler := pricingapp.NewReviewReferenceSeriesHandler(pricingapp.ReviewReferenceSeriesDeps{
-		Versions: versions,
-		Reviews:  reviews,
-		Clock:    systemClock{},
+		Versions:   versions,
+		Reviews:    reviews,
+		Clock:      systemClock{},
+		Registered: registered,
 	})
 	return transactionalReferenceSeriesReview{transactor: db.Transactor(), inner: handler}, nil
+}
+
+// pricingParameterRegisteredHandoff 装计价的「参数已登记」交接口（ADR-0229 决定五）。与登记册同一只 db，信封因此落在
+// 事务包装给的同一笔环境事务里：停在没卡或缺在用序列上的评价请求等的就是这封信。
+func pricingParameterRegisteredHandoff(db *bentopg.DB) (*pppostgres.OutboxEvaluationResumptionHandoffs, error) {
+	store, err := outbox.NewStore(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: pricing outbox store: %w", err)
+	}
+	handoff, err := pppostgres.NewOutboxEvaluationResumptionHandoffs(db, store, systemClock{})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: pricing parameter registered handoff: %w", err)
+	}
+	return handoff, nil
 }
 
 // buildReferenceSeriesPreviewOrchestration 装配 `/pricing-reference-series-previews` 的真编排（票

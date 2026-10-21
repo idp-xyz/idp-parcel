@@ -59,9 +59,15 @@ type RegisterPriceCardCommand struct {
 	Registration domain.PriceCardRegistration
 }
 
+// RegisterPriceCardDeps 是价卡登记的依赖。Registered 交「参数已登记」：结算那一侧停在没卡、卡上没声明取整或评价采用
+// 不了的请求，补登一版卡之后由它续办（ADR-0229 决定五）。缺了它登记照样成功，停着的请求却再也等不来续办，所以必备。
 type RegisterPriceCardDeps struct {
-	Catalog ports.PriceCardCatalog
+	Catalog    ports.PriceCardCatalog
+	Registered ports.PricingParameterRegisteredHandoff
 }
+
+// ErrPriceCardRegistrationHandoffMissing 说明装配没给价卡登记接「参数已登记」交接口。
+var ErrPriceCardRegistrationHandoffMissing = errors.New("parcel pricing: price card registration has no pricing parameter registered handoff")
 
 // RegisterPriceCardHandler 编排价卡登记用例（票 07 件③）。治理判断全在领域与仓储
 // （登记门在构造器，冲突判定在仓储的结果代数），这里只做受理与答案翻译。
@@ -84,6 +90,9 @@ func (handler *RegisterPriceCardHandler) Handle(
 	if command.Registration.Tenant().String() == "" {
 		return PriceCardRegistrationNotAccepted, nil
 	}
+	if handler.deps.Registered == nil {
+		return PriceCardRegistrationUndecided, ErrPriceCardRegistrationHandoffMissing
+	}
 
 	saved, err := handler.deps.Catalog.Register(ctx, command.Registration)
 	if err != nil {
@@ -91,9 +100,9 @@ func (handler *RegisterPriceCardHandler) Handle(
 	}
 	switch saved {
 	case ports.PriceCardRegistered:
-		return PriceCardRecorded, nil
+		return handler.announce(ctx, command.Registration, PriceCardRecorded)
 	case ports.PriceCardAlreadyRegistered:
-		return PriceCardAlreadyOnRegister, nil
+		return handler.announce(ctx, command.Registration, PriceCardAlreadyOnRegister)
 	case ports.PriceCardContentConflict:
 		return PriceCardRegistrationConflict, nil
 	case ports.PriceCardCanonicalizationDiffers:
@@ -101,4 +110,24 @@ func (handler *RegisterPriceCardHandler) Handle(
 	default:
 		return RegisterPriceCardOutcomeInvalid, fmt.Errorf("%w: %d", ErrUnexpectedPriceCardOutcome, saved)
 	}
+}
+
+// announce 在这一版卡落库（或重放命中同一版）之后交「参数已登记」，带卡的计价范围。重放重发同一封，由交接口按同一个
+// 标识去重；本口落地之前登进册的卡也借重放补上它那一封。冲突与形状不同不交：那一版没写进册。交接失败上抛，信封与
+// 登记行同生共死。
+func (handler *RegisterPriceCardHandler) announce(
+	ctx context.Context,
+	registration domain.PriceCardRegistration,
+	outcome RegisterPriceCardOutcome,
+) (RegisterPriceCardOutcome, error) {
+	plan := registration.Plan()
+	if err := handler.deps.Registered.HandOffPricingParameterRegistered(ctx, ports.PricingParameterRegisteredIntent{
+		Tenant:       registration.Tenant(),
+		Kind:         ports.PricingParameterPriceCard,
+		Registration: plan.Reference(),
+		Scope:        plan.Scope(),
+	}); err != nil {
+		return PriceCardRegistrationUndecided, fmt.Errorf("register price card: %w", err)
+	}
+	return outcome, nil
 }

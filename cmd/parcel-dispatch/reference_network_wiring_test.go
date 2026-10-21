@@ -314,7 +314,9 @@ func registerDemoCostCard(t *testing.T, db *bentopg.DB) {
 	if err != nil {
 		t.Fatalf("构造价卡库：%v", err)
 	}
-	handler := ppapplication.NewRegisterPriceCardHandler(ppapplication.RegisterPriceCardDeps{Catalog: cards})
+	handler := ppapplication.NewRegisterPriceCardHandler(ppapplication.RegisterPriceCardDeps{
+		Catalog: cards, Registered: pricingParameterHandoffForTest(t, db),
+	})
 	var outcome ppapplication.RegisterPriceCardOutcome
 	err = db.Transactor().WithinTransaction(t.Context(), func(ctx context.Context) error {
 		result, registerErr := handler.Handle(ctx, ppapplication.RegisterPriceCardCommand{Registration: registration})

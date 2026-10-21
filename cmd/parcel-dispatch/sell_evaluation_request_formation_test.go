@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,7 +15,6 @@ import (
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	ppinbox "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/inbox"
 	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
-	ppsettlement "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/settlementaccounting"
 	ppapplication "go.idp.xyz/idp-parcel/internal/parcelpricing/application"
 	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
@@ -90,7 +88,8 @@ func registerDemoSellPricing(t *testing.T, db *bentopg.DB) {
 	if err != nil {
 		t.Fatalf("重建演示售价卡：%v", err)
 	}
-	registerCard := ppapplication.NewRegisterPriceCardHandler(ppapplication.RegisterPriceCardDeps{Catalog: cards})
+	registered := pricingParameterHandoffForTest(t, db)
+	registerCard := ppapplication.NewRegisterPriceCardHandler(ppapplication.RegisterPriceCardDeps{Catalog: cards, Registered: registered})
 	within("演示售价卡", func(ctx context.Context) (string, error) {
 		outcome, err := registerCard.Handle(ctx, ppapplication.RegisterPriceCardCommand{Registration: card})
 		return outcome.String(), err
@@ -111,7 +110,7 @@ func registerDemoSellPricing(t *testing.T, db *bentopg.DB) {
 	}
 	decodeSeedDocument(t, read("reference-series-fuel-review.json"), &seriesReview)
 	reviewSeries := ppapplication.NewReviewReferenceSeriesHandler(ppapplication.ReviewReferenceSeriesDeps{
-		Versions: series, Reviews: seriesReviews, Clock: systemClock{},
+		Versions: series, Reviews: seriesReviews, Clock: systemClock{}, Registered: registered,
 	})
 	within("燃油序列复核", func(ctx context.Context) (string, error) {
 		outcome, err := reviewSeries.Handle(ctx, ppapplication.ReviewReferenceSeriesCommand{
@@ -141,7 +140,7 @@ func registerDemoSellPricing(t *testing.T, db *bentopg.DB) {
 	}
 	decodeSeedDocument(t, read("reference-catalogue-zone-cn-sg-review.json"), &catalogueReview)
 	reviewCatalogue := ppapplication.NewReviewReferenceCatalogueHandler(ppapplication.ReviewReferenceCatalogueDeps{
-		Versions: catalogues, Reviews: catalogueReviews, Clock: systemClock{},
+		Versions: catalogues, Reviews: catalogueReviews, Clock: systemClock{}, Registered: registered,
 	})
 	within("分区目录复核", func(ctx context.Context) (string, error) {
 		outcome, err := reviewCatalogue.Handle(ctx, ppapplication.ReviewReferenceCatalogueCommand{
@@ -374,14 +373,15 @@ func TestASellEvaluationRequestFormsACustomerChargeEvaluationThroughTheRouteTabl
 		t.Fatalf("评价标识那封信 = %q, want parcel-pricing.evaluation.recorded", eventType)
 	}
 
-	if got := recordedFailureCode(t, fixture.db, uncardedID); got != "dispatch.consumer_undecided" {
-		t.Fatalf("没卡的 SELL 请求 failure_code = %q, want dispatch.consumer_undecided；原文 = %v", got, observed[uncardedID])
+	// 没卡的那一份不再按未决重投：PP 入账、交「评价未形成」，SA 记停因等补登一张卡（ADR-0229 决定三）。
+	if got := recordedFailureCode(t, fixture.db, uncardedID); got != "" {
+		t.Fatalf("没卡的 SELL 请求 failure_code = %q，答不出评价不该再按未决重投；原文 = %v", got, observed[uncardedID])
 	}
-	if err := observed[uncardedID]; !errors.Is(err, ppsettlement.ErrPriceCardNotConfigured) {
-		t.Fatalf("没卡的 SELL 请求没停在「未配置」：%v", err)
+	if n := fixture.countInbox(t, "parcel-pricing/form-sell-evaluation-from-request", uncardedID); n != 1 {
+		t.Fatalf("没卡的 SELL 请求要入账：inbox 行数 = %d, want 1", n)
 	}
-	if n := fixture.countInbox(t, "parcel-pricing/form-sell-evaluation-from-request", uncardedID); n != 0 {
-		t.Fatalf("未决必须回滚：inbox 行数 = %d, want 0", n)
+	if got := unformedEnvelopes(t, fixture.db)["SELLREQ-SYN-NOCARD"]; got.Cause != "PRICE_CARD_NOT_CONFIGURED" || got.Direction != "SELL" {
+		t.Fatalf("没卡的 SELL 请求没交「未配置」：%+v", got)
 	}
 	if _, found, err := evaluations.FindByRequestReference(t.Context(),
 		ppValue(t, ppdomain.NewTenantID, demoTenant), ppValue(t, ppdomain.NewEvaluationRequestReference, "SELLREQ-SYN-NOCARD")); err != nil || found {

@@ -17,20 +17,23 @@ type SellEvaluationRequestKey struct {
 // SellEvaluationRequestRecord 是一次「发起 SELL 评价」越过提交边界留下的东西。RecordedAt 是编排时钟给的登记时刻，
 // 随记录往返，也是信封的发生时刻。
 //
-// State 与 FormedCharge 是册上的状态格：登记只收`已提交`、不带费用标识；改记其余各格归形成那一半。读口原样交回，
-// 按包裹找当前有效的预估客户费用看的就是这一对——FormedCharge 只在`已形成`时非空。
+// State、FormedCharge 与 StopCause 是册上的结论格：登记只收`已提交`、不带费用标识与停因；改记其余各格归记结论的那一口。
+// 读口原样交回，按包裹找当前有效的预估客户费用看的就是状态与费用标识这一对——FormedCharge 只在`已形成`时非空；
+// StopCause 只在停下的各格非零（ADR-0229 决定三）。
 type SellEvaluationRequestRecord struct {
 	Key          SellEvaluationRequestKey
 	Request      domain.SellEvaluationRequest
 	RecordedAt   time.Time
 	State        domain.SellEvaluationRequestState
 	FormedCharge domain.CustomerChargeID
+	StopCause    domain.EvaluationStopCause
 }
 
 // SellEvaluationRequestRegistry 是 SELL 评价请求的登记面。Save 的写入代数与 BUY 那本同一条（ADR-0031），所以共用
-// EvaluationRequestSaveOutcome：撞身份键或撞自然键（租户、包裹、计费时点）唯一约束都答`已存在`、不覆盖先到者；
-// 幂等由库上的唯一约束守。FindByNaturalKey 让编排在撞上时读回先到者、交回原 ID，而不是答失败。Save 收到状态不是
-// `已提交`或带了费用标识的记录即拒——那是把形成那一半的结论冒充成登记。
+// EvaluationRequestSaveOutcome：撞身份键、撞（自然键、代次）或撞前一代唯一约束都答`已存在`、不覆盖先到者；幂等由库上的
+// 唯一约束守，自然键是（租户、包裹、计费时点），一份请求至多一个下一代（ADR-0229 决定一）。FindByNaturalKey 交回这条
+// 代次链上最新的那一代，让编排在撞上时读回先到者、交回原 ID，而不是答失败。Save 收到状态不是`已提交`、带了费用标识
+// 或停因的记录即拒——那是把结论冒充成登记。
 type SellEvaluationRequestRegistry interface {
 	Save(ctx context.Context, record SellEvaluationRequestRecord) (EvaluationRequestSaveOutcome, error)
 	FindByNaturalKey(
@@ -42,8 +45,8 @@ type SellEvaluationRequestRegistry interface {
 
 // SellEvaluationRequestView 是请求册的只读半边。计价收到信封后按 ID 回读请求，SELL 消费门按评价回指的 ID 读回包裹与
 // 结算账户——走这里，拿不到 Save。FindCurrentByParcel 答一件包裹眼下的那份请求：自然键容得下同一件包裹在不同时点
-// 各有一份，而一户只采用一种时点，所以通常至多一份；有多份时交回登记最晚的那份，同刻再按 ID 定序，让同一组行
-// 永远答同一份。与登记面同一个适配器实现，行模型只有一份。
+// 各有一份、同一时点各代一份，而一户只采用一种时点、续办出来的下一代总是登记得更晚，所以交回登记最晚的那份，同刻
+// 再按代次、再按 ID 定序，让同一组行永远答同一份。与登记面同一个适配器实现，行模型只有一份。
 type SellEvaluationRequestView interface {
 	FindByID(ctx context.Context, key SellEvaluationRequestKey) (SellEvaluationRequestRecord, bool, error)
 	FindCurrentByParcel(
@@ -62,8 +65,8 @@ const (
 	SellEvaluationRequestConcluded
 	// SellEvaluationRequestConclusionReplayed：册上已是同一份结论（状态与费用标识都相同），没有再写。
 	SellEvaluationRequestConclusionReplayed
-	// SellEvaluationRequestConcludedOtherwise：册上已是另一份结论，不覆盖——一份请求只下一次结论（ADR-0190 越权
-	// 风险点 3「请求卡死」）。
+	// SellEvaluationRequestConcludedOtherwise：册上已是另一份结论，不覆盖——一份请求只下一次结论；补登之后要再问，
+	// 是另起下一代（ADR-0229 决定二），不改这一份。
 	SellEvaluationRequestConcludedOtherwise
 )
 
@@ -80,10 +83,10 @@ func (effect SellEvaluationRequestConclusionEffect) String() string {
 	}
 }
 
-// SellEvaluationRequestConclusionRecorder 是请求册的改记口，归形成那一半（ADR-0190 决定五）：把一份`已提交`的请求改记为
-// 结论，`已形成`时同一行写下费用标识。只从`已提交`往外走，撞上已有结论按内容分重放与另有结论，都不覆盖。要求环境
-// 事务：`已形成`的费用标识有外键指向客户费用，费用行与这一笔改记必须同生同灭。请求不在册上是错误，不是一种落点——
-// 编排只在同一事务里读到了这份请求之后才来记。
+// SellEvaluationRequestConclusionRecorder 是请求册的改记口，归形成那一半（ADR-0190 决定五）与记计价没形成评价的那一口
+// （ADR-0229 决定三）：把一份`已提交`的请求改记为结论，`已形成`时同一行写下费用标识，停下时写下停因。只从`已提交`
+// 往外走，撞上已有结论按内容分重放与另有结论，都不覆盖。要求环境事务：`已形成`的费用标识有外键指向客户费用，费用行
+// 与这一笔改记必须同生同灭。请求不在册上是错误，不是一种落点——编排只在同一事务里读到了这份请求之后才来记。
 type SellEvaluationRequestConclusionRecorder interface {
 	RecordConclusion(
 		ctx context.Context,

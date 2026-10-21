@@ -63,9 +63,10 @@ func TestBuyEvaluationTriggerReplaysConflictsAndMissesAsUnconfigured(t *testing.
 	}
 }
 
-// Covers: ADR-0208——费用项目随行落库读回；同原因换一个费用项目、或先登了没有费用项目的行再来补登，都是异内容，答冲突、
-// 原行不动（本册不设修订）。
-func TestBuyEvaluationTriggerCarriesItsFeeItemAndRefusesToRewriteIt(t *testing.T) {
+// Covers: ADR-0208——费用项目随行落库读回；同原因换一个已登的费用项目是异内容，答冲突、原行不动。ADR-0229 决定七
+// （AT-SA-197）：先登了没有费用项目的那一版，再来补登一格是追加下一版，读口取最新一版、旧版留在册上；任一版再交一次
+// 是重放；补上之后再换一个费用项目仍答冲突。
+func TestBuyEvaluationTriggerCarriesItsFeeItemAndOnlyRevisesAMissingOne(t *testing.T) {
 	db := catalogueDB(t)
 	triggers := mustBuyEvaluationTriggers(t, db)
 	tenant := registerTenant(t)
@@ -74,6 +75,7 @@ func TestBuyEvaluationTriggerCarriesItsFeeItemAndRefusesToRewriteIt(t *testing.T
 	otherFeeItem := withFeeItem(t, buyEvaluationTriggerRegistration(t, "ACTUAL_FULFILLMENT"), "SYN-FEE-ITEM-OTHER")
 	bare := buyEvaluationTriggerRegistration(t, "FAILED_ATTEMPT")
 	bareThenFeeItem := withFeeItem(t, buyEvaluationTriggerRegistration(t, "FAILED_ATTEMPT"), "SYN-FEE-ITEM-ATTEMPT")
+	revisedAgain := withFeeItem(t, buyEvaluationTriggerRegistration(t, "FAILED_ATTEMPT"), "SYN-FEE-ITEM-OTHER")
 
 	err := db.Transactor().WithinTransaction(t.Context(), func(ctx context.Context) error {
 		for _, step := range []struct {
@@ -84,7 +86,10 @@ func TestBuyEvaluationTriggerCarriesItsFeeItemAndRefusesToRewriteIt(t *testing.T
 			{fulfillment, ports.CatalogueReplay},
 			{otherFeeItem, ports.CatalogueConflict},
 			{bare, ports.CatalogueRegistered},
-			{bareThenFeeItem, ports.CatalogueConflict},
+			{bareThenFeeItem, ports.CatalogueRegistered},
+			{bareThenFeeItem, ports.CatalogueReplay},
+			{bare, ports.CatalogueReplay},
+			{revisedAgain, ports.CatalogueConflict},
 		} {
 			effect, err := triggers.SaveBuyEvaluationTrigger(ctx, tenant, step.registration, at)
 			if err != nil || effect != step.want {
@@ -108,8 +113,24 @@ func TestBuyEvaluationTriggerCarriesItsFeeItemAndRefusesToRewriteIt(t *testing.T
 	if err != nil || !found {
 		t.Fatalf("读回 found=%v err=%v", found, err)
 	}
-	if _, registered := loaded.FeeItem(); registered {
-		t.Fatal("补登被悄悄写进了原行")
+	if feeItem, registered := loaded.FeeItem(); !registered || feeItem.String() != "SYN-FEE-ITEM-ATTEMPT" {
+		t.Fatalf("费用项目 = %q registered=%v, want 追加的那一版", feeItem, registered)
+	}
+	querier, err := db.ReadExecutor(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var revisions int
+	var first *string
+	if err := querier.QueryRow(t.Context(),
+		`SELECT count(*), (SELECT fee_item_ref FROM settlement_accounting.buy_evaluation_trigger
+		                    WHERE tenant_id = $1 AND occurrence_reason = 'FAILED_ATTEMPT' AND revision = 1)
+		   FROM settlement_accounting.buy_evaluation_trigger WHERE tenant_id = $1 AND occurrence_reason = 'FAILED_ATTEMPT'`,
+		tenant.String()).Scan(&revisions, &first); err != nil {
+		t.Fatal(err)
+	}
+	if revisions != 2 || first != nil {
+		t.Fatalf("版次 %d 行、第一版费用项目 %v，want 两版且第一版原样没登", revisions, first)
 	}
 }
 

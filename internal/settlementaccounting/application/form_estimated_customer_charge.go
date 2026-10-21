@@ -34,17 +34,15 @@ type EstimatedCustomerChargeOutcome uint8
 
 const (
 	EstimatedCustomerChargeOutcomeInvalid EstimatedCustomerChargeOutcome = iota
-	// EstimatedCustomerChargeConcluded：请求册上记下了结论——`已形成`（连同费用）、`待判断`、`不可计价`或`冲突`。
+	// EstimatedCustomerChargeConcluded：请求册上记下了结论——`已形成`（连同费用），或停下连同停因：`待判断`、`不可计价`、
+	// `冲突`、`未形成`（评价失败）。停下的请求等补登或运营续办另起下一代（ADR-0229 决定二）。
 	EstimatedCustomerChargeConcluded
-	// EstimatedCustomerChargeAlreadyConcluded：请求早已有结论，本次什么都不写（重放；或 ADR-0190 越权风险点 3 的「请求
-	// 卡死」：一份请求只下一次结论，补登映射之后也不回补）。
+	// EstimatedCustomerChargeAlreadyConcluded：请求早已有结论，本次什么都不写（重放）。一份请求只下一次结论；补登之后
+	// 再问是下一代的事，不改这一份。
 	EstimatedCustomerChargeAlreadyConcluded
 	// EstimatedCustomerChargeNoSellRequest：评价没有回指。这份评价不是为包裹计费时点形成的，不归本编排，零写入。回指了
 	// 却在册上查不到是另一回事，见 ErrSellEvaluationRequestMissing。
 	EstimatedCustomerChargeNoSellRequest
-	// EstimatedCustomerChargeEvaluationNotFormed：计价侧这份评价落了`失败`。请求不改记、停在`已提交`——请求册不设「未形成」
-	// 那一格（ADR-0190 决定五「计价侧没形成评价时……请求停在已提交」），评价不可变，重投也不会变。
-	EstimatedCustomerChargeEvaluationNotFormed
 	// EstimatedCustomerChargeUndecided：某个依赖答不出，形成与否未知，整笔回滚等重投。
 	EstimatedCustomerChargeUndecided
 )
@@ -57,8 +55,6 @@ func (outcome EstimatedCustomerChargeOutcome) String() string {
 		return "SELL_REQUEST_ALREADY_CONCLUDED"
 	case EstimatedCustomerChargeNoSellRequest:
 		return "NO_SELL_REQUEST"
-	case EstimatedCustomerChargeEvaluationNotFormed:
-		return "SELL_EVALUATION_NOT_FORMED"
 	case EstimatedCustomerChargeUndecided:
 		return "ESTIMATED_CUSTOMER_CHARGE_UNDECIDED"
 	default:
@@ -102,11 +98,17 @@ type FormEstimatedCustomerChargeCommand struct {
 // EstimatedCustomerChargeResult 是本编排的结果。State 在`已记结论`与`早有结论`两格有意义，Charge 只在`已形成`时有。
 // 未决时 cause 带着依赖原样答出的错误：原因枚举只说停在哪个依赖上，外键违例、空键这类重投不自愈的错误要靠原文才看得出。
 type EstimatedCustomerChargeResult struct {
-	outcome EstimatedCustomerChargeOutcome
-	state   domain.SellEvaluationRequestState
-	charge  domain.CustomerChargeID
-	reason  EstimatedCustomerChargeUndecidedReason
-	cause   error
+	outcome   EstimatedCustomerChargeOutcome
+	state     domain.SellEvaluationRequestState
+	charge    domain.CustomerChargeID
+	stopCause domain.EvaluationStopCause
+	reason    EstimatedCustomerChargeUndecidedReason
+	cause     error
+}
+
+// StopCause 在`已记结论`与`早有结论`两格交回停下时的停因；`已形成`与其余各格第二个返回值为假。
+func (result EstimatedCustomerChargeResult) StopCause() (domain.EvaluationStopCause, bool) {
+	return result.stopCause, result.stopCause != domain.EvaluationStopCauseInvalid
 }
 
 func (result EstimatedCustomerChargeResult) Outcome() EstimatedCustomerChargeOutcome {
@@ -155,11 +157,12 @@ func NewFormEstimatedCustomerChargeHandler(deps FormEstimatedCustomerChargeDeps)
 
 // Handle 读请求 → 看评价结果 → 映费用项目 → 形成 → 记结论。
 //
-// 请求已不是`已提交`就什么都不做：一份请求只下一次结论，重放在这里落定，不再碰费用库。各种评价结果的去向：
+// 请求已不是`已提交`就什么都不做：一份请求只下一次结论，重放在这里落定，不再碰费用库。各种评价结果的去向（停因记在
+// 结论上，ADR-0229 决定三）：
 //   - 待判断、金额未声明（卡没声明金额取整，租户取值缺席）、费用行映不全或映到多个费用项目（AT-SA-174）——一律记
-//     `待判断`，不建占位费用，入账不重投。卡与映射是租户取值，补登之后这一份也不回补（ADR-0190 越权风险点 3）。
+//     `待判断`，各带各的停因，不建占位费用，入账不重投。卡与映射是租户取值，补登之后由「参数已登记」按停因另起下一代。
 //   - 不可计价、冲突——照记那一格（AT-SA-175：不形成任何费用行，不转待判断反复重试）。
-//   - 失败——请求停在`已提交`，见 EstimatedCustomerChargeEvaluationNotFormed。
+//   - 失败——记`未形成`，停因是评价失败。评价不可变，重投也不会变。
 //
 // 两侧说法矛盾的格上抛错误、不入账：回指的请求不在册上，结算币种对不上请求快照。
 func (handler *FormEstimatedCustomerChargeHandler) Handle(
@@ -180,22 +183,25 @@ func (handler *FormEstimatedCustomerChargeHandler) Handle(
 	}
 	if record.State != domain.SellRequestSubmitted {
 		return EstimatedCustomerChargeResult{
-			outcome: EstimatedCustomerChargeAlreadyConcluded,
-			state:   record.State,
-			charge:  record.FormedCharge,
+			outcome:   EstimatedCustomerChargeAlreadyConcluded,
+			state:     record.State,
+			charge:    record.FormedCharge,
+			stopCause: record.StopCause,
 		}, nil
 	}
 
 	switch adoption.Outcome {
 	case ports.SellEvaluationCompleted:
-	case ports.SellEvaluationPending, ports.SellEvaluationAmountUndeclared:
-		return handler.conclude(ctx, key, domain.SellRequestPendingJudgment, domain.CustomerChargeID{})
+	case ports.SellEvaluationPending:
+		return handler.stop(ctx, key, domain.StopEvaluationPendingJudgment)
+	case ports.SellEvaluationAmountUndeclared:
+		return handler.stop(ctx, key, domain.StopAmountRoundingUndeclared)
 	case ports.SellEvaluationUnratable:
-		return handler.conclude(ctx, key, domain.SellRequestUnratable, domain.CustomerChargeID{})
+		return handler.stop(ctx, key, domain.StopEvaluationUnratable)
 	case ports.SellEvaluationConflict:
-		return handler.conclude(ctx, key, domain.SellRequestConflict, domain.CustomerChargeID{})
+		return handler.stop(ctx, key, domain.StopEvaluationConflict)
 	case ports.SellEvaluationNotFormed:
-		return EstimatedCustomerChargeResult{outcome: EstimatedCustomerChargeEvaluationNotFormed}, nil
+		return handler.stop(ctx, key, domain.StopEvaluationFailed)
 	default:
 		return EstimatedCustomerChargeResult{}, fmt.Errorf("%w: %d", ErrUnexpectedSellEvaluationOutcome, adoption.Outcome)
 	}
@@ -209,7 +215,7 @@ func (handler *FormEstimatedCustomerChargeHandler) Handle(
 		return undecidedEstimatedCharge(FeeItemMappingViewUnavailable, err), nil
 	}
 	if !mapped {
-		return handler.conclude(ctx, key, domain.SellRequestPendingJudgment, domain.CustomerChargeID{})
+		return handler.stop(ctx, key, domain.StopFeeItemMappingIncomplete)
 	}
 
 	charge := record.Request.EstimatedCustomerChargeID()
@@ -225,7 +231,11 @@ func (handler *FormEstimatedCustomerChargeHandler) Handle(
 	}
 	switch formed.Outcome() {
 	case SellChargeFormed, SellChargeAlreadyFormed:
-		return handler.conclude(ctx, key, domain.SellRequestFormed, charge)
+		conclusion, err := domain.NewFormedSellEvaluationRequestConclusion(charge)
+		if err != nil {
+			return EstimatedCustomerChargeResult{}, err
+		}
+		return handler.conclude(ctx, key, conclusion)
 	case SellChargeUndecided:
 		return undecidedEstimatedCharge(SellChargeFormationUndecided, fmt.Errorf("sell charge formation: %s", formed.UndecidedReason())), nil
 	default:
@@ -265,26 +275,41 @@ func (handler *FormEstimatedCustomerChargeHandler) singleFeeItem(
 	return chosen, chosen.String() != "", nil
 }
 
+// stop 记一个停因作结论，状态格由停因推出。
+func (handler *FormEstimatedCustomerChargeHandler) stop(
+	ctx context.Context,
+	key ports.SellEvaluationRequestKey,
+	cause domain.EvaluationStopCause,
+) (EstimatedCustomerChargeResult, error) {
+	conclusion, err := domain.NewStoppedSellEvaluationRequestConclusion(cause, handler.deps.Clock.Now())
+	if err != nil {
+		return EstimatedCustomerChargeResult{}, err
+	}
+	return handler.conclude(ctx, key, conclusion)
+}
+
 // conclude 在请求册上记结论。另有结论不覆盖，作错误整笔回滚——见 ErrSellEvaluationRequestConcludedOtherwise。
 func (handler *FormEstimatedCustomerChargeHandler) conclude(
 	ctx context.Context,
 	key ports.SellEvaluationRequestKey,
-	state domain.SellEvaluationRequestState,
-	charge domain.CustomerChargeID,
+	conclusion domain.SellEvaluationRequestConclusion,
 ) (EstimatedCustomerChargeResult, error) {
-	conclusion, err := domain.NewSellEvaluationRequestConclusion(state, charge)
-	if err != nil {
-		return EstimatedCustomerChargeResult{}, err
-	}
 	effect, err := handler.deps.Conclusions.RecordConclusion(ctx, key, conclusion)
 	if err != nil {
 		return undecidedEstimatedCharge(SellEvaluationRequestRegisterUnavailable, err), nil
 	}
+	charge, _ := conclusion.FormedCharge()
+	stopCause, _ := conclusion.StopCause()
 	switch effect {
 	case ports.SellEvaluationRequestConcluded, ports.SellEvaluationRequestConclusionReplayed:
-		return EstimatedCustomerChargeResult{outcome: EstimatedCustomerChargeConcluded, state: state, charge: charge}, nil
+		return EstimatedCustomerChargeResult{
+			outcome:   EstimatedCustomerChargeConcluded,
+			state:     conclusion.State(),
+			charge:    charge,
+			stopCause: stopCause,
+		}, nil
 	case ports.SellEvaluationRequestConcludedOtherwise:
-		return EstimatedCustomerChargeResult{}, fmt.Errorf("%w: request %s, wanted %s", ErrSellEvaluationRequestConcludedOtherwise, key.Request, state)
+		return EstimatedCustomerChargeResult{}, fmt.Errorf("%w: request %s, wanted %s", ErrSellEvaluationRequestConcludedOtherwise, key.Request, conclusion.State())
 	default:
 		return EstimatedCustomerChargeResult{}, fmt.Errorf("%w: %d", ErrUnexpectedSellRequestConclusionEffect, effect)
 	}

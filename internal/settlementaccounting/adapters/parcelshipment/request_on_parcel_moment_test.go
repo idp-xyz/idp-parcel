@@ -69,6 +69,19 @@ func (double chainAdoptions) FindSellBillingMomentAdoption(
 	return double.adoption, double.adopted, nil
 }
 
+// chainStalls 收下 SELL 发起停办、不读回：本包只证消费格，停办册的口径由真库用例钉。
+type chainStalls struct{}
+
+func (chainStalls) RecordSellInitiationStall(context.Context, sadomain.TenantID, sadomain.SellEvaluationInitiationStall) error {
+	return nil
+}
+
+func (chainStalls) FindSellInitiationStall(
+	context.Context, sadomain.TenantID, sadomain.SellEvaluationRequestNaturalKey,
+) (sadomain.SellEvaluationInitiationStall, bool, error) {
+	return sadomain.SellEvaluationInitiationStall{}, false, nil
+}
+
 type chainRegistry struct {
 	records map[string]saports.SellEvaluationRequestRecord
 	findErr error
@@ -173,6 +186,7 @@ func newRequesterFixture(t *testing.T, adopted sadomain.ParcelBillingMoment) *re
 		Registry:    fixture.registry,
 		Identity:    &chainIdentity{},
 		Downstream:  fixture.handoff,
+		Stalls:      chainStalls{},
 		Clock:       chainClock{},
 	})
 	if err != nil {

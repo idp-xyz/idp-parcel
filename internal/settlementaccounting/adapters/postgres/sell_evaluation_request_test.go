@@ -281,11 +281,33 @@ func TestTheRequestStateCellCarriesTheFormedChargeOnlyWhenFormed(t *testing.T) {
 		t.Fatalf("首登结果 = %q", outcome)
 	}
 
-	mark := func(state string, charge any) error {
+	// mark 改记状态格、费用标识与停因（ADR-0229 决定三：停下的各格必须带停因，`已提交`与`已形成`不带）。
+	markWithCause := func(state string, charge any, cause any) error {
+		var stoppedAt any
+		if cause != nil {
+			stoppedAt = sellRequestRecordedAt
+		}
 		_, err := pool.Exec(t.Context(),
-			`UPDATE settlement_accounting.sell_evaluation_request SET state = $1, customer_charge_id = $2
-			  WHERE tenant_id = 'tenant-a' AND request_id = 'SELLREQ-SYN-1'`, state, charge)
+			`UPDATE settlement_accounting.sell_evaluation_request
+			    SET state = $1, customer_charge_id = $2, stop_cause = $3, stopped_at = $4
+			  WHERE tenant_id = 'tenant-a' AND request_id = 'SELLREQ-SYN-1'`, state, charge, cause, stoppedAt)
 		return err
+	}
+	mark := func(state string, charge any) error {
+		var cause any
+		if state == "PENDING_JUDGMENT" {
+			cause = "EVALUATION_PENDING_JUDGMENT"
+		}
+		return markWithCause(state, charge, cause)
+	}
+	if err := markWithCause("PENDING_JUDGMENT", nil, nil); err == nil {
+		t.Fatal("待判断却不带停因，库收下了")
+	}
+	if err := markWithCause("UNRATABLE", nil, "EVALUATION_CONFLICT"); err == nil {
+		t.Fatal("不可计价配了冲突的停因，库收下了")
+	}
+	if err := markWithCause("SUBMITTED", nil, "PRICE_CARD_NOT_CONFIGURED"); err == nil {
+		t.Fatal("已提交却带了停因，库收下了")
 	}
 	if err := mark("FORMED", nil); err == nil {
 		t.Fatal("已形成却不带费用标识，库收下了")
@@ -296,7 +318,7 @@ func TestTheRequestStateCellCarriesTheFormedChargeOnlyWhenFormed(t *testing.T) {
 	if err := mark("FORMED", "charge-estimated"); err == nil {
 		t.Fatal("已形成指向一笔不在费用册上的费用，库收下了")
 	}
-	if err := mark("NOT_FORMED", nil); err == nil {
+	if err := mark("STALLED", nil); err == nil {
 		t.Fatal("词表外的状态，库收下了")
 	}
 

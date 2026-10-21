@@ -12,7 +12,7 @@ import (
 
 // 本文件对真实 PostgreSQL 16 证 buildRegistrar 装的 ADR-0190 两本租户取值册（隔离合成 S）：SELL 计费时点采用——账户
 // 不在册上归用法格、行不落；首登、重放、换时点冲突不覆盖；词表外的时点在事务之前就拒。费用项目映射——首登、重放、换
-// 费用项目冲突不覆盖。两本都不交信封：没有停着等它们的东西可重驱。
+// 费用项目冲突不覆盖。两本落行时各交一封「评价参数已登记」（ADR-0229 决定五），重放不翻倍、冲突不交。
 
 func sellBillingMomentDocument(accountID, moment, scope string) string {
 	return `{"tenantId": "SYN-T1", "accountId": "` + accountID + `", "billingMoment": "` + moment + `", "pricingScopeId": "` + scope + `"}`
@@ -79,7 +79,13 @@ func TestTheSellCustomerChargeRegistersRegisterOnRealPostgres(t *testing.T) {
 		t.Fatalf("映射行 = %d（首登那一份 %d），要只有首登那一行", rows("fee_item_mapping"), n)
 	}
 
-	if after := outboxRows(); after != envelopesBefore {
-		t.Fatalf("两本册登记后 Outbox 从 %d 封变成 %d 封，这两本不交信封", envelopesBefore, after)
+	// 两本册各落一行、各交一封「评价参数已登记」（ADR-0229 决定五）：重放重发同一封、被 Outbox 按 ID 吞掉，冲突不交。
+	if after := outboxRows(); after != envelopesBefore+2 {
+		t.Fatalf("两本册登记后 Outbox 从 %d 封变成 %d 封，want 各落一行各一封", envelopesBefore, after)
+	}
+	if n := countRows(t, pool,
+		`SELECT count(*) FROM `+migrate.SchemaBento+`.outbox WHERE event_type = 'settlement-accounting.evaluation-parameter.registered' AND partition_key = $1`,
+		"SYN-T1"); n != 2 {
+		t.Fatalf("评价参数已登记 %d 封，want 2", n)
 	}
 }

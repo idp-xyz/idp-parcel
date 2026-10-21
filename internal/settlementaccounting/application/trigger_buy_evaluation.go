@@ -74,6 +74,7 @@ const (
 	BuyEvaluationTriggerAgreementScopeUnavailable
 	BuyEvaluationTriggerRequestUndecided
 	BuyEvaluationTriggerRequestHandoffUnavailable
+	BuyEvaluationTriggerStallRegisterUnavailable
 )
 
 func (reason BuyEvaluationTriggerUndecidedReason) String() string {
@@ -86,6 +87,8 @@ func (reason BuyEvaluationTriggerUndecidedReason) String() string {
 		return "EVALUATION_REQUEST_UNDECIDED"
 	case BuyEvaluationTriggerRequestHandoffUnavailable:
 		return "EVALUATION_REQUEST_HANDOFF_UNAVAILABLE"
+	case BuyEvaluationTriggerStallRegisterUnavailable:
+		return "BUY_EVALUATION_INITIATION_STALL_REGISTER_UNAVAILABLE"
 	default:
 		return ""
 	}
@@ -161,20 +164,24 @@ func (handler *TriggerBuyEvaluationHandler) Trigger(
 	}, nil
 }
 
-// RegisterBuyEvaluationTriggerHandler 登记一条发生项原因采用发生项形成这一时点。落库时刻不是载荷的一格。
+// RegisterBuyEvaluationTriggerHandler 登记一条发生项原因采用发生项形成这一时点，或给没登费用项目的那一版追加一版带
+// 费用项目的（ADR-0229 决定七），同一事务交「评价参数已登记」：答`未配置`而停在发起停办册上的发生项由它续办
+// （ADR-0229 决定四、五）。落库时刻不是载荷的一格。
 type RegisterBuyEvaluationTriggerHandler struct {
 	triggers ports.BuyEvaluationTriggerRegister
+	handoff  ports.EvaluationParameterRegisteredHandoff
 	clock    ports.Clock
 }
 
 func NewRegisterBuyEvaluationTriggerHandler(
 	triggers ports.BuyEvaluationTriggerRegister,
+	handoff ports.EvaluationParameterRegisteredHandoff,
 	clock ports.Clock,
 ) (*RegisterBuyEvaluationTriggerHandler, error) {
-	if triggers == nil || clock == nil {
+	if triggers == nil || handoff == nil || clock == nil {
 		return nil, fmt.Errorf("%w: buy evaluation trigger register", ErrNilDependency)
 	}
-	return &RegisterBuyEvaluationTriggerHandler{triggers: triggers, clock: clock}, nil
+	return &RegisterBuyEvaluationTriggerHandler{triggers: triggers, handoff: handoff, clock: clock}, nil
 }
 
 func (handler *RegisterBuyEvaluationTriggerHandler) RegisterBuyEvaluationTrigger(
@@ -185,5 +192,21 @@ func (handler *RegisterBuyEvaluationTriggerHandler) RegisterBuyEvaluationTrigger
 	if tenant.String() == "" {
 		return 0, fmt.Errorf("%w: tenant", domain.ErrBlankValue)
 	}
-	return handler.triggers.SaveBuyEvaluationTrigger(ctx, tenant, registration, handler.clock.Now())
+	registeredAt := handler.clock.Now()
+	effect, err := handler.triggers.SaveBuyEvaluationTrigger(ctx, tenant, registration, registeredAt)
+	if err != nil {
+		return 0, err
+	}
+	// 落的那一行按（原因、费用项目）认：册允许给没登费用项目的那一版追加一版（ADR-0229 决定七），两版各发一封信，
+	// 追加的那一版不能被第一版的信封标识吞掉。
+	feeItem, _ := registration.FeeItem()
+	if err := announceEvaluationParameter(ctx, handler.handoff, effect, ports.EvaluationParameterRegisteredIntent{
+		Tenant:       tenant,
+		Kind:         domain.ParameterBuyEvaluationTrigger,
+		Subject:      registration.Reason().String() + "@" + feeItem.String(),
+		RegisteredAt: registeredAt,
+	}); err != nil {
+		return 0, fmt.Errorf("register buy evaluation trigger: %w", err)
+	}
+	return effect, nil
 }

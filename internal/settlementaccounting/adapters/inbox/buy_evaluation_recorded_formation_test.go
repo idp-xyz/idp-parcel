@@ -128,7 +128,7 @@ func newFormationFixture(t *testing.T, request string) *formationFixture {
 		Evaluations: view, Costs: costs, Registry: costs, Clock: formationClock{},
 	})
 	outer, err := saapplication.NewFormRequestedSupplierExpectedCostHandler(saapplication.FormRequestedSupplierExpectedCostDeps{
-		Requests: requests, Costs: inner,
+		Requests: requests, Costs: inner, Stops: requests, Clock: formationClock{},
 	})
 	if err != nil {
 		t.Fatalf("形成编排外层：%v", err)

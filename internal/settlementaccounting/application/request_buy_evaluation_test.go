@@ -122,6 +122,7 @@ type evaluationRequestFixture struct {
 	registry *evaluationRequestRegistryDouble
 	identity *evaluationRequestIdentityDouble
 	handoff  *evaluationRequestHandoffDouble
+	stalls   *stallRegisterDouble
 	handler  *application.RequestBuyEvaluationHandler
 }
 
@@ -131,6 +132,7 @@ func newEvaluationRequestFixture(t *testing.T) *evaluationRequestFixture {
 		registry: newEvaluationRequestRegistry(),
 		identity: &evaluationRequestIdentityDouble{},
 		handoff:  newEvaluationRequestHandoff(),
+		stalls:   newStallRegister(),
 	}
 	handler, err := application.NewRequestBuyEvaluationHandler(application.RequestBuyEvaluationDeps{
 		Registry:   fixture.registry,

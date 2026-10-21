@@ -10,14 +10,16 @@ import (
 	adapter "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/settlementaccounting"
 	ppapplication "go.idp.xyz/idp-parcel/internal/parcelpricing/application"
 	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+	ppports "go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/pptest"
 	saports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
 // 本文件证 ppinbox.EvaluationRequestSubmittedConsumer 的处理方（票 sa-cc/11 裁决 5）：按信封引用向 SA 读口取那一份
 // 请求 → 译成命令 → 交「按评价请求形成评价」入口 → 把入口的封闭结果折成消费两格：已形成 / 已存在入账不重投；
-// 请求还看不见 / 未配置 / 适用冲突 / 输入不可得 / 未决各是一枚哨兵，消费门回滚重投，装配登进未决名单；引用坏了
-// 与译不出的答案原样上抛、不译成未决。处理方不判评价结果——形成与否、结果分格全在入口与 EvaluatePricingHandler。
+// 未配置 / 适用冲突 / 输入不可得交「评价未形成」后入账（ADR-0229 决定三）；请求还看不见与未决各是一枚哨兵，消费门
+// 回滚重投，装配登进未决名单；引用坏了与译不出的答案原样上抛、不译成未决。处理方不判评价结果——形成与否、结果分格
+// 全在入口与 EvaluatePricingHandler。
 
 type requestSourceDouble struct {
 	record saports.EvaluationRequestRecord
@@ -46,13 +48,32 @@ func (double *formerDouble) Handle(
 	return double.result, double.err
 }
 
+type unformedDouble struct {
+	intents []ppports.EvaluationRequestUnformedIntent
+	err     error
+}
+
+func (double *unformedDouble) HandOffEvaluationRequestUnformed(
+	_ context.Context, intent ppports.EvaluationRequestUnformedIntent,
+) error {
+	double.intents = append(double.intents, intent)
+	return double.err
+}
+
 func submitted() ppinbox.SubmittedEvaluationRequest {
 	return ppinbox.SubmittedEvaluationRequest{TenantID: "tenant-1", EvaluationRequestID: "EVREQ-SYN-1"}
 }
 
 func newFormOnSubmitted(t *testing.T, source *requestSourceDouble, former *formerDouble) *adapter.FormOnEvaluationRequestSubmittedAdapter {
 	t.Helper()
-	handler, err := adapter.NewFormOnEvaluationRequestSubmittedAdapter(source, former, ppdomain.EvidenceSynthetic)
+	return newFormOnSubmittedWith(t, source, former, &unformedDouble{})
+}
+
+func newFormOnSubmittedWith(
+	t *testing.T, source *requestSourceDouble, former *formerDouble, unformed *unformedDouble,
+) *adapter.FormOnEvaluationRequestSubmittedAdapter {
+	t.Helper()
+	handler, err := adapter.NewFormOnEvaluationRequestSubmittedAdapter(source, former, unformed, ppdomain.EvidenceSynthetic)
 	if err != nil {
 		t.Fatalf("construct: %v", err)
 	}
@@ -115,18 +136,18 @@ func TestARequestNotYetVisibleIsUndecided(t *testing.T) {
 	}
 }
 
-// Covers: 入口的三格「等谁」各成一枚哨兵，消息里带着入口给的东西（候选 / 缺项 / 停在哪一口）供运维读——不合成一枚：
-// 恢复动作各不相同（登记价卡 / 人裁 / 等别的上下文的读口 / 等依赖），合成一枚运维就分不出该去找谁。
-func TestEachWaitingOutcomeIsItsOwnUndecidedSentinel(t *testing.T) {
+// Covers: AT-PP-002 入口答不出评价的三格不随重投变好，不再是未决哨兵：交一封「评价未形成」（租户、请求、方向、停在
+// 哪一格、给人读的说明）后入账——没有在用价卡、多于一版同时适用（说明带候选）、造不出计价输入快照（说明带缺项）。
+func TestAnUnformableRequestHandsOffUnformedAndSettles(t *testing.T) {
 	candidate := pptest.IdentityReference(t, ppdomain.ArtifactPricingPlan, "SYN-BUY-PLAN-B", "v1")
 	for name, tc := range map[string]struct {
 		result   ppapplication.FormEvaluationFromRequestResult
-		sentinel error
+		cause    ppports.EvaluationRequestUnformedCause
 		mentions string
 	}{
 		"未配置": {
 			result:   ppapplication.FormEvaluationFromRequestResult{Outcome: ppapplication.RequestPriceCardNotConfigured},
-			sentinel: adapter.ErrPriceCardNotConfigured,
+			cause:    ppports.UnformedPriceCardNotConfigured,
 			mentions: "scope-1",
 		},
 		"适用冲突": {
@@ -134,7 +155,7 @@ func TestEachWaitingOutcomeIsItsOwnUndecidedSentinel(t *testing.T) {
 				Outcome:    ppapplication.RequestPriceCardApplicabilityConflict,
 				Candidates: []ppdomain.VersionReference{candidate},
 			},
-			sentinel: adapter.ErrPriceCardApplicabilityConflict,
+			cause:    ppports.UnformedPriceCardApplicabilityConflict,
 			mentions: "SYN-BUY-PLAN-B@v1",
 		},
 		"输入不可得": {
@@ -142,28 +163,52 @@ func TestEachWaitingOutcomeIsItsOwnUndecidedSentinel(t *testing.T) {
 				Outcome: ppapplication.RequestPricingInputUnavailable,
 				Missing: []string{"transport-fulfillment: no read-only view of the charge occurrence's member carried objects"},
 			},
-			sentinel: adapter.ErrPricingInputUnavailable,
+			cause:    ppports.UnformedPricingInputUnavailable,
 			mentions: "transport-fulfillment",
-		},
-		"未决": {
-			result: ppapplication.FormEvaluationFromRequestResult{
-				Outcome: ppapplication.RequestEvaluationUndecided,
-				Reason:  ppapplication.RequestEvaluationIdentityUnavailable,
-			},
-			sentinel: adapter.ErrEvaluationFormationUndecided,
-			mentions: "EVALUATION_IDENTITY_UNAVAILABLE",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
+			unformed := &unformedDouble{}
 			former := &formerDouble{result: tc.result}
-			err := newFormOnSubmitted(t, foundRecord(t), former).HandleSubmittedEvaluationRequest(t.Context(), submitted())
-			if !errors.Is(err, tc.sentinel) {
-				t.Fatalf("err = %v, want %v", err, tc.sentinel)
+			if err := newFormOnSubmittedWith(t, foundRecord(t), former, unformed).HandleSubmittedEvaluationRequest(t.Context(), submitted()); err != nil {
+				t.Fatalf("err = %v, want nil（交了评价未形成就入账）", err)
 			}
-			if !strings.Contains(err.Error(), tc.mentions) {
-				t.Fatalf("err %q does not mention %q", err, tc.mentions)
+			if len(unformed.intents) != 1 {
+				t.Fatalf("评价未形成交了 %d 封, want 1", len(unformed.intents))
+			}
+			intent := unformed.intents[0]
+			if intent.Tenant.String() != "tenant-1" || intent.Request.String() != "EVREQ-SYN-1" ||
+				intent.Direction != ppdomain.PricingDirectionBuy || intent.Cause != tc.cause {
+				t.Fatalf("intent = %+v", intent)
+			}
+			if !strings.Contains(strings.Join(intent.Detail, "; "), tc.mentions) {
+				t.Fatalf("说明 %v 没提 %q", intent.Detail, tc.mentions)
 			}
 		})
+	}
+}
+
+// Covers: 交「评价未形成」失败按两种分：暂时不可用是未决（入账跟着回滚，下一次重投再交）；被框架确定性拒收是硬失败，
+// 不进未决名单。入口的未决照旧是那一枚哨兵。
+func TestAFailedUnformedHandoffIsUndecidedUnlessRejected(t *testing.T) {
+	notConfigured := ppapplication.FormEvaluationFromRequestResult{Outcome: ppapplication.RequestPriceCardNotConfigured}
+	err := newFormOnSubmittedWith(t, foundRecord(t), &formerDouble{result: notConfigured},
+		&unformedDouble{err: errors.New("outbox down")}).HandleSubmittedEvaluationRequest(t.Context(), submitted())
+	if !errors.Is(err, adapter.ErrEvaluationFormationUndecided) {
+		t.Fatalf("暂时失败 err = %v, want ErrEvaluationFormationUndecided", err)
+	}
+	err = newFormOnSubmittedWith(t, foundRecord(t), &formerDouble{result: notConfigured},
+		&unformedDouble{err: ppports.ErrEvaluationRequestUnformedHandoffRejected}).HandleSubmittedEvaluationRequest(t.Context(), submitted())
+	if !errors.Is(err, ppports.ErrEvaluationRequestUnformedHandoffRejected) || errors.Is(err, adapter.ErrEvaluationFormationUndecided) {
+		t.Fatalf("确定性拒收 err = %v, want 硬失败", err)
+	}
+	undecided := &formerDouble{result: ppapplication.FormEvaluationFromRequestResult{
+		Outcome: ppapplication.RequestEvaluationUndecided,
+		Reason:  ppapplication.RequestEvaluationIdentityUnavailable,
+	}}
+	err = newFormOnSubmitted(t, foundRecord(t), undecided).HandleSubmittedEvaluationRequest(t.Context(), submitted())
+	if !errors.Is(err, adapter.ErrEvaluationFormationUndecided) || !strings.Contains(err.Error(), "EVALUATION_IDENTITY_UNAVAILABLE") {
+		t.Fatalf("入口未决 err = %v", err)
 	}
 }
 
@@ -195,10 +240,7 @@ func TestANotAcceptedCommandOrAStructuralErrorIsLoud(t *testing.T) {
 	if !errors.Is(err, boom) {
 		t.Fatalf("structural: err = %v, want the former's error", err)
 	}
-	for _, sentinel := range []error{
-		adapter.ErrEvaluationRequestNotVisible, adapter.ErrPriceCardNotConfigured,
-		adapter.ErrPriceCardApplicabilityConflict, adapter.ErrPricingInputUnavailable, adapter.ErrEvaluationFormationUndecided,
-	} {
+	for _, sentinel := range []error{adapter.ErrEvaluationRequestNotVisible, adapter.ErrEvaluationFormationUndecided} {
 		if errors.Is(err, sentinel) {
 			t.Fatalf("a structural error was translated into %v", sentinel)
 		}
@@ -207,13 +249,16 @@ func TestANotAcceptedCommandOrAStructuralErrorIsLoud(t *testing.T) {
 
 // Covers: 构造期拒 nil 与未声明的证据层级——证据层级不给默认，装配方必须说出这条路今天形成的评价是哪一级。
 func TestTheAdapterRefusesNilDependenciesAndAnUndeclaredEvidenceKind(t *testing.T) {
-	if _, err := adapter.NewFormOnEvaluationRequestSubmittedAdapter(nil, &formerDouble{}, ppdomain.EvidenceSynthetic); err == nil {
+	if _, err := adapter.NewFormOnEvaluationRequestSubmittedAdapter(nil, &formerDouble{}, &unformedDouble{}, ppdomain.EvidenceSynthetic); err == nil {
 		t.Fatal("nil source accepted")
 	}
-	if _, err := adapter.NewFormOnEvaluationRequestSubmittedAdapter(&requestSourceDouble{}, nil, ppdomain.EvidenceSynthetic); err == nil {
+	if _, err := adapter.NewFormOnEvaluationRequestSubmittedAdapter(&requestSourceDouble{}, nil, &unformedDouble{}, ppdomain.EvidenceSynthetic); err == nil {
 		t.Fatal("nil former accepted")
 	}
-	if _, err := adapter.NewFormOnEvaluationRequestSubmittedAdapter(&requestSourceDouble{}, &formerDouble{}, ""); err == nil {
+	if _, err := adapter.NewFormOnEvaluationRequestSubmittedAdapter(&requestSourceDouble{}, &formerDouble{}, nil, ppdomain.EvidenceSynthetic); err == nil {
+		t.Fatal("nil unformed handoff accepted")
+	}
+	if _, err := adapter.NewFormOnEvaluationRequestSubmittedAdapter(&requestSourceDouble{}, &formerDouble{}, &unformedDouble{}, ""); err == nil {
 		t.Fatal("undeclared evidence kind accepted")
 	}
 }

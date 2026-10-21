@@ -54,15 +54,20 @@ func newConclusionFixture(t *testing.T) conclusionFixture {
 	return fixture
 }
 
-func conclusionOf(t *testing.T, state domain.SellEvaluationRequestState, charge string) domain.SellEvaluationRequestConclusion {
+// conclusionOf 造一份结论：费用标识非空是`已形成`，否则按停因造停下的那一格（状态格由停因推出）。
+func conclusionOf(t *testing.T, cause domain.EvaluationStopCause, charge string) domain.SellEvaluationRequestConclusion {
 	t.Helper()
-	var id domain.CustomerChargeID
+	var (
+		conclusion domain.SellEvaluationRequestConclusion
+		err        error
+	)
 	if charge != "" {
-		id = saValue(t, domain.NewCustomerChargeID, charge)
+		conclusion, err = domain.NewFormedSellEvaluationRequestConclusion(saValue(t, domain.NewCustomerChargeID, charge))
+	} else {
+		conclusion, err = domain.NewStoppedSellEvaluationRequestConclusion(cause, sellRequestRecordedAt)
 	}
-	conclusion, err := domain.NewSellEvaluationRequestConclusion(state, id)
 	if err != nil {
-		t.Fatalf("结论 %s/%q：%v", state, charge, err)
+		t.Fatalf("结论 %s/%q：%v", cause, charge, err)
 	}
 	return conclusion
 }
@@ -102,26 +107,32 @@ func (fixture conclusionFixture) stored(t *testing.T) ports.SellEvaluationReques
 	return stored
 }
 
-// Covers: `已提交` → `待判断`写下；同一份再记是重放；换成`不可计价`不覆盖、册上仍是`待判断`。
+// Covers: `已提交` → `待判断`写下，连同停因（ADR-0229 决定三）；同一份再记是重放；换成`不可计价`、或同是`待判断`而停因
+// 不同，都不覆盖、册上仍是先到者。
 func TestARequestIsConcludedOnceAndAReplayIsRecognised(t *testing.T) {
 	fixture := newConclusionFixture(t)
-	pending := conclusionOf(t, domain.SellRequestPendingJudgment, "")
+	pending := conclusionOf(t, domain.StopFeeItemMappingIncomplete, "")
 
 	if effect, err := fixture.conclude(t, fixture.record.Key, pending, ""); err != nil || effect != ports.SellEvaluationRequestConcluded {
 		t.Fatalf("首记 = %s err = %v，want CONCLUDED", effect, err)
 	}
-	if stored := fixture.stored(t); stored.State != domain.SellRequestPendingJudgment || stored.FormedCharge.String() != "" {
-		t.Fatalf("读回 = %s / %q，want PENDING_JUDGMENT 不带费用", stored.State, stored.FormedCharge)
+	if stored := fixture.stored(t); stored.State != domain.SellRequestPendingJudgment || stored.FormedCharge.String() != "" ||
+		stored.StopCause != domain.StopFeeItemMappingIncomplete {
+		t.Fatalf("读回 = %s / %q / %s，want PENDING_JUDGMENT 不带费用、停因映射不全", stored.State, stored.FormedCharge, stored.StopCause)
 	}
 	if effect, err := fixture.conclude(t, fixture.record.Key, pending, ""); err != nil || effect != ports.SellEvaluationRequestConclusionReplayed {
 		t.Fatalf("重放 = %s err = %v，want REPLAYED", effect, err)
 	}
-	unratable := conclusionOf(t, domain.SellRequestUnratable, "")
+	unratable := conclusionOf(t, domain.StopEvaluationUnratable, "")
 	if effect, err := fixture.conclude(t, fixture.record.Key, unratable, ""); err != nil || effect != ports.SellEvaluationRequestConcludedOtherwise {
 		t.Fatalf("另一份结论 = %s err = %v，want CONCLUDED_OTHERWISE", effect, err)
 	}
-	if stored := fixture.stored(t); stored.State != domain.SellRequestPendingJudgment {
-		t.Fatalf("另一份结论覆盖了先到者：%s", stored.State)
+	otherPending := conclusionOf(t, domain.StopAmountRoundingUndeclared, "")
+	if effect, err := fixture.conclude(t, fixture.record.Key, otherPending, ""); err != nil || effect != ports.SellEvaluationRequestConcludedOtherwise {
+		t.Fatalf("同状态另一停因 = %s err = %v，want CONCLUDED_OTHERWISE", effect, err)
+	}
+	if stored := fixture.stored(t); stored.State != domain.SellRequestPendingJudgment || stored.StopCause != domain.StopFeeItemMappingIncomplete {
+		t.Fatalf("另一份结论覆盖了先到者：%s / %s", stored.State, stored.StopCause)
 	}
 }
 
@@ -129,7 +140,7 @@ func TestARequestIsConcludedOnceAndAReplayIsRecognised(t *testing.T) {
 // 不覆盖。
 func TestAFormedConclusionCarriesTheChargeWrittenInTheSameTransaction(t *testing.T) {
 	fixture := newConclusionFixture(t)
-	formed := conclusionOf(t, domain.SellRequestFormed, "SELLCC-SELLREQ-SYN-1")
+	formed := conclusionOf(t, domain.EvaluationStopCauseInvalid, "SELLCC-SELLREQ-SYN-1")
 
 	if effect, err := fixture.conclude(t, fixture.record.Key, formed, "SELLCC-SELLREQ-SYN-1"); err != nil || effect != ports.SellEvaluationRequestConcluded {
 		t.Fatalf("记已形成 = %s err = %v，want CONCLUDED", effect, err)
@@ -141,7 +152,7 @@ func TestAFormedConclusionCarriesTheChargeWrittenInTheSameTransaction(t *testing
 	if effect, err := fixture.conclude(t, fixture.record.Key, formed, ""); err != nil || effect != ports.SellEvaluationRequestConclusionReplayed {
 		t.Fatalf("重放 = %s err = %v，want REPLAYED", effect, err)
 	}
-	elsewhere := conclusionOf(t, domain.SellRequestFormed, "SYN-OTHER-CHARGE")
+	elsewhere := conclusionOf(t, domain.EvaluationStopCauseInvalid, "SYN-OTHER-CHARGE")
 	if effect, err := fixture.conclude(t, fixture.record.Key, elsewhere, "SYN-OTHER-CHARGE"); err != nil || effect != ports.SellEvaluationRequestConcludedOtherwise {
 		t.Fatalf("指向另一笔费用 = %s err = %v，want CONCLUDED_OTHERWISE", effect, err)
 	}
@@ -153,7 +164,7 @@ func TestAFormedConclusionCarriesTheChargeWrittenInTheSameTransaction(t *testing
 // Covers: 费用行没在同一事务里先落时，`已形成`撞外键、整笔回滚，请求仍是`已提交`。
 func TestAFormedConclusionWithoutItsChargeRowIsRefused(t *testing.T) {
 	fixture := newConclusionFixture(t)
-	formed := conclusionOf(t, domain.SellRequestFormed, "SELLCC-SELLREQ-SYN-1")
+	formed := conclusionOf(t, domain.EvaluationStopCauseInvalid, "SELLCC-SELLREQ-SYN-1")
 
 	if _, err := fixture.conclude(t, fixture.record.Key, formed, ""); err == nil {
 		t.Fatal("费用不在册上，已形成却记下了")
@@ -166,7 +177,7 @@ func TestAFormedConclusionWithoutItsChargeRowIsRefused(t *testing.T) {
 // Covers: 写口在事务外拒；另一个租户的键与不在册的请求答错、不落任何东西；零值结论拒。
 func TestRecordingAConclusionRefusesNoTransactionForeignKeysAndZeroConclusions(t *testing.T) {
 	fixture := newConclusionFixture(t)
-	pending := conclusionOf(t, domain.SellRequestPendingJudgment, "")
+	pending := conclusionOf(t, domain.StopEvaluationPendingJudgment, "")
 
 	if _, err := fixture.registry.RecordConclusion(t.Context(), fixture.record.Key, pending); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("事务外 RecordConclusion 应答 ErrTransactionRequired，实得：%v", err)

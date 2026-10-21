@@ -29,20 +29,24 @@ const occurrenceFormedRequester = "settlement-accounting/buy-evaluation-on-occur
 // 版本、业务时间）与它固定的供应商协议。费用项目与主要范围都不在命令上——前者归触发册，后者归协议，调用方带得了它们
 // 就有了第二套口径。
 //
-// Revised 说这一版是不是有效性修订产生的。是就不发起，见 BuyEvaluationTriggerOccurrenceRevised。
+// Revised 说这一版是不是有效性修订产生的。是就不发起，见 BuyEvaluationTriggerOccurrenceRevised。ResumeBasis 只在续办
+// 重跑一份发起停办时在场：发出的首代请求记下凭的依据，又停下时发起停办换上它（ADR-0229 决定四）。
 type TriggerBuyEvaluationOnOccurrenceFormedCommand struct {
-	TenantID   domain.TenantID
-	Occurrence domain.TransportChargeOccurrence
-	Agreement  domain.SupplierAgreementReference
-	Revised    bool
+	TenantID    domain.TenantID
+	Occurrence  domain.TransportChargeOccurrence
+	Agreement   domain.SupplierAgreementReference
+	Revised     bool
+	ResumeBasis domain.ResumeBasis
 }
 
-// TriggerBuyEvaluationOnOccurrenceFormedDeps 三口都必备：缺触发册就只能替租户默认一个原因或费用项目；缺协议范围读口就
-// 只能拿别的东西顶主要范围；缺请求编排这一路就走不完。
+// TriggerBuyEvaluationOnOccurrenceFormedDeps 各口都必备：缺触发册就只能替租户默认一个原因或费用项目；缺协议范围读口就
+// 只能拿别的东西顶主要范围；缺请求编排这一路就走不完；缺发起停办册，答`未配置`的那一拍就又入账即散。
 type TriggerBuyEvaluationOnOccurrenceFormedDeps struct {
 	Triggers   ports.BuyEvaluationTriggerView
 	Agreements ports.SupplierAgreementScopeView
 	Requests   *RequestBuyEvaluationHandler
+	Stalls     ports.BuyEvaluationInitiationStallRegister
+	Clock      ports.Clock
 }
 
 type TriggerBuyEvaluationOnOccurrenceFormedHandler struct {
@@ -61,6 +65,8 @@ func NewTriggerBuyEvaluationOnOccurrenceFormedHandler(
 		{"buy evaluation trigger view", deps.Triggers == nil},
 		{"supplier agreement scope view", deps.Agreements == nil},
 		{"request buy evaluation handler", deps.Requests == nil},
+		{"buy evaluation initiation stall register", deps.Stalls == nil},
+		{"clock", deps.Clock == nil},
 	} {
 		if dependency.missing {
 			return nil, fmt.Errorf("%w: %s", ErrNilDependency, dependency.name)
@@ -71,8 +77,8 @@ func NewTriggerBuyEvaluationOnOccurrenceFormedHandler(
 
 // Trigger 走一拍：受理 → 修订版不发起 → 触发册（原因、费用项目）→ 协议范围 → 交请求编排。
 //
-// 未配置的两格先于协议读口判：没登的原因不必去问 party-commercial。答`未配置`的入账不重投，只有依赖答不出才是`未决`
-// （ADR-0029、ADR-0094）。协议范围读口答出确定性的坏答案（ports.ErrSupplierAgreementScopeUntranslatable）不算答不出，
+// 未配置的两格先于协议读口判：没登的原因不必去问 party-commercial。答`未配置`的入账不重投，并在发起停办册上记下这一拍，
+// 补登触发册或运营续办时按记下的发生项与协议重跑（ADR-0229 决定四）；只有依赖答不出才是`未决`（ADR-0029、ADR-0094）。协议范围读口答出确定性的坏答案（ports.ErrSupplierAgreementScopeUntranslatable）不算答不出，
 // 与协议查无一样原样上抛。
 //
 // 本编排只该跑在调用方的事务里：请求登记与信封同生同灭。请求编排在交信封失败时留续办引用、照答已请求，那个形状在
@@ -95,11 +101,11 @@ func (handler *TriggerBuyEvaluationOnOccurrenceFormedHandler) Trigger(
 		return buyTriggerUndecided(BuyEvaluationTriggerRegisterUnavailable), nil
 	}
 	if !found || registration.Moment() != domain.BuyEvaluationTriggerOnOccurrenceFormed {
-		return buyTriggerUnconfigured(BuyEvaluationTriggerReasonNotRegistered), nil
+		return handler.recordStall(ctx, command, BuyEvaluationTriggerReasonNotRegistered, domain.StopOccurrenceReasonNotRegistered)
 	}
 	feeItem, registered := registration.FeeItem()
 	if !registered {
-		return buyTriggerUnconfigured(BuyEvaluationTriggerFeeItemNotRegistered), nil
+		return handler.recordStall(ctx, command, BuyEvaluationTriggerFeeItemNotRegistered, domain.StopTriggerFeeItemNotRegistered)
 	}
 
 	scope, found, err := handler.deps.Agreements.LoadSupplierAgreementScope(ctx, command.TenantID, command.Agreement)
@@ -126,6 +132,7 @@ func (handler *TriggerBuyEvaluationOnOccurrenceFormedHandler) Trigger(
 		FeeItem:     feeItem,
 		Agreement:   command.Agreement,
 		RequestedBy: requester,
+		ResumeBasis: command.ResumeBasis,
 	})
 	if err != nil {
 		return BuyEvaluationTriggerResult{}, err
@@ -153,6 +160,30 @@ func (handler *TriggerBuyEvaluationOnOccurrenceFormedHandler) Trigger(
 	default:
 		return BuyEvaluationTriggerResult{}, fmt.Errorf("%w: %q", ErrUnexpectedBuyEvaluationRequestOutcome, requested.Outcome())
 	}
+}
+
+// recordStall 在发起停办册上记下答`未配置`的这一拍，答案照旧是`未配置`。记不下就答`未决`让调用方整笔回滚重来：入账
+// 而没记下，正是这一拍此前的「入账即散」。
+func (handler *TriggerBuyEvaluationOnOccurrenceFormedHandler) recordStall(
+	ctx context.Context,
+	command TriggerBuyEvaluationOnOccurrenceFormedCommand,
+	reason BuyEvaluationTriggerUnconfiguredReason,
+	cause domain.EvaluationStopCause,
+) (BuyEvaluationTriggerResult, error) {
+	stall, err := domain.NewBuyEvaluationInitiationStall(domain.BuyEvaluationInitiationStallSpec{
+		Occurrence: command.Occurrence,
+		Agreement:  command.Agreement,
+		Cause:      cause,
+		StoppedAt:  handler.deps.Clock.Now(),
+		Basis:      command.ResumeBasis,
+	})
+	if err != nil {
+		return BuyEvaluationTriggerResult{}, fmt.Errorf("trigger buy evaluation on occurrence formed: initiation stall: %w", err)
+	}
+	if err := handler.deps.Stalls.RecordBuyInitiationStall(ctx, command.TenantID, stall); err != nil {
+		return buyTriggerUndecided(BuyEvaluationTriggerStallRegisterUnavailable), nil
+	}
+	return buyTriggerUnconfigured(reason), nil
 }
 
 func buyTriggerUnconfigured(reason BuyEvaluationTriggerUnconfiguredReason) BuyEvaluationTriggerResult {

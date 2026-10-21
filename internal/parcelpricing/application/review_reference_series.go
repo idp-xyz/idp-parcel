@@ -71,11 +71,17 @@ type ReviewReferenceSeriesCommand struct {
 	ReviewedAt    time.Time
 }
 
+// ReviewReferenceSeriesDeps 是序列复核的依赖。Registered 在一版序列通过复核（自复核时刻起在用）时交「参数已登记」：
+// 结算那一侧停在评价待判断、评价失败或缺换算步骤的请求由它续办（ADR-0229 决定五）。必备，理由同价卡登记。
 type ReviewReferenceSeriesDeps struct {
-	Versions ports.ReferenceSeriesVersionLoader
-	Reviews  ports.ReferenceSeriesReviewRegister
-	Clock    ports.Clock
+	Versions   ports.ReferenceSeriesVersionLoader
+	Reviews    ports.ReferenceSeriesReviewRegister
+	Clock      ports.Clock
+	Registered ports.PricingParameterRegisteredHandoff
 }
+
+// ErrSeriesReviewHandoffMissing 说明装配没给序列复核接「参数已登记」交接口。
+var ErrSeriesReviewHandoffMissing = errors.New("parcel pricing: reference series review has no pricing parameter registered handoff")
 
 // ReviewReferenceSeriesHandler 编排序列版本复核用例（ADR-0099 决定二）。四眼门与四件
 // 齐备的判断在领域构造器（以被复核的登记为入参），冲突判定在复核册的结果代数，这里只
@@ -96,6 +102,9 @@ func (handler *ReviewReferenceSeriesHandler) Handle(
 ) (ReviewReferenceSeriesOutcome, error) {
 	if command.Tenant.String() == "" || command.SeriesID == "" || command.SeriesVersion == "" {
 		return SeriesReviewNotAccepted, nil
+	}
+	if handler.deps.Registered == nil {
+		return SeriesReviewUndecided, ErrSeriesReviewHandoffMissing
 	}
 
 	registration, found, err := handler.deps.Versions.LoadVersion(ctx, command.Tenant, command.SeriesID, command.SeriesVersion)
@@ -124,9 +133,9 @@ func (handler *ReviewReferenceSeriesHandler) Handle(
 	}
 	switch saved {
 	case ports.ReferenceSeriesReviewRecorded:
-		return SeriesReviewRecorded, nil
+		return handler.announce(ctx, review, SeriesReviewRecorded)
 	case ports.ReferenceSeriesReviewAlreadyRecorded:
-		return SeriesReviewAlreadyOnRegister, nil
+		return handler.announce(ctx, review, SeriesReviewAlreadyOnRegister)
 	case ports.ReferenceSeriesReviewConflict:
 		return SeriesReviewConflict, nil
 	case ports.ReferenceSeriesReviewVersionUnknown:
@@ -136,4 +145,24 @@ func (handler *ReviewReferenceSeriesHandler) Handle(
 	default:
 		return ReviewReferenceSeriesOutcomeInvalid, fmt.Errorf("%w: %d", ErrUnexpectedSeriesReviewOutcome, saved)
 	}
+}
+
+// announce 只在复核通过时交「参数已登记」：退回的那一版不在用，续办再问一次得到的还是同一个答案。重放重发同一封，由
+// 交接口按同一个标识去重。交接失败上抛，信封与复核行同生共死。
+func (handler *ReviewReferenceSeriesHandler) announce(
+	ctx context.Context,
+	review domain.SeriesReview,
+	outcome ReviewReferenceSeriesOutcome,
+) (ReviewReferenceSeriesOutcome, error) {
+	if review.Decision() != domain.SeriesReviewApproved {
+		return outcome, nil
+	}
+	if err := handler.deps.Registered.HandOffPricingParameterRegistered(ctx, ports.PricingParameterRegisteredIntent{
+		Tenant:       review.Tenant(),
+		Kind:         ports.PricingParameterReferenceSeries,
+		Registration: review.Reference(),
+	}); err != nil {
+		return SeriesReviewUndecided, fmt.Errorf("review reference series: %w", err)
+	}
+	return outcome, nil
 }

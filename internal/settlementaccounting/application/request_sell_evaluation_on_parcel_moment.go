@@ -14,8 +14,10 @@ import (
 )
 
 // SellEvaluationRequestOutcome 是一次「计费时点到来」的应用答案。`已存在`是业务答案不是失败：同一件包裹在所采时点
-// 只发起一次（决定二），再来一次交回先到者。`未配置`与`包裹无商业解析`都不发起、调用方入账不重投，两格分开是因为
-// 恢复动作不同：前者等租户登记，后者要去小包托运那一侧查这件包裹为什么不在任何已接受委托上。`未决`是依赖故障，重试。
+// 只发起一次（决定二），再来一次交回这条代次链上最新的那一代。`未配置`与`包裹无商业解析`都不发起、调用方入账不重投，
+// 两格分开是因为恢复动作不同：前者等租户登记，后者要去小包托运那一侧查这件包裹为什么不在任何已接受委托上。两格都在
+// 发起停办册上记下这一拍（ADR-0229 决定四），补登或运营续办时按记下的输入重跑；`采用了别的时点`不记，那是这一户登的
+// 那一行的意思。`未决`是依赖故障，重试。
 type SellEvaluationRequestOutcome uint8
 
 const (
@@ -87,6 +89,7 @@ const (
 	SellRequestRegistryUnavailable
 	SellRequestIdentityUnavailable
 	SellRequestHandoffUnavailable
+	SellRequestStallRegisterUnavailable
 )
 
 func (reason SellEvaluationRequestUndecidedReason) String() string {
@@ -105,6 +108,8 @@ func (reason SellEvaluationRequestUndecidedReason) String() string {
 		return "SELL_EVALUATION_REQUEST_IDENTITY_UNAVAILABLE"
 	case SellRequestHandoffUnavailable:
 		return "SELL_EVALUATION_REQUEST_HANDOFF_UNAVAILABLE"
+	case SellRequestStallRegisterUnavailable:
+		return "SELL_EVALUATION_INITIATION_STALL_REGISTER_UNAVAILABLE"
 	default:
 		return ""
 	}
@@ -115,12 +120,15 @@ var ErrUnexpectedSellEvaluationRequestSave = errors.New("settlement accounting: 
 
 // RequestSellEvaluationOnParcelMomentCommand 是一拍包裹计费时点：哪件包裹、哪一种内置时点、凭哪件来源事实、以哪一刻
 // 为计价基准。结算账户、结算币种与计价范围都不在命令上——它们由链与采用册答，调用方带得了它们就有了第二套口径。
+//
+// ResumeBasis 只在续办重跑一份发起停办时在场：发出的首代请求记下凭的依据，又停下时发起停办换上它。
 type RequestSellEvaluationOnParcelMomentCommand struct {
 	TenantID       domain.TenantID
 	Parcel         domain.ParcelReference
 	Moment         domain.ParcelBillingMoment
 	Source         domain.SourceFactReference
 	PricingBasisAt time.Time
+	ResumeBasis    domain.ResumeBasis
 }
 
 type RequestSellEvaluationOnParcelMomentResult struct {
@@ -129,6 +137,12 @@ type RequestSellEvaluationOnParcelMomentResult struct {
 	undecided    SellEvaluationRequestUndecidedReason
 	record       ports.SellEvaluationRequestRecord
 	hasRecord    bool
+	stopCause    domain.EvaluationStopCause
+}
+
+// StopCause 交回发起停办册上记下的停因；没记（发起了、`采用了别的时点`、未受理、未决）第二个返回值为假。
+func (result RequestSellEvaluationOnParcelMomentResult) StopCause() (domain.EvaluationStopCause, bool) {
+	return result.stopCause, result.stopCause != domain.EvaluationStopCauseInvalid
 }
 
 func (result RequestSellEvaluationOnParcelMomentResult) Outcome() SellEvaluationRequestOutcome {
@@ -151,7 +165,7 @@ func (result RequestSellEvaluationOnParcelMomentResult) Request() (ports.SellEva
 }
 
 // RequestSellEvaluationOnParcelMomentDeps 各口都必备：链的三段缺一段就走不到账户，采用册缺了就只能默认一种时点，
-// 而请求册、铸造口与交接口是「登记并同事务交信封」的三件。
+// 而请求册、铸造口与交接口是「登记并同事务交信封」的三件；发起停办册缺了，停在发起之前的那一拍就又入账即散。
 type RequestSellEvaluationOnParcelMomentDeps struct {
 	Resolutions ports.ParcelCommercialResolutionView
 	Terms       ports.AdoptedSettlementTermsView
@@ -160,6 +174,7 @@ type RequestSellEvaluationOnParcelMomentDeps struct {
 	Registry    ports.SellEvaluationRequestRegistry
 	Identity    ports.SellEvaluationRequestIdentityFactory
 	Downstream  ports.SellEvaluationRequestHandoff
+	Stalls      ports.SellEvaluationInitiationStallRegister
 	Clock       ports.Clock
 }
 
@@ -183,6 +198,7 @@ func NewRequestSellEvaluationOnParcelMomentHandler(
 		{"sell evaluation request registry", deps.Registry == nil},
 		{"sell evaluation request identity factory", deps.Identity == nil},
 		{"sell evaluation request handoff", deps.Downstream == nil},
+		{"sell evaluation initiation stall register", deps.Stalls == nil},
 		{"clock", deps.Clock == nil},
 	} {
 		if dependency.missing {
@@ -209,7 +225,7 @@ func (handler *RequestSellEvaluationOnParcelMomentHandler) Handle(
 
 	account, currency, halted := handler.settlementAccountOf(ctx, command)
 	if halted != nil {
-		return *halted, nil
+		return handler.recordStall(ctx, command, *halted)
 	}
 
 	adoption, adopted, err := handler.deps.Adoptions.FindSellBillingMomentAdoption(ctx, command.TenantID, account)
@@ -217,7 +233,7 @@ func (handler *RequestSellEvaluationOnParcelMomentHandler) Handle(
 		return sellRequestUndecided(SellRequestBillingMomentAdoptionUnavailable), nil
 	}
 	if !adopted {
-		return sellRequestUnconfigured(SellRequestBillingMomentNotAdopted), nil
+		return handler.recordStall(ctx, command, sellRequestUnconfigured(SellRequestBillingMomentNotAdopted))
 	}
 	if adoption.Moment() != command.Moment {
 		return sellRequestUnconfigured(SellRequestBillingMomentDiffers), nil
@@ -247,6 +263,7 @@ func (handler *RequestSellEvaluationOnParcelMomentHandler) Handle(
 		Moment:             command.Moment,
 		Source:             command.Source,
 		PricingBasisAt:     command.PricingBasisAt,
+		ResumeBasis:        command.ResumeBasis,
 	})
 	if err != nil {
 		return RequestSellEvaluationOnParcelMomentResult{outcome: SellEvaluationRequestNotAccepted}, nil
@@ -313,6 +330,55 @@ func (handler *RequestSellEvaluationOnParcelMomentHandler) settlementAccountOf(
 		return halt(sellRequestUnconfigured(SellRequestSettlementAccountNotRegistered))
 	}
 	return account, key.Currency(), nil
+}
+
+// sellInitiationStopCauseOf 是停在发起之前的答案到停因的对照。`采用了别的时点`、`未受理`与`未决`不是停办：前者是这一户
+// 登的那一行的意思，后两者各有各的去向。
+func sellInitiationStopCauseOf(result RequestSellEvaluationOnParcelMomentResult) (domain.EvaluationStopCause, bool) {
+	switch result.outcome {
+	case SellEvaluationRequestParcelUnresolved:
+		return domain.StopParcelCommercialResolutionAbsent, true
+	case SellEvaluationRequestUnconfigured:
+		switch result.unconfigured {
+		case SellRequestSettlementPolicyNotAdopted:
+			return domain.StopSettlementPolicyNotAdopted, true
+		case SellRequestSettlementAccountNotRegistered:
+			return domain.StopSettlementAccountNotRegistered, true
+		case SellRequestBillingMomentNotAdopted:
+			return domain.StopSellBillingMomentNotAdopted, true
+		}
+	}
+	return domain.EvaluationStopCauseInvalid, false
+}
+
+// recordStall 在发起停办册上记下停在发起之前的这一拍（ADR-0229 决定四），答案原样交回。记不下就答`未决`让调用方整笔
+// 回滚重来：入账而没记下，正是这一拍此前的「入账即散」。
+func (handler *RequestSellEvaluationOnParcelMomentHandler) recordStall(
+	ctx context.Context,
+	command RequestSellEvaluationOnParcelMomentCommand,
+	result RequestSellEvaluationOnParcelMomentResult,
+) (RequestSellEvaluationOnParcelMomentResult, error) {
+	cause, stalls := sellInitiationStopCauseOf(result)
+	if !stalls {
+		return result, nil
+	}
+	stall, err := domain.NewSellEvaluationInitiationStall(domain.SellEvaluationInitiationStallSpec{
+		Parcel:         command.Parcel,
+		Moment:         command.Moment,
+		Source:         command.Source,
+		PricingBasisAt: command.PricingBasisAt,
+		Cause:          cause,
+		StoppedAt:      handler.deps.Clock.Now(),
+		Basis:          command.ResumeBasis,
+	})
+	if err != nil {
+		return RequestSellEvaluationOnParcelMomentResult{}, fmt.Errorf("request sell evaluation: initiation stall: %w", err)
+	}
+	if err := handler.deps.Stalls.RecordSellInitiationStall(ctx, command.TenantID, stall); err != nil {
+		return sellRequestUndecided(SellRequestStallRegisterUnavailable), nil
+	}
+	result.stopCause = cause
+	return result, nil
 }
 
 // existingRequest 按先到者作答并再交一次同一封信封：Outbox 按认领键吞掉第二次；万一先到者的信封没随它落下（调用方

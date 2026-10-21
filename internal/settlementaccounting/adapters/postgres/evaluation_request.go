@@ -20,9 +20,9 @@ var ErrEvaluationRequestDigestDrift = errors.New("settlement accounting postgres
 // EvaluationRequests 实现 ports.EvaluationRequestRegistry（登记面）与 ports.EvaluationRequestView（只读
 // 半边），同一张表、同一份行模型——分开实现就是第二处定义。
 //
-// 幂等由库上的唯一约束守：主键（租户+铸造 ID）拦同一份重放，自然键（租户+主要范围+计算目的+引用集合
-// 摘要）拦另一个 ID 带同一组成分再来（票 sa-cc/08 裁决 2）。撞上哪一条都答`已存在`、不覆盖先到者
-// （写入代数同 ADR-0031）。
+// 幂等由库上的唯一约束守：主键（租户+铸造 ID）拦同一份重放，（自然键、代次）拦另一个 ID 带同一组成分在同一代再来
+// （票 sa-cc/08 裁决 2；自然键是租户+主要范围+计算目的+引用集合摘要），前一代上的唯一约束拦同一份请求的第二个
+// 下一代（ADR-0229 决定一）。撞上哪一条都答`已存在`、不覆盖先到者（写入代数同 ADR-0031）。
 type EvaluationRequests struct {
 	db *bentopg.DB
 }
@@ -35,8 +35,10 @@ func NewEvaluationRequests(db *bentopg.DB) (*EvaluationRequests, error) {
 }
 
 var (
-	_ ports.EvaluationRequestRegistry = (*EvaluationRequests)(nil)
-	_ ports.EvaluationRequestView     = (*EvaluationRequests)(nil)
+	_ ports.EvaluationRequestRegistry      = (*EvaluationRequests)(nil)
+	_ ports.EvaluationRequestView          = (*EvaluationRequests)(nil)
+	_ ports.EvaluationRequestStopRecorder  = (*EvaluationRequests)(nil)
+	_ ports.EvaluationRequestSuccessorView = (*EvaluationRequests)(nil)
 )
 
 // Save 登记一份评价请求。撞主键或撞自然键唯一约束都交回`已存在`而不是错误：那是业务答案，编排据以按
@@ -59,6 +61,10 @@ func (registry *EvaluationRequests) Save(
 			fmt.Errorf("save evaluation request: key %q disagrees with the request %q it claims to index",
 				record.Key.Request.String(), record.Request.ID().String())
 	}
+	if record.StopCause != domain.EvaluationStopCauseInvalid {
+		return ports.EvaluationRequestSaveOutcomeInvalid,
+			fmt.Errorf("save evaluation request: a registration carries no stop cause, got %q", record.StopCause.String())
+	}
 
 	executor, err := registry.db.RequireExecutor(ctx)
 	if err != nil {
@@ -67,13 +73,23 @@ func (registry *EvaluationRequests) Save(
 
 	request := record.Request
 	sources := request.Sources()
+	var previous, basis *string
+	if id, has := request.Previous(); has {
+		value := id.String()
+		previous = &value
+	}
+	if resume := request.ResumeBasis(); resume.Present() {
+		value := resume.String()
+		basis = &value
+	}
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO settlement_accounting.evaluation_request
 			(tenant_id, request_id, scope_ref, purpose,
 			 occurrence_id, occurrence_reason, occurrence_version, occurred_at,
 			 fee_item, agreement_ref, source_digest,
-			 requested_at, requested_by, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+			 requested_at, requested_by, recorded_at,
+			 generation, previous_request_id, resume_basis)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Request.String(),
@@ -89,6 +105,9 @@ func (registry *EvaluationRequests) Save(
 		request.RequestedAt().UTC(),
 		request.RequestedBy().String(),
 		record.RecordedAt.UTC(),
+		request.Generation(),
+		previous,
+		basis,
 	)
 	if err != nil {
 		return ports.EvaluationRequestSaveOutcomeInvalid, fmt.Errorf("save evaluation request: %w", err)
@@ -110,15 +129,69 @@ func (registry *EvaluationRequests) FindByID(
 		key.TenantID.String(), key.Request.String())
 }
 
-// FindByNaturalKey 按（租户+自然键三成分）取回先到者。编排在 Save 答`已存在`时走这里读回赢家。
+// FindByNaturalKey 按（租户+自然键三成分）取回这条代次链上最新的那一代。编排在 Save 答`已存在`时走这里读回赢家。
 func (registry *EvaluationRequests) FindByNaturalKey(
 	ctx context.Context,
 	tenant domain.TenantID,
 	key domain.EvaluationRequestNaturalKey,
 ) (ports.EvaluationRequestRecord, bool, error) {
 	return registry.findOne(ctx, tenant,
-		`WHERE tenant_id = $1 AND scope_ref = $2 AND purpose = $3 AND source_digest = $4`,
+		`WHERE tenant_id = $1 AND scope_ref = $2 AND purpose = $3 AND source_digest = $4
+		 ORDER BY generation DESC LIMIT 1`,
 		tenant.String(), key.Scope.String(), key.Purpose.String(), key.SourceDigest)
+}
+
+// FindSuccessor 按前一代取回下一代。前一代上的唯一约束保证至多一份。
+func (registry *EvaluationRequests) FindSuccessor(
+	ctx context.Context,
+	key ports.EvaluationRequestKey,
+) (ports.EvaluationRequestRecord, bool, error) {
+	return registry.findOne(ctx, key.TenantID,
+		`WHERE tenant_id = $1 AND previous_request_id = $2`,
+		key.TenantID.String(), key.Request.String())
+}
+
+// RecordStop 给一份请求记停因（ADR-0229 决定三）。UPDATE 只认还没有停因的那一行：改得到就是写下了；改不到就读回比，
+// 同一个停因答重放，另一个答另有停因，都不覆盖。并发的两拍里后到者在行锁上等先到者提交，再按提交后的行判。
+func (registry *EvaluationRequests) RecordStop(
+	ctx context.Context,
+	key ports.EvaluationRequestKey,
+	cause domain.EvaluationStopCause,
+	stoppedAt time.Time,
+) (ports.EvaluationRequestStopEffect, error) {
+	none := ports.EvaluationRequestStopEffectInvalid
+	if strings.TrimSpace(key.TenantID.String()) == "" || strings.TrimSpace(key.Request.String()) == "" {
+		return none, fmt.Errorf("record evaluation request stop: the tenant or the request ID in the key is blank")
+	}
+	if cause.Stage() == domain.StopBeforeRequest || !cause.OccursIn(domain.BuyEvaluationDirection) || stoppedAt.IsZero() {
+		return none, fmt.Errorf("record evaluation request stop: %q at %s is not a stop of a buy request", cause.String(), stoppedAt)
+	}
+	executor, err := registry.db.RequireExecutor(ctx)
+	if err != nil {
+		return none, fmt.Errorf("record evaluation request stop: %w", err)
+	}
+	tag, err := executor.Exec(ctx,
+		`UPDATE settlement_accounting.evaluation_request
+		    SET stop_cause = $3, stopped_at = $4
+		  WHERE tenant_id = $1 AND request_id = $2 AND stop_cause IS NULL`,
+		key.TenantID.String(), key.Request.String(), cause.String(), stoppedAt.UTC())
+	if err != nil {
+		return none, fmt.Errorf("record evaluation request stop: %w", err)
+	}
+	if tag.RowsAffected() == 1 {
+		return ports.EvaluationRequestStopped, nil
+	}
+	stored, found, err := registry.FindByID(ctx, key)
+	if err != nil {
+		return none, fmt.Errorf("record evaluation request stop: %w", err)
+	}
+	if !found {
+		return none, fmt.Errorf("record evaluation request stop: request %s is not in the register", key.Request)
+	}
+	if stored.StopCause == cause {
+		return ports.EvaluationRequestStopReplayed, nil
+	}
+	return ports.EvaluationRequestStoppedOtherwise, nil
 }
 
 func (registry *EvaluationRequests) findOne(
@@ -137,18 +210,22 @@ func (registry *EvaluationRequests) findOne(
 		occurrenceID, occurrenceReason, occurrenceVersion string
 		occurredAt, requestedAt, recordedAt               time.Time
 		feeItem, agreement, digest, requestedBy           string
+		generation                                        int
+		previous, basis, cause                            *string
 	)
 	err = querier.QueryRow(ctx,
 		`SELECT request_id, scope_ref, purpose,
 		        occurrence_id, occurrence_reason, occurrence_version, occurred_at,
 		        fee_item, agreement_ref, source_digest,
-		        requested_at, requested_by, recorded_at
+		        requested_at, requested_by, recorded_at,
+		        generation, previous_request_id, resume_basis, stop_cause
 		   FROM settlement_accounting.evaluation_request `+where,
 		args...,
 	).Scan(&requestID, &scope, &purpose,
 		&occurrenceID, &occurrenceReason, &occurrenceVersion, &occurredAt,
 		&feeItem, &agreement, &digest,
-		&requestedAt, &requestedBy, &recordedAt)
+		&requestedAt, &requestedBy, &recordedAt,
+		&generation, &previous, &basis, &cause)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.EvaluationRequestRecord{}, false, nil
 	}
@@ -169,14 +246,24 @@ func (registry *EvaluationRequests) findOne(
 		digest:            digest,
 		requestedAt:       requestedAt,
 		requestedBy:       requestedBy,
+		generation:        generation,
+		previous:          derefText(previous),
+		basis:             derefText(basis),
 	})
 	if err != nil {
 		return ports.EvaluationRequestRecord{}, false, fmt.Errorf("find evaluation request: %w", err)
+	}
+	var stopCause domain.EvaluationStopCause
+	if cause != nil {
+		if stopCause, err = domain.EvaluationStopCauseFromName(*cause); err != nil {
+			return ports.EvaluationRequestRecord{}, false, fmt.Errorf("find evaluation request: %w", err)
+		}
 	}
 	return ports.EvaluationRequestRecord{
 		Key:        ports.EvaluationRequestKey{TenantID: tenant, Request: request.ID()},
 		Request:    request,
 		RecordedAt: recordedAt.UTC(),
+		StopCause:  stopCause,
 	}, true, nil
 }
 
@@ -199,6 +286,9 @@ type evaluationRequestColumns struct {
 	digest            string
 	requestedAt       time.Time
 	requestedBy       string
+	generation        int
+	previous          string
+	basis             string
 }
 
 // rebuildEvaluationRequest 把一行折回领域对象。请求没有独立的重建门：SubmitEvaluationRequest 从成分当场
@@ -236,6 +326,16 @@ func rebuildEvaluationRequest(columns evaluationRequestColumns) (domain.Evaluati
 	if err != nil {
 		return domain.EvaluationRequest{}, err
 	}
+	var previous domain.EvaluationRequestID
+	if columns.previous != "" {
+		if previous, err = domain.NewEvaluationRequestID(columns.previous); err != nil {
+			return domain.EvaluationRequest{}, err
+		}
+	}
+	basis, err := rebuildResumeBasis(columns.basis)
+	if err != nil {
+		return domain.EvaluationRequest{}, err
+	}
 	request, err := domain.SubmitEvaluationRequest(domain.EvaluationRequestSpec{
 		ID:      id,
 		Scope:   scope,
@@ -247,6 +347,9 @@ func rebuildEvaluationRequest(columns evaluationRequestColumns) (domain.Evaluati
 		},
 		RequestedAt: columns.requestedAt,
 		RequestedBy: requestedBy,
+		Generation:  columns.generation,
+		Previous:    previous,
+		ResumeBasis: basis,
 	})
 	if err != nil {
 		return domain.EvaluationRequest{}, err
