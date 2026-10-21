@@ -31,6 +31,8 @@ func (double *closerDouble) RetireAtCoveringSuccessor(_ context.Context, command
 
 const closureJSON = `{"tenant":"SYN-TENANT-01","planId":"SYN-PLAN-CN-SG-COST-01","version":"v1","successorVersion":"v2","reference":"SYN-CUT/2026-10-21"}`
 
+// Covers: AT-PP-010 的受控登记口那一半——两种收尾文档各进自己那一口，五格照搬；自报截止点或退役时刻、坏 JSON、没有租户
+// 在到达用例之前拒成用法错。
 func TestExecuteClosureRoutesEachKindToItsOwnFace(t *testing.T) {
 	closer := &closerDouble{}
 	execute := func(kind, raw string) int {
