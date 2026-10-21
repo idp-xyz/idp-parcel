@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -11,7 +13,13 @@ import (
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	nrports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
+	tfinbox "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/inbox"
+	tfnetworkrouting "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/networkrouting"
+	tfapplication "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
+	veinbox "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/inbox"
+	venr "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/networkrouting"
 	vepostgres "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
+	veapplication "go.idp.xyz/idp-parcel/internal/visibilityexception/application"
 	vedomain "go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 	veports "go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
@@ -139,6 +147,94 @@ func TestAnInvisibleInitialRouteRollsBackAndTheRedeliveryRetries(t *testing.T) {
 	assertUnclassifiedInitialRouteProjection(t, fixture, "initial-route-formed")
 	if n := fixture.countInbox(t, deriveInitialRouteConsumerName, eventID); n != 1 {
 		t.Fatalf("重投后 inbox 行数 = %d, want 1", n)
+	}
+}
+
+// Covers: code/68——NR 库里那一行初始路由经领域构造门重建不出来是坏数据，重投推不动。生产 wireDispatcher 一拍：信封
+// 扇出的两路都响亮失败、码面落 publish_failed 等人修数据，不以 consumer_undecided 之名重投到放弃；两路 inbox 都不入账。
+func TestAnUnrebuildableInitialRouteRowFailsLoudInsteadOfWaiting(t *testing.T) {
+	fixture := newSYNVerticalFixture(t)
+	ctx := t.Context()
+
+	eventID := recordInitialRouteJudgment(t, fixture, true)
+	if _, err := fixture.pool.Exec(ctx, `UPDATE network_routing.initial_route SET plan = '{}'::jsonb`); err != nil {
+		t.Fatalf("改坏初始路由：%v", err)
+	}
+
+	published, err := fixture.beat.DispatchOnce(ctx)
+	if err != nil {
+		t.Fatalf("第一拍：%v", err)
+	}
+	if published != 0 {
+		t.Fatalf("坏行却定稿了 %d 条", published)
+	}
+	if got := recordedFailureCode(t, fixture.db, eventID); got != "dispatch.publish_failed" {
+		t.Fatalf("failure_code = %q, want dispatch.publish_failed——坏行不是等依赖", got)
+	}
+	for _, consumer := range []string{deriveInitialRouteConsumerName, tfPreparationConsumerName} {
+		if n := fixture.countInbox(t, consumer, eventID); n != 0 {
+			t.Fatalf("%s inbox 行数 = %d, want 0", consumer, n)
+		}
+	}
+}
+
+type unrebuildableInitialRoute struct{}
+
+func (unrebuildableInitialRoute) FindByKey(
+	context.Context, nrdomain.InitialRouteJudgmentKey,
+) (nrports.InitialRouteRecord, bool, error) {
+	return nrports.InitialRouteRecord{}, false,
+		fmt.Errorf("find initial route: %w: bad plan", nrports.ErrStoredRouteRecordUnreadable)
+}
+
+type unreachedProjection struct{}
+
+func (unreachedProjection) Handle(
+	context.Context, veapplication.DeriveProjectionCommand,
+) (veapplication.DeriveProjectionResult, error) {
+	return veapplication.DeriveProjectionResult{}, errors.New("derive should not be called")
+}
+
+type unreachedPreparation struct{}
+
+func (unreachedPreparation) Prepare(
+	context.Context, tfapplication.PrepareOnPlannedLegsCommand,
+) (tfapplication.PrepareOnPlannedLegsResult, error) {
+	return tfapplication.PrepareOnPlannedLegsResult{}, errors.New("prepare should not be called")
+}
+
+// Covers: code/68 的逐路半边——真库那一拍两路合起来只看得到最响的码，一路修好另一路仍折未决也会落 publish_failed。
+// 这里各取生产的处理适配器与生产的未决名单，钉住每一路认不出坏行。
+func TestNeitherInitialRouteLaneListsAnUnrebuildableRow(t *testing.T) {
+	listed := func(err error, sentinels []error) bool {
+		for _, sentinel := range sentinels {
+			if errors.Is(err, sentinel) {
+				return true
+			}
+		}
+		return false
+	}
+	formed := veinbox.FormedInitialRoute{
+		TenantID: "SYN-TENANT-01", CustomerAccountID: "SYN-CUSTOMER-01", Shipment: "SYN-SHIPMENT-01",
+		Parcel: initialRouteParcel, Baseline: initialRouteBaseline, Purpose: initialRoutePurpose,
+	}
+
+	projection, err := venr.NewDeriveOnInitialRouteAdapter(unrebuildableInitialRoute{}, unreachedProjection{})
+	if err != nil {
+		t.Fatalf("构造 VE 适配器：%v", err)
+	}
+	if err := projection.HandleFormedInitialRoute(t.Context(), formed); err == nil ||
+		listed(err, veInitialRouteUndecidedSentinels) {
+		t.Fatalf("VE 那一路坏行 = %v——进了未决名单或没报错", err)
+	}
+
+	preparation, err := tfnetworkrouting.NewPrepareOnInitialRoute(unrebuildableInitialRoute{}, unreachedPreparation{})
+	if err != nil {
+		t.Fatalf("构造 TF 适配器：%v", err)
+	}
+	if err := preparation.HandleFormedInitialRoute(t.Context(), tfinbox.FormedInitialRoute(formed)); err == nil ||
+		listed(err, tfInitialRoutePreparationUndecidedSentinels) {
+		t.Fatalf("TF 那一路坏行 = %v——进了未决名单或没报错", err)
 	}
 }
 
