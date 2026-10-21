@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/application"
@@ -126,5 +127,20 @@ func TestACaseIsNotEstablishedForUnacceptedParcelsOrAnUnconfiguredRequirement(t 
 	blank, err := handler.Handle(context.Background(), parcelCaseCommand(t, " "))
 	if err != nil || blank.Outcome() != application.EstablishCaseNotAccepted {
 		t.Fatalf("blank = %s, %v", blank.Outcome(), err)
+	}
+}
+
+// Covers: 源上下文答出两份已接受委托（ports.ErrAcceptedParcelAmbiguous）是确定性坏状态：整笔报错，不答可重试的读不动，
+// 不建案、不签案件号。
+func TestAnAmbiguousAcceptedParcelFailsTheWholeRequest(t *testing.T) {
+	handler, parcels, cases := newParcelCaseFixture(t)
+	parcels.err = fmt.Errorf("adapter: DPCL-1: %w", ports.ErrAcceptedParcelAmbiguous)
+
+	result, err := handler.Handle(context.Background(), parcelCaseCommand(t, "parcel-1"))
+	if !errors.Is(err, ports.ErrAcceptedParcelAmbiguous) {
+		t.Fatalf("err = %v outcome = %s；歧义被折成了作答", err, result.Outcome())
+	}
+	if cases.store.saved != 0 || cases.identity.minted != 0 {
+		t.Fatalf("saved = %d minted = %d", cases.store.saved, cases.identity.minted)
 	}
 }

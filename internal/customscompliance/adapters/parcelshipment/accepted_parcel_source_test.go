@@ -7,6 +7,7 @@ import (
 
 	ccparcelshipment "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/parcelshipment"
 	ccdomain "go.idp.xyz/idp-parcel/internal/customscompliance/domain"
+	ccports "go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
@@ -37,7 +38,8 @@ func must[T any](t *testing.T, construct func(string) (T, error), raw string) T 
 }
 
 // Covers: AT-CC-437（翻译半边）——包裹的客户归属取提供方那份已接受委托的客户账户，来源资料引用取（委托，当前提交版本）；
-// 查不到答不在任何已接受委托里；提供方两份都声明了这件包裹是它的坏状态，作 error 交回、不挑一份。
+// 查不到答不在任何已接受委托里；提供方两份都声明了这件包裹是它的坏状态，译成 ErrAcceptedParcelAmbiguous 交回、不挑一份，
+// 与读不动分得开。
 func TestTheAcceptedRequestGivesCustomerAndSourceAndAmbiguityIsNotResolvedHere(t *testing.T) {
 	identity, err := psdomain.NewSourceIdentity(
 		must(t, psdomain.NewTenantID, "SYN-TENANT-01"),
@@ -71,7 +73,15 @@ func TestTheAcceptedRequestGivesCustomerAndSourceAndAmbiguityIsNotResolvedHere(t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := ambiguous.FindAcceptedParcelSource(context.Background(), tenant, "DPCL-1"); !errors.Is(err, psdomain.ErrAmbiguousParcelTarget) {
-		t.Fatalf("歧义：err = %v", err)
+	if _, _, err := ambiguous.FindAcceptedParcelSource(context.Background(), tenant, "DPCL-1"); !errors.Is(err, ccports.ErrAcceptedParcelAmbiguous) ||
+		!errors.Is(err, psdomain.ErrAmbiguousParcelTarget) {
+		t.Fatalf("歧义没译成本上下文的哨兵：err = %v", err)
+	}
+	unreadable, err := ccparcelshipment.NewAcceptedParcelSources(acceptedTargetsDouble{err: errors.New("down")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := unreadable.FindAcceptedParcelSource(context.Background(), tenant, "DPCL-1"); err == nil || errors.Is(err, ccports.ErrAcceptedParcelAmbiguous) {
+		t.Fatalf("读不动被读成了歧义：err = %v", err)
 	}
 }

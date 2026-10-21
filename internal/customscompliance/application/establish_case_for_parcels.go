@@ -2,6 +2,8 @@ package application
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
@@ -52,6 +54,10 @@ func (handler *EstablishCaseForParcelsHandler) Handle(
 			return EstablishCaseResult{outcome: EstablishCaseNotAccepted}, nil
 		}
 		source, found, err := handler.deps.Parcels.FindAcceptedParcelSource(ctx, command.TenantID, parcel)
+		if errors.Is(err, ports.ErrAcceptedParcelAmbiguous) {
+			// 源上下文的坏状态，重投不会好：整笔报错（HTTP 500），不答可重试的读不动。
+			return EstablishCaseResult{}, fmt.Errorf("customs compliance: accepted source of parcel %s: %w", parcel, err)
+		}
 		if err != nil {
 			return establishUndecided(AcceptedParcelSourceUnavailable), nil
 		}

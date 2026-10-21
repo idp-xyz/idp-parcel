@@ -30,8 +30,8 @@ func NewAcceptedParcelSources(view psports.CurrentAcceptedParcelTargetView) (*Ac
 var _ ccports.AcceptedParcelSourceView = (*AcceptedParcelSources)(nil)
 
 // FindAcceptedParcelSource 只译不判。提供方答「两份已接受委托都声明了这件包裹」是它自己的坏状态（ErrAmbiguousParcelTarget），
-// 原样作 error 交回，不在这里挑一份：挑哪份都是在替源上下文消歧。包裹身份在提供方词汇里构造不出来（空白），答「不在任何已接受
-// 委托里」——那件包裹本就不可能被接受过。
+// 译成本上下文的 ErrAcceptedParcelAmbiguous 交回，不在这里挑一份：挑哪份都是在替源上下文消歧。包裹身份在提供方词汇里构造不出来
+// （空白），答「不在任何已接受委托里」——那件包裹本就不可能被接受过。
 func (sources *AcceptedParcelSources) FindAcceptedParcelSource(
 	ctx context.Context,
 	tenant ccdomain.TenantID,
@@ -46,6 +46,10 @@ func (sources *AcceptedParcelSources) FindAcceptedParcelSource(
 		return ccports.AcceptedParcelSource{}, false, nil
 	}
 	target, found, err := sources.view.FindCurrentAcceptedByParcel(ctx, providerTenant, providerParcel)
+	if errors.Is(err, psdomain.ErrAmbiguousParcelTarget) {
+		return ccports.AcceptedParcelSource{}, false, fmt.Errorf("customs compliance parcelshipment adapter: %s: %w: %w",
+			parcel, ccports.ErrAcceptedParcelAmbiguous, err)
+	}
 	if err != nil {
 		return ccports.AcceptedParcelSource{}, false, fmt.Errorf("customs compliance parcelshipment adapter: %w", err)
 	}
