@@ -101,6 +101,12 @@
 | `AT-CC-446` | internal/customscompliance/application/register_credential_operation_evidence_test.go::TestCredentialRegistrationHandsTheOperationEvidenceToTheRegisterAndAReplayKeepsTheFirst（编排半边）；internal/customscompliance/adapters/postgres/credential_operation_evidence_test.go::TestACredentialVersionKeepsItsOperationEvidence（持久化半边）；internal/customscompliance/adapters/http/operator_credential_registration_test.go::TestTheCredentialFaceAuthenticatesItsOwnKindAndRecordsTheRegistrant（Intake 半边）；internal/customscompliance/adapters/http/query_credentials_test.go::TestCredentialListTranscribesEachVersionVerbatim（读面半边）；cmd/parcel-api/assemble_manual_external_facts_test.go::TestManualExternalFactsAdoptThroughTheOperatorFacesAndRecordTheSubmitter（生产装配半边） |
 | `AT-CC-447` | internal/accessidentity/adapters/postgres/manual_external_fact_decision_grant_test.go::TestTheManualExternalFactDecisionKindsAreGrantedAndReadBackSeparately（接入身份半边）；internal/customscompliance/adapters/accessidentity/credential_registration_decision_test.go::TestCredentialRegistrationAuthenticatesItsOwnKind（认证半边）；internal/customscompliance/adapters/http/operator_credential_registration_test.go::TestTheCredentialFaceAnswersNotGrantedAndRefusesSelfReportedIdentity（Intake 半边）；cmd/parcel-api/assemble_manual_external_facts_test.go::TestEachManualFactFaceOpensOnlyForItsOwnDecisionKind、::TestTheIntegrationClientFacesStillWorkAlongsideAndRecordNoOperator（生产装配半边） |
 | `AT-CC-448` | internal/customscompliance/application/submit_declaration_test.go::TestReadinessAndAuthorityAreTwoSeparateTracks（「unconfigured readiness is undecided」那一格；测试的 `Covers:` 尚未点名本条，补点名待 docs-consistency/code/26） |
+| `AT-CR-006` | internal/collectionremittance/application/instruction_principal_test.go::TestOnlyTheChannelReportOfThreeLayersPostsThePrincipal；cmd/parcel-collection-register/vertical_test.go::TestCollectionRegisterVerticalOnRealPostgres（生产装配半边） |
+| `AT-CR-007` | internal/collectionremittance/application/instruction_principal_test.go::TestAnArrivalCannotBorrowAnotherInstructionsInTransit；cmd/parcel-collection-register/vertical_test.go::TestCollectionRegisterVerticalOnRealPostgres（生产装配半边） |
+| `AT-CR-008` | internal/collectionremittance/application/instruction_principal_test.go::TestPostingAFactAgainUnderAnotherPostingIDIsAConflict；internal/collectionremittance/adapters/postgres/instruction_principal_test.go::TestTheDatabaseKeepsOnePostingPerCollectionFact（库约束半边）；cmd/parcel-collection-register/vertical_test.go::TestCollectionRegisterVerticalOnRealPostgres（生产装配半边） |
+| `AT-CR-015` | internal/collectionremittance/application/handler_test.go::TestAShortfallLandsFromInTransitAndLeavesReceivedFundsAlone |
+| `AT-CR-016` | internal/collectionremittance/application/handler_test.go::TestAShortfallLandsFromInTransitAndLeavesReceivedFundsAlone（短款半边）；internal/collectionremittance/application/instruction_principal_test.go::TestASurplusLandsOnlyFromReceivedFundsAndOnlyOnce（溢款半边）；internal/collectionremittance/adapters/postgres/instruction_principal_test.go::TestTheDatabaseFixesWhereIntakeAndVariancesComeFrom（库约束半边） |
+| `AT-CR-017` | internal/collectionremittance/application/instruction_principal_test.go::TestScenarioSeventeenShortfallStaysWithinTheReportLessWhatMoved（短款半边；抵扣记账形归 docs-consistency/code/47） |
 | `AT-NO-008` | internal/nodeoperations/application/accept_collaboration_test.go::TestExecutionFactsAreRecordedWithinTheDecision；internal/nodeoperations/application/accept_collaboration_test.go::TestOneDecisionPerCollaborationItem |
 | `AT-NO-009` | internal/nodeoperations/application/accept_collaboration_test.go::TestOneDecisionPerCollaborationItem |
 | `AT-NO-012` | internal/nodeoperations/application/accept_collaboration_test.go::TestExecutionFactsAreRecordedWithinTheDecision |
@@ -640,7 +646,6 @@
 | `AT-CR-012` | 形成回汇批次；分户账未开立答依据不在册 | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
 | `AT-CR-013` | 凭批次汇付；批次交出后新成员答批次已交出；重放成员答已在册 | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
 | `AT-CR-014` | 交出汇付主张两次与不在册批次 | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
-| `AT-CR-015` | 差异事项只登不落账，差额另凭事项记账 | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
 | `AT-CR-018` | 冲正是反向同额；入账不能冲正 | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
 | `AT-CR-022` | 依赖故障答未决、重跑续办 | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
 | `AT-CR-023` | 运营查阅代收分户账册：空册答空列表、读口故障答 NO_ANSWER_FORMED | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
@@ -1306,11 +1311,6 @@
 | `AT-CC-407` | 引用和关系提交成功，但发布首次失败 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
 | `AT-CC-408` | 来源已保全，但关联结果技术提交失败 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
 | `AT-CC-410` | 检查本用例直接形成或修改的对象 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
-| `AT-CR-006` | 只凭渠道代收报告入账（code/14） | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
-| `AT-CR-007` | 真实到账按指令移位、上限按指令算（code/14） | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
-| `AT-CR-008` | 同一条事实换记账标识再记答内容冲突（code/14） | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
-| `AT-CR-016` | 短款只从渠道在途、溢款只从待清分落入（code/14） | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
-| `AT-CR-017` | 场景十七：报告 100、到账 96、认可抵扣 3、短款 1（code/14、code/47） | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
 | `AT-CR-019` | 来源更正追加事实并回指原事实（code/15） | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
 | `AT-CR-020` | 真实到账凭结算已采用事实引用登记，金额之和不超额（ADR-0274；code/54） | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
 | `AT-CR-021` | 批次只收归集截点前已处于应付客户的本金（code/15） | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
