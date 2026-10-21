@@ -135,7 +135,7 @@
 - 分拣到下一方向、建立面向下一段的集运成员、集包出运、装载和交出必须等待当前有效路由指令。
 - 新路由生效后形成新的路由指令。旧标签、分拣码或指令不能继续授权未来作业，但原扫描和执行事实必须保留。
 - 集运前由本上下文按每个成员当前计划形成集运兼容判断；兼容判断不是实际成员关系。
-- 这几条由节点作业端在动作之前问方向依据读面来执行，节点写口对已经发生的作业照记（[ADR-0251](../../adr/0251-directional-node-work-is-paused-by-a-reading-before-the-action-and-recorded-moves-are-never-refused.md)）。路由指令与集运兼容判断尚未实现，见「给开发的交接」。
+- 这几条由节点作业端按随对象下发、带有效区间的方向依据执行（[ADR-0024](../../adr/0024-directional-work-basis-carries-a-validity-interval.md)），节点写口对已经发生的作业照记（[ADR-0251](../../adr/0251-directional-node-work-is-paused-by-a-reading-before-the-action-and-recorded-moves-are-never-refused.md)）。路由指令与集运兼容判断尚未实现，见「给开发的交接」。
 
 ## 一致性、幂等与并发
 
@@ -174,7 +174,7 @@
 | `AT-NR-035` | 有效网络收寄发生在非计划但已确认控制的节点 | 原计划按实际节点与计划不符失效、评估替代候选，形成偏离，不把节点回填进旧计划（偏离未实现，见 [demo-chain-gaps/35](../../../.scratch/demo-chain-gaps/issues/35-network-routing-route-deviation-consumes-movement-facts.md)） |
 | `AT-NR-036` | 当前有效实测仍满足原计划硬限制；策略版本已声明冻结形态 | 原计划继续适用，测量事实不被路由复制或修改（实测触发未实现，见「给开发的交接」） |
 | `AT-NR-037` | 原线路不再合格（有效硬限制或当前有效实测），包裹在当前可控节点上，存在替代候选且允许自动改路 | 替代候选比失效计划便宜、差额严格大于阈值时形成改路决定与新计划，保留旧计划及已执行前缀；差额不超过阈值时只形成建议，阻塞原因 `IMPROVEMENT_BELOW_THRESHOLD`（[ADR-0173](../../adr/0173-auto-reroute-is-folded-from-the-strategy-version.md) 决定三）。新路由指令与实测触发未实现，见「给开发的交接」 |
-| `AT-NR-038` | 原计划失效且没有替代候选 | 形成无当前有效路由，阻止方向性作业但允许安全作业；阻止落在节点作业端动作之前问的读面上（[ADR-0251](../../adr/0251-directional-node-work-is-paused-by-a-reading-before-the-action-and-recorded-moves-are-never-refused.md)，读面未实现） |
+| `AT-NR-038` | 原计划失效且没有替代候选 | 形成无当前有效路由，阻止方向性作业但允许安全作业；阻止由节点作业端按下发的方向依据执行（[ADR-0251](../../adr/0251-directional-node-work-is-paused-by-a-reading-before-the-action-and-recorded-moves-are-never-refused.md)，依据下发未实现） |
 | `AT-NR-039` | 先前无路由，收寄后出现合格候选 | 形成首个当前有效路由计划，不恢复旧占位（生产接法上复核不取候选成本、走不通，见 [demo-chain-gaps/115](../../../.scratch/demo-chain-gaps/issues/115-route-reassessment-never-loads-candidate-costs.md)） |
 | `AT-NR-040` | 只有普通扫描或卸载，没有控制依据 | `触发未受理`（`TRIGGER_NOT_ACCEPTED`）：不落复核、不入账未判、不回滚重投，不建立当前可控节点 |
 | `AT-NR-041` | 存在更优候选但已过冻结边界且原计划仍可执行 | 保留原计划，不因轻微改善自动切换 |

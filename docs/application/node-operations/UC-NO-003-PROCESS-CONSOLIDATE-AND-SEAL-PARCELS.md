@@ -74,10 +74,10 @@
 - 节点已经通过客户直接收寄或权威运输交接取得明确实物控制。
 - 作业实物具有稳定身份；正式包裹尚不能确认时使用待识别实物，不创建临时包裹。
 - 每项任务能够引用节点、对象、动作、范围和当前有效依据。
-- 方向性作业之前，作业端经方向依据预检取得当前有效路由指令；集运还要成员级集运兼容判断。写口对已经发生的方向性作业照记，同笔留下方向依据记录（[ADR-0251](../../adr/0251-directional-node-work-is-paused-by-a-reading-before-the-action-and-recorded-moves-are-never-refused.md)）。
+- 方向性作业依据当前有效路由指令；集运还要成员级集运兼容判断。两者随作业实物下发、带有效区间，作业端据本地时钟判断，出区间或缺依据即暂停（[ADR-0024](../../adr/0024-directional-work-basis-carries-a-validity-interval.md)）。写口对已经发生的方向性作业照记，同笔留下方向依据记录（[ADR-0251](../../adr/0251-directional-node-work-is-paused-by-a-reading-before-the-action-and-recorded-moves-are-never-refused.md)）。
 - 设备、测量、身份、分拣、集运和封签真实规则未配置时，只运行稳定骨架或受控 `R/S`。
 
-没有当前有效路由不阻止接收、隔离、状况记录、测量和在场核对。方向依据预检对分拣到下一方向、面向下一段的集运、集包出运、装载和交出答受阻，作业端据此不做；已经做了的照记。
+没有当前有效路由不阻止接收、隔离、状况记录、测量和在场核对。下发的方向依据对分拣到下一方向、面向下一段的集运、集包出运、装载和交出答受阻，作业端据此不做；已经做了的照记。
 
 ## 输入语义契约
 
@@ -97,7 +97,7 @@
 |---|---|---|---|
 | 作业事实已形成 | 明确对象完成一项实际节点动作 | 任务、对象、动作、发生时间、位置、执行方、来源和证据 | 整个任务完成、路由完成或运输完成 |
 | 当前有效实测已派生 | 依据仍有效的测量事实形成当前业务采用值 | 对象、项目、结果、单位、来源集合、规则版本和适用时间 | 客户/供应商计费重量或原测量覆盖 |
-| 方向性作业受阻 | 方向依据预检的答案：没有当前有效路由、兼容判断或授权，作业端不执行下一跳动作。写口不答这一格（[ADR-0251](../../adr/0251-directional-node-work-is-paused-by-a-reading-before-the-action-and-recorded-moves-are-never-refused.md)） | 对象、拟执行动作、缺少依据、当前安全作业和续办入口 | 收寄失败、服务终局、库存冻结，或拒收已经发生的移入 |
+| 方向性作业受阻 | 下发的方向依据（带有效区间，[ADR-0024](../../adr/0024-directional-work-basis-carries-a-validity-interval.md)）在作业端的答案：没有当前有效路由、兼容判断或授权，或依据已出有效区间，作业端不执行下一跳动作。写口不答这一格（[ADR-0251](../../adr/0251-directional-node-work-is-paused-by-a-reading-before-the-action-and-recorded-moves-are-never-refused.md)） | 对象、拟执行动作、缺少依据、当前安全作业和续办入口 | 收寄失败、服务终局、库存冻结，或拒收已经发生的移入 |
 | 集运单元已封装 | 实际成员已经形成且封装快照和封签记录完整 | 单元实例、载具引用、直接成员、快照、封签、时间、位置和作业依据 | 舱单、班次、装载分配或实际交接 |
 | 作业部分完成 | 一项任务或批次的对象结果不同 | 每个对象的完成、未完成、失败或待确认结果 | 一个批次状态覆盖成员 |
 | 作业结果待确认 | 来源冲突、设备结果或并发事实不足 | 已知事实、冲突、原结果和续办入口 | 最后扫描覆盖或人工直接设完成 |
@@ -122,7 +122,7 @@
 ### 3. 分拣与集运
 
 - 方向性分拣必须引用当前有效路由指令；指令失效后停止尚未执行范围。
-- 拟组合包裹先经方向依据预检取得 `network-routing` 的成员级集运兼容判断。部分成员不兼容不回滚其他合格成员；不兼容的成员实际被移入时照记，偏离归 `network-routing` 判。
+- 拟组合包裹先按下发的方向依据取得 `network-routing` 的成员级集运兼容判断。部分成员不兼容不回滚其他合格成员；不兼容的成员实际被移入时照记，偏离归 `network-routing` 判。
 - 兼容判断只允许执行，不自动建立成员。实际移入才形成集运成员关系。
 - 每个作业实物同一时点最多一个直接物理父级，全部包含链无循环（不查环未实现，见 [docs-consistency/code/19](../../../.scratch/docs-consistency/code/19-consolidation-containment-is-not-checked-for-cycles.md)）。
 - 作业批次只组织任务，不取得成员、控制、位置或运输责任。
@@ -190,9 +190,9 @@
 |---|---|---|
 | `AT-NO-029` | 已控制包裹完成扫描、称重和量方 | 每项事实独立保存，派生当前有效实测，不形成计费重量 |
 | `AT-NO-030` | 新测量使路由资格变化 | 保存实测并触发 `UC-NR-003`；节点不自行改路 |
-| `AT-NO-031` | 包裹没有当前有效路由 | 允许隔离、测量和核对；方向依据预检对方向性分拣与集包答受阻，已经发生的移入照记并留下方向依据记录（[ADR-0251](../../adr/0251-directional-node-work-is-paused-by-a-reading-before-the-action-and-recorded-moves-are-never-refused.md)；预检未实现，见「给开发的交接」） |
+| `AT-NO-031` | 包裹没有当前有效路由 | 允许隔离、测量和核对；下发的方向依据对方向性分拣与集包答受阻，作业端据此不做；已经发生的移入照记并留下方向依据记录（[ADR-0251](../../adr/0251-directional-node-work-is-paused-by-a-reading-before-the-action-and-recorded-moves-are-never-refused.md)；依据下发未实现，见「给开发的交接」） |
 | `AT-NO-032` | 新路由指令生效 | 后续任务引用新指令，旧指令和已发生事实保留 |
-| `AT-NO-033` | 三个包裹中两个兼容、一个不兼容 | 预检只对兼容成员放行集运，不兼容成员独立保留；不兼容的那件实际被移入时照记（[ADR-0251](../../adr/0251-directional-node-work-is-paused-by-a-reading-before-the-action-and-recorded-moves-are-never-refused.md)；兼容判断与预检未实现，见「给开发的交接」） |
+| `AT-NO-033` | 三个包裹中两个兼容、一个不兼容 | 下发的方向依据只对兼容成员放行集运，不兼容成员独立保留；不兼容的那件实际被移入时照记（[ADR-0251](../../adr/0251-directional-node-work-is-paused-by-a-reading-before-the-action-and-recorded-moves-are-never-refused.md)；兼容判断与依据下发未实现，见「给开发的交接」） |
 | `AT-NO-034` | 作业批次包含多个包裹 | 批次只组织任务，不形成集运成员或控制 |
 | `AT-NO-035` | 同一包裹并发移入两个集运单元 | 只允许一个当前直接父级，另一操作冲突 |
 | `AT-NO-036` | 封装后需要移出一个成员 | 先授权开封，再移出并重新封装；两版快照和封签均保留 |
@@ -217,7 +217,7 @@
 
 | 能力 | 现状 | 承接 |
 |---|---|---|
-| 方向依据预检（`AT-NO-031`、`AT-NO-033`、结果「方向性作业受阻」） | 没有读面；随一线作业端排 | [no-directional-basis/01](../../../.scratch/no-directional-basis/issues/01-consolidation-adds-members-without-any-directional-basis.md)（读面半边） |
+| 方向依据随对象下发、带有效区间（`AT-NO-031`、`AT-NO-033`、结果「方向性作业受阻」；ADR-0024、ADR-0251） | 没有下发口；随一线作业端排 | [no-directional-basis/01](../../../.scratch/no-directional-basis/issues/01-consolidation-adds-members-without-any-directional-basis.md)（读面半边） |
 | 路由指令与成员级集运兼容判断（启动条件、阶段 3、步骤 6） | `network-routing` 没有这两者的模型，方向依据记录的路由一格答`未配置` | [no-directional-basis/02](../../../.scratch/no-directional-basis/issues/02-network-routing-has-no-routing-instruction-or-consolidation-compatibility-judgment.md) |
 | 集运包含查环（阶段 3、`AT-NO-039`） | 移入只拒已封装、已关闭与重复成员，不查祖先链 | [docs-consistency/code/19](../../../.scratch/docs-consistency/code/19-consolidation-containment-is-not-checked-for-cycles.md) |
 | 实际测量与当前有效实测（`AT-NO-029`、`AT-NO-030`、阶段 2、步骤 4、5） | 没有实际测量登记册与派生；实测也不触发路由复核 | [pp-pricing-input-seams/04](../../../.scratch/pp-pricing-input-seams/issues/04-no-actual-measurement-registry-and-valid-measurements-read-port.md)、[product-strategy-boundary/08](../../../.scratch/product-strategy-boundary/issues/08-no-current-valid-measurement-derivation.md)；运输准备按实测再准备见 [demo-chain-gaps/44](../../../.scratch/demo-chain-gaps/issues/44-tf-re-prepares-on-node-actual-measurement.md) |
