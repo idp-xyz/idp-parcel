@@ -117,6 +117,9 @@ type AdoptFundsFactCommand struct {
 	AmountMinor int64
 	Version     string
 	OccurredAt  time.Time
+	// OperationEvidence 是提交方（操作者渠道上是 `OPERATOR/<发行方>#<sub>`），只进审计，理由在 ports.FundsFactRecord 同名字段。
+	// 不从载荷收：由 Intake 按认证结果填，集成客户端族与受控 CLI 两路不填。
+	OperationEvidence string
 }
 
 // CorrectFundsFactCommand 携带一次外部更正的采用：同一事实的新版本回指当前链头，只有金额变
@@ -132,6 +135,8 @@ type CorrectFundsFactCommand struct {
 	Version     string
 	AmountMinor int64
 	CorrectedAt time.Time
+	// OperationEvidence 同 AdoptFundsFactCommand 那一格：更正可能出自与首版不同的人，记在这一版上。
+	OperationEvidence string
 }
 
 // MapFundsCommand 携带一次资金映射：显式依据必备——金额相同、同一客户或同一时间都
@@ -300,7 +305,8 @@ func (handler *MapExternalFundsHandler) AdoptFact(
 		return FundsResult{outcome: FundsFactConflict}, nil
 	}
 
-	record := ports.FundsFactRecord{Key: key, ContentDigest: digest, Fact: fact, RecordedAt: handler.deps.Clock.Now()}
+	record := ports.FundsFactRecord{Key: key, ContentDigest: digest, Fact: fact, RecordedAt: handler.deps.Clock.Now(),
+		OperationEvidence: strings.TrimSpace(command.OperationEvidence)}
 	saved, err := handler.deps.Facts.Save(ctx, record)
 	if err != nil {
 		return fundsUndecided(FundsFactStoreUnavailable, command.Fact), nil
@@ -377,7 +383,8 @@ func (handler *MapExternalFundsHandler) CorrectFact(
 		return FundsResult{outcome: FundsNotAccepted}, nil
 	}
 
-	record := ports.FundsFactRecord{Key: key, ContentDigest: digest, Fact: corrected, RecordedAt: handler.deps.Clock.Now()}
+	record := ports.FundsFactRecord{Key: key, ContentDigest: digest, Fact: corrected, RecordedAt: handler.deps.Clock.Now(),
+		OperationEvidence: strings.TrimSpace(command.OperationEvidence)}
 	saved, err := handler.deps.Facts.Save(ctx, record)
 	if err != nil {
 		return fundsUndecided(FundsFactStoreUnavailable, command.Fact), nil

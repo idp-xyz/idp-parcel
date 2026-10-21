@@ -88,18 +88,18 @@ func (repository *ExternalFundsFacts) FindVersion(
 // externalFundsFactSelect 是资金事实一个版本的读回列，读的是版本子表（别名 v）；写侧 FindByKey / FindVersion
 // 与只读视图 AdoptedFundsFactView 共用同一段扫描（scanExternalFundsFact），三处读回的形状不会各自漂。
 const externalFundsFactSelect = `SELECT v.source_ref, v.payer_ref, v.kind, v.currency, v.amount_minor, v.version, v.occurred_at,
-		        v.corrects, v.corrected_at, v.content_digest, v.recorded_at
+		        v.corrects, v.corrected_at, v.content_digest, v.recorded_at, v.operation_evidence
 		   FROM settlement_accounting.external_funds_fact_version AS v`
 
 // scanExternalFundsFact 把一行扫成记录并经重建门复验更正两半。无行只回 false。
 func scanExternalFundsFact(row pgx.Row, key ports.FundsFactKey) (ports.FundsFactRecord, bool, error) {
 	var source, kindName, currency, version, digest string
-	var payer, corrects *string
+	var payer, corrects, evidence *string
 	var amount int64
 	var occurredAt, recordedAt time.Time
 	var correctedAt *time.Time
 	err := row.Scan(&source, &payer, &kindName, &currency, &amount, &version, &occurredAt,
-		&corrects, &correctedAt, &digest, &recordedAt)
+		&corrects, &correctedAt, &digest, &recordedAt, &evidence)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.FundsFactRecord{}, false, nil
 	}
@@ -152,12 +152,16 @@ func scanExternalFundsFact(row pgx.Row, key ports.FundsFactKey) (ports.FundsFact
 	if err != nil {
 		return ports.FundsFactRecord{}, false, err
 	}
-	return ports.FundsFactRecord{
+	record := ports.FundsFactRecord{
 		Key:           key,
 		ContentDigest: digest,
 		Fact:          fact,
 		RecordedAt:    recordedAt.UTC(),
-	}, true, nil
+	}
+	if evidence != nil {
+		record.OperationEvidence = *evidence
+	}
+	return record, true, nil
 }
 
 // Save 写下一次资金事实采用——一个版本。两步都在调用方的事务里（RequireExecutor 没有事务就拒，第二步
@@ -197,8 +201,8 @@ func (repository *ExternalFundsFacts) Save(
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO settlement_accounting.external_funds_fact_version
 			(tenant_id, fact_id, version, source_ref, payer_ref, kind, currency, amount_minor,
-			 occurred_at, corrects, corrected_at, content_digest, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+			 occurred_at, corrects, corrected_at, content_digest, recorded_at, operation_evidence)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Fact.String(),
@@ -213,6 +217,7 @@ func (repository *ExternalFundsFacts) Save(
 		optionalTime(correctedAt, hasCorrects),
 		record.ContentDigest,
 		record.RecordedAt.UTC(),
+		optionalText(record.OperationEvidence),
 	)
 	if err != nil {
 		return ports.FundsFactSaveOutcomeInvalid, fmt.Errorf("save external funds fact: %w", err)
@@ -242,4 +247,12 @@ func optionalTime(value time.Time, present bool) *time.Time {
 	}
 	utc := value.UTC()
 	return &utc
+}
+
+// optionalText 把空串写成 NULL：操作证据空着是「这一路不记提交方」，落成空串会撞非空白那道 CHECK。
+func optionalText(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
 }

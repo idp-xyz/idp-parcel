@@ -790,6 +790,9 @@ type FundsFactRecord struct {
 	ContentDigest string
 	Fact          domain.ExternalFundsFact
 	RecordedAt    time.Time
+	// OperationEvidence 是采用这一版的操作证据：经哪个渠道、由谁提交（ADR-0236 决定三）。空即这一路不记提交方。只进审计——不进
+	// ContentDigest、不进重放比对、不进任何门：同一版本由另一位操作者重放答已存在，交回的仍是首次那一位。
+	OperationEvidence string
 }
 
 type FundsFactSaveOutcome uint8
