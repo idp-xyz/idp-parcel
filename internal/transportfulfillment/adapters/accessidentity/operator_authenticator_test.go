@@ -94,21 +94,22 @@ func TestGrantedOperatorAuthenticatesToTheBoundTenant(t *testing.T) {
 
 func TestEveryTFDecisionMapsToItsOwnDecisionKind(t *testing.T) {
 	decisions := map[tfhttp.OperatorDecision]identity.DecisionKind{
-		tfhttp.OperatorDecisionSegmentClosure:                      identity.DecisionSegmentClosure,
-		tfhttp.OperatorDecisionDispatchTaskRegistration:            identity.DecisionDispatchTaskRegistration,
-		tfhttp.OperatorDecisionLoadAssignment:                      identity.DecisionLoadAssignment,
-		tfhttp.OperatorDecisionParticipationTermination:            identity.DecisionParticipationTermination,
-		tfhttp.OperatorDecisionEffectiveTimeJudgment:               identity.DecisionEffectiveTimeJudgment,
-		tfhttp.OperatorDecisionCarrierFirstEffectivePickupJudgment: identity.DecisionCarrierFirstEffectivePickupJudgment,
-		tfhttp.OperatorDecisionTransportCommissionSubmission:       identity.DecisionTransportCommissionSubmission,
-		tfhttp.OperatorDecisionChargeOccurrenceRegistration:        identity.DecisionTransportChargeOccurrenceRegistration,
-		tfhttp.OperatorDecisionCapacityReservation:                 identity.DecisionCapacityReservation,
-		tfhttp.OperatorDecisionCapacityRelease:                     identity.DecisionCapacityRelease,
-		tfhttp.OperatorDecisionBookingRequestSubmission:            identity.DecisionBookingRequestSubmission,
-		tfhttp.OperatorDecisionSegmentCommissionAdoption:           identity.DecisionFulfillmentSegmentCommissionAdoption,
-		tfhttp.OperatorDecisionTransportCommissionCancellation:     identity.DecisionTransportCommissionCancellation,
-		tfhttp.OperatorDecisionBookingRequestCancellation:          identity.DecisionBookingRequestCancellation,
-		tfhttp.OperatorDecisionDeliveryDispatchReask:               identity.DecisionDeliveryDispatchReask,
+		tfhttp.OperatorDecisionSegmentClosure:                       identity.DecisionSegmentClosure,
+		tfhttp.OperatorDecisionDispatchTaskRegistration:             identity.DecisionDispatchTaskRegistration,
+		tfhttp.OperatorDecisionLoadAssignment:                       identity.DecisionLoadAssignment,
+		tfhttp.OperatorDecisionParticipationTermination:             identity.DecisionParticipationTermination,
+		tfhttp.OperatorDecisionEffectiveTimeJudgment:                identity.DecisionEffectiveTimeJudgment,
+		tfhttp.OperatorDecisionCarrierFirstEffectivePickupJudgment:  identity.DecisionCarrierFirstEffectivePickupJudgment,
+		tfhttp.OperatorDecisionTransportCommissionSubmission:        identity.DecisionTransportCommissionSubmission,
+		tfhttp.OperatorDecisionChargeOccurrenceRegistration:         identity.DecisionTransportChargeOccurrenceRegistration,
+		tfhttp.OperatorDecisionCapacityReservation:                  identity.DecisionCapacityReservation,
+		tfhttp.OperatorDecisionCapacityRelease:                      identity.DecisionCapacityRelease,
+		tfhttp.OperatorDecisionBookingRequestSubmission:             identity.DecisionBookingRequestSubmission,
+		tfhttp.OperatorDecisionSegmentCommissionAdoption:            identity.DecisionFulfillmentSegmentCommissionAdoption,
+		tfhttp.OperatorDecisionTransportCommissionCancellation:      identity.DecisionTransportCommissionCancellation,
+		tfhttp.OperatorDecisionBookingRequestCancellation:           identity.DecisionBookingRequestCancellation,
+		tfhttp.OperatorDecisionDeliveryDispatchReask:                identity.DecisionDeliveryDispatchReask,
+		tfhttp.OperatorDecisionTransportCommissionAgreementRevision: identity.DecisionTransportCommissionAgreementRevision,
 	}
 	for decision, kind := range decisions {
 		for other, otherKind := range decisions {
