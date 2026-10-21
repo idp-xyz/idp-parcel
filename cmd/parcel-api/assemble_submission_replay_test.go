@@ -17,17 +17,18 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
-// 本文件在真实 PostgreSQL 上证提交重发「接着办」（ADR-0256 决定一第 2 格；票 docs-consistency/code/39）。除归属读口换成按脚本
-// 作答的替身（隔离合成 `S`，不进生产装配）、建单事务里按需注入一次失败之外，仓储、三个事务边界壳、Outbox 与标识工厂全是
-// 生产件：要证的正是这几样之间的事务切分——保全与归属答案逐笔提交，建单那一笔回滚时它们留下来，重发据此接着建单。
+// 本文件在真实 PostgreSQL 上证提交重发的格局（ADR-0256 决定一第 2 格、ADR-0266；票 docs-consistency/code/39）。除归属读口与
+// 出向通道换成按脚本作答的替身（隔离合成 `S`，不进生产装配）、建单事务里按需注入一次失败之外，仓储、各个事务边界壳、续办
+// 守卫、Outbox 与标识工厂全是生产件：要证的正是这几样之间的事务切分与排队——保全与答案逐笔提交，建单那一笔回滚时它们留下来，
+// 重发据此接着建单；同一来源身份的两路续办一次只走一路。
 
 var errInjectedBuildFailure = errors.New("injected: build transaction fails")
 
-// Covers: `AT-PS-111`——建单那一笔事务真回滚（委托行与信封一起消失），原样重发接着建成恰好一份委托与一封信封。
+// Covers: `AT-PS-111`——建单那一笔事务真回滚（委托行与信封一起消失），原样重发重判仍放行，接着建成恰好一份委托与一封信封。
 func TestAReplayAfterTheBuildTransactionRolledBackBuildsTheRequestOnce(t *testing.T) {
 	pool, db := replayDatabase(t)
 	failing := &failingOnceHandoff{}
-	submission, _ := submissionAssembledThrough(t, db, &scriptedOwnership{steps: []ownershipStep{permit}}, failing.wrap)
+	submission, _ := submissionAssembledThrough(t, db, &scriptedOwnership{steps: []ownershipStep{permit}}, failing.wrap, nil)
 	command := submissionCommand(t)
 
 	failing.armed = true
@@ -56,7 +57,7 @@ func TestAReplayAfterTheBuildTransactionRolledBackBuildsTheRequestOnce(t *testin
 	}
 }
 
-// Covers: `AT-PS-111`——判归属的依赖答不出（保全已落，归属答案一行都没留），原样重发重新判归属并照常建单。
+// Covers: `AT-PS-111`——判归属的依赖答不出（保全已落，答案一行都没留，没有形成答案），原样重发重新判归属，仍放行就照常建单。
 func TestAReplayAfterTheOwnershipDependencyFailedDecidesAgain(t *testing.T) {
 	pool, db := replayDatabase(t)
 	ownership := &scriptedOwnership{steps: []ownershipStep{dependencyDown, permit}}
@@ -66,7 +67,7 @@ func TestAReplayAfterTheOwnershipDependencyFailedDecidesAgain(t *testing.T) {
 	if _, err := submission.Handle(t.Context(), command); !errors.Is(err, errOwnershipDependencyDown) {
 		t.Fatalf("首次提交 err = %v, want 归属依赖失败原样上抛", err)
 	}
-	if rows := ownershipAnswerCount(t, pool, command.Identity); rows != 0 {
+	if rows := submissionAnswerCount(t, pool, command.Identity); rows != 0 {
 		t.Fatalf("归属答案 = %d 行, want 0", rows)
 	}
 
@@ -79,7 +80,7 @@ func TestAReplayAfterTheOwnershipDependencyFailedDecidesAgain(t *testing.T) {
 	}
 }
 
-// Covers: `AT-PS-112`——首次`生产归属未决`，原样重发重判：判得出就照常建单；两次判断都留在库里。
+// Covers: `AT-PS-112`——首次`生产归属未决`，原样重发重判，按这一次的结果作答：这一次放行，就建单、答`已提交`；两次判断都留在库里。
 func TestAReplayAfterOwnershipUnresolvedDecidesAgainAndBuilds(t *testing.T) {
 	pool, db := replayDatabase(t)
 	ownership := &scriptedOwnership{steps: []ownershipStep{unresolved, permit}}
@@ -97,7 +98,7 @@ func TestAReplayAfterOwnershipUnresolvedDecidesAgainAndBuilds(t *testing.T) {
 	if decision, carried := replay.OwnershipDecision(); !carried || decision.DecisionID().String() != "SYN-OWN-DEC-1" {
 		t.Fatalf("建单答复带的归属决定 = %v（%v），want 这一次放行的 SYN-OWN-DEC-1", decision.DecisionID(), carried)
 	}
-	if rows := ownershipAnswerCount(t, pool, command.Identity); rows != 2 {
+	if rows := submissionAnswerCount(t, pool, command.Identity); rows != 2 {
 		t.Fatalf("归属答案 = %d 行, want 2——未决那一次也留下", rows)
 	}
 	if rows := requestRowCount(t, pool, command.Identity); rows != 1 {
@@ -122,6 +123,9 @@ func TestAReplayAfterAdmissionPausedAnswersTheOriginal(t *testing.T) {
 	}
 	if got := replay.Outcome(); got != shipmentapp.OutcomeExistingResult {
 		t.Fatalf("重发 outcome = %v, want EXISTING_RESULT", got)
+	}
+	if prior, present := replay.PriorOutcome(); !present || prior != shipmentapp.OutcomeAdmissionPaused {
+		t.Fatalf("原结果 = %v（%v），want ADMISSION_PAUSED", prior, present)
 	}
 	decision, carried := replay.OwnershipDecision()
 	if !carried || decision.DecisionID().String() != "SYN-OWN-DEC-PAUSED-1" || decision.AdmissionControl() != domain.AdmissionControlPaused {
@@ -160,6 +164,9 @@ func TestAReplayOfABuiltRequestNamesItWithTheOwnershipItWasBuiltOn(t *testing.T)
 	if named, present := replay.ShipmentRequestID(); !present || named != command.ShipmentRequestID {
 		t.Fatalf("重发指名 %q（%v），want 原委托 %q", named, present, command.ShipmentRequestID)
 	}
+	if prior, present := replay.PriorOutcome(); !present || prior != shipmentapp.OutcomeSubmitted {
+		t.Fatalf("原结果 = %v（%v），want SUBMITTED", prior, present)
+	}
 	decision, carried := replay.OwnershipDecision()
 	if !carried || decision.DecisionID().String() != "SYN-OWN-DEC-1" || decision.Authority() != domain.ProductionAuthorityIDPParcel {
 		t.Fatalf("重发带的归属决定 = %v（%v），want 建单所据的 SYN-OWN-DEC-1", decision.DecisionID(), carried)
@@ -169,13 +176,21 @@ func TestAReplayOfABuiltRequestNamesItWithTheOwnershipItWasBuiltOn(t *testing.T)
 	}
 }
 
-// Covers: `AT-PS-111` 并发一支——建单那一笔回滚之后，两路重发同时续办，都判了归属、都去建单（接单入口给的委托号各不相同），
-// 建单的唯一键让只有一份落下：恰好一份委托、一封信封；两路答复指名同一份，落败那一路答`已有结果`并带胜者建单所据的归属。
-func TestTwoConcurrentReplaysAfterARolledBackBuildBuildOnce(t *testing.T) {
+// Covers: `AT-PS-111` 并发一支——建单那一笔回滚之后，两路重发同时到达：先进守卫的那一路判归属、建单；后一路在守卫外等，进门
+// 时委托已在，答`已有结果`指名同一份并带胜者建单所据的归属，自己一次归属都不判。脚本让后一路若真去判就会判成他方——守卫没排住
+// 时，同一范围就会一边在本地建单、一边投给他方（ADR-0266 决定二）。
+func TestTwoConcurrentReplaysAfterARolledBackBuildBuildOnceAndJudgeOnce(t *testing.T) {
 	pool, db := replayDatabase(t)
 	failing := &failingOnceHandoff{}
-	ownership := &scriptedOwnership{steps: []ownershipStep{permit}}
-	submission, _ := submissionAssembledThrough(t, db, ownership, failing.wrap)
+	entered := make(chan struct{})
+	slowPermit := func(scope domain.AdmissionScope) (domain.ProductionOwnershipDecision, error) {
+		close(entered)
+		time.Sleep(300 * time.Millisecond)
+		return permit(scope)
+	}
+	ownership := &scriptedOwnership{steps: []ownershipStep{permit, slowPermit, other}}
+	channel := &scriptedChannel{observe: []handoffObservationStep{confirmHandoff}}
+	submission, _ := submissionAssembledThrough(t, db, ownership, failing.wrap, channel)
 	command := submissionCommand(t)
 
 	failing.armed = true
@@ -183,8 +198,6 @@ func TestTwoConcurrentReplaysAfterARolledBackBuildBuildOnce(t *testing.T) {
 		t.Fatalf("首次提交 err = %v, want 建单事务的注入失败", err)
 	}
 
-	// 两路都要走到判归属才放行：确保两路都越过了「委托在不在」那一问，才是两次续办撞在建单上，而不是一前一后的重放。
-	ownership.hold(2)
 	commands := [2]shipmentapp.SubmitShipmentRequestCommand{command, command}
 	commands[0].ShipmentRequestID = mustValue(t, domain.NewShipmentRequestID, "syn-request-replay-a")
 	commands[0].DeclaredParcelIDs = []domain.DeclaredParcelID{mustValue(t, domain.NewDeclaredParcelID, "syn-parcel-replay-a")}
@@ -194,13 +207,21 @@ func TestTwoConcurrentReplaysAfterARolledBackBuildBuildOnce(t *testing.T) {
 	var results [2]shipmentapp.SubmitShipmentRequestResult
 	var failures [2]error
 	var wait sync.WaitGroup
-	for index := range commands {
-		wait.Add(1)
-		go func() {
-			defer wait.Done()
-			results[index], failures[index] = submission.Handle(context.Background(), commands[index])
-		}()
+	wait.Add(2)
+	go func() {
+		defer wait.Done()
+		results[0], failures[0] = submission.Handle(context.Background(), commands[0])
+	}()
+	// 第一路已在守卫里判归属，第二路才出发：它必须在守卫外等到第一路落笔。
+	select {
+	case <-entered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("第一路没有走到判归属")
 	}
+	go func() {
+		defer wait.Done()
+		results[1], failures[1] = submission.Handle(context.Background(), commands[1])
+	}()
 	wait.Wait()
 
 	for index, err := range failures {
@@ -208,8 +229,25 @@ func TestTwoConcurrentReplaysAfterARolledBackBuildBuildOnce(t *testing.T) {
 			t.Fatalf("第 %d 路重发：%v", index, err)
 		}
 	}
-	if ownership.timedOut() {
-		t.Fatal("两路没有同时走到判归属，并发前提不成立")
+	if got := results[0].Outcome(); got != shipmentapp.OutcomeSubmitted {
+		t.Fatalf("第一路 outcome = %v, want SUBMITTED", got)
+	}
+	if got := results[1].Outcome(); got != shipmentapp.OutcomeExistingResult {
+		t.Fatalf("第二路 outcome = %v, want EXISTING_RESULT", got)
+	}
+	first, _ := results[0].ShipmentRequestID()
+	second, present := results[1].ShipmentRequestID()
+	if !present || first != second || first != commands[0].ShipmentRequestID {
+		t.Fatalf("两路指名 %q / %q（%v），want 都是第一路建成的 %q", first, second, present, commands[0].ShipmentRequestID)
+	}
+	if decision, carried := results[1].OwnershipDecision(); !carried || decision.DecisionID().String() != "SYN-OWN-DEC-1" {
+		t.Fatalf("第二路带的归属决定 = %v（%v），want 胜者建单所据的 SYN-OWN-DEC-1", decision.DecisionID(), carried)
+	}
+	if got := ownership.calls(); got != 2 {
+		t.Fatalf("判归属 %d 次, want 2（首次一次、第一路续办一次）——第二路不该再判", got)
+	}
+	if got := channel.deliveryCount(); got != 0 {
+		t.Fatalf("投给他方 %d 次, want 0", got)
 	}
 	if rows := requestRowCount(t, pool, command.Identity); rows != 1 {
 		t.Fatalf("委托行 = %d, want 恰好 1", rows)
@@ -217,28 +255,53 @@ func TestTwoConcurrentReplaysAfterARolledBackBuildBuildOnce(t *testing.T) {
 	if got := submittedEnvelopeCount(t, pool); got != 1 {
 		t.Fatalf("「委托已提交」信封 = %d 份, want 恰好 1", got)
 	}
-	submitted, existing := 0, 0
-	var named [2]domain.ShipmentRequestID
-	for index, result := range results {
-		switch result.Outcome() {
-		case shipmentapp.OutcomeSubmitted:
-			submitted++
-		case shipmentapp.OutcomeExistingResult:
-			existing++
-		default:
-			t.Fatalf("第 %d 路 outcome = %v, want SUBMITTED 或 EXISTING_RESULT", index, result.Outcome())
-		}
-		id, present := result.ShipmentRequestID()
-		if !present {
-			t.Fatalf("第 %d 路没有指名委托", index)
-		}
-		named[index] = id
-		if _, carried := result.OwnershipDecision(); !carried {
-			t.Fatalf("第 %d 路没带归属决定", index)
-		}
+}
+
+// Covers: `AT-PS-114`——首次判为他方、交接没确认（通道未配置），其间登记册翻成本产品放行。重发不重判归属，按记着的那次尝试重投：
+// 仍未确认就仍答`生产归属未决`、不在本地建单；确认了才答`非本产品生产归属`；此后再重发答`已有结果`带原结果（ADR-0266 决定二，
+// ADR-0128 决定二「同一份决定对应同一次尝试」）。
+func TestAReplayAfterAnUnconfirmedHandoffRedeliversTheSameAttemptInsteadOfDeciding(t *testing.T) {
+	pool, db := replayDatabase(t)
+	ownership := &scriptedOwnership{steps: []ownershipStep{other, permit}}
+	channel := &scriptedChannel{observe: []handoffObservationStep{unconfiguredHandoff, unconfiguredHandoff, confirmHandoff}}
+	submission, _ := submissionAssembledThrough(t, db, ownership, nil, channel)
+	command := submissionCommand(t)
+
+	first, err := submission.Handle(t.Context(), command)
+	if err != nil || first.Outcome() != shipmentapp.OutcomeOwnershipUnresolved {
+		t.Fatalf("首次 outcome = %v, err = %v, want OWNERSHIP_UNRESOLVED", first.Outcome(), err)
 	}
-	if submitted != 1 || existing != 1 || named[0] != named[1] {
-		t.Fatalf("SUBMITTED %d 路、EXISTING_RESULT %d 路，指名 %v, want 各 1 且同一份", submitted, existing, named)
+	stillPending, err := submission.Handle(t.Context(), command)
+	if err != nil || stillPending.Outcome() != shipmentapp.OutcomeOwnershipUnresolved {
+		t.Fatalf("第二次 outcome = %v, err = %v, want OWNERSHIP_UNRESOLVED——交接仍未确认，登记册翻了也不在本地建单", stillPending.Outcome(), err)
+	}
+	confirmed, err := submission.Handle(t.Context(), command)
+	if err != nil || confirmed.Outcome() != shipmentapp.OutcomeOtherProductionAuthority {
+		t.Fatalf("第三次 outcome = %v, err = %v, want OTHER_PRODUCTION_AUTHORITY", confirmed.Outcome(), err)
+	}
+	if decision, _ := confirmed.OwnershipDecision(); decision.DecisionID().String() != "SYN-OWN-DEC-OTHER-1" {
+		t.Fatalf("确认的是 %v, want 首次那份他方决定", decision.DecisionID())
+	}
+	settled, err := submission.Handle(t.Context(), command)
+	if err != nil || settled.Outcome() != shipmentapp.OutcomeExistingResult {
+		t.Fatalf("第四次 outcome = %v, err = %v, want EXISTING_RESULT", settled.Outcome(), err)
+	}
+	if prior, _ := settled.PriorOutcome(); prior != shipmentapp.OutcomeOtherProductionAuthority {
+		t.Fatalf("原结果 = %v, want OTHER_PRODUCTION_AUTHORITY", prior)
+	}
+
+	if got := ownership.calls(); got != 1 {
+		t.Fatalf("判归属 %d 次, want 1——交接未确认的重发不重判", got)
+	}
+	attempts := channel.attempts()
+	if len(attempts) != 3 || attempts[0] != attempts[1] || attempts[1] != attempts[2] {
+		t.Fatalf("投递尝试 = %v, want 同一次尝试投三回", attempts)
+	}
+	if rows := requestRowCount(t, pool, command.Identity); rows != 0 {
+		t.Fatalf("委托行 = %d, want 0", rows)
+	}
+	if rows := submissionAnswerCount(t, pool, command.Identity); rows != 3 {
+		t.Fatalf("答案 = %d 行, want 3——每一次投递的评估都留下", rows)
 	}
 }
 
@@ -340,31 +403,16 @@ func syntheticOwnershipDecision(
 	return domain.NewProductionOwnershipDecision(spec)
 }
 
-// scriptedOwnership 按脚本逐次作答并计数；hold(n) 之后，前 n 次作答要等 n 路都到齐才放行（最多等一个固定时长，超时记下、
-// 照样放行，免得用例吊死），用来让并发的几路同时越过「委托在不在」那一问。
+func other(scope domain.AdmissionScope) (domain.ProductionOwnershipDecision, error) {
+	return otherAuthorityOwnership{anchor: envelopeProofAnchor}.DecideProductionOwnership(context.Background(), scope)
+}
+
+// scriptedOwnership 按脚本逐次作答并计数；并发的几路共用它，计数与取步要上锁。
 type scriptedOwnership struct {
 	steps []ownershipStep
 
-	mutex    sync.Mutex
-	count    int
-	holding  int
-	barrier  *sync.WaitGroup
-	released chan struct{}
-	late     bool
-}
-
-func (authority *scriptedOwnership) hold(parties int) {
-	authority.mutex.Lock()
-	defer authority.mutex.Unlock()
-	authority.holding = parties
-	authority.barrier = &sync.WaitGroup{}
-	authority.barrier.Add(parties)
-	authority.released = make(chan struct{})
-	barrier, released := authority.barrier, authority.released
-	go func() {
-		barrier.Wait()
-		close(released)
-	}()
+	mutex sync.Mutex
+	count int
 }
 
 func (authority *scriptedOwnership) DecideProductionOwnership(
@@ -374,24 +422,7 @@ func (authority *scriptedOwnership) DecideProductionOwnership(
 	authority.mutex.Lock()
 	step := authority.steps[min(authority.count, len(authority.steps)-1)]
 	authority.count++
-	var barrier *sync.WaitGroup
-	var released chan struct{}
-	if authority.holding > 0 {
-		authority.holding--
-		barrier, released = authority.barrier, authority.released
-	}
 	authority.mutex.Unlock()
-
-	if barrier != nil {
-		barrier.Done()
-		select {
-		case <-released:
-		case <-time.After(10 * time.Second):
-			authority.mutex.Lock()
-			authority.late = true
-			authority.mutex.Unlock()
-		}
-	}
 	return step(scope)
 }
 
@@ -401,10 +432,54 @@ func (authority *scriptedOwnership) calls() int {
 	return authority.count
 }
 
-func (authority *scriptedOwnership) timedOut() bool {
-	authority.mutex.Lock()
-	defer authority.mutex.Unlock()
-	return authority.late
+// handoffObservationStep 是出向通道替身一次作答的样子；脚本走完之后一直重复最后一步。
+type handoffObservationStep func(ports.ProductionHandoffDelivery) ports.ProductionHandoffObservation
+
+func unconfiguredHandoff(ports.ProductionHandoffDelivery) ports.ProductionHandoffObservation {
+	return ports.ProductionHandoffObservation{Observation: domain.HandoffObservationChannelUnconfigured}
+}
+
+func confirmHandoff(delivery ports.ProductionHandoffDelivery) ports.ProductionHandoffObservation {
+	confirmation, _ := domain.NewHandoffConfirmationReference("SYN-HANDOFF-CONFIRMATION-1")
+	query, _ := domain.NewHandoffQueryReference("SYN-HANDOFF-QUERY-1")
+	return ports.ProductionHandoffObservation{
+		Observation:          domain.HandoffObservationCompleteConfirmation,
+		ConfirmedScopeDigest: delivery.Scope.Digest(),
+		ConfirmationRef:      confirmation,
+		QueryRef:             query,
+		EffectiveAt:          envelopeProofAnchor.Add(-30 * time.Second),
+	}
+}
+
+// scriptedChannel 记下每一次投递的尝试身份，按脚本作答。
+type scriptedChannel struct {
+	observe []handoffObservationStep
+
+	mutex     sync.Mutex
+	delivered []domain.HandoffAttemptID
+}
+
+func (channel *scriptedChannel) DeliverAdmissionScope(
+	_ context.Context,
+	delivery ports.ProductionHandoffDelivery,
+) (ports.ProductionHandoffObservation, error) {
+	channel.mutex.Lock()
+	step := channel.observe[min(len(channel.delivered), len(channel.observe)-1)]
+	channel.delivered = append(channel.delivered, delivery.AttemptID)
+	channel.mutex.Unlock()
+	return step(delivery), nil
+}
+
+func (channel *scriptedChannel) deliveryCount() int {
+	channel.mutex.Lock()
+	defer channel.mutex.Unlock()
+	return len(channel.delivered)
+}
+
+func (channel *scriptedChannel) attempts() []domain.HandoffAttemptID {
+	channel.mutex.Lock()
+	defer channel.mutex.Unlock()
+	return append([]domain.HandoffAttemptID(nil), channel.delivered...)
 }
 
 func requestRowCount(t *testing.T, pool *pgxpool.Pool, identity domain.SourceIdentity) int {
@@ -412,9 +487,9 @@ func requestRowCount(t *testing.T, pool *pgxpool.Pool, identity domain.SourceIde
 	return identityRowCount(t, pool, "parcel_shipment.shipment_request", identity)
 }
 
-func ownershipAnswerCount(t *testing.T, pool *pgxpool.Pool, identity domain.SourceIdentity) int {
+func submissionAnswerCount(t *testing.T, pool *pgxpool.Pool, identity domain.SourceIdentity) int {
 	t.Helper()
-	return identityRowCount(t, pool, "parcel_shipment.submission_ownership_answer", identity)
+	return identityRowCount(t, pool, "parcel_shipment.submission_answer", identity)
 }
 
 func identityRowCount(t *testing.T, pool *pgxpool.Pool, table string, identity domain.SourceIdentity) int {

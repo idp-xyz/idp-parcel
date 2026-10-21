@@ -92,6 +92,7 @@ func TestAConcurrentInsertConflictHandsBackTheWinnersParcels(t *testing.T) {
 		t.Fatalf("first handle: %v", err)
 	}
 	fixture.sources.missPreservedOnce = true
+	fixture.requests.missesOnFind = 2
 
 	concurrent, err := fixture.handler.Handle(ctx, twoParcelCommand(t, fixture, "parcel-8", "parcel-9"))
 	if err != nil || concurrent.Outcome() != application.OutcomeExistingResult {

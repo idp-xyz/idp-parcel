@@ -86,7 +86,7 @@ func TestAReplayAfterTheOwnershipDependencyFailedDecidesOwnershipAgain(t *testin
 	}
 }
 
-// Covers: `AT-PS-112`——首次答`生产归属未决`，原样重发重判归属（UC-PS-001 未决结束「可安全续办」）：判得出就照常建单，
+// Covers: `AT-PS-112`——首次答`生产归属未决`，原样重发重判归属（UC-PS-001 未决结束「可安全续办」）：这一次放行就照常建单，
 // 两次判断都留下，建单答复带的是建单所据的那一次。
 func TestAReplayAfterOwnershipUnresolvedDecidesAgainAndBuilds(t *testing.T) {
 	fixture := newFixture(t)
@@ -210,9 +210,9 @@ func TestAReplayAfterAConfirmedHandoffAnswersTheOriginalWithoutDeliveringAgain(t
 	}
 }
 
-// Covers: `AT-PS-113` 的反面——交接未确认的`其他权威`答的是`生产归属未决`，重发照未决重判、重投同一次尝试（尝试身份由决定派生，
-// 对方据它认领重放），不当作已形成的结果。
-func TestAReplayAfterAnUnconfirmedHandoffDecidesAgain(t *testing.T) {
+// Covers: `AT-PS-114`——交接未确认的`其他权威`答的是`生产归属未决`，重发却不重判归属：按记着的那次尝试重投、重查（ADR-0266
+// 决定二）。其间登记册翻成本产品也不在本地建单；确认了答`非本产品生产归属`，此后答`已有结果`。
+func TestAReplayAfterAnUnconfirmedHandoffRedeliversTheSameAttempt(t *testing.T) {
 	fixture := newFixture(t)
 	ctx := context.Background()
 	fixture.ownership.authority = domain.ProductionAuthorityOther
@@ -222,12 +222,114 @@ func TestAReplayAfterAnUnconfirmedHandoffDecidesAgain(t *testing.T) {
 	if err != nil || first.Outcome() != application.OutcomeOwnershipUnresolved {
 		t.Fatalf("first outcome = %q, err = %v, want OWNERSHIP_UNRESOLVED", first.Outcome(), err)
 	}
-	replay, err := fixture.handler.Handle(ctx, fixture.command(t))
-	if err != nil || replay.Outcome() != application.OutcomeOwnershipUnresolved {
-		t.Fatalf("replay outcome = %q, err = %v, want OWNERSHIP_UNRESOLVED", replay.Outcome(), err)
+	fixture.ownership.authority = domain.ProductionAuthorityIDPParcel
+	pending, err := fixture.handler.Handle(ctx, fixture.command(t))
+	if err != nil || pending.Outcome() != application.OutcomeOwnershipUnresolved {
+		t.Fatalf("second outcome = %q, err = %v, want OWNERSHIP_UNRESOLVED", pending.Outcome(), err)
 	}
-	if fixture.ownership.decideCount != 2 || len(fixture.handoff.deliveries) != 2 {
-		t.Fatalf("decisions = %d, deliveries = %d, want 各 2", fixture.ownership.decideCount, len(fixture.handoff.deliveries))
+	fixture.handoff.observe = nil
+	confirmed, err := fixture.handler.Handle(ctx, fixture.command(t))
+	if err != nil || confirmed.Outcome() != application.OutcomeOtherProductionAuthority {
+		t.Fatalf("third outcome = %q, err = %v, want OTHER_PRODUCTION_AUTHORITY", confirmed.Outcome(), err)
+	}
+	settled, err := fixture.handler.Handle(ctx, fixture.command(t))
+	if err != nil || settled.Outcome() != application.OutcomeExistingResult {
+		t.Fatalf("fourth outcome = %q, err = %v, want EXISTING_RESULT", settled.Outcome(), err)
+	}
+	if prior, _ := settled.PriorOutcome(); prior != application.OutcomeOtherProductionAuthority {
+		t.Fatalf("prior outcome = %q, want OTHER_PRODUCTION_AUTHORITY", prior)
+	}
+	if fixture.ownership.decideCount != 1 || fixture.requests.insertCount != 0 {
+		t.Fatalf("decisions = %d, inserts = %d, want 1 与 0", fixture.ownership.decideCount, fixture.requests.insertCount)
+	}
+	deliveries := fixture.handoff.deliveries
+	if len(deliveries) != 3 || deliveries[0].AttemptID != deliveries[1].AttemptID || deliveries[1].AttemptID != deliveries[2].AttemptID {
+		t.Fatalf("deliveries = %d，尝试身份须同一，want 同一次尝试投三回", len(deliveries))
+	}
+}
+
+// Covers: `AT-PS-113`——取得放行之前就答完的拒绝（输入未受理、原委托不可见、关联不适用）也留下，原样重发答`已有结果`并带原结果，
+// 不再判（ADR-0081 Consequences「重放一份曾被业务拒绝的输入答`已有结果`」；ADR-0266 决定一）。
+func TestAReplayOfARefusalAnswersTheOriginalWithoutJudging(t *testing.T) {
+	ctx := context.Background()
+	cases := map[string]struct {
+		arrange func(*testing.T, *fixture) application.SubmitShipmentRequestCommand
+		want    application.SubmitOutcome
+	}{
+		"input not accepted": {
+			arrange: func(t *testing.T, value *fixture) application.SubmitShipmentRequestCommand {
+				command := value.command(t)
+				command.DeclaredParcelIDs = nil
+				return command
+			},
+			want: application.OutcomeInputNotAccepted,
+		},
+		"prior request not found": {
+			arrange: func(t *testing.T, value *fixture) application.SubmitShipmentRequestCommand {
+				command := value.command(t)
+				command.Identity = sourceIdentity(t, "tenant-1", "customer-1", "source-a", "key-linked")
+				command.Link = application.PriorRequestClaim{
+					PriorIdentity:  value.identity(t),
+					PriorRequestID: mustValue(t, domain.NewShipmentRequestID, "request-absent"),
+					Kind:           domain.LinkRejectedCorrection,
+				}
+				return command
+			},
+			want: application.OutcomePriorRequestNotFound,
+		},
+		"link ineligible": {
+			arrange: func(t *testing.T, value *fixture) application.SubmitShipmentRequestCommand {
+				if _, err := value.handler.Handle(ctx, value.command(t)); err != nil {
+					t.Fatalf("submit the pending prior: %v", err)
+				}
+				return value.linkedCommand(t, domain.LinkRejectedCorrection)
+			},
+			want: application.OutcomeLinkIneligible,
+		},
+	}
+	for name, test := range cases {
+		t.Run(name, func(t *testing.T) {
+			fixture := newFixture(t)
+			command := test.arrange(t, fixture)
+			decisionsBefore := fixture.ownership.decideCount
+
+			first, err := fixture.handler.Handle(ctx, command)
+			if err != nil || first.Outcome() != test.want {
+				t.Fatalf("first outcome = %q, err = %v, want %q", first.Outcome(), err, test.want)
+			}
+			replay, err := fixture.handler.Handle(ctx, command)
+			if err != nil || replay.Outcome() != application.OutcomeExistingResult {
+				t.Fatalf("replay outcome = %q, err = %v, want EXISTING_RESULT", replay.Outcome(), err)
+			}
+			if prior, present := replay.PriorOutcome(); !present || prior != test.want {
+				t.Fatalf("prior outcome = %q（%v），want %q", prior, present, test.want)
+			}
+			if _, named := replay.ShipmentRequestID(); named {
+				t.Fatal("拒绝的重发指名了委托")
+			}
+			if got := fixture.ownership.decideCount - decisionsBefore; got != 0 {
+				t.Fatalf("拒绝的提交与它的重发判了 %d 次归属, want 0", got)
+			}
+		})
+	}
+}
+
+// Covers: `AT-PS-112`——重判按这一次的结果作答：上一次未决、这一次判成暂停，就答`准入暂停`，不建单。
+func TestAReplayAfterOwnershipUnresolvedAnswersWhatThisJudgmentSays(t *testing.T) {
+	fixture := newFixture(t)
+	ctx := context.Background()
+	fixture.ownership.authority = domain.ProductionAuthorityUnresolved
+	if _, err := fixture.handler.Handle(ctx, fixture.command(t)); err != nil {
+		t.Fatalf("first handle: %v", err)
+	}
+	fixture.ownership.authority = domain.ProductionAuthorityIDPParcel
+	fixture.ownership.control = domain.AdmissionControlPaused
+	replay, err := fixture.handler.Handle(ctx, fixture.command(t))
+	if err != nil || replay.Outcome() != application.OutcomeAdmissionPaused {
+		t.Fatalf("replay outcome = %q, err = %v, want ADMISSION_PAUSED", replay.Outcome(), err)
+	}
+	if fixture.requests.insertCount != 0 {
+		t.Fatal("暂停的重判建了单")
 	}
 }
 
@@ -256,6 +358,7 @@ func TestAConcurrentInsertConflictCarriesTheWinnersOwnership(t *testing.T) {
 	}
 	// 接单入口每次现签一组新标识，后到的那一次带的是另一个委托号。
 	fixture.sources.missPreservedOnce = true
+	fixture.requests.missesOnFind = 2
 	late := fixture.command(t)
 	late.ShipmentRequestID = mustValue(t, domain.NewShipmentRequestID, "request-late")
 	concurrent, err := fixture.handler.Handle(ctx, late)

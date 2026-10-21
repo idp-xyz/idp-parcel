@@ -202,35 +202,80 @@ type ProductionOwnershipAuthority interface {
 	DecideProductionOwnership(ctx context.Context, scope domain.AdmissionScope) (domain.ProductionOwnershipDecision, error)
 }
 
-// SubmissionOwnershipAnswer 是提交编排为一份来源身份判得的一次生产归属答案：归属决定，加上据它评估门禁的结论。它是
-// UC-PS-001「必须持久保留的业务记录」里那份生产归属结果；重发同一请求时，编排凭它分辨这次提交走到了哪一步。
+// SubmissionRefusal 是提交编排在取得放行之前就答完的那几格拒绝：输入立不起最小委托身份、关联指名的原委托不可见、关联方向
+// 不适用。它们与归属挡下一样是已答出的业务答案，重发同一请求时答原结果、不再判（ADR-0081 Consequences「被拒提交的来源保全
+// 从此独立存活」），所以同样要留下。零值即「不是拒绝」。
+type SubmissionRefusal uint8
+
+const (
+	SubmissionRefusalInvalid SubmissionRefusal = iota
+	SubmissionRefusedInputNotAccepted
+	SubmissionRefusedPriorRequestNotFound
+	SubmissionRefusedLinkIneligible
+)
+
+func (refusal SubmissionRefusal) String() string {
+	switch refusal {
+	case SubmissionRefusedInputNotAccepted:
+		return "INPUT_NOT_ACCEPTED"
+	case SubmissionRefusedPriorRequestNotFound:
+		return "PRIOR_REQUEST_NOT_FOUND"
+	case SubmissionRefusedLinkIneligible:
+		return "LINK_INELIGIBLE"
+	default:
+		return ""
+	}
+}
+
+// SubmissionAnswer 是提交编排为一份来源身份答出的一次答案：要么一格拒绝，要么一次生产归属决定加上据它评估门禁的结论。它
+// 承载 UC-PS-001「必须持久保留的业务记录」里那份生产归属结果；重发同一请求时，编排凭它分辨这份提交上一次走到了哪一步
+// （ADR-0266）。
 //
-// 门禁放行与挡下由 BlockReasons 是否为空表达，ShipmentRequestID 只在放行时在场：据这次答案将要建的那份委托。答案在建单
-// 之前记下，建单那一笔没落成时，它就是一份「放行了、委托却不在」的答案，重发据此接着建单；建成之后，重发按委托号找回建单
-// 所据的那一次，并发下两次续办各记各的答案，也不会把别人那一次当成原委托的归属结果。
-type SubmissionOwnershipAnswer struct {
+// 拒绝时 Decision 为零值。门禁放行与挡下由 BlockReasons 是否为空表达，ShipmentRequestID 只在放行时在场：据这次答案将要建的
+// 那份委托。放行的答案先于建单记下；生产装配里两者在续办守卫的同一笔事务里，建单没落成，这次答案也一起不在，重发照「什么都
+// 没留下」接着办。建成之后，重发按委托号找回建单所据的那一次。
+type SubmissionAnswer struct {
+	Refusal           SubmissionRefusal
 	Decision          domain.ProductionOwnershipDecision
 	BlockReasons      []domain.FutureSubmissionBlockReason
 	ShipmentRequestID domain.ShipmentRequestID
 }
 
-// Allowed 说这次答案的门禁是否放行。
-func (answer SubmissionOwnershipAnswer) Allowed() bool {
-	return len(answer.BlockReasons) == 0
+// Refused 说这次答案是不是取得放行之前就答完的拒绝。
+func (answer SubmissionAnswer) Refused() bool {
+	return answer.Refusal != SubmissionRefusalInvalid
 }
 
-// SubmissionOwnershipAnswers 按完整来源身份追加并读回提交判得的生产归属答案。
+// Allowed 说这次答案的门禁是否放行。
+func (answer SubmissionAnswer) Allowed() bool {
+	return !answer.Refused() && len(answer.BlockReasons) == 0
+}
+
+// SubmissionAnswers 按完整来源身份追加并读回提交答出的答案。
 //
-// 只追加不改写：归属未决之后重发会重判，每一次判断都要留下（UC-PS-001「归属未决时保留缺口与续办记录」），后一次不覆盖
-// 前一次。读口分两个，因为重发要问的是两件事——委托已在时问「建它所据的是哪一次」，委托不在时问「最近一次判成了什么」。
-type SubmissionOwnershipAnswers interface {
-	RecordOwnershipAnswer(ctx context.Context, identity domain.SourceIdentity, answer SubmissionOwnershipAnswer) error
-	FindLatestOwnershipAnswer(ctx context.Context, identity domain.SourceIdentity) (SubmissionOwnershipAnswer, bool, error)
-	FindOwnershipAnswerForRequest(
+// 只追加不改写：生产归属未决之后重发会重判，每一次判断都要留下（UC-PS-001「归属未决时保留缺口与续办记录」），后一次不覆盖
+// 前一次——逐次留存的判断不是第二份归属记录，它们答的是同一份提交在不同时刻的同一个问题。读口分两个，因为重发要问的是两件
+// 事：委托已在时问「建它所据的是哪一次」，委托不在时问「最近一次答成了什么」。
+type SubmissionAnswers interface {
+	RecordSubmissionAnswer(ctx context.Context, identity domain.SourceIdentity, answer SubmissionAnswer) error
+	FindLatestSubmissionAnswer(ctx context.Context, identity domain.SourceIdentity) (SubmissionAnswer, bool, error)
+	FindSubmissionAnswerForRequest(
 		ctx context.Context,
 		identity domain.SourceIdentity,
 		request domain.ShipmentRequestID,
-	) (SubmissionOwnershipAnswer, bool, error)
+	) (SubmissionAnswer, bool, error)
+}
+
+// SubmissionContinuationGuard 让同一来源身份的「查上一次答案 → 判归属（或重投交接） → 记答案 → 建单」一次只走一路。
+//
+// 没有它，两路同时续办可能一路判本产品放行去建单、另一路恰逢登记册翻转判成他方去投递，同一范围便一边在本地建单、一边交给
+// 他方。建单的唯一键只拦得住第二份委托，拦不住一次已经发出去的投递；所以要串行的是判断那一段，不只是落库那一步。
+//
+// fn 拿到的 context 带着守卫自己那一笔事务：记答案、建单与「委托已提交」信封并进这一笔，一起提交或一起消失。不让它们在守卫外
+// 各开各的事务，是因为排队的几路各占着一条连接等锁，持锁那一路若还要另取连接落笔，连接池一满就互相等死。来源保全与重放观察
+// 在守卫之前、各自独立提交，不在这一笔里（ADR-0081 两段边界的第一段）。
+type SubmissionContinuationGuard interface {
+	Exclusively(ctx context.Context, identity domain.SourceIdentity, fn func(context.Context) error) error
 }
 
 // ProductionHandoffDelivery 是向已判为当前权威的他方投递完整拟受理范围的那一次尝试。
@@ -274,6 +319,10 @@ type OtherProductionAuthorityChannel interface {
 
 // SubmissionIdentityFactory 签发 parcel-shipment 自己拥有的内部身份。刻意不从调用方
 // 接收：客户参考号不得变成内部标识。
+//
+// 委托号不在本口签，由接单入口每次现签（`CustomerSubmissionIntake.mintInternalIdentities`）。重发续办的收敛依赖这一点：
+// 每一路续办记下的放行答案带着自己那一路的委托号，委托已在时按委托号找回建它所据的那一次答案；接单入口若对同一请求复用
+// 一个号，两路的答案就分不开。
 type SubmissionIdentityFactory interface {
 	NextSubmissionVersionID(ctx context.Context) (domain.SubmissionVersionID, error)
 	NextAcceptanceDecisionTaskID(ctx context.Context) (domain.AcceptanceDecisionTaskID, error)

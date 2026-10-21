@@ -78,7 +78,8 @@ func openDatabase(ctx context.Context, getenv func(string) string) (*bentopg.DB,
 // 提交」信封同一事务原子。PS 的写口按框架合同走 RequireExecutor，无事务即拒，事务
 // 边界因此归装配点，编排自己不开也不提交；两个边界壳只切事务，不含业务判断。
 //
-// 判得的归属答案（ownershipAnswerBoundary）与来源保全同属第一段那一类：逐笔独立提交，不随建单回滚。
+// 续办守卫（submissionContinuationGuard）开第二段那一笔事务：先取这份来源身份的咨询锁，再在锁里判归属、记答案、建单、
+// 交出信封，同一来源身份的两路续办因此一次只走一路（ADR-0266 决定二）。答案、委托与信封同生共死；来源保全照旧在锁外逐笔提交。
 //
 // 先前的整段 Handle 单事务壳（transactionalSubmission）随 ADR-0081 退役：它让编排
 // 报错时把已保全的来源一并回滚，而 UC-PS-001 步骤 2 明写「后续解析或依赖失败不能
@@ -118,38 +119,66 @@ func (boundary preservationBoundary) AppendObservation(
 	})
 }
 
-// ownershipAnswerBoundary 给判得的归属答案每笔各开一个事务：答案在建单之前、在建单那一笔之外落下，建单回滚也带不走它——
-// 重发正是凭「放行了、委托却不在」接着建单（票 docs-consistency/code/39）。读口直通。
-type ownershipAnswerBoundary struct {
+// submissionAnswerBoundary 给答出的答案每笔开一个事务；在续办守卫里调用时并进守卫那一笔（框架的嵌套事务即加入外层）。单独
+// 留着这层壳，是让守卫之外的调用也撞不上 RequireExecutor。读口直通。
+type submissionAnswerBoundary struct {
 	transactor bentoapp.Transactor
-	inner      ports.SubmissionOwnershipAnswers
+	inner      ports.SubmissionAnswers
 }
 
-var _ ports.SubmissionOwnershipAnswers = ownershipAnswerBoundary{}
+var _ ports.SubmissionAnswers = submissionAnswerBoundary{}
 
-func (boundary ownershipAnswerBoundary) RecordOwnershipAnswer(
+func (boundary submissionAnswerBoundary) RecordSubmissionAnswer(
 	ctx context.Context,
 	identity domain.SourceIdentity,
-	answer ports.SubmissionOwnershipAnswer,
+	answer ports.SubmissionAnswer,
 ) error {
 	return boundary.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-		return boundary.inner.RecordOwnershipAnswer(txCtx, identity, answer)
+		return boundary.inner.RecordSubmissionAnswer(txCtx, identity, answer)
 	})
 }
 
-func (boundary ownershipAnswerBoundary) FindLatestOwnershipAnswer(
+func (boundary submissionAnswerBoundary) FindLatestSubmissionAnswer(
 	ctx context.Context,
 	identity domain.SourceIdentity,
-) (ports.SubmissionOwnershipAnswer, bool, error) {
-	return boundary.inner.FindLatestOwnershipAnswer(ctx, identity)
+) (ports.SubmissionAnswer, bool, error) {
+	return boundary.inner.FindLatestSubmissionAnswer(ctx, identity)
 }
 
-func (boundary ownershipAnswerBoundary) FindOwnershipAnswerForRequest(
+func (boundary submissionAnswerBoundary) FindSubmissionAnswerForRequest(
 	ctx context.Context,
 	identity domain.SourceIdentity,
 	request domain.ShipmentRequestID,
-) (ports.SubmissionOwnershipAnswer, bool, error) {
-	return boundary.inner.FindOwnershipAnswerForRequest(ctx, identity, request)
+) (ports.SubmissionAnswer, bool, error) {
+	return boundary.inner.FindSubmissionAnswerForRequest(ctx, identity, request)
+}
+
+// submissionContinuationGuard 是 ports.SubmissionContinuationGuard 的装配：开一笔事务、取这份来源身份的咨询锁，fn 拿这笔事务的
+// context 跑——里面各个边界壳的写入都并进来，一路续办只占一条连接。若让写入另取连接，排队等锁的几路各占一条、持锁那一路再要
+// 一条，连接池一满就互相等死（实测于两连接的测试池）。
+type submissionContinuationGuard struct {
+	transactor bentoapp.Transactor
+	locks      submissionLocks
+}
+
+// submissionLocks 是守卫要的那一个窄口，生产实现是 pspostgres.SubmissionAnswers。
+type submissionLocks interface {
+	LockSubmission(ctx context.Context, identity domain.SourceIdentity) error
+}
+
+var _ ports.SubmissionContinuationGuard = submissionContinuationGuard{}
+
+func (guard submissionContinuationGuard) Exclusively(
+	ctx context.Context,
+	identity domain.SourceIdentity,
+	fn func(context.Context) error,
+) error {
+	return guard.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		if err := guard.locks.LockSubmission(txCtx, identity); err != nil {
+			return err
+		}
+		return fn(txCtx)
+	})
 }
 
 // submissionBoundary 是简报「事务边界」的第二段：建单与「委托已提交」信封在同一个
@@ -259,7 +288,7 @@ func buildSubmissionOrchestration(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: shipment requests: %w", err)
 	}
-	answers, err := pspostgres.NewSubmissionOwnershipAnswers(db)
+	answers, err := pspostgres.NewSubmissionAnswers(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: submission ownership answers: %w", err)
 	}
@@ -284,7 +313,8 @@ func buildSubmissionOrchestration(
 		preservationBoundary{transactor: db.Transactor(), inner: sources},
 		submissionBoundary{transactor: db.Transactor(), inner: requests, handoff: downstream},
 		ownership,
-		ownershipAnswerBoundary{transactor: db.Transactor(), inner: answers},
+		submissionAnswerBoundary{transactor: db.Transactor(), inner: answers},
+		submissionContinuationGuard{transactor: db.Transactor(), locks: answers},
 		pshandoff.UnconfiguredOtherProductionAuthorityChannel{},
 		identities,
 		clock,

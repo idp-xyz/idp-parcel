@@ -159,7 +159,8 @@ func TestSubmitConflictPreservesTheOriginalWithoutBuilding(t *testing.T) {
 }
 
 // Covers: PBC-04 / ADR-0031 — Insert 答「已存在」不是技术错误。同内容按重放规则答已有结果，
-// 且不追加观察：走到这一格时本次已经 Preserve 过自己那一份。
+// 且不追加观察：走到这一格时本次已经 Preserve 过自己那一份。同一来源身份的续办在守卫里一次一路，
+// 这一格只剩守卫之外的写入能撞上，用例让读委托读空一次来走到它。
 func TestSubmitConcurrentInsertAlreadyExistsReturnsExistingResultWithoutAppendingObservation(t *testing.T) {
 	fixture := newFixture(t)
 	ctx := context.Background()
@@ -174,6 +175,7 @@ func TestSubmitConcurrentInsertAlreadyExistsReturnsExistingResultWithoutAppendin
 	}
 	fixture.calls = nil
 	fixture.sources.missPreservedOnce = true
+	fixture.requests.missesOnFind = 2
 
 	concurrent, err := fixture.handler.Handle(ctx, fixture.command(t))
 	if err != nil {
@@ -206,6 +208,7 @@ func TestSubmitConcurrentInsertAlreadyExistsWithDifferentContentIsIngressConflic
 		t.Fatalf("first handle: %v", err)
 	}
 	fixture.sources.missPreservedOnce = true
+	fixture.requests.missesOnFind = 2
 
 	changed := fixture.command(t)
 	changed.PayloadDigest = mustValue(t, domain.NewPayloadDigest, "digest-2")
@@ -551,7 +554,7 @@ type fixture struct {
 	sources   *sourceRepositoryDouble
 	requests  *shipmentRequestRepositoryDouble
 	ownership *ownershipAuthorityDouble
-	answers   *ownershipAnswersDouble
+	answers   *submissionAnswersDouble
 	handoff   *handoffChannelDouble
 	calls     []string
 }
@@ -569,13 +572,14 @@ func newFixture(t *testing.T) *fixture {
 		control:   domain.AdmissionControlOpen,
 		record:    record,
 	}
-	value.answers = &ownershipAnswersDouble{record: record}
+	value.answers = &submissionAnswersDouble{record: record}
 	value.handoff = &handoffChannelDouble{t: t, record: record}
 	value.handler = application.NewSubmitShipmentRequestHandler(
 		value.sources,
 		value.requests,
 		value.ownership,
 		value.answers,
+		sequentialGuard{},
 		value.handoff,
 		&identityFactoryDouble{},
 		fixedClock{at: time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)},
@@ -838,12 +842,19 @@ type shipmentRequestRepositoryDouble struct {
 	insertCount int
 	// failNextInsert 让下一次建单那一笔没落成（只此一次）：它扮演建单事务回滚，委托因此不在。
 	failNextInsert error
+	// missesOnFind 让接下来这么多次按来源身份读委托读不到：同一来源身份的建单在续办守卫里一次一路，撞「已存在」只剩守卫之外的
+	// 写入一条路，用例借它走到那一格。编排在守卫外、守卫里各读一次，所以要走到建单就得读空两次。
+	missesOnFind int
 }
 
 func (double *shipmentRequestRepositoryDouble) FindBySourceIdentity(
 	_ context.Context,
 	identity domain.SourceIdentity,
 ) (domain.ShipmentRequest, bool, error) {
+	if double.missesOnFind > 0 {
+		double.missesOnFind--
+		return domain.ShipmentRequest{}, false, nil
+	}
 	existing, found := double.records[identity]
 	return existing, found, nil
 }
@@ -970,57 +981,57 @@ func (double *handoffChannelDouble) DeliverAdmissionScope(
 	}, nil
 }
 
-// ownershipAnswersDouble 按记下的先后保存每一次归属答案，只追加。
-type ownershipAnswersDouble struct {
+// submissionAnswersDouble 按记下的先后保存每一次归属答案，只追加。
+type submissionAnswersDouble struct {
 	record  func(string)
-	entries []recordedOwnershipAnswer
+	entries []recordedSubmissionAnswer
 	err     error
 }
 
-type recordedOwnershipAnswer struct {
+type recordedSubmissionAnswer struct {
 	identity domain.SourceIdentity
-	answer   ports.SubmissionOwnershipAnswer
+	answer   ports.SubmissionAnswer
 }
 
-func (double *ownershipAnswersDouble) RecordOwnershipAnswer(
+func (double *submissionAnswersDouble) RecordSubmissionAnswer(
 	_ context.Context,
 	identity domain.SourceIdentity,
-	answer ports.SubmissionOwnershipAnswer,
+	answer ports.SubmissionAnswer,
 ) error {
 	double.record("record-ownership")
 	if double.err != nil {
 		return double.err
 	}
-	double.entries = append(double.entries, recordedOwnershipAnswer{identity: identity, answer: answer})
+	double.entries = append(double.entries, recordedSubmissionAnswer{identity: identity, answer: answer})
 	return nil
 }
 
-func (double *ownershipAnswersDouble) FindLatestOwnershipAnswer(
+func (double *submissionAnswersDouble) FindLatestSubmissionAnswer(
 	_ context.Context,
 	identity domain.SourceIdentity,
-) (ports.SubmissionOwnershipAnswer, bool, error) {
+) (ports.SubmissionAnswer, bool, error) {
 	for index := len(double.entries) - 1; index >= 0; index-- {
 		if double.entries[index].identity == identity {
 			return double.entries[index].answer, true, nil
 		}
 	}
-	return ports.SubmissionOwnershipAnswer{}, false, nil
+	return ports.SubmissionAnswer{}, false, nil
 }
 
-func (double *ownershipAnswersDouble) FindOwnershipAnswerForRequest(
+func (double *submissionAnswersDouble) FindSubmissionAnswerForRequest(
 	_ context.Context,
 	identity domain.SourceIdentity,
 	request domain.ShipmentRequestID,
-) (ports.SubmissionOwnershipAnswer, bool, error) {
+) (ports.SubmissionAnswer, bool, error) {
 	for _, entry := range double.entries {
 		if entry.identity == identity && entry.answer.Allowed() && entry.answer.ShipmentRequestID == request {
 			return entry.answer, true, nil
 		}
 	}
-	return ports.SubmissionOwnershipAnswer{}, false, nil
+	return ports.SubmissionAnswer{}, false, nil
 }
 
-func (double *ownershipAnswersDouble) recordedFor(identity domain.SourceIdentity) int {
+func (double *submissionAnswersDouble) recordedFor(identity domain.SourceIdentity) int {
 	count := 0
 	for _, entry := range double.entries {
 		if entry.identity == identity {
@@ -1028,6 +1039,13 @@ func (double *ownershipAnswersDouble) recordedFor(identity domain.SourceIdentity
 		}
 	}
 	return count
+}
+
+// sequentialGuard 直接调 fn：内存替身的用例一次只走一路；守卫真的排队由 cmd/parcel-api 的真库并发用例取证。
+type sequentialGuard struct{}
+
+func (sequentialGuard) Exclusively(ctx context.Context, _ domain.SourceIdentity, fn func(context.Context) error) error {
+	return fn(ctx)
 }
 
 type identityFactoryDouble struct {
@@ -1053,7 +1071,7 @@ var (
 	_ ports.SourceSubmissionRepository      = (*sourceRepositoryDouble)(nil)
 	_ ports.ShipmentRequestRepository       = (*shipmentRequestRepositoryDouble)(nil)
 	_ ports.ProductionOwnershipAuthority    = (*ownershipAuthorityDouble)(nil)
-	_ ports.SubmissionOwnershipAnswers      = (*ownershipAnswersDouble)(nil)
+	_ ports.SubmissionAnswers               = (*submissionAnswersDouble)(nil)
 	_ ports.OtherProductionAuthorityChannel = (*handoffChannelDouble)(nil)
 	_ ports.SubmissionIdentityFactory       = (*identityFactoryDouble)(nil)
 	_ ports.Clock                           = fixedClock{}

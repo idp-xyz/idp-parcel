@@ -107,6 +107,28 @@ func TestSubmitReplayReportsTheOriginalShipmentRequestWithoutBuildingASecond(t *
 	if fixture.requests.insertCount != 1 {
 		t.Fatalf("insert count = %d, want 1", fixture.requests.insertCount)
 	}
+	if replay.Outcome != "EXISTING_RESULT" || replay.PriorOutcome != "SUBMITTED" {
+		t.Fatalf("replay outcome = %q / priorOutcome = %q, want EXISTING_RESULT / SUBMITTED", replay.Outcome, replay.PriorOutcome)
+	}
+	if first.PriorOutcome != "" {
+		t.Fatalf("首答带了 priorOutcome %q——它只随已有结果在场", first.PriorOutcome)
+	}
+}
+
+// Covers: `AT-PS-113`（ADR-0266 决定一）——首次答`输入未受理`，重发答`已有结果`，`priorOutcome` 带回原来那一格：没有归属决定
+// 可带的拒绝，客户只能凭它知道上一次答的是什么。
+func TestSubmitReplayOfARefusalCarriesThePriorOutcome(t *testing.T) {
+	fixture := newFixture(t)
+	fixture.intake.commands[0].DeclaredParcelIDs = nil
+	fixture.intake.commands = append(fixture.intake.commands, fixture.intake.commands[0])
+
+	if got := decodeBody(t, fixture.post(t)).Outcome; got != "INPUT_NOT_ACCEPTED" {
+		t.Fatalf("first outcome = %q, want INPUT_NOT_ACCEPTED", got)
+	}
+	replay := decodeBody(t, fixture.post(t))
+	if replay.Outcome != "EXISTING_RESULT" || replay.PriorOutcome != "INPUT_NOT_ACCEPTED" {
+		t.Fatalf("replay outcome = %q / priorOutcome = %q, want EXISTING_RESULT / INPUT_NOT_ACCEPTED", replay.Outcome, replay.PriorOutcome)
+	}
 }
 
 // Covers: UC-PS-001 步骤 3A 与 `AT-PS-012` — 立不起最小委托身份是应用层形成的业务答案，
@@ -295,6 +317,7 @@ func TestSubmitRejectsOtherMethods(t *testing.T) {
 
 type responseBody struct {
 	Outcome             string         `json:"outcome"`
+	PriorOutcome        string         `json:"priorOutcome"`
 	ShipmentRequestID   string         `json:"shipmentRequestId"`
 	GateBlockReasons    []string       `json:"gateBlockReasons"`
 	ProductionOwnership *ownershipBody `json:"productionOwnership"`
@@ -362,7 +385,8 @@ func newFixtureHandingOffThrough(t *testing.T, handoff ports.OtherProductionAuth
 			value.sources,
 			value.requests,
 			value.ownership,
-			&ownershipAnswersDouble{},
+			&submissionAnswersDouble{},
+			sequentialGuard{},
 			handoff,
 			&identityFactoryDouble{},
 			fixedClock{at: time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)},
@@ -579,48 +603,55 @@ func (double *handoffChannelDouble) DeliverAdmissionScope(
 	}, nil
 }
 
-// ownershipAnswersDouble 按记下的先后保存归属答案，只追加；端点这一层只看答复怎么落到响应体，不在这里重证重发怎么判。
-type ownershipAnswersDouble struct {
-	entries []recordedOwnershipAnswer
+// submissionAnswersDouble 按记下的先后保存归属答案，只追加；端点这一层只看答复怎么落到响应体，不在这里重证重发怎么判。
+type submissionAnswersDouble struct {
+	entries []recordedSubmissionAnswer
 }
 
-type recordedOwnershipAnswer struct {
+type recordedSubmissionAnswer struct {
 	identity domain.SourceIdentity
-	answer   ports.SubmissionOwnershipAnswer
+	answer   ports.SubmissionAnswer
 }
 
-func (double *ownershipAnswersDouble) RecordOwnershipAnswer(
+func (double *submissionAnswersDouble) RecordSubmissionAnswer(
 	_ context.Context,
 	identity domain.SourceIdentity,
-	answer ports.SubmissionOwnershipAnswer,
+	answer ports.SubmissionAnswer,
 ) error {
-	double.entries = append(double.entries, recordedOwnershipAnswer{identity: identity, answer: answer})
+	double.entries = append(double.entries, recordedSubmissionAnswer{identity: identity, answer: answer})
 	return nil
 }
 
-func (double *ownershipAnswersDouble) FindLatestOwnershipAnswer(
+func (double *submissionAnswersDouble) FindLatestSubmissionAnswer(
 	_ context.Context,
 	identity domain.SourceIdentity,
-) (ports.SubmissionOwnershipAnswer, bool, error) {
+) (ports.SubmissionAnswer, bool, error) {
 	for index := len(double.entries) - 1; index >= 0; index-- {
 		if double.entries[index].identity == identity {
 			return double.entries[index].answer, true, nil
 		}
 	}
-	return ports.SubmissionOwnershipAnswer{}, false, nil
+	return ports.SubmissionAnswer{}, false, nil
 }
 
-func (double *ownershipAnswersDouble) FindOwnershipAnswerForRequest(
+func (double *submissionAnswersDouble) FindSubmissionAnswerForRequest(
 	_ context.Context,
 	identity domain.SourceIdentity,
 	request domain.ShipmentRequestID,
-) (ports.SubmissionOwnershipAnswer, bool, error) {
+) (ports.SubmissionAnswer, bool, error) {
 	for _, entry := range double.entries {
 		if entry.identity == identity && entry.answer.Allowed() && entry.answer.ShipmentRequestID == request {
 			return entry.answer, true, nil
 		}
 	}
-	return ports.SubmissionOwnershipAnswer{}, false, nil
+	return ports.SubmissionAnswer{}, false, nil
+}
+
+// sequentialGuard 直接调 fn：端点用例一次只发一路，没有要排队的另一路。
+type sequentialGuard struct{}
+
+func (sequentialGuard) Exclusively(ctx context.Context, _ domain.SourceIdentity, fn func(context.Context) error) error {
+	return fn(ctx)
 }
 
 type identityFactoryDouble struct {

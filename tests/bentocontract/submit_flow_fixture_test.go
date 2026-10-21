@@ -43,7 +43,8 @@ type fixedContractClock struct{ at time.Time }
 func (clock fixedContractClock) Now() time.Time { return clock.at }
 
 // countingTransactor 数提交事务开了几次。PBC-07 的「不触发无条件自动重放」要拿它作证:
-// 一次失败的 Handle 之后计数必须停在 1。
+// 一次失败的 Handle 之后计数必须停在 1。提交事务是续办守卫开的那一笔(建单与信封并在其中),
+// 所以计数器与注入口包在守卫上。
 type countingTransactor struct {
 	inner bentoapp.Transactor
 	calls atomic.Int32
@@ -89,36 +90,56 @@ func (boundary preservationBoundary) AppendObservation(
 	})
 }
 
-// ownershipAnswerBoundary 给判得的归属答案每笔各开一个事务:与来源保全同属不随建单回滚的
+// submissionAnswerBoundary 给判得的归属答案每笔各开一个事务:与来源保全同属不随建单回滚的
 // 那一类,形状照 cmd/parcel-api 的同名壳。读口直通。
-type ownershipAnswerBoundary struct {
+type submissionAnswerBoundary struct {
 	transactor bentoapp.Transactor
-	inner      ports.SubmissionOwnershipAnswers
+	inner      ports.SubmissionAnswers
 }
 
-func (boundary ownershipAnswerBoundary) RecordOwnershipAnswer(
+func (boundary submissionAnswerBoundary) RecordSubmissionAnswer(
 	ctx context.Context,
 	identity domain.SourceIdentity,
-	answer ports.SubmissionOwnershipAnswer,
+	answer ports.SubmissionAnswer,
 ) error {
 	return boundary.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-		return boundary.inner.RecordOwnershipAnswer(txCtx, identity, answer)
+		return boundary.inner.RecordSubmissionAnswer(txCtx, identity, answer)
 	})
 }
 
-func (boundary ownershipAnswerBoundary) FindLatestOwnershipAnswer(
+func (boundary submissionAnswerBoundary) FindLatestSubmissionAnswer(
 	ctx context.Context,
 	identity domain.SourceIdentity,
-) (ports.SubmissionOwnershipAnswer, bool, error) {
-	return boundary.inner.FindLatestOwnershipAnswer(ctx, identity)
+) (ports.SubmissionAnswer, bool, error) {
+	return boundary.inner.FindLatestSubmissionAnswer(ctx, identity)
 }
 
-func (boundary ownershipAnswerBoundary) FindOwnershipAnswerForRequest(
+func (boundary submissionAnswerBoundary) FindSubmissionAnswerForRequest(
 	ctx context.Context,
 	identity domain.SourceIdentity,
 	request domain.ShipmentRequestID,
-) (ports.SubmissionOwnershipAnswer, bool, error) {
-	return boundary.inner.FindOwnershipAnswerForRequest(ctx, identity, request)
+) (ports.SubmissionAnswer, bool, error) {
+	return boundary.inner.FindSubmissionAnswerForRequest(ctx, identity, request)
+}
+
+// submissionContinuationGuard 开第二段那一笔事务:先取这份来源身份的咨询锁,再在锁里判归属、记答案、建单、交出信封,
+// 各边界壳的写入都并进这一笔。形状照 cmd/parcel-api 的同名壳。
+type submissionContinuationGuard struct {
+	transactor bentoapp.Transactor
+	locks      *psadapter.SubmissionAnswers
+}
+
+func (guard submissionContinuationGuard) Exclusively(
+	ctx context.Context,
+	identity domain.SourceIdentity,
+	fn func(context.Context) error,
+) error {
+	return guard.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		if err := guard.locks.LockSubmission(txCtx, identity); err != nil {
+			return err
+		}
+		return fn(txCtx)
+	})
 }
 
 // submissionBoundary 是简报「事务边界」的第二段:建单与「委托已提交」信封在同一个事务里
@@ -270,7 +291,7 @@ func newSubmitFlowFixture(
 	if err != nil {
 		t.Fatalf("构造委托仓储:%v", err)
 	}
-	answers, err := psadapter.NewSubmissionOwnershipAnswers(db)
+	answers, err := psadapter.NewSubmissionAnswers(db)
 	if err != nil {
 		t.Fatalf("构造归属答案仓储:%v", err)
 	}
@@ -292,9 +313,10 @@ func newSubmitFlowFixture(
 
 	handler := psapplication.NewSubmitShipmentRequestHandler(
 		preservationBoundary{transactor: db.Transactor(), inner: sources},
-		submissionBoundary{transactor: submits, inner: requests, handoff: handoff},
+		submissionBoundary{transactor: db.Transactor(), inner: requests, handoff: handoff},
 		contractProductionOwnership{anchor: submitFlowSubmittedAt},
-		ownershipAnswerBoundary{transactor: db.Transactor(), inner: answers},
+		submissionAnswerBoundary{transactor: db.Transactor(), inner: answers},
+		submissionContinuationGuard{transactor: submits, locks: answers},
 		pshandoff.UnconfiguredOtherProductionAuthorityChannel{},
 		&contractSubmissionIdentities{},
 		fixedContractClock{at: submitFlowSubmittedAt},

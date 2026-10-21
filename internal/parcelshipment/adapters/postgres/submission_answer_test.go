@@ -23,9 +23,9 @@ import (
 
 var answerAnchor = time.Date(2026, 8, 21, 10, 0, 0, 0, time.UTC)
 
-// Covers: UC-PS-001「必须持久保留的业务记录」生产归属结果一条——四种权威 × 准入控制组合与两种交接评估读回逐字段相同。
-func TestOwnershipAnswersRoundTripWholly(t *testing.T) {
-	answers, sources, transactor := newOwnershipAnswers(t)
+// Covers: UC-PS-001「必须持久保留的业务记录」生产归属结果一条——权威 × 准入控制各组合、四种交接评估与三格拒绝读回逐字段相同。
+func TestSubmissionAnswersRoundTripWholly(t *testing.T) {
+	answers, sources, transactor := newSubmissionAnswers(t)
 	ctx := t.Context()
 
 	confirmed := ports.ProductionHandoffObservation{
@@ -37,7 +37,12 @@ func TestOwnershipAnswersRoundTripWholly(t *testing.T) {
 		ConfirmedScopeDigest: mustBuild(t, domain.NewAdmissionScopeDigest, "half-of-scope"),
 		ConfirmationRef:      mustBuild(t, domain.NewHandoffConfirmationReference, "CONF-PARTIAL"),
 	}
-	cases := map[string]ports.SubmissionOwnershipAnswer{
+	unconfigured := ports.ProductionHandoffObservation{Observation: domain.HandoffObservationChannelUnconfigured}
+	timedOut := ports.ProductionHandoffObservation{Observation: domain.HandoffObservationTimedOut}
+	cases := map[string]ports.SubmissionAnswer{
+		"输入未受理":  {Refusal: ports.SubmissionRefusedInputNotAccepted},
+		"原委托不可见": {Refusal: ports.SubmissionRefusedPriorRequestNotFound},
+		"关联不适用":  {Refusal: ports.SubmissionRefusedLinkIneligible},
 		"本产品放行": {
 			Decision:          ownershipDecision(t, domain.ProductionAuthorityIDPParcel, domain.AdmissionControlOpen, nil),
 			ShipmentRequestID: mustBuild(t, domain.NewShipmentRequestID, "REQ-1"),
@@ -58,21 +63,32 @@ func TestOwnershipAnswersRoundTripWholly(t *testing.T) {
 			Decision:     ownershipDecision(t, domain.ProductionAuthorityOther, domain.AdmissionControlOpen, &partial),
 			BlockReasons: []domain.FutureSubmissionBlockReason{domain.FutureSubmissionOtherAuthority},
 		},
+		"通往他方的通道未配置": {
+			Decision:     ownershipDecision(t, domain.ProductionAuthorityOther, domain.AdmissionControlOpen, &unconfigured),
+			BlockReasons: []domain.FutureSubmissionBlockReason{domain.FutureSubmissionOtherAuthority},
+		},
+		"他方超时未答": {
+			Decision:     ownershipDecision(t, domain.ProductionAuthorityOther, domain.AdmissionControlOpen, &timedOut),
+			BlockReasons: []domain.FutureSubmissionBlockReason{domain.FutureSubmissionOtherAuthority},
+		},
 	}
 	for name, answer := range cases {
 		t.Run(name, func(t *testing.T) {
 			source := identity(t, "tenant-a", "customer-a", "portal", "key-"+name)
 			preserveFor(t, sources, transactor, source)
 			mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
-				return answers.RecordOwnershipAnswer(txCtx, source, answer)
+				return answers.RecordSubmissionAnswer(txCtx, source, answer)
 			})
 
-			found, exists, err := answers.FindLatestOwnershipAnswer(ctx, source)
+			found, exists, err := answers.FindLatestSubmissionAnswer(ctx, source)
 			if err != nil || !exists {
 				t.Fatalf("读回最近一次答案：exists = %v, err = %v", exists, err)
 			}
 			if !reflect.DeepEqual(found.Decision, answer.Decision) {
 				t.Errorf("决定读回 %+v，记下的是 %+v", found.Decision, answer.Decision)
+			}
+			if found.Refusal != answer.Refusal {
+				t.Errorf("拒绝读回 %v，记下的是 %v", found.Refusal, answer.Refusal)
 			}
 			if !slices.Equal(found.BlockReasons, answer.BlockReasons) || found.ShipmentRequestID != answer.ShipmentRequestID {
 				t.Errorf("门禁读回 %v / %q，记下的是 %v / %q",
@@ -83,39 +99,39 @@ func TestOwnershipAnswersRoundTripWholly(t *testing.T) {
 }
 
 // Covers: 只追加——重判留下每一次；最近一次与「建这份委托所据的那一次」各答各的，作用域外一律不可见。
-func TestOwnershipAnswersAppendAndAnswerByRequest(t *testing.T) {
-	answers, sources, transactor := newOwnershipAnswers(t)
+func TestSubmissionAnswersAppendAndAnswerByRequest(t *testing.T) {
+	answers, sources, transactor := newSubmissionAnswers(t)
 	ctx := t.Context()
 	source := identity(t, "tenant-a", "customer-a", "portal", "key-1")
 	preserveFor(t, sources, transactor, source)
 
-	unresolved := ports.SubmissionOwnershipAnswer{
+	unresolved := ports.SubmissionAnswer{
 		Decision:     ownershipDecision(t, domain.ProductionAuthorityUnresolved, domain.AdmissionControlOpen, nil),
 		BlockReasons: []domain.FutureSubmissionBlockReason{domain.FutureSubmissionAuthorityUnresolved},
 	}
-	winner := ports.SubmissionOwnershipAnswer{
+	winner := ports.SubmissionAnswer{
 		Decision:          ownershipDecision(t, domain.ProductionAuthorityIDPParcel, domain.AdmissionControlOpen, nil),
 		ShipmentRequestID: mustBuild(t, domain.NewShipmentRequestID, "REQ-WINNER"),
 	}
-	loser := ports.SubmissionOwnershipAnswer{
+	loser := ports.SubmissionAnswer{
 		Decision:          ownershipDecision(t, domain.ProductionAuthorityIDPParcel, domain.AdmissionControlOpen, nil),
 		ShipmentRequestID: mustBuild(t, domain.NewShipmentRequestID, "REQ-LOSER"),
 	}
-	for _, answer := range []ports.SubmissionOwnershipAnswer{unresolved, winner, loser} {
+	for _, answer := range []ports.SubmissionAnswer{unresolved, winner, loser} {
 		mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
-			return answers.RecordOwnershipAnswer(txCtx, source, answer)
+			return answers.RecordSubmissionAnswer(txCtx, source, answer)
 		})
 	}
 
-	latest, _, err := answers.FindLatestOwnershipAnswer(ctx, source)
+	latest, _, err := answers.FindLatestSubmissionAnswer(ctx, source)
 	if err != nil || latest.ShipmentRequestID != loser.ShipmentRequestID {
 		t.Fatalf("最近一次 = %q（err %v），want 最后记下的 REQ-LOSER", latest.ShipmentRequestID, err)
 	}
-	built, exists, err := answers.FindOwnershipAnswerForRequest(ctx, source, winner.ShipmentRequestID)
+	built, exists, err := answers.FindSubmissionAnswerForRequest(ctx, source, winner.ShipmentRequestID)
 	if err != nil || !exists || built.ShipmentRequestID != winner.ShipmentRequestID {
 		t.Fatalf("建 REQ-WINNER 所据 = %q / %v（err %v）", built.ShipmentRequestID, exists, err)
 	}
-	if _, exists, _ := answers.FindOwnershipAnswerForRequest(ctx, source, mustBuild(t, domain.NewShipmentRequestID, "REQ-NONE")); exists {
+	if _, exists, _ := answers.FindSubmissionAnswerForRequest(ctx, source, mustBuild(t, domain.NewShipmentRequestID, "REQ-NONE")); exists {
 		t.Fatal("没放行过的委托号读到了答案")
 	}
 
@@ -125,33 +141,38 @@ func TestOwnershipAnswersAppendAndAnswerByRequest(t *testing.T) {
 		"另一个来源":  identity(t, "tenant-a", "customer-a", "api", "key-1"),
 		"另一个请求键": identity(t, "tenant-a", "customer-a", "portal", "key-2"),
 	} {
-		if _, exists, err := answers.FindLatestOwnershipAnswer(ctx, elsewhere); err != nil || exists {
+		if _, exists, err := answers.FindLatestSubmissionAnswer(ctx, elsewhere); err != nil || exists {
 			t.Errorf("%s：exists = %v, err = %v，want 不可见", name, exists, err)
 		}
 	}
 }
 
 // Covers: 放行与「有将要建的委托」两格错配不落库；没保全的来源记不了答案。
-func TestOwnershipAnswersRefuseWhatCannotHold(t *testing.T) {
-	answers, sources, transactor := newOwnershipAnswers(t)
+func TestSubmissionAnswersRefuseWhatCannotHold(t *testing.T) {
+	answers, sources, transactor := newSubmissionAnswers(t)
 	ctx := t.Context()
 	source := identity(t, "tenant-a", "customer-a", "portal", "key-1")
 	preserveFor(t, sources, transactor, source)
 
-	allowedWithoutRequest := ports.SubmissionOwnershipAnswer{
+	allowedWithoutRequest := ports.SubmissionAnswer{
 		Decision: ownershipDecision(t, domain.ProductionAuthorityIDPParcel, domain.AdmissionControlOpen, nil),
 	}
-	blockedWithRequest := ports.SubmissionOwnershipAnswer{
+	blockedWithRequest := ports.SubmissionAnswer{
 		Decision:          ownershipDecision(t, domain.ProductionAuthorityIDPParcel, domain.AdmissionControlPaused, nil),
 		BlockReasons:      []domain.FutureSubmissionBlockReason{domain.FutureSubmissionAdmissionPaused},
 		ShipmentRequestID: mustBuild(t, domain.NewShipmentRequestID, "REQ-1"),
 	}
-	for name, answer := range map[string]ports.SubmissionOwnershipAnswer{
+	refusalWithGate := ports.SubmissionAnswer{
+		Refusal:      ports.SubmissionRefusedLinkIneligible,
+		BlockReasons: []domain.FutureSubmissionBlockReason{domain.FutureSubmissionAdmissionPaused},
+	}
+	for name, answer := range map[string]ports.SubmissionAnswer{
 		"放行却不指名委托": allowedWithoutRequest,
 		"挡下却指名委托":  blockedWithRequest,
+		"拒绝却带门禁原因": refusalWithGate,
 	} {
 		err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-			return answers.RecordOwnershipAnswer(txCtx, source, answer)
+			return answers.RecordSubmissionAnswer(txCtx, source, answer)
 		})
 		if err == nil {
 			t.Errorf("%s：记下了", name)
@@ -159,35 +180,38 @@ func TestOwnershipAnswersRefuseWhatCannotHold(t *testing.T) {
 	}
 
 	unpreserved := identity(t, "tenant-a", "customer-a", "portal", "never-preserved")
-	valid := ports.SubmissionOwnershipAnswer{
+	valid := ports.SubmissionAnswer{
 		Decision:          ownershipDecision(t, domain.ProductionAuthorityIDPParcel, domain.AdmissionControlOpen, nil),
 		ShipmentRequestID: mustBuild(t, domain.NewShipmentRequestID, "REQ-1"),
 	}
 	if err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-		return answers.RecordOwnershipAnswer(txCtx, unpreserved, valid)
+		return answers.RecordSubmissionAnswer(txCtx, unpreserved, valid)
 	}); err == nil {
 		t.Error("没保全的来源记下了答案")
 	}
-	if _, exists, _ := answers.FindLatestOwnershipAnswer(ctx, source); exists {
+	if _, exists, _ := answers.FindLatestSubmissionAnswer(ctx, source); exists {
 		t.Error("被拒的写入留下了行")
 	}
 }
 
 // Covers: 写口在无事务上下文被 RequireExecutor 拒绝：答案要与它的事务边界同生共死，事务边界归装配点。
-func TestOwnershipAnswerWritesRefuseToRunOutsideATransaction(t *testing.T) {
-	answers, sources, transactor := newOwnershipAnswers(t)
+func TestSubmissionAnswerWritesRefuseToRunOutsideATransaction(t *testing.T) {
+	answers, sources, transactor := newSubmissionAnswers(t)
 	ctx := t.Context()
 	source := identity(t, "tenant-a", "customer-a", "portal", "key-1")
 	preserveFor(t, sources, transactor, source)
 
-	answer := ports.SubmissionOwnershipAnswer{
+	answer := ports.SubmissionAnswer{
 		Decision:          ownershipDecision(t, domain.ProductionAuthorityIDPParcel, domain.AdmissionControlOpen, nil),
 		ShipmentRequestID: mustBuild(t, domain.NewShipmentRequestID, "REQ-1"),
 	}
-	if err := answers.RecordOwnershipAnswer(ctx, source, answer); !errors.Is(err, bentopg.ErrTransactionRequired) {
+	if err := answers.RecordSubmissionAnswer(ctx, source, answer); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务记答案应返回 ErrTransactionRequired，实得：%v", err)
 	}
-	if _, exists, err := answers.FindLatestOwnershipAnswer(ctx, source); err != nil || exists {
+	if err := answers.LockSubmission(ctx, source); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务取续办锁应返回 ErrTransactionRequired，实得：%v", err)
+	}
+	if _, exists, err := answers.FindLatestSubmissionAnswer(ctx, source); err != nil || exists {
 		t.Errorf("被拒的写入：exists = %v, err = %v", exists, err)
 	}
 }
@@ -269,13 +293,13 @@ func ownershipDecision(
 	return withHandoff
 }
 
-func newOwnershipAnswers(t *testing.T) (*adapter.SubmissionOwnershipAnswers, *adapter.SourceSubmissions, bentoapp.Transactor) {
+func newSubmissionAnswers(t *testing.T) (*adapter.SubmissionAnswers, *adapter.SourceSubmissions, bentoapp.Transactor) {
 	t.Helper()
 	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
-	answers, err := adapter.NewSubmissionOwnershipAnswers(db)
+	answers, err := adapter.NewSubmissionAnswers(db)
 	if err != nil {
 		t.Fatalf("构造归属答案仓储：%v", err)
 	}
@@ -297,4 +321,52 @@ func preserveFor(t *testing.T, sources *adapter.SourceSubmissions, transactor be
 	mustWithinTransaction(t, transactor, t.Context(), func(txCtx context.Context) error {
 		return sources.Preserve(txCtx, preserved)
 	})
+}
+
+// Covers: 续办锁按完整来源身份互斥（ports.SubmissionContinuationGuard 在本库的那一半）——同一身份的第二个事务等到第一个结束，
+// 别的身份不受影响。
+func TestSubmissionLockSerializesOneSourceIdentity(t *testing.T) {
+	answers, _, transactor := newSubmissionAnswers(t)
+	ctx := t.Context()
+	source := identity(t, "tenant-a", "customer-a", "portal", "key-1")
+	other := identity(t, "tenant-a", "customer-a", "portal", "key-2")
+
+	held := make(chan struct{})
+	release := make(chan struct{})
+	holderDone := make(chan error, 1)
+	go func() {
+		holderDone <- transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+			if err := answers.LockSubmission(txCtx, source); err != nil {
+				return err
+			}
+			close(held)
+			<-release
+			return nil
+		})
+	}()
+	<-held
+
+	if err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		return answers.LockSubmission(txCtx, other)
+	}); err != nil {
+		t.Fatalf("别的来源身份取锁：%v", err)
+	}
+
+	waiting, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
+	defer cancel()
+	if err := transactor.WithinTransaction(waiting, func(txCtx context.Context) error {
+		return answers.LockSubmission(txCtx, source)
+	}); err == nil {
+		t.Error("同一来源身份在持锁期间又取到了锁")
+	}
+
+	close(release)
+	if err := <-holderDone; err != nil {
+		t.Fatalf("持锁事务：%v", err)
+	}
+	if err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		return answers.LockSubmission(txCtx, source)
+	}); err != nil {
+		t.Fatalf("持锁事务结束后取锁：%v", err)
+	}
 }

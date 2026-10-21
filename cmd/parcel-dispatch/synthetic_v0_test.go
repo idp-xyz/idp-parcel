@@ -188,7 +188,7 @@ func newSYNVerticalFixture(t *testing.T) *synVerticalFixture {
 	if err != nil {
 		t.Fatalf("构造来源仓储：%v", err)
 	}
-	answers, err := pspostgres.NewSubmissionOwnershipAnswers(db)
+	answers, err := pspostgres.NewSubmissionAnswers(db)
 	if err != nil {
 		t.Fatalf("构造归属答案仓储：%v", err)
 	}
@@ -240,6 +240,7 @@ func newSYNVerticalFixture(t *testing.T) *synVerticalFixture {
 		requests,
 		&synSProductionOwnership{t: t},
 		answers,
+		sequentialSubmissionGuard{},
 		pshandoff.UnconfiguredOtherProductionAuthorityChannel{},
 		&synSSubmissionIdentities{},
 		systemClock{},
@@ -677,3 +678,11 @@ var (
 	_ psports.AcceptanceDecisionIdentity   = synSDecisionIdentities{}
 	_ psports.Clock                        = systemClock{}
 )
+
+// sequentialSubmissionGuard 直接调 fn：本包的提交都在用例自己的事务里一次一路地走，没有要排队的另一路；守卫真的排队由
+// cmd/parcel-api 的真库并发用例取证。
+type sequentialSubmissionGuard struct{}
+
+func (sequentialSubmissionGuard) Exclusively(ctx context.Context, _ psdomain.SourceIdentity, fn func(context.Context) error) error {
+	return fn(ctx)
+}

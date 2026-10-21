@@ -113,8 +113,12 @@ func NewSubmitShipmentRequestEndpoint(intake SubmissionIntake, handler Submissio
 
 // submitResponse 是本端点的封闭响应形状。`outcome` 取应用结果枚举的原名，传输层不合并、
 // 不改名，也没有「其他」这一格——留那一格就是给下一次合成一格开的门。
+//
+// `priorOutcome` 只随 `EXISTING_RESULT` 在场，取原处理答出的那一格原名（UC-PS-001「已有结果」一行「原接入处理结果」）：
+// 原来被拒（输入未受理、原委托不可见、关联不适用）的重发没有归属决定可带，少了这一格客户只知道办过了。
 type submitResponse struct {
 	Outcome             string                `json:"outcome"`
+	PriorOutcome        string                `json:"priorOutcome,omitempty"`
 	ShipmentRequestID   string                `json:"shipmentRequestId,omitempty"`
 	Parcels             []submittedParcelView `json:"parcels,omitempty"`
 	ProductionOwnership *ownershipView        `json:"productionOwnership,omitempty"`
@@ -181,6 +185,9 @@ func writeOutcome(response http.ResponseWriter, result application.SubmitShipmen
 	}
 
 	body := submitResponse{Outcome: outcome}
+	if prior, present := result.PriorOutcome(); present {
+		body.PriorOutcome = prior.String()
+	}
 	if requestID, present := result.ShipmentRequestID(); present {
 		body.ShipmentRequestID = requestID.String()
 	}

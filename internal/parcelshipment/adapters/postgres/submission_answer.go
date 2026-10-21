@@ -14,48 +14,79 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
-// SubmissionOwnershipAnswers 实现 ports.SubmissionOwnershipAnswers：每一次判得的归属答案追加一行，决定整份进 jsonb。
+// SubmissionAnswers 实现 ports.SubmissionAnswers：每一次答出的答案追加一行，拒绝存一格，归属决定整份进 jsonb。
 //
 // 读回逐字段过领域构造函数（NewProductionOwnershipDecision、AssessSafeHandoff、WithSafeHandoff）：库里一行坏数据在那几道门上
-// 暴露，不会变成一份看起来合法的原归属结果交给客户。
-type SubmissionOwnershipAnswers struct {
+// 暴露，不会变成一份看起来合法的原结果交给客户。
+type SubmissionAnswers struct {
 	db *bentopg.DB
 }
 
-func NewSubmissionOwnershipAnswers(db *bentopg.DB) (*SubmissionOwnershipAnswers, error) {
+func NewSubmissionAnswers(db *bentopg.DB) (*SubmissionAnswers, error) {
 	if db == nil {
 		return nil, fmt.Errorf("parcel shipment postgres: db is nil")
 	}
-	return &SubmissionOwnershipAnswers{db: db}, nil
+	return &SubmissionAnswers{db: db}, nil
 }
 
-var _ ports.SubmissionOwnershipAnswers = (*SubmissionOwnershipAnswers)(nil)
+var _ ports.SubmissionAnswers = (*SubmissionAnswers)(nil)
 
-// RecordOwnershipAnswer 追加一次归属答案。走 RequireExecutor：它与来源保全一样要落在一个明确的事务里，事务边界归装配点。
-func (repository *SubmissionOwnershipAnswers) RecordOwnershipAnswer(
+// LockSubmission 在当前事务里取这份来源身份的续办锁，事务结束即放（pg_advisory_xact_lock）。它是 ports.SubmissionContinuationGuard
+// 在本库的那一半，守卫的事务由装配点开。用咨询锁而不对 source_submission 那一行 FOR UPDATE：守卫事务要一直持锁到建单落下，而别的
+// 重放在守卫外追加观察要对那一行取外键共享锁，FOR UPDATE 与它互斥，它们连这一次到达都记不下，只能干等。
+func (repository *SubmissionAnswers) LockSubmission(ctx context.Context, identity domain.SourceIdentity) error {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("lock submission: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext('parcel_shipment.submission_answer.source'),
+		        hashtext($1 || chr(31) || $2 || chr(31) || $3 || chr(31) || $4))`,
+		identity.TenantID().String(),
+		identity.CustomerAccountID().String(),
+		identity.Source().String(),
+		identity.RequestKey().String(),
+	); err != nil {
+		return fmt.Errorf("lock submission: %w", err)
+	}
+	return nil
+}
+
+// RecordSubmissionAnswer 追加一次答案。走 RequireExecutor：它与来源保全一样要落在一个明确的事务里，事务边界归装配点。
+func (repository *SubmissionAnswers) RecordSubmissionAnswer(
 	ctx context.Context,
 	identity domain.SourceIdentity,
-	answer ports.SubmissionOwnershipAnswer,
+	answer ports.SubmissionAnswer,
 ) error {
 	executor, err := repository.db.RequireExecutor(ctx)
 	if err != nil {
-		return fmt.Errorf("record ownership answer: %w", err)
+		return fmt.Errorf("record submission answer: %w", err)
 	}
-	// 放行与「有将要建的委托」两格错配是编排的错，在这里拒而不是让库约束答一个 23514：错配的答案落了库，重发就会把一份挡下
-	// 的答案当成建单所据。
+	// 几格错配是编排的错，在这里拒而不是让库约束答一个 23514：错配的答案落了库，重发就会把一份没放行的答案当成建单所据，或把
+	// 一格拒绝读成一次归属判断。
 	if answer.Allowed() != (answer.ShipmentRequestID.String() != "") {
-		return fmt.Errorf("record ownership answer: an allowed answer must name the request it builds, a blocked one none")
+		return fmt.Errorf("record submission answer: an allowed answer must name the request it builds, any other none")
+	}
+	if answer.Refused() && (answer.Refusal.String() == "" || len(answer.BlockReasons) > 0) {
+		return fmt.Errorf("record submission answer: a refusal %d carries no gate", answer.Refusal)
 	}
 	reasons := make([]int16, 0, len(answer.BlockReasons))
 	for _, reason := range answer.BlockReasons {
 		if reason.String() == "" {
-			return fmt.Errorf("record ownership answer: gate block reason %d is outside the vocabulary", reason)
+			return fmt.Errorf("record submission answer: gate block reason %d is outside the vocabulary", reason)
 		}
 		reasons = append(reasons, int16(reason))
 	}
-	raw, err := json.Marshal(ownershipDecisionDocumentOf(answer.Decision))
-	if err != nil {
-		return fmt.Errorf("record ownership answer: %w", err)
+	var refusal *int16
+	var raw []byte
+	if answer.Refused() {
+		value := int16(answer.Refusal)
+		refusal = &value
+	} else {
+		raw, err = json.Marshal(ownershipDecisionDocumentOf(answer.Decision))
+		if err != nil {
+			return fmt.Errorf("record submission answer: %w", err)
+		}
 	}
 	var requestID *string
 	if answer.Allowed() {
@@ -63,33 +94,34 @@ func (repository *SubmissionOwnershipAnswers) RecordOwnershipAnswer(
 		requestID = &value
 	}
 	_, err = executor.Exec(ctx,
-		`INSERT INTO parcel_shipment.submission_ownership_answer
+		`INSERT INTO parcel_shipment.submission_answer
 			(tenant_id, customer_account_id, source, source_request_key,
-			 block_reasons, shipment_request_id, decision)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			 refusal, block_reasons, shipment_request_id, decision)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		identity.TenantID().String(),
 		identity.CustomerAccountID().String(),
 		identity.Source().String(),
 		identity.RequestKey().String(),
+		refusal,
 		reasons,
 		requestID,
 		raw,
 	)
 	if err != nil {
-		return fmt.Errorf("record ownership answer: %w", err)
+		return fmt.Errorf("record submission answer: %w", err)
 	}
 	return nil
 }
 
-// FindLatestOwnershipAnswer 取这份来源身份最近记下的一次答案。否定结果不区分「没判过」与「属于另一个作用域」，与来源保全
+// FindLatestSubmissionAnswer 取这份来源身份最近记下的一次答案。否定结果不区分「没答过」与「属于另一个作用域」，与来源保全
 // 仓储同一条纪律。
-func (repository *SubmissionOwnershipAnswers) FindLatestOwnershipAnswer(
+func (repository *SubmissionAnswers) FindLatestSubmissionAnswer(
 	ctx context.Context,
 	identity domain.SourceIdentity,
-) (ports.SubmissionOwnershipAnswer, bool, error) {
-	return repository.findOne(ctx, "find latest ownership answer",
-		`SELECT block_reasons, shipment_request_id, decision
-		   FROM parcel_shipment.submission_ownership_answer
+) (ports.SubmissionAnswer, bool, error) {
+	return repository.findOne(ctx, "find latest submission answer",
+		`SELECT refusal, block_reasons, shipment_request_id, decision
+		   FROM parcel_shipment.submission_answer
 		  WHERE tenant_id = $1
 		    AND customer_account_id = $2
 		    AND source = $3
@@ -103,16 +135,16 @@ func (repository *SubmissionOwnershipAnswers) FindLatestOwnershipAnswer(
 	)
 }
 
-// FindOwnershipAnswerForRequest 取放行建这份委托的那一次答案。同一个号记过不止一次时取最早那一次：建单在记答案之后，最早放行
+// FindSubmissionAnswerForRequest 取放行建这份委托的那一次答案。同一个号记过不止一次时取最早那一次：建单在记答案之后，最早放行
 // 它的那一次一定先于建单落下。
-func (repository *SubmissionOwnershipAnswers) FindOwnershipAnswerForRequest(
+func (repository *SubmissionAnswers) FindSubmissionAnswerForRequest(
 	ctx context.Context,
 	identity domain.SourceIdentity,
 	request domain.ShipmentRequestID,
-) (ports.SubmissionOwnershipAnswer, bool, error) {
-	return repository.findOne(ctx, "find ownership answer for request",
-		`SELECT block_reasons, shipment_request_id, decision
-		   FROM parcel_shipment.submission_ownership_answer
+) (ports.SubmissionAnswer, bool, error) {
+	return repository.findOne(ctx, "find submission answer for request",
+		`SELECT refusal, block_reasons, shipment_request_id, decision
+		   FROM parcel_shipment.submission_answer
 		  WHERE tenant_id = $1
 		    AND customer_account_id = $2
 		    AND source = $3
@@ -128,54 +160,63 @@ func (repository *SubmissionOwnershipAnswers) FindOwnershipAnswerForRequest(
 	)
 }
 
-func (repository *SubmissionOwnershipAnswers) findOne(
+func (repository *SubmissionAnswers) findOne(
 	ctx context.Context,
 	operation string,
 	query string,
 	arguments ...any,
-) (ports.SubmissionOwnershipAnswer, bool, error) {
+) (ports.SubmissionAnswer, bool, error) {
 	querier, err := repository.db.ReadExecutor(ctx)
 	if err != nil {
-		return ports.SubmissionOwnershipAnswer{}, false, fmt.Errorf("%s: %w", operation, err)
+		return ports.SubmissionAnswer{}, false, fmt.Errorf("%s: %w", operation, err)
 	}
+	var refusal *int16
 	var reasons []int16
 	var requestID *string
 	var raw []byte
-	err = querier.QueryRow(ctx, query, arguments...).Scan(&reasons, &requestID, &raw)
+	err = querier.QueryRow(ctx, query, arguments...).Scan(&refusal, &reasons, &requestID, &raw)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ports.SubmissionOwnershipAnswer{}, false, nil
+		return ports.SubmissionAnswer{}, false, nil
 	}
 	if err != nil {
-		return ports.SubmissionOwnershipAnswer{}, false, fmt.Errorf("%s: %w", operation, err)
+		return ports.SubmissionAnswer{}, false, fmt.Errorf("%s: %w", operation, err)
 	}
-	answer, err := ownershipAnswerFromRow(reasons, requestID, raw)
+	answer, err := submissionAnswerFromRow(refusal, reasons, requestID, raw)
 	if err != nil {
-		return ports.SubmissionOwnershipAnswer{}, false, fmt.Errorf("%s: %w", operation, err)
+		return ports.SubmissionAnswer{}, false, fmt.Errorf("%s: %w", operation, err)
 	}
 	return answer, true, nil
 }
 
-func ownershipAnswerFromRow(reasons []int16, requestID *string, raw []byte) (ports.SubmissionOwnershipAnswer, error) {
+func submissionAnswerFromRow(refusal *int16, reasons []int16, requestID *string, raw []byte) (ports.SubmissionAnswer, error) {
+	var answer ports.SubmissionAnswer
+	if refusal != nil {
+		answer.Refusal = ports.SubmissionRefusal(*refusal)
+		if *refusal < 0 || *refusal > 255 || answer.Refusal.String() == "" {
+			return ports.SubmissionAnswer{}, fmt.Errorf("refusal %d is outside the vocabulary", *refusal)
+		}
+		return answer, nil
+	}
 	var document ownershipDecisionDocument
 	if err := json.Unmarshal(raw, &document); err != nil {
-		return ports.SubmissionOwnershipAnswer{}, fmt.Errorf("决定不是本适配器写下的形状：%w", err)
+		return ports.SubmissionAnswer{}, fmt.Errorf("决定不是本适配器写下的形状：%w", err)
 	}
 	decision, err := document.decision()
 	if err != nil {
-		return ports.SubmissionOwnershipAnswer{}, err
+		return ports.SubmissionAnswer{}, err
 	}
-	answer := ports.SubmissionOwnershipAnswer{Decision: decision}
+	answer.Decision = decision
 	for _, stored := range reasons {
 		reason := domain.FutureSubmissionBlockReason(stored)
 		if stored < 0 || stored > 255 || reason.String() == "" {
-			return ports.SubmissionOwnershipAnswer{}, fmt.Errorf("gate block reason %d is outside the vocabulary", stored)
+			return ports.SubmissionAnswer{}, fmt.Errorf("gate block reason %d is outside the vocabulary", stored)
 		}
 		answer.BlockReasons = append(answer.BlockReasons, reason)
 	}
 	if requestID != nil {
 		answer.ShipmentRequestID, err = domain.NewShipmentRequestID(*requestID)
 		if err != nil {
-			return ports.SubmissionOwnershipAnswer{}, err
+			return ports.SubmissionAnswer{}, err
 		}
 	}
 	return answer, nil

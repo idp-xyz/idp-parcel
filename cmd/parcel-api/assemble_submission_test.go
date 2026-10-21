@@ -33,8 +33,9 @@ import (
 // Covers: 审计票 13——`/shipment-requests` 的第二参是真编排：整条链在真实 PostgreSQL
 // 上装得起来；治理目录未配置时归属如实答`权威未确定`、提交停在 OWNERSHIP_UNRESOLVED
 // 且带着归属决定；来源保全确实落库——重放同一份输入被认作同一请求、追加一次观察，再按
-// 未决续办重判归属（票 docs-consistency/code/39），证明首笔事务真的提交了，而不是装配在
-// 某个替身上悄悄成立。测试输入是隔离合成，只记 `S`，不进生产装配。
+// 未决续办重判归属（ADR-0266 部分停用 ADR-0081 Consequences 那一句的这一格：生产归属未决的
+// 重放重判，不答已有结果），证明首笔事务真的提交了，而不是装配在某个替身上悄悄成立。测试
+// 输入是隔离合成，只记 `S`，不进生产装配。
 //
 // 隔离形态入参传 nil，因此本用例同时是 ADR-0091「生产形态一字未变」那条的钉子：
 // 隔离形态哪天漏进生产装配，停在 OWNERSHIP_UNRESOLVED 这一格会在这里先变绿再被发现。
@@ -98,10 +99,10 @@ func TestTheGovernanceSelfAuthorityLeavesProductionOwnershipUnresolved(t *testin
 }
 
 // Covers: 两段事务边界的第一段（简报「事务边界」；ADR-0081）——来源保全在自己的事务里
-// 独立提交，编排随后给出业务性拒绝也动不了它，重放因此被认作同一请求、追加一次观察。
-// 「被拒的提交也保全来源」由 preservationBoundary 的边界位置兑现，不再依赖「答案即提交」
-// 的大事务。关联互证答完就走、不留答案，重放按原指名再互证一次，答的仍是`查无原委托`
-// （票 docs-consistency/code/39）。
+// 独立提交，编排随后给出业务性拒绝也动不了它，重放因此答`已有结果`（ADR-0081 Consequences
+// 「被拒提交的来源保全从此独立存活」）。「被拒的提交也保全来源」由 preservationBoundary 的
+// 边界位置兑现，不再依赖「答案即提交」的大事务；那一格拒绝也留了下来，重放带回原结果，
+// 不再互证一次（ADR-0266 决定一）。
 //
 // 建单事务回滚的半边不在此重证：WithinTransaction 对返回错误即回滚是框架合同，
 // 建单与信封同事务的原子性由 `tests/bentocontract` 的 PBC-04/05/07 在真库上取证。
@@ -137,11 +138,11 @@ func TestARefusedSubmissionStillPreservesItsSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("重放被拒提交：%v", err)
 	}
-	if got := replay.Outcome(); got != shipmentapp.OutcomePriorRequestNotFound {
-		t.Fatalf("outcome = %v, want PRIOR_REQUEST_NOT_FOUND", got)
+	if got := replay.Outcome(); got != shipmentapp.OutcomeExistingResult {
+		t.Fatalf("outcome = %v, want EXISTING_RESULT——被拒的提交也保全了来源", got)
 	}
-	if got := observationCount(t, pool, command.Identity); got != 1 {
-		t.Fatalf("观察 = %d 条, want 1——被拒的提交也保全了来源", got)
+	if prior, present := replay.PriorOutcome(); !present || prior != shipmentapp.OutcomePriorRequestNotFound {
+		t.Fatalf("原结果 = %v（%v），want PRIOR_REQUEST_NOT_FOUND", prior, present)
 	}
 }
 
@@ -568,16 +569,18 @@ func submissionAssembledWith(
 	ownership ports.ProductionOwnershipAuthority,
 ) (*shipmentapp.SubmitShipmentRequestHandler, *outbox.Store) {
 	t.Helper()
-	return submissionAssembledThrough(t, db, ownership, nil)
+	return submissionAssembledThrough(t, db, ownership, nil, nil)
 }
 
-// submissionAssembledThrough 在 submissionAssembledWith 之上留一个口子：wrapHandoff 非空时包住「委托已提交」意图适配器，
-// 好让用例在建单那一笔事务里注入失败——事务真回滚，委托行与信封一起消失，正是「保全已落、委托却不在」那一格。
+// submissionAssembledThrough 在 submissionAssembledWith 之上留两个口子：wrapHandoff 非空时包住「委托已提交」意图适配器，
+// 好让用例在建单那一笔事务里注入失败——事务真回滚，委托行与信封一起消失，正是「保全已落、委托却不在」那一格；channel
+// 非空时换掉生产装配同款的未配置出向通道，好让用例看见他方交接的确认与重投。
 func submissionAssembledThrough(
 	t *testing.T,
 	db *bentopg.DB,
 	ownership ports.ProductionOwnershipAuthority,
 	wrapHandoff func(ports.ShipmentRequestSubmittedHandoff) ports.ShipmentRequestSubmittedHandoff,
+	channel ports.OtherProductionAuthorityChannel,
 ) (*shipmentapp.SubmitShipmentRequestHandler, *outbox.Store) {
 	t.Helper()
 
@@ -602,9 +605,12 @@ func submissionAssembledThrough(
 	if err != nil {
 		t.Fatalf("构造标识工厂：%v", err)
 	}
-	answers, err := pspostgres.NewSubmissionOwnershipAnswers(db)
+	answers, err := pspostgres.NewSubmissionAnswers(db)
 	if err != nil {
-		t.Fatalf("构造归属答案仓储：%v", err)
+		t.Fatalf("构造提交答案仓储：%v", err)
+	}
+	if channel == nil {
+		channel = pshandoff.UnconfiguredOtherProductionAuthorityChannel{}
 	}
 	var downstream ports.ShipmentRequestSubmittedHandoff = handoff
 	if wrapHandoff != nil {
@@ -614,8 +620,9 @@ func submissionAssembledThrough(
 		preservationBoundary{transactor: db.Transactor(), inner: sources},
 		submissionBoundary{transactor: db.Transactor(), inner: requests, handoff: downstream},
 		ownership,
-		ownershipAnswerBoundary{transactor: db.Transactor(), inner: answers},
-		pshandoff.UnconfiguredOtherProductionAuthorityChannel{},
+		submissionAnswerBoundary{transactor: db.Transactor(), inner: answers},
+		submissionContinuationGuard{transactor: db.Transactor(), locks: answers},
+		channel,
 		identities,
 		clock,
 	), store
