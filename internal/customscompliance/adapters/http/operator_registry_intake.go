@@ -13,13 +13,15 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
 
-// 操作者渠道在本包登记写面的三格答复（ADR-0100 决定四），与 ErrAccessChannelNotConfigured 并列，各对一种恢复动作
-// （ADR-0029）。登记写面不判准入范围（ADR-0100：登记一个版本不形成任何生产事实），所以没有「不在准入范围」那一格。
+// 操作者渠道在本包的三格答复（ADR-0100 决定四），与 ErrAccessChannelNotConfigured 并列，各对一种恢复动作（ADR-0029）。
+// 登记写面不判准入范围（ADR-0100：登记一个版本不形成任何生产事实）；运营决定各口判，那一格用集成客户端族那边已有的
+// ErrOutsideAdmissionScope，恢复动作相同，不按族分设。
 var (
 	// ErrOperatorCredentialRejected：令牌缺失、过期或校验不过（401）——持令牌的人去登录或换令牌。
 	ErrOperatorCredentialRejected = errors.New("customs http: operator credential rejected")
-	// ErrOperatorNotGranted：令牌有效，但不在册、不绑这个租户或没有登记册配置写的授予（403）——管授予的人去登记。
-	ErrOperatorNotGranted = errors.New("customs http: operator holds no registry configuration grant")
+	// ErrOperatorNotGranted：令牌有效，但不在册、不绑这个租户，或没有该口所要那一格的授予（403）——管授予的人去登记。
+	// 登记口要登记册配置写，运营决定口要那一种决定；恢复动作相同，所以不按面分设哨兵。
+	ErrOperatorNotGranted = errors.New("customs http: operator holds no grant for the capability face or decision this endpoint needs")
 	// ErrIdentityDependencyUnavailable：发行方公钥集或操作者册读不动（503）——运维去救依赖。
 	ErrIdentityDependencyUnavailable = errors.New("customs http: identity dependency unavailable")
 )

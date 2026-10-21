@@ -50,8 +50,11 @@ func answer(err error) error {
 		return fmt.Errorf("%w: %w", customshttp.ErrOperatorCredentialRejected, err)
 	case errors.Is(err, identity.ErrOperatorNotGranted):
 		return fmt.Errorf("%w: %w", customshttp.ErrOperatorNotGranted, err)
+	case errors.Is(err, identity.ErrOutsideAdmissionScope):
+		return fmt.Errorf("%w: %w", customshttp.ErrOutsideAdmissionScope, err)
 	case errors.Is(err, identity.ErrCredentialVerifierUnavailable),
-		errors.Is(err, identity.ErrOperatorRegistryUnavailable):
+		errors.Is(err, identity.ErrOperatorRegistryUnavailable),
+		errors.Is(err, identity.ErrAdmissionScopeUnavailable):
 		return fmt.Errorf("%w: %w", customshttp.ErrIdentityDependencyUnavailable, err)
 	}
 	return err
