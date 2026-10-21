@@ -65,6 +65,7 @@ Date: 2026-10-21
 - **部分停用（扩成）** ADR-0235 决定一「重投推不动的答`未判`（`ReassessTriggerNotJudged`）：没有路由历史、证据未配置、冻结形态未配置。原因归 `ports.NotJudgedReason`。」一句：`未判`的原因封闭集再加一格「触发早于委托接受」（`TRIGGER_PRECEDES_SHIPMENT_ACCEPTANCE`，决定一）。**适用场景**：NR 路由复核的收寄采用与交接两路，触发的业务时间严格早于这一判断键的委托接受时刻。同句其余各格不变。
 - **部分停用（扩成）** ADR-0235 决定四「复核在已有结果分界之后、读路由历史之前比较：触发的业务时间严格早于当前位置时，答`未判`，原因「触发早于当前位置」（`TRIGGER_PRECEDES_CURRENT_POSITION`）。」一句：比当前位置之前先比委托接受（决定二）。**适用场景**：同上。当前位置的定义、同一时刻照判、交接更正、判断键串行与 ADR-0235 其余各条不变。
 - ADR-0272：无条款停用。它只管复核形成的计划；初始计划从接受起生效由 network-routing CONTEXT 定（票 code/60）。它决定三「离场门要求离场不早于生效，这一条对复核形成的计划恒成立」的论证不变，本记录让初始计划那一头同样成立（决定三）。
+- ADR-0249：无条款停用。早于受理的揽收没有「受理与揽收之间」那一段窗口：初始路由在处理时判断，晚于揽收，揽收当时的限制已经在那一次判断里核过；揽收复核只按硬约束判的条款不变。
 - ADR-0250：无条款停用。「终局入账、不进续办」与它决定二对续办纪律的读法一致。
 - ADR-0174：无条款停用。本记录是它「按权威业务时间裁决、不按到达顺序」在复核下限上的又一处落点。
 
@@ -90,6 +91,7 @@ Date: 2026-10-21
 
 - [ADR-0235](./0235-route-reassessment-settles-what-a-retry-cannot-change-and-does-not-judge-triggers-older-than-the-current-position.md)：前驱——部分停用（扩成）决定一「重投推不动的答`未判`……」一句与决定四「复核在已有结果分界之后、读路由历史之前比较……」一句，见「对已接受记录的作用」
 - [ADR-0272](./0272-a-plan-formed-by-route-reassessment-takes-effect-at-the-trigger-business-time.md)：复核形成的计划从触发业务时间起生效、离场取同一刻；离场夹到生效的同形候选已被它否决
+- [ADR-0249](./0249-offsite-pickup-reassessment-checks-hard-constraints-only-and-does-not-establish-a-controllable-node.md)：揽收复核只按硬约束判；早于受理的揽收由本记录入账不判，无条款停用
 - [ADR-0250](./0250-unclear-plan-applicability-in-reassessment-is-settled-as-not-judged-and-resume-in-the-same-change-stays-in-the-acceptance-chain.md)：`未判`先例与续办纪律
 - [ADR-0174](./0174-loading-concurrency-is-judged-by-business-time.md)：按权威业务时间裁决、不按到达顺序
 - [ADR-0215](./0215-a-handover-into-a-node-triggers-route-reassessment-and-reads-the-baseline-geo-projection.md)：交接一路按（租户，包裹）读回当前已接受委托
