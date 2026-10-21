@@ -85,9 +85,9 @@ func DeriveInstructionPrincipal(
 func (principal InstructionPrincipal) TransferCeiling() int64 { return principal.inTransit }
 
 // ShortfallCeiling 是短款金额能到的上限。短款 = 移位上限 − 经 settlement-accounting
-// 认可的协议抵扣；抵扣今天没有记账形（ADR-0271 越权风险点 6），认可的抵扣额留在
-// `渠道在途`，账上读不出它有多少。于是这里只得「不超过」：落一笔大于上限的短款必错，
-// 小于上限的那部分差额可能正是认可的抵扣。
+// 认可的协议抵扣；抵扣今天没有记账形（ADR-0271 越权风险点「协议抵扣的记账形未裁」），
+// 认可的抵扣额留在`渠道在途`，账上读不出它有多少。于是这里只得「不超过」：落一笔大于
+// 上限的短款必错，小于上限的那部分差额可能正是认可的抵扣。
 func (principal InstructionPrincipal) ShortfallCeiling() int64 { return principal.TransferCeiling() }
 
 // SurplusDue 是按指令算的溢款：该指令移入`待清分`的到账 − 指令金额 − 该指令已落入

@@ -67,8 +67,8 @@ type PostCommand struct {
 	PostedAt    time.Time
 }
 
-// PostSubledger 追加一笔记账：重放判定 → 解依据 → 定分户账与形状 → 按依据判重 →
-// 读回账面 → 按指令的上限 → 余额守卫 → 落账。
+// PostSubledger 追加一笔记账：重放判定 → 解依据 → 定分户账与形状 → 锁这本账 →
+// 按依据判重 → 读回账面 → 按指令的上限 → 余额守卫 → 落账。
 //
 // 重放判定必须先于一切按**当下状态**作答的门（余额守卫、批次收口）：那些门回答的是
 // 「这笔新账现在能不能落」，而重放的真相是「这笔账已经落了」，答案只由在册记录定。
@@ -81,7 +81,10 @@ type PostCommand struct {
 //
 // 余额守卫必须在同一笔事务内读回账面再判（写口 RequireExecutor 保证有环境事务）：
 // 隔着事务判出来的「够扣」在落账时可能已经不够了，而透支后的账面看上去与正常账面
-// 没有区别。按指令的上限先于按账的守卫：前者更紧，且它答的未受理（溢款报少）是请求
+// 没有区别。环境事务是 READ COMMITTED，同一份快照挡不住两笔并发的记账各自判够，所以
+// 读回之前先取这本账的事务锁：后到的那一笔等先到的提交之后才读，读到的是落过的账面。
+// 锁放在解依据之后，是因为账由依据推出；重放判定在锁外，它只看在册记录，并发重放
+// 由写口的 DO NOTHING 与随后的读回兜住。按指令的上限先于按账的守卫：前者更紧，且它答的未受理（溢款报少）是请求
 // 本身的错，不该被账面答案盖住。
 func (handler *Handler) PostSubledger(ctx context.Context, command PostCommand) (Outcome, error) {
 	if blank(command.Tenant) ||
@@ -124,6 +127,10 @@ func (handler *Handler) PostSubledger(ctx context.Context, command PostCommand) 
 	})
 	if err != nil {
 		return OutcomeNotAccepted, nil
+	}
+
+	if err := handler.deps.Subledgers.LockLedger(ctx, command.Tenant, basis.ledger); err != nil {
+		return OutcomeUndecided, nil
 	}
 
 	var principal *domain.InstructionPrincipal

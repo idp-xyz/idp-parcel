@@ -24,6 +24,7 @@ type storeDouble struct {
 	postings      map[string]domain.SubledgerPosting
 	postingOrder  []string
 	batches       map[string]domain.RemittanceBatch
+	locked        []domain.SubledgerKey
 
 	writeErr error
 	readErr  error
@@ -154,6 +155,17 @@ func (store *storeDouble) OpenSubledger(
 	}
 	store.subledgers[ledger.Key()] = ledger
 	return ports.SaveRegistered, nil
+}
+
+// LockLedger 在替身上只记一笔：内存替身没有并发，锁的效果由真库用例证。
+func (store *storeDouble) LockLedger(
+	_ context.Context, _ domain.TenantID, key domain.SubledgerKey,
+) error {
+	if store.writeErr != nil {
+		return store.writeErr
+	}
+	store.locked = append(store.locked, key)
+	return nil
 }
 
 func (store *storeDouble) AppendPosting(

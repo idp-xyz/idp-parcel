@@ -61,6 +61,29 @@ func (store *SubledgerStore) OpenSubledger(
 	return ports.SaveRegistered, nil
 }
 
+// LockLedger 取（租户，分户账四维）的事务级咨询锁，双 int 形式同本仓其余事务级锁；第二键
+// 撞上只让两本不相干的账多等一下。走 RequireExecutor：锁必须与随后的读回和落账在同一笔
+// 环境事务、同一条连接上，另取连接拿到的锁挡不住任何人。不锁记账行：要挡的正是还没
+// 落下的那一行。
+func (store *SubledgerStore) LockLedger(
+	ctx context.Context,
+	tenant domain.TenantID,
+	key domain.SubledgerKey,
+) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("lock subledger: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext('collection_remittance.subledger_posting.ledger'),
+		        hashtext($1 || chr(31) || $2 || chr(31) || $3 || chr(31) || $4 || chr(31) || $5))`,
+		ledgerColumns(tenant, key)...,
+	); err != nil {
+		return fmt.Errorf("lock subledger: %w", err)
+	}
+	return nil
+}
+
 // AppendPosting 追加一笔记账。位置与依据种类的落库词由领域词表给出；空串是调用方
 // 传了未知格——那是编程错误，让它撞库上的 CHECK 会把它折成「依赖故障」那一格。
 //

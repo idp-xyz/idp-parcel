@@ -5,9 +5,9 @@
 // （开立与记账）、回汇面（批次）。合成之后任何一族换形状都要动另外两族的实现。
 //
 // 本文件只放**点读**口：按键取一行、按分户账键取余额、按代收指令取它名下的事实与记账，
-// 伺候的是判断。管理台上列两册
-// 那类 `catalogue_read` 读口是另一个调用面（先例：关务的 PortsPathsView 点读与
-// PortsPathsCatalogueRead 上列分开两个接口），由读面那一侧追加，不拓宽这里的点读口。
+// 伺候的是判断。管理台上列两册那类 `catalogue_read` 读口是另一个调用面（先例：关务的
+// PortsPathsView 点读与 PortsPathsCatalogueRead 上列分开两个接口），由读面那一侧追加，
+// 不拓宽这里的点读口。
 package ports
 
 import (
@@ -84,7 +84,16 @@ type CollectionView interface {
 //
 // AppendPosting **只追加**。这里没有更新也没有删除方法，不是省略——写错走反向记账
 // 冲正，原记账原样留在账上；给一个改写入口，分配守恒就不再由结构交付了。
+//
+// LockLedger 在环境事务里取这本账的事务级锁，事务结束时自动放。余额守卫与按指令的
+// 上限都是「读回账面再判」：两笔并发的记账各自读到同一份账面、各自判够，落下去就透支。
+// 它放在写口而不是读口，是因为它只在有环境事务时才有意义——读口在事务外也能读。
 type SubledgerRegistry interface {
+	LockLedger(
+		ctx context.Context,
+		tenant domain.TenantID,
+		key domain.SubledgerKey,
+	) error
 	OpenSubledger(
 		ctx context.Context,
 		tenant domain.TenantID,

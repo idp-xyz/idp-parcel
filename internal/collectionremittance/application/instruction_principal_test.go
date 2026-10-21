@@ -179,7 +179,7 @@ func TestAnArrivalCannotBorrowAnotherInstructionsInTransit(t *testing.T) {
 	}
 }
 
-// 场景十七在本票范围内的那一半：报告 100 入`渠道在途`，到账 96 移进`待清分`，经结算
+// 场景十七在已有记账形的那一半：报告 100 入`渠道在途`，到账 96 移进`待清分`，经结算
 // 认可的协议抵扣 3 没有记账形，留在`渠道在途`；短款事项 1 自在途落入。短款按「报告 −
 // 移出」判上限：事项 5 越过 X 名下的 4，答余额不足。
 // Covers: AT-CR-017（短款半边；抵扣记账形未实现）
@@ -256,8 +256,8 @@ func TestAShortfallWaitsWhileTheInstructionHasAnUnmovedArrival(t *testing.T) {
 	mustPost(t, handler, shortfall)
 }
 
-// 溢款只从`待清分`落入，且同一笔多收只落一次：指令 100、报告与到账各 108，溢款 8 自
-// 待清分落入；从`渠道在途`落入答未受理；第二项事项再落 8 越过按指令算的溢款，答余额
+// 溢款只从`待清分`落入，且同一笔多收只落一次：指令 100、报告与到账各 108，报少的事项
+// 答未受理；溢款 8 自待清分落入；从`渠道在途`落入答未受理；第二项事项再落 8 越过按指令算的溢款，答余额
 // 不足；归属确认 溢款 → 应付客户 照旧。
 // Covers: AT-CR-016（溢款半边）
 func TestASurplusLandsOnlyFromReceivedFundsAndOnlyOnce(t *testing.T) {
@@ -266,6 +266,14 @@ func TestASurplusLandsOnlyFromReceivedFundsAndOnlyOnce(t *testing.T) {
 	openLedger(t, store, handler)
 	seedInstruction(t, store, handler, "SYN-INSTR-1", 100)
 	seedReceived(t, store, handler, "SYN-INSTR-1", 108)
+
+	// 事项报少：多收的 8 已经全在待清分里，报 5 等也等不对，答未受理。
+	mustRegisterDiscrepancy(t, handler, "SYN-DIFF-UNDER", "SYN-INSTR-1", domain.DiscrepancySurplus, 5)
+	if got := postOutcome(t, handler, postCommand(t, "SYN-POST-SURPLUS-UNDER",
+		domain.PositionAwaitingAllocation, domain.PositionSurplus,
+		5, domain.BasisDiscrepancy, "SYN-DIFF-UNDER", "2026-08-25T00:30:00Z")); got != application.OutcomeNotAccepted {
+		t.Fatalf("溢款事项报少 = %s，要 NOT_ACCEPTED", got)
+	}
 
 	mustRegisterDiscrepancy(t, handler, "SYN-DIFF-1", "SYN-INSTR-1", domain.DiscrepancySurplus, 8)
 	fromTransit := postCommand(t, "SYN-POST-SURPLUS-TRANSIT",
