@@ -132,7 +132,7 @@
 | `AT-NO-059` | internal/nodeoperations/application/dispose_identity_conflict_test.go::TestAThirdArrivalAfterADispositionConflictsOnlyWithTheUnitAssociatedNow；internal/nodeoperations/adapters/postgres/reception_disposition_test.go::TestOtherUnitIntakesStopAtADisposition；internal/nodeoperations/adapters/postgres/reception_disposition_test.go::TestParcelContainmentStopsAtADisposition；cmd/parcel-api/identity_disposition_test.go::TestADispositionAndAnotherUnitsReceptionSerializeOnTheParcel（并发半边） |
 | `AT-NO-060` | internal/nodeoperations/application/dispose_identity_conflict_test.go::TestADispositionAppendsOnEveryChainOfTheUnit |
 | `AT-NO-061` | internal/nodeoperations/domain/directional_basis_test.go::TestIdentityBasisReadsEachJudgmentChainHead；cmd/parcel-api/reception_one_mark_two_units_test.go::TestTheWiredReceptionTurnsOneMarkOnTwoUnitsIntoAnIdentityConflict（真库面：一码两物之后两件的原因集） |
-| `AT-NO-062` | internal/nodeoperations/application/identity_conflict_cause_test.go::TestAnAmbiguityOnlyConflictIsReleasedOnceTheDeclarationIsGone；internal/nodeoperations/application/identity_conflict_cause_test.go::TestAnAmbiguityOnlyConflictStaysWhileADeclarationRemains；cmd/parcel-dispatch/node_identity_ambiguity_release_test.go::TestTheWiredDispatchReleasesAnAmbiguityOnlyConflictOnceTheDeclarationIsGone；cmd/parcel-dispatch/node_identity_ambiguity_release_test.go::TestTheWiredDispatchKeepsConflictsTheRetiredDeclarationDidNotCause；internal/nodeoperations/application/delivery_scope_judgment_test.go::TestAnAmbiguityOnlyConflictWithoutAScopeIsReleasedIntoAnUnverifiedPendingUnit（末句：没有范围时追加不记冲突的待识别）；internal/nodeoperations/application/delivery_scope_judgment_test.go::TestAnAmbiguityOnlyConflictWithAScopeIsReleasedIntoAnIntake；internal/nodeoperations/adapters/http/reception_scope_basis_test.go::TestAManualRecheckThatReleasesAnAmbiguityIntoAnUnverifiedUnitAnswersCreated；cmd/parcel-dispatch/node_identity_ambiguity_release_test.go::TestTheWiredDispatchReleasesAnUnscopedAmbiguityIntoAnUnverifiedPendingUnit（末句的真库面） |
+| `AT-NO-062` | internal/nodeoperations/application/identity_conflict_cause_test.go::TestAnAmbiguityOnlyConflictIsReleasedOnceTheDeclarationIsGone；internal/nodeoperations/application/identity_conflict_cause_test.go::TestAnAmbiguityOnlyConflictStaysWhileADeclarationRemains；cmd/parcel-dispatch/node_identity_ambiguity_release_test.go::TestTheWiredDispatchReleasesAnAmbiguityOnlyConflictOnceTheDeclarationIsGone；cmd/parcel-dispatch/node_identity_ambiguity_release_test.go::TestTheWiredDispatchKeepsConflictsTheRetiredDeclarationDidNotCause；internal/nodeoperations/application/delivery_scope_judgment_test.go::TestAnAmbiguityOnlyConflictWithAScopeIsReleasedIntoAnIntake |
 | `AT-NO-063` | internal/nodeoperations/domain/delivery_scope_test.go::TestAPreAdviceCountsOnlyWhenEveryConditionHolds（推导半边）；internal/nodeoperations/ports/parcel_identity_test.go::TestTheIdentityVerdictFollowsTheScopeTable；internal/nodeoperations/application/delivery_scope_judgment_test.go::TestACustomerNumberHitWithoutAVerifiableScopeIsPendingAndUnverified；internal/nodeoperations/adapters/http/reception_scope_basis_test.go::TestTheDeliveryScopeCheckTravelsWithTheReceptionAnswer；cmd/parcel-api/reception_delivery_scope_test.go::TestTheWiredReceptionLeavesAnUnadvisedCustomerNumberPending；cmd/parcel-frontline-import/intake_delivery_scope_test.go::TestTheIntakeImportJudgesTheScopeFromTheTemplateBasis |
 | `AT-NO-064` | internal/parcelshipment/adapters/postgres/external_identifier_scope_test.go::TestAScopedCheckReturnsEveryCandidateAndAnswersCompatibilityPerCandidate；internal/parcelshipment/adapters/postgres/external_identifier_scope_test.go::TestTheSignalNarrowsToTheScopeAccounts；internal/nodeoperations/application/delivery_scope_judgment_test.go::TestAPreAdviceScopePicksItsAccountsCandidateAmongOthers；cmd/parcel-api/reception_delivery_scope_test.go::TestTheWiredReceptionIdentifiesAPreAdvisedDeliveryAmongCandidates |
 | `AT-NO-065` | internal/nodeoperations/ports/parcel_identity_test.go::TestTheIdentityVerdictFollowsTheScopeTable；internal/nodeoperations/application/delivery_scope_judgment_test.go::TestAScopeStillContestsWithinItsOwnAccounts |
@@ -148,6 +148,7 @@
 | `AT-NO-075` | internal/nodeoperations/application/recheck_by_handover_note_test.go::TestARecheckByHandoverNoteRechecksOnlyItsRecheckableMembers（编排半边）；internal/nodeoperations/adapters/postgres/delivery_handover_recheck_test.go::TestRecheckableMembersAreFoundByTheirHandoverNote（存储面）；cmd/parcel-api/assemble_delivery_handover_note_test.go::TestADeliveryHandoverNoteIsOpenedFilledAndConfirmedAgainstARealDatabase（parcel-api 半边：确认那一笔自投门铃）；cmd/parcel-dispatch/node_identity_recheck_scope_established_test.go::TestTheWiredDispatchRechecksAHandoverNoteOnceItsScopeIsEstablished（parcel-dispatch 半边：门铃 → 重核追加关联版、名下已关联与记冲突的不受影响） |
 | `AT-NO-129` | internal/nodeoperations/adapters/postgres/consolidation_membership_at_test.go::TestMembersAreReadAtTheGivenMomentFromTheSourceFacts、::TestFactsAtExactlyTheMomentCount（恰在时点的边界） |
 | `AT-NO-130` | internal/nodeoperations/adapters/postgres/consolidation_membership_at_test.go::TestAnUnreadableMembershipIsAnErrorNotANonUnit |
+| `AT-NO-131` | internal/nodeoperations/application/delivery_scope_judgment_test.go::TestAnAmbiguityOnlyConflictWithoutAScopeIsReleasedIntoAnUnverifiedPendingUnit；internal/nodeoperations/adapters/http/reception_scope_basis_test.go::TestAManualRecheckThatReleasesAnAmbiguityIntoAnUnverifiedUnitAnswersCreated；cmd/parcel-dispatch/node_identity_ambiguity_release_test.go::TestTheWiredDispatchReleasesAnUnscopedAmbiguityIntoAnUnverifiedPendingUnit（真库面） |
 | `AT-NR-001` | internal/networkrouting/application/create_initial_route_test.go::TestThreeParcelsKeepThreeIndependentResults；internal/networkrouting/domain/initial_route_plan_test.go::TestAnInitialRoutePlanCarriesItsFullSelectionBasis；internal/networkrouting/domain/route_ranking_test.go::TestSelectionFollowsTheStrategysDeclaredCriterionOrder |
 | `AT-NR-002` | internal/networkrouting/application/create_initial_route_test.go::TestTwoParcelsFormTwoIndependentPlans |
 | `AT-NR-003` | internal/networkrouting/application/create_initial_route_test.go::TestAReplayReturnsExistingResultsAndAConflictOverwritesNothing |
@@ -631,14 +632,13 @@
 | `AT-NR-027` | 某次班次容量申请、订舱或装载失败 | UC-NR-002-ASSESS-PARCEL-REACHABILITY.md |
 | `AT-NR-029` | 服务产品明确允许待路由，当前判断为不可达 | UC-NR-002-ASSESS-PARCEL-REACHABILITY.md |
 | `AT-NR-032` | 标准网络服务得到不可达结果 | UC-NR-002-ASSESS-PARCEL-REACHABILITY.md |
-| `AT-NR-033` | 客户送站形成有效网络收寄，实际节点与初始计划一致 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
-| `AT-NR-034` | 场外揽收地点与计划接货范围一致，尚未到节点 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
+| `AT-NR-033` | 客户送站形成有效网络收寄，实际节点与初始计划一致；策略版本已声明冻结形态，没有超过改善阈值的候选 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-NR-035` | 有效网络收寄发生在非计划但已确认控制的节点 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
-| `AT-NR-036` | 当前有效实测仍满足原计划硬限制 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
-| `AT-NR-037` | 当前有效实测使原线路不再合格，存在替代候选且允许自动改路 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
+| `AT-NR-036` | 当前有效实测仍满足原计划硬限制；策略版本已声明冻结形态 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
+| `AT-NR-037` | 原线路不再合格（有效硬限制或当前有效实测），包裹在当前可控节点上，存在替代候选且允许自动改路 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-NR-038` | 原计划失效且没有替代候选 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-NR-039` | 先前无路由，收寄后出现合格候选 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
-| `AT-NR-040` | 只有普通扫描或卸载，没有控制依据 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
+| `AT-NR-040` | 只有普通扫描或卸载，没有控制依据（复核编排答触发未受理） | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-NR-041` | 存在更优候选但已过冻结边界且原计划仍可执行 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-NR-042` | 候选可行但不满足自动改路条件 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-NR-043` | 改路会改变关务区域或报关服务方 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
@@ -648,7 +648,6 @@
 | `AT-NR-047` | 路由复核与实际装载并发 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-NR-048` | 结果提交成功但发布失败 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-NR-050` | 硬限制已证明原计划失效，但替代候选来源暂时不可用 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
-| `AT-NR-051` | 当前计划适用性证据本身冲突 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-NR-052` | 原计划失效，候选评估确认没有合格候选 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-NR-053` | 原计划失效，候选评估未决后补齐并找到合格候选 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-PC-016` | 发布提交成功但事件投递失败 | UC-PC-001-MAINTAIN-AND-PUBLISH-COMMERCIAL-AUTHORITY.md |
@@ -922,7 +921,6 @@
 | `AT-NO-005` | 节点依扣留协作将 P1 隔离并保持控制 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-NO-001-ACCEPT-AND-EXECUTE-CUSTOMS-NODE-COLLABORATION.md |
 | `AT-NO-022` | 包裹无当前有效路由 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
 | `AT-NO-028` | 跨客户查询未知实物或收寄结果 | 查询/权限/审计面（接入与持久化闸门后） | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
-| `AT-NO-031` | 包裹没有当前有效路由 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NO-037` | 封签破损或与记录不符 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NO-046` | 跨客户集运隔离模拟 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NR-049` | 跨租户查询路由复核 | 查询/权限/审计面（接入与持久化闸门后） | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
@@ -1274,6 +1272,10 @@
 | `AT-CC-407` | 引用和关系提交成功，但发布首次失败 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
 | `AT-CC-408` | 来源已保全，但关联结果技术提交失败 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
 | `AT-CC-410` | 检查本用例直接形成或修改的对象 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
+| `AT-NO-031` | 包裹没有当前有效路由（方向依据随对象下发、带有效区间，作业端判；ADR-0024、ADR-0251） | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
+| `AT-NR-034` | 场外揽收交接已采用，尚未到节点；选中候选的硬约束仍满足（ADR-0249） | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
+| `AT-NR-051` | 选中候选的限制状态未知：关务目录为空、受理基线缺端点国家或关务来源未接（ADR-0250） | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
+| `AT-NR-084` | 场外揽收复核时原计划被有效硬限制淘汰，存在替代候选，策略版本允许自动改路（ADR-0249） | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-VE-001` | `UC-CC-006` 提供已接受、范围明确的关务结果 | UC-VE-001-COORDINATE-CUSTOMS-EXCEPTIONS-AND-CUSTOMER-DISCLOSURE.md |
 | `AT-VE-002` | 只有原始监管消息、截图或操作员备注，尚未被关务接受 | UC-VE-001-COORDINATE-CUSTOMS-EXCEPTIONS-AND-CUSTOMER-DISCLOSURE.md |
 | `AT-VE-003` | 只有技术送达/监管接收且不存在适用异常条件 | UC-VE-001-COORDINATE-CUSTOMS-EXCEPTIONS-AND-CUSTOMER-DISCLOSURE.md |
@@ -1537,3 +1539,5 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-10-21 追记（票 demo-chain-gaps/146）：UC-TF-005 新立 `AT-TF-316`–`320`（门禁读数回给执行方只列没得出放行的对象：五格里只列阻断、读不动、未决；全都得出放行时没有逐对象那一格；袋只指名同样列出的成员；跨客户共同运输不露另一客户的包裹；交出读数同此），UC-TF-006 新立 `AT-TF-321`（交付读数同此，ADR-0237）。随票在领域、线格式与 parcel-api 真库用例上补 Covers 点名，全部入①；半边覆盖在行内注明。①、TF 加 6，②③④不变；总览计数未重算，进 main 时统一做。`AT-TF-063` 仍留在③：本票只证了门禁读数回给执行方那一半，跨客户共同运输的查询面本身没有落地。评审修订（同日）：`AT-TF-114` 与 `AT-TF-319` 补写出发意图的起讫与段绑定那一格（ADR-0237 决定五），两行补点名；不占新号。二轮评审修订（同日）：说不出与对不上分开，`AT-TF-114` 只留对不上那一支，`AT-TF-317` 补写核不上段的出发照问关务、回给设备只见整格那一格，两行补点名；不占新号。
 
 2026-10-21 追记（票 demo-chain-gaps/94）：UC-TF-006 新立 `AT-TF-322`–`325`（派送出发前的交付门禁问询：受限的答阻断、放行的不列逐对象那一格，同参交付逐字节相同、命中同一判断，零写入、不读派送尝试，受理与授予同有效交付口，ADR-0238）。随票在编排、线格式与 parcel-api 真库用例上补 Covers 点名，全部入①；半边覆盖在行内注明。①、TF 加 4，②③④不变；总览计数未重算，进 main 时统一做。号段 316–325 由协调方预分，146 与 94 两票用满。
+
+2026-10-21 追记（票 docs-consistency/05）：UC-NR-003 新立 `AT-NR-084`（揽收复核时原计划失效只出建议，ADR-0249），未实现，入④；`AT-NR-034`（揽收复核不比节点，ADR-0249，今天按地点比节点判失效，code/16）与 `AT-NR-051`（适用性看不清入账未判，ADR-0250，今天回滚重投，code/28）由②移入④；`AT-NO-031` 由③移入④（ADR-0251 之后它是作业端按下发依据判的机制，下发未实现，不是等实例参数）；`AT-NR-033`、`036`、`037`、`040` 只改场景文字，桶不变。UC-NO-002 `AT-NO-062` 拆出 `AT-NO-131`（无范围、只经客户件号时追加不记冲突的待识别），原行末句那三条 Covers 移到新行，入①。计数进 main 时由推送方重算。
