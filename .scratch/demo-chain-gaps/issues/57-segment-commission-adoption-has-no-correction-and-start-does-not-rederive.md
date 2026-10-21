@@ -1,7 +1,7 @@
 # 57 段采用委托与委托取消都没有更正面，首个参与被更正后委托的开始也不重派生
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg57。此前 in-progress——2026-10-21 认领（57、15 同批）；此前 ready-for-agent——2026-10-20 上线就绪评估归 R1，与 88 同批；「解除采用」的裁定见 [triage-2026-10-19](../triage-2026-10-19.md)「上线就绪评估（2026-10-20）」。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [25](./25-segment-adopts-transport-commission-and-cancellation-faces.md) 完成记录与 [ADR-0204](../../../docs/adr/0204-a-fulfillment-segment-adopts-a-transport-commission-by-declaration-and-a-started-commission-cannot-be-cancelled.md) 越权风险点 1、2、8（风险点 8 由票 25 隔离评审补入）。
+Status: resolved——2026-10-21 进 main（全量钉 `fb40c5f6`：`scripts/test-full.sh` 158 ok / 0 FAIL，见文末「进 main 记录」）；拆出的三问转票 [162](./162-commission-start-does-not-rederive-when-the-first-participation-is-corrected.md)、[163](./163-a-cancellation-dated-after-the-start-has-no-correction-face.md)、[164](./164-whether-a-cancellation-reached-the-provider-is-not-recorded.md)。此前 in-progress——完工待评审与进 main，分支 claude-dcg57。此前 in-progress——2026-10-21 认领（57、15 同批）；此前 ready-for-agent——2026-10-20 上线就绪评估归 R1，与 88 同批；「解除采用」的裁定见 [triage-2026-10-19](../triage-2026-10-19.md)「上线就绪评估（2026-10-20）」。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [25](./25-segment-adopts-transport-commission-and-cancellation-faces.md) 完成记录与 [ADR-0204](../../../docs/adr/0204-a-fulfillment-segment-adopts-a-transport-commission-by-declaration-and-a-started-commission-cannot-be-cancelled.md) 越权风险点 1、2、8（风险点 8 由票 25 隔离评审补入）。
 Blocked by: 无——用户决定一格已于 2026-10-20 代决，见 [triage-2026-10-19](../triage-2026-10-19.md)「上线就绪评估（2026-10-20）」（此前 用户决定（TF owner 复核 ADR-0204 风险点 1、2、8：采用错了怎么改，「已开始」能不能回退，采用登记之前成立的取消怎么更正））
 
 ## 现象
@@ -108,3 +108,7 @@ Blocked by: 无——用户决定一格已于 2026-10-20 代决，见 [triage-20
 **未采纳**：无。
 
 **验证**：变基到 main `8e9014e87`（67438a0f 之后只进了 `.scratch` 文档，冲突只在本票与票 15 的票面，按并集合）。`go build ./... && go vet ./...`、`gofmt -l` 干净；`scripts/test-full.sh` 覆盖 TF、SA、access-identity 的包与全部反向依赖（含各 cmd 包）、`./internal/architecture/...`、`./migrations/...`：52 个包 ok、0 FAIL。种子在一次性库上实灌：TF 0049、access_identity 0022 施加，457 一节全部 RECORDED/REGISTERED，库已删。
+
+## 进 main 记录
+
+2026-10-21 协调方合入，57、15 同批。作者两轮修订后把分支变基到 `8e9014e8`（即当时 main，票 88 与文档自洽 02 已在其中），并用只改文件的 tree-filter 重写中段历史（每一笔测试都绿、最终树逐字节不变），不需重放，分支 SHA 原样进 main（`4ee3a753`…`ddc6e3b9`）。一轮评审一条阻断（解除与采用的重放产生新效果）已修——按代次认幂等；二轮评审无阻断，补形成把人工失效的版本记成「已形成」一格已修——未形成册加 `INVALIDATED_BY_DECISION`、「盖住」改读链头。在 55432 一次性库上 `seed.sh` 全程退 0，用完 `DROP … WITH (FORCE)`。其上按 parallel-sessions.md 重生成 ADR 索引、重算 AT 盘点计数、重生成机制清点（`fb40c5f6`），各自单独成笔；`adr-index -check` 与 `at-coverage-counts -check` 退 0。在干净的隔离树上对 `fb40c5f6` 跑 `go build ./...`、`go vet ./...`、`gofmt -l` 干净，`scripts/test-full.sh` 全量 158 ok、0 FAIL（`-count=1`，无缓存）；推 `fb40c5f6:main`。迁移落号：`transport_fulfillment/0049`、`access_identity/0022`、`settlement_accounting/0044`（均连号）。

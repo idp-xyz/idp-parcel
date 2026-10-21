@@ -1,7 +1,7 @@
 # 15 发生项更正不驱动供应商预期成本的计价纠错
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg57。此前 in-progress——2026-10-21 认领（57、15 同批）；此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [08](./08-buy-evaluation-recorded-consumer-never-forms-supplier-expected-cost.md) 的隔离评审。
+Status: resolved——2026-10-21 进 main（全量钉 `fb40c5f6`：`scripts/test-full.sh` 158 ok / 0 FAIL，见文末「进 main 记录」）；与 57 同批。此前 in-progress——完工待评审与进 main，分支 claude-dcg57。此前 in-progress——2026-10-21 认领（57、15 同批）；此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [08](./08-buy-evaluation-recorded-consumer-never-forms-supplier-expected-cost.md) 的隔离评审。
 Blocked by: 无——[27] 已进 main。此前 [27](./27-transport-charge-occurrences-are-registered-and-handed-off.md)（发生项先要有生产路径；原票 07 已拆分）
 出处：[ADR-0200](../../../docs/adr/0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md) 越权风险点 4。
 
@@ -75,3 +75,7 @@ none
 **未采纳**：9 的字面修法（比版本先后），理由同上；效果（早一版的评价不接在替代版本后面）已做到。
 
 **验证**：同票 57 那一节。
+
+## 进 main 记录
+
+2026-10-21 协调方合入，57、15 同批。作者两轮修订后把分支变基到 `8e9014e8`（即当时 main，票 88 与文档自洽 02 已在其中），并用只改文件的 tree-filter 重写中段历史（每一笔测试都绿、最终树逐字节不变），不需重放，分支 SHA 原样进 main（`4ee3a753`…`ddc6e3b9`）。一轮评审一条阻断（解除与采用的重放产生新效果）已修——按代次认幂等；二轮评审无阻断，补形成把人工失效的版本记成「已形成」一格已修——未形成册加 `INVALIDATED_BY_DECISION`、「盖住」改读链头。在 55432 一次性库上 `seed.sh` 全程退 0，用完 `DROP … WITH (FORCE)`。其上按 parallel-sessions.md 重生成 ADR 索引、重算 AT 盘点计数、重生成机制清点（`fb40c5f6`），各自单独成笔；`adr-index -check` 与 `at-coverage-counts -check` 退 0。在干净的隔离树上对 `fb40c5f6` 跑 `go build ./...`、`go vet ./...`、`gofmt -l` 干净，`scripts/test-full.sh` 全量 158 ok、0 FAIL（`-count=1`，无缓存）；推 `fb40c5f6:main`。迁移落号：`transport_fulfillment/0049`、`access_identity/0022`、`settlement_accounting/0044`（均连号）。
