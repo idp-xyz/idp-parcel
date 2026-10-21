@@ -1,7 +1,7 @@
 # 68 VE、TF 读初始路由时把重建不出来的坏行折成可等的未决，重投到耗尽
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code68。此前 ready-for-agent——R2（上线后尽快）：坏行是确定性错误，重投推不动，整封信封占着分区重投到 ABANDONED；与 code/52、code/60 在 NR 一侧修掉的是同一类病。2026-10-21 协调方据 code/60 隔离评审（N2）立。
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code68。此前 ready-for-agent——R2（上线后尽快）：坏行是确定性错误，重投推不动，整封信封占着分区重投到 ABANDONED；与 code/52、code/60 在 NR 一侧修掉的是同一类病。2026-10-21 协调方据 code/60 隔离评审（N2）立。
 Blocked by: 无
 出处：code/60 隔离评审；NR 一侧已由 code/52（复核）、code/60（初始路由）让 `ports.ErrStoredRouteRecordUnreadable` 响亮报错。
 
@@ -57,3 +57,8 @@ S：两处各先 `errors.Is(err, ports.ErrStoredRouteRecordUnreadable)`，认出
 - `go build ./...`、`go vet ./...` 干净；`gofmt -l cmd internal` 为空。
 - `TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/visibilityexception/... ./internal/transportfulfillment/... ./cmd/parcel-dispatch ./internal/architecture/...`：退 0，29 个包 ok，2 个包无测试文件。
 - 没跑全量；没重生成生成物。
+
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-code68` 由协调方 rebase 到 main `3fb2108db`（无冲突）后快进，tip `c0c11472d`；轻评审无阻断（非阻断一条：VE 名单头注未与 TF 对称补一句，行为无误，留后续顺手）。
+- 生成物重生成无变化，检查均退 0。全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净。无迁移、无种子改动。
