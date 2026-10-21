@@ -265,4 +265,10 @@ type ReviewCatalogueRead interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]DeliveryDispatchReaskCadenceRecord, error)
+	// ListActualFulfillmentUnformed 上列实际履约未形成册里还未形成的那几件（ADR-0231 决定六），参与终点最早的在前；了结的不上列。
+	ListActualFulfillmentUnformed(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]ActualFulfillmentUnformedRecord, error)
 }

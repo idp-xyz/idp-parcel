@@ -57,33 +57,40 @@ type ReviewCatalogueReader interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]ports.DeliveryDispatchReaskCadenceRecord, error)
+	ListActualFulfillmentUnformed(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]ports.ActualFulfillmentUnformedRecord, error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
 var _ ReviewCatalogueReader = ports.ReviewCatalogueRead(nil)
 
 const (
-	outcomeTransportSchedulesListed       = "TRANSPORT_SCHEDULES_LISTED"
-	outcomeScheduleTemplatesListed        = "SCHEDULE_TEMPLATES_LISTED"
-	outcomeCapacityPoolsListed            = "CAPACITY_POOLS_LISTED"
-	outcomeTransportHandoversListed       = "TRANSPORT_HANDOVERS_LISTED"
-	outcomeEffectiveDeliveriesListed      = "EFFECTIVE_DELIVERIES_LISTED"
-	outcomeCarrierMasterDocumentsListed   = "CARRIER_MASTER_DOCUMENTS_LISTED"
-	outcomeTransportPreparationsListed    = "TRANSPORT_PREPARATIONS_LISTED"
-	outcomeDeliveryDispatchPendingsListed = "DELIVERY_DISPATCH_PENDINGS_LISTED"
-	outcomeReaskCadencesListed            = "REASK_CADENCES_LISTED"
+	outcomeTransportSchedulesListed        = "TRANSPORT_SCHEDULES_LISTED"
+	outcomeScheduleTemplatesListed         = "SCHEDULE_TEMPLATES_LISTED"
+	outcomeCapacityPoolsListed             = "CAPACITY_POOLS_LISTED"
+	outcomeTransportHandoversListed        = "TRANSPORT_HANDOVERS_LISTED"
+	outcomeEffectiveDeliveriesListed       = "EFFECTIVE_DELIVERIES_LISTED"
+	outcomeCarrierMasterDocumentsListed    = "CARRIER_MASTER_DOCUMENTS_LISTED"
+	outcomeTransportPreparationsListed     = "TRANSPORT_PREPARATIONS_LISTED"
+	outcomeDeliveryDispatchPendingsListed  = "DELIVERY_DISPATCH_PENDINGS_LISTED"
+	outcomeReaskCadencesListed             = "REASK_CADENCES_LISTED"
+	outcomeActualFulfillmentUnformedListed = "ACTUAL_FULFILLMENT_UNFORMED_LISTED"
 )
 
 const (
-	registryTransportSchedule       = "transport-schedule"
-	registryScheduleTemplate        = "transport-schedule-template"
-	registryCapacityPool            = "capacity-pool"
-	registryTransportHandover       = "transport-handover"
-	registryEffectiveDelivery       = "effective-delivery"
-	registryCarrierMasterDocument   = "carrier-master-document"
-	registryTransportPreparation    = "transport-preparation"
-	registryDeliveryDispatchPending = "delivery-dispatch-pending"
-	registryReaskCadence            = "delivery-dispatch-reask-cadence"
+	registryTransportSchedule         = "transport-schedule"
+	registryScheduleTemplate          = "transport-schedule-template"
+	registryCapacityPool              = "capacity-pool"
+	registryTransportHandover         = "transport-handover"
+	registryEffectiveDelivery         = "effective-delivery"
+	registryCarrierMasterDocument     = "carrier-master-document"
+	registryTransportPreparation      = "transport-preparation"
+	registryDeliveryDispatchPending   = "delivery-dispatch-pending"
+	registryReaskCadence              = "delivery-dispatch-reask-cadence"
+	registryActualFulfillmentUnformed = "actual-fulfillment-unformed"
 )
 
 // NewQueryTransportFulfillmentRecordsEndpoint 交回运输履约查阅页各本册子的 HTTP
@@ -115,7 +122,8 @@ func NewQueryTransportFulfillmentRecordsEndpoint(
 			registry != registryCarrierMasterDocument &&
 			registry != registryTransportPreparation &&
 			registry != registryDeliveryDispatchPending &&
-			registry != registryReaskCadence {
+			registry != registryReaskCadence &&
+			registry != registryActualFulfillmentUnformed {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
@@ -144,6 +152,8 @@ func NewQueryTransportFulfillmentRecordsEndpoint(
 			serveDeliveryDispatchPendings(response, request, reader, tenant, query.Limit)
 		case registryReaskCadence:
 			serveReaskCadences(response, request, reader, tenant, query.Limit)
+		case registryActualFulfillmentUnformed:
+			serveActualFulfillmentUnformed(response, request, reader, tenant, query.Limit)
 		}
 	})
 }
@@ -666,6 +676,63 @@ func serveReaskCadences(
 		})
 	}
 	writeJSON(response, http.StatusOK, reaskCadenceListResponse{Outcome: outcomeReaskCadencesListed, Cadences: bodies})
+}
+
+// serveActualFulfillmentUnformed 上列实际履约未形成册里还未形成的那几件（ADR-0231 决定六）：哪一段的哪个对象、在哪份委托下按第几版答的、
+// 为什么没形成、问的是哪一版协议、参与哪一刻结束、首次与最近一次答复时刻。空册答 []。这是要人去补的清单：续办各格不同——未配置与收尾
+// 两格是租户发一版接得住的协议再给委托换版，缺采购上下文是给委托换版、记下版本。
+func serveActualFulfillmentUnformed(
+	response http.ResponseWriter,
+	request *http.Request,
+	reader ReviewCatalogueReader,
+	tenant domain.TenantID,
+	limit int,
+) {
+	rows, err := reader.ListActualFulfillmentUnformed(request.Context(), tenant, limit)
+	if err != nil {
+		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+		return
+	}
+	bodies := make([]actualFulfillmentUnformedBody, 0, len(rows))
+	for _, row := range rows {
+		entry := row.Entry
+		bodies = append(bodies, actualFulfillmentUnformedBody{
+			Segment:            entry.Key.Segment.String(),
+			Object:             entry.Key.Object.String(),
+			Commission:         entry.Commission.String(),
+			CommissionRevision: entry.Revision,
+			Reason:             entry.Reason.String(),
+			AgreementObject:    entry.Agreement.Object(),
+			AgreementVersion:   entry.Agreement.Version(),
+			EndedAt:            rfc3339(entry.EndedAt),
+			FirstAnsweredAt:    rfc3339(row.FirstAnsweredAt),
+			LastAnsweredAt:     rfc3339(row.LastAnsweredAt),
+		})
+	}
+	writeJSON(response, http.StatusOK, actualFulfillmentUnformedListResponse{
+		Outcome:  outcomeActualFulfillmentUnformedListed,
+		Unformed: bodies,
+	})
+}
+
+type actualFulfillmentUnformedListResponse struct {
+	Outcome  string                          `json:"outcome"`
+	Unformed []actualFulfillmentUnformedBody `json:"unformed"`
+}
+
+// actualFulfillmentUnformedBody 是册上一件。endedAt 是参与终点的业务时间，两个答复时刻是登记时刻；agreementObject 与 agreementVersion 是
+// 那一次问 PC 的那一版，缺采购上下文那一格没问、两键不出现。
+type actualFulfillmentUnformedBody struct {
+	Segment            string `json:"segment"`
+	Object             string `json:"object"`
+	Commission         string `json:"commission"`
+	CommissionRevision int    `json:"commissionRevision"`
+	Reason             string `json:"reason"`
+	AgreementObject    string `json:"agreementObject,omitempty"`
+	AgreementVersion   string `json:"agreementVersion,omitempty"`
+	EndedAt            string `json:"endedAt"`
+	FirstAnsweredAt    string `json:"firstAnsweredAt"`
+	LastAnsweredAt     string `json:"lastAnsweredAt"`
 }
 
 type reaskCadenceListResponse struct {

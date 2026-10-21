@@ -279,3 +279,12 @@ func unformedReasonOf(raw string) ports.ActualFulfillmentUnformedReason {
 	}
 	return ports.ActualFulfillmentUnformedReasonInvalid
 }
+
+// ListActualFulfillmentUnformed 是查阅页那一格（ports.ReviewCatalogueRead）。不另写一条查询：筛法与排序只在册适配器的同名方法一处。
+func (catalogue *ReviewCatalogue) ListActualFulfillmentUnformed(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]ports.ActualFulfillmentUnformedRecord, error) {
+	return (&ActualFulfillmentUnformeds{db: catalogue.db}).ListActualFulfillmentUnformed(ctx, tenant, limit)
+}

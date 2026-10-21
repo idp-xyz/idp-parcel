@@ -127,6 +127,13 @@ func (stub unreachableReviewCatalogue) ListDeliveryDispatchReaskCadences(
 	return nil, nil
 }
 
+func (stub unreachableReviewCatalogue) ListActualFulfillmentUnformed(
+	context.Context, domain.TenantID, int,
+) ([]ports.ActualFulfillmentUnformedRecord, error) {
+	stub.refuse("actual fulfillment unformed")
+	return nil, nil
+}
+
 // stubReviewCatalogue 是各本册子的读口替身，记下读口收到的键。
 type stubReviewCatalogue struct {
 	schedules       []ports.TransportScheduleCatalogueRow
@@ -138,6 +145,7 @@ type stubReviewCatalogue struct {
 	preparations    []ports.TransportPreparationCatalogueRow
 	pendings        []ports.DeliveryDispatchPendingRecord
 	cadences        []ports.DeliveryDispatchReaskCadenceRecord
+	unformed        []ports.ActualFulfillmentUnformedRecord
 	err             error
 
 	gotTenant string
@@ -205,6 +213,13 @@ func (stub *stubReviewCatalogue) ListDeliveryDispatchReaskCadences(
 ) ([]ports.DeliveryDispatchReaskCadenceRecord, error) {
 	stub.gotTenant, stub.gotLimit = tenant.String(), limit
 	return stub.cadences, stub.err
+}
+
+func (stub *stubReviewCatalogue) ListActualFulfillmentUnformed(
+	_ context.Context, tenant domain.TenantID, limit int,
+) ([]ports.ActualFulfillmentUnformedRecord, error) {
+	stub.gotTenant, stub.gotLimit = tenant.String(), limit
+	return stub.unformed, stub.err
 }
 
 func recordsEndpoint(register *stubReviewCatalogue) http.Handler {
