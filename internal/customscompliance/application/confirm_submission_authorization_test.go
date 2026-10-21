@@ -157,8 +157,8 @@ func TestARecordedAuthorizationIsNeitherReformedNorDisplaced(t *testing.T) {
 	}
 }
 
-// Covers: AT-CC-444——就绪没登答未决并指名就绪未配置，就绪已失效答不再就绪，读不动答未决并指名读不动；三格都不形成授权
-// （AT-CC-105「当前就绪不存在、已经失效」的确认口半边：就绪未配置不折成请求未受理，与提交执行口同一口径）。
+// Covers: AT-CC-444——就绪没登答未决并指名就绪未配置，就绪已失效答不再就绪，读不动答未决并指名读不动；三格都不形成授权。
+// 「就绪没登」不折成请求未受理，与提交执行口同一口径（ADR-0227 决定八）。
 func TestAConfirmationWithoutCurrentReadinessFormsNoAuthorization(t *testing.T) {
 	for _, test := range []struct {
 		name      string
