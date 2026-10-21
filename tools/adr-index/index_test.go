@@ -131,6 +131,7 @@ func TestReadRecordsDoesNotMistakeOutgoingOrBackgroundForIncoming(t *testing.T) 
 	fronts := map[string]string{
 		"去向带冒号":    "Status: Accepted（2026-10-19。部分停用：[ADR-0002](./0002-b.md) 决定一一句）",
 		"整份取代":     "Status: Superseded by [ADR-0002](./0002-b.md)（已由 [ADR-0002](./0002-b.md) 取代）",
+		"草案史里的已由":  "Status: Accepted（2026-09-01，此前草案的 Decision 二已由 [ADR-0002](./0002-b.md) 否决，修订后接受）",
 		"转述背景的那一句": "Status: Accepted（2026-10-19。承 ADR-0002 里由 [ADR-0002](./0002-b.md) 决定一停用的那一句）",
 	}
 	for name, status := range fronts {
