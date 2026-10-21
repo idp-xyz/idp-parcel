@@ -1,7 +1,7 @@
 # 88 自动形成没赶上的参与不补：采用晚到、协议后补条件的段，实际履约发生项要人记得去登
 
 Category: enhancement
-Status: in-progress——评审已修，待复评与进 main，分支 claude-dcg88。此前 in-progress——完工待评审；2026-10-21 认领；ready-for-agent——2026-10-20 上线就绪评估归 R1（上线前必修），裁定与批次见 [triage-2026-10-19](../triage-2026-10-19.md)「上线就绪评估（2026-10-20）」。此前 needs-triage——2026-10-19 票 [67](./67-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0218](../../../docs/adr/0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md) 越权风险点 1、6。
+Status: in-progress——二轮评审已修，待进 main，分支 claude-dcg88。此前 in-progress——一轮评审已修、待复评；完工待评审；2026-10-21 认领；ready-for-agent——2026-10-20 上线就绪评估归 R1（上线前必修），裁定与批次见 [triage-2026-10-19](../triage-2026-10-19.md)「上线就绪评估（2026-10-20）」。此前 needs-triage——2026-10-19 票 [67](./67-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0218](../../../docs/adr/0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md) 越权风险点 1、6。
 Blocked by: 无
 
 ## 现象
@@ -85,3 +85,25 @@ M
 未采纳：无。
 
 验证：`go build ./...`、`go vet ./...`、变更 Go 文件 `gofmt -l` 干净；`scripts/test-full.sh ./internal/transportfulfillment/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./cmd/parcel-transport-register/ ./cmd/parcel-access-register/ ./internal/accessidentity/... ./internal/architecture/... ./migrations/...`：23 ok、1 无测试文件、0 FAIL；一次性库 `dcg88_seed` 上 `seed.sh` 实灌零报错，灌完删库。
+
+### 二轮（2026-10-21，隔离评审无阻断；变基到 main `6b0074d0` 之后修）
+
+必修逐条：
+
+1. **补形成把编程缺陷也吞进册**——已修。`formationDefectOf` 只认数据层面、逐件的确定性错误：`domain.ErrAmbiguousJourney`、`application.ErrAdoptionWithoutCommission`，以及新立的哨兵 `application.ErrCommissionAgreementDrift`（登记用例里委托记着那一版、PC 却答不在册或供应商不符，与拼回另一串快照，两处 `fmt.Errorf` 都用 `%w` 包它）。其余错误（集外的值、形状错、册拒写）原样上抛；登记用例答出本路不该见的一格交回缺陷处置、整封响亮失败；两种都不进册，同一封里排在后面的那一件也不再问（`catchUpSegment` 停在第一件不入账的，换版门铃不再往下一段问）。消费门 `settleCatchUp` 为每一件 `FormationDefectRecorded` 打一条 error 级日志：门铃的键、段、对象、整封的处置与完整错误；整封重投或烧完预算时册上留不下，日志带 `disposition` 说明这一次那几条落没落进册。派发装配的 `dispatchSources` 不带 logger、共享装配文件不归特性改，补形成照进程日志同一形状（JSON 写到标准输出）另建一只，记进 ADR-0231 越权风险点 6。用例：编程缺陷整封失败不进册 `catch_up_actual_fulfillment_test.go::TestAProgrammingDefectFailsTheWholeDoorbellAndRecordsNothing`（核对口集外一格上抛、只交登记一次；不适用、采购上下文冲突、集外答复三种答复在采用与换版两扇门铃上都答缺陷、册空）；数据缺陷进册 `::TestADataDefectIsRecordedWhileTheRestOfTheDoorbellForms`（旅程平局、委托读不回、核对答不在册、快照走岔四种，册上是类别码加完整错误、答复带回对象与错误）；有日志 `internal/transportfulfillment/adapters/inbox/actual_fulfillment_catch_up_consumers_test.go::TestARecordedDataDefectIsLoggedWithItsWholeError`（真库消费门，一条 ERROR、各维与完整错误逐字相等）。变异核对：把 `formationDefectOf` 的默认分支改回「认作数据违约」，编程缺陷那一例转红。
+2. **陈旧注释**——已修。`formEnded` 头注与内注、自动形成文件头注、`actualFulfillmentFormerOver` 头注、`CatchUpActualFulfillmentResult.Disposition`、`registrationDisposition` 都改成「登记答了不形成的在形成后半里写；交接、交付两路缺陷响亮失败，补形成那一路由 `recordFormationDefect` 记数据缺陷」一个口径；补形成哨兵名单的注释改说「编程缺陷上抛、数据缺陷不上抛」。顺手去掉登记用例里一句「同下面的快照走岔」的方位指代，改指哨兵名。
+3. **迁移号**——`transport_fulfillment/0048` 归本票（本票先于票 57 进 main），票 57 顺延。「并进一份」那一笔的提交说明改写，不再说「0048 让给票 57」；一轮记录里的变基一句补「票 57 顺延」。
+4. **历史卫生**——已改写。变基到 `6b0074d0` 之后，`git filter-branch --tree-filter` 只动文件名：先 `0048_actual_fulfillment_unformed.sql` → `0049_…`，再 `0047_transport_commission_agreement_revision.sql` → `0048_…`、`0047_commission_agreement_revision_and_actual_fulfillment_unformed.sql` → `0048_…`；同时 `--msg-filter` 只改两笔的说明。核对：改写前后末端树同一个（`26a6e51a`）；原先同含 145 的 `0047_booking_answer_bounce.sql` 与本票 `0047_…` 的那 18 笔，现在本票的文件号都在 0048 之后；「迁移号引用对齐到 TF 0048」那一笔只剩六个文件里的注释、ADR 与票面引用，说明改写；那 18 笔的第一笔与最后一笔上 `scripts/test-full.sh ./internal/transportfulfillment/adapters/postgres` 都绿；`refs/original` 已删；没压扁。逐笔 build、vet 与 `./internal/architecture/...`：分支上每一笔（变基、改写之后，连同本轮三笔）从导出的干净树上跑，全部 rc=0。
+5. **缺陷原文只截前段**——已修。册上记类别码连同完整错误原文，不截；截断常量删掉。查阅页照原样转写。
+6. **注释枚举缺陷类别**——已修。`ports.UnformedFormationDefect`、`ActualFulfillmentUnformedEntry` 的注释与迁移 0048 的表头、`defect` 列注释都改指 `formationDefectOf`，不再列类别；表头里「写它的只有补形成那一处」改成「只有实际履约形成编排」。
+7. **换版门铃读不回采用指名的段**——选了记成已知限制：ADR-0231 越权风险点 16。不逐段记：册的一行是一件参与，读不回的段说不出有哪几件；采用落册时段在册（迁移 0035 的外键）、段又不删，今天走不到。
+8. **补用例**——缺陷路上读不动、写不动重投且不进册，与已被盖住时照已形成了结：`::TestTheDefectPathRetriesWhatItCannotReadAndSettlesWhatIsCovered`。「`REGISTRATION_ANSWERED` 那一格带号」不再适用：登记用例答出本路不该见的一格已改为整封响亮失败、不进册（第 1 条），那一格连同带号的写法一并删掉；进册的数据缺陷都停在登记答复之前，号与问的那一版不记，查阅页不带 `commissionRevision`。
+
+未采纳：无。
+
+探针重跑（评审留下的探针拷进本会话 scratchpad `dcg88/probes/`，只读参考原件未动）：
+
+- 回显探针 `zz_echo_probe_test.go`：在 main `6b0074d0` 与本分支末端各跑一次，订舱三种、取消两种、实际履约三种采购上下文冲突共八格的原始响应体逐字节相同（`cmp` 无差，sha256 前缀 `03d45e80`），也与评审在 `4384a85a` 上留下的 `echo-4384a85a.txt` 逐字节相同。**覆盖面不比 main 少**的依据：没换过版时三种冲突回显与 main 逐字节相同，`agreementRevision` 只在作答的那一版是换版（号 2 起）时出现（`AT-TF-299`）；交接、交付两路的处置格没有变（`registrationDisposition` 逐格同 main，`FormActualFulfillmentResult.Disposition` 只多出补形成专用的一格；`formEnded` 只在入账的答复上多写一次未形成册，写不动时那一封重投），main 上 ADR-0218 那几条用例在本分支照旧全绿；补形成与未形成册是新增的路，不改 main 已有任何一格的答复。
+- 缺陷路探针 `zz_defect_probe_test.go`：「盖住读不动」答 `RETRY OCCURRENCE_REGISTRY_UNAVAILABLE`、不进册；「未形成册写不动」答 `RETRY UNFORMED_REGISTER_UNAVAILABLE`；「封闭集外的核对答复」现在在探针自己的 `onAdoption` 里以「采用门铃不该上抛：register charge occurrence: supplier agreement check answered outside its closed set」失败——探针当时盼的 `DATA_VIOLATION` 不再出现，正是第 1 条要的改变；同一情形由 `TestAProgrammingDefectFailsTheWholeDoorbellAndRecordsNothing/核对口集外一格` 钉住。
+
+验证：`go build ./...`、`go vet ./...`、变更 Go 文件 `gofmt -l` 干净；`scripts/test-full.sh ./internal/transportfulfillment/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./cmd/parcel-transport-register/ ./cmd/parcel-access-register/ ./internal/accessidentity/... ./internal/architecture/... ./migrations/...`：23 ok、1 无测试文件、0 FAIL；一次性库 `dcg88_seed` 上 `seed.sh` 实灌零报错（475 一节 RECORDED），灌完删库。没跑全量；没重生成机制清点、ADR 索引与 AT 计数。
