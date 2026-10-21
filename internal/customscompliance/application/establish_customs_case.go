@@ -16,7 +16,8 @@ import (
 var ErrUnexpectedCaseSave = errors.New("customs compliance: unexpected customs case save outcome")
 
 // EstablishCaseOutcome 是建案请求的应用处理结果（UC-CC-001 的裁决分格：已建立、重复、
-// 冲突、不适用、未受理、未决各占一格）。
+// 冲突、不适用、未受理、未决各占一格）。`包裹未接受`是未受理里单拆出来的一格：恢复动作不同——
+// 改请求换不来它，要等那件包裹所在的委托被接受（UC-CC-001 启动条件），或指名对包裹。
 type EstablishCaseOutcome uint8
 
 const (
@@ -27,6 +28,7 @@ const (
 	CaseNotRequired
 	EstablishCaseNotAccepted
 	EstablishCaseUndecided
+	CaseParcelNotAccepted
 )
 
 func (outcome EstablishCaseOutcome) String() string {
@@ -43,6 +45,38 @@ func (outcome EstablishCaseOutcome) String() string {
 		return "NOT_ACCEPTED"
 	case EstablishCaseUndecided:
 		return "UNDECIDED"
+	case CaseParcelNotAccepted:
+		return "PARCEL_NOT_ACCEPTED"
+	default:
+		return ""
+	}
+}
+
+// EstablishCaseUndecidedReason 指名建案停在哪一步等谁。建案要求规则未登记与读不动分两格：前者是租户还没配，
+// 后者是依赖故障，续办的人不同。
+type EstablishCaseUndecidedReason uint8
+
+const (
+	EstablishCaseUndecidedReasonNone EstablishCaseUndecidedReason = iota
+	CaseRequirementUnavailable
+	CaseRequirementUnconfigured
+	CaseStoreUnavailable
+	CaseIdentityUnavailable
+	AcceptedParcelSourceUnavailable
+)
+
+func (reason EstablishCaseUndecidedReason) String() string {
+	switch reason {
+	case CaseRequirementUnavailable:
+		return "CASE_REQUIREMENT_UNAVAILABLE"
+	case CaseRequirementUnconfigured:
+		return "CASE_REQUIREMENT_UNCONFIGURED"
+	case CaseStoreUnavailable:
+		return "CASE_STORE_UNAVAILABLE"
+	case CaseIdentityUnavailable:
+		return "CASE_IDENTITY_UNAVAILABLE"
+	case AcceptedParcelSourceUnavailable:
+		return "ACCEPTED_PARCEL_SOURCE_UNAVAILABLE"
 	default:
 		return ""
 	}
@@ -62,14 +96,26 @@ type EstablishCaseCommand struct {
 
 type EstablishCaseResult struct {
 	outcome     EstablishCaseOutcome
+	reason      EstablishCaseUndecidedReason
 	customsCase domain.CustomsCase
 	hasCase     bool
 	basis       string
 	handoffRef  string
+	unaccepted  []string
 }
 
 func (result EstablishCaseResult) Outcome() EstablishCaseOutcome {
 	return result.outcome
+}
+
+// UndecidedReason 只在`未决`时非零。
+func (result EstablishCaseResult) UndecidedReason() EstablishCaseUndecidedReason {
+	return result.reason
+}
+
+// UnacceptedParcels 只在`包裹未接受`时非空：请求里不在任何当前已接受委托里的那几件，按请求顺序。
+func (result EstablishCaseResult) UnacceptedParcels() []string {
+	return append([]string(nil), result.unaccepted...)
 }
 
 func (result EstablishCaseResult) Case() (domain.CustomsCase, bool) {
@@ -119,8 +165,11 @@ func (handler *EstablishCaseHandler) Handle(
 
 	judgment, configured, err := handler.deps.Requirement.JudgeCaseRequirement(
 		ctx, command.TenantID, command.Jurisdiction, command.Direction, command.Procedure)
-	if err != nil || !configured {
-		return EstablishCaseResult{outcome: EstablishCaseUndecided}, nil
+	if err != nil {
+		return establishUndecided(CaseRequirementUnavailable), nil
+	}
+	if !configured {
+		return establishUndecided(CaseRequirementUnconfigured), nil
 	}
 	if !judgment.Required {
 		return EstablishCaseResult{outcome: CaseNotRequired, basis: judgment.Basis}, nil
@@ -135,7 +184,7 @@ func (handler *EstablishCaseHandler) Handle(
 	}
 	existing, found, err := handler.deps.Store.FindByKey(ctx, key)
 	if err != nil {
-		return EstablishCaseResult{outcome: EstablishCaseUndecided}, nil
+		return establishUndecided(CaseStoreUnavailable), nil
 	}
 	if found {
 		return handler.settleAgainstExisting(existing, command), nil
@@ -143,7 +192,7 @@ func (handler *EstablishCaseHandler) Handle(
 
 	caseID, err := handler.deps.Identity.MintCaseID(ctx)
 	if err != nil {
-		return EstablishCaseResult{outcome: EstablishCaseUndecided}, nil
+		return establishUndecided(CaseIdentityUnavailable), nil
 	}
 	customsCase, err := domain.EstablishCustomsCase(domain.CustomsCaseSpec{
 		ID:            caseID,
@@ -161,7 +210,7 @@ func (handler *EstablishCaseHandler) Handle(
 
 	saved, err := handler.deps.Store.Save(ctx, key, customsCase)
 	if err != nil {
-		return EstablishCaseResult{outcome: EstablishCaseUndecided}, nil
+		return establishUndecided(CaseStoreUnavailable), nil
 	}
 	switch saved {
 	case ports.CustomsCaseSaved:
@@ -171,12 +220,16 @@ func (handler *EstablishCaseHandler) Handle(
 	case ports.CustomsCaseAlreadyRecorded:
 		winner, found, err := handler.deps.Store.FindByKey(ctx, key)
 		if err != nil || !found {
-			return EstablishCaseResult{outcome: EstablishCaseUndecided}, nil
+			return establishUndecided(CaseStoreUnavailable), nil
 		}
 		return handler.settleAgainstExisting(winner, command), nil
 	default:
 		return EstablishCaseResult{}, fmt.Errorf("%w: %d", ErrUnexpectedCaseSave, saved)
 	}
+}
+
+func establishUndecided(reason EstablishCaseUndecidedReason) EstablishCaseResult {
+	return EstablishCaseResult{outcome: EstablishCaseUndecided, reason: reason}
 }
 
 // settleAgainstExisting 分辨重复与范围冲突：同包裹集是重放（返原案件），异包裹集是

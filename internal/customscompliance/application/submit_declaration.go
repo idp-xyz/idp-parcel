@@ -114,6 +114,8 @@ func (reason DeclarationUndecidedReason) String() string {
 // SubmitDeclarationCommand 携带一次提交申报的全部输入：单元与组成、所属案件、资料/
 // 角色快照引用、发送目标与首次尝试的已知结果。案件维必填（ADR-0073 决定五）：案件
 // 先于申报存在，提交前按标识反查核存在——不核等于让调用方随手填一个字符串。
+//
+// 首次尝试的结果是`已登记待发送`时 SentAt 必须为零值：发送还没发生（ADR-0227 决定三）。运营命令面只走这一格。
 type SubmitDeclarationCommand struct {
 	TenantID      domain.TenantID
 	UnitID        string
@@ -199,9 +201,10 @@ func (handler *SubmitDeclarationHandler) Handle(
 	if err != nil {
 		return SubmitDeclarationResult{outcome: DeclarationNotAccepted}, nil
 	}
+	// 首次尝试的结果与发送时间先在受理处配对（domain.AttemptSendTimeMatches）：等到成版那一步才拒，单元行已经落了。
 	if strings.TrimSpace(command.TenantID.String()) == "" ||
 		strings.TrimSpace(command.Target) == "" ||
-		command.SentAt.IsZero() {
+		!domain.AttemptSendTimeMatches(command.InitialResult, command.SentAt) {
 		return SubmitDeclarationResult{outcome: DeclarationNotAccepted}, nil
 	}
 

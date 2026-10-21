@@ -445,9 +445,9 @@ func (result AttemptResult) String() string {
 	}
 }
 
-// sentShapeHolds 是发送时间与结果的配对：已登记待发送没有发送时间，其余三值必有。两头任一错配都是在替一次没发生的
-// 发送编时间，或给一次发生了的发送抹掉时间。
-func sentShapeHolds(result AttemptResult, sentAt time.Time) bool {
+// AttemptSendTimeMatches 是发送时间与结果的配对：已登记待发送没有发送时间，其余三值必有。两头任一错配都是在替一次
+// 没发生的发送编时间，或给一次发生了的发送抹掉时间。导出给编排在受理处先挡，构造与读回两道门用的是同一份。
+func AttemptSendTimeMatches(result AttemptResult, sentAt time.Time) bool {
 	return (result == AttemptRegisteredPendingSend) == sentAt.IsZero()
 }
 
@@ -471,14 +471,14 @@ type SubmissionAttempt struct {
 	sentAt     time.Time
 }
 
-// InitialAttempt 形成版本的首次发送尝试。结果为`已登记待发送`时不得带发送时间，其余结果必带（sentShapeHolds）。
+// InitialAttempt 形成版本的首次发送尝试。结果为`已登记待发送`时不得带发送时间，其余结果必带（AttemptSendTimeMatches）。
 func InitialAttempt(
 	version CustomsSubmissionVersion,
 	target string,
 	result AttemptResult,
 	sentAt time.Time,
 ) (SubmissionAttempt, error) {
-	if !version.id.valid() || target == "" || !result.valid() || !sentShapeHolds(result, sentAt) {
+	if !version.id.valid() || target == "" || !result.valid() || !AttemptSendTimeMatches(result, sentAt) {
 		return SubmissionAttempt{}, ErrInvalidSubmissionAttempt
 	}
 	attempt := SubmissionAttempt{
@@ -577,7 +577,7 @@ func RehydrateSubmissionAttempt(snapshot SubmissionAttemptSnapshot) (SubmissionA
 		snapshot.Sequence < 1 ||
 		snapshot.Target == "" ||
 		!snapshot.Result.valid() ||
-		!sentShapeHolds(snapshot.Result, snapshot.SentAt) {
+		!AttemptSendTimeMatches(snapshot.Result, snapshot.SentAt) {
 		return SubmissionAttempt{}, ErrInvalidSubmissionAttempt
 	}
 	if (snapshot.Sequence == 1) == snapshot.SafeResend.valid() {
