@@ -1,7 +1,7 @@
 # 146 出发前问询与出发两口向设备逐对象列出段内全部对象
 
 Category: bug
-Status: ready-for-agent——2026-10-20 代决复核立（上线前必修），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: in-progress——2026-10-21 认领（146、94 同批），分支 claude-dcg146。此前 ready-for-agent——2026-10-20 代决复核立（上线前必修），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 R11；ADR-0219 越权风险点 5（连带 ADR-0205 越权风险点 13）
 
