@@ -39,9 +39,10 @@
 | 成功结束 | 对明确主要计费范围形成估价、冻结、费用明细或追加调整，并保存计算展开 |
 | 负向结束 | 适用规则明确证明该范围不产生相应费用或控制结果不适用 |
 | 待判断结束 | 来源测量、计价时点、规则、责任、账户、币种或报告币换算依据不足；原币与合同结算币不同而评价未携带换算步骤时同样保持待判断，不由本用例补算 |
+| 未配置结束 | 发起评价之前租户取值没登记：BUY 答 `BUY_EVALUATION_TRIGGER_UNCONFIGURED`（没登原因或没登费用项目），SELL 答 `SELL_EVALUATION_REQUEST_UNCONFIGURED`（结算政策没采用、结算账户不在册或计费时点没采用）；不发起请求，记进发起停办册，补登之后续办，结算政策没采用没有续办路（[ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定四与越权风险点 13） |
 | 冲突结束 | 合格输入对相同范围、版本或金额互相矛盾，无法依据已确认规则裁决 |
 | 未受理结束 | 请求主体、租户、责任法人、客户账户、主要范围或权限不能合法关联 |
-| 未形成结束 | 计算、判断、持久化或结果发布因技术原因未完成 |
+| 未形成结束 | 计算、判断、持久化或结果发布因技术原因未完成；与 SELL 请求上的`未形成`结论不是一回事，那是评价失败或计价没形成评价（`AT-SA-180`、`AT-SA-198`） |
 
 ## 权威依据
 
@@ -82,11 +83,11 @@
 | 客户计费重量已形成 | 按客户合同和计量规则确定客户收费依据 | 原始测量、命中规则、单位、精度、取整和版本 | 不覆盖供应商计费重量或原始测量 |
 | 供应商计费重量已形成 | 按采购协议和计量规则确定成本收费依据 | 同上及供应商协议版本 | 不因客户规则变化而重写 |
 | 供应商预期成本已形成 | 运输收费发生项、采购商业依据和 BUY `PricingEvaluation` 形成内部预期金额 | 发生项、协议、评价、费用项目、主要范围、数量/单位、计算展开、币种和版本 | 不冒充供应商账单主张、审核应付或付款 |
-| 客户费用预估/暂估已形成 | 金额可用于报价、冻结或经营预测，但尚未满足最终确认条件；预估阶段可以派生当前有效客户预估费用 | 费用项目、范围、规则、计算展开、币种、有效期及预估版本采用关系 | 不当作客户运营应收、最终应收应付或会计收入 |
+| 客户费用预估/暂估已形成 | 金额可用于经营预测，但尚未满足最终确认条件；受理前估价与冻结不引用它（[ADR-0179](../../adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 决定一）；预估阶段可以派生当前有效客户预估费用 | 费用项目、范围、规则、计算展开、币种、有效期及预估版本采用关系 | 不当作客户运营应收、最终应收应付或会计收入 |
 | 费用已确认 | 费用类型的确认条件已满足 | 责任法人、相对方、方向、账户、金额和来源事实 | 不覆盖原测量或规则版本 |
 | 计价纠错/商业让利已形成 | 计价输入或适用规则更正，或有效商业授权，改变普通费用金额责任 | 原费用、明确调整类型、证据、新旧依据、借/贷方向和账期 | 不改写原费用或已发布对账单，不形成赔付、索赔退款、追偿或供应商账单贷项 |
 | 资金已冻结/已释放/已转扣费 | 依据合同控制策略占用、释放或转为正式费用 | 控制策略、账户、范围、金额、状态和补偿关系 | 不表示收款、支付或委托决定 |
-| 计价明确排除已接收 | `parcel-pricing` 返回不可计价，即按该价卡不存在可成立的价格 | 评价身份、方向、目的、版本清单和排除依据 | 不形成任何费用行（含零金额），不作为可补齐缺口重试，也不推导包裹终局、拒绝接单或退运决定 |
+| 计价明确排除已接收 | `parcel-pricing` 返回不可计价，即按该价卡不存在可成立的价格 | 评价身份、方向、目的、版本清单和排除依据 | 不形成任何费用行（含零金额），不自动重试——登了新一版价卡之后经续办另起一代（[ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定五），也不推导包裹终局、拒绝接单或退运决定 |
 | 待判断/冲突/未受理/未形成 | 分别表示业务依据不足、合格输入冲突、权限/范围不合法或技术未完成 | 缺口/冲突/失败阶段和续办入口 | 不互相替代或伪装为零费用；不可计价是确定结论，不并入本行 |
 
 ## 主流程
@@ -94,11 +95,11 @@
 | 步骤 | 责任方 | 处理 | 结果 |
 |---:|---|---|---|
 | 1 | `settlement-accounting` | 校验租户、责任法人、客户账户、主要范围、权限和请求身份 | 已受理或未受理 |
-| 2 | `settlement-accounting` / `parcel-pricing` | 发生项原因已登记「发生项形成」时，结算才提交主要范围、计算目的和合格来源引用；没登记则待判断，不发起请求。运输履约交出发生项已形成信封时，结算按引用回读那一份发生项，发生项与供应商协议取自它、费用项目取 BUY 触发册那一行、主要范围取协议的商业范围；没登原因或没登费用项目答未配置（[ADR-0208](../../adr/0208-buy-evaluation-is-requested-from-the-charge-occurrence-formed-envelope.md)）。SELL·客户费用另有按包裹计费时点发起的一路：结算账户采用的时点到来时，结算提交包裹、计价范围与计价基准时点（[ADR-0190](../../adr/0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md)）。`parcel-pricing` 采用测量、运输收费发生项、其他履约、面单及已解析商业依据形成不可变计价输入快照 | 计价输入版本或待判断 |
+| 2 | `settlement-accounting` / `parcel-pricing` | BUY·供应商成本：运输履约交出发生项已形成信封时，结算按引用回读那一份发生项，发生项与供应商协议取自它、费用项目取 BUY 触发册那一行、主要范围取协议的商业范围，提交主要范围、计算目的和合格来源引用；没登原因或没登费用项目答未配置（`BUY_EVALUATION_TRIGGER_UNCONFIGURED`，原因 `OCCURRENCE_REASON_NOT_REGISTERED` 或 `FEE_ITEM_NOT_REGISTERED`），不发起请求，在 BUY 发起停办册上记下这一拍（[ADR-0208](../../adr/0208-buy-evaluation-is-requested-from-the-charge-occurrence-formed-envelope.md)、[ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定四）。SELL·客户费用按包裹计费时点发起：结算账户采用的时点到来时，结算提交包裹、计价范围与计价基准时点（[ADR-0190](../../adr/0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md)）；发生项原因触发册只回答发不发起、不铸造 SELL 请求（[ADR-0169](../../adr/0169-sell-evaluation-forms-a-customer-charge.md) 决定三、ADR-0190 越权风险点 4）。`parcel-pricing` 采用测量、运输收费发生项、其他履约、面单及已解析商业依据形成不可变计价输入快照 | 计价输入版本或待判断 |
 | 3 | `parcel-pricing` | 按价格方向和固定版本清单执行客户/供应商评价，分别形成计价重量、基础价、附加费、折扣和取整结果 | 评价完成、待判断、冲突、不可计价或未形成 |
-| 4 | `settlement-accounting` | 校验评价与费用项目、责任法人、主要范围、确认条件和结算账户的映射。包裹计费时点那一路按评价回指读回 SELL 请求，结论记在请求上（[ADR-0190](../../adr/0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 决定五、[ADR-0198](../../adr/0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md)）。BUY·供应商成本评价按回指读回 BUY 评价请求，取请求上的合格来源引用，结论不记在请求上（[ADR-0200](../../adr/0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md)） | 可采用的结算依据或待判断 |
+| 4 | `settlement-accounting` | 校验评价与费用项目、责任法人、主要范围、确认条件和结算账户的映射。包裹计费时点那一路按评价回指读回 SELL 请求，结论记在请求上（[ADR-0190](../../adr/0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 决定五、[ADR-0198](../../adr/0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md)）。BUY·供应商成本评价按回指读回 BUY 评价请求，取请求上的合格来源引用；BUY 请求册不设状态格，采用不了的各格在请求上记停因（[ADR-0200](../../adr/0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md)、ADR-0229 决定三） | 可采用的结算依据或待判断 |
 | 5 | `settlement-accounting` | 保存评价引用、结算采用快照、责任/范围解释和金额展开；原币与合同结算币不同时，直接采用评价内的原币金额、汇率序列版本和换算步骤作为换算依据 | 预估或暂估费用 |
-| 6 | `settlement-accounting` | 按费用类型确认条件形成确认费用，或保持暂估 | 确认费用、待判断或不成立范围 |
+| 6 | `settlement-accounting` | 按费用类型确认条件形成确认费用，或保持暂估；确认同笔按费用项目的归属日形态与所属结算账户的对账安排形成结算归属日，判不出不挡确认（[ADR-0269](../../adr/0269-business-time-zone-and-cutoff-belong-to-the-statement-arrangement-of-the-settlement-account-and-the-cut-admits-by-attribution-date.md) 决定三） | 确认费用、待判断或不成立范围 |
 | 7 | `settlement-accounting` | 按已唯一解析的结算政策范围和商业策略形成估价、冻结、信用暴露或限制；不适用时保存依据 | 独立财务控制结果 |
 | 8 | `settlement-accounting` | 对迟到或更正依据形成计价纠错，对有效授权形成商业让利；非索赔客户费用退款只能作为这两类调整的结果 | 计价纠错、商业让利或当前无需调整；其他调整转交其唯一创建用例 |
 | 9 | `settlement-accounting` | 发布结果意图并供接受、对账、供应商匹配和经营分析引用 | 稳定结果或可恢复的发布失败 |
@@ -107,7 +108,7 @@
 
 ### 费用明细
 
-- `预估 → 暂估 → 确认` 只在该费用类型的条件满足时转换；不适用的阶段可以直接形成确认或不成立，但必须保存依据。
+- `预估 → 暂估 → 确认` 只在该费用类型的条件满足时转换；不适用的阶段可以直接形成确认或不成立，但必须保存依据。预估与暂估是形成那一步给出的结论，预估不随服务发生或计费时点到来自动转为暂估；包裹计费时点那一路形成预估，停在预估直到确认（[ADR-0270](../../adr/0270-a-charge-stage-is-given-by-the-judgement-that-forms-it-and-an-estimate-does-not-become-provisional-with-time.md)）。
 - 同一主要计费范围和截至时点存在多个客户预估版本时，按有效性、更正和替代关系派生当前有效客户预估费用；新预估、失效或替代只形成新采用结果，不覆盖原预估版本。
 - 已确认普通客户费用遇到迟到事实或计价规则更正时追加计价纠错；有效商业授权降低普通客户费用时追加商业让利。渠道作废或退款结果本身不产生调整，只有适用计价或让利规则成立时才能形成非索赔客户费用退款。
 - 供应商预期成本的计价纠错仍由本用例形成，但不得修改供应商账单主张或审核应付；供应商账单贷项由 `UC-SA-004` 形成。客户赔付、索赔费用退款、应追偿金额、追偿认可金额及其调整由 `UC-SA-007` 形成。
@@ -117,7 +118,7 @@
 
 ### 接受前财务控制
 
-- 合同要求估价时，估价可以引用预估费用，但不把预估直接确认为客户应收。
+- 合同要求估价时，本用例按结算账户的受理前估价采用登记，以逐件 SELL 试算合计形成估价；估价不引用、也不形成费用、预估费用或应收应付，没登记答未配置（[ADR-0179](../../adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 决定一、二、五）。
 - `可用余额 → 已冻结` 必须关联明确账户、金额、提交版本和控制策略；重复请求返回原冻结。
 - 接受失败、拒绝、放弃或冻结依据失效时形成 `已释放`；接受已经成立但响应或事件投递失败时保留合法冻结并等待查询/补偿。
 - `已冻结 → 已扣费` 只在费用确认和业务关联条件满足时发生；最终费用高于冻结时完整形成费用并留下差额，不截断金额。
@@ -160,7 +161,7 @@
 | `AT-SA-047` | 接受已成立但事件投递失败 | 保留合法冻结和接受前结果，只恢复同一发布意图 |
 | `AT-SA-048` | 最终费用高于冻结 | 完整形成确认费用，差额形成欠款/信用暴露，不截断费用 |
 | `AT-SA-049` | 合同明确接受前无财务控制 | 保存商业不适用依据，不制造零金额冻结或信用通过 |
-| `AT-SA-050` | 规则或币种版本缺失 | 保持待判断，不使用默认价格、币种或汇率 |
+| `AT-SA-050` | 规则或币种版本缺失 | 不形成费用，不使用默认价格、币种或汇率；包裹计费时点那一路与 BUY 那一路上没有在用价卡见 `AT-SA-198` |
 | `AT-SA-051` | 同一请求身份携带不同金额 | 形成请求冲突，原结果不被覆盖 |
 | `AT-SA-052` | 同一测量通过两个来源重复到达 | 只采用一次；重复来源保留引用，不重复计费 |
 | `AT-SA-053` | 客户计费规则更正但供应商规则未变 | 只追加客户费用计价纠错，供应商预期成本保持原版本 |
@@ -177,15 +178,15 @@
 | `AT-SA-172` | 同一金额或接受前控制范围同时命中预付和账期政策 | 形成模式适用冲突，不冻结、不形成信用通过或默认无控制，也不向委托接受提供可通过结果 |
 | `AT-SA-173` | 相同输入快照、方向、目的和版本清单重复请求 | 引用同一 `PricingEvaluation` 并幂等返回既有费用采用，不在结算中重复算价 |
 | `AT-SA-174` | SELL 评价完成但价格费用代码没有唯一费用项目映射 | 结算保持待判断，不创建占位费用或把价格代码直接当费用项目 |
-| `AT-SA-175` | 节点实测重量超出价卡明确排除范围，`parcel-pricing` 返回不可计价 | 保存排除依据与评价引用，不形成任何费用行（含零金额），不转为待判断反复重试，也不据此形成包裹终局或退运决定 |
+| `AT-SA-175` | 节点实测重量超出价卡明确排除范围，`parcel-pricing` 返回不可计价 | 不形成任何费用行（含零金额），也不据此形成包裹终局或退运决定；排除依据与评价引用留在评价上、经计价按回指读得到，SELL 请求记`不可计价`连同停因，BUY 请求记停因；不转为待判断、不自动重试，登了新一版价卡之后经续办另起一代（[ADR-0198](../../adr/0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md) 越权风险点 3、[ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定五） |
 | `AT-SA-176` | BUY 价卡为美元、合同结算币为人民币，评价已在内部完成换算并携带换算步骤 | 采用评价内的原币金额、汇率序列版本和换算步骤作为换算依据形成结算币金额，不重算也不改用其他汇率；报告币金额另行派生且不覆盖原币或结算币 |
 | `AT-SA-177` | 原币与合同结算币不同，但评价未携带换算步骤或汇率序列版本 | 保持待判断并记录缺口，不自行取汇率补算，也不以原币金额直接充当结算币金额 |
 | `AT-SA-178` | 评价所引用的汇率序列期次事后被更正 | 由 `parcel-pricing` 以新序列版本形成新评价，本用例据其追加计价纠错；原费用与原换算依据保留，不改写已保存的汇率序列版本 |
-| `AT-SA-179` | 包裹计费时点那一路，SELL·客户费用评价已完成，但价卡没声明金额取整 | SELL 请求记待判断，不形成费用、不换写金额，入账不重投；补登声明之后这一份也不回补（[ADR-0198](../../adr/0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md) 决定二） |
+| `AT-SA-179` | 包裹计费时点那一路，SELL·客户费用评价已完成，但价卡没声明金额取整 | SELL 请求记`待判断`、停因取整未声明（`AMOUNT_ROUNDING_UNDECLARED`），不形成费用、不换写金额，入账不重投；登一版声明了金额取整的新卡并收尾旧版之后，经续办另起新一代（[ADR-0198](../../adr/0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md) 决定二，[ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定三、五，[ADR-0234](../../adr/0234-an-older-price-card-version-leaves-new-selections-only-through-an-explicit-closure-for-a-named-successor.md) 决定四） |
 | `AT-SA-180` | 包裹计费时点那一路，SELL·客户费用评价失败 | SELL 请求记`未形成`、停因评价失败，入账不重投；补登参数之后经续办另起新一代（[ADR-0198](../../adr/0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md) 决定一，「停在已提交」一句由 [ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定三停用） |
 | `AT-SA-181` | 包裹计费时点那一路，评价回指的 SELL 请求不在册上，或评价结算币种与请求快照不同 | 不形成费用、不改记请求，作两侧矛盾上抛为可见的发布失败，不按待判断或不归本路静默入账（[ADR-0198](../../adr/0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md) 决定四） |
 | `AT-SA-182` | BUY·供应商成本评价已完成，回指一份在册的 BUY 评价请求 | 以请求上的发生项、费用项目、供应商协议与评价形成供应商预期成本首版，版本标识由请求标识派生；同一封重投或另一封指同一份评价都不多形成（[ADR-0200](../../adr/0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md) 决定一、二） |
-| `AT-SA-183` | 回指在册请求的 BUY 评价不可计价、冲突、待判断、失败、跨币种没带换算步骤，或价卡没声明金额取整 | 不形成任何成本行，不换写金额，入账不重投；BUY 请求册记各自的停因，补登参数之后经续办另起新一代（[ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定三）。`AT-SA-175` 保存排除依据、`AT-SA-177` 记录缺口在本路仍是例外：排除依据与缺口在评价上（[ADR-0200](../../adr/0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md) 决定三与越权风险点 2） |
+| `AT-SA-183` | 回指在册请求的 BUY 评价不可计价、冲突、待判断、失败、跨币种没带换算步骤，或价卡没声明金额取整 | 不形成任何成本行，不换写金额，入账不重投；BUY 请求册记各自的停因，补登参数之后经续办另起新一代（[ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定三）。排除依据照 `AT-SA-175` 留在评价上；`AT-SA-177` 记录缺口在本路仍是例外：缺口在评价上（[ADR-0200](../../adr/0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md) 决定三与越权风险点 2） |
 | `AT-SA-184` | BUY 评价回指的请求不在 BUY 请求册上，派生版本上已有另一份内容，或评价已完成而形成时未受理（例如合计为零） | 不形成成本，作两侧矛盾上抛为可见的发布失败，不按不归本路静默入账（[ADR-0200](../../adr/0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md) 决定四） |
 | `AT-SA-185` | 运输履约交出一份首版发生项已形成信封，原因在 BUY 触发册上登了「发生项形成」与费用项目 | 按引用回读发生项，以发生项、它固定的供应商协议、触发册的费用项目和协议的商业范围登记恰一份 BUY 评价请求并交信封；同一封重投答已存在，不登第二份（[ADR-0208](../../adr/0208-buy-evaluation-is-requested-from-the-charge-occurrence-formed-envelope.md) 决定一至四） |
 | `AT-SA-186` | 同上，但原因没登、或登了没登费用项目，或这一版是失效版本（失效之后长出的替代版本照常发起，见 `AT-SA-210`） | 不发起请求、不问协议，入账不重投；未配置点名缺哪一格，并在 BUY 发起停办册上记下这一拍，补登触发册之后经续办发起（[ADR-0208](../../adr/0208-buy-evaluation-is-requested-from-the-charge-occurrence-formed-envelope.md) 决定三、五；「补登之后不回补」由 [ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定四停用）。失效版本不发起、不记；替代版本没登触发行时与首版一样记停办、补登后续办（[ADR-0232](../../adr/0232-a-segment-commission-adoption-is-withdrawn-by-decision-only-before-occurrences-form-and-occurrence-revision-drives-the-supplier-cost-correction.md) 决定八收窄 ADR-0229 决定四那一格） |
@@ -216,9 +217,15 @@
 | `PAR-SET-02` | 客户商业价格政策、SELL 价卡/费率表/策略版本、费用项目映射、计价基准、税务口径和可复算样例 | 只能稳定骨架或隔离验证 |
 | `PAR-SET-03` | 供应商协议、运输收费发生条件、BUY 价卡/费率表/策略版本、责任范围、币种和可复算样例 | 不能形成生产供应商成本 |
 | `PAR-SET-04` | 原币清单、报告币换算依据、适用时点和版本 | 不得形成生产报告币金额或汇兑差额 |
-| `PAR-SET-11` | 计价参考序列的登记实例：燃油当周费率的来源标识与取值凭证，汇率的牌价来源、牌价类型、取值时点与加点规则，以及各自的登记责任方 | 评价无法携带可采用的换算步骤，本用例的结算币金额保持待判断 |
+| `PAR-SET-11` | 计价参考序列的登记实例：燃油当周费率的来源标识与取值凭证，汇率的牌价来源、牌价类型、取值时点与加点规则，以及各自的登记责任方；其中取值时点规则与加点规则只作登记，评价的期次按计价基准时点取、不加点（[ADR-0260](../../adr/0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md) 决定三） | 评价无法携带可采用的换算步骤，本用例的结算币金额保持待判断 |
 | `PAR-SET-07` | 周期费用和人工调整规则，或权威 `N/A` | 最低消费、保底量、返利和人工调整不得进入生产 |
 | `PAR-COM-08/09/10/15` | 结算模式适用范围、合同币种、截单/付款条件和财务控制策略 | 接受前控制和客户计费分支保持待配置 |
 | `PAR-NFR-06` | 计算、冻结、发布和恢复目标 | 不能形成生产运行基线 |
+
+## 给开发的交接
+
+| 规则或验收行 | 现状缺口 | 承接 |
+|---|---|---|
+| 主流程步 6 的结算归属日随确认形成 | 确认不形成归属日；归属日判定编排在 `cmd/` 下没有构造，时区与截单时刻还登在费用项目一册上；规则不变 | [code/11](../../../.scratch/docs-consistency/code/11-statement-cut-does-not-check-the-settlement-attribution-date.md) |
 
 完成本用例只证明纯计价评价、财务采用、费用生命周期和接受前财务控制能够保持独立、可追溯和追加式；客户对账、供应商审核、真实收付款和经营结果分别由其他 PN-07 用例形成。
