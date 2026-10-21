@@ -92,3 +92,13 @@ none
 - `scripts/test-full.sh`（专用一次性实例、走 socket）跑：触到的包及其反向依赖（含 `cmd/parcel-api`、`cmd/parcel-dispatch`、`cmd/parcel-frontline-import`、`cmd/parcel-node-operations-register`、`cmd/parcel-transport-register`，NO / TF / VE 各适配器与应用包，NR、PS、PP、SA 的 TF / NO 消费侧适配器）、`./internal/visibilityexception/...`、`./internal/architecture/...`、`./migrations/...`、`./tools/...`：全部 ok，0 FAIL。未跑全量。
 - 未重生成 ADR 索引、AT 计数与机制清点（`adr-index -check` 与 `at-coverage-counts -check` 此刻如预期报不一致，留给进 main 时重生成）。
 
+## 评审记录（2026-10-20，隔离评审，无阻断项；修订在同一分支 claude-dcg42，不 rebase，main 已到 `2a7cab9c`，进 main 时由协调方重放）
+
+1. **展开缓存按对象引用共用，成员包裹走 `parcel()` 不认种类**——已修（`0f61f99d`）。成员认出的包裹号恰与段里另一件单元同串、且袋先被展开时，原先按包裹问关务记下一格，那件单元随后取到它就永不展开，可能读出假干净，违背 ADR-0214 决定二。取的修法：每个对象引用（段里的与成员认出的）都先经 `object()` 问节点作业是不是单元，再问关务；`parcel()` 只在认出「不是单元」之后调。不取「缓存按（种类，对象）分开」：读数里一个对象引用只能有一格，分开就会出现同一引用两格、读数立不起来。代价是每件成员多一次成员关系读，ADR-0225 决定四、后果与越权风险点 5 随之改（`23c9f3d6`，ADR 尚未进 main，正文就地改）。用例 `TestAMemberParcelNamedLikeAUnitIsStillReadAsTheUnit`（`AT-TF-278`）：去掉修法即失败。
+2. **AT-NO-129 补恰在时点的三条边界**——已修（`5513c5f5`）。`TestFactsAtExactlyTheMomentCount`：业务时间恰等于问询时点的移入算在、移出不在、关闭之后不装任何东西（关闭前一微秒照成员事实答），与 `ObjectsUnderControlAt` 含起点的口径一致；UC-NO-003 那一行写明（`23c9f3d6`）。
+3. **TF `MovementFacts.FindByKey` 重建失败与读不动同形，VE 包成 `ErrMovementFactNotVisible` 进未决名单**——已登记到票 [114](./114-deterministic-failures-answered-as-retryable-undecided-across-consumers.md)（`ed36a5db`），点名本票新增的几种只能由越权写入造成的装不回情形，修法方向「`FindByKey` 重建失败也包 `ports.ErrMovementFactRecordUnreadable`，VE 归记录不一致」；本票不改。
+4. **AT-TF-275 空号**——取成本低的一种：AT 盘点本票追记写明 275 空着（票 53 号段 273–277 只用了 273–274，本票从 276 起），不补编（`ed36a5db`）。
+5. **NO 适配器「是不是单元」的 EXISTS 写了两遍**——按评审意见不修，已记 ADR-0225 越权风险点 2。
+
+修订后验证：`go build ./...`、`go vet ./...`、`gofmt -l` 干净；两笔修订代码提交各自单独 build/vet 通过；`scripts/test-full.sh` 覆盖触到的包及其反向依赖（含 `cmd/parcel-api`、`cmd/parcel-dispatch`、`cmd/parcel-frontline-import`、`cmd/parcel-node-operations-register`、`cmd/parcel-transport-register`）、`./internal/visibilityexception/...`、`./internal/architecture/...`、`./migrations/...`、`./tools/...`，52 个包 ok、0 FAIL。
+
