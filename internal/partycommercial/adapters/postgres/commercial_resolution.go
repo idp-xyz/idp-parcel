@@ -190,6 +190,15 @@ type adoptedDocument struct {
 	// 重读，理由与结算政策同一条：正文改一次，已固定的解析就会改口说自己当初授权的是别的额度。
 	// 出处不另写——它就是本项的 Version。
 	CreditBasis *creditBasisDocument `json:"creditBasis,omitempty"`
+	// ProductBase 只在采纳挂合同那一版客户服务规则时出现（ADR-0268 决定一）：在场即「底座已随闭包固定」，其中
+	// Version 缺席是「固定了、没有」。整份版本写下而不只写身份，层次读口才能不回登记册现选、按这一版点读正文。
+	// omitempty：其余各项与 ADR-0268 之前的快照逐字节不变；读回时缺这一格就是之前的那一种（决定三），不补成「没有」。
+	ProductBase *productBaseDocument `json:"productBase,omitempty"`
+}
+
+// productBaseDocument 用指针把「固定了没有」与「固定了一版」分开；整格缺席另是一种，见 adoptedDocument.ProductBase。
+type productBaseDocument struct {
+	Version *versionDocument `json:"version,omitempty"`
 }
 
 // creditBasisDocument 镜像 domain.CreditLimit 的两格封闭：恰一在场。两格分列而不是「一个数加
@@ -256,6 +265,13 @@ func documentOfClosure(closure domain.CommercialClosure) closureDocument {
 		}
 		if credit, ok := adopted.CreditBasis(); ok {
 			item.CreditBasis = documentOfCreditBasis(credit)
+		}
+		if base, hasBase, fixed := adopted.InheritedProductBase(); fixed {
+			item.ProductBase = &productBaseDocument{}
+			if hasBase {
+				version := documentOfVersion(base)
+				item.ProductBase.Version = &version
+			}
 		}
 		document.Adopted = append(document.Adopted, item)
 	}
@@ -372,6 +388,17 @@ func (document closureDocument) closure() (domain.CommercialClosure, error) {
 			}
 			spec.CreditLimit = limit
 			spec.HasCreditBasis = true
+		}
+		if item.ProductBase != nil {
+			spec.ProductBaseFixed = true
+			if item.ProductBase.Version != nil {
+				base, err := item.ProductBase.Version.version()
+				if err != nil {
+					return domain.CommercialClosure{}, err
+				}
+				spec.ProductBase = base
+				spec.HasProductBase = true
+			}
 		}
 		adopted = append(adopted, spec)
 		bases = append(bases, kind)
