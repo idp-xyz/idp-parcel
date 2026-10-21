@@ -33,7 +33,7 @@ Blocked by: 无（01 进 main 后开工；票 57+15 已进 main）
 |---|---|---|---|
 | H1 `AT-SA-179`「补登声明之后这一份也不回补」 | A | 已改 | UC-SA-002 `AT-SA-179`：记`待判断`、停因 `AMOUNT_ROUNDING_UNDECLARED`，登新卡并收尾旧版后经续办另起新一代（ADR-0198 决定二，ADR-0229 决定三、五，ADR-0234 决定四） |
 | H2 多份 UC「未登记则待判断」 | A | 已改 | UC-SA-001 输入「商业责任」与主流程金额文法一步（`ADVANCE_UNDECIDED` 带 `CONTRACT_UNCONFIGURED` / `RECOVERY_GRAMMAR_UNCONFIGURED`）；UC-SA-002 主流程发起评价一步的前半句删去、按 ADR-0208 写 `BUY_EVALUATION_TRIGGER_UNCONFIGURED`；UC-SA-003 主流程读归属日一步（`CHARGE_ATTRIBUTION_UNCONFIGURED`）；UC-SA-004 主流程审核一步（`AUDIT_UNDECIDED` 带 `AUDIT_ESCALATION_UNCONFIGURED`）；UC-SA-006 主流程分法一步（`ALLOCATION_FORM_UNCONFIGURED`）；UC-SA-007 输入「商业责任」与主流程金额文法一步（`CLAIM_UNDECIDED` 带 `CLAIM_RULE_UNCONFIGURED` / `CLAIM_GRAMMAR_UNCONFIGURED`）；六份 UC 元数据补「未配置结束」一行、结果表合并行补`未配置`。审计附带的待核（未配置有的单立结果、有的收在未决结果下当原因）不裁，留 SA owner：文档照代码逐只写明 |
-| H3 同一笔本金多次入账 | B | 代决 ADR-0271；已改；既有代码票写裁向 | CR CONTEXT「资金位置」词条、「分户账与记账」入账与判重两条、「清分、汇付与差异」两条、「代收事实与入账」「分户账资金位置」两节生命周期；[code/14](../code/14-collection-principal-posts-more-than-once-and-shortfall-moves-received-funds.md)「裁向」一节，解除 Blocked by |
+| H3 同一笔本金多次入账 | B | 代决 ADR-0271；已改；既有代码票写裁向 | CR CONTEXT「资金位置」词条、「分户账与记账」入账与判重各条、「清分、汇付与差异」两条、「代收事实与入账」「分户账资金位置」两节生命周期；[code/14](../code/14-collection-principal-posts-more-than-once-and-shortfall-moves-received-funds.md)「裁向」一节，解除 Blocked by |
 | H4 CR CONTEXT 写入账可冲正 | A | 已改 | CR CONTEXT「分户账记账」词条、「分户账与记账」新立「入账不能冲正」一条、「代收事实与入账」来源侧更正一条、「分户账资金位置」错记一条（ADR-0082 Consequences） |
 | H5 `短款`既是位置又是差额 | B | 代决 ADR-0271（与 H3 同一份）；已改；code/14 | CR CONTEXT「资金位置」`短款`、`溢款`两格释义，「差异事项」词条与生命周期，「清分、汇付与差异」差异一条；`待清分` / `应付客户` → `短款` 一条改为只从`渠道在途`落入，补 `待清分` → `溢款` |
 | M1 价卡声明计价基准时点 | A | 已改；GLOSSARY 交横切 | SA CONTEXT 词条「计价基准时点」与「计价、组合与精度」里计价基准时点那一条；票 demo-chain-gaps/141 追记一节；交横切 X1 |
@@ -41,14 +41,14 @@ Blocked by: 无（01 进 main 后开工；票 57+15 已进 main）
 | M3 BUY「结论不记在请求上」 | A | 已改 | UC-SA-002 主流程校验映射一步（ADR-0200、ADR-0229 决定三） |
 | M4 CONTEXT-MAP `settlement-accounting → parcel-pricing` 两句 | A | 交横切 | X2 |
 | M5 发生项原因另册登记写成 SELL 现行路 | A | 已改 | SA CONTEXT「计价、组合与精度」SELL 一条；UC-SA-002 主流程发起评价一步（ADR-0169 决定三与越权风险点 2、ADR-0190 越权风险点 4） |
-| M6 UC-SA-003「结算账户」行混进时区、周期、付款条件 | A | 已改 | UC-SA-003 输入语义契约拆成结算账户、对账安排、付款条件三行 |
+| M6 UC-SA-003「结算账户」行混进时区、周期、付款条件 | A | 已改 | UC-SA-003 输入语义契约拆成结算账户、对账安排、付款条件各一行 |
 | M7 截单不核归属日 | C | 既有代码票写裁向；文档加缺口注 | [code/11](../code/11-statement-cut-does-not-check-the-settlement-attribution-date.md)「裁向」一节（随 ADR-0269），解除 Blocked by；UC-SA-003、UC-SA-002「给开发的交接」 |
 | M8 发生项有效性修订不驱动纠错 | C | 已由票 demo-chain-gaps/15 消解（`5246a8c30` 代码，`0b338da96`、`381274461` 文档） | SA CONTEXT 失效纠错与替代版本一条、UC-SA-002 `AT-SA-186`、`AT-SA-206`–`210` 已随 ADR-0232 改；`AT-SA-164` 在盘点 ① 由撤下测试钉住 |
 | M9 资金映射缺赔付义务、追偿应收 | C | 既有代码票承接；文档加缺口注 | [code/12](../code/12-funds-mapping-has-no-compensation-or-recovery-targets.md)；UC-SA-005、UC-SA-007「给开发的交接」 |
 | M10 GLOSSARY「客户费用退款」 | A | 交横切 | X3 |
 | M11 时区与截单时刻两个所有者 | B | 代决 ADR-0269；已改；code/11 写裁向 | ADR-0168 挂部分停用与越权风险点 3 的回答；SA CONTEXT 词条「截单快照」「对账安排」与「结算账户、对账与争议」里对账单纳入、对账安排、归属日各条；UC-SA-003 目标与边界、输入、元数据、主流程读归属日与形成纳入快照的步骤，新立 `AT-SA-212`、`AT-SA-213`；UC-SA-002 主流程确认费用一步 |
 | M12 ADR-0236 称核销有受控 CLI | A | 已改；入口缺口立代码票 | ADR-0236 Status 行注记「表述更正」与 Links；入口缺口立 [code/46](../code/46-settlement-application-and-reversal-have-no-process-entry.md)；UC-SA-005 状态行与「给开发的交接」 |
-| L1 风险点被回答而无前向指针 | A | 0229 ← 0234 已由文档自洽 01 消解（`caf5d8fe0`）；其余两处已改 | ADR-0190 注记补越权风险点 8 由 ADR-0229 决定四回答；ADR-0198 注记补越权风险点 1、2 由 ADR-0229 部分回答 |
+| L1 风险点被回答而无前向指针 | A | 0229 ← 0234 已由文档自洽 01 消解（`caf5d8fe0`）；ADR-0190、ADR-0198 那几处已改 | ADR-0190 注记补越权风险点 8 由 ADR-0229 决定四回答；ADR-0198 注记补越权风险点 1、2 由 ADR-0229 部分回答 |
 | L2 0158 引文非原句、0179 停 0081 决定六无链 | A | 已由文档自洽 01 消解（`bc8283e33`） | 0081 注记逐格引原句并挂 0158、0156、0179、0157；0179 前段已写去向。0158 正文那句是转述、不带书名号，正文不改 |
 | L3 不可计价「不重试」与续办 | A | 已改；CONTEXT-MAP、GLOSSARY 交横切 | UC-SA-002 结果表「计价明确排除已接收」一行、`AT-SA-175`、`AT-SA-183`；交横切 X4 |
 | L4 阶梯返利漏写逐档取整 | A | 已改 | SA CONTEXT 周期费用一条 |
@@ -62,7 +62,7 @@ Blocked by: 无（01 进 main 后开工；票 57+15 已进 main）
 
 ### 代决与越权风险点
 
-用户授权「你作为业务和系统专家自决」，三份新 ADR 都是会话代决，Status 写明待谁复核，越权风险点见各记录文末。
+用户授权「你作为业务和系统专家自决」，ADR-0269、0270、0271 都是会话代决，Status 写明待谁复核，越权风险点见各记录文末。
 
 - **[ADR-0269](../../../docs/adr/0269-business-time-zone-and-cutoff-belong-to-the-statement-arrangement-of-the-settlement-account-and-the-cut-admits-by-attribution-date.md)（M11，兼 M7 裁向，代 SA owner）**：业务时区与截单时刻只登在按结算账户的对账安排上，归属日判定与截单同读这一份；费用项目一册只登形态；归属日随费用确认形成、此后不变，确认时判不出的截单时当场判；截单命令点名本期最后一个归属日，按它纳入并逐件指名。部分停用 ADR-0168 决定二一句里「时区与截单时刻」那一半与决定三一句里「截单编排仍只读已经形成的归属日」那一半，回答其越权风险点 3。越权风险点：一个结算账户一个时区；对账安排换版不回改已形成的归属日；截单当场判用截单那一刻的版本；截单时刻 0 会把每个时点归到次日（ADR-0168 的判法，不改）；本期最后一个归属日由命令点名。
 - **[ADR-0270](../../../docs/adr/0270-a-charge-stage-is-given-by-the-judgement-that-forms-it-and-an-estimate-does-not-become-provisional-with-time.md)（L8，代 SA owner）**：预估与暂估是形成那一步的结论，预估不随时点自动转为暂估；包裹计费时点那一路形成预估、停在预估直到确认；首发没有形成暂估的路。回答 ADR-0190 越权风险点 7，无条款停用，不改代码。越权风险点：服务已完成的包裹费用仍标预估；首发没有暂估。
@@ -72,7 +72,7 @@ Blocked by: 无（01 进 main 后开工；票 57+15 已进 main）
 
 1. **CR 没有 UC，缺口写在 CR CONTEXT 文末「给开发的交接」**。CR CONTEXT 头部因此不能照抄 NR/NO/VE/PS 那一句「规则与实现的差距见各 UC「给开发的交接」。」，写的是「本上下文还没有 UC，规则与实现的差距见文末「给开发的交接」。」；评审轮协调方裁定由票 10 立 `UC-CR-001` 并把这一节搬过去（交横切 X5）；本票先把那张表的「规则」一列改为只指 CR CONTEXT 的小节名。SA CONTEXT 头部照抄那一句。
 2. **「当前有效客户预估费用」词条与「费用明细」生命周期的预估一条去掉「报价」**，不只是审计点的「冻结」：运营试算是计价用例、只算不存、不交结算（ADR-0152），报价不引结算的预估费用。UC-SA-002 结果表那一行同改。
-3. **六份 UC 元数据补「未配置结束」一行**（H2 的连带）：原「待判断结束」只写依据不足，租户取值没登记的那一格在元数据上没有落处；UC-SA-003「待判断结束」去掉「时区」。UC-SA-002「未形成结束」补一句与 SELL 请求`未形成`结论的分别（后者是评价失败或计价没形成评价，不是技术未完成）。
+3. **UC-SA-001、002、003、004、006、007 元数据补「未配置结束」一行**（H2 的连带）：原「待判断结束」只写依据不足，租户取值没登记的那一格在元数据上没有落处；UC-SA-003「待判断结束」去掉「时区」。UC-SA-002「未形成结束」补一句与 SELL 请求`未形成`结论的分别（后者是评价失败或计价没形成评价，不是技术未完成）。
 4. **`AT-SA-050`（规则或币种版本缺失、原写保持待判断）改写**：包裹计费时点那一路与 BUY 那一路上没有在用价卡记的是`未形成`与停因（`AT-SA-198`），同一场景不能两套结果。
 5. **ADR-0236 的「表述更正」、ADR-0190 / 0198 的风险点回答由本票挂**：审计列给本组、01 的附表没覆盖；照 06 的先例按「本组文档」处理，只动 Status 行与 Links，正文去掉 Status 行与 Links 后与 main 逐字节相同。
 6. **X14（07 交来）在本票改了**：UC-SA-002 `PAR-SET-11` 一行补「取值时点规则与加点规则只作登记，评价的期次按计价基准时点取、不加点」（ADR-0260 决定三）；ADR-0260 已随 07 进 main，链接可解析。票 10 收 07 的 X14 时不必再改。
@@ -85,10 +85,14 @@ Blocked by: 无（01 进 main 后开工；票 57+15 已进 main）
 - **X4 CONTEXT-MAP 与 GLOSSARY「不可计价」不重试**（L3）。引文：CONTEXT-MAP `parcel-pricing → settlement-accounting` 一条「也不把它当作可补齐的缺口反复重试」；GLOSSARY「不可计价」一条「也不得把它当作可补齐的缺口反复重试」。改成什么：补一句不自动重试、登了新一版价卡之后经续办另起一代（ADR-0229 决定五），排除依据留在评价上、请求册只记停因（ADR-0198 越权风险点 3）。依据：UC-SA-002 `AT-SA-175` 与结果表「计价明确排除已接收」一行。
 - **X5 collection-remittance 没有 UC：票 10 立 `UC-CR-001` 并迁交接表**（作者判断 1；协调方 2026-10-21 裁定）。位置：`docs/application/` 下没有 CR 的用例，`docs/application/README.md` 用例总表没有 CR 一行；CR CONTEXT 头部那一句与 NR/NO/VE/PS 的固定句不同，文末暂放「给开发的交接」（「规则」一列只指 CR CONTEXT 的小节名）。改成什么：票 10 立 `UC-CR-001`（登记代收指令、代收事实、分户账入账与移位记账、差异事项与回汇批次，结果码按 `internal/collectionremittance/application` 的 `Outcome`），把 CR CONTEXT 文末那一节搬进它的「给开发的交接」，CR CONTEXT 头部改回固定句「规则与实现的差距见各 UC「给开发的交接」。」，并在 `docs/application/README.md` 补一行。依据：CR 已有完整的编排与结果码（`cmd/parcel-collection-register`）；AGENTS.md「改文档」新增权威文档要在 docs/README 补入口。
 - **X6 `docs/application/README.md` UC-SA-003、UC-SA-005 两行**（M7、M12 的连带）。引文：UC-SA-003「截单快照、对账单、金额争议和既有调整的后续账期纳入边界已形成」；UC-SA-005「产品内唯一真实收付采用、运营映射、未分配、部分/完整核销和撤销边界已形成」。改成什么：照两份 UC 的状态行补「按结算归属日纳入与对账安排登记未落」与「核销与核销撤销还没有进程入口、赔付义务与追偿应收的映射目标未落」。依据：UC-SA-003、UC-SA-005 状态行与「给开发的交接」。
+- **X7 GLOSSARY「截单快照」**（ADR-0269）。引文：「在结算账户的明确时区和截单时刻，对尚未出账且已经具备结算资格的费用范围形成的不可覆盖集合。」改成什么：对一个结算账户、按截单命令点名的本期最后一个归属日，把尚未出账、已经具备结算资格且归属日不晚于它的费用范围形成的不可覆盖集合；归属日在该账户对账安排的业务时区与截单时刻里判定，截单动作的时刻不参与纳入。依据：ADR-0269 决定四；SA CONTEXT 同名词条。
+- **X8 GLOSSARY「资金冻结」**（本票 M2 的连带）。引文：「在面单购买、订单接受或其他授权业务发生前，对运营结算余额中的明确金额作出的临时占用。」改成什么：在委托接受或其他已裁定冻结金额形态的授权业务发生前……；面单交易前的冻结没有裁定过金额从何而来，今天不形成。依据：SA CONTEXT 同名词条与「运营余额、收付款与坏账」里冻结那一条；ADR-0179 决定一、二。
+- **X9 GLOSSARY「当前有效客户预估费用」**（作者判断 2）。引文：「它是费用明细的阶段化当前视图，可用于报价、冻结和预估毛利，不是新的可编辑金额对象，也不是客户运营应收或会计收入。」改成什么：去掉「报价、冻结」，写用于预估口径的经营毛利，受理前估价与资金冻结不引用它。依据：ADR-0152（运营试算只算不存、不交结算）、ADR-0179 决定一；SA CONTEXT 同名词条。
+- **X10 GLOSSARY「结算政策」与「对账安排」撞义**（ADR-0269）。引文：「商业协议对结算币种、收付方向、预付或账期方式、对账周期、付款条件、信用约束、税务处理依据和允许归集范围作出的版本化约定。」改成什么：「对账周期」从结算政策的列举里拿出，或写明结算政策只约定周期的商业口径、对账周期的日历与业务时区、截单时刻属结算账户的对账安排（settlement-accounting 登记）；GLOSSARY 另立「对账安排」词条，与 SA CONTEXT 同名词条一致。依据：ADR-0269 决定一；ADR-0158 决定二「前三格是对账安排，付款条件是商业结算政策」；SA CONTEXT 词条「对账安排」。
 
 ### 检查
 
-- scratchpad 副本（`git archive claude-dc09` 解出）上 `go run ./tools/adr-index` 重生成后 `-check` 退 0；与 main 的 README 比，变的只有 0168、0190、0198、0236 四行注记与新增的 0269–0271 三行。重生成的 README 不随本票提交。
+- scratchpad 副本（`git archive claude-dc09` 解出）上 `go run ./tools/adr-index` 重生成后 `-check` 退 0；与 main 的 README 比，变的只有 0168、0190、0198、0236 的注记行与新增的 0269–0271 三行。重生成的 README 不随本票提交。
 - `go run ./tools/at-coverage-counts -check`：只报计数过期（② 与合计、SA 一行各多 2，即新立的 `AT-SA-212`、`AT-SA-213`），计数由推送方重算。
 - 本票改过的 ADR（0168、0190、0198、0236）去掉 `Status` 行与 Links 节后与 main 逐字节相同（脚本比对，0 份不同）；0168 注记所引被停原句「形态、时区与截单时刻按费用项目另册登记。」「截单编排仍只读已经形成的归属日，本记录不改纳入与发布。」「截单编排不调用这次判定。」在 0168 正文逐字存在；0236 注记所引两句在 0236 正文逐字存在；0190、0198 注记所引风险点原句在各自正文逐字存在，0198 注记另引的一句出自 ADR-0229「对已接受记录的作用」。
 - 改过与新增的全部 `.md` 相对链接与锚点逐个解析，全部能解析。
@@ -102,15 +106,15 @@ Blocked by: 无（01 进 main 后开工；票 57+15 已进 main）
 
 | 条 | 评审意见 | 处置 |
 |---|---|---|
-| B1 阻断 | 「未配置结束」只覆盖改过的那一步，同一 UC 里别的编排的未配置格漏了 | 各行按编排列全、写明码属哪只编排，逐码对过 `String()`：UC-SA-002 补确认触发门（`AdmitSettlementMomentHandler` 的 `SETTLEMENT_MOMENT_UNCONFIGURED`，ADR-0170 决定二）、确认（`ConfirmChargeHandler` 的 `CONFIRM_UNDECIDED` 带 `CONDITION_UNCONFIGURED` / `CONFIRMATION_FACTS_UNCONFIGURED`）、接受前控制（`ApplyPreAcceptanceControlHandler` 的 `CONTROL_NOT_FORMED` 带 `CONTROL_POLICY_NOT_CONFIGURED`、`CREDIT_BASIS_NOT_CONFIGURED`、`CONTROL_AMOUNT_NOT_CONFIGURED`、`ESTIMATE_PRICE_CARD_NOT_CONFIGURED`），SELL 一格写明 `SELL_BILLING_MOMENT_DIFFERS` 同答 `SELL_EVALUATION_REQUEST_UNCONFIGURED` 但不记停办（`sellInitiationStopCauseOf`、`AT-SA-191`）；UC-SA-003 补截单触发门、主流程首步加这一格，`CHARGE_ATTRIBUTION_UNCONFIGURED` 写明属 `JudgeChargeAttributionHandler`、截单今天不交，挂在 code/11 那一行上作落地后的格；UC-SA-004 补接收与匹配（`ReceiveSupplierBillHandler.Handle`）的 `BILL_UNDECIDED` 带 `CONVERSION_UNCONFIGURED`，`AT-SA-096` 与 `PAR-SET-04` 一行改为未配置；UC-SA-006 补 `AllocateCostsHandler` 的 `OPERATING_UNDECIDED` 带 `RULE_UNCONFIGURED`，主流程采用分摊规则一步同补 |
+| B1 阻断 | 「未配置结束」只覆盖改过的那一步，同一 UC 里别的编排的未配置格漏了 | 各行按编排列全、写明码属哪只编排，逐码对过 `String()`：（BUY 一格的编排第 2 轮评审更正为 `TriggerBuyEvaluationOnOccurrenceFormedHandler.Trigger`，ADR-0164 触发面另写半句）UC-SA-002 补确认触发门（`AdmitSettlementMomentHandler` 的 `SETTLEMENT_MOMENT_UNCONFIGURED`，ADR-0170 决定二）、确认（`ConfirmChargeHandler` 的 `CONFIRM_UNDECIDED` 带 `CONDITION_UNCONFIGURED` / `CONFIRMATION_FACTS_UNCONFIGURED`）、接受前控制（`ApplyPreAcceptanceControlHandler` 的 `CONTROL_NOT_FORMED` 带 `CONTROL_POLICY_NOT_CONFIGURED`、`CREDIT_BASIS_NOT_CONFIGURED`、`CONTROL_AMOUNT_NOT_CONFIGURED`、`ESTIMATE_PRICE_CARD_NOT_CONFIGURED`），SELL 一格写明 `SELL_BILLING_MOMENT_DIFFERS` 同答 `SELL_EVALUATION_REQUEST_UNCONFIGURED` 但不记停办（`sellInitiationStopCauseOf`、`AT-SA-191`）；UC-SA-003 补截单触发门、主流程首步加这一格，`CHARGE_ATTRIBUTION_UNCONFIGURED` 写明属 `JudgeChargeAttributionHandler`、截单今天不交，挂在 code/11 那一行上作落地后的格；UC-SA-004 补接收与匹配（`ReceiveSupplierBillHandler.Handle`）的 `BILL_UNDECIDED` 带 `CONVERSION_UNCONFIGURED`，`AT-SA-096` 与 `PAR-SET-04` 一行改为未配置；UC-SA-006 补 `AllocateCostsHandler` 的 `OPERATING_UNDECIDED` 带 `RULE_UNCONFIGURED`，主流程采用分摊规则一步同补 |
 | B2 阻断 | UC-SA-002 费用明细首条前后两种口径 | 改为「预估或暂估 → 确认只在该费用类型的条件满足时发生；阶段由形成那一步给出」，去掉「预估 → 暂估」的转换说法 |
 | 1 | ADR-0271 把`渠道在途`当成按指令的余额，代码按分户账键判 | 照协调方裁定按指令：决定二写明移位上限是同一指令已入账报告减去已移位、不挪用同账别的指令的在途款，并补候选「按分户账算」的否决；决定四、索引注记写明短款金额按指令；越权风险点 3 改写；CR CONTEXT 两条与资金位置生命周期同步；code/14「移位」一项改准（`SubledgerBalance.Admit` 今天按账判，要另加按指令的上限），「差额来源」与测试两项同步。**一处没照字面**：协调方写的「`溢款` = 到账 − 已入账报告」，在决定二下到账移不过已入账报告，这个差恒不大于零；落进`待清分`、能判溢款的是相对指令多出的那部分，所以写成「该指令已移入`待清分`的到账减去指令金额」。若协调方另有所指，请再裁 |
-| 2 | 0168、0190、0198 注记里回答风险点写「无条款停用」，与回答方别的停用自相矛盾 | 三份注记里新加的回答各处改为「这一回答不另停条款」 |
+| 2 | 0168、0190、0198 注记里回答风险点写「无条款停用」，与回答方别的停用自相矛盾 | 0168、0190、0198 注记里新加的回答各处改为「这一回答不另停条款」 |
 | 3 | ADR-0270 决定一的去向漏了失效与替代 | 补「预估失效、暂估不再成立或被新版本替代时追加失效或替代关系，原记录保留」，注记同步 |
 | 4 | ADR-0270 Context 引的是改写前的 CONTEXT | Context 开头注明「以下所引 settlement-accounting CONTEXT 原文是本记录接受前的文字」 |
 | 5 | CR 的 UC | 照裁定：X5 改写为票 10 立 `UC-CR-001` 并迁交接表；CR CONTEXT 交接表「规则」一列改为只指小节名，那一节末尾注明待迁 |
 | 6 | 截单快照、UC-SA-003 首段与首步对齐 ADR-0269 决定四 | SA CONTEXT「截单快照」词条改按本期最后一个归属日、`CutOffAt` 只记在快照上；UC-SA-003 目标与边界首段、主流程首步去掉账户时区 |
-| 7 | `AT-SA-213` 与「未配置结束」一套结果 | 两处与 ADR-0269 决定四（补一条）同写：那一件不入本期并指名，其余合格费用照常纳入、草稿照常形成；一件都入不了本期时不形成草稿，整笔答未配置并指名缺哪一册 |
+| 7 | `AT-SA-213` 与「未配置结束」一套结果 | `AT-SA-213`、「未配置结束」与 ADR-0269 决定四（补一条）同写：那一件不入本期并指名，其余合格费用照常纳入、草稿照常形成；一件都入不了本期时不形成草稿，整笔答未配置并指名缺哪一册 |
 | 8 | `AT-SA-050` 币种那半 | 补「币种或汇率缺失时……见 `AT-SA-177`」 |
 | 9 | 冻结一条补现状、「资金冻结」词条列举对齐 | 规则补「面单交易前的冻结没有裁定过金额从何而来，本上下文今天不为面单交易形成冻结」；词条列举改为「委托接受或其他已裁定冻结金额形态的授权业务」（代码核过：SA 应用层没有面单交易的冻结路） |
 | 10 | 新概念补词条 | SA Language 立「对账安排」；CR Language 立「入账记账与移位记账」；ADR-0271 去掉「入账层 / 移位层」，旁证在决定一里一句定义 |

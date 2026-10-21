@@ -42,12 +42,12 @@ M：唯一约束（迁移另取号）与编排判重；移位金额核对；短�
 
 ## 裁向（文档自洽 09，2026-10-21；评审轮改为按指令判）
 
-[ADR-0271](../../../docs/adr/0271-collection-principal-enters-the-ledger-only-on-the-channel-collection-report-and-shortfall-comes-only-from-in-transit.md) 裁定，本票照它实现；「最小的诚实修法」里「第二次换标识入账答`已入账`并回指第一笔」那半句按下面「判重」一项改为答内容冲突：
+[ADR-0271](../../../docs/adr/0271-collection-principal-enters-the-ledger-only-on-the-channel-collection-report-and-shortfall-comes-only-from-in-transit.md) 裁定，本票照它实现；「最小的诚实修法」里「第二次换标识入账答`已入账`并回指第一笔」那半句按本节「判重」一项改为答内容冲突：
 
 - **入账**：只有渠道代收报告（`CHANNEL_COLLECTION_REPORT`）能自外部来源入账，去向`渠道在途`、金额等于事实金额。`CollectionFact.IntakePosition()` 只对这一来源层级有位置；收件人付款与渠道回款通知凭它记任何一笔都答`NOT_ACCEPTED`。
-- **移位**：运营企业真实到账（`OPERATOR_BANK_CREDIT`）只收`渠道在途` → `待清分`，金额等于事实金额；不再能自外部来源入账。余额守卫今天按分户账键判（`SubledgerBalance.Admit` 只看这本账的`渠道在途`余额），同账别的指令的在途款也算得进来；要另加按指令的上限：同一指令已入账的渠道代收报告金额减去该指令已移位的金额，不够答`UNDERFUNDED`。
+- **移位**：运营企业真实到账（`OPERATOR_BANK_CREDIT`）只收`渠道在途` → `待清分`，金额等于事实金额；不再能自外部来源入账。余额守卫今天按分户账键判（`SubledgerBalance.Admit` 只看这本账的`渠道在途`余额），同账别的指令的在途款也算得进来；要另加按指令的上限：移位上限 = 该指令已入账报告 − 该指令自`渠道在途`移出的金额（到账移位与短款落账，减去冲正回`渠道在途`的），不够答`UNDERFUNDED`。
 - **判重**：凭代收事实的记账按（依据种类、依据引用）唯一。同一记账标识重放仍答`EXISTING`；换一个记账标识再凭同一条事实记账答`CONTENT_CONFLICT`，不记账。编排判重先于余额守卫，与库上的唯一约束（迁移另取号）同一口径。
-- **差额来源**：凭短款事项的记账只收`渠道在途` → `短款`，金额上限同样按指令（该指令已入账报告减去已移位）；凭溢款事项的落账只收`待清分` → `溢款`（`溢款` → `应付客户` 的归属确认照旧）；不满足答`NOT_ACCEPTED`。领域构造门与迁移 CHECK 各补一份。差异事项登记不因没有可落的余额而拒收：指令金额与报告之差只登事项、不记账。
+- **差额来源**：凭短款事项的记账只收`渠道在途` → `短款`，凭溢款事项的落账只收`待清分` → `溢款`（`溢款` → `应付客户` 的归属确认照旧），两者金额都等于差异事项金额；不满足答`NOT_ACCEPTED`。差异事项的金额按指令核：短款 = 该指令已入账报告 − 该指令自`渠道在途`移出的金额 − 经 settlement-accounting 认可的协议抵扣；溢款 = 该指令移入`待清分`的到账 − 指令金额 − 该指令已落入`溢款`的金额。该指令有停在余额不足的到账时不受理短款事项的落账。协议抵扣的记账形未裁，本票不做，认可的抵扣额留在`渠道在途`，见 [code/47](./47-agreed-cod-offset-has-no-posting-form.md)。领域构造门与迁移 CHECK 各补一份。差异事项登记不因没有可落的余额而拒收：指令金额与报告之差只登事项、不记账。
 - **测试**：`application/handler_test.go` 里凭真实到账自外部来源入账的各用例（短款、冲正等）改成渠道报告先入`渠道在途`、到账再移位；短款用例改成渠道报告入`渠道在途`、到账移位、差额自`渠道在途`落入`短款`；补收件人付款、渠道代收报告、渠道回款通知各自入账，同一事实换标识，到账多于该指令报告，同账两条指令一单的到账借不到另一单的在途款，溢款自`渠道在途`各一例。演示种子已是这一形（一条指令），不改。
 - **注释**：`IntakePosition`、`factPostingShapeHolds`、`discrepancyPostingShapeHolds` 与 `DiscrepancyItem.SettlementPosition` 的注释随之改；[code/45](./45-sa-cr-comments-carry-counts-that-no-longer-hold.md) 里 `collectionremittance` 包的那几条注释可一并改。
 
