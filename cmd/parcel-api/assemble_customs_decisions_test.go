@@ -56,11 +56,18 @@ type customsDecisionFixture struct {
 func registerOperator(t *testing.T, db *bentopg.DB, operators *aipg.OperatorRegistry, subject string,
 	interval accessidentity.EffectiveInterval, kinds ...accessidentity.DecisionKind) []string {
 	t.Helper()
+	return registerOperatorIn(t, db, operators, customsDecisionTenant, subject, interval, kinds...)
+}
+
+// registerOperatorIn 同 registerOperator，租户由调用方给。
+func registerOperatorIn(t *testing.T, db *bentopg.DB, operators *aipg.OperatorRegistry, tenant, subject string,
+	interval accessidentity.EffectiveInterval, kinds ...accessidentity.DecisionKind) []string {
+	t.Helper()
 	operator, err := accessidentity.NewOperatorSubject(customsDecisionIssuer, subject)
 	if err != nil {
 		t.Fatal(err)
 	}
-	binding, err := accessidentity.NewOperatorBinding(operator, customsDecisionTenant, "SYN-BIND-BASIS-PSB18")
+	binding, err := accessidentity.NewOperatorBinding(operator, tenant, "SYN-BIND-BASIS-PSB18")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +75,7 @@ func registerOperator(t *testing.T, db *bentopg.DB, operators *aipg.OperatorRegi
 	var ids []string
 	for _, kind := range kinds {
 		id := "SYN-GRANT-" + subject + "-" + kind.String()
-		grant, err := accessidentity.NewOperationDecisionGrant(customsDecisionTenant, id, operator, kind, interval, "SYN-GRANT-BASIS-PSB18")
+		grant, err := accessidentity.NewOperationDecisionGrant(tenant, id, operator, kind, interval, "SYN-GRANT-BASIS-PSB18")
 		if err != nil {
 			t.Fatal(err)
 		}
