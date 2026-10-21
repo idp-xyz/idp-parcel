@@ -45,3 +45,12 @@ type MovementFactRegistry interface {
 	FindByKey(ctx context.Context, key MovementFactKey) (MovementFactRecord, bool, error)
 	Save(ctx context.Context, record MovementFactRecord) (MovementFactSaveOutcome, error)
 }
+
+// MovementFactsOfSegment 按段列出声明了这一段的在册移动事实（ADR-0224 决定二）。
+//
+// 它为消费方的补派生开：事实可以先于它声明的段登记（ADR-0205 决定四），那一刻消费方沿段取不到对象；对象日后凭控制事实进段时，
+// 消费方要按段找回这些事实。交回每一个版本，同一条事实的版本按登记先后排——这正是消费方当初收到信封的次序，补派生照这个次序
+// 逐版走，才与正常路径同形。没有声明这一段的事实交回空切片，不是错误。与登记口分开立：本口只读，给它的消费方不必拿到 Save。
+type MovementFactsOfSegment interface {
+	FindBySegment(ctx context.Context, key FulfillmentSegmentKey) ([]MovementFactRecord, error)
+}

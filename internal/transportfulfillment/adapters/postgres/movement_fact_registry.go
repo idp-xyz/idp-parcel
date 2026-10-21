@@ -41,81 +41,114 @@ func (repository *MovementFacts) FindByKey(
 		return ports.MovementFactRecord{}, false, fmt.Errorf("find movement fact: %w", err)
 	}
 
-	var scheduleRef, kindText, locationRef, sourceRef string
-	var occurredAt, recordedAt time.Time
-	var segmentRef, resourceRef, gateClearance, gateReading, correctsVersion *string
-	var gateReadingDetail []byte
-	var correctedAt *time.Time
+	var row movementFactRow
 	err = querier.QueryRow(ctx,
-		`SELECT schedule_ref, kind, location_ref, source_ref, occurred_at,
-		        segment_ref, resource_ref, gate_clearance, gate_reading, gate_reading_detail,
-		        corrects_version, corrected_at, recorded_at
+		`SELECT `+movementFactColumns+`
 		   FROM transport_fulfillment.transport_movement_fact
 		  WHERE tenant_id = $1 AND fact_ref = $2 AND version = $3`,
 		key.TenantID.String(), key.Fact.String(), key.Version.String(),
-	).Scan(&scheduleRef, &kindText, &locationRef, &sourceRef, &occurredAt,
-		&segmentRef, &resourceRef, &gateClearance, &gateReading, &gateReadingDetail,
-		&correctsVersion, &correctedAt, &recordedAt)
+	).Scan(row.targets()...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.MovementFactRecord{}, false, nil
 	}
 	if err != nil {
 		return ports.MovementFactRecord{}, false, fmt.Errorf("find movement fact: %w", err)
 	}
+	record, err := row.record(key.TenantID)
+	if err != nil {
+		return ports.MovementFactRecord{}, false, fmt.Errorf("find movement fact: %w", err)
+	}
+	return record, true, nil
+}
 
+// movementFactColumns 是装回一个版本要读的各列，次序与 movementFactRow.targets 一一对应。租户不在其中，由调用方给。
+const movementFactColumns = `fact_ref, version, schedule_ref, kind, location_ref, source_ref, occurred_at,
+		        segment_ref, resource_ref, gate_clearance, gate_reading, gate_reading_detail,
+		        corrects_version, corrected_at, recorded_at`
+
+// movementFactRow 是一行装回之前的原样各列。按键取与按段列共用这一份装回：两条读路各写一遍，就会有一条先漏掉日后加的列。
+type movementFactRow struct {
+	factRef, version                                                     string
+	scheduleRef, kindText, locationRef, sourceRef                        string
+	occurredAt, recordedAt                                               time.Time
+	segmentRef, resourceRef, gateClearance, gateReading, correctsVersion *string
+	gateReadingDetail                                                    []byte
+	correctedAt                                                          *time.Time
+}
+
+func (row *movementFactRow) targets() []any {
+	return []any{
+		&row.factRef, &row.version,
+		&row.scheduleRef, &row.kindText, &row.locationRef, &row.sourceRef, &row.occurredAt,
+		&row.segmentRef, &row.resourceRef, &row.gateClearance, &row.gateReading, &row.gateReadingDetail,
+		&row.correctsVersion, &row.correctedAt, &row.recordedAt,
+	}
+}
+
+// record 把一行装回成租户 tenant 下的那一版记录。逐列走各自的构造门装回，不按列直接拼结构体。
+func (row movementFactRow) record(tenant domain.TenantID) (ports.MovementFactRecord, error) {
+	none := ports.MovementFactRecord{}
+	fact, err := domain.NewMovementFactReference(row.factRef)
+	if err != nil {
+		return none, err
+	}
+	version, err := domain.NewMovementFactVersion(row.version)
+	if err != nil {
+		return none, err
+	}
+	key := ports.MovementFactKey{TenantID: tenant, Fact: fact, Version: version}
 	spec := domain.RehydrateMovementFactSpec{
 		TenantID:   key.TenantID,
 		Fact:       key.Fact,
 		Version:    key.Version,
-		OccurredAt: occurredAt.UTC(),
+		OccurredAt: row.occurredAt.UTC(),
 	}
-	// 逐列走各自的构造门装回，不按列直接拼结构体。
-	if spec.Kind, err = movementFactKindFrom(kindText); err != nil {
-		return ports.MovementFactRecord{}, false, fmt.Errorf("find movement fact: %w", err)
+	if spec.Kind, err = movementFactKindFrom(row.kindText); err != nil {
+		return none, err
 	}
-	if spec.Schedule, err = domain.NewScheduleReference(scheduleRef); err != nil {
-		return ports.MovementFactRecord{}, false, fmt.Errorf("find movement fact: %w", err)
+	if spec.Schedule, err = domain.NewScheduleReference(row.scheduleRef); err != nil {
+		return none, err
 	}
-	if spec.Location, err = domain.NewMovementLocationReference(locationRef); err != nil {
-		return ports.MovementFactRecord{}, false, fmt.Errorf("find movement fact: %w", err)
+	if spec.Location, err = domain.NewMovementLocationReference(row.locationRef); err != nil {
+		return none, err
 	}
-	if spec.Source, err = domain.NewMovementSourceReference(sourceRef); err != nil {
-		return ports.MovementFactRecord{}, false, fmt.Errorf("find movement fact: %w", err)
+	if spec.Source, err = domain.NewMovementSourceReference(row.sourceRef); err != nil {
+		return none, err
 	}
-	if segmentRef != nil {
-		if spec.Segment, err = domain.NewFulfillmentSegmentReference(*segmentRef); err != nil {
-			return ports.MovementFactRecord{}, false, fmt.Errorf("find movement fact: %w", err)
+	if row.segmentRef != nil {
+		if spec.Segment, err = domain.NewFulfillmentSegmentReference(*row.segmentRef); err != nil {
+			return none, err
 		}
 	}
-	if resourceRef != nil {
-		if spec.Resource, err = domain.NewTransportResourceReference(*resourceRef); err != nil {
-			return ports.MovementFactRecord{}, false, fmt.Errorf("find movement fact: %w", err)
+	if row.resourceRef != nil {
+		if spec.Resource, err = domain.NewTransportResourceReference(*row.resourceRef); err != nil {
+			return none, err
 		}
 	}
-	if gateClearance != nil {
-		if spec.GateClearance, err = domain.NewGateClearanceReference(*gateClearance); err != nil {
-			return ports.MovementFactRecord{}, false, fmt.Errorf("find movement fact: %w", err)
+	if row.gateClearance != nil {
+		if spec.GateClearance, err = domain.NewGateClearanceReference(*row.gateClearance); err != nil {
+			return none, err
 		}
 	}
-	if gateReading != nil {
-		if spec.GateReading, err = departureGateReadingFrom(*gateReading, gateReadingDetail); err != nil {
-			return ports.MovementFactRecord{}, false, fmt.Errorf("find movement fact: %w", err)
+	if row.gateReading != nil {
+		if spec.GateReading, err = departureGateReadingFrom(*row.gateReading, row.gateReadingDetail); err != nil {
+			return none, err
 		}
 	}
-	if correctsVersion != nil {
-		if spec.Corrects, err = domain.NewMovementFactVersion(*correctsVersion); err != nil {
-			return ports.MovementFactRecord{}, false, fmt.Errorf("find movement fact: %w", err)
+	if row.correctsVersion != nil {
+		if spec.Corrects, err = domain.NewMovementFactVersion(*row.correctsVersion); err != nil {
+			return none, err
 		}
 	}
-	if correctedAt != nil {
-		spec.CorrectedAt = correctedAt.UTC()
+	if row.correctedAt != nil {
+		spec.CorrectedAt = row.correctedAt.UTC()
 	}
 
-	fact, err := domain.RehydrateMovementFact(spec)
+	rehydrated, err := domain.RehydrateMovementFact(spec)
 	if err != nil {
-		return ports.MovementFactRecord{}, false, fmt.Errorf("find movement fact: %w", err)
+		return none, err
 	}
-	return ports.MovementFactRecord{Key: key, Fact: fact, RecordedAt: recordedAt.UTC()}, true, nil
+	return ports.MovementFactRecord{Key: key, Fact: rehydrated, RecordedAt: row.recordedAt.UTC()}, nil
 }
 
 // Save 登记一个版本。撞键答`已登记`（ADR-0031），编排据此读回原版本。
