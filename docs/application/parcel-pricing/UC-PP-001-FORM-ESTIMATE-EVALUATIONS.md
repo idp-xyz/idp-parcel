@@ -92,8 +92,8 @@
 |---|---|---|
 | `AT-PP-001` | 请求还读不回、价卡或输入读口答不出、铸造口或评价库故障 | 是未决：入账回滚、信封重投；这几格是派发未决名单里仅有的哨兵（[ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定三） |
 | `AT-PP-002` | 请求所在范围下没有在用价卡、多于一版同时适用、或造不出计价输入快照 | 不形成评价、入账不重投，同笔交一封「评价未形成」（租户、请求、方向、停在哪一格、说明）；一份请求至多一封，重投不翻倍；不再按未决耗尽失败预算（[ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定三） |
-| `AT-PP-003` | 登记一版价卡（含草稿发布），或重放同一版 | 与价卡行同一事务交「参数已登记」，带卡的计价范围；同一版重放一封；冲突与规范化形状不同不交；交不出整笔回滚（[ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定五） |
-| `AT-PP-004` | 一版序列或目录复核通过（含免复核由连接器代写的那一份） | 与复核行同一事务交「参数已登记」，不带计价范围；退回的那一版不交（[ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定五） |
+| `AT-PP-003` | 登记一版价卡（含草稿发布），或重放同一版 | 与价卡行同一事务交「参数已登记」，带卡的计价范围与方向（内部方向的卡不交）；同一版重放一封；冲突与规范化形状不同不交；交不出整笔回滚（[ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定五） |
+| `AT-PP-004` | 一版序列或目录复核通过（含免复核由连接器代写的那一份） | 与复核行同一事务，按绑了它的卡的计价范围与方向各交一封「参数已登记」（同一范围同一方向的几版只交一次，内部方向不交）；没有卡绑它一封不交；退回的那一版不交、也不问绑定；问不出绑定整笔未决（[ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定五） |
 | `AT-PP-005` | 停在「没有在用价卡」的请求，租户补登了卡之后由结算续办出下一代 | 计价按下一代选到那张卡、形成回指下一代的评价并交评价已记录；上一代仍没有评价（[ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定一、五） |
 | `AT-PP-006` | 交「评价未形成」失败 | 暂时不可用是未决，入账跟着回滚、下一次重投再交；被框架确定性拒收是硬失败，不进未决名单（[ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定三） |
 

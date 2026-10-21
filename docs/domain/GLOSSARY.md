@@ -1686,6 +1686,46 @@ Status: Confirmed
 - 所有者：`settlement-accounting`。
 - 避免使用：供应商账单主张、审核应付、供应商报价。
 
+### 停因
+
+一份评价请求停下的原因，或一拍包裹计费时点、一版运输收费发生项还没发出请求就停下的原因。封闭集，分发起之前、计价没形成评价、评价采用不了三段；评价待判断再按缺的是什么分格（目录、序列、价表上的一段、包裹事实，分不出的落笼统那一格）。
+
+- 所有者：`settlement-accounting`，记在评价请求与[发起停办](#发起停办)上；计价没形成评价那几格由 `parcel-pricing` 经[评价未形成](#评价未形成)交来，结算记。
+- 停因是如实的答复，不是缺省值的替身。续办按它找解得开它的那一类[参数已登记](#参数已登记)；哪一类登记解得开哪些停因只在 [ADR-0229](../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 定一处。
+- 避免使用：错误码、失败原因、未决原因。
+
+### 代次
+
+同一个评价问题上先后发出的评价请求的序号。首代没有前一代；续办出来的各代指名前一代、带续办依据，一份请求至多一个下一代。
+
+- 所有者：`settlement-accounting`。
+- 下一代问的是同一个问题，费用或成本标识由它重新派生；前一代的结论、[停因](#停因)与评价原样留着，不改写（[ADR-0229](../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md)）。
+- 避免使用：重试次数、版本、修订。
+
+### 发起停办
+
+一拍包裹计费时点或一版运输收费发生项，走到发出评价请求之前就停下（答`未配置`，或包裹没有商业解析）时，按自然键记下的那一拍的输入与[停因](#停因)。
+
+- 所有者：`settlement-accounting`。
+- 它不是评价请求：此刻请求要的结算账户、计价范围或费用项目还答不出。续办时按记下的输入原样重跑发起；这一拍有了请求就不再等着，重跑答`采用了别的时点`就落终止（[ADR-0229](../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md)）。
+- 避免使用：草稿请求、待发请求、失败请求。
+
+### 评价未形成
+
+`parcel-pricing` 对一份评价请求答不出评价（没有在用价卡、多于一版同时适用、造不出计价输入快照）时交给结算的事实：租户、请求、方向、停在哪一格。
+
+- 所有者：`parcel-pricing` 交出；`settlement-accounting` 据以在请求上记[停因](#停因)。
+- 它不是依赖故障，不按未决重投；它也不是一份评价，一份请求的评价仍至多一份（[ADR-0229](../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md)）。
+- 避免使用：评价失败、不可计价、待判断。
+
+### 参数已登记
+
+一次租户取值落库时，与登记行同一事务交出的通知：这一类参数在这个租户里有新的一行或一版了，等着它的东西可以再问一次。它不带登了什么，只带种类与续办收窄所需的那几格。
+
+- 所有者：拥有那本册的上下文交出；收的一侧按自己的等待队列续办，形出自 [ADR-0094](../adr/0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md) 决定四，评价续办见 [ADR-0229](../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md)。
+- 它不是定时扫描，也不替租户填任何一格：`未配置`在补登之前照实答。
+- 避免使用：配置变更事件、刷新、重算。
+
 ### 供应商账单主张
 
 供应商通过账单、对账数据或其他可验证方式提出的收费范围和金额。
