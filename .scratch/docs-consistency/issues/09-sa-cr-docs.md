@@ -94,5 +94,29 @@ Blocked by: 无（01 进 main 后开工；票 57+15 已进 main）
 - 改过与新增的全部 `.md` 相对链接与锚点逐个解析，全部能解析。
 - 新写文字里的书名号引文逐个对全仓（main 与本分支）查过：除引自本文件节名、新 CONTEXT 原句与代码票里给出的建议写法之外，全部逐字有出处；ADR-0271 Context 所引 CR CONTEXT 原句是接受前的文字，在 main 上逐字存在，正文已注明。
 - 新写文字里没有行号、跨文件计数与「上一条」式位置引用（逐行扫过）。
-- `git diff main --stat` 只含：SA、CR 两份 CONTEXT；`docs/application/settlement-accounting/` 下七份 UC；新 ADR 0269–0271；ADR 0168、0190、0198、0236 的 Status 行与 Links；`.scratch/at-coverage-inventory.md`（② 加两行）；`.scratch/docs-consistency/` 下本票与 code/11、14、45、46；`.scratch/demo-chain-gaps/issues/141-*`（追记一节）。不改代码。
+- `git diff main --stat` 只含：SA、CR 两份 CONTEXT；`docs/application/settlement-accounting/` 下七份 UC；新 ADR 0269–0271；ADR 0168、0190、0198、0236 的 Status 行与 Links，ADR-0082 的 Links（评审轮加）；`.scratch/at-coverage-inventory.md`（② 加两行）；`.scratch/docs-consistency/` 下本票与 code/11、14、45、46；`.scratch/demo-chain-gaps/issues/141-*`（追记一节）。不改代码。
+
+## 评审记录（2026-10-21，隔离评审第 1 轮 → 作者修订）
+
+阻断 2 条、建议合入前修 4 条、顺手 9 条，除下面写明的一处口径之外全部照办。修订后 rebase 到 main `14443ac03`。
+
+| 条 | 评审意见 | 处置 |
+|---|---|---|
+| B1 阻断 | 「未配置结束」只覆盖改过的那一步，同一 UC 里别的编排的未配置格漏了 | 各行按编排列全、写明码属哪只编排，逐码对过 `String()`：UC-SA-002 补确认触发门（`AdmitSettlementMomentHandler` 的 `SETTLEMENT_MOMENT_UNCONFIGURED`，ADR-0170 决定二）、确认（`ConfirmChargeHandler` 的 `CONFIRM_UNDECIDED` 带 `CONDITION_UNCONFIGURED` / `CONFIRMATION_FACTS_UNCONFIGURED`）、接受前控制（`ApplyPreAcceptanceControlHandler` 的 `CONTROL_NOT_FORMED` 带 `CONTROL_POLICY_NOT_CONFIGURED`、`CREDIT_BASIS_NOT_CONFIGURED`、`CONTROL_AMOUNT_NOT_CONFIGURED`、`ESTIMATE_PRICE_CARD_NOT_CONFIGURED`），SELL 一格写明 `SELL_BILLING_MOMENT_DIFFERS` 同答 `SELL_EVALUATION_REQUEST_UNCONFIGURED` 但不记停办（`sellInitiationStopCauseOf`、`AT-SA-191`）；UC-SA-003 补截单触发门、主流程首步加这一格，`CHARGE_ATTRIBUTION_UNCONFIGURED` 写明属 `JudgeChargeAttributionHandler`、截单今天不交，挂在 code/11 那一行上作落地后的格；UC-SA-004 补接收与匹配（`ReceiveSupplierBillHandler.Handle`）的 `BILL_UNDECIDED` 带 `CONVERSION_UNCONFIGURED`，`AT-SA-096` 与 `PAR-SET-04` 一行改为未配置；UC-SA-006 补 `AllocateCostsHandler` 的 `OPERATING_UNDECIDED` 带 `RULE_UNCONFIGURED`，主流程采用分摊规则一步同补 |
+| B2 阻断 | UC-SA-002 费用明细首条前后两种口径 | 改为「预估或暂估 → 确认只在该费用类型的条件满足时发生；阶段由形成那一步给出」，去掉「预估 → 暂估」的转换说法 |
+| 1 | ADR-0271 把`渠道在途`当成按指令的余额，代码按分户账键判 | 照协调方裁定按指令：决定二写明移位上限是同一指令已入账报告减去已移位、不挪用同账别的指令的在途款，并补候选「按分户账算」的否决；决定四、索引注记写明短款金额按指令；越权风险点 3 改写；CR CONTEXT 两条与资金位置生命周期同步；code/14「移位」一项改准（`SubledgerBalance.Admit` 今天按账判，要另加按指令的上限），「差额来源」与测试两项同步。**一处没照字面**：协调方写的「`溢款` = 到账 − 已入账报告」，在决定二下到账移不过已入账报告，这个差恒不大于零；落进`待清分`、能判溢款的是相对指令多出的那部分，所以写成「该指令已移入`待清分`的到账减去指令金额」。若协调方另有所指，请再裁 |
+| 2 | 0168、0190、0198 注记里回答风险点写「无条款停用」，与回答方别的停用自相矛盾 | 三份注记里新加的回答各处改为「这一回答不另停条款」 |
+| 3 | ADR-0270 决定一的去向漏了失效与替代 | 补「预估失效、暂估不再成立或被新版本替代时追加失效或替代关系，原记录保留」，注记同步 |
+| 4 | ADR-0270 Context 引的是改写前的 CONTEXT | Context 开头注明「以下所引 settlement-accounting CONTEXT 原文是本记录接受前的文字」 |
+| 5 | CR 的 UC | 照裁定：X5 改写为票 10 立 `UC-CR-001` 并迁交接表；CR CONTEXT 交接表「规则」一列改为只指小节名，那一节末尾注明待迁 |
+| 6 | 截单快照、UC-SA-003 首段与首步对齐 ADR-0269 决定四 | SA CONTEXT「截单快照」词条改按本期最后一个归属日、`CutOffAt` 只记在快照上；UC-SA-003 目标与边界首段、主流程首步去掉账户时区 |
+| 7 | `AT-SA-213` 与「未配置结束」一套结果 | 两处与 ADR-0269 决定四（补一条）同写：那一件不入本期并指名，其余合格费用照常纳入、草稿照常形成；一件都入不了本期时不形成草稿，整笔答未配置并指名缺哪一册 |
+| 8 | `AT-SA-050` 币种那半 | 补「币种或汇率缺失时……见 `AT-SA-177`」 |
+| 9 | 冻结一条补现状、「资金冻结」词条列举对齐 | 规则补「面单交易前的冻结没有裁定过金额从何而来，本上下文今天不为面单交易形成冻结」；词条列举改为「委托接受或其他已裁定冻结金额形态的授权业务」（代码核过：SA 应用层没有面单交易的冻结路） |
+| 10 | 新概念补词条 | SA Language 立「对账安排」；CR Language 立「入账记账与移位记账」；ADR-0271 去掉「入账层 / 移位层」，旁证在决定一里一句定义 |
+| 11 | 序号与位置引用 | code/14、code/11 裁向去掉「第 N 条」「下面」；code/11 用例一项与 code/46 的跨文件步号改为引步骤原文；票面表与票 141 追记的「首条」、跨文件步号改为点名；ADR-0271 决定六、ADR-0269 Context 改为点名 |
+| 12 | ADR-0082 Links 指向 0271 | 加一行「在本记录的依据门上另加门」；0082 正文去掉 Status 行与 Links 后与 main 逐字节相同 |
+| 13 | 截单时刻 0 | 不改，如实留在 ADR-0269 越权风险点 4 |
+
+修订后的检查（main `14443ac03`）：scratchpad 副本上 `go run ./tools/adr-index` 后 `-check` 退 0；`at-coverage-counts -check` 只报计数过期（② 与合计、SA 一行各多 2）；0082、0168、0190、0198、0236 去掉 Status 行与 Links 后与 main 逐字节相同；改动的 `.md` 链接与锚点全部能解析；新写的书名号引文逐个对过出处（未命中的只有本文件节名与本文件原有文字）；新写的码与符号逐个在 `internal/`、`cmd/` 里确认存在（字符串码对 `String()` 的返回值，符号对定义）。
 
