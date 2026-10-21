@@ -1,6 +1,6 @@
 # ADR-0157：内置时点形态以参考配置发布，租户在时点语义格用引用选用
 
-Status: Accepted（2026-09-30 用户授权通道 1 自决：「你是业务和系统专家，你能帮我来做决策吗」。通道 2 起草。裁决原文在票 `product-strategy-boundary/06` Comments「裁决 ← 通道 1」。另：内置时点形态「提交接收」使 [ADR-0081](./0081-acceptance-judgment-is-envelope-driven.md) 决定六「时点取值源」一格不再留 nil，见 ADR-0081 的 Status 行（指针 2026-10-21 补））<!-- 索引注记 -->｜**形态选择格**：不是 ADR-0147 的依据格；带 `REFCFG-1:` 的值登记时须已发布，否则拒。
+Status: Accepted（2026-09-30 用户授权通道 1 自决：「你是业务和系统专家，你能帮我来做决策吗」。通道 2 起草。裁决原文在票 `product-strategy-boundary/06` Comments「裁决 ← 通道 1」。另：内置时点形态「提交接收」使 [ADR-0081](./0081-acceptance-judgment-is-envelope-driven.md) 决定六「时点取值源」一格不再留 nil，见 ADR-0081 的 Status 行（指针 2026-10-21 补））<!-- 索引注记 -->｜**形态选择格**：不是 ADR-0147 的依据格；带 `REFCFG-1:` 的值登记时须已发布，否则拒。｜**越权风险点 3 已答**（2026-10-21）：越权风险点 3「汇率格可以选用，计价侧没有执行器。」由 [ADR-0260](./0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md) 决定三回答——评价换算的期次一律按计价基准时点取，不执行价格政策汇率格上的时点形态；无条款停用，其余各条不变
 Date: 2026-09-30
 
 ## Context
@@ -42,3 +42,4 @@ ADR-0147 的采用写在登记依据格。时点语义格不是依据格：它�
 - [ADR-0147](./0147-reference-configuration-ships-embedded-and-is-adopted-through-ordinary-registration.md)：引用串形状与越权风险点 3；本记录把采用扩到时点语义格
 - 票 [`product-strategy-boundary/06`](../../.scratch/product-strategy-boundary/issues/06-ps-acceptance-and-label-selection-judgment-methods.md)、[`23`](../../.scratch/product-strategy-boundary/issues/23-pc-as-of-semantics-cells-gate-reference-citations.md)
 - [ADR-0081](./0081-acceptance-judgment-is-envelope-driven.md)：决定六「时点取值源」一格由本记录的「提交接收」形态接上
+- [ADR-0260](./0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md)：越权风险点 3 由其决定三回答，无条款停用

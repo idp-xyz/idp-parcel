@@ -1,6 +1,6 @@
 # ADR-0107: 评价金额的精度与取整由价卡内容声明，与重量取整同形，进内容摘要；未声明即不取整并如实记问题项；不编币种小数位表，消费方不得在评价外取整
 
-Status: Accepted<!-- 索引注记 -->｜**归属判据**：取整是价卡条款的一部分，与重量取整、体积系数「随工件版本化、不内置常量」同一立场；金额合计就是评价要交出去的数，不是结算侧另行采用的量，所以不归 SA。**适用场景**：评价结果里任何金额的 scale——声明了策略的卡合计落在进位单位上，未声明的带问题项交出，消费方两种情形都不得自己取整；模式集合与进位单位随首份真实价卡来，仓内不填
+Status: Accepted<!-- 索引注记 -->｜**归属判据**：取整是价卡条款的一部分，与重量取整、体积系数「随工件版本化、不内置常量」同一立场；金额合计就是评价要交出去的数，不是结算侧另行采用的量，所以不归 SA。**适用场景**：评价结果里任何金额的 scale——声明了策略的卡合计落在进位单位上，未声明的带问题项交出，消费方两种情形都不得自己取整；模式集合与进位单位随首份真实价卡来，仓内不填｜**部分停用**（2026-10-21）：其决定一「采购方向的策略属价卡内容，销售方向的属商业价格政策——与体积系数的两侧归属逐字同构（CONTEXT「体积系数」词条）。」一句已由 [ADR-0260](./0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md) 停用。**适用场景**：全部方向的评价金额取整——两个方向的策略都是价卡内容，商业价格政策不声明金额取整；决定一其余（金额取整是价卡内容、不内置任何金额精度常量、不按币种查表）与决定二至四不变，其余各条不变
 Date: 2026-09-04
 
 ## Context
@@ -57,3 +57,4 @@ Date: 2026-09-04
 - [票 pricing-amount-precision/01](../../.scratch/pricing-amount-precision/issues/01-evaluation-amount-scale-has-no-declared-source.md)：取证与两问
 - [票 label-channel/13](../../.scratch/label-channel-service-first-release/issues/13-buy-evaluation-to-cost-score-bridge.md)：「不编币种小数位表」的裁决出处
 - [票 price-card-shape-gaps/report.md](../../.scratch/price-card-shape-gaps/report.md)：E1 核对第 19 项把金额精度指到本票
+- [ADR-0260](./0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md)：后继——部分停用决定一「采购方向的策略属价卡内容，销售方向的属商业价格政策——与体积系数的两侧归属逐字同构（CONTEXT「体积系数」词条）。」一句，两个方向的金额取整都是价卡内容

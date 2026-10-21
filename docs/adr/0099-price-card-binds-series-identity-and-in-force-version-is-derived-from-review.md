@@ -1,6 +1,6 @@
 # ADR-0099: 价卡绑定序列标识而不是序列版本；在用序列版本按评价形成时刻从复核记录派生，解析结果冻结进评价的版本清单
 
-Status: Accepted（2026-09-03，用户经 IDP 队列通道 3 授权本会话「作为业务和系统专家自决」，据此对计价参考序列的运营形态作出裁决。裁决能力边界见文末）<!-- 索引注记 -->｜**两个时点判据**：计价基准时点决定期次，评价形成时刻决定版本——合成一个日期就是 SAP 式用当前表回看，重放随之失效。**适用场景**：方案对参考序列的引用与评价用例的解析；序列版本的复核是追加记录不是状态列，在用版本是派生结论不是可维护指针
+Status: Accepted（2026-09-03，用户经 IDP 队列通道 3 授权本会话「作为业务和系统专家自决」，据此对计价参考序列的运营形态作出裁决。裁决能力边界见文末）<!-- 索引注记 -->｜**两个时点判据**：计价基准时点决定期次，评价形成时刻决定版本——合成一个日期就是 SAP 式用当前表回看，重放随之失效。**适用场景**：方案对参考序列的引用与评价用例的解析；序列版本的复核是追加记录不是状态列，在用版本是派生结论不是可维护指针｜**部分停用**（2026-10-21）：其决定二「复核责任方不得与该版本的登记责任方相同（`PAR-SET-11` 分列两种责任的机制落点）。」一句已由 [ADR-0262](./0262-reference-series-and-catalogue-review-duty-separation-is-a-tenant-governance-rule.md) 停用。**适用场景**：计价参考序列与目录的全部人工复核——复核者须否不同于登记者、须持哪一格授予，改按租户登记的参考复核职责规则判，规则未登记时复核不放行；决定二其余（复核是追加的独立事实、不改证据等级、退回不删、可再复核）不变，其余各条不变
 Date: 2026-09-03
 
 ## Context
@@ -85,3 +85,4 @@ Date: 2026-09-03
 - [ADR-0094](./0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md)：「等运营登记」格——决定三不新开结果格的依据
 - [parcel-pricing CONTEXT](../domain/parcel-pricing/CONTEXT.md)：术语「计价参考序列」「序列版本复核」「在用序列版本」与生命周期「计价参考序列版本」随本记录更新
 - [pricing-reference-series-operations](../../.scratch/pricing-reference-series-operations/spec.md)：实施票
+- [ADR-0262](./0262-reference-series-and-catalogue-review-duty-separation-is-a-tenant-governance-rule.md)：后继——部分停用决定二「复核责任方不得与该版本的登记责任方相同（`PAR-SET-11` 分列两种责任的机制落点）。」一句，复核职责分离归租户治理
