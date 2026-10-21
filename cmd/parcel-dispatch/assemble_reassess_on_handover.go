@@ -81,20 +81,23 @@ func reassessOnHandoverConsumerOver(
 }
 
 // reassessRouteHandler 是 UC-NR-003 复核编排的生产接法。收寄采用那一路（networkIntakeConsumer）与交接这一路共用这一份：
-// 各种触发复核的是同一份路由判断，证据、自动改路事实与判断库接法一处定义，不会一路改了另一路还停在旧接法上。
+// 各种触发复核的是同一份路由判断，证据、候选成本与判断库接法一处定义，不会一路改了另一路还停在旧接法上。证据视图与候选
+// 成本取数侧都与初始路由同一种装法：复核排序比的成本与受理后选路比的同出一处，生产证据视图不折成本，不接取数侧复核就排
+// 不了序（票 demo-chain-gaps/115）。
 func reassessRouteHandler(db *bentopg.DB, clock systemClock) (*nrapplication.ReassessRouteHandler, error) {
 	evidence, err := initialRouteEvidence(db, clock, customsApplicabilitySource(db))
 	if err != nil {
 		return nil, err
 	}
-	return reassessRouteHandlerOver(db, clock, evidence)
+	return reassessRouteHandlerOver(db, clock, evidence, routeCosts(db, clock))
 }
 
-// reassessRouteHandlerOver 把判断库各册接到给定的证据视图与时钟上。各册都是 db 上的无状态包装，每次现建。
+// reassessRouteHandlerOver 把判断库各册接到给定的证据视图、候选成本取数侧与时钟上。各册都是 db 上的无状态包装，每次现建。
 func reassessRouteHandlerOver(
 	db *bentopg.DB,
 	clock nrports.Clock,
 	evidence nrports.InitialRouteEvidenceView,
+	costs nrports.RouteCandidateCostSource,
 ) (*nrapplication.ReassessRouteHandler, error) {
 	routeStore, err := nrpostgres.NewInitialRoutes(db)
 	if err != nil {
@@ -123,16 +126,13 @@ func reassessRouteHandlerOver(
 	return nrapplication.NewReassessRouteHandler(nrapplication.ReassessRouteDeps{
 		Routes:        routeStore,
 		Evidence:      evidence,
+		Costs:         costs,
 		Applicability: applicabilities,
 		Store:         reassessments,
 		Log:           handoffLog,
 		Identities:    identities,
 		Clock:         clock,
-		// 自动改路四条件的事实目录已就位（审计票 05）：按判断键取当前陈述，从未
-		// 登记的键照端口第二格答未配置——失效照常落库、改路评估整段不做，与先前
-		// 显式 nil 在空册上的行为等价；登记过的键才走 7B/7C。改善阈值、改路条件
-		// 与权限、冻结边界的取值属 PAR-NET-14 实例半边，目录只存登记方折算完的
-		// 陈述与出处，不种任何默认行。
+		// 事实目录只为保留历史陈述接着，复核不读它：自动改路的形态与阈值由路由策略版本当场折出（ADR-0173 决定四）。
 		AutoReroute: rerouteFacts,
 	}), nil
 }

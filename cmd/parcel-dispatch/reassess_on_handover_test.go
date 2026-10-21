@@ -27,7 +27,7 @@ import (
 
 // 本文件对真实 PostgreSQL 证交接触发的路由复核（ADR-0215）。已接受委托由 PS 应用编排形成（复用 SYN-V0 夹具），交接经
 // TF 生产登记编排登记并真交出信封，复核落 NR 真判断库。生产路由那一条全走生产装配；其余几条经
-// reassessOnHandoverConsumerOver 接同一份交接读取、PS 读取与消费门，只把证据视图换成记下所携投影的替身，好让计划与
+// reassessOnHandoverConsumerOver 接同一份交接读取、PS 读取与消费门，只把证据视图换成记下所携投影的替身、成本取数侧换成转交替身成本的替身，好让计划与
 // 冻结形态由用例给定。夹具全部合成，只记 `S`。
 
 const (
@@ -59,6 +59,21 @@ func (spy *carriedGeoEvidence) LoadInitialRouteEvidence(
 	return spy.evidence, !spy.unconfigured, nil
 }
 
+// reassessCostsDouble 是候选成本取数侧替身。answer 空时交回证据替身里的成本事实：生产证据视图不折成本，用例把成本写在
+// 证据替身上，这里原样转交，好让一份夹具同时给证据与成本。
+type reassessCostsDouble struct {
+	answer *nrports.RouteCandidateCosts
+}
+
+func (double *reassessCostsDouble) LoadCandidateCosts(
+	_ context.Context, _ nrdomain.InitialRouteJudgmentKey, evidence nrports.InitialRouteEvidence, _ nrports.RequestCarriedContent,
+) (nrports.RouteCandidateCosts, error) {
+	if double.answer != nil {
+		return *double.answer, nil
+	}
+	return nrports.RouteCandidateCosts{Facts: evidence.CandidateCosts}, nil
+}
+
 type reassessOnHandoverFixture struct {
 	syn      *synVerticalFixture
 	register *tfapplication.RegisterTransportHandoverHandler
@@ -66,7 +81,7 @@ type reassessOnHandoverFixture struct {
 	lane     dispatch.Consumer
 }
 
-// newReassessOnHandoverFixture 接一条与生产同形的复核路（同一个 Over、同一份哨兵名单），只换证据视图。accepted 为真时先由
+// newReassessOnHandoverFixture 接一条与生产同形的复核路（同一个 Over、同一份哨兵名单），只换证据视图与成本取数侧。accepted 为真时先由
 // PS 编排把 SYN 委托推到已接受（首个提交版本两端报国家与邮编）；withPlan 为真时给它的判断键落一份上海→新加坡枢纽→新加坡
 // 末端的计划。
 func newReassessOnHandoverFixture(t *testing.T, accepted, withPlan bool) *reassessOnHandoverFixture {
@@ -93,7 +108,7 @@ func newReassessOnHandoverFixture(t *testing.T, accepted, withPlan bool) *reasse
 		FreezeForm:                  nrdomain.RemainingSegmentCountFreeze,
 		FreezeRemainingSegmentLimit: &limit,
 	}}
-	reassess, err := reassessRouteHandlerOver(syn.db, systemClock{}, evidence)
+	reassess, err := reassessRouteHandlerOver(syn.db, systemClock{}, evidence, &reassessCostsDouble{})
 	if err != nil {
 		t.Fatalf("装配复核编排：%v", err)
 	}

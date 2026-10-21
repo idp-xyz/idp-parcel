@@ -12,7 +12,7 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 证复核的判断起点（票 docs-consistency/code/52）：原计划失效之后，下一次控制触发从「无当前有效
-// 路由」判，复核形成的新计划成为再下一次的起点。收寄采用与交接两路都与生产同形，只换证据视图。夹具全部合成，只记 `S`。
+// 路由」判，复核形成的新计划成为再下一次的起点。收寄采用与交接两路都与生产同形，只换证据视图与成本取数侧。夹具全部合成，只记 `S`。
 
 // reassessmentOf 经复核册的生产读口按关联读回一次复核：可空列与新计划都按适配器的口径翻译，不在测试里重拼。
 func reassessmentOf(t *testing.T, syn *synVerticalFixture, correlation string) nrports.ReassessmentRecord {

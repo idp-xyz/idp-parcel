@@ -23,7 +23,7 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 证复核按业务时间排（ADR-0235）：触发的业务时间早于路由历史里最近一次已判控制触发时，入账为
-// 「触发早于当前位置」、不判；收寄采用与交接两路同一条判据，两路接同一份复核编排（与生产同形，只换证据视图）。已接受
+// 「触发早于当前位置」、不判；收寄采用与交接两路同一条判据，两路接同一份复核编排（与生产同形，只换证据视图与成本取数侧）。已接受
 // 委托由 PS 编排形成，交接经 TF 生产登记编排登记并真交出信封，收寄采用记录经 PS 真交接适配器交出信封。夹具全部合成，
 // 只记 `S`。
 
@@ -33,6 +33,7 @@ type reassessBothLanesFixture struct {
 	handover dispatch.Consumer
 	intake   dispatch.Consumer
 	evidence *carriedGeoEvidence
+	costs    *reassessCostsDouble
 }
 
 // newReassessBothLanesFixture 接交接与收寄采用两路到同一份复核编排上：交接那一路走生产的 Over 与哨兵名单，收寄采用那一路
@@ -58,7 +59,8 @@ func newReassessBothLanesFixture(t *testing.T) *reassessBothLanesFixture {
 		FreezeForm:                  nrdomain.RemainingSegmentCountFreeze,
 		FreezeRemainingSegmentLimit: &limit,
 	}}
-	reassess, err := reassessRouteHandlerOver(syn.db, systemClock{}, evidence)
+	costs := &reassessCostsDouble{}
+	reassess, err := reassessRouteHandlerOver(syn.db, systemClock{}, evidence, costs)
 	if err != nil {
 		t.Fatalf("装配复核编排：%v", err)
 	}
@@ -90,6 +92,7 @@ func newReassessBothLanesFixture(t *testing.T) *reassessBothLanesFixture {
 		handover: handoverLane,
 		intake:   intakeConsumer,
 		evidence: evidence,
+		costs:    costs,
 	}
 }
 
