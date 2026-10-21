@@ -60,6 +60,7 @@ ADR-0115 让接受前财务控制策略版本有了正文——控制项逐行�
 - `internal/settlementaccounting/domain/pre_acceptance_control.go`、`application/apply_pre_acceptance_control.go`、`application/release_pre_acceptance_control.go`、`adapters/partycommercial/pre_acceptance_control_policy.go`、`internal/parcelshipment/adapters/settlementaccounting/pre_acceptance_control.go`：决定一至四的落点
 - 来源：IDP 队列通道 1 的授权（2026-09-07）
 - [ADR-0125](./0125-parcel-shipment-financial-control-result-carries-per-item-results-and-folds-in-the-domain.md)：决定三把本记录决定四的折叠位置从 PS 消费适配器搬进 PS 领域，归属不变
+- [ADR-0079](./0079-pre-acceptance-control-policy-view-asks-by-commercial-resolution-reference.md)：其决定五「在冻结账本上认领」一语以本记录决定三「释放两本账各认领一次」为准（表述更正，见 ADR-0079 的 Status 行）
 
 ## owner 复核记录
 

@@ -66,3 +66,4 @@ HELD/RESTRICTED/NOT_APPLICABLE：账期控制通过若译成 `HELD`，就是在�
 - [UC-PS-001](../application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md)：`AT-PS-035`
 - [ADR-0122](./0122-pre-acceptance-control-executes-the-policy-content-items-and-parcel-shipment-folds-by-the-joint-pass-condition.md)：决定一、二部分停用本记录「方式即选路」——控制种类决定走哪本账，同一范围可组合多项控制；两本账互不借用不变
 - [ADR-0127](./0127-credit-basis-is-handed-over-by-the-commercial-closure-resolution.md)：决定四部分停用本记录决定二里当前额度的来源——授信额度取闭包交出的信用依据
+- [ADR-0079](./0079-pre-acceptance-control-policy-view-asks-by-commercial-resolution-reference.md)：其决定五「在冻结账本上认领」一语以本记录决定四「释放按原关联双账本认领」为准（表述更正，见 ADR-0079 的 Status 行）
