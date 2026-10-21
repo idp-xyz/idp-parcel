@@ -50,8 +50,8 @@ Date: 2026-10-21
 
 - 代码随票 docs-consistency/code/25：PC 价格政策口径的体积一格三个方向一律不收、`SELL` 不再必填，种子与受控批文同步；NR 路由策略版本的比较价格政策一格不再作换算依据。PP 不改。
 - PC CONTEXT「商业价格政策版本」「定价方案绑定」「已解析定价依据」词条与 Rules 绑定一条、两阶段解析一条；PP CONTEXT「计价输入快照」「金额取整策略」「体积系数」词条与 Rules 体积、序列登记责任、换算三条；UC-PC-001（新增 `AT-PC-062`）、UC-PC-002（`AT-PC-036` 改写）、UC-PP-001（新增 `AT-PP-013`）随之改。
-- ADR-0107、ADR-0148 的 Status 行与 Links 挂前向指针；ADR-0157 注记挂回答。
-- GLOSSARY「可执行价卡版本」「价格规则版本」「计价参考序列」、CONTEXT-MAP `party-commercial → parcel-pricing` 一边与外部数值来源一边、参数登记册与计价规则模型设计里的旧口径，交文档自洽 10 改。
+- ADR-0107、ADR-0148、ADR-0157（按口解）的 Status 行与 Links 挂前向指针。
+- GLOSSARY「可执行价卡版本」「价格规则版本」「计价参考序列」、CONTEXT-MAP `party-commercial → parcel-pricing` 一边与外部数值来源一边、network-routing CONTEXT 首发排序形态那一条的换算一句、UC-SA-002 参数表 `PAR-SET-11` 一行、参数登记册与计价设计文档里的旧口径，交文档自洽 10 改。
 
 ## 对已接受记录的作用
 
