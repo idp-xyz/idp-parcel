@@ -108,3 +108,30 @@ Blocked by: 无（01 进 main 后开工；票 57、88、146+94 已进 main）
 - 改过 Status 行的已接受 ADR（0202、0203、0209、0213、0216、0221）去掉 Status 行与 Links 后与 main 逐字节相同。
 - 不改代码；没碰 PS（票 06）、PC+PP（票 07）的文件，也没碰 GLOSSARY、CONTEXT-MAP、SCENARIOS、`docs/product/`、`docs/agents/`。
 
+
+## 评审记录（2026-10-21，隔离评审第 1 轮 → 作者修订）
+
+阻断 4 条、建议 5 条、顺手 7 条，全部照办。
+
+| 条 | 评审意见 | 处置 |
+|---|---|---|
+| B1 阻断 | 三份新 ADR 正文用「第二条」「两条」之类序号与计数引 TF CONTEXT | 0263 Context 与 Consequences、0264 Consequences、0265 Status 前段与 Consequences 一律改成「小节名 + 该条起头的原句」；顺带把 0264 引 UC-TF-004 的「步 4、5」改成按动作说、把「容量后来缩减……」的省略引文改成原句，0263 Context「与之相抵的有三处」去掉计数。新写文字再扫一遍，没有剩下的序号与计数 |
+| B2 阻断 | UC-TF-004 结果表与步 4、5 还是旧口径，步 5 与 ADR-0264 决定二相抵 | 结果表按 `CommissionOutcome.String()` 逐码重写：`COMMISSION_SUBMITTED`、`BOOKING_SUBMITTED`、`BOOKING_ANSWERED`（五值，部分确认并入接受）、`COMMISSION_CANCELLED`/`BOOKING_CANCELLED`、`TRANSPORT_ALREADY_STARTED`、四个协议否定格、`COMMISSION_NOT_FOUND`/`COMMISSION_NOT_BOOKABLE`/`SCHEDULE_NOT_FOUND`/`BOOKING_NOT_FOUND`、`EXISTING_*` 四格、`*_CONFLICT` 三格、`INPUT_NOT_ACCEPTED`、`COMMISSION_UNDECIDED` 带五个原因码；「待补充/冲突」拆开、删掉待补充；表后写明带码各行属 `CommissionTransportHandler`。步 4 改为记承运答复五值、没有答复读作待确认、答复不读池；步 5 改为运营另作预占或释放（ADR-0203 决定三、ADR-0264 决定二），硬上限 `CAPACITY_EXCEEDED` 不可越过 |
+| B3 阻断 | ADR-0265 决定二「这一格本身就说明缺的是移动授权」与决定四相抵 | 照协调方裁定两头都改：决定二改为今天只有缺授权一种、所以不带原因；决定四写明接线后待补充带一个原因，封闭为缺移动授权、缺对象、缺动作、缺起止责任，今天不带原因不算缺口；索引注记与 code/43 修法第 2 条同步 |
+| B4 阻断 | UC-TF-001 结果契约不全、没有码 | 逐码对齐 `AcceptDispositionOutcome.String()`：`DISPOSITION_DECIDED`（三种决定 `ACCEPTED`/`PARTIALLY_ACCEPTED`/`DECLINED`）、`SUPPLEMENT_REQUIRED`、`EXISTING_DECISION`、`DECISION_CONFLICT`、`NODE_ONLY_DISPOSITION`、`NOT_ACCEPTED`、`UNDECIDED`（`DISPOSITION_ACCEPTANCE_STORE_UNAVAILABLE`）；补「纯节点动作」「已有决定」两行；表后写明带码各行属 `AcceptRegulatoryDispositionHandler`，旅程、交接、履约与停止各行出自别的编排 |
+| 建议 1 | CONTEXT「容量预占」仍写订舱、承运接受引用预占 | 改为只有装载分配经分配关系引用预占、实际装载与它比较，订舱与承运接受不引用（ADR-0264） |
+| 建议 2 | 本分支改掉的 CONTEXT 原句还被 Go 注释逐字引着 | 并入 code/02 追加节，按符号定位：`SubmitBooking` 体内、`CancelCommission` 头注、`FormCarrierAcceptance` 头注、`AdmitsSuccessor` 头注、`ErrCancelledAfterTransportStart` 与 `ChargeOccurrenceReason` 两处；另核出两处同类一并列入——`CarrierAcceptanceOutcome` 头注引的旧订舱生命周期（评审所说 `FormCarrierAcceptance` 一带的生命周期引文实际在这里）、`CapacityPool` 头注「CONTEXT 说的多维运力范围」 |
+| 建议 3 | ADR-0221 Links 里 0213 那条 | 改写为部分停用，写法照前段，去掉「文末」 |
+| 建议 4 | 交横切 X4 漏两处、引文截断；X2、X5 前半没引文 | X4 列全产品指南三处并引全；X2 引 GLOSSARY「容量池」两句；X5 前半引 GLOSSARY「权威运输交接结果」那一句 |
+| 建议 5 | UC-TF-005「当前实物方明确而来源链矛盾时保存控制冲突」 | 改成失效参与版本加节点作业记「控制来源链待重算」合起来的读法，不另存控制冲突（ADR-0263 决定三） |
+| 顺手 6 | ADR-0264 与产品基线的关系 | 越权风险点补一条：PRODUCT-BASELINE「不得重复累计同一容量」、PILOT-ACCEPTANCE-MATRIX OPS-05「硬容量不可突破」不相抵，硬上限在预占上守（`domain.ErrCapacityExceeded`），接受量超过池只是承运方的陈述；SCENARIOS「先形成 `350kg` 的有效容量预占」写进交横切 X7 |
+| 顺手 7 | ADR-0265 越权风险点 | 补两条：一件事项部分可承接部分缺授权时只能整件答待补充或记作部分承接的未承接原因；UC-CC-008「保存其接受、拒绝、待补充或部分接受结果」要靠关务自己记这一格答复，须 CC owner 会签 |
+| 顺手 8 | ADR-0203 注记与票 37 标题 | 注记把决定一小标题「（产品策略；票 21 落装载分配，票 37 落确认订舱）」与 Consequences「票 21 在决定一、二之内落装载分配的容量关系；票 37 落确认订舱。」里的「票 37 落确认订舱」逐字点名一并作废；票 37 标题改为「逐订舱的消费关系」并注原题（文件名不改，免得断链） |
+| 顺手 9 | UC-TF-003「已有结果」带「发布意图引用」 | 改为原准备结果与它引用的班次、容量；输入契约「请求与历史」与一致性一条里的发布意图同改 |
+| 顺手 10 | UC-TF-004 交接表把「委托一级与逐对象的承运接受」列为缺口 | 删去那一行：CONTEXT 写的是规则（不另成对象），交接表不再当缺口列 |
+| 顺手 11 | 「已拒绝」与「拒绝」混用 | CONTEXT 生命周期与「监管运输处置承接与履约」一条、UC-TF-001 目标、六层表与步 3 统一用「已拒绝」 |
+| 顺手 12 | 新 ADR 的 Date 行 | 三份都在 Status 行与 Date 行之间空一行 |
+
+未采纳：无。AT 盘点与 06、07 的冲突照协调方说由落地时取并集，本轮没再动盘点。
+
+修订后的检查：main 仍是 `3619f5c0e`，无需 rebase。scratchpad 副本（`git archive claude-dc08`）上 `go run ./tools/adr-index` 后 `-check` 退 0；改动的 `.md` 相对链接与锚点全部解析；三份新 ADR 的书名号引文对出处逐字核过（旧句对 main `3619f5c0e`）；被停原句（0203 决定一一句、0213 票 66 补记一句、0216 决定四标题）在被停方正文逐字存在；0202、0203、0209、0213、0216、0221 去掉 Status 行与 Links 后与 main 逐字节相同；code/02 追加节里引的注释原句在 Go 源里逐字存在（`CarrierAcceptanceOutcome` 那一句在注释里折了行，引的是它所引的 CONTEXT 旧句）；`go run ./tools/at-coverage-counts -check` 只报计数过期。
