@@ -14,15 +14,15 @@
 | nodeoperations | 109 | 116 | 15 | 29 | 4 | 16 |
 | parcelpricing | 133 | 122 | 17 | 16 | 1 | 23 |
 | parcelshipment | 209 | 205 | 20 | 39 | 10 | 19 |
-| partycommercial | 165 | 177 | 13 | 42 | 1 | 38 |
+| partycommercial | 170 | 180 | 14 | 43 | 1 | 39 |
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 208 | 150 | 34 | 63 | 12 | 9 |
-| transportfulfillment | 236 | 239 | 40 | 46 | 13 | 43 |
+| transportfulfillment | 236 | 240 | 40 | 46 | 13 | 43 |
 | visibilityexception | 112 | 110 | 12 | 31 | 8 | 12 |
-| **合计** | 1487 | 1425 | 193 | 345 | 62 | 194 |
+| **合计** | 1492 | 1429 | 194 | 346 | 62 | 195 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 197、测试 285。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 199、测试 287。
 
 ## 跨上下文消费缝：50 组，146 个生产文件
 
@@ -79,7 +79,7 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 7 |
 
-## 迁移：12 个模块共 274 份 SQL
+## 迁移：12 个模块共 275 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -90,13 +90,13 @@
 | node_operations | 19 |
 | parcel_pricing | 12 |
 | parcel_shipment | 27 |
-| party_commercial | 39 |
+| party_commercial | 40 |
 | pilot_governance | 8 |
 | settlement_accounting | 39 |
 | transport_fulfillment | 39 |
 | visibility_exception | 27 |
 
-## 接线面：接入面端点 173 个，消费适配器 52 个生产文件，直投路由表 35 条
+## 接线面：接入面端点 175 个，消费适配器 52 个生产文件，直投路由表 35 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -109,12 +109,12 @@
 | nodeoperations | 17 |
 | parcelpricing | 17 |
 | parcelshipment | 15 |
-| partycommercial | 32 |
+| partycommercial | 34 |
 | pilotgovernance | 1 |
 | settlementaccounting | 6 |
 | transportfulfillment | 38 |
 | visibilityexception | 15 |
-| **合计** | 173 |
+| **合计** | 175 |
 
 消费适配器按 `internal/<消费方>/adapters/` 下 `inbox`、`adoptconsume`、`finalconsume`、`veconsume` 四类目录的生产文件数。它与上面的「跨上下文消费缝」是两种东西：那一栏数的是消费方为某个提供方写的防腐层，这一栏数的是接进程内直投信封的消费门。
 
@@ -143,7 +143,7 @@
 | visibilityexception | 11 |
 | **合计** | 35 |
 
-## 端口：声明 548 个；基线口径缺 37，精确口径缺 2
+## 端口：声明 549 个；基线口径缺 37，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
