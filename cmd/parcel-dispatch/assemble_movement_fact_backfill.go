@@ -14,7 +14,8 @@ import (
 
 // backfillMovementFacts 装移动事实补派生的处理方（ADR-0224）：按信封键重读交接或对象级揽收，在它让对象进的那一段上按段列出
 // 声明了这一段的移动事实，凡事实那一刻对象在控的就补派生，对象是集运单元时补到它那一刻的成员身上——交接册、揽收登记册、段册、
-// 移动事实册与节点作业的成员关系、收寄身份都只读，权威事实留在各自的上下文。派生借投影那一份租户现绑的编排，与移动事实那一路同一个写入方。交接那一路与揽收那一路共用这一个处理方。
+// 移动事实册与节点作业的成员关系、收寄身份都只读，权威事实留在各自的上下文。派生借投影那一份租户现绑的编排，与移动事实那一路
+// 同一个写入方。交接那一路与揽收那一路共用这一个处理方。
 func backfillMovementFacts(db *bentopg.DB, derive *tenantBoundProjectionDerive) (*vetf.BackfillMovementFactsAdapter, error) {
 	handovers, err := tfpostgres.NewTransportHandovers(db)
 	if err != nil {

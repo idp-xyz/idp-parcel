@@ -19,8 +19,8 @@ import (
 )
 
 // veMovementFactUndecidedSentinels 只给 VE 移动事实投影这一路（ADR-0205 决定五）。本路不 FanOut：NR 的路由偏离消费移动事实
-// 另立票 demo-chain-gaps/35，接得住之前不挂（ADR-0049：接得住才登记）。与交接那份分开列：本路多三站——事实声明的段、段里集运
-// 单元那一刻的成员，以及阻断读数那一步的信号规则与分诊。
+// 另立票 demo-chain-gaps/35，接得住之前不挂（ADR-0049：接得住才登记）。与交接那份分开列：本路还要读事实声明的段、段里集运单元
+// 那一刻的成员，以及阻断读数那一步的信号规则与分诊。
 //
 // 不在名单里：ErrMovementFactRecordInconsistent（仓储不变量已破，含段册答非所问）、ErrMovementFactUntranslatableAnswer（引用
 // 坏了）、ErrConsolidationMembershipInconsistent（节点作业的答复立不成成员，重问同一个结果）、ErrDepartureGateSignalHandoffPending
