@@ -370,25 +370,11 @@ func (handler *RegisterChargeOccurrenceHandler) register(
 		return answer, nil
 	}
 
-	reference, err := domain.DeriveChargeOccurrenceReference(command.TenantID, command.Reason, fact.basis, fact.members)
+	key, coverage, err := occurrenceIdentity(command.TenantID, command.Reason, fact.basis, fact.scope, fact.members)
 	if err != nil {
 		return chargeNotAccepted(ChargeRequestMalformed), nil
 	}
-	key := ports.ChargeOccurrenceKey{
-		TenantID:   command.TenantID,
-		Occurrence: reference,
-		Validity:   domain.FirstOccurrenceValidity(),
-	}
-	continuation := chargeOccurrenceContinuation(command.TenantID.String(), reference.String())
-	coverage := ports.ChargeOccurrenceCoverageQuery{
-		TenantID:   command.TenantID,
-		Reason:     command.Reason,
-		Scope:      fact.scope,
-		FactBasis:  fact.basis,
-		Members:    fact.members,
-		Except:     reference,
-		ScopeUnits: domain.ScopeCountingUnits(),
-	}
+	continuation := chargeOccurrenceContinuation(command.TenantID.String(), key.Occurrence.String())
 
 	procurementGiven := strings.TrimSpace(command.Provider) != "" ||
 		strings.TrimSpace(command.AgreementObject) != "" ||
@@ -672,11 +658,7 @@ func (handler *RegisterChargeOccurrenceHandler) actualFulfillmentFact(
 	case err != nil:
 		return chargeOccurrenceFact{}, chargeNotAccepted(ChargeRequestMalformed), true, nil
 	}
-	basis, err := domain.ActualFulfillmentBasis(segment)
-	if err != nil {
-		return chargeOccurrenceFact{}, chargeNotAccepted(ChargeRequestMalformed), true, nil
-	}
-	scope, err := domain.SegmentOccurrenceScope(segment)
+	basis, scope, err := actualFulfillmentScope(segment)
 	if err != nil {
 		return chargeOccurrenceFact{}, chargeNotAccepted(ChargeRequestMalformed), true, nil
 	}

@@ -259,8 +259,11 @@ func (handler *FormActualFulfillmentOnParticipationEndHandler) keepUnformedRegis
 		return FormationUndecidedReasonNone, fmt.Errorf("keep actual fulfillment unformed: settled answer %s outside the register's set", registered.Outcome())
 	}
 
-	covering, covered, err := handler.coveringOccurrence(ctx, tenant, segment, participation.Object())
+	covering, covered, readErr, err := handler.coveringOccurrence(ctx, tenant, segment, participation.Object())
 	if err != nil {
+		return FormationUndecidedReasonNone, err
+	}
+	if readErr != nil {
 		return FormationOccurrenceRegistryUnavailable, nil
 	}
 	if covered {
@@ -292,41 +295,30 @@ func (handler *FormActualFulfillmentOnParticipationEndHandler) keepUnformedRegis
 }
 
 // coveringOccurrence 问这件参与是不是已有一项发生项盖住：同一段上同一件事实已被另一项计过（成员交集或按段计过），或同一身份那一项
-// 已在册。身份照登记用例的派生；按身份读只读首版，与登记用例的重放同一个读法。
+// 已在册。依据、范围与身份取登记用例同一处的派生（charge_occurrence_identity.go）；按身份读只读首版，与登记用例的重放同一个读法。
+//
+// 派生不出来是本上下文自己的缺陷，交 err、上抛；读不动是此刻的事，交 readErr、答未决重投——两者混在一格，缺陷就会被当成等得来的依赖反复
+// 重投。
 func (handler *FormActualFulfillmentOnParticipationEndHandler) coveringOccurrence(
 	ctx context.Context,
 	tenant domain.TenantID,
 	segment domain.FulfillmentSegmentReference,
 	object domain.CarriedObjectReference,
-) (ports.ChargeOccurrenceRecord, bool, error) {
-	basis, err := domain.ActualFulfillmentBasis(segment)
+) (covering ports.ChargeOccurrenceRecord, covered bool, readErr error, err error) {
+	basis, scope, err := actualFulfillmentScope(segment)
 	if err != nil {
-		return ports.ChargeOccurrenceRecord{}, false, err
+		return ports.ChargeOccurrenceRecord{}, false, nil, fmt.Errorf("keep actual fulfillment unformed: occurrence scope of %s: %w", segment, err)
 	}
-	scope, err := domain.SegmentOccurrenceScope(segment)
+	key, coverage, err := occurrenceIdentity(tenant, domain.ActualFulfillmentOccurrence, basis, scope, []domain.CarriedObjectReference{object})
 	if err != nil {
-		return ports.ChargeOccurrenceRecord{}, false, err
+		return ports.ChargeOccurrenceRecord{}, false, nil, fmt.Errorf("keep actual fulfillment unformed: occurrence identity of %s on %s: %w", object, segment, err)
 	}
-	members := []domain.CarriedObjectReference{object}
-	identity, err := domain.DeriveChargeOccurrenceReference(tenant, domain.ActualFulfillmentOccurrence, basis, members)
-	if err != nil {
-		return ports.ChargeOccurrenceRecord{}, false, err
+	covering, covered, readErr = handler.deps.Coverage.FindCovering(ctx, coverage)
+	if readErr != nil || covered {
+		return covering, covered, readErr, nil
 	}
-	covering, covered, err := handler.deps.Coverage.FindCovering(ctx, ports.ChargeOccurrenceCoverageQuery{
-		TenantID:   tenant,
-		Reason:     domain.ActualFulfillmentOccurrence,
-		Scope:      scope,
-		FactBasis:  basis,
-		Members:    members,
-		Except:     identity,
-		ScopeUnits: domain.ScopeCountingUnits(),
-	})
-	if err != nil || covered {
-		return covering, covered, err
-	}
-	return handler.deps.Coverage.FindByKey(ctx, ports.ChargeOccurrenceKey{
-		TenantID: tenant, Occurrence: identity, Validity: domain.FirstOccurrenceValidity(),
-	})
+	covering, covered, readErr = handler.deps.Coverage.FindByKey(ctx, key)
+	return covering, covered, readErr, nil
 }
 
 // unformedWrite 把册写口的失败分开：确定性拒绝是缺陷、上抛；其余是此刻写不动，答未决重投。
