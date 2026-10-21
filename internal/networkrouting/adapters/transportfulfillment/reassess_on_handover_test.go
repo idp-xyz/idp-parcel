@@ -633,7 +633,7 @@ func TestTheSameHandoverDeliveredAgainAnswersTheExistingResult(t *testing.T) {
 }
 
 // Covers: AT-NR-069——更正后仍`已交接`：新版本承继接收节点，另成一次复核，原复核不被覆盖；更正成拒收：入账，不复核，也不
-// 回退已有的复核。
+// 回退已有的复核。AT-NR-081（更正那一半）——更正承继原版的判断时刻，与当前位置同一时刻，不算更早，照判。
 func TestACorrectionIsReassessedAgainAndAWithdrawalLeavesEarlierReassessmentsAlone(t *testing.T) {
 	original := formHandover(t, handoverSpec{
 		object: "parcel-1", version: "handover/v1", verdict: tfdomain.ObjectHandedOver, receiving: planTransfer,
