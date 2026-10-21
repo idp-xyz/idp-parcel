@@ -1,7 +1,7 @@
 # 42 出发门禁读数不展开集运单元成员：一袋被扣包裹的境内出发读成不受门禁
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg42。2026-10-20 认领。此前 ready-for-agent——2026-10-19 分诊为 A（挡演示/上线），批次见 [triage-2026-10-19](../triage-2026-10-19.md)。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [32](./32-movement-facts-declare-segment-and-record-departure-gate-reading.md) 的隔离评审（非阻断项，评审建议进 main 前写明后果、另立票）。
+Status: resolved——2026-10-21 进 main（全量钉 `044dc99a`：`scripts/test-full.sh` 157 ok / 0 FAIL，见文末「进 main 记录」）；交出读数不展开转票 [122](./122-handover-gate-reading-does-not-expand-consolidation-unit-members.md)，追踪把袋当一件包裹投转票 [123](./123-tracking-projects-a-departing-bag-as-one-parcel-and-its-members-get-no-departure.md)。此前 in-progress——完工待评审与进 main，分支 claude-dcg42。2026-10-20 认领。此前 ready-for-agent——2026-10-19 分诊为 A（挡演示/上线），批次见 [triage-2026-10-19](../triage-2026-10-19.md)。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [32](./32-movement-facts-declare-segment-and-record-departure-gate-reading.md) 的隔离评审（非阻断项，评审建议进 main 前写明后果、另立票）。
 Blocked by: 无（NO 那一侧的端口在另一会话 idp-parcel-9b 的地盘里变动，落地前要与那边对齐读口形状）
 出处：[ADR-0205](../../../docs/adr/0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md) 越权风险点 5；[ADR-0206](../../../docs/adr/0206-customs-action-admission-judgement-folds-three-sources-and-judges-cross-zone-by-node-customs-zones.md) 越权风险点「对象只认包裹」（「展开成员由消费方做」）。
 
@@ -102,3 +102,6 @@ none
 
 修订后验证：`go build ./...`、`go vet ./...`、`gofmt -l` 干净；两笔修订代码提交各自单独 build/vet 通过；`scripts/test-full.sh` 覆盖触到的包及其反向依赖（含 `cmd/parcel-api`、`cmd/parcel-dispatch`、`cmd/parcel-frontline-import`、`cmd/parcel-node-operations-register`、`cmd/parcel-transport-register`）、`./internal/visibilityexception/...`、`./internal/architecture/...`、`./migrations/...`、`./tools/...`，52 个包 ok、0 FAIL。
 
+## 进 main 记录
+
+2026-10-21 协调方合入。分支基点 `8bf7a231`，其后 main 多了票 12（CC 外部结果同层判法）、上线就绪评估票面与 infra-speed/08 的 `ci.yml`；与本分支只在 `.scratch/at-coverage-inventory.md` 重叠。在隔离树上把分支 14 笔按原序 cherry-pick 到 `9e8ca46e`：盘点两次冲突都是两边各加一行，两边都留（用例行按编号、追记按日期排；评审修订改写的本票追记取分支新版），其余各文件与分支逐字相同；SHA 随之换新（分支 `415c5322`…`e06f5f3c` 作封存出处，main 上为 `c2aa7808`…`f20f3ee2`）。其上按 parallel-sessions.md 重生成 ADR 索引（`6795580f`）、重算 AT 盘点计数（`00f6e0a9`）、重生成机制清点（`044dc99a`），各自单独成笔；`adr-index -check` 与 `at-coverage-counts -check` 退 0。在干净的隔离树上对 `044dc99a` 跑 `go build ./...`、`go vet ./...`、`gofmt -l` 干净，`scripts/test-full.sh` 全量 157 ok、0 FAIL（`-count=1`，无缓存）；推 `044dc99a:main`。NO 读口形状（ADR-0225 越权风险点 1）仍待 NO owner 会签。
