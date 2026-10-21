@@ -1,7 +1,7 @@
 # 07 PC+PP（party-commercial、parcel-pricing）：CONTEXT 写出现行规则、UC 与之一致、矛盾裁清
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dc07（2026-10-21 协调方立；作者子代理 rebase 于 main `3619f5c0e`）
+Status: in-progress——完工待评审与进 main，分支 claude-dc07（2026-10-21 协调方立；作者子代理二轮修订后 rebase 于 main `899a45557`）
 Blocked by: 无（01 进 main 后开工）
 出处：[audit/pc-pp.md](../audit/pc-pp.md)（pc-pp.md）；[02 的完成记录](./02-code-defects-from-the-audit.md)里「交修订票」一表中交给本票的条目；[01](./01-adr-suspension-chains.md) 的「交后续」一节里交给本票的条目。
 
@@ -128,7 +128,7 @@ Blocked by: 无（01 进 main 后开工）
 
 阻断：
 
-1. **ADR-0262 写代写复核「照旧不经此门」，与代码不符。** 核过：`application/feed_reference_series.go` 的免复核分支调同一只 `ReviewReferenceSeriesHandler`，复核者为 `binding.ConnectorIdentity()`，今天就受不同主体比较。照协调方裁定改：代写复核不读规则、规则未登记也不答未配置，写死的不同主体比较在代写一路保留，落法是复核命令带「免复核声明下的系统代写」一格。ADR-0262 决定一末条与索引注记写明今天的事实与这条裁定，越权风险点补第 5 条「代写一路不受租户复核职责规则约束」；code/41 第 4 条点名 `feed_reference_series.go` 写出绕行方式；UC-PP-001 新增 `AT-PP-016`，AT 盘点入②。
+1. **ADR-0262 写代写复核照旧不经此门，与代码不符。** 核过：`application/feed_reference_series.go` 的免复核分支调同一只 `ReviewReferenceSeriesHandler`，复核者为 `binding.ConnectorIdentity()`，今天就受不同主体比较。照协调方裁定改：代写复核不读规则、规则未登记也不答未配置，写死的不同主体比较在代写一路保留，落法是复核命令带「免复核声明下的系统代写」一格。ADR-0262 决定一末条与索引注记写明今天的事实与这条裁定，越权风险点补第 5 条「代写一路不受租户复核职责规则约束」；code/41 第 4 条点名 `feed_reference_series.go` 写出绕行方式；UC-PP-001 新增 `AT-PP-016`，AT 盘点入②。
 2. **ADR-0261 越权风险点 3 与 Consequences 和 code/24 写成同一份清单**：主动拒绝、撤回、资料修订、受控关闭与重开四只编排停在未决并指名授权适用冲突，授权处置与完成人工复核两只各加 `AUTHORITY_APPLICABILITY_CONFLICT`。
 3. **ADR-0260 Consequences** 改为「ADR-0107、ADR-0148、ADR-0157（按口解）的 Status 行与 Links 挂前向指针」。
 
@@ -136,14 +136,14 @@ Blocked by: 无（01 进 main 后开工）
 
 - N1 ADR-0260 Consequences 末条交横切清单补 NR CONTEXT 排序那一条（X12）与 UC-SA-002 `PAR-SET-11`（X14）。
 - N2 ADR-0262 Consequences 与 code/41 第 2 条：写口给受控 CLI、装配与测试用，注明有意不照 `PriceCardApprovalDutyRule` 的先例。
-- N3 核过 `cmd/parcel-api` 只有 `/pricing-reference-series-reviews`、没有目录复核端点：ADR-0262 越权风险点 4 如实写「要求授予的租户无法复核目录」；目录复核的操作者面端点（`/pricing-reference-catalogue-reviews`）并进 code/41 第 4a 条，不另立票——它是同一道门的另一个入口，门改了而入口缺着，code/41 的验收就不完整。
+- N3 核过 `cmd/parcel-api` 只有 `/pricing-reference-series-reviews`、没有目录复核端点：ADR-0262 越权风险点 4 如实写要求授予的租户无法复核目录；目录复核的操作者面端点（`/pricing-reference-catalogue-reviews`）并进 code/41 第 4a 条，不另立票——它是同一道门的另一个入口，门改了而入口缺着，code/41 的验收就不完整。
 - N4 `AT-PP-015` 补 CLI 那一支（规则要求授予时一律答复核者不合格），code/41 第 6 条随之改。
 - N5 code/24 补：`dispose_shipment_request` 在生产上装 `UnconfiguredAuthorizedDispositionAuthorizer`（不问 PC，ADR-0132 越权风险点 2），给它加的那一码今天走不到，只为闭集穷尽。
-- N6 PP CONTEXT「`006` 见下条金额保真度」改为点名「金额保真度：不可默认成立」一条；UC-PC-001、UC-PC-003、UC-PP-001 的「规则如上文」改为点名小节。
-- N7 UC-PC-003 `AT-PC-061` 委派缺席答不允许的出处改为 ADR-0116 决定三（折法仍指 ADR-0261 决定二）；「受控关闭与重开各有授权适配器」改为两者共用 `continued_attempt_decision_authorization.go` 一只。
-- N8 X6 去掉 `PAR-SET-02` 那句条件句；设计文档「汇率比燃油多一条约束并已落地……」一句并进 X8。
+- N6 PP CONTEXT 里 `006` 见下条金额保真度的写法改为点名「金额保真度：不可默认成立」一条；UC-PC-001、UC-PC-003、UC-PP-001 的「规则如上文」改为点名小节。
+- N7 UC-PC-003 `AT-PC-061` 委派缺席答不允许的出处改为 ADR-0116 决定三（折法仍指 ADR-0261 决定二）；受控关闭与重开各有授权适配器的说法改为两者共用 `continued_attempt_decision_authorization.go` 一只。
+- N8 X6 去掉 `PAR-SET-02` 那句条件句；设计文档里汇率比燃油多一条约束的那一句并进 X8。
 
 未采纳：无。
 
-检查（修后）：见本节之后协调方要求的四项，结果写在返回里，并在下面补记。
+检查（修后，rebase 于 main `899a45557`，AT 盘点与 06 的行与追记取并集）：scratchpad 副本上 `go run ./tools/adr-index` 重生成后 `-check` 退 0；改动的 `.md` 相对链接与锚点全部解析；0099、0107、0148、0157、0233 注记里的被停原句在被停方正文逐字存在，五份去掉 Status 行与 Links 后与 main 逐字节相同；本轮新写的书名号引文逐条对出处检索，引旧写法或转述的去掉了书名号。
 
