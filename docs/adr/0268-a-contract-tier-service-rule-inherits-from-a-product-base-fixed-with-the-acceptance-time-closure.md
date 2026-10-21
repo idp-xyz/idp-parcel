@@ -12,7 +12,7 @@ Date: 2026-10-21
 - 代码（取证于 main `b18f662bc`）：
   - `internal/partycommercial/application/customer_service_rule_layers.go` 的 `LoadCustomerServiceRuleLayers` 每次读都向权威视图 `LoadScope` 取此刻的登记册，经 `CommercialRegistry.CustomerServiceRuleProductBase` 现选底座；选法里的 `applicable` 只收状态为生效、选用区间（经有效性更正之后的区间）含锚点的版本。锚点与声明产品取冻结闭包上的，登记册取此刻的。ADR-0233 起旧版可被截止或同起点退役，退役的版本此后不参选。
   - 端口头注自认：「底座不随闭包冻结，按传入的锚点读时选；已接受委托的底座只靠锚点固定与版本不回溯生效保持不变。」VE 适配器 `internal/visibilityexception/adapters/partycommercial/claim_service_rules.go` 的 `productBase` 头注：「底座不随闭包冻结，按锚点读时选；有效性更正改了底座区间时这里会改口」；底座答`适用冲突`时它报 `ErrUntranslatableAnswer`。同一文件 `adoptedRuleVersion` 头注照写 ADR-0136 决定二「读一份已固定的闭包没有`适用冲突`」，两说并存。
-  - 合同点核 `tiedToAdoptedContract(rule, adoption.contract)` 比的是同一份闭包 `AdoptedFor(CustomerContractObject)` 交出的客户合同对象，不是 `EligibilityQuery.Contract`；合同版、底座与单版点读三条路都过它。挂产品的正文不核。
+  - 合同点核 `tiedToAdoptedContract(rule, adoption.contract)` 比的是同一份闭包 `AdoptedFor(CustomerContractObject)` 交出的客户合同对象，不是 `EligibilityQuery.Contract`；合同版、底座与单版点读各条路都过它。挂产品的正文不核。
   - 闭包解析 `resolveCustomerServiceRuleBasis` 只采纳一版；`namedReferencesConfirmed` 只核采用的成员，底座不在其中。
 - 后果：包裹接受之后，产品底座那一版若被截止、同起点退役或有效性更正，客户合同继承来的首次索赔期限与最低材料会在事后改口，正是 ADR-0136 要防的那一种。
 
@@ -29,7 +29,7 @@ Date: 2026-10-21
 **二、VE 的合同点核比同一份闭包采用的客户合同。**（机制）
 
 - VE 对它读到并拼接的每份客户服务规则正文——闭包采纳的那一版与固定的底座——核：正文挂客户合同时，挂的必须是同一份闭包采用的那份客户合同。不等即提供方契约被打破。
-- 比较对象不是 `EligibilityQuery.Contract`：那是 VE 自己两本册的键（ADR-0136 决定二），与 PC 客户合同对象不是一套词，两者不核一致（ADR-0136 越权风险点 5 照旧）。拿查询携带的一格去核，是把核对对象换成调用方可控的值。
+- 比较对象不是 `EligibilityQuery.Contract`：那是 VE 自己的册（合同责任范围、申请人授权目录）的键（ADR-0136 决定二），与 PC 客户合同对象不是一套词，两者不核一致（ADR-0136 越权风险点 5 照旧）。拿查询携带的一格去核，是把核对对象换成调用方可控的值。
 - 挂产品的正文不核，照 ADR-0176 决定四。产品那一半由闭包解析保证：采用的成员与决定一之后的底座都受声明产品收窄与指名引用核对。
 
 **三、存量快照。**（机制）
@@ -63,7 +63,7 @@ Date: 2026-10-21
 1. **底座多候选会挡接受**（PC owner）。改后一份合同版委托的接受，要求同范围产品层恰好一版或一版都没有；运营登了两版同期生效的产品版而没收尾，接受停在`适用冲突`。这是把一个今天藏到索赔时才露出的登记错误提前露出。
 2. **有效性更正不回及已接受委托**（PC、VE owner）。若 owner 认为对底座的有效性更正（不是发新版）说的是登记本来就错了、应当追溯到已接受委托的索赔条款，推翻的是决定一；那时合同版与产品版一样要另立更正回及在途委托的规则，不只是底座。
 3. **存量快照照旧现选**（PC owner）。决定三之下演示库与测试夹具里的旧闭包仍会漂；生产没有存量，演示库重灌即消。
-4. **合同点核与 `EligibilityQuery.Contract` 仍不核一致**（VE owner）。ADR-0136 越权风险点 5 不因本记录消解：VE 两本册按查询携带的合同键入，PC 那一头按回指走，两者指向不同合同时今天没有一格会报。
+4. **合同点核与 `EligibilityQuery.Contract` 仍不核一致**（VE owner）。ADR-0136 越权风险点 5 不因本记录消解：VE 的合同责任范围与申请人授权目录按查询携带的合同键入，PC 那一头按回指走，两者指向不同合同时今天没有一格会报。
 
 ## Links
 

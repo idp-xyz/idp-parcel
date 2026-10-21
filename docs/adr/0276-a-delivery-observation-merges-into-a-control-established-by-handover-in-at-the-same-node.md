@@ -7,7 +7,7 @@ Date: 2026-10-21
 ## Context
 
 - [ADR-0199](./0199-node-reception-preserves-the-delivery-source-and-rechecks-pending-identities.md) 决定四「**四、同一作业实物在同一节点不另起控制起点（第四期）。**」定义「当前收寄」：「这件实物在这个节点上，有一条判断链的当前有效版本是`节点收寄已形成`或`待识别实物已建立`，且那一版的控制没有转出。」并规定：「有当前收寄时，同一实物在同一节点的任一交付观察都并入它」。
-- [ADR-0214](./0214-node-control-transfers-out-and-in-on-an-authoritative-transport-handover.md) 决定七立了第二种控制起点：权威运输交接`已交接`且声明了接收节点时，在该节点立 HANDOVER_IN 控制，记在节点控制转移册上。它的文末补记写「否则在接收节点立 HANDOVER_IN 控制，成立时刻取交接的业务时间。」越权风险点 17「收寄不认交接转入立起的控制」：「收寄编排只看收寄链，会再立一份，此后的转出停在「不止一份」。」后继票 demo-chain-gaps/92。
+- [ADR-0214](./0214-node-control-transfers-out-and-in-on-an-authoritative-transport-handover.md) 决定七另立一种控制起点：权威运输交接`已交接`且声明了接收节点时，在该节点立 HANDOVER_IN 控制，记在节点控制转移册上。它的文末补记写「否则在接收节点立 HANDOVER_IN 控制，成立时刻取交接的业务时间。」越权风险点 17「收寄不认交接转入立起的控制」：「收寄编排只看收寄链，会再立一份，此后的转出停在「不止一份」。」后继票 demo-chain-gaps/92。
 - 两份都已接受，谁也没停用谁。读 ADR-0199 的人会以为同一节点只有一个控制起点；转入之后再有一次送站，实际会有两份。补记自己说过两份的后果：「两份在身控制说不出实物在哪个节点，此后的转出也只能停在「不止一份」。」
 - 代码（取证于 main `b18f662bc`）：`internal/nodeoperations/application/receive_delivered_unit.go` 的 `Handle` 只调 `Receptions.FindCurrentJudgmentsAtNode` 认当前收寄，看不到转移册；转移册由 `ports` 的 `FindUnitControls`（同一把实物锁）读，收寄不读它。
 - 业务上，交接转入是权威运输交接对这件实物已经在本节点受控的确认；之后节点人员再扫到它，是同一件实物在同一个节点上的又一次观察，不是一次新的送站。

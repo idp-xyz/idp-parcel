@@ -6,12 +6,12 @@ Date: 2026-10-21
 
 ## Context
 
-- [ADR-0014](./0014-versioned-canonicalization-shape-for-content-digest.md) 决定「规范化版本的变化必须来自规范化结构的变化」，Consequences 写「每次变化都要新增一个规范化版本并长期支持它」。它的索引注记记了三次同号改形（ADR-0177、0201、0202），每次都以「没有需要回放的已保存摘要」为前提，并写明「此后任何一册再改规范化形状照本记录换号」。
+- [ADR-0014](./0014-versioned-canonicalization-shape-for-content-digest.md) 决定「规范化版本的变化必须来自规范化结构的变化」，Consequences 写「每次变化都要新增一个规范化版本并长期支持它」。它的索引注记记过同号改形（ADR-0177、0201、0202），各以「没有需要回放的已保存摘要」为前提，并写明「此后任何一册再改规范化形状照本记录换号」。
 - [ADR-0126](./0126-commercial-publication-digest-is-computed-server-side-per-register-and-approval-comes-through-a-pending-carrier.md) 决定一：「加册不换号：换号只在既有册的文档形状变化时发生（ADR-0014），一册从「没接」到「接了」不改任何已算出的字节。」
 - [ADR-0129](./0129-credit-ratio-base-is-declared-on-the-credit-policy-content.md) 决定一在已接的信用政策一册里加键不换号：「PCC-1 不换号：`canonicalCreditPolicyBody` 加键 `ratioBase,omitempty`（ADR-0126 决定一「各册接进同一个 `PCC-1` 不换号」同法）；金额正文的规范化文档因此一字不变，既有摘要不动。」它援引的是加册那一条，情形不同；它也没有按停用机制在 ADR-0014 上挂指针。
 - [ADR-0176](./0176-customer-service-rule-contract-tier-selection-and-inheritance.md) 决定五反把它当先例：「PCC-1 一字不改（若要改则按加 omitempty 键不换号的先例另核）」。[ADR-0177](./0177-customer-contract-names-its-customer-account-and-the-closure-narrows-by-it.md) 决定三已对客户合同一册显式偏离这一先例：「这是对 ADR-0176 决定五所记先例（「若要改则按加 omitempty 键不换号的先例另核」）的一次显式偏离」；ADR-0176 上没有这条指针。
 - [ADR-0209](./0209-supplier-agreements-declare-charge-occurrence-conditions-and-registration-judges-by-them.md) 决定三遇到同一种情形（供应商协议一节加可缺的收费发生条件，不带条件的旧文档逐字节不变）却换号：「改的是供应商协议一节的形状，照 ADR-0014 换号。」它的候选与反方写了理由：「只认 `PCC-1` 的构建读到带条件的文档时会把条件当未知键丢掉，算出的摘要与列上对不上却报不出是形状变了。」
-- 于是仓里有两条换号规则：ADR-0014、0126、0209 一条，ADR-0129、0176 一条，没有记录裁过谁先谁后。下一位给 PCC、PPC 或 TFC 加可缺键的作者，照哪条做都能找到一份已接受记录撑腰。
+- 于是仓里并存相反的换号做法：ADR-0014、0126、0209 一边，ADR-0129、0176 另一边，没有记录裁过谁先谁后。下一位给 PCC、PPC 或 TFC 加可缺键的作者，照哪条做都能找到一份已接受记录撑腰。
 - 代码（取证于 main `b18f662bc`）：`internal/partycommercial/domain/publication_canonicalization.go` 里信用政策正文的 `RatioBase string json:"ratioBase,omitempty"` 在 `PCC-1` 之下；同一文件另有供应商协议用的 `PCC-2`（`supplierChargeConditionCanonicalizationVersion`），按内容取能表达它的最低一版。折回存下的文档走 `RehydratePublicationContent`，用 `json.Unmarshal` 解码、不拒未知键——ADR-0209 说的「当未知键丢掉」在这一处成立。
 
 ## Decision
@@ -38,7 +38,7 @@ ADR-0129 给信用政策加 `ratioBase`，前提是它同句写的「金额正�
 ## 候选与反方
 
 - **旧文档字节不变就不换号（ADR-0129、0176 那一条）。** 否决：它只顾了已存摘要，没顾旧构建读新文档；本仓的折回口不拒未知键，丢键是静默的。滚动发布、回滚或多个进程版本并存时，这一格就会出现。
-- **一律换号，连没有已存摘要的那一册也换。** 否决：ADR-0014 的代价论证（「代价在此刻支付最低」）正是为没有存量的时刻留的；没有存量时换号只多一个要长期支持的版本，换不来任何可比性。三次既有例外都按此成立，本记录不推翻。
+- **一律换号，连没有已存摘要的那一册也换。** 否决：ADR-0014 的代价论证（「代价在此刻支付最低」）正是为没有存量的时刻留的；没有存量时换号只多一个要长期支持的版本，换不来任何可比性。既有例外都按此成立，本记录不推翻。
 - **改折回口拒未知键，就可以不换号。** 不采纳为替代：拒未知键让旧构建响亮失败，可它报的是「文档坏了」，不是形状变了、该换构建；换号后旧构建答的是本构建不认这一版，恢复动作明确。两者可以并存，拒未知键另作加固，不在本记录。
 - **把 ADR-0129 的 `ratioBase` 改写成新一版。** 否决：理由见决定四。
 
@@ -54,7 +54,7 @@ ADR-0129 给信用政策加 `ratioBase`，前提是它同句写的「金额正�
 ## Consequences
 
 - 代码不改：`PCC-1` 之下的 `ratioBase` 是决定四认下的例外，`PCC-2` 是决定一的做法。`publication_canonicalization.go` 里信用政策正文那段头注（「ADR-0129，PCC-1 加键不换号——金额正文的文档一字不变，既有摘要不动」）与本记录一致，不改。
-- ADR-0014、0129、0176、0177 的 Status 行与 Links 各补指针（见上节）。
+- ADR-0014、0129、0176、0177 的 Status 行与 Links 各补指针，见「对已接受记录的作用」。
 - 此后给任何一册的规范化正文加可缺键的作者，按决定一换号；要同号改形，先查那一册有没有已存摘要，按决定三写明前提。
 - 不改 CONTEXT：规范化版本是摘要的技术合同，不进领域语言。
 
