@@ -7,6 +7,7 @@ import (
 	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
@@ -196,6 +197,12 @@ func TestTheWiredAdoptionFaceStartsTheCommissionOfASegmentEstablishedByHandover(
 	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM transport_fulfillment.segment_commission_adoption`).Scan(&adoptions); err != nil || adoptions != 1 {
 		t.Fatalf("采用 %d 行 %v，want 1", adoptions, err)
 	}
+	// 采用成立的那一笔交出恰一封补形成门铃（ADR-0231 决定一）：原样再采用与答不成立的那两次都不交。
+	var doorbells int
+	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM `+migrate.SchemaBento+`.outbox WHERE event_type = $1`,
+		tfpostgres.SegmentCommissionAdoptionRegisteredEventType).Scan(&doorbells); err != nil || doorbells != 1 {
+		t.Fatalf("补形成门铃 %d 封 %v，want 1", doorbells, err)
+	}
 }
 
 // Covers: `AT-TF-188` 授予那一半——采用口没有持有采用授予的操作者进不来——只持有委托提交与取消委托的人答 403 OPERATOR_NOT_GRANTED（ADR-0202 决定一
@@ -274,6 +281,14 @@ func TestTheAdoptionShellRollsBackALinkWhenTheCommissionIsCancelledUnderneath(t 
 	if err != nil {
 		t.Fatal(err)
 	}
+	outboxStore, err := outbox.NewStore(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doorbell, err := tfpostgres.NewOutboxSegmentCommissionAdoptionHandoff(db, outboxStore, systemClock{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	segments, err := tfpostgres.NewFulfillmentSegments(db)
 	if err != nil {
 		t.Fatal(err)
@@ -308,7 +323,7 @@ func TestTheAdoptionShellRollsBackALinkWhenTheCommissionIsCancelledUnderneath(t 
 	adopter := transactionalSegmentCommissionAdopter{
 		transactor: db.Transactor(),
 		inner: tfapp.NewAdoptSegmentCommissionHandler(tfapp.AdoptSegmentCommissionDeps{
-			Adoptions: adoptions, Segments: segments, Commissions: racing, StartAdvancement: commissions, Clock: systemClock{},
+			Adoptions: adoptions, Segments: segments, Commissions: racing, StartAdvancement: commissions, Doorbell: doorbell, Clock: systemClock{},
 		}),
 	}
 	result, err := adopter.Adopt(t.Context(), tfapp.AdoptSegmentCommissionCommand{

@@ -80,6 +80,8 @@ const (
 	CommissionAdoptionStoreUnavailable
 	CommissionAdoptionSegmentStoreUnavailable
 	CommissionAdoptionCommissionStoreUnavailable
+	// CommissionAdoptionDoorbellUnavailable：采用成立了，可交给补形成的那封门铃此刻入不了队；整笔回滚，连线不留。
+	CommissionAdoptionDoorbellUnavailable
 )
 
 func (reason CommissionAdoptionUndecidedReason) String() string {
@@ -90,6 +92,8 @@ func (reason CommissionAdoptionUndecidedReason) String() string {
 		return "SEGMENT_STORE_UNAVAILABLE"
 	case CommissionAdoptionCommissionStoreUnavailable:
 		return "COMMISSION_STORE_UNAVAILABLE"
+	case CommissionAdoptionDoorbellUnavailable:
+		return "DOORBELL_UNAVAILABLE"
 	default:
 		return ""
 	}
@@ -151,11 +155,13 @@ func (result CommissionAdoptionResult) ContinuationReference() string {
 	return result.continuation
 }
 
+// AdoptSegmentCommissionDeps 全部必备。Doorbell 是采用成立时交给实际履约补形成的那封门铃（ADR-0231 决定一）。
 type AdoptSegmentCommissionDeps struct {
 	Adoptions        ports.SegmentCommissionAdoptionStore
 	Segments         ports.FulfillmentSegmentView
 	Commissions      ports.TransportCommissionStore
 	StartAdvancement ports.TransportCommissionStartAdvancement
+	Doorbell         ports.SegmentCommissionAdoptionHandoff
 	Clock            ports.Clock
 }
 
@@ -179,7 +185,10 @@ func NewAdoptSegmentCommissionHandler(deps AdoptSegmentCommissionDeps) *AdoptSeg
 // 窗口里的答法因此与没有并发时一致。**本编排答`采用成立`以外的任一格时，装配必须整笔回滚**：其余各格都不该留下任何写入，
 // 而读回发现委托刚被取消的两格，连线已经落了。
 //
-// 采用不入队：今天没有它的消费者（tf-chain-plan「跨票通则」X3）；运输收费发生项登记要它时按段回读（ports 的头注）。
+// 采用成立时同一笔交一封门铃（ADR-0231 决定一）：段上在采用之前已结束的参与，自动形成那一路判的时候段还没采用委托，答的是「段没有
+// 采用连线」，没有东西回头再问；门铃让派发进程把它们逐件交回同一个形成后半。只交门铃、不在这一笔里形成：形成要回问 party-commercial，
+// 读不动时采用不该跟着失败（ADR-0207 决定七前半句）。门铃入不了队答未决、整笔回滚——采用落了而门铃没交，那几件就又没人管了。
+// 已有与冲突两格不交：门铃在采用成立的那一笔里已经交过。
 func (handler *AdoptSegmentCommissionHandler) Adopt(
 	ctx context.Context,
 	command AdoptSegmentCommissionCommand,
@@ -260,7 +269,7 @@ func (handler *AdoptSegmentCommissionHandler) Adopt(
 		var written bool
 		switch change {
 		case domain.CommissionStartKept:
-			return CommissionAdoptionResult{outcome: CommissionAdopted, adoption: record, hasAdoption: true, commission: current, hasCommission: true}, nil
+			return handler.ringAdopted(ctx, record, current, command.Segment)
 		case domain.CommissionStartMarked:
 			written, err = handler.deps.Commissions.Replace(ctx, next)
 		case domain.CommissionStartAdvanced:
@@ -272,7 +281,7 @@ func (handler *AdoptSegmentCommissionHandler) Adopt(
 			return commissionAdoptionUndecided(CommissionAdoptionCommissionStoreUnavailable, command.Segment), nil
 		}
 		if written {
-			return CommissionAdoptionResult{outcome: CommissionAdopted, adoption: record, hasAdoption: true, commission: next, hasCommission: true}, nil
+			return handler.ringAdopted(ctx, record, next, command.Segment)
 		}
 		var found bool
 		current, found, err = handler.deps.Commissions.FindByKey(ctx, commissionKey)
@@ -290,6 +299,19 @@ func (handler *AdoptSegmentCommissionHandler) Adopt(
 		}
 	}
 	return CommissionAdoptionResult{}, fmt.Errorf("%w: commission %s start not settled after %d attempts", ErrUnexpectedCommissionSave, commissionRef, maxCommissionStartAttempts)
+}
+
+// ringAdopted 交采用成立的那封门铃，再答`采用成立`。
+func (handler *AdoptSegmentCommissionHandler) ringAdopted(
+	ctx context.Context,
+	record ports.SegmentCommissionAdoptionRecord,
+	commission ports.TransportCommissionRecord,
+	subject string,
+) (CommissionAdoptionResult, error) {
+	if err := handler.deps.Doorbell.HandOffSegmentCommissionAdoption(ctx, ports.SegmentCommissionAdoptedIntent{Record: record}); err != nil {
+		return commissionAdoptionUndecided(CommissionAdoptionDoorbellUnavailable, subject), nil
+	}
+	return CommissionAdoptionResult{outcome: CommissionAdopted, adoption: record, hasAdoption: true, commission: commission, hasCommission: true}, nil
 }
 
 // maxCommissionStartAttempts 是写委托开始的轮数上限，理由见 Adopt 里那一轮循环的注释。

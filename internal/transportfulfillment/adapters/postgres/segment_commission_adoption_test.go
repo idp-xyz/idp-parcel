@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
@@ -27,6 +28,7 @@ type adoptionStores struct {
 	commissions *adapter.TransportCommissions
 	bookings    *adapter.BookingRequests
 	adoptions   *adapter.SegmentCommissionAdoptions
+	doorbell    *adapter.OutboxSegmentCommissionAdoptionHandoff
 	transactor  bentoapp.Transactor
 	pool        *pgxpool.Pool
 }
@@ -54,7 +56,16 @@ func newAdoptionStores(t *testing.T) adoptionStores {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return adoptionStores{segments: segments, commissions: commissions, bookings: bookings, adoptions: adoptions, transactor: db.Transactor(), pool: pool}
+	store, err := outbox.NewStore(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doorbell, err := adapter.NewOutboxSegmentCommissionAdoptionHandoff(db, store, tfHandoffClock{at: segmentEnteredAtFixture.Add(24 * time.Hour)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return adoptionStores{segments: segments, commissions: commissions, bookings: bookings, adoptions: adoptions, doorbell: doorbell,
+		transactor: db.Transactor(), pool: pool}
 }
 
 // seed 立段 SEG-ADOPT（首个参与 segmentEnteredAtFixture）、提交 commission-1（tenant-1，服务方 partner-1）并在它下面订一舱。
@@ -82,7 +93,8 @@ func TestAWiredAdoptionStartsTheCommissionAndCancellationThenAnswersAlreadyStart
 	stores.seed(t, ctx)
 	clock := fixedAdoptionClock{at: segmentEnteredAtFixture.Add(24 * time.Hour)}
 	adopter := application.NewAdoptSegmentCommissionHandler(application.AdoptSegmentCommissionDeps{
-		Adoptions: stores.adoptions, Segments: stores.segments, Commissions: stores.commissions, StartAdvancement: stores.commissions, Clock: clock,
+		Adoptions: stores.adoptions, Segments: stores.segments, Commissions: stores.commissions, StartAdvancement: stores.commissions,
+		Doorbell: stores.doorbell, Clock: clock,
 	})
 	tenant := deliveryValue(t, domain.NewTenantID, "tenant-1")
 	command := application.AdoptSegmentCommissionCommand{TenantID: tenant, Segment: "SEG-ADOPT", Commission: "commission-1", Provider: "partner-1"}
@@ -269,7 +281,8 @@ func TestAnEarlierStartingSegmentAdoptedLaterAdvancesTheCommissionStart(t *testi
 	mustSaveSegment(t, stores.transactor, ctx, stores.segments, segmentRecord(t, "SEG-LATE", late))
 	clock := fixedAdoptionClock{at: segmentEnteredAtFixture.Add(24 * time.Hour)}
 	adopter := application.NewAdoptSegmentCommissionHandler(application.AdoptSegmentCommissionDeps{
-		Adoptions: stores.adoptions, Segments: stores.segments, Commissions: stores.commissions, StartAdvancement: stores.commissions, Clock: clock,
+		Adoptions: stores.adoptions, Segments: stores.segments, Commissions: stores.commissions, StartAdvancement: stores.commissions,
+		Doorbell: stores.doorbell, Clock: clock,
 	})
 	tenant := deliveryValue(t, domain.NewTenantID, "tenant-1")
 	adopt := func(segment string) application.CommissionAdoptionOutcome {
@@ -369,7 +382,8 @@ func TestAnAdoptionAfterACancellationDatedAfterTheSegmentStartedAnswersTheConfli
 		t.Fatalf("采用登记之前的取消 = %q", cancel.Outcome())
 	}
 	adopter := application.NewAdoptSegmentCommissionHandler(application.AdoptSegmentCommissionDeps{
-		Adoptions: stores.adoptions, Segments: stores.segments, Commissions: stores.commissions, StartAdvancement: stores.commissions, Clock: clock,
+		Adoptions: stores.adoptions, Segments: stores.segments, Commissions: stores.commissions, StartAdvancement: stores.commissions,
+		Doorbell: stores.doorbell, Clock: clock,
 	})
 	var result application.CommissionAdoptionResult
 	mustWithinDeliveryTransaction(t, stores.transactor, ctx, func(txCtx context.Context) error {

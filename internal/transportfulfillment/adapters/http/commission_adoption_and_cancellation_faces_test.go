@@ -140,6 +140,7 @@ func newAdoptionFaces(t *testing.T) adoptionFaces {
 		Segments:         trunkSegmentView{segment: segment},
 		Commissions:      commissions,
 		StartAdvancement: unreachableStartAdvancement{t: t},
+		Doorbell:         adoptionDoorbellStub{},
 		Clock:            fixedCommissionClock{},
 	})
 	intake := operatorIntake(t, authenticatorFake{})
@@ -285,4 +286,11 @@ func TestTheCancellationFacesStopUnstartedIntents(t *testing.T) {
 			t.Fatalf("%s = %d %v, want 400 MALFORMED_REQUEST", name, status, answer)
 		}
 	}
+}
+
+// adoptionDoorbellStub 收下采用成立的门铃：本文件证的是口的线格式，门铃的去处由补形成那一侧证。
+type adoptionDoorbellStub struct{}
+
+func (adoptionDoorbellStub) HandOffSegmentCommissionAdoption(context.Context, ports.SegmentCommissionAdoptedIntent) error {
+	return nil
 }

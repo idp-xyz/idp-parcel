@@ -153,8 +153,17 @@ func adoptTrunkCommission(t *testing.T, db *bentopg.DB) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	outboxStore, err := outbox.NewStore(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doorbell, err := tfpostgres.NewOutboxSegmentCommissionAdoptionHandoff(db, outboxStore, systemClock{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	adopter := tfapplication.NewAdoptSegmentCommissionHandler(tfapplication.AdoptSegmentCommissionDeps{
-		Adoptions: adoptions, Segments: segments, Commissions: commissions, StartAdvancement: commissions, Clock: systemClock{},
+		Adoptions: adoptions, Segments: segments, Commissions: commissions, StartAdvancement: commissions,
+		Doorbell: doorbell, Clock: systemClock{},
 	})
 	var adopted tfapplication.CommissionAdoptionResult
 	mustWithinTX(t, db.Transactor(), t.Context(), func(txCtx context.Context) error {

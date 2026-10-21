@@ -151,6 +151,7 @@ type commissionAdoptionFixture struct {
 	racing    *adoptionRacingCommissionStore
 	adoptions *adoptionStoreDouble
 	segments  *adoptedSegmentViewDouble
+	doorbell  *adoptionDoorbellDouble
 	adopter   *application.AdoptSegmentCommissionHandler
 }
 
@@ -169,12 +170,14 @@ func newCommissionAdoptionFixture(t *testing.T) *commissionAdoptionFixture {
 			"tenant-1|SEG-1": adoptableSegment(t, "SEG-1", segmentEnteredAt),
 			"tenant-1|SEG-2": adoptableSegment(t, "SEG-2", segmentEnteredAt.Add(time.Hour)),
 		}},
+		doorbell: &adoptionDoorbellDouble{},
 	}
 	fixture.adopter = application.NewAdoptSegmentCommissionHandler(application.AdoptSegmentCommissionDeps{
 		Adoptions:        fixture.adoptions,
 		Segments:         fixture.segments,
 		Commissions:      fixture.racing,
 		StartAdvancement: fixture.racing,
+		Doorbell:         fixture.doorbell,
 		Clock:            commissionClock{at: commissionNowAt},
 	})
 	return fixture
@@ -499,7 +502,8 @@ func TestAdoptionRecoveryAndConcurrency(t *testing.T) {
 		}
 		lateWinner := &lateAdoptionStore{adoptionStoreDouble: fixture.adoptions, winner: ports.SegmentCommissionAdoptionRecord{Key: key, ContentDigest: winnerDigest, Adoption: winner}}
 		adopter := application.NewAdoptSegmentCommissionHandler(application.AdoptSegmentCommissionDeps{
-			Adoptions: lateWinner, Segments: fixture.segments, Commissions: fixture.racing, Clock: commissionClock{at: commissionNowAt},
+			Adoptions: lateWinner, Segments: fixture.segments, Commissions: fixture.racing, Doorbell: fixture.doorbell,
+			Clock: commissionClock{at: commissionNowAt},
 		})
 		result, err := adopter.Adopt(context.Background(), adoptCommand("SEG-1", "commission-1", "partner-1"))
 		if err != nil || result.Outcome() != application.CommissionAdoptionConflict {

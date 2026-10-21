@@ -88,6 +88,10 @@ const (
 	FormationSegmentRegistryUnavailable
 	FormationAdoptionRegistryUnavailable
 	FormationJourneyRegistryUnavailable
+	// FormationOccurrenceRegistryUnavailable：登记答了「这一次不形成」之后，问「是不是已有一项盖住它」时发生项登记册读不动。
+	FormationOccurrenceRegistryUnavailable
+	// FormationUnformedRegisterUnavailable：实际履约未形成册此刻写不动。
+	FormationUnformedRegisterUnavailable
 )
 
 func (reason ActualFulfillmentFormationUndecidedReason) String() string {
@@ -102,6 +106,10 @@ func (reason ActualFulfillmentFormationUndecidedReason) String() string {
 		return "ADOPTION_REGISTRY_UNAVAILABLE"
 	case FormationJourneyRegistryUnavailable:
 		return "JOURNEY_REGISTRY_UNAVAILABLE"
+	case FormationOccurrenceRegistryUnavailable:
+		return "OCCURRENCE_REGISTRY_UNAVAILABLE"
+	case FormationUnformedRegisterUnavailable:
+		return "UNFORMED_REGISTER_UNAVAILABLE"
 	default:
 		return ""
 	}
@@ -239,13 +247,25 @@ type ChargeOccurrenceRegistration interface {
 	Register(ctx context.Context, command RegisterChargeOccurrenceCommand) (RegisterChargeOccurrenceResult, error)
 }
 
-// FormActualFulfillmentOnParticipationEndDeps 全部必备，都是只读口，外加登记用例。
+// ActualFulfillmentCoverageView 是发生项登记册的两口只读：登记答了「这一次不形成」时，问这件参与是不是已有一项仍有效的发生项盖住
+// （ChargeOccurrenceRegistry 的同名两口，真实装配接同一个适配器）。
+type ActualFulfillmentCoverageView interface {
+	FindByKey(ctx context.Context, key ports.ChargeOccurrenceKey) (ports.ChargeOccurrenceRecord, bool, error)
+	FindCovering(ctx context.Context, query ports.ChargeOccurrenceCoverageQuery) (ports.ChargeOccurrenceRecord, bool, error)
+}
+
+// FormActualFulfillmentOnParticipationEndDeps 全部必备：只读口、登记用例，外加实际履约未形成册的写口（ADR-0231 决定六）与时钟。
+// AdoptionsByCommission 只给换版之后的补形成用，与其余各口同一份装配。
 type FormActualFulfillmentOnParticipationEndDeps struct {
-	Handovers    TransportHandoverFinder
-	Segments     ParticipationSegmentsView
-	Adoptions    ports.SegmentCommissionAdoptionView
-	Journeys     ports.AlternateJourneyMemberView
-	Registration ChargeOccurrenceRegistration
+	Handovers             TransportHandoverFinder
+	Segments              ParticipationSegmentsView
+	Adoptions             ports.SegmentCommissionAdoptionView
+	AdoptionsByCommission ports.SegmentCommissionAdoptionsByCommission
+	Journeys              ports.AlternateJourneyMemberView
+	Registration          ChargeOccurrenceRegistration
+	Coverage              ActualFulfillmentCoverageView
+	Unformed              ports.ActualFulfillmentUnformedRegister
+	Clock                 ports.Clock
 }
 
 type FormActualFulfillmentOnParticipationEndHandler struct {
@@ -323,7 +343,7 @@ func (handler *FormActualFulfillmentOnParticipationEndHandler) OnDelivery(
 		})
 }
 
-// formFor 是两路共用的后半：在对象有过参与的各段里找终点恰是这件事实的那一条 → 段须已采用委托 → 定旅程 → 交登记用例。
+// formFor 是交接、交付两路共用的中段：在对象有过参与的各段里找终点恰是这件事实的那一条 → 段须已采用委托 → 交 formEnded。
 //
 // 按「终点是这件事实」找，不按「此刻在场」找：参与此刻已经离场。也不取对象最近一段：信封晚到时对象可能又进了下一段，
 // 只有终点依据说得清结束的是哪一条。没找到就是这件事实没结束任何参与——拒收与待确认不转出控制、更正出的新版本没有结束
@@ -382,14 +402,26 @@ func (handler *FormActualFulfillmentOnParticipationEndHandler) formFor(
 	}
 	segment, participation := found.segment, found.participation
 
-	_, adopted, err := handler.deps.Adoptions.FindBySegment(ctx, ports.SegmentCommissionAdoptionKey{TenantID: tenant, Segment: segment})
+	adoption, adopted, err := handler.deps.Adoptions.FindBySegment(ctx, ports.SegmentCommissionAdoptionKey{TenantID: tenant, Segment: segment})
 	if err != nil {
 		return formationUndecided(FormationAdoptionRegistryUnavailable), nil
 	}
 	if !adopted {
 		return FormActualFulfillmentResult{outcome: FormationSegmentNotAdopted, segment: segment.String()}, nil
 	}
+	return handler.formEnded(ctx, tenant, segment, adoption, participation)
+}
 
+// formEnded 是交接、交付两路与补形成（catch_up_actual_fulfillment.go）共用的后半：那一段已采用委托，这一条参与已结束 → 定旅程 →
+// 交登记用例 → 照登记的答复写实际履约未形成册。三路共用这一处，册也就只有一处在写（ADR-0231 决定六）。
+func (handler *FormActualFulfillmentOnParticipationEndHandler) formEnded(
+	ctx context.Context,
+	tenant domain.TenantID,
+	segment domain.FulfillmentSegmentReference,
+	adoption ports.SegmentCommissionAdoptionRecord,
+	participation domain.FulfillmentParticipation,
+) (FormActualFulfillmentResult, error) {
+	object := participation.Object()
 	records, err := handler.deps.Journeys.FindByMember(ctx, tenant, object)
 	if err != nil {
 		return formationUndecided(FormationJourneyRegistryUnavailable), nil
@@ -415,11 +447,21 @@ func (handler *FormActualFulfillmentOnParticipationEndHandler) formFor(
 	if err != nil {
 		return FormActualFulfillmentResult{}, err
 	}
-	return FormActualFulfillmentResult{
+	result := FormActualFulfillmentResult{
 		outcome:      FormationRegistrationAnswered,
 		segment:      segment.String(),
 		registration: registered,
-	}, nil
+	}
+	// 只在入账的答复上写册：重投的答复整笔回滚，写了也留不下；缺陷要响亮，不替它留痕。
+	if result.Disposition() != FormationSettled {
+		return result, nil
+	}
+	if reason, err := handler.keepUnformedRegister(ctx, tenant, segment, adoption, participation, registered); err != nil {
+		return FormActualFulfillmentResult{}, err
+	} else if reason != FormationUndecidedReasonNone {
+		return formationUndecided(reason), nil
+	}
+	return result, nil
 }
 
 func formationUndecided(reason ActualFulfillmentFormationUndecidedReason) FormActualFulfillmentResult {

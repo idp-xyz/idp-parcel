@@ -7,6 +7,7 @@ import (
 
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
@@ -56,8 +57,8 @@ func (adopter transactionalSegmentCommissionAdopter) Adopt(
 }
 
 // buildSegmentCommissionAdoption 装配 `/transport-fulfillment-segment-commission-adoptions` 背后的真编排（票 demo-chain-gaps/25，
-// ADR-0204）。缝全接真：采用册、段登记册（只读）、委托册（首次开始与前移开始是同一个适配器的两把写口）与时钟。采用不入队：
-// 今天没有它的消费者。
+// ADR-0204）。缝全接真：采用册、段登记册（只读）、委托册（首次开始与前移开始是同一个适配器的两把写口）、采用成立时交给实际履约
+// 补形成的那封门铃（ADR-0231 决定一，Outbox 意图，与连线同笔）与时钟。
 func buildSegmentCommissionAdoption(db *bentopg.DB) (tfhttp.SegmentCommissionAdopter, error) {
 	adoptions, err := tfpostgres.NewSegmentCommissionAdoptions(db)
 	if err != nil {
@@ -71,11 +72,20 @@ func buildSegmentCommissionAdoption(db *bentopg.DB) (tfhttp.SegmentCommissionAdo
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: transport commissions: %w", err)
 	}
+	store, err := outbox.NewStore(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: outbox store for segment commission adoption: %w", err)
+	}
+	doorbell, err := tfpostgres.NewOutboxSegmentCommissionAdoptionHandoff(db, store, systemClock{})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: segment commission adoption doorbell: %w", err)
+	}
 	handler := tfapp.NewAdoptSegmentCommissionHandler(tfapp.AdoptSegmentCommissionDeps{
 		Adoptions:        adoptions,
 		Segments:         segments,
 		Commissions:      commissions,
 		StartAdvancement: commissions,
+		Doorbell:         doorbell,
 		Clock:            systemClock{},
 	})
 	return transactionalSegmentCommissionAdopter{transactor: db.Transactor(), inner: handler}, nil

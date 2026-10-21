@@ -95,11 +95,13 @@ func (spy *registrationSpy) Register(
 // formationRig 把自动形成编排接到一台发生项登记夹具上：段、采用连线、委托、协议与发生项册都是那台夹具的，编排与人工登记
 // 读的是同一组。
 type formationRig struct {
-	occurrences *occurrenceRig
-	handovers   formationHandoversStub
-	segments    formationSegmentsStub
-	journeys    formationJourneysStub
-	spy         *registrationSpy
+	occurrences  *occurrenceRig
+	handovers    formationHandoversStub
+	segments     formationSegmentsStub
+	journeys     formationJourneysStub
+	spy          *registrationSpy
+	byCommission adoptionsByCommissionDouble
+	unformed     *unformedRegisterDouble
 }
 
 func newFormationRig(t *testing.T, occurrences *occurrenceRig) *formationRig {
@@ -108,6 +110,7 @@ func newFormationRig(t *testing.T, occurrences *occurrenceRig) *formationRig {
 		occurrences: occurrences,
 		handovers:   formationHandoversStub{records: map[ports.TransportHandoverKey]ports.TransportHandoverRecord{}},
 		segments:    formationSegmentsStub{records: []ports.FulfillmentSegmentRecord{occurrences.segments.record}},
+		unformed:    newUnformedRegister(),
 	}
 	rig.spy = &registrationSpy{inner: occurrences.handler()}
 	return rig
@@ -115,11 +118,15 @@ func newFormationRig(t *testing.T, occurrences *occurrenceRig) *formationRig {
 
 func (rig *formationRig) handler() *application.FormActualFulfillmentOnParticipationEndHandler {
 	return application.NewFormActualFulfillmentOnParticipationEndHandler(application.FormActualFulfillmentOnParticipationEndDeps{
-		Handovers:    rig.handovers,
-		Segments:     rig.segments,
-		Adoptions:    rig.occurrences.adoptions,
-		Journeys:     rig.journeys,
-		Registration: rig.spy,
+		Handovers:             rig.handovers,
+		Segments:              rig.segments,
+		Adoptions:             rig.occurrences.adoptions,
+		AdoptionsByCommission: rig.byCommission,
+		Journeys:              rig.journeys,
+		Registration:          rig.spy,
+		Coverage:              rig.occurrences.registry,
+		Unformed:              rig.unformed,
+		Clock:                 occurrenceClock{},
 	})
 }
 

@@ -93,7 +93,10 @@ func productionActualFulfillmentFormer(
 // 头注）。两份接法要一致：人工登记与自动形成调的是同一个用例、读同一组登记册，同一身份才互相答`已存在`。揽收尝试、派送尝试、
 // 订舱与承运答复四口本路用不到（只登实际履约），照接，免得登记用例在本路上出现与人工那一路不同的缺口。
 //
-// 不另包事务：消费门已在 inbox 那一笔事务里调处理方，发生项、已形成信封与 inbox 的已处理同笔提交；同一 ctx 带着同一笔。
+// 实际履约未形成册（ADR-0231 决定六）与发生项登记册的「盖住」一问也接在这一处：自动形成两路与补形成两路共用这一只编排，册只在它的
+// 形成后半里写。
+//
+// 不另包事务：消费门已在 inbox 那一笔事务里调处理方，发生项、已形成信封、未形成册与 inbox 的已处理同笔提交；同一 ctx 带着同一笔。
 func actualFulfillmentFormerOver(
 	db *bentopg.DB,
 	outboxStore *outbox.Store,
@@ -148,6 +151,10 @@ func actualFulfillmentFormerOver(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: alternate journeys for actual fulfillment: %w", err)
 	}
+	unformed, err := tfpostgres.NewActualFulfillmentUnformeds(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: actual fulfillment unformed register: %w", err)
+	}
 	registration := tfapplication.NewRegisterChargeOccurrenceHandler(tfapplication.RegisterChargeOccurrenceDeps{
 		PickupAttempts:   pickups,
 		DeliveryAttempts: deliveries,
@@ -163,10 +170,14 @@ func actualFulfillmentFormerOver(
 		Clock:            clock,
 	})
 	return tfapplication.NewFormActualFulfillmentOnParticipationEndHandler(tfapplication.FormActualFulfillmentOnParticipationEndDeps{
-		Handovers:    handovers,
-		Segments:     segments,
-		Adoptions:    adoptions,
-		Journeys:     journeys,
-		Registration: registration,
+		Handovers:             handovers,
+		Segments:              segments,
+		Adoptions:             adoptions,
+		AdoptionsByCommission: adoptions,
+		Journeys:              journeys,
+		Registration:          registration,
+		Coverage:              occurrences,
+		Unformed:              unformed,
+		Clock:                 clock,
 	}), nil
 }
