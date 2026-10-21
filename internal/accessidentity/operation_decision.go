@@ -90,6 +90,11 @@ const (
 	DecisionRegulatoryCredentialRegistration DecisionKind = "REGULATORY_CREDENTIAL_REGISTRATION"
 )
 
+// DecisionTransportCommissionAgreementRevision 是委托协议换版（ADR-0231 决定三）：运营人员指名一份运输委托自哪一业务时刻起改按同一协议
+// 对象的后继版本采购。它改的是委托此后形成的成本按哪一版协议判，与提交委托、取消委托都不是同一种权力——能提交的不因此能事后改一份
+// 已在途委托的协议版本，所以另成一种。
+const DecisionTransportCommissionAgreementRevision DecisionKind = "TRANSPORT_COMMISSION_AGREEMENT_REVISION"
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -106,6 +111,7 @@ var decisionKinds = []DecisionKind{
 	DecisionCustomsCaseEstablishment, DecisionCustomsSubmissionAuthorization, DecisionCustomsDeclarationSubmission,
 	DecisionDeliveryDispatchReask,
 	DecisionExternalFundsFactAdoption, DecisionRegulatoryCredentialRegistration,
+	DecisionTransportCommissionAgreementRevision,
 }
 
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。
