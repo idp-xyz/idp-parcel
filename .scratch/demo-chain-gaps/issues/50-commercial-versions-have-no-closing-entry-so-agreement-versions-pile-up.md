@@ -1,7 +1,7 @@
 # 50 商业版本没有收尾写口：同一供应商协议的旧版无法替代或退役，新旧两版并存在册
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg50。此前 in-progress——2026-10-21 认领；ready-for-agent——2026-10-20 上线就绪评估归 R1（上线前必修），裁定与批次见 [triage-2026-10-19](../triage-2026-10-19.md)「上线就绪评估（2026-10-20）」。此前 needs-triage——2026-10-19 Claude Code 作者子代理立（票 [29](./29-supplier-agreements-declare-charge-occurrence-conditions.md) 完成记录「偏离与待裁」，用户「你作为业务和系统专家自决……解决所有的问题」授权）。是否认领、归哪一位 owner 待分诊。
+Status: resolved——2026-10-21 进 main（全量钉 `1ec4059c`：`scripts/test-full.sh` 158 ok / 0 FAIL，见文末「进 main 记录」）；完整替代写口转票 [148](./148-commercial-version-supersession-write-face.md)，管理台收尾表单与目录余项转票 [149](./149-admin-web-commercial-version-closure-forms.md)，在途委托在收尾后成本不形成由票 [88](./88-actual-fulfillment-not-formed-when-adoption-or-agreement-arrives-late.md) 承接（88 落地前不得截止或退役仍被在途委托指名的供应商协议版本，见 ADR-0233）。此前 in-progress——完工待评审与进 main，分支 claude-dcg50。此前 in-progress——2026-10-21 认领；ready-for-agent——2026-10-20 上线就绪评估归 R1（上线前必修），裁定与批次见 [triage-2026-10-19](../triage-2026-10-19.md)「上线就绪评估（2026-10-20）」。此前 needs-triage——2026-10-19 Claude Code 作者子代理立（票 [29](./29-supplier-agreements-declare-charge-occurrence-conditions.md) 完成记录「偏离与待裁」，用户「你作为业务和系统专家自决……解决所有的问题」授权）。是否认领、归哪一位 owner 待分诊。
 Blocked by: 无
 地盘（建议）：PC `application` 发布用例或新用例、`registrationjson` 批文、`postgres` 版本册；可能需要新 ADR。
 出处：[ADR-0209](../../../docs/adr/0209-supplier-agreements-declare-charge-occurrence-conditions-and-registration-judges-by-them.md) 越权风险点 5；PC CONTEXT「供应商商业协议版本」生命周期「协议版本到期、终止或被替代后……」。
@@ -138,3 +138,6 @@ Blocked by: 无
   全部通过。
 - 种子数据与步骤未改（只改 README），未重灌。
 
+## 进 main 记录
+
+2026-10-21 协调方合入。分支基点 `61d1470a`，其后 main 多了票 12、42、product-strategy-boundary/18、代决复核文档与 `ci.yml`；与本分支只在 `.scratch/at-coverage-inventory.md` 与 `scripts/demo-seeds/README.md` 重叠，cherry-pick 19 笔按原序到 `cb087e5a` 无冲突，其余各文件与分支逐字相同；SHA 随之换新（分支 `afdba221`…`447c1bd8` 作封存出处，main 上为 `5fe6bf6c`…`d28452eb`）。本票与 psb/18 都改了演示种子（步 110 与步 460），叠合后在 55432 一次性库上 `seed.sh` 全程退 0，用完 `DROP … WITH (FORCE)`。其上按 parallel-sessions.md 重生成 ADR 索引、重算 AT 盘点计数、重生成机制清点（`1ec4059c`），各自单独成笔；`adr-index -check` 与 `at-coverage-counts -check` 退 0。在干净的隔离树上对 `1ec4059c` 跑 `go build ./...`、`go vet ./...`、`gofmt -l` 干净，`scripts/test-full.sh` 全量 158 ok、0 FAIL（`-count=1`，无缓存）；推 `1ec4059c:main`。迁移落号 `party_commercial/0040`（连号）。
