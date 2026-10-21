@@ -1,12 +1,17 @@
 package main
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strconv"
 	"testing"
 	"time"
 
+	"go.idp.xyz/idp-bento-go/eventing"
+
+	"go.idp.xyz/idp-parcel/internal/platform/dispatch"
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	tfapplication "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
@@ -115,5 +120,31 @@ func TestAnUndecidedOrFormedBeatLeavesThePendingRegisterAlone(t *testing.T) {
 	}
 	if pendingRowsOf(t, fixture) != 0 || dispatchTaskRows(t, fixture.db) != 1 {
 		t.Fatalf("顺利形成之后册 %d 行、任务 %d 项, want 0、1", pendingRowsOf(t, fixture), dispatchTaskRows(t, fixture.db))
+	}
+}
+
+// failingLane 扮演派送发起那一路的处理方交回某个错误：用来证本路的未决哨兵名单怎样分它。
+type failingLane struct{ err error }
+
+func (lane failingLane) Consume(context.Context, eventing.Envelope) error { return lane.err }
+
+// Covers: AT-TF-281（ADR-0230 决定一）——册写不动是等得来的依赖：本路的未决哨兵名单认它，译成派发的未决、整笔回滚重投；装配没交册
+// 是缺陷，不在名单里，落发布失败。
+func TestThePendingRegisterBeingUnwritableIsRetriedAndItsAbsenceIsADefect(t *testing.T) {
+	for name, testCase := range map[string]struct {
+		err     error
+		retried bool
+	}{
+		"册写不动":  {fmt.Errorf("%w: pending register down", tfapplication.ErrDeliveryDispatchPendingUnavailable), true},
+		"装配没交册": {tfapplication.ErrDeliveryDispatchPendingRegisterNotWired, false},
+	} {
+		lane, err := dispatch.WithUndecidedSentinels(failingLane{err: testCase.err}, deliveryDispatchOnHandoverUndecidedSentinels...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := lane.Consume(t.Context(), eventing.Envelope{})
+		if errors.Is(got, dispatch.ErrConsumerUndecided) != testCase.retried {
+			t.Fatalf("%s：%v，want 译成未决 = %v", name, got, testCase.retried)
+		}
 	}
 }

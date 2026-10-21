@@ -247,8 +247,8 @@ type DispatchTaskOpener interface {
 // 任务口落库那一步；装配点交的必须是任务口写的那一张登记册。没有时钟：本编排不铸任何时间，成立时间由命令带、登记时刻
 // 由任务口取。
 //
-// Pending 必备，是派送待形成册的写口（ADR-0230 决定一）：执行器是`要求缺失`唯一的答出处，册也就只在这里写——随交接信封、补拍、
-// 按册重问三种调用方都调本执行器，三者写的是同一本册，不各写一份。
+// Pending 必备，是派送待形成册的写口（ADR-0230 决定一）：执行器是`要求缺失`唯一的答出处，册也就只在这里写——再发起一拍的无论是
+// 哪个调用方，调的都是本执行器，写的也就是同一本册，不各写一份。
 type TriggerDeliveryDispatchDeps struct {
 	Segments   ports.ActualFulfillmentSegmentRegistry
 	Tasks      ports.DispatchTaskReader

@@ -11,7 +11,7 @@ import (
 )
 
 // pendingRegisterDouble 是派送待形成册的内存替身：写口照迁移 0045 那张表的改写规则（立或刷新、了结不改指、只作罢待形成的），
-// 队列口照 ListPending 的排序与筛法。err 非空时三个写口都答它，扮演册读写不动。
+// 队列口照 ListPending 的排序与筛法。err 非空时各写口都答它，扮演册读写不动。
 type pendingRegisterDouble struct {
 	rows   map[ports.DeliveryDispatchPendingKey]ports.DeliveryDispatchPendingRecord
 	err    error

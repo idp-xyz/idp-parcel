@@ -195,7 +195,7 @@ func TestThePendingQueueIsPerTenantOldestFirstAndFiltersByDueTime(t *testing.T) 
 	}
 }
 
-// TestThePendingRegisterWritesRefuseToRunOutsideATransaction 证三个写口无环境事务即拒：册上那一行要与执行器那一拍同笔，事务外
+// TestThePendingRegisterWritesRefuseToRunOutsideATransaction 证各写口无环境事务即拒：册上那一行要与执行器那一拍同笔，事务外
 // 写进去就可能留下一笔没人答过的待形成。断言指名 ErrTransactionRequired，不把「因为别的原因也失败了」混进来。
 func TestThePendingRegisterWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	register, _, _ := newDeliveryDispatchPendings(t)
