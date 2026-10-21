@@ -25,8 +25,8 @@ func NewOperatorDecisionAuthenticator(minter Minter) (*OperatorDecisionAuthentic
 	return &OperatorDecisionAuthenticator{minter: minter}, nil
 }
 
-// AuthenticateOperatorDecision 交回信封上的租户与主体。主体写成「发行方#sub」，与 PS、TF、NO 的运营决定认证方同一个写法：
-// sub 只在它的发行方之内唯一（ADR-0100 决定二第三条），授权确认把它记作确认人。
+// AuthenticateOperatorDecision 交回信封上的租户与主体。主体写成「发行方#sub」：sub 只在它的发行方之内唯一（ADR-0100 决定二
+// 第三条），单拿 sub 会让两个发行方的同一个 sub 在授权依据里读成一个人；授权确认把它记作确认人。
 func (authenticator *OperatorDecisionAuthenticator) AuthenticateOperatorDecision(
 	ctx context.Context,
 	bearerToken string,

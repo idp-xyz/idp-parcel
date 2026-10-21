@@ -415,7 +415,7 @@ func RehydrateSubmissionVersion(snapshot CustomsSubmissionVersionSnapshot) (Cust
 //
 // `已登记待发送`是 UC-CC-005「提交已登记待发送」那一格：提交版本固定时登记首次尝试的身份与目标，外部发送还没开始，
 // 所以它没有发送时间，也不是待确认——待确认说的是「可能已经发出去了」，拿它记一份没发出去的尝试，就是假装已发送。
-// 越过发送边界的那一步归发送通道（票 product-strategy-boundary/10 第 1 项）。
+// 越过发送边界的那一步归发送通道（票 product-strategy-boundary/10「申报发送通道」一项）。
 type AttemptResult uint8
 
 const (

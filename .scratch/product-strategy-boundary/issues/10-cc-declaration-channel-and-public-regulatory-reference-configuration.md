@@ -30,4 +30,4 @@ Blocked by: 第 2–4 项的参考配置等 03
 
 ## Comments
 
-- 2026-10-21 · Claude Code 会话（票 [18](./18-customs-case-and-declaration-submission-entry.md)，[ADR-0227](../../../docs/adr/0227-customs-case-and-declaration-submission-enter-production-through-operator-decision-faces.md)）：第 8 项已由票 18 承接——建案、提交授权确认、申报提交执行三口挂操作者渠道的运营决定能力面，生产进程有了「授权确认 → 提交版本」那一段。提交执行口不发送任何东西，首次尝试记 `REGISTERED_PENDING_SEND`、`sent_at` 为空（迁移 `customs_compliance/0025`）；提交版本形成信封照旧只有 VE 投影消费。第 1 项的连接器接上时要先裁：越过发送边界是推进这一份尝试的状态，还是另记一笔发送事实——尝试行今天没有 UPDATE（ADR-0227 越权风险点 7）。
+- 2026-10-21 · Claude Code 会话（票 [18](./18-customs-case-and-declaration-submission-entry.md)，[ADR-0227](../../../docs/adr/0227-customs-case-and-declaration-submission-enter-production-through-operator-decision-faces.md)）：「立案与提交申报的生产入口与触发面」一项已由票 18 承接——建案、提交授权确认、申报提交执行三口挂操作者渠道的运营决定能力面，生产进程有了「授权确认 → 提交版本」那一段。提交执行口不发送任何东西，首次尝试记 `REGISTERED_PENDING_SEND`、`sent_at` 为空（迁移 `customs_compliance/0025`）；提交版本形成信封照旧只有 VE 投影消费。「申报发送通道」一项的连接器接上时要先裁：越过发送边界是推进这一份尝试的状态，还是另记一笔发送事实——尝试行今天没有 UPDATE（ADR-0227 越权风险点 7）。

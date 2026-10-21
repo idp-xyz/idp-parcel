@@ -67,7 +67,7 @@ type customsDecisionFaces struct {
 //     规则册、案件册、案件标识签发与案件建立意图（VE 案件视图消费）。
 //   - 授权确认：就绪判断读口与提交授权册的读写两半。授权确认不入队：今天没有它的消费者。
 //   - 提交执行：提交册、案件册（反查核存在）、申报单元册、就绪与授权两个读口、版本标识签发与提交版本形成意图（VE 投影消费；
-//     发送通道归票 product-strategy-boundary/10 第 1 项，今天没有任何东西把它交给海关或报关服务商）。
+//     发送通道归票 product-strategy-boundary/10「申报发送通道」一项，今天没有任何东西把它交给海关或报关服务商）。
 //
 // 规则、就绪与授权三本册的内容是租户取值：没登时各口如实答未决并指名未配置，不为此种任何行。
 func buildCustomsDecisionFaces(db *bentopg.DB) (customsDecisionFaces, error) {
