@@ -1409,7 +1409,7 @@
 | `AT-VE-164` | `UC-VE-006` 已批准当前客户可见异常 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-170` | 内部 ETA 已形成，但适用合同、门槛或客户服务规则缺失或冲突 | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
 | `AT-VE-187` | 内部 ETA 已形成，且适用质量、合同和客户服务规则条件明确满足 | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
-| `AT-VE-188` | C1 的包裹已受理（客户归属已确立），初始路由投影尚未形成、没有客户视图；C1 查询它，C2 用同一包裹号查询 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
+| `AT-VE-188` | C1 的包裹所在委托已`已接受`（客户归属已确立），初始路由投影尚未形成、没有客户视图；C1 查询它，C2 用同一包裹号查询 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 
 ## 重盘变化摘要（0cddbba）
 
