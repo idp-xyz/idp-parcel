@@ -57,6 +57,8 @@ const (
 	FormationNotAccepted
 	FormationUndecided
 	FormationEndedParticipationAmbiguous
+	// FormationDefectRecorded 只出自补形成：这一件撞上本上下文自己的确定性缺陷，已记进实际履约未形成册（ADR-0231 决定二）。
+	FormationDefectRecorded
 )
 
 func (outcome ActualFulfillmentFormationOutcome) String() string {
@@ -75,6 +77,8 @@ func (outcome ActualFulfillmentFormationOutcome) String() string {
 		return "ACTUAL_FULFILLMENT_FORMATION_UNDECIDED"
 	case FormationEndedParticipationAmbiguous:
 		return "ENDED_PARTICIPATION_AMBIGUOUS"
+	case FormationDefectRecorded:
+		return "DEFECT_RECORDED"
 	default:
 		return ""
 	}
@@ -191,7 +195,7 @@ func (result FormActualFulfillmentResult) Registration() RegisterChargeOccurrenc
 func (result FormActualFulfillmentResult) Disposition() ActualFulfillmentFormationDisposition {
 	switch result.outcome {
 	case FormationHandoverNotHandedOver, FormationNoParticipationEnded, FormationSegmentNotAdopted,
-		FormationEndedParticipationAmbiguous:
+		FormationEndedParticipationAmbiguous, FormationDefectRecorded:
 		return FormationSettled
 	case FormationUndecided:
 		return FormationRetry

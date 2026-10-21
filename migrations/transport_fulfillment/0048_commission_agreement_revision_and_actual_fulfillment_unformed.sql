@@ -59,7 +59,8 @@ CREATE TABLE transport_fulfillment.transport_commission_agreement_revision (
 --
 -- 已采用委托的段上，一个对象的参与以下一次权威交接或有效交付结束，自动形成那一路（或采用、换版之后的补形成）把它交给登记用例，登记
 -- 用例答了「这一次不形成」：委托那一版没声明实际履约的收费发生条件（未配置）、那一版在参与终点未生效或已终止（截止与退役之后就落这两
--- 格，ADR-0233），或委托提交时没记下协议版本（缺采购上下文）。哪个段里的哪个对象、在哪份委托下按第几版、为什么、问的是哪一版协议、
+-- 格，ADR-0233），或委托提交时没记下协议版本（缺采购上下文）；补形成那一路上某一件撞上本上下文自己的确定性缺陷（旅程平局、数据违约、
+-- 登记用例答出本路不该见的一格），也记成一条，同一封门铃里的其余各件照常形成。哪个段里的哪个对象、在哪份委托下按第几版、为什么、问的是哪一版协议、
 -- 首次与最近一次答复时刻，记在这里；之后某一次形成了、或认出已有一项发生项盖住它，了结为已形成；那一版改说不计费，了结为不计费。
 -- 写它的只有补形成那一处（application.FormActualFulfillmentOnParticipationEndHandler），与那一拍同笔：派发进程里就是 inbox 那一笔。
 --
@@ -73,9 +74,9 @@ CREATE TABLE transport_fulfillment.actual_fulfillment_unformed (
     segment_ref        text        NOT NULL,
     object_ref         text        NOT NULL,
 
-    -- 最近一次答复时这一段采用的委托，与那一刻作答的那一版在委托上的号（1 是提交那一版）。
+    -- 最近一次答复时这一段采用的委托，与那一刻作答的那一版在委托上的号（1 是提交那一版）。缺陷那一格可能在问到委托之前就停了，号可缺。
     commission_id      text        NOT NULL,
-    commission_revision integer    NOT NULL,
+    commission_revision integer,
     -- 参与终点的业务时间：发生项按它核那一版协议。
     ended_at           timestamptz NOT NULL,
     -- 最近一次答「未形成」时的那一格。了结之后照留：那是这一件为什么等过。
@@ -83,6 +84,8 @@ CREATE TABLE transport_fulfillment.actual_fulfillment_unformed (
     -- 最近一次答「未形成」时去问 PC 的那一版；缺采购上下文那一格没问，两列同缺。
     agreement_object   text,
     agreement_version  text,
+    -- 缺陷那一格停在哪里：本上下文自己的缺陷类别，数据违约另带错误原文的前段。只随 FORMATION_DEFECT。
+    defect             text,
     first_answered_at  timestamptz NOT NULL,
     last_answered_at   timestamptz NOT NULL,
 
@@ -105,18 +108,32 @@ CREATE TABLE transport_fulfillment.actual_fulfillment_unformed (
             AND btrim(commission_id) <> ''
         ),
 
+    -- 号只在缺陷那一格可缺。
     CONSTRAINT actual_fulfillment_unformed_revision_positive
-        CHECK (commission_revision >= 1),
+        CHECK (
+            (commission_revision IS NOT NULL AND commission_revision >= 1)
+            OR (commission_revision IS NULL AND reason = 'FORMATION_DEFECT')
+        ),
 
     CONSTRAINT actual_fulfillment_unformed_reason_closed
-        CHECK (reason IN ('NOT_CONFIGURED', 'AGREEMENT_NOT_EFFECTIVE', 'AGREEMENT_TERMINATED', 'PROCUREMENT_CONTEXT_MISSING')),
+        CHECK (reason IN ('NOT_CONFIGURED', 'AGREEMENT_NOT_EFFECTIVE', 'AGREEMENT_TERMINATED', 'PROCUREMENT_CONTEXT_MISSING',
+                          'FORMATION_DEFECT')),
 
-    -- 问过的那一版两格同在或同缺；缺采购上下文没问 PC，必缺，其余三格必在。
+    -- 缺陷一格必带它停在哪里，别的格不带。
+    CONSTRAINT actual_fulfillment_unformed_defect_coupled
+        CHECK (
+            (reason = 'FORMATION_DEFECT' AND defect IS NOT NULL AND btrim(defect) <> '')
+            OR (reason <> 'FORMATION_DEFECT' AND defect IS NULL)
+        ),
+
+    -- 问过的那一版两格同在或同缺；缺采购上下文没问 PC，必缺；缺陷那一格问没问到都可能；其余三格必在。
     CONSTRAINT actual_fulfillment_unformed_agreement_coupled
         CHECK (
-            (reason = 'PROCUREMENT_CONTEXT_MISSING' AND agreement_object IS NULL AND agreement_version IS NULL)
-            OR (reason <> 'PROCUREMENT_CONTEXT_MISSING' AND agreement_object IS NOT NULL AND agreement_version IS NOT NULL
-                AND btrim(agreement_object) <> '' AND btrim(agreement_version) <> '')
+            (agreement_object IS NULL AND agreement_version IS NULL
+                AND reason IN ('PROCUREMENT_CONTEXT_MISSING', 'FORMATION_DEFECT'))
+            OR (agreement_object IS NOT NULL AND agreement_version IS NOT NULL
+                AND btrim(agreement_object) <> '' AND btrim(agreement_version) <> ''
+                AND reason <> 'PROCUREMENT_CONTEXT_MISSING')
         ),
 
     CONSTRAINT actual_fulfillment_unformed_state_closed

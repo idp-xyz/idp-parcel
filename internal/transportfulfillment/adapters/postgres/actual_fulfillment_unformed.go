@@ -42,16 +42,23 @@ func (register *ActualFulfillmentUnformeds) RecordUnformed(
 	if err != nil {
 		return unformedWriteFailure("record actual fulfillment unformed", err)
 	}
-	var agreementObject, agreementVersion *string
+	var agreementObject, agreementVersion, defect *string
 	if entry.Agreement.Object() != "" || entry.Agreement.Version() != "" {
 		object, version := entry.Agreement.Object(), entry.Agreement.Version()
 		agreementObject, agreementVersion = &object, &version
 	}
+	if entry.Defect != "" {
+		defect = &entry.Defect
+	}
+	var revision *int
+	if entry.Revision != 0 {
+		revision = &entry.Revision
+	}
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO transport_fulfillment.actual_fulfillment_unformed
 		     (tenant_id, segment_ref, object_ref, commission_id, commission_revision, ended_at, reason,
-		      agreement_object, agreement_version, first_answered_at, last_answered_at, state)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, 'UNFORMED')
+		      agreement_object, agreement_version, defect, first_answered_at, last_answered_at, state)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $11, $10, $10, 'UNFORMED')
 		 ON CONFLICT (tenant_id, segment_ref, object_ref) DO UPDATE
 		    SET commission_id       = EXCLUDED.commission_id,
 		        commission_revision = EXCLUDED.commission_revision,
@@ -59,6 +66,7 @@ func (register *ActualFulfillmentUnformeds) RecordUnformed(
 		        reason              = EXCLUDED.reason,
 		        agreement_object    = EXCLUDED.agreement_object,
 		        agreement_version   = EXCLUDED.agreement_version,
+		        defect              = EXCLUDED.defect,
 		        last_answered_at    = EXCLUDED.last_answered_at,
 		        state               = 'UNFORMED',
 		        occurrence_ref      = NULL,
@@ -66,8 +74,8 @@ func (register *ActualFulfillmentUnformeds) RecordUnformed(
 		        not_charged_by      = NULL,
 		        settled_at          = NULL`,
 		entry.Key.TenantID.String(), entry.Key.Segment.String(), entry.Key.Object.String(),
-		entry.Commission.String(), entry.Revision, entry.EndedAt.UTC(), entry.Reason.String(),
-		agreementObject, agreementVersion, answeredAt.UTC(),
+		entry.Commission.String(), revision, entry.EndedAt.UTC(), entry.Reason.String(),
+		agreementObject, agreementVersion, answeredAt.UTC(), defect,
 	); err != nil {
 		return unformedWriteFailure("record actual fulfillment unformed", err)
 	}
@@ -130,7 +138,7 @@ func unformedWriteFailure(verb string, err error) error {
 }
 
 const actualFulfillmentUnformedColumns = `tenant_id, segment_ref, object_ref, commission_id, commission_revision, ended_at, reason,
-	agreement_object, agreement_version, first_answered_at, last_answered_at, state,
+	agreement_object, agreement_version, defect, first_answered_at, last_answered_at, state,
 	occurrence_ref, occurrence_version, not_charged_by, settled_at`
 
 // FindByKey 按键读回一条。否定结果只回 false。
@@ -200,14 +208,14 @@ func (register *ActualFulfillmentUnformeds) ListActualFulfillmentUnformed(
 func scanActualFulfillmentUnformed(row pgx.Row) (ports.ActualFulfillmentUnformedRecord, error) {
 	var (
 		tenant, segment, object, commission, reason, state string
-		revision                                           int
+		revision                                           *int
 		endedAt, firstAnsweredAt, lastAnsweredAt           time.Time
-		agreementObject, agreementVersion                  *string
+		agreementObject, agreementVersion, defect          *string
 		occurrenceRef, occurrenceVersion, notChargedBy     *string
 		settledAt                                          *time.Time
 	)
 	if err := row.Scan(&tenant, &segment, &object, &commission, &revision, &endedAt, &reason,
-		&agreementObject, &agreementVersion, &firstAnsweredAt, &lastAnsweredAt, &state,
+		&agreementObject, &agreementVersion, &defect, &firstAnsweredAt, &lastAnsweredAt, &state,
 		&occurrenceRef, &occurrenceVersion, &notChargedBy, &settledAt); err != nil {
 		return ports.ActualFulfillmentUnformedRecord{}, err
 	}
@@ -216,7 +224,13 @@ func scanActualFulfillmentUnformed(row pgx.Row) (ports.ActualFulfillmentUnformed
 		LastAnsweredAt:  lastAnsweredAt.UTC(),
 	}
 	entry := &record.Entry
-	entry.Revision, entry.EndedAt = revision, endedAt.UTC()
+	entry.EndedAt = endedAt.UTC()
+	if revision != nil {
+		entry.Revision = *revision
+	}
+	if defect != nil {
+		entry.Defect = *defect
+	}
 	var err error
 	if entry.Key.TenantID, err = domain.NewTenantID(tenant); err != nil {
 		return ports.ActualFulfillmentUnformedRecord{}, err
@@ -271,7 +285,7 @@ func scanActualFulfillmentUnformed(row pgx.Row) (ports.ActualFulfillmentUnformed
 func unformedReasonOf(raw string) ports.ActualFulfillmentUnformedReason {
 	for _, reason := range []ports.ActualFulfillmentUnformedReason{
 		ports.UnformedNotConfigured, ports.UnformedAgreementNotEffective, ports.UnformedAgreementTerminated,
-		ports.UnformedProcurementContextMissing,
+		ports.UnformedProcurementContextMissing, ports.UnformedFormationDefect,
 	} {
 		if reason.String() == raw {
 			return reason

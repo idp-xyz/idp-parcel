@@ -35,6 +35,9 @@ const (
 	UnformedAgreementTerminated
 	// UnformedProcurementContextMissing：委托提交时没记下协议版本，也没换过版。续办是给委托换版、记下版本。
 	UnformedProcurementContextMissing
+	// UnformedFormationDefect：补形成那一路上这一件撞上本上下文自己的确定性缺陷（旅程平局、数据违约、登记用例答出本路不该见的一格），
+	// 原样重来不会变。记进册、同一封门铃里的其余各件照常形成；续办是修好缺陷之后再给委托换版或重新采用，让补形成再问一次。
+	UnformedFormationDefect
 )
 
 func (reason ActualFulfillmentUnformedReason) String() string {
@@ -47,6 +50,8 @@ func (reason ActualFulfillmentUnformedReason) String() string {
 		return "AGREEMENT_TERMINATED"
 	case UnformedProcurementContextMissing:
 		return "PROCUREMENT_CONTEXT_MISSING"
+	case UnformedFormationDefect:
+		return "FORMATION_DEFECT"
 	default:
 		return ""
 	}
@@ -79,7 +84,8 @@ func (state ActualFulfillmentUnformedState) String() string {
 }
 
 // ActualFulfillmentUnformedEntry 是一次「这一次不形成」的答复：在哪份委托下按第几版答的、参与哪一刻结束、哪一格、问的是哪一版协议
-// （缺采购上下文那一格没问，Agreement 为零值）。
+// （缺采购上下文那一格没问，Agreement 为零值）。缺陷那一格另带 Defect（停在哪里）；它可能在问到委托之前就停了，Revision 为零、
+// Agreement 为零值。
 type ActualFulfillmentUnformedEntry struct {
 	Key        ActualFulfillmentUnformedKey
 	Commission domain.TransportCommissionReference
@@ -87,6 +93,7 @@ type ActualFulfillmentUnformedEntry struct {
 	EndedAt    time.Time
 	Reason     ActualFulfillmentUnformedReason
 	Agreement  domain.SupplierAgreementVersion
+	Defect     string
 }
 
 // ActualFulfillmentUnformedRecord 是册上一条。时刻都是答复那一刻的登记时刻（派发时钟），只有 EndedAt 是业务时间。

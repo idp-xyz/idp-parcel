@@ -412,3 +412,73 @@ func TestAClosedAgreementVersionIsTracedAndRecoveredByRevision(t *testing.T) {
 		})
 	}
 }
+
+// saveAmbiguousJourneys 在 TF 旅程册上给 parcel 登两趟同一刻开始的退运旅程：那一件的发生项旅程定不下来。
+func saveAmbiguousJourneys(t *testing.T, db *bentopg.DB, parcel string) {
+	t.Helper()
+	journeys, err := tfpostgres.NewAlternateJourneys(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tenant := mustTF(t, tfdomain.NewTenantID, formationTenant)
+	for _, name := range []string{"A", "B"} {
+		basis := mustTF(t, tfdomain.NewDispositionBasisReference, "SYN-DISPOSITION-RETURN-DCG88-"+name)
+		original := mustTF(t, tfdomain.NewJourneyReference, "JRN/"+parcel)
+		journey, err := tfdomain.FormAlternateJourney(tfdomain.AlternateJourneySpec{
+			TenantID: tenant, Journey: mustTF(t, tfdomain.NewJourneyReference, "SYN-JRN-RETURN-DCG88-"+name),
+			Purpose: tfdomain.ReturnJourneyPurpose, OriginalJourney: original,
+			BasisKind: tfdomain.ServiceDispositionDecision, Basis: basis,
+			Members:   []tfdomain.CarriedObjectReference{mustTF(t, tfdomain.NewCarriedObjectReference, parcel)},
+			StartedAt: formationAt(30 * time.Minute),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		mustWithinTX(t, db.Transactor(), t.Context(), func(txCtx context.Context) error {
+			outcome, err := journeys.Save(txCtx, tfports.AlternateJourneyRecord{
+				Key:           tfports.AlternateJourneyKey{TenantID: tenant, Original: original, Purpose: tfdomain.ReturnJourneyPurpose, Basis: basis},
+				ContentDigest: "SYN-JOURNEY-DIGEST-" + name,
+				Journey:       journey,
+				RecordedAt:    formationAt(30 * time.Minute),
+			})
+			if err == nil && outcome != tfports.AlternateJourneySaved {
+				err = errors.New("alternate journey was not saved fresh")
+			}
+			return err
+		})
+	}
+}
+
+// Covers: AT-TF-303（S，ADR-0231 决定二）——采用晚到的那一段上两件包裹，其中一件的旅程在旅程册上平局：采用门铃 PUBLISHED，另一件照常补
+// 形成，平局那一件记进未形成册（FORMATION_DEFECT、AMBIGUOUS_JOURNEY）、查阅页列出——不因一件缺陷整封烧完失败预算、其余各件静默缺失。
+func TestOneDefectiveParticipationDoesNotSinkTheLateAdoptionCatchUp(t *testing.T) {
+	const parcel, tied = "SYN-PARCEL-DCG88-31", "SYN-PARCEL-DCG88-32"
+	beat, db, store := wiredBeat(t)
+	registerTrunkAgreement(t, db, formationTenant)
+	saveTrunkCommission(t, db, parcel, tied)
+	saveAmbiguousJourneys(t, db, tied)
+	register := newHandoverRegistration(t, db, store)
+	handOverAtSZX(t, register, db, parcel)
+	handOverAtSZX(t, register, db, tied)
+	dispatchUntilPublished(t, beat, db, handOverAtSIN(t, register, db, parcel))
+	dispatchUntilPublished(t, beat, db, handOverAtSIN(t, register, db, tied))
+
+	adoptTrunkCommission(t, db)
+	dispatchBeats(t, beat, 3)
+	for id, status := range outboxEventsOf(t, db, tfpostgres.SegmentCommissionAdoptionRegisteredEventType) {
+		if status != "PUBLISHED" {
+			t.Fatalf("门铃 %s = %s（%s）", id, status, recordedFailureCode(t, db, id))
+		}
+	}
+	occurrences := formationOccurrences(t, db)
+	if len(occurrences) != 1 || occurrences[0].members[0] != parcel {
+		t.Fatalf("补形成 = %+v, want 只有旅程定得下来的那一件", occurrences)
+	}
+	entry, found := unformedEntryOf(t, db, tied)
+	if !found || entry.Entry.Reason != tfports.UnformedFormationDefect || entry.Entry.Defect != "AMBIGUOUS_JOURNEY" {
+		t.Fatalf("平局那一件 = %+v %v", entry, found)
+	}
+	if listed := listedUnformed(t, db, formationTenant); len(listed) != 1 || listed[0].Entry.Key.Object.String() != tied {
+		t.Fatalf("查阅页 = %+v", listed)
+	}
+}

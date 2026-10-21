@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -315,5 +316,74 @@ func TestCatchUpRetriesWhatItCannotReadAndRefusesWhatItCannotWrite(t *testing.T)
 	})
 	if err != nil || malformed.Disposition() != application.FormationDefect {
 		t.Fatalf("第 1 版当换版门铃 = %v %s, want 缺陷", err, malformed.Disposition())
+	}
+}
+
+// ambiguousJourneysFor 是同一刻开始、都覆盖 object 的两趟退运旅程：那一件的旅程定不下来，是旅程册自己的不一致。
+func ambiguousJourneysFor(t *testing.T, object string) []ports.AlternateJourneyRecord {
+	t.Helper()
+	var records []ports.AlternateJourneyRecord
+	for _, name := range []string{"A", "B"} {
+		journey, err := domain.FormAlternateJourney(domain.AlternateJourneySpec{
+			TenantID:        occurrenceValue(t, domain.NewTenantID, occurrenceTenant),
+			Journey:         occurrenceValue(t, domain.NewJourneyReference, "SYN-JRN-RETURN-"+name+"-"+object),
+			Purpose:         domain.ReturnJourneyPurpose,
+			OriginalJourney: occurrenceValue(t, domain.NewJourneyReference, "JRN/"+object),
+			BasisKind:       domain.ServiceDispositionDecision,
+			Basis:           occurrenceValue(t, domain.NewDispositionBasisReference, "SYN-DISPOSITION-RETURN-"+name),
+			Members:         []domain.CarriedObjectReference{occurrenceValue(t, domain.NewCarriedObjectReference, object)},
+			StartedAt:       occurrenceEnteredAt.Add(-time.Hour),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		records = append(records, ports.AlternateJourneyRecord{Journey: journey})
+	}
+	return records
+}
+
+// Covers: AT-TF-303（ADR-0231 决定二、六）——补形成里一件撞上确定性缺陷（旅程平局；登记用例上抛的数据违约），那一件记进未形成册（格
+// FORMATION_DEFECT、记下停在哪里，号与问的那一版在问到委托之前停住时不记），同一封门铃里的其余各件照常形成，整封入账；未形成册连缺陷都
+// 记不下（确定性拒写）时整封响亮失败。
+func TestADefectiveParticipationIsRecordedWhileTheRestOfTheDoorbellForms(t *testing.T) {
+	rig, occurrences := catchUpRig(t, adoptedCommission(t),
+		participationRow(t, trunkParcel, true), participationRow(t, trunkSecondParcel, true))
+	rig.journeys.records = ambiguousJourneysFor(t, trunkSecondParcel)
+
+	result := rig.onAdoption(t)
+	if result.Disposition() != application.FormationSettled || len(result.Formations()) != 2 {
+		t.Fatalf("门铃 = %s，%d 件, want 整封入账、两件都有答复", result.Disposition(), len(result.Formations()))
+	}
+	registeredOccurrence(t, result.Formations()[0].Registration())
+	if result.Formations()[1].Outcome() != application.FormationDefectRecorded || occurrences.registry.saves != 1 {
+		t.Fatalf("平局那一件 = %s，册上 %d 项", result.Formations()[1].Outcome(), occurrences.registry.saves)
+	}
+	entry, found := rig.unformed.entry(t, trunkSecondParcel)
+	if !found || entry.State != ports.ActualFulfillmentUnformed || entry.Entry.Reason != ports.UnformedFormationDefect ||
+		entry.Entry.Defect != "AMBIGUOUS_JOURNEY" || entry.Entry.Revision != 0 || entry.Entry.Commission.String() != bkCommission ||
+		!entry.Entry.EndedAt.Equal(occurrenceEndedAt) {
+		t.Fatalf("缺陷那一条 = %+v %v", entry, found)
+	}
+	if _, found := rig.unformed.entry(t, trunkParcel); found {
+		t.Fatal("顺利形成的那一件进了册")
+	}
+
+	violated, violatedOccurrences := catchUpRig(t, adoptedCommission(t), participationRow(t, trunkParcel, true))
+	violatedOccurrences.agreements.check = ports.SupplierAgreementCheck{Standing: ports.SupplierAgreementNotRegistered}
+	if result := violated.onAdoption(t); result.Disposition() != application.FormationSettled {
+		t.Fatalf("数据违约那一封 = %s", result.Disposition())
+	}
+	if entry, _ := violated.unformed.entry(t, trunkParcel); entry.Entry.Reason != ports.UnformedFormationDefect ||
+		!strings.HasPrefix(entry.Entry.Defect, "DATA_VIOLATION: ") {
+		t.Fatalf("数据违约那一条 = %+v", entry)
+	}
+
+	refused, _ := catchUpRig(t, adoptedCommission(t), participationRow(t, trunkParcel, true))
+	refused.journeys.records = ambiguousJourneysFor(t, trunkParcel)
+	refused.unformed.writeErr = fmt.Errorf("check violated: %w", ports.ErrActualFulfillmentUnformedWriteRefused)
+	if _, err := refused.handler().CatchUpOnAdoption(t.Context(), application.CatchUpActualFulfillmentOnAdoptionCommand{
+		TenantID: occurrenceValue(t, domain.NewTenantID, occurrenceTenant), Segment: trunkSegment,
+	}); !errors.Is(err, ports.ErrActualFulfillmentUnformedWriteRefused) {
+		t.Fatalf("缺陷也记不下 err = %v, want 上抛", err)
 	}
 }

@@ -680,7 +680,7 @@ func serveReaskCadences(
 
 // serveActualFulfillmentUnformed 上列实际履约未形成册里还未形成的那几件（ADR-0231 决定六）：哪一段的哪个对象、在哪份委托下按第几版答的、
 // 为什么没形成、问的是哪一版协议、参与哪一刻结束、首次与最近一次答复时刻。空册答 []。这是要人去补的清单：续办各格不同——未配置与收尾
-// 两格是租户发一版接得住的协议再给委托换版，缺采购上下文是给委托换版、记下版本。
+// 两格是租户发一版接得住的协议再给委托换版，缺采购上下文是给委托换版、记下版本，缺陷是先修好它再让补形成再问一次。
 func serveActualFulfillmentUnformed(
 	response http.ResponseWriter,
 	request *http.Request,
@@ -704,6 +704,7 @@ func serveActualFulfillmentUnformed(
 			Reason:             entry.Reason.String(),
 			AgreementObject:    entry.Agreement.Object(),
 			AgreementVersion:   entry.Agreement.Version(),
+			Defect:             entry.Defect,
 			EndedAt:            rfc3339(entry.EndedAt),
 			FirstAnsweredAt:    rfc3339(row.FirstAnsweredAt),
 			LastAnsweredAt:     rfc3339(row.LastAnsweredAt),
@@ -721,15 +722,17 @@ type actualFulfillmentUnformedListResponse struct {
 }
 
 // actualFulfillmentUnformedBody 是册上一件。endedAt 是参与终点的业务时间，两个答复时刻是登记时刻；agreementObject 与 agreementVersion 是
-// 那一次问 PC 的那一版，缺采购上下文那一格没问、两键不出现。
+// 那一次问 PC 的那一版，缺采购上下文那一格没问、两键不出现。defect 只随 FORMATION_DEFECT，说停在哪里；那一格可能在问到委托之前就停了，
+// commissionRevision 与协议两键随之不出现。
 type actualFulfillmentUnformedBody struct {
 	Segment            string `json:"segment"`
 	Object             string `json:"object"`
 	Commission         string `json:"commission"`
-	CommissionRevision int    `json:"commissionRevision"`
+	CommissionRevision int    `json:"commissionRevision,omitempty"`
 	Reason             string `json:"reason"`
 	AgreementObject    string `json:"agreementObject,omitempty"`
 	AgreementVersion   string `json:"agreementVersion,omitempty"`
+	Defect             string `json:"defect,omitempty"`
 	EndedAt            string `json:"endedAt"`
 	FirstAnsweredAt    string `json:"firstAnsweredAt"`
 	LastAnsweredAt     string `json:"lastAnsweredAt"`

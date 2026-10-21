@@ -387,3 +387,51 @@ func TestEachAdoptionOfTheSameSegmentAndCommissionRingsItsOwnDoorbell(t *testing
 		t.Fatalf("门铃 = %+v, want 两次采用各一封、同一次重交不多一封", bells)
 	}
 }
+
+// Covers: AT-TF-303 的存储半边（ADR-0231 决定二、六）——缺陷那一格往返：不带号与问的那一版、带停在哪里；库面只认缺陷一格带它、别的格不带，
+// 号只在缺陷一格可缺。
+func TestTheUnformedRegisterKeepsAFormationDefect(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatal(err)
+	}
+	register, err := adapter.NewActualFulfillmentUnformeds(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 10, 21, 8, 0, 0, 0, time.UTC)
+	key := unformedKey(t, "tenant-1", "SEG-DEFECT", "parcel-defect")
+	defect := ports.ActualFulfillmentUnformedEntry{
+		Key: key, Commission: deliveryValue(t, domain.NewTransportCommissionReference, "commission-1"),
+		EndedAt: at.Add(-time.Hour), Reason: ports.UnformedFormationDefect, Defect: "AMBIGUOUS_JOURNEY",
+	}
+	mustWithinDeliveryTransaction(t, db.Transactor(), t.Context(), func(txCtx context.Context) error {
+		return register.RecordUnformed(txCtx, defect, at)
+	})
+	got, found, err := register.FindByKey(t.Context(), key)
+	if err != nil || !found || got.Entry.Reason != ports.UnformedFormationDefect || got.Entry.Defect != "AMBIGUOUS_JOURNEY" ||
+		got.Entry.Revision != 0 || got.Entry.Agreement != (domain.SupplierAgreementVersion{}) {
+		t.Fatalf("缺陷那一条读回 = %+v %v %v", got, found, err)
+	}
+	if listed, err := register.ListActualFulfillmentUnformed(t.Context(), key.TenantID, 10); err != nil || len(listed) != 1 {
+		t.Fatalf("缺陷那一条不上列：%+v %v", listed, err)
+	}
+
+	blank := defect
+	blank.Defect = ""
+	defectElsewhere := unformedEntry(t, key, at, ports.UnformedNotConfigured)
+	defectElsewhere.Defect = "AMBIGUOUS_JOURNEY"
+	revisionless := unformedEntry(t, key, at, ports.UnformedNotConfigured)
+	revisionless.Revision = 0
+	for name, entry := range map[string]ports.ActualFulfillmentUnformedEntry{
+		"缺陷不带停在哪里": blank, "别的格带缺陷": defectElsewhere, "别的格不带号": revisionless,
+	} {
+		err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+			return register.RecordUnformed(txCtx, entry, at)
+		})
+		if !errors.Is(err, ports.ErrActualFulfillmentUnformedWriteRefused) {
+			t.Fatalf("%s = %v, want 库面确定性拒绝", name, err)
+		}
+	}
+}
