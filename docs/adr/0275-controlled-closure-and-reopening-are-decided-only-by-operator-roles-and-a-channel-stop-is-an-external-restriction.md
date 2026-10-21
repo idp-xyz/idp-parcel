@@ -1,6 +1,6 @@
 # ADR-0275：受控关闭与重开只由运营侧授权角色决定、合同委派不参与；渠道服务方或代理商叫停是外部限制，不作请求方
 
-Status: Accepted（2026-10-21，Claude Code 会话代 PS、PC owner 决：用户 2026-10-21 原话「需要修改文档，确保自洽，正确」，常设授权「你作为业务和系统专家自决」；票 docs-consistency/10（10a 半边），出处审计 [audit/cross.md](../../.scratch/docs-consistency/audit/cross.md) SC·S-04、SC·S-05。无条款停用：相抵的是 parcel-shipment CONTEXT 与 SCENARIOS 场景二里「合同委派可直接决定」的例外句，已接受 ADR 里没有这一句；回答 [ADR-0187](./0187-controlled-closure-and-reopening-record-request-and-operation-evidence-on-the-decision.md) Alternatives 候选丁留给 PS owner 的一问（渠道方或代理商的请求要不要先留痕），不停用其条款。不改代码。越权风险点见文末，待 PS、PC owner 复核。）<!-- 索引注记 -->｜**决定方**：受控关闭与重开的正式决定只由运营企业责任法人授权的运营角色凭授权规则形成，合同委派不参与；货主、渠道服务方或代理商都不能经合同直接形成这两种决定。**货主的要求**：作为请求证据落在决定上（货主指令关闭、重开时货主新的有效授权），不另立请求册。**渠道方叫停**：渠道服务方或代理商叫停不是请求，关闭责任来源记为外部限制，请求方缺席；它的「恢复」是来源责任方对该限制的有效解除，解除只恢复可申请重开的资格，重开仍由授权角色决定。代理商本就是委托上的客户账户时，按货主算
+Status: Accepted（2026-10-21，Claude Code 会话代 PS、PC owner 决：用户 2026-10-21 原话「需要修改文档，确保自洽，正确」，常设授权「你作为业务和系统专家自决」；票 docs-consistency/10（10a 半边），出处审计 [audit/cross.md](../../.scratch/docs-consistency/audit/cross.md) SC·S-04、SC·S-05。无条款停用：相抵的是 parcel-shipment CONTEXT 与 SCENARIOS 场景二里「合同委派可直接决定」的例外句，已接受 ADR 里没有这一句；回答 [ADR-0187](./0187-controlled-closure-and-reopening-record-request-and-operation-evidence-on-the-decision.md) Alternatives 候选丁留给 PS owner 的一问（渠道方或代理商的请求要不要先留痕），回答 [ADR-0183](./0183-operator-channel-addresses-controlled-closure-and-reopening-by-parcel-and-derives-the-shipper-from-the-accepted-request.md) 越权风险点 1（操作者能否指名委托之外的请求方，例如代理商）与 Consequences「它们要提出关闭请求，另有来处时另行裁定」，都不停用其条款。代码只改注释与 Covers，随票 [docs-consistency/code/56](../../.scratch/docs-consistency/code/56-closure-and-reopening-comments-still-cite-the-deleted-delegation-exception.md)。越权风险点见文末，待 PS、PC owner 复核。）<!-- 索引注记 -->｜**决定方**：受控关闭与重开的正式决定只由运营企业责任法人授权的运营角色凭授权规则形成，合同委派不参与；货主、渠道服务方或代理商都不能经合同直接形成这两种决定。**货主的要求**：作为请求证据落在决定上（货主指令关闭、重开时货主新的有效授权），不另立请求册。**渠道方叫停**：渠道服务方或代理商叫停不是请求，关闭责任来源记为外部限制，请求方缺席；它的「恢复」是来源责任方对该限制的有效解除，解除只恢复可申请重开的资格，重开仍由授权角色决定。代理商本就是委托上的客户账户时，按货主算
 
 Date: 2026-10-21
 
@@ -37,14 +37,18 @@ Date: 2026-10-21
 
 ## 对已接受记录的作用
 
-- 无条款停用。ADR-0183 复核记录「承运方或渠道方叫停是外部限制」与 Consequences「操作者渠道上不开「渠道服务方或代理商作请求方」的路」，ADR-0187 决定一「不另立请求册」，本记录都照原句采用；ADR-0187 Alternatives 候选丁留给 PS owner 的一问由本记录决定四回答。
+- 无条款停用。ADR-0183 复核记录「承运方或渠道方叫停是外部限制」与 Consequences「操作者渠道上不开「渠道服务方或代理商作请求方」的路。它们要提出关闭请求，另有来处时另行裁定；今天的载荷形状里没有指名它们的格。」，ADR-0187 决定一「不另立请求册」，本记录都照原句采用。
+- ADR-0183 越权风险点 1（PS owner 若认为操作者应能指名委托之外的请求方）与上引 Consequences 后半句留的「另行裁定」由本记录决定三回答：渠道服务方或代理商不作请求方，叫停记为外部限制；无条款停用。
+- ADR-0187 Alternatives 候选丁留给 PS owner 的一问由本记录决定四回答；无条款停用。
 
 ## Consequences
 
 - parcel-shipment CONTEXT 受控关闭与重开那一条去掉「除非客户合同或明确授权……」的例外，补渠道方叫停记为外部限制、其恢复是来源解除。
 - SCENARIOS 场景二过程中停止与恢复请求、重开请求两步与预期结果「货主或渠道请求不会在缺少适用合同委派时……」一句随之改写。
-- ADR-0187 的 Status 行注记与 Links 补一条由 ADR-0275 回答的来向。
-- 不改代码：`formedOnlyByOperatorRole` 与操作者渠道的载荷形状已经是本记录的形。
+- ADR-0183、ADR-0187 的 Status 行注记与 Links 各补一条由 ADR-0275 回答的来向。
+- `docs/product/PRODUCT-BASELINE.md` 里有与 parcel-shipment CONTEXT 同句的例外（「除非客户合同或明确授权把其纳入可直接形成决定的授权角色范围」），归票 docs-consistency/10 的 10b 半边照决定一、三改。
+- 行为不改：`formedOnlyByOperatorRole` 与操作者渠道的载荷形状已经是本记录的形。三处注释与 Covers 仍引已删的例外句，说它首发不开、日后改这道拒绝即可开，随 [code/56](../../.scratch/docs-consistency/code/56-closure-and-reopening-comments-still-cite-the-deleted-delegation-exception.md) 改为指向本记录。
+- 决定三「解除只恢复可以申请并授权重开的资格」今天不落门：parcel-shipment 的 `ClosureResponsibilitySourceKind` 头注写「硬限制那一格的「解除」今天没有来源可读」，重开编排不为它加门，渠道方叫停形成的关闭今天授权角色可以直接重开。缺口记进 code/56。
 
 ## 越权风险点
 
@@ -55,7 +59,7 @@ Date: 2026-10-21
 
 ## Links
 
-- [ADR-0183](./0183-operator-channel-addresses-controlled-closure-and-reopening-by-parcel-and-derives-the-shipper-from-the-accepted-request.md)：决定三的关闭责任来源种类与复核记录「承运方或渠道方叫停是外部限制」，本记录照用
+- [ADR-0183](./0183-operator-channel-addresses-controlled-closure-and-reopening-by-parcel-and-derives-the-shipper-from-the-accepted-request.md)：决定三的关闭责任来源种类与复核记录「承运方或渠道方叫停是外部限制」，本记录照用；越权风险点 1 与 Consequences「另行裁定」那一问由本记录决定三回答
 - [ADR-0187](./0187-controlled-closure-and-reopening-record-request-and-operation-evidence-on-the-decision.md)：决定一请求证据落在决定上；Alternatives 候选丁那一问由本记录决定四回答
 - [parcel-shipment CONTEXT](../domain/parcel-shipment/CONTEXT.md)「面单继续尝试」相关规则、[party-commercial CONTEXT](../domain/party-commercial/CONTEXT.md) 受控关闭与重开一条、[SCENARIOS](../domain/SCENARIOS.md) 场景二
-- 票 `.scratch/docs-consistency/issues/10-cross-cutting-docs.md`
+- 票 `.scratch/docs-consistency/issues/10-cross-cutting-docs.md`；代码票 `.scratch/docs-consistency/code/56-closure-and-reopening-comments-still-cite-the-deleted-delegation-exception.md`

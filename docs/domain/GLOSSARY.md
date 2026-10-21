@@ -390,7 +390,7 @@ Status: Confirmed
 
 - 所有者：`party-commercial` 拥有供应商商业协议与参与方关系；`transport-fulfillment` 保存运输委托实际采用的签约服务商与协议快照。
 - 签约或接受运输委托不使它自动成为实际承运商；实际承运商仍依据收寄、交接和履约事实判断。
-- 它属外包运输一侧的角色集；面单交易一侧的角色集是渠道账号持有人、渠道服务方、合同与结算相对方、底层承运商、实际承运商和责任承担方，不含它。
+- [transport-fulfillment/CONTEXT.md](./transport-fulfillment/CONTEXT.md) 的交易角色集含它，[party-commercial/CONTEXT.md](./party-commercial/CONTEXT.md) 的角色集不含它。
 - 避免使用：实际承运商、底层承运商、渠道服务方、签约物流服务商。
 
 ### 合同与结算相对方
