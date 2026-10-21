@@ -1,7 +1,7 @@
 # 06 PS（parcel-shipment）：CONTEXT 写出现行规则、UC 与之一致、矛盾裁清
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dc06；此前 in-progress——2026-10-21 认领；原 ready-for-agent——2026-10-21 协调方立（文档自洽修订，见 [README](../README.md)「修订执行」）
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dc06；此前 in-progress——2026-10-21 认领；原 ready-for-agent——2026-10-21 协调方立（文档自洽修订，见 [README](../README.md)「修订执行」）
 Blocked by: 无（01 进 main 后开工）
 出处：[audit/ps.md](../audit/ps.md)（ps.md（取证 ps-code、ps-adr、ps-uc））；[02 的完成记录](./02-code-defects-from-the-audit.md)里「交修订票」一表中交给本票的条目；[01](./01-adr-suspension-chains.md) 的「交后续」一节里交给本票的条目。
 
@@ -168,3 +168,9 @@ Blocked by: 无（01 进 main 后开工）
 | N7 | 票面三处 | 「检查」diff 清单补 code/44；第 1 轮评审记录第 2 条去掉非逐字的书名号；code/44 现象去掉书名号 |
 
 检查（main 仍是 `3619f5c0e`）：scratchpad 副本上 `go run ./tools/adr-index` 后 `-check` 退 0；改过的 ADR 去掉 Status 行与 Links 后与 main 逐字节相同；改动的 `.md` 链接全部能解析；新写的书名号引文逐字核过（ADR-0256 决定一原句、ADR-0184 决定一原句、`amend_customer_source_data.go` 那段注释）。
+
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-dc06` tip `8936be533` 在 main `3619f5c0e` 上快进；两轮隔离评审的阻断全部消掉（第二轮残留的 ADR-0256 越权风险点 3 引文已改为本记录原句）。
+- 协调方随后在 tip 上单独提交：重生成 `docs/adr/README.md`、重算 AT 盘点总览计数；两者 `-check` 退 0。机制清点重生成无变化；`go build ./...` 干净。本票只动文档，未跑全量真库测试。
+- 去向：代码票 code/35–39、code/44；code/39（来源保全之后建单失败、重发不再建单）建议 R1，排进文档轮之后的首批代码票。
