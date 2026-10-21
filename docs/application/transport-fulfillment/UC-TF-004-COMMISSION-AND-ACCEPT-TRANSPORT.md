@@ -78,16 +78,23 @@
 
 | 结果 | 业务含义 | 必须保留 | 禁止行为 |
 |---|---|---|---|
-| 委托已提交 | 请求和条件已经固定，等待服务方处理 | 请求方、服务方、范围、条件、协议快照和版本 | 不表示承运接受 |
-| 订舱已确认 | 具体运输机会处理了容量申请 | 班次、维度、申请/确认数量、外部结果和版本 | 不表示实物已接收 |
-| 承运接受已形成 | 服务方接受明确范围和责任 | 接受对象、数量、条件、责任、时间和依据 | 不把签约方改写为实际承运商 |
-| 部分接受 | 只有部分对象/数量/条件被接受 | 接受与未接受范围、原因和续办入口 | 不以整批接受覆盖差异 |
+| 委托已提交（`COMMISSION_SUBMITTED`） | 请求和条件已经固定，协议在提交时点核过 | 请求方、服务方、范围、条件、协议快照、采购责任法人和版本 | 不表示承运接受 |
+| 订舱已提交（`BOOKING_SUBMITTED`） | 在一份已提交的委托下就一个在册班次申请舱位 | 委托、班次、申请量与单位、申请时刻 | 不占容量，不表示承运接受 |
+| 承运答复已登记（`BOOKING_ANSWERED`） | 承运方对订舱给出五值之一：接受（带不超过申请量的接受量，少于申请量即部分确认）、拒绝、失效、撤回、候补；尚无答复时订舱读作待确认 | 答复方、订舱、答复值、接受量或原因/依据、答复时刻 | 不读池、不要预占引用（[ADR-0264](../../adr/0264-capacity-assurance-is-required-on-load-assignments-only-and-neither-a-confirmed-booking-nor-a-departure-reads-capacity.md) 决定一）；接受不表示实物已接收，不把签约方改写为实际承运商 |
+| 取消成立（`COMMISSION_CANCELLED`、`BOOKING_CANCELLED`） | 尚未开始的委托整份取消，或尚未随运输开始而消耗的订舱取消 | 取消时刻；委托取消不往下游传 | 不删除已形成的承运答复、预占或履约事实 |
+| 运输已开始（`TRANSPORT_ALREADY_STARTED`） | 委托已开始，或订舱申请不晚于委托的开始，取消不成立 | 回显开始依据 | 不部分取消，不改写开始 |
+| 协议核对不过（`AGREEMENT_NOT_REGISTERED`、`AGREEMENT_NOT_EFFECTIVE`、`AGREEMENT_TERMINATED`、`PROVIDER_MISMATCH`） | 委托指名的那一版协议在提交时点不在册、未生效、已终止，或约定的供应商不是服务方 | 逐格作答，服务方不符带回约定供应商 | 不形成委托，不并成未受理 |
+| 引用不在册或不可订（`COMMISSION_NOT_FOUND`、`COMMISSION_NOT_BOOKABLE`、`SCHEDULE_NOT_FOUND`、`BOOKING_NOT_FOUND`） | 委托不在册、委托已取消不可订舱、班次不在册、订舱不在册（不是本服务方的答复同答 `BOOKING_NOT_FOUND`，ADR-0239） | 各格续办不同 | 不透露他租户的委托、班次与订舱 |
 | 预占已形成 | 明确维度的可用容量已扣减 | 维度、数量、来源、版本、释放/到期边界 | 不重复扣减同一范围 |
 | 装载分配已形成 | 计划把对象安排到班次/资源/位置 | 对象范围、分配版本、容量关系和撤回边界 | 不证明物理装载或控制转移 |
 | 单证版本已形成 | 运输凭证/舱单成员范围被固定 | 版本、成员快照、提交/外部结果和更正关系 | 不以列入单证证明装载 |
 | 运输收费发生项已形成 | 订舱、取消或其他运输准备范围满足采用协议要求的事实条件 | 采购责任法人、服务提供方、协议、原因、主要范围、成员、数量/单位、业务时间、有效性和来源 | 不形成价格、预期成本、账单主张、审核应付或付款 |
-| 待补充/冲突 | 权威结果或责任无法裁决 | 缺口、全部来源、原结果和续办入口 | 不按最后消息覆盖 |
-| 未形成 | 技术处理未完成 | 已形成对象、失败阶段和恢复引用 | 不伪装成业务拒绝 |
+| 已有结果（`EXISTING_COMMISSION`、`EXISTING_BOOKING`、`EXISTING_ANSWER`、`EXISTING_CANCELLATION`） | 同一委托、订舱、答复或取消原样再交 | 回显原记录 | 不多落一份 |
+| 冲突（`COMMISSION_CONFLICT`、`BOOKING_CONFLICT`、`ANSWER_CONFLICT`） | 同一身份异内容，或定局之后又来一份答复 | 原记录不动，冲突的那一份不落册 | 不按最后消息覆盖 |
+| 未受理（`INPUT_NOT_ACCEPTED`） | 载荷自身立不起来 | 最小原因与纠正入口 | 不读不写 |
+| 未决（`COMMISSION_UNDECIDED`） | 委托册、订舱册、答复册、协议核对或班次册读不动（`COMMISSION_STORE_UNAVAILABLE`、`BOOKING_STORE_UNAVAILABLE`、`ANSWER_STORE_UNAVAILABLE`、`SUPPLIER_AGREEMENT_UNAVAILABLE`、`SCHEDULE_STORE_UNAVAILABLE`） | 已形成对象与恢复引用，原样重交 | 不伪装成业务拒绝 |
+
+上表带码的各行属委托、订舱、承运答复与两种取消这一只编排（`application.CommissionTransportHandler`）。预占、装载分配、单证、段采用与发生项各有自己的编排与码，见验收示例里各自的 AT 行（例如预占 `AT-TF-137`、分配 `AT-TF-173`、段采用 `AT-TF-183`、订舱费 `AT-TF-207`、换版 `AT-TF-297`）。
 
 ## 应用流程
 
@@ -96,8 +103,8 @@
 | 1 | 运输运营 | 校验运输机会、对象、范围、责任和权限 | 无法关联时未受理 |
 | 2 | `transport-fulfillment` | 固定供应商协议、履约条件和成本来源快照 | 商业版本变化不覆盖本次请求 |
 | 3 | `transport-fulfillment` | 建立运输委托并提交订舱申请 | 保存请求和外部关联 |
-| 4 | 承运方/伙伴接入 | 返回订舱和承运处理结果 | 逐对象/逐数量记录接受、候补、拒绝或待确认 |
-| 5 | `transport-fulfillment` | 核对容量维度和授权，建立/转换预占 | 硬容量拒绝，软超配形成授权缺口 |
+| 4 | 承运方/伙伴接入 | 经集成客户端交来订舱答复 | 记承运答复五值（接受、拒绝、失效、撤回、候补），接受带接受量；没有答复时订舱读作待确认；答复不读池 |
+| 5 | 运输运营 | 按需另作容量预占或释放（运营决定，[ADR-0203](../../adr/0203-capacity-assurance-requires-a-reservation-on-every-pool-of-the-schedule-and-reservations-are-operation-decisions.md) 决定三、[ADR-0264](../../adr/0264-capacity-assurance-is-required-on-load-assignments-only-and-neither-a-confirmed-booking-nor-a-departure-reads-capacity.md) 决定二） | 硬上限按预占整段判，超出答 `CAPACITY_EXCEEDED`、不可越过（ADR-0203 决定四）；承运答复不触发预占 |
 | 6 | `transport-fulfillment` | 形成装载分配和运输单证版本 | 不形成物理装载或交接 |
 | 7 | `transport-fulfillment` | 对订舱、取消和其他适用准备结果形成运输收费发生项：订舱取已接受的承运答复，取消取尚未开始范围的订舱取消，采购上下文取订舱所属委托的快照（[ADR-0207](../../adr/0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md)「补记：票 28 落地时的补充裁定」） | 只固定发生事实；金额交给 `settlement-accounting` |
 | 8 | `transport-fulfillment` | 原子保存结果、审计和发布意图 | 发布失败只重试原意图 |
@@ -226,12 +233,11 @@
 
 实现必须把“运输委托、订舱、承运接受、容量预占、装载分配和单证”分别建模。不要用一个 `booking_status` 或 `accepted` 状态代表所有结果，也不要以订舱或承运接受直接创建实际履约段。
 
-已接受记录里记作缺口或越权风险点、今天没有做的几处（规则本身见 TF CONTEXT 与所引 ADR，本表只记现状与去处）：
+已接受记录里记作缺口或越权风险点、今天没有做的地方（规则本身见 TF CONTEXT 与所引 ADR，本表只记现状与去处）：
 
 | 缺口 | 现状 | 去处 |
 |---|---|---|
 | 委托一级的部分取消与向下游传取消 | 委托取消整份、不往下游传，尚未消耗的订舱与预占要运营逐个取消、释放（`AT-TF-092`、`AT-TF-185`） | ADR-0204 越权风险点 9；票 demo-chain-gaps/58（成员与段对象的关系）、demo-chain-gaps/37（逐订舱的消费关系） |
-| 委托一级与逐对象的承运接受 | 承运接受只挂在订舱答复上 | ADR-0202 决定五记为缺口，未立票 |
 | 整份委托或尚未订舱的取消费 | 取消发生项只认订舱一级的取消 | 票 demo-chain-gaps/76 |
 | 装载分配的变化与撤回 | 生产上只有形成首版一口；`AT-TF-180` 的改版与撤回只在领域与存储一侧成立 | ADR-0203「补记：票 21 落地时的补充裁定」越权风险点 14 |
 | 订舱与答复的查阅面 | 订舱册与答复册今天没有读面 | ADR-0202 越权风险点 15；票 demo-chain-gaps/48 |
