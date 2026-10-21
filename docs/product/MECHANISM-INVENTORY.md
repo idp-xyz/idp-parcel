@@ -18,13 +18,13 @@
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 208 | 150 | 34 | 63 | 12 | 9 |
-| transportfulfillment | 232 | 232 | 40 | 45 | 13 | 43 |
-| visibilityexception | 110 | 107 | 12 | 31 | 8 | 12 |
-| **合计** | 1472 | 1405 | 191 | 343 | 62 | 192 |
+| transportfulfillment | 233 | 234 | 40 | 46 | 13 | 43 |
+| visibilityexception | 112 | 109 | 12 | 31 | 8 | 12 |
+| **合计** | 1475 | 1409 | 191 | 344 | 62 | 192 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 193、测试 279。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 195、测试 280。
 
-## 跨上下文消费缝：48 组，142 个生产文件
+## 跨上下文消费缝：48 组，143 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -75,9 +75,9 @@
 | visibilityexception | nodeoperations | 1 |
 | visibilityexception | parcelshipment | 4 |
 | visibilityexception | partycommercial | 1 |
-| visibilityexception | transportfulfillment | 6 |
+| visibilityexception | transportfulfillment | 7 |
 
-## 迁移：12 个模块共 271 份 SQL
+## 迁移：12 个模块共 272 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -91,10 +91,10 @@
 | party_commercial | 39 |
 | pilot_governance | 8 |
 | settlement_accounting | 39 |
-| transport_fulfillment | 38 |
+| transport_fulfillment | 39 |
 | visibility_exception | 27 |
 
-## 接线面：接入面端点 170 个，消费适配器 51 个生产文件，直投路由表 34 条
+## 接线面：接入面端点 170 个，消费适配器 52 个生产文件，直投路由表 35 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -125,8 +125,8 @@
 | parcelshipment | 13 | 1 | 1 | 0 | 15 |
 | settlementaccounting | 6 | 0 | 0 | 0 | 6 |
 | transportfulfillment | 3 | 0 | 0 | 0 | 3 |
-| visibilityexception | 14 | 0 | 0 | 2 | 16 |
-| **合计** | 47 | 1 | 1 | 2 | 51 |
+| visibilityexception | 15 | 0 | 0 | 2 | 17 |
+| **合计** | 48 | 1 | 1 | 2 | 52 |
 
 直投路由表按 `cmd/` 生产文件里登记的不同事件类型数（`routeLeg` 字面量的 `event` 与 `map[eventing.EventType]dispatch.Consumer` 字面量的键并认，同一事件类型扇出给几路只算一条），按事件类型常量所属的消费门包归属。路由表只随消费者一起长（ADR-0049 第三条），本表只报它此刻多长。
 
@@ -138,10 +138,10 @@
 | parcelpricing | 2 |
 | parcelshipment | 12 |
 | settlementaccounting | 3 |
-| visibilityexception | 10 |
-| **合计** | 34 |
+| visibilityexception | 11 |
+| **合计** | 35 |
 
-## 端口：声明 544 个；基线口径缺 37，精确口径缺 2
+## 端口：声明 545 个；基线口径缺 37，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
