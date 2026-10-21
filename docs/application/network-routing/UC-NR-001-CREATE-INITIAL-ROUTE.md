@@ -266,6 +266,6 @@
 |---|---|---|
 | 某个包裹未决不回滚其他包裹已形成的计划（应用流程表后一段、`AT-NR-012`）；未决结束「可以安全续办」 | 只要一件包裹落路由判断未决，消费门整封回滚重投；同一委托已判成的计划一起撤掉。重投推不动的格（最低成本并列、成本待判断、不可计价、币种不齐、各未配置格）重投到 `ABANDONED` | [demo-chain-gaps/155](../../../.scratch/demo-chain-gaps/issues/155-initial-route-unconfigured-undecided-burns-the-acceptance-partition.md) |
 | 最低成本并列时保留全部候选与并列理由（结果「路由判断未决」、步骤 8C） | 并列候选只在内存结果里，不落库 | [demo-chain-gaps/155](../../../.scratch/demo-chain-gaps/issues/155-initial-route-unconfigured-undecided-burns-the-acceptance-partition.md) |
-| 并列交授权角色裁决 | 没有决定面 | [docs-consistency/code/27](../../../.scratch/docs-consistency/code/27-reroute-suggestions-and-ties-have-no-authorized-decision-face.md) |
+| 并列交授权角色裁决 | 没有决定面 | [docs-consistency/code/29](../../../.scratch/docs-consistency/code/29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md) |
 
 完成本用例不表示运输执行已经完成设计。班次、容量、订舱、装载和实际履约应继续在 `transport-fulfillment` 的后续应用用例中展开。

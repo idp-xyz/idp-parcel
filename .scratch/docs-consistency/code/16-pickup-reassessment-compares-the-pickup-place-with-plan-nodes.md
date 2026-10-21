@@ -43,7 +43,7 @@ M（按裁向，可能涉及计划模型加揽收段，则 L）。
 
 三件都已裁，照 [ADR-0249](../../../docs/adr/0249-offsite-pickup-reassessment-checks-hard-constraints-only-and-does-not-establish-a-controllable-node.md) 实现：
 
-1. **比法：只复核硬约束，不比节点。** 揽收触发的复核只看选中候选的硬约束：被有效限制淘汰即失效，限制状态未知按「适用性看不清」（[ADR-0250](../../../docs/adr/0250-unclear-plan-applicability-in-reassessment-is-settled-as-not-judged-and-resume-in-the-same-change-stays-in-the-acceptance-chain.md)，代码见 code/26），其余仍适用。揽收地点原样记入复核依据，不参与判断。上面「最小的诚实修法」第 1 条后半「比不出时答『适用性看不清』一类的未决」作废：比不出不是证据缺口，是比法不成立。
+1. **比法：只复核硬约束，不比节点。** 揽收触发的复核只看选中候选的硬约束：被有效限制淘汰即失效，限制状态未知按「适用性看不清」（[ADR-0250](../../../docs/adr/0250-unclear-plan-applicability-in-reassessment-is-settled-as-not-judged-and-resume-in-the-same-change-stays-in-the-acceptance-chain.md)，代码见 code/28），其余仍适用。揽收地点原样记入复核依据，不参与判断。上面「最小的诚实修法」第 1 条后半「比不出时答『适用性看不清』一类的未决」作废：比不出不是证据缺口，是比法不成立。
 2. **揽收不建立当前可控节点。** 已执行前缀为空、全部计划段未执行（`onlyUnexecuted` 为真，不得出 `EXECUTED_PREFIX_AFFECTED`）；原计划仍适用即保留、结论 `STILL_APPLICABLE`，不判冻结（不落 `FREEZE_FORM_UNCONFIGURED`）、不走 `tryImprovementReroute`；失效线折自动条件时位于可控节点为假，只形成建议，阻塞 `NOT_AT_CONTROLLED_NODE`。原先无路由时照常可形成首个计划。
 3. **与「交给运输方不建可控节点」的关系。** 两者都不建可控节点；揽收照复核（有效网络收寄的来源），节点交给运输方照旧不复核。揽收复核计入当前控制位置（复核册照常记触发业务时间）。
 

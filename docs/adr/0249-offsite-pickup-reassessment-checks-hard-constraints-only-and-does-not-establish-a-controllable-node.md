@@ -56,7 +56,7 @@ Date: 2026-10-21
 
 1. **揽收发生在计划起点范围之外，NR 不知道**（NR、TF owner）。客户把包裹交到一个与声明不符的地点，NR 照旧判原计划适用。缓解：包裹交进的首个节点不在计划上时，交接复核判失效；地点与声明是否相符归运输履约的揽收作业。TF owner 若要在揽收结果里带地理投影，本记录的比法可以再议。
 2. **揽收复核不试改善切换**（NR owner）。更便宜的路线要等包裹交进首个节点才判。揽收与首个节点之间通常只隔几小时，那时节点上的复核照常问冻结与改善。
-3. **揽收时原计划失效只出建议**（NR owner）。授权决定面没落地之前（票 docs-consistency/code/27），包裹停在无当前有效路由，直到交进首个节点，交接复核在节点上才可能自动改路。
+3. **揽收时原计划失效只出建议**（NR owner）。授权决定面没落地之前（票 docs-consistency/code/29），包裹停在无当前有效路由，直到交进首个节点，交接复核在节点上才可能自动改路。
 4. **揽收复核计入当前控制位置**（NR owner）。一次业务时间早于揽收的触发后到时入账不判。客户送站与场外揽收在同一件包裹上二选一，这一格只在来源业务时间填错时才撞上。
 5. **原先无路由时，揽收复核就形成首个计划**（NR owner）。计划首节点取自候选，包裹后来交进的节点与它不同时，交接复核判失效，计划只活了一段路。不形成而等首个节点也是一种取法，代价是揽收之后到首个节点之前没有任何计划可供运输准备。
 
@@ -70,4 +70,4 @@ Date: 2026-10-21
 - [ADR-0250](./0250-unclear-plan-applicability-in-reassessment-is-settled-as-not-judged-and-resume-in-the-same-change-stays-in-the-acceptance-chain.md)：限制状态未知的处置
 - [ADR-0075](./0075-customer-address-is-carried-with-the-routing-request.md)：NR 不建读取地址的端口
 - [network-routing CONTEXT](../domain/network-routing/CONTEXT.md)、[UC-NR-003](../application/network-routing/UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md)（`AT-NR-034`、`AT-NR-084`）
-- 票 `.scratch/docs-consistency/issues/05-nr-no-docs.md`；代码票 `.scratch/docs-consistency/code/16-pickup-reassessment-compares-the-pickup-place-with-plan-nodes.md`、`.scratch/docs-consistency/code/27-reroute-suggestions-and-ties-have-no-authorized-decision-face.md`
+- 票 `.scratch/docs-consistency/issues/05-nr-no-docs.md`；代码票 `.scratch/docs-consistency/code/16-pickup-reassessment-compares-the-pickup-place-with-plan-nodes.md`、`.scratch/docs-consistency/code/29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md`

@@ -1,6 +1,6 @@
 # ADR-0250：路由复核的「适用性看不清」入账未判、留下缺口——它的来源没有一个是依赖故障；ADR-0094 决定四「续办触发同笔落地」不约束路由复核
 
-Status: Accepted（2026-10-21，Claude Code 会话代 NR owner 决：用户 2026-10-21 原话「需要修改文档，确保自洽，正确」，常设授权「你作为业务和系统专家自决」；票 docs-consistency/05，出处审计 [audit/nr-no.md](../../.scratch/docs-consistency/audit/nr-no.md) M8、L14。部分停用 [ADR-0235](./0235-route-reassessment-settles-what-a-retry-cannot-change-and-does-not-judge-triggers-older-than-the-current-position.md) 决定一「重投推得动的照旧是未决……」一句里「适用性看不清」一格，被停原句与适用场景见「对已接受记录的作用」；回答 ADR-0235 越权风险点 1。ADR-0235 正文不改，只在其 Status 行与 Links 加前向指针。代码随票 [docs-consistency/code/26](../../.scratch/docs-consistency/code/26-unclear-plan-applicability-in-reassessment-is-retried-instead-of-settled.md)。越权风险点见文末，待 NR owner 复核，第 2 点知会 PS owner。）<!-- 索引注记 -->｜**分格**：复核里的「适用性看不清」只来自取数侧对选中候选答限制状态未知，来源有关务目录为空、受理基线缺端点国家、关务来源未接，重投都推不动；改答`未判`，原因 `PLAN_APPLICABILITY_UNCLEAR`，未判登记同行记下取数侧交回的缺口与再判条件，计划与适用性都不动。真依赖故障（关务目录读不动）在取数侧交错误，照旧走证据读不动、回滚重投。**续办纪律**：ADR-0094 决定四只管受理判断链；路由复核的每一次控制触发都从自己的位置重判，入账未判可以先于续办落地，续办仍归票 154
+Status: Accepted（2026-10-21，Claude Code 会话代 NR owner 决：用户 2026-10-21 原话「需要修改文档，确保自洽，正确」，常设授权「你作为业务和系统专家自决」；票 docs-consistency/05，出处审计 [audit/nr-no.md](../../.scratch/docs-consistency/audit/nr-no.md) M8、L14。部分停用 [ADR-0235](./0235-route-reassessment-settles-what-a-retry-cannot-change-and-does-not-judge-triggers-older-than-the-current-position.md) 决定一「重投推得动的照旧是未决……」一句里「适用性看不清」一格，被停原句与适用场景见「对已接受记录的作用」；回答 ADR-0235 越权风险点 1。ADR-0235 正文不改，只在其 Status 行与 Links 加前向指针。代码随票 [docs-consistency/code/28](../../.scratch/docs-consistency/code/28-unclear-plan-applicability-in-reassessment-is-retried-instead-of-settled.md)。越权风险点见文末，待 NR owner 复核，第 2 点知会 PS owner。）<!-- 索引注记 -->｜**分格**：复核里的「适用性看不清」只来自取数侧对选中候选答限制状态未知，来源有关务目录为空、受理基线缺端点国家、关务来源未接，重投都推不动；改答`未判`，原因 `PLAN_APPLICABILITY_UNCLEAR`，未判登记同行记下取数侧交回的缺口与再判条件，计划与适用性都不动。真依赖故障（关务目录读不动）在取数侧交错误，照旧走证据读不动、回滚重投。**续办纪律**：ADR-0094 决定四只管受理判断链；路由复核的每一次控制触发都从自己的位置重判，入账未判可以先于续办落地，续办仍归票 154
 Date: 2026-10-21
 
 ## Context
@@ -49,9 +49,9 @@ Date: 2026-10-21
 
 ## Consequences
 
-- 代码随票 docs-consistency/code/26：`ports.NotJudgedReason` 加 `PLAN_APPLICABILITY_UNCLEAR`；复核编排遇 `PlanReviewUndecided` 改答`未判`，`ReassessUndecidedReason` 去掉 `PlanReviewInconclusive`；未判登记加缺口与再判条件两列（network_routing 新迁移），这一原因必带、其余原因可空。
+- 代码随票 docs-consistency/code/28：`ports.NotJudgedReason` 加 `PLAN_APPLICABILITY_UNCLEAR`；复核编排遇 `PlanReviewUndecided` 改答`未判`，`ReassessUndecidedReason` 去掉 `PlanReviewInconclusive`；未判登记加缺口与再判条件两列（network_routing 新迁移），这一原因必带、其余原因可空。
 - UC-NR-003 结果表「当前计划适用性未决」一格并入`触发未判`；`AT-NR-051` 改写，`AT-NR-067` 去掉「适用性看不清」。
-- 在 code/26 落地之前，生产上这些来源照旧回滚重投到 `ABANDONED`。
+- 在 code/28 落地之前，生产上这些来源照旧回滚重投到 `ABANDONED`。
 
 ## 越权风险点
 
@@ -69,4 +69,4 @@ Date: 2026-10-21
 - [ADR-0052](./0052-network-evidence-catalogue-has-an-unconfigured-grade.md)：证据未配置与本格分开
 - [ADR-0249](./0249-offsite-pickup-reassessment-checks-hard-constraints-only-and-does-not-establish-a-controllable-node.md)：揽收复核只按硬约束判，限制状态未知同按本记录
 - [UC-NR-003](../application/network-routing/UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md)（`AT-NR-051`、`AT-NR-067`）
-- 票 `.scratch/docs-consistency/issues/05-nr-no-docs.md`；代码票 `.scratch/docs-consistency/code/26-unclear-plan-applicability-in-reassessment-is-retried-instead-of-settled.md`；续办 `.scratch/demo-chain-gaps/issues/154-network-reassessment-not-judged-triggers-resume-after-registration.md`；初始路由同格 `.scratch/demo-chain-gaps/issues/155-initial-route-unconfigured-undecided-burns-the-acceptance-partition.md`
+- 票 `.scratch/docs-consistency/issues/05-nr-no-docs.md`；代码票 `.scratch/docs-consistency/code/28-unclear-plan-applicability-in-reassessment-is-retried-instead-of-settled.md`；续办 `.scratch/demo-chain-gaps/issues/154-network-reassessment-not-judged-triggers-resume-after-registration.md`；初始路由同格 `.scratch/demo-chain-gaps/issues/155-initial-route-unconfigured-undecided-burns-the-acceptance-partition.md`

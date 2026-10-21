@@ -41,10 +41,10 @@ Blocked by: 无（01 进 main 后开工）
 | M5 承接决定缺「待补充」 | C | 既有代码票承接；文档加注记 | [code/18](../code/18-node-customs-collaboration-acceptance-lacks-pending-supplement.md)；UC-NO-001 状态行、`AT-NO-003` 注记 |
 | M6 集运包含不查环 | C | 既有代码票承接；文档加注记 | [code/19](../code/19-consolidation-containment-is-not-checked-for-cycles.md)；UC-NO-003 阶段 3、`AT-NO-039` 注记 |
 | M7 方向性作业受阻：UC 挡、CONTEXT 与代码照记 | B | 代决 [ADR-0251](../../../docs/adr/0251-directional-node-work-is-paused-by-a-reading-before-the-action-and-recorded-moves-are-never-refused.md)（把 no-directional-basis/01「裁定修订」定为记录）；已改；代码不改 | NO CONTEXT「集运、封装与载具」括注、「作业授权与执行」暂停一条；UC-NO-003 启动条件、结果「方向性作业受阻」、阶段 3、`AT-NO-031`、`AT-NO-033`；读面随 no-directional-basis/01、/02 |
-| M8 「适用性看不清」的来源都推不动 | B | 代决 [ADR-0250](../../../docs/adr/0250-unclear-plan-applicability-in-reassessment-is-settled-as-not-judged-and-resume-in-the-same-change-stays-in-the-acceptance-chain.md) 决定一；已改；立代码票 | ADR-0235 Status 行与 Links 挂前向指针；NR CONTEXT 复核前提缺口一条；UC-NR-003 结果表（「当前计划适用性未决」并入「触发未判」）、结果表后一段、步骤 6A、`AT-NR-051`、`AT-NR-067`；[code/26](../code/26-unclear-plan-applicability-in-reassessment-is-retried-instead-of-settled.md) |
+| M8 「适用性看不清」的来源都推不动 | B | 代决 [ADR-0250](../../../docs/adr/0250-unclear-plan-applicability-in-reassessment-is-settled-as-not-judged-and-resume-in-the-same-change-stays-in-the-acceptance-chain.md) 决定一；已改；立代码票 | ADR-0235 Status 行与 Links 挂前向指针；NR CONTEXT 复核前提缺口一条；UC-NR-003 结果表（「当前计划适用性未决」并入「触发未判」）、结果表后一段、步骤 6A、`AT-NR-051`、`AT-NR-067`；[code/28](../code/28-unclear-plan-applicability-in-reassessment-is-retried-instead-of-settled.md) |
 | L1 重核对象两处口径不一，缺「信号没了、只缺范围」 | A | 已改 | NO CONTEXT 生命周期「待识别实物与身份关联」定义重核对象一处，「送站交接单」改为引用；规则与生命周期补第三支（ADR-0212 决定六） |
 | L2 过时的实现现状句 | A | 已改 | UC-NR-003、UC-NO-002（交接一节与结果段那句）、UC-NO-003「给开发的交接」；UC-NO-006 状态行改已实现 |
-| L3 以现行口吻写尚无代码的能力 | C（交本票注记） | 已改；无票的一块立代码票 | UC-NR-003、UC-NO-003「给开发的交接」各列一张未实现表，相关 AT 行加注记：路由指令、集运兼容 → no-directional-basis/02；偏离 → demo-chain-gaps/35；复评新计划信封 → demo-chain-gaps/34；实测触发 → pp-pricing-input-seams/04、product-strategy-boundary/08、demo-chain-gaps/44（NR 侧消费票不立，NO 没有实测登记册之前它没有生产者）；人工改路决定 → 新立 [code/27](../code/27-reroute-suggestions-and-ties-have-no-authorized-decision-face.md) |
+| L3 以现行口吻写尚无代码的能力 | C（交本票注记） | 已改；无票的一块立代码票 | UC-NR-003、UC-NO-003「给开发的交接」各列一张未实现表，相关 AT 行加注记：路由指令、集运兼容 → no-directional-basis/02；偏离 → demo-chain-gaps/35；复评新计划信封 → demo-chain-gaps/34；实测触发 → pp-pricing-input-seams/04、product-strategy-boundary/08、demo-chain-gaps/44（NR 侧消费票不立，NO 没有实测登记册之前它没有生产者）；人工改路决定 → 新立 [code/29](../code/29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md) |
 | L4 AT-NR-033、036 缺冻结形态已声明的前提 | A | 已改 | UC-NR-003 `AT-NR-033`、`AT-NR-036` |
 | L5 失效后自动改路仍比改善 | B | 按已接受的 ADR-0173 决定三写进文档，不另立 ADR | ADR-0173 决定三原句「失效后同样按本形态折自动条件」已明写，代码与之一致，相抵只在 CONTEXT 漏写；NR CONTEXT 自动改路一条与 `AT-NR-037` 补上条件与 `IMPROVEMENT_BELOW_THRESHOLD` |
 | L6 币种不齐没提比较币种 | A | 已改 | NR CONTEXT「路由形成与选择」排序一条（ADR-0148 决定四） |
@@ -58,7 +58,7 @@ Blocked by: 无（01 进 main 后开工）
 | L14 ADR-0235 落`未判`不带续办，与 ADR-0094 决定四相抵 | B | 代决 ADR-0250 决定二 | ADR-0235 注记挂「由 ADR-0250 回答」（越权风险点 1，无条款停用）；ADR-0094 不动，决定二读的就是它注记里写的适用场景 |
 | L15 两处 Go 注释与 ADR 相反或过时 | C | 既有代码票承接 | demo-chain-gaps/115（02 已并入） |
 
-去向计数（按主去向）：已改文档 17（A 11、B 5、L3 一条）；交横切 2（L8、L10；另 M3、L11 各有 GLOSSARY 一半交横切）；已由某票消解 1（L13）；既有代码票承接 6（H1、H3、M4、M5、M6、L15）。新立代码票 2（code/26 承 M8，code/27 承 L3 的人工改路），已立的 code/16 解除阻塞。
+去向计数（按主去向）：已改文档 17（A 11、B 5、L3 一条）；交横切 2（L8、L10；另 M3、L11 各有 GLOSSARY 一半交横切）；已由某票消解 1（L13）；既有代码票承接 6（H1、H3、M4、M5、M6、L15）。新立代码票 2（code/28 承 M8，code/29 承 L3 的人工改路），已立的 code/16 解除阻塞。
 
 ### 代决与越权风险点
 
@@ -84,4 +84,4 @@ Blocked by: 无（01 进 main 后开工）
 - `go run ./tools/at-coverage-counts -check` 退 0（本票没动盘点文件，见 X6）。
 - 本票改动的全部 `.md` 里的相对链接与锚点用脚本逐个解析，全部能解析。
 - `git diff main --stat` 只含：本组两份 CONTEXT、NR、NO 的 UC（UC-NR-001、002、003，UC-NO-001、002、003、005、006）、新 ADR 三份、被停的 ADR-0172 与 ADR-0235 的 Status 行与 Links、`.scratch/docs-consistency/` 下本票与 code/16、17、26、27。
-- 编号：新代码票取 code/26、27（立票时 code/ 最大号 25）；03、04 等并行修订票若也立代码票，进 main 时撞号由协调方改号。
+- 编号：新代码票原取 code/26、27，评审轮按协调方分配改为 code/28、29（03 用 26–27、04 用 30–32），另立 code/33；分支内引用已同步。

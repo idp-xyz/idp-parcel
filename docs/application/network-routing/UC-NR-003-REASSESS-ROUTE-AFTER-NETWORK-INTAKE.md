@@ -178,7 +178,7 @@
 | `AT-NR-039` | 先前无路由，收寄后出现合格候选 | 形成首个当前有效路由计划，不恢复旧占位（生产接法上复核不取候选成本、走不通，见 [demo-chain-gaps/115](../../../.scratch/demo-chain-gaps/issues/115-route-reassessment-never-loads-candidate-costs.md)） |
 | `AT-NR-040` | 只有普通扫描或卸载，没有控制依据 | `触发未受理`（`TRIGGER_NOT_ACCEPTED`）：不落复核、不入账未判、不回滚重投，不建立当前可控节点 |
 | `AT-NR-041` | 存在更优候选但已过冻结边界且原计划仍可执行 | 保留原计划，不因轻微改善自动切换 |
-| `AT-NR-042` | 候选可行但不满足自动改路条件 | 只形成建议；授权决定前不改变计划（今天只有失效那条线形成建议，仍适用那条线见 [docs-consistency/code/17](../../../.scratch/docs-consistency/code/17-still-applicable-plan-never-forms-a-reroute-suggestion.md)；授权决定面未实现，见 [docs-consistency/code/27](../../../.scratch/docs-consistency/code/27-reroute-suggestions-and-ties-have-no-authorized-decision-face.md)） |
+| `AT-NR-042` | 候选可行但不满足自动改路条件 | 只形成建议；授权决定前不改变计划（今天只有失效那条线形成建议，仍适用那条线见 [docs-consistency/code/17](../../../.scratch/docs-consistency/code/17-still-applicable-plan-never-forms-a-reroute-suggestion.md)；授权决定面未实现，见 [docs-consistency/code/29](../../../.scratch/docs-consistency/code/29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md)） |
 | `AT-NR-043` | 改路会改变关务区域或报关服务方 | 等待新的关务适用性判断，不沿用原资格 |
 | `AT-NR-044` | 单次班次或装载分配失败但线路仍有可行机会 | 保留逻辑路由，交运输履约重新分配 |
 | `AT-NR-045` | 同一触发重复处理 | 返回原适用性或改路结果，不重复计划和事件 |
@@ -187,7 +187,7 @@
 | `AT-NR-048` | 结果提交成功但发布失败 | 不回退计划或重复决定，只重试原发布意图 |
 | `AT-NR-049` | 跨租户查询路由复核 | 不泄露包裹、路线、候选或限制信息 |
 | `AT-NR-050` | 硬限制已证明原计划失效，但替代候选来源暂时不可用 | 原计划退出当前有效范围，形成无当前有效路由并保持候选评估未决；不继续下发旧指令 |
-| `AT-NR-051` | 选中候选的限制状态未知：关务目录为空、受理基线缺端点国家或关务来源未接 | `触发未判`，原因 `PLAN_APPLICABILITY_UNCLEAR`，未判登记记下缺口与再判条件；不回滚重投，既不默认失效也不形成新计划（[ADR-0250](../../adr/0250-unclear-plan-applicability-in-reassessment-is-settled-as-not-judged-and-resume-in-the-same-change-stays-in-the-acceptance-chain.md)；未实现，今天答未决、回滚重投，见 [docs-consistency/code/26](../../../.scratch/docs-consistency/code/26-unclear-plan-applicability-in-reassessment-is-retried-instead-of-settled.md)） |
+| `AT-NR-051` | 选中候选的限制状态未知：关务目录为空、受理基线缺端点国家或关务来源未接 | `触发未判`，原因 `PLAN_APPLICABILITY_UNCLEAR`，未判登记记下缺口与再判条件；不回滚重投，既不默认失效也不形成新计划（[ADR-0250](../../adr/0250-unclear-plan-applicability-in-reassessment-is-settled-as-not-judged-and-resume-in-the-same-change-stays-in-the-acceptance-chain.md)；未实现，今天答未决、回滚重投，见 [docs-consistency/code/28](../../../.scratch/docs-consistency/code/28-unclear-plan-applicability-in-reassessment-is-retried-instead-of-settled.md)） |
 | `AT-NR-052` | 原计划失效，候选评估确认没有合格候选 | 无当前有效路由继续有效，候选评估形成无候选结果 |
 | `AT-NR-053` | 原计划失效，候选评估未决后补齐并找到合格候选 | 保留无路由期间，形成新计划版本并从明确边界生效（生产接法上复核不取候选成本、走不通，见 [demo-chain-gaps/115](../../../.scratch/demo-chain-gaps/issues/115-route-reassessment-never-loads-candidate-costs.md)） |
 | `AT-NR-059` | 当前计划末尾带交付段，包裹在某个计划节点上复核 | 已执行前缀与冻结边界的剩余段数只数节点间段，交付段不算剩余段；改路形成的新计划照被选候选带上它的交付段（[ADR-0217](../../adr/0217-route-plan-carries-a-delivery-leg-after-the-delivery-node.md)） |
@@ -220,10 +220,10 @@
 | 能力 | 现状 | 承接 |
 |---|---|---|
 | 场外揽收复核只按硬约束判、不比节点、不建可控节点（`AT-NR-034`、`AT-NR-084`） | 今天拿揽收地点比计划节点，原计划被误判失效 | [docs-consistency/code/16](../../../.scratch/docs-consistency/code/16-pickup-reassessment-compares-the-pickup-place-with-plan-nodes.md) |
-| 适用性看不清入账未判（`AT-NR-051`） | 今天答未决、回滚重投 | [docs-consistency/code/26](../../../.scratch/docs-consistency/code/26-unclear-plan-applicability-in-reassessment-is-retried-instead-of-settled.md) |
+| 适用性看不清入账未判（`AT-NR-051`） | 今天答未决、回滚重投 | [docs-consistency/code/28](../../../.scratch/docs-consistency/code/28-unclear-plan-applicability-in-reassessment-is-retried-instead-of-settled.md) |
 | 复核取候选成本（`AT-NR-039`、`AT-NR-053`、步骤 6B/7B/7C） | 复核没有成本取数口，有合格候选时排序报错或候选评估一律记未决 | [demo-chain-gaps/115](../../../.scratch/demo-chain-gaps/issues/115-route-reassessment-never-loads-candidate-costs.md) |
 | 仍适用线形成改路建议（步骤 7C、`AT-NR-042`） | 只有失效线形成建议 | [docs-consistency/code/17](../../../.scratch/docs-consistency/code/17-still-applicable-plan-never-forms-a-reroute-suggestion.md) |
-| 授权角色据建议或并列作出改路决定（步骤 7C、CONTEXT「授权角色接受建议 → 形成改路决定」） | 没有决定面，建议只能看 | [docs-consistency/code/27](../../../.scratch/docs-consistency/code/27-reroute-suggestions-and-ties-have-no-authorized-decision-face.md) |
+| 授权角色据建议或并列作出改路决定（步骤 7C、CONTEXT「授权角色接受建议 → 形成改路决定」） | 没有决定面，建议只能看 | [docs-consistency/code/29](../../../.scratch/docs-consistency/code/29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md) |
 | 路由指令（步骤 7B、`AT-NR-037`、「节点安全作业与方向性作业」） | 没有路由指令的模型 | [no-directional-basis/02](../../../.scratch/no-directional-basis/issues/02-network-routing-has-no-routing-instruction-or-consolidation-compatibility-judgment.md) |
 | 集运兼容判断（「节点安全作业与方向性作业」） | 没有成员级集运兼容判断的模型 | [no-directional-basis/02](../../../.scratch/no-directional-basis/issues/02-network-routing-has-no-routing-instruction-or-consolidation-compatibility-judgment.md) |
 | 路由偏离（`AT-NR-035`） | 没有偏离的模型 | [demo-chain-gaps/35](../../../.scratch/demo-chain-gaps/issues/35-network-routing-route-deviation-consumes-movement-facts.md) |
