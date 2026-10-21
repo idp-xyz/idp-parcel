@@ -28,6 +28,7 @@ func newUnformedRecording(t *testing.T) (*application.RecordEvaluationUnformedHa
 	return handler, sell, buy
 }
 
+// Covers: AT-SA-198 的 SELL 半边——记`未形成`连同停因，重放不翻倍，另有结论、请求不在册是矛盾，册答不出是未决。
 func TestAnUnformedSellRequestIsConcludedNotFormedWithItsCause(t *testing.T) {
 	handler, sell, _ := newUnformedRecording(t)
 	command := application.RecordEvaluationUnformedCommand{
@@ -60,6 +61,7 @@ func TestAnUnformedSellRequestIsConcludedNotFormedWithItsCause(t *testing.T) {
 	}
 }
 
+// Covers: AT-SA-198 的 BUY 半边——停因只记一次，另一个停因是矛盾；不是计价那一段的停因、方向对不上都不受理。
 func TestAnUnformedBuyRequestRecordsItsCauseOnce(t *testing.T) {
 	handler, _, buy := newUnformedRecording(t)
 	tenant := mustAccountValue(t, domain.NewTenantID, "tenant-1")

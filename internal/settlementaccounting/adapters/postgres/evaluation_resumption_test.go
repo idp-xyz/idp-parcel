@@ -387,7 +387,7 @@ func TestTheStalledQueueListsWhatStillWaits(t *testing.T) {
 	}
 }
 
-// Covers: 「评价参数已登记」交接口——同一行重放发同一封（EnqueueOnce 按 ID 吞掉第二封）、两行两封；种类不归本口拒；
+// Covers: AT-SA-199 「评价参数已登记」交接口——同一行重放发同一封（EnqueueOnce 按 ID 吞掉第二封）、两行两封；种类不归本口拒；
 // 写口无事务拒（PBC-08）。
 func TestTheEvaluationParameterHandoffEnqueuesOneEnvelopePerRegisteredRow(t *testing.T) {
 	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))

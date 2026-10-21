@@ -442,7 +442,7 @@ func TestASellRequestPendingOnAnIncompleteMappingResumesAfterTheMappingIsRegiste
 		"parcel-pricing.evaluation.recorded")
 }
 
-// Covers: 未决名单的两头——PP 请求那两路与续办几路只收真会自愈的依赖：请求还读不回、形成依赖故障、记停因或续办时某个
+// Covers: AT-PP-001 未决名单的两头——PP 请求那两路与续办几路只收真会自愈的依赖：请求还读不回、形成依赖故障、记停因或续办时某个
 // 依赖答不出；答不出评价的格（未配置一类）不在任何一份名单里——它们不再是错误，不需要被翻译。名单取生产切片本身。
 func TestTheResumptionLanesListOnlyDependenciesThatHealOnRetry(t *testing.T) {
 	for name, lane := range map[string]struct {

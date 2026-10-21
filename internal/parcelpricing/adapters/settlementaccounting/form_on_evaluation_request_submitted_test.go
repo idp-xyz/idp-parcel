@@ -188,7 +188,7 @@ func TestAnUnformableRequestHandsOffUnformedAndSettles(t *testing.T) {
 	}
 }
 
-// Covers: 交「评价未形成」失败按两种分：暂时不可用是未决（入账跟着回滚，下一次重投再交）；被框架确定性拒收是硬失败，
+// Covers: AT-PP-006 交「评价未形成」失败按两种分：暂时不可用是未决（入账跟着回滚，下一次重投再交）；被框架确定性拒收是硬失败，
 // 不进未决名单。入口的未决照旧是那一枚哨兵。
 func TestAFailedUnformedHandoffIsUndecidedUnlessRejected(t *testing.T) {
 	notConfigured := ppapplication.FormEvaluationFromRequestResult{Outcome: ppapplication.RequestPriceCardNotConfigured}
