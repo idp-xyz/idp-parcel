@@ -1,6 +1,6 @@
 # UC-PP-001 按假设包裹形成试算评价
 
-状态：机制待实现；租户的真实价卡、计价参考目录与序列待提供
+状态：机制已实现——试算编排、按评价请求形成评价、价卡收尾各有生产编排，`/pricing-estimates` 已装配；参考复核按租户复核职责规则判那一格待实现（见「给开发的交接」）。租户的真实价卡、计价参考目录与序列待提供（租户取值，未登记即答价卡未配置）
 
 ## 目标与边界
 
@@ -11,9 +11,9 @@
 本用例不拥有，也不形成：
 
 - 报价、锁价、接受或任何客户承诺（[PP CONTEXT](../../domain/parcel-pricing/CONTEXT.md)「评价对象为试算对象时……不得形成客户承诺」）。
-- 费用、预估费用、应收应付——`settlement-accounting` 不得据试算评价形成任何金额（同上）。
+- 费用、预估费用、应收应付——`settlement-accounting` 不得据试算评价形成任何金额（同上）。唯一的例外是接受前估价：结算把委托当前提交版本逐件试算的合计用作冻结与信用暴露的控制金额（[ADR-0179](../../adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md)），那一路不经本用例。
 - 择优：多张卡各自的评价之间没有优劣，择优归 `network-routing`（[CONTEXT-MAP](../../domain/CONTEXT-MAP.md) `parcel-pricing → network-routing`）。
-- 试算留痕：试算评价不入评价册、不交任何下游（[ADR-0152](../../adr/0152-operator-estimate-is-a-pricing-use-case-computed-not-recorded-and-never-handed-to-settlement.md) 决定二）。
+- 试算留痕：本用例的试算评价不入评价册、不交任何下游（[ADR-0152](../../adr/0152-operator-estimate-is-a-pricing-use-case-computed-not-recorded-and-never-handed-to-settlement.md) 决定二）；接受前估价的逐件试算由结算发起，同样不入评价册。
 
 ## 元数据
 
@@ -53,7 +53,7 @@
 
 「已形成」下逐卡一格：
 
-- **已评价**：交回那份试算评价。评价自己的状态（完成 / 待判断 / 不可计价 / 冲突 / 失败）原样透出，本用例不折成别的说法；「待判断」与「不可计价」是评价答案，不是本用例的失败（[PP CONTEXT](../../domain/parcel-pricing/CONTEXT.md) 不可计价与待判断诸句）。
+- **已评价**：交回那份试算评价。评价自己的状态（完成 / 待判断 / 不可计价 / 冲突 / 计算失败，`COMPLETED` / `PENDING` / `UNRATABLE` / `CONFLICT` / `FAILED`）原样透出，本用例不折成别的说法；「待判断」与「不可计价」是评价答案，不是本用例的失败（[PP CONTEXT](../../domain/parcel-pricing/CONTEXT.md) 不可计价与待判断诸句）。
 - **输入不全**：这张卡要的某一格发起方没给（例如卡绑了分区目录而声明没有邮编路线），点名缺哪一格；别的卡照算。
 
 ## 应用流程
@@ -86,7 +86,7 @@
 
 ## 按评价请求形成评价：答不出时与补登之后
 
-试算之外，计价还按结算交来的评价请求形成正式评价，选卡与本用例同一套口径（无价卡、适用冲突各成一格）。正式评价答不出、或租户补登参数之后怎样交回结算，由 [ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 定；本节只列计价这一侧的验收，结算那一侧见 [UC-SA-002](../settlement-accounting/UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md) `AT-SA-188` 至 `AT-SA-199`。
+试算之外，计价还按结算交来的评价请求形成正式评价。选卡的收尾折法与本用例同一套（[ADR-0234](../../adr/0234-an-older-price-card-version-leaves-new-selections-only-through-an-explicit-closure-for-a-named-successor.md)），无价卡、适用冲突各成一格；冲突的判法不同：本用例只在同一方案身份两版同时适用时答适用冲突，不同方案各一张卡并列各自评价，正式评价则把多于一版同时适用——不同方案各一版也算——一律答适用冲突，不评价任何一版。正式评价答不出、或租户补登参数之后怎样交回结算，由 [ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 定；本节只列计价这一侧的验收，结算那一侧见 [UC-SA-002](../settlement-accounting/UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md) `AT-SA-188` 至 `AT-SA-199`。
 
 | 编号 | 场景 | 期望结果 |
 |---|---|---|
@@ -110,8 +110,31 @@
 | `AT-PP-011` | 同一旧版上并发的两次收尾 | 后到者停在旧版行锁上，先到者提交后它读到已收尾的旧版、答未受理；册上一行（决定四） |
 | `AT-PP-012` | 停在只有新一版卡解得开的停因上的请求（如价表没有这一段），租户登了同一方案的新一版、再收尾旧版 | 收尾同笔交一封价卡种类、带旧版计价范围与方向的「参数已登记」，标识与两版各自登记那一封不同；后继登记那一封续办出来的那一代停在适用冲突，收尾那一封续办出的下一代选到后继、形成评价；前几代与它们的评价不改写（决定四、六） |
 
+## 计价条款从哪里来
+
+评价按范围选卡，体积系数、金额取整与换算所用的汇率序列都只从选中的价卡读，不分价格方向；商业价格政策的定价方案绑定与口径不参与（[ADR-0260](../../adr/0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md)）。
+
+| 编号 | 场景 | 期望结果 |
+|---|---|---|
+| `AT-PP-013` | 一张在用 `SELL` 卡声明了自己的体积系数与金额取整、绑了一串汇率序列；同范围的销售方向商业价格政策另有一份不同的口径 | 试算与正式评价都按卡上的系数算体积重、按卡上的策略取整、用卡绑定序列的在用版本按计价基准时点换算；政策上那一份不改变结果，版本清单里没有任何商业依据引用（ADR-0260 决定一至三） |
+
+## 序列与目录复核：复核者由租户的复核职责规则定
+
+人工复核一版计价参考序列或目录时，复核者须否不同于登记者、须持哪一格授予，按租户登记的参考复核职责规则判；规则未登记时复核不放行（[ADR-0262](../../adr/0262-reference-series-and-catalogue-review-duty-separation-is-a-tenant-governance-rule.md)）。
+
+| 编号 | 场景 | 期望结果 |
+|---|---|---|
+| `AT-PP-014` | 租户没有登记参考复核职责规则，操作者复核一版手工登记的序列或目录 | 答未配置，不落复核行，那一版不进在用；不按默认双人或默认单人放行（ADR-0262 决定一） |
+| `AT-PP-015` | 规则要求不同主体，登记者本人复核；或规则不要求不同主体，登记者本人复核；或规则要求某一格授予而复核者没有 | 第一种答须换人（`NEEDS_ANOTHER_REVIEWER`）、不落复核行；第二种落复核行，通过即自复核时刻起在用；第三种答复核者不合格、不落复核行（ADR-0262 决定一） |
+
 ## 给开发的交接
 
 - 分层落在 `internal/parcelpricing`：试算编排与补齐读数的共用件在 `application`；编排依赖里没有评价库写口与交付口（结构保证，ADR-0152 决定二）；`EvaluatePricingHandler` 改用共用件、行为不变。
-- 入口在 `internal/parcelpricing/adapters/http`，`parcel-api` 端点表一行、以 `UnconfiguredIntake{}` 起步；接口字段与错误码按 ADR-0152 决定七与 ADR-0022 定，不在本用例。
+- 入口在 `internal/parcelpricing/adapters/http`：`cmd/parcel-api` 端点表把 `/pricing-estimates` 挂在操作者渠道的计价查阅读（`operatorRegistries.pricingOperationsRead`）——试算不写任何册、不形成生产事实，不挂登记册配置写；接口字段与错误码按 ADR-0152 决定七与 ADR-0022 定，不在本用例。
 - 真实价卡、目录与序列属租户取值（[参数登记册](../../product/PILOT-PARAMETER-REGISTER.md) `PAR-SET-02/03` 等），未提供时本用例如实答价卡未配置，不预置任何卡。演示租户 `SYN-TENANT-01` 的种子卡只作 `S` 走通。
+
+现状缺口（规则如上文，代码未到；预期结果不变）：
+
+| AT | 缺口 | 承接 |
+|---|---|---|
+| `AT-PP-014`、`AT-PP-015` | 序列与目录复核今天写死复核者不得是登记者（`domain.NewSeriesReview`、`domain.NewCatalogueReview`），不读任何规则，没有未配置与复核者不合格两格 | 票 [docs-consistency/code/41](../../../.scratch/docs-consistency/code/41-reference-review-gate-reads-a-tenant-review-duty-rule.md) |
