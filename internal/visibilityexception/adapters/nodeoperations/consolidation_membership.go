@@ -29,8 +29,8 @@ type IntakeIdentityReader interface {
 	) ([]nodomain.IntakeIdentityObservation, error)
 }
 
-// ConsolidationMembershipView 实现 veports.ConsolidationMembershipView：全程追踪按集运单元成员投移动事实时，问节点作业「这一件
-// 那一刻是不是一袋、袋里直接装着什么、每件认出是哪件包裹」。只翻译——成员按什么时间算、身份怎么认，都由节点作业答。
+// ConsolidationMembershipView 实现 veports.ConsolidationMembershipView：全程追踪认集运单元、按单元成员投移动事实时，问节点作业
+// 「这一件那一刻是不是一袋、袋里直接装着什么、每件认出是哪件包裹」。只翻译——成员按什么时间算、身份怎么认，都由节点作业答。
 type ConsolidationMembershipView struct {
 	memberships MembershipAtReader
 	identities  IntakeIdentityReader
@@ -59,13 +59,9 @@ func (view *ConsolidationMembershipView) MembersAt(
 	query veports.ConsolidationMembershipQuery,
 ) (veports.ConsolidationMembership, error) {
 	none := veports.ConsolidationMembership{}
-	tenant, err := nodomain.NewTenantID(query.TenantID.String())
+	tenant, membership, err := view.read(ctx, query)
 	if err != nil {
-		return none, fmt.Errorf("%w: tenant: %v", veports.ErrConsolidationMembershipUntranslatable, err)
-	}
-	membership, err := view.memberships.ReadConsolidationMembershipAt(ctx, tenant, query.Object, query.At)
-	if err != nil {
-		return none, fmt.Errorf("read consolidation membership: node operations: %w", err)
+		return none, err
 	}
 	if !membership.Unit {
 		return none, nil
@@ -79,6 +75,33 @@ func (view *ConsolidationMembershipView) MembersAt(
 		answer.Members = append(answer.Members, translated)
 	}
 	return answer, nil
+}
+
+// IsUnitAt 只交回节点作业那一问的 Unit：成员不译、不问收寄册（见 veports.ConsolidationMembershipView）。
+func (view *ConsolidationMembershipView) IsUnitAt(ctx context.Context, query veports.ConsolidationMembershipQuery) (bool, error) {
+	_, membership, err := view.read(ctx, query)
+	if err != nil {
+		return false, err
+	}
+	return membership.Unit, nil
+}
+
+// read 是两问共用的那一读：是不是单元由节点作业这一本册答，两问不各读各的。
+func (view *ConsolidationMembershipView) read(
+	ctx context.Context,
+	query veports.ConsolidationMembershipQuery,
+) (nodomain.TenantID, noports.ConsolidationMembershipAt, error) {
+	tenant, err := nodomain.NewTenantID(query.TenantID.String())
+	if err != nil {
+		return nodomain.TenantID{}, noports.ConsolidationMembershipAt{},
+			fmt.Errorf("%w: tenant: %v", veports.ErrConsolidationMembershipUntranslatable, err)
+	}
+	membership, err := view.memberships.ReadConsolidationMembershipAt(ctx, tenant, query.Object, query.At)
+	if err != nil {
+		return nodomain.TenantID{}, noports.ConsolidationMembershipAt{},
+			fmt.Errorf("read consolidation membership: node operations: %w", err)
+	}
+	return tenant, membership, nil
 }
 
 func (view *ConsolidationMembershipView) member(

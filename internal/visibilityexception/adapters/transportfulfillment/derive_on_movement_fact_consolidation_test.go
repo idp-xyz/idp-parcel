@@ -34,6 +34,18 @@ func (double *membershipDouble) MembersAt(
 	return veports.ConsolidationMembership{Unit: true, Members: append([]veports.ConsolidationMember{}, members...)}, nil
 }
 
+func (double *membershipDouble) IsUnitAt(_ context.Context, query veports.ConsolidationMembershipQuery) (bool, error) {
+	double.asked = append(double.asked, query)
+	if err := double.errs[query.Object]; err != nil {
+		return false, err
+	}
+	_, unit := double.units[query.Object]
+	return unit, nil
+}
+
+// noUnits 答每一件都不是集运单元：只关心包裹那条路的用例拿它填成员关系那一口。
+func noUnits() *membershipDouble { return &membershipDouble{} }
+
 func (double *membershipDouble) askedObjects() []string {
 	var objects []string
 	for _, query := range double.asked {

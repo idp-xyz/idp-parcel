@@ -166,3 +166,36 @@ func TestMembershipReadFailuresAreNotReadAsAnAnswer(t *testing.T) {
 		t.Fatal("缺收寄身份那一口也装得起来")
 	}
 }
+
+// Covers: AT-VE-199 适配器半边——只问是不是单元的那一口照节点作业同一本单元册答，时点原样交过去；成员不译、不问收寄册，所以成员
+// 身份读不动或判不下来都不挡它。
+// Covers: AT-VE-200 适配器半边——单元册读不动作为调用失败交回，不读成「不是单元」。
+func TestIsUnitAtAnswersFromTheUnitBookWithoutJudgingMembers(t *testing.T) {
+	at := time.Date(2026, 10, 21, 14, 5, 0, 0, time.UTC)
+	memberships := &membershipsAtDouble{answers: map[string]noports.ConsolidationMembershipAt{
+		"bag-1": {Unit: true, Members: []noports.ConsolidationMemberAt{handlingMember(t, "hu-1", false)}},
+	}}
+	// 收寄册一问就报错：只问是不是单元时不该走到这里。
+	view, err := adapter.NewConsolidationMembershipView(memberships, intakeIdentitiesDouble{down: map[string]bool{"hu-1": true}})
+	if err != nil {
+		t.Fatalf("装适配器：%v", err)
+	}
+	if unit, err := view.IsUnitAt(t.Context(), membershipQuery(t, "bag-1", at)); err != nil || !unit {
+		t.Fatalf("bag-1 = %v / %v，要是单元", unit, err)
+	}
+	if !memberships.asked[0].Equal(at) {
+		t.Fatalf("时点 = %s，要 %s", memberships.asked[0], at)
+	}
+	if unit, err := view.IsUnitAt(t.Context(), membershipQuery(t, "PCL-9", at)); err != nil || unit {
+		t.Fatalf("PCL-9 = %v / %v，要不是单元", unit, err)
+	}
+
+	down, err := adapter.NewConsolidationMembershipView(&membershipsAtDouble{err: errMembershipBookDown}, intakeIdentitiesDouble{})
+	if err != nil {
+		t.Fatalf("装适配器：%v", err)
+	}
+	if _, err := down.IsUnitAt(t.Context(), membershipQuery(t, "bag-1", at)); !errors.Is(err, errMembershipBookDown) ||
+		errors.Is(err, veports.ErrConsolidationMembershipUntranslatable) {
+		t.Fatalf("err = %v，要原样包住调用失败", err)
+	}
+}
