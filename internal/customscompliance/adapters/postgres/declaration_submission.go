@@ -445,7 +445,7 @@ func attemptResultFrom(value string) (domain.AttemptResult, error) {
 }
 
 // nullIfZeroInstant 让`已登记待发送`的尝试在 sent_at 上落 NULL：领域交回零值是「还没发」，写成 0001-01-01 就成了一个
-// 编出来的发送时刻（迁移 0027 把两者配对）。
+// 编出来的发送时刻（迁移 0025 把两者配对）。
 func nullIfZeroInstant(at time.Time) *time.Time {
 	if at.IsZero() {
 		return nil

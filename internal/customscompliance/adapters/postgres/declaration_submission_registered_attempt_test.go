@@ -9,7 +9,7 @@ import (
 )
 
 // Covers: AT-CC-441（持久化半边）——`已登记待发送`的首次尝试落库时 sent_at 是 NULL，读回仍是待发送、没有发送时间
-// （迁移 0027）；库上那两条配对 CHECK 拦得住给待发送编发送时间、给已发出的抹发送时间、以及停在待发送的受控重发。
+// （迁移 0025）；库上那两条配对 CHECK 拦得住给待发送编发送时间、给已发出的抹发送时间、以及停在待发送的受控重发。
 func TestARegisteredAttemptIsStoredWithoutASendTime(t *testing.T) {
 	fixture := newDeclarationFixture(t)
 	ctx := t.Context()
