@@ -35,7 +35,7 @@ Blocked by: 无
 4. 判法放在领域投影一处，各口线格式只经它取：决定三。
 5. 落册、重放回显、信封、VE 与运营查阅不收窄：决定三。（已由评审 B2 改口径：重放回显的是首次读数，回给设备时同样只列没得出放行的；落册、信封、VE 与运营查阅不收窄。）
 6. 判法归产品策略（替所有租户定），投影与线格式归机制，没有租户取值：三类一段。
-7. （评审修订补）出发意图的起讫与声明的段绑定——班次起讫要就是段里在控各件进段那次`已交接`声明的交出、去向节点，两格都要声明，对不上或说不出就停在本侧、不问关务：决定五，越权风险点 7–11。见文末「评审记录」B1。
+7. （评审修订补）出发意图的起讫与声明的段绑定：决定五，越权风险点 7–12。见文末「评审记录」B1 与二轮一节。（已由二轮评审改口径：声明了的那一格与班次起讫对不上才停在本侧、不问关务；说不出——凭收寄进段、交接没声明全、在册认不出——照班次方向问关务、落册记全，回给设备的只有整格、起讫与 `entryUnbound`，一件不列。一轮写的「两格都要声明，对不上或说不出就停在本侧」不再成立。）
 
 ### 越权风险点
 
@@ -47,7 +47,7 @@ Blocked by: 无
 - 4：放行的对象不列，设备无从对账段里问了哪几件（TF owner、一线客户端 owner）。
 - 5：`members: []` 的含义从「空袋」变为「没有同样列出的成员」（TF owner、NO owner）。
 - 6：单件读数也收窄，答复里那一件放行时没有逐对象那一格（TF owner）。
-- 7–11（评审修订补）：交接漏声明节点的段出发不问关务；只核节点不核班次身份；交接声明错了出发就停在本侧（段内多站同样对不上）；每件多读一次交接册；存量读数不回补（TF owner、一线客户端 owner、运维）。越权风险点 2、3 同时改写：剩余暴露改指段自己的方向（跨区段、票 147 之后的未登区域节点），后继票 171。
+- 7–12（评审修订补，二轮改口径）：凭收寄进段与交接没声明全的段上设备只见整格；只核节点不核班次身份；交接声明错了或段内多站时诚实出发停在本侧、不形成信号；每件多读一次交接册；存量读数不回补；核不上的段上配假班次换得到一位汇总，照这么登出发会落一份按错误意图问来的读数并派生信号，持交接登记授予的一方塞一笔不声明节点的交接能把段降成只回整格（TF owner、VE owner、一线客户端 owner、运维）。越权风险点 2、3 同时改写：剩余暴露改指段自己的方向（跨区段、票 147 之后的未登区域节点），后继票 171。一轮写的「交接漏声明节点的段出发不问关务」已由二轮撤掉。
 
 ### 用例
 
@@ -89,21 +89,21 @@ Blocked by: 无
 
 ### 阻断
 
-**B1——146 没堵住 R11：设备给一段境内段配一班跨区班次，段里每件都答未决、都回给设备。** 修了，走的是评审给的第一条路：就在本票把出发意图的起讫与声明的段绑定。
+**B1——146 没堵住 R11：设备给一段境内段配一班跨区班次，段里每件都答未决、都回给设备。** 修了，走的是评审给的第一条路：就在本票把出发意图的起讫与声明的段绑定。（本节记的是一轮的做法：凡写「说不出停在本侧」「`SEGMENT_ENTRY_NODES_UNKNOWN`」「要两格都声明才问关务」的地方，二轮都已撤掉——说不出照问、只回整格，停点撤掉；以下文二轮一节与 ADR-0237 决定五为准。）
 
-- **为什么走这条**：绑定只用本上下文自己的事实（各件进段那次`已交接`声明的交出、去向节点，ADR-0213 决定一），认进段交接的认法交付读数早已有一份，抽成一处共用即可；改动是领域一个判法、三种停点、一口端口（原交付专用名改成共用名）、装配一处，加测试夹具，没有迁移（停点存在 jsonb 明细里，读回的封闭集随领域加三格）、没有新信封，出发登记与问询走的本就是同一条读数路径，两口一处改。评审给的另一种做法「起讫改从进段交接取」没取：要停用 ADR-0205 决定二「起讫取班次方向」的权威来源，而段里各件的进段交接可以各不相同、一份读数只有一对起讫，还得另立「取哪一件的」规则；核对只在对不上时不问，保住了既有口径。（二轮评审改准：一轮修订其实把「说不出」也停在了本侧，见下文二轮一节；二轮之后才是对不上的不问、核不上的照问而只回整格。）退回最低限度那条路（票 166、改完成记录为「R11 未完全满足」）没有走，166 未用。
+- **为什么走这条**：绑定只用本上下文自己的事实（各件进段那次`已交接`声明的交出、去向节点，ADR-0213 决定一），认进段交接的认法交付读数早已有一份，抽成一处共用即可；改动是领域一个判法、几种新停点（一轮三种，二轮撤掉「说不出」那一种、余两种）、一口端口（原交付专用名改成共用名）、装配一处，加测试夹具，没有迁移（停点存在 jsonb 明细里，读回的封闭集随领域加格）、没有新信封，出发登记与问询走的本就是同一条读数路径，两口一处改。评审给的另一种做法「起讫改从进段交接取」没取：要停用 ADR-0205 决定二「起讫取班次方向」的权威来源，而段里各件的进段交接可以各不相同、一份读数只有一对起讫，还得另立「取哪一件的」规则；核对只在对不上时不问，保住了既有口径。（二轮评审改准：一轮修订其实把「说不出」也停在了本侧，见下文二轮一节；二轮之后才是对不上的不问、核不上的照问而只回整格。）退回最低限度那条路（票 166、改完成记录为「R11 未完全满足」）没有走，166 未用。
 - **修法**（提交 `b471feb6`）：
-  - 领域：`DepartureEntryStops`——段里出发那一刻在控的每一件，进段交接声明的交出节点要是班次起点、去向节点要是班次终点；对不上停在 `SCHEDULE_NOT_SERVING_SEGMENT`（未决），说不出（凭收寄进段、没声明那两格、交接在册上认不出）停在 `SEGMENT_ENTRY_NODES_UNKNOWN`（未决），交接册读不动停在 `HANDOVER_REGISTRY_UNAVAILABLE`（读不动）。`ActualFulfillmentSegment.ParticipationsUnderControlAt` 交回在控那几件的参与，与 `ObjectsUnderControlAt` 同一口径（后者改为经它取）。
+  - 领域（一轮，二轮已改）：`DepartureEntryStops`——段里出发那一刻在控的每一件，进段交接声明的交出节点要是班次起点、去向节点要是班次终点；对不上停在 `SCHEDULE_NOT_SERVING_SEGMENT`（未决），说不出（凭收寄进段、没声明那两格、交接在册上认不出）停在 `SEGMENT_ENTRY_NODES_UNKNOWN`（未决），交接册读不动停在 `HANDOVER_REGISTRY_UNAVAILABLE`（读不动）。二轮换成 `BindDepartureEntries`，说不出不再是停点。`ActualFulfillmentSegment.ParticipationsUnderControlAt` 交回在控那几件的参与，与 `ObjectsUnderControlAt` 同一口径（后者改为经它取）。
   - 应用：出发读数在问集运成员关系与关务之前核；认进段交接收成 `entryHandoverOf`（新文件 `application/entry_handover.go`），交付读数取 at 也改走它，行为不变。
   - 端口：`ports.DeliveryGateEntryHandoverView` 改名 `ports.EntryHandoverView`，挪到新文件 `ports/entry_handover.go`；出发读数编排多一口交接登记册，`buildDepartureGateReader` 接真交接登记册。
   - 只核节点、不核班次身份：同方向改搭别班照样核得过。
 - **用例**：
-  - 编排：新 `application/read_departure_gate_entry_test.go`——对不上、两件里一件对不上、没声明去向、一格都没声明、一件说不出一件对不上、凭收寄进段、交接在册上认不出、交接册读不动，八种都停在本侧、不问成员关系与关务、回给设备一件不列，出发登记与问询同答；对得上的照问关务。
+  - 编排（一轮，二轮已改）：新 `application/read_departure_gate_entry_test.go`——一轮把对不上与说不出的几种都断言成停在本侧；二轮拆成两条用例，说不出的几种改断言照问关务、标未绑定、一件不列。
   - 领域与库面：停点各属一格的表加三种；停点往返用例加两条带新停点的读数。
-  - 真库：`cmd/parcel-api/departure_gate_executor_scope_test.go::TestPairingASegmentWithAnotherSchedulesDirectionNoLongerWidensTheReading` 复现评审 PoC——同一段境内段装两个客户的包裹，照种子登深圳→新加坡那一班；按本班问答不受门禁、一件不列；改配跨区班次问答未决、停在 `SCHEDULE_NOT_SERVING_SEGMENT`、一件不列、整库指纹不变（连关务都没问）；照这么配登出发 201、读数同停、库面没有逐对象那一格；交接没声明节点的段停在 `SEGMENT_ENTRY_NODES_UNKNOWN`、一件不列。
+  - 真库：`cmd/parcel-api/departure_gate_executor_scope_test.go::TestPairingASegmentWithAnotherSchedulesDirectionNoLongerWidensTheReading` 复现评审 PoC——同一段境内段装两个客户的包裹，照种子登深圳→新加坡那一班；按本班问答不受门禁、一件不列；改配跨区班次问答未决、停在 `SCHEDULE_NOT_SERVING_SEGMENT`、一件不列、整库指纹不变（连关务都没问）；照这么配登出发 201、读数同停、库面没有逐对象那一格；交接没声明节点的段一轮断言停在 `SEGMENT_ENTRY_NODES_UNKNOWN`，二轮改为照问关务、标 `entryUnbound`、一件不列。
 - **变异实测**：把出发读数里的绑定拆掉（`entryStops` 的结果丢弃），上面的真库用例与编排用例都变红；真库用例的失败输出正是 PoC 那一份：`{"answer":"UNDECIDED","from":"SYN-NODE-SZX-GATE","to":"SYN-NODE-SIN-HUB","objects":[{"object":"SYN-PARCEL-146-POC-CUST-A","answer":"UNDECIDED"},{"object":"SYN-PARCEL-146-POC-CUST-B","answer":"UNDECIDED"}]}`。复原后全绿。
-- **随行为变的既有用例**（不是放宽）：出发读数现在要进段交接声明了两格才问关务，所以几处夹具照演示动线的样子声明交出、去向节点——编排的 `departureSegments`（改为由声明了 NODE-SHA → NODE-SZX 的`已交接`立段，另给交接册替身）、tfhttp 的 `movementGateReaderOver`、`cmd/parcel-api` 的 `departureLine.handOver`（声明 SYN-NODE-SHA-HUB → SYN-NODE-SZX-GATE，另开 `handOverDeclaring`）、`assemble_movement_fact_test.go` 里手装读数编排那一处补交接册；`TestAMisansweringCustomsViewIsAnErrorAndMissingDependenciesAreRefused` 补「缺交接册那一口也装得起来」一支。
-- **文档**（提交 `6a5a4f50`）：ADR-0237 补决定五、候选与反方、对已接受记录的作用（部分停用 ADR-0205 决定二的停点名单；ADR-0219 读数另取决于交接登记册、无条款停用），越权风险点 2、3 改写，补 7–11；ADR-0205、0219 的 Status 与 Links 指针随改。TF CONTEXT「实际移动与出发门禁读数」加一条；UC-TF-005 `AT-TF-114`、`AT-TF-319` 补写这一格，不占新号；演示脚本补记与 AT 盘点两行补点名。剩余暴露（段自己确是跨区、票 147 之后起讫有未登区域节点时仍全列，且问的人可以是任一场外设备）立票 171。
+- **随行为变的既有用例**（不是放宽）：出发读数要核进段交接声明的两格（一轮写的是「声明了两格才问关务」，二轮之后没声明全的照问、只回整格），既有用例原本断言的是列出对象的那一种，所以几处夹具照演示动线的样子声明交出、去向节点——编排的 `departureSegments`（改为由声明了 NODE-SHA → NODE-SZX 的`已交接`立段，另给交接册替身）、tfhttp 的 `movementGateReaderOver`、`cmd/parcel-api` 的 `departureLine.handOver`（声明 SYN-NODE-SHA-HUB → SYN-NODE-SZX-GATE，另开 `handOverDeclaring`）、`assemble_movement_fact_test.go` 里手装读数编排那一处补交接册；`TestAMisansweringCustomsViewIsAnErrorAndMissingDependenciesAreRefused` 补「缺交接册那一口也装得起来」一支。
+- **文档**（提交 `6a5a4f50`）：ADR-0237 补决定五、候选与反方、对已接受记录的作用（部分停用 ADR-0205 决定二的停点名单；ADR-0219 读数另取决于交接登记册、无条款停用），越权风险点 2、3 改写，补 7–11（二轮又改 7、补 12）；ADR-0205、0219 的 Status 与 Links 指针随改。TF CONTEXT「实际移动与出发门禁读数」加一条；UC-TF-005 `AT-TF-114`、`AT-TF-319` 补写这一格，不占新号；演示脚本补记与 AT 盘点两行补点名。剩余暴露（段自己确是跨区、票 147 之后起讫有未登区域节点时仍全列，且问的人可以是任一场外设备）立票 171。
 
 **B2——权威文档把重放回显写成了不收窄。** 修了（提交 `6a5a4f50`）：TF CONTEXT 那一条、ADR-0237 决定三与 Status 行三处都改成「重放回显的是首次读数，回给设备时同样只列没得出放行的」，重放回显从「不收窄的读者」里拿掉。
 
@@ -137,7 +137,7 @@ Blocked by: 无
 - **对不上**与**交接册读不动**照旧停在本侧（`SCHEDULE_NOT_SERVING_SEGMENT`、`HANDOVER_REGISTRY_UNAVAILABLE`），不问关务、一件不列。`SEGMENT_ENTRY_NODES_UNKNOWN` 停点撤掉。
 - **未绑定**照班次方向问关务：落册记全（库面逐对象格全在），VE 照旧派生信号；读数多一位 `EntryUnbound`，存进 jsonb 明细（`entryUnbound` 键，不写即没有这一位，存量照读、重放回显一致）；回给执行方的只有整格、from/to 与这一位，一件对象都不列——判法在领域 `DepartureGateReading.ExecutorCells`，tfhttp 只经它取。没有放宽「停点与逐对象恰有其一」：未绑定的读数问了关务、没有停点，那道库面 CHECK 不动；这一位另立字段，构造门只许它出现在问了关务的读数上。无迁移。
 - **用例**：
-  - 领域：`departure_entry_binding_test.go`——十种组合（两格都对、没声明去向、一格都没声明、认不出、一件也认不出、起讫都错、只声明一格且错、说不出在前对不上在后、对不上在前说不出在后）；未绑定读数记全每格、回给执行方一件不给、重建带回那一位、停在本侧带那一位是读数不成形。
+  - 领域：`departure_entry_binding_test.go`——表驱动覆盖两格都对、没声明去向、一格都没声明、认不出、一件也认不出、起讫都错、只声明交出节点且错、只声明去向节点且错、说不出在前对不上在后、对不上在前说不出在后；未绑定读数记全每格、回给执行方一件不给、重建带回那一位、停在本侧带那一位是读数不成形。
   - 编排：`read_departure_gate_entry_test.go` 两条——对不上的五种停在本侧；说不出的四种（凭收寄进段、没声明去向、一格都没声明、认不出）照问两件、整格阻断、标未绑定、回给执行方一件不列，问询与出发同一份读数同样问法；对得上的照常列出被挡那一件。
   - 线格式：`TestAnUnboundDepartureShowsTheWholeCellAndNoObjects`，答复正是 `{"answer":"BLOCKED","from":"NODE-SHA","to":"NODE-SZX","entryUnbound":true}`，问询同字节。
   - 库面：`TestAnUnboundDepartureReadingRoundTripsWithItsFindings`，未绑定那一位与每一格往返，没有这一位的行库面没有这个键。
