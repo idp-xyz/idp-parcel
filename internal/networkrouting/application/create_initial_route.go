@@ -327,6 +327,9 @@ func (handler *CreateInitialRouteHandler) Handle(
 // 提交前重校（`AT-NR-010`）：候选选出后、越过提交边界前重读证据修订，换代即用新依据
 // 重新判断一轮——「原候选不得提交为当前计划」。连续换代说明视图正在滚动，保持未决
 // 比追着一个动的目标提交要诚实。
+//
+// 路由库里落了册的一行重建不出来是坏数据，重投推不动，响亮报错；读不回才是依赖故障，答未决让消费门回滚重投。复核读同一
+// 类坏行同一口径（ports.ErrStoredRouteRecordUnreadable 头注）。
 func (handler *CreateInitialRouteHandler) routeOneParcel(
 	ctx context.Context,
 	correlation domain.RequestCorrelationID,
@@ -335,6 +338,9 @@ func (handler *CreateInitialRouteHandler) routeOneParcel(
 	carried ports.RequestCarriedContent,
 ) (ParcelRouteResult, error) {
 	existing, found, err := handler.deps.Store.FindByKey(ctx, key)
+	if errors.Is(err, ports.ErrStoredRouteRecordUnreadable) {
+		return ParcelRouteResult{}, fmt.Errorf("load initial route: %w", err)
+	}
 	if err != nil {
 		return handler.undecidedParcel(key, RouteStoreUnavailable), nil
 	}
@@ -567,6 +573,9 @@ func (handler *CreateInitialRouteHandler) commit(
 		return result, nil
 	case ports.InitialRouteAlreadyRecorded:
 		winner, found, err := handler.deps.Store.FindByKey(ctx, key)
+		if errors.Is(err, ports.ErrStoredRouteRecordUnreadable) {
+			return ParcelRouteResult{}, fmt.Errorf("load concurrent initial route: %w", err)
+		}
 		if err != nil || !found {
 			return handler.undecidedParcel(key, RouteStoreUnavailable), nil
 		}

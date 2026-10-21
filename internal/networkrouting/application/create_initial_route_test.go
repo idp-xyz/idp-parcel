@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -1007,4 +1008,78 @@ func TestMissingAcceptedResolutionStopsAtApplicabilityUnavailable(t *testing.T) 
 	if fixture.applicability.asked != 0 {
 		t.Fatal("缺解析标识仍问了适用性视图")
 	}
+}
+
+// winnerUnreadableStore 演并发败方：写入答`已有记录`，读回赢家时那一行重建不出来。头一次按键找（判断之前）照常答没有。
+type winnerUnreadableStore struct {
+	*routeStoreDouble
+	finds int
+}
+
+func (double *winnerUnreadableStore) FindByKey(
+	ctx context.Context,
+	key domain.InitialRouteJudgmentKey,
+) (ports.InitialRouteRecord, bool, error) {
+	double.finds++
+	if double.finds > 1 {
+		return ports.InitialRouteRecord{}, false, fmt.Errorf("stored row: %w", ports.ErrStoredRouteRecordUnreadable)
+	}
+	return double.routeStoreDouble.FindByKey(ctx, key)
+}
+
+// 路由库里这件包裹落了册的一行经领域构造门重建不出来是坏数据，重投推不动：响亮报错，不折成`路由判断未决`
+// （ROUTE_STORE_UNAVAILABLE）回滚重投，与复核读同一类坏行同一口径。判断之前按键找、并发败方读回赢家两处都如此。读不回
+// （依赖故障）仍答未决，重投推得动。
+func TestAnUnrebuildableInitialRouteRowIsLoud(t *testing.T) {
+	t.Run("判断之前按键找", func(t *testing.T) {
+		fixture := newRouteFixture(t)
+		fixture.evidence.byParcel["parcel-1"] = routableEvidence(t)
+		fixture.store.findErr = fmt.Errorf("stored row: %w", ports.ErrStoredRouteRecordUnreadable)
+
+		if _, err := fixture.handler.Handle(context.Background(), routeCommand(t, "parcel-1")); !errors.Is(err, ports.ErrStoredRouteRecordUnreadable) {
+			t.Fatalf("err = %v, want ErrStoredRouteRecordUnreadable", err)
+		}
+		if fixture.store.saved != 0 || len(fixture.downstream.intents) != 0 {
+			t.Fatalf("写了 %d 次、交了 %d 份意图, want 都是 0", fixture.store.saved, len(fixture.downstream.intents))
+		}
+	})
+
+	t.Run("败方读回赢家", func(t *testing.T) {
+		fixture := newRouteFixture(t)
+		fixture.evidence.byParcel["parcel-1"] = routableEvidence(t)
+		fixture.store.saveOutcome["parcel-1"] = ports.InitialRouteAlreadyRecorded
+		store := &winnerUnreadableStore{routeStoreDouble: fixture.store}
+		handler := application.NewCreateInitialRouteHandler(application.CreateInitialRouteDeps{
+			Applicability: fixture.applicability,
+			Evidence:      fixture.evidence,
+			Costs:         passthroughCosts{},
+			Store:         store,
+			Log:           fixture.log,
+			Downstream:    fixture.downstream,
+			Identities:    &routeIdentityDouble{},
+			Clock:         fixedClock{at: routeJudgedAt},
+		})
+
+		if _, err := handler.Handle(context.Background(), routeCommand(t, "parcel-1")); !errors.Is(err, ports.ErrStoredRouteRecordUnreadable) {
+			t.Fatalf("err = %v, want ErrStoredRouteRecordUnreadable", err)
+		}
+		if len(fixture.downstream.intents) != 0 {
+			t.Fatalf("交了 %d 份意图, want 0", len(fixture.downstream.intents))
+		}
+	})
+
+	t.Run("读不回仍未决", func(t *testing.T) {
+		fixture := newRouteFixture(t)
+		fixture.evidence.byParcel["parcel-1"] = routableEvidence(t)
+		fixture.store.findErr = errors.New("connection reset")
+
+		result, err := fixture.handler.Handle(context.Background(), routeCommand(t, "parcel-1"))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if parcel := result.Parcels()[0]; parcel.Outcome() != application.ParcelRouteUndecided ||
+			parcel.UndecidedReason() != application.RouteStoreUnavailable {
+			t.Fatalf("包裹 = %q/%q, want UNDECIDED/ROUTE_STORE_UNAVAILABLE", parcel.Outcome(), parcel.UndecidedReason())
+		}
+	})
 }
