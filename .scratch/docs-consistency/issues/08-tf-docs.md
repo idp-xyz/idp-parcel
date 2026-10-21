@@ -135,3 +135,25 @@ Blocked by: 无（01 进 main 后开工；票 57、88、146+94 已进 main）
 未采纳：无。AT 盘点与 06、07 的冲突照协调方说由落地时取并集，本轮没再动盘点。
 
 修订后的检查：main 仍是 `3619f5c0e`，无需 rebase。scratchpad 副本（`git archive claude-dc08`）上 `go run ./tools/adr-index` 后 `-check` 退 0；改动的 `.md` 相对链接与锚点全部解析；三份新 ADR 的书名号引文对出处逐字核过（旧句对 main `3619f5c0e`）；被停原句（0203 决定一一句、0213 票 66 补记一句、0216 决定四标题）在被停方正文逐字存在；0202、0203、0209、0213、0216、0221 去掉 Status 行与 Links 后与 main 逐字节相同；code/02 追加节里引的注释原句在 Go 源里逐字存在（`CarrierAcceptanceOutcome` 那一句在注释里折了行，引的是它所引的 CONTEXT 旧句）；`go run ./tools/at-coverage-counts -check` 只报计数过期。
+
+## 评审记录（第 2 轮，2026-10-21）
+
+第 1 轮 B1、B2、B4 评审确认已消；B3 只改了正文。本轮阻断 2 条、建议 4 条、顺手 7 条，全部照办：
+
+| 条 | 评审意见 | 处置 |
+|---|---|---|
+| X-B1 阻断 | ADR-0265 索引注记还留着「这一格本身就说明缺的是移动授权」，决定四没写进去 | 注记改为：今天只有缺移动授权一种、答复不带原因；接线后（code/43）待补充带一个原因，封闭为缺移动授权、缺对象、缺动作、缺起止责任；越权风险点摘要补上后两条。第 1 轮 B3 行加更正 |
+| X-B2 阻断 | UC-TF-001「缺路由」答待补充，与 CONTEXT「已承接但无当前有效路线 → 履约准备待形成」相抵，也不在四种原因里 | UC-TF-001 元数据「待补充结束」、结果表 `SUPPLEMENT_REQUIRED` 行、`AT-TF-004` 去掉路由，地点并进起止责任；元数据注明没有当前有效路由不在此列；步 4 与输入契约「路由计划」行改为无计划时承接继续有效、履约准备待形成。CONTEXT「监管运输处置承接与履约」里待补充那一组改为缺当前有效移动授权或载运对象、运输动作、起止责任（含起始控制与目标责任边界）不足，路线缺席指向本节「当前无有效路线或运输机会时」那一条；ADR-0265 里定位这一句的引文随之改为该条起头的原句 |
+| 建议 1 | 会签点 | ADR-0265 前段改为第 1、3、4 点同时待 CC owner 会签；ADR-0263 前段补第 3 点另待 VE owner 会签；票面同步 |
+| 建议 2 | 测试注释四处 | 并入 code/02 追加节：`TestADeclineCarriesItsBasisAndNoObjects`、`TestAPartialAcceptanceKeepsBothSides`（引的是 UC-TF-001 结果契约旧句）、`TestCancellationOnlyReachesUnstartedCommissions`、`TestCancellationOnlyReachesUnstartedIntents`（行号写法加旧句） |
+| 建议 3 | UC-TF-004 元数据与 `AT-TF-039` | 「待补充结束」改为「未成结束」，指向协议否定格、引用不在册或不可订与没有答复读作待确认；`AT-TF-039` 改为委托已提交、订舱读作待确认 |
+| 建议 4 | ADR-0264 Context 的符号 | 改为 `application.DepartureGateReader.Read` 与端口 `ports.DepartureGateView.ReadDepartureGate` |
+| 顺手 5 | 步 5 的码出处 | 点明 `CAPACITY_EXCEEDED` 属 `application.PrepareTransportOpportunityHandler.Reserve` 的 `OpportunityOutcome` |
+| 顺手 6 | 0264 与 0203 对称 | 0264「对已接受记录的作用」补一条：0203 小标题与 Consequences 里的「票 37 落确认订舱」一并作废；0203 Links 里 ADR-0202 那一条照新口径改 |
+| 顺手 7 | UC-TF-005 引 CONTEXT 原句 | 改引「当前实物方已明确但控制来源链冲突」 |
+| 顺手 8 | 「已拒绝」 | UC-TF-001 目标首段与元数据「已拒绝结束」统一 |
+| 顺手 9 | `AT-TF-043` 与 `AT-TF-139` 对不上 | UC-TF-004「给开发的交接」补一行：今天池只有硬上限，没有软超配阈值与审批的输入格，`AT-TF-043` 走不到，软超配尚未立票 |
+| 顺手 10 | 去向表 M1、M2 行的序号与计数 | 改按条目内容说 |
+| 顺手 11 | CONTEXT 数量转换一条 | 改为各量各自保存、只沿明确关系转换，预占由运营另作、确认订舱不自动转成预占（ADR-0264） |
+
+未采纳：无。
