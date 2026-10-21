@@ -24,6 +24,9 @@ var (
 	// ErrDeliveryDispatchPendingUnavailable 说明这一拍的答复已经得出，写进派送待形成册时读写不动。整拍不答、随事务回滚：册上
 	// 那一行与这一拍的任务同笔，答复出去了而册没跟上，就是一件没人看得见的待形成。原样重跑这一拍即可。
 	ErrDeliveryDispatchPendingUnavailable = errors.New("transport fulfillment: delivery dispatch pending register unavailable")
+	// ErrDeliveryDispatchPendingRefused 说明册的写口确定性地拒了这一笔（没有环境事务、库上的约束不让写）。整拍同样不答、随事务回滚，
+	// 但它是装配或本上下文自己的缺陷：原样重跑一万次都一样，不能当成等得来的依赖去重投。
+	ErrDeliveryDispatchPendingRefused = errors.New("transport fulfillment: delivery dispatch pending write refused")
 )
 
 // DeliveryDispatchTriggerOutcome 是「对象凭`已交接`进入派送段 → 形成末端派送任务」这一拍的结果代数（ADR-0114 决定二）。
@@ -292,6 +295,9 @@ func (handler *TriggerDeliveryDispatchHandler) Trigger(
 		return TriggerDeliveryDispatchResult{}, err
 	}
 	if err := handler.keepPendingRegister(ctx, command, result); err != nil {
+		if errors.Is(err, ports.ErrDeliveryDispatchPendingWriteRefused) {
+			return TriggerDeliveryDispatchResult{}, fmt.Errorf("%w: %v", ErrDeliveryDispatchPendingRefused, err)
+		}
 		return TriggerDeliveryDispatchResult{}, fmt.Errorf("%w: %v", ErrDeliveryDispatchPendingUnavailable, err)
 	}
 	return result, nil

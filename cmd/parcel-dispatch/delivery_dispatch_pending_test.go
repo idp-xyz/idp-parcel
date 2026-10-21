@@ -128,15 +128,16 @@ type failingLane struct{ err error }
 
 func (lane failingLane) Consume(context.Context, eventing.Envelope) error { return lane.err }
 
-// Covers: AT-TF-281（ADR-0230 决定一）——册写不动是等得来的依赖：本路的未决哨兵名单认它，译成派发的未决、整笔回滚重投；装配没交册
-// 是缺陷，不在名单里，落发布失败。
+// Covers: AT-TF-281、AT-TF-294（ADR-0230 决定一）——册写不动是等得来的依赖：本路的未决哨兵名单认它，译成派发的未决、整笔回滚重投；
+// 装配没交册、册的写口确定性地拒写是缺陷，不在名单里，落发布失败。
 func TestThePendingRegisterBeingUnwritableIsRetriedAndItsAbsenceIsADefect(t *testing.T) {
 	for name, testCase := range map[string]struct {
 		err     error
 		retried bool
 	}{
-		"册写不动":  {fmt.Errorf("%w: pending register down", tfapplication.ErrDeliveryDispatchPendingUnavailable), true},
-		"装配没交册": {tfapplication.ErrDeliveryDispatchPendingRegisterNotWired, false},
+		"册写不动":   {fmt.Errorf("%w: pending register down", tfapplication.ErrDeliveryDispatchPendingUnavailable), true},
+		"装配没交册":  {tfapplication.ErrDeliveryDispatchPendingRegisterNotWired, false},
+		"册的写口拒写": {fmt.Errorf("%w: constraint", tfapplication.ErrDeliveryDispatchPendingRefused), false},
 	} {
 		lane, err := dispatch.WithUndecidedSentinels(failingLane{err: testCase.err}, deliveryDispatchOnHandoverUndecidedSentinels...)
 		if err != nil {

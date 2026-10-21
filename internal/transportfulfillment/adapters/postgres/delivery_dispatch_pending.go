@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
@@ -46,10 +48,10 @@ func (register *DeliveryDispatchPendings) RecordMissing(
 ) error {
 	executor, err := register.db.RequireExecutor(ctx)
 	if err != nil {
-		return fmt.Errorf("record delivery dispatch pending: %w", err)
+		return pendingWriteFailure("record delivery dispatch pending", err)
 	}
 	if len(missing) == 0 {
-		return fmt.Errorf("record delivery dispatch pending: no missing requirement named")
+		return fmt.Errorf("record delivery dispatch pending: %w: no missing requirement named", ports.ErrDeliveryDispatchPendingWriteRefused)
 	}
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO transport_fulfillment.delivery_dispatch_pending
@@ -68,7 +70,7 @@ func (register *DeliveryDispatchPendings) RecordMissing(
 		key.TenantID.String(), key.Segment.String(), key.Object.String(),
 		entryBasis.String(), slices.Clone(missing), answeredAt.UTC(),
 	); err != nil {
-		return fmt.Errorf("record delivery dispatch pending: %w", err)
+		return pendingWriteFailure("record delivery dispatch pending", err)
 	}
 	return nil
 }
@@ -82,7 +84,7 @@ func (register *DeliveryDispatchPendings) SettleFormed(
 ) error {
 	executor, err := register.db.RequireExecutor(ctx)
 	if err != nil {
-		return fmt.Errorf("settle delivery dispatch pending: %w", err)
+		return pendingWriteFailure("settle delivery dispatch pending", err)
 	}
 	if _, err := executor.Exec(ctx,
 		`UPDATE transport_fulfillment.delivery_dispatch_pending
@@ -90,7 +92,7 @@ func (register *DeliveryDispatchPendings) SettleFormed(
 		  WHERE tenant_id = $1 AND segment_ref = $2 AND object_ref = $3 AND state <> 'FORMED'`,
 		key.TenantID.String(), key.Segment.String(), key.Object.String(), task.String(), at.UTC(),
 	); err != nil {
-		return fmt.Errorf("settle delivery dispatch pending: %w", err)
+		return pendingWriteFailure("settle delivery dispatch pending", err)
 	}
 	return nil
 }
@@ -104,7 +106,7 @@ func (register *DeliveryDispatchPendings) SettleLapsed(
 ) error {
 	executor, err := register.db.RequireExecutor(ctx)
 	if err != nil {
-		return fmt.Errorf("lapse delivery dispatch pending: %w", err)
+		return pendingWriteFailure("lapse delivery dispatch pending", err)
 	}
 	if _, err := executor.Exec(ctx,
 		`UPDATE transport_fulfillment.delivery_dispatch_pending
@@ -112,7 +114,7 @@ func (register *DeliveryDispatchPendings) SettleLapsed(
 		  WHERE tenant_id = $1 AND segment_ref = $2 AND object_ref = $3 AND state = 'PENDING'`,
 		key.TenantID.String(), key.Segment.String(), key.Object.String(), lapsedBy, at.UTC(),
 	); err != nil {
-		return fmt.Errorf("lapse delivery dispatch pending: %w", err)
+		return pendingWriteFailure("lapse delivery dispatch pending", err)
 	}
 	return nil
 }
@@ -126,7 +128,7 @@ func (register *DeliveryDispatchPendings) MarkAsked(
 ) error {
 	executor, err := register.db.RequireExecutor(ctx)
 	if err != nil {
-		return fmt.Errorf("mark delivery dispatch pending asked: %w", err)
+		return pendingWriteFailure("mark delivery dispatch pending asked", err)
 	}
 	if _, err := executor.Exec(ctx,
 		`UPDATE transport_fulfillment.delivery_dispatch_pending
@@ -134,9 +136,19 @@ func (register *DeliveryDispatchPendings) MarkAsked(
 		  WHERE tenant_id = $1 AND segment_ref = $2 AND object_ref = $3 AND state = 'PENDING'`,
 		key.TenantID.String(), key.Segment.String(), key.Object.String(), at.UTC(),
 	); err != nil {
-		return fmt.Errorf("mark delivery dispatch pending asked: %w", err)
+		return pendingWriteFailure("mark delivery dispatch pending asked", err)
 	}
 	return nil
+}
+
+// pendingWriteFailure 把写口的失败分成两种：确定性拒绝（没有环境事务、约束类 SQLSTATE 23xxx）带上
+// ports.ErrDeliveryDispatchPendingWriteRefused，执行器据此按缺陷处置；其余照原样交出，执行器当「此刻读写不动」等重投。
+func pendingWriteFailure(verb string, err error) error {
+	var pgErr *pgconn.PgError
+	if errors.Is(err, bentopg.ErrTransactionRequired) || (errors.As(err, &pgErr) && strings.HasPrefix(pgErr.Code, "23")) {
+		return fmt.Errorf("%s: %w: %w", verb, ports.ErrDeliveryDispatchPendingWriteRefused, err)
+	}
+	return fmt.Errorf("%s: %w", verb, err)
 }
 
 // FindByKey 按键读回一条。否定结果只回 false。

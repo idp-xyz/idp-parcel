@@ -340,3 +340,21 @@ func TestMarkingAnEntryAskedMovesItToTheBackOfTheQueue(t *testing.T) {
 		t.Fatalf("不筛数出 %d 件 err=%v, want 2", count, err)
 	}
 }
+
+// Covers: AT-TF-294 的存储半边（ADR-0230 决定一）——写口的确定性拒绝带 ports.ErrDeliveryDispatchPendingWriteRefused：没有环境事务、
+// 库上的约束不让写（缺件不在封闭集）。执行器据此按缺陷处置，不当成读写不动去重投。
+func TestDeterministicPendingWriteFailuresAreMarkedRefused(t *testing.T) {
+	register, transactor, _ := newDeliveryDispatchPendings(t)
+	key := pendingKey(t, "SYN-TENANT-01", "SYN-SEG-70", "SYN-PARCEL-70-P")
+	if err := register.MarkAsked(t.Context(), key, pendingAnsweredAt); !errors.Is(err, ports.ErrDeliveryDispatchPendingWriteRefused) {
+		t.Fatalf("无事务 err = %v, want ErrDeliveryDispatchPendingWriteRefused", err)
+	}
+	var refused error
+	_ = transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+		refused = register.RecordMissing(ctx, key, pendingBasis(t, "basis/v1"), []string{"DELIVERY_ADDRESS"}, pendingAnsweredAt)
+		return refused
+	})
+	if !errors.Is(refused, ports.ErrDeliveryDispatchPendingWriteRefused) {
+		t.Fatalf("约束不让写 err = %v, want ErrDeliveryDispatchPendingWriteRefused", refused)
+	}
+}

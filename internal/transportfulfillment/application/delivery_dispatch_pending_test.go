@@ -2,6 +2,7 @@ package application_test
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -168,5 +169,19 @@ func TestTheBeatGivesNoAnswerWhenThePendingRegisterCannotBeWritten(t *testing.T)
 	_, err = application.NewTriggerDispatchOnHandoverHandler(fixture.deps).Trigger(t.Context(), onHandoverCommand(t, "parcel-1"))
 	if !errors.Is(err, application.ErrDeliveryDispatchPendingRegisterNotWired) {
 		t.Fatalf("err = %v, want ErrDeliveryDispatchPendingRegisterNotWired", err)
+	}
+}
+
+// Covers: AT-TF-294 的编排半边（ADR-0230 决定一）——册的写口确定性地拒了（端口带 ErrDeliveryDispatchPendingWriteRefused）：执行器交回
+// ErrDeliveryDispatchPendingRefused，不是读写不动那一个，派发那一路不会把它当未决重投。
+func TestARefusedPendingWriteIsADefectNotAWait(t *testing.T) {
+	fixture := newDispatchTriggerFixture(t)
+	fixture.enterByHandover(t, "parcel-1", "FINAL_DELIVERY", handoverJudgedTime)
+	fixture.places.resolution = ports.RequirementMissing
+	fixture.pending.err = fmt.Errorf("constraint: %w", ports.ErrDeliveryDispatchPendingWriteRefused)
+
+	_, err := fixture.handler().Trigger(t.Context(), triggerCommand(t, "parcel-1"))
+	if !errors.Is(err, application.ErrDeliveryDispatchPendingRefused) || errors.Is(err, application.ErrDeliveryDispatchPendingUnavailable) {
+		t.Fatalf("err = %v, want ErrDeliveryDispatchPendingRefused 且不是 ErrDeliveryDispatchPendingUnavailable", err)
 	}
 }

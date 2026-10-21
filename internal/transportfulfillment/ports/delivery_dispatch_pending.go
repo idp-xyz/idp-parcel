@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
@@ -9,6 +10,10 @@ import (
 
 // 派送待形成册的存取口（ADR-0230 决定一、二）。执行器答`要求缺失`时立或刷新一条，任务形成时了结，对象已不在段里时作罢；
 // 写它的只有派送发起执行器一处，读它的是按册重问与查阅页。
+
+// ErrDeliveryDispatchPendingWriteRefused 是册的写口给出的确定性拒绝：没有环境事务、库上的约束不让写。原样重来一万次都一样，
+// 调用方不该把它当成「册此刻读写不动」去重投；别的写入失败（连接断、超时、事务被打断）不带它。
+var ErrDeliveryDispatchPendingWriteRefused = errors.New("transport fulfillment: delivery dispatch pending write refused")
 
 // DeliveryDispatchPendingKey 是一件待形成派送的身份：哪个租户的哪个对象在哪个段里。不带入场依据——同一段同一对象只有一条参与
 // 替代链，更正长出的替代版本不是进段，派送仍是那一项（票 demo-chain-gaps/129）。
