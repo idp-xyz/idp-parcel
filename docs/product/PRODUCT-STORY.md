@@ -34,7 +34,7 @@ Agent 自动运营物流业务的前提,是每个判断可解释、每条规则�
 
 ## 今天能演示什么(如实)
 
-- 管理台哪些页已接线,一律以 `apps/admin-web/src/page-registry.tsx` 的接线登记处为准:`liveIds` 是接线事实本身,`readinessOf` 由它派生就绪度。本文不再抄第二份名单——上一版在这里抄了页名与页数,页登记此后继续长而这一句没跟着改,于是它自己变成了旧话。就形状说,委托主链、主数据目录、运营查阅、结算与治理四族各有已接线页,读面的未配置态均已验收;数据态经合成租户 `SYN-TENANT-01` 的真渠道(操作者渠道)读取,种子见 `scripts/demo-seeds/`([ADR-0150](../adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md))。
+- 管理台哪些页已接线,一律以 `apps/admin-web/src/page-registry.tsx` 的接线登记处为准:`liveIds` 是接线事实本身,`readinessOf` 由它派生就绪度。本文不再抄第二份名单——上一版在这里抄了页名与页数,页登记此后继续长而这一句没跟着改,于是它自己变成了旧话。就形状说,委托主链、主数据目录、运营查阅、结算与治理四族各有已接线页,读面的未配置态均已验收;数据态多数读面经合成租户 `SYN-TENANT-01` 的真渠道(操作者渠道)读取,尚未换真渠道的口仍走隔离读,种子见 `scripts/demo-seeds/`([ADR-0150](../adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md))。
 - 演示数据一律为隔离合成 S:经登记 CLI 灌入本机库,页面如实标注,证据层级记 S,不冒充生产。
 - 生产路径在租户登记接入渠道(产品自有渠道族的发行方与授予,见[参数登记册](./PILOT-PARAMETER-REGISTER.md))之前一律答未配置——这是刻意的诚实,不是缺陷。
 - 端到端演示动线以[合成 `S` 演示动线脚本](../design/synthetic-demo-journey-script.md)为准:那里逐步写明看哪页、取哪个端点、讲哪句,以及动线如实停住的位置与各堵墙的哨兵、成因与重启条件。本文不复述动线状态,免得再出现上一条那种旧话。
