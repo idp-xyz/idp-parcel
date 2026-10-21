@@ -38,3 +38,4 @@ Status: 已接受（2026-08-21，MCP-3 受用户委托裁断）<!-- 索引注记
 - 相关：ADR-0003、ADR-0014、ADR-0068
 - 来源：`.scratch/syn-wall-door-audit/issues/01`（MCP-6 复核与三条阻断）、`.scratch/syn-wall-door-audit/issues/12`（ADR-0017 分辨表）
 - [ADR-0139](./0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md)：Decision 一再收窄 Decision 2 的适用场景到租户既有渠道的适配
+- [ADR-0022](./0022-http-status-carries-answer-formed-not-business-verdict.md)：Decision 末段两项显式未决之一（规范化摘要）由本记录 Decision 三判为机制

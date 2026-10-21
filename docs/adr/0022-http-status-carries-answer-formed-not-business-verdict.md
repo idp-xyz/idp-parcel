@@ -72,3 +72,4 @@ Date: 2026-08-11
 - [ADR-0149](./0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md)：决定四按口解规范化摘要，决定二、三为作业事实与集成客户端两族定接入认证——本记录两项显式未决在这几族上的答案
 - [ADR-0100](./0100-operator-identity-is-a-product-owned-access-channel-family.md)：操作者族的接入认证——本记录两项显式未决之一在这一族上的答案
 - [ADR-0139](./0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md)：首方客户族的接入认证——本记录两项显式未决之一在这一族上的答案
+- [ADR-0072](./0072-access-channel-capability-is-shared-and-registry-shape-awaits-channel-evidence.md)：Decision 三把规范化摘要判为机制——本记录两项显式未决之一的答案

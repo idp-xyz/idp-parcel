@@ -101,3 +101,4 @@ Date: 2026-09-03
 - [ADR-0150](./0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md)：部分停用本记录决定五第二条中隔离形态与操作者渠道「互不替代、不合并」的一段——合成租户经真渠道进出，隔离形态逐口随真渠道退场
 - 来源：IDP 队列通道 4 的质疑与授权（2026-09-03）；`.scratch/tenant-implementation-01/implementation-week-decisions-and-customer-pack.md` 客户函中运营配置员的岗位描述
 - [ADR-0139](./0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md)：Decision 一停用决定四末段余下的客户委托一半
+- [ADR-0022](./0022-http-status-carries-answer-formed-not-business-verdict.md)：Decision 末段两项显式未决之一（接入认证）在操作者族上由本记录作答
