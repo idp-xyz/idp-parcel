@@ -30,3 +30,11 @@ Blocked by: 无
 ## 规模
 
 S（只补落库）；M（连同被替代条目进投影版本）。
+
+## 文档自洽审计复核（2026-10-21）
+
+审计条目：[audit/ve.md](../../docs-consistency/audit/ve.md) VE-03（归 C）：被替代条目不在投影版本里，与 VE CONTEXT「被替代的条目继续留在投影版本内并标明替代关系」、ADR-0065 决定七「被替代条目留在版本内但不参与派生」相反。这正是本票「要裁的」后一半，审计条目落在本票，不另立。按 main `67438a0f` 复核，现象仍在（`DeriveProjectionHandler.Handle` 先经 `domain.CurrentlyEffective` 滤掉被替代事实；测试 `TestASupersededFactStaysArchivedButLeavesTheEntries` 断言前身不在条目里）。
+
+审计补充的一点：管理台 `apps/admin-web/src/pages/visibility/TrackingProjectionPage.tsx` 的 `currentEffectiveEntries` 按 CONTEXT 的假设在前端再滤一遍被替代条目，在后端今天的形状下什么也不滤——前后端对同一读模型的理解相反。本票裁「连同 CONTEXT 前半一起落」时，前端那一步才有意义；裁「只补落库那一格」时，那一步应删。
+
+分级建议（文档自洽 02）：R3——运营查阅「少说」，不对客答错（客户视图只读当前有效条目）。若 owner 认定「事实库留档已够」，改走 B（新 ADR 部分停用 ADR-0065 决定七那句），归修订票 docs-consistency/04。

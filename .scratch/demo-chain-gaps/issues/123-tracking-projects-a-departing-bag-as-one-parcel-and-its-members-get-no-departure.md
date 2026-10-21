@@ -24,3 +24,9 @@ Blocked by: 无
 ## 既有票
 
 - [42](./42-departure-gate-reading-does-not-expand-consolidation-unit-members.md)、[53](./53-movement-facts-recorded-before-their-segment-never-reach-tracking.md)（补派生）、[114](./114-deterministic-failures-answered-as-retryable-undecided-across-consumers.md)
+
+## 文档自洽审计复核（2026-10-21）
+
+审计条目：[audit/ve.md](../../docs-consistency/audit/ve.md) VE-10（归 C，审计已点名本票，不另立）：段里在控的袋或集运单元被当成一件包裹投影，与 VE CONTEXT「集运、装载或同批关系不合并包裹身份和客户轨迹」相反；出处 ADR-0205 文末补记越权风险点 20、ADR-0225 越权风险点 9。按 main `67438a0f` 复核，现象仍在；票 146、94 只改门禁读数，没有改投影展开。
+
+分级建议（文档自洽 02）：R1——整袋出发是第一天的常态，袋里每件成员的 `DEPARTED` 永久缺失、追踪页多一件不是包裹的条目，属静默丢失，与已按 A 组处理的票 [53](./53-movement-facts-recorded-before-their-segment-never-reach-tracking.md)（`DEPARTED` 永久丢失）同一后果类。由协调方定稿。文档侧（UC-VE-002 `AT-VE-046` 附近注一句当前缺口）由修订票 docs-consistency/04 做。

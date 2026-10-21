@@ -30,3 +30,9 @@ Blocked by: 无
 ## 完成判据
 
 - UC-CC-004 结果契约里拒绝、撤销、不再有效与再次申请各有执行器与真库用例；授权按使用建模，更正、补充各自取得新授权；提交执行只认业务角色确认形成的授权，或有书面裁定说明 CLI 一路为何保留。
+
+## 文档自洽审计复核（2026-10-21）
+
+审计条目：[audit/cc.md](../../docs-consistency/audit/cc.md) L8（归 C，审计已点名本票，不另立）：`CorrectDeclarationHandler` 按单元读 `SubmissionAuthorityView.LoadSubmissionAuthority`，读到的就是首报用掉的那一份，与 UC-CC-004 `AT-CC-095`、UC-CC-005 `AT-CC-137`、UC-CC-007 `AT-CC-217` 的逐动作授权相反。本票「现状」第一条与「要裁的」第 5 条已覆盖。按 main `67438a0f` 复核，现象仍在；`cmd/parcel-dispatch/customs_no_automatic_submission_test.go` 仍守着更正编排不进生产装配。
+
+分级建议（文档自洽 02）：R3——无生产入口，且 ADR-0227 越权风险点 10 已立「本票落地前不得开更正、补充生产口」。文档侧（UC-CC-007 待决项点一句指向 ADR-0227 越权风险点 10）由修订票 docs-consistency/03 做。

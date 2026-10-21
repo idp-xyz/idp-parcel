@@ -33,3 +33,11 @@ CC 判出同层冲突后，只在新到那份接收记录上打一个布尔标�
 ## 既有票
 
 none
+
+## 文档自洽审计复核（2026-10-21）
+
+审计条目：[audit/ve.md](../../docs-consistency/audit/ve.md) VE-08（归 C，审计已点名本票，不另立）：关务同层冲突不形成「待确认」与信号，与 UC-VE-001 `AT-VE-006`、VE CONTEXT「冲突仍无法裁决时……投影保持信息待确认并形成适用异常信号」相反。按 main `67438a0f` 复核，现象仍在（`adapters/customscompliance/derive_on_external_result.go` 遇 `record.LayerConflict` 入账不派生）。
+
+相邻：[audit/cc.md](../../docs-consistency/audit/cc.md) M9（CC 没有层内更正关系，明确更正照判冲突）立为 [docs-consistency/code/04](../../docs-consistency/code/04-customs-external-results-have-no-in-layer-correction-relation.md)，改同一组 CC 文件（`domain/external_result.go`、接收载荷与接收记录），宜同批或先后紧接；冲突关系的形状（本票）与更正关系的形状（code/04）应一并定。[code/03](../../docs-consistency/code/03-customs-case-closure-obligation-items-lack-a-conflict-state.md)（关闭依据项缺「冲突」）的冲突依据也宜引用本票的冲突关系。
+
+分级建议（文档自洽 02）：R2——偏保守（冲突那份不进投影，不误放），但运营与客户都看不见关务进展存在冲突。文档侧（`AT-VE-006` 旁注当前缺口并指向本票）由修订票 docs-consistency/04 做。
