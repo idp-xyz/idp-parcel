@@ -1,6 +1,7 @@
 package postgres_test
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -73,7 +74,8 @@ func TestMovementFactsDeclaringASegmentAreListedInRecordingOrder(t *testing.T) {
 	}
 }
 
-// Covers: AT-TF-274——没有事实声明的段答空切片、不报错；一行装不回（库面被绕过构造门写过）时整次报错，不跳过那一行。
+// Covers: AT-TF-274——没有事实声明的段答空切片、不报错；一行装不回（库面被绕过构造门写过）时整次报错、包住可辨认的坏行哨兵，
+// 不跳过那一行。
 func TestASegmentNoFactDeclaresListsEmptyAndAnUnreadableRowFailsTheListing(t *testing.T) {
 	repository, transactor, pool := newMovementFacts(t)
 	ctx := t.Context()
@@ -95,7 +97,11 @@ func TestASegmentNoFactDeclaresListsEmptyAndAnUnreadableRowFailsTheListing(t *te
 	); err != nil {
 		t.Fatalf("绕过构造门写一行：%v", err)
 	}
-	if listed, err := repository.FindBySegment(ctx, segmentKeyFixture(t, "tenant-1", "segment-1")); err == nil {
+	listed, err = repository.FindBySegment(ctx, segmentKeyFixture(t, "tenant-1", "segment-1"))
+	if err == nil {
 		t.Fatalf("装不回的那一行被跳过了：列出 %d 条", len(listed))
+	}
+	if !errors.Is(err, ports.ErrMovementFactRecordUnreadable) {
+		t.Fatalf("坏行的 error = %v，want 包住 ErrMovementFactRecordUnreadable——不与读不动分开，调用方就只能答未决", err)
 	}
 }

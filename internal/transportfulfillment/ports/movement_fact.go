@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
@@ -46,11 +47,17 @@ type MovementFactRegistry interface {
 	Save(ctx context.Context, record MovementFactRecord) (MovementFactSaveOutcome, error)
 }
 
+// ErrMovementFactRecordUnreadable：库里声明了这一段的某一行读回来了，却过不了重建门。坏行不随重投变好，与读不动分开报，
+// 调用方据此不把它答成未决（ADR-0029：确定性错误不进未决名单）。
+var ErrMovementFactRecordUnreadable = errors.New("transport fulfillment: a stored movement fact cannot be read back")
+
 // MovementFactsOfSegment 按段列出声明了这一段的在册移动事实（ADR-0224 决定二）。
 //
 // 排序契约：交回每一个版本，先按事实、同一条事实按登记时刻、同一时刻按版本串排，重放时一字不变。段只是登记方声明的引用、不加
 // 外键，所以本口不问段在不在册：段不在册时照样交回声明了它的事实。没有声明这一段的事实交回空切片，不是错误。与登记口分开立：
 // 本口只读，给它的消费方不必拿到 Save。
+//
+// error 有两类：包住 ErrMovementFactRecordUnreadable 的是某一行过不了重建门，其余是读不动。
 type MovementFactsOfSegment interface {
 	FindBySegment(ctx context.Context, key FulfillmentSegmentKey) ([]MovementFactRecord, error)
 }

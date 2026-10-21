@@ -12,7 +12,7 @@ var _ ports.MovementFactsOfSegment = (*MovementFacts)(nil)
 // FindBySegment 列出声明了这一段的全部在册版本（ADR-0224 决定二），排序契约在 ports.MovementFactsOfSegment。段没有外键（迁移
 // 0026），本口不问段在不在册。
 //
-// 一行装不回就整次报错，不跳过那一行：跳过会让调用方把「漏了一条」当成「列全了」。
+// 一行装不回就整次报错、包住 ports.ErrMovementFactRecordUnreadable，不跳过那一行：跳过会让调用方把「漏了一条」当成「列全了」。
 func (repository *MovementFacts) FindBySegment(
 	ctx context.Context,
 	key ports.FulfillmentSegmentKey,
@@ -41,7 +41,8 @@ func (repository *MovementFacts) FindBySegment(
 		}
 		record, err := row.record(key.TenantID)
 		if err != nil {
-			return nil, fmt.Errorf("find movement facts of segment: %w", err)
+			return nil, fmt.Errorf("find movement facts of segment: %w: fact %q version %q: %v",
+				ports.ErrMovementFactRecordUnreadable, row.factRef, row.version, err)
 		}
 		records = append(records, record)
 	}
