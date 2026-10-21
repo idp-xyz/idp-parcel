@@ -13,5 +13,5 @@ Blocked by: 无
 
 ## 文档自洽复核（2026-10-21）
 
-SA CONTEXT 的两处（Language「计价基准时点」与 Rules「计价、组合与精度」首条）已由 [docs-consistency/09](../../docs-consistency/issues/09-sa-cr-docs.md) 照本票改为「产品内置、由发起评价的那一路与评价目的给出，价卡与商业价格政策不另声明」（审计 [sa-cr.md](../../docs-consistency/audit/sa-cr.md) M1）。GLOSSARY「计价基准时点」那一半交 [docs-consistency/10](../../docs-consistency/issues/10-cross-cutting-docs.md)（09 交横切 X1）；10 改完后本票即可收口。
+SA CONTEXT 的两处（Language「计价基准时点」与 Rules「计价、组合与精度」首条）已由 [docs-consistency/09](../../docs-consistency/issues/09-sa-cr-docs.md) 照本票改为产品内置的时点、由发起评价的那一路与评价目的给出、价卡与商业价格政策不另声明（审计 [sa-cr.md](../../docs-consistency/audit/sa-cr.md) M1）。GLOSSARY「计价基准时点」那一半交 [docs-consistency/10](../../docs-consistency/issues/10-cross-cutting-docs.md)（09 交横切 X1）；10 改完后本票即可收口。
 
