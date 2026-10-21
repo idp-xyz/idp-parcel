@@ -1,7 +1,7 @@
 # 146 出发前问询与出发两口向设备逐对象列出段内全部对象
 
 Category: bug
-Status: in-progress——二轮评审两条阻断已修，待复审与进 main，分支 claude-dcg146（2026-10-21，变基到 main `4384a85a`，见文末「评审记录」二轮一节）。此前 in-progress——评审两条阻断已修，待复审与进 main，分支 claude-dcg146（2026-10-21，见文末「评审记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg146（2026-10-21 Claude Code 作者子代理，变基到 main `b290b777`；见文末「完成记录」）。此前 in-progress——2026-10-21 认领（146、94 同批），分支 claude-dcg146。此前 ready-for-agent——2026-10-20 代决复核立（上线前必修），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: in-progress——三轮评审一条阻断（文档自洽）已修，待协调方核过进 main，分支 claude-dcg146（2026-10-21，变基到 main `875b7d51`，见文末「评审记录」三轮一节）。此前 in-progress——二轮评审两条阻断已修，待复审与进 main，分支 claude-dcg146（2026-10-21，变基到 main `4384a85a`，见文末「评审记录」二轮一节）。此前 in-progress——评审两条阻断已修，待复审与进 main，分支 claude-dcg146（2026-10-21，见文末「评审记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg146（2026-10-21 Claude Code 作者子代理，变基到 main `b290b777`；见文末「完成记录」）。此前 in-progress——2026-10-21 认领（146、94 同批），分支 claude-dcg146。此前 ready-for-agent——2026-10-20 代决复核立（上线前必修），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 R11；ADR-0219 越权风险点 5（连带 ADR-0205 越权风险点 13）
 
@@ -173,3 +173,26 @@ Blocked by: 无
 - `scripts/test-full.sh ./internal/transportfulfillment/... ./cmd/parcel-api/... ./cmd/parcel-dispatch/... ./cmd/parcel-transport-register/... ./internal/visibilityexception/... ./internal/architecture/... ./migrations/...`：32 包全 ok、0 FAIL（输出存 `/tmp/claude-1000/-home-tops-workspace-idp-parcel/0d01979a-68c3-4b61-b295-1b04bc643b8b/scratchpad/dcg146/test-run-review2.txt`）。
 - 变基到 `4384a85a`：只在 AT 盘点上有冲突，两边都留；合并时 146 那段追记留下了两份旧稿，已在 `df8d5bca` 去掉，表行没有重号。
 - 无迁移；无被权限检查拦下的仓库改动。
+
+### 三轮（2026-10-21，作者子代理修订，变基到 main `875b7d51`）
+
+代码层面 B-A 已修好、无回退，B1 仍堵着，B-B 已改对；剩一条文档阻断，与建议合入前修的各条一并办了。前两轮记录里的提交号是各自那一次变基之前的，变基后已变。
+
+**阻断——ADR-0237 前后矛盾。** 逐条对照全文改：
+- 候选与反方末条原写「没声明节点时照问。否决：漏声明即绕过，见决定五末条」，否决的正是二轮采纳的做法，所指那一条也撑不起它。改写成「没声明节点时照问且照列对象。否决：漏声明就换来全列……见决定五『说不出不停在本侧』与『未绑定』两条」。
+- Status 行索引注记与 Links 里 ADR-0205 那一条的「多三种停点」改成两种，并写出名字（`SCHEDULE_NOT_SERVING_SEGMENT`、`HANDOVER_REGISTRY_UNAVAILABLE`）。
+- 顺带对齐的几处：Status 说明决定五二轮后的口径；Consequences「决定一至三……存储不变」与决定五的存储增补分开写，文档一条补 TF CONTEXT 两条与 `AT-TF-114`、`AT-TF-317`，验收一条补未绑定那几格与两组变异；越权风险点 2 注明「配一班别的方向」只在两格都声明了的段上堵住。
+
+**建议合入前修**：
+1. 票面代决第 7 条与越权风险点那一行照第 5 条补括注改口径，范围改为 7–12；评审记录一轮那一节开头加一句「本节记的是一轮的做法……以二轮一节与 ADR-0237 决定五为准」，凡写「说不出停在本侧」「`SEGMENT_ENTRY_NODES_UNKNOWN`」「两格都声明才问关务」处逐条标「一轮，二轮已改」。
+2. ADR-0237 越权风险点 12 补登记那一半（照这么配登出发，落册的是按错误意图问来的读数，VE 据其中的阻断派生信号，例如在案只待出口放行的包裹只在假的跨区意图下答阻断），另补「持交接登记授予的一方塞一笔不声明节点的`已交接`能把对得上的段降成只回整格，仍不能让配假班次过关」。
+3. 越权风险点 9 补后果：诚实出发被判成对不上（交接声明错、段内多站）停在本侧——关务不问、VE 收不到阻断信号、落册没有逐对象那一格；本记录之前这类出发会记成阻断并形成信号。
+4. 「对已接受记录的作用」里部分停用 ADR-0205 决定一那条加半句：核不上段时一件不列。
+5. 二轮一节「十种组合」去掉计数，改为逐项列出。
+6. 做了：`cmd/parcel-api` 的 `TestASegmentEnteredByPickupStillAsksCustomsAndRecordsTheBlock` 补原样重投那一问——答 `MOVEMENT_FACT_VERSION_EXISTS`，回显从库面读回、仍带 `entryUnbound`、仍不列对象。变异实测：让库面读回时丢掉那一位，这条用例当场变红，复原后全绿。
+
+**残留 grep**（变基后，全仓 `docs`、`internal`、`cmd`、`.scratch/demo-chain-gaps/issues`、AT 盘点）：「三种停点」「`SEGMENT_ENTRY_NODES_UNKNOWN`」「段的进段节点说不出」「`DepartureEntryStops`」「`DepartureSegmentEntryNodesUnknown`」「对不上或说不出」「说不出就停」只剩本票面——一轮那一节的历史记录（已逐条标「一轮，二轮已改」）与二轮一节里「撤掉」「取代」的说法；ADR-0237、ADR-0205/0219 的 Status 与 Links、TF CONTEXT、UC-TF-005、票 94 票面、代码里一处都没有。「没声明节点时」只剩 ADR-0237 改写后的那条候选，以及 ADR-0213、ADR-0014 里讲摘要形状的无关句子。
+
+**变基**：只在 AT 盘点与 UC-TF-005 上有冲突，两边都留；UC-TF-005 的验收表与票 88 的行按号排好、无重号；AT 盘点里 146 那段追记又留下两份旧稿，已去掉。
+
+**验证**（实测，只记 `S`）：`go build ./...`、`go vet ./...` 通过，`gofmt -l internal cmd migrations` 干净；`scripts/test-full.sh ./internal/transportfulfillment/... ./cmd/parcel-api/... ./internal/architecture/... ./migrations/...` 全 ok、0 FAIL。无迁移；无被权限检查拦下的仓库改动。
