@@ -59,13 +59,14 @@ Blocked by: 无
 
 1. **ADR-0205 越权风险点 20 由本票在码里答了，ADR 上没有前向指针**（VE owner）：ADR 正文与 Status 行按约定未改；协调方进 main 时若要在 ADR-0205 Status 行加一句索引注记，需重生成 ADR 索引。
 2. **存量袋投影不清理**（VE owner）：本票之前已把袋当包裹投下的条目照留在投影里，运营按袋号查追踪仍看得到旧的移动条目。
-3. **其余各路仍把袋当一件包裹投**（VE owner）：交接、场外揽收、有效交付等投影按控制事实的对象引用立追踪包裹，对象是袋时同病（真库补派生用例里交接那一封就给袋立了一条交接条目）。本票地盘只在移动事实投影，未改，需另立票。
-4. **身份后来成立的成员永远拿不到这条移动事实**（VE owner、NO owner）：入账不派生之后没有任何东西回头补；要补，去处是识别成功那一封信上的补派生（同 ADR-0224 的做法）。
+3. **其余各路仍把袋当一件包裹投**（VE owner）：交接、场外揽收、有效交付、外部承运轨迹四路按事实的对象引用立追踪包裹，对象是袋时同病（真库补派生用例里交接那一封就给袋立了一条交接条目）。本票地盘只在移动事实投影，未改，转票 [docs-consistency/code/75](../../docs-consistency/code/75-tracking-projects-control-facts-on-a-consolidation-unit-as-one-parcel.md)（(a) 不再把单元当追踪包裹投；(b) 交接、交付投到成员上，Blocked by 票 80）。
+4. **身份后来成立的成员永远拿不到这条移动事实**（VE owner、NO owner）：入账不派生之后没有任何东西回头补；要补，去处是识别成功或身份冲突处置成立那一封信上的补派生（形状仿 ADR-0224），转票 [docs-consistency/code/74](../../docs-consistency/code/74-a-member-identified-after-the-movement-never-gets-that-movement-fact.md)。
 5. **NO 读口报错不分确定性与暂时**（NO owner，票 114）：`ConsolidationMembershipsAt` 与 `IntakeIdentities` 对「册上的值立不起来」与连不上库同样报错，本票一律记未决重投。
 6. **每条移动事实每件在控对象多一次成员关系读、每件非嵌套成员多一次收寄读**（运维）：节点作业成员事实那一本读不动时，连纯包裹的段的移动投影也整封未决——说不出是不是袋就不能当包裹投。
 7. **成员按业务发生时间取，受设备时钟偏差影响**（同 ADR-0225 越权风险点 3）；**段按消费那一刻的段册算、成员按事实那一刻的成员事实算**（同 ADR-0205 越权风险点 15），投到的成员可能与登记那一刻读数问到的不同。
-8. **成环跳过不报错**（NO owner）：节点作业成员关系册成了环是坏数据，投影照把能到达的包裹投上，不形成任何提醒。
+8. **成环跳过不报错**（NO owner 复核）：节点作业成员关系册成了环是坏数据，投影照把能到达的包裹投上，不形成任何提醒。出发一类有运输履约的门禁读数，成环在袋那一格的依据里记了缘由（`CONSOLIDATION_MEMBERSHIP_CYCLE`），运营查得到；移动与到达没有读数，成环在哪里都看不见。
 9. **NO 成员读面的翻译写了两处**（TF、VE、NO owner）：TF `adapters/nodeoperations` 与 VE `adapters/nodeoperations` 各把同两口 NO 读面译成本上下文的成员，判法相同（身份都经 `JudgeIdentityBasis`），只在「身份链判不下来」的落格上不同（理由见代决 4、6）。
+10. **更正版改了发生时间时，两个时点的成员集合不同**（VE owner，与 ADR-0205 越权风险点 15 同类）：成员按各版事实自己的发生时刻展开。只在 v1 那一刻的成员留着未被替代的 v1 条目——v2 没投到它身上，没有一份事实指名 v1 为前身；只在 v2 那一刻的成员收到一份带 `Supersedes` 回指 v1 的事实，而它从未收到过 v1。前者的追踪上留着一条已被更正掉的移动，后者的替代关系指向一份它没有的事实。要治，去处是更正版那一路取两版成员的并集、对只在前版的成员也形成一份替代（VE owner 裁）。
 
 ### AT
 
@@ -80,4 +81,17 @@ Blocked by: 无
 - 新用例另跑 `-count=3`：VE 两个适配器包与 `cmd/parcel-dispatch` ok。
 - 演示种子不受影响：没有改目录、映射、迁移或种子数据，未灌一次性库。
 - 未重生成 ADR 索引、AT 计数与机制清点（`at-coverage-counts -check` 此刻如预期报计数不一致，留给进 main 时重算）。
+
+## 评审记录（2026-10-21，隔离评审，无实质阻断；修订在同一分支 claude-dcg123）
+
+评审结论：去掉展开的变异下四条用例全红；与 ADR-0263 决定四的关系站得住（投影不形成参与或控制）。协调方要求收掉的几项：
+
+1. **rebase 到 main `91ee3f73c`**——已做。AT 盘点文末追记冲突，两段都留，按时间排（main 上 code/20、code/69 两条在前，本票在后），其余各文件无冲突。
+2. **ADR-0205 Status 行挂「越权风险点 20 已答」**（照 ADR-0272 先例，由票 demo-chain-gaps/123 回答（落地）……；无条款停用，其余各条不变），Links 补本票一条；**ADR-0225 Links** 加一句前向指针，指「不在本记录」第二条已由本票落地——已做，正文不改，`docs/adr/README.md` 未手改。
+3. **`veMovementFactUndecidedSentinels` 头注去掉「多三站」的计数**，改为直接列出——已做。
+4. **`backfillMovementFacts` 头注重新折行**——已做。
+5. **越权风险点补两条**：第 8 点补「出发一类有读数的成环缘由可见、移动与到达没有任何提醒」，列入 NO owner 复核；新增第 10 点（更正版改了发生时间时两个时点的成员集合不同）——已做。
+6. **另立两张票**：[docs-consistency/code/74](../../docs-consistency/code/74-a-member-identified-after-the-movement-never-gets-that-movement-fact.md)（R2，VE、NO：身份后来才成立的成员补派生，形状仿 ADR-0224，「要裁的」含扩 ADR-0224 还是另立 ADR）、[docs-consistency/code/75](../../docs-consistency/code/75-tracking-projects-control-facts-on-a-consolidation-unit-as-one-parcel.md)（VE，(a) 四路不再把单元当追踪包裹投，R2；(b) 交接、交付投到成员上，Blocked by 票 80）；越权风险点 3、4 已指过去。
+
+修订后验证（基于 main `91ee3f73c` rebase 之后）：`go build ./...`、`go vet ./...`、`gofmt -l` 干净；`TMPDIR=… scripts/test-full.sh ./internal/visibilityexception/... ./cmd/parcel-dispatch ./cmd/parcel-api ./cmd/parcel-ve-register ./internal/architecture/... ./migrations/...` 20 个包 ok、0 FAIL；scratchpad 里的一次性 worktree 副本上 `adr-index -check` 先如预期退 1（ADR-0205 Status 行改了），重生成后 `-check` 退 0，生成差异只有 README 里 ADR-0205 那一行；本树 README 未改。
 
