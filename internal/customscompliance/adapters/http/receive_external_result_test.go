@@ -63,7 +63,7 @@ func (double *resultStoreDouble) LoadForSubmission(
 	_ context.Context,
 	_ domain.TenantID,
 	_ domain.SubmissionVersionID,
-) ([]domain.ExternalResult, error) {
+) ([]domain.LayerFact, error) {
 	return nil, nil
 }
 

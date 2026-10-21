@@ -19,7 +19,8 @@ var (
 
 type resultStoreDouble struct {
 	records     map[string]ports.ExternalResultRecord
-	layerFacts  []domain.ExternalResult
+	saved       []string
+	layerFacts  []domain.LayerFact
 	findErr     error
 	factsErr    error
 	saveErr     error
@@ -62,18 +63,29 @@ func (double *resultStoreDouble) Save(
 		return ports.ExternalResultAlreadyRecorded, nil
 	}
 	double.records[resultKey(record.Key)] = record
+	double.saved = append(double.saved, resultKey(record.Key))
 	return ports.ExternalResultSaved, nil
 }
 
+// LoadForSubmission 交回预置的在册事实，再按入库序接上本替身里已保存的可归属记录——
+// 先后几次接收才看得见彼此，同层后续事件与矛盾要靠这个在编排面上判出来。
 func (double *resultStoreDouble) LoadForSubmission(
 	_ context.Context,
 	_ domain.TenantID,
-	_ domain.SubmissionVersionID,
-) ([]domain.ExternalResult, error) {
+	version domain.SubmissionVersionID,
+) ([]domain.LayerFact, error) {
 	if double.factsErr != nil {
 		return nil, double.factsErr
 	}
-	return double.layerFacts, nil
+	facts := append([]domain.LayerFact(nil), double.layerFacts...)
+	for _, key := range double.saved {
+		record := double.records[key]
+		if record.Unattributable || record.Result.Version() != version {
+			continue
+		}
+		facts = append(facts, domain.LayerFact{Result: record.Result, Release: record.Release})
+	}
+	return facts, nil
 }
 
 type submissionIndexDouble struct {
@@ -352,7 +364,7 @@ func TestUnattributableAndLayerConflictsAreKeptNotGuessed(t *testing.T) {
 
 	t.Run("a same-layer conflict keeps both facts", func(t *testing.T) {
 		fixture := newResultFixture(t)
-		fixture.store.layerFacts = []domain.ExternalResult{existingLayerFact(t, "REJECTED")}
+		fixture.store.layerFacts = []domain.LayerFact{{Result: existingLayerFact(t, "REJECTED")}}
 		result, err := fixture.handler.Handle(context.Background(), resultCommand(t, "source-2"))
 		if err != nil {
 			t.Fatalf("handle: %v", err)

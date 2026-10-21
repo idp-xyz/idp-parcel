@@ -129,3 +129,55 @@ func TestTheReleaseOutcomeTableRejectsWhatTheDomainRejects(t *testing.T) {
 	fixture.rejects(t, "种类集外", insert,
 		"tenant-a", "resp-shape", "MAYBE", "SYN-AUTHORITY-01", "declaration/full", "", externalReceivedAt)
 }
+
+// Covers: AT-CC-431 的真库半边——同层一致性读面把放行层连同放行事实一起读回：先部分、后全部两份各带
+// 自己的种类，同层判先后才分得出推进与回退；非放行层不带；放行事实落点建立之前那种只有分层事实的放行层
+// 存量如实不带，不编一个种类。
+func TestLoadForSubmissionCarriesEachReleaseKind(t *testing.T) {
+	repository, transactor := newExternalResults(t)
+	ctx := t.Context()
+	partial := releaseRecord(t, "tenant-a", "resp-partial", domain.PartialRelease, "")
+	full := releaseRecord(t, "tenant-a", "resp-full", domain.FullRelease, "")
+	stock := releaseRecord(t, "tenant-a", "resp-stock", domain.FullRelease, "")
+	stock.Release = nil
+	acceptance := attributedRecord(t, "tenant-a", "resp-acceptance", "submission-release")
+	inTx2(t, transactor, ctx, func(txCtx context.Context) error {
+		for _, record := range []ports.ExternalResultRecord{partial, full, stock, acceptance} {
+			if _, err := repository.Save(txCtx, record); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	facts, err := repository.LoadForSubmission(ctx, make2(t, domain.NewTenantID, "tenant-a"),
+		make2(t, domain.NewSubmissionVersionID, "submission-release"))
+	if err != nil {
+		t.Fatalf("读回提交事实：%v", err)
+	}
+	kinds := map[string]domain.ReleaseKind{}
+	for _, fact := range facts {
+		if fact.Release == nil {
+			kinds[fact.Result.SourceID()] = domain.ReleaseKindInvalid
+			continue
+		}
+		if fact.Release.Scope() != fact.Result.Scope() {
+			t.Fatalf("%s 的放行范围与结果范围不符", fact.Result.SourceID())
+		}
+		kinds[fact.Result.SourceID()] = fact.Release.Kind()
+	}
+	want := map[string]domain.ReleaseKind{
+		"resp-partial":    domain.PartialRelease,
+		"resp-full":       domain.FullRelease,
+		"resp-stock":      domain.ReleaseKindInvalid,
+		"resp-acceptance": domain.ReleaseKindInvalid,
+	}
+	if len(kinds) != len(want) {
+		t.Fatalf("读回 %v，want %v", kinds, want)
+	}
+	for source, kind := range want {
+		if got, present := kinds[source]; !present || got != kind {
+			t.Fatalf("%s 读回种类 %q（在场 %v），want %q", source, got, present, kind)
+		}
+	}
+}

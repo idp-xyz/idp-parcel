@@ -210,23 +210,28 @@ func loadReleaseOutcome(
 	if err != nil {
 		return nil, err
 	}
-	releaseKind, err := releaseKindFrom(kind)
-	if err != nil {
-		return nil, err
-	}
-	authorityRef, err := domain.NewRegulatoryAuthorityReference(authority)
-	if err != nil {
-		return nil, err
-	}
-	scopeRef, err := domain.NewDecisionScopeReference(scope)
-	if err != nil {
-		return nil, err
-	}
-	release, err := domain.ReceiveReleaseOutcome(releaseKind, authorityRef, scopeRef, condition, receivedAt)
+	release, err := rebuildReleaseOutcome(kind, authority, scope, condition, receivedAt)
 	if err != nil {
 		return nil, err
 	}
 	return &release, nil
+}
+
+// rebuildReleaseOutcome 把 release_outcome 一行的各列经领域构造函数重建成放行事实。
+func rebuildReleaseOutcome(kind, authority, scope, condition string, receivedAt time.Time) (domain.CustomsReleaseOutcome, error) {
+	releaseKind, err := releaseKindFrom(kind)
+	if err != nil {
+		return domain.CustomsReleaseOutcome{}, err
+	}
+	authorityRef, err := domain.NewRegulatoryAuthorityReference(authority)
+	if err != nil {
+		return domain.CustomsReleaseOutcome{}, err
+	}
+	scopeRef, err := domain.NewDecisionScopeReference(scope)
+	if err != nil {
+		return domain.CustomsReleaseOutcome{}, err
+	}
+	return domain.ReceiveReleaseOutcome(releaseKind, authorityRef, scopeRef, condition, receivedAt)
 }
 
 func releaseKindFrom(raw string) (domain.ReleaseKind, error) {
@@ -243,23 +248,28 @@ func releaseKindFrom(raw string) (domain.ReleaseKind, error) {
 }
 
 // LoadForSubmission 按（租户+提交版本）读回同一提交已保存的各层事实，供同层一致性
-// 比对。只回可归属事实——归属不上的留存记录没有监管事实可比。顺序按入库序稳定。
+// 比对。只回可归属事实——归属不上的留存记录没有监管事实可比。记了同层冲突的也回：冲突
+// 关系在两份事实之间，被标的那份仍要参与比对（判法见 domain.CheckLayerConsistency）。
+// 放行层连同放行事实一起读回；放行事实落点建立之前的放行层存量没有那一行，如实不带。
+// 顺序按入库序稳定。
 func (repository *ExternalResults) LoadForSubmission(
 	ctx context.Context,
 	tenant domain.TenantID,
 	version domain.SubmissionVersionID,
-) ([]domain.ExternalResult, error) {
+) ([]domain.LayerFact, error) {
 	querier, err := repository.db.ReadExecutor(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load external results: %w", err)
 	}
 
 	rows, err := querier.Query(ctx,
-		`SELECT result
-		   FROM customs_compliance.external_result
-		  WHERE tenant_id = $1
-		    AND submission_version = $2
-		  ORDER BY inserted_at, source_id`,
+		`SELECT e.result, r.kind, r.authority_ref, r.scope_ref, r.condition, r.received_at
+		   FROM customs_compliance.external_result e
+		   LEFT JOIN customs_compliance.release_outcome r
+		     ON r.tenant_id = e.tenant_id AND r.source_id = e.source_id
+		  WHERE e.tenant_id = $1
+		    AND e.submission_version = $2
+		  ORDER BY e.inserted_at, e.source_id`,
 		tenant.String(),
 		version.String(),
 	)
@@ -268,22 +278,37 @@ func (repository *ExternalResults) LoadForSubmission(
 	}
 	defer rows.Close()
 
-	var results []domain.ExternalResult
+	var facts []domain.LayerFact
 	for rows.Next() {
-		var resultJSON []byte
-		if err := rows.Scan(&resultJSON); err != nil {
+		var (
+			resultJSON                        []byte
+			kind, authority, scope, condition *string
+			releaseReceivedAt                 *time.Time
+		)
+		if err := rows.Scan(&resultJSON, &kind, &authority, &scope, &condition, &releaseReceivedAt); err != nil {
 			return nil, fmt.Errorf("load external results: %w", err)
 		}
 		result, err := rebuildResult(resultJSON)
 		if err != nil {
 			return nil, fmt.Errorf("load external results: %w", err)
 		}
-		results = append(results, result)
+		fact := domain.LayerFact{Result: result}
+		if kind != nil {
+			if authority == nil || scope == nil || condition == nil || releaseReceivedAt == nil {
+				return nil, fmt.Errorf("load external results: %s: release outcome row is incomplete", result.SourceID())
+			}
+			release, err := rebuildReleaseOutcome(*kind, *authority, *scope, *condition, *releaseReceivedAt)
+			if err != nil {
+				return nil, fmt.Errorf("load external results: %s: release outcome: %w", result.SourceID(), err)
+			}
+			fact.Release = &release
+		}
+		facts = append(facts, fact)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("load external results: %w", err)
 	}
-	return results, nil
+	return facts, nil
 }
 
 func rowOf(result domain.ExternalResult) resultRow {

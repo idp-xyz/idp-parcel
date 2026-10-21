@@ -207,11 +207,14 @@ func TestLoadForSubmissionReturnsOnlyThatSubmissionsFacts(t *testing.T) {
 		t.Fatalf("读回 %d 条，应为 2（他租户、他提交与留存记录都不进来）", len(results))
 	}
 	layers := map[domain.ResultLayer]bool{}
-	for _, result := range results {
-		if result.Version().String() != "submission-1" {
-			t.Errorf("混入了别的提交：%q", result.Version())
+	for _, fact := range results {
+		if fact.Result.Version().String() != "submission-1" {
+			t.Errorf("混入了别的提交：%q", fact.Result.Version())
 		}
-		layers[result.Layer()] = true
+		if fact.Release != nil {
+			t.Errorf("非放行层读回了放行事实：%s", fact.Result.SourceID())
+		}
+		layers[fact.Result.Layer()] = true
 	}
 	if !layers[domain.BusinessAcceptanceLayer] || !layers[domain.RegulatoryReceiptLayer] {
 		t.Errorf("各层事实缺席：%v", layers)

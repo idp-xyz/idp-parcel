@@ -55,7 +55,8 @@ const (
 )
 
 // ExternalResultStore 按幂等键找回并保存接收记录（写入代数同 ADR-0031），并按提交
-// 版本读回同一提交已保存的各层事实供同层一致性比对。
+// 版本读回同一提交已保存的各层事实供同层一致性比对。读回的放行层事实带着同一次接收
+// 拆出的放行事实：放行层的先后按放行种类判，少了它就分不出推进与回退。
 type ExternalResultStore interface {
 	FindByKey(ctx context.Context, key ExternalResultKey) (ExternalResultRecord, bool, error)
 	Save(ctx context.Context, record ExternalResultRecord) (ExternalResultSaveOutcome, error)
@@ -63,7 +64,7 @@ type ExternalResultStore interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		version domain.SubmissionVersionID,
-	) ([]domain.ExternalResult, error)
+	) ([]domain.LayerFact, error)
 }
 
 // SubmissionIndex 按版本找回原提交是否存在。found=false 表示响应声称的提交在本系统

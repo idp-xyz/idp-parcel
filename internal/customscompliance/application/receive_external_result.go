@@ -182,8 +182,8 @@ func NewReceiveExternalResultHandler(deps ReceiveExternalResultDeps) *ReceiveExt
 // Handle 把一条外部监管响应推进到分层事实：幂等/冲突按内容指纹分界 → 关联原提交
 // （找不到→留存不猜）→ 评估时点与适用辖区（取不出→未决）→ 按时点与辖区解析解释
 // 规则版本（未配置→未决）→ 领域解释（放行层另落放行事实，拆不出放行三件→未决）与
-// 同层一致性（冲突留存双方）→ 原子提交 → 发布意图。意图投递失败不翻结果，重放重发
-// 同一份。
+// 同层一致性（同层后续事件照常记下，矛盾留存双方并标冲突）→ 原子提交 → 发布意图。
+// 意图投递失败不翻结果，重放重发同一份。
 func (handler *ReceiveExternalResultHandler) Handle(
 	ctx context.Context,
 	command ReceiveExternalResultCommand,
@@ -353,12 +353,16 @@ func (handler *ReceiveExternalResultHandler) Handle(
 		RecordedAt:    handler.deps.Clock.Now(),
 	}
 	outcome := ResultRecorded
-	if err := domain.CheckLayerConsistency(layerFacts, interpreted); errors.Is(err, domain.ErrLayerConflict) {
-		// 同层冲突：双方事实都留存，不选边、不改当前判断——冲突以标记与结果格显式可见。
+	switch err := domain.CheckLayerConsistency(layerFacts, domain.LayerFact{Result: interpreted, Release: release}); {
+	case errors.Is(err, domain.ErrLayerConflict):
+		// 同层冲突：双方事实都留存，不选边、不改当前判断——冲突以标记与结果格显式可见。同层
+		// 后续事件不走到这里，它按业务时间进入当前判断。
 		record.LayerConflict = true
 		outcome = ResultLayerConflict
-	} else if err != nil {
-		return ReceiveExternalResultResult{outcome: ResultNotAccepted}, nil
+	case err != nil:
+		// 新到这份由本编排刚解释成形，走到这里是在册事实的放行事实与层次配不上——仓储
+		// 不变量已破，不是来源的错，不答未受理；整笔不作答。
+		return ReceiveExternalResultResult{}, fmt.Errorf("customs compliance: layer facts of %s: %w", version, err)
 	}
 
 	return handler.commit(ctx, record, outcome)
