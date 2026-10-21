@@ -1,7 +1,7 @@
 # 53 NR 仍适用线上的改善改路落 `REROUTED` 复核记录时不带失效依据，过不了 `route_reassessment_rerouted_shape`
 
 Category: bug
-Status: ready-for-agent——R2（上线前必修，但今天生产走不到）：仍适用线上一旦按改善阈值自动改路，复核册那一行必然被 CHECK 拒，整笔回滚；生产上复核今天不取候选成本（[demo-chain-gaps/115](../../demo-chain-gaps/issues/115-reassessment-reads-no-candidate-cost-in-production.md)），走不到这条线，115 一落地就撞上。2026-10-21 协调方立（code/16 作者读码所得，见 [code/52](./52-reassessment-reads-the-initial-route-row-instead-of-the-current-plan-or-no-route.md)「相关」一节；协调方读码核实）。
+Status: ready-for-agent——R2（上线前必修，但今天生产走不到）：仍适用线上一旦按改善阈值自动改路，复核册那一行必然被 CHECK 拒，整笔回滚；生产上复核今天不取候选成本（[demo-chain-gaps/115](../../demo-chain-gaps/issues/115-route-reassessment-never-loads-candidate-costs.md)），走不到这条线，115 一落地就撞上。2026-10-21 协调方立（code/16 作者读码所得，见 [code/52](./52-reassessment-reads-the-initial-route-row-instead-of-the-current-plan-or-no-route.md)「相关」一节；协调方读码核实）。
 Blocked by: 无
 出处：code/16 修订时读码所得，不在审计报告条目里。
 
