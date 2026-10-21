@@ -47,3 +47,7 @@ ADR-0139 的 `Status` 翻为 Accepted、首方 Intake 实施票立出之后，�
 - 0141 Decision 二的「只接受合成标识」参数形状上是按环境生效的开关，0141 以「只朝拦」豁免 ADR-0078 Decision 四——是否认可这条豁免（Standards 2）；末句「与 ADR-0091 Decision 三同一形状」说宽，0091 还有来源维（Standards 3）。
 - 0142 Decision 六「时间窗长度进契约文档」与 Decision 九 / 风险点 4「登记册增行」同一个值两种归属，接受前定一处（Spec 3）；Decision 五单一路径与 Decision 八 `SubmitToChannel` 实现「落投递账并返回」是否第二条入账路，以及「失败」层如何回到 VE，接受前说清（Spec 4）；Decision 四「写成 ADR-0140 的描述符」而 0140 只定了端点描述符，事件描述符形状待 0140 接（Spec 5）。
 - 票 02 正文「倾向未配置即不限流但出声」与标题「缺省朝拦」相反，且逆仓内 ADR-0052 / 0054 / 0055 / 0078 / 0091 一贯的缺省朝拦；票 02 把 `429` 作为 ADR-0022 的例外只写进契约文档即第二处口径，按 AGENTS 应另立小记录（Standards 4、Spec 8）。两条都归 owner，票激活前一并裁。
+
+## 文档自洽审计复核（2026-10-21）
+
+[docs-consistency/audit/ps.md](../docs-consistency/audit/ps.md) PS-24（取证 [ps-code.md](../docs-consistency/audit/ps-code.md) 第 12 条）点名：ADR-0140 已接受、首方 Intake 已接上提交口，`/v1`、`application/problem+json` 与端点描述符都没落地，也没立实施票。复核于 main `67438a0f`，现象仍在（`cmd/parcel-api/endpoints_submission.go` 仍挂 `"/shipment-requests"`，`adapters/http/submit_shipment_request.go` 仍写自造的 `problemResponse`）。实施票立为 [docs-consistency/code/22](../docs-consistency/code/22-customer-face-http-contract-misses-accepted-adrs.md)（连同 PS-07 的客户面 `!found` 答 404，分级 R1：基线前必须定形），作为 ADR-0140 的实施票挂在本规格「子票」之外的承接处，不改上表。
