@@ -65,6 +65,16 @@ jobs:
           # 用 status 不用 diff：diff 看不见未跟踪文件，报告一旦被删就会静默通过。
           test -z "$(git status --porcelain -- docs/product/MECHANISM-INVENTORY.md)"
 
+      # ADR 索引与 AT 盘点计数也是生成物，但约定与上一步相反：票不在自己那笔上重生成，由推送方
+      # 在 main 的 tip 上重生成、单独成笔（docs/agents/parallel-sessions.md「生成物不占号」）。
+      # 所以这一门只挂在 main 的推送上——挂到 PR 上，每张带新 ADR 或移了 AT 行的票都会按设计
+      # 红，红就不再是信号。它守的是推送方漏了那一步。
+      - name: ADR index and AT coverage counts are current
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          go run ./tools/adr-index -check
+          go run ./tools/at-coverage-counts -check
+
       # 分片并集必须恰好等于 go list ./...：少一个包就是一块没人跑的测试而 CI 照样绿，
       # 多一个就是同一块跑两遍。兑底片按「全部 − 显式片」现算，新包天然落进去；这一步
       # 守的是显式片之间不重叠、没有哪一片被写空。
@@ -225,8 +235,9 @@ jobs:
       # customscompliance 与 transportfulfillment 两个 postgres 包各自 `panic: test timed out after
       # 10m0s`（go test 单个二进制的默认上限），goroutine 全停在 pgx Commit/Rollback 等服务端
       # 回包、当前用例才跑 6s / 0s——不是哪个用例挂死，是每个用例都在排队。串行之后同一份
-      # 代码的真库包比并发时快三成（run 34133273333 对 34129503260）。本机验证口径一直是 `-p 1`
-      # （AGENTS / parallel-sessions），CI 不该比本机并发。-p 也管编译动作的并发，但编译缓存是
+      # 代码的真库包比并发时快三成（run 34133273333 对 34129503260）。本机全量 2026-10-19 起改走
+      # scripts/test-full.sh 的专用实例包并发；那边放开凭的是本机实测（无 -race、本机的 CPU 与
+      # 端口条件），搬不到 runner 上，这里的 -p 1 只凭上面这几笔账。-p 也管编译动作的并发，但编译缓存是
       # 热的（run 34129503260 四片首个结果在第 3–70 秒印出），串行编译的代价有限；包内
       # t.Parallel 不受影响。
       - name: Test
