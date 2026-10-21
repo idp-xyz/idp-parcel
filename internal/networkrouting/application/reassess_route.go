@@ -251,9 +251,11 @@ func planNodesOf(plan domain.InitialRoutePlan) ([]string, error) {
 // freezeOf 在原计划仍可执行时判断有没有越过冻结边界。未声明形态答未配置，不当成未冻结。
 // 硬约束失效不走这里。
 //
+// 只问建立了当前可控节点的复核；场外揽收在调用方就分走了，不判冻结（ADR-0249 决定二）。
+//
 // 只有「真的未声明」答未配置：它会落成未判登记里的 FREEZE_FORM_UNCONFIGURED，是一条给租户看的
 // 持久原因（ADR-0235）。另两种答不出的都是编程错误，响亮报错，理由同 planNodesOf：
-//   - 前缀立不起来：仍适用说明位置就在计划节点上，触发又只会是节点收寄或权威交接，前缀必立得起来。
+//   - 前缀立不起来：走到这里的触发建立了可控节点，仍适用又说明位置就在计划节点上，前缀必立得起来。
 //   - 冻结事实不成立（形态在封闭族外、段数为负）：策略版本册的 CHECK 拒这两种写入，证据视图交出它们
 //     是装配坏了，不是租户没登记。
 func freezeOf(
@@ -279,8 +281,9 @@ func freezeOf(
 }
 
 // reassessPlan 是原来有计划的那条线：6A 独立判定，仍适用即保留、失效即失效（候选状态
-// 另存）、看不清停未决。仍适用时先看冻结：未声明停未配置；已越过边界则保留原计划，
-// 轻微改善不改路。
+// 另存）、看不清停未决。可控节点上仍适用时先看冻结：未声明停未配置；已越过边界则保留原计划，
+// 轻微改善不改路。场外揽收不建立可控节点，仍适用即保留，不看冻结也不试改善（ADR-0249 决定二）：
+// 冻结与改善问的都是「从这个节点起往后怎么走」，揽收时没有这个节点；改善等包裹交进首个节点后的交接复核。
 func (handler *ReassessRouteHandler) reassessPlan(
 	ctx context.Context,
 	trigger domain.ReassessmentTrigger,
@@ -288,7 +291,7 @@ func (handler *ReassessRouteHandler) reassessPlan(
 	evidence ports.InitialRouteEvidence,
 ) (ReassessRouteResult, error) {
 	key := trigger.Key()
-	review, err := domain.ReviewPlanApplicability(plan, trigger.Location(), evidence.HardConstraints)
+	review, err := domain.ReviewPlanApplicability(plan, trigger.Control(), trigger.Location(), evidence.HardConstraints)
 	if err != nil {
 		return ReassessRouteResult{}, fmt.Errorf("review plan applicability: %w", err)
 	}
@@ -299,19 +302,22 @@ func (handler *ReassessRouteHandler) reassessPlan(
 		return handler.undecided(key, PlanReviewInconclusive), nil
 
 	case domain.PlanStillApplicable:
-		judgment, unconfigured, err := freezeOf(plan, trigger, evidence)
-		if err != nil {
-			return ReassessRouteResult{}, err
-		}
-		if unconfigured {
-			return handler.notJudged(ctx, trigger, ports.NotJudgedFreezeFormUnconfigured, time.Time{})
-		}
 		record := ports.ReassessmentRecord{
 			Correlation:  trigger.Correlation(),
 			Key:          key,
 			Conclusion:   ports.ReassessmentStillApplicable,
 			ReviewedPlan: plan.Version(),
 			ReassessedAt: handler.deps.Clock.Now(),
+		}
+		if !trigger.Control().EstablishesControllableNode() {
+			return handler.commit(ctx, trigger, record)
+		}
+		judgment, unconfigured, err := freezeOf(plan, trigger, evidence)
+		if err != nil {
+			return ReassessRouteResult{}, err
+		}
+		if unconfigured {
+			return handler.notJudged(ctx, trigger, ports.NotJudgedFreezeFormUnconfigured, time.Time{})
 		}
 		// 已越过冻结边界则保留原计划，轻微改善不改路。未越过时，成本改善严格大于
 		// 已登记阈值才允许自动切换。
@@ -607,24 +613,23 @@ func (handler *ReassessRouteHandler) tryImprovementReroute(
 	return record, nil
 }
 
+// structuralAutoReroute 折自动改路的结构条件。场外揽收时「位于当前可控节点」为假、「只改未执行部分」为真：失效线上
+// 只形成建议，阻塞只点名不在可控节点，授权决定从包裹交进的首个节点生效（ADR-0249 决定二）。
 func structuralAutoReroute(
 	trigger domain.ReassessmentTrigger,
 	plan domain.InitialRoutePlan,
 	evidence ports.InitialRouteEvidence,
 ) (domain.RerouteAuthority, []string, error) {
-	atNode := trigger.Control() == domain.NodeIntakeControl || trigger.Control() == domain.TransportHandoverControl
 	nodes, err := planNodesOf(plan)
 	if err != nil {
 		return domain.RerouteAuthorityInvalid, nil, err
 	}
 	prefix := domain.JudgeExecutedPrefix(nodes, trigger.Control(), trigger.Location().String())
-	onlyUnexecuted := prefix.Grade() == domain.ExecutedPrefixEstablished ||
-		prefix.Grade() == domain.ExecutedPrefixNodeNotOnPlan
 	authority, blockers := domain.FoldAutoReroute(
 		evidence.AutoRerouteForm,
 		evidence.AutoRerouteImprovementThresholdMinor,
-		atNode,
-		onlyUnexecuted,
+		trigger.Control().EstablishesControllableNode(),
+		prefix.OnlyUnexecutedAffected(),
 		evidence.UnresolvedRestrictions,
 		evidence.OutstandingResponsibilities,
 	)

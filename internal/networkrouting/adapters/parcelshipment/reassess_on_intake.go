@@ -40,8 +40,8 @@ func NewReassessOnIntakeAdapter(
 }
 
 // TriggerReassessment 翻译并转交一份采用记录，连同采用信封携带的内容（复核按它取证据，ADR-0075）。
-// 控制依据按来源类型译格：节点收寄是节点控制、场外揽收是权威运输交接的控制——两类都是 CONTEXT 认可的
-// 「当前可控节点」依据，普通扫描在提供方的采用判断里就进不来。
+// 控制依据按来源类型逐格译：节点收寄是节点控制，建立当前可控节点；场外揽收译成揽收那一格，照复核却不建立可控节点，
+// 揽收地点是客户场所、原样作复核位置（ADR-0249）。普通扫描在提供方的采用判断里就进不来。
 func (adapter *ReassessOnIntakeAdapter) TriggerReassessment(
 	ctx context.Context,
 	record psports.IntakeAdoptionRecord,
@@ -129,7 +129,9 @@ func controlKindFor(kind psdomain.IntakeSourceKind) (nrdomain.ControlEvidenceKin
 	case psdomain.NodeIntakeSource:
 		return nrdomain.NodeIntakeControl, nil
 	case psdomain.OffsitePickupSource:
-		return nrdomain.TransportHandoverControl, nil
+		// 不译成权威运输交接：那一格是交进声明的接收节点，位置是节点码；揽收的位置是客户场所，译过去复核就会拿它
+		// 比计划节点、把揽收当可控节点（ADR-0249）。
+		return nrdomain.OffsitePickupControl, nil
 	default:
 		return nrdomain.ControlEvidenceKindInvalid, fmt.Errorf(
 			"%w: intake source kind %d", ErrUntranslatableAnswer, kind)

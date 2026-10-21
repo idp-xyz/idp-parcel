@@ -22,7 +22,7 @@ func reviewedPlan(t *testing.T) domain.InitialRoutePlan {
 func TestAPlanReviewLapsesByMismatchOrRestriction(t *testing.T) {
 	plan := reviewedPlan(t)
 
-	offPlan, err := domain.ReviewPlanApplicability(plan,
+	offPlan, err := domain.ReviewPlanApplicability(plan, domain.NodeIntakeControl,
 		mustValue(t, domain.NewActualLocationReference, "node-elsewhere"), nil)
 	if err != nil {
 		t.Fatalf("review off-plan: %v", err)
@@ -35,7 +35,7 @@ func TestAPlanReviewLapsesByMismatchOrRestriction(t *testing.T) {
 		t.Fatalf("basis = %v present = %v", basis, present)
 	}
 
-	restricted, err := domain.ReviewPlanApplicability(plan,
+	restricted, err := domain.ReviewPlanApplicability(plan, domain.NodeIntakeControl,
 		mustValue(t, domain.NewActualLocationReference, "node-origin"),
 		[]domain.HardConstraintFinding{restrictionOn(t, "cand-1")})
 	if err != nil {
@@ -48,7 +48,7 @@ func TestAPlanReviewLapsesByMismatchOrRestriction(t *testing.T) {
 		t.Fatalf("basis = %v; 失效依据必须指得回限制来源", basis)
 	}
 
-	applicable, err := domain.ReviewPlanApplicability(plan,
+	applicable, err := domain.ReviewPlanApplicability(plan, domain.NodeIntakeControl,
 		mustValue(t, domain.NewActualLocationReference, "node-hub"), nil)
 	if err != nil {
 		t.Fatalf("review applicable: %v", err)
@@ -65,7 +65,7 @@ func TestAPlanReviewStaysUndecidedOnlyForItsOwnCandidate(t *testing.T) {
 	plan := reviewedPlan(t)
 	origin := mustValue(t, domain.NewActualLocationReference, "node-origin")
 
-	undecided, err := domain.ReviewPlanApplicability(plan, origin,
+	undecided, err := domain.ReviewPlanApplicability(plan, domain.NodeIntakeControl, origin,
 		[]domain.HardConstraintFinding{unknownConstraintOn(t, "cand-1")})
 	if err != nil {
 		t.Fatalf("review undecided: %v", err)
@@ -78,7 +78,7 @@ func TestAPlanReviewStaysUndecidedOnlyForItsOwnCandidate(t *testing.T) {
 		t.Fatalf("gap = %#v present = %v", gap, present)
 	}
 
-	foreign, err := domain.ReviewPlanApplicability(plan, origin,
+	foreign, err := domain.ReviewPlanApplicability(plan, domain.NodeIntakeControl, origin,
 		[]domain.HardConstraintFinding{
 			restrictionOn(t, "cand-9"),
 			unknownConstraintOn(t, "cand-8"),
@@ -90,7 +90,7 @@ func TestAPlanReviewStaysUndecidedOnlyForItsOwnCandidate(t *testing.T) {
 		t.Fatalf("outcome = %q; 别的候选的限制推翻了这份计划", foreign.Outcome())
 	}
 
-	if _, err := domain.ReviewPlanApplicability(plan, domain.ActualLocationReference{}, nil); !errors.Is(err, domain.ErrInvalidPlanReview) {
+	if _, err := domain.ReviewPlanApplicability(plan, domain.NodeIntakeControl, domain.ActualLocationReference{}, nil); !errors.Is(err, domain.ErrInvalidPlanReview) {
 		t.Fatalf("err = %v, want ErrInvalidPlanReview", err)
 	}
 }

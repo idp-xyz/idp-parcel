@@ -12,9 +12,13 @@ var (
 	ErrSourceHintDoesNotTrigger = errors.New("network routing: a source hint does not establish control or trigger reassessment")
 )
 
-// ControlEvidenceKind 是触发所携控制依据的封闭三值。前两格是权威控制依据（节点收寄结果、
-// transport-fulfillment 的权威运输交接结果），第三格是来源线索——普通扫描、位置消息、
-// 装卸或车辆到场。分类维度是「能不能据以认定控制权」，不是消息从哪个系统来。
+// ControlEvidenceKind 是触发所携控制依据的封闭集合。节点收寄、权威运输交接与场外揽收是权威控制依据（节点收寄结果、
+// transport-fulfillment 的交接结果与揽收结果），SourceHint 是来源线索——普通扫描、位置消息、装卸或车辆到场。分类维度
+// 是「能不能据以认定控制权」，不是消息从哪个系统来。
+//
+// 场外揽收与交进接收节点的权威运输交接同出 transport-fulfillment，却不能合成一格：揽收把包裹交到运输方手里，没有
+// 节点能从那里施加下一步作业，揽收地点也是客户场所一类、不是节点码（ADR-0249）。合成一格，复核就会拿客户场所去比
+// 计划节点，并把揽收当成可控节点去切前缀、判冻结、自动改路。
 type ControlEvidenceKind uint8
 
 const (
@@ -22,10 +26,11 @@ const (
 	NodeIntakeControl
 	TransportHandoverControl
 	SourceHint
+	OffsitePickupControl
 )
 
 func (kind ControlEvidenceKind) valid() bool {
-	return kind >= NodeIntakeControl && kind <= SourceHint
+	return kind >= NodeIntakeControl && kind <= OffsitePickupControl
 }
 
 func (kind ControlEvidenceKind) String() string {
@@ -36,9 +41,18 @@ func (kind ControlEvidenceKind) String() string {
 		return "TRANSPORT_HANDOVER_CONTROL"
 	case SourceHint:
 		return "SOURCE_HINT"
+	case OffsitePickupControl:
+		return "OFFSITE_PICKUP_CONTROL"
 	default:
 		return ""
 	}
+}
+
+// EstablishesControllableNode 答这一格控制依据是否建立当前可控节点（CONTEXT「当前可控节点」）：只有节点收寄与把包裹
+// 交进声明的接收节点的权威运输交接。也只有这两格的位置是节点码——适用性复核比节点、切已执行前缀、折「位于当前可控
+// 节点」都问这一处。场外揽收照复核却不建立（ADR-0249 决定二）；线索连触发都立不成。
+func (kind ControlEvidenceKind) EstablishesControllableNode() bool {
+	return kind == NodeIntakeControl || kind == TransportHandoverControl
 }
 
 // ActualLocationReference 指名实际接货位置或当前节点。位置事实属 node-operations 与

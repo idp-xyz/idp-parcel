@@ -68,6 +68,10 @@ func JudgeFreezeBoundary(form FreezeForm, limit *int, remainingSegments int) (Fr
 }
 
 // ExecutedPrefixGrade 是已执行前缀的分格。
+//
+// 「尚无可控节点」分两格，因为答的不是一件事：线索那一格是不知道包裹在哪、切不出前缀，不能断言只改未执行部分；
+// 场外揽收那一格是确知包裹还没进任何节点、什么都没执行（ADR-0249 决定二）。合成一格，揽收失效后的建议就会多一条
+// 不实的 EXECUTED_PREFIX_AFFECTED。
 type ExecutedPrefixGrade uint8
 
 const (
@@ -75,6 +79,7 @@ const (
 	ExecutedPrefixNoControllableNode
 	ExecutedPrefixNodeNotOnPlan
 	ExecutedPrefixEstablished
+	ExecutedPrefixNothingExecuted
 )
 
 // ExecutedPrefix 是计划段链上已经执行的节点前缀和剩余节点。
@@ -100,11 +105,25 @@ func (prefix ExecutedPrefix) RemainingSegments() int {
 	return len(prefix.remaining) - 1
 }
 
-// JudgeExecutedPrefix 用计划节点链和当前可控节点切出已执行前缀。可控节点只认节点收寄或
-// 权威运输交接。扫描、位置或消息顺序不建立可控节点。
+// OnlyUnexecutedAffected 答改路是否只动未执行部分（自动改路条件之一）。线索那一格切不出前缀，答不了，答假。
+func (prefix ExecutedPrefix) OnlyUnexecutedAffected() bool {
+	switch prefix.grade {
+	case ExecutedPrefixEstablished, ExecutedPrefixNodeNotOnPlan, ExecutedPrefixNothingExecuted:
+		return true
+	default:
+		return false
+	}
+}
+
+// JudgeExecutedPrefix 用计划节点链和当前可控节点切出已执行前缀。可控节点只认节点收寄或交进接收节点的权威运输交接
+// （ControlEvidenceKind.EstablishesControllableNode）。场外揽收不切前缀，全部计划段未执行，揽收地点与计划节点同名也
+// 一样——它不在节点上。扫描、位置或消息顺序不建立可控节点。
 func JudgeExecutedPrefix(planNodes []string, control ControlEvidenceKind, location string) ExecutedPrefix {
 	nodes := append([]string(nil), planNodes...)
-	if control != NodeIntakeControl && control != TransportHandoverControl {
+	if control == OffsitePickupControl {
+		return ExecutedPrefix{grade: ExecutedPrefixNothingExecuted, remaining: nodes}
+	}
+	if !control.EstablishesControllableNode() {
 		return ExecutedPrefix{grade: ExecutedPrefixNoControllableNode, remaining: nodes}
 	}
 	index := -1

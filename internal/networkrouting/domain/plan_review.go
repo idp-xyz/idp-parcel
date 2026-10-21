@@ -55,38 +55,45 @@ func (review PlanReview) Gap() (EvidenceGap, bool) {
 // ReviewPlanApplicability 独立复核当前计划是否仍可执行（复核层次 2 与 3 对计划本体的
 // 那一半）：
 //
-//   - 实际接货/控制位置不在计划节点序列上，计划与实际不相容——确定性失效，依据携带
-//     实际位置（「实际起点/节点……是否与计划相容」）；
+//   - 控制依据建立当前可控节点、而实际位置不在计划节点序列上，计划与实际不相容——确定性
+//     失效，依据携带实际位置（「实际起点/节点……是否与计划相容」）；
 //   - 计划选中候选被有效硬限制淘汰——确定性失效，依据携带限制来源（自动和人工都不能
 //     绕过）；
 //   - 选中候选的限制状态未知——适用性未决，缺口原样交回：默认保留是免检放行，默认
 //     失效是凭空下线；
 //   - 事实齐备且没有失效依据——仍适用，不制造语义重复的新计划。
 //
+// 场外揽收只走后三条，不比节点（ADR-0249 决定一）：揽收地点是客户场所一类、没有地理投影，
+// 拿它比计划节点，每一次揽收都会让计划失效；计划起点本由受理基线投影经服务区域解析而来，
+// 揽收是否发生在声明的寄件地点归运输履约与小包托运判，首个节点不在计划上时由交接复核接住。
+//
 // 它只看这份计划自己的可执行性，不比较替代候选——那是另一条独立判断线（6B），两条线
 // 的结论按硬句各自成立。
 func ReviewPlanApplicability(
 	plan InitialRoutePlan,
+	control ControlEvidenceKind,
 	actual ActualLocationReference,
 	constraints []HardConstraintFinding,
 ) (PlanReview, error) {
-	if !actual.valid() {
+	if !actual.valid() || !control.valid() || control == SourceHint {
 		return PlanReview{}, ErrInvalidPlanReview
 	}
 
-	onPlan := false
-	for _, node := range plan.Nodes() {
-		if node.String() == actual.String() {
-			onPlan = true
-			break
+	if control.EstablishesControllableNode() {
+		onPlan := false
+		for _, node := range plan.Nodes() {
+			if node.String() == actual.String() {
+				onPlan = true
+				break
+			}
 		}
-	}
-	if !onPlan {
-		basis, err := NewApplicabilityBasisReference("PLAN_ORIGIN_MISMATCH/" + actual.String())
-		if err != nil {
-			return PlanReview{}, err
+		if !onPlan {
+			basis, err := NewApplicabilityBasisReference("PLAN_ORIGIN_MISMATCH/" + actual.String())
+			if err != nil {
+				return PlanReview{}, err
+			}
+			return PlanReview{outcome: PlanNoLongerApplicable, basis: basis}, nil
 		}
-		return PlanReview{outcome: PlanNoLongerApplicable, basis: basis}, nil
 	}
 
 	for _, finding := range constraints {
