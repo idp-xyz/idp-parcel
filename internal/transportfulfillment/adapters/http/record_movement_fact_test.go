@@ -83,6 +83,16 @@ func (double *movementCustomsDouble) ReadDepartureGate(_ context.Context, query 
 		[]domain.DepartureGateBasis{{Action: "LOADING_DEPARTURE", Cause: "SOME_CAUSE", Sources: []string{"SRC-1"}}})
 }
 
+// movementMembershipsDouble 按对象交回集运成员关系：units 里没有的对象不是单元。
+type movementMembershipsDouble struct {
+	units map[string][]ports.ConsolidationMember
+}
+
+func (double movementMembershipsDouble) MembersAt(_ context.Context, query ports.ConsolidationMembershipQuery) (ports.ConsolidationMembership, error) {
+	members, unit := double.units[query.Object.String()]
+	return ports.ConsolidationMembership{Unit: unit, Members: members}, nil
+}
+
 // movementHandoffDouble 收下已形成信封的意图、什么也不做：本包只验线格式与答法，信封入队由 postgres 与 cmd 两层的用例证。
 type movementHandoffDouble struct{}
 
@@ -108,6 +118,16 @@ func (composed readThenRecord) Record(ctx context.Context, command application.R
 }
 
 func movementGateReader(t *testing.T, customs *movementCustomsDouble) *application.DepartureGateReader {
+	t.Helper()
+	return movementGateReaderOver(t, customs, movementMembershipsDouble{})
+}
+
+// movementGateReaderOver 同 movementGateReader，集运成员关系由调用方给：段里在控的那一件是 parcel-1，单元与否看 memberships。
+func movementGateReaderOver(
+	t *testing.T,
+	customs *movementCustomsDouble,
+	memberships movementMembershipsDouble,
+) *application.DepartureGateReader {
 	t.Helper()
 	tenant := httpValue(t, domain.NewTenantID, "tenant-1")
 	segment, err := domain.RehydrateActualFulfillmentSegment(domain.RehydrateActualFulfillmentSegmentSpec{
@@ -141,6 +161,7 @@ func movementGateReader(t *testing.T, customs *movementCustomsDouble) *applicati
 	reader, err := application.NewDepartureGateReader(application.DepartureGateReadDeps{
 		Segments:  movementSegmentsDouble{segment: segment},
 		Schedules: movementSchedulesDouble{schedule: schedule},
+		Members:   memberships,
 		Customs:   customs,
 	})
 	if err != nil {

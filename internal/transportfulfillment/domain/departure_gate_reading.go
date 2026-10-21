@@ -12,7 +12,8 @@ import (
 // 发生，挡下是动作之前那一问的事；读数只把那一刻问来的答复如实记下，阻断也照记。
 //
 // 五格与逐对象那一格是门禁读数的共用内核（gate_reading.go），交出门禁读数也用它。本文件自己定义的是：问之前本上下文
-// 这一侧停在了哪（段、班次、对象），以及一条出发上多个对象的答复怎样压成整条出发的一格。
+// 这一侧停在了哪（段、班次、对象），以及一条出发上多个对象的答复怎样压成整条出发的一格。段里在控的集运单元按成员展开，
+// 单元与成员各一格同在逐对象那几格里（consolidation_gate_finding.go，ADR-0225）；只有出发读数装得下它们。
 
 var (
 	ErrInvalidDepartureGateReading = errors.New("transport fulfillment: invalid departure gate reading")
@@ -187,13 +188,16 @@ func formDepartureGateReading(spec DepartureGateReadingSpec) (DepartureGateReadi
 		return strings.Compare(left.object.String(), right.object.String())
 	})
 	for index, finding := range findings {
-		if !finding.object.valid() || !finding.answer.valid() || len(finding.bases) == 0 {
+		if !finding.formed() {
 			return DepartureGateReading{}, ErrInvalidDepartureGateReading
 		}
 		if index > 0 && findings[index-1].object == finding.object {
 			return DepartureGateReading{}, ErrInvalidDepartureGateReading
 		}
 		answer = max(answer, finding.answer)
+	}
+	if err := checkConsolidationUnitFindings(findings); err != nil {
+		return DepartureGateReading{}, fmt.Errorf("%w: %w", ErrInvalidDepartureGateReading, err)
 	}
 	return DepartureGateReading{
 		answer:   answer,

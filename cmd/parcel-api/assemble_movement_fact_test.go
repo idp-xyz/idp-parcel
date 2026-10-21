@@ -533,7 +533,7 @@ func TestAReplayedDepartureDoesNotAskCustomsAgain(t *testing.T) {
 	}
 	counting := &countingDepartureGate{inner: view}
 	if movement.gate, err = tfapp.NewDepartureGateReader(tfapp.DepartureGateReadDeps{
-		Segments: segments, Schedules: schedules, Customs: counting,
+		Segments: segments, Schedules: schedules, Members: wiredConsolidationMembership(t, line.db), Customs: counting,
 	}); err != nil {
 		t.Fatalf("装读数编排：%v", err)
 	}

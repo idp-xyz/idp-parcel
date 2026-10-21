@@ -122,6 +122,10 @@ func RehydrateHandoverGateReading(spec HandoverGateReadingSpec, recorded GateAns
 
 func formHandoverGateReading(spec HandoverGateReadingSpec) (HandoverGateReading, error) {
 	stopped, asked := spec.Stop != HandoverGateStopInvalid, spec.Finding.formed()
+	if _, unit := spec.Finding.ConsolidationUnit(); unit {
+		// 单元那一格指名的成员要在同一份读数里各有一格，这一种读数只装得下一格（ADR-0225 只展开出发读数）。
+		return HandoverGateReading{}, ErrInvalidHandoverGateReading
+	}
 	if stopped == asked {
 		return HandoverGateReading{}, ErrInvalidHandoverGateReading
 	}

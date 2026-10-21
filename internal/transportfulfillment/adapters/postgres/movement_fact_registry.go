@@ -255,11 +255,14 @@ type departureGateReadingDetail struct {
 	Findings []departureGateFindingDetail `json:"findings"`
 }
 
+// Members 只在集运单元那一格上有（ADR-0225），空单元也写成空数组——键在不在就是「这一格是不是单元那一格」。这一键出现之前
+// 落册的读数没有它，照旧读成问关务问来的那一格，不必迁移。
 type departureGateFindingDetail struct {
 	Object    string                     `json:"object"`
 	Answer    string                     `json:"answer"`
 	Judgement *string                    `json:"judgement"`
 	Bases     []departureGateBasisDetail `json:"bases"`
+	Members   *[]string                  `json:"members,omitempty"`
 }
 
 type departureGateBasisDetail struct {
@@ -296,6 +299,13 @@ func gateFindingDetailOf(finding domain.GateFinding) departureGateFindingDetail 
 		}
 		row.Bases = append(row.Bases, departureGateBasisDetail{Action: basis.Action, Cause: basis.Cause, Sources: sources})
 	}
+	if members, unit := finding.ConsolidationUnit(); unit {
+		names := make([]string, 0, len(members))
+		for _, member := range members {
+			names = append(names, member.String())
+		}
+		row.Members = &names
+	}
 	return row
 }
 
@@ -317,7 +327,36 @@ func gateFindingFrom(row departureGateFindingDetail) (domain.GateFinding, error)
 	for _, basis := range row.Bases {
 		bases = append(bases, domain.GateBasis{Action: basis.Action, Cause: basis.Cause, Sources: basis.Sources})
 	}
+	if row.Members != nil {
+		return consolidationUnitFindingFrom(object, answer, row, bases)
+	}
 	finding, err := domain.NewGateFinding(object, answer, judgement, bases)
+	if err != nil {
+		return domain.GateFinding{}, fmt.Errorf("gate reading detail: %w", err)
+	}
+	return finding, nil
+}
+
+// consolidationUnitFindingFrom 重建单元那一格。它不是问关务问来的，带着判断标识的那一行是被绕过构造门写过；答复与成员对不对得上
+// 由读数的重建门在整份读数上核。
+func consolidationUnitFindingFrom(
+	unit domain.CarriedObjectReference,
+	answer domain.GateAnswer,
+	row departureGateFindingDetail,
+	bases []domain.GateBasis,
+) (domain.GateFinding, error) {
+	if row.Judgement != nil {
+		return domain.GateFinding{}, fmt.Errorf("gate reading detail: the consolidation unit %q carries a customs judgement", row.Object)
+	}
+	members := make([]domain.CarriedObjectReference, 0, len(*row.Members))
+	for _, raw := range *row.Members {
+		member, err := domain.NewCarriedObjectReference(raw)
+		if err != nil {
+			return domain.GateFinding{}, fmt.Errorf("gate reading detail: member: %w", err)
+		}
+		members = append(members, member)
+	}
+	finding, err := domain.RehydrateConsolidationUnitGateFinding(unit, answer, members, bases)
 	if err != nil {
 		return domain.GateFinding{}, fmt.Errorf("gate reading detail: %w", err)
 	}

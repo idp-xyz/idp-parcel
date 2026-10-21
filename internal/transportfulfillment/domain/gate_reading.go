@@ -59,11 +59,16 @@ type GateBasis struct {
 
 // GateFinding 是一件载运对象的那一格：关务对它这一次动作意图的答复译成的五格之一、关务判断标识与同格依据。
 // 标识只在关务形成了判断时有——读不动时关务那边什么也没记下，指不回去。
+//
+// 集运单元自己那一格（unit 为真）不是问关务问来的：关务按包裹认对象，问它只会答出一格假的干净读数。那一格由同一份读数里
+// 各直接成员那几格与本侧问不到的成员推出，构造与推法在 consolidation_gate_finding.go。
 type GateFinding struct {
 	object    CarriedObjectReference
 	answer    GateAnswer
 	judgement string
 	bases     []GateBasis
+	unit      bool
+	members   []CarriedObjectReference
 }
 
 // NewGateFinding 立一件对象的那一格。依据至少一条：没有依据的答复读者无从核对，与关务「答复只列同格依据」那条同一
@@ -104,9 +109,10 @@ func storableBasisText(value string, required bool) bool {
 	return !required || strings.TrimSpace(value) != ""
 }
 
-// formed 说这是不是一格；零值不是——读数里「没有逐对象那一格」与「那一格答了某格」必须分得开。
+// formed 说这是不是一格；零值不是——读数里「没有逐对象那一格」与「那一格答了某格」必须分得开。集运单元那一格的依据可以只是
+// 它的成员（成员那几格就是它的依据），所以依据与成员不能都空。
 func (finding GateFinding) formed() bool {
-	return finding.object.valid() && finding.answer.valid() && len(finding.bases) > 0
+	return finding.object.valid() && finding.answer.valid() && len(finding.bases)+len(finding.members) > 0
 }
 
 func (finding GateFinding) Object() CarriedObjectReference { return finding.object }
@@ -115,6 +121,11 @@ func (finding GateFinding) Answer() GateAnswer             { return finding.answ
 // Judgement 交回关务判断标识；读不动时答 false。
 func (finding GateFinding) Judgement() (string, bool) {
 	return finding.judgement, finding.judgement != ""
+}
+
+// ConsolidationUnit 说这一格是不是集运单元自己那一格；是的话交回它的直接成员里在同一份读数里各有一格的那几件（定序）。
+func (finding GateFinding) ConsolidationUnit() ([]CarriedObjectReference, bool) {
+	return append([]CarriedObjectReference(nil), finding.members...), finding.unit
 }
 
 func (finding GateFinding) Bases() []GateBasis {

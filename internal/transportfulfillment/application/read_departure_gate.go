@@ -20,12 +20,24 @@ const (
 	departureGateCustomsUntranslatable = "CUSTOMS_ADMISSION_UNTRANSLATABLE"
 )
 
-var errDepartureGateViewMisanswered = errors.New("transport fulfillment: the departure gate view answered for another object")
+// 集运成员关系那一问没有形成答复时，那一件同样记读不动：说不出它是不是一袋，就不能当成一件包裹去问关务（ADR-0225）。依据种类
+// 照关务那两种的分法：调用失败过一会儿可能就好，译不回来要查两边的口径。
+const (
+	departureGateMembershipUnavailable    = "CONSOLIDATION_MEMBERSHIP_UNAVAILABLE"
+	departureGateMembershipUntranslatable = "CONSOLIDATION_MEMBERSHIP_UNTRANSLATABLE"
+)
 
-// DepartureGateReadDeps 是出发门禁读数要问的三口：本上下文自己的段册与班次册，以及关务的动作准入判断。
+var (
+	errDepartureGateViewMisanswered = errors.New("transport fulfillment: the departure gate view answered for another object")
+	errConsolidationMemberMisshaped = errors.New("transport fulfillment: the consolidation membership view answered a member of no known kind")
+)
+
+// DepartureGateReadDeps 是出发门禁读数要问的四口：本上下文自己的段册与班次册、node-operations 的集运成员关系，以及关务的动作
+// 准入判断。
 type DepartureGateReadDeps struct {
 	Segments  ports.DepartureSegmentView
 	Schedules ports.TransportScheduleReader
+	Members   ports.ConsolidationMembershipView
 	Customs   ports.DepartureGateView
 }
 
@@ -40,8 +52,8 @@ type DepartureGateReader struct {
 
 // NewDepartureGateReader 构造期拒缺件：漏装的一口到第一条出发才暴露，会被记成一格读不动，把装配缺陷演成依赖故障。
 func NewDepartureGateReader(deps DepartureGateReadDeps) (*DepartureGateReader, error) {
-	if deps.Segments == nil || deps.Schedules == nil || deps.Customs == nil {
-		return nil, errors.New("transport fulfillment: the departure gate reader needs the segment view, the schedule reader and the customs view")
+	if deps.Segments == nil || deps.Schedules == nil || deps.Members == nil || deps.Customs == nil {
+		return nil, errors.New("transport fulfillment: the departure gate reader needs the segment view, the schedule reader, the consolidation membership view and the customs view")
 	}
 	return &DepartureGateReader{deps: deps}, nil
 }
@@ -109,8 +121,8 @@ func gateReferencesFrom(
 }
 
 // readIntent 先在本上下文这一侧找齐问关务要的东西：段里出发那一刻在控的对象、班次的方向。缺哪样就停在哪样、不问关务——
-// 没有对象就没有可问的，没有方向就说不出「自哪到哪」。找齐了才逐对象问；某一件读不动不停下，其余照问，每件各记一格。
-// error 只留给读数自己拼不出来（实现坏了）。
+// 没有对象就没有可问的，没有方向就说不出「自哪到哪」。找齐了才逐对象问（集运单元按成员展开，见 departureGateExpansion）；
+// 某一件读不动不停下，其余照问，每件各记一格。error 只留给读数自己拼不出来（实现坏了）。
 func (reader *DepartureGateReader) readIntent(ctx context.Context, intent departureGateIntent) (domain.DepartureGateReading, error) {
 	var stops []domain.DepartureGateStop
 	var objects []domain.CarriedObjectReference
@@ -150,30 +162,148 @@ func (reader *DepartureGateReader) readIntent(ctx context.Context, intent depart
 		return domain.FormDepartureGateReading(reading)
 	}
 
+	expansion := departureGateExpansion{
+		reader: reader,
+		intent: intent,
+		from:   reading.From,
+		to:     reading.To,
+		cells:  map[domain.CarriedObjectReference]domain.GateFinding{},
+		onPath: map[domain.CarriedObjectReference]bool{},
+	}
 	for _, object := range objects {
-		finding, err := reader.deps.Customs.ReadDepartureGate(ctx, ports.DepartureGateQuery{
-			TenantID: intent.tenant,
-			Object:   object,
-			From:     reading.From,
-			To:       reading.To,
-			At:       intent.at,
-		})
-		if err != nil {
-			cause := departureGateCustomsUnavailable
-			if errors.Is(err, ports.ErrDepartureGateAnswerUntranslatable) {
-				cause = departureGateCustomsUntranslatable
-			}
-			if finding, err = domain.NewDepartureGateFinding(object, domain.DepartureGateUnreadable, "",
-				[]domain.DepartureGateBasis{{Cause: cause}}); err != nil {
-				return domain.DepartureGateReading{}, err
-			}
+		if _, err := expansion.object(ctx, object); err != nil {
+			return domain.DepartureGateReading{}, err
 		}
-		if finding.Object() != object {
-			// 端口答的是另一件、或交回零值却不报错：那是实现坏了，不是关务读不动，记成一格只会把它藏起来。
-			return domain.DepartureGateReading{}, fmt.Errorf("%w: the customs view answered for %q when asked about %q",
-				errDepartureGateViewMisanswered, finding.Object(), object)
-		}
-		reading.Findings = append(reading.Findings, finding)
+	}
+	for _, cell := range expansion.cells {
+		reading.Findings = append(reading.Findings, cell)
 	}
 	return domain.FormDepartureGateReading(reading)
+}
+
+// departureGateExpansion 是一次读数里逐对象问的那一遍（ADR-0225）。段里在控的每一件先问 node-operations 是不是集运单元：不是就按
+// 包裹问关务；是就按出发那一刻的直接成员逐件问，嵌套单元一层层展开到包裹，单元自己那一格由领域取成员里最重的一格
+// （domain.FormConsolidationUnitGateFinding）。不问关务单元本身：关务按包裹认对象，问它只会答出一格假的干净读数。
+//
+// 每件对象只问一次、只有一格：同一件包裹既直接在段里、又在某一袋里，或几袋都指名同一件，问来的是同一格，读数里也只记一格。展开
+// 只沿这一条路径防环：嵌套成员已在路径上，就记成那一袋的缘由、不再回头；对象与成员都按定序走，同样的三源展开出同样的读数——出发
+// 前问询与随后同参出发靠的就是这一点（ADR-0219 决定二）。
+type departureGateExpansion struct {
+	reader *DepartureGateReader
+	intent departureGateIntent
+	from   domain.NetworkNodeReference
+	to     domain.NetworkNodeReference
+	cells  map[domain.CarriedObjectReference]domain.GateFinding
+	onPath map[domain.CarriedObjectReference]bool
+}
+
+// object 为一件不知种类的对象形成它那一格：段里在控的对象，与成员关系册说「它本身是单元」的嵌套成员，都从这里进。
+func (expansion *departureGateExpansion) object(ctx context.Context, object domain.CarriedObjectReference) (domain.GateFinding, error) {
+	if cell, formed := expansion.cells[object]; formed {
+		return cell, nil
+	}
+	membership, err := expansion.reader.deps.Members.MembersAt(ctx, ports.ConsolidationMembershipQuery{
+		TenantID: expansion.intent.tenant,
+		Object:   object,
+		At:       expansion.intent.at,
+	})
+	if err != nil {
+		cause := departureGateMembershipUnavailable
+		if errors.Is(err, ports.ErrConsolidationMembershipUntranslatable) {
+			cause = departureGateMembershipUntranslatable
+		}
+		return expansion.keep(domain.NewGateFinding(object, domain.GateUnreadable, "", []domain.GateBasis{{Cause: cause}}))
+	}
+	if !membership.Unit {
+		return expansion.parcel(ctx, object)
+	}
+	return expansion.unit(ctx, object, membership.Members)
+}
+
+// unit 按直接成员形成一件集运单元那一格。问不到关务的成员按缘由记进单元那一格的依据，各缘由所属的格由领域定。
+func (expansion *departureGateExpansion) unit(
+	ctx context.Context,
+	unit domain.CarriedObjectReference,
+	members []ports.ConsolidationMember,
+) (domain.GateFinding, error) {
+	expansion.onPath[unit] = true
+	defer delete(expansion.onPath, unit)
+
+	var cells []domain.GateFinding
+	named := map[domain.CarriedObjectReference]bool{}
+	sources := map[domain.ConsolidationMemberStop][]string{}
+	for _, member := range members {
+		switch member.Kind {
+		case ports.ConsolidationMemberParcel, ports.ConsolidationMemberUnit:
+			if named[member.Object] {
+				continue
+			}
+			if expansion.onPath[member.Object] {
+				sources[domain.ConsolidationMembershipCycle] = append(sources[domain.ConsolidationMembershipCycle], member.Object.String())
+				continue
+			}
+			ask := expansion.object
+			if member.Kind == ports.ConsolidationMemberParcel {
+				ask = expansion.parcel
+			}
+			cell, err := ask(ctx, member.Object)
+			if err != nil {
+				return domain.GateFinding{}, err
+			}
+			named[member.Object] = true
+			cells = append(cells, cell)
+		case ports.ConsolidationMemberIdentityUnresolved:
+			sources[domain.ConsolidationMemberIdentityUnresolved] = append(sources[domain.ConsolidationMemberIdentityUnresolved], member.Handling)
+		case ports.ConsolidationMemberIdentityUnreadable:
+			sources[domain.ConsolidationMemberIdentityUnreadable] = append(sources[domain.ConsolidationMemberIdentityUnreadable], member.Handling)
+		default:
+			// 成员落在封闭集外：那是适配器坏了，不是那一件读不动——记成一格只会把它藏起来。
+			return domain.GateFinding{}, fmt.Errorf("%w: member %q of %q", errConsolidationMemberMisshaped, member.Handling, unit)
+		}
+	}
+	var gaps []domain.ConsolidationMemberGap
+	for _, stop := range []domain.ConsolidationMemberStop{
+		domain.ConsolidationMemberIdentityUnresolved, domain.ConsolidationMemberIdentityUnreadable, domain.ConsolidationMembershipCycle,
+	} {
+		if len(sources[stop]) > 0 {
+			gaps = append(gaps, domain.ConsolidationMemberGap{Stop: stop, Sources: sources[stop]})
+		}
+	}
+	return expansion.keep(domain.FormConsolidationUnitGateFinding(unit, cells, gaps))
+}
+
+// parcel 按包裹问关务那一件。关务那一问没形成本上下文认得的答复时那一件记读不动，依据种类按救法分开（本文件头上的常量）。
+func (expansion *departureGateExpansion) parcel(ctx context.Context, object domain.CarriedObjectReference) (domain.GateFinding, error) {
+	if cell, formed := expansion.cells[object]; formed {
+		return cell, nil
+	}
+	finding, err := expansion.reader.deps.Customs.ReadDepartureGate(ctx, ports.DepartureGateQuery{
+		TenantID: expansion.intent.tenant,
+		Object:   object,
+		From:     expansion.from,
+		To:       expansion.to,
+		At:       expansion.intent.at,
+	})
+	if err != nil {
+		cause := departureGateCustomsUnavailable
+		if errors.Is(err, ports.ErrDepartureGateAnswerUntranslatable) {
+			cause = departureGateCustomsUntranslatable
+		}
+		return expansion.keep(domain.NewDepartureGateFinding(object, domain.DepartureGateUnreadable, "",
+			[]domain.DepartureGateBasis{{Cause: cause}}))
+	}
+	if finding.Object() != object {
+		// 端口答的是另一件、或交回零值却不报错：那是实现坏了，不是关务读不动，记成一格只会把它藏起来。
+		return domain.GateFinding{}, fmt.Errorf("%w: the customs view answered for %q when asked about %q",
+			errDepartureGateViewMisanswered, finding.Object(), object)
+	}
+	return expansion.keep(finding, nil)
+}
+
+func (expansion *departureGateExpansion) keep(finding domain.GateFinding, err error) (domain.GateFinding, error) {
+	if err != nil {
+		return domain.GateFinding{}, err
+	}
+	expansion.cells[finding.Object()] = finding
+	return finding, nil
 }

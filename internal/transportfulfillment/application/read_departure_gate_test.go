@@ -130,10 +130,36 @@ func (double *departureCustomsDouble) ReadDepartureGate(_ context.Context, query
 	return domain.NewDepartureGateFinding(query.Object, answer, judgement, []domain.DepartureGateBasis{basis})
 }
 
+// departureMembershipsDouble 按对象交回集运成员关系：units 里没有的对象不是单元；errors 里的对象答调用失败，untranslatable
+// 里的对象答译不回来。queries 记下每一问。
+type departureMembershipsDouble struct {
+	units          map[string][]ports.ConsolidationMember
+	errors         map[string]bool
+	untranslatable map[string]bool
+	queries        []ports.ConsolidationMembershipQuery
+}
+
+func (double *departureMembershipsDouble) MembersAt(
+	_ context.Context,
+	query ports.ConsolidationMembershipQuery,
+) (ports.ConsolidationMembership, error) {
+	double.queries = append(double.queries, query)
+	object := query.Object.String()
+	if double.errors[object] {
+		return ports.ConsolidationMembership{}, departureGateDown
+	}
+	if double.untranslatable[object] {
+		return ports.ConsolidationMembership{}, fmt.Errorf("adapter: %w", ports.ErrConsolidationMembershipUntranslatable)
+	}
+	members, unit := double.units[object]
+	return ports.ConsolidationMembership{Unit: unit, Members: members}, nil
+}
+
 type departureGateFixture struct {
-	segments  *departureSegmentsDouble
-	schedules *departureSchedulesDouble
-	customs   *departureCustomsDouble
+	segments    *departureSegmentsDouble
+	schedules   *departureSchedulesDouble
+	memberships *departureMembershipsDouble
+	customs     *departureCustomsDouble
 }
 
 func newDepartureGateFixture(t *testing.T, objects ...string) *departureGateFixture {
@@ -141,6 +167,9 @@ func newDepartureGateFixture(t *testing.T, objects ...string) *departureGateFixt
 	return &departureGateFixture{
 		segments:  departureSegments(t, "segment-1", objects...),
 		schedules: &departureSchedulesDouble{schedule: "schedule-1", registered: true},
+		memberships: &departureMembershipsDouble{
+			units: map[string][]ports.ConsolidationMember{}, errors: map[string]bool{}, untranslatable: map[string]bool{},
+		},
 		customs: &departureCustomsDouble{
 			answers: map[string]domain.DepartureGateAnswer{}, errors: map[string]bool{}, untranslatable: map[string]bool{},
 		},
@@ -152,6 +181,7 @@ func (fixture *departureGateFixture) reader(t *testing.T) *application.Departure
 	reader, err := application.NewDepartureGateReader(application.DepartureGateReadDeps{
 		Segments:  fixture.segments,
 		Schedules: fixture.schedules,
+		Members:   fixture.memberships,
 		Customs:   fixture.customs,
 	})
 	if err != nil {
@@ -336,8 +366,13 @@ func TestAMisansweringCustomsViewIsAnErrorAndMissingDependenciesAreRefused(t *te
 		t.Fatal("答非所问被记成了一格")
 	}
 	if _, err := application.NewDepartureGateReader(application.DepartureGateReadDeps{
-		Segments: fixture.segments, Schedules: fixture.schedules,
+		Segments: fixture.segments, Schedules: fixture.schedules, Members: fixture.memberships,
 	}); err == nil {
 		t.Fatal("缺关务那一口也装得起来")
+	}
+	if _, err := application.NewDepartureGateReader(application.DepartureGateReadDeps{
+		Segments: fixture.segments, Schedules: fixture.schedules, Customs: fixture.customs,
+	}); err == nil {
+		t.Fatal("缺集运成员关系那一口也装得起来")
 	}
 }

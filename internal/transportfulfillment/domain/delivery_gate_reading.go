@@ -146,6 +146,10 @@ func RehydrateDeliveryGateReading(spec DeliveryGateReadingSpec, recorded GateAns
 
 func formDeliveryGateReading(spec DeliveryGateReadingSpec) (DeliveryGateReading, error) {
 	stopped, asked := spec.Stop != DeliveryGateStopInvalid, spec.Finding.formed()
+	if _, unit := spec.Finding.ConsolidationUnit(); unit {
+		// 单元那一格指名的成员要在同一份读数里各有一格，这一种读数只装得下一格（ADR-0225 只展开出发读数）。
+		return DeliveryGateReading{}, ErrInvalidDeliveryGateReading
+	}
 	if stopped == asked {
 		return DeliveryGateReading{}, ErrInvalidDeliveryGateReading
 	}
