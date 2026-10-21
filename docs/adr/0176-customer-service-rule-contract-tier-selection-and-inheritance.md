@@ -1,6 +1,6 @@
 # ADR-0176：客户服务规则挂合同的一格按「合同优先解析 + 行级继承产品版」接入——同一范围产品版与合同版并存可解，消费侧按合同点核
 
-Status: Accepted（2026-10-08，经 `/grill-with-docs` 设计树四轮采访、用户逐问裁决；由票 party-commercial-customer-service-rule-contract-applicability/01「申请领域建模」引出。接受后对 ADR-0104 的承接线见本记录 Consequences 与 ADR-0104 的 Links 节前向指针）<!-- 索引注记 -->｜**合同优先判据**：有恰挂这份合同的版本就采纳它、行级无行继承产品版该行，没有才整体落产品版；「未尽事项以产品标准为准」是差异条款合同的通行形态，「整本替换」会让只改一处的合同失真。**适用场景**：同范围挂产品与挂合同的客户服务规则并存时的解析与 VE 索赔资格读取；闭包仍唯一采纳一版，「唯一适用」硬句不破。
+Status: Accepted（2026-10-08，经 `/grill-with-docs` 设计树四轮采访、用户逐问裁决；由票 party-commercial-customer-service-rule-contract-applicability/01「申请领域建模」引出。接受后对 ADR-0104 的承接线见本记录 Consequences 与 ADR-0104 的 Links 节前向指针。另：决定四「挂产品的版本不核」部分停用 [ADR-0104](./0104-customer-service-rule-content-is-owned-by-party-commercial-and-first-ships-two-items.md) 决定四一句里产品那一半，本记录正文没写，ADR-0268 认定（被停原句与适用场景见 ADR-0104 的 Status 行，指针 2026-10-21 补））<!-- 索引注记 -->｜**合同优先判据**：有恰挂这份合同的版本就采纳它、行级无行继承产品版该行，没有才整体落产品版；「未尽事项以产品标准为准」是差异条款合同的通行形态，「整本替换」会让只改一处的合同失真。**适用场景**：同范围挂产品与挂合同的客户服务规则并存时的解析与 VE 索赔资格读取；闭包仍唯一采纳一版，「唯一适用」硬句不破。｜**部分停用**（2026-10-21）：其决定二「底座版在层次读口内选「同范围挂服务产品、锚点生效」的版本，多候选照`适用冲突`纪律答。」一句，与决定四「VE 适配器点读后核「正文挂合同必须等于查询携带的」（原文折行续「合同」）一句里的比较对象，已由 [ADR-0268](./0268-a-contract-tier-service-rule-inherits-from-a-product-base-fixed-with-the-acceptance-time-closure.md) 停用——底座在接受时的同一次解析里选出、随闭包一并固定，已接受委托按闭包上固定的那一版读，多候选在解析时答`适用冲突`；VE 对拼进来的每份正文核其所挂合同等于同一份闭包采用的客户合同，不比查询携带的那一格。**适用场景**：决定二那句限闭包采纳挂合同那一版的已接受委托，合同版有行用合同版、无行取底座那一行的拼法不变；决定四那句只换比较对象，「挂产品的版本不核」与壳 ↔ 正文那一道不变；其余各条不变｜**部分停用**（指针 2026-10-21 补）：其决定五「若要改则按加 omitempty 键不换号的先例另核」一句，先由 [ADR-0177](./0177-customer-contract-names-its-customer-account-and-the-closure-narrows-by-it.md) 决定三对客户合同一册加 `customerAccount` 一键那一次显式偏离（必填键、摘要随之变、`PCC-1` 不换号），再由 [ADR-0267](./0267-a-key-added-to-an-already-canonicalized-body-is-a-shape-change-even-when-old-documents-stay-byte-identical.md) 停用——已接规范化的册正文加键（含可缺键）照 ADR-0014 换号，同号改形只在册上没有要回放的已存摘要时成立。**适用场景**：此后任何一册规范化文档的加键；决定五「PCC-1 一字不改」本身照旧成立，其余各条不变
 Date: 2026-10-08
 
 ## Context
@@ -89,3 +89,7 @@ VE 按行拼接：合同版有行用合同版，无行取底座版该行。拼�
 - [ADR-0080](./0080-commercial-closure-resolves-the-contract-first-and-keys-settlement-by-it.md)：两段解析纪律
 - [PC CONTEXT](../domain/party-commercial/CONTEXT.md)：客户服务规则词条与「唯一适用 / 适用冲突」硬句
 - [VE CONTEXT](../domain/visibility-exception/CONTEXT.md)：索赔资格按合同版本判断的硬句
+- [ADR-0136](./0136-claim-rule-resolution-key-is-the-acceptance-time-commercial-resolution-reference.md)：决定一、二按接受时固定的闭包读、读时没有`适用冲突`——ADR-0268 让本记录决定二的底座也照此固定
+- [ADR-0177](./0177-customer-contract-names-its-customer-account-and-the-closure-narrows-by-it.md)：后继——决定三显式偏离本记录决定五「若要改则按加 omitempty 键不换号的先例另核」，客户合同一册那一次
+- [ADR-0267](./0267-a-key-added-to-an-already-canonicalized-body-is-a-shape-change-even-when-old-documents-stay-byte-identical.md)：后继——部分停用决定五括注「若要改则按加 omitempty 键不换号的先例另核」一句
+- [ADR-0268](./0268-a-contract-tier-service-rule-inherits-from-a-product-base-fixed-with-the-acceptance-time-closure.md)：后继——部分停用决定二「底座版在层次读口内选……」一句与决定四比较对象那一半；认定决定四「挂产品的版本不核」部分停用 ADR-0104 决定四产品那一半

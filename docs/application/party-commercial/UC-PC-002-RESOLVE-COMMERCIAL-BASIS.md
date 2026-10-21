@@ -119,4 +119,6 @@
 
 计价目的的解析今天没有调用方：生产装配给 `domain.ResolveCommercialClosure` 的方案存续答复是 `nil`，问到即答`解析未决`（`BOUND_PLAN_NOT_CONFIRMED`）；ADR-0260 定按范围选卡、不补这一路的提供方，`AT-PC-035`、`AT-PC-036` 只在领域层钉住。
 
+客户服务规则采纳挂合同的那一版时，继承底座今天不在闭包里：解析只记采纳的那一版，底座在索赔时由层次读口按锚点现选，底座多候选到索赔时才报，也不过指名引用核对。规则不变（PC CONTEXT 客户服务规则那几条，[ADR-0268](../../adr/0268-a-contract-tier-service-rule-inherits-from-a-product-base-fixed-with-the-acceptance-time-closure.md) 决定一），缺口随 [code/61](../../../.scratch/docs-consistency/code/61-a-contract-tier-service-rule-reads-its-product-base-at-claim-time.md)。
+
 结果代数、两阶段顺序和提交前失效的领域契约另见 [`PN02-S01`](../../design/pn-02-synthetic-commercial-and-financial-control-development-handoff.md) 与 [`commercial_resolution_contract_test.go`](../../../internal/partycommercial/domain/commercial_resolution_contract_test.go)。
