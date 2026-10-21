@@ -175,6 +175,8 @@
 | `AT-NR-030` | internal/networkrouting/application/assess_parcel_reachability_test.go::TestAFormedJudgmentHandsOffOneIntentClaimedByItsCorrelation；internal/networkrouting/application/assess_parcel_reachability_test.go::TestFormedJudgmentTakesItsJudgmentTimeFromTheClockNotTheAsOf |
 | `AT-NR-031` | internal/networkrouting/domain/hard_constraint_test.go::TestACustomsRestrictionEliminatesOnlyItsCandidate |
 | `AT-NR-034` | internal/networkrouting/domain/offsite_pickup_reassessment_test.go::TestAPickupReviewChecksHardConstraintsOnlyAndNeverComparesThePlaceWithPlanNodes、::TestAnOffsitePickupTriggersAReassessmentWithoutEstablishingAControllableNode、::TestAPickupLeavesTheWholePlanUnexecuted（领域半边）；internal/networkrouting/application/offsite_pickup_reassessment_test.go::TestAPickupKeepsAPlanWhoseHardConstraintsStillHold；internal/networkrouting/adapters/parcelshipment/reassess_on_pickup_test.go::TestAnAdoptedOffsitePickupKeepsThePlanWhoseHardConstraintsHold（收寄采用一路）；cmd/parcel-dispatch/reassess_offsite_pickup_test.go::TestAnOffsitePickupKeepsThePlanOnTheDatabase |
+| `AT-NR-039` | internal/networkrouting/application/reassess_from_current_route_test.go::TestAfterALapseTheNextTriggerReassessesFromNoRoute（编排半边，失效之后那一格）；cmd/parcel-dispatch/reassess_after_lapse_test.go::TestAfterALapseTheNextTriggersReassessFromNoRouteOnTheDatabase（真库；生产接法上复核不取候选成本，归 demo-chain-gaps/115） |
+| `AT-NR-053` | internal/networkrouting/application/reassess_from_current_route_test.go::TestAfterALapseACompletedReviewFormsANewPlanVersion（编排半边；生产接法上复核不取候选成本，归 demo-chain-gaps/115） |
 | `AT-NR-064` | internal/networkrouting/adapters/transportfulfillment/reassess_on_handover_test.go::TestAHandoverIntoAPlannedNodeIsReassessedWithTheBaselineGeo、::TestAHandoverIntoAnUnplannedNodeLapsesThePlanAtThatNode；internal/networkrouting/adapters/parcelshipment/accepted_carried_geo_test.go::TestAnAcceptedParcelAnswersItsJudgmentKeyAndTheBaselineVersionsGeo（取投影半边）；cmd/parcel-dispatch/reassess_on_handover_test.go::TestAHandoverIntoANodeReassessesTheAcceptedParcelsRouteOnTheDatabase、::TestAHandoverIntoAnUnplannedNodeLapsesThePlanOnTheDatabase、::TestAHandoverReachesRouteReassessmentThroughTheProductionRoute、::TestAHandoverIntoSingaporeHubIsStillApplicableUnderTheDemoNetworkThroughTheProductionRoute；cmd/parcel-dispatch/assemble_test.go::TestARegisteredTransportHandoverReachesTheConsumerThroughTheRouteTable（路由表半边） |
 | `AT-NR-065` | internal/networkrouting/adapters/transportfulfillment/reassess_on_handover_test.go::TestHandoversThatDoNotEnterANodeSettleWithoutReassessment；cmd/parcel-dispatch/reassess_on_handover_test.go::TestHandoversThatAreNotAReassessmentTriggerSettleOnTheDatabase |
 | `AT-NR-066` | internal/networkrouting/adapters/transportfulfillment/reassess_on_handover_test.go::TestAHandoverOfAnObjectThatIsNotACurrentAcceptedParcelSettles；internal/networkrouting/adapters/parcelshipment/accepted_carried_geo_test.go::TestAnObjectThatIsNotACurrentAcceptedParcelAnswersNotFound（取投影半边）；cmd/parcel-dispatch/reassess_on_handover_test.go::TestHandoversThatAreNotAReassessmentTriggerSettleOnTheDatabase |
@@ -652,7 +654,6 @@
 | `AT-NR-036` | 当前有效实测仍满足原计划硬限制；策略版本已声明冻结形态 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-NR-037` | 原线路不再合格（有效硬限制或当前有效实测），包裹在当前可控节点上，存在替代候选且允许自动改路 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-NR-038` | 原计划失效且没有替代候选 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
-| `AT-NR-039` | 先前无路由，收寄后出现合格候选 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-NR-040` | 只有普通扫描或卸载，没有控制依据（复核编排答触发未受理） | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-NR-041` | 存在更优候选但已过冻结边界且原计划仍可执行 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-NR-042` | 候选可行但不满足自动改路条件 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
@@ -664,7 +665,6 @@
 | `AT-NR-048` | 结果提交成功但发布失败 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-NR-050` | 硬限制已证明原计划失效，但替代候选来源暂时不可用 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-NR-052` | 原计划失效，候选评估确认没有合格候选 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
-| `AT-NR-053` | 原计划失效，候选评估未决后补齐并找到合格候选 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-PC-016` | 发布提交成功但事件投递失败 | UC-PC-001-MAINTAIN-AND-PUBLISH-COMMERCIAL-AUTHORITY.md |
 | `AT-PP-013` | 在用 `SELL` 卡自带体积系数、金额取整与汇率序列，同范围销售价格政策另有口径；评价只按卡上的条款算（ADR-0260） | UC-PP-001-FORM-ESTIMATE-EVALUATIONS.md |
 | `AT-PP-016` | 免复核来源的代写复核不读参考复核职责规则，规则未登记照常进在用；登记者等于连接器身份答 `NEEDS_ANOTHER_REVIEWER`（ADR-0262；行为已对、缺 Covers 点名） | UC-PP-001-FORM-ESTIMATE-EVALUATIONS.md |
