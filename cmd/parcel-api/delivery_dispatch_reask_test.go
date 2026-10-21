@@ -349,7 +349,8 @@ func (trigger failingFor) Trigger(ctx context.Context, command tfapp.TriggerDeli
 }
 
 // Covers: AT-TF-293（ADR-0230 决定四）——按册重问问到某一件给不出答复：整口答 500 没形成答案，停在那一件；排在它前面的那一件已各自
-// 提交——任务落了、册上了结；它自己与后面的仍待形成。再按一次从册上仍待形成的接着问。
+// 提交——任务落了、册上了结；它自己与后面的仍待形成，但它另起一笔事务记下了这一次问过、排到队尾。它仍给不出答复时再按一次，先问到
+// 后面那一件并形成，再停在它身上；它好了之后再按一次就形成。
 func TestAReaskThatHitsAnUnanswerableEntryKeepsWhatItAlreadyCommitted(t *testing.T) {
 	rig := newReaskRig(t)
 	rig.owners.change(func(owners *taskReferenceOwners) { owners.placeMissing = true })
@@ -385,12 +386,20 @@ func TestAReaskThatHitsAnUnanswerableEntryKeepsWhatItAlreadyCommitted(t *testing
 		t.Fatalf("任务 = %d 项, want 1——排在前面的那一件已提交", rows)
 	}
 	if listed := rig.pendingListed(t); strings.Join(listed, ";") !=
-		reaskSegment+"/SYN-PARCEL-70-I/DELIVERY_PLACE;"+reaskSegment+"/SYN-PARCEL-70-J/DELIVERY_PLACE" {
-		t.Fatalf("查阅页列出 %v, want 给不出答复的那一件与后面那一件仍待形成", listed)
+		reaskSegment+"/SYN-PARCEL-70-J/DELIVERY_PLACE;"+reaskSegment+"/SYN-PARCEL-70-I/DELIVERY_PLACE" {
+		t.Fatalf("查阅页列出 %v, want 后面那一件在前、给不出答复的那一件排到队尾，都仍待形成", listed)
+	}
+
+	if status, answer := serveReaskOperator(t, endpoint, http.MethodPost, "/transport-fulfillment-delivery-dispatch-reasks",
+		`{"scope":"ALL","limit":10}`); status != http.StatusInternalServerError {
+		t.Fatalf("它仍给不出答复时再按一次：答 %d %v, want 500", status, answer)
+	}
+	if rows := rig.taskRows(t); rows != 2 {
+		t.Fatalf("任务 = %d 项, want 2——排在它后面的 SYN-PARCEL-70-J 这一次先问到并形成", rows)
 	}
 
 	_, items, _ := rig.reaskWith(t, `{"scope":"ALL","limit":10}`)
-	if len(items) != 2 || items[0].Outcome != "DISPATCH_TASK_FORMED" || items[1].Outcome != "DISPATCH_TASK_FORMED" {
-		t.Fatalf("换回真执行器再按一次 = %+v, want 两件都形成", items)
+	if len(items) != 1 || items[0].Object != "SYN-PARCEL-70-I" || items[0].Outcome != "DISPATCH_TASK_FORMED" {
+		t.Fatalf("换回真执行器再按一次 = %+v, want 只剩 SYN-PARCEL-70-I 并形成", items)
 	}
 }

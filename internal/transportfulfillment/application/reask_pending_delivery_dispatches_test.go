@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -53,7 +54,8 @@ func (fixture *dispatchTriggerFixture) reask(
 	result, err := application.NewReaskPendingDeliveryDispatchesHandler(application.ReaskPendingDeliveryDispatchesDeps{
 		Pending:  fixture.pending,
 		Cadences: cadences,
-		Trigger:  fixture.handler(),
+		Trigger:  fixture.trigger(),
+		Failed:   fixture.pending,
 		Clock:    handoverClock{at: reaskAt},
 	}).Reask(t.Context(), application.ReaskPendingDeliveryDispatchesCommand{
 		TenantID: value(t, domain.NewTenantID, "tenant-1"), Scope: scope, Limit: limit,
@@ -189,7 +191,8 @@ func TestReaskRefusesBadInputAndNamesTheRegisterItCannotRead(t *testing.T) {
 	} {
 		command.TenantID = value(t, domain.NewTenantID, "tenant-1")
 		result, err := application.NewReaskPendingDeliveryDispatchesHandler(application.ReaskPendingDeliveryDispatchesDeps{
-			Pending: fixture.pending, Cadences: cadenceReaderStub{}, Trigger: fixture.handler(), Clock: handoverClock{at: reaskAt},
+			Pending: fixture.pending, Cadences: cadenceReaderStub{}, Trigger: fixture.handler(), Failed: fixture.pending,
+			Clock: handoverClock{at: reaskAt},
 		}).Reask(t.Context(), command)
 		if err != nil || result.Outcome() != application.ReaskNotAccepted {
 			t.Errorf("%s：%s err=%v, want INPUT_NOT_ACCEPTED", name, result.Outcome(), err)
@@ -200,7 +203,8 @@ func TestReaskRefusesBadInputAndNamesTheRegisterItCannotRead(t *testing.T) {
 		t.Errorf("间隔册读不动 = %s %s", result.Outcome(), result.UndecidedReason())
 	}
 	result, err := application.NewReaskPendingDeliveryDispatchesHandler(application.ReaskPendingDeliveryDispatchesDeps{
-		Pending: failingQueue{}, Cadences: cadenceReaderStub{}, Trigger: fixture.handler(), Clock: handoverClock{at: reaskAt},
+		Pending: failingQueue{}, Cadences: cadenceReaderStub{}, Trigger: fixture.handler(), Failed: fixture.pending,
+		Clock: handoverClock{at: reaskAt},
 	}).Reask(t.Context(), application.ReaskPendingDeliveryDispatchesCommand{
 		TenantID: value(t, domain.NewTenantID, "tenant-1"), Scope: application.ReaskAllPending, Limit: 10,
 	})
@@ -270,5 +274,70 @@ func TestUndecidedEntriesDoNotHoldTheHeadOfTheReaskQueue(t *testing.T) {
 	items := second.Items()
 	if len(items) != 2 || items[0].Object.String() != "parcel-3" || items[0].Answer.Outcome() != application.DeliveryDispatchTaskFormed {
 		t.Fatalf("第二次重问 = %v, want 先问到 parcel-3 并形成", items)
+	}
+}
+
+// failingTriggerFor 包着执行器：对指名的那一件不交答复、只交错误，其余照执行器答。
+type failingTriggerFor struct {
+	inner  application.DeliveryDispatchTrigger
+	object string
+}
+
+func (trigger failingTriggerFor) Trigger(
+	ctx context.Context, command application.TriggerDeliveryDispatchCommand,
+) (application.TriggerDeliveryDispatchResult, error) {
+	if command.Object == trigger.object {
+		return application.TriggerDeliveryDispatchResult{}, errors.New("executor gave no answer")
+	}
+	return trigger.inner.Trigger(ctx, command)
+}
+
+// Covers: AT-TF-293（ADR-0230 决定四）——某一件执行器给不出答复：整口交回带段与对象的错误，前面那一件已形成；给不出答复的那一件
+// 另记一次问过、排到队尾，再按一次先问到它后面的那一件，不被它卡住。装配没交 Failed 时这一口不问。
+func TestAnUnanswerableEntryIsMovedBehindTheOthers(t *testing.T) {
+	fixture := newDispatchTriggerFixture(t)
+	for _, object := range []string{"parcel-1", "parcel-2", "parcel-3"} {
+		action := ""
+		if object == "parcel-1" {
+			action = "FINAL_DELIVERY"
+		}
+		fixture.enterByHandover(t, object, action, handoverJudgedTime)
+	}
+	fixture.conditions.resolution = ports.RequirementMissing
+	for index, object := range []string{"parcel-1", "parcel-2", "parcel-3"} {
+		fixture.triggerAt(t, object, deliveryTriggeredAt.Add(time.Duration(index)*time.Minute))
+	}
+	fixture.conditions.resolution = ports.RequirementResolved
+	fixture.failObject = "parcel-2"
+
+	handler := func(failed application.ReaskFailureMarker) *application.ReaskPendingDeliveryDispatchesHandler {
+		return application.NewReaskPendingDeliveryDispatchesHandler(application.ReaskPendingDeliveryDispatchesDeps{
+			Pending: fixture.pending, Cadences: cadenceReaderStub{}, Trigger: fixture.trigger(), Failed: failed,
+			Clock: handoverClock{at: reaskAt},
+		})
+	}
+	command := application.ReaskPendingDeliveryDispatchesCommand{
+		TenantID: value(t, domain.NewTenantID, "tenant-1"), Scope: application.ReaskAllPending, Limit: 10,
+	}
+	if _, err := handler(nil).Reask(t.Context(), command); !errors.Is(err, application.ErrReaskFailureMarkerNotWired) {
+		t.Fatalf("没交 Failed：err = %v, want ErrReaskFailureMarkerNotWired", err)
+	}
+
+	_, err := handler(fixture.pending).Reask(t.Context(), command)
+	if err == nil || !strings.Contains(err.Error(), "segment-1/parcel-2") {
+		t.Fatalf("第一次重问 err = %v, want 点名 segment-1/parcel-2", err)
+	}
+	if row := fixture.pendingRow(t, "parcel-1"); row.State != ports.DeliveryDispatchPendingFormed {
+		t.Fatalf("排在前面的 parcel-1 = %+v, want 已形成", row)
+	}
+	if row := fixture.pendingRow(t, "parcel-2"); row.State != ports.DeliveryDispatchPending || !row.LastAskedAt.Equal(reaskAt) {
+		t.Fatalf("给不出答复的 parcel-2 = %+v, want 仍待形成、记下这一次问过", row)
+	}
+
+	if _, err := handler(fixture.pending).Reask(t.Context(), command); err == nil {
+		t.Fatal("parcel-2 仍给不出答复，第二次重问却没报错")
+	}
+	if row := fixture.pendingRow(t, "parcel-3"); row.State != ports.DeliveryDispatchPendingFormed {
+		t.Fatalf("排在后面的 parcel-3 = %+v, want 第二次重问先问到它并形成", row)
 	}
 }

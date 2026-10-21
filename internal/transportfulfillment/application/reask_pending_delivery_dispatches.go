@@ -2,6 +2,8 @@ package application
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -140,12 +142,22 @@ func (result ReaskPendingDeliveryDispatchesResult) Items() []ReaskedDeliveryDisp
 // Remaining 是这一次没问到的件数：问之前按同一个筛法数出的待形成件数，减去这一次问到的。大于零就是件数上限截住了，再按一次接着问。
 func (result ReaskPendingDeliveryDispatchesResult) Remaining() int { return result.remaining }
 
+// ReaskFailureMarker 给一件记下「这一次问过」，自成一笔事务。按册重问只在执行器对那一件给不出答复时调它：那一拍的事务已整笔回滚，
+// 执行器里的那一笔「问过」也跟着没了，不另记一次，那一件就一直停在队头。
+type ReaskFailureMarker interface {
+	MarkAsked(ctx context.Context, key ports.DeliveryDispatchPendingKey, at time.Time) error
+}
+
+// ErrReaskFailureMarkerNotWired 说明装配没交 Failed：缺了它，一件持续给不出答复的派送会让每一次重问都停在它身上。
+var ErrReaskFailureMarkerNotWired = errors.New("transport fulfillment: reask failure marker is not wired")
+
 // ReaskPendingDeliveryDispatchesDeps 全部必备。Trigger 是派送发起执行器，装配点交的那一只每问一件自成一笔事务：一件写不动只回滚
-// 那一件，已问过的各件留在册上。
+// 那一件，已问过的各件留在册上。Failed 是另起一笔事务的「问过」记录口，见 ReaskFailureMarker。
 type ReaskPendingDeliveryDispatchesDeps struct {
 	Pending  ports.DeliveryDispatchPendingQueue
 	Cadences ports.DeliveryDispatchReaskCadenceReader
 	Trigger  DeliveryDispatchTrigger
+	Failed   ReaskFailureMarker
 	Clock    ports.Clock
 }
 
@@ -164,12 +176,16 @@ func NewReaskPendingDeliveryDispatchesHandler(deps ReaskPendingDeliveryDispatche
 	return &ReaskPendingDeliveryDispatchesHandler{deps: deps}
 }
 
-// Reask 问一次：受理 → 问到期的先取间隔（没登记答未配置）→ 列册 → 逐件交执行器。某一件执行器给不出答复（错误）就停在那一件交回
-// 错误：前面各件已各自提交，原样再按一次从册上仍待形成的接着问。
+// Reask 问一次：受理 → 问到期的先取间隔（没登记答未配置）→ 列册 → 逐件交执行器。某一件执行器给不出答复（错误）就停在那一件，交回
+// 带段与对象的错误：前面各件已各自提交；那一件另起一笔事务记下这一次问过、排到队尾，再按一次先问后面的。那一笔也记不下（库面整个
+// 读写不动）时，它仍停在查阅页队头，修好之前每一次重问都会先停在它身上。
 func (handler *ReaskPendingDeliveryDispatchesHandler) Reask(
 	ctx context.Context,
 	command ReaskPendingDeliveryDispatchesCommand,
 ) (ReaskPendingDeliveryDispatchesResult, error) {
+	if handler.deps.Failed == nil {
+		return ReaskPendingDeliveryDispatchesResult{}, ErrReaskFailureMarkerNotWired
+	}
 	if strings.TrimSpace(command.TenantID.String()) == "" || command.Scope == ReaskScopeInvalid ||
 		command.Limit < 1 || command.Limit > MaxReaskBatch {
 		return ReaskPendingDeliveryDispatchesResult{outcome: ReaskNotAccepted}, nil
@@ -202,7 +218,9 @@ func (handler *ReaskPendingDeliveryDispatchesHandler) Reask(
 			OccurredAt: result.askedAt,
 		})
 		if err != nil {
-			return ReaskPendingDeliveryDispatchesResult{}, err
+			marked := handler.deps.Failed.MarkAsked(ctx, entry.Key, result.askedAt)
+			return ReaskPendingDeliveryDispatchesResult{}, fmt.Errorf("reask delivery dispatch %s/%s: %w",
+				entry.Key.Segment, entry.Key.Object, errors.Join(err, marked))
 		}
 		result.items = append(result.items, ReaskedDeliveryDispatch{Segment: entry.Key.Segment, Object: entry.Key.Object, Answer: answer})
 	}

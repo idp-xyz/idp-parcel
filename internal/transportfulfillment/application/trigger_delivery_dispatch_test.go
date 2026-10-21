@@ -91,6 +91,8 @@ type dispatchTriggerFixture struct {
 	conditions *deliveryConditionStub
 	pending    *pendingRegisterDouble
 	deps       application.TriggerDeliveryDispatchDeps
+	// failObject 非空时，trigger() 交回的执行器对这一件不交答复、只交错误。
+	failObject string
 }
 
 func newDispatchTriggerFixture(t *testing.T) *dispatchTriggerFixture {
@@ -117,6 +119,14 @@ func newDispatchTriggerFixture(t *testing.T) *dispatchTriggerFixture {
 
 func (fixture *dispatchTriggerFixture) handler() *application.TriggerDeliveryDispatchHandler {
 	return application.NewTriggerDeliveryDispatchHandler(fixture.deps)
+}
+
+// trigger 是按册重问用的执行器：照 handler()，failObject 指名的那一件交错误。
+func (fixture *dispatchTriggerFixture) trigger() application.DeliveryDispatchTrigger {
+	if fixture.failObject == "" {
+		return fixture.handler()
+	}
+	return failingTriggerFor{inner: fixture.handler(), object: fixture.failObject}
 }
 
 // enterByHandover 让一个对象凭`已交接`进入 segment-1；首个对象成立段时随带服务动作声明。

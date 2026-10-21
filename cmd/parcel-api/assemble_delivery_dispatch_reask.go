@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"time"
 
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -10,6 +11,7 @@ import (
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	tfapp "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
+	tfports "go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
 // buildDeliveryDispatchReask 装配 `/transport-fulfillment-delivery-dispatch-reasks` 背后的按册重问（ADR-0230 决定四、五）。执行器
@@ -38,8 +40,24 @@ func deliveryDispatchReaskOver(db *bentopg.DB, trigger tfapp.DeliveryDispatchTri
 		Pending:  pendings,
 		Cadences: cadences,
 		Trigger:  trigger,
+		Failed:   transactionalReaskFailureMarker{transactor: db.Transactor(), pendings: pendings},
 		Clock:    systemClock{},
 	}), nil
+}
+
+// transactionalReaskFailureMarker 给执行器给不出答复的那一件另起一笔事务记下「这一次问过」：那一拍自己的事务已整笔回滚，这一笔
+// 与它无关，提交了那一件就排到队尾。
+type transactionalReaskFailureMarker struct {
+	transactor bentoapp.Transactor
+	pendings   *tfpostgres.DeliveryDispatchPendings
+}
+
+var _ tfapp.ReaskFailureMarker = transactionalReaskFailureMarker{}
+
+func (marker transactionalReaskFailureMarker) MarkAsked(ctx context.Context, key tfports.DeliveryDispatchPendingKey, at time.Time) error {
+	return marker.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		return marker.pendings.MarkAsked(txCtx, key, at)
+	})
 }
 
 // transactionalReaskCadenceRegistrar 把每次重问间隔登记包进一笔事务，理由随 transactionalPreAdviceWindowRegistrar：登记册的写口按

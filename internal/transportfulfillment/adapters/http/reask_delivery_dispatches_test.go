@@ -33,6 +33,12 @@ func (noCadence) CurrentCadence(context.Context, domain.TenantID) (ports.Deliver
 	return ports.DeliveryDispatchReaskCadenceRecord{}, false, nil
 }
 
+type noMarker struct{}
+
+func (noMarker) MarkAsked(context.Context, ports.DeliveryDispatchPendingKey, time.Time) error {
+	return nil
+}
+
 type unreachableTrigger struct{ t *testing.T }
 
 func (trigger unreachableTrigger) Trigger(context.Context, application.TriggerDeliveryDispatchCommand) (application.TriggerDeliveryDispatchResult, error) {
@@ -43,7 +49,7 @@ func (trigger unreachableTrigger) Trigger(context.Context, application.TriggerDe
 func reaskEndpoint(t *testing.T, intake tfhttp.DeliveryDispatchReaskIntake) http.Handler {
 	t.Helper()
 	return tfhttp.NewReaskDeliveryDispatchesEndpoint(intake, application.NewReaskPendingDeliveryDispatchesHandler(application.ReaskPendingDeliveryDispatchesDeps{
-		Pending: emptyPendingQueue{}, Cadences: noCadence{}, Trigger: unreachableTrigger{t: t},
+		Pending: emptyPendingQueue{}, Cadences: noCadence{}, Trigger: unreachableTrigger{t: t}, Failed: noMarker{},
 		Clock: tfClock{at: time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)},
 	}))
 }
