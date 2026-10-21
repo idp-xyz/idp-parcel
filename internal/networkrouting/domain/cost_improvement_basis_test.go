@@ -16,13 +16,27 @@ func pricedFact(t *testing.T, candidate string, amount int64, currency string) d
 	return fact
 }
 
-// Covers: ADR-0173 决定一——成本改善严格大于已登记阈值才够格；够格时交回的改善依据带被替代计划成本、新计划成本、币种与阈值。
+func legCitation(t *testing.T, ordinal int) domain.PlannedLegCostCitation {
+	t.Helper()
+	citation, err := domain.NewPlannedLegCostCitation(domain.PlannedLegCostCitationSpec{
+		Ordinal: ordinal, EvaluationID: "EST-current", PlanReference: "PLAN-COST/v1",
+		ComparisonAmount: "21", ComparisonCurrency: "CNY",
+	})
+	if err != nil {
+		t.Fatalf("leg citation: %v", err)
+	}
+	return citation
+}
+
+// Covers: AT-NR-085、ADR-0173 决定一——成本改善严格大于已登记阈值才够格；够格时交回的改善依据带被替代计划成本、新计划成本、
+// 币种、阈值，与被替代那一侧这次取到的逐段出处。
 func TestACostImprovementQualifiesOnlyWhenStrictlyOverTheThreshold(t *testing.T) {
 	current := pricedFact(t, "candidate-current", 4200, "CNY")
 	next := pricedFact(t, "candidate-next", 3100, "CNY")
 
 	threshold := 1000
-	basis, over := domain.JudgeCostImprovement(current, next, &threshold)
+	citations := []domain.PlannedLegCostCitation{legCitation(t, 1), legCitation(t, 2)}
+	basis, over := domain.JudgeCostImprovement(current, next, &threshold, citations)
 	if !over {
 		t.Fatal("改善 1100 分、阈值 1000 分，应够格")
 	}
@@ -30,24 +44,27 @@ func TestACostImprovementQualifiesOnlyWhenStrictlyOverTheThreshold(t *testing.T)
 		basis.Currency() != "CNY" || basis.ThresholdMinor() != 1000 || basis.ImprovementMinor() != 1100 {
 		t.Fatalf("basis = %+v", basis)
 	}
+	if got := basis.SupersededCostCitations(); len(got) != 2 || got[0].EvaluationID() != "EST-current" {
+		t.Fatalf("被替代那一侧的出处 = %+v, want 两段", got)
+	}
 
 	equal := 1100
-	if _, over := domain.JudgeCostImprovement(current, next, &equal); over {
+	if _, over := domain.JudgeCostImprovement(current, next, &equal, nil); over {
 		t.Fatal("改善恰等于阈值不得够格：严格大于才切换")
 	}
-	if _, over := domain.JudgeCostImprovement(current, next, nil); over {
+	if _, over := domain.JudgeCostImprovement(current, next, nil, nil); over {
 		t.Fatal("阈值没登记不得够格")
 	}
 	zero := 0
-	if _, over := domain.JudgeCostImprovement(current, pricedFact(t, "candidate-next", 3100, "SGD"), &zero); over {
+	if _, over := domain.JudgeCostImprovement(current, pricedFact(t, "candidate-next", 3100, "SGD"), &zero, nil); over {
 		t.Fatal("币种不同比不出，不得够格")
 	}
-	if _, over := domain.JudgeCostImprovement(next, current, &zero); over {
+	if _, over := domain.JudgeCostImprovement(next, current, &zero, nil); over {
 		t.Fatal("新候选更贵不是改善")
 	}
 }
 
-// Covers: 改善依据的构造门——读回在册依据也过这一道，改善不超过阈值或金额、阈值、币种不成形都拒。
+// Covers: AT-NR-085 改善依据的构造门——读回在册依据也过这一道，改善不超过阈值，或金额、阈值、币种、出处不成形都拒。
 func TestACostImprovementBasisRefusesWhatCouldNotHaveSwitched(t *testing.T) {
 	valid := domain.CostImprovementBasisSpec{
 		SupersededCostMinor: 4200, SuccessorCostMinor: 3100, Currency: "CNY", ThresholdMinor: 1000,
@@ -67,6 +84,12 @@ func TestACostImprovementBasisRefusesWhatCouldNotHaveSwitched(t *testing.T) {
 		"被替代成本为负": func(spec *domain.CostImprovementBasisSpec) { spec.SupersededCostMinor = -1 },
 		"新计划成本为负": func(spec *domain.CostImprovementBasisSpec) { spec.SuccessorCostMinor = -1 },
 		"阈值为负":    func(spec *domain.CostImprovementBasisSpec) { spec.ThresholdMinor = -1 },
+		"出处段号重复": func(spec *domain.CostImprovementBasisSpec) {
+			spec.SupersededCostCitations = []domain.PlannedLegCostCitation{legCitation(t, 1), legCitation(t, 1)}
+		},
+		"出处不成形": func(spec *domain.CostImprovementBasisSpec) {
+			spec.SupersededCostCitations = []domain.PlannedLegCostCitation{{}}
+		},
 	} {
 		spec := valid
 		mutate(&spec)

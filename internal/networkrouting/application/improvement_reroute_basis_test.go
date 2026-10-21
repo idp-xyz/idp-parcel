@@ -11,8 +11,8 @@ import (
 // 本文件钉仍适用线上改善改路形成的复核记录带什么依据（票 docs-consistency/code/53）：`已改路`的依据是失效依据或改善依据，
 // 恰有其一，复核册的逐结论 CHECK 同此。阈值是本测试交入的租户取值，不是产品默认。
 
-// improvementFixture 预置原计划仍可执行、冻结形态已声明且未越过边界、另有一条更便宜候选的前提：原计划所选 candidate-1
-// 1000 分，candidate-2 100 分，改善 900 分。
+// improvementFixture 预置原计划仍可执行、包裹在当前可控节点上、冻结形态已声明且未越过边界、另有一条更便宜候选的前提：
+// 取数侧给原计划所选 candidate-1 出 1000 分、candidate-2 出 100 分，各带一段出处，改善 900 分。
 func improvementFixture(t *testing.T, threshold int) *reassessFixture {
 	t.Helper()
 	fixture := newReassessFixture(t)
@@ -23,11 +23,13 @@ func improvementFixture(t *testing.T, threshold int) *reassessFixture {
 	evidence.FreezeForm = domain.RemainingSegmentCountFreeze
 	evidence.FreezeRemainingSegmentLimit = &limit
 	fixture.evidence.byParcel["parcel-1"] = evidence
+	fixture.costs.answer = pricedBySource(t)
 	return fixture
 }
 
-// Covers: ADR-0173 决定一——改善严格大于阈值时自动切换，复核记录不带失效依据，带改善依据：被替代计划成本、新计划成本、
-// 比较所用币种与阈值；候选评估记有候选（落得过复核册「`已改路`必有候选评估状态」那一条）。
+// Covers: AT-NR-085（编排半边）——改善严格大于阈值时自动切换，复核记录不带失效依据，带改善依据：被替代计划成本、新计划
+// 成本、比较所用币种与阈值，以及被替代计划所选候选这次取到的出处；新计划只带它自己的出处；候选评估记有候选（落得过复核册
+// 「`已改路`必有候选评估状态」那一条）。
 func TestAnImprovementRerouteRecordsItsImprovementBasis(t *testing.T) {
 	fixture := improvementFixture(t, 500)
 
@@ -50,12 +52,16 @@ func TestAnImprovementRerouteRecordsItsImprovementBasis(t *testing.T) {
 		basis.Currency() != "CNY" || basis.ThresholdMinor() != 500 {
 		t.Fatalf("改善依据 = %+v, want 1000 → 100、CNY、阈值 500", basis)
 	}
+	if cited := basis.SupersededCostCitations(); len(cited) != 1 || cited[0].EvaluationID() != "EST-candidate-1-1" {
+		t.Fatalf("被替代那一侧的出处 = %+v, want candidate-1 这次那一段", cited)
+	}
+	assertCitesOnly(t, record.NewPlan, "candidate-2")
 	if !record.HasNewPlan || record.NewPlan.SelectedCandidate().String() != "candidate-2" || !record.HasDecision {
 		t.Fatalf("新计划选中 %s、决定 %v, want candidate-2 与自动决定", record.NewPlan.SelectedCandidate(), record.HasDecision)
 	}
 }
 
-// Covers: 改善恰等于阈值不切换：仍适用、原计划保留，记录不带改善依据，也不碰适用性。
+// Covers: AT-NR-085 末句——改善恰等于阈值不切换：仍适用、原计划保留，记录不带改善依据，也不碰适用性。
 func TestAnImprovementAtTheThresholdKeepsThePlanWithoutABasis(t *testing.T) {
 	fixture := improvementFixture(t, 900)
 

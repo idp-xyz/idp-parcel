@@ -11,7 +11,8 @@ import (
 // 本文件对真实 PostgreSQL 证仍适用线上改善改路那一行的落库形状（票 docs-consistency/code/53）：`已改路`的依据是失效依据
 // 或改善依据，恰有其一；改善依据整份往返，读回时重走领域构造门。
 
-// improvementReroutedRecord 造一份仍适用线上的`已改路`记录：被复核计划仍可执行，没有失效依据，改善依据点名两份成本与阈值。
+// improvementReroutedRecord 造一份仍适用线上的`已改路`记录：被复核计划仍可执行，没有失效依据，改善依据点名两份成本、阈值
+// 与被替代那一侧的一段出处。
 func improvementReroutedRecord(
 	t *testing.T,
 	key domain.InitialRouteJudgmentKey,
@@ -20,8 +21,16 @@ func improvementReroutedRecord(
 	t.Helper()
 	record := reroutedRecord(t, key, correlation)
 	record.LapseBasis = domain.ApplicabilityBasisReference{}
+	citation, err := domain.NewPlannedLegCostCitation(domain.PlannedLegCostCitationSpec{
+		Ordinal: 1, EvaluationID: "EST-RPV-0001-1", PlanReference: "PLAN-COST/v1",
+		PolicyReference: "POLICY-1", HasPolicy: true, ComparisonAmount: "42.00", ComparisonCurrency: "CNY",
+	})
+	if err != nil {
+		t.Fatalf("段出处：%v", err)
+	}
 	basis, err := domain.NewCostImprovementBasis(domain.CostImprovementBasisSpec{
 		SupersededCostMinor: 4200, SuccessorCostMinor: 3100, Currency: "CNY", ThresholdMinor: 1000,
+		SupersededCostCitations: []domain.PlannedLegCostCitation{citation},
 	})
 	if err != nil {
 		t.Fatalf("改善依据：%v", err)
@@ -31,8 +40,8 @@ func improvementReroutedRecord(
 	return record
 }
 
-// Covers: ADR-0173 决定一——冻结未越过、改善超过阈值时那一行`已改路`落得了库：不带失效依据，带改善依据、新计划与自动改路
-// 决定，过逐结论 CHECK；读回时改善依据四格不变形。
+// Covers: AT-NR-085（复核册半边）——冻结未越过、改善超过阈值时那一行`已改路`落得了库：不带失效依据，带改善依据、新计划与
+// 自动改路决定，过逐结论 CHECK；读回时改善依据各格与出处不变形。
 func TestAnImprovementRerouteRoundTripsWithItsImprovementBasis(t *testing.T) {
 	_, reassessments, transactor, _ := newRouteStores(t)
 	ctx := t.Context()
@@ -57,6 +66,15 @@ func TestAnImprovementRerouteRoundTripsWithItsImprovementBasis(t *testing.T) {
 	if basis.SupersededCostMinor() != 4200 || basis.SuccessorCostMinor() != 3100 ||
 		basis.Currency() != "CNY" || basis.ThresholdMinor() != 1000 {
 		t.Fatalf("改善依据往返变形：%+v", basis)
+	}
+	cited := basis.SupersededCostCitations()
+	if len(cited) != 1 || cited[0].Ordinal() != 1 || cited[0].EvaluationID() != "EST-RPV-0001-1" ||
+		cited[0].PlanReference() != "PLAN-COST/v1" || cited[0].ComparisonAmount() != "42.00" ||
+		cited[0].ComparisonCurrency() != "CNY" {
+		t.Fatalf("被替代那一侧的出处往返变形：%+v", cited)
+	}
+	if policy, stated := cited[0].PolicyReference(); !stated || policy != "POLICY-1" {
+		t.Fatalf("出处的政策引用往返变形：%q %v", policy, stated)
 	}
 }
 

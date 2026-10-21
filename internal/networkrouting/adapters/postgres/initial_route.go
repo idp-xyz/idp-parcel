@@ -289,6 +289,26 @@ func rowsOfCostCitations(citations []domain.PlannedLegCostCitation) []costCitati
 	return rows
 }
 
+func costCitationsOfRows(rows []costCitationRow) ([]domain.PlannedLegCostCitation, error) {
+	citations := make([]domain.PlannedLegCostCitation, 0, len(rows))
+	for _, stored := range rows {
+		citation, err := domain.NewPlannedLegCostCitation(domain.PlannedLegCostCitationSpec{
+			Ordinal:            stored.Ordinal,
+			EvaluationID:       stored.EvaluationID,
+			PlanReference:      stored.PlanReference,
+			PolicyReference:    stored.PolicyReference,
+			HasPolicy:          stored.PolicyReference != "",
+			ComparisonAmount:   stored.ComparisonAmount,
+			ComparisonCurrency: stored.ComparisonCurrency,
+		})
+		if err != nil {
+			return nil, err
+		}
+		citations = append(citations, citation)
+	}
+	return citations, nil
+}
+
 func rowOfNoRoute(judgment domain.NoCurrentRouteJudgment) noRouteRow {
 	return noRouteRow{
 		Candidates:   rowsOfCandidates(judgment.Candidates()),
@@ -331,21 +351,9 @@ func rebuildPlan(key domain.InitialRouteJudgmentKey, data []byte) (domain.Initia
 	if err != nil {
 		return domain.InitialRoutePlan{}, err
 	}
-	citations := make([]domain.PlannedLegCostCitation, 0, len(row.CostCitations))
-	for _, stored := range row.CostCitations {
-		citation, err := domain.NewPlannedLegCostCitation(domain.PlannedLegCostCitationSpec{
-			Ordinal:            stored.Ordinal,
-			EvaluationID:       stored.EvaluationID,
-			PlanReference:      stored.PlanReference,
-			PolicyReference:    stored.PolicyReference,
-			HasPolicy:          stored.PolicyReference != "",
-			ComparisonAmount:   stored.ComparisonAmount,
-			ComparisonCurrency: stored.ComparisonCurrency,
-		})
-		if err != nil {
-			return domain.InitialRoutePlan{}, err
-		}
-		citations = append(citations, citation)
+	citations, err := costCitationsOfRows(row.CostCitations)
+	if err != nil {
+		return domain.InitialRoutePlan{}, err
 	}
 	customsCitations := make([]domain.CustomsApplicabilityCitation, 0, len(row.CustomsCitations))
 	for _, stored := range row.CustomsCitations {

@@ -48,10 +48,11 @@ func declareImprovementReroute(t *testing.T, fixture *reassessBothLanesFixture, 
 	}
 }
 
-// Covers: ADR-0173 决定一（真库，交接一路）——策略版本声明了自动改路、阈值 1000 分；原计划 SYN-RPV-63 仍可执行，交进新加坡
-// 枢纽未越过冻结边界，便宜的候选改善 1100 分、严格大于阈值：
+// Covers: AT-NR-085（真库，交接一路）——策略版本声明了自动改路、阈值 1000 分；原计划 SYN-RPV-63 仍可执行，包裹交进新加坡
+// 枢纽（当前可控节点）、未越过冻结边界，便宜的候选改善 1100 分、严格大于阈值：
 //  1. 落一行`已改路`：被复核计划是原计划，不带失效依据，带改善依据（被替代计划成本 4200、新计划成本 3100、阈值 1000、
-//     CNY），候选评估有候选，新计划选中 SYN-CANDIDATE-02，带自动改路决定；信封入账，不回滚重投；
+//     CNY，被替代那一侧带 SYN-CANDIDATE-01 这次取到的两段出处），候选评估有候选，新计划选中 SYN-CANDIDATE-02，带自动
+//     改路决定；信封入账，不回滚重投；
 //  2. 适用性册里原计划已被替代、接班的是新计划，两者都在触发的业务时间转移（ADR-0272）；
 //  3. 又一次交进新加坡枢纽：起点是那份新计划，仍适用引用它，不再改路。
 func TestAnImprovementRerouteBeforeTheFreezeBoundaryLandsOnTheDatabase(t *testing.T) {
@@ -86,6 +87,10 @@ func TestAnImprovementRerouteBeforeTheFreezeBoundaryLandsOnTheDatabase(t *testin
 	if basis.SupersededCostMinor() != 4200 || basis.SuccessorCostMinor() != 3100 ||
 		basis.ThresholdMinor() != 1000 || basis.Currency() != "CNY" {
 		t.Fatalf("改善依据 = %+v, want 4200 → 3100、阈值 1000、CNY", basis)
+	}
+	cited := basis.SupersededCostCitations()
+	if len(cited) != 2 || cited[0].EvaluationID() != "EST-SYN-CANDIDATE-01-1" || cited[1].EvaluationID() != "EST-SYN-CANDIDATE-01-2" {
+		t.Fatalf("被替代那一侧的出处 = %+v, want SYN-CANDIDATE-01 这次取到的两段", cited)
 	}
 
 	applicabilities, err := nrpostgres.NewPlanApplicabilities(fixture.syn.db)

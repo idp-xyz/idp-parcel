@@ -41,12 +41,14 @@ type suggestionRow struct {
 	SuggestedAt time.Time      `json:"suggested_at"`
 }
 
-// improvementBasisRow 是改善依据 jsonb 列的行模型。被比的两份计划归 reviewed_plan 与 new_plan 两列，这里只记成本与阈值。
+// improvementBasisRow 是改善依据 jsonb 列的行模型。被比的两份计划归 reviewed_plan 与 new_plan 两列，这里只记成本、阈值与
+// 被替代那一侧这次的出处；新计划那一侧的出处在 new_plan 里，不复述。出处行模型与计划里的同一个。
 type improvementBasisRow struct {
-	SupersededCostMinor int64  `json:"superseded_cost_minor"`
-	SuccessorCostMinor  int64  `json:"successor_cost_minor"`
-	Currency            string `json:"currency"`
-	ThresholdMinor      int64  `json:"threshold_minor"`
+	SupersededCostMinor     int64             `json:"superseded_cost_minor"`
+	SuccessorCostMinor      int64             `json:"successor_cost_minor"`
+	Currency                string            `json:"currency"`
+	ThresholdMinor          int64             `json:"threshold_minor"`
+	SupersededCostCitations []costCitationRow `json:"superseded_cost_citations,omitempty"`
 }
 
 type decisionRow struct {
@@ -456,10 +458,11 @@ func reassessmentColumns(record ports.ReassessmentRecord) (reassessmentRowColumn
 	if record.HasImprovementBasis {
 		basis := record.ImprovementBasis
 		if columns.improvementJSON, err = json.Marshal(improvementBasisRow{
-			SupersededCostMinor: basis.SupersededCostMinor(),
-			SuccessorCostMinor:  basis.SuccessorCostMinor(),
-			Currency:            basis.Currency(),
-			ThresholdMinor:      basis.ThresholdMinor(),
+			SupersededCostMinor:     basis.SupersededCostMinor(),
+			SuccessorCostMinor:      basis.SuccessorCostMinor(),
+			Currency:                basis.Currency(),
+			ThresholdMinor:          basis.ThresholdMinor(),
+			SupersededCostCitations: rowsOfCostCitations(basis.SupersededCostCitations()),
 		}); err != nil {
 			return reassessmentRowColumns{}, err
 		}
@@ -563,11 +566,16 @@ func rebuildImprovementBasis(data []byte) (domain.CostImprovementBasis, error) {
 	if err := json.Unmarshal(data, &row); err != nil {
 		return domain.CostImprovementBasis{}, err
 	}
+	citations, err := costCitationsOfRows(row.SupersededCostCitations)
+	if err != nil {
+		return domain.CostImprovementBasis{}, err
+	}
 	return domain.NewCostImprovementBasis(domain.CostImprovementBasisSpec{
-		SupersededCostMinor: row.SupersededCostMinor,
-		SuccessorCostMinor:  row.SuccessorCostMinor,
-		Currency:            row.Currency,
-		ThresholdMinor:      row.ThresholdMinor,
+		SupersededCostMinor:     row.SupersededCostMinor,
+		SuccessorCostMinor:      row.SuccessorCostMinor,
+		Currency:                row.Currency,
+		ThresholdMinor:          row.ThresholdMinor,
+		SupersededCostCitations: citations,
 	})
 }
 
