@@ -1,7 +1,7 @@
 # 88 自动形成没赶上的参与不补：采用晚到、协议后补条件的段，实际履约发生项要人记得去登
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg88。此前 in-progress——2026-10-21 认领；ready-for-agent——2026-10-20 上线就绪评估归 R1（上线前必修），裁定与批次见 [triage-2026-10-19](../triage-2026-10-19.md)「上线就绪评估（2026-10-20）」。此前 needs-triage——2026-10-19 票 [67](./67-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0218](../../../docs/adr/0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md) 越权风险点 1、6。
+Status: in-progress——评审已修，待复评与进 main，分支 claude-dcg88。此前 in-progress——完工待评审；2026-10-21 认领；ready-for-agent——2026-10-20 上线就绪评估归 R1（上线前必修），裁定与批次见 [triage-2026-10-19](../triage-2026-10-19.md)「上线就绪评估（2026-10-20）」。此前 needs-triage——2026-10-19 票 [67](./67-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0218](../../../docs/adr/0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md) 越权风险点 1、6。
 Blocked by: 无
 
 ## 现象
@@ -67,3 +67,21 @@ M
 - 收尾在途委托指名的版本时没有提醒：票 [161](./161-closing-an-agreement-version-named-by-in-flight-commissions-raises-no-prompt.md)。
 - 已形成的发生项按新版重计：去处票 15、57 的发生项修订入口。
 - 与票 57 同改的文件（进 main 时后到的一方合并）：`internal/transportfulfillment/application/adopt_segment_commission.go`（本票加门铃依赖与 `ringAdopted`）、`cmd/parcel-api/assemble_segment_commission_adoption.go` 与它的测试、`internal/transportfulfillment/adapters/http/register_charge_occurrence.go`、`internal/transportfulfillment/adapters/accessidentity/operator_authenticator_test.go` 的决定映射表、`cmd/parcel-dispatch/actual_fulfillment_on_participation_end_test.go`、`internal/accessidentity/operation_decision.go` 的 `decisionKinds`（取并集）与 access_identity 决定种类 CHECK（本票 0021，票 57 另取的那一份要以 0021 为底取并集）。票 57 若改了采用册的读法（解除另记），本票的 `SegmentCommissionAdoptions.ListByCommission` 要随之只列仍在采用的（票 160）。
+
+## 评审记录
+
+### 一轮（2026-10-21，隔离评审；变基到 main `7b598e47` 之后修）
+
+变基：票 145 先进 main、占了 transport_fulfillment/0047，本票的 TF 迁移改为 `0048`，代码、ADR 与票面引用随改；access_identity `0021` 照用。UC-TF-004 与 AT 盘点同 145 的新行冲突，两边并存。
+
+必修逐条：
+
+1. **没换过版时冲突回显多出 `"agreementRevision":1`**——已修。`writeChargeOccurrenceOutcome` 只在作答的那一版是某一次换版（号 2 起）时填这一键；没换过版的订舱、取消、实际履约三种冲突回显与换版之前逐字节相同。用例 `internal/transportfulfillment/adapters/http/register_charge_occurrence_revision_echo_test.go::TestTheConflictEchoNamesARevisionOnlyWhenTheCommissionWasRevised`（没换版不出这一键、键数与换版前相同；换版后等于 2）；UC-TF-004 `AT-TF-299` 写明。
+2. **采用门铃的信封 ID 在解除后再采用同一份委托时撞上**——已修。指纹加这一次采用的登记时刻（折到登记册精度，从册上读回重交仍是同一个 ID）；票 57 让采用册按代记之后换成代次。用例 `internal/transportfulfillment/adapters/postgres/actual_fulfillment_catch_up_test.go::TestEachAdoptionOfTheSameSegmentAndCommissionRingsItsOwnDoorbell`；ADR-0231 决定一与票 160 补这一层交互。
+3. **「盖住」一问另抄了一份身份派生**——已修。依据、范围、身份与覆盖一问收进 `application/charge_occurrence_identity.go`（`actualFulfillmentScope`、`occurrenceIdentity`），登记用例与补形成都调它；补形成派生出错上抛按缺陷处置，读不动才答 `OCCURRENCE_REGISTRY_UNAVAILABLE` 重投。
+4. **注释计数与枚举**——已修。`formEnded` 头注改成「交接、交付与补形成都走这一处」；补形成哨兵注释改成「确定性错误都不进名单」加符号名，不枚举。
+5. **一件缺陷烧完预算后其余各件静默缺失**——选了第一条，已修：补形成里一件撞上确定性缺陷（旅程平局、登记用例上抛的数据违约、答出本路不该见的一格），记成未形成册上的 `FORMATION_DEFECT`（记下停在哪里；记之前先问盖住），这一件入账，接着问下一件，整封入账；未形成册连缺陷都记不下（确定性拒写）时才整封响亮失败。迁移 0048 的未形成册加缺陷一格（号与问的那一版在缺陷格可缺），查阅页带 `defect`。自动形成那两扇门一封只管一件，缺陷照 ADR-0218 决定六响亮失败、不进册。用例：编排 `catch_up_actual_fulfillment_test.go::TestADefectiveParticipationIsRecordedWhileTheRestOfTheDoorbellForms`、库面 `::TestTheUnformedRegisterKeepsAFormationDefect`、派发真库端到端 `cmd/parcel-dispatch/actual_fulfillment_catch_up_test.go::TestOneDefectiveParticipationDoesNotSinkTheLateAdoptionCatchUp`、查阅线格式。ADR-0231 决定二、六与越权风险点 6 改写（代价：缺陷不再表现为发布失败，要看查阅页；数据违约只留错误原文前段；缺陷修好之后要再换版或重新采用才会再问）。
+
+未采纳：无。
+
+验证：`go build ./...`、`go vet ./...`、变更 Go 文件 `gofmt -l` 干净；`scripts/test-full.sh ./internal/transportfulfillment/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./cmd/parcel-transport-register/ ./cmd/parcel-access-register/ ./internal/accessidentity/... ./internal/architecture/... ./migrations/...`：23 ok、1 无测试文件、0 FAIL；一次性库 `dcg88_seed` 上 `seed.sh` 实灌零报错，灌完删库。
