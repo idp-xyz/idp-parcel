@@ -59,13 +59,13 @@ M：两个装载连上退役册与最新区间更正册（与 ADR-0233 给版本
 
 ### 做了什么
 
-- PC 领域：新 `versionFold`（`domain/version_fold.go`），是版本壳上的收尾折进自带区间正文的唯一一处折法——只截终点、整版退役与业务时点无关地排除。`SupplierAgreement` 的 `NarrowedBy` / `EndedBy` / `SupportsProcurementAt` 与 `CommercialRegistry.bodyExcludedAt` 改用它（行为不变），`AuthorityGrant` 与 `ContractDelegation` 新长出 `NarrowedBy`、`EndedBy`、`InForceAt`，都用这一处。
-- PC 领域：新错误 `ErrAuthorityApplicabilityConflict`，既不 Is `ErrNotAuthorized` 也不 Is `ErrAuthorityRulesNotConfigured`。`Authorize` 先收齐命中的授予：没有命中的照旧答`未配置`或`不允许`（范围加时刻按 `InForceAt` 判）；有命中的先解决定方，再看命中是否多于一条，多于一条答适用冲突。`resolveDecider` 命中多条委派时，委派方相同取那一个，不同答适用冲突。
+- PC 领域：新 `versionFold`（`domain/version_fold.go`），是版本壳上的收尾折进自带区间正文的唯一一处折法——只截终点、整版退役与业务时点无关地排除。`SupplierAgreement` 的 `NarrowedBy` / `EndedBy` / `SupportsProcurementAt`、`CommercialRegistry.bodyExcludedAt` 与收尾门用的 `bodySelectionOf` 改用它（行为不变），`AuthorityGrant` 与 `ContractDelegation` 新长出 `NarrowedBy`、`EndedBy`、`InForceAt`，都用这一处。
+- PC 领域：新错误 `ErrAuthorityApplicabilityConflict`，既不 Is `ErrNotAuthorized` 也不 Is `ErrAuthorityRulesNotConfigured`。`Authorize` 先收齐命中的授予：没有命中的照旧答`未配置`或`不允许`（范围加时刻按 `InForceAt` 判）；命中多于一条即答适用冲突，先于解决定方；恰一条才解决定方。`resolveDecider` 命中多条委派时，委派方相同取那一个，不同答适用冲突。
 - PC 适配器：`LoadEffectiveGrants` 把授予行包成带对象类别（授权规则）的子查询，再连 `versionClosureJoins`（最新一条区间更正加退役册）；`LoadEffectiveDelegations` 对委派行连同样两册。读回后经领域折进收尾，`InForceAt(at)` 不成立的不交出。收尾行有却立不起来就整次上抛。端口与裁定编排的注释随之改。
 - PS：`psports.AuthorizationOutcome` 加 `AuthorizationApplicabilityConflict`（`APPLICABILITY_CONFLICT`）。五只适配器（主动拒绝、人工复核、资料修订、受控关闭与重开、撤回）在 `errors.Is` 分支里把它译成这一格，不带引用。四只编排停在未决：主动拒绝 `REJECTION_AUTHORITY_APPLICABILITY_CONFLICT`、撤回 `WITHDRAWAL_AUTHORITY_APPLICABILITY_CONFLICT`、资料修订 `SOURCE_DATA_AMENDMENT_AUTHORITY_APPLICABILITY_CONFLICT`（三格续办归运营登记），受控关闭与重开 `continuedAttemptUndecided` 的 `AUTHORITY_APPLICABILITY_CONFLICT`。两只各加一码：授权处置 `AuthorizedDispositionAuthorityApplicabilityConflict`、完成人工复核 `ManualReviewAuthorityApplicabilityConflict`，`String()` 都是 `AUTHORITY_APPLICABILITY_CONFLICT`，不落库、状态不变。各编排的 `default` 照旧答 `ErrUnexpectedAuthorizationOutcome`。
 - 测试先行（先写用例、确认红，再实现）：
-  - PC 领域 `authority_closure_test.go`，覆盖多条命中两种形状、退役、截止、只截终点、收尾只认同一版、决定方先答拒绝、委派随合同版本收尾、委派方异同。
-  - PC 真库 `adapters/postgres/authority_closure_test.go`，经 `CloseCommercialVersionHandler` 生产写口退役、截止授权规则版本与客户合同版本。`authorization_grant_test.go` 的 `TestTwoMatchingGrantsReturnTheFirstInStableOrder` 改写为 `TestTwoMatchingGrantsAreAnApplicabilityConflict`。
+  - PC 领域 `authority_closure_test.go`，覆盖多条命中两种形状、退役、截止、只截终点、收尾只认同一版、多条命中先于解决定方答冲突、委派随合同版本收尾、委派方异同。
+  - PC 真库 `adapters/postgres/authority_closure_test.go`，经 `CloseCommercialVersionHandler` 生产写口退役、截止授权规则版本与客户合同版本；同一版先截晚再截早时授予与供应商协议正文都按后一条判。`authorization_grant_test.go` 的 `TestTwoMatchingGrantsReturnTheFirstInStableOrder` 改写为 `TestTwoMatchingGrantsAreAnApplicabilityConflict`。
   - PS 适配器 `authorization_applicability_conflict_test.go`（五只）与编排 `authorization_applicability_conflict_test.go`（六只），另有续办路径的内部用例。
   - `cmd/parcel-api` 的 `TestAReviewAgainstTwoMatchingGrantsAnswersAnApplicabilityConflict`：真授权册两条授予，经 PC 裁定编排、PS 真适配器与生产复核编排答适用冲突，不落库、不铸信封。
 - 文档：UC-PC-003 补消费侧翻译与首发答复对照，`AT-PC-042`、`059`–`061` 的现状缺口改为已补。UC-PS-002、UC-PS-005 的未决原因表补新码（已逐码对照 `String()`），缺口行改为已补。
@@ -73,10 +73,10 @@ M：两个装载连上退役册与最新区间更正册（与 ADR-0233 给版本
 
 ### 代决
 
-1. **决定方答出`不允许`时，先于适用冲突。** 决定方的解法与命中哪一条授予无关：委派缺席、客户账户请求关闭或重开，换哪一条授予都是`不允许`。这时照答不允许，不报冲突，因为冲突说的是「采用哪一版」答不出，而一次拒绝不采用任何一版。委派方不同的冲突照旧报冲突。
+1. **多条命中先于解决定方答适用冲突。**（评审 B1 后改写，协调方裁定取评审的 (a)）照 ADR-0261 决定三首句原样落地：折完收尾之后命中多于一条授予就答`适用冲突`，不带例外——即便这次请求无论采用哪一条都会因决定方被拒（委派缺席、客户账户请求关闭或重开）。多条命中本身是一处配置错误，理清之后同一请求照常答拒绝。初版曾让决定方的拒绝先于冲突，与决定三首句、PC CONTEXT 收尾规则、UC-PC-003 第 4 步与结果表都相抵，已撤。
 2. **三格续办路径归`等待运营登记`。** 授权适用冲突在 PS 的三个原因上 `resumePath` 取 `ResumeByOperatorRegistration`：消解它的是商业责任方经截止或同起点退役收尾旧版，是一次登记册写入，重试推不动。
 3. **码名。** PS 端口一格 `APPLICABILITY_CONFLICT`（与 `RULES_NOT_CONFIGURED` 同形）；三个 `JudgmentPendingReason` 照 `*_AUTHORITY_RULES_NOT_CONFIGURED` 取 `*_AUTHORITY_APPLICABILITY_CONFLICT`；受控关闭与重开、授权处置、完成人工复核各自的集合里取 `AUTHORITY_APPLICABILITY_CONFLICT`。
-4. **一处折法，顺手收拢既有两处。** ADR-0261 说「宜复用同一处折法」，供应商协议正文与政策正文选候选原各写一遍。三处如今都走 `versionFold`，行为不变，既有用例全绿。
+4. **一处折法，顺手收拢既有两处。** ADR-0261 说「宜复用同一处折法」，供应商协议正文与政策正文选候选原各写一遍。这几处与收尾门的 `bodySelectionOf` 如今都走 `versionFold`，行为不变，既有用例全绿。
 5. **退役的授予与业务时点无关地排除。** 判法与 ADR-0233 越权风险点 2 相同，退役按决定时间读。
 6. **装载口与 `Authorize` 用同一个谓词各判一次。** 适配器按 `InForceAt` 不交出（票面「不交出」），领域再按同一谓词判（与既有「SQL 按区间取行、`Authorize` 再判 `Contains`」同形）。谓词只在领域定义一次。
 7. **版本册上没有那一版的授予照原样交出。** 授予册与版本册之间没有外键，收尾两册以外键指向版本册，所以这样的授予不可能被收尾过。
@@ -85,10 +85,11 @@ M：两个装载连上退役册与最新区间更正册（与 ADR-0233 给版本
 
 ### 越权风险点
 
-1. **代决 1 的次序**（PC owner）。若 owner 读 ADR-0261 决定三为「多于一条命中一律先答冲突」，就把 `Authorize` 里 `len(hits) > 1` 那一判移到 `resolveDecider` 之前，用例 `TestARefusalThatNoGrantChoiceChangesIsNotAConflict` 随改。
-2. **续办归运营登记，但收尾口不发「参数已登记」信封**（PS owner）。今天四只编排都是命令驱动，不在派发进程的接受链上排队，没有等门铃的委托。日后哪一支进了 `awaitOperatorRegistration` 那条路，收尾口要补门铃，否则会停在等待态。
-3. **重构动到了 ADR-0233 的读法**（PC owner）。`SupplierAgreement` 与 `bodyExcludedAt` 改用 `versionFold`，判法逐条不变。既有 `AT-PC-054`–`058` 用例与运输履约的收尾核对用例全绿，演示种子灌通。
+1. **冲突先于拒绝的代价**（PC owner）。客户账户请求关闭或重开、又恰好两条授予都命中时，答`适用冲突`而不是 `ErrCustomerAccountCannotDecide`；运营角色代录资料修订而委派缺席、又恰好两条授予都命中时，同样答冲突而不是委派缺席。消费方停在未决，等商业责任方收尾旧版或撤去重复的那一条；理清之后同一请求照常答拒绝（用例 `TestSeveralHitsAreAConflictBeforeTheDeciderIsResolved`）。
+2. **续办归运营登记，但收尾口不发「参数已登记」信封**（PS owner）。今天四只编排都是命令驱动，不在派发进程的接受链上排队，没有等门铃的委托。日后哪一支进了 `awaitOperatorRegistration` 那条路，收尾口要补门铃，否则会停在等待态。另有一层：撤回与资料修订的「重发即续办」受 [code/44](./44-withdrawal-and-amendment-replays-short-circuit-after-an-undecided-round.md) 限制——未决那一轮之后重放同一请求不再续办，运营收尾旧版之后，客户或运营要换新的请求身份重新提交才推得动。
+3. **重构动到了 ADR-0233 的读法**（PC owner）。`SupplierAgreement`、`bodyExcludedAt` 与 `bodySelectionOf` 改用 `versionFold`，判法逐条不变。既有 `AT-PC-054`–`058` 用例与运输履约的收尾核对用例全绿，演示种子灌通。
 4. **适用冲突对首发租户的可见性**（PC、PS owner）。运营在旧版收尾之前先登了后继的授予，那一段时间里四只编排答未决、两只答冲突码，管理台目前把冲突码当未知码显示（见未决）。这与 ADR-0261 越权风险点 1 同一格：只在换版未收尾或重复登记时出现。
+5. **收尾门不看后继版本上的授予**（PC owner）。ADR-0233 的「接得住」只比两版的壳（授权规则没有自带区间的正文），不看后继版本在同一范围登没登授予、登的授予接不接得住旧版那一段。收尾一版授权规则而后继没登对应授予，那一段的裁定就由`已配置`变成`未配置`；`Authorize` 注释已改成条件句，没在收尾门上加判，留 PC owner 复核要不要加。
 
 ### 迁移
 
@@ -101,8 +102,9 @@ M：两个装载连上退役册与最新区间更正册（与 ADR-0233 给版本
 ### 验证（分支 claude-code24）
 
 - `go build ./...`、`go vet ./...`、`gofmt -l` 干净。
-- `TMPDIR=… scripts/test-full.sh <动过包的反向依赖（go list -test 算出 47 个）> ./internal/partycommercial/... ./internal/parcelshipment/... ./tests/bentocontract/... ./internal/architecture/... ./migrations/...`：退 0，47 个包 ok（另 3 个无测试文件）。反向依赖已含 `cmd/parcel-api`、`cmd/parcel-dispatch`、`cmd/parcel-commercial`。
-- 新用例另跑 `-count=3`：PC 领域、PC postgres、PS 适配器、PS 编排、`cmd/parcel-api` 共 5 个包 ok。
+- 初版：`TMPDIR=… scripts/test-full.sh <动过包的反向依赖（go list -test 算出 47 个）> ./internal/partycommercial/... ./internal/parcelshipment/... ./tests/bentocontract/... ./internal/architecture/... ./migrations/...`：退 0，47 个包 ok（另 3 个无测试文件）。反向依赖已含 `cmd/parcel-api`、`cmd/parcel-dispatch`、`cmd/parcel-commercial`。
+- 初版新用例另跑 `-count=3`：PC 领域、PC postgres、PS 适配器、PS 编排、`cmd/parcel-api` 共 5 个包 ok。
+- 评审修订后（已 rebase 到 main `c89830c72`）：`go build ./...`、`go vet ./...`、`gofmt -l` 干净；`TMPDIR=… scripts/test-full.sh ./internal/partycommercial/... ./internal/parcelshipment/... ./cmd/parcel-api ./cmd/parcel-dispatch ./cmd/parcel-commercial ./tests/bentocontract/... ./internal/transportfulfillment/... ./internal/architecture/... ./migrations/...` 退 0，43 个包 ok（另 4 个无测试文件）；新用例与改过的用例另跑 `-count=3`，5 个包 ok。
 - 演示种子在一次性库 `code24seed` 上灌通（退 0），用后已 `DROP DATABASE … WITH (FORCE)`。
 - 未跑全量，未重生成 MECHANISM-INVENTORY、ADR 索引与 AT 计数。
 
@@ -110,4 +112,22 @@ M：两个装载连上退役册与最新区间更正册（与 ADR-0233 给版本
 
 - `apps/admin-web` 的 `AuthorizedDispositionOutcome`、`ManualReviewCompletionOutcome` 类型与展示表补 `AUTHORITY_APPLICABILITY_CONFLICT`，属前端切片，未立票。
 - 其余 PS UC（主动拒绝、人工复核、授权处置、受控关闭与重开所在的用例）的结果表随票 10 补，本票只改了 UC-PS-002、UC-PS-005 两张已列码的表。
+
+## 评审记录
+
+### 第 1 轮（2026-10-21，隔离评审；协调方转达，一条阻断）
+
+代码行为未见错，变异测试大多被杀。
+
+| 条 | 意见 | 处理 |
+|---|---|---|
+| B1 | 代决 1「拒绝先于冲突」与 ADR-0261 决定三首句相抵，UC-PC-003 因此自相矛盾 | 协调方裁定取 (a)，不立新 ADR：`Authorize` 的 `len(hits) > 1` 移到 `resolveDecider` 之前；用例改为 `TestSeveralHitsAreAConflictBeforeTheDeciderIsResolved`，钉住冲突先答、只剩一条时照答拒绝；UC-PC-003 首发对照删去那句例外；代决 1 与越权风险点 1 改写 |
+| N1 | `bodyExcludedAt` 自己取最后一条更正、`bodySelectionOf` 另写一遍收窄，「唯一定义」名不副实 | `versionFold` 加 `cutAtEnd` 与 `selectable`；`bodyExcludedAt` 经 `correctionEndOf` 取截止点，`bodySelectionOf` 的收窄改走 `selectable` |
+| N2 | 测试文件头「四只」「两只」「六只」、ports.go「第四格」是计数 | 改为点名或去掉数字；同批去掉适配器用例的「三只」、两只编排头注的「第三个落点」、续办用例的「三格」 |
+| N3 | `TestTwoMatchingGrantsAreAnApplicabilityConflict` 长度与首个合在一判 | 拆成先判长度、再取首个 |
+| N4 | 「取最新一条更正」扩到授予而无用例 | 补 `TestTheLatestOfTwoCutsGovernsTheGrantAndTheBody`：同一版先截晚、再截早，授予与供应商协议正文都按后一条判 |
+| N5 | `Authorize` 注释「一次成立的收尾不会把已配置变成未配置」过强 | 改为条件句（后继版本在同一范围登了接得住的授予时）；越权风险点补第 5 条 |
+| N6 | 撤回与资料修订的重发续办受 code/44 限制 | 越权风险点 2 补这一句 |
+
+收口前已 `git rebase main`（`c89830c72`），无冲突。
 
