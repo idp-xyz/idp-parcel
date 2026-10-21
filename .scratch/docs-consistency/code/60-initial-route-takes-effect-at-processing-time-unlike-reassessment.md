@@ -43,3 +43,8 @@ S：一处取值改法，加编排与真库用例各一。不加迁移：计划�
 - docs-consistency/code/53：改善替代那一行落不了复核册，修好之后改善替代一路才走得到这里。
 - demo-chain-gaps/115：复核不取候选成本，失效线自动改路今天形成不了。
 - docs-consistency/code/52：复核起点改读当前有效计划，复核形成的计划成为下一次起点；ADR-0272 随它立。
+
+## 并入（2026-10-21，协调方，出自 code/52 第 2 轮修订）
+
+- 初始路由编排 `CreateInitialRouteHandler`（UC-NR-001）遇 `InitialRoutes.FindByKey` 出错仍一律答 `ROUTE_STORE_UNAVAILABLE`、回滚重投；code/52 之后复核一路对同一类坏行（`ports.ErrStoredRouteRecordUnreadable`）响亮报错。本票落地时一并让初始路由编排 `errors.Is` 这一哨兵后响亮报错，其余读不回照旧答未决，补一条用例。
+

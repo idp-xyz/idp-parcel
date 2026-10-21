@@ -1,7 +1,7 @@
 # 52 NR 路由复核读的是初始路由那一行，不是当前有效计划或无路由：失效之后的复核回滚重投到耗尽，或对一份已失效的计划答仍适用
 
 Category: bug
-Status: in-progress——第 2 轮评审已修，待进 main，分支 claude-code52（已 rebase 到 main `4e7874ba0`），见文末「完成记录」「评审记录」。此前 ready-for-agent——建议 R1（上线前必修）：答错且会卡住分区。原计划经一次复核失效之后，下一次控制触发（收寄采用或交接）还是拿那份已失效的初始计划去复核：限制仍在时答 `UNDECIDED/REASSESS_STORE_UNAVAILABLE`，占着交接分区或小包托运分区回滚重投，直到 `ABANDONED`，同一分区后面的信封跟着推迟，失败码还指向一个没坏的依赖；限制解除时对已失效的计划答 `STILL_APPLICABLE`，复核册说这份计划仍适用，适用性册说它已失效，两册打架。ADR-0249 决定二「交进首个节点时，交接复核走『原先无当前有效路由』那条线」那一格，代码里不存在，code/29 的绕法与 ADR-0249 越权风险点 3 的缓解都靠它。没有绕法。2026-10-21 由 code/16 的隔离评审发现（N1），作者会话立票（用户「你作为业务和系统专家自决」授权），分级由协调方定稿。
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——第 2 轮评审已修，待进 main，分支 claude-code52（已 rebase 到 main `4e7874ba0`），见文末「完成记录」「评审记录」。此前 ready-for-agent——建议 R1（上线前必修）：答错且会卡住分区。原计划经一次复核失效之后，下一次控制触发（收寄采用或交接）还是拿那份已失效的初始计划去复核：限制仍在时答 `UNDECIDED/REASSESS_STORE_UNAVAILABLE`，占着交接分区或小包托运分区回滚重投，直到 `ABANDONED`，同一分区后面的信封跟着推迟，失败码还指向一个没坏的依赖；限制解除时对已失效的计划答 `STILL_APPLICABLE`，复核册说这份计划仍适用，适用性册说它已失效，两册打架。ADR-0249 决定二「交进首个节点时，交接复核走『原先无当前有效路由』那条线」那一格，代码里不存在，code/29 的绕法与 ADR-0249 越权风险点 3 的缓解都靠它。没有绕法。2026-10-21 由 code/16 的隔离评审发现（N1），作者会话立票（用户「你作为业务和系统专家自决」授权），分级由协调方定稿。
 Blocked by: 无
 出处：docs-consistency/code/16 隔离评审 N1。main `14443ac03` 上同病，不是 code/16 引入的。
 
@@ -179,3 +179,9 @@ M：一个读口（或给 `InitialRouteStore` 旁另立「当前路由」读口�
 - 新用例另跑 `-count=3`，都 ok：`TestASupersededPlanLeavesAtTheTriggerBusinessTime`、`TestAnUnrebuildableRoutingRecordIsLoud`、`TestUnrebuildableInitialRouteAndApplicabilityRowsAreReportedAsSuch`。
 - `tools/adr-index`：在 scratchpad 的 `git archive HEAD` 副本上重生成之后 `-check` 退 0。
 
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-code52` tip `05603b8c5` 在 main `4e7874ba0` 上快进；两轮隔离评审均无阻断，第二轮附变异测试，起点判法逐格核过恰一份当前有效。
+- 协调方在 tip 上单独提交重生成的 ADR 索引（新 ADR-0272）、AT 计数与机制清点，`-check` 均退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净。无迁移、无种子改动；本票之前落库的复核计划按处理时钟生效，演示库需 `scripts/demo-seeds --reset` 重灌（越权风险点 6）。
+- 去向：code/60（初始路由按业务时间生效；协调方并入一项：`CreateInitialRouteHandler` 遇 `ports.ErrStoredRouteRecordUnreadable` 照复核口径响亮报错，不折成 `ROUTE_STORE_UNAVAILABLE`）。
