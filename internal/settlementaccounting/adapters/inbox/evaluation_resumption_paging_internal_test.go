@@ -14,8 +14,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
-// 钉续办门的翻页（ADR-0229 决定五，评审发现）：办过却没写回的件——这一户采用了别的时点、重跑被拒——仍满足队列的口径、
-// 停在队首；续办门按位置往后翻，排在它们后面的照样办到，不会被它们占满的一页挡住。
+// 钉续办门的翻页（ADR-0229 决定五）：办过却没写回的件——重跑被拒、撞上矛盾、未决——仍满足队列的口径、停在队首；
+// 续办门按位置往后翻，排在它们后面的照样办到，不会被它们占满的一页挡住。
 
 type pagingQueue struct {
 	items []ports.StalledEvaluation
@@ -44,7 +44,7 @@ func after(position, cursor ports.StalledEvaluationPosition) bool {
 	return position.Kind+"/"+position.FirstKey > cursor.Kind+"/"+cursor.FirstKey
 }
 
-// unwrittenResumer 每一件都办、都不写回：办过的件留在队列里，与「这一户采用了别的时点」那种件同一个处境。
+// unwrittenResumer 每一件都办、都不写回：办过的件留在队列里，与重跑被拒、撞上矛盾、未决的件同一个处境。
 type unwrittenResumer struct {
 	handled []string
 }

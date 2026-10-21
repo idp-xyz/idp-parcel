@@ -11,7 +11,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
-// 钉续办门按信封收窄（ADR-0229 决定五，评审发现）：计价的三类必带计价范围与方向，BUY 触发册必带发生项原因，SELL 计费
+// 钉续办门按信封收窄（ADR-0229 决定五）：计价的三类必带计价范围与方向，BUY 触发册必带发生项原因，SELL 计费
 // 时点采用必带户，缺了是毒丸——按种类放宽会把整个租户里同停因的件推一遍；带了的格原样进取队列的条件。
 
 type recordingQueue struct {

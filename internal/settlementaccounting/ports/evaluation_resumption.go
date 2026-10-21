@@ -130,7 +130,7 @@ type StalledEvaluation struct {
 }
 
 // StalledEvaluationPosition 是队列的定序键：停下时刻、种类与两段键。按它翻页而不是每页重读队首：办过却没有写回的件
-// （这一户采用了别的时点、重跑被拒、撞上矛盾）仍满足「等着」的口径，每页重读队首会被它们占满、把后面等着的挡住。
+// （重跑被拒、撞上矛盾、未决）仍满足「等着」的口径，每页重读队首会被它们占满、把后面等着的挡住。
 type StalledEvaluationPosition struct {
 	StoppedAt time.Time
 	Kind      string
