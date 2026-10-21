@@ -543,6 +543,10 @@ const (
 	// NotJudgedTriggerPrecedesCurrentPosition 是触发的业务时间早于路由历史里最近一次已判控制触发：包裹已经在更晚
 	// 的位置上判过，这次不判（ADR-0235）。它不等登记也不等续办，是终局的入账。
 	NotJudgedTriggerPrecedesCurrentPosition
+	// NotJudgedTriggerPrecedesShipmentAcceptance 是触发的业务时间早于这一判断键的委托接受时刻（ADR-0279）：初始路由从接受
+	// 起生效，据这次触发离场会早于生效。与早于当前位置分开：那一格比的是路由历史里的已判复核，这一格比的是委托本身，
+	// 审计要答得出早于的是哪一个。同样是终局的入账。
+	NotJudgedTriggerPrecedesShipmentAcceptance
 )
 
 func (reason NotJudgedReason) String() string {
@@ -555,6 +559,8 @@ func (reason NotJudgedReason) String() string {
 		return "FREEZE_FORM_UNCONFIGURED"
 	case NotJudgedTriggerPrecedesCurrentPosition:
 		return "TRIGGER_PRECEDES_CURRENT_POSITION"
+	case NotJudgedTriggerPrecedesShipmentAcceptance:
+		return "TRIGGER_PRECEDES_SHIPMENT_ACCEPTANCE"
 	default:
 		return ""
 	}
@@ -570,7 +576,9 @@ type NotJudgedTrigger struct {
 	TriggerOccurredAt time.Time
 	// CurrentPositionAt 只在触发早于当前位置时有值：比较所用的那一次已判控制触发的业务时间，审计要答得出「早于谁」。
 	CurrentPositionAt time.Time
-	SettledAt         time.Time
+	// ShipmentAcceptedAt 只在触发早于委托接受时有值：比较所用的委托接受时刻。
+	ShipmentAcceptedAt time.Time
+	SettledAt          time.Time
 }
 
 // ReassessmentStore 按触发关联找回并保存复核结果：同一触发和输入版本已经处理即返回

@@ -278,14 +278,23 @@ func (repository *RouteReassessments) RecordNotJudged(ctx context.Context, recor
 		return fmt.Errorf("record reassessment not judged: current position time must come with %s and only with it",
 			ports.NotJudgedTriggerPrecedesCurrentPosition)
 	}
+	var acceptedAt *time.Time
+	if !record.ShipmentAcceptedAt.IsZero() {
+		at := record.ShipmentAcceptedAt.UTC()
+		acceptedAt = &at
+	}
+	if (record.Reason == ports.NotJudgedTriggerPrecedesShipmentAcceptance) != (acceptedAt != nil) {
+		return fmt.Errorf("record reassessment not judged: shipment acceptance time must come with %s and only with it",
+			ports.NotJudgedTriggerPrecedesShipmentAcceptance)
+	}
 	key := record.Key
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO network_routing.route_reassessment_not_judged
 			(tenant_id, correlation_id,
 			 customer_account_id, shipment_request_id,
 			 acceptance_baseline, declared_parcel_id, service_purpose,
-			 reason, trigger_occurred_at, current_position_at, settled_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			 reason, trigger_occurred_at, current_position_at, shipment_accepted_at, settled_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		 ON CONFLICT DO NOTHING`,
 		key.TenantID.String(),
 		record.Correlation.String(),
@@ -297,6 +306,7 @@ func (repository *RouteReassessments) RecordNotJudged(ctx context.Context, recor
 		reason,
 		record.TriggerOccurredAt.UTC(),
 		positionAt,
+		acceptedAt,
 		record.SettledAt.UTC(),
 	); err != nil {
 		return fmt.Errorf("record reassessment not judged: %w", err)

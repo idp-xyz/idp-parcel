@@ -13,8 +13,8 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 16 证复核按业务时间排的库面（ADR-0235）：复核行带所判触发的业务时间并原样读回；按判断键取
-// 最近一次，别的判断键不掺进来；缺触发业务时间的行写不进；「早于当前位置」的未判必带当前位置时刻且必早于它；取最近
-// 一次时按判断键串行到事务结束。
+// 最近一次，别的判断键不掺进来；缺触发业务时间的行写不进；「早于当前位置」的未判必带当前位置时刻且必早于它，「早于委托
+// 接受」的未判必带委托接受时刻且不晚于它（ADR-0279）；取最近一次时按判断键串行到事务结束。
 
 func stillApplicableAt(t *testing.T, key domain.InitialRouteJudgmentKey, correlation string, at time.Time) ports.ReassessmentRecord {
 	t.Helper()
@@ -131,6 +131,77 @@ func TestABehindTriggerCarriesTheCurrentPositionItWasComparedWith(t *testing.T) 
 		         'parcel-1', 'LAST_MILE_DELIVERY', 'TRIGGER_PRECEDES_CURRENT_POSITION', now(), now() - interval '1 hour', now())`,
 	); err == nil {
 		t.Fatal("当前位置不晚于触发的「早于当前位置」进了库")
+	}
+}
+
+// Covers: AT-NR-087（登记册那一半）——「早于委托接受」的未判必带委托接受时刻且不晚于它（舍入到微秒后可以相等），别的原因
+// 不带，也不与当前位置时刻混用——适配器与库各拒一次。
+func TestATriggerBeforeTheAcceptanceCarriesTheAcceptanceItWasComparedWith(t *testing.T) {
+	_, reassessments, transactor, pool := newRouteStores(t)
+	ctx := t.Context()
+	key := routeKey(t, "tenant-1", "parcel-1")
+
+	before := notJudged(t, key, "trigger-a-before", ports.NotJudgedTriggerPrecedesShipmentAcceptance)
+	before.ShipmentAcceptedAt = notJudgedTriggerAt.Add(time.Hour)
+	within(t, transactor, ctx, func(txCtx context.Context) error {
+		return reassessments.RecordNotJudged(txCtx, before)
+	})
+	var reason string
+	var acceptedAt time.Time
+	var positionAt *time.Time
+	if err := pool.QueryRow(ctx,
+		`SELECT reason, shipment_accepted_at, current_position_at FROM network_routing.route_reassessment_not_judged
+		  WHERE tenant_id = 'tenant-1' AND correlation_id = 'trigger-a-before'`).Scan(&reason, &acceptedAt, &positionAt); err != nil ||
+		reason != "TRIGGER_PRECEDES_SHIPMENT_ACCEPTANCE" || !acceptedAt.Equal(before.ShipmentAcceptedAt) || positionAt != nil {
+		t.Fatalf("未判行 = %q、接受 %s、当前位置 %v（err %v）, want 早于委托接受 %s、不带当前位置",
+			reason, acceptedAt, positionAt, err, before.ShipmentAcceptedAt)
+	}
+
+	for name, record := range map[string]ports.NotJudgedTrigger{
+		"早于委托接受却没带时刻": notJudged(t, key, "trigger-a-bare", ports.NotJudgedTriggerPrecedesShipmentAcceptance),
+		"别的原因带了委托接受时刻": func() ports.NotJudgedTrigger {
+			record := notJudged(t, key, "trigger-a-extra", ports.NotJudgedNoRoutingHistory)
+			record.ShipmentAcceptedAt = notJudgedTriggerAt.Add(time.Hour)
+			return record
+		}(),
+		"早于委托接受带的是当前位置时刻": func() ports.NotJudgedTrigger {
+			record := notJudged(t, key, "trigger-a-position", ports.NotJudgedTriggerPrecedesShipmentAcceptance)
+			record.CurrentPositionAt = notJudgedTriggerAt.Add(time.Hour)
+			return record
+		}(),
+	} {
+		if err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+			return reassessments.RecordNotJudged(txCtx, record)
+		}); err == nil {
+			t.Errorf("%s：写进了未判登记", name)
+		}
+	}
+	// 纳秒上早于接受、舍入到微秒后落在同一刻的那一次照样写得进：编排按纳秒比，库按微秒存。
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO network_routing.route_reassessment_not_judged
+			(tenant_id, correlation_id, customer_account_id, shipment_request_id, acceptance_baseline,
+			 declared_parcel_id, service_purpose, reason, trigger_occurred_at, shipment_accepted_at, settled_at)
+		 VALUES ('tenant-1', 'trigger-a-same-microsecond', 'customer-a', 'request-1', 'baseline-v1',
+		         'parcel-1', 'LAST_MILE_DELIVERY', 'TRIGGER_PRECEDES_SHIPMENT_ACCEPTANCE', $1, $2, now())`,
+		notJudgedTriggerAt.Add(100*time.Nanosecond), notJudgedTriggerAt.Add(400*time.Nanosecond),
+	); err != nil {
+		t.Fatalf("同一微秒里早于接受的那一次写不进：%v", err)
+	}
+	for name, insert := range map[string]string{
+		"委托接受早于触发": `INSERT INTO network_routing.route_reassessment_not_judged
+			(tenant_id, correlation_id, customer_account_id, shipment_request_id, acceptance_baseline,
+			 declared_parcel_id, service_purpose, reason, trigger_occurred_at, shipment_accepted_at, settled_at)
+		 VALUES ('tenant-1', 'trigger-a-raw', 'customer-a', 'request-1', 'baseline-v1',
+		         'parcel-1', 'LAST_MILE_DELIVERY', 'TRIGGER_PRECEDES_SHIPMENT_ACCEPTANCE', now(), now() - interval '1 microsecond', now())`,
+		"别的原因带了委托接受时刻": `INSERT INTO network_routing.route_reassessment_not_judged
+			(tenant_id, correlation_id, customer_account_id, shipment_request_id, acceptance_baseline,
+			 declared_parcel_id, service_purpose, reason, trigger_occurred_at, shipment_accepted_at, settled_at)
+		 VALUES ('tenant-1', 'trigger-a-raw-extra', 'customer-a', 'request-1', 'baseline-v1',
+		         'parcel-1', 'LAST_MILE_DELIVERY', 'NO_ROUTING_HISTORY', now(), now() + interval '1 hour', now())`,
+	} {
+		if _, err := pool.Exec(ctx, insert); err == nil {
+			t.Errorf("%s：绕过适配器直插进了库", name)
+		}
 	}
 }
 
