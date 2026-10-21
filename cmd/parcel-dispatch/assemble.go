@@ -2127,11 +2127,17 @@ func labelFinalJudgmentCore(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: label validity rule: %w", err)
 	}
+	// 首次有效收寄发生不晚于有效取消的业务时间是事实冲突（ADR-0254），判断记进同一本冲突册再答`不形成`。
+	conflicts, err := pspostgres.NewCancellationOrderConflicts(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: cancellation order conflicts: %w", err)
+	}
 	judge := psapplication.NewJudgeLabelServiceFinalHandler(psapplication.JudgeLabelServiceFinalDeps{
 		Transactions:  transactions,
 		Registers:     registers,
 		Cancellations: chain.cancellations,
 		Validity:      validity,
+		Conflicts:     conflicts,
 		Adoption:      chain.handler,
 		Clock:         clock,
 	})
@@ -2988,6 +2994,12 @@ func networkIntakeAdoption(
 	if err != nil {
 		return none, fmt.Errorf("parcel-dispatch: parcel cancellations: %w", err)
 	}
+	// 取消已提交之后才到、发生不晚于取消的收寄是事实冲突（ADR-0254）：冲突先记进册、消费门再入账。
+	// 装 nil 时编排把冲突答成依赖未决、回滚重投，冲突永远入不了账。
+	conflicts, err := pspostgres.NewCancellationOrderConflicts(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-dispatch: cancellation order conflicts: %w", err)
+	}
 	identities, err := psidentity.NewCommitmentVersions()
 	if err != nil {
 		return none, fmt.Errorf("parcel-dispatch: commitment versions: %w", err)
@@ -3034,6 +3046,7 @@ func networkIntakeAdoption(
 			Downstream:    downstream,
 			Clock:         clock,
 			Cancellations: cancellations,
+			Conflicts:     conflicts,
 		}),
 	}, nil
 }
