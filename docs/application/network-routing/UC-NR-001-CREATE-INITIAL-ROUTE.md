@@ -275,7 +275,7 @@
 
 | 规则 | 现状 | 承接 |
 |---|---|---|
-| 某个包裹未决不回滚其他包裹已形成的计划（应用流程表后一段、`AT-NR-012`） | 依赖类未决的那一件仍让消费门整封回滚重投，同一交接里已判成的计划一起回滚、重投时按判断键再判 | 待立票（见 [demo-chain-gaps/155](../../../.scratch/demo-chain-gaps/issues/155-initial-route-unconfigured-undecided-burns-the-acceptance-partition.md) 完成记录「未决事项」） |
+| 某个包裹未决不回滚其他包裹已形成的计划（应用流程表后一段、`AT-NR-012`） | 依赖类未决的那一件仍让消费门整封回滚重投，同一交接里已判成的计划一起回滚、重投时按判断键再判 | [docs-consistency/code/78](../../../.scratch/docs-consistency/code/78-initial-route-dependency-undecided-drags-formed-siblings.md) |
 | 路由未形成「保持可续办」（结果「路由未形成」、步骤 8C） | 登记补齐、部署接入或授权角色裁决之后没有续办：重驱要随请求携带的地理投影，本上下文不落它，取法待裁 | [demo-chain-gaps/154](../../../.scratch/demo-chain-gaps/issues/154-network-reassessment-not-judged-triggers-resume-after-registration.md) |
 | 并列交授权角色裁决 | 没有决定面 | [docs-consistency/code/29](../../../.scratch/docs-consistency/code/29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md) |
 

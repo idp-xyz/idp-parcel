@@ -80,6 +80,14 @@ go run ./cmd/parcel-dispatch
 
 **dispatch 对逐条投递失败一行日志都不打，全程静默不代表链跑通了。** `Dispatcher.DispatchOnce` 把失败码写进库那一行就 `continue`，进程循环只在整拍失败（认领不到、定稿写不进去）时才出声。要看它把委托推到哪一步，查 `bento.outbox` 那一行的 `status` 与 `failure_code`，别只看进程有没有报错——失败码之外的东西（停在哪一站、未决的原因是什么）今天在真进程上根本取不到，那是另一个已知缺口，记在 `.scratch/first-tenant-runway/issues/08`。实测于 2026-09-02：只灌治理权威区间、不灌商业主数据时，链如实答未决，重投烧完预算后那一行落 `ABANDONED` + `dispatch.consumer_undecided`，而委托停在`已提交`——那是一个已知缺口，记在 `.scratch/first-tenant-runway/issues/07`，演示前先读它，免得把它当成现场故障。
 
+补记（2026-10-21，票 demo-chain-gaps/155）：委托接受之后初始路由停在重投推不动的一格（网络证据未配置、候选证据不全、排序形态未声明、最低成本并列、候选成本缺依据等）时，接受决定信封答 `PUBLISHED`、没有失败码，也没有初始路由。那不是链跑通了：包裹落的是`路由未形成`，原因与对象落在未形成登记里，要这样查——
+
+```sql
+SELECT declared_parcel_id, reason, correlation_id FROM network_routing.initial_route_not_formed;
+```
+
+只有依赖读不回之类重投推得动的未决，接受信封才会照旧落失败码 `dispatch.consumer_undecided` 并重投。
+
 ## 动线
 
 角色：**租户的物流产品经理**。顺序即种子包的数据故事顺序（见 `scripts/demo-seeds/README.md`），一句话串起来是「建产品 → 配价 → 一单会走的网 → 过关的规则 → 一单委托」。

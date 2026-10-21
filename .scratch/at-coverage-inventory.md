@@ -162,7 +162,7 @@
 | `AT-NR-003` | internal/networkrouting/application/create_initial_route_test.go::TestAReplayReturnsExistingResultsAndAConflictOverwritesNothing |
 | `AT-NR-004` | internal/networkrouting/application/create_initial_route_test.go::TestAConcurrentLoserReadsBackTheWinner |
 | `AT-NR-005` | internal/networkrouting/application/create_initial_route_test.go::TestThreeParcelsKeepThreeIndependentResults；internal/networkrouting/domain/initial_route_plan_test.go::TestNoCurrentRouteDemandsAClosedFullyEliminatedSpace |
-| `AT-NR-006` | internal/networkrouting/application/create_initial_route_test.go::TestThreeParcelsKeepThreeIndependentResults（第三件：证据读不动答未决）；internal/networkrouting/application/create_initial_route_not_formed_test.go::TestDependencyFailuresStayUndecidedAndLeaveNoNotFormedRow |
+| `AT-NR-006` | internal/networkrouting/application/create_initial_route_test.go::TestThreeParcelsKeepThreeIndependentResults（第三件：证据读不动答未决）；internal/networkrouting/application/create_initial_route_not_formed_test.go::TestDependencyFailuresStayUndecidedAndLeaveNoNotFormedRow；internal/networkrouting/adapters/customscompliance/customs_source_test.go::TestAnUnreadableCatalogIsADependencyFailureNotAGap（取数侧半边：关务目录读不到以 ErrCustomsCatalogUnreadable 上抛，不记成缺口） |
 | `AT-NR-009` | internal/networkrouting/application/create_initial_route_test.go::TestAWaybillOnlyServiceIsNotApplicableWithItsBasis |
 | `AT-NR-010` | internal/networkrouting/application/create_initial_route_test.go::TestAPreCommitRevisionChangeRejudgesWithTheNewEvidence；internal/networkrouting/application/create_initial_route_test.go::TestARollingViewKeepsTheJudgmentUndecided |
 | `AT-NR-011` | internal/networkrouting/application/create_initial_route_test.go::TestAFailedIntentDeliveryIsRetriedWithoutASecondPlan |
