@@ -131,3 +131,13 @@ M：两个装载连上退役册与最新区间更正册（与 ADR-0233 给版本
 
 收口前已 `git rebase main`（`c89830c72`），无冲突。
 
+### 第 2 轮（2026-10-21，隔离评审；协调方转达，无阻断）
+
+变异测试都被杀，只有一格缺口：把 `CommercialRegistry.correctionEndOf` 改成取最早一条，全部用例照样通过。这一路是政策正文的 `bodyExcludedAt` 与收尾门的 `bodySelectionOf`，N4 只走 SQL 点读，管不到它。main 上同样没有人钉住，不算回归；本票把这一路收进了 `versionFold`，所以在本票补。
+
+| 条 | 意见 | 处理 |
+|---|---|---|
+| — | 登记册一路「取最后一条更正」无用例 | 补 `domain/version_closure_test.go` 的 `TestTheLatestOfTwoCutsGovernsThePolicyBodyInTheRegistry`：同一份结算政策正文版本先截在 v3、再截在 v2，两个截止点之间解析唯一答 v2，收尾门按较早的截止点判接得住、重发可以同起点退役旧版。在 scratchpad 副本上把 `correctionEndOf` 改成 `list[0]`，两判都红（第一判答 `APPLICABILITY_CONFLICT`，第二判答 `ErrClosureLeavesGap`）；副本已删 |
+
+验证：`TMPDIR=… scripts/test-full.sh ./internal/partycommercial/...` 退 0，6 个包 ok（另 1 个无测试文件）；新用例另跑 `-count=3` ok。
+
