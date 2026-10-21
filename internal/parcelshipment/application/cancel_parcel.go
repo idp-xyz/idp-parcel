@@ -31,7 +31,8 @@ const (
 	CancellationNotAccepted
 	// CancellationFinalOutcomeStands：包裹已有终局（非取消终局，或另一请求已成立的取消），交既有
 	// 终局、不形成取消（AT-PS-086）。它与`已有结果`分开：那一格说的是同一请求身份的重放，这一格
-	// 说的是包裹本身已经终局，与请求是谁无关。不落取消记录——终局不回退，重放照样读到它。
+	// 说的是包裹本身已经终局，与请求是谁无关。不落记录：它说的是此刻在册的终局；终局失效后重放，
+	// 按失效后的边界重判。
 	CancellationFinalOutcomeStands
 )
 
