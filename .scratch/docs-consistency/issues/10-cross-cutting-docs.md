@@ -1,7 +1,7 @@
 # 10 横切文档：GLOSSARY、CONTEXT-MAP、SCENARIOS、产品文档、协作文档
 
 Category: enhancement
-Status: in-progress——10a 已进 main（见「10a 进 main 记录」）；10b 评审已修，待随 10a rebase 做词汇对齐后进 main。此前 in-progress——10a 完工待评审与进 main，分支 claude-dc10a；10b 待开。此前 ready-for-agent——2026-10-21 协调方立（文档自洽修订最后一张，见 [README](../README.md)「修订执行」）
+Status: resolved——2026-10-21 10a、10b 两半边都已进 main（见「10a 进 main 记录」「10b 进 main 记录」）。此前 in-progress——10a 已进 main（见「10a 进 main 记录」）；10b 评审已修，待随 10a rebase 做词汇对齐后进 main。此前 in-progress——10a 完工待评审与进 main，分支 claude-dc10a；10b 待开。此前 ready-for-agent——2026-10-21 协调方立（文档自洽修订最后一张，见 [README](../README.md)「修订执行」）
 Blocked by: 03、04、05、06、07、08、09 进 main（它们的「交横切」一节是本票的输入）
 出处：[audit/cross.md](../audit/cross.md) 里 GLOSSARY（GL）、CONTEXT-MAP（CM）、SCENARIOS（SC）、产品基线诸件（PB）、试点三件（PL）、docs/agents 与 AGENTS.md（AG）各条，以及其中 B 类；03–09 各票的「交横切」一节；[01](./01-adr-suspension-chains.md)「交后续」交给本票的条目。
 
@@ -431,3 +431,9 @@ cross 的 B2、B3 两簇 B 类（B2-04、B2-10、B3·1、B3·2、B3·3、B3·6�
 查过、不改的：「多维容量」（一班多维是一组池，与 GLOSSARY「容量池」相容）；「截单时刻」各处（都在说对账安排或归属日判定的登记项，与 ADR-0269 一致）；「计算目的」各处（都指 PP 的计算目的，GLOSSARY 已去掉 PC 引用它那半句）。
 
 检查：rebase 冲突只在本票面末尾，两节都留、10a 在前，Status 行取 main；scratchpad 副本上 adr-index 生成后 `-check` 退 0，`at-coverage-counts -check` 退 0；改动的 `.md` 链接全部解析；已接受 ADR 正文对 `4e7874ba0` 逐字节相同。
+
+## 10b 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-dc10b` 由协调方 rebase 到 main `01babbc1b`（无冲突）后快进，tip `3b28e4104`；隔离评审 2 条阻断（docs/agents 两处单一权威）全部消掉，随 10a 做过一轮词汇对齐。
+- 协调方随后在 tip 上单独提交重生成的 `docs/adr/README.md`（新 ADR-0277、0278 与 0008、0017、0025、0026、0031、0043、0077、0078、0090、0139、0146、0213、0231、0233 注记）；AT 计数与机制清点重生成无变化；三者检查退 0，`go build ./...` 干净。只动文档，免全量真库测试（workflow「进 main 的步骤」新写入的例外）。
+- 去向：代码票 code/57、58；AG 五条规程类代决就地标「会话代决，待用户复核」。
