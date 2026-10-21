@@ -24,20 +24,29 @@ type Record struct {
 	SupersededBy   string
 	SupersederFile string
 	Note           string
+	// ProxyTag 由 Status 行标记前段派生（见 proxyTag），不手写：代决与待谁复核只在前段写一次，
+	// 索引要露出它就从那一处取，不另在注记里抄第二份。
+	ProxyTag string
 }
 
 // AcceptedInNote 出现在注记里，就是把接受出处又说了一遍：接受出处只写在标记前段。
 const AcceptedInNote = "**已接受**"
 
 var (
-	// 来向（后来哪份记录停用、收窄或回答了本记录）写进标记前段的三种写法。去向（本记录停用了谁）
-	// 写作「部分停用 [ADR-…]」「收窄 [ADR-…]」，主语是本记录、不带「由」，所以不会被认成来向。
-	// 这是查重的网，不是取注记的办法：注记仍只认标记，理由见 NoteMarker。
+	// 来向（后来哪份记录停用、收窄或回答了本记录）写进标记前段的两种写法：「已由 [ADR-…]」与
+	// 「由 [ADR-…](…) 停用 / 收窄 / 回答……」。去向（本记录停用了谁）写作「部分停用 [ADR-…]」
+	// 「收窄 [ADR-…]」，主语是本记录、不带「由」，认不成来向。动词后面紧跟「的」是在转述背景
+	// （「由 ADR-… 停用的那一句」），不是本记录被谁停用，放过；整份被取代的记录前段本来就是来向
+	// （`Superseded by`），不查。这是查重的网，不是取注记的办法：注记仍只认标记，理由见 NoteMarker。
 	incomingInFront = regexp.MustCompile(`已由\s*\[ADR-\d{4}\]` +
-		`|由\s*\[ADR-\d{4}\]\([^)]*\)[^。；）\]]{0,24}?(停用|收窄|回答|作答|改指|限定|取代|按口解)` +
-		`|部分停用[：:]\s*\[ADR-\d{4}\]`)
-	// 头部停用行不进索引：读索引的人看不到它，它与注记写的又是同一件事。
-	suspensionHeader = regexp.MustCompile(`^(Partially suspended by|Amended by)\s*:`)
+		`|由\s*\[ADR-\d{4}\]\([^)]*\)[^。；）\]]{0,24}?(?:停用|收窄|回答|作答|改指|限定|取代|按口解)(.?)`)
+	// 头部停用行不进索引：读索引的人看不到它，它与注记写的又是同一件事。冒号全角半角都认。
+	suspensionHeader = regexp.MustCompile(`^(Partially suspended by|Amended by)\s*[:：]`)
+
+	// 代决标签的两个来源：前段写明「代决」「代裁」「代 X owner」即会话代 owner 裁定；
+	// 「待 X owner 复核」取第一处，那是这份代决等谁复核。
+	proxyDecided  = regexp.MustCompile(`代决|代裁|代\s*[A-Za-z][A-Za-z0-9 、与-]*?\s*owner`)
+	pendingReview = regexp.MustCompile(`待\s*([^，。；）「」]*?)\s*owner\s*复核`)
 
 	recordFile = regexp.MustCompile(`^(\d{4})-[^/]+\.md$`)
 	// 冒号全角半角都收：早期记录的 H1 用半角加空格，后来统一成全角，正文不改，所以两种都在。
@@ -75,8 +84,8 @@ func ParseRecord(file, content string) (Record, error) {
 		if strings.HasPrefix(line, "## ") {
 			break
 		}
-		if suspensionHeader.MatchString(line) {
-			return Record{}, fmt.Errorf("%s：头部有「%s」行；部分停用写进 Status 行的索引注记，不另设头部行", file, strings.SplitN(line, ":", 2)[0])
+		if h := suspensionHeader.FindStringSubmatch(line); h != nil {
+			return Record{}, fmt.Errorf("%s：头部有「%s」行；部分停用写进 Status 行的索引注记，不另设头部行", file, h[1])
 		}
 		if strings.HasPrefix(line, "Status:") && !found {
 			status, found = line, true
@@ -99,8 +108,13 @@ func ParseRecord(file, content string) (Record, error) {
 		return Record{}, fmt.Errorf("%s：Status 行里有不是「%s」的 HTML 注释", file, NoteMarker)
 	}
 	// 同一件事在一行里写两遍，两份措辞迟早分岔，读的人不知道哪份算数（票 infra-speed/07 的来由）。
-	if m := incomingInFront.FindString(body); m != "" {
-		return Record{}, fmt.Errorf("%s：Status 行标记前段写了来向「%s」；后来者的停用与回答只写在「%s」之后", file, m, NoteMarker)
+	if !strings.HasPrefix(strings.TrimSpace(strings.TrimPrefix(body, "Status:")), "Superseded") {
+		for _, m := range incomingInFront.FindAllStringSubmatch(body, -1) {
+			if m[1] == "的" {
+				continue
+			}
+			return Record{}, fmt.Errorf("%s：Status 行标记前段写了来向「%s」；后来者的停用与回答只写在「%s」之后", file, m[0], NoteMarker)
+		}
 	}
 	if strings.Contains(record.Note, AcceptedInNote) {
 		return Record{}, fmt.Errorf("%s：索引注记里又写了一段「%s」；接受出处只写在标记前段", file, AcceptedInNote)
@@ -117,7 +131,37 @@ func ParseRecord(file, content string) (Record, error) {
 		}
 		record.SupersededBy, record.SupersederFile = s[1], s[2]
 	}
+	record.ProxyTag = proxyTag(body)
 	return record, nil
+}
+
+// proxyTag 从标记前段认出代决与待谁复核，交回索引行首的短标签；两样都认不出交回空串。
+func proxyTag(front string) string {
+	proxy := proxyDecided.MatchString(front)
+	who := ""
+	reviewed := false
+	if m := pendingReview.FindStringSubmatch(front); m != nil {
+		reviewed = true
+		who = strings.TrimSpace(m[1])
+	}
+	pending := "待 owner 复核"
+	if who != "" {
+		// 照前段原样留空格：英文缩写前后空一格，中文直接相连（「待各册 owner 复核」）。
+		sep := ""
+		if who[0] < 0x80 {
+			sep = " "
+		}
+		pending = "待" + sep + who + " owner 复核"
+	}
+	switch {
+	case proxy && reviewed:
+		return "〔代决·" + pending + "〕"
+	case proxy:
+		return "〔代决〕"
+	case reviewed:
+		return "〔" + pending + "〕"
+	}
+	return ""
 }
 
 // ReadRecords 读 fsys 根下全部 ADR，按号排。号重复、取代者不存在或指向自己都算错，不跳过。
@@ -167,11 +211,11 @@ func Render(records []Record) (accepted, superseded string) {
 	var a, s strings.Builder
 	for _, record := range records {
 		if record.SupersededBy == "" {
-			fmt.Fprintf(&a, "- [ADR-%s：%s](./%s)%s\n", record.Number, record.Title, record.File, record.Note)
+			fmt.Fprintf(&a, "- %s[ADR-%s：%s](./%s)%s\n", record.ProxyTag, record.Number, record.Title, record.File, record.Note)
 			continue
 		}
-		fmt.Fprintf(&s, "- [ADR-%s：%s](./%s) → 由 [ADR-%s](./%s) 取代%s\n",
-			record.Number, record.Title, record.File, record.SupersededBy, record.SupersederFile, record.Note)
+		fmt.Fprintf(&s, "- %s[ADR-%s：%s](./%s) → 由 [ADR-%s](./%s) 取代%s\n",
+			record.ProxyTag, record.Number, record.Title, record.File, record.SupersededBy, record.SupersederFile, record.Note)
 	}
 	return a.String(), s.String()
 }
