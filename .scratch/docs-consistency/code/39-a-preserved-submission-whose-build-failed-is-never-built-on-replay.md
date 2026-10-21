@@ -13,7 +13,7 @@ Blocked by: 无
 
 - `cmd/parcel-api/assemble_submission.go`：`preservationBoundary` 给保全单独开事务，头注写「保全一经提交就不随后续步骤回滚」；`submissionBoundary` 是建单的第二个事务。
 - `internal/parcelshipment/application/submit_shipment_request.go`：`Handle` 在 `Preserve` 之后，`DecideProductionOwnership` 出错、签发标识出错、`Insert` 出错都直接上抛；`resolvePreserved` 对同内容的重发只答 `OutcomeExistingResult`，「绝不重判归属、也不建第二份委托」，`FindBySourceIdentity` 找不到时不指名委托。
-- 文档：UC-PS-001 元数据「未决结束：本次处理没有形成生产归属或接受/拒绝决定，原始提交和处理尝试可安全续办」；ADR-0022「没有形成答案」由调用方重发。
+- 文档：[ADR-0256](../../../docs/adr/0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md) 决定一第 2 格「重发必须接着办」；ADR-0022「没有形成答案」由调用方重发。
 
 ## 三类
 
