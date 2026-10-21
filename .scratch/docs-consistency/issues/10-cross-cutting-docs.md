@@ -232,3 +232,135 @@ cross 的 B2、B3 两簇 B 类（B2-04、B2-10、B3·1、B3·2、B3·3、B3·6�
 - 分支 `claude-dc10a` tip `7d30868cb` 在 main `37f9d7747` 上快进；隔离评审 4 条阻断全部消掉，协调方抽核 B1（ADR-0274 Context 不再把相反入口归到 ADR-0082）与 B2（ADR-0183 挂「由 ADR-0275 回答」）。
 - 协调方随后在 tip 上单独提交：重生成 `docs/adr/README.md`、重算 AT 盘点总览计数（UC-CR-001 新增 `AT-CR-001`–`023`）；两者 `-check` 退 0。机制清点重生成无变化；`go build ./...` 干净。只动文档，免全量真库测试。
 - 去向：代码票 code/54、55、56；归 10b 的条目见上。审计 cross.md B2、B3 两簇里 B2-04、B2-10、B3·1、B3·2、B3·3、B3·6、B3·8 七条不在本票出处范围、03–09 也没接，由协调方另立票。
+
+## 10b 完成记录（2026-10-21，分支 claude-dc10b，基 main `4e7874ba0`）
+
+作者：Claude Code 作者子代理，worktree `idp-parcel-dc10b`。按 main 现状逐条复核审计 cross.md 的产品基线诸件（PB）、试点三件（PL）、docs/agents 与 AGENTS.md（AG）各条，以及 03–09「交横切」与 01「交后续」落在 10b 范围的条目：审计条目在 `4e7874ba0` 上全部仍成立，没有一条已被别票消解（审计钉之后进 main 的票没有动这几份产品与协作文档，只动过首个消费者切片简报里与 code/39 相关的两句、演示动线两条补记）。
+
+### 审计条目 → 去向
+
+| 条目 | 归类 | 去向 | 落点 |
+|---|---|---|---|
+| PB·H1 导览说 CR 没有后端、没有 CONTEXT | A | 已改 | 导览 9.11 与 13.1：机制已落地、首发不启用分开说 |
+| PB·H2 首发只有网络服务一种形态 | A | 已改 | PRODUCT-STORY 一句话定位；导览 2.1 |
+| PB·H3 网络定义登记册写入方仍列为缺口 | A | 已改 | 开发主线新补记（一）；控制金额源一并收口 |
+| PB·M1 Bento 闸门「已解除」与「仍阻断」 | B | 代决 ADR-0277 | 简报闸门表、开发主线三句、AGENTS.md 当前默认切片、PN-02 合成商业交接 |
+| PB·M2 两道哨兵按旧条款写 | A | 已改 | 开发主线横切缺口投递一条（ADR-0064、ADR-0148 决定六） |
+| PB·M3 HTTP 接入面仍写成 PAR-INT-01 实例半边 | A | 已改 | 开发主线两处；PRODUCT-STORY 生产路径一句 |
+| PB·M4 SELL/BUY 补记仍写不进派发 | A | 已改 | 开发主线新补记（二） |
+| PB·M5 PN-03 行写代码未实现 | A | 已改 | 覆盖缺口表 PN-03 行改指机制半边现状 |
+| PB·M6 商业解析排在生产归属之前 | A | 已改 | 端到端主链阶段 1 |
+| PB·M7 仍待提供整体归实例半边 | A | 已改 | 覆盖缺口表后那句与 PN-02、PN-05 两行 |
+| PB·M8 切片表漏 UC | A | 已改 | 两张表补 UC-PC-003、UC-NO-004/005/006、UC-CC-013、UC-PP-001 |
+| PB·M9 关务基线按十二个用例评估 | A | 已改 | 关务基线状态行、评估结论、两张表补 UC-CC-013 与它跟 UC-CC-009 的分工 |
+| PB·M10 关务基线余量全归真实实例 | A | 已改 | 评估结论、规则取值、PAR-COM-13 并发规则归产品策略两处 |
+| PB·M11 导览业务入口表当前行为与代码不符 | A | 已改 | 导览 8.6 改列接入面族、钉取证 |
+| PB·M12 导览 PN 定级表 | A | 已改 | 导览 12.2 改引开发主线 |
+| PB·M13 导览用例数与漏 UC | A | 已改 | 导览 9.0 改引应用用例索引并补行 |
+| PB·M14 导览第 9 章进度句过时 | A | 已改 | 删去各模块「当前成熟度」块，操作面只写职责，进度只留第 13 章并钉 SHA |
+| PB·M15 导览 UC-PC-003 授权范围 | A | 已改 | 导览 9.0、9.1 |
+| PB·M16 产品基线「不同时铺开多个渠道」 | A | 已改 | 产品基线首发原则补作用面 |
+| PB·L1 重定级结论未补 ADR-0100 落地、0139..0142 接受 | A | 已改 | 开发主线新补记（三） |
+| PB·L2 全仓九份 contract test | A | 已改 | 就地注明取证 SHA |
+| PB·L3 五条出口共七处（= 06 X11） | A | 已改 | 按符号指，不写数 |
+| PB·L4 「紧接其上那句」 | A | 已改 | 改为点名 |
+| PB·L5 关务基线 31 项 | A | 已改 | 改引切片 0 交接 |
+| PB·L6 引已取代的 ADR-0018 | A | 已改 | 注明已取代、落位结论沿用（指 ADR-0022 Links） |
+| PB·L7 ADR-0016 当完整决定引用 | A | 已改 | 开发主线、PRODUCT-STORY 各补部分取代；前向指针已由 01 消解（`bc8283e33`） |
+| PB·L8 产品故事漏产品策略 | A | 已改 | PRODUCT-STORY 演进路线与凭什么赢 |
+| PB·L9 导览把角色定义划给租户 | A | 已改 | 导览第 3 章 |
+| PB·L10 导览说前端无 CI 门禁 | A | 已改 | 导览 13.2 |
+| PB·L11 收费模型引文非原句 | A | 已改 | 照产品基线原句引 |
+| PB·L12 择优归属不准 | A | 已改 | 开发主线首发范围约束、收费模型 |
+| PB·L13 数据态要等隔离读准入 | A | 已改 | PRODUCT-STORY |
+| PL·F1 PAR-INT-08 漏运营决定 | A | 已改 | 已确认约束与最低证据 |
+| PL·F2 PAR-INT-11、PAR-GOV-03 只列两组词 | A | 已改 | 按族点名四组，词表以 `internal/accessidentity` 为准 |
+| PL·F3 矩阵按三条判据 | A | 已改 | 改引开发主线（ADR-0146） |
+| PL·F4 渠道或国家专属设计挡在租户参数后 | A | 已改 | 范围「进入详细设计的条件」；登记册门槛一节改为「生产启用前」并加约束说明 |
+| PL·F5 41 例源价卡漏金额保真度 | A | 已改 | 矩阵计价证据规则改引源完整性门禁 |
+| PL·F6 证据存储写死自建 MinIO | B | 代决 ADR-0278 | 登记册两处与 PAR-GOV-11、矩阵、docs/README、PN-08 交接与几份工作单 |
+| PL·F7 PAR-GOV-10 标待核验 | A | 已改 | 改待提供并指拆分注 |
+| PL·F8 缺 webhook 订阅行 | A | 已改 | 新增 PAR-INT-14 |
+| PL·F9 PAR-COM-18 影响面漏一册 | A | 已改 | 改引 ADR-0126 所列各册 |
+| PL·F10 路由复核触发漏交接进节点 | A | 已改 | 范围、PAR-NET-14、OPS-02 都改引 UC-NR-003「触发」一行 |
+| PL·F11 限量生产门槛漏几行 | A | 已改 | PN-03 补 PAR-NET-17/18、治理补 PAR-INT-11 同时生效、接入渠道族各行 |
+| PL·F12 范围几句等真实确认涵盖了判断方法 | A | 已改 | 范围三句只点名租户取值 |
+| PL·F13 PAR-VIS-02「保守默认依据」 | A | 已改 | 改「经批准登记的保守参数及其依据」 |
+| PL·F14 面单渠道服务必验条件三种 | A | 已改 | CPS-07 加租户条件与 N/A；范围那句加租户条件 |
+| PL·F15 PAR-SET-03 混进单卡取证状态 | A | 已改 | 模板行只留证据要求；单卡答复移回 PP-S03-W01，范围那句改指它 |
+| AG·H1 domain.md 说 CR 没有 CONTEXT | A | 已改 | domain.md 树、映射表、缺席一段；workflow.md「九个」 |
+| AG·H2 进 main 步骤只写在单会话不读处 | A | 已改 | workflow.md 新增「进 main 的步骤」；AGENTS.md 与 parallel-sessions 头部写明单会话必读部分 |
+| AG·M1 机制清点重生成两套口径 | B | 代决（docs/agents）+ 立代码票 | parallel-sessions「生成物不占号」改为三件同一条规矩；CI 门挂法交 code/57 |
+| AG·M2 Spec 轴对照 UC 还是票面 | B | 代决（docs/agents） | 只在 workflow.md「进 main 的步骤」定义，workflow 上文与 parallel-sessions 改为链接 |
+| AG·M3 gh 无 workflow scope | A | 已改 | workflow.md 当前宿主 |
+| AG·M4 四条红线少一条 | A | 已改 | workflow.md 改指红线表并补敏感实例外置 |
+| AG·M5 AGENTS.md 改文档没写部分停用（兼 01 交后续） | A | 已改 | AGENTS.md 改文档一句入口；workflow.md 那句改链接 |
+| AG·M6 当前宿主只写 Cursor | B | 代决（docs/agents） | workflow.md 新增「当前宿主之二：WSL 里的 Claude Code 会话」；parallel-sessions 标明依赖 idp-mcp 的几节只对 Cursor 多通道 |
+| AG·M7 「必要时再 /code-review」与评审门不一 | B | 代决（AGENTS.md） | AGENTS.md 本仓主路径补一句 |
+| AG·L1 branch-state 跑法 | A | 已改 | parallel-sessions 改 pwsh 形 |
+| AG·L2 位置引用方向写反 | A | 已改 | 改为节名加原句 |
+| AG·L3 上方路由表与别处计数 | A | 已改 | workflow.md 两处、parallel-sessions「四片」 |
+| AG·L4 `-p 1` 残留 | A | 已改 | parallel-sessions 步骤 4、workflow.md 前端切片理由 |
+| AG·L5 autocrlf 前后两说 | A | 已改 | workflow.md 两处理由改为 `.gitattributes` |
+| AG·L6 `blocked` 状态 | B | 代决（docs/agents）+ 立代码票 | 认 `Blocked by:`，不补角色；脚本交 code/58 |
+| AG·L7 link-skills.sh 不在本仓 | A | 已改 | workflow.md |
+| X·X-08 `docs/review/081701.md` 本机绝对路径（01 交后续） | A | 不落 | `docs/review/` 不在 10a、10b 任一半边的文件范围，交协调方定 |
+| 附表 C1 断链 | — | 10b 范围内无断链 | 审计所报各条落在 ADR 与 `docs/review/`：ADR-0045、0054 的 Links 已由 01 改正（0054 Decision 正文那条记了引用更正），ADR-0011 是已取代记录、不动；`docs/review/` 见上一行 |
+
+交来的条目：
+
+| 条目 | 去向 | 落点 |
+|---|---|---|
+| 01 交后续：AGENTS.md 部分停用写法 | 已改 | 同 AG·M5 |
+| 01 交后续：进 main 步骤旁写停用只写一处 | 已改 | workflow.md「进 main 的步骤」作者一步 |
+| 01 交后续：开发主线、产品故事引 ADR-0016 | 已改 | 同 PB·L7 |
+| 01 交后续：ADR-0017 指针交出的闸门现状（PB·M1） | 代决 ADR-0277 | ADR-0017 注记末句改为以 ADR-0277 决定三为准 |
+| 01 交后续：pp 最终设计的 `Amended by` | 已改 | pp-pricing-rule-model-final-design 两处；同样写法的 pp-unratable-outcome-decision-brief 一处一并改 |
+| 03 X6 ADR-0213 R12 读法注 | 已改 | ADR-0213 注记 |
+| 03 X7 关务基线内部合规限制消费方 | 已改 | 补 UC-CC-013，实现现状不写进基线 |
+| 04 第 7 条 ADR-0077 ← ADR-0100 | 已改 | 0077 注记与 Links、0100 前段与 Links |
+| 04 第 8 条 ADR-0078 ← ADR-0139 理由收窄 | 已改 | 0078 注记与 Links、0139 Links |
+| 06 X8 AGENTS.md 当前默认切片 | 已改 | 随 ADR-0277 |
+| 06 X10 首个消费者切片简报 | 已改 | 布局块、SourceRequestKey、首个提交状态、`!found` 映射 |
+| 06 X11 开发主线七处 `!found` | 已改 | 同 PB·L3 |
+| 06 X12 「人工接受」 | 已改 | PILOT-SCOPE、矩阵 CPS-11、pn-02 两份设计文档 |
+| 07 X6 PAR-SET-11 与参考复核职责规则 | 已改 | 已确认约束、最低证据、当前登记 |
+| 07 X7 转录本 SOURCE_RATE_CARD 一行 | 已改 | 与源完整性门禁一致 |
+| 07 X8 计价设计两份 | 已改 | 体积系数不分方向、汇率口径补 ADR-0260 决定三读法 |
+| 07 X9 ADR-0146「第三条判据」 | 已改 | ADR-0146 注记「引用更正」，前段不动 |
+| 08 X4 导览控制待确认/冲突三处 | 已改 | 照 ADR-0263 决定二 |
+| 08 X6 ADR-0233 引文 | 已改 | ADR-0233 注记「引用更正」；ADR-0231 Context 同一引文一并更正 |
+| 03 X1–X5、04 第 1–6 条、05 X1–X5、06 X1–X7 与 X9、07 X1–X5 与 X11–X14、08 X1–X3 与 X5、X7、09 X1–X10 | 归 10a | GLOSSARY、CONTEXT-MAP、SCENARIOS、各 CONTEXT、`docs/application/` 与别组 UC，本半边不改 |
+
+统计：审计 PB、PL、AG 共 63 条——已改 56、代决 7（立 ADR 2：PB·M1 → ADR-0277、PL·F6 → ADR-0278；在 docs/agents 与 AGENTS.md 里代决 5：AG·M1、M2、M6、M7、L6，其中 2 条另立代码票）；外加 X·X-08 一条不落。交来条目 10b 半边全部落实，没有不落的。新立代码票 2 张：code/57、code/58（code/59 未用）。新 ADR 2 份：0277、0278（0267–0268 未用）。
+
+### 代决摘要与越权风险点
+
+- **ADR-0277（PB·M1，代架构 owner，待架构 owner 复核，第 2 点同待 Bento owner）**：Bento 持久化闸门分 Parcel 半边（锁定候选 `v0.1.0-rc.2` 的空缓存下载与 `PBC-01` 至 `PBC-09` 对同一 checksum 全部通过，自 `ccbf79e` 成立）与登记半边（绑 `B-06`、宣称闸门通过，等双消费者证明）；Parcel 半边成立之后持久化进生产装配不再限于取证用途，约束与常驻门禁照旧；文档统一写「Parcel 半边已过、持久化进生产装配获准；闸门本身未通过、`B-06` 未登记」。部分停用 ADR-0017 两句、ADR-0026 一句。越权风险点：RC 进生产装配；登记半边可能长期不发生；租户生产与 `B-06` 的关系未裁；候选变化时已铺开的实现不回退。
+- **ADR-0278（PL·F6，代产品 owner，待产品 owner 复核）**：证据存储的形态（S3 兼容对象存储、按对象版本引用、`idp-parcel/pilot` 命名空间约定）归产品策略，用哪一个平台、谁建谁运维是租户取值，登在该租户的 `PAR-GOV-11`。部分停用 ADR-0008 Decision 一句的一半与 Consequences 两句。越权风险点：开发方若托管证据存储；命名空间约定跨租户同名；连接器尚无执行器（psb/13 第 2 项）。
+- **协作规程的五条 B 类在 docs/agents 与 AGENTS.md 里代决，不立 ADR**：AGENTS.md 把 ADR 留给「难逆转技术或产品取舍」，进 main 的步骤、评审轴、宿主说明与票面状态写法都随时可改，权威在 docs/agents（parallel-sessions 里 2026-09-08 等用户裁定也是这样记的）。各处就地标了「会话代决，待用户复核」。
+  - AG·M1：三件生成物同一条规矩，票不重生成、推送方在 tip 上各单独一笔。风险：要走 PR 形态之前 CI 的机制清点门得先按 code/57 改，否则 PR 上按设计红。
+  - AG·M2：Spec 轴对照票面判据与裁决加所引 UC，相抵以 UC 为准并记阻断。风险：评审要多读一份 UC，票面裁决与 UC 不一的票会被判阻断，作者要先改 UC 或票面。
+  - AG·M6：两种宿主并存，Claude Code 一节照实际作业写；idp-mcp 依赖的点名、度量五数只对 Cursor 多通道成立。风险：Cursor 多通道若已退场，那几节该整节退役，本票没有裁「退场」，留给用户。
+  - AG·M7：代码票与改现行规则的文档票落 main 前都要一份非作者评审，单会话也一样。风险：把 09-08 只说代码票的门扩到改规则的文档票，是照本轮各票的做法扩的。
+  - AG·L6：阻塞只认 `Blocked by:`，不补 `blocked` 状态角色。风险：脚本修好之前复核队列第二节在 WSL 里一直是空的（code/58）。
+- **进 main 的步骤写成现行**：照本轮各票「进 main 记录」与派单写下，只动 `.md` 的票可免全量真库测试与灌种子、进 main 记录写「未跑」。风险：这一免是照 09 等票的实际做法定的，用户若要文档票也全跑，改的是那两步的一句。
+
+### 归 10a 与待随 10a 对齐
+
+- 归 10a（交来的，本半边不改）：见上表最后一行。另有两处落在别组 UC、建议 10a 一并看：UC-PS-001「开发拆分建议」末段说持久化「按 ADR-0026 可写，登记为发布基线仍在 Bento 闸门之后」，可补引 ADR-0277；UC-PS-001 业务决策简报「保留人工接受门槛」一句与 06 X12 同类，是否改由 PS 口径定。
+- 待随 10a 对齐（产品与设计文档里照 10a 将改的词改的句子，以 10a 进 main 后的词为准）：
+  - 开发主线 ADR-0171 那条补记「申报测量与地址要素走小包托运」：06 X6 让 CONTEXT-MAP 改用「声明测量」（PS CONTEXT 已立此词）；补记是日期记录，随 10a 一起改。
+  - PRODUCT-BASELINE「实物控制关系」：05 X3 要统一「实物控制」与「实物控制关系」的词名。
+  - 「供应商或保险追偿」在 PILOT-SCOPE、PRODUCT-BASELINE、参数登记册与导览：04 第 3 条把 GLOSSARY 词头改为「追偿事项」、旧名列同义。
+  - 「可执行价卡版本」在 PRODUCT-BASELINE、PN-07 交接与 PN-02 合成商业交接：07 X1 要对齐 PP CONTEXT 的「定价方案版本」「价表版本」或定义「价卡」。
+  - 导览与开发主线写到 `UC-CR-001` 的地方：10a 立 UC-CR-001 后，导览 9.0 用例索引与开发主线切片表是否列它（COD 不在首发 PN 切片里）由合并时定。
+
+### 检查
+
+- 新 ADR 两份与改了 `Status` 行或 Links 的已接受 ADR 十一份：正文（去掉 `Status` 行与 Links 节）对 `4e7874ba0` 逐字节相同（scratchpad `dc10b/tools/adrbody.py`）。
+- `git archive claude-dc10b` 解到 scratchpad 后 `go run ./tools/adr-index` 生成、`-check` 退 0；索引里 0277 标〔代决·待架构 owner 复核〕、0278 标〔代决·待产品 owner 复核〕。`go run ./tools/at-coverage-counts -check` 退 0。本分支不手改 `docs/adr/README.md`、不重生成机制清点。
+- 改过的 `.md` 与 `docs/product/`、`docs/design/`、`docs/agents/`、`AGENTS.md`、`docs/README.md` 全部文件的相对链接与锚点全部解析（`dc09tools/links.py`）。
+- 改过的行里的书名号引文对 `4e7874ba0` 与本分支全仓逐字核过（`dc09tools/quotes.py`），新写的引文都中；报不中的都是改行里原样留着的旧引文、建议改写稿或代码注释跨行。
+- 与 main 的重叠：本分支开工后 main 前进到 `37f9d7747`（code/52），两边改的文件不相交。
+- 未跑 Go 测试：本半边不改代码。
