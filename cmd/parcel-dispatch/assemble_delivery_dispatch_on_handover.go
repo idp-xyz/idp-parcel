@@ -70,11 +70,16 @@ func triggerDeliveryDispatchOnHandoverConsumer(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: delivery condition source: %w", err)
 	}
-	return deliveryDispatchOnHandoverConsumerOver(db, inboxStore, clock, places, windows, conditions)
+	pendings, err := tfpostgres.NewDeliveryDispatchPendings(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: delivery dispatch pendings: %w", err)
+	}
+	return deliveryDispatchOnHandoverConsumerOver(db, inboxStore, clock, places, windows, conditions, pendings)
 }
 
-// deliveryDispatchOnHandoverConsumerOver 把交接登记册、段登记册与任务登记册接到给定的三条派送要求缝上。三条缝之外的接线
-// 只有这一处：生产装配交真适配器，真库用例交替身，两边的交接、段、任务与消费门是同一份接法。
+// deliveryDispatchOnHandoverConsumerOver 把交接登记册、段登记册与任务登记册接到给定的三条派送要求缝与派送待形成册上。这几样
+// 之外的接线只有这一处：生产装配交真适配器，真库用例交替身（册那一格交包着真册、能在同一笔事务里注入失败的那一只），两边的交接、
+// 段、任务与消费门是同一份接法。
 //
 // 不另包事务：消费门已在 inbox 那一笔事务里调处理方，任务口落库、派送待形成册那一行与 inbox 的已处理同笔提交；同一 ctx 带着同一笔。查在册的
 // 读口与任务口落库用同一只任务登记册，理由同 cmd/parcel-api 的 deliveryDispatchTriggerOver。
@@ -85,6 +90,7 @@ func deliveryDispatchOnHandoverConsumerOver(
 	places tfports.DeliveryPlaceSource,
 	windows tfports.DeliveryWindowSource,
 	conditions tfports.DeliveryConditionSource,
+	pendings tfports.DeliveryDispatchPendingRegister,
 ) (*tfinbox.TransportHandoverRegisteredConsumer, error) {
 	handovers, err := tfpostgres.NewTransportHandovers(db)
 	if err != nil {
@@ -97,10 +103,6 @@ func deliveryDispatchOnHandoverConsumerOver(
 	tasks, err := tfpostgres.NewDispatchTasks(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: delivery dispatch tasks: %w", err)
-	}
-	pendings, err := tfpostgres.NewDeliveryDispatchPendings(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: delivery dispatch pendings: %w", err)
 	}
 	trigger := tfapplication.NewTriggerDeliveryDispatchHandler(tfapplication.TriggerDeliveryDispatchDeps{
 		Segments:   segments,

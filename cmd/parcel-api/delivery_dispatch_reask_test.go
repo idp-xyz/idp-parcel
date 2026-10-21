@@ -13,6 +13,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
+	tfapp "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	tfports "go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
@@ -329,5 +330,65 @@ func TestUndecidedEntriesDoNotStarveTheRestOfTheReaskQueue(t *testing.T) {
 	}
 	if rows := rig.taskRows(t); rows != 1 {
 		t.Fatalf("任务 = %d 项, want 1", rows)
+	}
+}
+
+// failingFor 包着真执行器：对指名的那一件不交答复、只交错误，其余照真执行器答。扮演「册上某一件这一拍给不出答复」。
+type failingFor struct {
+	inner  tfapp.DeliveryDispatchTrigger
+	object string
+}
+
+func (trigger failingFor) Trigger(ctx context.Context, command tfapp.TriggerDeliveryDispatchCommand) (tfapp.TriggerDeliveryDispatchResult, error) {
+	if command.Object == trigger.object {
+		return tfapp.TriggerDeliveryDispatchResult{}, errors.New("SYN 执行器给不出答复")
+	}
+	return trigger.inner.Trigger(ctx, command)
+}
+
+// Covers: AT-TF-293（ADR-0230 决定四）——按册重问问到某一件给不出答复：整口答 500 没形成答案，停在那一件；排在它前面的那一件已各自
+// 提交——任务落了、册上了结；它自己与后面的仍待形成。再按一次从册上仍待形成的接着问。
+func TestAReaskThatHitsAnUnanswerableEntryKeepsWhatItAlreadyCommitted(t *testing.T) {
+	rig := newReaskRig(t)
+	rig.owners.change(func(owners *taskReferenceOwners) { owners.placeMissing = true })
+	for index, object := range []string{"SYN-PARCEL-70-H", "SYN-PARCEL-70-I", "SYN-PARCEL-70-J"} {
+		action := tfdomain.SegmentServiceActionUndeclared
+		if index == 0 {
+			action = tfdomain.SegmentServesFinalDelivery
+		}
+		rig.enter(t, object, reaskSegment, "SYN-HANDOVER-SCOPE-70", "SYN-HANDOVER-RESULT/"+object+"/v1", action)
+		if status, view, raw := rig.tick(t, reaskSegment, object, time.Date(2026, 1, 2, 9, index, 0, 0, time.UTC).Format(time.RFC3339)); status != http.StatusOK ||
+			view.Outcome != "REQUIREMENT_MISSING" {
+			t.Fatalf("补拍 %s 答 %d %s", object, status, raw)
+		}
+	}
+	rig.owners.change(func(owners *taskReferenceOwners) { owners.placeMissing = false })
+	trigger, err := deliveryDispatchTriggerOver(rig.db, rig.owners, rig.owners, rig.owners)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reask, err := deliveryDispatchReaskOver(rig.db, failingFor{inner: trigger, object: "SYN-PARCEL-70-I"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint := tfhttp.NewReaskDeliveryDispatchesEndpoint(rig.decisions, reask)
+	status, answer := serveReaskOperator(t, endpoint, http.MethodPost, "/transport-fulfillment-delivery-dispatch-reasks", `{"scope":"ALL","limit":10}`)
+	if status != http.StatusInternalServerError {
+		t.Fatalf("问到给不出答复的那一件：答 %d %v, want 500", status, answer)
+	}
+	if _, has := answer["outcome"]; has {
+		t.Fatalf("没形成答案却带了 outcome：%v", answer)
+	}
+	if rows := rig.taskRows(t); rows != 1 {
+		t.Fatalf("任务 = %d 项, want 1——排在前面的那一件已提交", rows)
+	}
+	if listed := rig.pendingListed(t); strings.Join(listed, ";") !=
+		reaskSegment+"/SYN-PARCEL-70-I/DELIVERY_PLACE;"+reaskSegment+"/SYN-PARCEL-70-J/DELIVERY_PLACE" {
+		t.Fatalf("查阅页列出 %v, want 给不出答复的那一件与后面那一件仍待形成", listed)
+	}
+
+	_, items, _ := rig.reaskWith(t, `{"scope":"ALL","limit":10}`)
+	if len(items) != 2 || items[0].Outcome != "DISPATCH_TASK_FORMED" || items[1].Outcome != "DISPATCH_TASK_FORMED" {
+		t.Fatalf("换回真执行器再按一次 = %+v, want 两件都形成", items)
 	}
 }

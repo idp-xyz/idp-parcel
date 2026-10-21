@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-bento-go/eventing"
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/platform/dispatch"
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
@@ -147,5 +148,67 @@ func TestThePendingRegisterBeingUnwritableIsRetriedAndItsAbsenceIsADefect(t *tes
 		if errors.Is(got, dispatch.ErrConsumerUndecided) != testCase.retried {
 			t.Fatalf("%s：%v，want 译成未决 = %v", name, got, testCase.retried)
 		}
+	}
+}
+
+// faultablePendings 包着真派送待形成册。failSettle 为真时，了结那一口先在同一笔事务里执行一条必错的语句（除以零），让库面真的把这笔
+// 事务打断，再交出那个错误：用来证册写不动时整笔回滚，而不是在替身里假装失败。
+type faultablePendings struct {
+	*tfpostgres.DeliveryDispatchPendings
+	db         *bentopg.DB
+	failSettle bool
+}
+
+func (pendings *faultablePendings) SettleFormed(
+	ctx context.Context, key tfports.DeliveryDispatchPendingKey, task tfdomain.DispatchTaskReference, at time.Time,
+) error {
+	if pendings.failSettle {
+		executor, err := pendings.db.RequireExecutor(ctx)
+		if err != nil {
+			return err
+		}
+		_, err = executor.Exec(ctx, `SELECT 1 / 0`)
+		return err
+	}
+	return pendings.DeliveryDispatchPendings.SettleFormed(ctx, key, task, at)
+}
+
+// Covers: AT-TF-294（ADR-0230 决定一）——册上已有一件待形成，所有者补齐之后交接信封到了：任务落了一行，了结册上那一条时库面真的打断
+// 了这笔事务。整笔回滚：inbox 不落、任务不落、册上那一条仍是待形成，信封登哨兵重投；库面恢复之后原样重投，任务形成、册上了结、inbox
+// 一行。
+func TestAnUnwritablePendingRegisterRollsBackTheInboxTheTaskAndTheRegisterTogether(t *testing.T) {
+	fixture := newHandoverDispatchFixture(t)
+	fixture.registerHandover(t, handoverInto(t, "SYN-PARCEL-70-G", 1, handoverDispatchSegment,
+		tfdomain.SegmentServesFinalDelivery.String()))
+	fixture.owners.missingWindow = true
+	if result, err := fixture.retick(t, "SYN-PARCEL-70-G", handoverDispatchAt.Add(-time.Hour)); err != nil ||
+		result.Outcome() != tfapplication.DeliveryDispatchRequirementMissing {
+		t.Fatalf("补拍 = %s err=%v, want REQUIREMENT_MISSING", result.Outcome(), err)
+	}
+	fixture.owners.missingWindow = false
+	fixture.pendings.failSettle = true
+
+	err := fixture.deliver(t, "SYN-PARCEL-70-G", 1)
+	if !errors.Is(err, dispatch.ErrConsumerUndecided) || !errors.Is(err, tfapplication.ErrDeliveryDispatchPendingUnavailable) {
+		t.Fatalf("册写不动 = %v, want 译成未决并带 ErrDeliveryDispatchPendingUnavailable", err)
+	}
+	if n := inboxRowsOf(t, fixture.db, handoverDispatchConsumerName, handoverDispatchEventID("SYN-PARCEL-70-G", 1)); n != 0 {
+		t.Fatalf("inbox 行 = %d, want 0——该随册一起回滚", n)
+	}
+	if n := dispatchTaskRows(t, fixture.db); n != 0 {
+		t.Fatalf("任务 = %d 项, want 0——任务那一行该随册一起回滚", n)
+	}
+	if row, _ := fixture.pendingRow(t, "SYN-PARCEL-70-G"); row.State != tfports.DeliveryDispatchPending {
+		t.Fatalf("册上那一条 = %+v, want 仍待形成", row)
+	}
+
+	fixture.pendings.failSettle = false
+	if err := fixture.deliver(t, "SYN-PARCEL-70-G", 1); err != nil {
+		t.Fatalf("恢复之后重投：%v", err)
+	}
+	if row, _ := fixture.pendingRow(t, "SYN-PARCEL-70-G"); row.State != tfports.DeliveryDispatchPendingFormed ||
+		dispatchTaskRows(t, fixture.db) != 1 ||
+		inboxRowsOf(t, fixture.db, handoverDispatchConsumerName, handoverDispatchEventID("SYN-PARCEL-70-G", 1)) != 1 {
+		t.Fatalf("恢复之后册 %+v、任务 %d 项, want 已形成、1 项、inbox 一行", row, dispatchTaskRows(t, fixture.db))
 	}
 }

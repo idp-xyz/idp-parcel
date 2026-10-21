@@ -82,7 +82,9 @@ type handoverDispatchFixture struct {
 	inboxStore  *inbox.Store
 	register    *tfapplication.RegisterTransportHandoverHandler
 	owners      *requirementStub
-	lane        dispatch.Consumer
+	// pendings 包着真派送待形成册：默认原样转交，用例可以让它在同一笔事务里注入一次库面失败。
+	pendings *faultablePendings
+	lane     dispatch.Consumer
 }
 
 // newHandoverDispatchFixture 接一条与生产同形的派送发起路（同一个 Over、同一份哨兵名单），只把三条要求缝换成替身。
@@ -100,8 +102,13 @@ func newHandoverDispatchFixture(t *testing.T) *handoverDispatchFixture {
 		t.Fatalf("构造 Inbox Store：%v", err)
 	}
 	fixture.register = newHandoverRegistration(t, db, fixture.outboxStore)
+	real, err := tfpostgres.NewDeliveryDispatchPendings(db)
+	if err != nil {
+		t.Fatalf("派送待形成册：%v", err)
+	}
+	fixture.pendings = &faultablePendings{DeliveryDispatchPendings: real, db: db}
 	consumer, err := deliveryDispatchOnHandoverConsumerOver(
-		db, fixture.inboxStore, handoverDispatchClock{}, fixture.owners, fixture.owners, fixture.owners)
+		db, fixture.inboxStore, handoverDispatchClock{}, fixture.owners, fixture.owners, fixture.owners, fixture.pendings)
 	if err != nil {
 		t.Fatalf("装配派送发起这一路：%v", err)
 	}
