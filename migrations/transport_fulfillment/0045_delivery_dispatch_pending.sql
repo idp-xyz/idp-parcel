@@ -21,6 +21,9 @@ CREATE TABLE transport_fulfillment.delivery_dispatch_pending (
     missing           text[]      NOT NULL,
     first_answered_at timestamptz NOT NULL,
     last_answered_at  timestamptz NOT NULL,
+    -- 最近一次问这一件的时刻，不论那一拍答了什么（未决、引用被占、不受理也算）。按册重问按它排队、到期重问按它算：只按最近一次
+    -- 答复排，答不出缺失的那几件就永远排在队头，后面的问不到。
+    last_asked_at     timestamptz NOT NULL,
 
     state             text        NOT NULL,
     -- 了结时形成或认出的那一项任务。
@@ -60,7 +63,7 @@ CREATE TABLE transport_fulfillment.delivery_dispatch_pending (
         )
 );
 
--- 按租户列待形成的那几件：查阅页与按册重问都只问 PENDING，按最近一次答复时刻排。
+-- 按租户列待形成的那几件：查阅页与按册重问都只问 PENDING，按最近一次问的时刻排。
 CREATE INDEX delivery_dispatch_pending_open_by_tenant
-    ON transport_fulfillment.delivery_dispatch_pending (tenant_id, last_answered_at, segment_ref, object_ref)
+    ON transport_fulfillment.delivery_dispatch_pending (tenant_id, last_asked_at, segment_ref, object_ref)
     WHERE state = 'PENDING';

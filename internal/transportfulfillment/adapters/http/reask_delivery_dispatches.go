@@ -69,6 +69,8 @@ type deliveryDispatchReaskResponse struct {
 	IntervalMinutes int64                       `json:"intervalMinutes,omitempty"`
 	DueBy           string                      `json:"dueBy,omitempty"`
 	Items           []deliveryDispatchReaskItem `json:"items"`
+	// Remaining 一律在场：这一次没问到的件数，零也照写——零就是册上该问的这一次都问到了。
+	Remaining int `json:"remaining"`
 }
 
 type deliveryDispatchReaskItem struct {
@@ -92,6 +94,7 @@ func writeDeliveryDispatchReaskOutcome(response http.ResponseWriter, result appl
 		UndecidedReason: result.UndecidedReason().String(),
 		AskedAt:         rfc3339(result.AskedAt()),
 		Items:           []deliveryDispatchReaskItem{},
+		Remaining:       result.Remaining(),
 	}
 	if dueBy, cadence, has := result.DueBy(); has {
 		body.CadenceVersion = cadence.Cadence.Version().String()

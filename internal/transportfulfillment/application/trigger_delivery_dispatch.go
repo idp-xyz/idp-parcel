@@ -297,10 +297,11 @@ func (handler *TriggerDeliveryDispatchHandler) Trigger(
 	return result, nil
 }
 
-// keepPendingRegister 照这一拍的答复写派送待形成册（ADR-0230 决定一）。只有三种答复动册：`要求缺失`立或刷新那一条；`已形成`
-// 与`已在册`了结它；`不是触发事实`里对象已不在段里的两格（链尾失效、已离场）作罢——这一件再问也形成不了。其余答复不动册：
-// `未决`还没有答案；`引用被占`与`不受理`是要人去看的异常，册上那一条照旧待形成；段不在、不是派送段、不凭交接入场三格对册上
-// 那一件不会出现（它进册时这三件都成立，段的服务动作与入场种类之后不改）；不是这一次交接带对象进段，说的是那封信，不是这一件。
+// keepPendingRegister 照这一拍的答复写派送待形成册（ADR-0230 决定一）。只有三种答复改册上那一件的状态：`要求缺失`立或刷新那一条；
+// `已形成`与`已在册`了结它；`不是触发事实`里对象已不在段里的两格（链尾失效、已离场）作罢——这一件再问也形成不了。其余答复只记下
+// 这一次问过、不改状态：`未决`还没有答案；`引用被占`与`不受理`是要人去看的异常，册上那一条照旧待形成；段不在、不是派送段、不凭
+// 交接入场三格对册上那一件不会出现（它进册时这三件都成立，段的服务动作与入场种类之后不改）；不是这一次交接带对象进段，说的是那
+// 封信，不是这一件。记下问过，是为了按册重问的队头不被这几件占住（决定四）。
 func (handler *TriggerDeliveryDispatchHandler) keepPendingRegister(
 	ctx context.Context,
 	command TriggerDeliveryDispatchCommand,
@@ -326,7 +327,7 @@ func (handler *TriggerDeliveryDispatchHandler) keepPendingRegister(
 			return handler.deps.Pending.SettleLapsed(ctx, key, result.refusal.String(), command.OccurredAt)
 		}
 	}
-	return nil
+	return handler.deps.Pending.MarkAsked(ctx, key, command.OccurredAt)
 }
 
 // answer 是一拍的判断本身，见 Trigger。

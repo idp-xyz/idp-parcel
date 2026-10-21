@@ -187,6 +187,10 @@ func (pendingRegisterSink) SettleLapsed(context.Context, ports.DeliveryDispatchP
 	return nil
 }
 
+func (pendingRegisterSink) MarkAsked(context.Context, ports.DeliveryDispatchPendingKey, time.Time) error {
+	return nil
+}
+
 func (fixture *triggerFixture) endpoint(t *testing.T) http.Handler {
 	t.Helper()
 	return tfhttp.NewTriggerDeliveryDispatchEndpoint(newTriggerIntake(t), application.NewTriggerDeliveryDispatchHandler(fixture.deps))

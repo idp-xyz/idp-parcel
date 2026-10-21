@@ -10,7 +10,7 @@ import (
 )
 
 // MaxReaskBatch 是一次按册重问最多问几件。它约束的是一次请求的耗时与所有者那一侧的读压，不是业务取值：册上待形成的多于这个数，
-// 运营人员再按一次，重问从最近一次答复最早的那几件接着问。
+// 运营人员再按一次，重问从最近一次问最早的那几件接着问；答复里的 Remaining 说这一次没问到的还有几件。
 const MaxReaskBatch = 200
 
 // ReaskScope 是按册重问问哪几件（ADR-0230 决定四、五）。
@@ -18,7 +18,7 @@ type ReaskScope uint8
 
 const (
 	ReaskScopeInvalid ReaskScope = iota
-	// ReaskAllPending：册上待形成的全部（按最近一次答复最早的在前，截到 limit）。运营人员此刻就要问，不看重问间隔。
+	// ReaskAllPending：册上待形成的全部（按最近一次问最早的在前，截到 limit）。运营人员此刻就要问，不看重问间隔。
 	ReaskAllPending
 	// ReaskDuePending：只问按本租户重问间隔已到期的那几件。间隔没登记就没有到期这回事，答`未配置`。
 	ReaskDuePending
@@ -109,13 +109,14 @@ type ReaskedDeliveryDispatch struct {
 }
 
 type ReaskPendingDeliveryDispatchesResult struct {
-	outcome  ReaskOutcome
-	reason   ReaskUndecidedReason
-	askedAt  time.Time
-	cadence  ports.DeliveryDispatchReaskCadenceRecord
-	hasDueBy bool
-	dueBy    time.Time
-	items    []ReaskedDeliveryDispatch
+	outcome   ReaskOutcome
+	reason    ReaskUndecidedReason
+	askedAt   time.Time
+	cadence   ports.DeliveryDispatchReaskCadenceRecord
+	hasDueBy  bool
+	dueBy     time.Time
+	items     []ReaskedDeliveryDispatch
+	remaining int
 }
 
 func (result ReaskPendingDeliveryDispatchesResult) Outcome() ReaskOutcome { return result.outcome }
@@ -127,7 +128,7 @@ func (result ReaskPendingDeliveryDispatchesResult) UndecidedReason() ReaskUndeci
 // AskedAt 是这一次重问的时刻，也是各件那一拍的业务时间。
 func (result ReaskPendingDeliveryDispatchesResult) AskedAt() time.Time { return result.askedAt }
 
-// DueBy 只在问到期的、且间隔登记了时给出：最近一次答复不晚于这一刻的算到期；Cadence 给出算它所凭的那一版。
+// DueBy 只在问到期的、且间隔登记了时给出：最近一次问不晚于这一刻的算到期；Cadence 给出算它所凭的那一版。
 func (result ReaskPendingDeliveryDispatchesResult) DueBy() (time.Time, ports.DeliveryDispatchReaskCadenceRecord, bool) {
 	return result.dueBy, result.cadence, result.hasDueBy
 }
@@ -135,6 +136,9 @@ func (result ReaskPendingDeliveryDispatchesResult) DueBy() (time.Time, ports.Del
 func (result ReaskPendingDeliveryDispatchesResult) Items() []ReaskedDeliveryDispatch {
 	return append([]ReaskedDeliveryDispatch(nil), result.items...)
 }
+
+// Remaining 是这一次没问到的件数：问之前按同一个筛法数出的待形成件数，减去这一次问到的。大于零就是件数上限截住了，再按一次接着问。
+func (result ReaskPendingDeliveryDispatchesResult) Remaining() int { return result.remaining }
 
 // ReaskPendingDeliveryDispatchesDeps 全部必备。Trigger 是派送发起执行器，装配点交的那一只每问一件自成一笔事务：一件写不动只回滚
 // 那一件，已问过的各件留在册上。
@@ -147,7 +151,8 @@ type ReaskPendingDeliveryDispatchesDeps struct {
 
 // ReaskPendingDeliveryDispatchesHandler 是按册重问（ADR-0230 决定四）：把派送待形成册上的那几件逐件交回派送发起执行器，再问一次
 // 所有者。它不另判任何一格——派送段、在场、入场依据、查在册、取件都是执行器的门，册怎么了结也由执行器那一拍写。所以重问是幂等的：
-// 已形成的答`已在册`，从不另立第二项；仍缺的刷新最近一次答复时刻；对象离场的作罢。
+// 已形成的答`已在册`，从不另立第二项；仍缺的刷新最近一次答复时刻；对象离场的作罢；答复动不了册的那几件也记下这一次问过，排到
+// 队尾，后面的那几件下一次轮得到。
 //
 // 不带期望交接：重问问的是对象此刻在这个段里的那条参与，不替哪一次交接说话。不是 ADR-0216 否掉的「按拍批量发起」：问的只是册上
 // 已知待形成的那几件，不扫段找对象。
@@ -180,10 +185,15 @@ func (handler *ReaskPendingDeliveryDispatchesHandler) Reask(
 		}
 		result.cadence, result.hasDueBy, result.dueBy = cadence, true, cadence.Cadence.DueBy(result.askedAt)
 	}
+	candidates, err := handler.deps.Pending.CountPending(ctx, command.TenantID, result.dueBy)
+	if err != nil {
+		return ReaskPendingDeliveryDispatchesResult{outcome: ReaskUndecided, reason: ReaskPendingRegisterUnavailable}, nil
+	}
 	pending, err := handler.deps.Pending.ListPending(ctx, command.TenantID, result.dueBy, command.Limit)
 	if err != nil {
 		return ReaskPendingDeliveryDispatchesResult{outcome: ReaskUndecided, reason: ReaskPendingRegisterUnavailable}, nil
 	}
+	result.remaining = max(candidates-len(pending), 0)
 	for _, entry := range pending {
 		answer, err := handler.deps.Trigger.Trigger(ctx, TriggerDeliveryDispatchCommand{
 			TenantID:   command.TenantID,

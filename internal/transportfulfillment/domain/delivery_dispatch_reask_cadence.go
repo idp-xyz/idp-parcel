@@ -16,7 +16,7 @@ func NewDeliveryDispatchReaskCadenceVersion(value string) (DeliveryDispatchReask
 	return DeliveryDispatchReaskCadenceVersion{required}, err
 }
 
-// DeliveryDispatchReaskCadence 是一个租户的派送重问间隔（ADR-0230 决定五）：派送待形成册上的一件，最近一次答复过去多久才算
+// DeliveryDispatchReaskCadence 是一个租户的派送重问间隔（ADR-0230 决定五）：派送待形成册上的一件，最近一次问过去多久才算
 // 到期、该再问一次所有者。它是租户取值——问得多勤，取决于这个租户的所有者多快补齐、愿意被问多少次——产品不给默认，也不出参考值；
 // 没登记就没有到期这回事，到期重问如实答未配置。批量重问「全部」不看它：那是运营人员此刻就要问。
 //
@@ -46,7 +46,7 @@ func (cadence DeliveryDispatchReaskCadence) Version() DeliveryDispatchReaskCaden
 
 func (cadence DeliveryDispatchReaskCadence) Interval() time.Duration { return cadence.interval }
 
-// DueBy 答此刻 now 之下，最近一次答复不晚于哪一刻的那几件到期。
+// DueBy 答此刻 now 之下，最近一次问不晚于哪一刻的那几件到期。
 func (cadence DeliveryDispatchReaskCadence) DueBy(now time.Time) time.Time {
 	return now.Add(-cadence.interval)
 }

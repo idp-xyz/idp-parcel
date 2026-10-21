@@ -42,6 +42,10 @@ func (failingQueue) ListPending(context.Context, domain.TenantID, time.Time, int
 	return nil, errors.New("pending register down")
 }
 
+func (failingQueue) CountPending(context.Context, domain.TenantID, time.Time) (int, error) {
+	return 0, errors.New("pending register down")
+}
+
 func (fixture *dispatchTriggerFixture) reask(
 	t *testing.T, cadences ports.DeliveryDispatchReaskCadenceReader, scope application.ReaskScope, limit int,
 ) application.ReaskPendingDeliveryDispatchesResult {
@@ -217,4 +221,54 @@ func (window windowOnlyFor) LoadDeliveryWindow(
 		return time.Time{}, time.Time{}, ports.RequirementMissing, nil
 	}
 	return window.inner.LoadDeliveryWindow(ctx, tenant, planned, present)
+}
+
+// placeUnreadableFor 让收件地点那一缝对指名的几件对象读不动、其余照内层答：扮演「队头几件一直答未决」。
+type placeUnreadableFor struct {
+	inner   *deliveryPlaceStub
+	objects map[string]bool
+}
+
+func (place placeUnreadableFor) LoadDeliveryPlace(
+	ctx context.Context, tenant domain.TenantID, object domain.CarriedObjectReference,
+) (string, ports.RequirementResolution, error) {
+	if place.objects[object.String()] {
+		return "", ports.RequirementResolutionInvalid, errors.New("parcel shipment unavailable")
+	}
+	return place.inner.LoadDeliveryPlace(ctx, tenant, object)
+}
+
+// Covers: AT-TF-292（ADR-0230 决定四）——队头那几件一直答`未决`：它们不改状态，却记下这一次问过、排到队尾；第一次重问被件数上限
+// 截住，答复说还有几件没问到；第二次重问先问到后面那一件，不再被队头卡住。
+func TestUndecidedEntriesDoNotHoldTheHeadOfTheReaskQueue(t *testing.T) {
+	fixture := newDispatchTriggerFixture(t)
+	for _, object := range []string{"parcel-1", "parcel-2", "parcel-3"} {
+		action := ""
+		if object == "parcel-1" {
+			action = "FINAL_DELIVERY"
+		}
+		fixture.enterByHandover(t, object, action, handoverJudgedTime)
+	}
+	fixture.conditions.resolution = ports.RequirementMissing
+	for index, object := range []string{"parcel-1", "parcel-2", "parcel-3"} {
+		fixture.triggerAt(t, object, deliveryTriggeredAt.Add(time.Duration(index)*time.Minute))
+	}
+	fixture.conditions.resolution = ports.RequirementResolved
+	fixture.deps.Places = placeUnreadableFor{inner: fixture.places, objects: map[string]bool{"parcel-1": true, "parcel-2": true}}
+
+	first := fixture.reask(t, cadenceReaderStub{}, application.ReaskAllPending, 2)
+	if items := first.Items(); len(items) != 2 || items[0].Answer.Outcome() != application.DeliveryDispatchUndecided ||
+		items[1].Answer.Outcome() != application.DeliveryDispatchUndecided || first.Remaining() != 1 {
+		t.Fatalf("第一次重问 = %v、还剩 %d, want 队头两件未决、还剩 1", items, first.Remaining())
+	}
+	if row := fixture.pendingRow(t, "parcel-1"); row.State != ports.DeliveryDispatchPending || !row.LastAskedAt.Equal(reaskAt) ||
+		!row.LastAnsweredAt.Equal(deliveryTriggeredAt) {
+		t.Fatalf("未决那一件 = %+v, want 仍待形成、最近一次问是这一次重问、最近一次答复不动", row)
+	}
+
+	second := fixture.reask(t, cadenceReaderStub{}, application.ReaskAllPending, 2)
+	items := second.Items()
+	if len(items) != 2 || items[0].Object.String() != "parcel-3" || items[0].Answer.Outcome() != application.DeliveryDispatchTaskFormed {
+		t.Fatalf("第二次重问 = %v, want 先问到 parcel-3 并形成", items)
+	}
 }

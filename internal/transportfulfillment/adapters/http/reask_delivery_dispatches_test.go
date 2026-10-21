@@ -23,6 +23,10 @@ func (emptyPendingQueue) ListPending(context.Context, domain.TenantID, time.Time
 	return nil, nil
 }
 
+func (emptyPendingQueue) CountPending(context.Context, domain.TenantID, time.Time) (int, error) {
+	return 0, nil
+}
+
 type noCadence struct{}
 
 func (noCadence) CurrentCadence(context.Context, domain.TenantID) (ports.DeliveryDispatchReaskCadenceRecord, bool, error) {
@@ -71,8 +75,8 @@ func TestTheReaskFaceAnswersItsWholeFaceGrades(t *testing.T) {
 		status, answer := postReask(t, endpoint, body)
 		var outcome string
 		_ = json.Unmarshal(answer["outcome"], &outcome)
-		if status != http.StatusOK || outcome != want || string(answer["items"]) != "[]" {
-			t.Fatalf("%s 答 %d %v, want 200 %s、items []", body, status, answer, want)
+		if status != http.StatusOK || outcome != want || string(answer["items"]) != "[]" || string(answer["remaining"]) != "0" {
+			t.Fatalf("%s 答 %d %v, want 200 %s、items []、remaining 0", body, status, answer, want)
 		}
 		if _, has := answer["dueBy"]; has {
 			t.Fatalf("%s 不该带到期时刻：%v", body, answer)

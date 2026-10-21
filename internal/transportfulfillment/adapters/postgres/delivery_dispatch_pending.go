@@ -53,12 +53,13 @@ func (register *DeliveryDispatchPendings) RecordMissing(
 	}
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO transport_fulfillment.delivery_dispatch_pending
-		     (tenant_id, segment_ref, object_ref, entry_basis, missing, first_answered_at, last_answered_at, state)
-		 VALUES ($1, $2, $3, $4, $5, $6, $6, 'PENDING')
+		     (tenant_id, segment_ref, object_ref, entry_basis, missing, first_answered_at, last_answered_at, last_asked_at, state)
+		 VALUES ($1, $2, $3, $4, $5, $6, $6, $6, 'PENDING')
 		 ON CONFLICT (tenant_id, segment_ref, object_ref) DO UPDATE
 		    SET entry_basis      = EXCLUDED.entry_basis,
 		        missing          = EXCLUDED.missing,
 		        last_answered_at = EXCLUDED.last_answered_at,
+		        last_asked_at    = EXCLUDED.last_asked_at,
 		        state            = 'PENDING',
 		        task_ref         = NULL,
 		        lapsed_by        = NULL,
@@ -85,7 +86,7 @@ func (register *DeliveryDispatchPendings) SettleFormed(
 	}
 	if _, err := executor.Exec(ctx,
 		`UPDATE transport_fulfillment.delivery_dispatch_pending
-		    SET state = 'FORMED', task_ref = $4, lapsed_by = NULL, settled_at = $5
+		    SET state = 'FORMED', task_ref = $4, lapsed_by = NULL, settled_at = $5, last_asked_at = $5
 		  WHERE tenant_id = $1 AND segment_ref = $2 AND object_ref = $3 AND state <> 'FORMED'`,
 		key.TenantID.String(), key.Segment.String(), key.Object.String(), task.String(), at.UTC(),
 	); err != nil {
@@ -107,11 +108,33 @@ func (register *DeliveryDispatchPendings) SettleLapsed(
 	}
 	if _, err := executor.Exec(ctx,
 		`UPDATE transport_fulfillment.delivery_dispatch_pending
-		    SET state = 'LAPSED', lapsed_by = $4, settled_at = $5
+		    SET state = 'LAPSED', lapsed_by = $4, settled_at = $5, last_asked_at = $5
 		  WHERE tenant_id = $1 AND segment_ref = $2 AND object_ref = $3 AND state = 'PENDING'`,
 		key.TenantID.String(), key.Segment.String(), key.Object.String(), lapsedBy, at.UTC(),
 	); err != nil {
 		return fmt.Errorf("lapse delivery dispatch pending: %w", err)
+	}
+	return nil
+}
+
+// MarkAsked 只给待形成的那一条记下这一次问过。答复动不了册的那几格要走这一口：不记的话，它们的最近一次问停在原地、一直排在队头，
+// 一次重问的件数全被它们占满，后面的那几件就永远问不到。
+func (register *DeliveryDispatchPendings) MarkAsked(
+	ctx context.Context,
+	key ports.DeliveryDispatchPendingKey,
+	at time.Time,
+) error {
+	executor, err := register.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("mark delivery dispatch pending asked: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`UPDATE transport_fulfillment.delivery_dispatch_pending
+		    SET last_asked_at = $4
+		  WHERE tenant_id = $1 AND segment_ref = $2 AND object_ref = $3 AND state = 'PENDING'`,
+		key.TenantID.String(), key.Segment.String(), key.Object.String(), at.UTC(),
+	); err != nil {
+		return fmt.Errorf("mark delivery dispatch pending asked: %w", err)
 	}
 	return nil
 }
@@ -141,12 +164,12 @@ func (register *DeliveryDispatchPendings) FindByKey(
 	return record, true, nil
 }
 
-// ListPending 列一个租户待形成的那几件：最近一次答复最早的在前，同刻按（段，对象）稳定排序。answeredBy 非零时只列最近一次
-// 答复不晚于它的。
+// ListPending 列一个租户待形成的那几件：最近一次问最早的在前，同刻按（段，对象）稳定排序。askedBy 非零时只列最近一次问不晚于
+// 它的。
 func (register *DeliveryDispatchPendings) ListPending(
 	ctx context.Context,
 	tenant domain.TenantID,
-	answeredBy time.Time,
+	askedBy time.Time,
 	limit int,
 ) ([]ports.DeliveryDispatchPendingRecord, error) {
 	if limit <= 0 {
@@ -156,19 +179,14 @@ func (register *DeliveryDispatchPendings) ListPending(
 	if err != nil {
 		return nil, fmt.Errorf("list delivery dispatch pending: %w", err)
 	}
-	var due *time.Time
-	if !answeredBy.IsZero() {
-		at := answeredBy.UTC()
-		due = &at
-	}
 	rows, err := querier.Query(ctx,
 		`SELECT `+deliveryDispatchPendingColumns+`
 		   FROM transport_fulfillment.delivery_dispatch_pending
 		  WHERE tenant_id = $1 AND state = 'PENDING'
-		    AND ($2::timestamptz IS NULL OR last_answered_at <= $2::timestamptz)
-		  ORDER BY last_answered_at, segment_ref, object_ref
+		    AND ($2::timestamptz IS NULL OR last_asked_at <= $2::timestamptz)
+		  ORDER BY last_asked_at, segment_ref, object_ref
 		  LIMIT $3`,
-		tenant.String(), due, limit,
+		tenant.String(), askedByParameter(askedBy), limit,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list delivery dispatch pending: %w", err)
@@ -188,17 +206,49 @@ func (register *DeliveryDispatchPendings) ListPending(
 	return list, nil
 }
 
+// CountPending 用 ListPending 的同一个筛法数件数。
+func (register *DeliveryDispatchPendings) CountPending(
+	ctx context.Context,
+	tenant domain.TenantID,
+	askedBy time.Time,
+) (int, error) {
+	querier, err := register.db.ReadExecutor(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("count delivery dispatch pending: %w", err)
+	}
+	var count int
+	if err := querier.QueryRow(ctx,
+		`SELECT count(*)
+		   FROM transport_fulfillment.delivery_dispatch_pending
+		  WHERE tenant_id = $1 AND state = 'PENDING'
+		    AND ($2::timestamptz IS NULL OR last_asked_at <= $2::timestamptz)`,
+		tenant.String(), askedByParameter(askedBy),
+	).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count delivery dispatch pending: %w", err)
+	}
+	return count, nil
+}
+
+// askedByParameter 把零值译成 SQL 的 NULL：零值是「不筛」，不是公元元年。
+func askedByParameter(askedBy time.Time) *time.Time {
+	if askedBy.IsZero() {
+		return nil
+	}
+	at := askedBy.UTC()
+	return &at
+}
+
 const deliveryDispatchPendingColumns = `tenant_id, segment_ref, object_ref, entry_basis, missing, first_answered_at, last_answered_at,
-		        state, task_ref, lapsed_by, settled_at`
+		        last_asked_at, state, task_ref, lapsed_by, settled_at`
 
 // scanDeliveryDispatchPending 逐列走各自的构造门装回：按册重问拿这几件去问执行器，坏行要在这里响，不流进那一拍。
 func scanDeliveryDispatchPending(row pgx.Row) (ports.DeliveryDispatchPendingRecord, error) {
 	var tenantText, segmentText, objectText, basisText, stateText string
 	var missing []string
-	var firstAt, lastAt time.Time
+	var firstAt, lastAt, askedAt time.Time
 	var task, lapsedBy *string
 	var settledAt *time.Time
-	if err := row.Scan(&tenantText, &segmentText, &objectText, &basisText, &missing, &firstAt, &lastAt,
+	if err := row.Scan(&tenantText, &segmentText, &objectText, &basisText, &missing, &firstAt, &lastAt, &askedAt,
 		&stateText, &task, &lapsedBy, &settledAt); err != nil {
 		return ports.DeliveryDispatchPendingRecord{}, err
 	}
@@ -220,7 +270,7 @@ func scanDeliveryDispatchPending(row pgx.Row) (ports.DeliveryDispatchPendingReco
 		return ports.DeliveryDispatchPendingRecord{}, err
 	}
 	record.Missing = missing
-	record.FirstAnsweredAt, record.LastAnsweredAt = firstAt.UTC(), lastAt.UTC()
+	record.FirstAnsweredAt, record.LastAnsweredAt, record.LastAskedAt = firstAt.UTC(), lastAt.UTC(), askedAt.UTC()
 	if task != nil {
 		record.Task = *task
 	}

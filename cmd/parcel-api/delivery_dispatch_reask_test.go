@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -271,5 +272,62 @@ func TestTheReaskFaceNeedsTheDeliveryDispatchReaskGrant(t *testing.T) {
 	endpoint.ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusForbidden || problemCode(t, recorder) != "OPERATOR_NOT_GRANTED" {
 		t.Fatalf("只持建派送任务授予：答 %d %s, want 403 OPERATOR_NOT_GRANTED", recorder.Code, recorder.Body.String())
+	}
+}
+
+// placeUnreadableFor 让收件地点那一缝对指名的几件读不动、其余照替身所有者答：扮演「队头那几件一直答未决」。
+type placeUnreadableFor struct {
+	owners  *taskReferenceOwners
+	objects map[string]bool
+}
+
+func (place placeUnreadableFor) LoadDeliveryPlace(
+	ctx context.Context, tenant tfdomain.TenantID, object tfdomain.CarriedObjectReference,
+) (string, tfports.RequirementResolution, error) {
+	if place.objects[object.String()] {
+		return "", tfports.RequirementResolutionInvalid, errors.New("parcel shipment 读面不可用")
+	}
+	return place.owners.LoadDeliveryPlace(ctx, tenant, object)
+}
+
+// Covers: AT-TF-292（ADR-0230 决定四）——队头两件一直答未决、件数上限是 2：第一次按册重问只问到它们、答复说还剩 1 件；第二次先问到
+// 后面那一件并形成任务，不被队头卡住。
+func TestUndecidedEntriesDoNotStarveTheRestOfTheReaskQueue(t *testing.T) {
+	rig := newReaskRig(t)
+	rig.owners.change(func(owners *taskReferenceOwners) { owners.placeMissing = true })
+	for index, object := range []string{"SYN-PARCEL-70-D", "SYN-PARCEL-70-E", "SYN-PARCEL-70-F"} {
+		action := tfdomain.SegmentServiceActionUndeclared
+		if index == 0 {
+			action = tfdomain.SegmentServesFinalDelivery
+		}
+		rig.enter(t, object, reaskSegment, "SYN-HANDOVER-SCOPE-70", "SYN-HANDOVER-RESULT/"+object+"/v1", action)
+		if status, view, raw := rig.tick(t, reaskSegment, object, time.Date(2026, 1, 2, 9, index, 0, 0, time.UTC).Format(time.RFC3339)); status != http.StatusOK ||
+			view.Outcome != "REQUIREMENT_MISSING" {
+			t.Fatalf("补拍 %s 答 %d %s", object, status, raw)
+		}
+	}
+	rig.owners.change(func(owners *taskReferenceOwners) { owners.placeMissing = false })
+	trigger, err := deliveryDispatchTriggerOver(rig.db,
+		placeUnreadableFor{owners: rig.owners, objects: map[string]bool{"SYN-PARCEL-70-D": true, "SYN-PARCEL-70-E": true}},
+		rig.owners, rig.owners)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reask, err := deliveryDispatchReaskOver(rig.db, trigger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rig.reask = tfhttp.NewReaskDeliveryDispatchesEndpoint(rig.decisions, reask)
+
+	_, items, answer := rig.reaskWith(t, `{"scope":"ALL","limit":2}`)
+	if len(items) != 2 || items[0].Outcome != "DISPATCH_UNDECIDED" || items[1].Outcome != "DISPATCH_UNDECIDED" || string(answer["remaining"]) != "1" {
+		t.Fatalf("第一次重问 = %+v remaining=%s, want 队头两件未决、还剩 1", items, answer["remaining"])
+	}
+	_, items, _ = rig.reaskWith(t, `{"scope":"ALL","limit":2}`)
+	if len(items) == 0 || items[0].Object != "SYN-PARCEL-70-F" || items[0].Outcome != "DISPATCH_TASK_FORMED" {
+		t.Fatalf("第二次重问 = %+v, want 先问到 SYN-PARCEL-70-F 并形成", items)
+	}
+	if rows := rig.taskRows(t); rows != 1 {
+		t.Fatalf("任务 = %d 项, want 1", rows)
 	}
 }

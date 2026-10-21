@@ -611,7 +611,7 @@ type carrierMasterDocumentBody struct {
 }
 
 // serveDeliveryDispatchPendings 上列派送待形成的那几件（ADR-0230 决定三）：哪个段里的哪个对象、凭哪条入场依据、缺哪几件、首次
-// 与最近一次答复时刻。只列待形成的；了结与作罢的不上列——这一页是要人去催所有者的清单，不是派送的历史。
+// 与最近一次答复时刻、最近一次问的时刻。只列待形成的；了结与作罢的不上列——这一页是要人去催所有者的清单，不是派送的历史。
 func serveDeliveryDispatchPendings(
 	response http.ResponseWriter,
 	request *http.Request,
@@ -633,6 +633,7 @@ func serveDeliveryDispatchPendings(
 			Missing:         append([]string{}, row.Missing...),
 			FirstAnsweredAt: rfc3339(row.FirstAnsweredAt),
 			LastAnsweredAt:  rfc3339(row.LastAnsweredAt),
+			LastAskedAt:     rfc3339(row.LastAskedAt),
 		})
 	}
 	writeJSON(response, http.StatusOK, deliveryDispatchPendingListResponse{
@@ -689,6 +690,7 @@ type deliveryDispatchPendingBody struct {
 	Missing         []string `json:"missing"`
 	FirstAnsweredAt string   `json:"firstAnsweredAt"`
 	LastAnsweredAt  string   `json:"lastAnsweredAt"`
+	LastAskedAt     string   `json:"lastAskedAt"`
 }
 
 type transportPreparationListResponse struct {

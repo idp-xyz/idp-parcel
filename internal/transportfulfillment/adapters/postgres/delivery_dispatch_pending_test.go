@@ -222,6 +222,7 @@ func TestThePendingRegisterWritesRefuseToRunOutsideATransaction(t *testing.T) {
 		"SettleLapsed": func() error {
 			return register.SettleLapsed(t.Context(), key, "PARTICIPATION_NOT_ACTIVE", pendingAnsweredAt)
 		},
+		"MarkAsked": func() error { return register.MarkAsked(t.Context(), key, pendingAnsweredAt) },
 	} {
 		if err := write(); !errors.Is(err, bentopg.ErrTransactionRequired) {
 			t.Errorf("%s 无事务应返回 ErrTransactionRequired，实得：%v", name, err)
@@ -234,17 +235,17 @@ func TestThePendingTableRefusesRowsTheRegisterCannotGive(t *testing.T) {
 	_, transactor, db := newDeliveryDispatchPendings(t)
 	for name, statement := range map[string]string{
 		"缺件不在封闭集": `INSERT INTO transport_fulfillment.delivery_dispatch_pending
-			(tenant_id, segment_ref, object_ref, entry_basis, missing, first_answered_at, last_answered_at, state)
-			VALUES ('t', 's', 'o', 'b', ARRAY['DELIVERY_ADDRESS'], now(), now(), 'PENDING')`,
+			(tenant_id, segment_ref, object_ref, entry_basis, missing, first_answered_at, last_answered_at, last_asked_at, state)
+			VALUES ('t', 's', 'o', 'b', ARRAY['DELIVERY_ADDRESS'], now(), now(), now(), 'PENDING')`,
 		"缺件为空": `INSERT INTO transport_fulfillment.delivery_dispatch_pending
-			(tenant_id, segment_ref, object_ref, entry_basis, missing, first_answered_at, last_answered_at, state)
-			VALUES ('t', 's', 'o', 'b', ARRAY[]::text[], now(), now(), 'PENDING')`,
+			(tenant_id, segment_ref, object_ref, entry_basis, missing, first_answered_at, last_answered_at, last_asked_at, state)
+			VALUES ('t', 's', 'o', 'b', ARRAY[]::text[], now(), now(), now(), 'PENDING')`,
 		"已形成没有任务": `INSERT INTO transport_fulfillment.delivery_dispatch_pending
-			(tenant_id, segment_ref, object_ref, entry_basis, missing, first_answered_at, last_answered_at, state, settled_at)
-			VALUES ('t', 's', 'o', 'b', ARRAY['DELIVERY_PLACE'], now(), now(), 'FORMED', now())`,
+			(tenant_id, segment_ref, object_ref, entry_basis, missing, first_answered_at, last_answered_at, last_asked_at, state, settled_at)
+			VALUES ('t', 's', 'o', 'b', ARRAY['DELIVERY_PLACE'], now(), now(), now(), 'FORMED', now())`,
 		"作罢格不在封闭集": `INSERT INTO transport_fulfillment.delivery_dispatch_pending
-			(tenant_id, segment_ref, object_ref, entry_basis, missing, first_answered_at, last_answered_at, state, lapsed_by, settled_at)
-			VALUES ('t', 's', 'o', 'b', ARRAY['DELIVERY_PLACE'], now(), now(), 'LAPSED', 'SEGMENT_NOT_FOUND', now())`,
+			(tenant_id, segment_ref, object_ref, entry_basis, missing, first_answered_at, last_answered_at, last_asked_at, state, lapsed_by, settled_at)
+			VALUES ('t', 's', 'o', 'b', ARRAY['DELIVERY_PLACE'], now(), now(), now(), 'LAPSED', 'SEGMENT_NOT_FOUND', now())`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			err := transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
@@ -291,5 +292,51 @@ func TestTheReviewCatalogueListsOnlyThisTenantsPendingDeliveries(t *testing.T) {
 	}
 	if len(rows) != 1 || rows[0].Key != mine {
 		t.Fatalf("查阅页列出 %+v, want 只有本租户待形成的 %v", rows, mine)
+	}
+}
+
+// Covers: AT-TF-292（ADR-0230 决定四）——记下问过只动待形成的那一条、只改最近一次问的时刻；列队与数件数都按最近一次问排与筛，
+// 刚问过的排到队尾。
+func TestMarkingAnEntryAskedMovesItToTheBackOfTheQueue(t *testing.T) {
+	register, transactor, _ := newDeliveryDispatchPendings(t)
+	head := pendingKey(t, "SYN-TENANT-01", "SYN-SEG-70", "SYN-PARCEL-70-M")
+	tail := pendingKey(t, "SYN-TENANT-01", "SYN-SEG-70", "SYN-PARCEL-70-N")
+	formed := pendingKey(t, "SYN-TENANT-01", "SYN-SEG-70", "SYN-PARCEL-70-O")
+	task, err := domain.NewDispatchTaskReference("DELIVERY-DISPATCH/task-o")
+	if err != nil {
+		t.Fatal(err)
+	}
+	asked := pendingAnsweredAt.Add(10 * time.Hour)
+	withinPendingTransaction(t, transactor, func(ctx context.Context) error {
+		for index, key := range []ports.DeliveryDispatchPendingKey{head, tail, formed} {
+			if err := register.RecordMissing(ctx, key, pendingBasis(t, "basis/v1"), []string{"DELIVERY_PLACE"},
+				pendingAnsweredAt.Add(time.Duration(index)*time.Hour)); err != nil {
+				return err
+			}
+		}
+		if err := register.SettleFormed(ctx, formed, task, pendingAnsweredAt.Add(3*time.Hour)); err != nil {
+			return err
+		}
+		if err := register.MarkAsked(ctx, head, asked); err != nil {
+			return err
+		}
+		return register.MarkAsked(ctx, formed, asked)
+	})
+	if record := mustFindPending(t, register, head); !record.LastAskedAt.Equal(asked) || !record.LastAnsweredAt.Equal(pendingAnsweredAt) ||
+		record.State != ports.DeliveryDispatchPending {
+		t.Fatalf("记下问过之后 = %+v, want 只改最近一次问", record)
+	}
+	if record := mustFindPending(t, register, formed); record.LastAskedAt.Equal(asked) {
+		t.Fatalf("已形成的那一条也被记了问过：%+v", record)
+	}
+	listed, err := register.ListPending(t.Context(), head.TenantID, time.Time{}, 10)
+	if err != nil || len(listed) != 2 || listed[0].Key != tail || listed[1].Key != head {
+		t.Fatalf("列队 = %+v err=%v, want 没问过的在前、刚问过的排到队尾", listed, err)
+	}
+	if count, err := register.CountPending(t.Context(), head.TenantID, asked.Add(-time.Minute)); err != nil || count != 1 {
+		t.Fatalf("截止在刚问过之前数出 %d 件 err=%v, want 1", count, err)
+	}
+	if count, err := register.CountPending(t.Context(), head.TenantID, time.Time{}); err != nil || count != 2 {
+		t.Fatalf("不筛数出 %d 件 err=%v, want 2", count, err)
 	}
 }
