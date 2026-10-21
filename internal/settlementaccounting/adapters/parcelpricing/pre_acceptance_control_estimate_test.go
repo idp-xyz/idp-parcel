@@ -269,6 +269,13 @@ func (unusedCredit) LoadCreditRatioBase(context.Context, sadomain.TenantID, sado
 	return 0, false, nil
 }
 
+// singlePathLock 替作用域锁：本夹具只走单路，排不排队与估价无关。
+type singlePathLock struct{}
+
+func (singlePathLock) LockControlScope(context.Context, sadomain.TenantID, sadomain.SettlementScope) error {
+	return nil
+}
+
 type estimateControl struct {
 	handler *saapplication.ApplyPreAcceptanceControlHandler
 	freezes *inMemoryFreezes
@@ -309,6 +316,7 @@ func newEstimateControl(t *testing.T, trials saports.PreAcceptanceTrialSource) e
 		CreditBasis: unusedCredit{},
 		RatioBases:  unusedCredit{},
 		Exposures:   inMemoryExposures{ledger: sadomain.NewCreditExposureLedger()},
+		ScopeLock:   singlePathLock{},
 		Clock:       trialClock{},
 	})
 	if err != nil {

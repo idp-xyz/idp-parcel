@@ -317,6 +317,145 @@ func TestControlWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	}
 }
 
+// TestTheScopeLockRefusesToRunOutsideATransaction 证作用域锁不在连接池上取：在池上取，锁随那条语句的自动提交当场放掉，读改写
+// 照样两路并发而调用方以为排过队了。
+func TestTheScopeLockRefusesToRunOutsideATransaction(t *testing.T) {
+	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	locks, err := adapter.NewPreAcceptanceControlScopeLocks(db)
+	if err != nil {
+		t.Fatalf("构造作用域锁：%v", err)
+	}
+	if err := locks.LockControlScope(t.Context(), saTenant(t, "tenant-1"), saScope(t)); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("无事务取作用域锁应返回 ErrTransactionRequired，实得：%v", err)
+	}
+	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		return locks.LockControlScope(txCtx, saTenant(t, "tenant-1"), saScope(t))
+	}); err != nil {
+		t.Fatalf("事务内取作用域锁：%v", err)
+	}
+}
+
+// Covers: SA CONTEXT「重复请求、查询和补偿不得形成重复冻结或重复释放」在账本写口这一层的半边——一份读得比库里旧的整册快照
+// 写回时，库里已释放的那一行不被改回占着、原释放时间不动；没变的行一行都不写（行版本不变），只有新入册的那一笔与真正的
+// 释放推进落库。编排层排队之外还守这一层：绕过编排、拿着旧快照写回的那一路也压不回别人的释放。
+func TestAStaleSnapshotNeitherRevivesAReleaseNorRewritesUnchangedEntries(t *testing.T) {
+	freezes, exposures, transactor, pool := newControlLedgers(t)
+	ctx := t.Context()
+	tenant := saTenant(t, "tenant-1")
+	scope := saScope(t)
+	releasedAt := frozenAtFixture.Add(time.Hour)
+
+	t.Run("冻结", func(t *testing.T) {
+		ledger := domain.NewFreezeLedger()
+		target := mustFreeze(t, ledger, freezeRequest(t, "control-X", 3000), saBalance(t, 10000))
+		mustFreeze(t, ledger, freezeRequest(t, "control-W", 2000), saBalance(t, 10000))
+		mustSaveFreezeLedger(t, transactor, ctx, freezes, tenant, scope, ledger)
+
+		stale, err := freezes.LoadForScope(ctx, tenant, scope)
+		if err != nil {
+			t.Fatalf("读旧快照：%v", err)
+		}
+		current, err := freezes.LoadForScope(ctx, tenant, scope)
+		if err != nil {
+			t.Fatalf("读当前账：%v", err)
+		}
+		if _, err := current.Release(target.FreezeID(), releasedAt); err != nil {
+			t.Fatalf("释放 X：%v", err)
+		}
+		mustSaveFreezeLedger(t, transactor, ctx, freezes, tenant, scope, current)
+		before := rowVersions(t, pool, "funds_freeze")
+
+		mustFreeze(t, stale, freezeRequest(t, "control-Y", 1000), saBalance(t, 10000))
+		mustSaveFreezeLedger(t, transactor, ctx, freezes, tenant, scope, stale)
+
+		reloaded, err := freezes.LoadForScope(ctx, tenant, scope)
+		if err != nil {
+			t.Fatalf("读回：%v", err)
+		}
+		kept, _ := reloaded.FindByRequest(target.RequestID())
+		if kept.Status() != domain.FreezeReleased || !kept.ReleasedAt().Equal(releasedAt) {
+			t.Fatalf("X = %s（释放于 %v），want RELEASED 于 %v——旧快照把释放压回去了", kept.Status(), kept.ReleasedAt(), releasedAt)
+		}
+		if added, found := reloaded.FindByRequest(saValue(t, domain.NewControlRequestID, "control-Y")); !found || added.Status() != domain.FreezeHeld {
+			t.Fatalf("Y 在册 %t、状态 %s，want 新入册的那一笔落库", found, added.Status())
+		}
+		after := rowVersions(t, pool, "funds_freeze")
+		for _, request := range []string{"control-X", "control-W"} {
+			if before[request] != after[request] {
+				t.Errorf("%s 没变却被写了一遍（行版本 %s → %s）", request, before[request], after[request])
+			}
+		}
+
+		mustSaveFreezeLedger(t, transactor, ctx, freezes, tenant, scope, reloaded)
+		if again := rowVersions(t, pool, "funds_freeze"); !sameVersions(after, again) {
+			t.Errorf("原样再存一遍改了行版本：%v → %v", after, again)
+		}
+	})
+
+	t.Run("暴露", func(t *testing.T) {
+		ledger := domain.NewCreditExposureLedger()
+		target, err := ledger.Expose(exposureRequest(t, "control-X", 3000), saStanding(t, 10000, false))
+		if err != nil {
+			t.Fatalf("暴露 X：%v", err)
+		}
+		if _, err := ledger.Expose(exposureRequest(t, "control-W", 2000), saStanding(t, 10000, false)); err != nil {
+			t.Fatalf("暴露 W：%v", err)
+		}
+		saveExposures := func(ledger *domain.CreditExposureLedger) {
+			t.Helper()
+			saWithin(t, transactor, ctx, func(txCtx context.Context) error {
+				return exposures.Save(txCtx, tenant, scope, ledger)
+			})
+		}
+		saveExposures(ledger)
+
+		stale, err := exposures.LoadForScope(ctx, tenant, scope)
+		if err != nil {
+			t.Fatalf("读旧快照：%v", err)
+		}
+		current, err := exposures.LoadForScope(ctx, tenant, scope)
+		if err != nil {
+			t.Fatalf("读当前账：%v", err)
+		}
+		if _, err := current.Release(target.ExposureID(), releasedAt); err != nil {
+			t.Fatalf("释放 X：%v", err)
+		}
+		saveExposures(current)
+		before := rowVersions(t, pool, "credit_exposure")
+
+		if _, err := stale.Expose(exposureRequest(t, "control-Y", 1000), saStanding(t, 10000, false)); err != nil {
+			t.Fatalf("暴露 Y：%v", err)
+		}
+		saveExposures(stale)
+
+		reloaded, err := exposures.LoadForScope(ctx, tenant, scope)
+		if err != nil {
+			t.Fatalf("读回：%v", err)
+		}
+		kept, _ := reloaded.FindByRequest(target.RequestID())
+		if kept.Status() != domain.ExposureReleased || !kept.ReleasedAt().Equal(releasedAt) {
+			t.Fatalf("X = %s（释放于 %v），want RELEASED 于 %v——旧快照把释放压回去了", kept.Status(), kept.ReleasedAt(), releasedAt)
+		}
+		if added, found := reloaded.FindByRequest(saValue(t, domain.NewControlRequestID, "control-Y")); !found || added.Status() != domain.ExposureRecorded {
+			t.Fatalf("Y 在册 %t、状态 %s，want 新入册的那一笔落库", found, added.Status())
+		}
+		after := rowVersions(t, pool, "credit_exposure")
+		for _, request := range []string{"control-X", "control-W"} {
+			if before[request] != after[request] {
+				t.Errorf("%s 没变却被写了一遍（行版本 %s → %s）", request, before[request], after[request])
+			}
+		}
+
+		saveExposures(reloaded)
+		if again := rowVersions(t, pool, "credit_exposure"); !sameVersions(after, again) {
+			t.Errorf("原样再存一遍改了行版本：%v → %v", after, again)
+		}
+	})
+}
+
 // TestControlRollbackLeavesNothingBehind 证保存与它所在的事务同生共死。
 func TestControlRollbackLeavesNothingBehind(t *testing.T) {
 	repository, _, transactor, _ := newControlLedgers(t)
@@ -484,6 +623,41 @@ func exposureRequest(t *testing.T, requestID string, amount int64) domain.Exposu
 		t.Fatalf("暴露请求：%v", err)
 	}
 	return request
+}
+
+// rowVersions 按控制请求读回每一行的 xmin：行被 UPDATE 过 xmin 就换，ON CONFLICT 撞上而 WHERE 不放行时只加行锁、xmin 不动。
+func rowVersions(t *testing.T, pool *pgxpool.Pool, table string) map[string]string {
+	t.Helper()
+	rows, err := pool.Query(t.Context(),
+		`SELECT control_request_id, xmin::text FROM settlement_accounting.`+table)
+	if err != nil {
+		t.Fatalf("读行版本：%v", err)
+	}
+	defer rows.Close()
+	versions := map[string]string{}
+	for rows.Next() {
+		var request, version string
+		if err := rows.Scan(&request, &version); err != nil {
+			t.Fatalf("读行版本：%v", err)
+		}
+		versions[request] = version
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("读行版本：%v", err)
+	}
+	return versions
+}
+
+func sameVersions(left, right map[string]string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for request, version := range left {
+		if right[request] != version {
+			return false
+		}
+	}
+	return true
 }
 
 func countFreezeRows(t *testing.T, pool *pgxpool.Pool) int {

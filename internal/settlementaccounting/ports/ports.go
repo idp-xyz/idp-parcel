@@ -155,6 +155,18 @@ type CreditExposureLedgerRepository interface {
 	) error
 }
 
+// PreAcceptanceControlScopeLock 让同一（租户，结算作用域）上的接受前控制施加与释放一次只走一路，锁在当前事务里取、随事务结束放。
+//
+// 两本账都是整册读、领域改、整册写，可用余额与可用额度也是读后写：账本的求和与内部编号都不知道别的事务刚落了什么。不排队，两路
+// 施加各自判够、编出同一个内部编号，后提交的那一路撞键整笔回滚；同一笔的两次释放各读到占着，各报一个释放时刻。锁要先于余额、额度与
+// 账本的读取，且与写入同一笔事务，否则读到的仍是锁外的旧账。账本写口另守一层：旧快照写回压不回库里已落的释放，那一层不靠这把锁。
+//
+// 一把锁管两本账，不是两本账合流——ADR-0047 守的是余额与额度互不借用，锁不承载余额。释放按冻结、暴露的次序碰两本，施加的次序由
+// 策略正文定（ADR-0122），每本一把锁就会有两路按相反次序取锁而互等。
+type PreAcceptanceControlScopeLock interface {
+	LockControlScope(ctx context.Context, tenant domain.TenantID, scope domain.SettlementScope) error
+}
+
 type Clock interface {
 	Now() time.Time
 }

@@ -227,6 +227,10 @@ func rejectionOrchestrationWith(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: credit exposure ledgers: %w", err)
 	}
+	scopeLocks, err := sapostgres.NewPreAcceptanceControlScopeLocks(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: pre-acceptance control scope locks: %w", err)
+	}
 	identities, err := psidentity.NewAcceptanceDecisions()
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: acceptance decision identities: %w", err)
@@ -239,7 +243,7 @@ func rejectionOrchestrationWith(
 		rejectionRequests,
 	)
 	release := pssettlement.NewPreAcceptanceControlAdapter(pssettlement.PreAcceptanceControlAdapterDeps{
-		Release: saapplication.NewReleasePreAcceptanceControlHandler(freezes, exposures, clock),
+		Release: saapplication.NewReleasePreAcceptanceControlHandler(freezes, exposures, scopeLocks, clock),
 		// Apply 留空：主动拒绝只消费释放半边；Scopes 留空：实例半边，见 buildRejectionOrchestration 的注释。
 	})
 

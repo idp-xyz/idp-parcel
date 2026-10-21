@@ -163,6 +163,10 @@ func (fixture *customerSupplementLoopFixture) wireSettlement(t *testing.T, ctx c
 	if err != nil {
 		t.Fatalf("构造暴露账本：%v", err)
 	}
+	scopeLocks, err := sapostgres.NewPreAcceptanceControlScopeLocks(fixture.db)
+	if err != nil {
+		t.Fatalf("构造控制作用域锁：%v", err)
+	}
 	balances, err := sapostgres.NewOperationalBalances(fixture.db, freezes)
 	if err != nil {
 		t.Fatalf("构造运营余额：%v", err)
@@ -201,7 +205,7 @@ func (fixture *customerSupplementLoopFixture) wireSettlement(t *testing.T, ctx c
 	settlement.trials.answer = synRPricedTrials(t)
 	return pssettlement.NewPreAcceptanceControlAdapter(pssettlement.PreAcceptanceControlAdapterDeps{
 		Apply:   settlement.apply,
-		Release: saapplication.NewReleasePreAcceptanceControlHandler(freezes, exposures, systemClock{}),
+		Release: saapplication.NewReleasePreAcceptanceControlHandler(freezes, exposures, scopeLocks, systemClock{}),
 		Scopes: pssettlement.NewPolicyBackedControlScopeSource(
 			&synRSettledCommercialBasis{synRSwitchableAsOfCommercialBasis: fixture.commercial}, directory),
 	})

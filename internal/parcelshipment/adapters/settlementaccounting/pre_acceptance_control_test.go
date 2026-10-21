@@ -194,6 +194,13 @@ type fixedClock struct{ at time.Time }
 
 func (clock fixedClock) Now() time.Time { return clock.at }
 
+// scopeLockDouble 替作用域锁：本文件的用例都是单路，排不排队与本文件要证的译法无关，排队另有真库用例证。
+type scopeLockDouble struct{}
+
+func (scopeLockDouble) LockControlScope(context.Context, sadomain.TenantID, sadomain.SettlementScope) error {
+	return nil
+}
+
 var (
 	_ saports.PreAcceptanceControlPolicyView = (*policyDouble)(nil)
 	_ saports.OperationalBalanceView         = (*balanceDouble)(nil)
@@ -324,6 +331,7 @@ func (fixture *controlFixture) estimateViews(deps saapplication.ApplyPreAcceptan
 	deps.Adoptions = fixture.adoptions
 	deps.Trials = fixture.trials
 	deps.Traces = fixture.traces
+	deps.ScopeLock = scopeLockDouble{}
 	return deps
 }
 
@@ -409,7 +417,7 @@ func newControlFixture(t *testing.T) *controlFixture {
 			Clock:       fixedClock{at: controlledAt},
 		})),
 		Release: saapplication.NewReleasePreAcceptanceControlHandler(
-			fixture.ledger, exposures, fixedClock{at: controlledAt.Add(time.Hour)}),
+			fixture.ledger, exposures, scopeLockDouble{}, fixedClock{at: controlledAt.Add(time.Hour)}),
 		Scopes: fixture.scopes,
 	})
 	return fixture
@@ -615,7 +623,7 @@ func termsFixture(t *testing.T, standing sadomain.CreditStanding) *controlFixtur
 			Clock:       fixedClock{at: controlledAt},
 		})),
 		Release: saapplication.NewReleasePreAcceptanceControlHandler(
-			fixture.ledger, exposures, fixedClock{at: controlledAt.Add(time.Hour)}),
+			fixture.ledger, exposures, scopeLockDouble{}, fixedClock{at: controlledAt.Add(time.Hour)}),
 		Scopes: fixture.scopes,
 	})
 	return fixture
@@ -1252,7 +1260,7 @@ func TestAReleaseWithoutAFormedScopeNamesItsGapAndClaimsNothing(t *testing.T) {
 			arrange: func(fixture *controlFixture) *adapter.PreAcceptanceControlAdapter {
 				return adapter.NewPreAcceptanceControlAdapter(adapter.PreAcceptanceControlAdapterDeps{
 					Release: saapplication.NewReleasePreAcceptanceControlHandler(fixture.ledger,
-						&exposureLedgerDouble{ledger: sadomain.NewCreditExposureLedger()}, fixedClock{at: controlledAt.Add(time.Hour)}),
+						&exposureLedgerDouble{ledger: sadomain.NewCreditExposureLedger()}, scopeLockDouble{}, fixedClock{at: controlledAt.Add(time.Hour)}),
 				})
 			},
 			want: "CONTROL_SCOPE_NOT_ASSEMBLED",

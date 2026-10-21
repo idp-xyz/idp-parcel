@@ -1061,6 +1061,10 @@ func acceptanceFinancialControl(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: credit standings: %w", err)
 	}
+	scopeLocks, err := sapostgres.NewPreAcceptanceControlScopeLocks(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance control scope locks: %w", err)
+	}
 	declarations, err := pcpostgres.NewPreAcceptanceControlDeclarations(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance control declarations: %w", err)
@@ -1109,6 +1113,7 @@ func acceptanceFinancialControl(
 		CreditBasis: creditBasis,
 		RatioBases:  ratioBases,
 		Exposures:   exposures,
+		ScopeLock:   scopeLocks,
 		Clock:       clock,
 	})
 	if err != nil {
@@ -1124,7 +1129,7 @@ func acceptanceFinancialControl(
 	}
 	return pssettlement.NewPreAcceptanceControlAdapter(pssettlement.PreAcceptanceControlAdapterDeps{
 		Apply:   apply,
-		Release: saapplication.NewReleasePreAcceptanceControlHandler(freezes, exposures, clock),
+		Release: saapplication.NewReleasePreAcceptanceControlHandler(freezes, exposures, scopeLocks, clock),
 		Scopes: pssettlement.NewPolicyBackedControlScopeSource(
 			commercial,
 			directory,

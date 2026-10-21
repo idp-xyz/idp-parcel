@@ -328,6 +328,7 @@ type ApplyPreAcceptanceControlHandler struct {
 	creditBasis ports.CreditBasisView
 	ratioBases  ports.CreditRatioBaseView
 	exposures   ports.CreditExposureLedgerRepository
+	scopeLock   ports.PreAcceptanceControlScopeLock
 	clock       ports.Clock
 }
 
@@ -336,7 +337,7 @@ type ApplyPreAcceptanceControlHandler struct {
 // 那条路的委托到达时 panic。CreditBasis 是账期分支的授信额度来源（ADR-0127 决定四）；RatioBases 是
 // 比例额度的基数在本上下文账本里的取值（ADR-0129 决定三）——额度是比例时没有它折不出金额，与别的
 // 依赖同一道构造门。Adoptions、Trials、Traces 是估价那一口（ADR-0179）：两条路都要金额，金额只从
-// 估价来。
+// 估价来。ScopeLock 让同一作用域上的控制排队：没有它，并发两路各按自己读到的账判够、各把自己的快照整册写回。
 type ApplyPreAcceptanceControlDeps struct {
 	Policy      ports.PreAcceptanceControlPolicyView
 	Adoptions   ports.PreAcceptanceEstimateAdoptionView
@@ -348,6 +349,7 @@ type ApplyPreAcceptanceControlDeps struct {
 	CreditBasis ports.CreditBasisView
 	RatioBases  ports.CreditRatioBaseView
 	Exposures   ports.CreditExposureLedgerRepository
+	ScopeLock   ports.PreAcceptanceControlScopeLock
 	Clock       ports.Clock
 }
 
@@ -374,6 +376,7 @@ func NewApplyPreAcceptanceControlHandler(deps ApplyPreAcceptanceControlDeps) (*A
 		{"credit basis view", deps.CreditBasis == nil},
 		{"credit ratio base view", deps.RatioBases == nil},
 		{"credit exposure ledger repository", deps.Exposures == nil},
+		{"pre-acceptance control scope lock", deps.ScopeLock == nil},
 		{"clock", deps.Clock == nil},
 	} {
 		if dependency.missing {
@@ -391,6 +394,7 @@ func NewApplyPreAcceptanceControlHandler(deps ApplyPreAcceptanceControlDeps) (*A
 		creditBasis: deps.CreditBasis,
 		ratioBases:  deps.RatioBases,
 		exposures:   deps.Exposures,
+		scopeLock:   deps.ScopeLock,
 		clock:       deps.Clock,
 	}, nil
 }
@@ -644,6 +648,11 @@ func (handler *ApplyPreAcceptanceControlHandler) freezeFunds(
 	amountMinor int64,
 	controlledAt time.Time,
 ) (controlStep, *ApplyPreAcceptanceControlResult, error) {
+	// 锁先于读余额：可用余额扣的是这本账上已占着的冻结，锁之后读到的才是别的控制落完之后的账。取不到锁就是这本账此刻读写不了，
+	// 与账本读不回同一格。
+	if err := handler.scopeLock.LockControlScope(ctx, command.TenantID, command.Scope); err != nil {
+		return controlStep{}, handler.haltNotFormed(command, FreezeLedgerUnavailable), nil
+	}
 	balance, err := handler.balance.LoadBalance(ctx, command.TenantID, command.Scope)
 	if err != nil {
 		return controlStep{}, handler.haltNotFormed(command, BalanceUnavailable), nil
@@ -711,6 +720,10 @@ func (handler *ApplyPreAcceptanceControlHandler) exposeCredit(
 		return controlStep{}, halted, err
 	}
 
+	// 锁先于读信用状况，理由同预付冻结：已占用暴露是这本账当场求和的。授信依据与基数在锁外取，它们不是本作用域两本账上的事实。
+	if err := handler.scopeLock.LockControlScope(ctx, command.TenantID, command.Scope); err != nil {
+		return controlStep{}, handler.haltNotFormed(command, ExposureLedgerUnavailable), nil
+	}
 	standing, err := handler.credit.LoadCreditStanding(ctx, command.TenantID, command.Scope)
 	if err != nil {
 		return controlStep{}, handler.haltNotFormed(command, CreditStandingUnavailable), nil

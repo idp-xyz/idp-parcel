@@ -21,6 +21,21 @@ type fixedClock struct{ at time.Time }
 
 func (clock fixedClock) Now() time.Time { return clock.at }
 
+// scopeLockDouble 替作用域锁：err 答取不到；locked 数取过几次，onLock 让用例记下取锁落在哪一步之前。
+type scopeLockDouble struct {
+	err    error
+	locked int
+	onLock func()
+}
+
+func (double *scopeLockDouble) LockControlScope(context.Context, domain.TenantID, domain.SettlementScope) error {
+	double.locked++
+	if double.onLock != nil {
+		double.onLock()
+	}
+	return double.err
+}
+
 // unconfigured 取反向默认：既有用例给的都是已登记的策略，零值应当继续表示「登记了」。
 // 正向的 configured 会让每个既有构造点都要补一句 true，而漏补的那个会静默变成未配置。
 type policyDouble struct {
@@ -301,8 +316,13 @@ func commandFor(t *testing.T, requestID string) application.ApplyPreAcceptanceCo
 }
 
 // mustHandler 走构造门；本文件的用例证的是编排行为，不是装配门，门拒了就是夹具没配齐。
+// mustHandler 在用例没给作用域锁时补一只不拦的：本包用例都是单路，排队与否与它们要证的编排无关；锁本身的编排顺序与失败另有
+// 用例，排队另有真库用例。
 func mustHandler(t *testing.T, deps application.ApplyPreAcceptanceControlDeps) *application.ApplyPreAcceptanceControlHandler {
 	t.Helper()
+	if deps.ScopeLock == nil {
+		deps.ScopeLock = &scopeLockDouble{}
+	}
 	handler, err := application.NewApplyPreAcceptanceControlHandler(deps)
 	if err != nil {
 		t.Fatalf("new apply pre-acceptance control handler: %v", err)
@@ -899,4 +919,95 @@ func TestAHaltOnTheSecondControlLeavesTheFirstReplayableNotDoubled(t *testing.T)
 	if _, exposed := resumed.Exposure(); !exposed {
 		t.Fatal("续办后第二项仍未执行")
 	}
+}
+
+// Covers: ports.PreAcceptanceControlScopeLock 的取锁位置——预付冻结那一项先取作用域锁，再读余额与冻结账本：可用余额扣的是册内
+// 已占着的冻结，锁之前读到的是别的控制落完之前的账。账期那一项同理先于信用状况与暴露账本，授信依据在锁外取。并发的效果另有真库用例证。
+func TestEachControlItemTakesTheScopeLockBeforeReadingItsBook(t *testing.T) {
+	t.Run("预付冻结", func(t *testing.T) {
+		balance := &balanceDouble{balance: balanceWith(t, 10_000)}
+		ledger := &ledgerDouble{ledger: domain.NewFreezeLedger()}
+		lock := &scopeLockDouble{}
+		lock.onLock = func() {
+			if balance.loaded != 0 || ledger.loaded != 0 {
+				t.Error("取锁时余额或冻结账本已经读过了")
+			}
+		}
+		handler := mustHandler(t, application.ApplyPreAcceptanceControlDeps{
+			Policy: requiredPolicy(t), Adoptions: adopted(t), Trials: estimating(t, 4_000), Traces: &traceDouble{},
+			Balance: balance, Freezes: ledger,
+			Credit: &creditDouble{}, CreditBasis: &creditBasisDouble{}, RatioBases: &ratioBaseDouble{},
+			Exposures: &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()}, ScopeLock: lock, Clock: fixedClock{at: controlAt},
+		})
+		if result, err := handler.Handle(context.Background(), command(t)); err != nil || result.Outcome() != application.ControlApplied {
+			t.Fatalf("handle = %q, %v；want CONTROL_APPLIED", result.Outcome(), err)
+		}
+		if lock.locked != 1 || ledger.saved != 1 {
+			t.Fatalf("取锁 %d 次、存账 %d 次，want 各一次", lock.locked, ledger.saved)
+		}
+	})
+	t.Run("信用校验", func(t *testing.T) {
+		credit := &creditDouble{standing: standingWith(t, 10_000, 0, false)}
+		exposures := &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()}
+		lock := &scopeLockDouble{}
+		lock.onLock = func() {
+			if credit.loaded != 0 || exposures.loaded != 0 {
+				t.Error("取锁时信用状况或暴露账本已经读过了")
+			}
+		}
+		handler := mustHandler(t, application.ApplyPreAcceptanceControlDeps{
+			Policy: &policyDouble{policy: methodPolicy(t, domain.TermsSettlement)}, Adoptions: adopted(t), Trials: estimating(t, 4_000),
+			Traces: &traceDouble{}, Balance: &balanceDouble{}, Freezes: &ledgerDouble{ledger: domain.NewFreezeLedger()},
+			Credit: credit, CreditBasis: authorized(t, 10_000), RatioBases: &ratioBaseDouble{},
+			Exposures: exposures, ScopeLock: lock, Clock: fixedClock{at: controlAt},
+		})
+		if result, err := handler.Handle(context.Background(), command(t)); err != nil || result.Outcome() != application.ControlApplied {
+			t.Fatalf("handle = %q, %v；want CONTROL_APPLIED", result.Outcome(), err)
+		}
+		if lock.locked != 1 || exposures.saved != 1 {
+			t.Fatalf("取锁 %d 次、存账 %d 次，want 各一次", lock.locked, exposures.saved)
+		}
+	})
+}
+
+// Covers: 取不到作用域锁停在那本账读写不了的那一格（待判断、可续办），不读、不写：锁外读到的账正是锁要挡的。
+func TestAnUnavailableScopeLockHaltsTheItemBeforeItsBookIsRead(t *testing.T) {
+	t.Run("预付冻结", func(t *testing.T) {
+		balance := &balanceDouble{balance: balanceWith(t, 10_000)}
+		ledger := &ledgerDouble{ledger: domain.NewFreezeLedger()}
+		handler := mustHandler(t, application.ApplyPreAcceptanceControlDeps{
+			Policy: requiredPolicy(t), Adoptions: adopted(t), Trials: estimating(t, 4_000), Traces: &traceDouble{},
+			Balance: balance, Freezes: ledger,
+			Credit: &creditDouble{}, CreditBasis: &creditBasisDouble{}, RatioBases: &ratioBaseDouble{},
+			Exposures: &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()},
+			ScopeLock: &scopeLockDouble{err: errors.New("lock unavailable")}, Clock: fixedClock{at: controlAt},
+		})
+		result, err := handler.Handle(context.Background(), command(t))
+		if err != nil || result.Outcome() != application.ControlNotFormed || result.NotFormedReason() != application.FreezeLedgerUnavailable {
+			t.Fatalf("handle = %q/%q, %v；want NOT_FORMED/FREEZE_LEDGER_UNAVAILABLE", result.Outcome(), result.NotFormedReason(), err)
+		}
+		if result.ContinuationReference().String() == "" {
+			t.Fatal("取不到锁没有留下续办引用")
+		}
+		if balance.loaded != 0 || ledger.loaded != 0 || ledger.saved != 0 {
+			t.Fatalf("取不到锁仍读了余额 %d 次、读账 %d 次、存账 %d 次", balance.loaded, ledger.loaded, ledger.saved)
+		}
+	})
+	t.Run("信用校验", func(t *testing.T) {
+		credit := &creditDouble{standing: standingWith(t, 10_000, 0, false)}
+		exposures := &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()}
+		handler := mustHandler(t, application.ApplyPreAcceptanceControlDeps{
+			Policy: &policyDouble{policy: methodPolicy(t, domain.TermsSettlement)}, Adoptions: adopted(t), Trials: estimating(t, 4_000),
+			Traces: &traceDouble{}, Balance: &balanceDouble{}, Freezes: &ledgerDouble{ledger: domain.NewFreezeLedger()},
+			Credit: credit, CreditBasis: authorized(t, 10_000), RatioBases: &ratioBaseDouble{},
+			Exposures: exposures, ScopeLock: &scopeLockDouble{err: errors.New("lock unavailable")}, Clock: fixedClock{at: controlAt},
+		})
+		result, err := handler.Handle(context.Background(), command(t))
+		if err != nil || result.Outcome() != application.ControlNotFormed || result.NotFormedReason() != application.ExposureLedgerUnavailable {
+			t.Fatalf("handle = %q/%q, %v；want NOT_FORMED/EXPOSURE_LEDGER_UNAVAILABLE", result.Outcome(), result.NotFormedReason(), err)
+		}
+		if credit.loaded != 0 || exposures.loaded != 0 || exposures.saved != 0 {
+			t.Fatalf("取不到锁仍读了信用状况 %d 次、读账 %d 次、存账 %d 次", credit.loaded, exposures.loaded, exposures.saved)
+		}
+	})
 }

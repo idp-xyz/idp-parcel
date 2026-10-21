@@ -96,15 +96,17 @@ func (result ReleasePreAcceptanceControlResult) ContinuationReference() Continua
 type ReleasePreAcceptanceControlHandler struct {
 	ledger    ports.FreezeLedgerRepository
 	exposures ports.CreditExposureLedgerRepository
+	scopeLock ports.PreAcceptanceControlScopeLock
 	clock     ports.Clock
 }
 
 func NewReleasePreAcceptanceControlHandler(
 	ledger ports.FreezeLedgerRepository,
 	exposures ports.CreditExposureLedgerRepository,
+	scopeLock ports.PreAcceptanceControlScopeLock,
 	clock ports.Clock,
 ) *ReleasePreAcceptanceControlHandler {
-	return &ReleasePreAcceptanceControlHandler{ledger: ledger, exposures: exposures, clock: clock}
+	return &ReleasePreAcceptanceControlHandler{ledger: ledger, exposures: exposures, scopeLock: scopeLock, clock: clock}
 }
 
 // Handle 按原关联释放一次接受前财务控制。在冻结账本与暴露账本**各**认领一次（ADR-0122）：
@@ -123,13 +125,18 @@ func (handler *ReleasePreAcceptanceControlHandler) Handle(
 
 	result := ReleasePreAcceptanceControlResult{outcome: NothingToRelease}
 
+	// 一把锁管两本账，取在读冻结账本之前：同一笔的两次释放并发时，后到的那一路要读到先到那一路已落的释放，才交得回原释放时刻；
+	// 锁外两路都读到占着，各报一个释放时刻，库里只留先落的那个。取不到锁就是冻结那本此刻读写不了，与它读不回同一格。
+	if err := handler.scopeLock.LockControlScope(ctx, command.TenantID, command.Scope); err != nil {
+		return handler.notFormed(command, FreezeLedgerUnavailable), nil
+	}
 	ledger, err := handler.ledger.LoadForScope(ctx, command.TenantID, command.Scope)
 	if err != nil || ledger == nil {
 		return handler.notFormed(command, FreezeLedgerUnavailable), nil
 	}
 	if freeze, found := ledger.FindByRequest(command.RequestID); found && freeze.Status() == domain.FreezeReleased {
-		// 已释放的再请求一次只交回原释放，不回写：Save 写的是整个作用域的账本，重复释放每回一次就把读到的那份
-		// 快照整册写回一次，并发下会把别人刚落的释放压回去，原释放时刻也跟着读到哪份写哪份。
+		// 已释放的再请求一次只交回原释放，不回写：这一册上没有要推进的行，Save 走一遍整册只是逐行撞键、一行不改，
+		// 白白锁一遍整个作用域的行。
 		result.outcome, result.freeze, result.hasFreeze = ControlReleased, freeze, true
 	} else if found {
 		released, err := ledger.Release(freeze.FreezeID(), handler.clock.Now())

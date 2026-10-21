@@ -90,7 +90,7 @@ func releaseCommand(t *testing.T) application.ReleasePreAcceptanceControlCommand
 func TestAHeldFreezeIsReleasedByItsOriginalAssociation(t *testing.T) {
 	ledger, frozen := heldLedger(t)
 	repo := &ledgerDouble{ledger: ledger}
-	handler := application.NewReleasePreAcceptanceControlHandler(repo, emptyExposures(), fixedClock{at: releasedAtClock})
+	handler := application.NewReleasePreAcceptanceControlHandler(repo, emptyExposures(), &scopeLockDouble{}, fixedClock{at: releasedAtClock})
 
 	result, err := handler.Handle(context.Background(), releaseCommand(t))
 	if err != nil {
@@ -121,12 +121,12 @@ func TestARepeatedReleaseReturnsTheOriginalAnswerWithItsOriginalTime(t *testing.
 	ledger, _ := heldLedger(t)
 	repo := &ledgerDouble{ledger: ledger}
 
-	first, err := application.NewReleasePreAcceptanceControlHandler(repo, emptyExposures(), fixedClock{at: releasedAtClock}).
+	first, err := application.NewReleasePreAcceptanceControlHandler(repo, emptyExposures(), &scopeLockDouble{}, fixedClock{at: releasedAtClock}).
 		Handle(context.Background(), releaseCommand(t))
 	if err != nil {
 		t.Fatalf("first handle: %v", err)
 	}
-	second, err := application.NewReleasePreAcceptanceControlHandler(repo, emptyExposures(), fixedClock{at: releasedAtClock.Add(time.Hour)}).
+	second, err := application.NewReleasePreAcceptanceControlHandler(repo, emptyExposures(), &scopeLockDouble{}, fixedClock{at: releasedAtClock.Add(time.Hour)}).
 		Handle(context.Background(), releaseCommand(t))
 	if err != nil {
 		t.Fatalf("second handle: %v", err)
@@ -149,7 +149,7 @@ func TestARepeatedReleaseReturnsTheOriginalAnswerWithItsOriginalTime(t *testing.
 // 也不会长出一笔冻结来。
 func TestAReleaseForARequestThatNeverFrozeIsNothingToRelease(t *testing.T) {
 	repo := &ledgerDouble{ledger: domain.NewFreezeLedger()}
-	handler := application.NewReleasePreAcceptanceControlHandler(repo, emptyExposures(), fixedClock{at: releasedAtClock})
+	handler := application.NewReleasePreAcceptanceControlHandler(repo, emptyExposures(), &scopeLockDouble{}, fixedClock{at: releasedAtClock})
 
 	result, err := handler.Handle(context.Background(), releaseCommand(t))
 	if err != nil {
@@ -180,7 +180,7 @@ func TestAnUnreachableLedgerKeepsTheReleaseUnformed(t *testing.T) {
 			ledger, _ := heldLedger(t)
 			repo := &ledgerDouble{ledger: ledger}
 			arrange(repo)
-			handler := application.NewReleasePreAcceptanceControlHandler(repo, emptyExposures(), fixedClock{at: releasedAtClock})
+			handler := application.NewReleasePreAcceptanceControlHandler(repo, emptyExposures(), &scopeLockDouble{}, fixedClock{at: releasedAtClock})
 
 			result, err := handler.Handle(context.Background(), releaseCommand(t))
 			if err != nil {
@@ -223,7 +223,7 @@ func TestACombinedControlIsReleasedOnBothLedgers(t *testing.T) {
 	}
 	freezes := &ledgerDouble{ledger: freezeLedger}
 	exposures := &exposureLedgerDouble{ledger: exposureLedger}
-	handler := application.NewReleasePreAcceptanceControlHandler(freezes, exposures, fixedClock{at: releasedAtClock})
+	handler := application.NewReleasePreAcceptanceControlHandler(freezes, exposures, &scopeLockDouble{}, fixedClock{at: releasedAtClock})
 
 	result, err := handler.Handle(context.Background(), releaseCommand(t))
 	if err != nil {
@@ -268,12 +268,12 @@ func TestARepeatedReleaseWritesNeitherLedgerAgain(t *testing.T) {
 	freezes := &ledgerDouble{ledger: freezeLedger}
 	exposures := &exposureLedgerDouble{ledger: exposureLedger}
 
-	first, err := application.NewReleasePreAcceptanceControlHandler(freezes, exposures, fixedClock{at: releasedAtClock}).
+	first, err := application.NewReleasePreAcceptanceControlHandler(freezes, exposures, &scopeLockDouble{}, fixedClock{at: releasedAtClock}).
 		Handle(context.Background(), releaseCommand(t))
 	if err != nil {
 		t.Fatalf("first handle: %v", err)
 	}
-	repeat, err := application.NewReleasePreAcceptanceControlHandler(freezes, exposures, fixedClock{at: releasedAtClock.Add(time.Hour)}).
+	repeat, err := application.NewReleasePreAcceptanceControlHandler(freezes, exposures, &scopeLockDouble{}, fixedClock{at: releasedAtClock.Add(time.Hour)}).
 		Handle(context.Background(), releaseCommand(t))
 	if err != nil {
 		t.Fatalf("repeat handle: %v", err)
@@ -319,7 +319,7 @@ func TestARecordedExposureIsReleasedByItsOriginalAssociation(t *testing.T) {
 	}
 	exposures := &exposureLedgerDouble{ledger: ledger}
 	handler := application.NewReleasePreAcceptanceControlHandler(
-		&ledgerDouble{ledger: domain.NewFreezeLedger()}, exposures, fixedClock{at: releasedAtClock})
+		&ledgerDouble{ledger: domain.NewFreezeLedger()}, exposures, &scopeLockDouble{}, fixedClock{at: releasedAtClock})
 
 	result, err := handler.Handle(context.Background(), releaseCommand(t))
 	if err != nil {
@@ -355,7 +355,7 @@ func TestARecordedExposureIsReleasedByItsOriginalAssociation(t *testing.T) {
 func TestAnIncompleteReleaseRequestIsNotAccepted(t *testing.T) {
 	ledger, _ := heldLedger(t)
 	repo := &ledgerDouble{ledger: ledger}
-	handler := application.NewReleasePreAcceptanceControlHandler(repo, emptyExposures(), fixedClock{at: releasedAtClock})
+	handler := application.NewReleasePreAcceptanceControlHandler(repo, emptyExposures(), &scopeLockDouble{}, fixedClock{at: releasedAtClock})
 
 	command := releaseCommand(t)
 	command.RequestID = domain.ControlRequestID{}
@@ -370,5 +370,40 @@ func TestAnIncompleteReleaseRequestIsNotAccepted(t *testing.T) {
 	}
 	if repo.loaded != 0 {
 		t.Fatal("身份不成立却读了账本")
+	}
+}
+
+// Covers: 释放先取作用域锁再读冻结账本；取不到锁停在冻结账本读写不了那一格（待判断、可续办），两本账都不读不写。
+func TestAReleaseTakesTheScopeLockBeforeReadingEitherBook(t *testing.T) {
+	ledger, _ := heldLedger(t)
+	repo := &ledgerDouble{ledger: ledger}
+	exposures := emptyExposures()
+	lock := &scopeLockDouble{}
+	lock.onLock = func() {
+		if repo.loaded != 0 || exposures.loaded != 0 {
+			t.Error("取锁时账本已经读过了")
+		}
+	}
+	if result, err := application.NewReleasePreAcceptanceControlHandler(repo, exposures, lock, fixedClock{at: releasedAtClock}).
+		Handle(context.Background(), releaseCommand(t)); err != nil || result.Outcome() != application.ControlReleased {
+		t.Fatalf("handle = %q, %v；want CONTROL_RELEASED", result.Outcome(), err)
+	}
+	if lock.locked != 1 {
+		t.Fatalf("取锁 %d 次，want 一次", lock.locked)
+	}
+
+	held, _ := heldLedger(t)
+	blocked := &ledgerDouble{ledger: held}
+	untouched := emptyExposures()
+	result, err := application.NewReleasePreAcceptanceControlHandler(blocked, untouched,
+		&scopeLockDouble{err: errors.New("lock unavailable")}, fixedClock{at: releasedAtClock}).Handle(context.Background(), releaseCommand(t))
+	if err != nil || result.Outcome() != application.ReleaseNotFormed || result.NotFormedReason() != application.FreezeLedgerUnavailable {
+		t.Fatalf("handle = %q/%q, %v；want RELEASE_NOT_FORMED/FREEZE_LEDGER_UNAVAILABLE", result.Outcome(), result.NotFormedReason(), err)
+	}
+	if result.ContinuationReference().String() == "" {
+		t.Fatal("取不到锁没有留下续办引用")
+	}
+	if blocked.loaded != 0 || blocked.saved != 0 || untouched.loaded != 0 || untouched.saved != 0 {
+		t.Fatal("取不到锁仍读写了账本")
 	}
 }

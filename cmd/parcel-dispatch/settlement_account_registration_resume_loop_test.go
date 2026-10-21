@@ -186,6 +186,10 @@ func newSynRSettlementControl(t *testing.T, db *bentopg.DB) *synRSettlementContr
 	if err != nil {
 		t.Fatalf("构造比例基数：%v", err)
 	}
+	scopeLocks, err := sapostgres.NewPreAcceptanceControlScopeLocks(db)
+	if err != nil {
+		t.Fatalf("构造控制作用域锁：%v", err)
+	}
 	control := &synRSettlementControl{
 		adoptions: &synRCountingAdoptions{inner: adoptions},
 		trials:    &synRCountingTrials{},
@@ -201,6 +205,7 @@ func newSynRSettlementControl(t *testing.T, db *bentopg.DB) *synRSettlementContr
 		CreditBasis: synRNoCreditBasis{},
 		RatioBases:  ratioBases,
 		Exposures:   exposures,
+		ScopeLock:   scopeLocks,
 		Clock:       systemClock{},
 	})
 	if err != nil {

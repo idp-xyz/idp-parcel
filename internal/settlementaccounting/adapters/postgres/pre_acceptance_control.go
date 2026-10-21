@@ -13,7 +13,49 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
+	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
+
+// PreAcceptanceControlScopeLocks 实现 ports.PreAcceptanceControlScopeLock。
+type PreAcceptanceControlScopeLocks struct {
+	db *bentopg.DB
+}
+
+func NewPreAcceptanceControlScopeLocks(db *bentopg.DB) (*PreAcceptanceControlScopeLocks, error) {
+	if db == nil {
+		return nil, fmt.Errorf("settlement accounting postgres: db is nil")
+	}
+	return &PreAcceptanceControlScopeLocks{db: db}, nil
+}
+
+var _ ports.PreAcceptanceControlScopeLock = (*PreAcceptanceControlScopeLocks)(nil)
+
+// LockControlScope 取（租户，结算作用域）的事务级咨询锁，事务结束即放。走 RequireExecutor：在连接池上取，锁随那条语句的自动提交
+// 当场放掉，挡不住任何一路。不对账本行 FOR UPDATE：一笔新冻结或新暴露还没有行可锁，两路首次占用照样各自判够。
+//
+// 键照本仓其余事务级锁的双 int 形式：第一键是锁空间名的散列，第二键是四维以 chr(31) 拼接后的散列；撞上只让两个不相干的作用域多等
+// 一会儿。同一事务里再取一次是重入，组合策略在两本账上各取一次不会自己等自己。
+func (locks *PreAcceptanceControlScopeLocks) LockControlScope(
+	ctx context.Context,
+	tenant domain.TenantID,
+	scope domain.SettlementScope,
+) error {
+	executor, err := locks.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("lock pre-acceptance control scope: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext('settlement_accounting.pre_acceptance_control.scope'),
+		        hashtext($1 || chr(31) || $2 || chr(31) || $3 || chr(31) || $4))`,
+		tenant.String(),
+		scope.LegalEntity().String(),
+		scope.Account().String(),
+		scope.Currency().String(),
+	); err != nil {
+		return fmt.Errorf("lock pre-acceptance control scope: %w", err)
+	}
+	return nil
+}
 
 // 幂等指纹是账本用 NUL 分隔符拼出的不透明字符串，而 PostgreSQL 的 text 存不了
 // `0x00`。适配器以十六进制携带它：编码保持等值关系（同指纹同编码），账本拿回的
@@ -33,7 +75,7 @@ func decodeDigest(encoded string) (string, error) {
 // FreezeLedgers 实现 ports.FreezeLedgerRepository：整册取回、整册保存。
 //
 // 一行一条冻结：LoadForScope 读全作用域重建账本（幂等与冲突判定要整册），Save 逐条
-// UPSERT——只增不删由行模型保证：键上 DO UPDATE 只推进状态与释放时间，原金额与原
+// UPSERT——只增不删由行模型保证：键上 DO UPDATE 只把占着推进到已释放，原金额与原
 // 冻结时间不在 SET 里，写不动。
 type FreezeLedgers struct {
 	db *bentopg.DB
@@ -112,6 +154,10 @@ func (repository *FreezeLedgers) LoadForScope(
 
 // Save 把整册写回。UPSERT 的 SET 只有状态与释放时间——冻结不可改写，释放是唯一的
 // 状态推进；重复保存同一册是幂等。
+//
+// DO UPDATE 只放行「库里占着、这一册已释放」那一种推进，别的行撞上键就原样留着、一行不写。整册里绝大多数行这一次并没有变，
+// 无条件 SET 就是拿读到的快照覆盖库里的现状：快照读得比库旧，库里已释放的那一行会被改回占着、释放时间清空，钱被静默占回去。
+// 编排在作用域锁下读写，这里不靠它，绕过编排的写入同样压不回一次释放。
 func (repository *FreezeLedgers) Save(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -143,7 +189,9 @@ func (repository *FreezeLedgers) Save(
 			 ON CONFLICT ON CONSTRAINT funds_freeze_pkey DO UPDATE
 			    SET status = EXCLUDED.status,
 			        released_at = EXCLUDED.released_at,
-			        saved_at = now()`,
+			        saved_at = now()
+			  WHERE funds_freeze.status = $13
+			    AND EXCLUDED.status = $14`,
 			tenant.String(),
 			scope.LegalEntity().String(),
 			scope.Account().String(),
@@ -156,6 +204,8 @@ func (repository *FreezeLedgers) Save(
 			encodeDigest(digest),
 			freeze.FrozenAt().UTC(),
 			releasedAt,
+			uint8(domain.FreezeHeld),
+			uint8(domain.FreezeReleased),
 		); err != nil {
 			return fmt.Errorf("save freeze ledger: %w", err)
 		}
@@ -301,6 +351,8 @@ func (repository *CreditExposureLedgers) LoadForScope(
 
 // Save 把整册暴露写回。SET 只有状态与释放时间，纪律同冻结账本：政策引用与金额、暴露时间一样是
 // 形成时的事实，不在 SET 里，写不动——存量行释放时也不会被补上一个它当初没有的出处。
+//
+// DO UPDATE 只放行「库里已记、这一册已释放」那一种推进，理由同冻结账本：旧快照写回压不回库里的释放。
 func (repository *CreditExposureLedgers) Save(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -338,7 +390,9 @@ func (repository *CreditExposureLedgers) Save(
 			 ON CONFLICT ON CONSTRAINT credit_exposure_pkey DO UPDATE
 			    SET status = EXCLUDED.status,
 			        released_at = EXCLUDED.released_at,
-			        saved_at = now()`,
+			        saved_at = now()
+			  WHERE credit_exposure.status = $14
+			    AND EXCLUDED.status = $15`,
 			tenant.String(),
 			scope.LegalEntity().String(),
 			scope.Account().String(),
@@ -352,6 +406,8 @@ func (repository *CreditExposureLedgers) Save(
 			exposure.ExposedAt().UTC(),
 			releasedAt,
 			policyRef,
+			uint8(domain.ExposureRecorded),
+			uint8(domain.ExposureReleased),
 		); err != nil {
 			return fmt.Errorf("save credit exposure ledger: %w", err)
 		}

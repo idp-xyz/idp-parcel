@@ -330,6 +330,7 @@ func TestAnyNilDependencyIsRefusedAtConstruction(t *testing.T) {
 			CreditBasis: &creditBasisDouble{basis: amountBasis(t, "credit-1/v1", 10_000)},
 			RatioBases:  &ratioBaseDouble{},
 			Exposures:   &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()},
+			ScopeLock:   &scopeLockDouble{},
 			Clock:       fixedClock{at: controlAt},
 		}
 	}
@@ -344,6 +345,7 @@ func TestAnyNilDependencyIsRefusedAtConstruction(t *testing.T) {
 		"credit basis": func(deps *application.ApplyPreAcceptanceControlDeps) { deps.CreditBasis = nil },
 		"ratio bases":  func(deps *application.ApplyPreAcceptanceControlDeps) { deps.RatioBases = nil },
 		"exposures":    func(deps *application.ApplyPreAcceptanceControlDeps) { deps.Exposures = nil },
+		"scope lock":   func(deps *application.ApplyPreAcceptanceControlDeps) { deps.ScopeLock = nil },
 		"clock":        func(deps *application.ApplyPreAcceptanceControlDeps) { deps.Clock = nil },
 	}
 	for name, missing := range strip {
