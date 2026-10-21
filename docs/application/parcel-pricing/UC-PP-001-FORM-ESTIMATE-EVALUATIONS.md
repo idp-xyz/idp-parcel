@@ -84,6 +84,19 @@
 6. **结算不可见**：任一试算之后，评价册与结算侧都没有新增任何记录。
 7. **身份自报**：声明里带租户格。结果未受理。
 
+## 按评价请求形成评价：答不出时与补登之后
+
+试算之外，计价还按结算交来的评价请求形成正式评价，选卡与本用例同一套口径（无价卡、适用冲突各成一格）。正式评价答不出、或租户补登参数之后怎样交回结算，由 [ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 定；本节只列计价这一侧的验收，结算那一侧见 [UC-SA-002](../settlement-accounting/UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md) `AT-SA-188` 至 `AT-SA-199`。
+
+| 编号 | 场景 | 期望结果 |
+|---|---|---|
+| `AT-PP-001` | 请求还读不回、价卡或输入读口答不出、铸造口或评价库故障 | 是未决：入账回滚、信封重投；这几格是派发未决名单里仅有的哨兵（[ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定三） |
+| `AT-PP-002` | 请求所在范围下没有在用价卡、多于一版同时适用、或造不出计价输入快照 | 不形成评价、入账不重投，同笔交一封「评价未形成」（租户、请求、方向、停在哪一格、说明）；一份请求至多一封，重投不翻倍；不再按未决耗尽失败预算（[ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定三） |
+| `AT-PP-003` | 登记一版价卡（含草稿发布），或重放同一版 | 与价卡行同一事务交「参数已登记」，带卡的计价范围；同一版重放一封；冲突与规范化形状不同不交；交不出整笔回滚（[ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定五） |
+| `AT-PP-004` | 一版序列或目录复核通过（含免复核由连接器代写的那一份） | 与复核行同一事务交「参数已登记」，不带计价范围；退回的那一版不交（[ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定五） |
+| `AT-PP-005` | 停在「没有在用价卡」的请求，租户补登了卡之后由结算续办出下一代 | 计价按下一代选到那张卡、形成回指下一代的评价并交评价已记录；上一代仍没有评价（[ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定一、五） |
+| `AT-PP-006` | 交「评价未形成」失败 | 暂时不可用是未决，入账跟着回滚、下一次重投再交；被框架确定性拒收是硬失败，不进未决名单（[ADR-0229](../../adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定三） |
+
 ## 给开发的交接
 
 - 分层落在 `internal/parcelpricing`：试算编排与补齐读数的共用件在 `application`；编排依赖里没有评价库写口与交付口（结构保证，ADR-0152 决定二）；`EvaluatePricingHandler` 改用共用件、行为不变。

@@ -1,0 +1,26 @@
+# 150 价卡没有截止旧版的受控口，补登卡上取值只能靠期间不重叠的新版
+
+Category: enhancement
+Status: needs-triage——2026-10-21 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权），出自票 [14](./14-buy-request-stuck-after-an-unadoptable-evaluation.md) 实现时的发现。
+Blocked by: 无
+出处：[ADR-0229](../../../docs/adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 越权风险点 6。
+
+## 现象
+
+计价按（租户、计价范围、方向、目的、计价基准时点）选卡，同范围期间重叠的两版答`适用冲突`。卡上没声明金额取整、没绑汇率序列这类停因，要靠新一版卡解开；租户登一版同范围、同期间的新卡，旧卡不会退场，续办出的下一代请求停在`适用冲突`。今天唯一的绕法是新版从某个时点起生效、旧版期间不覆盖它——可已登的旧版期间改不了，计价没有截止旧版的受控口。
+
+## 三类
+
+机制（受控截止口）；截止到哪个时点是租户取值。规模 S–M。
+
+## 最小的诚实修法
+
+照参与方与商业那一侧区间更正的做法（票 [50](./50-commercial-versions-have-no-closing-entry-so-agreement-versions-pile-up.md)、ADR-0038、ADR-0056）：给价卡一个受控登记入口，把旧版截止在新版生效时点，旧版行留历史、只追加截止事实；截止落库同笔交「参数已登记」（种类价卡），停在`适用冲突`上的请求按 ADR-0229 续办。不以新版生效自动收尾旧版。
+
+## 要裁的
+
+截止口归登记册配置写还是运营决定；截止之后已在旧版下形成的评价是否要标注（不改写）。归 PP owner。
+
+## 既有票
+
+none
