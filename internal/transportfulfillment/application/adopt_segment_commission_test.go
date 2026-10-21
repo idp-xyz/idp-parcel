@@ -178,6 +178,7 @@ func newCommissionAdoptionFixture(t *testing.T) *commissionAdoptionFixture {
 		Commissions:      fixture.racing,
 		StartAdvancement: fixture.racing,
 		Doorbell:         fixture.doorbell,
+		CommissionHold:   freeCommissionHold{},
 		Clock:            commissionClock{at: commissionNowAt},
 	})
 	return fixture
@@ -503,7 +504,8 @@ func TestAdoptionRecoveryAndConcurrency(t *testing.T) {
 		lateWinner := &lateAdoptionStore{adoptionStoreDouble: fixture.adoptions, winner: ports.SegmentCommissionAdoptionRecord{Key: key, ContentDigest: winnerDigest, Adoption: winner}}
 		adopter := application.NewAdoptSegmentCommissionHandler(application.AdoptSegmentCommissionDeps{
 			Adoptions: lateWinner, Segments: fixture.segments, Commissions: fixture.racing, Doorbell: fixture.doorbell,
-			Clock: commissionClock{at: commissionNowAt},
+			CommissionHold: freeCommissionHold{},
+			Clock:          commissionClock{at: commissionNowAt},
 		})
 		result, err := adopter.Adopt(context.Background(), adoptCommand("SEG-1", "commission-1", "partner-1"))
 		if err != nil || result.Outcome() != application.CommissionAdoptionConflict {

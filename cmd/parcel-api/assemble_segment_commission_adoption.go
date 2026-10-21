@@ -86,6 +86,7 @@ func buildSegmentCommissionAdoption(db *bentopg.DB) (tfhttp.SegmentCommissionAdo
 		Commissions:      commissions,
 		StartAdvancement: commissions,
 		Doorbell:         doorbell,
+		CommissionHold:   commissions,
 		Clock:            systemClock{},
 	})
 	return transactionalSegmentCommissionAdopter{transactor: db.Transactor(), inner: handler}, nil

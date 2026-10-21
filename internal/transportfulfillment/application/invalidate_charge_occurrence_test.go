@@ -8,6 +8,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
+	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
 // 本文件证发生项失效的生产入口与失效之后的重登（票 demo-chain-gaps/57，ADR-0232 决定四、五）。夹具复用登记用例那一套合成串，
@@ -196,4 +197,11 @@ func TestADeclaredSelfOperationNoLongerCollidesWithAnInvalidatedOccurrence(t *te
 	if after := rig.register(t, declared); after.Outcome() != application.ChargeOccurrenceNotApplicable {
 		t.Fatalf("失效之后声明自营 = %q, want NOT_APPLICABLE", after.Outcome())
 	}
+}
+
+// freeCommissionHold 是委托开始锁的替身：单线程的编排用例里没有并发，取锁总成功。
+type freeCommissionHold struct{}
+
+func (freeCommissionHold) HoldCommissionStart(context.Context, ports.TransportCommissionKey) error {
+	return nil
 }

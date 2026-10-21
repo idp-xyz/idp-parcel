@@ -141,6 +141,7 @@ func newAdoptionFaces(t *testing.T) adoptionFaces {
 		Commissions:      commissions,
 		StartAdvancement: unreachableStartAdvancement{t: t},
 		Doorbell:         adoptionDoorbellStub{},
+		CommissionHold:   freeCommissionHold{},
 		Clock:            fixedCommissionClock{},
 	})
 	intake := operatorIntake(t, authenticatorFake{})

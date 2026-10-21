@@ -124,6 +124,8 @@ const (
 	ProcurementContextConflict
 	// 未决：采用连线或委托读不动。
 	ProcurementSourceUnavailable
+	// 未决：登记过程中这一段的采用连线变了（被解除或换了一份），原样重交即按此刻的连线作答（ADR-0232 决定六）。
+	ProcurementSourceChanged
 	// 未受理：订舱与取消的事实不成立。续办各不相同——还没定局的等承运方答复；没成约的本就没有这笔费；没取消的不是取消；
 	// 取消晚于运输开始的不是尚未执行服务的取消；成员不在委托里的改成员。
 	BookingNotAnswered
@@ -173,6 +175,8 @@ func (detail ChargeOccurrenceDetail) String() string {
 		return "PROCUREMENT_CONTEXT_CONFLICT"
 	case ProcurementSourceUnavailable:
 		return "PROCUREMENT_SOURCE_UNAVAILABLE"
+	case ProcurementSourceChanged:
+		return "PROCUREMENT_SOURCE_CHANGED"
 	case BookingNotAnswered:
 		return "BOOKING_NOT_ANSWERED"
 	case BookingNotAccepted:
@@ -511,6 +515,15 @@ func (handler *RegisterChargeOccurrenceHandler) register(
 	} else if covered {
 		return alreadyCovered(covering, coverage), nil
 	}
+	if fact.hasSegment {
+		// 采用连线是在锁外读的；解除采用在同一把范围锁下读这一段的发生项（ADR-0232 决定六）。锁下再读一次：连线变了就不凭旧样子落册，
+		// 答未决让登记方原样重交——重交时按此刻的连线取采购上下文。
+		if changed, err := handler.adoptionChangedSince(ctx, command.TenantID, fact); err != nil {
+			return chargeUndecided(ProcurementSourceUnavailable, continuation), nil
+		} else if changed {
+			return chargeUndecided(ProcurementSourceChanged, continuation), nil
+		}
+	}
 	// 范围锁已在手：此刻读到的链头不会被同一范围上另一笔登记或失效改掉。链头仍有效，这一次是重放或冲突；链头已失效，这件事实凭
 	// 这一次的判断重新成立，从失效版本长出替代版本（ADR-0232 决定五）——不再按首版 V1 作答，否则失效之后同内容重登仍答已存在、
 	// 回显一份已失效的首版，那件事的成本就永远登不回来（ADR-0207 Consequences「已知限制」）。
@@ -720,6 +733,22 @@ func (handler *RegisterChargeOccurrenceHandler) actualFulfillmentFact(
 	}, RegisterChargeOccurrenceResult{}, false, nil
 }
 
+// adoptionChangedSince 在范围锁下重读这一段的当前采用，与取事实时读到的比：有无、指名哪份委托，任一不同即变了。
+func (handler *RegisterChargeOccurrenceHandler) adoptionChangedSince(
+	ctx context.Context,
+	tenant domain.TenantID,
+	fact chargeOccurrenceFact,
+) (bool, error) {
+	adoption, adopted, err := handler.deps.Adoptions.FindBySegment(ctx, ports.SegmentCommissionAdoptionKey{TenantID: tenant, Segment: fact.segment})
+	if err != nil {
+		return false, err
+	}
+	if adopted != fact.hasCommission {
+		return true, nil
+	}
+	return adopted && adoption.Adoption.Commission() != fact.commission.Commission.Commission(), nil
+}
+
 // errProcurementSourceUnreadable 只在本包流转：采用连线或委托读不动，由调用方答未决。
 var errProcurementSourceUnreadable = errors.New("register charge occurrence: adoption or commission unreadable")
 
@@ -734,9 +763,9 @@ var ErrCommissionAgreementDrift = errors.New("transport fulfillment: the supplie
 // commissionAdoptedBy 按段读采用连线，有就读那份委托（ADR-0204 决定二末条）。没有连线答 adopted=false：没有连线的段不读作
 // 自营也不读作外包（ADR-0204 决定四），采购上下文照旧由登记方给。
 //
-// 读连线不加锁，以登记这一刻读到的为准：采用不看发生项登记了没有，早于或晚于登记都合法，采用晚到时已形成的项不回头
-// 重判，与并发时读到「没有连线」是同一种情形，锁住也只是把并发改成先后。两边可能就此不一致——发生项按登记方报的上下文、
-// 段随即挂上委托——去处同委托开始前移后的取消项，是发生项修订入口（ADR-0207 文末补记越权风险点）。
+// 这里读连线不加锁；Register 在取到范围锁之后重读一次，变了就答未决（adoptionChangedSince）——解除采用在同一把锁下判这一段有没有
+// 按委托形成的发生项，两者因此排成先后。采用不取这把锁：采用不看发生项登记了没有，早于或晚于登记都合法，采用晚到时已形成的项不
+// 回头重判。两边可能就此不一致——发生项按登记方报的上下文、段随即挂上委托——续办是发生项失效之后重登（ADR-0232 决定五）。
 func (handler *RegisterChargeOccurrenceHandler) commissionAdoptedBy(
 	ctx context.Context,
 	tenant domain.TenantID,

@@ -162,7 +162,10 @@ type AdoptSegmentCommissionDeps struct {
 	Commissions      ports.TransportCommissionStore
 	StartAdvancement ports.TransportCommissionStartAdvancement
 	Doorbell         ports.SegmentCommissionAdoptionHandoff
-	Clock            ports.Clock
+	// CommissionHold 在读委托之前取它「开始」的锁，与解除采用排先后（ADR-0232 决定六）。必备：缺了它，一笔判「不动」的采用与一笔把
+	// 开始撤回的解除并发时，会留下段挂在一份已回到已提交的委托上。
+	CommissionHold ports.TransportCommissionStartHold
+	Clock          ports.Clock
 }
 
 type AdoptSegmentCommissionHandler struct {
@@ -173,7 +176,7 @@ func NewAdoptSegmentCommissionHandler(deps AdoptSegmentCommissionDeps) *AdoptSeg
 	return &AdoptSegmentCommissionHandler{deps: deps}
 }
 
-// Adopt 登记一次采用（ADR-0204）：声明过构造门 → 按（租户、段）分已有与冲突 → 段在册 → 委托在册 → 领域判服务方、取消、
+// Adopt 登记一次采用（ADR-0204）：声明过构造门 → 按（租户、段）分已有与冲突 → 段在册 → 取委托的开始锁、委托在册 → 领域判服务方、取消、
 // 首个参与与开始先后 → 落连线 → 把委托的开始写成已采用各段首个参与里最早的那一条（尚未开始的标开始，开始晚于这一段的
 // 前移，其余不动）。
 //
@@ -227,6 +230,12 @@ func (handler *AdoptSegmentCommissionHandler) Adopt(
 		return CommissionAdoptionResult{outcome: CommissionAdoptionSegmentNotFound}, nil
 	}
 	commissionKey := ports.TransportCommissionKey{TenantID: command.TenantID, Commission: commissionRef}
+	if handler.deps.CommissionHold == nil {
+		return CommissionAdoptionResult{}, errors.New("transport fulfillment: segment commission adoption is wired without the commission start hold")
+	}
+	if err := handler.deps.CommissionHold.HoldCommissionStart(ctx, commissionKey); err != nil {
+		return commissionAdoptionUndecided(CommissionAdoptionCommissionStoreUnavailable, command.Segment), nil
+	}
 	commission, found, err := handler.deps.Commissions.FindByKey(ctx, commissionKey)
 	if err != nil {
 		return commissionAdoptionUndecided(CommissionAdoptionCommissionStoreUnavailable, command.Segment), nil

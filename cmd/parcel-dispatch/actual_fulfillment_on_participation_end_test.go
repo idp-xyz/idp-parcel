@@ -162,7 +162,7 @@ func adoptTrunkCommission(t *testing.T, db *bentopg.DB) {
 		t.Fatal(err)
 	}
 	adopter := tfapplication.NewAdoptSegmentCommissionHandler(tfapplication.AdoptSegmentCommissionDeps{
-		Adoptions: adoptions, Segments: segments, Commissions: commissions, StartAdvancement: commissions,
+		Adoptions: adoptions, Segments: segments, Commissions: commissions, StartAdvancement: commissions, CommissionHold: commissions,
 		Doorbell: doorbell, Clock: systemClock{},
 	})
 	var adopted tfapplication.CommissionAdoptionResult

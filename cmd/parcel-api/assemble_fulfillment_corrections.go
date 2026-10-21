@@ -79,3 +79,71 @@ func buildChargeOccurrenceInvalidation(db *bentopg.DB) (tfhttp.ChargeOccurrenceI
 	})
 	return transactionalChargeOccurrenceInvalidator{transactor: db.Transactor(), inner: handler}, nil
 }
+
+// errSegmentCommissionNotWithdrawn 只在本壳里流转：解除编排答解除成立以外的格时逼事务回滚。
+var errSegmentCommissionNotWithdrawn = errors.New("parcel-api: segment commission adoption not withdrawn; transaction rolled back")
+
+// transactionalSegmentCommissionWithdrawer 把一次解除包进一笔事务：两把锁、解除册与委托册的写口按框架合同无事务即拒。解除与委托的
+// 开始同笔落地；编排答解除成立以外的任一格都整笔回滚——其余各格本不该留下写入（application.WithdrawSegmentCommissionAdoptionHandler
+// 的头注）。
+type transactionalSegmentCommissionWithdrawer struct {
+	transactor bentoapp.Transactor
+	inner      *tfapp.WithdrawSegmentCommissionAdoptionHandler
+}
+
+var _ tfhttp.SegmentCommissionAdoptionWithdrawer = transactionalSegmentCommissionWithdrawer{}
+
+func (withdrawer transactionalSegmentCommissionWithdrawer) Withdraw(
+	ctx context.Context,
+	command tfapp.WithdrawSegmentCommissionAdoptionCommand,
+) (tfapp.AdoptionWithdrawalResult, error) {
+	var result tfapp.AdoptionWithdrawalResult
+	err := withdrawer.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		handled, handleErr := withdrawer.inner.Withdraw(txCtx, command)
+		if handleErr != nil {
+			return handleErr
+		}
+		result = handled
+		if handled.Outcome() != tfapp.AdoptionWithdrawn {
+			return errSegmentCommissionNotWithdrawn
+		}
+		return nil
+	})
+	if errors.Is(err, errSegmentCommissionNotWithdrawn) {
+		return result, nil
+	}
+	if err != nil {
+		return tfapp.AdoptionWithdrawalResult{}, err
+	}
+	return result, nil
+}
+
+// buildSegmentCommissionAdoptionWithdrawal 装配 `/transport-fulfillment-segment-commission-adoption-withdrawals` 背后的解除编排。缝全接
+// 真：采用册（当前采用、解除册与按委托列当前采用是同一个适配器）、发生项登记册（范围锁与按范围列链头）、委托册（读、开始锁与改开始的
+// 写口是同一个适配器）与时钟。解除不入队：今天没有它的消费者。
+func buildSegmentCommissionAdoptionWithdrawal(db *bentopg.DB) (tfhttp.SegmentCommissionAdoptionWithdrawer, error) {
+	adoptions, err := tfpostgres.NewSegmentCommissionAdoptions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: segment commission adoptions for withdrawal: %w", err)
+	}
+	occurrences, err := tfpostgres.NewChargeOccurrences(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: charge occurrences for adoption withdrawal: %w", err)
+	}
+	commissions, err := tfpostgres.NewTransportCommissions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: transport commissions for adoption withdrawal: %w", err)
+	}
+	handler := tfapp.NewWithdrawSegmentCommissionAdoptionHandler(tfapp.WithdrawSegmentCommissionAdoptionDeps{
+		Adoptions:       adoptions,
+		Withdrawals:     adoptions,
+		CommissionLinks: adoptions,
+		Occurrences:     occurrences,
+		OccurrenceScope: occurrences,
+		Commissions:     commissions,
+		CommissionHold:  commissions,
+		StartCorrection: commissions,
+		Clock:           systemClock{},
+	})
+	return transactionalSegmentCommissionWithdrawer{transactor: db.Transactor(), inner: handler}, nil
+}

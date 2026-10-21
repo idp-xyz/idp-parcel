@@ -9,6 +9,7 @@ import (
 func init() {
 	registerUnwired(fulfillmentCorrectionsWiring{
 		chargeOccurrenceInvalidation: unwiredChargeOccurrenceInvalidation{},
+		segmentCommissionWithdrawal:  unwiredSegmentCommissionWithdrawal{},
 	})
 }
 
@@ -19,4 +20,13 @@ func (unwiredChargeOccurrenceInvalidation) Invalidate(
 	context.Context, tfapp.InvalidateChargeOccurrenceCommand,
 ) (tfapp.ChargeOccurrenceInvalidationResult, error) {
 	return tfapp.ChargeOccurrenceInvalidationResult{}, errOrchestrationNotWired
+}
+
+// unwiredSegmentCommissionWithdrawal 是解除口的未接线占位。
+type unwiredSegmentCommissionWithdrawal struct{}
+
+func (unwiredSegmentCommissionWithdrawal) Withdraw(
+	context.Context, tfapp.WithdrawSegmentCommissionAdoptionCommand,
+) (tfapp.AdoptionWithdrawalResult, error) {
+	return tfapp.AdoptionWithdrawalResult{}, errOrchestrationNotWired
 }

@@ -30,3 +30,19 @@ func (intake *OperatorDecisionIntake) IntakeChargeOccurrenceInvalidation(ctx con
 	}
 	return payload.Command(operator)
 }
+
+var _ SegmentCommissionAdoptionWithdrawalIntake = (*OperatorDecisionIntake)(nil)
+
+// IntakeSegmentCommissionAdoptionWithdrawal 译解除履约段采用（`/transport-fulfillment-segment-commission-adoption-withdrawals`）。
+// 操作者随命令带进去：解除记下作出这一次决定的人（ADR-0232 决定一）。
+func (intake *OperatorDecisionIntake) IntakeSegmentCommissionAdoptionWithdrawal(ctx context.Context, request *http.Request) (application.WithdrawSegmentCommissionAdoptionCommand, error) {
+	operator, err := intake.identityFor(ctx, request, OperatorDecisionSegmentCommissionAdoptionWithdrawal)
+	if err != nil {
+		return application.WithdrawSegmentCommissionAdoptionCommand{}, err
+	}
+	var payload SegmentCommissionAdoptionWithdrawalPayload
+	if err := decodeClosedPayload(request.Body, &payload); err != nil {
+		return application.WithdrawSegmentCommissionAdoptionCommand{}, err
+	}
+	return payload.Command(operator)
+}
