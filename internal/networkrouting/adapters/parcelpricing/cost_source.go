@@ -25,13 +25,13 @@ import (
 // 以零或他段顶替；合成按不舍入精度相加、合计后按比较币种最小币单位取整一次——逐段先
 // 取整会随段数累积舍入误差，改变并列判断。
 
-// 下面两格都挂在 nrports.ErrRouteCostAnswerUnusable 名下：重投多少次都一样，编排据它响亮报错，不与依赖读不回同进重投
-// 的未决（ADR-0029）。
 var (
 	// errUntranslatableEvaluation 说提供方交回了本桥认不出的形状（含引用译不出、评价
-	// 缺比较金额、方向配错）：逐格分派不留兜底，认不出就上抛（ADR-0031）。
+	// 缺比较金额、方向配错）：逐格分派不留兜底，认不出就上抛（ADR-0031）。挂在 nrports.ErrRouteCostAnswerUnusable
+	// 名下：重投多少次都一样，编排据它响亮报错，不与依赖读不回同进重投的未决（ADR-0029）。
 	errUntranslatableEvaluation = fmt.Errorf("%w: untranslatable pricing evaluation", nrports.ErrRouteCostAnswerUnusable)
-	// errNotACostEvaluation 说方案的方向与用途答的不是「运营企业为这一段花多少」。
+	// errNotACostEvaluation 说方案的方向与用途答的不是「运营企业为这一段花多少」。同挂在
+	// nrports.ErrRouteCostAnswerUnusable 名下：方向配错是登记的错，重投推不动。
 	errNotACostEvaluation = fmt.Errorf("%w: pricing plan is not a leg cost basis", nrports.ErrRouteCostAnswerUnusable)
 	// errLegEstimateUndecided 说 parcel-pricing 补齐读数那几口读不回，这一段评价形成与否未知：整次取数报错、编排落依赖
 	// 不可用的未决，不把一次故障记成这一段待判断。
@@ -282,7 +282,7 @@ func (adapter *RouteCandidateCostAdapter) resolveLegs(
 			}
 			reference, err := planReference(planRef)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("leg %d of %s: %w", ordinal+1, path.Candidate, err)
 			}
 			plan, found, err := adapter.deps.Plans.FindByReference(ctx, pricingTenant, reference)
 			if err != nil {
@@ -567,7 +567,12 @@ func planReference(raw string) (ppdomain.VersionReference, error) {
 	if !ok || id == "" || version == "" {
 		return ppdomain.VersionReference{}, fmt.Errorf("%w: plan reference %q", errUntranslatableEvaluation, raw)
 	}
-	return ppdomain.NewVersionReferenceIdentity(ppdomain.ArtifactPricingPlan, id, version)
+	reference, err := ppdomain.NewVersionReferenceIdentity(ppdomain.ArtifactPricingPlan, id, version)
+	if err != nil {
+		// 切得开、立不成引用（首尾带空白一类）同是目录引用写坏了，与切不开同一格。
+		return ppdomain.VersionReference{}, fmt.Errorf("%w: plan reference %q: %v", errUntranslatableEvaluation, raw, err)
+	}
+	return reference, nil
 }
 
 // checkPlanDirection 按依据种类核方案方向与用途：外包段要供应商采购成本价卡，内部段要

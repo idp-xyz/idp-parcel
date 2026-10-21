@@ -750,7 +750,7 @@ func factOf(t *testing.T, facts []nrdomain.CandidateCostFact, candidate string) 
 	return nrdomain.CandidateCostFact{}
 }
 
-// Covers: `AT-NR-092`、`AT-NR-093` 取数侧那一半——方案方向配错、候选没有线路引用、比较币种译不出都挂在 nrports.ErrRouteCostAnswerUnusable
+// Covers: `AT-NR-092`、`AT-NR-093` 取数侧那一半——方案方向配错、方案引用立不成、候选没有线路引用、比较币种译不出都挂在 nrports.ErrRouteCostAnswerUnusable
 // 名下：重投多少次都一样，编排据它响亮报错，不与依赖读不回同进重投。目录读不回那一格不在这里（见
 // TestAnUnreadableCatalogueFailsTheWholeCostLoad）。
 func TestDeterministicCostAnswersAreUnusableNotUnreadable(t *testing.T) {
@@ -770,6 +770,15 @@ func TestDeterministicCostAnswersAreUnusableNotUnreadable(t *testing.T) {
 				Candidate: value(t, nrdomain.NewCandidateID, "not-a-line-candidate"),
 				Legs:      make([]nrdomain.PlannedLeg, 1),
 			})
+		},
+		"方案引用立不成": func(t *testing.T) (*testSource, nrports.InitialRouteEvidence) {
+			source := newAdapter(t,
+				map[string][]nrports.LineSegmentCostBasis{
+					"line-x": {{SegmentIndex: 0, Kind: nrports.SupplierBuyPlanBasis, Reference: "plan-x /v1"}},
+				},
+				map[string]ppdomain.PricingPlanVersion{},
+			)
+			return source, evidenceWithComparison(t, "USD", pathOf(t, "line-x", 1))
 		},
 		"比较币种译不出": func(t *testing.T) (*testSource, nrports.InitialRouteEvidence) {
 			source := newAdapter(t, map[string][]nrports.LineSegmentCostBasis{}, map[string]ppdomain.PricingPlanVersion{})

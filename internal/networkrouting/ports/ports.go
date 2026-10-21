@@ -411,7 +411,7 @@ type InitialRouteNotFormed struct {
 }
 
 // InitialRouteNotFormedRegister 留下初始路由未形成的原因与对象。同一判断键再来一次（携带同一基线的另一封交接）停在
-// 未形成时按最新这一次改写：这一行答的是「这件包裹此刻为什么还没有初始路由」，不是某一次投递为什么没判。写口要事务：
+// 未形成时按最新这一次改写：这一行答的是这件包裹「最近一次停住的原因」，不是某一次投递为什么没判。写口要事务：
 // 这一行与同一交接里已判成的包裹、交接登记与 inbox 的入账同笔提交。
 type InitialRouteNotFormedRegister interface {
 	RecordNotFormed(ctx context.Context, record InitialRouteNotFormed) error
