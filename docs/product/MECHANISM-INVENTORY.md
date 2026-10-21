@@ -11,20 +11,20 @@
 | collectionremittance | 23 | 9 | 4 | 6 | 0 | 3 |
 | customscompliance | 119 | 115 | 22 | 47 | 10 | 16 |
 | networkrouting | 80 | 80 | 9 | 14 | 2 | 7 |
-| nodeoperations | 107 | 115 | 15 | 28 | 4 | 16 |
+| nodeoperations | 109 | 116 | 15 | 29 | 4 | 16 |
 | parcelpricing | 133 | 122 | 17 | 16 | 1 | 23 |
 | parcelshipment | 209 | 205 | 20 | 39 | 10 | 19 |
 | partycommercial | 165 | 177 | 13 | 42 | 1 | 38 |
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 208 | 150 | 34 | 63 | 12 | 9 |
-| transportfulfillment | 233 | 234 | 40 | 46 | 13 | 43 |
-| visibilityexception | 112 | 109 | 12 | 31 | 8 | 12 |
-| **合计** | 1475 | 1410 | 191 | 344 | 62 | 192 |
+| transportfulfillment | 236 | 239 | 40 | 46 | 13 | 43 |
+| visibilityexception | 112 | 110 | 12 | 31 | 8 | 12 |
+| **合计** | 1480 | 1417 | 191 | 345 | 62 | 192 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 195、测试 281。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 195、测试 282。
 
-## 跨上下文消费缝：48 组，143 个生产文件
+## 跨上下文消费缝：49 组，144 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -67,6 +67,7 @@
 | transportfulfillment | accessidentity | 5 |
 | transportfulfillment | customscompliance | 3 |
 | transportfulfillment | networkrouting | 2 |
+| transportfulfillment | nodeoperations | 1 |
 | transportfulfillment | parcelshipment | 2 |
 | transportfulfillment | partycommercial | 3 |
 | visibilityexception | accessidentity | 3 |
@@ -141,7 +142,7 @@
 | visibilityexception | 11 |
 | **合计** | 35 |
 
-## 端口：声明 545 个；基线口径缺 37，精确口径缺 2
+## 端口：声明 547 个；基线口径缺 37，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
