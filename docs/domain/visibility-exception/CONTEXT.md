@@ -4,7 +4,7 @@ Status: Confirmed
 
 本上下文基于各源上下文已经接受的事实，形成包裹全程追踪投影、标准追踪里程碑、预计到达时间和客户可见信息，并管理异常信号、异常案件、处置协调、责任证据、客户索赔及供应商或保险追偿关系。它回答“目前可以确认发生了什么、可能发生什么风险、谁在处置、依据什么形成责任结论”，但不拥有节点、运输、关务等源事实，不解除来源限制，也不拥有赔付、追偿或费用的最终金额。
 
-本文件是 `visibility-exception` 语言、规则与生命周期的权威来源。跨上下文术语以[统一领域语言](../GLOSSARY.md)为准，所有权关系以[领域上下文地图](../CONTEXT-MAP.md)为准。来源事实、有效事件和派生状态遵循 [ADR-0005](../../adr/0005-source-facts-effective-events-derived-state.md)，客户承诺、计划、预测和实际事实的分离遵循 [ADR-0004](../../adr/0004-separate-commitment-plan-actual.md)。
+本文件是 `visibility-exception` 语言、规则与生命周期的权威来源。跨上下文术语以[统一领域语言](../GLOSSARY.md)为准，所有权关系以[领域上下文地图](../CONTEXT-MAP.md)为准。来源事实、有效事件和派生状态遵循 [ADR-0005](../../adr/0005-source-facts-effective-events-derived-state.md)，客户承诺、计划、预测和实际事实的分离遵循 [ADR-0004](../../adr/0004-separate-commitment-plan-actual.md)。规则与实现的差距见各 UC「给开发的交接」。
 
 ## Language
 
