@@ -183,3 +183,44 @@ M
 - `scripts/test-full.sh` 跑 `./internal/transportfulfillment/...`、`./internal/accessidentity/...`、改过包的全部反向依赖（含全部 cmd 包）、`./internal/architecture/...`、`./migrations/...`：65 个包，61 ok、0 FAIL，其余 4 个没有测试文件。清单在 scratchpad `dcg70-revdeps2.txt`。
 - 种子见上「变基」第 2 条。
 
+### 二轮（2026-10-21，只看修订那一段 `d4a55fe4..9916c6ba`）
+
+一条阻断、两条建议、四条顺手，都在本分支修，没有 rebase。
+
+1. **阻断：「先取锁、再读段、再查在册」没被测试钉住**（`a53b1a4f`）。
+   - 真库并发首拍 `TestConcurrentFirstTicksFormOneTaskAndTheOtherReadsTheWinner`：
+     - 先到的那一拍问地点时停住，另开一条连接轮询本库 `pg_locks`（`locktype='advisory' AND NOT granted`、只看本库）。看到等锁的事务才放行，10 秒看不到判「后一拍没在形成锁上等」。
+     - 其余断言照旧：所有者只被问 3 次、一笔 201、一笔 200、任务 1 行。
+     - 看锁另开连接，是因为测试池只有两条连接，两拍各占一条，再从池里取会互等。
+   - 编排层 `TestEveryBeatHoldsItsEntryBeforeAnswering`：段替身读段时记下 `len(pending.held)`，断言等于 1。
+   - **变异实测**（在 scratchpad 的副本里做，工作树没动）：
+     - `HoldFormation` 改成空操作 → 真库用例红：「后一拍没在形成锁上等：先到的那一拍停在取件处 10 秒，库里始终没有等在咨询锁上的事务」（10.40s）。
+     - 取锁挪到 `answer()` 之后 → 编排层用例红：「读段时已占过的件数 = [0], want [1]——先占后读」。
+   - 「任务口撞键读回赢家」那一道：执行器那几路已由形成锁排开，真库上不可再达。现在由替身层 `application/trigger_delivery_dispatch_supersession_test.go::TestATaskLandingBetweenTheCheckAndTheWriteIsReadBackAsTheWinner` 守着：查在册看不见、任务口撞键，执行器读回赢家答已在册。
+2. **建议：替身的 err 让写册失败的用例停在取锁那一步**（`a53b1a4f`）。
+   - 替身拆出 `holdErr`；`TestTheBeatGivesNoAnswerWhenThePendingRegisterCannotBeWritten`、`TestARefusedPendingWriteIsADefectNotAWait` 加断言，证真走到了答复之后写册那一步。
+   - 新增 `TestABeatThatCannotHoldItsEntryGivesNoAnswer`：取锁读写不动或没有事务时，不读段、不问所有者、不写册。
+3. **建议：持续报错的那一件卡队头**（`822c75b8`）：照「出错时另起一笔事务给它记一次 MarkAsked」做了。
+   - 按册重问新依赖 `Failed`（`ReaskFailureMarker`），parcel-api 交事务包装的真册；没交时这一口不问。错误带段与对象。
+   - 用例：编排 `TestAnUnanswerableEntryIsMovedBehindTheOthers`；真库 `TestAReaskThatHitsAnUnanswerableEntryKeepsWhatItAlreadyCommitted` 扩为三次按：
+     - 第一次停在 I，I 排到队尾；
+     - 第二次 I 仍报错，但先形成 J；
+     - 修好后第三次形成 I。
+   - `Reask` 文档注释与 ADR-0230 越权风险点 6 写明：那一笔也记不下（库面整个读写不动）时，它仍停在查阅页队头，修好之前每次重问都先停在它身上。
+4. **顺手：锁的形式**（`70a983b0`）：改用本仓双 int 形式——第一键是锁空间名散列，第二键是三件以 chr(31) 拼接的散列。注释写明双 int 与迁移执行器的单 bigint 会话锁不同空间，撞上只让同一空间里两件不相干的派送多等。
+5. **顺手：注释口径**（`734ab7c4`）：
+   - 端口：写到行的那几口才记问过；`HoldFormation` 不写行，`RecordMissing` 遇已形成的不写。
+   - `ErrDeliveryDispatchPendingUnavailable`：取锁失败时还没有答复。
+   - HTTP `Remaining`：未受理、未配置、未决时也是零，那时看 outcome。
+6. **顺手：「问」的口径**（`1038d1db`）：PAR-NET-19 与 ADR-0230 写明「问」指交执行器跑一拍，不一定问到所有者（迟到的前版信封、缝没接线、任务册读不动也刷新）。
+7. **顺手**（`a53b1a4f`、`734ab7c4`）：
+   - 并发用例注释去掉变更叙述。
+   - `assemble_delivery_dispatch_on_handover.go` 的哨兵名单注释改为按类说明，不再逐个列别的包的错误符号，过长那一行收短。
+
+**未采纳**：无。
+
+**验证**：
+- `go build ./...`、`go vet ./...` 退 0；`gofmt -l cmd internal migrations tools` 无输出。
+- 本轮每一笔改 Go 的提交都经 `git archive` 单独导出，build 与 vet 通过。
+- `scripts/test-full.sh ./internal/transportfulfillment/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./internal/accessidentity/... ./internal/architecture/... ./migrations/...`：21 ok、0 FAIL，另 1 个包没有测试文件。
+
