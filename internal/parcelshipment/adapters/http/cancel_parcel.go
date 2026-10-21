@@ -65,13 +65,15 @@ func NewCancelParcelEndpoint(intake CancellationIntake, handler CancellationHand
 
 // cancellationResponse 是本端点的封闭响应形状。`outcome` 取应用结果枚举的原名；三种
 // 已提交走向各带自己的凭据——取消成立带取消决定标识、待处置带越过的收寄版本（调用方
-// 要知道输给了哪次收寄）、拒绝带规则依据；未决带原因与续办引用；取消成立而发布意图
+// 要知道输给了哪次收寄）、拒绝带规则依据（面单渠道服务越过承运商收寄时依据指名那一代
+// 收寄）；既有终局带指名那份终局的引用；未决带原因与续办引用；取消成立而发布意图
 // 未交出时带重发引用（补偿与判断续办分开，理由随撤回端点）。
 type cancellationResponse struct {
 	Outcome               string `json:"outcome"`
 	CancellationID        string `json:"cancellationId,omitempty"`
 	IntakeVersion         string `json:"intakeVersion,omitempty"`
 	RefusalBasis          string `json:"refusalBasis,omitempty"`
+	StandingFinal         string `json:"standingFinal,omitempty"`
 	DecidedAt             string `json:"decidedAt,omitempty"`
 	PendingReason         string `json:"pendingReason,omitempty"`
 	ContinuationReference string `json:"continuationReference,omitempty"`
@@ -96,6 +98,9 @@ func writeCancellationOutcome(response http.ResponseWriter, result application.C
 		case ports.RecordCancellationRefused:
 			body.RefusalBasis = record.RefusalBasis.String()
 		}
+	}
+	if result.Outcome() == application.CancellationFinalOutcomeStands {
+		body.StandingFinal = result.Basis().String()
 	}
 	if reason := result.UndecidedReason().String(); reason != "" {
 		body.PendingReason = reason

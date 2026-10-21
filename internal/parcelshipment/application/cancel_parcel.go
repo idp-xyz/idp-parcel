@@ -17,7 +17,7 @@ import (
 var ErrUnexpectedCancellationSave = errors.New("parcel shipment: unexpected cancellation save outcome")
 
 // CancelParcelOutcome 是取消请求的应用处理结果，对应 UC-PS-006 元数据的四种结束加
-// 重复/冲突/不受理三格。
+// 重复/冲突/不受理三格，以及决定矩阵「已有终局服务结果 → 返回既有终局」那一格。
 type CancelParcelOutcome uint8
 
 const (
@@ -29,6 +29,10 @@ const (
 	CancellationExistingResult
 	CancellationConflict
 	CancellationNotAccepted
+	// CancellationFinalOutcomeStands：包裹已有终局（非取消终局，或另一请求已成立的取消），交既有
+	// 终局、不形成取消（AT-PS-086）。它与`已有结果`分开：那一格说的是同一请求身份的重放，这一格
+	// 说的是包裹本身已经终局，与请求是谁无关。不落取消记录——终局不回退，重放照样读到它。
+	CancellationFinalOutcomeStands
 )
 
 func (outcome CancelParcelOutcome) String() string {
@@ -47,6 +51,8 @@ func (outcome CancelParcelOutcome) String() string {
 		return "REQUEST_CONFLICT"
 	case CancellationNotAccepted:
 		return "REQUEST_NOT_ACCEPTED"
+	case CancellationFinalOutcomeStands:
+		return "FINAL_OUTCOME_STANDS"
 	default:
 		return ""
 	}
@@ -63,6 +69,11 @@ const (
 	CancelAdoptionStoreUnavailable
 	CancelStoreUnavailable
 	CancelIdentityUnavailable
+	CancelFinalStoreUnavailable
+	CancelCarrierPickupUnavailable
+	// CancelCarrierPickupPending：面单渠道服务的首次有效收寄判过了但待确认。它不结束取消权，也不能
+	// 当作没有——UC-PS-006 决定矩阵「收寄事实存在但有效性待确认 → 取消/处置未决」。
+	CancelCarrierPickupPending
 )
 
 func (reason CancelUndecidedReason) String() string {
@@ -79,6 +90,12 @@ func (reason CancelUndecidedReason) String() string {
 		return "CANCELLATION_STORE_UNAVAILABLE"
 	case CancelIdentityUnavailable:
 		return "CANCELLATION_IDENTITY_UNAVAILABLE"
+	case CancelFinalStoreUnavailable:
+		return "FINAL_OUTCOME_STORE_UNAVAILABLE"
+	case CancelCarrierPickupUnavailable:
+		return "CARRIER_PICKUP_UNAVAILABLE"
+	case CancelCarrierPickupPending:
+		return "CARRIER_PICKUP_PENDING"
 	default:
 		return ""
 	}
@@ -118,7 +135,7 @@ func (result CancelParcelResult) Record() (ports.CancellationRecord, bool) {
 	return result.record, result.hasRecord
 }
 
-// Basis 在`拒绝`时携带规则依据。
+// Basis 在`拒绝`时携带规则依据，在`既有终局`时指名那份终局。
 func (result CancelParcelResult) Basis() domain.CheckReason {
 	return result.basis
 }
@@ -136,14 +153,21 @@ func (result CancelParcelResult) CancellationHandoffReference() domain.Ownership
 	return result.handoff
 }
 
+// CancelParcelDeps 是取消编排的依赖。提交边界上读的边界事实各一个口：当前有效终局与已成立的取消
+// （Finals、Cancellations）、网络服务的责任起点（Adoptions）、面单渠道服务的首次有效收寄
+// （CarrierPickups）。都不按服务形态挑着读：本上下文不在包裹上存服务形态的判别位，而任一样在册
+// 都使取消不成立（PS CONTEXT「此刻已在册的收寄或终局使取消不成立」），全读是它的直译。
 type CancelParcelDeps struct {
-	Requests   ports.ShipmentRequestRepository
-	Authority  ports.CancellationAuthorityView
-	Adoptions  ports.IntakeAdoptionStore
-	Store      ports.ParcelCancellationStore
-	Identities CancellationIdentityFactory
-	Downstream ports.ParcelCancellationHandoff
-	Clock      ports.Clock
+	Requests       ports.ShipmentRequestRepository
+	Authority      ports.CancellationAuthorityView
+	Adoptions      ports.IntakeAdoptionStore
+	Finals         ports.CurrentFinalView
+	Cancellations  ports.ParcelCancellationView
+	CarrierPickups ports.CarrierPickupBoundaryView
+	Store          ports.ParcelCancellationStore
+	Identities     CancellationIdentityFactory
+	Downstream     ports.ParcelCancellationHandoff
+	Clock          ports.Clock
 }
 
 type CancelParcelHandler struct {
@@ -155,8 +179,9 @@ func NewCancelParcelHandler(deps CancelParcelDeps) *CancelParcelHandler {
 }
 
 // Handle 把一件包裹的取消请求推进到判断：受理与委托核验（统一不可见）→ 幂等/冲突 →
-// 授权（未配置即未决，不写默认授权）→ 在决定提交边界重读当前收寄 → 边界前取消成立、
-// 边界后登记待处置（明确不能回退取消）→ 提交与发布意图。已发生事实全程不删。
+// 授权（未配置即未决，不写默认授权）→ 在决定提交边界重读终局与收寄 → 已有终局交既有终局、
+// 网络收寄已在册登记待处置、面单渠道服务首次有效收寄已在册不可取消（都明确不能回退取消）、
+// 边界前取消成立 → 提交与发布意图。已发生事实全程不删。
 func (handler *CancelParcelHandler) Handle(
 	ctx context.Context,
 	command CancelParcelCommand,
@@ -217,11 +242,45 @@ func (handler *CancelParcelHandler) Handle(
 		return handler.commit(ctx, record)
 	}
 
-	// 决定提交边界的收寄重读（AT-PS-079）：先合法成立的收寄赢，取消不形成、转待处置。
+	// 决定提交边界上已在册的边界事实使取消不成立，不比时间（ADR-0254 决定二第 1 格）。终局先读：
+	// 已终局的包裹无论哪种服务形态都交既有终局（AT-PS-086），不落到待处置或拒绝那几格去。
+	if result, settled := handler.standingFinal(ctx, command, key.TenantID); settled {
+		return result, nil
+	}
+
+	// 网络服务的收寄重读（AT-PS-079）：先合法成立的收寄赢，取消不形成、转待处置。
 	started, crossed, err := handler.deps.Adoptions.FindResponsibilityStart(
 		ctx, key.TenantID, command.Parcel)
 	if err != nil {
 		return handler.undecided(command, CancelAdoptionStoreUnavailable), nil
+	}
+	if !crossed {
+		// 面单渠道服务的边界是实际承运商首次有效收寄（PS CONTEXT）。已形成即不可取消，拒绝带上越过的
+		// 那一代——面单渠道服务没有收寄后处置这条路，承运商收寄就是它的终局边界。
+		boundary, err := handler.deps.CarrierPickups.FindCurrentCarrierPickup(ctx, key.TenantID, command.Parcel)
+		if err != nil {
+			return handler.undecided(command, CancelCarrierPickupUnavailable), nil
+		}
+		switch boundary.State {
+		case ports.CarrierPickupBoundaryAbsent:
+		case ports.CarrierPickupBoundaryPending:
+			return handler.undecided(command, CancelCarrierPickupPending), nil
+		case ports.CarrierPickupBoundaryFormed:
+			basis, err := domain.NewCheckReason("CARRIER_FIRST_EFFECTIVE_PICKUP/" +
+				boundary.Pickup.Fact.String() + "@" + boundary.Pickup.Version.String())
+			if err != nil {
+				return CancelParcelResult{}, fmt.Errorf("carrier pickup boundary basis: %w", err)
+			}
+			return handler.commit(ctx, ports.CancellationRecord{
+				Key:           key,
+				ContentDigest: digest,
+				Kind:          ports.RecordCancellationRefused,
+				RefusalBasis:  basis,
+				DecidedAt:     handler.deps.Clock.Now(),
+			})
+		default:
+			return CancelParcelResult{}, fmt.Errorf("parcel shipment: unhandled carrier pickup boundary state %d", boundary.State)
+		}
 	}
 
 	intake := domain.CurrentIntakeFact{}
@@ -273,6 +332,46 @@ func (handler *CancelParcelHandler) Handle(
 		DecidedAt:     handler.deps.Clock.Now(),
 	}
 	return handler.commit(ctx, record)
+}
+
+// standingFinal 读包裹当前有效终局：非取消终局与已成立的取消都是终局。settled 为 true 时 result
+// 就是答复——既有终局，或读不动的未决（读不动不放行取消）。
+func (handler *CancelParcelHandler) standingFinal(
+	ctx context.Context,
+	command CancelParcelCommand,
+	tenant domain.TenantID,
+) (CancelParcelResult, bool) {
+	final, found, err := handler.deps.Finals.FindCurrentFinal(ctx, tenant, command.Parcel)
+	if err != nil {
+		return handler.undecided(command, CancelFinalStoreUnavailable), true
+	}
+	if found && final.Finalized {
+		return handler.finalStands("FINAL_OUTCOME/", final.Final.Version().String(), command)
+	}
+	cancellation, cancelled, err := handler.deps.Cancellations.FindCancellation(ctx, tenant, command.Parcel)
+	if err != nil {
+		return handler.undecided(command, CancelStoreUnavailable), true
+	}
+	if cancelled {
+		return handler.finalStands("PARCEL_CANCELLATION/", cancellation.ID().String(), command)
+	}
+	return CancelParcelResult{}, false
+}
+
+func (handler *CancelParcelHandler) finalStands(
+	kind string,
+	identifier string,
+	command CancelParcelCommand,
+) (CancelParcelResult, bool) {
+	if strings.TrimSpace(identifier) == "" {
+		// 指名不出那份终局：读口交回的终局缺标识，是读口坏了；不放行取消。
+		return handler.undecided(command, CancelFinalStoreUnavailable), true
+	}
+	basis, err := domain.NewCheckReason(kind + identifier)
+	if err != nil {
+		return handler.undecided(command, CancelFinalStoreUnavailable), true
+	}
+	return CancelParcelResult{outcome: CancellationFinalOutcomeStands, basis: basis}, true
 }
 
 func memberOfCurrentVersion(request domain.ShipmentRequest, parcel domain.DeclaredParcelID) bool {

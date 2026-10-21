@@ -85,12 +85,37 @@ func (double *cancellationIdentityDouble) NextParcelCancellationID(
 	return domain.NewParcelCancellationID("cancel-" + string(rune('0'+double.next)))
 }
 
+// carrierPickupBoundaryDouble 是面单渠道服务首次有效收寄链尾读口的替身：零值答没有。
+type carrierPickupBoundaryDouble struct {
+	boundary ports.CarrierPickupBoundary
+	err      error
+	asked    int
+}
+
+func (double *carrierPickupBoundaryDouble) FindCurrentCarrierPickup(
+	_ context.Context,
+	_ domain.TenantID,
+	_ domain.DeclaredParcelID,
+) (ports.CarrierPickupBoundary, error) {
+	double.asked++
+	if double.err != nil {
+		return ports.CarrierPickupBoundary{}, double.err
+	}
+	if double.boundary.State == ports.CarrierPickupBoundaryStateInvalid {
+		return ports.CarrierPickupBoundary{State: ports.CarrierPickupBoundaryAbsent}, nil
+	}
+	return double.boundary, nil
+}
+
 type cancelFixture struct {
-	handler    *application.CancelParcelHandler
-	authority  *cancellationAuthorityDouble
-	adoptions  *adoptionStoreDouble
-	store      *cancellationStoreDouble
-	downstream *cancellationDownstreamDouble
+	handler       *application.CancelParcelHandler
+	authority     *cancellationAuthorityDouble
+	adoptions     *adoptionStoreDouble
+	finals        *currentFinalViewDouble
+	cancellations *cancellationViewDouble
+	pickups       *carrierPickupBoundaryDouble
+	store         *cancellationStoreDouble
+	downstream    *cancellationDownstreamDouble
 }
 
 func newCancelFixture(t *testing.T) *cancelFixture {
@@ -105,20 +130,256 @@ func newCancelFixture(t *testing.T) *cancelFixture {
 			judgment:   ports.CancellationAuthorityJudgment{Granted: true, Basis: mustValue(t, domain.NewCheckReason, "CANCEL-RULE/PC-17")},
 			configured: true,
 		},
-		adoptions:  newAdoptionStore(),
-		store:      newCancellationStore(),
-		downstream: &cancellationDownstreamDouble{},
+		adoptions:     newAdoptionStore(),
+		finals:        newCurrentFinalViewDouble(),
+		cancellations: &cancellationViewDouble{},
+		pickups:       &carrierPickupBoundaryDouble{},
+		store:         newCancellationStore(),
+		downstream:    &cancellationDownstreamDouble{},
 	}
 	fixture.handler = application.NewCancelParcelHandler(application.CancelParcelDeps{
-		Requests:   requests,
-		Authority:  fixture.authority,
-		Adoptions:  fixture.adoptions,
-		Store:      fixture.store,
-		Identities: &cancellationIdentityDouble{},
-		Downstream: fixture.downstream,
-		Clock:      fixedClock{at: cancelRequestedAt.Add(time.Minute)},
+		Requests:       requests,
+		Authority:      fixture.authority,
+		Adoptions:      fixture.adoptions,
+		Finals:         fixture.finals,
+		Cancellations:  fixture.cancellations,
+		CarrierPickups: fixture.pickups,
+		Store:          fixture.store,
+		Identities:     &cancellationIdentityDouble{},
+		Downstream:     fixture.downstream,
+		Clock:          fixedClock{at: cancelRequestedAt.Add(time.Minute)},
 	})
 	return fixture
+}
+
+// formedFinal 真经领域构造一份当前有效终局。
+func formedFinal(t *testing.T, parcel, version string) ports.FinalOutcomeRecord {
+	t.Helper()
+	source, err := domain.NewResponsibilityOutcome(domain.ResponsibilityOutcomeSpec{
+		Kind:       domain.LabelServiceOutcome,
+		Parcel:     mustValue(t, domain.NewDeclaredParcelID, parcel),
+		Decision:   mustValue(t, domain.NewResponsibilityDecisionReference, "LABEL-SERVICE-FINAL/"+parcel),
+		Execution:  mustValue(t, domain.NewExecutionEvidenceReference, "TF-PICKUP-7@v1"),
+		Version:    mustValue(t, domain.NewResponsibilityOutcomeVersion, "v1"),
+		OccurredAt: cancelRequestedAt.Add(-time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("responsibility outcome: %v", err)
+	}
+	final, err := domain.FormParcelFinalOutcome(domain.ParcelFinalOutcomeSpec{
+		Version:     mustValue(t, domain.NewFinalOutcomeVersionID, version),
+		Parcel:      mustValue(t, domain.NewDeclaredParcelID, parcel),
+		Kind:        mustValue(t, domain.NewFinalKindReference, "LABEL_SERVICE_FINAL"),
+		Source:      source,
+		RuleVersion: mustValue(t, domain.NewFinalRuleVersionReference, "FINAL-RULE/v1"),
+	})
+	if err != nil {
+		t.Fatalf("form final: %v", err)
+	}
+	return ports.FinalOutcomeRecord{Finalized: true, Final: final}
+}
+
+func formedCarrierPickupBoundary(t *testing.T) ports.CarrierPickupBoundary {
+	t.Helper()
+	return ports.CarrierPickupBoundary{
+		State: ports.CarrierPickupBoundaryFormed,
+		Pickup: domain.CarrierFirstEffectivePickupSpec{
+			Fact:        mustValue(t, domain.NewCarrierFirstEffectivePickupFactReference, "CFEP-7"),
+			Version:     mustValue(t, domain.NewCarrierFirstEffectivePickupFactVersion, "CFEV-1"),
+			EffectiveAt: cancelRequestedAt.Add(time.Hour),
+		},
+	}
+}
+
+// Covers: `AT-PS-086`「包裹已有终局后请求取消——返回既有终局」与 ADR-0254 决定二第 1 格——提交边界
+// 上先读当前有效终局：已有非取消终局（面单渠道服务由首次有效收寄形成的那一种，网络服务的交付等同此）
+// 或已成立的取消，都交既有终局、不形成取消、不落取消记录、不交释放意图；这一格不比时间。
+func TestAStandingFinalIsReturnedInsteadOfACancellation(t *testing.T) {
+	t.Run("a current non-cancellation final", func(t *testing.T) {
+		fixture := newCancelFixture(t)
+		fixture.finals.finals[mustValue(t, domain.NewDeclaredParcelID, "parcel-1")] = formedFinal(t, "parcel-1", "FINAL-7")
+
+		result, err := fixture.handler.Handle(context.Background(), cancelCommand(t, "parcel-1"))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.CancellationFinalOutcomeStands {
+			t.Fatalf("outcome = %q, want FINAL_OUTCOME_STANDS", result.Outcome())
+		}
+		if result.Basis().String() != "FINAL_OUTCOME/FINAL-7" {
+			t.Fatalf("basis = %q；要指名那份既有终局", result.Basis())
+		}
+		if fixture.store.saved != 0 || len(fixture.downstream.intents) != 0 {
+			t.Fatal("既有终局之上落了取消记录或交了释放意图")
+		}
+	})
+
+	t.Run("a cancellation already standing under another request", func(t *testing.T) {
+		fixture := newCancelFixture(t)
+		fixture.cancellations.cancellation = cancelledAt(t, cancelRequestedAt.Add(-time.Hour))
+		fixture.cancellations.cancelled = true
+
+		result, err := fixture.handler.Handle(context.Background(), cancelCommand(t, "parcel-1"))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.CancellationFinalOutcomeStands ||
+			result.Basis().String() != "PARCEL_CANCELLATION/cancel-1" {
+			t.Fatalf("outcome = %q basis = %q, want FINAL_OUTCOME_STANDS 指名原取消", result.Outcome(), result.Basis())
+		}
+		if fixture.store.saved != 0 {
+			t.Fatal("同一包裹形成了第二份取消")
+		}
+	})
+
+	t.Run("a final read that fails stalls instead of letting the cancellation through", func(t *testing.T) {
+		fixture := newCancelFixture(t)
+		fixture.finals.failWith = errors.New("final store down")
+
+		result, err := fixture.handler.Handle(context.Background(), cancelCommand(t, "parcel-1"))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.CancellationUndecided ||
+			result.UndecidedReason() != application.CancelFinalStoreUnavailable {
+			t.Fatalf("outcome = %q/%q, want CANCELLATION_UNDECIDED/FINAL_OUTCOME_STORE_UNAVAILABLE",
+				result.Outcome(), result.UndecidedReason())
+		}
+		if fixture.store.saved != 0 {
+			t.Fatal("读不动终局却落了库")
+		}
+	})
+
+	t.Run("a cancellation read that fails stalls too", func(t *testing.T) {
+		fixture := newCancelFixture(t)
+		fixture.cancellations.err = errors.New("cancellation view down")
+
+		result, err := fixture.handler.Handle(context.Background(), cancelCommand(t, "parcel-1"))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.UndecidedReason() != application.CancelStoreUnavailable {
+			t.Fatalf("reason = %q, want CANCELLATION_STORE_UNAVAILABLE", result.UndecidedReason())
+		}
+	})
+}
+
+// Covers: PS CONTEXT「面单渠道服务包裹只允许在实际承运商收寄前……取消」与 ADR-0254 决定二第 1 格的面单
+// 渠道一侧——提交边界上读该包裹的首次有效收寄链尾：已形成即不可取消，答取消被拒并指名越过的那一代收寄，
+// 记录随之落库（重放答原结果）；待确认是「收寄事实存在但有效性待确认」，取消未决（UC-PS-006 决定矩阵），
+// 不先取消后等事实；读不动按依赖未决，不放行；链尾失效或从未有过照常取消。
+func TestALabelChannelParcelCannotBeCancelledPastTheCarrierPickup(t *testing.T) {
+	t.Run("a formed first effective pickup refuses the cancellation and names it", func(t *testing.T) {
+		fixture := newCancelFixture(t)
+		fixture.pickups.boundary = formedCarrierPickupBoundary(t)
+
+		result, err := fixture.handler.Handle(context.Background(), cancelCommand(t, "parcel-1"))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.CancellationRefused {
+			t.Fatalf("outcome = %q, want CANCELLATION_REFUSED", result.Outcome())
+		}
+		if result.Basis().String() != "CARRIER_FIRST_EFFECTIVE_PICKUP/CFEP-7@CFEV-1" {
+			t.Fatalf("basis = %q；要指名越过的那一代收寄", result.Basis())
+		}
+		record, present := result.Record()
+		if !present || record.Kind != ports.RecordCancellationRefused || fixture.store.saved != 1 {
+			t.Fatalf("record = %+v present = %v saved = %d", record, present, fixture.store.saved)
+		}
+		if len(fixture.downstream.intents) != 0 {
+			t.Fatal("不可取消却交了释放意图")
+		}
+
+		replay, err := fixture.handler.Handle(context.Background(), cancelCommand(t, "parcel-1"))
+		if err != nil || replay.Outcome() != application.CancellationExistingResult {
+			t.Fatalf("replay = %q err = %v", replay.Outcome(), err)
+		}
+	})
+
+	t.Run("a pending pickup leaves the cancellation undecided", func(t *testing.T) {
+		fixture := newCancelFixture(t)
+		fixture.pickups.boundary = ports.CarrierPickupBoundary{State: ports.CarrierPickupBoundaryPending}
+
+		result, err := fixture.handler.Handle(context.Background(), cancelCommand(t, "parcel-1"))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.CancellationUndecided ||
+			result.UndecidedReason() != application.CancelCarrierPickupPending {
+			t.Fatalf("outcome = %q/%q, want CANCELLATION_UNDECIDED/CARRIER_PICKUP_PENDING",
+				result.Outcome(), result.UndecidedReason())
+		}
+		if fixture.store.saved != 0 {
+			t.Fatal("待确认的收寄之上落了取消")
+		}
+	})
+
+	t.Run("an unreadable pickup register stalls", func(t *testing.T) {
+		fixture := newCancelFixture(t)
+		fixture.pickups.err = errors.New("tf registry down")
+
+		result, err := fixture.handler.Handle(context.Background(), cancelCommand(t, "parcel-1"))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.UndecidedReason() != application.CancelCarrierPickupUnavailable || fixture.store.saved != 0 {
+			t.Fatalf("reason = %q saved = %d, want CARRIER_PICKUP_UNAVAILABLE 且零落库",
+				result.UndecidedReason(), fixture.store.saved)
+		}
+	})
+
+	t.Run("no pickup or a voided one lets the cancellation stand", func(t *testing.T) {
+		fixture := newCancelFixture(t)
+		result, err := fixture.handler.Handle(context.Background(), cancelCommand(t, "parcel-1"))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.ParcelCancelled || fixture.pickups.asked != 1 {
+			t.Fatalf("outcome = %q asked = %d；收寄读口必须在提交边界上问过", result.Outcome(), fixture.pickups.asked)
+		}
+	})
+}
+
+// Covers: UC-PS-006 结果语义契约——取消编排的结果码与未决原因码逐码对照 String()，封闭集合不悄悄放开。
+func TestTheCancellationOutcomeAndReasonSetsAreClosed(t *testing.T) {
+	outcomes := map[application.CancelParcelOutcome]string{
+		application.ParcelCancelled:                "PARCEL_CANCELLED",
+		application.DispositionPending:             "DISPOSITION_PENDING",
+		application.CancellationRefused:            "CANCELLATION_REFUSED",
+		application.CancellationUndecided:          "CANCELLATION_UNDECIDED",
+		application.CancellationExistingResult:     "EXISTING_RESULT",
+		application.CancellationConflict:           "REQUEST_CONFLICT",
+		application.CancellationNotAccepted:        "REQUEST_NOT_ACCEPTED",
+		application.CancellationFinalOutcomeStands: "FINAL_OUTCOME_STANDS",
+	}
+	for outcome, want := range outcomes {
+		if outcome.String() != want {
+			t.Fatalf("outcome %d = %q, want %q", outcome, outcome.String(), want)
+		}
+	}
+	if application.CancelParcelOutcome(len(outcomes)+1).String() != "" {
+		t.Fatal("集合外的结果带了标签")
+	}
+	reasons := map[application.CancelUndecidedReason]string{
+		application.CancelRequestUnavailable:       "REQUEST_UNAVAILABLE",
+		application.CancelAuthorityUnavailable:     "AUTHORITY_UNAVAILABLE",
+		application.CancelAuthorityUnconfigured:    "AUTHORITY_UNCONFIGURED",
+		application.CancelAdoptionStoreUnavailable: "ADOPTION_STORE_UNAVAILABLE",
+		application.CancelStoreUnavailable:         "CANCELLATION_STORE_UNAVAILABLE",
+		application.CancelIdentityUnavailable:      "CANCELLATION_IDENTITY_UNAVAILABLE",
+		application.CancelFinalStoreUnavailable:    "FINAL_OUTCOME_STORE_UNAVAILABLE",
+		application.CancelCarrierPickupUnavailable: "CARRIER_PICKUP_UNAVAILABLE",
+		application.CancelCarrierPickupPending:     "CARRIER_PICKUP_PENDING",
+	}
+	for reason, want := range reasons {
+		if reason.String() != want {
+			t.Fatalf("reason %d = %q, want %q", reason, reason.String(), want)
+		}
+	}
+	if application.CancelUndecidedReason(len(reasons)+1).String() != "" {
+		t.Fatal("集合外的未决原因带了标签")
+	}
 }
 
 func cancelCommand(t *testing.T, parcel string) application.CancelParcelCommand {
