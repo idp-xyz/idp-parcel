@@ -86,7 +86,7 @@
 
 ## 首切范围与现状
 
-动作集合 `AuthorizedAction` 是封闭集：人工复核（`MANUAL_REVIEW`）、主动拒绝（`ACTIVE_REJECTION`）、资料修订（`SOURCE_DATA_AMENDMENT`，[ADR-0116](../../adr/0116-source-data-amendment-is-an-authorized-action-and-contract-delegation-resolves-the-actual-decider.md) 决定一）、受控关闭（`CONTROLLED_CLOSURE`）与重开（`REOPENING`）。裁定交回动作、所命中的授权规则版本、原因、证据、时点与实际决定方（`Authorization.Decider()`，ADR-0116 决定三）。消费侧 `parcel-shipment` 的主动拒绝、人工复核、资料修订各有授权适配器，受控关闭与重开共用一只（`continued_attempt_decision_authorization.go`），按本用例的答复集合翻译；`适用冲突`今天不在它们的翻译集合内，落进各自的 `default` 交回 error（未形成），补这一格见 code/24。撤回不在动作集内，归建模未决一；`parcel-shipment` 的撤回适配器已在，折不出请求即答未形成，不译成授权规则未配置。
+动作集合 `AuthorizedAction` 是封闭集：人工复核（`MANUAL_REVIEW`）、主动拒绝（`ACTIVE_REJECTION`）、资料修订（`SOURCE_DATA_AMENDMENT`，[ADR-0116](../../adr/0116-source-data-amendment-is-an-authorized-action-and-contract-delegation-resolves-the-actual-decider.md) 决定一）、受控关闭（`CONTROLLED_CLOSURE`）与重开（`REOPENING`）。裁定交回动作、所命中的授权规则版本、原因、证据、时点与实际决定方（`Authorization.Decider()`，ADR-0116 决定三）。消费侧 `parcel-shipment` 的主动拒绝、人工复核、资料修订各有授权适配器，受控关闭与重开共用一只（`continued_attempt_decision_authorization.go`），按本用例的答复集合翻译；`适用冲突`译成 `psports.AuthorizationOutcome` 的 `APPLICABILITY_CONFLICT` 一格（撤回那只同此），消费方停在未决或答它自己的一码，不读作已授权也不读作拒绝（[ADR-0261](../../adr/0261-authority-grants-and-contract-delegations-follow-the-closure-of-their-version-and-several-hits-are-an-applicability-conflict.md) 越权风险点 3）。撤回不在动作集内，归建模未决一；`parcel-shipment` 的撤回适配器已在，折不出请求即答未形成，不译成授权规则未配置。
 
 ## 建模未决与已作的裁定
 
@@ -135,11 +135,11 @@
 
 读取面是独立端口：`ports.AuthorityGrantStore.LoadEffectiveGrants` 按适用范围与业务时点装载授权规则，`ports.EffectiveContractDelegationView` 只在运营角色代客户请求资料修订时装载委派，`application.AdjudicateCommercialAuthorizationHandler` 调 `domain.Authorize(grants, delegations, request)` 交回上述各格之一；授权治理册从迁移 `party_commercial/0003` 起（PostgreSQL 适配器 `postgres.AuthorityGrants`、`postgres.ContractDelegations`）。它不得与 `AcceptanceContentDeclaration` 并格，也不得复用 `CommercialAuthorityView.LoadScope`——`CommercialRegistry` 不持有 `AuthorityGrant`。
 
-首发答复对照（`domain.Authorize` 与编排）：`已授权`是交回的 `Authorization`；`不允许`是 `ErrNotAuthorized`，含它的两个具名分格 `ErrDelegationAbsent`（委派缺席）与 `ErrCustomerAccountCannotDecide`（客户账户请求只能由运营角色形成的关闭或重开）；`授权规则未配置`是 `ErrAuthorityRulesNotConfigured`；`未形成`是装载失败的包装错误与委派读口未接线的错误；输入未受理在请求构造时就拒（`ErrInvalidAuthorizationRequest`、`ErrAuthorizationRequesterRequired`），不进编排。`适用冲突`今天没有对应的格。
+首发答复对照（`domain.Authorize` 与编排）：`已授权`是交回的 `Authorization`；`不允许`是 `ErrNotAuthorized`，含它的两个具名分格 `ErrDelegationAbsent`（委派缺席）与 `ErrCustomerAccountCannotDecide`（客户账户请求只能由运营角色形成的关闭或重开）；`授权规则未配置`是 `ErrAuthorityRulesNotConfigured`；`未形成`是装载失败的包装错误与委派读口未接线的错误；输入未受理在请求构造时就拒（`ErrInvalidAuthorizationRequest`、`ErrAuthorizationRequesterRequired`），不进编排。`适用冲突`是 `ErrAuthorityApplicabilityConflict`，它既不 Is `ErrNotAuthorized` 也不 Is `ErrAuthorityRulesNotConfigured`；实际决定方的解法与命中哪一条授予无关，所以决定方解出`不允许`（委派缺席、客户账户请求关闭或重开）时照答`不允许`，不报适用冲突——一次拒绝不采用任何一版。授予与委派的装载先折所挂版本的收尾（`AuthorityGrant`、`ContractDelegation` 的 `NarrowedBy`、`EndedBy`、`InForceAt`，与自带区间的政策正文共用领域 `versionFold` 一处折法），折后不在业务时点现行的不交出。
 
-现状缺口（规则见「结果语义」「应用流程」与「建模未决与已作的裁定」第五项，代码未到；预期结果不变）：
+现状缺口（规则见「结果语义」「应用流程」与「建模未决与已作的裁定」第五项）：
 
 | AT | 缺口 | 承接 |
 |---|---|---|
-| `AT-PC-042` | `Authorize` 取首个命中；`LoadEffectiveGrants` 按 `object_id, version_label` 排序，`resolveDecider` 对委派同样取首个 | 票 [docs-consistency/code/24](../../../.scratch/docs-consistency/code/24-closed-authorization-rule-and-contract-versions-keep-granting.md) |
-| `AT-PC-059`、`AT-PC-060`、`AT-PC-061` | 授予与委派的装载只看各自的区间，不连退役册与区间更正册；同起点重发后命中的是已退役的那一版 | 同上 |
+| `AT-PC-042` | 已补：`Authorize` 命中多于一条授予、`resolveDecider` 命中委派方不同的多条委派，都答适用冲突，不取首个；装载顺序仍按对象与版本标签稳定，但不再决定采用哪一版 | 票 [docs-consistency/code/24](../../../.scratch/docs-consistency/code/24-closed-authorization-rule-and-contract-versions-keep-granting.md) |
+| `AT-PC-059`、`AT-PC-060`、`AT-PC-061` | 已补：授予与委派的装载连退役册与最新一条区间更正，已退役那一版不交出、截止点之后的旧版不交出；同起点重发并退役旧版之后只命中后继 | 同上 |
