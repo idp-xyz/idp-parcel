@@ -1,7 +1,7 @@
 # 88 自动形成没赶上的参与不补：采用晚到、协议后补条件的段，实际履约发生项要人记得去登
 
 Category: enhancement
-Status: in-progress——二轮评审已修，待进 main，分支 claude-dcg88。此前 in-progress——一轮评审已修、待复评；完工待评审；2026-10-21 认领；ready-for-agent——2026-10-20 上线就绪评估归 R1（上线前必修），裁定与批次见 [triage-2026-10-19](../triage-2026-10-19.md)「上线就绪评估（2026-10-20）」。此前 needs-triage——2026-10-19 票 [67](./67-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0218](../../../docs/adr/0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md) 越权风险点 1、6。
+Status: resolved——2026-10-21 进 main（全量钉 `b20bf209`：`scripts/test-full.sh` 158 ok / 0 FAIL，见文末「进 main 记录」）；解除采用后未形成条目作罢与换版补形成只列仍采用的段转票 [160](./160-unadoption-leaves-actual-fulfillment-unformed-entries-and-revision-catch-up-lists-unadopted-segments.md)，收尾仍被在途委托指名的协议版本时没有提醒转票 [161](./161-closing-an-agreement-version-named-by-in-flight-commissions-raises-no-prompt.md)。票 50（ADR-0233）的运营约束「88 落地前不得截止或退役仍被在途委托指名的供应商协议版本」由本票承接口解除，承接是事后的（看未形成查阅面，票 161）。此前 in-progress——二轮评审已修，待进 main，分支 claude-dcg88。此前 in-progress——一轮评审已修、待复评；完工待评审；2026-10-21 认领；ready-for-agent——2026-10-20 上线就绪评估归 R1（上线前必修），裁定与批次见 [triage-2026-10-19](../triage-2026-10-19.md)「上线就绪评估（2026-10-20）」。此前 needs-triage——2026-10-19 票 [67](./67-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0218](../../../docs/adr/0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md) 越权风险点 1、6。
 Blocked by: 无
 
 ## 现象
@@ -107,3 +107,7 @@ M
 - 缺陷路探针 `zz_defect_probe_test.go`：「盖住读不动」答 `RETRY OCCURRENCE_REGISTRY_UNAVAILABLE`、不进册；「未形成册写不动」答 `RETRY UNFORMED_REGISTER_UNAVAILABLE`；「封闭集外的核对答复」现在在探针自己的 `onAdoption` 里以「采用门铃不该上抛：register charge occurrence: supplier agreement check answered outside its closed set」失败——探针当时盼的 `DATA_VIOLATION` 不再出现，正是第 1 条要的改变；同一情形由 `TestAProgrammingDefectFailsTheWholeDoorbellAndRecordsNothing/核对口集外一格` 钉住。
 
 验证：`go build ./...`、`go vet ./...`、变更 Go 文件 `gofmt -l` 干净；`scripts/test-full.sh ./internal/transportfulfillment/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./cmd/parcel-transport-register/ ./cmd/parcel-access-register/ ./internal/accessidentity/... ./internal/architecture/... ./migrations/...`：23 ok、1 无测试文件、0 FAIL；一次性库 `dcg88_seed` 上 `seed.sh` 实灌零报错（475 一节 RECORDED），灌完删库。没跑全量；没重生成机制清点、ADR 索引与 AT 计数。
+
+## 进 main 记录
+
+2026-10-21 协调方合入。作者在二轮修订后把分支变基到 `6b0074d0`（即当时 main），并用只改文件名的 tree-filter 重写历史，使每份迁移从引入它的那一笔起就带最终号（TF `0048`；票 145 先占了 `0047`）；重写前后最终树逐字节相同。不需重放，分支 SHA 原样进 main（`6fc2a5ff`…`bbf7d5a8`）。一轮评审一条（无换版时冲突回显多一键）已修；二轮评审无阻断，「补形成吞掉编程缺陷」等已修，作者重跑评审探针：无换版时八种冲突回显与 main 逐字节相同。在 55432 一次性库上 `seed.sh` 全程退 0（步 475），用完 `DROP … WITH (FORCE)`。其上按 parallel-sessions.md 重生成 ADR 索引、重算 AT 盘点计数、重生成机制清点（`b20bf209`），各自单独成笔；`adr-index -check` 与 `at-coverage-counts -check` 退 0。在干净的隔离树上对 `b20bf209` 跑 `go build ./...`、`go vet ./...`、`gofmt -l` 干净，`scripts/test-full.sh` 全量 158 ok、0 FAIL（`-count=1`，无缓存）；推 `b20bf209:main`。迁移落号：`transport_fulfillment/0048`、`access_identity/0021`（均连号）。
