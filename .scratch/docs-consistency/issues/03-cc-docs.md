@@ -1,7 +1,7 @@
 # 03 CC（customs-compliance）：CONTEXT 写出现行规则、UC 与之一致、矛盾裁清
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dc03（见文末「完成记录」）。此前 in-progress——2026-10-21 认领；原 ready-for-agent——2026-10-21 协调方立（文档自洽修订，见 [README](../README.md)「修订执行」）
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dc03（见文末「完成记录」）。此前 in-progress——2026-10-21 认领；原 ready-for-agent——2026-10-21 协调方立（文档自洽修订，见 [README](../README.md)「修订执行」）
 Blocked by: 无（01 进 main 后开工）
 出处：[audit/cc.md](../audit/cc.md)（cc.md）；[02 的完成记录](./02-code-defects-from-the-audit.md)里「交修订票」一表中交给本票的条目；[01](./01-adr-suspension-chains.md) 的「交后续」一节里交给本票的条目。
 
@@ -131,3 +131,9 @@ Blocked by: 无（01 进 main 后开工）
 代码票号：本票占 code/26–27 与 code/34。
 
 检查（修后，rebase 于 main `f329f505`，AT 盘点追记一处与 05 的追记相邻冲突、两条并存）：scratchpad 副本上 `go run ./tools/adr-index` 重生成后 `-check` 退 0；`at-coverage-counts -check` 只报计数过期；改动的 25 个 .md 相对链接与锚点全部解析；0206、0227、0137 注记与 ADR-0241、0243 里的被停原句逐字核过。
+
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-dc03` tip `2636bcfe8` 在 main `f329f505` 上快进；两轮隔离评审的阻断全部消掉，第二轮修订由协调方对代码抽核（`DutyVerificationHandoffUnavailable` 只由重派编排给出、`SubmissionAuthorization` 无到期字段）。
+- 协调方随后在 tip 上单独提交：重生成 `docs/adr/README.md`、重算 AT 盘点总览计数；两者 `-check` 退 0。机制清点重生成无变化；`go build ./...` 干净。本票只动文档，未跑全量真库测试。
+- 去向：代码票 code/26、27、34。
