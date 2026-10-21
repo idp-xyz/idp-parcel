@@ -3,9 +3,13 @@ package postgres_test
 import (
 	"context"
 	"errors"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
@@ -13,6 +17,7 @@ import (
 	adapter "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
+	"go.idp.xyz/idp-parcel/migrations"
 )
 
 // Covers: ADR-0239 决定三的读口——订舱连同所属委托的服务提供方一条语句读回：不在册（含只登在他租户名下）答不在；在册带回
@@ -66,8 +71,8 @@ func TestABookingIsReadBackWithItsCommissionsProviderInOneStatement(t *testing.T
 	}
 }
 
-// Covers: `AT-TF-327`（存取面）、ADR-0239 决定二的挡回册——一次挡回立一行；同键再来只加次数、推后最近一次时刻，首次时刻不动；依据不同另起一行；
-// 只在事务里写，事务回滚不留痕；封闭集外的依据与空来源在写之前就拒。
+// Covers: `AT-TF-327`（存取面）、ADR-0239 决定二的挡回册——一次挡回立一行；同键再来只加次数、推后最近一次时刻，首次时刻不动；
+// 依据不同另起一行，库里存的是定宽码；只在事务里写，事务回滚不留痕；封闭集外的依据与空来源在写之前就拒。
 func TestABouncedAnswerIsCountedOnItsOwnRowPerBasis(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -107,7 +112,7 @@ func TestABouncedAnswerIsCountedOnItsOwnRowPerBasis(t *testing.T) {
 	record(otherBasis)
 
 	type row struct {
-		basis       string
+		basis       int16
 		first, last time.Time
 		count       int64
 	}
@@ -129,8 +134,8 @@ func TestABouncedAnswerIsCountedOnItsOwnRowPerBasis(t *testing.T) {
 	}
 	rows.Close()
 	if len(got) != 2 ||
-		got[0].basis != "BOOKING_NOT_REGISTERED" || got[0].count != 1 ||
-		got[1].basis != "SOURCE_NOT_SERVICE_PROVIDER" || got[1].count != 2 ||
+		got[0].basis != 1 || got[0].count != 1 ||
+		got[1].basis != 2 || got[1].count != 2 ||
 		!got[1].first.Equal(at) || !got[1].last.Equal(at.Add(time.Hour)) {
 		t.Fatalf("挡回册 = %+v", got)
 	}
@@ -166,6 +171,188 @@ func TestABouncedAnswerIsCountedOnItsOwnRowPerBasis(t *testing.T) {
 			return bounces.RecordBounce(txCtx, broken)
 		}); err == nil {
 			t.Fatalf("%s 照样写进了挡回册", name)
+		}
+	}
+}
+
+func newBounceLedger(t *testing.T) (*adapter.BookingAnswerBounces, *bentopg.DB, *pgxpool.Pool) {
+	t.Helper()
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	bounces, err := adapter.NewBookingAnswerBounces(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return bounces, db, pool
+}
+
+// Covers: ADR-0239 决定三的定宽依据——订舱标识与答复标识都在字节界上，两种依据各写一行都写得进，两行的键逐字节等长：键上唯一由
+// 挡回路决定的那一格是定宽码，答复方挑什么长度的标识，两条路写的键都一样长。
+func TestBothBasesWriteKeysOfTheSameWidthAtTheByteBound(t *testing.T) {
+	bounces, db, pool := newBounceLedger(t)
+	ctx := t.Context()
+	longest := strings.Repeat("A", 512)
+	for _, basis := range []ports.BookingAnswerBounceBasis{ports.BouncedBookingNotRegistered, ports.BouncedSourceNotServiceProvider} {
+		bounce := ports.BookingAnswerBounce{
+			Key: ports.BookingKey{
+				TenantID: deliveryValue(t, domain.NewTenantID, "SYN-TENANT-01"),
+				Booking:  deliveryValue(t, domain.NewBookingReference, longest),
+			},
+			Source:     "SYN-PARTY-CARRIER-LM-01",
+			Acceptance: deliveryValue(t, domain.NewCarrierAcceptanceReference, longest),
+			Basis:      basis,
+			BouncedAt:  time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC),
+		}
+		if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
+			return bounces.RecordBounce(txCtx, bounce)
+		}); err != nil {
+			t.Fatalf("依据 %s 在字节界上写不进：%v", basis, err)
+		}
+	}
+	var widths []int
+	rows, err := pool.Query(ctx,
+		`SELECT pg_column_size(ROW(tenant_id, source_ref, booking_id, acceptance_id, basis))
+		   FROM transport_fulfillment.booking_answer_bounce ORDER BY basis`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var width int
+		if err := rows.Scan(&width); err != nil {
+			t.Fatal(err)
+		}
+		widths = append(widths, width)
+	}
+	rows.Close()
+	if len(widths) != 2 || widths[0] != widths[1] {
+		t.Fatalf("两种依据的键宽 = %v，want 两行等宽", widths)
+	}
+}
+
+// Covers: ADR-0239 决定二——同一次挡回并发到达两份：先到的一笔立行未提交时，后到的一笔停在主键上；先到那笔提交之后它并进同一行，
+// 次数为二、首次时刻取两份里早的那一刻（后到那份记得更早）。
+func TestTwoConcurrentIdenticalBouncesCountTwiceOnOneRow(t *testing.T) {
+	bounces, db, pool := newBounceLedger(t)
+	ctx := t.Context()
+	at := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
+	bounce := ports.BookingAnswerBounce{
+		Key: ports.BookingKey{
+			TenantID: deliveryValue(t, domain.NewTenantID, "tenant-a"),
+			Booking:  deliveryValue(t, domain.NewBookingReference, "booking-1"),
+		},
+		Source:     "partner-2",
+		Acceptance: deliveryValue(t, domain.NewCarrierAcceptanceReference, "answer-1"),
+		Basis:      ports.BouncedSourceNotServiceProvider,
+		BouncedAt:  at.Add(time.Minute),
+	}
+	earlier := bounce
+	earlier.BouncedAt = at
+
+	observer, err := pgx.Connect(ctx, pgtest.AdminDSN(t))
+	if err != nil {
+		t.Fatalf("开观察连接：%v", err)
+	}
+	t.Cleanup(func() { _ = observer.Close(context.Background()) })
+	database := pool.Config().ConnConfig.Database
+
+	held, release, firstDone, secondDone := make(chan struct{}), make(chan struct{}), make(chan error, 1), make(chan error, 1)
+	// 放行登记进清理：放行之前任何一处 Fatal，先到那笔会一直占着连接，连接池清理挂到 go test 超时。
+	var releaseOnce sync.Once
+	releaseFirst := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(releaseFirst)
+	go func() {
+		firstDone <- db.Transactor().WithinTransaction(context.Background(), func(txCtx context.Context) error {
+			err := bounces.RecordBounce(txCtx, bounce)
+			close(held)
+			<-release
+			return err
+		})
+	}()
+	<-held
+	go func() {
+		secondDone <- db.Transactor().WithinTransaction(context.Background(), func(txCtx context.Context) error {
+			return bounces.RecordBounce(txCtx, earlier)
+		})
+	}()
+	for deadline := time.Now().Add(10 * time.Second); ; {
+		select {
+		case early := <-secondDone:
+			t.Fatalf("先到那笔提交之前后到的一笔就写完了：%v", early)
+		default:
+		}
+		var waiting int
+		if err := observer.QueryRow(ctx,
+			`SELECT count(*) FROM pg_stat_activity WHERE datname = $1 AND wait_event_type = 'Lock'`, database).Scan(&waiting); err != nil {
+			t.Fatalf("看锁等待：%v", err)
+		}
+		if waiting > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("后到的一笔既没写完也没停在主键上")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	releaseFirst()
+	if err := <-firstDone; err != nil {
+		t.Fatalf("先到那笔：%v", err)
+	}
+	if err := <-secondDone; err != nil {
+		t.Fatalf("后到那笔：%v", err)
+	}
+	var first, last time.Time
+	var count int64
+	if err := pool.QueryRow(ctx,
+		`SELECT first_bounced_at, last_bounced_at, bounce_count FROM transport_fulfillment.booking_answer_bounce`).Scan(&first, &last, &count); err != nil {
+		t.Fatalf("读挡回册：%v", err)
+	}
+	if count != 2 || !first.Equal(at) || !last.Equal(at.Add(time.Minute)) {
+		t.Fatalf("并发两份之后：次数 %d、首次 %s、最近 %s", count, first, last)
+	}
+}
+
+// Covers: 迁移 0050 的拒绝门——订舱册、答复册或承运总单里有超过字节界的订舱标识、答复标识或答复依据时不施加：界立起来之后，
+// 这样的行从门里读不回来，不替任何人截短。
+func TestMigration0050RefusesStoredReferencesOverTheByteBound(t *testing.T) {
+	pool := pgtest.Pool(t)
+	ctx := t.Context()
+	assets, err := migrations.TransportFulfillment()
+	if err != nil {
+		t.Fatalf("读迁移资产：%v", err)
+	}
+	var bounceRegister string
+	for _, asset := range assets {
+		if strings.HasPrefix(asset.Name, "0050_") {
+			bounceRegister = asset.SQL
+		}
+	}
+	if bounceRegister == "" {
+		t.Fatal("找不到迁移 0050")
+	}
+	long := strings.Repeat("A", 513)
+	for name, probe := range map[string]string{
+		"订舱册的订舱标识": `INSERT INTO transport_fulfillment.booking_request
+			(tenant_id, booking_id, commission_id, schedule_id, quantity, unit_ref, requested_at, content_digest, recorded_at)
+			VALUES ('SYN-TENANT-01', '` + long + `', 'C-1', 'S-1', 1, 'KG', now(), 'd', now())`,
+		"答复册的答复依据": `INSERT INTO transport_fulfillment.booking_answer
+			(tenant_id, booking_id, acceptance_id, outcome, quantity, basis, decided_at, content_digest, recorded_at)
+			VALUES ('SYN-TENANT-01', 'B-1', 'A-1', 'REFUSED', 0, '` + long + `', now(), 'd', now())`,
+	} {
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatalf("开事务：%v", err)
+		}
+		if _, err := tx.Exec(ctx, probe); err != nil {
+			_ = tx.Rollback(context.Background())
+			t.Fatalf("%s：插探针行：%v", name, err)
+		}
+		_, err = tx.Exec(ctx, bounceRegister)
+		_ = tx.Rollback(context.Background())
+		if err == nil || !strings.Contains(err.Error(), "超过 512 字节") {
+			t.Fatalf("%s 超界时 0050 应拒绝施加：%v", name, err)
 		}
 	}
 }

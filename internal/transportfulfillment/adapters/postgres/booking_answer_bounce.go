@@ -10,7 +10,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// BookingAnswerBounces 实现 ports.BookingAnswerBounceLedger：承运答复挡回册（迁移 0050）。
+// BookingAnswerBounces 实现 ports.BookingAnswerBounceLedger：承运答复挡回册，表 transport_fulfillment.booking_answer_bounce。
 type BookingAnswerBounces struct {
 	db *bentopg.DB
 }
@@ -29,8 +29,8 @@ func NewBookingAnswerBounces(db *bentopg.DB) (*BookingAnswerBounces, error) {
 // 两个时刻各取极值而不是照写：并发的两次同键挡回按落库先后到达，后落的那一笔不一定是后记的那一刻。
 func (repository *BookingAnswerBounces) RecordBounce(ctx context.Context, bounce ports.BookingAnswerBounce) error {
 	const operation = "record booking answer bounce"
-	basis := bounce.Basis.String()
-	if basis == "" {
+	basis, known := bounceBasisCode(bounce.Basis)
+	if !known {
 		return fmt.Errorf("%s: bounce basis %d is not a basis", operation, bounce.Basis)
 	}
 	if strings.TrimSpace(bounce.Source) == "" {
@@ -49,7 +49,7 @@ func (repository *BookingAnswerBounces) RecordBounce(ctx context.Context, bounce
 		 ON CONFLICT (tenant_id, source_ref, booking_id, acceptance_id, basis) DO UPDATE
 		    SET first_bounced_at = LEAST(bounce.first_bounced_at, EXCLUDED.first_bounced_at),
 		        last_bounced_at  = GREATEST(bounce.last_bounced_at, EXCLUDED.last_bounced_at),
-		        bounce_count    = bounce.bounce_count + 1`,
+		        bounce_count     = bounce.bounce_count + 1`,
 		bounce.Key.TenantID.String(),
 		bounce.Source,
 		bounce.Key.Booking.String(),
@@ -60,4 +60,16 @@ func (repository *BookingAnswerBounces) RecordBounce(ctx context.Context, bounce
 		return fmt.Errorf("%s: %w", operation, err)
 	}
 	return nil
+}
+
+// bounceBasisCode 把依据译成库里的定宽码。码随表定，不随枚举的次序：枚举改了次序，已落库的行不该换义。
+func bounceBasisCode(basis ports.BookingAnswerBounceBasis) (int16, bool) {
+	switch basis {
+	case ports.BouncedBookingNotRegistered:
+		return 1, true
+	case ports.BouncedSourceNotServiceProvider:
+		return 2, true
+	default:
+		return 0, false
+	}
 }

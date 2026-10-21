@@ -308,7 +308,7 @@ func (commission TransportCommission) Cancel(at time.Time) (TransportCommission,
 type BookingReference struct{ requiredValue }
 
 func NewBookingReference(value string) (BookingReference, error) {
-	required, err := newRequiredValue("booking reference", value)
+	required, err := newStoredReference("booking reference", value)
 	return BookingReference{required}, err
 }
 
@@ -411,7 +411,7 @@ func (booking BookingRequest) Cancel(at time.Time) (BookingRequest, error) {
 type CarrierAcceptanceReference struct{ requiredValue }
 
 func NewCarrierAcceptanceReference(value string) (CarrierAcceptanceReference, error) {
-	required, err := newRequiredValue("carrier acceptance reference", value)
+	required, err := newStoredReference("carrier acceptance reference", value)
 	return CarrierAcceptanceReference{required}, err
 }
 
@@ -419,7 +419,7 @@ func NewCarrierAcceptanceReference(value string) (CarrierAcceptanceReference, er
 type AcceptanceBasisReference struct{ requiredValue }
 
 func NewAcceptanceBasisReference(value string) (AcceptanceBasisReference, error) {
-	required, err := newRequiredValue("acceptance basis reference", value)
+	required, err := newStoredReference("acceptance basis reference", value)
 	return AcceptanceBasisReference{required}, err
 }
 

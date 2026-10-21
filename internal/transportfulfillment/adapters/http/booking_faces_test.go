@@ -308,6 +308,45 @@ func TestTheBookingAnswerFaceAnswersOnTheWire(t *testing.T) {
 	}
 }
 
+// Covers: `AT-TF-326` 线格式面（字节界那一支）——超界的答复标识，答在册订舱与答不在册订舱都是 200 INPUT_NOT_ACCEPTED、响应体
+// 逐字相同；载荷超过读取上限是坏报文（400），订舱提交口同一道闸。
+func TestTheBookingAnswerFaceBoundsWhatItReads(t *testing.T) {
+	handler := bookingHandler(t)
+	booking := tfhttp.NewSubmitBookingRequestEndpoint(operatorIntake(t, authenticatorFake{}), handler)
+	if status, answer := postBookingFace(t, booking, "/transport-fulfillment-booking-request-submissions", "presented.operator.token", bookingRequestBody); status != http.StatusCreated {
+		t.Fatalf("订舱 = %d %v", status, answer)
+	}
+	const path = "/transport-fulfillment/booking-answers"
+	stranger := tfhttp.NewAnswerBookingEndpoint(clientIntake(t, carrierAuthenticatorFake{source: "SYN-PARTY-CARRIER-LM-01"}), handler)
+
+	overBound := strings.Replace(acceptedAnswerBody, `"SYN-CARRIER-ANSWER-01"`, `"`+strings.Repeat("A", 513)+`"`, 1)
+	onBooked := overBound
+	onAbsent := strings.Replace(overBound, `"SYN-BOOKING-01"`, `"SYN-BOOKING-77"`, 1)
+	bookedStatus, bookedBody := postBookingFaceRaw(stranger, path, "presented.client.token", onBooked)
+	absentStatus, absentBody := postBookingFaceRaw(stranger, path, "presented.client.token", onAbsent)
+	if bookedStatus != http.StatusOK || strings.TrimSpace(bookedBody) != `{"outcome":"INPUT_NOT_ACCEPTED"}` ||
+		absentStatus != bookedStatus || absentBody != bookedBody {
+		t.Fatalf("超界答复标识：答在册订舱 %d %s，答不在册订舱 %d %s", bookedStatus, bookedBody, absentStatus, absentBody)
+	}
+
+	padding := strings.Repeat(" ", 1<<20)
+	for name, testCase := range map[string]struct {
+		endpoint http.Handler
+		path     string
+		token    string
+		body     string
+	}{
+		"承运答复": {stranger, path, "presented.client.token", acceptedAnswerBody + padding},
+		"订舱提交": {booking, "/transport-fulfillment-booking-request-submissions", "presented.operator.token", bookingRequestBody + padding},
+	} {
+		status, answer := postBookingFace(t, testCase.endpoint, testCase.path, testCase.token, testCase.body)
+		problem, _ := answer["error"].(map[string]any)
+		if status != http.StatusBadRequest || problem["code"] != "MALFORMED_REQUEST" {
+			t.Fatalf("%s 载荷超过读取上限 = %d %v, want 400 MALFORMED_REQUEST", name, status, answer)
+		}
+	}
+}
+
 // Covers: 先认证、后解载荷——令牌不过的调用方看不到载荷校验的结果；没认出身份就交来翻译是装配违约，不是坏报文。
 func TestTheBookingAnswerIntakeAuthenticatesBeforeReadingThePayload(t *testing.T) {
 	intake := clientIntake(t, carrierAuthenticatorFake{err: tfhttp.ErrIntegrationClientNotGranted})

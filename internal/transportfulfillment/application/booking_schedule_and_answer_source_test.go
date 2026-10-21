@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -284,6 +285,55 @@ func TestANonProviderAndAnAbsentBookingAreAnsweredAlike(t *testing.T) {
 			result, err := fixture.handler.AnswerBooking(context.Background(), command)
 			if err != nil || result.Outcome() != application.CommissionUndecided || result.UndecidedReason() != testCase.reason {
 				t.Fatalf("%s·%s = %q / %q %v, want 未决 %q", name, path, result.Outcome(), result.UndecidedReason(), err, testCase.reason)
+			}
+		}
+	}
+}
+
+// Covers: `AT-TF-326`（编排面，字节界那一支）——答复标识到字节界为止，不是本服务方答在册订舱与答不在册订舱照旧同一副结果、
+// 各写一次挡回册；超界的答复标识或订舱标识在查库之前就答未受理，几条路结果相同、不读订舱、不写挡回册。界外的标识不再落到挡回册
+// 那一写上：那一写一旦因键长失败，两条路就会一条答订舱不在册、一条答未决。
+func TestAReferenceAtOrOverTheByteBoundIsAnsweredAlikeOnBothBouncePaths(t *testing.T) {
+	answerWith := func(source, booking, acceptance string) application.AnswerBookingCommand {
+		command := answerBookingCommand(t, domain.BookingAccepted)
+		command.Source, command.Booking, command.Acceptance = source, booking, acceptance
+		return command
+	}
+	atBound, overBound := strings.Repeat("A", 512), strings.Repeat("A", 513)
+	for name, testCase := range map[string]struct {
+		paths  []application.AnswerBookingCommand
+		want   application.CommissionOutcome
+		reads  int
+		writes int
+	}{
+		"答复标识恰在界上": {
+			paths: []application.AnswerBookingCommand{answerWith("partner-2", "booking-1", atBound), answerWith("partner-2", "booking-9", atBound)},
+			want:  application.BookingNotFound, reads: 1, writes: 1,
+		},
+		"答复标识超界": {
+			paths: []application.AnswerBookingCommand{answerWith("partner-2", "booking-1", overBound), answerWith("partner-2", "booking-9", overBound)},
+			want:  application.CommissionNotAccepted,
+		},
+		"订舱标识超界": {
+			paths: []application.AnswerBookingCommand{answerWith("partner-2", overBound, "acceptance-1"), answerWith("partner-1", overBound, "acceptance-1")},
+			want:  application.CommissionNotAccepted,
+		},
+	} {
+		var reference application.CommissionResult
+		for i, command := range testCase.paths {
+			fixture := newBookedFixture(t)
+			result, err := fixture.handler.AnswerBooking(context.Background(), command)
+			if err != nil || result.Outcome() != testCase.want {
+				t.Fatalf("%s·第 %d 条 = %q %v, want %q", name, i, result.Outcome(), err, testCase.want)
+			}
+			if i == 0 {
+				reference = result
+			} else if !reflect.DeepEqual(result, reference) {
+				t.Fatalf("%s：两条路的结果 %+v 与 %+v 分得开", name, result, reference)
+			}
+			if fixture.withProvider.reads != testCase.reads || fixture.bounces.writes != testCase.writes {
+				t.Fatalf("%s·第 %d 条：读订舱 %d 次、写挡回册 %d 次，want %d/%d", name, i,
+					fixture.withProvider.reads, fixture.bounces.writes, testCase.reads, testCase.writes)
 			}
 		}
 	}

@@ -347,7 +347,8 @@ func postWithTokenRaw(endpoint http.Handler, path, token, body string) (int, str
 	return response.Code, response.Body.String()
 }
 
-// bounceRows 交挡回册上本租户的全部行，按答复方、订舱、答复标识、依据排：每行「答复方|订舱|答复标识|依据|次数」。
+// bounceRows 交挡回册上本租户的全部行，按答复方、订舱、答复标识、依据排：每行「答复方|订舱|答复标识|依据码|次数」，依据码 1 是
+// 订舱不在册、2 是不是服务提供方。
 func bounceRows(t *testing.T, pool *pgxpool.Pool) []string {
 	t.Helper()
 	rows, err := pool.Query(t.Context(),
@@ -361,12 +362,13 @@ func bounceRows(t *testing.T, pool *pgxpool.Pool) []string {
 	defer rows.Close()
 	var got []string
 	for rows.Next() {
-		var source, booking, acceptance, basis string
+		var source, booking, acceptance string
+		var basis int16
 		var count int64
 		if err := rows.Scan(&source, &booking, &acceptance, &basis, &count); err != nil {
 			t.Fatalf("读挡回册：%v", err)
 		}
-		got = append(got, fmt.Sprintf("%s|%s|%s|%s|%d", source, booking, acceptance, basis, count))
+		got = append(got, fmt.Sprintf("%s|%s|%s|%d|%d", source, booking, acceptance, basis, count))
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatalf("读挡回册：%v", err)
@@ -412,9 +414,9 @@ func TestTheWiredBookingAnswerFaceAnswersANonProviderAsBookingNotFoundAndKeepsTh
 		t.Fatalf("末端原样重交 = %d %s", status, body)
 	}
 	want := []string{
-		"SYN-PARTY-CARRIER-LM-01|SYN-BOOKING-DCG145-NOWHERE|SYN-CARRIER-ANSWER-DCG24|BOOKING_NOT_REGISTERED|1",
-		"SYN-PARTY-CARRIER-LM-01|SYN-BOOKING-TRUNK-DCG24|SYN-CARRIER-ANSWER-DCG24|SOURCE_NOT_SERVICE_PROVIDER|2",
-		"SYN-PARTY-CARRIER-TRUNK-01|SYN-BOOKING-DCG145-NOWHERE|SYN-CARRIER-ANSWER-DCG24|BOOKING_NOT_REGISTERED|1",
+		"SYN-PARTY-CARRIER-LM-01|SYN-BOOKING-DCG145-NOWHERE|SYN-CARRIER-ANSWER-DCG24|1|1",
+		"SYN-PARTY-CARRIER-LM-01|SYN-BOOKING-TRUNK-DCG24|SYN-CARRIER-ANSWER-DCG24|2|2",
+		"SYN-PARTY-CARRIER-TRUNK-01|SYN-BOOKING-DCG145-NOWHERE|SYN-CARRIER-ANSWER-DCG24|1|1",
 	}
 	if got := bounceRows(t, pool); strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("挡回册 =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -436,6 +438,69 @@ func TestTheWiredBookingAnswerFaceAnswersANonProviderAsBookingNotFoundAndKeepsTh
 	}
 	if got := bounceRows(t, pool); strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("受理之后挡回册被改写：\n%s", strings.Join(got, "\n"))
+	}
+}
+
+func answerBody(booking, acceptance string) string {
+	return fmt.Sprintf(`{"booking": %q, "answer": %q, "outcome": "ACCEPTED", "quantity": 120, "decidedAt": "2026-10-19T09:00:00Z"}`,
+		booking, acceptance)
+}
+
+// Covers: `AT-TF-326` 真库面（字节界那一支）——答复方挑什么长度的答复标识，订舱在册而不归它答与订舱不在册两条路
+// 的响应都逐字节相同：
+//   - 标识恰在字节界上（订舱标识与答复标识都 512 字节，挡回册的键最长的那一形）：两条路都答 BOOKING_NOT_FOUND，两种依据各落一行。
+//   - 超界一个字节，以及依据存成变长词时校准出来能分开两条路的那个长度：两条路都答 INPUT_NOT_ACCEPTED，挡回册一行不多。
+func TestTheWiredBookingAnswerFaceAnswersAlikeWhateverTheIdentifiersLength(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	seeded := publishSeededSupplierAgreements(t, db)
+	trunk := seeded["SYN-SUPPLIER-TRUNK-CN-SG-01"]
+	registerSeededTrunkSchedule(t, db)
+	endpoints := bookingFacesForTest(t, db)
+	if status, answer := postWithToken(t, endpoints.commission, commissionSubmissionPath, "presented.operator.token",
+		commissionBody("SYN-COMMISSION-TRUNK-DCG24", trunk.Declarations.SupplierAgreementBody.Supplier, trunk.ObjectID, trunk.Version, "2026-10-19T08:00:00Z")); status != http.StatusCreated {
+		t.Fatalf("干线委托 = %d %v", status, answer)
+	}
+	bookedLongest := "B" + strings.Repeat("A", 511)
+	absentLongest := "N" + strings.Repeat("A", 511)
+	for _, booking := range []string{"SYN-BOOKING-TRUNK-DCG24", bookedLongest} {
+		if status, answer := postWithToken(t, endpoints.booking, bookingSubmissionPath, "presented.operator.token",
+			trunkBookingBody(booking, seededTrunkSchedule)); status != http.StatusCreated {
+			t.Fatalf("干线订舱 %.24s… = %d %v", booking, status, answer)
+		}
+	}
+	bounced := func() int {
+		var rows int
+		if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM transport_fulfillment.booking_answer_bounce`).Scan(&rows); err != nil {
+			t.Fatalf("数挡回册：%v", err)
+		}
+		return rows
+	}
+	for name, testCase := range map[string]struct {
+		booked, absent string
+		acceptance     int
+		want           string
+		newRows        int
+	}{
+		"答复标识 512 字节":     {"SYN-BOOKING-TRUNK-DCG24", "SYN-BOOKING-TRUNK-DCG99", 512, "BOOKING_NOT_FOUND", 2},
+		"订舱与答复标识都 512 字节": {bookedLongest, absentLongest, 512, "BOOKING_NOT_FOUND", 2},
+		"答复标识 513 字节":     {"SYN-BOOKING-TRUNK-DCG24", "SYN-BOOKING-TRUNK-DCG99", 513, "INPUT_NOT_ACCEPTED", 0},
+		"答复标识 2605 字节":    {"SYN-BOOKING-TRUNK-DCG24", "SYN-BOOKING-TRUNK-DCG99", 2605, "INPUT_NOT_ACCEPTED", 0},
+	} {
+		before := bounced()
+		acceptance := strings.Repeat("C", testCase.acceptance)
+		bookedStatus, bookedBody := postWithTokenRaw(endpoints.lastMile, bookingAnswerPath, "presented.client.token", answerBody(testCase.booked, acceptance))
+		absentStatus, absentBody := postWithTokenRaw(endpoints.lastMile, bookingAnswerPath, "presented.client.token", answerBody(testCase.absent, acceptance))
+		if bookedStatus != http.StatusOK || strings.TrimSpace(bookedBody) != `{"outcome":"`+testCase.want+`"}` ||
+			absentStatus != bookedStatus || absentBody != bookedBody {
+			t.Fatalf("%s：答在册而不归它的订舱 %d %s，答不在册的订舱 %d %s", name, bookedStatus, bookedBody, absentStatus, absentBody)
+		}
+		if added := bounced() - before; added != testCase.newRows {
+			t.Fatalf("%s：挡回册多了 %d 行，want %d", name, added, testCase.newRows)
+		}
 	}
 }
 
