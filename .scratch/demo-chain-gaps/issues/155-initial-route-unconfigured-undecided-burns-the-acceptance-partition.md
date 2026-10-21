@@ -1,7 +1,7 @@
 # 155 NR 初始路由的未配置类未决照样重投到 ABANDONED
 
 Category: bug
-Status: in-progress——隔离评审无阻断项、评审修订完，待进 main，分支 claude-dcg155（2026-10-21，见文末「完成记录」「评审记录」）。此前完工待评审。此前 needs-triage——2026-10-21 Claude Code 会话立（票 131 实施时读代码发现，与 131 同族；用户「要我裁定的部分，你作为业务和系统专家，请你自决吧」授权）
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——隔离评审无阻断项、评审修订完，待进 main，分支 claude-dcg155（2026-10-21，见文末「完成记录」「评审记录」）。此前完工待评审。此前 needs-triage——2026-10-21 Claude Code 会话立（票 131 实施时读代码发现，与 131 同族；用户「要我裁定的部分，你作为业务和系统专家，请你自决吧」授权）
 Blocked by: 无
 出处：票 [131](./131-network-reassessment-undecided-is-split-by-reason.md) 实施；[ADR-0235](../../../docs/adr/0235-route-reassessment-settles-what-a-retry-cannot-change-and-does-not-judge-triggers-older-than-the-current-position.md) 决定六
 
@@ -142,3 +142,9 @@ Blocked by: 无
 
 **未采纳**：无。
 
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-dcg155` tip `52af7bdf7` 在 main `8d68c7bab` 上快进；隔离评审无阻断，九格判定逐格对 ADR-0273 决定二核过，修订已收。
+- 协调方在 tip 上单独提交重算的 AT 计数与重生成的机制清点；ADR 索引无变化；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净；演示种子在一次性库上灌通（迁移 `network_routing/0025` 一并施加），用后删库。
+- 去向：续办并入 demo-chain-gaps/154（先等 14）；docs-consistency/code/78（依赖类未决连坐，R3）。
