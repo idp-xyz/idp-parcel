@@ -1,7 +1,7 @@
 # 12 同层先后到达的关务结果一律判冲突：先部分放行、后全部放行时，全部放行被吞
 
 Category: bug
-Status: in-progress——隔离评审无阻断项、评审修订完，待进 main，分支 claude-dcg12（2026-10-21，见文末「完成记录」「评审记录」）。此前 2026-10-20 升 A 并认领（product-strategy-boundary/18 同期开工）；needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [11](./11-external-result-received-has-no-subscriber.md) 的隔离评审。
+Status: resolved——2026-10-21 进 main（全量钉 `2a7cab9c`：`scripts/test-full.sh` 156 ok / 0 FAIL，见文末「进 main 记录」）；VE 冲突信号转票 [124](./124-customs-layer-conflict-relation-and-tracking-signal.md)，同一来源并发撞键答错转票 [125](./125-concurrent-same-source-results-with-different-content-answer-existing-result.md)。此前 in-progress——隔离评审无阻断项、评审修订完，待进 main，分支 claude-dcg12（2026-10-21，见文末「完成记录」「评审记录」）。此前 2026-10-20 升 A 并认领（product-strategy-boundary/18 同期开工）；needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [11](./11-external-result-received-has-no-subscriber.md) 的隔离评审。
 Blocked by: [product-strategy-boundary/18](../../product-strategy-boundary/issues/18-customs-case-and-declaration-submission-entry.md)（关务立案与申报提交入口；那张开工时本票须同期或先修，见 [triage-2026-10-19](../triage-2026-10-19.md)）
 出处：[ADR-0197](../../../docs/adr/0197-customs-external-results-enter-tracking-projection-per-layer.md) 越权风险点 5。
 
@@ -120,3 +120,6 @@ none
 - `./internal/architecture/...`、`./migrations/...`
 - `./cmd/...`，含 parcel-dispatch 与 parcel-api
 
+## 进 main 记录
+
+2026-10-21 协调方合入。分支基点 `8bf7a231`，其后 main 多了 `61d1470a`（上线就绪评估票面）与 `9045b6fd`（infra-speed/08 的 `ci.yml`），与本分支无重叠文件；在隔离树上把分支 13 笔按原序 cherry-pick 到 `9045b6fd`，无冲突，SHA 随之换新（分支 `2c84a997`…`9552ab5d` 作封存出处，main 上为 `9045b6fd..eefa83e7`）。评审修订里作者「顺带核得、未改」那一条由协调方立为票 125（`50b17390`）。其上按 parallel-sessions.md 重生成 ADR 索引（`7f791243`）、重算 AT 盘点计数（`f684590c`）、重生成机制清点（`2a7cab9c`），各自单独成笔；`adr-index -check` 与 `at-coverage-counts -check` 退 0。在干净的隔离树上对 `2a7cab9c` 跑 `go build ./...`、`go vet ./...`、`gofmt -l` 干净，`scripts/test-full.sh` 全量 156 ok、0 FAIL（`-count=1`，无缓存）；推 `2a7cab9c:main`。
