@@ -124,3 +124,23 @@ Blocked by: 无（01 进 main 后开工；票 57+15 已进 main）
 
 修订后的检查（main `14443ac03`）：scratchpad 副本上 `go run ./tools/adr-index` 后 `-check` 退 0；`at-coverage-counts -check` 只报计数过期（② 与合计、SA 一行各多 2）；0082、0168、0190、0198、0236 去掉 Status 行与 Links 后与 main 逐字节相同；改动的 `.md` 链接与锚点全部能解析；新写的书名号引文逐个对过出处（未命中的只有本文件节名与本文件原有文字）；新写的码与符号逐个在 `internal/`、`cmd/` 里确认存在（字符串码对 `String()` 的返回值，符号对定义）。
 
+## 评审记录（第 2 轮，2026-10-21）
+
+阻断 5 条、建议合入前修 3 条、顺手 3 条，全部照办；修订后 rebase 到 main `e8cd3de65`。
+
+| 条 | 评审意见 | 处置 |
+|---|---|---|
+| 1 阻断 | UC-SA-002 BUY 一格挂错了编排 | 未配置结束一行改挂 `TriggerBuyEvaluationOnOccurrenceFormedHandler.Trigger`（装配在 `cmd/parcel-dispatch` 的 `assemble_evaluation_resumption.go`），带两个原因、记停办；另写半句：ADR-0164 触发面 `TriggerBuyEvaluationHandler` 同答 `BUY_EVALUATION_TRIGGER_UNCONFIGURED`，但不带原因、不记停办。主流程发起评价一步结果列补「未配置」；第 1 轮记录的 B1 行补一句更正 |
+| 2 阻断 | ADR-0269 整笔答未配置太宽，全部晚于本期没有格 | 决定四收窄为「一件都入不了本期、且其中有判不出归属日的」整笔答未配置；全部晚于本期另给一格：不形成草稿，逐件指名晚于本期，不答未配置。同一句逐字写进 SA CONTEXT 进入对账单那一条、UC-SA-003 未配置结束一行与 `AT-SA-213`、code/11；`AT-SA-212` 补全部晚于本期一格；ADR-0269 Consequences 与 code/11 写明截单编排要新立整笔未配置的格、归属日判定要补「缺哪一册」的原因格（今天都没有）；UC-SA-003 交接表第一列点名元数据「未配置结束」一行，现状缺口一格同步 |
+| 3 阻断 | ADR-0271「已移位」口径 | 照评审写法定稿，移位上限、短款、溢款三式逐字写进 ADR-0271 决定二、决定四、决定五与索引注记，CR CONTEXT「清分、汇付与差异」，code/14「移位」「差额来源」两项；用 grep 核过三式在三份文件里逐字相同 |
+| 4 阻断 | 与 SCENARIOS 场景十七相抵 | 照裁定：短款式扣除经 settlement-accounting 认可的协议抵扣，认可的抵扣额暂留在`渠道在途`、可见为未了结、不落短款；ADR-0271 决定四补这一条，补越权风险点 6（抵扣记账形未裁，待 CR owner 定），Links 补场景十七一行（场景不改）；立 [code/47](../code/47-agreed-cod-offset-has-no-posting-form.md)（`ls` 确认未占，建议 R2，Blocked by CR owner 定形）。CR CONTEXT「抵扣只能依据……」一句末尾指向本上下文的「给开发的交接」，交接表补 code/47 一行——规则句上不直接挂票号，照前几轮「CONTEXT 规则句上不挂票号」的口径 |
+| 5 阻断 | 交横切漏项 | 补 X7 GLOSSARY「截单快照」、X8「资金冻结」、X9「当前有效客户预估费用」的「报价」、X10「结算政策」与「对账安排」撞义，各写位置、引文、改法、依据 |
+| 建议 | code/14 差额来源与 ADR 统一 | 写成两者金额都等于差异事项金额，差异事项金额按三式核 |
+| 建议 | 停在余额不足的到账时不判短款 | ADR-0271 决定四补一条，并进越权风险点 3；CR CONTEXT 与 code/14 同步 |
+| 建议 | 结果列与待判断措辞对齐 | UC-SA-002 确认一步改「或保持原阶段（预估或暂估）」、结果列补未配置，待判断结束去掉「账户」并注明归未配置结束；UC-SA-004 待判断结束去掉「币种」并注明跨币种归未配置结束，匹配一步结果列补未配置（`AT-SA-096`）；UC-SA-003 纳入快照一步结果列补全 |
+| 顺手 | `receive_supplier_bill.go` 引 `AT-SA-096` 的注释 | 记进 code/45（`BillUndecidedReason` 头注与 `ErrCrossCurrencyMatch` 分支注释） |
+| 顺手 | 序号与计数 | code/14「下面「判重」一项」改为「本节「判重」一项」；票面完成记录与处置表里的跨文件计数改为点名；UC 交接表同文件步号保留 |
+| 顺手 | `AT-SA-198` 指针 | UC-SA-002 结果表「待判断/冲突/未受理/未形成」一行补：没有在用价卡不在这一行，走 SELL `未形成`连同停因、BUY 停因（`AT-SA-198`） |
+
+修订后的检查（main `e8cd3de65`）：scratchpad 副本上 `go run ./tools/adr-index` 后 `-check` 退 0；改动的 `.md` 链接与锚点全部能解析；0082、0168、0190、0198、0236 去掉 Status 行与 Links 后与 main 逐字节相同；新写的码与符号逐个在 `internal/`、`cmd/` 里确认存在；三式用 grep 证明在 ADR-0271、CR CONTEXT、code/14 逐字一致。
+
