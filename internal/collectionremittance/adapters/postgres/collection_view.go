@@ -128,23 +128,91 @@ func (view *CollectionPointView) LoadCollectionFact(
 		return none, false, fmt.Errorf("load collection fact: %w", err)
 	}
 
+	fact, err := rebuildFact(id.String(), instructionRaw, layerRaw, evidenceRaw,
+		currencyRaw, amountMinor, occurredAt)
+	if err != nil {
+		return none, false, err
+	}
+	return fact, true, nil
+}
+
+// LoadInstructionFacts 交回该指令名下的全部代收事实，按事实标识排序。坏行同点读口一样
+// 上抛：漏掉一条真实到账，按指令判短款时就看不见那笔还没移位的钱。
+func (view *CollectionPointView) LoadInstructionFacts(
+	ctx context.Context,
+	tenant domain.TenantID,
+	id domain.CollectionInstructionID,
+) ([]domain.CollectionFact, error) {
+	if strings.TrimSpace(id.String()) == "" {
+		return nil, fmt.Errorf("load instruction facts: the instruction ID is blank")
+	}
+	querier, err := view.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load instruction facts: %w", err)
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT fact_ref, source_layer, evidence_ref, currency, amount_minor, occurred_at
+		   FROM collection_remittance.collection_fact
+		  WHERE tenant_id = $1 AND instruction_ref = $2
+		  ORDER BY fact_ref`,
+		tenant.String(), id.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("load instruction facts: %w", err)
+	}
+	defer rows.Close()
+
+	facts := make([]domain.CollectionFact, 0)
+	for rows.Next() {
+		var (
+			factRaw, layerRaw, evidenceRaw, currencyRaw string
+			amountMinor                                 int64
+			occurredAt                                  time.Time
+		)
+		if err := rows.Scan(&factRaw, &layerRaw, &evidenceRaw, &currencyRaw,
+			&amountMinor, &occurredAt); err != nil {
+			return nil, fmt.Errorf("load instruction facts: %w", err)
+		}
+		fact, err := rebuildFact(factRaw, id.String(), layerRaw, evidenceRaw,
+			currencyRaw, amountMinor, occurredAt)
+		if err != nil {
+			return nil, err
+		}
+		facts = append(facts, fact)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("load instruction facts: %w", err)
+	}
+	return facts, nil
+}
+
+func rebuildFact(
+	factRaw, instructionRaw, layerRaw, evidenceRaw, currencyRaw string,
+	amountMinor int64,
+	occurredAt time.Time,
+) (domain.CollectionFact, error) {
+	none := domain.CollectionFact{}
+	id, err := domain.NewCollectionFactID(factRaw)
+	if err != nil {
+		return none, fmt.Errorf("rebuild collection fact: %w", err)
+	}
 	instruction, err := domain.NewCollectionInstructionID(instructionRaw)
 	if err != nil {
-		return none, false, fmt.Errorf("rebuild collection fact: %w", err)
+		return none, fmt.Errorf("rebuild collection fact: %w", err)
 	}
 	// 库里的陌生来源层级不折成默认成员：四层不得互相推导这条，靠的正是「不认识就
 	// 说不认识」——把它默成收件人付款会让一笔真实到账在读回后变成渠道在途。
 	layer, known := domain.ParseCollectionSourceLayer(layerRaw)
 	if !known {
-		return none, false, fmt.Errorf("rebuild collection fact: unknown source layer %q", layerRaw)
+		return none, fmt.Errorf("rebuild collection fact: unknown source layer %q", layerRaw)
 	}
 	evidence, err := domain.NewEvidenceReference(evidenceRaw)
 	if err != nil {
-		return none, false, fmt.Errorf("rebuild collection fact: %w", err)
+		return none, fmt.Errorf("rebuild collection fact: %w", err)
 	}
 	amount, err := rebuildMoney(currencyRaw, amountMinor)
 	if err != nil {
-		return none, false, err
+		return none, err
 	}
 	fact, err := domain.AcceptCollectionFact(domain.CollectionFactSpec{
 		ID:          id,
@@ -155,9 +223,9 @@ func (view *CollectionPointView) LoadCollectionFact(
 		OccurredAt:  occurredAt,
 	})
 	if err != nil {
-		return none, false, fmt.Errorf("rebuild collection fact: %w", err)
+		return none, fmt.Errorf("rebuild collection fact: %w", err)
 	}
-	return fact, true, nil
+	return fact, nil
 }
 
 func (view *CollectionPointView) LoadDiscrepancyItem(

@@ -67,17 +67,22 @@ type PostCommand struct {
 	PostedAt    time.Time
 }
 
-// PostSubledger 追加一笔记账：重放判定 → 解依据 → 定分户账与形状 → 读回账面 →
-// 余额守卫 → 落账。
+// PostSubledger 追加一笔记账：重放判定 → 解依据 → 定分户账与形状 → 按依据判重 →
+// 读回账面 → 按指令的上限 → 余额守卫 → 落账。
 //
 // 重放判定必须先于一切按**当下状态**作答的门（余额守卫、批次收口）：那些门回答的是
 // 「这笔新账现在能不能落」，而重放的真相是「这笔账已经落了」，答案只由在册记录定。
 // 反过来排，重放一笔已把来源清空的记账会得到 UNDERFUNDED，其处置指引（等实收或先
 // 清分，重跑就会成）对已落账的请求全是假话——已灌演示库上实测出过这一格。
 //
+// 按依据判重排在余额守卫之前，理由相同：换一个记账标识再凭同一条代收事实记账是同键
+// 异内容（ADR-0271 决定三），它的真相由在册那一笔定，不由此刻账上够不够定。答已有
+// 结果会把一次误操作伪装成成功，所以答冲突。库上同一口径的唯一约束兜住并发的那一格。
+//
 // 余额守卫必须在同一笔事务内读回账面再判（写口 RequireExecutor 保证有环境事务）：
 // 隔着事务判出来的「够扣」在落账时可能已经不够了，而透支后的账面看上去与正常账面
-// 没有区别。
+// 没有区别。按指令的上限先于按账的守卫：前者更紧，且它答的未受理（溢款报少）是请求
+// 本身的错，不该被账面答案盖住。
 func (handler *Handler) PostSubledger(ctx context.Context, command PostCommand) (Outcome, error) {
 	if blank(command.Tenant) ||
 		strings.TrimSpace(command.ID.String()) == "" ||
@@ -98,18 +103,18 @@ func (handler *Handler) PostSubledger(ctx context.Context, command PostCommand) 
 		return OutcomeExisting, nil
 	}
 
-	ledger, outcome, err := handler.resolveLedgerForPosting(ctx, command)
+	basis, outcome, err := handler.resolveBasisForPosting(ctx, command)
 	if outcome != OutcomeRegistered || err != nil {
 		return outcome, err
 	}
 
-	amount, err := domain.NewMoney(ledger.Currency(), command.AmountMinor)
+	amount, err := domain.NewMoney(basis.ledger.Currency(), command.AmountMinor)
 	if err != nil {
 		return OutcomeNotAccepted, nil
 	}
 	posting, err := domain.RecordSubledgerPosting(domain.SubledgerPostingSpec{
 		ID:        command.ID,
-		Ledger:    ledger,
+		Ledger:    basis.ledger,
 		From:      command.From,
 		To:        command.To,
 		Amount:    amount,
@@ -121,7 +126,21 @@ func (handler *Handler) PostSubledger(ctx context.Context, command PostCommand) 
 		return OutcomeNotAccepted, nil
 	}
 
-	balance, opened, err := handler.deps.Subledger.LoadBalance(ctx, command.Tenant, ledger)
+	var principal *domain.InstructionPrincipal
+	if basis.instructionKnown && gatedByInstruction(posting) {
+		derived, outcome := handler.loadInstructionPrincipal(ctx, command.Tenant, basis.instruction)
+		if outcome != OutcomeRegistered {
+			return outcome, nil
+		}
+		if basis.factKnown {
+			if used, found := derived.PostingOf(basis.fact.ID()); found && used != command.ID {
+				return OutcomeContentConflict, nil
+			}
+		}
+		principal = &derived
+	}
+
+	balance, opened, err := handler.deps.Subledger.LoadBalance(ctx, command.Tenant, basis.ledger)
 	if err != nil {
 		return OutcomeUndecided, nil
 	}
@@ -129,11 +148,13 @@ func (handler *Handler) PostSubledger(ctx context.Context, command PostCommand) 
 		// 账没开立就没有受托依据。这不是输入不合法，是缺上游那一笔。
 		return OutcomeBasisMissing, nil
 	}
-	if err := balance.Admit(posting); err != nil {
-		if errors.Is(err, domain.ErrPositionUnderfunded) {
-			return OutcomeUnderfunded, nil
+	if principal != nil {
+		if outcome := admissionOutcome(principal.Admit(posting)); outcome != OutcomeRegistered {
+			return outcome, nil
 		}
-		return OutcomeNotAccepted, nil
+	}
+	if outcome := admissionOutcome(balance.Admit(posting)); outcome != OutcomeRegistered {
+		return outcome, nil
 	}
 
 	saved, err := handler.deps.Subledgers.AppendPosting(ctx, command.Tenant, posting)
@@ -144,6 +165,8 @@ func (handler *Handler) PostSubledger(ctx context.Context, command PostCommand) 
 		return OutcomeRegistered, nil
 	}
 
+	// 撞键而按标识读不回同一笔，就是撞上了按依据的唯一约束：并发的另一笔已凭同一条
+	// 代收事实落账，同样是冲突。
 	existing, found, err := handler.deps.Subledger.LoadPosting(ctx, command.Tenant, command.ID)
 	if err != nil {
 		return OutcomeUndecided, nil
@@ -154,14 +177,67 @@ func (handler *Handler) PostSubledger(ctx context.Context, command PostCommand) 
 	return OutcomeExisting, nil
 }
 
-// resolveLedgerForPosting 按依据种类解出分户账，并核这笔记账的形状是不是该依据允许的
+// admissionOutcome 把余额与上限两道门的判词译成答案；OutcomeRegistered 即放行。
+func admissionOutcome(err error) Outcome {
+	switch {
+	case err == nil:
+		return OutcomeRegistered
+	case errors.Is(err, domain.ErrPositionUnderfunded):
+		return OutcomeUnderfunded
+	default:
+		return OutcomeNotAccepted
+	}
+}
+
+// gatedByInstruction 答这笔记账要不要过按指令的那一层：凭代收事实的（判重）、落入
+// `短款`或`溢款`的（差额按指令算），以及一切自`渠道在途`移出的（移位上限按指令算）。
+// 清分、汇付与别的冲正不在此列——它们的来源位置不按指令分账，按账的余额守卫就够。
+func gatedByInstruction(posting domain.SubledgerPosting) bool {
+	return posting.BasisKind() == domain.BasisCollectionFact ||
+		posting.To() == domain.PositionShortfall ||
+		posting.To() == domain.PositionSurplus ||
+		posting.From() == domain.PositionInTransitAtChannel
+}
+
+func (handler *Handler) loadInstructionPrincipal(
+	ctx context.Context,
+	tenant domain.TenantID,
+	instruction domain.CollectionInstruction,
+) (domain.InstructionPrincipal, Outcome) {
+	facts, err := handler.deps.Collection.LoadInstructionFacts(ctx, tenant, instruction.ID())
+	if err != nil {
+		return domain.InstructionPrincipal{}, OutcomeUndecided
+	}
+	postings, err := handler.deps.Subledger.LoadInstructionPostings(ctx, tenant, instruction)
+	if err != nil {
+		return domain.InstructionPrincipal{}, OutcomeUndecided
+	}
+	principal, err := domain.DeriveInstructionPrincipal(instruction, facts, postings)
+	if err != nil {
+		// 读口交回别的指令的事实或别本账的记账是读口坏了，不是业务答案。
+		return domain.InstructionPrincipal{}, OutcomeUndecided
+	}
+	return principal, OutcomeRegistered
+}
+
+// postingBasis 是解出来的依据：记账所在的分户账，以及它追溯到的代收指令与代收事实
+// （有的话）。批次依据的汇付记账不追溯到单条指令。
+type postingBasis struct {
+	ledger           domain.SubledgerKey
+	instruction      domain.CollectionInstruction
+	instructionKnown bool
+	fact             domain.CollectionFact
+	factKnown        bool
+}
+
+// resolveBasisForPosting 按依据种类解出分户账，并核这笔记账的形状是不是该依据允许的
 // 那一种。第二个返回值为 OutcomeRegistered 表示解析通过（此时还没落账），其余格是
 // 已经定案的答案。
-func (handler *Handler) resolveLedgerForPosting(
+func (handler *Handler) resolveBasisForPosting(
 	ctx context.Context,
 	command PostCommand,
-) (domain.SubledgerKey, Outcome, error) {
-	none := domain.SubledgerKey{}
+) (postingBasis, Outcome, error) {
+	none := postingBasis{}
 	switch command.BasisKind {
 	case domain.BasisCollectionFact:
 		factID, err := domain.NewCollectionFactID(command.Basis.String())
@@ -175,30 +251,35 @@ func (handler *Handler) resolveLedgerForPosting(
 		if !found {
 			return none, OutcomeBasisMissing, nil
 		}
-		ledger, outcome, err := handler.ledgerOfInstruction(ctx, command.Tenant, fact.Instruction())
-		if outcome != OutcomeRegistered || err != nil {
-			return none, outcome, err
+		instruction, outcome := handler.loadInstruction(ctx, command.Tenant, fact.Instruction())
+		if outcome != OutcomeRegistered {
+			return none, outcome, nil
 		}
 		if !factPostingShapeHolds(command, fact) {
 			return none, OutcomeNotAccepted, nil
 		}
-		return ledger, OutcomeRegistered, nil
+		return postingBasis{
+			ledger: instruction.Ledger(), instruction: instruction, instructionKnown: true,
+			fact: fact, factKnown: true,
+		}, OutcomeRegistered, nil
 
 	case domain.BasisAllocation:
 		instructionID, err := domain.NewCollectionInstructionID(command.Basis.String())
 		if err != nil {
 			return none, OutcomeNotAccepted, nil
 		}
-		ledger, outcome, err := handler.ledgerOfInstruction(ctx, command.Tenant, instructionID)
-		if outcome != OutcomeRegistered || err != nil {
-			return none, outcome, err
+		instruction, outcome := handler.loadInstruction(ctx, command.Tenant, instructionID)
+		if outcome != OutcomeRegistered {
+			return none, outcome, nil
 		}
 		// 清分是唯一一跳：待清分 → 应付客户。别的方向要么该走别的依据，要么是冲正。
 		if command.From != domain.PositionAwaitingAllocation ||
 			command.To != domain.PositionPayableToCustomer {
 			return none, OutcomeNotAccepted, nil
 		}
-		return ledger, OutcomeRegistered, nil
+		return postingBasis{
+			ledger: instruction.Ledger(), instruction: instruction, instructionKnown: true,
+		}, OutcomeRegistered, nil
 
 	case domain.BasisRemittanceBatch:
 		batchID, err := domain.NewRemittanceBatchID(command.Basis.String())
@@ -219,7 +300,7 @@ func (handler *Handler) resolveLedgerForPosting(
 			command.To != domain.PositionRemitted {
 			return none, OutcomeNotAccepted, nil
 		}
-		return batch.Ledger(), OutcomeRegistered, nil
+		return postingBasis{ledger: batch.Ledger()}, OutcomeRegistered, nil
 
 	case domain.BasisDiscrepancy:
 		itemID, err := domain.NewDiscrepancyItemID(command.Basis.String())
@@ -233,14 +314,16 @@ func (handler *Handler) resolveLedgerForPosting(
 		if !found {
 			return none, OutcomeBasisMissing, nil
 		}
-		ledger, outcome, err := handler.ledgerOfInstruction(ctx, command.Tenant, item.Instruction())
-		if outcome != OutcomeRegistered || err != nil {
-			return none, outcome, err
+		instruction, outcome := handler.loadInstruction(ctx, command.Tenant, item.Instruction())
+		if outcome != OutcomeRegistered {
+			return none, outcome, nil
 		}
 		if !discrepancyPostingShapeHolds(command, item) {
 			return none, OutcomeNotAccepted, nil
 		}
-		return ledger, OutcomeRegistered, nil
+		return postingBasis{
+			ledger: instruction.Ledger(), instruction: instruction, instructionKnown: true,
+		}, OutcomeRegistered, nil
 
 	case domain.BasisCorrection:
 		originalID, err := domain.NewPostingID(command.Basis.String())
@@ -266,39 +349,117 @@ func (handler *Handler) resolveLedgerForPosting(
 		if !original.From().InsideLedger() {
 			return none, OutcomeNotAccepted, nil
 		}
-		return original.Ledger(), OutcomeRegistered, nil
+		resolved := postingBasis{ledger: original.Ledger()}
+		// 自`渠道在途`移出的冲正（冲正一笔冲正，把移回在途的到账再移出去）同样按指令
+		// 判上限，否则它能把同账别的指令的在途款移走。
+		if command.From == domain.PositionInTransitAtChannel {
+			instruction, known, outcome := handler.instructionBehind(ctx, command.Tenant, original)
+			if outcome != OutcomeRegistered {
+				return none, outcome, nil
+			}
+			resolved.instruction, resolved.instructionKnown = instruction, known
+		}
+		return resolved, OutcomeRegistered, nil
 
 	default:
 		return none, OutcomeNotAccepted, nil
 	}
 }
 
-func (handler *Handler) ledgerOfInstruction(
+func (handler *Handler) loadInstruction(
 	ctx context.Context,
 	tenant domain.TenantID,
 	id domain.CollectionInstructionID,
-) (domain.SubledgerKey, Outcome, error) {
+) (domain.CollectionInstruction, Outcome) {
 	instruction, found, err := handler.deps.Collection.LoadInstruction(ctx, tenant, id)
 	if err != nil {
-		return domain.SubledgerKey{}, OutcomeUndecided, nil
+		return domain.CollectionInstruction{}, OutcomeUndecided
 	}
 	if !found {
-		return domain.SubledgerKey{}, OutcomeBasisMissing, nil
+		return domain.CollectionInstruction{}, OutcomeBasisMissing
 	}
-	return instruction.Ledger(), OutcomeRegistered, nil
+	return instruction, OutcomeRegistered
 }
 
-// factPostingShapeHolds 核凭代收事实的两种合法记账：
-//   - 入账：外部来源 → 该事实的入账位置，全额一次。位置由事实的来源层级定，不由调用
-//     方挑——挑错的那一次在库里看不出来（四层来源不得互相推导那条的落点）。
-//   - 渠道回款到账：渠道在途 → 待清分，且只有真实到账那一层撑得起这一跳。
+// instructionBehind 沿冲正链找到一笔记账最终追溯到的代收指令。冲正只能指向已在册的
+// 更早一笔，链上不会成环；仍记下走过的标识，读口交回坏数据时停在未决而不是转圈。
+func (handler *Handler) instructionBehind(
+	ctx context.Context,
+	tenant domain.TenantID,
+	posting domain.SubledgerPosting,
+) (domain.CollectionInstruction, bool, Outcome) {
+	none := domain.CollectionInstruction{}
+	seen := map[domain.PostingID]bool{}
+	for posting.BasisKind() == domain.BasisCorrection {
+		if seen[posting.ID()] {
+			return none, false, OutcomeUndecided
+		}
+		seen[posting.ID()] = true
+		originalID, err := domain.NewPostingID(posting.Basis().String())
+		if err != nil {
+			return none, false, OutcomeUndecided
+		}
+		original, found, err := handler.deps.Subledger.LoadPosting(ctx, tenant, originalID)
+		if err != nil || !found {
+			return none, false, OutcomeUndecided
+		}
+		posting = original
+	}
+
+	var instructionID domain.CollectionInstructionID
+	switch posting.BasisKind() {
+	case domain.BasisCollectionFact:
+		factID, err := domain.NewCollectionFactID(posting.Basis().String())
+		if err != nil {
+			return none, false, OutcomeUndecided
+		}
+		fact, found, err := handler.deps.Collection.LoadCollectionFact(ctx, tenant, factID)
+		if err != nil || !found {
+			return none, false, OutcomeUndecided
+		}
+		instructionID = fact.Instruction()
+	case domain.BasisDiscrepancy:
+		itemID, err := domain.NewDiscrepancyItemID(posting.Basis().String())
+		if err != nil {
+			return none, false, OutcomeUndecided
+		}
+		item, found, err := handler.deps.Collection.LoadDiscrepancyItem(ctx, tenant, itemID)
+		if err != nil || !found {
+			return none, false, OutcomeUndecided
+		}
+		instructionID = item.Instruction()
+	case domain.BasisAllocation:
+		id, err := domain.NewCollectionInstructionID(posting.Basis().String())
+		if err != nil {
+			return none, false, OutcomeUndecided
+		}
+		instructionID = id
+	default:
+		return none, false, OutcomeRegistered
+	}
+	instruction, outcome := handler.loadInstruction(ctx, tenant, instructionID)
+	if outcome != OutcomeRegistered {
+		// 在册记账的依据读不回来是账面坏了，不是缺上游那一笔。
+		return none, false, OutcomeUndecided
+	}
+	return instruction, true, OutcomeRegistered
+}
+
+// factPostingShapeHolds 核凭代收事实的两种合法记账，金额都等于事实金额、全额一次：
+//   - 入账：外部来源 → 该事实的入账位置。只有渠道代收报告有入账位置（`渠道在途`），
+//     收件人付款、渠道回款通知与真实到账凭它入账一律不受理（ADR-0271 决定一）。
+//   - 到账移位：渠道在途 → 待清分，只有真实到账那一层撑得起（决定二）。
 //
-// 全额入账是有意的：一条事实入账一次，部分入账没有可表达的「余下部分」，而余下部分
-// 无处可表达时，它会以「这条事实已处理」的样子消失。
+// 全额是有意的：一条事实至多支撑一笔记账，部分记账没有可表达的「余下部分」，而余下
+// 部分无处可表达时，它会以「这条事实已处理」的样子消失。到账多于该指令在途款时整笔
+// 停在余额不足，不先移一部分，也是这个道理。
 func factPostingShapeHolds(command PostCommand, fact domain.CollectionFact) bool {
+	if command.AmountMinor != fact.Amount().AmountMinor() {
+		return false
+	}
 	if command.From == domain.PositionExternalSource {
-		return command.To == fact.IntakePosition() &&
-			command.AmountMinor == fact.Amount().AmountMinor()
+		intake := fact.IntakePosition()
+		return intake.InsideLedger() && command.To == intake
 	}
 	return fact.Layer().SettlesToOperator() &&
 		command.From == domain.PositionInTransitAtChannel &&
@@ -306,11 +467,13 @@ func factPostingShapeHolds(command PostCommand, fact domain.CollectionFact) bool
 }
 
 // discrepancyPostingShapeHolds 核凭差异事项的两种合法记账：
-//   - 差额落账：去向是该事项的落点（短款或溢款），金额与事项一致；
+//   - 差额落账：该事项的来源位置 → 落点（短款自`渠道在途`、溢款自`待清分`），金额与
+//     事项一致（ADR-0271 决定四、五）；差额按指令够不够、溢款对不对由按指令的上限判；
 //   - 溢款归属确认：溢款 → 应付客户，金额可部分。
 func discrepancyPostingShapeHolds(command PostCommand, item domain.DiscrepancyItem) bool {
 	if command.To == item.SettlementPosition() {
-		return command.AmountMinor == item.Amount().AmountMinor()
+		return command.From == item.SettlementSource() &&
+			command.AmountMinor == item.Amount().AmountMinor()
 	}
 	return item.Kind() == domain.DiscrepancySurplus &&
 		command.From == domain.PositionSurplus &&

@@ -25,8 +25,9 @@
 //	2 = 要人看过再走：内容冲突（同键异内容绝不覆盖）、依据不在册（先把上游那一笔登进来）、
 //	    批次已交出（成员只增不改，要继续归集就形成新批次）；
 //	3 = 未决（依赖故障，登记与否未知，重跑同一命令即可续办）；
-//	4 = 账上钱不够（来源位置余额不足）。它单独一格：请求本身没错，等实收或先清分之后
-//	    重跑同一命令就会成——与 3 的区别是这一格**确定没落账**，而 3 连落没落都不知道。
+//	4 = 账上钱不够（来源位置余额不足，或按指令算的上限不够）。它单独一格：请求本身没错，
+//	    等上游那一笔（该指令的渠道报告入账、到账移位、短款冲正、实收或先清分）之后重跑
+//	    同一命令就会成——与 3 的区别是这一格**确定没落账**，而 3 连落没落都不知道。
 package main
 
 import (
@@ -296,7 +297,7 @@ func answer(command string, outcome application.Outcome) (string, int) {
 	case application.OutcomeUndecided:
 		return message, exitUndecided
 	case application.OutcomeUnderfunded:
-		return message + "（来源位置余额不足——等实收或先清分后重跑同一命令）", exitUnderfunded
+		return message + "（来源位置或该指令名下余额不足——等该指令的报告入账、到账移位、实收或先清分后重跑同一命令）", exitUnderfunded
 	default:
 		// 用例交回一个它自己都不认识的格是实现坏了，不是业务答案。
 		return fmt.Sprintf("%s: 未知应用结果 %d", command, outcome), exitUndecided

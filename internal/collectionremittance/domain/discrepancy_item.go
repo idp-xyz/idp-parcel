@@ -104,11 +104,24 @@ func (item DiscrepancyItem) Basis() BasisReference { return item.basis }
 func (item DiscrepancyItem) ObservedAt() time.Time { return item.observedAt }
 
 // SettlementPosition 是本事项处置后差额应落的资金位置：短款落`短款`，溢款落`溢款`。
-// 记账方向仍由记账方给出——溢款既可能自`待清分`移入`溢款`，也可能在归属确认后自
-// `溢款`移回`应付客户`，那是两笔不同的记账，本方法只说差额那一格在哪。
+// 溢款之后还有一笔归属确认（`溢款` → `应付客户`），那是另一笔记账，本方法只说差额
+// 落进的那一格。
 func (item DiscrepancyItem) SettlementPosition() FundPosition {
 	if item.kind == DiscrepancyShortfall {
 		return PositionShortfall
 	}
 	return PositionSurplus
+}
+
+// SettlementSource 是差额落账唯一允许的来源位置（ADR-0271 决定四、五）。
+//
+// 短款只从`渠道在途`来：差额那部分钱从没回到运营企业，账上它只可能还在渠道名下；从
+// `待清分`或`应付客户`挪，挪走的是已经到账、甚至已归属客户的本金，客户因此少拿钱。
+// 溢款只从`待清分`来：它之后能归到`应付客户`，所以只能装已经到账的钱，从`渠道在途`
+// 落入就让没收到的钱绕过了「只有真实到账才推进到待清分」那道门。
+func (item DiscrepancyItem) SettlementSource() FundPosition {
+	if item.kind == DiscrepancyShortfall {
+		return PositionInTransitAtChannel
+	}
+	return PositionAwaitingAllocation
 }

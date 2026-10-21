@@ -13,8 +13,10 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 证 buildRegistrar 装配的整条链（隔离合成 S）：七个命令各自
-// 贯通「译装 → 用例 → 真库」，重放与内容冲突在真库上分得开，四层来源在真库上仍不互相
-// 推导，余额守卫与批次封口按当刻账面生效，冲正是追加而不是删除。
+// 贯通「译装 → 用例 → 真库」，重放与内容冲突在真库上分得开，只有渠道报告入账、同一条
+// 事实不记两笔，余额守卫按账、移位与短款按指令、批次封口按当刻账面生效，冲正是追加
+// 而不是删除。
+// Covers: AT-CR-006、AT-CR-007、AT-CR-008（生产装配半边）
 //
 // 本口与写口适配器各持一份私有词表映射（领域 String() 与迁移 CHECK），本用例把两份
 // 一起钉在同一个词表上——任一份漂了，这里就红。
@@ -99,19 +101,33 @@ func TestCollectionRegisterVerticalOnRealPostgres(t *testing.T) {
 		}`
 	}
 
-	// 入账位置由事实的来源层级定：收件人付款只到渠道在途，落到待清分被拒。
+	// 只有渠道代收报告入账（ADR-0271 决定一）：收件人付款、渠道回款通知与真实到账凭它们
+	// 入账都被拒，同一笔钱只入一次。
+	mustExecute(commandFact, fact("SYN-FACT-REPORT", "CHANNEL_COLLECTION_REPORT", "12000"), exitRegistered, "REGISTERED")
+	mustExecute(commandFact, fact("SYN-FACT-NOTICE", "CHANNEL_REMITTANCE_NOTICE", "12000"), exitRegistered, "REGISTERED")
+	for _, sidecar := range []string{"SYN-FACT-POD", "SYN-FACT-NOTICE"} {
+		mustExecute(commandPosting,
+			posting("SYN-POST-"+sidecar, "EXTERNAL_SOURCE", "IN_TRANSIT_AT_CHANNEL", "12000",
+				"COLLECTION_FACT", sidecar, "2026-08-24T01:10:00Z"),
+			exitUsage, "NOT_ACCEPTED")
+	}
 	mustExecute(commandPosting,
-		posting("SYN-POST-BAD", "EXTERNAL_SOURCE", "AWAITING_ALLOCATION", "12000",
-			"COLLECTION_FACT", "SYN-FACT-POD", "2026-08-24T01:10:00Z"),
+		posting("SYN-POST-BAD", "EXTERNAL_SOURCE", "AWAITING_ALLOCATION", "10000",
+			"COLLECTION_FACT", "SYN-FACT-CREDIT", "2026-08-24T01:10:00Z"),
 		exitUsage, "NOT_ACCEPTED")
 	mustExecute(commandPosting,
 		posting("SYN-POST-1", "EXTERNAL_SOURCE", "IN_TRANSIT_AT_CHANNEL", "12000",
-			"COLLECTION_FACT", "SYN-FACT-POD", "2026-08-24T01:10:00Z"),
+			"COLLECTION_FACT", "SYN-FACT-REPORT", "2026-08-24T01:10:00Z"),
 		exitRegistered, "REGISTERED")
 	mustExecute(commandPosting,
 		posting("SYN-POST-1", "EXTERNAL_SOURCE", "IN_TRANSIT_AT_CHANNEL", "12000",
-			"COLLECTION_FACT", "SYN-FACT-POD", "2026-08-24T01:10:00Z"),
+			"COLLECTION_FACT", "SYN-FACT-REPORT", "2026-08-24T01:10:00Z"),
 		exitRegistered, "EXISTING")
+	// 换记账标识再凭同一条报告入账是内容冲突（ADR-0271 决定三），不是已有结果。
+	mustExecute(commandPosting,
+		posting("SYN-POST-1-AGAIN", "EXTERNAL_SOURCE", "IN_TRANSIT_AT_CHANNEL", "12000",
+			"COLLECTION_FACT", "SYN-FACT-REPORT", "2026-08-24T01:20:00Z"),
+		exitNeedsReview, "CONTENT_CONFLICT")
 
 	// 只有真实到账那一层撑得起渠道在途 → 待清分，且实收 10000 少于指令 12000。
 	mustExecute(commandPosting,
@@ -123,6 +139,30 @@ func TestCollectionRegisterVerticalOnRealPostgres(t *testing.T) {
 			"COLLECTION_FACT", "SYN-FACT-CREDIT", "2026-08-24T02:00:00Z"),
 		exitRegistered, "REGISTERED")
 
+	// 同账第二条指令 Y 的报告 5000 入在途。X 名下在途剩 2000，一笔 3000 的迟到款按账够
+	// （在途合计 7000），按指令不够：不借 Y 的在途款（ADR-0271 决定二）。
+	mustExecute(commandInstruction, `{
+			"tenantId": "SYN-T1", "instructionRef": "SYN-INSTR-Y",
+			"parcelRef": "SYN-PARCEL-2", "requirementRef": "SYN-COD-REQ-V1",
+			"customerRef": "SYN-CUST-1", "legalEntityRef": "SYN-ENTITY-1",
+			"currency": "EUR", "channelRef": "SYN-CHANNEL-1",
+			"amountMinor": 5000, "instructedAt": "2026-08-24T00:30:00Z"
+		}`, exitRegistered, "REGISTERED")
+	mustExecute(commandFact, `{
+			"tenantId": "SYN-T1", "factRef": "SYN-FACT-Y-REPORT", "instructionRef": "SYN-INSTR-Y",
+			"sourceLayer": "CHANNEL_COLLECTION_REPORT", "evidenceRef": "SYN-EV-Y",
+			"currency": "EUR", "amountMinor": 5000, "occurredAt": "2026-08-24T01:00:00Z"
+		}`, exitRegistered, "REGISTERED")
+	mustExecute(commandPosting,
+		posting("SYN-POST-Y-1", "EXTERNAL_SOURCE", "IN_TRANSIT_AT_CHANNEL", "5000",
+			"COLLECTION_FACT", "SYN-FACT-Y-REPORT", "2026-08-24T01:10:00Z"),
+		exitRegistered, "REGISTERED")
+	mustExecute(commandFact, fact("SYN-FACT-LATE", "OPERATOR_BANK_CREDIT", "3000"), exitRegistered, "REGISTERED")
+	mustExecute(commandPosting,
+		posting("SYN-POST-LATE-CREDIT", "IN_TRANSIT_AT_CHANNEL", "AWAITING_ALLOCATION", "3000",
+			"COLLECTION_FACT", "SYN-FACT-LATE", "2026-08-24T02:30:00Z"),
+		exitUnderfunded, "UNDERFUNDED")
+
 	// 清分只凭代收指令；透支答余额不足（自己一格，不混进未决）。
 	mustExecute(commandPosting,
 		posting("SYN-POST-BIG", "AWAITING_ALLOCATION", "PAYABLE_TO_CUSTOMER", "12000",
@@ -133,7 +173,8 @@ func TestCollectionRegisterVerticalOnRealPostgres(t *testing.T) {
 			"ALLOCATION", "SYN-INSTR-1", "2026-08-24T03:00:00Z"),
 		exitRegistered, "REGISTERED")
 
-	// 差异事项只登事项；差额落账另有一笔以它为依据的记账，金额必须与事项一致。
+	// 差异事项只登事项；差额落账另有一笔以它为依据的记账，金额必须与事项一致，且短款只从
+	// 渠道在途落入——报了没回来的那 2000 在渠道名下，已到账的待清分一分不动。
 	discrepancy := `{
 		"tenantId": "SYN-T1", "discrepancyRef": "SYN-DIFF-1", "instructionRef": "SYN-INSTR-1",
 		"kind": "SHORTFALL", "currency": "EUR", "amountMinor": 2000,
@@ -141,14 +182,19 @@ func TestCollectionRegisterVerticalOnRealPostgres(t *testing.T) {
 	}`
 	mustExecute(commandDiscrepancy, discrepancy, exitRegistered, "REGISTERED")
 	mustExecute(commandDiscrepancy, discrepancy, exitRegistered, "EXISTING")
+	// X 名下还有一笔登了没移的到账（SYN-FACT-LATE），此刻不判短款。
 	mustExecute(commandPosting,
-		posting("SYN-POST-DIFF-BAD", "AWAITING_ALLOCATION", "SHORTFALL", "1500",
+		posting("SYN-POST-DIFF", "IN_TRANSIT_AT_CHANNEL", "SHORTFALL", "2000",
+			"DISCREPANCY", "SYN-DIFF-1", "2026-08-25T01:00:00Z"),
+		exitUnderfunded, "UNDERFUNDED")
+	mustExecute(commandPosting,
+		posting("SYN-POST-DIFF-RECEIVED", "AWAITING_ALLOCATION", "SHORTFALL", "2000",
 			"DISCREPANCY", "SYN-DIFF-1", "2026-08-25T01:00:00Z"),
 		exitUsage, "NOT_ACCEPTED")
 	mustExecute(commandPosting,
-		posting("SYN-POST-DIFF", "AWAITING_ALLOCATION", "SHORTFALL", "2000",
+		posting("SYN-POST-DIFF-BAD", "IN_TRANSIT_AT_CHANNEL", "SHORTFALL", "1500",
 			"DISCREPANCY", "SYN-DIFF-1", "2026-08-25T01:00:00Z"),
-		exitRegistered, "REGISTERED")
+		exitUsage, "NOT_ACCEPTED")
 
 	// 回汇批次：账未开立时依据不在册；形成后收汇付记账，交出主张后封口。
 	batch := func(ref, customer, through string) string {
@@ -208,14 +254,14 @@ func TestCollectionRegisterVerticalOnRealPostgres(t *testing.T) {
 	if err != nil || !opened {
 		t.Fatalf("读回账面：opened=%v err=%v", opened, err)
 	}
-	// 入账 12000；渠道在途剩 2000，待清分 10000-8000-2000=0，应付客户 8000-5000=3000，
-	// 已汇付 5000，短款 2000。
+	// 入账 12000 + 5000；渠道在途剩 X 的 2000 与 Y 的 5000，待清分 10000-8000=2000，
+	// 应付客户 8000-5000=3000，已汇付 5000；短款等迟到款，未落。
 	wants := map[domain.FundPosition]int64{
-		domain.PositionInTransitAtChannel: 2000,
-		domain.PositionAwaitingAllocation: 0,
+		domain.PositionInTransitAtChannel: 7000,
+		domain.PositionAwaitingAllocation: 2000,
 		domain.PositionPayableToCustomer:  3000,
 		domain.PositionRemitted:           5000,
-		domain.PositionShortfall:          2000,
+		domain.PositionShortfall:          0,
 		domain.PositionSurplus:            0,
 	}
 	var held int64
@@ -226,7 +272,7 @@ func TestCollectionRegisterVerticalOnRealPostgres(t *testing.T) {
 		}
 		held += got
 	}
-	if balance.IntakeTotal() != 12000 || held != balance.IntakeTotal() {
+	if balance.IntakeTotal() != 17000 || held != balance.IntakeTotal() {
 		t.Fatalf("分配守恒破了：账内合计 %d，入账 %d", held, balance.IntakeTotal())
 	}
 	if balance.PostingCount() != 5 {

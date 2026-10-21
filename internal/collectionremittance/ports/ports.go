@@ -4,7 +4,8 @@
 // 端口按聚合族分三对，不合成一个大接口：代收面（指令、事实、差异事项）、分户账面
 // （开立与记账）、回汇面（批次）。合成之后任何一族换形状都要动另外两族的实现。
 //
-// 本文件只放**点读**口：按键取一行、按分户账键取余额，伺候的是判断。管理台上列两册
+// 本文件只放**点读**口：按键取一行、按分户账键取余额、按代收指令取它名下的事实与记账，
+// 伺候的是判断。管理台上列两册
 // 那类 `catalogue_read` 读口是另一个调用面（先例：关务的 PortsPathsView 点读与
 // PortsPathsCatalogueRead 上列分开两个接口），由读面那一侧追加，不拓宽这里的点读口。
 package ports
@@ -68,6 +69,12 @@ type CollectionView interface {
 		tenant domain.TenantID,
 		id domain.DiscrepancyItemID,
 	) (domain.DiscrepancyItem, bool, error)
+	// LoadInstructionFacts 交回该指令名下的全部代收事实，空切片即一条也没登记。
+	LoadInstructionFacts(
+		ctx context.Context,
+		tenant domain.TenantID,
+		id domain.CollectionInstructionID,
+	) ([]domain.CollectionFact, error)
 }
 
 // SubledgerRegistry 是分户账面的写口：开立与记账。
@@ -112,6 +119,14 @@ type SubledgerView interface {
 		tenant domain.TenantID,
 		id domain.PostingID,
 	) (domain.SubledgerPosting, bool, error)
+	// LoadInstructionPostings 交回依据追溯到该指令的全部记账：凭它的代收事实、凭它的
+	// 差异事项、凭它清分的，以及沿冲正链冲正这些记账的。按指令判上限（ADR-0271）要的
+	// 正是这一组；冲正不跟着追溯，冲正回`渠道在途`的短款就还不回它的指令。
+	LoadInstructionPostings(
+		ctx context.Context,
+		tenant domain.TenantID,
+		instruction domain.CollectionInstruction,
+	) ([]domain.SubledgerPosting, error)
 }
 
 // RemittanceRegistry 是回汇面的写口：形成批次与交出汇付主张。

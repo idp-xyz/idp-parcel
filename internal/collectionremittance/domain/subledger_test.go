@@ -171,6 +171,57 @@ func TestAPostingMustCiteTheBasisItsDestinationRequires(t *testing.T) {
 	}
 }
 
+// 来源位置随去向与依据限死（ADR-0271）：入账只入`渠道在途`；凭代收事实只有入账与
+// 到账移位两种形；`短款`只从`渠道在途`落入，`溢款`只从`待清分`落入。
+func TestAPostingsSourcePositionIsFixedByItsDestinationAndBasis(t *testing.T) {
+	key := ledgerKey(t, "EUR")
+	base := domain.SubledgerPostingSpec{
+		ID:       postingID(t, "SYN-POST-1"),
+		Ledger:   key,
+		Amount:   money(t, "EUR", 1000),
+		Basis:    basisRef(t, "SYN-BASIS-1"),
+		PostedAt: instant(t, "2026-08-24T01:00:00Z"),
+	}
+	refused := []struct {
+		name      string
+		from, to  domain.FundPosition
+		basisKind domain.PostingBasisKind
+	}{
+		{"入账一步落到待清分", domain.PositionExternalSource, domain.PositionAwaitingAllocation, domain.BasisCollectionFact},
+		{"凭代收事实自待清分移回渠道在途", domain.PositionAwaitingAllocation, domain.PositionInTransitAtChannel, domain.BasisCollectionFact},
+		{"短款自待清分落入", domain.PositionAwaitingAllocation, domain.PositionShortfall, domain.BasisDiscrepancy},
+		{"短款自应付客户落入", domain.PositionPayableToCustomer, domain.PositionShortfall, domain.BasisDiscrepancy},
+		{"溢款自渠道在途落入", domain.PositionInTransitAtChannel, domain.PositionSurplus, domain.BasisDiscrepancy},
+	}
+	for _, testCase := range refused {
+		spec := base
+		spec.From, spec.To, spec.BasisKind = testCase.from, testCase.to, testCase.basisKind
+		if _, err := domain.RecordSubledgerPosting(spec); !errors.Is(err, domain.ErrInvalidPosting) {
+			t.Fatalf("%s 被接受：%v", testCase.name, err)
+		}
+	}
+
+	accepted := []struct {
+		name      string
+		from, to  domain.FundPosition
+		basisKind domain.PostingBasisKind
+	}{
+		{"报告入渠道在途", domain.PositionExternalSource, domain.PositionInTransitAtChannel, domain.BasisCollectionFact},
+		{"到账移到待清分", domain.PositionInTransitAtChannel, domain.PositionAwaitingAllocation, domain.BasisCollectionFact},
+		{"短款自渠道在途落入", domain.PositionInTransitAtChannel, domain.PositionShortfall, domain.BasisDiscrepancy},
+		{"溢款自待清分落入", domain.PositionAwaitingAllocation, domain.PositionSurplus, domain.BasisDiscrepancy},
+		{"溢款归属确认", domain.PositionSurplus, domain.PositionPayableToCustomer, domain.BasisDiscrepancy},
+		{"冲正短款回渠道在途", domain.PositionShortfall, domain.PositionInTransitAtChannel, domain.BasisCorrection},
+	}
+	for _, testCase := range accepted {
+		spec := base
+		spec.From, spec.To, spec.BasisKind = testCase.from, testCase.to, testCase.basisKind
+		if _, err := domain.RecordSubledgerPosting(spec); err != nil {
+			t.Fatalf("%s 被拒：%v", testCase.name, err)
+		}
+	}
+}
+
 // 「未实际收到的代收款不得进入应付客户」在记账形状上的落点：一层来源事实推不出
 // 可付余额，归属要另有一笔凭代收指令的清分记账。
 func TestACollectionFactAloneDoesNotMakePrincipalPayable(t *testing.T) {
@@ -326,7 +377,17 @@ func TestDerivingRefusesAForeignPostingAndABrokenLedger(t *testing.T) {
 func TestAnUnderfundedPositionIsNotAnInvalidRequest(t *testing.T) {
 	key := ledgerKey(t, "EUR")
 	balance, err := domain.DeriveSubledgerBalance(key, []domain.SubledgerPosting{
-		intake(t, key, "1", 1000, domain.PositionAwaitingAllocation),
+		intake(t, key, "1", 1000, domain.PositionInTransitAtChannel),
+		posting(t, domain.SubledgerPostingSpec{
+			ID:        postingID(t, "SYN-POST-CREDIT"),
+			Ledger:    key,
+			From:      domain.PositionInTransitAtChannel,
+			To:        domain.PositionAwaitingAllocation,
+			Amount:    money(t, "EUR", 1000),
+			BasisKind: domain.BasisCollectionFact,
+			Basis:     basisRef(t, "SYN-FACT-CREDIT-1"),
+			PostedAt:  instant(t, "2026-08-24T02:00:00Z"),
+		}),
 	})
 	if err != nil {
 		t.Fatalf("派生余额：%v", err)

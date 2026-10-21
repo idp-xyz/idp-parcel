@@ -18,6 +18,7 @@ import (
 type storeDouble struct {
 	instructions  map[string]domain.CollectionInstruction
 	facts         map[string]domain.CollectionFact
+	factOrder     []string
 	discrepancies map[string]domain.DiscrepancyItem
 	subledgers    map[domain.SubledgerKey]domain.Subledger
 	postings      map[string]domain.SubledgerPosting
@@ -79,6 +80,7 @@ func (store *storeDouble) AcceptCollectionFact(
 		return ports.SaveAlreadyRegistered, nil
 	}
 	store.facts[key] = fact
+	store.factOrder = append(store.factOrder, key)
 	return ports.SaveRegistered, nil
 }
 
@@ -124,6 +126,21 @@ func (store *storeDouble) LoadDiscrepancyItem(
 	}
 	item, found := store.discrepancies[id.String()]
 	return item, found, nil
+}
+
+func (store *storeDouble) LoadInstructionFacts(
+	_ context.Context, _ domain.TenantID, id domain.CollectionInstructionID,
+) ([]domain.CollectionFact, error) {
+	if store.readErr != nil {
+		return nil, store.readErr
+	}
+	owned := []domain.CollectionFact{}
+	for _, key := range store.factOrder {
+		if fact := store.facts[key]; fact.Instruction() == id {
+			owned = append(owned, fact)
+		}
+	}
+	return owned, nil
 }
 
 func (store *storeDouble) OpenSubledger(
@@ -194,6 +211,38 @@ func (store *storeDouble) LoadPosting(
 	}
 	posting, found := store.postings[id.String()]
 	return posting, found, nil
+}
+
+// LoadInstructionPostings 与真库读口同一口径：凭该指令的事实、差异事项、清分，以及
+// 沿冲正链冲正这些记账的。替身按落账次序扫一遍——冲正总在原记账之后落，一趟就够。
+func (store *storeDouble) LoadInstructionPostings(
+	_ context.Context, _ domain.TenantID, instruction domain.CollectionInstruction,
+) ([]domain.SubledgerPosting, error) {
+	if store.readErr != nil {
+		return nil, store.readErr
+	}
+	attributed := map[string]bool{}
+	owned := []domain.SubledgerPosting{}
+	for _, key := range store.postingOrder {
+		posting := store.postings[key]
+		basis := posting.Basis().String()
+		var mine bool
+		switch posting.BasisKind() {
+		case domain.BasisCollectionFact:
+			mine = store.facts[basis].Instruction() == instruction.ID()
+		case domain.BasisDiscrepancy:
+			mine = store.discrepancies[basis].Instruction() == instruction.ID()
+		case domain.BasisAllocation:
+			mine = basis == instruction.ID().String()
+		case domain.BasisCorrection:
+			mine = attributed[basis]
+		}
+		if mine && posting.Ledger() == instruction.Ledger() {
+			attributed[key] = true
+			owned = append(owned, posting)
+		}
+	}
+	return owned, nil
 }
 
 func (store *storeDouble) FormBatch(

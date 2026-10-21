@@ -18,8 +18,8 @@ func withinTransaction(t *testing.T, db *bentopg.DB, body func(ctx context.Conte
 	return db.Transactor().WithinTransaction(t.Context(), body)
 }
 
-// 四层来源在真库上往返不串：读回的层级必须还是写下去的那一层。串了的话，一笔真实
-// 到账在读回后会变成渠道在途，而两者撑得起的下一步不同。
+// 四层来源在真库上往返不串：读回的层级必须还是写下去的那一层。串了的话，一笔旁证
+// 在读回后会变成渠道报告，凭它就能入账。
 func TestEachSourceLayerSurvivesTheRoundTrip(t *testing.T) {
 	db := newDB(t)
 	tenant := fixtureTenant(t)
@@ -33,10 +33,10 @@ func TestEachSourceLayerSurvivesTheRoundTrip(t *testing.T) {
 	}
 
 	wantIntake := map[domain.CollectionSourceLayer]domain.FundPosition{
-		domain.RecipientPayment:        domain.PositionInTransitAtChannel,
+		domain.RecipientPayment:        domain.FundPositionUnknown,
 		domain.ChannelCollectionReport: domain.PositionInTransitAtChannel,
-		domain.ChannelRemittanceNotice: domain.PositionInTransitAtChannel,
-		domain.OperatorBankCredit:      domain.PositionAwaitingAllocation,
+		domain.ChannelRemittanceNotice: domain.FundPositionUnknown,
+		domain.OperatorBankCredit:      domain.FundPositionUnknown,
 	}
 	if err := withinTransaction(t, db, func(ctx context.Context) error {
 		if _, err := collections.RegisterInstruction(
@@ -203,15 +203,24 @@ func TestPostingsAccumulateAndBatchStateAdvancesOnce(t *testing.T) {
 			return err
 		}
 		if _, err := collections.AcceptCollectionFact(ctx, tenant,
+			fixtureFact(t, "SYN-FACT-REPORT", "SYN-INSTR-1", domain.ChannelCollectionReport, 12000)); err != nil {
+			return err
+		}
+		if _, err := collections.AcceptCollectionFact(ctx, tenant,
 			fixtureFact(t, "SYN-FACT-CREDIT", "SYN-INSTR-1", domain.OperatorBankCredit, 12000)); err != nil {
 			return err
 		}
 		if _, err := remittances.FormBatch(ctx, tenant, fixtureBatch(t, "SYN-BATCH-1")); err != nil {
 			return err
 		}
+		if _, err := subledgers.AppendPosting(ctx, tenant, fixturePosting(t, "SYN-POST-0",
+			domain.PositionExternalSource, domain.PositionInTransitAtChannel,
+			12000, domain.BasisCollectionFact, "SYN-FACT-REPORT", "2026-08-24T01:10:00Z")); err != nil {
+			return err
+		}
 		if _, err := subledgers.AppendPosting(ctx, tenant, fixturePosting(t, "SYN-POST-1",
-			domain.PositionExternalSource, domain.PositionAwaitingAllocation,
-			12000, domain.BasisCollectionFact, "SYN-FACT-CREDIT", "2026-08-24T01:10:00Z")); err != nil {
+			domain.PositionInTransitAtChannel, domain.PositionAwaitingAllocation,
+			12000, domain.BasisCollectionFact, "SYN-FACT-CREDIT", "2026-08-24T02:00:00Z")); err != nil {
 			return err
 		}
 		if _, err := subledgers.AppendPosting(ctx, tenant, fixturePosting(t, "SYN-POST-2",
@@ -243,8 +252,8 @@ func TestPostingsAccumulateAndBatchStateAdvancesOnce(t *testing.T) {
 	if err != nil || !opened {
 		t.Fatalf("读回账面：opened=%v err=%v", opened, err)
 	}
-	if balance.PostingCount() != 3 {
-		t.Fatalf("记账笔数 = %d，要 3（重放没写第二行）", balance.PostingCount())
+	if balance.PostingCount() != 4 {
+		t.Fatalf("记账笔数 = %d，要 4（重放没写第二行）", balance.PostingCount())
 	}
 	if balance.At(domain.PositionAwaitingAllocation) != 4000 ||
 		balance.At(domain.PositionPayableToCustomer) != 3000 ||

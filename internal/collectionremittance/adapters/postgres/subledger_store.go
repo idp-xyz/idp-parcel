@@ -277,6 +277,92 @@ func (view *SubledgerBalanceView) LoadPosting(
 	return posting, true, nil
 }
 
+// LoadInstructionPostings 交回依据追溯到该指令的全部记账：凭它名下代收事实的、凭它
+// 名下差异事项的、凭它清分的，再沿冲正链收冲正这些记账的。
+//
+// 追溯在 SQL 里一趟递归做完，不在编排里逐笔回读依据：逐笔回读是每笔一个往返，且冲正
+// 链要一层层追。basis_ref 没有外键（0001 那张表的头注），所以这里按 basis_kind 分派
+// 去连各自的册子。只扫这本账：一条指令的记账都在它的分户账上。
+func (view *SubledgerBalanceView) LoadInstructionPostings(
+	ctx context.Context,
+	tenant domain.TenantID,
+	instruction domain.CollectionInstruction,
+) ([]domain.SubledgerPosting, error) {
+	if strings.TrimSpace(instruction.ID().String()) == "" {
+		return nil, fmt.Errorf("load instruction postings: the instruction ID is blank")
+	}
+	querier, err := view.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load instruction postings: %w", err)
+	}
+	key := instruction.Ledger()
+	arguments := append(ledgerColumns(tenant, key), instruction.ID().String())
+	rows, err := querier.Query(ctx,
+		`WITH RECURSIVE ledger_posting AS (
+		     SELECT posting_ref, from_position, to_position, amount_minor,
+		            basis_kind, basis_ref, posted_at
+		       FROM collection_remittance.subledger_posting
+		      WHERE tenant_id = $1 AND customer_ref = $2 AND legal_entity_ref = $3
+		        AND currency = $4 AND channel_ref = $5
+		 ),
+		 attributed (posting_ref) AS (
+		     SELECT p.posting_ref
+		       FROM ledger_posting p
+		       JOIN collection_remittance.collection_fact f
+		         ON f.tenant_id = $1 AND f.fact_ref = p.basis_ref
+		      WHERE p.basis_kind = 'COLLECTION_FACT' AND f.instruction_ref = $6
+		     UNION
+		     SELECT p.posting_ref
+		       FROM ledger_posting p
+		       JOIN collection_remittance.discrepancy_item d
+		         ON d.tenant_id = $1 AND d.discrepancy_ref = p.basis_ref
+		      WHERE p.basis_kind = 'DISCREPANCY' AND d.instruction_ref = $6
+		     UNION
+		     SELECT p.posting_ref
+		       FROM ledger_posting p
+		      WHERE p.basis_kind = 'ALLOCATION' AND p.basis_ref = $6
+		     UNION
+		     SELECT c.posting_ref
+		       FROM ledger_posting c
+		       JOIN attributed a ON c.basis_ref = a.posting_ref
+		      WHERE c.basis_kind = 'CORRECTION'
+		 )
+		 SELECT p.posting_ref, p.from_position, p.to_position, p.amount_minor,
+		        p.basis_kind, p.basis_ref, p.posted_at
+		   FROM ledger_posting p
+		   JOIN attributed a ON a.posting_ref = p.posting_ref
+		  ORDER BY p.posted_at, p.posting_ref`,
+		arguments...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("load instruction postings: %w", err)
+	}
+	defer rows.Close()
+
+	postings := make([]domain.SubledgerPosting, 0)
+	for rows.Next() {
+		var (
+			idRaw, fromRaw, toRaw, basisKindRaw, basisRaw string
+			amountMinor                                   int64
+			postedAt                                      time.Time
+		)
+		if err := rows.Scan(&idRaw, &fromRaw, &toRaw, &amountMinor,
+			&basisKindRaw, &basisRaw, &postedAt); err != nil {
+			return nil, fmt.Errorf("load instruction postings: %w", err)
+		}
+		posting, err := rebuildPosting(key, idRaw, fromRaw, toRaw, amountMinor,
+			basisKindRaw, basisRaw, postedAt)
+		if err != nil {
+			return nil, err
+		}
+		postings = append(postings, posting)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("load instruction postings: %w", err)
+	}
+	return postings, nil
+}
+
 // rebuildPosting 把一行记账还原成领域记账，逐格走同一道构造门——包括三条依据门。
 // 坏行在读口拦下上抛：一条绕过写口进来的记账，正是账面唯一可能不守恒的来源。
 func rebuildPosting(

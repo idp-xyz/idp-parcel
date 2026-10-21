@@ -67,17 +67,18 @@ func TestACollectionInstructionNeedsItsServiceRequirementBasis(t *testing.T) {
 	}
 }
 
-// 四层来源不得互相推导：只有真实到账那一层把本金带进`待清分`，其余三层一律停在
-// `渠道在途`。这条映射错一次，未实际收到的代收款就会推进成可付客户余额。
-func TestOnlyAnOperatorBankCreditTakesPrincipalPastTheChannel(t *testing.T) {
+// 只有渠道代收报告自外部来源入账、且只入`渠道在途`；收件人付款、渠道回款通知与真实
+// 到账都没有入账位置（ADR-0271 决定一、二）。其中只有真实到账撑得起`渠道在途` →
+// `待清分`那一跳。
+func TestOnlyAChannelCollectionReportTakesPrincipalIntoTheLedger(t *testing.T) {
 	cases := []struct {
 		layer domain.CollectionSourceLayer
 		want  domain.FundPosition
 	}{
-		{domain.RecipientPayment, domain.PositionInTransitAtChannel},
+		{domain.RecipientPayment, domain.FundPositionUnknown},
 		{domain.ChannelCollectionReport, domain.PositionInTransitAtChannel},
-		{domain.ChannelRemittanceNotice, domain.PositionInTransitAtChannel},
-		{domain.OperatorBankCredit, domain.PositionAwaitingAllocation},
+		{domain.ChannelRemittanceNotice, domain.FundPositionUnknown},
+		{domain.OperatorBankCredit, domain.FundPositionUnknown},
 	}
 	for _, testCase := range cases {
 		fact := acceptedFact(t, testCase.layer)
@@ -86,12 +87,6 @@ func TestOnlyAnOperatorBankCreditTakesPrincipalPastTheChannel(t *testing.T) {
 		}
 		if got := testCase.layer.SettlesToOperator(); got != (testCase.layer == domain.OperatorBankCredit) {
 			t.Fatalf("%s 的到账判断 = %v", testCase.layer, got)
-		}
-	}
-	// 没有任何一格能落到`应付客户`：那一步要另有一笔清分记账。
-	for _, testCase := range cases {
-		if testCase.want == domain.PositionPayableToCustomer {
-			t.Fatalf("%s 直接入账到应付客户", testCase.layer)
 		}
 	}
 }
@@ -250,8 +245,10 @@ func TestADiscrepancyItemDoesNotSettleItself(t *testing.T) {
 	if err != nil {
 		t.Fatalf("登记差异事项：%v", err)
 	}
-	if item.SettlementPosition() != domain.PositionShortfall {
-		t.Fatalf("短款的落点 = %s", item.SettlementPosition())
+	if item.SettlementPosition() != domain.PositionShortfall ||
+		item.SettlementSource() != domain.PositionInTransitAtChannel {
+		t.Fatalf("短款的来源与落点 = %s → %s，要渠道在途 → 短款",
+			item.SettlementSource(), item.SettlementPosition())
 	}
 
 	surplus := spec
@@ -260,8 +257,10 @@ func TestADiscrepancyItemDoesNotSettleItself(t *testing.T) {
 	if err != nil {
 		t.Fatalf("登记溢款事项：%v", err)
 	}
-	if surplusItem.SettlementPosition() != domain.PositionSurplus {
-		t.Fatalf("溢款的落点 = %s", surplusItem.SettlementPosition())
+	if surplusItem.SettlementPosition() != domain.PositionSurplus ||
+		surplusItem.SettlementSource() != domain.PositionAwaitingAllocation {
+		t.Fatalf("溢款的来源与落点 = %s → %s，要待清分 → 溢款",
+			surplusItem.SettlementSource(), surplusItem.SettlementPosition())
 	}
 
 	withoutBasis := spec

@@ -240,6 +240,11 @@ type SubledgerPosting struct {
 //   - 进入`已汇付`必须凭回汇批次——没有批次依据的资金不算汇付出去；
 //   - 进入`短款`或`溢款`必须凭差异事项——差额不自动落账，先有事项再有记账。
 //
+// 另有几格来源位置由去向与依据限死（ADR-0271），本层只看得到位置与依据种类，凭的是
+// 哪一层事实、哪一种事项由编排核：
+//   - 入账只入`渠道在途`；凭代收事实只有入账与`渠道在途` → `待清分`两种形；
+//   - `短款`只从`渠道在途`落入，`溢款`只从`待清分`落入。
+//
 // 金额币种必须等于分户账币种：币种在键上，一本账内不发生换算，本包也没有折算入口。
 func RecordSubledgerPosting(spec SubledgerPostingSpec) (SubledgerPosting, error) {
 	if !spec.ID.valid() {
@@ -286,6 +291,24 @@ func RecordSubledgerPosting(spec SubledgerPostingSpec) (SubledgerPosting, error)
 		spec.BasisKind != BasisDiscrepancy {
 		return SubledgerPosting{}, fmt.Errorf(
 			"%w: shortfall or surplus must cite a discrepancy item", ErrInvalidPosting)
+	}
+	if spec.From == PositionExternalSource && spec.To != PositionInTransitAtChannel {
+		return SubledgerPosting{}, fmt.Errorf(
+			"%w: intake lands only in transit at the channel", ErrInvalidPosting)
+	}
+	if spec.BasisKind == BasisCollectionFact && spec.From != PositionExternalSource &&
+		(spec.From != PositionInTransitAtChannel || spec.To != PositionAwaitingAllocation) {
+		return SubledgerPosting{}, fmt.Errorf(
+			"%w: a collection fact supports only intake or the move to awaiting allocation",
+			ErrInvalidPosting)
+	}
+	if spec.To == PositionShortfall && spec.From != PositionInTransitAtChannel {
+		return SubledgerPosting{}, fmt.Errorf(
+			"%w: shortfall lands only from in transit at the channel", ErrInvalidPosting)
+	}
+	if spec.To == PositionSurplus && spec.From != PositionAwaitingAllocation {
+		return SubledgerPosting{}, fmt.Errorf(
+			"%w: surplus lands only from awaiting allocation", ErrInvalidPosting)
 	}
 	if spec.PostedAt.IsZero() {
 		return SubledgerPosting{}, fmt.Errorf("%w: posted at", ErrInvalidPosting)

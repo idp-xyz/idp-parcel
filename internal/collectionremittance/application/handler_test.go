@@ -52,7 +52,7 @@ func TestPostingIntoALedgerThatWasNeverOpenedIsBasisMissing(t *testing.T) {
 	ctx := t.Context()
 
 	seedInstruction(t, store, handler, "SYN-INSTR-1", 12000)
-	seedFact(t, store, handler, "SYN-FACT-1", "SYN-INSTR-1", domain.RecipientPayment, 12000)
+	seedFact(t, store, handler, "SYN-FACT-1", "SYN-INSTR-1", domain.ChannelCollectionReport, 12000)
 
 	command := postCommand(t, "SYN-POST-1",
 		domain.PositionExternalSource, domain.PositionInTransitAtChannel,
@@ -153,10 +153,7 @@ func TestABatchStopsAcceptingMembersOnceItsClaimIsHandedOver(t *testing.T) {
 	ctx := t.Context()
 	openLedger(t, store, handler)
 	seedInstruction(t, store, handler, "SYN-INSTR-1", 12000)
-	seedFact(t, store, handler, "SYN-FACT-CREDIT", "SYN-INSTR-1", domain.OperatorBankCredit, 12000)
-	mustPost(t, handler, postCommand(t, "SYN-POST-1",
-		domain.PositionExternalSource, domain.PositionAwaitingAllocation,
-		12000, domain.BasisCollectionFact, "SYN-FACT-CREDIT", "2026-08-24T01:10:00Z"))
+	seedReceived(t, store, handler, "SYN-INSTR-1", 12000)
 	mustPost(t, handler, postCommand(t, "SYN-POST-2",
 		domain.PositionAwaitingAllocation, domain.PositionPayableToCustomer,
 		12000, domain.BasisAllocation, "SYN-INSTR-1", "2026-08-24T03:00:00Z"))
@@ -192,10 +189,7 @@ func TestPostingMoreThanThePositionHoldsIsUnderfundedNotInvalid(t *testing.T) {
 	ctx := t.Context()
 	openLedger(t, store, handler)
 	seedInstruction(t, store, handler, "SYN-INSTR-1", 12000)
-	seedFact(t, store, handler, "SYN-FACT-CREDIT", "SYN-INSTR-1", domain.OperatorBankCredit, 12000)
-	mustPost(t, handler, postCommand(t, "SYN-POST-1",
-		domain.PositionExternalSource, domain.PositionAwaitingAllocation,
-		12000, domain.BasisCollectionFact, "SYN-FACT-CREDIT", "2026-08-24T01:10:00Z"))
+	seedReceived(t, store, handler, "SYN-INSTR-1", 12000)
 
 	tooMuch := postCommand(t, "SYN-POST-BIG",
 		domain.PositionAwaitingAllocation, domain.PositionPayableToCustomer,
@@ -214,10 +208,7 @@ func TestReplayingAPostingWhoseSourceWasSinceDrainedAnswersExisting(t *testing.T
 	ctx := t.Context()
 	openLedger(t, store, handler)
 	seedInstruction(t, store, handler, "SYN-INSTR-1", 12000)
-	seedFact(t, store, handler, "SYN-FACT-CREDIT", "SYN-INSTR-1", domain.OperatorBankCredit, 12000)
-	mustPost(t, handler, postCommand(t, "SYN-POST-1",
-		domain.PositionExternalSource, domain.PositionAwaitingAllocation,
-		12000, domain.BasisCollectionFact, "SYN-FACT-CREDIT", "2026-08-24T01:10:00Z"))
+	seedReceived(t, store, handler, "SYN-INSTR-1", 12000)
 
 	allocation := postCommand(t, "SYN-POST-2",
 		domain.PositionAwaitingAllocation, domain.PositionPayableToCustomer,
@@ -242,10 +233,7 @@ func TestReplayingABatchMemberPostingAfterHandOverAnswersExisting(t *testing.T) 
 	ctx := t.Context()
 	openLedger(t, store, handler)
 	seedInstruction(t, store, handler, "SYN-INSTR-1", 12000)
-	seedFact(t, store, handler, "SYN-FACT-CREDIT", "SYN-INSTR-1", domain.OperatorBankCredit, 12000)
-	mustPost(t, handler, postCommand(t, "SYN-POST-1",
-		domain.PositionExternalSource, domain.PositionAwaitingAllocation,
-		12000, domain.BasisCollectionFact, "SYN-FACT-CREDIT", "2026-08-24T01:10:00Z"))
+	seedReceived(t, store, handler, "SYN-INSTR-1", 12000)
 	mustPost(t, handler, postCommand(t, "SYN-POST-2",
 		domain.PositionAwaitingAllocation, domain.PositionPayableToCustomer,
 		12000, domain.BasisAllocation, "SYN-INSTR-1", "2026-08-24T03:00:00Z"))
@@ -270,16 +258,23 @@ func TestReplayingABatchMemberPostingAfterHandOverAnswersExisting(t *testing.T) 
 }
 
 // 差异事项只登事项，差额落账要另有一笔以它为依据的记账；短款不得靠缩小指令抹平。
-func TestADiscrepancySettlesOnlyThroughItsOwnPosting(t *testing.T) {
+// 短款只从`渠道在途`落入：渠道报 12000 入在途，到账 10000 移进待清分，差额 2000 是
+// 渠道报了、钱没回来的那部分，自在途落入`短款`；已到账的 10000 一分不动（ADR-0271 决定四）。
+// Covers: AT-CR-015、AT-CR-016（短款半边）
+func TestAShortfallLandsFromInTransitAndLeavesReceivedFundsAlone(t *testing.T) {
 	store := newStore()
 	handler := store.handler()
 	ctx := t.Context()
 	openLedger(t, store, handler)
 	seedInstruction(t, store, handler, "SYN-INSTR-1", 12000)
+	seedFact(t, store, handler, "SYN-FACT-REPORT", "SYN-INSTR-1", domain.ChannelCollectionReport, 12000)
 	seedFact(t, store, handler, "SYN-FACT-CREDIT", "SYN-INSTR-1", domain.OperatorBankCredit, 10000)
 	mustPost(t, handler, postCommand(t, "SYN-POST-1",
-		domain.PositionExternalSource, domain.PositionAwaitingAllocation,
-		10000, domain.BasisCollectionFact, "SYN-FACT-CREDIT", "2026-08-24T01:10:00Z"))
+		domain.PositionExternalSource, domain.PositionInTransitAtChannel,
+		12000, domain.BasisCollectionFact, "SYN-FACT-REPORT", "2026-08-24T01:10:00Z"))
+	mustPost(t, handler, postCommand(t, "SYN-POST-2",
+		domain.PositionInTransitAtChannel, domain.PositionAwaitingAllocation,
+		10000, domain.BasisCollectionFact, "SYN-FACT-CREDIT", "2026-08-24T02:00:00Z"))
 
 	item := testDiscrepancy(t, "SYN-DIFF-1", "SYN-INSTR-1", domain.DiscrepancyShortfall, 2000)
 	if outcome, _ := handler.RegisterDiscrepancy(ctx, application.RegisterDiscrepancyCommand{
@@ -297,15 +292,34 @@ func TestADiscrepancySettlesOnlyThroughItsOwnPosting(t *testing.T) {
 		t.Fatalf("差异事项自动落了账：短款 %d", balance.At(domain.PositionShortfall))
 	}
 
-	wrongAmount := postCommand(t, "SYN-POST-DIFF-BAD",
+	fromReceived := postCommand(t, "SYN-POST-DIFF-RECEIVED",
 		domain.PositionAwaitingAllocation, domain.PositionShortfall,
+		2000, domain.BasisDiscrepancy, "SYN-DIFF-1", "2026-08-25T01:00:00Z")
+	if outcome, _ := handler.PostSubledger(ctx, fromReceived); outcome != application.OutcomeNotAccepted {
+		t.Fatalf("短款自待清分落入 = %s，要 NOT_ACCEPTED——那是已到账的钱", outcome)
+	}
+	wrongAmount := postCommand(t, "SYN-POST-DIFF-BAD",
+		domain.PositionInTransitAtChannel, domain.PositionShortfall,
 		1500, domain.BasisDiscrepancy, "SYN-DIFF-1", "2026-08-25T01:00:00Z")
 	if outcome, _ := handler.PostSubledger(ctx, wrongAmount); outcome != application.OutcomeNotAccepted {
 		t.Fatalf("差额与事项不符 = %s，要 NOT_ACCEPTED", outcome)
 	}
 	mustPost(t, handler, postCommand(t, "SYN-POST-DIFF",
-		domain.PositionAwaitingAllocation, domain.PositionShortfall,
+		domain.PositionInTransitAtChannel, domain.PositionShortfall,
 		2000, domain.BasisDiscrepancy, "SYN-DIFF-1", "2026-08-25T01:00:00Z"))
+
+	balance, _, err = store.LoadBalance(ctx, tenantID(t), testLedgerKey(t))
+	if err != nil {
+		t.Fatalf("读回账面：%v", err)
+	}
+	if balance.At(domain.PositionAwaitingAllocation) != 10000 ||
+		balance.At(domain.PositionInTransitAtChannel) != 0 ||
+		balance.At(domain.PositionShortfall) != 2000 {
+		t.Fatalf("短款落账后账面不对：待清分 %d 渠道在途 %d 短款 %d",
+			balance.At(domain.PositionAwaitingAllocation),
+			balance.At(domain.PositionInTransitAtChannel),
+			balance.At(domain.PositionShortfall))
+	}
 }
 
 // 冲正就是原记账的反向同额，形状固定死；放开成自由移动之后，账上看不出干了什么。
@@ -315,10 +329,7 @@ func TestACorrectionIsExactlyTheReverseOfItsOriginal(t *testing.T) {
 	ctx := t.Context()
 	openLedger(t, store, handler)
 	seedInstruction(t, store, handler, "SYN-INSTR-1", 12000)
-	seedFact(t, store, handler, "SYN-FACT-CREDIT", "SYN-INSTR-1", domain.OperatorBankCredit, 12000)
-	mustPost(t, handler, postCommand(t, "SYN-POST-1",
-		domain.PositionExternalSource, domain.PositionAwaitingAllocation,
-		12000, domain.BasisCollectionFact, "SYN-FACT-CREDIT", "2026-08-24T01:10:00Z"))
+	seedReceived(t, store, handler, "SYN-INSTR-1", 12000)
 	mustPost(t, handler, postCommand(t, "SYN-POST-2",
 		domain.PositionAwaitingAllocation, domain.PositionPayableToCustomer,
 		12000, domain.BasisAllocation, "SYN-INSTR-1", "2026-08-24T03:00:00Z"))
@@ -332,8 +343,8 @@ func TestACorrectionIsExactlyTheReverseOfItsOriginal(t *testing.T) {
 
 	// 入账冲不了正：去向侧没有账外位置，反向那一笔落不下来。
 	reverseIntake := postCommand(t, "SYN-POST-FIX-INTAKE",
-		domain.PositionAwaitingAllocation, domain.PositionExternalSource,
-		12000, domain.BasisCorrection, "SYN-POST-1", "2026-08-24T04:00:00Z")
+		domain.PositionInTransitAtChannel, domain.PositionExternalSource,
+		12000, domain.BasisCorrection, "SYN-POST-REPORT", "2026-08-24T04:00:00Z")
 	if outcome, _ := handler.PostSubledger(ctx, reverseIntake); outcome != application.OutcomeNotAccepted {
 		t.Fatalf("冲正入账 = %s，要 NOT_ACCEPTED", outcome)
 	}
@@ -352,9 +363,9 @@ func TestACorrectionIsExactlyTheReverseOfItsOriginal(t *testing.T) {
 			balance.At(domain.PositionPayableToCustomer),
 			balance.At(domain.PositionAwaitingAllocation))
 	}
-	// 原记账没被删：三笔都还在。
-	if balance.PostingCount() != 3 {
-		t.Fatalf("记账笔数 = %d，要 3——冲正是追加，不是删除", balance.PostingCount())
+	// 原记账没被删：入账、到账移位、清分与冲正四笔都还在。
+	if balance.PostingCount() != 4 {
+		t.Fatalf("记账笔数 = %d，要 4——冲正是追加，不是删除", balance.PostingCount())
 	}
 }
 
@@ -414,6 +425,20 @@ func seedFact(
 	}); outcome != application.OutcomeRegistered {
 		t.Fatalf("接受事实 %s = %s", id, outcome)
 	}
+}
+
+// seedReceived 走一遍渠道报告入`渠道在途`、真实到账移进`待清分`，金额相同——今天唯一
+// 能让本金到`待清分`的路。
+func seedReceived(t *testing.T, store *storeDouble, handler *application.Handler, instruction string, amountMinor int64) {
+	t.Helper()
+	seedFact(t, store, handler, "SYN-FACT-REPORT", instruction, domain.ChannelCollectionReport, amountMinor)
+	seedFact(t, store, handler, "SYN-FACT-CREDIT", instruction, domain.OperatorBankCredit, amountMinor)
+	mustPost(t, handler, postCommand(t, "SYN-POST-REPORT",
+		domain.PositionExternalSource, domain.PositionInTransitAtChannel,
+		amountMinor, domain.BasisCollectionFact, "SYN-FACT-REPORT", "2026-08-24T01:10:00Z"))
+	mustPost(t, handler, postCommand(t, "SYN-POST-CREDIT",
+		domain.PositionInTransitAtChannel, domain.PositionAwaitingAllocation,
+		amountMinor, domain.BasisCollectionFact, "SYN-FACT-CREDIT", "2026-08-24T02:00:00Z"))
 }
 
 func mustPost(t *testing.T, handler *application.Handler, command application.PostCommand) {

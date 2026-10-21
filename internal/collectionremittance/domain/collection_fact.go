@@ -15,13 +15,15 @@ type CollectionSourceLayer uint8
 
 const (
 	SourceLayerUnknown CollectionSourceLayer = iota
-	// RecipientPayment 是履约侧代收证据：尾程执行方记录的收件人付款主张。
+	// RecipientPayment 是履约侧代收证据：尾程执行方记录的收件人付款主张。它是旁证——
+	// 登记在册、不支撑任何记账：它说的是尾程收了钱，不是谁对运营企业欠这笔钱。
 	RecipientPayment
-	// ChannelCollectionReport 是渠道报告已代收，钱仍在渠道手上。
+	// ChannelCollectionReport 是渠道报告已代收，钱仍在渠道手上。本金只凭它进账。
 	ChannelCollectionReport
-	// ChannelRemittanceNotice 是渠道通知已回款，通知本身不是到账。
+	// ChannelRemittanceNotice 是渠道通知已回款，通知本身不是到账。它也是旁证。
 	ChannelRemittanceNotice
-	// OperatorBankCredit 是运营企业真实到账。只有它支撑本金推进到`应付客户`。
+	// OperatorBankCredit 是运营企业真实到账。只有它撑得起`渠道在途` → `待清分`那一跳，
+	// 而它自己不进账：钱早已凭渠道报告在账上，到账只是把它从渠道手上移回来。
 	OperatorBankCredit
 )
 
@@ -125,15 +127,16 @@ func (fact CollectionFact) Amount() Money { return fact.amount }
 
 func (fact CollectionFact) OccurredAt() time.Time { return fact.occurredAt }
 
-// IntakePosition 是这条事实入账时本金应停的位置：真实到账停`待清分`（归属还没落到
-// 具体客户应付），其余三层只停`渠道在途`。
+// IntakePosition 是这条事实自外部来源入账时本金应停的位置。只有渠道代收报告有位置
+// ——`渠道在途`；其余三层交回 FundPositionUnknown，即凭它们入不了账（ADR-0271 决定一）。
 //
-// 这条映射是「未实际收到的代收款不得进入应付客户」那句硬规则的落点。把它做进词表
-// 而不是留给记账方选位置，是因为选错的那一次在库里看不出来——一笔停在`应付客户`的
-// 钱，无论它凭哪一层进来，行上长得一模一样。
+// 四层各自都能入账时，同一件包裹的同一笔钱经三层各记一次，账上就是两三倍；而事后
+// 分不出哪一笔是重的。只留一层入账，是因为渠道报告正是`渠道在途`那一格的意思：渠道
+// 陈述这笔钱在它手上、欠着运营企业，账上的每一分钱从此都有一个对它负责的渠道。位置
+// 做进词表而不留给记账方挑，是因为挑错的那一次在库里看不出来。
 func (fact CollectionFact) IntakePosition() FundPosition {
-	if fact.layer.SettlesToOperator() {
-		return PositionAwaitingAllocation
+	if fact.layer == ChannelCollectionReport {
+		return PositionInTransitAtChannel
 	}
-	return PositionInTransitAtChannel
+	return FundPositionUnknown
 }
