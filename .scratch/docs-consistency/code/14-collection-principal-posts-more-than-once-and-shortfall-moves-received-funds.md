@@ -1,7 +1,7 @@
 # 14 CR 同一笔本金可以多次「自外部来源入账」，`短款`会挪走已到账的本金
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code14。R1（上线前必修）：碰钱且破坏数据完整性。CR 受托保管的是客户的代收本金：一包裹的同一笔钱经收件人付款、渠道代收报告、渠道回款通知三层各自全额入账，`应付客户`会超过真实到账；短款又从已到账的`待清分`里挪走差额，客户少拿钱。今天记账只走受控 CLI（`cmd/parcel-collection-register`），但守恒不变量一破就无法事后分辨哪一笔是重的，没有可靠绕法。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code14。R1（上线前必修）：碰钱且破坏数据完整性。CR 受托保管的是客户的代收本金：一包裹的同一笔钱经收件人付款、渠道代收报告、渠道回款通知三层各自全额入账，`应付客户`会超过真实到账；短款又从已到账的`待清分`里挪走差额，客户少拿钱。今天记账只走受控 CLI（`cmd/parcel-collection-register`），但守恒不变量一破就无法事后分辨哪一笔是重的，没有可靠绕法。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
 Blocked by: 无——2026-10-21 文档自洽 09 已裁（[ADR-0271](../../../docs/adr/0271-collection-principal-enters-the-ledger-only-on-the-channel-collection-report-and-shortfall-comes-only-from-in-transit.md)），裁向见文末「裁向（文档自洽 09，2026-10-21）」。此前：docs-consistency/09（SA+CR 修订）先裁 [audit/sa-cr.md](../audit/sa-cr.md) H3、H5：四层事实里哪一层负责入账、其余层只做移位或旁证；真实到账遇已由渠道层入账的本金走入账还是走移位；`短款`只记在差异事项上、不占资金位置，还是只允许从「已报告未到账」的`渠道在途`落入。
 出处：[audit/sa-cr.md](../audit/sa-cr.md) H3、H5（两条在审计里归 B，建议修法写明「裁定之后另立代码票」；同一上下文、同一根因——记账只核形状不核依据的入账次数与资金来源——合成本票。审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，CR 代码在此期间未改）。
 
@@ -118,3 +118,10 @@ AT：`AT-CR-008` 另多一处并发半边点名（`concurrency_test.go::TestAFac
 - `TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/collectionremittance/... ./cmd/parcel-api/... ./cmd/parcel-collection-register/... ./internal/architecture/... ./migrations/... ./internal/platform/migrate/...`：9 个有测试的包 ok。头一轮 `internal/architecture` 的 PBC-08 门禁报 `SubledgerStore.LockLedger` 缺无事务负向证据，已在 `transaction_guard_test.go` 补上后全绿。
 - 新用例（含两条并发屏障用例与无事务负向断言）`-count=3`：ok。
 - 种子头注的重放口径在一次性库 `code14seed` 上实跑：灌完后原样重放本节全答已在册；换标识的入账、到账移位答 `CONTENT_CONFLICT`（2），清分、短款答 `UNDERFUNDED`（4）；用完已删库。
+
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-code14` tip `73f511e31` 在 main `cbcaaa873` 上快进；隔离评审无阻断，按协调方裁定在本票补了分户账咨询锁（N1）与并发用例（去锁即红），其余建议已修。
+- 协调方在 tip 上单独提交重算的 AT 计数与重生成的机制清点；ADR 索引无变化；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净；演示种子在一次性库上灌通（迁移 `collection_remittance/0002` 一并施加），用后删库。
+- 去向：code/47（协议抵扣记账形）、code/54（真实到账凭采用引用）、code/15（更正回指）仍开。
