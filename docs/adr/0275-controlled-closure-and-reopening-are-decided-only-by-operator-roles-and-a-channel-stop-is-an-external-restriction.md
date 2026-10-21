@@ -9,7 +9,7 @@ Date: 2026-10-21
 以下所引 parcel-shipment CONTEXT 与 SCENARIOS 原文是本记录接受前的文字，已随本记录改写（见 Consequences）。
 
 - parcel-shipment CONTEXT 与 party-commercial CONTEXT 对同一件事说法相反，两份都是 Confirmed，谁也没有停用谁：
-  - parcel-shipment CONTEXT：「货主、渠道服务方和代理商只能提出请求，除非客户合同或明确授权把其纳入可直接形成决定的授权角色范围」。SCENARIOS 场景二跟着它写了两处例外：「除非客户合同或明确授权已经把请求方委派为可直接决定的角色」「除非其已被合同明确委派为决定角色」。
+  - parcel-shipment CONTEXT：「货主、渠道服务方和代理商只能提出请求，除非客户合同或明确授权把其纳入可直接形成决定的授权角色范围」。SCENARIOS 场景二跟着它写了例外：「除非客户合同或明确授权已经把请求方委派为可直接决定的角色」「除非其已被合同明确委派为决定角色」。
   - party-commercial CONTEXT：「两者都是运营侧凭授权规则形成的决定，合同委派不参与。」
 - 代码跟的是 party-commercial：`internal/partycommercial/domain/authority_grant.go` 的 `formedOnlyByOperatorRole` 对受控关闭与重开返回真，客户账户请求方答 `ErrCustomerAccountCannotDecide`。
 - 例外支的裁定只落在票里：[pc-gaps/13](../../.scratch/party-commercial-context-gaps/issues/13-authorized-action-lacks-controlled-closure-and-reopening.md) 裁决 ③ 对「货主经合同或明确授权直接形成决定」那一支写「首发不开、留位」。它比 party-commercial CONTEXT 的「合同委派不参与」弱：一个是首发暂不开放，一个是规则上不存在。
@@ -32,7 +32,7 @@ Date: 2026-10-21
 ## 候选与反方
 
 - **例外长期存在、首发不开、留位。** 否决：留位等于在 CONTEXT 里写一条今天谁也不执行的规则，读者照它建模会在授权规则里给客户账户留一格「可直接决定」，那正是代码 `ErrCustomerAccountCannotDecide` 守住的门；真要开，是一次商业授权模型的改动，配得上一份新记录。
-- **渠道方叫停也作请求、另立请求册。** 否决：渠道方叫停的效力来自它对自己渠道的控制，不来自对运营企业提要求；记成请求，重开时就只需授权角色一按，绕过了「硬限制须先由来源责任方解除」。
+- **渠道方叫停也作请求、另立请求册。** 否决：渠道方叫停的效力来自它对自己渠道的控制，不来自对运营企业提要求；记成请求，重开时就只需授权角色一按，绕过了硬限制须先由来源责任方解除这一步（parcel-shipment CONTEXT 受控关闭与重开那几条）。
 - **渠道方叫停一律不形成包裹级关闭，只禁该渠道。** 否决：渠道方要求的常常是整件包裹的停（例如它报告收件人地址存疑），只禁一个渠道挡不住换渠道重试；是否形成包裹级关闭由运营角色判，形成时来源记为外部限制。
 
 ## 对已接受记录的作用
@@ -43,19 +43,19 @@ Date: 2026-10-21
 
 - parcel-shipment CONTEXT 受控关闭与重开那一条去掉「除非客户合同或明确授权……」的例外，补渠道方叫停记为外部限制、其恢复是来源解除。
 - SCENARIOS 场景二过程中停止与恢复请求、重开请求两步与预期结果「货主或渠道请求不会在缺少适用合同委派时……」一句随之改写。
-- ADR-0187 的 Status 行注记与 Links 补「由 ADR-0275 回答」一条。
+- ADR-0187 的 Status 行注记与 Links 补一条由 ADR-0275 回答的来向。
 - 不改代码：`formedOnlyByOperatorRole` 与操作者渠道的载荷形状已经是本记录的形。
 
 ## 越权风险点
 
-1. **代 PS、PC owner 裁定例外不存在**（PS、PC owner）。若 owner 要给大客户开「经合同委派直接关闭或重开」的自助路，推翻的是决定一，要另起记录改授权规则与 `formedOnlyByOperatorRole`，并让 parcel-shipment 的关闭编排接受客户账户作实际决定方。
+1. **代 PS、PC owner 裁定例外不存在**（PS、PC owner）。若 owner 要给大客户开经合同委派直接关闭或重开的自助路，推翻的是决定一，要另起记录改授权规则与 `formedOnlyByOperatorRole`，并让 parcel-shipment 的关闭编排接受客户账户作实际决定方。
 2. **渠道方叫停由运营角色转成关闭**（PS owner）。渠道方的要求今天没有自己的入口，靠运营角色读到之后形成关闭；读漏了就没有关闭。渠道方要有直连的叫停口，是另一份记录。
 3. **渠道方的恢复靠来源解除**（PS owner）。渠道方说「可以继续了」，运营角色先要把它记为来源责任方的有效解除，再由授权角色重开；两步都在运营一侧，渠道方自己按不出重开。
 4. **未授权请求不留痕**（PS owner）。被拒的停止或恢复要求在本产品里没有记录，只在形成它的运营渠道（客服工单、邮件）里有；要在产品里留痕，是另立请求册，本记录不立。
 
 ## Links
 
-- [ADR-0183](./0183-operator-channel-addresses-controlled-closure-and-reopening-by-parcel-and-derives-the-shipper-from-the-accepted-request.md)：决定三的关闭责任来源三格与复核记录「承运方或渠道方叫停是外部限制」，本记录照用
+- [ADR-0183](./0183-operator-channel-addresses-controlled-closure-and-reopening-by-parcel-and-derives-the-shipper-from-the-accepted-request.md)：决定三的关闭责任来源种类与复核记录「承运方或渠道方叫停是外部限制」，本记录照用
 - [ADR-0187](./0187-controlled-closure-and-reopening-record-request-and-operation-evidence-on-the-decision.md)：决定一请求证据落在决定上；Alternatives 候选丁那一问由本记录决定四回答
 - [parcel-shipment CONTEXT](../domain/parcel-shipment/CONTEXT.md)「面单继续尝试」相关规则、[party-commercial CONTEXT](../domain/party-commercial/CONTEXT.md) 受控关闭与重开一条、[SCENARIOS](../domain/SCENARIOS.md) 场景二
 - 票 `.scratch/docs-consistency/issues/10-cross-cutting-docs.md`

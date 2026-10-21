@@ -10,9 +10,9 @@ Date: 2026-10-21
 
 - 两份已接受的记录给了相反的入口：
   - [ADR-0137](./0137-customs-gate-judgments-are-registered-facts-driven-by-assessment-requests-payment-gate-rule-is-registered-and-funds-facts-are-minted-only-in-settlement-accounting.md) 决定四是全称句：「外部资金事实进入本产品只有 `settlement-accounting` 采用这一口」。CONTEXT-MAP 的 `settlement-accounting → customs-compliance` 一条照写「结算是外部资金事实进入本产品的唯一采用口」。
-  - collection-remittance CONTEXT 与 [ADR-0082](./0082-collection-subledger-is-keyed-by-four-dimensions-and-posted-append-only.md) 让代收与清分自己接受「运营企业真实到账」：CR CONTEXT「代收事实」把它列为四个来源层级之一，Boundaries 写「本上下文只登记汇付主张与已接受的资金事实引用」；GLOSSARY「代收货款」写「银行或支付系统拥有运营企业真实到账事实；`collection-remittance` 关联这些事实形成代收分户账结果」。
-- 代码走的是第二条：`internal/collectionremittance/domain/collection_fact.go` 的 `OperatorBankCredit` 带一个任意的 `EvidenceReference` 经受控 CLI（`cmd/parcel-collection-register`）登进代收与清分，不经 settlement-accounting 的采用信封，也不核引用指向什么。
-- 一笔渠道回款在银行流水上是一条外部资金事实。两个口各铸一次，同一笔钱就在结算里作为一条已采用事实、在代收与清分里作为另一条真实到账各存一份，「两份撞了怎么办」正是 ADR-0137 决定四去掉第二个铸造点要防的那一问。
+  - collection-remittance CONTEXT 与 [ADR-0082](./0082-collection-subledger-is-keyed-by-four-dimensions-and-posted-append-only.md) 让代收与清分自己接受「运营企业真实到账」：CR CONTEXT「代收事实」把它列为来源层级之一，Boundaries 写「本上下文只登记汇付主张与已接受的资金事实引用」；GLOSSARY「代收货款」写「银行或支付系统拥有运营企业真实到账事实；`collection-remittance` 关联这些事实形成代收分户账结果」。
+- 代码让代收与清分自收真实到账：`internal/collectionremittance/domain/collection_fact.go` 的 `OperatorBankCredit` 带一个任意的 `EvidenceReference` 经受控 CLI（`cmd/parcel-collection-register`）登进代收与清分，不经 settlement-accounting 的采用信封，也不核引用指向什么。
+- 一笔渠道回款在银行流水上是一条外部资金事实。两个口各铸一次，同一笔钱就在结算里作为一条已采用事实、在代收与清分里作为另一条真实到账各存一份，两份撞了怎么办，正是 ADR-0137 决定四去掉第二个铸造点时说的那一问：「若 CC 另开人工补录口，同一笔付款会有两个铸造点」。
 - settlement-accounting CONTEXT 写入账余额时有「COD 代收本金不进」，已经默认 COD 的到账会经过结算的采用，但没有任何一处写它怎样到达代收与清分。
 - COD 首发不在试点范围内，今天不阻断；但照 CONTEXT-MAP 实现的作者会在两处各开一个铸造点，或者把代收与清分的真实到账层堵死。
 
