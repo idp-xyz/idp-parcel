@@ -1,6 +1,6 @@
 # ADR-0158：结算账户登记册是一行固定属性，接受前控制只查应收
 
-Status: Accepted（2026-09-30。本项是机制，接受依据是 ADR-0146 决定一「机制与产品策略同属产品交付轨道，开发方现在就做」。）<!-- 索引注记 -->｜**登记册**：五格固定、绑结算政策对象不绑某一版、不设修订；部分停用 [ADR-0081](./0081-acceptance-judgment-is-envelope-driven.md) 决定六的结算账户目录留 nil。空册与没有相符应收行都停在 `CONTROL_SCOPE_NOT_CONFIGURED`。2026-09-30。本项是机制，接受依据是 ADR-0146 决定一。
+Status: Accepted（2026-09-30。本项是机制，接受依据是 ADR-0146 决定一「机制与产品策略同属产品交付轨道，开发方现在就做」。）<!-- 索引注记 -->｜**登记册**：五格固定、绑结算政策对象不绑某一版、不设修订；部分停用 [ADR-0081](./0081-acceptance-judgment-is-envelope-driven.md) 决定六的结算账户目录留 nil。空册与没有相符应收行都停在 `CONTROL_SCOPE_NOT_CONFIGURED`。
 Date: 2026-09-30
 
 ## Context

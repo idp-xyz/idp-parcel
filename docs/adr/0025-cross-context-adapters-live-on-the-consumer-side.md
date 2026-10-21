@@ -1,6 +1,6 @@
 # ADR-0025: 跨上下文调用的适配器落在消费侧，翻译职责由它独占
 
-Status: Accepted（Decision 中「适配器为此需要的实例半边协作者，其接口定义在适配器包内，**不进消费方 `ports`**」一句已由 [ADR-0027](./0027-multi-step-cross-context-protocol-state-held-by-the-provider.md) **在跨上下文多步协议场景**停用，其余各条不变）<!-- 索引注记 -->｜**部分停用**：其 Decision 中「适配器为此需要的实例半边协作者，其接口定义在适配器包内，不进消费方 `ports`」一句已在跨上下文多步协议场景由 [ADR-0027](./0027-multi-step-cross-context-protocol-state-held-by-the-provider.md) 停用——该协作者已由提供方以第二阶段用例提供，适配器直接调用，不另定接口。其余各条不变。  
+Status: Accepted<!-- 索引注记 -->｜**部分停用**：其 Decision 中「适配器为此需要的实例半边协作者，其接口定义在适配器包内，**不进消费方 `ports`**」一句已由 [ADR-0027](./0027-multi-step-cross-context-protocol-state-held-by-the-provider.md) 停用——该协作者已由提供方以第二阶段用例提供，适配器直接调用，不另定接口。**适用场景**：仅限跨上下文多步协议；其余各条不变。  
 Date: 2026-08-11
 
 ## Context

@@ -1,6 +1,6 @@
 # ADR-0189：逐段计价区域按卡给——绑了分区目录的卡由包裹邮编路线经目录读出，未绑的卡取租户按线路段登记的段计价区域
 
-Status: Accepted（2026-10-18，Claude Code 会话代决：用户原话「你作为业务和系统专家自决。解决所有的问题」；票 [routing-first-cut/18](../../.scratch/routing-first-cut/issues/18-leg-endpoints-folded-into-price-card-zones.md) 的产物。补 [ADR-0148](./0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定四第 7 条留给 PP 计价输入缝的那一格，越权风险点 5 由本记录接手。越权风险点见文末，待 PP、NR 与 SA owner 复核。） 决定四第二步（绑目录那一路）落地时的补充裁定见文末「补记：票 routing-first-cut/20 落绑目录那一路时的补充裁定」（2026-10-19）。<!-- 索引注记 -->｜**已接受**（2026-10-18，用户原话「你作为业务和系统专家自决」，Claude Code 会话代 PP、NR owner 裁定；票 routing-first-cut/18）。**按卡给**：绑目录的卡走包裹邮编路线与 PP 读数补全（票 routing-first-cut/20），未绑的卡取段计价区域，都没有即待判断。**段计价区域**：NR 一本只增不改的册，键（租户，线路，版本，段号），只挂在有成本依据的段上，不随线路版本内容走。只适用于整段区域恒定的卡，按目的邮编分区的卡要绑目录。不采节点邮编。**越权风险点**待 PP、NR、SA owner 复核。
+Status: Accepted（2026-10-18，Claude Code 会话代 PP、NR owner 决：用户原话「你作为业务和系统专家自决。解决所有的问题」；票 [routing-first-cut/18](../../.scratch/routing-first-cut/issues/18-leg-endpoints-folded-into-price-card-zones.md) 的产物。补 [ADR-0148](./0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定四第 7 条留给 PP 计价输入缝的那一格，越权风险点 5 由本记录接手。越权风险点见文末，待 PP、NR 与 SA owner 复核。） 决定四第二步（绑目录那一路）落地时的补充裁定见文末「补记：票 routing-first-cut/20 落绑目录那一路时的补充裁定」（2026-10-19）。<!-- 索引注记 -->｜**按卡给**：绑目录的卡走包裹邮编路线与 PP 读数补全（票 routing-first-cut/20），未绑的卡取段计价区域，都没有即待判断。**段计价区域**：NR 一本只增不改的册，键（租户，线路，版本，段号），只挂在有成本依据的段上，不随线路版本内容走。只适用于整段区域恒定的卡，按目的邮编分区的卡要绑目录。不采节点邮编。
 
 Date: 2026-10-18
 
