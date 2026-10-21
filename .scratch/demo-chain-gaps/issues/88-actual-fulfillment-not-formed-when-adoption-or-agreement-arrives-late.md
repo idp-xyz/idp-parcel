@@ -21,3 +21,7 @@ Blocked by: 无
 ## 规模
 
 M
+
+## 出自票 50 评审（2026-10-21）
+
+票 [50](./50-commercial-versions-have-no-closing-entry-so-agreement-versions-pile-up.md) 开了商业版本的两种收尾（[ADR-0233](../../../docs/adr/0233-an-older-commercial-version-is-closed-for-a-named-successor-by-a-cut-or-a-same-start-retirement.md)）：截止与同起点退役。收尾之后，运输履约按版本点读核协议：截止点之后答未生效，退役之后答已终止。自动形成实际履约发生项那一路（`registrationDisposition`）把这两格都判作已了结——不重投、不留痕，成本静默不形成（ADR-0233 越权风险点 1）。所以本票的**重跑与「已结束而未形成」查阅面必须覆盖收尾造成的 `AGREEMENT_TERMINATED` / `AGREEMENT_NOT_EFFECTIVE` 两格**：委托协议换版之后按新一版重跑，查阅面要能列出因旧版被收尾而未形成的那些参与。本票落地之前，ADR-0233 记了运营约束：不得截止或退役仍被在途委托指名的供应商协议版本。
