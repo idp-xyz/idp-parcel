@@ -149,6 +149,7 @@ func TestAnUnboundBlockedDepartureStillRaisesTheSignal(t *testing.T) {
 // Covers: AT-TF-160 派发半边——移动事实这一路的失败分格：读不回事实、段册读不动、信号搁置、派生编排未决落 dispatch.consumer_undecided，其余保持
 // dispatch.publish_failed。名单取 veMovementFactUndecidedSentinels 本身：测试里重列一份会让漏登记的哨兵在测试里绿、在生产里塌成
 // publish_failed。
+// Covers: AT-VE-198 派发半边（移动事实那一路）——集运成员读不动落未决，答复不一致保持发布失败。
 func TestMovementFactFailuresLandInTheRightPartition(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -159,7 +160,9 @@ func TestMovementFactFailuresLandInTheRightPartition(t *testing.T) {
 		{"段册读不动", vetf.ErrMovementSegmentNotVisible, "dispatch.consumer_undecided"},
 		{"信号搁置", vetf.ErrDepartureGateSignalUndecided, "dispatch.consumer_undecided"},
 		{"派生编排未决", vetf.ErrProjectionUndecided, "dispatch.consumer_undecided"},
+		{"集运成员读不动", vetf.ErrConsolidationMembershipNotVisible, "dispatch.consumer_undecided"},
 		{"记录不变量已破", vetf.ErrMovementFactRecordInconsistent, "dispatch.publish_failed"},
+		{"集运成员答复不一致", vetf.ErrConsolidationMembershipInconsistent, "dispatch.publish_failed"},
 		{"引用译不出", vetf.ErrMovementFactUntranslatableAnswer, "dispatch.publish_failed"},
 		{"分诊意图待发", vetf.ErrDepartureGateSignalHandoffPending, "dispatch.publish_failed"},
 		{"投影意图待发", vetf.ErrProjectionHandoffPending, "dispatch.publish_failed"},

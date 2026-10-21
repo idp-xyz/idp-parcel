@@ -71,6 +71,7 @@ func TestADepartureRecordedBeforeItsSegmentReachesTrackingOnceTheHandoverEstabli
 
 // Covers: AT-VE-181 派发半边——补派生两路的失败分格：控制事实读不回、对象的段读不动、按段列事实读不动、派生编排未决落
 // dispatch.consumer_undecided，其余保持 dispatch.publish_failed。名单取各路的哨兵变量本身，理由同移动事实那一份。
+// Covers: AT-VE-198 派发半边（补派生两路）——集运成员读不动落未决，答复不一致保持发布失败。
 func TestMovementFactBackfillFailuresLandInTheRightPartition(t *testing.T) {
 	type failure struct {
 		name     string
@@ -81,7 +82,9 @@ func TestMovementFactBackfillFailuresLandInTheRightPartition(t *testing.T) {
 		{"对象的段读不动", vetf.ErrObjectSegmentsNotVisible, "dispatch.consumer_undecided"},
 		{"按段列事实读不动", vetf.ErrMovementFactsOfSegmentNotVisible, "dispatch.consumer_undecided"},
 		{"派生编排未决", vetf.ErrProjectionUndecided, "dispatch.consumer_undecided"},
+		{"集运成员读不动", vetf.ErrConsolidationMembershipNotVisible, "dispatch.consumer_undecided"},
 		{"段册或事实不变量已破", vetf.ErrMovementFactRecordInconsistent, "dispatch.publish_failed"},
+		{"集运成员答复不一致", vetf.ErrConsolidationMembershipInconsistent, "dispatch.publish_failed"},
 		{"事实引用译不出", vetf.ErrMovementFactUntranslatableAnswer, "dispatch.publish_failed"},
 		{"投影意图待发", vetf.ErrProjectionHandoffPending, "dispatch.publish_failed"},
 		{"投影封闭集合外", veconsume.ErrUnexpectedProjectionOutcome, "dispatch.publish_failed"},
@@ -163,6 +166,12 @@ func TestADepartureRecordedBeforeItsSegmentReachesTrackingOnceAPickupEstablishes
 // 在出发前一小时交进出发声明的那一段，段由这一次交接立起。交回交接信封的事件 ID。
 func registerHandoverIntoMovementSegment(t *testing.T, fixture *synVerticalFixture) string {
 	t.Helper()
+	return registerHandoverOfObjectIntoMovementSegment(t, fixture, movementParcelOnBoard)
+}
+
+// registerHandoverOfObjectIntoMovementSegment 同 registerHandoverIntoMovementSegment，交进段的是 object。
+func registerHandoverOfObjectIntoMovementSegment(t *testing.T, fixture *synVerticalFixture, object string) string {
+	t.Helper()
 	store, err := outbox.NewStore(fixture.db)
 	if err != nil {
 		t.Fatalf("构造 Outbox Store：%v", err)
@@ -171,7 +180,7 @@ func registerHandoverIntoMovementSegment(t *testing.T, fixture *synVerticalFixtu
 	tenant := mustTF(t, tfdomain.NewTenantID, fixture.identity.TenantID().String())
 	command := tfapplication.RegisterTransportHandoverCommand{
 		TenantID:          tenant,
-		Object:            movementParcelOnBoard,
+		Object:            object,
 		Scope:             backfillScope,
 		ReleasedBy:        "SYN-NODE-SHA-HUB",
 		ReceivedBy:        "SYN-OWN-FLEET",
@@ -192,7 +201,7 @@ func registerHandoverIntoMovementSegment(t *testing.T, fixture *synVerticalFixtu
 	if result.Outcome() != tfapplication.HandoverRegistered || result.SegmentContinuationReference() != "" {
 		t.Fatalf("登记交接：outcome=%s debt=%q", result.Outcome(), result.SegmentContinuationReference())
 	}
-	return tenant.String() + "/" + movementParcelOnBoard + "/" + backfillScope + "/" + backfillVersion
+	return tenant.String() + "/" + object + "/" + backfillScope + "/" + backfillVersion
 }
 
 // registerPickupIntoMovementSegment 经生产登记编排（真揽收登记册、真段册、真版本签发、真 outbox 交出）登一次场外揽收：在控那一件
