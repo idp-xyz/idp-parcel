@@ -44,11 +44,11 @@ none
 
 ### 做了什么
 
-- **决定**：[ADR-0224](../../../docs/adr/0224-tracking-backfills-movement-facts-recorded-before-their-segment-when-a-control-fact-puts-the-object-in-it.md)（`5b46613f`）。回答 ADR-0205 文末补记越权风险点 14；ADR-0205 只在 Status 行与 Links 加前向指针，不停用任何条款。
-- **TF 只读口**（`54fcafac`、`b588226a`）：ports `MovementFactsOfSegment.FindBySegment`，postgres 实现与按键取共用一份行装回（`movementFactRow`）；迁移 `0044` 加 `(tenant_id, segment_ref, fact_ref, recorded_at, version) WHERE segment_ref IS NOT NULL` 部分索引。领域加 `FulfillmentParticipation.EnteredByPickup`，揽收入场依据的拼写收进 `pickupParticipationBasis` 一处。
-- **VE 补派生**（`b61da14e`、`63658eb8`）：`BackfillMovementFactsAdapter` 一个处理方接交接与对象级揽收两类信封。交接只认转出控制的那一版；只看这一次控制事实让对象进的那一段（`EnteredByHandover` / `EnteredByPickup`），认到即停；按段列事实，事实发生那一刻对象在控（`ObjectsUnderControlAt`）的逐版补派生。派生与移动事实那一路共用 `deriveMovementFactOnto`，同一把幂等键；只补投影，不补信号、不重问关务。交接与揽收的回读核对各抽成一处（`findRegisteredHandover`、`findRegisteredPickup`），与同一封信上的投影共用。两个新消费门各记一本账。
-- **派发**（`dfa125bf`、`408f373f`）：新文件 `routes_movement_fact_backfill.go` 与 `assemble_movement_fact_backfill.go`，交接与揽收信封的扇出各加一路，名次 `positionProjection + 10`，各带自己的未决哨兵名单。没改 `routes.go`、`assemble.go` 等共享文件。
-- **用例与盘点**（`5b46613f`）：UC-VE-002 新立 `AT-VE-178`–`182`；UC-TF-005 新立 `AT-TF-273`–`274`，`AT-TF-159` 加指向补派生的一句。AT 盘点只加行与追记，「总览」计数不改。`AT-TF-275`–`277` 没用到。
+- **决定**：[ADR-0224](../../../docs/adr/0224-tracking-backfills-movement-facts-recorded-before-their-segment-when-a-control-fact-puts-the-object-in-it.md)（`9075df35`，评审修订 `e17009e4`）。回答 ADR-0205 文末补记越权风险点 14；ADR-0205 只在 Status 行与 Links 加前向指针，不停用任何条款。
+- **TF 只读口**（`54fcafac`、`b588226a`、`059b8218`）：ports `MovementFactsOfSegment.FindBySegment`，postgres 实现与按键取共用一份行装回（`movementFactRow`）；迁移 `0044` 加 `(tenant_id, segment_ref, fact_ref, recorded_at, version) WHERE segment_ref IS NOT NULL` 部分索引。领域加 `FulfillmentParticipation.EnteredByPickup`，揽收入场依据的拼写收进 `pickupParticipationBasis` 一处。
+- **VE 补派生**（`b61da14e`、`904a32ea`、`47931cfb`）：`BackfillMovementFactsAdapter` 一个处理方接交接与对象级揽收两类信封。交接只认转出控制的那一版；只看这一次控制事实让对象进的那一段（`EnteredByHandover` / `EnteredByPickup`），认到即停；按段列事实，事实发生那一刻对象在控（`ObjectsUnderControlAt`）的逐版补派生。派生与移动事实那一路共用 `deriveMovementFactOnto`，同一把幂等键；只补投影，不补信号、不重问关务。交接与揽收的回读核对各抽成一处（`findRegisteredHandover`、`findRegisteredPickup`），与同一封信上的投影共用。两个新消费门各记一本账。
+- **派发**（`dfa125bf`、`904a32ea`、`cc9a95df`）：新文件 `routes_movement_fact_backfill.go` 与 `assemble_movement_fact_backfill.go`，交接与揽收信封的扇出各加一路，名次 `positionProjection + 10`，各带自己的未决哨兵名单。没改 `routes.go`、`assemble.go` 等共享文件。
+- **用例与盘点**（`9075df35`）：UC-VE-002 新立 `AT-VE-178`–`182`；UC-TF-005 新立 `AT-TF-273`–`274`，`AT-TF-159` 加指向补派生的一句。AT 盘点只加行与追记，「总览」计数不改。`AT-TF-275`–`277` 没用到。
 - **后继票**：[120](./120-movement-facts-before-a-pickup-attempt-or-carrier-segment-are-not-backfilled.md)（揽收执行口与承运商段）、[121](./121-departures-recorded-before-their-segment-are-never-re-asked-at-the-gate.md)（先于段的出发不补问门禁）。票 [114](./114-deterministic-failures-answered-as-retryable-undecided-across-consumers.md) 加了一段，点名本票新开的几处未决包装。
 - 演示种子不改：参考映射里早有 `movement-departure → DEPARTED`。NO 地盘（`internal/nodeoperations/**` 等）没碰。
 
@@ -77,11 +77,11 @@ none
 5. **每次控制事实多读段与事实**（运维）。要读整段连同全部参与；按段列事实不分页。
 6. **只补控制事实那一件**（VE owner）。凭存量迁移、手工直写段册进段的对象不补。
 7. **次序靠登记时刻**（VE owner）。时钟回拨时中间多一版投影，结论不变。
-8. **确定性坏行记成未决、反复重投**（运维）。票 114 已点名这几处。
+8. **补派生停住时挡同一分区后面的信封，坏行还会跨对象波及**（TF、VE owner、运维）。交接与揽收信封按（租户、对象、口名段）分区、只交队头；补派生停在未决或响亮失败，同一对象后面的交接与揽收信封（含派送发起、节点控制转出、来源采用）都排队等，直到烧完失败预算。按段列出的坏行会挡住每件进那一段的对象。坏行已与读不动分开（归不变量已破）；段行装不回仍记未决，票 114；队头阻塞本身去处票 89。
 
 ### 评审意见的处置（另一协调会话隔离评审，看的是约 20:45 的未提交树）
 
-- 阻断 1（只挂交接）：补上对象级场外揽收那一路（`b588226a`、`63658eb8`、`408f373f`）。揽收执行口没有对象级信封，承运商段判为不适用，两者归票 120；本票就这两类段而言是部分修复。
+- 阻断 1（只挂交接）：补上对象级场外揽收那一路（`b588226a`、`904a32ea`）。揽收执行口没有对象级信封，承运商段判为不适用，两者归票 120；本票就这两类段而言是部分修复。
 - 阻断 2（文档写全）：ADR-0224、本记录、UC 行与 AT-TF-159 指针都已落。进段欠账记为越权风险点 1，补出的出发不带门禁读数记为越权风险点 3 与票 121。
 - 建议 3（生产路由真库用例与失败分区）：真库用例在 `cmd/parcel-dispatch/movement_fact_backfill_test.go`，交接、揽收各一条。失败分区用例两路各跑：未决哨兵进 `consumer_undecided`，`ErrMovementFactRecordInconsistent` 等进 `publish_failed`。
 - 建议 4（坏行被包成未决）：本票不修，票 114 已加一段。
@@ -104,5 +104,24 @@ none
 ### 验证
 
 - `go build ./...`、`go vet ./...`、`gofmt -l` 干净；`go test ./tools/...` 绿。
-- `scripts/test-full.sh` 跑了本票动过的包及其反向依赖（含测试导入），连同 `./internal/architecture/...`、`./migrations/...`：`./cmd/parcel-api/`、`./cmd/parcel-dispatch/`、`./cmd/parcel-transport-register/`、`./internal/transportfulfillment/...`、`./internal/visibilityexception/...`，以及 NR、NO、PP、PS、SA 各自的 `adapters/transportfulfillment`。36 个包全绿：首轮在 `dfa125bf` 的树上，二轮在补揽收之后的树上，代码等于 `408f373f`。
+- `scripts/test-full.sh` 跑了本票动过的包及其反向依赖（含测试导入），连同 `./internal/architecture/...`、`./migrations/...`：`./cmd/parcel-api/`、`./cmd/parcel-dispatch/`、`./cmd/parcel-transport-register/`、`./internal/transportfulfillment/...`、`./internal/visibilityexception/...`，以及 NR、NO、PP、PS、SA 各自的 `adapters/transportfulfillment`。36 个包全绿：首轮在 `dfa125bf` 的树上，二轮在补揽收之后的树上（代码等于 `904a32ea`）。评审修订后的第三轮见下节「评审记录」。
 - 没跑全量；ADR 索引、机制清点与 AT 计数没有重生成。`tools/adr-index -check` 因 ADR 索引没重生成而不一致，这是预期，进 main 时由推送方重生成。
+
+## 评审记录（2026-10-20，隔离评审第二轮：无阻断项，逐条去向）
+
+- **N1 分区队头阻塞与跨对象波及**：ADR-0224 越权风险点 8 改写，写法照 ADR-0218 越权风险点 8，去处票 89。可选的代码修法也做了（`059b8218`、`47931cfb`）：`FindBySegment` 把行重建失败包成 `ports.ErrMovementFactRecordUnreadable`，补派生归 `ErrMovementFactRecordInconsistent`，不进未决名单；用例补在 `movement_fact_segment_lookup_test.go`（AT-TF-274）与 `backfill_movement_facts_test.go`（AT-VE-181）。既有段册那两问的坏行仍记未决，票 114 那一段改成只点名它们。
+- **N2「取不回」两义**：报错那一格改说「按键读不动」，`!found` 那一格改说「按键却答没有」。改在 UC-VE-002 `AT-VE-181`、ADR-0224 决定六、`ErrObjectSegmentsNotVisible` 与 `ErrMovementFactRecordInconsistent` 的注释、路由文件的哨兵头注；测试用例名同改。
+- **N3 迁移 0044 注释**：改成「凭交接或场外揽收进段时」（`059b8218`），赶在进 main、校验和锁死之前。
+- **N4 单笔编不过**：从 `b588226a` 起新建临时分支，`cherry-pick -n` 把 `63658eb8`、`408f373f` 合成一笔 `904a32ea`，再依次 cherry-pick 后面的提交，最后把 `claude-dcg53` 指过去；新旧两棵树逐字相同。分支上每一笔都单独跑过 `go build ./...` 与 `go vet ./...`，全过。旧 SHA `63658eb8`、`408f373f`、`5b46613f`、`e8f401a5` 不在分支上了；本票上文的引用已改成新 SHA（`904a32ea`、`9075df35`）。
+- **N5 段次序**：`backfillEntered` 的注释改成「次序只影响读几段，不影响认到的是哪一段」，不再依赖端口没承诺的次序。
+- **N6 头注**：
+  - `routes_offsite_pickup.go` 与 `routes_transport_handover.go` 都不再枚举登在别处的路，只说本文件登了哪几路、先后看 position。后者同病（漏了补派生那一路），一并改了。
+  - `routes_movement_fact_backfill.go` 改成「不挡在主业务各路后面」。
+  - `BackfillMovementFactsAdapter` 的注释补上后续对象加入既有段那一种。
+  - 派发测试头注补上揽收用例与失败分区。
+- **N7 不自愈**：ADR-0224 Consequences 加一条：上线前已丢的出发不会自愈，新 inbox 只对上线之后交出的信封生效；存量要补得另做按段回扫，本记录不做。
+- **未采纳**：无。
+
+第三轮验证（树等于 `e17009e4`）：
+- `go build ./...`、`go vet ./...`、`gofmt -l` 干净。
+- `scripts/test-full.sh` 跑了本票触及的包及其反向依赖（含 `cmd/parcel-dispatch`、`cmd/parcel-api`、`cmd/parcel-transport-register`），连同 `./internal/architecture/...`、`./migrations/...`、`./tools/...`，39 个包全绿。
