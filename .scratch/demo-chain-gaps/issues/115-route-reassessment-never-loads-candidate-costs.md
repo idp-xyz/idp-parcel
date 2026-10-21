@@ -107,7 +107,7 @@ routing-first-cut/10（候选成本取数侧）、demo-chain-gaps/105（计划�
 - code/53 可达性的取证：在 `reassessBothLanesFixture` 上临时写一条用例，声明自动改路、阈值 0，取数侧给两条候选 4200 与 3100，原计划 4200、交进新加坡枢纽、冻结未越过。投递答 `REASSESS_STORE_UNAVAILABLE` 未决，即复核册 CHECK 拒落改善改路那一行。用例跑完即删，没有提交。
 - 没有迁移；演示种子没改，所以没在一次性库上重灌（种子只登数据，本票不改种子，也不改登记口）。没跑全量，没重生成 MECHANISM-INVENTORY、ADR 索引与 AT 计数。
 
-## 评审记录（2026-10-21，隔离评审一轮，修订在分支 `claude-dcg115`，已 rebase 到 main `01babbc1b`）
+## 评审记录（2026-10-21，隔离评审一轮，修订在分支 `claude-dcg115`，已 rebase 到 main `79a70dbba`）
 
 阻断 1 项（披露与文档，没有代码错误），建议合入前修 4 项，顺手 3 项，都已办。code/53 分级按协调方裁定改。完成记录里相应各条已就地改成修订后的口径。
 
@@ -132,7 +132,7 @@ routing-first-cut/10（候选成本取数侧）、demo-chain-gaps/105（计划�
 
 Status 改为 R1，加上线闸门：code/53 落地之前，任何租户不得在路由策略版本里声明自动改路。依据是评审结论：本票落地后声明了自动改路的租户会撞上，没有绕法，还会拖垮同一封信封上的其他路径；本票只是缩小了失败面，不是回归。
 
-### 验证（修订后，rebase 到 `01babbc1b` 之后）
+### 验证（修订后，rebase 到 `01babbc1b` 之后跑；随后再 rebase 到 `79a70dbba`，其间 main 只改文档、没有 Go 改动，`go build ./...` 复核干净）
 
 - `go build ./...`、`go vet ./...` 干净；本分支相对 main 改动的 Go 文件 `gofmt -l` 为空。
 - `TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh`，跑同一组包：`./internal/networkrouting/...`、`./cmd/parcel-dispatch/`、`./cmd/parcel-api/`、`./cmd/parcel-network-register/`、`./internal/parcelshipment/adapters/networkrouting/...`、`./internal/transportfulfillment/adapters/networkrouting/...`、`./internal/visibilityexception/adapters/networkrouting/...`、`./internal/architecture/...`、`./migrations/...`。结果 21 ok、0 FAIL。
