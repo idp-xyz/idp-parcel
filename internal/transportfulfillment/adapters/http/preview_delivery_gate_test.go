@@ -32,9 +32,10 @@ func (double previewDeliverySegments) FindByKey(context.Context, ports.Fulfillme
 	return double.record, true, nil
 }
 
-type previewDeliveryHandovers struct{ handovers []domain.TransportHandover }
+// entryHandoversStub 是交接登记册找进段交接那一问的替身：不按对象与版本筛，照给定的那几版交回，哪一版是进段那一次由领域认。
+type entryHandoversStub struct{ handovers []domain.TransportHandover }
 
-func (double previewDeliveryHandovers) FindHandedOverByVersion(
+func (double entryHandoversStub) FindHandedOverByVersion(
 	context.Context, domain.TenantID, domain.CarriedObjectReference, domain.HandoverResultVersion,
 ) ([]domain.TransportHandover, error) {
 	return double.handovers, nil
@@ -89,7 +90,7 @@ func previewDeliveryHandler(t *testing.T, answer domain.GateAnswer) *application
 			Key:     ports.FulfillmentSegmentKey{TenantID: spec.TenantID, Segment: segmentRef},
 			Segment: segment,
 		}},
-		Handovers: previewDeliveryHandovers{handovers: []domain.TransportHandover{handover}},
+		Handovers: entryHandoversStub{handovers: []domain.TransportHandover{handover}},
 		Customs:   previewDeliveryCustoms{answer: answer},
 	})
 	if err != nil {

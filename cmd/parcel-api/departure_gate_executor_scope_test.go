@@ -6,6 +6,10 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
+	tfapp "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
+	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
 // 本文件对真实 PostgreSQL 证出发门禁读数回给执行方的那一格（ADR-0237；票 demo-chain-gaps/146）：出发前问询与出发两口经生产装配
@@ -163,5 +167,109 @@ func TestADepartureThatPassesShowsTheExecutorNoObjectsButRecordsThemAll(t *testi
 	}
 	if got := line.recordedObjects("SYN-MOVE-146-CLEAN"); !slices.Equal(got, []string{"SYN-PARCEL-146-CLEAN"}) {
 		t.Fatalf("库面逐对象那几格 = %v，want 照旧记着那一件", got)
+	}
+}
+
+// registerSeededSchedule 照演示种子原样登一份周期安排，并按运行日期显式登那一班——与 newDepartureLine 登上海→深圳那一班同一套
+// 登记用例。
+func (line *previewLine) registerSeededSchedule(templateFile, runningDate string) {
+	line.t.Helper()
+	t := line.t
+	schedules, err := buildTransportScheduleRegistration(line.db)
+	if err != nil {
+		t.Fatalf("装配班次登记：%v", err)
+	}
+	var template struct {
+		TenantID string `json:"tenantId"`
+		tfhttp.ScheduleTemplateRegistrationPayload
+	}
+	if err := json.Unmarshal(demoSeed(t, "transport", templateFile), &template); err != nil {
+		t.Fatalf("读周期安排种子 %s：%v", templateFile, err)
+	}
+	tenant := mustValue(t, tfdomain.NewTenantID, template.TenantID)
+	templateCommand, err := template.ScheduleTemplateRegistrationPayload.Command(tenant)
+	if err != nil {
+		t.Fatalf("译周期安排：%v", err)
+	}
+	if result, err := schedules.RegisterTemplate(t.Context(), templateCommand); err != nil || result.Outcome() != tfapp.ScheduleTemplateRegistered {
+		t.Fatalf("登周期安排：%s / %v", result.Outcome(), err)
+	}
+	scheduleCommand, err := tfhttp.TransportScheduleRegistrationPayload{Template: template.Template, RunningDate: runningDate}.Command(tenant)
+	if err != nil {
+		t.Fatalf("译班次：%v", err)
+	}
+	if result, err := schedules.RegisterSchedule(t.Context(), scheduleCommand); err != nil || result.Outcome() != tfapp.TransportScheduleRegistered {
+		t.Fatalf("登班次：%s / %v", result.Outcome(), err)
+	}
+}
+
+// askOn 以演示场外设备的出示，按指定班次问一段出发前那一问。
+func (line *previewLine) askOn(schedule, segment string) string {
+	line.t.Helper()
+	response := line.post(line.preview, "/transport-fulfillment/departure-gate-previews", "SYN-OFFSITE-01",
+		`{"schedule":"`+schedule+`","segment":"`+segment+`","departsAt":"2026-10-21T22:05:00+08:00"}`)
+	if response.Code != http.StatusOK {
+		line.t.Fatalf("问询 HTTP %d %s", response.Code, response.Body.String())
+	}
+	return response.Body.String()
+}
+
+// Covers: AT-TF-114、AT-TF-319 真库（ADR-0237 决定五，证据 S）——评审 PoC 的那一格：演示动线上一段境内的上海→深圳自营段装着两个客户
+// 的包裹，都不在任何关务案卷里。设备按本班问，答不受门禁、一件不列。设备改配演示种子里一班深圳→新加坡的跨区班次去问同一段：读数
+// 停在本侧「班次不服务该段」、答未决，一件不列，整库一张表都不变——连关务都没被问到，于是它也问不出「段里每件跨区无案、都未决」那
+// 一份全列的读数。照这么配登出发，出发照样 201 落册，读数同样停在本侧、库面没有逐对象那一格。另一段的交接没声明交出与去向节点：
+// 读数停在「段的进段节点说不出」，同样一件不列、不问关务。
+func TestPairingASegmentWithAnotherSchedulesDirectionNoLongerWidensTheReading(t *testing.T) {
+	line := newPreviewLine(t)
+	line.registerSeededSchedule("02-schedule-template-szx-sin.json", "2026-10-21")
+	const (
+		segment     = "SYN-SEG-146-DOMESTIC"
+		crossZone   = "SYN-SCHED-SZX-SIN-DAILY/2026-10-21"
+		customerA   = "SYN-PARCEL-146-POC-CUST-A"
+		customerB   = "SYN-PARCEL-146-POC-CUST-B"
+		undeclared  = "SYN-SEG-146-UNDECLARED"
+		undeclaredP = "SYN-PARCEL-146-POC-UNDECLARED"
+	)
+	line.handOver(segment, customerA)
+	line.handOver(segment, customerB)
+	line.handOverDeclaring(undeclared, undeclaredP, "", "")
+
+	honest := line.askOn(departureLineSchedule, segment)
+	if !strings.Contains(honest, `"answer":"NOT_GUARDED"`) || strings.Contains(honest, "SYN-PARCEL-146-POC") {
+		t.Fatalf("按本班问 = %s，want 不受门禁、一件不列", honest)
+	}
+
+	before := line.snapshot()
+	probe := line.askOn(crossZone, segment)
+	var answer struct {
+		GateReading executorScopeWire `json:"gateReading"`
+	}
+	if err := json.Unmarshal([]byte(probe), &answer); err != nil {
+		t.Fatalf("decode %s：%v", probe, err)
+	}
+	if answer.GateReading.Answer != "UNDECIDED" || answer.GateReading.From != "SYN-NODE-SZX-GATE" ||
+		!strings.Contains(probe, `"stops":["SCHEDULE_NOT_SERVING_SEGMENT"]`) || len(answer.GateReading.Objects) != 0 ||
+		strings.Contains(probe, "SYN-PARCEL-146-POC") {
+		t.Fatalf("改配跨区班次问同一段 = %s，want 停在本侧、一件不列", probe)
+	}
+	if changed := changedSince(before, line.snapshot()); len(changed) != 0 {
+		t.Fatalf("改配班次的问询改了 %v，want 连关务都没问到", changed)
+	}
+
+	departed := line.post(line.movement, "/transport-fulfillment/movement-facts", "SYN-OFFSITE-01",
+		`{"fact":"SYN-MOVE-146-POC","schedule":"`+crossZone+`","kind":"DEPARTURE","location":"SYN-NODE-SHA-HUB",`+
+			`"version":"v1","occurredAt":"2026-10-21T22:05:00+08:00","segment":"`+segment+`"}`)
+	if departed.Code != http.StatusCreated || gateReadingBytes(t, departed) != gateReadingBytes(t, line.post(line.preview,
+		"/transport-fulfillment/departure-gate-previews", "SYN-OFFSITE-01",
+		`{"schedule":"`+crossZone+`","segment":"`+segment+`","departsAt":"2026-10-21T22:05:00+08:00"}`)) {
+		t.Fatalf("照这么配登出发 = %d %s，want 201、读数与问询同停在本侧", departed.Code, departed.Body.String())
+	}
+	if recorded := line.recordedObjects("SYN-MOVE-146-POC"); len(recorded) != 0 {
+		t.Fatalf("落册的读数有逐对象那几格 %v，want 停在本侧", recorded)
+	}
+
+	stopped := line.askOn(departureLineSchedule, undeclared)
+	if !strings.Contains(stopped, `"stops":["SEGMENT_ENTRY_NODES_UNKNOWN"]`) || strings.Contains(stopped, undeclaredP) {
+		t.Fatalf("交接没声明节点的段 = %s，want 停在本侧、一件不列", stopped)
 	}
 }

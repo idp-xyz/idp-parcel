@@ -131,6 +131,7 @@ func movementGateReader(t *testing.T, customs *movementCustomsDouble) *applicati
 }
 
 // movementGateReaderOver 同 movementGateReader，集运成员关系由调用方给：段里在控的那一件是 parcel-1，单元与否看 memberships。
+// parcel-1 凭一次声明了 NODE-SHA → NODE-SZX 的`已交接`进段，与班次方向相同（ADR-0237 决定五）。
 func movementGateReaderOver(
 	t *testing.T,
 	customs *movementCustomsDouble,
@@ -138,16 +139,27 @@ func movementGateReaderOver(
 ) *application.DepartureGateReader {
 	t.Helper()
 	tenant := httpValue(t, domain.NewTenantID, "tenant-1")
-	segment, err := domain.RehydrateActualFulfillmentSegment(domain.RehydrateActualFulfillmentSegmentSpec{
-		TenantID: tenant,
-		Segment:  httpValue(t, domain.NewFulfillmentSegmentReference, "segment-1"),
-		Participations: []domain.RehydrateParticipationSpec{{
-			Object:     httpValue(t, domain.NewCarriedObjectReference, "parcel-1"),
-			EntryKind:  domain.EnteredByTransportHandover,
-			EntryBasis: httpValue(t, domain.NewParticipationBasisReference, "HO/parcel-1"),
-			EnteredAt:  time.Date(2026, 9, 5, 9, 0, 0, 0, time.UTC),
-		}},
-	})
+	entry := domain.TransportHandoverSpec{
+		TenantID:          tenant,
+		Object:            httpValue(t, domain.NewCarriedObjectReference, "parcel-1"),
+		Scope:             httpValue(t, domain.NewHandoverScopeReference, "handover-scope-sha"),
+		ReleasedBy:        httpValue(t, domain.NewHandoverPartyReference, "party-sha-hub"),
+		ReceivedBy:        httpValue(t, domain.NewHandoverPartyReference, "party-own-linehaul"),
+		Verdict:           domain.ObjectHandedOver,
+		ReleasingEvidence: httpValue(t, domain.NewHandoverEvidenceReference, "evidence-release-1"),
+		ReceivingEvidence: httpValue(t, domain.NewHandoverEvidenceReference, "evidence-receive-1"),
+		Rule:              httpValue(t, domain.NewHandoverRuleReference, "handover-rule/v1"),
+		Version:           httpValue(t, domain.NewHandoverResultVersion, "handover-result/parcel-1/v1"),
+		JudgedAt:          time.Date(2026, 9, 5, 9, 0, 0, 0, time.UTC),
+	}
+	entry.Nodes.Releasing = httpValue(t, domain.NewNetworkNodeReference, "NODE-SHA")
+	entry.Nodes.Onward = httpValue(t, domain.NewNetworkNodeReference, "NODE-SZX")
+	handover, err := domain.FormTransportHandover(entry)
+	if err != nil {
+		t.Fatalf("交接：%v", err)
+	}
+	segment, err := domain.EstablishSegmentWithHandover(httpValue(t, domain.NewFulfillmentSegmentReference, "segment-1"), handover,
+		domain.PlannedSegmentReference{})
 	if err != nil {
 		t.Fatalf("立段：%v", err)
 	}
@@ -169,6 +181,7 @@ func movementGateReaderOver(
 	reader, err := application.NewDepartureGateReader(application.DepartureGateReadDeps{
 		Segments:  movementSegmentsDouble{segment: segment},
 		Schedules: movementSchedulesDouble{schedule: schedule},
+		Handovers: entryHandoversStub{handovers: []domain.TransportHandover{handover}},
 		Members:   memberships,
 		Customs:   customs,
 	})

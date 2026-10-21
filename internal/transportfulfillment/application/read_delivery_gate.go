@@ -20,7 +20,7 @@ var errDeliveryGateViewMisanswered = errors.New("transport fulfillment: the deli
 type DeliveryGateReadDeps struct {
 	Attempts  ports.DeliveryAttemptView
 	Segments  ports.DeliveryGateSegmentView
-	Handovers ports.DeliveryGateEntryHandoverView
+	Handovers ports.EntryHandoverView
 	Customs   ports.DeliveryGateView
 }
 
@@ -157,30 +157,16 @@ func (reader *DeliveryGateReader) deliveryNode(
 		// 两问之间参与刚被结束或替代：此刻已不在场，按「此刻不在任何段里」答，不拿刚离场的那一段顶。
 		return none, domain.DeliveryNoActiveSegment, nil
 	}
-	switch participation.EntryKind() {
-	case domain.EnteredByOffsitePickup, domain.EnteredByCarrierFirstEffectivePickup:
+	entry, recognised := entryHandoverOf(ctx, reader.deps.Handovers, tenant, participation)
+	switch recognised {
+	case entryByPickup:
 		return none, domain.DeliveryEnteredByPickup, nil
-	}
-	version, named := participation.EntryHandoverVersion()
-	if !named {
+	case entryHandoverNotOnRegister:
 		return none, domain.DeliveryEntryHandoverNotOnRegister, nil
-	}
-	handovers, err := reader.deps.Handovers.FindHandedOverByVersion(ctx, tenant, object, version)
-	if err != nil {
-		return none, domain.DeliveryHandoverRegistryUnavailable, nil
-	}
-	var entry domain.TransportHandover
-	matched := 0
-	for _, handover := range handovers {
-		if participation.EnteredByHandover(handover) {
-			entry, matched = handover, matched+1
-		}
-	}
-	switch {
-	case matched == 0:
-		return none, domain.DeliveryEntryHandoverNotOnRegister, nil
-	case matched > 1:
+	case entryHandoverAmbiguous:
 		return none, domain.DeliveryEntryHandoverAmbiguous, nil
+	case entryHandoverUnreadable:
+		return none, domain.DeliveryHandoverRegistryUnavailable, nil
 	}
 	node, declared := entry.ReleasingNode()
 	if !declared {

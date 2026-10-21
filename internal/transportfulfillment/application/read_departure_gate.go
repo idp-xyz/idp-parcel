@@ -32,11 +32,12 @@ var (
 	errConsolidationMemberMisshaped = errors.New("transport fulfillment: the consolidation membership view answered a member of no known kind")
 )
 
-// DepartureGateReadDeps 是出发门禁读数要问的四口：本上下文自己的段册与班次册、node-operations 的集运成员关系，以及关务的动作
-// 准入判断。
+// DepartureGateReadDeps 是出发门禁读数要问的几口：本上下文自己的段册、班次册与交接册（核班次是不是载着这一段），node-operations
+// 的集运成员关系，以及关务的动作准入判断。
 type DepartureGateReadDeps struct {
 	Segments  ports.DepartureSegmentView
 	Schedules ports.TransportScheduleReader
+	Handovers ports.EntryHandoverView
 	Members   ports.ConsolidationMembershipView
 	Customs   ports.DepartureGateView
 }
@@ -52,8 +53,8 @@ type DepartureGateReader struct {
 
 // NewDepartureGateReader 构造期拒缺件：漏装的一口到第一条出发才暴露，会被记成一格读不动，把装配缺陷演成依赖故障。
 func NewDepartureGateReader(deps DepartureGateReadDeps) (*DepartureGateReader, error) {
-	if deps.Segments == nil || deps.Schedules == nil || deps.Members == nil || deps.Customs == nil {
-		return nil, errors.New("transport fulfillment: the departure gate reader needs the segment view, the schedule reader, the consolidation membership view and the customs view")
+	if deps.Segments == nil || deps.Schedules == nil || deps.Handovers == nil || deps.Members == nil || deps.Customs == nil {
+		return nil, errors.New("transport fulfillment: the departure gate reader needs the segment view, the schedule reader, the entry handover view, the consolidation membership view and the customs view")
 	}
 	return &DepartureGateReader{deps: deps}, nil
 }
@@ -120,12 +121,13 @@ func gateReferencesFrom(
 	return scheduleRef, segmentRef, true
 }
 
-// readIntent 先在本上下文这一侧找齐问关务要的东西：段里出发那一刻在控的对象、班次的方向。缺哪样就停在哪样、不问关务——
-// 没有对象就没有可问的，没有方向就说不出「自哪到哪」。找齐了才逐对象问（集运单元按成员展开，见 departureGateExpansion）；
-// 某一件读不动不停下，其余照问，每件各记一格。error 只留给读数自己拼不出来（实现坏了）。
+// readIntent 先在本上下文这一侧找齐问关务要的东西：段里出发那一刻在控的对象、班次的方向，以及这一班确是载着这一段的
+// （entryStops）。缺哪样就停在哪样、不问关务——没有对象就没有可问的，没有方向就说不出「自哪到哪」，方向不是这一段的就是在替
+// 别的一车问。找齐了才逐对象问（集运单元按成员展开，见 departureGateExpansion）；某一件读不动不停下，其余照问，每件各记一格。
+// error 只留给读数自己拼不出来（实现坏了）。
 func (reader *DepartureGateReader) readIntent(ctx context.Context, intent departureGateIntent) (domain.DepartureGateReading, error) {
 	var stops []domain.DepartureGateStop
-	var objects []domain.CarriedObjectReference
+	var inControl []domain.FulfillmentParticipation
 	if intent.segment == (domain.FulfillmentSegmentReference{}) {
 		stops = append(stops, domain.DepartureSegmentNotDeclared)
 	} else {
@@ -136,7 +138,7 @@ func (reader *DepartureGateReader) readIntent(ctx context.Context, intent depart
 		case !found:
 			stops = append(stops, domain.DepartureSegmentNotRegistered)
 		default:
-			if objects = record.Segment.ObjectsUnderControlAt(intent.at); len(objects) == 0 {
+			if inControl = record.Segment.ParticipationsUnderControlAt(intent.at); len(inControl) == 0 {
 				stops = append(stops, domain.DepartureNoObjectUnderControl)
 			}
 		}
@@ -161,6 +163,9 @@ func (reader *DepartureGateReader) readIntent(ctx context.Context, intent depart
 	if len(stops) > 0 {
 		return domain.FormDepartureGateReading(reading)
 	}
+	if reading.Stops = reader.entryStops(ctx, intent.tenant, direction, inControl); len(reading.Stops) > 0 {
+		return domain.FormDepartureGateReading(reading)
+	}
 
 	expansion := departureGateExpansion{
 		reader: reader,
@@ -170,8 +175,8 @@ func (reader *DepartureGateReader) readIntent(ctx context.Context, intent depart
 		cells:  map[domain.CarriedObjectReference]domain.GateFinding{},
 		onPath: map[domain.CarriedObjectReference]bool{},
 	}
-	for _, object := range objects {
-		if _, err := expansion.object(ctx, object); err != nil {
+	for _, participation := range inControl {
+		if _, err := expansion.object(ctx, participation.Object()); err != nil {
 			return domain.DepartureGateReading{}, err
 		}
 	}
@@ -179,6 +184,30 @@ func (reader *DepartureGateReader) readIntent(ctx context.Context, intent depart
 		reading.Findings = append(reading.Findings, cell)
 	}
 	return domain.FormDepartureGateReading(reading)
+}
+
+// entryStops 认段里在控各件进段的那次`已交接`，交领域核班次的起讫是不是它们声明的交出、去向节点（domain.DepartureEntryStops）。
+// 交接册读不动时停在读不动、不核也不问关务：核不了就说不出这一班载的是不是这一段。
+func (reader *DepartureGateReader) entryStops(
+	ctx context.Context,
+	tenant domain.TenantID,
+	direction domain.ScheduleDirection,
+	inControl []domain.FulfillmentParticipation,
+) []domain.DepartureGateStop {
+	entries := make([]domain.TransportHandover, 0, len(inControl))
+	unresolved := false
+	for _, participation := range inControl {
+		entry, recognised := entryHandoverOf(ctx, reader.deps.Handovers, tenant, participation)
+		switch recognised {
+		case entryHandoverFound:
+			entries = append(entries, entry)
+		case entryHandoverUnreadable:
+			return []domain.DepartureGateStop{domain.DepartureHandoverRegistryUnavailable}
+		default:
+			unresolved = true
+		}
+	}
+	return domain.DepartureEntryStops(direction, entries, unresolved)
 }
 
 // departureGateExpansion 是一次读数里逐对象问的那一遍（ADR-0225）。段里在控的每一件先问 node-operations 是不是集运单元：不是就按

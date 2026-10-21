@@ -9,15 +9,15 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// 交付门禁读数在写事务之前读的两本册（ADR-0213 决定五）：段登记册答对象此刻在哪段、凭什么进的段，交接登记册答进段的
-// 那次交接声明了哪个交出节点。
+// 门禁读数在写事务之前读的两本册（ADR-0213 决定五、ADR-0237 决定五）：段登记册答对象此刻在哪段、凭什么进的段，交接登记册答
+// 进段的那次交接声明了哪些节点。
 var (
-	_ ports.DeliveryGateSegmentView       = (*FulfillmentSegments)(nil)
-	_ ports.DeliveryGateEntryHandoverView = (*TransportHandovers)(nil)
+	_ ports.DeliveryGateSegmentView = (*FulfillmentSegments)(nil)
+	_ ports.EntryHandoverView       = (*TransportHandovers)(nil)
 )
 
-// FindHandedOverByVersion 按（租户、对象、交接版本）交回`已交接`的各版，供交付门禁读数找对象进段的那次交接
-// （ports.DeliveryGateEntryHandoverView，ADR-0213 决定五）。
+// FindHandedOverByVersion 按（租户、对象、交接版本）交回`已交接`的各版，供门禁读数找对象进段的那次交接
+// （ports.EntryHandoverView）。
 //
 // 交接的键还有一维范围，ADR-0221 之前的存量入场依据却只带版本，所以这里按主键前缀（租户、对象）取、再按版本筛，可能不止
 // 一行：如实全交回，哪一版是进段那一次由领域认（FulfillmentParticipation.EnteredByHandover），在 SQL 里再按范围或业务时间

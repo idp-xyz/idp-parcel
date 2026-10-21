@@ -206,13 +206,21 @@ func demoSeed(t *testing.T, family, name string) []byte {
 	return raw
 }
 
-// handOver 在上海枢纽把一件交给自营干线，立段——演示动线上「用现有交接口立 SHA→SZX 自营段」那一步。
+// handOver 在上海枢纽把一件交给自营干线，立段——演示动线上「用现有交接口立 SHA→SZX 自营段」那一步。交接照演示动线声明交出节点
+// 上海枢纽、去向节点深圳口岸，正是演示班次的起讫：出发读数核这一对（ADR-0237 决定五）。
 func (line *departureLine) handOver(segment, object string) {
+	line.t.Helper()
+	line.handOverDeclaring(segment, object, "SYN-NODE-SHA-HUB", "SYN-NODE-SZX-GATE")
+}
+
+// handOverDeclaring 同 handOver，交出与去向节点由调用方给；空串即不声明那一格。
+func (line *departureLine) handOverDeclaring(segment, object, releasing, onward string) {
 	line.t.Helper()
 	command, err := tfhttp.HandoverRegistrationPayload{
 		Object: object, Scope: "SYN-SCOPE/sha-hub-dock", ReleasedBy: "SYN-PARTY/sha-hub", ReceivedBy: "SYN-PARTY/own-linehaul",
 		Verdict: "HANDED_OVER", ReleasingEvidence: "SYN-EVIDENCE/release-" + object, ReceivingEvidence: "SYN-EVIDENCE/receive-" + object,
 		Rule: "SYN-RULE/handover@v1", Version: "v1", JudgedAt: departureLineHandedOverAt.Format(time.RFC3339), Segment: segment,
+		ReleasingNode: releasing, OnwardNode: onward,
 	}.Command(mustValue(line.t, tfdomain.NewTenantID, departureLineTenant))
 	if err != nil {
 		line.t.Fatalf("译交接：%v", err)
@@ -530,9 +538,14 @@ func TestAReplayedDepartureDoesNotAskCustomsAgain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("班次册：%v", err)
 	}
+	handovers, err := tfpostgres.NewTransportHandovers(line.db)
+	if err != nil {
+		t.Fatalf("交接册：%v", err)
+	}
 	counting := &countingDepartureGate{inner: view}
 	if movement.gate, err = tfapp.NewDepartureGateReader(tfapp.DepartureGateReadDeps{
-		Segments: segments, Schedules: schedules, Members: wiredConsolidationMembership(t, line.db), Customs: counting,
+		Segments: segments, Schedules: schedules, Handovers: handovers, Members: wiredConsolidationMembership(t, line.db),
+		Customs: counting,
 	}); err != nil {
 		t.Fatalf("装读数编排：%v", err)
 	}

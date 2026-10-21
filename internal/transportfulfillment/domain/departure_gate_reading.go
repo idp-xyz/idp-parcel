@@ -51,23 +51,31 @@ const (
 	// DepartureRecordedBeforeGateReading 只出现在迁移前就已落册的出发上（迁移 0026 的存量回填）：那时没问过关务，
 	// 如实答未决而不是猜一格。新登记的出发不会停在这里，构造门拒它。
 	DepartureRecordedBeforeGateReading
+	// DepartureSegmentEntryNodesUnknown：出发那一刻段里在控的某一件，说不出它是在哪个节点交进这一段、往哪个节点去——凭收寄进段、
+	// 进段那次`已交接`没声明交出或去向节点，或那次交接在册上认不出。说不出就核不了班次是不是载着这一段（DepartureEntryStops）。
+	DepartureSegmentEntryNodesUnknown
+	// DepartureScheduleNotServingSegment：班次的起讫与段里在控各件交进来时声明的交出、去向节点对不上，这一班载的不是这一段。
+	DepartureScheduleNotServingSegment
 
 	// 读不动：哪一口
 	DepartureSegmentRegistryUnavailable
 	DepartureScheduleRegistryUnavailable
+	// DepartureHandoverRegistryUnavailable：找段里各件进段那次交接时交接登记册读不动。
+	DepartureHandoverRegistryUnavailable
 )
 
 func (stop DepartureGateStop) valid() bool {
-	return stop >= DepartureSegmentNotDeclared && stop <= DepartureScheduleRegistryUnavailable
+	return stop >= DepartureSegmentNotDeclared && stop <= DepartureHandoverRegistryUnavailable
 }
 
 // Answer 是这种停点所属的那一格。
 func (stop DepartureGateStop) Answer() DepartureGateAnswer {
 	switch stop {
 	case DepartureSegmentNotDeclared, DepartureSegmentNotRegistered, DepartureNoObjectUnderControl,
-		DepartureScheduleNotRegistered, DepartureRecordedBeforeGateReading:
+		DepartureScheduleNotRegistered, DepartureRecordedBeforeGateReading,
+		DepartureSegmentEntryNodesUnknown, DepartureScheduleNotServingSegment:
 		return DepartureGateUndecided
-	case DepartureSegmentRegistryUnavailable, DepartureScheduleRegistryUnavailable:
+	case DepartureSegmentRegistryUnavailable, DepartureScheduleRegistryUnavailable, DepartureHandoverRegistryUnavailable:
 		return DepartureGateUnreadable
 	default:
 		return DepartureGateAnswerInvalid
@@ -86,10 +94,16 @@ func (stop DepartureGateStop) String() string {
 		return "SCHEDULE_NOT_REGISTERED"
 	case DepartureRecordedBeforeGateReading:
 		return "RECORDED_BEFORE_GATE_READING"
+	case DepartureSegmentEntryNodesUnknown:
+		return "SEGMENT_ENTRY_NODES_UNKNOWN"
+	case DepartureScheduleNotServingSegment:
+		return "SCHEDULE_NOT_SERVING_SEGMENT"
 	case DepartureSegmentRegistryUnavailable:
 		return "SEGMENT_REGISTRY_UNAVAILABLE"
 	case DepartureScheduleRegistryUnavailable:
 		return "SCHEDULE_REGISTRY_UNAVAILABLE"
+	case DepartureHandoverRegistryUnavailable:
+		return "HANDOVER_REGISTRY_UNAVAILABLE"
 	default:
 		return ""
 	}
@@ -241,8 +255,19 @@ func (reading DepartureGateReading) segmentNotDeclared() bool {
 // 已经在下一站交接离场，按此刻取就问不到真正随车出发的那几件。不经装载分配推：分配是意图，拿它覆盖段里的实际
 // 控制，就是 CONTEXT 禁止的「用计划覆盖事实」。
 func (segment ActualFulfillmentSegment) ObjectsUnderControlAt(at time.Time) []CarriedObjectReference {
+	participations := segment.ParticipationsUnderControlAt(at)
+	objects := make([]CarriedObjectReference, 0, len(participations))
+	for _, participation := range participations {
+		objects = append(objects, participation.object)
+	}
+	return objects
+}
+
+// ParticipationsUnderControlAt 交回 ObjectsUnderControlAt 那几件各自在控的那一版参与，口径与次序都同它：要知道那几件是凭什么
+// 进的这一段时用（出发读数核班次是不是载着这一段，DepartureEntryStops）。
+func (segment ActualFulfillmentSegment) ParticipationsUnderControlAt(at time.Time) []FulfillmentParticipation {
 	moment := AtRegistryPrecision(at)
-	var objects []CarriedObjectReference
+	var inControl []FulfillmentParticipation
 	for _, participation := range segment.participations {
 		if participation.superseded || participation.voided {
 			continue
@@ -253,12 +278,43 @@ func (segment ActualFulfillmentSegment) ObjectsUnderControlAt(at time.Time) []Ca
 		if !participation.endedAt.IsZero() && !AtRegistryPrecision(participation.endedAt).After(moment) {
 			continue
 		}
-		if !slices.Contains(objects, participation.object) {
-			objects = append(objects, participation.object)
+		if !slices.ContainsFunc(inControl, func(kept FulfillmentParticipation) bool { return kept.object == participation.object }) {
+			inControl = append(inControl, participation)
 		}
 	}
-	slices.SortFunc(objects, func(left, right CarriedObjectReference) int {
-		return strings.Compare(left.String(), right.String())
+	slices.SortFunc(inControl, func(left, right FulfillmentParticipation) int {
+		return strings.Compare(left.object.String(), right.object.String())
 	})
-	return objects
+	return inControl
+}
+
+// DepartureEntryStops 答这一班能不能替段里出发那一刻在控的这几件问出发意图（ADR-0237 决定五）。班次与段都是登记方或问询方
+// 声明的：两样不互相核对，配一班别的方向的班次去问，关务就会按一份不属于这一车的意图作答——例如把一段境内段配上一班跨关务区域的
+// 班次，段里不在案卷的每件都答未决、都回给设备。所以核的是段自己的事实：每件交进这一段时那次`已交接`声明的交出节点就是班次的起点、
+// 去向节点就是班次的终点。
+//
+// entries 是认出来的那几次进段交接；unresolved 说有没有一件认不出（凭收寄进段，或那次交接在册上认不出）。说不出那两格答
+// DepartureSegmentEntryNodesUnknown，声明了却与班次起讫对不上答 DepartureScheduleNotServingSegment，两样可以同在；都停在本侧、
+// 不问关务。只核起讫节点、不核班次身份：同一方向换一班（改搭快班、顺延下一班）照样载得了这一段。
+func DepartureEntryStops(direction ScheduleDirection, entries []TransportHandover, unresolved bool) []DepartureGateStop {
+	unknown, mismatched := unresolved, false
+	for _, entry := range entries {
+		releasing, releasingDeclared := entry.ReleasingNode()
+		onward, onwardDeclared := entry.OnwardNode()
+		if !releasingDeclared || !onwardDeclared {
+			unknown = true
+			continue
+		}
+		if releasing != direction.From() || onward != direction.To() {
+			mismatched = true
+		}
+	}
+	var stops []DepartureGateStop
+	if unknown {
+		stops = append(stops, DepartureSegmentEntryNodesUnknown)
+	}
+	if mismatched {
+		stops = append(stops, DepartureScheduleNotServingSegment)
+	}
+	return stops
 }

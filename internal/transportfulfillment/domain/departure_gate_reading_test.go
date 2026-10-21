@@ -79,16 +79,20 @@ func TestTheHeaviestObjectAnswerIsTheDepartureAnswer(t *testing.T) {
 	}
 }
 
-// Covers: AT-TF-114 领域半边——停在本上下文这一侧时，每种停点只属一格：缺段、缺对象、缺班次答未决，段册与班次册读不动答读不动，
-// 两者并存时读不动压过未决。停点与逐对象答复恰有其一：停下了就没问关务，问了关务就没有停点。
+// Covers: AT-TF-114 领域半边——停在本上下文这一侧时，每种停点只属一格：缺段、缺对象、缺班次、班次不服务该段、段的进段节点说不出
+// 答未决，段册、班次册与交接册读不动答读不动，两者并存时读不动压过未决。停点与逐对象答复恰有其一：停下了就没问关务，问了关务就
+// 没有停点。
 func TestStopsBelongToOneAnswerAndExcludeFindings(t *testing.T) {
 	for stop, want := range map[domain.DepartureGateStop]domain.DepartureGateAnswer{
 		domain.DepartureSegmentNotDeclared:          domain.DepartureGateUndecided,
 		domain.DepartureSegmentNotRegistered:        domain.DepartureGateUndecided,
 		domain.DepartureNoObjectUnderControl:        domain.DepartureGateUndecided,
 		domain.DepartureScheduleNotRegistered:       domain.DepartureGateUndecided,
+		domain.DepartureSegmentEntryNodesUnknown:    domain.DepartureGateUndecided,
+		domain.DepartureScheduleNotServingSegment:   domain.DepartureGateUndecided,
 		domain.DepartureSegmentRegistryUnavailable:  domain.DepartureGateUnreadable,
 		domain.DepartureScheduleRegistryUnavailable: domain.DepartureGateUnreadable,
+		domain.DepartureHandoverRegistryUnavailable: domain.DepartureGateUnreadable,
 	} {
 		if got := stoppedReading(t, stop).Answer(); got != want {
 			t.Errorf("%s 答 %s, want %s", stop, got, want)

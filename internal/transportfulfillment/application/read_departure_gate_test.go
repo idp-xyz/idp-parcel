@@ -15,39 +15,83 @@ import (
 
 var departureGateDown = errors.New("册不可用")
 
-// departureSegmentsDouble 按段号交回一个段：在册的段由 RehydrateActualFulfillmentSegment 立起，成员都在出发前一小时
-// 凭交接入场。
+// departureSegmentsDouble 按段号交回一个段：在册的段由各件的`已交接`立起，成员都在出发前一小时凭交接入场；那几次交接都声明了
+// 交出节点 NODE-SHA、去向节点 NODE-SZX，与班次替身的方向相同（ADR-0237 决定五要核这一对）。handovers 是同一批交接，交给交接册
+// 替身。
 type departureSegmentsDouble struct {
-	segments map[string]domain.ActualFulfillmentSegment
-	findErr  error
-	reads    int
+	segments  map[string]domain.ActualFulfillmentSegment
+	handovers []domain.TransportHandover
+	findErr   error
+	reads     int
 }
 
 func departureSegments(t *testing.T, segment string, objects ...string) *departureSegmentsDouble {
+	t.Helper()
+	return departureSegmentsDeclaring(t, segment, "NODE-SHA", "NODE-SZX", objects...)
+}
+
+// departureSegmentsDeclaring 同 departureSegments，只是各件进段的那次交接声明的是给定的交出与去向节点；空串即不声明那一格。
+func departureSegmentsDeclaring(t *testing.T, segment, releasing, onward string, objects ...string) *departureSegmentsDouble {
 	t.Helper()
 	double := &departureSegmentsDouble{segments: map[string]domain.ActualFulfillmentSegment{}}
 	if segment == "" {
 		return double
 	}
-	participations := make([]domain.RehydrateParticipationSpec, 0, len(objects))
-	for _, object := range objects {
-		participations = append(participations, domain.RehydrateParticipationSpec{
-			Object:     mustRefValue(t, domain.NewCarriedObjectReference, object),
-			EntryKind:  domain.EnteredByTransportHandover,
-			EntryBasis: mustRefValue(t, domain.NewParticipationBasisReference, "HO/"+object),
-			EnteredAt:  movedAtFixture.Add(-time.Hour),
-		})
+	segmentRef := mustRefValue(t, domain.NewFulfillmentSegmentReference, segment)
+	var built domain.ActualFulfillmentSegment
+	for index, object := range objects {
+		handover := departureEntryHandover(t, object, releasing, onward)
+		double.handovers = append(double.handovers, handover)
+		var err error
+		if index == 0 {
+			built, err = domain.EstablishSegmentWithHandover(segmentRef, handover, domain.PlannedSegmentReference{})
+		} else {
+			built, err = built.JoinWithHandover(handover, domain.PlannedSegmentReference{})
+		}
+		if err != nil {
+			t.Fatalf("立段：%v", err)
+		}
 	}
-	built, err := domain.RehydrateActualFulfillmentSegment(domain.RehydrateActualFulfillmentSegmentSpec{
-		TenantID:       mustRefValue(t, domain.NewTenantID, "tenant-1"),
-		Segment:        mustRefValue(t, domain.NewFulfillmentSegmentReference, segment),
-		Participations: participations,
-	})
-	if err != nil {
-		t.Fatalf("立段：%v", err)
+	if len(objects) == 0 {
+		var err error
+		if built, err = domain.RehydrateActualFulfillmentSegment(domain.RehydrateActualFulfillmentSegmentSpec{
+			TenantID: mustRefValue(t, domain.NewTenantID, "tenant-1"),
+			Segment:  segmentRef,
+		}); err != nil {
+			t.Fatalf("立空段：%v", err)
+		}
 	}
 	double.segments[segment] = built
 	return double
+}
+
+// departureEntryHandover 是 object 在出发前一小时交进段的那一版`已交接`；releasing、onward 为空即不声明那一格。
+func departureEntryHandover(t *testing.T, object, releasing, onward string) domain.TransportHandover {
+	t.Helper()
+	spec := domain.TransportHandoverSpec{
+		TenantID:          mustRefValue(t, domain.NewTenantID, "tenant-1"),
+		Object:            mustRefValue(t, domain.NewCarriedObjectReference, object),
+		Scope:             mustRefValue(t, domain.NewHandoverScopeReference, "scope-"+object),
+		ReleasedBy:        mustRefValue(t, domain.NewHandoverPartyReference, "party-sha-hub"),
+		ReceivedBy:        mustRefValue(t, domain.NewHandoverPartyReference, "party-own-linehaul"),
+		Verdict:           domain.ObjectHandedOver,
+		ReleasingEvidence: mustRefValue(t, domain.NewHandoverEvidenceReference, "evidence-release-"+object),
+		ReceivingEvidence: mustRefValue(t, domain.NewHandoverEvidenceReference, "evidence-receive-"+object),
+		Rule:              mustRefValue(t, domain.NewHandoverRuleReference, "handover-rule/v1"),
+		Version:           mustRefValue(t, domain.NewHandoverResultVersion, "handover-result/"+object+"/v1"),
+		JudgedAt:          movedAtFixture.Add(-time.Hour),
+	}
+	if releasing != "" {
+		spec.Nodes.Releasing = mustRefValue(t, domain.NewNetworkNodeReference, releasing)
+	}
+	if onward != "" {
+		spec.Nodes.Onward = mustRefValue(t, domain.NewNetworkNodeReference, onward)
+	}
+	handover, err := domain.FormTransportHandover(spec)
+	if err != nil {
+		t.Fatalf("交接 %s：%v", object, err)
+	}
+	return handover
 }
 
 func (double *departureSegmentsDouble) FindByKey(_ context.Context, key ports.FulfillmentSegmentKey) (ports.FulfillmentSegmentRecord, bool, error) {
@@ -158,14 +202,17 @@ func (double *departureMembershipsDouble) MembersAt(
 type departureGateFixture struct {
 	segments    *departureSegmentsDouble
 	schedules   *departureSchedulesDouble
+	handovers   *entryHandoversDouble
 	memberships *departureMembershipsDouble
 	customs     *departureCustomsDouble
 }
 
 func newDepartureGateFixture(t *testing.T, objects ...string) *departureGateFixture {
 	t.Helper()
+	segments := departureSegments(t, "segment-1", objects...)
 	return &departureGateFixture{
-		segments:  departureSegments(t, "segment-1", objects...),
+		segments:  segments,
+		handovers: &entryHandoversDouble{handovers: segments.handovers},
 		schedules: &departureSchedulesDouble{schedule: "schedule-1", registered: true},
 		memberships: &departureMembershipsDouble{
 			units: map[string][]ports.ConsolidationMember{}, errors: map[string]bool{}, untranslatable: map[string]bool{},
@@ -181,6 +228,7 @@ func (fixture *departureGateFixture) reader(t *testing.T) *application.Departure
 	reader, err := application.NewDepartureGateReader(application.DepartureGateReadDeps{
 		Segments:  fixture.segments,
 		Schedules: fixture.schedules,
+		Handovers: fixture.handovers,
 		Members:   fixture.memberships,
 		Customs:   fixture.customs,
 	})
@@ -366,13 +414,18 @@ func TestAMisansweringCustomsViewIsAnErrorAndMissingDependenciesAreRefused(t *te
 		t.Fatal("答非所问被记成了一格")
 	}
 	if _, err := application.NewDepartureGateReader(application.DepartureGateReadDeps{
-		Segments: fixture.segments, Schedules: fixture.schedules, Members: fixture.memberships,
+		Segments: fixture.segments, Schedules: fixture.schedules, Handovers: fixture.handovers, Members: fixture.memberships,
 	}); err == nil {
 		t.Fatal("缺关务那一口也装得起来")
 	}
 	if _, err := application.NewDepartureGateReader(application.DepartureGateReadDeps{
-		Segments: fixture.segments, Schedules: fixture.schedules, Customs: fixture.customs,
+		Segments: fixture.segments, Schedules: fixture.schedules, Handovers: fixture.handovers, Customs: fixture.customs,
 	}); err == nil {
 		t.Fatal("缺集运成员关系那一口也装得起来")
+	}
+	if _, err := application.NewDepartureGateReader(application.DepartureGateReadDeps{
+		Segments: fixture.segments, Schedules: fixture.schedules, Members: fixture.memberships, Customs: fixture.customs,
+	}); err == nil {
+		t.Fatal("缺交接册那一口也装得起来")
 	}
 }

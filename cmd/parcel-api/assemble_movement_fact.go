@@ -84,8 +84,8 @@ func buildMovementFactOrchestration(db *bentopg.DB) (tfhttp.MovementFactHandler,
 	return transactionalMovementFact{transactor: db.Transactor(), gate: gate, inner: handler}, nil
 }
 
-// buildDepartureGateReader 装出发门禁读数编排：本上下文的段册与班次册，再经消费侧适配器问节点作业的集运成员关系与收寄身份
-// （ADR-0225）、关务的动作准入判断——全接真。
+// buildDepartureGateReader 装出发门禁读数编排：本上下文的段册、班次册与交接册（核班次是不是载着这一段，ADR-0237），再经消费侧
+// 适配器问节点作业的集运成员关系与收寄身份（ADR-0225）、关务的动作准入判断——全接真。
 // 出发登记与出发前问询（buildDepartureGatePreview，ADR-0219）都从这里取，各取一份、接的是同一批真适配器与同一个库：
 // 两口读数同一套，装配上也只有这一处定义。
 //
@@ -99,6 +99,10 @@ func buildDepartureGateReader(db *bentopg.DB) (*tfapp.DepartureGateReader, error
 	schedules, err := tfpostgres.NewTransportSchedules(db)
 	if err != nil {
 		return nil, fmt.Errorf("departure gate reader: transport schedules: %w", err)
+	}
+	handovers, err := tfpostgres.NewTransportHandovers(db)
+	if err != nil {
+		return nil, fmt.Errorf("departure gate reader: transport handovers: %w", err)
 	}
 	customsAdmission, err := buildCustomsAdmissionOrchestration(db)
 	if err != nil {
@@ -123,6 +127,7 @@ func buildDepartureGateReader(db *bentopg.DB) (*tfapp.DepartureGateReader, error
 	return tfapp.NewDepartureGateReader(tfapp.DepartureGateReadDeps{
 		Segments:  segments,
 		Schedules: schedules,
+		Handovers: handovers,
 		Members:   members,
 		Customs:   customs,
 	})

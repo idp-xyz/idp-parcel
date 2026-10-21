@@ -418,7 +418,9 @@ func departureGateStopFrom(raw string) (domain.DepartureGateStop, error) {
 	for _, stop := range []domain.DepartureGateStop{
 		domain.DepartureSegmentNotDeclared, domain.DepartureSegmentNotRegistered, domain.DepartureNoObjectUnderControl,
 		domain.DepartureScheduleNotRegistered, domain.DepartureRecordedBeforeGateReading,
+		domain.DepartureSegmentEntryNodesUnknown, domain.DepartureScheduleNotServingSegment,
 		domain.DepartureSegmentRegistryUnavailable, domain.DepartureScheduleRegistryUnavailable,
+		domain.DepartureHandoverRegistryUnavailable,
 	} {
 		if stop.String() == raw {
 			return stop, nil

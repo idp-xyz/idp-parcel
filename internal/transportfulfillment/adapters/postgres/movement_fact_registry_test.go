@@ -3,6 +3,7 @@ package postgres_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -127,6 +128,29 @@ func TestAStoppedDepartureReadingRoundTrips(t *testing.T) {
 	}
 	if _, _, directed := back.Direction(); directed {
 		t.Fatal("没读到班次的读数读回来带了起讫")
+	}
+
+	// AT-TF-114 真库半边（ADR-0237 决定五）：核班次是不是载着这一段的那几种停点同样往返。
+	from, _ := domain.NewNetworkNodeReference("NODE-SHA")
+	to, _ := domain.NewNetworkNodeReference("NODE-SZX")
+	for fact, stops := range map[string][]domain.DepartureGateStop{
+		"MF-0007-ENTRY":    {domain.DepartureSegmentEntryNodesUnknown, domain.DepartureScheduleNotServingSegment},
+		"MF-0007-HANDOVER": {domain.DepartureHandoverRegistryUnavailable},
+	} {
+		bound, err := domain.FormDepartureGateReading(domain.DepartureGateReadingSpec{From: from, To: to, Stops: stops})
+		if err != nil {
+			t.Fatalf("读数：%v", err)
+		}
+		entrySpec := movementFactSpec(t, fact, "v1", domain.DepartureFact)
+		entrySpec.GateReading = bound
+		mustSaveMovementFact(t, transactor, ctx, repository, movementFactRecordOf(t, entrySpec))
+		found, exists, err := repository.FindByKey(ctx, movementFactKeyFixture(t, "tenant-1", fact, "v1"))
+		if err != nil || !exists {
+			t.Fatalf("取回 %s：%v exists=%v", fact, err, exists)
+		}
+		if back, _ := found.Fact.GateReading(); !slices.Equal(back.Stops(), stops) || back.Answer() != bound.Answer() {
+			t.Fatalf("%s 读回成了 %s %v", fact, back.Answer(), back.Stops())
+		}
 	}
 }
 

@@ -9,26 +9,13 @@ import (
 )
 
 // 交付门禁读数要问的几口（ADR-0213 决定五）。另立文件而不并进 ports.go，理由同 handover_gate.go：这几口只服务交付门禁读数
-// 一处（有效交付登记与交付前问询走的是同一条读数路径）。
+// 一处（有效交付登记与交付前问询走的是同一条读数路径）。找对象进段那次交接的那一口与出发读数共用，在 entry_handover.go。
 
 // DeliveryGateSegmentView 是读数取 at 时读段的那两问：对象此刻在哪个段里在场，那一段长什么样。只读，不带写口——读数
 // 不动段，结束参与是登记编排在写事务里的事。ActualFulfillmentSegmentRegistry 天然满足它。
 type DeliveryGateSegmentView interface {
 	FindActiveSegments(ctx context.Context, tenant domain.TenantID, object domain.CarriedObjectReference) ([]FulfillmentSegmentKey, error)
 	FindByKey(ctx context.Context, key FulfillmentSegmentKey) (FulfillmentSegmentRecord, bool, error)
-}
-
-// DeliveryGateEntryHandoverView 按（租户、对象、交接版本）找回`已交接`的那几版。ADR-0221 之前的存量参与，入场依据只带
-// 版本、不带交接范围，所以这一问不按幂等键问：同一对象在不同范围用了同一个版本号时如实全交回，哪一版是进段那一次由领域
-// （FulfillmentParticipation.EnteredByHandover）认，本口不挑；按交接键铸的依据在那一处只认得出范围相同的一版。拒收与
-// 待确认不交回——它们立不起参与。
-type DeliveryGateEntryHandoverView interface {
-	FindHandedOverByVersion(
-		ctx context.Context,
-		tenant domain.TenantID,
-		object domain.CarriedObjectReference,
-		version domain.HandoverResultVersion,
-	) ([]domain.TransportHandover, error)
 }
 
 // DeliveryGateQuery 是对一件对象的一次交付问询：租户、对象、在哪个节点交付、交付时点。只交意图，不交「问哪几种受门禁
