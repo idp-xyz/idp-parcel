@@ -17,6 +17,16 @@ CC 收外部结果时先按幂等键读已有记录：读到了就比内容摘�
 
 同形追记（2026-10-21，协调方；出自 [product-strategy-boundary/18](../../product-strategy-boundary/issues/18-customs-case-and-declaration-submission-entry.md) 的隔离评审）：`internal/customscompliance/application/submit_declaration.go` 的 `SubmitDeclarationHandler.commit` 遇 `ports.DeclarationSubmissionAlreadyRecorded` 时同样读回赢家、交给 `existingResult` 答 `EXISTING_VERSION`，不比内容指纹。票 18 给提交执行开了生产口（`POST /customs-declaration-submissions`），这一格因此生产可达：两份内容不同的提交并发到达，后到那份答已有版本而不是来源冲突。修法同下，一并改。
 
+同形追记（2026-10-21，出自 [demo-chain-gaps/140](./140-operators-adopt-external-funds-facts-and-regulatory-credentials.md) 的隔离评审）：`internal/settlementaccounting/application/map_external_funds.go` 的 `AdoptFact`、`CorrectFact` 遇 `ports.FundsFactAlreadyAdopted` 时读回赢家（`FindByKey` 交回的链头）交给 `existingFact`，不比内容摘要；在线口（集成客户端族与票 140 开的手工口）的答复只有 `outcome`、不带记录，输掉竞态的一方无从分辨自己那份被丢了。三种情形：
+
+- (a) 同一事实、同一版本字面、金额不同的两份并发采用：后到那份答 200 `EXISTING_FUNDS_FACT`，被静默丢弃（顺序到达答 `FUNDS_FACT_CONFLICT`）。
+- (b) 同一事实、首版版本字面不同的两份并发采用（撞「一条事实只有一个首版」的部分唯一索引）：同上，后到答已存在（顺序到达答冲突）。
+- (c) 两份更正并发回指同一链头、新版本字面不同（撞「一个前版只被更正一次」的唯一约束）：后到答已存在，交回的链头是对方那一版（顺序到达答 `SOURCE_NOT_ACCEPTED`，即`未受理`）。
+
+最现实的是两族并发：财务照回单在管理台录入的同时，银行接口推来同一事实（同一 `factRef`）。修法同下：读回赢家之后照开头那一步比内容摘要，一致答已存在，不一致按顺序到达时的同一格作答（(a)(b) 答冲突，(c) 答未受理）；补真库并发用例。`internal/settlementaccounting/adapters/postgres/external_funds_fact.go` 的 `ExternalFundsFacts.Save` 头注与 `ports.FundsFactAlreadyAdopted` 注释原先把这一格写成「有意的」，票 140 已改成指向本票的缺陷说法。
+
+CC 的监管凭证登记那一路**没有**这个问题，别误改：`RegisterCredentialHandler.Handle` 落册撞键（`CaseConfigurationAlreadyRegistered`）之后读回在册版本、按 CCC-1 比内容，异内容答 `CONTENT_CONFLICT`。
+
 ## 三类
 
 机制。规模 S。

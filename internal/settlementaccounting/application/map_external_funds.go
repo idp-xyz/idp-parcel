@@ -395,8 +395,8 @@ func (handler *MapExternalFundsHandler) CorrectFact(
 	case ports.FundsFactAlreadyAdopted:
 		// 两步之间另一位写入方赢了：要么同一新版本先落了，要么链头先被别的版本更正了（库上守链形的
 		// 唯一约束把后者也折成`已采用`）。两种都按当前链头作答——它就是此刻被采用的那一版。
-		// 同一个「回指的不是当前链头」顺序到达时在上面答的是`未受理`，两答有意不同，理由见
-		// ExternalFundsFacts.Save 头注。
+		// 同一个「回指的不是当前链头」顺序到达时答的是`未受理`；两答不一致是缺陷，见票 demo-chain-gaps/125 的
+		// SA 同形追记。
 		winner, found, err := handler.deps.Facts.FindByKey(ctx, key)
 		if err != nil || !found {
 			return fundsUndecided(FundsFactStoreUnavailable, command.Fact), nil
