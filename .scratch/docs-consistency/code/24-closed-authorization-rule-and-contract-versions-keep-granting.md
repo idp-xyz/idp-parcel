@@ -49,7 +49,7 @@ M：两个装载连上退役册与最新区间更正册（与 ADR-0233 给版本
    - `psports.AuthorizationOutcome` 加一格 `APPLICABILITY_CONFLICT`（`String()` 同名）。
    - 五只经 PC 裁定编排询问授权的适配器——`adapters/partycommercial` 下的 `active_rejection.go`、`manual_review_authorization.go`、`source_data_amendment_authorization.go`、`continued_attempt_decision_authorization.go`（受控关闭与重开同一只）、`withdrawal_authorization.go`——在 `errors.Is` 分支里把 PC 的适用冲突错误译成这一格；今天它们落 `default` 交回 error（未形成），不会被读成已授权或拒绝。
    - 有未决格的四只编排停在未决，原因码指名授权适用冲突：`reject_shipment_request.go`、`withdraw_shipment_request.go`、`amend_customer_source_data.go`（`handler.undecided` 加 `…AuthorityApplicabilityConflict` 原因，与 `…AuthorityRulesNotConfigured` 并列）、`form_continued_attempt_decision.go`（`continuedAttemptUndecided` 加同名原因）。
-   - 没有未决格的两只编排——`dispose_shipment_request.go` 与 `complete_manual_review.go`——今天把未配置答成自己的一个结果码（`AUTHORITY_RULES_NOT_CONFIGURED`，不落库、状态不变）；照同一形状各加 `AUTHORITY_APPLICABILITY_CONFLICT` 一码：不落库、状态不变、不读作已授权也不读作拒绝。
+   - 没有未决格的两只编排——`dispose_shipment_request.go` 与 `complete_manual_review.go`——今天把未配置答成自己的一个结果码（`AUTHORITY_RULES_NOT_CONFIGURED`，不落库、状态不变）；照同一形状各加 `AUTHORITY_APPLICABILITY_CONFLICT` 一码：不落库、状态不变、不读作已授权也不读作拒绝。其中 `dispose_shipment_request` 在生产上装的是 `UnconfiguredAuthorizedDispositionAuthorizer`（不问 PC，ADR-0132 越权风险点 2），给它加的那一码今天走不到，只为闭集穷尽。
    - 各编排的 `default` 分支照旧答 `ErrUnexpectedAuthorizationOutcome`。这几处是 PS 的地盘，PS 的 UC 结果表随票 10 补（PS 组的 06 正在修订，本票与 06 都不直接改 PS 文件）。
 5. 补用例：`AT-PC-042`、`AT-PC-059`、`AT-PC-060`、`AT-PC-061`（UC-PC-003），领域与真库各一，并在 `.scratch/at-coverage-inventory.md` 把这几行从④移入①。
 

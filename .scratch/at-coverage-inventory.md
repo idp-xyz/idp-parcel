@@ -661,6 +661,7 @@
 | `AT-NR-053` | 原计划失效，候选评估未决后补齐并找到合格候选 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-PC-016` | 发布提交成功但事件投递失败 | UC-PC-001-MAINTAIN-AND-PUBLISH-COMMERCIAL-AUTHORITY.md |
 | `AT-PP-013` | 在用 `SELL` 卡自带体积系数、金额取整与汇率序列，同范围销售价格政策另有口径；评价只按卡上的条款算（ADR-0260） | UC-PP-001-FORM-ESTIMATE-EVALUATIONS.md |
+| `AT-PP-016` | 免复核来源的代写复核不读参考复核职责规则，规则未登记照常进在用；登记者等于连接器身份答 `NEEDS_ANOTHER_REVIEWER`（ADR-0262；行为已对、缺 Covers 点名） | UC-PP-001-FORM-ESTIMATE-EVALUATIONS.md |
 | `AT-PS-009` | 接受后客户合同或产品发布新版本 | UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md |
 | `AT-PS-011` | 接受成功后检查下游对象 | UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md |
 | `AT-PS-018` | 无法识别目标委托、包裹或资料范围 | UC-PS-002-AMEND-CUSTOMER-SOURCE-DATA.md |
@@ -1571,4 +1572,4 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 
 2026-10-21 追记（票 docs-consistency/06）：UC-PS-002 新立 `AT-PS-106`（委托查无或属别人答统一不可见，今天答 500，code/22），入④；`AT-PS-019` 改为可见范围内无修订授权（未获授权）。UC-PS-003 新立 `AT-PS-107`（取消已提交后才到、发生不晚于取消的收寄停在未决，ADR-0254；机制已在 `TestTheCancellationBoundaryJudgesByBusinessTime`，缺 Covers 点名），入②；`AT-PS-045` 限到收寄已采用后取消才到。UC-PS-004 新立 `AT-PS-108`（面单渠道同一情形，今天答 CANCELLATION_STANDS，code/35），入④。UC-PS-005 新立 `AT-PS-109`（只有信用暴露的撤回按原关联释放，机制已在 `TestAWithdrawalReleasesEveryOccupationRegardlessOfTheConclusion`，那里点的是 `AT-PS-035`）、`AT-PS-110`（可见范围内无撤回授权，机制已在 `TestAnUnauthorizedWithdrawalFormsNothing`，那里点的是 `AT-PS-075`），入②。UC-PS-006 `AT-PS-083`、`AT-PS-084`、`AT-PS-088`（收寄后服务处置决定没有模型，code/37）与 `AT-PS-086`（终局后取消答既有终局，今天不读终局，code/21）由②移入④。总览计数未改，由推送方重算。
 
-2026-10-21 追记（票 docs-consistency/07）：UC-PC-003 新立 `AT-PC-059`–`061`（授予与委派随所挂版本收尾，ADR-0261），`AT-PC-042` 由待评审改为适用冲突，UC-PC-001 新立 `AT-PC-062`（价格政策口径不收体积系数，ADR-0260），UC-PP-001 新立 `AT-PP-014`、`015`（参考复核读租户复核职责规则，ADR-0262），均未实现，入④（承接 code/24、25、41）；UC-PP-001 新立 `AT-PP-013`（计价条款只从价卡读，ADR-0260），行为已对、缺 Covers 点名，入②。`AT-PC-037`–`053` 本就不在本盘点内，`AT-PC-042` 是其中唯一随本票加行的一条。`AT-PC-006`、`003`、`033`、`036`、`058` 只改场景文字，测试归属不变。
+2026-10-21 追记（票 docs-consistency/07）：UC-PC-003 新立 `AT-PC-059`–`061`（授予与委派随所挂版本收尾，ADR-0261），`AT-PC-042` 由待评审改为适用冲突，UC-PC-001 新立 `AT-PC-062`（价格政策口径不收体积系数，ADR-0260），UC-PP-001 新立 `AT-PP-014`、`015`（参考复核读租户复核职责规则，ADR-0262），均未实现，入④（承接 code/24、25、41）；UC-PP-001 新立 `AT-PP-013`（计价条款只从价卡读，ADR-0260）与 `AT-PP-016`（免复核来源的代写复核不读规则，ADR-0262），行为已对、缺 Covers 点名，入②。`AT-PC-037`–`053` 本就不在本盘点内，`AT-PC-042` 是其中唯一随本票加行的一条。`AT-PC-006`、`003`、`033`、`036`、`058` 只改场景文字，测试归属不变。
