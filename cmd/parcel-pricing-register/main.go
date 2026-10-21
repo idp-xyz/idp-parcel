@@ -14,10 +14,13 @@
 // 时刻），四眼门与在册与否由复核用例判。种子与补录历史复核走这里；在线口另按 ADR-0085
 // 进端点表。
 //
+// 另两种登记 price-card-cut 与 price-card-retirement 是价卡收尾（ADR-0234）：输入是一份收尾文档（租户、定价方案、旧版、
+// 后继、依据），截止点与退役时刻由服务端定；收尾同笔交「参数已登记」。在线口另进端点表。
+//
 // 本工具假设业务 schema 已由迁移作业施加，不自行迁移。
 //
 // 退出码：0 = 已登记/幂等重放；1 = 用法或输入不合法（含重建门拒绝）；2 = 登记册
-// 治理答案（版本内容冲突/规范化形状不同/复核的版本不在册/复核责任方就是登记责任方
+// 治理答案（版本内容冲突/规范化形状不同/复核的版本不在册/复核责任方就是登记责任方/收尾不成立
 // ——原行未被顶替，人工续办）；3 = 未决（依赖故障，登记与否未知）。
 package main
 
@@ -164,7 +167,7 @@ func parseReviewDocument(raw []byte) (application.ReviewReferenceSeriesCommand, 
 }
 
 func main() {
-	kind := flag.String("kind", "", "登记种类：price-card、reference-series、reference-series-review、reference-catalogue 或 reference-catalogue-review")
+	kind := flag.String("kind", "", "登记种类：price-card、price-card-cut、price-card-retirement、reference-series、reference-series-review、reference-catalogue 或 reference-catalogue-review")
 	file := flag.String("file", "", "登记快照 JSON 路径")
 	flag.Parse()
 
@@ -231,6 +234,19 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "构造参数已登记交接口：%v\n", err)
 		os.Exit(exitUndecided)
+	}
+
+	if isClosureKind(*kind) {
+		closer, err := application.NewClosePriceCardVersionHandler(application.ClosePriceCardVersionDeps{
+			Registry: cards, Registered: registered, Clock: systemClock{},
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "构造价卡收尾用例：%v\n", err)
+			os.Exit(exitUndecided)
+		}
+		message, code := executeClosure(ctx, *kind, raw, closer, db.Transactor())
+		fmt.Println(message)
+		os.Exit(code)
 	}
 
 	message, code := execute(ctx, *kind, raw,
@@ -342,8 +358,9 @@ func execute(
 		}
 		return "reference-series-review: " + outcome.String(), referenceSeriesReviewExitCode(outcome)
 	default:
-		return fmt.Sprintf("未知登记种类 %q（支持 %s / %s / %s / %s / %s）", kind,
-			kindPriceCard, kindReferenceSeries, kindReferenceSeriesReview, kindReferenceCatalogue, kindReferenceCatalogueReview), exitUsage
+		return fmt.Sprintf("未知登记种类 %q（支持 %s / %s / %s / %s / %s / %s / %s）", kind,
+			kindPriceCard, kindPriceCardCut, kindPriceCardRetirement, kindReferenceSeries, kindReferenceSeriesReview,
+			kindReferenceCatalogue, kindReferenceCatalogueReview), exitUsage
 	}
 }
 
