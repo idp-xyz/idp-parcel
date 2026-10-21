@@ -44,6 +44,12 @@
 | `AT-CC-008` | internal/customscompliance/application/establish_customs_case_test.go::TestCaseRequirementGapsAndRefusalsStayDistinct |
 | `AT-CC-009` | internal/customscompliance/application/establish_customs_case_test.go::TestOneCasePerRegulatoryScopeAndNoSilentScopeGrowth |
 | `AT-CC-010` | internal/customscompliance/application/establish_customs_case_test.go::TestOneCasePerRegulatoryScopeAndNoSilentScopeGrowth |
+| `AT-CC-020` | internal/customscompliance/application/establish_case_for_parcels_test.go::TestACaseIsNotEstablishedForUnacceptedParcelsOrAnUnconfiguredRequirement（命令面半边：包裹不在当前已接受委托里不建案） |
+| `AT-CC-078` | internal/customscompliance/application/confirm_submission_authorization_test.go::TestAConfirmationFormsTheAuthorizationNamingTheConfirmer（人工确认半边） |
+| `AT-CC-105` | internal/customscompliance/application/confirm_submission_authorization_test.go::TestAConfirmationWithoutCurrentReadinessFormsNoAuthorization（确认口半边：就绪未配置答未决、不折成未受理） |
+| `AT-CC-107` | cmd/parcel-api/assemble_customs_decisions_test.go::TestCustomsCaseAuthorizationAndSubmissionRunThroughTheProductionFaces（生产装配半边） |
+| `AT-CC-112` | cmd/parcel-api/assemble_customs_decisions_test.go::TestEachCustomsFaceOpensOnlyForItsOwnDecisionKind（生产装配半边） |
+| `AT-CC-122` | cmd/parcel-api/assemble_customs_decisions_test.go::TestCustomsCaseAuthorizationAndSubmissionRunThroughTheProductionFaces（生产装配半边） |
 | `AT-CC-201` | internal/customscompliance/application/manage_follow_up_test.go::TestFollowUpTargetsProposalsAndEffectsStayDisciplined |
 | `AT-CC-202` | internal/customscompliance/application/manage_follow_up_test.go::TestFollowUpTargetsProposalsAndEffectsStayDisciplined |
 | `AT-CC-208` | internal/customscompliance/application/manage_follow_up_test.go::TestFollowUpTargetsProposalsAndEffectsStayDisciplined |
@@ -82,6 +88,15 @@
 | `AT-CC-435` | internal/customscompliance/domain/external_result_test.go::TestReleasesAdvanceByKindAlongBusinessTime、::TestProcessDecisionsFormASequenceAndOtherLayersHoldOneConclusion（领域半边）；internal/customscompliance/application/receive_successive_results_test.go::TestContradictionsAreStillConflictsOnTheLaterArrival（编排半边） |
 | `AT-CC-436` | internal/customscompliance/application/receive_successive_results_test.go::TestReplaysAnswerTheBookedRecordAndStockConflictsAreNotRejudged（编排半边）；cmd/parcel-dispatch/successive_customs_results_projection_test.go::TestReplayingTheFullReleaseFormsNothingNew |
 | `AT-CC-389` | internal/customscompliance/application/receive_manifest_test.go::TestRevisionsAdvanceVersionsAndRematchAssociations |
+| `AT-CC-437` | internal/customscompliance/application/establish_case_for_parcels_test.go::TestACaseForNamedParcelsTakesCustomerAndSourceFromTheAcceptedRequests；internal/customscompliance/adapters/parcelshipment/accepted_parcel_source_test.go::TestTheAcceptedRequestGivesCustomerAndSourceAndAmbiguityIsNotResolvedHere（翻译半边）；internal/customscompliance/adapters/http/operator_decision_endpoints_test.go::TestCustomsDecisionPayloadsRefuseIdentityAndSendFacts（Intake 半边）；cmd/parcel-api/assemble_customs_decisions_test.go::TestCustomsCaseAuthorizationAndSubmissionRunThroughTheProductionFaces（生产装配半边） |
+| `AT-CC-438` | internal/customscompliance/application/establish_case_for_parcels_test.go::TestACaseIsNotEstablishedForUnacceptedParcelsOrAnUnconfiguredRequirement；internal/customscompliance/adapters/http/operator_decision_endpoints_test.go::TestAnUnacceptedParcelAnswerListsTheParcels（答复半边）；cmd/parcel-api/assemble_customs_decisions_test.go::TestUnconfiguredCustomsRegistersAnswerNotConfiguredThroughTheProductionFaces（生产装配半边） |
+| `AT-CC-439` | cmd/parcel-api/assemble_customs_decisions_test.go::TestCustomsCaseAuthorizationAndSubmissionRunThroughTheProductionFaces |
+| `AT-CC-440` | internal/customscompliance/application/confirm_submission_authorization_test.go::TestAConfirmationFormsTheAuthorizationNamingTheConfirmer；cmd/parcel-api/assemble_customs_decisions_test.go::TestCustomsCaseAuthorizationAndSubmissionRunThroughTheProductionFaces（生产装配半边） |
+| `AT-CC-441` | internal/customscompliance/domain/declaration_submission_test.go::TestARegisteredAttemptCarriesNoSendTimeAndCannotBeResent（领域半边）；internal/customscompliance/adapters/postgres/declaration_submission_registered_attempt_test.go::TestARegisteredAttemptIsStoredWithoutASendTime（持久化半边）；internal/customscompliance/application/submit_declaration_registered_attempt_test.go::TestASubmissionCanRegisterItsFirstAttemptWithoutSendingIt（编排半边）；internal/customscompliance/adapters/http/operator_decision_endpoints_test.go::TestCustomsDecisionPayloadsRefuseIdentityAndSendFacts（Intake 半边）；cmd/parcel-api/assemble_customs_decisions_test.go::TestCustomsCaseAuthorizationAndSubmissionRunThroughTheProductionFaces（生产装配半边） |
+| `AT-CC-442` | internal/customscompliance/application/confirm_submission_authorization_test.go::TestARecordedAuthorizationIsNeitherReformedNorDisplaced；cmd/parcel-api/assemble_customs_decisions_test.go::TestCustomsCaseAuthorizationAndSubmissionRunThroughTheProductionFaces（生产装配半边：重放） |
+| `AT-CC-443` | cmd/parcel-dispatch/customs_no_automatic_submission_test.go::TestAnAcceptedRequestDoesNotEstablishACaseOrSubmitADeclaration（派发半边）；cmd/parcel-dispatch/customs_no_automatic_submission_test.go::TestOnlyTheOperatorDecisionFacesConstructCustomsCaseAndSubmissionOrchestrations（进程半边） |
+| `AT-CC-444` | internal/customscompliance/application/confirm_submission_authorization_test.go::TestAConfirmationWithoutCurrentReadinessFormsNoAuthorization；cmd/parcel-api/assemble_customs_decisions_test.go::TestUnconfiguredCustomsRegistersAnswerNotConfiguredThroughTheProductionFaces（生产装配半边） |
+| `AT-CC-445` | internal/accessidentity/adapters/postgres/customs_decision_grant_test.go::TestTheCustomsDecisionKindsAreGrantedAndReadBackSeparately（接入身份半边）；internal/customscompliance/adapters/accessidentity/operator_decision_authenticator_test.go::TestCustomsDecisionsAuthenticatePerKindAndAskTheAdmissionScope（认证半边）；internal/customscompliance/adapters/http/operator_decision_endpoints_test.go::TestEachCustomsDecisionFaceAuthenticatesItsOwnKindAndTakesIdentityFromTheEnvelope（Intake 半边）；cmd/parcel-api/assemble_customs_decisions_test.go::TestEachCustomsFaceOpensOnlyForItsOwnDecisionKind（生产装配半边） |
 | `AT-NO-008` | internal/nodeoperations/application/accept_collaboration_test.go::TestExecutionFactsAreRecordedWithinTheDecision；internal/nodeoperations/application/accept_collaboration_test.go::TestOneDecisionPerCollaborationItem |
 | `AT-NO-009` | internal/nodeoperations/application/accept_collaboration_test.go::TestOneDecisionPerCollaborationItem |
 | `AT-NO-012` | internal/nodeoperations/application/accept_collaboration_test.go::TestExecutionFactsAreRecordedWithinTheDecision |
@@ -737,7 +752,6 @@
 | `AT-CC-101` | 批量请求包含 U1、U2，U1 获得授权而 U2 被拒绝或待决定 | 查询/权限/审计面（接入与持久化闸门后） | UC-CC-004-AUTHORIZE-DECLARATION-SUBMISSION.md |
 | `AT-CC-102` | 跨客户申报单元进入人工决定，或客户侧尝试查询授权 | 查询/权限/审计面（接入与持久化闸门后） | UC-CC-004-AUTHORIZE-DECLARATION-SUBMISSION.md |
 | `AT-CC-103` | 读取权限、委派、政策或就绪依据时超时，或计算、持久化失败 | 查询/权限/审计面（接入与持久化闸门后） | UC-CC-004-AUTHORIZE-DECLARATION-SUBMISSION.md |
-| `AT-CC-112` | 操作员有批准权限或可以登录渠道账号，但没有当前范围的实际提交权限 | 查询/权限/审计面（接入与持久化闸门后） | UC-CC-005-FREEZE-SUBMISSION-AND-INITIATE-ATTEMPT.md |
 | `AT-CC-115` | 真实参数指定在冻结边界占用凭证，且当前版本所需次数或额度可用 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-CC-005-FREEZE-SUBMISSION-AND-INITIATE-ATTEMPT.md |
 | `AT-CC-119` | 跨客户合报单元形成提交版本 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-CC-005-FREEZE-SUBMISSION-AND-INITIATE-ATTEMPT.md |
 | `AT-CC-129` | 请求可能已经发送，但通信超时、连接中断或响应丢失 | 查询/权限/审计面（接入与持久化闸门后） | UC-CC-005-FREEZE-SUBMISSION-AND-INITIATE-ATTEMPT.md |
@@ -880,7 +894,6 @@
 | `AT-CC-017` | 案件最小结果提交成功，但结果事件首次投递失败 | UC-CC-001-ESTABLISH-CUSTOMS-CASE.md |
 | `AT-CC-018` | 建案完成后检查下游对象 | UC-CC-001-ESTABLISH-CUSTOMS-CASE.md |
 | `AT-CC-019` | 正式申报所需字段尚不完整，但案件四项固定身份、适用责任和初始角色均可确定 | UC-CC-001-ESTABLISH-CUSTOMS-CASE.md |
-| `AT-CC-020` | 交接只有“已接受”状态字符串，没有可验证接受决定和接受基线 | UC-CC-001-ESTABLISH-CUSTOMS-CASE.md |
 | `AT-CC-021` | 接受前可达性或初始路由只请求关务路径资格判断 | UC-CC-001-ESTABLISH-CUSTOMS-CASE.md |
 | `AT-CC-022` | 建案后出现不同监管方向、程序或独立法定义务 | UC-CC-001-ESTABLISH-CUSTOMS-CASE.md |
 | `AT-CC-023` | 已建立出口案件，单个包裹的单元规则和资料来源完整 | UC-CC-002-FORM-DECLARATION-UNIT-AND-DATA.md |
@@ -930,7 +943,6 @@
 | `AT-CC-074` | 读取资格、规则、凭证或限制时超时，或计算、持久化失败 | UC-CC-003-ASSESS-DECLARATION-READINESS.md |
 | `AT-CC-075` | 就绪判断已完整提交，但结果事件首次投递失败 | UC-CC-003-ASSESS-DECLARATION-READINESS.md |
 | `AT-CC-077` | 检查已就绪判断产生的下游对象，或已有提交授权但当前判断未就绪 | UC-CC-003-ASSESS-DECLARATION-READINESS.md |
-| `AT-CC-078` | 首发目标当前已就绪，有权业务角色逐次人工确认允许提交 | UC-CC-004-AUTHORIZE-DECLARATION-SUBMISSION.md |
 | `AT-CC-079` | 请求方提交授权申请，但尚无实际决定方结论 | UC-CC-004-AUTHORIZE-DECLARATION-SUBMISSION.md |
 | `AT-CC-081` | 决定方具有有效委派，但委派只覆盖当前法人、客户、程序、渠道和风险范围 | UC-CC-004-AUTHORIZE-DECLARATION-SUBMISSION.md |
 | `AT-CC-083` | 权威治理明确长期目标不采用自动授权或要求人工决定 | UC-CC-004-AUTHORIZE-DECLARATION-SUBMISSION.md |
@@ -948,9 +960,7 @@
 | `AT-CC-098` | 相同请求身份携带不同资料、渠道、动作或请求方 | UC-CC-004-AUTHORIZE-DECLARATION-SUBMISSION.md |
 | `AT-CC-099` | 两个有权角色并发对同一请求分别批准和拒绝 | UC-CC-004-AUTHORIZE-DECLARATION-SUBMISSION.md |
 | `AT-CC-104` | 授权或拒绝决定已完整提交，但结果事件首次投递失败 | UC-CC-004-AUTHORIZE-DECLARATION-SUBMISSION.md |
-| `AT-CC-105` | 授权请求进入时当前就绪不存在、已经失效，或与授权目标版本不一致 | UC-CC-004-AUTHORIZE-DECLARATION-SUBMISSION.md |
 | `AT-CC-106` | 检查授权结果产生的下游对象 | UC-CC-004-AUTHORIZE-DECLARATION-SUBMISSION.md |
-| `AT-CC-107` | 首发目标的当前就绪和人工提交授权完全一致，有权执行主体明确发起提交 | UC-CC-005-FREEZE-SUBMISSION-AND-INITIATE-ATTEMPT.md |
 | `AT-CC-108` | 一个工作界面连续完成授权确认和提交执行 | UC-CC-005-FREEZE-SUBMISSION-AND-INITIATE-ATTEMPT.md |
 | `AT-CC-109` | 执行请求到达时就绪不存在、已失效或与目标不一致 | UC-CC-005-FREEZE-SUBMISSION-AND-INITIATE-ATTEMPT.md |
 | `AT-CC-110` | 授权不存在、已撤销、已到期、目标不符或已被另一逻辑提交使用 | UC-CC-005-FREEZE-SUBMISSION-AND-INITIATE-ATTEMPT.md |
@@ -962,7 +972,6 @@
 | `AT-CC-118` | 检查一个已冻结提交版本 | UC-CC-005-FREEZE-SUBMISSION-AND-INITIATE-ATTEMPT.md |
 | `AT-CC-120` | 提交版本冻结后渠道模板或映射版本升级 | UC-CC-005-FREEZE-SUBMISSION-AND-INITIATE-ATTEMPT.md |
 | `AT-CC-121` | 提交版本合法形成后，资料、角色、规则、凭证或渠道资格发生变化 | UC-CC-005-FREEZE-SUBMISSION-AND-INITIATE-ATTEMPT.md |
-| `AT-CC-122` | 相同请求、目标、授权、账号和实际内容重复到达 | UC-CC-005-FREEZE-SUBMISSION-AND-INITIATE-ATTEMPT.md |
 | `AT-CC-123` | 相同请求身份携带不同资料、动作、渠道、账号、授权或内容 | UC-CC-005-FREEZE-SUBMISSION-AND-INITIATE-ATTEMPT.md |
 | `AT-CC-124` | 两个执行者并发使用同一具体授权提交同一目标 | UC-CC-005-FREEZE-SUBMISSION-AND-INITIATE-ATTEMPT.md |
 | `AT-CC-125` | 最终门禁、内容形成或本地持久化在完整业务边界前失败，且可证明未调用渠道 | UC-CC-005-FREEZE-SUBMISSION-AND-INITIATE-ATTEMPT.md |
