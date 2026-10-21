@@ -200,9 +200,10 @@ func NewTriggerDispatchOnHandoverHandler(deps TriggerDispatchOnHandoverDeps) *Tr
 
 // Trigger 跑一拍：受理键 → 按键读回那一版交接（须是`已交接`）→ 按对象找此刻在场的段 → 交执行器。
 //
-// 段取「此刻在场的段」而不是这次交接立进的段：交接记录不带段，段号只在段登记册的参与上；信封晚到、对象已经又被下一次
-// 交接带走时，此刻在场的段才是该派送的那一段，前一段的参与已离场、照 ADR-0114 决定二本就不触发。多于一个在场段是
-// 库面不一致，不挑一个，与结束参与那一侧同一个错误。
+// 段取「此刻在场的段」：交接记录不带段，段号只在段登记册的参与上。这一版交接随命令交给执行器，由它核那个段里的链尾
+// 是不是凭这一版入场（票 demo-chain-gaps/129）——信封晚到、对象已被下一次交接带进别的段，或待确认更正为`已交接`而对象
+// 仍挂在先前的段里，此刻在场的段都不是这次交接带对象进的段，执行器答`不是触发事实`。核在执行器那一道门，不在这里另判：
+// 认「凭哪一版交接入场」只有一处定义。多于一个在场段是库面不一致，不挑一个，与结束参与那一侧同一个错误。
 func (handler *TriggerDispatchOnHandoverHandler) Trigger(
 	ctx context.Context,
 	command TriggerDispatchOnHandoverCommand,
@@ -234,11 +235,13 @@ func (handler *TriggerDispatchOnHandoverHandler) Trigger(
 		return TriggerDispatchOnHandoverResult{}, ErrObjectActiveInSeveralSegments
 	}
 
+	handover := record.Handover
 	triggered, err := handler.deps.Trigger.Trigger(ctx, TriggerDeliveryDispatchCommand{
-		TenantID:   key.TenantID,
-		Segment:    active[0].Segment.String(),
-		Object:     key.Object.String(),
-		OccurredAt: handler.deps.Clock.Now(),
+		TenantID:         key.TenantID,
+		Segment:          active[0].Segment.String(),
+		Object:           key.Object.String(),
+		OccurredAt:       handler.deps.Clock.Now(),
+		ExpectedHandover: &handover,
 	})
 	if err != nil {
 		return TriggerDispatchOnHandoverResult{}, err

@@ -59,9 +59,9 @@ func (outcome DeliveryDispatchTriggerOutcome) String() string {
 	}
 }
 
-// DeliveryTriggerRefusal 点名`不是触发事实`是哪一格。五格各自成格而不并成一个「不触发」，因为续办动作两两不同：
+// DeliveryTriggerRefusal 点名`不是触发事实`是哪一格。各格各自成格而不并成一个「不触发」，因为续办动作两两不同：
 // 去查段立没立起来、去查对象进没进段、去看对象是不是已经交出去了、去看登记方有没有声明服务动作、去看进段凭的是
-// 哪种控制事实。与 SegmentEntryRefusal 同一条规则：领域正当拒绝单开答格、不留续办引用。
+// 哪种控制事实、去看对象此刻是凭哪一次交接进的段。与 SegmentEntryRefusal 同一条规则：领域正当拒绝单开答格、不留续办引用。
 type DeliveryTriggerRefusal uint8
 
 const (
@@ -78,6 +78,10 @@ const (
 	// `已交接`的权威交接进入派送段」这一种事实；揽收成立的段被声明为派送段时（ADR-0114 越权风险点 2 的那一格），凭收寄
 	// 进入的对象照字面不触发，后续凭交接加入的对象才触发。
 	DeliveryTriggerRefusedEntryNotByHandover
+	// DeliveryTriggerRefusedEntryNotThisHandover：调用方说了这一拍是哪一次交接带对象进的段（命令里的期望交接），而链尾
+	// 不是凭它入场的。信封晚到、对象已被下一次交接带进别的段，或待确认更正为`已交接`而对象仍挂在先前的段里，都落这一格：
+	// 这次交接没有带对象进这个段，替这个段形成任务就是替一个对象已经交出去的段派送（票 demo-chain-gaps/129）。
+	DeliveryTriggerRefusedEntryNotThisHandover
 )
 
 func (refusal DeliveryTriggerRefusal) String() string {
@@ -92,6 +96,8 @@ func (refusal DeliveryTriggerRefusal) String() string {
 		return "SEGMENT_NOT_DELIVERY"
 	case DeliveryTriggerRefusedEntryNotByHandover:
 		return "ENTRY_NOT_BY_HANDOVER"
+	case DeliveryTriggerRefusedEntryNotThisHandover:
+		return "ENTRY_NOT_THIS_HANDOVER"
 	default:
 		return ""
 	}
@@ -168,11 +174,17 @@ func (reason DeliveryDispatchUndecidedReason) String() string {
 // 在这一拍成立的，进段是它的触发事实不是它的成立时刻。它由调用方给而不是这里取时钟，与 OpenDispatchTaskCommand 同一
 // 条通例——任务是何时成立的，不由写库那一刻决定。调用方有两个（ADR-0216）：派发进程里随交接登记信封发起的那一路，给的
 // 是处理那封信那一刻的派发时钟；作业事实口的补拍，给的是请求里报的时刻。一拍一对象，没有拍频可选。
+//
+// ExpectedHandover 可缺：随交接信封发起的那一路给出那一版交接，执行器据它核链尾是不是凭这一次交接入场的（票
+// demo-chain-gaps/129）。给的是交接本身而不是一串依据：认「这条参与是不是凭这一版交接进的段」只在
+// FulfillmentParticipation.EnteredByHandover 一处定义，旧拼法的依据要按版本与起点认，比串比不出来。补拍与按册重问不给——
+// 它们问的是对象此刻在这个段里的那条参与，不替某一次交接说话。
 type TriggerDeliveryDispatchCommand struct {
-	TenantID   domain.TenantID
-	Segment    string
-	Object     string
-	OccurredAt time.Time
+	TenantID         domain.TenantID
+	Segment          string
+	Object           string
+	OccurredAt       time.Time
+	ExpectedHandover *domain.TransportHandover
 }
 
 type TriggerDeliveryDispatchResult struct {
@@ -281,9 +293,17 @@ func (handler *TriggerDeliveryDispatchHandler) Trigger(
 	if participation.EntryKind() != domain.EnteredByTransportHandover {
 		return deliveryDispatchRefused(DeliveryTriggerRefusedEntryNotByHandover), nil
 	}
+	// 期望交接核在查在册之前：这次交接没带对象进这个段，这一拍就不是它的触发事实，不论这个段上有没有任务。
+	if command.ExpectedHandover != nil && !participation.EnteredByHandover(*command.ExpectedHandover) {
+		return deliveryDispatchRefused(DeliveryTriggerRefusedEntryNotThisHandover), nil
+	}
 	reference := deliveryDispatchTaskReference(segmentReference, object, participation.EntryBasis())
 	if registered, answered := handler.registeredTask(ctx, command, object, reference,
 		legacyDeliveryDispatchTaskReference(segmentReference, object, participation.EntryBasis())); answered {
+		return registered, nil
+	}
+	if registered, answered := handler.registeredOnSupersededVersion(ctx, command, segmentReference, object,
+		record.Segment.ParticipationHistory(object)); answered {
 		return registered, nil
 	}
 	if !participation.Active() {
@@ -445,7 +465,7 @@ func (handler *TriggerDeliveryDispatchHandler) registeredTask(
 	// 段与入场依据是调用方给的不透明串，旧拼法串因此可能恰好合新形状；那样的串上若有任务，是新铸法下另一组（段，对象，
 	// 入场依据）的，同一对象跨段时种类与对象集都对得上，核对拦不住。新旧两种拼法字面上不得相同，在这里守
 	// （票 tf-face-algebra/09 裁定「单射铸法：取长度前缀，带形状标记」）。
-	if _, newShape := parseDeliveryDispatchTaskReference(legacy); newShape {
+	if isNewShapeDeliveryDispatchTaskReference(legacy) {
 		return TriggerDeliveryDispatchResult{}, false
 	}
 	task, found, err = handler.findTask(ctx, command.TenantID, legacy)
@@ -454,6 +474,45 @@ func (handler *TriggerDeliveryDispatchHandler) registeredTask(
 	}
 	if found && isThisObjectsDeliveryTask(task, object) {
 		return TriggerDeliveryDispatchResult{outcome: DeliveryDispatchTaskAlreadyFormed, record: task, hasRecord: true}, true
+	}
+	return TriggerDeliveryDispatchResult{}, false
+}
+
+// registeredOnSupersededVersion 沿参与替代链往前回看：链尾回指的前版参与已经形成了这个对象的派送任务，就答`已在册`并交回
+// 那一项，不按链尾的入场依据另铸第二项（票 demo-chain-gaps/129）。
+//
+// 同一段上的替代版本不是进段：CONTEXT 把内部触发限定为「载运对象凭`已交接`进入派送段」，证据更正只改写对象凭什么在段里，
+// 对象一直在这个段里，派送也就仍是那一项。键照旧按（段，对象，入场依据）铸，不改铸法：已落库的任务身份不追溯改写，链尾
+// 那一版若从没形成过任务，照新入场依据铸。
+//
+// 失效版本跳过：它记的是「凭前版入场的那条参与失去了依据」，链尾失效时执行器早在前面答了对象不在段里，失效版本上从没有
+// 一拍走到形成任务。前版键上立着的不是这个对象的派送任务时不算在册、也不答引用被占——那一串不是本拍的键，只是兼认的去处。
+func (handler *TriggerDeliveryDispatchHandler) registeredOnSupersededVersion(
+	ctx context.Context,
+	command TriggerDeliveryDispatchCommand,
+	segment domain.FulfillmentSegmentReference,
+	object domain.CarriedObjectReference,
+	history []domain.FulfillmentParticipation,
+) (TriggerDeliveryDispatchResult, bool) {
+	for index := len(history) - 2; index >= 0; index-- {
+		prior := history[index]
+		if prior.Voided() {
+			continue
+		}
+		candidates := []string{deliveryDispatchTaskReference(segment, object, prior.EntryBasis())}
+		// 旧拼法串恰合新形状时不去认它，理由同 registeredTask 那一处：那样的串上的任务属于新铸法下另一组三件。
+		if legacy := legacyDeliveryDispatchTaskReference(segment, object, prior.EntryBasis()); !isNewShapeDeliveryDispatchTaskReference(legacy) {
+			candidates = append(candidates, legacy)
+		}
+		for _, raw := range candidates {
+			task, found, err := handler.findTask(ctx, command.TenantID, raw)
+			if err != nil {
+				return deliveryDispatchUndecided(DeliveryDispatchTaskUndecided, command), true
+			}
+			if found && isThisObjectsDeliveryTask(task, object) {
+				return TriggerDeliveryDispatchResult{outcome: DeliveryDispatchTaskAlreadyFormed, record: task, hasRecord: true}, true
+			}
+		}
 	}
 	return TriggerDeliveryDispatchResult{}, false
 }
@@ -553,6 +612,11 @@ func parseDeliveryDispatchTaskReference(reference string) ([3]string, bool) {
 		parts[index], rest = after[:length], after[length:]
 	}
 	return parts, rest == ""
+}
+
+func isNewShapeDeliveryDispatchTaskReference(reference string) bool {
+	_, newShape := parseDeliveryDispatchTaskReference(reference)
+	return newShape
 }
 
 // legacyDeliveryDispatchTaskReference 是旧拼法：三件以斜杠直拼，不单射。只用来兼认停在它上面的存量，不拿它铸新任务。
