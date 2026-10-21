@@ -131,3 +131,11 @@ func (trigger ReassessmentTrigger) SourceVersion() SourceFactVersionReference {
 func (trigger ReassessmentTrigger) OccurredAt() time.Time {
 	return trigger.occurredAt
 }
+
+// PrecedesPosition 答这次触发是否早于路由历史里最近一次已判控制触发的业务时间（ADR-0235）。CONTEXT 要求按业务时间
+// 裁决、不按消息到达顺序：收寄采用与交接分属不同分区，较早的那次可能在较新的复核之后才到，再判一次就是据一个已经
+// 过去的位置失效或改路。同一时刻不算更早：两次控制落在同一时刻时没有先后可比，照判，不替它们排一个没有业务依据
+// 的次序。
+func (trigger ReassessmentTrigger) PrecedesPosition(positionAt time.Time) bool {
+	return trigger.occurredAt.Before(positionAt)
+}

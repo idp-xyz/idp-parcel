@@ -68,6 +68,7 @@ func (repository *RouteReassessments) FindByCorrelation(
 		reviewedPlan, lapseBasis                      *string
 		candidateState, rerouteState                  *string
 		blockersJSON, planJSON, suggJSON, decisionRaw []byte
+		triggerOccurredAt                             *time.Time
 		reassessedAt                                  time.Time
 	)
 	err = querier.QueryRow(ctx,
@@ -75,7 +76,7 @@ func (repository *RouteReassessments) FindByCorrelation(
 		        acceptance_baseline, declared_parcel_id, service_purpose,
 		        conclusion, reviewed_plan, lapse_basis,
 		        candidate_state, reroute_state, reroute_blockers,
-		        new_plan, suggestion, decision, reassessed_at
+		        new_plan, suggestion, decision, trigger_occurred_at, reassessed_at
 		   FROM network_routing.route_reassessment
 		  WHERE tenant_id = $1
 		    AND correlation_id = $2`,
@@ -85,7 +86,7 @@ func (repository *RouteReassessments) FindByCorrelation(
 		&acceptanceBaseline, &declaredParcel, &purpose,
 		&conclusion, &reviewedPlan, &lapseBasis,
 		&candidateState, &rerouteState, &blockersJSON,
-		&planJSON, &suggJSON, &decisionRaw, &reassessedAt)
+		&planJSON, &suggJSON, &decisionRaw, &triggerOccurredAt, &reassessedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.ReassessmentRecord{}, false, nil
 	}
@@ -108,6 +109,10 @@ func (repository *RouteReassessments) FindByCorrelation(
 		Correlation:  correlation,
 		Key:          key,
 		ReassessedAt: reassessedAt.UTC(),
+	}
+	// 迁移 0022 之前落的行没有触发业务时间，读回零值，与「不参与当前位置」同一个意思。
+	if triggerOccurredAt != nil {
+		record.TriggerOccurredAt = triggerOccurredAt.UTC()
 	}
 	record.Conclusion, err = reassessmentConclusionFrom(conclusion)
 	if err != nil {
@@ -186,6 +191,10 @@ func (repository *RouteReassessments) Save(
 	if err != nil {
 		return ports.ReassessmentSaveOutcomeInvalid, fmt.Errorf("save reassessment: %w", err)
 	}
+	// 新行必带触发业务时间（迁移 0022 的 CHECK 也拒）：缺了它，这次复核不算进当前位置，较早的触发会在它之后再判。
+	if record.TriggerOccurredAt.IsZero() {
+		return ports.ReassessmentSaveOutcomeInvalid, fmt.Errorf("save reassessment: trigger business time is zero")
+	}
 
 	key := record.Key
 	tag, err := executor.Exec(ctx,
@@ -195,8 +204,8 @@ func (repository *RouteReassessments) Save(
 			 acceptance_baseline, declared_parcel_id, service_purpose,
 			 conclusion, reviewed_plan, lapse_basis,
 			 candidate_state, reroute_state, reroute_blockers,
-			 new_plan, suggestion, decision, reassessed_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+			 new_plan, suggestion, decision, trigger_occurred_at, reassessed_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 		 ON CONFLICT DO NOTHING`,
 		key.TenantID.String(),
 		correlation.String(),
@@ -214,6 +223,7 @@ func (repository *RouteReassessments) Save(
 		columns.planJSON,
 		columns.suggestionJSON,
 		columns.decisionJSON,
+		record.TriggerOccurredAt.UTC(),
 		record.ReassessedAt.UTC(),
 	)
 	if err != nil {
@@ -240,14 +250,23 @@ func (repository *RouteReassessments) RecordNotJudged(ctx context.Context, recor
 	if record.TriggerOccurredAt.IsZero() || record.SettledAt.IsZero() {
 		return fmt.Errorf("record reassessment not judged: trigger or settlement time is zero")
 	}
+	var positionAt *time.Time
+	if !record.CurrentPositionAt.IsZero() {
+		at := record.CurrentPositionAt.UTC()
+		positionAt = &at
+	}
+	if (record.Reason == ports.NotJudgedTriggerPrecedesCurrentPosition) != (positionAt != nil) {
+		return fmt.Errorf("record reassessment not judged: current position time must come with %s and only with it",
+			ports.NotJudgedTriggerPrecedesCurrentPosition)
+	}
 	key := record.Key
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO network_routing.route_reassessment_not_judged
 			(tenant_id, correlation_id,
 			 customer_account_id, shipment_request_id,
 			 acceptance_baseline, declared_parcel_id, service_purpose,
-			 reason, trigger_occurred_at, settled_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			 reason, trigger_occurred_at, current_position_at, settled_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		 ON CONFLICT DO NOTHING`,
 		key.TenantID.String(),
 		record.Correlation.String(),
@@ -258,11 +277,64 @@ func (repository *RouteReassessments) RecordNotJudged(ctx context.Context, recor
 		key.ServicePurpose.String(),
 		reason,
 		record.TriggerOccurredAt.UTC(),
+		positionAt,
 		record.SettledAt.UTC(),
 	); err != nil {
 		return fmt.Errorf("record reassessment not judged: %w", err)
 	}
 	return nil
+}
+
+// LatestTriggerAt 交回这一判断键在册复核里最近一次控制触发的业务时间（ADR-0235）。
+//
+// 查询之前按判断键取事务级咨询锁，把「读最近一次 → 判 → 落复核」串到事务结束：收寄采用与交接两路分属不同分区，
+// 可能在两笔并发事务里到达，读已提交下各自读不到对方尚未提交的复核，会双双判过，较早的那次照样落在较新的之后。
+// 后到的一方等在锁上，先到的提交后才查，这条查询另取快照，读得到刚提交的那一行。锁随事务释放，所以走
+// RequireExecutor：没有事务时锁在取锁那条语句结束就放掉，静默放过比报错更糟。锁键各维以 chr(31) 分隔后取
+// hashtext，口径同 CC 的 ExternalResults.LoadForSubmission；哈希撞上只多等一会儿，不错判。
+//
+// 迁移 0022 之前落的行没有触发业务时间，max 跳过它们；一行都没有带时间的，答没有当前位置。
+func (repository *RouteReassessments) LatestTriggerAt(
+	ctx context.Context,
+	key domain.InitialRouteJudgmentKey,
+) (time.Time, bool, error) {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("latest reassessment trigger: %w", err)
+	}
+	dims := []any{
+		key.TenantID.String(),
+		key.CustomerAccountID.String(),
+		key.ShipmentRequestID.String(),
+		key.AcceptanceBaseline.String(),
+		key.DeclaredParcelID.String(),
+		key.ServicePurpose.String(),
+	}
+	if _, err := executor.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext('network_routing.route_reassessment.judgment_key'),
+		        hashtext($1 || chr(31) || $2 || chr(31) || $3 || chr(31) || $4 || chr(31) || $5 || chr(31) || $6))`,
+		dims...,
+	); err != nil {
+		return time.Time{}, false, fmt.Errorf("latest reassessment trigger: 取判断键锁：%w", err)
+	}
+	var latest *time.Time
+	if err := executor.QueryRow(ctx,
+		`SELECT max(trigger_occurred_at)
+		   FROM network_routing.route_reassessment
+		  WHERE tenant_id = $1
+		    AND customer_account_id = $2
+		    AND shipment_request_id = $3
+		    AND acceptance_baseline = $4
+		    AND declared_parcel_id = $5
+		    AND service_purpose = $6`,
+		dims...,
+	).Scan(&latest); err != nil {
+		return time.Time{}, false, fmt.Errorf("latest reassessment trigger: %w", err)
+	}
+	if latest == nil {
+		return time.Time{}, false, nil
+	}
+	return latest.UTC(), true, nil
 }
 
 type reassessmentRowColumns struct {

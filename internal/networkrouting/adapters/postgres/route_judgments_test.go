@@ -238,17 +238,18 @@ func TestALapsedReassessmentCarriesItsSuggestion(t *testing.T) {
 		t.Fatalf("构造建议：%v", err)
 	}
 	record := ports.ReassessmentRecord{
-		Correlation:     correlation,
-		Key:             key,
-		Conclusion:      ports.ReassessmentPlanLapsed,
-		ReviewedPlan:    scalar(t, domain.NewRoutePlanVersionID, "RPV-0001"),
-		LapseBasis:      scalar(t, domain.NewApplicabilityBasisReference, "closure-7"),
-		CandidateState:  ports.CandidatesAvailable,
-		RerouteState:    domain.SuggestionOnly,
-		RerouteBlockers: []string{"NOT_AT_CONTROLLED_NODE"},
-		Suggestion:      suggestion,
-		HasSuggestion:   true,
-		ReassessedAt:    reassessedAtTS,
+		Correlation:       correlation,
+		Key:               key,
+		Conclusion:        ports.ReassessmentPlanLapsed,
+		ReviewedPlan:      scalar(t, domain.NewRoutePlanVersionID, "RPV-0001"),
+		LapseBasis:        scalar(t, domain.NewApplicabilityBasisReference, "closure-7"),
+		CandidateState:    ports.CandidatesAvailable,
+		RerouteState:      domain.SuggestionOnly,
+		RerouteBlockers:   []string{"NOT_AT_CONTROLLED_NODE"},
+		Suggestion:        suggestion,
+		HasSuggestion:     true,
+		ReassessedAt:      reassessedAtTS,
+		TriggerOccurredAt: reassessedAtTS.Add(-time.Hour),
 	}
 	saveReassessment(t, transactor, ctx, reassessments, correlation, record)
 
@@ -280,11 +281,12 @@ func TestReassessmentReplayKeepsTheFirstConclusion(t *testing.T) {
 	key := routeKey(t, "tenant-1", "parcel-1")
 	correlation := scalar(t, domain.NewRequestCorrelationID, "trigger-3")
 	first := ports.ReassessmentRecord{
-		Correlation:  correlation,
-		Key:          key,
-		Conclusion:   ports.ReassessmentStillApplicable,
-		ReviewedPlan: scalar(t, domain.NewRoutePlanVersionID, "RPV-0001"),
-		ReassessedAt: reassessedAtTS,
+		Correlation:       correlation,
+		Key:               key,
+		Conclusion:        ports.ReassessmentStillApplicable,
+		ReviewedPlan:      scalar(t, domain.NewRoutePlanVersionID, "RPV-0001"),
+		ReassessedAt:      reassessedAtTS,
+		TriggerOccurredAt: reassessedAtTS.Add(-time.Hour),
 	}
 	saveReassessment(t, transactor, ctx, reassessments, correlation, first)
 
@@ -314,11 +316,12 @@ func TestReassessmentScopesAreInvisibleToEachOther(t *testing.T) {
 	key := routeKey(t, "tenant-1", "parcel-1")
 	correlation := scalar(t, domain.NewRequestCorrelationID, "trigger-4")
 	saveReassessment(t, transactor, ctx, reassessments, correlation, ports.ReassessmentRecord{
-		Correlation:  correlation,
-		Key:          key,
-		Conclusion:   ports.ReassessmentStillApplicable,
-		ReviewedPlan: scalar(t, domain.NewRoutePlanVersionID, "RPV-0001"),
-		ReassessedAt: reassessedAtTS,
+		Correlation:       correlation,
+		Key:               key,
+		Conclusion:        ports.ReassessmentStillApplicable,
+		ReviewedPlan:      scalar(t, domain.NewRoutePlanVersionID, "RPV-0001"),
+		ReassessedAt:      reassessedAtTS,
+		TriggerOccurredAt: reassessedAtTS.Add(-time.Hour),
 	})
 
 	other := scalar(t, domain.NewTenantID, "tenant-b")
@@ -330,7 +333,8 @@ func TestReassessmentScopesAreInvisibleToEachOther(t *testing.T) {
 // TestConclusionShapeIsPinnedInTheDatabase 证在场件矩阵的库面：绕过适配器直插的坏行
 // 被 CHECK 拒。后三支探针钉的是 SQL 三值逻辑的缝——可空列上的等号 / IN /
 // jsonb_array_length 在 NULL 上给 NULL，没有显式 IS NOT NULL（或 IS NOT DISTINCT
-// FROM）时整条约束会按 NULL 放行。
+// FROM）时整条约束会按 NULL 放行。探针都带上触发业务时间：缺了它，行先被迁移 0022 那条 CHECK 拒，探针就不再证
+// 它自己点名的那条约束。
 func TestConclusionShapeIsPinnedInTheDatabase(t *testing.T) {
 	_, _, _, pool := newRouteStores(t)
 	ctx := t.Context()
@@ -339,10 +343,10 @@ func TestConclusionShapeIsPinnedInTheDatabase(t *testing.T) {
 		`INSERT INTO network_routing.route_reassessment
 			(tenant_id, correlation_id, customer_account_id, shipment_request_id,
 			 acceptance_baseline, declared_parcel_id, service_purpose,
-			 conclusion, reviewed_plan, lapse_basis, reassessed_at)
+			 conclusion, reviewed_plan, lapse_basis, trigger_occurred_at, reassessed_at)
 		 VALUES ('tenant-1', 'trigger-9', 'customer-a', 'request-1',
 		         'baseline-v1', 'parcel-1', 'LAST_MILE_DELIVERY',
-		         'STILL_APPLICABLE', 'RPV-0001', 'closure-7', now())`); err == nil {
+		         'STILL_APPLICABLE', 'RPV-0001', 'closure-7', now(), now())`); err == nil {
 		t.Fatal("一行「仍适用却带失效依据」进了复核库")
 	}
 
@@ -350,10 +354,10 @@ func TestConclusionShapeIsPinnedInTheDatabase(t *testing.T) {
 		`INSERT INTO network_routing.route_reassessment
 			(tenant_id, correlation_id, customer_account_id, shipment_request_id,
 			 acceptance_baseline, declared_parcel_id, service_purpose,
-			 conclusion, reviewed_plan, lapse_basis, candidate_state, reassessed_at)
+			 conclusion, reviewed_plan, lapse_basis, candidate_state, trigger_occurred_at, reassessed_at)
 		 VALUES ('tenant-1', 'trigger-10', 'customer-a', 'request-1',
 		         'baseline-v1', 'parcel-1', 'LAST_MILE_DELIVERY',
-		         'PLAN_LAPSED', 'RPV-0001', 'closure-7', NULL, now())`); err == nil {
+		         'PLAN_LAPSED', 'RPV-0001', 'closure-7', NULL, now(), now())`); err == nil {
 		t.Fatal("一行「已失效却没有候选评估状态」按 NULL 溜进了复核库")
 	}
 
@@ -362,11 +366,11 @@ func TestConclusionShapeIsPinnedInTheDatabase(t *testing.T) {
 			(tenant_id, correlation_id, customer_account_id, shipment_request_id,
 			 acceptance_baseline, declared_parcel_id, service_purpose,
 			 conclusion, reviewed_plan, lapse_basis, candidate_state,
-			 reroute_state, new_plan, decision, reassessed_at)
+			 reroute_state, new_plan, decision, trigger_occurred_at, reassessed_at)
 		 VALUES ('tenant-1', 'trigger-11', 'customer-a', 'request-1',
 		         'baseline-v1', 'parcel-1', 'LAST_MILE_DELIVERY',
 		         'REROUTED', 'RPV-0001', 'closure-7', 'CANDIDATES_AVAILABLE',
-		         NULL, '{}', '{}', now())`); err == nil {
+		         NULL, '{}', '{}', now(), now())`); err == nil {
 		t.Fatal("一行「已改路却没有改路判定」按 NULL 溜进了复核库")
 	}
 
@@ -375,11 +379,11 @@ func TestConclusionShapeIsPinnedInTheDatabase(t *testing.T) {
 			(tenant_id, correlation_id, customer_account_id, shipment_request_id,
 			 acceptance_baseline, declared_parcel_id, service_purpose,
 			 conclusion, reviewed_plan, lapse_basis, candidate_state,
-			 reroute_state, reroute_blockers, suggestion, reassessed_at)
+			 reroute_state, reroute_blockers, suggestion, trigger_occurred_at, reassessed_at)
 		 VALUES ('tenant-1', 'trigger-12', 'customer-a', 'request-1',
 		         'baseline-v1', 'parcel-1', 'LAST_MILE_DELIVERY',
 		         'PLAN_LAPSED', 'RPV-0001', 'closure-7', 'CANDIDATES_AVAILABLE',
-		         'SUGGESTION_ONLY', NULL, '{}', now())`); err == nil {
+		         'SUGGESTION_ONLY', NULL, '{}', now(), now())`); err == nil {
 		t.Fatal("一行「仅建议却没有阻塞清单」按 NULL 溜进了复核库")
 	}
 
@@ -388,11 +392,11 @@ func TestConclusionShapeIsPinnedInTheDatabase(t *testing.T) {
 			(tenant_id, correlation_id, customer_account_id, shipment_request_id,
 			 acceptance_baseline, declared_parcel_id, service_purpose,
 			 conclusion, reviewed_plan, lapse_basis, candidate_state,
-			 reroute_state, reroute_blockers, suggestion, reassessed_at)
+			 reroute_state, reroute_blockers, suggestion, trigger_occurred_at, reassessed_at)
 		 VALUES ('tenant-1', 'trigger-13', 'customer-a', 'request-1',
 		         'baseline-v1', 'parcel-1', 'LAST_MILE_DELIVERY',
 		         'PLAN_LAPSED', 'RPV-0001', 'closure-7', 'CANDIDATES_AVAILABLE',
-		         'SUGGESTION_ONLY', '{}', '{}', now())`); err == nil {
+		         'SUGGESTION_ONLY', '{}', '{}', now(), now())`); err == nil {
 		t.Fatal("一行「阻塞清单是对象不是数组」按 jsonb 类型缝溜进了复核库")
 	}
 }
@@ -410,11 +414,12 @@ func TestRouteWritesRefuseToRunOutsideATransaction(t *testing.T) {
 
 	correlation := scalar(t, domain.NewRequestCorrelationID, "trigger-5")
 	if _, err := reassessments.Save(ctx, correlation, ports.ReassessmentRecord{
-		Correlation:  correlation,
-		Key:          key,
-		Conclusion:   ports.ReassessmentStillApplicable,
-		ReviewedPlan: scalar(t, domain.NewRoutePlanVersionID, "RPV-0001"),
-		ReassessedAt: reassessedAtTS,
+		Correlation:       correlation,
+		Key:               key,
+		Conclusion:        ports.ReassessmentStillApplicable,
+		ReviewedPlan:      scalar(t, domain.NewRoutePlanVersionID, "RPV-0001"),
+		ReassessedAt:      reassessedAtTS,
+		TriggerOccurredAt: reassessedAtTS.Add(-time.Hour),
 	}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务保存复核应返回 ErrTransactionRequired，实得：%v", err)
 	}
@@ -434,11 +439,12 @@ func TestRouteRollbackLeavesNothingBehind(t *testing.T) {
 			return err
 		}
 		if _, err := reassessments.Save(txCtx, correlation, ports.ReassessmentRecord{
-			Correlation:  correlation,
-			Key:          key,
-			Conclusion:   ports.ReassessmentStillApplicable,
-			ReviewedPlan: scalar(t, domain.NewRoutePlanVersionID, "RPV-0001"),
-			ReassessedAt: reassessedAtTS,
+			Correlation:       correlation,
+			Key:               key,
+			Conclusion:        ports.ReassessmentStillApplicable,
+			ReviewedPlan:      scalar(t, domain.NewRoutePlanVersionID, "RPV-0001"),
+			ReassessedAt:      reassessedAtTS,
+			TriggerOccurredAt: reassessedAtTS.Add(-time.Hour),
 		}); err != nil {
 			return err
 		}
@@ -647,17 +653,18 @@ func reroutedRecord(
 		t.Fatalf("形成改路决定：%v", err)
 	}
 	return ports.ReassessmentRecord{
-		Correlation:    correlation,
-		Key:            key,
-		Conclusion:     ports.ReassessmentRerouted,
-		ReviewedPlan:   scalar(t, domain.NewRoutePlanVersionID, "RPV-0001"),
-		LapseBasis:     scalar(t, domain.NewApplicabilityBasisReference, "closure-7"),
-		CandidateState: ports.CandidatesAvailable,
-		RerouteState:   domain.AutomaticRerouteAllowed,
-		NewPlan:        newPlan,
-		HasNewPlan:     true,
-		Decision:       decision,
-		HasDecision:    true,
-		ReassessedAt:   reassessedAtTS,
+		Correlation:       correlation,
+		Key:               key,
+		Conclusion:        ports.ReassessmentRerouted,
+		ReviewedPlan:      scalar(t, domain.NewRoutePlanVersionID, "RPV-0001"),
+		LapseBasis:        scalar(t, domain.NewApplicabilityBasisReference, "closure-7"),
+		CandidateState:    ports.CandidatesAvailable,
+		RerouteState:      domain.AutomaticRerouteAllowed,
+		NewPlan:           newPlan,
+		HasNewPlan:        true,
+		Decision:          decision,
+		HasDecision:       true,
+		ReassessedAt:      reassessedAtTS,
+		TriggerOccurredAt: reassessedAtTS.Add(-time.Hour),
 	}
 }

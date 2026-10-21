@@ -161,7 +161,7 @@ func NewReassessRouteHandler(deps ReassessRouteDeps) *ReassessRouteHandler {
 // Handle 把一次权威触发推进到复核结论：触发受理（线索在构造期就被拒）→ 重复/冲突分界
 // → 载入历史结果（没有历史不得凭空假定初始计划）→ 两条独立判断线（6A 计划适用性、
 // 6B 替代候选）→ 提交。失效即失效：候选评估未决拦不住失效落库，三件并存（硬句）。
-// 判断前提里重投推不动的那几格不答未决，入账未判、留下原因（ADR-0235）。
+// 判断前提里重投推不动的那几格不答未决，入账未判、留下原因；早于当前位置的触发同样入账不判（ADR-0235）。
 func (handler *ReassessRouteHandler) Handle(
 	ctx context.Context,
 	command ReassessRouteCommand,
@@ -199,13 +199,23 @@ func (handler *ReassessRouteHandler) Handle(
 		return handler.undecided(key, ReassessLogUnavailable), nil
 	}
 
+	// UC-NR-003 复核顺序「触发有效性」那一层问业务时间是否当前：包裹已经在更晚的控制位置上判过，这次触发不再据以
+	// 失效或改路（ADR-0235）。放在已有结果分界之后：已判过的触发再投读回原结果，不因它后来被更晚的复核超过而改答。
+	positionAt, positioned, err := handler.deps.Store.LatestTriggerAt(ctx, key)
+	if err != nil {
+		return handler.undecided(key, ReassessStoreUnavailable), nil
+	}
+	if positioned && trigger.PrecedesPosition(positionAt) {
+		return handler.notJudged(ctx, trigger, ports.NotJudgedTriggerPrecedesCurrentPosition, positionAt)
+	}
+
 	history, found, err := handler.deps.Routes.FindByKey(ctx, key)
 	if err != nil {
 		return handler.undecided(key, RoutingHistoryUnavailable), nil
 	}
 	if !found {
 		// 「没有历史结果时不得凭空假定初始计划」——复核复的是一份已有判断。
-		return handler.notJudged(ctx, trigger, ports.NotJudgedNoRoutingHistory)
+		return handler.notJudged(ctx, trigger, ports.NotJudgedNoRoutingHistory, time.Time{})
 	}
 
 	evidence, configured, err := handler.deps.Evidence.LoadInitialRouteEvidence(ctx, key, command.Carried)
@@ -213,7 +223,7 @@ func (handler *ReassessRouteHandler) Handle(
 		return handler.undecided(key, ReassessEvidenceUnavailable), nil
 	}
 	if !configured {
-		return handler.notJudged(ctx, trigger, ports.NotJudgedEvidenceNotConfigured)
+		return handler.notJudged(ctx, trigger, ports.NotJudgedEvidenceNotConfigured, time.Time{})
 	}
 	if !evidence.ViewRevision.Valid() || !evidence.Strategy.Valid() {
 		return ReassessRouteResult{}, ErrIncompleteRouteEvidence
@@ -285,7 +295,7 @@ func (handler *ReassessRouteHandler) reassessPlan(
 			return ReassessRouteResult{}, err
 		}
 		if unconfigured {
-			return handler.notJudged(ctx, trigger, ports.NotJudgedFreezeFormUnconfigured)
+			return handler.notJudged(ctx, trigger, ports.NotJudgedFreezeFormUnconfigured, time.Time{})
 		}
 		record := ports.ReassessmentRecord{
 			Correlation:  trigger.Correlation(),
@@ -819,13 +829,15 @@ func (handler *ReassessRouteHandler) reviewCandidates(evidence ports.InitialRout
 	}
 }
 
-// commit 提交复核记录。并发下另一方先提交时读回赢家。
+// commit 提交复核记录。并发下另一方先提交时读回赢家。触发的业务时间在这里一处写上：每条提交路都经过这里，
+// 漏写一条，那次复核就不再算进当前位置（ADR-0235）。
 func (handler *ReassessRouteHandler) commit(
 	ctx context.Context,
 	trigger domain.ReassessmentTrigger,
 	record ports.ReassessmentRecord,
 ) (ReassessRouteResult, error) {
 	key := trigger.Key()
+	record.TriggerOccurredAt = trigger.OccurredAt()
 	saved, err := handler.deps.Store.Save(ctx, trigger.Correlation(), record)
 	if err != nil {
 		return handler.undecided(key, ReassessStoreUnavailable), nil
@@ -860,11 +872,12 @@ func (handler *ReassessRouteHandler) loadApplicability(
 
 // notJudged 先把原因落进未判登记，再答`未判`。原因没落库就不得答这一格（护栏同 ADR-0094 决定五）：
 // 消费门见`未判`就入账，原因随之只剩一份没人读的处理结果；落库失败改答登记册那一格的未决，
-// 照旧回滚重投，下一轮重新走到这里。
+// 照旧回滚重投，下一轮重新走到这里。positionAt 只在触发早于当前位置时给。
 func (handler *ReassessRouteHandler) notJudged(
 	ctx context.Context,
 	trigger domain.ReassessmentTrigger,
 	reason ports.NotJudgedReason,
+	positionAt time.Time,
 ) (ReassessRouteResult, error) {
 	key := trigger.Key()
 	if err := handler.deps.Store.RecordNotJudged(ctx, ports.NotJudgedTrigger{
@@ -872,6 +885,7 @@ func (handler *ReassessRouteHandler) notJudged(
 		Key:               key,
 		Reason:            reason,
 		TriggerOccurredAt: trigger.OccurredAt(),
+		CurrentPositionAt: positionAt,
 		SettledAt:         handler.deps.Clock.Now(),
 	}); err != nil {
 		return handler.undecided(key, ReassessStoreUnavailable), nil

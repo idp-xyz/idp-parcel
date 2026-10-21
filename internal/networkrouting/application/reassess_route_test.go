@@ -106,6 +106,7 @@ type reassessmentStoreDouble struct {
 	byCorrelation map[domain.RequestCorrelationID]ports.ReassessmentRecord
 	notJudged     map[domain.RequestCorrelationID]ports.NotJudgedTrigger
 	notJudgedErr  error
+	latestErr     error
 	saved         int
 }
 
@@ -114,6 +115,30 @@ func newReassessmentStore() *reassessmentStoreDouble {
 		byCorrelation: map[domain.RequestCorrelationID]ports.ReassessmentRecord{},
 		notJudged:     map[domain.RequestCorrelationID]ports.NotJudgedTrigger{},
 	}
+}
+
+// LatestTriggerAt 与真库同一口径：同判断键、带业务时间的复核里取最晚那一次。
+func (double *reassessmentStoreDouble) LatestTriggerAt(
+	_ context.Context,
+	key domain.InitialRouteJudgmentKey,
+) (time.Time, bool, error) {
+	if double.latestErr != nil {
+		return time.Time{}, false, double.latestErr
+	}
+	return latestTriggerAt(double.byCorrelation, key)
+}
+
+func latestTriggerAt(
+	records map[domain.RequestCorrelationID]ports.ReassessmentRecord,
+	key domain.InitialRouteJudgmentKey,
+) (time.Time, bool, error) {
+	var latest time.Time
+	for _, record := range records {
+		if record.Key == key && record.TriggerOccurredAt.After(latest) {
+			latest = record.TriggerOccurredAt
+		}
+	}
+	return latest, !latest.IsZero(), nil
 }
 
 // RecordNotJudged 与真库同一条：同一关联已有一行时保留先到那一行。
@@ -586,5 +611,139 @@ func TestReplayConflictAndMissingHistoryStayDisciplined(t *testing.T) {
 	}
 	if refused.Outcome() != application.ReassessTriggerNotAccepted {
 		t.Fatalf("outcome = %q; 线索立不成触发", refused.Outcome())
+	}
+}
+
+// reassessCommandAt 是另一次控制触发：自己的关联、位置与业务时间。
+func reassessCommandAt(t *testing.T, correlation, location string, at time.Time) application.ReassessRouteCommand {
+	t.Helper()
+	command := reassessCommand(t, location)
+	command.Trigger.Correlation = value(t, domain.NewRequestCorrelationID, correlation)
+	command.Trigger.SourceVersion = value(t, domain.NewSourceFactVersionReference, correlation+"/fact")
+	command.Trigger.OccurredAt = at
+	return command
+}
+
+func handleOK(t *testing.T, fixture *reassessFixture, command application.ReassessRouteCommand) application.ReassessRouteResult {
+	t.Helper()
+	result, err := fixture.handler.Handle(context.Background(), command)
+	if err != nil {
+		t.Fatalf("handle %s: %v", command.Trigger.Correlation, err)
+	}
+	return result
+}
+
+// Covers: AT-NR-079——包裹已在较晚的位置上判过（仍适用），较早那次触发后到：入账为「触发早于当前位置」，不判——原计划
+// 不因那个已经过去的位置失效，适用性不动；未判登记点名比较所用的当前位置时刻。复核记录带上所判触发的业务时间。
+func TestATriggerEarlierThanTheCurrentPositionIsNotJudged(t *testing.T) {
+	fixture := newReassessFixture(t)
+	record := currentPlanRecord(t)
+	fixture.routes.records[record.Key] = record
+	fixture.evidence.byParcel["parcel-1"] = evidenceBeforeFreeze(t)
+
+	later := handleOK(t, fixture, reassessCommandAt(t, "trigger-later", "node-origin", reassessedAt))
+	if later.Outcome() != application.ReassessedStillApplicable {
+		t.Fatalf("较晚那次 = %q, want STILL_APPLICABLE", later.Outcome())
+	}
+	if kept, _ := later.Record(); !kept.TriggerOccurredAt.Equal(reassessedAt) {
+		t.Fatalf("复核记录的触发业务时间 = %s, want %s", kept.TriggerOccurredAt, reassessedAt)
+	}
+
+	earlier := reassessCommandAt(t, "trigger-earlier", "node-actual-elsewhere", reassessedAt.Add(-time.Hour))
+	behind := handleOK(t, fixture, earlier)
+	if behind.Outcome() != application.ReassessTriggerNotJudged ||
+		behind.NotJudgedReason() != ports.NotJudgedTriggerPrecedesCurrentPosition {
+		t.Fatalf("较早那次 = %q/%q, want TRIGGER_NOT_JUDGED/TRIGGER_PRECEDES_CURRENT_POSITION",
+			behind.Outcome(), behind.NotJudgedReason())
+	}
+	if fixture.store.saved != 1 || len(fixture.applicability.saved) != 0 {
+		t.Fatalf("复核 %d 条、适用性写 %d 次, want 1 与 0——较早的位置不得据以失效", fixture.store.saved, len(fixture.applicability.saved))
+	}
+	noted := fixture.store.notJudged[value(t, domain.NewRequestCorrelationID, "trigger-earlier")]
+	if !noted.CurrentPositionAt.Equal(reassessedAt) || !noted.TriggerOccurredAt.Equal(reassessedAt.Add(-time.Hour)) {
+		t.Fatalf("未判登记 = %+v, want 当前位置 %s、触发 %s", noted, reassessedAt, reassessedAt.Add(-time.Hour))
+	}
+
+	// 再投（同一触发另一封信封）同答，不判、不多一行。
+	if again := handleOK(t, fixture, earlier); again.Outcome() != application.ReassessTriggerNotJudged {
+		t.Fatalf("再投 = %q, want TRIGGER_NOT_JUDGED", again.Outcome())
+	}
+	if fixture.store.saved != 1 || len(fixture.store.notJudged) != 1 {
+		t.Fatalf("再投之后复核 %d 条、未判 %d 行, want 1 与 1", fixture.store.saved, len(fixture.store.notJudged))
+	}
+}
+
+// Covers: AT-NR-081——较新的触发照判；与当前位置同一时刻的触发不算更早，也照判（两次控制同一时刻没有先后可比）。已判过的
+// 触发后来被更晚的复核超过，再投仍读回原结果，不改答「早于当前位置」。
+func TestNewerAndSimultaneousTriggersAreJudgedAndAJudgedTriggerKeepsItsResult(t *testing.T) {
+	fixture := newReassessFixture(t)
+	record := currentPlanRecord(t)
+	fixture.routes.records[record.Key] = record
+	fixture.evidence.byParcel["parcel-1"] = evidenceBeforeFreeze(t)
+
+	first := reassessCommandAt(t, "trigger-first", "node-origin", reassessedAt)
+	if result := handleOK(t, fixture, first); result.Outcome() != application.ReassessedStillApplicable {
+		t.Fatalf("第一次 = %q, want STILL_APPLICABLE", result.Outcome())
+	}
+	if result := handleOK(t, fixture, reassessCommandAt(t, "trigger-same-instant", "node-origin", reassessedAt)); result.Outcome() != application.ReassessedStillApplicable {
+		t.Fatalf("同一时刻 = %q, want STILL_APPLICABLE——同一时刻不算更早", result.Outcome())
+	}
+	if result := handleOK(t, fixture, reassessCommandAt(t, "trigger-newer", "node-origin", reassessedAt.Add(time.Hour))); result.Outcome() != application.ReassessedStillApplicable {
+		t.Fatalf("较新 = %q, want STILL_APPLICABLE", result.Outcome())
+	}
+	if replay := handleOK(t, fixture, first); replay.Outcome() != application.ReassessedStillApplicable {
+		t.Fatalf("第一次再投 = %q, want 读回原结果 STILL_APPLICABLE", replay.Outcome())
+	}
+	if fixture.store.saved != 3 || len(fixture.store.notJudged) != 0 {
+		t.Fatalf("复核 %d 条、未判 %d 行, want 3 与 0", fixture.store.saved, len(fixture.store.notJudged))
+	}
+}
+
+// Covers: AT-NR-082——乱序到达有确定答案：较早的触发若在较新的触发之后才到，入账不判；两种到达顺序下，最后一次已判的都是
+// 业务时间较晚的那一次，包裹的当前位置不倒退。读不出当前位置是依赖故障：答登记册那一格的未决，回滚重投，不跳过比较。
+func TestOutOfOrderArrivalHasADeterminedAnswer(t *testing.T) {
+	latestJudged := func(fixture *reassessFixture) string {
+		var latest ports.ReassessmentRecord
+		for _, record := range fixture.store.byCorrelation {
+			if record.TriggerOccurredAt.After(latest.TriggerOccurredAt) {
+				latest = record
+			}
+		}
+		return latest.Correlation.String()
+	}
+	for name, order := range map[string][]string{
+		"按业务时间到达": {"trigger-intake", "trigger-handover"},
+		"较早的后到":   {"trigger-handover", "trigger-intake"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fixture := newReassessFixture(t)
+			record := currentPlanRecord(t)
+			fixture.routes.records[record.Key] = record
+			fixture.evidence.byParcel["parcel-1"] = evidenceBeforeFreeze(t)
+			commands := map[string]application.ReassessRouteCommand{
+				"trigger-intake":   reassessCommandAt(t, "trigger-intake", "node-origin", reassessedAt),
+				"trigger-handover": reassessCommandAt(t, "trigger-handover", "node-origin", reassessedAt.Add(4*time.Hour)),
+			}
+			for _, correlation := range order {
+				handleOK(t, fixture, commands[correlation])
+			}
+			if got := latestJudged(fixture); got != "trigger-handover" {
+				t.Fatalf("最后一次已判 = %q, want trigger-handover", got)
+			}
+			_, intakeJudged := fixture.store.byCorrelation[value(t, domain.NewRequestCorrelationID, "trigger-intake")]
+			_, intakeBehind := fixture.store.notJudged[value(t, domain.NewRequestCorrelationID, "trigger-intake")]
+			if intakeJudged == intakeBehind {
+				t.Fatalf("较早那次判了 = %v、入账未判 = %v, want 二者恰居其一", intakeJudged, intakeBehind)
+			}
+		})
+	}
+
+	unreadable := newReassessFixture(t)
+	unreadable.routes.records[currentPlanRecord(t).Key] = currentPlanRecord(t)
+	unreadable.evidence.byParcel["parcel-1"] = evidenceBeforeFreeze(t)
+	unreadable.store.latestErr = errors.New("pool closed")
+	stalled := handleOK(t, unreadable, reassessCommand(t, "node-origin"))
+	if stalled.Outcome() != application.ReassessUndecided || stalled.UndecidedReason() != application.ReassessStoreUnavailable {
+		t.Fatalf("读不出当前位置 = %q/%q, want UNDECIDED/REASSESS_STORE_UNAVAILABLE", stalled.Outcome(), stalled.UndecidedReason())
 	}
 }

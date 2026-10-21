@@ -19,6 +19,7 @@ import (
 type notJudgedRow struct {
 	correlation, reason string
 	triggerAt           time.Time
+	positionAt          *time.Time
 }
 
 func notJudgedRows(t *testing.T, syn *synVerticalFixture) []notJudgedRow {
@@ -28,7 +29,7 @@ func notJudgedRows(t *testing.T, syn *synVerticalFixture) []notJudgedRow {
 		t.Fatalf("取读执行器：%v", err)
 	}
 	rows, err := querier.Query(t.Context(),
-		`SELECT correlation_id, reason, trigger_occurred_at
+		`SELECT correlation_id, reason, trigger_occurred_at, current_position_at
 		   FROM network_routing.route_reassessment_not_judged WHERE tenant_id = $1 ORDER BY correlation_id`, "SYN-TENANT-01")
 	if err != nil {
 		t.Fatalf("列未判：%v", err)
@@ -37,7 +38,7 @@ func notJudgedRows(t *testing.T, syn *synVerticalFixture) []notJudgedRow {
 	var found []notJudgedRow
 	for rows.Next() {
 		var row notJudgedRow
-		if err := rows.Scan(&row.correlation, &row.reason, &row.triggerAt); err != nil {
+		if err := rows.Scan(&row.correlation, &row.reason, &row.triggerAt, &row.positionAt); err != nil {
 			t.Fatalf("扫未判行：%v", err)
 		}
 		found = append(found, row)

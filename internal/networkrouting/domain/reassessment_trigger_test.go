@@ -72,3 +72,27 @@ func TestASourceHintNeverTriggersReassessment(t *testing.T) {
 		})
 	}
 }
+
+// Covers: AT-NR-079、AT-NR-081（领域那一半）——触发只在业务时间严格早于当前位置时才算早；同一时刻不算更早，较晚的更不算。
+// 比的是业务时间：触发换了时区写法也是同一时刻。
+func TestATriggerPrecedesThePositionOnlyWhenItsBusinessTimeIsStrictlyEarlier(t *testing.T) {
+	trigger, err := domain.NewReassessmentTrigger(triggerSpec(t, domain.TransportHandoverControl))
+	if err != nil {
+		t.Fatalf("new trigger: %v", err)
+	}
+	at := trigger.OccurredAt()
+	shanghai := time.FixedZone("UTC+8", 8*60*60)
+	for name, tc := range map[string]struct {
+		positionAt time.Time
+		want       bool
+	}{
+		"当前位置更晚":     {at.Add(time.Minute), true},
+		"同一时刻":       {at, false},
+		"同一时刻换了时区写法": {at.In(shanghai), false},
+		"当前位置更早":     {at.Add(-time.Minute), false},
+	} {
+		if got := trigger.PrecedesPosition(tc.positionAt); got != tc.want {
+			t.Errorf("%s：PrecedesPosition = %v, want %v", name, got, tc.want)
+		}
+	}
+}

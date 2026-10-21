@@ -226,6 +226,19 @@ type reassessStoreDouble struct {
 	notJudged     map[nrdomain.RequestCorrelationID]nrports.NotJudgedTrigger
 }
 
+// LatestTriggerAt 与真库同一口径：同判断键、带业务时间的复核里取最晚那一次。
+func (double *reassessStoreDouble) LatestTriggerAt(
+	_ context.Context, key nrdomain.InitialRouteJudgmentKey,
+) (time.Time, bool, error) {
+	var latest time.Time
+	for _, record := range double.byCorrelation {
+		if record.Key == key && record.TriggerOccurredAt.After(latest) {
+			latest = record.TriggerOccurredAt
+		}
+	}
+	return latest, !latest.IsZero(), nil
+}
+
 func (double *reassessStoreDouble) RecordNotJudged(_ context.Context, record nrports.NotJudgedTrigger) error {
 	if double.notJudged == nil {
 		double.notJudged = map[nrdomain.RequestCorrelationID]nrports.NotJudgedTrigger{}

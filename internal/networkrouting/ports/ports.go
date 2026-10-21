@@ -502,7 +502,10 @@ type ReassessmentRecord struct {
 	HasSuggestion   bool
 	Decision        domain.RerouteDecision
 	HasDecision     bool
-	ReassessedAt    time.Time
+	// TriggerOccurredAt 是这次复核所判触发的业务时间（ADR-0235）：它是路由历史里的「当前位置」时刻，较早的触发
+	// 据它不判。ReassessedAt 是处理时钟，两者不可互代——按处理时刻比，就又成了按到达顺序裁决。
+	TriggerOccurredAt time.Time
+	ReassessedAt      time.Time
 }
 
 // ReassessmentSaveOutcome 与其余判断库同一套写入代数（ADR-0031）。
@@ -528,6 +531,9 @@ const (
 	NotJudgedEvidenceNotConfigured
 	// NotJudgedFreezeFormUnconfigured 是原计划仍可执行、策略版本却没声明冻结形态：不当成未冻结。
 	NotJudgedFreezeFormUnconfigured
+	// NotJudgedTriggerPrecedesCurrentPosition 是触发的业务时间早于路由历史里最近一次已判控制触发：包裹已经在更晚
+	// 的位置上判过，这次不判（ADR-0235）。它不等登记也不等续办，是终局的入账。
+	NotJudgedTriggerPrecedesCurrentPosition
 )
 
 func (reason NotJudgedReason) String() string {
@@ -538,6 +544,8 @@ func (reason NotJudgedReason) String() string {
 		return "REASSESS_EVIDENCE_NOT_CONFIGURED"
 	case NotJudgedFreezeFormUnconfigured:
 		return "FREEZE_FORM_UNCONFIGURED"
+	case NotJudgedTriggerPrecedesCurrentPosition:
+		return "TRIGGER_PRECEDES_CURRENT_POSITION"
 	default:
 		return ""
 	}
@@ -551,6 +559,8 @@ type NotJudgedTrigger struct {
 	Reason      NotJudgedReason
 	// TriggerOccurredAt 是触发的业务时间，不是处理时刻。
 	TriggerOccurredAt time.Time
+	// CurrentPositionAt 只在触发早于当前位置时有值：比较所用的那一次已判控制触发的业务时间，审计要答得出「早于谁」。
+	CurrentPositionAt time.Time
 	SettledAt         time.Time
 }
 
@@ -570,4 +580,8 @@ type ReassessmentStore interface {
 	// RecordNotJudged 留下一次入账未判的原因。同（租户，触发关联）已有一行时保留先到那一行、
 	// 答成功：同一触发再投时编排会重新判一遍，仍判不成就再来这里。
 	RecordNotJudged(ctx context.Context, record NotJudgedTrigger) error
+	// LatestTriggerAt 交回这一判断键在册复核里最近一次控制触发的业务时间；没有带业务时间的复核时第二个返回值为假。
+	// 实现须把「读最近一次 → 判 → 落复核」按判断键串行到事务结束（ADR-0235）：两路触发在两笔并发事务里各自读不到
+	// 对方尚未提交的复核，会双双判过，较早的那次照样落在较新的之后。
+	LatestTriggerAt(ctx context.Context, key domain.InitialRouteJudgmentKey) (time.Time, bool, error)
 }
