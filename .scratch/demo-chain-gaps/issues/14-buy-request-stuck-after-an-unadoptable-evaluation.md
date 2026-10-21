@@ -31,8 +31,8 @@ none
 
 ### 做了什么
 
-- **代次与停因**（迁移 `settlement_accounting/0041`）：BUY 与 SELL 两本评价请求册加代次、前一代、续办依据与停因；（自然键、代次）唯一，一份请求至多一个下一代；SELL 册加`未形成`，停下的各格必带停因（CHECK 配对）。迁移前的`不可计价`、`冲突`照填停因，`待判断`标「停因未记」。
-- **发起停办册**（迁移 `0042`）：SELL 计费时点与 BUY 发生项走到发起就答`未配置`（含包裹没有商业解析）时记下那一拍的输入与停因；`采用了别的时点`、修订版不记。
+- **代次与停因**（迁移 `settlement_accounting/0042`）：BUY 与 SELL 两本评价请求册加代次、前一代、续办依据与停因；（自然键、代次）唯一，一份请求至多一个下一代；SELL 册加`未形成`，停下的各格必带停因（CHECK 配对）。迁移前的`不可计价`、`冲突`照填停因，`待判断`标「停因未记」。
+- **发起停办册**（迁移 `settlement_accounting/0043`）：SELL 计费时点与 BUY 发生项走到发起就答`未配置`（含包裹没有商业解析）时记下那一拍的输入与停因；`采用了别的时点`、修订版不记。
 - **计价答不出评价不再进未决名单**：PP 对请求答没有在用价卡、适用冲突、输入不可得时入账、交「评价未形成」，SA 记停因；PP 请求两路的未决名单只剩「请求还读不回」与「形成依赖故障」。
 - **采用不了记停因**：BUY 形成那一半在请求册上记停因；SELL 评价失败改记`未形成`。
 - **参数已登记**：结算三本评价参数册（SELL 计费时点采用、费用项目映射、BUY 触发册）落行同笔交「评价参数已登记」；结算账户已登记多一路 SA 续办门；PP 价卡登记（含草稿发布，带计价范围）与序列、目录复核通过（含免复核代写）同笔交「参数已登记」。三类信封各一扇续办门，按停因（价卡另按计价范围）取队列，逐件一笔事务续办：停下的请求另起下一代、发起停办按记下的输入重跑；同一依据对同一条代次链至多续办一次。
@@ -96,7 +96,7 @@ none
 6. **分区登记表那一行**：采纳。裁段改成「与计价的参数已登记、结算账户已登记同字符串同队；评价未形成另队」，注释去掉「上一行」；那一行挪到「受理前估价采用已登记」之后——原位置会让那一行既有的「同上一行」改指本行。
 7. **assemble.go 形成消费者头注**：采纳，改为「采用不了时在请求册上记停因（ADR-0229）」。
 8. **parcel-settlement-register「同上」**：采纳，点名 `accountHandoff`。
-9. **SELL 发起停办死行**：采纳，落终止。迁移 0042 加 `closed_at`，`SellEvaluationInitiationStallRegister.CloseSellInitiationStall`，续办重跑答`采用了别的时点`落终止（新结局`CLOSED`）、队列不再取，再停一次清掉终止。用例 `TestAStallWhoseAccountAdoptsAnotherMomentIsClosed` 与真库队列用例。没另立票。
+9. **SELL 发起停办死行**：采纳，落终止。迁移 `settlement_accounting/0043` 加 `closed_at`，`SellEvaluationInitiationStallRegister.CloseSellInitiationStall`，续办重跑答`采用了别的时点`落终止（新结局`CLOSED`）、队列不再取，再停一次清掉终止。用例 `TestAStallWhoseAccountAdoptsAnotherMomentIsClosed` 与真库队列用例。没另立票。
 10. **ADR-0200 按原句引**：采纳，ADR-0229 与 ADR-0200 Status 都引「评价停下的各格入账，不重投，不改记任何册」。
 11. **旧注释**：采纳。`form_estimated_customer_charge_test.go` 头注改为`未形成`连同停因；`ErrSellEvaluationRequestUndecided`、`ErrBuyEvaluationTriggerUndecided` 与 `chargeOccurrenceFormedUndecidedSentinels` 改为点名各自的未决原因类型、说明发起停办册记不下也在其中，不再列举各口；`sellRequestConsumption` 头注写明结算政策没采用与包裹无商业解析不经参数已登记续办。
 12. **真生产方驱动 SA 续办门的端到端用例**：采纳，`TestTheSettlementAccountRegisteredEnvelopeDrivesTheEvaluationResumption`（含扇出两路的 inbox 行）。

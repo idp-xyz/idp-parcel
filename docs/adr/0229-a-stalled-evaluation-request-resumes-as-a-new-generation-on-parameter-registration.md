@@ -105,7 +105,7 @@ Date: 2026-10-21
 
 ## Consequences
 
-- 迁移 `settlement_accounting/0041_evaluation_request_generation_and_stop_cause.sql`（两本请求册加代次与停因，SELL 加`未形成`，迁移前的结论回填停因）、`0042_evaluation_initiation_stall_and_trigger_revision.sql`（两本发起停办册，SELL 那一本带户与终止两格；BUY 触发册加版次）。计价没有迁移。
+- 迁移 `settlement_accounting/0042_evaluation_request_generation_and_stop_cause.sql`（两本请求册加代次与停因，SELL 加`未形成`，迁移前的结论回填停因）、`0043_evaluation_initiation_stall_and_trigger_revision.sql`（两本发起停办册，SELL 那一本带户与终止两格；BUY 触发册加版次）。计价没有迁移。
 - 代码（符号名）：领域 `EvaluationStopCause`、`EvaluationParameterKind`（含 `Narrowing`）、`ResumeBasis`、`SellEvaluationInitiationStall`、`BuyEvaluationInitiationStall`，请求的 `Resume`；结算 `RecordEvaluationUnformedHandler`、`ResumeStalledEvaluationHandler`、`OperatorResumeEvaluationHandler`；`postgres.EvaluationResumptions`（两本发起停办册与续办队列）、`OutboxEvaluationParameterRegisteredHandoff`；结算读计价评价那一层的待判断分格 `pendingCauseOf`；计价 `ports.EvaluationRequestUnformedHandoff`、`ports.PricingParameterRegisteredHandoff`、`ports.PricingParameterBindingView`（`postgres.PriceCards.FindPricedScopesBinding`）与 `postgres.OutboxEvaluationResumptionHandoffs`；消费门 `sainbox.EvaluationRequestUnformedConsumer`、`sainbox.EvaluationParameterRegisteredConsumer`。
 - 派发：新路由 `parcel-pricing.evaluation-request.unformed`、`parcel-pricing.pricing-parameter.registered`、`settlement-accounting.evaluation-parameter.registered`，`settlement-accounting.settlement-account.registered` 多一路续办；PP 请求两路的未决名单拿掉三枚哨兵。
 - `parcel-settlement-register` 多一条命令 `evaluation-resume`；三本评价参数册的登记命令落行时多交一封信。计价的登记口（`parcel-pricing-register`、`parcel-pricing-feed`、`parcel-api` 的价卡登记、草稿发布与序列复核）都接「参数已登记」交接口。
