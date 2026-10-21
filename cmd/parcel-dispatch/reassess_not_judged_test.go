@@ -12,7 +12,7 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 证复核未判（ADR-0235）：重投推不动的三格——没有路由历史、证据未配置、冻结形态未配置——入账，
-// 原因落 NR 的未判登记，不登本路未决哨兵；同一触发再投重新判一遍。复核路与生产同形（同一个 Over、同一份哨兵名单），
+// 原因落 NR 的未判登记，不登本路未决哨兵；携带同一触发的另一封信封再来时重新判一遍。复核路与生产同形（同一个 Over、同一份哨兵名单），
 // 只把证据视图换成替身；失败分区那一条全走生产路由表。依赖类未决仍回滚重投，由 AT-NR-067 那条用例钉。夹具全部合成，
 // 只记 `S`。
 
@@ -153,7 +153,7 @@ func TestAHandoverWithoutRoutingHistoryNoLongerHoldsItsPartitionThroughTheProduc
 	next.JudgedAt = reassessHandoverAt.Add(6 * time.Hour)
 	second := registerHandover(t, syn, register, next)
 
-	// 拍数取派发预算之上：改之前这一路每拍答未决，预算耗尽之前同一分区的第二封认领不到。
+	// 拍数取派发预算之上：这一路若答未决，预算耗尽之前同一分区的第二封认领不到，第一封落 ABANDONED。
 	for range 6 {
 		if _, err := syn.beat.DispatchOnce(t.Context()); err != nil {
 			t.Fatalf("一拍：%v", err)

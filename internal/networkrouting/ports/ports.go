@@ -578,7 +578,7 @@ type ReassessmentStore interface {
 		record ReassessmentRecord,
 	) (ReassessmentSaveOutcome, error)
 	// RecordNotJudged 留下一次入账未判的原因。同（租户，触发关联）已有一行时保留先到那一行、
-	// 答成功：同一触发再投时编排会重新判一遍，仍判不成就再来这里。
+	// 答成功：携带同一触发的另一封信封再来时编排会重新判一遍，仍判不成就再来这里。
 	RecordNotJudged(ctx context.Context, record NotJudgedTrigger) error
 	// LatestTriggerAt 交回这一判断键在册复核里最近一次控制触发的业务时间；没有带业务时间的复核时第二个返回值为假。
 	// 实现须把「读最近一次 → 判 → 落复核」按判断键串行到事务结束（ADR-0235）：两路触发在两笔并发事务里各自读不到

@@ -63,9 +63,9 @@ func (outcome ReassessOutcome) String() string {
 
 // ReassessUndecidedReason 指名复核停在哪一步。封闭集合，按依赖阶段分类统计。
 //
-// 只收重投推得动的格（ADR-0235，判据同 ADR-0029 按恢复动作分格）。没有路由历史、证据未配置、
-// 冻结形态未配置重投多少次都一样，归 ports.NotJudgedReason，入账留原因。往这里加一格之前先答
-// 它重投会不会变：不会变的放进来，消费门就会对着它烧完失败预算。
+// 只收重投推得动的格（ADR-0235，判据同 ADR-0029 按恢复动作分格）；重投推不动的归
+// ports.NotJudgedReason，入账留原因。往这里加一格之前先答它重投会不会变：不会变的放进来，
+// 消费门就会对着它烧完失败预算。
 type ReassessUndecidedReason uint8
 
 const (
@@ -193,8 +193,9 @@ func (handler *ReassessRouteHandler) Handle(
 			}, nil
 		}
 		// 指纹在册而复核不在，只会是上一次这个触发入账未判：其余出口要么连指纹一起回滚，要么同笔
-		// 落了复核。重投与另一封信封都往下重新判——前提此刻齐了就判，仍缺就再入账；答「登记册
-		// 读不回」会把一份合法的未判卡回重投，烧到 ABANDONED（ADR-0235）。
+		// 落了复核。携带同一触发的另一封信封走到这里时往下重新判——前提此刻齐了就判，仍缺就再入账；
+		// 答「登记册读不回」会把一份合法的未判卡回重投，烧到 ABANDONED（ADR-0235）。同一封信封入账
+		// 之后由消费门按 inbox 跳过，到不了这里。
 	} else if err := handler.deps.Log.Append(ctx, key.TenantID, trigger.Correlation(), digest); err != nil {
 		return handler.undecided(key, ReassessLogUnavailable), nil
 	}
@@ -249,6 +250,12 @@ func planNodesOf(plan domain.InitialRoutePlan) ([]string, error) {
 
 // freezeOf 在原计划仍可执行时判断有没有越过冻结边界。未声明形态答未配置，不当成未冻结。
 // 硬约束失效不走这里。
+//
+// 只有「真的未声明」答未配置：它会落成未判登记里的 FREEZE_FORM_UNCONFIGURED，是一条给租户看的
+// 持久原因（ADR-0235）。另两种答不出的都是编程错误，响亮报错，理由同 planNodesOf：
+//   - 前缀立不起来：仍适用说明位置就在计划节点上，触发又只会是节点收寄或权威交接，前缀必立得起来。
+//   - 冻结事实不成立（形态在封闭族外、段数为负）：策略版本册的 CHECK 拒这两种写入，证据视图交出它们
+//     是装配坏了，不是租户没登记。
 func freezeOf(
 	plan domain.InitialRoutePlan,
 	trigger domain.ReassessmentTrigger,
@@ -260,13 +267,15 @@ func freezeOf(
 	}
 	prefix := domain.JudgeExecutedPrefix(nodes, trigger.Control(), trigger.Location().String())
 	if prefix.Grade() != domain.ExecutedPrefixEstablished {
-		return domain.FreezeJudgment{}, true, nil
+		return domain.FreezeJudgment{}, false, fmt.Errorf(
+			"network routing: plan %s is still applicable at %s yet yields no executed prefix",
+			plan.Version().String(), trigger.Location().String())
 	}
 	judgment, err := domain.JudgeFreezeBoundary(evidence.FreezeForm, evidence.FreezeRemainingSegmentLimit, prefix.RemainingSegments())
-	if err != nil || judgment.Unconfigured() {
-		return judgment, true, nil
+	if err != nil {
+		return domain.FreezeJudgment{}, false, fmt.Errorf("judge freeze boundary: %w", err)
 	}
-	return judgment, false, nil
+	return judgment, judgment.Unconfigured(), nil
 }
 
 // reassessPlan 是原来有计划的那条线：6A 独立判定，仍适用即保留、失效即失效（候选状态

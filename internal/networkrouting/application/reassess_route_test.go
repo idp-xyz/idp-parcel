@@ -340,6 +340,27 @@ func TestAnUndeclaredFreezeFormDoesNotCountAsUnfrozen(t *testing.T) {
 	}
 }
 
+// Covers: 冻结事实不成立（段数为负）不是「冻结形态未配置」：策略版本册不收这种写入，证据视图交出它是装配坏了——
+// 响亮报错，不落未判，免得未判登记里多一条点名租户没登记的假原因。
+func TestInvalidFreezeFactsAreLoudRatherThanUnconfigured(t *testing.T) {
+	fixture := newReassessFixture(t)
+	record := currentPlanRecord(t)
+	fixture.routes.records[record.Key] = record
+	evidence := routableEvidence(t)
+	negative := -1
+	evidence.FreezeForm = domain.RemainingSegmentCountFreeze
+	evidence.FreezeRemainingSegmentLimit = &negative
+	fixture.evidence.byParcel["parcel-1"] = evidence
+
+	_, err := fixture.handler.Handle(context.Background(), reassessCommand(t, "node-origin"))
+	if !errors.Is(err, domain.ErrUnknownFreezeForm) {
+		t.Fatalf("err = %v, want ErrUnknownFreezeForm", err)
+	}
+	if len(fixture.store.notJudged) != 0 || fixture.store.saved != 0 {
+		t.Fatalf("装配缺陷却落了未判 %d 行、复核 %d 条", len(fixture.store.notJudged), fixture.store.saved)
+	}
+}
+
 // assertOnlyNotJudged 钉一次未判只留下一行未判原因：判断键与触发业务时间取自触发，入账时刻取处理时钟，没有复核结论。
 func assertOnlyNotJudged(t *testing.T, fixture *reassessFixture, want ports.NotJudgedReason) {
 	t.Helper()
@@ -392,8 +413,8 @@ func TestUnconfiguredEvidenceIsNotJudgedWhileUnreadableEvidenceStaysUndecided(t 
 	}
 }
 
-// Covers: AT-NR-078——同一触发入账未判之后再投：不答「登记册读不回」，重新判一遍；前提补齐了就判、落一条复核，未判
-// 登记只留第一次那一行。未判原因落不了库时不得答未判：改答登记册那一格的未决，照旧回滚重投。
+// Covers: AT-NR-078——同一触发入账未判之后由另一封信封再带来：不答「登记册读不回」，重新判一遍；前提补齐了就判、落一条
+// 复核，未判登记只留第一次那一行。未判原因落不了库时不得答未判：改答登记册那一格的未决，照旧回滚重投。
 func TestANotJudgedTriggerIsJudgedAgainWhenItIsDeliveredAgain(t *testing.T) {
 	fixture := newReassessFixture(t)
 	fixture.evidence.byParcel["parcel-1"] = evidenceBeforeFreeze(t)
