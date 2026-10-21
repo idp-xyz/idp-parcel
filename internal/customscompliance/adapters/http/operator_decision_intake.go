@@ -26,7 +26,7 @@ const (
 )
 
 // OperatorDecisionRegulatoryCredentialRegistration 是监管凭证登记（ADR-0236 决定一）：租户关务人员照凭证原件在管理台手工登记一版
-// 凭证。与上面三种同一面、分开授予——能建案或提交的不因此能往册上添凭证。
+// 凭证。与关务各种运营决定同一面、分开授予——能建案或提交的不因此能往册上添凭证。
 const OperatorDecisionRegulatoryCredentialRegistration OperatorDecision = "REGULATORY_CREDENTIAL_REGISTRATION"
 
 // OperatorIdentity 是一次运营决定出示认证出的身份：租户与做出决定的操作者（「发行方#sub」）。

@@ -34,7 +34,7 @@ import (
 
 // operatorDecisionIntakes 是操作者渠道「运营决定」能力面在各上下文的 Intake（ADR-0151；票 operator-channel/15）。nodeOperations
 // 是复核页人工重核待识别实物（ADR-0199 决定三；票 no-reception-source/03）。customs 是建案、提交授权确认与申报提交执行三口
-// （ADR-0227 决定一），以及监管凭证的手工登记口（ADR-0236 决定二）。settlement 是外部资金事实手工采用与更正两口（ADR-0236 决定二）。
+// （ADR-0227 决定一），以及监管凭证的手工登记（ADR-0236 决定二）。settlement 是外部资金事实的手工采用与手工更正（ADR-0236 决定二）。
 type operatorDecisionIntakes struct {
 	shipment       *shipmenthttp.OperatorDecisionIntake
 	transport      *tfhttp.OperatorDecisionIntake

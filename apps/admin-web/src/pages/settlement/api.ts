@@ -391,7 +391,7 @@ export function listSettlementOperatingResults<Registry extends OperatingRegistr
 //
 // 本签发向的是两个手工口（`…-manual-registrations`）：挂操作者渠道的「运营决定」能力面，按决定种类
 // EXTERNAL_FUNDS_FACT_ADOPTION 认证，首版与更正同一种授予；服务端把登录操作者记成那一版的提交方。没有这一种授予答 403
-// OPERATOR_NOT_GRANTED，由面板的接入拒绝那一格说清续办。路径不带 manual 的那两口仍在，是集成客户端族给有接口的外部系统用的，
+// OPERATOR_NOT_GRANTED，由面板的接入拒绝那一格说清续办。路径不带 manual 的同名口仍在，是集成客户端族给有接口的外部系统用的，
 // 认的是客户端凭据而不是操作者令牌，管理台发过去只会被拒——本签因此不用它们。
 //
 // 页面收的是登记输入 JSON 本体，与受控 CLI <命令> -input 吃的同一份形状（译装在服务端只有 registrationjson 那一份），原样作请求体

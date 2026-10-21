@@ -29,7 +29,8 @@ func init() {
 			},
 		},
 		build: func(sources endpointSources) (manualExternalFactsWiring, error) {
-			// 编排与集成客户端那三口是同一套构造：两族只差 Intake，采用、更正与凭证登记的规则、幂等与答案代数各只有一份。
+			// 编排取集成客户端族那边的同一套构造（buildSettlementRegistrationOrchestration、buildCustomsRegistrationOrchestration）：两族只差
+			// Intake，采用、更正与凭证登记的规则、幂等与答案代数各只有一份。
 			settlement, err := buildSettlementRegistrationOrchestration(sources.db)
 			if err != nil {
 				return manualExternalFactsWiring{}, err
@@ -44,7 +45,7 @@ func init() {
 		mount: func(channels endpointChannels, wiring manualExternalFactsWiring) []httpapi.BusinessEndpoint {
 			return []httpapi.BusinessEndpoint{
 				// 外部资金事实与监管凭证的手工采用口（ADR-0236）：租户的财务、关务人员照银行回单或凭证原件在管理台录入，挂「运营
-				// 决定」能力面，两类事实各按自己那一种认证，提交操作者记成操作证据。与集成客户端族那三口并存而不替代：有接口的外部
+				// 决定」能力面，两类事实各按自己那一种认证，提交操作者记成操作证据。与集成客户端族的同名口并存而不替代：有接口的外部
 				// 系统照旧推，没接口的由人照单录，路径带 manual 让两族在端点表上一眼分得开。写开关换不了它们（ADR-0150 决定三）。
 				{Pattern: "/settlement-external-funds-fact-manual-registrations", Handler: settlementhttp.NewRegisterExternalFundsFactEndpoint(channels.operatorDecisions.settlement, wiring.externalFundsFactAdoption)},
 				{Pattern: "/settlement-external-funds-fact-correction-manual-registrations", Handler: settlementhttp.NewRegisterExternalFundsFactCorrectionEndpoint(channels.operatorDecisions.settlement, wiring.externalFundsFactCorrectionAdoption)},

@@ -48,8 +48,8 @@ func operatorDecisionIntakeForTest(t *testing.T, authenticator settlementhttp.Op
 	return intake
 }
 
-// Covers: AT-SA-200（Intake 半边）——采用与更正两口都按「外部资金事实采用」这一种决定认证；租户取认证结果，载荷与集成客户端那一口
-// 同一份形状；提交操作者记成命令上的操作证据 `OPERATOR/发行方#sub`，不从载荷收。
+// Covers: AT-SA-200（Intake 半边）——采用与更正都按「外部资金事实采用」这一种决定认证；租户取认证结果，载荷与集成客户端族同一份
+// 形状；提交操作者记成命令上的操作证据 `OPERATOR/发行方#sub`，不从载荷收。
 func TestTheOperatorDecisionIntakeAdoptsUnderTheAuthenticatedTenantAndRecordsTheOperator(t *testing.T) {
 	var asked []settlementhttp.OperatorDecision
 	intake := operatorDecisionIntakeForTest(t, decisionAuthenticator{asked: &asked})

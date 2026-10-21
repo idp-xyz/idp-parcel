@@ -25,15 +25,14 @@ type OperatorIdentity struct {
 	Operator string
 }
 
-// OperatorDecisionAuthenticator 认证一次运营决定出示，交回出示者的身份。失败只交回本包的格：ErrAccessChannelNotConfigured、
-// ErrOperatorCredentialRejected、ErrOperatorNotGranted、ErrOutsideAdmissionScope、ErrIdentityDependencyUnavailable；从共享接入
-// 身份能力译过来的那一层在 adapters/accessidentity。
+// OperatorDecisionAuthenticator 认证一次运营决定出示，交回出示者的身份。失败只交回本包的接入格，端点体按它们作答；从共享接入身份
+// 能力译过来的那一层在 adapters/accessidentity。
 type OperatorDecisionAuthenticator interface {
 	AuthenticateOperatorDecision(ctx context.Context, bearerToken string, decision OperatorDecision) (OperatorIdentity, error)
 }
 
-// OperatorDecisionIntake 是操作者渠道「运营决定」能力面在外部资金事实采用与更正两口的 Intake（ADR-0236 决定二）：租户的财务人员
-// 照银行回单或支付系统的记录在管理台手工采用。与集成客户端族那两口（IntegrationClientIntake）并存，编排、载荷形状与答案代数是同
+// OperatorDecisionIntake 是操作者渠道「运营决定」能力面在外部资金事实采用与更正上的 Intake（ADR-0236 决定二）：租户的财务人员
+// 照银行回单或支付系统的记录在管理台手工采用。与集成客户端族（IntegrationClientIntake）并存，编排、载荷形状与答案代数是同
 // 一份——载荷仍由 registrationjson 那一份译装，载荷里自报租户即拒；两族只差谁在提交、凭什么授予。
 //
 // 提交操作者记成命令上的操作证据（`OPERATOR/<发行方>#<sub>`），只进审计。先认证、后读载荷：令牌不过的调用方看不到载荷校验的结果。

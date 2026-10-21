@@ -59,7 +59,7 @@ var (
 	// ErrOperatorCredentialRejected：令牌缺失、过期或校验不过（401）——持令牌的人去登录或换令牌。
 	ErrOperatorCredentialRejected = errors.New("settlement accounting http: operator credential rejected")
 	// ErrOperatorNotGranted：令牌有效，但不在册、不绑这个租户或没有这一口要的授予（403）——管授予的人去登记。查阅各口要主数据与
-	// 运营查阅读，资金事实采用两口要运营决定的那一种（OperatorDecisionIntake）；同一格，恢复动作相同。
+	// 运营查阅读，资金事实的采用与更正要运营决定的那一种（OperatorDecisionIntake）；同一格，恢复动作相同。
 	ErrOperatorNotGranted = errors.New("settlement accounting http: operator holds no effective grant for this face")
 )
 

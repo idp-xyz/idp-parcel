@@ -52,7 +52,7 @@ func (authenticator *OperatorDecisionAuthenticator) AuthenticateOperatorDecision
 	return settlementhttp.OperatorIdentity{Tenant: tenant, Operator: subject.Issuer() + "#" + subject.Subject()}, nil
 }
 
-// answerOperatorDecision 把操作者铸造的格译成 settlementhttp 的格。比查阅读那一份多准入范围两格：运营决定形成生产事实。
+// answerOperatorDecision 把操作者铸造的格译成 settlementhttp 的格。比查阅读那一份多出准入范围的格：运营决定形成生产事实，查阅不形成。
 func answerOperatorDecision(err error) error {
 	switch {
 	case errors.Is(err, identity.ErrAccessChannelNotConfigured):

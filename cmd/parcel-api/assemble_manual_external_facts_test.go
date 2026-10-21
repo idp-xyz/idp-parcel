@@ -17,8 +17,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
-// 本文件对真实 PostgreSQL 证外部资金事实与监管凭证手工采用三口的生产装配（票 demo-chain-gaps/140，ADR-0236）：端点行按特性登记处
-// 那一份 build 与 mount 装上——手工三口与集成客户端族的原三口同场，编排是两族共用的那一套真库缝。操作者 Intake 是生产那只铸造器经
+// 本文件对真实 PostgreSQL 证外部资金事实与监管凭证手工采用各口的生产装配（票 demo-chain-gaps/140，ADR-0236）：端点行按特性登记处
+// 那一份 build 与 mount 装上——手工口与集成客户端族的同名口同场，编排是两族共用的那一套真库缝。操作者 Intake 是生产那只铸造器经
 // 真操作者册（access_identity 0021 放开的两种决定）铸的信封；集成客户端那一侧用核验方与客户端册的替身（客户端册的真库往返另有用例）。
 // 准入范围取放行一切的替身：准入对照与区间各有自己的用例，这里证的是决定种类、操作证据与编排。证据只记 `S`。
 
@@ -233,8 +233,8 @@ func TestManualExternalFactsAdoptThroughTheOperatorFacesAndRecordTheSubmitter(t 
 	}
 }
 
-// Covers: AT-SA-201、AT-CC-447（生产装配半边）——手工三口各按自己那一种决定认证：管关务的人用不了资金事实两口，管钱的人用不了凭证口，
-// 只持别种决定（申报提交执行）的人三口都用不了，一律答 OPERATOR_NOT_GRANTED、什么都不写；没带令牌答 401。
+// Covers: AT-SA-201、AT-CC-447（生产装配半边）——手工各口各按自己那一种决定认证：管关务的人用不了资金事实的采用与更正，管钱的人
+// 用不了凭证口，只持别种决定（申报提交执行）的人哪一口都用不了，一律答 OPERATOR_NOT_GRANTED、什么都不写；没带令牌答 401。
 func TestEachManualFactFaceOpensOnlyForItsOwnDecisionKind(t *testing.T) {
 	fixture := newManualFactsFixture(t)
 	const fact, credential = "SYN-FUNDS-FACT-DCG140-02", "SYN-CRED-DCG140-02"
@@ -263,7 +263,7 @@ func TestEachManualFactFaceOpensOnlyForItsOwnDecisionKind(t *testing.T) {
 	}
 }
 
-// Covers: AT-SA-201、AT-CC-447（生产装配半边：两族并存）——集成客户端族的原两口照旧可用：经它采用的资金事实与登记的凭证不记操作证据
+// Covers: AT-SA-201、AT-CC-447（生产装配半边：两族并存）——集成客户端族的原口照旧可用：经它采用的资金事实与登记的凭证不记操作证据
 // （NULL）；同一条事实随后由财务人员经手工口重放答已存在，不补记、不顶替成手工那一位。
 func TestTheIntegrationClientFacesStillWorkAlongsideAndRecordNoOperator(t *testing.T) {
 	fixture := newManualFactsFixture(t)
