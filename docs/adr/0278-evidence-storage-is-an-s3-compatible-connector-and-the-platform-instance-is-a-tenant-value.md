@@ -36,7 +36,7 @@ Date: 2026-10-21
 
 ## Consequences
 
-- 参数登记册「权威证据存储」一节与 `PAR-GOV-11` 行、验收场景矩阵的证据位置一句、[docs/README](../README.md) 的敏感实例一句与 [PN-08 交接](../design/pn-08-end-to-end-pilot-and-stage-admission-development-handoff.md)里写「MinIO」的各处，改写为「S3 兼容对象存储」与「该租户 `PAR-GOV-11` 登记的平台」。
+- 参数登记册「权威证据存储」一节与 `PAR-GOV-11` 行、验收场景矩阵的证据位置一句、[docs/README](../README.md) 的敏感实例一句与 [PN-08 交接](../design/pn-08-end-to-end-pilot-and-stage-admission-development-handoff.md)里写 MinIO 的各处，改写为 S3 兼容对象存储与该租户 `PAR-GOV-11` 登记的平台。
 - 演示租户 `SYN-TENANT-01` 只形成 `S` 证据，不进登记册，本记录不给它配证据存储。
 
 ## 越权风险点
