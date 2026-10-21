@@ -1,7 +1,7 @@
 # 53 先于段登记的移动事实永远进不了全程追踪
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg53。此前 ready-for-agent——2026-10-19 分诊为 A（挡演示/上线），批次见 [triage-2026-10-19](../triage-2026-10-19.md)。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [33](./33-movement-fact-recorded-envelope-and-tracking-projection.md) 的完成记录（代决与越权风险点）。
+Status: resolved——2026-10-20 进 main（全量钉 `453cc29e`：`scripts/test-full.sh` 156 ok / 0 FAIL，见文末「进 main 记录」）；揽收尝试级执行口与承运商段那一格转票 [120](./120-movement-facts-before-a-pickup-attempt-or-carrier-segment-are-not-backfilled.md)，补出的出发缺门禁读数转票 [121](./121-departures-recorded-before-their-segment-are-never-re-asked-at-the-gate.md)。此前 in-progress——完工待评审与进 main，分支 claude-dcg53。此前 ready-for-agent——2026-10-19 分诊为 A（挡演示/上线），批次见 [triage-2026-10-19](../triage-2026-10-19.md)。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [33](./33-movement-fact-recorded-envelope-and-tracking-projection.md) 的完成记录（代决与越权风险点）。
 Blocked by: 无
 出处：[ADR-0205](../../../docs/adr/0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md) 决定四（段不在册照记）与文末补记越权风险点 14。
 
@@ -125,3 +125,7 @@ none
 第三轮验证（树等于 `e17009e4`）：
 - `go build ./...`、`go vet ./...`、`gofmt -l` 干净。
 - `scripts/test-full.sh` 跑了本票触及的包及其反向依赖（含 `cmd/parcel-dispatch`、`cmd/parcel-api`、`cmd/parcel-transport-register`），连同 `./internal/architecture/...`、`./migrations/...`、`./tools/...`，39 个包全绿。
+
+## 进 main 记录
+
+2026-10-20 协调方合入。分支基点 `6a05b431` 即当时 main，未重放，分支 SHA 原样进 main（`54fcafac`…`c1b78bad`）。其上按 parallel-sessions.md 重生成 ADR 索引（`92bba7e8`）、重算 AT 盘点计数（`03681aed`）、重生成机制清点（`453cc29e`），各自单独成笔；`adr-index -check` 与 `at-coverage-counts -check` 退 0。在干净的隔离树上对 `453cc29e` 跑 `go build ./...`、`go vet ./...`、`gofmt -l` 干净，`scripts/test-full.sh` 全量 156 ok、0 FAIL（`-count=1`，无缓存）；推 `453cc29e:main`。另一协调会话（1d58ed）先前对同一 worktree 的半成品树做过一轮评审，其六点已由第一轮修订吸收，第二轮隔离评审核过逐点到位。
