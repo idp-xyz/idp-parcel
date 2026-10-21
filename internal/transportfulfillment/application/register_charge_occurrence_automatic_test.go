@@ -42,3 +42,33 @@ func TestAnAutomaticRegistrationDoesNotRegrowAnInvalidatedOccurrence(t *testing.
 		t.Fatalf("失效之后再采用，自动形成 = %q/%q, want 长出 V3", regrown.Outcome(), regrown.Detail())
 	}
 }
+
+// Covers: ADR-0232 决定五「同一刻算不晚于」——这一段当前采用的落册时刻恰与那一次失效同一刻：不算失效之后才采用，自动形成照旧答已存在、
+// 不长出替代版本；晚一微秒才算。
+func TestAnAdoptionRecordedAtTheSameMomentAsTheInvalidationDoesNotReopenIt(t *testing.T) {
+	commission := trunkCommission(t, commissionShape{startedAt: occurrenceEnteredAt})
+	rig := adoptedTrunkRig(t, commission)
+	automatic := actualFulfillmentCommand(t)
+	automatic.Provider, automatic.AgreementObject, automatic.AgreementVersion = "", "", ""
+	automatic.Automatic = true
+	original := registeredOccurrence(t, rig.register(t, automatic))
+	if result := invalidate(t, invalidationHandler(rig, &scopeHoldDouble{}), original.Occurrence().String(), "V1", "SYN-EVIDENCE"); result.Outcome() != application.ChargeOccurrenceInvalidated {
+		t.Fatalf("失效 = %q", result.Outcome())
+	}
+	invalidatedAt := occurrenceNow.Add(time.Hour)
+	segment := occurrenceValue(t, domain.NewFulfillmentSegmentReference, trunkSegment)
+	adoptAt := func(at time.Time) {
+		readopted := rig.adoptions.records[segment]
+		readopted.Generation, readopted.RecordedAt = 2, at
+		rig.adoptions = adoptionViewDouble{records: map[domain.FulfillmentSegmentReference]ports.SegmentCommissionAdoptionRecord{segment: readopted}}
+	}
+
+	adoptAt(invalidatedAt)
+	if same := rig.register(t, automatic); same.Outcome() != application.ChargeOccurrenceExisting || same.Detail() != application.OccurrenceInvalidatedByDecision {
+		t.Fatalf("同一刻 = %q/%q, want 已存在、不长出", same.Outcome(), same.Detail())
+	}
+	adoptAt(invalidatedAt.Add(time.Microsecond))
+	if later := rig.register(t, automatic); later.Outcome() != application.ChargeOccurrenceRegistered {
+		t.Fatalf("晚一微秒 = %q/%q, want 长出替代版本", later.Outcome(), later.Detail())
+	}
+}
