@@ -667,8 +667,8 @@ func TestANewerProjectionThatChangesTheDimensionsSupersedesTheCurrentViewKeeping
 
 // Covers: CONTEXT「客户全程追踪视图的版本由披露更正与替代关系驱动，不与内部投影版本一一
 // 对应；投影重新派生本身不要求形成新的客户视图版本」——新投影派生出的四维与当前版相同
-// 时不换代：不签新身份、不写新版本，当前版只改记所依据的投影，答已有结果；意图由同一
-// 视图版本认领，再交一次也是同一份。
+// 时不换代：不签新身份、不写新版本，当前版只前移确认依据（ConfirmedOn），答已有结果；
+// 意图由同一视图版本认领，再交一次也是同一份。
 func TestANewerProjectionThatLeavesTheDimensionsUnchangedKeepsTheViewVersion(t *testing.T) {
 	fixture := newViewFixture(t)
 	ctx := context.Background()
@@ -725,8 +725,8 @@ func TestANewerProjectionThatLeavesTheDimensionsUnchangedKeepsTheViewVersion(t *
 	}
 }
 
-// Covers: 同一条未决语义的重新确认半边——改记所依据的投影没写成（并发输家或库故障）时
-// 答未决，交回重投，不答已有结果：答了，消费门就入账收工，视图永远停在旧投影上。
+// Covers: 同一条未决语义的重新确认半边——确认依据（ConfirmedOn）没前移成（并发输家或库
+// 故障）时答未决，交回重投，不答已有结果：答了，消费门就入账收工，视图永远停在旧投影上。
 func TestAFailedReaffirmIsUndecided(t *testing.T) {
 	fixture := newViewFixture(t)
 	ctx := context.Background()

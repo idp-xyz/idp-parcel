@@ -5,8 +5,14 @@ import (
 	"testing"
 	"time"
 
+	"go.idp.xyz/idp-bento-go/postgres/inbox"
+	"go.idp.xyz/idp-bento-go/postgres/outbox"
+
 	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
+	veidentity "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/identity"
+	veinbox "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/inbox"
 	vepostgres "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
+	veapplication "go.idp.xyz/idp-parcel/internal/visibilityexception/application"
 	vedomain "go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 )
 
@@ -17,7 +23,8 @@ import (
 const secondHandoverScope = "SYN-SCOPE-02"
 
 // Covers: 四维不变——披露策略空册，两版投影派生出的四维都是全部待确认：视图仍是同一版、
-// 版本行一行，当前版的确认依据跟上第二版投影、形成时依据仍是第一版，对客视图发布意图仍是一份。
+// 版本行一行，当前版的确认依据跟上第二版投影、形成时依据仍是第一版，对客视图发布意图仍是一份；
+// 第二版的派生信封再投一次答已有结果，三样都不变。
 func TestASecondProjectionWithUnchangedDimensionsKeepsTheCustomerViewVersion(t *testing.T) {
 	fixture := newAcceptedCustomerViewFixture(t)
 
@@ -40,6 +47,78 @@ func TestASecondProjectionWithUnchangedDimensionsKeepsTheCustomerViewVersion(t *
 	}
 	if n := fixture.countOutboxOfType(t, customerViewPublishedType); n != 1 {
 		t.Fatalf("视图发布意图 = %d, want 仍为 1", n)
+	}
+
+	// P2 的派生信封再投一次（新信封 ID，消费账不拦）：当前版已确认过 P2，是重放——答已有结果，
+	// 不再前移、不换代，意图由同一视图版本认领，不多一份。
+	redeliverDerivedProjection(t, fixture, second.projection)
+	again := currentCustomerView(t, fixture)
+	if again.Version() != view.Version() || again.ConfirmedOn() != second.projection.Version() {
+		t.Fatalf("重投后视图 = %s 确认依据 = %s，want 仍是 %s / %s",
+			again.Version(), again.ConfirmedOn(), view.Version(), second.projection.Version())
+	}
+	if n := fixture.countSQL(t, `SELECT count(*) FROM visibility_exception.customer_view_version`); n != 1 {
+		t.Fatalf("重投后 customer_view_version 行数 = %d, want 仍为 1", n)
+	}
+	if n := fixture.countOutboxOfType(t, customerViewPublishedType); n != 1 {
+		t.Fatalf("重投后视图发布意图 = %d, want 仍为 1", n)
+	}
+}
+
+// redeliverDerivedProjection 以新 ID 把同一版投影的派生信封交给生产的客户视图派生那一路，
+// 并直接问一次租户现绑的派生编排，钉住它答的是已有结果——消费门把已发布与已有结果都译成
+// 入账，单看消费返回分不出两者。
+func redeliverDerivedProjection(t *testing.T, fixture *synVerticalFixture, projection vedomain.TrackingProjection) {
+	t.Helper()
+	outboxStore, err := outbox.NewStore(fixture.db)
+	if err != nil {
+		t.Fatalf("构造 Outbox Store：%v", err)
+	}
+	inboxStore, err := inbox.NewStore(fixture.db)
+	if err != nil {
+		t.Fatalf("构造 Inbox Store：%v", err)
+	}
+	consumer, err := deriveCustomerViewConsumer(fixture.db, outboxStore, inboxStore, systemClock{})
+	if err != nil {
+		t.Fatalf("装配客户视图派生那一路：%v", err)
+	}
+	tenant := fixture.identity.TenantID().String()
+	envelope := redeliveryEnvelope(tenant, "redeliver-derived-"+projection.Version().String(),
+		veinbox.TrackingProjectionDerivedEventType, transportHandoverObject,
+		`{"tenantId":"`+tenant+`","parcel":"`+transportHandoverObject+`","versionId":"`+projection.Version().String()+`"}`)
+	envelope.Source = "idp-parcel/visibility-exception"
+	if err := consumer.Consume(t.Context(), envelope); err != nil {
+		t.Fatalf("派生信封重投：%v", err)
+	}
+
+	views, err := vepostgres.NewCustomerViews(fixture.db)
+	if err != nil {
+		t.Fatalf("构造视图库：%v", err)
+	}
+	identities, err := veidentity.NewCustomerViewVersions()
+	if err != nil {
+		t.Fatalf("构造视图版本身份：%v", err)
+	}
+	downstream, err := vepostgres.NewOutboxCustomerViewHandoff(fixture.db, outboxStore, systemClock{})
+	if err != nil {
+		t.Fatalf("构造视图交接：%v", err)
+	}
+	derive := &tenantBoundCustomerViewDerive{
+		db: fixture.db, views: views, identities: identities, downstream: downstream, clock: systemClock{},
+	}
+	var result veapplication.DeriveCustomerViewResult
+	mustWithinTX(t, fixture.transactor, t.Context(), func(txCtx context.Context) error {
+		var deriveErr error
+		result, deriveErr = derive.Handle(txCtx, veapplication.DeriveCustomerViewCommand{
+			TenantID:   mustVE(t, vedomain.NewTenantID, tenant),
+			Customer:   mustVE(t, vedomain.NewCustomerAccountReference, "SYN-CUSTOMER-01"),
+			Projection: projection,
+		})
+		return deriveErr
+	})
+	if result.Outcome() != veapplication.CustomerViewExistingResult || result.HandoffReference() != "" {
+		t.Fatalf("重投 outcome = %q 续办 = %q，want EXISTING_RESULT 且意图已交出",
+			result.Outcome(), result.HandoffReference())
 	}
 }
 
