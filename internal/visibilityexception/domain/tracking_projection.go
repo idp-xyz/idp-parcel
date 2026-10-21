@@ -382,6 +382,19 @@ func (projection TrackingProjection) CarriesCustomerServiceFinal() bool {
 	return false
 }
 
+// CarriesClassifiedMilestone 回答这份投影里有没有至少一条已归类为标准追踪里程碑的条目。
+// 未归类条目如实保留在投影里，但客户视图的公开里程碑只能来自已归类的那些——一条都没有，
+// 客户就没有里程碑可看。与 CarriesCustomerServiceFinal 同理，这里不看替代关系，被替代事实
+// 由派生编排先滤掉。
+func (projection TrackingProjection) CarriesClassifiedMilestone() bool {
+	for _, entry := range projection.entries {
+		if _, classified := entry.Milestone(); classified {
+			return true
+		}
+	}
+	return false
+}
+
 // Rederive 依据迟到事实、来源更正或映射版本变化形成新的当前投影（CONTEXT 生命周期）：
 // 换版本、换条目、指回原版；原投影版本继续保留——已经发布的客户信息靠这条关系追加
 // 更正，不靠改写。

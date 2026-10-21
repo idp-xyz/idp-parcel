@@ -88,6 +88,37 @@ func FinalDimensionOver(permitted ViewDimension, projection TrackingProjection) 
 	return PendDimension()
 }
 
+// MilestonesDimensionOver 把披露策略对里程碑一维的答复落到一份投影上。策略回答「准不准
+// 给这位客户看公开里程碑」，回答不了「投影里有没有一条标准追踪里程碑」——条目未归类
+// （映射目录没登这一类事实，或这类事实本就不是里程碑，如初始路由、终局）时，客户能看的
+// 里程碑一条也没有。
+//
+// 准许展示而投影里没有已归类条目时这一维答待确认，不答展示：答展示等于告诉客户「里程碑
+// 可看」，背后却什么都没有。理由与 FinalDimensionOver 同：不答不展示，待确认与不展示原样
+// 放行，只收窄不放宽。
+func MilestonesDimensionOver(permitted ViewDimension, projection TrackingProjection) ViewDimension {
+	if permitted.state != DimensionShown || projection.CarriesClassifiedMilestone() {
+		return permitted
+	}
+	return PendDimension()
+}
+
+// ETADimensionWithoutVisibilityJudgement 把披露策略对 ETA 一维的答复落到「没有 ETA 客户
+// 可见性判断」上。策略回答「准不准给这位客户看 ETA」；某一份 ETA 能不能对客，要
+// `UC-VE-003` 的 ETA 客户可见性判断答（质量门槛、合同与客户服务规则，`AT-VE-187`），而本
+// 上下文今天还没有这一对象，派生编排因而读不到任何获准对客的 ETA。
+//
+// 准许展示时这一维答待确认（CONTEXT「客户全程追踪视图只基于……获准对客展示的 ETA……
+// 形成」，`AT-VE-158`）：答展示，客户读到的是「ETA：展示」，背后没有任何 ETA。不答不展示，
+// 待确认与不展示原样放行，理由与 FinalDimensionOver 同。ETA 客户可见性判断落地时，本函数
+// 改为收那份判断、按它在不在答，而不是另起一道。
+func ETADimensionWithoutVisibilityJudgement(permitted ViewDimension) ViewDimension {
+	if permitted.state != DimensionShown {
+		return permitted
+	}
+	return PendDimension()
+}
+
 func (dimension ViewDimension) State() DimensionState {
 	return dimension.state
 }

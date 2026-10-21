@@ -281,7 +281,8 @@ func commandOver(t *testing.T, projection domain.TrackingProjection) application
 // 客户账户隔离的客户视图版本」与「客户全程追踪视图只基于当前有效的全程追踪投影……
 // 形成」——首版视图锚定投影版本、账户是字段、意图由视图版本认领恰发一份。点名
 // `AT-VE-156`「当前投影包含已批准公开里程碑→展示标准语义……不复制内部来源状态」
-// ——展示维只携带策略批准的内容引用。
+// ——展示维只携带策略批准的内容引用。ETA 一维没有对客可见判断可依，策略准许也答
+// 待确认（另见 ETA 一维的专门用例），其余三维照策略展示。
 func TestFirstQualifyingProjectionPublishesAnAccountIsolatedView(t *testing.T) {
 	fixture := newViewFixture(t)
 
@@ -309,13 +310,16 @@ func TestFirstQualifyingProjectionPublishesAnAccountIsolatedView(t *testing.T) {
 	dimensions := view.Dimensions()
 	for name, dimension := range map[string]domain.ViewDimension{
 		"milestones": dimensions.Milestones,
-		"eta":        dimensions.ETA,
 		"final":      dimensions.Final,
 		"note":       dimensions.Note,
 	} {
 		if dimension.State() != domain.DimensionShown {
 			t.Fatalf("%s dimension = %q, want SHOWN", name, dimension.State())
 		}
+	}
+	if dimensions.ETA.State() != domain.DimensionPendingConfirmation {
+		t.Fatalf("eta dimension = %q, want PENDING_CONFIRMATION without a customer-visible ETA judgement",
+			dimensions.ETA.State())
 	}
 	if fixture.views.saved != 1 {
 		t.Fatalf("saved %d views, want 1", fixture.views.saved)
@@ -426,7 +430,6 @@ func TestAPermittedFinalPendsUntilTheProjectionCarriesTheAdoptedFinal(t *testing
 			t.Fatalf("%s: the final dimension carried content before any final was adopted", stage.name)
 		}
 		if dimensions.Milestones.State() != domain.DimensionShown ||
-			dimensions.ETA.State() != domain.DimensionShown ||
 			dimensions.Note.State() != domain.DimensionShown {
 			t.Fatalf("%s: pending the final pulled the other dimensions down with it", stage.name)
 		}
@@ -449,6 +452,80 @@ func TestAPermittedFinalPendsUntilTheProjectionCarriesTheAdoptedFinal(t *testing
 	if prior, superseding := after.PriorVersion(); !superseding || prior != latest.Version() {
 		t.Fatalf("prior version = %q, want the delivered-but-unadopted view %q kept as history",
 			prior, latest.Version())
+	}
+}
+
+// Covers: CONTEXT「客户全程追踪视图只基于当前有效的全程追踪投影、获准对客展示的 ETA……
+// 形成」与 UC-VE-008 主流程「读取 `UC-VE-003` 的客户可见性判断；只有达到适用质量与合同
+// 门槛的 ETA 才进入视图，不能使用计划时间或内部预测填充」——策略把 ETA 一维登成展示，
+// 本编排没有任何获准对客的 ETA 判断可依，这一维答待确认、不带内容，不答「ETA：展示」；
+// 策略不展示的照旧不展示。点名 `AT-VE-158`「只有内部 ETA 或质量未达对客门槛→不展示
+// ETA，也不使用计划或承诺时间填充」。
+func TestAPermittedETAPendsWithoutACustomerVisibleETAJudgement(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		eta  ports.DimensionDisclosure
+		want domain.DimensionState
+	}{
+		{"策略准许展示", shownAnswer(t).ETA, domain.DimensionPendingConfirmation},
+		{"策略不展示", ports.DimensionDisclosure{State: domain.DimensionNotDisclosed}, domain.DimensionNotDisclosed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture := newViewFixture(t)
+			fixture.policy.answer.ETA = tc.eta
+
+			result, err := fixture.handler.Handle(context.Background(), viewCommand(t, "projection-1"))
+			if err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+			view, _ := result.View()
+			eta := view.Dimensions().ETA
+			if eta.State() != tc.want {
+				t.Fatalf("eta = %q, want %q", eta.State(), tc.want)
+			}
+			if _, has := eta.Content(); has {
+				t.Fatal("the eta dimension carried content with no customer-visible ETA behind it")
+			}
+		})
+	}
+}
+
+// Covers: CONTEXT 生命周期「某一维信息待确认……只对该维返回待确认……不虚构里程碑」——
+// 策略准许展示里程碑，投影里却只有未归类条目（初始路由、终局这类不是标准追踪里程碑
+// 的事实）时，里程碑一维答待确认；第一条已归类的里程碑进投影，四维变了，新版本指回
+// 前版、里程碑一维转为展示。
+func TestPermittedMilestonesPendUntilTheProjectionCarriesAClassifiedMilestone(t *testing.T) {
+	fixture := newViewFixture(t)
+	ctx := context.Background()
+	route := viewEntry(t, domain.SourceNetworkRouting, "initial-route/parcel-1", "initial-route-formed", "")
+
+	first, err := fixture.handler.Handle(ctx, commandOver(t, projectionOf(t, "projection-1", route)))
+	if err != nil {
+		t.Fatalf("first handle: %v", err)
+	}
+	before, _ := first.View()
+	if before.Dimensions().Milestones.State() != domain.DimensionPendingConfirmation {
+		t.Fatalf("milestones = %q, want PENDING_CONFIRMATION with only unclassified entries",
+			before.Dimensions().Milestones.State())
+	}
+	if _, has := before.Dimensions().Milestones.Content(); has {
+		t.Fatal("the milestones dimension carried content before any milestone was classified")
+	}
+
+	second, err := fixture.handler.Handle(ctx, commandOver(t, projectionOf(t, "projection-2", route, intakeEntry(t))))
+	if err != nil {
+		t.Fatalf("second handle: %v", err)
+	}
+	if second.Outcome() != application.CustomerViewPublished {
+		t.Fatalf("outcome = %q, want PUBLISHED once a classified milestone changes the dimensions", second.Outcome())
+	}
+	after, _ := second.View()
+	if content, shown := after.Dimensions().Milestones.Content(); !shown || content.String() != "milestones/v1" {
+		t.Fatalf("milestones = %q content %q, want SHOWN with the content the policy approved",
+			after.Dimensions().Milestones.State(), content)
+	}
+	if prior, superseding := after.PriorVersion(); !superseding || prior != before.Version() {
+		t.Fatalf("prior version = %q, want %q", prior, before.Version())
 	}
 }
 

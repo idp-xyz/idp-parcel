@@ -239,9 +239,11 @@ func (handler *DeriveCustomerViewHandler) handOff(
 // 待登记实例参数，如实说等；不虚构可见性，也不把没人作过的披露决定说成「不展示」。
 // 已配置时逐维经领域构造器翻译，展示无内容在构造期立不起来，上抛而不吞。
 //
-// 终局一维再过一道投影：策略只说准不准看，终局形成没有由投影答（domain.FinalDimensionOver）。
-// 终局的事实归 PS，进投影时有固定的事实类型可认，所以能在这里补。ETA 一维要的是
-// `UC-VE-003` 的对客可见判断（`AT-VE-158`），那份判断不在投影里，不在这里补。
+// 策略只说准不准看，说不了背后有没有东西可看，终局、里程碑与 ETA 各再过一道，都只收窄
+// 不放宽：终局一维看投影里有没有 PS 已采用的终局（domain.FinalDimensionOver）；里程碑一维
+// 看投影里有没有已归类的标准追踪里程碑（domain.MilestonesDimensionOver）；ETA 一维要的是
+// `UC-VE-003` 的 ETA 客户可见性判断（`AT-VE-158`），那份判断本上下文还没有，准许展示也只能
+// 答待确认（domain.ETADimensionWithoutVisibilityJudgement）。追踪说明一维照策略。
 func dimensionsFrom(
 	answer ports.DisclosureAnswer,
 	configured bool,
@@ -273,8 +275,8 @@ func dimensionsFrom(
 		return domain.CustomerViewDimensions{}, fmt.Errorf("note dimension: %w", err)
 	}
 	return domain.CustomerViewDimensions{
-		Milestones: milestones,
-		ETA:        eta,
+		Milestones: domain.MilestonesDimensionOver(milestones, projection),
+		ETA:        domain.ETADimensionWithoutVisibilityJudgement(eta),
 		Final:      domain.FinalDimensionOver(final, projection),
 		Note:       note,
 	}, nil

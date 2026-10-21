@@ -267,3 +267,73 @@ func TestTheFinalDimensionShowsOnlyWhenTheProjectionCarriesAnAdoptedFinal(t *tes
 		})
 	}
 }
+
+// Covers: VE CONTEXT「客户全程追踪视图只基于当前有效的全程追踪投影、获准对客展示的 ETA……
+// 形成」与生命周期「某一维信息待确认或不可披露 → 只对该维返回待确认、暂不可用或不展示，
+// 不虚构里程碑、ETA、终局或异常说明」——策略准许展示 ETA，可本上下文还没有获准对客的
+// ETA 判断，这一维答待确认、不带内容；策略不展示与待确认原样放行，只收窄不放宽。点名
+// `AT-VE-158`「只有内部 ETA 或质量未达对客门槛→不展示 ETA，也不使用计划或承诺时间填充」。
+func TestTheETADimensionPendsWithoutACustomerVisibleETAJudgement(t *testing.T) {
+	permitted, err := domain.ShowDimension(mustValue(t, domain.NewViewContentReference, "eta-band/v1"))
+	if err != nil {
+		t.Fatalf("show eta: %v", err)
+	}
+	for _, tc := range []struct {
+		name      string
+		permitted domain.ViewDimension
+		want      domain.DimensionState
+	}{
+		{"策略准许展示", permitted, domain.DimensionPendingConfirmation},
+		{"策略不展示", domain.WithholdDimension(), domain.DimensionNotDisclosed},
+		{"策略待确认", domain.PendDimension(), domain.DimensionPendingConfirmation},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := domain.ETADimensionWithoutVisibilityJudgement(tc.permitted)
+			if got.State() != tc.want {
+				t.Fatalf("eta = %q, want %q", got.State(), tc.want)
+			}
+			if _, shown := got.Content(); shown {
+				t.Fatal("没有对客 ETA 判断，ETA 一维却带出了内容")
+			}
+		})
+	}
+}
+
+// Covers: VE CONTEXT「客户全程追踪视图只展示适用服务与授权允许的公开里程碑」与生命周期
+// 「某一维信息待确认……不虚构里程碑」——策略准许展示里程碑，投影里却没有一条已归类为
+// 标准追踪里程碑的条目（例如只有终局或初始路由那类未归类条目）时，这一维答待确认；
+// 有一条已归类即照策略展示。策略不展示与待确认原样放行。
+func TestTheMilestonesDimensionPendsUntilTheProjectionCarriesAClassifiedMilestone(t *testing.T) {
+	permitted, err := domain.ShowDimension(mustValue(t, domain.NewViewContentReference, "public-milestones/v1"))
+	if err != nil {
+		t.Fatalf("show milestones: %v", err)
+	}
+	intake := classified(t, "parcel-1")
+	route := unclassifiedEntry(t, domain.SourceNetworkRouting, "initial-route/parcel-1", "initial-route-formed")
+
+	for _, tc := range []struct {
+		name       string
+		permitted  domain.ViewDimension
+		projection domain.TrackingProjection
+		want       domain.DimensionState
+	}{
+		{"只有未归类条目", permitted, projectionWith(t, route), domain.DimensionPendingConfirmation},
+		{"有一条已归类", permitted, projectionWith(t, route, intake), domain.DimensionShown},
+		{"策略不展示", domain.WithholdDimension(), projectionWith(t, intake), domain.DimensionNotDisclosed},
+		{"策略待确认", domain.PendDimension(), projectionWith(t, intake), domain.DimensionPendingConfirmation},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := domain.MilestonesDimensionOver(tc.permitted, tc.projection)
+			if got.State() != tc.want {
+				t.Fatalf("milestones = %q, want %q", got.State(), tc.want)
+			}
+			content, shown := got.Content()
+			if shown != (tc.want == domain.DimensionShown) {
+				t.Fatalf("content shown = %v under state %q", shown, got.State())
+			}
+			if shown && content.String() != "public-milestones/v1" {
+				t.Fatalf("content = %q; 展示的内容来处只能是策略批的那一份", content)
+			}
+		})
+	}
+}
