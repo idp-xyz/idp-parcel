@@ -1,7 +1,7 @@
 # 75 交接、揽收、交付、外部承运追踪四路仍把集运单元当一件追踪包裹投
 
 Category: enhancement
-Status: in-progress——(a) 完工待评审与进 main，分支 claude-code75（rebase 到 main `4bd28bc11`，见文末「完成记录」与「评审记录」）；(b) Blocked by 80。此前 needs-triage——(a) R2（上线后尽快）：整袋交接是常态，追踪上每交接一袋就多一份不是包裹的追踪投影，违背 VE CONTEXT「集运、装载或同批关系不合并包裹身份和客户轨迹」。(b) 归后续。2026-10-21 协调方据票 demo-chain-gaps/123 隔离评审立（作者子代理代笔）。
+Status: in-progress——(a) 已进 main（见文末「(a) 进 main 记录」）；(b) Blocked by demo-chain-gaps/80。此前 in-progress——(a) 完工待评审与进 main，分支 claude-code75（rebase 到 main `4bd28bc11`，见文末「完成记录」与「评审记录」）；(b) Blocked by 80。此前 needs-triage——(a) R2（上线后尽快）：整袋交接是常态，追踪上每交接一袋就多一份不是包裹的追踪投影，违背 VE CONTEXT「集运、装载或同批关系不合并包裹身份和客户轨迹」。(b) 归后续。2026-10-21 协调方据票 demo-chain-gaps/123 隔离评审立（作者子代理代笔）。
 Blocked by: (a) 无；(b) [demo-chain-gaps/80](../../demo-chain-gaps/issues/80-a-consolidation-unit-handover-does-not-move-member-control.md)（ADR-0263 决定四）
 上下文：VE（全程追踪）。
 出处：票 [demo-chain-gaps/123](../../demo-chain-gaps/issues/123-tracking-projects-a-departing-bag-as-one-parcel-and-its-members-get-no-departure.md) 完成记录越权风险点 3；其真库补派生用例里，袋经交接进段时交接那一封给袋立了一条交接条目。
@@ -105,3 +105,10 @@ Blocked by: (a) 无；(b) [demo-chain-gaps/80](../../demo-chain-gaps/issues/80-a
 - `TMPDIR=… scripts/test-full.sh ./internal/visibilityexception/... ./cmd/parcel-dispatch ./cmd/parcel-api ./cmd/parcel-ve-register ./internal/architecture/... ./migrations/...`：退 0，20 个包 ok、0 FAIL。
 - 新用例另跑 `-count=3`：VE 两个适配器包与 `cmd/parcel-dispatch`（`-run 'ControlFact|Bag'`）ok。
 - 未重生成 AT 计数与机制清点，留给进 main 时重算。
+
+## (a) 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-code75` tip `9d1c33d12` 在 main `4bd28bc11` 上快进；隔离评审无阻断，四条建议与两条顺手已收；构造搬家逐行比过。
+- 协调方在 tip 上单独提交重算的 AT 计数与重生成的机制清点；ADR 索引无变化；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净。无迁移、无种子改动。
+- 去向：(b) 仍 Blocked by 票 80，落地时回补已入账未派生的单元事实；code/79（PS 采用各路先认单元，R2）。
