@@ -50,7 +50,7 @@ func (catalogue *CredentialCatalogue) ListCredentials(
 
 	rows, err := querier.Query(ctx,
 		`SELECT credential_id, issuer_ref, holder_ref, procedure_ref,
-		        valid_from, valid_to, uses, registered_at
+		        valid_from, valid_to, uses, registered_at, operation_evidence
 		   FROM customs_compliance.regulatory_credential
 		  WHERE tenant_id = $1
 		  ORDER BY credential_id
@@ -68,9 +68,10 @@ func (catalogue *CredentialCatalogue) ListCredentials(
 			idRaw, issuer, holder, procedure string
 			validFrom, validTo, registeredAt time.Time
 			uses                             int
+			evidence                         *string
 		)
 		if err := rows.Scan(&idRaw, &issuer, &holder, &procedure,
-			&validFrom, &validTo, &uses, &registeredAt); err != nil {
+			&validFrom, &validTo, &uses, &registeredAt, &evidence); err != nil {
 			return nil, fmt.Errorf("list credentials: %w", err)
 		}
 		id, err := domain.NewCredentialID(idRaw)
@@ -81,10 +82,14 @@ func (catalogue *CredentialCatalogue) ListCredentials(
 		if err != nil {
 			return nil, fmt.Errorf("rebuild credential catalogue: %w", err)
 		}
-		entries = append(entries, ports.CredentialCatalogueEntry{
+		entry := ports.CredentialCatalogueEntry{
 			Credential:   credential,
 			RegisteredAt: registeredAt.UTC(),
-		})
+		}
+		if evidence != nil {
+			entry.OperationEvidence = *evidence
+		}
+		entries = append(entries, entry)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("list credentials: %w", err)

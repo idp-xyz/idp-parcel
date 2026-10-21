@@ -40,6 +40,7 @@ func (registry *CredentialRegistrations) RegisterCredential(
 	ctx context.Context,
 	tenant domain.TenantID,
 	credential domain.RegulatoryCredential,
+	operationEvidence string,
 ) (ports.CaseConfigurationSaveOutcome, error) {
 	if strings.TrimSpace(credential.ID().String()) == "" {
 		// 零值凭证的各维皆空，落库会撞 CHECK 而报成「依赖故障」，它明明是调用方编程错误。
@@ -55,12 +56,12 @@ func (registry *CredentialRegistrations) RegisterCredential(
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO customs_compliance.regulatory_credential
 			(tenant_id, credential_id, issuer_ref, holder_ref, procedure_ref,
-			 valid_from, valid_to, uses, registered_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+			 valid_from, valid_to, uses, registered_at, operation_evidence)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now(), $9)
 		 ON CONFLICT DO NOTHING`,
 		tenant.String(), credential.ID().String(),
 		credential.Issuer().String(), credential.Holder().String(), credential.Procedure().String(),
-		credential.ValidFrom().UTC(), credential.ValidTo().UTC(), uses,
+		credential.ValidFrom().UTC(), credential.ValidTo().UTC(), uses, nullableEvidence(operationEvidence),
 	)
 	if err != nil {
 		return ports.CaseConfigurationSaveOutcomeInvalid, fmt.Errorf("register credential: %w", err)
@@ -146,4 +147,12 @@ func rebuildCredential(
 		return domain.RegulatoryCredential{}, err
 	}
 	return domain.RegisterCredential(id, issuerRef, holderRef, procedureRef, validFrom.UTC(), validTo.UTC(), uses)
+}
+
+// nullableEvidence 把空的操作证据写成 NULL：空着是「这一路不记登记人」，落成空串会撞非空白那道 CHECK。
+func nullableEvidence(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
 }

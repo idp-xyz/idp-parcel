@@ -124,12 +124,13 @@ func TestAnEmptyCredentialRegisterAnswersAnEmptyArray(t *testing.T) {
 
 // Covers: 0014 自注 / 票 sa-cc/10 做法 2 — 一版凭证逐字段转写；次数额度「来源未提供」以
 // uses 缺席表达（不写 0——0 会被读成额度已用尽），有额度的凭证 uses 在场；登记时间与有效期
-// 两端各自一列。
+// 两端各自一列。登记人（AT-CC-446 读面半边）只在那一版记了操作证据时在场，不记的一路缺席，不写空串。
 func TestCredentialListTranscribesEachVersionVerbatim(t *testing.T) {
 	registeredAt := catalogueBaseAt.Add(-time.Hour)
 	register := &stubCredentials{
 		entries: []ports.CredentialCatalogueEntry{
-			{Credential: credentialOf(t, "SYN-CRED-01", 3), RegisteredAt: registeredAt},
+			{Credential: credentialOf(t, "SYN-CRED-01", 3), RegisteredAt: registeredAt,
+				OperationEvidence: "OPERATOR/https://id.syn.example/dex#SYN-CUSTOMS-01"},
 			{Credential: credentialOf(t, "SYN-CRED-02", 0), RegisteredAt: registeredAt},
 		},
 	}
@@ -145,14 +146,15 @@ func TestCredentialListTranscribesEachVersionVerbatim(t *testing.T) {
 	var body struct {
 		Outcome     string `json:"outcome"`
 		Credentials []struct {
-			Credential   string `json:"credential"`
-			Issuer       string `json:"issuer"`
-			Holder       string `json:"holder"`
-			Procedure    string `json:"procedure"`
-			ValidFrom    string `json:"validFrom"`
-			ValidTo      string `json:"validTo"`
-			Uses         *int   `json:"uses"`
-			RegisteredAt string `json:"registeredAt"`
+			Credential   string  `json:"credential"`
+			Issuer       string  `json:"issuer"`
+			Holder       string  `json:"holder"`
+			Procedure    string  `json:"procedure"`
+			ValidFrom    string  `json:"validFrom"`
+			ValidTo      string  `json:"validTo"`
+			Uses         *int    `json:"uses"`
+			RegisteredAt string  `json:"registeredAt"`
+			Evidence     *string `json:"operationEvidence"`
 		} `json:"credentials"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
@@ -174,6 +176,9 @@ func TestCredentialListTranscribesEachVersionVerbatim(t *testing.T) {
 	}
 	if unprovided.Credential != "SYN-CRED-02" || unprovided.Uses != nil {
 		t.Fatalf("来源未提供额度的凭证 uses 该缺席，不该写成 0：%+v", unprovided)
+	}
+	if quota.Evidence == nil || *quota.Evidence != "OPERATOR/https://id.syn.example/dex#SYN-CUSTOMS-01" || unprovided.Evidence != nil {
+		t.Fatalf("登记人转写走样：%v / %v", quota.Evidence, unprovided.Evidence)
 	}
 }
 

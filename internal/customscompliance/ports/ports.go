@@ -1012,11 +1012,15 @@ type ParcelDeclarationFactsView interface {
 // （UC-CC-005 步 7/9、UC-CC-006 步 7），不在本册：这里登的是凭证本身，不是余额。写入
 // 代数与其余登记册同（ADR-0031，不 UPSERT）：同键已在册交回`已登记`，内容是否同一份由
 // 编排读回自己比。
+//
+// operationEvidence 是这一版的操作证据：经哪个渠道、由谁登记（ADR-0236 决定三）。空即这一路不记登记人。它只进审计，不是凭证
+// 内容：不进 CCC-1 比对、不进适用性判断，同键已在册时不顶替先到那一版的。
 type CredentialRegistry interface {
 	RegisterCredential(
 		ctx context.Context,
 		tenant domain.TenantID,
 		credential domain.RegulatoryCredential,
+		operationEvidence string,
 	) (CaseConfigurationSaveOutcome, error)
 }
 
@@ -1320,6 +1324,8 @@ type PortsPathsCatalogueRead interface {
 type CredentialCatalogueEntry struct {
 	Credential   domain.RegulatoryCredential
 	RegisteredAt time.Time
+	// OperationEvidence 是登记这一版的操作证据（ADR-0236 决定三），空即这一路不记登记人。随行透出供审计读，不是凭证内容。
+	OperationEvidence string
 }
 
 // CredentialCatalogueRead 是监管凭证登记册的伴生列表读口（ADR-0077 Decision 一/五）：

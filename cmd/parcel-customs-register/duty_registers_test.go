@@ -37,6 +37,7 @@ func (book *fakeCredentialBook) RegisterCredential(
 	_ context.Context,
 	tenant domain.TenantID,
 	credential domain.RegulatoryCredential,
+	_ string,
 ) (ports.CaseConfigurationSaveOutcome, error) {
 	if book.registerErr != nil {
 		return ports.CaseConfigurationSaveOutcomeInvalid, book.registerErr

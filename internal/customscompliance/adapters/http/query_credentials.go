@@ -65,13 +65,14 @@ func NewQueryCredentialsEndpoint(
 		for _, entry := range entries {
 			credential := entry.Credential
 			body := credentialBody{
-				Credential:   credential.ID().String(),
-				Issuer:       credential.Issuer().String(),
-				Holder:       credential.Holder().String(),
-				Procedure:    credential.Procedure().String(),
-				ValidFrom:    credential.ValidFrom().UTC().Format(time.RFC3339Nano),
-				ValidTo:      credential.ValidTo().UTC().Format(time.RFC3339Nano),
-				RegisteredAt: entry.RegisteredAt.UTC().Format(time.RFC3339Nano),
+				Credential:        credential.ID().String(),
+				Issuer:            credential.Issuer().String(),
+				Holder:            credential.Holder().String(),
+				Procedure:         credential.Procedure().String(),
+				ValidFrom:         credential.ValidFrom().UTC().Format(time.RFC3339Nano),
+				ValidTo:           credential.ValidTo().UTC().Format(time.RFC3339Nano),
+				RegisteredAt:      entry.RegisteredAt.UTC().Format(time.RFC3339Nano),
+				OperationEvidence: entry.OperationEvidence,
 			}
 			if uses, provided := credential.Uses(); provided {
 				body.Uses = &uses
@@ -93,14 +94,16 @@ type credentialListResponse struct {
 // credentialBody 逐字段透出一版监管凭证。uses 只在来源提供了次数额度时在场：领域把零约定
 // 为「来源未提供」并经 Uses 的第二个返回值显式交出，传输层照那道区分落成缺席 / 在场——
 // 不写 0，0 在读者眼里是「额度已用尽」，而本册不登余额。registeredAt 是登记动作的时钟，
-// 与 validFrom / validTo 两端是三件事。
+// 与 validFrom / validTo 两端是三件事。operationEvidence 只在这一版记了登记人时在场（ADR-0236 决定三）：缺席是「这一路不记」，
+// 不写空串冒充「无人登记」。
 type credentialBody struct {
-	Credential   string `json:"credential"`
-	Issuer       string `json:"issuer"`
-	Holder       string `json:"holder"`
-	Procedure    string `json:"procedure"`
-	ValidFrom    string `json:"validFrom"`
-	ValidTo      string `json:"validTo"`
-	Uses         *int   `json:"uses,omitempty"`
-	RegisteredAt string `json:"registeredAt"`
+	Credential        string `json:"credential"`
+	Issuer            string `json:"issuer"`
+	Holder            string `json:"holder"`
+	Procedure         string `json:"procedure"`
+	ValidFrom         string `json:"validFrom"`
+	ValidTo           string `json:"validTo"`
+	Uses              *int   `json:"uses,omitempty"`
+	RegisteredAt      string `json:"registeredAt"`
+	OperationEvidence string `json:"operationEvidence,omitempty"`
 }

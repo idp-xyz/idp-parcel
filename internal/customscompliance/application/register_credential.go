@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
@@ -32,6 +33,9 @@ type RegisterCredentialCommand struct {
 	ValidFrom time.Time
 	ValidTo   time.Time
 	Uses      int
+	// OperationEvidence 是登记方（操作者渠道上是 `OPERATOR/<发行方>#<sub>`），只进审计，理由在 ports.CredentialRegistry 头注。不从
+	// 载荷收：由 Intake 按认证结果填，集成客户端族与受控 CLI 两路不填。
+	OperationEvidence string
 }
 
 // RegisterCredentialDeps 写口与读口两半，理由同其余登记册：冲突判定靠读回。
@@ -62,7 +66,7 @@ func (handler *RegisterCredentialHandler) Handle(
 		return ConfigurationNotAccepted, nil
 	}
 
-	saved, err := handler.deps.Registry.RegisterCredential(ctx, command.TenantID, credential)
+	saved, err := handler.deps.Registry.RegisterCredential(ctx, command.TenantID, credential, strings.TrimSpace(command.OperationEvidence))
 	if err != nil {
 		return ConfigurationUndecided, nil
 	}

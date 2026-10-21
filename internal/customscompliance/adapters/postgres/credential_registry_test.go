@@ -57,7 +57,7 @@ func registerCredential(
 ) (ports.CaseConfigurationSaveOutcome, error) {
 	t.Helper()
 	return register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
-		return registry.RegisterCredential(ctx, viewValue(t, domain.NewTenantID, "tenant-a"), credential)
+		return registry.RegisterCredential(ctx, viewValue(t, domain.NewTenantID, "tenant-a"), credential, "")
 	})
 }
 
@@ -158,7 +158,7 @@ func TestCredentialWritesRefuseToRunOutsideATransaction(t *testing.T) {
 
 	if _, err := registry.RegisterCredential(t.Context(),
 		viewValue(t, domain.NewTenantID, "tenant-a"),
-		synCredential(t, "SYN-HOLDER-01", 1)); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		synCredential(t, "SYN-HOLDER-01", 1), ""); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务登记凭证应返回 ErrTransactionRequired，实得：%v", err)
 	}
 }

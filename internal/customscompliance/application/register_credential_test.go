@@ -20,6 +20,7 @@ var credentialValidFrom = time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 type credentialRow struct {
 	tenant     string
 	credential domain.RegulatoryCredential
+	evidence   string
 }
 
 type credentialStoreDouble struct {
@@ -32,6 +33,7 @@ func (double *credentialStoreDouble) RegisterCredential(
 	_ context.Context,
 	tenant domain.TenantID,
 	credential domain.RegulatoryCredential,
+	evidence string,
 ) (ports.CaseConfigurationSaveOutcome, error) {
 	if double.registerErr != nil {
 		return ports.CaseConfigurationSaveOutcomeInvalid, double.registerErr
@@ -41,7 +43,7 @@ func (double *credentialStoreDouble) RegisterCredential(
 			return ports.CaseConfigurationAlreadyRegistered, nil
 		}
 	}
-	double.rows = append(double.rows, credentialRow{tenant: tenant.String(), credential: credential})
+	double.rows = append(double.rows, credentialRow{tenant: tenant.String(), credential: credential, evidence: evidence})
 	return ports.CaseConfigurationRegistered, nil
 }
 
