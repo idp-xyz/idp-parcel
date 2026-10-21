@@ -132,7 +132,7 @@
 - 否则须当前受控关闭已经生效且未被重开——受控关闭本身只把包裹级继续尝试判断派生为不允许新增尝试，不是终局；全部相关面单交易均已定案，结果待确认的交易不得按失败处理；不存在仍可使用的面单结果——本包裹被受理且未渠道作废、未依据接受时固定的有效期规则不可逆失效的成功继续阻止终局。到这里：从未有过成功结果形成终局失败结果；有过成功但均已作废或不可逆失效形成终局服务结果。
 - 渠道退款、对账、运营结算不作为前置条件。有效期规则是接受时固定的实例参数，未配置时不按时钟推算失效。
 - 判断结果作为责任结果进入「应用流程」一节的采用流程：终局类型与规则版本仍由 `party-commercial` 的终局规则声明给出（`PAR-COM-17`）；提供方尚未声明面单渠道服务两格时保持终局未决，不默认「首次收寄即所有面单产品终局」。
-- 面单服务终局判断编排（`JudgeLabelServiceFinalHandler`）的结果：`LABEL_SERVICE_FINAL_ADOPTED`（判出终局并交采用，采用本身的结果读「结果语义契约」）、`LABEL_SERVICE_NOT_FINAL`（带 `CONTINUED_ATTEMPT_STILL_OPEN`、`LABEL_TRANSACTION_NOT_FINALIZED` 或 `USABLE_LABEL_RESULT_OUTSTANDING`）、`CANCELLATION_STANDS`（有效取消在先）、`REQUEST_NOT_ACCEPTED`、`JUDGMENT_UNDECIDED`（交易、继续尝试登记、取消或有效期规则读不回，原因各占一格）。
+- 面单服务终局判断编排（`JudgeLabelServiceFinalHandler`）的结果：`LABEL_SERVICE_FINAL_ADOPTED`（判出终局并交采用，采用本身的结果读「结果语义契约」）、`LABEL_SERVICE_NOT_FINAL`（带 `CONTINUED_ATTEMPT_STILL_OPEN`、`LABEL_TRANSACTION_NOT_FINALIZED`、`USABLE_LABEL_RESULT_OUTSTANDING`，或 `CANCELLATION_ORDER_CONFLICT`——有效取消在场而首次有效收寄发生不晚于取消的业务时间，冲突记进冲突册）、`CANCELLATION_STANDS`（有效取消在先）、`REQUEST_NOT_ACCEPTED`、`JUDGMENT_UNDECIDED`（交易、继续尝试登记、取消或有效期规则读不回，或判出的冲突记不下，原因 `LABEL_TRANSACTIONS_UNAVAILABLE`、`CONTINUED_ATTEMPT_REGISTER_UNAVAILABLE`、`CANCELLATION_VIEW_UNAVAILABLE`、`LABEL_VALIDITY_RULE_UNAVAILABLE`、`CONFLICT_REGISTER_UNAVAILABLE` 各占一格）。
 
 ## 一致性、幂等与并发
 
@@ -188,7 +188,7 @@
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
 | `AT-PS-063`，结果表「当前终局重派生」一行 | 责任结果没有有效性一格，重派生沿用原终局种类、不按规则重判，「有效交付失效之后当前无终局」表达不出；本行预期结果不变 | [code/23](../../../.scratch/docs-consistency/code/23-final-outcome-rederivation-cannot-express-a-voided-delivery.md) |
-| `AT-PS-108` | 面单服务终局判断读到有效取消即答 `CANCELLATION_STANDS`，不比承运商首次有效收寄的发生时间；本行预期结果不变 | [code/35](../../../.scratch/docs-consistency/code/35-cancellation-and-boundary-fact-order-conflict-has-no-label-half-and-no-resolution-face.md) |
+| `AT-PS-108` | 判法已补：读到有效取消时比首次有效收寄的业务发生时间，不晚于取消答 `LABEL_SERVICE_NOT_FINAL`、原因 `CANCELLATION_ORDER_CONFLICT`，冲突记进冲突册（[code/35](../../../.scratch/docs-consistency/code/35-cancellation-and-boundary-fact-order-conflict-has-no-label-half-and-no-resolution-face.md)）；解开它的业务决定面仍没有，本行预期结果不变 | [code/76](../../../.scratch/docs-consistency/code/76-a-cancellation-order-conflict-has-no-resolution-decision-face.md) |
 | 承运商首次有效收寄被作废之后的终局重派生 | 代码显式答未决（`ErrVoidedCarrierPickupRederivationUndecided`），判法等 [ADR-0138](../../adr/0138-voided-carrier-pickup-voids-the-label-service-final-as-a-third-ledger-record-and-rejudges-on-remaining-basis.md)（Proposed）接受 | 票 label-channel-service-first-release/39 |
 
 完成本用例只闭合包裹服务终局及委托完成派生；追踪、异常、索赔、供应商追偿、客户费用和经营结算仍由各自上下文独立形成。

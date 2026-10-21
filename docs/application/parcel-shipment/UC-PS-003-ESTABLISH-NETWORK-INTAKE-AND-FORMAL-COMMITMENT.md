@@ -149,7 +149,7 @@
 - 同一包裹、同一来源类型和同一来源结果版本只能形成一个有效网络收寄采用结果。
 - 客户送站与场外揽收都指向同一包裹时不能形成两个责任起点。先合法形成者保留，后续来源作为重复、冲突或后续物理事实处理。
 - 多包裹委托逐包裹提交；一个成员未决或不采用不回滚其他成员已经形成的正式承诺。
-- 取消与收寄的先后按两者的业务时间比，不按消息到达或提交顺序（[ADR-0254](../../adr/0254-cancellation-and-boundary-fact-order-is-judged-by-their-business-times-and-a-late-earlier-boundary-fact-is-a-fact-conflict.md)）：收寄已采用之后到达的取消不成立；取消已提交之后到达的收寄，发生晚于取消的业务时间即不采用（`SOURCE_NOT_ADOPTED`），不晚于取消即停在未决（原因 `CANCELLATION_ORDER_CONFLICT`），不形成责任起点、不抹取消，等一份明确的业务决定解开。已经发生的物理事实始终保留。
+- 取消与收寄的先后按两者的业务时间比，不按消息到达或提交顺序（[ADR-0254](../../adr/0254-cancellation-and-boundary-fact-order-is-judged-by-their-business-times-and-a-late-earlier-boundary-fact-is-a-fact-conflict.md)）：收寄已采用之后到达的取消不成立；取消已提交之后到达的收寄，发生晚于取消的业务时间即不采用（`SOURCE_NOT_ADOPTED`），不晚于取消即停在未决（原因 `CANCELLATION_ORDER_CONFLICT`），不形成责任起点、不抹取消，冲突留在册上、按包裹查得出；这一格重投推不动，消费门入账而不回滚重投，等一份明确的业务决定解开。已经发生的物理事实始终保留。
 - 来源更正、撤销或身份关系变化形成新的采用判断版本。原责任判断和承诺历史不能删除；当前承诺影响通过带原因的新版本表达。同来源更正以来源所有者声明的更正关系识别——新版本自报更正的恰是该包裹当前采用的那一版；来源种类相同而无更正声明的新版本按「先合法形成者保留」那一条（`AT-PS-049`）作竞争处理（[ADR-0117](../../adr/0117-same-source-correction-forms-a-superseding-adoption-version-chained-to-the-current-responsibility-start.md)）。
 - 提交结果不确定时按稳定关联查询原采用结果、承诺和发布意图，不盲目重复提交。
 
@@ -198,6 +198,6 @@
 
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
-| `AT-PS-107` 与「一致性、幂等与并发」取消与收寄一条 | 冲突之后没有解开它的业务决定面，冲突包裹没有责任起点、也不触发收寄后的路由复核；采用消费门还把这一格当依赖类未决回滚重投，而它重投推不动；本行预期结果不变 | [code/35](../../../.scratch/docs-consistency/code/35-cancellation-and-boundary-fact-order-conflict-has-no-label-half-and-no-resolution-face.md) |
+| `AT-PS-107` 与「一致性、幂等与并发」取消与收寄一条 | 入账已补：冲突记进冲突册、采用消费门入账不回滚重投（[code/35](../../../.scratch/docs-consistency/code/35-cancellation-and-boundary-fact-order-conflict-has-no-label-half-and-no-resolution-face.md)）；解开它的业务决定面仍没有，冲突包裹没有责任起点、也不触发收寄后的路由复核，本行预期结果不变 | [code/76](../../../.scratch/docs-consistency/code/76-a-cancellation-order-conflict-has-no-resolution-decision-face.md) |
 
 完成本用例只闭合网络服务责任起点和正式承诺，不证明路由仍适用、节点作业完成、运输已经开始或包裹已经终局。

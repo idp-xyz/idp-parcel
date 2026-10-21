@@ -1,6 +1,6 @@
 # UC-PS-006 取消包裹或协调收寄后服务处置
 
-状态：开发基线；网络服务包裹的逐包裹取消已实现，收寄后服务处置决定、面单渠道服务的边界核验与取消—收寄冲突的解开尚未实现，见「给开发的交接」；真实取消授权、收寄后处置规则、伙伴能力和费用参数待提供
+状态：开发基线；逐包裹取消已实现，含提交边界上的终局与面单渠道服务首次有效收寄核验、取消—收寄冲突的判法与留存；收寄后服务处置决定与取消—收寄冲突的解开尚未实现，见「给开发的交接」；真实取消授权、收寄后处置规则、伙伴能力和费用参数待提供
 
 ## 目标与边界
 
@@ -53,7 +53,7 @@
 |---|---|---|
 | 已接受，尚无有效网络收寄或其他适用非取消边界 | 授权成立时形成包裹取消决定和取消终局 | 删除身份、接受基线或既有交易 |
 | 收寄事实存在但有效性待确认 | 取消/处置未决，续办事实核对 | 先取消后等事实，或按消息晚到忽略收寄 |
-| 取消已提交（已答`包裹已取消`）之后才到的收寄，发生不晚于取消的业务时间（事实冲突，[ADR-0254](../../adr/0254-cancellation-and-boundary-fact-order-is-judged-by-their-business-times-and-a-late-earlier-boundary-fact-is-a-fact-conflict.md)） | 已提交的取消不被改写；收寄采用停在未决（`CANCELLATION_ORDER_CONFLICT`）；收寄后处置不形成；等一份明确的业务决定 | 自动认取消或自动认收寄，按消息晚到忽略收寄 |
+| 取消已提交（已答`包裹已取消`）之后才到的收寄，发生不晚于取消的业务时间（事实冲突，[ADR-0254](../../adr/0254-cancellation-and-boundary-fact-order-is-judged-by-their-business-times-and-a-late-earlier-boundary-fact-is-a-fact-conflict.md)） | 已提交的取消不被改写；收寄采用停在未决（`CANCELLATION_ORDER_CONFLICT`），面单渠道服务不形成终局；冲突留在册上按包裹查得出；收寄后处置不形成；等一份明确的业务决定 | 自动认取消或自动认收寄，按消息晚到忽略收寄 |
 | 取消到达提交边界时有效网络收寄已经在册 | 收寄后服务处置决定、未决或拒绝 | 回退为已取消 |
 | 已有终局服务结果 | 返回既有终局；新服务需求建立关联委托 | 重开原结果或追溯取消 |
 | 包裹已被谱系后继替代 | 对当前有效后继重新明确请求范围 | 把来源包裹决定自动扩散给后继 |
@@ -66,11 +66,12 @@
 |---|---|---|---|
 | 包裹已取消 | `PARCEL_CANCELLED` | 授权成立、提交边界上没有在册的收寄或终局，形成取消终局 | 不得删除身份、接受基线或既有交易 |
 | 待处置 | `DISPOSITION_PENDING` | 提交边界上收寄已在册，取消不形成；记下越过的收寄版本，收寄后服务处置决定由后续独立请求形成 | 不得回退为已取消，也不得据此自动退运或终止 |
-| 取消被拒 | `CANCELLATION_REFUSED` | 授权答不允许，带规则依据 | 不得在授权规则未登记时作答 |
-| 取消未决 | `CANCELLATION_UNDECIDED` | 依赖读不回、授权规则未登记或本方提交没有落成（[ADR-0256](../../adr/0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md)），原因是 `REQUEST_UNAVAILABLE`、`AUTHORITY_UNAVAILABLE`、`AUTHORITY_UNCONFIGURED`、`ADOPTION_STORE_UNAVAILABLE`、`CANCELLATION_STORE_UNAVAILABLE`、`CANCELLATION_IDENTITY_UNAVAILABLE` 之一，带续办引用 | 不得默认授权或默认放行取消 |
+| 取消被拒 | `CANCELLATION_REFUSED` | 授权答不允许，带规则依据；或面单渠道服务的实际承运商首次有效收寄在提交边界上已经在册，依据指名越过的那一代收寄（`CARRIER_FIRST_EFFECTIVE_PICKUP/<收寄事实>@<版本>`） | 不得在授权规则未登记时作答 |
+| 取消未决 | `CANCELLATION_UNDECIDED` | 依赖读不回、授权规则未登记、面单渠道服务的首次有效收寄判过但待确认，或本方提交没有落成（[ADR-0256](../../adr/0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md)），原因是 `REQUEST_UNAVAILABLE`、`AUTHORITY_UNAVAILABLE`、`AUTHORITY_UNCONFIGURED`、`ADOPTION_STORE_UNAVAILABLE`、`CANCELLATION_STORE_UNAVAILABLE`、`CANCELLATION_IDENTITY_UNAVAILABLE`、`FINAL_OUTCOME_STORE_UNAVAILABLE`、`CARRIER_PICKUP_UNAVAILABLE`、`CARRIER_PICKUP_PENDING` 之一，带续办引用 | 不得默认授权或默认放行取消 |
 | 已有结果 | `EXISTING_RESULT` | 同一请求身份、同一包裹、相同内容的重复请求，返回原逐包裹结果 | 不得重复形成取消 |
 | 请求冲突 | `REQUEST_CONFLICT` | 同一请求身份、同一包裹携带不同内容 | 不得覆盖原请求 |
 | 请求未受理 | `REQUEST_NOT_ACCEPTED` | 包裹、请求方、原因或业务时间缺席，请求立不起来 | 不得与统一不可见并成一格 |
+| 既有终局 | `FINAL_OUTCOME_STANDS` | 提交边界上包裹已有当前有效终局（非取消终局，或已成立的取消），返回既有终局并指名那份终局；不形成取消，不落取消记录 | 不得重开原结果或追溯取消 |
 
 委托查无、编号不符、跨租户、跨客户或包裹不是当前提交版本的成员，答统一不可见结果（[ADR-0022](../../adr/0022-http-status-carries-answer-formed-not-business-verdict.md)），不是上表任一格。
 
@@ -129,6 +130,6 @@
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
 | 收寄后服务处置决定；`AT-PS-083`、`AT-PS-084`、`AT-PS-088` | 编排越过边界时只记`待处置`，收寄后服务处置决定没有模型、没有决定面，也不向下游提出范围化请求；本行预期结果不变 | [code/37](../../../.scratch/docs-consistency/code/37-post-intake-service-disposition-decision-has-no-model.md) |
-| 面单渠道服务的取消边界；`AT-PS-086` | 提交边界上只读网络收寄的采用链，不读面单渠道服务的承运商首次有效收寄与当前有效终局；面单渠道包裹在承运商收寄乃至终局之后仍可能答`包裹已取消`；本行预期结果不变 | [code/21](../../../.scratch/docs-consistency/code/21-label-channel-parcel-cancellation-ignores-carrier-pickup-and-finals.md) |
+| 面单渠道服务的取消边界；`AT-PS-086` | 已补：提交边界上先读当前有效终局，已有终局答 `FINAL_OUTCOME_STANDS`；再读网络收寄的采用链与面单渠道服务的首次有效收寄，已形成的收寄答 `CANCELLATION_REFUSED` 并指名那一代，待确认答未决 `CARRIER_PICKUP_PENDING` | [code/21](../../../.scratch/docs-consistency/code/21-label-channel-parcel-cancellation-ignores-carrier-pickup-and-finals.md) |
 | 统一不可见 | 委托查无、编号不符、跨租户与成员出界今天答 `REQUEST_NOT_ACCEPTED`，与字段缺并成一格 | [code/22](../../../.scratch/docs-consistency/code/22-customer-face-http-contract-misses-accepted-adrs.md) |
-| 决定矩阵「事实冲突」一行 | 冲突停在未决之后没有解开它的业务决定面 | [code/35](../../../.scratch/docs-consistency/code/35-cancellation-and-boundary-fact-order-conflict-has-no-label-half-and-no-resolution-face.md) |
+| 决定矩阵「事实冲突」一行 | 判法与留存已补：两条消费链都把冲突记进冲突册、消费门入账（[code/35](../../../.scratch/docs-consistency/code/35-cancellation-and-boundary-fact-order-conflict-has-no-label-half-and-no-resolution-face.md)）；解开它的业务决定面仍没有 | [code/76](../../../.scratch/docs-consistency/code/76-a-cancellation-order-conflict-has-no-resolution-decision-face.md) |
