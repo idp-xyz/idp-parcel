@@ -76,6 +76,11 @@ const (
 	DecisionCustomsDeclarationSubmission   DecisionKind = "CUSTOMS_DECLARATION_SUBMISSION"
 )
 
+// DecisionDeliveryDispatchReask 是派送重问（ADR-0230 决定四、七）：让派送发起执行器对派送待形成册上的对象再问一次所有者——按册
+// 批量重问与对单个（段，对象）补拍是同一种权力，一种授予：它们都只能在所有者给齐派送要求时形成任务，不能指名工作范围的任何一件，
+// 与手工建派送任务（DISPATCH_TASK_REGISTRATION）不是一回事。
+const DecisionDeliveryDispatchReask DecisionKind = "DELIVERY_DISPATCH_REASK"
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -90,6 +95,7 @@ var decisionKinds = []DecisionKind{
 	DecisionFulfillmentSegmentCommissionAdoption, DecisionTransportCommissionCancellation, DecisionBookingRequestCancellation,
 	DecisionDeliveryHandoverConfirmation,
 	DecisionCustomsCaseEstablishment, DecisionCustomsSubmissionAuthorization, DecisionCustomsDeclarationSubmission,
+	DecisionDeliveryDispatchReask,
 }
 
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。
