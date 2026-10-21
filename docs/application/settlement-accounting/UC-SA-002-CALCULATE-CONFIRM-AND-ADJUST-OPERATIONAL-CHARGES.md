@@ -119,6 +119,7 @@
 ### 接受前财务控制
 
 - 合同要求估价时，本用例按结算账户的受理前估价采用登记，以逐件 SELL 试算合计形成估价；估价不引用、也不形成费用、预估费用或应收应付，没登记答未配置（[ADR-0179](../../adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 决定一、二、五）。
+- 估价采用与 SELL 计费时点采用两本登记上同一结算账户的计价范围必须相同；登任一本时另一本已有这一户而范围不同，答冲突、不落行、不交那一本的登记信封（[ADR-0280](../../adr/0280-a-settlement-account-registers-one-sell-pricing-scope-across-the-estimate-and-billing-moment-adoptions.md)）。
 - `可用余额 → 已冻结` 必须关联明确账户、金额、提交版本和控制策略；重复请求返回原冻结。
 - 接受失败、拒绝、放弃或冻结依据失效时形成 `已释放`；接受已经成立但响应或事件投递失败时保留合法冻结并等待查询/补偿。
 - `已冻结 → 已扣费` 只在费用确认和业务关联条件满足时发生；最终费用高于冻结时完整形成费用并留下差额，不截断金额。
@@ -226,6 +227,7 @@
 
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
+| 接受前财务控制：估价采用与 SELL 计费时点采用同户一份计价范围 | 两只登记编排各写各的册、互不读，同一户可以登两个范围 | [code/62](../../../.scratch/docs-consistency/code/62-the-estimate-and-billing-moment-adoptions-may-register-different-pricing-scopes.md) |
 | 主流程步 6 的结算归属日随确认形成 | 确认不形成归属日；归属日判定编排在 `cmd/` 下没有构造，时区与截单时刻还登在费用项目一册上；规则不变 | [code/11](../../../.scratch/docs-consistency/code/11-statement-cut-does-not-check-the-settlement-attribution-date.md) |
 
 完成本用例只证明纯计价评价、财务采用、费用生命周期和接受前财务控制能够保持独立、可追溯和追加式；客户对账、供应商审核、真实收付款和经营结果分别由其他 PN-07 用例形成。
