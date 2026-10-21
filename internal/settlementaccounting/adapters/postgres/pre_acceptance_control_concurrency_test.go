@@ -21,8 +21,8 @@ import (
 )
 
 // 本文件在真实 PostgreSQL 上证同一结算作用域上并发的接受前控制互不覆盖（隔离合成 S）：施加与释放两只编排走真账本、真余额与
-// 信用状况视图、真作用域锁，商业侧与计价侧的几口用替身。屏障停在先手那一路读完账本之后，此时它手里是整册快照；后手那一路或者
-// 被锁挡在读账之前（看 pg_locks 认），或者径直提交（修前）。两本账各证一遍。
+// 信用状况视图、真作用域锁，商业侧与计价侧的几口用替身。屏障停在先手那一路读完账本之后，此时它手里是整册快照；排队时后手那一路
+// 被锁挡在读账之前（看 pg_locks 认），不排队时后手径直提交。两本账各证一遍。
 
 var raceControlAt = time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
 
@@ -56,8 +56,8 @@ func (gate *raceGate) pass() {
 	}
 }
 
-// gatedFreezes 与 gatedExposures 只把编排手里那一口包上屏障；余额与信用状况视图读的是未包的账本：停在它们里面，修前修后都停在
-// 同一处——锁之前还是之后由编排定，屏障不替它定。
+// gatedFreezes 与 gatedExposures 只把编排手里那一口包上屏障；余额与信用状况视图读的是未包的账本：屏障停在哪一步不随编排排不排队
+// 而变——锁之前还是之后由编排定，屏障不替它定。
 type gatedFreezes struct {
 	*adapter.FreezeLedgers
 	gate *raceGate
@@ -393,8 +393,8 @@ func restrictedOf(result application.ApplyPreAcceptanceControlResult, book raceB
 }
 
 // Covers: SA CONTEXT「重复请求、查询和补偿不得形成重复冻结或重复释放」——先手那一路为 Y 施加控制，读完账本时 X 还占着；后手那一路
-// 释放 X。修前后手径直提交，先手把读到的整册快照写回，X 回到占着、释放时间清空，客户的钱或额度被静默占回去。现在先手那一路的
-// 账写回时 X 仍是已释放，Y 占着，本书占用合计只剩 Y 那一笔。
+// 释放 X。失败形态：后手径直提交，先手把读到的整册快照写回，X 回到占着、释放时间清空，客户的钱或额度被静默占回去。要的是先手那一路
+// 的账写回之后 X 仍是已释放，Y 占着，本书占用合计只剩 Y 那一笔。
 func TestAReleaseCommittedDuringAnotherControlOnTheScopeIsNotWrittenBack(t *testing.T) {
 	for _, book := range raceBooks {
 		t.Run(book.name, func(t *testing.T) {
@@ -426,8 +426,8 @@ func TestAReleaseCommittedDuringAnotherControlOnTheScopeIsNotWrittenBack(t *test
 }
 
 // Covers: SA CONTEXT「重复请求、查询和补偿不得形成重复冻结或重复释放」与 ReleasePreAcceptanceControlHandler 的「重复释放返回与首次
-// 相同的答案（含原释放时间）」——同一笔的两次释放并发。修前两路都读到占着、各报一个释放时刻，库里只留先落的那个，另一路交回的
-// 释放时刻对不上账；现在后到的那一路读到的已是先到那一路落的释放，两路交回同一个释放时刻，就是库里那一个。
+// 相同的答案（含原释放时间）」——同一笔的两次释放并发。不排队时两路都读到占着、各报一个释放时刻，库里只留先落的那个，另一路交回的
+// 释放时刻对不上账；排队时后到的那一路读到的已是先到那一路落的释放，两路交回同一个释放时刻，就是库里那一个。
 func TestConcurrentReleasesOfOneControlAnswerTheReleaseThatLanded(t *testing.T) {
 	for _, book := range raceBooks {
 		t.Run(book.name, func(t *testing.T) {
@@ -453,8 +453,8 @@ func TestConcurrentReleasesOfOneControlAnswerTheReleaseThatLanded(t *testing.T) 
 }
 
 // Covers: SA CONTEXT 运营结算余额「可用余额 … 再扣除冻结金额」与账期额度同理——余额与额度只够一笔，两路并发为 Y、Z 施加控制。
-// 修前两路各读到零占用、各判够，先手写回时与后手撞在账本自编的内部编号上，先手那一路整笔事务失败、留给续办；现在后手被锁挡在读
-// 余额之前，读到的已是 Y 那一笔，答业务限制。两路都提交，本书只占 Y 那一笔。
+// 不排队时两路各读到零占用、各判够，先手写回时与后手撞在账本自编的内部编号上，先手那一路整笔事务失败、留给续办；排队时后手被锁
+// 挡在读余额之前，读到的已是 Y 那一笔，答业务限制。两路都提交，本书只占 Y 那一笔。
 func TestConcurrentControlsOnOneScopeJudgeAgainstEachOthersOccupation(t *testing.T) {
 	for _, book := range raceBooks {
 		t.Run(book.name, func(t *testing.T) {
