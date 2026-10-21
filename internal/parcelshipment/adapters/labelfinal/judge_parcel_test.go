@@ -104,7 +104,27 @@ type cancellationViewDouble struct {
 func (double *cancellationViewDouble) FindCancellation(
 	context.Context, psdomain.TenantID, psdomain.DeclaredParcelID,
 ) (psdomain.ParcelCancellation, bool, error) {
-	return psdomain.ParcelCancellation{}, double.cancelled, nil
+	if !double.cancelled {
+		return psdomain.ParcelCancellation{}, false, nil
+	}
+	// 交易与关闭两路不带收寄，取消的业务时间不参与比较，取一个固定值即可。
+	cancellation, err := psdomain.DecideParcelCancellation(psdomain.ParcelCancellationSpec{
+		ID:          mustCancellationValue(psdomain.NewParcelCancellationID, "cancel-1"),
+		Parcel:      mustCancellationValue(psdomain.NewDeclaredParcelID, "parcel-1"),
+		Requester:   mustCancellationValue(psdomain.NewCancellationRequesterReference, "customer-1"),
+		Authority:   mustCancellationValue(psdomain.NewCancellationAuthorityReference, "CANCEL-RULE/1"),
+		Reason:      mustCancellationValue(psdomain.NewCancellationReasonReference, "CHANGED_MIND"),
+		RequestedAt: time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC),
+	}, psdomain.CurrentIntakeFact{})
+	return cancellation, true, err
+}
+
+func mustCancellationValue[T any](construct func(string) (T, error), raw string) T {
+	value, err := construct(raw)
+	if err != nil {
+		panic(err)
+	}
+	return value
 }
 
 // adopterDouble 记下判断交给采用路径的命令。它交回零值结果：采用各格怎么译归 finalconsume 自己的

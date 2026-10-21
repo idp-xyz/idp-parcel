@@ -135,15 +135,101 @@ func TestFirstEffectiveCarrierPickupFormsTheLabelServiceFinal(t *testing.T) {
 		t.Fatalf("kind = %s/%v，want LABEL_SERVICE_OUTCOME", kind, forms)
 	}
 
-	t.Run("a standing cancellation is not overridden by a pickup", func(t *testing.T) {
+	t.Run("a standing cancellation is not overridden by a later pickup", func(t *testing.T) {
 		cancelled := input
-		cancelled.CancellationStands = true
+		cancelled.Cancellation = standingCancellationAt(t, labelServicePickupAt.Add(-time.Minute))
 		verdict := judge(t, cancelled)
 		if verdict.Judgment() != domain.LabelServiceCancellationStands {
 			t.Fatalf("judgment = %s，want CANCELLATION_STANDS", verdict.Judgment())
 		}
 		if _, forms := verdict.ResponsibilityOutcomeKind(); forms {
 			t.Fatal("取消在先仍造出了非取消终局来源")
+		}
+	})
+}
+
+func standingCancellationAt(t *testing.T, requestedAt time.Time) domain.ParcelCancellation {
+	t.Helper()
+	spec := cancellationSpec(t)
+	spec.RequestedAt = requestedAt
+	cancellation, err := domain.DecideParcelCancellation(spec, domain.CurrentIntakeFact{})
+	if err != nil {
+		t.Fatalf("decide cancellation: %v", err)
+	}
+	return cancellation
+}
+
+// Covers: `AT-PS-095` 与 `AT-PS-108`（ADR-0254 决定二第 2、3 格的面单渠道一侧）——有效取消已在，
+// 此后到的首次有效收寄按两者的业务时间比：晚于取消，取消在先；不晚于取消（含相等），事实冲突，
+// 不形成非取消终局、也不按取消在先作答，判断指名冲突并交回哪份取消对哪一代收寄。不带收寄的两路
+// 没有边界事实可比，照旧取消在先。
+func TestAStandingCancellationIsComparedWithTheFirstPickupByBusinessTime(t *testing.T) {
+	input := labelServiceInput(t, emptyRegister(t))
+	input.FirstEffectivePickup = firstPickup(t)
+
+	cases := []struct {
+		name        string
+		cancelledAt time.Time
+		want        domain.LabelServiceFinalJudgment
+		reason      domain.LabelServiceNotFinalReason
+	}{
+		{"the pickup is later than the cancellation", labelServicePickupAt.Add(-time.Second),
+			domain.LabelServiceCancellationStands, domain.LabelServiceNotFinalReasonNone},
+		{"the pickup is earlier than the cancellation", labelServicePickupAt.Add(time.Hour),
+			domain.LabelServiceNotFinal, domain.LabelServiceCancellationOrderConflict},
+		{"the pickup is at the same instant as the cancellation", labelServicePickupAt,
+			domain.LabelServiceNotFinal, domain.LabelServiceCancellationOrderConflict},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			judged := input
+			judged.Cancellation = standingCancellationAt(t, tc.cancelledAt)
+			verdict := judge(t, judged)
+			if verdict.Judgment() != tc.want || verdict.Reason() != tc.reason {
+				t.Fatalf("verdict = %s/%s，want %s/%s", verdict.Judgment(), verdict.Reason(), tc.want, tc.reason)
+			}
+			if _, forms := verdict.ResponsibilityOutcomeKind(); forms {
+				t.Fatal("有效取消在场时造出了非取消终局来源")
+			}
+			conflict, conflicted := verdict.Conflict()
+			if conflicted != (tc.reason == domain.LabelServiceCancellationOrderConflict) {
+				t.Fatalf("conflicted = %v，与原因 %s 不符", conflicted, verdict.Reason())
+			}
+			if !conflicted {
+				return
+			}
+			if conflict.Cancellation().String() != "cancel-1" || !conflict.CancelledAt().Equal(tc.cancelledAt) {
+				t.Fatalf("conflict cancellation = %s@%s", conflict.Cancellation(), conflict.CancelledAt())
+			}
+			boundary := conflict.Boundary()
+			if boundary.Kind != domain.CarrierFirstEffectivePickupBoundary ||
+				boundary.Reference.String() != "TF-TRACK-FACT-7@TF-TRACK-FACT-7/v1" ||
+				!boundary.OccurredAt.Equal(labelServicePickupAt) {
+				t.Fatalf("conflict boundary = %+v；要指名哪一代收寄与它的业务发生时间", boundary)
+			}
+		})
+	}
+
+	t.Run("the closure paths carry no pickup and keep the cancellation", func(t *testing.T) {
+		closurePath := labelServiceInput(t, emptyRegister(t))
+		closurePath.Cancellation = standingCancellationAt(t, labelServicePickupAt.Add(time.Hour))
+		verdict := judge(t, closurePath)
+		if verdict.Judgment() != domain.LabelServiceCancellationStands {
+			t.Fatalf("judgment = %s，want CANCELLATION_STANDS", verdict.Judgment())
+		}
+	})
+
+	t.Run("another parcel's cancellation is a wiring defect", func(t *testing.T) {
+		foreign := input
+		spec := cancellationSpec(t)
+		spec.Parcel = mustValue(t, domain.NewDeclaredParcelID, "parcel-2")
+		cancellation, err := domain.DecideParcelCancellation(spec, domain.CurrentIntakeFact{})
+		if err != nil {
+			t.Fatalf("decide cancellation: %v", err)
+		}
+		foreign.Cancellation = cancellation
+		if _, err := domain.JudgeLabelServiceFinal(foreign); !errors.Is(err, domain.ErrInvalidLabelServiceFinalInput) {
+			t.Fatalf("err = %v，want ErrInvalidLabelServiceFinalInput", err)
 		}
 	})
 }

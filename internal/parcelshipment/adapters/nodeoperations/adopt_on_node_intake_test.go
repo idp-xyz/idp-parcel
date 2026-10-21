@@ -430,6 +430,16 @@ func TestAdoptionOutcomesMapToConsumptionSlots(t *testing.T) {
 			},
 		},
 		{
+			// 取消先后冲突重投推不动（ADR-0254 决定二），冲突已记进册，消费门入账不回滚。
+			outcome: "ELIGIBILITY_UNDECIDED cancellation order conflict",
+			new: func(t *testing.T) (*adapter.AdoptOnNodeIntakeAdapter, error) {
+				return processingThrough(t, newAdoptHandler(t, adoptHandlerConfig{
+					cancellations: standingCancellationView{cancellation: cancellationRequestedAt(t, receivedAt.Add(time.Hour))},
+					conflicts:     &recordingConflicts{},
+				})), nil
+			},
+		},
+		{
 			outcome: "COMMITMENT_FORMED handoff pending",
 			want:    adapter.ErrAdoptionHandoffPending,
 			new: func(t *testing.T) (*adapter.AdoptOnNodeIntakeAdapter, error) {
@@ -552,4 +562,47 @@ func TestAPendingHandoffDoesNotMarkTheInboxProcessed(t *testing.T) {
 	if downstream.calls != 3 {
 		t.Fatalf("成功入账后重复投递不应再交意图；调用 = %d", downstream.calls)
 	}
+}
+
+type standingCancellationView struct {
+	cancellation psdomain.ParcelCancellation
+}
+
+func (view standingCancellationView) FindCancellation(
+	context.Context, psdomain.TenantID, psdomain.DeclaredParcelID,
+) (psdomain.ParcelCancellation, bool, error) {
+	return view.cancellation, true, nil
+}
+
+type recordingConflicts struct {
+	records []psports.CancellationOrderConflictRecord
+}
+
+func (register *recordingConflicts) Record(
+	_ context.Context, record psports.CancellationOrderConflictRecord,
+) (psports.CancellationOrderConflictSaveOutcome, error) {
+	register.records = append(register.records, record)
+	return psports.CancellationOrderConflictRecorded, nil
+}
+
+func (register *recordingConflicts) ListByParcel(
+	context.Context, psdomain.TenantID, psdomain.DeclaredParcelID,
+) ([]psports.CancellationOrderConflictEntry, error) {
+	return nil, nil
+}
+
+func cancellationRequestedAt(t *testing.T, at time.Time) psdomain.ParcelCancellation {
+	t.Helper()
+	cancellation, err := psdomain.DecideParcelCancellation(psdomain.ParcelCancellationSpec{
+		ID:          value(t, psdomain.NewParcelCancellationID, "cancel-1"),
+		Parcel:      value(t, psdomain.NewDeclaredParcelID, "parcel-1"),
+		Requester:   value(t, psdomain.NewCancellationRequesterReference, "customer-1"),
+		Authority:   value(t, psdomain.NewCancellationAuthorityReference, "CANCEL-RULE/1"),
+		Reason:      value(t, psdomain.NewCancellationReasonReference, "CHANGED_MIND"),
+		RequestedAt: at,
+	}, psdomain.CurrentIntakeFact{})
+	if err != nil {
+		t.Fatalf("decide cancellation: %v", err)
+	}
+	return cancellation
 }

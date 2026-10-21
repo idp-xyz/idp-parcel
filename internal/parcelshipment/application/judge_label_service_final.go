@@ -48,7 +48,7 @@ func (outcome LabelServiceFinalOutcome) String() string {
 	}
 }
 
-// LabelServiceUndecidedReason 指名判断停在哪一步等谁。四个读口各占一格：等的东西不同。
+// LabelServiceUndecidedReason 指名判断停在哪一步等谁。每个读口与冲突册各占一格：等的东西不同。
 type LabelServiceUndecidedReason uint8
 
 const (
@@ -57,6 +57,9 @@ const (
 	ContinuedAttemptRegisterUnavailable
 	LabelCancellationViewUnavailable
 	LabelValidityRuleUnavailable
+	// LabelConflictRegisterUnavailable：判出了取消先后冲突却记不下。冲突那一格入账，记不下就入账
+	// 等于把冲突丢了，所以这里停成依赖未决、回滚重投。
+	LabelConflictRegisterUnavailable
 )
 
 func (reason LabelServiceUndecidedReason) String() string {
@@ -69,6 +72,8 @@ func (reason LabelServiceUndecidedReason) String() string {
 		return "CANCELLATION_VIEW_UNAVAILABLE"
 	case LabelValidityRuleUnavailable:
 		return "LABEL_VALIDITY_RULE_UNAVAILABLE"
+	case LabelConflictRegisterUnavailable:
+		return "CONFLICT_REGISTER_UNAVAILABLE"
 	default:
 		return ""
 	}
@@ -117,13 +122,16 @@ type ParcelFinalAdopter interface {
 	Handle(ctx context.Context, command FormParcelFinalCommand) (FormParcelFinalResult, error)
 }
 
-// JudgeLabelServiceFinalDeps 是判断的依赖。四个读口都只读：判断不写，形成走 Adoption。
+// JudgeLabelServiceFinalDeps 是判断的依赖。读口都只读：判断不写，形成走 Adoption。唯一的写口是
+// Conflicts——它不形成终局，只把判出的取消先后冲突留在册上（ADR-0254 决定二）。
 // Validity 可为 nil——有效期规则是实例半边，装配没有它时按「未配置」办，不推算失效。
+// Conflicts 为 nil 时判出的冲突无处可记，按依赖未决交回，不答`不形成`。
 type JudgeLabelServiceFinalDeps struct {
 	Transactions  ports.LabelTransactionsByParcelView
 	Registers     ports.ContinuedAttemptRegisterView
 	Cancellations ports.ParcelCancellationView
 	Validity      ports.LabelValidityRuleView
+	Conflicts     ports.CancellationOrderConflictRegister
 	Adoption      ParcelFinalAdopter
 	Clock         ports.Clock
 }
@@ -138,7 +146,7 @@ func NewJudgeLabelServiceFinalHandler(deps JudgeLabelServiceFinalDeps) *JudgeLab
 
 // Handle 判一件包裹：取消视图 → 全部相关交易（整册，不筛）→ 登记册（未开册即空册）→ 对仍有效的
 // 成功结果问有效期规则（未配置不失效）→ JudgeLabelServiceFinal → 形成终局的格译成责任结果交
-// 采用路径；不形成与取消在先不走采用。
+// 采用路径；不形成与取消在先不走采用，取消先后冲突先记进冲突册再答`不形成`。
 func (handler *JudgeLabelServiceFinalHandler) Handle(
 	ctx context.Context,
 	command JudgeLabelServiceFinalCommand,
@@ -158,9 +166,15 @@ func (handler *JudgeLabelServiceFinalHandler) Handle(
 		pickup = referenced
 	}
 
-	_, cancelled, err := handler.deps.Cancellations.FindCancellation(ctx, tenant, command.Parcel)
+	cancellation, cancelled, err := handler.deps.Cancellations.FindCancellation(ctx, tenant, command.Parcel)
 	if err != nil {
 		return undecidedLabelServiceFinal(LabelCancellationViewUnavailable), nil
+	}
+	if !cancelled {
+		cancellation = domain.ParcelCancellation{}
+	} else if cancellation.ID().String() == "" {
+		// 答了「有取消」却交不出是哪一份：读口坏了。当成没有会让收寄盖过一份真取消。
+		return LabelServiceFinalResult{}, errors.New("judge label service final: the cancellation view answered a cancellation it cannot name")
 	}
 	transactions, err := handler.deps.Transactions.ListByCoveredParcel(ctx, tenant, command.Parcel)
 	if err != nil {
@@ -187,7 +201,7 @@ func (handler *JudgeLabelServiceFinalHandler) Handle(
 		LapsedTransactions:   lapsed,
 		Register:             register,
 		FirstEffectivePickup: pickup,
-		CancellationStands:   cancelled,
+		Cancellation:         cancellation,
 	})
 	if err != nil {
 		// 读口交回了别的包裹的东西：装配缺陷，响亮报错不吸收。
@@ -200,6 +214,18 @@ func (handler *JudgeLabelServiceFinalHandler) Handle(
 		result.outcome = LabelServiceCancellationStandsOutcome
 		return result, nil
 	case domain.LabelServiceNotFinal:
+		if conflict, conflicted := verdict.Conflict(); conflicted {
+			if handler.deps.Conflicts == nil {
+				return undecidedLabelServiceFinal(LabelConflictRegisterUnavailable), nil
+			}
+			if _, err := handler.deps.Conflicts.Record(ctx, ports.CancellationOrderConflictRecord{
+				TenantID:   tenant,
+				Conflict:   conflict,
+				DetectedAt: handler.deps.Clock.Now(),
+			}); err != nil {
+				return undecidedLabelServiceFinal(LabelConflictRegisterUnavailable), nil
+			}
+		}
 		result.outcome = LabelServiceNotFinalOutcome
 		return result, nil
 	}

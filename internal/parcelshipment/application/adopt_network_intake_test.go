@@ -158,6 +158,7 @@ type intakeFixture struct {
 	adoptions     *adoptionStoreDouble
 	downstream    *intakeDownstreamDouble
 	cancellations *cancellationViewDouble
+	conflicts     *conflictRegisterDouble
 }
 
 func newIntakeFixture(t *testing.T) *intakeFixture {
@@ -174,9 +175,15 @@ func newIntakeFixture(t *testing.T) *intakeFixture {
 		adoptions:     newAdoptionStore(),
 		downstream:    &intakeDownstreamDouble{},
 		cancellations: &cancellationViewDouble{},
+		conflicts:     &conflictRegisterDouble{},
 	}
 	fixture.requests.records[sourceIdentity(t, "tenant-1", "customer-1", "source-a", "key-1")] = acceptedRequest(t)
-	fixture.handler = application.NewAdoptNetworkIntakeHandler(application.AdoptNetworkIntakeDeps{
+	fixture.handler = application.NewAdoptNetworkIntakeHandler(fixture.deps())
+	return fixture
+}
+
+func (fixture *intakeFixture) deps() application.AdoptNetworkIntakeDeps {
+	return application.AdoptNetworkIntakeDeps{
 		Requests:      fixture.requests,
 		Eligibility:   fixture.eligibility,
 		Adoptions:     fixture.adoptions,
@@ -184,7 +191,16 @@ func newIntakeFixture(t *testing.T) *intakeFixture {
 		Downstream:    fixture.downstream,
 		Clock:         fixedClock{at: intakeHappenedAt.Add(time.Minute)},
 		Cancellations: fixture.cancellations,
-	})
+		Conflicts:     fixture.conflicts,
+	}
+}
+
+func newIntakeFixtureWithoutConflictRegister(t *testing.T) *intakeFixture {
+	t.Helper()
+	fixture := newIntakeFixture(t)
+	deps := fixture.deps()
+	deps.Conflicts = nil
+	fixture.handler = application.NewAdoptNetworkIntakeHandler(deps)
 	return fixture
 }
 
@@ -700,14 +716,13 @@ func cancelledAt(t *testing.T, at time.Time) domain.ParcelCancellation {
 }
 
 // Covers: `AT-PS-044`「包裹在收寄事实发生前已经合法取消——保留物理来源但不重开服务」
-// 与 `AT-PS-080`「取消先成立，迟到消息证明实物后来到站——取消不被覆盖」：取消决定早于
-// 收寄发生即不采用、原因指名取消决定。
+// 与 `AT-PS-080`「取消先成立，迟到消息证明实物在取消的业务时间之后才到站——取消不被覆盖」：
+// 取消的业务时间早于收寄发生即不采用、原因指名取消决定。
 //
-// 晚于格锚 UC-PS-006 一致性硬句「收寄与取消并发时，以不可覆盖业务决定边界及权威事实
-// 的业务发生顺序裁决，不以消息到达或客户端时间最后写入覆盖」——收寄发生早于取消决定
-// 说明取消形成时权威事实的顺序已经矛盾（AT-PS-079 要求那时不形成取消），采用侧对这份
-// 已成取消停未决是它的镜像防线；不选边，留给事实核对续办。AT-PS-081 的「来源冲突」
-// 说的是收寄事实本身的证据冲突，机制未建，此处不锚它。
+// 另一格是 `AT-PS-107`（ADR-0254 决定二第 3 格）：取消已提交之后才到的收寄，发生不晚于取消的
+// 业务时间（含相等），是事实冲突——不形成责任起点也不抹取消，停在未决 CANCELLATION_ORDER_CONFLICT，
+// 冲突留在册上按包裹查得出。冲突记不下（册未接入或写不进）时不得假装留下了：按依赖未决交回，
+// 消费门回滚重投。
 func TestTheCancellationBoundaryJudgesByBusinessTime(t *testing.T) {
 	t.Run("cancellation before the intake refuses adoption", func(t *testing.T) {
 		fixture := newIntakeFixture(t)
@@ -730,8 +745,61 @@ func TestTheCancellationBoundaryJudgesByBusinessTime(t *testing.T) {
 		}
 	})
 
-	t.Run("an intake that happened before the cancellation stalls as a conflict", func(t *testing.T) {
+	for name, cancelledAtTime := range map[string]time.Time{
+		"an intake that happened before the cancellation stalls as a recorded conflict": intakeHappenedAt.Add(time.Hour),
+		"an intake at the same instant as the cancellation is a conflict too":           intakeHappenedAt,
+	} {
+		t.Run(name, func(t *testing.T) {
+			fixture := newIntakeFixture(t)
+			fixture.cancellations.cancellation = cancelledAt(t, cancelledAtTime)
+			fixture.cancellations.cancelled = true
+
+			result, err := fixture.handler.Handle(context.Background(), adoptCommand(t))
+			if err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+			if result.Outcome() != application.IntakeEligibilityUndecided ||
+				result.UndecidedReason() != application.IntakeCancellationOrderConflict {
+				t.Fatalf("outcome = %q/%q; 顺序冲突不得选边", result.Outcome(), result.UndecidedReason())
+			}
+			if !result.UndecidedReason().AwaitsDecision() {
+				t.Fatal("冲突重投推不动，必须标成等业务决定，消费门才会入账而不回滚")
+			}
+			if fixture.adoptions.saved != 0 {
+				t.Fatal("冲突形成了采用或不采用记录——责任起点不形成，也不按取消在先不采用")
+			}
+			if len(fixture.conflicts.records) != 1 {
+				t.Fatalf("冲突册行数 = %d, want 1——冲突必须留下", len(fixture.conflicts.records))
+			}
+			conflict := fixture.conflicts.records[0]
+			if conflict.TenantID.String() != "tenant-1" || conflict.Conflict.Cancellation().String() != "cancel-1" ||
+				conflict.Conflict.Boundary().Kind != domain.NetworkIntakeBoundary ||
+				conflict.Conflict.Boundary().Reference.String() != "NODE_INTAKE/intake-result/v1" ||
+				!conflict.Conflict.Boundary().OccurredAt.Equal(intakeHappenedAt) ||
+				!conflict.Conflict.CancelledAt().Equal(cancelledAtTime) {
+				t.Fatalf("冲突 = %+v；要指名哪份取消、哪一代来源与两边的业务时间", conflict)
+			}
+		})
+	}
+
+	t.Run("a conflict that cannot be recorded is a dependency gap, not a recorded conflict", func(t *testing.T) {
 		fixture := newIntakeFixture(t)
+		fixture.cancellations.cancellation = cancelledAt(t, intakeHappenedAt.Add(time.Hour))
+		fixture.cancellations.cancelled = true
+		fixture.conflicts.err = errors.New("conflict register down")
+
+		result, err := fixture.handler.Handle(context.Background(), adoptCommand(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.UndecidedReason() != application.IntakeConflictRegisterUnavailable ||
+			result.UndecidedReason().AwaitsDecision() {
+			t.Fatalf("reason = %q；冲突没记下就入账会把它丢掉", result.UndecidedReason())
+		}
+	})
+
+	t.Run("an unwired conflict register does not pretend to have recorded the conflict", func(t *testing.T) {
+		fixture := newIntakeFixtureWithoutConflictRegister(t)
 		fixture.cancellations.cancellation = cancelledAt(t, intakeHappenedAt.Add(time.Hour))
 		fixture.cancellations.cancelled = true
 
@@ -739,12 +807,8 @@ func TestTheCancellationBoundaryJudgesByBusinessTime(t *testing.T) {
 		if err != nil {
 			t.Fatalf("handle: %v", err)
 		}
-		if result.Outcome() != application.IntakeEligibilityUndecided ||
-			result.UndecidedReason() != application.IntakeCancellationOrderConflict {
-			t.Fatalf("outcome = %q/%q; 顺序冲突不得选边", result.Outcome(), result.UndecidedReason())
-		}
-		if fixture.adoptions.saved != 0 {
-			t.Fatal("冲突落了库")
+		if result.UndecidedReason() != application.IntakeConflictRegisterUnavailable {
+			t.Fatalf("reason = %q, want CONFLICT_REGISTER_UNAVAILABLE", result.UndecidedReason())
 		}
 	})
 }

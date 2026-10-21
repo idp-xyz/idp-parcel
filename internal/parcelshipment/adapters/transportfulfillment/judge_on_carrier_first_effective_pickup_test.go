@@ -12,6 +12,7 @@ import (
 	adapter "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/transportfulfillment"
 	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	tfports "go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
@@ -84,12 +85,49 @@ func (openRegisterViewDouble) FindByParcel(
 	return psdomain.ContinuedAttemptRegister{}, false, nil
 }
 
-type standingCancellationDouble struct{ cancelled bool }
+type standingCancellationDouble struct {
+	cancellation psdomain.ParcelCancellation
+	cancelled    bool
+}
 
 func (double *standingCancellationDouble) FindCancellation(
 	context.Context, psdomain.TenantID, psdomain.DeclaredParcelID,
 ) (psdomain.ParcelCancellation, bool, error) {
-	return psdomain.ParcelCancellation{}, double.cancelled, nil
+	return double.cancellation, double.cancelled, nil
+}
+
+// standAt 让取消视图交回一份业务时间为 at 的有效取消。
+func (double *standingCancellationDouble) standAt(t *testing.T, at time.Time) {
+	t.Helper()
+	cancellation, err := psdomain.DecideParcelCancellation(psdomain.ParcelCancellationSpec{
+		ID:          value(t, psdomain.NewParcelCancellationID, "cancel-1"),
+		Parcel:      value(t, psdomain.NewDeclaredParcelID, "parcel-1"),
+		Requester:   value(t, psdomain.NewCancellationRequesterReference, "customer-1"),
+		Authority:   value(t, psdomain.NewCancellationAuthorityReference, "CANCEL-RULE/1"),
+		Reason:      value(t, psdomain.NewCancellationReasonReference, "CHANGED_MIND"),
+		RequestedAt: at,
+	}, psdomain.CurrentIntakeFact{})
+	if err != nil {
+		t.Fatalf("decide cancellation: %v", err)
+	}
+	double.cancellation, double.cancelled = cancellation, true
+}
+
+type conflictRegisterDouble struct {
+	records []psports.CancellationOrderConflictRecord
+}
+
+func (double *conflictRegisterDouble) Record(
+	_ context.Context, record psports.CancellationOrderConflictRecord,
+) (psports.CancellationOrderConflictSaveOutcome, error) {
+	double.records = append(double.records, record)
+	return psports.CancellationOrderConflictRecorded, nil
+}
+
+func (double *conflictRegisterDouble) ListByParcel(
+	context.Context, psdomain.TenantID, psdomain.DeclaredParcelID,
+) ([]psports.CancellationOrderConflictEntry, error) {
+	return nil, nil
 }
 
 // labelFinalAdopterDouble 记下判断交给采用路径的命令，交回零值结果：采用各格怎么译归 finalconsume 自己的用例，
@@ -124,6 +162,7 @@ type carrierPickupFixture struct {
 	targets      *labelTargetViewDouble
 	transactions *labelTransactionsViewDouble
 	cancels      *standingCancellationDouble
+	conflicts    *conflictRegisterDouble
 	adopter      *labelFinalAdopterDouble
 	judge        *recordingLabelJudge
 }
@@ -134,11 +173,13 @@ func newCarrierPickupFixture(t *testing.T) *carrierPickupFixture {
 	targets := &labelTargetViewDouble{target: pickupTarget(t), found: true}
 	transactions := &labelTransactionsViewDouble{}
 	cancels := &standingCancellationDouble{}
+	conflicts := &conflictRegisterDouble{}
 	adopter := &labelFinalAdopterDouble{}
 	judge := &recordingLabelJudge{inner: psapplication.NewJudgeLabelServiceFinalHandler(psapplication.JudgeLabelServiceFinalDeps{
 		Transactions:  transactions,
 		Registers:     openRegisterViewDouble{},
 		Cancellations: cancels,
+		Conflicts:     conflicts,
 		Adoption:      adopter,
 		Clock:         fixedClock{at: pickupJudgedAt},
 	})}
@@ -151,7 +192,7 @@ func newCarrierPickupFixture(t *testing.T) *carrierPickupFixture {
 		t.Fatalf("new adapter: %v", err)
 	}
 	return &carrierPickupFixture{handler: handler, pickups: pickups, targets: targets,
-		transactions: transactions, cancels: cancels, adopter: adopter, judge: judge}
+		transactions: transactions, cancels: cancels, conflicts: conflicts, adopter: adopter, judge: judge}
 }
 
 func (f *carrierPickupFixture) put(record tfports.CarrierFirstEffectivePickupRecord) {
@@ -363,24 +404,49 @@ func TestAnEnvelopeWithoutAnObjectReadsItFromThePickup(t *testing.T) {
 }
 
 // Covers: CANCELLATION_STANDS → 入账，不交采用路径——取消在先时收寄不盖非取消终局：PS CONTEXT
-// 「除已经形成的有效取消结果外，实际承运商首次有效收寄即形成终局」那句的前半。
+// 「除已经形成的有效取消结果外，实际承运商首次有效收寄即形成终局」那句的前半；收寄发生晚于取消
+// 的业务时间（`AT-PS-095`）。
 func TestAStandingCancellationOutranksTheFirstPickup(t *testing.T) {
 	f := newCarrierPickupFixture(t)
 	f.put(recordOf(t, formedCarrierPickup(t, "parcel-1")))
-	f.cancels.cancelled = true
+	f.cancels.standAt(t, firstPickupAt.Add(-time.Hour))
 
 	if err := f.handle(t, registeredCarrierPickupRef("CFEV-1")); err != nil {
 		t.Fatalf("CANCELLATION_STANDS 应入账，实得：%v", err)
 	}
-	if len(f.judge.commands) != 1 || len(f.adopter.commands) != 0 {
-		t.Fatalf("判断 %d 次、采用 %d 次，want 1 / 0", len(f.judge.commands), len(f.adopter.commands))
+	if len(f.judge.commands) != 1 || len(f.adopter.commands) != 0 || len(f.conflicts.records) != 0 {
+		t.Fatalf("判断 %d 次、采用 %d 次、冲突 %d 条，want 1 / 0 / 0",
+			len(f.judge.commands), len(f.adopter.commands), len(f.conflicts.records))
 	}
 }
 
-// Covers: LABEL_SERVICE_NOT_FINAL 在本路**结构上到不了**：夹具是面单交易那一路判 NOT_FINAL 的输入（没开过册、
-// 无交易），而本路的命令总带一份已形成的收寄，PS CONTEXT「实际承运商首次有效收寄即形成终局」先于
-// 「否则，只有在当前受控关闭已经生效且未被重开」那条关闭路径成立。这条用例钉的是这一点，
-// LabelServiceNotFinalOutcome 那一格在翻译表里的译法由 labelfinal 自己的用例守。
+// Covers: `AT-PS-108`——取消已提交之后才到的首次有效收寄发生不晚于取消的业务时间：判断答`不形成`并指名
+// 冲突，消费门入账（重投推不动，ADR-0254 决定二），不交采用路径，冲突按 TF 登记的那一代收寄记进冲突册。
+func TestALateEarlierPickupIsConsumedAsARecordedConflict(t *testing.T) {
+	f := newCarrierPickupFixture(t)
+	f.put(recordOf(t, formedCarrierPickup(t, "parcel-1")))
+	f.cancels.standAt(t, firstPickupAt.Add(time.Hour))
+
+	if err := f.handle(t, registeredCarrierPickupRef("CFEV-1")); err != nil {
+		t.Fatalf("冲突应入账，实得：%v", err)
+	}
+	if len(f.adopter.commands) != 0 {
+		t.Fatal("冲突交了采用路径")
+	}
+	if len(f.conflicts.records) != 1 {
+		t.Fatalf("冲突册行数 = %d, want 1", len(f.conflicts.records))
+	}
+	boundary := f.conflicts.records[0].Conflict.Boundary()
+	if boundary.Kind != psdomain.CarrierFirstEffectivePickupBoundary || !boundary.OccurredAt.Equal(firstPickupAt) {
+		t.Fatalf("冲突边界 = %+v；要指名首次有效收寄与它的业务发生时间", boundary)
+	}
+}
+
+// Covers: 关闭路径那几格 LABEL_SERVICE_NOT_FINAL 在本路**结构上到不了**：夹具是面单交易那一路判 NOT_FINAL 的输入
+// （没开过册、无交易），而本路的命令总带一份已形成的收寄，PS CONTEXT「实际承运商首次有效收寄即形成终局」先于
+// 「否则，只有在当前受控关闭已经生效且未被重开」那条关闭路径成立。本路唯一到得了的`不形成`是取消先后冲突，由
+// TestALateEarlierPickupIsConsumedAsARecordedConflict 守；LabelServiceNotFinalOutcome 那一格在翻译表里的译法由
+// labelfinal 自己的用例守。
 func TestNotFinalIsStructurallyUnreachableOnThePickupRoute(t *testing.T) {
 	f := newCarrierPickupFixture(t)
 	f.put(recordOf(t, formedCarrierPickup(t, "parcel-1")))

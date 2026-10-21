@@ -119,11 +119,16 @@ func (judgment LabelServiceFinalJudgment) String() string {
 // 结果（它「会继续阻止受控关闭路径形成终局」）。
 type LabelServiceNotFinalReason uint8
 
+// LabelServiceCancellationOrderConflict 不是关闭路径上的一句，是收寄路径上的事实冲突（ADR-0254 决定二
+// 第 3 格）：有效取消已在，此后到的首次有效收寄发生不晚于取消的业务时间。它放进`不形成`而不另立一格
+// 结果，是因为恢复动作与`不形成`相同——判断到了、重投推不动，消费门入账（ADR-0134 决定二的翻译表
+// 照旧）；它也不是`取消在先`，那一格说的是取消已赢。
 const (
 	LabelServiceNotFinalReasonNone LabelServiceNotFinalReason = iota
 	ContinuedAttemptStillOpen
 	LabelTransactionNotFinalized
 	UsableLabelResultOutstanding
+	LabelServiceCancellationOrderConflict
 )
 
 func (reason LabelServiceNotFinalReason) String() string {
@@ -134,6 +139,8 @@ func (reason LabelServiceNotFinalReason) String() string {
 		return "LABEL_TRANSACTION_NOT_FINALIZED"
 	case UsableLabelResultOutstanding:
 		return "USABLE_LABEL_RESULT_OUTSTANDING"
+	case LabelServiceCancellationOrderConflict:
+		return "CANCELLATION_ORDER_CONFLICT"
 	default:
 		return ""
 	}
@@ -149,14 +156,15 @@ func (reason LabelServiceNotFinalReason) String() string {
 //     那笔成功照常阻止终局。
 //   - Register 是该包裹的`面单继续尝试决定`登记册（可为空册）。
 //   - FirstEffectivePickup 零值即缺席。
-//   - CancellationStands 说当前存在有效的取消终局。
+//   - Cancellation 是该包裹当前有效的取消决定，零值即没有。要整份而不只一个「有没有」：收寄路径上
+//     得拿它的业务时间与收寄比先后（ADR-0254）。
 type LabelServiceFinalInput struct {
 	Parcel               DeclaredParcelID
 	Transactions         []LabelTransaction
 	LapsedTransactions   []LabelTransactionID
 	Register             ContinuedAttemptRegister
 	FirstEffectivePickup CarrierFirstEffectivePickup
-	CancellationStands   bool
+	Cancellation         ParcelCancellation
 }
 
 // LabelServiceFinalVerdict 是判断的产物：格、原因、所引的证据（收寄事实或生效关闭）与终局
@@ -167,6 +175,8 @@ type LabelServiceFinalVerdict struct {
 	pickup      CarrierFirstEffectivePickup
 	closure     ContinuedAttemptDecision
 	hasClosure  bool
+	conflict    CancellationOrderConflict
+	conflicted  bool
 	effectiveAt time.Time
 }
 
@@ -182,6 +192,11 @@ func (verdict LabelServiceFinalVerdict) Reason() LabelServiceNotFinalReason {
 // FirstEffectivePickup 在收寄路径上交回所引的事实。
 func (verdict LabelServiceFinalVerdict) FirstEffectivePickup() (CarrierFirstEffectivePickup, bool) {
 	return verdict.pickup, verdict.pickup.present()
+}
+
+// Conflict 只在`不形成`、原因为取消先后冲突时给出：哪份取消、哪一代收寄、各自的业务时间。
+func (verdict LabelServiceFinalVerdict) Conflict() (CancellationOrderConflict, bool) {
+	return verdict.conflict, verdict.conflicted
 }
 
 // Closure 在关闭路径上交回作为证据的那份生效关闭决定。
@@ -210,7 +225,9 @@ func (verdict LabelServiceFinalVerdict) ResponsibilityOutcomeKind() (Responsibil
 
 // JudgeLabelServiceFinal 跨该包裹全部相关面单交易与收寄事实形成包裹级判断。规则逐句取 CONTEXT：
 //
-//  1. 已经形成的有效取消结果在先 → 取消在先，不形成非取消终局；
+//  1. 已经形成的有效取消结果 → 不形成非取消终局。带着收寄来时按两者的业务时间比（ADR-0254）：收寄
+//     晚于取消，取消在先；不晚于取消，事实冲突，`不形成`并指名冲突，也不按取消在先作答。不带收寄
+//     （交易与关闭两路）时没有边界事实可比，取消在先；
 //  2. 实际承运商首次有效收寄 → 非取消终局（不看交易停在哪一格、不看有没有关闭）；
 //  3. 否则要先有生效且未被重开的受控关闭——它只派生「不允许新增尝试」，本身不是终局；
 //  4. 全部相关交易均已定案——任一结果待确认都不得按失败处理；
@@ -226,8 +243,36 @@ func JudgeLabelServiceFinal(input LabelServiceFinalInput) (LabelServiceFinalVerd
 		}
 	}
 
-	if input.CancellationStands {
-		return LabelServiceFinalVerdict{judgment: LabelServiceCancellationStands}, nil
+	if input.Cancellation.id.valid() {
+		if input.Cancellation.parcel != input.Parcel {
+			return LabelServiceFinalVerdict{}, ErrInvalidLabelServiceFinalInput
+		}
+		if !input.FirstEffectivePickup.present() {
+			return LabelServiceFinalVerdict{judgment: LabelServiceCancellationStands}, nil
+		}
+		reference, err := NewCancellationBoundaryReference(
+			input.FirstEffectivePickup.fact.String() + "@" + input.FirstEffectivePickup.version.String())
+		if err != nil {
+			return LabelServiceFinalVerdict{}, ErrInvalidLabelServiceFinalInput
+		}
+		conflict, conflicted, err := JudgeCancellationOrder(input.Cancellation, CancellationBoundaryFact{
+			Kind:       CarrierFirstEffectivePickupBoundary,
+			Reference:  reference,
+			OccurredAt: input.FirstEffectivePickup.effectiveAt,
+		})
+		if err != nil {
+			return LabelServiceFinalVerdict{}, ErrInvalidLabelServiceFinalInput
+		}
+		if !conflicted {
+			return LabelServiceFinalVerdict{judgment: LabelServiceCancellationStands}, nil
+		}
+		return LabelServiceFinalVerdict{
+			judgment:   LabelServiceNotFinal,
+			reason:     LabelServiceCancellationOrderConflict,
+			pickup:     input.FirstEffectivePickup,
+			conflict:   conflict,
+			conflicted: true,
+		}, nil
 	}
 	if input.FirstEffectivePickup.present() {
 		return LabelServiceFinalVerdict{

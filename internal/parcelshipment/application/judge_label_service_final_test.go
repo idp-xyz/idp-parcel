@@ -75,6 +75,7 @@ type labelServiceFinalFixture struct {
 	transactions *labelTransactionsByParcelDouble
 	registers    *continuedAttemptRegisterDouble
 	validity     *labelValidityDouble
+	conflicts    *conflictRegisterDouble
 	handler      *application.JudgeLabelServiceFinalHandler
 }
 
@@ -85,6 +86,7 @@ func newLabelServiceFinalFixture(t *testing.T) *labelServiceFinalFixture {
 		transactions: &labelTransactionsByParcelDouble{},
 		registers:    &continuedAttemptRegisterDouble{},
 		validity:     &labelValidityDouble{},
+		conflicts:    &conflictRegisterDouble{},
 	}
 	// 面单渠道服务的终局类型由规则答复给出，这里的取值只是夹具锚点，不是任何产品的声明。
 	fixture.final.rules.judgment.Kind = mustValue(t, domain.NewFinalKindReference, "LABEL_SERVICE_FINAL")
@@ -93,6 +95,7 @@ func newLabelServiceFinalFixture(t *testing.T) *labelServiceFinalFixture {
 		Registers:     fixture.registers,
 		Cancellations: fixture.final.cancellations,
 		Validity:      fixture.validity,
+		Conflicts:     fixture.conflicts,
 		Adoption:      fixture.final.handler,
 		Clock:         fixedClock{at: labelServiceClosureAt.Add(time.Hour)},
 	})
@@ -329,8 +332,8 @@ func TestTheClosurePathAdoptsAFailureFinalAcrossAllTransactions(t *testing.T) {
 	})
 }
 
-// Covers: `AT-PS-095`「已有有效取消结果，随后收到首次有效收寄 → 取消在先，不形成非取消终局」
-// 与 `AT-PS-100`「两格已判出但终局规则声明尚未包含面单渠道服务 → 保持终局未决」：取消在先不走
+// Covers: `AT-PS-095`「已有有效取消结果，随后收到的首次有效收寄发生晚于取消的业务时间 → 取消在先，
+// 不形成非取消终局」与 `AT-PS-100`「两格已判出但终局规则声明尚未包含面单渠道服务 → 保持终局未决」：取消在先不走
 // 采用路径；终局规则的实例半边——租户未登记终局规则声明（PAR-COM-17）时，采用路径如实停在
 // FINAL_RULE_UNCONFIGURED，判断本身仍交回（机制半边可测）。声明已登而缺面单两行是另一格：
 // 「此产品下这种结果不形成终局」，未决原因是 FinalRuleNotSatisfiedYet，译法钉在 adapters/partycommercial
@@ -351,6 +354,9 @@ func TestCancellationAndUnconfiguredRulesStopTheLabelServiceFinalHonestly(t *tes
 		}
 		if _, delegated := result.Adoption(); delegated || fixture.final.finals.saved != 0 {
 			t.Fatal("取消在先仍走到了采用路径")
+		}
+		if len(fixture.conflicts.records) != 0 {
+			t.Fatal("取消在先不是冲突，却记了冲突")
 		}
 	})
 
@@ -378,6 +384,91 @@ func TestCancellationAndUnconfiguredRulesStopTheLabelServiceFinalHonestly(t *tes
 
 // Covers: ADR-0029 依赖故障归未决并指名等谁；未受理分格；未决原因集封闭；本编排的依赖里没有
 // 任何写口——它只判断，形成走既有采用路径。
+// Covers: `AT-PS-108`（ADR-0254 决定二第 3 格的面单渠道一侧）——有效取消已在，此后到的首次有效收寄
+// 发生不晚于取消的业务时间：不形成非取消终局，也不按取消在先作答，答`不形成`并指名冲突，不走采用
+// 路径；冲突记进冲突册按包裹查得出，已提交的取消不被碰。冲突记不下时按依赖未决交回——那一格重投会
+// 改变结果，而冲突那一格入账。
+func TestALateEarlierPickupIsAFactConflictWithTheStandingCancellation(t *testing.T) {
+	arrange := func(t *testing.T) (*labelServiceFinalFixture, application.JudgeLabelServiceFinalCommand) {
+		fixture := newLabelServiceFinalFixture(t)
+		fixture.final.cancellations.cancelled = true
+		fixture.final.cancellations.cancellation = cancelledAt(t, labelServicePickupAt.Add(time.Hour))
+		command := labelServiceCommand(t)
+		command.FirstEffectivePickup = labelServicePickup(t)
+		return fixture, command
+	}
+
+	t.Run("the judgment names the conflict and records it", func(t *testing.T) {
+		fixture, command := arrange(t)
+		result, err := fixture.handler.Handle(context.Background(), command)
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.LabelServiceNotFinalOutcome ||
+			result.Verdict().Reason() != domain.LabelServiceCancellationOrderConflict {
+			t.Fatalf("outcome = %q reason = %q, want LABEL_SERVICE_NOT_FINAL/CANCELLATION_ORDER_CONFLICT",
+				result.Outcome(), result.Verdict().Reason())
+		}
+		if result.Outcome() == application.LabelServiceCancellationStandsOutcome ||
+			result.Outcome() == application.LabelServiceJudgmentUndecided {
+			t.Fatal("冲突既不是取消在先，也不是读口未决")
+		}
+		if _, delegated := result.Adoption(); delegated || fixture.final.finals.saved != 0 {
+			t.Fatal("冲突走到了采用路径")
+		}
+		if len(fixture.conflicts.records) != 1 {
+			t.Fatalf("冲突册行数 = %d, want 1", len(fixture.conflicts.records))
+		}
+		recorded := fixture.conflicts.records[0]
+		if recorded.TenantID.String() != "tenant-1" || recorded.Conflict.Cancellation().String() != "cancel-1" ||
+			recorded.Conflict.Boundary().Kind != domain.CarrierFirstEffectivePickupBoundary ||
+			recorded.Conflict.Boundary().Reference.String() != "TF-TRACK-FACT-7@TF-TRACK-FACT-7/v1" {
+			t.Fatalf("冲突 = %+v", recorded)
+		}
+
+		replay, err := fixture.handler.Handle(context.Background(), command)
+		if err != nil || replay.Outcome() != application.LabelServiceNotFinalOutcome {
+			t.Fatalf("重投同一封：outcome = %q err = %v——重投推不动，答同一格", replay.Outcome(), err)
+		}
+		if len(fixture.conflicts.records) != 1 {
+			t.Fatal("同一份冲突重投记了第二行")
+		}
+	})
+
+	t.Run("a conflict that cannot be recorded is a dependency gap", func(t *testing.T) {
+		fixture, command := arrange(t)
+		fixture.conflicts.err = errors.New("conflict register down")
+		result, err := fixture.handler.Handle(context.Background(), command)
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.LabelServiceJudgmentUndecided ||
+			result.UndecidedReason() != application.LabelConflictRegisterUnavailable {
+			t.Fatalf("outcome = %q reason = %q, want JUDGMENT_UNDECIDED/CONFLICT_REGISTER_UNAVAILABLE",
+				result.Outcome(), result.UndecidedReason())
+		}
+	})
+
+	t.Run("an unwired conflict register does not pretend to have recorded it", func(t *testing.T) {
+		fixture, command := arrange(t)
+		fixture.handler = application.NewJudgeLabelServiceFinalHandler(application.JudgeLabelServiceFinalDeps{
+			Transactions:  fixture.transactions,
+			Registers:     fixture.registers,
+			Cancellations: fixture.final.cancellations,
+			Validity:      fixture.validity,
+			Adoption:      fixture.final.handler,
+			Clock:         fixedClock{at: labelServiceClosureAt.Add(time.Hour)},
+		})
+		result, err := fixture.handler.Handle(context.Background(), command)
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.UndecidedReason() != application.LabelConflictRegisterUnavailable {
+			t.Fatalf("reason = %q, want CONFLICT_REGISTER_UNAVAILABLE", result.UndecidedReason())
+		}
+	})
+}
+
 func TestLabelServiceFinalRecoveryDiscipline(t *testing.T) {
 	stops := map[string]struct {
 		arrange func(*labelServiceFinalFixture)
@@ -435,6 +526,7 @@ func TestLabelServiceFinalRecoveryDiscipline(t *testing.T) {
 		for _, reason := range []application.LabelServiceUndecidedReason{
 			application.LabelTransactionsUnavailable, application.ContinuedAttemptRegisterUnavailable,
 			application.LabelCancellationViewUnavailable, application.LabelValidityRuleUnavailable,
+			application.LabelConflictRegisterUnavailable,
 		} {
 			label := reason.String()
 			if label == "" {
@@ -442,15 +534,17 @@ func TestLabelServiceFinalRecoveryDiscipline(t *testing.T) {
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 4 {
+		if len(labels) != 5 {
 			t.Fatalf("labels collapsed into %d", len(labels))
 		}
 		if application.LabelServiceUndecidedReason(len(labels)+1).String() != "" {
-			t.Fatal("第五个未决原因带了标签——封闭集合被悄悄放开")
+			t.Fatal("集合外的未决原因带了标签——封闭集合被悄悄放开")
 		}
 	})
 
-	t.Run("the judgment holds no write port of its own", func(t *testing.T) {
+	// 冲突册是唯一许可的写口，且只许它：它不形成终局，只把判出的冲突留下（ADR-0254 决定二）。
+	// 名单之外任何依赖带写法，仍是判断在形成终局之外另写了东西。
+	t.Run("the judgment holds no write port of its own beyond the conflict register", func(t *testing.T) {
 		deps := reflect.TypeOf(application.JudgeLabelServiceFinalDeps{})
 		for index := 0; index < deps.NumField(); index++ {
 			field := deps.Field(index)
@@ -459,7 +553,10 @@ func TestLabelServiceFinalRecoveryDiscipline(t *testing.T) {
 			}
 			for method := 0; method < field.Type.NumMethod(); method++ {
 				name := field.Type.Method(method).Name
-				if name == "Save" || name == "Insert" || name == "Replace" {
+				if field.Name == "Conflicts" && name == "Record" {
+					continue
+				}
+				if name == "Save" || name == "Insert" || name == "Replace" || name == "Record" {
 					t.Fatalf("依赖 %s 带了写法 %s——判断不写，形成走既有采用路径", field.Name, name)
 				}
 			}

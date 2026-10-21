@@ -32,7 +32,8 @@ var (
 // Consumption 把采用编排的封闭结果译成消费门的两格：nil 入账、error 回滚。
 //
 // 消费完成不等于形成采用。REQUEST_NOT_ACCEPTED / SOURCE_CONFLICT / NOT_APPLICABLE
-// 是业务负向终局，重试不会让另一份委托或另一份资格长出来，入账收工。COMMITMENT_FORMED、
+// 是业务负向终局，重试不会让另一份委托或另一份资格长出来，入账收工。未决里等业务决定的那一格
+// （取消先后冲突，AwaitsDecision）同样入账：重投推不动，冲突已在册上。COMMITMENT_FORMED、
 // SOURCE_NOT_ADOPTED、EXISTING_RESULT 在应用层可能带着未交出去的 handoff 引用——那是
 // 技术续办，必须先拦住，否则消费门一 MarkProcessed，adoption 行在、下游 outbox 永久缺。
 func Consumption(result psapplication.AdoptNetworkIntakeResult) error {
@@ -48,6 +49,9 @@ func Consumption(result psapplication.AdoptNetworkIntakeResult) error {
 		psapplication.IntakeRequestNotAccepted:
 		return nil
 	case psapplication.IntakeEligibilityUndecided:
+		if result.UndecidedReason().AwaitsDecision() {
+			return nil
+		}
 		return fmt.Errorf("%w: %s", ErrAdoptionUndecided, result.UndecidedReason())
 	default:
 		return fmt.Errorf("%w: %q", ErrUnexpectedAdoptionOutcome, result.Outcome())

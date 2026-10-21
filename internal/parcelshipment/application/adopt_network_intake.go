@@ -64,10 +64,15 @@ const (
 	IntakeAdoptionStoreUnavailable
 	IntakeCommitmentIdentityUnavailable
 	IntakeCancellationViewUnavailable
+	// IntakeCancellationOrderConflict：取消已提交之后才到的来源发生不晚于取消的业务时间（ADR-0254
+	// 决定二第 3 格）。只在冲突已记进冲突册之后才答它——它等的是一份明确的业务决定，见 AwaitsDecision。
 	IntakeCancellationOrderConflict
 	// IntakeCorrectionPredecessorUnjudged：来源自报更正的那一版在采用账上还没有任何记录——
 	// 先后两封乱序，或前版那封还没消费到。重投会改变结果，所以是未决不是拒（ADR-0117 决定五）。
 	IntakeCorrectionPredecessorUnjudged
+	// IntakeConflictRegisterUnavailable：判出了冲突却记不下（冲突册未接入或写不进）。与
+	// IntakeCancellationOrderConflict 分开是因为恢复动作不同：这格修依赖、重投就会记下，那格重投推不动。
+	IntakeConflictRegisterUnavailable
 )
 
 func (reason IntakeUndecidedReason) String() string {
@@ -90,9 +95,18 @@ func (reason IntakeUndecidedReason) String() string {
 		return "CANCELLATION_ORDER_CONFLICT"
 	case IntakeCorrectionPredecessorUnjudged:
 		return "CORRECTION_PREDECESSOR_UNJUDGED"
+	case IntakeConflictRegisterUnavailable:
+		return "CONFLICT_REGISTER_UNAVAILABLE"
 	default:
 		return ""
 	}
+}
+
+// AwaitsDecision 说这一格未决重投推不动、等的是一份明确的业务决定而不是某个依赖（ADR-0254 决定二，
+// 按恢复动作分格同 ADR-0029）。消费门据它入账而不回滚：同一来源再投多少次，两个业务时间都不变。
+// 判据只放这里，消费侧不另认原因名。
+func (reason IntakeUndecidedReason) AwaitsDecision() bool {
+	return reason == IntakeCancellationOrderConflict
 }
 
 // AdoptNetworkIntakeCommand 携带来源原料与目标委托的双重指名（来源身份 + 委托编号，
@@ -151,6 +165,9 @@ type AdoptNetworkIntakeDeps struct {
 	// Cancellations 是包裹级取消决定的读口（UC-PS-006）。nil 与「取消机制未接入」
 	// 同义：边界核验整段不做——UC-PS-006 编排落地前的装配没有取消可查。
 	Cancellations ports.ParcelCancellationView
+	// Conflicts 是取消先后冲突册的写口。nil 时判出的冲突无处可记，按依赖未决交回、不答
+	// CANCELLATION_ORDER_CONFLICT——那一格会被消费门入账，没记下就入账等于把冲突丢了。
+	Conflicts ports.CancellationOrderConflictRegister
 }
 
 type AdoptNetworkIntakeHandler struct {
@@ -210,10 +227,10 @@ func (handler *AdoptNetworkIntakeHandler) Handle(
 		return handler.refuse(ctx, command, key, digest, refusal, request)
 	}
 
-	// 取消边界按业务时间裁决（AT-PS-044/080/081）：取消决定早于收寄发生——包裹在收寄
-	// 前已经合法取消，来源不采用、物理事实保留；收寄发生早于取消决定——权威事实的
-	// 业务顺序与两份决定的成立顺序矛盾（取消形成时收寄已发生却没拦住），事实冲突
-	// 保持未决，不按消息到达顺序选边。
+	// 取消已提交在先，本来源后到：按两个业务时间比（ADR-0254 决定二第 2、3 格）。取消的业务时间
+	// 早于收寄发生——包裹在收寄前已经合法取消，来源不采用、物理事实保留；收寄发生不晚于取消的
+	// 业务时间——取消形成时包裹其实已越过边界，事实冲突：不形成责任起点、不抹取消，冲突记进册里
+	// 停着等业务决定，不按消息到达顺序选边。
 	if handler.deps.Cancellations != nil {
 		cancellation, cancelled, err := handler.deps.Cancellations.FindCancellation(
 			ctx, key.TenantID, source.Parcel())
@@ -221,14 +238,7 @@ func (handler *AdoptNetworkIntakeHandler) Handle(
 			return handler.undecided(command, source, IntakeCancellationViewUnavailable), nil
 		}
 		if cancelled {
-			if cancellation.RequestedAt().Before(source.OccurredAt()) {
-				reason, err := domain.NewCheckReason("CANCELLED_BEFORE_INTAKE/" + cancellation.ID().String())
-				if err != nil {
-					return AdoptNetworkIntakeResult{}, fmt.Errorf("refusal reason: %w", err)
-				}
-				return handler.refuse(ctx, command, key, digest, reason, request)
-			}
-			return handler.undecided(command, source, IntakeCancellationOrderConflict), nil
+			return handler.judgeAgainstCancellation(ctx, command, key, digest, source, cancellation, request)
 		}
 	}
 
@@ -319,6 +329,49 @@ func (handler *AdoptNetworkIntakeHandler) Handle(
 		AdoptedAt:         handler.deps.Clock.Now(),
 	}
 	return handler.commit(ctx, record, request)
+}
+
+// judgeAgainstCancellation 比已提交的取消与本来源的先后，判法在领域（JudgeCancellationOrder）一处。
+func (handler *AdoptNetworkIntakeHandler) judgeAgainstCancellation(
+	ctx context.Context,
+	command AdoptNetworkIntakeCommand,
+	key ports.IntakeAdoptionKey,
+	digest string,
+	source domain.IntakeSource,
+	cancellation domain.ParcelCancellation,
+	request domain.ShipmentRequest,
+) (AdoptNetworkIntakeResult, error) {
+	reference, err := domain.NewCancellationBoundaryReference(source.Kind().String() + "/" + source.Version().String())
+	if err != nil {
+		return AdoptNetworkIntakeResult{}, fmt.Errorf("cancellation boundary reference: %w", err)
+	}
+	conflict, conflicted, err := domain.JudgeCancellationOrder(cancellation, domain.CancellationBoundaryFact{
+		Kind:       domain.NetworkIntakeBoundary,
+		Reference:  reference,
+		OccurredAt: source.OccurredAt(),
+	})
+	if err != nil {
+		// 读口交回的取消立不起来：拼坏的聚合，不是业务未决。
+		return AdoptNetworkIntakeResult{}, fmt.Errorf("judge cancellation order: %w", err)
+	}
+	if !conflicted {
+		reason, err := domain.NewCheckReason("CANCELLED_BEFORE_INTAKE/" + cancellation.ID().String())
+		if err != nil {
+			return AdoptNetworkIntakeResult{}, fmt.Errorf("refusal reason: %w", err)
+		}
+		return handler.refuse(ctx, command, key, digest, reason, request)
+	}
+	if handler.deps.Conflicts == nil {
+		return handler.undecided(command, source, IntakeConflictRegisterUnavailable), nil
+	}
+	if _, err := handler.deps.Conflicts.Record(ctx, ports.CancellationOrderConflictRecord{
+		TenantID:   key.TenantID,
+		Conflict:   conflict,
+		DetectedAt: handler.deps.Clock.Now(),
+	}); err != nil {
+		return handler.undecided(command, source, IntakeConflictRegisterUnavailable), nil
+	}
+	return handler.undecided(command, source, IntakeCancellationOrderConflict), nil
 }
 
 // supersede 以更正后的来源形成新的采用判断版本（AT-PS-050，ADR-0117 决定二、三）：新采用

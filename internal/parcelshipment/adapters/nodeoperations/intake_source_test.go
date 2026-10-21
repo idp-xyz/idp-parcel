@@ -220,11 +220,13 @@ func adoptHandler(t *testing.T) *psapplication.AdoptNetworkIntakeHandler {
 }
 
 type adoptHandlerConfig struct {
-	downstream  psports.NetworkIntakeHandoff
-	eligibility psports.IntakeEligibilityView
-	adoptions   *adoptionStoreDouble
-	identity    psdomain.SourceIdentity
-	request     psdomain.ShipmentRequest
+	downstream    psports.NetworkIntakeHandoff
+	eligibility   psports.IntakeEligibilityView
+	adoptions     *adoptionStoreDouble
+	identity      psdomain.SourceIdentity
+	request       psdomain.ShipmentRequest
+	cancellations psports.ParcelCancellationView
+	conflicts     psports.CancellationOrderConflictRegister
 }
 
 func newAdoptHandler(t *testing.T, config adoptHandlerConfig) *psapplication.AdoptNetworkIntakeHandler {
@@ -253,11 +255,13 @@ func newAdoptHandler(t *testing.T, config adoptHandlerConfig) *psapplication.Ado
 		Requests: &requestStoreDouble{records: map[psdomain.SourceIdentity]psdomain.ShipmentRequest{
 			id: request,
 		}},
-		Eligibility: eligibility,
-		Adoptions:   adoptions,
-		Identities:  &commitmentIdentityDouble{},
-		Downstream:  downstream,
-		Clock:       fixedClock{at: receivedAt.Add(time.Minute)},
+		Eligibility:   eligibility,
+		Adoptions:     adoptions,
+		Identities:    &commitmentIdentityDouble{},
+		Downstream:    downstream,
+		Clock:         fixedClock{at: receivedAt.Add(time.Minute)},
+		Cancellations: config.cancellations,
+		Conflicts:     config.conflicts,
 	})
 }
 

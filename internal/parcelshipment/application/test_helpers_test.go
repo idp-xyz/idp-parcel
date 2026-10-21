@@ -1,10 +1,12 @@
 package application_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
 type stringValue interface {
@@ -93,4 +95,39 @@ func validity(t *testing.T) domain.OwnershipValidityInterval {
 		t.Fatalf("new validity interval: %v", err)
 	}
 	return interval
+}
+
+// conflictRegisterDouble 是取消先后冲突册的替身：按（租户，包裹，边界种类，边界引用，取消）去重，
+// 与真册的主键同一组维度。
+type conflictRegisterDouble struct {
+	records []ports.CancellationOrderConflictRecord
+	err     error
+}
+
+func (double *conflictRegisterDouble) Record(
+	_ context.Context,
+	record ports.CancellationOrderConflictRecord,
+) (ports.CancellationOrderConflictSaveOutcome, error) {
+	if double.err != nil {
+		return ports.CancellationOrderConflictSaveOutcomeInvalid, double.err
+	}
+	for _, existing := range double.records {
+		if existing.TenantID == record.TenantID &&
+			existing.Conflict.Parcel() == record.Conflict.Parcel() &&
+			existing.Conflict.Boundary().Kind == record.Conflict.Boundary().Kind &&
+			existing.Conflict.Boundary().Reference == record.Conflict.Boundary().Reference &&
+			existing.Conflict.Cancellation() == record.Conflict.Cancellation() {
+			return ports.CancellationOrderConflictAlreadyRecorded, nil
+		}
+	}
+	double.records = append(double.records, record)
+	return ports.CancellationOrderConflictRecorded, nil
+}
+
+func (double *conflictRegisterDouble) ListByParcel(
+	_ context.Context,
+	_ domain.TenantID,
+	_ domain.DeclaredParcelID,
+) ([]ports.CancellationOrderConflictEntry, error) {
+	return nil, double.err
 }
