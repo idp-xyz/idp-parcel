@@ -313,7 +313,7 @@ func (handler *CreateInitialRouteHandler) Handle(
 
 	results := make([]ParcelRouteResult, 0, len(keys))
 	for _, key := range keys {
-		result, err := handler.routeOneParcel(ctx, handoff.Correlation(), key, command.Carried)
+		result, err := handler.routeOneParcel(ctx, handoff.Correlation(), key, handoff.AcceptedAt(), command.Carried)
 		if err != nil {
 			return CreateInitialRouteResult{}, err
 		}
@@ -331,6 +331,7 @@ func (handler *CreateInitialRouteHandler) routeOneParcel(
 	ctx context.Context,
 	correlation domain.RequestCorrelationID,
 	key domain.InitialRouteJudgmentKey,
+	acceptedAt time.Time,
 	carried ports.RequestCarriedContent,
 ) (ParcelRouteResult, error) {
 	existing, found, err := handler.deps.Store.FindByKey(ctx, key)
@@ -350,7 +351,7 @@ func (handler *CreateInitialRouteHandler) routeOneParcel(
 	}
 
 	for attempt := 0; attempt < 2; attempt++ {
-		record, undecided, err := handler.judgeParcel(ctx, key, evidence, carried)
+		record, undecided, err := handler.judgeParcel(ctx, key, acceptedAt, evidence, carried)
 		if err != nil {
 			return ParcelRouteResult{}, err
 		}
@@ -380,6 +381,7 @@ func (handler *CreateInitialRouteHandler) routeOneParcel(
 func (handler *CreateInitialRouteHandler) judgeParcel(
 	ctx context.Context,
 	key domain.InitialRouteJudgmentKey,
+	acceptedAt time.Time,
 	evidence ports.InitialRouteEvidence,
 	carried ports.RequestCarriedContent,
 ) (ports.InitialRouteRecord, *ParcelRouteResult, error) {
@@ -441,7 +443,7 @@ func (handler *CreateInitialRouteHandler) judgeParcel(
 	switch ranking.Outcome() {
 	case domain.RankingSelected:
 		selected, _ := ranking.Selected()
-		return handler.planRecord(ctx, key, selected, candidates, evidence, costs.CitationsOf(selected), judgedAt)
+		return handler.planRecord(ctx, key, selected, candidates, evidence, costs.CitationsOf(selected), judgedAt, acceptedAt)
 	case domain.RankingNoQualifiedCandidate:
 		return handler.noRouteRecord(key, candidates, evidence, judgedAt)
 	case domain.RankingTied:
@@ -471,6 +473,10 @@ func (handler *CreateInitialRouteHandler) judgeParcel(
 //
 // 交进来的只是选中候选那一份。未选中候选的金额作为候选成本事实参与了排序，出处却不随计划留痕：计划的出处只按段号
 // 对段链，没有候选维（票 demo-chain-gaps/105）。
+//
+// 计划从委托接受的时刻起生效，判断时刻另记处理时钟（CONTEXT「路由计划适用性」）。生效取处理时钟时，路由交接一积压，
+// 此后业务时间落在接受与处理之间的控制触发让计划失效或被替代，离场早于生效，被领域离场门拒、整封信封响亮失败；复核形成
+// 的计划同样按触发的业务时间生效（ADR-0272），两段接得上。
 func (handler *CreateInitialRouteHandler) planRecord(
 	ctx context.Context,
 	key domain.InitialRouteJudgmentKey,
@@ -479,6 +485,7 @@ func (handler *CreateInitialRouteHandler) planRecord(
 	evidence ports.InitialRouteEvidence,
 	costCitations []domain.PlannedLegCostCitation,
 	judgedAt time.Time,
+	acceptedAt time.Time,
 ) (ports.InitialRouteRecord, *ParcelRouteResult, error) {
 	none := ports.InitialRouteRecord{}
 	var legs []domain.PlannedLeg
@@ -506,7 +513,7 @@ func (handler *CreateInitialRouteHandler) planRecord(
 		Strategy:         evidence.Strategy,
 		ViewRevision:     evidence.ViewRevision,
 		JudgedAt:         judgedAt,
-		EffectiveFrom:    judgedAt,
+		EffectiveFrom:    acceptedAt,
 		CostCitations:    costCitations,
 		CustomsCitations: evidence.CustomsCitations,
 	})
