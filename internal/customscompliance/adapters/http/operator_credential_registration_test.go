@@ -76,3 +76,19 @@ func TestTheCredentialFaceAnswersNotGrantedAndRefusesSelfReportedIdentity(t *tes
 		}
 	}
 }
+
+// Covers: AT-CC-447（Intake 半边：读取上限）——凭证手工口的请求体超过登记批文的读取上限即答坏报文；填充放在对象里面，不设上限时
+// 这一份能译出命令，证得出是上限在拒。
+func TestTheCredentialFaceRefusesAnOversizedBody(t *testing.T) {
+	intake, err := customshttp.NewOperatorDecisionIntake(decisionAuthenticator{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	padded := strings.TrimSuffix(regulatoryCredentialBody, "}") + strings.Repeat(" ", 1<<20) + "}"
+	if _, err := intake.IntakeRegulatoryCredentialRegistration(context.Background(), post("/probe", padded)); !errors.Is(err, customshttp.ErrMalformedRequest) {
+		t.Fatalf("超限：err = %v, want 坏报文", err)
+	}
+	if _, err := intake.IntakeRegulatoryCredentialRegistration(context.Background(), post("/probe", regulatoryCredentialBody)); err != nil {
+		t.Fatalf("上限之内的同一份被拒：%v", err)
+	}
+}

@@ -100,6 +100,22 @@ func TestTheOperatorDecisionIntakeAnswersTheChannelGradesAndRefusesSelfReportedI
 	}
 }
 
+// Covers: AT-SA-201（Intake 半边：读取上限）——手工口的请求体超过一兆字节即答坏报文，不把整份读进内存；采用与更正两个入口同一道。
+func TestTheOperatorDecisionIntakeRefusesAnOversizedBody(t *testing.T) {
+	intake := operatorDecisionIntakeForTest(t, decisionAuthenticator{})
+	// 填充放在对象里面：形状本身合法，不设上限时整份能译出命令，设了上限才被截断——这样才证得出是上限在拒。
+	padded := func(body string) string { return strings.TrimSuffix(body, "}") + strings.Repeat(" ", 1<<20) + "}" }
+	if _, err := intake.IntakeExternalFundsFactRegistration(context.Background(), commandRequest(padded(externalFundsFactBody))); !errors.Is(err, settlementhttp.ErrMalformedRequest) {
+		t.Fatalf("采用口超限：err = %v, want 坏报文", err)
+	}
+	if _, err := intake.IntakeExternalFundsFactCorrectionRegistration(context.Background(), commandRequest(padded(externalFundsCorrectionBody))); !errors.Is(err, settlementhttp.ErrMalformedRequest) {
+		t.Fatalf("更正口超限：err = %v, want 坏报文", err)
+	}
+	if _, err := intake.IntakeExternalFundsFactRegistration(context.Background(), commandRequest(externalFundsFactBody)); err != nil {
+		t.Fatalf("上限之内的同一份被拒：%v", err)
+	}
+}
+
 // Covers: AT-SA-201（端点半边）——经采用口的端点体：未授予答 403 OPERATOR_NOT_GRANTED，编排一次也不被调到。
 func TestTheAdoptionEndpointAnswersNotGrantedBeforeTheOrchestration(t *testing.T) {
 	intake := operatorDecisionIntakeForTest(t, decisionAuthenticator{err: settlementhttp.ErrOperatorNotGranted})

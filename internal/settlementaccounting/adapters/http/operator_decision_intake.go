@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
@@ -30,6 +31,10 @@ type OperatorIdentity struct {
 type OperatorDecisionAuthenticator interface {
 	AuthenticateOperatorDecision(ctx context.Context, bearerToken string, decision OperatorDecision) (OperatorIdentity, error)
 }
+
+// maxManualRegistrationBytes 给手工口的一份登记输入设读取上限：一笔资金事实只有十来个键，一兆字节已宽出几个量级，设限只为
+// 不让一份坏掉或恶意的请求体把内存吃满。超限读到的是被截断的 JSON，答坏报文。
+const maxManualRegistrationBytes = 1 << 20
 
 // OperatorDecisionIntake 是操作者渠道「运营决定」能力面在外部资金事实采用与更正上的 Intake（ADR-0236 决定二）：租户的财务人员
 // 照银行回单或支付系统的记录在管理台手工采用。与集成客户端族（IntegrationClientIntake）并存，编排、载荷形状与答案代数是同
@@ -60,7 +65,7 @@ func (intake *OperatorDecisionIntake) IntakeExternalFundsFactRegistration(
 	if err != nil {
 		return application.AdoptFundsFactCommand{}, err
 	}
-	payload, err := readSinglePayload(request.Body)
+	payload, err := readSinglePayload(io.LimitReader(request.Body, maxManualRegistrationBytes+1))
 	if err != nil {
 		return application.AdoptFundsFactCommand{}, err
 	}
@@ -80,7 +85,7 @@ func (intake *OperatorDecisionIntake) IntakeExternalFundsFactCorrectionRegistrat
 	if err != nil {
 		return application.CorrectFundsFactCommand{}, err
 	}
-	payload, err := readSinglePayload(request.Body)
+	payload, err := readSinglePayload(io.LimitReader(request.Body, maxManualRegistrationBytes+1))
 	if err != nil {
 		return application.CorrectFundsFactCommand{}, err
 	}
