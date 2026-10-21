@@ -3,6 +3,7 @@ package networkrouting_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -14,8 +15,8 @@ import (
 )
 
 // 本文件钉初始路由进运输准备那一缝（票 demo-chain-gaps/18，ADR-0201 决定二、七）：计划段按 NR 拼写读出连接代码与起讫、
-// 段引用照「版本#序位」拼；无路线判断照样交编排；读不回答未决、记录对不上键与说不清连接的段响亮失败；编排各格落成消费
-// 两格。NR 与编排两侧都用替身，夹具全部合成。
+// 段引用照「版本#序位」拼；无路线判断照样交编排；读不回答未决，NR 库里重建不出来的坏行、记录对不上键与说不清连接的段
+// 响亮失败；编排各格落成消费两格。NR 与编排两侧都用替身，夹具全部合成。
 
 var routeJudgedAt = time.Date(2026, 10, 21, 2, 0, 0, 0, time.UTC)
 
@@ -171,8 +172,8 @@ func TestANoRouteJudgmentReachesThePreparationAsNotFormed(t *testing.T) {
 	}
 }
 
-// Covers: AT-TF-135、计划 D01-1 的哨兵分格——读不回与读失败答未决哨兵；记录对不上键答不变量已破；窗口依据一格连接都不指或
-// 指两格，答译不过去、不交编排——不折成`未配置`。
+// Covers: AT-TF-135、计划 D01-1 的哨兵分格——读不回与读失败答未决哨兵；NR 库里那一行重建不出来带着 NR 的坏行哨兵
+// 上抛，不进未决；记录对不上键答不变量已破；窗口依据一格连接都不指或指两格，答译不过去、不交编排——不折成`未配置`。
 func TestUnreadableOrUntranslatableRoutesFailWithTheirOwnSentinels(t *testing.T) {
 	trigger := &preparationTriggerStub{}
 	if err := handle(t, routeFinderStub{}, trigger); !errors.Is(err, adapter.ErrInitialRouteNotVisible) {
@@ -180,6 +181,12 @@ func TestUnreadableOrUntranslatableRoutesFailWithTheirOwnSentinels(t *testing.T)
 	}
 	if err := handle(t, routeFinderStub{err: errors.New("down")}, trigger); !errors.Is(err, adapter.ErrInitialRouteNotVisible) {
 		t.Fatalf("读失败：%v", err)
+	}
+	// 坏行重投推不动：保住 NR 哨兵的链上抛，不包成`判断还看不见`。
+	badRow := fmt.Errorf("find initial route: %w: bad plan", nrports.ErrStoredRouteRecordUnreadable)
+	if err := handle(t, routeFinderStub{err: badRow}, trigger); !errors.Is(err, nrports.ErrStoredRouteRecordUnreadable) ||
+		errors.Is(err, adapter.ErrInitialRouteNotVisible) {
+		t.Fatalf("坏行：%v", err)
 	}
 	inconsistent := formedRecord(t, legOn(t, "CONNECTION/C@1", "A", "B", 0))
 	inconsistent.HasNoRoute = true
