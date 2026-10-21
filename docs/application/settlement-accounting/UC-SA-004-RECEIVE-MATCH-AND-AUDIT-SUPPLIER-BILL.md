@@ -128,6 +128,7 @@
 | `AT-SA-098` | 审核应付或供应商费用贷项发布失败 | 原审核/贷项结果有效，只恢复各自同一发布意图，不把一方发布成功推定为另一方已发布 |
 | `AT-SA-099` | 批量含通过、争议、拒绝和技术失败行 | 逐范围返回，合法通过行不回滚 |
 | `AT-SA-100` | 检查本用例形成的对象 | 只形成主张、匹配、争议、审核应付和贷项；不形成付款、发票或成本分摊 |
+| `AT-SA-211` | 账单一行点名的预期成本版本已撤下（发生项失效之后的失效纠错版本），或已有后继（被纠正过） | 答 `EXPECTED_COST_NOT_CURRENT`，带出行、版本、撤下与否与后继；不落账单、不交意图，不按带着全额的失效纠错版本对账（[ADR-0232](../../adr/0232-a-segment-commission-adoption-is-withdrawn-by-decision-only-before-occurrences-form-and-occurrence-revision-drives-the-supplier-cost-correction.md) 决定七） |
 
 ## 生产参数与待决风险
 
