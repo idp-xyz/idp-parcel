@@ -1,7 +1,7 @@
 # 06 PS（parcel-shipment）：CONTEXT 写出现行规则、UC 与之一致、矛盾裁清
 
 Category: enhancement
-Status: ready-for-agent——2026-10-21 协调方立（文档自洽修订，见 [README](../README.md)「修订执行」）
+Status: in-progress——2026-10-21 认领，分支 claude-dc06；原 ready-for-agent——2026-10-21 协调方立（文档自洽修订，见 [README](../README.md)「修订执行」）
 Blocked by: 无（01 进 main 后开工）
 出处：[audit/ps.md](../audit/ps.md)（ps.md（取证 ps-code、ps-adr、ps-uc））；[02 的完成记录](./02-code-defects-from-the-audit.md)里「交修订票」一表中交给本票的条目；[01](./01-adr-suspension-chains.md) 的「交后续」一节里交给本票的条目。
 
