@@ -26,13 +26,13 @@ M10 的现象逐条成立：两路适配器的 `reassessmentToConsumption` 把�
 
 1. **判据在复核编排一处，两路同改**：`ReassessUndecidedReason` 只留重投推得动的格；没有路由历史、证据未配置、冻结形态未配置改答`未判`（`ReassessTriggerNotJudged`），原因归 `ports.NotJudgedReason`。两路适配器只按结论折，不持原因字面量。M10 字面只点名交接适配器，收寄采用一路同改的理由见 ADR 候选第一条。
 2. **原因落库，不只落日志**：新表 `network_routing.route_reassessment_not_judged`（迁移 0021），一行记关联、判断键各维、原因、触发业务时间与入账时刻。原因没落库不得答`未判`，写不进改答登记册那一格的未决、回滚重投。M10 写「日志与 inbox 账」，落成登记的理由见 ADR 决定二。
-3. **同一触发入账未判之后再投，重新判**：指纹在册、复核不在时往下重新判，不再答登记册读不回；未判登记只留先到那一行。
+3. **携带同一触发的另一封信封再来时重新判**：指纹在册、复核不在时往下重新判，不再答登记册读不回；未判登记只留先到那一行。同一封信封入账后由消费门按 inbox 跳过，到不了这里，所以这不是续办手段。
 4. **续办不在本票**：另立 [154](./154-network-reassessment-not-judged-triggers-resume-after-registration.md)，Blocked by 票 14（同族续办形状）。初始路由一路同病，另立 [155](./155-initial-route-unconfigured-undecided-burns-the-acceptance-partition.md)。
 5. **ADR-0215 部分停用**：决定四「重投」一条里「复核停在未决（复核登记册或路由历史读不回、证据未配置、适用性看不清、取号依赖故障）」一句的未决范围，适用场景限 NR 路由复核两路。只在 ADR-0215 的 Status 行与 Links 加前向指针，正文不改。
 
 ### 越权风险点（全文见 ADR-0235「越权风险点」，本票相关的几条）
 
-1. 三格入账之后没有续办触发：配置补齐或初始路由形成之后，这几次复核不自动重判（票 154）。owner 若坚持 ADR-0094 决定四「续办触发同笔落地」，撤回的是`未判`一格，代价回到 ADR-0215 越权风险点 10。
+1. 三格入账之后没有续办触发：配置补齐或初始路由形成之后，这几次复核不自动重判。今天没有任何续办手段（同一封信封入账后由消费门跳过，生产上也没有工具发出携带同一触发的另一封），全靠票 154。owner 若坚持 ADR-0094 决定四「续办触发同笔落地」，撤回的是`未判`一格，代价回到 ADR-0215 越权风险点 10。
 2. 「没有路由历史」可能自愈：初始路由停在依赖类未决、事后才形成时，早到的触发原本重投到它形成就能判。
 3. 原因落 NR 登记，不落进程日志；owner 要日志行另加即可。
 4. 未判登记只留第一次的原因。
@@ -50,11 +50,11 @@ M10 的现象逐条成立：两路适配器的 `reassessmentToConsumption` 把�
 
 ### 用例
 
-- 编排 `reassess_route_test.go`：三格各答`未判`且原因落登记、不落复核、不动适用性（AT-NR-074/075/076）；证据读不动仍答未决、不落未判（AT-NR-067）；再投重新判、前提补齐后判成、原因落不了库答未决（AT-NR-078）。
+- 编排 `reassess_route_test.go`：三格各答`未判`且原因落登记、不落复核、不动适用性（AT-NR-074/075/076）；证据读不动仍答未决、不落未判（AT-NR-067）；另一封信封带来同一触发时重新判、前提补齐后判成、原因落不了库答未决（AT-NR-078）。
 - 交接适配器：三格入账、零复核、未判一行，业务时间取交接；证据读不动仍回滚重投、不落未判。收寄适配器：没有路由历史入账留原因；证据读不动仍回滚重投。
 - 未判登记真库 `route_reassessment_not_judged_test.go`：一行往返、撞键保留先到那一行、原因在库里封闭、无事务拒、回滚无痕。
 - 派发真库 `cmd/parcel-dispatch/reassess_not_judged_test.go`：
-  - 三格经生产同形的复核路入账、处理完毕、未判一行，另一封信封再投仍一行（AT-NR-074–076、078）。
+  - 三格经生产同形的复核路入账、处理完毕、未判一行，另一封信封带来同一触发仍一行（AT-NR-074–076、078）。
   - 前提补齐后另一封信封判成一条仍适用（AT-NR-078）。
   - 生产路由表上没有路由历史的已接受包裹先后两次交接，两封信封都定稿 `PUBLISHED`，各落一行未判（AT-NR-077）。
 - `reassess_on_handover_test.go` 的 AT-NR-067 用例改用依赖故障（证据读不动），回滚重投、不落未判。
@@ -63,3 +63,17 @@ M10 的现象逐条成立：两路适配器的 `reassessmentToConsumption` 把�
 ### 验证
 
 于 `7e7dc058`（含 132）：`go build ./...`、`go vet ./...`、`gofmt -l cmd internal migrations tools` 干净；两笔代码提交 `5fb721e5`、`dc428623` 各自单独 `go build ./... && go vet ./...` 通过。`scripts/test-full.sh` 跑了改动包及其反向依赖 44 个包（含 `./cmd/...` 下全部反向依赖的 cmd 包），加 `./internal/architecture/...`、`./migrations/...`，全绿。未跑全量；未重生成机制清点、ADR 索引与 AT 计数（`go run ./tools/adr-index -check` 如预期答 README 未重生成）。
+
+## 评审记录（2026-10-21，协调方隔离评审：无阻断项；作者子代理同分支修订）
+
+逐条去向（与票 132 同一份评审，两票共用的条目两边都记）：
+
+1. **「同一信封再投会重判」不成立**——已修。消费门按（消费者名 + 来源 + 事件 ID）跳过重复投递，未判入账后同一封再投到不了复核编排，只有携带同一触发的另一封信封才会重判；生产上今天没有工具发出这样一封。ADR-0235 决定三改写、删去「手工续办的口子」，越权风险点 1 写明今天没有续办手段、全靠票 154；票 154「现象」同改；UC-NR-003 一致性节与 AT-NR-078 用词改为「另一封信封」；复核编排、端口、postgres 适配器与迁移 0021 的注释同改（`cf0ca77e`、`a79164fa`、`d0e888b8`）。
+2. **ADR-0215 决定三被收窄却写「不受影响」**——已修，主要落在票 132，见那边的评审记录。
+3. **派发真库用例里的变更叙述**——已修：`TestAHandoverWithoutRoutingHistoryNoLongerHoldsItsPartitionThroughTheProductionRoute` 的拍数注释改为「这一路若答未决，预算耗尽之前同一分区的第二封认领不到，第一封落 ABANDONED」（`cf0ca77e`）。
+4. **`ReassessUndecidedReason` 注释枚举 ports.NotJudgedReason 的成员**——已修，改为「重投推不动的归 ports.NotJudgedReason」（`cf0ca77e`）。
+5. **`freezeOf` 把三种答不出并成「冻结形态未配置」**——另分一格。只有真的未声明才答未配置、落 `FREEZE_FORM_UNCONFIGURED`。另两种都是编程错误，响亮报错，不落未判：前缀立不起来今天不可达；冻结事实不成立（形态在封闭族外、段数为负）被策略版本册的 CHECK 拒写，只能来自坏了的证据视图。理由同 `planNodesOf`：折成未配置会把装配缺陷伪装成租户配置缺口，在未判登记里留一条点名租户没登记的假原因。补编排用例 `TestInvalidFreezeFactsAreLoudRatherThanUnconfigured`；ADR-0235 决定一补一条，越权风险点加第 12 条「装配缺陷响亮失败，照样占着分区」（`cf0ca77e`、`a79164fa`、`3ff125ca`）。
+
+**未采纳**：无。
+
+**修订后验证**：于 `d0e888b8`，`go build ./...`、`go vet ./...`、`gofmt -l cmd internal migrations tools` 干净；修订那笔代码提交 `cf0ca77e` 单独 build、vet 通过。`scripts/test-full.sh` 跑了 `./internal/networkrouting/...`、`./cmd/parcel-dispatch/`、`./cmd/parcel-api/`、`./cmd/parcel-network-register/`，PS、TF、VE 各自的 `adapters/networkrouting`，`./internal/platform/inboxconsume/`、`./internal/architecture/...`、`./migrations/...`，22 个包全绿，0 FAIL。之后的提交只动 ADR 与票面。
