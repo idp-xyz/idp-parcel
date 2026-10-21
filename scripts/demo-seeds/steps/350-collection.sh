@@ -10,7 +10,7 @@ echo "== 代收与清分登记（collection-remittance：分户账、指令、�
 # 已灌过的库上原样重放本节，每一行答已在册（EXISTING / ALREADY_HANDED_OVER，退出码 0）：
 # 重放判定先于余额守卫。换了记账标识再跑的不是重放：凭代收事实的那两笔（入账、到账移位）
 # 答内容冲突（退出码 2，一条事实至多支撑一笔记账），凭差异事项或清分的那两笔来源位置已被
-# 原记账移空，答余额不足（退出码 4）。实测于 5edc626ae 对一次性演示库重放。
+# 原记账移空，答余额不足（退出码 4）。实测于 docs-consistency/code/14 评审轮，对一次性演示库重放。
 "$BIN/parcel-collection-register" subledger -input "$SEEDS/collection/01-subledger-account-01-cny.json"
 "$BIN/parcel-collection-register" subledger -input "$SEEDS/collection/02-subledger-account-01-sgd.json"
 "$BIN/parcel-collection-register" instruction -input "$SEEDS/collection/03-instruction-parcel-01.json"
