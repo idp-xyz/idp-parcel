@@ -88,10 +88,14 @@ func WithdrawSegmentCommissionAdoption(
 		return SegmentCommissionAdoptionWithdrawal{}, TransportCommission{}, ErrInvalidAdoptionWithdrawal
 	}
 	var earliest SegmentCommissionAdoption
-	found := false
+	found, startStays := false, false
 	for _, other := range remaining {
 		if other.tenantID != adoption.tenantID || other.commission != adoption.commission || other.segment == adoption.segment {
 			return SegmentCommissionAdoptionWithdrawal{}, TransportCommission{}, ErrInvalidAdoptionWithdrawal
+		}
+		// 开始所依的那一段还在，开始就不动——同刻并列时它不一定是字面序最小的那一条：采用遇同刻不前移，开始依的是先采用的那一段。
+		if other.startBasis == beforeBasis && sameOnRegistry(other.startedAt, beforeAt) {
+			startStays = true
 		}
 		if !found || other.startedAt.Before(earliest.startedAt) ||
 			(other.startedAt.Equal(earliest.startedAt) && other.startBasis.String() < earliest.startBasis.String()) {
@@ -115,7 +119,7 @@ func WithdrawSegmentCommissionAdoption(
 		withdrawal.change = CommissionStartWithdrawn
 		corrected.startedBasis = ParticipationBasisReference{}
 		corrected.startedAt = time.Time{}
-	case earliest.startBasis == beforeBasis && sameOnRegistry(earliest.startedAt, beforeAt):
+	case startStays:
 		withdrawal.change = CommissionStartUnchanged
 		withdrawal.startAfterBasis, withdrawal.startAfterAt = beforeBasis, beforeAt.UTC()
 	default:

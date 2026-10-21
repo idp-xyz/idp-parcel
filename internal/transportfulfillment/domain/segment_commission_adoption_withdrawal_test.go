@@ -106,3 +106,28 @@ func TestAWithdrawalRefusesInputsThatContradictTheRegister(t *testing.T) {
 		t.Fatal("集外的变法认成了一格")
 	}
 }
+
+// Covers: AT-TF-308 的同刻并列那一格（评审复现）——委托的开始依的是先采用、同刻、依据字面序较大的那一段；解除一段不相干的段，开始所依的
+// 那一段还在，记 KEPT、开始原样，不按字面序换成另一条同刻的依据。
+func TestWithdrawingAnUnrelatedSegmentUnderATieKeepsTheStart(t *testing.T) {
+	commission := submittedCommission(t)
+	tieAt, otherAt := commissionSubmittedAt.Add(time.Hour), commissionSubmittedAt.Add(3*time.Hour)
+	started, err := commission.MarkTransportStarted(mustValue(t, domain.NewParticipationBasisReference, "HO/z-first-adopted"), tieAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := adoptionOf(t, started, "SEG-FIRST", "HO/z-first-adopted", tieAt)
+	second := adoptionOf(t, started, "SEG-SECOND", "HO/a-second-adopted", tieAt)
+	unrelated := adoptionOf(t, started, "SEG-UNRELATED", "HO/unrelated", otherAt)
+	by := mustValue(t, domain.NewRegistrantReference, "https://id.syn.example/dex#SYN-OPERATOR-01")
+	withdrawal, after, err := domain.WithdrawSegmentCommissionAdoption(unrelated, 1, started, []domain.SegmentCommissionAdoption{first, second}, by)
+	basis, _, _ := after.TransportStarted()
+	if err != nil || withdrawal.StartChange() != domain.CommissionStartUnchanged || basis.String() != "HO/z-first-adopted" {
+		t.Fatalf("变法 %s，之后的依据 %s，err=%v；want KEPT、HO/z-first-adopted", withdrawal.StartChange(), basis, err)
+	}
+	// 开始所依的那一段被解除、剩下同刻的另一段：照字面序取它，记 REDERIVED。
+	rederived, moved, err := domain.WithdrawSegmentCommissionAdoption(first, 1, started, []domain.SegmentCommissionAdoption{second, unrelated}, by)
+	if basis, _, _ := moved.TransportStarted(); err != nil || rederived.StartChange() != domain.CommissionStartRederived || basis.String() != "HO/a-second-adopted" {
+		t.Fatalf("解除开始所依的那一段 = %s %s %v", rederived.StartChange(), basis, err)
+	}
+}
