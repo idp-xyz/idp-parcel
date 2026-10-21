@@ -72,3 +72,21 @@ Blocked by: 无——用户决定一格已于 2026-10-20 代决，见 [triage-20
 - 迁移与种子号：TF 取 main 下一个空号（88 占 0048 则本票 0049），access_identity 以 main 最新为底只加本票两个词（88 占 0021 则本票 0022，CHECK 并入 88 的 `TRANSPORT_COMMISSION_AGREEMENT_REVISION`）；种子 `data/access/11`、`12` 与 `data/governance/48`、`49` 改空号；`access_identity 0021` 等迁移号在注释与 ADR-0232 Consequences 里的引用随之改。
 - `ListByCommission`（88）与 `FindCurrentByCommission`（本票）同一问两份口径，变基后统一（票 160 管的那一半写清）。
 - AT 编号：本轮新用 `AT-SA-211`（UC-SA-004），变基时核一次 main 上有没有别的票先占了。
+
+## 评审记录（变基；2026-10-21，Claude Code 作者子代理，分支 claude-dcg57）
+
+票 88 进 main 之后变基到 main，其后 146+94 又进 main，再变基一次，最终基在 main `67438a0f3`（da12d4c2b 之后只进了 .scratch 文档）。上文各节里的 SHA 是变基之前的；变基后提交说明不变，按说明对得上。逐条去向：
+
+- **迁移与种子号——已改，从引入那一笔起就带最终号。** transport_fulfillment `0049`、access_identity `0022`、settlement_accounting `0044`（未撞）；种子 `data/access/13`、`14` 与 `data/governance/49`、`50`，步 `457` 未撞。access_identity 迁移在变基解冲突时改名，CHECK 以 main 上 0021 为底只加本票两个词（核过：0022 的词集 = 0021 的词集 + 2，含 88 的 `TRANSPORT_COMMISSION_AGREEMENT_REVISION`）；`decisionKinds` 取并集。TF 迁移同样在引入那一笔的冲突里改名，后续改它的那一笔随改名合上。种子四个数据文件与 `steps/457` 里的路径用只改这几处的 `git filter-branch --tree-filter` 在全部本票提交上改号（前后两树只差这几处）；逐笔扫过，任何一笔里迁移目录、种子数据目录与步骤目录都没有同号两份。代码注释、ADR-0232 Consequences 与种子 README 里的号单独一笔（`d4a360fec`）。种子在一次性库上实灌一遍：迁移 TF 0049、access_identity 0022 施加，457 一节两段区间、两条授予、两条对照全部 RECORDED，88 的 475 一节照常。
+- **`ListByCommission` 与 `FindCurrentByCommission` 统一——已做，`2ea72320c`。** 取 88 的端口与名字（`SegmentCommissionAdoptionsByCommission.ListByCommission`），实现改按 `currentAdoptionCondition` 只交此刻仍采用的段、各段当前那一代；解除编排改调它，本票那一口删去。票 160 的列段那一半随之做完（票 160 记一笔）；未形成条目作罢那一半留给 160。
+- **`formedUnder` 与委托换版——已修，`b0040ac4d`。** 选「与委托上全部协议快照比」：委托多一问 `BoundAgreementSnapshot`（提交那一版或任一次换版的后继）。不让发生项记下委托标识：那要动发生项册与已形成信封，换版又只在同一协议对象内换，服务方加这一集快照已分得开。用例：编排面 `TestAnOccurrenceFormedUnderARevisedAgreementBlocksTheWithdrawal`，真库 `cmd/parcel-dispatch/actual_fulfillment_after_invalidation_test.go::TestAnOccurrenceFormedUnderTheRevisedAgreementBlocksTheWithdrawal`（换版在 SIN 交接之前、自动形成按 v2、解除答 `OCCURRENCES_FORMED`）；改回只比提交那一版，两条都红。
+- **88 的补形成复活失效项——已修，`d12d034d6`。** 登记命令多一格 `Automatic`，只有自动形成那一处（`formEnded`，交接、交付与补形成三路共用）置真。链头已失效且这一段的当前采用落册不晚于那一次失效：答已存在、细格 `OCCURRENCE_INVALIDATED_BY_DECISION`、回显失效版本，不长出替代版本；采用晚于失效（解除之后再采用，或失效之后才采用）照常长出——指错了委托的更正因此是「失效 → 解除 → 再采用」三步，再采用的门铃自己把那一项按新的连线补回来。操作者登记不受这一条管。
+  - **与 `formationDefectOf` 的关系**：新加的是一格答复，不是错误，`formationDefectOf` 不必认它。已存在本就由 `registrationDisposition` 判入账、由 `keepUnformedRegister` 照「已形成」了结册上那一条（指名失效版本）——那一件不是待补的缺口，是操作者的决定，不该当数据缺陷进册、更不该当编程缺陷整封失败。读采用读不动答未决 `PROCUREMENT_SOURCE_UNAVAILABLE`，照既有那一格重投。
+  - 用例：编排面 `register_charge_occurrence_automatic_test.go::TestAnAutomaticRegistrationDoesNotRegrowAnInvalidatedOccurrence`；真库 `TestAnInvalidatedOccurrenceIsNotRegrownByCatchUpUntilTheSegmentIsAdoptedAgain`（SIN 交接自动形成 → 人工失效 → 换版 → 换版门铃 PUBLISHED、仍只有 V1 与失效版本 V2 → 解除 → 接第 1 代再采用 → 采用门铃补形成长出 V3、按 v2）。拆掉这一条修法，真库那条在「换版补形成之后各版」处红，读到 V3。
+- **AT-SA-211**：main 上没被占（main 的 AT-SA 到 201）。AT-TF 本票的 306–315 与 146+94 的 316–328 不撞。
+- **变基中顺手补的**：88 让采用编排的 `Doorbell`、本票让 `CommissionHold`、`Withdrawals` 成为必备，两边各自新写的测试装配只带自己那几口，合到一起之后缺口处空指针；补齐（`f5fc13d9a`）。88 把发生项身份的派生收进 `occurrenceIdentity` 之后，登记用例里本票读链头那两处改用 `key.Occurrence`（解冲突时改，在引入那一笔里）。
+- 文档：ADR-0232 决定一（委托各版快照）、决定五（自动形成不复活）、越权风险点 4、6 改写、新增 16（按落册时刻比「失效之后才采用」），Links 加 ADR-0231；ADR-0231 Links 加后继一行（正文不改）；TF CONTEXT 发生项生命周期一句；`AT-TF-309`、`AT-TF-312` 两行补格；AT 盘点只在这两行加用例。
+
+**未采纳**：无。
+
+**验证**：变基过程中每一笔都跑过 `go build ./... && go vet ./...`（`git rebase` 的 exec），filter-branch 只改种子文件名与步骤里的路径；`gofmt -l` 干净。`scripts/test-full.sh` 覆盖 TF、SA、access-identity 的包与全部反向依赖（含 cmd/parcel-api、parcel-dispatch、parcel-access-register、parcel-settlement-register、parcel-transport-register）、`./internal/architecture/...`、`./migrations/...`：51 个包 ok、0 FAIL。变基后没走 exec 的前几笔另用 `git archive` 单独 build、vet 过。

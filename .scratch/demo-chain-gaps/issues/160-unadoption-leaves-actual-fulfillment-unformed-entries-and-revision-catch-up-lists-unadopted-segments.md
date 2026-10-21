@@ -22,3 +22,9 @@ Blocked by: 票 [57](./57-segment-commission-adoption-has-no-correction-and-star
 ## 规模
 
 S
+
+## 记录（2026-10-21，票 57 变基时顺手做的一半，分支 claude-dcg57）
+
+「按委托列段只列此刻仍在采用的那几段，与解除采用的记法同一处判」已做：`SegmentCommissionAdoptions.ListByCommission` 改按 `currentAdoptionCondition`（与 `FindBySegment` 同一个判法）只交当前那一代，解除编排重新派生开始也调它，票 57 原来那一口 `FindCurrentByCommission` 删去（真库用例 `TestListingByCommissionShowsOnlyTheCurrentAdoptions`）。
+
+未做、仍归本票：解除采用时把实际履约未形成册上那一段的条目作罢（要多一种状态或一封门铃）；采用门铃信封指纹里的登记时刻换成代次（今天登记时刻已能分开解除前后两次采用，换不换不影响正确性）。另：票 57 让自动形成遇已失效链头答已存在、把未形成册上那一条了结为已形成（ADR-0232 决定五、越权风险点 16），与作罢不是一回事。
