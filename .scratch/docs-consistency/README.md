@@ -72,13 +72,13 @@
 |---|---|---|---|
 | [01](./issues/01-adr-suspension-chains.md) X1 | 全部 ADR 的停用链：补缺失的前向指针（含用「改为、接上、扩成」之类不写停用的那约 15 处）、合并 Status 行里写两遍的停用（并入 infra-speed/07）、改 `docs/adr/README.md` 顶部规则让重复不再新增、补治理类 ADR 的话题级通读 | 0279–0280 | 现在；票 57 动的 ADR-0200、0204、0207、0208、0229 留到 57 进 main 后补一笔 |
 | [02](./issues/02-code-defects-from-the-audit.md) 代码票整理 | 把八份报告的 C 类条目归拢成代码票（不改代码），按上线就绪口径分级 | — | 现在 |
-| 03 CC | audit/cc.md 的 A、B | 0241–0244 | 01 进 main |
-| 04 VE | audit/ve.md 的 A、B | 0245–0248 | 01 进 main |
-| 05 NR+NO | audit/nr-no.md 的 A、B | 0249–0253 | 01 进 main |
-| 06 PS | audit/ps.md 的 A、B | 0254–0259 | 01 进 main |
-| 07 PC+PP | audit/pc-pp.md 的 A、B | 0260–0262 | 01 进 main |
-| 08 TF | audit/tf.md 的 A、B | 0263–0268 | 01、票 57 进 main |
-| 09 SA+CR | audit/sa-cr.md 的 A、B | 0269–0273 | 01、票 57 进 main |
-| 10 横切文档 | audit/cross.md 里 GLOSSARY、CONTEXT-MAP、SCENARIOS、`docs/product/`、`docs/agents/` 的 A、B，并收各组交来的共享文件改动 | 0274–0278 | 03–09 进 main |
+| [03](./issues/03-cc-docs.md) CC | audit/cc.md 的 A、B | 0241–0244 | 01 进 main |
+| [04](./issues/04-ve-docs.md) VE | audit/ve.md 的 A、B | 0245–0248 | 01 进 main |
+| [05](./issues/05-nr-no-docs.md) NR+NO | audit/nr-no.md 的 A、B | 0249–0253 | 01 进 main |
+| [06](./issues/06-ps-docs.md) PS | audit/ps.md 的 A、B | 0254–0259 | 01 进 main |
+| [07](./issues/07-pc-pp-docs.md) PC+PP | audit/pc-pp.md 的 A、B | 0260–0262 | 01 进 main |
+| [08](./issues/08-tf-docs.md) TF | audit/tf.md 的 A、B | 0263–0268 | 01、票 57 进 main |
+| [09](./issues/09-sa-cr-docs.md) SA+CR | audit/sa-cr.md 的 A、B | 0269–0273 | 01、票 57 进 main |
+| [10](./issues/10-cross-cutting-docs.md) 横切文档 | audit/cross.md 里 GLOSSARY、CONTEXT-MAP、SCENARIOS、`docs/product/`、`docs/agents/` 的 A、B，并收各组交来的共享文件改动 | 0274–0278 | 03–09 进 main |
 
 分工规矩：03–09 只改本组的 CONTEXT、UC 与本组新立的 ADR（及被它停用的那几份 ADR 的 Status 行与 Links）；需要改 GLOSSARY、CONTEXT-MAP、SCENARIOS、产品文档、别组文件的，写进本票「交横切」一节，由 10 统一改。B 类按用户授权（「你作为业务和系统专家自决」）代决，立新 ADR，写越权风险点。并行：03–07 每次至多三张。
