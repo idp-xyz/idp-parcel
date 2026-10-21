@@ -11,7 +11,7 @@ CC CONTEXT 与 ADR-0206 把动作准入的限制一源写作「内部合规限�
 
 ## 证据
 
-- 代码：`internal/customscompliance/domain/action_admission.go` 包注释「三源——内部合规限制、放行门禁核对、外部放行结果」、`AdmissionAnswer` 头注「外部放行不解内部限制」、`JudgeActionAdmission` 头注「外部放行不解内部限制」、`objectScope` 头注「内部限制可以直接落在一个包裹上」；而 `ActionAdmissionInput.Restrictions` 的类型是 `[]RegulatoryRestriction`，`ports.RestrictionScopeView` 交回的也是它。
+- 代码：`internal/customscompliance/domain/action_admission.go` 包注释「三源——内部合规限制、放行门禁核对、外部放行结果」、`AdmissionAnswer` 头注「外部放行不解内部限制」、`JudgeActionAdmission` 头注「外部放行不解内部限制」、`objectScope` 头注「内部限制可以直接落在一个包裹上」，测试注释 `domain/action_admission_test.go` 与 `adapters/postgres/action_admission_test.go` 里的「外部放行不解内部限制」同此；而 `ActionAdmissionInput.Restrictions` 的类型是 `[]RegulatoryRestriction`，`ports.RestrictionScopeView` 交回的也是它。
 - 决定：ADR-0241 决定二、三、四；CC CONTEXT「监管限制」「内部合规限制」「动作准入判断」词条（文档自洽 03 改写后）。
 
 ## 三类
