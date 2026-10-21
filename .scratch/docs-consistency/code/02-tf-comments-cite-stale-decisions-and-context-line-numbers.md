@@ -59,3 +59,10 @@ S：只改注释，`go build`、`go vet` 不受影响。
 - 同文件 `CarrierAcceptance.AdmitsSuccessor` 头注，引「后续替代不覆盖原申请」：今天写「后继不覆盖候补，也不覆盖原申请」。
 - `domain/transport_charge_occurrence.go` 的 `ErrCancelledAfterTransportStart` 注释与 `ChargeOccurrenceReason` 头注，引「尚未执行服务的取消费」：今天 TF CONTEXT「运输收费发生项与成本来源」写原因封闭四种、「尚未随运输开始而消耗的订舱的取消费」。
 - `domain/transport_schedule_capacity.go` 的 `CapacityPool` 头注「CONTEXT 说的多维运力范围」：今天 Language「容量池」就是一池一维、一班的多维运力是一组池，这半句改为直接引它。
+
+测试注释里同类的几处（文档自洽 08 第 2 轮评审补；Covers 点名的 AT 号不变，只改引文）：
+
+- `internal/transportfulfillment/application/accept_regulatory_disposition_test.go` 的 `TestADeclineCarriesItsBasisAndNoObjects`，引 UC-TF-001 结果契约`已拒绝`行「拒绝范围、依据、决定方和业务时间」：今天那一行是「拒绝范围、拒因、决定方和业务时间」，并标了码 `DISPOSITION_DECIDED`（决定 `DECLINED`）。
+- 同文件 `TestAPartialAcceptanceKeepsBothSides`，引`部分承接`行「已承接、未承接范围及逐项原因」：今天那一行是「已承接对象、未承接范围的原因与移动授权」，码 `DISPOSITION_DECIDED`（决定 `PARTIALLY_ACCEPTED`）。
+- `internal/transportfulfillment/application/commission_transport_test.go` 的 `TestCancellationOnlyReachesUnstartedCommissions`，用行号写法「195「尚未消耗的运输委托或订舱范围可以取消」」：行号去掉，引文改为 TF CONTEXT 生命周期「运输委托、订舱与承运接受」里「尚未开始的运输委托可以整份取消」。
+- `internal/transportfulfillment/domain/transport_commission_test.go` 的 `TestCancellationOnlyReachesUnstartedIntents`，同样的行号写法与旧句：照上一条改。

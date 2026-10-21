@@ -34,8 +34,8 @@ Blocked by: 无（01 进 main 后开工；票 57、88、146+94 已进 main）
 | H1 `AT-TF-181` 重号、结果相反 | A | 已改 | UC-TF-004 删去「不改写首次开始」那一行；留下的那一行顺带改掉已被 ADR-0231 停用的「采用不入队」 |
 | H2 委托取消写成只停尚未消耗的下游范围 | A | 已改 | TF CONTEXT「运输委托、订舱、容量与装载」取消一条与生命周期取消一条改为整份、不往下游传（ADR-0204 决定三）；UC-TF-004 业务规则、`AT-TF-092`、「给开发的交接」记 ADR-0204 越权风险点 9 与票 58、37 |
 | H3 交出、交付门禁读数的现行规则只在 ADR-0213 补记里，「文末补记」指错 | A | 已改 | TF CONTEXT Language「交出门禁读数」「交付门禁读数」逐码写出停点与所属格、关务读不动的两种依据；「运输交接与实物控制」末条写出交出更正另读一份、「揽收、派送与交付」写出 POD 更正承继，两边互指；UC-TF-005、UC-TF-006 改引 CONTEXT；ADR-0213 Status 前段两处「文末」改小节名；TF 文档里全部「文末补记」改按小节名引 |
-| M1 `待确认`时控制归谁 | B | 代决 [ADR-0263](../../../docs/adr/0263-a-pending-handover-keeps-the-previously-confirmed-control-and-transport-fulfillment-has-no-control-unconfirmed-result.md)；已改；产品文档一处交横切 X4 | TF CONTEXT「运输交接与实物控制」第二条、两条封签规则、更正一条，生命周期「权威运输交接」两条；UC-TF-005 交接规则、`AT-TF-055`、「给开发的交接」（`AT-TF-054` 等单元控制规则，票 80） |
-| M2 确认订舱需要容量保障，代码没做 | B | 代决 [ADR-0264](../../../docs/adr/0264-capacity-assurance-is-required-on-load-assignments-only-and-neither-a-confirmed-booking-nor-a-departure-reads-capacity.md) 决定一、二；已改 | ADR-0203 Status 注记与 Links 挂部分停用（决定一一句里的确认订舱）；ADR-0202 注记与 Links 挂越权风险点 17 已答；TF CONTEXT 两条；UC-TF-004 `AT-TF-041`；票 demo-chain-gaps/37 加更正（保障判据作废、改为逐订舱消费关系）；注释一处并入 code/02 |
+| M1 `待确认`时控制归谁 | B | 代决 [ADR-0263](../../../docs/adr/0263-a-pending-handover-keeps-the-previously-confirmed-control-and-transport-fulfillment-has-no-control-unconfirmed-result.md)；已改；产品文档一处交横切 X4 | TF CONTEXT「运输交接与实物控制」里交接逐对象判断、封签、更正的各条，生命周期「权威运输交接」里待确认与已交接的条目；UC-TF-005 交接规则、`AT-TF-055`、「给开发的交接」（`AT-TF-054` 等单元控制规则，票 80） |
+| M2 确认订舱需要容量保障，代码没做 | B | 代决 [ADR-0264](../../../docs/adr/0264-capacity-assurance-is-required-on-load-assignments-only-and-neither-a-confirmed-booking-nor-a-departure-reads-capacity.md) 决定一、二；已改 | ADR-0203 Status 注记与 Links 挂部分停用（决定一一句里的确认订舱）；ADR-0202 注记与 Links 挂越权风险点 17 已答；TF CONTEXT 讲容量保障的条目；UC-TF-004 `AT-TF-041`；票 demo-chain-gaps/37 加更正（保障判据作废、改为逐订舱消费关系）；注释一处并入 code/02 |
 | M3 需求快照过期挡出发 | B | 代决 ADR-0264 决定三；已改 | TF CONTEXT 需求快照一条去掉「出发门禁」；UC-TF-003 容量规则、`AT-TF-089` |
 | M4 UC-TF-003 的发布意图 | A | 已改 | UC-TF-003 步 8、`AT-TF-037`（ADR-0201 决定七） |
 | M5 `AT-TF-048` 保留两份来源 | A | 已改 | UC-TF-004 `AT-TF-048` |
@@ -83,7 +83,7 @@ Blocked by: 无（01 进 main 后开工；票 57、88、146+94 已进 main）
 
 - **ADR-0263（M1，代 TF owner，待 TF owner 复核，第 2、3 点同待 NO owner）**：权威运输交接结果封闭三格；待确认保持此前已确认的控制关系，证据已表明占有变化而身份认不出的那一种也是待确认；更正撤回控制由失效参与版本与 NO 的「控制来源链待重算」合起来表达；集运单元成员控制规则未立前单元交接不为成员形成参与或控制判断，封签异常时不为成员另立待确认/冲突。不停用任何已接受条款。越权风险点：待确认期间控制记在已无实物的一方；单元成员控制规则未立（票 80）；长期待确认没有信号。
 - **ADR-0264（M2、M3，代 TF owner，待 TF owner 复核）**：确认订舱不挂容量保障，答复不读池、不要预占引用，接受量可超过池余量；保护只在装载分配；出发不读容量与需求快照，需求变了由运营重核预占与分配。部分停用 ADR-0203 决定一一句里的确认订舱，回答 ADR-0202 越权风险点 17；票 37 改范围。越权风险点：池上看不出承运方已接受多少；需求变了没人提醒、分配变化入口未接线；租户可能要按确认订舱挡超卖。
-- **ADR-0265（L8，代 TF owner，待 TF owner 复核，第 1 点同待 CC owner）**：承接决定封闭三种；缺移动授权时编排答 `SUPPLEMENT_REQUIRED`，不落承接记录、不交回执，续办是协作事项本身；协作事项其余核对随接线（code/43）。不停用任何已接受条款。越权风险点：关务一侧要自己记住哪件事项在等补；本上下文看不到在等补的事项。
+- **ADR-0265（L8，代 TF owner，待 TF owner 复核，第 1、3、4 点同时待 CC owner 会签）**：承接决定封闭三种；待补充是答复，不落承接记录、不交回执，续办是协作事项本身；今天只有缺移动授权一种、答复不带原因，接线后（code/43）带一个原因，封闭为缺移动授权、缺对象、缺动作、缺起止责任。不停用任何已接受条款。越权风险点：关务一侧要自己记住哪件事项在等补；本上下文看不到在等补的事项；一件事项部分缺授权只能整件待补或记作部分承接的原因；UC-CC-008 要关务自记这一格答复。
 
 ### 交横切（交 docs-consistency/10）
 
@@ -117,7 +117,7 @@ Blocked by: 无（01 进 main 后开工；票 57、88、146+94 已进 main）
 |---|---|---|
 | B1 阻断 | 三份新 ADR 正文用「第二条」「两条」之类序号与计数引 TF CONTEXT | 0263 Context 与 Consequences、0264 Consequences、0265 Status 前段与 Consequences 一律改成「小节名 + 该条起头的原句」；顺带把 0264 引 UC-TF-004 的「步 4、5」改成按动作说、把「容量后来缩减……」的省略引文改成原句，0263 Context「与之相抵的有三处」去掉计数。新写文字再扫一遍，没有剩下的序号与计数 |
 | B2 阻断 | UC-TF-004 结果表与步 4、5 还是旧口径，步 5 与 ADR-0264 决定二相抵 | 结果表按 `CommissionOutcome.String()` 逐码重写：`COMMISSION_SUBMITTED`、`BOOKING_SUBMITTED`、`BOOKING_ANSWERED`（五值，部分确认并入接受）、`COMMISSION_CANCELLED`/`BOOKING_CANCELLED`、`TRANSPORT_ALREADY_STARTED`、四个协议否定格、`COMMISSION_NOT_FOUND`/`COMMISSION_NOT_BOOKABLE`/`SCHEDULE_NOT_FOUND`/`BOOKING_NOT_FOUND`、`EXISTING_*` 四格、`*_CONFLICT` 三格、`INPUT_NOT_ACCEPTED`、`COMMISSION_UNDECIDED` 带五个原因码；「待补充/冲突」拆开、删掉待补充；表后写明带码各行属 `CommissionTransportHandler`。步 4 改为记承运答复五值、没有答复读作待确认、答复不读池；步 5 改为运营另作预占或释放（ADR-0203 决定三、ADR-0264 决定二），硬上限 `CAPACITY_EXCEEDED` 不可越过 |
-| B3 阻断 | ADR-0265 决定二「这一格本身就说明缺的是移动授权」与决定四相抵 | 照协调方裁定两头都改：决定二改为今天只有缺授权一种、所以不带原因；决定四写明接线后待补充带一个原因，封闭为缺移动授权、缺对象、缺动作、缺起止责任，今天不带原因不算缺口；索引注记与 code/43 修法第 2 条同步 |
+| B3 阻断 | ADR-0265 决定二「这一格本身就说明缺的是移动授权」与决定四相抵 | 照协调方裁定两头都改：决定二改为今天只有缺授权一种、所以不带原因；决定四写明接线后待补充带一个原因，封闭为缺移动授权、缺对象、缺动作、缺起止责任，今天不带原因不算缺口；code/43 修法同步。（第 2 轮更正：第 1 轮只改了正文，索引注记里「这一格本身就说明缺的是移动授权」那句旧话第 2 轮才删、补进决定四的口径） |
 | B4 阻断 | UC-TF-001 结果契约不全、没有码 | 逐码对齐 `AcceptDispositionOutcome.String()`：`DISPOSITION_DECIDED`（三种决定 `ACCEPTED`/`PARTIALLY_ACCEPTED`/`DECLINED`）、`SUPPLEMENT_REQUIRED`、`EXISTING_DECISION`、`DECISION_CONFLICT`、`NODE_ONLY_DISPOSITION`、`NOT_ACCEPTED`、`UNDECIDED`（`DISPOSITION_ACCEPTANCE_STORE_UNAVAILABLE`）；补「纯节点动作」「已有决定」两行；表后写明带码各行属 `AcceptRegulatoryDispositionHandler`，旅程、交接、履约与停止各行出自别的编排 |
 | 建议 1 | CONTEXT「容量预占」仍写订舱、承运接受引用预占 | 改为只有装载分配经分配关系引用预占、实际装载与它比较，订舱与承运接受不引用（ADR-0264） |
 | 建议 2 | 本分支改掉的 CONTEXT 原句还被 Go 注释逐字引着 | 并入 code/02 追加节，按符号定位：`SubmitBooking` 体内、`CancelCommission` 头注、`FormCarrierAcceptance` 头注、`AdmitsSuccessor` 头注、`ErrCancelledAfterTransportStart` 与 `ChargeOccurrenceReason` 两处；另核出两处同类一并列入——`CarrierAcceptanceOutcome` 头注引的旧订舱生命周期（评审所说 `FormCarrierAcceptance` 一带的生命周期引文实际在这里）、`CapacityPool` 头注「CONTEXT 说的多维运力范围」 |
