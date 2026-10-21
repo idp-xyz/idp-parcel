@@ -26,7 +26,7 @@ Date: 2026-10-21
 - 所以补形成与自动形成落在同一个身份上：先到的一方形成，后到的一方答`已存在`；门铃重投、补形成再跑一遍、原先那封交接或交付信封重放，都不多出一项。
 - 明确终止结束的参与不补：自动形成只对交接与交付两种终点形成，补了终止的，形不形成又随采用早晚而异，正是本条要消掉的那种不确定。终止结束的那几件照旧人工登记。
 - 一封门铃一笔 inbox 事务。逐件的答复折成整封的处置，判据同 ADR-0218 决定六：有一件是缺陷，整封响亮失败；有一件要重投，整封回滚重投（已答的各件下一次再答一遍，落回同一身份）；都入账才入账。哪一件未决就停在那一件，不往下白问。
-- 未决与缺陷沿用自动形成两扇门的两个哨兵；两路在派发路由上各列自己的未决名单。
+- 未决与缺陷沿用自动形成消费门的哨兵；补形成的每一路在派发路由上各列自己的未决名单。
 
 **三、委托协议换版是一种运营决定，委托出新一版。**（机制；决定种类是产品角色模型）
 
@@ -110,7 +110,7 @@ Date: 2026-10-21
   - 领域：`TransportCommission` 带协议换版串（`DraftAgreementRevision`、`CommissionAgreementRevisionDraft.Revise`、`AgreementTermsAt`、`AgreementRevisionBy`、`AgreementRevisions`），`CommissionAgreementRevision`、`CommissionAgreementTerms`、`RehydrateCommissionAgreementRevision`。
   - 端口另立文件：`ports/commission_agreement_revision.go`（换版写口与门铃）、`ports/actual_fulfillment_catch_up.go`（采用门铃、按委托列段）、`ports/actual_fulfillment_unformed.go`（未形成册）；查阅读口加一口。
   - 应用：`application/revise_commission_agreement.go`；`application/catch_up_actual_fulfillment.go`（补形成两口、册的写法）；`form_actual_fulfillment_on_participation_end.go` 拆出共用的形成后半；登记用例按业务时间取那一版、答复带回作答的那一版与所问的那一版；采用编排多一个必备依赖（门铃）。
-  - 适配器：postgres 换版读写、两封门铃的交出口、按委托列段、未形成册与查阅；inbox 两扇门；HTTP 换版口、查阅一格。
+  - 适配器：postgres 换版读写、采用与换版门铃的交出口、按委托列段、未形成册与查阅；inbox 补形成的消费门；HTTP 换版口、查阅一格。
   - 迁移：transport_fulfillment `0047`（换版册）、`0048`（未形成册）；access_identity `0021`（决定种类 CHECK 加一词）。
 - 接入身份：决定种类加 `TRANSPORT_COMMISSION_AGREEMENT_REVISION`。
 - 装配：parcel-api 新特性文件 `endpoints_commission_agreement_revision.go`、`assemble_commission_agreement_revision.go`，采用装配接门铃；parcel-dispatch 新路由文件 `routes_actual_fulfillment_catch_up.go` 与 `assemble_actual_fulfillment_catch_up.go`，自动形成的装配接未形成册与「盖住」一问。
