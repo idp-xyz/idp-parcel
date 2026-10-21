@@ -2,7 +2,7 @@
 
 Category: bug
 Status: ready-for-agent——R2（上线后尽快）：截单发布已在生产装配（`cmd/parcel-api/assemble_settlement_orchestrations.go` 的 `CutOffPublishStatementHandler`），纳入哪些费用由调用方列，系统只核「已确认」；本地时刻过了截单点、本该归下一日的费用会被收进本期账单，碰钱（错期出账）但不丢不重。绕法：财务按归属日自行挑费用清单，可靠但全靠人。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
-Blocked by: docs-consistency/09（SA+CR 修订）先裁 [audit/sa-cr.md](../audit/sa-cr.md) M11：业务时区与截单时刻的唯一权威是「对账安排」还是费用项目的归属日登记。纳入判据读哪一处，随这一裁。
+Blocked by: 无——2026-10-21 文档自洽 09 已裁（[ADR-0269](../../../docs/adr/0269-business-time-zone-and-cutoff-belong-to-the-statement-arrangement-of-the-settlement-account-and-the-cut-admits-by-attribution-date.md)），裁向见文末「裁向（文档自洽 09，2026-10-21）」。此前：docs-consistency/09（SA+CR 修订）先裁 [audit/sa-cr.md](../audit/sa-cr.md) M11：业务时区与截单时刻的唯一权威是「对账安排」还是费用项目的归属日登记。纳入判据读哪一处，随这一裁。
 出处：[audit/sa-cr.md](../audit/sa-cr.md) M7（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，SA 代码在此期间未改）。
 
 ## 现象
@@ -36,3 +36,16 @@ M：截单编排读（或当场判）每件费用的归属日，归属日晚于�
 
 - 见 Blocked by：时区与截单时刻的权威在哪一处（M11）。
 - 归属日在费用确认那一刻形成并落库，还是截单时当场判。推荐前者（与「不可变的归属」一致），随 09 的裁定写定。
+
+## 裁向（文档自洽 09，2026-10-21）
+
+[ADR-0269](../../../docs/adr/0269-business-time-zone-and-cutoff-belong-to-the-statement-arrangement-of-the-settlement-account-and-the-cut-admits-by-attribution-date.md) 裁定，本票照它实现，「最小的诚实修法」与「要裁的」两节以下面为准：
+
+1. **对账安排登记册**：按（租户、结算账户）登记业务时区（IANA 名）与截单时刻（当天的分钟数 0–1439，0 是一份登记），可追加新一版、读最新一版；没登记答未配置。迁移另取号；`parcel-settlement-register` 另立登记命令。
+2. **费用项目一册只登形态**：`domain.ChargeAttributionRegistration` 的 `timeZone`、`cutoffMinute` 退场，判定改读该费用所属结算账户的对账安排；`charge-attribution` 命令随之收窄。今天这一册没有任何种子行，迁移不必搬数。
+3. **归属日随费用确认形成**：确认同笔判并落库，此后不变；判不出不挡确认，归属日留空。
+4. **截单按归属日纳入**：截单命令加「本期最后一个归属日」一格；命令列出的费用里归属日晚于它的不入本期并逐件指名，已出账的不再纳入；归属日留空的当场判（`JudgeChargeAttributionHandler` 接进截单编排）、判出即落库，判不出答未配置（`CHARGE_ATTRIBUTION_UNCONFIGURED`）并指名缺哪一册。`CutOffAt` 照旧记在草稿与快照上，不参与纳入。
+5. 用例：UC-SA-003 `AT-SA-062`、`AT-SA-212`、`AT-SA-213`，UC-SA-002 主流程步 6。
+
+建议分级不变（R2）。
+
