@@ -202,6 +202,37 @@ type ProductionOwnershipAuthority interface {
 	DecideProductionOwnership(ctx context.Context, scope domain.AdmissionScope) (domain.ProductionOwnershipDecision, error)
 }
 
+// SubmissionOwnershipAnswer 是提交编排为一份来源身份判得的一次生产归属答案：归属决定，加上据它评估门禁的结论。它是
+// UC-PS-001「必须持久保留的业务记录」里那份生产归属结果；重发同一请求时，编排凭它分辨这次提交走到了哪一步。
+//
+// 门禁放行与挡下由 BlockReasons 是否为空表达，ShipmentRequestID 只在放行时在场：据这次答案将要建的那份委托。答案在建单
+// 之前记下，建单那一笔没落成时，它就是一份「放行了、委托却不在」的答案，重发据此接着建单；建成之后，重发按委托号找回建单
+// 所据的那一次，并发下两次续办各记各的答案，也不会把别人那一次当成原委托的归属结果。
+type SubmissionOwnershipAnswer struct {
+	Decision          domain.ProductionOwnershipDecision
+	BlockReasons      []domain.FutureSubmissionBlockReason
+	ShipmentRequestID domain.ShipmentRequestID
+}
+
+// Allowed 说这次答案的门禁是否放行。
+func (answer SubmissionOwnershipAnswer) Allowed() bool {
+	return len(answer.BlockReasons) == 0
+}
+
+// SubmissionOwnershipAnswers 按完整来源身份追加并读回提交判得的生产归属答案。
+//
+// 只追加不改写：归属未决之后重发会重判，每一次判断都要留下（UC-PS-001「归属未决时保留缺口与续办记录」），后一次不覆盖
+// 前一次。读口分两个，因为重发要问的是两件事——委托已在时问「建它所据的是哪一次」，委托不在时问「最近一次判成了什么」。
+type SubmissionOwnershipAnswers interface {
+	RecordOwnershipAnswer(ctx context.Context, identity domain.SourceIdentity, answer SubmissionOwnershipAnswer) error
+	FindLatestOwnershipAnswer(ctx context.Context, identity domain.SourceIdentity) (SubmissionOwnershipAnswer, bool, error)
+	FindOwnershipAnswerForRequest(
+		ctx context.Context,
+		identity domain.SourceIdentity,
+		request domain.ShipmentRequestID,
+	) (SubmissionOwnershipAnswer, bool, error)
+}
+
 // ProductionHandoffDelivery 是向已判为当前权威的他方投递完整拟受理范围的那一次尝试。
 //
 // 它只携带范围与对方是谁，不携带治理侧的停写证据：那份证据回答的是「前任停笔了没有」，是本方

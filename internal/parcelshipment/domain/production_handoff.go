@@ -298,6 +298,25 @@ func (assessment SafeHandoffAssessment) UnresolvedReason() (HandoffUnresolvedRea
 	return assessment.unresolvedReason, true
 }
 
+// FormationSpec 交回形成这份评估的那组输入：原样再交给 AssessSafeHandoff，得到的就是同一份评估。它只供持久化适配器把评估
+// 存下再读回——提交编排要把判得的归属答案留下，重发时才答得出原归属结果（UC-PS-001「已有结果」）。评估未决时确认引用也在
+// 这组输入里；判「交过去没有」仍只能读 Status 与 ConfirmationReference，后者按状态收起确认引用，正是为了不让一份部分确认
+// 被当成确认读。
+func (assessment SafeHandoffAssessment) FormationSpec() SafeHandoffAssessmentSpec {
+	return SafeHandoffAssessmentSpec{
+		AttemptID:            assessment.attemptID,
+		Scope:                assessment.scope,
+		TargetAuthority:      assessment.targetAuthority,
+		Observation:          assessment.observation,
+		ConfirmedScopeDigest: assessment.confirmedScopeDigest,
+		ConfirmationRef:      assessment.confirmationRef,
+		QueryRef:             assessment.queryRef,
+		ContinuationRef:      assessment.continuationRef,
+		EffectiveAt:          assessment.effectiveAt,
+		AssessedAt:           assessment.assessedAt,
+	}
+}
+
 // valid 只认经 AssessSafeHandoff 形成的评估：零值的状态格是 SafeHandoffStatusInvalid，而两个
 // 合法状态之外没有第三种形成路径。其余字段的相互约束在形成时已由 validHandoffEvidence 守过，
 // 字段不可导出，此后无从被改。
