@@ -92,10 +92,12 @@
 | `AT-VE-196` | 移动事实声明的段里那一刻在控的是一袋（集运单元），出发、移动、到达任一种；或事实先于段登记、袋后凭控制事实进段 | 投到袋里事实发生那一刻的每件直接成员身上，事实引用取成员自己的包裹，与它直接在段里时同一把键；袋本身不立追踪投影；那一刻已出袋、之后才装进的不投；同一封信重投、正常路径与补派生先后到达都只留一份 |
 | `AT-VE-197` | 袋里套袋、同一件既在袋里又直接在段里或被几袋同时指名、成员关系成环；成员身份此刻不成立；袋那一刻什么也不装 | 逐层展开到包裹，每件只投一次；身份不成立的那一件入账不派生，不挡其余各件；空袋没有可投的成员 |
 | `AT-VE-198` | 问节点作业成员关系或成员身份读不动；节点作业答了却立不成成员（答复译不回、身份链判不下来、成员种类在封闭集外） | 前者整封回滚、记未决待重投，一份也不派生；后者记发布失败，不当未决 |
+| `AT-VE-199` | 运输交接（已交接、已拒收、待确认任一种）、对象级场外揽收、有效交付或外部承运轨迹的对象在事实发生那一刻是集运单元；或对象是不在集运单元册上的包裹 | 前者入账不派生：单元不立已接受事实、不立追踪投影，也不投到它的成员上，问的只是它是不是单元、不读成员身份，时点取事实的业务发生时间；后者照旧派生到这件包裹上 |
+| `AT-VE-200` | `AT-VE-199` 那几类事实问节点作业是不是集运单元读不动；节点作业答了却译不回 | 前者整封回滚、记未决待重投，不派生；后者记发布失败，不当未决 |
 
 移动事实已形成那一路的消费验收是上表 `AT-VE-189`–`192`（投影派生、入账不派生、未决分格、更正替代；[ADR-0205](../../adr/0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md) 文末补记），阻断信号那一半在 [UC-VE-004](./UC-VE-004-TRIAGE-SIGNALS-AND-OPEN-CASES.md)；段里在控的集运单元按事实那一刻的成员展开，正常路径与补派生同一处，验收是上表 `AT-VE-196`–`198`。先于段登记的移动事实由交接或对象级揽收那一封补派生，验收是上表 `AT-VE-178`–`182`（[ADR-0224](../../adr/0224-tracking-backfills-movement-facts-recorded-before-their-segment-when-a-control-fact-puts-the-object-in-it.md)）；运输履约一侧的移动事实登记与按段列出事实的读口在 [UC-TF-005](../transport-fulfillment/UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md)。
 
-`AT-VE-046` 的移动事实那一半已补（票 [demo-chain-gaps/123](../../../.scratch/demo-chain-gaps/issues/123-tracking-projects-a-departing-bag-as-one-parcel-and-its-members-get-no-departure.md)）：移动事实那一路与补派生在段里取到的在控对象是袋或集运单元时，投到它那一刻的成员身上，袋本身不再当一件包裹投，验收见上表 `AT-VE-196`–`198`；本行预期结果不变。
+`AT-VE-046` 的移动事实那一半已补（票 [demo-chain-gaps/123](../../../.scratch/demo-chain-gaps/issues/123-tracking-projects-a-departing-bag-as-one-parcel-and-its-members-get-no-departure.md)）：移动事实那一路与补派生在段里取到的在控对象是袋或集运单元时，投到它那一刻的成员身上，袋本身不再当一件包裹投，验收见上表 `AT-VE-196`–`198`。交接、对象级场外揽收、有效交付与外部承运轨迹四路也不再把集运单元当一件包裹投（票 [docs-consistency/code/75](../../../.scratch/docs-consistency/code/75-tracking-projects-control-facts-on-a-consolidation-unit-as-one-parcel.md) 前一半），验收见上表 `AT-VE-199`–`200`；交接与交付投到成员上等单元控制规则（票 [demo-chain-gaps/80](../../../.scratch/demo-chain-gaps/issues/80-a-consolidation-unit-handover-does-not-move-member-control.md)）。本行预期结果不变。
 
 `AT-VE-043` 的现状缺口：替代链分叉今天先按业务时间裁决，裁得出就不立信号，两个后继照常派生里程碑；分叉只在当前有效集里找，源上下文更正其中一支后就检测不到；分叉关系也不随投影版本存下。由票 [docs-consistency/code/30](../../../.scratch/docs-consistency/code/30-forked-supersession-is-judged-by-business-time-and-not-kept-pending.md) 补齐，本行预期结果不变。
 
