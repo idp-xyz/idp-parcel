@@ -111,3 +111,22 @@ func TestTheOccurrenceCostStateAndInvalidationRecordRefuseToRunOutsideATransacti
 		t.Errorf("无事务记失效应返回 ErrTransactionRequired，实得：%v", err)
 	}
 }
+
+func TestTheSuccessorOfAnExpectedCostVersionIsReadBack(t *testing.T) {
+	repository, transactor := newExpectedCosts(t)
+	tenant := saTenant(t, "tenant-1")
+	first := formedExpectedCost(t, "cost-v1", "occurrence-1")
+	mustSaveExpectedCost(t, transactor, repository, tenant, first)
+	if _, found, err := repository.LoadExpectedCostSuccessor(t.Context(), tenant, first.Version()); err != nil || found {
+		t.Fatalf("还没纠正就读到了后继：%v %v", found, err)
+	}
+	withdrawn, err := first.Withdraw(withdrawnOccurrence(t, "occurrence-1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustSaveExpectedCost(t, transactor, repository, tenant, withdrawn)
+	successor, found, err := repository.LoadExpectedCostSuccessor(t.Context(), tenant, first.Version())
+	if err != nil || !found || successor != withdrawn.Version() {
+		t.Fatalf("后继 = %s %v %v", successor, found, err)
+	}
+}

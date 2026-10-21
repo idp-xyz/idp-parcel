@@ -29,6 +29,9 @@ const (
 	BillVersionConflict
 	BillNotAccepted
 	BillUndecided
+	// BillExpectedCostNotCurrent：一行点名的预期成本版本不是此刻的当前有效预期成本——它是失效纠错版本（依的发生项已失效），或已有
+	// 后继（被纠正过）。照它匹配，就会给一份已不成立、或已重述过的成本对上账（ADR-0232 决定七）。续办是改点名当前那一版，或不匹配。
+	BillExpectedCostNotCurrent
 )
 
 func (outcome BillReceptionOutcome) String() string {
@@ -43,6 +46,8 @@ func (outcome BillReceptionOutcome) String() string {
 		return "SOURCE_NOT_ACCEPTED"
 	case BillUndecided:
 		return "BILL_UNDECIDED"
+	case BillExpectedCostNotCurrent:
+		return "EXPECTED_COST_NOT_CURRENT"
 	default:
 		return ""
 	}
@@ -95,6 +100,20 @@ type ReceiveSupplierBillResult struct {
 	hasRecord    bool
 	continuation string
 	handoff      string
+	notCurrent   ExpectedCostNotCurrent
+}
+
+// ExpectedCostNotCurrent 说点名的那一版为什么不是当前：失效纠错版本，或已有后继（Successor）。
+type ExpectedCostNotCurrent struct {
+	Line      domain.BillLineReference
+	Version   domain.SupplierCostVersionID
+	Withdrawn bool
+	Successor domain.SupplierCostVersionID
+}
+
+// NotCurrent 只在`预期成本不是当前`时有值。
+func (result ReceiveSupplierBillResult) NotCurrent() (ExpectedCostNotCurrent, bool) {
+	return result.notCurrent, result.outcome == BillExpectedCostNotCurrent
 }
 
 func (result ReceiveSupplierBillResult) Outcome() BillReceptionOutcome {
@@ -128,8 +147,10 @@ func (result ReceiveSupplierBillResult) AuditUndecided() bool {
 // ReceiveSupplierBillDeps 是 UC-SA-004 全程的依赖：接收半程用 Receptions/Costs/Authority，
 // 审核半程再用 Accounts/Payables，贷项用 CreditNotes；三种结果同走一个 Downstream 分别发布。
 type ReceiveSupplierBillDeps struct {
-	Receptions  ports.BillReceptionStore
-	Costs       ports.ExpectedCostView
+	Receptions ports.BillReceptionStore
+	Costs      ports.ExpectedCostView
+	// Successions 判点名的预期成本版本有没有后继（ADR-0232 决定七）。必备：缺了它，一行就可能对上一份已被纠正过的成本。
+	Successions ports.ExpectedCostSuccessionView
 	Authority   ports.SupplierAuditAuthorityView
 	Accounts    ports.SupplierPayableAccountView
 	Escalation  ports.AuditEscalationCeilingView
@@ -209,6 +230,9 @@ func (handler *ReceiveSupplierBillHandler) Handle(
 				// 指名了不存在的预期成本版本：提交矛盾，改单重来。
 				return ReceiveSupplierBillResult{outcome: BillNotAccepted}, nil
 			}
+			if answer, stale, err := handler.notCurrent(ctx, command, directive, loaded); err != nil || stale {
+				return answer, err
+			}
 			expected = loaded
 		}
 		match, err := domain.MatchBillLine(claim, directive.Line, directive.Classification, expected, directive.Basis, record.RecordedAt)
@@ -230,6 +254,32 @@ func (handler *ReceiveSupplierBillHandler) Handle(
 	record.AuditAuthorityConfigured = configured
 
 	return handler.commit(ctx, record)
+}
+
+// notCurrent 判点名的那一版是不是此刻的当前有效预期成本：失效纠错版本不是，有后继的也不是。两格都不落任何行。
+func (handler *ReceiveSupplierBillHandler) notCurrent(
+	ctx context.Context,
+	command ReceiveSupplierBillCommand,
+	directive LineMatchDirective,
+	loaded domain.SupplierExpectedCost,
+) (ReceiveSupplierBillResult, bool, error) {
+	if handler.deps.Successions == nil {
+		return ReceiveSupplierBillResult{}, false, errors.New("settlement accounting: supplier bill reception is wired without the expected cost succession view")
+	}
+	stale := ExpectedCostNotCurrent{Line: directive.Line, Version: loaded.Version(), Withdrawn: loaded.Withdrawn()}
+	successor, superseded, err := handler.deps.Successions.LoadExpectedCostSuccessor(ctx, command.TenantID, loaded.Version())
+	if err != nil {
+		return ReceiveSupplierBillResult{outcome: BillUndecided, reason: BillExpectedCostUnavailable,
+			continuation: billContinuation("EXPECTED_COST_UNAVAILABLE", command.Claim.Claim.String())}, true, nil
+	}
+	if superseded {
+		stale.Successor = successor
+	}
+	if !stale.Withdrawn && !superseded {
+		return ReceiveSupplierBillResult{}, false, nil
+	}
+	return ReceiveSupplierBillResult{outcome: BillExpectedCostNotCurrent, notCurrent: stale,
+		continuation: billContinuation("EXPECTED_COST_NOT_CURRENT", command.Claim.Claim.String(), directive.Line.String())}, true, nil
 }
 
 func commandIdentityPresent(command ReceiveSupplierBillCommand) bool {

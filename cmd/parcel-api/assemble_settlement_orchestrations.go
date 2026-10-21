@@ -163,7 +163,7 @@ func buildSettlementOrchestrations(db *bentopg.DB) (settlementOrchestrations, er
 			Allocations: allocations, Results: results, Rules: rules, Downstream: operatingHandoff, Clock: clock,
 		}),
 		supplier: saapplication.NewReceiveSupplierBillHandler(saapplication.ReceiveSupplierBillDeps{
-			Receptions: receptions, Costs: costs, Authority: catalogues, Accounts: catalogues, Escalation: ceilings,
+			Receptions: receptions, Costs: costs, Successions: costs, Authority: catalogues, Accounts: catalogues, Escalation: ceilings,
 			Payables: payables, CreditNotes: creditNotes, Downstream: billHandoff, Clock: clock,
 		}),
 		claims: saapplication.NewSettleClaimAmountsHandler(saapplication.SettleClaimAmountsDeps{

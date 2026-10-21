@@ -95,6 +95,20 @@ func (double *costViewDouble) LoadExpectedCost(
 	return cost, found, nil
 }
 
+// LoadExpectedCostSuccessor 照真册：回指这一版的那一版就是它的后继。
+func (double *costViewDouble) LoadExpectedCostSuccessor(
+	_ context.Context,
+	_ domain.TenantID,
+	version domain.SupplierCostVersionID,
+) (domain.SupplierCostVersionID, bool, error) {
+	for _, cost := range double.costs {
+		if prior, corrects := cost.PriorVersion(); corrects && prior == version {
+			return cost.Version(), true, nil
+		}
+	}
+	return domain.SupplierCostVersionID{}, false, nil
+}
+
 type authorityViewDouble struct {
 	configured bool
 	err        error
@@ -196,6 +210,7 @@ func newBillFixture(t *testing.T) *billFixture {
 	fixture.handler = application.NewReceiveSupplierBillHandler(application.ReceiveSupplierBillDeps{
 		Receptions:  fixture.store,
 		Costs:       fixture.costs,
+		Successions: fixture.costs,
 		Authority:   fixture.authority,
 		Accounts:    fixture.accounts,
 		Escalation:  fixture.escalation,
