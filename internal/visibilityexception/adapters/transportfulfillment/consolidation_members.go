@@ -7,13 +7,15 @@ import (
 	"time"
 
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
+	"go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/veconsume"
+	veapplication "go.idp.xyz/idp-parcel/internal/visibilityexception/application"
 	vedomain "go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 	veports "go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
 var (
 	// ErrConsolidationMembershipNotVisible 表示问节点作业「这一件那一刻是不是一袋、袋里装着什么、成员是哪件包裹」读不动。说不出
-	// 是不是袋就不能当包裹投，也不能当空袋入账；读得动之后重投，展开从头再走一遍，已派生过的答已有结果。续办格。
+	// 是不是袋就不能当包裹投，也不能当空袋入账；读得动之后重投，从头再问一遍，已派生过的答已有结果。续办格。
 	ErrConsolidationMembershipNotVisible = errors.New(
 		"visibility exception transportfulfillment adapter: the consolidation membership cannot be read")
 	// ErrConsolidationMembershipInconsistent 表示节点作业答了，答复却立不成成员：译不回来、成员的身份链判不下来、成员种类落在
@@ -70,14 +72,9 @@ func (expansion *memberExpansion) walk(ctx context.Context, object vedomain.Trac
 		return nil
 	}
 	expansion.visited[object.String()] = true
-	membership, err := expansion.members.MembersAt(ctx, veports.ConsolidationMembershipQuery{
-		TenantID: expansion.tenant, Object: object.String(), At: expansion.at,
-	})
-	if errors.Is(err, veports.ErrConsolidationMembershipUntranslatable) {
-		return fmt.Errorf("%w: object %q: %v", ErrConsolidationMembershipInconsistent, object, err)
-	}
+	membership, err := expansion.members.MembersAt(ctx, membershipQuery(expansion.tenant, object, expansion.at))
 	if err != nil {
-		return fmt.Errorf("%w: object %q: %v", ErrConsolidationMembershipNotVisible, object, err)
+		return membershipFailure(object, err)
 	}
 	if !membership.Unit {
 		expansion.parcels = append(expansion.parcels, object)
@@ -100,4 +97,46 @@ func (expansion *memberExpansion) walk(ctx context.Context, object vedomain.Trac
 		}
 	}
 	return nil
+}
+
+// deriveUnlessConsolidationUnit 先问命令上的对象在事实发生那一刻是不是集运单元：是就入账不派生，否则照常交给派生编排。单元不是
+// 追踪包裹，不为它立投影（CONTEXT）；也不在这里投到成员上——交接与交付对成员意味着控制随单元转移，单元控制规则立起来之前运输履约
+// 不为成员形成参与或控制判断（ADR-0263 决定四），投影先投给成员，追踪上就有一份运输履约自己都没认的成员控制。
+//
+// 时点取命令的业务发生时间，与派生进投影的那一格同一个。判据与 trackedParcelsAt 同一本单元册（同串的包裹号按单元认），失败分格也
+// 同一处（membershipFailure）；只是问 IsUnitAt、不认成员身份：此刻不投到成员上，成员身份那一侧的故障与这一问的答复无关。
+func deriveUnlessConsolidationUnit(
+	ctx context.Context,
+	members veports.ConsolidationMembershipView,
+	derive ProjectionHandler,
+	command veapplication.DeriveProjectionCommand,
+) error {
+	unit, err := members.IsUnitAt(ctx, membershipQuery(command.TenantID, command.Fact.Parcel, command.Fact.OccurredAt))
+	if err != nil {
+		return membershipFailure(command.Fact.Parcel, err)
+	}
+	if unit {
+		return nil
+	}
+	result, err := derive.Handle(ctx, command)
+	if err != nil {
+		return err
+	}
+	return veconsume.Consumption(result)
+}
+
+func membershipQuery(
+	tenant vedomain.TenantID,
+	object vedomain.TrackedParcelReference,
+	at time.Time,
+) veports.ConsolidationMembershipQuery {
+	return veports.ConsolidationMembershipQuery{TenantID: tenant, Object: object.String(), At: at}
+}
+
+// membershipFailure 把节点作业那一问的失败分成两格：答了却立不成本口形状是确定性的，其余都是读不动、续办。
+func membershipFailure(object vedomain.TrackedParcelReference, err error) error {
+	if errors.Is(err, veports.ErrConsolidationMembershipUntranslatable) {
+		return fmt.Errorf("%w: object %q: %v", ErrConsolidationMembershipInconsistent, object, err)
+	}
+	return fmt.Errorf("%w: object %q: %v", ErrConsolidationMembershipNotVisible, object, err)
 }

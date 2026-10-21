@@ -219,7 +219,7 @@ func handoverDeriveHandler(t *testing.T, mapping handoverMappingViewDouble, down
 
 func TestAMissingHandoverIsContinuableUndecided(t *testing.T) {
 	derive := &handoverCountingHandler{}
-	subject, err := adapter.NewDeriveOnTransportHandoverAdapter(&handoverFinderDouble{}, derive)
+	subject, err := adapter.NewDeriveOnTransportHandoverAdapter(&handoverFinderDouble{}, noUnits(), derive)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -234,7 +234,7 @@ func TestAMissingHandoverIsContinuableUndecided(t *testing.T) {
 func TestAnUnreadableHandoverIsContinuableUndecided(t *testing.T) {
 	derive := &handoverCountingHandler{}
 	subject, err := adapter.NewDeriveOnTransportHandoverAdapter(
-		&handoverFinderDouble{err: errors.New("store unavailable")}, derive)
+		&handoverFinderDouble{err: errors.New("store unavailable")}, noUnits(), derive)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -251,7 +251,7 @@ func TestAMismatchedHandoverKeyIsInconsistentNotUndecided(t *testing.T) {
 	record.Key.Scope = handoverValue(t, tfdomain.NewHandoverScopeReference, "other-scope")
 	derive := &handoverCountingHandler{}
 	subject, err := adapter.NewDeriveOnTransportHandoverAdapter(
-		&handoverFinderDouble{record: record, found: true}, derive)
+		&handoverFinderDouble{record: record, found: true}, noUnits(), derive)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -268,7 +268,7 @@ func TestAHandoverWithZeroRecordedAtIsInconsistentNotUndecided(t *testing.T) {
 	record.RecordedAt = time.Time{}
 	derive := &handoverCountingHandler{}
 	subject, err := adapter.NewDeriveOnTransportHandoverAdapter(
-		&handoverFinderDouble{record: record, found: true}, derive)
+		&handoverFinderDouble{record: record, found: true}, noUnits(), derive)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -283,7 +283,7 @@ func TestAHandoverWithZeroRecordedAtIsInconsistentNotUndecided(t *testing.T) {
 func TestAnUntranslatableHandoverReferenceKeepsItsSentinel(t *testing.T) {
 	derive := &handoverCountingHandler{}
 	subject, err := adapter.NewDeriveOnTransportHandoverAdapter(
-		&handoverFinderDouble{record: registeredHandover(t, tfdomain.ObjectHandedOver), found: true}, derive)
+		&handoverFinderDouble{record: registeredHandover(t, tfdomain.ObjectHandedOver), found: true}, noUnits(), derive)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -308,7 +308,7 @@ func TestAnUntranslatableHandoverReferenceKeepsItsSentinel(t *testing.T) {
 func TestFindByKeyLooksUpAllFourHandoverDimensionsIncludingVersion(t *testing.T) {
 	finder := &handoverFinderDouble{record: registeredHandover(t, tfdomain.ObjectHandedOver), found: true}
 	handler, _, _ := handoverDeriveHandler(t, handoverMappingViewDouble{configured: false}, handoverProjectionDownstreamDouble{})
-	subject, err := adapter.NewDeriveOnTransportHandoverAdapter(finder, handler)
+	subject, err := adapter.NewDeriveOnTransportHandoverAdapter(finder, noUnits(), handler)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -330,7 +330,7 @@ func TestACorrectedHandoverCarriesItsSupersessionIntoTheFact(t *testing.T) {
 	original := registeredHandover(t, tfdomain.ObjectHandedOver)
 	finder := &handoverFinderDouble{record: original, found: true}
 	handler, facts, _ := handoverDeriveHandler(t, handoverMappingViewDouble{configured: false}, handoverProjectionDownstreamDouble{})
-	subject, err := adapter.NewDeriveOnTransportHandoverAdapter(finder, handler)
+	subject, err := adapter.NewDeriveOnTransportHandoverAdapter(finder, noUnits(), handler)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -378,7 +378,7 @@ func TestACorrectedHandoverCarriesItsSupersessionIntoTheFact(t *testing.T) {
 func TestUnconfiguredMappingDerivesAnUnclassifiedHandoverProjection(t *testing.T) {
 	handler, facts, projections := handoverDeriveHandler(t, handoverMappingViewDouble{configured: false}, handoverProjectionDownstreamDouble{})
 	subject, err := adapter.NewDeriveOnTransportHandoverAdapter(
-		&handoverFinderDouble{record: registeredHandover(t, tfdomain.ObjectHandedOver), found: true}, handler)
+		&handoverFinderDouble{record: registeredHandover(t, tfdomain.ObjectHandedOver), found: true}, noUnits(), handler)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -427,7 +427,7 @@ func TestThreeHandoverVerdictsWriteDistinctFactKinds(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			handler, facts, _ := handoverDeriveHandler(t, handoverMappingViewDouble{configured: false}, handoverProjectionDownstreamDouble{})
 			subject, err := adapter.NewDeriveOnTransportHandoverAdapter(
-				&handoverFinderDouble{record: registeredHandover(t, verdict), found: true}, handler)
+				&handoverFinderDouble{record: registeredHandover(t, verdict), found: true}, noUnits(), handler)
 			if err != nil {
 				t.Fatalf("构造：%v", err)
 			}
@@ -453,7 +453,7 @@ func TestAFailedHandoverProjectionHandoffKeepsThePendingSentinel(t *testing.T) {
 		err: errors.New("outbox down"),
 	})
 	subject, err := adapter.NewDeriveOnTransportHandoverAdapter(
-		&handoverFinderDouble{record: registeredHandover(t, tfdomain.ObjectHandedOver), found: true}, handler)
+		&handoverFinderDouble{record: registeredHandover(t, tfdomain.ObjectHandedOver), found: true}, noUnits(), handler)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -465,7 +465,7 @@ func TestAFailedHandoverProjectionHandoffKeepsThePendingSentinel(t *testing.T) {
 func TestHandoverMappingViewFailureDoesNotLookLikeUnconfigured(t *testing.T) {
 	handler, _, _ := handoverDeriveHandler(t, handoverMappingViewDouble{err: errors.New("mapping unreachable")}, handoverProjectionDownstreamDouble{})
 	subject, err := adapter.NewDeriveOnTransportHandoverAdapter(
-		&handoverFinderDouble{record: registeredHandover(t, tfdomain.ObjectHandedOver), found: true}, handler)
+		&handoverFinderDouble{record: registeredHandover(t, tfdomain.ObjectHandedOver), found: true}, noUnits(), handler)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}

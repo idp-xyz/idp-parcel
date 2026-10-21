@@ -11,6 +11,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/veconsume"
 	veapplication "go.idp.xyz/idp-parcel/internal/visibilityexception/application"
 	vedomain "go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
+	veports "go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
 var (
@@ -53,23 +54,28 @@ type HandoverProjectionHandler interface {
 // 按四维引用重读 TF 交接判断，译成已接受源事实命令，再交给派生编排。
 //
 // 跨上下文翻译留在消费方（ADR-0025）。投影只引用源事实，不复制权威交接，也不把交接
-// 投影当成 node-operations 的控制转出。
+// 投影当成 node-operations 的控制转出。交接的对象是集运单元时入账不派生（deriveUnlessConsolidationUnit）。
 type DeriveOnTransportHandoverAdapter struct {
 	handovers TransportHandoverFinder
+	members   veports.ConsolidationMembershipView
 	derive    HandoverProjectionHandler
 }
 
 func NewDeriveOnTransportHandoverAdapter(
 	handovers TransportHandoverFinder,
+	members veports.ConsolidationMembershipView,
 	derive HandoverProjectionHandler,
 ) (*DeriveOnTransportHandoverAdapter, error) {
 	if handovers == nil {
 		return nil, fmt.Errorf("visibility exception transportfulfillment adapter: handover finder is nil")
 	}
+	if members == nil {
+		return nil, fmt.Errorf("visibility exception transportfulfillment adapter: consolidation membership view is nil")
+	}
 	if derive == nil {
 		return nil, fmt.Errorf("visibility exception transportfulfillment adapter: projection handler is nil")
 	}
-	return &DeriveOnTransportHandoverAdapter{handovers: handovers, derive: derive}, nil
+	return &DeriveOnTransportHandoverAdapter{handovers: handovers, members: members, derive: derive}, nil
 }
 
 var _ veinbox.RegisteredTransportHandoverHandler = (*DeriveOnTransportHandoverAdapter)(nil)
@@ -92,11 +98,7 @@ func (adapter *DeriveOnTransportHandoverAdapter) HandleRegisteredTransportHandov
 	if err != nil {
 		return err
 	}
-	result, err := adapter.derive.Handle(ctx, command)
-	if err != nil {
-		return err
-	}
-	return veconsume.Consumption(result)
+	return deriveUnlessConsolidationUnit(ctx, adapter.members, adapter.derive, command)
 }
 
 // findRegisteredHandover 按信封键取回交接并核它与键一致。交接投影与移动事实补派生（ADR-0224）两路都按同一封信读同一条

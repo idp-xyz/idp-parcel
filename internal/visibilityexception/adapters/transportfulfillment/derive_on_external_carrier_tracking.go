@@ -12,6 +12,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/veconsume"
 	veapplication "go.idp.xyz/idp-parcel/internal/visibilityexception/application"
 	vedomain "go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
+	veports "go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
 // externalCarrierTrackingKind 是 TF 为这一类事实命名的类型词，定义在 transport-fulfillment
@@ -51,22 +52,29 @@ type ExternalTrackingFactFinder interface {
 // EffectiveAt 是 TF 判断过的有效时间，ReceivedAt 是 TF 接到素材的时间——本适配器不拿任何一个
 // 顶替另一个（ADR-0102）。原始状态词不过桥：它不是类型词，解释它是另一次判断、另一张票；
 // 映射目录里没有这一类型时，DeriveProjectionHandler 如实留为未归类。
+//
+// 对象是集运单元时入账不派生（deriveUnlessConsolidationUnit）；时点取源给的发生时间，与进投影的业务发生时间同一格。
 type DeriveOnExternalCarrierTrackingAdapter struct {
-	facts  ExternalTrackingFactFinder
-	derive ProjectionHandler
+	facts   ExternalTrackingFactFinder
+	members veports.ConsolidationMembershipView
+	derive  ProjectionHandler
 }
 
 func NewDeriveOnExternalCarrierTrackingAdapter(
 	facts ExternalTrackingFactFinder,
+	members veports.ConsolidationMembershipView,
 	derive ProjectionHandler,
 ) (*DeriveOnExternalCarrierTrackingAdapter, error) {
 	if facts == nil {
 		return nil, fmt.Errorf("visibility exception transportfulfillment adapter: external tracking finder is nil")
 	}
+	if members == nil {
+		return nil, fmt.Errorf("visibility exception transportfulfillment adapter: consolidation membership view is nil")
+	}
 	if derive == nil {
 		return nil, fmt.Errorf("visibility exception transportfulfillment adapter: projection handler is nil")
 	}
-	return &DeriveOnExternalCarrierTrackingAdapter{facts: facts, derive: derive}, nil
+	return &DeriveOnExternalCarrierTrackingAdapter{facts: facts, members: members, derive: derive}, nil
 }
 
 var _ veinbox.JudgedExternalTrackingHandler = (*DeriveOnExternalCarrierTrackingAdapter)(nil)
@@ -101,11 +109,7 @@ func (adapter *DeriveOnExternalCarrierTrackingAdapter) HandleJudgedExternalTrack
 	if err != nil {
 		return err
 	}
-	result, err := adapter.derive.Handle(ctx, command)
-	if err != nil {
-		return err
-	}
-	return veconsume.Consumption(result)
+	return deriveUnlessConsolidationUnit(ctx, adapter.members, adapter.derive, command)
 }
 
 func externalTrackingProjectionCommand(
@@ -117,8 +121,7 @@ func externalTrackingProjectionCommand(
 	if err != nil {
 		return none, fmt.Errorf("%w: tenant: %v", ErrExternalTrackingUntranslatableAnswer, err)
 	}
-	// 载运对象引用按 TF 的领域定义可能指正式包裹身份，也可能指集运单元。今天不替它猜：对象号
-	// 照原样进追踪包裹引用，与交付、交接两路同一条做法。
+	// 载运对象引用按 TF 的领域定义可能指正式包裹身份，也可能指集运单元；是不是单元在派生之前问，这里先按引用原文立。
 	parcel, err := vedomain.NewTrackedParcelReference(fact.Object().String())
 	if err != nil {
 		return none, fmt.Errorf("%w: carried object: %v", ErrExternalTrackingUntranslatableAnswer, err)

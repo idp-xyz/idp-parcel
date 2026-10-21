@@ -14,6 +14,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/veconsume"
 	veapplication "go.idp.xyz/idp-parcel/internal/visibilityexception/application"
 	vedomain "go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
+	veports "go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
 var (
@@ -60,23 +61,29 @@ type ProjectionHandler interface {
 // 投影当成 parcel-shipment 终局。
 //
 // 载运对象引用按 transport-fulfillment 的领域定义可能指正式包裹身份，也可能指集运
-// 单元。今天不替它猜：对象号照原样进追踪包裹引用。
+// 单元：不在本上下文猜，问节点作业那一刻是不是单元，是就入账不派生
+// （deriveUnlessConsolidationUnit）。
 type DeriveOnEffectiveDeliveryAdapter struct {
 	deliveries EffectiveDeliveryFinder
+	members    veports.ConsolidationMembershipView
 	derive     ProjectionHandler
 }
 
 func NewDeriveOnEffectiveDeliveryAdapter(
 	deliveries EffectiveDeliveryFinder,
+	members veports.ConsolidationMembershipView,
 	derive ProjectionHandler,
 ) (*DeriveOnEffectiveDeliveryAdapter, error) {
 	if deliveries == nil {
 		return nil, fmt.Errorf("visibility exception transportfulfillment adapter: delivery finder is nil")
 	}
+	if members == nil {
+		return nil, fmt.Errorf("visibility exception transportfulfillment adapter: consolidation membership view is nil")
+	}
 	if derive == nil {
 		return nil, fmt.Errorf("visibility exception transportfulfillment adapter: projection handler is nil")
 	}
-	return &DeriveOnEffectiveDeliveryAdapter{deliveries: deliveries, derive: derive}, nil
+	return &DeriveOnEffectiveDeliveryAdapter{deliveries: deliveries, members: members, derive: derive}, nil
 }
 
 var _ veinbox.RegisteredEffectiveDeliveryHandler = (*DeriveOnEffectiveDeliveryAdapter)(nil)
@@ -123,11 +130,7 @@ func (adapter *DeriveOnEffectiveDeliveryAdapter) HandleRegisteredEffectiveDelive
 	if err != nil {
 		return err
 	}
-	result, err := adapter.derive.Handle(ctx, command)
-	if err != nil {
-		return err
-	}
-	return veconsume.Consumption(result)
+	return deriveUnlessConsolidationUnit(ctx, adapter.members, adapter.derive, command)
 }
 
 func projectionCommand(record tfports.EffectiveDeliveryRecord) (veapplication.DeriveProjectionCommand, error) {

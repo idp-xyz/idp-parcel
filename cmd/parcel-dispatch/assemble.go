@@ -283,42 +283,54 @@ var veProjectionUndecidedSentinels = []error{
 
 // vePickupUndecidedSentinels 只给 VE 揽收投影这一路。与 PS 采用那份分开列，也不与
 // 节点收寄投影合用——揽收没有「实物还没识别」，多出来的 inconsistent 不得宣布成等依赖。
+// ErrConsolidationMembershipNotVisible：问节点作业对象是不是集运单元读不动。
 //
 // 不在名单里：ErrPickupRecordInconsistent、ErrPickupUntranslatableAnswer、
+// ErrConsolidationMembershipInconsistent（节点作业答了却译不回，重问同一个结果）、
 // ErrPickupProjectionHandoffPending、veconsume.ErrUnexpectedProjectionOutcome。
 var vePickupUndecidedSentinels = []error{
 	vetf.ErrPickupNotVisible,
+	vetf.ErrConsolidationMembershipNotVisible,
 	vetf.ErrPickupProjectionUndecided,
 }
 
 // veDeliveryUndecidedSentinels 只给 VE 交付投影这一路。与 PS 终局那份分开列。
+// ErrConsolidationMembershipNotVisible：问节点作业对象是不是集运单元读不动。
 //
 // 不在名单里：ErrDeliveryRecordInconsistent、ErrUntranslatableAnswer、
+// ErrConsolidationMembershipInconsistent（节点作业答了却译不回，重问同一个结果）、
 // ErrProjectionHandoffPending、veconsume.ErrUnexpectedProjectionOutcome。
 var veDeliveryUndecidedSentinels = []error{
 	vetf.ErrDeliveryNotVisible,
+	vetf.ErrConsolidationMembershipNotVisible,
 	vetf.ErrProjectionUndecided,
 }
 
 // veHandoverUndecidedSentinels 只给 VE 交接投影这一路。与 TF 派送发起那一路
 // （deliveryDispatchOnHandoverUndecidedSentinels）分开列：同一封信扇出给两路，各包各的哨兵再 FanOut。
 // 不投 PS：终局只认有效交付，交接不是终局事实。
+// ErrConsolidationMembershipNotVisible：问节点作业对象是不是集运单元读不动。
 //
 // 不在名单里：ErrHandoverRecordInconsistent、ErrHandoverUntranslatableAnswer、
+// ErrConsolidationMembershipInconsistent（节点作业答了却译不回，重问同一个结果）、
 // ErrHandoverProjectionHandoffPending、veconsume.ErrUnexpectedProjectionOutcome。
 var veHandoverUndecidedSentinels = []error{
 	vetf.ErrHandoverNotVisible,
+	vetf.ErrConsolidationMembershipNotVisible,
 	vetf.ErrHandoverProjectionUndecided,
 }
 
 // veExternalTrackingUndecidedSentinels 只给 VE 外部承运轨迹投影这一路（label-channel/16）。
+// ErrConsolidationMembershipNotVisible：问节点作业对象是不是集运单元读不动。
 //
 // 不在名单里：ErrExternalTrackingRecordInconsistent——它含「待判断版本到了这里」那一格，那是
 // TF 侧交接口的缺陷不是等谁（ADR-0102 决定三：待判断的不提供给 VE）；以及
-// ErrExternalTrackingUntranslatableAnswer、ErrExternalTrackingProjectionHandoffPending、
+// ErrExternalTrackingUntranslatableAnswer、ErrConsolidationMembershipInconsistent（节点作业答了
+// 却译不回，重问同一个结果）、ErrExternalTrackingProjectionHandoffPending、
 // veconsume.ErrUnexpectedProjectionOutcome。
 var veExternalTrackingUndecidedSentinels = []error{
 	vetf.ErrExternalTrackingNotVisible,
+	vetf.ErrConsolidationMembershipNotVisible,
 	vetf.ErrExternalTrackingProjectionUndecided,
 }
 
@@ -1493,91 +1505,6 @@ func deriveProjectionConsumer(
 	consumer, err := veinbox.NewNodeIntakeConsumer(db.Transactor(), inboxStore, processing)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: derive projection consumer: %w", err)
-	}
-	return consumer, nil
-}
-
-// derivePickupConsumer 接对象级揽收登记 → VE 投影。与 PS 采用分 inbox 名。
-func derivePickupConsumer(
-	db *bentopg.DB,
-	inboxStore *inbox.Store,
-	derive *tenantBoundProjectionDerive,
-) (dispatch.Consumer, error) {
-	registrations, err := tfpostgres.NewOffsitePickupRegistrations(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: projection pickup registrations: %w", err)
-	}
-	processing, err := vetf.NewDeriveOnOffsitePickupAdapter(registrations, derive)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: derive on offsite pickup: %w", err)
-	}
-	consumer, err := veinbox.NewOffsitePickupConsumer(db.Transactor(), inboxStore, processing)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: derive pickup consumer: %w", err)
-	}
-	return consumer, nil
-}
-
-// deriveDeliveryConsumer 接有效交付登记 → VE 投影。与 PS 终局分 inbox 名。
-func deriveDeliveryConsumer(
-	db *bentopg.DB,
-	inboxStore *inbox.Store,
-	derive *tenantBoundProjectionDerive,
-) (dispatch.Consumer, error) {
-	deliveries, err := tfpostgres.NewEffectiveDeliveries(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: projection deliveries: %w", err)
-	}
-	processing, err := vetf.NewDeriveOnEffectiveDeliveryAdapter(deliveries, derive)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: derive on effective delivery: %w", err)
-	}
-	consumer, err := veinbox.NewEffectiveDeliveryConsumer(db.Transactor(), inboxStore, processing)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: derive delivery consumer: %w", err)
-	}
-	return consumer, nil
-}
-
-// deriveExternalTrackingConsumer 接 TF 外部承运轨迹事实（有效时间已判断的版本）→ VE 投影。
-// 本路不接 PS：外部轨迹是来源事实，不是有效交付，也不构成终局（TF CONTEXT「外部承运轨迹事实」）。
-func deriveExternalTrackingConsumer(
-	db *bentopg.DB,
-	inboxStore *inbox.Store,
-	derive *tenantBoundProjectionDerive,
-) (dispatch.Consumer, error) {
-	facts, err := tfpostgres.NewExternalTrackingFacts(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: projection external tracking facts: %w", err)
-	}
-	processing, err := vetf.NewDeriveOnExternalCarrierTrackingAdapter(facts, derive)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: derive on external carrier tracking: %w", err)
-	}
-	consumer, err := veinbox.NewExternalTrackingConsumer(db.Transactor(), inboxStore, processing)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: derive external tracking consumer: %w", err)
-	}
-	return consumer, nil
-}
-
-// deriveHandoverConsumer 接 TF 权威交接登记 → VE 投影。本路不接 PS：终局只认有效交付。
-func deriveHandoverConsumer(
-	db *bentopg.DB,
-	inboxStore *inbox.Store,
-	derive *tenantBoundProjectionDerive,
-) (dispatch.Consumer, error) {
-	handovers, err := tfpostgres.NewTransportHandovers(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: projection transport handovers: %w", err)
-	}
-	processing, err := vetf.NewDeriveOnTransportHandoverAdapter(handovers, derive)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: derive on transport handover: %w", err)
-	}
-	consumer, err := veinbox.NewTransportHandoverConsumer(db.Transactor(), inboxStore, processing)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: derive handover consumer: %w", err)
 	}
 	return consumer, nil
 }

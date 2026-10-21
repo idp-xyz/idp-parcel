@@ -206,7 +206,7 @@ func pickupDeriveHandler(t *testing.T, mapping pickupMappingViewDouble, downstre
 
 func TestAMissingPickupRegistrationIsContinuableUndecided(t *testing.T) {
 	derive := &pickupCountingHandler{}
-	subject, err := adapter.NewDeriveOnOffsitePickupAdapter(&pickupRegistryDouble{}, derive)
+	subject, err := adapter.NewDeriveOnOffsitePickupAdapter(&pickupRegistryDouble{}, noUnits(), derive)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -221,7 +221,7 @@ func TestAMissingPickupRegistrationIsContinuableUndecided(t *testing.T) {
 func TestAnUnreadablePickupRegistryIsContinuableUndecided(t *testing.T) {
 	derive := &pickupCountingHandler{}
 	subject, err := adapter.NewDeriveOnOffsitePickupAdapter(
-		&pickupRegistryDouble{err: errors.New("store unavailable")}, derive)
+		&pickupRegistryDouble{err: errors.New("store unavailable")}, noUnits(), derive)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -238,7 +238,7 @@ func TestAPickupRecordThatDisagreesWithItsKeyIsInconsistentNotUndecided(t *testi
 	record.Key.Object = pickupValue(t, tfdomain.NewCarriedObjectReference, "other-parcel")
 	derive := &pickupCountingHandler{}
 	subject, err := adapter.NewDeriveOnOffsitePickupAdapter(
-		&pickupRegistryDouble{record: record, found: true}, derive)
+		&pickupRegistryDouble{record: record, found: true}, noUnits(), derive)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -255,7 +255,7 @@ func TestAPickupWithZeroRecordedAtIsInconsistentNotUndecided(t *testing.T) {
 	record.RecordedAt = time.Time{}
 	derive := &pickupCountingHandler{}
 	subject, err := adapter.NewDeriveOnOffsitePickupAdapter(
-		&pickupRegistryDouble{record: record, found: true}, derive)
+		&pickupRegistryDouble{record: record, found: true}, noUnits(), derive)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -270,7 +270,7 @@ func TestAPickupWithZeroRecordedAtIsInconsistentNotUndecided(t *testing.T) {
 func TestUnconfiguredMappingDerivesAnUnclassifiedPickupProjection(t *testing.T) {
 	handler, facts, projections := pickupDeriveHandler(t, pickupMappingViewDouble{configured: false}, pickupProjectionDownstreamDouble{})
 	subject, err := adapter.NewDeriveOnOffsitePickupAdapter(
-		&pickupRegistryDouble{record: registeredPickup(t, "parcel-1"), found: true}, handler)
+		&pickupRegistryDouble{record: registeredPickup(t, "parcel-1"), found: true}, noUnits(), handler)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -309,42 +309,12 @@ func TestUnconfiguredMappingDerivesAnUnclassifiedPickupProjection(t *testing.T) 
 	}
 }
 
-func TestAConsolidationUnitLikeObjectIsUsedAsParcelReference(t *testing.T) {
-	handler, facts, projections := pickupDeriveHandler(t, pickupMappingViewDouble{configured: false}, pickupProjectionDownstreamDouble{})
-	subject, err := adapter.NewDeriveOnOffsitePickupAdapter(
-		&pickupRegistryDouble{record: registeredPickup(t, "unit-cons-1"), found: true}, handler)
-	if err != nil {
-		t.Fatalf("构造：%v", err)
-	}
-	ref := veinbox.RegisteredOffsitePickup{
-		TenantID: "tenant-1",
-		Object:   "unit-cons-1",
-		Attempt:  "attempt-1",
-	}
-	if err := subject.HandleRegisteredOffsitePickup(t.Context(), ref); err != nil {
-		t.Fatalf("集运单元号原样当包裹引用必须入账，got %v", err)
-	}
-	var fact vedomain.AcceptedSourceFact
-	for _, record := range facts.byKey {
-		fact = record.Fact
-	}
-	if fact.Parcel().String() != "unit-cons-1" {
-		t.Fatalf("parcel = %q, want unit-cons-1；不得猜、不得跳过", fact.Parcel())
-	}
-	if fact.Fact().String() != "offsite-pickup/unit-cons-1/attempt-1" {
-		t.Fatalf("fact = %q", fact.Fact())
-	}
-	if _, found := projections.byKey["tenant-1/unit-cons-1"]; !found {
-		t.Fatal("集运单元号必须能锚一份投影")
-	}
-}
-
 func TestAFailedPickupProjectionHandoffKeepsThePendingSentinel(t *testing.T) {
 	handler, _, _ := pickupDeriveHandler(t, pickupMappingViewDouble{configured: false}, pickupProjectionDownstreamDouble{
 		err: errors.New("outbox down"),
 	})
 	subject, err := adapter.NewDeriveOnOffsitePickupAdapter(
-		&pickupRegistryDouble{record: registeredPickup(t, "parcel-1"), found: true}, handler)
+		&pickupRegistryDouble{record: registeredPickup(t, "parcel-1"), found: true}, noUnits(), handler)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -356,7 +326,7 @@ func TestAFailedPickupProjectionHandoffKeepsThePendingSentinel(t *testing.T) {
 func TestPickupMappingViewFailureDoesNotLookLikeUnconfigured(t *testing.T) {
 	handler, _, _ := pickupDeriveHandler(t, pickupMappingViewDouble{err: errors.New("mapping unreachable")}, pickupProjectionDownstreamDouble{})
 	subject, err := adapter.NewDeriveOnOffsitePickupAdapter(
-		&pickupRegistryDouble{record: registeredPickup(t, "parcel-1"), found: true}, handler)
+		&pickupRegistryDouble{record: registeredPickup(t, "parcel-1"), found: true}, noUnits(), handler)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -368,7 +338,7 @@ func TestPickupMappingViewFailureDoesNotLookLikeUnconfigured(t *testing.T) {
 func TestAnUntranslatablePickupReferenceKeepsItsSentinel(t *testing.T) {
 	derive := &pickupCountingHandler{}
 	subject, err := adapter.NewDeriveOnOffsitePickupAdapter(
-		&pickupRegistryDouble{record: registeredPickup(t, "parcel-1"), found: true}, derive)
+		&pickupRegistryDouble{record: registeredPickup(t, "parcel-1"), found: true}, noUnits(), derive)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}

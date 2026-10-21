@@ -71,8 +71,8 @@ func deriveMovementFactConsumer(
 	return routed, nil
 }
 
-// projectionConsolidationMembers 装全程追踪问节点作业集运成员关系与收寄身份的那一口：两本册只读，移动事实那一路与补派生两路
-// 各装一份，展开同一处判法。
+// projectionConsolidationMembers 装全程追踪问节点作业集运成员关系与收寄身份的那一口：两本册只读，用它的各路各装一份，展开成员
+// 与认单元同一处判法。
 func projectionConsolidationMembers(db *bentopg.DB) (*venodeops.ConsolidationMembershipView, error) {
 	memberships, err := nopostgres.NewConsolidationMembershipsAt(db)
 	if err != nil {

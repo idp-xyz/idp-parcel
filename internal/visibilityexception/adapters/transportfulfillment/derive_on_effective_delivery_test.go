@@ -285,7 +285,7 @@ func deliveryDeriveHandler(t *testing.T, mapping deliveryMappingViewDouble, down
 
 func TestAMissingDeliveryIsContinuableUndecided(t *testing.T) {
 	derive := &countingProjectionHandler{}
-	subject, err := adapter.NewDeriveOnEffectiveDeliveryAdapter(&deliveryFinderDouble{}, derive)
+	subject, err := adapter.NewDeriveOnEffectiveDeliveryAdapter(&deliveryFinderDouble{}, noUnits(), derive)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -300,7 +300,7 @@ func TestAMissingDeliveryIsContinuableUndecided(t *testing.T) {
 func TestAnUnreadableDeliveryIsContinuableUndecided(t *testing.T) {
 	derive := &countingProjectionHandler{}
 	subject, err := adapter.NewDeriveOnEffectiveDeliveryAdapter(
-		&deliveryFinderDouble{err: errors.New("store unavailable")}, derive)
+		&deliveryFinderDouble{err: errors.New("store unavailable")}, noUnits(), derive)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -317,7 +317,7 @@ func TestAMismatchedDeliveryKeyIsInconsistentNotUndecided(t *testing.T) {
 	record.Key.Object = deliveryValue(t, tfdomain.NewCarriedObjectReference, "other-parcel")
 	derive := &countingProjectionHandler{}
 	subject, err := adapter.NewDeriveOnEffectiveDeliveryAdapter(
-		&deliveryFinderDouble{record: record, found: true}, derive)
+		&deliveryFinderDouble{record: record, found: true}, noUnits(), derive)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -334,7 +334,7 @@ func TestAZeroRecordedAtIsInconsistentNotUndecided(t *testing.T) {
 	record.RecordedAt = time.Time{}
 	derive := &countingProjectionHandler{}
 	subject, err := adapter.NewDeriveOnEffectiveDeliveryAdapter(
-		&deliveryFinderDouble{record: record, found: true}, derive)
+		&deliveryFinderDouble{record: record, found: true}, noUnits(), derive)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -349,7 +349,7 @@ func TestAZeroRecordedAtIsInconsistentNotUndecided(t *testing.T) {
 func TestAnUntranslatableDeliveryReferenceKeepsItsSentinel(t *testing.T) {
 	derive := &countingProjectionHandler{}
 	subject, err := adapter.NewDeriveOnEffectiveDeliveryAdapter(
-		&deliveryFinderDouble{record: registeredDelivery(t, "parcel-1"), found: true}, derive)
+		&deliveryFinderDouble{record: registeredDelivery(t, "parcel-1"), found: true}, noUnits(), derive)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -374,7 +374,7 @@ func TestAnUntranslatableDeliveryReferenceKeepsItsSentinel(t *testing.T) {
 func TestTheRereadNamesTheGenerationTheEnvelopeCarries(t *testing.T) {
 	finder := &deliveryFinderDouble{record: registeredDelivery(t, "parcel-1"), found: true}
 	handler, _, _ := deliveryDeriveHandler(t, deliveryMappingViewDouble{configured: false}, deliveryProjectionDownstreamDouble{})
-	subject, err := adapter.NewDeriveOnEffectiveDeliveryAdapter(finder, handler)
+	subject, err := adapter.NewDeriveOnEffectiveDeliveryAdapter(finder, noUnits(), handler)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -402,7 +402,7 @@ func TestEachDeliveryResultVersionEntersTheProjection(t *testing.T) {
 	finder := supersededDeliveryFinder(t, "parcel-1")
 	handler, facts, _ := deliveryDeriveHandler(
 		t, deliveryMappingViewDouble{configured: false}, deliveryProjectionDownstreamDouble{})
-	subject, err := adapter.NewDeriveOnEffectiveDeliveryAdapter(finder, handler)
+	subject, err := adapter.NewDeriveOnEffectiveDeliveryAdapter(finder, noUnits(), handler)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -453,7 +453,7 @@ func TestACorrectedDeliveryCarriesItsSupersessionIntoTheFact(t *testing.T) {
 	finder := supersededDeliveryFinder(t, "parcel-1")
 	handler, facts, _ := deliveryDeriveHandler(
 		t, deliveryMappingViewDouble{configured: false}, deliveryProjectionDownstreamDouble{})
-	subject, err := adapter.NewDeriveOnEffectiveDeliveryAdapter(finder, handler)
+	subject, err := adapter.NewDeriveOnEffectiveDeliveryAdapter(finder, noUnits(), handler)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -486,7 +486,7 @@ func TestACorrectedDeliveryCarriesItsSupersessionIntoTheFact(t *testing.T) {
 func TestUnconfiguredMappingDerivesAnUnclassifiedProjection(t *testing.T) {
 	handler, facts, projections := deliveryDeriveHandler(t, deliveryMappingViewDouble{configured: false}, deliveryProjectionDownstreamDouble{})
 	subject, err := adapter.NewDeriveOnEffectiveDeliveryAdapter(
-		&deliveryFinderDouble{record: registeredDelivery(t, "parcel-1"), found: true}, handler)
+		&deliveryFinderDouble{record: registeredDelivery(t, "parcel-1"), found: true}, noUnits(), handler)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -530,7 +530,7 @@ func TestAFailedProjectionHandoffKeepsThePendingSentinel(t *testing.T) {
 		err: errors.New("outbox down"),
 	})
 	subject, err := adapter.NewDeriveOnEffectiveDeliveryAdapter(
-		&deliveryFinderDouble{record: registeredDelivery(t, "parcel-1"), found: true}, handler)
+		&deliveryFinderDouble{record: registeredDelivery(t, "parcel-1"), found: true}, noUnits(), handler)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -542,7 +542,7 @@ func TestAFailedProjectionHandoffKeepsThePendingSentinel(t *testing.T) {
 func TestMappingViewFailureDoesNotLookLikeUnconfigured(t *testing.T) {
 	handler, _, _ := deliveryDeriveHandler(t, deliveryMappingViewDouble{err: errors.New("mapping unreachable")}, deliveryProjectionDownstreamDouble{})
 	subject, err := adapter.NewDeriveOnEffectiveDeliveryAdapter(
-		&deliveryFinderDouble{record: registeredDelivery(t, "parcel-1"), found: true}, handler)
+		&deliveryFinderDouble{record: registeredDelivery(t, "parcel-1"), found: true}, noUnits(), handler)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}

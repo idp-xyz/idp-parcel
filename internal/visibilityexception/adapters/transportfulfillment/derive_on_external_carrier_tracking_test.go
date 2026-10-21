@@ -77,7 +77,7 @@ func TestAJudgedExternalTrackingFactLandsWithItsThreeTimesAndKind(t *testing.T) 
 	judgment, _ := tfdomain.JudgeEffectiveTimeExplicitly(trackingEffectiveVE)
 	derive, facts, projections := deliveryDeriveHandler(t, deliveryMappingViewDouble{configured: false}, deliveryProjectionDownstreamDouble{})
 	subject, err := adapter.NewDeriveOnExternalCarrierTrackingAdapter(
-		&externalTrackingFinderDouble{record: judgedTrackingRecord(t, "EXTV-1", "", judgment), found: true}, derive)
+		&externalTrackingFinderDouble{record: judgedTrackingRecord(t, "EXTV-1", "", judgment), found: true}, noUnits(), derive)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -126,7 +126,7 @@ func TestASupersedingVersionCarriesItsPredecessor(t *testing.T) {
 	judgment, _ := tfdomain.JudgeEffectiveTimeByRule(rule, trackingEffectiveVE)
 	derive, facts, _ := deliveryDeriveHandler(t, deliveryMappingViewDouble{configured: false}, deliveryProjectionDownstreamDouble{})
 	subject, _ := adapter.NewDeriveOnExternalCarrierTrackingAdapter(
-		&externalTrackingFinderDouble{record: judgedTrackingRecord(t, "EXTV-2", "EXTV-1", judgment), found: true}, derive)
+		&externalTrackingFinderDouble{record: judgedTrackingRecord(t, "EXTV-2", "EXTV-1", judgment), found: true}, noUnits(), derive)
 
 	if err := subject.HandleJudgedExternalTracking(t.Context(), judgedTrackingRef("EXTV-2")); err != nil {
 		t.Fatalf("处理：%v", err)
@@ -142,7 +142,7 @@ func TestASupersedingVersionCarriesItsPredecessor(t *testing.T) {
 func TestAPendingVersionArrivingHereIsInconsistentNotUndecided(t *testing.T) {
 	derive := &countingProjectionHandler{}
 	subject, _ := adapter.NewDeriveOnExternalCarrierTrackingAdapter(
-		&externalTrackingFinderDouble{record: judgedTrackingRecord(t, "EXTV-1", "", tfdomain.PendingEffectiveTime()), found: true}, derive)
+		&externalTrackingFinderDouble{record: judgedTrackingRecord(t, "EXTV-1", "", tfdomain.PendingEffectiveTime()), found: true}, noUnits(), derive)
 
 	err := subject.HandleJudgedExternalTracking(t.Context(), judgedTrackingRef("EXTV-1"))
 	if !errors.Is(err, adapter.ErrExternalTrackingRecordInconsistent) {
@@ -155,11 +155,11 @@ func TestAPendingVersionArrivingHereIsInconsistentNotUndecided(t *testing.T) {
 
 func TestAMissingOrUnreadableExternalTrackingFactIsContinuableUndecided(t *testing.T) {
 	derive := &countingProjectionHandler{}
-	missing, _ := adapter.NewDeriveOnExternalCarrierTrackingAdapter(&externalTrackingFinderDouble{}, derive)
+	missing, _ := adapter.NewDeriveOnExternalCarrierTrackingAdapter(&externalTrackingFinderDouble{}, noUnits(), derive)
 	if err := missing.HandleJudgedExternalTracking(t.Context(), judgedTrackingRef("EXTV-1")); !errors.Is(err, adapter.ErrExternalTrackingNotVisible) {
 		t.Fatalf("缺登记应为可续办未决：%v", err)
 	}
-	unreadable, _ := adapter.NewDeriveOnExternalCarrierTrackingAdapter(&externalTrackingFinderDouble{err: errors.New("store unavailable")}, derive)
+	unreadable, _ := adapter.NewDeriveOnExternalCarrierTrackingAdapter(&externalTrackingFinderDouble{err: errors.New("store unavailable")}, noUnits(), derive)
 	if err := unreadable.HandleJudgedExternalTracking(t.Context(), judgedTrackingRef("EXTV-1")); !errors.Is(err, adapter.ErrExternalTrackingNotVisible) {
 		t.Fatalf("读失败应为可续办未决：%v", err)
 	}
@@ -173,7 +173,7 @@ func TestAMismatchedExternalTrackingKeyIsInconsistent(t *testing.T) {
 	record := judgedTrackingRecord(t, "EXTV-1", "", judgment)
 	record.Key.Version = deliveryValue(t, tfdomain.NewExternalTrackingFactVersion, "EXTV-other")
 	derive := &countingProjectionHandler{}
-	subject, _ := adapter.NewDeriveOnExternalCarrierTrackingAdapter(&externalTrackingFinderDouble{record: record, found: true}, derive)
+	subject, _ := adapter.NewDeriveOnExternalCarrierTrackingAdapter(&externalTrackingFinderDouble{record: record, found: true}, noUnits(), derive)
 
 	if err := subject.HandleJudgedExternalTracking(t.Context(), judgedTrackingRef("EXTV-other")); !errors.Is(err, adapter.ErrExternalTrackingRecordInconsistent) {
 		t.Fatalf("键与本体不符应为不一致：%v", err)
@@ -182,7 +182,7 @@ func TestAMismatchedExternalTrackingKeyIsInconsistent(t *testing.T) {
 
 func TestAnUntranslatableExternalTrackingReferenceIsRefused(t *testing.T) {
 	derive := &countingProjectionHandler{}
-	subject, _ := adapter.NewDeriveOnExternalCarrierTrackingAdapter(&externalTrackingFinderDouble{}, derive)
+	subject, _ := adapter.NewDeriveOnExternalCarrierTrackingAdapter(&externalTrackingFinderDouble{}, noUnits(), derive)
 	if err := subject.HandleJudgedExternalTracking(t.Context(), veinbox.JudgedExternalTracking{TenantID: "tenant-1", Fact: "", Version: "v"}); !errors.Is(err, adapter.ErrExternalTrackingUntranslatableAnswer) {
 		t.Fatalf("空事实引用应为不可译：%v", err)
 	}

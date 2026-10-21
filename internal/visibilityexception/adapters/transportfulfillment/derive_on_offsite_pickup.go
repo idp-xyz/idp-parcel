@@ -1,6 +1,6 @@
 // Package transportfulfillment 是 visibility-exception 消费 transport-fulfillment
 // 对象级结果的适配器（ADR-0025 消费方侧）。它只翻译不判断：揽收登记译成已接受源事实
-// 命令，归类与派生由 DeriveProjectionHandler 回答。揽收与交付各文件自洽，不设共享.go。
+// 命令，归类与派生由 DeriveProjectionHandler 回答。
 package transportfulfillment
 
 import (
@@ -14,6 +14,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/veconsume"
 	veapplication "go.idp.xyz/idp-parcel/internal/visibilityexception/application"
 	vedomain "go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
+	veports "go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
 var (
@@ -59,23 +60,29 @@ type PickupProjectionHandler interface {
 // 跨上下文翻译留在消费方（ADR-0025）。投影只引用源事实，不复制场外揽收。
 //
 // 载运对象引用按 transport-fulfillment 的领域定义可能指正式包裹身份，也可能指集运
-// 单元，而事件与记录都不带判别位。今天不替它猜、不跳过：Object 原样当包裹引用。
+// 单元，而事件与记录都不带判别位：不在本上下文猜，问节点作业那一刻是不是单元，是就
+// 入账不派生（deriveUnlessConsolidationUnit）。
 type DeriveOnOffsitePickupAdapter struct {
 	pickups OffsitePickupFinder
+	members veports.ConsolidationMembershipView
 	derive  PickupProjectionHandler
 }
 
 func NewDeriveOnOffsitePickupAdapter(
 	pickups OffsitePickupFinder,
+	members veports.ConsolidationMembershipView,
 	derive PickupProjectionHandler,
 ) (*DeriveOnOffsitePickupAdapter, error) {
 	if pickups == nil {
 		return nil, fmt.Errorf("visibility exception transportfulfillment adapter: pickup finder is nil")
 	}
+	if members == nil {
+		return nil, fmt.Errorf("visibility exception transportfulfillment adapter: consolidation membership view is nil")
+	}
 	if derive == nil {
 		return nil, fmt.Errorf("visibility exception transportfulfillment adapter: projection handler is nil")
 	}
-	return &DeriveOnOffsitePickupAdapter{pickups: pickups, derive: derive}, nil
+	return &DeriveOnOffsitePickupAdapter{pickups: pickups, members: members, derive: derive}, nil
 }
 
 var _ veinbox.RegisteredOffsitePickupHandler = (*DeriveOnOffsitePickupAdapter)(nil)
@@ -97,11 +104,7 @@ func (adapter *DeriveOnOffsitePickupAdapter) HandleRegisteredOffsitePickup(
 	if err != nil {
 		return err
 	}
-	result, err := adapter.derive.Handle(ctx, command)
-	if err != nil {
-		return err
-	}
-	return veconsume.Consumption(result)
+	return deriveUnlessConsolidationUnit(ctx, adapter.members, adapter.derive, command)
 }
 
 // findRegisteredPickup 按信封键取回对象级揽收并核它与键一致。揽收投影与移动事实补派生（ADR-0224）两路都按同一封信读同一条
@@ -163,7 +166,6 @@ func pickupProjectionCommand(
 	if err != nil {
 		return none, fmt.Errorf("%w: tenant: %v", ErrPickupUntranslatableAnswer, err)
 	}
-	// 集运单元不猜、不跳过：Object 原样当包裹引用。
 	parcel, err := vedomain.NewTrackedParcelReference(record.Pickup.Object().String())
 	if err != nil {
 		return none, fmt.Errorf("%w: carried object: %v", ErrPickupUntranslatableAnswer, err)
