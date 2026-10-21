@@ -1,6 +1,6 @@
 # ADR-0208：BUY 评价由发生项已形成信封发起——发生项与协议取自发生项，费用项目取触发册，主要范围取协议的商业范围
 
-Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/26，代决出自 `.scratch/demo-chain-gaps/tf-chain-plan.md` 的「BUY 发起（接 08，收 10）」一节。越权风险点见文末，待 SA owner 复核，第 2、8 点同时待 PC owner、第 5、7 点同时待 TF owner。）<!-- 索引注记 -->｜**已接受**（2026-10-19，用户原话「你作为业务和系统专家自决」，Claude Code 会话代 SA owner 裁定；票 demo-chain-gaps/26）。结算在派发里消费 `transport-fulfillment.charge-occurrence.formed`（消费者先登路由），按引用回读发生项；发生项、原因、版本、业务时间与供应商协议取自发生项，部分停用 ADR-0164 决定一末句（限本路径）；费用项目取 BUY 触发册新格，缺行或缺费用项目答未配置入账；主要范围取协议的商业范围（PC 新开只交范围的窄读口），读不动未决、查无是矛盾；修订版不发起。越权风险点待 SA owner 复核，部分同时待 PC、TF owner｜**部分停用**（2026-10-21）：决定三「补登之后，已入账的那一份不回补」与「册不设修订：同原因换一个费用项目或给没登的行补登，都答冲突」中「给没登的行补登」那半已由 [ADR-0229](./0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 停用——答`未配置`的那一拍记进发起停办册、补登后经「评价参数已登记」续办；没登费用项目的那一版可追加一版带费用项目的，旧版留历史。**适用场景**：同原因换一个已登的费用项目仍答冲突；越权风险点 4 由 ADR-0229 作答。其余各条不变
+Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/26，代决出自 `.scratch/demo-chain-gaps/tf-chain-plan.md` 的「BUY 发起（接 08，收 10）」一节。越权风险点见文末，待 SA owner 复核，第 2、8 点同时待 PC owner、第 5、7 点同时待 TF owner。）<!-- 索引注记 -->｜**已接受**（2026-10-19，用户原话「你作为业务和系统专家自决」，Claude Code 会话代 SA owner 裁定；票 demo-chain-gaps/26）。结算在派发里消费 `transport-fulfillment.charge-occurrence.formed`（消费者先登路由），按引用回读发生项；发生项、原因、版本、业务时间与供应商协议取自发生项，部分停用 ADR-0164 决定一末句（限本路径）；费用项目取 BUY 触发册新格，缺行或缺费用项目答未配置入账；主要范围取协议的商业范围（PC 新开只交范围的窄读口），读不动未决、查无是矛盾；修订版不发起。越权风险点待 SA owner 复核，部分同时待 PC、TF owner｜**部分停用**（2026-10-21）：决定三「补登之后，已入账的那一份不回补」与「册不设修订：同原因换一个费用项目或给没登的行补登，都答冲突」两句已由 [ADR-0229](./0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 停用——答`未配置`的那一拍记进发起停办册、补登后经「评价参数已登记」续办；触发册纳入修订形，没登费用项目的那一版可追加一版带费用项目的，旧版留历史。**适用场景**：同原因换一个已登的费用项目仍答冲突；越权风险点 4 由 ADR-0229 作答。其余各条不变
 Date: 2026-10-19
 
 ## Context
@@ -69,4 +69,4 @@ Date: 2026-10-19
 - [UC-SA-002](../application/settlement-accounting/UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md)：步 2，`AT-SA-185` 至 `AT-SA-187`
 - [ADR-0207：运输收费发生项由运营决定显式登记](./0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md)：本信封的生产方，载荷三键与决定六的协议指称照写
 - 票 `.scratch/demo-chain-gaps/issues/26-settlement-consumes-charge-occurrence-formed-to-request-buy-evaluation.md`
-- [ADR-0229](./0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md)：前向指针——部分停用决定三「补登之后……不回补」与「给没登的行补登……答冲突」，越权风险点 4 在那里作答
+- [ADR-0229](./0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md)：前向指针——部分停用决定三「补登之后……不回补」与「册不设修订……都答冲突」，触发册纳入修订形（同原因换一个已登的费用项目仍答冲突），越权风险点 4 在那里作答
