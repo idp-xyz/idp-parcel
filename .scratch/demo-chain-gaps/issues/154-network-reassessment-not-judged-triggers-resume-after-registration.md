@@ -34,3 +34,12 @@ Blocked by: [demo-chain-gaps/14](./14-buy-request-stuck-after-an-unadoptable-eva
 ## 既有票
 
 [14](./14-buy-request-stuck-after-an-unadoptable-evaluation.md)（同族，SA、PP）；[155](./155-initial-route-unconfigured-undecided-burns-the-acceptance-partition.md)（初始路由一路同病）。
+
+## 并入：初始路由未形成的续办（2026-10-21，票 155 实施时记）
+
+票 [155](./155-initial-route-unconfigured-undecided-burns-the-acceptance-partition.md) 之后，初始路由停在重投推不动的一格时入账为`路由未形成`，原因与对象落 `network_routing.initial_route_not_formed`（迁移 0025）：判断键、原因、交接关联、委托接受时刻，并列另记全部候选、并列的那几家与打平金额，候选证据不全另记候选与缺口。补齐之后同一件包裹的答案会变，照 ADR-0273 决定三要有续办；它与本票的复核续办同族、同一个登记口来源，并入本票。
+
+- 重驱的原料：判断键与交接关联在登记行里；商业解析标识回到 PS 接受决定；**地理投影不在 NR 落库**（ADR-0075 决定三）。初始路由重驱不是复核，ADR-0215 决定二「经消费侧适配器取受理基线那一版」的适用场景今天只到「不由小包托运信封触发的路由复核」；要让初始路由重驱也这样取，得先有一份记录把那条适用场景扩过来。这是本票「要裁的」第二条的同一问，一并裁。
+- 续办信封的来处多一类：候选成本缺依据（`CANDIDATE_COSTS_PENDING`、`CANDIDATE_COSTS_UNPRICEABLE`）等的是 PP 的价卡、序列或目录登记；PP 的「参数已登记」今天不对内部方向交信封，外包段引的 BUY 卡登记倒有一面，NR 要不要收它，随本票定。
+- 最低成本并列等的是授权角色裁决，不等登记；决定面归 [docs-consistency/code/29](../../docs-consistency/code/29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md)。
+- 「受理基线缺国家」（`CANDIDATE_EVIDENCE_INCOMPLETE` 下的 `GEO_ELEMENTS_MISSING`、`CUSTOMS_ENDPOINT_COUNTRY_MISSING`）补齐不了：基线一经固定不再改写，续办重驱也只会再停一次。
