@@ -20,8 +20,9 @@ import (
 // ExternalFundsFactRegistrationIntake 把一次已认证的接入请求翻译成外部资金事实首版的采用命令。
 //
 // 两个 Intake 都是接口而不是本包内的解析代码，判据同 customshttp 的登记口（ADR-0085 决定二）：登记输入本体
-// 的译装在 adapters/registrationjson 已有一份（与受控 CLI 的 -input 同源，本包不得另写）。提交方认证归集成客户端族
-// （ADR-0149），真 Intake 是 IntegrationClientIntake：租户取册上的绑定，载荷自报租户即拒。逐类分设而不合成一个按种类
+// 的译装在 adapters/registrationjson 已有一份（与受控 CLI 的 -input 同源，本包不得另写）。提交方认证有两族并存：外部系统
+// 走集成客户端族（ADR-0149，IntegrationClientIntake），租户的财务人员手工采用走运营决定能力面（ADR-0236，OperatorDecisionIntake）；
+// 两族的租户都取认证结果，载荷自报租户即拒。逐类分设而不合成一个按种类
 // 分派的口子：两类命令类型互不相同，合成一个就得在 Intake 里先认种类再定形状。
 type ExternalFundsFactRegistrationIntake interface {
 	IntakeExternalFundsFactRegistration(
