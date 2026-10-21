@@ -79,7 +79,7 @@ func (catalogue *FundsApplicationCatalogue) ListExternalFundsFacts(
 	// 让类型在语句里说这句话，超界在库内报错而不是静默进小数。
 	rows, err := querier.Query(ctx,
 		`SELECT f.fact_id, f.source_ref, f.kind, f.currency, f.amount_minor, f.version,
-		        f.occurred_at, f.corrects, f.corrected_at,
+		        f.occurred_at, f.corrects, f.corrected_at, f.operation_evidence,
 		        applied.applied_minor, applied.reversed_minor, applied.application_count,
 		        (SELECT COALESCE(
 		                    json_agg(
@@ -150,12 +150,13 @@ func (catalogue *FundsApplicationCatalogue) ListExternalFundsFacts(
 			occurredAt       time.Time
 			corrects         *string
 			correctedAt      *time.Time
+			evidence         *string
 			mappingsJSON     []byte
 			applicationsJSON []byte
 		)
 		if err := rows.Scan(
 			&row.Fact, &row.Source, &row.Kind, &row.Currency, &row.AmountMinor, &row.Version,
-			&occurredAt, &corrects, &correctedAt,
+			&occurredAt, &corrects, &correctedAt, &evidence,
 			&row.AppliedMinor, &row.ReversedMinor, &row.ApplicationCount,
 			&mappingsJSON, &applicationsJSON,
 		); err != nil {
@@ -164,6 +165,7 @@ func (catalogue *FundsApplicationCatalogue) ListExternalFundsFacts(
 		row.OccurredAt = occurredAt.UTC()
 		row.Corrects = catalogueText(corrects)
 		row.CorrectedAt = catalogueInstant(correctedAt)
+		row.OperationEvidence = catalogueText(evidence)
 		// 未核销余额只扣未撤销那一笔：撤销把金额退回未结，它不该继续算作已分配。
 		row.UnappliedMinor = row.AmountMinor - row.AppliedMinor
 

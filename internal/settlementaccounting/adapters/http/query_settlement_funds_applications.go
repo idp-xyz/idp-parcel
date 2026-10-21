@@ -92,21 +92,22 @@ func externalFundsFactBodyOf(row ports.ExternalFundsFactCatalogueRow) externalFu
 		})
 	}
 	return externalFundsFactBody{
-		Fact:             row.Fact,
-		Source:           row.Source,
-		Kind:             row.Kind,
-		Currency:         row.Currency,
-		Amount:           minorAmount(row.AmountMinor),
-		Version:          row.Version,
-		OccurredAt:       rfc3339(row.OccurredAt),
-		Corrects:         row.Corrects,
-		CorrectedAt:      optionalInstant(row.CorrectedAt),
-		AppliedAmount:    minorAmount(row.AppliedMinor),
-		ReversedAmount:   minorAmount(row.ReversedMinor),
-		UnappliedAmount:  minorAmount(row.UnappliedMinor),
-		ApplicationCount: row.ApplicationCount,
-		Mappings:         mappings,
-		Applications:     applications,
+		Fact:              row.Fact,
+		Source:            row.Source,
+		Kind:              row.Kind,
+		Currency:          row.Currency,
+		Amount:            minorAmount(row.AmountMinor),
+		Version:           row.Version,
+		OccurredAt:        rfc3339(row.OccurredAt),
+		Corrects:          row.Corrects,
+		CorrectedAt:       optionalInstant(row.CorrectedAt),
+		OperationEvidence: row.OperationEvidence,
+		AppliedAmount:     minorAmount(row.AppliedMinor),
+		ReversedAmount:    minorAmount(row.ReversedMinor),
+		UnappliedAmount:   minorAmount(row.UnappliedMinor),
+		ApplicationCount:  row.ApplicationCount,
+		Mappings:          mappings,
+		Applications:      applications,
 	}
 }
 
@@ -126,22 +127,25 @@ type externalFundsFactListResponse struct {
 // kind 照实透出不译成收付方向：封闭集 RECEIPT_CONFIRMED / PAYMENT_FAILED /
 // FUNDS_RETURNED 里只有一格是「收到了钱」，折成收/付两向会把「付款失败」与「资金
 // 退回」压成同一格。
+//
+// operationEvidence 只在链头那一版记了提交方时在场（ADR-0236 决定三）：缺席是「那一路不记」，不写空串冒充「无人提交」。
 type externalFundsFactBody struct {
-	Fact             string                      `json:"fact"`
-	Source           string                      `json:"source"`
-	Kind             string                      `json:"kind"`
-	Currency         string                      `json:"currency"`
-	Amount           string                      `json:"amount"`
-	Version          string                      `json:"version"`
-	OccurredAt       string                      `json:"occurredAt"`
-	Corrects         string                      `json:"corrects,omitempty"`
-	CorrectedAt      string                      `json:"correctedAt,omitempty"`
-	AppliedAmount    string                      `json:"appliedAmount"`
-	ReversedAmount   string                      `json:"reversedAmount"`
-	UnappliedAmount  string                      `json:"unappliedAmount"`
-	ApplicationCount int64                       `json:"applicationCount"`
-	Mappings         []fundsMappingBody          `json:"mappings"`
-	Applications     []settlementApplicationBody `json:"applications"`
+	Fact              string                      `json:"fact"`
+	Source            string                      `json:"source"`
+	Kind              string                      `json:"kind"`
+	Currency          string                      `json:"currency"`
+	Amount            string                      `json:"amount"`
+	Version           string                      `json:"version"`
+	OccurredAt        string                      `json:"occurredAt"`
+	Corrects          string                      `json:"corrects,omitempty"`
+	CorrectedAt       string                      `json:"correctedAt,omitempty"`
+	OperationEvidence string                      `json:"operationEvidence,omitempty"`
+	AppliedAmount     string                      `json:"appliedAmount"`
+	ReversedAmount    string                      `json:"reversedAmount"`
+	UnappliedAmount   string                      `json:"unappliedAmount"`
+	ApplicationCount  int64                       `json:"applicationCount"`
+	Mappings          []fundsMappingBody          `json:"mappings"`
+	Applications      []settlementApplicationBody `json:"applications"`
 }
 
 // fundsMappingBody 逐字段透出一条真实收付映射。映射不是核销——事实接收、金额责任

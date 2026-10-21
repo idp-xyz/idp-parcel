@@ -255,21 +255,23 @@ type SettlementApplicationEntry struct {
 // / FUNDS_RETURNED，三格里只有一格是「收到了钱」，折成收/付两向会把「付款失败」与
 // 「资金退回」压成同一格。
 type ExternalFundsFactCatalogueRow struct {
-	Fact             string
-	Source           string
-	Kind             string
-	Currency         string
-	AmountMinor      int64
-	Version          string
-	OccurredAt       time.Time
-	Corrects         string
-	CorrectedAt      *time.Time
-	AppliedMinor     int64
-	ReversedMinor    int64
-	UnappliedMinor   int64
-	ApplicationCount int64
-	Mappings         []FundsMappingEntry
-	Applications     []SettlementApplicationEntry
+	Fact        string
+	Source      string
+	Kind        string
+	Currency    string
+	AmountMinor int64
+	Version     string
+	OccurredAt  time.Time
+	Corrects    string
+	CorrectedAt *time.Time
+	// OperationEvidence 是采用当前链头那一版的操作证据（ADR-0236 决定三），空即那一路不记提交方。随行透出供审计读。
+	OperationEvidence string
+	AppliedMinor      int64
+	ReversedMinor     int64
+	UnappliedMinor    int64
+	ApplicationCount  int64
+	Mappings          []FundsMappingEntry
+	Applications      []SettlementApplicationEntry
 }
 
 // FundsApplicationCatalogueRead 是收付款核销页的伴生列表读端口。行对象是已采用的
