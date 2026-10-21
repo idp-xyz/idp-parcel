@@ -59,7 +59,7 @@
 | 未获授权（`NOT_AUTHORIZED`） | 请求方与所查授权依据 | 不形成撤回、不释放；授权规则未登记不答这一格 |
 | 已有决定（`DECISION_ALREADY_FORMED`） | 已先行提交的接受、拒绝或撤回引用；撞上既有撤回时带原补偿关联 | 后到请求不覆盖原决定 |
 | 来源冲突（`SOURCE_CONFLICT`） | 原请求引用 | 同一请求身份携带不同内容；不覆盖原请求，不再撤回一次 |
-| 撤回未决（`UNDECIDED`） | 已知事实、缺口、续办入口与未决原因，原因是 `SHIPMENT_REQUEST_UNAVAILABLE`、`WITHDRAWAL_AUTHORITY_UNAVAILABLE`、`WITHDRAWAL_AUTHORITY_RULES_NOT_CONFIGURED`、`DECISION_IDENTITY_UNAVAILABLE`、`DECISION_NOT_RECORDED`、`STALE_SHIPMENT_REQUEST_REVISION` 之一 | 不默认撤回或接受 |
+| 撤回未决（`UNDECIDED`） | 已知事实、缺口、续办入口与未决原因，原因是 `SHIPMENT_REQUEST_UNAVAILABLE`、`WITHDRAWAL_AUTHORITY_UNAVAILABLE`、`WITHDRAWAL_AUTHORITY_RULES_NOT_CONFIGURED`、`DECISION_IDENTITY_UNAVAILABLE`、`DECISION_NOT_RECORDED`、`STALE_SHIPMENT_REQUEST_REVISION` 之一；授权适用冲突（同一刻多于一条授予允许、或委派方不同的多条委派命中，[ADR-0261](../../adr/0261-authority-grants-and-contract-delegations-follow-the-closure-of-their-version-and-several-hits-are-an-applicability-conflict.md)）同停在这一格、原因指名授权适用冲突，与授权规则未登记并列（未实现，见「给开发的交接」） | 不默认撤回或接受；授权适用冲突不答未获授权 |
 | 统一不可见（不是一格结果） | 委托查无、跨租户或跨客户：`404` 加上下文统一不可见码（[ADR-0022](../../adr/0022-http-status-carries-answer-formed-not-business-verdict.md)） | 不区分不存在与他人的 |
 
 ## 应用流程
@@ -116,3 +116,4 @@
 | `AT-PS-075`，「统一不可见」一行 | 撤回编排对查无的委托上抛错误，HTTP 适配器答 `500 NO_ANSWER_FORMED`；本行预期结果不变 | [code/22](../../../.scratch/docs-consistency/code/22-customer-face-http-contract-misses-accepted-adrs.md) |
 | `AT-PS-068`、`AT-PS-076` 与撤回后关联重提（[ADR-0255](../../adr/0255-a-submitted-request-is-regrouped-only-by-withdrawing-it-and-submitting-linked-new-requests.md)） | 已撤回委托在真库上读不回：重建门不开`已撤回`、撤回决定不进快照，重复撤回与以撤回重提关联原委托在真库上走不通；本行预期结果不变 | [code/36](../../../.scratch/docs-consistency/code/36-withdrawn-shipment-requests-cannot-be-read-back-from-the-store.md) |
 | 「撤回未决」一行，ADR-0256 决定一第 2 格「重放须接着办」 | 撤回停在未决时装配事务照样提交来源保全，重放同一请求对仍为`已提交`的委托答 `DECISION_ALREADY_FORMED`、不带任何决定，这次撤回从此不会形成；本行预期结果不变 | [code/44](../../../.scratch/docs-consistency/code/44-withdrawal-and-amendment-replays-short-circuit-after-an-undecided-round.md) |
+| 「撤回未决」一行的授权适用冲突（ADR-0261） | 小包托运的授权适配器不译 `party-commercial` 的适用冲突错误，落兜底分支交回错误，不形成未决格，也不读作已授权或拒绝；规则不变 | [code/24](../../../.scratch/docs-consistency/code/24-closed-authorization-rule-and-contract-versions-keep-granting.md) |

@@ -6,7 +6,7 @@
 
 产品总体首发主线见[国际小包网络运营首发产品基线与开发主线](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)。关务 `UC-CC-001..012` 的整体完整性和控制域专项工作顺序见[关务与贸易合规专项开发基线](../product/CUSTOMS-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)。
 
-当前用例数量不能代表产品核心优先级。`UC-NO-001`、`UC-TF-001`、`UC-VE-001` 和 `UC-SA-001` 分别只覆盖关务触发的节点、运输、异常和代垫协作；它们不能替代正常运营主链。PN-02 的 `UC-PC-001/002` 与 `UC-PS-001/002/005` 已补齐商业权威、唯一解析、接单和决定前撤回，PN-04 的 `UC-TF-003..007` 与 `UC-PS-004/006` 已补齐常规运输、收费发生事实、逐包裹取消/收寄后处置和包裹终局，PN-06 的 `UC-VE-002..008` 已补齐内部投影、普通客户追踪、ETA/缺口、异常案件、客户通知和证据索赔编排，PN-07 的 `UC-SA-002..007` 已补齐价格评价采用、调整所有权、对账纳入、供应商账单、真实收付映射、核销、经营结果和金额结算编排。
+当前用例数量不能代表产品核心优先级。`UC-NO-001`、`UC-TF-001`、`UC-VE-001` 和 `UC-SA-001` 分别只覆盖关务触发的节点、运输、异常和代垫协作；它们不能替代正常运营主链。PN-02 的 `UC-PC-001/002` 与 `UC-PS-001/002/005` 已补齐商业权威、唯一解析、接单和决定前撤回，PN-04 的 `UC-TF-003..007` 与 `UC-PS-004/006` 已补齐常规运输、收费发生事实、逐包裹取消/收寄后处置和包裹终局，PN-06 的 `UC-VE-002..008` 已补齐内部投影、普通客户追踪、ETA/缺口、异常案件、客户通知和证据索赔编排，PN-07 的 `UC-SA-002..007` 已补齐价格评价采用、调整所有权、对账纳入、供应商账单、真实收付映射、核销、经营结果和金额结算编排。`collection-remittance` 的 `UC-CR-001` 收拢代收指令、代收事实、分户账记账、差异事项与回汇批次的登记编排；它不属任何一个 PN 切片，COD 首发不在试点范围。
 
 `parcel-pricing` 当前作为 PN-07 的内部纯计价前置能力，由 `UC-SA-002` 编排输入和消费评价；它不单独建立报价、合同或账务用例。后续只有在确认独立报价接受、锁价或外部计价服务责任后，才新增相应 `UC-PP-*` 用例。运营发起的试算不在此列：它不形成承诺、不进结算、不锁价，由 `UC-PP-001` 承担（[ADR-0152](../adr/0152-operator-estimate-is-a-pricing-use-case-computed-not-recorded-and-never-handed-to-settlement.md) 决定一收窄本句的适用场景）。
 
@@ -49,14 +49,15 @@ PN-08 的阶段准入、暂停恢复、生产权威、对象级接管和 `Go/No-
 
 | ID | 用例 | 主责上下文 | 状态 |
 |---|---|---|---|
-| `UC-PC-001` | [维护并发布商业权威依据](./party-commercial/UC-PC-001-MAINTAIN-AND-PUBLISH-COMMERCIAL-AUTHORITY.md) | `party-commercial` | 商业对象独立身份、不可覆盖发布、冲突和替代边界已形成，真实来源与批准参数待提供 |
-| `UC-PC-002` | [按范围与时点解析商业依据](./party-commercial/UC-PC-002-RESOLVE-COMMERCIAL-BASIS.md) | `party-commercial` | 独立商业选择锚点、唯一解析和逐项 `asOf` 两阶段机制已形成，真实锚点策略与商业版本待提供 |
-| `UC-PP-001` | [按假设包裹形成试算评价](./parcel-pricing/UC-PP-001-FORM-ESTIMATE-EVALUATIONS.md) | `parcel-pricing` | 逐适用价卡各算一份、只算不存、结构上不交结算、不择优的机制已定（ADR-0152），待实现；真实价卡、目录与序列待提供 |
+| `UC-PC-001` | [维护并发布商业权威依据](./party-commercial/UC-PC-001-MAINTAIN-AND-PUBLISH-COMMERCIAL-AUTHORITY.md) | `party-commercial` | 受控发布、换版收尾、参与方身份与关系登记机制已实现；真实主数据来源、审批职责规则与商业版本待提供 |
+| `UC-PC-002` | [按范围与时点解析商业依据](./party-commercial/UC-PC-002-RESOLVE-COMMERCIAL-BASIS.md) | `party-commercial` | 两阶段解析、提交前重校与回指取回机制已实现；真实锚点策略、对象版本与新鲜度参数待提供 |
+| `UC-PC-003` | [裁定商业授权请求](./party-commercial/UC-PC-003-ADJUDICATE-COMMERCIAL-AUTHORIZATION.md) | `party-commercial` | 裁定机制已实现；客户侧授权代表与撤回动作待人类评审，真实授权规则与权限等级目录待提供 |
+| `UC-PP-001` | [按假设包裹形成试算评价](./parcel-pricing/UC-PP-001-FORM-ESTIMATE-EVALUATIONS.md) | `parcel-pricing` | 试算、按评价请求形成评价与价卡收尾机制已实现，参考复核按租户复核职责规则判那一格待实现；真实价卡、目录与序列待提供 |
 | `UC-PS-001` | [客户提交国际小包请求并取得生产归属或接单结果](./parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md) | `parcel-shipment` | 接单机制已确认，真实规则与参数待提供 |
 | `UC-PS-002` | [补充或更正已接受委托的客户原始资料](./parcel-shipment/UC-PS-002-AMEND-CUSTOMER-SOURCE-DATA.md) | `parcel-shipment` | 资料版本、阶段边界和下游交接已形成，真实字段与授权参数待确认 |
 | `UC-PS-003` | [形成有效网络收寄与正式承诺](./parcel-shipment/UC-PS-003-ESTABLISH-NETWORK-INTAKE-AND-FORMAL-COMMITMENT.md) | `parcel-shipment` | 两类来源统一采用、逐包裹责任起点和正式承诺机制已形成，真实资格与承诺参数待提供 |
 | `UC-PS-004` | [依据运输责任结果形成包裹终局服务结果](./parcel-shipment/UC-PS-004-FORM-PARCEL-FINAL-SERVICE-OUTCOME.md) | `parcel-shipment` | 有效交付、退运完成或其他合同责任结果到逐包裹终局的交接已形成，真实终局规则待提供 |
-| `UC-PS-005` | [撤回尚未决定的客户委托](./parcel-shipment/UC-PS-005-WITHDRAW-SUBMITTED-SHIPMENT-REQUEST.md) | `parcel-shipment` | 撤回、接受、拒绝并发决定边界及冻结释放补偿已形成，真实授权与回执参数待提供 |
+| `UC-PS-005` | [撤回尚未决定的客户委托](./parcel-shipment/UC-PS-005-WITHDRAW-SUBMITTED-SHIPMENT-REQUEST.md) | `parcel-shipment` | 撤回、接受、拒绝并发决定边界及已成立占用的释放补偿已形成，真实授权与回执参数待提供 |
 | `UC-PS-006` | [取消包裹或协调收寄后服务处置](./parcel-shipment/UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md) | `parcel-shipment` | 收寄前逐包裹取消、收寄后处置决定和下游承接/执行分层已形成，真实规则、伙伴与费用参数待提供 |
 | `UC-NR-002` | [评估包裹接受前可达性](./network-routing/UC-NR-002-ASSESS-PARCEL-REACHABILITY.md) | `network-routing` | 三值判断和提交前失效重判机制已闭合，真实网络与时点参数待提供 |
 | `UC-NR-001` | [为已接受包裹形成初始路由](./network-routing/UC-NR-001-CREATE-INITIAL-ROUTE.md) | `network-routing` | 稳定业务骨架已形成，真实网络与非功能参数待提供 |
@@ -97,8 +98,9 @@ PN-08 的阶段准入、暂停恢复、生产权威、对象级接管和 `Go/No-
 | `UC-VE-008` | [提供客户普通全程追踪视图](./visibility-exception/UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md) | `visibility-exception` | 客户账户/对象授权、普通里程碑、获准 ETA、终局、异常只读展示和更正边界已形成，真实公开策略待提供 |
 | `UC-SA-001` | [判定关务实际代垫并形成客户代垫回收](./settlement-accounting/UC-SA-001-ASSESS-ACTUAL-ADVANCE-AND-FORM-CUSTOMER-RECOVERY.md) | `settlement-accounting` | 实际代垫、客户责任、回收本金和调整边界已形成，真实合同、账户、币种与资金来源参数待提供 |
 | `UC-SA-002` | [计算、确认并调整运营费用](./settlement-accounting/UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md) | `settlement-accounting` | 已接入 `parcel-pricing` 纯评价边界，客户/供应商计费重量采用、费用生命周期和接受前财务控制结果已形成；真实价卡、账户和控制策略待提供 |
-| `UC-SA-003` | [截单、发布并处理客户对账单](./settlement-accounting/UC-SA-003-CUT-OFF-PUBLISH-AND-RECONCILE-CUSTOMER-STATEMENT.md) | `settlement-accounting` | 截单快照、对账单、金额争议和既有调整的后续账期纳入边界已形成；本用例不创建调整，真实账期与争议规则待提供 |
+| `UC-SA-003` | [截单、发布并处理客户对账单](./settlement-accounting/UC-SA-003-CUT-OFF-PUBLISH-AND-RECONCILE-CUSTOMER-STATEMENT.md) | `settlement-accounting` | 截单快照、对账单、金额争议和既有调整的后续账期纳入边界已形成，按结算归属日纳入与对账安排登记未落；本用例不创建调整，真实账期与争议规则待提供 |
 | `UC-SA-004` | [接收、匹配并审核供应商账单](./settlement-accounting/UC-SA-004-RECEIVE-MATCH-AND-AUDIT-SUPPLIER-BILL.md) | `settlement-accounting` | 预期成本、供应商主张、金额范围匹配和审核应付边界已形成，真实账单入口与账期待提供 |
-| `UC-SA-005` | [映射外部收付款并形成运营核销](./settlement-accounting/UC-SA-005-MAP-EXTERNAL-FUNDS-AND-APPLY-SETTLEMENT.md) | `settlement-accounting` | 产品内唯一真实收付采用、运营映射、未分配、部分/完整核销和撤销边界已形成，真实财务交换待提供 |
+| `UC-SA-005` | [映射外部收付款并形成运营核销](./settlement-accounting/UC-SA-005-MAP-EXTERNAL-FUNDS-AND-APPLY-SETTLEMENT.md) | `settlement-accounting` | 产品内唯一真实收付采用、运营映射、未分配、部分/完整核销和撤销边界已形成，核销与核销撤销还没有进程入口、赔付义务与追偿应收的映射目标未落；真实财务交换待提供 |
 | `UC-SA-006` | [分摊成本并派生经营结果](./settlement-accounting/UC-SA-006-ALLOCATE-COSTS-AND-DERIVE-OPERATING-RESULTS.md) | `settlement-accounting` | 共享成本、未分摊余额、法人间结算和版本化经营结果边界已形成，真实分摊/毛利口径待提供 |
 | `UC-SA-007` | [形成索赔、赔付与追偿金额](./settlement-accounting/UC-SA-007-SETTLE-CLAIMS-AND-RECOVERY-AMOUNTS.md) | `settlement-accounting` | 客户赔付义务、应追偿、对方认可和追加调整已分层；真实到账与核销只由 `UC-SA-005` 形成，真实金额规则待提供 |
+| `UC-CR-001` | [登记代收义务与事实、记代收分户账并形成回汇批次](./collection-remittance/UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md) | `collection-remittance` | 登记与记账编排已实现，经受控 CLI 落库；入账判重、按指令移位、短款溢款来源位置、更正回指与真实到账凭采用引用登记未落；COD 首发不在试点范围 |

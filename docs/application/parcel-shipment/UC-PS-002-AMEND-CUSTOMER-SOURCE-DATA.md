@@ -116,7 +116,7 @@
 | 不允许 | `DISALLOWED` | 请求越出接受基线成员集合，或允许声明把这一格登记为不允许 | 结构化原因、规则版本、适用时间 | 不得删除原始请求或写成技术失败 |
 | 已有结果 | `ALREADY_HANDLED` | 同一请求身份与相同内容已经形成结果 | 原请求和已有版本/结果关联 | 不得重复形成版本 |
 | 请求冲突 | `SOURCE_CONFLICT` | 同一请求身份携带不同内容、范围、基准或资料适用时间（`requestEffectiveAt`） | 原请求、冲突字段和纠正入口 | 不得把 `occurredAt`/`receivedAt` 的变化当作冲突，也不得按最后到达覆盖 |
-| 未决 | `UNDECIDED` | 授权服务、阶段事实或允许声明读不回，授权规则未登记，资料修订阶段判不出，或本方的版本提交、标识签发、下游交接没有落成（[ADR-0256](../../adr/0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md)） | 续办引用与未决原因，原因是 `SHIPMENT_REQUEST_UNAVAILABLE`、`SOURCE_DATA_AMENDMENT_AUTHORITY_UNAVAILABLE`、`SOURCE_DATA_AMENDMENT_AUTHORITY_RULES_NOT_CONFIGURED`、`SOURCE_DATA_AMENDMENT_STAGE_FACT_UNAVAILABLE`、`SOURCE_DATA_AMENDMENT_STAGE_UNDETERMINED`、`SOURCE_DATA_RULE_UNAVAILABLE`、`SOURCE_DATA_VERSION_IDENTITY_UNAVAILABLE`、`AMENDED_REQUEST_NOT_SAVED`、`STALE_SHIPMENT_REQUEST_REVISION`、`SOURCE_DATA_VERSION_NOT_HANDED_OFF` 之一 | 不得返回已采用或业务拒绝；依赖答不出不交人工复核，授权规则未登记不答未获授权 |
+| 未决 | `UNDECIDED` | 授权服务、阶段事实或允许声明读不回，授权规则未登记，资料修订阶段判不出，或本方的版本提交、标识签发、下游交接没有落成（[ADR-0256](../../adr/0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md)） | 续办引用与未决原因，原因是 `SHIPMENT_REQUEST_UNAVAILABLE`、`SOURCE_DATA_AMENDMENT_AUTHORITY_UNAVAILABLE`、`SOURCE_DATA_AMENDMENT_AUTHORITY_RULES_NOT_CONFIGURED`、`SOURCE_DATA_AMENDMENT_STAGE_FACT_UNAVAILABLE`、`SOURCE_DATA_AMENDMENT_STAGE_UNDETERMINED`、`SOURCE_DATA_RULE_UNAVAILABLE`、`SOURCE_DATA_VERSION_IDENTITY_UNAVAILABLE`、`AMENDED_REQUEST_NOT_SAVED`、`STALE_SHIPMENT_REQUEST_REVISION`、`SOURCE_DATA_VERSION_NOT_HANDED_OFF` 之一；授权适用冲突（同一刻多于一条授予允许、或委派方不同的多条委派命中，[ADR-0261](../../adr/0261-authority-grants-and-contract-delegations-follow-the-closure-of-their-version-and-several-hits-are-an-applicability-conflict.md)）同停在这一格、原因指名授权适用冲突，与授权规则未登记并列（未实现，见「给开发的交接」） | 不得返回已采用或业务拒绝；依赖答不出不交人工复核，授权规则未登记与授权适用冲突都不答未获授权 |
 
 输入未受理与统一不可见不是资料修订编排的结果，在接入与 HTTP 层作答：
 
@@ -231,3 +231,4 @@
 |---|---|---|
 | `AT-PS-106`，结果语义契约「委托查无、跨租户或跨客户」一行 | 资料修订编排对查无的委托上抛错误，HTTP 适配器答 `500 NO_ANSWER_FORMED`；委托未接受、修订意图未声明、内容与范围不配同样答 5xx。本行预期结果不变 | [code/22](../../../.scratch/docs-consistency/code/22-customer-face-http-contract-misses-accepted-adrs.md) |
 | 「未决」一行，ADR-0256 决定一第 2 格「重放须接着办」 | 来源保全落下之后版本没落成（保存失败、并发抢先或业务未决），重放同一请求只答 `ALREADY_HANDLED`、不带版本，这次修订从此不会形成；本行预期结果不变 | [code/44](../../../.scratch/docs-consistency/code/44-withdrawal-and-amendment-replays-short-circuit-after-an-undecided-round.md) |
+| 「未决」一行的授权适用冲突（ADR-0261） | 小包托运的授权适配器不译 `party-commercial` 的适用冲突错误，落兜底分支交回错误，不形成未决格，也不读作已授权或拒绝；规则不变 | [code/24](../../../.scratch/docs-consistency/code/24-closed-authorization-rule-and-contract-versions-keep-granting.md) |
