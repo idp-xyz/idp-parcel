@@ -1,7 +1,7 @@
 # 24 PC 授权规则或客户合同的版本收尾之后，授权授予与合同委派照旧生效
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code24（基于 main `79a70dbba`）。原分级 R1（上线前必修）不变；原状态行：ready-for-agent——R1（上线前必修）：答错且留错痕。收尾口（票 demo-chain-gaps/50 进 main，ADR-0233）对授权规则与合同都收；运营退役一版授权规则来收回某个等级的拒绝、关闭或重开权，这些权限实际上照旧生效。更重的一格：同起点重发 v2、退役 v1 之后，`Authorize` 取首个命中，命中的是已退役的 v1 授予，消费方保存的「所采用的授权规则版本」就是一版已退役的规则。第一次更正错登的授权规则就撞，没有绕法（只能把授予逐条改区间）。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code24（基于 main `79a70dbba`）。原分级 R1（上线前必修）不变；原状态行：ready-for-agent——R1（上线前必修）：答错且留错痕。收尾口（票 demo-chain-gaps/50 进 main，ADR-0233）对授权规则与合同都收；运营退役一版授权规则来收回某个等级的拒绝、关闭或重开权，这些权限实际上照旧生效。更重的一格：同起点重发 v2、退役 v1 之后，`Authorize` 取首个命中，命中的是已退役的 v1 授予，消费方保存的「所采用的授权规则版本」就是一版已退役的规则。第一次更正错登的授权规则就撞，没有绕法（只能把授予逐条改区间）。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
 Blocked by: 无——2026-10-21 文档自洽 07 已裁（[ADR-0261](../../../docs/adr/0261-authority-grants-and-contract-delegations-follow-the-closure-of-their-version-and-several-hits-are-an-applicability-conflict.md)）：授予与委派**随所挂版本收尾**，多条命中答适用冲突。原 Blocked by：docs-consistency/07 先裁版本壳的截止与退役对授权授予与合同委派怎么作用。
 出处：[audit/pc-pp.md](../audit/pc-pp.md) H2（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，PC 代码在此期间未改）。
 
@@ -141,3 +141,9 @@ M：两个装载连上退役册与最新区间更正册（与 ADR-0233 给版本
 
 验证：`TMPDIR=… scripts/test-full.sh ./internal/partycommercial/...` 退 0，6 个包 ok（另 1 个无测试文件）；新用例另跑 `-count=3` ok。
 
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-code24` tip `e16e37ff9` 在 main `c89830c72` 上快进；两轮隔离评审：第一轮阻断（拒绝先于冲突与 ADR-0261 决定三相抵）按协调方裁定照 ADR 原样落地；第二轮无阻断，变异测试全被杀死，补了登记册一路「取最新更正」的用例。
+- 协调方在 tip 上单独提交重算的 AT 计数与重生成的机制清点；ADR 索引无变化；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净；演示种子在一次性库上灌通，用后删库。无迁移。
+- 去向：code/56 S 半边随本票完工（M 半边解除门仍等来源可读）；前端两个结果类型的中文词条未立票（未知码按原码显示，不崩）。
