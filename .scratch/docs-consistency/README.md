@@ -45,3 +45,18 @@
 ## 次序
 
 审计并行、只读。修订按组各开一张票、各一个 worktree，组与组之间文件不相交的可并行；同一组内不并行。依赖列里的在途票进 main 之后，那一组才开修订。票 126（TF 运营决定记提交操作者）排在 TF 组修订之后。
+
+## 审计结果（2026-10-21，钉 `6b0074d0`）
+
+| 组 | 报告 | 条数 | 高 | A 文档错 | B 要裁 | C 代码错 |
+|---|---|---|---|---|---|---|
+| TF | [audit/tf.md](./audit/tf.md) | 41 | 3 | 32 | 5 | 4 |
+| CC | [audit/cc.md](./audit/cc.md) | 24 | 3 | 18 | 2 | 4 |
+| VE | [audit/ve.md](./audit/ve.md) | 22 | 2 | 9 | 3 | 10 |
+| SA+CR | [audit/sa-cr.md](./audit/sa-cr.md) | 26 | 5 | 17 | 4 | 5 |
+| PS | [audit/ps.md](./audit/ps.md)（取证：[ps-code](./audit/ps-code.md)、[ps-adr](./audit/ps-adr.md)、[ps-uc](./audit/ps-uc.md)） | 51 | 6 | 40 | 6 | 5 |
+| PC+PP | [audit/pc-pp.md](./audit/pc-pp.md) | 24 | 5 | 20 | 2 | 2 |
+| NR+NO | [audit/nr-no.md](./audit/nr-no.md) | 26 | 3 | 14 | 5 | 7 |
+| 横切 | 审计中 | | | | | |
+
+审计读的是 `6b0074d0`；其后进 main 的票（88、145、146+94、150、57+15 等）可能已改掉其中一些条目，修订开工时先按 main 现状逐条复核。
