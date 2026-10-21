@@ -1,7 +1,7 @@
 # 04 VE（visibility-exception）：CONTEXT 写出现行规则、UC 与之一致、矛盾裁清
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dc04（见文末「完成记录」）。此前 in-progress——2026-10-21 认领；原 ready-for-agent——2026-10-21 协调方立（文档自洽修订，见 [README](../README.md)「修订执行」）
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dc04（见文末「完成记录」）。此前 in-progress——2026-10-21 认领；原 ready-for-agent——2026-10-21 协调方立（文档自洽修订，见 [README](../README.md)「修订执行」）
 Blocked by: 无（01 进 main 后开工）
 出处：[audit/ve.md](../audit/ve.md)（ve.md）；[02 的完成记录](./02-code-defects-from-the-audit.md)里「交修订票」一表中交给本票的条目；[01](./01-adr-suspension-chains.md) 的「交后续」一节里交给本票的条目。
 
@@ -162,3 +162,9 @@ Blocked by: 无（01 进 main 后开工）
 rebase 到 main（先 `f329f505`，再 `73a2c4a7`）时有冲突。`docs/adr/README.md` 取 main 的版本，分支上不提交重生成。AT 盘点文末追记段与 05 的追记段两段都留。
 
 未采纳：无。
+
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-dc04` tip `f1477842f` 在 main `73a2c4a7` 上快进；两轮隔离评审的阻断全部消掉（第二轮 ADR-0246 三处事实错已改：包裹号而非件号、出现条件补已取消、首方客户没有别的口得知接受）。
+- 协调方随后在 tip 上单独提交：重生成 `docs/adr/README.md`、重算 AT 盘点总览计数；两者 `-check` 退 0。机制清点重生成无变化；`go build ./...` 干净。本票只动文档，未跑全量真库测试。
+- 去向：代码票 code/30、31、32；票 117 补了现状注与 `AT-VE-192` 同病一笔。
