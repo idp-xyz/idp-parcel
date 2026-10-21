@@ -1189,7 +1189,7 @@ type ControlDispositionView interface {
 }
 
 // AuthorizationOutcome 是各授权端口共用的封闭答复集合。端口分开而答案集合共用：授权来源、
-// 有效期间与原因目录各不相同（那是端口分开的理由），但「答得出什么」只有这三种，且分格
+// 有效期间与原因目录各不相同（那是端口分开的理由），但「答得出什么」是同一组，且分格
 // 维度相同——按消费方的恢复动作分（ADR-0029）。共用一个集合还有一层强制力：日后多一种答复，
 // 每一处译函数会一起报错，而不是各自静默归入某一格。
 //
@@ -1204,6 +1204,11 @@ type ControlDispositionView interface {
 // 零值取`未设`而不取`未配置`：适配器必须说出它看到的是哪一种，靠漏填落进`未配置`会让「问过、
 // 确实没规则」与「压根没实现这一支」长得一模一样。漏填因此是一次端口坏了（译函数上抛），
 // 不是一次安静的停顿。
+//
+// `适用冲突`是第四格（ADR-0261 决定三）：同一刻多于一条授予允许这次请求，或委派方不同的多条委派
+// 命中。权威允许了，只是答不出采用哪一版——读作已授权，消费方就要保存一版谁也没选过的规则；读作
+// `不允许`，就把一次换版未收尾说成「你无权」。恢复动作是商业责任方收尾旧版或撤去重复的那一条，
+// 与`未配置`的「租户登记规则」也不同，所以单列。
 type AuthorizationOutcome uint8
 
 const (
@@ -1211,6 +1216,7 @@ const (
 	AuthorizationGranted
 	AuthorizationRefused
 	AuthorizationRulesNotConfigured
+	AuthorizationApplicabilityConflict
 )
 
 func (outcome AuthorizationOutcome) String() string {
@@ -1221,6 +1227,8 @@ func (outcome AuthorizationOutcome) String() string {
 		return "REFUSED"
 	case AuthorizationRulesNotConfigured:
 		return "RULES_NOT_CONFIGURED"
+	case AuthorizationApplicabilityConflict:
+		return "APPLICABILITY_CONFLICT"
 	default:
 		return ""
 	}

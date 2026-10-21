@@ -991,9 +991,11 @@ type amendmentAuthorizerDouble struct {
 	t                  *testing.T
 	granted            bool
 	rulesNotConfigured bool
-	err                error
-	calls              int
-	record             func(string)
+	// applicabilityConflict 让替身答`适用冲突`（ADR-0261 决定三）。
+	applicabilityConflict bool
+	err                   error
+	calls                 int
+	record                func(string)
 }
 
 func (double *amendmentAuthorizerDouble) AuthorizeSourceDataAmendment(
@@ -1010,6 +1012,9 @@ func (double *amendmentAuthorizerDouble) AuthorizeSourceDataAmendment(
 	}
 	if double.rulesNotConfigured {
 		return ports.SourceDataAmendmentAuthorization{Outcome: ports.AuthorizationRulesNotConfigured}, nil
+	}
+	if double.applicabilityConflict {
+		return ports.SourceDataAmendmentAuthorization{Outcome: ports.AuthorizationApplicabilityConflict}, nil
 	}
 	if !double.granted {
 		return ports.SourceDataAmendmentAuthorization{Outcome: ports.AuthorizationRefused}, nil

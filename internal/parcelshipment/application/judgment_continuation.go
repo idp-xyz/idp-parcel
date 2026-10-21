@@ -160,6 +160,15 @@ const (
 	// 派生，所以同一原因下的几种缺口仍各拿一条续办引用。
 	FinancialControlNotConfigured
 
+	// 各授权端口自己的`授权适用冲突`（ADR-0261 决定三）：同一刻多于一条授予允许这次请求，或委派方不同的多条委派
+	// 命中。权威允许了，只是答不出采用哪一版，所以既不是`未获授权`（不落确定的拒绝），也不能当已授权继续（那要
+	// 保存一版谁也没选过的规则）。它与同一支上的 *AuthorityRulesNotConfigured 分开：那一格等租户登记规则，这一格
+	// 等商业责任方收尾旧版或撤去重复的那一条——同为一次登记，催的却是另一件事；续办引用由原因派生，共用会让运维
+	// 拿一条引用查回来另一种缺口。逐支不共用，理由同上面那一族。复核授权那一支的同名格在它自己的结果集合里。
+	RejectionAuthorityApplicabilityConflict
+	WithdrawalAuthorityApplicabilityConflict
+	SourceDataAmendmentAuthorityApplicabilityConflict
+
 	// judgmentPendingReasonEnd 不是一个原因，是封闭集合的上界，**必须永远排在最后**。
 	//
 	// 它让「每个取值都有 String()」可以被遍历检查，而那条检查堵的是一条静默链：漏补
@@ -190,7 +199,10 @@ func (reason JudgmentPendingReason) resumePath() domain.ResumePath {
 		SourceDataAmendmentAuthorityRulesNotConfigured,
 		ReachabilityAsOfNotConfigured,
 		FinancialControlAsOfNotConfigured,
-		FinancialControlNotConfigured:
+		FinancialControlNotConfigured,
+		RejectionAuthorityApplicabilityConflict,
+		WithdrawalAuthorityApplicabilityConflict,
+		SourceDataAmendmentAuthorityApplicabilityConflict:
 		// 这一族等的是运营企业做一次登记，不是等某个权威恢复（ADR-0094）。它们与同一支上的
 		// *Unavailable 只差一个词而恢复动作相反：权威答不出会自愈，而一个从未登记过的范围
 		// 重试一万次也长不出一条登记。这几个取值自己的注释早写过这句话，此前却落在下面那个
@@ -198,6 +210,9 @@ func (reason JudgmentPendingReason) resumePath() domain.ResumePath {
 		//
 		// 逐个列举不写成按名字前缀判：命名相近不构成同一个恢复动作，而这份名单正是那条判据
 		// 的落地——新增一个原因时要回答的是它等谁，不是它叫什么。
+		//
+		// 授权适用冲突在这一族里：消解它的是商业责任方经截止或同起点退役收尾旧版（ADR-0233），那是一次
+		// 登记册写入，重试推不动、客户与复核角色也补不出。
 		return domain.ResumeByOperatorRegistration
 	default:
 		// 其余取值全是依赖答不出或声明未到，只有本方推得动。这一条不靠任何未确认规则：
@@ -344,6 +359,12 @@ func (reason JudgmentPendingReason) String() string {
 		return "CONTROL_DISPOSITION_UNAVAILABLE"
 	case ControlDispositionNotFormed:
 		return "CONTROL_DISPOSITION_NOT_FORMED"
+	case RejectionAuthorityApplicabilityConflict:
+		return "REJECTION_AUTHORITY_APPLICABILITY_CONFLICT"
+	case WithdrawalAuthorityApplicabilityConflict:
+		return "WITHDRAWAL_AUTHORITY_APPLICABILITY_CONFLICT"
+	case SourceDataAmendmentAuthorityApplicabilityConflict:
+		return "SOURCE_DATA_AMENDMENT_AUTHORITY_APPLICABILITY_CONFLICT"
 	default:
 		return ""
 	}

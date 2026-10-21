@@ -185,6 +185,9 @@ func (handler *WithdrawShipmentRequestHandler) Handle(
 		// 这个范围此刻一条现行授权规则都没有。它不是对客户的判定——`UC-PS-005` 明禁默认
 		// 任何角色有撤回权，而把「没有规则」答成`未获授权`同样是一次默认，只是方向朝紧。
 		return handler.undecided(ctx, command, WithdrawalAuthorityRulesNotConfigured, request.State()), nil
+	case ports.AuthorizationApplicabilityConflict:
+		// 权威允许了，却答不出凭哪一版规则；答成`未获授权`是对客户说假话，当作已授权就要在撤回上记一版谁也没选过的规则。
+		return handler.undecided(ctx, command, WithdrawalAuthorityApplicabilityConflict, request.State()), nil
 	default:
 		// 逐取值分派，不留兜底：端口日后多一种答复时这里报错，而不是静默归入上面某一格。
 		return WithdrawShipmentRequestResult{}, ErrUnexpectedAuthorizationOutcome

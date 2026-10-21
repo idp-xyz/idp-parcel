@@ -290,6 +290,37 @@ func TestAReviewAgainstAnEmptyAuthorityBookStaysUndecided(t *testing.T) {
 	assertNoReviewCompletionRecorded(t, db)
 }
 
+// Covers: ADR-0261 决定三与越权风险点 3 的装配证据——真授权册上两个授权规则对象各授一份覆盖合成坐标的复核权，经 PC
+// 裁定编排、PS 真授权适配器与生产复核编排，答 AUTHORITY_APPLICABILITY_CONFLICT：不取首个、不签授权引用、不落库、不铸
+// 信封，也不压成「你无权复核」。
+func TestAReviewAgainstTwoMatchingGrantsAnswersAnApplicabilityConflict(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+
+	version := submittedRequestOnRealAssembly(t, db)
+	seedSYNReviewGrant(t, db)
+	seedSYNGrant(t, db, pcdomain.ManualReviewAction, synReviewLevel, synReviewScope, "SYN-REVIEW-RULE-2")
+	review, err := manualReviewOrchestrationWith(db, synRReviewRequestSource{t: t})
+	if err != nil {
+		t.Fatalf("装配复核完成编排：%v", err)
+	}
+
+	result, err := review.Handle(t.Context(), reviewCompletionCommand(t, version, "1"))
+	if err != nil {
+		t.Fatalf("完成复核：%v——适用冲突是答得出的一格，不是未形成", err)
+	}
+	if got := result.Outcome(); got != shipmentapp.ManualReviewAuthorityApplicabilityConflict {
+		t.Fatalf("outcome = %q, want AUTHORITY_APPLICABILITY_CONFLICT", got)
+	}
+	if got := envelopeCountOfType(t, db, resumeEnvelopeType); got != 0 {
+		t.Fatalf("适用冲突时信封 = %d 封, want 0", got)
+	}
+	assertNoReviewCompletionRecorded(t, db)
+}
+
 // Covers: 生产装配的实例半边形状——复核授权的请求映射留 nil（`PAR-COM-14` 待提供），编排停在
 // 未形成：不落库、不铸信封，也不冒充`授权规则未配置`或`不允许`。与 buildRejectionOrchestration
 // 对拒绝授权映射的处置同款；谁把这里的 nil 换成一份「开发用」坐标，这条会先红。

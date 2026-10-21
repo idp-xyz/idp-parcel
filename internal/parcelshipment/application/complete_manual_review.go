@@ -20,6 +20,9 @@ import (
 // 那一步的分法：前者是确定的业务答案，续办也补不出授权来；后者是租户还没把 `PAR-COM-14` 的授权
 // 规则登记上——首发期没有租户，每一次询问都落在这一格，压成前者等于对一个尚未配置的产品说
 // 「你无权复核」。两格都什么也不落库。
+//
+// `授权适用冲突`是第三个落点（ADR-0261 决定三）：权威允许了，却答不出凭哪一版规则，而复核留痕要签那一版——挑一版就是
+// 替商业责任方作答，压成`未获授权`又是对复核人说假话。本编排没有未决格，照`未配置`的形状另开一码，什么也不落库。
 type ManualReviewCompletionOutcome uint8
 
 const (
@@ -31,6 +34,7 @@ const (
 	ManualReviewCompletionConflict
 	ManualReviewNotAuthorized
 	ManualReviewAuthorityRulesNotConfigured
+	ManualReviewAuthorityApplicabilityConflict
 )
 
 func (outcome ManualReviewCompletionOutcome) String() string {
@@ -49,6 +53,8 @@ func (outcome ManualReviewCompletionOutcome) String() string {
 		return "NOT_AUTHORIZED"
 	case ManualReviewAuthorityRulesNotConfigured:
 		return "AUTHORITY_RULES_NOT_CONFIGURED"
+	case ManualReviewAuthorityApplicabilityConflict:
+		return "AUTHORITY_APPLICABILITY_CONFLICT"
 	default:
 		return ""
 	}
@@ -165,6 +171,11 @@ func (handler *CompleteManualReviewHandler) Handle(
 	case ports.AuthorizationRulesNotConfigured:
 		return CompleteManualReviewResult{
 			outcome: ManualReviewAuthorityRulesNotConfigured,
+			state:   request.State(),
+		}, nil
+	case ports.AuthorizationApplicabilityConflict:
+		return CompleteManualReviewResult{
+			outcome: ManualReviewAuthorityApplicabilityConflict,
 			state:   request.State(),
 		}, nil
 	default:

@@ -44,7 +44,8 @@ var _ psports.ManualReviewAuthorizer = (*ManualReviewAuthorizationAdapter)(nil)
 // AuthorizeManualReview 问提供方这位复核人许不许为这份提交版本完成复核。
 //
 // 询问折不成提供方请求时停在未形成：缺的是范围/时点/原因映射，不是授权规则本身。
-// 提供方四格按恢复动作翻译：已授权带所采用版本引用；不允许；未配置；其余 error。
+// 提供方的答复按恢复动作逐格翻译：已授权带所采用版本引用；不允许；未配置；适用冲突（ADR-0261 决定三，
+// 不带引用）；其余 error。
 //
 // 映射折出的请求动作必须是 ManualReviewAction。这一道守卫是本口的全部意义所在：一份映射若折出了
 // 拒绝动作，一条只授拒绝权的规则就会被读成复核权——获准拒单不等于获准复核（PC CONTEXT），而那正是
@@ -81,6 +82,10 @@ func (adapter *ManualReviewAuthorizationAdapter) AuthorizeManualReview(
 		case errors.Is(err, pcdomain.ErrAuthorityRulesNotConfigured):
 			return psports.ManualReviewAuthorization{
 				Outcome: psports.AuthorizationRulesNotConfigured,
+			}, nil
+		case errors.Is(err, pcdomain.ErrAuthorityApplicabilityConflict):
+			return psports.ManualReviewAuthorization{
+				Outcome: psports.AuthorizationApplicabilityConflict,
 			}, nil
 		case errors.Is(err, pcdomain.ErrNotAuthorized):
 			return psports.ManualReviewAuthorization{

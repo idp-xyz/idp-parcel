@@ -21,6 +21,10 @@ import (
 // `未获授权`与`授权规则未配置`是 party-commercial 答复的两格落点，理由同复核那一步：前者是确定的业务
 // 答案，后者是租户还没把处置授权规则登记上——首发期 PC 的授权动作词汇里还没有这一格，每一次询问都
 // 落在这里，压成前者等于对一个尚未配置的产品说「你无权处置」。两格都什么也不落库。
+//
+// `授权适用冲突`是第三个落点（ADR-0261 决定三）：权威允许了，却答不出凭哪一版规则，处置留痕要记那一版；本编排没有
+// 未决格，照`未配置`的形状另开一码，什么也不落库、状态不变。生产上装的授权口今天不问 PC（ADR-0132 越权风险点 2），
+// 这一码走不到，开它只为闭集穷尽：日后接上 PC，这一格不会落进 default 被读成端口坏了。
 type AuthorizedDispositionOutcome uint8
 
 const (
@@ -33,6 +37,7 @@ const (
 	AuthorizedDispositionConflict
 	AuthorizedDispositionNotAuthorized
 	AuthorizedDispositionAuthorityRulesNotConfigured
+	AuthorizedDispositionAuthorityApplicabilityConflict
 )
 
 func (outcome AuthorizedDispositionOutcome) String() string {
@@ -53,6 +58,8 @@ func (outcome AuthorizedDispositionOutcome) String() string {
 		return "NOT_AUTHORIZED"
 	case AuthorizedDispositionAuthorityRulesNotConfigured:
 		return "AUTHORITY_RULES_NOT_CONFIGURED"
+	case AuthorizedDispositionAuthorityApplicabilityConflict:
+		return "AUTHORITY_APPLICABILITY_CONFLICT"
 	default:
 		return ""
 	}
@@ -181,6 +188,11 @@ func (handler *DisposeShipmentRequestHandler) Handle(
 	case ports.AuthorizationRulesNotConfigured:
 		return DisposeShipmentRequestResult{
 			outcome: AuthorizedDispositionAuthorityRulesNotConfigured,
+			state:   request.State(),
+		}, nil
+	case ports.AuthorizationApplicabilityConflict:
+		return DisposeShipmentRequestResult{
+			outcome: AuthorizedDispositionAuthorityApplicabilityConflict,
 			state:   request.State(),
 		}, nil
 	default:

@@ -145,6 +145,9 @@ func (handler *RejectShipmentRequestHandler) Handle(
 		// 运营侧拒绝权同样是 `PAR-COM-14` 待提供的实例参数。一条规则都没登记时说不出
 		// 「这个人不能拒」——那句话要有一份规则作依据才成立。
 		return handler.undecided(ctx, command, RejectionAuthorityRulesNotConfigured, request.State()), nil
+	case ports.AuthorizationApplicabilityConflict:
+		// 权威允许了这次拒绝，却答不出凭哪一版规则——决定上要记那一版，挑一版就是替商业责任方作答。
+		return handler.undecided(ctx, command, RejectionAuthorityApplicabilityConflict, request.State()), nil
 	default:
 		return RejectShipmentRequestResult{}, ErrUnexpectedAuthorizationOutcome
 	}

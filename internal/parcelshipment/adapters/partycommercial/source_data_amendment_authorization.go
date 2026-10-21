@@ -68,9 +68,9 @@ var _ psports.SourceDataAmendmentAuthorizer = (*SourceDataAmendmentAuthorization
 
 // AuthorizeSourceDataAmendment 问提供方这次资料修订许不许、许了的话实际决定方是谁。
 //
-// 询问折不成商业坐标时停在未形成：缺的是坐标映射，不是授权规则本身。提供方四格按恢复动作翻译：
+// 询问折不成商业坐标时停在未形成：缺的是坐标映射，不是授权规则本身。提供方的答复按恢复动作逐格翻译：
 // 已授权带所采用版本引用与 PC 解出的决定方；不允许（含 grant 在场而委派缺席的 ErrDelegationAbsent
-// ——它 Is ErrNotAuthorized，恢复动作同在业务侧）；未配置；其余 error。
+// ——它 Is ErrNotAuthorized，恢复动作同在业务侧）；未配置；适用冲突（ADR-0261 决定三，不带引用）；其余 error。
 func (adapter *SourceDataAmendmentAuthorizationAdapter) AuthorizeSourceDataAmendment(
 	ctx context.Context,
 	query psports.SourceDataAmendmentAuthorizationQuery,
@@ -104,6 +104,10 @@ func (adapter *SourceDataAmendmentAuthorizationAdapter) AuthorizeSourceDataAmend
 		case errors.Is(err, pcdomain.ErrAuthorityRulesNotConfigured):
 			return psports.SourceDataAmendmentAuthorization{
 				Outcome: psports.AuthorizationRulesNotConfigured,
+			}, nil
+		case errors.Is(err, pcdomain.ErrAuthorityApplicabilityConflict):
+			return psports.SourceDataAmendmentAuthorization{
+				Outcome: psports.AuthorizationApplicabilityConflict,
 			}, nil
 		case errors.Is(err, pcdomain.ErrNotAuthorized):
 			return psports.SourceDataAmendmentAuthorization{

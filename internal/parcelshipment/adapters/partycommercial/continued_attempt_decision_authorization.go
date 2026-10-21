@@ -16,8 +16,10 @@ import (
 // 这里：动作由询问里的 Kind 钉死（关闭权与重开权是 PC 互不蕴含的两格，映射不得把一格读成另一格）；所代的客户账户
 // 只能是询问身份上的那一个；原因与时点是询问自带的事实——让映射再给一份就有了第二个来源。
 //
-// 请求方一律是运营角色（pc-gaps/13 裁决 ③：例外支首发不开，货主只作请求方落在决定上，不进 PC）：客户账户请求
-// 这两格由 PC 的 resolveDecider 显式拒（ErrCustomerAccountCannotDecide），本适配器不给映射一个「客户自己来的」种类。
+// 请求方一律是运营角色：受控关闭与重开只由运营侧授权角色形成，合同委派不参与，货主的要求是落在决定上的请求证据、
+// 不进 PC（ADR-0275 决定一、二；party-commercial CONTEXT「两者都是运营侧凭授权规则形成的决定，合同委派不参与。」）。
+// 客户账户请求这两格由 PC 的 resolveDecider 显式拒（ErrCustomerAccountCannotDecide），本适配器不给映射一个「客户
+// 自己来的」种类。
 type ContinuedAttemptDecisionRequestCoordinates struct {
 	OperatorRole pcdomain.OperatorRoleReference
 	LegalEntity  pcdomain.LegalEntityReference
@@ -66,8 +68,8 @@ var _ psports.ContinuedAttemptDecisionAuthorizer = (*ContinuedAttemptDecisionAut
 // AuthorizeContinuedAttemptDecision 问提供方这次关闭或重开许不许、许了的话三件是什么。
 //
 // 询问折不成商业坐标时停在未形成，且不去问提供方：一次已经发出的查询收不回来，它本身就回答了「这个范围有没有规则」。
-// 提供方四格按恢复动作翻译：已授权带三件；不允许（含客户账户请求这两格的 ErrCustomerAccountCannotDecide——它 Is
-// ErrNotAuthorized，恢复动作在业务侧）；未配置；其余 error。
+// 提供方的答复按恢复动作逐格翻译：已授权带三件；不允许（含客户账户请求这两格的 ErrCustomerAccountCannotDecide——它 Is
+// ErrNotAuthorized，恢复动作在业务侧）；未配置；适用冲突（ADR-0261 决定三，不带引用）；其余 error。
 func (adapter *ContinuedAttemptDecisionAuthorizationAdapter) AuthorizeContinuedAttemptDecision(
 	ctx context.Context,
 	query psports.ContinuedAttemptDecisionAuthorizationQuery,
@@ -105,6 +107,10 @@ func (adapter *ContinuedAttemptDecisionAuthorizationAdapter) AuthorizeContinuedA
 		case errors.Is(err, pcdomain.ErrAuthorityRulesNotConfigured):
 			return psports.ContinuedAttemptDecisionAuthorization{
 				Outcome: psports.AuthorizationRulesNotConfigured,
+			}, nil
+		case errors.Is(err, pcdomain.ErrAuthorityApplicabilityConflict):
+			return psports.ContinuedAttemptDecisionAuthorization{
+				Outcome: psports.AuthorizationApplicabilityConflict,
 			}, nil
 		case errors.Is(err, pcdomain.ErrNotAuthorized):
 			return psports.ContinuedAttemptDecisionAuthorization{

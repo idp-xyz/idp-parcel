@@ -400,7 +400,9 @@ type rejectionAuthorizerDouble struct {
 	t                  *testing.T
 	granted            bool
 	rulesNotConfigured bool
-	err                error
+	// applicabilityConflict 让替身答`适用冲突`（ADR-0261 决定三）。
+	applicabilityConflict bool
+	err                   error
 }
 
 func (double *rejectionAuthorizerDouble) AuthorizeActiveRejection(
@@ -413,6 +415,9 @@ func (double *rejectionAuthorizerDouble) AuthorizeActiveRejection(
 	}
 	if double.rulesNotConfigured {
 		return ports.ActiveRejectionAuthorization{Outcome: ports.AuthorizationRulesNotConfigured}, nil
+	}
+	if double.applicabilityConflict {
+		return ports.ActiveRejectionAuthorization{Outcome: ports.AuthorizationApplicabilityConflict}, nil
 	}
 	if !double.granted {
 		return ports.ActiveRejectionAuthorization{Outcome: ports.AuthorizationRefused}, nil

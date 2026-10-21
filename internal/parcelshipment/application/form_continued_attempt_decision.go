@@ -42,7 +42,7 @@ const (
 	// ContinuedAttemptDecisionNotAccepted：输入本身立不起来（缺项、责任来源种类认不出、货主重授权证据缺席或账户对不上、
 	// 重开生效时间不晚于关闭）。恢复动作是改输入重来；具体哪一格见 Refusal。
 	ContinuedAttemptDecisionNotAccepted
-	// ContinuedAttemptDecisionUndecided：等一个依赖（授权规则未配置、授权口 / 终局口 / 登记册读不回、标识签不出）。
+	// ContinuedAttemptDecisionUndecided：等一个依赖（授权规则未配置或适用冲突、授权口 / 终局口 / 登记册读不回、标识签不出）。
 	// 未写任何东西；哪一个依赖见 PendingReason。
 	ContinuedAttemptDecisionUndecided
 	// ContinuedAttemptDecisionWriteConflict：开册撞上别人刚开的、或追加时预期版本对不上。版本冲突是业务答案（ADR-0031），
@@ -87,6 +87,9 @@ const (
 	ContinuedAttemptFinalOutcomeUnavailable
 	ContinuedAttemptDecisionRegisterUnavailable
 	ContinuedAttemptDecisionIdentityUnavailable
+	// ContinuedAttemptAuthorityApplicabilityConflict：同一刻多于一条授予允许这次关闭或重开（ADR-0261 决定三）。权威允许了，
+	// 却答不出凭哪一版规则与哪个授权角色——决定要记这两件，不替商业责任方挑；也不是拒绝。等的是收尾旧版或撤去重复的那一条。
+	ContinuedAttemptAuthorityApplicabilityConflict
 )
 
 func (reason ContinuedAttemptPendingReason) String() string {
@@ -101,6 +104,8 @@ func (reason ContinuedAttemptPendingReason) String() string {
 		return "REGISTER_UNAVAILABLE"
 	case ContinuedAttemptDecisionIdentityUnavailable:
 		return "DECISION_IDENTITY_UNAVAILABLE"
+	case ContinuedAttemptAuthorityApplicabilityConflict:
+		return "AUTHORITY_APPLICABILITY_CONFLICT"
 	default:
 		return ""
 	}
@@ -146,7 +151,8 @@ func (refusal ContinuedAttemptRefusal) String() string {
 //
 // 领域的 ClosureResponsibilitySourceReference 是一个不透明必填串，本层把它写成 `<种类>/<主体>`：重开时要认得出原关闭
 // 是不是货主指令形成的，认不出就核不了「同一货主账户」那一步。硬限制那一格的「解除」今天没有来源可读，本编排不为
-// 它加门——加一道读不到来源的门等于把重开一律拒掉，那是替来源责任方作答。
+// 它加门——加一道读不到来源的门等于把重开一律拒掉，那是替来源责任方作答。渠道服务方或代理商叫停形成的关闭也落在
+// 这一格（ADR-0275 决定三），在解除可读之前由授权角色重开前自己核来源方已解除（ADR-0275 越权风险点 3）。
 type ClosureResponsibilitySourceKind uint8
 
 const (
@@ -554,6 +560,8 @@ func (handler *FormContinuedAttemptDecisionHandler) form(ctx context.Context, pl
 		return ContinuedAttemptDecisionResult{outcome: ContinuedAttemptDecisionNotAuthorized}, nil
 	case ports.AuthorizationRulesNotConfigured:
 		return continuedAttemptUndecided(ContinuedAttemptAuthorityRulesNotConfigured), nil
+	case ports.AuthorizationApplicabilityConflict:
+		return continuedAttemptUndecided(ContinuedAttemptAuthorityApplicabilityConflict), nil
 	default:
 		// 逐取值分派，不留兜底：端口日后多一种答复时这里报错，而不是静默归入上面某一格。
 		return ContinuedAttemptDecisionResult{}, ErrUnexpectedAuthorizationOutcome

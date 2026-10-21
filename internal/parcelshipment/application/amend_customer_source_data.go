@@ -212,6 +212,9 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 		// 「未登记时只能形成未决或业务拒绝，不能以系统便利推断允许」——反过来也一样，
 		// 不能以系统便利推断这个人越权。
 		return handler.undecided(command, SourceDataAmendmentAuthorityRulesNotConfigured), nil
+	case ports.AuthorizationApplicabilityConflict:
+		// 权威允许了，却答不出凭哪一版规则、或谁是实际决定方——两项都要随版本保存，不能替商业责任方挑。
+		return handler.undecided(command, SourceDataAmendmentAuthorityApplicabilityConflict), nil
 	default:
 		return AmendCustomerSourceDataResult{}, ErrUnexpectedAuthorizationOutcome
 	}

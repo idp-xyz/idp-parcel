@@ -66,3 +66,17 @@ func TestCustomerAndReviewPathsUnchanged(t *testing.T) {
 		t.Errorf("人工复核那一格不该变，实际 %s", got.String())
 	}
 }
+
+// TestAuthorityApplicabilityConflictsResumeByOperatorRegistration 钉授权`适用冲突`三格的续办方：等的是商业责任方经截止或
+// 同起点退役收尾旧版、或撤去重复的那一条（ADR-0261 决定三），那是一次登记；重试一万次，册上仍是那两条授予。
+func TestAuthorityApplicabilityConflictsResumeByOperatorRegistration(t *testing.T) {
+	for _, reason := range []JudgmentPendingReason{
+		RejectionAuthorityApplicabilityConflict,
+		WithdrawalAuthorityApplicabilityConflict,
+		SourceDataAmendmentAuthorityApplicabilityConflict,
+	} {
+		if got := reason.resumePath(); got != domain.ResumeByOperatorRegistration {
+			t.Errorf("%s 等的是一次收尾登记，续办路径应为 OPERATOR_REGISTRATION，实际 %s", reason.String(), got.String())
+		}
+	}
+}
