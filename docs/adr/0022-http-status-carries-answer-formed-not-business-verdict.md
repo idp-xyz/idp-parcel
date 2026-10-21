@@ -1,6 +1,6 @@
 # ADR-0022: HTTP 状态码只回答「有没有形成答案」，业务判别一律进响应体
 
-Status: Accepted<!-- 索引注记 -->｜**部分停用**（2026-10-19）：三类表 4xx 行「调用方的错，重发不会改变结果｜出队，交给人，不自动重发」对 `429` 的适用已由 [ADR-0140](./0140-first-party-api-contract-is-generated-from-endpoint-descriptors-with-url-major-version-and-problem-details.md) Decision 三停用，**适用场景**仅限首方与集成两族的限流答复（`429` + `Retry-After`，按 `Retry-After` 重发即正当）；其余 4xx 照旧，其余各条不变。**部分停用**：其 Decision 中「两项未决期间，业务端点可以存在并由测试替身驱动，但不进 `cmd/parcel-api` 的装配」的末段「但不进 `cmd/parcel-api` 的装配」已由 [ADR-0055](./0055-business-endpoint-intake-has-an-unconfigured-grade.md) 停用——业务端点改为带「未配置即拒」Intake 进装配，未配置自成一格如实作答；该句要防的「默认实现铸造信封」由未配置格保留并加强。该句前段（端点可存在并由测试替身驱动）与同段「并禁止在它们决定前落地任何默认实现」不变，其余各条不变。  
+Status: Accepted<!-- 索引注记 -->｜**部分停用**（2026-10-19）：三类表 4xx 行「调用方的错，重发不会改变结果｜出队，交给人，不自动重发」对 `429` 的适用已由 [ADR-0140](./0140-first-party-api-contract-is-generated-from-endpoint-descriptors-with-url-major-version-and-problem-details.md) Decision 三停用，**适用场景**仅限首方与集成两族的限流答复（`429` + `Retry-After`，按 `Retry-After` 重发即正当）；其余 4xx 照旧，其余各条不变。**部分停用**：其 Decision 中「两项未决期间，业务端点可以存在并由测试替身驱动，但不进 `cmd/parcel-api` 的装配」的末段「但不进 `cmd/parcel-api` 的装配」已由 [ADR-0055](./0055-business-endpoint-intake-has-an-unconfigured-grade.md) 停用——业务端点改为带「未配置即拒」Intake 进装配，未配置自成一格如实作答；该句要防的「默认实现铸造信封」由未配置格保留并加强。该句前段（端点可存在并由测试替身驱动）与同段「并禁止在它们决定前落地任何默认实现」不变，其余各条不变。｜**两项未决已答**（指针 2026-10-21 补，话题通读所得）：Decision 末段「**接入认证与规范化摘要是两项显式未决，本记录不决定，并禁止在它们决定前落地任何默认实现。**」所说两项已逐族逐口作答——接入认证由 [ADR-0100](./0100-operator-identity-is-a-product-owned-access-channel-family.md)（操作者族）、[ADR-0149](./0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md)（作业事实与集成客户端两族）、[ADR-0139](./0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md)（首方客户族）各定，规范化摘要由 [ADR-0072](./0072-access-channel-capability-is-shared-and-registry-shape-awaits-channel-evidence.md) Decision 三判为机制、[ADR-0149](./0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md) 决定四按口定形状版本；没有作答的族与口照旧不得落地默认实现，「并禁止在它们决定前落地任何默认实现」与其余各条不变  
 Date: 2026-08-11
 
 ## Context
@@ -69,3 +69,6 @@ Date: 2026-08-11
 - [开发主线：机制半边现状](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md#机制半边现状)：HTTP 面缺口与六处 `!found` 出口的出处
 - [首发试点参数与证据登记册](../product/PILOT-PARAMETER-REGISTER.md)：`PAR-INT-01` 登记接入渠道，接入认证等它
 - [ADR-0140](./0140-first-party-api-contract-is-generated-from-endpoint-descriptors-with-url-major-version-and-problem-details.md)：Decision 三部分停用三类表 4xx 行对 `429` 的适用，限首方与集成两族的限流答复
+- [ADR-0149](./0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md)：决定四按口解规范化摘要，决定二、三为作业事实与集成客户端两族定接入认证——本记录两项显式未决在这几族上的答案
+- [ADR-0100](./0100-operator-identity-is-a-product-owned-access-channel-family.md)：操作者族的接入认证——本记录两项显式未决之一在这一族上的答案
+- [ADR-0139](./0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md)：首方客户族的接入认证——本记录两项显式未决之一在这一族上的答案
