@@ -1,18 +1,18 @@
 # ADR-0250：路由复核的「适用性看不清」入账未判、留下缺口——它的来源没有一个是依赖故障；ADR-0094 决定四「续办触发同笔落地」不约束路由复核
 
-Status: Accepted（2026-10-21，Claude Code 会话代 NR owner 决：用户 2026-10-21 原话「需要修改文档，确保自洽，正确」，常设授权「你作为业务和系统专家自决」；票 docs-consistency/05，出处审计 [audit/nr-no.md](../../.scratch/docs-consistency/audit/nr-no.md) M8、L14。部分停用 [ADR-0235](./0235-route-reassessment-settles-what-a-retry-cannot-change-and-does-not-judge-triggers-older-than-the-current-position.md) 决定一「重投推得动的照旧是未决……」一句里「适用性看不清」一格，被停原句与适用场景见「对已接受记录的作用」；回答 ADR-0235 越权风险点 1。ADR-0235 正文不改，只在其 Status 行与 Links 加前向指针。代码随票 [docs-consistency/code/26](../../.scratch/docs-consistency/code/26-unclear-plan-applicability-in-reassessment-is-retried-instead-of-settled.md)。越权风险点见文末，待 NR owner 复核，第 2 点知会 PS owner。）<!-- 索引注记 -->｜**分格**：复核里的「适用性看不清」只来自取数侧对选中候选答限制状态未知，来源有关务目录为空、受理基线缺端点国家、关务来源未接三种，重投都推不动；改答`未判`，原因 `PLAN_APPLICABILITY_UNCLEAR`，未判登记同行记下取数侧交回的缺口与再判条件，计划与适用性都不动。真依赖故障（关务目录读不动）在取数侧交错误，照旧走证据读不动、回滚重投。**续办纪律**：ADR-0094 决定四只管受理判断链；路由复核的每一次控制触发都从自己的位置重判，入账未判可以先于续办落地，续办仍归票 154
+Status: Accepted（2026-10-21，Claude Code 会话代 NR owner 决：用户 2026-10-21 原话「需要修改文档，确保自洽，正确」，常设授权「你作为业务和系统专家自决」；票 docs-consistency/05，出处审计 [audit/nr-no.md](../../.scratch/docs-consistency/audit/nr-no.md) M8、L14。部分停用 [ADR-0235](./0235-route-reassessment-settles-what-a-retry-cannot-change-and-does-not-judge-triggers-older-than-the-current-position.md) 决定一「重投推得动的照旧是未决……」一句里「适用性看不清」一格，被停原句与适用场景见「对已接受记录的作用」；回答 ADR-0235 越权风险点 1。ADR-0235 正文不改，只在其 Status 行与 Links 加前向指针。代码随票 [docs-consistency/code/26](../../.scratch/docs-consistency/code/26-unclear-plan-applicability-in-reassessment-is-retried-instead-of-settled.md)。越权风险点见文末，待 NR owner 复核，第 2 点知会 PS owner。）<!-- 索引注记 -->｜**分格**：复核里的「适用性看不清」只来自取数侧对选中候选答限制状态未知，来源有关务目录为空、受理基线缺端点国家、关务来源未接，重投都推不动；改答`未判`，原因 `PLAN_APPLICABILITY_UNCLEAR`，未判登记同行记下取数侧交回的缺口与再判条件，计划与适用性都不动。真依赖故障（关务目录读不动）在取数侧交错误，照旧走证据读不动、回滚重投。**续办纪律**：ADR-0094 决定四只管受理判断链；路由复核的每一次控制触发都从自己的位置重判，入账未判可以先于续办落地，续办仍归票 154
 Date: 2026-10-21
 
 ## Context
 
 - ADR-0235 决定一按恢复动作把复核未决分成两格：重投推得动的照旧是未决、回滚重投，名单里有「适用性看不清」；重投推不动的答`未判`、入账留原因。
 - 「适用性看不清」在代码里是领域 `ReviewPlanApplicability` 遇选中候选的限制状态未知（`ConstraintStatusUnknown`）答 `PlanReviewUndecided`，复核编排把它折成 `PlanReviewInconclusive`、回滚重投。
-- 限制状态未知今天只有三个来处，都在关务适用性取数侧：
+- 限制状态未知今天的来处都在关务适用性取数侧（取证于 main `205eb254`）：
   - 关务来源目录为空（`CUSTOMS_PORT_PATH_CATALOG_EMPTY`）：租户没登口岸路径目录，等登记。
   - 受理基线的地理投影缺端点国家（`CUSTOMS_ENDPOINT_COUNTRY_MISSING/<端>`）：基线一经固定不再改写，这一格永远补不上。
   - 关务来源未接（`CUSTOMS_APPLICABILITY_NOT_CONNECTED`）：装配没接关务判断口，等部署。
 - 关务目录读不动（`CatalogUnreadable`）不在其中：取数侧把它作为错误交回，复核编排答「证据读不动」，回滚重投。
-- 三格重投多少次都一样，照 ADR-0235 自己的判据该答`未判`。它们照旧占着交接分区重投到 `ABANDONED`；UC-NR-003 `AT-NR-067` 把它们写成依赖类未决，运维会去查一个没坏的依赖。
+- 它们重投多少次都一样，照 ADR-0235 自己的判据该答`未判`。它们照旧占着交接分区重投到 `ABANDONED`；UC-NR-003 `AT-NR-067` 把它们写成依赖类未决，运维会去查一个没坏的依赖。
 - ADR-0235 越权风险点 1 留了一问：ADR-0094 决定四说「第三格必须与它的续办触发同笔落地，否则不许落地」；ADR-0235 落`未判`而没带续办。ADR-0094 自己的索引注记写明适用场景是「接受判断链的未决处置」，两份记录之间没有停用关系，要不要跨上下文适用没人裁过。
 
 ## Decision
@@ -34,9 +34,9 @@ Date: 2026-10-21
 
 ## 候选与反方
 
-- **只把目录为空、端点国家缺两格移到`未判`，「关务来源未接」留在未决。** 否决：来源未接等的是部署，重投同样推不动；留在未决就是让没接关务的部署每次复核都烧到 `ABANDONED`。
-- **在取数侧把三格译成「证据未配置」，复用 `REASSESS_EVIDENCE_NOT_CONFIGURED`。** 否决：证据未配置说的是判断时点没有适用的网络证据（ADR-0052），这里网络证据在、缺的是选中候选的关务资格；合成一格，运维按原因查时分不出该去登哪一样。
-- **未判登记只记原因，不记缺口。** 否决：三种来源的补法各不相同，只记原因等于让续办与运维回头再问一次取数侧。
+- **只把目录为空、端点国家缺这两样移到`未判`，「关务来源未接」留在未决。** 否决：来源未接等的是部署，重投同样推不动；留在未决就是让没接关务的部署每次复核都烧到 `ABANDONED`。
+- **在取数侧把这些来源译成「证据未配置」，复用 `REASSESS_EVIDENCE_NOT_CONFIGURED`。** 否决：证据未配置说的是判断时点没有适用的网络证据（ADR-0052），这里网络证据在、缺的是选中候选的关务资格；合成一格，运维按原因查时分不出该去登哪一样。
+- **未判登记只记原因，不记缺口。** 否决：这几种来源的补法各不相同，只记原因等于让续办与运维回头再问一次取数侧。
 - **ADR-0094 决定四跨上下文适用，撤回 ADR-0235 的`未判`、改回重投。** 否决：代价回到 ADR-0215 越权风险点 10，分区堵到 `ABANDONED`，同样丢掉这次复核，还拖住同一分区后面的信封。
 - **另立一份记录把 ADR-0094 决定四定为跨上下文纪律、同时给路由复核补续办。** 未采纳：续办的形状要与票 14 的同族修法一起定（ADR-0235 决定六），本记录不抢那张票。
 
@@ -51,7 +51,7 @@ Date: 2026-10-21
 
 - 代码随票 docs-consistency/code/26：`ports.NotJudgedReason` 加 `PLAN_APPLICABILITY_UNCLEAR`；复核编排遇 `PlanReviewUndecided` 改答`未判`，`ReassessUndecidedReason` 去掉 `PlanReviewInconclusive`；未判登记加缺口与再判条件两列（network_routing 新迁移），这一原因必带、其余原因可空。
 - UC-NR-003 结果表「当前计划适用性未决」一格并入`触发未判`；`AT-NR-051` 改写，`AT-NR-067` 去掉「适用性看不清」。
-- 在 code/26 落地之前，生产上这三格照旧回滚重投到 `ABANDONED`。
+- 在 code/26 落地之前，生产上这些来源照旧回滚重投到 `ABANDONED`。
 
 ## 越权风险点
 

@@ -227,7 +227,7 @@
 | 路由指令（步骤 7B、`AT-NR-037`、「节点安全作业与方向性作业」） | 没有路由指令的模型 | [no-directional-basis/02](../../../.scratch/no-directional-basis/issues/02-network-routing-has-no-routing-instruction-or-consolidation-compatibility-judgment.md) |
 | 集运兼容判断（「节点安全作业与方向性作业」） | 没有成员级集运兼容判断的模型 | [no-directional-basis/02](../../../.scratch/no-directional-basis/issues/02-network-routing-has-no-routing-instruction-or-consolidation-compatibility-judgment.md) |
 | 路由偏离（`AT-NR-035`） | 没有偏离的模型 | [demo-chain-gaps/35](../../../.scratch/demo-chain-gaps/issues/35-network-routing-route-deviation-consumes-movement-facts.md) |
-| 节点实测触发复核（元数据「触发」的当前有效实测、`AT-NR-036`、`AT-NR-037`） | `node-operations` 没有实际测量登记册，复核只有收寄采用与交接两种触发；NR 侧消费票随实测登记册另立 | [pp-pricing-input-seams/04](../../../.scratch/pp-pricing-input-seams/issues/04-no-actual-measurement-registry-and-valid-measurements-read-port.md) |
+| 节点实测触发复核（元数据「触发」的当前有效实测、`AT-NR-036`、`AT-NR-037`） | `node-operations` 没有实际测量登记册，复核的触发今天只有收寄采用与交接；NR 侧消费票随实测登记册另立 | [pp-pricing-input-seams/04](../../../.scratch/pp-pricing-input-seams/issues/04-no-actual-measurement-registry-and-valid-measurements-read-port.md) |
 | 复评新计划的发布意图与运输准备消费 | 新计划落库，不另发信封 | [demo-chain-gaps/34](../../../.scratch/demo-chain-gaps/issues/34-network-routing-replanned-route-envelope-and-tf-preparation-consumer.md) |
 | 入账未判之后的续办 | 没有续办手段 | [demo-chain-gaps/154](../../../.scratch/demo-chain-gaps/issues/154-network-reassessment-not-judged-triggers-resume-after-registration.md) |
 

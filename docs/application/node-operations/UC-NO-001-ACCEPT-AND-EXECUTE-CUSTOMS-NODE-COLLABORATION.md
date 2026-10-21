@@ -1,6 +1,6 @@
 # UC-NO-001 承接并执行节点监管协作
 
-状态：开发基线草案；节点承接、作业任务、现场执行事实和关务回接边界已形成，真实监管程序的动作、执行方、授权和证据参数待提供。承接决定的「待补充」一格未实现：代码只有接受、拒接、部分承接三格，见 [docs-consistency/code/18](../../../.scratch/docs-consistency/code/18-node-customs-collaboration-acceptance-lacks-pending-supplement.md)
+状态：开发基线草案；节点承接、作业任务、现场执行事实和关务回接边界已形成，真实监管程序的动作、执行方、授权和证据参数待提供。承接决定的「待补充」一格未实现：代码的承接决定只有接受、拒接、部分承接，见 [docs-consistency/code/18](../../../.scratch/docs-consistency/code/18-node-customs-collaboration-acceptance-lacks-pending-supplement.md)
 
 ## 目标与边界
 
