@@ -86,7 +86,7 @@
 
 ## 首切范围与现状
 
-动作集合 `AuthorizedAction` 是封闭集：人工复核（`MANUAL_REVIEW`）、主动拒绝（`ACTIVE_REJECTION`）、资料修订（`SOURCE_DATA_AMENDMENT`，[ADR-0116](../../adr/0116-source-data-amendment-is-an-authorized-action-and-contract-delegation-resolves-the-actual-decider.md) 决定一）、受控关闭（`CONTROLLED_CLOSURE`）与重开（`REOPENING`）。裁定交回动作、所命中的授权规则版本、原因、证据、时点与实际决定方（`Authorization.Decider()`，ADR-0116 决定三）。消费侧 `parcel-shipment` 的主动拒绝、人工复核、资料修订、受控关闭与重开各有授权适配器，按本用例的答复集合翻译；`适用冲突`今天不在它们的翻译集合内，落进各自的 `default` 交回 error（未形成），补这一格见 code/24。撤回不在动作集内，归建模未决一；`parcel-shipment` 的撤回适配器已在，折不出请求即答未形成，不译成授权规则未配置。
+动作集合 `AuthorizedAction` 是封闭集：人工复核（`MANUAL_REVIEW`）、主动拒绝（`ACTIVE_REJECTION`）、资料修订（`SOURCE_DATA_AMENDMENT`，[ADR-0116](../../adr/0116-source-data-amendment-is-an-authorized-action-and-contract-delegation-resolves-the-actual-decider.md) 决定一）、受控关闭（`CONTROLLED_CLOSURE`）与重开（`REOPENING`）。裁定交回动作、所命中的授权规则版本、原因、证据、时点与实际决定方（`Authorization.Decider()`，ADR-0116 决定三）。消费侧 `parcel-shipment` 的主动拒绝、人工复核、资料修订各有授权适配器，受控关闭与重开共用一只（`continued_attempt_decision_authorization.go`），按本用例的答复集合翻译；`适用冲突`今天不在它们的翻译集合内，落进各自的 `default` 交回 error（未形成），补这一格见 code/24。撤回不在动作集内，归建模未决一；`parcel-shipment` 的撤回适配器已在，折不出请求即答未形成，不译成授权规则未配置。
 
 ## 建模未决与已作的裁定
 
@@ -129,7 +129,7 @@
 | `AT-PC-049` | 已授权后该授权规则被截止或退役 | 既有决定继续引用当时采用的那一版，不追溯改写 |
 | `AT-PC-059` | 同一授权规则对象同起点重发 `v2` 并退役 `v1`，此后按两版共同的范围、法人、等级与动作询问 | 命中 `v2`，`已授权`并指名 `v2`；已退役的 `v1` 不参与，也不使这次询问成为适用冲突（ADR-0261 决定一） |
 | `AT-PC-060` | 授权规则旧版被截止在后继的生效时点，分别以截止点之前与之后的业务时点询问 | 之前命中旧版，之后只命中后继；截止之后的旧版授予不算现行规则（ADR-0261 决定一） |
-| `AT-PC-061` | 客户合同版本被同起点退役或截止之后，运营角色代该客户请求资料修订 | 挂在已退役那一版、或截止点之后的旧版上的委派不再解出实际决定方；后继合同版本声明了同一委派即由它解出，没有即`不允许`（委派缺席，ADR-0261 决定二） |
+| `AT-PC-061` | 客户合同版本被同起点退役或截止之后，运营角色代该客户请求资料修订 | 挂在已退役那一版、或截止点之后的旧版上的委派不再解出实际决定方；后继合同版本声明了同一委派即由它解出，没有即`不允许`（委派缺席，ADR-0116 决定三）；折法见 ADR-0261 决定二 |
 
 ## 给开发的交接
 
@@ -137,7 +137,7 @@
 
 首发答复对照（`domain.Authorize` 与编排）：`已授权`是交回的 `Authorization`；`不允许`是 `ErrNotAuthorized`，含它的两个具名分格 `ErrDelegationAbsent`（委派缺席）与 `ErrCustomerAccountCannotDecide`（客户账户请求只能由运营角色形成的关闭或重开）；`授权规则未配置`是 `ErrAuthorityRulesNotConfigured`；`未形成`是装载失败的包装错误与委派读口未接线的错误；输入未受理在请求构造时就拒（`ErrInvalidAuthorizationRequest`、`ErrAuthorizationRequesterRequired`），不进编排。`适用冲突`今天没有对应的格。
 
-现状缺口（规则如上文，代码未到；预期结果不变）：
+现状缺口（规则见「结果语义」「应用流程」与「建模未决与已作的裁定」第五项，代码未到；预期结果不变）：
 
 | AT | 缺口 | 承接 |
 |---|---|---|
