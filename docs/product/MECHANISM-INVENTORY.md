@@ -12,7 +12,7 @@
 | customscompliance | 126 | 126 | 24 | 47 | 10 | 18 |
 | networkrouting | 80 | 82 | 9 | 14 | 2 | 7 |
 | nodeoperations | 109 | 116 | 15 | 29 | 4 | 16 |
-| parcelpricing | 137 | 125 | 18 | 18 | 1 | 23 |
+| parcelpricing | 142 | 129 | 19 | 19 | 1 | 24 |
 | parcelshipment | 209 | 205 | 20 | 39 | 10 | 19 |
 | partycommercial | 170 | 180 | 14 | 43 | 1 | 39 |
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
@@ -20,9 +20,9 @@
 | settlementaccounting | 221 | 162 | 37 | 65 | 13 | 10 |
 | transportfulfillment | 248 | 255 | 42 | 49 | 13 | 45 |
 | visibilityexception | 112 | 110 | 12 | 31 | 8 | 12 |
-| **合计** | 1521 | 1467 | 200 | 353 | 63 | 198 |
+| **合计** | 1526 | 1471 | 201 | 354 | 63 | 199 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 205、测试 299。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 207、测试 302。
 
 ## 跨上下文消费缝：50 组，149 个生产文件
 
@@ -79,7 +79,7 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 7 |
 
-## 迁移：12 个模块共 286 份 SQL
+## 迁移：12 个模块共 287 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -88,7 +88,7 @@
 | customs_compliance | 26 |
 | network_routing | 22 |
 | node_operations | 19 |
-| parcel_pricing | 12 |
+| parcel_pricing | 13 |
 | parcel_shipment | 27 |
 | party_commercial | 40 |
 | pilot_governance | 8 |
@@ -96,7 +96,7 @@
 | transport_fulfillment | 42 |
 | visibility_exception | 27 |
 
-## 接线面：接入面端点 180 个，消费适配器 53 个生产文件，直投路由表 37 条
+## 接线面：接入面端点 182 个，消费适配器 53 个生产文件，直投路由表 37 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -107,14 +107,14 @@
 | customscompliance | 21 |
 | networkrouting | 9 |
 | nodeoperations | 17 |
-| parcelpricing | 17 |
+| parcelpricing | 19 |
 | parcelshipment | 15 |
 | partycommercial | 34 |
 | pilotgovernance | 1 |
 | settlementaccounting | 8 |
 | transportfulfillment | 40 |
 | visibilityexception | 15 |
-| **合计** | 180 |
+| **合计** | 182 |
 
 消费适配器按 `internal/<消费方>/adapters/` 下 `inbox`、`adoptconsume`、`finalconsume`、`veconsume` 四类目录的生产文件数。它与上面的「跨上下文消费缝」是两种东西：那一栏数的是消费方为某个提供方写的防腐层，这一栏数的是接进程内直投信封的消费门。
 
@@ -144,7 +144,7 @@
 | （未归类） | 1 |
 | **合计** | 37 |
 
-## 端口：声明 565 个；基线口径缺 37，精确口径缺 2
+## 端口：声明 566 个；基线口径缺 37，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
