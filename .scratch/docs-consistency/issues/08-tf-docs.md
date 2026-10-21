@@ -1,7 +1,7 @@
 # 08 TF（transport-fulfillment）：CONTEXT 写出现行规则、UC 与之一致、矛盾裁清
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dc08。此前 ready-for-agent——2026-10-21 协调方立（文档自洽修订，见 [README](../README.md)「修订执行」）
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dc08。此前 ready-for-agent——2026-10-21 协调方立（文档自洽修订，见 [README](../README.md)「修订执行」）
 Blocked by: 无（01 进 main 后开工；票 57、88、146+94 已进 main）
 出处：[audit/tf.md](../audit/tf.md)（tf.md）；[02 的完成记录](./02-code-defects-from-the-audit.md)里「交修订票」一表中交给本票的条目；[01](./01-adr-suspension-chains.md) 的「交后续」一节里交给本票的条目。
 
@@ -159,3 +159,9 @@ Blocked by: 无（01 进 main 后开工；票 57、88、146+94 已进 main）
 未采纳：无。
 
 修订后：已 `git rebase main`（main `544e41de1`，06、07 已进），AT 盘点 ④ 节与文末追记的冲突取并集，06、07 与本票的行与追记都保留。scratchpad 副本上 `go run ./tools/adr-index` 后 `-check` 退 0，重生成的索引里 ADR-0265 那一行不再有「这一格本身就说明缺的是移动授权」；改动的 `.md` 链接全部解析；新写的书名号引文逐字核过；0202、0203、0209、0213、0216、0221 去掉 Status 行与 Links 后与 main 逐字节相同；`at-coverage-counts -check` 只报计数过期。
+
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-dc08` tip `ae7e340d6` 在 main `544e41de1` 上快进；两轮隔离评审的阻断全部消掉，第二轮修订由协调方抽核（ADR-0265 索引注记已无旧理由；UC-TF-001 缺路由不再答待补充）。
+- 协调方随后在 tip 上单独提交：重生成 `docs/adr/README.md`、重算 AT 盘点总览计数；两者 `-check` 退 0。机制清点重生成无变化；`go build ./...` 干净。本票只动文档，未跑全量真库测试。
+- 去向：代码票 code/43；code/02 追加注释清单；票 37 改范围；交横切 X1–X7 交票 10。票 demo-chain-gaps/126 可开工。
