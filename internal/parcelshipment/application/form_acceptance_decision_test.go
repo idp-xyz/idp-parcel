@@ -995,15 +995,24 @@ func (double *decisionHandoffDouble) HandOffAcceptanceDecision(
 type controlReleaseDouble struct {
 	calls           int
 	controlResultID string
-	err             error
+	// versions 按序留下每次释放指名的提交版本：被取代版本的释放与本版拒绝的释放走同一个端口，
+	// 只看计数分不出放的是哪一版。
+	versions []domain.SubmissionVersionID
+	err      error
+	// record 在场时把释放记进夹具的调用序，供断言「释放先于判断新版本」。
+	record func(string)
 }
 
 func (double *controlReleaseDouble) ReleasePreAcceptanceControl(
 	_ context.Context,
 	request ports.ControlReleaseRequest,
 ) error {
+	if double.record != nil {
+		double.record("release-control")
+	}
 	double.calls++
 	double.controlResultID = request.ControlResultID.String()
+	double.versions = append(double.versions, request.SubmissionVersion)
 	return double.err
 }
 
@@ -1025,7 +1034,10 @@ type recordedJudgmentsDouble struct {
 	// control 在场时原样交回，压过 controlOutcome：一格结论造不出「第一项成立、第二项受限」那种
 	// 逐项形状，而释放该看的正是逐项（ADR-0125 决定四）。
 	control *domain.FinancialControlResult
-	err     error
+	// controlByVersion 按提交版本给控制结论，压过上面两格：被取代那一版占没占下资金与当前版本无关。
+	// 结论的零值表示那一版从未形成控制。
+	controlByVersion map[string]domain.FinancialControlOutcome
+	err              error
 	// noAdoptedResolution 表示还没有任何一轮采用过商业依据。默认相反，因为多数用例是在
 	// 判断推进过之后才形成决定的。
 	noAdoptedResolution bool
@@ -1074,6 +1086,13 @@ func (double *recordedJudgmentsDouble) LoadRecordedJudgments(
 		recorded.Reachability = append(recorded.Reachability, judgment)
 	}
 
+	if outcome, listed := double.controlByVersion[version.String()]; listed {
+		if outcome != domain.FinancialControlOutcomeInvalid {
+			recorded.FinancialControl = financialControlOf(double.t, outcome, "SAC-"+version.String(),
+				formedAsOfFor(double.t, domain.FinancialControlJudgmentKind, controlPolicyFormedAsOf))
+		}
+		return recorded, nil
+	}
 	switch {
 	case double.control != nil:
 		recorded.FinancialControl = *double.control

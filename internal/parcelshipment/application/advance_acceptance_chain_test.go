@@ -245,14 +245,15 @@ func TestAnEmptyMemberListIsRejectedRatherThanReadAsNothingToJudge(t *testing.T)
 	}
 }
 
-// Covers: 三个 Stage 各有自己的字面 — Stage 会随未决原因一起写进消费门的错误正文，两格
+// Covers: 每个 Stage 各有自己的字面 — Stage 会随未决原因一起写进消费门的错误正文，两格
 // 同字面时运维在日志里认不出停的是哪条腿。
 func TestEachStageNamesItself(t *testing.T) {
-	seen := make(map[string]application.AcceptanceChainStage, 3)
+	seen := make(map[string]application.AcceptanceChainStage)
 	for _, stage := range []application.AcceptanceChainStage{
 		application.AcceptanceChainReachabilityStage,
 		application.AcceptanceChainFinancialControlStage,
 		application.AcceptanceChainDecisionStage,
+		application.AcceptanceChainSupersededReleaseStage,
 	} {
 		name := stage.String()
 		if name == "" {
@@ -281,6 +282,8 @@ type chainFixture struct {
 	controller   *financialControlDouble
 	requests     *decidableRequestStore
 	downstream   *decisionHandoffDouble
+	judgments    *recordedJudgmentsDouble
+	release      *controlReleaseDouble
 	calls        []string
 }
 
@@ -304,6 +307,18 @@ func newChainFixture(t *testing.T) *chainFixture {
 	value.requests = &decidableRequestStore{t: t}
 	value.downstream = &decisionHandoffDouble{}
 
+	// 决定那一步读的是**已记录**的判断，而记录端口在本夹具里是个不回读的替身。
+	// 因此这里给一份与命令成员一致的已记录判断，冒充前两步刚记下的那些。
+	value.judgments = &recordedJudgmentsDouble{
+		t: t,
+		reachability: map[string]domain.ReachabilityValue{
+			"parcel-1": domain.ReachabilityReachable,
+			"parcel-2": domain.ReachabilityReachable,
+		},
+		controlOutcome: domain.FinancialControlHeld,
+	}
+	value.release = &controlReleaseDouble{record: record}
+
 	recorder := &judgmentRequestStore{}
 	clock := fixedClock{at: handlerClockAt}
 	value.deps = application.AdvanceAcceptanceChainDeps{
@@ -313,21 +328,12 @@ func newChainFixture(t *testing.T) *chainFixture {
 		FinancialControl: application.NewAdvanceFinancialControlJudgmentHandler(
 			value.commercial, value.controller, &controlDispositionDouble{}, recorder, value.requests, clock),
 		Decision: application.NewFormAcceptanceDecisionHandler(application.FormAcceptanceDecisionDeps{
-			Requests:   value.requests,
-			Commercial: value.commercial,
-			// 决定那一步读的是**已记录**的判断，而记录端口在本夹具里是个不回读的替身。
-			// 因此这里给一份与命令成员一致的已记录判断，冒充前两步刚记下的那些。
-			Judgments: &recordedJudgmentsDouble{
-				t: t,
-				reachability: map[string]domain.ReachabilityValue{
-					"parcel-1": domain.ReachabilityReachable,
-					"parcel-2": domain.ReachabilityReachable,
-				},
-				controlOutcome: domain.FinancialControlHeld,
-			},
+			Requests:     value.requests,
+			Commercial:   value.commercial,
+			Judgments:    value.judgments,
 			Reachability: &reachabilityRevalidatorDouble{outcome: ports.ReachabilityJudgmentStillCurrent},
 			Recorder:     recorder,
-			Release:      &controlReleaseDouble{},
+			Release:      value.release,
 			Downstream:   value.downstream,
 			Identities:   &decisionIdentityFactory{t: t},
 			Clock:        clock,

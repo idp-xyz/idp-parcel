@@ -52,10 +52,30 @@ type customerSupplementLoopFixture struct {
 	supplementGate   *psinbox.SubmissionVersionFormedConsumer
 	submittedHandoff *pspostgres.OutboxShipmentRequestSubmittedHandoff
 	supplement       *psapplication.FormNewSubmissionVersionHandler
+	chain            *psapplication.AdvanceAcceptanceChainHandler
+	commercial       *synRSwitchableAsOfCommercialBasis
+}
+
+// customerSupplementLoopLegs 是夹具里可换的两口：财务控制与占用释放。缺省是合成替身（控制恒成立、释放恒成功）；
+// 要证占用在两本账上真的形成与释放时，换成生产的 PS→SA 适配器（superseded_version_control_release_test.go）。
+type customerSupplementLoopLegs struct {
+	control psports.PreAcceptanceFinancialController
+	release psports.PreAcceptanceControlRelease
 }
 
 func newCustomerSupplementLoopFixture(t *testing.T) *customerSupplementLoopFixture {
 	t.Helper()
+	return newCustomerSupplementLoopFixtureWith(t, customerSupplementLoopLegs{})
+}
+
+func newCustomerSupplementLoopFixtureWith(t *testing.T, legs customerSupplementLoopLegs) *customerSupplementLoopFixture {
+	t.Helper()
+	if legs.control == nil {
+		legs.control = synRFinancialAuthority{t: t}
+	}
+	if legs.release == nil {
+		legs.release = &synSControlRelease{}
+	}
 
 	base := newSYNVerticalFixture(t)
 	store, err := outbox.NewStore(base.db)
@@ -88,7 +108,7 @@ func newCustomerSupplementLoopFixture(t *testing.T) *customerSupplementLoopFixtu
 		Reachability: &synSReachabilityRevalidator{},
 		Judgments:    base.judgments,
 		Recorder:     base.judgments,
-		Release:      &synSControlRelease{},
+		Release:      legs.release,
 		Downstream:   decisionHandoff,
 		Identities:   &synSDecisionIdentities{},
 		Clock:        systemClock{},
@@ -98,7 +118,7 @@ func newCustomerSupplementLoopFixture(t *testing.T) *customerSupplementLoopFixtu
 		Reachability: psapplication.NewAdvanceAcceptanceJudgmentHandler(
 			commercial, reachability, base.judgments, base.requests, systemClock{}),
 		FinancialControl: psapplication.NewAdvanceFinancialControlJudgmentHandler(
-			commercial, synRFinancialAuthority{t: t}, synRControlDispositions{}, base.judgments, base.requests, systemClock{}),
+			commercial, legs.control, synRControlDispositions{}, base.judgments, base.requests, systemClock{}),
 		Decision: decision,
 	})
 	submittedGate, err := psinbox.NewShipmentRequestSubmittedConsumer(base.transactor, inboxStore, chain)
@@ -136,6 +156,8 @@ func newCustomerSupplementLoopFixture(t *testing.T) *customerSupplementLoopFixtu
 		supplementGate:     supplementGate,
 		submittedHandoff:   submittedHandoff,
 		supplement:         supplement,
+		chain:              chain,
+		commercial:         commercial,
 	}
 }
 

@@ -26,6 +26,9 @@ const (
 	AcceptanceChainReachabilityStage
 	AcceptanceChainFinancialControlStage
 	AcceptanceChainDecisionStage
+	// AcceptanceChainSupersededReleaseStage 是三步之前那一拍：放掉被取代各版已成立的占用（见 releaseSuperseded）。
+	// 它单列一格而不借财务控制那一格：停在这里时当前版本的控制一步都没走，借过去运维会去查一笔根本没发起的占用。
+	AcceptanceChainSupersededReleaseStage
 )
 
 func (stage AcceptanceChainStage) String() string {
@@ -36,6 +39,8 @@ func (stage AcceptanceChainStage) String() string {
 		return "FINANCIAL_CONTROL_JUDGMENT"
 	case AcceptanceChainDecisionStage:
 		return "ACCEPTANCE_DECISION"
+	case AcceptanceChainSupersededReleaseStage:
+		return "SUPERSEDED_CONTROL_RELEASE"
 	default:
 		return ""
 	}
@@ -152,7 +157,7 @@ func NewAdvanceAcceptanceChainHandler(deps AdvanceAcceptanceChainDeps) *AdvanceA
 	return &AdvanceAcceptanceChainHandler{deps: deps}
 }
 
-// Handle 推进一轮：逐成员可达性 → 整份委托财务控制 → 形成决定。
+// Handle 推进一轮：放掉被取代各版已成立的占用 → 逐成员可达性 → 整份委托财务控制 → 形成决定。
 //
 // 任一步未决即整条停下，不往下走。往下走没有意义而且有害：形成决定读的是**已记录**的
 // 判断，缺一条它只会再答一次`尚未决定`，代价是多记一次处理尝试，还把停顿原因换成了
@@ -188,6 +193,15 @@ func (handler *AdvanceAcceptanceChainHandler) Handle(
 			outcome: AcceptanceChainVersionSuperseded,
 			state:   request.State(),
 		}, nil
+	}
+	if err == nil && found {
+		stalled, stopped, err := handler.releaseSuperseded(ctx, command, request)
+		if err != nil {
+			return AdvanceAcceptanceChainResult{}, err
+		}
+		if stopped {
+			return stalled, nil
+		}
 	}
 
 	// 逐成员推进可达性：命令按成员发起（AdvanceAcceptanceJudgmentCommand 带

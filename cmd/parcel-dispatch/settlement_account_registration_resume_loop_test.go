@@ -224,11 +224,12 @@ func (adoptions *synRCountingAdoptions) FindAdoption(
 	return adoptions.inner.FindAdoption(ctx, tenant, account)
 }
 
-// synRCountingTrials 是试算口的替身：恒答「这一时点没有在用的售价卡」并计数、记下最后一次的问法。被问到即证金额那一格的
-// 采用行已找到；问法里的计价范围就是那一行登的。
+// synRCountingTrials 是试算口的替身：缺省答「这一时点没有在用的售价卡」并计数、记下最后一次的问法。被问到即证金额那一格的
+// 采用行已找到；问法里的计价范围就是那一行登的。answer 在场时改按它作答——要让控制真的占下一笔金额的用例用它。
 type synRCountingTrials struct {
-	asked int
-	query saports.PreAcceptanceTrialQuery
+	asked  int
+	query  saports.PreAcceptanceTrialQuery
+	answer func(saports.PreAcceptanceTrialQuery) saports.PreAcceptanceTrialAnswer
 }
 
 func (trials *synRCountingTrials) FormPreAcceptanceTrials(
@@ -237,6 +238,9 @@ func (trials *synRCountingTrials) FormPreAcceptanceTrials(
 ) (saports.PreAcceptanceTrialAnswer, error) {
 	trials.asked++
 	trials.query = query
+	if trials.answer != nil {
+		return trials.answer(query), nil
+	}
 	return saports.PreAcceptanceTrialAnswer{Outcome: saports.PreAcceptanceTrialPriceCardNotConfigured}, nil
 }
 
