@@ -487,6 +487,14 @@ func (unwiredTransportFulfillmentRecords) ListDeliveryDispatchPendings(
 	return nil, errOrchestrationNotWired
 }
 
+func (unwiredTransportFulfillmentRecords) ListDeliveryDispatchReaskCadences(
+	context.Context,
+	tfdomain.TenantID,
+	int,
+) ([]tfports.DeliveryDispatchReaskCadenceRecord, error) {
+	return nil, errOrchestrationNotWired
+}
+
 func (unwiredTransportFulfillmentRecords) ListTransportPreparations(
 	context.Context,
 	tfdomain.TenantID,

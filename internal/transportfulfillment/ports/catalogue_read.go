@@ -259,4 +259,10 @@ type ReviewCatalogueRead interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]DeliveryDispatchPendingRecord, error)
+	// ListDeliveryDispatchReaskCadences 上列一个租户登过的各版重问间隔（ADR-0230 决定五），最近登记的在前：第一行就是生效的那一版。
+	ListDeliveryDispatchReaskCadences(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]DeliveryDispatchReaskCadenceRecord, error)
 }

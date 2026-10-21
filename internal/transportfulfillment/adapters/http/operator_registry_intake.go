@@ -27,6 +27,7 @@ var (
 	_ CredentialIntake        = (*OperatorRegistryIntake)(nil)
 	_ EffectiveTimeRuleIntake = (*OperatorRegistryIntake)(nil)
 	_ MasterDocumentIntake    = (*OperatorRegistryIntake)(nil)
+	_ ReaskCadenceIntake      = (*OperatorRegistryIntake)(nil)
 )
 
 func NewOperatorRegistryIntake(authenticator OperatorRegistryAuthenticator) (*OperatorRegistryIntake, error) {
@@ -54,6 +55,10 @@ func (intake *OperatorRegistryIntake) IntakeMasterDocumentRegistration(ctx conte
 
 func (intake *OperatorRegistryIntake) IntakeMasterDocumentRevision(ctx context.Context, request *http.Request) (application.ReviseMasterDocumentCommand, error) {
 	return registryCommand(ctx, intake, request, MasterDocumentRevisionPayload.Command)
+}
+
+func (intake *OperatorRegistryIntake) IntakeReaskCadenceRegistration(ctx context.Context, request *http.Request) (application.RegisterReaskCadenceCommand, error) {
+	return registryCommand(ctx, intake, request, ReaskCadenceRegistrationPayload.Command)
 }
 
 // registryCommand 是各口共用的一段：认证 → 封闭解码（decodeClosedPayload，与运营决定口同一份判据）→ 载荷连同认证出

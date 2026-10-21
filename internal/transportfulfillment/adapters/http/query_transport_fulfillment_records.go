@@ -52,6 +52,11 @@ type ReviewCatalogueReader interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]ports.DeliveryDispatchPendingRecord, error)
+	ListDeliveryDispatchReaskCadences(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]ports.DeliveryDispatchReaskCadenceRecord, error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
@@ -66,6 +71,7 @@ const (
 	outcomeCarrierMasterDocumentsListed   = "CARRIER_MASTER_DOCUMENTS_LISTED"
 	outcomeTransportPreparationsListed    = "TRANSPORT_PREPARATIONS_LISTED"
 	outcomeDeliveryDispatchPendingsListed = "DELIVERY_DISPATCH_PENDINGS_LISTED"
+	outcomeReaskCadencesListed            = "REASK_CADENCES_LISTED"
 )
 
 const (
@@ -77,6 +83,7 @@ const (
 	registryCarrierMasterDocument   = "carrier-master-document"
 	registryTransportPreparation    = "transport-preparation"
 	registryDeliveryDispatchPending = "delivery-dispatch-pending"
+	registryReaskCadence            = "delivery-dispatch-reask-cadence"
 )
 
 // NewQueryTransportFulfillmentRecordsEndpoint 交回运输履约查阅页各本册子的 HTTP
@@ -107,7 +114,8 @@ func NewQueryTransportFulfillmentRecordsEndpoint(
 			registry != registryEffectiveDelivery &&
 			registry != registryCarrierMasterDocument &&
 			registry != registryTransportPreparation &&
-			registry != registryDeliveryDispatchPending {
+			registry != registryDeliveryDispatchPending &&
+			registry != registryReaskCadence {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
@@ -134,6 +142,8 @@ func NewQueryTransportFulfillmentRecordsEndpoint(
 			serveTransportPreparations(response, request, reader, tenant, query.Limit)
 		case registryDeliveryDispatchPending:
 			serveDeliveryDispatchPendings(response, request, reader, tenant, query.Limit)
+		case registryReaskCadence:
+			serveReaskCadences(response, request, reader, tenant, query.Limit)
 		}
 	})
 }
@@ -629,6 +639,42 @@ func serveDeliveryDispatchPendings(
 		Outcome:  outcomeDeliveryDispatchPendingsListed,
 		Pendings: bodies,
 	})
+}
+
+// serveReaskCadences 上列一个租户登过的各版重问间隔（ADR-0230 决定五），最近登记的在前、第一行生效。空册答 []：那个租户的到期重问
+// 答未配置。
+func serveReaskCadences(
+	response http.ResponseWriter,
+	request *http.Request,
+	reader ReviewCatalogueReader,
+	tenant domain.TenantID,
+	limit int,
+) {
+	rows, err := reader.ListDeliveryDispatchReaskCadences(request.Context(), tenant, limit)
+	if err != nil {
+		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+		return
+	}
+	bodies := make([]reaskCadenceBody, 0, len(rows))
+	for _, row := range rows {
+		bodies = append(bodies, reaskCadenceBody{
+			Version:         row.Cadence.Version().String(),
+			IntervalMinutes: int64(row.Cadence.Interval().Minutes()),
+			RecordedAt:      rfc3339(row.RecordedAt),
+		})
+	}
+	writeJSON(response, http.StatusOK, reaskCadenceListResponse{Outcome: outcomeReaskCadencesListed, Cadences: bodies})
+}
+
+type reaskCadenceListResponse struct {
+	Outcome  string             `json:"outcome"`
+	Cadences []reaskCadenceBody `json:"cadences"`
+}
+
+type reaskCadenceBody struct {
+	Version         string `json:"version"`
+	IntervalMinutes int64  `json:"intervalMinutes"`
+	RecordedAt      string `json:"recordedAt"`
 }
 
 type deliveryDispatchPendingListResponse struct {
