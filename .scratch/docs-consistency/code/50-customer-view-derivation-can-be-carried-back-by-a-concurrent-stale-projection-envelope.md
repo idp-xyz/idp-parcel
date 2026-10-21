@@ -2,7 +2,7 @@
 
 Category: bug
 Status: needs-triage——建议 R2（上线后尽快）：答错且静默，但要两封同一包裹的投影派生信封并发消费、交错落在一个窄窗口里才出现。2026-10-21 文档自洽 code/05 隔离评审立（用户「你作为业务和系统专家自决」授权），分支 claude-code05。分级由协调方定稿。
-Blocked by: 无（建在 [code/05](./05-customer-tracking-view-overwrites-published-versions.md) 的版本表与确认依据之上；code/05 未进 main 时以其分支为准）
+Blocked by: 无（建在 [code/05](./05-customer-tracking-view-overwrites-published-versions.md) 的 `ConfirmedOn` 之上，随 code/05 进 main）
 出处：code/05 隔离评审 N4。code/05 只修存储形状与换代判据，不修这个竞态。
 
 ## 现象

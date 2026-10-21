@@ -107,7 +107,7 @@
 | `AT-VE-173` | 查询时准入范围未登记或答不在范围 | 照常形成查询结果；查询不形成生产事实，不判准入范围 |
 | `AT-VE-188` | C1 的包裹所在委托已`已接受`（客户归属已确立），初始路由投影尚未形成、没有客户视图；C1 查询它，C2 用同一包裹号查询 | C1 得当前无可见结果；C2 得与包裹不存在逐字相同的答复，不泄露存在性；归属读不动时返回未形成（ADR-0246） |
 
-`AT-VE-161` 的现状缺口已由票 [docs-consistency/code/05](../../../.scratch/docs-consistency/code/05-customer-tracking-view-overwrites-published-versions.md) 补齐（2026-10-21）：客户视图版本只增不改写，替代追加新版本并回指前一版，已发布的前一版按版本读得回；新投影派生出的四维与当前版相同时不换代，只改记当前版所依据的投影版本。本行预期结果不变。
+`AT-VE-161` 的现状缺口已由票 [docs-consistency/code/05](../../../.scratch/docs-consistency/code/05-customer-tracking-view-overwrites-published-versions.md) 补齐（2026-10-21）：客户视图版本只增不改写，替代追加新版本并回指前一版，已发布的前一版按版本读得回；新投影派生出的四维与当前版相同时不换代，只前移当前版的确认依据（`ConfirmedOn`）；对客响应体不带投影版本，客户的采用版本由视图版本号承担。本行预期结果不变。
 
 `AT-VE-158` 与结果语义「客户追踪视图」一行的现状缺口由票 [docs-consistency/code/06](../../../.scratch/docs-consistency/code/06-customer-view-shows-dimensions-without-a-visible-judgement.md) 收窄（2026-10-21），未补齐：本上下文还没有 `UC-VE-003` 的 ETA 客户可见性判断，ETA 一维在策略准许展示时答待确认，不再答展示；里程碑一维在投影没有已归类的标准追踪里程碑时答待确认。两处都只收窄、不放宽，策略不展示的照旧不展示。`AT-VE-158` 预期的「不展示 ETA」对的是判断已形成、答未达门槛那一格，随 ETA 客户可见性判断落地（`AT-VE-187`）由票 [docs-consistency/code/51](../../../.scratch/docs-consistency/code/51-eta-customer-visibility-judgement-is-not-modelled-or-read-by-the-customer-view.md) 补齐。本行与那一行的预期结果不变。
 

@@ -1417,7 +1417,7 @@
 | `AT-VE-152` | 同一外部标识存在多个有效候选 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-154` | 集团用户只获委派 C1、C3 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-155` | C1/C2 包裹处于同一集运单元、班次或共同案件 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
-| `AT-VE-158` | 只有内部 ETA 或质量未达对客门槛 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md；现状（2026-10-21，code/06）：还没有 ETA 客户可见性判断对象，ETA 维在策略准许展示时答待确认（`TestAPermittedETAPendsWithoutACustomerVisibleETAJudgement`），「判断答未达门槛→不展示」那一格未钉，待 code/51 |
+| `AT-VE-158` | 只有内部 ETA 或质量未达对客门槛 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-159` | `parcel-shipment` 已形成当前有效客户服务终局 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-160` | 只有有效交付扫描但终局尚未形成 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-163` | 一个维度存在无法裁决的事实冲突 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |

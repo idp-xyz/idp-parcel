@@ -97,3 +97,14 @@ M：迁移另取号，把 `customer_view` 改成版本表加当前标记（照 `
 
 验证（修订后，同一分支）：`go build ./...`、`go vet ./...`、`gofmt -l` 干净；`scripts/test-full.sh ./internal/visibilityexception/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./internal/architecture/... ./migrations/...` 19 个包 ok，退出码 0。
 
+### 第 2 轮（2026-10-21，隔离评审；协调方转达，无阻断，变异测试 M1–M6 均被抓住）
+
+| 条 | 意见 | 处理 |
+|---|---|---|
+| N-a | 「所依据的投影」有几处说法没跟上新语义 | `DeriveCustomerViewHandler.Handle` 头注、`TestANewerProjectionThatLeavesTheDimensionsUnchangedKeepsTheViewVersion` 与 `TestAFailedReaffirmIsUndecided` 头注、UC-VE-008 `AT-VE-161` 缺口注都改为「只前移确认依据（`ConfirmedOn`）」 |
+| N-b | AT 盘点 ④ 不另开「现状」惯例 | `AT-VE-158` 那一行还原成 main 原文；现状只留在 UC-VE-008 缺口注与 code/06 票面 |
+| N-c | 四维不变用例补重投 | `TestASecondProjectionWithUnchangedDimensionsKeepsTheCustomerViewVersion` 末尾以新信封 ID 把 P2 的派生信封交给生产的客户视图派生那一路，再直接问一次租户现绑的派生编排：答 `EXISTING_RESULT`、意图已交出，版本行仍 1 行、确认依据仍是 P2、意图仍 1 份 |
+| N-d | 包数按实况写；补跑反向依赖与迁移执行器 | 第 1 轮那一跑的清单不含 `cmd/parcel-ve-register` 与 `internal/platform/migrate`，19 个包是那份清单的实况；本轮按全清单补跑，见下。code/50 的 Blocked by 改为「无（建在 code/05 的 `ConfirmedOn` 之上，随 code/05 进 main）」 |
+
+验证（第 2 轮修订后）：`go build ./...`、`go vet ./...`、`gofmt -l cmd internal migrations tools` 干净；`scripts/test-full.sh ./internal/visibilityexception/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./cmd/parcel-ve-register/ ./internal/architecture/... ./migrations/... ./internal/platform/migrate/...` 21 个包 ok，退出码 0。
+
