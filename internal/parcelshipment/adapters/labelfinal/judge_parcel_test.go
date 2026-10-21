@@ -11,6 +11,7 @@ import (
 	adapter "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/labelfinal"
 	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
 // 本文件证三路共用的处理方核与五值翻译（ADR-0134 决定二，lc/25 做法 3 那张表）：按（租户 + 包裹）反查
@@ -119,6 +120,21 @@ func (double *cancellationViewDouble) FindCancellation(
 	return cancellation, true, err
 }
 
+// emptyConflictRegister 是一本空的取消先后冲突册：交易与关闭两路读它，册上没有冲突即照旧取消在先。
+type emptyConflictRegister struct{}
+
+func (emptyConflictRegister) Record(
+	context.Context, psports.CancellationOrderConflictRecord,
+) (psports.CancellationOrderConflictSaveOutcome, error) {
+	return psports.CancellationOrderConflictRecorded, nil
+}
+
+func (emptyConflictRegister) ListByParcel(
+	context.Context, psdomain.TenantID, psdomain.DeclaredParcelID,
+) ([]psports.CancellationOrderConflictEntry, error) {
+	return nil, nil
+}
+
 func mustCancellationValue[T any](construct func(string) (T, error), raw string) T {
 	value, err := construct(raw)
 	if err != nil {
@@ -182,6 +198,7 @@ func newFixture(t *testing.T) *fixture {
 		Transactions:  transactions,
 		Registers:     registers,
 		Cancellations: cancels,
+		Conflicts:     emptyConflictRegister{},
 		Adoption:      adopter,
 		Clock:         fixedClock{at: judgedAt},
 	})}

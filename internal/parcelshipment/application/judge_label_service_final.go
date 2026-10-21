@@ -194,14 +194,25 @@ func (handler *JudgeLabelServiceFinalHandler) Handle(
 	if err != nil {
 		return undecidedLabelServiceFinal(LabelValidityRuleUnavailable), nil
 	}
+	conflictRecorded := false
+	if cancelled && pickup == (domain.CarrierFirstEffectivePickup{}) {
+		// 不带收寄的两路比不了先后，只能读册：收寄那一路已判出的冲突照答，同一包裹不因触发路不同而
+		// 答成取消在先（ADR-0254 决定二第 3 格）。
+		recorded, err := handler.conflictRecorded(ctx, tenant, command.Parcel, cancellation.ID())
+		if err != nil {
+			return undecidedLabelServiceFinal(LabelConflictRegisterUnavailable), nil
+		}
+		conflictRecorded = recorded
+	}
 
 	verdict, err := domain.JudgeLabelServiceFinal(domain.LabelServiceFinalInput{
-		Parcel:               command.Parcel,
-		Transactions:         transactions,
-		LapsedTransactions:   lapsed,
-		Register:             register,
-		FirstEffectivePickup: pickup,
-		Cancellation:         cancellation,
+		Parcel:                       command.Parcel,
+		Transactions:                 transactions,
+		LapsedTransactions:           lapsed,
+		Register:                     register,
+		FirstEffectivePickup:         pickup,
+		Cancellation:                 cancellation,
+		CancellationConflictRecorded: conflictRecorded,
 	})
 	if err != nil {
 		// 读口交回了别的包裹的东西：装配缺陷，响亮报错不吸收。
@@ -246,6 +257,28 @@ func (handler *JudgeLabelServiceFinalHandler) Handle(
 	result.adoption = adoption
 	result.delegated = true
 	return result, nil
+}
+
+// conflictRecorded 问冲突册上有没有一行指向这份取消。册未接入与读不动同答 error：没查过不能当作没有。
+func (handler *JudgeLabelServiceFinalHandler) conflictRecorded(
+	ctx context.Context,
+	tenant domain.TenantID,
+	parcel domain.DeclaredParcelID,
+	cancellation domain.ParcelCancellationID,
+) (bool, error) {
+	if handler.deps.Conflicts == nil {
+		return false, errors.New("conflict register is not wired")
+	}
+	entries, err := handler.deps.Conflicts.ListByParcel(ctx, tenant, parcel)
+	if err != nil {
+		return false, err
+	}
+	for _, entry := range entries {
+		if entry.Cancellation == cancellation {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // lapsedTransactions 对每笔上本包裹被受理的交易问一次有效期规则。规则未配置或读口缺席都不失效

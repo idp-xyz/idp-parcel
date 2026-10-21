@@ -158,13 +158,16 @@ func (reason LabelServiceNotFinalReason) String() string {
 //   - FirstEffectivePickup 零值即缺席。
 //   - Cancellation 是该包裹当前有效的取消决定，零值即没有。要整份而不只一个「有没有」：收寄路径上
 //     得拿它的业务时间与收寄比先后（ADR-0254）。
+//   - CancellationConflictRecorded 说冲突册上已有一行指向这份取消。不带收寄的两路没有边界事实可比，
+//     只能靠它知道冲突早已判出——否则同一包裹换一路触发就答成取消在先。
 type LabelServiceFinalInput struct {
-	Parcel               DeclaredParcelID
-	Transactions         []LabelTransaction
-	LapsedTransactions   []LabelTransactionID
-	Register             ContinuedAttemptRegister
-	FirstEffectivePickup CarrierFirstEffectivePickup
-	Cancellation         ParcelCancellation
+	Parcel                       DeclaredParcelID
+	Transactions                 []LabelTransaction
+	LapsedTransactions           []LabelTransactionID
+	Register                     ContinuedAttemptRegister
+	FirstEffectivePickup         CarrierFirstEffectivePickup
+	Cancellation                 ParcelCancellation
+	CancellationConflictRecorded bool
 }
 
 // LabelServiceFinalVerdict 是判断的产物：格、原因、所引的证据（收寄事实或生效关闭）与终局
@@ -194,7 +197,8 @@ func (verdict LabelServiceFinalVerdict) FirstEffectivePickup() (CarrierFirstEffe
 	return verdict.pickup, verdict.pickup.present()
 }
 
-// Conflict 只在`不形成`、原因为取消先后冲突时给出：哪份取消、哪一代收寄、各自的业务时间。
+// Conflict 只在这一次新判出取消先后冲突时给出（收寄路径）：哪份取消、哪一代收寄、各自的业务时间。
+// 交易与关闭两路照册上已有的冲突作答时不给——那一行早已记下，不是这次判出的。
 func (verdict LabelServiceFinalVerdict) Conflict() (CancellationOrderConflict, bool) {
 	return verdict.conflict, verdict.conflicted
 }
@@ -227,7 +231,7 @@ func (verdict LabelServiceFinalVerdict) ResponsibilityOutcomeKind() (Responsibil
 //
 //  1. 已经形成的有效取消结果 → 不形成非取消终局。带着收寄来时按两者的业务时间比（ADR-0254）：收寄
 //     晚于取消，取消在先；不晚于取消，事实冲突，`不形成`并指名冲突，也不按取消在先作答。不带收寄
-//     （交易与关闭两路）时没有边界事实可比，取消在先；
+//     （交易与关闭两路）时没有边界事实可比：册上已有指向这份取消的冲突即照答冲突，没有才是取消在先；
 //  2. 实际承运商首次有效收寄 → 非取消终局（不看交易停在哪一格、不看有没有关闭）；
 //  3. 否则要先有生效且未被重开的受控关闭——它只派生「不允许新增尝试」，本身不是终局；
 //  4. 全部相关交易均已定案——任一结果待确认都不得按失败处理；
@@ -248,6 +252,9 @@ func JudgeLabelServiceFinal(input LabelServiceFinalInput) (LabelServiceFinalVerd
 			return LabelServiceFinalVerdict{}, ErrInvalidLabelServiceFinalInput
 		}
 		if !input.FirstEffectivePickup.present() {
+			if input.CancellationConflictRecorded {
+				return LabelServiceFinalVerdict{judgment: LabelServiceNotFinal, reason: LabelServiceCancellationOrderConflict}, nil
+			}
 			return LabelServiceFinalVerdict{judgment: LabelServiceCancellationStands}, nil
 		}
 		reference, err := NewCancellationBoundaryReference(

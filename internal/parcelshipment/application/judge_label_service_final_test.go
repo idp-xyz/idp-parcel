@@ -9,6 +9,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
 var (
@@ -382,8 +383,6 @@ func TestCancellationAndUnconfiguredRulesStopTheLabelServiceFinalHonestly(t *tes
 	})
 }
 
-// Covers: ADR-0029 依赖故障归未决并指名等谁；未受理分格；未决原因集封闭；本编排的依赖里没有
-// 任何写口——它只判断，形成走既有采用路径。
 // Covers: `AT-PS-108`（ADR-0254 决定二第 3 格的面单渠道一侧）——有效取消已在，此后到的首次有效收寄
 // 发生不晚于取消的业务时间：不形成非取消终局，也不按取消在先作答，答`不形成`并指名冲突，不走采用
 // 路径；冲突记进冲突册按包裹查得出，已提交的取消不被碰。冲突记不下时按依赖未决交回——那一格重投会
@@ -469,6 +468,121 @@ func TestALateEarlierPickupIsAFactConflictWithTheStandingCancellation(t *testing
 	})
 }
 
+// Covers: `AT-PS-108` 与 ADR-0254 决定二第 3 格对同一包裹的各路触发——冲突一经收寄那一路判出并记进册，
+// 交易与关闭两路（不带收寄）再触发时也答`不形成`/CANCELLATION_ORDER_CONFLICT，不答取消在先：先查册上有没有
+// 指向这份取消的冲突。查不动按依赖未决；册上没有（或只有指向别的取消的行）照旧取消在先；册未接入不假装查过。
+func TestTheClosurePathsAnswerTheRecordedConflictToo(t *testing.T) {
+	arrange := func(t *testing.T) *labelServiceFinalFixture {
+		fixture := newLabelServiceFinalFixture(t)
+		fixture.final.cancellations.cancelled = true
+		fixture.final.cancellations.cancellation = cancelledAt(t, labelServicePickupAt.Add(time.Hour))
+		return fixture
+	}
+	recordConflictThroughThePickupRoute := func(t *testing.T, fixture *labelServiceFinalFixture) {
+		command := labelServiceCommand(t)
+		command.FirstEffectivePickup = labelServicePickup(t)
+		if _, err := fixture.handler.Handle(context.Background(), command); err != nil {
+			t.Fatalf("pickup route: %v", err)
+		}
+		if len(fixture.conflicts.records) != 1 {
+			t.Fatalf("收寄那一路没有记下冲突：%d 行", len(fixture.conflicts.records))
+		}
+	}
+
+	t.Run("a recorded conflict on this cancellation", func(t *testing.T) {
+		fixture := arrange(t)
+		recordConflictThroughThePickupRoute(t, fixture)
+
+		result, err := fixture.handler.Handle(context.Background(), labelServiceCommand(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.LabelServiceNotFinalOutcome ||
+			result.Verdict().Reason() != domain.LabelServiceCancellationOrderConflict {
+			t.Fatalf("outcome = %q reason = %q, want LABEL_SERVICE_NOT_FINAL/CANCELLATION_ORDER_CONFLICT",
+				result.Outcome(), result.Verdict().Reason())
+		}
+		if len(fixture.conflicts.records) != 1 {
+			t.Fatal("关闭那一路又记了一行冲突——它只读册，不判新冲突")
+		}
+		if _, delegated := result.Adoption(); delegated {
+			t.Fatal("冲突走到了采用路径")
+		}
+	})
+
+	t.Run("no conflict on the register keeps the cancellation", func(t *testing.T) {
+		fixture := arrange(t)
+		result, err := fixture.handler.Handle(context.Background(), labelServiceCommand(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.LabelServiceCancellationStandsOutcome {
+			t.Fatalf("outcome = %q, want CANCELLATION_STANDS", result.Outcome())
+		}
+	})
+
+	t.Run("a conflict on another cancellation does not count", func(t *testing.T) {
+		fixture := arrange(t)
+		recordConflictThroughThePickupRoute(t, fixture)
+		other := cancelledAt(t, labelServicePickupAt.Add(time.Hour))
+		spec := domain.ParcelCancellationSpec{
+			ID:          mustValue(t, domain.NewParcelCancellationID, "cancel-2"),
+			Parcel:      other.Parcel(),
+			Requester:   other.Requester(),
+			Authority:   other.Authority(),
+			Reason:      other.Reason(),
+			RequestedAt: other.RequestedAt(),
+		}
+		another, err := domain.DecideParcelCancellation(spec, domain.CurrentIntakeFact{})
+		if err != nil {
+			t.Fatalf("decide: %v", err)
+		}
+		fixture.final.cancellations.cancellation = another
+		result, err := fixture.handler.Handle(context.Background(), labelServiceCommand(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.LabelServiceCancellationStandsOutcome {
+			t.Fatalf("outcome = %q, want CANCELLATION_STANDS——册上那行指向的不是这份取消", result.Outcome())
+		}
+	})
+
+	t.Run("an unreadable register is a dependency gap", func(t *testing.T) {
+		fixture := arrange(t)
+		fixture.conflicts.err = errors.New("conflict register down")
+		result, err := fixture.handler.Handle(context.Background(), labelServiceCommand(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.LabelServiceJudgmentUndecided ||
+			result.UndecidedReason() != application.LabelConflictRegisterUnavailable {
+			t.Fatalf("outcome = %q reason = %q, want JUDGMENT_UNDECIDED/CONFLICT_REGISTER_UNAVAILABLE",
+				result.Outcome(), result.UndecidedReason())
+		}
+	})
+
+	t.Run("an unwired register does not pretend to have looked", func(t *testing.T) {
+		fixture := arrange(t)
+		fixture.handler = application.NewJudgeLabelServiceFinalHandler(application.JudgeLabelServiceFinalDeps{
+			Transactions:  fixture.transactions,
+			Registers:     fixture.registers,
+			Cancellations: fixture.final.cancellations,
+			Validity:      fixture.validity,
+			Adoption:      fixture.final.handler,
+			Clock:         fixedClock{at: labelServiceClosureAt.Add(time.Hour)},
+		})
+		result, err := fixture.handler.Handle(context.Background(), labelServiceCommand(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.UndecidedReason() != application.LabelConflictRegisterUnavailable {
+			t.Fatalf("reason = %q, want CONFLICT_REGISTER_UNAVAILABLE", result.UndecidedReason())
+		}
+	})
+}
+
+// Covers: ADR-0029 依赖故障归未决并指名等谁；未受理分格；未决原因集封闭；本编排的依赖里除冲突册外
+// 没有写口——它只判断，形成走既有采用路径。
 func TestLabelServiceFinalRecoveryDiscipline(t *testing.T) {
 	stops := map[string]struct {
 		arrange func(*labelServiceFinalFixture)
@@ -546,14 +660,17 @@ func TestLabelServiceFinalRecoveryDiscipline(t *testing.T) {
 	// 名单之外任何依赖带写法，仍是判断在形成终局之外另写了东西。
 	t.Run("the judgment holds no write port of its own beyond the conflict register", func(t *testing.T) {
 		deps := reflect.TypeOf(application.JudgeLabelServiceFinalDeps{})
+		register := reflect.TypeOf((*ports.CancellationOrderConflictRegister)(nil)).Elem()
 		for index := 0; index < deps.NumField(); index++ {
 			field := deps.Field(index)
 			if field.Name == "Adoption" || field.Type.Kind() != reflect.Interface {
 				continue
 			}
+			// 放过的只是冲突册本身：字段名对得上而类型换成别的写口，照样拦。
+			exempt := field.Name == "Conflicts" && field.Type == register
 			for method := 0; method < field.Type.NumMethod(); method++ {
 				name := field.Type.Method(method).Name
-				if field.Name == "Conflicts" && name == "Record" {
+				if exempt && name == "Record" {
 					continue
 				}
 				if name == "Save" || name == "Insert" || name == "Replace" || name == "Record" {

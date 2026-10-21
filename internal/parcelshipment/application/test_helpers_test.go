@@ -126,8 +126,25 @@ func (double *conflictRegisterDouble) Record(
 
 func (double *conflictRegisterDouble) ListByParcel(
 	_ context.Context,
-	_ domain.TenantID,
-	_ domain.DeclaredParcelID,
+	tenant domain.TenantID,
+	parcel domain.DeclaredParcelID,
 ) ([]ports.CancellationOrderConflictEntry, error) {
-	return nil, double.err
+	if double.err != nil {
+		return nil, double.err
+	}
+	var entries []ports.CancellationOrderConflictEntry
+	for _, record := range double.records {
+		if record.TenantID != tenant || record.Conflict.Parcel() != parcel {
+			continue
+		}
+		entries = append(entries, ports.CancellationOrderConflictEntry{
+			TenantID:     record.TenantID,
+			Parcel:       record.Conflict.Parcel(),
+			Cancellation: record.Conflict.Cancellation(),
+			CancelledAt:  record.Conflict.CancelledAt(),
+			Boundary:     record.Conflict.Boundary(),
+			DetectedAt:   record.DetectedAt,
+		})
+	}
+	return entries, nil
 }

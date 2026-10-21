@@ -219,6 +219,19 @@ func TestAStandingCancellationIsComparedWithTheFirstPickupByBusinessTime(t *test
 		}
 	})
 
+	t.Run("the closure paths answer a conflict already on record against this cancellation", func(t *testing.T) {
+		closurePath := labelServiceInput(t, emptyRegister(t))
+		closurePath.Cancellation = standingCancellationAt(t, labelServicePickupAt.Add(time.Hour))
+		closurePath.CancellationConflictRecorded = true
+		verdict := judge(t, closurePath)
+		if verdict.Judgment() != domain.LabelServiceNotFinal || verdict.Reason() != domain.LabelServiceCancellationOrderConflict {
+			t.Fatalf("verdict = %s/%s，want NOT_FINAL/CANCELLATION_ORDER_CONFLICT", verdict.Judgment(), verdict.Reason())
+		}
+		if _, conflicted := verdict.Conflict(); conflicted {
+			t.Fatal("册上已有的冲突不是这一次新判出的，不该再交回去记")
+		}
+	})
+
 	t.Run("another parcel's cancellation is a wiring defect", func(t *testing.T) {
 		foreign := input
 		spec := cancellationSpec(t)
