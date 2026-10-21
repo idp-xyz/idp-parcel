@@ -416,7 +416,7 @@ func (handler *FormActualFulfillmentOnParticipationEndHandler) formFor(
 }
 
 // formEnded 是交接、交付两路与补形成（catch_up_actual_fulfillment.go）共用的后半：那一段已采用委托，这一条参与已结束 → 定旅程 →
-// 交登记用例 → 照登记的答复写实际履约未形成册。三路共用这一处，册也就只有一处在写（ADR-0231 决定六）。
+// 交登记用例 → 照登记的答复写实际履约未形成册。交接、交付与补形成都走这一处，册也就只有这一处在写（ADR-0231 决定六）。
 func (handler *FormActualFulfillmentOnParticipationEndHandler) formEnded(
 	ctx context.Context,
 	tenant domain.TenantID,
