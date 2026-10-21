@@ -1,7 +1,7 @@
 # 146 出发前问询与出发两口向设备逐对象列出段内全部对象
 
 Category: bug
-Status: in-progress——评审两条阻断已修，待复审与进 main，分支 claude-dcg146（2026-10-21，见文末「评审记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg146（2026-10-21 Claude Code 作者子代理，变基到 main `b290b777`；见文末「完成记录」）。此前 in-progress——2026-10-21 认领（146、94 同批），分支 claude-dcg146。此前 ready-for-agent——2026-10-20 代决复核立（上线前必修），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: in-progress——二轮评审两条阻断已修，待复审与进 main，分支 claude-dcg146（2026-10-21，变基到 main `4384a85a`，见文末「评审记录」二轮一节）。此前 in-progress——评审两条阻断已修，待复审与进 main，分支 claude-dcg146（2026-10-21，见文末「评审记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg146（2026-10-21 Claude Code 作者子代理，变基到 main `b290b777`；见文末「完成记录」）。此前 in-progress——2026-10-21 认领（146、94 同批），分支 claude-dcg146。此前 ready-for-agent——2026-10-20 代决复核立（上线前必修），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 R11；ADR-0219 越权风险点 5（连带 ADR-0205 越权风险点 13）
 
@@ -33,7 +33,7 @@ Blocked by: 无
 2. 袋那一格只指名同样列出的成员，放行的成员不随袋带出；问不到成员或空袋的袋在列、`members` 为空数组：决定二，越权风险点 5。
 3. 交出与交付这两种单件读数也照同一判法收窄（票面只写出发两口）：决定一「范围」与候选「交出与交付读数不收窄」，越权风险点 6。
 4. 判法放在领域投影一处，各口线格式只经它取：决定三。
-5. 落册、重放回显、信封、VE 与运营查阅不收窄：决定三。
+5. 落册、重放回显、信封、VE 与运营查阅不收窄：决定三。（已由评审 B2 改口径：重放回显的是首次读数，回给设备时同样只列没得出放行的；落册、信封、VE 与运营查阅不收窄。）
 6. 判法归产品策略（替所有租户定），投影与线格式归机制，没有租户取值：三类一段。
 7. （评审修订补）出发意图的起讫与声明的段绑定——班次起讫要就是段里在控各件进段那次`已交接`声明的交出、去向节点，两格都要声明，对不上或说不出就停在本侧、不问关务：决定五，越权风险点 7–11。见文末「评审记录」B1。
 
@@ -91,7 +91,7 @@ Blocked by: 无
 
 **B1——146 没堵住 R11：设备给一段境内段配一班跨区班次，段里每件都答未决、都回给设备。** 修了，走的是评审给的第一条路：就在本票把出发意图的起讫与声明的段绑定。
 
-- **为什么走这条**：绑定只用本上下文自己的事实（各件进段那次`已交接`声明的交出、去向节点，ADR-0213 决定一），认进段交接的认法交付读数早已有一份，抽成一处共用即可；改动是领域一个判法、三种停点、一口端口（原交付专用名改成共用名）、装配一处，加测试夹具，没有迁移（停点存在 jsonb 明细里，读回的封闭集随领域加三格）、没有新信封，出发登记与问询走的本就是同一条读数路径，两口一处改。评审给的另一种做法「起讫改从进段交接取」没取：要停用 ADR-0205 决定二「起讫取班次方向」的权威来源，而段里各件的进段交接可以各不相同、一份读数只有一对起讫，还得另立「取哪一件的」规则；核对只在对不上时不问，保住了既有口径。退回最低限度那条路（票 166、改完成记录为「R11 未完全满足」）没有走，166 未用。
+- **为什么走这条**：绑定只用本上下文自己的事实（各件进段那次`已交接`声明的交出、去向节点，ADR-0213 决定一），认进段交接的认法交付读数早已有一份，抽成一处共用即可；改动是领域一个判法、三种停点、一口端口（原交付专用名改成共用名）、装配一处，加测试夹具，没有迁移（停点存在 jsonb 明细里，读回的封闭集随领域加三格）、没有新信封，出发登记与问询走的本就是同一条读数路径，两口一处改。评审给的另一种做法「起讫改从进段交接取」没取：要停用 ADR-0205 决定二「起讫取班次方向」的权威来源，而段里各件的进段交接可以各不相同、一份读数只有一对起讫，还得另立「取哪一件的」规则；核对只在对不上时不问，保住了既有口径。（二轮评审改准：一轮修订其实把「说不出」也停在了本侧，见下文二轮一节；二轮之后才是对不上的不问、核不上的照问而只回整格。）退回最低限度那条路（票 166、改完成记录为「R11 未完全满足」）没有走，166 未用。
 - **修法**（提交 `b471feb6`）：
   - 领域：`DepartureEntryStops`——段里出发那一刻在控的每一件，进段交接声明的交出节点要是班次起点、去向节点要是班次终点；对不上停在 `SCHEDULE_NOT_SERVING_SEGMENT`（未决），说不出（凭收寄进段、没声明那两格、交接在册上认不出）停在 `SEGMENT_ENTRY_NODES_UNKNOWN`（未决），交接册读不动停在 `HANDOVER_REGISTRY_UNAVAILABLE`（读不动）。`ActualFulfillmentSegment.ParticipationsUnderControlAt` 交回在控那几件的参与，与 `ObjectsUnderControlAt` 同一口径（后者改为经它取）。
   - 应用：出发读数在问集运成员关系与关务之前核；认进段交接收成 `entryHandoverOf`（新文件 `application/entry_handover.go`），交付读数取 at 也改走它，行为不变。
@@ -127,3 +127,49 @@ Blocked by: 无
 - `scripts/test-full.sh ./internal/transportfulfillment/... ./cmd/parcel-api/... ./cmd/parcel-dispatch/... ./cmd/parcel-transport-register/... ./internal/visibilityexception/... ./internal/architecture/... ./migrations/...`：32 包全 ok、0 FAIL（输出存 `/tmp/claude-1000/-home-tops-workspace-idp-parcel/0d01979a-68c3-4b61-b295-1b04bc643b8b/scratchpad/dcg146/test-run-review.txt`）。
 - `-v` 确认新真库用例 PASS；变异实测见 B1。
 - 没跑全量，没重生成机制清点、ADR 索引与 AT 计数；无迁移；无被权限检查拦下的仓库改动（scratchpad 里一条带变量路径的清理命令被安全检查拦下，没有执行，改用字面路径清理）。
+
+### 二轮（2026-10-21，评审区间 `d794d805..95cca3e9`；作者子代理修订，变基到 main `4384a85a`）
+
+阻断 2 项，都修了；顺手 3 项全办。修订提交（变基后）：`cd62da18`（代码）、`fd31f702`（文档）、`df8d5bca`（变基时 AT 盘点合并整理）。
+
+**B-A——凭收寄进段的段出发读数再也读不出阻断，VE 信号也没了。** 修了，照评审推荐，不重开 B1：把「说不出」与「对不上」分开。
+- **判法**：领域 `BindDepartureEntries` 答三格——已绑定、未绑定、对不上（取代一轮的 `DepartureEntryStops`）。声明了的那一格只要有一格与班次起讫不同就是对不上，哪怕另一格没声明；没有对不上、但有说不出的（凭场外揽收或实际承运商首次有效收寄进段、进段交接没声明全、在册认不出）是未绑定。
+- **对不上**与**交接册读不动**照旧停在本侧（`SCHEDULE_NOT_SERVING_SEGMENT`、`HANDOVER_REGISTRY_UNAVAILABLE`），不问关务、一件不列。`SEGMENT_ENTRY_NODES_UNKNOWN` 停点撤掉。
+- **未绑定**照班次方向问关务：落册记全（库面逐对象格全在），VE 照旧派生信号；读数多一位 `EntryUnbound`，存进 jsonb 明细（`entryUnbound` 键，不写即没有这一位，存量照读、重放回显一致）；回给执行方的只有整格、from/to 与这一位，一件对象都不列——判法在领域 `DepartureGateReading.ExecutorCells`，tfhttp 只经它取。没有放宽「停点与逐对象恰有其一」：未绑定的读数问了关务、没有停点，那道库面 CHECK 不动；这一位另立字段，构造门只许它出现在问了关务的读数上。无迁移。
+- **用例**：
+  - 领域：`departure_entry_binding_test.go`——十种组合（两格都对、没声明去向、一格都没声明、认不出、一件也认不出、起讫都错、只声明一格且错、说不出在前对不上在后、对不上在前说不出在后）；未绑定读数记全每格、回给执行方一件不给、重建带回那一位、停在本侧带那一位是读数不成形。
+  - 编排：`read_departure_gate_entry_test.go` 两条——对不上的五种停在本侧；说不出的四种（凭收寄进段、没声明去向、一格都没声明、认不出）照问两件、整格阻断、标未绑定、回给执行方一件不列，问询与出发同一份读数同样问法；对得上的照常列出被挡那一件。
+  - 线格式：`TestAnUnboundDepartureShowsTheWholeCellAndNoObjects`，答复正是 `{"answer":"BLOCKED","from":"NODE-SHA","to":"NODE-SZX","entryUnbound":true}`，问询同字节。
+  - 库面：`TestAnUnboundDepartureReadingRoundTripsWithItsFindings`，未绑定那一位与每一格往返，没有这一位的行库面没有这个键。
+  - 真库（评审探针那一格）：`TestASegmentEnteredByPickupStillAsksCustomsAndRecordsTheBlock`——凭场外揽收进段、一件被限制装载出发：问询与出发都答 `{"answer":"BLOCKED","from":"SYN-NODE-SHA-HUB","to":"SYN-NODE-SZX-GATE","entryUnbound":true}`，库面两件各一格、被扣那一件 `BLOCKED` / `RESTRICTION_IN_FORCE`、带关务判断标识、记着那一位；交接只报交出节点、没报去向的一段同理。
+  - 真库（B1 PoC）：`TestPairingASegmentWithAnotherSchedulesDirectionNoLongerWidensTheReading`——已绑定的境内段配跨区班次仍停在 `SCHEDULE_NOT_SERVING_SEGMENT`、一件不列、整库不变；没声明节点的段按本班问答不受门禁、标未绑定、一件不列；给它配跨区班次，回给设备的只有 `{"answer":"UNDECIDED",…,"entryUnbound":true}`。
+  - 派发：`cmd/parcel-dispatch` 的 `TestAnUnboundBlockedDepartureStillRaisesTheSignal`——未绑定的阻断读数经生产路由照旧给被挡那一件形成一个发作期。
+- **变异实测**（各自复原后全绿）：
+  - 把未绑定改回停在本侧：探针格真库用例红（`SYN-SEG-146-PICKUP 回给设备的` 不是那一份）、B1 PoC 用例里「没声明节点的段按本班问」那一支红（答成 `"stops":["SCHEDULE_NOT_SERVING_SEGMENT"]`）、编排用例四支全红（`0 格，未绑定 false，关务 0 次`）。
+  - 把投影改为未绑定时照列对象：B1 PoC 用例红，失败输出 `{"answer":"UNDECIDED","from":"SYN-NODE-SZX-GATE","to":"SYN-NODE-SIN-HUB","entryUnbound":true,"objects":[{"object":"SYN-PARCEL-146-POC-UNDECLARED","answer":"UNDECIDED"}]}`；探针格真库用例、线格式、编排、领域各一条同时红。
+- **文档**：ADR-0237 决定五改写（对不上不问；说不出照问、落册全、设备只见整格；为什么说不出不停）、对已接受记录的作用里 ADR-0205 停点名单改成多两种停点；越权风险点 7 改写为「两类段上设备只见整格」，补 12「核不上的段上配假班次换得到一位汇总」；候选与反方补「说不出也停在本侧」「以揽收地点作交出节点」「只核起点（揽收进段也没有起点）」「不绑定只列阻断（会部分重开 B1：配跨区假班次时在案包裹在跨关务区域移动那一道上折成阻断，境内段上别的客户的出口包裹会被列出）」，「起讫改从进段交接取」那条的「只在对不上时不问」改准。ADR-0205、0219 指针随改。TF CONTEXT 一条改写；UC-TF-005 `AT-TF-114` 只留对不上那一支、`AT-TF-317` 补写未绑定那一格；演示脚本补记与 AT 盘点随改。
+
+**B-B——ADR-0205 的索引注记仍把重放回显写成不收窄。** 修了（`fd31f702`）：改成「落册、信封、VE 与运营查阅不收窄；重放回显首次读数，回给设备时同样只列没得出放行的」。
+
+**顺手**：
+1. 给判法补领域层表驱动用例：见上 `departure_entry_binding_test.go`。
+2. 完成记录代决 5 补一句「已由评审 B2 改口径」；评审记录一轮里「核对……只在对不上时不问」那句加了改准的括注。
+3. `read_delivery_gate.go::deliveryNode` 与 `read_departure_gate.go::entryBinding`（原 `entryStops`）对 `entryHandoverFinding` 的 switch 补了显式 `case entryHandoverFound` 与 default 报错（`errEntryHandoverFindingUnknown`，落在封闭集外是实现坏了）；出发读数对核对结果的 switch 同样穷尽、default 报错。
+
+**未采纳**：
+- 以揽收地点作交出节点、只核起点：揽收事实没有网络节点，见 ADR-0237 候选与反方。
+- 不绑定、只把回给执行方的收成只列阻断：会部分重开 B1，同上。
+- 放宽「停点与逐对象恰有其一」：没必要，未绑定的读数问了关务、没有停点，另立一位就够，库面 CHECK 不动。
+
+**演示链实走**（一次性库 `dcg146_walk`，`seed.sh` 灌入退 0，起本分支的 `parcel-api` 与 `parcel-dispatch`，华东场外设备、配置员令牌，合成数据，只记 `S`；走完已停进程、删库；脚本与输出在 `/tmp/claude-1000/-home-tops-workspace-idp-parcel/0d01979a-68c3-4b61-b295-1b04bc643b8b/scratchpad/dcg146/walk/`，输出 `/tmp/claude-1000/-home-tops-workspace-idp-parcel/0d01979a-68c3-4b61-b295-1b04bc643b8b/scratchpad/dcg146/walk/walk.txt`）：
+- 两件交给自营干线、两格都声明 SHA-HUB → SZX-GATE：按本班问 `NOT_GUARDED`、没有 `objects`；配深圳→新加坡那一班问同一段：`UNDECIDED` / `SCHEDULE_NOT_SERVING_SEGMENT`。
+- 交接没声明节点的段：按本班问 `NOT_GUARDED` 带 `entryUnbound`；配跨区那一班问：`UNDECIDED` 带 `entryUnbound`，一件不列。
+- 凭场外揽收进段、一件被限制装载出发：问询与出发都答 `BLOCKED` 带 `entryUnbound`、没有 `objects`；库面 `BLOCKED`，两件各一格，被扣那一件依据 `RESTRICTION_IN_FORCE`、带关务判断标识，明细 `"entryUnbound": true`；派发一拍之后全程追踪给被扣那一件形成发作期 `DEPARTURE_GATE_BLOCKED` / `SYN-VE-DEPARTURE-GATE-V1`。
+- 交接只报交出节点、没报去向、一件被限制：问询 `BLOCKED` 带 `entryUnbound`。
+- 本班出发（已绑定）：201、`NOT_GUARDED`。
+
+**验证**（实测，只记 `S`）：
+- `go build ./...`、`go vet ./...` 通过，`gofmt -l internal cmd migrations` 干净；变基后五笔代码提交（`fdd85c5a`、`05862bbd`、`6431ac80`、`92045fe0`、`cd62da18`）各自在 `git archive` 出的干净目录里 `go build ./... && go vet ./...` 通过。
+- `scripts/test-full.sh ./internal/transportfulfillment/... ./cmd/parcel-api/... ./cmd/parcel-dispatch/... ./cmd/parcel-transport-register/... ./internal/visibilityexception/... ./internal/architecture/... ./migrations/...`：32 包全 ok、0 FAIL（输出存 `/tmp/claude-1000/-home-tops-workspace-idp-parcel/0d01979a-68c3-4b61-b295-1b04bc643b8b/scratchpad/dcg146/test-run-review2.txt`）。
+- 变基到 `4384a85a`：只在 AT 盘点上有冲突，两边都留；合并时 146 那段追记留下了两份旧稿，已在 `df8d5bca` 去掉，表行没有重号。
+- 无迁移；无被权限检查拦下的仓库改动。

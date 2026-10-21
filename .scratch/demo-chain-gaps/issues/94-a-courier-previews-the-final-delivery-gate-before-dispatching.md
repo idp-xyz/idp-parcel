@@ -1,7 +1,7 @@
 # 94 派送出发之前问一次交付门禁
 
 Category: enhancement
-Status: in-progress——评审两条阻断已修，待复审与进 main，分支 claude-dcg146（2026-10-21，见文末「评审记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg146（2026-10-21 Claude Code 作者子代理，变基到 main `b290b777`；见文末「完成记录」）。此前 in-progress——2026-10-21 认领（146、94 同批），分支 claude-dcg146。此前 ready-for-agent——2026-10-20 代决复核升为上线前必修（R14），见 [owner-review-20261020](../../owner-review-20261020/report.md)。此前 needs-triage——2026-10-19 Claude Code 作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [66](./66-effective-delivery-records-a-final-delivery-gate-reading.md) 的完成记录。
+Status: in-progress——二轮评审两条阻断已修，待复审与进 main，分支 claude-dcg146（2026-10-21，变基到 main `4384a85a`，见文末「评审记录」二轮一节）。此前 in-progress——评审两条阻断已修，待复审与进 main，分支 claude-dcg146（2026-10-21，见文末「评审记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg146（2026-10-21 Claude Code 作者子代理，变基到 main `b290b777`；见文末「完成记录」）。此前 in-progress——2026-10-21 认领（146、94 同批），分支 claude-dcg146。此前 ready-for-agent——2026-10-20 代决复核升为上线前必修（R14），见 [owner-review-20261020](../../owner-review-20261020/report.md)。此前 needs-triage——2026-10-19 Claude Code 作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [66](./66-effective-delivery-records-a-final-delivery-gate-reading.md) 的完成记录。
 Blocked by: [66](./66-effective-delivery-records-a-final-delivery-gate-reading.md)（读数内核与 `DeliveryGateReader` 随它进 main）
 地盘：TF 新 `application/preview_delivery_gate.go`（复用 `DeliveryGateReader` 取 at 的那一步）、新 tfhttp 问询口；新 `cmd/parcel-api/assemble_delivery_gate_preview.go` + `endpoints.go` 一行（装配令牌）；文档 UC-TF-006 AT、ADR（号认领时由协调方给）。
 出处：[ADR-0213](../../../docs/adr/0213-a-transport-handover-declares-its-releasing-receiving-and-onward-nodes.md) 文末「补记：票 66 落决定五时的补充裁定」越权风险点 20；先例 [ADR-0219](../../../docs/adr/0219-a-device-previews-the-departure-gate-before-departing-and-reads-what-the-departure-will-record.md)（设备出发前门禁问询）。
@@ -112,3 +112,10 @@ M
 - **7**：立票 [172](./172-customs-judgement-register-grows-with-every-gate-preview.md)——关务判断册的保留期与限流（问询按件、时点按微秒入标识，恶意设备可无限增长）；ADR-0238 越权风险点 4、5 指向它（提交 `1962d6b1`）。
 - **随票 146 的 B1 一并动到本票代码的**：交付读数取 at 时认进段交接的那一段收成共用的 `entryHandoverOf`（`application/entry_handover.go`），端口 `ports.DeliveryGateEntryHandoverView` 改名 `ports.EntryHandoverView`。交付读数的行为与停点不变，交付编排与线格式用例原样全过。
 - **验证**：同票 146 评审记录「评审修订后的验证」，同一跑。
+
+### 二轮（2026-10-21，作者子代理修订，变基到 main `4384a85a`）
+
+两条阻断都在票 146（见那张票面二轮一节）。随它动到本票代码的：
+- `read_delivery_gate.go::deliveryNode` 对 `entryHandoverFinding` 的 switch 补了显式 `case entryHandoverFound` 与 default 报错（顺手 3）。交付读数的行为与停点不变。
+- tfhttp 的 `gateObjectViewsOf` 改为收领域判好的那几格，交付与交接视图改成 `gateObjectViewsOf(domain.ExecutorGateCells(...))`，线格式不变。交付前问询与交付登记的线格式用例原样全过。
+- 验证同票 146 二轮一节，同一跑。
