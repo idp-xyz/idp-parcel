@@ -7,6 +7,10 @@ Blocked by: 无（排在 demo-chain-gaps/115 之后）
 
 ## 现象
 
+复核形成的改路建议与初始路由的最低成本并列都要授权角色裁决，可没有任何口能作这个决定，领域里备好的「授权角色」决定方式在生产路径上无人构造。
+
+## 证据
+
 - 领域已备好决定方式：`internal/networkrouting/domain/reroute.go` 的 `RerouteDecisionMode` 有 `AuthorizedRoleReroute`，`FormRerouteDecision` 对人工方式要求指名授权角色、`禁行`下拒。
 - 没有调用方：应用层只在 `rerouteAfterLapse`、`tryImprovementReroute` 里以 `AutomaticReroute` 形成决定；没有命令口、没有运营决定面、没有授予名，`AuthorizedRoleReroute` 在生产路径上无人构造。
 - 初始路由的最低成本并列同样「交授权角色裁决」（NR CONTEXT「路由形成与选择」、UC-NR-001 结果「路由判断未决」），也没有口；并列候选今天还不落库（demo-chain-gaps/155）。

@@ -40,7 +40,7 @@ Blocked by: 无（01 进 main 后开工）
 | M4 仍适用线从不形成改路建议 | C | 既有代码票承接（复核：不走「限到失效线」那条路） | [code/17](../code/17-still-applicable-plan-never-forms-a-reroute-suggestion.md) 记复核结论；UC-NR-003 `AT-NR-042` 注记 |
 | M5 承接决定缺「待补充」 | C | 既有代码票承接；文档加注记 | [code/18](../code/18-node-customs-collaboration-acceptance-lacks-pending-supplement.md)；UC-NO-001 状态行、`AT-NO-003` 注记 |
 | M6 集运包含不查环 | C | 既有代码票承接；文档加注记 | [code/19](../code/19-consolidation-containment-is-not-checked-for-cycles.md)；UC-NO-003 阶段 3、`AT-NO-039` 注记 |
-| M7 方向性作业受阻：UC 挡、CONTEXT 与代码照记 | B | 代决 [ADR-0251](../../../docs/adr/0251-directional-node-work-is-paused-by-a-reading-before-the-action-and-recorded-moves-are-never-refused.md)（把 no-directional-basis/01「裁定修订」定为记录）；已改；代码不改 | NO CONTEXT「集运、封装与载具」括注、「作业授权与执行」暂停一条；UC-NO-003 启动条件、结果「方向性作业受阻」、阶段 3、`AT-NO-031`、`AT-NO-033`；读面随 no-directional-basis/01、/02 |
+| M7 方向性作业受阻：UC 挡、CONTEXT 与代码照记 | B | 代决 [ADR-0251](../../../docs/adr/0251-directional-node-work-is-paused-outside-the-validity-interval-of-the-delivered-basis-and-recorded-moves-are-never-refused.md)（把 no-directional-basis/01「裁定修订」定为记录）；已改；代码不改 | NO CONTEXT「集运、封装与载具」括注、「作业授权与执行」暂停一条；UC-NO-003 启动条件、结果「方向性作业受阻」、阶段 3、`AT-NO-031`、`AT-NO-033`；读面随 no-directional-basis/01、/02 |
 | M8 「适用性看不清」的来源都推不动 | B | 代决 [ADR-0250](../../../docs/adr/0250-unclear-plan-applicability-in-reassessment-is-settled-as-not-judged-and-resume-in-the-same-change-stays-in-the-acceptance-chain.md) 决定一；已改；立代码票 | ADR-0235 Status 行与 Links 挂前向指针；NR CONTEXT 复核前提缺口一条；UC-NR-003 结果表（「当前计划适用性未决」并入「触发未判」）、结果表后一段、步骤 6A、`AT-NR-051`、`AT-NR-067`；[code/28](../code/28-unclear-plan-applicability-in-reassessment-is-retried-instead-of-settled.md) |
 | L1 重核对象两处口径不一，缺「信号没了、只缺范围」 | A | 已改 | NO CONTEXT 生命周期「待识别实物与身份关联」定义重核对象一处，「送站交接单」改为引用；规则与生命周期补第三支（ADR-0212 决定六） |
 | L2 过时的实现现状句 | A | 已改 | UC-NR-003、UC-NO-002（交接一节与结果段那句）、UC-NO-003「给开发的交接」；UC-NO-006 状态行改已实现 |
@@ -83,7 +83,7 @@ Blocked by: 无（01 进 main 后开工）
 - `go run ./tools/adr-index` 重生成后 `-check` 退 0。重生成的 `docs/adr/README.md` 不随本票提交：照 [parallel-sessions「生成物不占号」](../../../docs/agents/parallel-sessions.md#生成物不占号但只在干净检出上生成)，带新 ADR、改 Status 行的票只改 ADR 文件，索引由推送方在 tip 上重生成。
 - `go run ./tools/at-coverage-counts -check`：初轮退 0；评审轮移行之后只报计数过期（退 1，ErrStale），计数由推送方重算。
 - 本票改动的全部 `.md` 里的相对链接与锚点用脚本逐个解析，全部能解析。
-- `git diff main --stat` 只含：本组两份 CONTEXT、NR、NO 的 UC（UC-NR-001、002、003，UC-NO-001、002、003、005、006）、新 ADR 三份、被停的 ADR-0172 与 ADR-0235 的 Status 行与 Links、`.scratch/docs-consistency/` 下本票与 code/16、17、26、27。
+- `git diff main --stat` 只含（第二轮评审后按现状重写）：本组两份 CONTEXT；NR、NO 的 UC（UC-NR-001、002、003，UC-NO-001、002、003、005、006）；新 ADR 0249、0250、0251；被停的 ADR-0172、ADR-0173、ADR-0235 的 Status 行与 Links；`.scratch/at-coverage-inventory.md`（评审轮受托移行）；`.scratch/no-directional-basis/issues/01-…`（评审轮受托加一条更正）；`.scratch/docs-consistency/` 下本票与 code/16、17、28、29、33。
 - 编号：新代码票原取 code/26、27，评审轮按协调方分配改为 code/28、29（03 用 26–27、04 用 30–32），另立 code/33；分支内引用已同步。
 
 ## 评审记录（2026-10-21，隔离评审第 1 轮 → 作者修订）
@@ -106,3 +106,23 @@ Blocked by: 无（01 进 main 后开工）
 另照 [10](./10-cross-cutting-docs.md) 新增的跨组约定第 5 条（出自本票评审），NR、NO 两份 CONTEXT 头部各加一句不含票号的固定指针「规则与实现的差距见各 UC『给开发的交接』」；两份 CONTEXT 的规则条目里没有挂票号。收口前已 `git rebase main`（main `f928c5ba`）。
 
 修订后的检查：scratchpad 副本上 `go run ./tools/adr-index` 后 `-check` 退 0（README 不随票提交）；`go run ./tools/at-coverage-counts -check` 只报计数过期；改动的 `.md` 相对链接全部解析；ADR-0249、0250 引的被停原句在 ADR-0172、0173、0235 正文里逐字核过。
+
+## 评审记录（第 2 轮，2026-10-21）
+
+第 1 轮三条阻断评审确认已消。残留阻断一条、建议三条、顺手七条，全部照办：
+
+| 条 | 评审意见 | 处置 |
+|---|---|---|
+| B1 阻断 | UC-NO-003 交接表指向 no-directional-basis/01「读面半边」，那张票「裁定修订」第 1 条仍写「在线时现问」 | 经协调方授权，在该票「裁定修订」之下加 2026-10-21 更正一条：「现问」与「服务端答此刻能不能做」的读法作废，照 ADR-0024、ADR-0251 改为方向依据随对象下发、带有效区间、作业端据本地时钟判，「读面」一律改指下发半边；UC-NO-003 交接表与 ADR-0251 的指称同改 |
+| 1 | UC-NO-002 `AT-NO-022` 与 `AT-NO-031` 同一场景 | `AT-NO-022` 措辞对齐并指向 `AT-NO-031`；AT 盘点里同样由③移入④，追记同步 |
+| 2 | UC-NO-003 交接表「移入只拒……」漏了 `UnitNotFound`、`MemberElsewhereContained` | 补上，`AT-NO-035` 一并点名；另写明不拒成员就是单元本身 |
+| 3 | 完成记录「检查」里的 diff 清单过期 | 按现状重写 |
+| 4 | 三个测试的 Covers 注释仍写「`AT-NO-062` 末句」 | 本轮不改代码，登在下面，并并入 code/33 的修法：`internal/nodeoperations/application/delivery_scope_judgment_test.go::TestAnAmbiguityOnlyConflictWithoutAScopeIsReleasedIntoAnUnverifiedPendingUnit`、`internal/nodeoperations/adapters/http/reception_scope_basis_test.go::TestAManualRecheckThatReleasesAnAmbiguityIntoAnUnverifiedUnitAnswersCreated`、`cmd/parcel-dispatch/node_identity_ambiguity_release_test.go::TestTheWiredDispatchReleasesAnUnscopedAmbiguityIntoAnUnverifiedPendingUnit` 三处 Covers 改指 `AT-NO-131` |
+| 5 | code/29 缺「证据」小节 | 补上，「现象」一节改为一句概述 |
+| 6 | code/28「三个来处」 | 去掉「三个」 |
+| 7 | ADR-0249 Consequences 漏了 ADR-0172 | 补上 |
+| 8 | ADR-0251 文件名带初稿含义 | `git mv` 为 `0251-directional-node-work-is-paused-outside-the-validity-interval-of-the-delivered-basis-and-recorded-moves-are-never-refused.md`，全仓引用同步，旧名 grep 为 0 |
+| 9 | UC-NR-003 首段与元数据「其他结束」仍写「判断未决」 | 改为「复核未决、替代候选评估未决」，与结果表一致 |
+| 10 | code/33「`domain/` 只有……」穷举不全 | 改为「有的是……等」的不穷举说法，补上关务协作承接、送站预报与预报时窗、身份冲突处置 |
+
+检查：scratchpad 副本上 `go run ./tools/adr-index` 后 `-check` 退 0；改过的 `.md` 相对链接全部解析；全仓 grep 旧的 0251 文件名为 0。

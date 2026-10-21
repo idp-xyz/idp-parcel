@@ -1,6 +1,6 @@
 # ADR-0251：节点方向性作业的「暂停」由作业端按随对象下发、带有效区间的方向依据判——服务端对已经发生的移入与分拣一律照记、同笔留下方向依据，写口不答「方向性作业受阻」
 
-Status: Accepted（2026-10-21，Claude Code 会话代 NO owner 决：用户 2026-10-21 原话「需要修改文档，确保自洽，正确」，常设授权「你作为业务和系统专家自决」；票 docs-consistency/05，出处审计 [audit/nr-no.md](../../.scratch/docs-consistency/audit/nr-no.md) M7；隔离评审指出初稿与 [ADR-0024](./0024-directional-work-basis-carries-a-validity-interval.md) 相抵，协调方裁定取 ADR-0024 的形状。把票 [no-directional-basis/01](../../.scratch/no-directional-basis/issues/01-consolidation-adds-members-without-any-directional-basis.md)「裁定修订」第 1、2、4 条（2026-10-16 会话代决）定为记录，读面的形状照 ADR-0024。无条款停用。越权风险点见文末，待 NO owner 复核，第 3 点同时待 NR owner 会签。）<!-- 索引注记 -->｜**门在作业端**：方向依据（身份、服务结果、路由依据，取法同方向依据记录）随对象下发、带有效区间，作业端据本地时钟判断是否仍在区间内，出区间或缺依据即暂停方向性作业；依据有效而网络不通时照做、事实入本地队列，与 ADR-0024 一致。「方向性作业受阻」是这份依据的答案，不是写口的结果。**写口照记**：在线口、一线过渡导入、离线回传交来的移入一律照记，不因方向依据缺失、未配置、过期或读不动而拒收、悬置或回写，同笔留下方向依据记录；CONTEXT 括注里列的来路是举例。**集运兼容**：成员级集运兼容判断是下发依据的一格，不兼容的移入照记、偏离归 NR 判。**今天**：依据下发随一线作业端排，NR 指令与兼容判断随 no-directional-basis/02；在此之前路由一格答`未配置`
+Status: Accepted（2026-10-21，Claude Code 会话代 NO owner 决：用户 2026-10-21 原话「需要修改文档，确保自洽，正确」，常设授权「你作为业务和系统专家自决」；票 docs-consistency/05，出处审计 [audit/nr-no.md](../../.scratch/docs-consistency/audit/nr-no.md) M7；隔离评审指出初稿与 [ADR-0024](./0024-directional-work-basis-carries-a-validity-interval.md) 相抵，协调方裁定取 ADR-0024 的形状。把票 [no-directional-basis/01](../../.scratch/no-directional-basis/issues/01-consolidation-adds-members-without-any-directional-basis.md)「裁定修订」第 1、2、4 条（2026-10-16 会话代决）定为记录，原称「读面」的那一半照 ADR-0024 改为依据下发（该票已登更正）。无条款停用。越权风险点见文末，待 NO owner 复核，第 3 点同时待 NR owner 会签。）<!-- 索引注记 -->｜**门在作业端**：方向依据（身份、服务结果、路由依据，取法同方向依据记录）随对象下发、带有效区间，作业端据本地时钟判断是否仍在区间内，出区间或缺依据即暂停方向性作业；依据有效而网络不通时照做、事实入本地队列，与 ADR-0024 一致。「方向性作业受阻」是这份依据的答案，不是写口的结果。**写口照记**：在线口、一线过渡导入、离线回传交来的移入一律照记，不因方向依据缺失、未配置、过期或读不动而拒收、悬置或回写，同笔留下方向依据记录；CONTEXT 括注里列的来路是举例。**集运兼容**：成员级集运兼容判断是下发依据的一格，不兼容的移入照记、偏离归 NR 判。**今天**：依据下发随一线作业端排，NR 指令与兼容判断随 no-directional-basis/02；在此之前路由一格答`未配置`
 Date: 2026-10-21
 
 ## Context
@@ -36,7 +36,7 @@ Date: 2026-10-21
 
 **四、今天的落地范围。**
 
-- 方向依据的下发随一线作业端一起建（no-directional-basis/01 读面半边；作业端的排期见该票「排期代决」）。
+- 方向依据的下发随一线作业端一起建（no-directional-basis/01 原称「读面」的那一半，已在该票「裁定修订」之下 2026-10-21 更正为下发半边；作业端的排期见该票「排期代决」）。
 - NR 的路由指令与成员级集运兼容判断随 [no-directional-basis/02](../../.scratch/no-directional-basis/issues/02-network-routing-has-no-routing-instruction-or-consolidation-compatibility-judgment.md)，下发时照 ADR-0024 带有效区间。在此之前，方向依据记录的路由一格答`未配置`，不替 NR 默认兼容。
 - 方向依据记录与偏离标记已在 main 上（no-directional-basis/01 偏离标记半边）。
 

@@ -919,7 +919,6 @@
 | `AT-CC-409` | 来源属于未授权法人、程序、方向或客户范围 | 查询/权限/审计面（接入与持久化闸门后） | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
 | `AT-NO-004` | 操作员有节点登录权限但没有当前有效开封、销毁或移交授权 | 查询/权限/审计面（接入与持久化闸门后） | UC-NO-001-ACCEPT-AND-EXECUTE-CUSTOMS-NODE-COLLABORATION.md |
 | `AT-NO-005` | 节点依扣留协作将 P1 隔离并保持控制 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-NO-001-ACCEPT-AND-EXECUTE-CUSTOMS-NODE-COLLABORATION.md |
-| `AT-NO-022` | 包裹无当前有效路由 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
 | `AT-NO-028` | 跨客户查询未知实物或收寄结果 | 查询/权限/审计面（接入与持久化闸门后） | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
 | `AT-NO-037` | 封签破损或与记录不符 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NO-046` | 跨客户集运隔离模拟 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
@@ -1272,6 +1271,7 @@
 | `AT-CC-407` | 引用和关系提交成功，但发布首次失败 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
 | `AT-CC-408` | 来源已保全，但关联结果技术提交失败 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
 | `AT-CC-410` | 检查本用例直接形成或修改的对象 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
+| `AT-NO-022` | 包裹无当前有效路由（同 `AT-NO-031`：方向依据随对象下发、带有效区间，作业端判；ADR-0024、ADR-0251） | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
 | `AT-NO-031` | 包裹没有当前有效路由（方向依据随对象下发、带有效区间，作业端判；ADR-0024、ADR-0251） | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NR-034` | 场外揽收交接已采用，尚未到节点；选中候选的硬约束仍满足（ADR-0249） | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-NR-051` | 选中候选的限制状态未知：关务目录为空、受理基线缺端点国家或关务来源未接（ADR-0250） | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
@@ -1540,4 +1540,4 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 
 2026-10-21 追记（票 demo-chain-gaps/94）：UC-TF-006 新立 `AT-TF-322`–`325`（派送出发前的交付门禁问询：受限的答阻断、放行的不列逐对象那一格，同参交付逐字节相同、命中同一判断，零写入、不读派送尝试，受理与授予同有效交付口，ADR-0238）。随票在编排、线格式与 parcel-api 真库用例上补 Covers 点名，全部入①；半边覆盖在行内注明。①、TF 加 4，②③④不变；总览计数未重算，进 main 时统一做。号段 316–325 由协调方预分，146 与 94 两票用满。
 
-2026-10-21 追记（票 docs-consistency/05）：UC-NR-003 新立 `AT-NR-084`（揽收复核时原计划失效只出建议，ADR-0249），未实现，入④；`AT-NR-034`（揽收复核不比节点，ADR-0249，今天按地点比节点判失效，code/16）与 `AT-NR-051`（适用性看不清入账未判，ADR-0250，今天回滚重投，code/28）由②移入④；`AT-NO-031` 由③移入④（ADR-0251 之后它是作业端按下发依据判的机制，下发未实现，不是等实例参数）；`AT-NR-033`、`036`、`037`、`040` 只改场景文字，桶不变。UC-NO-002 `AT-NO-062` 拆出 `AT-NO-131`（无范围、只经客户件号时追加不记冲突的待识别），原行末句那三条 Covers 移到新行，入①。计数进 main 时由推送方重算。
+2026-10-21 追记（票 docs-consistency/05）：UC-NR-003 新立 `AT-NR-084`（揽收复核时原计划失效只出建议，ADR-0249），未实现，入④；`AT-NR-034`（揽收复核不比节点，ADR-0249，今天按地点比节点判失效，code/16）与 `AT-NR-051`（适用性看不清入账未判，ADR-0250，今天回滚重投，code/28）由②移入④；`AT-NO-031` 与同场景的 UC-NO-002 `AT-NO-022` 由③移入④（ADR-0251 之后它们是作业端按下发依据判的机制，下发未实现，不是等实例参数）；`AT-NR-033`、`036`、`037`、`040` 只改场景文字，桶不变。UC-NO-002 `AT-NO-062` 拆出 `AT-NO-131`（无范围、只经客户件号时追加不记冲突的待识别），原行末句那三条 Covers 移到新行，入①。计数进 main 时由推送方重算。
