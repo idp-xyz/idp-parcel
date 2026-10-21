@@ -106,8 +106,8 @@ type chargeOccurrenceResponse struct {
 }
 
 // chargeOccurrenceCommissionBody 是冲突那一格回显的委托采购上下文：服务方、协议快照与采购责任法人，权威都是委托。协议三格与法人是
-// 委托在这件事实的业务时间所凭的那一版，agreementRevision 是那一版在委托上的号（1 是提交那一版，ADR-0231）。那一版记下了协议对象与
-// 版本标签就一并给出，登记方照它改载荷最直接。
+// 委托在这件事实的业务时间所凭的那一版；agreementRevision 只在那一版是某一次换版时出现，是它在委托上的号（2 起，ADR-0231）——提交
+// 那一版不出这一键，没换过版的委托回显与换版之前逐字节相同。那一版记下了协议对象与版本标签就一并给出，登记方照它改载荷最直接。
 type chargeOccurrenceCommissionBody struct {
 	Commission        string `json:"commission"`
 	Provider          string `json:"provider"`
@@ -201,8 +201,11 @@ func writeChargeOccurrenceOutcome(response http.ResponseWriter, result applicati
 		version, recorded := commission.AgreementVersion()
 		// 冲突那一格总带着委托在这件事实的业务时间所凭的那一版（ADR-0231 决定四），回显它：登记方要对照的是那一版，不是提交那一版。
 		if terms, named := result.CommissionTerms(); named {
-			echoed.Agreement, echoed.LegalEntity, echoed.AgreementRevision = terms.Snapshot().String(), terms.LegalEntity().String(), terms.Revision()
+			echoed.Agreement, echoed.LegalEntity = terms.Snapshot().String(), terms.LegalEntity().String()
 			version, recorded = terms.Version()
+			if terms.Revision() > 1 {
+				echoed.AgreementRevision = terms.Revision()
+			}
 		}
 		if recorded {
 			echoed.AgreementObject, echoed.AgreementVersion = version.Object(), version.Version()
