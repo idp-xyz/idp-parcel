@@ -269,7 +269,10 @@ func (repository *ContractDelegations) LoadContractDelegations(
 //
 // 空切片不是错误：交给 Authorize 译 ErrDelegationAbsent。合同版本从 commercial_version 的快照重建（0025
 // 的外键保证它在），委派行只存版本键不存第二份快照——版本的重建来源只信一处（判据同 versionDocument
-// 的头注）。顺序按合同、再按（动作、范围、等级），让装载结果稳定可比。
+// 的头注）。顺序按合同、再按（动作、范围、等级），让装载结果稳定可比；命中几条由 Authorize 判，不取首个。
+//
+// 委派先折所挂客户合同版本的收尾再交出（ADR-0261 决定二）：合同版本已退役的不交出，被截止的截止点及之后不交出，
+// 折法与授予同一处（领域 ContractDelegation.NarrowedBy / EndedBy / InForceAt）。
 func (repository *ContractDelegations) LoadEffectiveDelegations(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -288,13 +291,15 @@ func (repository *ContractDelegations) LoadEffectiveDelegations(
 		`SELECT version.snapshot,
 		        child.action, child.scope_ref, child.authority_level,
 		        child.delegator_kind, child.delegator_ref,
-		        child.effective_starts_at, child.effective_ends_at
+		        child.effective_starts_at, child.effective_ends_at,
+		        `+versionClosureColumns+`
 		   FROM party_commercial.contract_delegation AS child
 		   JOIN party_commercial.commercial_version AS version
 		     ON version.tenant_id     = child.tenant_id
 		    AND version.object_kind   = child.object_kind
 		    AND version.object_id     = child.object_id
 		    AND version.version_label = child.version_label
+		   `+versionClosureJoins("child")+`
 		  WHERE child.tenant_id = $1
 		    AND child.scope_ref = $2
 		    AND child.effective_starts_at <= $3
@@ -313,12 +318,13 @@ func (repository *ContractDelegations) LoadEffectiveDelegations(
 	for rows.Next() {
 		var snapshot []byte
 		var document delegationDocument
-		if err := rows.Scan(
+		var closure scannedVersionClosure
+		if err := rows.Scan(append([]any{
 			&snapshot,
 			&document.Action, &document.Scope, &document.Level,
 			&document.DelegatorKind, &document.Delegator,
 			&document.StartsAt, &document.EndsAt,
-		); err != nil {
+		}, closure.targets()...)...); err != nil {
 			return nil, fmt.Errorf("load effective delegations: %w", err)
 		}
 		var versionDoc versionDocument
@@ -338,12 +344,41 @@ func (repository *ContractDelegations) LoadEffectiveDelegations(
 		if err != nil {
 			return nil, fmt.Errorf("load effective delegations: %w", err)
 		}
-		delegations = append(delegations, delegation)
+		if delegation, err = foldDelegationClosure(delegation, closure); err != nil {
+			return nil, fmt.Errorf("load effective delegations: %w", err)
+		}
+		if delegation.InForceAt(at) {
+			delegations = append(delegations, delegation)
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("load effective delegations: %w", err)
 	}
 	return delegations, nil
+}
+
+// foldDelegationClosure 把所挂合同版本的最新一条区间更正与退役折进委派；收尾行有却立不起来是坏数据，上抛——跳过它会让
+// 一条已离开新裁定的委派照旧解出决定方。
+func foldDelegationClosure(delegation domain.ContractDelegation, closure scannedVersionClosure) (domain.ContractDelegation, error) {
+	correction, corrected, err := closure.correctionFor(delegation.Contract())
+	if err != nil {
+		return domain.ContractDelegation{}, err
+	}
+	if corrected {
+		if delegation, err = delegation.NarrowedBy(correction); err != nil {
+			return domain.ContractDelegation{}, err
+		}
+	}
+	retirement, retired, err := closure.retirementFor(delegation.Contract())
+	if err != nil {
+		return domain.ContractDelegation{}, err
+	}
+	if retired {
+		if delegation, err = delegation.EndedBy(retirement); err != nil {
+			return domain.ContractDelegation{}, err
+		}
+	}
+	return delegation, nil
 }
 
 // delegationDocument 是子表一行在 json_agg 里的形状，也是按范围装载时逐列扫进的形状——两条路读的是同一

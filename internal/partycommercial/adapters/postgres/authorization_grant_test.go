@@ -135,7 +135,9 @@ func TestGrantWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	}
 }
 
-func TestTwoMatchingGrantsReturnTheFirstInStableOrder(t *testing.T) {
+// Covers: `AT-PC-042` 真库那一半——同一范围同一时点两个对象各授一份，裁定答适用冲突：装载顺序稳定（按对象、版本标签），
+// 但采用哪一版不取决于它（ADR-0261 决定三）；适用冲突与不允许、未配置互不 Is。
+func TestTwoMatchingGrantsAreAnApplicabilityConflict(t *testing.T) {
 	grants, transactor, _ := newAuthorityGrants(t)
 	mustSaveGrant(t, transactor, t.Context(), grants,
 		persistedGrant(t, "tenant-1", "auth-b", domain.ActiveRejectionAction, "level-commercial", "scope-a"))
@@ -149,24 +151,18 @@ func TestTwoMatchingGrantsReturnTheFirstInStableOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if len(loaded) != 2 {
-		t.Fatalf("loaded %d grants, want 2", len(loaded))
-	}
-	// 今天 Authorize 返回首个命中，命中顺序即装载顺序。ORDER BY object_id 让顺序稳定，
-	// 但「采用哪一版」仍依赖这个顺序——不是一条与顺序无关的生产采用规则。
-	if loaded[0].Version().ObjectID().String() != "auth-a" {
-		t.Fatalf("first loaded = %q, want auth-a（按 object_id 排序，不是登记先后）",
-			loaded[0].Version().ObjectID())
+	if len(loaded) != 2 || loaded[0].Version().ObjectID().String() != "auth-a" {
+		t.Fatalf("loaded = %d grants, first %q; want 2, auth-a first（按 object_id 排序，不是登记先后）",
+			len(loaded), loaded[0].Version().ObjectID())
 	}
 
 	handler := application.NewAdjudicateCommercialAuthorizationHandler(grants)
-	authorized, err := handler.Handle(t.Context(), pcTenant(t, "tenant-1"), grantRejectionRequest(t, "scope-a", grantJudgedAt))
-	if err != nil {
-		t.Fatalf("adjudicate: %v", err)
+	_, err = handler.Handle(t.Context(), pcTenant(t, "tenant-1"), grantRejectionRequest(t, "scope-a", grantJudgedAt))
+	if !errors.Is(err, domain.ErrAuthorityApplicabilityConflict) {
+		t.Fatalf("error = %v, want ErrAuthorityApplicabilityConflict——不取装载顺序的第一个", err)
 	}
-	if authorized.GrantVersion().ObjectID().String() != "auth-a" {
-		t.Fatalf("采用 %q；今天是装载顺序的第一个命中，不是生产采用规则",
-			authorized.GrantVersion().ObjectID())
+	if errors.Is(err, domain.ErrNotAuthorized) || errors.Is(err, domain.ErrAuthorityRulesNotConfigured) {
+		t.Fatalf("error = %v：适用冲突被读成了不允许或未配置", err)
 	}
 }
 

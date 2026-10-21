@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"sort"
+	"time"
 )
 
 var (
@@ -259,6 +260,8 @@ type ContractDelegation struct {
 	scope     CommercialScopeReference
 	level     AuthorityLevel
 	effective EffectiveInterval
+	// closure 是装载时从版本册折进来的所挂客户合同版本的收尾（NarrowedBy、EndedBy），不是随发布登记的委派正文。
+	closure versionFold
 }
 
 // NewContractDelegation 要求拥有对象是当前可用的客户合同版本、动作是决定权归客户的那一格。
@@ -313,13 +316,41 @@ func (delegation ContractDelegation) Effective() EffectiveInterval {
 	return delegation.effective
 }
 
+// NarrowedBy 交回被所挂客户合同版本壳上的区间更正（截止）收窄的同一条委派（ADR-0261 决定二）：判用区间终点取截止点与
+// 委派自身终点中较早的一个，折法与授权授予同一处（versionFold）。委派只回答「谁替谁」（ADR-0116 决定三），折法不改它与
+// 授予的分工。
+func (delegation ContractDelegation) NarrowedBy(correction ValidityCorrection) (ContractDelegation, error) {
+	if !sameVersionKey(delegation.contract, correction.tenant, correction.kind, correction.objectID, correction.version) ||
+		!correction.corrected.valid() {
+		return ContractDelegation{}, ErrInvalidContractDelegation
+	}
+	delegation.closure = delegation.closure.narrowedBy(correction)
+	return delegation, nil
+}
+
+// EndedBy 交回所挂客户合同版本已同起点退役的同一条委派：它不再为任何新的裁定解出实际决定方。后继合同版本声明了同一
+// 委派，由那一条解出；没有，就是委派缺席。
+func (delegation ContractDelegation) EndedBy(retirement VersionRetirement) (ContractDelegation, error) {
+	if !sameVersionKey(delegation.contract, retirement.tenant, retirement.kind, retirement.objectID, retirement.version) ||
+		retirement.at.IsZero() {
+		return ContractDelegation{}, ErrInvalidContractDelegation
+	}
+	delegation.closure = delegation.closure.closedWhole()
+	return delegation, nil
+}
+
+// InForceAt 答这条委派在 at 是否有效：落在自身区间内，且没被所挂合同版本的收尾排除。
+func (delegation ContractDelegation) InForceAt(at time.Time) bool {
+	return delegation.effective.Contains(at) && !delegation.closure.excludes(at)
+}
+
 // resolves 回答这条委派是否把该请求的决定权交给了请求方所持的等级：动作、范围、等级、时点
 // 五维之外，委派方还要对得上——客户账户委派对所代的客户账户，责任法人委派对请求上的责任法人。
 func (delegation ContractDelegation) resolves(request AuthorizationRequest) bool {
 	if delegation.action != request.action ||
 		delegation.scope != request.scope ||
 		delegation.level != request.level ||
-		!delegation.effective.Contains(request.at) {
+		!delegation.InForceAt(request.at) {
 		return false
 	}
 	switch delegation.delegator.kind {

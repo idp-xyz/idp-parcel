@@ -1296,6 +1296,7 @@ type ContractDelegationContentView interface {
 //
 // 委派方、动作与等级不在本口的键上：一次装载交回该范围该时点的全部有效委派，五维匹配由
 // 领域做——判据只能有一处，与 LoadEffectiveGrants 把动作、法人、等级留给 Authorize 同理。
+// 「有效」按折完所挂客户合同版本收尾的委派判，折法与授予同一处（ADR-0261 决定二）。
 type EffectiveContractDelegationView interface {
 	LoadEffectiveDelegations(
 		ctx context.Context,
@@ -1309,6 +1310,8 @@ type EffectiveContractDelegationView interface {
 //
 // LoadEffectiveGrants 按（租户+范围+业务时点）装载当时管得着的授权。空切片交给
 // domain.Authorize 译`未配置`，本口不把空折成不允许。读取失败上抛，不得折成空切片。
+// 「管得着」按折完所挂授权规则版本收尾的授予判（ADR-0261 决定一）：已退役那一版与截止点之后
+// 的旧版不交出，交出的授予带着折进来的截止点，由 Authorize 再按同一判据判。
 //
 // 公开裁定口是应用层的 AdjudicateCommercialAuthorization，不在本接口上——消费方
 // 不得绕过 Authorize 四格直接拿切片自己判。

@@ -32,6 +32,13 @@ var _ ports.AuthorityGrantStore = (*AuthorityGrants)(nil)
 
 // LoadEffectiveGrants 取回该租户该范围在业务时点仍管得着的授权。空切片不是错误：
 // 交给 Authorize 译`未配置`。
+//
+// 授予先折所挂授权规则版本的收尾再交出（ADR-0261 决定一）：已退役那一版的授予不交出，壳上有区间更正的按最新一条的
+// 终点收窄、截止点及之后不交出。折法在领域一处（AuthorityGrant.NarrowedBy / EndedBy / InForceAt），这里只取行与折进。
+// 授予册不带对象类别列（它只收授权规则），连收尾两册时补上那一格；版本册上没有这一版的授予连不到任何收尾，照原样交出
+// ——收尾口只收册上的版本，连不到就是没收尾。收尾行有却立不起来是坏数据，整次上抛：跳过它会让一版已退役的授予照旧放行。
+//
+// 顺序按（对象、版本标签）稳定，但裁定不取首个：命中多于一条时 Authorize 答适用冲突（ADR-0261 决定三）。
 func (repository *AuthorityGrants) LoadEffectiveGrants(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -47,16 +54,19 @@ func (repository *AuthorityGrants) LoadEffectiveGrants(
 	}
 
 	rows, err := querier.Query(ctx,
-		`SELECT snapshot
-		   FROM party_commercial.authorization_grant
-		  WHERE tenant_id = $1
-		    AND scope_ref = $2
-		    AND effective_starts_at <= $3
-		    AND (effective_ends_at IS NULL OR effective_ends_at > $3)
-		  ORDER BY object_id, version_label`,
+		`SELECT granted.snapshot, `+versionClosureColumns+`
+		   FROM (SELECT g.tenant_id, $4::smallint AS object_kind, g.object_id, g.version_label, g.snapshot
+		           FROM party_commercial.authorization_grant AS g
+		          WHERE g.tenant_id = $1
+		            AND g.scope_ref = $2
+		            AND g.effective_starts_at <= $3
+		            AND (g.effective_ends_at IS NULL OR g.effective_ends_at > $3)) AS granted
+		   `+versionClosureJoins("granted")+`
+		  ORDER BY granted.object_id, granted.version_label`,
 		tenant.String(),
 		scope.String(),
 		at.UTC(),
+		uint8(domain.AuthorizationRuleObject),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("load effective grants: %w", err)
@@ -66,19 +76,47 @@ func (repository *AuthorityGrants) LoadEffectiveGrants(
 	var grants []domain.AuthorityGrant
 	for rows.Next() {
 		var raw []byte
-		if err := rows.Scan(&raw); err != nil {
+		var closure scannedVersionClosure
+		if err := rows.Scan(append([]any{&raw}, closure.targets()...)...); err != nil {
 			return nil, fmt.Errorf("load effective grants: %w", err)
 		}
 		grant, err := grantFromSnapshot(raw)
 		if err != nil {
 			return nil, fmt.Errorf("load effective grants: %w", err)
 		}
-		grants = append(grants, grant)
+		if grant, err = foldGrantClosure(grant, closure); err != nil {
+			return nil, fmt.Errorf("load effective grants: %w", err)
+		}
+		if grant.InForceAt(at) {
+			grants = append(grants, grant)
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("load effective grants: %w", err)
 	}
 	return grants, nil
+}
+
+func foldGrantClosure(grant domain.AuthorityGrant, closure scannedVersionClosure) (domain.AuthorityGrant, error) {
+	correction, corrected, err := closure.correctionFor(grant.Version())
+	if err != nil {
+		return domain.AuthorityGrant{}, err
+	}
+	if corrected {
+		if grant, err = grant.NarrowedBy(correction); err != nil {
+			return domain.AuthorityGrant{}, err
+		}
+	}
+	retirement, retired, err := closure.retirementFor(grant.Version())
+	if err != nil {
+		return domain.AuthorityGrant{}, err
+	}
+	if retired {
+		if grant, err = grant.EndedBy(retirement); err != nil {
+			return domain.AuthorityGrant{}, err
+		}
+	}
+	return grant, nil
 }
 
 // SaveGrant 登记一条已生效授权。撞键不覆盖：同内容重放，异内容冲突。

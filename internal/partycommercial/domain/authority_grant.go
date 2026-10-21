@@ -26,11 +26,16 @@ var (
 	// 委派），不是租户去登记规则（ADR-0116 Decision 三，按 ADR-0029 的恢复动作分格）。
 	ErrDelegationAbsent = fmt.Errorf("%w: no effective contract delegation hands this decision to the requesting operator role", ErrNotAuthorized)
 	// ErrCustomerAccountCannotDecide 是 ErrNotAuthorized 的另一个具名分格：客户账户自己来请求受控关闭或重开。
-	// PS CONTEXT「货主……只能提出请求，除非客户合同或明确授权把其纳入可直接形成决定的授权角色范围」——那条
-	// 例外支首发不开、留位（票 party-commercial-context-gaps/13 裁决 ③），于是客户账户即便持有命中 grant 的
-	// 等级也不能是决定方。它 Is ErrNotAuthorized：恢复动作在业务侧（由授权的运营角色来形成决定），不是租户去
-	// 登记规则；日后开例外支改的是这一道拒绝与一条新的委派方向。
+	// CONTEXT「两者都是运营侧凭授权规则形成的决定，合同委派不参与。」——货主经客户合同或明确授权直接形成这两种决定
+	// 的路在规则上不存在（ADR-0275 决定一），于是客户账户即便持有命中 grant 的等级也不能是决定方。它 Is
+	// ErrNotAuthorized：恢复动作在业务侧（由授权的运营角色据货主的要求形成决定），不是租户去登记规则。要给货主开
+	// 直接形成的路，须另立记录改授权规则，不是改这一道拒绝。
 	ErrCustomerAccountCannotDecide = fmt.Errorf("%w: a customer account may only request a controlled closure or reopening; the decision is formed by an authorized operator role", ErrNotAuthorized)
+	// ErrAuthorityApplicabilityConflict 说的是折完所挂版本的收尾之后，一个请求在同一刻被多于一条授予允许，或被委派方
+	// 不同的多条委派命中（ADR-0261 决定三）。它既不 Is ErrNotAuthorized 也不 Is ErrAuthorityRulesNotConfigured：
+	// 权威表过态、也允许了，只是答不出采用哪一版；恢复动作是商业责任方收尾旧版或撤去重复的那一条（ADR-0029 按恢复
+	// 动作分格）。压成不允许会把一次换版未收尾说成「你无权」，取首个则让消费方保存一版谁也没选过的规则。
+	ErrAuthorityApplicabilityConflict = errors.New("party commercial: more than one effective grant or delegation answers this request")
 )
 
 // AuthorityLevel 是商业权限等级，不是人事职级。它是版本化的业务授权：职务名称、
@@ -121,6 +126,8 @@ type AuthorityGrant struct {
 	level       AuthorityLevel
 	scope       CommercialScopeReference
 	effective   EffectiveInterval
+	// closure 是装载时从版本册折进来的所挂授权规则版本的收尾（NarrowedBy、EndedBy），不是登记时的授予正文。
+	closure versionFold
 }
 
 func NewAuthorityGrant(
@@ -171,12 +178,40 @@ func (grant AuthorityGrant) Effective() EffectiveInterval {
 	return grant.effective
 }
 
+// NarrowedBy 交回被所挂授权规则版本壳上的区间更正（截止）收窄的同一条授予（ADR-0261 决定一）：判用区间终点取更正
+// 终点与授予自身终点中较早的一个。折法见 versionFold，与自带区间的政策正文同一口径。授予册里的区间不改写。
+func (grant AuthorityGrant) NarrowedBy(correction ValidityCorrection) (AuthorityGrant, error) {
+	if !sameVersionKey(grant.version, correction.tenant, correction.kind, correction.objectID, correction.version) ||
+		!correction.corrected.valid() {
+		return AuthorityGrant{}, ErrInvalidAuthorityGrant
+	}
+	grant.closure = grant.closure.narrowedBy(correction)
+	return grant, nil
+}
+
+// EndedBy 交回所挂授权规则版本已同起点退役的同一条授予：它不参与任何新的裁定（ADR-0261 决定一）。已作出的裁定与消费方
+// 随决定保存的授权规则版本引用不在这里，收尾不追溯它们。
+func (grant AuthorityGrant) EndedBy(retirement VersionRetirement) (AuthorityGrant, error) {
+	if !sameVersionKey(grant.version, retirement.tenant, retirement.kind, retirement.objectID, retirement.version) ||
+		retirement.at.IsZero() {
+		return AuthorityGrant{}, ErrInvalidAuthorityGrant
+	}
+	grant.closure = grant.closure.closedWhole()
+	return grant, nil
+}
+
+// InForceAt 答这条授予在 at 是不是现行规则：落在自身区间内，且没被所挂版本的收尾排除。「这个范围此刻有没有现行规则」
+// 与「这条授予允不允许」都按它判——已退役与截止之后的授予两问都不算。
+func (grant AuthorityGrant) InForceAt(at time.Time) bool {
+	return grant.effective.Contains(at) && !grant.closure.excludes(at)
+}
+
 func (grant AuthorityGrant) permits(request AuthorizationRequest) bool {
 	return grant.action == request.action &&
 		grant.legalEntity == request.legalEntity &&
 		grant.level == request.level &&
 		grant.scope == request.scope &&
-		grant.effective.Contains(request.at)
+		grant.InForceAt(request.at)
 }
 
 // AuthorizationRequest 请求执行一个动作。它有意不携带参与方角色：承运商代理商或
@@ -337,21 +372,28 @@ func (authorization Authorization) Decider() (Decider, bool) {
 	return authorization.decider, authorization.decider.valid()
 }
 
-// Authorize 寻找一条允许该请求的已生效授权。没有授权就是拒绝，绝不是放行：
-// 授权要么显式授予，要么就是没有。
+// Authorize 寻找允许该请求的已生效授权。没有授权就是拒绝，绝不是放行：授权要么显式授予，要么就是没有。
 //
 // 没通过分成两格，按调用方的恢复动作而不是本上下文观察到的原因（ADR-0029）：这个范围在
-// 这个时刻一条已生效规则都没有时交回`未配置`，等租户把规则登记上；有规则而本请求不在其内
+// 这个时刻一条现行规则都没有时交回`未配置`，等租户把规则登记上；有规则而本请求不在其内
 // 才是业务拒绝。
 //
 // 判据取**范围加时刻**，不取整份请求。责任法人、权限等级或动作任一不符，都说明权威已经就
 // 这个范围表过态、只是没把这一项放进去——那是它给出的答案，不是它还没被问过。反过来，规则
 // 全部过期与从未登记同落`未配置`：在请求那个时刻，这个范围都没有一条管得着的规则，两者要做
-// 的事同为「让一条现行规则存在」。
+// 的事同为「让一条现行规则存在」。「现行」按折完所挂版本收尾的授予判（InForceAt）：已退役与截止
+// 之后的授予不算（ADR-0261 决定一）。收尾要求后继接得住旧版此后的那一段，所以一次成立的收尾不会
+// 把`已配置`变成`未配置`。
+//
+// 命中多于一条授予答 ErrAuthorityApplicabilityConflict（ADR-0261 决定三）：不取首个，不按版本标签、
+// 装载顺序或生效时点挑——任何这类规则都是在替租户挑一版，而消费方会把挑出来的那一版当作「所采用的
+// 授权规则版本」保存下来。两条是同一授权规则对象换版未收尾，还是不同对象各授一份，同一答法。
 //
 // 授权命中之后再解实际决定方（ADR-0116 Decision 三）。委派只回答「谁替谁」，顶替不了「许不许」：
 // 规则缺席时不看委派照旧`未配置`；规则在场而运营角色代录的决定权归客户的动作没有有效委派，
 // 是 ErrDelegationAbsent——它 Is ErrNotAuthorized，因为缺的是客户把决定权交出来，不是租户的规则。
+// 决定方的解法与命中的是哪一条授予无关，所以先解决定方：它答出`不允许`时，命中几条授予都改变不了
+// 这个答案，照答不允许，不报适用冲突——冲突说的是「采用哪一版」答不出，而一次拒绝不采用任何一版。
 //
 // 「谁有权复核」同样走这里，带 ManualReviewAction，不另立一个按范围加时刻的谓词：那种谓词没有
 // 主体、没有等级、没有三值，答不了「谁有权」，也不该答「要不要」——后者的单一权威是接单规则
@@ -362,35 +404,45 @@ func Authorize(
 	request AuthorizationRequest,
 ) (Authorization, error) {
 	configured := false
+	var hits []AuthorityGrant
 	for _, grant := range grants {
-		if grant.scope == request.scope && grant.effective.Contains(request.at) {
+		if grant.scope == request.scope && grant.InForceAt(request.at) {
 			configured = true
 		}
 		if grant.permits(request) {
-			decider, err := resolveDecider(delegations, request)
-			if err != nil {
-				return Authorization{}, err
-			}
-			return Authorization{
-				action:   request.action,
-				grant:    grant,
-				reason:   request.reason,
-				evidence: request.evidence,
-				at:       request.at,
-				decider:  decider,
-			}, nil
+			hits = append(hits, grant)
 		}
 	}
-	if !configured {
-		return Authorization{}, ErrAuthorityRulesNotConfigured
+	if len(hits) == 0 {
+		if !configured {
+			return Authorization{}, ErrAuthorityRulesNotConfigured
+		}
+		return Authorization{}, ErrNotAuthorized
 	}
-	return Authorization{}, ErrNotAuthorized
+	decider, err := resolveDecider(delegations, request)
+	if err != nil {
+		return Authorization{}, err
+	}
+	if len(hits) > 1 {
+		return Authorization{}, ErrAuthorityApplicabilityConflict
+	}
+	return Authorization{
+		action:   request.action,
+		grant:    hits[0],
+		reason:   request.reason,
+		evidence: request.evidence,
+		at:       request.at,
+		decider:  decider,
+	}, nil
 }
 
 // resolveDecider 按请求方解实际决定方：客户账户自己请求，决定方就是它；运营角色请求它自己
 // 拥有的动作（人工复核、主动拒绝、受控关闭、重开），决定方就是它；运营角色代客户请求决定权归客户
 // 的动作，决定方是把这一决定委派给它所持等级的委派方——没有委派，登录操作人不能顶替。
 // 没带请求方（旧构造器）解不出决定方，交回零值，由 Authorization.Decider 报为「未指名」。
+//
+// 命中多条委派时只看委派方：委派方相同即同一个实际决定方（同一委派方在换版未收尾的两版合同上各声明
+// 一次），不算冲突；委派方不同答 ErrAuthorityApplicabilityConflict，不取首个（ADR-0261 决定三）。
 //
 // 客户账户请求只能由运营角色形成的动作（受控关闭、重开）在这里拒，不靠「客户不持等级、命不中 grant」
 // 兜——那样理由就落在数据形状上而不在领域里；拒绝放在命中之后，规则缺席时照旧先答未配置。
@@ -404,10 +456,20 @@ func resolveDecider(delegations []ContractDelegation, request AuthorizationReque
 	if request.requester.kind == CustomerAccountRequester || !request.action.decidedByCustomer() {
 		return request.requester.decider(), nil
 	}
+	resolved := false
+	var decider Decider
 	for _, delegation := range delegations {
-		if delegation.resolves(request) {
-			return delegation.delegator.decider(), nil
+		if !delegation.resolves(request) {
+			continue
 		}
+		candidate := delegation.delegator.decider()
+		if resolved && candidate != decider {
+			return Decider{}, ErrAuthorityApplicabilityConflict
+		}
+		resolved, decider = true, candidate
 	}
-	return Decider{}, ErrDelegationAbsent
+	if !resolved {
+		return Decider{}, ErrDelegationAbsent
+	}
+	return decider, nil
 }

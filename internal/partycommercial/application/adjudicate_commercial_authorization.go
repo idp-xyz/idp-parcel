@@ -40,7 +40,8 @@ func NewAdjudicateCommercialAuthorizationHandlerWithDelegations(
 	return &AdjudicateCommercialAuthorizationHandler{grants: grants, delegations: delegations}
 }
 
-// Handle 按租户装载该范围该时点的现行授权与有效委派，再交给 domain.Authorize。
+// Handle 按租户装载该范围该时点的现行授权与有效委派（都已折进所挂版本的收尾，ADR-0261），再交给 domain.Authorize；
+// 命中多于一条答 domain.ErrAuthorityApplicabilityConflict，与`不允许`、`未配置`分格，消费方据以停在未决。
 //
 // 最小身份不成立时不查询权威：一次已经发出的查询无法收回，它本身就回答了「这个范围
 // 有没有规则」。装载失败包装上抛，不得冒充`不允许`或`未配置`；消费方把它留在 error

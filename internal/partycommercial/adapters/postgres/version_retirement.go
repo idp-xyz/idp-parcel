@@ -10,8 +10,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 )
 
-// 同起点退役册的持久化面（ADR-0233，迁移 0040），以及按版本点读时把版本层的收尾（最新一条区间更正、退役）折进来的
-// 那一段。整册装载自己聚全部更正（LoadForScope），点读只要最新的一条：选用区间取登记顺序上的最后一条（ADR-0056）。
+// 同起点退役册的持久化面（ADR-0233，迁移 0040），以及按版本点读、装载授权授予与合同委派（ADR-0261）时把版本层的收尾
+// （最新一条区间更正、退役）折进来的那一段。整册装载自己聚全部更正（LoadForScope），其余只要最新的一条：选用区间取
+// 登记顺序上的最后一条（ADR-0056）。
 
 // SaveVersionRetirement 登记一次同起点退役。一版只退一次：主键撞上即读回比对，同一个决定（同一后继、同一决定引用）答
 // `已登记`，异内容答`内容冲突`，原行不动。退役时刻不进比对，理由同 domain.sameRetirementDecision。
@@ -72,8 +73,8 @@ func (repository *CommercialPublications) SaveVersionRetirement(
 	return ports.VersionRetirementContentConflict, nil
 }
 
-// versionClosureJoins 是按版本点读时把收尾折进来的两段连接：最新一条区间更正与退役。alias 是外层查询里版本行的别名；
-// 与壳同一条语句取回，理由同 LoadSupplierAgreementVersion 头注。
+// versionClosureJoins 是把收尾折进来的两段连接：最新一条区间更正与退役。alias 是外层查询里带版本四元组那一行的别名；
+// 与所折的行同一条语句取回，理由同 LoadSupplierAgreementVersion 头注。
 func versionClosureJoins(alias string) string {
 	return `LEFT JOIN LATERAL (
 		        SELECT c.corrected_starts_at, c.corrected_ends_at, c.correction_ref, c.corrected_at

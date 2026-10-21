@@ -311,10 +311,10 @@ func TestControlledClosureAndReopeningAreTwoSeparateAuthorizedActions(t *testing
 	})
 }
 
-// Covers: PS CONTEXT「货主、渠道服务方和代理商只能提出请求，除非客户合同或明确授权把其纳入可直接形成决定的授权
-// 角色范围」——例外支首发不开、留位（票 party-commercial-context-gaps/13 裁决 ③）：客户账户作请求方来请求关闭 /
-// 重开，即便持有的等级命中一条 grant，也在领域里显式拒绝（Is ErrNotAuthorized），理由钉在领域而不是靠命不中。
-// 无规则时仍是未配置——拒绝不顶替租户尚未登记规则这一格。
+// Covers: CONTEXT「两者都是运营侧凭授权规则形成的决定，合同委派不参与。」与 ADR-0275 决定一——货主经客户合同或明确
+// 授权直接形成关闭或重开的路规则上不存在：客户账户作请求方来请求关闭 / 重开，即便持有的等级命中一条 grant，也在领域
+// 里显式拒绝（Is ErrNotAuthorized），理由钉在领域而不是靠命不中。无规则时仍是未配置——拒绝不顶替租户尚未登记规则
+// 这一格。
 func TestACustomerAccountMayOnlyRequestClosureAndReopening(t *testing.T) {
 	customer := customerRequester(t, "account-1")
 	for _, action := range []domain.AuthorizedAction{domain.ControlledClosureAction, domain.ReopeningAction} {
