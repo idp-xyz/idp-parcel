@@ -1,7 +1,7 @@
 # 52 NR 路由复核读的是初始路由那一行，不是当前有效计划或无路由：失效之后的复核回滚重投到耗尽，或对一份已失效的计划答仍适用
 
 Category: bug
-Status: in-progress——第 1 轮评审已修，待进 main，分支 claude-code52（已 rebase 到 main `4e7874ba0`），见文末「完成记录」「评审记录」。此前 ready-for-agent——建议 R1（上线前必修）：答错且会卡住分区。原计划经一次复核失效之后，下一次控制触发（收寄采用或交接）还是拿那份已失效的初始计划去复核：限制仍在时答 `UNDECIDED/REASSESS_STORE_UNAVAILABLE`，占着交接分区或小包托运分区回滚重投，直到 `ABANDONED`，同一分区后面的信封跟着推迟，失败码还指向一个没坏的依赖；限制解除时对已失效的计划答 `STILL_APPLICABLE`，复核册说这份计划仍适用，适用性册说它已失效，两册打架。ADR-0249 决定二「交进首个节点时，交接复核走『原先无当前有效路由』那条线」那一格，代码里不存在，code/29 的绕法与 ADR-0249 越权风险点 3 的缓解都靠它。没有绕法。2026-10-21 由 code/16 的隔离评审发现（N1），作者会话立票（用户「你作为业务和系统专家自决」授权），分级由协调方定稿。
+Status: in-progress——第 2 轮评审已修，待进 main，分支 claude-code52（已 rebase 到 main `4e7874ba0`），见文末「完成记录」「评审记录」。此前 ready-for-agent——建议 R1（上线前必修）：答错且会卡住分区。原计划经一次复核失效之后，下一次控制触发（收寄采用或交接）还是拿那份已失效的初始计划去复核：限制仍在时答 `UNDECIDED/REASSESS_STORE_UNAVAILABLE`，占着交接分区或小包托运分区回滚重投，直到 `ABANDONED`，同一分区后面的信封跟着推迟，失败码还指向一个没坏的依赖；限制解除时对已失效的计划答 `STILL_APPLICABLE`，复核册说这份计划仍适用，适用性册说它已失效，两册打架。ADR-0249 决定二「交进首个节点时，交接复核走『原先无当前有效路由』那条线」那一格，代码里不存在，code/29 的绕法与 ADR-0249 越权风险点 3 的缓解都靠它。没有绕法。2026-10-21 由 code/16 的隔离评审发现（N1），作者会话立票（用户「你作为业务和系统专家自决」授权），分级由协调方定稿。
 Blocked by: 无
 出处：docs-consistency/code/16 隔离评审 N1。main `14443ac03` 上同病，不是 code/16 引入的。
 
@@ -66,8 +66,8 @@ M：一个读口（或给 `InitialRouteStore` 旁另立「当前路由」读口�
 
 ### 做了什么
 
-- 复核册加读口 `ports.ReassessmentStore.FormedPlans`（评审 N2 后由「取最近一份」改成）：按判断键交回形成过的全部新计划（`REROUTED` 或 `FIRST_PLAN_FORMED` 那一行的 `new_plan`），迁移 0022 之前没有业务时间的行一并读回；先后只为读来可复现。在册计划重建不出来交 `ports.ErrStoredRoutePlanUnreadable`。真库实现在 `internal/networkrouting/adapters/postgres/route_reassessment.go`。没有加表，也没有迁移。
-- 复核编排 `Handle` 改由 `startingPoint` 定判断起点：路由历史里的计划是初始计划加复核形成过的全部新计划，逐份按计划版本读适用性册。恰一份当前有效（含没有登记行）就复核它；一份都没有就走 `reassessNoRoute`；不止一份、某份已被替代而接班的不在路由历史里、某份已结束，都是坏起点，答 `ErrInconsistentRouteStart`、响亮报错。重建不出来的在册计划也响亮报错，不折成未决。起点在 `LatestTriggerAt` 取的判断键锁里读。
+- 复核册加读口 `ports.ReassessmentStore.FormedPlans`（评审 N2 后由「取最近一份」改成）：按判断键交回形成过的全部新计划（`REROUTED` 或 `FIRST_PLAN_FORMED` 那一行的 `new_plan`），迁移 0022 之前没有业务时间的行一并读回；先后只为读来可复现。在册计划重建不出来交 `ports.ErrStoredRouteRecordUnreadable`（第 2 轮评审后由 `ErrStoredRoutePlanUnreadable` 改名；初始路由那一行与计划适用性那一行重建不出来也交它）。真库实现在 `internal/networkrouting/adapters/postgres/route_reassessment.go`。没有加表，也没有迁移。
+- 复核编排 `Handle` 改由 `startingPoint` 定判断起点：路由历史里的计划是初始计划加复核形成过的全部新计划，逐份按计划版本读适用性册。恰一份当前有效（含没有登记行）就复核它；一份都没有就走 `reassessNoRoute`；不止一份、某份已被替代而接班的不在路由历史里、某份已结束，都是坏起点，答 `ErrInconsistentRouteStart`、响亮报错。路由历史里任一处落了册的行（初始路由、复核形成的计划、适用性）重建不出来，也响亮报错，不折成未决。起点在 `LatestTriggerAt` 取的判断键锁里读。
 - 已有结果分界挪进判断键锁里：取锁之后先按关联读复核册。指纹原先就在册的是重放，按原结论作答。指纹是本笔刚登的，说明并发里输给了赢家，答 `EXISTING_RESULT`，与提交时撞键同一格。这样同一触发的后到一方不会按赢家换过的起点再判一次、再写一次适用性。
 - `reassessPlan` 遇 `ErrPlanNoLongerCurrent` 不再折成「登记册读不回」，响亮报错：起点在锁里读、只取当前有效的计划，重复触发也已在锁里读回，这个错误不再有正当来由，是编程错误。离场门的其余拒法也响亮报错，但不是编程错误一类，例如离场早于生效（见 code/60）。去掉 `loadApplicability`，适用性随起点交给失效与改善替代两处，不读第二次。
 - 复核形成的计划改为从这次触发的业务时间起生效，判断时刻仍取处理时钟；改善替代时原计划的离场时刻也取触发业务时间。单一权威是 [ADR-0272](../../../docs/adr/0272-a-plan-formed-by-route-reassessment-takes-effect-at-the-trigger-business-time.md)（评审 R1 后立）。
@@ -77,7 +77,8 @@ M：一个读口（或给 `InitialRouteStore` 旁另立「当前路由」读口�
     - 失效之后候选评估未决或最低成本并列，都仍无路由、不挂建议。
     - 失效之后评估补齐，形成新计划版本，从触发业务时间起生效，无路由期间那一行保留。
     - 失效线自动改路与改善替代形成的新计划都成为下一次复核的起点。
-    - 坏起点响亮报错：替代的接班不在路由历史里、不止一份当前有效，都答 `ErrInconsistentRouteStart`；在册计划重建不出来答 `ErrStoredRoutePlanUnreadable`。
+    - 坏起点响亮报错：替代的接班不在路由历史里、不止一份当前有效，都答 `ErrInconsistentRouteStart`；路由历史三处坏行各答 `ErrStoredRouteRecordUnreadable`。
+    - 改善替代时被替代计划与接班计划的适用性转移时刻都是触发业务时间（ADR-0272 决定二）。
     - 同一业务时刻形成的两份计划，处理时钟回拨，起点仍是当前有效的那一份。
     - 积压之下（处理时钟比触发晚十小时）失效、形成首个计划、再失效、走无路由线，评审 R2 那条用例；生效改回判断时刻即红。
     - 读不出新计划答 `ROUTING_HISTORY_UNAVAILABLE`，读不出适用性答 `APPLICABILITY_STORE_UNAVAILABLE`。
@@ -154,4 +155,27 @@ M：一个读口（或给 `InitialRouteStore` 旁另立「当前路由」读口�
 - 同一组包 `TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/networkrouting/... ./cmd/parcel-dispatch ./cmd/parcel-api ./cmd/parcel-network-register ./internal/parcelshipment/adapters/networkrouting ./internal/transportfulfillment/adapters/networkrouting ./internal/visibilityexception/adapters/networkrouting ./internal/architecture/... ./migrations/...`：21 个包 ok。
 - 新用例另跑 `-count=3`：派发真库两条、复核册真库两条、编排新增四条，都 ok。
 - `tools/adr-index`：在 scratchpad 的 `git archive HEAD` 副本上重生成之后 `-check` 退 0，ADR-0272 进索引，标〔代决·待 NR owner 复核〕。本分支的 `docs/adr/README.md` 未动。
+
+### 第 2 轮（2026-10-21，隔离评审，协调方转达）
+
+无阻断。评审逐格核过 `FormedPlans` 起点判法都恰好一份当前有效，ADR-0272「无条款停用」成立。五条合入前修，逐条处置：
+
+| 条 | 意见 | 处置 |
+|---|---|---|
+| 1 | ADR-0272 决定二没有测试钉住：离场时刻改成 `now` 或晚一小时，用例全绿 | 新加 `TestASupersededPlanLeavesAtTheTriggerBusinessTime`：处理时钟比触发晚半小时，断言被替代计划 `SUPERSEDED`、`TransitionedAt()` 等于触发业务时间，接班计划同一刻。自做变异：离场时刻改成 `now`、改成触发时刻加一小时，它都红 |
+| 2 | ADR-0272 Context 的取证锚点 | 改为「取证于 main `4e7874ba0`，本记录之前的代码」 |
+| 3 | 两处非逐字引号 | ADR-0272 决定三与 code/60 去掉「离场不早于生效」的引号；Context 与 code/60 Status 改引 `leaveCurrent` 头注原文「离场必须带依据与不早于生效的时刻」；Context 的积压场景描述去掉引号，改成叙述 |
+| 4 | `ErrStoredRoutePlanUnreadable` 只覆盖复核册一处 | 改名 `ErrStoredRouteRecordUnreadable`，复用这一个，不另立同类哨兵：三处同是「路由历史里落了册的行经领域构造门重建不出来」，恢复动作相同（修数据，不等依赖）。`InitialRoutes.FindByKey` 的计划、无路由判断与未知结论，`PlanApplicabilities.FindByPlan` 的重建失败，都包它；复核 `Handle` 的路由历史分支与 `startingPoint` 的适用性读各 `errors.Is` 后响亮报错。端口注释是通则口吻，三个产出口一致；对调用方只说明它与「读不回」分开交、各自的恢复动作，不替调用方立规矩。初始路由编排（UC-NR-001）遇 `FindByKey` 出错仍折成 `ROUTE_STORE_UNAVAILABLE`，本票没动，见下 |
+| 5 | 措辞 | ADR-0272 决定三标题收窄到「复核形成的计划」；越权风险点 2 与 code/60 Status 改为首发链路上通常撞不上、纯失效一路积压与离线补登时撞得上；决定三「恒成立」补半句：不覆盖本记录之前已落库的复核计划，演示库要 `--reset` 重灌 |
+
+补用例：编排 `TestAnUnrebuildableRoutingRecordIsLoud`（三处坏行各自响亮报错、不落复核、不动适用性；取代上一轮的 `TestAnUnrebuildableFormedPlanIsLoud`）；库面 `TestUnrebuildableInitialRouteAndApplicabilityRowsAreReportedAsSuch`（初始路由计划写坏；适用性一行在本用例独占的库上拆掉封闭态与逐态形状两条 CHECK 后写坏）。
+
+留给协调方：初始路由编排 `CreateInitialRouteHandler` 在 `FindByKey` 出错时一律答 `ROUTE_STORE_UNAVAILABLE`，坏行也回滚重投。它是 UC-NR-001 一路，不在本票范围；要不要同样响亮报错，可并进 code/60 或另立。
+
+验证（第 2 轮修订后，main 仍是 `4e7874ba0`）：
+
+- `go build ./...`、`go vet ./...`、`gofmt -l`（相对 main 改动的 Go 文件）干净。
+- 同一组包 `TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/networkrouting/... ./cmd/parcel-dispatch ./cmd/parcel-api ./cmd/parcel-network-register ./internal/parcelshipment/adapters/networkrouting ./internal/transportfulfillment/adapters/networkrouting ./internal/visibilityexception/adapters/networkrouting ./internal/architecture/... ./migrations/...`：21 个包 ok。
+- 新用例另跑 `-count=3`，都 ok：`TestASupersededPlanLeavesAtTheTriggerBusinessTime`、`TestAnUnrebuildableRoutingRecordIsLoud`、`TestUnrebuildableInitialRouteAndApplicabilityRowsAreReportedAsSuch`。
+- `tools/adr-index`：在 scratchpad 的 `git archive HEAD` 副本上重生成之后 `-check` 退 0。
 
