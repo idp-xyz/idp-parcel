@@ -33,3 +33,12 @@ S：只改注释，`go build`、`go vet` 不受影响。
 - 上列各处的「（NNN）」换成 CONTEXT 小节名加句首引文（如「CONTEXT「单个案件不存在部分关闭」」）。修完在 `internal/customscompliance` 与 `cmd/parcel-customs-register` 下用 `grep -nE '（[0-9]{3}）'` 再扫一遍，只剩 HTTP 状态码一类的括注。
 - 「引文随 CONTEXT 改写而过期」那几处换成 CONTEXT 新句；`TestReadinessAndAuthorityAreTwoSeparateTracks` 的 `Covers:` 同一笔补点名 `AT-CC-448`（UC-CC-005，ADR-0243 新立，AT 盘点已按这条测试入①）。
 - CLI 包头注去掉「五本」，「一处列全」已指向 `allCommands`；参数区间改为指名参数登记册「关务」一节，不写编号区间。
+
+## 附带登记：提交授权没有到期时间（文档自洽 03 第二轮评审）
+
+不是注释问题，按协调方安排登在这里，免得缺口无处可查；实施时宜挪进授权业务角色面的余项票 [product-strategy-boundary/36](../../product-strategy-boundary/issues/36-submission-authorization-business-role-face-remainder.md)。
+
+- 现象：`domain.SubmissionAuthorization.Effective()` 就是 `revokedAt.IsZero()`，CC 领域没有到期字段。UC-CC-004「提交授权不再有效」要求「明确有效期、撤销决定或其他适用授权自身条件在使用前触发」，UC-CC-005 `AT-CC-110` 要求「已到期」答门禁阻断；首发只有撤销一格（UC-CC-005 首发结果码对照、`AT-CC-110` 已注明未实现）。
+- 三类：机制（授权带可选的有效截止、`Effective` 按时点判）；有效期取值是租户取值（`PAR-CUS-03`）；没给有效期的授权只随撤销失效，产品不替租户填一个默认期限。
+- 规模：S–M（领域一格、授权册迁移另取号、提交门禁按提交时点判）。
+

@@ -143,7 +143,7 @@
 |---|---|---|
 | `AUTHORIZATION_CONFIRMED` | 提交已授权 | 持授权确认授予的业务角色确认当前已就绪的单元 |
 | `AUTHORIZATION_EXISTING` | 已有授权处理结果 | 单元已有有效授权：同一确认重放，或另一位有权角色再次确认 |
-| `AUTHORIZATION_NO_LONGER_EFFECTIVE` | 提交授权不再有效 | 单元已有的授权已失效 |
+| `AUTHORIZATION_NO_LONGER_EFFECTIVE` | 提交授权不再有效 | 单元已有的授权已撤销；授权没有到期时间，「明确有效期」触发的不再有效首发未实现 |
 | `NOT_READY` | 不再就绪 | 单元的就绪判断已失效 |
 | `NOT_ACCEPTED` | 请求未受理 | 请求缺坐标或不成立；操作者未持授权确认授予在接入渠道答 `OPERATOR_NOT_GRANTED`，不进编排 |
 | `AUTHORIZATION_UNDECIDED` + `READINESS_UNCONFIGURED` | 授权前提未配置 | 单元的就绪判断没登，续办是去登记 |
