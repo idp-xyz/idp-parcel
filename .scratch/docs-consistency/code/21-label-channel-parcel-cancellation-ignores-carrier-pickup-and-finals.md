@@ -1,7 +1,7 @@
 # 21 PS 面单渠道服务包裹的取消不核实际承运商收寄、面单服务终局边界和既有终局
 
 Category: bug
-Status: ready-for-agent——R1（上线前必修）：答错且破坏终局不变量。逐包裹取消已在生产装配（`cmd/parcel-api/assemble_cancellation.go`）；面单渠道包裹在承运商收寄之后、甚至已有终局之后仍可能交出 `PARCEL_CANCELLED`。今天取消授权停在 `AUTHORITY_UNCONFIGURED` 暂时挡住，租户一登记取消授权（上线实施的常规一步）这条路就生效，没有绕法。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
+Status: in-progress——完工待评审与进 main，分支 claude-code21（见文末「完成记录」）。此前 ready-for-agent——R1（上线前必修）：答错且破坏终局不变量。逐包裹取消已在生产装配（`cmd/parcel-api/assemble_cancellation.go`）；面单渠道包裹在承运商收寄之后、甚至已有终局之后仍可能交出 `PARCEL_CANCELLED`。今天取消授权停在 `AUTHORITY_UNCONFIGURED` 暂时挡住，租户一登记取消授权（上线实施的常规一步）这条路就生效，没有绕法。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
 Blocked by: 无
 出处：[audit/ps.md](../audit/ps.md) PS-02，取证 [audit/ps-code.md](../audit/ps-code.md) 第 2 条（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，现象仍在）。
 
@@ -39,3 +39,54 @@ M：取消编排在提交边界上加两道读——当前有效终局、按服�
 ## 裁向（2026-10-21，文档自洽 06）
 
 - 晚到那一格已由 [ADR-0254](../../../docs/adr/0254-cancellation-and-boundary-fact-order-is-judged-by-their-business-times-and-a-late-earlier-boundary-fact-is-a-fact-conflict.md) 裁定：取消与边界事实按两者的业务时间比，取消已提交之后才到、发生不晚于取消的承运商首次有效收寄是事实冲突，面单终局判断不形成终局、指名冲突（`LABEL_SERVICE_NOT_FINAL` 加一格原因）。那一半连同冲突的解开决定面归 [code/35](./35-cancellation-and-boundary-fact-order-conflict-has-no-label-half-and-no-resolution-face.md)；本票照旧只管提交边界上已在册的事实（ADR-0254 决定二第 1 格），范围不变，Blocked by 仍为无。
+
+## 完成记录（2026-10-21，分支 claude-code21，基于 main `91ee3f73c`；与 code/35 同批）
+
+### 做了什么
+
+- `1345692bc` 取消编排在提交边界上加读（`CancelParcelHandler.Handle`，授权之后、形成取消之前）：
+  - 先读当前有效终局（`CurrentFinalView`）与已成立的取消（`ParcelCancellationView`）：有终局答新结果 `FINAL_OUTCOME_STANDS`，`Basis` 指名 `FINAL_OUTCOME/<终局版本>` 或 `PARCEL_CANCELLATION/<取消标识>`，不落取消记录（`AT-PS-086`）。
+  - 再读网络服务的采用链（今天的做法，越过答 `DISPOSITION_PENDING`）。
+  - 未越过时读面单渠道服务的实际承运商首次有效收寄链尾（新端口 `CarrierPickupBoundaryView`，TF 登记册之上的消费侧适配器 `pstf.CarrierPickupBoundaryAdapter`）：已形成答 `CANCELLATION_REFUSED`，依据 `CARRIER_FIRST_EFFECTIVE_PICKUP/<收寄事实>@<版本>`，拒绝记录落库、重放答原结果；待确认答未决 `CARRIER_PICKUP_PENDING`；链尾失效与从未有过同答没有。
+  - 读不动按依赖未决：`FINAL_OUTCOME_STORE_UNAVAILABLE`、`CARRIER_PICKUP_UNAVAILABLE`；已成立取消读不动沿用 `CANCELLATION_STORE_UNAVAILABLE`。不放行取消。
+  - HTTP 响应加 `standingFinal`；parcel-api 取消装配接真终局库与 TF 收寄登记册，授权缝拆出 `cancellationOrchestrationWith` 供真库用例换一个已登记的授权答复。
+- `570af12d0` 管理台取消页认 `FINAL_OUTCOME_STANDS`、三个新未决原因与「既有终局」一行。
+- `2a6858fbf` UC-PS-006 状态行、结果语义契约（新增「既有终局」一行，拒绝与未决两行的含义与原因码补齐）、决定矩阵冲突一行与交接表 code/21 一行改为已补。
+- `1661da162` AT 盘点 `AT-PS-086` 由④移入①。
+
+### 代决
+
+用户授权「你作为业务和系统专家自决……解决所有的问题」。
+
+1. 提交边界上的边界事实全读，不按服务形态挑：本上下文不在包裹上存服务形态的判别位，CONTEXT「此刻已在册的收寄或终局使取消不成立」对两种形态同写，全读是它的直译。读序是终局 → 网络服务采用链 → 面单渠道服务首次有效收寄。
+2. 「返回既有终局」另立结果 `FINAL_OUTCOME_STANDS`，不并进`已有结果`：后者说的是同一请求身份的重放，前者说的是包裹本身已终局。它不落取消记录——终局不回退，重放照样读到它。
+3. 已成立的取消也是既有终局。取消键是（租户，委托来源请求键，包裹），同一委托下第二份取消在键上就撞了；这一格只在包裹号跨委托复用时到得了，读它是为不让同一包裹形成第二份取消。
+4. 面单渠道服务越过首次有效收寄答`取消被拒`、依据指名那一代，不另立结果格：面单渠道服务没有收寄后处置这条路，收寄就是它的终局边界（CONTEXT「面单渠道服务发生实际承运商收寄……后，包裹不得回退为“已取消”」），ADR-0254 决定二第 1 格写的是「答既有终局或不可取消」。记录落库，与网络服务的`待处置`同样是已提交的判断。
+5. 待确认的收寄答取消未决（UC-PS-006 决定矩阵「收寄事实存在但有效性待确认 → 取消/处置未决」）；失效链尾当作没有（ADR-0135 决定六「链尾失效即该对象当前无首次有效收寄」）。
+6. 授权仍在边界之前：授权未配置时，已终局的包裹照旧答 `AUTHORITY_UNCONFIGURED`。票面「先读终局」读作提交边界上的先后，不改授权在前的既有顺序。
+7. 载运对象按包裹标识原串查 TF 链尾，与收寄判断那一路反查包裹用同一个串；集运单元那一格同样不猜。
+8. 「其他约定终局边界」不另读：合同声明的边界成立即形成终局（CONTEXT 生命周期），已由终局那一道读覆盖；未声明即只有承运商收寄一条。
+
+### 越权风险点（待 PS owner 复核）
+
+1. 全读不分形态：网络服务包裹若在 TF 册上有首次有效收寄，会答`取消被拒`而不是`待处置`。TF 的「非首次」规则下（ADR-0135 决定四）已参与的对象不形成首次有效收寄，这一格不应出现；若 owner 要按形态分读，需要先在 PS 立服务形态的判别。
+2. `FINAL_OUTCOME_STANDS` 不落记录：终局日后重派生或失效（ADR-0138 仍 Proposed）时，同一请求的重放可能答出不同的结果；取消重放没有立 ADR-0266 那样「答原结果」的纪律。
+3. 面单渠道越界与授权拒绝同用 `CANCELLATION_REFUSED`，客户端靠依据前缀分辨。若 owner 要求单列一格，改的是结果枚举一格与记录种类一格（要迁移）。
+4. 授权未配置时已终局的包裹不答既有终局（代决 6）。
+
+### 迁移
+
+无（本票）。冲突册迁移 0029 属 code/35。
+
+### AT
+
+`AT-PS-086` 入①：`TestAStandingFinalIsReturnedInsteadOfACancellation`、真库 `TestTheWiredCancellationStopsAtTheBoundaryFactsAgainstARealDatabase`。面单渠道越界另由 `TestALabelChannelParcelCannotBeCancelledPastTheCarrierPickup`、`TestTheCarrierPickupBoundaryReadsTheChainTail` 守；结果码与原因码逐码对照 String() 在 `TestTheCancellationOutcomeAndReasonSetsAreClosed`。
+
+### 验证（分支 claude-code21）
+
+与 code/35 同批跑，记在 code/35 完成记录「验证」一节。
+
+### 未决
+
+- 管理台改动没有跑类型检查：本 worktree 没有 `node_modules`。
+- AT 盘点总览计数未改，由推送方重算。

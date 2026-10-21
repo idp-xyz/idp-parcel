@@ -1,7 +1,7 @@
 # 35 PS 取消与边界事实的先后冲突：面单渠道一侧不比时间、冲突没有解开的决定面
 
 Category: enhancement
-Status: needs-triage——建议 R2（上线后尽快）：看得见的卡住。网络服务一侧，取消已提交之后才到、发生不晚于取消的收寄，采用停在未决 `CANCELLATION_ORDER_CONFLICT`，此后没有任何口能解开它，包裹在节点手里却没有责任起点，也不触发收寄后的路由复核；面单渠道服务一侧，同一情形今天答 `CANCELLATION_STANDS`，客户被告知已取消、承运商却已收走。今天取消授权停在未配置，取消形成不了，两种情形都还到不了；租户一登记取消授权即生效。2026-10-21 文档自洽 06 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc06。分级由协调方定稿。
+Status: in-progress——完工待评审与进 main，分支 claude-code21（见文末「完成记录」；解开冲突的决定面拆到 [code/76](./76-a-cancellation-order-conflict-has-no-resolution-decision-face.md)）。此前 needs-triage——建议 R2（上线后尽快）：看得见的卡住。网络服务一侧，取消已提交之后才到、发生不晚于取消的收寄，采用停在未决 `CANCELLATION_ORDER_CONFLICT`，此后没有任何口能解开它，包裹在节点手里却没有责任起点，也不触发收寄后的路由复核；面单渠道服务一侧，同一情形今天答 `CANCELLATION_STANDS`，客户被告知已取消、承运商却已收走。今天取消授权停在未配置，取消形成不了，两种情形都还到不了；租户一登记取消授权即生效。2026-10-21 文档自洽 06 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc06。分级由协调方定稿。
 Blocked by: 无（面单渠道提交边界那一半与 [code/21](./21-label-channel-parcel-cancellation-ignores-carrier-pickup-and-finals.md) 同一编排，宜同批或排在其后）
 出处：[audit/ps.md](../audit/ps.md) PS-03（B），代决 [ADR-0254](../../../docs/adr/0254-cancellation-and-boundary-fact-order-is-judged-by-their-business-times-and-a-late-earlier-boundary-fact-is-a-fact-conflict.md)；UC-PS-003「给开发的交接」、UC-PS-004「给开发的交接」`AT-PS-108` 一行、UC-PS-006「给开发的交接」事实冲突一行。
 
@@ -35,3 +35,59 @@ M：面单渠道终局判断多比一次时间并多一格不形成原因；收�
 ## 要裁的
 
 - 解开决定的去向集合与授权：本票落地时提出，交 PS owner 认可（ADR-0254 越权风险点 2）。
+
+## 完成记录（2026-10-21，分支 claude-code21，基于 main `91ee3f73c`；与 code/21 同批）
+
+### 做了什么
+
+- `3489c149f` 判法与入账：
+  - 领域 `JudgeCancellationOrder`（`domain/cancellation_order.go`）是取消与边界事实先后的唯一判据：两边都在册之后只比取消的业务时间（`RequestedAt`）与边界事实的业务发生时间，严格晚于取消是取消在先，不晚于（含相等）是冲突，冲突带回两侧各自的那一代与业务时间。
+  - 面单服务终局判断（`JudgeLabelServiceFinal`）的输入从「有没有有效取消」换成整份取消；带着收寄来时用它比，冲突答 `LABEL_SERVICE_NOT_FINAL`、新原因 `CANCELLATION_ORDER_CONFLICT`，verdict 交回冲突；取消在先照旧 `CANCELLATION_STANDS`（`AT-PS-095`、`AT-PS-108`）。
+  - 收寄采用编排改调这道判据；冲突先记进冲突册（新端口 `CancellationOrderConflictRegister`）再答 `ELIGIBILITY_UNDECIDED`/`CANCELLATION_ORDER_CONFLICT`。新方法 `IntakeUndecidedReason.AwaitsDecision` 标出这一格，采用消费门（`adoptconsume.Consumption`）对它入账、不回滚。那段注释「取消决定」改为「取消的业务时间」。
+  - 两侧冲突记不下（册未接入或写不进）都答依赖未决，新原因 `CONFLICT_REGISTER_UNAVAILABLE`，照常回滚重投。
+- `4845807f0` 冲突册落库与生产接线：迁移 `migrations/parcel_shipment/0029_cancellation_order_conflict.sql`（只追加，主键（租户，包裹，边界种类，边界那一代，取消），CHECK 钉住边界事实不晚于取消、种类封闭），适配器 `pspostgres.CancellationOrderConflicts`；parcel-dispatch 的收寄采用编排与面单终局判断核接真册。
+- `078643a10` 拆出 code/76（解开冲突的决定面）。
+- `2a6858fbf` UC-PS-003 一致性一条与交接表、UC-PS-004 面单渠道结果清单与交接表、UC-PS-006 决定矩阵冲突一行与交接表改为已补，决定面指 code/76。
+- `1661da162` AT 盘点 `AT-PS-107` 由②、`AT-PS-108` 由④移入①。
+
+### 代决
+
+用户授权「你作为业务和系统专家自决……解决所有的问题」。
+
+1. 「消费门入账并留下冲突」读作要留存：只入账不留痕，冲突会从重投流里消失、按包裹查不出（ADR-0254 决定三「冲突原因按包裹查得出」），日后的决定面也无从取。所以立了冲突册，入账与记册同一笔事务。
+2. 网络一侧不另立结果格，仍答 `ELIGIBILITY_UNDECIDED`/`CANCELLATION_ORDER_CONFLICT`（UC-PS-003、UC-PS-006 都这样写）；「重投推不动」的判据放在原因类型的 `AwaitsDecision` 一处，消费门只问它，不另认原因名。
+3. 冲突记不下另立 `CONFLICT_REGISTER_UNAVAILABLE`：与冲突那一格恢复动作不同（修依赖、重投就会记下），不能共用一个原因。
+4. 面单一侧照票面建议用 `LABEL_SERVICE_NOT_FINAL` 加一格原因，ADR-0134 决定二的翻译表照旧把它译成已消费，不必另加结果格，也不答 `JUDGMENT_UNDECIDED`。
+5. 面单终局判断编排因此有了一个写口（冲突册）。「判断不写」那条结构用例改为只放过 `Conflicts.Record`：册不形成终局，只把判出的冲突留下。
+6. 交易与关闭两路不带收寄时照旧 `CANCELLATION_STANDS`，即便收寄那一路先前判出过冲突：那两路没有边界事实可比；这一格不写任何东西，不会解开冲突。
+7. 取消视图答「有取消」却交不出取消标识时响亮报错（读口坏了），不当作没有取消——当作没有会让收寄盖过一份真取消。
+8. 边界那一代的引用：网络一侧 `<来源种类>/<来源版本>`，面单一侧 `<收寄事实>@<版本>`（与执行证据引用同形）。
+9. 决定面拆成 code/76，没在本票做：它要先定一个 ADR-0254 有意没定的形状（谁有权、去向有哪几个、各去向驱动什么重判），是要 PS owner 认可的产品策略，体量本身是一张 M 票；与判法捆在一起，判法就得等认可才能进 main，而判法不进 main，冲突照旧回滚重投到失败预算耗尽、在库里不留痕。
+
+### 越权风险点（待 PS owner 复核）
+
+1. 冲突册的归属：册与写口随本票立，读口 `ListByParcel` 今天只有用例与日后的决定面会用。若 owner 认为册该随决定面一起设计，改的是端口与表的形状，判法不变。
+2. 同一包裹因触发路不同答不同格（代决 6）：收寄那一路答冲突，交易或关闭那一路答取消在先。两格都不写入，客服按冲突册查得出。
+3. 判断编排多了写口（代决 5），「判断不写」那条不变量放宽了一格。
+4. ADR-0254 越权风险点 2 的缓解今天成立了一半：冲突包裹按包裹查得出、不再回滚重投；没有责任起点、不触发路由复核、面单冲突包裹没有终局，等 code/76。
+
+### 迁移
+
+`migrations/parcel_shipment/0029_cancellation_order_conflict.sql`（取 main 现有最大号 0028 + 1）。演示种子在一次性库 `code21seed` 上灌过一遍，干净完成、新表已在，库随后删掉。
+
+### AT
+
+- `AT-PS-107` 入①：`TestTheCancellationBoundaryJudgesByBusinessTime`（含相等、记不下、册未接入三格）、`TestAdoptionOutcomesMapToConsumptionSlots`（消费门入账）、真库经生产 wireDispatcher `TestALateEarlierNodeIntakeIsConsumedAsARecordedConflict`。
+- `AT-PS-108` 入①：`TestAStandingCancellationIsComparedWithTheFirstPickupByBusinessTime`、`TestALateEarlierPickupIsAFactConflictWithTheStandingCancellation`、`TestALateEarlierPickupIsConsumedAsARecordedConflict`、真库 `TestALateEarlierCarrierPickupIsConsumedAsARecordedConflict`。
+- 判据本身：`TestTheCancellationOrderIsJudgedByTheTwoBusinessTimes`；冲突册：真库 `TestACancellationOrderConflictIsRecordedOnceAndListedByParcel`。
+
+### 验证（分支 claude-code21，两票同批）
+
+- `go build ./...`、`go vet ./...` 干净，`gofmt -l cmd internal migrations tests tools` 无输出。
+- `TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/parcelshipment/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./cmd/parcel-commercial/ ./cmd/parcel-frontline-import/ ./cmd/parcel-settlement-register/ ./tests/bentocontract/... ./internal/architecture/... ./migrations/... ./internal/customscompliance/adapters/parcelshipment/ ./internal/networkrouting/adapters/... ./internal/nodeoperations/adapters/parcelshipment/ ./internal/parcelpricing/adapters/... ./internal/settlementaccounting/adapters/parcelshipment/ ./internal/transportfulfillment/... ./internal/visibilityexception/adapters/...`：75 个包 ok，零失败（改动包与 PS 包的反向依赖全在内，含接线与类型可达两道棘轮）。
+- 新用例另跑 `-count=3`（同一脚本，`-run` 点名本两票全部新用例与被改的既有用例，范围 `./internal/parcelshipment/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/`）：全部 ok。
+
+### 未决
+
+- 解开冲突的业务决定面：code/76。
+- AT 盘点总览计数未改，由推送方重算；机制清点等生成物未重生成。
