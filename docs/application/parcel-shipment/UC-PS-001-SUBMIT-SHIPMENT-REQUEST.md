@@ -119,7 +119,7 @@
 
 ### 接受判断结果（接受链 `AdvanceAcceptanceChainHandler`）
 
-接受链挂在「委托已提交」信封的消费者上，按「逐成员可达性 → 整份委托财务控制 → 形成决定」推进；处理结果是 `DECIDED`（形成了已接受或已拒绝）、`UNDECIDED`（尚未决定，停在哪一步、为什么另行交回），或 `VERSION_SUPERSEDED`（信封指名的提交版本已被新版本取代，这一版不再有可判断的；不按未决重投）。
+接受链挂在「委托已提交」信封的消费者上，按「放掉被取代各版已成立的占用 → 逐成员可达性 → 整份委托财务控制 → 形成决定」推进；处理结果是 `DECIDED`（形成了已接受或已拒绝）、`UNDECIDED`（尚未决定，停在哪一步、为什么另行交回），或 `VERSION_SUPERSEDED`（信封指名的提交版本已被新版本取代，这一版不再有可判断的；不按未决重投）。停在哪一步按四格交回：`SUPERSEDED_CONTROL_RELEASE`（被取代版本的占用没能确定放掉，原因 `CONTROL_RELEASE_PENDING`，或读不回那一版的判断，原因 `RECORDED_JUDGMENTS_UNAVAILABLE`；都是内部重试，当前版本一步不判）、`REACHABILITY_JUDGMENT`、`FINANCIAL_CONTROL_JUDGMENT`、`ACCEPTANCE_DECISION`。
 
 | 结果 | 业务含义 | 必须返回或可查询的依据 | 禁止行为 |
 |---|---|---|---|
@@ -304,7 +304,7 @@
 
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
-| `AT-PS-035`「接受提交未成立时按原关联释放已成立各项形成的占用」 | 提交版本被新版本取代（客户补件、授权处置交客户补充之后的补件）时，旧版本已成立的占用没有释放；本行预期结果不变 | [code/20](../../../.scratch/docs-consistency/code/20-superseded-submission-version-keeps-its-control-occupation.md) |
+| `AT-PS-035`「接受提交未成立时按原关联释放已成立各项形成的占用」 | 已补：提交版本被新版本取代（客户补件、授权处置交客户补充之后的补件）时，接受链判新版本之前先按原关联放掉旧版本已成立的占用；放不掉停在 `SUPERSEDED_CONTROL_RELEASE` 内部重试，新版本不判 | [code/20](../../../.scratch/docs-consistency/code/20-superseded-submission-version-keeps-its-control-occupation.md) |
 | 提交答复与问题详情 | 首方提交口还没有 `/v1` 前缀，问题体还不是 `application/problem+json`（ADR-0140 决定二、三） | [code/22](../../../.scratch/docs-consistency/code/22-customer-face-http-contract-misses-accepted-adrs.md) |
 | [ADR-0256](../../adr/0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md) 决定一第 2 格「重发必须接着办」 | 已补：重发按这份提交上一次实际走到的位置作答（[ADR-0266](../../adr/0266-a-submission-replay-answers-what-the-first-round-answered-and-only-unresolved-ownership-is-judged-again.md)），没有形成答案的接着判归属与建单，生产归属未决的重判（交接未确认的他方归属除外：按记着的尝试重投重查，不重判），同一来源身份的续办一次只走一路；答出的答案逐次留存（`AT-PS-111`、`AT-PS-112`、`AT-PS-114`） | [code/39](../../../.scratch/docs-consistency/code/39-a-preserved-submission-whose-build-failed-is-never-built-on-replay.md) |
 | 提交答复「已有结果」一行「已经形成生产归属时返回原归属结果」 | 已补：已有结果带原结果（`priorOutcome`）与原归属结果——已经建单时是建单所据的那一次，准入暂停与非本产品生产归属连同门禁原因（`AT-PS-003`、`AT-PS-113`） | [code/39](../../../.scratch/docs-consistency/code/39-a-preserved-submission-whose-build-failed-is-never-built-on-replay.md) |
