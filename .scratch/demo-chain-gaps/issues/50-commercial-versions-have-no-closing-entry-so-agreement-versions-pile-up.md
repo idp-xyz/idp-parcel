@@ -1,7 +1,7 @@
 # 50 商业版本没有收尾写口：同一供应商协议的旧版无法替代或退役，新旧两版并存在册
 
 Category: enhancement
-Status: ready-for-agent——2026-10-20 上线就绪评估归 R1（上线前必修），裁定与批次见 [triage-2026-10-19](../triage-2026-10-19.md)「上线就绪评估（2026-10-20）」。此前 needs-triage——2026-10-19 Claude Code 作者子代理立（票 [29](./29-supplier-agreements-declare-charge-occurrence-conditions.md) 完成记录「偏离与待裁」，用户「你作为业务和系统专家自决……解决所有的问题」授权）。是否认领、归哪一位 owner 待分诊。
+Status: in-progress——2026-10-21 认领，分支 claude-dcg50。此前 ready-for-agent——2026-10-20 上线就绪评估归 R1（上线前必修），裁定与批次见 [triage-2026-10-19](../triage-2026-10-19.md)「上线就绪评估（2026-10-20）」。此前 needs-triage——2026-10-19 Claude Code 作者子代理立（票 [29](./29-supplier-agreements-declare-charge-occurrence-conditions.md) 完成记录「偏离与待裁」，用户「你作为业务和系统专家自决……解决所有的问题」授权）。是否认领、归哪一位 owner 待分诊。
 Blocked by: 无
 地盘（建议）：PC `application` 发布用例或新用例、`registrationjson` 批文、`postgres` 版本册；可能需要新 ADR。
 出处：[ADR-0209](../../../docs/adr/0209-supplier-agreements-declare-charge-occurrence-conditions-and-registration-judges-by-them.md) 越权风险点 5；PC CONTEXT「供应商商业协议版本」生命周期「协议版本到期、终止或被替代后……」。
