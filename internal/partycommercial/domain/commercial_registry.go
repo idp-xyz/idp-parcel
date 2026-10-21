@@ -57,8 +57,10 @@ type commercialVersionKey struct {
 // 有效性更正另册保存（ADR-0038）：改的是选用区间，不是版本键下的正文。同一版本可有多条
 // 更正，按登记顺序只增；选用区间取最后一条。覆盖那一次是缺陷，已随这条纪律修掉。
 type CommercialRegistry struct {
-	versions           map[commercialVersionKey]CommercialVersion
-	corrections        map[commercialVersionKey][]ValidityCorrection
+	versions    map[commercialVersionKey]CommercialVersion
+	corrections map[commercialVersionKey][]ValidityCorrection
+	// retirements 是同起点退役（ADR-0233）：施加之后 versions 里那一版就是`已退役`，这里留着决定本身，供重放比对。
+	retirements        map[commercialVersionKey]VersionRetirement
 	policies           []CommercialPricePolicy
 	settlementPolicies []SettlementPolicy
 	creditPolicies     []CreditPolicy
@@ -72,6 +74,7 @@ func NewCommercialRegistry() *CommercialRegistry {
 	return &CommercialRegistry{
 		versions:         make(map[commercialVersionKey]CommercialVersion),
 		corrections:      make(map[commercialVersionKey][]ValidityCorrection),
+		retirements:      make(map[commercialVersionKey]VersionRetirement),
 		contractAccounts: make(map[commercialVersionKey]CustomerAccountID),
 	}
 }
@@ -299,17 +302,22 @@ func (registry *CommercialRegistry) selectionInterval(version CommercialVersion)
 	return version.effective
 }
 
-// correctionExcludes 答版本壳上的区间更正有没有把 at 排除在这一版之外，给自带区间的正文（价格、结算、信用政策）选候选
-// 时用：正文按自己的区间参选，壳上有更正时再被更正后的区间收窄。
+// bodyExcludedAt 答自带区间的正文（价格、结算、信用政策）选候选时，版本壳上的收尾有没有把 at 排除在这一版之外：壳已不在
+// `已生效`（如同起点退役，ADR-0233），或壳上有区间更正而 at 不在更正后的区间里。正文按自己的区间参选，壳上的收尾只
+// 收窄它。
 //
-// 只有在有更正时才会排除。没更正时正文自带的区间照旧是唯一判据，不拿壳上的原区间去收窄它——两者从未被要求相等，
-// 今天按正文区间选中的版本不能因为多了这一道而落选。有更正时取交而不取代：更正改的是壳的选用区间，取代会让正文
-// 起点晚于壳的那一段反被放宽。
-func (registry *CommercialRegistry) correctionExcludes(version CommercialVersion, at time.Time) bool {
+// 壳仍生效又没更正时不排除：正文自带的区间照旧是唯一判据，不拿壳上的原区间去收窄它——两者从未被要求相等，今天按
+// 正文区间选中的版本不能因为多了这一道而落选。有更正时取交而不取代：更正改的是壳的选用区间，取代会让正文起点晚于
+// 壳的那一段反被放宽。
+func (registry *CommercialRegistry) bodyExcludedAt(version CommercialVersion, at time.Time) bool {
 	if registry == nil {
 		return false
 	}
-	list := registry.corrections[keyOf(version)]
+	key := keyOf(version)
+	if registered, found := registry.versions[key]; found && registered.status != CommercialVersionEffective {
+		return true
+	}
+	list := registry.corrections[key]
 	if len(list) == 0 {
 		return false
 	}

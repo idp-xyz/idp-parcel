@@ -22,6 +22,11 @@ type SupplierAgreement struct {
 	effective     EffectiveInterval
 	terminatedAt  time.Time
 	terminationOn RelationshipBasisReference
+	// selectionCap 是壳上最新一条区间更正的区间（NarrowedBy），capped 标出它在场；retired 标出壳已同起点退役（EndedBy）。
+	// 三者都是点读时从版本册折进来的，不是发布时的正文。
+	selectionCap EffectiveInterval
+	capped       bool
+	retired      bool
 	// chargeConditions 是可缺的收费发生条件一节（ADR-0209）。零值即没声明：运输履约按这一版登记发生项时答`未配置`。
 	chargeConditions ChargeOccurrenceConditions
 }
@@ -121,13 +126,47 @@ func (agreement SupplierAgreement) TerminatedAt() (time.Time, bool) {
 	return agreement.terminatedAt, true
 }
 
+// NarrowedBy 交回被版本壳上的区间更正收窄的同一版正文（ADR-0233 决定四）：此后按版本点读的核对也照更正后的区间判，
+// 与闭包选候选同一口径（ADR-0038 决定二）。正文自带的区间不改写，更正与它取交，判法同 bodyExcludedAt。
+func (agreement SupplierAgreement) NarrowedBy(correction ValidityCorrection) (SupplierAgreement, error) {
+	if !sameVersionKey(agreement.version, correction.tenant, correction.kind, correction.objectID, correction.version) ||
+		!correction.corrected.valid() {
+		return SupplierAgreement{}, ErrInvalidSupplierAgreement
+	}
+	agreement.selectionCap = correction.corrected
+	agreement.capped = true
+	return agreement, nil
+}
+
+// EndedBy 交回壳已同起点退役（ADR-0233 决定三）的同一版正文：它不再支持任何新的采购决定，终止时刻读作退役时刻。
+// 退役只管退役之后作出的决定，而问到这里的决定都在其后，所以与业务时点无关地一律不支持——旧版的整段时间都由同起点
+// 的后继接着。
+func (agreement SupplierAgreement) EndedBy(retirement VersionRetirement) (SupplierAgreement, error) {
+	if !sameVersionKey(agreement.version, retirement.tenant, retirement.kind, retirement.objectID, retirement.version) ||
+		retirement.at.IsZero() {
+		return SupplierAgreement{}, ErrInvalidSupplierAgreement
+	}
+	agreement.retired = true
+	if agreement.terminatedAt.IsZero() || retirement.at.Before(agreement.terminatedAt) {
+		agreement.terminatedAt = retirement.at
+	}
+	return agreement, nil
+}
+
+func sameVersionKey(version CommercialVersion, tenant TenantID, kind CommercialObjectKind, objectID CommercialObjectID, label CommercialVersionLabel) bool {
+	return version.tenant == tenant && version.kind == kind && version.objectID == objectID && version.version == label
+}
+
 // SupportsProcurementAt 回答一个新的采购决定能否依据本协议形成。批准生效与落在
-// 有效区间内两者都必需；终止自其自身时点起关闭后续使用。
+// 有效区间内两者都必需；终止自其自身时点起关闭后续使用；壳上的区间更正收窄区间，同起点退役关闭全部新的使用。
 func (agreement SupplierAgreement) SupportsProcurementAt(at time.Time) bool {
-	if agreement.version.status != CommercialVersionEffective {
+	if agreement.version.status != CommercialVersionEffective || agreement.retired {
 		return false
 	}
 	if !agreement.terminatedAt.IsZero() && !at.Before(agreement.terminatedAt) {
+		return false
+	}
+	if agreement.capped && !agreement.selectionCap.Contains(at) {
 		return false
 	}
 	return agreement.effective.Contains(at)

@@ -8,8 +8,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 )
 
-// 本文件证按后继截止（票 demo-chain-gaps/50）在领域一侧的判据：截出来的是一条区间更正，解析据它在两版之间按时点
-// 唯一选择；重放不追加；截止不成立的各格拒；自带区间的政策正文同样被截止收窄。
+// 本文件证按后继收尾旧版（ADR-0233，票 demo-chain-gaps/50）在领域一侧的判据：截止落一条区间更正，解析据它在两版之间
+// 按时点唯一选择；同起点重发时旧版按决定退役，此后只选后继；重放不重登；收尾不成立的各格拒；自带区间的政策正文同样
+// 被收尾收窄；供应商协议正文折进更正与退役后照新的口径答支不支持采购。
 
 var (
 	cutPredecessorStart = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -74,7 +75,7 @@ func TestCutAtSuccessorStartSplitsTheOverlapByTime(t *testing.T) {
 	}
 }
 
-// Covers: `AT-PC-055`「同一次截止重放 → 认出册上那一条，不追加，修订标识不变」。
+// Covers: `AT-PC-056` 截止那一半「同一次截止重放 → 认出册上那一条，不追加，修订标识不变」。
 //
 // 第一次截止之后旧版的终点就是截止点；重放若先过区间检查，会被读成越界。换一份更正依据再截同一处则不是重放：
 // 旧版已在那一刻截止，答越界。
@@ -106,14 +107,14 @@ func TestReplayingACutRecognisesTheRegisteredOne(t *testing.T) {
 	}
 }
 
-// Covers: `AT-PC-056`「截止不成立（后继不晚于旧版起点、不早于旧版终点、后继不是同一对象的另一版、任一版未生效、
-// 后继就是旧版、按版本点读的类别）→ 一条更正都不构造」。
+// Covers: `AT-PC-057` 截止那一半「收尾不成立（后继不晚于旧版起点、不早于旧版终点、后继比旧版先到头、后继不是同一
+// 对象的另一版、任一版未生效、后继就是旧版）→ 一条更正都不构造」。
 func TestACutThatDoesNotHoldIsRefused(t *testing.T) {
 	cases := map[string]struct {
 		arrange func(*testing.T, *domain.CommercialRegistry) (old domain.CommercialVersion, successor domain.CommercialVersionLabel)
 		want    error
 	}{
-		"后继与旧版同一起点：那是替代，不是截止": {
+		"后继与旧版同一起点：走同起点退役，不是截止": {
 			arrange: func(t *testing.T, registry *domain.CommercialRegistry) (domain.CommercialVersion, domain.CommercialVersionLabel) {
 				old := liveVersionFrom(t, registry, domain.CustomerContractObject, "contract-1", "v1", "scope-a", cutPredecessorStart)
 				next := liveVersionFrom(t, registry, domain.CustomerContractObject, "contract-1", "v2", "scope-a", cutPredecessorStart)
@@ -143,7 +144,7 @@ func TestACutThatDoesNotHoldIsRefused(t *testing.T) {
 				other := liveVersionFrom(t, registry, domain.CustomerContractObject, "contract-2", "v2", "scope-a", cutSuccessorStart)
 				return old, other.Version()
 			},
-			want: domain.ErrSuccessorCutVersionNotRegistered,
+			want: domain.ErrClosureVersionNotRegistered,
 		},
 		"后继只在另一范围下": {
 			arrange: func(t *testing.T, registry *domain.CommercialRegistry) (domain.CommercialVersion, domain.CommercialVersionLabel) {
@@ -151,7 +152,7 @@ func TestACutThatDoesNotHoldIsRefused(t *testing.T) {
 				other := liveVersionFrom(t, registry, domain.CustomerContractObject, "contract-1", "v2", "scope-b", cutSuccessorStart)
 				return old, other.Version()
 			},
-			want: domain.ErrSuccessorCutVersionNotRegistered,
+			want: domain.ErrClosureVersionNotRegistered,
 		},
 		"后继已计划生效、尚未取效": {
 			arrange: func(t *testing.T, registry *domain.CommercialRegistry) (domain.CommercialVersion, domain.CommercialVersionLabel) {
@@ -159,22 +160,22 @@ func TestACutThatDoesNotHoldIsRefused(t *testing.T) {
 				planned := plannedVersionFrom(t, registry, domain.CustomerContractObject, "contract-1", "v2", "scope-a", cutSuccessorStart)
 				return old, planned.Version()
 			},
-			want: domain.ErrSuccessorCutNotEffective,
+			want: domain.ErrClosureNotEffective,
 		},
 		"后继就是旧版": {
 			arrange: func(t *testing.T, registry *domain.CommercialRegistry) (domain.CommercialVersion, domain.CommercialVersionLabel) {
 				old := liveVersionFrom(t, registry, domain.CustomerContractObject, "contract-1", "v1", "scope-a", cutPredecessorStart)
 				return old, old.Version()
 			},
-			want: domain.ErrSuccessorCutSameVersion,
+			want: domain.ErrClosureSameVersion,
 		},
-		"供应商协议按版本点读": {
+		"后继比旧版先到头：截掉的后一段没有人接": {
 			arrange: func(t *testing.T, registry *domain.CommercialRegistry) (domain.CommercialVersion, domain.CommercialVersionLabel) {
-				old := liveVersionFrom(t, registry, domain.SupplierAgreementObject, "agreement-1", "v1", "scope-a", cutPredecessorStart)
-				next := liveVersionFrom(t, registry, domain.SupplierAgreementObject, "agreement-1", "v2", "scope-a", cutSuccessorStart)
+				old := liveVersionFrom(t, registry, domain.CustomerContractObject, "contract-1", "v1", "scope-a", cutPredecessorStart)
+				next := liveVersionBetween(t, registry, domain.CustomerContractObject, "contract-1", "v2", "scope-a", cutSuccessorStart, anchorAt)
 				return old, next.Version()
 			},
-			want: domain.ErrSuccessorCutKindReadByVersion,
+			want: domain.ErrClosureLeavesGap,
 		},
 	}
 	for name, tc := range cases {
@@ -204,8 +205,8 @@ func TestACutThatDoesNotHoldIsRefused(t *testing.T) {
 	})
 }
 
-// Covers: `AT-PC-057`「自带区间的政策正文（结算、信用、价格）重叠成`适用冲突`，按后继截止旧版 → 选候选同样按截止点
-// 分开；后继正文不从截止点开始的截止拒；版本没有更正时只按正文自己的区间选」。
+// Covers: `AT-PC-054` 政策正文那一半「自带区间的政策正文（结算、信用、价格）重叠成`适用冲突`，按后继截止旧版 → 选候选
+// 同样按截止点分开；后继正文不从截止点开始的截止拒；版本没有更正时只按正文自己的区间选」。
 func TestACutNarrowsPolicyBodiesThatCarryTheirOwnInterval(t *testing.T) {
 	t.Run("结算政策", func(t *testing.T) {
 		registry := domain.NewCommercialRegistry()
@@ -401,4 +402,239 @@ func publishedCutVersion(t *testing.T, kind domain.CommercialObjectKind, objectI
 		t.Fatalf("publish: %v", err)
 	}
 	return published
+}
+
+var retiredAtRegistration = time.Date(2026, 6, 2, 0, 0, 0, 0, time.UTC)
+
+// Covers: `AT-PC-055`「同一对象同起点重发、两版重叠成`适用冲突`，按决定引用退役旧版 → 旧版成`已退役`，原正文、原区间与
+// 批准保留，退役关系与决定引用留在册上，修订标识推进；此后任何锚点都只选后继；自带区间的政策正文随壳落选」。
+func TestSameStartRetirementLeavesOnlyTheSuccessor(t *testing.T) {
+	t.Run("客户合同", func(t *testing.T) {
+		registry := domain.NewCommercialRegistry()
+		old := liveVersionFrom(t, registry, domain.CustomerContractObject, "contract-1", "v1", "scope-a", cutPredecessorStart)
+		next := liveVersionFrom(t, registry, domain.CustomerContractObject, "contract-1", "v2", "scope-a", cutPredecessorStart)
+		if got := domain.ResolveCommercialBasis(registry, resolutionKeyAt(t, "scope-a", domain.CustomerContractObject, anchorAt), nil); got.Outcome() != domain.ApplicabilityConflict {
+			t.Fatalf("同起点重发未收尾时 outcome = %q, want APPLICABILITY_CONFLICT", got.Outcome())
+		}
+		before := registry.ViewRevision(old.Tenant(), old.Scope())
+		retirement := mustRetire(t, registry, old, next, "SYN-REISSUE-1")
+		if retirement.Successor() != next.Version() || !retirement.RetiredAt().Equal(retiredAtRegistration) {
+			t.Fatalf("退役 = %+v", retirement)
+		}
+		after, err := registry.RegisterRetirement(retirement)
+		if err != nil {
+			t.Fatalf("register retirement: %v", err)
+		}
+		if after.String() == before.String() {
+			t.Fatal("退役后修订标识没有推进")
+		}
+		stored, _ := registry.Lookup(old.Tenant(), old.Kind(), old.ObjectID(), old.Version())
+		reference, retired := stored.RetirementReference()
+		if stored.Status() != domain.CommercialVersionRetired || !retired || reference != retirement.Reference() {
+			t.Fatalf("旧版 status = %q, reference = %q", stored.Status(), reference)
+		}
+		if stored.Effective() != old.Effective() || stored.ContentDigest() != old.ContentDigest() {
+			t.Fatal("退役改写了旧版的原区间或正文")
+		}
+		for _, at := range []time.Time{anchorAt, beforeCut} {
+			got := domain.ResolveCommercialBasis(registry, resolutionKeyAt(t, "scope-a", domain.CustomerContractObject, at), nil)
+			adopted, _ := got.AdoptedVersion()
+			if got.Outcome() != domain.UniquelyResolved || adopted.Version() != next.Version() {
+				t.Fatalf("at %v outcome = %q adopted = %q, want 唯一解析到后继", at, got.Outcome(), adopted.Version())
+			}
+		}
+	})
+
+	t.Run("结算政策", func(t *testing.T) {
+		registry := domain.NewCommercialRegistry()
+		old := liveVersionFrom(t, registry, domain.SettlementPolicyObject, "settlement-1", "v1", "scope-a", cutPredecessorStart)
+		next := liveVersionFrom(t, registry, domain.SettlementPolicyObject, "settlement-1", "v2", "scope-a", cutPredecessorStart)
+		registerSettlementBody(t, registry, old, old.Effective())
+		registerSettlementBody(t, registry, next, next.Effective())
+		if got := domain.ResolveCommercialBasis(registry, policyKeyAt(t, domain.SettlementPolicyObject, anchorAt), nil); got.Outcome() != domain.ApplicabilityConflict {
+			t.Fatalf("退役前 outcome = %q, want APPLICABILITY_CONFLICT", got.Outcome())
+		}
+		if _, err := registry.RegisterRetirement(mustRetire(t, registry, old, next, "SYN-REISSUE-1")); err != nil {
+			t.Fatalf("register retirement: %v", err)
+		}
+		got := domain.ResolveCommercialBasis(registry, policyKeyAt(t, domain.SettlementPolicyObject, anchorAt), nil)
+		adopted, _ := got.AdoptedVersion()
+		if got.Outcome() != domain.UniquelyResolved || adopted.Version() != next.Version() {
+			t.Fatalf("退役后 outcome = %q adopted = %q, want 唯一解析到后继", got.Outcome(), adopted.Version())
+		}
+	})
+}
+
+// Covers: `AT-PC-056` 退役那一半「同一个退役决定重放 → 交回册上那一次（原退役时刻），不重登、修订不变；换一份决定引用
+// 或换一个后继再退 → 拒，不改写这一段史实」。
+func TestReplayingARetirementRecognisesTheRegisteredOne(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	old := liveVersionFrom(t, registry, domain.CustomerContractObject, "contract-1", "v1", "scope-a", cutPredecessorStart)
+	next := liveVersionFrom(t, registry, domain.CustomerContractObject, "contract-1", "v2", "scope-a", cutPredecessorStart)
+	other := liveVersionFrom(t, registry, domain.CustomerContractObject, "contract-1", "v3", "scope-a", cutPredecessorStart)
+	first := mustRetire(t, registry, old, next, "SYN-REISSUE-1")
+	revision, err := registry.RegisterRetirement(first)
+	if err != nil {
+		t.Fatalf("register retirement: %v", err)
+	}
+
+	again, replay, err := registry.RetireAtSameStartSuccessor(old.Tenant(), old.Scope(), old.Kind(), old.ObjectID(), old.Version(), next.Version(),
+		commercialValue(t, domain.NewRetirementReference, "SYN-REISSUE-1"), retiredAtRegistration.Add(time.Hour))
+	if err != nil || !replay || !again.RetiredAt().Equal(first.RetiredAt()) {
+		t.Fatalf("重放 replay=%v err=%v at=%v, want 认出册上那一次与原时刻", replay, err, again.RetiredAt())
+	}
+	if replayed, _ := registry.RegisterRetirement(again); replayed.String() != revision.String() {
+		t.Fatal("重放推动了修订标识")
+	}
+	for name, probe := range map[string]struct {
+		successor domain.CommercialVersionLabel
+		reference string
+	}{
+		"换一份决定引用": {successor: next.Version(), reference: "SYN-REISSUE-OTHER"},
+		"换一个后继":   {successor: other.Version(), reference: "SYN-REISSUE-1"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, _, err := registry.RetireAtSameStartSuccessor(old.Tenant(), old.Scope(), old.Kind(), old.ObjectID(), old.Version(), probe.successor,
+				commercialValue(t, domain.NewRetirementReference, probe.reference), retiredAtRegistration)
+			if !errors.Is(err, domain.ErrVersionRetiredOtherwise) {
+				t.Fatalf("err = %v, want ErrVersionRetiredOtherwise", err)
+			}
+		})
+	}
+}
+
+// Covers: `AT-PC-057` 退役那一半「同起点退役不成立（后继晚于旧版起点、后继比旧版先到头、后继未生效、后继不是同一对象的
+// 另一版、登记时刻早于旧版取效）→ 不构造退役，旧版仍在已生效」。
+func TestASameStartRetirementThatDoesNotHoldIsRefused(t *testing.T) {
+	cases := map[string]struct {
+		arrange func(*testing.T, *domain.CommercialRegistry) (domain.CommercialVersion, domain.CommercialVersionLabel)
+		at      time.Time
+		want    error
+	}{
+		"后继晚于旧版起点：走截止": {
+			arrange: func(t *testing.T, registry *domain.CommercialRegistry) (domain.CommercialVersion, domain.CommercialVersionLabel) {
+				old := liveVersionFrom(t, registry, domain.CustomerContractObject, "contract-1", "v1", "scope-a", cutPredecessorStart)
+				next := liveVersionFrom(t, registry, domain.CustomerContractObject, "contract-1", "v2", "scope-a", cutSuccessorStart)
+				return old, next.Version()
+			},
+			want: domain.ErrSameStartRetirementStartsDiffer,
+		},
+		"后继比旧版先到头": {
+			arrange: func(t *testing.T, registry *domain.CommercialRegistry) (domain.CommercialVersion, domain.CommercialVersionLabel) {
+				old := liveVersionFrom(t, registry, domain.CustomerContractObject, "contract-1", "v1", "scope-a", cutPredecessorStart)
+				next := liveVersionBetween(t, registry, domain.CustomerContractObject, "contract-1", "v2", "scope-a", cutPredecessorStart, anchorAt)
+				return old, next.Version()
+			},
+			want: domain.ErrClosureLeavesGap,
+		},
+		"后继已计划生效、尚未取效": {
+			arrange: func(t *testing.T, registry *domain.CommercialRegistry) (domain.CommercialVersion, domain.CommercialVersionLabel) {
+				old := liveVersionFrom(t, registry, domain.CustomerContractObject, "contract-1", "v1", "scope-a", cutPredecessorStart)
+				planned := plannedVersionFrom(t, registry, domain.CustomerContractObject, "contract-1", "v2", "scope-a", cutPredecessorStart)
+				return old, planned.Version()
+			},
+			want: domain.ErrClosureNotEffective,
+		},
+		"后继只在另一对象下": {
+			arrange: func(t *testing.T, registry *domain.CommercialRegistry) (domain.CommercialVersion, domain.CommercialVersionLabel) {
+				old := liveVersionFrom(t, registry, domain.CustomerContractObject, "contract-1", "v1", "scope-a", cutPredecessorStart)
+				other := liveVersionFrom(t, registry, domain.CustomerContractObject, "contract-2", "v2", "scope-a", cutPredecessorStart)
+				return old, other.Version()
+			},
+			want: domain.ErrClosureVersionNotRegistered,
+		},
+		"登记时刻早于旧版取效": {
+			arrange: func(t *testing.T, registry *domain.CommercialRegistry) (domain.CommercialVersion, domain.CommercialVersionLabel) {
+				old := liveVersionFrom(t, registry, domain.CustomerContractObject, "contract-1", "v1", "scope-a", cutPredecessorStart)
+				next := liveVersionFrom(t, registry, domain.CustomerContractObject, "contract-1", "v2", "scope-a", cutPredecessorStart)
+				return old, next.Version()
+			},
+			at:   cutPredecessorStart,
+			want: domain.ErrInvalidCommercialTransition,
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			registry := domain.NewCommercialRegistry()
+			old, successor := tc.arrange(t, registry)
+			at := tc.at
+			if at.IsZero() {
+				at = retiredAtRegistration
+			}
+			_, _, err := registry.RetireAtSameStartSuccessor(old.Tenant(), old.Scope(), old.Kind(), old.ObjectID(), old.Version(), successor,
+				commercialValue(t, domain.NewRetirementReference, "SYN-REISSUE-1"), at)
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("err = %v, want %v", err, tc.want)
+			}
+			if stored, _ := registry.Lookup(old.Tenant(), old.Kind(), old.ObjectID(), old.Version()); stored.Status() != domain.CommercialVersionEffective {
+				t.Fatalf("被拒的退役改了旧版的生命周期位置：%q", stored.Status())
+			}
+		})
+	}
+}
+
+// Covers: `AT-PC-058` 领域那一半「供应商协议正文折进壳上的区间更正与同起点退役 → 截止点之前支持采购、之后不支持；退役
+// 之后一律不支持，终止时刻读作退役时刻；别一版的更正或退役折不进来」。
+func TestASupplierAgreementBodyFoldsTheVersionClosure(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	old := liveVersionFrom(t, registry, domain.SupplierAgreementObject, "agreement-1", "v1", "scope-a", cutPredecessorStart)
+	next := liveVersionFrom(t, registry, domain.SupplierAgreementObject, "agreement-1", "v2", "scope-a", cutSuccessorStart)
+	sameStart := liveVersionFrom(t, registry, domain.SupplierAgreementObject, "agreement-1", "v3", "scope-a", cutPredecessorStart)
+	agreement := supplierAgreementOf(t, old)
+	if !agreement.SupportsProcurementAt(anchorAt) {
+		t.Fatal("未收尾的协议在区间内不支持采购")
+	}
+
+	correction, _ := mustCut(t, registry, old, next, "SYN-CUT-AGREEMENT")
+	narrowed, err := agreement.NarrowedBy(correction)
+	if err != nil {
+		t.Fatalf("narrowed by: %v", err)
+	}
+	if narrowed.SupportsProcurementAt(anchorAt) || !narrowed.SupportsProcurementAt(beforeCut) {
+		t.Fatal("截止后的协议没有按截止点分开支不支持采购")
+	}
+	if narrowed.Effective() != agreement.Effective() {
+		t.Fatal("折进更正改写了正文自带的区间")
+	}
+
+	retirement := mustRetire(t, registry, old, sameStart, "SYN-REISSUE-AGREEMENT")
+	ended, err := agreement.EndedBy(retirement)
+	if err != nil {
+		t.Fatalf("ended by: %v", err)
+	}
+	if ended.SupportsProcurementAt(beforeCut) || ended.SupportsProcurementAt(anchorAt) {
+		t.Fatal("退役后的协议仍支持采购")
+	}
+	if terminatedAt, terminated := ended.TerminatedAt(); !terminated || !terminatedAt.Equal(retirement.RetiredAt()) {
+		t.Fatalf("终止时刻 = %v %v, want 退役时刻", terminatedAt, terminated)
+	}
+
+	foreign, _ := mustCut(t, registry, next, liveVersionFrom(t, registry, domain.SupplierAgreementObject, "agreement-1", "v4", "scope-a", anchorAt), "SYN-CUT-OTHER")
+	if _, err := agreement.NarrowedBy(foreign); !errors.Is(err, domain.ErrInvalidSupplierAgreement) {
+		t.Fatalf("折进别一版的更正 err = %v, want ErrInvalidSupplierAgreement", err)
+	}
+}
+
+func supplierAgreementOf(t *testing.T, version domain.CommercialVersion) domain.SupplierAgreement {
+	t.Helper()
+	agreement, err := domain.NewSupplierAgreement(version,
+		commercialValue(t, domain.NewPartyID, "supplier-1"),
+		commercialValue(t, domain.NewLegalEntityReference, "legal-1"),
+		commercialValue(t, domain.NewCommercialScopeReference, "scope-a"),
+		commercialValue(t, domain.NewPricingPlanReference, "plan-buy-1"),
+		version.Effective())
+	if err != nil {
+		t.Fatalf("new supplier agreement: %v", err)
+	}
+	return agreement
+}
+
+func mustRetire(t *testing.T, registry *domain.CommercialRegistry, old, next domain.CommercialVersion, reference string) domain.VersionRetirement {
+	t.Helper()
+	retirement, replay, err := registry.RetireAtSameStartSuccessor(old.Tenant(), old.Scope(), old.Kind(), old.ObjectID(), old.Version(), next.Version(),
+		commercialValue(t, domain.NewRetirementReference, reference), retiredAtRegistration)
+	if err != nil || replay {
+		t.Fatalf("retire at same start successor: replay=%v err=%v", replay, err)
+	}
+	return retirement
 }

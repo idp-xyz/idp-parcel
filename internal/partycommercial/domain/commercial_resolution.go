@@ -452,7 +452,7 @@ func resolvePriceRuleBasis(
 	}
 	admitted := make([]CommercialPricePolicy, 0, len(registry.policies))
 	for _, policy := range registry.policies {
-		if registry.correctionExcludes(policy.version, key.Anchor.At()) {
+		if registry.bodyExcludedAt(policy.version, key.Anchor.At()) {
 			continue
 		}
 		admitted = append(admitted, policy)
@@ -509,7 +509,7 @@ func resolveSettlementPolicyBasis(registry *CommercialRegistry, key ResolutionKe
 		if policy.version.tenant != key.TenantID || policy.version.scope != key.Scope {
 			continue
 		}
-		if registry.correctionExcludes(policy.version, key.Anchor.At()) {
+		if registry.bodyExcludedAt(policy.version, key.Anchor.At()) {
 			continue
 		}
 		inScope = append(inScope, policy)
@@ -561,7 +561,7 @@ func resolveCreditPolicyBasis(registry *CommercialRegistry, key ResolutionKey) R
 		if policy.version.tenant != key.TenantID || policy.version.scope != key.Scope {
 			continue
 		}
-		if registry.correctionExcludes(policy.version, key.Anchor.At()) {
+		if registry.bodyExcludedAt(policy.version, key.Anchor.At()) {
 			continue
 		}
 		inScope = append(inScope, policy)
