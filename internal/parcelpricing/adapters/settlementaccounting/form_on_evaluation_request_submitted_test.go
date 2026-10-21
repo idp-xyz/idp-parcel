@@ -136,7 +136,7 @@ func TestARequestNotYetVisibleIsUndecided(t *testing.T) {
 	}
 }
 
-// Covers: AT-PP-002 入口答不出评价的三格不随重投变好，不再是未决哨兵：交一封「评价未形成」（租户、请求、方向、停在
+// Covers: AT-PP-002 入口答不出评价的三格不随重投变好，不是未决哨兵：交一封「评价未形成」（租户、请求、方向、停在
 // 哪一格、给人读的说明）后入账——没有在用价卡、多于一版同时适用（说明带候选）、造不出计价输入快照（说明带缺项）。
 func TestAnUnformableRequestHandsOffUnformedAndSettles(t *testing.T) {
 	candidate := pptest.IdentityReference(t, ppdomain.ArtifactPricingPlan, "SYN-BUY-PLAN-B", "v1")

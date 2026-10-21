@@ -352,7 +352,7 @@ func sellInitiationStopCauseOf(result RequestSellEvaluationOnParcelMomentResult)
 }
 
 // recordStall 在发起停办册上记下停在发起之前的这一拍（ADR-0229 决定四），答案原样交回。记不下就答`未决`让调用方整笔
-// 回滚重来：入账而没记下，正是这一拍此前的「入账即散」。
+// 回滚重来：入账而没记下，这一拍就散了，补登之后没有东西再推它。
 func (handler *RequestSellEvaluationOnParcelMomentHandler) recordStall(
 	ctx context.Context,
 	command RequestSellEvaluationOnParcelMomentCommand,

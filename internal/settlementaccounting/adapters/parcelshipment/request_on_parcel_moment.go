@@ -219,8 +219,8 @@ func parcelMomentCommand(
 }
 
 // sellRequestConsumption 把编排结果落成消费两格，按「重投会不会改变结果」分：已发起、已存在、未配置、包裹无商业解析
-// 都是终局答案，入账不重投（未配置等租户登记，补登之后也不回补，ADR-0190 越权风险点 3）；未决重投；未受理在这里
-// 是本包译出的命令被拒，属适配器缺陷，响亮上抛不入账。
+// 都是终局答案，入账不重投（未配置等租户登记：编排已把这一拍记进发起停办册，补登之后由「参数已登记」续办，ADR-0229）；
+// 未决重投；未受理在这里是本包译出的命令被拒，属适配器缺陷，响亮上抛不入账。
 func sellRequestConsumption(result saapplication.RequestSellEvaluationOnParcelMomentResult) error {
 	switch result.Outcome() {
 	case saapplication.SellEvaluationRequested,

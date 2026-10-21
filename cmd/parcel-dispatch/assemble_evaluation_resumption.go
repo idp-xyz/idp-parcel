@@ -183,7 +183,7 @@ func stalledEvaluationResumer(
 	return resumer, nil
 }
 
-// evaluationResumptionConsumer 装一扇续办门：一类「参数已登记」信封到来，按租户取续办队列逐件续办。三类信封各装一扇，
+// evaluationResumptionConsumer 装一扇续办门：一类「参数已登记」信封到来，按租户取续办队列逐件续办。每一类信封各装一扇，
 // 各记各的 inbox，续办编排各得一只。
 func evaluationResumptionConsumer(
 	registration sainbox.EvaluationParameterRegistration,

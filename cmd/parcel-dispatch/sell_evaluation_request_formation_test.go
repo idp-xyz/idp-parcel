@@ -373,7 +373,7 @@ func TestASellEvaluationRequestFormsACustomerChargeEvaluationThroughTheRouteTabl
 		t.Fatalf("评价标识那封信 = %q, want parcel-pricing.evaluation.recorded", eventType)
 	}
 
-	// 没卡的那一份不再按未决重投：PP 入账、交「评价未形成」，SA 记停因等补登一张卡（ADR-0229 决定三）。
+	// 没卡的那一份不按未决重投：PP 入账、交「评价未形成」，SA 记停因等补登一张卡（ADR-0229 决定三）。
 	if got := recordedFailureCode(t, fixture.db, uncardedID); got != "" {
 		t.Fatalf("没卡的 SELL 请求 failure_code = %q，答不出评价不该再按未决重投；原文 = %v", got, observed[uncardedID])
 	}

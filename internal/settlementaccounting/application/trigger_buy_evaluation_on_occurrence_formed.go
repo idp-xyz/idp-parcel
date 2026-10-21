@@ -163,7 +163,7 @@ func (handler *TriggerBuyEvaluationOnOccurrenceFormedHandler) Trigger(
 }
 
 // recordStall 在发起停办册上记下答`未配置`的这一拍，答案照旧是`未配置`。记不下就答`未决`让调用方整笔回滚重来：入账
-// 而没记下，正是这一拍此前的「入账即散」。
+// 而没记下，这一拍就散了，补登之后没有东西再推它。
 func (handler *TriggerBuyEvaluationOnOccurrenceFormedHandler) recordStall(
 	ctx context.Context,
 	command TriggerBuyEvaluationOnOccurrenceFormedCommand,

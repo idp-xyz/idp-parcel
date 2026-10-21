@@ -95,7 +95,7 @@ func supplierCostVersions(t *testing.T, db *bentopg.DB) []string {
 	return versions
 }
 
-// assertNothingAbandoned 断言这几类信封一封都没有落在失败码上：答`未配置`不再按未决重投，参数已登记与续办出来的那几封
+// assertNothingAbandoned 断言这几类信封一封都没有落在失败码上：答`未配置`不按未决重投，参数已登记与续办出来的那几封
 // 都入了账。
 func assertNothingAbandoned(t *testing.T, db *bentopg.DB, eventTypes ...string) {
 	t.Helper()
@@ -137,7 +137,7 @@ func enqueueOccurrenceFormed(t *testing.T, db *bentopg.DB, store *outbox.Store, 
 }
 
 // Covers: AT-SA-195、AT-PP-005——票面现象那一路（BUY）：发生项发起的请求在计价那一侧答「没有在用价卡」，PP 入账交「评价
-// 未形成」、SA 在第一代上记停因（不再按未决重投到 ABANDONED）；租户补登演示成本卡，价卡登记同笔交「参数已登记」，SA 按
+// 未形成」、SA 在第一代上记停因（不按未决重投到 ABANDONED）；租户补登演示成本卡，价卡登记同笔交「参数已登记」，SA 按
 // 停因与计价范围续办出第二代（回指第一代、带依据），PP 选到卡形成评价，SA 以第二代派生的版本标识形成供应商预期成本。
 // 第一代的停因原样、它名下没有成本；再登一张不相干的卡不再推出第三代。
 func TestABuyRequestStalledOnAMissingPriceCardResumesAfterTheCardIsRegistered(t *testing.T) {
@@ -443,7 +443,7 @@ func TestASellRequestPendingOnAnIncompleteMappingResumesAfterTheMappingIsRegiste
 }
 
 // Covers: AT-PP-001 未决名单的两头——PP 请求那两路与续办几路只收真会自愈的依赖：请求还读不回、形成依赖故障、记停因或续办时某个
-// 依赖答不出；答不出评价的格（未配置一类）不在任何一份名单里——它们不再是错误，不需要被翻译。名单取生产切片本身。
+// 依赖答不出；答不出评价的格（未配置一类）不在任何一份名单里——它们不是错误，不需要被翻译。名单取生产切片本身。
 func TestTheResumptionLanesListOnlyDependenciesThatHealOnRetry(t *testing.T) {
 	for name, lane := range map[string]struct {
 		sentinels []error
