@@ -232,3 +232,62 @@ func TestResendIsControlledByTheSafeResendJudgment(t *testing.T) {
 		t.Fatal("前次尝试被改写了")
 	}
 }
+
+// Covers: AT-CC-441（领域半边）——首次尝试可以记成`已登记待发送`：没有发送时间，不读作待确认；给它编一个发送时间、或给
+// 一次已发出的尝试抹掉发送时间都拒。停在待发送的尝试没有可「再次」的发送，受控重发也不能停在待发送；读回走同一道门。
+func TestARegisteredAttemptCarriesNoSendTimeAndCannotBeResent(t *testing.T) {
+	version, err := domain.FixSubmissionVersion(versionSpec(t))
+	if err != nil {
+		t.Fatalf("fix submission version: %v", err)
+	}
+
+	registered, err := domain.InitialAttempt(version, "channel-A", domain.AttemptRegisteredPendingSend, time.Time{})
+	if err != nil {
+		t.Fatalf("registered attempt: %v", err)
+	}
+	if registered.Result() != domain.AttemptRegisteredPendingSend || registered.Result().String() != "REGISTERED_PENDING_SEND" ||
+		!registered.SentAt().IsZero() || registered.Sequence() != 1 {
+		t.Fatalf("registered = %#v", registered)
+	}
+	if _, err := domain.InitialAttempt(version, "channel-A", domain.AttemptRegisteredPendingSend, declaredAt); !errors.Is(err, domain.ErrInvalidSubmissionAttempt) {
+		t.Fatalf("err = %v; 给一次没发出去的尝试编了发送时间", err)
+	}
+	if _, err := domain.InitialAttempt(version, "channel-A", domain.AttemptAcknowledged, time.Time{}); !errors.Is(err, domain.ErrInvalidSubmissionAttempt) {
+		t.Fatalf("err = %v; 已发出的尝试没有发送时间", err)
+	}
+
+	if _, err := registered.ControlledResend(
+		mustValue(t, domain.NewSafeResendReference, "safe-resend/attempt-1"),
+		domain.AttemptAcknowledged,
+		declaredAt.Add(time.Hour),
+	); !errors.Is(err, domain.ErrInvalidSubmissionAttempt) {
+		t.Fatalf("err = %v; 没发出去的尝试被「再次」发送了", err)
+	}
+	sent, err := domain.InitialAttempt(version, "channel-A", domain.AttemptPendingConfirmation, declaredAt)
+	if err != nil {
+		t.Fatalf("sent attempt: %v", err)
+	}
+	if _, err := sent.ControlledResend(
+		mustValue(t, domain.NewSafeResendReference, "safe-resend/attempt-1"),
+		domain.AttemptRegisteredPendingSend,
+		declaredAt.Add(time.Hour),
+	); !errors.Is(err, domain.ErrInvalidSubmissionAttempt) {
+		t.Fatalf("err = %v; 受控重发停在了待发送", err)
+	}
+
+	rehydrated, err := domain.RehydrateSubmissionAttempt(registered.Snapshot())
+	if err != nil || rehydrated.Result() != domain.AttemptRegisteredPendingSend || !rehydrated.SentAt().IsZero() {
+		t.Fatalf("读回 = %#v, %v", rehydrated, err)
+	}
+	stamped := registered.Snapshot()
+	stamped.SentAt = declaredAt
+	if _, err := domain.RehydrateSubmissionAttempt(stamped); !errors.Is(err, domain.ErrInvalidSubmissionAttempt) {
+		t.Fatalf("err = %v; 读回的待发送尝试带着发送时间", err)
+	}
+	resent := registered.Snapshot()
+	resent.Sequence = 2
+	resent.SafeResend = mustValue(t, domain.NewSafeResendReference, "safe-resend/attempt-1")
+	if _, err := domain.RehydrateSubmissionAttempt(resent); !errors.Is(err, domain.ErrInvalidSubmissionAttempt) {
+		t.Fatalf("err = %v; 读回的受控重发停在待发送", err)
+	}
+}

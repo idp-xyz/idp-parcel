@@ -322,7 +322,7 @@ func (repository *DeclarationSubmissions) insertAttempt(
 		attempt.Target,
 		attempt.Result.String(),
 		nullIfBlankRef(attempt.SafeResend.String()),
-		attempt.SentAt,
+		nullIfZeroInstant(attempt.SentAt),
 	); err != nil {
 		return fmt.Errorf("save declaration submission: attempt: %w", err)
 	}
@@ -345,7 +345,7 @@ func (repository *DeclarationSubmissions) latestAttempt(
 		sequence       int
 		target, result string
 		safeResend     *string
-		sentAt         time.Time
+		sentAt         *time.Time
 	)
 	err = querier.QueryRow(ctx,
 		`SELECT sequence, target, result, safe_resend_ref, sent_at
@@ -364,7 +364,9 @@ func (repository *DeclarationSubmissions) latestAttempt(
 		Version:  version,
 		Sequence: sequence,
 		Target:   target,
-		SentAt:   sentAt,
+	}
+	if sentAt != nil {
+		snapshot.SentAt = *sentAt
 	}
 	if snapshot.Result, err = attemptResultFrom(result); err != nil {
 		return domain.SubmissionAttempt{}, err
@@ -425,7 +427,7 @@ func rebuildSubmissionVersion(
 	return version, nil
 }
 
-// attemptResultFrom 把列值译回封闭三值。迁移 CHECK 已拦住集合外取值。
+// attemptResultFrom 把列值译回封闭四值。迁移 CHECK 已拦住集合外取值。
 func attemptResultFrom(value string) (domain.AttemptResult, error) {
 	switch value {
 	case "ACKNOWLEDGED":
@@ -434,10 +436,21 @@ func attemptResultFrom(value string) (domain.AttemptResult, error) {
 		return domain.AttemptFailed, nil
 	case "PENDING_CONFIRMATION":
 		return domain.AttemptPendingConfirmation, nil
+	case "REGISTERED_PENDING_SEND":
+		return domain.AttemptRegisteredPendingSend, nil
 	default:
 		return domain.AttemptResultInvalid,
 			fmt.Errorf("customs compliance postgres: unknown attempt result %q", value)
 	}
+}
+
+// nullIfZeroInstant 让`已登记待发送`的尝试在 sent_at 上落 NULL：领域交回零值是「还没发」，写成 0001-01-01 就成了一个
+// 编出来的发送时刻（迁移 0027 把两者配对）。
+func nullIfZeroInstant(at time.Time) *time.Time {
+	if at.IsZero() {
+		return nil
+	}
+	return &at
 }
 
 func nullIfBlankRef(value string) *string {

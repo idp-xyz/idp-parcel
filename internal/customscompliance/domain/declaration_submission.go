@@ -410,8 +410,12 @@ func RehydrateSubmissionVersion(snapshot CustomsSubmissionVersionSnapshot) (Cust
 	}, nil
 }
 
-// AttemptResult 是提交尝试的已知结果封闭三值。结果未知保持待确认——超时不得直接
-// 解释为失败（CONTEXT「提交尝试」）。
+// AttemptResult 是提交尝试封闭四值：越过发送边界之后的三种已知结果，加越过之前的`已登记待发送`。结果未知保持
+// 待确认——超时不得直接解释为失败（CONTEXT「提交尝试」）。
+//
+// `已登记待发送`是 UC-CC-005「提交已登记待发送」那一格：提交版本固定时登记首次尝试的身份与目标，外部发送还没开始，
+// 所以它没有发送时间，也不是待确认——待确认说的是「可能已经发出去了」，拿它记一份没发出去的尝试，就是假装已发送。
+// 越过发送边界的那一步归发送通道（票 product-strategy-boundary/10 第 1 项）。
 type AttemptResult uint8
 
 const (
@@ -419,10 +423,11 @@ const (
 	AttemptAcknowledged
 	AttemptFailed
 	AttemptPendingConfirmation
+	AttemptRegisteredPendingSend
 )
 
 func (result AttemptResult) valid() bool {
-	return result >= AttemptAcknowledged && result <= AttemptPendingConfirmation
+	return result >= AttemptAcknowledged && result <= AttemptRegisteredPendingSend
 }
 
 func (result AttemptResult) String() string {
@@ -433,9 +438,17 @@ func (result AttemptResult) String() string {
 		return "FAILED"
 	case AttemptPendingConfirmation:
 		return "PENDING_CONFIRMATION"
+	case AttemptRegisteredPendingSend:
+		return "REGISTERED_PENDING_SEND"
 	default:
 		return ""
 	}
+}
+
+// sentShapeHolds 是发送时间与结果的配对：已登记待发送没有发送时间，其余三值必有。两头任一错配都是在替一次没发生的
+// 发送编时间，或给一次发生了的发送抹掉时间。
+func sentShapeHolds(result AttemptResult, sentAt time.Time) bool {
+	return (result == AttemptRegisteredPendingSend) == sentAt.IsZero()
 }
 
 // SafeResendReference 指名安全再次发送判断：合格来源与真实规则共同证明原尝试没有
@@ -458,27 +471,32 @@ type SubmissionAttempt struct {
 	sentAt     time.Time
 }
 
-// InitialAttempt 形成版本的首次发送尝试。
+// InitialAttempt 形成版本的首次发送尝试。结果为`已登记待发送`时不得带发送时间，其余结果必带（sentShapeHolds）。
 func InitialAttempt(
 	version CustomsSubmissionVersion,
 	target string,
 	result AttemptResult,
 	sentAt time.Time,
 ) (SubmissionAttempt, error) {
-	if !version.id.valid() || target == "" || !result.valid() || sentAt.IsZero() {
+	if !version.id.valid() || target == "" || !result.valid() || !sentShapeHolds(result, sentAt) {
 		return SubmissionAttempt{}, ErrInvalidSubmissionAttempt
 	}
-	return SubmissionAttempt{
+	attempt := SubmissionAttempt{
 		version:  version.id,
 		sequence: 1,
 		target:   target,
 		result:   result,
-		sentAt:   sentAt.UTC(),
-	}, nil
+	}
+	if !sentAt.IsZero() {
+		attempt.sentAt = sentAt.UTC()
+	}
+	return attempt, nil
 }
 
 // ControlledResend 依据安全再次发送判断对同一版本形成受控新尝试。安全判断必备——
-// 没有它的重发与盲目重发分不开；新尝试不改前次尝试的任何结果。
+// 没有它的重发与盲目重发分不开；新尝试不改前次尝试的任何结果。前次尝试若还停在
+// `已登记待发送`，它根本没发出去，没有可「再次」的发送；受控重发本身是一次发送，
+// 结果也不能是`已登记待发送`。
 func (attempt SubmissionAttempt) ControlledResend(
 	safeResend SafeResendReference,
 	result AttemptResult,
@@ -486,6 +504,9 @@ func (attempt SubmissionAttempt) ControlledResend(
 ) (SubmissionAttempt, error) {
 	if !safeResend.valid() {
 		return SubmissionAttempt{}, ErrUnsafeResend
+	}
+	if attempt.result == AttemptRegisteredPendingSend || result == AttemptRegisteredPendingSend {
+		return SubmissionAttempt{}, ErrInvalidSubmissionAttempt
 	}
 	if !result.valid() || sentAt.IsZero() || sentAt.Before(attempt.sentAt) {
 		return SubmissionAttempt{}, ErrInvalidSubmissionAttempt
@@ -521,6 +542,7 @@ func (attempt SubmissionAttempt) Target() string {
 	return attempt.target
 }
 
+// SentAt 是越过发送边界的时刻；`已登记待发送`的尝试交回零值。
 func (attempt SubmissionAttempt) SentAt() time.Time {
 	return attempt.sentAt
 }
@@ -548,24 +570,31 @@ func (attempt SubmissionAttempt) Snapshot() SubmissionAttemptSnapshot {
 }
 
 // RehydrateSubmissionAttempt 从快照重建发送尝试并重验形状：首次尝试没有安全再次
-// 发送判断、受控重发必须携带（CONTEXT「在此之前不得盲目重发」的构造期与读回期是同一道门）。
+// 发送判断、受控重发必须携带（CONTEXT「在此之前不得盲目重发」的构造期与读回期是同一道门）；
+// 发送时间与结果的配对、受控重发不会停在`已登记待发送`，也与构造期同一道门。
 func RehydrateSubmissionAttempt(snapshot SubmissionAttemptSnapshot) (SubmissionAttempt, error) {
 	if !snapshot.Version.valid() ||
 		snapshot.Sequence < 1 ||
 		snapshot.Target == "" ||
 		!snapshot.Result.valid() ||
-		snapshot.SentAt.IsZero() {
+		!sentShapeHolds(snapshot.Result, snapshot.SentAt) {
 		return SubmissionAttempt{}, ErrInvalidSubmissionAttempt
 	}
 	if (snapshot.Sequence == 1) == snapshot.SafeResend.valid() {
 		return SubmissionAttempt{}, ErrInvalidSubmissionAttempt
 	}
-	return SubmissionAttempt{
+	if snapshot.Sequence > 1 && snapshot.Result == AttemptRegisteredPendingSend {
+		return SubmissionAttempt{}, ErrInvalidSubmissionAttempt
+	}
+	attempt := SubmissionAttempt{
 		version:    snapshot.Version,
 		sequence:   snapshot.Sequence,
 		target:     snapshot.Target,
 		result:     snapshot.Result,
 		safeResend: snapshot.SafeResend,
-		sentAt:     snapshot.SentAt.UTC(),
-	}, nil
+	}
+	if !snapshot.SentAt.IsZero() {
+		attempt.sentAt = snapshot.SentAt.UTC()
+	}
+	return attempt, nil
 }
