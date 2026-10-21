@@ -189,6 +189,40 @@ func TestTheWiredClaimsInheritTheRowsAContractTierRuleLeavesToTheProductBase(t *
 		materials.Required[0].String() != "SYN-MAT-INVOICE" || materials.Required[1].String() != "SYN-MAT-PHOTO" {
 		t.Fatalf("最低材料维 = %#v，合同版无这一行，要继承产品底座那一行并冻底座", materials)
 	}
+
+	// ADR-0268 决定一：接受之后运营对产品底座登一条有效性更正，把它的选用区间挪到接受锚点之后——此刻按锚点现选已经
+	// 选不到它，而已接受委托继承来的那一行不改口，仍冻接受时随闭包固定的 SYN-CSR-1。
+	moved, err := pcdomain.NewEffectiveInterval(time.Date(2026, 8, 22, 0, 0, 0, 0, time.UTC), time.Time{})
+	if err != nil {
+		t.Fatalf("有效区间：%v", err)
+	}
+	correction, err := productTier.CorrectEffectiveInterval(moved,
+		mustValue(t, pcdomain.NewValidityCorrectionReference, "SYN-CORRECT-CSR-1"), time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("区间更正：%v", err)
+	}
+	if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
+		outcome, saveErr := publications.SaveValidityCorrection(txCtx, correction)
+		if saveErr == nil && outcome != pcports.ValidityCorrectionSaved {
+			t.Errorf("登记区间更正 = %s，应成功", outcome)
+		}
+		return saveErr
+	}); err != nil {
+		t.Fatalf("事务内登记区间更正：%v", err)
+	}
+	if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
+		var readErr error
+		answer, _, readErr = rules.RulesForClaim(txCtx, veports.EligibilityQuery{
+			Tenant: command.TenantID, Batch: command.Batch, Item: command.Item, Customer: command.Customer,
+			Contract: command.Contract, Target: command.Target, Kind: command.Kind, Applicant: command.Applicant,
+		})
+		return readErr
+	}); err != nil {
+		t.Fatalf("更正之后读资格规则：%v", err)
+	}
+	if got := answer.Materials; !got.Registered || got.RuleVersion != "SYN-TENANT-1/SYN-CSR-1/v1" || len(got.Required) != 2 {
+		t.Fatalf("底座更正之后最低材料维 = %#v，已接受委托要照旧继承接受时固定的 SYN-CSR-1", got)
+	}
 }
 
 // effectiveContractTierCustomerServiceRule 造一版壳上指名客户合同的客户服务规则（PC 闭包按壳把它归合同层）。被指名的合同

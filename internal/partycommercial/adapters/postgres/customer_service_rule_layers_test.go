@@ -18,9 +18,10 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
-// 本文件对真实 PostgreSQL 16 证客户服务规则的层次读口（ADR-0176 决定二，spec「Testing Decisions」缝三）：两层在场
-// 标志各自如实、底座多候选答`适用冲突`、声明的服务产品照闭包回落层收窄底座、租户是身份不是过滤器、权威读不到与
-// 锚点缺席同答`解析未决`、底座正文坏数据走 error。读口经 postgres 的权威视图与正文点读口装配，与生产同一条路。
+// 本文件对真实 PostgreSQL 16 证客户服务规则的层次读口（ADR-0176 决定二，spec「Testing Decisions」缝三）在没有底座一格
+// 的旧快照上那一路（ADR-0268 决定三）：两层在场标志各自如实、底座多候选答`适用冲突`、声明的服务产品照闭包回落层收窄
+// 底座、租户是身份不是过滤器、权威读不到答`解析未决`、底座正文坏数据走 error、问法立不住走 error。读口经 postgres 的
+// 权威视图与正文点读口装配，与生产同一条路。
 //
 // 夹具里的天数与材料只是取值，用来认出交回的是哪一版正文，不作业务断言——本册的值属实例半边。
 
@@ -158,6 +159,59 @@ func firstClaimDays(rule domain.CustomerServiceRuleVersion) int {
 
 var noDeclaredProduct = domain.CommercialObjectID{}
 
+// legacyClosureOver 经重建门造一份采纳了 contractRule 的已固定闭包，**没有底座一格**——ADR-0268 之前形成的快照就是
+// 这个样子（决定三），层次读口对它按闭包锚点与键上声明的服务产品现选底座。本文件证的正是这条现选的路；底座随闭包
+// 固定的那一路见 customer_service_rule_product_base_fixing_test.go。declaredProduct 非空时闭包也采用那个服务产品，
+// 键上声明它（键要求声明的产品在必需依据里）。
+func legacyClosureOver(t *testing.T, tenant string, contractRule domain.CommercialVersion, declaredProduct string) domain.CommercialClosure {
+	t.Helper()
+	return legacyClosureIn(t, tenant, pcScope(t), contractRule, declaredProduct)
+}
+
+func legacyClosureIn(
+	t *testing.T,
+	tenant string,
+	scope domain.CommercialScopeReference,
+	contractRule domain.CommercialVersion,
+	declaredProduct string,
+) domain.CommercialClosure {
+	t.Helper()
+	anchor := layerAnchor(t)
+	key := domain.ClosureResolutionKey{
+		TenantID:             pcTenant(t, tenant),
+		CustomerAccountID:    pcValue(t, domain.NewCustomerAccountID, "customer-1"),
+		LegalEntityCandidate: pcValue(t, domain.NewLegalEntityReference, "legal-1"),
+		Scope:                scope,
+		Purpose:              domain.AcceptanceControlPurpose,
+		Anchor:               anchor,
+		RequiredBases:        []domain.CommercialObjectKind{domain.CustomerContractObject, domain.CustomerServiceRuleObject},
+	}
+	adopted := []domain.RehydrateAdoptedBasisSpec{
+		{Kind: domain.CustomerContractObject, Version: effectiveContract(t, "contract-02", "v1", "digest-contract-02")},
+		{Kind: domain.CustomerServiceRuleObject, Version: contractRule},
+	}
+	if declaredProduct != "" {
+		key.ServiceProduct = pcValue(t, domain.NewCommercialObjectID, declaredProduct)
+		key.RequiredBases = append(key.RequiredBases, domain.ServiceProductObject)
+		adopted = append(adopted, domain.RehydrateAdoptedBasisSpec{
+			Kind:    domain.ServiceProductObject,
+			Version: effectiveVersionOfKind(t, domain.ServiceProductObject, declaredProduct, "v1", "digest-"+declaredProduct),
+		})
+	}
+	closure, err := domain.RehydrateCommercialClosure(domain.RehydrateCommercialClosureSpec{
+		Outcome:      domain.UniquelyResolved,
+		ResolutionID: pcValue(t, domain.NewResolutionID, "CLO-legacy"),
+		Key:          key,
+		Anchor:       anchor,
+		ViewRevision: pcValue(t, domain.NewAuthorityViewRevision, "view-legacy"),
+		Adopted:      adopted,
+	})
+	if err != nil {
+		t.Fatalf("重建旧快照闭包：%v", err)
+	}
+	return closure
+}
+
 // Covers: 票 03 完成判据「合同版与底座版在场 / 不在场四种组合各有真库用例」。底座「不在场」有两种成因，各配一次：
 // 范围里没有产品层的版本（选法答`无适用依据`），与选出了那一版但它没登正文（选法答`唯一解析`、正文未登记）。
 // 合同版不在场是壳在、正文没登。两层的标志各自如实，一层缺席不连带另一层。
@@ -204,7 +258,7 @@ func TestTheLayeredReadAnswersEachTierPresenceOnItsOwn(t *testing.T) {
 			}
 
 			layers, err := fixture.reader.LoadCustomerServiceRuleLayers(
-				ctx, tenant, pcScope(t), contract, layerAnchor(t), noDeclaredProduct)
+				ctx, tenant, legacyClosureOver(t, "tenant-1", contract, ""))
 			if err != nil {
 				t.Fatalf("层次读口：%v", err)
 			}
@@ -264,7 +318,7 @@ func TestTwoProductBaseCandidatesAreAnApplicabilityConflictNotAPick(t *testing.T
 	mustSaveCustomerServiceRule(t, transactor, ctx, repository, productBaseBody(t, bare, "product-a", 45))
 
 	layers, err := fixture.reader.LoadCustomerServiceRuleLayers(
-		ctx, pcTenant(t, "tenant-1"), pcScope(t), contract, layerAnchor(t), noDeclaredProduct)
+		ctx, pcTenant(t, "tenant-1"), legacyClosureOver(t, "tenant-1", contract, ""))
 	if err != nil {
 		t.Fatalf("底座冲突被当成了错误：%v", err)
 	}
@@ -296,10 +350,10 @@ func TestTheDeclaredServiceProductNarrowsTheProductBaseAsTheClosureDoes(t *testi
 	mustSaveCustomerServiceRule(t, transactor, ctx, repository, productBaseBody(t, productA, "product-a", 30))
 	mustSaveCustomerServiceRule(t, transactor, ctx, repository, productBaseBody(t, productB, "product-b", 20))
 
-	ask := func(declared domain.CommercialObjectID) ports.CustomerServiceRuleLayers {
+	ask := func(declared string) ports.CustomerServiceRuleLayers {
 		t.Helper()
 		layers, err := fixture.reader.LoadCustomerServiceRuleLayers(
-			ctx, pcTenant(t, "tenant-1"), pcScope(t), contract, layerAnchor(t), declared)
+			ctx, pcTenant(t, "tenant-1"), legacyClosureOver(t, "tenant-1", contract, declared))
 		if err != nil {
 			t.Fatalf("层次读口：%v", err)
 		}
@@ -313,7 +367,7 @@ func TestTheDeclaredServiceProductNarrowsTheProductBaseAsTheClosureDoes(t *testi
 		"product-a": {productA, 30},
 		"product-b": {productB, 20},
 	} {
-		layers := ask(pcValue(t, domain.NewCommercialObjectID, product))
+		layers := ask(product)
 		if layers.ProductBaseOutcome != domain.UniquelyResolved || !layers.HasProductBase {
 			t.Fatalf("声明 %s：底座选法 = %q，在场 = %v", product, layers.ProductBaseOutcome, layers.HasProductBase)
 		}
@@ -323,7 +377,7 @@ func TestTheDeclaredServiceProductNarrowsTheProductBaseAsTheClosureDoes(t *testi
 		}
 	}
 
-	if layers := ask(noDeclaredProduct); layers.ProductBaseOutcome != domain.ApplicabilityConflict || layers.HasProductBase {
+	if layers := ask(""); layers.ProductBaseOutcome != domain.ApplicabilityConflict || layers.HasProductBase {
 		t.Fatalf("不声明服务产品：底座选法 = %q，在场 = %v, want APPLICABILITY_CONFLICT 且不在场",
 			layers.ProductBaseOutcome, layers.HasProductBase)
 	}
@@ -344,14 +398,14 @@ func TestTheLayeredReadIsBoundToItsTenant(t *testing.T) {
 	mustSaveCustomerServiceRule(t, transactor, ctx, repository, productBaseBody(t, theirs, "product-a", 30))
 
 	layers, err := fixture.reader.LoadCustomerServiceRuleLayers(
-		ctx, pcTenant(t, "tenant-2"), pcScope(t), mine, layerAnchor(t), noDeclaredProduct)
+		ctx, pcTenant(t, "tenant-2"), legacyClosureOver(t, "tenant-1", mine, ""))
 	if err == nil || layers.HasContractTier || layers.HasProductBase {
 		t.Fatalf("拿他租户身份读本租户合同版：err=%v 合同版在场=%v 底座在场=%v，应是 error 且不交内容",
 			err, layers.HasContractTier, layers.HasProductBase)
 	}
 
 	layers, err = fixture.reader.LoadCustomerServiceRuleLayers(
-		ctx, pcTenant(t, "tenant-1"), pcScope(t), mine, layerAnchor(t), noDeclaredProduct)
+		ctx, pcTenant(t, "tenant-1"), legacyClosureOver(t, "tenant-1", mine, ""))
 	if err != nil {
 		t.Fatalf("层次读口：%v", err)
 	}
@@ -374,10 +428,10 @@ func (unreadableAuthority) LoadScope(
 	return nil, errors.New("authority view unavailable")
 }
 
-// Covers: 读口头注「锚点立不住与权威读不到同答`解析未决`，不带原因」——两者都不是「这个范围没有产品版」，压成`无适用
-// 依据`会让一次读不到被当成租户没登记；也不是 error：与第一阶段「读不到权威不向上抛技术错误」同一条分界。合同版
-// 照常交回。
-func TestAnUnreadableAuthorityAndAMissingAnchorBothLeaveTheProductBasePending(t *testing.T) {
+// Covers: 读口头注「`解析未决`……今天只由权威读不到造成，不带原因」——旧快照现选那一路读不到权威，不是「这个范围没有
+// 产品版」，压成`无适用依据`会让一次读不到被当成租户没登记；也不是 error：与第一阶段「读不到权威不向上抛技术错误」同一
+// 条分界。合同版照常交回。锚点那一格不在这里：唯一已解析的闭包立不起没有锚点的样子（重建门拒）。
+func TestAnUnreadableAuthorityLeavesTheLegacyProductBasePending(t *testing.T) {
 	fixture := newLayerFixture(t)
 	repository, transactor := fixture.repository, fixture.transactor
 	ctx := t.Context()
@@ -393,34 +447,22 @@ func TestAnUnreadableAuthorityAndAMissingAnchorBothLeaveTheProductBasePending(t 
 	if err != nil {
 		t.Fatalf("构造层次读口：%v", err)
 	}
-	for name, ask := range map[string]func() (ports.CustomerServiceRuleLayers, error){
-		"权威读不到": func() (ports.CustomerServiceRuleLayers, error) {
-			return unreadable.LoadCustomerServiceRuleLayers(
-				ctx, pcTenant(t, "tenant-1"), pcScope(t), contract, layerAnchor(t), noDeclaredProduct)
-		},
-		"锚点缺席": func() (ports.CustomerServiceRuleLayers, error) {
-			return fixture.reader.LoadCustomerServiceRuleLayers(
-				ctx, pcTenant(t, "tenant-1"), pcScope(t), contract, domain.SelectionAnchor{}, noDeclaredProduct)
-		},
-	} {
-		t.Run(name, func(t *testing.T) {
-			layers, err := ask()
-			if err != nil {
-				t.Fatalf("未决被当成了错误：%v", err)
-			}
-			if layers.ProductBaseOutcome != domain.ResolutionPending || layers.HasProductBase {
-				t.Fatalf("底座选法 = %q，在场 = %v, want RESOLUTION_PENDING 且不在场",
-					layers.ProductBaseOutcome, layers.HasProductBase)
-			}
-			if !layers.HasContractTier || firstClaimDays(layers.ContractTier) != 10 {
-				t.Fatalf("底座未决连带丢了合同版：在场=%v", layers.HasContractTier)
-			}
-		})
+	layers, err := unreadable.LoadCustomerServiceRuleLayers(ctx, pcTenant(t, "tenant-1"), legacyClosureOver(t, "tenant-1", contract, ""))
+	if err != nil {
+		t.Fatalf("未决被当成了错误：%v", err)
+	}
+	if layers.ProductBaseOutcome != domain.ResolutionPending || layers.HasProductBase {
+		t.Fatalf("底座选法 = %q，在场 = %v, want RESOLUTION_PENDING 且不在场",
+			layers.ProductBaseOutcome, layers.HasProductBase)
+	}
+	if !layers.HasContractTier || firstClaimDays(layers.ContractTier) != 10 {
+		t.Fatalf("底座未决连带丢了合同版：在场=%v", layers.HasContractTier)
 	}
 }
 
-// Covers: 读口头注「范围必须是合同版自己的范围」与类别——问法立不住是调用方违约，走 error，不是任何一格答案：拿别的
-// 范围去配底座就是跨范围套条款，拿一份不是客户服务规则的版本当合同版则根本无从读起。
+// Covers: 读口头注「闭包要是唯一已解析、属显式租户、采纳了一版壳上指名客户合同的客户服务规则，且那一版在闭包键的范围
+// 里」——问法立不住是调用方违约，走 error，不是任何一格答案：拿别的范围去配底座就是跨范围套条款，拿一份不是客户服务
+// 规则的版本当合同版则根本无从读起，产品层那一版没有继承底座，没采纳客户服务规则的闭包无从问起。
 func TestTheLayeredReadRefusesAnAskItCannotAnswer(t *testing.T) {
 	fixture := newLayerFixture(t)
 	repository, transactor := fixture.repository, fixture.transactor
@@ -434,18 +476,34 @@ func TestTheLayeredReadRefusesAnAskItCannotAnswer(t *testing.T) {
 	mustSaveCustomerServiceRule(t, transactor, ctx, repository, contractTierBody(t, contract, "contract-02", 10))
 	mustSaveCustomerServiceRule(t, transactor, ctx, repository, productBaseBody(t, base, "product-a", 30))
 
-	otherScope := pcValue(t, domain.NewCommercialScopeReference, "scope-2")
-	if layers, err := fixture.reader.LoadCustomerServiceRuleLayers(
-		ctx, tenant, otherScope, contract, layerAnchor(t), noDeclaredProduct); err == nil || layers.HasContractTier || layers.HasProductBase {
-		t.Fatalf("合同版不在所问范围：err=%v 合同版在场=%v 底座在场=%v，应是 error 且不交内容",
-			err, layers.HasContractTier, layers.HasProductBase)
+	withoutServiceRule, err := domain.RehydrateCommercialClosure(domain.RehydrateCommercialClosureSpec{
+		Outcome:      domain.UniquelyResolved,
+		ResolutionID: pcValue(t, domain.NewResolutionID, "CLO-no-rule"),
+		Key:          legacyClosureOver(t, "tenant-1", contract, "").ResolutionKey(),
+		Anchor:       layerAnchor(t),
+		ViewRevision: pcValue(t, domain.NewAuthorityViewRevision, "view-legacy"),
+		Adopted: []domain.RehydrateAdoptedBasisSpec{
+			{Kind: domain.CustomerContractObject, Version: effectiveContract(t, "contract-02", "v1", "digest-contract-02")},
+		},
+	})
+	if err != nil {
+		t.Fatalf("重建闭包：%v", err)
 	}
 
-	notARule := effectiveContract(t, "contract-02", "v1", "digest-contract-02")
-	if layers, err := fixture.reader.LoadCustomerServiceRuleLayers(
-		ctx, tenant, pcScope(t), notARule, layerAnchor(t), noDeclaredProduct); err == nil || layers.HasContractTier || layers.HasProductBase {
-		t.Fatalf("拿客户合同版本当合同版：err=%v 合同版在场=%v 底座在场=%v，应是 error",
-			err, layers.HasContractTier, layers.HasProductBase)
+	for name, closure := range map[string]domain.CommercialClosure{
+		"合同版不在闭包键的范围": legacyClosureIn(t, "tenant-1", pcValue(t, domain.NewCommercialScopeReference, "scope-2"), contract, ""),
+		"拿客户合同版本当合同版": legacyClosureOver(t, "tenant-1", effectiveContract(t, "contract-02", "v1", "digest-contract-02"), ""),
+		"采纳的是产品层那一版":  legacyClosureOver(t, "tenant-1", base, ""),
+		"闭包没采纳客户服务规则": withoutServiceRule,
+		"闭包不是唯一已解析":   domain.PriorResolutionUnavailable(domain.BasisNotResolved, domain.ResolutionReasonNone),
+	} {
+		t.Run(name, func(t *testing.T) {
+			layers, err := fixture.reader.LoadCustomerServiceRuleLayers(ctx, tenant, closure)
+			if err == nil || layers.HasContractTier || layers.HasProductBase {
+				t.Fatalf("err=%v 合同版在场=%v 底座在场=%v，应是 error 且不交内容",
+					err, layers.HasContractTier, layers.HasProductBase)
+			}
+		})
 	}
 }
 
@@ -464,7 +522,7 @@ func TestABadProductBaseBodyIsAnErrorNotAnAbsentBase(t *testing.T) {
 	insertCustomerServiceRuleRows(t, pool, "csr-named", "product-2", true)
 
 	layers, err := fixture.reader.LoadCustomerServiceRuleLayers(
-		ctx, pcTenant(t, "tenant-1"), pcScope(t), contract, layerAnchor(t), noDeclaredProduct)
+		ctx, pcTenant(t, "tenant-1"), legacyClosureOver(t, "tenant-1", contract, ""))
 	if !errors.Is(err, domain.ErrCustomerServiceRuleApplicabilityMismatch) {
 		t.Fatalf("err = %v, want ErrCustomerServiceRuleApplicabilityMismatch", err)
 	}

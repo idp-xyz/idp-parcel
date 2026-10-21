@@ -141,9 +141,10 @@ func buildClaimsOrchestration(db *bentopg.DB) (transactionalClaims, error) {
 // 对象都答「没有」、两维停在未登记——与本票之前键来源留 nil 的可观察行为一字不变（ADR-0136
 // Consequences）。协作方缺一即装配失败（ADR-0079 决定八），没有可选的一半。
 //
-// 闭包采纳挂合同的那一版时，两维经 PC 层次读口取合同版与产品底座两层、按行拼（ADR-0176 决定二）。层次读口
-// 用闭包解析读的同一份商业权威（发布库之上的 CommercialAuthority）选底座，正文仍经同一只点读口——底座与闭包
-// 回落层是同一处选法读同一份权威，这里不另接一条取底座的路。
+// 闭包采纳挂合同的那一版时，两维经 PC 层次读口取合同版与继承底座两层、按行拼（ADR-0176 决定二）。底座随接受时
+// 的闭包固定（ADR-0268 决定一），层次读口按闭包上那一版经同一只点读口读正文；商业权威（发布库之上的
+// CommercialAuthority）只为没有底座一格的旧快照现选（决定三），与闭包回落层同一处选法读同一份权威，这里不另接
+// 一条取底座的路。
 func buildClaimEligibilityRules(db *bentopg.DB) (veports.EligibilityRuleView, error) {
 	own, err := vepostgres.NewMultiTenantClaimEligibilityRules(db)
 	if err != nil {

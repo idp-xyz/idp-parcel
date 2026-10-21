@@ -67,7 +67,7 @@ type CommercialResolutionReferenceSource interface {
 // ClaimServiceRulesDeps 收拢五个协作方。Rules 是 VE 自己的册（合同责任范围 + 申请人授权目录，
 // adapters/postgres 的两个形状任一），本适配器在它的答案上叠两维；References 是 parcel-shipment 的回指读口，
 // Closures 是 party-commercial 的闭包读口，Contents 是 party-commercial 的正文点读口（ADR-0104 决定四），
-// Layers 是 party-commercial 的层次读口（ADR-0176 决定二，闭包采纳合同版时用）——
+// Layers 是 party-commercial 的层次读口（ADR-0176 决定二、ADR-0268 决定一，闭包采纳合同版时用）——
 // 提供方那几只全是只读半边，本包不持任何写口（判据同 PC ports.CommercialResolutionView 头注）。
 type ClaimServiceRulesDeps struct {
 	Rules      veports.EligibilityRuleView
@@ -149,7 +149,7 @@ func (adapter *ClaimServiceRules) RulesForClaim(
 // 只剩第三段那一格：规则版本在场而正文未登（found=false）→ 两维未登记，恢复动作是去 PC 登正文（票 03 原格）。
 //
 // 第三段按闭包采纳的那一版分两条路，分法与 PC 闭包分层同一（壳上指名客户合同的归合同层）：合同版经层次读口
-// 一次取回合同版与产品底座两份正文、按行拼（ADR-0176 决定二）；其余照旧单版点读。按正文分会让壳空而正文挂合同
+// 一次取回合同版与随闭包固定的继承底座两份正文、按行拼（ADR-0176 决定二、ADR-0268 决定一）；其余照旧单版点读。按正文分会让壳空而正文挂合同
 // 的那一版在这里走合同层、在闭包里却是产品层，同一版两种归法。
 func (adapter *ClaimServiceRules) serviceRuleDimensions(
 	ctx context.Context,
@@ -183,9 +183,9 @@ func (adapter *ClaimServiceRules) serviceRuleDimensions(
 	return translateRule(rule, nil, query)
 }
 
-// contractTierDimensions 是闭包采纳合同版时的第三段（ADR-0176 决定二）：经层次读口按（租户、合同版自己的范围、
-// 闭包采纳的那一版、闭包锚点、闭包键上声明的服务产品）取两层，底座由 PC 选，本包不挑——锚点与产品取冻结闭包上的，
-// 底座与闭包回落层才是同一处选法读同一组键。
+// contractTierDimensions 是闭包采纳合同版时的第三段（ADR-0176 决定二）：把第二段取回的那份闭包整份交给层次读口取两层。
+// 底座由 PC 定，本包不挑：闭包上固定了底座就读那一版（ADR-0268 决定一），没有那一格的旧快照由 PC 按闭包锚点现选
+// （决定三）——哪一路都只有 PC 分得清，本包只拿它交回的答案。
 //
 // 合同版正文未登 → 两维未登记，与单版点读「正文未登」同格，不整版拿底座顶：合同版里可能收紧的条款没登上来，拿产品
 // 标准代答会把一次漏登变成一次放宽。两层正文各过一道合同点核（tiedToAdoptedContract）。
@@ -198,8 +198,7 @@ func (adapter *ClaimServiceRules) contractTierDimensions(
 	var unregistered veports.FilingDeadlineRule
 	var noMaterials veports.MinimumMaterialsRule
 
-	layers, err := adapter.layers.LoadCustomerServiceRuleLayers(ctx, tenant, adoption.rule.Scope(), adoption.rule,
-		adoption.closure.Anchor(), adoption.closure.ResolutionKey().ServiceProduct)
+	layers, err := adapter.layers.LoadCustomerServiceRuleLayers(ctx, tenant, adoption.closure)
 	if err != nil {
 		return unregistered, noMaterials, fmt.Errorf("load customer service rule layers: %w", err)
 	}
@@ -222,10 +221,13 @@ func (adapter *ClaimServiceRules) contractTierDimensions(
 //   - `无适用依据` → 没有底座，同上，恢复动作是登一版产品版。
 //   - `适用冲突` → ErrUntranslatableAnswer，与闭包对客户服务规则答`适用冲突`同一格（票 04 判断项 Q5）：恢复动作都是
 //     运营更正登记，折成未登记会把租户支去补一份不缺的东西。
-//   - `解析未决` → error：今天只由权威读不到或锚点立不住造成，冻结闭包的锚点立得住，剩下的是依赖调不通。
+//   - `解析未决` → error：今天只由权威读不到造成，是依赖调不通。
 //
-// 底座不随闭包冻结，按锚点读时选；有效性更正改了底座区间时这里会改口（ADR-0176 决定二的已知后果）。合同版有没有
-// 写全两行都先走这一道：底座坏了是登记坏了，不因这一次恰好用不上就不报。
+// 底座随接受时的闭包固定（ADR-0268 决定一）：固定了一版答`唯一解析`、固定了没有答`无适用依据`，此后底座被截止、
+// 退役或有效性更正都不改口；`适用冲突`与`解析未决`在新快照上走不到——多候选在接受时就挡了——只留给没有底座一格、
+// 由 PC 现选的旧快照（决定三，只在演示库与测试夹具里）。与第二段「读一份已固定的闭包没有`适用冲突`」不相抵：那一格说
+// 的是闭包本身，这里是旧快照的底座在读时现选。合同版有没有写全两行都先走这一道：底座坏了是登记坏了，不因这一次恰好
+// 用不上就不报。
 func productBase(
 	layers pcports.CustomerServiceRuleLayers,
 	contract pcdomain.CommercialObjectID,
@@ -254,13 +256,13 @@ func productBase(
 	}
 }
 
-// tiedToAdoptedContract 是 ADR-0176 决定四那道点核：正文挂客户合同时，挂的必须是闭包采用的那一份；挂产品的正文不核
-// （解析键与闭包都没有可比的产品维，由解析唯一性保证）。合同版、底座与产品层那一版一律过它——哪一层的正文挂了别的
-// 合同，拼进来就是把别户的条款套给这一户。
+// tiedToAdoptedContract 是 ADR-0176 决定四那道点核，比较对象照 ADR-0268 决定二：正文挂客户合同时，挂的必须是同一份
+// 闭包采用的那份客户合同；挂产品的正文不核（产品那一半由闭包解析保证：采用的成员与固定的底座都受声明产品收窄与指名
+// 引用核对）。合同版、底座与产品层那一版一律过它——哪一层的正文挂了别的合同，拼进来就是把别户的条款套给这一户。
 //
 // 比的是闭包采用的客户合同，不是 EligibilityQuery.Contract：后者是 VE 的合同责任范围引用，与 PC 合同对象不是一套词，
-// ADR-0136 决定五也写明两者不核一致。壳 ↔ 正文那一道归点读口里的 ConsistentCustomerServiceRuleApplicability，与这一道
-// 分属两层。
+// ADR-0136 越权风险点 5 也写明两者不核一致；拿查询携带的那一格去核，是把核对对象换成调用方可控的值。壳 ↔ 正文那一道
+// 归点读口里的 ConsistentCustomerServiceRuleApplicability，与这一道分属两层。
 func tiedToAdoptedContract(rule pcdomain.CustomerServiceRuleVersion, contract pcdomain.CommercialObjectID) error {
 	tied, ok := rule.Applicability().CustomerContract()
 	if !ok || tied == contract {
@@ -374,7 +376,7 @@ func (adapter *ClaimServiceRules) adoptedRuleVersion(
 }
 
 // adoptedRule 是第二段交给第三段的东西：闭包采用的那一版规则、同一份闭包采用的客户合同（合同点核比它），以及闭包
-// 本身（层次读口要它的锚点与键上声明的服务产品）。
+// 本身（层次读口按它读固定的底座，旧快照则按它的锚点与键上声明的服务产品现选）。
 type adoptedRule struct {
 	rule     pcdomain.CommercialVersion
 	contract pcdomain.CommercialObjectID

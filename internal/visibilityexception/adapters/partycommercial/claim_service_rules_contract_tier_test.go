@@ -21,23 +21,16 @@ type layersDouble struct {
 
 	asked        int
 	askedTenant  pcdomain.TenantID
-	askedScope   pcdomain.CommercialScopeReference
-	askedRule    pcdomain.CommercialVersion
-	askedAnchor  pcdomain.SelectionAnchor
-	askedProduct pcdomain.CommercialObjectID
+	askedClosure pcdomain.CommercialClosure
 }
 
 func (double *layersDouble) LoadCustomerServiceRuleLayers(
 	_ context.Context,
 	tenant pcdomain.TenantID,
-	scope pcdomain.CommercialScopeReference,
-	contractRule pcdomain.CommercialVersion,
-	anchor pcdomain.SelectionAnchor,
-	declaredProduct pcdomain.CommercialObjectID,
+	closure pcdomain.CommercialClosure,
 ) (pcports.CustomerServiceRuleLayers, error) {
 	double.asked++
-	double.askedTenant, double.askedScope, double.askedRule = tenant, scope, contractRule
-	double.askedAnchor, double.askedProduct = anchor, declaredProduct
+	double.askedTenant, double.askedClosure = tenant, closure
 	if double.err != nil {
 		return pcports.CustomerServiceRuleLayers{}, double.err
 	}
@@ -160,8 +153,8 @@ func contractTierFixture(t *testing.T) (*resolutionFixture, pcdomain.CommercialV
 	return fixture, contractRule
 }
 
-// Covers: 票 04 做什么 1、2 / ADR-0176 决定二——采纳合同版时经层次读口按（租户、合同版自己的范围、闭包采纳的那一版、
-// 闭包锚点、闭包键声明的产品）问恰一次，不走单版点读；合同版有行的那一维用合同版并冻它的版本引用，合同版无行的那一维
+// Covers: 票 04 做什么 1、2 / ADR-0176 决定二、ADR-0268 决定一——采纳合同版时把第二段取回的那份闭包整份交给层次读口、
+// 问恰一次，不走单版点读（底座固定在闭包上，读哪一版由 PC 按闭包定）；合同版有行的那一维用合同版并冻它的版本引用，合同版无行的那一维
 // 取底座行并冻底座的版本引用。
 func TestAContractTierRuleTakesItsOwnRowsAndInheritsTheRestFromTheProductBase(t *testing.T) {
 	fixture, contractRule := contractTierFixture(t)
@@ -182,15 +175,12 @@ func TestAContractTierRuleTakesItsOwnRowsAndInheritsTheRestFromTheProductBase(t 
 	if fixture.layers.asked != 1 {
 		t.Fatalf("层次读口被问 %d 次，要恰一次", fixture.layers.asked)
 	}
-	closure := fixture.closures.closure
+	asked, _ := fixture.layers.askedClosure.AdoptedFor(pcdomain.CustomerServiceRuleObject)
 	if fixture.layers.askedTenant.String() != "tenant-1" ||
-		fixture.layers.askedScope != contractRule.Scope() ||
-		fixture.layers.askedRule.ObjectID().String() != "csr-c1" ||
-		fixture.layers.askedAnchor != closure.Anchor() ||
-		fixture.layers.askedProduct != closure.ResolutionKey().ServiceProduct {
-		t.Fatalf("层次读口问法 = %s %s %s %v %q，要是查询租户、合同版自己的范围、闭包采纳的那一版、闭包锚点与闭包键上的产品",
-			fixture.layers.askedTenant, fixture.layers.askedScope, fixture.layers.askedRule.ObjectID(),
-			fixture.layers.askedAnchor, fixture.layers.askedProduct)
+		fixture.layers.askedClosure.ResolutionID() != fixture.closures.closure.ResolutionID() ||
+		!asked.Version().SameVersionAs(contractRule) {
+		t.Fatalf("层次读口问法 = %s %s %s，要是查询租户与第二段取回的那份闭包",
+			fixture.layers.askedTenant, fixture.layers.askedClosure.ResolutionID(), asked.Version().ObjectID())
 	}
 	if fixture.contents.asked != 0 {
 		t.Fatal("合同版另走了一次单版点读：两层要从层次读口一次取回")
@@ -378,6 +368,38 @@ func TestAnUnusableProductBaseIsNotFoldedIntoUnregistered(t *testing.T) {
 		_, _, err := fixture.adapter(t).RulesForClaim(context.Background(), fixture.query(t))
 		if !errors.Is(err, down) {
 			t.Fatalf("err = %v, want %v 原样可辨", err, down)
+		}
+	})
+}
+
+// Covers: ADR-0268 决定二「比较对象不是 `EligibilityQuery.Contract`」——查询携带的是 VE 的合同责任范围引用
+// （contract-1/liability），与闭包采用的客户合同 contract-1 不是同一串：正文挂闭包采用的那份合同照答，挂的恰是查询
+// 携带的那一格反而不过。核对对象若换成调用方可控的那一格，前一格会报错、后一格会放行。
+func TestTheContractCheckComparesTheClosureContractNotTheQueryContract(t *testing.T) {
+	t.Run("正文挂闭包采用的合同", func(t *testing.T) {
+		fixture, contractRule := contractTierFixture(t)
+		if fixture.query(t).Contract.String() == "contract-1" {
+			t.Fatal("夹具没咬到：查询携带的合同与闭包采用的合同同串")
+		}
+		fixture.layers.layers.ContractTier = ruleBody(t, contractRule, appliesToContract(t, "contract-1"),
+			ruleRows{deadlineStartEvent: "event-custom"})
+
+		rules, _, err := fixture.adapter(t).RulesForClaim(context.Background(), fixture.query(t))
+		if err != nil {
+			t.Fatalf("err = %v", err)
+		}
+		if !rules.FilingDeadline.Registered || rules.FilingDeadline.RuleVersion != "tenant-1/csr-c1/v1" {
+			t.Fatalf("首次索赔期限维 = %#v", rules.FilingDeadline)
+		}
+	})
+	t.Run("正文挂查询携带的那一格", func(t *testing.T) {
+		fixture, contractRule := contractTierFixture(t)
+		fixture.layers.layers.ContractTier = ruleBody(t, contractRule,
+			appliesToContract(t, fixture.query(t).Contract.String()), ruleRows{deadlineStartEvent: "event-custom"})
+
+		_, _, err := fixture.adapter(t).RulesForClaim(context.Background(), fixture.query(t))
+		if !errors.Is(err, adapter.ErrUntranslatableAnswer) {
+			t.Fatalf("err = %v, want ErrUntranslatableAnswer", err)
 		}
 	})
 }
