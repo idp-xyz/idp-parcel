@@ -120,6 +120,7 @@ func adoptionBody(segment, commission, provider string) string {
 //   - 采用登记之前的取消：第二段 11:00 由交接立起，那份委托 12:00 登记取消时本上下文还不知道两者相连，取消照常成立；此后拿
 //     第二段去采用它答 200 COMMISSION_CANCELLED_AFTER_START，并排回显取消时刻与段的首个参与，不多一行采用（领域在落连线之前
 //     就判出这一格，这里证的是答法与零写入，不是装配回滚；回滚见下一个用例）。
+//   - `AT-TF-300` 的装配半边（ADR-0231 决定一）：采用成立的那一笔交出恰一封补形成门铃，原样再采用与答不成立的那两次都不交。
 func TestTheWiredAdoptionFaceStartsTheCommissionOfASegmentEstablishedByHandover(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))

@@ -41,7 +41,7 @@ func revisionOf(t *testing.T, commission domain.TransportCommission, version, ba
 	return revised, revision
 }
 
-// Covers: AT-TF-298 的库面一半（S，ADR-0231 决定三）——换版落行后随委托读回，事实按业务时间取那一版；同一份委托再落同号或同依据的
+// Covers: AT-TF-298 的库面一半、AT-TF-296 的读回半边（S，ADR-0231 决定三、四）——换版落行后随委托读回，事实按业务时间取那一版；同一份委托再落同号或同依据的
 // 一行答已登记、原行不动；他租户同名委托上看不到这一行。
 func TestACommissionReadsBackItsAgreementRevisions(t *testing.T) {
 	commissions, _, _, transactor, _ := newCommissionStores(t)
@@ -112,7 +112,7 @@ func TestACommissionReadsBackItsAgreementRevisions(t *testing.T) {
 	}
 }
 
-// TestTheRevisionWritesRefuseToRunOutsideATransaction 证换版的两个写口无环境事务即拒：换版锁要与读委托、落行同一笔才守得住铸号，
+// Covers: AT-TF-298 的存储半边——换版的两个写口无环境事务即拒：换版锁要与读委托、落行同一笔才守得住铸号，
 // 落行要与门铃同一笔，事务外跑就是一次没有门铃的换版。
 func TestTheRevisionWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	commissions, _, _, _, _ := newCommissionStores(t)

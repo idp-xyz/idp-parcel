@@ -177,7 +177,7 @@ func unformedEntry(t *testing.T, key ports.ActualFulfillmentUnformedKey, endedAt
 	return entry
 }
 
-// Covers: AT-TF-302 的库面一半（S，ADR-0231 决定六）——未形成册：立一条、再答刷新（首次答复时刻不动）；了结为已形成或不计费之后不上列；
+// Covers: AT-TF-302 的库面一半、AT-TF-304 的按租户隔离（S，ADR-0231 决定六）——未形成册：立一条、再答刷新（首次答复时刻不动）；了结为已形成或不计费之后不上列；
 // 册上没有的了结什么也不写；已形成的再答未形成又回到列上。列表只列本租户未形成的、参与终点最早的在前。
 func TestTheUnformedRegisterTracksAndListsOnlyWhatIsStillUnformed(t *testing.T) {
 	pool := pgtest.Pool(t)
@@ -253,7 +253,7 @@ func TestTheUnformedRegisterTracksAndListsOnlyWhatIsStillUnformed(t *testing.T) 
 	}
 }
 
-// TestTheUnformedRegisterRefusesWhatItCannotHold 证写口的确定性拒绝：无环境事务、库面约束不让写（问过的那一版与那一格对不上）都带
+// Covers: AT-TF-303 的存储半边——写口的确定性拒绝：无环境事务、库面约束不让写（问过的那一版与那一格对不上）都带
 // ErrActualFulfillmentUnformedWriteRefused，补形成据此按缺陷处置、不当成此刻写不动去重投。
 func TestTheUnformedRegisterRefusesWhatItCannotHold(t *testing.T) {
 	pool := pgtest.Pool(t)
@@ -291,7 +291,7 @@ func TestTheUnformedRegisterRefusesWhatItCannotHold(t *testing.T) {
 	}
 }
 
-// TestTheCatchUpDoorbellsRefuseToRunOutsideATransaction 证两封门铃的交出口无环境事务即拒：门铃要与采用连线、换版同一笔落，事务外入队
+// Covers: AT-TF-303 的存储半边——两封门铃的交出口无环境事务即拒：门铃要与采用连线、换版同一笔落，事务外入队
 // 就是一封与采用或换版脱了钩的门铃。
 func TestTheCatchUpDoorbellsRefuseToRunOutsideATransaction(t *testing.T) {
 	pool := pgtest.Pool(t)
