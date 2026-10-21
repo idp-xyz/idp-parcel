@@ -1,7 +1,7 @@
 # 10 横切文档：GLOSSARY、CONTEXT-MAP、SCENARIOS、产品文档、协作文档
 
 Category: enhancement
-Status: in-progress——10a 完工待评审与进 main，分支 claude-dc10a；10b 待开。此前 ready-for-agent——2026-10-21 协调方立（文档自洽修订最后一张，见 [README](../README.md)「修订执行」）
+Status: in-progress——10a 已进 main（见「10a 进 main 记录」）；10b 评审已修，待随 10a rebase 做词汇对齐后进 main。此前 in-progress——10a 完工待评审与进 main，分支 claude-dc10a；10b 待开。此前 ready-for-agent——2026-10-21 协调方立（文档自洽修订最后一张，见 [README](../README.md)「修订执行」）
 Blocked by: 03、04、05、06、07、08、09 进 main（它们的「交横切」一节是本票的输入）
 出处：[audit/cross.md](../audit/cross.md) 里 GLOSSARY（GL）、CONTEXT-MAP（CM）、SCENARIOS（SC）、产品基线诸件（PB）、试点三件（PL）、docs/agents 与 AGENTS.md（AG）各条，以及其中 B 类；03–09 各票的「交横切」一节；[01](./01-adr-suspension-chains.md)「交后续」交给本票的条目。
 
@@ -226,3 +226,9 @@ cross 的 B2、B3 两簇 B 类（B2-04、B2-10、B3·1、B3·2、B3·3、B3·6�
 | 建议 6 | GLOSSARY「签约服务商」新句没有出处 | 改为指明 TF CONTEXT 的角色集含它、PC CONTEXT 的不含 |
 | 建议 7 | ADR-0274「扩到」是停用动词 | 改为「本就涵盖代收与清分」 |
 | 建议 8 | 场景二用位置引用指下一步；CONTEXT-MAP 新挂票号；票面步号引用 | 场景二点名 PS CONTEXT 那条硬限制解除规则；去掉新挂的 `pp-pricing-input-seams/04`；票面场景步号改为点名那一步的内容 |
+
+## 10a 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-dc10a` tip `7d30868cb` 在 main `37f9d7747` 上快进；隔离评审 4 条阻断全部消掉，协调方抽核 B1（ADR-0274 Context 不再把相反入口归到 ADR-0082）与 B2（ADR-0183 挂「由 ADR-0275 回答」）。
+- 协调方随后在 tip 上单独提交：重生成 `docs/adr/README.md`、重算 AT 盘点总览计数（UC-CR-001 新增 `AT-CR-001`–`023`）；两者 `-check` 退 0。机制清点重生成无变化；`go build ./...` 干净。只动文档，免全量真库测试。
+- 去向：代码票 code/54、55、56；归 10b 的条目见上。审计 cross.md B2、B3 两簇里 B2-04、B2-10、B3·1、B3·2、B3·3、B3·6、B3·8 七条不在本票出处范围、03–09 也没接，由协调方另立票。
