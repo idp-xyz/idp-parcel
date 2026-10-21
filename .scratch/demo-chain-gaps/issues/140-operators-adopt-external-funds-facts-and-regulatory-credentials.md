@@ -1,7 +1,7 @@
 # 140 管理台手工采用外部资金事实与监管凭证：操作者渠道入口
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg140。此前 in-progress——2026-10-21 认领；ready-for-agent——2026-10-20 代决复核立（上线前必修），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: resolved——2026-10-21 进 main（全量钉 `bc5a574d`：`scripts/test-full.sh` 158 ok / 0 FAIL；admin-web 三道门退 0；见文末「进 main 记录」）；逐字段表单转票 [156](./156-admin-web-manual-external-fact-forms-replace-json-entry.md)，集成客户端记提交方转票 [157](./157-integration-client-adoptions-record-the-submitting-client.md)，集成客户端登记口请求体上限转票 [159](./159-integration-client-registration-faces-cap-the-request-body.md)，资金事实并发撞键不比内容归票 [125](./125-concurrent-same-source-results-with-different-content-answer-existing-result.md)。此前 in-progress——完工待评审与进 main，分支 claude-dcg140。此前 in-progress——2026-10-21 认领；ready-for-agent——2026-10-20 代决复核立（上线前必修），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 R1；ADR-0149 决定一、三
 
@@ -85,3 +85,6 @@ Blocked by: 无
 
 变基记录（2026-10-21，协调方通知后办）：票 70 进 main 后变基到 `4d181b01`。冲突逐处取两边并集：`internal/accessidentity/operation_decision.go`（`DecisionDeliveryDispatchReask` 与本票两种并存）、`scripts/demo-seeds/README.md` 配置员授予那一行、ADR-0151 的 Status 行与 Links（ADR-0230 与 ADR-0236 两条部分停用并存）。迁移 `access_identity/0021` 改名 `0020`、CHECK 改以 0019 为底；种子权威区间 `data/governance/45`、`46` 改到 `46`、`47`（45 已被票 70 的派送重问占）；`data/access/02`、`03` 票 70 没有动（它另起 `09`、`10`），本票的行原样；步 `470` 仍空。
 
+## 进 main 记录
+
+2026-10-21 协调方合入。作者在评审修订后、票 70 进 main 之后把分支变基到 `4d181b01`（即当时 main；access_identity 迁移改为 0020、以 0019 为底加两词；种子权威区间改为 `data/governance/46`、`47`；`settlement_accounting/0041` 保持，票 14 让号到 0042、0043），因此不需重放，分支 SHA 原样进 main（`37e4ef88`…`73b82de4`）。其上按 parallel-sessions.md 重生成 ADR 索引、重算 AT 盘点计数、重生成机制清点（`bc5a574d`），各自单独成笔；`adr-index -check` 与 `at-coverage-counts -check` 退 0。在干净的隔离树上对 `bc5a574d` 跑 `go build ./...`、`go vet ./...`、`gofmt -l` 干净，`scripts/test-full.sh` 全量 158 ok、0 FAIL（`-count=1`，无缓存），admin-web 三道门（Node 22：tsc、run-tests、vite build）退 0；推 `bc5a574d:main`。迁移落号：`access_identity/0020`、`settlement_accounting/0041`、`customs_compliance/0026`（均连号）。
