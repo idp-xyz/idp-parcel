@@ -41,3 +41,11 @@ S：只改注释，`go build`、`go vet` 不受影响。
 ## 要裁的
 
 无。已接受订舱要不要可撤回是另一件事，不在本票裁。
+
+## 追加（2026-10-21，文档自洽 08）
+
+[ADR-0264](../../../docs/adr/0264-capacity-assurance-is-required-on-load-assignments-only-and-neither-a-confirmed-booking-nor-a-departure-reads-capacity.md) 裁定确认订舱不挂容量保障（部分停用 ADR-0203 决定一里确认订舱那一半），于是又有一处注释过时，并进本票一起改：
+
+- `application/commission_transport.go` 的 `SubmitBooking` 头注「确认订舱与容量的关系另归一张票」一句：改为确认订舱不读池、不要预占引用，容量保障只挂在装载分配上（ADR-0264 决定一、二）。
+
+同一条注释里「委托在册且未取消」「订舱不占容量」等其余说法不变。
