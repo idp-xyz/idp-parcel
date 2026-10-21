@@ -67,8 +67,8 @@ type DeliveryDispatchPendingRecord struct {
 	SettledAt time.Time
 }
 
-// DeliveryDispatchPendingRegister 是执行器写册的各口，都要环境事务：册上那一行与执行器那一拍的其余写入同笔。各口都把最近一次问
-// 的时刻记成这一拍。
+// DeliveryDispatchPendingRegister 是执行器写册的各口，都要环境事务：册上那一行与执行器那一拍的其余写入同笔。写到行的那几口把
+// 最近一次问的时刻记成这一拍；HoldFormation 不写行，RecordMissing 遇已形成的那一条也不写。
 //
 //   - RecordMissing：立一条，或把待形成、已作罢的那一条刷新为待形成，入场依据、缺件与最近一次答复时刻取这一次；首次答复时刻只在
 //     立的那一刻写。已形成的不动。

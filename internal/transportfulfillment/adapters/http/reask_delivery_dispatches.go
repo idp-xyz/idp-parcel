@@ -69,7 +69,8 @@ type deliveryDispatchReaskResponse struct {
 	IntervalMinutes int64                       `json:"intervalMinutes,omitempty"`
 	DueBy           string                      `json:"dueBy,omitempty"`
 	Items           []deliveryDispatchReaskItem `json:"items"`
-	// Remaining 一律在场：这一次没问到的件数，零也照写——零就是册上该问的这一次都问到了。
+	// Remaining 一律在场：问过了时是这一次没问到的件数，零就是册上该问的这一次都问到了；未受理、未配置、未决时这一次没有问，
+	// 它也是零，那时看 outcome。
 	Remaining int `json:"remaining"`
 }
 

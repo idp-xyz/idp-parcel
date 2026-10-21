@@ -23,13 +23,11 @@ import (
 // 同一封信扇出给两路、各记各的 inbox 账，本路还会停在三条派送要求缝与任务登记册上，合用一份会把 VE 没有的格子也宣布成
 // 「等依赖」。
 //
-// tfapplication.ErrDeliveryDispatchPendingUnavailable 在名单里：答复得出了、派送待形成册写不动，整拍随 inbox 那一笔回滚，册读写得
-// 动之后原样重投即过（ADR-0230 决定一）。
+// 名单只收「此刻读不动、写不动」这一类：某一口读不到、派送待形成册取锁或写入时读写不动（ADR-0230 决定一），原样重投即过。
 //
-// 不在名单里：tfinbox.ErrDeliveryDispatchOnHandoverDefect（本上下文自己交出的键或命令过不了自己的门、装配缺一条缝、执行器
-// 答出封闭集合以外的格）、tfapplication.ErrObjectActiveInSeveralSegments（库面不一致）、
-// tfapplication.ErrUnexpectedDispatchTaskOutcome、tfapplication.ErrDeliveryDispatchPendingRegisterNotWired（装配没交册）、
-// tfapplication.ErrDeliveryDispatchPendingRefused（册的写口确定性地拒了：没有事务、约束不让写）——重投都不会变。`要求缺失`不在任何名单里：它入账不重投，不是错误（ADR-0216 决定三）。
+// 不收的是重投不会变的那几类：本上下文自己交出的键或命令过不了自己的门、装配缺件（缺一条缝、没交册）、执行器答出封闭集合以外
+// 的格、库面不一致、册的写口确定性地拒写——它们落发布失败，响给人看。`要求缺失`不在任何名单里：它入账不重投，不是错误
+// （ADR-0216 决定三）。
 var deliveryDispatchOnHandoverUndecidedSentinels = []error{
 	tfinbox.ErrDeliveryDispatchOnHandoverUndecided,
 	tfapplication.ErrDeliveryDispatchPendingUnavailable,

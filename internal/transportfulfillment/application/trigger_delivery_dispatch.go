@@ -21,10 +21,11 @@ var (
 	// ErrDeliveryDispatchPendingRegisterNotWired 说明装配没交派送待形成册。它不是一格答复：缺了它，`要求缺失`就又回到只在那一次
 	// 答复里出现一次（ADR-0230 决定一），宁可这一拍不答。
 	ErrDeliveryDispatchPendingRegisterNotWired = errors.New("transport fulfillment: delivery dispatch pending register is not wired")
-	// ErrDeliveryDispatchPendingUnavailable 说明这一拍的答复已经得出，写进派送待形成册时读写不动。整拍不答、随事务回滚：册上
-	// 那一行与这一拍的任务同笔，答复出去了而册没跟上，就是一件没人看得见的待形成。原样重跑这一拍即可。
+	// ErrDeliveryDispatchPendingUnavailable 说明派送待形成册那一侧此刻读写不动：取形成锁时（这一拍还没有答复），或答复得出之后
+	// 写册时。整拍不答、随事务回滚：册上那一行与这一拍的任务同笔，答复出去了而册没跟上，就是一件没人看得见的待形成。原样重跑这一拍
+	// 即可。
 	ErrDeliveryDispatchPendingUnavailable = errors.New("transport fulfillment: delivery dispatch pending register unavailable")
-	// ErrDeliveryDispatchPendingRefused 说明册的写口确定性地拒了这一笔（没有环境事务、库上的约束不让写）。整拍同样不答、随事务回滚，
+	// ErrDeliveryDispatchPendingRefused 说明册那一侧确定性地拒了这一笔（取锁或写册时没有环境事务、库上的约束不让写）。整拍同样不答、随事务回滚，
 	// 但它是装配或本上下文自己的缺陷：原样重跑一万次都一样，不能当成等得来的依赖去重投。
 	ErrDeliveryDispatchPendingRefused = errors.New("transport fulfillment: delivery dispatch pending write refused")
 )
