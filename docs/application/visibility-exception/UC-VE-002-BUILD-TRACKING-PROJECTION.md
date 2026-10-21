@@ -89,10 +89,13 @@
 | `AT-VE-190` | 移动事实没声明段、声明的段不在册，或那一刻段里没有在控对象 | 入账不派生，不报错、不重投；段不在册的那一条，对象日后凭`已交接`或对象级场外揽收进段时由那一封控制事实信封补派生（`AT-VE-178`） |
 | `AT-VE-191` | 移动事实那一路回读事实或段册读不动、派生停在未决 | 整封回滚、记未决待重投；键不符或引用译不出记发布失败，不当未决 |
 | `AT-VE-192` | 移动事实的更正版到达 | 投影条目带替代关系回指前版，被替代的前版不参与派生 |
+| `AT-VE-196` | 移动事实声明的段里那一刻在控的是一袋（集运单元），出发、移动、到达任一种；或事实先于段登记、袋后凭控制事实进段 | 投到袋里事实发生那一刻的每件直接成员身上，事实引用取成员自己的包裹，与它直接在段里时同一把键；袋本身不立追踪投影；那一刻已出袋、之后才装进的不投；同一封信重投、正常路径与补派生先后到达都只留一份 |
+| `AT-VE-197` | 袋里套袋、同一件既在袋里又直接在段里或被几袋同时指名、成员关系成环；成员身份此刻不成立；袋那一刻什么也不装 | 逐层展开到包裹，每件只投一次；身份不成立的那一件入账不派生，不挡其余各件；空袋没有可投的成员 |
+| `AT-VE-198` | 问节点作业成员关系或成员身份读不动；节点作业答了却立不成成员（答复译不回、身份链判不下来、成员种类在封闭集外） | 前者整封回滚、记未决待重投，一份也不派生；后者记发布失败，不当未决 |
 
-移动事实已形成那一路的消费验收是上表 `AT-VE-189`–`192`（投影派生、入账不派生、未决分格、更正替代；[ADR-0205](../../adr/0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md) 文末补记），阻断信号那一半在 [UC-VE-004](./UC-VE-004-TRIAGE-SIGNALS-AND-OPEN-CASES.md)。先于段登记的移动事实由交接或对象级揽收那一封补派生，验收是上表 `AT-VE-178`–`182`（[ADR-0224](../../adr/0224-tracking-backfills-movement-facts-recorded-before-their-segment-when-a-control-fact-puts-the-object-in-it.md)）；运输履约一侧的移动事实登记与按段列出事实的读口在 [UC-TF-005](../transport-fulfillment/UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md)。
+移动事实已形成那一路的消费验收是上表 `AT-VE-189`–`192`（投影派生、入账不派生、未决分格、更正替代；[ADR-0205](../../adr/0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md) 文末补记），阻断信号那一半在 [UC-VE-004](./UC-VE-004-TRIAGE-SIGNALS-AND-OPEN-CASES.md)；段里在控的集运单元按事实那一刻的成员展开，正常路径与补派生同一处，验收是上表 `AT-VE-196`–`198`。先于段登记的移动事实由交接或对象级揽收那一封补派生，验收是上表 `AT-VE-178`–`182`（[ADR-0224](../../adr/0224-tracking-backfills-movement-facts-recorded-before-their-segment-when-a-control-fact-puts-the-object-in-it.md)）；运输履约一侧的移动事实登记与按段列出事实的读口在 [UC-TF-005](../transport-fulfillment/UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md)。
 
-`AT-VE-046` 的现状缺口：移动事实那一路与补派生在段里取到的在控对象若是袋或集运单元，全程追踪今天把它当一件包裹投影，袋里的成员拿不到这条移动事实——与本行和 CONTEXT「集运、装载或同批关系不合并包裹身份和客户轨迹」相反。由票 [demo-chain-gaps/123](../../../.scratch/demo-chain-gaps/issues/123-tracking-projects-a-departing-bag-as-one-parcel-and-its-members-get-no-departure.md) 补齐，本行预期结果不变。
+`AT-VE-046` 的移动事实那一半已补（票 [demo-chain-gaps/123](../../../.scratch/demo-chain-gaps/issues/123-tracking-projects-a-departing-bag-as-one-parcel-and-its-members-get-no-departure.md)）：移动事实那一路与补派生在段里取到的在控对象是袋或集运单元时，投到它那一刻的成员身上，袋本身不再当一件包裹投，验收见上表 `AT-VE-196`–`198`；本行预期结果不变。
 
 `AT-VE-043` 的现状缺口：替代链分叉今天先按业务时间裁决，裁得出就不立信号，两个后继照常派生里程碑；分叉只在当前有效集里找，源上下文更正其中一支后就检测不到；分叉关系也不随投影版本存下。由票 [docs-consistency/code/30](../../../.scratch/docs-consistency/code/30-forked-supersession-is-judged-by-business-time-and-not-kept-pending.md) 补齐，本行预期结果不变。
 
