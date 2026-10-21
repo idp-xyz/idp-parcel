@@ -67,6 +67,15 @@ const (
 // 依据引用，依 party-commercial 的授权交付关系确认交接单对那个客户账户的绑定。只能确认、不能否认——否认是客户账户自己的话，走客户面。
 const DecisionDeliveryHandoverConfirmation DecisionKind = "DELIVERY_HANDOVER_CONFIRMATION"
 
+// 关务立案、提交授权确认与申报提交执行（ADR-0227 决定一、二）：三者都是运营人员作出的生产决定，各成一种。批准与实际提交
+// 分开授予——关务 CONTEXT 要求请求、批准、撤销与实际提交权限分别表达，持其中一种不因此取得另一种；首发不启用生产自动申报，
+// 提交只经持后一种授予的人逐次发起。
+const (
+	DecisionCustomsCaseEstablishment       DecisionKind = "CUSTOMS_CASE_ESTABLISHMENT"
+	DecisionCustomsSubmissionAuthorization DecisionKind = "CUSTOMS_SUBMISSION_AUTHORIZATION"
+	DecisionCustomsDeclarationSubmission   DecisionKind = "CUSTOMS_DECLARATION_SUBMISSION"
+)
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -80,6 +89,7 @@ var decisionKinds = []DecisionKind{
 	DecisionBookingRequestSubmission,
 	DecisionFulfillmentSegmentCommissionAdoption, DecisionTransportCommissionCancellation, DecisionBookingRequestCancellation,
 	DecisionDeliveryHandoverConfirmation,
+	DecisionCustomsCaseEstablishment, DecisionCustomsSubmissionAuthorization, DecisionCustomsDeclarationSubmission,
 }
 
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。
