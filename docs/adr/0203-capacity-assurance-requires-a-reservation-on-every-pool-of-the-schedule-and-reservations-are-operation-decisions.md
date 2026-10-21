@@ -95,7 +95,7 @@ Date: 2026-10-19
 
 - [ADR-0151：未归族的命令口定族](./0151-unassigned-command-faces-get-their-families.md)：决定三的定族判据与「每口一种决定」的先例
 - [ADR-0201：运输机会](./0201-schedule-templates-materialize-concrete-schedules-by-date-and-preparation-answers-not-configured-on-an-empty-register.md)：池身份、建池走登记册配置写与「登记口不改池」
-- [ADR-0202：运输委托、订舱与承运答复的入口族与协议核对](./0202-transport-commission-booking-and-carrier-answer-entry-families-and-supplier-agreement-check.md)：确认订舱那一半（票 37）所在的订舱面
+- [ADR-0202：运输委托、订舱与承运答复的入口族与协议核对](./0202-transport-commission-booking-and-carrier-answer-entry-families-and-supplier-agreement-check.md)：订舱面所在；确认订舱那一半原归票 37，已由 ADR-0264 停用，票 37 改为逐订舱的消费关系
 - [ADR-0264](./0264-capacity-assurance-is-required-on-load-assignments-only-and-neither-a-confirmed-booking-nor-a-departure-reads-capacity.md)：后继——部分停用决定一一句里的确认订舱，容量保障只挂在装载分配上
 - [ADR-0022](./0022-http-status-carries-answer-formed-not-business-verdict.md)、[ADR-0029](./0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md)：各格答 200 且按续办分开
 - [ADR-0023](./0023-work-fact-identity-and-time-are-minted-by-the-device.md)：判断时点由声明方给

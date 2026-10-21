@@ -35,7 +35,7 @@
 | 触发 | 有效运输机会、节点侧准备范围或受授权的运输需求 |
 | 成功结束 | 对明确范围形成运输准备结果，可进入权威交接 |
 | 部分结束 | 只有部分范围被接受、预占或分配 |
-| 待补充结束 | 协议、对象、容量、责任或外部结果不足 |
+| 未成结束 | 协议核对不过（四个协议否定格）、引用不在册或不可订（委托、班次、订舱），或订舱还没有答复、读作待确认；各格见结果语义契约 |
 | 拒绝结束 | 明确规则拒绝承担相应范围 |
 | 未形成结束 | 外部提交、并发或技术处理未完成 |
 
@@ -104,7 +104,7 @@
 | 2 | `transport-fulfillment` | 固定供应商协议、履约条件和成本来源快照 | 商业版本变化不覆盖本次请求 |
 | 3 | `transport-fulfillment` | 建立运输委托并提交订舱申请 | 保存请求和外部关联 |
 | 4 | 承运方/伙伴接入 | 经集成客户端交来订舱答复 | 记承运答复五值（接受、拒绝、失效、撤回、候补），接受带接受量；没有答复时订舱读作待确认；答复不读池 |
-| 5 | 运输运营 | 按需另作容量预占或释放（运营决定，[ADR-0203](../../adr/0203-capacity-assurance-requires-a-reservation-on-every-pool-of-the-schedule-and-reservations-are-operation-decisions.md) 决定三、[ADR-0264](../../adr/0264-capacity-assurance-is-required-on-load-assignments-only-and-neither-a-confirmed-booking-nor-a-departure-reads-capacity.md) 决定二） | 硬上限按预占整段判，超出答 `CAPACITY_EXCEEDED`、不可越过（ADR-0203 决定四）；承运答复不触发预占 |
+| 5 | 运输运营 | 按需另作容量预占或释放（运营决定，[ADR-0203](../../adr/0203-capacity-assurance-requires-a-reservation-on-every-pool-of-the-schedule-and-reservations-are-operation-decisions.md) 决定三、[ADR-0264](../../adr/0264-capacity-assurance-is-required-on-load-assignments-only-and-neither-a-confirmed-booking-nor-a-departure-reads-capacity.md) 决定二） | 硬上限按预占整段判，超出答 `CAPACITY_EXCEEDED`（`application.PrepareTransportOpportunityHandler.Reserve` 的 `OpportunityOutcome`）、不可越过（ADR-0203 决定四）；承运答复不触发预占 |
 | 6 | `transport-fulfillment` | 形成装载分配和运输单证版本 | 不形成物理装载或交接 |
 | 7 | `transport-fulfillment` | 对订舱、取消和其他适用准备结果形成运输收费发生项：订舱取已接受的承运答复，取消取尚未开始范围的订舱取消，采购上下文取订舱所属委托的快照（[ADR-0207](../../adr/0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md)「补记：票 28 落地时的补充裁定」） | 只固定发生事实；金额交给 `settlement-accounting` |
 | 8 | `transport-fulfillment` | 原子保存结果、审计和发布意图 | 发布失败只重试原意图 |
@@ -149,7 +149,7 @@
 
 | ID | 场景 | 预期结果 |
 |---|---|---|
-| `AT-TF-039` | 运输委托提交但承运方尚未响应 | 委托和订舱待确认，不形成承运接受或交接 |
+| `AT-TF-039` | 运输委托提交但承运方尚未响应 | 委托已提交，订舱读作待确认，不形成承运接受或交接 |
 | `AT-TF-040` | 承运方只接受部分数量 | 保存申请/接受/未接受范围，不把整批标记接受 |
 | `AT-TF-041` | 订舱确认但无容量预占依据 | 保留订舱结果，不能伪造有效预占；确认订舱不要预占引用、不读池（[ADR-0264](../../adr/0264-capacity-assurance-is-required-on-load-assignments-only-and-neither-a-confirmed-booking-nor-a-departure-reads-capacity.md) 决定一） |
 | `AT-TF-042` | 物理硬容量不足 | 拒绝超出范围，人工不能绕过 |
@@ -241,5 +241,6 @@
 | 整份委托或尚未订舱的取消费 | 取消发生项只认订舱一级的取消 | 票 demo-chain-gaps/76 |
 | 装载分配的变化与撤回 | 生产上只有形成首版一口；`AT-TF-180` 的改版与撤回只在领域与存储一侧成立 | ADR-0203「补记：票 21 落地时的补充裁定」越权风险点 14 |
 | 订舱与答复的查阅面 | 订舱册与答复册今天没有读面 | ADR-0202 越权风险点 15；票 demo-chain-gaps/48 |
+| 软容量的受控超配（`AT-TF-043`） | 今天池只有一个硬上限，预占口没有软超配阈值与审批的输入格，超出一律答 `CAPACITY_EXCEEDED`（`AT-TF-139`）；`AT-TF-043` 走不到 | ADR-0203 决定四（硬上限不可越过）；软超配的阈值与审批尚未立票 |
 
 完成本用例只证明运输准备、承运接受和运输收费发生事实可被追溯；可执行价格和纯评价由 `parcel-pricing` 形成，供应商预期成本、账单主张和审核应付由 `settlement-accounting` 形成，权威运输交接、实际承运、移动、交付和包裹终局由后续用例分别形成。

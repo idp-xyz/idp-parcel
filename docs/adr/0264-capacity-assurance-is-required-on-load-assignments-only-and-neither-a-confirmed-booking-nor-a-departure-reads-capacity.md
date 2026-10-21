@@ -9,7 +9,7 @@ Date: 2026-10-21
 - [ADR-0203](./0203-capacity-assurance-requires-a-reservation-on-every-pool-of-the-schedule-and-reservations-are-operation-decisions.md) 决定一要求「装载分配或确认订舱」所在班次挂了容量池，就逐池引用当前有效预占并声明分配量；装载分配那一半由票 21 落地，确认订舱那一半归票 demo-chain-gaps/37，该票一直停在 needs-triage。
 - 确认订舱的提交方是承运系统：答复走集成客户端族（[ADR-0202](./0202-transport-commission-booking-and-carrier-answer-entry-families-and-supplier-agreement-check.md) 决定二），线格式里没有预占引用，承运方也不知道本上下文的预占。判据挂在这一口上，答复方永远答不出来。
 - 代码：`application.CommissionTransportHandler.AnswerBooking` 对`接受`不读池、不要预占引用；UC-TF-004 `AT-TF-041` 写「订舱确认但无容量预占依据 | 保留订舱结果，不能伪造有效预占」。ADR-0202 越权风险点 17 记着「承运方接受的量可以超过那一班池上的余量」，等票 37。
-- 另一处（取证于 main `3619f5c0e`，下面引的 TF CONTEXT、UC 原句随票 docs-consistency/08 改写）：TF CONTEXT「运输委托、订舱、容量与装载」要求需求快照变化时「以新快照重新校验尚未完成的预占、分配、舱单范围和出发门禁」，UC-TF-003 写「在预占、分配、舱单冻结和出发前重新校验」，`AT-TF-089` 写「出发门禁仍引用过期需求快照 | 阻断出发范围并要求重评」。可「出发门禁读数」在 TF 是关务五格读数的专名，出发一律落册、读数不挡（[ADR-0205](./0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md)）；`domain.DepartureGateReading` 与 `application.ReadDepartureGate` 都没有容量或需求快照输入。需求快照过期挂在哪个门上，没有记录裁过。
+- 另一处（取证于 main `3619f5c0e`，下面引的 TF CONTEXT、UC 原句随票 docs-consistency/08 改写）：TF CONTEXT「运输委托、订舱、容量与装载」要求需求快照变化时「以新快照重新校验尚未完成的预占、分配、舱单范围和出发门禁」，UC-TF-003 写「在预占、分配、舱单冻结和出发前重新校验」，`AT-TF-089` 写「出发门禁仍引用过期需求快照 | 阻断出发范围并要求重评」。可「出发门禁读数」在 TF 是关务五格读数的专名，出发一律落册、读数不挡（[ADR-0205](./0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md)）；`domain.DepartureGateReading`、`application.DepartureGateReader.Read` 与端口 `ports.DepartureGateView.ReadDepartureGate` 都没有容量或需求快照输入。需求快照过期挂在哪个门上，没有记录裁过。
 
 ## Decision
 
@@ -38,6 +38,7 @@ Date: 2026-10-21
 ## 对已接受记录的作用
 
 - **部分停用** ADR-0203 决定一「装载分配或确认订舱所在的具体班次只要登记了至少一个容量池，就必须对该班次的每个池引用一份当前有效预占，并逐池声明分配量；没有登记容量池的班次不要求。」一句。**适用场景**：只限句中的确认订舱——承运方确认订舱不要预占引用、不读池。装载分配照旧适用这一句；决定一其余几句、决定二至六不变。
+- ADR-0203 决定一小标题「（产品策略；票 21 落装载分配，票 37 落确认订舱）」与 Consequences「票 21 在决定一、二之内落装载分配的容量关系；票 37 落确认订舱。」里的「票 37 落确认订舱」随决定一那一句里确认订舱的停用一并作废，票 37 改为逐订舱的消费关系（决定四）。
 - ADR-0202：越权风险点 17「接受量不对班次余量判」由本记录决定一回答，无条款停用。
 - ADR-0205：不停用。本记录决定三是它「出发一律落册」的直接推论，写在这里只为把 TF CONTEXT 那一句里的「出发门禁」拿掉。
 
