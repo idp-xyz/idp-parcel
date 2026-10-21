@@ -89,7 +89,7 @@
 | 输入组 | 权威来源 | 最低业务语义 | 使用约束 |
 |---|---|---|---|
 | 判断请求 | `parcel-shipment` | 请求关联、委托、提交版本、包裹、服务目的、判断适用时点和发起原因 | 同一请求版本必须稳定；不得仅凭客户参考号形成全局身份 |
-| 包裹声明 | `parcel-shipment` | 客户地址的地理解析投影；声明测量、货物、申报原始资料及各自版本 | 地理投影随判断请求携带，`network-routing` 不回读、不留存地址本体，只留投影的版本化内容摘要（[ADR-0075](../../adr/0075-customer-address-is-carried-with-the-routing-request.md)）；声明测量、货物与申报资料不由本上下文读取：关务资格经关务适用性判断引用，候选成本由 `parcel-pricing` 按各候选的计价依据算出（[ADR-0148](../../adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定一）；不得改写或推导节点实测 |
+| 包裹声明 | `parcel-shipment` | 客户地址的地理解析投影；声明测量、货物、申报原始资料及各自版本 | 地理投影随判断请求携带，`network-routing` 不回读、不留存地址本体，只留投影的版本化内容摘要（[ADR-0075](../../adr/0075-customer-address-is-carried-with-the-routing-request.md)）；声明测量只在组装候选成本的计价输入时，由 NR 侧的 `parcel-pricing` 消费方适配器取客户声明快照（[ADR-0148](../../adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定四第 7 条）；货物与申报资料经关务适用性判断引用（ADR-0148 决定一）；不得改写或推导节点实测 |
 | 服务要求 | `parcel-shipment` | 客户请求的服务范围、时间要求、寄收件关系和具有约束力的客户要求 | 普通偏好与合同承诺必须区分 |
 | 商业资格 | `party-commercial` | 责任法人、服务产品与合同版本、网络使用资格、适用区域和商业渠道约束 | 客户声明不能替代权威商业版本 |
 | 网络依据 | `network-routing` | 服务区域、节点覆盖、拓扑、连接、线路、服务日历、时区、截单、可用性调整和路由策略版本 | 稳定网络与临时调整分别引用，不覆盖历史 |

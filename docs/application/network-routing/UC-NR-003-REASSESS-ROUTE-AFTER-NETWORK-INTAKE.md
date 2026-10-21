@@ -92,10 +92,11 @@
 | 无当前有效路由 | 原计划已经失效或原先无计划，且尚无新的当前有效计划；替代候选可以仍在评估 | 原计划历史、计划失效依据、候选评估状态、判断时点和阻断范围 | 为等待候选继续使用失效计划、占位路线、自动取消、终局失败或默认交出 |
 | 改路建议已形成 | 存在候选，但不满足自动改路条件，或自动条件都满足而最低成本并列、选不出唯一一条，需要授权决定 | 建议、原因、候选、影响、当前计划状态和授权入口；并列时原因逐家点名并列候选 | 建议直接改计划或绕过硬限制；并列时按候选标识或任何无业务依据的次序自动改路 |
 | 替代候选评估未决 | 当前计划适用性已经独立判断，但候选来源、资格、网络或限制尚不足；或候选在而排序选不出唯一一条（原先无路由的包裹遇最低成本并列时不形成首个计划，记在这一格） | 当前计划适用性结果、已评估候选、缺口和续办引用 | 覆盖已确定的计划失效，或默认选择候选 |
+| 复核未决 | 依赖读不动，或结果提交技术上不确定：复核登记册或路由历史读不回、证据读不动、适用性或复核库写不进、取号依赖故障、未判原因写不进。复核编排答 `UNDECIDED`（`ReassessUndecided`） | 未决原因（`REASSESS_LOG_UNAVAILABLE`、`ROUTING_HISTORY_UNAVAILABLE`、`REASSESS_EVIDENCE_UNAVAILABLE`、`APPLICABILITY_STORE_UNAVAILABLE`、`REASSESS_STORE_UNAVAILABLE`、`REASSESS_IDENTITY_UNAVAILABLE`；今天另有 `PLAN_REVIEW_INCONCLUSIVE`，照 ADR-0250 移入`触发未判`，见 [docs-consistency/code/28](../../../.scratch/docs-consistency/code/28-unclear-plan-applicability-in-reassessment-is-retried-instead-of-settled.md)）与续办引用；消费侧登本路未决哨兵，回滚重投 | 落复核、入账未判、入账跳过；默认保留、默认失效或选默认候选 |
 | 已有结果 | 同一触发和输入版本已经处理 | 原适用性、计划、无路由或建议引用 | 重复计划、决定或发布意图 |
 | 触发冲突 | 同一触发身份携带不同事实或版本 | 原触发、冲突内容和纠正入口 | 覆盖原判断 |
 | 触发未判 | 触发已保全，这一次不形成判断：判断的前提缺了且重投推不动——没有路由历史可复核、判断时点的证据未配置、原计划仍可执行而冻结形态未配置（[ADR-0235](../../adr/0235-route-reassessment-settles-what-a-retry-cannot-change-and-does-not-judge-triggers-older-than-the-current-position.md)）、原计划适用性看不清（选中候选的限制状态未知，[ADR-0250](../../adr/0250-unclear-plan-applicability-in-reassessment-is-settled-as-not-judged-and-resume-in-the-same-change-stays-in-the-acceptance-chain.md)）；或触发的业务时间早于当前控制位置（触发早于当前控制位置，[ADR-0235](../../adr/0235-route-reassessment-settles-what-a-retry-cannot-change-and-does-not-judge-triggers-older-than-the-current-position.md)） | 触发关联、判断键、原因、触发业务时间；适用性看不清时另记取数侧交回的缺口与再判条件；早于当前控制位置时另记比较所用的当前控制位置时刻 | 占着投递回滚重投、空耗派发预算；默认保留、默认失效或选默认候选；据较早的位置失效或改路 |
-| 触发未受理 | 来源不构成复核触发：只有普通扫描、位置一类线索，没有节点收寄或权威运输控制依据 | 不落复核、不入账未判；答`TRIGGER_NOT_ACCEPTED` | 建立当前可控节点、据线索失效或改路、回滚重投 |
+| 触发未受理 | 来源不构成复核触发：只有普通扫描、位置一类线索，没有节点收寄或权威运输控制依据。复核编排答 `TRIGGER_NOT_ACCEPTED`，不落复核、不入账未判 | 无 | 建立当前可控节点、据线索失效或改路。收寄采用与交接两路的触发由消费侧适配器从权威记录译出，编排对它们答到这一格是适配器缺陷，适配器响亮失败、信封回滚，不当成业务答案入账 |
 
 如果原计划已被硬限制证明失效，即使替代候选暂时无法完成评估，也不能把它继续标记为适用；应提交“原计划已失效 + 无当前有效路由 + 替代候选评估未决”。原计划适用性本身看不清（选中候选的限制状态未知）时入账为`触发未判`、计划与适用性都不动（[ADR-0250](../../adr/0250-unclear-plan-applicability-in-reassessment-is-settled-as-not-judged-and-resume-in-the-same-change-stays-in-the-acceptance-chain.md)）；只有依赖读不动或结果提交技术上不确定时，才答未决、回滚重投。
 
@@ -176,7 +177,7 @@
 | `AT-NR-037` | 原线路不再合格（有效硬限制或当前有效实测），包裹在当前可控节点上，存在替代候选且允许自动改路 | 替代候选比失效计划便宜、差额严格大于阈值时形成改路决定与新计划，保留旧计划及已执行前缀；差额不超过阈值时只形成建议，阻塞原因 `IMPROVEMENT_BELOW_THRESHOLD`（[ADR-0173](../../adr/0173-auto-reroute-is-folded-from-the-strategy-version.md) 决定三）。新路由指令与实测触发未实现，见「给开发的交接」 |
 | `AT-NR-038` | 原计划失效且没有替代候选 | 形成无当前有效路由，阻止方向性作业但允许安全作业；阻止由节点作业端按下发的方向依据执行（[ADR-0251](../../adr/0251-directional-node-work-is-paused-by-a-reading-before-the-action-and-recorded-moves-are-never-refused.md)，依据下发未实现） |
 | `AT-NR-039` | 先前无路由，收寄后出现合格候选 | 形成首个当前有效路由计划，不恢复旧占位（生产接法上复核不取候选成本、走不通，见 [demo-chain-gaps/115](../../../.scratch/demo-chain-gaps/issues/115-route-reassessment-never-loads-candidate-costs.md)） |
-| `AT-NR-040` | 只有普通扫描或卸载，没有控制依据 | `触发未受理`（`TRIGGER_NOT_ACCEPTED`）：不落复核、不入账未判、不回滚重投，不建立当前可控节点 |
+| `AT-NR-040` | 只有普通扫描或卸载，没有控制依据 | 复核编排答`触发未受理`（`TRIGGER_NOT_ACCEPTED`）：不落复核、不入账未判，不建立当前可控节点。收寄采用与交接两路的触发由适配器从权威记录译出，答到这一格即适配器响亮失败、信封回滚 |
 | `AT-NR-041` | 存在更优候选但已过冻结边界且原计划仍可执行 | 保留原计划，不因轻微改善自动切换 |
 | `AT-NR-042` | 候选可行但不满足自动改路条件 | 只形成建议；授权决定前不改变计划（今天只有失效那条线形成建议，仍适用那条线见 [docs-consistency/code/17](../../../.scratch/docs-consistency/code/17-still-applicable-plan-never-forms-a-reroute-suggestion.md)；授权决定面未实现，见 [docs-consistency/code/29](../../../.scratch/docs-consistency/code/29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md)） |
 | `AT-NR-043` | 改路会改变关务区域或报关服务方 | 等待新的关务适用性判断，不沿用原资格 |
