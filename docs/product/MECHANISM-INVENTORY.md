@@ -6,7 +6,7 @@
 
 | 上下文 | 生产 | 测试 | 应用编排 | postgres 适配器 | 其中 Outbox 投递 | http 适配器 |
 |---|---|---|---|---|---|---|
-| accessidentity | 38 | 41 | 0 | 6 | 0 | 2 |
+| accessidentity | 38 | 42 | 0 | 6 | 0 | 2 |
 | architecture（非业务） | 0 | 14 | 0 | 0 | 0 | 0 |
 | collectionremittance | 23 | 9 | 4 | 6 | 0 | 3 |
 | customscompliance | 126 | 126 | 24 | 47 | 10 | 18 |
@@ -18,11 +18,11 @@
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 221 | 162 | 37 | 65 | 13 | 10 |
-| transportfulfillment | 248 | 255 | 42 | 49 | 13 | 45 |
+| transportfulfillment | 262 | 266 | 45 | 54 | 15 | 46 |
 | visibilityexception | 112 | 110 | 12 | 31 | 8 | 12 |
-| **合计** | 1526 | 1471 | 201 | 354 | 63 | 199 |
+| **合计** | 1540 | 1483 | 204 | 359 | 65 | 200 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 207、测试 302。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 211、测试 305。
 
 ## 跨上下文消费缝：50 组，149 个生产文件
 
@@ -79,11 +79,11 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 7 |
 
-## 迁移：12 个模块共 287 份 SQL
+## 迁移：12 个模块共 289 份 SQL
 
 | 模块 | 份数 |
 |---|---|
-| access_identity | 20 |
+| access_identity | 21 |
 | collection_remittance | 1 |
 | customs_compliance | 26 |
 | network_routing | 22 |
@@ -93,10 +93,10 @@
 | party_commercial | 40 |
 | pilot_governance | 8 |
 | settlement_accounting | 42 |
-| transport_fulfillment | 42 |
+| transport_fulfillment | 43 |
 | visibility_exception | 27 |
 
-## 接线面：接入面端点 182 个，消费适配器 53 个生产文件，直投路由表 37 条
+## 接线面：接入面端点 183 个，消费适配器 54 个生产文件，直投路由表 39 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -112,9 +112,9 @@
 | partycommercial | 34 |
 | pilotgovernance | 1 |
 | settlementaccounting | 8 |
-| transportfulfillment | 40 |
+| transportfulfillment | 41 |
 | visibilityexception | 15 |
-| **合计** | 182 |
+| **合计** | 183 |
 
 消费适配器按 `internal/<消费方>/adapters/` 下 `inbox`、`adoptconsume`、`finalconsume`、`veconsume` 四类目录的生产文件数。它与上面的「跨上下文消费缝」是两种东西：那一栏数的是消费方为某个提供方写的防腐层，这一栏数的是接进程内直投信封的消费门。
 
@@ -126,9 +126,9 @@
 | parcelpricing | 2 | 0 | 0 | 0 | 2 |
 | parcelshipment | 13 | 1 | 1 | 0 | 15 |
 | settlementaccounting | 7 | 0 | 0 | 0 | 7 |
-| transportfulfillment | 3 | 0 | 0 | 0 | 3 |
+| transportfulfillment | 4 | 0 | 0 | 0 | 4 |
 | visibilityexception | 15 | 0 | 0 | 2 | 17 |
-| **合计** | 49 | 1 | 1 | 2 | 53 |
+| **合计** | 50 | 1 | 1 | 2 | 54 |
 
 直投路由表按 `cmd/` 生产文件里登记的不同事件类型数（`routeLeg` 字面量的 `event` 与 `map[eventing.EventType]dispatch.Consumer` 字面量的键并认，同一事件类型扇出给几路只算一条），按事件类型常量所属的消费门包归属。路由表只随消费者一起长（ADR-0049 第三条），本表只报它此刻多长。
 
@@ -140,11 +140,12 @@
 | parcelpricing | 2 |
 | parcelshipment | 12 |
 | settlementaccounting | 4 |
+| transportfulfillment | 2 |
 | visibilityexception | 11 |
 | （未归类） | 1 |
-| **合计** | 37 |
+| **合计** | 39 |
 
-## 端口：声明 566 个；基线口径缺 37，精确口径缺 2
+## 端口：声明 571 个；基线口径缺 37，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
