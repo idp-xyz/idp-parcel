@@ -66,3 +66,22 @@ Blocked by: 无
 - **0021 的 CHECK 全集**以 main 的 0018 为底加本份两词；并行票占的 0019、0020 若也重建这条 CHECK，最后落地的那一份要取并集（读码所见：票 70 分支上的 0020 加 `DELIVERY_DISPATCH_REASK`，且以 0016 为底，缺 0018 的三个关务词）。
 - 不重生成机制清点、ADR 索引与 AT 计数。
 
+## 评审记录（2026-10-21，隔离评审：无阻断项；协调方转作者修订，本轮未变基）
+
+| # | 评审意见 | 去向 |
+|---|---|---|
+| 1 | SA 资金事实采用与更正撞键（`FundsFactAlreadyAdopted`）读回赢家、不比内容摘要，在线口答复不带记录，输家分不出；`ExternalFundsFacts.Save` 头注写成「有意」与票 125 相抵 | ✅ 票 [125](./125-concurrent-same-source-results-with-different-content-answer-existing-result.md) 加同形追记：三种情形 (a)(b)(c)、两族并发是最现实的一格、修法同票 125；点明 CC 凭证那一路落库后读回比 CCC-1、答 `CONTENT_CONFLICT`，无此问题。`ExternalFundsFacts.Save` 头注、`ports.FundsFactAlreadyAdopted` 注释与 `CorrectFact` 撞键分支注释改指票 125 的缺陷说法（只动注释，修法本身归票 125） |
+| 2 | ADR-0236 决定四与越权风险点 3 要正面回应 UC-SA-005「结算人员不能更改银行事实」，并写明两族顺序到达的答复与续办 | ✅ 决定四引原文并回应：手工更正采用的是新来源版本、原版本保留，但职责分离今天不强制、持采用授予的人能更正银行接口送来的金额，写成越权风险点 3，去向票 product-strategy-boundary/07；顺序到达两格写明——手工先录错、银行随后推真值答 `FUNDS_FACT_CONFLICT`，手工先更正、银行随后推更正答 `SOURCE_NOT_ACCEPTED`，外部系统一侧都转人工；并发那一格指向票 125。Status 行索引注记随改 |
+| 3 | SA CONTEXT 写了「首版与更正同一种授予」，那是授予粒度 | ✅ 改成「由持相应授予的租户财务人员手工采用」，粒度只在 ADR-0236 决定一 |
+| 4 | 关务 `snapshotHint` 给凭证一类仍带「不逐字段建表单，因为…随 PAR-INT-01 提供」 | ✅ 凭证一类改用单拼的 `manualEntryHint`：与 CLI、集成客户端同形，「本页暂以 JSON 录入，逐字段表单尚未提供」；其余各类不动。收付款页那份提示的头注同步去掉「不逐字段建表单」的旧理由 |
+| 5 | 两页新加的 `IDENTITY_DEPENDENCY_UNAVAILABLE` 说明「本次什么都没登记」与面板 noAnswer 格后接的「登记与否未知」相抵 | ✅ 删掉那半句，说明改成「接入身份依赖读不动（发行方公钥集、操作者册或准入范围），可稍后重试」；面板不动 |
+| 6 | `CustomsCasesPage.tsx` 头注「票 demo-chain-gaps/140 起接手工口…」是变更叙述 | ✅ 改成「接手工口 POST /customs-regulatory-credential-manual-registrations，ADR-0236」 |
+| 7 | 「采用人」列显示的是链头那一版的提交方 | ✅ 表头改「采用人（链头那一版）」，注释写明首版与各次更正可能出自不同的人 |
+| 8 | SA 手工口 `readSinglePayload(request.Body)` 无请求体上限 | ✅ 加 `io.LimitReader(…, 1 MiB+1)`（与 CC 手工口同值），补用例 `TestTheOperatorDecisionIntakeRefusesAnOversizedBody`（填充放在对象里，去掉上限时这条用例实测转红）；CC 凭证手工口顺带补同形用例 `TestTheCredentialFaceRefusesAnOversizedBody`。集成客户端原口同病，另立票 [159](./159-integration-client-registration-faces-cap-the-request-body.md)，本票不改 |
+
+未采纳：无。
+
+验证（修订后）：`scripts/test-full.sh ./cmd/parcel-api/... ./cmd/parcel-customs-register/... ./cmd/parcel-settlement-register/... ./internal/accessidentity/... ./internal/settlementaccounting/... ./internal/customscompliance/... ./internal/architecture/... ./migrations/...`：33 ok、2 无测试文件、0 FAIL；`go build ./...`、`go vet ./...`、`gofmt -l` 干净，修订里两笔 Go 提交逐个检出 build/vet 都过；admin-web 三道门：tsc 退 0、run-tests 598/598、vite build 退 0。
+
+待变基（协调方通知后办）：票 70 先进 main，占 `access_identity/0019`（加 `DELIVERY_DISPATCH_REASK`）、种子 `data/governance/45` 与 `data/access` 的改动。届时本票的 access_identity 迁移改成 main 上下一个空号、CHECK 取并集；种子数据号改空号；`settlement_accounting/0041` 按 main 定号（票 14 也取了 0041、0042）。
+
