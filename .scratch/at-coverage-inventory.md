@@ -332,9 +332,12 @@
 | `AT-PS-080` | internal/parcelshipment/application/adopt_network_intake_test.go::TestTheCancellationBoundaryJudgesByBusinessTime |
 | `AT-PS-081` | internal/parcelshipment/application/adopt_network_intake_test.go::TestTheCancellationBoundaryJudgesByBusinessTime |
 | `AT-PS-082` | internal/parcelshipment/application/cancel_parcel_test.go::TestACrossedBoundaryTurnsIntoDispositionPending；internal/parcelshipment/domain/parcel_cancellation_test.go::TestACrossedIntakeBoundaryRefusesCancellation |
+| `AT-PS-086` | internal/parcelshipment/application/cancel_parcel_test.go::TestAStandingFinalIsReturnedInsteadOfACancellation；cmd/parcel-api/assemble_cancellation_boundary_test.go::TestTheWiredCancellationStopsAtTheBoundaryFactsAgainstARealDatabase |
 | `AT-PS-090` | internal/parcelshipment/application/cancel_parcel_test.go::TestForeignProbesAndFailedIntentsStayDisciplined |
 | `AT-PS-091` | internal/parcelshipment/domain/final_outcome_test.go::TestAResponsibilityOutcomeDemandsBothDecisionAndExecution |
 | `AT-PS-092` | internal/customscompliance/domain/disposition_verification_test.go::TestVerificationDemandsFactsAndComparesProvidedQuantities |
+| `AT-PS-107` | internal/parcelshipment/application/adopt_network_intake_test.go::TestTheCancellationBoundaryJudgesByBusinessTime；internal/parcelshipment/adapters/nodeoperations/adopt_on_node_intake_test.go::TestAdoptionOutcomesMapToConsumptionSlots；cmd/parcel-dispatch/cancellation_order_conflict_test.go::TestALateEarlierNodeIntakeIsConsumedAsARecordedConflict |
+| `AT-PS-108` | internal/parcelshipment/domain/label_service_final_test.go::TestAStandingCancellationIsComparedWithTheFirstPickupByBusinessTime；internal/parcelshipment/application/judge_label_service_final_test.go::TestALateEarlierPickupIsAFactConflictWithTheStandingCancellation；internal/parcelshipment/adapters/transportfulfillment/judge_on_carrier_first_effective_pickup_test.go::TestALateEarlierPickupIsConsumedAsARecordedConflict；cmd/parcel-dispatch/cancellation_order_conflict_test.go::TestALateEarlierCarrierPickupIsConsumedAsARecordedConflict |
 | `AT-PS-111` | cmd/parcel-api/assemble_submission_replay_test.go::TestAReplayAfterTheBuildTransactionRolledBackBuildsTheRequestOnce；cmd/parcel-api/assemble_submission_replay_test.go::TestAReplayAfterTheOwnershipDependencyFailedDecidesAgain；cmd/parcel-api/assemble_submission_replay_test.go::TestTwoConcurrentReplaysAfterARolledBackBuildBuildOnceAndJudgeOnce；internal/parcelshipment/application/submit_shipment_request_replay_test.go::TestAReplayAfterAFailedBuildBuildsTheRequestOnce；internal/parcelshipment/application/submit_shipment_request_replay_test.go::TestAReplayAfterTheOwnershipDependencyFailedDecidesOwnershipAgain |
 | `AT-PS-112` | cmd/parcel-api/assemble_submission_replay_test.go::TestAReplayAfterOwnershipUnresolvedDecidesAgainAndBuilds；internal/parcelshipment/application/submit_shipment_request_replay_test.go::TestAReplayAfterOwnershipUnresolvedAnswersWhatThisJudgmentSays；internal/parcelshipment/application/submit_shipment_request_replay_test.go::TestAReplayAfterOwnershipUnresolvedDecidesAgainAndBuilds；internal/parcelshipment/application/submit_shipment_request_replay_test.go::TestAReplayStillUnresolvedAnswersUnresolvedAgain |
 | `AT-PS-113` | cmd/parcel-api/assemble_submission_replay_test.go::TestAReplayAfterAdmissionPausedAnswersTheOriginal；internal/parcelshipment/adapters/http/submit_shipment_request_test.go::TestSubmitReplayOfARefusalCarriesThePriorOutcome；internal/parcelshipment/application/submit_shipment_request_replay_test.go::TestAReplayAfterAConfirmedHandoffAnswersTheOriginalWithoutDeliveringAgain；internal/parcelshipment/application/submit_shipment_request_replay_test.go::TestAReplayAfterAdmissionPausedAnswersTheOriginalWithoutDeciding；internal/parcelshipment/application/submit_shipment_request_replay_test.go::TestAReplayOfARefusalAnswersTheOriginalWithoutJudging |
@@ -726,7 +729,6 @@
 | `AT-PS-087` | 取消包裹已有面单交易 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
 | `AT-PS-089` | 收寄后服务终止执行结果满足合同终局规则 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
 | `AT-PS-093` | 异常案件认定可能遗失，但权威服务责任结果尚未形成 | UC-PS-004-FORM-PARCEL-FINAL-SERVICE-OUTCOME.md |
-| `AT-PS-107` | 包裹取消已提交，此后到达的收寄来源发生时间不晚于取消的业务时间（ADR-0254） | UC-PS-003-ESTABLISH-NETWORK-INTAKE-AND-FORMAL-COMMITMENT.md |
 | `AT-PS-109` | 只有信用校验一项且成立（形成信用暴露）的委托撤回 | UC-PS-005-WITHDRAW-SUBMITTED-SHIPMENT-REQUEST.md |
 | `AT-PS-110` | 委托在请求方可见范围内，但请求方没有撤回授权 | UC-PS-005-WITHDRAW-SUBMITTED-SHIPMENT-REQUEST.md |
 | `AT-SA-001` | 合法关务交接到达 | UC-SA-001-ASSESS-ACTUAL-ADVANCE-AND-FORM-CUSTOMER-RECOVERY.md |
@@ -1332,10 +1334,8 @@
 | `AT-PP-015` | 参考复核按规则判不同主体与要求授予（ADR-0262；code/41） | UC-PP-001-FORM-ESTIMATE-EVALUATIONS.md |
 | `AT-PS-083` | 已收寄且普通退运决定、责任和路径齐备 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
 | `AT-PS-084` | 监管退运要求到达 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
-| `AT-PS-086` | 包裹已有终局后请求取消 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
 | `AT-PS-088` | 处置请求已发出但运输方拒绝承接 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
 | `AT-PS-106` | 指名的委托不存在，或属于别的租户、客户 | UC-PS-002-AMEND-CUSTOMER-SOURCE-DATA.md |
-| `AT-PS-108` | 面单渠道包裹已有有效取消，随后的首次有效收寄发生不晚于取消的业务时间（ADR-0254） | UC-PS-004-FORM-PARCEL-FINAL-SERVICE-OUTCOME.md |
 | `AT-TF-018` | 只有车辆到场和司机扫描（逐对象结果待确认未实现，code/01） | UC-TF-002-PERFORM-OFFSITE-PICKUP.md |
 | `AT-TF-054` | 封签连续的集运单元整体交接（成员随单元受控的派生规则未立，ADR-0263、票 demo-chain-gaps/80） | UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md |
 | `AT-TF-070` | 本人签收和地址来源冲突（逐对象结果待确认未实现，code/01） | UC-TF-006-PERFORM-DELIVERY-AND-CAPTURE-POD.md |
@@ -1620,6 +1620,8 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-10-21 追记（票 docs-consistency/08，文档自洽 TF 组）：UC-TF-005 新立 `AT-TF-329`（待确认或拒收更正成`已交接`即进段、结束先前段的参与；今天对象仍挂在先前的段里，票 demo-chain-gaps/130），未实现，入④；`AT-TF-018`、`AT-TF-070`（逐对象结果待确认，code/01）、`AT-TF-054`（单元成员随单元受控的派生规则未立，ADR-0263、票 demo-chain-gaps/80）、`AT-TF-087`、`AT-TF-088`（节点实测后的再准备未实现，票 demo-chain-gaps/44）由②移入④；`AT-TF-037`（准备结果不入队信封，ADR-0201 决定七）、`AT-TF-089`（出发不读容量与需求快照，ADR-0264）改场景文字，留②；`AT-TF-081`（三类口径，ADR-0146、ADR-0150）改场景文字，留③。UC-TF-004 `AT-TF-181` 删去重号的旧行，盘点里本无此号。总览计数不改，由推送方重算。
 
 2026-10-21 追记（票 docs-consistency/code/39，含隔离评审修订）：UC-PS-001 新立 `AT-PS-111`（保全之后没有形成答案，重发重判仍放行即接着建单、并发只建一份且后到者不判）、`AT-PS-112`（生产归属未决之后重发重判、按这一次作答）、`AT-PS-113`（准入暂停、交接已确认的他方归属与三格拒绝之后重发答已有结果带原结果、不重判）、`AT-PS-114`（他方交接未确认之后重发重投同一次尝试、不重判），四行随代码与测试同票落地，入①；`AT-PS-003` 改限为原处理已经建单、带建单所据的原归属结果，该行补点真库用例；`AT-PS-104` 的重放一支限到这次也没有建单。总览计数未改，由推送方重算。
+
+2026-10-21 追记（票 docs-consistency/code/21、code/35）：UC-PS-006 `AT-PS-086`（终局后取消答既有终局 FINAL_OUTCOME_STANDS）由④移入①；UC-PS-003 `AT-PS-107`（取消已提交后才到、发生不晚于取消的收寄记进冲突册、消费门入账）由②移入①；UC-PS-004 `AT-PS-108`（面单渠道同一情形答`不形成`并指名冲突）由④移入①。总览计数未改，由推送方重算。
 
 2026-10-21 追记（票 docs-consistency/10，10a 半边）：新立 UC-CR-001（collection-remittance 此前没有 UC，「给开发的交接」自 CR CONTEXT 迁入），`AT-CR-001`–`023`：编排已有、测试未点名的入②，未实现的（code/14、15、47、54）入④；UC-TF-005 `AT-TF-157`–`161` 改为引用 UC-VE-002、UC-VE-004 的对应行，①的几行不动。计数随进 main 重算。
 
