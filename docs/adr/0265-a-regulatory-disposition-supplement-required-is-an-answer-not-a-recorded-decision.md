@@ -5,8 +5,8 @@ Date: 2026-10-21
 
 ## Context
 
-- TF CONTEXT「监管运输处置承接决定」词条：「决定可以是已承接、部分承接、待补充或拒绝」；生命周期「监管运输处置待承接 → 已承接、部分承接、待补充或拒绝」；UC-TF-001 结果契约把「监管运输协作待补充」列为一种结果，「必须保留：已知边界、缺口和续办入口」。
-- 代码：`domain.DispositionAcceptanceKind` 封闭三格 `ACCEPTED`、`PARTIALLY_ACCEPTED`、`DECLINED`；待补充只是编排 `application.AcceptRegulatoryDispositionHandler` 的一格答复 `SUPPLEMENT_REQUIRED`，出自领域的 `ErrMovementAuthorityMissing`（承接或部分承接缺移动授权），不落承接记录、不交回执。领域头注自称依据「UC-TF-001 结果契约：已承接、部分承接、已拒绝」，与 UC 原文不符。
+- 取证于 main `3619f5c0e`（下面引的 TF CONTEXT 与 UC 原句随票 docs-consistency/08 改写）。TF CONTEXT「监管运输处置承接决定」词条：「决定可以是已承接、部分承接、待补充或拒绝」；生命周期「监管运输处置待承接 → 已承接、部分承接、待补充或拒绝」；UC-TF-001 结果契约把「监管运输协作待补充」列为一种结果，必须保留的一栏写「已知边界、缺口和续办入口」。
+- 代码：`domain.DispositionAcceptanceKind` 封闭三格 `ACCEPTED`、`PARTIALLY_ACCEPTED`、`DECLINED`；待补充只是编排 `application.AcceptRegulatoryDispositionHandler` 的一格答复 `SUPPLEMENT_REQUIRED`，出自领域的 `ErrMovementAuthorityMissing`（承接或部分承接缺移动授权），不落承接记录、不交回执。领域头注说 UC-TF-001 结果契约是已承接、部分承接、已拒绝三格，并注「待补充与未受理是编排层答复，不是决定」，与 UC 原文不符。
 - 承接编排在 `cmd/` 下没有接线，生产上还没有人能走到这一格。待补充要不要落册、要不要本上下文留续办入口，没有记录裁过。
 
 ## Decision
@@ -38,13 +38,13 @@ UC-TF-001 要求核对载运对象、移动动作、起止责任与当前有效�
 
 - TF CONTEXT 词条「监管运输处置承接决定」、「监管运输处置承接与履约」第二条、生命周期「监管运输处置承接」第二条改成本记录的口径。
 - UC-TF-001 结果契约「监管运输协作待补充」一行改为答复、不落决定；`AT-TF-004` 写明答复不落决定；「给开发的交接」列出接线缺口。
-- 领域头注「UC-TF-001 结果契约：已承接、部分承接、已拒绝；待补充与未受理是编排层答复，不是决定」与改后的 UC 一致，不用改。
+- `domain.DispositionAcceptanceKind` 的头注（三格，「待补充与未受理是编排层答复，不是决定」）与改后的 UC 一致，不用改。
 - 承接编排的生产入口与协作事项的核对另立票 docs-consistency/code/43。
 
 ## 越权风险点
 
 1. **关务一侧要自己记住哪件事项在等补**（TF、CC owner）。本上下文答了待补充就不留痕；关务的协作事项若不据这一格答复记下「等移动授权」，补齐之后也没人再交一次。接线时（code/43）关务那一侧的消费者要把这一格记进自己的协作事项状态。
-2. **本上下文看不到在等补的事项**（TF owner）。运营人员要问「有哪些监管运输还在等授权」，只能去关务那一侧查。今天承接没有生产入口，这一问还不会出现。
+2. **本上下文看不到在等补的事项**（TF owner）。运营人员要知道哪些监管运输还在等授权，只能去关务那一侧查。今天承接没有生产入口，这一问还不会出现。
 
 ## Links
 

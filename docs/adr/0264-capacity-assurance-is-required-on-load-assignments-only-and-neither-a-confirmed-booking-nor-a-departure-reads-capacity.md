@@ -8,7 +8,7 @@ Date: 2026-10-21
 - [ADR-0203](./0203-capacity-assurance-requires-a-reservation-on-every-pool-of-the-schedule-and-reservations-are-operation-decisions.md) 决定一要求「装载分配或确认订舱」所在班次挂了容量池，就逐池引用当前有效预占并声明分配量；装载分配那一半由票 21 落地，确认订舱那一半归票 demo-chain-gaps/37，该票一直停在 needs-triage。
 - 确认订舱的提交方是承运系统：答复走集成客户端族（[ADR-0202](./0202-transport-commission-booking-and-carrier-answer-entry-families-and-supplier-agreement-check.md) 决定二），线格式里没有预占引用，承运方也不知道本上下文的预占。判据挂在这一口上，答复方永远答不出来。
 - 代码：`application.CommissionTransportHandler.AnswerBooking` 对`接受`不读池、不要预占引用；UC-TF-004 `AT-TF-041` 写「订舱确认但无容量预占依据 | 保留订舱结果，不能伪造有效预占」。ADR-0202 越权风险点 17 记着「承运方接受的量可以超过那一班池上的余量」，等票 37。
-- 另一处：TF CONTEXT「运输委托、订舱、容量与装载」要求需求快照变化时「以新快照重新校验尚未完成的预占、分配、舱单范围和出发门禁」，UC-TF-003 写「在预占、分配、舱单冻结和出发前重新校验」，`AT-TF-089` 写「出发门禁仍引用过期需求快照 | 阻断出发范围并要求重评」。可「出发门禁读数」在 TF 是关务五格读数的专名，出发一律落册、读数不挡（[ADR-0205](./0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md)）；`domain.DepartureGateReading` 与 `application.ReadDepartureGate` 都没有容量或需求快照输入。需求快照过期挂在哪个门上，没有记录裁过。
+- 另一处（取证于 main `3619f5c0e`，下面引的 TF CONTEXT、UC 原句随票 docs-consistency/08 改写）：TF CONTEXT「运输委托、订舱、容量与装载」要求需求快照变化时「以新快照重新校验尚未完成的预占、分配、舱单范围和出发门禁」，UC-TF-003 写「在预占、分配、舱单冻结和出发前重新校验」，`AT-TF-089` 写「出发门禁仍引用过期需求快照 | 阻断出发范围并要求重评」。可「出发门禁读数」在 TF 是关务五格读数的专名，出发一律落册、读数不挡（[ADR-0205](./0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md)）；`domain.DepartureGateReading` 与 `application.ReadDepartureGate` 都没有容量或需求快照输入。需求快照过期挂在哪个门上，没有记录裁过。
 
 ## Decision
 
@@ -48,7 +48,7 @@ Date: 2026-10-21
 
 ## Consequences
 
-- TF CONTEXT「运输委托、订舱、容量与装载」里「确认订舱或装载分配需要容量保障」「『需要容量保障』的判据」「成员、当前有效测量……出发门禁」三条改写。
+- TF CONTEXT「运输委托、订舱、容量与装载」里讲确认订舱要容量保障的两条、讲需求快照变化要重新校验的那一条改写。
 - UC-TF-003 容量与班次规则那一条、`AT-TF-089` 改写；UC-TF-004 `AT-TF-041` 的读法不变，补引本记录。
 - 票 demo-chain-gaps/37 票面加 2026-10-21 更正。
 - `application/commission_transport.go` 里 `SubmitBooking` 头注「确认订舱与容量的关系另归一张票」一句改指本记录，并入票 docs-consistency/code/02。
@@ -57,7 +57,7 @@ Date: 2026-10-21
 
 1. **池上看不出承运方已经接受了多少**（TF owner）。运营人员读池时，只看得到预占与分配；某一班承运方已接受的总量要另读订舱册。订舱与答复今天没有查阅面（ADR-0202 越权风险点 15，票 demo-chain-gaps/48）。
 2. **需求变了没人提醒，分配也改不了**（TF owner）。重评靠运营人员按新快照重核；本上下文不监视测量或成员的变化，旧预占照旧有效到期满。装载分配的变化与撤回入口接线之前，已形成的分配改不了版，只能等预占到期（ADR-0203 补记越权风险点 14）。节点实测之后的再准备另立票（[ADR-0201](./0201-schedule-templates-materialize-concrete-schedules-by-date-and-preparation-answers-not-configured-on-an-empty-register.md) 决定八）。
-3. **租户可能要按确认订舱挡超卖**（TF owner）。真实租户若要求「承运方接受的量不得超过已登的池」，那是一种另加的产品策略，今天的答复口不挡；要加，改的是答复口的判法，并要先让答复带得出预占引用。
+3. **租户可能要按确认订舱挡超卖**（TF owner）。真实租户若要求承运方接受的量不得超过已登的池，那是一种另加的产品策略，今天的答复口不挡；要加，改的是答复口的判法，并要先让答复带得出预占引用。
 
 ## Links
 

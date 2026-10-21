@@ -5,10 +5,10 @@ Date: 2026-10-21
 
 ## Context
 
-- TF CONTEXT「运输交接与实物控制」第二条写：「若证据已经表明实物占有发生变化，却无法确认对象身份、成员范围或合法控制来源，则必须形成`控制待确认/冲突`，不能继续把已经没有实际保管能力的一方记为当前实物控制方。」同节封签一条写成员「当前成员实物控制形成待确认/冲突」。UC-TF-005 `AT-TF-055` 照这两句写。
+- 取证于 main `3619f5c0e`（本记录随票 docs-consistency/08 改写了下面引的 TF CONTEXT 与 UC 原句）。TF CONTEXT「运输交接与实物控制」第二条写：「若证据已经表明实物占有发生变化，却无法确认对象身份、成员范围或合法控制来源，则必须形成`控制待确认/冲突`，不能继续把已经没有实际保管能力的一方记为当前实物控制方。」同节封签一条写成员「当前成员实物控制形成待确认/冲突」。UC-TF-005 `AT-TF-055` 照这两句写。
 - 与之相抵的有三处：
   - GLOSSARY「权威运输交接结果」：「只有已交接转移控制，已拒收和待确认均保持此前已确认的控制关系」。
-  - CONTEXT-MAP「node-operations ↔ transport-fulfillment」：「只有"已交接"结果转移控制，已拒收或待确认均保持原控制」。
+  - CONTEXT-MAP「node-operations ↔ transport-fulfillment」：「只有“已交接”结果转移控制，已拒收或待确认均保持原控制」。
   - TF CONTEXT 自己的生命周期「权威运输交接」：「此前控制方在结果成立前继续保持控制」。
 - 代码只与后一边一致：`domain.HandoverVerdict` 封闭三格（已交接、已拒收、待确认），TF 领域里没有「控制待确认/冲突」这一种结果；节点作业对拒收与待确认的首登零写入，对撤回控制的更正记「控制来源链待重算」、控制不回退（[ADR-0214](./0214-node-control-transfers-out-and-in-on-an-authoritative-transport-handover.md)、[ADR-0220](./0220-node-control-reads-the-handover-correction-chain-by-the-transport-fulfillment-back-pointer.md)）。
 - 没有任何已接受的 ADR 定过「控制待确认/冲突」这一格。CONTEXT 两处说法各执一词，代码只做了一边，所以要裁。
