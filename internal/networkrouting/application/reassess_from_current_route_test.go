@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -202,9 +203,9 @@ func TestAnImprovementRerouteIsTheNextStartingPoint(t *testing.T) {
 	}
 }
 
-// Covers: 起点自相矛盾是坏数据，响亮报错：路由历史里最近一份计划已被替代，却没有更晚的计划接班——这件包裹答不出当前计划
-// 还是无路由；按任何一边判都是凭空假定。
-func TestASupersededLatestPlanWithoutASuccessorIsLoud(t *testing.T) {
+// Covers: 起点自相矛盾是坏数据，响亮报错：路由历史里的计划已被替代，接班的却不在路由历史里——这件包裹答不出当前计划还是
+// 无路由；按任何一边判都是凭空假定。
+func TestASupersededPlanWhoseSuccessorIsMissingIsLoud(t *testing.T) {
 	fixture := newReassessFixture(t)
 	record := currentPlanRecord(t)
 	fixture.routes.records[record.Key] = record
@@ -220,15 +221,154 @@ func TestASupersededLatestPlanWithoutASuccessorIsLoud(t *testing.T) {
 	}
 	fixture.applicability.byPlan[record.Plan.Version()] = superseded
 
-	if _, err := fixture.handler.Handle(context.Background(), reassessCommand(t, "node-origin")); err == nil {
-		t.Fatal("起点自相矛盾却作答了")
+	if _, err := fixture.handler.Handle(context.Background(), reassessCommand(t, "node-origin")); !errors.Is(err, application.ErrInconsistentRouteStart) {
+		t.Fatalf("err = %v, want ErrInconsistentRouteStart", err)
 	}
 	if fixture.store.saved != 0 {
 		t.Fatalf("坏起点上落了 %d 条复核", fixture.store.saved)
 	}
 }
 
-// Covers: 读不出起点是依赖故障，答未决、回滚重投：复核册读不出最近一份新计划，答路由历史读不回；适用性读不出，答适用性登记
+// formedRecord 是路由历史里一次形成了新计划的复核：触发业务时间与处理时刻各由用例给，好演同一时刻靠处理时钟分先后。
+func formedRecord(t *testing.T, correlation, version string, at, processedAt time.Time) ports.ReassessmentRecord {
+	t.Helper()
+	plan := currentPlanRecord(t).Plan
+	formed, err := domain.FormInitialRoutePlan(domain.InitialRoutePlanSpec{
+		Key:           reassessKey(t),
+		Version:       value(t, domain.NewRoutePlanVersionID, version),
+		Selected:      plan.SelectedCandidate(),
+		Candidates:    plan.Candidates(),
+		Legs:          plan.Legs(),
+		Strategy:      plan.Strategy(),
+		ViewRevision:  plan.ViewRevision(),
+		JudgedAt:      processedAt,
+		EffectiveFrom: at,
+	})
+	if err != nil {
+		t.Fatalf("form plan %s: %v", version, err)
+	}
+	return ports.ReassessmentRecord{
+		Correlation:       value(t, domain.NewRequestCorrelationID, correlation),
+		Key:               reassessKey(t),
+		Conclusion:        ports.ReassessmentFirstPlanFormed,
+		CandidateState:    ports.CandidatesAvailable,
+		NewPlan:           formed,
+		HasNewPlan:        true,
+		TriggerOccurredAt: at,
+		ReassessedAt:      processedAt,
+	}
+}
+
+func lapsedApplicability(t *testing.T, plan domain.InitialRoutePlan, at time.Time) domain.PlanApplicability {
+	t.Helper()
+	established, err := domain.EstablishPlanApplicability(plan.Version(), plan.EffectiveFrom())
+	if err != nil {
+		t.Fatalf("establish: %v", err)
+	}
+	lapsed, err := established.Lapse(value(t, domain.NewApplicabilityBasisReference, "HARD_CONSTRAINT_RESTRICTION/R"), at)
+	if err != nil {
+		t.Fatalf("lapse: %v", err)
+	}
+	return lapsed
+}
+
+// Covers: 同一业务时刻形成的两份计划不靠处理时钟分先后：先判的那次形成的计划已失效，后判的那次形成的计划当前有效，而
+// 处理时钟回拨让后判的那次处理时刻更早。起点仍是当前有效的那一份，不按「处理时刻最晚」取到已失效的那份去走无路由线。
+func TestTwoPlansFormedAtTheSameInstantAreToldApartByApplicabilityNotByTheClock(t *testing.T) {
+	fixture := newReassessFixture(t)
+	record := currentPlanRecord(t)
+	fixture.routes.records[record.Key] = record
+	fixture.evidence.byParcel["parcel-1"] = evidenceBeforeFreeze(t)
+	fixture.applicability.byPlan[record.Plan.Version()] = lapsedApplicability(t, record.Plan, reassessedAt.Add(-time.Hour))
+	same := reassessedAt.Add(-30 * time.Minute)
+	first := formedRecord(t, "trigger-first", "plan-first", same, reassessedAt.Add(-time.Minute))
+	second := formedRecord(t, "trigger-second", "plan-second", same, reassessedAt.Add(-2*time.Minute))
+	fixture.store.byCorrelation[first.Correlation] = first
+	fixture.store.byCorrelation[second.Correlation] = second
+	fixture.applicability.byPlan[first.NewPlan.Version()] = lapsedApplicability(t, first.NewPlan, same)
+
+	result := handleOK(t, fixture, reassessCommand(t, "node-origin"))
+	if result.Outcome() != application.ReassessedStillApplicable {
+		t.Fatalf("outcome = %q, want STILL_APPLICABLE", result.Outcome())
+	}
+	if kept, _ := result.Record(); kept.ReviewedPlan != second.NewPlan.Version() {
+		t.Fatalf("被复核计划 = %s, want 当前有效的 %s", kept.ReviewedPlan, second.NewPlan.Version())
+	}
+}
+
+// Covers: 路由历史里不止一份当前有效是坏数据，响亮报错，不任取一份去复核。
+func TestTwoCurrentlyEffectivePlansAreLoud(t *testing.T) {
+	fixture := newReassessFixture(t)
+	record := currentPlanRecord(t)
+	fixture.routes.records[record.Key] = record
+	fixture.evidence.byParcel["parcel-1"] = evidenceBeforeFreeze(t)
+	formed := formedRecord(t, "trigger-formed", "plan-formed", reassessedAt.Add(-30*time.Minute), reassessedAt.Add(-time.Minute))
+	fixture.store.byCorrelation[formed.Correlation] = formed
+
+	if _, err := fixture.handler.Handle(context.Background(), reassessCommand(t, "node-origin")); !errors.Is(err, application.ErrInconsistentRouteStart) {
+		t.Fatalf("err = %v, want ErrInconsistentRouteStart", err)
+	}
+	if fixture.store.saved != 0 {
+		t.Fatalf("坏起点上落了 %d 条复核", fixture.store.saved)
+	}
+}
+
+// Covers: 积压之下的失效——复核形成的计划从触发的业务时间起生效（ADR-0272），处理时钟落后业务时间十小时也一样：失效之后
+// 形成首个计划，下一次触发再按限制让它失效，失效时刻取那次触发的业务时间、不早于生效，过得了离场门；再下一次走无路由线。
+// 生效若取处理时钟，第二次失效的业务时间早于生效，离场门拒、整封响亮失败。
+func TestUnderABacklogAFormedPlanLapsesAtItsTriggersBusinessTime(t *testing.T) {
+	fixture := newReassessFixture(t)
+	fixture.handler = application.NewReassessRouteHandler(application.ReassessRouteDeps{
+		Routes:        fixture.routes,
+		Evidence:      fixture.evidence,
+		Applicability: fixture.applicability,
+		Store:         fixture.store,
+		Log:           fixture.log,
+		Identities:    &routeIdentityDouble{},
+		Clock:         fixedClock{at: reassessedAt.Add(10 * time.Hour)},
+	})
+	record := currentPlanRecord(t)
+	fixture.routes.records[record.Key] = record
+	fixture.evidence.byParcel["parcel-1"] = restrictedSelectedCandidate(t, evidenceBeforeFreeze(t))
+	lapsedOnPickup(t, fixture)
+
+	fixture.evidence.byParcel["parcel-1"] = evidenceBeforeFreeze(t)
+	formed := handleOK(t, fixture, reassessCommandAt(t, "trigger-3", "node-origin", reassessedAt.Add(2*time.Hour)))
+	if formed.Outcome() != application.ReassessedFirstPlanFormed {
+		t.Fatalf("形成 = %q, want FIRST_PLAN_FORMED", formed.Outcome())
+	}
+	first, _ := formed.Record()
+
+	fixture.evidence.byParcel["parcel-1"] = restrictedSelectedCandidate(t, evidenceBeforeFreeze(t))
+	again := handleOK(t, fixture, reassessCommandAt(t, "trigger-4", "node-origin", reassessedAt.Add(3*time.Hour)))
+	if lapsed, _ := again.Record(); again.Outcome() != application.ReassessedPlanLapsed || lapsed.ReviewedPlan != first.NewPlan.Version() {
+		t.Fatalf("再失效 = %q/%q、被复核 %s, want PLAN_LAPSED、复核 %s",
+			again.Outcome(), again.UndecidedReason(), lapsed.ReviewedPlan, first.NewPlan.Version())
+	}
+	if state := fixture.applicability.byPlan[first.NewPlan.Version()].State(); state != domain.PlanLapsed {
+		t.Fatalf("新计划适用性 = %s, want LAPSED", state)
+	}
+
+	third := handleOK(t, fixture, reassessCommandAt(t, "trigger-5", "node-origin", reassessedAt.Add(4*time.Hour)))
+	if noRoute, _ := third.Record(); third.Outcome() != application.ReassessedPlanLapsed || noRoute.ReviewedPlan.String() != "" {
+		t.Fatalf("再下一次 = %q/%q、被复核 %s, want PLAN_LAPSED、无路由线", third.Outcome(), third.UndecidedReason(), noRoute.ReviewedPlan)
+	}
+}
+
+// Covers: 复核册里的计划重建不出来是坏数据：响亮报错，不折成「路由历史读不回」的未决、回滚重投。
+func TestAnUnrebuildableFormedPlanIsLoud(t *testing.T) {
+	fixture := newReassessFixture(t)
+	record := currentPlanRecord(t)
+	fixture.routes.records[record.Key] = record
+	fixture.evidence.byParcel["parcel-1"] = evidenceBeforeFreeze(t)
+	fixture.store.newPlanErr = fmt.Errorf("formed plans: %w", ports.ErrStoredRoutePlanUnreadable)
+
+	if _, err := fixture.handler.Handle(context.Background(), reassessCommand(t, "node-origin")); !errors.Is(err, ports.ErrStoredRoutePlanUnreadable) {
+		t.Fatalf("err = %v, want ErrStoredRoutePlanUnreadable", err)
+	}
+}
+
+// Covers: 读不出起点是依赖故障，答未决、回滚重投：复核册读不出形成过的新计划，答路由历史读不回；适用性读不出，答适用性登记
 // 读不回。两格都不落复核、不动适用性。
 func TestAnUnreadableStartingPointStaysUndecided(t *testing.T) {
 	history := newReassessFixture(t)

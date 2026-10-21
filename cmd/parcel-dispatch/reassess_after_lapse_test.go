@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -111,5 +112,109 @@ func TestAfterALapseTheNextTriggersReassessFromNoRouteOnTheDatabase(t *testing.T
 	if kept.Conclusion != nrports.ReassessmentStillApplicable || kept.ReviewedPlan != formed.NewPlan.Version() {
 		t.Fatalf("新计划之后 = %s / %s, want STILL_APPLICABLE、复核新计划 %s",
 			kept.Conclusion, kept.ReviewedPlan, formed.NewPlan.Version())
+	}
+}
+
+// seedFormedPlan 在复核册落一行形成了新计划的复核（触发业务时间与处理时刻由用例给），lapsed 为真时把那份计划的适用性记为
+// 已失效。计划沿上海枢纽 → 新加坡枢纽 → 新加坡末端，真经 NR 领域形成。
+func seedFormedPlan(
+	t *testing.T, syn *synVerticalFixture, correlation, version string, at, processedAt time.Time, lapsed bool,
+) {
+	t.Helper()
+	candidate, err := nrdomain.NewRouteCandidate(mustNR(t, nrdomain.NewCandidateID, "SYN-CANDIDATE-01"),
+		nrdomain.CandidateQualified, nrdomain.CandidateReason{})
+	if err != nil {
+		t.Fatalf("候选：%v", err)
+	}
+	plan, err := nrdomain.FormInitialRoutePlan(nrdomain.InitialRoutePlanSpec{
+		Key:           reassessHandoverKey(t),
+		Version:       mustNR(t, nrdomain.NewRoutePlanVersionID, version),
+		Selected:      candidate.ID(),
+		Candidates:    []nrdomain.RouteCandidate{candidate},
+		Legs:          legsThrough(t, "SYN-NODE-SHA-HUB", reassessHandoverReceiving, "SYN-NODE-SIN-LM"),
+		Strategy:      mustNR(t, nrdomain.NewRouteStrategyReference, "SYN-STRATEGY/v1"),
+		ViewRevision:  mustNR(t, nrdomain.NewNetworkViewRevision, "SYN-VIEW-REV-1"),
+		JudgedAt:      processedAt,
+		EffectiveFrom: at,
+	})
+	if err != nil {
+		t.Fatalf("计划：%v", err)
+	}
+	store, err := nrpostgres.NewRouteReassessments(syn.db)
+	if err != nil {
+		t.Fatalf("构造复核库：%v", err)
+	}
+	applicabilities, err := nrpostgres.NewPlanApplicabilities(syn.db)
+	if err != nil {
+		t.Fatalf("构造适用性库：%v", err)
+	}
+	record := nrports.ReassessmentRecord{
+		Correlation:       mustNR(t, nrdomain.NewRequestCorrelationID, correlation),
+		Key:               reassessHandoverKey(t),
+		Conclusion:        nrports.ReassessmentFirstPlanFormed,
+		CandidateState:    nrports.CandidatesAvailable,
+		NewPlan:           plan,
+		HasNewPlan:        true,
+		TriggerOccurredAt: at,
+		ReassessedAt:      processedAt,
+	}
+	mustWithinTX(t, syn.transactor, t.Context(), func(txCtx context.Context) error {
+		if _, err := store.Save(txCtx, record.Correlation, record); err != nil {
+			return err
+		}
+		if !lapsed {
+			return nil
+		}
+		return applicabilities.Save(txCtx, lapsedApplicabilityOf(t, plan.Version(), plan.EffectiveFrom()))
+	})
+}
+
+func lapsedApplicabilityOf(t *testing.T, plan nrdomain.RoutePlanVersionID, effectiveFrom time.Time) nrdomain.PlanApplicability {
+	t.Helper()
+	established, err := nrdomain.EstablishPlanApplicability(plan, effectiveFrom)
+	if err != nil {
+		t.Fatalf("适用性：%v", err)
+	}
+	lapsed, err := established.Lapse(mustNR(t, nrdomain.NewApplicabilityBasisReference, "HARD_CONSTRAINT_RESTRICTION/SYN-CC-52"),
+		effectiveFrom)
+	if err != nil {
+		t.Fatalf("失效：%v", err)
+	}
+	return lapsed
+}
+
+// Covers: 复核判断起点（真库，交接一路）——路由历史里有三份复核形成的计划：一份是迁移 0022 之前落的、没有触发业务时间，
+// 已失效；另两份形成于同一业务时刻，先判的那份已失效，后判的那份当前有效，而处理时钟回拨让后判的那次处理时刻更早。下一次
+// 交接复核的起点是当前有效的那一份，不按处理时刻取到已失效的那份、也不因业务时间缺席的旧行乱了阵脚。
+func TestTheStartingPointIgnoresClockOrderAndLegacyRowsOnTheDatabase(t *testing.T) {
+	fixture := newReassessBothLanesFixture(t)
+	syn := fixture.syn
+	applicabilities, err := nrpostgres.NewPlanApplicabilities(syn.db)
+	if err != nil {
+		t.Fatalf("构造适用性库：%v", err)
+	}
+	mustWithinTX(t, syn.transactor, t.Context(), func(txCtx context.Context) error {
+		return applicabilities.Save(txCtx, lapsedApplicabilityOf(t,
+			mustNR(t, nrdomain.NewRoutePlanVersionID, "SYN-RPV-63"), reassessHandoverAt.Add(-72*time.Hour)))
+	})
+	same := reassessHandoverAt.Add(-2 * time.Hour)
+	seedFormedPlan(t, syn, "SYN-SEED/52/legacy", "SYN-RPV-52-LEGACY", reassessHandoverAt.Add(-3*time.Hour), same, true)
+	seedFormedPlan(t, syn, "SYN-SEED/52/first", "SYN-RPV-52-FIRST", same, same.Add(2*time.Minute), true)
+	seedFormedPlan(t, syn, "SYN-SEED/52/second", "SYN-RPV-52-SECOND", same, same.Add(time.Minute), false)
+	// 演迁移 0022 之前落的一行：CHECK 只拦新行，这里在本用例独占的库上拆掉它再抹去业务时间。
+	if _, err := syn.pool.Exec(t.Context(), `ALTER TABLE network_routing.route_reassessment
+		DROP CONSTRAINT route_reassessment_trigger_occurred_at_present`); err != nil {
+		t.Fatalf("拆业务时间约束：%v", err)
+	}
+	if _, err := syn.pool.Exec(t.Context(), `UPDATE network_routing.route_reassessment SET trigger_occurred_at = NULL
+		WHERE tenant_id = 'SYN-TENANT-01' AND correlation_id = 'SYN-SEED/52/legacy'`); err != nil {
+		t.Fatalf("抹业务时间：%v", err)
+	}
+
+	handover := fixture.handoverInto(t, "after-tie", reassessHandoverReceiving, reassessHandoverAt)
+	deliver(t, syn, fixture.handover, handover, handover)
+	kept := reassessmentOf(t, syn, handoverCorrelation("after-tie"))
+	if kept.Conclusion != nrports.ReassessmentStillApplicable || kept.ReviewedPlan.String() != "SYN-RPV-52-SECOND" {
+		t.Fatalf("复核 = %s / %s, want STILL_APPLICABLE、复核当前有效的 SYN-RPV-52-SECOND", kept.Conclusion, kept.ReviewedPlan)
 	}
 }

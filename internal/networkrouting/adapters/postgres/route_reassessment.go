@@ -337,19 +337,17 @@ func (repository *RouteReassessments) LatestTriggerAt(
 	return latest.UTC(), true, nil
 }
 
-// LatestNewPlan 交回这一判断键在册复核里最近一次形成的新计划。同一时刻取处理时刻较晚的：同一判断键的复核在
-// LatestTriggerAt 的锁里串行，后判的那一次读过先判的结果，处理时刻在其后。迁移 0022 之前的行没有触发业务时间，排在
-// 带时间的行之后。
-func (repository *RouteReassessments) LatestNewPlan(
+// FormedPlans 交回这一判断键在册复核里形成过的全部新计划。按触发业务时间、处理时刻排，迁移 0022 之前没有业务时间的行
+// 排在前面；先后只为读来可复现，调用方不据它判哪份当前有效。
+func (repository *RouteReassessments) FormedPlans(
 	ctx context.Context,
 	key domain.InitialRouteJudgmentKey,
-) (domain.InitialRoutePlan, bool, error) {
+) ([]domain.InitialRoutePlan, error) {
 	querier, err := repository.db.ReadExecutor(ctx)
 	if err != nil {
-		return domain.InitialRoutePlan{}, false, fmt.Errorf("latest reassessment new plan: %w", err)
+		return nil, fmt.Errorf("reassessment formed plans: %w", err)
 	}
-	var planJSON []byte
-	err = querier.QueryRow(ctx,
+	rows, err := querier.Query(ctx,
 		`SELECT new_plan
 		   FROM network_routing.route_reassessment
 		  WHERE tenant_id = $1
@@ -359,26 +357,34 @@ func (repository *RouteReassessments) LatestNewPlan(
 		    AND declared_parcel_id = $5
 		    AND service_purpose = $6
 		    AND new_plan IS NOT NULL
-		  ORDER BY trigger_occurred_at DESC NULLS LAST, reassessed_at DESC
-		  LIMIT 1`,
+		  ORDER BY trigger_occurred_at NULLS FIRST, reassessed_at, correlation_id`,
 		key.TenantID.String(),
 		key.CustomerAccountID.String(),
 		key.ShipmentRequestID.String(),
 		key.AcceptanceBaseline.String(),
 		key.DeclaredParcelID.String(),
 		key.ServicePurpose.String(),
-	).Scan(&planJSON)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.InitialRoutePlan{}, false, nil
-	}
+	)
 	if err != nil {
-		return domain.InitialRoutePlan{}, false, fmt.Errorf("latest reassessment new plan: %w", err)
+		return nil, fmt.Errorf("reassessment formed plans: %w", err)
 	}
-	plan, err := rebuildPlan(key, planJSON)
-	if err != nil {
-		return domain.InitialRoutePlan{}, false, fmt.Errorf("latest reassessment new plan: %w", err)
+	defer rows.Close()
+	var plans []domain.InitialRoutePlan
+	for rows.Next() {
+		var planJSON []byte
+		if err := rows.Scan(&planJSON); err != nil {
+			return nil, fmt.Errorf("reassessment formed plans: %w", err)
+		}
+		plan, err := rebuildPlan(key, planJSON)
+		if err != nil {
+			return nil, fmt.Errorf("reassessment formed plans: %w: %v", ports.ErrStoredRoutePlanUnreadable, err)
+		}
+		plans = append(plans, plan)
 	}
-	return plan, true, nil
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("reassessment formed plans: %w", err)
+	}
+	return plans, nil
 }
 
 type reassessmentRowColumns struct {

@@ -16,7 +16,7 @@ import (
 // ErrUnexpectedReassessmentSave 说明复核库交回了封闭集合以外的写入结果。
 var ErrUnexpectedReassessmentSave = errors.New("network routing: unexpected reassessment save outcome")
 
-// ErrInconsistentRouteStart 说明路由历史答不出判断起点：最近一份计划既不当前有效，也不是失效而无接班。
+// ErrInconsistentRouteStart 说明路由历史答不出判断起点：适用性册与路由历史对不上，答不出哪份计划当前有效、还是无路由。
 var ErrInconsistentRouteStart = errors.New("network routing: the routing history yields no reassessment starting point")
 
 // ReassessOutcome 是复核请求的应用处理结果。三种领域走向（仍适用/已失效/首个计划）各占
@@ -258,46 +258,72 @@ type routeStart struct {
 	hasPlan       bool
 }
 
-// startingPoint 定复核从哪里判。受理时落的初始路由那一行此后不变，复核的结论与新计划只落复核册与适用性册，所以起点要
-// 三本册合起来读：最近一份计划是复核册里最近形成的新计划，没有就是初始计划；它的适用性答它是否仍当前有效。已失效而无
-// 接班即无当前有效路由，下一次复核走无路由那条线（CONTEXT 生命周期）——拿已失效的计划再复核一次，限制仍在时撞上
-// 「不得二次离场」，限制已撤时把它原地答回仍适用，两样都是生命周期不许的。
+// startingPoint 定复核从哪里判。受理时落的初始路由那一行此后不变，复核的结论与新计划只落复核册与适用性册，所以起点要把
+// 初始路由册（initial_route）、复核册（route_reassessment）与适用性册（plan_applicability）合起来读：路由历史里的计划
+// 是初始计划加上复核形成过的全部新计划，各问一次适用性，仍当前有效的那一份就是起点；一份都没有即无当前有效路由，下一次
+// 复核走无路由那条线（CONTEXT 生命周期）。拿已失效的计划再复核一次，限制仍在时撞上「不得二次离场」，限制已撤时把它
+// 原地答回仍适用，两样都是生命周期不许的。
 //
-// 适用性没有登记行即当前有效：计划形成时不另写一行，离场才写。最近一份计划已被替代或已结束是坏起点：替代必有更晚的
-// 接班计划，结束之后不再有复核；照哪一边判都是凭空假定，响亮报错。
+// 不按形成先后取「最近一份」：同一业务时刻的两次复核只能靠处理时钟分先后，时钟一回拨就取错。改问每一份的适用性，先后
+// 不进判断。适用性的写法：失效线改路与首个计划形成时不写行，改善替代写接班行；离场必写。所以没有登记行即当前有效。
+//
+// 路由历史自相矛盾是坏数据，响亮报错：不止一份当前有效；某份已被替代，接班的却不在路由历史里；某份已结束（结束之后不再
+// 有复核）。照哪一边判都是凭空假定。
 func (handler *ReassessRouteHandler) startingPoint(
 	ctx context.Context,
 	key domain.InitialRouteJudgmentKey,
 	history ports.InitialRouteRecord,
 ) (routeStart, ReassessUndecidedReason, error) {
-	plan, formed, err := handler.deps.Store.LatestNewPlan(ctx, key)
+	formed, err := handler.deps.Store.FormedPlans(ctx, key)
+	if errors.Is(err, ports.ErrStoredRoutePlanUnreadable) {
+		return routeStart{}, ReassessUndecidedReasonNone, fmt.Errorf("load formed plans: %w", err)
+	}
 	if err != nil {
 		return routeStart{}, RoutingHistoryUnavailable, nil
 	}
-	if !formed {
-		if !history.HasPlan {
-			return routeStart{}, ReassessUndecidedReasonNone, nil
-		}
-		plan = history.Plan
+	plans := formed
+	if history.HasPlan {
+		plans = append([]domain.InitialRoutePlan{history.Plan}, formed...)
 	}
-	applicability, registered, err := handler.deps.Applicability.FindByPlan(ctx, plan.Version())
-	if err != nil {
-		return routeStart{}, ApplicabilityStoreUnavailable, nil
+	known := make(map[domain.RoutePlanVersionID]bool, len(plans))
+	for _, plan := range plans {
+		known[plan.Version()] = true
 	}
-	if !registered {
-		applicability, err = domain.EstablishPlanApplicability(plan.Version(), plan.EffectiveFrom())
+	var current []routeStart
+	for _, plan := range plans {
+		applicability, registered, err := handler.deps.Applicability.FindByPlan(ctx, plan.Version())
 		if err != nil {
-			return routeStart{}, ReassessUndecidedReasonNone, fmt.Errorf("establish plan applicability: %w", err)
+			return routeStart{}, ApplicabilityStoreUnavailable, nil
+		}
+		if !registered {
+			applicability, err = domain.EstablishPlanApplicability(plan.Version(), plan.EffectiveFrom())
+			if err != nil {
+				return routeStart{}, ReassessUndecidedReasonNone, fmt.Errorf("establish plan applicability: %w", err)
+			}
+		}
+		switch applicability.State() {
+		case domain.PlanCurrentlyEffective:
+			current = append(current, routeStart{plan: plan, applicability: applicability, hasPlan: true})
+		case domain.PlanLapsed:
+		case domain.PlanSuperseded:
+			if successor, _ := applicability.Successor(); !known[successor] {
+				return routeStart{}, ReassessUndecidedReasonNone, fmt.Errorf(
+					"%w: plan %s is superseded by %s, which is not in the routing history",
+					ErrInconsistentRouteStart, plan.Version().String(), successor.String())
+			}
+		default:
+			return routeStart{}, ReassessUndecidedReasonNone, fmt.Errorf(
+				"%w: plan %s is %s", ErrInconsistentRouteStart, plan.Version().String(), applicability.State())
 		}
 	}
-	switch applicability.State() {
-	case domain.PlanCurrentlyEffective:
-		return routeStart{plan: plan, applicability: applicability, hasPlan: true}, ReassessUndecidedReasonNone, nil
-	case domain.PlanLapsed:
+	switch len(current) {
+	case 0:
 		return routeStart{}, ReassessUndecidedReasonNone, nil
+	case 1:
+		return current[0], ReassessUndecidedReasonNone, nil
 	default:
 		return routeStart{}, ReassessUndecidedReasonNone, fmt.Errorf(
-			"%w: the latest plan %s is %s", ErrInconsistentRouteStart, plan.Version().String(), applicability.State())
+			"%w: %d plans are currently effective", ErrInconsistentRouteStart, len(current))
 	}
 }
 
@@ -401,8 +427,8 @@ func (handler *ReassessRouteHandler) reassessPlan(
 
 	case domain.PlanNoLongerApplicable:
 		basis, _ := review.LapseBasis()
-		// 起点在判断键锁里读、只取当前有效的计划，重复触发也在锁里按关联读回了，走到这里的计划不会已经离场；离场失败
-		// 是编程错误，响亮报错。
+		// 起点在判断键锁里读、只取当前有效的计划，重复触发也在锁里按关联读回了：答 ErrPlanNoLongerCurrent 是编程
+		// 错误。离场门的其余拒法（如离场早于生效）也不折成未决，照样响亮报错。
 		lapsed, err := start.applicability.Lapse(basis, trigger.OccurredAt())
 		if err != nil {
 			return ReassessRouteResult{}, fmt.Errorf("lapse plan applicability: %w", err)
@@ -643,7 +669,7 @@ func (handler *ReassessRouteHandler) tryImprovementReroute(
 	if err != nil {
 		return ports.ReassessmentRecord{}, err
 	}
-	// 原计划在接班计划生效的那一刻离场，两者同取触发的业务时间（见 formPlanFromEvidence）。
+	// 原计划在接班计划生效的那一刻离场（ADR-0272）。
 	superseded, err := start.applicability.Supersede(selection.plan.Version(), basis, trigger.OccurredAt())
 	if err != nil {
 		return ports.ReassessmentRecord{}, fmt.Errorf("supersede plan applicability: %w", err)
@@ -720,9 +746,7 @@ type evidenceSelection struct {
 // 由调用方按自己那条线分派——形不成计划不是故障。证据答了候选却缺执行路径是装配坏，响亮
 // 报错不静默。
 //
-// 复核形成的计划从这次触发的业务时间起生效，判断时刻仍取处理时钟。新计划是下一次复核的起点，那一次的失效时刻取它
-// 自己触发的业务时间，不得早于生效（domain.PlanApplicability 的离场门）；生效取处理时钟，业务时间落后于处理时钟的
-// 下一次触发就失效不了。按当前位置判据（ADR-0235），能判的下一次触发都不早于这一次。
+// 复核形成的计划从这次触发的业务时间起生效，判断时刻仍取处理时钟（ADR-0272）。
 func (handler *ReassessRouteHandler) formPlanFromEvidence(
 	ctx context.Context,
 	trigger domain.ReassessmentTrigger,

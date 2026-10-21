@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"sort"
 	"testing"
 	"time"
 
@@ -138,27 +139,31 @@ func (double *reassessmentStoreDouble) LatestTriggerAt(
 	return latestTriggerAt(double.byCorrelation, key)
 }
 
-// LatestNewPlan 与真库同一口径：同判断键、带新计划的复核里取触发业务时间最晚那一次，同一时刻取处理时刻较晚的。
-func (double *reassessmentStoreDouble) LatestNewPlan(
+// FormedPlans 交回同判断键、带新计划的复核里的全部新计划，先后与真库同一口径：按触发业务时间，同一时刻按处理时刻。
+func (double *reassessmentStoreDouble) FormedPlans(
 	_ context.Context,
 	key domain.InitialRouteJudgmentKey,
-) (domain.InitialRoutePlan, bool, error) {
+) ([]domain.InitialRoutePlan, error) {
 	if double.newPlanErr != nil {
-		return domain.InitialRoutePlan{}, false, double.newPlanErr
+		return nil, double.newPlanErr
 	}
-	var latest ports.ReassessmentRecord
-	found := false
+	var formed []ports.ReassessmentRecord
 	for _, record := range double.byCorrelation {
-		if record.Key != key || !record.HasNewPlan {
-			continue
-		}
-		later := record.TriggerOccurredAt.After(latest.TriggerOccurredAt) ||
-			(record.TriggerOccurredAt.Equal(latest.TriggerOccurredAt) && record.ReassessedAt.After(latest.ReassessedAt))
-		if !found || later {
-			latest, found = record, true
+		if record.Key == key && record.HasNewPlan {
+			formed = append(formed, record)
 		}
 	}
-	return latest.NewPlan, found, nil
+	sort.Slice(formed, func(i, j int) bool {
+		if !formed[i].TriggerOccurredAt.Equal(formed[j].TriggerOccurredAt) {
+			return formed[i].TriggerOccurredAt.Before(formed[j].TriggerOccurredAt)
+		}
+		return formed[i].ReassessedAt.Before(formed[j].ReassessedAt)
+	})
+	plans := make([]domain.InitialRoutePlan, 0, len(formed))
+	for _, record := range formed {
+		plans = append(plans, record.NewPlan)
+	}
+	return plans, nil
 }
 
 func latestTriggerAt(
