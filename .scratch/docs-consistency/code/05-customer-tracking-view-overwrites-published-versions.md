@@ -1,7 +1,7 @@
 # 05 VE 客户全程追踪视图的已发布版本被原地覆盖，且每个投影新版本都换一代视图
 
 Category: bug
-Status: ready-for-agent——R1（上线前必修）：对外发布物不留痕。客户视图派生已在 `cmd/parcel-dispatch` 生产装配里跑，客户读口在 `cmd/parcel-api` 上；第一天起每个投影新版本都改写一次客户视图那一行，已向客户发布过的版本读不回，`prior_version` 指着不存在的行。CONTEXT 明令「不得静默删除或改写历史披露」；没有绕法。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
+Status: in-progress——完工待评审与进 main，分支 claude-code05（基于 main `35d181d1c`）。原分级 R1（上线前必修）不变。
 Blocked by: 无
 出处：[audit/ve.md](../audit/ve.md) VE-01（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，现象仍在，VE 代码在此期间未改）。
 
@@ -44,3 +44,44 @@ M：迁移另取号，把 `customer_view` 改成版本表加当前标记（照 `
 - 产品文档 `docs/product/IDP-PARCEL-BUSINESS-PROCESS-AND-MODULE-GUIDE.md`「投影和客户视图只增版本」一句与代码不符，本票落地后即成真，不必改文档。
 
 与 [06](./06-customer-view-shows-dimensions-without-a-visible-judgement.md) 改同一个派生编排，宜先后紧接。
+
+## 完成记录（2026-10-21，分支 claude-code05）
+
+用户授权原话「你作为业务和系统专家自决……解决所有的问题」；下列「代决」由作者会话代 VE owner 作出，待 VE owner 复核。
+
+### 做了什么
+
+- 迁移 `migrations/visibility_exception/0028_customer_view_versions.sql`：`customer_view` 换成版本表 `customer_view_version`（键：租户、客户账户、包裹、版本）加当前标记 `customer_view_current`（键：租户、客户账户、包裹；外键指名一行存下来的版本；另带「当前所依据的投影版本」一格），形状照 `0016_tracking_projection_versions.sql`。存量行各自迁成一条版本行并立为当前，旧表删去。
+- `adapters/postgres` 的 `CustomerViews`：`Save` 先追加版本行、再立或移当前标记，乐观锁语义不变（首发撞已有当前、替代时当前不是前一版，都答 `ErrCurrentViewChanged`，同一事务回滚，不留从未成为当前的版本行）；新增 `FindVersion` 按版本读回（带账户与包裹，跨账户、跨租户与不存在同答）与 `Reaffirm`（只改标记上的依据，乐观锁看版本与原依据）。`FindCurrent` 走标记直取。
+- `ports.CustomerViewStore` 加 `FindVersion`、`Reaffirm`，注释改为版本只增不改写；`domain.RehydrateCustomerView` 与快照注释里「库里只有当前版本」随改。
+- 领域：`CustomerViewDimensions.Equal`；`CustomerTrackingView.Reaffirm(basedOn, dimensions)`——四维变了或投影没换都拒。
+- 派生编排 `DeriveCustomerViewHandler.Handle`：四维与当前版相同时不签新身份、不换代，当前版 `Reaffirm` 跟上新投影，答 `EXISTING_RESULT`，意图照重放那样以同一视图版本再交一次；四维变了才 `Supersede`。
+- 测试：真库 `TestASupersededVersionStaysReadableByVersion`（替代后前一版按版本原样读回、前版指回指着存下来的行、版本行两行、跨账户与跨租户按版本探针同不存在）、`TestReaffirmMovesOnlyTheCurrentBasis`（不多一行、不改版本行、过时依据被乐观锁拒）、`TestTheCustomerViewVersionMigrationCarriesExistingViewsAsTheirCurrentVersions`（存量迁移）、无事务负向证据并进 `TestWritesRefuseToRunOutsideATransaction`；编排 `TestANewerProjectionThatChangesTheDimensionsSupersedesTheCurrentViewKeepingHistory`、`TestANewerProjectionThatLeavesTheDimensionsUnchangedKeepsTheViewVersion`、`TestAFailedReaffirmIsUndecided`；领域 `TestReaffirmFollowsANewerProjectionOnlyWhileTheDimensionsStayTheSame`。`TestAPermittedFinalPendsUntilTheProjectionCarriesTheAdoptedFinal` 的第二拍随改为不换代。`cmd/parcel-dispatch` 里按表数行的用例改数 `customer_view_version`。
+- 文档：UC-VE-008 `AT-VE-161` 的现状缺口注改为已补；票 ve-customer-view-per-projection-version/01 补 2026-10-21 补记。产品指南「投影和客户视图只增版本」一句本票落地后即成真，未改。
+
+### 代决
+
+1. **「所依据的投影版本」记在当前标记上，不记在版本行上**（票面推荐「当前版上原地更新这一列」，另裁）。版本行的 `based_on_projection` 是那一版形成时所依据的投影，一经写入不改；标记上的那一格是当前版最近一次按之确认四维未变的投影。理由：客户追踪响应体带着 `basedOnProjection`，它随版本一起对客发布过；在版本行上原地改它，就是改写一行已发布的版本，与本票要守的「只增不改写」正面相撞，也丢掉「这一版当初依据哪一份投影形成」。把可变的那一格放在本来就可变的当前标记上，版本行一列都不必改。读法随之：`FindCurrent` 答标记上的依据，`FindVersion` 答形成时的依据。
+2. **换不换代只看四维（逐维三态加内容引用）是否相同。** 票面「内容或披露依据变化」里的「披露依据」，视图今天不存披露策略版本，可观察的只有策略逐维的答复；策略换版而四维答复不变，不换代。
+3. **存量行的前版指回原样迁入，不抹成首版。** 指令里「迁成各自的首版」读作「各自成为版本表里存下来的第一行」。那一版确曾替代过别的版本、客户读到过 `priorVersion`；抹掉等于改写已发布的替代关系。它指的那一行读不回，是旧形状已经造成的事实，照 0016 对投影的处理如实留存。
+4. **重新确认答 `EXISTING_RESULT`，不新增结果枚举。** 对客户而言当前版没变；意图仍由同一视图版本认领，`outboxintent.EnqueueOnce` 按信封 ID 去重，不多发一份。没有新信封，因此不涉及 `FingerprintEventID`，也没有新派发路由。
+5. **`prior_version` 不设外键**，同 0016：存量行的前身读不回；新链条由「替代只在当前标记恰指前一版时成立、标记经外键只能指存下来的行」保证前身在库。
+
+### 越权风险点
+
+1. 同一视图版本按当前读与按版本读，`BasedOn` 可能不同（当前读是最近确认的那份投影，按版本读是形成时那份）。客户先后两次查询可能看到同一 `version`、不同 `basedOnProjection`。若 VE owner 认为 `basedOnProjection` 属对客发布内容、变了就该换代，则代决 1、2 要改为投影一换就换代——那又与 CONTEXT「投影重新派生本身不要求形成新的客户视图版本」冲突，需要 VE owner 裁。
+2. 一版被替代之后，它曾经跟上过哪些投影（标记上的依据）随标记移动而不留；只留形成时那份。审计若要「每一版被哪些投影确认过」，要另加一张确认记录表。
+3. 视图不存披露策略版本：策略换版、答复相同，不换代，事后也答不出某一版视图依据哪一版策略。若审计要这一格，要给版本行加列。
+4. 存量行的悬空前版指针保留；按它 `FindVersion` 答查无。今天没有租户、没有生产数据，演示库重灌即无此类行。
+5. 迁移删旧表 `customer_view`：仓内引用已全部改指新表（`cmd/parcel-dispatch` 里按表数行的用例）；仓外若有人直接读这张表（运维脚本、报表），会断。
+
+### AT
+
+- `AT-VE-161`：AT 盘点 ① 行改指新编排用例，并加真库持久化半边。总览计数未动，由协调方进 main 时重算。
+
+### 验证（分支 claude-code05）
+
+- `go build ./...`、`go vet ./...`、`gofmt -l ./cmd ./internal ./migrations` 干净。
+- `scripts/test-full.sh ./internal/visibilityexception/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./cmd/parcel-ve-register/ ./internal/architecture/... ./migrations/... ./internal/platform/migrate/...`：21 个包 ok，退出码 0（`cmd/parcel-ve-register` 是改动包的反向依赖）。
+- 一次性库 `code05seed` 上 `scripts/demo-seeds/seed.sh` 灌完（迁移链含 0028 施加通过），用完已删。演示种子数据未改。
+
