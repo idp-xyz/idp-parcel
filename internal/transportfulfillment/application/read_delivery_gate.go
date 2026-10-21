@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
@@ -23,7 +24,8 @@ type DeliveryGateReadDeps struct {
 	Customs   ports.DeliveryGateView
 }
 
-// DeliveryGateReader 为一次有效交付形成交付门禁读数，供 RegisterWithGateReading 与交付同一笔落册（ADR-0213 决定五）。
+// DeliveryGateReader 为一次有效交付形成交付门禁读数，供 RegisterWithGateReading 与交付同一笔落册（ADR-0213 决定五）；
+// 派送出发前的交付门禁问询（PreviewDeliveryGateHandler，ADR-0238）走同一条路，读数交回设备、不落册。
 //
 // 它由组合根在写事务之前、用外层 ctx 调：关务的判断在它自己的事务里记下（ADR-0206 决定六），嵌进交付登记那一笔会随它
 // 回滚；读在池上，不在写事务里，任何一口读不动都只是读数里的一格，挡不住交付落册。
@@ -63,8 +65,35 @@ func (reader *DeliveryGateReader) ReadRegistration(
 	case !found || !result.Outcome().Succeeded():
 		return domain.DeliveryGateReading{}, nil
 	}
+	return reader.readIntent(ctx, deliveryGateIntent{tenant: key.TenantID, object: key.Object, at: result.OccurredAt()})
+}
 
-	node, stop, err := reader.deliveryNode(ctx, key.TenantID, key.Object)
+// deliveryGateIntent 是交付读数从输入里只取的那三样：租户、对象与交付时点；其余取决于此刻的段册、交接册与关务。交付登记的时点
+// 取派送尝试里那件对象的结果时刻，交付前问询（ADR-0238）的时点取设备给的拟交付时点；两边收成它之后走同一个 readIntent——
+// 「同参同读数」靠的是只有这一条路，不靠两边各写一遍再比对。
+type deliveryGateIntent struct {
+	tenant domain.TenantID
+	object domain.CarriedObjectReference
+	at     time.Time
+}
+
+// deliveryGateIntentOf 是交付前问询把输入收成 deliveryGateIntent 的那一处。租户与对象的判据与交付登记的键同一处
+// （deliveredObjectFrom）：同一件对象在两口受理与否一致。时点按登记精度为零即不受理——不拿服务端时钟补（ADR-0023）。
+func deliveryGateIntentOf(tenant domain.TenantID, object string, at time.Time) (deliveryGateIntent, bool) {
+	if domain.AtRegistryPrecision(at).IsZero() {
+		return deliveryGateIntent{}, false
+	}
+	objectRef, accepted := deliveredObjectFrom(tenant, object)
+	if !accepted {
+		return deliveryGateIntent{}, false
+	}
+	return deliveryGateIntent{tenant: tenant, object: objectRef, at: at}, true
+}
+
+// readIntent 先取交付意图的 at（deliveryNode），取不到就停在本侧、不问关务；取到了才问关务那一件。error 只留给读数自己拼不
+// 出来或读口答错了对象（实现坏了）。
+func (reader *DeliveryGateReader) readIntent(ctx context.Context, intent deliveryGateIntent) (domain.DeliveryGateReading, error) {
+	node, stop, err := reader.deliveryNode(ctx, intent.tenant, intent.object)
 	if err != nil {
 		return domain.DeliveryGateReading{}, err
 	}
@@ -73,25 +102,25 @@ func (reader *DeliveryGateReader) ReadRegistration(
 	}
 
 	finding, err := reader.deps.Customs.ReadDeliveryGate(ctx, ports.DeliveryGateQuery{
-		TenantID: key.TenantID,
-		Object:   key.Object,
+		TenantID: intent.tenant,
+		Object:   intent.object,
 		Node:     node,
-		At:       result.OccurredAt(),
+		At:       intent.at,
 	})
 	if err != nil {
 		cause := departureGateCustomsUnavailable
 		if errors.Is(err, ports.ErrDeliveryGateAnswerUntranslatable) {
 			cause = departureGateCustomsUntranslatable
 		}
-		if finding, err = domain.NewGateFinding(key.Object, domain.GateUnreadable, "",
+		if finding, err = domain.NewGateFinding(intent.object, domain.GateUnreadable, "",
 			[]domain.GateBasis{{Cause: cause}}); err != nil {
 			return domain.DeliveryGateReading{}, err
 		}
 	}
-	if finding.Object() != key.Object {
+	if finding.Object() != intent.object {
 		// 端口答的是另一件、或交回零值却不报错：那是实现坏了，不是关务读不动，记成一格只会把它藏起来。
 		return domain.DeliveryGateReading{}, fmt.Errorf("%w: the customs view answered for %q when asked about %q",
-			errDeliveryGateViewMisanswered, finding.Object(), key.Object)
+			errDeliveryGateViewMisanswered, finding.Object(), intent.object)
 	}
 	return domain.FormDeliveryGateReading(domain.DeliveryGateReadingSpec{Node: node, Finding: finding})
 }

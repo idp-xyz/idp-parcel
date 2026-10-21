@@ -8,8 +8,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
-// 交付门禁读数要问的几口（ADR-0213 决定五）。另立文件而不并进 ports.go，理由同 handover_gate.go：这几口只服务有效交付
-// 登记一处。
+// 交付门禁读数要问的几口（ADR-0213 决定五）。另立文件而不并进 ports.go，理由同 handover_gate.go：这几口只服务交付门禁读数
+// 一处（有效交付登记与交付前问询走的是同一条读数路径）。
 
 // DeliveryGateSegmentView 是读数取 at 时读段的那两问：对象此刻在哪个段里在场，那一段长什么样。只读，不带写口——读数
 // 不动段，结束参与是登记编排在写事务里的事。ActualFulfillmentSegmentRegistry 天然满足它。

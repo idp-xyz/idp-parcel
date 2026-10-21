@@ -30,8 +30,8 @@ type WorkFactAuthenticator interface {
 }
 
 // WorkFactCommandIntake 是作业事实各口的操作者渠道 Intake（ADR-0149 决定二、票 operator-channel/10 余下半边）。
-// 首登与更正共用这一份认证与授予；出发前门禁问询（ADR-0219）只读，也走这一份——能报出发的就能问。不实现关段、建派送
-// 任务、有效时间判断、承运商首次有效收寄判断——那四口归运营决定。
+// 首登与更正共用这一份认证与授予；出发前门禁问询（ADR-0219）与交付前门禁问询（ADR-0238）只读，也走这一份——能报出发、能登
+// 交付的就能问。不实现关段、建派送任务、有效时间判断、承运商首次有效收寄判断——那四口归运营决定。
 type WorkFactCommandIntake struct {
 	authenticator  WorkFactAuthenticator
 	movementSource string
@@ -58,6 +58,7 @@ var (
 	_ DeliveryProofCorrectionIntake = (*WorkFactCommandIntake)(nil)
 	_ DeliveryAttemptIntake         = (*WorkFactCommandIntake)(nil)
 	_ DepartureGatePreviewIntake    = (*WorkFactCommandIntake)(nil)
+	_ DeliveryGatePreviewIntake     = (*WorkFactCommandIntake)(nil)
 )
 
 func (intake *WorkFactCommandIntake) tenantFrom(ctx context.Context, request *http.Request) (domain.TenantID, error) {
@@ -156,6 +157,20 @@ func (intake *WorkFactCommandIntake) IntakeDepartureGatePreview(ctx context.Cont
 	var payload DepartureGatePreviewPayload
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.PreviewDepartureGateCommand{}, err
+	}
+	return payload.Command(tenant)
+}
+
+// IntakeDeliveryGatePreview 与 IntakeRegistration 同一道 tenantFrom：问得了的就是登得了有效交付的。载荷换成只收两格的
+// DeliveryGatePreviewPayload。
+func (intake *WorkFactCommandIntake) IntakeDeliveryGatePreview(ctx context.Context, request *http.Request) (application.PreviewDeliveryGateCommand, error) {
+	tenant, err := intake.tenantFrom(ctx, request)
+	if err != nil {
+		return application.PreviewDeliveryGateCommand{}, err
+	}
+	var payload DeliveryGatePreviewPayload
+	if err := decodeClosedPayload(request.Body, &payload); err != nil {
+		return application.PreviewDeliveryGateCommand{}, err
 	}
 	return payload.Command(tenant)
 }

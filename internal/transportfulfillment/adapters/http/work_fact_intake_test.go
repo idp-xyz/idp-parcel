@@ -151,7 +151,16 @@ var workFactLines = map[string]workFactLine{
 		},
 		valid: workFactDepartureGatePreviewBody,
 	},
+	"/transport-fulfillment/delivery-gate-previews": {
+		intake: func(intake *tfhttp.WorkFactCommandIntake, request *http.Request) error {
+			_, err := intake.IntakeDeliveryGatePreview(context.Background(), request)
+			return err
+		},
+		valid: workFactDeliveryGatePreviewBody,
+	},
 }
+
+const workFactDeliveryGatePreviewBody = `{"object":"SYN-PARCEL-08-10","deliversAt":"2026-09-06T15:30:00+08:00"}`
 
 const workFactDepartureGatePreviewBody = `{"schedule":"SYN-SCHEDULE/linehaul-06","segment":"SYN-SEGMENT-08-06",` +
 	`"departsAt":"2026-09-24T14:00:00+08:00"}`

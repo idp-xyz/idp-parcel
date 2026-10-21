@@ -426,18 +426,27 @@ func (handler *RegisterEffectiveDeliveryHandler) deliveryKey(
 // deliveryKeyFrom 是登记编排与写事务之前问读数那一侧共用的指名受理：两边对同一条命令认出同一个键，读数才问得到登记
 // 要落的那一份。
 func deliveryKeyFrom(tenant domain.TenantID, attempt string, object string) (ports.EffectiveDeliveryKey, bool) {
-	if strings.TrimSpace(tenant.String()) == "" {
+	objectRef, accepted := deliveredObjectFrom(tenant, object)
+	if !accepted {
 		return ports.EffectiveDeliveryKey{}, false
 	}
 	attemptRef, err := domain.NewAttemptReference(attempt)
 	if err != nil {
 		return ports.EffectiveDeliveryKey{}, false
 	}
+	return ports.EffectiveDeliveryKey{TenantID: tenant, Object: objectRef, Attempt: attemptRef}, true
+}
+
+// deliveredObjectFrom 过交付的租户与对象两格：交付登记的键与交付前问询（ADR-0238）都过这一处，同一件对象在两口受理与否一致。
+func deliveredObjectFrom(tenant domain.TenantID, object string) (domain.CarriedObjectReference, bool) {
+	if strings.TrimSpace(tenant.String()) == "" {
+		return domain.CarriedObjectReference{}, false
+	}
 	objectRef, err := domain.NewCarriedObjectReference(object)
 	if err != nil {
-		return ports.EffectiveDeliveryKey{}, false
+		return domain.CarriedObjectReference{}, false
 	}
-	return ports.EffectiveDeliveryKey{TenantID: tenant, Object: objectRef, Attempt: attemptRef}, true
+	return objectRef, true
 }
 
 // RecordedDeliveryGateReading 答这条首登命令是不是在册那一份的同内容重放；是则交回在册那一版的读数。
