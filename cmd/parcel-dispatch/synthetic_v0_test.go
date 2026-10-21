@@ -188,6 +188,10 @@ func newSYNVerticalFixture(t *testing.T) *synVerticalFixture {
 	if err != nil {
 		t.Fatalf("构造来源仓储：%v", err)
 	}
+	answers, err := pspostgres.NewSubmissionOwnershipAnswers(db)
+	if err != nil {
+		t.Fatalf("构造归属答案仓储：%v", err)
+	}
 	requests, err := pspostgres.NewShipmentRequests(db)
 	if err != nil {
 		t.Fatalf("构造委托仓储：%v", err)
@@ -235,6 +239,7 @@ func newSYNVerticalFixture(t *testing.T) *synVerticalFixture {
 		sources,
 		requests,
 		&synSProductionOwnership{t: t},
+		answers,
 		pshandoff.UnconfiguredOtherProductionAuthorityChannel{},
 		&synSSubmissionIdentities{},
 		systemClock{},

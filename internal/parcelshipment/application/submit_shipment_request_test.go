@@ -26,7 +26,7 @@ func TestSubmitEstablishesSubmittedRequestAfterPreservingSource(t *testing.T) {
 	if result.Outcome() != application.OutcomeSubmitted {
 		t.Fatalf("outcome = %q, want SUBMITTED", result.Outcome())
 	}
-	if got, want := fixture.calls, []string{"preserve-source", "decide-ownership", "insert-request"}; !slices.Equal(got, want) {
+	if got, want := fixture.calls, []string{"preserve-source", "decide-ownership", "record-ownership", "insert-request"}; !slices.Equal(got, want) {
 		t.Fatalf("call order = %v, want %v", got, want)
 	}
 
@@ -79,6 +79,11 @@ func TestSubmitReplayReturnsExistingResultWithoutASecondRequest(t *testing.T) {
 	}
 	if fixture.ownership.decideCount != 1 {
 		t.Fatalf("replay decided ownership again: %d decisions", fixture.ownership.decideCount)
+	}
+	// 「已有结果」一行：已经形成生产归属时返回原归属结果——建单所据的那一次，不是重发这一刻再判的。
+	decision, carried := replay.OwnershipDecision()
+	if !carried || decision.DecisionID().String() != "decision-1" {
+		t.Fatalf("replay ownership = %v (carried %v), want the original decision-1", decision.DecisionID(), carried)
 	}
 }
 
@@ -286,7 +291,7 @@ func TestSubmitHandsTheScopeToTheOtherAuthorityAndReturnsItsConfirmation(t *test
 	if result.Outcome() != application.OutcomeOtherProductionAuthority {
 		t.Fatalf("outcome = %q, want OTHER_PRODUCTION_AUTHORITY", result.Outcome())
 	}
-	if got, want := fixture.calls, []string{"preserve-source", "decide-ownership", "deliver-handoff"}; !slices.Equal(got, want) {
+	if got, want := fixture.calls, []string{"preserve-source", "decide-ownership", "deliver-handoff", "record-ownership"}; !slices.Equal(got, want) {
 		t.Fatalf("call order = %v, want %v", got, want)
 	}
 	if fixture.requests.insertCount != 0 {
@@ -546,6 +551,7 @@ type fixture struct {
 	sources   *sourceRepositoryDouble
 	requests  *shipmentRequestRepositoryDouble
 	ownership *ownershipAuthorityDouble
+	answers   *ownershipAnswersDouble
 	handoff   *handoffChannelDouble
 	calls     []string
 }
@@ -563,11 +569,13 @@ func newFixture(t *testing.T) *fixture {
 		control:   domain.AdmissionControlOpen,
 		record:    record,
 	}
+	value.answers = &ownershipAnswersDouble{record: record}
 	value.handoff = &handoffChannelDouble{t: t, record: record}
 	value.handler = application.NewSubmitShipmentRequestHandler(
 		value.sources,
 		value.requests,
 		value.ownership,
+		value.answers,
 		value.handoff,
 		&identityFactoryDouble{},
 		fixedClock{at: time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)},
@@ -828,6 +836,8 @@ type shipmentRequestRepositoryDouble struct {
 	records     map[domain.SourceIdentity]domain.ShipmentRequest
 	record      func(string)
 	insertCount int
+	// failNextInsert 让下一次建单那一笔没落成（只此一次）：它扮演建单事务回滚，委托因此不在。
+	failNextInsert error
 }
 
 func (double *shipmentRequestRepositoryDouble) FindBySourceIdentity(
@@ -845,6 +855,10 @@ func (double *shipmentRequestRepositoryDouble) Insert(
 ) (ports.ShipmentRequestInsertOutcome, error) {
 	double.record("insert-request")
 	double.insertCount++
+	if err := double.failNextInsert; err != nil {
+		double.failNextInsert = nil
+		return ports.ShipmentRequestInsertOutcomeInvalid, err
+	}
 	if _, found := double.records[identity]; found {
 		return ports.ShipmentRequestAlreadyExists, nil
 	}
@@ -876,6 +890,8 @@ type ownershipAuthorityDouble struct {
 	control     domain.AdmissionControl
 	record      func(string)
 	decideCount int
+	// failNext 让下一次判归属答不出（只此一次），扮演准入权威的依赖失败。
+	failNext error
 }
 
 func (double *ownershipAuthorityDouble) DecideProductionOwnership(
@@ -885,9 +901,14 @@ func (double *ownershipAuthorityDouble) DecideProductionOwnership(
 	double.t.Helper()
 	double.record("decide-ownership")
 	double.decideCount++
+	if err := double.failNext; err != nil {
+		double.failNext = nil
+		return domain.ProductionOwnershipDecision{}, err
+	}
 
+	// 决定号随判断次数走：重发要答「原归属结果」时，用例凭它分得出答的是哪一次。
 	spec := domain.ProductionOwnershipDecisionSpec{
-		DecisionID:       mustValue(double.t, domain.NewProductionOwnershipDecisionID, "decision-1"),
+		DecisionID:       mustValue(double.t, domain.NewProductionOwnershipDecisionID, "decision-"+strconv.Itoa(double.decideCount)),
 		Scope:            scope,
 		Authority:        double.authority,
 		AdmissionControl: double.control,
@@ -949,6 +970,66 @@ func (double *handoffChannelDouble) DeliverAdmissionScope(
 	}, nil
 }
 
+// ownershipAnswersDouble 按记下的先后保存每一次归属答案，只追加。
+type ownershipAnswersDouble struct {
+	record  func(string)
+	entries []recordedOwnershipAnswer
+	err     error
+}
+
+type recordedOwnershipAnswer struct {
+	identity domain.SourceIdentity
+	answer   ports.SubmissionOwnershipAnswer
+}
+
+func (double *ownershipAnswersDouble) RecordOwnershipAnswer(
+	_ context.Context,
+	identity domain.SourceIdentity,
+	answer ports.SubmissionOwnershipAnswer,
+) error {
+	double.record("record-ownership")
+	if double.err != nil {
+		return double.err
+	}
+	double.entries = append(double.entries, recordedOwnershipAnswer{identity: identity, answer: answer})
+	return nil
+}
+
+func (double *ownershipAnswersDouble) FindLatestOwnershipAnswer(
+	_ context.Context,
+	identity domain.SourceIdentity,
+) (ports.SubmissionOwnershipAnswer, bool, error) {
+	for index := len(double.entries) - 1; index >= 0; index-- {
+		if double.entries[index].identity == identity {
+			return double.entries[index].answer, true, nil
+		}
+	}
+	return ports.SubmissionOwnershipAnswer{}, false, nil
+}
+
+func (double *ownershipAnswersDouble) FindOwnershipAnswerForRequest(
+	_ context.Context,
+	identity domain.SourceIdentity,
+	request domain.ShipmentRequestID,
+) (ports.SubmissionOwnershipAnswer, bool, error) {
+	for _, entry := range double.entries {
+		if entry.identity == identity && entry.answer.Allowed() && entry.answer.ShipmentRequestID == request {
+			return entry.answer, true, nil
+		}
+	}
+	return ports.SubmissionOwnershipAnswer{}, false, nil
+}
+
+func (double *ownershipAnswersDouble) recordedFor(identity domain.SourceIdentity) int {
+	count := 0
+	for _, entry := range double.entries {
+		if entry.identity == identity {
+			count++
+		}
+	}
+	return count
+}
+
 type identityFactoryDouble struct {
 	versions int
 	tasks    int
@@ -972,6 +1053,7 @@ var (
 	_ ports.SourceSubmissionRepository      = (*sourceRepositoryDouble)(nil)
 	_ ports.ShipmentRequestRepository       = (*shipmentRequestRepositoryDouble)(nil)
 	_ ports.ProductionOwnershipAuthority    = (*ownershipAuthorityDouble)(nil)
+	_ ports.SubmissionOwnershipAnswers      = (*ownershipAnswersDouble)(nil)
 	_ ports.OtherProductionAuthorityChannel = (*handoffChannelDouble)(nil)
 	_ ports.SubmissionIdentityFactory       = (*identityFactoryDouble)(nil)
 	_ ports.Clock                           = fixedClock{}

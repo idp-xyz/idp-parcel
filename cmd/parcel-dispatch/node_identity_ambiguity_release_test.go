@@ -335,7 +335,11 @@ func declareTheMarkInAnotherRequest(t *testing.T, fixture *synVerticalFixture, s
 	if err != nil {
 		t.Fatalf("构造来源仓储：%v", err)
 	}
-	handler := psapplication.NewSubmitShipmentRequestHandler(sources, fixture.requests, &synSProductionOwnership{t: t},
+	answers, err := pspostgres.NewSubmissionOwnershipAnswers(fixture.db)
+	if err != nil {
+		t.Fatalf("构造归属答案仓储：%v", err)
+	}
+	handler := psapplication.NewSubmitShipmentRequestHandler(sources, fixture.requests, &synSProductionOwnership{t: t}, answers,
 		pshandoff.UnconfiguredOtherProductionAuthorityChannel{}, declaringRequestIdentities{suffix: suffix}, systemClock{})
 	identity, err := psdomain.NewSourceIdentity(
 		fixture.identity.TenantID(),

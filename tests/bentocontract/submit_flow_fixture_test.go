@@ -89,6 +89,38 @@ func (boundary preservationBoundary) AppendObservation(
 	})
 }
 
+// ownershipAnswerBoundary 给判得的归属答案每笔各开一个事务:与来源保全同属不随建单回滚的
+// 那一类,形状照 cmd/parcel-api 的同名壳。读口直通。
+type ownershipAnswerBoundary struct {
+	transactor bentoapp.Transactor
+	inner      ports.SubmissionOwnershipAnswers
+}
+
+func (boundary ownershipAnswerBoundary) RecordOwnershipAnswer(
+	ctx context.Context,
+	identity domain.SourceIdentity,
+	answer ports.SubmissionOwnershipAnswer,
+) error {
+	return boundary.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		return boundary.inner.RecordOwnershipAnswer(txCtx, identity, answer)
+	})
+}
+
+func (boundary ownershipAnswerBoundary) FindLatestOwnershipAnswer(
+	ctx context.Context,
+	identity domain.SourceIdentity,
+) (ports.SubmissionOwnershipAnswer, bool, error) {
+	return boundary.inner.FindLatestOwnershipAnswer(ctx, identity)
+}
+
+func (boundary ownershipAnswerBoundary) FindOwnershipAnswerForRequest(
+	ctx context.Context,
+	identity domain.SourceIdentity,
+	request domain.ShipmentRequestID,
+) (ports.SubmissionOwnershipAnswer, bool, error) {
+	return boundary.inner.FindOwnershipAnswerForRequest(ctx, identity, request)
+}
+
 // submissionBoundary 是简报「事务边界」的第二段:建单与「委托已提交」信封在同一个事务里
 // 成立或一起消失。已存在时本事务没有写下任何东西,把答案交回编排按重放规则重答,不入队
 // 第二份意图。
@@ -238,6 +270,10 @@ func newSubmitFlowFixture(
 	if err != nil {
 		t.Fatalf("构造委托仓储:%v", err)
 	}
+	answers, err := psadapter.NewSubmissionOwnershipAnswers(db)
+	if err != nil {
+		t.Fatalf("构造归属答案仓储:%v", err)
+	}
 	store, err := outbox.NewStore(db)
 	if err != nil {
 		t.Fatalf("构造 Outbox Store:%v", err)
@@ -258,6 +294,7 @@ func newSubmitFlowFixture(
 		preservationBoundary{transactor: db.Transactor(), inner: sources},
 		submissionBoundary{transactor: submits, inner: requests, handoff: handoff},
 		contractProductionOwnership{anchor: submitFlowSubmittedAt},
+		ownershipAnswerBoundary{transactor: db.Transactor(), inner: answers},
 		pshandoff.UnconfiguredOtherProductionAuthorityChannel{},
 		&contractSubmissionIdentities{},
 		fixedContractClock{at: submitFlowSubmittedAt},

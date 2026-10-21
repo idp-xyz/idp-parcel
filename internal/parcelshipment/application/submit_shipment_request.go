@@ -157,7 +157,7 @@ func (result SubmitShipmentRequestResult) Parcels() []SubmittedParcel {
 }
 
 // naming 让结果指名一份委托，连同它的逐件包裹。建成、重放、并发建单撞已存在都经这里，件与号一律从委托读、不从命令读：
-// 接单入口每次都现签一组新标识，重放时那一组走不到建单（`CustomerSubmissionIntake.mintInternalIdentities` 的注释），
+// 接单入口每次都现签一组新标识，委托已建时重放那一组走不到建单（`CustomerSubmissionIntake.mintInternalIdentities` 的注释），
 // 从命令读就会把一组从没落库的号交给客户（ADR-0223 决定二）。
 func (result SubmitShipmentRequestResult) naming(request domain.ShipmentRequest) SubmitShipmentRequestResult {
 	result.shipmentRequestID = request.ShipmentRequestID()
@@ -198,6 +198,7 @@ type SubmitShipmentRequestHandler struct {
 	sources    ports.SourceSubmissionRepository
 	requests   ports.ShipmentRequestRepository
 	ownership  ports.ProductionOwnershipAuthority
+	answers    ports.SubmissionOwnershipAnswers
 	handoff    ports.OtherProductionAuthorityChannel
 	identities ports.SubmissionIdentityFactory
 	clock      ports.Clock
@@ -207,6 +208,7 @@ func NewSubmitShipmentRequestHandler(
 	sources ports.SourceSubmissionRepository,
 	requests ports.ShipmentRequestRepository,
 	ownership ports.ProductionOwnershipAuthority,
+	answers ports.SubmissionOwnershipAnswers,
 	handoff ports.OtherProductionAuthorityChannel,
 	identities ports.SubmissionIdentityFactory,
 	clock ports.Clock,
@@ -215,6 +217,7 @@ func NewSubmitShipmentRequestHandler(
 		sources:    sources,
 		requests:   requests,
 		ownership:  ownership,
+		answers:    answers,
 		handoff:    handoff,
 		identities: identities,
 		clock:      clock,
@@ -242,17 +245,29 @@ func (handler *SubmitShipmentRequestHandler) Handle(
 		return SubmitShipmentRequestResult{}, fmt.Errorf("find preserved source: %w", err)
 	}
 	if found {
-		return handler.resolvePreserved(ctx, existing, incoming)
+		return handler.resolvePreserved(ctx, command, existing, incoming)
 	}
 
 	if err := handler.sources.Preserve(ctx, incoming); err != nil {
 		return SubmitShipmentRequestResult{}, fmt.Errorf("preserve source: %w", err)
 	}
+	return handler.proceed(ctx, command, incoming)
+}
 
+// proceed 是来源保全之后的那一段：立候选、互证关联指名、判归属、过门禁、建单。首次提交走它，重发一份保全过却没形成答案的
+// 提交也走它——两者从这里起是同一件事，分开写就会有一边先改、另一边留旧。
+//
+// preserved 是保全在册的那份来源事实：委托的当前提交版本据它立，重发时就是首次到达那一份，不是这一次的观察（观察只追加在
+// 旁边，UC-PS-001「`occurredAt`/`receivedAt` 变化只追加观察」）。
+func (handler *SubmitShipmentRequestHandler) proceed(
+	ctx context.Context,
+	command SubmitShipmentRequestCommand,
+	preserved domain.SourceSubmissionFingerprint,
+) (SubmitShipmentRequestResult, error) {
 	// 用例步骤 3A 先于 3B：无法建立最小委托身份的输入，根本没有可拿去问准入权威的
 	// 拟受理范围。
 	candidate, err := domain.NewSubmissionCandidate(
-		incoming,
+		preserved,
 		command.BatchID,
 		command.ShipmentRequestID,
 		command.DeclaredParcelIDs,
@@ -294,12 +309,13 @@ func (handler *SubmitShipmentRequestHandler) Handle(
 		return SubmitShipmentRequestResult{}, fmt.Errorf("evaluate future submission gate: %w", err)
 	}
 	if !gate.IsAllowed() {
-		return SubmitShipmentRequestResult{
-			outcome:           blockedOutcome(decision),
-			ownershipDecision: decision,
-			hasDecision:       true,
-			gateBlockReasons:  gate.BlockReasons(),
-		}, nil
+		// 挡下的答案记下了才答：重发要凭它分辨这一格是已形成的结果（暂停、已交给他方）还是可以重判的未决；没记下就答，
+		// 重发会把一次暂停重判成放行。
+		blocked := ports.SubmissionOwnershipAnswer{Decision: decision, BlockReasons: gate.BlockReasons()}
+		if err := handler.answers.RecordOwnershipAnswer(ctx, command.Identity, blocked); err != nil {
+			return SubmitShipmentRequestResult{}, fmt.Errorf("record ownership answer: %w", err)
+		}
+		return blockedResult(blocked), nil
 	}
 
 	versionID, err := handler.identities.NextSubmissionVersionID(ctx)
@@ -331,6 +347,12 @@ func (handler *SubmitShipmentRequestHandler) Handle(
 	if err != nil {
 		return SubmitShipmentRequestResult{}, fmt.Errorf("submit shipment request: %w", err)
 	}
+	// 放行的答案在建单之前、在建单那一笔之外记下：建单没落成时它留下「放行了、委托却不在」，重发据此接着建单；建成之后，
+	// 重发按委托号找回建单所据的就是这一次。
+	allowed := ports.SubmissionOwnershipAnswer{Decision: decision, ShipmentRequestID: request.ShipmentRequestID()}
+	if err := handler.answers.RecordOwnershipAnswer(ctx, command.Identity, allowed); err != nil {
+		return SubmitShipmentRequestResult{}, fmt.Errorf("record ownership answer: %w", err)
+	}
 	inserted, err := handler.requests.Insert(ctx, command.Identity, request)
 	if err != nil {
 		return SubmitShipmentRequestResult{}, fmt.Errorf("insert shipment request: %w", err)
@@ -343,9 +365,9 @@ func (handler *SubmitShipmentRequestHandler) Handle(
 			hasDecision:       true,
 		}.naming(request), nil
 	case ports.ShipmentRequestAlreadyExists:
-		// 并发下另一方先建了单。回去按重放规则重答；本次已经 Preserve 过自己那一份，
-		// 不再走 AppendObservation（那条路是给「未保全、只是又看见」用的）。
-		return handler.resolveAfterInsertConflict(ctx, command.Identity, incoming)
+		// 并发下另一方先建了单。回去按重放规则重答；这次到达已经留下过痕迹（首次是保全，续办是那一次观察），
+		// 不再追加观察。
+		return handler.resolveAfterInsertConflict(ctx, command.Identity, preserved)
 	default:
 		return SubmitShipmentRequestResult{}, ErrUnexpectedInsertOutcome
 	}
@@ -355,10 +377,17 @@ func (handler *SubmitShipmentRequestHandler) Handle(
 // 集合外的取值没有恢复动作可派。
 var ErrUnexpectedInsertOutcome = errors.New("parcel shipment: unexpected shipment request insert outcome")
 
-// resolvePreserved 回答来源身份已被保全过的请求。它绝不重判归属、也不建第二份委托：
-// 原内容不动，调用方拿到原结果。
+// resolvePreserved 回答来源身份已被保全过的请求：原内容不动，按这份提交上一次实际走到的位置作答（ADR-0256 决定一第 2 格
+// 「重发必须接着办」）。
+//
+//   - 委托已在 → `已有结果`，指名原委托并带建单所据的原归属结果；不重判、不建第二份。
+//   - 委托不在、上一次已形成挡下的结果（准入暂停、已安全交给他方）→ `已有结果`带原归属结果与门禁原因，不重判：暂停不随原因
+//     解除自动恢复，已交出去的范围再交一次就是投给两个生产系统。哪几格算已形成由 settledOnReplay 定。
+//   - 其余——什么都没留下（归属依赖失败、关联互证或输入校验答完就走、建单那一笔没落成），或上一次答生产归属未决——照首次
+//     提交接着办：重判归属、照常建单。并发的两次续办由建单的唯一键保证只建一份，后到者撞「已存在」按重放规则重答。
 func (handler *SubmitShipmentRequestHandler) resolvePreserved(
 	ctx context.Context,
+	command SubmitShipmentRequestCommand,
 	existing domain.SourceSubmissionFingerprint,
 	incoming domain.SourceSubmissionFingerprint,
 ) (SubmitShipmentRequestResult, error) {
@@ -374,19 +403,77 @@ func (handler *SubmitShipmentRequestHandler) resolvePreserved(
 		return SubmitShipmentRequestResult{}, fmt.Errorf("append source observation: %w", err)
 	}
 
-	result := SubmitShipmentRequestResult{outcome: OutcomeExistingResult}
 	request, found, err := handler.requests.FindBySourceIdentity(ctx, existing.Identity())
 	if err != nil {
 		return SubmitShipmentRequestResult{}, fmt.Errorf("find existing shipment request: %w", err)
 	}
 	if found {
-		result = result.naming(request)
+		return handler.existingRequestResult(ctx, existing.Identity(), request)
+	}
+
+	answer, answered, err := handler.answers.FindLatestOwnershipAnswer(ctx, existing.Identity())
+	if err != nil {
+		return SubmitShipmentRequestResult{}, fmt.Errorf("find latest ownership answer: %w", err)
+	}
+	if answered && settledOnReplay(answer) {
+		result := blockedResult(answer)
+		result.outcome = OutcomeExistingResult
+		return result, nil
+	}
+	return handler.proceed(ctx, command, existing)
+}
+
+// settledOnReplay 判一次挡下的归属答案在重发时是不是已形成的结果。只有两格是：`非本产品生产归属`（范围已安全交给他方，
+// ADR-0128 决定三）与`准入暂停`（首发试点叠加条件：原因解除也不自动恢复，恢复要一次明确的恢复决定，而不是客户再发一次）。
+// `生产归属未决`不是——UC-PS-001 未决结束写的就是「原始提交和处理尝试可安全续办」，重发即续办。放行过的答案也不是：
+// 委托不在，说明建单那一笔没落成。
+func settledOnReplay(answer ports.SubmissionOwnershipAnswer) bool {
+	if answer.Allowed() {
+		return false
+	}
+	switch blockedOutcome(answer.Decision) {
+	case OutcomeOtherProductionAuthority, OutcomeAdmissionPaused:
+		return true
+	default:
+		return false
+	}
+}
+
+// blockedResult 把一次挡下的归属答案译成结果：首次答它，重发答已形成的那几格时也照它带原归属结果与门禁原因。
+func blockedResult(answer ports.SubmissionOwnershipAnswer) SubmitShipmentRequestResult {
+	return SubmitShipmentRequestResult{
+		outcome:           blockedOutcome(answer.Decision),
+		ownershipDecision: answer.Decision,
+		hasDecision:       true,
+		gateBlockReasons:  append([]domain.FutureSubmissionBlockReason(nil), answer.BlockReasons...),
+	}
+}
+
+// existingRequestResult 回答委托已在的那一格：指名它，并带建它所据的那次归属答案（UC-PS-001「已有结果」一行）。按委托号找
+// 而不取最近一次：并发续办时落败那一方也记了自己的答案。找不到就不带——那是答案记录落地之前建成的委托，没有可答的原归属
+// 结果，不拿别的一次顶替。
+func (handler *SubmitShipmentRequestHandler) existingRequestResult(
+	ctx context.Context,
+	identity domain.SourceIdentity,
+	request domain.ShipmentRequest,
+) (SubmitShipmentRequestResult, error) {
+	result := SubmitShipmentRequestResult{outcome: OutcomeExistingResult}.naming(request)
+	answer, answered, err := handler.answers.FindOwnershipAnswerForRequest(ctx, identity, request.ShipmentRequestID())
+	if err != nil {
+		return SubmitShipmentRequestResult{}, fmt.Errorf("find ownership answer for request: %w", err)
+	}
+	if answered {
+		result.ownershipDecision = answer.Decision
+		result.hasDecision = true
 	}
 	return result, nil
 }
 
 // resolveAfterInsertConflict 回答 Insert 交回「已存在」之后的那一格。与 resolvePreserved 共用
-// 分类规则，但不再追加观察：走到这里时本次已经对本份输入做过 Preserve。
+// 分类规则，但不再追加观察：走到这里时这次到达已经保全过或追加过观察。
+//
+// 「已存在」却按来源身份读不回委托，撞的是委托号唯一键（另一个来源键占了同一个号）：这份提交并没有建成，上抛让调用方
+// 原样重发、接单入口另签一组号接着办，不答一个不指名委托的已有结果——那正是这份提交从此不再建单的样子。
 func (handler *SubmitShipmentRequestHandler) resolveAfterInsertConflict(
 	ctx context.Context,
 	identity domain.SourceIdentity,
@@ -408,15 +495,14 @@ func (handler *SubmitShipmentRequestHandler) resolveAfterInsertConflict(
 		return SubmitShipmentRequestResult{outcome: OutcomeIngressConflict}, nil
 	}
 
-	result := SubmitShipmentRequestResult{outcome: OutcomeExistingResult}
 	request, found, err := handler.requests.FindBySourceIdentity(ctx, identity)
 	if err != nil {
 		return SubmitShipmentRequestResult{}, fmt.Errorf("find existing shipment request: %w", err)
 	}
-	if found {
-		result = result.naming(request)
+	if !found {
+		return SubmitShipmentRequestResult{}, fmt.Errorf("insert reported already exists but no shipment request is found")
 	}
-	return result, nil
+	return handler.existingRequestResult(ctx, identity, request)
 }
 
 // resolvePriorClaim 把关联指名换成已互证的关联出处（`AT-PS-036`②③、`AT-PS-076`）。

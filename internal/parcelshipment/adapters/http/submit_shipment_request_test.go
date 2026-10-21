@@ -362,6 +362,7 @@ func newFixtureHandingOffThrough(t *testing.T, handoff ports.OtherProductionAuth
 			value.sources,
 			value.requests,
 			value.ownership,
+			&ownershipAnswersDouble{},
 			handoff,
 			&identityFactoryDouble{},
 			fixedClock{at: time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)},
@@ -576,6 +577,50 @@ func (double *handoffChannelDouble) DeliverAdmissionScope(
 		QueryRef:             mustValue(double.t, domain.NewHandoffQueryReference, "query-1"),
 		EffectiveAt:          time.Date(2026, 8, 7, 11, 30, 0, 0, time.UTC),
 	}, nil
+}
+
+// ownershipAnswersDouble 按记下的先后保存归属答案，只追加；端点这一层只看答复怎么落到响应体，不在这里重证重发怎么判。
+type ownershipAnswersDouble struct {
+	entries []recordedOwnershipAnswer
+}
+
+type recordedOwnershipAnswer struct {
+	identity domain.SourceIdentity
+	answer   ports.SubmissionOwnershipAnswer
+}
+
+func (double *ownershipAnswersDouble) RecordOwnershipAnswer(
+	_ context.Context,
+	identity domain.SourceIdentity,
+	answer ports.SubmissionOwnershipAnswer,
+) error {
+	double.entries = append(double.entries, recordedOwnershipAnswer{identity: identity, answer: answer})
+	return nil
+}
+
+func (double *ownershipAnswersDouble) FindLatestOwnershipAnswer(
+	_ context.Context,
+	identity domain.SourceIdentity,
+) (ports.SubmissionOwnershipAnswer, bool, error) {
+	for index := len(double.entries) - 1; index >= 0; index-- {
+		if double.entries[index].identity == identity {
+			return double.entries[index].answer, true, nil
+		}
+	}
+	return ports.SubmissionOwnershipAnswer{}, false, nil
+}
+
+func (double *ownershipAnswersDouble) FindOwnershipAnswerForRequest(
+	_ context.Context,
+	identity domain.SourceIdentity,
+	request domain.ShipmentRequestID,
+) (ports.SubmissionOwnershipAnswer, bool, error) {
+	for _, entry := range double.entries {
+		if entry.identity == identity && entry.answer.Allowed() && entry.answer.ShipmentRequestID == request {
+			return entry.answer, true, nil
+		}
+	}
+	return ports.SubmissionOwnershipAnswer{}, false, nil
 }
 
 type identityFactoryDouble struct {

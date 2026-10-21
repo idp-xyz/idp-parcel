@@ -143,13 +143,13 @@ func (transactor *uncertainOverRollback) WithinTransaction(
 }
 
 // TestCommitUncertainOverARollbackAnswersTruthfullyByStableCorrelation 证回滚方向的
-// 恢复纪律：按稳定关联查询答的是真相（委托不存在、半个都没长出来），且重发同一命令
-// 不盲目重跑提交事务。
+// 恢复纪律：按稳定关联查询答的是真相（委托不存在、半个都没长出来），不确定错误本身
+// 不触发自动重放。
 //
-// 这个方向上来源保全已经独立提交（简报「事务边界」第一段），重发同命令因此走重放
-// 判定：答`已有结果`且不附委托——「只有已经建单时才附已有委托结果」（简报「输入与
-// 幂等」）——提交事务一次都不再开。把保全后中断的提交续成委托属「已证明业务幂等时
-// 才能自动续办」的续办机制，本文件只证当前口径如实、不越界替它作答。
+// 这个方向上来源保全已经独立提交（简报「事务边界」第一段），合法恢复是调用方带原命令
+// 重发：编排先按稳定关联查原结果，确认委托不在才接着办——重判归属、建单，恰好再开一次
+// 提交事务（ADR-0256 决定一第 2 格「重发必须接着办」，票 docs-consistency/code/39）。
+// 答一个不附委托的`已有结果`就此了事，这份提交便再也不会建单。
 func TestCommitUncertainOverARollbackAnswersTruthfullyByStableCorrelation(t *testing.T) {
 	injector := &uncertainOverRollback{}
 	fixture := newSubmitFlowFixture(t, func(base bentoapp.Transactor) bentoapp.Transactor {
@@ -183,26 +183,26 @@ func TestCommitUncertainOverARollbackAnswersTruthfullyByStableCorrelation(t *tes
 		t.Fatalf("意图行数 = %d, want 0——回滚方向不得留下无主意图", intents)
 	}
 
-	// 重发同一命令:来源保全已独立提交,重放判定接手——答`已有结果`、不附委托、
-	// 不再开提交事务。
+	// 重发同一命令:来源保全已独立提交,查得委托不在,接着办——建成、交回这份委托,
+	// 提交事务恰好再开一次。
 	replayed, err := fixture.handler.Handle(ctx,
 		fixture.submitCommand(t, identity, "PBC07-REQ-02", "sha256:pbc07-b", submitFlowSubmittedAt.Add(time.Minute)))
 	if err != nil {
 		t.Fatalf("重发同一命令:%v", err)
 	}
-	if replayed.Outcome() != psapplication.OutcomeExistingResult {
-		t.Fatalf("重发结果 = %s, want EXISTING_RESULT（保全已提交）", replayed.Outcome())
+	if replayed.Outcome() != psapplication.OutcomeSubmitted {
+		t.Fatalf("重发结果 = %s, want SUBMITTED（查得委托不在，接着建单）", replayed.Outcome())
 	}
-	if _, attached := replayed.ShipmentRequestID(); attached {
-		t.Fatal("重发附带了委托标识——委托从未建立,附上即编造")
+	if replayedID, attached := replayed.ShipmentRequestID(); !attached || replayedID.String() != "PBC07-REQ-02" {
+		t.Fatalf("重发交回 %q, want 这次建成的 PBC07-REQ-02", replayedID)
 	}
-	if calls := fixture.submits.calls.Load(); calls != 1 {
-		t.Fatalf("重发后提交事务计数 = %d, want 仍为 1——重放判定不重跑事务", calls)
+	if calls := fixture.submits.calls.Load(); calls != 2 {
+		t.Fatalf("重发后提交事务计数 = %d, want 2——续办恰好再开一次", calls)
 	}
-	if rows := fixture.requestRowCount(t, identity); rows != 0 {
-		t.Fatalf("重发后委托行数 = %d, want 0", rows)
+	if rows := fixture.requestRowCount(t, identity); rows != 1 {
+		t.Fatalf("重发后委托行数 = %d, want 1", rows)
 	}
-	if intents := fixture.submittedIntentCount(t); intents != 0 {
-		t.Fatalf("重发后意图行数 = %d, want 0", intents)
+	if intents := fixture.submittedIntentCount(t); intents != 1 {
+		t.Fatalf("重发后意图行数 = %d, want 1", intents)
 	}
 }

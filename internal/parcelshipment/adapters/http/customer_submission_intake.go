@@ -417,7 +417,8 @@ func customerDeclaredReferences(
 
 // mintInternalIdentities 现签内部标识。它们**不从客户参考派生**——`SubmissionIdentityFactory`
 // 的端口注释把这条写死了：「客户参考号不得变成内部标识」。代价是同一份内容重发两次会
-// 签出两组新标识，但那两组都用不上：重放在来源身份上就被认出，命令里的标识根本走不到建单。
+// 签出两组新标识。委托已建时那一组用不上：重放在来源身份上就被认出，答的是原委托。只有上一次
+// 保全之后没建成单，重发接着建单时才用这一组——上一组从没落库，客户手里也没有它。
 func (intake *CustomerSubmissionIntake) mintInternalIdentities(
 	parcelCount int,
 ) (domain.ShipmentRequestID, domain.SubmissionBatchID, []domain.DeclaredParcelID, error) {

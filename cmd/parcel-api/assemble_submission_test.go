@@ -32,8 +32,9 @@ import (
 
 // Covers: 审计票 13——`/shipment-requests` 的第二参是真编排：整条链在真实 PostgreSQL
 // 上装得起来；治理目录未配置时归属如实答`权威未确定`、提交停在 OWNERSHIP_UNRESOLVED
-// 且带着归属决定；来源保全确实落库——重放同一份输入答`已有结果`，证明首笔事务真的
-// 提交了，而不是装配在某个替身上悄悄成立。测试输入是隔离合成，只记 `S`，不进生产装配。
+// 且带着归属决定；来源保全确实落库——重放同一份输入被认作同一请求、追加一次观察，再按
+// 未决续办重判归属（票 docs-consistency/code/39），证明首笔事务真的提交了，而不是装配在
+// 某个替身上悄悄成立。测试输入是隔离合成，只记 `S`，不进生产装配。
 //
 // 隔离形态入参传 nil，因此本用例同时是 ADR-0091「生产形态一字未变」那条的钉子：
 // 隔离形态哪天漏进生产装配，停在 OWNERSHIP_UNRESOLVED 这一格会在这里先变绿再被发现。
@@ -65,8 +66,11 @@ func TestTheWiredSubmissionAnswersHonestlyAgainstARealDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("重放同一份输入：%v", err)
 	}
-	if got := replay.Outcome(); got != shipmentapp.OutcomeExistingResult {
-		t.Fatalf("outcome = %v, want EXISTING_RESULT——重放靠的是首笔事务已提交的来源保全", got)
+	if got := replay.Outcome(); got != shipmentapp.OutcomeOwnershipUnresolved {
+		t.Fatalf("outcome = %v, want OWNERSHIP_UNRESOLVED——未决的重放重判归属，目录仍未配置就仍判不出", got)
+	}
+	if got := observationCount(t, pool, command.Identity); got != 1 {
+		t.Fatalf("观察 = %d 条, want 1——重放靠的是首笔事务已提交的来源保全", got)
 	}
 }
 
@@ -94,8 +98,10 @@ func TestTheGovernanceSelfAuthorityLeavesProductionOwnershipUnresolved(t *testin
 }
 
 // Covers: 两段事务边界的第一段（简报「事务边界」；ADR-0081）——来源保全在自己的事务里
-// 独立提交，编排随后给出业务性拒绝也动不了它，重放因此答`已有结果`。「被拒的提交也
-// 保全来源」由 preservationBoundary 的边界位置兑现，不再依赖「答案即提交」的大事务。
+// 独立提交，编排随后给出业务性拒绝也动不了它，重放因此被认作同一请求、追加一次观察。
+// 「被拒的提交也保全来源」由 preservationBoundary 的边界位置兑现，不再依赖「答案即提交」
+// 的大事务。关联互证答完就走、不留答案，重放按原指名再互证一次，答的仍是`查无原委托`
+// （票 docs-consistency/code/39）。
 //
 // 建单事务回滚的半边不在此重证：WithinTransaction 对返回错误即回滚是框架合同，
 // 建单与信封同事务的原子性由 `tests/bentocontract` 的 PBC-04/05/07 在真库上取证。
@@ -131,8 +137,11 @@ func TestARefusedSubmissionStillPreservesItsSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("重放被拒提交：%v", err)
 	}
-	if got := replay.Outcome(); got != shipmentapp.OutcomeExistingResult {
-		t.Fatalf("outcome = %v, want EXISTING_RESULT——被拒的提交也保全了来源", got)
+	if got := replay.Outcome(); got != shipmentapp.OutcomePriorRequestNotFound {
+		t.Fatalf("outcome = %v, want PRIOR_REQUEST_NOT_FOUND", got)
+	}
+	if got := observationCount(t, pool, command.Identity); got != 1 {
+		t.Fatalf("观察 = %d 条, want 1——被拒的提交也保全了来源", got)
 	}
 }
 
@@ -559,6 +568,18 @@ func submissionAssembledWith(
 	ownership ports.ProductionOwnershipAuthority,
 ) (*shipmentapp.SubmitShipmentRequestHandler, *outbox.Store) {
 	t.Helper()
+	return submissionAssembledThrough(t, db, ownership, nil)
+}
+
+// submissionAssembledThrough 在 submissionAssembledWith 之上留一个口子：wrapHandoff 非空时包住「委托已提交」意图适配器，
+// 好让用例在建单那一笔事务里注入失败——事务真回滚，委托行与信封一起消失，正是「保全已落、委托却不在」那一格。
+func submissionAssembledThrough(
+	t *testing.T,
+	db *bentopg.DB,
+	ownership ports.ProductionOwnershipAuthority,
+	wrapHandoff func(ports.ShipmentRequestSubmittedHandoff) ports.ShipmentRequestSubmittedHandoff,
+) (*shipmentapp.SubmitShipmentRequestHandler, *outbox.Store) {
+	t.Helper()
 
 	sources, err := pspostgres.NewSourceSubmissions(db)
 	if err != nil {
@@ -581,10 +602,19 @@ func submissionAssembledWith(
 	if err != nil {
 		t.Fatalf("构造标识工厂：%v", err)
 	}
+	answers, err := pspostgres.NewSubmissionOwnershipAnswers(db)
+	if err != nil {
+		t.Fatalf("构造归属答案仓储：%v", err)
+	}
+	var downstream ports.ShipmentRequestSubmittedHandoff = handoff
+	if wrapHandoff != nil {
+		downstream = wrapHandoff(handoff)
+	}
 	return shipmentapp.NewSubmitShipmentRequestHandler(
 		preservationBoundary{transactor: db.Transactor(), inner: sources},
-		submissionBoundary{transactor: db.Transactor(), inner: requests, handoff: handoff},
+		submissionBoundary{transactor: db.Transactor(), inner: requests, handoff: downstream},
 		ownership,
+		ownershipAnswerBoundary{transactor: db.Transactor(), inner: answers},
 		pshandoff.UnconfiguredOtherProductionAuthorityChannel{},
 		identities,
 		clock,
@@ -746,6 +776,24 @@ func (authority otherAuthorityOwnership) DecideProductionOwnership(
 // submittedEnvelopeType 与意图适配器的类型常量同字面（`tests/bentocontract` 同款拍法）：
 // 按类型统计而不只按 EventID，一个意外身份的第二份信封才逃不掉。
 const submittedEnvelopeType = "parcel-shipment.shipment-request.submitted"
+
+// observationCount 数一份来源身份的重放观察：重放被认作同一请求，才会追加在已保全的来源旁边。
+func observationCount(t *testing.T, pool *pgxpool.Pool, identity domain.SourceIdentity) int {
+	t.Helper()
+	var count int
+	err := pool.QueryRow(t.Context(),
+		`SELECT count(*) FROM parcel_shipment.source_submission_observation
+		  WHERE tenant_id = $1 AND customer_account_id = $2 AND source = $3 AND source_request_key = $4`,
+		identity.TenantID().String(),
+		identity.CustomerAccountID().String(),
+		identity.Source().String(),
+		identity.RequestKey().String(),
+	).Scan(&count)
+	if err != nil {
+		t.Fatalf("统计观察条数：%v", err)
+	}
+	return count
+}
 
 func submittedEnvelopeCount(t *testing.T, pool *pgxpool.Pool) int {
 	t.Helper()

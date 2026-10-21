@@ -78,6 +78,8 @@ func openDatabase(ctx context.Context, getenv func(string) string) (*bentopg.DB,
 // 提交」信封同一事务原子。PS 的写口按框架合同走 RequireExecutor，无事务即拒，事务
 // 边界因此归装配点，编排自己不开也不提交；两个边界壳只切事务，不含业务判断。
 //
+// 判得的归属答案（ownershipAnswerBoundary）与来源保全同属第一段那一类：逐笔独立提交，不随建单回滚。
+//
 // 先前的整段 Handle 单事务壳（transactionalSubmission）随 ADR-0081 退役：它让编排
 // 报错时把已保全的来源一并回滚，而 UC-PS-001 步骤 2 明写「后续解析或依赖失败不能
 // 删除该记录」——保全的存活不能系在后续步骤的成败上。
@@ -114,6 +116,40 @@ func (boundary preservationBoundary) AppendObservation(
 	return boundary.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
 		return boundary.inner.AppendObservation(txCtx, observed)
 	})
+}
+
+// ownershipAnswerBoundary 给判得的归属答案每笔各开一个事务：答案在建单之前、在建单那一笔之外落下，建单回滚也带不走它——
+// 重发正是凭「放行了、委托却不在」接着建单（票 docs-consistency/code/39）。读口直通。
+type ownershipAnswerBoundary struct {
+	transactor bentoapp.Transactor
+	inner      ports.SubmissionOwnershipAnswers
+}
+
+var _ ports.SubmissionOwnershipAnswers = ownershipAnswerBoundary{}
+
+func (boundary ownershipAnswerBoundary) RecordOwnershipAnswer(
+	ctx context.Context,
+	identity domain.SourceIdentity,
+	answer ports.SubmissionOwnershipAnswer,
+) error {
+	return boundary.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		return boundary.inner.RecordOwnershipAnswer(txCtx, identity, answer)
+	})
+}
+
+func (boundary ownershipAnswerBoundary) FindLatestOwnershipAnswer(
+	ctx context.Context,
+	identity domain.SourceIdentity,
+) (ports.SubmissionOwnershipAnswer, bool, error) {
+	return boundary.inner.FindLatestOwnershipAnswer(ctx, identity)
+}
+
+func (boundary ownershipAnswerBoundary) FindOwnershipAnswerForRequest(
+	ctx context.Context,
+	identity domain.SourceIdentity,
+	request domain.ShipmentRequestID,
+) (ports.SubmissionOwnershipAnswer, bool, error) {
+	return boundary.inner.FindOwnershipAnswerForRequest(ctx, identity, request)
 }
 
 // submissionBoundary 是简报「事务边界」的第二段：建单与「委托已提交」信封在同一个
@@ -223,6 +259,10 @@ func buildSubmissionOrchestration(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: shipment requests: %w", err)
 	}
+	answers, err := pspostgres.NewSubmissionOwnershipAnswers(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: submission ownership answers: %w", err)
+	}
 	clock := systemClock{}
 	ownership, err := buildProductionOwnership(db, isolated, selfAuthority)
 	if err != nil {
@@ -244,6 +284,7 @@ func buildSubmissionOrchestration(
 		preservationBoundary{transactor: db.Transactor(), inner: sources},
 		submissionBoundary{transactor: db.Transactor(), inner: requests, handoff: downstream},
 		ownership,
+		ownershipAnswerBoundary{transactor: db.Transactor(), inner: answers},
 		pshandoff.UnconfiguredOtherProductionAuthorityChannel{},
 		identities,
 		clock,
