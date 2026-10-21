@@ -1,7 +1,7 @@
 # 69 业务时间早于委托接受的复核触发撞离场门，整封信封响亮失败
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code69。R2（上线后尽快；若某租户首发动线里「先收后受理」加触发晚处理是常态则升 R1）。2026-10-21 协调方据 code/60 越权风险点 1 与其隔离评审建议立，同日给裁向。
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code69。R2（上线后尽快；若某租户首发动线里「先收后受理」加触发晚处理是常态则升 R1）。2026-10-21 协调方据 code/60 越权风险点 1 与其隔离评审建议立，同日给裁向。
 Blocked by: 无（裁向已给；实现与 ADR 由同一张票落）
 出处：code/60 完成记录越权风险点 1；code/60 隔离评审 risk1_recommendation。
 
@@ -102,3 +102,9 @@ UC-NR-003 立 `AT-NR-087`。Covers 指它的用例：
 - AT 盘点 rebase 冲突取并集。
 - 验证：同一组包重跑退 0，22 个包 ok；迁移改过，在一次性库上随种子重灌一遍，退 0，新约束名在库里，用完已删。scratchpad 副本上 `adr-index`、`-check` 退 0；ADR-0235 正文除 Status 行与 Links 外逐字节不变。
 
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-code69` tip `764fd9b3d` 在 main `3e3b08300` 上快进；隔离评审无阻断，小改已收。
+- 协调方在 tip 上单独提交重生成的 ADR 索引（新 ADR-0279、0235 注记）、AT 计数（AT-NR-087）与机制清点，检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净；演示种子在一次性库上灌通（迁移 `network_routing/0024` 一并施加），用后删库。
+- 去向：ADR-0279 越权风险点 1（从接受时刻的位置补判一次）归 demo-chain-gaps/154。
