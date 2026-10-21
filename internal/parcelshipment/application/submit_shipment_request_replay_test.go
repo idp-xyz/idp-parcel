@@ -370,3 +370,23 @@ func TestAConcurrentInsertConflictCarriesTheWinnersOwnership(t *testing.T) {
 		t.Fatalf("ownership = %v (carried %v), want 先建成那一份的 decision-1", decision.DecisionID(), carried)
 	}
 }
+
+// Covers: 留存的答案里读回一格词表之外的拒绝，是坏数据——重发上抛、没有形成答案，不答一个不带原结果的`已有结果`。
+func TestAReplayOverAnUntranslatableRefusalFormsNoAnswer(t *testing.T) {
+	fixture := newFixture(t)
+	ctx := context.Background()
+	command := fixture.command(t)
+	command.DeclaredParcelIDs = nil
+	if _, err := fixture.handler.Handle(ctx, command); err != nil {
+		t.Fatalf("first handle: %v", err)
+	}
+	fixture.answers.entries[len(fixture.answers.entries)-1].answer.Refusal = ports.SubmissionRefusal(99)
+
+	result, err := fixture.handler.Handle(ctx, command)
+	if !errors.Is(err, application.ErrUntranslatableRefusal) {
+		t.Fatalf("err = %v, want ErrUntranslatableRefusal", err)
+	}
+	if result.Outcome() != application.OutcomeInvalid {
+		t.Fatalf("outcome = %q, want 没有形成答案", result.Outcome())
+	}
+}

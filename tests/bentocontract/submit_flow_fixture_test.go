@@ -90,8 +90,8 @@ func (boundary preservationBoundary) AppendObservation(
 	})
 }
 
-// submissionAnswerBoundary 给判得的归属答案每笔各开一个事务:与来源保全同属不随建单回滚的
-// 那一类,形状照 cmd/parcel-api 的同名壳。读口直通。
+// submissionAnswerBoundary 给答出的答案每笔开一个事务;在续办守卫里调用时并进守卫那一笔,
+// 与委托、信封同生共死。形状照 cmd/parcel-api 的同名壳。读口直通。
 type submissionAnswerBoundary struct {
 	transactor bentoapp.Transactor
 	inner      ports.SubmissionAnswers
@@ -143,8 +143,8 @@ func (guard submissionContinuationGuard) Exclusively(
 }
 
 // submissionBoundary 是简报「事务边界」的第二段:建单与「委托已提交」信封在同一个事务里
-// 成立或一起消失。已存在时本事务没有写下任何东西,把答案交回编排按重放规则重答,不入队
-// 第二份意图。
+// 成立或一起消失;在续办守卫里调用时并进守卫那一笔,连同这次的提交答案。已存在时这一段没有
+// 写下任何东西,把答案交回编排按重放规则重答,不入队第二份意图。
 type submissionBoundary struct {
 	transactor bentoapp.Transactor
 	inner      ports.ShipmentRequestRepository

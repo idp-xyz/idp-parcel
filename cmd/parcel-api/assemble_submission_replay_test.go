@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
@@ -178,17 +179,19 @@ func TestAReplayOfABuiltRequestNamesItWithTheOwnershipItWasBuiltOn(t *testing.T)
 
 // Covers: `AT-PS-111` 并发一支——建单那一笔回滚之后，两路重发同时到达：先进守卫的那一路判归属、建单；后一路在守卫外等，进门
 // 时委托已在，答`已有结果`指名同一份并带胜者建单所据的归属，自己一次归属都不判。脚本让后一路若真去判就会判成他方——守卫没排住
-// 时，同一范围就会一边在本地建单、一边投给他方（ADR-0266 决定二）。
+// 时，同一范围就会一边在本地建单、一边投给他方（ADR-0266 决定二）。用屏障而不靠时间窗：第一路在判归属里停住，直到库里看见
+// 第二路在等同一把咨询锁，才放第一路落笔。
 func TestTwoConcurrentReplaysAfterARolledBackBuildBuildOnceAndJudgeOnce(t *testing.T) {
 	pool, db := replayDatabase(t)
 	failing := &failingOnceHandoff{}
 	entered := make(chan struct{})
-	slowPermit := func(scope domain.AdmissionScope) (domain.ProductionOwnershipDecision, error) {
+	release := make(chan struct{})
+	heldPermit := func(scope domain.AdmissionScope) (domain.ProductionOwnershipDecision, error) {
 		close(entered)
-		time.Sleep(300 * time.Millisecond)
+		<-release
 		return permit(scope)
 	}
-	ownership := &scriptedOwnership{steps: []ownershipStep{permit, slowPermit, other}}
+	ownership := &scriptedOwnership{steps: []ownershipStep{permit, heldPermit, other}}
 	channel := &scriptedChannel{observe: []handoffObservationStep{confirmHandoff}}
 	submission, _ := submissionAssembledThrough(t, db, ownership, failing.wrap, channel)
 	command := submissionCommand(t)
@@ -222,7 +225,12 @@ func TestTwoConcurrentReplaysAfterARolledBackBuildBuildOnceAndJudgeOnce(t *testi
 		defer wait.Done()
 		results[1], failures[1] = submission.Handle(context.Background(), commands[1])
 	}()
+	waited := sawSecondReplayWaiting(t, pool)
+	close(release)
 	wait.Wait()
+	if !waited {
+		t.Fatal("第二路没有在第一路持锁期间等那把锁，并发前提不成立")
+	}
 
 	for index, err := range failures {
 		if err != nil {
@@ -259,7 +267,7 @@ func TestTwoConcurrentReplaysAfterARolledBackBuildBuildOnceAndJudgeOnce(t *testi
 
 // Covers: `AT-PS-114`——首次判为他方、交接没确认（通道未配置），其间登记册翻成本产品放行。重发不重判归属，按记着的那次尝试重投：
 // 仍未确认就仍答`生产归属未决`、不在本地建单；确认了才答`非本产品生产归属`；此后再重发答`已有结果`带原结果（ADR-0266 决定二，
-// ADR-0128 决定二「同一份决定对应同一次尝试」）。
+// ADR-0128 决定二「同一份决定重复走到这里必须得到同一次尝试」）。
 func TestAReplayAfterAnUnconfirmedHandoffRedeliversTheSameAttemptInsteadOfDeciding(t *testing.T) {
 	pool, db := replayDatabase(t)
 	ownership := &scriptedOwnership{steps: []ownershipStep{other, permit}}
@@ -303,6 +311,19 @@ func TestAReplayAfterAnUnconfirmedHandoffRedeliversTheSameAttemptInsteadOfDecidi
 	if rows := submissionAnswerCount(t, pool, command.Identity); rows != 3 {
 		t.Fatalf("答案 = %d 行, want 3——每一次投递的评估都留下", rows)
 	}
+}
+
+// sawSecondReplayWaiting 另开一条连接（测试池只有两条，两路续办各占一条），用本包的 waitForAdvisoryLockWaiter 看本库里有没有
+// 一个事务在等咨询锁。不在这里 Fatal：调用方要先放行持锁那一路，否则用例吊死。
+func sawSecondReplayWaiting(t *testing.T, pool *pgxpool.Pool) bool {
+	t.Helper()
+	conn, err := pgx.ConnectConfig(t.Context(), pool.Config().ConnConfig.Copy())
+	if err != nil {
+		t.Errorf("另开观察连接：%v", err)
+		return false
+	}
+	defer conn.Close(context.Background())
+	return waitForAdvisoryLockWaiter(conn, 10*time.Second)
 }
 
 func replayDatabase(t *testing.T) (*pgxpool.Pool, *bentopg.DB) {

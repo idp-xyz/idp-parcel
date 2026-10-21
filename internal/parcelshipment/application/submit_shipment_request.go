@@ -277,8 +277,8 @@ func (handler *SubmitShipmentRequestHandler) Handle(
 
 // resolveExclusively 按这份提交上一次实际走到的位置作答（ADR-0266），要动手（判归属、重投交接、建单）的那几格在续办守卫里做。
 //
-// 先在守卫外看一眼：委托已在、或上一次的答案已经定了，只读即可作答，不必排队——重发一份已办完的提交不开任何写事务（PBC-07
-// 「重放路径不重跑事务」）。要动手时进守卫再看一次：守卫让同一来源身份一次只走一路，进门之后读到的答案与委托，在本路落笔之前
+// 先在守卫外看一眼：委托已在、或上一次的答案已经定了，只读即可作答，不必排队——重发一份已办完的提交不进续办守卫那一笔事务
+// （PBC-07「重放路径不重跑事务」；这次到达的观察照旧在守卫外追加）。要动手时进守卫再看一次：守卫让同一来源身份一次只走一路，进门之后读到的答案与委托，在本路落笔之前
 // 不会再被别路改动，「记答案前复查」在进门这一刻做一次就够。首次到达也走这一路：保全之后、判归属之前，同一请求的一次重发可能
 // 已经抢先续办。
 //
@@ -350,8 +350,13 @@ func (handler *SubmitShipmentRequestHandler) standing(
 	}
 	switch {
 	case answered && answer.Refused():
+		prior := refusalOutcome(answer.Refusal)
+		if prior == OutcomeInvalid {
+			// 读回一格词表之外的拒绝是坏数据。答一个不带原结果的已有结果，客户只会以为办过了；上抛让它没有形成答案。
+			return submissionStanding{}, fmt.Errorf("%w: refusal %d", ErrUntranslatableRefusal, answer.Refusal)
+		}
 		return submissionStanding{
-			result:  SubmitShipmentRequestResult{outcome: OutcomeExistingResult, priorOutcome: refusalOutcome(answer.Refusal)},
+			result:  SubmitShipmentRequestResult{outcome: OutcomeExistingResult, priorOutcome: prior},
 			settled: true,
 		}, nil
 	case answered && settledOnReplay(answer):
@@ -521,8 +526,11 @@ func (handler *SubmitShipmentRequestHandler) refuse(
 	return SubmitShipmentRequestResult{outcome: refusalOutcome(refusal)}, nil
 }
 
-// refusalOutcome 是留存的拒绝与它答出的那一格之间唯一的对照；拒绝之外的取值没有结果格，答 OutcomeInvalid，由编码那一侧（HTTP
-// 适配器）把它拦成没有形成答案。
+// ErrUntranslatableRefusal 说明留存的答案里有一格词表之外的拒绝。上抛而不译成业务结果：集合外的取值没有原结果可答。
+var ErrUntranslatableRefusal = errors.New("parcel shipment: recorded refusal is outside the vocabulary")
+
+// refusalOutcome 是留存的拒绝与它答出的那一格之间唯一的对照；拒绝之外的取值没有结果格，答 OutcomeInvalid，调用方据此上抛
+// ErrUntranslatableRefusal。
 func refusalOutcome(refusal ports.SubmissionRefusal) SubmitOutcome {
 	switch refusal {
 	case ports.SubmissionRefusedInputNotAccepted:
@@ -671,7 +679,7 @@ func (handler *SubmitShipmentRequestHandler) handOverToOtherAuthority(
 // redeliverHandoff 回答上一次是他方、交接却没确认的那份提交的重发：按库里记着的那次尝试重投、重查确认，不重判归属。
 //
 // 重判是错的那一边：登记册此间若翻成本产品，重判会放行建单，而上一次的投递已经发出去了，同一范围就一边交给他方、一边在本地
-// 建单。同一份决定对应同一次尝试（ADR-0128 决定二），对方据尝试身份认领重放，所以重投不会在对方那里多出一份。确认了，这一次
+// 建单。ADR-0128 决定二「同一份决定重复走到这里必须得到同一次尝试」，对方据尝试身份认领重放，所以重投不会在对方那里多出一份。确认了，这一次
 // 才第一次答成`非本产品生产归属`；仍未确认就仍答`生产归属未决`。重查的评估同样记下，后一次不覆盖前一次。
 func (handler *SubmitShipmentRequestHandler) redeliverHandoff(
 	ctx context.Context,

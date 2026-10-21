@@ -329,7 +329,6 @@ func TestSubmissionLockSerializesOneSourceIdentity(t *testing.T) {
 	answers, _, transactor := newSubmissionAnswers(t)
 	ctx := t.Context()
 	source := identity(t, "tenant-a", "customer-a", "portal", "key-1")
-	other := identity(t, "tenant-a", "customer-a", "portal", "key-2")
 
 	held := make(chan struct{})
 	release := make(chan struct{})
@@ -346,10 +345,18 @@ func TestSubmissionLockSerializesOneSourceIdentity(t *testing.T) {
 	}()
 	<-held
 
-	if err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-		return answers.LockSubmission(txCtx, other)
-	}); err != nil {
-		t.Fatalf("别的来源身份取锁：%v", err)
+	// 外部键相同、作用域任一段不同的来源身份是别的身份，锁互不相干。
+	for name, other := range map[string]domain.SourceIdentity{
+		"另一个租户":  identity(t, "tenant-b", "customer-a", "portal", "key-1"),
+		"另一个客户":  identity(t, "tenant-a", "customer-b", "portal", "key-1"),
+		"另一个来源":  identity(t, "tenant-a", "customer-a", "api", "key-1"),
+		"另一个请求键": identity(t, "tenant-a", "customer-a", "portal", "key-2"),
+	} {
+		if err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+			return answers.LockSubmission(txCtx, other)
+		}); err != nil {
+			t.Errorf("%s取锁：%v", name, err)
+		}
 	}
 
 	waiting, cancel := context.WithTimeout(ctx, 300*time.Millisecond)

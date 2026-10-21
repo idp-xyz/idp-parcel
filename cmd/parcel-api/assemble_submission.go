@@ -182,8 +182,10 @@ func (guard submissionContinuationGuard) Exclusively(
 }
 
 // submissionBoundary 是简报「事务边界」的第二段：建单与「委托已提交」信封在同一个
-// 事务里成立或一起消失（ports.ShipmentRequestSubmittedHandoff 的合同即此义）。已存在
-// 时本事务没有写下任何东西，把答案交回编排按重放规则重答，不入队第二份意图。
+// 事务里成立或一起消失（ports.ShipmentRequestSubmittedHandoff 的合同即此义）。提交编排
+// 在续办守卫里调它，这一段并进守卫那一笔事务，连同这次的提交答案一起提交或回滚；单独
+// 留着自己开事务的壳，是让守卫之外的调用也撞不上 RequireExecutor。已存在时这一段没有写下
+// 任何东西，把答案交回编排按重放规则重答，不入队第二份意图。
 type submissionBoundary struct {
 	transactor bentoapp.Transactor
 	inner      ports.ShipmentRequestRepository
