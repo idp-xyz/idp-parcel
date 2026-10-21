@@ -36,14 +36,20 @@ type reassessBothLanesFixture struct {
 	costs    *reassessCostsDouble
 }
 
-// newReassessBothLanesFixture 接交接与收寄采用两路到同一份复核编排上：交接那一路走生产的 Over 与哨兵名单，收寄采用那一路
-// 按生产同样的三层接（采用仓储 → 两层适配器 → 消费门）。委托已接受，判断键上落一份上海枢纽 → 新加坡枢纽 → 新加坡末端
-// 的计划，冻结形态已声明、未越过边界。
+// newReassessBothLanesFixture 在已接受的委托上接好两路复核（reassessBothLanesOver），判断键上落一份上海枢纽 → 新加坡枢纽 →
+// 新加坡末端的计划，冻结形态已声明、未越过边界。
 func newReassessBothLanesFixture(t *testing.T) *reassessBothLanesFixture {
 	t.Helper()
 	syn := newSYNVerticalFixture(t)
 	acceptWithDeclaredGeo(t, syn)
 	saveThroughSingaporePlan(t, syn)
+	return reassessBothLanesOver(t, syn)
+}
+
+// reassessBothLanesOver 接交接与收寄采用两路到同一份复核编排上：交接那一路走生产的 Over 与哨兵名单，收寄采用那一路按生产
+// 同样的三层接（采用仓储 → 两层适配器 → 消费门）。委托与路由历史由调用方先备好。
+func reassessBothLanesOver(t *testing.T, syn *synVerticalFixture) *reassessBothLanesFixture {
+	t.Helper()
 	outboxStore, err := outbox.NewStore(syn.db)
 	if err != nil {
 		t.Fatalf("构造 Outbox Store：%v", err)
