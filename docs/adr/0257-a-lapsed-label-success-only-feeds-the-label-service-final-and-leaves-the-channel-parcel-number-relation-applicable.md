@@ -1,6 +1,6 @@
 # ADR-0257：面单成功结果按有效期不可逆失效，只进面单服务终局判断，不改渠道包裹件号关联的适用状态——外部标识关联没有`已失效`一格
 
-Status: Accepted（2026-10-21，Claude Code 会话代 PS owner 决：用户 2026-10-21 原话「需要修改文档，确保自洽，正确」，常设授权「你作为业务和系统专家自决」；票 docs-consistency/06，出处审计 [audit/ps.md](../../.scratch/docs-consistency/audit/ps.md) PS-22（取证 [audit/ps-code.md](../../.scratch/docs-consistency/audit/ps-code.md) 第 10 条）。回答 [ADR-0184](./0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md) 决定七「已失效没有执行器」所留的那一格，并更正它的理由，无条款停用；ADR-0184 正文不改，只在其 Status 行与 Links 加前向指针。代码不改。越权风险点见文末，待 PS owner 复核，第 1 点知会 NO owner。）<!-- 索引注记 -->｜**分工**：有效期届满是面单对渠道服务的可用性到头，判在面单服务终局判断里——那笔成功不再阻止受控关闭路径形成终局；号码仍标识那件实物，渠道包裹件号关联照旧`适用`，身份核对照旧把它当候选，消费方按包裹当前服务结果另行限制后续动作。**终态**：外部标识关联只有`已作废`与`已被替代`两种终态，`已失效`从 PS CONTEXT 生命周期删去；渠道日后若主动收回某个号，那是新的来源事实，另立记录
+Status: Accepted（2026-10-21，Claude Code 会话代 PS owner 决：用户 2026-10-21 原话「需要修改文档，确保自洽，正确」，常设授权「你作为业务和系统专家自决」；票 docs-consistency/06，出处审计 [audit/ps.md](../../.scratch/docs-consistency/audit/ps.md) PS-22（取证 [audit/ps-code.md](../../.scratch/docs-consistency/audit/ps-code.md) 第 10 条）。回答 [ADR-0184](./0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md) 决定七「已失效没有执行器」所留的那一格，并更正它的理由；部分停用 ADR-0184 决定一「行只插不改；适用状态的变化另起一行挂在原关联上，终态一次——已作废、已被替代、已失效都不回到适用（PS CONTEXT「外部标识关联」生命周期）。」一句里的终态列举，被停原句与适用场景见「对已接受记录的作用」（评审轮 2026-10-21 改，原写无条款停用）；ADR-0184 正文不改，只在其 Status 行与 Links 加前向指针。代码不改。越权风险点见文末，待 PS owner 复核，第 1 点知会 NO owner。）<!-- 索引注记 -->｜**分工**：有效期届满是面单对渠道服务的可用性到头，判在面单服务终局判断里——那笔成功不再阻止受控关闭路径形成终局；号码仍标识那件实物，渠道包裹件号关联照旧`适用`，身份核对照旧把它当候选，消费方按包裹当前服务结果另行限制后续动作。**终态**：外部标识关联只有`已作废`与`已被替代`两种终态，`已失效`从 PS CONTEXT 生命周期删去；渠道日后若主动收回某个号，那是新的来源事实，另立记录
 Date: 2026-10-21
 
 ## Context
@@ -41,7 +41,8 @@ Date: 2026-10-21
 
 ## 对已接受记录的作用
 
-- **回答** ADR-0184 决定七「已失效没有执行器：有效期规则今天没有登记处，本记录不造。」所留的那一格：不造，理由按本记录决定二；「今天没有登记处」一语据 ADR-0119 更正。无条款停用。ADR-0184 决定一「已作废、已被替代、已失效都不回到适用」一句不改，其中`已失效`自此没有来路。
+- **回答** ADR-0184 决定七「已失效没有执行器：有效期规则今天没有登记处，本记录不造。」所留的那一格：不造，理由按本记录决定二；「今天没有登记处」一语据 ADR-0119 更正。这一条不停用条款。
+- **部分停用** ADR-0184 决定一「行只插不改；适用状态的变化另起一行挂在原关联上，终态一次——已作废、已被替代、已失效都不回到适用（PS CONTEXT「外部标识关联」生命周期）。」一句里的终态列举：外部标识关联的终态只有`已作废`与`已被替代`两种，`已失效`不再是一格终态（决定三）。**适用场景**：外部标识关联册的全部关联；面单成功结果按有效期不可逆失效不形成关联的状态变化。同句「行只插不改」「适用状态的变化另起一行挂在原关联上，终态一次」与「不回到适用」不变，ADR-0184 其余各条不变。
 - [ADR-0119](./0119-label-validity-is-a-declaration-slot-on-the-final-rule-content.md)：不动，本记录确认它的分工。
 
 ## Consequences
@@ -56,7 +57,7 @@ Date: 2026-10-21
 
 ## Links
 
-- [ADR-0184](./0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md)：回答决定七所留的那一格并更正其理由
+- [ADR-0184](./0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md)：回答决定七所留的那一格并更正其理由；部分停用决定一「行只插不改……已失效都不回到适用……」一句里的终态列举
 - [ADR-0119](./0119-label-validity-is-a-declaration-slot-on-the-final-rule-content.md)：有效期是终局规则声明上的一格
 - [ADR-0185](./0185-external-identifier-relation-identity-includes-its-formation-basis.md)：关联的键带形成依据
 - [PS CONTEXT](../domain/parcel-shipment/CONTEXT.md)：「外部标识关联」生命周期、Rules 外部标识各条

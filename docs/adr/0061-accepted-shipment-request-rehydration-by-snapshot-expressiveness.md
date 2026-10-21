@@ -1,6 +1,6 @@
 # ADR-0061: 已接受委托的重建门按快照表达能力开门
 
-Status: Accepted<!-- 索引注记 -->｜**部分停用**（指针 2026-10-21 补）：其决定一「`已拒绝`、`已撤回`仍由入口以 `ErrRehydrationStateNotSupported` 拒绝。」里`已拒绝`那一半已由 [ADR-0188](./0188-rejected-shipment-request-rehydration-by-snapshot-expressiveness.md) 推进——快照补上主动拒绝留痕之后，重建门开到`已拒绝`。**适用场景**：只限`已拒绝`；`已撤回`照旧拒绝，其余各条不变
+Status: Accepted<!-- 索引注记 -->｜**部分停用**（指针 2026-10-21 补）：其决定一「`已拒绝`、`已撤回`仍由入口以 `ErrRehydrationStateNotSupported` 拒绝。」里`已拒绝`那一半已由 [ADR-0188](./0188-rejected-shipment-request-rehydration-by-snapshot-expressiveness.md) 停用（ADR-0188 自称「推进」，即把门扩到这一格）——快照补上主动拒绝留痕之后，重建门开到`已拒绝`。**适用场景**：只限`已拒绝`；`已撤回`照旧拒绝，其余各条不变
 Date: 2026-08-18
 
 ## Context
