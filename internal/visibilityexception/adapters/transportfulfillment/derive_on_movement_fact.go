@@ -195,7 +195,8 @@ func (adapter *DeriveOnMovementFactAdapter) objectsOf(
 }
 
 // signalBlocked 为出发读数里关务判为阻断的每一件形成一次信号（ADR-0205 决定五）。只看逐对象那一格，不看整格：整格是压过的
-// 结论，阻断只可能来自某一件，信号也只该落在那一件上。
+// 结论，阻断只可能来自某一件，信号也只该落在那一件上。集运单元那一格同理不形成信号（ADR-0225）：它是由袋里各件推出来的，
+// 阻断的那一件在读数里另有一格、另形成信号；给袋再立一次，同一次违规在分诊里就记成两回，还落在一个不是包裹的引用上。
 //
 // 更正版不再形成：领域的更正版沿用原登记那一刻的读数（ADR-0205 越权风险点 8），同一次出发、同一份读数，原版已经命中过一次，
 // 再命中一次只会把同一件事在分诊里记成两回。
@@ -212,7 +213,7 @@ func (adapter *DeriveOnMovementFactAdapter) signalBlocked(ctx context.Context, f
 		return fmt.Errorf("%w: tenant: %v", ErrMovementFactUntranslatableAnswer, err)
 	}
 	for _, finding := range reading.Findings() {
-		if finding.Answer() != tfdomain.DepartureGateBlocked {
+		if _, unit := finding.ConsolidationUnit(); unit || finding.Answer() != tfdomain.DepartureGateBlocked {
 			continue
 		}
 		parcel, err := vedomain.NewTrackedParcelReference(finding.Object().String())
