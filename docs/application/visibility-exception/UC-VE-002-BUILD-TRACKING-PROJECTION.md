@@ -94,6 +94,10 @@
 
 `AT-VE-046` 的现状缺口：移动事实那一路与补派生在段里取到的在控对象若是袋或集运单元，全程追踪今天把它当一件包裹投影，袋里的成员拿不到这条移动事实——与本行和 CONTEXT「集运、装载或同批关系不合并包裹身份和客户轨迹」相反。由票 [demo-chain-gaps/123](../../../.scratch/demo-chain-gaps/issues/123-tracking-projects-a-departing-bag-as-one-parcel-and-its-members-get-no-departure.md) 补齐，本行预期结果不变。
 
+`AT-VE-043` 的现状缺口：替代链分叉今天先按业务时间裁决，裁得出就不立信号，两个后继照常派生里程碑；分叉只在当前有效集里找，源上下文更正其中一支后就检测不到；分叉关系也不随投影版本存下。由票 [docs-consistency/code/30](../../../.scratch/docs-consistency/code/30-forked-supersession-is-judged-by-business-time-and-not-kept-pending.md) 补齐，本行预期结果不变。
+
+`AT-VE-044` 与主流程第 5 步「被替代条目保留」的现状缺口：被替代条目今天不进投影版本，只留在事实库；投影条目落库也不带前身，运营追踪查阅看不出当前那一条取代了谁（`AT-VE-192` 的「带替代关系回指前版」在真库上同病）。由票 [demo-chain-gaps/117](../../../.scratch/demo-chain-gaps/issues/117-projection-entries-are-stored-without-their-supersession.md) 补齐，本行预期结果不变。
+
 ## 给开发的交接
 
 把“已接受来源 → 映射判断 → 各维度投影 → 标准里程碑/摘要”分别建模。完成本用例只证明内部投影可解释和可重派生，不证明客户有权查询、客户视图已经发布、ETA、异常、通知或源动作完成。

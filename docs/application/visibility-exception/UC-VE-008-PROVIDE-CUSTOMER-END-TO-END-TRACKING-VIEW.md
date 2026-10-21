@@ -4,7 +4,7 @@
 
 ## 目标与边界
 
-本用例从已认证请求方查询一个或多个包裹开始，到在明确货主客户账户和对象授权范围内返回普通全程追踪视图，或返回无权查询、标识冲突、信息待确认、当前无可见结果或未形成为止。
+本用例从已认证请求方查询一个或多个包裹开始，到在明确货主客户账户和对象授权范围内返回普通全程追踪视图，或返回当前无可见结果、无权查询或未形成为止。信息待确认落在视图的维上；标识冲突在本上下文内部按待确认处理，对外与无权查询同一答复（[ADR-0246](../../adr/0246-the-customer-tracking-query-answers-no-visible-result-for-a-parcel-attributed-to-the-requesting-account-before-its-view-forms.md)）。
 
 本用例把 [`UC-VE-002`](./UC-VE-002-BUILD-TRACKING-PROJECTION.md) 的当前有效追踪投影、[`UC-VE-003`](./UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md) 已满足对客门槛的 ETA、`parcel-shipment` 的客户服务终局以及已经批准披露的客户可见异常编排为客户账户隔离的只读视图。
 
@@ -21,7 +21,7 @@
 | 触发 | 授权客户查询、当前投影/ETA/终局/客户可见异常变化、客户归属确立，或来源更正触发客户视图重派生 |
 | 成功结束 | 返回当前客户账户及授权对象范围内可解释的客户追踪视图 |
 | 负向结束 | 请求方或对象明确无权查询，且外部结果不泄露对象是否存在 |
-| 待判断结束 | 外部标识或客户归属冲突、身份谱系待确认：本上下文内部按待确认处理、不择一、不形成视图；对外不另分格，与无权查询同一答复（[ADR-0246](../../adr/0246-the-customer-tracking-query-answers-no-visible-result-for-a-parcel-attributed-to-the-requesting-account-before-its-view-forms.md)）。某一维来源不足落在该维的待确认上 |
+| 待判断结束 | 外部标识或客户归属冲突：本上下文内部按待确认处理、不择一、不形成视图；对外不另分格，与无权查询同一答复（[ADR-0246](../../adr/0246-the-customer-tracking-query-answers-no-visible-result-for-a-parcel-attributed-to-the-requesting-account-before-its-view-forms.md)）。其余待确认都落在视图的维上，见结果语义「信息待确认」 |
 | 未形成结束 | 本次查询的视图读取、客户归属读取或授权判断未完成，不能伪装为无轨迹或无权查询；视图尚未派生出来不属这一格，见结果语义「当前无可见结果」 |
 
 ## 权威依据
@@ -106,6 +106,12 @@
 | `AT-VE-171` | 客户系统经首方客户渠道查询时在请求里自报客户账户或租户 | 按坏请求拒绝，不会忽略自报的那一格后照常作答；客户账户只取自客户渠道册上的绑定 |
 | `AT-VE-172` | 客户系统持有委托提交等其他客户面能力，但没有追踪查阅授予 | 返回未授予，不因同一客户端持有别的能力而放行查询 |
 | `AT-VE-173` | 查询时准入范围未登记或答不在范围 | 照常形成查询结果；查询不形成生产事实，不判准入范围 |
+
+`AT-VE-161` 的现状缺口：客户视图替代时今天原地改写已发布的那一行，原版本读不回；而且每个投影新版本都换一代视图，四维内容没变也一样。由票 [docs-consistency/code/05](../../../.scratch/docs-consistency/code/05-customer-tracking-view-overwrites-published-versions.md) 补齐，本行预期结果不变。
+
+`AT-VE-158` 与结果语义「客户追踪视图」一行的现状缺口：ETA 一维今天只翻译披露策略的答复，生产上从不形成 ETA，策略答展示时客户读到「ETA：展示」而背后没有任何获准对客的 ETA 判断；里程碑一维在投影只有未归类条目时同样答展示。由票 [docs-consistency/code/06](../../../.scratch/docs-consistency/code/06-customer-view-shows-dimensions-without-a-visible-judgement.md) 补齐，本行与那一行的预期结果不变。
+
+结果语义「当前无可见结果」一行与 `AT-VE-188` 的现状缺口：查询端点今天只有当前视图与 `VIEW_NOT_FOUND` 两格，归属方查视图尚未形成的包裹也答 `VIEW_NOT_FOUND`。由票 [docs-consistency/code/31](../../../.scratch/docs-consistency/code/31-customer-tracking-query-cannot-say-no-visible-result-for-its-own-parcel.md) 补齐，本行预期结果不变。
 
 ## 给开发的交接
 
