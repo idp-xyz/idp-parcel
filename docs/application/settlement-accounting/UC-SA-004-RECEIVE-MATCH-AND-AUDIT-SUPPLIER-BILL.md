@@ -32,7 +32,7 @@
 | 触发 | 供应商账单到达、账期结算、内部预期成本形成、供应商更正/贷项或授权人工复核 |
 | 成功结束 | 对明确金额范围形成匹配、审核应付、供应商费用贷项、追加主张、争议、拒绝或待审结果 |
 | 负向结束 | 主张明确不属于责任范围或被授权拒绝 |
-| 待判断结束 | 账单、履约、协议、计量、范围或币种依据不足 |
+| 待判断结束 | 账单、履约、协议、计量或范围依据不足（跨币种没有换算依据归「未配置结束」） |
 | 未配置结束 | 租户取值没登记，如实答未配置、不填默认值。按编排：接收与匹配（`ReceiveSupplierBillHandler.Handle`）在账单与预期成本跨币种而没有换算依据时答 `BILL_UNDECIDED`，原因 `CONVERSION_UNCONFIGURED`；审核（`ReceiveSupplierBillHandler.Audit`）在审核授权、应付账户或升级上限没登记时答 `AUDIT_UNDECIDED`，原因 `AUDIT_AUTHORITY_UNCONFIGURED`、`PAYABLE_ACCOUNT_UNCONFIGURED` 或 `AUDIT_ESCALATION_UNCONFIGURED`，不形成审核应付、不默认放行 |
 | 冲突结束 | 同一主张金额被多个客户/履约段/账期无唯一依据地认领 |
 | 未受理结束 | 来源伙伴、责任法人、账期、账户或权限不能合法关联 |
@@ -81,7 +81,7 @@
 | 1 | `settlement-accounting` | 校验来源伙伴、责任法人、账期、账户、币种和权限 | 已受理或未受理 |
 | 2 | `settlement-accounting` | 保全账单版本并解析行、金额、范围和更正关系 | 主张已接收或待解析 |
 | 3 | `settlement-accounting` | 读取采购协议、BUY `PricingEvaluation`、履约事实、计费重量采用快照和预期成本 | 匹配候选或待判断 |
-| 4 | `settlement-accounting` | 按金额范围建立一对多、多对一、部分和未匹配关系 | 匹配结果、差异或冲突 |
+| 4 | `settlement-accounting` | 按金额范围建立一对多、多对一、部分和未匹配关系 | 匹配结果、差异、冲突或未配置（跨币种没有换算依据，`AT-SA-096`） |
 | 5 | 授权审核责任方 | 对无争议范围，按已登记金额上限判断是否在权限内，再形成审核应付；超过上限必须升级，不形成应付。上限没登记答未配置（`AUDIT_UNDECIDED`，原因 `AUDIT_ESCALATION_UNCONFIGURED`），不形成审核应付、不默认放行（[ADR-0163](../../adr/0163-supplier-audit-escalation-compares-the-matched-amount-to-a-ceiling.md) 决定三）。争议范围形成待审/争议/拒绝 | 审核应付、必须升级、未配置或负向结果 |
 | 6 | `settlement-accounting` | 接收供应商更正、贷项、追加主张和迟到主张 | 追加结果，不覆盖历史 |
 | 7 | `settlement-accounting` | 分别发布稳定审核应付和供应商费用贷项引用及其关联，供对账、经营分析和外部财务交换消费 | 发布成功或可恢复失败 |
