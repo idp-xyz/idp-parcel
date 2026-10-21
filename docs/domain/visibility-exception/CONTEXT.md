@@ -99,7 +99,7 @@ Status: Confirmed
 - 全程追踪投影只能消费各源上下文已经接受的事实和有效性变化。来源消息、原始扫描或外部状态码未经业务所有者接受前，不得直接改变投影。
 - 收到源上下文的已接受事实，不一定形成投影条目。下列情形**入账不派生**：本上下文记下这一份已经消费，不把它变成投影条目，也不为等它变化而重投；源事实仍归源上下文。
   - 源上下文已把它判为与同层现有事实冲突的那一份（关务同层冲突，[ADR-0197](../../adr/0197-customs-external-results-enter-tracking-projection-per-layer.md) 决定五，判据见 [ADR-0226](../../adr/0226-successive-same-layer-customs-results-are-successors-unless-they-contradict.md)）：不让后到的一方改变当前进展。冲突本身仍按「冲突仍无法裁决时」那一条处理。
-  - 事实没有可投的追踪对象：移动事实没声明段、声明的段不在册，或事实发生那一刻段里没有在控对象（[ADR-0205](../../adr/0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md) 文末补记）；段册读不动不在此列，是未决。对象日后凭`已交接`或对象级场外揽收进了那一段时，由那一份控制事实补派生（[ADR-0224](../../adr/0224-tracking-backfills-movement-facts-recorded-before-their-segment-when-a-control-fact-puts-the-object-in-it.md)）。
+  - 事实没有可投的追踪对象：移动事实没声明段、声明的段不在册，或事实发生那一刻段里没有在控对象（[ADR-0205](../../adr/0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md) 文末补记）；段册读不动不在此列，是未决。段不在册的那一条，对象日后凭`已交接`或对象级场外揽收进了那一段时，由那一份控制事实补派生（[ADR-0224](../../adr/0224-tracking-backfills-movement-facts-recorded-before-their-segment-when-a-control-fact-puts-the-object-in-it.md)）。
   - 补派生时没有可补的移动事实：交接是拒收或待确认，没让对象进段；对象不在任何段，或它参与的段不是这一次交接或收寄进的那一段；那一段上没有声明它的移动事实；对象进段晚于事实发生（[ADR-0224](../../adr/0224-tracking-backfills-movement-facts-recorded-before-their-segment-when-a-control-fact-puts-the-object-in-it.md) 决定三、四）。
 - 投影必须引用来源事实，不得复制形成含义不同的第二套节点、运输、关务、路由或托运事实。任何运营人员和集成来源都不能直接编辑当前追踪摘要或标准追踪里程碑。
 - 来源原文、来源代码、业务发生时间、有效时间和接收时间分别保存。标准追踪里程碑映射必须具有版本和适用范围；无法可靠映射时保持未归类，不能为了得到完整时间线强行映射为“运输中”或其他宽泛结果。
@@ -121,7 +121,7 @@ Status: Confirmed
 
 ### 事实类型词
 
-下表是本上下文消费的全部事实类型词，也是租户登记标准里程碑映射时用的键。词的含义归所列源上下文：源上下文改了某种事实的语义分格，本表随之增减词；没有登在本表的词不是事实类型。词一经租户映射引用就是租户可见的配置键，改名要迁每个租户的映射。
+下表是本上下文消费的全部事实类型词，也是租户登记标准里程碑映射时用的键。词的含义归所列源上下文：源上下文改了某种事实的语义分格，本表随之增减词；本表之外的词不由任何源产出。词一经租户映射引用就是租户可见的配置键，改名要迁每个租户的映射。
 
 | 类型词 | 源上下文 | 源事实及其分格 |
 |---|---|---|
