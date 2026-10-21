@@ -147,6 +147,8 @@ go run ./cmd/parcel-dispatch
 
 > 2026-10-19 补记（票 `demo-chain-gaps/111`，[ADR-0221](../adr/0221-a-handover-participation-basis-is-minted-from-the-handover-key.md)）：参与上记的交接依据自此由交接键铸（包裹、`scope`、`version`）。同一包裹各次交接各起一个 `scope` 时，`version` 都写 `v1` 也认得出是哪一次：干线段在 SIN-HUB 那一次交接之后照样自动形成实际履约发生项、发起 BUY 请求；结束自营段的那一次答段没有采用连线，交给尾程的那一次答没有参与被结束；各封交接信封都 `PUBLISHED`。psb/05「重走（钉 `76686b7b`，2026-10-19）」停点一建议的「各次交接版本各不相同」不必再守；`version` 仍只给更正用（票 95 补记）。段登记册、委托与段采用的开始依据上记的那一串由这三件铸（拼法只在 ADR-0221 决定一），两次交接各得一串、读得出是哪一次；节点控制的转出引用照旧只带版本。证据是派发进程生产路由表上的真库用例（`cmd/parcel-dispatch/actual_fulfillment_handover_version_reuse_test.go`），照那次重走的次序登 SHA/v1、SZX/v1、SZX/v2（随后采用干线委托）、SIN/v1、SINLM/v1，合成夹具，只记 `S`；本票没有在一次性库上重走动线，种子不变。
 
+> 2026-10-21 补记（票 `demo-chain-gaps/88`，[ADR-0231](../adr/0231-actual-fulfillment-left-unformed-is-caught-up-by-doorbells-and-a-commission-agreement-revision.md)）：采用不必赶在 SIN-HUB 那一次交接之前。先交接、后采用时，SIN 那一封照旧以「段没有采用连线」`PUBLISHED`、不形成；采用答 `201` 的同一笔交出一封补形成门铃（`transport-fulfillment.segment-commission-adoption.registered`），dispatch 下一拍把干线段上已结束的那一条参与补形成，与上一条补记的发生项同一身份、同一登记者，BUY 随之发起。委托所凭的那一版被收尾（种子 110 收尾的是没有委托指名的 `v1`、`v2`，动线指名 `v3` 不受影响）或没声明条件时，补不成的那几件在 `GET /transport-fulfillment-records?registry=actual-fulfillment-unformed`；配置员经 `POST /transport-fulfillment-transport-commission-agreement-revisions`（委托、同一协议对象的后继版本、起用时刻、依据）给委托换版，dispatch 下一拍对采用了它的各段补形成、清单随之了结。PC 发新版不替委托改指。本条未在一次性库上逐步实走，取证见票 88 完成记录里的真库用例（只记 `S`）。
+
 ### 第 4 步 · 过关的规则（customs-compliance）
 
 | 看哪页 | 取哪个端点 |

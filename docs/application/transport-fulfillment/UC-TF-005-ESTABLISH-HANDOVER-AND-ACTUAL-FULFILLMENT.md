@@ -16,7 +16,7 @@
 - 记录出发、实际移动、到达、资源变化、中断、折返、改降和控制责任变化。
 - 在下一次权威交接或有效交付后结束相应对象的履约参与关系。
 - 以稳定事实引用交给追踪、异常、节点、路由和包裹终局消费方。
-- 外包段上的参与结束之后形成实际履约的运输收费发生项，不在交接编排里形成：段已采用运输委托的，由本上下文随交接与有效交付信封自动形成（[ADR-0218](../../adr/0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md)）；其余经运营决定另行登记（[ADR-0207](../../adr/0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md)）。
+- 外包段上的参与结束之后形成实际履约的运输收费发生项，不在交接编排里形成：段已采用运输委托的，由本上下文随交接与有效交付信封自动形成（[ADR-0218](../../adr/0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md)）；采用晚于参与结束、或委托换了协议版本时，由采用与换版的门铃补形成，没形成的留痕在实际履约未形成册上（[ADR-0231](../../adr/0231-actual-fulfillment-left-unformed-is-caught-up-by-doorbells-and-a-commission-agreement-revision.md)）；其余经运营决定另行登记（[ADR-0207](../../adr/0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md)）。
 
 本用例不执行：
 
@@ -92,7 +92,7 @@
 | 6 | 执行方/伙伴接入 | 接收出发、移动、到达、中断和资源变化事实；出发在写入之前逐对象向 `customs-compliance` 拉取门禁读数 | 保存来源，不直接修改计划；出发与读数同一笔落册 |
 | 7 | `transport-fulfillment` | 形成下一次交接或控制结束结果 | 结束相应对象参与关系，其他对象继续 |
 | 8 | `transport-fulfillment` | 发布稳定事实引用给路由、追踪、异常和 `parcel-shipment` | 发布失败只重试同一意图 |
-| 9 | `transport-fulfillment`（段已采用委托）/ 运输运营（运营决定） | 段已采用运输委托的，由派发进程随交接与有效交付信封经同一个登记用例自动形成实际履约发生项（找哪一条参与、旅程与登记者的取法见 [ADR-0218](../../adr/0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md)，参与依据怎样指回交接见 [ADR-0221](../../adr/0221-a-handover-participation-basis-is-minted-from-the-handover-key.md)）。其余由运营决定在参与结束之后另行登记实际履约的运输收费发生项：事实取段内已结束的参与，采购上下文由登记方给出并经协议核对，发生条件、数量与单位按采用的那一版协议声明的收费发生条件定，段已采用运输委托时采购上下文取委托快照、登记方可以不给，发生项与已形成信封同笔落地（[ADR-0207](../../adr/0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md)、[ADR-0209](../../adr/0209-supplier-agreements-declare-charge-occurrence-conditions-and-registration-judges-by-them.md)；ADR-0207 文末补记） | 只固定发生事实，金额交给 `parcel-pricing` 与 `settlement-accounting`；不内联进交接或交付编排；协议没声明答未配置；自动形成读不动时信封重投，不回滚交接与交付 |
+| 9 | `transport-fulfillment`（段已采用委托）/ 运输运营（运营决定） | 段已采用运输委托的，由派发进程随交接与有效交付信封经同一个登记用例自动形成实际履约发生项（找哪一条参与、旅程与登记者的取法见 [ADR-0218](../../adr/0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md)，参与依据怎样指回交接见 [ADR-0221](../../adr/0221-a-handover-participation-basis-is-minted-from-the-handover-key.md)）。其余由运营决定在参与结束之后另行登记实际履约的运输收费发生项：事实取段内已结束的参与，采购上下文由登记方给出并经协议核对，发生条件、数量与单位按采用的那一版协议声明的收费发生条件定，段已采用运输委托时采购上下文取委托快照、登记方可以不给，发生项与已形成信封同笔落地（[ADR-0207](../../adr/0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md)、[ADR-0209](../../adr/0209-supplier-agreements-declare-charge-occurrence-conditions-and-registration-judges-by-them.md)；ADR-0207 文末补记） | 只固定发生事实，金额交给 `parcel-pricing` 与 `settlement-accounting`；不内联进交接或交付编排；协议没声明答未配置；自动形成读不动时信封重投，不回滚交接与交付。采用晚到与委托协议换版由各自那一笔的门铃补形成，答未配置、协议未生效、已终止、缺采购上下文的留在实际履约未形成册上、查阅页列出（[ADR-0231](../../adr/0231-actual-fulfillment-left-unformed-is-caught-up-by-doorbells-and-a-commission-agreement-revision.md)） |
 
 ## 交接与实际履约规则
 
@@ -108,6 +108,7 @@
 
 - 出发之前，执行方可以按班次、可缺的段与拟出发时点问一次门禁：交回与随后同参出发同一套读数，本用例不落任何记录，也不据它拒收随后的出发；那条出发照样在它自己那一刻重问、与读数同一笔落册。能报出发的就能问（[ADR-0219](../../adr/0219-a-device-previews-the-departure-gate-before-departing-and-reads-what-the-departure-will-record.md)）。
 - 退运、替代和改路后的新履约段拥有独立身份并关联原旅程，不倒退原段、原承诺或原交付。
+- 补形成只补以下一次权威交接或有效交付结束的参与，交回自动形成的同一个形成后半，所以与自动形成落在同一个身份上；明确终止结束的照旧人工登记（[ADR-0231](../../adr/0231-actual-fulfillment-left-unformed-is-caught-up-by-doorbells-and-a-commission-agreement-revision.md) 决定二）。
 
 ## 一致性、幂等与并发
 
@@ -216,6 +217,12 @@
 | `AT-TF-278` | 袋套袋；同一件包裹既在段里又在袋里；成员认出的包裹号与段里另一件单元同串；成员关系成环；出发那一刻什么也不装的单元（含已关闭） | 逐层展开到包裹、每件只问一次只一格，同串的号按单元展开、不按包裹问关务；成环那一边不回头、那一袋答读不动并指名环上那一件；空单元答未决、依据「单元无成员」（ADR-0225 决定三、四） |
 | `AT-TF-279` | 带单元那一格的读数落册、重放、读回；存量读数；单元那一格被改得与成员对不上、缺成员、单元互相包含或带了关务判断标识 | 成员与缘由同一行往返；存量读数没有成员键照读，不迁移；改过的那一行不装回；交出与交付读数不收单元那一格（ADR-0225 决定五） |
 | `AT-TF-280` | 段里有袋时设备出发前问询，随即同参出发 | 两份读数逐格相同，袋那一格与它的成员也相同，问成员关系与问关务的问法逐问相同（ADR-0225 决定六，ADR-0219 决定二） |
+| `AT-TF-300` | 段的采用晚于派发处理那封交接信封：那一封以「段没有采用连线」入账，参与已结束 | 采用成立的那一笔交一封门铃，派发进程把段上以下一次交接或有效交付结束的参与逐件补形成（同一个登记用例、旅程 `JRN/<包裹>`、系统登记者），BUY 随之发起；仍在场的、以明确终止结束的不补；门铃重投、补形成再跑、原信封重放都答已存在、不多一项；门铃入不了队采用答未决、整笔回滚（[ADR-0231](../../adr/0231-actual-fulfillment-left-unformed-is-caught-up-by-doorbells-and-a-commission-agreement-revision.md) 决定一、二；证据 `S`） |
+| `AT-TF-301` | 委托指名的那一版没声明实际履约的收费发生条件，PC 已另发一版声明了的 | 自动形成照旧按委托那一版答未配置、不随 PC 新版改指，未形成册上立一条（委托、第 1 版、问的那一版、参与终点）；委托换版到后继之后换版门铃补形成，那一条了结为已形成（决定三、五、六；证据 `S`） |
+| `AT-TF-302` | 委托指名的那一版被同起点退役或截止，之后结束的参与 | 答已终止或协议未生效，各记进未形成册；同一件此前已由别的版本形成（换版之后参与终点所凭的那一版答否）的，认出已被盖住、照已形成了结；不计费只了结册上已有的那一条（决定六；ADR-0233 越权风险点 1） |
+| `AT-TF-303` | 补形成时采用连线、按委托列段、段登记册、「盖住」那一问或未形成册读写不动；门铃指名的段已没有采用连线；本上下文自己交出的门铃键不成立；未形成册确定性拒写 | 前者整封回滚重投、指名停在哪一口；段没有采用连线入账；键不成立是缺陷、键维缺一是毒丸入账；确定性拒写响亮失败、不进未决名单 |
+| `AT-TF-304` | 运营人员查实际履约未形成 | `GET /transport-fulfillment-records?registry=actual-fulfillment-unformed` 只列本租户未形成的、参与终点最早的在前，逐件带段、对象、委托与那一版的号、哪一格、问的那一版协议、参与终点、首次与最近一次答复时刻；了结的不上列，别的租户看不到；空册答 [] |
+| `AT-TF-305` | 委托那一版被收尾之后，运营人员把委托换到后继（退役时自提交起用，截止时自后继起点起用） | 换版门铃补形成，按后继的快照形成发生项，册上那一条了结（决定三、五；证据 `S`） |
 
 ## 给开发的交接
 
