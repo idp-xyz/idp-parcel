@@ -340,7 +340,8 @@ func (line *previewLine) recordedDetail(fact string) (map[string][2]string, bool
 // 揽收事实没有节点，起讫核不上段，但不停在本侧——按演示班次上海→深圳问关务。问询与同参出发都答阻断，回给设备的只有整格、起讫与
 // 「未绑定」那一位，被挡那一件也不列，两口逐字节相同；库面那一行两件各一格、带关务判断标识，被扣那一件依据是那条限制，明细记着那一位
 // ——全程追踪据它照旧形成出发门禁阻断信号（派发那一半在 cmd/parcel-dispatch）。另一段的进段交接只声明了交出节点、没报去向（演示尾程
-// 交接的样子），同样照问、同样只回整格。
+// 交接的样子），同样照问、同样只回整格。原样重投那一条出发答已有版本，回显的读数从库面读回、仍带「未绑定」那一位、仍不列对象——
+// 读回时丢了那一位，重放就会把被挡那一件列给设备。
 func TestASegmentEnteredByPickupStillAsksCustomsAndRecordsTheBlock(t *testing.T) {
 	line := newPreviewLine(t)
 	const (
@@ -366,6 +367,12 @@ func TestASegmentEnteredByPickupStillAsksCustomsAndRecordsTheBlock(t *testing.T)
 		if previewed, recorded := gateReadingBytes(t, asked), gateReadingBytes(t, departed); previewed != want || recorded != want {
 			t.Fatalf("%s 回给设备的：\n问询 %s\n出发 %s\nwant %s", segment, previewed, recorded, want)
 		}
+	}
+
+	replayed := line.departAs("SYN-MOVE-146-PICKUP", pickupSegment)
+	if replayed.Code != http.StatusOK || !strings.Contains(replayed.Body.String(), `"outcome":"MOVEMENT_FACT_VERSION_EXISTS"`) ||
+		gateReadingBytes(t, replayed) != `{"answer":"BLOCKED","from":"SYN-NODE-SHA-HUB","to":"SYN-NODE-SZX-GATE","entryUnbound":true}` {
+		t.Fatalf("原样重投 = %d %s，want 已有版本、回显同一份只有整格的读数", replayed.Code, replayed.Body.String())
 	}
 
 	cells, unbound := line.recordedDetail("SYN-MOVE-146-PICKUP")
