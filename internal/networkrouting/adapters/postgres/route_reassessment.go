@@ -41,6 +41,14 @@ type suggestionRow struct {
 	SuggestedAt time.Time      `json:"suggested_at"`
 }
 
+// improvementBasisRow 是改善依据 jsonb 列的行模型。被比的两份计划归 reviewed_plan 与 new_plan 两列，这里只记成本与阈值。
+type improvementBasisRow struct {
+	SupersededCostMinor int64  `json:"superseded_cost_minor"`
+	SuccessorCostMinor  int64  `json:"successor_cost_minor"`
+	Currency            string `json:"currency"`
+	ThresholdMinor      int64  `json:"threshold_minor"`
+}
+
 type decisionRow struct {
 	Mode         string    `json:"mode"`
 	DecidedBy    string    `json:"decided_by,omitempty"`
@@ -68,6 +76,7 @@ func (repository *RouteReassessments) FindByCorrelation(
 		reviewedPlan, lapseBasis                      *string
 		candidateState, rerouteState                  *string
 		blockersJSON, planJSON, suggJSON, decisionRaw []byte
+		improvementJSON                               []byte
 		triggerOccurredAt                             *time.Time
 		reassessedAt                                  time.Time
 	)
@@ -76,7 +85,7 @@ func (repository *RouteReassessments) FindByCorrelation(
 		        acceptance_baseline, declared_parcel_id, service_purpose,
 		        conclusion, reviewed_plan, lapse_basis,
 		        candidate_state, reroute_state, reroute_blockers,
-		        new_plan, suggestion, decision, trigger_occurred_at, reassessed_at
+		        new_plan, suggestion, decision, improvement_basis, trigger_occurred_at, reassessed_at
 		   FROM network_routing.route_reassessment
 		  WHERE tenant_id = $1
 		    AND correlation_id = $2`,
@@ -86,7 +95,7 @@ func (repository *RouteReassessments) FindByCorrelation(
 		&acceptanceBaseline, &declaredParcel, &purpose,
 		&conclusion, &reviewedPlan, &lapseBasis,
 		&candidateState, &rerouteState, &blockersJSON,
-		&planJSON, &suggJSON, &decisionRaw, &triggerOccurredAt, &reassessedAt)
+		&planJSON, &suggJSON, &decisionRaw, &improvementJSON, &triggerOccurredAt, &reassessedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.ReassessmentRecord{}, false, nil
 	}
@@ -129,6 +138,13 @@ func (repository *RouteReassessments) FindByCorrelation(
 		if err != nil {
 			return ports.ReassessmentRecord{}, false, fmt.Errorf("find reassessment: %w", err)
 		}
+	}
+	if improvementJSON != nil {
+		record.ImprovementBasis, err = rebuildImprovementBasis(improvementJSON)
+		if err != nil {
+			return ports.ReassessmentRecord{}, false, fmt.Errorf("find reassessment: %w", err)
+		}
+		record.HasImprovementBasis = true
 	}
 	if candidateState != nil {
 		record.CandidateState, err = candidateStateFrom(*candidateState)
@@ -204,8 +220,8 @@ func (repository *RouteReassessments) Save(
 			 acceptance_baseline, declared_parcel_id, service_purpose,
 			 conclusion, reviewed_plan, lapse_basis,
 			 candidate_state, reroute_state, reroute_blockers,
-			 new_plan, suggestion, decision, trigger_occurred_at, reassessed_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+			 new_plan, suggestion, decision, improvement_basis, trigger_occurred_at, reassessed_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 		 ON CONFLICT DO NOTHING`,
 		key.TenantID.String(),
 		correlation.String(),
@@ -223,6 +239,7 @@ func (repository *RouteReassessments) Save(
 		columns.planJSON,
 		columns.suggestionJSON,
 		columns.decisionJSON,
+		columns.improvementJSON,
 		record.TriggerOccurredAt.UTC(),
 		record.ReassessedAt.UTC(),
 	)
@@ -388,15 +405,16 @@ func (repository *RouteReassessments) FormedPlans(
 }
 
 type reassessmentRowColumns struct {
-	conclusion     string
-	reviewedPlan   *string
-	lapseBasis     *string
-	candidateState *string
-	rerouteState   *string
-	blockersJSON   []byte
-	planJSON       []byte
-	suggestionJSON []byte
-	decisionJSON   []byte
+	conclusion      string
+	reviewedPlan    *string
+	lapseBasis      *string
+	candidateState  *string
+	rerouteState    *string
+	blockersJSON    []byte
+	planJSON        []byte
+	suggestionJSON  []byte
+	decisionJSON    []byte
+	improvementJSON []byte
 }
 
 func reassessmentColumns(record ports.ReassessmentRecord) (reassessmentRowColumns, error) {
@@ -431,6 +449,17 @@ func reassessmentColumns(record ports.ReassessmentRecord) (reassessmentRowColumn
 			Candidates:  rowsOfCandidates(record.Suggestion.Candidates()),
 			Blockers:    record.Suggestion.Blockers(),
 			SuggestedAt: record.Suggestion.SuggestedAt(),
+		}); err != nil {
+			return reassessmentRowColumns{}, err
+		}
+	}
+	if record.HasImprovementBasis {
+		basis := record.ImprovementBasis
+		if columns.improvementJSON, err = json.Marshal(improvementBasisRow{
+			SupersededCostMinor: basis.SupersededCostMinor(),
+			SuccessorCostMinor:  basis.SuccessorCostMinor(),
+			Currency:            basis.Currency(),
+			ThresholdMinor:      basis.ThresholdMinor(),
 		}); err != nil {
 			return reassessmentRowColumns{}, err
 		}
@@ -525,6 +554,20 @@ func rebuildSuggestion(
 		Candidates:  candidates,
 		Blockers:    row.Blockers,
 		SuggestedAt: row.SuggestedAt,
+	})
+}
+
+// rebuildImprovementBasis 经 NewCostImprovementBasis 重走构造门：一份改善不超过阈值的在册依据在读回处响亮暴露。
+func rebuildImprovementBasis(data []byte) (domain.CostImprovementBasis, error) {
+	var row improvementBasisRow
+	if err := json.Unmarshal(data, &row); err != nil {
+		return domain.CostImprovementBasis{}, err
+	}
+	return domain.NewCostImprovementBasis(domain.CostImprovementBasisSpec{
+		SupersededCostMinor: row.SupersededCostMinor,
+		SuccessorCostMinor:  row.SuccessorCostMinor,
+		Currency:            row.Currency,
+		ThresholdMinor:      row.ThresholdMinor,
 	})
 }
 
