@@ -28,7 +28,7 @@ func NewTransportCommissions(db *bentopg.DB) (*TransportCommissions, error) {
 	return &TransportCommissions{db: db}, nil
 }
 
-// FindByKey 按（租户+委托）取回已登记委托。读回经重建门复验开始/取消互斥。
+// FindByKey 按（租户+委托）取回已登记委托，连同各次协议换版（ADR-0231）。读回经重建门复验开始/取消互斥与换版串。
 func (repository *TransportCommissions) FindByKey(
 	ctx context.Context,
 	key ports.TransportCommissionKey,
@@ -65,7 +65,11 @@ func (repository *TransportCommissions) FindByKey(
 		return ports.TransportCommissionRecord{}, false, fmt.Errorf("find transport commission: %w", err)
 	}
 
-	commission, err := rebuildCommission(key, provider, agreement, legalEntity, conditions, role, responsibility, membersJSON, submittedAt, startedAt, startedBasis, cancelledAt, agreementObject, agreementVersion)
+	revisions, err := agreementRevisionsOf(ctx, querier, key)
+	if err != nil {
+		return ports.TransportCommissionRecord{}, false, fmt.Errorf("find transport commission: %w", err)
+	}
+	commission, err := rebuildCommission(key, provider, agreement, legalEntity, conditions, role, responsibility, membersJSON, submittedAt, startedAt, startedBasis, cancelledAt, agreementObject, agreementVersion, revisions)
 	if err != nil {
 		return ports.TransportCommissionRecord{}, false, fmt.Errorf("find transport commission: %w", err)
 	}
@@ -198,6 +202,7 @@ func rebuildCommission(
 	startedBasis *string,
 	cancelledAt *time.Time,
 	agreementObject, agreementVersion *string,
+	revisions []domain.CommissionAgreementRevision,
 ) (domain.TransportCommission, error) {
 	var memberIDs []string
 	if err := json.Unmarshal(membersJSON, &memberIDs); err != nil {
@@ -213,10 +218,11 @@ func rebuildCommission(
 	}
 
 	spec := domain.RehydrateTransportCommissionSpec{
-		TenantID:    key.TenantID,
-		Commission:  key.Commission,
-		SubmittedAt: submittedAt,
-		Members:     members,
+		TenantID:           key.TenantID,
+		Commission:         key.Commission,
+		SubmittedAt:        submittedAt,
+		Members:            members,
+		AgreementRevisions: revisions,
 	}
 	var err error
 	if spec.Provider, err = domain.NewServiceProviderReference(provider); err != nil {

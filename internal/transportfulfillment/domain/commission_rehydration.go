@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"slices"
 	"time"
 )
 
@@ -28,6 +29,8 @@ type RehydrateTransportCommissionSpec struct {
 	CancelledAt    time.Time
 	// AgreementVersion 可缺：迁移 TF 0038 之前落的委托只有快照，没有记下登记方指名的那两格。
 	AgreementVersion SupplierAgreementVersion
+	// AgreementRevisions 是委托上的各次协议换版（ADR-0231），按号从小到大；没换过版为空。
+	AgreementRevisions []CommissionAgreementRevision
 }
 
 // RehydrateTransportCommission 验四快照与采购责任法人、非空成员、提交时刻，以及开始/取消互斥与时刻
@@ -92,6 +95,10 @@ func RehydrateTransportCommission(spec RehydrateTransportCommissionSpec) (Transp
 	if cancelled {
 		commission.cancelledAt = spec.CancelledAt.UTC()
 	}
+	if !validRevisionChain(commission, spec.AgreementRevisions) {
+		return TransportCommission{}, ErrInvalidRehydratedCommission
+	}
+	commission.revisions = slices.Clone(spec.AgreementRevisions)
 	return commission, nil
 }
 

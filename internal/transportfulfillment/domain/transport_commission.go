@@ -68,6 +68,9 @@ type TransportCommission struct {
 	// agreementVersion 是登记方指名、提交时核过的那一版协议（对象与版本标签）。快照 agreement 是 PC 一处拼出的指称，本上下文
 	// 不拆它（SupplierAgreementVersion 头注）；要按这份委托回去问 PC 那一版声明的收费发生条件，就得留下原来那两格。
 	agreementVersion SupplierAgreementVersion
+	// revisions 是委托协议换版（ADR-0231），按号从小到大；提交那一版不在其中。快照、法人与版本两格只说提交那一版，事实按哪一版判
+	// 由 AgreementTermsAt 按业务时间答。
+	revisions []CommissionAgreementRevision
 }
 
 // declaredCommissionValid 是登记方声明那一半的构造门，只在草稿处判一次：协议快照与法人之外，提交不比草稿多判任何一格，
