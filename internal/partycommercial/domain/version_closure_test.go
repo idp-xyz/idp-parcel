@@ -742,3 +742,41 @@ func intervalBetween(t *testing.T, startsAt, endsAt time.Time) domain.EffectiveI
 	}
 	return interval
 }
+
+// Covers: 选用取登记顺序上的最后一条更正（ADR-0056），落在登记册读法上（bodyExcludedAt 与收尾门的 bodySelectionOf 经
+// correctionEndOf、versionFold 取截止点）——同一份政策正文版本先截晚（截在 v3）、再截早（截在 v2）：两个截止点之间的
+// 时刻旧版正文已落选，解析唯一答 v2；收尾门按较早那个截止点判接得住，正好接到它的重发可以同起点退役旧版。按前一条判，
+// 那一刻旧版与 v2 并存成`适用冲突`，重发也会被误判为接不住。
+func TestTheLatestOfTwoCutsGovernsThePolicyBodyInTheRegistry(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	lateCut := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+	between := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+	old := liveVersionFrom(t, registry, domain.SettlementPolicyObject, "settlement-1", "v1", "scope-a", cutPredecessorStart)
+	early := liveVersionFrom(t, registry, domain.SettlementPolicyObject, "settlement-1", "v2", "scope-a", cutSuccessorStart)
+	late := liveVersionFrom(t, registry, domain.SettlementPolicyObject, "settlement-1", "v3", "scope-a", lateCut)
+	for _, version := range []domain.CommercialVersion{old, early, late} {
+		registerSettlementBody(t, registry, version, version.Effective())
+	}
+	for _, cut := range []struct {
+		next      domain.CommercialVersion
+		reference string
+	}{{late, "SYN-CUT-LATE"}, {early, "SYN-CUT-EARLY"}} {
+		correction, _ := mustCut(t, registry, old, cut.next, cut.reference)
+		if _, err := registry.RegisterValidityCorrection(correction); err != nil {
+			t.Fatalf("register correction %s: %v", cut.reference, err)
+		}
+	}
+
+	got := domain.ResolveCommercialBasis(registry, policyKeyAt(t, domain.SettlementPolicyObject, between), nil)
+	adopted, _ := got.AdoptedVersion()
+	if got.Outcome() != domain.UniquelyResolved || adopted.Version() != early.Version() {
+		t.Fatalf("两个截止点之间 outcome = %q adopted = %q, want 唯一解析到 v2——旧版正文按较早的截止点落选", got.Outcome(), adopted.Version())
+	}
+
+	reissue := liveVersionBetween(t, registry, domain.SettlementPolicyObject, "settlement-1", "v1b", "scope-a", cutPredecessorStart, cutSuccessorStart)
+	registerSettlementBody(t, registry, reissue, reissue.Effective())
+	if _, _, err := registry.RetireAtSameStartSuccessor(old.Tenant(), old.Scope(), old.Kind(), old.ObjectID(), old.Version(), reissue.Version(),
+		commercialValue(t, domain.NewRetirementReference, "SYN-REISSUE-LATEST"), retiredAtRegistration); err != nil {
+		t.Fatalf("同起点退役 err = %v——收尾门应按较早那个截止点判，重发接得住", err)
+	}
+}
