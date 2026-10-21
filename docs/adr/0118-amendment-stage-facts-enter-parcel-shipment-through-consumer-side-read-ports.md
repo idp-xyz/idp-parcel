@@ -1,6 +1,6 @@
 # ADR-0118: 「资料修订阶段」由 parcel-shipment 判断，关务与装袋两处阶段事实经消费侧读口同步进入——customs-compliance → parcel-shipment、node-operations → parcel-shipment 两条消费缝；读面未接即判不出阶段、停在未决
 
-Status: Accepted<!-- 索引注记 -->｜**分岔判据**：阶段是修订请求到达那一刻要问的「此刻」，事件便车保证不了此刻已知全部事实，故取 ADR-0025 的消费侧读口而非 ADR-0075 的随信封携带；六格取 UC-PS-002 原词、靠后压过靠前、委托级取成员最远。**适用场景**：`SourceDataAmendmentQuery.Stage` 在问矩阵前判出，判不出停在 `SourceDataAmendmentStageUndetermined` 不默认最早阶段；CC/NO 今天无按包裹键的读面，两只未接适配器答`不知道`，缺口归提供方立票（ps-port-remainder/05）；矩阵正文与缺格语义仍归 PC 半边  
+Status: Accepted<!-- 索引注记 -->｜**分岔判据**：阶段是修订请求到达那一刻要问的「此刻」，事件便车保证不了此刻已知全部事实，故取 ADR-0025 的消费侧读口而非 ADR-0075 的随信封携带；六格取 UC-PS-002 原词、靠后压过靠前、委托级取成员最远。**适用场景**：`SourceDataAmendmentQuery.Stage` 在问矩阵前判出，判不出停在 `SourceDataAmendmentStageUndetermined` 不默认最早阶段；CC/NO 按包裹键的读面接受时还没有，两只适配器先答`不知道`；ps-port-remainder/05（2026-09-07 resolved）之后两只适配器已接提供方真读面；矩阵正文与缺格语义仍归 PC 半边  
 Date: 2026-09-07
 
 > 裁决授权：owner 于 2026-09-07 授权 MCP-1 代裁票 [ps-port-remainder/02](../../.scratch/ps-port-remainder/issues/02-source-data-amendment-allowance-is-a-third-stage-content-declaration.md) 四问（记在该票 Comments），本记录把其中 Q2（六格原词）与 Q4（跨上下文输入缝取消费侧读口、要 ADR）落成决策；Q1（矩阵正文归 `party-commercial`）与 Q3（缺格语义）归 PC 半边落地时另记，不在此。

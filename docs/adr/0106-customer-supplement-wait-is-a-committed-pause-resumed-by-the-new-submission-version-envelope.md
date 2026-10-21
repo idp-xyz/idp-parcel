@@ -1,6 +1,6 @@
 # ADR-0106: 等待受控补充是入账暂停——与人工复核、运营登记同组提交入账，续办由「新提交版本已形成」信封驱动；停用 ADR-0086 Context 对这一格的分侧
 
-Status: Accepted<!-- 索引注记 -->｜**部分停用**（2026-10-19）：决定四「客户渠道的采信身份属 `PAR-INT-01` 接入契约，是实例半边」已由 [ADR-0139](./0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md) Decision 一停用，**适用场景**收窄为**租户既有渠道的适配**；首方族的采信身份由 ADR-0139 Decision 二定；其余各条不变。**分格判据**：仍是 ADR-0029 / ADR-0094 的「看恢复动作」——客户补件不是本进程重试推得动的，且代码证实受控补充编排不铸信封、无生产调用方、等待态从不落库，旧信封重投即便新版本到达也推不动链。**适用场景**：`ResumePath` 四格自此只剩`等待内部续办`一格回滚重投；处置翻转与它的续办信封（新提交版本）必须同笔落地，入口机制半边随之接进装配、实例半边（`PAR-INT-01`）留空
+Status: Accepted（另：部分停用 [ADR-0081](./0081-acceptance-judgment-is-envelope-driven.md) 决定三「任一步未决即整笔回滚等重投」一句里`等待受控补充`一格，改为提交入账（决定一）；被停原句与适用场景见 ADR-0081 的 Status 行（指针 2026-10-21 补））<!-- 索引注记 -->｜**部分停用**（2026-10-19）：决定四「客户渠道的采信身份属 `PAR-INT-01` 接入契约，是实例半边」已由 [ADR-0139](./0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md) Decision 一停用，**适用场景**收窄为**租户既有渠道的适配**；首方族的采信身份由 ADR-0139 Decision 二定；其余各条不变。**分格判据**：仍是 ADR-0029 / ADR-0094 的「看恢复动作」——客户补件不是本进程重试推得动的，且代码证实受控补充编排不铸信封、无生产调用方、等待态从不落库，旧信封重投即便新版本到达也推不动链。**适用场景**：`ResumePath` 自此只有`等待内部续办`一格回滚重投（`等待授权处置`一格由 ADR-0132 后加，同为提交入账）；处置翻转与它的续办信封（新提交版本）必须同笔落地，入口机制半边随之接进装配、实例半边（`PAR-INT-01`）留空
 Date: 2026-09-04
 
 ## Context
@@ -59,3 +59,4 @@ Date: 2026-09-04
 - [票 first-tenant-runway/07](../../.scratch/first-tenant-runway/issues/07-undecided-that-never-self-heals-burns-the-retry-budget.md)：D4 / D5 把同一形状做实的先例
 - [UC-PS-001](../application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md)：「安全续办」与`尚未决定`的结果语义
 - [ADR-0139](./0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md)：Decision 一把决定四的适用场景收窄到租户既有渠道的适配
+- [ADR-0081](./0081-acceptance-judgment-is-envelope-driven.md)：部分停用决定三「任一步未决即整笔回滚等重投」一句里`等待受控补充`一格

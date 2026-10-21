@@ -1,6 +1,6 @@
 # ADR-0094: 未决重投与否由领域的 `ResumePath` 决定，并增设「等运营登记」第四格
 
-Status: Accepted<!-- 索引注记 -->｜**分格判据**：看恢复动作，不看缺了什么——重试、客户补件、人工复核都推不动、只有一次登记动作推得动的，是新的第四格。**适用场景**：接受判断链的未决处置；新增未决原因时先答它的恢复动作，消费门不再持有原因字面量｜**部分停用**：其 Decision 三对 `ResumeByCustomerSupplement` 的「维持回滚重投」一格——原句「`ResumeByCustomerSupplement` → **维持回滚重投**。ADR-0086 的 Context 判过这一格……本记录**不改它**」——已由 [ADR-0106](./0106-customer-supplement-wait-is-a-committed-pause-resumed-by-the-new-submission-version-envelope.md) 停用；该格当时写明「另立取证票，不在本记录裁」，取证票即 first-tenant-runway/09，其三问已从代码答出，改为提交入账。**适用场景**：只停那一格的处置；Decision 一、二、四、五与其余三格不变，其余各条不变
+Status: Accepted（另：部分停用 [ADR-0081](./0081-acceptance-judgment-is-envelope-driven.md) 决定三「任一步未决即整笔回滚等重投」一句里`等待运营登记`一格，改为提交入账（Decision 三）；被停原句与适用场景见 ADR-0081 的 Status 行（指针 2026-10-21 补））<!-- 索引注记 -->｜**分格判据**：看恢复动作，不看缺了什么——重试、客户补件、人工复核都推不动、只有一次登记动作推得动的，是新的第四格。**适用场景**：接受判断链的未决处置；新增未决原因时先答它的恢复动作，消费门不再持有原因字面量｜**部分停用**：其 Decision 三对 `ResumeByCustomerSupplement` 的「维持回滚重投」一格——原句「`ResumeByCustomerSupplement` → **维持回滚重投**。ADR-0086 的 Context 判过这一格……本记录**不改它**」——已由 [ADR-0106](./0106-customer-supplement-wait-is-a-committed-pause-resumed-by-the-new-submission-version-envelope.md) 停用；该格当时写明「另立取证票，不在本记录裁」，取证票即 first-tenant-runway/09，其三问已从代码答出，改为提交入账。**适用场景**：只停那一格的处置；Decision 一、二、四、五与其余三格不变，其余各条不变｜**部分停用**（指针 2026-10-21 补）：其 Decision 三「四格处置」已由 [ADR-0132](./0132-authorized-disposition-decides-the-destination-of-a-restricted-request-as-its-own-wait-state-and-never-passes.md) 决定二扩一格——`ResumeByAuthorizedDisposition`（`等待授权处置`）同为提交入账，续办由授权处置命令自身驱动。**适用场景**：只新增这一格；四格各自的处置、Decision 一的按恢复动作分格与其余各条不变
 Date: 2026-09-02
 
 ## Context
@@ -50,10 +50,11 @@ Date: 2026-09-02
 ## Links
 
 - [ADR-0086](./0086-manual-review-wait-is-a-committed-pause-resumed-by-completion-envelope.md)：本记录把它的 Decision 一从一个取值推广到一族恢复动作，其保存护栏原样扩用
-- [ADR-0081](./0081-acceptance-judgment-is-envelope-driven.md)：Decision 三的未决语义是被细分的对象
+- [ADR-0081](./0081-acceptance-judgment-is-envelope-driven.md)：Decision 三的未决语义是被细分的对象，部分停用其中`等待运营登记`一格（指针 2026-10-21 补）
 - [ADR-0029](./0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md)：按恢复动作分格的判据
 - [ADR-0045](./0045-new-submission-version-keeps-history-and-reestablishes-the-task.md)：受控补充的重触发判断另成切片——Decision 三不动那一格的理由
 - [ADR-0095](./0095-undecided-stage-and-reason-surface-in-two-layers.md)：本记录带走可观测性的一半，那一篇裁另一半
 - [UC-PS-001](../application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md)：「安全续办」与`尚未决定`的结果语义
 - [票 07](../../.scratch/first-tenant-runway/issues/07-undecided-that-never-self-heals-burns-the-retry-budget.md)：现场与三条候选路
 - [ADR-0106](./0106-customer-supplement-wait-is-a-committed-pause-resumed-by-the-new-submission-version-envelope.md)：前向指针——Decision 三刻意留待取证的那一格（`ResumeByCustomerSupplement`）证据齐后由它改判为提交入账，Decision 四「触发同笔落地」对那一格逐字沿用
+- [ADR-0132](./0132-authorized-disposition-decides-the-destination-of-a-restricted-request-as-its-own-wait-state-and-never-passes.md)：后继——决定二把 Decision 三的处置扩一格`等待授权处置`，同为提交入账

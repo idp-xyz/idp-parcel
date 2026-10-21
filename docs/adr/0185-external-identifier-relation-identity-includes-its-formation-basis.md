@@ -1,6 +1,6 @@
 # ADR-0185：外部标识关联的身份含形成依据——同一分配方对同一对象再签同一个号是新的一条关联
 
-Status: Accepted（2026-10-16，部分停用 [ADR-0184](./0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md) 决定一的键，其余各条不变。由票 [ps-external-mark-relations/03](../../.scratch/ps-external-mark-relations/issues/03-channel-parcel-numbers-from-label-results-void-and-replacement.md) 的两轴评审揭出——Standards 轴报阻断、Spec 轴报非阻断，评审者是 `/code-review` 的隔离子代理（用户 2026-10-16 改裁允许子代理）。Claude Code 会话在用户「你帮我做决定吧」「开始」的同一授权下代 PS owner 裁定。）<!-- 索引注记 -->｜**键**：（租户，标识类型，分配方，号码，被标识对象，形成依据）。换单沿用原号、作废后再签同号都是新关联；替代后继不得是被替代者自己。**越权风险点**已经 owner 复核（2026-10-19 代裁，见该记录文末）。
+Status: Accepted（2026-10-16，部分停用 [ADR-0184](./0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md) 决定一「键（租户，标识类型，分配方，号码，被标识对象）」一句的键——键加入形成依据（被停原句补引 2026-10-21），其余各条不变。由票 [ps-external-mark-relations/03](../../.scratch/ps-external-mark-relations/issues/03-channel-parcel-numbers-from-label-results-void-and-replacement.md) 的两轴评审揭出——Standards 轴报阻断、Spec 轴报非阻断，评审者是 `/code-review` 的隔离子代理（用户 2026-10-16 改裁允许子代理）。Claude Code 会话在用户「你帮我做决定吧」「开始」的同一授权下代 PS owner 裁定。）<!-- 索引注记 -->｜**键**：（租户，标识类型，分配方，号码，被标识对象，形成依据）。换单沿用原号、作废后再签同号都是新关联；替代后继不得是被替代者自己。**越权风险点**已经 owner 复核（2026-10-19 代裁，见该记录文末）。
 
 Date: 2026-10-16
 

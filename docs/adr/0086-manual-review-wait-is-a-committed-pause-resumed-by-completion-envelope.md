@@ -1,6 +1,6 @@
 # ADR-0086: 等待人工复核是入账暂停——暂停与等待态同事务落库，续办由「复核已完成」信封另行驱动
 
-Status: Accepted<!-- 索引注记 -->｜**部分停用**：其 Context 把`等待受控补充`判在「回滚重投是对的」那一侧的分侧——原句「等待受控补充 / 等待内部续办：重投重跑同一轮，等的依赖（客户新提交版本、抖动的内部依赖）会自己回来」中关于**客户新提交版本**的那一半——已由 [ADR-0106](./0106-customer-supplement-wait-is-a-committed-pause-resumed-by-the-new-submission-version-envelope.md) 停用，该等待态改为提交入账、由「新提交版本已形成」信封驱动续办，理由是代码证实新版本不会自己回来、回来了也不是在途那封信封受益。**适用场景**：只停`等待受控补充`那一半；`等待内部续办`的分侧与 Decision 一至四不变，其余各条不变
+Status: Accepted（另：部分停用 [ADR-0081](./0081-acceptance-judgment-is-envelope-driven.md) 决定三「任一步未决即整笔回滚等重投」一句里`等待人工复核`一格，改为提交入账（决定一）；被停原句与适用场景见 ADR-0081 的 Status 行（指针 2026-10-21 补））<!-- 索引注记 -->｜**部分停用**：其 Context 把`等待受控补充`判在「回滚重投是对的」那一侧的分侧——原句「等待受控补充 / 等待内部续办：重投重跑同一轮，等的依赖（客户新提交版本、抖动的内部依赖）会自己回来」中关于**客户新提交版本**的那一半——已由 [ADR-0106](./0106-customer-supplement-wait-is-a-committed-pause-resumed-by-the-new-submission-version-envelope.md) 停用，该等待态改为提交入账、由「新提交版本已形成」信封驱动续办，理由是代码证实新版本不会自己回来、回来了也不是在途那封信封受益。**适用场景**：只停`等待受控补充`那一半；`等待内部续办`的分侧与 Decision 一至四不变，其余各条不变
 Date: 2026-08-31
 
 ## Context
@@ -39,8 +39,8 @@ Date: 2026-08-31
 
 ## Links
 
-- [ADR-0081：接受判断由信封驱动](./0081-acceptance-judgment-is-envelope-driven.md)：Decision 三的未决语义是本记录细分的对象；命令面保留条款是 Decision 三的边界
+- [ADR-0081：接受判断由信封驱动](./0081-acceptance-judgment-is-envelope-driven.md)：Decision 三的未决语义是本记录细分的对象，部分停用其中`等待人工复核`一格（指针 2026-10-21 补）；命令面保留条款是 Decision 三的边界
 - [票 09：接受前人工复核页接线](../../.scratch/admin-skeleton-closure-batch/issues/09-acceptance-review-wiring.md)：队列读面与两个命令口的驱动票
-- [CONTEXT.md](../domain/parcel-shipment/CONTEXT.md)：接受判断任务三个等待态「使用不同原因和续办路径」——本记录把处置也分开
+- [CONTEXT.md](../domain/parcel-shipment/CONTEXT.md)：接受判断任务各等待态「使用不同原因和续办路径」——本记录把处置也分开
 - [ADR-0031](./0031-owned-repository-write-outcome-is-a-closed-algebra-not-an-error.md)：`决定没落库`/`换代冲突`的原因分格，Decision 一的保存失败语义沿用它
 - [ADR-0106](./0106-customer-supplement-wait-is-a-committed-pause-resumed-by-the-new-submission-version-envelope.md)：前向指针——停用本记录 Context 对`等待受控补充`的分侧，把 Decision 一的保存护栏与 Decision 二的信封驱动形状扩用到那一格

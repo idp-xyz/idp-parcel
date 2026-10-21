@@ -1,6 +1,6 @@
 # ADR-0061: 已接受委托的重建门按快照表达能力开门
 
-Status: Accepted
+Status: Accepted<!-- 索引注记 -->｜**部分停用**（指针 2026-10-21 补）：其决定一「`已拒绝`、`已撤回`仍由入口以 `ErrRehydrationStateNotSupported` 拒绝。」里`已拒绝`那一半已由 [ADR-0188](./0188-rejected-shipment-request-rehydration-by-snapshot-expressiveness.md) 推进——快照补上主动拒绝留痕之后，重建门开到`已拒绝`。**适用场景**：只限`已拒绝`；`已撤回`照旧拒绝，其余各条不变
 Date: 2026-08-18
 
 ## Context
@@ -48,4 +48,4 @@ Date: 2026-08-18
 - [ADR-0030：聚合重建按状态逐个开门](./0030-rehydration-admits-one-state-at-a-time-by-snapshot-expressiveness.md)：本记录推进它「今天只开`已提交`」那一格；判据与其余各条不变
 - [ADR-0028：聚合的重建与构造分属两扇门](./0028-aggregate-rehydration-is-a-separate-door-that-validates-without-recomputing.md)：重建仍只校验不重算
 - [ADR-0029：按标识取回原状态失败时按恢复动作分格](./0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md)：已接受缺产物与门外状态分两个哨兵
-- [ADR-0188：已拒绝委托的重建门按快照表达能力开门](./0188-rejected-shipment-request-rehydration-by-snapshot-expressiveness.md)：本记录决定一「`已拒绝`、`已撤回`仍由入口以 `ErrRehydrationStateNotSupported` 拒绝」里`已拒绝`那一半被推进；Status 与其余各条不变
+- [ADR-0188：已拒绝委托的重建门按快照表达能力开门](./0188-rejected-shipment-request-rehydration-by-snapshot-expressiveness.md)：本记录决定一「`已拒绝`、`已撤回`仍由入口以 `ErrRehydrationStateNotSupported` 拒绝」里`已拒绝`那一半被推进；其余各条不变
