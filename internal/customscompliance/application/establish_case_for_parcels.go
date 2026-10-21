@@ -8,7 +8,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 )
 
-// EstablishCaseForParcelsCommand 是运营命令面的建案请求（ADR-0227 决定一）：监管范围四维、指名的包裹与初始角色快照。
+// EstablishCaseForParcelsCommand 是运营命令面的建案请求（ADR-0227 决定二）：监管范围四维、指名的包裹与初始角色快照。
 // 包裹只给身份——客户归属与来源资料引用由本编排按租户查 parcel-shipment 的当前已接受委托取，请求方说不了，也就冒充
 // 不了另一个客户的包裹。
 type EstablishCaseForParcelsCommand struct {

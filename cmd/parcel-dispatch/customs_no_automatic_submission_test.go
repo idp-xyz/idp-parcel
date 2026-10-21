@@ -13,7 +13,7 @@ import (
 	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 )
 
-// 本文件证首发「不启用生产自动申报」在派发进程上的那一半（ADR-0227 决定二；票 product-strategy-boundary/18）：委托被接受、
+// 本文件证首发「不启用生产自动申报」在派发进程上的那一半（ADR-0227 决定五；票 product-strategy-boundary/18）：委托被接受、
 // 接受信封经生产派发图扇出之后，关务那边既没有案件、申报单元，也没有提交授权、提交版本或提交尝试；派发进程的生产代码里
 // 构造不出建案、授权确认与提交三只编排——它们只在 parcel-api 的运营决定口那一个装配文件里出现。证据只记 `S`。
 

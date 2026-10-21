@@ -1,4 +1,4 @@
--- 关务的三种运营决定（ADR-0227 决定一、二；票 product-strategy-boundary/18）：建案 CUSTOMS_CASE_ESTABLISHMENT、提交授权确认
+-- 关务的三种运营决定（ADR-0227 决定一；票 product-strategy-boundary/18）：建案 CUSTOMS_CASE_ESTABLISHMENT、提交授权确认
 -- CUSTOMS_SUBMISSION_AUTHORIZATION、申报提交执行 CUSTOMS_DECLARATION_SUBMISSION。与 accessidentity.DecisionCustomsCaseEstablishment、
 -- DecisionCustomsSubmissionAuthorization、DecisionCustomsDeclarationSubmission 同笔放开（0001 头注那条约定）。本迁移不种任何行：
 -- 谁被授予哪一种决定是租户取值（参数登记册 PAR-CUS-03）。

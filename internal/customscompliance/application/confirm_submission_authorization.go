@@ -8,7 +8,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 )
 
-// AuthorizationConfirmationOutcome 是一次提交授权确认的应用处理结果（UC-CC-004 首发人工确认那一格，ADR-0227 决定二）。
+// AuthorizationConfirmationOutcome 是一次提交授权确认的应用处理结果（UC-CC-004 首发人工确认那一格，ADR-0227 决定三）。
 // `已有授权`与`授权不再有效`各占一格：前者照旧可用、后者不得再支持提交，续办相反；本册一单元一行，后者今天没有再次
 // 申请的路（票 product-strategy-boundary/36）。`不再就绪`是业务负向，与等依赖的`未决`分开（ADR-0029）。
 type AuthorizationConfirmationOutcome uint8

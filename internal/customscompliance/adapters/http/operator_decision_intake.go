@@ -14,7 +14,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
 
-// OperatorDecision 是本包各口对应的运营决定种类（ADR-0227 决定一、二），字面与操作者册的决定种类相同。三口各一种：能建案的
+// OperatorDecision 是本包各口对应的运营决定种类（ADR-0227 决定一），字面与操作者册的决定种类相同。三口各一种：能建案的
 // 不因此能确认授权，能确认授权的不因此能发起提交——关务 CONTEXT 要求批准与实际提交权限分别表达，授予的粒度就是权力的粒度。
 type OperatorDecision string
 
@@ -118,7 +118,7 @@ type SubmissionAuthorizationPayload struct {
 }
 
 // DeclarationSubmissionPayload 是提交执行口的线格式。没有尝试结果与发送时间两格：提交执行口不发送任何东西，首次尝试一律
-// 登记为`已登记待发送`（ADR-0227 决定三）；让请求方说「已回执」「何时发出」就是让他替一次没发生的发送作证。
+// 登记为`已登记待发送`（ADR-0227 决定四）；让请求方说「已回执」「何时发出」就是让他替一次没发生的发送作证。
 type DeclarationSubmissionPayload struct {
 	UnitID    string   `json:"unitId"`
 	CaseID    string   `json:"caseId"`

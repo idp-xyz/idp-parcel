@@ -23,17 +23,17 @@ type DeclarationSubmitter interface {
 	Handle(ctx context.Context, command application.SubmitDeclarationCommand) (application.SubmitDeclarationResult, error)
 }
 
-// NewEstablishCaseEndpoint 交回建案口（`POST /customs-cases`，ADR-0227 决定一）。
+// NewEstablishCaseEndpoint 交回建案口（`POST /customs-cases`，ADR-0227 决定二）。
 func NewEstablishCaseEndpoint(intake CaseEstablishmentIntake, handler CaseEstablisher) http.Handler {
 	return decisionEndpoint(intake.IntakeCaseEstablishment, handler.Handle, writeCaseEstablishment)
 }
 
-// NewConfirmSubmissionAuthorizationEndpoint 交回授权确认口（`POST /customs-submission-authorizations`，ADR-0227 决定二）。
+// NewConfirmSubmissionAuthorizationEndpoint 交回授权确认口（`POST /customs-submission-authorizations`，ADR-0227 决定三）。
 func NewConfirmSubmissionAuthorizationEndpoint(intake SubmissionAuthorizationIntake, handler SubmissionAuthorizationConfirmer) http.Handler {
 	return decisionEndpoint(intake.IntakeSubmissionAuthorization, handler.Handle, writeAuthorizationConfirmation)
 }
 
-// NewSubmitDeclarationEndpoint 交回提交执行口（`POST /customs-declaration-submissions`，ADR-0227 决定二、三）。
+// NewSubmitDeclarationEndpoint 交回提交执行口（`POST /customs-declaration-submissions`，ADR-0227 决定四）。
 func NewSubmitDeclarationEndpoint(intake DeclarationSubmissionIntake, handler DeclarationSubmitter) http.Handler {
 	return decisionEndpoint(intake.IntakeDeclarationSubmission, handler.Handle, writeDeclarationSubmission)
 }

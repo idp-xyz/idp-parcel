@@ -4,7 +4,7 @@ Category: enhancement
 Status: needs-triage——2026-10-20 Claude Code 会话随 [18](./18-customs-case-and-declaration-submission-entry.md) 分诊立（用户「你作为业务和系统专家自决……解决所有的问题」授权）
 Blocked by: 无
 地盘：`internal/customscompliance`（授权确认编排、提交授权册与其迁移、提交受理口）、`cmd/parcel-api` 的授权确认特性文件；`cmd/parcel-customs-register` 的授权命令。
-出处：[18](./18-customs-case-and-declaration-submission-entry.md) 分诊裁定末段；[ADR-0227](../../../docs/adr/0227-customs-case-and-declaration-submission-enter-production-through-operator-decision-faces.md) 越权风险点 3、4、5、6；[UC-CC-004](../../../docs/application/customs-compliance/UC-CC-004-AUTHORIZE-DECLARATION-SUBMISSION.md) 结果契约。
+出处：[18](./18-customs-case-and-declaration-submission-entry.md) 分诊裁定末段；[ADR-0227](../../../docs/adr/0227-customs-case-and-declaration-submission-enter-production-through-operator-decision-faces.md) 越权风险点 1、3、4、5、6；[UC-CC-004](../../../docs/application/customs-compliance/UC-CC-004-AUTHORIZE-DECLARATION-SUBMISSION.md) 结果契约。
 
 ## 现状
 

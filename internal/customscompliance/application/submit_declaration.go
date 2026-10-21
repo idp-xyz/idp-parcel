@@ -115,7 +115,7 @@ func (reason DeclarationUndecidedReason) String() string {
 // 角色快照引用、发送目标与首次尝试的已知结果。案件维必填（ADR-0073 决定五）：案件
 // 先于申报存在，提交前按标识反查核存在——不核等于让调用方随手填一个字符串。
 //
-// 首次尝试的结果是`已登记待发送`时 SentAt 必须为零值：发送还没发生（ADR-0227 决定三）。运营命令面只走这一格。
+// 首次尝试的结果是`已登记待发送`时 SentAt 必须为零值：发送还没发生（ADR-0227 决定四）。运营命令面只走这一格。
 type SubmitDeclarationCommand struct {
 	TenantID      domain.TenantID
 	UnitID        string
