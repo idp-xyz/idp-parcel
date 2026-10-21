@@ -2,7 +2,7 @@
 
 Category: bug
 Status: ready-for-agent——R1（上线前必修）：答错且留错痕。收尾口（票 demo-chain-gaps/50 进 main，ADR-0233）对授权规则与合同都收；运营退役一版授权规则来收回某个等级的拒绝、关闭或重开权，这些权限实际上照旧生效。更重的一格：同起点重发 v2、退役 v1 之后，`Authorize` 取首个命中，命中的是已退役的 v1 授予，消费方保存的「所采用的授权规则版本」就是一版已退役的规则。第一次更正错登的授权规则就撞，没有绕法（只能把授予逐条改区间）。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
-Blocked by: docs-consistency/07（PC+PP 修订）先裁：版本壳的截止与退役对挂在其上的授权授予与合同委派怎么作用。ADR-0233 决定六写的是「合同委派、授权授予不随版本收尾」并列为越权风险点 6，与 PC CONTEXT「停止用于新的解析和判断」相抵；审计按 CONTEXT 归 C，并注明 owner 若认定授予按自身区间走就改归 B。
+Blocked by: 无——2026-10-21 文档自洽 07 已裁（[ADR-0261](../../../docs/adr/0261-authority-grants-and-contract-delegations-follow-the-closure-of-their-version-and-several-hits-are-an-applicability-conflict.md)）：授予与委派**随所挂版本收尾**，多条命中答适用冲突。原 Blocked by：docs-consistency/07 先裁版本壳的截止与退役对授权授予与合同委派怎么作用。
 出处：[audit/pc-pp.md](../audit/pc-pp.md) H2（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，PC 代码在此期间未改）。
 
 ## 现象
@@ -37,3 +37,14 @@ M：两个装载连上退役册与最新区间更正册（与 ADR-0233 给版本
 ## 要裁的
 
 全部在 Blocked by 那一裁里；「取首个命中」不随裁向，必修。
+
+## 裁向（2026-10-21，文档自洽 07）
+
+[ADR-0261](../../../docs/adr/0261-authority-grants-and-contract-delegations-follow-the-closure-of-their-version-and-several-hits-are-an-applicability-conflict.md) 取上文「最小的诚实修法」第一支（随版本收尾），并把「取首个命中」那一格一并裁成适用冲突。照此实施：
+
+1. `LoadEffectiveGrants` 装载的授予折进退役册（`party_commercial.commercial_version_retirement`）与壳上最新一条区间更正：版本已退役的授予不交出；有更正的，判用区间终点取更正终点与授予自身终点中较早的一个，只截终点（与 ADR-0233 决定五给自带区间的政策正文的折法同一口径，宜复用同一处折法）。「范围加时刻有没有现行规则」按折后的授予判。
+2. `LoadEffectiveDelegations` 对所挂客户合同版本同一折法。
+3. `domain.Authorize`：折后命中多于一条授予即交回新的具名错误（适用冲突），不取首个；`resolveDecider`：命中多条委派而委派方不同同答适用冲突，委派方相同取那一个决定方。新错误要与 `ErrNotAuthorized`、`ErrAuthorityRulesNotConfigured` 分得开（按恢复动作分格，ADR-0029）。
+4. `parcel-shipment` 的各授权适配器（主动拒绝、人工复核、资料修订、受控关闭与重开、撤回）把适用冲突译成各自的未决，不落`不允许`、不当作已授权。
+5. 补用例：`AT-PC-042`、`AT-PC-059`、`AT-PC-060`、`AT-PC-061`（UC-PC-003），领域与真库各一，并在 `.scratch/at-coverage-inventory.md` 把这几行从④移入①。
+
