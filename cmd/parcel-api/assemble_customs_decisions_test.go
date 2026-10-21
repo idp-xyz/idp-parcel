@@ -48,7 +48,57 @@ func (tokenSubjectVerifier) VerifyOperatorCredential(_ context.Context, credenti
 
 type customsDecisionFixture struct {
 	db        *bentopg.DB
+	operators *aipg.OperatorRegistry
 	endpoints map[string]http.Handler
+}
+
+// registerOperator 把一个合成操作者绑到演示委托所在的租户，并按给定区间逐种登运营决定授予，交回各笔授予号。断言在事务闭包外。
+func registerOperator(t *testing.T, db *bentopg.DB, operators *aipg.OperatorRegistry, subject string,
+	interval accessidentity.EffectiveInterval, kinds ...accessidentity.DecisionKind) []string {
+	t.Helper()
+	operator, err := accessidentity.NewOperatorSubject(customsDecisionIssuer, subject)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding, err := accessidentity.NewOperatorBinding(operator, customsDecisionTenant, "SYN-BIND-BASIS-PSB18")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var grants []accessidentity.OperatorGrant
+	var ids []string
+	for _, kind := range kinds {
+		id := "SYN-GRANT-" + subject + "-" + kind.String()
+		grant, err := accessidentity.NewOperationDecisionGrant(customsDecisionTenant, id, operator, kind, interval, "SYN-GRANT-BASIS-PSB18")
+		if err != nil {
+			t.Fatal(err)
+		}
+		grants = append(grants, grant)
+		ids = append(ids, id)
+	}
+	var outcomes []accessidentity.OperatorRegistrationOutcome
+	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		bound, err := operators.RegisterOperator(txCtx, binding)
+		if err != nil {
+			return err
+		}
+		outcomes = append(outcomes, bound)
+		for _, grant := range grants {
+			granted, err := operators.RegisterGrant(txCtx, grant)
+			if err != nil {
+				return err
+			}
+			outcomes = append(outcomes, granted)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("登记操作者 %s：%v", subject, err)
+	}
+	for _, outcome := range outcomes {
+		if outcome != accessidentity.OperatorRegistrationRecorded {
+			t.Fatalf("登记操作者 %s：%v", subject, outcomes)
+		}
+	}
+	return ids
 }
 
 func newCustomsDecisionFixture(t *testing.T) *customsDecisionFixture {
@@ -70,32 +120,7 @@ func newCustomsDecisionFixture(t *testing.T) *customsDecisionFixture {
 		customsApprover:    accessidentity.DecisionCustomsSubmissionAuthorization,
 		customsSubmitter:   accessidentity.DecisionCustomsDeclarationSubmission,
 	} {
-		operator, err := accessidentity.NewOperatorSubject(customsDecisionIssuer, subject)
-		if err != nil {
-			t.Fatal(err)
-		}
-		binding, err := accessidentity.NewOperatorBinding(operator, customsDecisionTenant, "SYN-BIND-BASIS-PSB18")
-		if err != nil {
-			t.Fatal(err)
-		}
-		grant, err := accessidentity.NewOperationDecisionGrant(customsDecisionTenant, "SYN-GRANT-"+subject, operator, kind, interval, "SYN-GRANT-BASIS-PSB18")
-		if err != nil {
-			t.Fatal(err)
-		}
-		var bound, granted accessidentity.OperatorRegistrationOutcome
-		if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
-			var err error
-			if bound, err = operators.RegisterOperator(txCtx, binding); err != nil {
-				return err
-			}
-			granted, err = operators.RegisterGrant(txCtx, grant)
-			return err
-		}); err != nil {
-			t.Fatalf("登记操作者 %s：%v", subject, err)
-		}
-		if bound != accessidentity.OperatorRegistrationRecorded || granted != accessidentity.OperatorRegistrationRecorded {
-			t.Fatalf("登记操作者 %s：绑定 %s，授予 %s", subject, bound, granted)
-		}
+		registerOperator(t, db, operators, subject, interval, kind)
 	}
 	minter, err := buildOperatorMinter(tokenSubjectVerifier{}, operators, admitAll{})
 	if err != nil {
@@ -126,7 +151,7 @@ func newCustomsDecisionFixture(t *testing.T) *customsDecisionFixture {
 	if len(endpoints) != 3 {
 		t.Fatalf("关务三口没按登记处挂上：%v", endpoints)
 	}
-	return &customsDecisionFixture{db: db, endpoints: endpoints}
+	return &customsDecisionFixture{db: db, operators: operators, endpoints: endpoints}
 }
 
 func (fixture *customsDecisionFixture) post(t *testing.T, pattern, operator, body string) (int, map[string]any) {
@@ -331,5 +356,72 @@ func TestUnconfiguredCustomsRegistersAnswerNotConfiguredThroughTheProductionFace
 	}
 	if n := fixture.count(t, `SELECT (SELECT count(*) FROM customs_compliance.customs_case) + (SELECT count(*) FROM customs_compliance.submission_authority)`); n != 0 {
 		t.Fatalf("未配置时写下了 %d 行", n)
+	}
+}
+
+// Covers: AT-CC-445（生产装配半边：授予的时效）——三种授予过期或被撤销之后，三口都答 OPERATOR_NOT_GRANTED、不写：授予只在它
+// 生效的区间里开门，撤销之后的出示与从未授予同答。
+func TestExpiredOrRevokedCustomsGrantsNoLongerOpenTheFaces(t *testing.T) {
+	fixture := newCustomsDecisionFixture(t)
+	saveAcceptedLabelChannelRequest(t, fixture.db)
+	fixture.registerCaseRequirement(t)
+	fixture.registerReadiness(t, customsDecisionUnit)
+
+	now := time.Now()
+	kinds := []accessidentity.DecisionKind{
+		accessidentity.DecisionCustomsCaseEstablishment,
+		accessidentity.DecisionCustomsSubmissionAuthorization,
+		accessidentity.DecisionCustomsDeclarationSubmission,
+	}
+	expired, err := accessidentity.NewEffectiveInterval(now.Add(-2*time.Hour), now.Add(-time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	registerOperator(t, fixture.db, fixture.operators, "SYN-EXPIRED-PSB18", expired, kinds...)
+
+	open, err := accessidentity.NewEffectiveInterval(now.Add(-2*time.Hour), time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	grantIDs := registerOperator(t, fixture.db, fixture.operators, "SYN-REVOKED-PSB18", open, kinds...)
+	var revoked []accessidentity.OperatorRegistrationOutcome
+	if err := fixture.db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		for _, id := range grantIDs {
+			revocation, err := accessidentity.NewGrantRevocation(customsDecisionTenant, id, now.Add(-time.Minute), "SYN-REVOKE-BASIS-PSB18")
+			if err != nil {
+				return err
+			}
+			outcome, err := fixture.operators.RegisterRevocation(txCtx, revocation)
+			if err != nil {
+				return err
+			}
+			revoked = append(revoked, outcome)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("撤销授予：%v", err)
+	}
+	for _, outcome := range revoked {
+		if outcome != accessidentity.OperatorRegistrationRecorded {
+			t.Fatalf("撤销授予：%v", revoked)
+		}
+	}
+
+	for _, operator := range []string{"SYN-EXPIRED-PSB18", "SYN-REVOKED-PSB18"} {
+		for pattern, body := range map[string]string{
+			"/customs-cases":                     customsCaseBody,
+			"/customs-submission-authorizations": `{"unitId":"` + customsDecisionUnit + `"}`,
+			"/customs-declaration-submissions":   customsSubmissionBody("CASE-ANY"),
+		} {
+			status, answer := fixture.post(t, pattern, operator, body)
+			code, _ := answer["error"].(map[string]any)
+			if status != http.StatusForbidden || code["code"] != "OPERATOR_NOT_GRANTED" {
+				t.Fatalf("%s 由 %s 出示：%d %v", pattern, operator, status, answer)
+			}
+		}
+	}
+	if n := fixture.count(t, `SELECT (SELECT count(*) FROM customs_compliance.customs_case) + (SELECT count(*) FROM customs_compliance.submission_authority)
+		+ (SELECT count(*) FROM customs_compliance.declaration_submission)`); n != 0 {
+		t.Fatalf("过期或撤销的授予写下了 %d 行", n)
 	}
 }

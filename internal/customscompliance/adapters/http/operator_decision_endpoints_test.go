@@ -131,7 +131,7 @@ func TestCustomsDecisionPayloadsRefuseIdentityAndSendFacts(t *testing.T) {
 		body    string
 	}{
 		"建案带租户":    {customshttp.NewEstablishCaseEndpoint(intake, establisher), `{"tenantId":"T","parcels":["DPCL-1"]}`},
-		"建案带客户归属":  {customshttp.NewEstablishCaseEndpoint(intake, establisher), `{"parcels":[{"parcel":"DPCL-1","customer":"C"}]}`},
+		"建案带客户归属":  {customshttp.NewEstablishCaseEndpoint(intake, establisher), `{"parcels":["DPCL-1"],"customer":"SYN-ACCOUNT-02","sourceRef":"SHR-X/SUBV-X"}`},
 		"建案方向不认识":  {customshttp.NewEstablishCaseEndpoint(intake, establisher), `{"direction":"OUTBOUND","parcels":["DPCL-1"]}`},
 		"授权确认带确认人": {customshttp.NewConfirmSubmissionAuthorizationEndpoint(intake, &capturingConfirmer{}), `{"unitId":"U","confirmer":"bob"}`},
 		"提交带尝试结果":  {customshttp.NewSubmitDeclarationEndpoint(intake, &capturingSubmitter{}), `{"unitId":"U","initialResult":"ACKNOWLEDGED"}`},
