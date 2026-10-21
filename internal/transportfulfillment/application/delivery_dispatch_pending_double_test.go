@@ -16,6 +16,16 @@ type pendingRegisterDouble struct {
 	rows   map[ports.DeliveryDispatchPendingKey]ports.DeliveryDispatchPendingRecord
 	err    error
 	writes int
+	// held 记下每一拍占过的那一件，次序照调用。
+	held []ports.DeliveryDispatchPendingKey
+}
+
+func (double *pendingRegisterDouble) HoldFormation(_ context.Context, key ports.DeliveryDispatchPendingKey) error {
+	if double.err != nil {
+		return double.err
+	}
+	double.held = append(double.held, key)
+	return nil
 }
 
 func newPendingRegister() *pendingRegisterDouble {

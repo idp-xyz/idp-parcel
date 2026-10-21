@@ -75,7 +75,10 @@ type DeliveryDispatchPendingRecord struct {
 //   - SettleFormed：把一条改成已形成；册上没有这一件就什么也不写——册只记待形成过的那几件，顺利形成的任务不进册。
 //   - SettleLapsed：只把待形成的那一条改成已作罢；已形成的不动——它的任务还在，对象离场是任务之后的事。
 //   - MarkAsked：只给待形成的那一条记下这一次问过，别的不动。答复动不了册的那几格（未决、引用被占、不受理……）走这一口。
+//   - HoldFormation：在这一笔事务里占住这一件（租户，段，对象），到事务结束才放。同一件的两拍因此一前一后：后一拍在前一拍提交之后
+//     才读段、查在册，看得见前一拍铸下的任务——不论两拍各凭替代链上的哪一版。不写任何行。
 type DeliveryDispatchPendingRegister interface {
+	HoldFormation(ctx context.Context, key DeliveryDispatchPendingKey) error
 	RecordMissing(ctx context.Context, key DeliveryDispatchPendingKey, entryBasis domain.ParticipationBasisReference, missing []string, answeredAt time.Time) error
 	SettleFormed(ctx context.Context, key DeliveryDispatchPendingKey, task domain.DispatchTaskReference, at time.Time) error
 	SettleLapsed(ctx context.Context, key DeliveryDispatchPendingKey, lapsedBy string, at time.Time) error

@@ -191,6 +191,10 @@ func (pendingRegisterSink) MarkAsked(context.Context, ports.DeliveryDispatchPend
 	return nil
 }
 
+func (pendingRegisterSink) HoldFormation(context.Context, ports.DeliveryDispatchPendingKey) error {
+	return nil
+}
+
 func (fixture *triggerFixture) endpoint(t *testing.T) http.Handler {
 	t.Helper()
 	return tfhttp.NewTriggerDeliveryDispatchEndpoint(newTriggerIntake(t), application.NewTriggerDeliveryDispatchHandler(fixture.deps))

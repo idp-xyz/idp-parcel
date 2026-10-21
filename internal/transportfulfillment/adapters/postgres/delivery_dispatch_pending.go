@@ -119,6 +119,22 @@ func (register *DeliveryDispatchPendings) SettleLapsed(
 	return nil
 }
 
+// HoldFormation 取这一件（租户，段，对象）的事务级咨询锁，事务结束时自动放。键按三件拼成一串取 64 位散列：撞上别的键只会让两件
+// 不相干的派送多等一下，不会让该串的两拍并行。不锁段行：段册的写路有自己的锁序，这里另起一把只给派送发起用的锁，不与它们交缠。
+func (register *DeliveryDispatchPendings) HoldFormation(ctx context.Context, key ports.DeliveryDispatchPendingKey) error {
+	executor, err := register.db.RequireExecutor(ctx)
+	if err != nil {
+		return pendingWriteFailure("hold delivery dispatch formation", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
+		"transport_fulfillment.delivery_dispatch\x1f"+key.TenantID.String()+"\x1f"+key.Segment.String()+"\x1f"+key.Object.String(),
+	); err != nil {
+		return pendingWriteFailure("hold delivery dispatch formation", err)
+	}
+	return nil
+}
+
 // MarkAsked 只给待形成的那一条记下这一次问过。答复动不了册的那几格要走这一口：不记的话，它们的最近一次问停在原地、一直排在队头，
 // 一次重问的件数全被它们占满，后面的那几件就永远问不到。
 func (register *DeliveryDispatchPendings) MarkAsked(

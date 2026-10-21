@@ -290,17 +290,29 @@ func (handler *TriggerDeliveryDispatchHandler) Trigger(
 	if handler.deps.Pending == nil {
 		return TriggerDeliveryDispatchResult{}, ErrDeliveryDispatchPendingRegisterNotWired
 	}
+	// 先占住这一件再读段、查在册：同一件的两拍若并行，各凭替代链上不同的一版去查，都看不见对方还没提交的任务，就会各铸一项。
+	if segment, object, accepted := deliveryTriggerTargetFrom(command); accepted {
+		key := ports.DeliveryDispatchPendingKey{TenantID: command.TenantID, Segment: segment, Object: object}
+		if err := handler.deps.Pending.HoldFormation(ctx, key); err != nil {
+			return TriggerDeliveryDispatchResult{}, pendingRegisterFailure(err)
+		}
+	}
 	result, err := handler.answer(ctx, command)
 	if err != nil {
 		return TriggerDeliveryDispatchResult{}, err
 	}
 	if err := handler.keepPendingRegister(ctx, command, result); err != nil {
-		if errors.Is(err, ports.ErrDeliveryDispatchPendingWriteRefused) {
-			return TriggerDeliveryDispatchResult{}, fmt.Errorf("%w: %v", ErrDeliveryDispatchPendingRefused, err)
-		}
-		return TriggerDeliveryDispatchResult{}, fmt.Errorf("%w: %v", ErrDeliveryDispatchPendingUnavailable, err)
+		return TriggerDeliveryDispatchResult{}, pendingRegisterFailure(err)
 	}
 	return result, nil
+}
+
+// pendingRegisterFailure 把册那一侧的失败译成本编排的两个错误：确定性拒绝是缺陷，其余是此刻读写不动。
+func pendingRegisterFailure(err error) error {
+	if errors.Is(err, ports.ErrDeliveryDispatchPendingWriteRefused) {
+		return fmt.Errorf("%w: %v", ErrDeliveryDispatchPendingRefused, err)
+	}
+	return fmt.Errorf("%w: %v", ErrDeliveryDispatchPendingUnavailable, err)
 }
 
 // keepPendingRegister 照这一拍的答复写派送待形成册（ADR-0230 决定一）。只有三种答复改册上那一件的状态：`要求缺失`立或刷新那一条；

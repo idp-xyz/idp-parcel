@@ -222,7 +222,8 @@ func TestThePendingRegisterWritesRefuseToRunOutsideATransaction(t *testing.T) {
 		"SettleLapsed": func() error {
 			return register.SettleLapsed(t.Context(), key, "PARTICIPATION_NOT_ACTIVE", pendingAnsweredAt)
 		},
-		"MarkAsked": func() error { return register.MarkAsked(t.Context(), key, pendingAnsweredAt) },
+		"MarkAsked":     func() error { return register.MarkAsked(t.Context(), key, pendingAnsweredAt) },
+		"HoldFormation": func() error { return register.HoldFormation(t.Context(), key) },
 	} {
 		if err := write(); !errors.Is(err, bentopg.ErrTransactionRequired) {
 			t.Errorf("%s 无事务应返回 ErrTransactionRequired，实得：%v", name, err)
@@ -356,5 +357,51 @@ func TestDeterministicPendingWriteFailuresAreMarkedRefused(t *testing.T) {
 	})
 	if !errors.Is(refused, ports.ErrDeliveryDispatchPendingWriteRefused) {
 		t.Fatalf("约束不让写 err = %v, want ErrDeliveryDispatchPendingWriteRefused", refused)
+	}
+}
+
+// Covers: AT-TF-295（ADR-0230 决定四）——同一件（租户，段，对象）的两拍串行：一笔事务占住之后，另一笔要等它提交才拿得到；别的一件
+// 不受牵连。
+func TestHoldingAFormationSerialisesTwoBeatsOfTheSameEntry(t *testing.T) {
+	register, transactor, _ := newDeliveryDispatchPendings(t)
+	key := pendingKey(t, "SYN-TENANT-01", "SYN-SEG-70", "SYN-PARCEL-70-Q")
+	other := pendingKey(t, "SYN-TENANT-01", "SYN-SEG-70", "SYN-PARCEL-70-R")
+
+	holding, release := make(chan struct{}), make(chan struct{})
+	first := make(chan error, 1)
+	go func() {
+		first <- transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+			if err := register.HoldFormation(ctx, key); err != nil {
+				return err
+			}
+			close(holding)
+			<-release
+			return nil
+		})
+	}()
+	<-holding
+
+	withinPendingTransaction(t, transactor, func(ctx context.Context) error { return register.HoldFormation(ctx, other) })
+
+	second := make(chan error, 1)
+	go func() {
+		second <- transactor.WithinTransaction(t.Context(), func(ctx context.Context) error { return register.HoldFormation(ctx, key) })
+	}()
+	select {
+	case err := <-second:
+		t.Fatalf("前一笔还没提交，后一笔就拿到了同一件：%v", err)
+	case <-time.After(300 * time.Millisecond):
+	}
+	close(release)
+	if err := <-first; err != nil {
+		t.Fatalf("前一笔：%v", err)
+	}
+	select {
+	case err := <-second:
+		if err != nil {
+			t.Fatalf("后一笔：%v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("前一笔提交之后，后一笔仍没拿到")
 	}
 }

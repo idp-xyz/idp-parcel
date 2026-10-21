@@ -32,14 +32,13 @@ import (
 const taskReferenceTenant = "SYN-TENANT-01"
 
 // taskReferenceOwners 扮三个所有者，都答「给了」；用例可以把地点改答「没有」、让时间窗读不到、换条件引用，用来证在册
-// 之后的重放不随所有者改答漂移。calls 记三条缝一共被问了几次。gate 不为空时，问条件的那一刻要等两拍都到了才放行。
+// 之后的重放不随所有者改答漂移。calls 记三条缝一共被问了几次。
 type taskReferenceOwners struct {
 	mu           sync.Mutex
 	placeMissing bool
 	windowFails  bool
 	conditions   string
 	calls        int
-	gate         *firstTickGate
 }
 
 func newTaskReferenceOwners() *taskReferenceOwners {
@@ -80,43 +79,9 @@ func (owners *taskReferenceOwners) LoadDeliveryWindow(context.Context, tfdomain.
 
 func (owners *taskReferenceOwners) LoadDeliveryConditions(context.Context, tfdomain.TenantID, tfdomain.CarriedObjectReference) (string, tfports.RequirementResolution, error) {
 	owners.mu.Lock()
+	defer owners.mu.Unlock()
 	owners.calls++
-	gate, conditions := owners.gate, owners.conditions
-	owners.mu.Unlock()
-	if gate != nil {
-		gate.arrive()
-	}
-	return conditions, tfports.RequirementResolved, nil
-}
-
-// firstTickGate 让两拍都走到「向所有者取条件」才一起往下走：那时两笔事务都已查过在册、都没查到，接着各自去任务口
-// 落库——这正是并发首拍要撞的那个窗口。超时放行时记下来，用例据此判这一轮到底测没测到并发。
-type firstTickGate struct {
-	mu       sync.Mutex
-	arrived  int
-	want     int
-	release  chan struct{}
-	timedOut bool
-}
-
-func newFirstTickGate(want int) *firstTickGate {
-	return &firstTickGate{want: want, release: make(chan struct{})}
-}
-
-func (gate *firstTickGate) arrive() {
-	gate.mu.Lock()
-	gate.arrived++
-	if gate.arrived == gate.want {
-		close(gate.release)
-	}
-	gate.mu.Unlock()
-	select {
-	case <-gate.release:
-	case <-time.After(10 * time.Second):
-		gate.mu.Lock()
-		gate.timedOut = true
-		gate.mu.Unlock()
-	}
+	return owners.conditions, tfports.RequirementResolved, nil
 }
 
 type taskReferenceRig struct {
@@ -462,14 +427,14 @@ func TestAReplayAfterTheOwnersChangeTheirAnswersEchoesTheRegisteredTask(t *testi
 	replay("对象离开派送段")
 }
 
-// Covers: 票 tf-face-algebra/09 完成判据「并发首拍真库回归照过：一笔 201，另一笔读回赢家答已在册」。两拍都查过在册、
-// 都没查到，在问条件那一刻会合后各自去任务口落库：先提交的那笔 201，另一笔撞键读回赢家，种类与对象集核得过，答 200 已在册、回显同一项。
+// Covers: 票 tf-face-algebra/09 完成判据「并发首拍真库回归照过：一笔 201，另一笔读回赢家答已在册」；AT-TF-295（ADR-0230 决定四）。
+// 自 ADR-0230 起两拍先占住同一件（租户，段，对象）再读段、查在册，于是并发首拍被排成一前一后：先拿到的那笔 201，另一笔等它提交
+// 之后查在册就查到了，答 200 已在册、回显同一项，所有者只被问一轮。执行器落库撞键读回赢家那一道（任务口答`已建立`）仍在，守的是
+// 不经执行器写进来的那一种。
 func TestConcurrentFirstTicksFormOneTaskAndTheOtherReadsTheWinner(t *testing.T) {
 	rig := newTaskReferenceRig(t)
 	const object, segment = "SYN-PARCEL-09-06", "SYN-DELIVERY-SEGMENT-09-06"
 	rig.enter(t, object, segment, "SYN-HANDOVER-SCOPE-09-06", "SYN-HANDOVER-RESULT/09-06/v1", tfdomain.SegmentServesFinalDelivery)
-	gate := newFirstTickGate(2)
-	rig.owners.change(func(owners *taskReferenceOwners) { owners.gate = gate })
 
 	type answer struct {
 		code int
@@ -487,8 +452,8 @@ func TestConcurrentFirstTicksFormOneTaskAndTheOtherReadsTheWinner(t *testing.T) 
 		}()
 	}
 	group.Wait()
-	if gate.timedOut {
-		t.Fatal("两拍没有在取件处会合——这一轮没测到并发首拍")
+	if asked := rig.owners.askedSoFar(); asked != 3 {
+		t.Fatalf("所有者被问 %d 次, want 3——后一拍该在前一拍提交之后查到在册，不再取件", asked)
 	}
 
 	var formed, replayed *answer

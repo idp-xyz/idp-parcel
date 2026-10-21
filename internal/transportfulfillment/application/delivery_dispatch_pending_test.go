@@ -185,3 +185,20 @@ func TestARefusedPendingWriteIsADefectNotAWait(t *testing.T) {
 		t.Fatalf("err = %v, want ErrDeliveryDispatchPendingRefused 且不是 ErrDeliveryDispatchPendingUnavailable", err)
 	}
 }
+
+// Covers: AT-TF-295 的编排半边（ADR-0230 决定四）——每一拍先占住这一件（租户，段，对象）再读段、查在册；受理不了的命令不占。
+func TestEveryBeatHoldsItsEntryBeforeAnswering(t *testing.T) {
+	fixture := newDispatchTriggerFixture(t)
+	fixture.enterByHandover(t, "parcel-1", "FINAL_DELIVERY", handoverJudgedTime)
+	if _, err := fixture.handler().Trigger(t.Context(), triggerCommand(t, "parcel-1")); err != nil {
+		t.Fatal(err)
+	}
+	if len(fixture.pending.held) != 1 || fixture.pending.held[0].Object.String() != "parcel-1" || fixture.pending.held[0].Segment.String() != "segment-1" {
+		t.Fatalf("占过 %v, want 恰 segment-1/parcel-1 那一件", fixture.pending.held)
+	}
+	malformed := triggerCommand(t, "parcel-1")
+	malformed.Segment = " "
+	if result, err := fixture.handler().Trigger(t.Context(), malformed); err != nil || result.Outcome() != application.DeliveryDispatchNotAccepted || len(fixture.pending.held) != 1 {
+		t.Fatalf("受理不了的命令 = %s err=%v、占过 %d 件, want INPUT_NOT_ACCEPTED、不占", result.Outcome(), err, len(fixture.pending.held))
+	}
+}
