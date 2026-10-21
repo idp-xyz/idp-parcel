@@ -1,7 +1,7 @@
 # 07 PC+PP（party-commercial、parcel-pricing）：CONTEXT 写出现行规则、UC 与之一致、矛盾裁清
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dc07（2026-10-21 协调方立；作者子代理二轮修订后 rebase 于 main `899a45557`）
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dc07（2026-10-21 协调方立；作者子代理二轮修订后 rebase 于 main `899a45557`）
 Blocked by: 无（01 进 main 后开工）
 出处：[audit/pc-pp.md](../audit/pc-pp.md)（pc-pp.md）；[02 的完成记录](./02-code-defects-from-the-audit.md)里「交修订票」一表中交给本票的条目；[01](./01-adr-suspension-chains.md) 的「交后续」一节里交给本票的条目。
 
@@ -147,3 +147,8 @@ Blocked by: 无（01 进 main 后开工）
 
 检查（修后，rebase 于 main `899a45557`，AT 盘点与 06 的行与追记取并集）：scratchpad 副本上 `go run ./tools/adr-index` 重生成后 `-check` 退 0；改动的 `.md` 相对链接与锚点全部解析；0099、0107、0148、0157、0233 注记里的被停原句在被停方正文逐字存在，五份去掉 Status 行与 Links 后与 main 逐字节相同；本轮新写的书名号引文逐条对出处检索，引旧写法或转述的去掉了书名号。
 
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-dc07` tip `9e36491e9` 在 main `899a45557` 上快进；两轮隔离评审的阻断全部消掉，第二轮修订由协调方抽核（ADR-0262 代写复核一路的裁定、ADR-0261 越权风险点 3 与 Consequences 与 code/24 同一份清单、ADR-0260 Consequences 改为按口解）。
+- 协调方随后在 tip 上单独提交：重生成 `docs/adr/README.md`、重算 AT 盘点总览计数；两者 `-check` 退 0。机制清点重生成无变化；`go build ./...` 干净。本票只动文档，未跑全量真库测试。
+- 去向：代码票 code/40、41；code/24、25 已写裁向、解除 Blocked by；交横切 X1–X14 交票 10。
