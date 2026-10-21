@@ -149,6 +149,36 @@ func TestMembersAreReadAtTheGivenMomentFromTheSourceFacts(t *testing.T) {
 	}
 }
 
+// Covers: `AT-NO-129` 边界（ADR-0225 决定二）——业务时间恰等于问询时点的事实算数，与运输履约取段里在控对象的口径一致（时点落在起止
+// 之内含起点）：那一刻移入的在，那一刻移出的不在，那一刻关闭的实例不装任何东西。
+func TestFactsAtExactlyTheMomentCount(t *testing.T) {
+	fixture := newMembershipFixture(t)
+	fixture.openUnit("bag-in")
+	fixture.openUnit("bag-out")
+	fixture.openUnit("bag-closed")
+	before := membershipAt.Add(-time.Hour)
+
+	fixture.fact("in-a", "ADD_MEMBER", "bag-in", "hu-a", membershipAt, membershipAt)
+	fixture.fact("out-add", "ADD_MEMBER", "bag-out", "hu-b", before, before)
+	fixture.fact("out-remove", "REMOVE_MEMBER", "bag-out", "hu-b", membershipAt, membershipAt)
+	fixture.fact("out-stay", "ADD_MEMBER", "bag-out", "hu-c", before, before)
+	fixture.fact("closed-add", "ADD_MEMBER", "bag-closed", "hu-d", before, before)
+	fixture.fact("closed-close", "CLOSE_UNIT", "bag-closed", "", membershipAt, membershipAt)
+
+	if got := fixture.read("bag-in", membershipAt); !sameMembers(membersOf(got), "hu-a") {
+		t.Fatalf("恰在时点移入 = %v，要算在", membersOf(got))
+	}
+	if got := fixture.read("bag-out", membershipAt); !sameMembers(membersOf(got), "hu-c") {
+		t.Fatalf("恰在时点移出 = %v，要不在", membersOf(got))
+	}
+	if got := fixture.read("bag-closed", membershipAt); !got.Unit || len(got.Members) != 0 {
+		t.Fatalf("恰在时点关闭 = %+v，要在册而不装任何东西", got)
+	}
+	if got := fixture.read("bag-closed", membershipAt.Add(-time.Microsecond)); !sameMembers(membersOf(got), "hu-d") {
+		t.Fatalf("关闭前一微秒 = %v，要照成员事实答", membersOf(got))
+	}
+}
+
 // Covers: `AT-NO-130`（ADR-0225 决定二）——读不动作为错误交回，不答「不是单元」：调用方据「不是单元」去按包裹问别处，把读不动答成
 // 它，就是一袋被当成一件包裹放过去。空白对象不问。
 func TestAnUnreadableMembershipIsAnErrorNotANonUnit(t *testing.T) {
