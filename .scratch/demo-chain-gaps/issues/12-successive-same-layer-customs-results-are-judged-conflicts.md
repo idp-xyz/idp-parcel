@@ -75,10 +75,10 @@ none
 
 ### 用例
 
-- 领域 `external_result_test.go`：放行按种类随业务时间推进的十三格（含乱序、同刻、回退、部分与附条件改换、说不出种类的存量）；过程决定成序列与其余四层一版一结论；全对称性检查与三份链的六种到达顺序；不同范围与不同层各归各位；放行事实与层次配不上即不成形。
+- 领域 `external_result_test.go`：放行按种类随业务时间推进的各格（含乱序、同刻、回退、部分与附条件改换、说不出种类的存量）；过程决定成序列与其余四层一版一结论；两两对称性检查，一条推进链按全部到达顺序都不记冲突；不同范围与不同层各归各位；放行事实与层次配不上即不成形。
 - 编排 `receive_successive_results_test.go`（替身结果库把已存记录交回下一次接收）：先部分后全部与乱序都记下、都交出；先后两项过程决定都记下；同刻两种结论与回退标在后到那份、先到那份不动；重投答已有记录、存量冲突标记重放不改；在册事实配不上层次整笔报错、不落记录。
 - 结果库真库 `release_outcome_test.go::TestLoadForSubmissionCarriesEachReleaseKind`：部分、全部各带种类，非放行层与说不出种类的存量不带。
-- 派发真库 `cmd/parcel-dispatch/successive_customs_results_projection_test.go`：生产结果库、提交索引、解释规则读口、辖区链与 Outbox 交接组成的接收编排，加生产 `wireDispatcher` 与演示映射种子。覆盖四件：
+- 派发真库 `cmd/parcel-dispatch/successive_customs_results_projection_test.go`：生产结果库、提交索引、解释规则读口、辖区链与 Outbox 交接组成的接收编排，加生产 `wireDispatcher` 与演示映射种子。覆盖：
   - 先部分后全部、全部先到两种顺序：两成员都归入 `CUSTOMS_CLEARED`，部分放行未归类，放行读口两份都交出。
   - 先后两项过程决定都进投影。
   - 同刻两种放行种类：后到那份判冲突、信封定稿不派生，放行读口只交先到那份。
