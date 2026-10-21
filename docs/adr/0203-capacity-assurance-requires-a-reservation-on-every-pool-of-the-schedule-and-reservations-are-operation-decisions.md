@@ -1,6 +1,6 @@
 # ADR-0203：容量保障——班次挂了容量池，装载分配与确认订舱就要对每个池引用有效预占并声明分配量；预占与释放是两种运营决定，声明需求量与来源，硬上限按预占整段判、带余量拒绝、不可审批越过
 
-Status: Accepted（2026-10-19，Claude Code 会话代 TF owner 决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 [demo-chain-gaps/20](../../.scratch/demo-chain-gaps/issues/20-capacity-reservation-and-release-decision-faces.md) 起草并落决定三至六，决定一、二由票 21 落装载分配那一半、票 37 落确认订舱那一半。越权风险点见文末，待 TF owner 复核，access-identity owner 知会。）<!-- 索引注记 -->｜保障判据只看班次挂没挂池：挂了就逐池引用当前有效预占并声明分配量，没挂不要求；分配关系守恒「已分配 ≤ 预占 − 释放 − 消耗」、撤回归还、不调消耗、池班次须等于分配班次。容量预占、容量释放各是一种运营决定，都声明数量、单位与来源（运营声明版本或准备结果的需求快照两种），单位须等于池的单位、不换算；预占从判断时点占到有效期满，硬上限按这一整段最紧那一刻判，超出答 `CAPACITY_EXCEEDED` 带余量、没有越过的格；读池行锁，并发预占串行判；预占与释放各有池内唯一的引用，同内容答已有、异内容答冲突；池不在册、预占不在册、单位不符各成一格。
+Status: Accepted（2026-10-19，Claude Code 会话代 TF owner 决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 [demo-chain-gaps/20](../../.scratch/demo-chain-gaps/issues/20-capacity-reservation-and-release-decision-faces.md) 起草并落决定三至六，决定一、二由票 21 落装载分配那一半、票 37 落确认订舱那一半。越权风险点见文末，待 TF owner 复核，access-identity owner 知会。）<!-- 索引注记 -->｜保障判据只看班次挂没挂池：挂了就逐池引用当前有效预占并声明分配量，没挂不要求；分配关系守恒「已分配 ≤ 预占 − 释放 − 消耗」、撤回归还、不调消耗、池班次须等于分配班次。容量预占、容量释放各是一种运营决定，都声明数量、单位与来源（运营声明版本或准备结果的需求快照两种），单位须等于池的单位、不换算；预占从判断时点占到有效期满，硬上限按这一整段最紧那一刻判，超出答 `CAPACITY_EXCEEDED` 带余量、没有越过的格；读池行锁，并发预占串行判；预占与释放各有池内唯一的引用，同内容答已有、异内容答冲突；池不在册、预占不在册、单位不符各成一格。｜**部分停用**（2026-10-21）：其决定一「装载分配或确认订舱所在的具体班次只要登记了至少一个容量池，就必须对该班次的每个池引用一份当前有效预占，并逐池声明分配量；没有登记容量池的班次不要求。」一句里的确认订舱已由 [ADR-0264](./0264-capacity-assurance-is-required-on-load-assignments-only-and-neither-a-confirmed-booking-nor-a-departure-reads-capacity.md) 停用——承运方确认订舱不要预占引用、不读池，接受量可以超过那一班池上登记的余量；容量保障只挂在装载分配上。**适用场景**：只限句中的确认订舱；装载分配照旧适用这一句，决定一其余几句与决定二至六不变，前段所记「票 37 落确认订舱那一半」随之作废（票 37 改为逐订舱的消费关系），其余各条不变
 
 Date: 2026-10-19
 
@@ -96,6 +96,7 @@ Date: 2026-10-19
 - [ADR-0151：未归族的命令口定族](./0151-unassigned-command-faces-get-their-families.md)：决定三的定族判据与「每口一种决定」的先例
 - [ADR-0201：运输机会](./0201-schedule-templates-materialize-concrete-schedules-by-date-and-preparation-answers-not-configured-on-an-empty-register.md)：池身份、建池走登记册配置写与「登记口不改池」
 - [ADR-0202：运输委托、订舱与承运答复的入口族与协议核对](./0202-transport-commission-booking-and-carrier-answer-entry-families-and-supplier-agreement-check.md)：确认订舱那一半（票 37）所在的订舱面
+- [ADR-0264](./0264-capacity-assurance-is-required-on-load-assignments-only-and-neither-a-confirmed-booking-nor-a-departure-reads-capacity.md)：后继——部分停用决定一一句里的确认订舱，容量保障只挂在装载分配上
 - [ADR-0022](./0022-http-status-carries-answer-formed-not-business-verdict.md)、[ADR-0029](./0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md)：各格答 200 且按续办分开
 - [ADR-0023](./0023-work-fact-identity-and-time-are-minted-by-the-device.md)：判断时点由声明方给
 - [UC-TF-004](../application/transport-fulfillment/UC-TF-004-COMMISSION-AND-ACCEPT-TRANSPORT.md)：步 5，`AT-TF-136` 至 `AT-TF-144`
