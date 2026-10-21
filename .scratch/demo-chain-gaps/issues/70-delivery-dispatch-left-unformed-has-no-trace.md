@@ -34,21 +34,32 @@ M
 
 ## 完成记录（2026-10-21，作者子代理，分支 claude-dcg70）
 
-基线 `640f67de`（main = origin/main）。授权：用户原话「你作为业务和系统专家自决……解决所有的问题」；裁定照 [triage-2026-10-19](../triage-2026-10-19.md)「上线就绪评估（2026-10-20）」关于 70 的那一条落，代决复核 M2、M8 与票 129 同批（协调方 2026-10-21 派单）。新 ADR 是 [ADR-0230](../../../docs/adr/0230-delivery-dispatch-left-unformed-is-kept-on-a-pending-register-and-reasked-through-the-same-executor.md)，裁定之外的细节按下文「代决」自决。
+基线 `640f67de`（main = origin/main），评审之后变基到 main `c1828dd1`（下列 SHA 都是变基之后的）。授权：用户原话「你作为业务和系统专家自决……解决所有的问题」；裁定照 [triage-2026-10-19](../triage-2026-10-19.md)「上线就绪评估（2026-10-20）」关于 70 的那一条落，代决复核 M2、M8 与票 129 同批（协调方 2026-10-21 派单）。新 ADR 是 [ADR-0230](../../../docs/adr/0230-delivery-dispatch-left-unformed-is-kept-on-a-pending-register-and-reasked-through-the-same-executor.md)，裁定之外的细节按下文「代决」自决。
 
 ### 提交
 
-- `7946b053` 认领；`5f0a29ad` 票 129 并入、照抄代决复核追加一节。
-- `692cb407` 票 129：期望交接与沿替代链认前版任务（完成记录见票 129）。
-- `591bfe7a` 派送待形成册：迁移 0045、端口、PG 适配器、执行器写册、两个进程的装配、用例。
-- `57bf0b42` TF 查阅页 `registry=delivery-dispatch-pending`。
-- `8260fb28` 运营决定新种类「派送重问」，access_identity 迁移 0020。
-- `7beaaf5c` 派送重问间隔册：迁移 0046、领域、登记编排、HTTP 登记口、查阅页 `registry=delivery-dispatch-reask-cadence`。
-- `4249a08d` 按册重问用例与 `/transport-fulfillment-delivery-dispatch-reasks`；补拍口改挂运营决定；parcel-api 新特性文件与真库用例。
-- `1e7fd088` 演示种子新一节 `460-access-delivery-dispatch-reask.sh`。
-- `9d258d69` ADR-0230；ADR-0216、0114、0151 前向指针；TF CONTEXT、UC-TF-006、参数登记册 `PAR-NET-19`、演示动线补记。
-- `2277bcec` 立票 152、153；`dea49639` AT 覆盖盘点追记。
-- `452f43fd` 本路哨兵分类用例、注释去计数；`57af00db` 改族后过期的两处注释改口。
+- `95ae2613` 认领；`e8ee6394` 票 129 并入、照抄代决复核追加一节。
+- `276e81ea` 票 129：期望交接与沿替代链认前版任务（完成记录见票 129）。
+- `a23f0ec7` 派送待形成册：迁移 0045、端口、PG 适配器、执行器写册、两个进程的装配、用例。
+- `678c6db9` TF 查阅页 `registry=delivery-dispatch-pending`。
+- `9d5d269c` 运营决定新种类「派送重问」，access_identity 迁移 0019（变基时由 0020 改号，CHECK 以 main 上 0018 为底）。
+- `a80620f9` 派送重问间隔册：迁移 0046、领域、登记编排、HTTP 登记口、查阅页 `registry=delivery-dispatch-reask-cadence`。
+- `2054e0cd` 按册重问用例与 `/transport-fulfillment-delivery-dispatch-reasks`；补拍口改挂运营决定；parcel-api 新特性文件与真库用例。
+- `ca41f99e` 演示种子新一节 `455-access-delivery-dispatch-reask.sh`（变基时由 460 改号）。
+- `a37f8270` ADR-0230；ADR-0216、0114、0151 前向指针；TF CONTEXT、UC-TF-006、参数登记册 `PAR-NET-19`、演示动线补记。
+- `a645e534` 立票 152、153；`a3fac644` AT 覆盖盘点追记。
+- `bf45a240` 本路哨兵分类用例、注释去计数；`232d8f99` 改族后过期的两处注释改口；`d4a55fe4` 两张票的完成记录。
+- 评审之后：
+  - `c3080387` ADR-0230 改指迁移 0019 与种子 455；
+  - `1b306b19` 三处过期注释、票 129 Status、演示补记；
+  - `11d043e9` 要求缺失不改回已形成；
+  - `d533e777` 按最近一次问排队、remaining；
+  - `e8df75c5` 确定性拒绝归缺陷；
+  - `dade3c30` 形成锁；
+  - `192e4f7f` 两条真库用例；
+  - `4efd5c43` 间隔带登记依据；
+  - `08512b57` ADR、UC、CONTEXT、PAR、AT 随之改写；
+  - 本笔：评审记录。
 
 ### 落点
 
@@ -57,10 +68,10 @@ M
   - 端口 `ports/delivery_dispatch_pending.go`、`ports/delivery_dispatch_reask_cadence.go`；PG `adapters/postgres/delivery_dispatch_pending.go`、`delivery_dispatch_reask_cadence.go`。
   - 用例 `application/reask_pending_delivery_dispatches.go`、`register_delivery_dispatch_reask_cadence.go`；领域 `domain/delivery_dispatch_reask_cadence.go`。
   - HTTP：`reask_delivery_dispatches.go`、`register_delivery_dispatch_reask_cadence.go`、查阅页两格；补拍口 Intake 从 `WorkFactCommandIntake` 移到 `OperatorDecisionIntake`。
-- 接入身份：`DecisionDeliveryDispatchReask`，access_identity 迁移 0020。
+- 接入身份：`DecisionDeliveryDispatchReask`，access_identity 迁移 0019。
 - parcel-api：新 `endpoints_delivery_dispatch_reask.go`（两行：按册重问挂运营决定、重问间隔登记挂登记册配置写）、`assemble_delivery_dispatch_reask.go`；`endpoints_delivery_dispatch.go` 那一行改面；`assemble_delivery_dispatch.go` 交真册；`unwired_orchestration.go` 只加查阅页两口占位。没改 endpoints.go、main.go、endpoints_test.go、assemble_operator_decisions.go。
 - parcel-dispatch：`assemble_delivery_dispatch_on_handover.go` 交真册、本路未决哨兵名单加 `ErrDeliveryDispatchPendingUnavailable`；没加路由，没改 assemble.go、routes.go。
-- 迁移：transport_fulfillment `0045`、`0046`；access_identity `0020`。
+- 迁移：transport_fulfillment `0045`、`0046`；access_identity `0019`。
 
 ### 代决与越权风险点
 
@@ -76,7 +87,7 @@ M
 8. **重问节奏 = 重问间隔**：最近一次答复之后多久到期，租户登记（登记册配置写），最近登记的那一版生效，未登记到期重问答 `REASK_CADENCE_NOT_CONFIGURED`，产品与演示租户都不登。自动驱动另立票 [152](./152-delivery-dispatch-reask-has-no-in-process-driver.md)：它要动 parcel-dispatch 的 main 与装配，不在本票地盘。越权风险点 9、10、11。
 9. **M2 取「由管理台调度员补拍」**：补拍口改挂运营决定。补拍与按册重问共用一种决定「派送重问」（同一种权力），线格式与答复不变。并进 ADR-0230（决定七），没另立 ADR-0234。部分停用 ADR-0216 决定四一句、ADR-0151 决定六末句派送发起口那一项。越权风险点 7、8。
 10. **门铃另立票** [153](./153-delivery-requirement-owners-ring-no-doorbell-when-they-fill-in.md)。越权风险点 14。
-11. **演示种子另起一节**（460），不改 450 与 400 的数据文件；不登重问间隔。
+11. **演示种子另起一节**（455，数据 `data/access/09`、`10`、`data/governance/45`），不改 450 与 400 的数据文件；不登重问间隔。
 
 越权风险点逐条见 ADR-0230 文末，待 TF owner 复核，第 7、8 点同时待接入身份 owner。
 
@@ -115,8 +126,60 @@ M
 - 演示动线没在一次性库上逐步实走，只写了补记；取证靠上列真库用例。
 - 管理台页面（apps/admin-web）没做：查阅格与两口都已在 API 上。
 - 进 main 时要协调方处理：
-  - access_identity 迁移 0020 的号与 CHECK 并集。并行票 psb18 占了 0018、0019，若它们也重建这条 CHECK，后落地的一份要取并集。
-  - 演示种子 `data/access/09`、`10`、`data/governance/42` 与 460 一节的号，可能与并行票撞。
-  - 参数登记册 `PAR-NET-19` 的号。
-  - 票面与 ADR 指向票 130 的链接，要 main 上的票 130 文件才连得上。
+  - access_identity 迁移号：变基后落 0019，CHECK 以 main 上 0018 为底取并集（0019 词集 = 0018 词集 + 1）。
+  - 演示种子：变基后落 455 一节、`data/governance/45`；`data/access/09`、`10` 在 main 上是空号。
+  - 参数登记册 `PAR-NET-19`：main 上是空号。
+  - 指向票 130 的链接：变基后 main 上有票 130，连得上。
+
+## 评审记录（2026-10-21，隔离评审，无阻断项）
+
+变基到 main `c1828dd1`，之后按评审逐条修。
+
+### 变基
+
+1. **access_identity 迁移**：0020 改为 0019。CHECK 以 main 上 0018 那一份为底，加 `DELIVERY_DISPATCH_REASK`；`decisionKinds` 取并集，`grep` 核过 0019 词集 = 0018 词集 + 1（25 → 26）。授予读回用例加一种 0018 的词。
+2. **演示种子**：`460-access-delivery-dispatch-reask.sh` 改为 455，`data/governance/42` 改为 45；`data/access/09`、`10` 不撞。README 授予表那一行取两边并集。55432 上一次性库 `dcg70seed2`：`seed.sh` 全程退 0，新一节三行 `REGISTERED` / `RECORDED`，关务三种与派送重问的授予都在库里；用完 `DROP ... WITH (FORCE)`。
+3. **PAR-NET-19**：main 上没被占，照用。
+4. **票 129、130**：129 票面以 main 那份为底，只多认领、完成、评审三节；指向票 130 的链接能连上。
+5. **文本冲突**：票 70 的追加节、README 授予表都取并集；AT 盘点、TF CONTEXT 与 ADR 自动合并。
+
+### 必修
+
+1. **三处过期注释改口**（`1b306b19`）：`assemble_delivery_dispatch.go` 的事务包装头注、`trigger_delivery_dispatch.go` 文件头注、`delivery_dispatch_task_reference_test.go` 头注。
+2. **票 129 Status** 改为「in-progress——完工待评审与进 main，分支 claude-dcg70（与 70 同批）」（`1b306b19`）。
+3. **按册重问队头卡死**（`d533e777`）：
+   - 迁移 0045 加 `last_asked_at`，每问一次就记、不论答复。答复动不了状态的那几格走新口 `MarkAsked`，只记问过。排队与到期都按它。
+   - 队列口加 `CountPending`，结果与答复带 `remaining`；查阅页多一列 `lastAskedAt`。
+   - 真库用例 `cmd/parcel-api/...::TestUndecidedEntriesDoNotStarveTheRestOfTheReaskQueue`：队头两件一直未决、上限 2，第一次答 `remaining=1`，第二次先问到后面那一件并形成。另有编排与 PG 用例。
+   - ADR-0230 决定四、五与越权风险点 4、5、9 改写。
+4. **`RecordMissing` 不改回已形成**（`11d043e9`）：`DO UPDATE ... WHERE state <> 'FORMED'`，替身同规则，PG 用例证 task_ref 不被清。
+
+### 顺手
+
+5. **确定性拒绝归缺陷**（`e8df75c5`）：
+   - PG 写口把没有环境事务、SQLSTATE 23xxx、缺件为空包上 `ports.ErrDeliveryDispatchPendingWriteRefused`。
+   - 执行器据它交 `ErrDeliveryDispatchPendingRefused`，不进哨兵；其余写不动仍交 `ErrDeliveryDispatchPendingUnavailable`。
+   - 用例：PG、编排、派发哨兵名单各一条。
+   - 别的 SQLSTATE 类的确定性错误仍会被当成写不动，记进 ADR-0230 越权风险点 15。
+6. **并发窗口**（`dade3c30`）：取「锁」不取「只记风险」。
+   - 册口加 `HoldFormation`，按（租户，段，对象）取事务级咨询锁。执行器先占住再读段、查在册，同一件的两拍排成一前一后，替代链两版并发也不铸第二项。
+   - tf-face-algebra/09 的并发首拍用例原来要两拍在取件处会合，锁让它们会合不了，改证新语义：一笔 201、一笔已在册、所有者只被问一轮。
+   - 手工建任务口不取这把锁，记进越权风险点 16。
+7. **两条真库用例**（`192e4f7f`）：
+   - 一件给不出答复时整口 500，前面那一件的任务与了结已提交，再按一次接着问（`cmd/parcel-api/...::TestAReaskThatHitsAnUnanswerableEntryKeepsWhatItAlreadyCommitted`）。
+   - 册写不动时，在同一笔事务里真执行一条必错语句：inbox、任务与册一起回滚，恢复后重投形成（`cmd/parcel-dispatch/...::TestAnUnwritablePendingRegisterRollsBackTheInboxTheTaskAndTheRegisterTogether`）。
+   - 为此派发那一路的册改由装配交入，生产交真册。
+8. **重问间隔带登记依据**（`4efd5c43`）：迁移 0046 加 `basis`（非空）；构造门要依据，同版本换依据是冲突；载荷、答复与查阅页带 `basis`。生效区间没加，记进越权风险点 10，交 TF owner。
+9. **演示补记**改指「票 demo-chain-gaps/60 那条补记」（`1b306b19`）。
+
+### 未采纳
+
+无。第 6 条在锁与只记风险两条路里选了锁；第 8 条只补依据、不补生效区间，理由见上。
+
+### 验证（评审之后）
+
+- `go build ./...`、`go vet ./...` 退 0；`gofmt -l cmd internal migrations tools` 无输出。
+  - 中间一笔 `11d043e9` 的端口注释不合 gofmt，`d533e777` 修正；每一笔单独都能 build 与 vet。
+- `scripts/test-full.sh` 跑 `./internal/transportfulfillment/...`、`./internal/accessidentity/...`、改过包的全部反向依赖（含全部 cmd 包）、`./internal/architecture/...`、`./migrations/...`：65 个包，61 ok、0 FAIL，其余 4 个没有测试文件。清单在 scratchpad `dcg70-revdeps2.txt`。
+- 种子见上「变基」第 2 条。
 
