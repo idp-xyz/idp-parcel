@@ -46,8 +46,7 @@
 | `AT-CC-010` | internal/customscompliance/application/establish_customs_case_test.go::TestOneCasePerRegulatoryScopeAndNoSilentScopeGrowth |
 | `AT-CC-020` | internal/customscompliance/application/establish_case_for_parcels_test.go::TestACaseIsNotEstablishedForUnacceptedParcelsOrAnUnconfiguredRequirement（命令面半边：包裹不在当前已接受委托里不建案） |
 | `AT-CC-078` | internal/customscompliance/application/confirm_submission_authorization_test.go::TestAConfirmationFormsTheAuthorizationNamingTheConfirmer（人工确认半边） |
-| `AT-CC-105` | internal/customscompliance/application/confirm_submission_authorization_test.go::TestAConfirmationWithoutCurrentReadinessFormsNoAuthorization（确认口半边：就绪未配置答未决、不折成未受理） |
-| `AT-CC-107` | cmd/parcel-api/assemble_customs_decisions_test.go::TestCustomsCaseAuthorizationAndSubmissionRunThroughTheProductionFaces（生产装配半边） |
+| `AT-CC-107` | cmd/parcel-api/assemble_customs_decisions_test.go::TestCustomsCaseAuthorizationAndSubmissionRunThroughTheProductionFaces（版本冻结半边；发送归票 psb/10） |
 | `AT-CC-112` | cmd/parcel-api/assemble_customs_decisions_test.go::TestEachCustomsFaceOpensOnlyForItsOwnDecisionKind（生产装配半边） |
 | `AT-CC-122` | cmd/parcel-api/assemble_customs_decisions_test.go::TestCustomsCaseAuthorizationAndSubmissionRunThroughTheProductionFaces（生产装配半边） |
 | `AT-CC-201` | internal/customscompliance/application/manage_follow_up_test.go::TestFollowUpTargetsProposalsAndEffectsStayDisciplined |
@@ -960,6 +959,7 @@
 | `AT-CC-098` | 相同请求身份携带不同资料、渠道、动作或请求方 | UC-CC-004-AUTHORIZE-DECLARATION-SUBMISSION.md |
 | `AT-CC-099` | 两个有权角色并发对同一请求分别批准和拒绝 | UC-CC-004-AUTHORIZE-DECLARATION-SUBMISSION.md |
 | `AT-CC-104` | 授权或拒绝决定已完整提交，但结果事件首次投递失败 | UC-CC-004-AUTHORIZE-DECLARATION-SUBMISSION.md |
+| `AT-CC-105` | 授权请求进入时当前就绪不存在、已经失效，或与授权目标版本不一致 | UC-CC-004-AUTHORIZE-DECLARATION-SUBMISSION.md |
 | `AT-CC-106` | 检查授权结果产生的下游对象 | UC-CC-004-AUTHORIZE-DECLARATION-SUBMISSION.md |
 | `AT-CC-108` | 一个工作界面连续完成授权确认和提交执行 | UC-CC-005-FREEZE-SUBMISSION-AND-INITIATE-ATTEMPT.md |
 | `AT-CC-109` | 执行请求到达时就绪不存在、已失效或与目标不一致 | UC-CC-005-FREEZE-SUBMISSION-AND-INITIATE-ATTEMPT.md |
