@@ -29,10 +29,10 @@ Blocked by: 无（10a 已进 main；10b 不碰已接受 ADR 正文之外的这�
 
 | 条目 | 复核结论 | 去向 |
 |---|---|---|
-| B2·B2-04 规范化版本加可缺键换不换号 | 仍成立：ADR-0129、0176 一边，ADR-0014、0126、0209 一边；代码 `ratioBase` 在 `PCC-1` 下、供应商协议用 `PCC-2` | 已裁并改：[ADR-0267](../../../docs/adr/0267-a-key-added-to-an-already-canonicalized-body-is-a-shape-change-even-when-old-documents-stay-byte-identical.md)。部分停用 ADR-0129 决定一括注一句（理由层）与 ADR-0176 决定五括注一句；认定 ADR-0129 决定一「PCC-1 不换号」是对 ADR-0014 Consequences 一句的部分停用（ADR-0129 前段补去向、ADR-0014 注记补来向）；ADR-0014 注记加读法。代码不改 |
-| B2·B2-10 计价范围登在两本册上 | 仍成立：两只登记编排各写各的册、互不读 | 已裁并改：[ADR-0280](../../../docs/adr/0280-a-settlement-account-registers-one-sell-pricing-scope-across-the-estimate-and-billing-moment-adoptions.md)。部分停用并回答 ADR-0190 越权风险点 9「两册允许不同」一句；ADR-0179 注记加读法；SA CONTEXT 冻结一条、UC-SA-002「接受前财务控制」与「给开发的交接」各补一行；立代码票 [code/62](../code/62-the-estimate-and-billing-moment-adoptions-may-register-different-pricing-scopes.md) |
-| B3·1 等登记的格能不能先入账 | 部分已消解：路由复核那一格已由票 docs-consistency/05 的 ADR-0250 决定二裁（`0a0f5b0d1`），TF 实际发生项与派送的续办已由 ADR-0231、ADR-0230 承接；全产品判据仍缺，ADR-0132 的伪引文仍在 | 已裁并改：[ADR-0273](../../../docs/adr/0273-a-settled-wait-for-registration-may-enter-without-a-same-change-resume-and-adr-0094-decision-four-binds-only-the-acceptance-chain.md)，无条款停用。ADR-0094 注记加读法（决定四只约束接受判断链）；ADR-0132 注记加引用更正。代码不改 |
-| B3·2 合同版继承的产品底座读时现选 | 仍成立：层次读口每次 `LoadScope` 现选，`applicable` 按此刻状态与更正后区间判 | 已裁并改：[ADR-0268](../../../docs/adr/0268-a-contract-tier-service-rule-inherits-from-a-product-base-fixed-with-the-acceptance-time-closure.md) 决定一（底座随接受时闭包固定）。部分停用 ADR-0176 决定二一句；ADR-0136 注记加读法；PC CONTEXT 客户服务规则 Rules 补一条、VE CONTEXT 索赔资格时点一条补一句；UC-PC-002、UC-VE-007「给开发的交接」记缺口；立代码票 [code/61](../code/61-a-contract-tier-service-rule-reads-its-product-base-at-claim-time.md) |
+| B2·B2-04 规范化版本加可缺键换不换号 | 仍成立：ADR-0129、0176 一边，ADR-0014、0126、0209 一边；代码 `ratioBase` 在 `PCC-1` 下、供应商协议用 `PCC-2` | 已裁并改：[ADR-0267](../../../docs/adr/0267-a-key-added-to-an-already-canonicalized-body-is-a-shape-change-even-when-old-documents-stay-byte-identical.md)。部分停用 ADR-0014 Consequences 一句（只限清点出的既往各次同号改形，评审 B1 补）、ADR-0129 决定一括注一句（理由层）与 ADR-0176 决定五括注一句；认定 ADR-0129 决定一「PCC-1 不换号」是对 ADR-0014 那一句的部分停用（ADR-0129 前段补去向、ADR-0014 注记补来向）；ADR-0014 注记加读法。既往各次前提都成立，代码不改、不立代码票 |
+| B2·B2-10 计价范围登在两本册上 | 仍成立：两只登记编排各写各的册、互不读 | 已裁并改：[ADR-0280](../../../docs/adr/0280-a-settlement-account-registers-one-sell-pricing-scope-across-the-estimate-and-billing-moment-adoptions.md)。回答 ADR-0190 越权风险点 9，无条款停用（评审第 6 条改判）；ADR-0179 注记加读法；SA CONTEXT 冻结一条、UC-SA-002「接受前财务控制」与「给开发的交接」各补一行；立代码票 [code/62](../code/62-the-estimate-and-billing-moment-adoptions-may-register-different-pricing-scopes.md) |
+| B3·1 等登记的格能不能先入账 | 部分已消解：路由复核那一格已由票 docs-consistency/05 的 ADR-0250 决定二裁（`0a0f5b0d1`），TF 实际发生项与派送的续办已由 ADR-0231、ADR-0230 承接；全产品判据仍缺，ADR-0132 的伪引文仍在 | 已裁并改：[ADR-0273](../../../docs/adr/0273-a-settled-wait-for-registration-may-enter-without-a-same-change-resume-and-adr-0094-decision-four-binds-only-the-acceptance-chain.md)，无条款停用。ADR-0094 注记加读法（决定四只约束接受判断链），Links 补 ADR-0250 与 ADR-0273 各一行；ADR-0132 注记加引用更正。代码不改 |
+| B3·2 合同版继承的产品底座读时现选 | 仍成立：层次读口每次 `LoadScope` 现选，`applicable` 按此刻状态与更正后区间判 | 已裁并改：[ADR-0268](../../../docs/adr/0268-a-contract-tier-service-rule-inherits-from-a-product-base-fixed-with-the-acceptance-time-closure.md) 决定一（底座随接受时闭包固定）。部分停用 ADR-0176 决定二一句，扩成决定一「有合同版采纳合同版」一句（评审第 7 条）；ADR-0136 注记加读法；PC CONTEXT 客户服务规则 Rules 补一条、VE CONTEXT 索赔资格时点一条补一句；UC-PC-002、UC-VE-007「给开发的交接」记缺口；立代码票 [code/61](../code/61-a-contract-tier-service-rule-reads-its-product-base-at-claim-time.md) |
 | B3·3 0176 决定四按查询携带的合同点核 | 仍成立（文档）：代码 `tiedToAdoptedContract` 比闭包采用的合同 | 已裁并改：ADR-0268 决定二。部分停用 ADR-0176 决定四比较对象那一半；认定 ADR-0176 决定四「挂产品的版本不核」部分停用 ADR-0104 决定四产品那一半（ADR-0176 前段补去向、ADR-0104 注记补来向）。代码只改头注，并入 code/61 |
 | B3·6 交接转入立起的控制，收寄不认 | 仍成立：`ReceiveDeliveredUnitHandler.Handle` 只读 `FindCurrentJudgmentsAtNode` | 已裁并改：[ADR-0276](../../../docs/adr/0276-a-delivery-observation-merges-into-a-control-established-by-handover-in-at-the-same-node.md)。部分停用（扩成）ADR-0199 决定四一句；回答 ADR-0214 文末补记越权风险点 17 的同节点那一半；NO CONTEXT 节点控制一条、UC-NO-002 结果表「已有结果」与识别那一步、「给开发的交接」随之改。代码随既有票 demo-chain-gaps/92（它「要裁的」里同节点两问由 ADR-0276 答，别的节点上有在身控制那一问留在那张票），不另立 code/6x |
 | B3·8 R11 改了设备答复的逐对象范围 | 已由票 demo-chain-gaps/146 消解：ADR-0237（`ce54131ec`，进 main 记录 `56273c5bd`）部分停用 ADR-0205 决定一、ADR-0225 决定六各一句并回答 ADR-0219 越权风险点 5，三份注记与 Links 已挂；代码经领域 `ExecutorGateCells` | 不落新 ADR。ADR-0205、0219 复核记录里「正文与 Decision 不变」是正文，不改，注记已指向 ADR-0237 |
@@ -61,11 +61,11 @@ Blocked by: 无（10a 已进 main；10b 不碰已接受 ADR 正文之外的这�
 
 ### 代决摘要与越权风险点
 
-- **ADR-0267**（代 PC owner）：已接规范化的册正文里加键（含可缺键）是形状变化，照 ADR-0014 换号；同号改形只在册上没有要回放的已存摘要时成立；ADR-0129 那一次认作这种例外、不回头换号。越权风险点：全仓换号判据由 PC 一侧定；ADR-0129 的 `ratioBase` 在滚动发布下会被旧构建丢掉；例外的前提由作者自证；折回口不拒未知键。
+- **ADR-0267**（代 PC、PP、TF owner）：已接规范化的册（面）文档加键（含可缺键）是形状变化，默认照 ADR-0014 换号；同号改形只在记录里写明前提时成立——首个租户实例进生产之前已存摘要随演示库重灌即消，之后只在那一册没有已存摘要时；清点出的既往各次（计价 PPC 与 PRS、商业发布 PCC、运输履约 TFC 各次，连同 ADR-0129）都在上线前、前提成立，逐次认定，不回头换号。越权风险点：全仓换号判据由会话定；既往各次照上线前阶段认定；清点只核了 json 定形的正文；进生产之后那一种前提由作者自证；折回口不拒未知键。
 - **ADR-0268**（代 PC、VE owner）：合同版继承的产品底座随接受时闭包一并固定，底座多候选在解析时答`适用冲突`，底座过指名引用核对；VE 合同点核比同一份闭包采用的客户合同。越权风险点：底座多候选会挡接受；有效性更正不回及已接受委托；存量快照照旧现选；`EligibilityQuery.Contract` 与闭包合同仍不核一致。
 - **ADR-0273**（代 PS、NR、TF、SA owner）：ADR-0094 决定四只约束接受判断链；别处重投推不动、只等一次登记的格可先入账、续办另票；补齐之后答案会变的要有续办；续办由登记信封驱动，登记送不到信封时按租户登记的间隔到期重问。越权风险点：跨上下文判据由会话定；「答案变不变」由作者判；续办票落地前靠人查；按间隔重问可能问空。
 - **ADR-0276**（代 NO owner，TF owner 会签）：同一节点上交接转入立起、尚未转出的控制与当前收寄一样吸收此后的交付观察，收寄落「并入在身控制」、答`已有结果`。越权风险点：若交接转入后节点扫描应形成独立收寄则推翻决定一；拒收观察也并入；别的节点上的在身控制仍会长出第二份（票 92 另一问）；信息格没有判断种类。
-- **ADR-0280**（代 SA owner）：同一结算账户在估价采用与 SELL 计费时点采用两本册上一份计价范围，后登的一本不同即冲突、不交信封，同户登记串行。越权风险点：同户一份范围由会话定；先登的一本赢；两本册之间多了一道读依赖。
+- **ADR-0280**（代 SA owner）：同一结算账户在估价采用与 SELL 计费时点采用两本册上一份计价范围，后登的一本不同即冲突、不交信封，同户登记串行；回答 ADR-0190 越权风险点 9，无条款停用。越权风险点：同户一份范围由会话定；先登的一本赢；两本册之间多了一道读依赖。
 
 ### 立的代码票
 
@@ -81,3 +81,27 @@ Blocked by: 无（10a 已进 main；10b 不碰已接受 ADR 正文之外的这�
 - 已接受 ADR 正文：本票改过的已接受 ADR（0014、0094、0104、0129、0132、0136、0176、0179、0190、0199、0214），去掉 Status 行与 Links 节之后与基底逐字节相同（`dc11/tools/adrbody.py`，全部 `BODY-IDENTICAL`）；Status 行只有插入，原有文字一字未删。
 - 引文：改动文件里的书名号引文逐条对出处查逐字（`dc11/tools/quotes.py` 与按就近 ADR 号核出处的 `dc11/tools/attr.py`），报不中的逐条看过：都是原有文字或已标明出处的别份记录原句与术语名；被停原句在被停方正文逐字存在（折行的 ADR-0176 决定四那一句按原文折行标注）。
 - 自检：新加文字不用位置引用、跨文件计数与序号指称（已接受 ADR 的决定几编号除外）。
+
+## 评审记录（隔离评审第 1 轮，2026-10-21）与作者回应
+
+阻断 1 条，建议合入前修 5 条，顺手 3 条，全部照办（第 6、7 条按判断写了理由）。rebase 于 main `c89830c72`。
+
+| # | 评审意见 | 回应 |
+|---|---|---|
+| B1 阻断 | ADR-0267 只认了 ADR-0129 一次同号加键，仓里还有同类（`bebe0c7bd` 服务产品与客户合同、`a693a4f55` 移动事实） | 对以 json 结构体标签定形的各规范化正文逐提交清点（`internal/*/domain` 下各 `*canonicaliz*.go`、计价 `fingerprint.go` 与参考序列、参考目录登记册；PCC、PPC、PRS、TFC、PSC、NOC、CCC、SAC 与其余前缀），列出加、删、改键而版本号不变的各次：计价 `PPC-3` 三笔（2026-08-08）、`PPC-5`/`PRS-2` 五笔（2026-09-04）与一笔（2026-10-08）、商业发布 `bebe0c7bd`、运输履约具体班次 `660b35b70`、周期安排 `c329b90f4`、移动事实 `a693a4f55`；PS、NO、CC、SA 无（NO 收寄来源那一次换了 `NRS-2`）。逐次判前提：计价 `PPC-3` 那几笔时没有持久化层；具体班次迁移 0024 有行即拒；移动事实那一口不存摘要；其余都是可缺键、旧文档逐字节不变。严格按「册上没有已存摘要」判，可缺键那几次都不成立，可它们没有让任何已存摘要失配，补换号反倒让演示库上的串对不上——于是把决定三的前提写成两件同时成立（没有要按旧形回放的已存摘要，也没有不认新形的构建会读新文档），分上线前（已存摘要只在演示库与测试夹具，重灌即消，进生产的构建都认得新形）与上线后（只在那一册没有已存摘要）两段；既往各次都在上线前，前提成立，写进决定四的表，ADR-0014 注记补来向、适用场景逐次列出，ADR-0267 改为部分停用 ADR-0014 那一句。前提都成立，不立 code/63。Context 的「两边」、Consequences 的「代码不改」、越权风险点 2 随之改写，并补清点范围的风险点 |
+| 1 | ADR-0176 注记、ADR-0268 Context 与「对已接受记录的作用」里不配对的书名号 | 三处逐字引成「VE 适配器点读后核「正文挂合同必须等于查询携带的合同」」，去掉「原文折行续」 |
+| 2 | ADR-0267 Consequences 里的 0177 本分支没补 | 删去，改为 ADR-0014、0129、0176 |
+| 3 | ADR-0280 Consequences 写了 HTTP 登记面 | 改为受控 CLI 登记面，注明两本册今天没有 HTTP 登记面 |
+| 4 | ADR-0273 Context 里 ADR-0235 的决定号 | 改为决定二、六 |
+| 5 | 票 demo-chain-gaps/92 的「要裁的」补一句 | 补 2026-10-21 一句：同节点两问已由 ADR-0276 答，「别的节点上有在身控制」那一问仍留在本票 |
+| 6 | ADR-0280 对 ADR-0190 越权风险点 9 改「回答，无条款停用」，或照「扩成」写 | 改为回答、无条款停用。理由：「两册允许不同」写在越权风险点里，是对那时登记面的陈述；ADR-0179 决定五与 ADR-0190 决定三只定各自一册的键、值形与不设修订，都没定登记何时答冲突，两册之间加一道核没有改它们的哪一句。ADR-0190 注记、Links 与 ADR-0280 前段、「对已接受记录的作用」、Links 同步 |
+| 7 | ADR-0268 那条停用的适用场景补 ADR-0176 决定一「有合同版采纳合同版」那一格 | 合同层恰一版之下再要求底座不多于一版，改的是决定一那一格的结局，照「扩成」记成对 ADR-0176 决定一一句的部分停用，不只补进决定二那条的适用场景：ADR-0268 前段、「对已接受记录的作用」、Links 与 ADR-0176 注记、Links 都补上 |
+| 8 | ADR-0276 Context 读口名；ADR-0136 注记转述了 0176 的停用；票面漏记 ADR-0094 Links 的 0250 一条 | 读口改为 `FindActiveControls`；ADR-0136 注记删去那半句；完成记录 B3·1 一行补上 |
+
+### 重跑的检查
+
+- `go run ./tools/adr-index` 在 `git archive claude-dc11` 解出的副本上重生成后 `-check` 退 0。
+- 改动的 `.md` 链接与锚点全部解析（`dc11/tools/links.py`，基准 main..claude-dc11）。
+- 被停原句逐字：本轮新加或改写的注记与 ADR 里的引文逐条对出处查（`dc11/tools/quotes.py`、`dc11/tools/attr.py`）。
+- 已接受 ADR 正文：本票改过的各份去掉 Status 行与 Links 节后与 main 逐字节相同（`dc11/tools/adrbody.py`）。
+
