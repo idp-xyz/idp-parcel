@@ -142,6 +142,18 @@ func TestARevisedOccurrenceIsMarkedForTheTrigger(t *testing.T) {
 	if len(trigger.commands) != 1 || !trigger.commands[0].Revised {
 		t.Fatalf("修订版没被标出：%+v", trigger.commands)
 	}
+
+	// Covers: AT-SA-210——失效之后长出的替代版本不是「修订版、不发起」：它是这件事实重新成立的那一版，要评价（ADR-0232 决定八）。
+	superseding := must[tfdomain.TransportChargeOccurrence](t)(original.ReviseValidity(
+		tfdomain.OccurrenceSuperseded,
+		must[tfdomain.OccurrenceValidityVersion](t)(tfdomain.NewOccurrenceValidityVersion("V2")),
+		must[tfdomain.OccurrenceBasisReference](t)(tfdomain.NewOccurrenceBasisReference("SYN-CORRECTION-01")),
+		occurredAt.Add(time.Hour)))
+	reestablished := &triggerDouble{}
+	_ = newAdapter(t, sourceWith(superseding), reestablished).HandleFormedChargeOccurrence(t.Context(), formedOf(superseding))
+	if len(reestablished.commands) != 1 || reestablished.commands[0].Revised {
+		t.Fatalf("替代版本被标成了不发起：%+v", reestablished.commands)
+	}
 }
 
 // Covers: 读不回与读不动都是可见性未决，交 ErrChargeOccurrenceNotVisible；读回的键对不上是提供方不变量已破，另一枚哨兵；
@@ -274,7 +286,7 @@ func realTrigger(t *testing.T, view triggerViewDouble, scopes scopeViewDouble) (
 func TestTriggerOutcomesLandAsConsumption(t *testing.T) {
 	original := trunkOccurrence(t)
 	revised := must[tfdomain.TransportChargeOccurrence](t)(original.ReviseValidity(
-		tfdomain.OccurrenceSuperseded,
+		tfdomain.OccurrenceInvalidated,
 		must[tfdomain.OccurrenceValidityVersion](t)(tfdomain.NewOccurrenceValidityVersion("V2")),
 		must[tfdomain.OccurrenceBasisReference](t)(tfdomain.NewOccurrenceBasisReference("SYN-CORRECTION-01")),
 		occurredAt.Add(time.Hour)))

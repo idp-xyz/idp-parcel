@@ -46,6 +46,54 @@ type expectedCostRegistryDouble struct {
 	loadErr error
 	saveErr error
 	saves   int
+	// invalidated 是结算记下的已失效发生项版本，按发生项 ID 分；stateReads 数成本状态读了几次（都在发生项锁下）。
+	invalidated map[string][]domain.OccurrenceVersion
+	stateReads  int
+}
+
+// LoadOccurrenceCostState 照真册的读法：链头是没有别的版本回指它的那一版。
+func (double *expectedCostRegistryDouble) LoadOccurrenceCostState(
+	_ context.Context,
+	_ domain.TenantID,
+	occurrence domain.ChargeOccurrenceID,
+) (ports.OccurrenceCostState, error) {
+	double.stateReads++
+	if double.loadErr != nil {
+		return ports.OccurrenceCostState{}, double.loadErr
+	}
+	corrected := map[domain.SupplierCostVersionID]bool{}
+	for _, cost := range double.costs {
+		if prior, has := cost.PriorVersion(); has {
+			corrected[prior] = true
+		}
+	}
+	state := ports.OccurrenceCostState{Invalidated: double.invalidated[occurrence.String()]}
+	for _, cost := range double.costs {
+		if cost.Occurrence().ID() == occurrence && !corrected[cost.Version()] {
+			state.Heads = append(state.Heads, cost)
+		}
+	}
+	return state, nil
+}
+
+// RecordOccurrenceInvalidation 记下失效的那一版；重记不重复。
+func (double *expectedCostRegistryDouble) RecordOccurrenceInvalidation(
+	_ context.Context, _ domain.TenantID, occurrence domain.ChargeOccurrenceID,
+	invalidated domain.OccurrenceVersion, _ domain.OccurrenceVersion, _ time.Time,
+) error {
+	if double.saveErr != nil {
+		return double.saveErr
+	}
+	if double.invalidated == nil {
+		double.invalidated = map[string][]domain.OccurrenceVersion{}
+	}
+	for _, recorded := range double.invalidated[occurrence.String()] {
+		if recorded == invalidated {
+			return nil
+		}
+	}
+	double.invalidated[occurrence.String()] = append(double.invalidated[occurrence.String()], invalidated)
+	return nil
 }
 
 func newExpectedCostRegistry() *expectedCostRegistryDouble {
@@ -97,6 +145,16 @@ func (double *expectedCostRegistryDouble) Save(
 	}
 	if _, exists := double.costs[cost.Version().String()]; exists {
 		return ports.ExpectedCostAlreadyRecorded, nil
+	}
+	// 纠错版本照真册：不进首版三维，但一版至多被纠正一次。
+	if prior, corrects := cost.PriorVersion(); corrects {
+		for _, existing := range double.costs {
+			if earlier, has := existing.PriorVersion(); has && earlier == prior {
+				return ports.ExpectedCostAlreadyRecorded, nil
+			}
+		}
+		double.costs[cost.Version().String()] = cost
+		return ports.ExpectedCostSaved, nil
 	}
 	for _, existing := range double.costs {
 		if _, corrected := existing.PriorVersion(); corrected {

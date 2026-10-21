@@ -169,6 +169,8 @@ type SupplierExpectedCost struct {
 	conversion         ConversionStepReference
 	priorVersion       SupplierCostVersionID
 	correctionReason   CostCorrectionReason
+	// withdrawn 说这一版是失效纠错版本：它依的发生项已失效，这份成本不再成立（ADR-0232 决定七）。
+	withdrawn bool
 }
 
 // FormSupplierExpectedCost 形成首个预期成本版本。原币与合同结算币不同时换算步骤
@@ -315,5 +317,6 @@ func (cost SupplierExpectedCost) AppendCorrection(spec CostCorrectionSpec) (Supp
 	corrected.conversion = spec.Conversion
 	corrected.priorVersion = cost.version
 	corrected.correctionReason = spec.Reason
+	corrected.withdrawn = false
 	return corrected, nil
 }

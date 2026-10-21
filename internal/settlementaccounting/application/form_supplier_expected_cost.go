@@ -19,6 +19,14 @@ import (
 // ErrUnexpectedExpectedCostSave 说明预期成本登记面交回了封闭集合以外的写入结果。
 var ErrUnexpectedExpectedCostSave = errors.New("settlement accounting: unexpected expected cost save outcome")
 
+// ErrCorrectionChangesSettlementCurrency 说明发生项替代版本的新评价换了合同结算币。纠错不动的身份里有合同结算币（ADR-0067 决定三），
+// 纠错版本表达不了它；换了只可能是替代版本换了采购协议、而新协议约定了另一种结算币，这是另一份成本，要人定怎么处置。重投不会变。
+var ErrCorrectionChangesSettlementCurrency = errors.New("settlement accounting: the superseding evaluation changes the contract settlement currency")
+
+// ErrCostChainAdvancedUnderLock 说明握着发生项锁形成纠错版本，登记面却答已登记、按版本又读不回：被纠正的那一版已有别的后继。纠错与
+// 撤下都先取这把锁，走到这里只剩没走这把锁的写入者。
+var ErrCostChainAdvancedUnderLock = errors.New("settlement accounting: the supplier cost chain advanced while its occurrence lock was held")
+
 // ExpectedCostOutcome 是一次预期成本形成的应用处理结果。提供方的四种非完成结果各有去处
 // （ADR-0029 按恢复动作分格）：不可计价是终局（不重试、不落零额，AT-SA-175），冲突等裁决，
 // 待判断与未形成归未决并指名等谁。`已形成过首版`是专格：同一发生项、费用项目和规则版本的
@@ -35,6 +43,9 @@ const (
 	EvaluationConflict
 	ExpectedCostNotAccepted
 	ExpectedCostUndecided
+	// ExpectedCostOccurrenceInvalidated：评价所依的那一版发生项已失效（结算已记下），这份评价不再形成任何成本（ADR-0232 决定七）。是定局：
+	// 失效不会撤回，重投还是这一格。
+	ExpectedCostOccurrenceInvalidated
 )
 
 func (outcome ExpectedCostOutcome) String() string {
@@ -55,6 +66,8 @@ func (outcome ExpectedCostOutcome) String() string {
 		return "SOURCE_NOT_ACCEPTED"
 	case ExpectedCostUndecided:
 		return "EXPECTED_COST_UNDECIDED"
+	case ExpectedCostOccurrenceInvalidated:
+		return "OCCURRENCE_INVALIDATED"
 	default:
 		return ""
 	}
@@ -219,19 +232,54 @@ func (handler *FormSupplierExpectedCostHandler) Handle(
 		return ExpectedCostResult{}, fmt.Errorf("settlement accounting: untranslated buy evaluation outcome %d", adoption.Outcome)
 	}
 
-	cost, err := domain.FormSupplierExpectedCost(domain.SupplierExpectedCostSpec{
-		Version:            command.Version,
-		Occurrence:         command.Occurrence,
-		FeeItem:            command.FeeItem,
-		RuleVersion:        adoption.RuleVersion,
-		Agreement:          command.Agreement,
-		Evaluation:         command.Evaluation,
-		OriginalCurrency:   adoption.OriginalCurrency,
-		OriginalMinor:      adoption.OriginalMinor,
-		SettlementCurrency: adoption.SettlementCurrency,
-		SettlementMinor:    adoption.SettlementMinor,
-		Conversion:         adoption.Conversion,
-	})
+	// 先在发生项锁下读这一项的成本状态（ADR-0232 决定七、八）：评价所依的那一版已失效就不再形成；这个费用项目上已有一条链、链头依的
+	// 是另一版发生项，这份评价来自替代版本，按它重述全额、接在链头后面——纠错由发生项新版本触发，金额同不同都追加（重述的发生项版本
+	// 与业务时点本身就是这一版计价结果的一部分，ADR-0067 决定二）；否则照旧形成首版。
+	state, err := handler.deps.Registry.LoadOccurrenceCostState(ctx, command.TenantID, command.Occurrence.ID())
+	if err != nil {
+		return expectedCostUndecided(ExpectedCostRegistryUnavailable, command.Version.String(), err), nil
+	}
+	if state.Invalidates(command.Occurrence.Version()) {
+		return ExpectedCostResult{outcome: ExpectedCostOccurrenceInvalidated,
+			continuation: costContinuation("OCCURRENCE_INVALIDATED", command.Occurrence.ID().String(), command.Occurrence.Version().String())}, nil
+	}
+	head, chained, err := state.HeadFor(command.FeeItem)
+	if err != nil {
+		return ExpectedCostResult{}, fmt.Errorf("settlement accounting: occurrence %s fee item %s: %w", command.Occurrence.ID(), command.FeeItem, err)
+	}
+	var cost domain.SupplierExpectedCost
+	if chained && head.Occurrence().Version() != command.Occurrence.Version() {
+		if settlementCurrency, _ := head.SettlementAmount(); settlementCurrency != adoption.SettlementCurrency {
+			return ExpectedCostResult{}, fmt.Errorf("%w: occurrence %s from %s to %s",
+				ErrCorrectionChangesSettlementCurrency, command.Occurrence.ID(), settlementCurrency, adoption.SettlementCurrency)
+		}
+		cost, err = head.AppendCorrection(domain.CostCorrectionSpec{
+			Version:          command.Version,
+			Occurrence:       command.Occurrence,
+			RuleVersion:      adoption.RuleVersion,
+			Agreement:        command.Agreement,
+			Evaluation:       command.Evaluation,
+			OriginalCurrency: adoption.OriginalCurrency,
+			OriginalMinor:    adoption.OriginalMinor,
+			SettlementMinor:  adoption.SettlementMinor,
+			Conversion:       adoption.Conversion,
+			Reason:           domain.OccurrenceSupersededCorrection(),
+		})
+	} else {
+		cost, err = domain.FormSupplierExpectedCost(domain.SupplierExpectedCostSpec{
+			Version:            command.Version,
+			Occurrence:         command.Occurrence,
+			FeeItem:            command.FeeItem,
+			RuleVersion:        adoption.RuleVersion,
+			Agreement:          command.Agreement,
+			Evaluation:         command.Evaluation,
+			OriginalCurrency:   adoption.OriginalCurrency,
+			OriginalMinor:      adoption.OriginalMinor,
+			SettlementCurrency: adoption.SettlementCurrency,
+			SettlementMinor:    adoption.SettlementMinor,
+			Conversion:         adoption.Conversion,
+		})
+	}
 	if errors.Is(err, domain.ErrConversionStepMissing) {
 		// 原币与合同结算币不同而评价未携带换算步骤：保持待判断并记录缺口，不自行取汇率
 		// 补算，也不以原币金额充当结算币金额（AT-SA-177）。
@@ -285,6 +333,9 @@ func (handler *FormSupplierExpectedCostHandler) existingCost(
 			return ExpectedCostResult{outcome: ExpectedCostConflict}, nil
 		}
 		return ExpectedCostResult{outcome: ExpectedCostExistingResult, cost: byVersion, hasCost: true}, nil
+	}
+	if prior, corrects := formed.PriorVersion(); corrects {
+		return ExpectedCostResult{}, fmt.Errorf("%w: correcting %s as %s", ErrCostChainAdvancedUnderLock, prior, command.Version)
 	}
 	first, found, err := handler.deps.Registry.LoadFirstVersion(
 		ctx, command.TenantID, command.Occurrence.ID(), command.FeeItem, formed.RuleVersion())

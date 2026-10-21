@@ -106,6 +106,10 @@ func (adapter *RequestOnChargeOccurrenceFormedAdapter) HandleFormedChargeOccurre
 
 // triggerCommandOf 把发生项译成发起命令。四件引用与协议原样取自发生项：协议是发生项形成时固定下来的来源事实
 // （ADR-0208 决定二），原因用运输履约的原词，结算触发册按同一个词登记。修订与否只交一格，判不判归编排。
+//
+// 只有失效版本算「修订版、不发起」：失效说那个范围不成立，没有东西可评价，撤下它的成本另有一路（WithdrawOnChargeOccurrenceInvalidated）。
+// 失效之后长出的替代版本是这件事实重新成立的那一版，要评价，评价形成时接在失效纠错版本后面重述全额（ADR-0232 决定八，部分停用 ADR-0208
+// 决定五「修订版不发起」）。
 func triggerCommandOf(occurrence tfdomain.TransportChargeOccurrence) (saapplication.TriggerBuyEvaluationOnOccurrenceFormedCommand, error) {
 	none := saapplication.TriggerBuyEvaluationOnOccurrenceFormedCommand{}
 	tenant, err := sadomain.NewTenantID(occurrence.TenantID().String())
@@ -132,12 +136,11 @@ func triggerCommandOf(occurrence tfdomain.TransportChargeOccurrence) (saapplicat
 	if err != nil {
 		return none, fmt.Errorf("%w: supplier agreement: %v", ErrUntranslatableAnswer, err)
 	}
-	_, revised := occurrence.Corrects()
 	return saapplication.TriggerBuyEvaluationOnOccurrenceFormedCommand{
 		TenantID:   tenant,
 		Occurrence: reference,
 		Agreement:  agreement,
-		Revised:    revised,
+		Revised:    occurrence.Invalidated(),
 	}, nil
 }
 

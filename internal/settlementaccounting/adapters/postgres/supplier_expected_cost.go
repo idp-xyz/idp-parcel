@@ -85,18 +85,19 @@ func (repository *SupplierExpectedCosts) loadOne(
 		originalCurrency, settlementCurrency              string
 		originalMinor, settlementMinor                    int64
 		conversion, priorVersion, correctionReason        *string
+		withdrawn                                         bool
 	)
 	err = querier.QueryRow(ctx,
 		`SELECT version, occurrence_id, occurrence_reason, occurrence_version, occurred_at,
 		        fee_item, purchase_rule_version, agreement_ref, evaluation_ref,
 		        original_currency, original_minor, settlement_currency, settlement_minor,
-		        conversion_ref, prior_version, correction_reason
+		        conversion_ref, prior_version, correction_reason, withdrawn
 		   FROM settlement_accounting.supplier_expected_cost `+where,
 		args...,
 	).Scan(&versionValue, &occurrenceID, &occurrenceReason, &occurrenceVersion, &occurredAt,
 		&feeItem, &ruleVersion, &agreement, &evaluation,
 		&originalCurrency, &originalMinor, &settlementCurrency, &settlementMinor,
-		&conversion, &priorVersion, &correctionReason)
+		&conversion, &priorVersion, &correctionReason, &withdrawn)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.SupplierExpectedCost{}, false, nil
 	}
@@ -129,6 +130,7 @@ func (repository *SupplierExpectedCosts) loadOne(
 	if err != nil {
 		return domain.SupplierExpectedCost{}, false, fmt.Errorf("load expected cost: %w", err)
 	}
+	spec.Withdrawn = withdrawn
 
 	cost, err := domain.RehydrateSupplierExpectedCost(spec)
 	if err != nil {
@@ -141,7 +143,8 @@ func (repository *SupplierExpectedCosts) loadOne(
 // 已有行时交回`已登记`而不是错误：那是业务答案，调用方据以读回赢家（ADR-0031）。
 //
 // 首版撞幂等三维时交回的也是`已登记`：那三维上的部分唯一索引拦的正是「同一发生项、
-// 费用项目和规则版本重复形成预期成本」，冲突在这里是重复形成，不是技术故障。
+// 费用项目和规则版本重复形成预期成本」，冲突在这里是重复形成，不是技术故障。纠错版本撞「一版
+// 至多被纠正一次」（迁移 0044）同样交回`已登记`。
 func (repository *SupplierExpectedCosts) Save(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -180,8 +183,8 @@ func (repository *SupplierExpectedCosts) Save(
 			(tenant_id, version, occurrence_id, occurrence_reason, occurrence_version,
 			 occurred_at, fee_item, purchase_rule_version, agreement_ref, evaluation_ref,
 			 original_currency, original_minor, settlement_currency, settlement_minor,
-			 conversion_ref, prior_version, correction_reason, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+			 conversion_ref, prior_version, correction_reason, recorded_at, withdrawn)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 		 ON CONFLICT DO NOTHING`,
 		tenant.String(),
 		cost.Version().String(),
@@ -201,6 +204,7 @@ func (repository *SupplierExpectedCosts) Save(
 		priorVersion,
 		correctionReason,
 		recordedAt.UTC(),
+		cost.Withdrawn(),
 	)
 	if err != nil {
 		return ports.ExpectedCostSaveOutcomeInvalid, fmt.Errorf("save expected cost: %w", err)

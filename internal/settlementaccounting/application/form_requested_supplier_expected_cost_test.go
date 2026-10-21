@@ -164,9 +164,10 @@ func TestARequestedBuyEvaluationFormsTheFirstVersionUnderTheDerivedIdentity(t *t
 	}
 }
 
-// Covers: 另一份请求点名同一发生项的新版本、同一费用项目，评价命中同一规则版本——首版已在别的版本标识上，不重复
-// 形成；答`已有首版`并交回先到者，零新增（重述走计价纠错，不在本编排）。
-func TestASecondRequestOnTheSameOccurrenceFeeItemAndRuleFindsTheFirstVersion(t *testing.T) {
+// Covers: AT-SA-207——另一份请求点名同一发生项的新版本、同一费用项目，评价命中同一规则版本：不再答`已有首版`即止（ADR-0200 越权风险点
+// 4、票 demo-chain-gaps/15），而是按新评价重述全额、接在链头后面追加一个纠错版本：回指首版、原因是发生项替代、发生项版本随评价换成新的
+// 那一版，版本标识由这份请求派生；首版一字不动。金额与首版相同也追加——纠错由发生项新版本触发，不由评价结果不同触发。重放不多一份。
+func TestARequestNamingANewerOccurrenceVersionAppendsACorrection(t *testing.T) {
 	fixture := newRequestedCostFixture(t)
 	fixture.requests.register(t, "EVREQ-SYN-2", "occurrence-7/v2")
 	if _, err := fixture.handle(t, "buy-eval-1", "EVREQ-SYN-1"); err != nil {
@@ -175,11 +176,42 @@ func TestASecondRequestOnTheSameOccurrenceFeeItemAndRuleFindsTheFirstVersion(t *
 	fixture.evaluations.adoptions["buy-eval-2"] = completedAdoption(t, "buy-eval-2")
 
 	result, err := fixture.handle(t, "buy-eval-2", "EVREQ-SYN-2")
-	if err != nil || result.Outcome() != application.RequestedSupplierExpectedCostFirstVersionExists {
-		t.Fatalf("outcome = %s err=%v, want 已有首版", result.Outcome(), err)
+	if err != nil || result.Outcome() != application.RequestedSupplierExpectedCostAdopted ||
+		result.Formation().Outcome() != application.ExpectedCostFormed {
+		t.Fatalf("outcome = %s / %s err=%v, want 追加纠错", result.Outcome(), result.Formation().Outcome(), err)
 	}
-	if first, _ := result.Formation().Cost(); first.Version().String() != "BUYSC-EVREQ-SYN-1" || len(fixture.registry.costs) != 1 {
-		t.Fatalf("交回 %s，成本 %d 份", first.Version(), len(fixture.registry.costs))
+	corrected, _ := result.Formation().Cost()
+	prior, corrects := corrected.PriorVersion()
+	reason, _ := corrected.CorrectionReason()
+	if corrected.Version().String() != "BUYSC-EVREQ-SYN-2" || !corrects || prior.String() != "BUYSC-EVREQ-SYN-1" ||
+		reason.String() != "OCCURRENCE_SUPERSEDED" || corrected.Occurrence().Version().String() != "occurrence-7/v2" ||
+		corrected.Evaluation().String() != "buy-eval-2" || corrected.Withdrawn() {
+		t.Fatalf("纠错版本 = %+v", corrected)
+	}
+	if first := fixture.registry.costs["BUYSC-EVREQ-SYN-1"]; first.Occurrence().Version().String() != "occurrence-7/v1" || len(fixture.registry.costs) != 2 {
+		t.Fatalf("首版被改或成本 %d 份", len(fixture.registry.costs))
+	}
+	replay, err := fixture.handle(t, "buy-eval-2", "EVREQ-SYN-2")
+	if err != nil || replay.Formation().Outcome() != application.ExpectedCostExistingResult || len(fixture.registry.costs) != 2 {
+		t.Fatalf("重放 = %s err=%v，成本 %d 份", replay.Formation().Outcome(), err, len(fixture.registry.costs))
+	}
+}
+
+// Covers: AT-SA-208——请求所依的那一版发生项已被结算记作失效：评价到了也不形成任何成本，答 OCCURRENCE_INVALIDATED、入账，零写入。
+func TestAnEvaluationOfAnInvalidatedOccurrenceVersionFormsNothing(t *testing.T) {
+	fixture := newRequestedCostFixture(t)
+	occurrence, err := domain.NewChargeOccurrenceID("occurrence-7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	version, err := domain.NewOccurrenceVersion("occurrence-7/v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.registry.invalidated = map[string][]domain.OccurrenceVersion{occurrence.String(): {version}}
+	result, err := fixture.handle(t, "buy-eval-1", "EVREQ-SYN-1")
+	if err != nil || result.Outcome() != application.RequestedSupplierExpectedCostOccurrenceInvalidated || len(fixture.registry.costs) != 0 {
+		t.Fatalf("已失效那一版的评价 = %s err=%v，成本 %d 份", result.Outcome(), err, len(fixture.registry.costs))
 	}
 }
 

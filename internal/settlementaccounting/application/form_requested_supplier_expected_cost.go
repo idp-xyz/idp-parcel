@@ -44,6 +44,8 @@ const (
 	RequestedSupplierExpectedCostNoBuyRequest
 	// RequestedSupplierExpectedCostUndecided：某个依赖答不出，形成与否未知，整笔回滚等重投。
 	RequestedSupplierExpectedCostUndecided
+	// RequestedSupplierExpectedCostOccurrenceInvalidated：请求所依的那一版发生项已失效，评价不再形成成本，零写入（ADR-0232 决定七）。
+	RequestedSupplierExpectedCostOccurrenceInvalidated
 )
 
 func (outcome RequestedSupplierExpectedCostOutcome) String() string {
@@ -58,6 +60,8 @@ func (outcome RequestedSupplierExpectedCostOutcome) String() string {
 		return "NO_BUY_REQUEST"
 	case RequestedSupplierExpectedCostUndecided:
 		return "SUPPLIER_EXPECTED_COST_UNDECIDED"
+	case RequestedSupplierExpectedCostOccurrenceInvalidated:
+		return "OCCURRENCE_INVALIDATED"
 	default:
 		return ""
 	}
@@ -172,6 +176,9 @@ func (handler *FormRequestedSupplierExpectedCostHandler) Handle(
 		return handler.stop(ctx, key, formed, domain.StopEvaluationUnratable)
 	case EvaluationConflict:
 		return handler.stop(ctx, key, formed, domain.StopEvaluationConflict)
+	case ExpectedCostOccurrenceInvalidated:
+		// 发生项那一版已失效不是停办：没有哪一种登记补得回它，记成停因只会让续办去重跑一份注定不形成成本的请求。
+		return RequestedSupplierExpectedCostResult{outcome: RequestedSupplierExpectedCostOccurrenceInvalidated, formation: formed}, nil
 	case ExpectedCostUndecided:
 		folded, err := foldUndecidedFormation(formed, version)
 		if err != nil || folded.outcome != RequestedSupplierExpectedCostEvaluationNotAdopted {

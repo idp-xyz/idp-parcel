@@ -29,7 +29,8 @@ const occurrenceFormedRequester = "settlement-accounting/buy-evaluation-on-occur
 // 版本、业务时间）与它固定的供应商协议。费用项目与主要范围都不在命令上——前者归触发册，后者归协议，调用方带得了它们
 // 就有了第二套口径。
 //
-// Revised 说这一版是不是有效性修订产生的。是就不发起，见 BuyEvaluationTriggerOccurrenceRevised。ResumeBasis 只在续办
+// Revised 说这一版是不是失效版本（发生项有效性修订里说「那个范围不成立」的那一种）。是就不发起，见
+// BuyEvaluationTriggerOccurrenceRevised；失效之后长出的替代版本不在此列，照常发起（ADR-0232 决定八）。ResumeBasis 只在续办
 // 重跑一份发起停办时在场：发出的首代请求记下凭的依据，又停下时发起停办换上它（ADR-0229 决定四）。
 type TriggerBuyEvaluationOnOccurrenceFormedCommand struct {
 	TenantID    domain.TenantID

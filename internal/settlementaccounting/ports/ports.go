@@ -335,6 +335,14 @@ type ExpectedCostRegistry interface {
 		feeItem domain.FeeItemReference,
 		ruleVersion domain.PurchaseRuleVersionReference,
 	) (domain.SupplierExpectedCost, bool, error)
+	// LoadOccurrenceCostState 先取这一项发生项的事务级串行锁，再交它各条版本链的链头与已失效的那几版（ADR-0232 决定七、八）。形成、
+	// 纠错与撤下都经它读：评价晚到的形成与失效信封并发时，两边各凭对方还没提交的样子判，就会在已失效的那一版上形成一份没人撤的成本。
+	// 不在事务里调用由实现拒。
+	LoadOccurrenceCostState(
+		ctx context.Context,
+		tenant domain.TenantID,
+		occurrence domain.ChargeOccurrenceID,
+	) (OccurrenceCostState, error)
 }
 
 // SupplierAuditAuthorityView 取该供应商/责任法人范围的审核授权配置。found=false 表示

@@ -20,8 +20,8 @@ const (
 	// BuyEvaluationTriggerUndecided 只出自发生项已形成那一路：某个依赖答不出，停在哪一口见 UndecidedReason。
 	// 调用方整笔回滚重来。ADR-0164 那条触发面仍按 ViewUnavailable 答册读不动，两路不合一格。
 	BuyEvaluationTriggerUndecided
-	// BuyEvaluationTriggerOccurrenceRevised 只出自发生项已形成那一路：这一版是有效性修订（失效或替代），本路不为
-	// 它发起请求。修订怎样驱动纠错归票 demo-chain-gaps/15；失效的那一版若也发起，会给一个已证无效的范围估成本。
+	// BuyEvaluationTriggerOccurrenceRevised 只出自发生项已形成那一路：这一版是失效版本，本路不为它发起请求——失效的那一版
+	// 若也发起，会给一个已证无效的范围估成本；撤下它已有的成本另有一路（ADR-0232 决定七）。失效之后长出的替代版本照常发起。
 	BuyEvaluationTriggerOccurrenceRevised
 )
 

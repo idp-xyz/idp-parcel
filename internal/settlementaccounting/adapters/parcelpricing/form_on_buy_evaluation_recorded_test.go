@@ -82,6 +82,25 @@ func (costs *buyGateCosts) LoadFirstVersion(
 	return sadomain.SupplierExpectedCost{}, false, nil
 }
 
+// LoadOccurrenceCostState 照真册的读法交链头；这里的用例不登失效。
+func (costs *buyGateCosts) LoadOccurrenceCostState(
+	_ context.Context, _ sadomain.TenantID, occurrence sadomain.ChargeOccurrenceID,
+) (saports.OccurrenceCostState, error) {
+	corrected := map[sadomain.SupplierCostVersionID]bool{}
+	for _, cost := range costs.byVersion {
+		if prior, has := cost.PriorVersion(); has {
+			corrected[prior] = true
+		}
+	}
+	var state saports.OccurrenceCostState
+	for _, cost := range costs.byVersion {
+		if cost.Occurrence().ID() == occurrence && !corrected[cost.Version()] {
+			state.Heads = append(state.Heads, cost)
+		}
+	}
+	return state, nil
+}
+
 func (costs *buyGateCosts) Save(_ context.Context, tenant sadomain.TenantID, cost sadomain.SupplierExpectedCost, _ time.Time) (saports.ExpectedCostSaveOutcome, error) {
 	if costs.saveErr != nil {
 		return saports.ExpectedCostSaveOutcomeInvalid, costs.saveErr

@@ -176,7 +176,7 @@ func (catalogue *ChargeCatalogue) ListSupplierExpectedCosts(
 		        fee_item, purchase_rule_version, agreement_ref, evaluation_ref,
 		        original_currency, original_minor,
 		        settlement_currency, settlement_minor,
-		        conversion_ref, prior_version, correction_reason, recorded_at
+		        conversion_ref, prior_version, correction_reason, withdrawn, recorded_at
 		   FROM settlement_accounting.supplier_expected_cost
 		  WHERE tenant_id = $1
 		  ORDER BY occurrence_id, fee_item, version
@@ -203,7 +203,7 @@ func (catalogue *ChargeCatalogue) ListSupplierExpectedCosts(
 			&row.FeeItem, &row.PurchaseRuleVersion, &row.Agreement, &row.Evaluation,
 			&row.OriginalCurrency, &row.OriginalMinor,
 			&row.SettlementCurrency, &row.SettlementMinor,
-			&conversionStep, &priorVersion, &correctionReason, &recordedAt,
+			&conversionStep, &priorVersion, &correctionReason, &row.Withdrawn, &recordedAt,
 		); err != nil {
 			return nil, fmt.Errorf("list supplier expected costs: %w", err)
 		}

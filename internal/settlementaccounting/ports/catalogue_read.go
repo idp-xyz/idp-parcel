@@ -104,7 +104,9 @@ type SupplierExpectedCostCatalogueRow struct {
 	ConversionStep      string
 	PriorVersion        string
 	CorrectionReason    string
-	RecordedAt          time.Time
+	// Withdrawn 为真：这一版是失效纠错版本，它依的发生项已失效、这份成本不再成立；金额是被撤下那一笔的原样（ADR-0232 决定七）。
+	Withdrawn  bool
+	RecordedAt time.Time
 }
 
 // ChargeCatalogueRead 是费用与计费页的伴生列表读端口：客户费用册与供应商预期成本

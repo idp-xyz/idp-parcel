@@ -165,6 +165,7 @@ func serveSupplierExpectedCosts(
 			ConversionStep:      row.ConversionStep,
 			PriorVersion:        row.PriorVersion,
 			CorrectionReason:    row.CorrectionReason,
+			Withdrawn:           row.Withdrawn,
 			RecordedAt:          rfc3339(row.RecordedAt),
 		})
 	}
@@ -253,5 +254,7 @@ type supplierExpectedCostBody struct {
 	ConversionStep      string `json:"conversionStep,omitempty"`
 	PriorVersion        string `json:"priorVersion,omitempty"`
 	CorrectionReason    string `json:"correctionReason,omitempty"`
-	RecordedAt          string `json:"recordedAt"`
+	// withdrawn 只随失效纠错版本出现：它依的发生项已失效，这一版说的是那份成本不再成立，金额是被撤下那一笔的原样。
+	Withdrawn  bool   `json:"withdrawn,omitempty"`
+	RecordedAt string `json:"recordedAt"`
 }

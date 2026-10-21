@@ -17,6 +17,8 @@ type RehydrateSupplierExpectedCostSpec struct {
 	Conversion         ConversionStepReference
 	PriorVersion       SupplierCostVersionID
 	CorrectionReason   CostCorrectionReason
+	// Withdrawn 只在纠错版本上可能为真：失效纠错版本必回指它纠正的那一版（ADR-0232 决定七）。
+	Withdrawn bool
 }
 
 // RehydrateSupplierExpectedCost 读回一份预期成本：复验行自身形状，不重算金额
@@ -53,6 +55,9 @@ func RehydrateSupplierExpectedCost(spec RehydrateSupplierExpectedCostSpec) (Supp
 			return SupplierExpectedCost{}, ErrInvalidSupplierCost
 		}
 	}
+	if spec.Withdrawn && !spec.PriorVersion.valid() {
+		return SupplierExpectedCost{}, ErrInvalidSupplierCost
+	}
 
 	return SupplierExpectedCost{
 		version:            spec.Version,
@@ -68,5 +73,6 @@ func RehydrateSupplierExpectedCost(spec RehydrateSupplierExpectedCostSpec) (Supp
 		conversion:         spec.Conversion,
 		priorVersion:       spec.PriorVersion,
 		correctionReason:   spec.CorrectionReason,
+		withdrawn:          spec.Withdrawn,
 	}, nil
 }
