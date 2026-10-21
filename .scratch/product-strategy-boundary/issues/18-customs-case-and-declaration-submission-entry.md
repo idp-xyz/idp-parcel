@@ -1,7 +1,7 @@
 # 18 关务立案与提交申报：生产入口与触发面
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-psb18（2026-10-21 Claude Code 作者子代理收口，完成记录见文末）。此前 in-progress——2026-10-20 分诊并认领，分支 claude-psb18。此前 ready-for-agent——2026-10-20 Claude Code 会话代 CC owner 分诊（用户原话「你作为业务和系统专家自决……解决所有的问题」），「要裁的」三问裁定见文末「分诊裁定」。更早的 needs-triage——2026-09-24 通道 2 立票（用户令通道 2 独立承接）；分诊时先定「要裁的」再转 ready-for-agent
+Status: in-progress——评审修订完，待进 main，分支 claude-psb18（2026-10-21 隔离评审无阻断，必修与顺手修已改，见文末「评审记录」；完成记录在其前）。此前 in-progress——完工待评审与进 main（2026-10-21 Claude Code 作者子代理收口）。此前 in-progress——2026-10-20 分诊并认领，分支 claude-psb18。此前 ready-for-agent——2026-10-20 Claude Code 会话代 CC owner 分诊（用户原话「你作为业务和系统专家自决……解决所有的问题」），「要裁的」三问裁定见文末「分诊裁定」。更早的 needs-triage——2026-09-24 通道 2 立票（用户令通道 2 独立承接）；分诊时先定「要裁的」再转 ready-for-agent
 Blocked by: 无；触发面与 [routing-first-cut/12](../../routing-first-cut/issues/12-cc-customs-applicability-judgment-for-route-candidates.md)（候选的关务适用性）、[票 10](./10-cc-declaration-channel-and-public-regulatory-reference-configuration.md) 第 1 项（申报发送连接器）相邻，分诊时划清
 地盘：`internal/customscompliance`（入口与触发）、`cmd/parcel-api` 或 `cmd/parcel-dispatch` 的装配。
 出处：[票 05](./05-demo-journey-criterion-evidence.md) 格 9——开发主线重定级表 PN-05 第一项记「未见缺口」，动线取证补出这一格。
@@ -47,12 +47,12 @@ UC-CC-004 的拒绝、撤销、再次申请，授权目标绑定到组成 / 资�
 - **提交执行与「已登记待发送」**：领域 `AttemptResult` 加 `REGISTERED_PENDING_SEND`，与发送时间配对（`AttemptSendTimeMatches`，构造、读回、受理三处同一份），受控重发不能停在这一格；迁移 `customs_compliance/0025` 放开结果集合、`sent_at` 可空并配对；提交编排受理处先配对。提交执行口的载荷没有尝试结果与发送时间两格，首次尝试一律待发送。
 - **装配**：`cmd/parcel-api/assemble_customs_decisions.go` 三只编排全接真库缝，各包一笔事务，未决整笔回滚。
 - **没有自动提交路径**：`cmd/parcel-dispatch/customs_no_automatic_submission_test.go` 两条用例（接受扇出后关务各册与意图为零；扫 `cmd/` 生产源码，建案 / 授权 / 提交编排只在上面那一个装配文件里构造）。
-- **文档**：ADR-0227（Status 带索引注记，不手改 adr/README）；CC `CONTEXT.md`「提交尝试」词条与「提交与外部监管结果」生命周期首条；UC-CC-001 / 004 / 005 验收示例加 `AT-CC-437`–`445`；AT 盘点移入 `AT-CC-020`、`078`、`105`、`107`、`112`、`122` 到①并加 437–445 九行（不改「总览」）；票 10 加一条 Comment；立票 35、36（分诊那一笔）。
+- **文档**：ADR-0227（Status 带索引注记，不手改 adr/README）；CC `CONTEXT.md`「提交尝试」词条与「提交与外部监管结果」生命周期首条；UC-CC-001 / 004 / 005 验收示例加 `AT-CC-437`–`445`；AT 盘点移入 `AT-CC-020`、`078`、`107`、`112`、`122` 到①并加 437–445 九行（不改「总览」；`105` 评审后撤回④）；票 10 加一条 Comment；立票 35、36（分诊那一笔）。
 - **演示种子**：配置员加三种授予（`data/access/02`）、准入对照（`03`）三行，新步 `steps/460-customs-declaration-faces.sh` 登三份运营决定权威区间（`data/governance/42`–`44`）与演示单元 `SYN-UNIT-CN-EXPORT-DEMO-01` 的就绪（`data/customs/31`，不登授权）；运行时脚本 `declare-one-parcel.sh <包裹号>` 走三口；README 两处。
 
 ### 代决与越权风险点（详见 ADR-0227 文末）
 
-代决：分诊三问照上文「分诊裁定」；批准与实际提交分两种决定、不强制职责分离；首次尝试记「已登记待发送」而不沿用待确认；建案按已接受包裹寻址；不加隔离放行。越权风险点九条：运维登记授权一路仍被提交执行认（1）；决定种类与授予粒度、party-commercial 的角色委派不问（2）；授权只绑单元（3）；受理口不核组成在案件里（4）；提交执行人不留痕（5）；授权依据不带授予号（6）；待发送与连接器的分工（7）；建案四维与角色照请求收（8）；未决整笔回滚与编排注释的出入（9）。1、3–6 进票 36，7 进票 10，8 进票 35。
+代决：分诊三问照上文「分诊裁定」；批准与实际提交分两种决定、不强制职责分离；首次尝试记「已登记待发送」而不沿用待确认；建案按已接受包裹寻址；不加隔离放行。越权风险点（评审后十一条，10、11 见「评审记录」）：运维登记授权一路仍被提交执行认（1）；决定种类与授予粒度、party-commercial 的角色委派不问（2）；授权只绑单元（3）；受理口不核组成在案件里（4）；提交执行人不留痕（5）；授权依据不带授予号（6）；待发送与连接器的分工（7）；建案四维与角色照请求收（8）；未决整笔回滚与编排注释的出入（9）。1、3–6 进票 36，7 进票 10，8 进票 35。
 
 ### 用例（真库）
 
@@ -72,3 +72,24 @@ UC-CC-004 的拒绝、撤销、再次申请，授权目标绑定到组成 / 资�
 ### 过程记录
 
 收口时为核对 adr-index 在本 worktree 跑过一次 `git stash` / `git stash pop`：stash 列表各 worktree 共用，本树没有可存的改动，`pop` 弹出的是另一会话（`claude-dcg50`）放在栈顶的 stash。当即按原提交 `683fe655` 与原说明 `git stash store` 放回栈顶，核对本树多出的改动与那份 stash 逐字节相同后撤掉，本分支的提交不含它。那份 stash 的提交与内容未变，缺席约数分钟。
+
+## 评审记录
+
+2026-10-21，隔离评审无阻断；协调方转来必修 5 条、顺手修 5 条、不修 1 条。逐条去向（全部在本分支 `d1bdfc42` 之后的提交里）：
+
+1. **CC 迁移跳号**：`customs_compliance/0027_…` 改名 `0025_…`（main 上 CC 最大号 0024），代码注释、测试 Covers、ADR-0227、本票、票 10 的引用随改；`access_identity/0018` 不动。本分支各文件里已无 CC 的 0027（`246d7913`）。
+2. **注释里的「ADR-0227 决定N」**：按定稿编号逐处改正（一＝三口三种决定，二＝建案，三＝授权确认，四＝提交执行与已登记待发送，五＝没有自动提交路径），含两份迁移头注；票 35 出处改指「决定七与越权风险点 8」，票 36 出处补上 1。改完全仓 grep 逐条对过（`09994c6a`）。
+3. **UC 同表两套口径**：ADR-0227 加决定八「首发对『未登记』一格的答法」，写明替代 `AT-CC-105` 在「不存在」「已经失效」两格、`AT-CC-110` 在「不存在」一格的结果名，理由按恢复动作分格；两行行旁注首发答法见 `AT-CC-444` / `AT-CC-439` 与决定八，正文不改。AT 盘点 `AT-CC-105` 撤回④，确认口用例不再点名它；`AT-CC-107` 留①，注「版本冻结半边；发送归票 psb/10」（`789ae7b4`、`5cf6db32`、`7b7e8fbb`）。
+4. **授权使用未建模**：ADR-0227 加越权风险点 10，票 36 现状加一条并加「要裁的」第 5 问：票 36 落地（授权按使用建模）之前，不得给原案内更正、补充开生产口（`789ae7b4`、`7b7e8fbb`）。
+5. **「已登记待发送」只形成一半**：ADR-0227 决定四与越权风险点 7 扩写——没有授权使用关系，唯一意图只有 VE 投影消费、不是发送意图，今天的待发送不含发送意图；连接器要么自带发送意图、要么扫尝试行。票 10 的 Comment 同步；CC CONTEXT 生命周期那一条删去「发送意图已经形成」的说法（`789ae7b4`、`7b7e8fbb`）。
+6. **确认后授予被撤销**：ADR-0227 加越权风险点 11（授权照旧有效是取舍，与 UC-CC-004「决定时重新校验」一致），票 36 现状与「要裁的」第 6 问（同上两笔）。
+7. **PS 答两份已接受委托**：CC 端口加哨兵 `ports.ErrAcceptedParcelAmbiguous`，消费侧适配器把 PS 的 `ErrAmbiguousParcelTarget` 译成它，建案编排见到就整笔报错（HTTP 500 `NO_ANSWER_FORMED`），不答可重试的未决；照票 12 对 `ErrLayerFactInconsistent` 的做法。补适配器与编排两条用例；ADR-0227 决定二改一句（`f592b8b8`）。
+8. **注释**：认证方注释不再枚举别处的认证方，改写成「为什么写成发行方#sub」；装配文件、领域与演示脚本里「票 10 第 1 项」改成指名「申报发送通道」一项，票面同类序位指针一并改（`0f886080`）。
+9. **GLOSSARY**：「申报提交尝试」定义随「已登记待发送」改一句（`789ae7b4`）。
+10. **用例**：三口补一条面级真库用例——三种授予过期或撤销之后，三口都答 `OPERATOR_NOT_GRANTED`、不写；「建案带客户归属」那条改成带未知字段 `customer` / `sourceRef`，真按未知字段拒（`5751c54c`）。
+
+不修（协调方处理）：`commit()` 撞到已有记录时不比内容指纹、并发异内容提交答 `EXISTING_VERSION`——与票 125 同形，协调方进 main 时在票 125 加一段，本分支不动。
+
+未采纳：无。
+
+验证：`scripts/test-full.sh` 覆盖 `./internal/customscompliance/...`、`./internal/accessidentity/...`、`./cmd/parcel-api/...`、`./cmd/parcel-dispatch/...`、`./cmd/parcel-customs-register/...`、`./cmd/parcel-access-register/...` 与两者其余的反向依赖、`./internal/architecture/...`、`./migrations/...`，全部 ok；`go build ./...`、`go vet ./...` 干净，`gofmt -l` 空；评审修订的每笔提交单独 build 与 vet 都过。迁移改号之后在 55432 的一次性库上重灌 `seed.sh` 退 0，灌完即删库。没有用 `git stash`。
