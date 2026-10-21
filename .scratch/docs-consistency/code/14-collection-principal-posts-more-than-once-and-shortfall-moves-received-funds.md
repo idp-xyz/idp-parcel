@@ -111,3 +111,10 @@ M：唯一约束（迁移另取号）与编排判重；移位金额核对；短�
 - **N5**：编排层 `TestASurplusLandsOnlyFromReceivedFundsAndOnlyOnce` 补溢款事项报少答 `NOT_ACCEPTED`；UC-CR-001 结果表「未受理」一行补这半句。
 
 AT：`AT-CR-008` 另多一处并发半边点名（`concurrency_test.go::TestAFactPostedConcurrentlyOutsideTheLockAnswersConflict`），盘点①该行随之加注。
+
+第 1 轮修完的验证（rebase 到 main `cbcaaa873` 之后，无冲突）：
+
+- `go build ./...`、`go vet`（CR 各包、`cmd/parcel-collection-register`、`cmd/parcel-api`）、`gofmt -l`：干净。
+- `TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/collectionremittance/... ./cmd/parcel-api/... ./cmd/parcel-collection-register/... ./internal/architecture/... ./migrations/... ./internal/platform/migrate/...`：9 个有测试的包 ok。头一轮 `internal/architecture` 的 PBC-08 门禁报 `SubledgerStore.LockLedger` 缺无事务负向证据，已在 `transaction_guard_test.go` 补上后全绿。
+- 新用例（含两条并发屏障用例与无事务负向断言）`-count=3`：ok。
+- 种子头注的重放口径在一次性库 `code14seed` 上实跑：灌完后原样重放本节全答已在册；换标识的入账、到账移位答 `CONTENT_CONFLICT`（2），清分、短款答 `UNDERFUNDED`（4）；用完已删库。
