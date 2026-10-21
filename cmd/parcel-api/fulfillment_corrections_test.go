@@ -563,7 +563,7 @@ func TestAnAdoptionRacingAWithdrawalOfTheSameCommissionSerializesOnItsStart(t *t
 	}
 }
 
-// Covers: AT-TF-310 的生产装配半边（ADR-0232 决定一，评审 B1 复现）——采用答回显带代次；解除之后，解除之前那一次采用请求原样重交答
+// Covers: AT-TF-310 的生产装配半边（ADR-0232 决定一）——采用答回显带代次；解除之后，解除之前那一次采用请求原样重交答
 // 200 ADOPTION_ALREADY_WITHDRAWN 并回显那一次解除，不落新一代；点名接在第 1 代之后的再采用落成第 2 代、委托重新开始；再采用之后第 1 代
 // 那一次解除原样重交答 200 EXISTING_WITHDRAWAL，不解除第 2 代。册上采用 2 行、解除 1 行。
 func TestReplayingAnOldAdoptionOrWithdrawalHasNoNewEffect(t *testing.T) {

@@ -107,7 +107,7 @@ func TestAWithdrawalRefusesInputsThatContradictTheRegister(t *testing.T) {
 	}
 }
 
-// Covers: AT-TF-308 的同刻并列那一格（评审复现）——委托的开始依的是先采用、同刻、依据字面序较大的那一段；解除一段不相干的段，开始所依的
+// Covers: AT-TF-308 的同刻并列那一格——委托的开始依的是先采用、同刻、依据字面序较大的那一段；解除一段不相干的段，开始所依的
 // 那一段还在，记 KEPT、开始原样，不按字面序换成另一条同刻的依据。
 func TestWithdrawingAnUnrelatedSegmentUnderATieKeepsTheStart(t *testing.T) {
 	commission := submittedCommission(t)

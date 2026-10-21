@@ -8,7 +8,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 )
 
-// Covers: ADR-0232 决定七的账单匹配那一半（评审 4）——账单一行点名的预期成本版本已撤下（失效纠错版本）或已有后继（被撤下、被纠正过的
+// Covers: AT-SA-211（ADR-0232 决定七的账单匹配那一半）——账单一行点名的预期成本版本已撤下（失效纠错版本）或已有后继（被撤下、被纠正过的
 // 原版），都答 EXPECTED_COST_NOT_CURRENT、带出是哪一行哪一版与它的后继，不落账单、不交意图；点名当前那一版照常匹配。
 func TestABillLineNamingANonCurrentExpectedCostIsNotMatched(t *testing.T) {
 	fixture := newBillFixture(t)
