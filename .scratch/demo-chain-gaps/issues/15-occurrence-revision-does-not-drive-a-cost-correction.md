@@ -28,3 +28,9 @@ Blocked by: [27](./27-transport-charge-occurrences-are-registered-and-handed-off
 ## 既有票
 
 none
+
+## 文档自洽审计复核（2026-10-21）
+
+审计条目：[audit/sa-cr.md](../../docs-consistency/audit/sa-cr.md) M8（归 C，审计已点名本票，不另立）：SA CONTEXT「供应商成本与共享分摊」与 UC-SA-002 `AT-SA-164` 写发生项有效性更正「追加新的预期成本版本表达计价纠错」，同表 `AT-SA-186` 与代码是「修订版不发起、不记」（结果 `OCCURRENCE_REVISION_NOT_TRIGGERED`，ADR-0208 决定五把怎样驱动纠错归本票）。按 main `67438a0f` 复核，SA 代码未改，现象仍在。
+
+分级：R1，与上线就绪评估「代决复核追加」一致（本票随票 57 的发生项失效入口一并升）。文档侧（`AT-SA-164` 注「未实现，见票 15」并与 `AT-SA-186` 互指）由修订票 docs-consistency/09 做；本票落地时去掉那条注。

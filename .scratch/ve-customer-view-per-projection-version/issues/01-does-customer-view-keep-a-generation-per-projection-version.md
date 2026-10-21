@@ -53,3 +53,9 @@ VE CONTEXT「形成新版本并标明更正或替代关系；原发布历史保�
   一段历史的第二份索引，一决策一处定义容不下它。main 现行形状（FindCurrent+版本守卫）即
   长期口径，`dca024a` 的 FindByVersion 形状不再是待裁的另一半。若将来出现「客户要求回看某版
   投影对应视图」的真实诉求，那是新的披露需求，按新票走披露决定面，不重开本问。
+
+## 文档自洽审计复核（2026-10-21）
+
+[audit/ve.md](../../docs-consistency/audit/ve.md) VE-01 指出：本票裁「不需要按投影版本留代」时所凭的前提——「main 的视图链……CONTEXT『原发布历史保留』已保证历史不丢」——在代码里不成立。`adapters/postgres/customer_view.go` 的 `CustomerViews.Save` 替代时原地 `UPDATE` 当前那一行（主键（租户，客户账户，包裹）），已发布的前一版读不回；派生编排又按投影版本换代。按 main `67438a0f` 复核，现象仍在。
+
+本票的结论（客户视图不按投影版本各留一代）不变，也与 VE CONTEXT 一致；代码缺陷立为 [docs-consistency/code/05](../../docs-consistency/code/05-customer-tracking-view-overwrites-published-versions.md)（R1），本票不重开。

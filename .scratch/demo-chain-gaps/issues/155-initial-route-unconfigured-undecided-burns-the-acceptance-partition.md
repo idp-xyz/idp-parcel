@@ -30,3 +30,16 @@ Blocked by: 无
 ## 既有票
 
 [131](./131-network-reassessment-undecided-is-split-by-reason.md)（复核一路，已修）；[154](./154-network-reassessment-not-judged-triggers-resume-after-registration.md)（续办）。
+
+## 文档自洽审计复核（2026-10-21）
+
+审计条目：[audit/nr-no.md](../../docs-consistency/audit/nr-no.md) H1（归 C，高）落在本票，不另立；它把本票的范围扩大了两处：
+
+1. **不只是未配置类**：最低成本并列（`domain.RankingTied` → `RouteCandidatesTied`）、成本待判断、不可计价、币种不齐也一样落包裹级未决并整封回滚重投，重投多少次都不变。NR CONTEXT「路由形成与选择」要的是「初始路由遇并列既不形成计划也不形成无当前有效路由，保留全部候选与并列理由并保持可续办」；今天并列候选与理由只在内存结果里，信封落 `ABANDONED` 之后什么也没留下。CONTEXT 承认首发形态下「单维恰恰最容易打平」，并列会是常见情形。
+2. **兄弟包裹连坐**：`adapters/postgres/initial_route.go` 的 `InitialRoutes.Save` 走 `RequireExecutor`、与消费门同一事务，整封回滚时同一委托里已判成的包裹计划一起撤掉，与 UC-NR-001「某个包裹未决或无路由不回滚其他包裹已经合法形成的计划」、`AT-NR-012` 相反。
+
+按 main `67438a0f` 复核，`adapters/parcelshipment/route_on_acceptance.go` 的 `outcomeToConsumption` 仍是「任一件 `ParcelRouteUndecided` 即 `ErrRouteHandoffUndecided`」，现象全在。
+
+扩充后的最小修法：初始路由的持久未决（并列、各未配置格、成本待判断、不可计价、币种不齐）照 ADR-0235 决定一、二的形状入账并留下原因；并列候选与并列理由落库；逐包裹提交，判成的那几件照常形成计划，不连坐。「要裁的」两件不变，再加一件：并列的续办入口（授权角色人工选择，UC-NR-001「人工选择」）是否同票。
+
+分级建议（文档自洽 02）：R1——第一天就撞（单维成本并列常见），后果是整单无路由且不留痕，无绕法。由协调方定稿。
