@@ -204,7 +204,7 @@ func CheckLayerConsistency(existing []LayerFact, incoming LayerFact) error {
 
 // wellFormed 守住放行事实与层次的配对：只有放行层带放行事实，且放行范围就是结果范围
 // （接收编排两头都这么落）。放行层缺放行事实只放过在册那一侧——放行事实有自己的落点
-// 之前，放行层只以分层事实落库，那批存量说不出种类；新到的放行层由调用方另行要求带着它。
+// 之前，放行层只以分层事实落库，那批存量说不出种类；新到的放行层在核对入口另行要求带着它。
 func (fact LayerFact) wellFormed() error {
 	if !fact.Result.layer.valid() {
 		return ErrInvalidExternalResult
@@ -233,8 +233,8 @@ func contradicts(one, other LayerFact) bool {
 		return one.Result.occurredAt.Equal(other.Result.occurredAt) &&
 			one.Result.rawSemantics != other.Result.rawSemantics
 	default:
-		// 监管接收、业务受理、核定税费与处置决定对一版提交只给一个结论：换一种说法要么是
-		// 矛盾、要么是更正，而更正得由来源指明，不能从业务时间猜。
+		// 监管接收、业务受理、监管核定税费与监管处置决定对一版提交只给一个结论：换一种说法
+		// 要么是矛盾、要么是更正，而更正得由来源指明，不能从业务时间猜。
 		return one.Result.rawSemantics != other.Result.rawSemantics
 	}
 }
