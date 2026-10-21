@@ -71,8 +71,11 @@
 | `AT-VE-074` | 两案确认重复 | 主案继续，重复案以已归并关闭，历史不删 |
 | `AT-VE-075` | 无执行授权 | 保持协调状态，不伪造源动作或通知 |
 | `AT-VE-183` | 出发读数里袋那一格阻断（由袋里一件被关务判为阻断的包裹推出） | 信号落在被扣的那一件上；袋那一格不另形成信号，同一次违规不在分诊里记两回（ADR-0225 决定七） |
+| `AT-VE-193` | 移动事实的出发读数里有一件阻断 | 那一件按租户登记的出发门禁阻断信号规则形成异常信号、交分诊；没登记规则如实不形成，投影照派生 |
+| `AT-VE-194` | 移动事实那一路读出发门禁阻断信号规则读不动 | 整封回滚、记未决待重投，投影与信号同生共死；不把这一次没交进分诊吞成入账 |
+| `AT-VE-195` | 移动事实的更正版到达 | 读数沿用原版，更正版不再形成第二次信号 |
 
-移动事实已形成那一路的消费验收暂挂在 [UC-TF-005](../transport-fulfillment/UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md) `AT-TF-158`、`AT-TF-160`、`AT-TF-161`（出发门禁阻断信号的形成、搁置与更正版不再命中；ADR-0205 文末补记），待 VE owner 复核时迁入本用例或另编 `AT-VE` 号。这一类信号尚无恢复边界、不带事实依据，见同一补记的越权风险点 22、23。
+移动事实已形成那一路的信号验收是上表 `AT-VE-193`–`195`（出发门禁阻断信号的形成、搁置与更正版不再命中；[ADR-0205](../../adr/0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md) 文末补记），投影那一半在 [UC-VE-002](./UC-VE-002-BUILD-TRACKING-PROJECTION.md)。这一类信号与替代链分叉的冲突信号今天尚无恢复边界、不带事实依据与因果条件，与本用例输入语义「信号」一行和 `AT-VE-065` 相反，见同一补记的越权风险点 22、23；由票 [demo-chain-gaps/135](../../../.scratch/demo-chain-gaps/issues/135-departure-gate-signals-carry-causal-condition-and-fact-basis.md) 补齐。
 
 ## 给开发的交接
 
