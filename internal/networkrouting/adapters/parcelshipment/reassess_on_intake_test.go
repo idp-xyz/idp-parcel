@@ -154,6 +154,20 @@ func (double *reassessStoreDouble) LatestTriggerAt(
 	return latest, !latest.IsZero(), nil
 }
 
+// LatestNewPlan 与真库同一口径：同判断键、带新计划的复核里取触发业务时间最晚那一次。
+func (double *reassessStoreDouble) LatestNewPlan(
+	_ context.Context, key nrdomain.InitialRouteJudgmentKey,
+) (nrdomain.InitialRoutePlan, bool, error) {
+	var latest nrports.ReassessmentRecord
+	found := false
+	for _, record := range double.byCorrelation {
+		if record.Key == key && record.HasNewPlan && (!found || record.TriggerOccurredAt.After(latest.TriggerOccurredAt)) {
+			latest, found = record, true
+		}
+	}
+	return latest.NewPlan, found, nil
+}
+
 func (double *reassessStoreDouble) RecordNotJudged(_ context.Context, record nrports.NotJudgedTrigger) error {
 	if double.notJudged == nil {
 		double.notJudged = map[nrdomain.RequestCorrelationID]nrports.NotJudgedTrigger{}

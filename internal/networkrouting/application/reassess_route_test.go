@@ -80,8 +80,9 @@ func mustQualified(t *testing.T, id string) domain.RouteCandidate {
 }
 
 type applicabilityStoreDouble struct {
-	byPlan map[domain.RoutePlanVersionID]domain.PlanApplicability
-	saved  []domain.PlanApplicability
+	byPlan  map[domain.RoutePlanVersionID]domain.PlanApplicability
+	saved   []domain.PlanApplicability
+	findErr error
 }
 
 func newApplicabilityStore() *applicabilityStoreDouble {
@@ -92,6 +93,9 @@ func (double *applicabilityStoreDouble) FindByPlan(
 	_ context.Context,
 	plan domain.RoutePlanVersionID,
 ) (domain.PlanApplicability, bool, error) {
+	if double.findErr != nil {
+		return domain.PlanApplicability{}, false, double.findErr
+	}
 	applicability, found := double.byPlan[plan]
 	return applicability, found, nil
 }
@@ -107,7 +111,10 @@ type reassessmentStoreDouble struct {
 	notJudged     map[domain.RequestCorrelationID]ports.NotJudgedTrigger
 	notJudgedErr  error
 	latestErr     error
-	saved         int
+	newPlanErr    error
+	// onLatest 在取判断键锁那一刻插进来，演锁前另一笔事务刚提交的东西。
+	onLatest func()
+	saved    int
 }
 
 func newReassessmentStore() *reassessmentStoreDouble {
@@ -125,7 +132,33 @@ func (double *reassessmentStoreDouble) LatestTriggerAt(
 	if double.latestErr != nil {
 		return time.Time{}, false, double.latestErr
 	}
+	if double.onLatest != nil {
+		double.onLatest()
+	}
 	return latestTriggerAt(double.byCorrelation, key)
+}
+
+// LatestNewPlan 与真库同一口径：同判断键、带新计划的复核里取触发业务时间最晚那一次，同一时刻取处理时刻较晚的。
+func (double *reassessmentStoreDouble) LatestNewPlan(
+	_ context.Context,
+	key domain.InitialRouteJudgmentKey,
+) (domain.InitialRoutePlan, bool, error) {
+	if double.newPlanErr != nil {
+		return domain.InitialRoutePlan{}, false, double.newPlanErr
+	}
+	var latest ports.ReassessmentRecord
+	found := false
+	for _, record := range double.byCorrelation {
+		if record.Key != key || !record.HasNewPlan {
+			continue
+		}
+		later := record.TriggerOccurredAt.After(latest.TriggerOccurredAt) ||
+			(record.TriggerOccurredAt.Equal(latest.TriggerOccurredAt) && record.ReassessedAt.After(latest.ReassessedAt))
+		if !found || later {
+			latest, found = record, true
+		}
+	}
+	return latest.NewPlan, found, nil
 }
 
 func latestTriggerAt(

@@ -337,6 +337,50 @@ func (repository *RouteReassessments) LatestTriggerAt(
 	return latest.UTC(), true, nil
 }
 
+// LatestNewPlan 交回这一判断键在册复核里最近一次形成的新计划。同一时刻取处理时刻较晚的：同一判断键的复核在
+// LatestTriggerAt 的锁里串行，后判的那一次读过先判的结果，处理时刻在其后。迁移 0022 之前的行没有触发业务时间，排在
+// 带时间的行之后。
+func (repository *RouteReassessments) LatestNewPlan(
+	ctx context.Context,
+	key domain.InitialRouteJudgmentKey,
+) (domain.InitialRoutePlan, bool, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return domain.InitialRoutePlan{}, false, fmt.Errorf("latest reassessment new plan: %w", err)
+	}
+	var planJSON []byte
+	err = querier.QueryRow(ctx,
+		`SELECT new_plan
+		   FROM network_routing.route_reassessment
+		  WHERE tenant_id = $1
+		    AND customer_account_id = $2
+		    AND shipment_request_id = $3
+		    AND acceptance_baseline = $4
+		    AND declared_parcel_id = $5
+		    AND service_purpose = $6
+		    AND new_plan IS NOT NULL
+		  ORDER BY trigger_occurred_at DESC NULLS LAST, reassessed_at DESC
+		  LIMIT 1`,
+		key.TenantID.String(),
+		key.CustomerAccountID.String(),
+		key.ShipmentRequestID.String(),
+		key.AcceptanceBaseline.String(),
+		key.DeclaredParcelID.String(),
+		key.ServicePurpose.String(),
+	).Scan(&planJSON)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.InitialRoutePlan{}, false, nil
+	}
+	if err != nil {
+		return domain.InitialRoutePlan{}, false, fmt.Errorf("latest reassessment new plan: %w", err)
+	}
+	plan, err := rebuildPlan(key, planJSON)
+	if err != nil {
+		return domain.InitialRoutePlan{}, false, fmt.Errorf("latest reassessment new plan: %w", err)
+	}
+	return plan, true, nil
+}
+
 type reassessmentRowColumns struct {
 	conclusion     string
 	reviewedPlan   *string
