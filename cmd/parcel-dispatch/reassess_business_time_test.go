@@ -32,6 +32,7 @@ type reassessBothLanesFixture struct {
 	register *tfapplication.RegisterTransportHandoverHandler
 	handover dispatch.Consumer
 	intake   dispatch.Consumer
+	evidence *carriedGeoEvidence
 }
 
 // newReassessBothLanesFixture 接交接与收寄采用两路到同一份复核编排上：交接那一路走生产的 Over 与哨兵名单，收寄采用那一路
@@ -88,6 +89,7 @@ func newReassessBothLanesFixture(t *testing.T) *reassessBothLanesFixture {
 		register: newHandoverRegistration(t, syn.db, outboxStore),
 		handover: handoverLane,
 		intake:   intakeConsumer,
+		evidence: evidence,
 	}
 }
 
@@ -100,9 +102,11 @@ func (fixture *reassessBothLanesFixture) handoverInto(t *testing.T, tag, receivi
 	return registerHandover(t, fixture.syn, fixture.register, command)
 }
 
-// intakeAt 落一份`采用`格的节点收寄采用记录，收寄地点与业务时间由用例给，并在同一事务经 PS 真交接适配器交出信封；交回
-// 信封 ID（前后两次列 outbox 取差，不在测试里重拼）。
-func (fixture *reassessBothLanesFixture) intakeAt(t *testing.T, version, place string, at time.Time) string {
+// intakeAt 落一份`采用`格的收寄采用记录，来源类型（节点收寄或场外揽收）、收寄地点与业务时间由用例给，并在同一事务经 PS
+// 真交接适配器交出信封；交回信封 ID（前后两次列 outbox 取差，不在测试里重拼）。
+func (fixture *reassessBothLanesFixture) intakeAt(
+	t *testing.T, kind psdomain.IntakeSourceKind, version, place string, at time.Time,
+) string {
 	t.Helper()
 	syn := fixture.syn
 	ctx := t.Context()
@@ -121,7 +125,7 @@ func (fixture *reassessBothLanesFixture) intakeAt(t *testing.T, version, place s
 	key := psports.IntakeAdoptionKey{
 		TenantID: syn.identity.TenantID(),
 		Parcel:   mustPS(t, psdomain.NewDeclaredParcelID, reassessHandoverParcel),
-		Kind:     psdomain.NodeIntakeSource,
+		Kind:     kind,
 		Version:  mustPS(t, psdomain.NewSourceResultVersion, version),
 	}
 	source, err := psdomain.NewIntakeSource(psdomain.IntakeSourceSpec{
@@ -265,7 +269,7 @@ func TestAnEarlierIntakeArrivingAfterAJudgedHandoverIsNotJudgedOnTheDatabase(t *
 	fixture := newReassessBothLanesFixture(t)
 	handover := fixture.handoverInto(t, "hub", reassessHandoverReceiving, reassessHandoverAt)
 	intakeAt := reassessHandoverAt.Add(-48 * time.Hour)
-	intake := fixture.intakeAt(t, "SYN-INTAKE/132/v1", "SYN-NODE-SHA-HUB", intakeAt)
+	intake := fixture.intakeAt(t, psdomain.NodeIntakeSource, "SYN-INTAKE/132/v1", "SYN-NODE-SHA-HUB", intakeAt)
 
 	deliver(t, fixture.syn, fixture.handover, handover, handover)
 	deliver(t, fixture.syn, fixture.intake, intake, intake)
@@ -293,7 +297,7 @@ func TestOutOfOrderReassessmentTriggersHaveADeterminedAnswerOnTheDatabase(t *tes
 	for name, intakeFirst := range map[string]bool{"按业务时间到达": true, "较早的收寄后到": false} {
 		t.Run(name, func(t *testing.T) {
 			fixture := newReassessBothLanesFixture(t)
-			intake := fixture.intakeAt(t, "SYN-INTAKE/132/v1", "SYN-NODE-SHA-HUB", reassessHandoverAt.Add(-48*time.Hour))
+			intake := fixture.intakeAt(t, psdomain.NodeIntakeSource, "SYN-INTAKE/132/v1", "SYN-NODE-SHA-HUB", reassessHandoverAt.Add(-48*time.Hour))
 			handover := fixture.handoverInto(t, "hub", reassessHandoverReceiving, reassessHandoverAt)
 			if intakeFirst {
 				deliver(t, fixture.syn, fixture.intake, intake, intake)

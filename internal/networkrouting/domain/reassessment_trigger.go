@@ -49,8 +49,8 @@ func (kind ControlEvidenceKind) String() string {
 }
 
 // EstablishesControllableNode 答这一格控制依据是否建立当前可控节点（CONTEXT「当前可控节点」）：只有节点收寄与把包裹
-// 交进声明的接收节点的权威运输交接。也只有这两格的位置是节点码——适用性复核比节点、切已执行前缀、折「位于当前可控
-// 节点」都问这一处。场外揽收照复核却不建立（ADR-0249 决定二）；线索连触发都立不成。
+// 交进声明的接收节点的权威运输交接。也只有这两格的位置是节点码。凡问「包裹在不在节点上」的判断都问这一处，不另列名单。
+// 场外揽收照复核却不建立（ADR-0249 决定二）；线索连触发都立不成。
 func (kind ControlEvidenceKind) EstablishesControllableNode() bool {
 	return kind == NodeIntakeControl || kind == TransportHandoverControl
 }

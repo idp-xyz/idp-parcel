@@ -175,25 +175,7 @@ func saveThroughSingaporePlan(t *testing.T, syn *synVerticalFixture) {
 // savePlan 给 SYN 委托的判断键落一份真经 NR 领域形成的计划，沿给定节点逐段连成节点间段，选中给定候选。
 func savePlan(t *testing.T, syn *synVerticalFixture, selected string, nodes ...string) {
 	t.Helper()
-	legs := make([]nrdomain.PlannedLeg, 0, len(nodes)-1)
-	for i := 1; i < len(nodes); i++ {
-		start := reassessHandoverAt.Add(time.Duration(i-len(nodes)) * 24 * time.Hour)
-		window, err := nrdomain.NewPlannedTimeWindow(start, start.Add(24*time.Hour),
-			mustNR(t, nrdomain.NewWindowBasisReference, "SYN-CALENDAR/v1"))
-		if err != nil {
-			t.Fatalf("段窗口：%v", err)
-		}
-		leg, err := nrdomain.NewPlannedLeg(nrdomain.PlannedLegSpec{
-			From:        mustNR(t, nrdomain.NewPlanNodeReference, nodes[i-1]),
-			To:          mustNR(t, nrdomain.NewPlanNodeReference, nodes[i]),
-			Responsible: mustNR(t, nrdomain.NewResponsiblePartyReference, "SYN-PARTY-01"),
-			Window:      window,
-		})
-		if err != nil {
-			t.Fatalf("计划段：%v", err)
-		}
-		legs = append(legs, leg)
-	}
+	legs := legsThrough(t, nodes...)
 	candidate, err := nrdomain.NewRouteCandidate(mustNR(t, nrdomain.NewCandidateID, selected),
 		nrdomain.CandidateQualified, nrdomain.CandidateReason{})
 	if err != nil {
@@ -224,6 +206,31 @@ func savePlan(t *testing.T, syn *synVerticalFixture, selected string, nodes ...s
 		}
 		return err
 	})
+}
+
+// legsThrough 沿给定节点逐段连成节点间段，每段一天，末段止于 reassessHandoverAt。
+func legsThrough(t *testing.T, nodes ...string) []nrdomain.PlannedLeg {
+	t.Helper()
+	legs := make([]nrdomain.PlannedLeg, 0, len(nodes)-1)
+	for i := 1; i < len(nodes); i++ {
+		start := reassessHandoverAt.Add(time.Duration(i-len(nodes)) * 24 * time.Hour)
+		window, err := nrdomain.NewPlannedTimeWindow(start, start.Add(24*time.Hour),
+			mustNR(t, nrdomain.NewWindowBasisReference, "SYN-CALENDAR/v1"))
+		if err != nil {
+			t.Fatalf("段窗口：%v", err)
+		}
+		leg, err := nrdomain.NewPlannedLeg(nrdomain.PlannedLegSpec{
+			From:        mustNR(t, nrdomain.NewPlanNodeReference, nodes[i-1]),
+			To:          mustNR(t, nrdomain.NewPlanNodeReference, nodes[i]),
+			Responsible: mustNR(t, nrdomain.NewResponsiblePartyReference, "SYN-PARTY-01"),
+			Window:      window,
+		})
+		if err != nil {
+			t.Fatalf("计划段：%v", err)
+		}
+		legs = append(legs, leg)
+	}
+	return legs
 }
 
 // handoverCommand 是一次交接的登记命令。receiving 空即不声明接收节点；releasing 同理。
