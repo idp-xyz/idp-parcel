@@ -1,7 +1,7 @@
 # 35 PS 取消与边界事实的先后冲突：面单渠道一侧不比时间、冲突没有解开的决定面
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-code21（见文末「完成记录」；解开冲突的决定面拆到 [code/76](./76-a-cancellation-order-conflict-has-no-resolution-decision-face.md)）。此前 needs-triage——建议 R2（上线后尽快）：看得见的卡住。网络服务一侧，取消已提交之后才到、发生不晚于取消的收寄，采用停在未决 `CANCELLATION_ORDER_CONFLICT`，此后没有任何口能解开它，包裹在节点手里却没有责任起点，也不触发收寄后的路由复核；面单渠道服务一侧，同一情形今天答 `CANCELLATION_STANDS`，客户被告知已取消、承运商却已收走。今天取消授权停在未配置，取消形成不了，两种情形都还到不了；租户一登记取消授权即生效。2026-10-21 文档自洽 06 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc06。分级由协调方定稿。
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code21（见文末「完成记录」；解开冲突的决定面拆到 [code/76](./76-a-cancellation-order-conflict-has-no-resolution-decision-face.md)）。此前 needs-triage——建议 R2（上线后尽快）：看得见的卡住。网络服务一侧，取消已提交之后才到、发生不晚于取消的收寄，采用停在未决 `CANCELLATION_ORDER_CONFLICT`，此后没有任何口能解开它，包裹在节点手里却没有责任起点，也不触发收寄后的路由复核；面单渠道服务一侧，同一情形今天答 `CANCELLATION_STANDS`，客户被告知已取消、承运商却已收走。今天取消授权停在未配置，取消形成不了，两种情形都还到不了；租户一登记取消授权即生效。2026-10-21 文档自洽 06 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc06。分级由协调方定稿。
 Blocked by: 无（面单渠道提交边界那一半与 [code/21](./21-label-channel-parcel-cancellation-ignores-carrier-pickup-and-finals.md) 同一编排，宜同批或排在其后）
 出处：[audit/ps.md](../audit/ps.md) PS-03（B），代决 [ADR-0254](../../../docs/adr/0254-cancellation-and-boundary-fact-order-is-judged-by-their-business-times-and-a-late-earlier-boundary-fact-is-a-fact-conflict.md)；UC-PS-003「给开发的交接」、UC-PS-004「给开发的交接」`AT-PS-108` 一行、UC-PS-006「给开发的交接」事实冲突一行。
 
@@ -111,3 +111,10 @@ M：面单渠道终局判断多比一次时间并多一格不形成原因；收�
 - `go build ./...`、`go vet ./...` 干净，`gofmt -l cmd internal migrations tests tools` 无输出。
 - `TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/parcelshipment/... ./cmd/parcel-api ./cmd/parcel-dispatch ./tests/bentocontract/... ./internal/transportfulfillment/... ./internal/architecture/... ./migrations/...`：36 个包 ok，零失败。
 - 新用例与被改用例另跑 `-count=3`（范围 `./internal/parcelshipment/... ./cmd/parcel-api ./cmd/parcel-dispatch`）：全部 ok。
+
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-code21`（code/21、35 同一分支）由协调方 rebase 到 main `c83f8e8e6`（无冲突）后快进，tip `e57a2f271`；隔离评审无阻断，按协调方裁定补了交易与关闭两路照冲突册作答（ADR-0254 第 3 格字面），其余建议已收。
+- 协调方在 tip 上单独提交重算的 AT 计数与重生成的机制清点；ADR 索引无变化；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净；admin-web `tsc -b --noEmit`、`run-tests.mjs`、`vite build` 都过；演示种子在一次性库上灌通（迁移 `parcel_shipment/0029` 一并施加），用后删库。
+- 去向：code/76（解开冲突的业务决定面，待 PS owner 认可形状）、code/77（取消、采用、面单终局按包裹串行，R2）。

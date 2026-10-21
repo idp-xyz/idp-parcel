@@ -1,7 +1,7 @@
 # 21 PS 面单渠道服务包裹的取消不核实际承运商收寄、面单服务终局边界和既有终局
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code21（见文末「完成记录」）。此前 ready-for-agent——R1（上线前必修）：答错且破坏终局不变量。逐包裹取消已在生产装配（`cmd/parcel-api/assemble_cancellation.go`）；面单渠道包裹在承运商收寄之后、甚至已有终局之后仍可能交出 `PARCEL_CANCELLED`。今天取消授权停在 `AUTHORITY_UNCONFIGURED` 暂时挡住，租户一登记取消授权（上线实施的常规一步）这条路就生效，没有绕法。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code21（见文末「完成记录」）。此前 ready-for-agent——R1（上线前必修）：答错且破坏终局不变量。逐包裹取消已在生产装配（`cmd/parcel-api/assemble_cancellation.go`）；面单渠道包裹在承运商收寄之后、甚至已有终局之后仍可能交出 `PARCEL_CANCELLED`。今天取消授权停在 `AUTHORITY_UNCONFIGURED` 暂时挡住，租户一登记取消授权（上线实施的常规一步）这条路就生效，没有绕法。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
 Blocked by: 无
 出处：[audit/ps.md](../audit/ps.md) PS-02，取证 [audit/ps-code.md](../audit/ps-code.md) 第 2 条（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，现象仍在）。
 
@@ -108,3 +108,10 @@ M：取消编排在提交边界上加两道读——当前有效终局、按服�
 - 收口前 `git rebase main`（`8d68c7bab`），无冲突；完成记录里的 SHA 已换成 rebase 后的。
 
 修订后验证见 code/35 评审记录。
+
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-code21`（code/21、35 同一分支）由协调方 rebase 到 main `c83f8e8e6`（无冲突）后快进，tip `e57a2f271`；隔离评审无阻断，按协调方裁定补了交易与关闭两路照冲突册作答（ADR-0254 第 3 格字面），其余建议已收。
+- 协调方在 tip 上单独提交重算的 AT 计数与重生成的机制清点；ADR 索引无变化；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净；admin-web `tsc -b --noEmit`、`run-tests.mjs`、`vite build` 都过；演示种子在一次性库上灌通（迁移 `parcel_shipment/0029` 一并施加），用后删库。
+- 去向：code/76（解开冲突的业务决定面，待 PS owner 认可形状）、code/77（取消、采用、面单终局按包裹串行，R2）。
