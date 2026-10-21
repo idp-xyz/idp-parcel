@@ -45,6 +45,8 @@ type handoverSpec struct {
 	verdict   tfdomain.HandoverVerdict
 	receiving string
 	releasing string
+	// at 是交接的判断时刻，零值取 handedOverAt。
+	at time.Time
 }
 
 func formHandover(t *testing.T, spec handoverSpec) tfdomain.TransportHandover {
@@ -66,6 +68,9 @@ func formHandover(t *testing.T, spec handoverSpec) tfdomain.TransportHandover {
 		Version:    value(t, tfdomain.NewHandoverResultVersion, spec.version),
 		JudgedAt:   handedOverAt,
 		Nodes:      nodes,
+	}
+	if !spec.at.IsZero() {
+		formed.JudgedAt = spec.at
 	}
 	if spec.verdict == tfdomain.ObjectHandedOver {
 		formed.ReleasingEvidence = value(t, tfdomain.NewHandoverEvidenceReference, "evidence-release")
@@ -689,5 +694,47 @@ func TestAnUnconfiguredPurposeIsLoud(t *testing.T) {
 	if err := unconfigured.HandleRegisteredTransportHandover(context.Background(), envelopeOf(handover)); !errors.Is(
 		err, adapter.ErrUntranslatableAnswer) {
 		t.Fatalf("err = %v, want ErrUntranslatableAnswer", err)
+	}
+}
+
+// Covers: AT-NR-079（更正那一半）——包裹先凭交接 A 进新加坡枢纽、再凭更晚的交接 B 进新加坡末端，两次都判过；之后 A 被更正
+// （仍`已交接`）。更正承继 A 的判断时刻，早于当前位置（B），入账为「触发早于当前位置」，不判——ADR-0235 部分停用 ADR-0215
+// 决定三的那一格。
+func TestACorrectionOfAHandoverEarlierThanTheCurrentPositionIsNotJudged(t *testing.T) {
+	original := formHandover(t, handoverSpec{
+		object: "parcel-1", version: "handover-a/v1", verdict: tfdomain.ObjectHandedOver, receiving: planTransfer,
+	})
+	later := formHandover(t, handoverSpec{
+		object: "parcel-1", version: "handover-b/v1", verdict: tfdomain.ObjectHandedOver, receiving: planLastMile,
+		at: handedOverAt.Add(time.Hour),
+	})
+	restated, err := original.Correct(tfdomain.HandoverCorrection{
+		Verdict:           tfdomain.ObjectHandedOver,
+		ReleasingEvidence: value(t, tfdomain.NewHandoverEvidenceReference, "evidence-release-2"),
+		ReceivingEvidence: value(t, tfdomain.NewHandoverEvidenceReference, "evidence-receive-2"),
+		Rule:              value(t, tfdomain.NewHandoverRuleReference, "rule/v1"),
+		Version:           value(t, tfdomain.NewHandoverResultVersion, "handover-a/v2"),
+		CorrectedAt:       handedOverAt.Add(2 * time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("correct: %v", err)
+	}
+	built := newSubject(t, newHandoverFinder(original, later, restated), acceptedParcel(t), true)
+	for _, handover := range []tfdomain.TransportHandover{original, later, restated} {
+		if err := built.deliver(t, handover); err != nil {
+			t.Fatalf("deliver %s: %v", handover.Version(), err)
+		}
+	}
+	if n := len(built.reassessments.byCorrelation); n != 2 {
+		t.Fatalf("复核 = %d 条, want 2（A 与 B 各一条，A 的更正没有）", n)
+	}
+	if len(built.reassessments.notJudged) != 1 {
+		t.Fatalf("未判 = %d 行, want 1", len(built.reassessments.notJudged))
+	}
+	for _, noted := range built.reassessments.notJudged {
+		if noted.Reason != nrports.NotJudgedTriggerPrecedesCurrentPosition ||
+			!noted.TriggerOccurredAt.Equal(handedOverAt) || !noted.CurrentPositionAt.Equal(handedOverAt.Add(time.Hour)) {
+			t.Fatalf("未判 = %+v, want 更正那一版早于当前位置 %s", noted, handedOverAt.Add(time.Hour))
+		}
 	}
 }
