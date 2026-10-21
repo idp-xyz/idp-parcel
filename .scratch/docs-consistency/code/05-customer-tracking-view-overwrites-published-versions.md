@@ -1,7 +1,7 @@
 # 05 VE 客户全程追踪视图的已发布版本被原地覆盖，且每个投影新版本都换一代视图
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code05（基于 main `35d181d1c`）。原分级 R1（上线前必修）不变。
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code05（基于 main `35d181d1c`）。原分级 R1（上线前必修）不变。
 Blocked by: 无
 出处：[audit/ve.md](../audit/ve.md) VE-01（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，现象仍在，VE 代码在此期间未改）。
 
@@ -108,3 +108,9 @@ M：迁移另取号，把 `customer_view` 改成版本表加当前标记（照 `
 
 验证（第 2 轮修订后）：`go build ./...`、`go vet ./...`、`gofmt -l cmd internal migrations tools` 干净；`scripts/test-full.sh ./internal/visibilityexception/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./cmd/parcel-ve-register/ ./internal/architecture/... ./migrations/... ./internal/platform/migrate/...` 21 个包 ok，退出码 0。
 
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-code05`（code/05、06 同一分支）tip `318000920` 在 main `35d181d1c` 上快进；两轮隔离评审无阻断，第二轮附变异测试（M1–M6 均被用例抓住）。
+- 协调方在 tip 上单独提交重生成的机制清点；ADR 索引与 AT 计数 `-check` 退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净；演示种子在一次性库上灌通（迁移 `visibility_exception/0028` 一并施加），用后删库。
+- 去向：code/50（并发旧投影信封带回旧依据，R2）、code/51（ETA 客户可见性判断，Blocked by code/07，R2）。

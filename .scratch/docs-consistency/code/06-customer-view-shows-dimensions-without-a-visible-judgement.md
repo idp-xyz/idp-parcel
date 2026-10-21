@@ -1,7 +1,7 @@
 # 06 VE 客户视图的 ETA 维在没有任何客户可见 ETA 判断时也答 `SHOWN`，里程碑维同病较轻
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code05（基于 main `35d181d1c`，接在 code/05 之后）。原分级 R1（上线前必修）不变。
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code05（基于 main `35d181d1c`，接在 code/05 之后）。原分级 R1（上线前必修）不变。
 Blocked by: 无
 出处：[audit/ve.md](../audit/ve.md) VE-02（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，现象仍在）。
 
@@ -86,3 +86,9 @@ S–M：ETA 维加一道与 `FinalDimensionOver` 同形的兜底（读 UC-VE-003
 
 验证同 code/05 评审记录。
 
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-code05`（code/05、06 同一分支）tip `318000920` 在 main `35d181d1c` 上快进；两轮隔离评审无阻断，第二轮附变异测试（M1–M6 均被用例抓住）。
+- 协调方在 tip 上单独提交重生成的机制清点；ADR 索引与 AT 计数 `-check` 退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净；演示种子在一次性库上灌通（迁移 `visibility_exception/0028` 一并施加），用后删库。
+- 去向：code/50（并发旧投影信封带回旧依据，R2）、code/51（ETA 客户可见性判断，Blocked by code/07，R2）。
