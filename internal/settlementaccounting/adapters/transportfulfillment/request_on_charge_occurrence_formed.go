@@ -20,8 +20,8 @@ var (
 	// 同一事务落库，同库同进程下读不回只剩可见性滞后，重投会改变结果。生产装配把它登进 WithUndecidedSentinels。
 	ErrChargeOccurrenceNotVisible = errors.New(
 		"settlement accounting transportfulfillment adapter: charge occurrence is not yet visible")
-	// ErrBuyEvaluationTriggerUndecided 表示触发编排停在自己的未决上（触发册、协议范围读口、请求册、铸造口或交接口）。
-	// 同样是续办，同样进 WithUndecidedSentinels；停在哪一口留在错误正文里。
+	// ErrBuyEvaluationTriggerUndecided 表示触发编排停在自己的未决上（saapplication.BuyEvaluationTriggerUndecidedReason 的
+	// 各格，BUY 发起停办册记不下也在其中）。同样是续办，同样进 WithUndecidedSentinels；停在哪一口留在错误正文里。
 	ErrBuyEvaluationTriggerUndecided = errors.New(
 		"settlement accounting transportfulfillment adapter: triggering the buy evaluation is undecided")
 	// ErrChargeOccurrenceInconsistent 表示按键取回的发生项指着另一个键。提供方仓储不变量已破，不是等谁；禁止进

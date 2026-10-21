@@ -635,8 +635,8 @@ var sellEvaluationRequestSubmittedUndecidedSentinels = []error{
 // 恢复动作都是等依赖、重投：
 //   - satransport.ErrChargeOccurrenceNotVisible——信封所指的发生项还读不回（发生项与信封同事务落库，读不回只剩可见性
 //     滞后），或登记册自己答不出。
-//   - satransport.ErrBuyEvaluationTriggerUndecided——触发编排停在自己的未决上：BUY 触发册、协议范围读口（PC 读不动）、
-//     请求册、铸造口或交信封。停在哪一口写在错误正文里。
+//   - satransport.ErrBuyEvaluationTriggerUndecided——触发编排停在自己的未决上（saapplication.BuyEvaluationTriggerUndecidedReason
+//     的各格，BUY 发起停办册记不下也在其中）。停在哪一口写在错误正文里。
 //
 // 不在名单里的：
 //   - 入账定局的各格不是错误，处理方答 nil——已发起（含已存在）、没登这个原因、登了却没登费用项目、修订版不经本路发起。
@@ -2355,7 +2355,8 @@ func adoptDutyPaymentVerificationConsumer(
 // 跨上下文翻译只在 SA 的 `adapters/parcelpricing`；SA application 不 import PP。
 //
 // 消费门与本体读的是同一只 BUY 读口：消费门取回指交外层，本体按评价引用自己再读结果与金额，命令上不带金额
-// （FormSupplierExpectedCostCommand 头注）。请求册与预期成本库都是真册；请求册不记状态，评价采用不了时不改记任何册。
+// （FormSupplierExpectedCostCommand 头注）。请求册与预期成本库都是真册；请求册不记状态，采用不了时在请求册上记停因
+// （ADR-0229）。
 func formSupplierExpectedCostOnBuyEvaluationConsumer(
 	db *bentopg.DB,
 	inboxStore *inbox.Store,

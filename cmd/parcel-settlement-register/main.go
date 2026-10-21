@@ -258,8 +258,8 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造越权升级上限登记：%w", err)
 	}
-	// 「评价参数已登记」交接口同上：BUY 触发册、SELL 计费时点采用册与费用项目映射册的行与信封落在同一笔环境事务里，
-	// 停在发起之前或映射不全的评价请求等的就是这封信（ADR-0229 决定五）。
+	// 「评价参数已登记」交接口与 accountHandoff 同一只 db、同一只 Outbox Store：BUY 触发册、SELL 计费时点采用册与费用项目
+	// 映射册的行与信封因此落在同一笔环境事务里，停在发起之前或映射不全的评价请求等的就是这封信（ADR-0229 决定五）。
 	parameterHandoff, err := sapostgres.NewOutboxEvaluationParameterRegisteredHandoff(db, outboxStore, systemClock{})
 	if err != nil {
 		return none, fmt.Errorf("构造评价参数已登记交接口：%w", err)

@@ -21,8 +21,9 @@ var (
 	// ErrFinalOutcomeNotVisible 是终局那一路的同一格。
 	ErrFinalOutcomeNotVisible = errors.New(
 		"settlement accounting parcelshipment adapter: final outcome is not yet visible")
-	// ErrSellEvaluationRequestUndecided 表示发起编排停在自己的未决上（链上某一口、采用册、请求册、铸造口或交接口不可用）。
-	// 同样是续办，同样进 WithUndecidedSentinels；编排的未决原因留在错误正文里，运维据它去查那一口。
+	// ErrSellEvaluationRequestUndecided 表示发起编排停在自己的未决上（saapplication.SellEvaluationRequestUndecidedReason 的
+	// 各格，SELL 发起停办册记不下也在其中）。同样是续办，同样进 WithUndecidedSentinels；编排的未决原因留在错误正文里，
+	// 运维据它去查那一口。
 	ErrSellEvaluationRequestUndecided = errors.New(
 		"settlement accounting parcelshipment adapter: requesting the sell evaluation is undecided")
 	// ErrAdoptionRecordInconsistent 表示按键取回的记录指着另一个键、或业务时刻为零。提供方仓储不变量已破，不是等谁；
@@ -219,8 +220,9 @@ func parcelMomentCommand(
 }
 
 // sellRequestConsumption 把编排结果落成消费两格，按「重投会不会改变结果」分：已发起、已存在、未配置、包裹无商业解析
-// 都是终局答案，入账不重投（未配置等租户登记：编排已把这一拍记进发起停办册，补登之后由「参数已登记」续办，ADR-0229）；
-// 未决重投；未受理在这里是本包译出的命令被拒，属适配器缺陷，响亮上抛不入账。
+// 都是终局答案，入账不重投；编排已把停下的那一拍记进发起停办册（ADR-0229）。账户没登、计费时点没采用由补登那一本册
+// 的「参数已登记」续办；结算政策没采用与包裹无商业解析没有哪一类登记解得开，登记续办不推它们（停因与恢复方的对照在
+// domain.EvaluationStopCause.ResumedBy）。未决重投；未受理在这里是本包译出的命令被拒，属适配器缺陷，响亮上抛不入账。
 func sellRequestConsumption(result saapplication.RequestSellEvaluationOnParcelMomentResult) error {
 	switch result.Outcome() {
 	case saapplication.SellEvaluationRequested,
