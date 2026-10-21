@@ -7,7 +7,7 @@ Date: 2026-10-21
 
 - settlement-accounting CONTEXT「费用明细」生命周期写：「预估 → 暂估：服务已经发生或责任基础已经形成，但仍缺少允许最终确认的计量、履约、账单或其他依据。」读成状态迁移，就是时点一到预估就该变成暂估。
 - [ADR-0190](./0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 越权风险点 7：「两种时点都在责任起点或之后，照 settlement-accounting `CONTEXT` 的生命周期已够得上暂估。本记录沿 ADR-0169 决定二只形成预估客户费用，预估到暂估的转移不在本记录。」2026-10-20 复核记录维持这一点。
-- 代码：`domain.FormCustomerCharge` 在形成时收阶段，只收 `ChargeEstimated` 与 `ChargeProvisional`；`CustomerCharge.Confirm` 从任一阶段确认；领域里没有预估转暂估的方法。形成客户费用的编排只有 `application.FormSellCustomerChargeHandler`，它交 `ChargeEstimated`。
+- 代码：`domain.FormCustomerCharge` 在形成时收阶段，只收 `ChargeEstimated` 与 `ChargeProvisional`；`CustomerCharge.Confirm` 从任一阶段确认；领域里没有预估转暂估的方法。应用层调 `domain.FormCustomerCharge` 的只有 `application.FormSellCustomerChargeHandler`（包裹计费时点那一路的 `FormEstimatedCustomerChargeHandler` 经它形成费用），它交 `ChargeEstimated`。
 - 包裹计费时点那一路在没有实测时用申报测量（ADR-0190 越权风险点 1），金额依据本身可以是声明值；同一件包裹在不同计费时点上的依据完整程度不同，时点不能单独说明金额已够得上暂估。
 
 ## Decision

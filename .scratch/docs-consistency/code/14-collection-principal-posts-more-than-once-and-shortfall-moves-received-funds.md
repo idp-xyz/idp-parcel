@@ -48,7 +48,7 @@ M：唯一约束（迁移另取号）与编排判重；移位金额核对；短�
 2. **移位层**：运营企业真实到账（`OPERATOR_BANK_CREDIT`）只收`渠道在途` → `待清分`，金额等于事实金额；不再能自外部来源入账。`渠道在途`不够答`UNDERFUNDED`（余额守卫已有）。
 3. **判重**：凭代收事实的记账按（依据种类、依据引用）唯一。同一记账标识重放仍答`EXISTING`；换一个记账标识再凭同一条事实记账答`CONTENT_CONFLICT`，不记账。编排判重先于余额守卫，与库上的唯一约束（迁移另取号）同一口径。
 4. **差额来源**：凭短款事项的记账只收`渠道在途` → `短款`；凭溢款事项的落账只收`待清分` → `溢款`（`溢款` → `应付客户` 的归属确认照旧）；不满足答`NOT_ACCEPTED`。领域构造门与迁移 CHECK 各补一份。
-5. **测试**：`application/handler_test.go` 的短款用例改成渠道报告入`渠道在途`、到账移位、差额自`渠道在途`落入`短款`；补三层各自入账、同一事实换标识、到账多于报告、溢款自`渠道在途`各一例。演示种子已是这一形，不改。
+5. **测试**：`application/handler_test.go` 里凭真实到账自外部来源入账的各用例（短款、冲正等）改成渠道报告先入`渠道在途`、到账再移位；短款用例改成渠道报告入`渠道在途`、到账移位、差额自`渠道在途`落入`短款`；补三层各自入账、同一事实换标识、到账多于报告、溢款自`渠道在途`各一例。演示种子已是这一形，不改。
 6. 注释：`IntakePosition`、`factPostingShapeHolds`、`discrepancyPostingShapeHolds` 与 `DiscrepancyItem.SettlementPosition` 的注释随之改；[code/45](./45-sa-cr-comments-carry-counts-that-no-longer-hold.md) 里 `collectionremittance` 那两处可一并改。
 
 建议分级不变（R1）。
