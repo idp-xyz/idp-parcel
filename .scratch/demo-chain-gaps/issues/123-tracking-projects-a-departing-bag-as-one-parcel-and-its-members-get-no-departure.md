@@ -1,7 +1,7 @@
 # 123 全程追踪把出发的一袋当一件包裹投，袋里的成员拿不到出发里程碑
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg123（2026-10-21 认领，基于 main `e013fef6e`）。此前 needs-triage——2026-10-20 票 [42](./42-departure-gate-reading-does-not-expand-consolidation-unit-members.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0205](../../../docs/adr/0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md) 文末补记越权风险点 20（原指票 42，票 42 只修了门禁读数与阻断信号）与 [ADR-0225](../../../docs/adr/0225-the-departure-gate-reading-asks-through-consolidation-unit-members-at-the-moment-of-departure.md)「不在本记录」第二条、越权风险点 9。
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg123（2026-10-21 认领，基于 main `e013fef6e`）。此前 needs-triage——2026-10-20 票 [42](./42-departure-gate-reading-does-not-expand-consolidation-unit-members.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0205](../../../docs/adr/0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md) 文末补记越权风险点 20（原指票 42，票 42 只修了门禁读数与阻断信号）与 [ADR-0225](../../../docs/adr/0225-the-departure-gate-reading-asks-through-consolidation-unit-members-at-the-moment-of-departure.md)「不在本记录」第二条、越权风险点 9。
 Blocked by: 无
 地盘：VE 移动事实投影（`internal/visibilityexception/adapters/transportfulfillment/derive_on_movement_fact.go` 的 `objectsOf`，以及补派生 `backfill_movement_facts.go`）。
 
@@ -95,3 +95,9 @@ Blocked by: 无
 
 修订后验证（基于 main `91ee3f73c` rebase 之后）：`go build ./...`、`go vet ./...`、`gofmt -l` 干净；`TMPDIR=… scripts/test-full.sh ./internal/visibilityexception/... ./cmd/parcel-dispatch ./cmd/parcel-api ./cmd/parcel-ve-register ./internal/architecture/... ./migrations/...` 20 个包 ok、0 FAIL；scratchpad 里的一次性 worktree 副本上 `adr-index -check` 先如预期退 1（ADR-0205 Status 行改了），重生成后 `-check` 退 0，生成差异只有 README 里 ADR-0205 那一行；本树 README 未改。
 
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-dcg123` tip `868597c97` 在 main `91ee3f73c` 上快进；隔离评审无实质阻断（合并冲突已在 rebase 中取并集），变异测试四条全红；协调方核过 ADR-0205 注记只动 Status 行与 Links。
+- 协调方在 tip 上单独提交重生成的 ADR 索引、AT 计数（AT-VE-196–198）与机制清点，检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净。无迁移、无种子改动。
+- 去向：docs-consistency/code/74（身份后成立的成员补派生，R2）、code/75（其余各路不把单元当包裹投 R2；投到成员上 Blocked by 票 80）。
