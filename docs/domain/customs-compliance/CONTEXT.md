@@ -276,7 +276,7 @@ Status: Confirmed
 
 ### 提交与外部监管结果
 
-- 固定提交版本 → 首次尝试`已登记待发送`：尝试身份、目标与发送意图已经形成，外部发送尚未开始；只有发送通道越过发送边界，尝试才算已发起（[ADR-0227](../../adr/0227-customs-case-and-declaration-submission-enter-production-through-operator-decision-faces.md)）。
+- 固定提交版本 → 首次尝试`已登记待发送`：尝试身份与目标已经登记，外部发送尚未开始；只有发送通道越过发送边界，尝试才算已发起（[ADR-0227](../../adr/0227-customs-case-and-declaration-submission-enter-production-through-operator-decision-faces.md)）。
 - 发起提交尝试后，技术结果可以是成功、失败或待确认；技术成功和失败都只表达技术层，不直接改变监管接收或业务受理事实。
 - 通信超时或结果缺失 → 形成`原提交结果仍待确认`并查询原提交；只有形成绑定原尝试、渠道和范围的安全再次发送判断后，才允许对同一提交版本形成受控新尝试。
 - 监管接收、业务受理、监管过程决定、监管核定税费、放行结果和监管处置决定分别由合格外部事实形成，不得为了得到单一线性状态而虚构缺失结果。
