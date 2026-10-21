@@ -118,8 +118,7 @@ func (adapter *DeriveOnMovementFactAdapter) HandleRecordedMovementFact(
 		return fmt.Errorf("%w: fact %q version %q", ErrMovementFactNotVisible, recorded.Fact, recorded.Version)
 	}
 	fact := record.Fact
-	if record.Key != key || fact.TenantID() != key.TenantID || fact.Fact() != key.Fact || fact.Version() != key.Version ||
-		fact.OccurredAt().IsZero() || record.RecordedAt.IsZero() {
+	if !movementFactRecordAgrees(record, key) {
 		return fmt.Errorf("%w: fact %q version %q", ErrMovementFactRecordInconsistent, recorded.Fact, recorded.Version)
 	}
 	kind, err := kindForMovementFact(fact.Kind())
@@ -132,25 +131,46 @@ func (adapter *DeriveOnMovementFactAdapter) HandleRecordedMovementFact(
 		return err
 	}
 	for _, object := range objects {
-		command, err := movementProjectionCommand(record, kind, object)
-		if err != nil {
-			return err
-		}
-		result, err := adapter.derive.Handle(ctx, command)
-		if err != nil {
-			return err
-		}
-		if err := veconsume.Consumption(result); err != nil {
+		if err := deriveMovementFactOnto(ctx, adapter.derive, record, kind, object); err != nil {
 			return err
 		}
 	}
 	return adapter.signalBlocked(ctx, fact)
 }
 
+// movementFactRecordAgrees 核取回的记录与它被取时的键一致、时间不为零。按键取与按段列（ADR-0224）都过这一道，不一致一律是
+// 仓储不变量已破。
+func movementFactRecordAgrees(record tfports.MovementFactRecord, key tfports.MovementFactKey) bool {
+	fact := record.Fact
+	return record.Key == key && fact.TenantID() == key.TenantID && fact.Fact() == key.Fact && fact.Version() == key.Version &&
+		!fact.OccurredAt().IsZero() && !record.RecordedAt.IsZero()
+}
+
+// deriveMovementFactOnto 在一件对象上派生这一版事实。正常路径与补派生（ADR-0224）都走这一处：引用、版本、三个时间与替代关系
+// 只由 movementProjectionCommand 定，两路交进派生编排的是同一把幂等键与同一份内容，谁先到谁派生，后到的一路答已有结果，不出
+// 第二个条目。
+func deriveMovementFactOnto(
+	ctx context.Context,
+	derive MovementProjectionHandler,
+	record tfports.MovementFactRecord,
+	kind vedomain.SourceFactKind,
+	object tfdomain.CarriedObjectReference,
+) error {
+	command, err := movementProjectionCommand(record, kind, object)
+	if err != nil {
+		return err
+	}
+	result, err := derive.Handle(ctx, command)
+	if err != nil {
+		return err
+	}
+	return veconsume.Consumption(result)
+}
+
 // objectsOf 取事实声明的段里、事实发生那一刻在控的对象——与出发门禁读数问关务时同一条口径（ADR-0205 决定四，口径只在
 // ActualFulfillmentSegment.ObjectsUnderControlAt 定义一处）。没声明段、段不在册、那一刻段里没有在控对象，都交回空：事实照样
-// 入账，只是没有可投的对象。段不在册不等它：事实本就可以先于段登记（ADR-0205 决定四），这封信等不来段；段日后登了也不会
-// 回头补投——这一格在补记的越权风险点里。
+// 入账，只是没有可投的对象。段不在册不等它：事实本就可以先于段登记（ADR-0205 决定四），这封信等不来段。对象日后凭交接进了
+// 这一段，由交接那一封信的补派生按段找回本事实（ADR-0224），不靠本信重投。
 func (adapter *DeriveOnMovementFactAdapter) objectsOf(
 	ctx context.Context,
 	fact tfdomain.TransportMovementFact,

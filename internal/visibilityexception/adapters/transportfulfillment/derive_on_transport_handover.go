@@ -83,29 +83,9 @@ func (adapter *DeriveOnTransportHandoverAdapter) HandleRegisteredTransportHandov
 	ctx context.Context,
 	registered veinbox.RegisteredTransportHandover,
 ) error {
-	key, err := handoverKeyFor(registered)
+	record, err := findRegisteredHandover(ctx, adapter.handovers, registered)
 	if err != nil {
 		return err
-	}
-	record, found, err := adapter.handovers.FindByKey(ctx, key)
-	if err != nil {
-		return fmt.Errorf("%w: %v", ErrHandoverNotVisible, err)
-	}
-	if !found {
-		return fmt.Errorf("%w: object %q scope %q version %q",
-			ErrHandoverNotVisible, registered.Object, registered.Scope, registered.Version)
-	}
-	if record.Key != key ||
-		record.Handover.Object() != key.Object ||
-		record.Handover.Scope() != key.Scope ||
-		record.Handover.Version() != key.Version ||
-		record.Handover.TenantID() != key.TenantID {
-		return fmt.Errorf("%w: object %q scope %q version %q",
-			ErrHandoverRecordInconsistent, registered.Object, registered.Scope, registered.Version)
-	}
-	if record.Handover.JudgedAt().IsZero() || record.RecordedAt.IsZero() {
-		return fmt.Errorf("%w: object %q scope %q version %q",
-			ErrHandoverRecordInconsistent, registered.Object, registered.Scope, registered.Version)
 	}
 
 	command, err := handoverProjectionCommand(record)
@@ -117,6 +97,41 @@ func (adapter *DeriveOnTransportHandoverAdapter) HandleRegisteredTransportHandov
 		return err
 	}
 	return veconsume.Consumption(result)
+}
+
+// findRegisteredHandover 按信封四维取回交接并核它与键一致。交接投影与移动事实补派生（ADR-0224）两路都按同一封信读同一条
+// 登记，核对只写这一处：两路各核一份，日后一路加了一格、另一路没加，同一条坏记录就会在一路当毒丸、在另一路照常派生。
+func findRegisteredHandover(
+	ctx context.Context,
+	handovers TransportHandoverFinder,
+	registered veinbox.RegisteredTransportHandover,
+) (tfports.TransportHandoverRecord, error) {
+	none := tfports.TransportHandoverRecord{}
+	key, err := handoverKeyFor(registered)
+	if err != nil {
+		return none, err
+	}
+	record, found, err := handovers.FindByKey(ctx, key)
+	if err != nil {
+		return none, fmt.Errorf("%w: %v", ErrHandoverNotVisible, err)
+	}
+	if !found {
+		return none, fmt.Errorf("%w: object %q scope %q version %q",
+			ErrHandoverNotVisible, registered.Object, registered.Scope, registered.Version)
+	}
+	if record.Key != key ||
+		record.Handover.Object() != key.Object ||
+		record.Handover.Scope() != key.Scope ||
+		record.Handover.Version() != key.Version ||
+		record.Handover.TenantID() != key.TenantID {
+		return none, fmt.Errorf("%w: object %q scope %q version %q",
+			ErrHandoverRecordInconsistent, registered.Object, registered.Scope, registered.Version)
+	}
+	if record.Handover.JudgedAt().IsZero() || record.RecordedAt.IsZero() {
+		return none, fmt.Errorf("%w: object %q scope %q version %q",
+			ErrHandoverRecordInconsistent, registered.Object, registered.Scope, registered.Version)
+	}
+	return record, nil
 }
 
 func handoverKeyFor(registered veinbox.RegisteredTransportHandover) (tfports.TransportHandoverKey, error) {
