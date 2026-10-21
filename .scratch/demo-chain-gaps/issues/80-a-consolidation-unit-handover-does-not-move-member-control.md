@@ -19,6 +19,7 @@ Blocked by: 无
 - **成员随单元转出的判据**：要不要读 NO 自己的封装快照与封签记录，判「封签连续且相符」；判不了时成员记什么——入账待确认，还是照转并记信息格。
 - **NR 逐成员复核**：交接触发的路由复核（票 [63](./63-network-routing-reassesses-on-a-handover-into-a-node.md)）对集运单元今天也不逐成员。
 - 三类：判据与派生是机制；封签核对的严格程度可能是产品策略。
+- **全程追踪那一侧等着本票**：全程追踪今天对单元的交接、揽收、交付、外部承运轨迹入账不派生、不投成员（票 [docs-consistency/code/75](../../docs-consistency/code/75-tracking-projects-control-facts-on-a-consolidation-unit-as-one-parcel.md) (a)）；本票定下成员随单元受控的规则后，由 code/75 (b) 投到成员上并回补已入账的那几份。
 
 ## 规模
 

@@ -1,7 +1,7 @@
 # 75 交接、揽收、交付、外部承运追踪四路仍把集运单元当一件追踪包裹投
 
 Category: enhancement
-Status: in-progress——(a) 完工待评审与进 main，分支 claude-code75（基于 main `8d68c7bab`，见文末「完成记录」）；(b) Blocked by 80。此前 needs-triage——(a) R2（上线后尽快）：整袋交接是常态，追踪上每交接一袋就多一份不是包裹的追踪投影，违背 VE CONTEXT「集运、装载或同批关系不合并包裹身份和客户轨迹」。(b) 归后续。2026-10-21 协调方据票 demo-chain-gaps/123 隔离评审立（作者子代理代笔）。
+Status: in-progress——(a) 完工待评审与进 main，分支 claude-code75（rebase 到 main `4bd28bc11`，见文末「完成记录」与「评审记录」）；(b) Blocked by 80。此前 needs-triage——(a) R2（上线后尽快）：整袋交接是常态，追踪上每交接一袋就多一份不是包裹的追踪投影，违背 VE CONTEXT「集运、装载或同批关系不合并包裹身份和客户轨迹」。(b) 归后续。2026-10-21 协调方据票 demo-chain-gaps/123 隔离评审立（作者子代理代笔）。
 Blocked by: (a) 无；(b) [demo-chain-gaps/80](../../demo-chain-gaps/issues/80-a-consolidation-unit-handover-does-not-move-member-control.md)（ADR-0263 决定四）
 上下文：VE（全程追踪）。
 出处：票 [demo-chain-gaps/123](../../demo-chain-gaps/issues/123-tracking-projects-a-departing-bag-as-one-parcel-and-its-members-get-no-departure.md) 完成记录越权风险点 3；其真库补派生用例里，袋经交接进段时交接那一封给袋立了一条交接条目。
@@ -28,6 +28,8 @@ Blocked by: (a) 无；(b) [demo-chain-gaps/80](../../demo-chain-gaps/issues/80-a
 ### (b) 把交接、交付投到成员上——Blocked by 票 80
 
 - 票 80 定下成员随单元受控的派生规则之后，交接、交付按那条规则投到成员上；揽收与外部承运轨迹看那时的规则是否同样适用。
+- 验收：落地时回补 (a) 已入账未派生的单元事实，来源是 TF 册（交接、揽收、交付、外部承运轨迹各册里对象是单元的那几版）加 NO 单元册（那一刻的成员）；交接可取 NO 转移册里 `CONSOLIDATION_UNIT_PENDING_RULE` 那几行定位。
+- 与 [code/74](./74-a-member-identified-after-the-movement-never-gets-that-movement-fact.md) 的分工：本半边落地之后，74 的补派生从移动事实扩到交接与交付；本半边投成员时身份后来才成立的那几件，由 74 一并补。
 
 ## 三类
 
@@ -63,11 +65,12 @@ Blocked by: (a) 无；(b) [demo-chain-gaps/80](../../demo-chain-gaps/issues/80-a
 
 1. **已入账的单元事实，票 80 之后不会自己投到成员上**（VE owner，票 80）：(b) 落地时要么在单元控制规则形成成员参与的那一刻补派生（形状仿 ADR-0224），要么回扫运输履约册上对象是单元的交接、交付；本票没有留痕表，回扫靠 TF 册与 inbox。
 2. **存量单元投影不清理**（VE owner，同票 123 越权风险点 2）：本票之前已把单元当包裹投下的交接、揽收、交付、外部轨迹条目照留，运营按袋号查追踪仍看得到旧条目。
-3. **每封交接、揽收、交付、外部轨迹信多一次节点作业单元册读**（运维）：那一本读不动时，连纯包裹的这四路也整封未决——说不出是不是单元就不能当包裹投。这四路排在投影名次、同一封信上的主业务各路仍照跑（FanOut 收齐各路错误），整封信重投时已入账的各路按 inbox 跳过。
+3. **每封交接、揽收、交付、外部轨迹信多一次节点作业单元册读**（运维、NO owner）：那一本读不动时，连纯包裹的这四路也整封未决——说不出是不是单元就不能当包裹投。这四路排在投影名次、同一封信上的主业务各路仍照跑（FanOut 收齐各路错误），整封信重投时已入账的各路按 inbox 跳过。`IsUnitAt` 在 VE 这一侧不认成员身份，但经的仍是 NO `ConsolidationMembershipsAt` 那一读：对象是未关闭的单元时它照跑成员查询，成员行坏了（成员标识立不成作业实物标识）报错，VE 读成读不动，那一封信一路记未决重投到失败预算耗尽。后续：NO 出一口只跑 EXISTS 的「是不是单元」，VE `IsUnitAt` 改接它（未立票，NO owner 复核时定）。
 4. **成员拿不到单元的交接、交付、外部轨迹**（VE、TF owner）：整袋交接、按主单给轨迹的外部承运商，成员追踪上这一段在 (b) 之前是空的；单元经交接进段时移动事实已由补派生投到成员上（票 123），于是成员追踪上可能有出发、没有之前那一次交接条目。揽收与外部承运轨迹是否随票 80 的规则投到成员上，票面 (b) 已列为到时再看。
 5. **包裹号与单元号同串时按单元认**（NO、VE owner，同 ADR-0214 越权风险点 1）：那件包裹自己的交接、揽收、交付、外部轨迹也不进追踪。
-6. **小包托运终局那一路不在本票地盘**（PS owner）：PS 采用有效交付、采用场外揽收与面单终局判断各路仍把单元号原样当包裹反查（反查不中各自落未找到），与 VE 这边入账不派生口径不同，二者不矛盾，但单元交付在两边留下的痕迹不同。
+6. **小包托运那几路对单元信封记未决**（PS owner）：PS 采用有效交付、采用场外揽收与面单终局判断（经首次有效收寄）各路仍把单元号原样当包裹反查，反查不中落各自的 `ErrParcelTargetNotFound`，而这一格在各路未决名单里（理由是委托可能还没接受）。对象是单元时重投不会改变结果，每封这样的信都一路重投到失败预算耗尽、再落发布失败。转票 [code/79](./79-ps-adoption-retries-a-consolidation-unit-envelope-as-a-missing-parcel-target.md)（R2：各路照同一判据先认单元，是单元就确定性入账、不采用；成员是否随单元采用随票 80 再定）。
 7. **`assemble.go` 被改**（协调方）：一段连续删除与四份名单各加一行，与并行会话改同一文件的别处不重叠，进 main 时若有文本冲突按两边取并集。
+8. **单元册晚于运输履约事实到达时按包裹投，事后不纠正**（VE、NO owner）：消费那一刻节点作业还没登这件单元（开袋事实晚到或补登），就答不是单元，事实照常投到这个对象上，立起一份单元的追踪投影；单元日后登了册，没有任何东西回头撤这份投影，与越权风险点 2 的存量投影同一形状。
 
 ### AT
 
@@ -81,3 +84,24 @@ Blocked by: (a) 无；(b) [demo-chain-gaps/80](../../demo-chain-gaps/issues/80-a
 - `TMPDIR=… scripts/test-full.sh ./internal/visibilityexception/... ./cmd/parcel-dispatch ./cmd/parcel-api ./cmd/parcel-ve-register ./internal/architecture/... ./migrations/...`：20 个包 ok、0 FAIL。
 - 新用例另跑 `-count=3`：VE 两个适配器包与 `cmd/parcel-dispatch`（`-run 'ControlFact|Bag'`）ok。
 - 未重生成 AT 计数与机制清点（`at-coverage-counts -check` 此刻如预期报计数不一致，留给进 main 时重算）；ADR 索引不受影响（没动 ADR）。
+
+## 评审记录（2026-10-21，隔离评审，无阻断；修订在同一分支 claude-code75）
+
+评审结论：搬家逐行比过，两条变异（适配器层、真库）都能杀死。协调方要求收掉的几项：
+
+1. **rebase 到 main `4bd28bc11`**（code/21、35、155 已进）——已做。`assemble.go` 无冲突；AT 盘点文末追记冲突，两段都留（票 155 在前，本票在后）。
+2. **N1 包裹那一道补一格**——适配器层 `TestAControlFactOnAParcelStillDerives` 每条道多跑对象 `unit-cons-1`，真库 `TestAControlFactOnABagIsAccountedForWithoutATrackingProjection` 多跑 `SYN-BAG-NOT-IN-BOOK`：串长得像单元、不在单元册上，照旧派生。为此 `registeredHandover`、`judgedTrackingRecord` 各抽出带对象参数的 `registeredHandoverOf`、`judgedTrackingRecordOf`。UC-VE-002 `AT-VE-199` 写明不按串形或前缀猜。
+3. **N2**——越权风险点 6 改写为 PS 各路对单元信封记未决、重投到失败预算耗尽；另立 [code/79](./79-ps-adoption-retries-a-consolidation-unit-envelope-as-a-missing-parcel-target.md)（R2）。评审原话写「无限重投」，按派发器实际行为（未决也计入认领预算 `MaxAttempts`）写成「到失败预算耗尽」。
+4. **N3**——VE CONTEXT 新规则补全理由：揽收「同样是运输履约取得控制」；外部承运轨迹引 ADR-0263 决定四的封签那一条（封签不符时不得据原成员快照推出成员已经到达）。理由补得全，外部轨迹不从 (b) 拆出。`deriveUnlessConsolidationUnit` 头注同口径补齐。
+5. **N4**——(b) 一节加回补验收（来源 TF 册加 NO 单元册，交接可取 `CONSOLIDATION_UNIT_PENDING_RULE` 行）；票 [demo-chain-gaps/80](../../demo-chain-gaps/issues/80-a-consolidation-unit-handover-does-not-move-member-control.md)「要裁的」加一条反向指过来；[code/74](./74-a-member-identified-after-the-movement-never-gets-that-movement-fact.md) 与本票 (b) 互加交叉引用。
+6. **N5**——越权风险点 3 补：`IsUnitAt` 仍经 NO 那一读跑成员查询，成员行坏了落读不动、一路重投；记后续「NO 出一口只跑 EXISTS」。
+7. **N6**——新增越权风险点 8：单元册晚于运输履约事实到时按包裹投，事后不纠正。
+
+修订后验证见下一节「修订后验证」。
+
+### 修订后验证（基于 main `4bd28bc11` rebase 之后）
+
+- `go build ./...`、`go vet ./...`、`gofmt -l` 干净。
+- `TMPDIR=… scripts/test-full.sh ./internal/visibilityexception/... ./cmd/parcel-dispatch ./cmd/parcel-api ./cmd/parcel-ve-register ./internal/architecture/... ./migrations/...`：退 0，20 个包 ok、0 FAIL。
+- 新用例另跑 `-count=3`：VE 两个适配器包与 `cmd/parcel-dispatch`（`-run 'ControlFact|Bag'`）ok。
+- 未重生成 AT 计数与机制清点，留给进 main 时重算。
