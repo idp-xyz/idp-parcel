@@ -87,6 +87,7 @@ Date: 2026-10-19
 - [ADR-0209：供应商协议声明收费发生条件，发生项登记按采用的那一版判，断言期退场](./0209-supplier-agreements-declare-charge-occurrence-conditions-and-registration-judges-by-them.md)：部分停用本记录决定三的断言期判法（限新形成的发生项）与决定四串行化那一句的键（改按主要业务范围），回答本记录越权风险点 1、4
 - [ADR-0218：实际履约发生项由交接与有效交付信封自动形成](./0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md)：部分停用本记录决定七后半句与越权风险点 3（限有采用连线的段）、决定四末句的演示约定
 - [ADR-0231](./0231-actual-fulfillment-left-unformed-is-caught-up-by-doorbells-and-a-commission-agreement-revision.md)：委托协议换版；部分停用文末补记「发生项按它回问 PC」一句（换版之后按业务时间取那一版）
+- [ADR-0232](./0232-a-segment-commission-adoption-is-withdrawn-by-decision-only-before-occurrences-form-and-occurrence-revision-drives-the-supplier-cost-correction.md)：Consequences「已知限制」由它兑现——重放与自营两条路径改读链头，链头已失效时同一件事实再登从失效版本长出替代版本；发生项失效经运营决定进生产，是文末补记越权风险点 10、11、15 说的「发生项修订入口」
 
 ## 补记：票 28 落地时的补充裁定（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；待 TF owner 复核，风险点 9 同时待 PC owner）
 
