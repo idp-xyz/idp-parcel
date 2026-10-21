@@ -1034,7 +1034,7 @@ type recordedJudgmentsDouble struct {
 	// control 在场时原样交回，压过 controlOutcome：一格结论造不出「第一项成立、第二项受限」那种
 	// 逐项形状，而释放该看的正是逐项（ADR-0125 决定四）。
 	control *domain.FinancialControlResult
-	// controlByVersion 按提交版本给控制结论，压过上面两格：被取代那一版占没占下资金与当前版本无关。
+	// controlByVersion 按提交版本给控制结论，压过 control 与 controlOutcome：被取代那一版占没占下资金与当前版本无关。
 	// 结论的零值表示那一版从未形成控制。
 	controlByVersion map[string]domain.FinancialControlOutcome
 	err              error

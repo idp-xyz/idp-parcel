@@ -13,8 +13,8 @@ import (
 
 // JudgmentPendingReason 指名本轮为何有一件事没有办完：多数取值说的是接受判断任务没能推进，
 // `ControlReleasePending` 说的是一份接受已确定不成立的版本（决定已经成立，或已被新提交版本取代）
-// 占下的资金没能确定放掉。两类共用一个封闭集合，
-// 是因为续办引用由「原因 + 范围」派生，原因分成两套会让同一范围派生出两族互不相认的引用。
+// 占下的资金没能确定放掉。两类共用一个封闭集合，是因为续办引用由「原因 + 范围」派生，原因分成
+// 两套会让同一范围派生出两族互不相认的引用。
 //
 // 它是封闭集合而非自由文本，这样未决才能按依赖阶段分类统计——用例的可观测性一节明禁用自由
 // 文本聚合原因维度。取值与产生它的那条路径同时出现。
@@ -90,7 +90,8 @@ const (
 	SupplementedRequestNotSaved
 	SourceDataVersionNotHandedOff
 	// AcceptanceDecisionNotHandedOff 说的是决定已越过提交边界、它的发布意图没能确定交出。
-	// 与 ControlReleasePending 同类：不是判断没推进，是已成立决定留下的随附事项。
+	// 与 ControlReleasePending 同类：不是判断没推进，是一件已定的事留下的随附事项——这里是已成立的
+	// 决定，那里是接受已确定不成立的版本。
 	AcceptanceDecisionNotHandedOff
 	// StaleShipmentRequestRevision 说的是保存被并发写入抢先：这一份聚合读出来之后，有人
 	// 先落了一步。它与`决定没落库`分开，因为两者的运维含义相反——一个可能是库坏了，一个是
