@@ -1,6 +1,6 @@
 # ADR-0232：解除履约段采用是一种运营决定，只在段上还没有按那份委托形成仍有效的发生项时允许，委托的开始随之撤回或按其余段重新派生；发生项失效经运营决定进生产，失效之后同一件事实再登从失效版本长出替代版本；结算按失效撤下、按替代版本的新评价重述供应商预期成本
 
-Status: Accepted（2026-10-21，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」，2026-10-20 又答「要我裁定的部分，你作为业务和系统专家，请你自决吧」；票 demo-chain-gaps/57、15。裁定的单一权威是 `.scratch/demo-chain-gaps/triage-2026-10-19.md`「上线就绪评估（2026-10-20）」关于 57 的那一条与末节「代决复核追加的上线前必修（2026-10-20）」，以及代决复核报告 `.scratch/owner-review-20261020/report.md` 的 R10 与 M9。部分停用 [ADR-0204](./0204-a-fulfillment-segment-adopts-a-transport-commission-by-declaration-and-a-started-commission-cannot-be-cancelled.md) 决定一末两句与决定二「只前移、不后移」、[ADR-0208](./0208-buy-evaluation-is-requested-from-the-charge-occurrence-formed-envelope.md) 决定五「修订版不发起」一句、[ADR-0200](./0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md) 决定三「同一发生项、费用项目与规则版本已有另一个标识的首版时，同样入账」一句；被停原句与适用场景见「对已接受记录的作用」，三份正文不改，只在其 Status 行与 Links 加前向指针。回答 ADR-0204 越权风险点 2、[ADR-0207](./0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md) Consequences「已知限制」与文末补记越权风险点 11、15、ADR-0200 越权风险点 4。越权风险点见文末，待 TF owner 复核，第 10 至 13 点同时待 SA owner，第 14 点 access-identity owner 知会。）<!-- 索引注记 -->｜**已接受**（2026-10-21，用户原话「你作为业务和系统专家自决」，Claude Code 会话代 TF、SA owner 裁定；票 demo-chain-gaps/57、15）。**解除采用**：运营决定「解除履约段采用」，载荷（段、委托），段上还有按这份委托形成（服务方与协议快照同委托）、仍有效的实际履约发生项答 `OCCURRENCES_FORMED` 并回显、续办是先失效；解除另记一行，采用那一行不改，同段可以再采用（下一代）。**开始**：委托再无别的已采用段时撤回到已提交（又取消得了），还有时按其余段采用上记的开始取最早的那一条（可以后移），不是开始所依的段时不动；之前、变法与之后随解除留下。**发生项失效**：运营决定「运输收费发生项失效」，点名链头那一版与一条依据，长出 V(n+1) 失效版本、记修订者，已形成信封同笔。**再登**：登记用例改读链头，链头已失效时凭这一次的判断从失效版本长出替代版本。**并发**：解除与登记共用发生项范围锁、登记在锁下重读采用；采用与解除共用委托的开始锁。**结算**：失效版本的信封另走一路，在发生项锁下记下那一版已失效、给依它形成的链头各长出一版失效纠错版本（计价结果原样、标不再成立）；替代版本照常发起 BUY 评价，评价形成时接在链头后面重述全额，纠错由发生项新版本触发、金额同不同都追加；晚于失效到的、依已失效那一版的评价不形成成本。部分停用 ADR-0204 决定一末两句与决定二「只前移」、ADR-0208 决定五一句、ADR-0200 决定三一句。其余三问拆成票 demo-chain-gaps/162–164。越权风险点含首个参与更正不重新派生、已答出的「运输已开始」随撤回过时、解除幂等按最近一次、失效不可撤回、失效纠错版本今天只有列表认它、替代评价换结算币响亮失败、与票 14 代次的对齐
+Status: Accepted（2026-10-21，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」，2026-10-20 又答「要我裁定的部分，你作为业务和系统专家，请你自决吧」；票 demo-chain-gaps/57、15。裁定的单一权威是 `.scratch/demo-chain-gaps/triage-2026-10-19.md`「上线就绪评估（2026-10-20）」关于 57 的那一条与末节「代决复核追加的上线前必修（2026-10-20）」，以及代决复核报告 `.scratch/owner-review-20261020/report.md` 的 R10 与 M9。部分停用 [ADR-0204](./0204-a-fulfillment-segment-adopts-a-transport-commission-by-declaration-and-a-started-commission-cannot-be-cancelled.md) 决定一末两句与决定二「只前移、不后移」、[ADR-0208](./0208-buy-evaluation-is-requested-from-the-charge-occurrence-formed-envelope.md) 决定五「修订版不发起」一句、[ADR-0200](./0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md) 决定三「同一发生项、费用项目与规则版本已有另一个标识的首版时，同样入账」一句，并随 ADR-0208 那一句收窄 [ADR-0229](./0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定四「不记的」里「修订版不发起」一格；被停原句与适用场景见「对已接受记录的作用」，四份正文不改，只在其 Status 行与 Links 加前向指针。回答 ADR-0204 越权风险点 2、[ADR-0207](./0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md) Consequences「已知限制」与文末补记越权风险点 11、15、ADR-0200 越权风险点 4。越权风险点见文末，待 TF owner 复核，第 10 至 13 点与第 15 点同时待 SA owner，第 14 点 access-identity owner 知会。）<!-- 索引注记 -->｜**已接受**（2026-10-21，用户原话「你作为业务和系统专家自决」，Claude Code 会话代 TF、SA owner 裁定；票 demo-chain-gaps/57、15）。**解除采用**：运营决定「解除履约段采用」，载荷（段、委托、代次），段上还有按这份委托形成（服务方与协议快照同委托）、仍有效的实际履约发生项答 `OCCURRENCES_FORMED` 并回显、续办是先失效；解除另记一行，采用那一行不改，同段可以再采用（下一代，请求点名接在哪一代之后）；解除与再采用都按代次认重放。**开始**：委托再无别的已采用段时撤回到已提交（又取消得了），还有时按其余段采用上记的开始取最早的那一条（可以后移），不是开始所依的段时不动（同刻并列按依据与时刻认开始所依的那一条）；之前、变法与之后随解除留下。**发生项失效**：运营决定「运输收费发生项失效」，点名链头那一版与一条依据，长出 V(n+1) 失效版本、记修订者，已形成信封同笔。**再登**：登记用例改读链头，链头已失效时凭这一次的判断从失效版本长出替代版本。**并发**：解除与登记共用发生项范围锁、登记在锁下重读采用；采用与解除共用委托的开始锁。**结算**：失效版本的信封另走一路，在发生项锁下记下那一版已失效、给依它形成的链头各长出一版失效纠错版本（计价结果原样、标不再成立）；替代版本照常发起 BUY 评价，评价形成时只接在失效纠错版本后面重述全额（失效还没记到结算时答未决、等撤下那一路），纠错由发生项新版本触发、金额同不同都追加；晚于失效到的、依已失效那一版的评价不形成成本；账单一行点名已撤下或已有后继的版本答 `EXPECTED_COST_NOT_CURRENT`、不进匹配。部分停用 ADR-0204 决定一末两句与决定二「只前移」、ADR-0208 决定五一句、ADR-0200 决定三一句，收窄 ADR-0229 决定四一格。其余三问拆成票 demo-chain-gaps/162–164。越权风险点含首个参与更正不重新派生、已答出的「运输已开始」随撤回过时、解除与再采用按代次认重放的线格式代价、失效不可撤回、失效纠错版本只有列表与账单匹配认它、替代评价换结算币响亮失败、替代评价等撤下那一路、与票 14 代次的对齐
 Date: 2026-10-21
 
 ## Context
@@ -16,20 +16,22 @@ Date: 2026-10-21
 **一、解除履约段采用是一种运营决定，只在这一段上还没有按那份委托形成仍有效的发生项时允许。**（机制；种类是产品角色模型）
 
 - 决定种类 `FULFILLMENT_SEGMENT_COMMISSION_ADOPTION_WITHDRAWAL`，口 `POST /transport-fulfillment-segment-commission-adoption-withdrawals`，挂操作者渠道「运营决定」能力面。按 [ADR-0151](./0151-unassigned-command-faces-get-their-families.md) 的定族判据，它是操作者对一条已登记声明的更正，是生产决定，不是现场事实。租户与操作者只取自认证结果，解除记下操作者（「发行方#sub」）。能采用的不因此能解除：两种分开授予。
-- 载荷是段与点名的委托。委托由登记方点名、不由段推出：段上此刻采用的若已不是他以为的那一份，这一次不该落在别人的采用上。各格（HTTP 200，[ADR-0022](./0022-http-status-carries-answer-formed-not-business-verdict.md)，续办两两不同，[ADR-0029](./0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md)）：
-  - 段上此刻没有采用：最近一次解除解的正是点名的委托，答 `EXISTING_WITHDRAWAL` 回显那一次；否则 `ADOPTION_NOT_FOUND`。
+- 载荷是段、点名的委托与点名的代次。委托由登记方点名、不由段推出：段上此刻采用的若已不是他以为的那一份，这一次不该落在别人的采用上。代次是采用回显的 `generation`：同一段解除之后可以再采用同一份委托，只凭（段、委托）分不出一次解除说的是哪一代，旧那一次原样重交就会解除新那一代。幂等因此按（段、委托、代次）认。各格（HTTP 200，[ADR-0022](./0022-http-status-carries-answer-formed-not-business-verdict.md)，续办两两不同，[ADR-0029](./0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md)）：
+  - 点名那一代已有解除：解的正是点名的委托，答 `EXISTING_WITHDRAWAL` 回显那一次（重放，此后这一段再采用了也不动新那一代）；解的是另一份，答 `ADOPTION_MISMATCH` 回显那一次。
+  - 段上此刻没有采用：`ADOPTION_NOT_FOUND`。
+  - 段上的当前采用不是点名那一代：`GENERATION_NOT_CURRENT`，回显当前那一代。
   - 段上采用的是另一份：`ADOPTION_MISMATCH`，回显在册那一份。
   - 段上还有按这份委托形成、此刻仍有效的实际履约发生项：`OCCURRENCES_FORMED`，回显那几项（链头），续办是逐项经决定四的口失效之后再来。「按这份委托形成」认的是服务方与协议快照都与委托那一行同——段已采用委托时登记从委托取这两样（ADR-0207 文末补记），所以凡同的都算；登记方在采用之前自报了另一家、另一版协议的那几项不是这份委托的成本来源，不挡。订舱与取消发生项属于订舱所属的委托，不归段的采用，也不挡。
   - 未受理 `INPUT_NOT_ACCEPTED`、未决 `WITHDRAWAL_UNDECIDED`（带原因与续办引用）。
   - 只有真解除了一段答 201 `ADOPTION_WITHDRAWN`，回显解除与委托此后的样子。
 - 解除另记一行（迁移 TF 0048 的解除册）：被解除的那一代、委托、解除人、委托的开始在这一次之前是什么、怎么变、之后是什么。采用那一行不改不删：它记着「当时这样声明过」与这一段在委托下的原开始，是历史。
-- 解除之后同一段可以再采用（指错了委托，解除之后采用对的那一份），再采用是这一段的下一代。采用册的主键因此扩成（租户、段、代次），既有的行都是第一代；第二代起必须接在已解除的上一代后面（`previous_generation = generation - 1` 且上一代在解除册上，外键守），一段此刻至多一份当前采用。按段读采用的各处（采用的已有与冲突、发生项登记的采购上下文、自动形成的「段已采用」）读的都是当前那一代。
+- 解除之后同一段可以再采用（指错了委托，解除之后采用对的那一份），再采用是这一段的下一代。再采用的请求必须点名接在哪一代之后（`afterGeneration`，即被解除的那一代）；缺了或点错答 `ADOPTION_ALREADY_WITHDRAWN` 并回显那一次解除，不落新一代、不动委托——只凭（段、委托、服务方）分不出解除之后那一次是新的决定，还是解除之前那一次采用请求被原样重交。从没解除过的段采用照旧不必点名，采用与解除回显的采用都带 `generation`。采用册的主键因此扩成（租户、段、代次），既有的行都是第一代；第二代起必须接在已解除的上一代后面（`previous_generation = generation - 1` 且上一代在解除册上，外键守），一段此刻至多一份当前采用。按段读采用的各处（采用的已有与冲突、发生项登记的采购上下文、自动形成的「段已采用」）读的都是当前那一代。
 - 解除不入队：今天没有它的消费者。
 
 **二、委托的开始随解除撤回或按其余已采用段重新派生。**（机制；R10 代决）
 
 - 委托再无别的已采用段：开始撤回，委托回到已提交。那次开始派生自后来证明错误的连线，不是已发生的控制事实；不撤回，错采用的委托永远取消不了。撤回之后委托照常可以取消。
-- 还有别的已采用段：开始改按其余各段采用上记的开始里最早的那一条（同刻按依据字面序取第一条，与段上取首个参与同一个判法），可以比原来晚。解除的不是开始所依的那一段时，开始原样不动，变法记 `KEPT`。
+- 还有别的已采用段：开始改按其余各段采用上记的开始里最早的那一条（同刻按依据字面序取第一条，与段上取首个参与同一个判法），可以比原来晚。解除的不是开始所依的那一段时，开始原样不动，变法记 `KEPT`。开始所依的那一条按（依据、时刻）认：其余各段里还有一条恰是开始的依据与时刻（同刻并列时采用那一路不前移，开始依的是先采用的那一段，不一定是字面序最小的那条），开始就原样不动、记 `KEPT`，不按字面序另挑一条换依据。
 - 取其余各段**采用上记的**开始，不回头按段上此刻的参与重算：每一段在委托下何时、凭哪条控制事实开始，是采用那一刻记下的这一段自己的事实（ADR-0204 决定二）；首个参与被更正之后要不要重新派生是另一问，拆到票 demo-chain-gaps/162。
 - 委托那一行只是此刻的样子；开始换过什么、凭哪一次解除换的，记在解除那一行（之前、变法、之后）。原开始在采用那一行。写委托的开始只认在册开始恰是解除读到的那一份、且未取消的行。
 
@@ -61,11 +63,13 @@ Date: 2026-10-21
 - 只撤依被失效那一版形成的链头：依更晚版本形成的链头说的是另一次判断，一封迟到的旧失效信不该把它撤掉。依那一版的评价还在路上、此刻没有成本可撤时答已了结，记下的失效让那份评价到了也不再形成成本（答 `OCCURRENCE_INVALIDATED`、入账）。
 - 一版至多被纠正一次（迁移 SA 0044 的唯一索引）：失效纠错与替代纠错若都回指同一版，经营口径就说不出哪一版是当前有效的。两者都先取同一把发生项锁。
 - 重投：同一封信入账之后不再处理；编排层面原样再交答重放、不多一版。
+- 账单匹配只对当前有效的那一版：供应商账单一行点名的预期成本版本是失效纠错版本，或已有后继（被纠正过），答独立一格 `EXPECTED_COST_NOT_CURRENT`，带出行、版本、撤下与否与后继，不落账单、不交意图。失效纠错版本带着全额，照它匹配就会给已失效的发生项对上账；续办是改点名当前那一版，或不匹配。
 
 **八、替代版本的新评价接在链头后面重述全额。**（机制；纠错由什么触发是产品策略）
 
 - 失效之后长出的替代版本照常发起 BUY 评价：只有失效版本「不发起」（部分停用 ADR-0208 决定五一句）。请求的自然键带发生项版本，是另一份请求。
-- 评价形成时，在同一把发生项锁下读这一项的成本状态：这个费用项目上已有一条链、链头依的是另一版发生项，这份评价按 `AppendCorrection` 重述全额、接在链头后面（多半是决定七那一版失效纠错版本），原因 `OCCURRENCE_SUPERSEDED`，版本标识仍由这份请求派生（[ADR-0200](./0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md) 决定二「计价纠错的版本标识由纠错那条路给」：这条路就是这份请求）；否则照旧形成首版。
+- 评价形成时，在同一把发生项锁下读这一项的成本状态：这个费用项目上已有一条链、链头依的是另一版发生项，这份评价按 `AppendCorrection` 重述全额、接在链头后面，原因 `OCCURRENCE_SUPERSEDED`，版本标识仍由这份请求派生（[ADR-0200](./0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md) 决定二「计价纠错的版本标识由纠错那条路给」：这条路就是这份请求）；否则照旧形成首版。
+- 只接在失效纠错版本后面。替代版本只从失效版本长出（决定五），所以链头依的那一版还没被撤下，是撤下那一路还没把失效记到结算，不是这份评价可以接。结算不认发生项各版的先后（版本是运输履约交来的不透明引用），此刻分不开两种乱序：替代版本的评价先于失效到，与早一版的评价晚于替代版本的评价到——后一种接上去，链头就退回一版已失效的发生项。两种都答未决 `OCCURRENCE_INVALIDATION_NOT_RECORDED`、零写入、重投：撤下那一路记下失效之后，前一种接在失效纠错版本后面，后一种答 `OCCURRENCE_INVALIDATED`、入账（越权风险点 15）。
 - 回答票 15 的两问：纠错由**发生项新版本**触发，不由评价结果不同触发；同一规则版本、同一金额也追加——重述的发生项版本与业务时点本身就是这一版计价结果的一部分（ADR-0067 决定二），不追加，当前有效的那一版就停在一份已失效的发生项上。
 - 替代版本的新评价换了合同结算币：纠错不动的身份里有合同结算币（ADR-0067 决定三），纠错版本表达不了；响亮失败，等人处置（越权风险点 11）。
 
@@ -90,6 +94,9 @@ Date: 2026-10-21
   - 适用场景：只停替代版本那一半——失效之后长出的替代版本是这件事实重新成立的那一版，照常发起（本记录决定八）。失效版本照旧不发起，撤下它的成本另有一路（决定七）。
 - **ADR-0200 决定三「同一发生项、费用项目与规则版本已有另一个标识的首版时，同样入账」，部分停用。**
   - 适用场景：只限这个费用项目上的链头依的是另一版发生项——那时这份评价来自替代版本，形成纠错版本（决定八）。同一版发生项上的第二份请求撞上首版，照旧答已有首版、入账。回答 ADR-0200 越权风险点 4。
+- **ADR-0229 决定四「不记的」里「修订版不发起」一格，随 ADR-0208 决定五那一句收窄。**
+  - 被停条款：「不记的：`采用了别的时点`（……）、修订版不发起、未受理、未决。」中的「修订版不发起」。
+  - 适用场景：只停替代版本那一半——替代版本照常发起，发起时答未配置就照常记进发起停办册、补登之后续办（`AT-SA-186`、`AT-SA-191` 随之改口）。失效版本照旧不发起、不记：没有哪一种登记补得回一版已失效的发生项（越权风险点 13）。
 - **ADR-0207 Consequences「已知限制」，就此兑现。** 重放与自营两条路径改读链头，链头已失效时另行作答（决定五）。文末补记越权风险点 10、11、15「今天没有发生项修订的生产入口」「若实情是委托落空、改由自营承运，要先更正采用，今天改不了」的去处有了：失效之后重登、解除采用。正文不改。
 
 ## 候选与反方
@@ -97,6 +104,7 @@ Date: 2026-10-21
 - **解除由控制事实的更正驱动，不立运营决定。** 指错了委托不是控制事实错了：段、参与与交接都对，错的是登记方「这一段按哪份委托采购」的那一条声明，声明的更正只能由作声明的一方作出。否决。
 - **解除时连带让段上已形成的发生项自动失效。** 那几项已经交给结算形成了预期成本；自动失效等于让一次采购组织的更正静默撤掉成本来源，而作决定的人未必知道段上已经形成了什么。挡在已形成的发生项上、要失效由持另一种授予的人显式做，与分诊裁定同一个口径。否决。
 - **解除改写采用那一行（加一格「已解除」），不另立解除册。** 采用那一行记着「当时这样声明过」与这一段的原开始，改写它就丢了历史；解除的之前、变法与之后也没有地方放。否决，改为采用只插、解除另记一行。
+- **解除按（段、委托）认最近一次，不带代次。** 解除之后同一份委托再采用，旧那一次解除原样重交就会解除新那一代、委托的开始再撤一次；采用请求在解除之后原样重交会落成新一代、委托又开始。重放要不产生新效果，请求就得说出它说的是哪一代。否决。
 - **解除之后不许同段再采用。** 指错了委托的续办正是采用对的那一份；不许，就只剩另立一段，而段的身份由控制事实定（ADR-0096），不能为采购更正另立。否决，改为按代。
 - **解除之后委托的开始不动，只记连线没了。** 委托就停在一次派生自错误连线的「已开始」上，取消不了，开始之前提出的订舱判据也停在错的时刻（R10 的理由）。否决。
 - **重新派生按其余各段此刻的首个参与重算。** 那是「首个参与被更正后是否重新派生」那一问，拆到票 162；这里照每一段采用上记的开始取，与采用那一路同一个口径。暂不采纳。
@@ -107,16 +115,17 @@ Date: 2026-10-21
 - **失效纠错版本记零金额。** 零是一个价格：经营口径会把它当成「这笔成本重算为零」采用进去，与「这份成本不再成立」是两回事；`AT-SA-175` 也禁「把算不出写成不要钱」。否决，改为原样带过去、另标不再成立。
 - **失效纠错版本另立一张表。** 版本链会跨两张表，「当前有效」要两边拼；读成本的各处按版本读，读到一个不在表里的版本说不清。否决，同表加一格。
 - **纠错由评价结果不同触发，金额相同就不追加。** 当前有效的那一版会停在一份已失效的发生项上，按版本引用它的人读到的是一个说「这件事不成立」的依据（见决定八）。否决。
+- **结算按发生项版本号比先后，早于链头的评价不接。** 版本拼法（`V` 加序号）是运输履约的派生规则，不是交接的公开语言；结算读出先后，运输履约改一次拼法就静默错。替代版本只从失效版本长出，等撤下那一路记下失效就分得开两种乱序（决定八）。否决。
 - **结算在发起评价那一路里一并处理失效。** 发起那一路的编排是票 14 在动的地盘，且「不发起」与「撤下成本」是两件事、恢复动作不同；分开一路、各记各的账，与 TF 自消费交接信封的先例（ADR-0216、ADR-0218）同形。否决合并。
 
 ## Consequences
 
-- 代码（运输履约）：领域 `SegmentCommissionAdoptionWithdrawal`、`WithdrawSegmentCommissionAdoption`、`CommissionStartCorrection`、`NextOccurrenceValidity`、`InvalidateChargeOccurrence`、`ReestablishChargeOccurrence`、`TransportChargeOccurrence.SameFactContentAs`、`RevisedBy`；编排 `WithdrawSegmentCommissionAdoptionHandler`、`InvalidateChargeOccurrenceHandler`，`RegisterChargeOccurrenceHandler` 改读链头、锁下重读采用（未决细格 `PROCUREMENT_SOURCE_CHANGED`），`AdoptSegmentCommissionHandler` 多一口必备依赖 `CommissionHold`；端口另立文件（`charge_occurrence_scope.go`、`segment_commission_adoption_withdrawal.go`），`SegmentCommissionAdoptionRecord` 多 `Generation`；PG 适配器按代读写采用册、解除册、委托开始锁与改开始的写口、发生项范围锁与按范围列链头。
-- 代码（结算）：领域 `SupplierExpectedCost.Withdraw`、`Withdrawn`、`SupplierCostWithdrawalVersionID`（前缀 `BUYSCW`）、两种纠错原因；`FormSupplierExpectedCostHandler` 先读成本状态再定首版或纠错、多一格 `OCCURRENCE_INVALIDATED`；新编排 `WithdrawSupplierExpectedCostHandler`；`ExpectedCostRegistry` 多一口 `LoadOccurrenceCostState`，另立 `SupplierCostOccurrenceInvalidations`；消费者 `sainbox.ChargeOccurrenceInvalidatedConsumer` 与适配器 `WithdrawOnChargeOccurrenceInvalidatedAdapter`；发起那一路的适配器只把失效版本标为不发起。预期成本列表与查阅口多 `withdrawn` 一格（管理台页面未改）。
+- 代码（运输履约）：领域 `SegmentCommissionAdoptionWithdrawal`、`WithdrawSegmentCommissionAdoption`、`CommissionStartCorrection`、`NextOccurrenceValidity`、`InvalidateChargeOccurrence`、`ReestablishChargeOccurrence`、`TransportChargeOccurrence.SameFactContentAs`、`RevisedBy`；编排 `WithdrawSegmentCommissionAdoptionHandler`、`InvalidateChargeOccurrenceHandler`，`RegisterChargeOccurrenceHandler` 改读链头、锁下重读采用（未决细格 `PROCUREMENT_SOURCE_CHANGED`），`AdoptSegmentCommissionHandler` 多两口必备依赖 `CommissionHold`、`Withdrawals`，命令多 `AfterGeneration`、结果多一格 `ADOPTION_ALREADY_WITHDRAWN`，解除命令带 `Generation`、结果有 `GENERATION_NOT_CURRENT` 一格；端口另立文件（`charge_occurrence_scope.go`、`segment_commission_adoption_withdrawal.go`），`SegmentCommissionAdoptionRecord` 多 `Generation`；PG 适配器按代读写采用册、解除册、委托开始锁与改开始的写口、发生项范围锁与按范围列链头。
+- 代码（结算）：领域 `SupplierExpectedCost.Withdraw`、`Withdrawn`、`SupplierCostWithdrawalVersionID`（前缀 `BUYSCW`）、两种纠错原因；`FormSupplierExpectedCostHandler` 先读成本状态再定首版或纠错、多一格 `OCCURRENCE_INVALIDATED` 与一个未决原因 `OCCURRENCE_INVALIDATION_NOT_RECORDED`；`ReceiveSupplierBillHandler` 多一口必备依赖 `Successions`（新读口 `ExpectedCostSuccessionView`）、多一格 `EXPECTED_COST_NOT_CURRENT`；新编排 `WithdrawSupplierExpectedCostHandler`；`ExpectedCostRegistry` 多一口 `LoadOccurrenceCostState`，另立 `SupplierCostOccurrenceInvalidations`；消费者 `sainbox.ChargeOccurrenceInvalidatedConsumer` 与适配器 `WithdrawOnChargeOccurrenceInvalidatedAdapter`；发起那一路的适配器只把失效版本标为不发起。预期成本列表与查阅口多 `withdrawn` 一格（管理台页面未改）。
 - 迁移：access_identity `0021`（决定种类 CHECK 以 0020 为底取并集加两词）；transport_fulfillment `0048`（修订者一列、一版至多被修订一次；采用册加代次与上一代、解除册）；settlement_accounting `0044`（`withdrawn` 一列、一版至多被纠正一次、发生项失效记录一册）。
 - 接口：两口挂运营决定面，装配在 `cmd/parcel-api/endpoints_fulfillment_corrections.go` 与 `assemble_fulfillment_corrections.go`；派发路由 `cmd/parcel-dispatch/routes_supplier_cost_on_occurrence_invalidated.go`。
 - 演示种子：配置员持两种决定，授予、对照与区间另起 `steps/457` 一节。
-- 文档：TF `CONTEXT` 段采用委托一条、委托生命周期一条、发生项生命周期一条；SA `CONTEXT` 供应商成本两条；UC-TF-004 补 `AT-TF-306` 至 `310`、`315`，UC-TF-005 补 `AT-TF-311` 至 `314`，UC-SA-002 补 `AT-SA-206` 至 `210`；ADR-0204、0208、0200 的 Status 行与 Links、ADR-0207 的 Links 加前向指针；子票 demo-chain-gaps/162–164。
+- 文档：TF `CONTEXT` 段采用委托一条、委托生命周期一条、发生项生命周期一条；SA `CONTEXT` 供应商成本两条；UC-TF-004 补 `AT-TF-306` 至 `310`、`315`，UC-TF-005 补 `AT-TF-311` 至 `314`，UC-SA-002 补 `AT-SA-206` 至 `210`，UC-SA-004 补 `AT-SA-211`；ADR-0204、0208、0200、0229 的 Status 行与 Links、ADR-0207 的 Links 加前向指针；子票 demo-chain-gaps/162–164。
 
 ## 越权风险点
 
@@ -124,16 +133,17 @@ Date: 2026-10-21
 2. **撤回或后移之后，此前答过的「运输已开始」随之过时**（TF owner）。取消委托此前答 `TRANSPORT_ALREADY_STARTED` 的，撤回之后取消得了；取消订舱按申请时刻对新的开始判，可取消的范围随之变（ADR-0204 越权风险点 3 同族）。已答出去的不回头通知；按委托的开始判过的取消发生项不重判（ADR-0207 文末补记越权风险点 10 同一问）。
 3. **取消的更正与「取消送达服务方」不在本记录**（TF owner）。ADR-0204 越权风险点 8 照旧，去处票 demo-chain-gaps/163、164。
 4. **「按这份委托形成」按服务方与协议快照认**（TF owner）。采用之前登记方自报、恰与委托同上下文的那几项也挡解除；同一委托、服务方与协议都同的两份委托（不同委托标识）上形成的项分不开。
-5. **解除的幂等按（段、委托）认最近一次**（TF owner）。解除之后又采用了同一份委托，旧的那一次解除原样重交会解除新那一代；采用请求在解除之后原样重交会采用成新一代。两者都要请求在两次更正之间重放，今天不另设请求标识。
+5. **解除与再采用按代次认重放，代价落在线格式上**（TF owner）。解除口多一格必填的 `generation`，解除过的段再采用要多填 `afterGeneration`；从没解除过的段采用不变。代次之外不另设请求标识：同一代上两次内容不同的解除（点名另一份委托）答委托不符，而不是第二次决定。
 6. **解除不让发生项随之失效、也不入队**（TF owner）。挡在已形成的发生项上是故意的：先失效，再解除。失效与解除之间、解除与再采用之间，那一段的成本来源暂缺；再采用之后的重形成靠人工重登，或票 demo-chain-gaps/88 的采用晚到门铃。
 7. **失效不可撤回、依据不核**（TF owner）。没有「撤回失效」的面；误失效的续办是同一件事实再登（长出替代版本）。依据是作决定的人交来的一条引用，本上下文不核它指向什么。
 8. **替代版本的内容可以与失效之前不同**（TF owner）。只有身份四维必同；旅程、采购上下文、数量与单位都取这一次的判断。人工登记与自动形成按派生拼写对齐（ADR-0218 决定四）的约定不变，写了别的旅程照旧落成另一份内容。
 9. **委托册改写落册时刻**（TF owner）。解除改开始照旧写回 `recorded_at`，与 ADR-0204 越权风险点 6 同一问。
-10. **失效纠错版本今天只有列表认它**（SA owner）。读预期成本的另一处是供应商账单逐行匹配，按版本读、不看 `withdrawn`：账单指向一版已撤下的成本时不拦（UC-SA-004 那一侧另定）。管理台预期成本页面还没显示这一格（admin-web 那一侧另做）；经营口径的「当前有效供应商预期成本」今天没有读者。
+10. **失效纠错版本只有列表与账单匹配认它**（SA owner）。账单一行点名已撤下或已有后继的版本答 `EXPECTED_COST_NOT_CURRENT`、不进匹配（决定七）；已经匹配进审核应付的那几行不回头重判，与已形成的审核应付不因后来的纠错改写同一口径。管理台预期成本页面还没显示这一格（admin-web 那一侧另做）；经营口径的「当前有效供应商预期成本」今天没有读者。
 11. **替代版本的新评价换了合同结算币**（SA owner）。纠错版本表达不了，响亮失败落 `publish_failed` 等人处置；租户若真会因换协议而换结算币，要另裁这一格（另起首版链、或由人撤下后重形成）。
 12. **结算按「失效版本回指的那一版」撤**（SA owner）。只认本记录这条修订入口长出的线性版本链；直接调 `ReviseValidity` 形成的、不回指链头的替代版本不在此列。失效记录只增不删：被失效的那一版的评价无论多晚到都不再形成成本。
 13. **与 [ADR-0229](./0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md)（票 demo-chain-gaps/14 的停因与代次）的对齐**（SA owner）。ADR-0229 先进 main，本记录变基其上时这样接：形成编排答 `OCCURRENCE_INVALIDATED` 的那一格不记停因——没有哪一种参数登记补得回一版已失效的发生项，记成停因只会让续办重跑一份注定不形成成本的请求；续办另起的那一代若落在已失效的发生项版本上，同样答这一格、入账；续办那一代的评价若来自替代版本，按决定八形成纠错而不是首版；发起停办册「修订版不记」从此只指失效版本（替代版本照常发起，没登触发行时照常记停办、补登后续办，`AT-SA-191` 随之改口）。本记录在 `ExpectedCostRegistry` 加的 `LoadOccurrenceCostState` 一口，ADR-0229 那一侧日后新写的替身要补上。
 14. **种类粒度**（psb/07，access-identity owner 知会）。同 ADR-0202 越权风险点 8：解除与失效各成一种，与采用、登记分开授予。
+15. **替代版本的评价等撤下那一路**（SA owner）。撤下那一路卡住（失效信封的消费一直未决）时，替代版本的评价随它一起未决、烧自己的重投预算；预算耗尽的条目留在库里，要运维重驱，不另设扫描。不按版本号比先后：版本的拼法是运输履约的事，结算读出先后就多了一处要跟着它改的地方。
 
 ## Links
 
@@ -142,10 +152,10 @@ Date: 2026-10-21
 - [ADR-0208：BUY 评价由发生项已形成信封发起](./0208-buy-evaluation-is-requested-from-the-charge-occurrence-formed-envelope.md)：决定五「修订版不发起」被本记录部分停用（限替代版本）
 - [ADR-0200：BUY 评价按回指的请求形成供应商预期成本](./0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md)：决定三一句被本记录部分停用；回答其越权风险点 4
 - [ADR-0067：预期成本纠错版本整组重述一个评价的计价结果](./0067-cost-correction-restates-the-whole-evaluation-result.md)：决定八照它重述
-- [ADR-0229：停下的评价请求按停因续办](./0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md)：越权风险点 13 记两者怎样接
+- [ADR-0229：停下的评价请求按停因续办](./0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md)：决定四「不记的」里「修订版不发起」一格被本记录收窄（限替代版本）；越权风险点 13 记两者怎样接
 - [ADR-0112](./0112-source-correction-rederives-participation-as-a-superseding-version-on-the-same-segment.md)：替代与失效版本的形状，决定五照参与关系的「从失效版本长出替代版本」
 - [ADR-0218](./0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md)：自动形成经同一个登记用例，答未决即重投
 - [ADR-0151](./0151-unassigned-command-faces-get-their-families.md)：两种决定的定族判据
 - [ADR-0022](./0022-http-status-carries-answer-formed-not-business-verdict.md)、[ADR-0029](./0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md)
-- [UC-TF-004](../application/transport-fulfillment/UC-TF-004-COMMISSION-AND-ACCEPT-TRANSPORT.md)：`AT-TF-306` 至 `310`、`315`；[UC-TF-005](../application/transport-fulfillment/UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md)：`AT-TF-311` 至 `314`；[UC-SA-002](../application/settlement-accounting/UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md)：`AT-SA-206` 至 `210`
+- [UC-TF-004](../application/transport-fulfillment/UC-TF-004-COMMISSION-AND-ACCEPT-TRANSPORT.md)：`AT-TF-306` 至 `310`、`315`；[UC-TF-005](../application/transport-fulfillment/UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md)：`AT-TF-311` 至 `314`；[UC-SA-002](../application/settlement-accounting/UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md)：`AT-SA-206` 至 `210`；[UC-SA-004](../application/settlement-accounting/UC-SA-004-RECEIVE-MATCH-AND-AUDIT-SUPPLIER-BILL.md)：`AT-SA-211`
 - 票 `.scratch/demo-chain-gaps/issues/57-…`、`15-…`；子票 `162-…`、`163-…`、`164-…`
