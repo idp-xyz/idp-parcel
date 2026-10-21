@@ -584,7 +584,8 @@
 | `AT-VE-153` | internal/visibilityexception/adapters/http/customer_tracking_view_intake_test.go::TestCustomerTrackingViewIntakeKeysTheQueryByTheAuthenticatedAccount（HTTP 半边）；cmd/parcel-api/assemble_customer_tracking_view_test.go::TestCustomerTrackingViewLineRefusesOtherFamiliesAndClientsWithoutTheGrant |
 | `AT-VE-156` | internal/visibilityexception/application/derive_customer_view_test.go::TestFirstQualifyingProjectionPublishesAnAccountIsolatedView |
 | `AT-VE-157` | internal/visibilityexception/application/derive_customer_view_test.go::TestANonDisclosableDimensionIsWithheldAloneWithoutHidingTheOthers |
-| `AT-VE-161` | internal/visibilityexception/application/derive_customer_view_test.go::TestANewerProjectionSupersedesTheCurrentViewKeepingHistory |
+| `AT-VE-158` | internal/visibilityexception/application/derive_customer_view_test.go::TestAPermittedETAPendsWithoutACustomerVisibleETAJudgement；internal/visibilityexception/domain/customer_view_test.go::TestTheETADimensionPendsWithoutACustomerVisibleETAJudgement |
+| `AT-VE-161` | internal/visibilityexception/application/derive_customer_view_test.go::TestANewerProjectionThatChangesTheDimensionsSupersedesTheCurrentViewKeepingHistory；internal/visibilityexception/adapters/postgres/customer_view_test.go::TestASupersededVersionStaysReadableByVersion（持久化半边） |
 | `AT-VE-168` | internal/visibilityexception/adapters/http/query_customer_tracking_view_test.go::TestAnUnreadableStoreIsNoAnswerNotNotFound |
 | `AT-VE-169` | cmd/parcel-dispatch/acceptance_rederive_test.go::TestALateAcceptanceRederivesTheCustomerViewFromTheCurrentProjection；internal/visibilityexception/adapters/parcelshipment/derive_customer_view_on_acceptance_test.go::TestAProjectedParcelRederivesTheCustomerView（消费侧半边） |
 | `AT-VE-171` | internal/visibilityexception/adapters/http/customer_tracking_view_intake_test.go::TestCustomerTrackingViewQueryStringIsClosed；cmd/parcel-api/assemble_customer_tracking_view_test.go::TestACustomerClientReadsItsOwnTrackingViewAgainstARealDatabase |
@@ -1417,7 +1418,6 @@
 | `AT-VE-152` | 同一外部标识存在多个有效候选 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-154` | 集团用户只获委派 C1、C3 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-155` | C1/C2 包裹处于同一集运单元、班次或共同案件 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
-| `AT-VE-158` | 只有内部 ETA 或质量未达对客门槛 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-159` | `parcel-shipment` 已形成当前有效客户服务终局 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-160` | 只有有效交付扫描但终局尚未形成 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-163` | 一个维度存在无法裁决的事实冲突 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |

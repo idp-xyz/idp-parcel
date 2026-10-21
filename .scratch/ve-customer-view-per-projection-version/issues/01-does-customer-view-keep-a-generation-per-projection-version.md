@@ -59,3 +59,5 @@ VE CONTEXT「形成新版本并标明更正或替代关系；原发布历史保�
 [audit/ve.md](../../docs-consistency/audit/ve.md) VE-01 指出：本票裁「不需要按投影版本留代」时所凭的前提——「main 的视图链……CONTEXT『原发布历史保留』已保证历史不丢」——在代码里不成立。`adapters/postgres/customer_view.go` 的 `CustomerViews.Save` 替代时原地 `UPDATE` 当前那一行（主键（租户，客户账户，包裹）），已发布的前一版读不回；派生编排又按投影版本换代。按 main `67438a0f` 复核，现象仍在。
 
 本票的结论（客户视图不按投影版本各留一代）不变，也与 VE CONTEXT 一致；代码缺陷立为 [docs-consistency/code/05](../../docs-consistency/code/05-customer-tracking-view-overwrites-published-versions.md)（R1），本票不重开。
+
+2026-10-21 补记：「文档自洽审计复核」一节所说的代码缺陷已由 [docs-consistency/code/05](../../docs-consistency/code/05-customer-tracking-view-overwrites-published-versions.md) 在分支 `claude-code05` 修好（迁移 `0028_customer_view_versions.sql`）：客户视图版本只增不改写，已发布的前一版按版本读得回，本票所凭的前提「原发布历史保留」从此在代码里成立。本票的结论照守——视图换不换代只看四维对客户的答复变没变，投影换版本而四维不变时不换代，只改记当前版所依据的投影版本，不为每个投影版本各留一代。
