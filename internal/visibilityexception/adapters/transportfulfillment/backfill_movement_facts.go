@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	// ErrObjectSegmentsNotVisible 表示控制事实那件对象有参与的段读不动——列不出来，或按键取不回。对象进没进段要读得出来才说得清，
-	// 读不动是依赖的事，续办格。
+	// ErrObjectSegmentsNotVisible 表示控制事实那件对象有参与的段读不动——列的那一问报错，或按键取的那一问报错。对象进没进段要
+	// 读得出来才说得清，读不动是依赖的事，续办格。按键读得动却答没有是另一格：段册自相矛盾，归 ErrMovementFactRecordInconsistent。
 	ErrObjectSegmentsNotVisible = errors.New(
 		"visibility exception transportfulfillment adapter: the segments of the controlled object cannot be read")
 	// ErrMovementFactsOfSegmentNotVisible 表示按段列移动事实那一问读不动。续办格：读得动之后重投，补派生从头再走一遍，已派生过
@@ -38,7 +38,8 @@ type SegmentMovementFactLister interface {
 }
 
 // BackfillMovementFactsAdapter 是控制事实信封上补派生那一路的处理方（ADR-0224）：对象凭这一版`已交接`或这一版场外揽收进了
-// 某一段，就按段找回声明了这一段的在册移动事实，凡事实发生那一刻这件对象在段里在控的，就在它身上补一份移动事实派生。
+// 某一段，就按段找回声明了这一段的在册移动事实，凡事实发生那一刻这件对象在段里在控的，就在它身上补一份移动事实派生。段由
+// 这一次控制事实首立，还是对象后来加入既有段，同样走这一路：后者也会先后颠倒——后到的对象，控制事实的业务时间可能早于出发。
 //
 // 补的是正常路径当初因段不在册而没派生的那一份（ADR-0205 决定四允许事实先于段登记）。判据与幂等键都不另立：在控与否取
 // ActualFulfillmentSegment.ObjectsUnderControlAt，派生走 deriveMovementFactOnto，与移动事实信封那一路是同一段代码，所以补过的
@@ -128,7 +129,7 @@ func (adapter *BackfillMovementFactsAdapter) HandleRegisteredOffsitePickup(
 
 // backfillEntered 找出这一次控制事实让对象进的那一段，在那一段上补派生。对象一程走几段，早先那几段与这一次无关：只认入场依据
 // 指的正是这一次的那条参与（EnteredByHandover、EnteredByPickup；更正落下的替代参与凭更正那一版认得出）。一次控制事实至多让对象
-// 进一段，认到就停；从入场最晚的那一段往前认，新近进的那一段排在最后，多半第一眼就认到。
+// 进一段，认到就停。按什么次序认只影响读几段，不影响认到的是哪一段。
 func (adapter *BackfillMovementFactsAdapter) backfillEntered(
 	ctx context.Context,
 	tenant tfdomain.TenantID,
@@ -163,7 +164,7 @@ func (adapter *BackfillMovementFactsAdapter) segmentEnteredBy(
 	if err != nil {
 		return none, false, fmt.Errorf("%w: segment %q: %v", ErrObjectSegmentsNotVisible, key.Segment, err)
 	}
-	// 段不能被删除（CONTEXT），按对象列得出的段按键却取不回，是段册自相矛盾，不是等谁。
+	// 段不能被删除（CONTEXT），按对象列得出的段按键却答没有，是段册自相矛盾，不是等谁。
 	if !found || key.TenantID != tenant || record.Key != key ||
 		record.Segment.Segment() != key.Segment || record.Segment.TenantID() != key.TenantID {
 		return none, false, fmt.Errorf("%w: segment %q", ErrMovementFactRecordInconsistent, key.Segment)
@@ -183,6 +184,10 @@ func (adapter *BackfillMovementFactsAdapter) backfill(
 	object tfdomain.CarriedObjectReference,
 ) error {
 	records, err := adapter.facts.FindBySegment(ctx, key)
+	if errors.Is(err, tfports.ErrMovementFactRecordUnreadable) {
+		// 坏行重投一万次还是坏行；记成未决会让它以「等依赖」之名挂在队头烧失败预算，运维从错的入口进。
+		return fmt.Errorf("%w: segment %q: %v", ErrMovementFactRecordInconsistent, key.Segment, err)
+	}
 	if err != nil {
 		return fmt.Errorf("%w: segment %q: %v", ErrMovementFactsOfSegmentNotVisible, key.Segment, err)
 	}

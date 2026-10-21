@@ -3,6 +3,7 @@ package transportfulfillment_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -279,8 +280,8 @@ func TestAHandoverThatDoesNotPutTheObjectUnderControlAtTheFactBackfillsNothing(t
 	})
 }
 
-// Covers: AT-VE-181——各格失败落进各自的哨兵：交接读不回、对象的段列不出或取不回、按段列事实读不动、派生停在未决是续办；按对象
-// 列得出的段按键取不回、列出的事实没声明这一段是仓储不变量已破，不当未决。
+// Covers: AT-VE-181——各格失败落进各自的哨兵：交接读不回、对象的段列不出或按键读不动、按段列事实读不动、派生停在未决是续办；
+// 按对象列得出的段按键取不到、列出的事实没声明这一段、某一行装不回是仓储不变量已破，不当未决。
 func TestBackfillFailuresKeepTheirSentinels(t *testing.T) {
 	unreadable := errors.New("connection refused")
 	for _, test := range []struct {
@@ -291,12 +292,15 @@ func TestBackfillFailuresKeepTheirSentinels(t *testing.T) {
 		{"交接读不回", func(_ *testing.T, fixture *backfillFixture) { fixture.handovers.found = false }, adapter.ErrHandoverNotVisible},
 		{"对象的段列不出", func(_ *testing.T, fixture *backfillFixture) { fixture.segments.listErr = unreadable },
 			adapter.ErrObjectSegmentsNotVisible},
-		{"段按键取不动", func(_ *testing.T, fixture *backfillFixture) { fixture.segments.findErr = unreadable },
+		{"段按键读不动", func(_ *testing.T, fixture *backfillFixture) { fixture.segments.findErr = unreadable },
 			adapter.ErrObjectSegmentsNotVisible},
 		{"按段列事实读不动", func(_ *testing.T, fixture *backfillFixture) { fixture.facts.err = unreadable },
 			adapter.ErrMovementFactsOfSegmentNotVisible},
+		{"按段列出的某一行装不回", func(_ *testing.T, fixture *backfillFixture) {
+			fixture.facts.err = fmt.Errorf("find movement facts of segment: %w", tfports.ErrMovementFactRecordUnreadable)
+		}, adapter.ErrMovementFactRecordInconsistent},
 		{"派生停在未决", nil, adapter.ErrProjectionUndecided},
-		{"列得出的段取不回", func(_ *testing.T, fixture *backfillFixture) {
+		{"列得出的段按键取不到", func(_ *testing.T, fixture *backfillFixture) {
 			fixture.segments.records = map[tfports.FulfillmentSegmentKey]tfports.FulfillmentSegmentRecord{}
 		}, adapter.ErrMovementFactRecordInconsistent},
 		{"列出的事实没声明这一段", func(t *testing.T, fixture *backfillFixture) {

@@ -21,7 +21,8 @@ var (
 	ErrMovementSegmentNotVisible = errors.New(
 		"visibility exception transportfulfillment adapter: the segment declared by the movement fact cannot be read")
 	// ErrMovementFactRecordInconsistent 表示按键取回的记录指着另一个键、时间为零、种类落在封闭三值之外，或段册按键交回了
-	// 另一个段。仓储不变量已破（ADR-0029），不是等谁。禁止进 WithUndecidedSentinels。
+	// 另一个段；补派生（ADR-0224）那一侧还有：按对象列得出的段按键取不到、按段列出的事实没声明这一段或某一行装不回。仓储
+	// 不变量已破（ADR-0029），不是等谁。禁止进 WithUndecidedSentinels。
 	ErrMovementFactRecordInconsistent = errors.New(
 		"visibility exception transportfulfillment adapter: movement fact disagrees with its key")
 	// ErrMovementFactUntranslatableAnswer 表示引用译不成领域标识。引用坏了，不是等谁。
