@@ -6,7 +6,7 @@
 
 - 仓库根 [AGENTS.md](../AGENTS.md)：开发与 Agent 的开工顺序、红线、改文档规则与 skills 路由；不替代本目录下的产品/领域权威定义。
 - [Agent skills 接线](./agents/)：issue tracker（本地 `.scratch/`）、triage 标签、领域文档消费约定；供 `/triage`、`/to-spec`、`/to-tickets`、`/implement`、`/wayfinder` 读取。
-- [技能流程在本仓的落法](./agents/workflow.md)：通用技能流程与本仓 PN 切片、交接工作包、证据层级之间的绑定关系，以及哪些上游步骤本仓已用文档做过。
+- [技能流程在本仓的落法](./agents/workflow.md)：通用技能流程与本仓 PN 切片、交接工作包、证据层级之间的绑定关系，哪些上游步骤本仓已用文档做过，以及进 main 的步骤（单会话与多会话同此）。
 - [缩写与标识索引](./ABBREVIATIONS.md)：限界上下文缩写、Go 包前缀命名法、`PN`/`PAR`/`UC`/`AT`/`ADR`/`BD` 等标识前缀家族和证据层级的速查入口；只索引不定义，术语权威仍是 [GLOSSARY.md](./domain/GLOSSARY.md)。
 
 ## 权威文档职责
@@ -22,7 +22,7 @@
 - [首发试点验收场景矩阵](./product/PILOT-ACCEPTANCE-MATRIX.md)：把试点范围和领域场景转化为带证据层级、验收门槛、责任与待填参数的执行清单，是试点证据规划和最终验收判定的权威入口。
 - [首发试点参数与证据登记册](./product/PILOT-PARAMETER-REGISTER.md)：集中登记真实客户、线路、伙伴、合同、规模和治理参数及其证据引用；只记录实例状态，不重新定义领域规则。
 - [关务与贸易合规专项开发基线](./product/CUSTOMS-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)：评估 `UC-CC-001..012` 的控制域闭环，登记真实参数阻塞项，并把关务专项生产、回放/模拟和后续增强分层；不代表产品总体首发主线。
-- [领域上下文地图](./domain/CONTEXT-MAP.md)：定义十个限界上下文的所有权、非所有权和协作关系，是领域边界的唯一权威来源。
+- [领域上下文地图](./domain/CONTEXT-MAP.md)：定义各限界上下文的所有权、非所有权和协作关系，是领域边界的唯一权威来源。
 - [参与方与商业上下文](./domain/party-commercial/CONTEXT.md)：定义参与方、客户账户、服务产品、客户合同、渠道关系与账号授权，是该上下文语言、规则和生命周期的权威来源。
 - [小包计价上下文](./domain/parcel-pricing/CONTEXT.md)：定义版本化价卡、费率表、计价策略、纯价格评价、解释和回放；不拥有合同、来源事实或费用账务。
 - [小包托运上下文](./domain/parcel-shipment/CONTEXT.md)：定义委托接受、包裹身份与谱系、面单交易、外部标识、取消和完成机制，是该上下文语言、规则和生命周期的权威来源。
