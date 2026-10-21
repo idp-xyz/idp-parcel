@@ -115,7 +115,7 @@
 | 原委托不可见 | `PRIOR_REQUEST_NOT_FOUND` | 关联新委托指名的原委托查无此委托、编号不符，或属于别的租户、客户——三种同答 | 无（不回显原委托任何内容）；原样重发答`已有结果`带原结果，不再互证 | 不得区分三种原因，否则可以借此枚举别人的委托 |
 | 关联不适用 | `LINK_INELIGIBLE` | 原委托可见、也属这个客户，但它的状态不承认所声明的关联方向；关联只锚在已拒绝、已接受、已撤回三种终态上，原委托仍为`已提交`时客户该走同一委托的新提交版本（普通纠错），或先撤回原委托再关联重提（重组，[ADR-0255](../../adr/0255-a-submitted-request-is-regrouped-only-by-withdrawing-it-and-submitting-linked-new-requests.md)） | 关联方向与原委托当前状态；原样重发答`已有结果`带原结果，不再互证 | 不得与「原委托不可见」并成一格，不得替客户撤回原委托 |
 
-提交编排没有形成答案时（来源保全之前的认证与解析失败，或保全之后归属判断、建单等一步出错）接 HTTP 答 5xx，调用方原样重发同一请求；本用例不另设「技术未形成」一格，提交编排也不在「未决」那一格内（[ADR-0256](../../adr/0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md) 决定一）。「没有形成答案」只指这一格，已答出的业务答案都不在其内。重发接着办：来源保全认出同一请求之后，提交编排按这份提交上一次实际走到的位置作答，格局由 [ADR-0266](../../adr/0266-a-submission-replay-answers-what-the-first-round-answered-and-only-unresolved-ownership-is-judged-again.md) 决定一定——答出过的答`已有结果`带原结果，停在`生产归属未决`的重判，没有形成答案的照首次提交接着判归属与建单；同一来源身份的续办一次只走一路（决定二）。
+提交编排没有形成答案时（来源保全之前的认证与解析失败，或保全之后归属判断、建单等一步出错）接 HTTP 答 5xx，调用方原样重发同一请求；本用例不另设「技术未形成」一格，提交编排也不在「未决」那一格内（[ADR-0256](../../adr/0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md) 决定一）。「没有形成答案」只指这一格，已答出的业务答案都不在其内。重发接着办：来源保全认出同一请求之后，提交编排按这份提交上一次实际走到的位置作答，格局由 [ADR-0266](../../adr/0266-a-submission-replay-answers-what-the-first-round-answered-and-only-unresolved-ownership-is-judged-again.md) 决定一定——答出过的答`已有结果`带原结果，停在`生产归属未决`的重判（交接未确认的他方归属除外：按记着的尝试重投重查，不重判），没有形成答案的照首次提交接着判归属与建单；同一来源身份的续办一次只走一路（决定二）。
 
 ### 接受判断结果（接受链 `AdvanceAcceptanceChainHandler`）
 
@@ -200,7 +200,7 @@
 ## 一致性、幂等与并发
 
 - 同一逻辑提交的重复或重试不得创建第二份委托。具体请求标识组合和有效范围由真实接入渠道确定，客户参考号不能未经确认直接充当全局幂等键。
-- 同一逻辑请求身份与相同规范化内容摘要是重放：原处理答出过结果时返回已有结果，停在生产归属未决时重判、没有形成答案时接着办（见「结果语义契约」一节「重发接着办」那段）；相同身份与不同内容、范围、基础版本或 `requestEffectiveAt`（含缺失/显式存在差异）形成接入冲突或受控纠正，不覆盖原版本。`occurredAt`/`receivedAt` 变化只追加观察，不改变重放分类。
+- 同一逻辑请求身份与相同规范化内容摘要是重放：原处理答出过结果时返回已有结果，停在生产归属未决时重判（交接未确认的他方归属除外：按记着的尝试重投重查，不重判）、没有形成答案时接着办（见「结果语义契约」一节「重发接着办」那段）；相同身份与不同内容、范围、基础版本或 `requestEffectiveAt`（含缺失/显式存在差异）形成接入冲突或受控纠正，不覆盖原版本。`occurredAt`/`receivedAt` 变化只追加观察，不改变重放分类。
 - 一份委托的同一提交版本只能形成一个当前有效接受或拒绝决定。并发处理必须能够返回同一结果或明确冲突，不能一边接受一边拒绝。
 - 接受决定必须保存来源发生时间（`occurredAt`）、系统接收时间（`receivedAt`）、请求生效时间（`requestEffectiveAt`）、判断依据时点和决定时间各自语义，并引用实际采用的商业和判断版本。`occurredAt`/`receivedAt` 不进入 `PayloadDigest`，也不单独造成冲突；`requestEffectiveAt` 的值及缺失/显式存在状态进入摘要。判断依据时点按前述责任分工逐项选择、校验和回显；提交时发现关键依据不再有效必须重新判断，暂时无法完成时形成未决结果，不得静默接受。
 - 接受结果响应丢失时，调用方必须能够通过稳定请求关联查询原结果，不能通过再次建单恢复。
@@ -262,8 +262,8 @@
 | `AT-PS-105` | 一件没声明客户包裹件号；其后同一委托经受控补充形成新提交版本、成员次序换了，再重放原请求 | 那一件只带内部标识，不以空值或内部标识顶替客户参考；重放仍按首个提交版本的次序带回（ADR-0223 决定一） |
 | `AT-PS-111` | 来源已保全，之后归属判断依赖失败或建单那一笔没落成（答 5xx，没有形成答案），客户原样重发且重判仍放行；或两路重发同时到达 | 接着建单，答`已提交`；只建成一份委托、一封「委托已提交」信封；并发时后到那一路等先到那一路落笔，答`已有结果`指名同一份委托，自己不判归属（[ADR-0256](../../adr/0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md) 决定一、[ADR-0266](../../adr/0266-a-submission-replay-answers-what-the-first-round-answered-and-only-unresolved-ownership-is-judged-again.md) 决定二） |
 | `AT-PS-112` | 首次答`生产归属未决`（交接未确认的他方归属除外），客户原样重发 | 重判归属，按这一次的结果作答：放行就建单、答`已提交`；挡下就答对应那一格；每一次判断都留下，后一次不覆盖前一次 |
-| `AT-PS-113` | 首次答`准入暂停`、交接已确认的`非本产品生产归属`、`输入未受理`、`原委托不可见`或`关联不适用`，客户原样重发（其间暂停原因已解除、原委托状态已变也一样） | 答`已有结果`并带原结果（`priorOutcome`），挡下的那几格连同原归属结果与门禁原因；不重判、不再交接，不建委托 |
-| `AT-PS-114` | 首次判为他方、交接未确认（答`生产归属未决`），客户原样重发（其间登记册已翻成本产品也一样） | 按记着的那次尝试重投、重查确认，不重判归属、不在本地建单：确认了答`非本产品生产归属`，仍未确认答`生产归属未决` |
+| `AT-PS-113` | 上一次答`准入暂停`、交接已确认的`非本产品生产归属`、`输入未受理`、`原委托不可见`或`关联不适用`，客户原样重发（其间暂停原因已解除、原委托状态已变也一样） | 答`已有结果`并带原结果（`priorOutcome`），挡下的那几格连同原归属结果与门禁原因；不重判、不再交接，不建委托 |
+| `AT-PS-114` | 首次判为他方、交接未确认（答`生产归属未决`），客户原样重发（其间登记册已翻成本产品也一样） | 按记着的那次尝试重投、重查确认，不重判归属、不在本地建单：确认了答`非本产品生产归属`，仍未确认答`生产归属未决`；确认之后再重发答`已有结果`，带原结果 |
 
 ## 已确认业务决策与待提供参数
 
@@ -306,7 +306,7 @@
 |---|---|---|
 | `AT-PS-035`「接受提交未成立时按原关联释放已成立各项形成的占用」 | 提交版本被新版本取代（客户补件、授权处置交客户补充之后的补件）时，旧版本已成立的占用没有释放；本行预期结果不变 | [code/20](../../../.scratch/docs-consistency/code/20-superseded-submission-version-keeps-its-control-occupation.md) |
 | 提交答复与问题详情 | 首方提交口还没有 `/v1` 前缀，问题体还不是 `application/problem+json`（ADR-0140 决定二、三） | [code/22](../../../.scratch/docs-consistency/code/22-customer-face-http-contract-misses-accepted-adrs.md) |
-| [ADR-0256](../../adr/0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md) 决定一第 2 格「重发必须接着办」 | 已补：重发按这份提交上一次实际走到的位置作答（[ADR-0266](../../adr/0266-a-submission-replay-answers-what-the-first-round-answered-and-only-unresolved-ownership-is-judged-again.md)），没有形成答案的接着判归属与建单，生产归属未决的重判，同一来源身份的续办一次只走一路；答出的答案逐次留存（`AT-PS-111`、`AT-PS-112`、`AT-PS-114`） | [code/39](../../../.scratch/docs-consistency/code/39-a-preserved-submission-whose-build-failed-is-never-built-on-replay.md) |
+| [ADR-0256](../../adr/0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md) 决定一第 2 格「重发必须接着办」 | 已补：重发按这份提交上一次实际走到的位置作答（[ADR-0266](../../adr/0266-a-submission-replay-answers-what-the-first-round-answered-and-only-unresolved-ownership-is-judged-again.md)），没有形成答案的接着判归属与建单，生产归属未决的重判（交接未确认的他方归属除外：按记着的尝试重投重查，不重判），同一来源身份的续办一次只走一路；答出的答案逐次留存（`AT-PS-111`、`AT-PS-112`、`AT-PS-114`） | [code/39](../../../.scratch/docs-consistency/code/39-a-preserved-submission-whose-build-failed-is-never-built-on-replay.md) |
 | 提交答复「已有结果」一行「已经形成生产归属时返回原归属结果」 | 已补：已有结果带原结果（`priorOutcome`）与原归属结果——已经建单时是建单所据的那一次，准入暂停与非本产品生产归属连同门禁原因（`AT-PS-003`、`AT-PS-113`） | [code/39](../../../.scratch/docs-consistency/code/39-a-preserved-submission-whose-build-failed-is-never-built-on-replay.md) |
 | 迁移 0028（提交答案留存）之前保全的来源 | 那时答过准入暂停、交接已确认的非本产品生产归属、输入未受理、原委托不可见或关联不适用的，库里没有答案行，重发按没有形成答案重判；那时已建成的委托，重发只指名委托、不带原归属结果。当时的答案没有留下，无法回填。只影响演示数据（[ADR-0266](../../adr/0266-a-submission-replay-answers-what-the-first-round-answered-and-only-unresolved-ownership-is-judged-again.md) 越权风险点 4） | 不承接（无法回填） |
 | 关联不适用 / 撤回重提（[ADR-0255](../../adr/0255-a-submitted-request-is-regrouped-only-by-withdrawing-it-and-submitting-linked-new-requests.md)） | 已撤回委托在真库上读不回（重建门不开`已撤回`、撤回决定不进快照），以 `WITHDRAWN_RESUBMISSION` 关联原委托在真库上走不通；`AT-PS-076` 同此 | [code/36](../../../.scratch/docs-consistency/code/36-withdrawn-shipment-requests-cannot-be-read-back-from-the-store.md) |

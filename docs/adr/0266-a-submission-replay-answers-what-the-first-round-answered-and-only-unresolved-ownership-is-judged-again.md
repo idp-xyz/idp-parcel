@@ -1,13 +1,13 @@
 # ADR-0266：提交重放按上一次答出的结果作答——答出过的照原结果答，只有生产归属未决重判，他方交接未确认重投同一次尝试，没有形成答案的接着办；同一来源身份的续办一次只走一路
 
-Status: Accepted（2026-10-21，Claude Code 会话代 PS owner 决：用户原话「你作为业务和系统专家自决……解决所有的问题」，常设授权「你作为业务和系统专家自决」；票 [docs-consistency/code/39](../../.scratch/docs-consistency/code/39-a-preserved-submission-whose-build-failed-is-never-built-on-replay.md) 隔离评审 B1、N1 的协调方裁定。部分停用 [ADR-0081](./0081-acceptance-judgment-is-envelope-driven.md) Consequences「被拒提交的来源保全从此独立存活」一条里「重放一份曾被业务拒绝的输入答`已有结果`」一句，**适用场景只限生产归属未决的那次提交的重放**，被停原句与适用场景见「对已接受记录的作用」；ADR-0081 正文不改，只在其 Status 行与 Links 加前向指针。[ADR-0256](./0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md) 决定一第 2 格「重发必须接着办」不停用，本记录写出它在提交编排上落成的格局。越权风险点见文末，待 PS owner 复核。）<!-- 索引注记 -->｜**格局**：委托已建 → 已有结果，指名委托并带建单所据的原归属结果；上一次答出拒绝（输入未受理、原委托不可见、关联不适用）或已形成挡下结果（准入暂停、交接已确认的他方归属）→ 已有结果带原结果、不重判；他方而交接未确认 → 按记着的尝试重投、重查，不重判；生产归属未决 → 重判，按这一次的结果作答；没有形成答案（5xx 那一次）→ 续办；续办建成 → 已提交。**留存**：每一次答出的答案逐次追加，不算第二份归属记录。**串行**：同一来源身份的判归属、记答案、建单在一把咨询锁里一次一路，并进同一笔事务。**带原结果**：已有结果带 `priorOutcome`
+Status: Accepted（2026-10-21，Claude Code 会话代 PS owner 决：用户原话「你作为业务和系统专家自决……解决所有的问题」，常设授权「你作为业务和系统专家自决」；票 [docs-consistency/code/39](../../.scratch/docs-consistency/code/39-a-preserved-submission-whose-build-failed-is-never-built-on-replay.md) 隔离评审 B1、N1 的协调方裁定。部分停用 [ADR-0081](./0081-acceptance-judgment-is-envelope-driven.md) Consequences「被拒提交的来源保全从此独立存活」一条里「重放一份曾被业务拒绝的输入答`已有结果`」一句，**适用场景只限生产归属未决的那次提交的重放**（其中交接未确认的他方归属不重判，按记着的尝试重投重查），被停原句与适用场景见「对已接受记录的作用」。部分停用（接上）[ADR-0128](./0128-other-authority-handoff-needs-both-takeover-record-and-handoff-confirmation.md) 决定二「本上下文不持久化交接尝试」一句与 Consequences「若将来决定记录落库，评估一格随之」一句：交接评估随提交答案留存，尝试身份照旧由决定派生。两份记录正文都不改，只在其 Status 行与 Links 加前向指针。[ADR-0256](./0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md)「重发必须接着办」不停用，本记录写出它在提交编排上落成的格局。越权风险点见文末，待 PS owner 复核。）<!-- 索引注记 -->｜**格局**：委托已建 → 已有结果，指名委托并带建单所据的原归属结果；上一次答出拒绝（输入未受理、原委托不可见、关联不适用）或已形成挡下结果（准入暂停、交接已确认的他方归属）→ 已有结果带原结果、不重判；他方而交接未确认 → 按记着的尝试重投、重查，不重判；其余生产归属未决 → 重判，按这一次的结果作答；没有形成答案（5xx 那一次）→ 续办；续办建成 → 已提交。**留存**：每一次答出的答案逐次追加，不算第二份归属记录。**串行**：同一来源身份的判归属、记答案、建单在一把咨询锁里一次一路，并进同一笔事务；已定的重放不进这一笔。**带原结果**：已有结果带 `priorOutcome`
 Date: 2026-10-21
 
 ## Context
 
-- ADR-0256 决定一第 2 格要求提交编排在保全已落、结果没落成时「重发必须接着办」。票 code/39 第一轮把「答出过、但没有可读记录」的几格（输入未受理、原委托不可见、关联不适用）也归进「什么都没形成」，重发时重判一次。
-- 那一轮因此改动了两个钉着 [ADR-0081](./0081-acceptance-judgment-is-envelope-driven.md) Consequences 原口径的真库用例：`TestARefusedSubmissionStillPreservesItsSource`（重放改答 `PRIOR_REQUEST_NOT_FOUND`）与 `TestTheWiredSubmissionAnswersHonestlyAgainstARealDatabase`（重放改答 `OWNERSHIP_UNRESOLVED`）。ADR-0081 那一句「重放一份曾被业务拒绝的输入答`已有结果`」是已接受记录，被改了却没有停用指针——隔离评审 B1。
-- UC-PS-001 未决结束写「原始提交和处理尝试可安全续办」，首发试点叠加条件写暂停「原因解除、指标恢复或健康检查通过都不自动恢复」，提交答复「已有结果」一行要求「已经形成生产归属时返回原归属结果」。这三句对不同格给了不同的重放答法，此前没有一处把格局写全。
+- ADR-0256 要求提交编排在保全已落、结果没落成时「重发必须接着办」。票 code/39 第一轮把「答出过、但没有可读记录」的几格（输入未受理、原委托不可见、关联不适用）也归进「什么都没形成」，重发时重判一次。
+- 那一轮因此改动了钉着 [ADR-0081](./0081-acceptance-judgment-is-envelope-driven.md) Consequences 原口径的真库用例 `TestARefusedSubmissionStillPreservesItsSource`（重放改答 `PRIOR_REQUEST_NOT_FOUND`）与 `TestTheWiredSubmissionAnswersHonestlyAgainstARealDatabase`（重放改答 `OWNERSHIP_UNRESOLVED`）。ADR-0081 那一句「重放一份曾被业务拒绝的输入答`已有结果`」是已接受记录，被改了却没有停用指针——隔离评审 B1。
+- UC-PS-001 未决结束写「原始提交和处理尝试可安全续办」，首发试点叠加条件写暂停「原因解除、指标恢复或健康检查通过都不自动恢复」，提交答复「已有结果」一行要求「已经形成生产归属时返回原归属结果」。这几句对不同格给了不同的重放答法，此前没有一处把格局写全。
 - 评审 N1：两路续办并发、或登记册在两路之间翻转时，一路可能判本产品放行去建单，另一路判他方去投递；他方交接未确认之后重发若重判，也可能因登记册翻转而在本地建单。建单的唯一键只拦得住第二份委托，拦不住一次已发出的投递。
 
 ## Decision
@@ -20,7 +20,7 @@ Date: 2026-10-21
 | 答出拒绝：`输入未受理`、`原委托不可见`、`关联不适用` | `已有结果`带原结果，不再判 |
 | 已形成挡下结果：`准入暂停`、交接已确认的`非本产品生产归属` | `已有结果`带原归属结果与门禁原因，不重判、不再交接 |
 | 他方而交接未确认（答的是`生产归属未决`） | 按记着的那次尝试重投、重查确认，不重判归属（决定二） |
-| `生产归属未决`（其余） | 重判归属，按这一次的结果作答：放行就建单、答`已提交`；挡下就答对应那一格 |
+| `生产归属未决`（交接未确认的他方归属除外） | 重判归属，按这一次的结果作答：放行就建单、答`已提交`；挡下就答对应那一格 |
 | 没有形成答案（保全之后归属依赖失败、建单那一笔没落成，答 5xx 的那一次） | 照首次提交继续判归属与建单 |
 | 续办建成委托 | `已提交`（客户上一次拿到的是 5xx 或未决，这一次才建成） |
 
@@ -29,7 +29,7 @@ Date: 2026-10-21
 **二、他方交接未确认不重判；同一来源身份的续办串行。**
 
 1. 最近一次答案是「他方、交接未确认」时，重发按库里记着的那次尝试身份重投、重查，不重判归属：确认了，这一次才答`非本产品生产归属`；仍未确认就仍答`生产归属未决`。同一份决定重复走到交接步必须得到同一次尝试（[ADR-0128](./0128-other-authority-handoff-needs-both-takeover-record-and-handoff-confirmation.md) 决定二），对方据尝试身份认领重放。
-2. 同一来源身份的「查上一次答案 → 判归属或重投 → 记答案 → 建单」一次只走一路：装配开一笔事务、取这份来源身份的咨询锁，判断与落笔都在锁里、并进这一笔；进锁之后先复查上一次答案与委托，有新的就照它作答。已定的重放（委托已建、拒绝、已形成挡下结果）在锁外只读作答，不开写事务。
+2. 同一来源身份的「查上一次答案 → 判归属或重投 → 记答案 → 建单」一次只走一路：装配开一笔事务、取这份来源身份的咨询锁，判断与落笔都在锁里、并进这一笔；进锁之后先复查上一次答案与委托，有新的就照它作答。已定的重放（委托已建、拒绝、已形成挡下结果）在锁外只读作答，不进续办守卫那一笔事务（这次到达的观察照旧在锁外追加）。
 
 **三、答案逐次留存。** 每一次答出的答案（拒绝、归属判断及其门禁结论、交接重查）追加一行，不覆盖；放行的答案带将要建的委托号，委托已建时按委托号找回建它所据的那一次。逐次留存的判断不是 UC-PS-001「已有结果」禁止行为里的「第二份归属记录」：它们答的是同一份提交在不同时刻的同一个问题。
 
@@ -44,15 +44,15 @@ Date: 2026-10-21
 
 ## 对已接受记录的作用
 
-- **部分停用** [ADR-0081](./0081-acceptance-judgment-is-envelope-driven.md) Consequences「被拒提交的来源保全从此独立存活」一条中「重放一份曾被业务拒绝的输入答`已有结果`，靠的是首笔保全事务真的提交了。」一句。**适用场景**：只限生产归属未决的那次提交的重放——这一格重判归属，按这一次的结果作答，不答已有结果。其余被拒提交（输入未受理、原委托不可见、关联不适用、准入暂停、交接已确认的非本产品生产归属）的重放照原句答`已有结果`；该条其余部分与 ADR-0081 其余各条不变。
-- [ADR-0256](./0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md)：无条款停用。本记录是其决定一第 2 格在提交编排上的落法；越权风险点 3 所说的缺口由票 code/39 补齐。
-- [ADR-0128](./0128-other-authority-handoff-needs-both-takeover-record-and-handoff-confirmation.md)：无条款停用。决定二尝试身份由决定派生、「同一份决定重复走到这里必须得到同一次尝试」在重发上照用；交接评估此后随答案留存，兑现的是其 Consequences「若将来决定记录落库，评估一格随之」那一格——决定二所说「本上下文不持久化交接尝试」自此不再是事实，派生尝试身份的做法不因此改变。
+- **部分停用** [ADR-0081](./0081-acceptance-judgment-is-envelope-driven.md) Consequences「被拒提交的来源保全从此独立存活」一条中「重放一份曾被业务拒绝的输入答`已有结果`，靠的是首笔保全事务真的提交了。」一句。**适用场景**：只限生产归属未决的那次提交的重放——这一格不答已有结果：交接未确认的他方归属按记着的尝试重投重查、不重判，其余重判归属、按这一次的结果作答。其余被拒提交（输入未受理、原委托不可见、关联不适用、准入暂停、交接已确认的非本产品生产归属）的重放照原句答`已有结果`；该条其余部分与 ADR-0081 其余各条不变。
+- [ADR-0256](./0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md)：无条款停用。本记录是其「重发必须接着办」在提交编排上的落法；其越权风险点「提交编排保全之后出错答 5xx 而不是未决」所说的缺口由票 code/39 补齐。
+- **部分停用（接上）** [ADR-0128](./0128-other-authority-handoff-needs-both-takeover-record-and-handoff-confirmation.md) 决定二「本上下文不持久化交接尝试」一句与 Consequences「若将来决定记录落库，评估一格随之」一句：交接评估随提交答案留存，重发一份交接未确认的他方提交时按记着的尝试重投重查（决定二）。**适用场景**：提交编排的交接评估。尝试身份照旧由决定派生，「同一份决定重复走到这里必须得到同一次尝试」在重发上照用；其余各条不变。
 
 ## Consequences
 
 - 代码随票 code/39：提交答案表 `parcel_shipment.submission_answer`（迁移 `migrations/parcel_shipment/0028_submission_answer.sql`）与端口 `ports.SubmissionAnswers`；续办守卫端口 `ports.SubmissionContinuationGuard`，装配在 `cmd/parcel-api/assemble_submission.go`；领域补 `ProductionOwnershipDecision.WithReassessedHandoff`；结果补 `PriorOutcome`，首方答复补 `priorOutcome`。
 - UC-PS-001 提交答复表各行与「重发接着办」一段、`AT-PS-003`、`AT-PS-104`、`AT-PS-111`–`AT-PS-114` 照本记录写；PS CONTEXT 重放一条指向本记录。
-- 首个消费者切片简报「输入与幂等」同键同摘要一条改为只引 UC-PS-001「重发接着办」一段。
+- 首个消费者切片简报「输入与幂等」同键同摘要一条改为只引 UC-PS-001「重发接着办」一段；「事务边界」补一句指向决定二。
 
 ## 越权风险点
 
@@ -67,8 +67,8 @@ Date: 2026-10-21
 ## Links
 
 - [ADR-0081](./0081-acceptance-judgment-is-envelope-driven.md)：部分停用其 Consequences「被拒提交的来源保全从此独立存活」一条中「重放一份曾被业务拒绝的输入答`已有结果`」一句，只限生产归属未决的那次提交的重放
-- [ADR-0256](./0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md)：决定一第 2 格「重发必须接着办」，本记录写出它在提交编排上的格局
-- [ADR-0128](./0128-other-authority-handoff-needs-both-takeover-record-and-handoff-confirmation.md)：决定二尝试身份由决定派生；Consequences「若将来决定记录落库，评估一格随之」
+- [ADR-0256](./0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md)：「重发必须接着办」，本记录写出它在提交编排上的格局
+- [ADR-0128](./0128-other-authority-handoff-needs-both-takeover-record-and-handoff-confirmation.md)：部分停用（接上）决定二「本上下文不持久化交接尝试」一句与 Consequences「若将来决定记录落库，评估一格随之」一句
 - [ADR-0022](./0022-http-status-carries-answer-formed-not-business-verdict.md)：「没有形成答案」由 5xx 承载
 - [UC-PS-001](../application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md)：提交答复表与「重发接着办」一段、`AT-PS-003`、`AT-PS-104`、`AT-PS-111`–`AT-PS-114`
 - 票 `.scratch/docs-consistency/code/39-a-preserved-submission-whose-build-failed-is-never-built-on-replay.md`

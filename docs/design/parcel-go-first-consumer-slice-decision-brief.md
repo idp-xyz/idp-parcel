@@ -148,6 +148,8 @@ tests/
 1. **来源保全事务**：保存原始内容或不可变引用、摘要及接入处理状态。后续解析或依赖失败不能删除该记录。
 2. **委托提交事务**：仅在本产品拥有当前生产权威时，创建提交批次关联、委托、当前提交版本、声明包裹和接受判断任务，随后 Enqueue 同一事件信封；任一步失败全部回滚。
 
+首次提交与重放续办一样：判归属、记提交答案与委托提交事务并成同一笔，由续办守卫按来源身份取锁，同一来源身份一次只走一路；来源保全事务仍在锁外独立提交，见 [ADR-0266](../adr/0266-a-submission-replay-answers-what-the-first-round-answered-and-only-unresolved-ownership-is-judged-again.md) 决定二。
+
 每份委托独立提交，提交批次不形成全批原子事务。一个委托失败不得回滚同批其他委托已经合法形成的`已提交`事实。
 
 Repository 写入必须在 `Transactor.WithinTransaction` 派生的 context 中调用 `DB.RequireExecutor(ctx)`。Outbox Writer 使用同一 context；禁止 Repository 或 Outbox 在取不到事务时改用连接池。
