@@ -65,7 +65,7 @@ func init() {
 				{Pattern: "/customs-case-requirement-registrations", Handler: customshttp.NewRegisterCaseRequirementEndpoint(channels.operatorRegistries.customs, wiring.caseRequirementRegistration)},
 				// 凭证、税费付款协作事项、税费付款核对三册的在线登记口（ADR-0085 决定一，票 sa-cc/07
 				// 步二；裁决「同族一致」三册都开）：写准入不另立形。凭证口走集成客户端族（ADR-0149；票 operator-channel/11），
-				// 隔离放行已撤。协作与核对两口走操作者渠道的登记写面。
+				// 隔离放行已撤；租户人员照原件手工登记另走运营决定能力面上的手工口（ADR-0236）。协作与核对两口走操作者渠道的登记写面。
 				// 路径的事物词取登记 CLI 的命令名（regulatory-credential / duty-collaboration /
 				// duty-payment-verification），同一本册在 CLI 与端点两处不换词；不取读口的册名
 				// （/customs-credentials 那组）——读口按册平铺，写口按命令命名，前五个登记口已是这么分的。

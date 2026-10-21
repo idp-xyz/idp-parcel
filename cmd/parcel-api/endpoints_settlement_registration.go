@@ -38,7 +38,8 @@ func init() {
 				// parcel-settlement-register 的命令名（external-funds-fact /
 				// external-funds-fact-correction），同一本册在 CLI 与端点两处不换词；前缀随本上下文读口的 /settlement-。
 				// 两口在生产上是同一只编排的两个方法，端点表仍各收一参：装配测试才盖得住「采用口接了更正编排」。
-				// 外部资金事实进产品只经这一口（ADR-0137 决定四）：CC 那侧没有、也不会有资金事实的在线口。
+				// 外部资金事实进产品只经本上下文的采用（ADR-0137 决定四）：这两口与运营决定能力面上的手工采用口（ADR-0236）是同一只
+				// 采用编排的两族入口，CC 那侧没有、也不会有资金事实的在线口。
 				{Pattern: "/settlement-external-funds-fact-registrations", Handler: settlementhttp.NewRegisterExternalFundsFactEndpoint(externalFundsFactRegistrationIntake, wiring.externalFundsFactRegistration)},
 				{Pattern: "/settlement-external-funds-fact-correction-registrations", Handler: settlementhttp.NewRegisterExternalFundsFactCorrectionEndpoint(externalFundsFactCorrectionIntake, wiring.externalFundsFactCorrectionRegistration)},
 			}
