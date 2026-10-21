@@ -445,7 +445,7 @@ POD 后来被证明无效时，原证据和原判断继续保留，运输控制�
 
 ### 7.9 异常案件、索赔、赔付与追偿
 
-异常信号不等于案件，案件也不等于赔偿责任。客户索赔按提交批次接收、逐索赔项判断收到、资格、责任、复核和最终赔付。供应商或保险追偿可以为保全期限并行启动，不必等待客户索赔或赔付完成。
+异常信号不等于案件，案件也不等于赔偿责任。客户索赔按提交批次接收、逐索赔项判断收到、资格、责任、复核和最终赔付。追偿事项可以为保全期限并行启动，不必等待客户索赔或赔付完成。
 
 异常模块拥有证据和责任关系，结算模块形成金额。客户赔付不等待追偿；应追偿、对方认可、真实到账和核销是四个结果，未追回差额必须保留为经营损失。
 
@@ -672,7 +672,7 @@ POD 后来被证明无效时，原证据和原判断继续保留，运输控制�
 | [UC-VE-004](../application/visibility-exception/UC-VE-004-TRIAGE-SIGNALS-AND-OPEN-CASES.md) | 哪些异常信号应建立案件？ | 按发作期、可信度、影响、严重度和分诊规则处理，命中条件才建立案件。 |
 | [UC-VE-005](../application/visibility-exception/UC-VE-005-MANAGE-CASES-AND-COORDINATE-ACTIONS.md) | 如何管理案件并推动处置？ | 维护责任团队、响应周期、影响范围和案件生命周期，向目标上下文发出可追踪的处置请求。 |
 | [UC-VE-006](../application/visibility-exception/UC-VE-006-FORM-CUSTOMER-DISCLOSURE-AND-NOTIFICATION.md) | 什么异常可以告诉哪个客户？ | 按产品、合同、可信度、影响和客户账户形成披露及通知内容，再分别记录提交、送达和确认。 |
-| [UC-VE-007](../application/visibility-exception/UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md) | 如何处理证据、索赔和追偿？ | 保存来源证据，逐索赔项判断收到/资格/责任/复核，独立启动供应商或保险追偿。 |
+| [UC-VE-007](../application/visibility-exception/UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md) | 如何处理证据、索赔和追偿？ | 保存来源证据，逐索赔项判断收到/资格/责任/复核，独立启动追偿事项。 |
 | [UC-VE-008](../application/visibility-exception/UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md) | 客户能看到哪些全程信息？ | 校验客户账户和对象授权，组合获准里程碑、ETA、终局和客户可见异常；不暴露内部投影全量。 |
 
 #### 计价
@@ -680,6 +680,12 @@ POD 后来被证明无效时，原证据和原判断继续保留，运输控制�
 | 用例 | 业务问题 | 产品处理与结果 |
 |---|---|---|
 | [UC-PP-001](../application/parcel-pricing/UC-PP-001-FORM-ESTIMATE-EVALUATIONS.md) | 一件还不存在的包裹按此刻在用的价卡怎么计价？ | 对每张适用价卡各形成一份试算评价，交回状态、金额、费用组成、版本清单与解释，供比价与估价；只算不存，不形成承诺、不交结算、不择优。 |
+
+#### 代收与清分
+
+| 用例 | 业务问题 | 产品处理与结果 |
+|---|---|---|
+| [UC-CR-001](../application/collection-remittance/UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md) | 代收本金怎样登记、记账并回汇？ | 登记代收指令与分层的代收事实，记代收分户账（入账、移位、冲正），登记差异事项并形成回汇批次；运营企业真实到账经 `settlement-accounting` 的采用进入（[ADR-0274](../adr/0274-collected-principal-bank-arrival-enters-through-the-settlement-accounting-funds-adoption.md)）。首发试点不启用 COD。 |
 
 #### 结算与经营核算
 
@@ -1086,7 +1092,11 @@ POD 后来被证明无效时，原证据和原判断继续保留，运输控制�
 
 **输入与输出**
 
-输入来自托运的客户代收要求、运输履约的收款证据与渠道报告，以及银行/支付系统的真实资金事实。结算模块只提供 COD 服务费和协议允许的抵扣；代收模块拥有本金及客户汇付结果。
+输入来自托运的客户代收要求、运输履约的收款证据与渠道报告，以及经 `settlement-accounting` 采用的运营企业真实到账——代收与清分凭采用引用登记这一层，不另开入口（[ADR-0274](../adr/0274-collected-principal-bank-arrival-enters-through-the-settlement-accounting-funds-adoption.md)）。结算模块只提供 COD 服务费和协议允许的抵扣；代收模块拥有本金及客户汇付结果。
+
+**主要用例**
+
+- `UC-CR-001`：登记代收义务与事实、记代收分户账并形成回汇批次。
 
 **首发边界与当前状态**
 

@@ -298,7 +298,7 @@
 
 在相关真实合同、接单规则、授权角色、财务策略、接入契约、试点治理和非功能参数完成登记及验证前，不应宣称真实生产接单流程已经完整，也不应发布租户既有渠道的固定 Schema、真实拒绝原因目录或客户 SLA；首方客户 API 的契约形状与错误码是产品契约，按 [ADR-0140](../../adr/0140-first-party-api-contract-is-generated-from-endpoint-descriptors-with-url-major-version-and-problem-details.md) 发布。
 
-机制与产品策略按 [ADR-0017](../../adr/0017-admission-gates-judged-by-blocking-cause.md)、[ADR-0146](../../adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 已放行；为产出消费者证明而写的持久化实现按 [ADR-0026](../../adr/0026-persistence-written-for-consumer-proof-precedes-gate-passage.md) 可写，登记为发布基线仍在 Bento 闸门之后；隔离形态逐口退场按 [ADR-0150](../../adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md)。仍然禁止的是把未确认的真实合同、规则、角色、时限或阈值写成取值：租户取值保持显式未配置，如实答`未配置`。
+机制与产品策略按 [ADR-0017](../../adr/0017-admission-gates-judged-by-blocking-cause.md)、[ADR-0146](../../adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 已放行；为产出消费者证明而写的持久化实现按 [ADR-0026](../../adr/0026-persistence-written-for-consumer-proof-precedes-gate-passage.md) 可写，锁定候选的 Parcel 半边成立之后按 [ADR-0277](../../adr/0277-the-parcel-half-of-the-bento-persistence-gate-has-passed-and-registration-still-waits-for-both-consumers.md) 进生产装配，登记 `B-06` 仍在 Bento 闸门之后；隔离形态逐口退场按 [ADR-0150](../../adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md)。仍然禁止的是把未确认的真实合同、规则、角色、时限或阈值写成取值：租户取值保持显式未配置，如实答`未配置`。
 
 ## 给开发的交接
 
