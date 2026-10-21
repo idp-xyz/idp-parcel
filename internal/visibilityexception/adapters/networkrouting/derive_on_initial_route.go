@@ -93,6 +93,12 @@ func (adapter *DeriveOnInitialRouteAdapter) HandleFormedInitialRoute(
 		return err
 	}
 	record, found, err := adapter.routes.FindByKey(ctx, key)
+	// NR 库里那一行重建不出来是坏数据，重投推不动，要人修数据；包进 ErrInitialRouteNotVisible 就进了未决名单，整封
+	// 信封按「稍后再看」重投到放弃。所以先认 NR 的坏行哨兵、保链上抛，余下的读不回才是可等的依赖故障
+	// （nrports.ErrStoredRouteRecordUnreadable 头注）。
+	if errors.Is(err, nrports.ErrStoredRouteRecordUnreadable) {
+		return fmt.Errorf("load initial route: %w", err)
+	}
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrInitialRouteNotVisible, err)
 	}

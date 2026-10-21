@@ -3,6 +3,7 @@ package networkrouting_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -306,6 +307,27 @@ func TestAnUnreadableInitialRouteIsContinuableUndecided(t *testing.T) {
 	}
 	if derive.calls != 0 {
 		t.Fatal("读失败不该走到派生")
+	}
+}
+
+// NR 库里那一行经领域构造门重建不出来是坏数据，重投推不动：响亮上抛、保住 NR 哨兵的错误链，不包成`判断还看不见`
+// 进未决名单重投到耗尽。读不回（依赖故障）仍是未决，见上一条用例。
+func TestAnUnrebuildableInitialRouteRowIsLoudNotUndecided(t *testing.T) {
+	derive := &routeCountingHandler{}
+	subject, err := adapter.NewDeriveOnInitialRouteAdapter(
+		&routeFinderDouble{err: fmt.Errorf("find initial route: %w: bad plan", nrports.ErrStoredRouteRecordUnreadable)}, derive)
+	if err != nil {
+		t.Fatalf("构造：%v", err)
+	}
+	err = subject.HandleFormedInitialRoute(t.Context(), formedInitialRouteRef())
+	if !errors.Is(err, nrports.ErrStoredRouteRecordUnreadable) {
+		t.Fatalf("err = %v, want ErrStoredRouteRecordUnreadable 链不断", err)
+	}
+	if errors.Is(err, adapter.ErrInitialRouteNotVisible) {
+		t.Fatalf("err = %v——坏行包成了未决哨兵", err)
+	}
+	if derive.calls != 0 {
+		t.Fatal("坏行不该走到派生")
 	}
 }
 
