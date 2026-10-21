@@ -222,7 +222,7 @@
 | 集运包含查环（阶段 3、`AT-NO-039`） | 移入只拒已封装、已关闭与重复成员，不查祖先链 | [docs-consistency/code/19](../../../.scratch/docs-consistency/code/19-consolidation-containment-is-not-checked-for-cycles.md) |
 | 实际测量与当前有效实测（`AT-NO-029`、`AT-NO-030`、阶段 2、步骤 4、5） | 没有实际测量登记册与派生；实测也不触发路由复核 | [pp-pricing-input-seams/04](../../../.scratch/pp-pricing-input-seams/issues/04-no-actual-measurement-registry-and-valid-measurements-read-port.md)、[product-strategy-boundary/08](../../../.scratch/product-strategy-boundary/issues/08-no-current-valid-measurement-derivation.md)；运输准备按实测再准备见 [demo-chain-gaps/44](../../../.scratch/demo-chain-gaps/issues/44-tf-re-prepares-on-node-actual-measurement.md) |
 | 路由偏离（`AT-NO-044`、一致性一节的偏离） | `network-routing` 没有偏离的模型 | [demo-chain-gaps/35](../../../.scratch/demo-chain-gaps/issues/35-network-routing-route-deviation-consumes-movement-facts.md) |
-| 作业任务、作业批次、扫描、作业位置、状况观察、在场核对 | 没有模型 | 无票；随节点参数 `PAR-NET-04..06` 排 |
+| 作业任务、作业批次、扫描、作业位置、状况观察、在场核对 | 没有模型；这几块是机制，不等租户参数，租户取值（作业清单、位置层级、设备）照 `PAR-NET-04..06` 登记 | [docs-consistency/code/33](../../../.scratch/docs-consistency/code/33-node-operations-has-no-work-task-batch-scan-location-condition-or-presence-check-model.md) |
 
 真实生产写入的租户取值（节点、作业清单、设备与规则）仍待节点参数。
 
