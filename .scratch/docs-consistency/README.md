@@ -79,6 +79,7 @@
 | [07](./issues/07-pc-pp-docs.md) PC+PP | audit/pc-pp.md 的 A、B | 0260–0262 | 01 进 main |
 | [08](./issues/08-tf-docs.md) TF | audit/tf.md 的 A、B | 0263–0268 | 01、票 57 进 main |
 | [09](./issues/09-sa-cr-docs.md) SA+CR | audit/sa-cr.md 的 A、B | 0269–0273 | 01、票 57 进 main |
+| [11](./issues/11-unclaimed-cross-adr-contradictions.md) 横切 ADR 矛盾补漏 | audit/cross.md 里 B2、B3 两簇无人接的七条 B 类，与两簇 A 类停用指针复核 | 0267、0268、0273、0276、0279、0280 | 10a 进 main |
 | [10](./issues/10-cross-cutting-docs.md) 横切文档 | audit/cross.md 里 GLOSSARY、CONTEXT-MAP、SCENARIOS、`docs/product/`、`docs/agents/` 的 A、B，并收各组交来的共享文件改动 | 0274–0278 | 03–09 进 main |
 
 分工规矩：03–09 只改本组的 CONTEXT、UC 与本组新立的 ADR（及被它停用的那几份 ADR 的 Status 行与 Links）；需要改 GLOSSARY、CONTEXT-MAP、SCENARIOS、产品文档、别组文件的，写进本票「交横切」一节，由 10 统一改。B 类按用户授权（「你作为业务和系统专家自决」）代决，立新 ADR，写越权风险点。并行：03–07 每次至多三张。
