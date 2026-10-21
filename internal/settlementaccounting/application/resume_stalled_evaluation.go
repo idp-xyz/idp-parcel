@@ -183,7 +183,8 @@ func (handler *ResumeStalledEvaluationHandler) Handle(
 }
 
 // waitsFor 答一个停因与它上次续办凭的依据，在不在等这一次续办。凭同一个依据续办过的不再推：同一封信重投、同一条运营
-// 命令重跑，都不该把续办出来又停下的那一件再推一代。
+// 命令重跑，都不该把续办出来又停下的那一件再推一代。这里只在本事务里再核链头；整条代次链上有没有哪一代凭过这个依据，
+// 由队列的口径（StalledEvaluationQuery.ExcludeBasis）筛过一遍。
 func waitsFor(command ResumeStalledEvaluationCommand, cause domain.EvaluationStopCause, lastBasis domain.ResumeBasis) bool {
 	if lastBasis == command.Basis {
 		return false

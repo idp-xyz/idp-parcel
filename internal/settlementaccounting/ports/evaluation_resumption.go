@@ -108,7 +108,7 @@ func (kind StalledEvaluationKind) String() string {
 }
 
 // StalledEvaluation 是等着续办的一件：只带回读它的键与当时的停因，续办在自己的事务里按键再读一次再判。按 Kind 只有
-// 一组键有值。
+// 一组键有值。Position 是它在队列里的位置，下一页从它之后取。
 type StalledEvaluation struct {
 	Kind              StalledEvaluationKind
 	Cause             domain.EvaluationStopCause
@@ -117,13 +117,27 @@ type StalledEvaluation struct {
 	OccurrenceVersion domain.OccurrenceVersion
 	SellRequest       domain.SellEvaluationRequestID
 	BuyRequest        domain.EvaluationRequestID
+	Position          StalledEvaluationPosition
 }
+
+// StalledEvaluationPosition 是队列的定序键：停下时刻、种类与两段键。按它翻页而不是每页重读队首：办过却没有写回的件
+// （这一户采用了别的时点、重跑被拒、撞上矛盾）仍满足「等着」的口径，每页重读队首会被它们占满、把后面等着的挡住。
+type StalledEvaluationPosition struct {
+	StoppedAt time.Time
+	Kind      string
+	FirstKey  string
+	SecondKey string
+}
+
+// Present 答位置在不在场：零值表示从队首取。
+func (position StalledEvaluationPosition) Present() bool { return position.Kind != "" }
 
 // StalledEvaluationQuery 是取等待队列的条件。
 //
 //   - Causes 必填：只取停在这几种停因上的。一次参数登记交的是它解得开的那几种，运营续办交全集。
-//   - ExcludeBasis 可缺：凭这个依据续办过的不再取——发起停办重跑后仍停着、或续办出来的那一代又停下了，同一封信重投、
-//     同一条运营命令重跑都不再推它。
+//   - ExcludeBasis 可缺：这条代次链上任一代凭这个依据续办过、或发起停办凭它重跑过的不再取——同一封信重投、同一条运营
+//     命令重跑都不再推这条链。
+//   - After 可缺：只取排在这个位置之后的，调用方按页往后翻。
 //   - PricingScope 可缺：只取问的是这个计价范围的请求。价卡登记带它，免得一张卡把别的范围上等着的请求全推一遍；
 //     发起停办没有计价范围，带了它就不取发起停办。
 //   - Parcel 与 Occurrence（连同 OccurrenceVersion）可缺：运营续办按一件包裹或一版发生项点名时用，两样都带就什么都不取。
@@ -134,14 +148,15 @@ type StalledEvaluationQuery struct {
 	Parcel            domain.ParcelReference
 	Occurrence        domain.ChargeOccurrenceID
 	OccurrenceVersion domain.OccurrenceVersion
+	After             StalledEvaluationPosition
 }
 
 // ErrStalledEvaluationQueryInvalid 说明取队列的条件立不住（停因为空、点名的发生项缺版本）。是调用方的缺陷，不是依赖故障。
 var ErrStalledEvaluationQueryInvalid = errors.New("settlement accounting: invalid stalled evaluation query")
 
-// StalledEvaluationQueue 交回一个租户里等着续办的东西，四本册合起来按停下的时刻先后、同刻按键定序，至多 limit 件。
+// StalledEvaluationQueue 交回一个租户里等着续办的东西，四本册合起来按停下的时刻先后、同刻按种类与键定序，至多 limit 件。
 // 「等着」的口径（ADR-0229 决定五）：发起停办——这件包裹在这一时点（或这一版发生项）还没有任何一份请求；请求——带停因、
-// 还没有下一代。续办过的自然从队列里出去，所以调用方按页反复取，取到一页里没有新面孔即到底。
+// 还没有下一代。调用方按 After 往后翻页，取到不足一页即到底。
 type StalledEvaluationQueue interface {
 	ListStalled(ctx context.Context, tenant domain.TenantID, query StalledEvaluationQuery, limit int) ([]StalledEvaluation, error)
 }

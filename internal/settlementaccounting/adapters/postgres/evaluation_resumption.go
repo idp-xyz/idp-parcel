@@ -204,11 +204,11 @@ func (stalls *EvaluationResumptions) FindBuyInitiationStall(
 	return stall, true, nil
 }
 
-// ListStalled 把四本册里等着的东西合成一张队列。每一支都带同一组条件：停因在名单里、不是凭被排除的依据续办出来或
-// 重跑过的；请求那两支再要求还没有下一代，发起停办那两支要求这一拍还没有任何一份请求。计价范围在场时发起停办两支
-// 整支不取；点名包裹时只取 SELL 两支、点名发生项时只取 BUY 两支。
+// ListStalled 把四本册里等着的东西合成一张队列。每一支都带同一组条件：停因在名单里；这条代次链上没有哪一代凭被排除的
+// 依据续办出来、发起停办也没有凭它重跑过；请求那两支再要求还没有下一代，发起停办那两支要求这一拍还没有任何一份请求。
+// 计价范围在场时发起停办两支整支不取；点名包裹时只取 SELL 两支、点名发生项时只取 BUY 两支。
 //
-// 定序按停下的时刻、再按种类与键：同一组行永远排成同一个次序，调用方按页取到一页里没有新面孔即到底。
+// 定序按停下的时刻、再按种类与键；位置在场时只取排在它之后的——按位置翻页，办过却没写回的件不会把后面的挡住。
 func (stalls *EvaluationResumptions) ListStalled(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -228,6 +228,12 @@ func (stalls *EvaluationResumptions) ListStalled(
 		}
 		causes = append(causes, cause.String())
 	}
+	var afterAt *time.Time
+	var afterKind, afterFirst, afterSecond *string
+	if after := query.After; after.Present() {
+		at := after.StoppedAt.UTC()
+		afterAt, afterKind, afterFirst, afterSecond = &at, &after.Kind, &after.FirstKey, &after.SecondKey
+	}
 	querier, err := stalls.db.ReadExecutor(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list stalled evaluations: %w", err)
@@ -235,7 +241,8 @@ func (stalls *EvaluationResumptions) ListStalled(
 	rows, err := querier.Query(ctx, stalledEvaluationsSQL,
 		tenant.String(), causes, optionalBasis(query.ExcludeBasis), optionalText(query.PricingScope),
 		optionalText(query.Parcel.String()), optionalText(query.Occurrence.String()),
-		optionalText(query.OccurrenceVersion.String()), limit)
+		optionalText(query.OccurrenceVersion.String()), limit,
+		afterAt, afterKind, afterFirst, afterSecond)
 	if err != nil {
 		return nil, fmt.Errorf("list stalled evaluations: %w", err)
 	}
@@ -254,6 +261,7 @@ func (stalls *EvaluationResumptions) ListStalled(
 		if err != nil {
 			return nil, fmt.Errorf("list stalled evaluations: %w", err)
 		}
+		item.Position = ports.StalledEvaluationPosition{StoppedAt: stoppedAt.UTC(), Kind: kind, FirstKey: first, SecondKey: second}
 		stalled = append(stalled, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -263,7 +271,9 @@ func (stalls *EvaluationResumptions) ListStalled(
 }
 
 // stalledEvaluationsSQL 的参数：$1 租户、$2 停因名单、$3 排除的依据（可空）、$4 计价范围（可空）、$5 包裹（可空）、
-// $6 发生项（可空）、$7 发生项版本（可空）、$8 上限。各支交回同形四列：种类、停因、两段键、停下时刻。
+// $6 发生项（可空）、$7 发生项版本（可空）、$8 上限、$9–$12 翻页位置（可空，四格同在同缺）。各支交回同形四列：种类、
+// 停因、两段键、停下时刻。排除依据对请求那两支查整条代次链（同一自然键上任一代），不只看链头：一条链先凭 B 续办、
+// 再凭 C 续办出又停下的一代，B 重投时不该再推它。
 const stalledEvaluationsSQL = `
 SELECT kind, stop_cause, first_key, second_key, stopped_at FROM (
 	SELECT 'SELL_INITIATION' AS kind, s.stop_cause, s.parcel_id AS first_key, s.billing_moment AS second_key, s.stopped_at
@@ -289,7 +299,10 @@ SELECT kind, stop_cause, first_key, second_key, stopped_at FROM (
 	SELECT 'SELL_REQUEST', q.stop_cause, q.request_id, '', q.stopped_at
 	  FROM settlement_accounting.sell_evaluation_request q
 	 WHERE q.tenant_id = $1 AND q.stop_cause = ANY($2)
-	   AND ($3::text IS NULL OR q.resume_basis IS DISTINCT FROM $3)
+	   AND ($3::text IS NULL OR NOT EXISTS (
+	         SELECT 1 FROM settlement_accounting.sell_evaluation_request c
+	          WHERE c.tenant_id = q.tenant_id AND c.parcel_id = q.parcel_id
+	            AND c.billing_moment = q.billing_moment AND c.resume_basis = $3))
 	   AND ($4::text IS NULL OR q.pricing_scope_id = $4)
 	   AND $6::text IS NULL
 	   AND ($5::text IS NULL OR q.parcel_id = $5)
@@ -299,13 +312,17 @@ SELECT kind, stop_cause, first_key, second_key, stopped_at FROM (
 	SELECT 'BUY_REQUEST', e.stop_cause, e.request_id, '', e.stopped_at
 	  FROM settlement_accounting.evaluation_request e
 	 WHERE e.tenant_id = $1 AND e.stop_cause = ANY($2)
-	   AND ($3::text IS NULL OR e.resume_basis IS DISTINCT FROM $3)
+	   AND ($3::text IS NULL OR NOT EXISTS (
+	         SELECT 1 FROM settlement_accounting.evaluation_request c
+	          WHERE c.tenant_id = e.tenant_id AND c.scope_ref = e.scope_ref AND c.purpose = e.purpose
+	            AND c.source_digest = e.source_digest AND c.resume_basis = $3))
 	   AND ($4::text IS NULL OR e.scope_ref = $4)
 	   AND $5::text IS NULL
 	   AND ($6::text IS NULL OR (e.occurrence_id = $6 AND e.occurrence_version = $7))
 	   AND NOT EXISTS (SELECT 1 FROM settlement_accounting.evaluation_request n
 	                    WHERE n.tenant_id = e.tenant_id AND n.previous_request_id = e.request_id)
 ) stalled
+WHERE $9::timestamptz IS NULL OR (stopped_at, kind, first_key, second_key) > ($9::timestamptz, $10::text, $11::text, $12::text)
 ORDER BY stopped_at, kind, first_key, second_key
 LIMIT $8`
 

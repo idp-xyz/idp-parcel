@@ -439,3 +439,75 @@ func TestTheEvaluationParameterHandoffEnqueuesOneEnvelopePerRegisteredRow(t *tes
 		return nil
 	})
 }
+
+// Covers: AT-SA-193 的翻页与整链排除——按位置往后取：同一组行第二页接着第一页、不重不漏；排除的依据查整条代次链：
+// 一条链先凭 B 续办出第二代、再凭 C 续办出又停下的第三代，排除 B 时第三代不取，排除别的依据照取。
+func TestTheStalledQueuePagesByPositionAndExcludesABasisAcrossTheWholeChain(t *testing.T) {
+	fixture := newResumptionFixture(t)
+	for index, parcel := range []string{"SYN-PARCEL-P1", "SYN-PARCEL-P2", "SYN-PARCEL-P3"} {
+		record := sellEvaluationRequestRecord(t, "tenant-a", "SELLREQ-SYN-P"+string(rune('1'+index)), parcel,
+			domain.BillingMomentNetworkIntakeAdopted, sellRequestRecordedAt)
+		saveSellEvaluationRequest(t, fixture.db.Transactor(), fixture.sellRequests, record)
+		fixture.stopSell(t, record.Key, domain.StopEvaluationPendingJudgment)
+	}
+	causes := domain.EvaluationStopCausesResumedBy(domain.ParameterReferenceSeries)
+	first, err := fixture.resumptions.ListStalled(t.Context(), fixture.tenant, ports.StalledEvaluationQuery{Causes: causes}, 2)
+	if err != nil || len(first) != 2 {
+		t.Fatalf("第一页 = %+v err=%v", first, err)
+	}
+	second, err := fixture.resumptions.ListStalled(t.Context(), fixture.tenant,
+		ports.StalledEvaluationQuery{Causes: causes, After: first[1].Position}, 2)
+	if err != nil || len(second) != 1 {
+		t.Fatalf("第二页 = %+v err=%v", second, err)
+	}
+	seen := map[string]bool{}
+	for _, item := range append(first, second...) {
+		seen[item.SellRequest.String()] = true
+	}
+	if len(seen) != 3 {
+		t.Fatalf("两页合起来 = %v，want 三件不重不漏", seen)
+	}
+
+	// 整链排除：P1 那条链 B → 第二代、C → 第三代，第三代又停下。
+	chainHead := sellEvaluationRequestRecord(t, "tenant-a", "SELLREQ-SYN-P1", "SYN-PARCEL-P1",
+		domain.BillingMomentNetworkIntakeAdopted, sellRequestRecordedAt)
+	b := basisOf(t, domain.ParameterPriceCard, "pricing-parameter/B")
+	c := basisOf(t, domain.ParameterFeeItemMapping, "evaluation-parameter/C")
+	second2, err := chainHead.Request.Resume(saValue(t, domain.NewSellEvaluationRequestID, "SELLREQ-SYN-P1-2"), b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record2 := ports.SellEvaluationRequestRecord{Key: ports.SellEvaluationRequestKey{TenantID: fixture.tenant, Request: second2.ID()},
+		Request: second2, RecordedAt: sellRequestRecordedAt.Add(time.Hour), State: domain.SellRequestSubmitted}
+	saveSellEvaluationRequest(t, fixture.db.Transactor(), fixture.sellRequests, record2)
+	fixture.stopSell(t, record2.Key, domain.StopFeeItemMappingIncomplete)
+	third, err := second2.Resume(saValue(t, domain.NewSellEvaluationRequestID, "SELLREQ-SYN-P1-3"), c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record3 := ports.SellEvaluationRequestRecord{Key: ports.SellEvaluationRequestKey{TenantID: fixture.tenant, Request: third.ID()},
+		Request: third, RecordedAt: sellRequestRecordedAt.Add(2 * time.Hour), State: domain.SellRequestSubmitted}
+	saveSellEvaluationRequest(t, fixture.db.Transactor(), fixture.sellRequests, record3)
+	fixture.stopSell(t, record3.Key, domain.StopEvaluationFailed)
+
+	listed := func(exclude domain.ResumeBasis) bool {
+		items := fixture.list(t, ports.StalledEvaluationQuery{
+			Causes: domain.AllEvaluationStopCauses(), ExcludeBasis: exclude, Parcel: saValue(t, domain.NewParcelReference, "SYN-PARCEL-P1"),
+		})
+		for _, item := range items {
+			if item.SellRequest.String() == "SELLREQ-SYN-P1-3" {
+				return true
+			}
+		}
+		return false
+	}
+	if listed(b) {
+		t.Fatal("链上第二代凭 B 续办过，排除 B 时第三代又被取到")
+	}
+	if listed(c) {
+		t.Fatal("第三代自己凭 C 续办出来，排除 C 时又被取到")
+	}
+	if !listed(basisOf(t, domain.ParameterPriceCard, "pricing-parameter/D")) {
+		t.Fatal("排除一个链上没用过的依据，第三代却不在队列里")
+	}
+}

@@ -132,6 +132,16 @@ var (
 	}
 )
 
+// stalledIdentity 认一件等着的东西是谁：种类与两段键，不含停因与位置——同一件重跑后换了停因或停下时刻，仍是同一件。
+type stalledIdentity struct {
+	kind          ports.StalledEvaluationKind
+	first, second string
+}
+
+func identityOf(item ports.StalledEvaluation) stalledIdentity {
+	return stalledIdentity{kind: item.Kind, first: item.Position.FirstKey, second: item.Position.SecondKey}
+}
+
 // StalledEvaluationResumer 是续办一件的编排，生产装配接 saapplication.ResumeStalledEvaluationHandler。
 type StalledEvaluationResumer interface {
 	Handle(
@@ -243,8 +253,8 @@ func (consumer *EvaluationParameterRegisteredConsumer) decode(id eventing.EventI
 
 // resumeWaiting 按页取等着的件，逐件在各自的顶层事务里续办一次。结局分三类收：落定（续办了、仍停着、早续办过、不在等）、
 // 未决（记下，等本封重投）、硬错误（矛盾、装配缺件，记下并继续办其余）。硬错误压过未决上抛——它要人看，折进未决会重投到
-// 预算耗尽。一页里没有新面孔即到底：续办了的出了队列，仍停着的换上了本依据也出了队列，留下的只有未决与硬错误那几件，
-// 它们下一页仍排在前面。
+// 预算耗尽。按位置往后翻页、不足一页即到底：办过却没写回的件（不在等、硬错误、未决）仍满足队列的口径，每页重读队首会被
+// 它们占满。续办中途换了位置的件（发起停办重跑后又停下）可能在后面的页里再出现一次，记过的不再办。
 func (consumer *EvaluationParameterRegisteredConsumer) resumeWaiting(ctx context.Context, registered registeredParameter) error {
 	causes := domain.EvaluationStopCausesResumedBy(registered.kind)
 	if len(causes) == 0 {
@@ -254,7 +264,7 @@ func (consumer *EvaluationParameterRegisteredConsumer) resumeWaiting(ctx context
 	if registered.kind == domain.ParameterPriceCard {
 		query.PricingScope = registered.scope
 	}
-	attempted := map[ports.StalledEvaluation]bool{}
+	attempted := map[stalledIdentity]bool{}
 	var (
 		total, settled int
 		undecided      []error
@@ -265,13 +275,12 @@ func (consumer *EvaluationParameterRegisteredConsumer) resumeWaiting(ctx context
 		if err != nil {
 			return fmt.Errorf("%w: list stalled evaluations: %v", ErrEvaluationResumptionUndecided, err)
 		}
-		fresh := 0
 		for _, item := range items {
-			if attempted[item] {
+			query.After = item.Position
+			if attempted[identityOf(item)] {
 				continue
 			}
-			attempted[item] = true
-			fresh++
+			attempted[identityOf(item)] = true
 			total++
 			var result saapplication.ResumeStalledEvaluationResult
 			err := consumer.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
@@ -302,7 +311,7 @@ func (consumer *EvaluationParameterRegisteredConsumer) resumeWaiting(ctx context
 				settled++
 			}
 		}
-		if fresh == 0 || len(items) < consumer.pageSize {
+		if len(items) < consumer.pageSize {
 			break
 		}
 	}
