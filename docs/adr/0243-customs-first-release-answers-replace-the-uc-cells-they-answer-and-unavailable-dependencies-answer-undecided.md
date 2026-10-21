@@ -1,6 +1,6 @@
-# ADR-0243：关务建案、授权确认与提交执行三口的首发答法并进 UC 原行——被替代的格移出原 AT 行，提交执行时就绪没登也答未决，读不动与写不进答未决并指名那一口
+# ADR-0243：关务建案、授权确认、提交执行三口与税费付款、放行门禁两只核对编排的首发答法并进 UC 原行——被替代的格移出原 AT 行，提交执行时就绪没登也答未决，读不动与写不进答未决并指名那一口
 
-Status: Accepted（2026-10-21，Claude Code 会话代决：用户原话「需要修改文档，确保自洽，正确」与常设授权「你作为业务和系统专家自决」；票 docs-consistency/03，代 CC owner 裁定审计 cc H1、M1、M2、M3、M4 的文档处理。部分停用 [ADR-0227](./0227-customs-case-and-declaration-submission-enter-production-through-operator-decision-faces.md) 决定八一句，见「对已接受记录的作用」。越权风险点见文末，待 CC owner 复核。）<!-- 索引注记 -->｜**第三格**：提交执行时单元的就绪判断没登，首发答未决并指名 `READINESS_UNCONFIGURED`（`AT-CC-448`），与 ADR-0227 决定八的另两格同一原则，替代 UC-CC-005 `AT-CC-109` 在「不存在」一格的结果名。**读不动与写不进**：UC 的「未形成授权结果」「未形成提交处理结果」在两口首发都答未决并指名那一口（授权确认 `READINESS_UNAVAILABLE`、`AUTHORITY_STORE_UNAVAILABLE`；提交执行 `CASE_LOOKUP_UNAVAILABLE`、`READINESS_UNAVAILABLE`、`AUTHORITY_UNAVAILABLE`、`UNIT_STORE_UNAVAILABLE`、`VERSION_IDENTITY_UNAVAILABLE`、`SUBMISSION_STORE_UNAVAILABLE`），HTTP 200 带原因，与建案（ADR-0227 决定二）同一写法；与「未配置」同一个结果码，靠原因分续办。**UC 写法**：同一场景只留一套结果——被首发答法替代的格从原 AT 行移出、原行只留仍成立的格，结果表补首发结果码对照，不再行旁注明「首发答法见……」
+Status: Accepted（2026-10-21，Claude Code 会话代决：用户原话「需要修改文档，确保自洽，正确」与常设授权「你作为业务和系统专家自决」；票 docs-consistency/03，代 CC owner 裁定审计 cc H1、M1、M2、M3、M4 的文档处理，评审时决定二扩到 UC-CC-009 的两只核对编排。部分停用 [ADR-0227](./0227-customs-case-and-declaration-submission-enter-production-through-operator-decision-faces.md) 决定八一句，见「对已接受记录的作用」。越权风险点见文末，待 CC owner 复核。）<!-- 索引注记 -->｜**第三格**：提交执行时单元的就绪判断没登，首发答未决并指名 `READINESS_UNCONFIGURED`（`AT-CC-448`），与 ADR-0227 决定八的另两格同一原则，替代 UC-CC-005 `AT-CC-109` 在「不存在」一格的结果名。**读不动与写不进**：UC 的「未形成授权结果」「未形成提交处理结果」在两口首发都答未决并指名那一口（授权确认 `READINESS_UNAVAILABLE`、`AUTHORITY_STORE_UNAVAILABLE`；提交执行 `CASE_LOOKUP_UNAVAILABLE`、`READINESS_UNAVAILABLE`、`AUTHORITY_UNAVAILABLE`、`UNIT_STORE_UNAVAILABLE`、`VERSION_IDENTITY_UNAVAILABLE`、`SUBMISSION_STORE_UNAVAILABLE`），HTTP 200 带原因，与建案（ADR-0227 决定二）同一写法；UC-CC-009「未形成税费/门禁核对」同此，税费付款核对与放行门禁核对两只编排都答 `UNDECIDED` 并指名读不动或写不进的那一口；与「未配置」「判不了」同一个结果码，靠原因分续办。**UC 写法**：同一场景只留一套结果——被首发答法替代的格从原 AT 行移出、原行只留仍成立的格，结果表补首发结果码对照，不再行旁注明「首发答法见……」
 Date: 2026-10-21
 
 ## Context
@@ -15,23 +15,26 @@ Date: 2026-10-21
 
 **二、读不动与写不进答未决并指名那一口。** UC-CC-004「未形成授权结果」与 UC-CC-005「未形成提交处理结果」在两口首发以`未决`作答，原因指名读不动或写不进的那一口（码见注记），HTTP 200 带原因——与建案口（ADR-0227 决定二）、外部结果接收口同一写法。「未决」由此在三口都有两类原因：某本册的内容租户还没登（`*_UNCONFIGURED`，续办是去登记），与某个依赖此刻读不动或写不进（`*_UNAVAILABLE`，续办是运维去救、请求方原样重试）。结果码相同、原因分格，是 ADR-0029「按恢复动作分格」在答复体里的落法：恢复动作写在原因上，不再另立一个结果名。编排交回 error（没有形成任何答案）仍是 500。
 
-**三、UC 同一场景只留一套结果。** 被首发答法替代的格从原 AT 行移出，原行只留仍成立的格，替代那一格由 4xx 号 AT 独自承担；原行不再行旁注明「首发答法见……」。UC-CC-001、UC-CC-004、UC-CC-005 的结果表各补一张首发结果码对照：结果码、对应哪一格结果、何时答；首发未实现的格写明未实现，不写成已有结果码。
+同一写法适用于 UC-CC-009 的税费付款核对与放行门禁核对两只编排：「未形成税费/门禁核对」首发答 `UNDECIDED`，原因指名读不动或写不进的那一口（门禁核对 `GATE_CONDITION_VIEW_UNAVAILABLE`、`DUTY_PAYMENT_GATE_RULE_VIEW_UNAVAILABLE`、`DUTY_VERIFICATION_VIEW_UNAVAILABLE`、`GATE_STORE_UNAVAILABLE`；付款核对 `COLLABORATION_STORE_UNAVAILABLE`、`FUNDS_FACT_REGISTER_UNAVAILABLE`、`PAYER_REQUIREMENT_VIEW_UNAVAILABLE`、`DUTY_VERIFICATION_STORE_UNAVAILABLE`、`DUTY_VERIFICATION_HANDOFF_UNAVAILABLE`）；同一结果码下的其余原因是「放行门禁核对未决」或付款核对未决——目录或规则没登、没有付款核对、三态待确认或冲突、等税费结果或来源补事实。
+
+**三、UC 同一场景只留一套结果。** 被首发答法替代的格从原 AT 行移出，原行只留仍成立的格，替代那一格由 4xx 号 AT 独自承担；原行不再行旁注明「首发答法见……」。UC-CC-001、UC-CC-004、UC-CC-005、UC-CC-009 的结果表各补一张首发结果码对照：结果码、对应哪一格结果、何时答；首发未实现的格写明未实现，不写成已有结果码。
 
 ## 对已接受记录的作用
 
-部分停用 [ADR-0227](./0227-customs-case-and-declaration-submission-enter-production-through-operator-decision-faces.md) 决定八一句：「两行的正文不改，行旁注明首发答法见 `AT-CC-444` / `AT-CC-439` 与本条。」——两行改为只留仍成立的格。同一决定的替代范围扩到 UC-CC-005 `AT-CC-109` 的「不存在」一格（决定一）。**适用场景**：只限 UC 文档的写法与替代范围；决定八的答法（未登记答未决并指名未配置、已失效答业务负向）与 ADR-0227 其余各条不变。
+部分停用 [ADR-0227](./0227-customs-case-and-declaration-submission-enter-production-through-operator-decision-faces.md) 决定八一句：「两行的正文不改，行旁注明首发答法见 `AT-CC-444` / `AT-CC-439` 与本条。」——两行改为只留仍成立的格。同一决定里的「这替代 UC-CC-004 `AT-CC-105`「请求未受理（授权前提不成立）」在「不存在」「已经失效」两格、UC-CC-005 `AT-CC-110`「提交前门禁已阻断」在「不存在」一格上的结果名（110 的已撤销照旧是门禁阻断那一类，答 `NOT_AUTHORIZED`）」一句扩成也替代 UC-CC-005 `AT-CC-109`「提交前门禁已阻断」在「不存在」一格上的结果名（决定一）。**适用场景**：只限 UC 文档的写法与替代范围；决定八的答法（未登记答未决并指名未配置、已失效答业务负向）与 ADR-0227 其余各条不变。
 
 ## 候选与反方
 
 **甲 · 照决定八旧做法，在 `AT-CC-109` 行旁再加一条「首发答法见……」。** 反方：同一场景两套结果，照行写测试的人断言门禁阻断，与生产答复相反；审计 H1 那一格就是这样漏的——括注靠人记得补，补漏了没有任何信号。否决。
 
-**乙 · 「读不动」另立结果名（沿用 UC 的「未形成……结果」），不并进未决。** 反方：三只编排已经这样答、HTTP 契约已经这样写、建案口已由 ADR-0227 决定二定了同一写法；为文档另立一个结果名就得改三口代码与答复契约，换来的只是把原因字段里已有的区别再说一遍。否决。
+**乙 · 「读不动」另立结果名（沿用 UC 的「未形成……结果」），不并进未决。** 反方：各编排已经这样答、HTTP 契约已经这样写、建案口已由 ADR-0227 决定二定了同一写法；为文档另立一个结果名就得改各口代码与答复契约，换来的只是把原因字段里已有的区别再说一遍。否决。
 
 **丙 · 把替代的格留在原行、删掉 4xx 号 AT。** 反方：4xx 号 AT 是首发答法的测试钉子（`.scratch/at-coverage-inventory.md` 已登），原行还带着首发未实现的长期格（目标绑定、授权已被另一逻辑提交使用等）；合并会把已钉住的与未落地的混在一行里。否决。
 
 ## Consequences
 
 - UC-CC-001：结果表补「包裹未接受」「建案要求未配置」两格与首发结果码对照，`AT-CC-016` 写首发答法。UC-CC-004：结果表补「不再就绪」一格与对照，`AT-CC-103`、`AT-CC-105` 去掉被 `AT-CC-444` 替代的格。UC-CC-005：新立 `AT-CC-448`，`AT-CC-109`、`AT-CC-110` 去掉被 `AT-CC-448`、`AT-CC-439` 替代的格，结果表补对照，`AT-CC-107`、`AT-CC-125`、`AT-CC-126`、`AT-CC-127` 写明首发「已登记待发送」只形成一半（ADR-0227 决定四）。
+- UC-CC-009：结果表「放行门禁核对未决」只留判不了与未配置，「未形成税费/门禁核对」与 `AT-CC-282` 写首发答 `UNDECIDED` 并指名那一口，补首发结果码对照。
 - AT 盘点（`.scratch/at-coverage-inventory.md`）登 `AT-CC-448`。
 - 不改代码。
 
