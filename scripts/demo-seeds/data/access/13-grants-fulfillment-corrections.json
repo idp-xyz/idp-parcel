@@ -1,0 +1,23 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "grants": [
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-ADOPTION-WITHDRAWAL-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "FULFILLMENT_SEGMENT_COMMISSION_ADOPTION_WITHDRAWAL",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-ADOPTION-WITHDRAWAL-01"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-OCCURRENCE-INVALIDATION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "TRANSPORT_CHARGE_OCCURRENCE_INVALIDATION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-OCCURRENCE-INVALIDATION-01"
+    }
+  ]
+}

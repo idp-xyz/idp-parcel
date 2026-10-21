@@ -83,7 +83,7 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
 
 | 登录邮箱 | 授予（自 2026-01-01 生效，不设终点） |
 |---|---|
-| `syn-operator-config-01@syn-tenant-01.example.invalid` | 登记册配置写、主数据与运营查阅读、运营决定（装载分配、终止参与、关段、建派送任务、有效时间判断、承运商首次有效收寄判断；复核完成、主动拒绝、授权处置、受控关闭、受控重开——委托侧这几种越过 Intake 的前提见表后说明；待识别重核——节点作业复核页上的「重核」；身份冲突处置——同一页上的「处置」；运输委托提交；订舱提交；履约段采用运输委托、取消运输委托、取消订舱；送站交接确认——依授权交付关系确认送站交接单的绑定；关务建案、提交授权确认、申报提交执行；派送重问——按派送待形成册批量重问与对单个（段，对象）补拍；外部资金事实采用、监管凭证登记——管理台手工采用的两类外部事实）；作业事实登记，按作业范围给：演示网络各节点（收寄），华东场外揽收与新加坡尾程派送两个场外范围（运输履约各口），每个范围配一台合成设备（`data/access/04`） |
+| `syn-operator-config-01@syn-tenant-01.example.invalid` | 登记册配置写、主数据与运营查阅读、运营决定（装载分配、终止参与、关段、建派送任务、有效时间判断、承运商首次有效收寄判断；复核完成、主动拒绝、授权处置、受控关闭、受控重开——委托侧这几种越过 Intake 的前提见表后说明；待识别重核——节点作业复核页上的「重核」；身份冲突处置——同一页上的「处置」；运输委托提交；订舱提交；履约段采用运输委托、取消运输委托、取消订舱；送站交接确认——依授权交付关系确认送站交接单的绑定；关务建案、提交授权确认、申报提交执行；派送重问——按派送待形成册批量重问与对单个（段，对象）补拍；外部资金事实采用、监管凭证登记——管理台手工采用的两类外部事实；解除履约段采用、运输收费发生项失效）；作业事实登记，按作业范围给：演示网络各节点（收寄），华东场外揽收与新加坡尾程派送两个场外范围（运输履约各口），每个范围配一台合成设备（`data/access/04`） |
 | `syn-operator-viewer-01@syn-tenant-01.example.invalid` | 主数据与运营查阅读 |
 
 委托侧各种运营决定的授予只开门。权威串设了之后，越过 Intake 还要指名的对象在演示租户下查得到：复核完成、主动拒绝、
@@ -107,6 +107,12 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
 那是租户取值，演示租户也不替自己选一个，到期重问（`{"scope":"DUE"}`）如实答 `REASK_CADENCE_NOT_CONFIGURED`；按册重问全部
 （`POST /transport-fulfillment-delivery-dispatch-reasks`，`{"scope":"ALL","limit":50}`）与补拍
 （`POST /transport-fulfillment-delivery-dispatch-triggers`）不看它。待形成的那几件在 `GET /transport-fulfillment-records?registry=delivery-dispatch-pending`。
+
+配置员另持运营决定「解除履约段采用」与「运输收费发生项失效」两种（ADR-0232 决定一、四；票 demo-chain-gaps/57）：授予、对照与权威区间
+另起 `steps/457-access-fulfillment-corrections.sh` 一节，数据是 `data/access/11`、`12` 与 `data/governance/48`、`49`。种子不解除任何采用、
+不让任何发生项失效。指错了委托时的更正次序：先 `POST /transport-fulfillment-charge-occurrence-invalidations`（`occurrence`、链头的
+`version`、`basis`）让这一段上按那份委托形成的发生项失效，再 `POST /transport-fulfillment-segment-commission-adoption-withdrawals`
+（`segment`、`commission`）解除采用，然后采用对的那一份、对同一件事实重登发生项（长出替代版本）。
 
 配置员另持运营决定「订舱提交」（ADR-0202 决定一、五；`data/access/02` 的授予、`03` 的对照与 `data/governance/30` 那份运营决定
 区间各一行），承运答复口另认合成干线承运商的集成客户端（`data/access/05`、`06` 各一行，`03` 的对照与 `data/governance/31` 那份
