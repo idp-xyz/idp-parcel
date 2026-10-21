@@ -127,7 +127,11 @@ func (handler *ReleasePreAcceptanceControlHandler) Handle(
 	if err != nil || ledger == nil {
 		return handler.notFormed(command, FreezeLedgerUnavailable), nil
 	}
-	if freeze, found := ledger.FindByRequest(command.RequestID); found {
+	if freeze, found := ledger.FindByRequest(command.RequestID); found && freeze.Status() == domain.FreezeReleased {
+		// 已释放的再请求一次只交回原释放，不回写：Save 写的是整个作用域的账本，重复释放每回一次就把读到的那份
+		// 快照整册写回一次，并发下会把别人刚落的释放压回去，原释放时刻也跟着读到哪份写哪份。
+		result.outcome, result.freeze, result.hasFreeze = ControlReleased, freeze, true
+	} else if found {
 		released, err := ledger.Release(freeze.FreezeID(), handler.clock.Now())
 		if err != nil {
 			// 刚找到的冻结释放不了，只剩编程错误或时钟异常（释放时刻早于冻结时刻）。两者都
@@ -147,7 +151,10 @@ func (handler *ReleasePreAcceptanceControlHandler) Handle(
 	if err != nil || exposureLedger == nil {
 		return handler.notFormed(command, ExposureLedgerUnavailable), nil
 	}
-	if exposure, found := exposureLedger.FindByRequest(command.RequestID); found {
+	if exposure, found := exposureLedger.FindByRequest(command.RequestID); found && exposure.Status() == domain.ExposureReleased {
+		// 理由同冻结那本：已释放即交回原释放，不整册回写。
+		result.outcome, result.exposure, result.hasExposure = ControlReleased, exposure, true
+	} else if found {
 		released, err := exposureLedger.Release(exposure.ExposureID(), handler.clock.Now())
 		if err != nil {
 			return ReleasePreAcceptanceControlResult{}, fmt.Errorf("release exposure: %w", err)

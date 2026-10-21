@@ -245,6 +245,58 @@ func TestACombinedControlIsReleasedOnBothLedgers(t *testing.T) {
 	}
 }
 
+// Covers: UC-SA-002 `AT-SA-045` 幂等在释放一侧的写入半边——已释放的再请求一次只交回原释放、两本账都不回写。
+// 账本按作用域整册保存，重复释放每回写一次，就把读到的那份快照整册写回一次：并发下会压回别人刚落的释放，原释放
+// 时刻也跟着读到哪份写哪份。parcel-shipment 的接受链对被取代版本每一轮都请求一次释放，重复释放是常态而不是例外。
+func TestARepeatedReleaseWritesNeitherLedgerAgain(t *testing.T) {
+	freezeLedger, _ := heldLedger(t)
+	scope := releaseScope(t)
+	request, err := domain.NewExposureRequest(
+		value(t, domain.NewControlRequestID, "ctrl-req-1"),
+		scope,
+		4_000,
+		value(t, domain.NewBusinessAssociationReference, "request-1/version-1"),
+		controlAt,
+	)
+	if err != nil {
+		t.Fatalf("new exposure request: %v", err)
+	}
+	exposureLedger := domain.NewCreditExposureLedger()
+	if _, err := exposureLedger.Expose(request, authorizedStanding(t, scope, 10_000)); err != nil {
+		t.Fatalf("expose: %v", err)
+	}
+	freezes := &ledgerDouble{ledger: freezeLedger}
+	exposures := &exposureLedgerDouble{ledger: exposureLedger}
+
+	first, err := application.NewReleasePreAcceptanceControlHandler(freezes, exposures, fixedClock{at: releasedAtClock}).
+		Handle(context.Background(), releaseCommand(t))
+	if err != nil {
+		t.Fatalf("first handle: %v", err)
+	}
+	repeat, err := application.NewReleasePreAcceptanceControlHandler(freezes, exposures, fixedClock{at: releasedAtClock.Add(time.Hour)}).
+		Handle(context.Background(), releaseCommand(t))
+	if err != nil {
+		t.Fatalf("repeat handle: %v", err)
+	}
+
+	if repeat.Outcome() != application.ControlReleased {
+		t.Fatalf("repeat outcome = %q, want CONTROL_RELEASED", repeat.Outcome())
+	}
+	if freezes.saved != 1 || exposures.saved != 1 {
+		t.Fatalf("saved freezes/exposures %d/%d times, want 1/1——重复释放把账本整册写回了一次", freezes.saved, exposures.saved)
+	}
+	firstFreeze, _ := first.Freeze()
+	repeatFreeze, hasFreeze := repeat.Freeze()
+	firstExposure, _ := first.Exposure()
+	repeatExposure, hasExposure := repeat.Exposure()
+	if !hasFreeze || !hasExposure ||
+		!repeatFreeze.ReleasedAt().Equal(firstFreeze.ReleasedAt()) ||
+		!repeatExposure.ReleasedAt().Equal(firstExposure.ReleasedAt()) {
+		t.Fatalf("重复释放交回 freeze=%v/%v exposure=%v/%v, want 两本都在场、原释放时刻",
+			hasFreeze, repeatFreeze.ReleasedAt(), hasExposure, repeatExposure.ReleasedAt())
+	}
+}
+
 // Covers: ADR-0047 / ADR-0122「释放按原关联双账本认领」——账期控制留下的暴露由同一释放编排
 // 放开，幂等同款；冻结账本上没有它不影响暴露那本的认领，两本都没有仍是`无可释放`。
 func TestARecordedExposureIsReleasedByItsOriginalAssociation(t *testing.T) {
