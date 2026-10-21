@@ -109,9 +109,10 @@ func MilestonesDimensionOver(permitted ViewDimension, projection TrackingProject
 // 上下文今天还没有这一对象，派生编排因而读不到任何获准对客的 ETA。
 //
 // 准许展示时这一维答待确认（CONTEXT「客户全程追踪视图只基于……获准对客展示的 ETA……
-// 形成」，`AT-VE-158`）：答展示，客户读到的是「ETA：展示」，背后没有任何 ETA。不答不展示，
-// 待确认与不展示原样放行，理由与 FinalDimensionOver 同。ETA 客户可见性判断落地时，本函数
-// 改为收那份判断、按它在不在答，而不是另起一道。
+// 形成」）：答展示，客户读到的是「ETA：展示」，背后没有任何 ETA。不答不展示：`AT-VE-158`
+// 预期的「不展示 ETA」对的是判断已经形成、答未达门槛那一格；这里连判断都没有，答不展示是把
+// 没人作过的判断说成作过，理由与 FinalDimensionOver 同。待确认与不展示原样放行。ETA 客户可见性
+// 判断落地时，本函数改为收那份判断、按它的结论答，而不是另起一道。
 func ETADimensionWithoutVisibilityJudgement(permitted ViewDimension) ViewDimension {
 	if permitted.state != DimensionShown {
 		return permitted
@@ -165,6 +166,7 @@ type CustomerTrackingView struct {
 	customer     CustomerAccountReference
 	parcel       TrackedParcelReference
 	basedOn      ProjectionVersionID
+	confirmedOn  ProjectionVersionID
 	dimensions   CustomerViewDimensions
 	priorVersion CustomerViewVersionID
 	publishedAt  time.Time
@@ -193,6 +195,7 @@ func PublishCustomerView(
 		customer:    customer,
 		parcel:      parcel,
 		basedOn:     basedOn,
+		confirmedOn: basedOn,
 		dimensions:  dimensions,
 		publishedAt: publishedAt.UTC(),
 	}, nil
@@ -210,10 +213,19 @@ func (view CustomerTrackingView) Parcel() TrackedParcelReference {
 	return view.parcel
 }
 
-// BasedOn 是本视图锚定的投影版本——视图只基于当前有效投影形成。当前版经 Reaffirm 跟上
-// 较新的投影时这一格随之前移，版本不换；按版本读回的已发布版本带的是它形成时那一版。
+// BasedOn 是本版形成时所依据的投影版本——视图只基于当前有效投影形成。它随版本一起定下，
+// 此后不变：Reaffirm 不动它，按版本读回的已发布版本答的也是它。
 func (view CustomerTrackingView) BasedOn() ProjectionVersionID {
 	return view.basedOn
+}
+
+// ConfirmedOn 是本版最近一次按之确认四维未变的投影版本。形成即确认一次，所以未经 Reaffirm
+// 时等于 BasedOn；当前版跟上较新投影时只有这一格前移。派生编排的幂等判断读它：同一投影
+// 版本已确认过，就是重放。它是内部派生的账，不是对客发布内容，客户追踪响应体不带它——
+// 客户的采用版本由版本号承担（CONTEXT「留存投影版本的按版本读回属运营追踪查阅，不属客户
+// 发布物」）。被替代之后不再有当前确认，按版本读回的历史版这一格退回 BasedOn。
+func (view CustomerTrackingView) ConfirmedOn() ProjectionVersionID {
+	return view.confirmedOn
 }
 
 func (view CustomerTrackingView) Dimensions() CustomerViewDimensions {
@@ -239,11 +251,14 @@ func (view CustomerTrackingView) PriorVersion() (CustomerViewVersionID, bool) {
 // CustomerViewSnapshot 是持久化层重建视图所需的全量状态。字段经 PublishCustomerView
 // 的同一套不变量验证；前版指回随快照携带——替代关系是已发生的历史，重建不重演
 // Supersede：前一版虽按版本读得回，重建一个版本不该先去读另一个版本。
+//
+// ConfirmedOn 可缺：缺席即未经重新确认，取 BasedOn。
 type CustomerViewSnapshot struct {
 	Version      CustomerViewVersionID
 	Customer     CustomerAccountReference
 	Parcel       TrackedParcelReference
 	BasedOn      ProjectionVersionID
+	ConfirmedOn  ProjectionVersionID
 	Dimensions   CustomerViewDimensions
 	PriorVersion CustomerViewVersionID
 	PublishedAt  time.Time
@@ -269,23 +284,26 @@ func RehydrateCustomerView(snapshot CustomerViewSnapshot) (CustomerTrackingView,
 		}
 		view.priorVersion = snapshot.PriorVersion
 	}
+	if snapshot.ConfirmedOn.valid() {
+		view.confirmedOn = snapshot.ConfirmedOn
+	}
 	return view, nil
 }
 
 // Reaffirm 让当前版跟上一份较新的投影：按那份投影重新得出的四维与本版相同时不形成新版本
-// （CONTEXT「投影重新派生本身不要求形成新的客户视图版本」），只改记所依据的投影版本。
-// 版本、四维、发布时间与前版指回原样保留——客户已经读到的那一版不因内部投影换版本而
-// 被改写。四维变了就必须 Supersede，这里拒绝：不换代却换内容，正是静默改写历史披露。
-// 投影没换也拒绝：那是重放，由调用方按已有结果答。
+// （CONTEXT「投影重新派生本身不要求形成新的客户视图版本」），只前移 ConfirmedOn。版本、
+// 四维、发布时间、形成时依据与前版指回原样保留——客户已经读到的那一版不因内部投影换
+// 版本而被改写。四维变了就必须 Supersede，这里拒绝：不换代却换内容，正是静默改写历史
+// 披露。投影已确认过也拒绝：那是重放，由调用方按已有结果答。
 func (view CustomerTrackingView) Reaffirm(
-	basedOn ProjectionVersionID,
+	confirmedOn ProjectionVersionID,
 	dimensions CustomerViewDimensions,
 ) (CustomerTrackingView, error) {
-	if !basedOn.valid() || basedOn == view.basedOn || !dimensions.Equal(view.dimensions) {
+	if !confirmedOn.valid() || confirmedOn == view.confirmedOn || !dimensions.Equal(view.dimensions) {
 		return CustomerTrackingView{}, ErrInvalidCustomerView
 	}
 	reaffirmed := view
-	reaffirmed.basedOn = basedOn
+	reaffirmed.confirmedOn = confirmedOn
 	return reaffirmed, nil
 }
 

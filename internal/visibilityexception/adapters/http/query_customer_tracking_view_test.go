@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -110,7 +111,7 @@ func serve(t *testing.T, intake visibilityhttp.QueryIntake, reader visibilityhtt
 
 // Covers: UC-VE-008 `AT-VE-150`「C1 授权用户按本账户包裹查询→只返回 C1 当前有效客户
 // 视图和采用版本」与「四维三态如实透出不合成」——展示维带内容引用，待确认与不展示
-// 维只有状态没有内容，版本与投影锚逐字段在场。
+// 维只有状态没有内容；采用版本由 version 承担，内部投影版本不进响应体。
 func TestAnAuthorizedQueryReturnsTheCurrentViewVerbatim(t *testing.T) {
 	reader := readerDouble{views: map[readerKey]domain.CustomerTrackingView{
 		{value(t, domain.NewTenantID, "tenant-1"), value(t, domain.NewCustomerAccountReference, "customer-1"), value(t, domain.NewTrackedParcelReference, "parcel-1")}: mixedView(t),
@@ -124,9 +125,8 @@ func TestAnAuthorizedQueryReturnsTheCurrentViewVerbatim(t *testing.T) {
 	var body struct {
 		Outcome string `json:"outcome"`
 		View    struct {
-			Version           string `json:"version"`
-			BasedOnProjection string `json:"basedOnProjection"`
-			Milestones        struct {
+			Version    string `json:"version"`
+			Milestones struct {
 				State      string `json:"state"`
 				ContentRef string `json:"contentRef"`
 			} `json:"milestones"`
@@ -145,8 +145,14 @@ func TestAnAuthorizedQueryReturnsTheCurrentViewVerbatim(t *testing.T) {
 	if body.Outcome != "CURRENT_VIEW" {
 		t.Fatalf("outcome = %q, want CURRENT_VIEW", body.Outcome)
 	}
-	if body.View.Version != "view-7" || body.View.BasedOnProjection != "projection-9" {
-		t.Fatalf("view = %+v; 版本与投影锚必须逐字段在场", body.View)
+	if body.View.Version != "view-7" {
+		t.Fatalf("view = %+v; 采用版本必须在场", body.View)
+	}
+	// 投影是内部对象，客户的采用版本由 version 承担；带出投影版本，同一 version 会随视图
+	// 跟上新投影而对客户答出不同内容。
+	if strings.Contains(recorder.Body.String(), "basedOnProjection") ||
+		strings.Contains(recorder.Body.String(), "projection-9") {
+		t.Fatalf("响应体带出了内部投影版本：%s", recorder.Body.String())
 	}
 	if body.View.Milestones.State != "SHOWN" || body.View.Milestones.ContentRef != "milestones/v3" {
 		t.Fatalf("milestones = %+v, want SHOWN with its content reference", body.View.Milestones)

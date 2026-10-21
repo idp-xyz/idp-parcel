@@ -37,16 +37,17 @@ func NewCustomerViews(db *bentopg.DB) (*CustomerViews, error) {
 }
 
 // customerViewColumns 是版本行读回领域对象所需的列，FindCurrent 与 FindVersion 共用一份
-// 次序，scanCustomerView 按它扫描。所依据的投影一格由调用方各自选：当前读标记上的，按
-// 版本读版本行上的。
-const customerViewColumns = `v.version, v.prior_version, v.published_at,
+// 次序，scanCustomerView 按它扫描：先形成时依据（版本行），再确认依据（标记，按版本读到
+// 已被替代的版本时为空）。
+const customerViewColumns = `v.based_on_projection, c.based_on_projection,
+		        v.version, v.prior_version, v.published_at,
 		        v.milestones_state, v.milestones_content,
 		        v.eta_state, v.eta_content,
 		        v.final_state, v.final_content,
 		        v.note_state, v.note_content`
 
-// FindCurrent 按（租户+账户+包裹）取回当前视图版本。所依据的投影取标记上的那一格：当前版
-// 经 Reaffirm 跟上过较新的投影时，答的是跟上之后的那一份。
+// FindCurrent 按（租户+账户+包裹）取回当前视图版本。BasedOn 取版本行上形成时的依据，
+// ConfirmedOn 取标记上的那一格：当前版经 Reaffirm 跟上过较新的投影时，答的是跟上之后的那一份。
 //
 // 走 ReadExecutor：事务内读得到本事务刚写的行，事务外用显式注入的连接池——查询
 // 端点的读面正是后者。否定结果只回 false，不区分「不存在」「属于另一个客户」与
@@ -63,7 +64,7 @@ func (repository *CustomerViews) FindCurrent(
 		return domain.CustomerTrackingView{}, false, fmt.Errorf("find current customer view: %w", err)
 	}
 	view, found, err := scanCustomerView(customer, parcel, querier.QueryRow(ctx,
-		`SELECT c.based_on_projection, `+customerViewColumns+`
+		`SELECT `+customerViewColumns+`
 		   FROM visibility_exception.customer_view_current AS c
 		   JOIN visibility_exception.customer_view_version AS v
 		     ON v.tenant_id = c.tenant_id
@@ -84,8 +85,8 @@ func (repository *CustomerViews) FindCurrent(
 }
 
 // FindVersion 按版本读回该账户该包裹名下留存的任一版——当前版或已被替代的历史版皆可。
-// 所依据的投影取版本行上的那一格，即那一版形成时所依据的投影。否定结果与 FindCurrent
-// 同理不分成因。
+// BasedOn 是那一版形成时的依据；标记只在这一版仍是当前时接得上，接上即带出确认依据，
+// 接不上（已被替代）确认依据退回形成时依据。否定结果与 FindCurrent 同理不分成因。
 func (repository *CustomerViews) FindVersion(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -98,8 +99,13 @@ func (repository *CustomerViews) FindVersion(
 		return domain.CustomerTrackingView{}, false, fmt.Errorf("find customer view by version: %w", err)
 	}
 	view, found, err := scanCustomerView(customer, parcel, querier.QueryRow(ctx,
-		`SELECT v.based_on_projection, `+customerViewColumns+`
+		`SELECT `+customerViewColumns+`
 		   FROM visibility_exception.customer_view_version AS v
+		   LEFT JOIN visibility_exception.customer_view_current AS c
+		     ON c.tenant_id = v.tenant_id
+		    AND c.customer_account_id = v.customer_account_id
+		    AND c.parcel_id = v.parcel_id
+		    AND c.version = v.version
 		  WHERE v.tenant_id = $1
 		    AND v.customer_account_id = $2
 		    AND v.parcel_id = $3
@@ -122,12 +128,13 @@ func scanCustomerView(
 ) (domain.CustomerTrackingView, bool, error) {
 	var (
 		basedOn, version                                     string
+		confirmedOn                                          *string
 		priorVersion                                         *string
 		publishedAt                                          time.Time
 		milestonesState, etaState, finalState, noteState     string
 		milestonesContent, etaContent, finalContent, noteRaw *string
 	)
-	err := row.Scan(&basedOn, &version, &priorVersion, &publishedAt,
+	err := row.Scan(&basedOn, &confirmedOn, &version, &priorVersion, &publishedAt,
 		&milestonesState, &milestonesContent,
 		&etaState, &etaContent,
 		&finalState, &finalContent,
@@ -148,7 +155,7 @@ func scanCustomerView(
 	if err != nil {
 		return domain.CustomerTrackingView{}, false, err
 	}
-	snapshot, err := snapshotOf(customer, parcel, version, basedOn, priorVersion, publishedAt, dimensions)
+	snapshot, err := snapshotOf(customer, parcel, version, basedOn, confirmedOn, priorVersion, publishedAt, dimensions)
 	if err != nil {
 		return domain.CustomerTrackingView{}, false, err
 	}
@@ -223,7 +230,7 @@ func (repository *CustomerViews) Save(
 			view.Customer().String(),
 			view.Parcel().String(),
 			view.Version().String(),
-			view.BasedOn().String(),
+			view.ConfirmedOn().String(),
 		)
 		if err != nil {
 			return fmt.Errorf("save customer view current marker: %w", err)
@@ -246,7 +253,7 @@ func (repository *CustomerViews) Save(
 		view.Customer().String(),
 		view.Parcel().String(),
 		view.Version().String(),
-		view.BasedOn().String(),
+		view.ConfirmedOn().String(),
 		prior.String(),
 	)
 	if err != nil {
@@ -258,7 +265,7 @@ func (repository *CustomerViews) Save(
 	return nil
 }
 
-// Reaffirm 只改当前标记上所依据的投影那一格，不写版本行：客户已读到的那一版一列不动。
+// Reaffirm 只改当前标记上的确认依据那一格，不写版本行：客户已读到的那一版一列不动。
 // 乐观锁同时看版本与原依据——当前版已换代，或已被另一次派生跟上别的投影，都零行命中，
 // 输家重读后按新的当前版重走。
 func (repository *CustomerViews) Reaffirm(
@@ -283,7 +290,7 @@ func (repository *CustomerViews) Reaffirm(
 		view.Customer().String(),
 		view.Parcel().String(),
 		view.Version().String(),
-		view.BasedOn().String(),
+		view.ConfirmedOn().String(),
 		replacing.String(),
 	)
 	if err != nil {
@@ -358,7 +365,7 @@ func snapshotOf(
 	customer domain.CustomerAccountReference,
 	parcel domain.TrackedParcelReference,
 	version, basedOn string,
-	priorVersion *string,
+	confirmedOn, priorVersion *string,
 	publishedAt time.Time,
 	dimensions domain.CustomerViewDimensions,
 ) (domain.CustomerViewSnapshot, error) {
@@ -377,6 +384,13 @@ func snapshotOf(
 		BasedOn:     basedOnID,
 		Dimensions:  dimensions,
 		PublishedAt: publishedAt.UTC(),
+	}
+	if confirmedOn != nil {
+		confirmedID, err := domain.NewProjectionVersionID(*confirmedOn)
+		if err != nil {
+			return domain.CustomerViewSnapshot{}, err
+		}
+		snapshot.ConfirmedOn = confirmedID
 	}
 	if priorVersion != nil {
 		priorID, err := domain.NewCustomerViewVersionID(*priorVersion)

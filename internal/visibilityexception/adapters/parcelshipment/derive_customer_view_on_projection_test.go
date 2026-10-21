@@ -112,6 +112,9 @@ func (double *viewPolicyDouble) AssessDisclosure(
 	return veports.DisclosureAnswer{}, double.configured, nil
 }
 
+// customerViewStoreDouble 只替本包的消费链把视图记下来：Save 不做乐观锁，Reaffirm 不校验
+// 当前版与原确认依据，FindVersion 一律查无。库的这几条行为以 adapters/postgres 的真库
+// 用例为准，本包用例不拿它作凭据。
 type customerViewStoreDouble struct {
 	byKey   map[string]vedomain.CustomerTrackingView
 	findErr error
@@ -137,7 +140,6 @@ func (double *customerViewStoreDouble) Save(
 	return nil
 }
 
-// FindVersion 本包用例不读历史版，替身答查无。
 func (double *customerViewStoreDouble) FindVersion(
 	_ context.Context,
 	_ vedomain.TenantID,

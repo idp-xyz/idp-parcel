@@ -36,6 +36,9 @@ type viewStoreKey struct {
 	parcel   domain.TrackedParcelReference
 }
 
+// viewStoreDouble 只替编排把四维、版本与确认依据记下来，不是库的行为凭据：Save 不做
+// 首发与替代的乐观锁，FindVersion 只按版本号查、不看租户与账户。乐观锁、按版本读回的
+// 账户隔离与版本行只增不改写，以 adapters/postgres 的真库用例为准。
 type viewStoreDouble struct {
 	views      map[viewStoreKey]domain.CustomerTrackingView
 	versions   map[domain.CustomerViewVersionID]domain.CustomerTrackingView
@@ -74,7 +77,7 @@ func (double *viewStoreDouble) Reaffirm(
 	}
 	key := viewStoreKey{tenant: tenant, customer: view.Customer(), parcel: view.Parcel()}
 	current, found := double.views[key]
-	if !found || current.Version() != view.Version() || current.BasedOn() != replacing {
+	if !found || current.Version() != view.Version() || current.ConfirmedOn() != replacing {
 		return errors.New("view store double: current view changed")
 	}
 	double.views[key] = view
@@ -459,8 +462,9 @@ func TestAPermittedFinalPendsUntilTheProjectionCarriesTheAdoptedFinal(t *testing
 // 形成」与 UC-VE-008 主流程「读取 `UC-VE-003` 的客户可见性判断；只有达到适用质量与合同
 // 门槛的 ETA 才进入视图，不能使用计划时间或内部预测填充」——策略把 ETA 一维登成展示，
 // 本编排没有任何获准对客的 ETA 判断可依，这一维答待确认、不带内容，不答「ETA：展示」；
-// 策略不展示的照旧不展示。点名 `AT-VE-158`「只有内部 ETA 或质量未达对客门槛→不展示
-// ETA，也不使用计划或承诺时间填充」。
+// 策略不展示的照旧不展示。这里钉的是「还没有判断对象」这一格，不是 UC-VE-008 验收表里
+// 场景为「只有内部 ETA 或质量未达对客门槛」的那一行：那一行要等 ETA 客户可见性判断落地
+// 才钉得住（票 docs-consistency/code/51），故不点它的号。
 func TestAPermittedETAPendsWithoutACustomerVisibleETAJudgement(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -690,8 +694,11 @@ func TestANewerProjectionThatLeavesTheDimensionsUnchangedKeepsTheViewVersion(t *
 	if !present || view.Version() != firstView.Version() {
 		t.Fatalf("view version = %q, want the current version %q kept", view.Version(), firstView.Version())
 	}
-	if view.BasedOn().String() != "projection-2" {
-		t.Fatalf("view based on %q, want it to follow the newer projection", view.BasedOn())
+	if view.ConfirmedOn().String() != "projection-2" {
+		t.Fatalf("view confirmed on %q, want it to follow the newer projection", view.ConfirmedOn())
+	}
+	if view.BasedOn() != firstView.BasedOn() {
+		t.Fatalf("view based on %q; the projection the published version formed on must not move", view.BasedOn())
 	}
 	if _, superseding := view.PriorVersion(); superseding {
 		t.Fatal("an unchanged view grew a prior version")

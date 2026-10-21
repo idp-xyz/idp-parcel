@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -143,7 +144,7 @@ func TestACurrentViewIsReadBackUnchanged(t *testing.T) {
 // 前版并成为当前；拿着已被替代的旧前版再替代（乐观锁失手）拒绝而不覆盖；首发撞已有
 // 当前同样拒绝。
 func TestSupersedeAdvancesTheVersionWithOptimisticLock(t *testing.T) {
-	repository, transactor := newCustomerViews(t)
+	repository, transactor, pool := newCustomerViewsOnPool(t)
 	ctx := t.Context()
 	tenant := tenantOf(t, "tenant-a")
 
@@ -209,6 +210,57 @@ func TestSupersedeAdvancesTheVersionWithOptimisticLock(t *testing.T) {
 	}
 	if kept.Version() != second.Version() {
 		t.Errorf("输家覆盖了当前版本：%q", kept.Version())
+	}
+	// 输家写下的版本行随它的事务回滚：不留一版从未成为当前的「已发布」视图。
+	if n := countCustomerViewVersions(t, pool); n != 2 {
+		t.Errorf("版本行 = %d，应仍为 2：输家不得留下版本行", n)
+	}
+	for _, loser := range []domain.CustomerViewVersionID{stale.Version(), duplicate.Version()} {
+		if _, exists, err := repository.FindVersion(ctx, tenant, first.Customer(), first.Parcel(), loser); err != nil || exists {
+			t.Errorf("输家签出的版本 %q 读得回：err=%v exists=%v", loser, err, exists)
+		}
+	}
+}
+
+// TestRewritingAStoredVersionIsRefusedByItsKey 证同一版本号再写一次以主键冲突报错暴露，
+// 不静默覆盖已发布的那一版，也不被读成乐观锁失手（那会让调用方重读后再走一遍）。
+func TestRewritingAStoredVersionIsRefusedByItsKey(t *testing.T) {
+	repository, transactor := newCustomerViews(t)
+	ctx := t.Context()
+	tenant := tenantOf(t, "tenant-a")
+
+	first := firstView(t, "view-1")
+	within2(t, transactor, ctx, func(txCtx context.Context) error {
+		return repository.Save(txCtx, tenant, first)
+	})
+	rewritten, err := domain.PublishCustomerView(
+		first.Version(), first.Customer(), first.Parcel(),
+		build(t, domain.NewProjectionVersionID, "projection-2"),
+		domain.CustomerViewDimensions{
+			Milestones: domain.PendDimension(),
+			ETA:        domain.PendDimension(),
+			Final:      domain.PendDimension(),
+			Note:       domain.PendDimension(),
+		},
+		publishedAt.Add(time.Hour),
+	)
+	if err != nil {
+		t.Fatalf("形成同号的另一版：%v", err)
+	}
+	rewriteErr := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		return repository.Save(txCtx, tenant, rewritten)
+	})
+	var pgErr *pgconn.PgError
+	if !errors.As(rewriteErr, &pgErr) || pgErr.Code != "23505" ||
+		pgErr.ConstraintName != "customer_view_version_pkey" {
+		t.Fatalf("同号重写应以版本主键冲突报错，实得：%v", rewriteErr)
+	}
+	if errors.Is(rewriteErr, adapter.ErrCurrentViewChanged) {
+		t.Fatal("同号重写被读成了乐观锁失手")
+	}
+	kept, exists, err := repository.FindVersion(ctx, tenant, first.Customer(), first.Parcel(), first.Version())
+	if err != nil || !exists || kept.Dimensions() != first.Dimensions() || kept.BasedOn() != first.BasedOn() {
+		t.Fatalf("已发布的那一版被改写：%+v exists=%v err=%v", kept, exists, err)
 	}
 }
 
@@ -280,7 +332,7 @@ func TestASupersededVersionStaysReadableByVersion(t *testing.T) {
 }
 
 // TestReaffirmMovesOnlyTheCurrentBasis 证四维不变时视图不换代：重新确认之后当前版仍是
-// 同一版、投影锚跟上新投影，版本行不多一行也不改一列（按版本读回仍是形成时的投影锚）；
+// 同一版、确认依据跟上新投影，版本行不多一行也不改一列（形成时依据不动）；
 // 拿着已过时的原依据再确认——别的派生已先跟上——零行命中即拒，不覆盖。
 // Covers: VE CONTEXT「客户全程追踪视图的版本由披露更正与替代关系驱动，不与内部投影版本
 // 一一对应；投影重新派生本身不要求形成新的客户视图版本」的持久化半边。
@@ -305,8 +357,11 @@ func TestReaffirmMovesOnlyTheCurrentBasis(t *testing.T) {
 	if err != nil || !exists {
 		t.Fatalf("取回当前视图：%v exists=%v", err, exists)
 	}
-	if current.Version() != first.Version() || current.BasedOn().String() != "projection-2" {
-		t.Fatalf("当前版 = %q 投影锚 = %q，应为同一版跟上 projection-2", current.Version(), current.BasedOn())
+	if current.Version() != first.Version() || current.ConfirmedOn().String() != "projection-2" {
+		t.Fatalf("当前版 = %q 确认依据 = %q，应为同一版跟上 projection-2", current.Version(), current.ConfirmedOn())
+	}
+	if current.BasedOn() != first.BasedOn() {
+		t.Errorf("当前版的形成时依据 = %q，应仍是 %q", current.BasedOn(), first.BasedOn())
 	}
 	if current.Dimensions() != first.Dimensions() || !current.PublishedAt().Equal(first.PublishedAt()) {
 		t.Error("重新确认改写了已发布的四维或发布时间")
@@ -315,8 +370,9 @@ func TestReaffirmMovesOnlyTheCurrentBasis(t *testing.T) {
 	if err != nil || !exists {
 		t.Fatalf("按版本读回：%v exists=%v", err, exists)
 	}
-	if formed.BasedOn() != first.BasedOn() {
-		t.Errorf("版本行的投影锚 = %q，应仍是形成时的 %q", formed.BasedOn(), first.BasedOn())
+	if formed.BasedOn() != first.BasedOn() || formed.ConfirmedOn().String() != "projection-2" {
+		t.Errorf("按版本读回当前版：形成时依据 = %q 确认依据 = %q，应为 %q / projection-2",
+			formed.BasedOn(), formed.ConfirmedOn(), first.BasedOn())
 	}
 	if n := countCustomerViewVersions(t, pool); n != 1 {
 		t.Errorf("版本行 = %d，应为 1：不换代就不多一行", n)
@@ -336,8 +392,8 @@ func TestReaffirmMovesOnlyTheCurrentBasis(t *testing.T) {
 	if err != nil {
 		t.Fatalf("复读当前视图：%v", err)
 	}
-	if kept.BasedOn().String() != "projection-2" {
-		t.Errorf("输家覆盖了当前投影锚：%q", kept.BasedOn())
+	if kept.ConfirmedOn().String() != "projection-2" {
+		t.Errorf("输家覆盖了当前确认依据：%q", kept.ConfirmedOn())
 	}
 }
 

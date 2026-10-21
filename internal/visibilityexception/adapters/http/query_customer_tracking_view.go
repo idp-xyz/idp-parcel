@@ -131,16 +131,19 @@ type queryResponse struct {
 
 // trackingViewBody 逐字段透出视图版本：四维三态如实转写，不合成统一状态，也不替
 // 待确认或不展示的维编内容——那两态在领域构造期就不带内容，这里无内容可编。
+//
+// 不带所依据的投影版本：投影是内部对象，客户的采用版本由 `version` 承担（CONTEXT「留存
+// 投影版本的按版本读回属运营追踪查阅，不属客户发布物」）。视图四维不变时不换代、只跟上
+// 新投影，带着它，同一个 `version` 就会对客户答出不同内容。
 type trackingViewBody struct {
-	Version           string        `json:"version"`
-	Parcel            string        `json:"parcel"`
-	BasedOnProjection string        `json:"basedOnProjection"`
-	PublishedAt       string        `json:"publishedAt"`
-	PriorVersion      string        `json:"priorVersion,omitempty"`
-	Milestones        dimensionBody `json:"milestones"`
-	ETA               dimensionBody `json:"eta"`
-	Final             dimensionBody `json:"final"`
-	Note              dimensionBody `json:"note"`
+	Version      string        `json:"version"`
+	Parcel       string        `json:"parcel"`
+	PublishedAt  string        `json:"publishedAt"`
+	PriorVersion string        `json:"priorVersion,omitempty"`
+	Milestones   dimensionBody `json:"milestones"`
+	ETA          dimensionBody `json:"eta"`
+	Final        dimensionBody `json:"final"`
+	Note         dimensionBody `json:"note"`
 }
 
 type dimensionBody struct {
@@ -151,14 +154,13 @@ type dimensionBody struct {
 func newTrackingViewBody(view domain.CustomerTrackingView) *trackingViewBody {
 	dimensions := view.Dimensions()
 	body := &trackingViewBody{
-		Version:           view.Version().String(),
-		Parcel:            view.Parcel().String(),
-		BasedOnProjection: view.BasedOn().String(),
-		PublishedAt:       view.PublishedAt().UTC().Format(time.RFC3339Nano),
-		Milestones:        newDimensionBody(dimensions.Milestones),
-		ETA:               newDimensionBody(dimensions.ETA),
-		Final:             newDimensionBody(dimensions.Final),
-		Note:              newDimensionBody(dimensions.Note),
+		Version:     view.Version().String(),
+		Parcel:      view.Parcel().String(),
+		PublishedAt: view.PublishedAt().UTC().Format(time.RFC3339Nano),
+		Milestones:  newDimensionBody(dimensions.Milestones),
+		ETA:         newDimensionBody(dimensions.ETA),
+		Final:       newDimensionBody(dimensions.Final),
+		Note:        newDimensionBody(dimensions.Note),
 	}
 	if prior, superseding := view.PriorVersion(); superseding {
 		body.PriorVersion = prior.String()

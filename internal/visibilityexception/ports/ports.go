@@ -192,14 +192,16 @@ type DisclosurePolicyView interface {
 // 版本只增不改写：已向客户发布的每一版都留存、按版本读得回，替代追加新版本并回指前一版
 // （CONTEXT「不得静默删除或改写历史披露」）；当前版另由显式标记指名。
 type CustomerViewStore interface {
+	// FindCurrent 读回当前版；它的 ConfirmedOn 是当前标记上最近确认的那份投影。
 	FindCurrent(
 		ctx context.Context,
 		tenant domain.TenantID,
 		customer domain.CustomerAccountReference,
 		parcel domain.TrackedParcelReference,
 	) (domain.CustomerTrackingView, bool, error)
-	// FindVersion 按版本读回该账户该包裹名下留存的任一版，当前版或已被替代的皆可。读回的
-	// 是那一版形成时的样子：所依据的投影是形成时那一份，不随当前版的 Reaffirm 前移。
+	// FindVersion 按版本读回该账户该包裹名下留存的任一版，当前版或已被替代的皆可。BasedOn
+	// 是那一版形成时的依据；读到的恰是当前版时 ConfirmedOn 同 FindCurrent，已被替代的版本
+	// 不再有当前确认，ConfirmedOn 退回 BasedOn。
 	FindVersion(
 		ctx context.Context,
 		tenant domain.TenantID,
@@ -210,8 +212,8 @@ type CustomerViewStore interface {
 	// Save 追加一个视图版本并让它成为当前：首版只在尚无当前版时成立，替代只在当前版恰是
 	// 它所指的前一版时成立。
 	Save(ctx context.Context, tenant domain.TenantID, view domain.CustomerTrackingView) error
-	// Reaffirm 不换代，只把当前版所依据的投影从 replacing 改记为 view.BasedOn()；只在当前版
-	// 仍是 view 那一版、且仍依据 replacing 时成立。版本行一列不改。
+	// Reaffirm 不换代，只把当前版的确认依据从 replacing 前移到 view.ConfirmedOn()；只在当前版
+	// 仍是 view 那一版、且确认依据仍是 replacing 时成立。版本行一列不改。
 	Reaffirm(
 		ctx context.Context,
 		tenant domain.TenantID,

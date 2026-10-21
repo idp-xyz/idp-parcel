@@ -138,7 +138,7 @@ func TestSupersessionKeepsThePublishedHistory(t *testing.T) {
 // Covers: VE CONTEXT「客户全程追踪视图的版本由披露更正与替代关系驱动，不与内部投影版本
 // 一一对应；投影重新派生本身不要求形成新的客户视图版本」与「已经向客户发布的……出现
 // 更正时，必须以追加更新或明确替代关系表达，不得静默删除或改写历史披露」——四维不变时
-// 重新确认只换投影锚，版本、四维、发布时间原样；四维变了不许走重新确认，那等于不换代
+// 重新确认只前移确认依据，版本、四维、发布时间与形成时依据原样；四维变了不许走重新确认，那等于不换代
 // 却换内容；投影没换不是重新确认。
 func TestReaffirmFollowsANewerProjectionOnlyWhileTheDimensionsStayTheSame(t *testing.T) {
 	view := publishedView(t)
@@ -148,8 +148,11 @@ func TestReaffirmFollowsANewerProjectionOnlyWhileTheDimensionsStayTheSame(t *tes
 	if err != nil {
 		t.Fatalf("reaffirm: %v", err)
 	}
-	if reaffirmed.BasedOn() != newer {
-		t.Fatalf("based on = %s; 重新确认要跟上新投影", reaffirmed.BasedOn())
+	if reaffirmed.ConfirmedOn() != newer {
+		t.Fatalf("confirmed on = %s; 重新确认要跟上新投影", reaffirmed.ConfirmedOn())
+	}
+	if reaffirmed.BasedOn() != view.BasedOn() {
+		t.Fatalf("based on = %s; 形成时依据是已发布版本的一部分，重新确认不动它", reaffirmed.BasedOn())
 	}
 	if reaffirmed.Version() != view.Version() || reaffirmed.Dimensions() != view.Dimensions() ||
 		!reaffirmed.PublishedAt().Equal(view.PublishedAt()) {
@@ -167,8 +170,11 @@ func TestReaffirmFollowsANewerProjectionOnlyWhileTheDimensionsStayTheSame(t *tes
 	if _, err := view.Reaffirm(newer, changed); !errors.Is(err, domain.ErrInvalidCustomerView) {
 		t.Fatalf("err = %v; 四维变了必须换代", err)
 	}
-	if _, err := view.Reaffirm(view.BasedOn(), shownDimensions(t)); !errors.Is(err, domain.ErrInvalidCustomerView) {
+	if _, err := view.Reaffirm(view.ConfirmedOn(), shownDimensions(t)); !errors.Is(err, domain.ErrInvalidCustomerView) {
 		t.Fatalf("err = %v; 投影没换是重放，不是重新确认", err)
+	}
+	if _, err := reaffirmed.Reaffirm(newer, shownDimensions(t)); !errors.Is(err, domain.ErrInvalidCustomerView) {
+		t.Fatalf("err = %v; 已确认过的投影再来是重放，不是重新确认", err)
 	}
 	if _, err := view.Reaffirm(domain.ProjectionVersionID{}, shownDimensions(t)); !errors.Is(err, domain.ErrInvalidCustomerView) {
 		t.Fatalf("err = %v; 没有投影锚的重新确认挂不回任何一次派生", err)
@@ -271,8 +277,10 @@ func TestTheFinalDimensionShowsOnlyWhenTheProjectionCarriesAnAdoptedFinal(t *tes
 // Covers: VE CONTEXT「客户全程追踪视图只基于当前有效的全程追踪投影、获准对客展示的 ETA……
 // 形成」与生命周期「某一维信息待确认或不可披露 → 只对该维返回待确认、暂不可用或不展示，
 // 不虚构里程碑、ETA、终局或异常说明」——策略准许展示 ETA，可本上下文还没有获准对客的
-// ETA 判断，这一维答待确认、不带内容；策略不展示与待确认原样放行，只收窄不放宽。点名
-// `AT-VE-158`「只有内部 ETA 或质量未达对客门槛→不展示 ETA，也不使用计划或承诺时间填充」。
+// ETA 判断，这一维答待确认、不带内容；策略不展示与待确认原样放行，只收窄不放宽。这里钉的
+// 是「还没有判断对象」这一格，不是 UC-VE-008 验收表里场景为「只有内部 ETA 或质量未达对客
+// 门槛」的那一行：那一行要等 ETA 客户可见性判断落地才钉得住（票 docs-consistency/code/51），
+// 故不点它的号。
 func TestTheETADimensionPendsWithoutACustomerVisibleETAJudgement(t *testing.T) {
 	permitted, err := domain.ShowDimension(mustValue(t, domain.NewViewContentReference, "eta-band/v1"))
 	if err != nil {

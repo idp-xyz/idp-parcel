@@ -140,7 +140,10 @@ func (handler *DeriveCustomerViewHandler) Handle(
 	if err != nil {
 		return DeriveCustomerViewResult{outcome: CustomerViewUndecided, reason: CustomerViewStoreUnavailable}, nil
 	}
-	if found && current.BasedOn() == command.Projection.Version() {
+	if found && current.ConfirmedOn() == command.Projection.Version() {
+		// 比的是确认依据（ConfirmedOn），不是形成时依据：当前版已跟上过的那份投影再来一封，
+		// 同样是重放。
+		//
 		// 同一投影版本重放：不签新身份、不重问策略、不形成第二个视图版本，但把同一份
 		// 意图再交一次——本上下文不记意图完没完成，只答已有结果就收工，一份首次发布
 		// 失败的视图会永远停在「已发布、下游不知道」（ADR-0043，重放重发同一份）。
@@ -170,7 +173,7 @@ func (handler *DeriveCustomerViewHandler) Handle(
 		if err != nil {
 			return DeriveCustomerViewResult{}, fmt.Errorf("reaffirm customer tracking view: %w", err)
 		}
-		if err := handler.deps.Views.Reaffirm(ctx, command.TenantID, reaffirmed, current.BasedOn()); err != nil {
+		if err := handler.deps.Views.Reaffirm(ctx, command.TenantID, reaffirmed, current.ConfirmedOn()); err != nil {
 			return DeriveCustomerViewResult{outcome: CustomerViewUndecided, reason: CustomerViewStoreUnavailable}, nil
 		}
 		return DeriveCustomerViewResult{
@@ -242,7 +245,7 @@ func (handler *DeriveCustomerViewHandler) handOff(
 // 策略只说准不准看，说不了背后有没有东西可看，终局、里程碑与 ETA 各再过一道，都只收窄
 // 不放宽：终局一维看投影里有没有 PS 已采用的终局（domain.FinalDimensionOver）；里程碑一维
 // 看投影里有没有已归类的标准追踪里程碑（domain.MilestonesDimensionOver）；ETA 一维要的是
-// `UC-VE-003` 的 ETA 客户可见性判断（`AT-VE-158`），那份判断本上下文还没有，准许展示也只能
+// `UC-VE-003` 的 ETA 客户可见性判断（`AT-VE-187`），那份判断本上下文还没有，准许展示也只能
 // 答待确认（domain.ETADimensionWithoutVisibilityJudgement）。追踪说明一维照策略。
 func dimensionsFrom(
 	answer ports.DisclosureAnswer,

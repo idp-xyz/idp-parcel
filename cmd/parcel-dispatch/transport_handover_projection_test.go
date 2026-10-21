@@ -79,6 +79,13 @@ func TestAHandedOverTransportHandoverClassifiesAsInTransitUnderTheDemoMapping(t 
 
 func recordRegisteredTransportHandover(t *testing.T, fixture *synVerticalFixture) string {
 	t.Helper()
+	return recordRegisteredTransportHandoverIn(t, fixture, transportHandoverScope, transportHandoverVersion)
+}
+
+// recordRegisteredTransportHandoverIn 落同一包裹在另一交接范围里的一份交接登记：范围进事实引用，
+// 同一包裹因此多一份已接受事实，投影换一版。
+func recordRegisteredTransportHandoverIn(t *testing.T, fixture *synVerticalFixture, scope, version string) string {
+	t.Helper()
 
 	store, err := outbox.NewStore(fixture.db)
 	if err != nil {
@@ -98,14 +105,14 @@ func recordRegisteredTransportHandover(t *testing.T, fixture *synVerticalFixture
 	handover, err := tfdomain.FormTransportHandover(tfdomain.TransportHandoverSpec{
 		TenantID:          tenant,
 		Object:            mustTF(t, tfdomain.NewCarriedObjectReference, transportHandoverObject),
-		Scope:             mustTF(t, tfdomain.NewHandoverScopeReference, transportHandoverScope),
+		Scope:             mustTF(t, tfdomain.NewHandoverScopeReference, scope),
 		ReleasedBy:        mustTF(t, tfdomain.NewHandoverPartyReference, "SYN-NODE-01"),
 		ReceivedBy:        mustTF(t, tfdomain.NewHandoverPartyReference, "SYN-CARRIER-01"),
 		Verdict:           tfdomain.ObjectHandedOver,
 		ReleasingEvidence: mustTF(t, tfdomain.NewHandoverEvidenceReference, "evidence/SYN-RELEASE-01"),
 		ReceivingEvidence: mustTF(t, tfdomain.NewHandoverEvidenceReference, "evidence/SYN-RECEIVE-01"),
 		Rule:              mustTF(t, tfdomain.NewHandoverRuleReference, "SYN-HANDOVER-RULE/v1"),
-		Version:           mustTF(t, tfdomain.NewHandoverResultVersion, transportHandoverVersion),
+		Version:           mustTF(t, tfdomain.NewHandoverResultVersion, version),
 		JudgedAt:          judgedAt,
 	})
 	if err != nil {
@@ -125,7 +132,7 @@ func recordRegisteredTransportHandover(t *testing.T, fixture *synVerticalFixture
 			Scope:    handover.Scope(),
 			Version:  handover.Version(),
 		},
-		ContentDigest: "SYN-HANDOVER-DIGEST-01",
+		ContentDigest: "SYN-HANDOVER-DIGEST-" + scope + "-" + version,
 		Handover:      handover,
 		RecordedAt:    judgedAt.Add(time.Second),
 	}
@@ -140,7 +147,7 @@ func recordRegisteredTransportHandover(t *testing.T, fixture *synVerticalFixture
 	if outcome != tfports.HandoverSaved {
 		t.Fatalf("save outcome = %v, want 已写入", outcome)
 	}
-	return tenant.String() + "/" + transportHandoverObject + "/" + transportHandoverScope + "/" + transportHandoverVersion
+	return tenant.String() + "/" + transportHandoverObject + "/" + scope + "/" + version
 }
 
 func assertUnclassifiedHandoverProjection(t *testing.T, fixture *synVerticalFixture) {
