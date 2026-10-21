@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
@@ -23,6 +24,12 @@ var publishedAt = time.Date(2026, 8, 13, 15, 0, 0, 0, time.UTC)
 
 func newCustomerViews(t *testing.T) (*adapter.CustomerViews, bentoapp.Transactor) {
 	t.Helper()
+	repository, transactor, _ := newCustomerViewsOnPool(t)
+	return repository, transactor
+}
+
+func newCustomerViewsOnPool(t *testing.T) (*adapter.CustomerViews, bentoapp.Transactor, *pgxpool.Pool) {
+	t.Helper()
 
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -33,7 +40,17 @@ func newCustomerViews(t *testing.T) (*adapter.CustomerViews, bentoapp.Transactor
 	if err != nil {
 		t.Fatalf("构造视图库：%v", err)
 	}
-	return repository, db.Transactor()
+	return repository, db.Transactor(), pool
+}
+
+func countCustomerViewVersions(t *testing.T, pool *pgxpool.Pool) int {
+	t.Helper()
+	var n int
+	if err := pool.QueryRow(t.Context(),
+		`SELECT count(*) FROM visibility_exception.customer_view_version`).Scan(&n); err != nil {
+		t.Fatalf("数版本行：%v", err)
+	}
+	return n
 }
 
 func within2(t *testing.T, transactor bentoapp.Transactor, ctx context.Context, fn func(context.Context) error) {
@@ -192,6 +209,135 @@ func TestSupersedeAdvancesTheVersionWithOptimisticLock(t *testing.T) {
 	}
 	if kept.Version() != second.Version() {
 		t.Errorf("输家覆盖了当前版本：%q", kept.Version())
+	}
+}
+
+// TestASupersededVersionStaysReadableByVersion 证替代不改写已发布的那一版：替代之后前一版
+// 按版本原样读得回（四维、投影锚、发布时间都是它发布时的样子），当前版的前版指回指着
+// 一行存下来的版本；按版本读回同样带着账户，别的账户拿同一版本号读不到。
+// Covers: VE CONTEXT「已经向客户发布的里程碑、ETA、异常说明或通知出现更正时，必须以追加
+// 更新或明确替代关系表达，不得静默删除或改写历史披露」；点名 `AT-VE-161` 的持久化半边
+// 「原版本保留且不再作为当前结果」。
+func TestASupersededVersionStaysReadableByVersion(t *testing.T) {
+	repository, transactor, pool := newCustomerViewsOnPool(t)
+	ctx := t.Context()
+	tenant := tenantOf(t, "tenant-a")
+
+	first := firstView(t, "view-1")
+	within2(t, transactor, ctx, func(txCtx context.Context) error {
+		return repository.Save(txCtx, tenant, first)
+	})
+	final, err := domain.ShowDimension(build(t, domain.NewViewContentReference, "final/v1"))
+	if err != nil {
+		t.Fatalf("展示维：%v", err)
+	}
+	changed := mixedDimensions(t)
+	changed.Final = final
+	second, err := first.Supersede(
+		build(t, domain.NewCustomerViewVersionID, "view-2"),
+		build(t, domain.NewProjectionVersionID, "projection-2"),
+		changed,
+		publishedAt.Add(time.Hour),
+	)
+	if err != nil {
+		t.Fatalf("形成替代版本：%v", err)
+	}
+	within2(t, transactor, ctx, func(txCtx context.Context) error {
+		return repository.Save(txCtx, tenant, second)
+	})
+
+	current, exists, err := repository.FindCurrent(ctx, tenant, first.Customer(), first.Parcel())
+	if err != nil || !exists {
+		t.Fatalf("取回当前视图：%v exists=%v", err, exists)
+	}
+	prior, superseding := current.PriorVersion()
+	if current.Version() != second.Version() || !superseding || prior != first.Version() {
+		t.Fatalf("当前版 = %q 前版 = %q，应为 view-2 指回 view-1", current.Version(), prior)
+	}
+
+	kept, exists, err := repository.FindVersion(ctx, tenant, first.Customer(), first.Parcel(), prior)
+	if err != nil || !exists {
+		t.Fatalf("前版指回指着一行读不回的版本：%v exists=%v", err, exists)
+	}
+	if kept.Dimensions() != first.Dimensions() || kept.BasedOn() != first.BasedOn() ||
+		!kept.PublishedAt().Equal(first.PublishedAt()) {
+		t.Errorf("已发布的前一版被改写：%+v", kept)
+	}
+	if _, superseding := kept.PriorVersion(); superseding {
+		t.Error("首版读回时凭空长出了前版")
+	}
+	if n := countCustomerViewVersions(t, pool); n != 2 {
+		t.Errorf("版本行 = %d，应为 2：替代追加一行，不改写原行", n)
+	}
+
+	otherCustomer := build(t, domain.NewCustomerAccountReference, "customer-b")
+	if _, exists, err := repository.FindVersion(ctx, tenant, otherCustomer, first.Parcel(), prior); err != nil || exists {
+		t.Errorf("跨账户按版本探针：err=%v exists=%v，应与不存在同答", err, exists)
+	}
+	if _, exists, err := repository.FindVersion(ctx, tenantOf(t, "tenant-b"), first.Customer(), first.Parcel(), prior); err != nil || exists {
+		t.Errorf("跨租户按版本探针：err=%v exists=%v，应与不存在同答", err, exists)
+	}
+}
+
+// TestReaffirmMovesOnlyTheCurrentBasis 证四维不变时视图不换代：重新确认之后当前版仍是
+// 同一版、投影锚跟上新投影，版本行不多一行也不改一列（按版本读回仍是形成时的投影锚）；
+// 拿着已过时的原依据再确认——别的派生已先跟上——零行命中即拒，不覆盖。
+// Covers: VE CONTEXT「客户全程追踪视图的版本由披露更正与替代关系驱动，不与内部投影版本
+// 一一对应；投影重新派生本身不要求形成新的客户视图版本」的持久化半边。
+func TestReaffirmMovesOnlyTheCurrentBasis(t *testing.T) {
+	repository, transactor, pool := newCustomerViewsOnPool(t)
+	ctx := t.Context()
+	tenant := tenantOf(t, "tenant-a")
+
+	first := firstView(t, "view-1")
+	within2(t, transactor, ctx, func(txCtx context.Context) error {
+		return repository.Save(txCtx, tenant, first)
+	})
+	reaffirmed, err := first.Reaffirm(build(t, domain.NewProjectionVersionID, "projection-2"), first.Dimensions())
+	if err != nil {
+		t.Fatalf("重新确认：%v", err)
+	}
+	within2(t, transactor, ctx, func(txCtx context.Context) error {
+		return repository.Reaffirm(txCtx, tenant, reaffirmed, first.BasedOn())
+	})
+
+	current, exists, err := repository.FindCurrent(ctx, tenant, first.Customer(), first.Parcel())
+	if err != nil || !exists {
+		t.Fatalf("取回当前视图：%v exists=%v", err, exists)
+	}
+	if current.Version() != first.Version() || current.BasedOn().String() != "projection-2" {
+		t.Fatalf("当前版 = %q 投影锚 = %q，应为同一版跟上 projection-2", current.Version(), current.BasedOn())
+	}
+	if current.Dimensions() != first.Dimensions() || !current.PublishedAt().Equal(first.PublishedAt()) {
+		t.Error("重新确认改写了已发布的四维或发布时间")
+	}
+	formed, exists, err := repository.FindVersion(ctx, tenant, first.Customer(), first.Parcel(), first.Version())
+	if err != nil || !exists {
+		t.Fatalf("按版本读回：%v exists=%v", err, exists)
+	}
+	if formed.BasedOn() != first.BasedOn() {
+		t.Errorf("版本行的投影锚 = %q，应仍是形成时的 %q", formed.BasedOn(), first.BasedOn())
+	}
+	if n := countCustomerViewVersions(t, pool); n != 1 {
+		t.Errorf("版本行 = %d，应为 1：不换代就不多一行", n)
+	}
+
+	stale, err := first.Reaffirm(build(t, domain.NewProjectionVersionID, "projection-3"), first.Dimensions())
+	if err != nil {
+		t.Fatalf("形成过期的重新确认：%v", err)
+	}
+	staleErr := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		return repository.Reaffirm(txCtx, tenant, stale, first.BasedOn())
+	})
+	if !errors.Is(staleErr, adapter.ErrCurrentViewChanged) {
+		t.Fatalf("按过时依据重新确认应拒 ErrCurrentViewChanged，实得：%v", staleErr)
+	}
+	kept, _, err := repository.FindCurrent(ctx, tenant, first.Customer(), first.Parcel())
+	if err != nil {
+		t.Fatalf("复读当前视图：%v", err)
+	}
+	if kept.BasedOn().String() != "projection-2" {
+		t.Errorf("输家覆盖了当前投影锚：%q", kept.BasedOn())
 	}
 }
 

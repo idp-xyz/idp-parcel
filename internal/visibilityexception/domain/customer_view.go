@@ -179,13 +179,21 @@ func (view CustomerTrackingView) Parcel() TrackedParcelReference {
 	return view.parcel
 }
 
-// BasedOn 是本视图锚定的投影版本——视图只基于当前有效投影形成。
+// BasedOn 是本视图锚定的投影版本——视图只基于当前有效投影形成。当前版经 Reaffirm 跟上
+// 较新的投影时这一格随之前移，版本不换；按版本读回的已发布版本带的是它形成时那一版。
 func (view CustomerTrackingView) BasedOn() ProjectionVersionID {
 	return view.basedOn
 }
 
 func (view CustomerTrackingView) Dimensions() CustomerViewDimensions {
 	return view.dimensions
+}
+
+// Equal 回答两组四维对客户是否是同一份答复：逐维三态与内容来处都相同。视图换不换代
+// 只看这一问（CONTEXT「客户全程追踪视图的版本由披露更正与替代关系驱动，不与内部投影
+// 版本一一对应」）。
+func (dimensions CustomerViewDimensions) Equal(other CustomerViewDimensions) bool {
+	return dimensions == other
 }
 
 func (view CustomerTrackingView) PublishedAt() time.Time {
@@ -199,7 +207,7 @@ func (view CustomerTrackingView) PriorVersion() (CustomerViewVersionID, bool) {
 
 // CustomerViewSnapshot 是持久化层重建视图所需的全量状态。字段经 PublishCustomerView
 // 的同一套不变量验证；前版指回随快照携带——替代关系是已发生的历史，重建不重演
-// Supersede（重演需要原视图在手，而库里只有当前版本）。
+// Supersede：前一版虽按版本读得回，重建一个版本不该先去读另一个版本。
 type CustomerViewSnapshot struct {
 	Version      CustomerViewVersionID
 	Customer     CustomerAccountReference
@@ -231,6 +239,23 @@ func RehydrateCustomerView(snapshot CustomerViewSnapshot) (CustomerTrackingView,
 		view.priorVersion = snapshot.PriorVersion
 	}
 	return view, nil
+}
+
+// Reaffirm 让当前版跟上一份较新的投影：按那份投影重新得出的四维与本版相同时不形成新版本
+// （CONTEXT「投影重新派生本身不要求形成新的客户视图版本」），只改记所依据的投影版本。
+// 版本、四维、发布时间与前版指回原样保留——客户已经读到的那一版不因内部投影换版本而
+// 被改写。四维变了就必须 Supersede，这里拒绝：不换代却换内容，正是静默改写历史披露。
+// 投影没换也拒绝：那是重放，由调用方按已有结果答。
+func (view CustomerTrackingView) Reaffirm(
+	basedOn ProjectionVersionID,
+	dimensions CustomerViewDimensions,
+) (CustomerTrackingView, error) {
+	if !basedOn.valid() || basedOn == view.basedOn || !dimensions.Equal(view.dimensions) {
+		return CustomerTrackingView{}, ErrInvalidCustomerView
+	}
+	reaffirmed := view
+	reaffirmed.basedOn = basedOn
+	return reaffirmed, nil
 }
 
 // Supersede 依据来源更正、有效性变化、ETA 新版本或终局更正形成新的客户视图版本

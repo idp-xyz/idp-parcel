@@ -38,7 +38,7 @@ func TestALateAcceptanceRederivesTheCustomerViewFromTheCurrentProjection(t *test
 	if published != 1 {
 		t.Fatalf("第二拍应恰好定稿派生信封（零行入账收工）：published = %d", published)
 	}
-	if n := fixture.countSQL(t, `SELECT count(*) FROM visibility_exception.customer_view`); n != 0 {
+	if n := fixture.countSQL(t, `SELECT count(*) FROM visibility_exception.customer_view_version`); n != 0 {
 		t.Fatalf("归属未确立就有了 %d 行客户视图——账户不得发明", n)
 	}
 
@@ -118,8 +118,8 @@ func TestALateAcceptanceRederivesTheCustomerViewFromTheCurrentProjection(t *test
 	if published != 0 {
 		t.Fatalf("重拍定稿了 %d 条", published)
 	}
-	if n := fixture.countSQL(t, `SELECT count(*) FROM visibility_exception.customer_view`); n != 1 {
-		t.Fatalf("customer_view 行数 = %d, want 1——重投不得再派生一版", n)
+	if n := fixture.countSQL(t, `SELECT count(*) FROM visibility_exception.customer_view_version`); n != 1 {
+		t.Fatalf("customer_view_version 行数 = %d, want 1——重投不得再派生一版", n)
 	}
 	if n := fixture.countOutboxOfType(t, customerViewPublishedType); n != 1 {
 		t.Fatalf("重拍后视图发布意图 = %d, want 仍为 1", n)

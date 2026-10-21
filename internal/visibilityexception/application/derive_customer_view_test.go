@@ -37,14 +37,49 @@ type viewStoreKey struct {
 }
 
 type viewStoreDouble struct {
-	views   map[viewStoreKey]domain.CustomerTrackingView
-	findErr error
-	saveErr error
-	saved   int
+	views      map[viewStoreKey]domain.CustomerTrackingView
+	versions   map[domain.CustomerViewVersionID]domain.CustomerTrackingView
+	findErr    error
+	saveErr    error
+	saved      int
+	reaffirmed int
 }
 
 func newViewStore() *viewStoreDouble {
-	return &viewStoreDouble{views: map[viewStoreKey]domain.CustomerTrackingView{}}
+	return &viewStoreDouble{
+		views:    map[viewStoreKey]domain.CustomerTrackingView{},
+		versions: map[domain.CustomerViewVersionID]domain.CustomerTrackingView{},
+	}
+}
+
+func (double *viewStoreDouble) FindVersion(
+	_ context.Context,
+	_ domain.TenantID,
+	_ domain.CustomerAccountReference,
+	_ domain.TrackedParcelReference,
+	version domain.CustomerViewVersionID,
+) (domain.CustomerTrackingView, bool, error) {
+	view, found := double.versions[version]
+	return view, found, nil
+}
+
+func (double *viewStoreDouble) Reaffirm(
+	_ context.Context,
+	tenant domain.TenantID,
+	view domain.CustomerTrackingView,
+	replacing domain.ProjectionVersionID,
+) error {
+	if double.saveErr != nil {
+		return double.saveErr
+	}
+	key := viewStoreKey{tenant: tenant, customer: view.Customer(), parcel: view.Parcel()}
+	current, found := double.views[key]
+	if !found || current.Version() != view.Version() || current.BasedOn() != replacing {
+		return errors.New("view store double: current view changed")
+	}
+	double.views[key] = view
+	double.reaffirmed++
+	return nil
 }
 
 func (double *viewStoreDouble) FindCurrent(
@@ -65,6 +100,7 @@ func (double *viewStoreDouble) Save(_ context.Context, tenant domain.TenantID, v
 		return double.saveErr
 	}
 	double.views[viewStoreKey{tenant: tenant, customer: view.Customer(), parcel: view.Parcel()}] = view
+	double.versions[view.Version()] = view
 	double.saved++
 	return nil
 }
@@ -358,7 +394,8 @@ func TestANonDisclosableDimensionIsWithheldAloneWithoutHidingTheOthers(t *testin
 // 点名 `AT-VE-160` 的终局半边「只有有效交付扫描但终局尚未形成→可展示获准交付里程碑，
 // 不显示包裹服务终局已完成」与 `AT-VE-159` 的展示半边「`parcel-shipment` 已形成当前
 // 有效客户服务终局→展示终局及其依据版本，不由摘要反推」。视图每一维只带策略给的内容
-// 来处，不列交付里程碑本身，也不带终局的依据版本，这两半没有钉。
+// 来处，不列交付里程碑本身，也不带终局的依据版本，这两半没有钉。在途与有效交付两拍的
+// 四维相同，第二拍不换代（视图版本不与投影版本一一对应）。
 func TestAPermittedFinalPendsUntilTheProjectionCarriesTheAdoptedFinal(t *testing.T) {
 	fixture := newViewFixture(t)
 	ctx := context.Background()
@@ -367,16 +404,18 @@ func TestAPermittedFinalPendsUntilTheProjectionCarriesTheAdoptedFinal(t *testing
 	for _, stage := range []struct {
 		name       string
 		projection domain.TrackingProjection
+		outcome    application.DeriveCustomerViewOutcome
 	}{
-		{"在途", inTransitProjection(t, "projection-1")},
-		{"有效交付、终局未采用", projectionOf(t, "projection-2", intakeEntry(t), deliveryEntry(t))},
+		{"在途", inTransitProjection(t, "projection-1"), application.CustomerViewPublished},
+		{"有效交付、终局未采用", projectionOf(t, "projection-2", intakeEntry(t), deliveryEntry(t)),
+			application.CustomerViewExistingResult},
 	} {
 		result, err := fixture.handler.Handle(ctx, commandOver(t, stage.projection))
 		if err != nil {
 			t.Fatalf("%s: handle: %v", stage.name, err)
 		}
-		if result.Outcome() != application.CustomerViewPublished {
-			t.Fatalf("%s: outcome = %q, want PUBLISHED", stage.name, result.Outcome())
+		if result.Outcome() != stage.outcome {
+			t.Fatalf("%s: outcome = %q, want %q", stage.name, result.Outcome(), stage.outcome)
 		}
 		latest, _ = result.View()
 		dimensions := latest.Dimensions()
@@ -502,14 +541,15 @@ func TestTheSameProjectionVersionDoesNotRepublishButResendsTheSameIntent(t *test
 }
 
 // Covers: CONTEXT「来源更正、事实有效性变化、身份谱系变化、ETA 新版本或终局更正必须
-// 重新派生客户视图并形成追加更正或明确替代关系。原已发布版本保留」——投影换版本时
-// 新视图指回前版并锚定新投影。点名 `AT-VE-161`「来源更正使原里程碑或终局失效→形成
-// 追加更正/替代视图，原版本保留且不再作为当前结果」。
-func TestANewerProjectionSupersedesTheCurrentViewKeepingHistory(t *testing.T) {
+// 重新派生客户视图并形成追加更正或明确替代关系。原已发布版本保留」——新投影改变了
+// 四维（终局采用进投影，终局一维由待确认转为展示）时，新视图指回前版并锚定新投影，
+// 前一版按版本仍读得回、原样未改。点名 `AT-VE-161`「来源更正使原里程碑或终局失效→
+// 形成追加更正/替代视图，原版本保留且不再作为当前结果」。
+func TestANewerProjectionThatChangesTheDimensionsSupersedesTheCurrentViewKeepingHistory(t *testing.T) {
 	fixture := newViewFixture(t)
 	ctx := context.Background()
 
-	first, err := fixture.handler.Handle(ctx, viewCommand(t, "projection-1"))
+	first, err := fixture.handler.Handle(ctx, commandOver(t, inTransitProjection(t, "projection-1")))
 	if err != nil {
 		t.Fatalf("first handle: %v", err)
 	}
@@ -533,6 +573,93 @@ func TestANewerProjectionSupersedesTheCurrentViewKeepingHistory(t *testing.T) {
 	}
 	if view.Version() == firstView.Version() {
 		t.Fatal("the superseding view reused the prior version identity")
+	}
+	kept, found, err := fixture.views.FindVersion(ctx, mustValue(t, domain.NewTenantID, "tenant-1"),
+		viewCustomer(t), view.Parcel(), prior)
+	if err != nil || !found {
+		t.Fatalf("the superseded version is not readable: err=%v found=%v", err, found)
+	}
+	if kept.Dimensions() != firstView.Dimensions() || kept.BasedOn() != firstView.BasedOn() {
+		t.Fatal("the superseded version was rewritten instead of kept as published")
+	}
+}
+
+// Covers: CONTEXT「客户全程追踪视图的版本由披露更正与替代关系驱动，不与内部投影版本一一
+// 对应；投影重新派生本身不要求形成新的客户视图版本」——新投影派生出的四维与当前版相同
+// 时不换代：不签新身份、不写新版本，当前版只改记所依据的投影，答已有结果；意图由同一
+// 视图版本认领，再交一次也是同一份。
+func TestANewerProjectionThatLeavesTheDimensionsUnchangedKeepsTheViewVersion(t *testing.T) {
+	fixture := newViewFixture(t)
+	ctx := context.Background()
+
+	first, err := fixture.handler.Handle(ctx, viewCommand(t, "projection-1"))
+	if err != nil {
+		t.Fatalf("first handle: %v", err)
+	}
+	firstView, _ := first.View()
+	issuedBefore := fixture.identities.next
+
+	second, err := fixture.handler.Handle(ctx, commandOver(t, projectionOf(t, "projection-2",
+		intakeEntry(t), deliveryEntry(t), finalEntry(t, domain.FinalOutcomeAdoptedFactKind))))
+	if err != nil {
+		t.Fatalf("second handle: %v", err)
+	}
+
+	if second.Outcome() != application.CustomerViewExistingResult {
+		t.Fatalf("outcome = %q, want EXISTING_RESULT; unchanged dimensions must not form a new view version",
+			second.Outcome())
+	}
+	view, present := second.View()
+	if !present || view.Version() != firstView.Version() {
+		t.Fatalf("view version = %q, want the current version %q kept", view.Version(), firstView.Version())
+	}
+	if view.BasedOn().String() != "projection-2" {
+		t.Fatalf("view based on %q, want it to follow the newer projection", view.BasedOn())
+	}
+	if _, superseding := view.PriorVersion(); superseding {
+		t.Fatal("an unchanged view grew a prior version")
+	}
+	if fixture.identities.next != issuedBefore {
+		t.Fatal("an unchanged view consumed a new view version identity")
+	}
+	if fixture.views.saved != 1 || fixture.views.reaffirmed != 1 {
+		t.Fatalf("saved %d, reaffirmed %d; want the first version saved once and then reaffirmed once",
+			fixture.views.saved, fixture.views.reaffirmed)
+	}
+	if len(fixture.downstream.intents) != 2 ||
+		fixture.downstream.intents[1].View.Version() != firstView.Version() {
+		t.Fatal("the reaffirmed view must hand off the same intent claimed by its unchanged version")
+	}
+
+	replay, err := fixture.handler.Handle(ctx, commandOver(t, projectionOf(t, "projection-2",
+		intakeEntry(t), deliveryEntry(t), finalEntry(t, domain.FinalOutcomeAdoptedFactKind))))
+	if err != nil {
+		t.Fatalf("replay handle: %v", err)
+	}
+	if replay.Outcome() != application.CustomerViewExistingResult || fixture.views.reaffirmed != 1 {
+		t.Fatal("replaying the projection the view already follows reaffirmed it again")
+	}
+}
+
+// Covers: 同一条未决语义的重新确认半边——改记所依据的投影没写成（并发输家或库故障）时
+// 答未决，交回重投，不答已有结果：答了，消费门就入账收工，视图永远停在旧投影上。
+func TestAFailedReaffirmIsUndecided(t *testing.T) {
+	fixture := newViewFixture(t)
+	ctx := context.Background()
+
+	if _, err := fixture.handler.Handle(ctx, viewCommand(t, "projection-1")); err != nil {
+		t.Fatalf("first handle: %v", err)
+	}
+	fixture.views.saveErr = errors.New("view store unavailable")
+
+	result, err := fixture.handler.Handle(ctx, viewCommand(t, "projection-2"))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.CustomerViewUndecided ||
+		result.UndecidedReason() != application.CustomerViewStoreUnavailable {
+		t.Fatalf("outcome = %q reason = %q, want UNDECIDED / CUSTOMER_VIEW_STORE_UNAVAILABLE",
+			result.Outcome(), result.UndecidedReason())
 	}
 }
 

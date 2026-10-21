@@ -185,9 +185,12 @@ type DisclosurePolicyView interface {
 	) (DisclosureAnswer, bool, error)
 }
 
-// CustomerViewStore 保存客户当前视图版本。键含租户与客户账户——租户是最高数据隔离
-// 边界（ADR-0003），跨越它必须在签名上看得见；账户隔离是字段不是约定，按包裹一个键
-// 会让两个客户的授权范围共用一份视图。原版本由替代关系承担历史，库只管当前。
+// CustomerViewStore 保存客户视图版本。键含租户与客户账户——租户是最高数据隔离边界
+// （ADR-0003），跨越它必须在签名上看得见；账户隔离是字段不是约定，按包裹一个键会让
+// 两个客户的授权范围共用一份视图。
+//
+// 版本只增不改写：已向客户发布的每一版都留存、按版本读得回，替代追加新版本并回指前一版
+// （CONTEXT「不得静默删除或改写历史披露」）；当前版另由显式标记指名。
 type CustomerViewStore interface {
 	FindCurrent(
 		ctx context.Context,
@@ -195,7 +198,26 @@ type CustomerViewStore interface {
 		customer domain.CustomerAccountReference,
 		parcel domain.TrackedParcelReference,
 	) (domain.CustomerTrackingView, bool, error)
+	// FindVersion 按版本读回该账户该包裹名下留存的任一版，当前版或已被替代的皆可。读回的
+	// 是那一版形成时的样子：所依据的投影是形成时那一份，不随当前版的 Reaffirm 前移。
+	FindVersion(
+		ctx context.Context,
+		tenant domain.TenantID,
+		customer domain.CustomerAccountReference,
+		parcel domain.TrackedParcelReference,
+		version domain.CustomerViewVersionID,
+	) (domain.CustomerTrackingView, bool, error)
+	// Save 追加一个视图版本并让它成为当前：首版只在尚无当前版时成立，替代只在当前版恰是
+	// 它所指的前一版时成立。
 	Save(ctx context.Context, tenant domain.TenantID, view domain.CustomerTrackingView) error
+	// Reaffirm 不换代，只把当前版所依据的投影从 replacing 改记为 view.BasedOn()；只在当前版
+	// 仍是 view 那一版、且仍依据 replacing 时成立。版本行一列不改。
+	Reaffirm(
+		ctx context.Context,
+		tenant domain.TenantID,
+		view domain.CustomerTrackingView,
+		replacing domain.ProjectionVersionID,
+	) error
 }
 
 // CustomerViewIdentityFactory 签发客户视图版本标识。与投影身份工厂分开：投影派生与

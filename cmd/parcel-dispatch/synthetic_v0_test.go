@@ -131,8 +131,8 @@ func TestSYNAcceptedDecisionStopsAtUnconfiguredRouteEvidence(t *testing.T) {
 	if n := fixture.countInbox(t, synV0VERederiveConsumer, synV0DecisionID); n != 1 {
 		t.Fatalf("VE 补派生 inbox 行数 = %d, want 1——空转也要入账，重投由账本跳过", n)
 	}
-	if n := fixture.countSQL(t, `SELECT count(*) FROM visibility_exception.customer_view`); n != 0 {
-		t.Fatalf("customer_view 行数 = %d, want 0——无投影不得发明视图", n)
+	if n := fixture.countSQL(t, `SELECT count(*) FROM visibility_exception.customer_view_version`); n != 0 {
+		t.Fatalf("customer_view_version 行数 = %d, want 0——无投影不得发明视图", n)
 	}
 	fixture.assertNoInitialRoute(t)
 	if n := fixture.countRouteHandoffLogs(t); n != 0 {

@@ -17,12 +17,14 @@ import (
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 )
 
-// ErrCurrentViewChanged 表示乐观锁失手：首发时已有别人占住当前，或替代时当前版本
-// 已不是新版本所指的前版。两个并发派生只有一个赢——输家重读当前再走幂等或替代路，
-// 覆盖会把赢家的版本链拆断。
+// ErrCurrentViewChanged 表示乐观锁失手：首发时已有别人占住当前，替代时当前版本已不是
+// 新版本所指的前版，或重新确认时当前版已换代或已跟上别的投影。两个并发派生只有一个
+// 赢——输家重读当前再走幂等、重新确认或替代路，覆盖会把赢家的版本链拆断。
 var ErrCurrentViewChanged = errors.New("visibility exception postgres: current view changed")
 
-// CustomerViews 实现 ports.CustomerViewStore。
+// CustomerViews 实现 ports.CustomerViewStore。版本行只增不改写：Save 追加版本行并把
+// customer_view_current 的显式标记指向它，已发布的每一版连同四维与发布时间留存、按版本
+// 读得回；读当前版走标记直取，不扫描历史。标记是唯一的可变处。
 type CustomerViews struct {
 	db *bentopg.DB
 }
@@ -34,7 +36,17 @@ func NewCustomerViews(db *bentopg.DB) (*CustomerViews, error) {
 	return &CustomerViews{db: db}, nil
 }
 
-// FindCurrent 按（租户+账户+包裹）取回当前视图版本。
+// customerViewColumns 是版本行读回领域对象所需的列，FindCurrent 与 FindVersion 共用一份
+// 次序，scanCustomerView 按它扫描。所依据的投影一格由调用方各自选：当前读标记上的，按
+// 版本读版本行上的。
+const customerViewColumns = `v.version, v.prior_version, v.published_at,
+		        v.milestones_state, v.milestones_content,
+		        v.eta_state, v.eta_content,
+		        v.final_state, v.final_content,
+		        v.note_state, v.note_content`
+
+// FindCurrent 按（租户+账户+包裹）取回当前视图版本。所依据的投影取标记上的那一格：当前版
+// 经 Reaffirm 跟上过较新的投影时，答的是跟上之后的那一份。
 //
 // 走 ReadExecutor：事务内读得到本事务刚写的行，事务外用显式注入的连接池——查询
 // 端点的读面正是后者。否定结果只回 false，不区分「不存在」「属于另一个客户」与
@@ -50,28 +62,72 @@ func (repository *CustomerViews) FindCurrent(
 	if err != nil {
 		return domain.CustomerTrackingView{}, false, fmt.Errorf("find current customer view: %w", err)
 	}
+	view, found, err := scanCustomerView(customer, parcel, querier.QueryRow(ctx,
+		`SELECT c.based_on_projection, `+customerViewColumns+`
+		   FROM visibility_exception.customer_view_current AS c
+		   JOIN visibility_exception.customer_view_version AS v
+		     ON v.tenant_id = c.tenant_id
+		    AND v.customer_account_id = c.customer_account_id
+		    AND v.parcel_id = c.parcel_id
+		    AND v.version = c.version
+		  WHERE c.tenant_id = $1
+		    AND c.customer_account_id = $2
+		    AND c.parcel_id = $3`,
+		tenant.String(),
+		customer.String(),
+		parcel.String(),
+	))
+	if err != nil {
+		return domain.CustomerTrackingView{}, false, fmt.Errorf("find current customer view: %w", err)
+	}
+	return view, found, nil
+}
 
+// FindVersion 按版本读回该账户该包裹名下留存的任一版——当前版或已被替代的历史版皆可。
+// 所依据的投影取版本行上的那一格，即那一版形成时所依据的投影。否定结果与 FindCurrent
+// 同理不分成因。
+func (repository *CustomerViews) FindVersion(
+	ctx context.Context,
+	tenant domain.TenantID,
+	customer domain.CustomerAccountReference,
+	parcel domain.TrackedParcelReference,
+	version domain.CustomerViewVersionID,
+) (domain.CustomerTrackingView, bool, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return domain.CustomerTrackingView{}, false, fmt.Errorf("find customer view by version: %w", err)
+	}
+	view, found, err := scanCustomerView(customer, parcel, querier.QueryRow(ctx,
+		`SELECT v.based_on_projection, `+customerViewColumns+`
+		   FROM visibility_exception.customer_view_version AS v
+		  WHERE v.tenant_id = $1
+		    AND v.customer_account_id = $2
+		    AND v.parcel_id = $3
+		    AND v.version = $4`,
+		tenant.String(),
+		customer.String(),
+		parcel.String(),
+		version.String(),
+	))
+	if err != nil {
+		return domain.CustomerTrackingView{}, false, fmt.Errorf("find customer view by version: %w", err)
+	}
+	return view, found, nil
+}
+
+func scanCustomerView(
+	customer domain.CustomerAccountReference,
+	parcel domain.TrackedParcelReference,
+	row pgx.Row,
+) (domain.CustomerTrackingView, bool, error) {
 	var (
-		version, basedOn                                     string
+		basedOn, version                                     string
 		priorVersion                                         *string
 		publishedAt                                          time.Time
 		milestonesState, etaState, finalState, noteState     string
 		milestonesContent, etaContent, finalContent, noteRaw *string
 	)
-	err = querier.QueryRow(ctx,
-		`SELECT version, based_on_projection, prior_version, published_at,
-		        milestones_state, milestones_content,
-		        eta_state, eta_content,
-		        final_state, final_content,
-		        note_state, note_content
-		   FROM visibility_exception.customer_view
-		  WHERE tenant_id = $1
-		    AND customer_account_id = $2
-		    AND parcel_id = $3`,
-		tenant.String(),
-		customer.String(),
-		parcel.String(),
-	).Scan(&version, &basedOn, &priorVersion, &publishedAt,
+	err := row.Scan(&basedOn, &version, &priorVersion, &publishedAt,
 		&milestonesState, &milestonesContent,
 		&etaState, &etaContent,
 		&finalState, &finalContent,
@@ -80,7 +136,7 @@ func (repository *CustomerViews) FindCurrent(
 		return domain.CustomerTrackingView{}, false, nil
 	}
 	if err != nil {
-		return domain.CustomerTrackingView{}, false, fmt.Errorf("find current customer view: %w", err)
+		return domain.CustomerTrackingView{}, false, err
 	}
 
 	dimensions, err := rebuildDimensions(
@@ -90,22 +146,25 @@ func (repository *CustomerViews) FindCurrent(
 		dimensionColumns{noteState, noteRaw},
 	)
 	if err != nil {
-		return domain.CustomerTrackingView{}, false, fmt.Errorf("find current customer view: %w", err)
+		return domain.CustomerTrackingView{}, false, err
 	}
-	snapshot, err := snapshotOf(tenant, customer, parcel, version, basedOn, priorVersion, publishedAt, dimensions)
+	snapshot, err := snapshotOf(customer, parcel, version, basedOn, priorVersion, publishedAt, dimensions)
 	if err != nil {
-		return domain.CustomerTrackingView{}, false, fmt.Errorf("find current customer view: %w", err)
+		return domain.CustomerTrackingView{}, false, err
 	}
 	view, err := domain.RehydrateCustomerView(snapshot)
 	if err != nil {
-		return domain.CustomerTrackingView{}, false, fmt.Errorf("find current customer view: %w", err)
+		return domain.CustomerTrackingView{}, false, err
 	}
 	return view, true, nil
 }
 
-// Save 提交视图版本：首版只在无当前行时成立（ON CONFLICT DO NOTHING），替代只在当前
-// 版本恰为新版本所指前版时成立（UPDATE ... WHERE version = prior 的乐观锁）。零行
-// 命中都是 ErrCurrentViewChanged——并发输家的恢复动作是重读，不是覆盖。
+// Save 追加视图版本并移当前标记：首版只在无当前标记时立标记（ON CONFLICT DO NOTHING），
+// 替代只在标记恰指新版本所指前版时移标记（UPDATE ... WHERE version = prior 的乐观锁）。
+// 零行命中都是 ErrCurrentViewChanged——并发输家的恢复动作是重读，不是覆盖；它已写下的
+// 版本行随同一事务回滚，不留一版从未成为当前的「已发布」视图。
+//
+// 版本行不带 ON CONFLICT：同版本号重写以主键冲突报错暴露，不静默覆盖已发布的那一版。
 //
 // 走 RequireExecutor：视图提交与将来同一步的意图发布必须同生共死。
 func (repository *CustomerViews) Save(
@@ -125,30 +184,49 @@ func (repository *CustomerViews) Save(
 	noteState, noteContent := dimensionColumnsOf(dimensions.Note)
 
 	prior, superseding := view.PriorVersion()
+	var priorColumn *string
+	if superseding {
+		priorColumn = stringPointer(prior.String())
+	}
+
+	if _, err := executor.Exec(ctx,
+		`INSERT INTO visibility_exception.customer_view_version
+			(tenant_id, customer_account_id, parcel_id,
+			 version, based_on_projection, prior_version, published_at,
+			 milestones_state, milestones_content,
+			 eta_state, eta_content,
+			 final_state, final_content,
+			 note_state, note_content)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+		tenant.String(),
+		view.Customer().String(),
+		view.Parcel().String(),
+		view.Version().String(),
+		view.BasedOn().String(),
+		priorColumn,
+		view.PublishedAt().UTC(),
+		milestonesState, milestonesContent,
+		etaState, etaContent,
+		finalState, finalContent,
+		noteState, noteContent,
+	); err != nil {
+		return fmt.Errorf("save customer view version: %w", err)
+	}
+
 	if !superseding {
 		tag, err := executor.Exec(ctx,
-			`INSERT INTO visibility_exception.customer_view
-				(tenant_id, customer_account_id, parcel_id,
-				 version, based_on_projection, prior_version, published_at,
-				 milestones_state, milestones_content,
-				 eta_state, eta_content,
-				 final_state, final_content,
-				 note_state, note_content)
-			 VALUES ($1, $2, $3, $4, $5, NULL, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+			`INSERT INTO visibility_exception.customer_view_current
+				(tenant_id, customer_account_id, parcel_id, version, based_on_projection)
+			 VALUES ($1, $2, $3, $4, $5)
 			 ON CONFLICT DO NOTHING`,
 			tenant.String(),
 			view.Customer().String(),
 			view.Parcel().String(),
 			view.Version().String(),
 			view.BasedOn().String(),
-			view.PublishedAt().UTC(),
-			milestonesState, milestonesContent,
-			etaState, etaContent,
-			finalState, finalContent,
-			noteState, noteContent,
 		)
 		if err != nil {
-			return fmt.Errorf("save customer view: %w", err)
+			return fmt.Errorf("save customer view current marker: %w", err)
 		}
 		if tag.RowsAffected() == 0 {
 			return fmt.Errorf("%w", ErrCurrentViewChanged)
@@ -157,34 +235,59 @@ func (repository *CustomerViews) Save(
 	}
 
 	tag, err := executor.Exec(ctx,
-		`UPDATE visibility_exception.customer_view
+		`UPDATE visibility_exception.customer_view_current
 		    SET version = $4,
-		        based_on_projection = $5,
-		        prior_version = $6,
-		        published_at = $7,
-		        milestones_state = $8, milestones_content = $9,
-		        eta_state = $10, eta_content = $11,
-		        final_state = $12, final_content = $13,
-		        note_state = $14, note_content = $15
+		        based_on_projection = $5
 		  WHERE tenant_id = $1
 		    AND customer_account_id = $2
 		    AND parcel_id = $3
-		    AND version = $16`,
+		    AND version = $6`,
 		tenant.String(),
 		view.Customer().String(),
 		view.Parcel().String(),
 		view.Version().String(),
 		view.BasedOn().String(),
 		prior.String(),
-		view.PublishedAt().UTC(),
-		milestonesState, milestonesContent,
-		etaState, etaContent,
-		finalState, finalContent,
-		noteState, noteContent,
-		prior.String(),
 	)
 	if err != nil {
-		return fmt.Errorf("save customer view: %w", err)
+		return fmt.Errorf("save customer view current marker: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("%w", ErrCurrentViewChanged)
+	}
+	return nil
+}
+
+// Reaffirm 只改当前标记上所依据的投影那一格，不写版本行：客户已读到的那一版一列不动。
+// 乐观锁同时看版本与原依据——当前版已换代，或已被另一次派生跟上别的投影，都零行命中，
+// 输家重读后按新的当前版重走。
+func (repository *CustomerViews) Reaffirm(
+	ctx context.Context,
+	tenant domain.TenantID,
+	view domain.CustomerTrackingView,
+	replacing domain.ProjectionVersionID,
+) error {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("reaffirm customer view: %w", err)
+	}
+	tag, err := executor.Exec(ctx,
+		`UPDATE visibility_exception.customer_view_current
+		    SET based_on_projection = $5
+		  WHERE tenant_id = $1
+		    AND customer_account_id = $2
+		    AND parcel_id = $3
+		    AND version = $4
+		    AND based_on_projection = $6`,
+		tenant.String(),
+		view.Customer().String(),
+		view.Parcel().String(),
+		view.Version().String(),
+		view.BasedOn().String(),
+		replacing.String(),
+	)
+	if err != nil {
+		return fmt.Errorf("reaffirm customer view: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("%w", ErrCurrentViewChanged)
@@ -250,8 +353,8 @@ func rebuildDimension(columns dimensionColumns) (domain.ViewDimension, error) {
 	}
 }
 
+// snapshotOf 不收租户：租户只在键上，视图对象按账户隔离，租户不进领域字段。
 func snapshotOf(
-	tenant domain.TenantID,
 	customer domain.CustomerAccountReference,
 	parcel domain.TrackedParcelReference,
 	version, basedOn string,
@@ -259,7 +362,6 @@ func snapshotOf(
 	publishedAt time.Time,
 	dimensions domain.CustomerViewDimensions,
 ) (domain.CustomerViewSnapshot, error) {
-	_ = tenant // 租户只在键上；视图对象按账户隔离，租户不进领域字段。
 	versionID, err := domain.NewCustomerViewVersionID(version)
 	if err != nil {
 		return domain.CustomerViewSnapshot{}, err

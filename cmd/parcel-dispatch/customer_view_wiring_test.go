@@ -134,8 +134,8 @@ func TestADerivedProjectionWithoutAnAcceptedParcelLeavesNoCustomerView(t *testin
 			published, recordedFailureCode(t, fixture.db, projection.Version().String()))
 	}
 
-	if n := fixture.countSQL(t, `SELECT count(*) FROM visibility_exception.customer_view`); n != 0 {
-		t.Fatalf("customer_view 行数 = %d, want 0——账户不得发明", n)
+	if n := fixture.countSQL(t, `SELECT count(*) FROM visibility_exception.customer_view_version`); n != 0 {
+		t.Fatalf("customer_view_version 行数 = %d, want 0——账户不得发明", n)
 	}
 	if n := fixture.countOutboxOfType(t, customerViewPublishedType); n != 0 {
 		t.Fatalf("视图发布意图 = %d, want 0", n)

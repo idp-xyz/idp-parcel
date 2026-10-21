@@ -113,11 +113,16 @@ func NewDeriveCustomerViewHandler(deps DeriveCustomerViewDeps) *DeriveCustomerVi
 	return &DeriveCustomerViewHandler{deps: deps}
 }
 
-// Handle 把一个投影新版本推进到客户视图版本：受理（账户与投影身份缺一即未受理，不读
-// 任何依赖）→ 幂等按投影版本（同一投影版本不重发视图，只重发同一份意图）→ 披露策略
-// 答复译成四维（未配置即四维全部待确认，如实说等，不虚构可见性；终局一维另看投影里
-// 有没有终局）→ 首版发布或替代指回前版 → 提交与发布意图。视图只基于当前投影形成，
-// 本编排不读内部案件或原始来源消息——依赖清单里根本没有那些端口。
+// Handle 把一个投影新版本推进到客户视图：受理（账户与投影身份缺一即未受理，不读任何
+// 依赖）→ 幂等按投影版本（同一投影版本不重发视图，只重发同一份意图）→ 披露策略答复译
+// 成四维（未配置即四维全部待确认，如实说等，不虚构可见性；终局一维另看投影里有没有
+// 终局）→ 四维与当前版相同则不换代、只改记所依据的投影，否则首版发布或替代指回前版 →
+// 提交与发布意图。视图只基于当前投影形成，本编排不读内部案件或原始来源消息——依赖
+// 清单里根本没有那些端口。
+//
+// 换不换代只看四维：客户全程追踪视图的版本由披露更正与替代关系驱动，不与内部投影版本
+// 一一对应（CONTEXT）。投影每换一版就换一代视图，客户会收到一串内容相同、只是编号不同的
+// 「更正」，下游据发布意图作的通知判断也跟着空转。
 func (handler *DeriveCustomerViewHandler) Handle(
 	ctx context.Context,
 	command DeriveCustomerViewCommand,
@@ -158,6 +163,24 @@ func (handler *DeriveCustomerViewHandler) Handle(
 		return DeriveCustomerViewResult{}, err
 	}
 
+	if found && current.Dimensions().Equal(dimensions) {
+		// 四维没变：不签新身份、不形成新版本，当前版只跟上这份投影。答已有结果——客户
+		// 读到的仍是同一版；意图照重放那样再交一次，同一版本认领同一份，不多发。
+		reaffirmed, err := current.Reaffirm(command.Projection.Version(), dimensions)
+		if err != nil {
+			return DeriveCustomerViewResult{}, fmt.Errorf("reaffirm customer tracking view: %w", err)
+		}
+		if err := handler.deps.Views.Reaffirm(ctx, command.TenantID, reaffirmed, current.BasedOn()); err != nil {
+			return DeriveCustomerViewResult{outcome: CustomerViewUndecided, reason: CustomerViewStoreUnavailable}, nil
+		}
+		return DeriveCustomerViewResult{
+			outcome:    CustomerViewExistingResult,
+			view:       reaffirmed,
+			hasView:    true,
+			handoffRef: handler.handOff(ctx, command.TenantID, reaffirmed),
+		}, nil
+	}
+
 	version, err := handler.deps.Identities.NextCustomerViewVersionID(ctx)
 	if err != nil {
 		return DeriveCustomerViewResult{outcome: CustomerViewUndecided, reason: CustomerViewIdentityUnavailable}, nil
@@ -165,8 +188,8 @@ func (handler *DeriveCustomerViewHandler) Handle(
 
 	var view domain.CustomerTrackingView
 	if found {
-		// 投影换了版本：形成新的客户视图版本并指回前版，原发布历史保留——不再有效的
-		// 内容不得继续显示为当前事实（CONTEXT）。
+		// 四维变了：形成新的客户视图版本并指回前版，原发布历史保留——不再有效的内容
+		// 不得继续显示为当前事实（CONTEXT）。
 		view, err = current.Supersede(version, command.Projection.Version(), dimensions, handler.deps.Clock.Now())
 	} else {
 		view, err = domain.PublishCustomerView(

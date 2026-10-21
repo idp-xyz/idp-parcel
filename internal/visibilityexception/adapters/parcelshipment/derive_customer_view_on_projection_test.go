@@ -137,6 +137,27 @@ func (double *customerViewStoreDouble) Save(
 	return nil
 }
 
+// FindVersion 本包用例不读历史版，替身答查无。
+func (double *customerViewStoreDouble) FindVersion(
+	_ context.Context,
+	_ vedomain.TenantID,
+	_ vedomain.CustomerAccountReference,
+	_ vedomain.TrackedParcelReference,
+	_ vedomain.CustomerViewVersionID,
+) (vedomain.CustomerTrackingView, bool, error) {
+	return vedomain.CustomerTrackingView{}, false, nil
+}
+
+func (double *customerViewStoreDouble) Reaffirm(
+	_ context.Context,
+	tenant vedomain.TenantID,
+	view vedomain.CustomerTrackingView,
+	_ vedomain.ProjectionVersionID,
+) error {
+	double.byKey[tenant.String()+"/"+view.Customer().String()+"/"+view.Parcel().String()] = view
+	return nil
+}
+
 type viewIdentityDouble struct{ next int }
 
 func (double *viewIdentityDouble) NextCustomerViewVersionID(_ context.Context) (vedomain.CustomerViewVersionID, error) {

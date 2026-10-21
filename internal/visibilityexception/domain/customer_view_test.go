@@ -135,6 +135,46 @@ func TestSupersessionKeepsThePublishedHistory(t *testing.T) {
 	}
 }
 
+// Covers: VE CONTEXT「客户全程追踪视图的版本由披露更正与替代关系驱动，不与内部投影版本
+// 一一对应；投影重新派生本身不要求形成新的客户视图版本」与「已经向客户发布的……出现
+// 更正时，必须以追加更新或明确替代关系表达，不得静默删除或改写历史披露」——四维不变时
+// 重新确认只换投影锚，版本、四维、发布时间原样；四维变了不许走重新确认，那等于不换代
+// 却换内容；投影没换不是重新确认。
+func TestReaffirmFollowsANewerProjectionOnlyWhileTheDimensionsStayTheSame(t *testing.T) {
+	view := publishedView(t)
+	newer := mustValue(t, domain.NewProjectionVersionID, "projection-1/v2")
+
+	reaffirmed, err := view.Reaffirm(newer, shownDimensions(t))
+	if err != nil {
+		t.Fatalf("reaffirm: %v", err)
+	}
+	if reaffirmed.BasedOn() != newer {
+		t.Fatalf("based on = %s; 重新确认要跟上新投影", reaffirmed.BasedOn())
+	}
+	if reaffirmed.Version() != view.Version() || reaffirmed.Dimensions() != view.Dimensions() ||
+		!reaffirmed.PublishedAt().Equal(view.PublishedAt()) {
+		t.Fatal("重新确认改写了已发布的版本、四维或发布时间")
+	}
+	if _, superseding := reaffirmed.PriorVersion(); superseding {
+		t.Fatal("重新确认凭空长出了前版")
+	}
+	if view.BasedOn().String() != "projection-1/v1" {
+		t.Fatal("原视图被改写了")
+	}
+
+	changed := shownDimensions(t)
+	changed.ETA = domain.WithholdDimension()
+	if _, err := view.Reaffirm(newer, changed); !errors.Is(err, domain.ErrInvalidCustomerView) {
+		t.Fatalf("err = %v; 四维变了必须换代", err)
+	}
+	if _, err := view.Reaffirm(view.BasedOn(), shownDimensions(t)); !errors.Is(err, domain.ErrInvalidCustomerView) {
+		t.Fatalf("err = %v; 投影没换是重放，不是重新确认", err)
+	}
+	if _, err := view.Reaffirm(domain.ProjectionVersionID{}, shownDimensions(t)); !errors.Is(err, domain.ErrInvalidCustomerView) {
+		t.Fatalf("err = %v; 没有投影锚的重新确认挂不回任何一次派生", err)
+	}
+}
+
 // unclassifiedEntry 造一条未归类条目：终局不是里程碑，映射目录登不登它都不改变终局
 // 有没有形成，夹具因此刻意不归类。
 func unclassifiedEntry(
