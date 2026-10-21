@@ -2,7 +2,9 @@ package postgres_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -212,37 +214,46 @@ func TestABuyRequestRecordsItsStopOnceAndResumesIntoOneSuccessor(t *testing.T) {
 	}
 }
 
-// Covers: AT-SA-191 两本发起停办册——落一行、按自然键读回原样；同一自然键再停一次换上这一次的停因、时刻与依据，来源
-// 事实不换；写口无事务拒。
+// Covers: AT-SA-191 两本发起停办册——落一行、按自然键读回原样；同一自然键再停一次换上这一次的停因、时刻、依据与户，来源
+// 事实不换；只有停在计费时点没采用的那一拍记户；写口无事务拒。
 func TestInitiationStallsRecordTheMomentAndTakeTheLatestStop(t *testing.T) {
 	fixture := newResumptionFixture(t)
 	key := domain.SellEvaluationRequestNaturalKey{
 		Parcel: saValue(t, domain.NewParcelReference, "SYN-PARCEL-9"), Moment: domain.BillingMomentNetworkIntakeAdopted,
 	}
-	stall := func(cause domain.EvaluationStopCause, at time.Time, basis domain.ResumeBasis) domain.SellEvaluationInitiationStall {
+	stall := func(cause domain.EvaluationStopCause, at time.Time, basis domain.ResumeBasis, account domain.SettlementAccountID) domain.SellEvaluationInitiationStall {
 		built, err := domain.NewSellEvaluationInitiationStall(domain.SellEvaluationInitiationStallSpec{
 			Parcel: key.Parcel, Moment: key.Moment, Source: saValue(t, domain.NewSourceFactReference, "SYN-INTAKE-9"),
-			PricingBasisAt: sellRequestBasisAt, Cause: cause, StoppedAt: at, Basis: basis,
+			PricingBasisAt: sellRequestBasisAt, Cause: cause, StoppedAt: at, Basis: basis, Account: account,
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
 		return built
 	}
-	if err := fixture.resumptions.RecordSellInitiationStall(t.Context(), fixture.tenant, stall(domain.StopSettlementAccountNotRegistered, resumptionAt, domain.ResumeBasis{})); !errors.Is(err, bentopg.ErrTransactionRequired) {
+	unregistered := stall(domain.StopSettlementAccountNotRegistered, resumptionAt, domain.ResumeBasis{}, domain.SettlementAccountID{})
+	if err := fixture.resumptions.RecordSellInitiationStall(t.Context(), fixture.tenant, unregistered); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("事务外记 SELL 发起停办应答 ErrTransactionRequired，实得：%v", err)
 	}
 	fixture.within(t, func(ctx context.Context) error {
-		return fixture.resumptions.RecordSellInitiationStall(ctx, fixture.tenant, stall(domain.StopSettlementAccountNotRegistered, resumptionAt, domain.ResumeBasis{}))
+		return fixture.resumptions.RecordSellInitiationStall(ctx, fixture.tenant, unregistered)
 	})
+	if loaded, _, err := fixture.resumptions.FindSellInitiationStall(t.Context(), fixture.tenant, key); err != nil {
+		t.Fatal(err)
+	} else if _, reached := loaded.Account(); reached {
+		t.Fatalf("账户没登的那一拍记了户：%+v", loaded)
+	}
 	basis := basisOf(t, domain.ParameterSettlementAccount, "settlement-account/1")
+	notAdopted := stall(domain.StopSellBillingMomentNotAdopted, resumptionAt.Add(time.Hour), basis,
+		saValue(t, domain.NewSettlementAccountID, "SYN-ACCT-9"))
 	fixture.within(t, func(ctx context.Context) error {
-		return fixture.resumptions.RecordSellInitiationStall(ctx, fixture.tenant, stall(domain.StopSellBillingMomentNotAdopted, resumptionAt.Add(time.Hour), basis))
+		return fixture.resumptions.RecordSellInitiationStall(ctx, fixture.tenant, notAdopted)
 	})
 	loaded, found, err := fixture.resumptions.FindSellInitiationStall(t.Context(), fixture.tenant, key)
+	account, reached := loaded.Account()
 	if err != nil || !found || loaded.Cause() != domain.StopSellBillingMomentNotAdopted || loaded.Basis() != basis ||
 		!loaded.StoppedAt().Equal(resumptionAt.Add(time.Hour)) || loaded.Source().String() != "SYN-INTAKE-9" ||
-		!loaded.PricingBasisAt().Equal(sellRequestBasisAt) {
+		!loaded.PricingBasisAt().Equal(sellRequestBasisAt) || !reached || account.String() != "SYN-ACCT-9" {
 		t.Fatalf("读回 = %+v found=%v err=%v", loaded, found, err)
 	}
 
@@ -388,7 +399,7 @@ func TestTheStalledQueueListsWhatStillWaits(t *testing.T) {
 }
 
 // Covers: AT-SA-199 「评价参数已登记」交接口——同一行重放发同一封（EnqueueOnce 按 ID 吞掉第二封）、两行两封；种类不归本口拒；
-// 写口无事务拒（PBC-08）。
+// 收窄格随种类必带（触发册带发生项原因、计费时点采用带户、映射两格都空），缺了或带错拒；写口无事务拒（PBC-08）。
 func TestTheEvaluationParameterHandoffEnqueuesOneEnvelopePerRegisteredRow(t *testing.T) {
 	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
@@ -436,8 +447,55 @@ func TestTheEvaluationParameterHandoffEnqueuesOneEnvelopePerRegisteredRow(t *tes
 		if err := handoff.HandOffEvaluationParameterRegistered(ctx, wrong); err == nil {
 			return errors.New("计价的种类经结算的口交了出去")
 		}
+		trigger := ports.EvaluationParameterRegisteredIntent{
+			Tenant: saTenant(t, "tenant-a"), Kind: domain.ParameterBuyEvaluationTrigger,
+			Subject: "ACTUAL_FULFILLMENT@SYN-FEE", RegisteredAt: resumptionAt,
+		}
+		if err := handoff.HandOffEvaluationParameterRegistered(ctx, trigger); err == nil {
+			return errors.New("不带发生项原因的触发册登记交了出去")
+		}
+		trigger.OccurrenceReason = saValue(t, domain.NewOccurrenceReasonReference, "ACTUAL_FULFILLMENT")
+		adoption := ports.EvaluationParameterRegisteredIntent{
+			Tenant: saTenant(t, "tenant-a"), Kind: domain.ParameterSellBillingMomentAdoption,
+			Subject: "SYN-ACCT-1", Account: saValue(t, domain.NewSettlementAccountID, "SYN-ACCT-1"), RegisteredAt: resumptionAt,
+		}
+		mappingWithAccount := intent
+		mappingWithAccount.Account = adoption.Account
+		if err := handoff.HandOffEvaluationParameterRegistered(ctx, mappingWithAccount); err == nil {
+			return errors.New("带户的映射登记交了出去")
+		}
+		for _, each := range []ports.EvaluationParameterRegisteredIntent{trigger, adoption} {
+			if err := handoff.HandOffEvaluationParameterRegistered(ctx, each); err != nil {
+				return err
+			}
+		}
 		return nil
 	})
+	payloads := map[string]map[string]any{}
+	rows, err := querier.Query(t.Context(), `SELECT payload FROM `+migrate.SchemaBento+`.outbox
+		WHERE event_type = 'settlement-accounting.evaluation-parameter.registered'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var raw []byte
+		if err := rows.Scan(&raw); err != nil {
+			t.Fatal(err)
+		}
+		body := map[string]any{}
+		if err := json.Unmarshal(raw, &body); err != nil {
+			t.Fatal(err)
+		}
+		payloads[fmt.Sprint(body["registrationKind"])] = body
+	}
+	if payloads["BUY_EVALUATION_TRIGGER"]["occurrenceReason"] != "ACTUAL_FULFILLMENT" ||
+		payloads["SELL_BILLING_MOMENT_ADOPTION"]["settlementAccountId"] != "SYN-ACCT-1" {
+		t.Fatalf("收窄格 = %+v", payloads)
+	}
+	if _, carried := payloads["FEE_ITEM_MAPPING"]["settlementAccountId"]; carried {
+		t.Fatalf("映射带了户：%+v", payloads["FEE_ITEM_MAPPING"])
+	}
 }
 
 // Covers: AT-SA-193 的翻页与整链排除——按位置往后取：同一组行第二页接着第一页、不重不漏；排除的依据查整条代次链：
@@ -510,4 +568,147 @@ func TestTheStalledQueuePagesByPositionAndExcludesABasisAcrossTheWholeChain(t *t
 	if !listed(basisOf(t, domain.ParameterPriceCard, "pricing-parameter/D")) {
 		t.Fatal("排除一个链上没用过的依据，第三代却不在队列里")
 	}
+}
+
+// Covers: AT-SA-193 的收窄与终止——方向只取那一路；发生项原因只取 BUY 那一路里原因是它的；户只取 SELL 那一路里落在这一户
+// 的；落了终止的 SELL 发起停办不再进队列、终止重放不改时刻、不在册的键答没收，再停一次又进队列；落终止要求环境事务。
+func TestTheStalledQueueNarrowsByDirectionReasonAndAccountAndSkipsClosedStalls(t *testing.T) {
+	fixture := newResumptionFixture(t)
+	sellStall := func(parcel, account string) domain.SellEvaluationInitiationStall {
+		built, err := domain.NewSellEvaluationInitiationStall(domain.SellEvaluationInitiationStallSpec{
+			Parcel: saValue(t, domain.NewParcelReference, parcel), Moment: domain.BillingMomentNetworkIntakeAdopted,
+			Source: saValue(t, domain.NewSourceFactReference, "SYN-INTAKE-"+parcel), PricingBasisAt: sellRequestBasisAt,
+			Cause: domain.StopSellBillingMomentNotAdopted, StoppedAt: resumptionAt,
+			Account: saValue(t, domain.NewSettlementAccountID, account),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return built
+	}
+	buyStall := func(occurrence, reason string) domain.BuyEvaluationInitiationStall {
+		formed, err := domain.NewTransportChargeOccurrence(saValue(t, domain.NewChargeOccurrenceID, occurrence),
+			saValue(t, domain.NewOccurrenceReasonReference, reason), saValue(t, domain.NewOccurrenceVersion, "V1"), evaluationOccurredAt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		built, err := domain.NewBuyEvaluationInitiationStall(domain.BuyEvaluationInitiationStallSpec{
+			Occurrence: formed, Agreement: saValue(t, domain.NewSupplierAgreementReference, "SYN-AGR/v1"),
+			Cause: domain.StopOccurrenceReasonNotRegistered, StoppedAt: resumptionAt,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return built
+	}
+	parcelA, parcelB := sellStall("SYN-PARCEL-A", "SYN-ACCT-A"), sellStall("SYN-PARCEL-B", "SYN-ACCT-B")
+	fixture.within(t, func(ctx context.Context) error {
+		for _, stall := range []domain.SellEvaluationInitiationStall{parcelA, parcelB} {
+			if err := fixture.resumptions.RecordSellInitiationStall(ctx, fixture.tenant, stall); err != nil {
+				return err
+			}
+		}
+		for _, stall := range []domain.BuyEvaluationInitiationStall{
+			buyStall("SYN-OCC-FULFIL", "ACTUAL_FULFILLMENT"), buyStall("SYN-OCC-RETURN", "SYN_RETURN_HANDLING"),
+		} {
+			if err := fixture.resumptions.RecordBuyInitiationStall(ctx, fixture.tenant, stall); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	sellRecord := sellEvaluationRequestRecord(t, "tenant-a", "SELLREQ-SYN-N", "SYN-PARCEL-N",
+		domain.BillingMomentNetworkIntakeAdopted, sellRequestRecordedAt)
+	saveSellEvaluationRequest(t, fixture.db.Transactor(), fixture.sellRequests, sellRecord)
+	fixture.stopSell(t, sellRecord.Key, domain.StopPriceCardNotConfigured)
+	buyRecord := evaluationRequestRecord(t, "tenant-a", "EVREQ-SYN-N", "syn-fee-n")
+	saveEvaluationRequest(t, fixture.db.Transactor(), fixture.buyRequests, buyRecord)
+	fixture.within(t, func(ctx context.Context) error {
+		_, err := fixture.buyRequests.RecordStop(ctx, buyRecord.Key, domain.StopPriceCardNotConfigured, resumptionAt)
+		return err
+	})
+
+	describe := func(items []ports.StalledEvaluation) map[string]bool {
+		got := map[string]bool{}
+		for _, item := range items {
+			got[item.Kind.String()+"/"+item.Position.FirstKey] = true
+		}
+		return got
+	}
+	expect := func(label string, query ports.StalledEvaluationQuery, want ...string) {
+		t.Helper()
+		got := describe(fixture.list(t, query))
+		if len(got) != len(want) {
+			t.Fatalf("%s = %v, want %v", label, got, want)
+		}
+		for _, each := range want {
+			if !got[each] {
+				t.Fatalf("%s = %v, want %v", label, got, want)
+			}
+		}
+	}
+	all := domain.AllEvaluationStopCauses()
+	expect("BUY 一路", ports.StalledEvaluationQuery{Causes: all, Direction: domain.BuyEvaluationDirection},
+		"BUY_INITIATION/SYN-OCC-FULFIL", "BUY_INITIATION/SYN-OCC-RETURN", "BUY_REQUEST/EVREQ-SYN-N")
+	expect("SELL 一路", ports.StalledEvaluationQuery{Causes: all, Direction: domain.SellEvaluationDirection},
+		"SELL_INITIATION/SYN-PARCEL-A", "SELL_INITIATION/SYN-PARCEL-B", "SELL_REQUEST/SELLREQ-SYN-N")
+	priceCard := domain.EvaluationStopCausesResumedBy(domain.ParameterPriceCard)
+	expect("BUY 卡、SELL 请求的范围", ports.StalledEvaluationQuery{
+		Causes: priceCard, PricingScope: "SYN-SCOPE-SELL-1", Direction: domain.BuyEvaluationDirection,
+	})
+	expect("采用登记、户 A", ports.StalledEvaluationQuery{
+		Causes:  domain.EvaluationStopCausesResumedBy(domain.ParameterSellBillingMomentAdoption),
+		Account: saValue(t, domain.NewSettlementAccountID, "SYN-ACCT-A"),
+	}, "SELL_INITIATION/SYN-PARCEL-A")
+	expect("户 SYN-ACCT-1、不分停因", ports.StalledEvaluationQuery{
+		Causes: all, Account: saValue(t, domain.NewSettlementAccountID, "SYN-ACCT-1"),
+	}, "SELL_REQUEST/SELLREQ-SYN-N")
+	expect("触发册登记、原因 ACTUAL_FULFILLMENT", ports.StalledEvaluationQuery{
+		Causes:           domain.EvaluationStopCausesResumedBy(domain.ParameterBuyEvaluationTrigger),
+		OccurrenceReason: saValue(t, domain.NewOccurrenceReasonReference, "ACTUAL_FULFILLMENT"),
+	}, "BUY_INITIATION/SYN-OCC-FULFIL")
+	expect("原因 BOOKING、不分停因", ports.StalledEvaluationQuery{
+		Causes: all, OccurrenceReason: saValue(t, domain.NewOccurrenceReasonReference, "BOOKING"),
+	}, "BUY_REQUEST/EVREQ-SYN-N")
+
+	adoptionCauses := domain.EvaluationStopCausesResumedBy(domain.ParameterSellBillingMomentAdoption)
+	closedAt := resumptionAt.Add(2 * time.Hour)
+	if _, err := fixture.resumptions.CloseSellInitiationStall(t.Context(), fixture.tenant, parcelA.NaturalKey(), closedAt); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("事务外落终止应答 ErrTransactionRequired，实得：%v", err)
+	}
+	closeStall := func(key domain.SellEvaluationRequestNaturalKey, at time.Time) bool {
+		var closed bool
+		fixture.within(t, func(ctx context.Context) error {
+			var err error
+			closed, err = fixture.resumptions.CloseSellInitiationStall(ctx, fixture.tenant, key, at)
+			return err
+		})
+		return closed
+	}
+	if !closeStall(parcelA.NaturalKey(), closedAt) || !closeStall(parcelA.NaturalKey(), closedAt.Add(time.Hour)) {
+		t.Fatal("在册的那一拍答没收")
+	}
+	if closeStall(domain.SellEvaluationRequestNaturalKey{
+		Parcel: saValue(t, domain.NewParcelReference, "SYN-PARCEL-NONE"), Moment: domain.BillingMomentNetworkIntakeAdopted,
+	}, closedAt) {
+		t.Fatal("不在册的键答收了")
+	}
+	expect("户 A 落终止之后", ports.StalledEvaluationQuery{Causes: adoptionCauses}, "SELL_INITIATION/SYN-PARCEL-B")
+	querier, err := fixture.db.ReadExecutor(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var recordedClose time.Time
+	if err := querier.QueryRow(t.Context(), `SELECT closed_at FROM settlement_accounting.sell_evaluation_initiation_stall
+		WHERE tenant_id = 'tenant-a' AND parcel_id = 'SYN-PARCEL-A'`).Scan(&recordedClose); err != nil {
+		t.Fatal(err)
+	}
+	if !recordedClose.Equal(closedAt) {
+		t.Fatalf("终止时刻 = %s，want 第一次的 %s", recordedClose, closedAt)
+	}
+	fixture.within(t, func(ctx context.Context) error {
+		return fixture.resumptions.RecordSellInitiationStall(ctx, fixture.tenant, parcelA)
+	})
+	expect("户 A 再停一次", ports.StalledEvaluationQuery{Causes: adoptionCauses},
+		"SELL_INITIATION/SYN-PARCEL-A", "SELL_INITIATION/SYN-PARCEL-B")
 }

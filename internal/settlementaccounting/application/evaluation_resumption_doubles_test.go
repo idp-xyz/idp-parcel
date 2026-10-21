@@ -2,21 +2,25 @@ package application_test
 
 import (
 	"context"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 )
 
-// stallRegisterDouble 是两本发起停办册的内存替身：同一自然键再记一次就换上这一次，与真册同一口径；err 让写口答不出。
+// stallRegisterDouble 是两本发起停办册的内存替身：同一自然键再记一次就换上这一次并清掉终止，与真册同一口径；err 让写口
+// 答不出。closed 记 SELL 那一本落了终止的键。
 type stallRegisterDouble struct {
-	sell map[string]domain.SellEvaluationInitiationStall
-	buy  map[string]domain.BuyEvaluationInitiationStall
-	err  error
+	sell   map[string]domain.SellEvaluationInitiationStall
+	buy    map[string]domain.BuyEvaluationInitiationStall
+	closed map[string]time.Time
+	err    error
 }
 
 func newStallRegister() *stallRegisterDouble {
 	return &stallRegisterDouble{
-		sell: map[string]domain.SellEvaluationInitiationStall{},
-		buy:  map[string]domain.BuyEvaluationInitiationStall{},
+		sell:   map[string]domain.SellEvaluationInitiationStall{},
+		buy:    map[string]domain.BuyEvaluationInitiationStall{},
+		closed: map[string]time.Time{},
 	}
 }
 
@@ -35,7 +39,23 @@ func (double *stallRegisterDouble) RecordSellInitiationStall(
 		return double.err
 	}
 	double.sell[sellStallKey(tenant, stall.NaturalKey())] = stall
+	delete(double.closed, sellStallKey(tenant, stall.NaturalKey()))
 	return nil
+}
+
+func (double *stallRegisterDouble) CloseSellInitiationStall(
+	_ context.Context, tenant domain.TenantID, key domain.SellEvaluationRequestNaturalKey, closedAt time.Time,
+) (bool, error) {
+	if double.err != nil {
+		return false, double.err
+	}
+	if _, found := double.sell[sellStallKey(tenant, key)]; !found {
+		return false, nil
+	}
+	if _, already := double.closed[sellStallKey(tenant, key)]; !already {
+		double.closed[sellStallKey(tenant, key)] = closedAt
+	}
+	return true, nil
 }
 
 func (double *stallRegisterDouble) FindSellInitiationStall(

@@ -201,10 +201,11 @@ func (handler *RegisterBuyEvaluationTriggerHandler) RegisterBuyEvaluationTrigger
 	// 追加的那一版不能被第一版的信封标识吞掉。
 	feeItem, _ := registration.FeeItem()
 	if err := announceEvaluationParameter(ctx, handler.handoff, effect, ports.EvaluationParameterRegisteredIntent{
-		Tenant:       tenant,
-		Kind:         domain.ParameterBuyEvaluationTrigger,
-		Subject:      registration.Reason().String() + "@" + feeItem.String(),
-		RegisteredAt: registeredAt,
+		Tenant:           tenant,
+		Kind:             domain.ParameterBuyEvaluationTrigger,
+		Subject:          registration.Reason().String() + "@" + feeItem.String(),
+		OccurrenceReason: registration.Reason(),
+		RegisteredAt:     registeredAt,
 	}); err != nil {
 		return 0, fmt.Errorf("register buy evaluation trigger: %w", err)
 	}

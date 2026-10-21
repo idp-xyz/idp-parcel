@@ -206,7 +206,8 @@ func TestTheRequestBackReferenceDecidesWhetherThisOrchestrationOwnsTheEvaluation
 
 // Covers: AT-SA-175、AT-SA-177 与评价停下的其余各格——不可计价、评价冲突、待判断、未形成、跨币种无换算步骤、金额
 // 未声明都是这份评价的定局：不写成本行，形成编排那一层的格照原样交回；不是未决（评价不可变，计价对同一份请求也不再
-// 形成第二份评价，重投无益）。AT-SA-192：每一格在 BUY 请求册上记各自的停因（ADR-0229 决定三），记不下才是未决。
+// 形成第二份评价，重投无益）。AT-SA-192：每一格在 BUY 请求册上记各自的停因（ADR-0229 决定三），待判断记读口分出的那一格，
+// 记不下才是未决。
 func TestEvaluationsThatCannotBeAdoptedAreSettledWithoutWrites(t *testing.T) {
 	for _, grade := range []struct {
 		evaluation string
@@ -217,6 +218,7 @@ func TestEvaluationsThatCannotBeAdoptedAreSettledWithoutWrites(t *testing.T) {
 		{"buy-eval-unratable", application.ExpectedCostUnratable, application.ExpectedCostUndecidedReasonNone, domain.StopEvaluationUnratable},
 		{"buy-eval-conflict", application.EvaluationConflict, application.ExpectedCostUndecidedReasonNone, domain.StopEvaluationConflict},
 		{"buy-eval-pending", application.ExpectedCostUndecided, application.EvaluationPending, domain.StopEvaluationPendingJudgment},
+		{"buy-eval-pending-series", application.ExpectedCostUndecided, application.EvaluationPending, domain.StopEvaluationSeriesUnresolved},
 		{"buy-eval-not-formed", application.ExpectedCostUndecided, application.EvaluationNotFormed, domain.StopEvaluationFailed},
 		{"buy-eval-unconverted", application.ExpectedCostUndecided, application.ConversionStepMissing, domain.StopConversionStepMissing},
 		{"buy-eval-undeclared", application.ExpectedCostUndecided, application.EvaluationAmountPrecisionUndeclared, domain.StopAmountRoundingUndeclared},

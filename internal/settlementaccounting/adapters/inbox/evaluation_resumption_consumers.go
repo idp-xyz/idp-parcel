@@ -189,12 +189,15 @@ func NewEvaluationParameterRegisteredConsumer(
 	}, nil
 }
 
-// registeredParameter 是译码后的一次登记：租户、种类、价卡带的计价范围，以及凭的依据（由信封标识造）。
+// registeredParameter 是译码后的一次登记：租户、种类、这个种类带的收窄格，以及凭的依据（由信封标识造）。
 type registeredParameter struct {
-	tenant domain.TenantID
-	kind   domain.EvaluationParameterKind
-	scope  string
-	basis  domain.ResumeBasis
+	tenant    domain.TenantID
+	kind      domain.EvaluationParameterKind
+	scope     string
+	direction domain.EvaluationDirection
+	reason    domain.OccurrenceReasonReference
+	account   domain.SettlementAccountID
+	basis     domain.ResumeBasis
 }
 
 func (consumer *EvaluationParameterRegisteredConsumer) Consume(ctx context.Context, envelope eventing.Envelope) error {
@@ -218,13 +221,18 @@ func (consumer *EvaluationParameterRegisteredConsumer) Consume(ctx context.Conte
 	return gate.Consume(ctx, envelope)
 }
 
-// decode 译载荷：tenantId 与 registrationKind 两键必备，pricingScope 只有价卡带。种类必须是这扇门认的那几种——别的种类出现
-// 在这类信封上说明发布侧的契约漂了，重投长不出对的种类，是毒丸。
+// decode 译载荷：tenantId 与 registrationKind 两键必备，种类必带的收窄格（domain.EvaluationParameterKind.Narrowing）也必备。
+// 种类必须是这扇门认的那几种——别的种类出现在这类信封上说明发布侧的契约漂了，重投长不出对的种类，是毒丸。缺了收窄格
+// 同样是毒丸：按种类放宽去推会把整个租户里同停因的件推一遍，正是收窄要挡的；重投也长不出那一格。种类不带的格出现了
+// 不理会。
 func (consumer *EvaluationParameterRegisteredConsumer) decode(id eventing.EventID, payload []byte) (registeredParameter, error) {
 	var body struct {
-		TenantID         string `json:"tenantId"`
-		RegistrationKind string `json:"registrationKind"`
-		PricingScope     string `json:"pricingScope"`
+		TenantID            string `json:"tenantId"`
+		RegistrationKind    string `json:"registrationKind"`
+		PricingScope        string `json:"pricingScope"`
+		Direction           string `json:"direction"`
+		OccurrenceReason    string `json:"occurrenceReason"`
+		SettlementAccountID string `json:"settlementAccountId"`
 	}
 	if err := json.Unmarshal(payload, &body); err != nil {
 		return registeredParameter{}, fmt.Errorf("%w: %v", ErrPoisonEnvelope, err)
@@ -244,25 +252,51 @@ func (consumer *EvaluationParameterRegisteredConsumer) decode(id eventing.EventI
 	if !accepted {
 		return registeredParameter{}, fmt.Errorf("%w: kind %s does not travel on %s", ErrPoisonEnvelope, kind, consumer.registration.EventType)
 	}
-	basis, err := domain.NewParameterResumeBasis(kind, string(id))
-	if err != nil {
+	registered := registeredParameter{tenant: tenant, kind: kind}
+	narrowing := kind.Narrowing()
+	if narrowing.PricingScope {
+		if body.PricingScope == "" {
+			return registeredParameter{}, fmt.Errorf("%w: kind %s without pricingScope", ErrPoisonEnvelope, kind)
+		}
+		registered.scope = body.PricingScope
+	}
+	if narrowing.Direction {
+		if registered.direction, err = domain.EvaluationDirectionFromName(body.Direction); err != nil {
+			return registeredParameter{}, fmt.Errorf("%w: kind %s: %v", ErrPoisonEnvelope, kind, err)
+		}
+	}
+	if narrowing.OccurrenceReason {
+		if registered.reason, err = domain.NewOccurrenceReasonReference(body.OccurrenceReason); err != nil {
+			return registeredParameter{}, fmt.Errorf("%w: kind %s occurrenceReason: %v", ErrPoisonEnvelope, kind, err)
+		}
+	}
+	if narrowing.Account {
+		if registered.account, err = domain.NewSettlementAccountID(body.SettlementAccountID); err != nil {
+			return registeredParameter{}, fmt.Errorf("%w: kind %s settlementAccountId: %v", ErrPoisonEnvelope, kind, err)
+		}
+	}
+	if registered.basis, err = domain.NewParameterResumeBasis(kind, string(id)); err != nil {
 		return registeredParameter{}, fmt.Errorf("%w: %v", ErrPoisonEnvelope, err)
 	}
-	return registeredParameter{tenant: tenant, kind: kind, scope: body.PricingScope, basis: basis}, nil
+	return registered, nil
 }
 
-// resumeWaiting 按页取等着的件，逐件在各自的顶层事务里续办一次。结局分三类收：落定（续办了、仍停着、早续办过、不在等）、
-// 未决（记下，等本封重投）、硬错误（矛盾、装配缺件，记下并继续办其余）。硬错误压过未决上抛——它要人看，折进未决会重投到
-// 预算耗尽。按位置往后翻页、不足一页即到底：办过却没写回的件（不在等、硬错误、未决）仍满足队列的口径，每页重读队首会被
+// resumeWaiting 按页取等着的件，逐件在各自的顶层事务里续办一次。结局分三类收：落定（续办了、仍停着、早续办过、不在等、
+// 落了终止）、未决（记下，等本封重投）、硬错误（矛盾、装配缺件，记下并继续办其余）。硬错误压过未决上抛——它要人看，
+// 折进未决会重投到预算耗尽。按位置往后翻页、不足一页即到底：办过却没写回的件（不在等、硬错误、未决）仍满足队列的口径，每页重读队首会被
 // 它们占满。续办中途换了位置的件（发起停办重跑后又停下）可能在后面的页里再出现一次，记过的不再办。
 func (consumer *EvaluationParameterRegisteredConsumer) resumeWaiting(ctx context.Context, registered registeredParameter) error {
 	causes := domain.EvaluationStopCausesResumedBy(registered.kind)
 	if len(causes) == 0 {
 		return nil
 	}
-	query := ports.StalledEvaluationQuery{Causes: causes, ExcludeBasis: registered.basis}
-	if registered.kind == domain.ParameterPriceCard {
-		query.PricingScope = registered.scope
+	query := ports.StalledEvaluationQuery{
+		Causes:           causes,
+		ExcludeBasis:     registered.basis,
+		PricingScope:     registered.scope,
+		Direction:        registered.direction,
+		OccurrenceReason: registered.reason,
+		Account:          registered.account,
 	}
 	attempted := map[stalledIdentity]bool{}
 	var (

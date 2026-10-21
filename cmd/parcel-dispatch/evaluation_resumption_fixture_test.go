@@ -23,3 +23,13 @@ func pricingParameterHandoffForTest(t *testing.T, db *bentopg.DB) *pppostgres.Ou
 	}
 	return handoff
 }
+
+// pricedScopesForTest 装序列与目录复核问「绑了它的卡在哪些范围上」的读口，同生产装法：卡册本身。
+func pricedScopesForTest(t *testing.T, db *bentopg.DB) *pppostgres.PriceCards {
+	t.Helper()
+	cards, err := pppostgres.NewPriceCards(db)
+	if err != nil {
+		t.Fatalf("构造价卡库：%v", err)
+	}
+	return cards
+}

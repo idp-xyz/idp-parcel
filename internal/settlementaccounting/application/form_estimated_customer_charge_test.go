@@ -13,8 +13,9 @@ import (
 
 // 钉 ADR-0190 决定五的形成编排外层（票 sell-customer-charge/04）：SELL·客户费用评价已记录之后，按评价回指读回 SELL
 // 请求，全部费用行经映射册映到同一个费用项目才形成，费用标识由请求派生，请求册记`已形成`与费用标识；映不全、映到
-// 多个、金额未声明记`待判断`（AT-SA-174），不可计价与冲突照记，失败停在`已提交`；没有回指的评价零写入，回指不在
-// 册上与币种对不上是矛盾、上抛；重放不多形成。依赖全是替身，金额断言只看它是否原样出自评价。夹具全是合成串。
+// 多个、金额未声明记`待判断`（AT-SA-174），不可计价与冲突照记，评价失败记`未形成`，停下的各格都连同停因记
+// （ADR-0229）；没有回指的评价零写入，回指不在册上与币种对不上是矛盾、上抛；重放不多形成。依赖全是替身，金额断言
+// 只看它是否原样出自评价。夹具全是合成串。
 
 var estimatedChargeAt = time.Date(2026, 10, 19, 9, 30, 0, 0, time.UTC)
 
@@ -366,6 +367,28 @@ func TestPendingUnratableConflictAndFailedEvaluationsAreRecordedWithTheirStopCau
 		if stored.State != want.state || stored.StopCause != want.cause || len(fixture.charges.saved) != 0 || len(fixture.mappings.asked) != 0 {
 			t.Fatalf("%s：请求册 = %s / %s，费用 %d 笔，问映射 %v", outcome, stored.State, stored.StopCause,
 				len(fixture.charges.saved), fixture.mappings.asked)
+		}
+	}
+}
+
+// Covers: AT-SA-189 的形成半边——`待判断`记读口分出的那一格停因，续办据此只等解得开它的那一类登记；读口没分（零值）或交来
+// 的不是评价待判断的一格，落笼统那一格。
+func TestAPendingEvaluationIsRecordedWithTheCauseTheViewClassified(t *testing.T) {
+	for given, want := range map[domain.EvaluationStopCause]domain.EvaluationStopCause{
+		domain.StopEvaluationCatalogueUnresolved: domain.StopEvaluationCatalogueUnresolved,
+		domain.StopEvaluationInputIncomplete:     domain.StopEvaluationInputIncomplete,
+		domain.EvaluationStopCauseInvalid:        domain.StopEvaluationPendingJudgment,
+		domain.StopPriceCardNotConfigured:        domain.StopEvaluationPendingJudgment,
+	} {
+		fixture := newEstimatedChargeFixture(t, map[string]string{"BASE_FREIGHT": "SYN-FEE-FREIGHT"})
+		fixture.adoption.Outcome = ports.SellEvaluationPending
+		fixture.adoption.PendingCause = given
+		fixture.adoption.ChargeCodes = nil
+		if _, err := fixture.handle(t); err != nil {
+			t.Fatalf("%s：%v", given, err)
+		}
+		if stored := fixture.storedState(t); stored.State != domain.SellRequestPendingJudgment || stored.StopCause != want {
+			t.Fatalf("读口分出 %q：请求册 = %s / %s，want 待判断 / %s", given, stored.State, stored.StopCause, want)
 		}
 	}
 }

@@ -225,8 +225,8 @@ func (request SellEvaluationRequest) EstimatedCustomerChargeID() CustomerChargeI
 	return CustomerChargeID{requiredValue{value: estimatedCustomerChargePrefix + "-" + request.id.String()}}
 }
 
-// sellRequestStateOf 是停因到 SELL 请求册状态格的粗分：三种`待判断`（评价待判断、卡没声明金额取整、映射不全）与
-// 迁移留下的那一格并作`待判断`，不可计价与评价冲突各一格，计价没形成评价与评价失败并作`未形成`。BUY 一侧独有的
+// sellRequestStateOf 是停因到 SELL 请求册状态格的粗分：各种`待判断`（评价待判断及其细分、卡没声明金额取整、映射不全）
+// 与迁移留下的那一格并作`待判断`，不可计价与评价冲突各一格，计价没形成评价与评价失败并作`未形成`。BUY 一侧独有的
 // 停因与发起之前的停因在这本册上不出现，交回无效。
 func sellRequestStateOf(cause EvaluationStopCause) SellEvaluationRequestState {
 	if !cause.OccursIn(SellEvaluationDirection) || cause.Stage() == StopBeforeRequest {
@@ -234,7 +234,8 @@ func sellRequestStateOf(cause EvaluationStopCause) SellEvaluationRequestState {
 	}
 	switch cause {
 	case StopEvaluationPendingJudgment, StopAmountRoundingUndeclared, StopFeeItemMappingIncomplete,
-		StopPendingJudgmentCauseUnrecorded:
+		StopEvaluationCatalogueUnresolved, StopEvaluationSeriesUnresolved, StopEvaluationRateNotFound,
+		StopEvaluationInputIncomplete, StopPendingJudgmentCauseUnrecorded:
 		return SellRequestPendingJudgment
 	case StopEvaluationUnratable:
 		return SellRequestUnratable

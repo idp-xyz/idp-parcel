@@ -225,7 +225,7 @@ func (handler *RequestSellEvaluationOnParcelMomentHandler) Handle(
 
 	account, currency, halted := handler.settlementAccountOf(ctx, command)
 	if halted != nil {
-		return handler.recordStall(ctx, command, *halted)
+		return handler.recordStall(ctx, command, domain.SettlementAccountID{}, *halted)
 	}
 
 	adoption, adopted, err := handler.deps.Adoptions.FindSellBillingMomentAdoption(ctx, command.TenantID, account)
@@ -233,7 +233,7 @@ func (handler *RequestSellEvaluationOnParcelMomentHandler) Handle(
 		return sellRequestUndecided(SellRequestBillingMomentAdoptionUnavailable), nil
 	}
 	if !adopted {
-		return handler.recordStall(ctx, command, sellRequestUnconfigured(SellRequestBillingMomentNotAdopted))
+		return handler.recordStall(ctx, command, account, sellRequestUnconfigured(SellRequestBillingMomentNotAdopted))
 	}
 	if adoption.Moment() != command.Moment {
 		return sellRequestUnconfigured(SellRequestBillingMomentDiffers), nil
@@ -352,10 +352,12 @@ func sellInitiationStopCauseOf(result RequestSellEvaluationOnParcelMomentResult)
 }
 
 // recordStall 在发起停办册上记下停在发起之前的这一拍（ADR-0229 决定四），答案原样交回。记不下就答`未决`让调用方整笔
-// 回滚重来：入账而没记下，这一拍就散了，补登之后没有东西再推它。
+// 回滚重来：入账而没记下，这一拍就散了，补登之后没有东西再推它。account 只在停在计费时点没采用时在场：链已走到那一户，
+// 补登采用时按户收窄续办。
 func (handler *RequestSellEvaluationOnParcelMomentHandler) recordStall(
 	ctx context.Context,
 	command RequestSellEvaluationOnParcelMomentCommand,
+	account domain.SettlementAccountID,
 	result RequestSellEvaluationOnParcelMomentResult,
 ) (RequestSellEvaluationOnParcelMomentResult, error) {
 	cause, stalls := sellInitiationStopCauseOf(result)
@@ -370,6 +372,7 @@ func (handler *RequestSellEvaluationOnParcelMomentHandler) recordStall(
 		Cause:          cause,
 		StoppedAt:      handler.deps.Clock.Now(),
 		Basis:          command.ResumeBasis,
+		Account:        account,
 	})
 	if err != nil {
 		return RequestSellEvaluationOnParcelMomentResult{}, fmt.Errorf("request sell evaluation: initiation stall: %w", err)

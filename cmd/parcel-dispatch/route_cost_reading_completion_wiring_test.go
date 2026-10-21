@@ -193,6 +193,7 @@ func registerDemoZoneCatalogue(t *testing.T, db *bentopg.DB) {
 	decodeSeedDocument(t, readDemoPricingSeed(t, "reference-catalogue-zone-cn-sg-review.json"), &review)
 	reviewHandler := ppapplication.NewReviewReferenceCatalogueHandler(ppapplication.ReviewReferenceCatalogueDeps{
 		Versions: catalogues, Reviews: reviews, Clock: systemClock{}, Registered: pricingParameterHandoffForTest(t, db),
+		PricedScopes: pricedScopesForTest(t, db),
 	})
 	var registered ppapplication.RegisterReferenceCatalogueOutcome
 	var reviewed ppapplication.ReviewReferenceCatalogueOutcome
@@ -239,6 +240,7 @@ func registerDemoExchangeRateSeries(t *testing.T, db *bentopg.DB) {
 	decodeSeedDocument(t, readDemoPricingSeed(t, "reference-series-fx-cny-sgd-review.json"), &review)
 	reviewHandler := ppapplication.NewReviewReferenceSeriesHandler(ppapplication.ReviewReferenceSeriesDeps{
 		Versions: versions, Reviews: reviews, Clock: systemClock{}, Registered: pricingParameterHandoffForTest(t, db),
+		PricedScopes: pricedScopesForTest(t, db),
 	})
 	var registered ppapplication.RegisterReferenceSeriesOutcome
 	var reviewed ppapplication.ReviewReferenceSeriesOutcome

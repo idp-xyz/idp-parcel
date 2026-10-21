@@ -180,7 +180,7 @@ func TestABuyRequestStalledOnAMissingPriceCardResumesAfterTheCardIsRegistered(t 
 
 	// 又一次价卡登记（别的范围的一张卡）：没有在等的请求，不推出第三代。
 	enqueueForBeat(t, fixture.db, store, "pricing-parameter-again", sainbox.PricingParameterRegisteredResumption.EventType,
-		`{"tenantId":"`+demoTenant+`","registrationKind":"PRICE_CARD","pricingScope":"SYN-SCOPE-01"}`)
+		`{"tenantId":"`+demoTenant+`","registrationKind":"PRICE_CARD","pricingScope":"SYN-SCOPE-01","direction":"BUY"}`)
 	drainBeats(t, beat)
 	if again := buyRequestsOf(t, fixture.db, "SYN-OCC-TRUNK-01"); len(again) != 2 {
 		t.Fatalf("没有在等的请求，第二封参数已登记却又续办：%+v", again)

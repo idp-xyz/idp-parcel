@@ -51,6 +51,7 @@ func (handler *RegisterSellBillingMomentAdoptionHandler) Register(
 		Tenant:       command.Tenant,
 		Kind:         domain.ParameterSellBillingMomentAdoption,
 		Subject:      command.Adoption.Account().String(),
+		Account:      command.Adoption.Account(),
 		RegisteredAt: registeredAt,
 	}); err != nil {
 		return 0, fmt.Errorf("register sell billing moment adoption: %w", err)

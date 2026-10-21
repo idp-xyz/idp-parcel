@@ -34,8 +34,8 @@ var (
 	_ ports.StalledEvaluationQueue                = (*EvaluationResumptions)(nil)
 )
 
-// RecordSellInitiationStall 落一行或换上这一次的停因、时刻与依据。来源事实与计价基准时点不换：同一件包裹在同一时点的
-// 那一拍只有一组，再来的是重放或续办重跑，带的仍是记下的那组。
+// RecordSellInitiationStall 落一行或换上这一次的停因、时刻、依据与户，并清掉终止：又停下了，就又在等。来源事实与计价
+// 基准时点不换：同一件包裹在同一时点的那一拍只有一组，再来的是重放或续办重跑，带的仍是记下的那组。
 func (stalls *EvaluationResumptions) RecordSellInitiationStall(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -49,14 +49,17 @@ func (stalls *EvaluationResumptions) RecordSellInitiationStall(
 		return fmt.Errorf("record sell evaluation initiation stall: %w", err)
 	}
 	key := stall.NaturalKey()
+	account, _ := stall.Account()
 	_, err = executor.Exec(ctx,
 		`INSERT INTO settlement_accounting.sell_evaluation_initiation_stall
-			(tenant_id, parcel_id, billing_moment, source_fact_ref, pricing_basis_at, stop_cause, stopped_at, resume_basis)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			(tenant_id, parcel_id, billing_moment, source_fact_ref, pricing_basis_at, stop_cause, stopped_at, resume_basis,
+			 settlement_account_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		 ON CONFLICT (tenant_id, parcel_id, billing_moment) DO UPDATE
-		    SET stop_cause = EXCLUDED.stop_cause, stopped_at = EXCLUDED.stopped_at, resume_basis = EXCLUDED.resume_basis`,
+		    SET stop_cause = EXCLUDED.stop_cause, stopped_at = EXCLUDED.stopped_at, resume_basis = EXCLUDED.resume_basis,
+		        settlement_account_id = EXCLUDED.settlement_account_id, closed_at = NULL`,
 		tenant.String(), key.Parcel.String(), key.Moment.String(), stall.Source().String(), stall.PricingBasisAt().UTC(),
-		stall.Cause().String(), stall.StoppedAt().UTC(), optionalBasis(stall.Basis()))
+		stall.Cause().String(), stall.StoppedAt().UTC(), optionalBasis(stall.Basis()), optionalText(account.String()))
 	if err != nil {
 		return fmt.Errorf("record sell evaluation initiation stall: %w", err)
 	}
@@ -75,15 +78,15 @@ func (stalls *EvaluationResumptions) FindSellInitiationStall(
 	}
 	var (
 		source, cause      string
-		basis              *string
+		basis, account     *string
 		basisAt, stoppedAt time.Time
 	)
 	err = querier.QueryRow(ctx,
-		`SELECT source_fact_ref, pricing_basis_at, stop_cause, stopped_at, resume_basis
+		`SELECT source_fact_ref, pricing_basis_at, stop_cause, stopped_at, resume_basis, settlement_account_id
 		   FROM settlement_accounting.sell_evaluation_initiation_stall
 		  WHERE tenant_id = $1 AND parcel_id = $2 AND billing_moment = $3`,
 		tenant.String(), key.Parcel.String(), key.Moment.String(),
-	).Scan(&source, &basisAt, &cause, &stoppedAt, &basis)
+	).Scan(&source, &basisAt, &cause, &stoppedAt, &basis, &account)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return none, false, nil
 	}
@@ -102,6 +105,12 @@ func (stalls *EvaluationResumptions) FindSellInitiationStall(
 	if err != nil {
 		return none, false, fmt.Errorf("find sell evaluation initiation stall: %w", err)
 	}
+	var accountID domain.SettlementAccountID
+	if account != nil {
+		if accountID, err = domain.NewSettlementAccountID(*account); err != nil {
+			return none, false, fmt.Errorf("find sell evaluation initiation stall: %w", err)
+		}
+	}
 	stall, err := domain.NewSellEvaluationInitiationStall(domain.SellEvaluationInitiationStallSpec{
 		Parcel:         key.Parcel,
 		Moment:         key.Moment,
@@ -110,11 +119,37 @@ func (stalls *EvaluationResumptions) FindSellInitiationStall(
 		Cause:          stopCause,
 		StoppedAt:      stoppedAt,
 		Basis:          resume,
+		Account:        accountID,
 	})
 	if err != nil {
 		return none, false, fmt.Errorf("find sell evaluation initiation stall: %w", err)
 	}
 	return stall, true, nil
+}
+
+// CloseSellInitiationStall 落终止。已落过的不改时刻：终止只记第一次，再收一次是同一件事的重放。
+func (stalls *EvaluationResumptions) CloseSellInitiationStall(
+	ctx context.Context,
+	tenant domain.TenantID,
+	key domain.SellEvaluationRequestNaturalKey,
+	closedAt time.Time,
+) (bool, error) {
+	if strings.TrimSpace(tenant.String()) == "" || closedAt.IsZero() {
+		return false, fmt.Errorf("close sell evaluation initiation stall: the tenant or the closing time is blank")
+	}
+	executor, err := stalls.db.RequireExecutor(ctx)
+	if err != nil {
+		return false, fmt.Errorf("close sell evaluation initiation stall: %w", err)
+	}
+	tag, err := executor.Exec(ctx,
+		`UPDATE settlement_accounting.sell_evaluation_initiation_stall
+		    SET closed_at = COALESCE(closed_at, $4)
+		  WHERE tenant_id = $1 AND parcel_id = $2 AND billing_moment = $3`,
+		tenant.String(), key.Parcel.String(), key.Moment.String(), closedAt.UTC())
+	if err != nil {
+		return false, fmt.Errorf("close sell evaluation initiation stall: %w", err)
+	}
+	return tag.RowsAffected() > 0, nil
 }
 
 // RecordBuyInitiationStall 落一行或换上这一次的停因、时刻与依据，口径同 SELL 那一本。
@@ -205,8 +240,9 @@ func (stalls *EvaluationResumptions) FindBuyInitiationStall(
 }
 
 // ListStalled 把四本册里等着的东西合成一张队列。每一支都带同一组条件：停因在名单里；这条代次链上没有哪一代凭被排除的
-// 依据续办出来、发起停办也没有凭它重跑过；请求那两支再要求还没有下一代，发起停办那两支要求这一拍还没有任何一份请求。
-// 计价范围在场时发起停办两支整支不取；点名包裹时只取 SELL 两支、点名发生项时只取 BUY 两支。
+// 依据续办出来、发起停办也没有凭它重跑过；请求那两支再要求还没有下一代，发起停办那两支要求这一拍还没有任何一份请求，
+// SELL 那一支再要求没有落终止。计价范围在场时发起停办两支整支不取；方向、发生项原因、户与点名的包裹或发生项各只认
+// 一路，带了就只取那一路。
 //
 // 定序按停下的时刻、再按种类与键；位置在场时只取排在它之后的——按位置翻页，办过却没写回的件不会把后面的挡住。
 func (stalls *EvaluationResumptions) ListStalled(
@@ -220,6 +256,14 @@ func (stalls *EvaluationResumptions) ListStalled(
 	}
 	if query.Occurrence.String() != "" && query.OccurrenceVersion.String() == "" {
 		return nil, fmt.Errorf("%w: the occurrence is named without its version", ports.ErrStalledEvaluationQueryInvalid)
+	}
+	var direction *string
+	if query.Direction != domain.EvaluationDirectionInvalid {
+		name := query.Direction.String()
+		if name == "" {
+			return nil, fmt.Errorf("%w: direction %d", ports.ErrStalledEvaluationQueryInvalid, query.Direction)
+		}
+		direction = &name
 	}
 	causes := make([]string, 0, len(query.Causes))
 	for _, cause := range query.Causes {
@@ -242,7 +286,8 @@ func (stalls *EvaluationResumptions) ListStalled(
 		tenant.String(), causes, optionalBasis(query.ExcludeBasis), optionalText(query.PricingScope),
 		optionalText(query.Parcel.String()), optionalText(query.Occurrence.String()),
 		optionalText(query.OccurrenceVersion.String()), limit,
-		afterAt, afterKind, afterFirst, afterSecond)
+		afterAt, afterKind, afterFirst, afterSecond,
+		direction, optionalText(query.OccurrenceReason.String()), optionalText(query.Account.String()))
 	if err != nil {
 		return nil, fmt.Errorf("list stalled evaluations: %w", err)
 	}
@@ -271,16 +316,18 @@ func (stalls *EvaluationResumptions) ListStalled(
 }
 
 // stalledEvaluationsSQL 的参数：$1 租户、$2 停因名单、$3 排除的依据（可空）、$4 计价范围（可空）、$5 包裹（可空）、
-// $6 发生项（可空）、$7 发生项版本（可空）、$8 上限、$9–$12 翻页位置（可空，四格同在同缺）。各支交回同形四列：种类、
-// 停因、两段键、停下时刻。排除依据对请求那两支查整条代次链（同一自然键上任一代），不只看链头：一条链先凭 B 续办、
+// $6 发生项（可空）、$7 发生项版本（可空）、$8 上限、$9–$12 翻页位置（可空，四格同在同缺）、$13 方向（可空）、
+// $14 发生项原因（可空）、$15 户（可空）。各支交回同形五列：种类、停因、两段键、停下时刻。排除依据对请求那两支查整条代次链（同一自然键上任一代），不只看链头：一条链先凭 B 续办、
 // 再凭 C 续办出又停下的一代，B 重投时不该再推它。
 const stalledEvaluationsSQL = `
 SELECT kind, stop_cause, first_key, second_key, stopped_at FROM (
 	SELECT 'SELL_INITIATION' AS kind, s.stop_cause, s.parcel_id AS first_key, s.billing_moment AS second_key, s.stopped_at
 	  FROM settlement_accounting.sell_evaluation_initiation_stall s
-	 WHERE s.tenant_id = $1 AND s.stop_cause = ANY($2)
+	 WHERE s.tenant_id = $1 AND s.stop_cause = ANY($2) AND s.closed_at IS NULL
 	   AND ($3::text IS NULL OR s.resume_basis IS DISTINCT FROM $3)
-	   AND $4::text IS NULL AND $6::text IS NULL
+	   AND $4::text IS NULL AND $6::text IS NULL AND $14::text IS NULL
+	   AND ($13::text IS NULL OR $13 = 'SELL')
+	   AND ($15::text IS NULL OR s.settlement_account_id = $15)
 	   AND ($5::text IS NULL OR s.parcel_id = $5)
 	   AND NOT EXISTS (SELECT 1 FROM settlement_accounting.sell_evaluation_request r
 	                    WHERE r.tenant_id = s.tenant_id AND r.parcel_id = s.parcel_id
@@ -290,7 +337,9 @@ SELECT kind, stop_cause, first_key, second_key, stopped_at FROM (
 	  FROM settlement_accounting.buy_evaluation_initiation_stall b
 	 WHERE b.tenant_id = $1 AND b.stop_cause = ANY($2)
 	   AND ($3::text IS NULL OR b.resume_basis IS DISTINCT FROM $3)
-	   AND $4::text IS NULL AND $5::text IS NULL
+	   AND $4::text IS NULL AND $5::text IS NULL AND $15::text IS NULL
+	   AND ($13::text IS NULL OR $13 = 'BUY')
+	   AND ($14::text IS NULL OR b.occurrence_reason = $14)
 	   AND ($6::text IS NULL OR (b.occurrence_id = $6 AND b.occurrence_version = $7))
 	   AND NOT EXISTS (SELECT 1 FROM settlement_accounting.evaluation_request r
 	                    WHERE r.tenant_id = b.tenant_id AND r.occurrence_id = b.occurrence_id
@@ -304,7 +353,9 @@ SELECT kind, stop_cause, first_key, second_key, stopped_at FROM (
 	          WHERE c.tenant_id = q.tenant_id AND c.parcel_id = q.parcel_id
 	            AND c.billing_moment = q.billing_moment AND c.resume_basis = $3))
 	   AND ($4::text IS NULL OR q.pricing_scope_id = $4)
-	   AND $6::text IS NULL
+	   AND $6::text IS NULL AND $14::text IS NULL
+	   AND ($13::text IS NULL OR $13 = 'SELL')
+	   AND ($15::text IS NULL OR q.account_id = $15)
 	   AND ($5::text IS NULL OR q.parcel_id = $5)
 	   AND NOT EXISTS (SELECT 1 FROM settlement_accounting.sell_evaluation_request n
 	                    WHERE n.tenant_id = q.tenant_id AND n.previous_request_id = q.request_id)
@@ -317,7 +368,9 @@ SELECT kind, stop_cause, first_key, second_key, stopped_at FROM (
 	          WHERE c.tenant_id = e.tenant_id AND c.scope_ref = e.scope_ref AND c.purpose = e.purpose
 	            AND c.source_digest = e.source_digest AND c.resume_basis = $3))
 	   AND ($4::text IS NULL OR e.scope_ref = $4)
-	   AND $5::text IS NULL
+	   AND $5::text IS NULL AND $15::text IS NULL
+	   AND ($13::text IS NULL OR $13 = 'BUY')
+	   AND ($14::text IS NULL OR e.occurrence_reason = $14)
 	   AND ($6::text IS NULL OR (e.occurrence_id = $6 AND e.occurrence_version = $7))
 	   AND NOT EXISTS (SELECT 1 FROM settlement_accounting.evaluation_request n
 	                    WHERE n.tenant_id = e.tenant_id AND n.previous_request_id = e.request_id)

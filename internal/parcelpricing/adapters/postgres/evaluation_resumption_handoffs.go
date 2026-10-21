@@ -10,6 +10,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 )
@@ -49,27 +50,30 @@ var (
 type pricingParameterRegisteredPayload struct {
 	TenantID         string `json:"tenantId"`
 	RegistrationKind string `json:"registrationKind"`
-	PricingScope     string `json:"pricingScope,omitempty"`
+	PricingScope     string `json:"pricingScope"`
+	Direction        string `json:"direction"`
 }
 
-// HandOffPricingParameterRegistered 把一次「参数已登记」入队。ID 取（租户 / 种类 / 那一版）的定长指纹：同一版重放重发同一封、
-// 由 EnqueueOnce 吞掉；结算拿这封信的标识当续办依据，同一次登记重放不会把同一条代次链推两代。
+// HandOffPricingParameterRegistered 把一次「参数已登记」的一面入队。ID 取（租户 / 种类 / 那一版 / 范围 / 方向）的定长指纹：
+// 同一面重放重发同一封、由 EnqueueOnce 吞掉，一版序列绑在两个范围上是两封；结算拿这封信的标识当续办依据，同一次登记
+// 重放不会把同一条代次链推两代。范围或方向缺席、方向不是 BUY 或 SELL，都是装配缺陷，响亮报错不入队。
 func (handoffs *OutboxEvaluationResumptionHandoffs) HandOffPricingParameterRegistered(
 	ctx context.Context,
 	intent ports.PricingParameterRegisteredIntent,
 ) error {
 	tenant := intent.Tenant.String()
 	version := intent.Registration.ID() + "@" + intent.Registration.Version()
-	if tenant == "" || intent.Kind.String() == "" || intent.Registration.ID() == "" {
-		return fmt.Errorf("hand off pricing parameter registered: tenant, kind and registration are required")
+	if tenant == "" || intent.Kind.String() == "" || intent.Registration.ID() == "" || intent.Scope.String() == "" {
+		return fmt.Errorf("hand off pricing parameter registered: tenant, kind, registration and pricing scope are required")
 	}
-	if (intent.Kind == ports.PricingParameterPriceCard) != (intent.Scope.String() != "") {
-		return fmt.Errorf("hand off pricing parameter registered: only a price card carries its pricing scope")
+	if intent.Direction != domain.PricingDirectionBuy && intent.Direction != domain.PricingDirectionSell {
+		return fmt.Errorf("hand off pricing parameter registered: direction %q is neither BUY nor SELL", intent.Direction)
 	}
 	payload, err := json.Marshal(pricingParameterRegisteredPayload{
 		TenantID:         tenant,
 		RegistrationKind: intent.Kind.String(),
 		PricingScope:     intent.Scope.String(),
+		Direction:        intent.Direction.String(),
 	})
 	if err != nil {
 		return fmt.Errorf("hand off pricing parameter registered: %w", err)
@@ -77,7 +81,8 @@ func (handoffs *OutboxEvaluationResumptionHandoffs) HandOffPricingParameterRegis
 	now := handoffs.clock.Now().UTC()
 	return handoffs.enqueue(ctx, eventing.Envelope{
 		SpecVersion: eventing.SpecVersion,
-		ID:          outboxintent.FingerprintEventID(pricingParameterRegisteredEventIDPort, tenant, intent.Kind.String(), version),
+		ID: outboxintent.FingerprintEventID(pricingParameterRegisteredEventIDPort,
+			tenant, intent.Kind.String(), version, intent.Scope.String(), intent.Direction.String()),
 		// 分区装租户，与结算、party-commercial 的登记续办口同一个字符串：同一租户的续办一轮接一轮，不会两轮并发去推
 		// 同一条代次链。
 		Source:       ppEventSource,

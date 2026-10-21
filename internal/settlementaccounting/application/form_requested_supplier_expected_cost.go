@@ -201,7 +201,7 @@ func foldUndecidedFormation(
 			cause:     formed.UndecidedCause(),
 		}, nil
 	case EvaluationPending:
-		return notAdopted(formed, domain.StopEvaluationPendingJudgment), nil
+		return notAdopted(formed, pendingJudgmentCauseOf(formed.PendingCause())), nil
 	case EvaluationNotFormed:
 		return notAdopted(formed, domain.StopEvaluationFailed), nil
 	case ConversionStepMissing:

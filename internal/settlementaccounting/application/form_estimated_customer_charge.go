@@ -193,7 +193,7 @@ func (handler *FormEstimatedCustomerChargeHandler) Handle(
 	switch adoption.Outcome {
 	case ports.SellEvaluationCompleted:
 	case ports.SellEvaluationPending:
-		return handler.stop(ctx, key, domain.StopEvaluationPendingJudgment)
+		return handler.stop(ctx, key, pendingJudgmentCauseOf(adoption.PendingCause))
 	case ports.SellEvaluationAmountUndeclared:
 		return handler.stop(ctx, key, domain.StopAmountRoundingUndeclared)
 	case ports.SellEvaluationUnratable:
@@ -273,6 +273,15 @@ func (handler *FormEstimatedCustomerChargeHandler) singleFeeItem(
 		chosen = mapping.FeeItem()
 	}
 	return chosen, chosen.String() != "", nil
+}
+
+// pendingJudgmentCauseOf 取读口分出的那一格待判断；读口没分（零值）或交来的不是待判断的一格，落笼统那一格（理由在
+// domain.EvaluationStopCause.PendingJudgmentOfEvaluation 头注）。BUY 那一路同用。
+func pendingJudgmentCauseOf(cause domain.EvaluationStopCause) domain.EvaluationStopCause {
+	if cause.PendingJudgmentOfEvaluation() {
+		return cause
+	}
+	return domain.StopEvaluationPendingJudgment
 }
 
 // stop 记一个停因作结论，状态格由停因推出。

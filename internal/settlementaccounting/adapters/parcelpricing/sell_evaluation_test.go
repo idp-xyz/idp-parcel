@@ -162,3 +162,20 @@ func TestTheSellViewBoundaries(t *testing.T) {
 		t.Fatalf("别的租户读到了评价：found=%v err=%v", found, err)
 	}
 }
+
+// Covers: AT-SA-189 的读口半边——`待判断`的评价按问题项分格：价表上没有这一段落「价表没有这一段」，补登目录或序列解不开它；
+// 已完成的评价不带这一格。
+func TestAPendingSellEvaluationNamesWhatItIsMissing(t *testing.T) {
+	card := sellCard(t, ppdomain.PricingDirectionSell, ppdomain.PricingPurposeCustomerCharge, true)
+	view := newSellAdapter(t,
+		sellEvaluation(t, "eval-sell-rate", "SELLREQ-SYN-5", card, "Z9"),
+		sellEvaluation(t, "eval-sell-done", "SELLREQ-SYN-6", card, "Z1"))
+	pending, found, err := loadSell(t, view, "tenant-1", "eval-sell-rate")
+	if err != nil || !found || pending.Outcome != saports.SellEvaluationPending || pending.PendingCause != sadomain.StopEvaluationRateNotFound {
+		t.Fatalf("缺价表段：结果 = %s 停因 = %s found=%v err=%v", pending.Outcome, pending.PendingCause, found, err)
+	}
+	done, found, err := loadSell(t, view, "tenant-1", "eval-sell-done")
+	if err != nil || !found || done.Outcome != saports.SellEvaluationCompleted || done.PendingCause != sadomain.EvaluationStopCauseInvalid {
+		t.Fatalf("已完成：结果 = %s 停因 = %s found=%v err=%v", done.Outcome, done.PendingCause, found, err)
+	}
+}

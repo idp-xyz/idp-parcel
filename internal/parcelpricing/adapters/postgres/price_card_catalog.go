@@ -282,3 +282,80 @@ func periodEndMatches(period domain.EffectivePeriod, column *time.Time) bool {
 	}
 	return column != nil && period.EndsAt().Equal(*column)
 }
+
+var _ ports.PricingParameterBindingView = (*PriceCards)(nil)
+
+// FindPricedScopesBinding 读这个租户的全部卡、逐张经领域整图重验，挑出绑了这条序列或这份目录的，交回它们的计价范围与
+// 方向（ports.PricingParameterBindingView）。绑定只在快照里：列面没有绑定列，按列筛就得给每一种绑定加一列检索面，
+// 而这一问只在序列或目录通过复核时问一次。读走 ReadExecutor：调用方在复核那一笔事务里问，读到的是同一个快照。
+func (catalog *PriceCards) FindPricedScopesBinding(
+	ctx context.Context,
+	tenant domain.TenantID,
+	kind ports.PricingParameterKind,
+	id string,
+) ([]ports.PricedScope, error) {
+	if tenant.String() == "" || id == "" {
+		return nil, fmt.Errorf("find priced scopes binding: tenant and id are required")
+	}
+	var binds func(domain.PricingPlanStructures) bool
+	switch kind {
+	case ports.PricingParameterReferenceSeries:
+		binds = func(structures domain.PricingPlanStructures) bool {
+			for _, binding := range structures.ReferenceSeries() {
+				if binding.SeriesID() == id {
+					return true
+				}
+			}
+			return false
+		}
+	case ports.PricingParameterReferenceCatalogue:
+		binds = func(structures domain.PricingPlanStructures) bool {
+			for _, link := range structures.ReferenceCatalogues() {
+				if link.CatalogueID() == id {
+					return true
+				}
+			}
+			return false
+		}
+	default:
+		return nil, fmt.Errorf("find priced scopes binding: kind %q binds nothing", kind)
+	}
+	querier, err := catalog.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("find priced scopes binding: %w", err)
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT `+priceCardRowColumns+`
+		   FROM parcel_pricing.price_card_version
+		  WHERE tenant_id = $1
+		  ORDER BY scope, direction, plan_id, plan_version`,
+		tenant.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find priced scopes binding: %w", err)
+	}
+	defer rows.Close()
+
+	var scopes []ports.PricedScope
+	seen := map[ports.PricedScope]bool{}
+	for rows.Next() {
+		row, err := scanPriceCardRow(rows)
+		if err != nil {
+			return nil, fmt.Errorf("find priced scopes binding: %w", err)
+		}
+		plan, err := row.plan(tenant)
+		if err != nil {
+			return nil, fmt.Errorf("find priced scopes binding: %w", err)
+		}
+		scope := ports.PricedScope{Scope: plan.Scope(), Direction: plan.Direction()}
+		if seen[scope] || !binds(plan.Structures()) {
+			continue
+		}
+		seen[scope] = true
+		scopes = append(scopes, scope)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("find priced scopes binding: %w", err)
+	}
+	return scopes, nil
+}

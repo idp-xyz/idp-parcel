@@ -82,6 +82,12 @@ func (chainStalls) FindSellInitiationStall(
 	return sadomain.SellEvaluationInitiationStall{}, false, nil
 }
 
+func (chainStalls) CloseSellInitiationStall(
+	context.Context, sadomain.TenantID, sadomain.SellEvaluationRequestNaturalKey, time.Time,
+) (bool, error) {
+	return false, nil
+}
+
 type chainRegistry struct {
 	records map[string]saports.SellEvaluationRequestRecord
 	findErr error

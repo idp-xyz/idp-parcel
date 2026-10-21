@@ -148,15 +148,17 @@ type ReviewReferenceCatalogueCommand struct {
 	ReviewedAt       time.Time
 }
 
-// ReviewReferenceCatalogueDeps 是目录复核的依赖。Registered 在一版目录通过复核时交「参数已登记」，理由同序列复核。
+// ReviewReferenceCatalogueDeps 是目录复核的依赖。Registered 与 PricedScopes 在一版目录通过复核时按绑了它的卡交「参数已登记」，
+// 理由同序列复核。
 type ReviewReferenceCatalogueDeps struct {
-	Versions   ports.ReferenceCatalogueVersionLoader
-	Reviews    ports.ReferenceCatalogueReviewRegister
-	Clock      ports.Clock
-	Registered ports.PricingParameterRegisteredHandoff
+	Versions     ports.ReferenceCatalogueVersionLoader
+	Reviews      ports.ReferenceCatalogueReviewRegister
+	Clock        ports.Clock
+	Registered   ports.PricingParameterRegisteredHandoff
+	PricedScopes ports.PricingParameterBindingView
 }
 
-// ErrCatalogueReviewHandoffMissing 说明装配没给目录复核接「参数已登记」交接口。
+// ErrCatalogueReviewHandoffMissing 说明装配没给目录复核接「参数已登记」交接口或绑定读口。
 var ErrCatalogueReviewHandoffMissing = errors.New("parcel pricing: reference catalogue review has no pricing parameter registered handoff")
 
 type ReviewReferenceCatalogueHandler struct {
@@ -175,7 +177,7 @@ func (handler *ReviewReferenceCatalogueHandler) Handle(
 	if command.Tenant.String() == "" || command.CatalogueID == "" || command.CatalogueVersion == "" {
 		return CatalogueReviewNotAccepted, nil
 	}
-	if handler.deps.Registered == nil {
+	if handler.deps.Registered == nil || handler.deps.PricedScopes == nil {
 		return CatalogueReviewUndecided, ErrCatalogueReviewHandoffMissing
 	}
 	registration, found, err := handler.deps.Versions.LoadVersion(ctx, command.Tenant, command.CatalogueID, command.CatalogueVersion)
@@ -223,11 +225,8 @@ func (handler *ReviewReferenceCatalogueHandler) announce(
 	if review.Decision() != domain.SeriesReviewApproved {
 		return outcome, nil
 	}
-	if err := handler.deps.Registered.HandOffPricingParameterRegistered(ctx, ports.PricingParameterRegisteredIntent{
-		Tenant:       review.Tenant(),
-		Kind:         ports.PricingParameterReferenceCatalogue,
-		Registration: review.Reference(),
-	}); err != nil {
+	if err := announceBoundPricingParameter(ctx, handler.deps.PricedScopes, handler.deps.Registered,
+		review.Tenant(), ports.PricingParameterReferenceCatalogue, review.Reference()); err != nil {
 		return CatalogueReviewUndecided, fmt.Errorf("review reference catalogue: %w", err)
 	}
 	return outcome, nil

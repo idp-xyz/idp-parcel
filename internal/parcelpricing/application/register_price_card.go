@@ -112,21 +112,18 @@ func (handler *RegisterPriceCardHandler) Handle(
 	}
 }
 
-// announce 在这一版卡落库（或重放命中同一版）之后交「参数已登记」，带卡的计价范围。重放重发同一封，由交接口按同一个
-// 标识去重；本口落地之前登进册的卡也借重放补上它那一封。冲突与形状不同不交：那一版没写进册。交接失败上抛，信封与
-// 登记行同生共死。
+// announce 在这一版卡落库（或重放命中同一版）之后交「参数已登记」，带卡的计价范围与方向。重放重发同一封，由交接口按
+// 同一个标识去重；本口落地之前登进册的卡也借重放补上它那一封。冲突与形状不同不交：那一版没写进册。交接失败上抛，
+// 信封与登记行同生共死。
 func (handler *RegisterPriceCardHandler) announce(
 	ctx context.Context,
 	registration domain.PriceCardRegistration,
 	outcome RegisterPriceCardOutcome,
 ) (RegisterPriceCardOutcome, error) {
 	plan := registration.Plan()
-	if err := handler.deps.Registered.HandOffPricingParameterRegistered(ctx, ports.PricingParameterRegisteredIntent{
-		Tenant:       registration.Tenant(),
-		Kind:         ports.PricingParameterPriceCard,
-		Registration: plan.Reference(),
-		Scope:        plan.Scope(),
-	}); err != nil {
+	if err := announcePricingParameter(ctx, handler.deps.Registered, registration.Tenant(),
+		ports.PricingParameterPriceCard, plan.Reference(),
+		[]ports.PricedScope{{Scope: plan.Scope(), Direction: plan.Direction()}}); err != nil {
 		return PriceCardRegistrationUndecided, fmt.Errorf("register price card: %w", err)
 	}
 	return outcome, nil

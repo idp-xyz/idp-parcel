@@ -237,12 +237,13 @@ func main() {
 		application.NewRegisterPriceCardHandler(application.RegisterPriceCardDeps{Catalog: cards, Registered: registered}),
 		application.NewRegisterReferenceSeriesHandler(application.RegisterReferenceSeriesDeps{Register: series}),
 		application.NewReviewReferenceSeriesHandler(application.ReviewReferenceSeriesDeps{
-			Versions: series, Reviews: reviews, Clock: systemClock{}, Registered: registered,
+			Versions: series, Reviews: reviews, Clock: systemClock{}, Registered: registered, PricedScopes: cards,
 		}),
 		catalogueRegistrars{
 			register: application.NewRegisterReferenceCatalogueHandler(application.RegisterReferenceCatalogueDeps{Register: catalogues}),
 			review: application.NewReviewReferenceCatalogueHandler(application.ReviewReferenceCatalogueDeps{
 				Versions: catalogues, Reviews: catalogueReviews, Clock: systemClock{}, Registered: registered,
+				PricedScopes: cards,
 			}),
 		},
 		db.Transactor(),

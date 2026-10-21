@@ -168,18 +168,24 @@ func assemble(db *bentopg.DB, sourceRoot string, clock ports.Clock, observer por
 	if err != nil {
 		return assembly{}, fmt.Errorf("构造参数已登记交接口：%w", err)
 	}
+	// 信封按绑了这条序列的卡各交一面，读卡册问是哪几张。
+	cards, err := adapter.NewPriceCards(db)
+	if err != nil {
+		return assembly{}, fmt.Errorf("构造价卡册：%w", err)
+	}
 	return assembly{
 		feed: application.NewFeedReferenceSeriesHandler(application.FeedReferenceSeriesDeps{
-			Bindings:   bindings,
-			Connectors: registry,
-			Artifacts:  sourcefeed.NewInPlaceArtifactStore(),
-			Latest:     series,
-			Register:   series,
-			Versions:   series,
-			Reviews:    reviews,
-			Clock:      clock,
-			Observer:   observer,
-			Registered: registered,
+			Bindings:     bindings,
+			Connectors:   registry,
+			Artifacts:    sourcefeed.NewInPlaceArtifactStore(),
+			Latest:       series,
+			Register:     series,
+			Versions:     series,
+			Reviews:      reviews,
+			Clock:        clock,
+			Observer:     observer,
+			Registered:   registered,
+			PricedScopes: cards,
 		}),
 		bindings: application.NewRegisterSourceConnectorBindingHandler(application.RegisterSourceConnectorBindingDeps{Bindings: bindings}),
 	}, nil

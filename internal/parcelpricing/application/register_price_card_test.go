@@ -146,8 +146,8 @@ func TestRegisterPriceCardSurfacesCatalogFailure(t *testing.T) {
 	}
 }
 
-// Covers: AT-PP-003 一版卡落库（或重放命中同一版）同笔交「参数已登记」，带卡的计价范围，结算按它只续办问这个范围的
-// 请求；冲突与形状不同不交——那一版没写进册；交不出整笔报错让登记口回滚；装配漏了交接口就不受理。
+// Covers: AT-PP-003 一版卡落库（或重放命中同一版）同笔交「参数已登记」，带卡的计价范围与方向，结算按它只续办问这个
+// 范围、这一路的请求；冲突与形状不同不交——那一版没写进册；交不出整笔报错让登记口回滚；装配漏了交接口就不受理。
 func TestARegisteredPriceCardAnnouncesItsScope(t *testing.T) {
 	for _, tc := range []struct {
 		saved    ports.PriceCardRegistrationOutcome
@@ -172,6 +172,7 @@ func TestARegisteredPriceCardAnnouncesItsScope(t *testing.T) {
 		if tc.announce {
 			intent := registered.intents[0]
 			if intent.Kind != ports.PricingParameterPriceCard || intent.Scope != registration.Plan().Scope() ||
+				intent.Direction != registration.Plan().Direction() ||
 				intent.Registration != registration.Plan().Reference() || intent.Tenant != registration.Tenant() {
 				t.Fatalf("intent = %+v", intent)
 			}

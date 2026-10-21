@@ -256,9 +256,13 @@ func (outcome BuyEvaluationOutcome) String() string {
 // Request 是评价回指的 BUY 评价请求标识，各格都带；评价没有回指（计价内部或测试路径形成）时是零值。它是不是真
 // 的一份 BUY 请求，由 BUY 评价请求册按标识回答，读口不认前缀、不猜。形成命令缺的发生项、费用项目与供应商协议
 // 引用就从那份请求取。
+//
+// PendingCause 只在`待判断`时在场：评价缺的是哪一类东西（domain.EvaluationStopCause.PendingJudgmentOfEvaluation 那几格），
+// 由读口按提供方的问题项分格，续办按它找解得开的那一类登记。
 type BuyEvaluationAdoption struct {
 	Evaluation         domain.BuyEvaluationReference
 	Outcome            BuyEvaluationOutcome
+	PendingCause       domain.EvaluationStopCause
 	Request            domain.EvaluationRequestID
 	RuleVersion        domain.PurchaseRuleVersionReference
 	OriginalCurrency   domain.CurrencyCode

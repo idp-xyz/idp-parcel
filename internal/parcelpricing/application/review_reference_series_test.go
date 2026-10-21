@@ -78,6 +78,7 @@ type reviewFixture struct {
 	loader     *versionLoaderDouble
 	reviews    *reviewRegisterDouble
 	registered *pricingParameterDouble
+	scopes     *pricedScopesDouble
 }
 
 func newReviewFixture(t *testing.T) *reviewFixture {
@@ -87,12 +88,14 @@ func newReviewFixture(t *testing.T) *reviewFixture {
 		loader:     &versionLoaderDouble{registrations: map[string]domain.ReferenceSeriesRegistration{"SYN-FUEL@v1": registration}},
 		reviews:    &reviewRegisterDouble{outcome: ports.ReferenceSeriesReviewRecorded},
 		registered: &pricingParameterDouble{},
+		scopes:     &pricedScopesDouble{scopes: boundScopes(t)},
 	}
 	fixture.handler = application.NewReviewReferenceSeriesHandler(application.ReviewReferenceSeriesDeps{
-		Versions:   fixture.loader,
-		Reviews:    fixture.reviews,
-		Clock:      fixedClock{at: formedAt},
-		Registered: fixture.registered,
+		Versions:     fixture.loader,
+		Reviews:      fixture.reviews,
+		Clock:        fixedClock{at: formedAt},
+		Registered:   fixture.registered,
+		PricedScopes: fixture.scopes,
 	})
 	return fixture
 }
@@ -176,28 +179,42 @@ func TestReviewOutcomesFollowRecoveryActions(t *testing.T) {
 	}
 }
 
-// Covers: AT-PP-004 一版序列通过复核才交「参数已登记」（种类 REFERENCE_SERIES、那一版的引用，不带计价范围）；退回的
-// 那一版不在用，不交；交不出整笔报错让登记口回滚；装配漏了交接口就不受理。
-func TestAnApprovedReviewAnnouncesTheSeriesAsRegistered(t *testing.T) {
+// Covers: AT-PP-004 一版序列通过复核才交「参数已登记」：先问绑了这条序列的卡在哪些范围上，按 BUY 与 SELL 的那几面各交
+// 一封（种类 REFERENCE_SERIES、那一版的引用、那一面的范围与方向），内部方向的面不交，没有卡绑它就一封不交；退回的那一版
+// 不在用，不交、也不问；问不出或交不出整笔报错让登记口回滚；装配漏了交接口或绑定读口就不受理。
+func TestAnApprovedReviewAnnouncesTheSeriesOnEveryScopeThatBindsIt(t *testing.T) {
 	fixture := newReviewFixture(t)
 	if _, err := fixture.handler.Handle(context.Background(), reviewCommand("SYN-REVIEWER", "v1", domain.SeriesReviewApproved)); err != nil {
 		t.Fatalf("复核：%v", err)
 	}
-	if len(fixture.registered.intents) != 1 {
-		t.Fatalf("交了 %d 封参数已登记, want 1", len(fixture.registered.intents))
+	if len(fixture.scopes.asked) != 1 || fixture.scopes.asked[0] != "REFERENCE_SERIES/SYN-FUEL" {
+		t.Fatalf("问绑定 = %v", fixture.scopes.asked)
 	}
-	intent := fixture.registered.intents[0]
-	if intent.Kind != ports.PricingParameterReferenceSeries || intent.Registration.ID() != "SYN-FUEL" ||
-		intent.Registration.Version() != "v1" || intent.Scope.String() != "" || intent.Tenant.String() != "tenant-1" {
-		t.Fatalf("intent = %+v", intent)
+	if len(fixture.registered.intents) != 2 {
+		t.Fatalf("交了 %d 封参数已登记, want BUY 与 SELL 各一封", len(fixture.registered.intents))
+	}
+	for i, want := range []struct{ scope, direction string }{{"SYN-SCOPE-BUY", "BUY"}, {"SYN-SCOPE-SELL", "SELL"}} {
+		intent := fixture.registered.intents[i]
+		if intent.Kind != ports.PricingParameterReferenceSeries || intent.Registration.ID() != "SYN-FUEL" ||
+			intent.Registration.Version() != "v1" || intent.Scope.String() != want.scope ||
+			intent.Direction.String() != want.direction || intent.Tenant.String() != "tenant-1" {
+			t.Fatalf("第 %d 封 intent = %+v", i, intent)
+		}
+	}
+
+	unbound := newReviewFixture(t)
+	unbound.scopes.scopes = nil
+	if outcome, err := unbound.handler.Handle(context.Background(), reviewCommand("SYN-REVIEWER", "v1", domain.SeriesReviewApproved)); err != nil ||
+		outcome != application.SeriesReviewRecorded || len(unbound.registered.intents) != 0 {
+		t.Fatalf("没有卡绑：outcome = %s err = %v 交了 %d 封", outcome, err, len(unbound.registered.intents))
 	}
 
 	returned := newReviewFixture(t)
 	if _, err := returned.handler.Handle(context.Background(), reviewCommand("SYN-REVIEWER", "v1", domain.SeriesReviewReturned)); err != nil {
 		t.Fatalf("退回：%v", err)
 	}
-	if len(returned.registered.intents) != 0 {
-		t.Fatal("退回的那一版交了参数已登记")
+	if len(returned.registered.intents) != 0 || len(returned.scopes.asked) != 0 {
+		t.Fatal("退回的那一版交了参数已登记或问了绑定")
 	}
 
 	failing := newReviewFixture(t)
@@ -206,11 +223,20 @@ func TestAnApprovedReviewAnnouncesTheSeriesAsRegistered(t *testing.T) {
 		outcome != application.SeriesReviewUndecided {
 		t.Fatalf("交不出 outcome = %s err = %v, want 未决与错误", outcome, err)
 	}
+	blind := newReviewFixture(t)
+	blind.scopes.err = errors.New("card register down")
+	if outcome, err := blind.handler.Handle(context.Background(), reviewCommand("SYN-REVIEWER", "v1", domain.SeriesReviewApproved)); err == nil ||
+		outcome != application.SeriesReviewUndecided || len(blind.registered.intents) != 0 {
+		t.Fatalf("问不出绑定 outcome = %s err = %v, want 未决与错误、一封不交", outcome, err)
+	}
 
-	unwired := application.NewReviewReferenceSeriesHandler(application.ReviewReferenceSeriesDeps{
-		Versions: fixture.loader, Reviews: fixture.reviews, Clock: fixedClock{at: formedAt},
-	})
-	if _, err := unwired.Handle(context.Background(), reviewCommand("SYN-REVIEWER", "v1", domain.SeriesReviewApproved)); !errors.Is(err, application.ErrSeriesReviewHandoffMissing) {
-		t.Fatalf("漏装交接口 err = %v", err)
+	for label, deps := range map[string]application.ReviewReferenceSeriesDeps{
+		"交接口":  {Versions: fixture.loader, Reviews: fixture.reviews, Clock: fixedClock{at: formedAt}, PricedScopes: fixture.scopes},
+		"绑定读口": {Versions: fixture.loader, Reviews: fixture.reviews, Clock: fixedClock{at: formedAt}, Registered: fixture.registered},
+	} {
+		unwired := application.NewReviewReferenceSeriesHandler(deps)
+		if _, err := unwired.Handle(context.Background(), reviewCommand("SYN-REVIEWER", "v1", domain.SeriesReviewApproved)); !errors.Is(err, application.ErrSeriesReviewHandoffMissing) {
+			t.Fatalf("漏装%s err = %v", label, err)
+		}
 	}
 }

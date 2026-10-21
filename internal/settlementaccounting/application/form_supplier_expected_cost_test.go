@@ -137,6 +137,9 @@ func newExpectedCostFixture(t *testing.T) *expectedCostFixture {
 	pending := completedAdoption(t, "buy-eval-pending")
 	pending.Outcome = ports.BuyEvaluationPending
 	fixture.evaluations.adoptions["buy-eval-pending"] = pending
+	pendingSeries := completedAdoption(t, "buy-eval-pending-series")
+	pendingSeries.Outcome, pendingSeries.PendingCause = ports.BuyEvaluationPending, domain.StopEvaluationSeriesUnresolved
+	fixture.evaluations.adoptions["buy-eval-pending-series"] = pendingSeries
 	unratable := completedAdoption(t, "buy-eval-unratable")
 	unratable.Outcome = ports.BuyEvaluationUnratable
 	fixture.evaluations.adoptions["buy-eval-unratable"] = unratable

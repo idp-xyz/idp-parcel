@@ -86,7 +86,9 @@ const (
 	StopPriceCardNotConfigured
 	StopPriceCardApplicabilityConflict
 	StopPricingInputUnavailable
-	// 评价采用不了：评价已形成，结算这一侧形成不了费用或成本。
+	// 评价采用不了：评价已形成，结算这一侧形成不了费用或成本。待判断按缺的是什么再分几格，缺的东西不同，补登的就是
+	// 不同的册：目录读不出（分区、偏远档位）、序列读不出（参考序列、汇率）、价表上没有这一段、包裹事实不全；分不清
+	// 或不止一样缺的，落笼统的那一格。
 	StopEvaluationPendingJudgment
 	StopEvaluationUnratable
 	StopEvaluationConflict
@@ -94,6 +96,10 @@ const (
 	StopAmountRoundingUndeclared
 	StopConversionStepMissing
 	StopFeeItemMappingIncomplete
+	StopEvaluationCatalogueUnresolved
+	StopEvaluationSeriesUnresolved
+	StopEvaluationRateNotFound
+	StopEvaluationInputIncomplete
 	// StopPendingJudgmentCauseUnrecorded 只出自迁移：停因一列落地之前就已记成`待判断`的 SELL 请求，当时没记是哪一种
 	// 待判断。迁移不猜它是评价待判断、取整未声明还是映射不全，所以三类登记都解得开它。
 	StopPendingJudgmentCauseUnrecorded
@@ -116,6 +122,10 @@ var allEvaluationStopCauses = []EvaluationStopCause{
 	StopAmountRoundingUndeclared,
 	StopConversionStepMissing,
 	StopFeeItemMappingIncomplete,
+	StopEvaluationCatalogueUnresolved,
+	StopEvaluationSeriesUnresolved,
+	StopEvaluationRateNotFound,
+	StopEvaluationInputIncomplete,
 	StopPendingJudgmentCauseUnrecorded,
 }
 
@@ -153,6 +163,14 @@ func (cause EvaluationStopCause) String() string {
 		return "CONVERSION_STEP_MISSING"
 	case StopFeeItemMappingIncomplete:
 		return "FEE_ITEM_MAPPING_INCOMPLETE"
+	case StopEvaluationCatalogueUnresolved:
+		return "EVALUATION_CATALOGUE_UNRESOLVED"
+	case StopEvaluationSeriesUnresolved:
+		return "EVALUATION_SERIES_UNRESOLVED"
+	case StopEvaluationRateNotFound:
+		return "EVALUATION_RATE_NOT_FOUND"
+	case StopEvaluationInputIncomplete:
+		return "EVALUATION_INPUT_INCOMPLETE"
 	case StopPendingJudgmentCauseUnrecorded:
 		return "PENDING_JUDGMENT_CAUSE_UNRECORDED"
 	default:
@@ -181,10 +199,24 @@ func (cause EvaluationStopCause) Stage() EvaluationStopStage {
 		return StopInPricing
 	case StopEvaluationPendingJudgment, StopEvaluationUnratable, StopEvaluationConflict, StopEvaluationFailed,
 		StopAmountRoundingUndeclared, StopConversionStepMissing, StopFeeItemMappingIncomplete,
-		StopPendingJudgmentCauseUnrecorded:
+		StopEvaluationCatalogueUnresolved, StopEvaluationSeriesUnresolved, StopEvaluationRateNotFound,
+		StopEvaluationInputIncomplete, StopPendingJudgmentCauseUnrecorded:
 		return StopAtAdoption
 	default:
 		return EvaluationStopStageInvalid
+	}
+}
+
+// PendingJudgmentOfEvaluation 答这一停因是不是评价`待判断`的一格（笼统的那一格或它的细分）。读口按问题项分格，分不出
+// 的落笼统那一格；形成编排拿到不是这几格的值时也落笼统那一格——宁可多推一次续办，不可让它停在一格什么登记都解不开的
+// 停因上。
+func (cause EvaluationStopCause) PendingJudgmentOfEvaluation() bool {
+	switch cause {
+	case StopEvaluationPendingJudgment, StopEvaluationCatalogueUnresolved, StopEvaluationSeriesUnresolved,
+		StopEvaluationRateNotFound, StopEvaluationInputIncomplete:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -199,7 +231,8 @@ func (cause EvaluationStopCause) OccursIn(direction EvaluationDirection) bool {
 		return direction == BuyEvaluationDirection
 	case StopPriceCardNotConfigured, StopPriceCardApplicabilityConflict, StopPricingInputUnavailable,
 		StopEvaluationPendingJudgment, StopEvaluationUnratable, StopEvaluationConflict, StopEvaluationFailed,
-		StopAmountRoundingUndeclared:
+		StopAmountRoundingUndeclared, StopEvaluationCatalogueUnresolved, StopEvaluationSeriesUnresolved,
+		StopEvaluationRateNotFound, StopEvaluationInputIncomplete:
 		return direction == BuyEvaluationDirection || direction == SellEvaluationDirection
 	default:
 		return false
@@ -207,13 +240,16 @@ func (cause EvaluationStopCause) OccursIn(direction EvaluationDirection) bool {
 }
 
 // ResumedBy 答一次这一类参数登记能不能解开这一停因。判据是恢复动作：登了这一类参数，按同一个问题再问一次可能得到
-// 不同的答案，才算解得开；登了也不会变的不列，留给运营续办口。
+// 不同的答案，才算解得开；登了也不会变的不列。
 //
-//   - 结算政策没采用、包裹没有商业解析：答案在委托接受时固定的商业解析上，结算这一侧的任何登记都改不了它。
-//   - 计价输入不可得：缺的是小包托运或运输履约那一侧的事实。
-//   - 评价待判断、评价失败：可能缺卡上的取值、序列的在用版本或目录的在用版本，三类登记都可能解开。
-//   - 不可计价、评价冲突、金额取整未声明：答案出自卡，换一版卡才可能变。
+//   - 结算政策没采用：答案在委托接受时固定的商业闭包上，结算这一侧的任何登记都改不了它，运营续办重跑读到的也是同一份
+//     闭包——今天没有续办路（ADR-0229 越权风险点「结算政策没采用今天没有续办路」）。
+//   - 包裹没有商业解析、计价输入不可得、包裹事实不全：缺的是小包托运或运输履约那一侧的事实，那一侧补上之后由运营续办
+//     口点名。
+//   - 目录读不出只认目录、序列读不出只认序列：周期喂进来的序列不推缺分区的请求。
+//   - 不可计价、评价冲突、评价失败、金额取整未声明、价表没有这一段：答案出自卡，换一版卡才可能变。
 //   - 换算步骤缺席：卡没绑汇率序列，或序列在计价基准时点没有在用版本。
+//   - 笼统的待判断：分不清缺哪一样，卡、序列、目录三类登记都可能解开。
 func (cause EvaluationStopCause) ResumedBy(kind EvaluationParameterKind) bool {
 	switch cause {
 	case StopSettlementAccountNotRegistered:
@@ -222,10 +258,14 @@ func (cause EvaluationStopCause) ResumedBy(kind EvaluationParameterKind) bool {
 		return kind == ParameterSellBillingMomentAdoption
 	case StopOccurrenceReasonNotRegistered, StopTriggerFeeItemNotRegistered:
 		return kind == ParameterBuyEvaluationTrigger
-	case StopPriceCardNotConfigured, StopPriceCardApplicabilityConflict,
-		StopEvaluationUnratable, StopEvaluationConflict, StopAmountRoundingUndeclared:
+	case StopPriceCardNotConfigured, StopPriceCardApplicabilityConflict, StopEvaluationUnratable,
+		StopEvaluationConflict, StopEvaluationFailed, StopAmountRoundingUndeclared, StopEvaluationRateNotFound:
 		return kind == ParameterPriceCard
-	case StopEvaluationPendingJudgment, StopEvaluationFailed:
+	case StopEvaluationCatalogueUnresolved:
+		return kind == ParameterReferenceCatalogue
+	case StopEvaluationSeriesUnresolved:
+		return kind == ParameterReferenceSeries
+	case StopEvaluationPendingJudgment:
 		return kind == ParameterPriceCard || kind == ParameterReferenceSeries || kind == ParameterReferenceCatalogue
 	case StopConversionStepMissing:
 		return kind == ParameterPriceCard || kind == ParameterReferenceSeries
@@ -305,6 +345,37 @@ func EvaluationParameterKindFromName(name string) (EvaluationParameterKind, erro
 	return EvaluationParameterKindInvalid, fmt.Errorf("%w: evaluation parameter kind %q", ErrInvalidEvaluationResumption, name)
 }
 
+// EvaluationParameterNarrowing 是一类登记的「参数已登记」信封必带的收窄格：续办只取这一次登记真解得开的那几件，
+// 不按种类把整个租户里同停因的件推一遍。
+//
+//   - 计价的三类（价卡、序列、目录）带计价范围与方向：卡带自己的，序列与目录带绑了它的每一张卡的。一张 BUY 卡登了，
+//     SELL 那一路问同一个范围的请求照样等着；一条序列喂了一期，没绑它的卡上停着的请求不是在等它。
+//   - BUY 触发册带发生项原因：登的是这一个原因那一行，别的原因上停着的发生项照样缺。
+//   - SELL 计费时点采用带户：采用是按户登的。
+//   - 结算账户与费用项目映射不带：账户没登时链还没走到户，停办上记不下等的是哪一户；映射是按计价费用代码登的，
+//     停下的请求上记的是映射不全、没有记缺哪一个代码。这两类按种类续办：多推的发起停办重跑后照样停着，只换上这一次的
+//     依据与时刻；多推的请求起了下一代，照样停在同一格（ADR-0229 越权风险点「收窄到哪一层」）。
+type EvaluationParameterNarrowing struct {
+	PricingScope     bool
+	Direction        bool
+	OccurrenceReason bool
+	Account          bool
+}
+
+// Narrowing 答这一类登记的信封必带哪几格。
+func (kind EvaluationParameterKind) Narrowing() EvaluationParameterNarrowing {
+	switch kind {
+	case ParameterPriceCard, ParameterReferenceSeries, ParameterReferenceCatalogue:
+		return EvaluationParameterNarrowing{PricingScope: true, Direction: true}
+	case ParameterBuyEvaluationTrigger:
+		return EvaluationParameterNarrowing{OccurrenceReason: true}
+	case ParameterSellBillingMomentAdoption:
+		return EvaluationParameterNarrowing{Account: true}
+	default:
+		return EvaluationParameterNarrowing{}
+	}
+}
+
 // 续办依据的两种来源段。不是标识铸造前缀，照样以 Prefix 结尾进前缀门禁：依据串与各上下文铸造的标识在日志里混看。
 const (
 	parameterResumeBasisPrefix = "PARAMREG"
@@ -366,7 +437,8 @@ func normalizeLineage(generation int, hasPrevious bool, basis ResumeBasis) (int,
 }
 
 // SellEvaluationInitiationStallSpec 是一拍包裹计费时点停在发起之前的全部输入：那一拍本身（包裹、时点、来源事实、计价
-// 基准时点，续办时原样重跑），停因，停下的时刻，以及若是续办重跑之后又停下，凭的那个依据。
+// 基准时点，续办时原样重跑），停因，停下的时刻，以及若是续办重跑之后又停下，凭的那个依据。Account 只在停在计费时点
+// 没采用时在场：链已走到那一户，补登采用时只续办那一户的。
 type SellEvaluationInitiationStallSpec struct {
 	Parcel         ParcelReference
 	Moment         ParcelBillingMoment
@@ -375,6 +447,7 @@ type SellEvaluationInitiationStallSpec struct {
 	Cause          EvaluationStopCause
 	StoppedAt      time.Time
 	Basis          ResumeBasis
+	Account        SettlementAccountID
 }
 
 // SellEvaluationInitiationStall 是 SELL 那一路的发起停办：包裹计费时点到了，链停在结算账户之前或采用册上，一份请求都
@@ -387,11 +460,13 @@ type SellEvaluationInitiationStall struct {
 	cause          EvaluationStopCause
 	stoppedAt      time.Time
 	basis          ResumeBasis
+	account        SettlementAccountID
 }
 
 func NewSellEvaluationInitiationStall(spec SellEvaluationInitiationStallSpec) (SellEvaluationInitiationStall, error) {
 	if !spec.Parcel.valid() || !spec.Moment.valid() || !spec.Source.valid() || spec.PricingBasisAt.IsZero() ||
-		spec.StoppedAt.IsZero() || spec.Cause.Stage() != StopBeforeRequest || !spec.Cause.OccursIn(SellEvaluationDirection) {
+		spec.StoppedAt.IsZero() || spec.Cause.Stage() != StopBeforeRequest || !spec.Cause.OccursIn(SellEvaluationDirection) ||
+		(spec.Cause == StopSellBillingMomentNotAdopted) != spec.Account.valid() {
 		return SellEvaluationInitiationStall{}, fmt.Errorf("%w: sell evaluation initiation stall", ErrInvalidEvaluationResumption)
 	}
 	return SellEvaluationInitiationStall{
@@ -401,6 +476,7 @@ func NewSellEvaluationInitiationStall(spec SellEvaluationInitiationStallSpec) (S
 		cause:          spec.Cause,
 		stoppedAt:      spec.StoppedAt.UTC(),
 		basis:          spec.Basis,
+		account:        spec.Account,
 	}, nil
 }
 
@@ -412,6 +488,11 @@ func (stall SellEvaluationInitiationStall) PricingBasisAt() time.Time   { return
 func (stall SellEvaluationInitiationStall) Cause() EvaluationStopCause  { return stall.cause }
 func (stall SellEvaluationInitiationStall) StoppedAt() time.Time        { return stall.stoppedAt }
 func (stall SellEvaluationInitiationStall) Basis() ResumeBasis          { return stall.basis }
+
+// Account 交回停在计费时点没采用时那一户；别的停因第二个返回值为假。
+func (stall SellEvaluationInitiationStall) Account() (SettlementAccountID, bool) {
+	return stall.account, stall.account.valid()
+}
 
 // BuyEvaluationInitiationStallSpec 是一份已形成的发生项停在 BUY 发起之前的全部输入：发生项（标识、原因、有效性版本、
 // 业务时间）与它固定的供应商协议，续办时原样重跑发起编排。修订版不经本路发起，所以不在这里。

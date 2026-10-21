@@ -97,6 +97,9 @@ func (adapter *BuyEvaluationAdapter) LoadBuyEvaluation(
 	if adoption.Outcome == saports.BuyEvaluationOutcomeInvalid {
 		return saports.BuyEvaluationAdoption{}, false, fmt.Errorf("%w: evaluation status %q", ErrUntranslatableAnswer, evaluation.Status())
 	}
+	if adoption.Outcome == saports.BuyEvaluationPending {
+		adoption.PendingCause = pendingCauseOf(evaluation.Issues())
+	}
 	if adoption.Outcome != saports.BuyEvaluationCompleted {
 		return adoption, true, nil
 	}

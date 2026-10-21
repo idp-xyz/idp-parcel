@@ -36,9 +36,11 @@ const (
 	StalledEvaluationStillStalled
 	// StalledEvaluationAlreadyResumed：早已续办过——停下的请求已有下一代，或这一拍已有请求。重放落在这里。
 	StalledEvaluationAlreadyResumed
-	// StalledEvaluationNotWaiting：它不在等这个依据——没有停因、停因不在这次续办的名单里、凭的正是这个依据续办过，或
-	// 重跑之后这一户采用的是别的计费时点（那一拍本就不计费）。
+	// StalledEvaluationNotWaiting：它不在等这个依据——没有停因、停因不在这次续办的名单里，或凭的正是这个依据续办过。
 	StalledEvaluationNotWaiting
+	// StalledEvaluationClosed：SELL 发起停办重跑之后这一户答`采用了别的时点`——那一拍本就不计费，不是停下，发起停办落
+	// 终止、不再进队列。
+	StalledEvaluationClosed
 	// StalledEvaluationNotAccepted：命令立不住，或记下的输入重跑时被发起编排拒收。
 	StalledEvaluationNotAccepted
 	// StalledEvaluationUndecided：某个依赖答不出，整笔回滚等重投。
@@ -55,6 +57,8 @@ func (outcome ResumeStalledEvaluationOutcome) String() string {
 		return "ALREADY_RESUMED"
 	case StalledEvaluationNotWaiting:
 		return "NOT_WAITING"
+	case StalledEvaluationClosed:
+		return "CLOSED"
 	case StalledEvaluationNotAccepted:
 		return "NOT_ACCEPTED"
 	case StalledEvaluationUndecided:
@@ -236,7 +240,20 @@ func (handler *ResumeStalledEvaluationHandler) rerunSellInitiation(
 		if cause, stalled := result.StopCause(); stalled {
 			return ResumeStalledEvaluationResult{outcome: StalledEvaluationStillStalled, stopCause: cause}, nil
 		}
-		return ResumeStalledEvaluationResult{outcome: StalledEvaluationNotWaiting}, nil
+		if result.UnconfiguredReason() != SellRequestBillingMomentDiffers {
+			return ResumeStalledEvaluationResult{}, fmt.Errorf("%w: %s %s without a stop cause",
+				ErrUnexpectedResumedInitiationOutcome, result.Outcome(), result.UnconfiguredReason())
+		}
+		// 不落终止，这一行会一直满足「等着」的口径：每来一次能解开计费时点没采用的登记就再重跑它一次、再答一次同样的话。
+		closed, err := handler.deps.SellStalls.CloseSellInitiationStall(ctx, command.TenantID, key, handler.deps.Clock.Now())
+		if err != nil {
+			return undecidedResumption("SELL_INITIATION_STALL_REGISTER", err), nil
+		}
+		if !closed {
+			return ResumeStalledEvaluationResult{}, fmt.Errorf("%w: sell initiation %s/%s",
+				ErrStalledEvaluationVanished, key.Parcel, key.Moment)
+		}
+		return ResumeStalledEvaluationResult{outcome: StalledEvaluationClosed}, nil
 	case SellEvaluationRequestUndecided:
 		return undecidedResumption(result.UndecidedReason().String(), nil), nil
 	case SellEvaluationRequestNotAccepted:

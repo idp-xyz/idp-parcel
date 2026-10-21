@@ -23,6 +23,7 @@ const evaluationParameterRegisteredEventType eventing.EventType = "settlement-ac
 const evaluationParameterRegisteredEventIDPort = "evaluation-parameter"
 
 // evaluationParameterKinds 是本口收的种类：结算自己那几本评价参数册。结算账户另有自己的「已登记」口，计价的登记由计价交。
+// 各种类必带哪一格收窄由 domain.EvaluationParameterKind.Narrowing 定。
 var evaluationParameterKinds = map[domain.EvaluationParameterKind]bool{
 	domain.ParameterSellBillingMomentAdoption: true,
 	domain.ParameterFeeItemMapping:            true,
@@ -49,16 +50,18 @@ func NewOutboxEvaluationParameterRegisteredHandoff(
 
 var _ ports.EvaluationParameterRegisteredHandoff = (*OutboxEvaluationParameterRegisteredHandoff)(nil)
 
-// evaluationParameterRegisteredPayload 只有租户与种类两键，与「结算账户已登记」同形：续办门按租户与种类取等着的件，
-// 登的是哪一行它不需要知道——续办时发起编排照旧问各本册。
+// evaluationParameterRegisteredPayload 带租户、种类与那个种类必带的收窄格：续办门按它们取等着的件，登的那一行别的内容
+// 它不需要知道——续办时发起编排照旧问各本册。收窄格不在场的种类不写这一键。
 type evaluationParameterRegisteredPayload struct {
-	TenantID         string `json:"tenantId"`
-	RegistrationKind string `json:"registrationKind"`
+	TenantID            string `json:"tenantId"`
+	RegistrationKind    string `json:"registrationKind"`
+	OccurrenceReason    string `json:"occurrenceReason,omitempty"`
+	SettlementAccountID string `json:"settlementAccountId,omitempty"`
 }
 
 // HandOffEvaluationParameterRegistered 把一份意图入队。信封 ID 取（租户 / 种类 / 落的那一行）的定长指纹：一行一封，重放同一行
 // 由 EnqueueOnce 按 ID 吞掉（ADR-0043）；续办把它当依据，同一封信重投不会把同一条代次链推两代。种类不归本口、租户或行键
-// 缺席、登记时刻零值都是装配缺陷，响亮报错不入队。
+// 缺席、登记时刻零值、收窄格缺了必带的或带了不该带的，都是装配缺陷，响亮报错不入队。
 func (handoff *OutboxEvaluationParameterRegisteredHandoff) HandOffEvaluationParameterRegistered(
 	ctx context.Context,
 	intent ports.EvaluationParameterRegisteredIntent,
@@ -66,9 +69,16 @@ func (handoff *OutboxEvaluationParameterRegisteredHandoff) HandOffEvaluationPara
 	if !evaluationParameterKinds[intent.Kind] || intent.Tenant.String() == "" || intent.Subject == "" || intent.RegisteredAt.IsZero() {
 		return fmt.Errorf("hand off evaluation parameter registered: kind %q, tenant, subject and moment are required", intent.Kind.String())
 	}
+	reason, account := intent.OccurrenceReason.String(), intent.Account.String()
+	if narrowing := intent.Kind.Narrowing(); narrowing.OccurrenceReason != (reason != "") || narrowing.Account != (account != "") {
+		return fmt.Errorf("hand off evaluation parameter registered: kind %s carries occurrence reason %q and account %q",
+			intent.Kind, reason, account)
+	}
 	payload, err := json.Marshal(evaluationParameterRegisteredPayload{
-		TenantID:         intent.Tenant.String(),
-		RegistrationKind: intent.Kind.String(),
+		TenantID:            intent.Tenant.String(),
+		RegistrationKind:    intent.Kind.String(),
+		OccurrenceReason:    reason,
+		SettlementAccountID: account,
 	})
 	if err != nil {
 		return fmt.Errorf("hand off evaluation parameter registered: %w", err)

@@ -187,11 +187,17 @@ func buildReferenceSeriesReviewOrchestration(db *bentopg.DB) (transactionalRefer
 	if err != nil {
 		return transactionalReferenceSeriesReview{}, err
 	}
+	// 信封按绑了这条序列的卡各交一面，读卡册问是哪几张。
+	cards, err := pppostgres.NewPriceCards(db)
+	if err != nil {
+		return transactionalReferenceSeriesReview{}, fmt.Errorf("parcel-api: price card catalog: %w", err)
+	}
 	handler := pricingapp.NewReviewReferenceSeriesHandler(pricingapp.ReviewReferenceSeriesDeps{
-		Versions:   versions,
-		Reviews:    reviews,
-		Clock:      systemClock{},
-		Registered: registered,
+		Versions:     versions,
+		Reviews:      reviews,
+		Clock:        systemClock{},
+		Registered:   registered,
+		PricedScopes: cards,
 	})
 	return transactionalReferenceSeriesReview{transactor: db.Transactor(), inner: handler}, nil
 }

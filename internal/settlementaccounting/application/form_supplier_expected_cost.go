@@ -121,6 +121,7 @@ type ExpectedCostResult struct {
 	outcome      ExpectedCostOutcome
 	reason       ExpectedCostUndecidedReason
 	cause        error
+	pendingCause domain.EvaluationStopCause
 	cost         domain.SupplierExpectedCost
 	hasCost      bool
 	continuation string
@@ -139,6 +140,11 @@ func (result ExpectedCostResult) UndecidedReason() ExpectedCostUndecidedReason {
 // 待判断、未形成或金额未声明时没有错误可交，为 nil——原因已在 UndecidedReason 里说全。
 func (result ExpectedCostResult) UndecidedCause() error {
 	return result.cause
+}
+
+// PendingCause 只在停在评价待判断时在场：读口按问题项分出的那一格（ports.BuyEvaluationAdoption.PendingCause）。
+func (result ExpectedCostResult) PendingCause() domain.EvaluationStopCause {
+	return result.pendingCause
 }
 
 // Cost 在已形成、重放与`已形成过首版`三格交回那份成本。
@@ -192,7 +198,9 @@ func (handler *FormSupplierExpectedCostHandler) Handle(
 	switch adoption.Outcome {
 	case ports.BuyEvaluationCompleted:
 	case ports.BuyEvaluationPending:
-		return expectedCostUndecided(EvaluationPending, command.Evaluation.String(), nil), nil
+		pending := expectedCostUndecided(EvaluationPending, command.Evaluation.String(), nil)
+		pending.pendingCause = adoption.PendingCause
+		return pending, nil
 	case ports.BuyEvaluationNotFormed:
 		return expectedCostUndecided(EvaluationNotFormed, command.Evaluation.String(), nil), nil
 	case ports.BuyEvaluationAmountUndeclared:

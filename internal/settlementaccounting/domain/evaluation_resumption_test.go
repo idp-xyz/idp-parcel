@@ -36,6 +36,10 @@ func TestEvaluationStopCausesSitOnTheirStageAndDirection(t *testing.T) {
 		{domain.StopAmountRoundingUndeclared, domain.StopAtAdoption, true, true},
 		{domain.StopConversionStepMissing, domain.StopAtAdoption, true, false},
 		{domain.StopFeeItemMappingIncomplete, domain.StopAtAdoption, false, true},
+		{domain.StopEvaluationCatalogueUnresolved, domain.StopAtAdoption, true, true},
+		{domain.StopEvaluationSeriesUnresolved, domain.StopAtAdoption, true, true},
+		{domain.StopEvaluationRateNotFound, domain.StopAtAdoption, true, true},
+		{domain.StopEvaluationInputIncomplete, domain.StopAtAdoption, true, true},
 		{domain.StopPendingJudgmentCauseUnrecorded, domain.StopAtAdoption, false, true},
 	}
 	if len(cases) != len(domain.AllEvaluationStopCauses()) {
@@ -61,8 +65,9 @@ func TestEvaluationStopCausesSitOnTheirStageAndDirection(t *testing.T) {
 	}
 }
 
-// Covers: AT-SA-189 一类参数登记只续办它解得开的停因——判据是登了之后同一个问题再问一次可能不同；结算政策没采用、
-// 包裹没有商业解析与计价输入不可得哪一类登记都解不开，只留给运营续办口。
+// Covers: AT-SA-189 一类参数登记只续办它解得开的停因——判据是登了之后同一个问题再问一次可能不同；序列只推序列读不出、
+// 目录只推目录读不出（周期喂价不推缺分区的请求）；结算政策没采用、包裹没有商业解析、计价输入不可得与包裹事实不全
+// 哪一类登记都解不开。
 func TestAParameterRegistrationResumesOnlyTheCausesItCanUnblock(t *testing.T) {
 	want := map[domain.EvaluationParameterKind][]domain.EvaluationStopCause{
 		domain.ParameterSettlementAccount:         {domain.StopSettlementAccountNotRegistered},
@@ -73,14 +78,14 @@ func TestAParameterRegistrationResumesOnlyTheCausesItCanUnblock(t *testing.T) {
 			domain.StopPriceCardNotConfigured, domain.StopPriceCardApplicabilityConflict,
 			domain.StopEvaluationPendingJudgment, domain.StopEvaluationUnratable, domain.StopEvaluationConflict,
 			domain.StopEvaluationFailed, domain.StopAmountRoundingUndeclared, domain.StopConversionStepMissing,
-			domain.StopPendingJudgmentCauseUnrecorded,
+			domain.StopEvaluationRateNotFound, domain.StopPendingJudgmentCauseUnrecorded,
 		},
 		domain.ParameterReferenceSeries: {
-			domain.StopEvaluationPendingJudgment, domain.StopEvaluationFailed, domain.StopConversionStepMissing,
+			domain.StopEvaluationPendingJudgment, domain.StopConversionStepMissing, domain.StopEvaluationSeriesUnresolved,
 			domain.StopPendingJudgmentCauseUnrecorded,
 		},
 		domain.ParameterReferenceCatalogue: {
-			domain.StopEvaluationPendingJudgment, domain.StopEvaluationFailed, domain.StopPendingJudgmentCauseUnrecorded,
+			domain.StopEvaluationPendingJudgment, domain.StopEvaluationCatalogueUnresolved, domain.StopPendingJudgmentCauseUnrecorded,
 		},
 	}
 	for kind, causes := range want {
@@ -102,6 +107,7 @@ func TestAParameterRegistrationResumesOnlyTheCausesItCanUnblock(t *testing.T) {
 	}
 	for _, cause := range []domain.EvaluationStopCause{
 		domain.StopSettlementPolicyNotAdopted, domain.StopParcelCommercialResolutionAbsent, domain.StopPricingInputUnavailable,
+		domain.StopEvaluationInputIncomplete,
 	} {
 		for kind := range want {
 			if cause.ResumedBy(kind) {
@@ -239,7 +245,8 @@ func TestABuyRequestResumesIntoTheNextGenerationWithTheSameSources(t *testing.T)
 	}
 }
 
-// Covers: 发起停办只收发起之前、本路的停因；缺来源事实或计价基准时点立不住。
+// Covers: 发起停办只收发起之前、本路的停因；缺来源事实或计价基准时点立不住；户只在停在计费时点没采用时在场，缺了或多了
+// 都立不住。
 func TestAnInitiationStallTakesOnlyItsOwnBeforeRequestCauses(t *testing.T) {
 	stoppedAt := time.Date(2026, 9, 12, 9, 0, 0, 0, time.UTC)
 	sell := domain.SellEvaluationInitiationStallSpec{
@@ -271,6 +278,23 @@ func TestAnInitiationStallTakesOnlyItsOwnBeforeRequestCauses(t *testing.T) {
 	if _, err := domain.NewSellEvaluationInitiationStall(noSource); err == nil {
 		t.Fatal("缺来源事实的发起停办立住了")
 	}
+	account := mustValue(t, domain.NewSettlementAccountID, "SYN-ACCT-1")
+	withAccount := sell
+	withAccount.Account = account
+	if _, err := domain.NewSellEvaluationInitiationStall(withAccount); err == nil {
+		t.Fatal("账户没登的那一拍记了户")
+	}
+	notAdopted := sell
+	notAdopted.Cause = domain.StopSellBillingMomentNotAdopted
+	if _, err := domain.NewSellEvaluationInitiationStall(notAdopted); err == nil {
+		t.Fatal("停在计费时点没采用却没记户")
+	}
+	notAdopted.Account = account
+	if stall, err := domain.NewSellEvaluationInitiationStall(notAdopted); err != nil {
+		t.Fatalf("停在计费时点没采用：%v", err)
+	} else if got, reached := stall.Account(); !reached || got != account {
+		t.Fatalf("户 = %q reached=%v", got, reached)
+	}
 
 	buy := domain.BuyEvaluationInitiationStallSpec{
 		Occurrence: occurrence(t),
@@ -284,5 +308,31 @@ func TestAnInitiationStallTakesOnlyItsOwnBeforeRequestCauses(t *testing.T) {
 	buy.Cause = domain.StopSettlementAccountNotRegistered
 	if _, err := domain.NewBuyEvaluationInitiationStall(buy); !errors.Is(err, domain.ErrInvalidEvaluationResumption) {
 		t.Fatal("BUY 发起停办收了 SELL 的停因")
+	}
+}
+
+// Covers: AT-SA-189 的收窄格——计价的三类带计价范围与方向，BUY 触发册带发生项原因，SELL 计费时点采用带户，结算账户与
+// 映射不带；`待判断`的细分只认评价待判断那几格。
+func TestAParameterKindDeclaresWhatItsEnvelopeNarrowsBy(t *testing.T) {
+	for kind, want := range map[domain.EvaluationParameterKind]domain.EvaluationParameterNarrowing{
+		domain.ParameterPriceCard:                 {PricingScope: true, Direction: true},
+		domain.ParameterReferenceSeries:           {PricingScope: true, Direction: true},
+		domain.ParameterReferenceCatalogue:        {PricingScope: true, Direction: true},
+		domain.ParameterBuyEvaluationTrigger:      {OccurrenceReason: true},
+		domain.ParameterSellBillingMomentAdoption: {Account: true},
+		domain.ParameterSettlementAccount:         {},
+		domain.ParameterFeeItemMapping:            {},
+	} {
+		if got := kind.Narrowing(); got != want {
+			t.Errorf("%s 收窄 = %+v, want %+v", kind, got, want)
+		}
+	}
+	for _, cause := range domain.AllEvaluationStopCauses() {
+		want := cause == domain.StopEvaluationPendingJudgment || cause == domain.StopEvaluationCatalogueUnresolved ||
+			cause == domain.StopEvaluationSeriesUnresolved || cause == domain.StopEvaluationRateNotFound ||
+			cause == domain.StopEvaluationInputIncomplete
+		if cause.PendingJudgmentOfEvaluation() != want {
+			t.Errorf("%s 是不是评价待判断的一格 = %v, want %v", cause, !want, want)
+		}
 	}
 }

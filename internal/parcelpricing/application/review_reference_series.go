@@ -72,15 +72,17 @@ type ReviewReferenceSeriesCommand struct {
 }
 
 // ReviewReferenceSeriesDeps 是序列复核的依赖。Registered 在一版序列通过复核（自复核时刻起在用）时交「参数已登记」：
-// 结算那一侧停在评价待判断、评价失败或缺换算步骤的请求由它续办（ADR-0229 决定五）。必备，理由同价卡登记。
+// 结算那一侧停在序列读不出、缺换算步骤或笼统待判断上的请求由它续办（ADR-0229 决定五）。PricedScopes 答这条序列绑在哪些
+// 卡上：信封按那几张卡的计价范围与方向各交一面，结算只续办那几个范围上的。两件都必备，理由同价卡登记。
 type ReviewReferenceSeriesDeps struct {
-	Versions   ports.ReferenceSeriesVersionLoader
-	Reviews    ports.ReferenceSeriesReviewRegister
-	Clock      ports.Clock
-	Registered ports.PricingParameterRegisteredHandoff
+	Versions     ports.ReferenceSeriesVersionLoader
+	Reviews      ports.ReferenceSeriesReviewRegister
+	Clock        ports.Clock
+	Registered   ports.PricingParameterRegisteredHandoff
+	PricedScopes ports.PricingParameterBindingView
 }
 
-// ErrSeriesReviewHandoffMissing 说明装配没给序列复核接「参数已登记」交接口。
+// ErrSeriesReviewHandoffMissing 说明装配没给序列复核接「参数已登记」交接口或绑定读口。
 var ErrSeriesReviewHandoffMissing = errors.New("parcel pricing: reference series review has no pricing parameter registered handoff")
 
 // ReviewReferenceSeriesHandler 编排序列版本复核用例（ADR-0099 决定二）。四眼门与四件
@@ -103,7 +105,7 @@ func (handler *ReviewReferenceSeriesHandler) Handle(
 	if command.Tenant.String() == "" || command.SeriesID == "" || command.SeriesVersion == "" {
 		return SeriesReviewNotAccepted, nil
 	}
-	if handler.deps.Registered == nil {
+	if handler.deps.Registered == nil || handler.deps.PricedScopes == nil {
 		return SeriesReviewUndecided, ErrSeriesReviewHandoffMissing
 	}
 
@@ -157,11 +159,8 @@ func (handler *ReviewReferenceSeriesHandler) announce(
 	if review.Decision() != domain.SeriesReviewApproved {
 		return outcome, nil
 	}
-	if err := handler.deps.Registered.HandOffPricingParameterRegistered(ctx, ports.PricingParameterRegisteredIntent{
-		Tenant:       review.Tenant(),
-		Kind:         ports.PricingParameterReferenceSeries,
-		Registration: review.Reference(),
-	}); err != nil {
+	if err := announceBoundPricingParameter(ctx, handler.deps.PricedScopes, handler.deps.Registered,
+		review.Tenant(), ports.PricingParameterReferenceSeries, review.Reference()); err != nil {
 		return SeriesReviewUndecided, fmt.Errorf("review reference series: %w", err)
 	}
 	return outcome, nil

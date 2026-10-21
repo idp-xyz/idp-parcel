@@ -73,9 +73,12 @@ func (outcome SellEvaluationOutcome) String() string {
 //
 // ChargeCodes 是评价全部费用行的计价费用代码，按行序、不去重；只有已完成的评价（含金额未声明那一格）才有费用行。
 // 映到哪个费用项目归费用项目映射册（ADR-0190 决定五），读口只照抄代码。
+//
+// PendingCause 只在`待判断`时在场，口径同 BuyEvaluationAdoption.PendingCause。
 type SellEvaluationAdoption struct {
 	Evaluation         domain.SellEvaluationReference
 	Outcome            SellEvaluationOutcome
+	PendingCause       domain.EvaluationStopCause
 	Request            domain.SellEvaluationRequestID
 	ChargeCodes        []domain.PricingChargeCode
 	OriginalCurrency   domain.CurrencyCode

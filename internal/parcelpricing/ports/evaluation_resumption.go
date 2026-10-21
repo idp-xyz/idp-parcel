@@ -74,13 +74,33 @@ func (kind PricingParameterKind) String() string {
 	}
 }
 
-// PricingParameterRegisteredIntent 是一次计价参数落库：租户、种类、哪一版（只进信封标识，认领同一次登记的重放）、价卡的
-// 计价范围（只有价卡带：结算按它只续办问这个范围的请求，免得一张卡把别的范围上等着的请求全推一遍）。
+// PricingParameterRegisteredIntent 是一次计价参数落库在一个计价范围上的那一面：租户、种类、哪一版（进信封标识，认领同一次
+// 登记的重放）、受影响的计价范围与方向（进载荷，结算按它只续办问这个范围、这一路的请求）。价卡一版一面；序列与目录
+// 一版按绑了它的卡各一面——没有卡绑它，就没有等着它的请求，一面都不交。方向只有 BUY 与 SELL：结算的评价请求只有这两路。
 type PricingParameterRegisteredIntent struct {
 	Tenant       domain.TenantID
 	Kind         PricingParameterKind
 	Registration domain.VersionReference
 	Scope        domain.PricingScopeID
+	Direction    domain.PricingDirection
+}
+
+// PricedScope 是一张卡问的计价范围与方向。
+type PricedScope struct {
+	Scope     domain.PricingScopeID
+	Direction domain.PricingDirection
+}
+
+// PricingParameterBindingView 答一条序列或一份目录被哪些卡绑着，交回这些卡各自的计价范围与方向，去重、定序。不按卡的
+// 版本与适用期筛：停着的请求的计价基准时点可能落在任何一版的适用期里，按适用期筛就是替它选卡。kind 只收序列与目录，
+// id 是序列或目录在租户内的标识（与卡上绑定的那一格同一取值）。
+type PricingParameterBindingView interface {
+	FindPricedScopesBinding(
+		ctx context.Context,
+		tenant domain.TenantID,
+		kind PricingParameterKind,
+		id string,
+	) ([]PricedScope, error)
 }
 
 // ErrPricingParameterHandoffRejected 表示「参数已登记」信封被框架的确定性校验拒收。登记口据此整笔回滚、交出硬失败。

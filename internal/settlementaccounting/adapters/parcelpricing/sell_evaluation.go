@@ -48,6 +48,9 @@ func (adapter *SellEvaluationAdapter) LoadSellEvaluation(
 	if outcome == saports.SellEvaluationOutcomeInvalid {
 		return saports.SellEvaluationAdoption{}, false, fmt.Errorf("%w: evaluation status %q", ErrUntranslatableAnswer, evaluation.Status())
 	}
+	if outcome == saports.SellEvaluationPending {
+		adoption.PendingCause = pendingCauseOf(evaluation.Issues())
+	}
 	if requested, ok := evaluation.RequestReference(); ok {
 		request, err := sadomain.NewSellEvaluationRequestID(requested.String())
 		if err != nil {
