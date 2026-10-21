@@ -1,7 +1,7 @@
 # 05 NR+NO（network-routing、node-operations）：CONTEXT 写出现行规则、UC 与之一致、矛盾裁清
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dc05（见文末「完成记录」）。此前 in-progress——2026-10-21 认领；原 ready-for-agent——2026-10-21 协调方立（文档自洽修订，见 [README](../README.md)「修订执行」）
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dc05；再此前 in-progress——2026-10-21 认领；原 ready-for-agent——2026-10-21 协调方立（文档自洽修订，见 [README](../README.md)「修订执行」）
 Blocked by: 无（01 进 main 后开工）
 出处：[audit/nr-no.md](../audit/nr-no.md)（nr-no.md）；[02 的完成记录](./02-code-defects-from-the-audit.md)里「交修订票」一表中交给本票的条目；[01](./01-adr-suspension-chains.md) 的「交后续」一节里交给本票的条目。
 
@@ -126,3 +126,10 @@ Blocked by: 无（01 进 main 后开工）
 | 10 | code/33「`domain/` 只有……」穷举不全 | 改为「有的是……等」的不穷举说法，补上关务协作承接、送站预报与预报时窗、身份冲突处置 |
 
 检查：scratchpad 副本上 `go run ./tools/adr-index` 后 `-check` 退 0；改过的 `.md` 相对链接全部解析；全仓 grep 旧的 0251 文件名为 0。
+
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-dc05` tip `d99096267` 在 main `f928c5ba` 上快进；两轮隔离评审的阻断全部消掉（第 2 轮残留的 no-directional-basis/01「现问」口径已加更正）。
+- 协调方随后在 tip 上单独提交：重生成 `docs/adr/README.md`（`go run ./tools/adr-index`）、重算 AT 盘点总览计数（`go run ./tools/at-coverage-counts`）；两者 `-check` 退 0。机制清点重生成无变化。
+- 本票只动文档，`go build ./...` 干净；未跑全量真库测试（无代码改动）。
+- 去向：代码票 code/28、29、33；code/16 已解阻（ADR-0249）。
