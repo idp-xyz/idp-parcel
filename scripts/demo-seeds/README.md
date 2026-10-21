@@ -143,6 +143,12 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
 `manual` 的三口仍归集成客户端族（合成银行与合成报关服务商，`data/access/05`、`06`），两族并存。种子里的资金事实与凭证照旧经受控 CLI 登入，那几行
 两栏答「未记」。查阅员两种都没有，三口都答 403 `OPERATOR_NOT_GRANTED`。证据只记 `S`。
 
+配置员另持运营决定「委托协议换版」（ADR-0231 决定三；票 demo-chain-gaps/88）：授予、对照与权威区间另起 `steps/475-access-commission-agreement-revision.sh`
+一节，数据是 `data/access/11`、`12` 与 `data/governance/48`。种子不换任何委托的版：委托所凭的那一版被收尾（`steps/110` 只收尾种子里没有委托指名的
+`v1`、`v2`）或没声明条件时，由运营人员经 `POST /transport-fulfillment-transport-commission-agreement-revisions` 指名后继与起用时刻；换版之后派发进程
+对采用了这份委托的各段补形成实际履约发生项。采用晚于参与结束的段同样由采用那一笔的门铃补。补不成的那几件（未配置、协议未生效或已终止、缺采购
+上下文）在 `GET /transport-fulfillment-records?registry=actual-fulfillment-unformed`。查阅员没有这一种，换版口答 403 `OPERATOR_NOT_GRANTED`。证据只记 `S`。
+
 单要一枚令牌：`scripts/demo-seeds/operator-channel/operator-token.sh <邮箱>` 打印访问令牌，末尾加 `claims` 打印两枚
 令牌的载荷。它与管理台走同一个公共客户端、同一条 authorization_code + PKCE 流，管理台不必在跑。
 
