@@ -1,6 +1,6 @@
 # ADR-0031: 自有仓储端口的写入结果是封闭代数而不是 error，预期版本由聚合携带
 
-Status: Accepted（**Consequences 登记的 `Insert` 已知缺口已关闭**：入口条件「已经建过了 ≠ 直接译成已有结果」已答为否；`ShipmentRequestInsertOutcome` 承接该格，编排按重放规则重答且不重复追加观察。）  
+Status: Accepted（**Consequences 登记的 `Insert` 已知缺口已关闭**：入口条件「已经建过了 ≠ 直接译成已有结果」已答为否；`ShipmentRequestInsertOutcome` 承接该格，编排按重放规则重答且不重复追加观察。）<!-- 索引注记 -->｜**读法注**（2026-10-21）：Consequences 里说真适配器仍阻断在 Bento 持久化闸门后、「所以本记录今天只落端口、调用点与替身」那一条按 [ADR-0277](./0277-the-parcel-half-of-the-bento-persistence-gate-has-passed-and-registration-still-waits-for-both-consumers.md) 决定三读——闸门此后分 Parcel 半边与登记半边判，Parcel 半边（锁定候选的空缓存下载与 `PBC-01` 至 `PBC-09` 对同一 checksum 全部通过）已过、持久化进生产装配获准，登记 `B-06` 与宣称闸门通过仍在后；本句是写下时的现状，无条款停用  
 Date: 2026-08-11
 
 ## Context
@@ -81,3 +81,4 @@ Date: 2026-08-11
 - [ADR-0025：跨上下文调用的适配器落在消费侧，翻译职责由它独占](./0025-cross-context-adapters-live-on-the-consumer-side.md)：「翻译必须是全函数」按字面够不到自有端口，本记录取用的是它的理由而非它的适用范围
 - [ADR-0017：实现准入闸门按阻断理由分别裁决](./0017-admission-gates-judged-by-blocking-cause.md)：真适配器仍阻断其后，本记录只落机制半边
 - [Go 首个消费者切片决策简报](../design/parcel-go-first-consumer-slice-decision-brief.md)：`PBC-02` 的乐观版本冲突与 `PBC-04` 的并发重复要求所在处
+- [ADR-0277](./0277-the-parcel-half-of-the-bento-persistence-gate-has-passed-and-registration-still-waits-for-both-consumers.md)：读法注——Consequences 里真适配器仍阻断在 Bento 持久化闸门后那一条按其决定三读，无条款停用

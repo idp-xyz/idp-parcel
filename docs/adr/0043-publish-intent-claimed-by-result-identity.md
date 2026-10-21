@@ -1,6 +1,6 @@
 # ADR-0043: 发布意图由结果标识认领，重放重发同一份——事务发布落地前的统一缝形
 
-Status: Accepted  
+Status: Accepted<!-- 索引注记 -->｜**读法注**（2026-10-21）：决定四「实际投递、outbox 与事务发布仍归闸门」按 [ADR-0277](./0277-the-parcel-half-of-the-bento-persistence-gate-has-passed-and-registration-still-waits-for-both-consumers.md) 决定三读——闸门此后分 Parcel 半边与登记半边判，Parcel 半边（锁定候选的空缓存下载与 `PBC-01` 至 `PBC-09` 对同一 checksum 全部通过）已过、持久化进生产装配获准，登记 `B-06` 与宣称闸门通过仍在后；本句是写下时的现状，无条款停用  
 Date: 2026-08-12
 
 ## Context
@@ -37,3 +37,4 @@ Bento 持久化闸门挡住事务发布与 outbox（[ADR-0017](./0017-admission-
 - [ADR-0031：自有仓储端口的写入结果是封闭代数而不是 error](./0031-owned-repository-write-outcome-is-a-closed-algebra-not-an-error.md)：与本记录在同一条提交边界上互补
 - [UC-PS-002](../application/parcel-shipment/UC-PS-002-AMEND-CUSTOMER-SOURCE-DATA.md)（`AT-PS-031`）、[UC-PS-001](../application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md)（`AT-PS-013`）、[UC-NR-002](../application/network-routing/UC-NR-002-ASSESS-PARCEL-REACHABILITY.md)（`AT-NR-030`）：三个样本的验收出处
 - [开发主线：机制半边现状](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md#横切缺口不属任何单一切片)：「无事件机制」一行随本记录更新
+- [ADR-0277](./0277-the-parcel-half-of-the-bento-persistence-gate-has-passed-and-registration-still-waits-for-both-consumers.md)：读法注——决定四「实际投递、outbox 与事务发布仍归闸门」按其决定三读，无条款停用

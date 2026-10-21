@@ -1,6 +1,6 @@
 # ADR-0025: 跨上下文调用的适配器落在消费侧，翻译职责由它独占
 
-Status: Accepted<!-- 索引注记 -->｜**部分停用**：其 Decision 中「适配器为此需要的实例半边协作者，其接口定义在适配器包内，**不进消费方 `ports`**」一句已由 [ADR-0027](./0027-multi-step-cross-context-protocol-state-held-by-the-provider.md) 停用——该协作者已由提供方以第二阶段用例提供，适配器直接调用，不另定接口。**适用场景**：仅限跨上下文多步协议；其余各条不变。  
+Status: Accepted<!-- 索引注记 -->｜**部分停用**：其 Decision 中「适配器为此需要的实例半边协作者，其接口定义在适配器包内，**不进消费方 `ports`**」一句已由 [ADR-0027](./0027-multi-step-cross-context-protocol-state-held-by-the-provider.md) 停用——该协作者已由提供方以第二阶段用例提供，适配器直接调用，不另定接口。**适用场景**：仅限跨上下文多步协议；其余各条不变。｜**读法注**（2026-10-21）：Consequences「**本记录不解除任何闸门。**」一条里说两边的持久化与事件发布仍阻断于 Bento 闸门那半句按 [ADR-0277](./0277-the-parcel-half-of-the-bento-persistence-gate-has-passed-and-registration-still-waits-for-both-consumers.md) 决定三读——闸门此后分 Parcel 半边与登记半边判，Parcel 半边（锁定候选的空缓存下载与 `PBC-01` 至 `PBC-09` 对同一 checksum 全部通过）已过、持久化进生产装配获准，登记 `B-06` 与宣称闸门通过仍在后；本句是写下时的现状，无条款停用；「本记录不解除任何闸门」本身照旧成立  
 Date: 2026-08-11
 
 ## Context
@@ -57,3 +57,4 @@ Date: 2026-08-11
 - [ADR-0022：HTTP 状态码只回答「有没有形成答案」，业务判别一律进响应体](./0022-http-status-carries-answer-formed-not-business-verdict.md)：入站适配器的同类分界——传输层不比应用层多知道什么，本记录把同一条用在跨上下文出站一侧
 - [UC-PC-002：按范围与时点解析商业依据](../application/party-commercial/UC-PC-002-RESOLVE-COMMERCIAL-BASIS.md)：两阶段契约与步骤 6「消费方形成 `asOf` 值」的出处
 - [上下文地图](../domain/CONTEXT-MAP.md)：九个限界上下文与它们之间的关系，本记录规定这些关系在代码里的落法
+- [ADR-0277](./0277-the-parcel-half-of-the-bento-persistence-gate-has-passed-and-registration-still-waits-for-both-consumers.md)：读法注——Consequences 里持久化与事件发布仍阻断于 Bento 闸门那半句按其决定三读，无条款停用
