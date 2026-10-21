@@ -1,7 +1,7 @@
 # 94 派送出发之前问一次交付门禁
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg146（2026-10-21 Claude Code 作者子代理，变基到 main `b290b777`；见文末「完成记录」）。此前 in-progress——2026-10-21 认领（146、94 同批），分支 claude-dcg146。此前 ready-for-agent——2026-10-20 代决复核升为上线前必修（R14），见 [owner-review-20261020](../../owner-review-20261020/report.md)。此前 needs-triage——2026-10-19 Claude Code 作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [66](./66-effective-delivery-records-a-final-delivery-gate-reading.md) 的完成记录。
+Status: in-progress——评审两条阻断已修，待复审与进 main，分支 claude-dcg146（2026-10-21，见文末「评审记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg146（2026-10-21 Claude Code 作者子代理，变基到 main `b290b777`；见文末「完成记录」）。此前 in-progress——2026-10-21 认领（146、94 同批），分支 claude-dcg146。此前 ready-for-agent——2026-10-20 代决复核升为上线前必修（R14），见 [owner-review-20261020](../../owner-review-20261020/report.md)。此前 needs-triage——2026-10-19 Claude Code 作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [66](./66-effective-delivery-records-a-final-delivery-gate-reading.md) 的完成记录。
 Blocked by: [66](./66-effective-delivery-records-a-final-delivery-gate-reading.md)（读数内核与 `DeliveryGateReader` 随它进 main）
 地盘：TF 新 `application/preview_delivery_gate.go`（复用 `DeliveryGateReader` 取 at 的那一步）、新 tfhttp 问询口；新 `cmd/parcel-api/assemble_delivery_gate_preview.go` + `endpoints.go` 一行（装配令牌）；文档 UC-TF-006 AT、ADR（号认领时由协调方给）。
 出处：[ADR-0213](../../../docs/adr/0213-a-transport-handover-declares-its-releasing-receiving-and-onward-nodes.md) 文末「补记：票 66 落决定五时的补充裁定」越权风险点 20；先例 [ADR-0219](../../../docs/adr/0219-a-device-previews-the-departure-gate-before-departing-and-reads-what-the-departure-will-record.md)（设备出发前门禁问询）。
@@ -73,6 +73,7 @@ M
 - 7：不记谁问过（TF owner、VE owner）。
 - 8：拟交付时点是预计、段按此刻取，同参条件很少严格成立（TF owner）。
 - 9：CC 文档的请求时机一句没补，票 165（CC owner）。
+- （评审修订补）4、5 指向票 172（判断册增长）；6、7 指向票 171（按作业范围或派送指派限对象并留痕）。
 
 ### 用例
 
@@ -99,3 +100,15 @@ M
 - **票面地盘之外**：`application/register_effective_delivery.go` 抽出 `deliveredObjectFrom`（受理同一处）、`ports/delivery_gate.go` 包头一句、`adapters/http/work_fact_intake.go` 加一个方法与 Intake 断言；共用文档 GLOSSARY、CONTEXT-MAP 各补一句。
 - **待 owner 复核**：上列代决与越权风险点，尤其是代决 1（挂在设备出发前）、越权风险点 6（任一件是否被扣可零成本探知）与 8（同参条件很少严格成立）。
 - **无被权限检查拦下的改动。**
+
+## 评审记录（2026-10-21，隔离评审；作者子代理修订，分支 `claude-dcg146`，与票 146 同批，main 仍是 `b290b777`）
+
+两条阻断都在票 146（见那张票面的「评审记录」）；本票只有顺手各条，全办。
+
+- **3**：`application/preview_delivery_gate_test.go` 首条用例注释「问询不读派送尝试，见本文件末一条用例」已指错（末一条是 `TestADeliveryPreviewThatCannotBeAcceptedAsksNothing`），改用符号名 `TestADeliveryPreviewWritesNothingAndIsNotHandedToTheDelivery`（提交 `45fc6441`）。
+- **4**：`adapters/http/work_fact_intake.go` 的 `IntakeDeliveryGatePreview` 注释「只收两格的 DeliveryGatePreviewPayload」数了别的文件的字段，改成「只收读数取决于的那几格」（同上）。
+- **5**：`cmd/parcel-api/transport_fulfillment_command_lines_test.go` 补 `/transport-fulfillment/delivery-gate-previews` 一行，与出发前问询那一行对等：越过 Intake 答 200 `DELIVERY_GATE_PREVIEWED`（合成对象不在任何段里，读数停在本侧），自报 `tenantId` 答 400 `MALFORMED_REQUEST`、不带 outcome（同上；`-v` 确认子用例 PASS）。
+- **6**：立票 [171](./171-gate-previews-are-scoped-to-the-asking-devices-work-and-leave-a-trace.md)——两种问询一起按作业范围或派送指派限对象，并在本上下文留痕（指向 ADR-0219 越权风险点 6、ADR-0237 越权风险点 2、ADR-0238 越权风险点 6、7）；ADR-0238 越权风险点 6、7 改写并指向它。
+- **7**：立票 [172](./172-customs-judgement-register-grows-with-every-gate-preview.md)——关务判断册的保留期与限流（问询按件、时点按微秒入标识，恶意设备可无限增长）；ADR-0238 越权风险点 4、5 指向它（提交 `1962d6b1`）。
+- **随票 146 的 B1 一并动到本票代码的**：交付读数取 at 时认进段交接的那一段收成共用的 `entryHandoverOf`（`application/entry_handover.go`），端口 `ports.DeliveryGateEntryHandoverView` 改名 `ports.EntryHandoverView`。交付读数的行为与停点不变，交付编排与线格式用例原样全过。
+- **验证**：同票 146 评审记录「评审修订后的验证」，同一跑。

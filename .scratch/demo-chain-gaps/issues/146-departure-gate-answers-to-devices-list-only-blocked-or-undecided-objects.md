@@ -1,7 +1,7 @@
 # 146 出发前问询与出发两口向设备逐对象列出段内全部对象
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-dcg146（2026-10-21 Claude Code 作者子代理，变基到 main `b290b777`；见文末「完成记录」）。此前 in-progress——2026-10-21 认领（146、94 同批），分支 claude-dcg146。此前 ready-for-agent——2026-10-20 代决复核立（上线前必修），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: in-progress——评审两条阻断已修，待复审与进 main，分支 claude-dcg146（2026-10-21，见文末「评审记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg146（2026-10-21 Claude Code 作者子代理，变基到 main `b290b777`；见文末「完成记录」）。此前 in-progress——2026-10-21 认领（146、94 同批），分支 claude-dcg146。此前 ready-for-agent——2026-10-20 代决复核立（上线前必修），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 R11；ADR-0219 越权风险点 5（连带 ADR-0205 越权风险点 13）
 
@@ -35,6 +35,7 @@ Blocked by: 无
 4. 判法放在领域投影一处，各口线格式只经它取：决定三。
 5. 落册、重放回显、信封、VE 与运营查阅不收窄：决定三。
 6. 判法归产品策略（替所有租户定），投影与线格式归机制，没有租户取值：三类一段。
+7. （评审修订补）出发意图的起讫与声明的段绑定——班次起讫要就是段里在控各件进段那次`已交接`声明的交出、去向节点，两格都要声明，对不上或说不出就停在本侧、不问关务：决定五，越权风险点 7–11。见文末「评审记录」B1。
 
 ### 越权风险点
 
@@ -46,6 +47,7 @@ Blocked by: 无
 - 4：放行的对象不列，设备无从对账段里问了哪几件（TF owner、一线客户端 owner）。
 - 5：`members: []` 的含义从「空袋」变为「没有同样列出的成员」（TF owner、NO owner）。
 - 6：单件读数也收窄，答复里那一件放行时没有逐对象那一格（TF owner）。
+- 7–11（评审修订补）：交接漏声明节点的段出发不问关务；只核节点不核班次身份；交接声明错了出发就停在本侧（段内多站同样对不上）；每件多读一次交接册；存量读数不回补（TF owner、一线客户端 owner、运维）。越权风险点 2、3 同时改写：剩余暴露改指段自己的方向（跨区段、票 147 之后的未登区域节点），后继票 171。
 
 ### 用例
 
@@ -80,3 +82,48 @@ Blocked by: 无
 - **票面地盘之外**：交出与交付两种读数的答复视图（`register_transport_handover.go`、`register_effective_delivery.go`）也经同一判法收窄，见代决 3；对应的既有用例随之改。
 - **待 owner 复核**：上列代决与越权风险点，尤其是代决 1（读不动也列）与越权风险点 2（剩余暴露）。
 - **无被权限检查拦下的改动。**
+
+## 评审记录（2026-10-21，隔离评审；作者子代理修订，分支 `claude-dcg146`，main 仍是 `b290b777`，未变基）
+
+阻断 2 项，都修了；顺手 7 项全办（3–5 是票 94 的代码与用例，6、7 立票）。
+
+### 阻断
+
+**B1——146 没堵住 R11：设备给一段境内段配一班跨区班次，段里每件都答未决、都回给设备。** 修了，走的是评审给的第一条路：就在本票把出发意图的起讫与声明的段绑定。
+
+- **为什么走这条**：绑定只用本上下文自己的事实（各件进段那次`已交接`声明的交出、去向节点，ADR-0213 决定一），认进段交接的认法交付读数早已有一份，抽成一处共用即可；改动是领域一个判法、三种停点、一口端口（原交付专用名改成共用名）、装配一处，加测试夹具，没有迁移（停点存在 jsonb 明细里，读回的封闭集随领域加三格）、没有新信封，出发登记与问询走的本就是同一条读数路径，两口一处改。评审给的另一种做法「起讫改从进段交接取」没取：要停用 ADR-0205 决定二「起讫取班次方向」的权威来源，而段里各件的进段交接可以各不相同、一份读数只有一对起讫，还得另立「取哪一件的」规则；核对只在对不上时不问，保住了既有口径。退回最低限度那条路（票 166、改完成记录为「R11 未完全满足」）没有走，166 未用。
+- **修法**（提交 `b471feb6`）：
+  - 领域：`DepartureEntryStops`——段里出发那一刻在控的每一件，进段交接声明的交出节点要是班次起点、去向节点要是班次终点；对不上停在 `SCHEDULE_NOT_SERVING_SEGMENT`（未决），说不出（凭收寄进段、没声明那两格、交接在册上认不出）停在 `SEGMENT_ENTRY_NODES_UNKNOWN`（未决），交接册读不动停在 `HANDOVER_REGISTRY_UNAVAILABLE`（读不动）。`ActualFulfillmentSegment.ParticipationsUnderControlAt` 交回在控那几件的参与，与 `ObjectsUnderControlAt` 同一口径（后者改为经它取）。
+  - 应用：出发读数在问集运成员关系与关务之前核；认进段交接收成 `entryHandoverOf`（新文件 `application/entry_handover.go`），交付读数取 at 也改走它，行为不变。
+  - 端口：`ports.DeliveryGateEntryHandoverView` 改名 `ports.EntryHandoverView`，挪到新文件 `ports/entry_handover.go`；出发读数编排多一口交接登记册，`buildDepartureGateReader` 接真交接登记册。
+  - 只核节点、不核班次身份：同方向改搭别班照样核得过。
+- **用例**：
+  - 编排：新 `application/read_departure_gate_entry_test.go`——对不上、两件里一件对不上、没声明去向、一格都没声明、一件说不出一件对不上、凭收寄进段、交接在册上认不出、交接册读不动，八种都停在本侧、不问成员关系与关务、回给设备一件不列，出发登记与问询同答；对得上的照问关务。
+  - 领域与库面：停点各属一格的表加三种；停点往返用例加两条带新停点的读数。
+  - 真库：`cmd/parcel-api/departure_gate_executor_scope_test.go::TestPairingASegmentWithAnotherSchedulesDirectionNoLongerWidensTheReading` 复现评审 PoC——同一段境内段装两个客户的包裹，照种子登深圳→新加坡那一班；按本班问答不受门禁、一件不列；改配跨区班次问答未决、停在 `SCHEDULE_NOT_SERVING_SEGMENT`、一件不列、整库指纹不变（连关务都没问）；照这么配登出发 201、读数同停、库面没有逐对象那一格；交接没声明节点的段停在 `SEGMENT_ENTRY_NODES_UNKNOWN`、一件不列。
+- **变异实测**：把出发读数里的绑定拆掉（`entryStops` 的结果丢弃），上面的真库用例与编排用例都变红；真库用例的失败输出正是 PoC 那一份：`{"answer":"UNDECIDED","from":"SYN-NODE-SZX-GATE","to":"SYN-NODE-SIN-HUB","objects":[{"object":"SYN-PARCEL-146-POC-CUST-A","answer":"UNDECIDED"},{"object":"SYN-PARCEL-146-POC-CUST-B","answer":"UNDECIDED"}]}`。复原后全绿。
+- **随行为变的既有用例**（不是放宽）：出发读数现在要进段交接声明了两格才问关务，所以几处夹具照演示动线的样子声明交出、去向节点——编排的 `departureSegments`（改为由声明了 NODE-SHA → NODE-SZX 的`已交接`立段，另给交接册替身）、tfhttp 的 `movementGateReaderOver`、`cmd/parcel-api` 的 `departureLine.handOver`（声明 SYN-NODE-SHA-HUB → SYN-NODE-SZX-GATE，另开 `handOverDeclaring`）、`assemble_movement_fact_test.go` 里手装读数编排那一处补交接册；`TestAMisansweringCustomsViewIsAnErrorAndMissingDependenciesAreRefused` 补「缺交接册那一口也装得起来」一支。
+- **文档**（提交 `6a5a4f50`）：ADR-0237 补决定五、候选与反方、对已接受记录的作用（部分停用 ADR-0205 决定二的停点名单；ADR-0219 读数另取决于交接登记册、无条款停用），越权风险点 2、3 改写，补 7–11；ADR-0205、0219 的 Status 与 Links 指针随改。TF CONTEXT「实际移动与出发门禁读数」加一条；UC-TF-005 `AT-TF-114`、`AT-TF-319` 补写这一格，不占新号；演示脚本补记与 AT 盘点两行补点名。剩余暴露（段自己确是跨区、票 147 之后起讫有未登区域节点时仍全列，且问的人可以是任一场外设备）立票 171。
+
+**B2——权威文档把重放回显写成了不收窄。** 修了（提交 `6a5a4f50`）：TF CONTEXT 那一条、ADR-0237 决定三与 Status 行三处都改成「重放回显的是首次读数，回给设备时同样只列没得出放行的」，重放回显从「不收窄的读者」里拿掉。
+
+### 顺手
+
+3. `preview_delivery_gate_test.go` 首条用例注释的「本文件末一条用例」改指 `TestADeliveryPreviewWritesNothingAndIsNotHandedToTheDelivery`（票 94，提交 `45fc6441`）。
+4. `work_fact_intake.go` 的 `IntakeDeliveryGatePreview` 注释不再数别的文件的字段（同上）。
+5. `cmd/parcel-api/transport_fulfillment_command_lines_test.go` 补 `/transport-fulfillment/delivery-gate-previews` 一行：越过 Intake 答 200 `DELIVERY_GATE_PREVIEWED`（对象不在任何段里、停在本侧），自报 `tenantId` 答 400（同上）。
+6. 立票 [171](./171-gate-previews-are-scoped-to-the-asking-devices-work-and-leave-a-trace.md)：两种问询一起按作业范围或派送指派限对象，并在本上下文留痕；ADR-0237 越权风险点 2、ADR-0238 越权风险点 6、7 指向它。
+7. 立票 [172](./172-customs-judgement-register-grows-with-every-gate-preview.md)：关务判断册随问询增长，保留期与限流；ADR-0238 越权风险点 4、5 指向它（提交 `1962d6b1`）。另在票 147 追加一节，写明它落地之后与门禁读数收窄的交互。
+
+### 未采纳
+
+- 评审的退回路线（票 166、改写 R11 满足度）：主路线走通了，不需要。
+- 「起讫改从进段交接取」：见 B1「为什么走这条」。
+- 在本票里按作业范围限问询的对象：段与派送任务今天没有作业范围归属，要先定指派从哪来，归票 171。
+
+### 评审修订后的验证（实测，只记 `S`）
+
+- `go build ./...`、`go vet ./...` 通过，`gofmt -l internal cmd migrations` 干净；两笔代码提交（`b471feb6`、`45fc6441`）各自在 `git archive` 出的干净目录里 `go build ./... && go vet ./...` 通过。
+- `scripts/test-full.sh ./internal/transportfulfillment/... ./cmd/parcel-api/... ./cmd/parcel-dispatch/... ./cmd/parcel-transport-register/... ./internal/visibilityexception/... ./internal/architecture/... ./migrations/...`：32 包全 ok、0 FAIL（输出存 `/tmp/claude-1000/-home-tops-workspace-idp-parcel/0d01979a-68c3-4b61-b295-1b04bc643b8b/scratchpad/dcg146/test-run-review.txt`）。
+- `-v` 确认新真库用例 PASS；变异实测见 B1。
+- 没跑全量，没重生成机制清点、ADR 索引与 AT 计数；无迁移；无被权限检查拦下的仓库改动（scratchpad 里一条带变量路径的清理命令被安全检查拦下，没有执行，改用字面路径清理）。
