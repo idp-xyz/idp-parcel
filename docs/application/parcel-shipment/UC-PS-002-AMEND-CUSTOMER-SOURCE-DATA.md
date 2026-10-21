@@ -118,7 +118,7 @@
 | 请求冲突 | `SOURCE_CONFLICT` | 同一请求身份携带不同内容、范围、基准或资料适用时间（`requestEffectiveAt`） | 原请求、冲突字段和纠正入口 | 不得把 `occurredAt`/`receivedAt` 的变化当作冲突，也不得按最后到达覆盖 |
 | 未决 | `UNDECIDED` | 授权服务、阶段事实或允许声明读不回，授权规则未登记，资料修订阶段判不出，或本方的版本提交、标识签发、下游交接没有落成（[ADR-0256](../../adr/0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md)） | 未决原因与续办引用，例如 `SOURCE_DATA_AMENDMENT_AUTHORITY_UNAVAILABLE`、`SOURCE_DATA_AMENDMENT_AUTHORITY_RULES_NOT_CONFIGURED`、`SOURCE_DATA_AMENDMENT_STAGE_UNDETERMINED`、`SOURCE_DATA_AMENDMENT_STAGE_FACT_UNAVAILABLE`、`SOURCE_DATA_RULE_UNAVAILABLE`、`AMENDED_REQUEST_NOT_SAVED`、`SOURCE_DATA_VERSION_NOT_HANDED_OFF` | 不得返回已采用或业务拒绝；依赖答不出不交人工复核，授权规则未登记不答未获授权 |
 
-下面两种不是资料修订编排的结果，在接入与 HTTP 层作答：
+输入未受理与统一不可见不是资料修订编排的结果，在接入与 HTTP 层作答：
 
 | 情形 | 作答 | 禁止行为 |
 |---|---|---|

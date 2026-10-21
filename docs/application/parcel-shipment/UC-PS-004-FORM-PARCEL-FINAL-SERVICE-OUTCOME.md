@@ -132,7 +132,7 @@
 - 否则须当前受控关闭已经生效且未被重开——受控关闭本身只把包裹级继续尝试判断派生为不允许新增尝试，不是终局；全部相关面单交易均已定案，结果待确认的交易不得按失败处理；不存在仍可使用的面单结果——本包裹被受理且未渠道作废、未依据接受时固定的有效期规则不可逆失效的成功继续阻止终局。到这里：从未有过成功结果形成终局失败结果；有过成功但均已作废或不可逆失效形成终局服务结果。
 - 渠道退款、对账、运营结算不作为前置条件。有效期规则是接受时固定的实例参数，未配置时不按时钟推算失效。
 - 判断结果作为责任结果进入「应用流程」一节的采用流程：终局类型与规则版本仍由 `party-commercial` 的终局规则声明给出（`PAR-COM-17`）；提供方尚未声明面单渠道服务两格时保持终局未决，不默认「首次收寄即所有面单产品终局」。
-- 面单服务终局判断编排（`JudgeLabelServiceFinalHandler`）的结果：`LABEL_SERVICE_FINAL_ADOPTED`（判出终局并交采用，采用本身的结果读上面的结果表）、`LABEL_SERVICE_NOT_FINAL`（带 `CONTINUED_ATTEMPT_STILL_OPEN`、`LABEL_TRANSACTION_NOT_FINALIZED` 或 `USABLE_LABEL_RESULT_OUTSTANDING`）、`CANCELLATION_STANDS`（有效取消在先）、`REQUEST_NOT_ACCEPTED`、`JUDGMENT_UNDECIDED`（交易、继续尝试登记、取消或有效期规则读不回，原因各占一格）。
+- 面单服务终局判断编排（`JudgeLabelServiceFinalHandler`）的结果：`LABEL_SERVICE_FINAL_ADOPTED`（判出终局并交采用，采用本身的结果读「结果语义契约」）、`LABEL_SERVICE_NOT_FINAL`（带 `CONTINUED_ATTEMPT_STILL_OPEN`、`LABEL_TRANSACTION_NOT_FINALIZED` 或 `USABLE_LABEL_RESULT_OUTSTANDING`）、`CANCELLATION_STANDS`（有效取消在先）、`REQUEST_NOT_ACCEPTED`、`JUDGMENT_UNDECIDED`（交易、继续尝试登记、取消或有效期规则读不回，原因各占一格）。
 
 ## 一致性、幂等与并发
 
