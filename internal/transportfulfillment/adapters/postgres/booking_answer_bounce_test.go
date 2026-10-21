@@ -317,9 +317,9 @@ func TestTwoConcurrentIdenticalBouncesCountTwiceOnOneRow(t *testing.T) {
 	}
 }
 
-// Covers: 迁移 0050 的拒绝门——订舱册、答复册或承运总单里有超过字节界的订舱标识或答复标识时不施加：界立起来之后，这样的行从
+// Covers: 迁移 0047 的拒绝门——订舱册、答复册或承运总单里有超过字节界的订舱标识或答复标识时不施加：界立起来之后，这样的行从
 // 门里读不回来，不替任何人截短。答复依据不受界，长的答复依据不挡迁移（走过拒绝门、撞上已建的表）。
-func TestMigration0050RefusesStoredReferencesOverTheByteBound(t *testing.T) {
+func TestMigration0047RefusesStoredReferencesOverTheByteBound(t *testing.T) {
 	pool := pgtest.Pool(t)
 	ctx := t.Context()
 	assets, err := migrations.TransportFulfillment()
@@ -328,12 +328,12 @@ func TestMigration0050RefusesStoredReferencesOverTheByteBound(t *testing.T) {
 	}
 	var bounceRegister string
 	for _, asset := range assets {
-		if strings.HasPrefix(asset.Name, "0050_") {
+		if strings.HasPrefix(asset.Name, "0047_") {
 			bounceRegister = asset.SQL
 		}
 	}
 	if bounceRegister == "" {
-		t.Fatal("找不到迁移 0050")
+		t.Fatal("找不到迁移 0047")
 	}
 	long := strings.Repeat("A", 513)
 	answerRow := func(acceptance, basis string) string {
@@ -363,7 +363,7 @@ func TestMigration0050RefusesStoredReferencesOverTheByteBound(t *testing.T) {
 		_ = tx.Rollback(context.Background())
 		refused := err != nil && strings.Contains(err.Error(), "超过 512 字节")
 		if refused != testCase.refused || err == nil {
-			t.Fatalf("%s 超长时 0050：%v，want 拒绝门%v", name, err, map[bool]string{true: "拦下", false: "放过"}[testCase.refused])
+			t.Fatalf("%s 超长时 0047：%v，want 拒绝门%v", name, err, map[bool]string{true: "拦下", false: "放过"}[testCase.refused])
 		}
 	}
 }

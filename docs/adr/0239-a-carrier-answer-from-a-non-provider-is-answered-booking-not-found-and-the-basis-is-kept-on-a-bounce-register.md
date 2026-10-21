@@ -1,6 +1,6 @@
 # ADR-0239：不是本服务方的承运答复答订舱不在册——对外与订舱不在册同一格同一副响应，挡回依据与答复同笔记进承运答复挡回册，两条挡回路做一样多的事
 
-Status: Accepted（2026-10-21，Claude Code 会话代决：用户 2026-10-20 原话「要我裁定的部分，你作为业务和系统专家，请你自决吧」，另有常设指令「你作为业务和系统专家自决……解决所有的问题」；代决复核报告 `.scratch/owner-review-20261020/report.md` 的 R9 裁「否」，票 demo-chain-gaps/145。回答 [ADR-0202](./0202-transport-commission-booking-and-carrier-answer-entry-families-and-supplier-agreement-check.md) 越权风险点 14；部分停用 ADR-0202 文末补记「承运答复的次序与格」一条里 `SOURCE_NOT_SERVICE_PROVIDER` 那一格（被停原句与适用场景见 ADR-0202 的 Status 行）。ADR-0202 正文不改，只在其 Status 行与 Links 加前向指针。越权风险点见文末，待 TF owner 复核，第 1 点知会接入身份 owner。）<!-- 索引注记 -->｜**已接受**（2026-10-21，用户原话「你作为业务和系统专家自决」，Claude Code 会话代 TF owner 裁定；票 demo-chain-gaps/145）。**对外一格**：承运答复口对答复方不是订舱所属委托服务提供方的答复答 `BOOKING_NOT_FOUND`（200），与订舱在本租户下不在册同一格、响应体逐字相同；`SOURCE_NOT_SERVICE_PROVIDER` 退出线格式，应用层结果里也不留这一格；续办同是找租户核对；来源核对仍在重放之前。**对内分清**：TF 立承运答复挡回册（迁移 0050），（租户，答复方来源身份，订舱，答复标识，依据）一行，依据封闭两值（订舱不在册、不是服务提供方）存成定宽码，记首末挡回时刻与次数，同键再来只加次数；与那一次答复同笔，写不动答未决、整笔回滚，不答订舱不在册；台账不形成答复、不妨碍订舱录入之后的正当答复、不存报文内容；不叫「拒收」「不受理」，两词在 TF 已有别义，TF CONTEXT 立「承运答复挡回」词条。**一样多的事**：订舱连同委托的服务提供方一条语句读回，两条挡回路都是一读一写、写的键等长；订舱标识与答复标识设 512 字节界，超界在查库之前答`未受理`，两条路一样，迁移 0050 遇已有超界行拒绝施加；TF 命令载荷限读 1 MiB、超限答坏报文；读不动同答 `BOOKING_STORE_UNAVAILABLE`、册写不动同答 `ANSWER_STORE_UNAVAILABLE`，答复口不再单读委托，剩下的差别只有时差。部分停用 ADR-0202 补记那一格。越权风险点含挡回册没有查阅面（票 167）、剩余时差、数据违约 500 仍暴露存在、册无保留期与聚合（票 170）、未决借答复册的名、不存报文内容、字节界是产品常量、限读作用于 TF 全部命令口、键长余量靠租户与来源身份短，待 TF owner 复核
+Status: Accepted（2026-10-21，Claude Code 会话代决：用户 2026-10-20 原话「要我裁定的部分，你作为业务和系统专家，请你自决吧」，另有常设指令「你作为业务和系统专家自决……解决所有的问题」；代决复核报告 `.scratch/owner-review-20261020/report.md` 的 R9 裁「否」，票 demo-chain-gaps/145。回答 [ADR-0202](./0202-transport-commission-booking-and-carrier-answer-entry-families-and-supplier-agreement-check.md) 越权风险点 14；部分停用 ADR-0202 文末补记「承运答复的次序与格」一条里 `SOURCE_NOT_SERVICE_PROVIDER` 那一格（被停原句与适用场景见 ADR-0202 的 Status 行）。ADR-0202 正文不改，只在其 Status 行与 Links 加前向指针。越权风险点见文末，待 TF owner 复核，第 1 点知会接入身份 owner。）<!-- 索引注记 -->｜**已接受**（2026-10-21，用户原话「你作为业务和系统专家自决」，Claude Code 会话代 TF owner 裁定；票 demo-chain-gaps/145）。**对外一格**：承运答复口对答复方不是订舱所属委托服务提供方的答复答 `BOOKING_NOT_FOUND`（200），与订舱在本租户下不在册同一格、响应体逐字相同；`SOURCE_NOT_SERVICE_PROVIDER` 退出线格式，应用层结果里也不留这一格；续办同是找租户核对；来源核对仍在重放之前。**对内分清**：TF 立承运答复挡回册（迁移 0047），（租户，答复方来源身份，订舱，答复标识，依据）一行，依据封闭两值（订舱不在册、不是服务提供方）存成定宽码，记首末挡回时刻与次数，同键再来只加次数；与那一次答复同笔，写不动答未决、整笔回滚，不答订舱不在册；台账不形成答复、不妨碍订舱录入之后的正当答复、不存报文内容；不叫「拒收」「不受理」，两词在 TF 已有别义，TF CONTEXT 立「承运答复挡回」词条。**一样多的事**：订舱连同委托的服务提供方一条语句读回，两条挡回路都是一读一写、写的键等长；订舱标识与答复标识设 512 字节界，超界在查库之前答`未受理`，两条路一样，迁移 0047 遇已有超界行拒绝施加；TF 命令载荷限读 1 MiB、超限答坏报文；读不动同答 `BOOKING_STORE_UNAVAILABLE`、册写不动同答 `ANSWER_STORE_UNAVAILABLE`，答复口不再单读委托，剩下的差别只有时差。部分停用 ADR-0202 补记那一格。越权风险点含挡回册没有查阅面（票 167）、剩余时差、数据违约 500 仍暴露存在、册无保留期与聚合（票 170）、未决借答复册的名、不存报文内容、字节界是产品常量、限读作用于 TF 全部命令口、键长余量靠租户与来源身份短，待 TF owner 复核
 
 Date: 2026-10-21
 
@@ -27,7 +27,7 @@ Date: 2026-10-21
 
 **二、对内分清：承运答复挡回册。**（机制）
 
-- TF 立承运答复挡回册（迁移 transport_fulfillment `0050`）。一行是（租户，答复方来源身份，订舱，答复标识，依据），记首次与最近一次挡回时刻、次数。
+- TF 立承运答复挡回册（迁移 transport_fulfillment `0047`）。一行是（租户，答复方来源身份，订舱，答复标识，依据），记首次与最近一次挡回时刻、次数。
   - 依据封闭两值：`BOOKING_NOT_REGISTERED`（载荷指名的订舱在本租户下不在册）、`SOURCE_NOT_SERVICE_PROVIDER`（订舱在册，答复方不是它所属委托的服务提供方）。库里存定宽码（1、2），理由见决定三。
   - 订舱与答复标识照载荷原样记；答复方取集成客户端绑定的来源身份。
   - 时刻是本上下文记下它的时刻，不是答复方给的答复时刻。
@@ -47,7 +47,7 @@ Date: 2026-10-21
 - **字节界**：订舱标识与承运答复标识各以 512 字节为界（UTF-8 字节，`domain.ErrValueTooLongToStore`）。先例是 parcel-shipment 外部标识号码的字节界。只给进键的两个标识设界：答复依据不进任何键、不进挡回册，只在服务方那条路、来源核对之后才判，与合并掉的那一位无关，照旧只过既有构造门（非空、无 NUL）；给它设界只会让一格可能装自由文本的值约 171 个汉字就被拒。
   - 界在构造门上，构造门排在查库之前：超界答`未受理`（200），两条路一样，一次库都不碰。这与 TF 对全空白、带 NUL 的值是同一个先例——存不进去的输入在构造期答「改输入」。
   - 界让挡回册、订舱册与答复册的键都落在索引上限之下，两条路都写得进。写失败只剩依赖故障一种，超长标识也不再永远答「未决，稍后再交」。
-  - 界只由领域构造门守，库上不另加 CHECK，与 parcel-shipment 那道界同一先例。界立起来之前已经落库、超过界的行，此后从门里读不回来，所以迁移 0050 遇到这样的行拒绝施加，不替任何人截短一个标识。
+  - 界只由领域构造门守，库上不另加 CHECK，与 parcel-shipment 那道界同一先例。界立起来之前已经落库、超过界的行，此后从门里读不回来，所以迁移 0047 遇到这样的行拒绝施加，不替任何人截短一个标识。
 - **载荷限读**：TF 各命令口的载荷经同一个解码门（`decodeClosedPayload`）读，限读 1 MiB，超限答坏报文（400），先例是各上下文登记口的读取上限。它是字节界之前的第一道闸，不让一个调用方把整段请求读进内存。
 - **未决原因**：读不动两条路都答 `BOOKING_STORE_UNAVAILABLE`，册写不动都答 `ANSWER_STORE_UNAVAILABLE`。答复口不再单读委托，`COMMISSION_STORE_UNAVAILABLE` 在这一口不再出现。
 - 有了这几条，两条路的状态、响应体与未决原因都相同，剩下的差别只有时差一格。不加人为延时，也不做常数时间答复：那条语句命中不命中一行的差别，见越权风险点 2。
@@ -71,7 +71,7 @@ Date: 2026-10-21
 - TF：
   - 端口 `ports/booking_answer_bounce.go`：`BookingWithProviderReader`、`BookingAnswerBounceLedger`、挡回依据两值。
   - 适配器 `BookingRequests.FindBookingWithProvider`（与 `FindByKey` 共用一份行重建）、`BookingAnswerBounces`。
-  - 迁移 transport_fulfillment `0050`：承运答复挡回册，依据存 smallint；已有超界的订舱标识或答复标识时拒绝施加。
+  - 迁移 transport_fulfillment `0047`：承运答复挡回册，依据存 smallint；已有超界的订舱标识或答复标识时拒绝施加。
   - TF CONTEXT Language 一节「承运答复挡回」词条。
   - 领域 `domain/stored_reference.go`：`NewBookingReference`、`NewCarrierAcceptanceReference` 过 512 字节界，超界 `ErrValueTooLongToStore`；`NewAcceptanceBasisReference` 不变。
   - HTTP 解码门 `decodeClosedPayload` 限读 1 MiB。
