@@ -70,7 +70,9 @@ type priceCardListResponse struct {
 }
 
 // priceCardBody 逐字段透出检索列面。effectiveTo 缺席即无上界适用期;源文件名与
-// SHA-256 是证据索引(真实价卡文件外置于受限证据库,ADR-0008),照登转写。
+// SHA-256 是证据索引(真实价卡文件外置于受限证据库,ADR-0008),照登转写。收尾三格
+// (ADR-0234)缺席即没有那一种收尾:selectionEndsAt 是最新一条截止的终点,retiredAt 是退役
+// 时刻,successorVersion 是此刻管着这一版的那次收尾指名的后继;发布时的适用期两格照旧。
 type priceCardBody struct {
 	PlanID               string `json:"planId"`
 	PlanVersion          string `json:"planVersion"`
@@ -89,6 +91,9 @@ type priceCardBody struct {
 	AuthorizationVersion string `json:"authorizationVersion"`
 	PublicationApprover  string `json:"publicationApprover"`
 	RegisteredAt         string `json:"registeredAt"`
+	SelectionEndsAt      string `json:"selectionEndsAt,omitempty"`
+	RetiredAt            string `json:"retiredAt,omitempty"`
+	SuccessorVersion     string `json:"successorVersion,omitempty"`
 }
 
 func priceCardBodyOf(row ports.PriceCardCatalogueRow) priceCardBody {
@@ -113,5 +118,12 @@ func priceCardBodyOf(row ports.PriceCardCatalogueRow) priceCardBody {
 	if row.HasEffectiveTo {
 		body.EffectiveTo = rfc3339(row.EffectiveTo)
 	}
+	if row.HasSelectionEnd {
+		body.SelectionEndsAt = rfc3339(row.SelectionEndsAt)
+	}
+	if row.HasRetirement {
+		body.RetiredAt = rfc3339(row.RetiredAt)
+	}
+	body.SuccessorVersion = row.SuccessorVersion
 	return body
 }

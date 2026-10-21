@@ -47,6 +47,9 @@ func catalogueLimit(operation string, limit int) error {
 // ListPriceCards 上列价卡版本的检索列面。方向不设默认过滤:目录答「登了哪些卡」,
 // 方向隔离是**评价装载**的谓词(BUY 的册面不进 SELL 的答案),上列两向并见不穿它
 // ——运营查阅的授权边界只有租户,方向列照实透出供页面分栏。
+//
+// 收尾事实从截止册与退役册连过来(ADR-0234):截止取最新一条,与选卡读的是同一条;发布时的适用期
+// 两格照列,不被截止点覆盖——目录要让人看得出「发布时登的是什么、后来被截到哪」两件事。
 func (catalogue *OperationsCatalogue) ListPriceCards(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -61,13 +64,24 @@ func (catalogue *OperationsCatalogue) ListPriceCards(
 	}
 
 	rows, err := querier.Query(ctx,
-		`SELECT plan_id, plan_version, direction, purpose, scope,
-		        rate_table_id, rate_table_version, effective_from, effective_to,
-		        canonicalization, content_digest, source_file_name, source_file_sha256,
-		        authorization_id, authorization_version, publication_approver, registered_at
-		   FROM parcel_pricing.price_card_version
-		  WHERE tenant_id = $1
-		  ORDER BY registered_at DESC, plan_id, plan_version
+		`SELECT v.plan_id, v.plan_version, v.direction, v.purpose, v.scope,
+		        v.rate_table_id, v.rate_table_version, v.effective_from, v.effective_to,
+		        v.canonicalization, v.content_digest, v.source_file_name, v.source_file_sha256,
+		        v.authorization_id, v.authorization_version, v.publication_approver, v.registered_at,
+		        latest_cut.selection_ends_at, latest_cut.successor_version,
+		        retirement.retired_at, retirement.successor_version
+		   FROM parcel_pricing.price_card_version v
+		   LEFT JOIN LATERAL (
+		        SELECT c.selection_ends_at, c.successor_version
+		          FROM parcel_pricing.price_card_version_cut c
+		         WHERE c.tenant_id = v.tenant_id AND c.plan_id = v.plan_id AND c.plan_version = v.plan_version
+		         ORDER BY c.registration_id DESC
+		         LIMIT 1) latest_cut ON true
+		   LEFT JOIN parcel_pricing.price_card_version_retirement retirement
+		          ON retirement.tenant_id = v.tenant_id AND retirement.plan_id = v.plan_id
+		         AND retirement.plan_version = v.plan_version
+		  WHERE v.tenant_id = $1
+		  ORDER BY v.registered_at DESC, v.plan_id, v.plan_version
 		  LIMIT $2`,
 		tenant.String(),
 		limit,
@@ -80,18 +94,26 @@ func (catalogue *OperationsCatalogue) ListPriceCards(
 	cards := make([]ports.PriceCardCatalogueRow, 0, limit)
 	for rows.Next() {
 		var row ports.PriceCardCatalogueRow
-		var effectiveTo *time.Time
+		var effectiveTo, cutEnd, retiredAt *time.Time
+		var cutSuccessor, retirementSuccessor *string
 		if err := rows.Scan(
 			&row.PlanID, &row.PlanVersion, &row.Direction, &row.Purpose, &row.Scope,
 			&row.RateTableID, &row.RateTableVersion, &row.EffectiveFrom, &effectiveTo,
 			&row.Canonicalization, &row.ContentDigest, &row.SourceFileName, &row.SourceFileSHA256,
 			&row.AuthorizationID, &row.AuthorizationVersion, &row.PublicationApprover, &row.RegisteredAt,
+			&cutEnd, &cutSuccessor, &retiredAt, &retirementSuccessor,
 		); err != nil {
 			return nil, fmt.Errorf("list price cards: %w", err)
 		}
 		if effectiveTo != nil {
 			row.EffectiveTo = *effectiveTo
 			row.HasEffectiveTo = true
+		}
+		if cutEnd != nil && cutSuccessor != nil {
+			row.SelectionEndsAt, row.HasSelectionEnd, row.SuccessorVersion = *cutEnd, true, *cutSuccessor
+		}
+		if retiredAt != nil && retirementSuccessor != nil {
+			row.RetiredAt, row.HasRetirement, row.SuccessorVersion = *retiredAt, true, *retirementSuccessor
 		}
 		cards = append(cards, row)
 	}

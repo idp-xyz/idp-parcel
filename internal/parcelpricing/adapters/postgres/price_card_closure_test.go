@@ -458,3 +458,40 @@ func TestAClosureIsHandedOffApartFromTheCardRegistrations(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Covers: AT-PP-007、AT-PP-008 的目录半边——管理台价卡目录折进收尾：截过的那一版回显最新一条截止的终点与后继，退役的那一版
+// 回显退役时刻与后继，发布时的适用期两格不被覆盖；没收尾的那一版三格都空。
+func TestThePriceCardCatalogueEchoesTheClosures(t *testing.T) {
+	fixture := newClosureFixture(t)
+	fixture.register(t, "tenant-a", closedCardPlan(t, "v1", closureScope, closureJanuary, time.Time{}, domain.PricingPlanStructures{}))
+	fixture.register(t, "tenant-a", closedCardPlan(t, "v2", closureScope, closureJune, time.Time{}, domain.PricingPlanStructures{}))
+	fixture.register(t, "tenant-a", closedCardPlan(t, "v3", closureScope, closureJune, time.Time{}, domain.PricingPlanStructures{}))
+	if cut := fixture.cut(t, t.Context(), "tenant-a", "v1", "v2", "SYN-CUT-V1"); cut.Outcome() != application.PriceCardClosureRecorded {
+		t.Fatalf("截止 = %s（%v）", cut.Outcome(), cut.Cause())
+	}
+	if retired := fixture.retire(t, "tenant-a", "v2", "v3", "SYN-RETIRE-V2"); retired.Outcome() != application.PriceCardClosureRecorded {
+		t.Fatalf("退役 = %s（%v）", retired.Outcome(), retired.Cause())
+	}
+	catalogue, err := adapter.NewOperationsCatalogue(fixture.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := catalogue.ListPriceCards(t.Context(), evaluationValue(t, domain.NewTenantID, "tenant-a"), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byVersion := map[string]ports.PriceCardCatalogueRow{}
+	for _, row := range rows {
+		byVersion[row.PlanVersion] = row
+	}
+	if v1 := byVersion["v1"]; !v1.HasSelectionEnd || !v1.SelectionEndsAt.Equal(closureJune) || v1.SuccessorVersion != "v2" ||
+		v1.HasRetirement || v1.HasEffectiveTo {
+		t.Fatalf("截过的 v1 = %+v", v1)
+	}
+	if v2 := byVersion["v2"]; !v2.HasRetirement || !v2.RetiredAt.Equal(closureRegistry) || v2.SuccessorVersion != "v3" || v2.HasSelectionEnd {
+		t.Fatalf("退役的 v2 = %+v", v2)
+	}
+	if v3 := byVersion["v3"]; v3.HasSelectionEnd || v3.HasRetirement || v3.SuccessorVersion != "" {
+		t.Fatalf("没收尾的 v3 = %+v", v3)
+	}
+}

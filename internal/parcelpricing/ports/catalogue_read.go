@@ -26,6 +26,10 @@ import (
 //
 // HasEffectiveTo 为假即无上界适用期。用显式布尔而不是零值判断:零时刻是一个合法的
 // 绝对时刻,拿它兼作「没有终点」会让补历史的区间读不出来。
+//
+// 收尾三格(ADR-0234)另列,不覆盖发布时的适用期那两格:SelectionEndsAt 是册上最新一条截止
+// 的终点(HasSelectionEnd 为假即没截止过),RetiredAt 是退役时刻(HasRetirement 为假即没退役),
+// SuccessorVersion 是此刻管着这一版的那次收尾指名的后继——退役了取退役的,否则取最新一条截止的。
 type PriceCardCatalogueRow struct {
 	PlanID               string
 	PlanVersion          string
@@ -45,6 +49,11 @@ type PriceCardCatalogueRow struct {
 	AuthorizationVersion string
 	PublicationApprover  string
 	RegisteredAt         time.Time
+	SelectionEndsAt      time.Time
+	HasSelectionEnd      bool
+	RetiredAt            time.Time
+	HasRetirement        bool
+	SuccessorVersion     string
 }
 
 // PriceCardCatalogueRead 是价卡目录的伴生列表读端口。

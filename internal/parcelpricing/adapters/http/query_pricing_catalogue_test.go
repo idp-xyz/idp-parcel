@@ -226,6 +226,42 @@ func TestPriceCardsEndpointTranscribesRows(t *testing.T) {
 	}
 }
 
+// Covers: AT-PP-007、AT-PP-008 的目录半边——收尾三格照行转写:截过的那一版带截止点与后继、发布时的适用期照旧;退役的那一版
+// 带退役时刻与后继;没收尾的那一版三键都缺席。
+func TestPriceCardsEndpointEchoesTheClosures(t *testing.T) {
+	query := catalogueQuery(t)
+	reader := &cardReaderDouble{
+		tenant: query.Scope.Tenant(),
+		rows: []ports.PriceCardCatalogueRow{
+			{PlanID: "plan-1", PlanVersion: "v1", EffectiveFrom: pricingBaseAt, RegisteredAt: pricingBaseAt,
+				SelectionEndsAt: pricingBaseAt.Add(30 * 24 * time.Hour), HasSelectionEnd: true, SuccessorVersion: "v2"},
+			{PlanID: "plan-1", PlanVersion: "v0", EffectiveFrom: pricingBaseAt, RegisteredAt: pricingBaseAt,
+				RetiredAt: pricingBaseAt.Add(time.Hour), HasRetirement: true, SuccessorVersion: "v1"},
+			{PlanID: "plan-1", PlanVersion: "v2", EffectiveFrom: pricingBaseAt, RegisteredAt: pricingBaseAt},
+		},
+	}
+	endpoint := pricinghttp.NewQueryPriceCardsEndpoint(intakeDouble{query: query}, reader)
+	recorder := httptest.NewRecorder()
+	endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/pricing-price-cards", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	cards := decodeBody(t, recorder)["cards"].([]any)
+	cut, retired, open := cards[0].(map[string]any), cards[1].(map[string]any), cards[2].(map[string]any)
+	if cut["selectionEndsAt"] != "2026-09-24T09:00:00Z" || cut["successorVersion"] != "v2" || cut["retiredAt"] != nil ||
+		cut["effectiveFrom"] != "2026-08-25T09:00:00Z" {
+		t.Fatalf("截过的那一版 = %v", cut)
+	}
+	if retired["retiredAt"] != "2026-08-25T10:00:00Z" || retired["successorVersion"] != "v1" || retired["selectionEndsAt"] != nil {
+		t.Fatalf("退役的那一版 = %v", retired)
+	}
+	for _, key := range []string{"selectionEndsAt", "retiredAt", "successorVersion"} {
+		if _, has := open[key]; has {
+			t.Fatalf("没收尾的那一版长出了 %s 键：%v", key, open)
+		}
+	}
+}
+
 // Covers: 序列行体转写——口径两键与更正两键成对在场或成对缺席,证据等级照透。
 func TestReferenceSeriesEndpointTranscribesRows(t *testing.T) {
 	query := catalogueQuery(t)
