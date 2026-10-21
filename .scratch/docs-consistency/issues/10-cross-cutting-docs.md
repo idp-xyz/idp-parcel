@@ -214,7 +214,7 @@ cross 的 B2、B3 两簇 B 类（B2-04、B2-10、B3·1、B3·2、B3·3、B3·6�
 
 | # | 评审意见 | 回应 |
 |---|---|---|
-| B1 | ADR-0274 Context 说「两份已接受的记录给了相反的入口」并引 ADR-0082，但 ADR-0082 没有相反的句子，与 Status「无条款停用」自相矛盾 | 改为 ADR-0137 对 CR CONTEXT 与 GLOSSARY；写明 ADR-0082 决定四只是必要条件、没有定入口 |
+| B1 | ADR-0274 Context 说两份已接受的记录给了相反的入口并引 ADR-0082，但 ADR-0082 没有相反的句子，与 Status「无条款停用」自相矛盾 | 改为 ADR-0137 对 CR CONTEXT 与 GLOSSARY；写明 ADR-0082 决定四只是必要条件、没有定入口 |
 | B2 | ADR-0275 也回答了 ADR-0183 越权风险点 1 与 Consequences「另行裁定」，没挂来向 | ADR-0183 Status 注记与 Links 各补「由 ADR-0275 回答」；ADR-0275 Status 前段、「对已接受记录的作用」、Links 同步；截引的 Consequences 补全后半句；ADR-0183 正文逐字节不变 |
 | B3 | 代码三处注释与 Covers 仍引已删的 PS CONTEXT 例外句 | 立 code/56（R3，只改注释与 Covers）；ADR-0275 Consequences 那句改为行为不改、注释随 code/56 |
 | B4 | 产品基线有与 ADR-0275 正面相反的同句 | 「归 10b」一节补那一句与改法；ADR-0275 Consequences 点名产品基线 |
@@ -225,4 +225,4 @@ cross 的 B2、B3 两簇 B 类（B2-04、B2-10、B3·1、B3·2、B3·3、B3·6�
 | 建议 5 | 场景十二用词 | 复秤那一步改为形成新的预估版本；计费时点那一步用原词「计价基准时点」 |
 | 建议 6 | GLOSSARY「签约服务商」新句没有出处 | 改为指明 TF CONTEXT 的角色集含它、PC CONTEXT 的不含 |
 | 建议 7 | ADR-0274「扩到」是停用动词 | 改为「本就涵盖代收与清分」 |
-| 建议 8 | 场景二「按下一步处理」位置引用；CONTEXT-MAP 新挂票号；票面步号引用 | 场景二点名 PS CONTEXT 那条硬限制解除规则；去掉新挂的 `pp-pricing-input-seams/04`；票面场景步号改为点名那一步的内容 |
+| 建议 8 | 场景二用位置引用指下一步；CONTEXT-MAP 新挂票号；票面步号引用 | 场景二点名 PS CONTEXT 那条硬限制解除规则；去掉新挂的 `pp-pricing-input-seams/04`；票面场景步号改为点名那一步的内容 |

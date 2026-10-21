@@ -13,10 +13,10 @@ Blocked by: 无（解除那一半要先有硬限制解除的来源可读，见�
 
 ## 证据
 
-- `internal/partycommercial/domain/authority_grant.go`：`ErrCustomerAccountCannotDecide` 的注释引 PS CONTEXT 那半句，写「那条例外支首发不开、留位」「日后开例外支改的是这一道拒绝与一条新的委派方向」。
+- `internal/partycommercial/domain/authority_grant.go`：`ErrCustomerAccountCannotDecide` 的注释引 PS CONTEXT 那半句，写「例外支首发不开、留位」与「日后开例外支改的是这一道拒绝与一条新的委派方向」。
 - `internal/partycommercial/domain/authority_grant_test.go`：`TestACustomerAccountMayOnlyRequestClosureAndReopening` 的 Covers 引同一半句与「例外支首发不开、留位」。
 - `internal/parcelshipment/adapters/partycommercial/continued_attempt_decision_authorization.go`：`ContinuedAttemptDecisionRequestCoordinates` 的结构注释「pc-gaps/13 裁决 ③：例外支首发不开」。
-- `internal/parcelshipment/application/form_continued_attempt_decision.go`：`ClosureResponsibilitySourceKind` 头注「硬限制那一格的「解除」今天没有来源可读，本编排不为它加门」。
+- `internal/parcelshipment/application/form_continued_attempt_decision.go`：`ClosureResponsibilitySourceKind` 头注说硬限制那一格的解除今天没有来源可读，本编排不为它加门。
 
 ## 三类
 
