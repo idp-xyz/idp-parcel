@@ -45,6 +45,11 @@ M：两个装载连上退役册与最新区间更正册（与 ADR-0233 给版本
 1. `LoadEffectiveGrants` 装载的授予折进退役册（`party_commercial.commercial_version_retirement`）与壳上最新一条区间更正：版本已退役的授予不交出；有更正的，判用区间终点取更正终点与授予自身终点中较早的一个，只截终点（与 ADR-0233 决定五给自带区间的政策正文的折法同一口径，宜复用同一处折法）。范围加时刻有没有现行规则，按折后的授予判。
 2. `LoadEffectiveDelegations` 对所挂客户合同版本同一折法。
 3. `domain.Authorize`：折后命中多于一条授予即交回新的具名错误（适用冲突），不取首个；`resolveDecider`：命中多条委派而委派方不同同答适用冲突，委派方相同取那一个决定方。新错误要与 `ErrNotAuthorized`、`ErrAuthorityRulesNotConfigured` 分得开（按恢复动作分格，ADR-0029）。
-4. `parcel-shipment` 的各授权适配器（主动拒绝、人工复核、资料修订、受控关闭与重开、撤回）把适用冲突译成各自的未决，不落`不允许`、不当作已授权。
+4. `parcel-shipment`（协调方 2026-10-21 裁定）：
+   - `psports.AuthorizationOutcome` 加一格 `APPLICABILITY_CONFLICT`（`String()` 同名）。
+   - 五只经 PC 裁定编排询问授权的适配器——`adapters/partycommercial` 下的 `active_rejection.go`、`manual_review_authorization.go`、`source_data_amendment_authorization.go`、`continued_attempt_decision_authorization.go`（受控关闭与重开同一只）、`withdrawal_authorization.go`——在 `errors.Is` 分支里把 PC 的适用冲突错误译成这一格；今天它们落 `default` 交回 error（未形成），不会被读成已授权或拒绝。
+   - 有未决格的四只编排停在未决，原因码指名授权适用冲突：`reject_shipment_request.go`、`withdraw_shipment_request.go`、`amend_customer_source_data.go`（`handler.undecided` 加 `…AuthorityApplicabilityConflict` 原因，与 `…AuthorityRulesNotConfigured` 并列）、`form_continued_attempt_decision.go`（`continuedAttemptUndecided` 加同名原因）。
+   - 没有未决格的两只编排——`dispose_shipment_request.go` 与 `complete_manual_review.go`——今天把未配置答成自己的一个结果码（`AUTHORITY_RULES_NOT_CONFIGURED`，不落库、状态不变）；照同一形状各加 `AUTHORITY_APPLICABILITY_CONFLICT` 一码：不落库、状态不变、不读作已授权也不读作拒绝。
+   - 各编排的 `default` 分支照旧答 `ErrUnexpectedAuthorizationOutcome`。这几处是 PS 的地盘，PS 的 UC 结果表随票 10 补（PS 组的 06 正在修订，本票与 06 都不直接改 PS 文件）。
 5. 补用例：`AT-PC-042`、`AT-PC-059`、`AT-PC-060`、`AT-PC-061`（UC-PC-003），领域与真库各一，并在 `.scratch/at-coverage-inventory.md` 把这几行从④移入①。
 

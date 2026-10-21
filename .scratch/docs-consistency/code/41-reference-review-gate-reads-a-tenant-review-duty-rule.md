@@ -31,8 +31,10 @@ M：领域规则类型、读口与表各一，两只编排各接一次，两格�
 1. 领域：新增参考复核职责规则（一租户一条：须否不同主体、可缺的要求授予），形状照 `PriceCardApprovalDutyRule`；`NewSeriesReview`、`NewCatalogueReview` 改为收规则与复核者的授予集，按规则判，去掉写死的比较。
 2. 端口与持久化：读口（按租户读，`found=false` 即未登记）与只给装配和测试用的写口；新迁移一张表（`parcel_pricing` 下接现有最大号）。
 3. 编排：两只复核编排先读规则，未登记答新的 `NOT_CONFIGURED`、要求授予而复核者没有答新的复核者不合格一格，`NEEDS_ANOTHER_REVIEWER` 只在规则要求不同主体时给出；三格都不落复核行。复核命令从操作者信封带上授予集。
+   - 受控 CLI（`cmd/parcel-pricing-register -kind reference-series-review` 与 `-kind reference-catalogue-review`）走同一编排、同一道门，不绕过规则：复核者取批文的 `reviewer` 串，授予集为空；规则要求不同主体时照比登记者，要求授予时一律答复核者不合格（ADR-0262 越权风险点 4）。
+   - 规则的登记口：`parcel-pricing-register` 增一种登记（例如 `-kind reference-review-duty-rule`，批文 `{"tenant", "distinctSubjects", "requiredGrant"}`），一租户一条、同内容重放、异内容答冲突；在线登记面随治理写面那一族另裁。
 4. 免人工复核：租户对来源声明免人工复核时，连接器代写的那一份不经此门，行为不变。
-5. 种子：`SYN-TENANT-01` 登一条要求不同主体、不要求授予的规则，演示动线行为不变。
+5. 种子：`scripts/demo-seeds/steps/150-pricing.sh` 在序列与目录复核之前，经上面的 CLI 登记口给 `SYN-TENANT-01` 登一条要求不同主体、不要求授予的规则（`SYN-` 数据文件放在 `data/pricing/`）；种子的登记者 `SYN-PRICING-OPS-01` 与复核者 `SYN-PRICING-REVIEW-01` 本就不同，演示动线不退成未配置、行为不变。
 6. 用例：`AT-PP-014`、`AT-PP-015` 的领域、编排与真库用例；`.scratch/at-coverage-inventory.md` 把两行从④移入①。
 
 ## 要裁的

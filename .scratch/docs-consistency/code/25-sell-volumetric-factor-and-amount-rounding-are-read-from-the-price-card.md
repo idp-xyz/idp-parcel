@@ -47,7 +47,7 @@ M（裁为价卡：撤掉 PC 的 SELL 体积口径必填，改 PC 校验与登�
 
 1. PC：`domain.NewVolumetricCaliber` 对三个方向一律不收系数引用（`SELL` 不再必填，带了即拒，判法与今天的 `BUY`、`INTERNAL` 相同）；受控批文与管理台表单的价格政策口径去掉体积一格；已发布的口径行原样留在册上，读面（价格政策目录）把那一格标「不参与计价」。若价格政策正文的规范化文档形状因此变化，照 ADR-0014 判换不换号。
 2. PC：`FxCaliber` 注释里「消费方据以停在未决，不得读成零加点」那半句（缺加点一格时的读法）改为 ADR-0260 决定三的口径（评价不读政策正文、不执行取值时点规则、不加点）；`VolumetricCaliber` 注释里「销售方向没有承运商卡，只能由商业政策声明」那条理由与它的测试头注随第 1 条改写。
-3. 种子：`scripts/demo-seeds/data/commercial/publish-batch.json` 的 `SYN-PRICE-RULE-CN-SG` 口径去掉 `volumetricFactor`，摘要随之重算；种子卡 `price-card-cn-sg.json` 不动。
+3. 种子：`scripts/demo-seeds/data/commercial/publish-batch.json` 的 `SYN-PRICE-RULE-CN-SG` 口径去掉 `volumetricFactor`，摘要随之重算；种子卡 `price-card-cn-sg.json` 不动。同一版本号换了内容，在已灌过的库上重跑会答内容冲突，照 `scripts/demo-seeds/README.md` 的先例用 `--reset` 复灌，并在该 README 记一句。汇率序列 `reference-series-fx-cny-sgd.json` 的 `quoteBasis` 指的是同一对象与版本号，不随摘要变。
 4. NR：路由策略版本的比较价格政策一格（`ports.RouteStrategyDefinitionVersion.ComparisonPricePolicy` 一路，迁移与 `adapters/postgres/network_catalog.go` 同改）不再作换算依据——删掉，或保留为历史列并在登记口拒收新值；ADR-0148 决定四那一句已由 ADR-0260 部分停用。
 5. 补用例：`AT-PC-062`（UC-PC-001，PC 侧拒收）；`AT-PP-013`（UC-PP-001）今天的行为已对，补 Covers 点名即可。在 `.scratch/at-coverage-inventory.md` 把 `AT-PC-062` 从④移入①、`AT-PP-013` 从②移入①。
 
