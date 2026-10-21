@@ -45,5 +45,5 @@ S（只补落库）；M（连同被替代条目进投影版本）。
 
 - 被替代条目进投影版本、标明已被替代，派生各维度与 `CarriesCustomerServiceFinal` 一类读法只看当前有效条目；当前那一条照旧带前身。
 - 管理台 `currentEffectiveEntries` 那一步随之有意义，不删。
-- [ADR-0245](../../../docs/adr/0245-a-forked-supersession-chain-is-never-ordered-by-business-time-and-stays-pending-in-the-projection-version.md) 要分叉各方同样进投影版本、带分叉标记、不参与派生，实现票 [docs-consistency/code/26](../../docs-consistency/code/26-forked-supersession-is-judged-by-business-time-and-not-kept-pending.md)，改的是同一组条目形状与派生过滤，宜同批或紧接。
+- [ADR-0245](../../../docs/adr/0245-a-forked-supersession-chain-is-never-ordered-by-business-time-and-stays-pending-in-the-projection-version.md) 要分叉各方同样进投影版本、带分叉标记、不参与派生，实现票 [docs-consistency/code/30](../../docs-consistency/code/30-forked-supersession-is-judged-by-business-time-and-not-kept-pending.md)，改的是同一组条目形状与派生过滤，宜同批或紧接。
 - 规模按票面的 M 计。

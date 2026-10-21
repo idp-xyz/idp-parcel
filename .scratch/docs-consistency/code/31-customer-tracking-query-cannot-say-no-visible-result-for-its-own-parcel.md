@@ -1,4 +1,4 @@
-# 27 VE 客户追踪查询对本账户已归属、视图未形成的包裹答 `VIEW_NOT_FOUND`，与无权查询分不开
+# 31 VE 客户追踪查询对本账户已归属、视图未形成的包裹答 `VIEW_NOT_FOUND`，与无权查询分不开
 
 Category: enhancement
 Status: ready-for-agent——R2（上线后尽快）：会撞（委托接受后、初始路由投影形成前，客户拿首方提交答复里的件号去查，或 NR 一直形不成投影时），但有可靠绕法：客户系统按受理状态稍后重查。首方 API 兼容性基线发布前落地最省（ADR-0246 越权风险点 5）。2026-10-21 文档自洽 04 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc04。
@@ -20,7 +20,7 @@ Blocked by: 无
 
 ## 规模
 
-S–M：端点加一个依赖（归属反查口）与一格 `NO_VISIBLE_RESULT`；`cmd/parcel-api` 的装配接上反查口；首方契约描述加取值；补用例。
+S–M：端点加一个依赖（归属反查口）与一格 `NO_VISIBLE_RESULT`；`cmd/parcel-api` 的装配接上反查口；首方契约描述加取值；补用例；演示文档两处同步（见修法第 6 条）。
 
 ## 最小的诚实修法
 
@@ -29,6 +29,9 @@ S–M：端点加一个依赖（归属反查口）与一格 `NO_VISIBLE_RESULT`�
 3. 反查读不动 → 与视图读不回同一格（`NO_ANSWER_FORMED`），不降成任何业务格。
 4. 头注「一律这一格」改为三格；`queryResponse` 的取值说明随之改。
 5. 用例：归属方查视图未形成的包裹答 `NO_VISIBLE_RESULT`；别的账户查同一件、查不存在的号都答 `VIEW_NOT_FOUND` 且响应体逐字相同；反查读不动答未形成。Covers 点 UC-VE-008 `AT-VE-188`、`AT-VE-151`。
+6. 演示文档同步，与代码同一笔：
+   - `scripts/demo-seeds/README.md` 客户追踪视图那一条「视图在委托接受、初始路由投影形成之后由 dispatch 派生，之前查它答 `VIEW_NOT_FOUND`」改为：委托接受之前答 `VIEW_NOT_FOUND`；接受之后、视图派生出来之前，本账户查它答 `NO_VISIBLE_RESULT`。
+   - `docs/design/synthetic-demo-journey-script.md` 首方查询那张「请求 | 答复」表加一行「首方令牌，本账户已受理、视图尚未形成的包裹 | `200 NO_VISIBLE_RESULT`」；「别的账户的包裹，或不存在的包裹」一行不变。
 
 ## 要裁的
 
