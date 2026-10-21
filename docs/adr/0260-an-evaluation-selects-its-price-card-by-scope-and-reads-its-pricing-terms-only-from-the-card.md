@@ -1,11 +1,11 @@
-# ADR-0260：评价按范围选卡，计价条款只从价卡读——体积系数与金额取整不分方向都是卡的内容，换算用卡绑定的汇率序列；商业价格政策的定价方案绑定与销售体积口径不参与评价
+# ADR-0260：评价按范围选卡，计价条款只从价卡读——体积系数与金额取整不分方向都是卡的内容，换算用卡绑定的汇率序列；按范围选卡不读商业价格政策的定价方案绑定，政策不声明体积系数
 
-Status: Accepted（2026-10-21，Claude Code 会话代 PP owner 与 PC owner 决：用户 2026-10-21 原话「需要修改文档，确保自洽，正确」，常设授权「你作为业务和系统专家自决」；票 docs-consistency/07，出处审计 [audit/pc-pp.md](../../.scratch/docs-consistency/audit/pc-pp.md) H4、H5 与 [audit/cross.md](../../.scratch/docs-consistency/audit/cross.md) B2-02、B2-03。部分停用 [ADR-0107](./0107-evaluation-amount-rounding-is-declared-by-the-price-card-like-weight-rounding.md) 决定一一句，部分停用 [ADR-0148](./0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定四「比较币种与换算」一条里的一句、按口解同条下一句的「该口径」并撤掉其 Consequences 的一项，回答 [ADR-0157](./0157-built-in-as-of-forms-are-adopted-as-reference-citations.md) 越权风险点 3；被停原句与适用场景见「对已接受记录的作用」，三份正文不改，只在其 Status 行与 Links 加前向指针。代码随票 [docs-consistency/code/25](../../.scratch/docs-consistency/code/25-sell-volumetric-factor-and-amount-rounding-are-read-from-the-price-card.md)。越权风险点见文末，待 PP owner 复核，第 1、2、5、7 点同时待 PC owner，第 6 点同时待 NR owner。）<!-- 索引注记 -->｜**选卡**：评价用的价卡只出自 `parcel-pricing` 自己的价卡登记册（按范围选卡与收尾折法照 ADR-0179、ADR-0234），商业价格政策的定价方案绑定不参与选卡、不与选出的卡核对，只作商业授权留痕。**计价条款**：体积系数与金额取整是价卡内容，`SELL` 卡与 `BUY` 卡同一归属；商业价格政策口径的体积一格三个方向一律不收。**换算**：用卡绑定的汇率序列，期次按计价基准时点、版本按形成时刻的在用版本；口径的声明仍在商业价格政策上，由序列取值登记的口径引用指名，评价不读政策正文、不执行政策上的取值时点规则、不加点；路由比价同此，路由策略版本所引的价格政策不参与换算。**重启**：选卡改走绑定时，三项随之另立记录
+Status: Accepted（2026-10-21，Claude Code 会话代 PP owner 与 PC owner 决：用户 2026-10-21 原话「需要修改文档，确保自洽，正确」，常设授权「你作为业务和系统专家自决」；票 docs-consistency/07，出处审计 [audit/pc-pp.md](../../.scratch/docs-consistency/audit/pc-pp.md) H4、H5 与 [audit/cross.md](../../.scratch/docs-consistency/audit/cross.md) B2-02、B2-03。部分停用 [ADR-0107](./0107-evaluation-amount-rounding-is-declared-by-the-price-card-like-weight-rounding.md) 决定一一句，部分停用 [ADR-0148](./0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定四「比较币种与换算」一条里的一句、按口解同条下一句的「该口径」并撤掉其 Consequences 的一项，回答 [ADR-0157](./0157-built-in-as-of-forms-are-adopted-as-reference-citations.md) 越权风险点 3；被停原句与适用场景见「对已接受记录的作用」，三份正文不改，只在其 Status 行与 Links 加前向指针。代码随票 [docs-consistency/code/25](../../.scratch/docs-consistency/code/25-sell-volumetric-factor-and-amount-rounding-are-read-from-the-price-card.md)。越权风险点见文末，待 PP owner 复核，第 1、2、5、7 点同时待 PC owner，第 6 点同时待 NR owner。）<!-- 索引注记 -->｜**选卡**：正式评价、接受前估价与试算按范围从 `parcel-pricing` 自己的价卡登记册选卡（折法照 ADR-0179、ADR-0234），不读商业价格政策的定价方案绑定、不与选出的卡核对；绑定只在路由自营段的内部成本上指名方案（ADR-0148 决定四），PC 计价目的的解析无人使用。**计价条款**：体积系数与金额取整是价卡内容，`SELL` 卡与 `BUY` 卡同一归属；商业价格政策口径的体积一格三个方向一律不收。**换算**：用卡绑定的汇率序列，期次按计价基准时点、版本按形成时刻的在用版本；口径的声明仍在商业价格政策上，由序列取值登记的口径引用指名，评价不读政策正文、不执行政策上的取值时点规则、不加点；路由比价同此，路由策略版本所引的价格政策不参与换算。**重启**：选卡改走绑定时，三项随之另立记录
 Date: 2026-10-21
 
 ## Context
 
-- **选卡有两套说法。** 本记录之前的 PC CONTEXT 把可执行价卡绑定写在商业价格政策上，并把「已解析定价依据」列为 `parcel-pricing` 的输入；CONTEXT-MAP 的 `party-commercial → parcel-pricing` 一边与 GLOSSARY「可执行价卡版本」同一说法。代码只有一套：正式 `SELL` 评价、接受前估价与试算都按（租户、计价范围、方向、目的、时点）经价卡登记册选卡（[ADR-0179](./0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 决定三，Context 原句「不走 PC 价格政策的定价方案绑定（ADR-0034）」），`internal/parcelpricing` 不 import 也不经端口读 PC 的价格政策。PC 那一侧的计价目的解析（[ADR-0034](./0034-pricing-closure-adopts-via-price-policy.md)）没有调用方，生产装配给 `domain.ResolveCommercialClosure` 的方案存续答复是 `nil`，问到即答`解析未决`（`BoundPlanNotConfirmed`）。PP 的 `PricingInputSnapshot` 也没有商业依据一格，而 PP CONTEXT「计价输入快照」把「商业依据」列为成员。
+- **选卡有两套说法。** 本记录之前的 PC CONTEXT 把可执行价卡绑定写在商业价格政策上，并把「已解析定价依据」列为 `parcel-pricing` 的输入；CONTEXT-MAP 的 `party-commercial → parcel-pricing` 一边与 GLOSSARY「可执行价卡版本」同一说法。代码只有一套：正式 `SELL` 评价、接受前估价与试算都按（租户、计价范围、方向、目的、时点）经价卡登记册选卡（[ADR-0179](./0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 决定三，Context 原句「不走 PC 价格政策的定价方案绑定（ADR-0034）」），`internal/parcelpricing` 不 import 也不经端口读 PC 的价格政策。路由候选成本按段的成本依据引用指名价卡：外包段直接引 `BUY` 卡，自营段引一份 `INTERNAL` 方向价格政策，NR 侧适配器（`InternalPlanResolver`）点读它的定价方案绑定得出方案（ADR-0148 决定四）——那是绑定决定评价用哪份方案的唯一一处。PC 那一侧的计价目的解析（[ADR-0034](./0034-pricing-closure-adopts-via-price-policy.md)）没有调用方，生产装配给 `domain.ResolveCommercialClosure` 的方案存续答复是 `nil`，问到即答`解析未决`（`BoundPlanNotConfirmed`）。PP 的 `PricingInputSnapshot` 也没有商业依据一格，而 PP CONTEXT「计价输入快照」把「商业依据」列为成员。
 - **体积系数与金额取整，文档归政策、代码在卡上。** PP CONTEXT「体积系数」「金额取整策略」与 [ADR-0107](./0107-evaluation-amount-rounding-is-declared-by-the-price-card-like-weight-rounding.md) 决定一都说销售方向的属商业价格政策；PC 的 `NewVolumetricCaliber` 要求 `SELL` 政策必须声明体积系数引用。PP 的 `PricingPlanVersion` 不分方向携带卡自己的系数与金额取整，`deriveVolumetricWeight` 只读卡上那一份；演示种子的 `SELL` 卡与 `SELL` 价格政策各登了一个 5000。[ADR-0190](./0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 把「价卡的金额取整声明」列为租户取值，[ADR-0198](./0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md) 决定二按「卡没声明金额取整」记停因，[ADR-0229](./0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 让取整未声明只由价卡登记续办——三份都站在卡这一边。PC 价格政策口径（`PricePolicyCaliber`）只有税务、体积、汇率三格，从来没有金额取整。
 - **汇率口径有两个来处。** [ADR-0013](./0013-pricing-owns-versioned-external-reference-series.md) 定汇率口径由商业价格政策声明；PP 的汇率序列取值登记必带口径引用（`NewQuotedReferenceSeriesValue` 的 `quoteBasis`，指一版商业价格政策），换算用的是卡绑定的序列。[ADR-0148](./0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定四又要路由比价按「策略版本所引的一份价格政策」的口径换算；NR 登了 `ComparisonPricePolicy`、一路带到候选证据，此后无人读它；[ADR-0189](./0189-leg-pricing-zones-are-supplied-per-card-and-unbound-cards-take-a-registered-leg-zone.md) 越权风险点 8 写的是「比价与正式评价只认 parcel-pricing 的在用序列」。PC 价格政策的汇率格可以选用「提交接收」一类时点形态，计价侧没有执行它的东西（[ADR-0157](./0157-built-in-as-of-forms-are-adopted-as-reference-citations.md) 越权风险点 3）。
 - 结果：同一格有两处各自合法的声明，计价只用卡上那一处，政策上那一处静默不起作用；照文档写新消费方的作者会去解析 PC 价格闭包选卡。
@@ -19,10 +19,11 @@ Date: 2026-10-21
 
 ## Decision
 
-**一、评价用的价卡只出自 `parcel-pricing` 自己的价卡登记册；商业价格政策的定价方案绑定不参与选卡。**（产品策略）
+**一、按范围选卡不读商业价格政策的定价方案绑定。**（产品策略）
 
-- 正式评价、接受前估价与试算按（租户、计价范围、方向、目的、时点）选卡，收尾之后的折法照 [ADR-0234](./0234-an-older-price-card-version-leaves-new-selections-only-through-an-explicit-closure-for-a-named-successor.md)；这是选卡的唯一权威。
-- 商业价格政策照旧必须绑定价格方向与定价方案，PC 照 ADR-0034 解析并带回它；它是这份政策授权哪份方案的商业留痕，不决定计价选哪张卡，也不与选出的卡核对。
+- 正式评价、接受前估价与试算按（租户、计价范围、方向、目的、时点）从 `parcel-pricing` 自己的价卡登记册选卡，收尾之后的折法照 [ADR-0234](./0234-an-older-price-card-version-leaves-new-selections-only-through-an-explicit-closure-for-a-named-successor.md)；这三条路上它是选卡的唯一权威。
+- 路由候选成本照 ADR-0148 决定四按段指名：外包段引 `BUY` 卡，自营段引 `INTERNAL` 方向价格政策、经它的定价方案绑定得出方案。这是绑定决定评价用哪份方案的唯一一处，本记录不改它。
+- 销售与采购方向的商业价格政策照旧必须绑定价格方向与定价方案，PC 照 ADR-0034 解析并带回它；在按范围选卡的三条路上，它是这份政策授权哪份方案的商业留痕，不决定计价选哪张卡，也不与选出的卡核对。
 - 计价目的的 PC 解析今天没有消费方；生产装配不传方案存续答复（[ADR-0032](./0032-resolution-confirms-references-named-in-the-adopted-content.md) 的入参），问到即答`解析未决`、原因 `BoundPlanNotConfirmed`（ADR-0034 决定三）。本记录不补那个提供方。
 - 计价输入快照不带商业依据：评价不引用任何 PC 解析。
 
@@ -57,12 +58,12 @@ Date: 2026-10-21
 - **部分停用** ADR-0107 决定一「采购方向的策略属价卡内容，销售方向的属商业价格政策——与体积系数的两侧归属逐字同构（CONTEXT「体积系数」词条）。」一句。**适用场景**：全部方向的评价金额取整——两个方向的策略都是价卡内容。决定一其余（金额取整是价卡内容、不内置任何金额精度常量、不按币种查表）与决定二至四不变。
 - **部分停用** ADR-0148 决定四「比较币种与换算」一条里「换算所用的汇率口径（牌价类型、取值时点规则、加点规则）由策略版本所引的一份价格政策声明——PP 不接受未声明口径的裸汇率，本记录不另开口子。」一句；同条下一句「换算由 PP 按该口径、取判断时点在用的汇率序列完成」里的「该口径」按卡绑定的汇率序列所带的口径解；其 Consequences 里「路由策略版本加「比较币种」与所引价格政策两项」的所引价格政策一项不再立。**适用场景**：路由候选成本的比较币种换算。比较币种是路由策略版本上的租户取值、逐段留痕、NR 不持汇率也不自己换算，与决定四其余各条不变。
 - ADR-0157：无条款停用，越权风险点 3「汇率格可以选用，计价侧没有执行器。」由决定三回答——评价不执行政策上的时点形态，期次按计价基准时点取。
-- ADR-0013、ADR-0034、ADR-0179、ADR-0189：无条款停用。ADR-0013 的口径声明经序列登记的口径引用落地；ADR-0034 的解析照旧，只是无人用它选卡；ADR-0179 决定三与 ADR-0189 越权风险点 8 正是本记录认的那一边。
+- ADR-0013、ADR-0034、ADR-0179、ADR-0189：无条款停用。ADR-0013 的口径声明经序列登记的口径引用落地；ADR-0034 的解析照旧，只是无人用它选卡；ADR-0179 决定三与 ADR-0189 越权风险点 8 正是本记录认的那一边。ADR-0148 决定四自营段经 `INTERNAL` 价格政策的绑定得出方案那一条不变。
 
 ## 越权风险点
 
 1. **客户差异化的销售价首发表达不了**（PP、PC owner）。按范围选卡不认客户：同一计价范围只有一张在用 `SELL` 卡，合同议定的不同抛比或取整只能另立计价范围，或等选卡改走绑定（决定四）。首发没有客户差异化 `SELL` 价的证据，这条限制先如实写在 PC CONTEXT 与 UC-PC-002 里。
-2. **绑定照旧可登、照旧解析，却不决定选卡**（PC owner）。租户照 PC 管理台登了绑定，可能以为它决定计价用哪张卡；绑定的方案被 PP 截止或退役后，PC 那份绑定照旧指着它。本记录不加两侧一致性核对：那要 PC 读 PP 的册或反过来，换来的只是一道没人依赖的门。
+2. **销售与采购政策的绑定照旧可登、照旧解析，却不决定选卡**（PC owner）。只有 `INTERNAL` 方向政策的绑定经路由自营段决定评价用哪份方案；租户照 PC 管理台给销售或采购政策登了绑定，可能以为它决定计价用哪张卡；绑定的方案被 PP 截止或退役后，PC 那份绑定照旧指着它。本记录不加两侧一致性核对：那要 PC 读 PP 的册或反过来，换来的只是一道没人依赖的门。
 3. **政策上的取值时点规则不执行**（PP owner）。政策选了「提交接收」，评价按计价基准时点取期次，两者不同时以计价基准时点为准、不报。要执行它，得先有计价侧的时点执行器，并裁它与计价基准时点谁优先。
 4. **口径引用不核**（PP owner）。汇率序列登记时引的那一版政策是不是真声明了这一牌价类型，计价不核；转录与登记错误由登记责任方承担（PP CONTEXT 序列登记责任一条）。
 5. **撤掉 PC 销售体积格改了 PC 的登记面**（PC owner）。带 `volumetricFactor` 的 `SELL` 价格政策批文此后答未受理，种子与受控批文工具须同步；已发布的行不动。今天没有真实租户登过这一格。
