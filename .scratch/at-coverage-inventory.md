@@ -783,7 +783,6 @@
 | `AT-TF-012` | 事实已保存但派生或发布技术失败 | UC-TF-001-ACCEPT-AND-FULFILL-REGULATORY-TRANSPORT-DISPOSITION.md |
 | `AT-TF-014` | 外包伙伴提供符合当前规则的对象级接收证据 | UC-TF-002-PERFORM-OFFSITE-PICKUP.md |
 | `AT-TF-017` | 包装不合格且执行方明确拒收 | UC-TF-002-PERFORM-OFFSITE-PICKUP.md |
-| `AT-TF-018` | 只有车辆到场和司机扫描 | UC-TF-002-PERFORM-OFFSITE-PICKUP.md |
 | `AT-TF-022` | 一个对象已取消且取消先于实际接收 | UC-TF-002-PERFORM-OFFSITE-PICKUP.md |
 | `AT-TF-023` | 揽收先实际发生，取消消息后到 | UC-TF-002-PERFORM-OFFSITE-PICKUP.md |
 | `AT-TF-025` | 场外揽收成功但尚未到节点 | UC-TF-002-PERFORM-OFFSITE-PICKUP.md |
@@ -795,7 +794,7 @@
 | `AT-TF-034` | 出发后发生资源故障 | UC-TF-003-PREPARE-TRANSPORT-OPPORTUNITY.md |
 | `AT-TF-035` | 同一准备请求重复到达 | UC-TF-003-PREPARE-TRANSPORT-OPPORTUNITY.md |
 | `AT-TF-036` | 计划段版本与节点准备范围冲突 | UC-TF-003-PREPARE-TRANSPORT-OPPORTUNITY.md |
-| `AT-TF-037` | 运输准备保存成功但发布失败 | UC-TF-003-PREPARE-TRANSPORT-OPPORTUNITY.md |
+| `AT-TF-037` | 运输准备保存成功（准备结果不入队信封，ADR-0201 决定七） | UC-TF-003-PREPARE-TRANSPORT-OPPORTUNITY.md |
 | `AT-TF-039` | 运输委托提交但承运方尚未响应 | UC-TF-004-COMMISSION-AND-ACCEPT-TRANSPORT.md |
 | `AT-TF-040` | 承运方只接受部分数量 | UC-TF-004-COMMISSION-AND-ACCEPT-TRANSPORT.md |
 | `AT-TF-041` | 订舱确认但无容量预占依据 | UC-TF-004-COMMISSION-AND-ACCEPT-TRANSPORT.md |
@@ -808,14 +807,12 @@
 | `AT-TF-048` | 外部响应冲突 | UC-TF-004-COMMISSION-AND-ACCEPT-TRANSPORT.md |
 | `AT-TF-049` | 委托取消与承运接受同时发生 | UC-TF-004-COMMISSION-AND-ACCEPT-TRANSPORT.md |
 | `AT-TF-050` | 结果已保存但发布失败 | UC-TF-004-COMMISSION-AND-ACCEPT-TRANSPORT.md |
-| `AT-TF-054` | 封签连续的集运单元整体交接 | UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md |
 | `AT-TF-055` | 封签破损但单元被接收 | UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md |
 | `AT-TF-056` | 渠道品牌已知但实际承运商未知 | UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md |
 | `AT-TF-058` | 班次出发后资源故障 | UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md |
 | `AT-TF-059` | 运输中断但没有控制终止证据 | UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md |
 | `AT-TF-060` | 目的节点接收证据充分 | UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md |
 | `AT-TF-068` | 执行方上传照片但方式未获允许 | UC-TF-006-PERFORM-DELIVERY-AND-CAPTURE-POD.md |
-| `AT-TF-070` | 本人签收和地址来源冲突 | UC-TF-006-PERFORM-DELIVERY-AND-CAPTURE-POD.md |
 | `AT-TF-071` | 多包裹部分交付后启动退运决定 | UC-TF-006-PERFORM-DELIVERY-AND-CAPTURE-POD.md |
 | `AT-TF-075` | 主伙伴不可继续，系统有备用候选 | UC-TF-007-START-ALTERNATE-OR-RETURN-JOURNEY.md |
 | `AT-TF-076` | 授权角色确认备用伙伴 | UC-TF-007-START-ALTERNATE-OR-RETURN-JOURNEY.md |
@@ -824,9 +821,7 @@
 | `AT-TF-083` | 同一采用决定重复提交 | UC-TF-007-START-ALTERNATE-OR-RETURN-JOURNEY.md |
 | `AT-TF-084` | 决定更正与新旅程开始并发 | UC-TF-007-START-ALTERNATE-OR-RETURN-JOURNEY.md |
 | `AT-TF-086` | 同一成员的重量、体积和件数均参与容量 | UC-TF-003-PREPARE-TRANSPORT-OPPORTUNITY.md |
-| `AT-TF-087` | 预占后节点新测量使体积增加 | UC-TF-003-PREPARE-TRANSPORT-OPPORTUNITY.md |
-| `AT-TF-088` | 集运单元成员在舱单冻结前变化 | UC-TF-003-PREPARE-TRANSPORT-OPPORTUNITY.md |
-| `AT-TF-089` | 出发门禁仍引用过期需求快照 | UC-TF-003-PREPARE-TRANSPORT-OPPORTUNITY.md |
+| `AT-TF-089` | 需求快照已过期，班次照样出发（出发照实落册、不读容量与需求快照，ADR-0264） | UC-TF-003-PREPARE-TRANSPORT-OPPORTUNITY.md |
 | `AT-TF-090` | 订舱已经确认且采用协议把该动作列为成本发生依据 | UC-TF-004-COMMISSION-AND-ACCEPT-TRANSPORT.md |
 | `AT-TF-091` | 订舱后取消被接受，但协议允许存在取消费用 | UC-TF-004-COMMISSION-AND-ACCEPT-TRANSPORT.md |
 | `AT-TF-092` | 取消到达时服务已经开始 | UC-TF-004-COMMISSION-AND-ACCEPT-TRANSPORT.md |
@@ -962,7 +957,7 @@
 | `AT-TF-057` | 后续取得真实承运商收寄证据 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md |
 | `AT-TF-063` | 跨客户共同运输查询 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md |
 | `AT-TF-074` | 跨客户批量查询 POD | 查询/权限/审计面（接入与持久化闸门后） | UC-TF-006-PERFORM-DELIVERY-AND-CAPTURE-POD.md |
-| `AT-TF-081` | 退运路径未纳入生产 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-TF-007-START-ALTERNATE-OR-RETURN-JOURNEY.md |
+| `AT-TF-081` | 该租户没有登记退运路径、责任或伙伴（退运路径未纳入生产） | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-TF-007-START-ALTERNATE-OR-RETURN-JOURNEY.md |
 | `AT-TF-085` | 模拟退运通过 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-TF-007-START-ALTERNATE-OR-RETURN-JOURNEY.md |
 | `AT-VE-007` | 真实程序正常形成查验决定 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-VE-001-COORDINATE-CUSTOMS-EXCEPTIONS-AND-CUSTOMER-DISCLOSURE.md |
 | `AT-VE-019` | 案件需要关务补充查询或重新申报判断 | 查询/权限/审计面（接入与持久化闸门后） | UC-VE-001-COORDINATE-CUSTOMS-EXCEPTIONS-AND-CUSTOMER-DISCLOSURE.md |
@@ -1299,6 +1294,12 @@
 | `AT-PS-088` | 处置请求已发出但运输方拒绝承接 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
 | `AT-PS-106` | 指名的委托不存在，或属于别的租户、客户 | UC-PS-002-AMEND-CUSTOMER-SOURCE-DATA.md |
 | `AT-PS-108` | 面单渠道包裹已有有效取消，随后的首次有效收寄发生不晚于取消的业务时间（ADR-0254） | UC-PS-004-FORM-PARCEL-FINAL-SERVICE-OUTCOME.md |
+| `AT-TF-018` | 只有车辆到场和司机扫描（逐对象结果待确认未实现，code/01） | UC-TF-002-PERFORM-OFFSITE-PICKUP.md |
+| `AT-TF-054` | 封签连续的集运单元整体交接（成员随单元受控的派生规则未立，ADR-0263、票 demo-chain-gaps/80） | UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md |
+| `AT-TF-070` | 本人签收和地址来源冲突（逐对象结果待确认未实现，code/01） | UC-TF-006-PERFORM-DELIVERY-AND-CAPTURE-POD.md |
+| `AT-TF-087` | 预占后节点新测量使体积增加（节点实测后的再准备未实现，票 demo-chain-gaps/44） | UC-TF-003-PREPARE-TRANSPORT-OPPORTUNITY.md |
+| `AT-TF-088` | 集运单元成员在舱单冻结前变化（节点实测后的再准备未实现，票 demo-chain-gaps/44） | UC-TF-003-PREPARE-TRANSPORT-OPPORTUNITY.md |
+| `AT-TF-329` | 交接首登为待确认（或已拒收），之后更正成`已交接`：对象凭这一版进段、结束先前段的参与（未实现，票 demo-chain-gaps/130） | UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md |
 | `AT-VE-001` | `UC-CC-006` 提供已接受、范围明确的关务结果 | UC-VE-001-COORDINATE-CUSTOMS-EXCEPTIONS-AND-CUSTOMER-DISCLOSURE.md |
 | `AT-VE-002` | 只有原始监管消息、截图或操作员备注，尚未被关务接受 | UC-VE-001-COORDINATE-CUSTOMS-EXCEPTIONS-AND-CUSTOMER-DISCLOSURE.md |
 | `AT-VE-003` | 只有技术送达/监管接收且不存在适用异常条件 | UC-VE-001-COORDINATE-CUSTOMS-EXCEPTIONS-AND-CUSTOMER-DISCLOSURE.md |
@@ -1573,3 +1574,5 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-10-21 追记（票 docs-consistency/06）：UC-PS-002 新立 `AT-PS-106`（委托查无或属别人答统一不可见，今天答 500，code/22），入④；`AT-PS-019` 改为可见范围内无修订授权（未获授权）。UC-PS-003 新立 `AT-PS-107`（取消已提交后才到、发生不晚于取消的收寄停在未决，ADR-0254；机制已在 `TestTheCancellationBoundaryJudgesByBusinessTime`，缺 Covers 点名），入②；`AT-PS-045` 限到收寄已采用后取消才到。UC-PS-004 新立 `AT-PS-108`（面单渠道同一情形，今天答 CANCELLATION_STANDS，code/35），入④。UC-PS-005 新立 `AT-PS-109`（只有信用暴露的撤回按原关联释放，机制已在 `TestAWithdrawalReleasesEveryOccupationRegardlessOfTheConclusion`，那里点的是 `AT-PS-035`）、`AT-PS-110`（可见范围内无撤回授权，机制已在 `TestAnUnauthorizedWithdrawalFormsNothing`，那里点的是 `AT-PS-075`），入②。UC-PS-006 `AT-PS-083`、`AT-PS-084`、`AT-PS-088`（收寄后服务处置决定没有模型，code/37）与 `AT-PS-086`（终局后取消答既有终局，今天不读终局，code/21）由②移入④。总览计数未改，由推送方重算。
 
 2026-10-21 追记（票 docs-consistency/07）：UC-PC-003 新立 `AT-PC-059`–`061`（授予与委派随所挂版本收尾，ADR-0261），`AT-PC-042` 由待评审改为适用冲突，UC-PC-001 新立 `AT-PC-062`（价格政策口径不收体积系数，ADR-0260），UC-PP-001 新立 `AT-PP-014`、`015`（参考复核读租户复核职责规则，ADR-0262），均未实现，入④（承接 code/24、25、41）；UC-PP-001 新立 `AT-PP-013`（计价条款只从价卡读，ADR-0260）与 `AT-PP-016`（免复核来源的代写复核不读规则，ADR-0262），行为已对、缺 Covers 点名，入②。`AT-PC-037`–`053` 本就不在本盘点内，`AT-PC-042` 是其中唯一随本票加行的一条。`AT-PC-006`、`003`、`033`、`036`、`058` 只改场景文字，测试归属不变。
+
+2026-10-21 追记（票 docs-consistency/08，文档自洽 TF 组）：UC-TF-005 新立 `AT-TF-329`（待确认或拒收更正成`已交接`即进段、结束先前段的参与；今天对象仍挂在先前的段里，票 demo-chain-gaps/130），未实现，入④；`AT-TF-018`、`AT-TF-070`（逐对象结果待确认，code/01）、`AT-TF-054`（单元成员随单元受控的派生规则未立，ADR-0263、票 demo-chain-gaps/80）、`AT-TF-087`、`AT-TF-088`（节点实测后的再准备未实现，票 demo-chain-gaps/44）由②移入④；`AT-TF-037`（准备结果不入队信封，ADR-0201 决定七）、`AT-TF-089`（出发不读容量与需求快照，ADR-0264）改场景文字，留②；`AT-TF-081`（三类口径，ADR-0146、ADR-0150）改场景文字，留③。UC-TF-004 `AT-TF-181` 删去重号的旧行，盘点里本无此号。总览计数不改，由推送方重算。
