@@ -44,11 +44,11 @@ M：改两本账的写入与一条读写路径，补真库并发用例（两连�
 
 无。两种修法属机制，落地时按代价选一种，选法写进完成记录。
 
-## 完成记录（2026-10-21，分支 claude-code70，基于 main `3e3b08300`）
+## 完成记录（2026-10-21，分支 claude-code70，基于 main `3e3b08300`；评审后 rebase 于 main `f4a7e226a`，下文 SHA 均为 rebase 后的）
 
 ### 做了什么
 
-- `60ff9788a` 两种修法兼用：
+- `fa638c0d2` 两种修法兼用：
   - 新端口 `ports.PreAcceptanceControlScopeLock` 与适配器 `sapostgres.PreAcceptanceControlScopeLocks`：按（租户，法人，账户，币种）取 `pg_advisory_xact_lock`，锁空间 `settlement_accounting.pre_acceptance_control.scope`，走 `RequireExecutor`，锁与读写同一笔环境事务。
   - `ApplyPreAcceptanceControlHandler`：预付冻结一项在读运营余额之前取锁，信用校验一项在读信用状况之前取锁（授信依据与比例基数在锁外取）；`ReleasePreAcceptanceControlHandler` 在读冻结账本之前取锁。取不到锁分别停在 `FREEZE_LEDGER_UNAVAILABLE` / `EXPOSURE_LEDGER_UNAVAILABLE`，带续办引用，不读不写。`ApplyPreAcceptanceControlDeps.ScopeLock` 进构造门；`NewReleasePreAcceptanceControlHandler` 多一参。
   - `FreezeLedgers.Save`、`CreditExposureLedgers.Save`：`DO UPDATE` 加 `WHERE 库里占着 AND 这一册已释放`，别的撞键行一行不写。
@@ -60,7 +60,7 @@ M：改两本账的写入与一条读写路径，补真库并发用例（两连�
   - 写口用例 `TestAStaleSnapshotNeitherRevivesAReleaseNorRewritesUnchangedEntries`：旧快照写回不改回库里的释放、原释放时刻不变；未变的行行版本（`xmin`）不变，原样再存一遍也不变。`TestTheScopeLockRefusesToRunOutsideATransaction` 是锁的无事务负向证据（PBC-08）。
   - 编排用例：`TestEachControlItemTakesTheScopeLockBeforeReadingItsBook`、`TestAnUnavailableScopeLockHaltsTheItemBeforeItsBookIsRead`、`TestAReleaseTakesTheScopeLockBeforeReadingEitherBook`；构造门用例补「scope lock」一格。
   - code/20 那处止血的注释改写：已释放不回写的理由换成「没有要推进的行，写一遍只是白锁一遍」，旧理由（会压回别人的释放）已由写口守住。
-- `ee8e0eb5d` SA CONTEXT「运营余额、收付款与坏账」补规则句；UC-SA-002「一致性、幂等与并发」补一行引它。UC 里没有本问题的现状注，无可改。
+- `501cc2acc` SA CONTEXT「运营余额、收付款与坏账」补规则句；UC-SA-002「一致性、幂等与并发」补一行引它。UC 里没有本问题的现状注，无可改。
 
 ### 代决（用户授权「你作为业务和系统专家自决……解决所有的问题」）
 
@@ -73,7 +73,7 @@ M：改两本账的写入与一条读写路径，补真库并发用例（两连�
 ### 越权风险点（待 SA owner 复核）
 
 1. **同一作用域上的控制全部排队，且锁持到外层事务提交。** 锁随环境事务放，PS 消费门那一笔事务提交之前，同一结算账户上的别的委托都等着。大客户单账户高并发时接受链会排队。
-2. **死锁可能（未实测）。** 外层事务若在取作用域锁之前已持有别的行锁（如同一委托的聚合行），另一路持作用域锁后又要那一行，PostgreSQL 死锁检测会中止其中一路，走既有的错误重投。两路要碰同一份委托，聚合乐观锁本来也会让其中一路回滚。
+2. **死锁（按隔离评审实测改写）。** 今天走不到：`cmd/parcel-api` 拒绝、处置、撤回三处释放口的 `Scopes` 是 nil，释放进不了 SA 编排。接上 `Scopes` 之后，parcel-api 一侧先取委托的行锁 R_i、再取作用域锁 S，接受链一侧先取 S、再取 R_i，两边会互等；PostgreSQL 约 1s 后中止其中一路，整笔回滚，重投或重试即自愈。日后接 parcel-api 作用域映射时要知道这一格，届时另立票，把 40P01 这个根因带进日志或续办范围（评审 N3）。
 3. **锁失败与账本读不回同一格**，运维从原因码看不出是锁等超时还是库读不回。
 4. **写口静默跳过。** 绕过编排、拿旧快照写回时，库里已释放的行不动、不报错；那一路手里的账本与库不一致（它交回的释放时刻可能不是库里那个）。编排路径在锁下，不会走到这一格。
 5. **`Save` 仍逐行整册。** 写的条数随作用域历史增长（只增不删），没改成只交变化的条目：要改就得让领域账本交出「改了哪几条」，本票不动领域。规模起来后另立票。
@@ -85,11 +85,22 @@ M：改两本账的写入与一条读写路径，补真库并发用例（两连�
 
 - 未改 AT 盘点；未重生成 `docs/product/MECHANISM-INVENTORY.md`、ADR 索引与 AT 计数。
 
-### 验证（代码同 `60ff9788a`）
+### 验证（首轮，代码同 `fa638c0d2`）
 
 - `TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/settlementaccounting/... ./internal/parcelshipment/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./cmd/parcel-settlement-register/ ./internal/customscompliance/adapters/settlementaccounting/ ./internal/parcelpricing/adapters/settlementaccounting/ ./tests/bentocontract/... ./internal/architecture/... ./migrations/...`：退 0，40 个包 ok、3 个无测试文件、0 FAIL。`cmd/` 与 `internal/` 下导入 SA 编排、端口或 postgres 适配器的包（`go list` 算）都在这一组里。
 - 新用例与改动用例 `-count=3`（SA `adapters/postgres`、SA `application`）：ok。
 - 变异：去掉释放那一处锁，同一笔两次释放用例两本都红；去掉施加两处锁，只够一笔用例两本都红；去掉写口 `WHERE`，旧快照用例两本都红；锁与写口都去掉，四条用例全红（即修前）。恢复后绿。
 - `go build ./...`、`go vet ./...`、`gofmt -l` 干净。
 - 演示种子：一次性库 `code70seed` 上灌入退 0（「种子灌入完成」），用后 `DROP DATABASE code70seed WITH (FORCE)`。无迁移。
+
+## 评审记录
+
+### 第 1 轮（隔离评审，协调方转达）
+
+没有阻断。死锁已实测，结论并入越权风险点 2。修订：
+
+- 并发用例文件的头注、`gatedFreezes`/`gatedExposures` 注释与三条用例的 Covers 去掉变更叙述，改为陈述失败形态（不排队时……、排队时……）。
+- 越权风险点 2 按实测结论改写；40P01 根因进日志或续办范围留待接 parcel-api 作用域映射那一票（N3）。
+
+验证（rebase 于 main `f4a7e226a` 之后）：`TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/settlementaccounting/...` 退 0；`go build ./...`、`go vet ./...`、`gofmt -l` 干净。rebase 无冲突。
 
