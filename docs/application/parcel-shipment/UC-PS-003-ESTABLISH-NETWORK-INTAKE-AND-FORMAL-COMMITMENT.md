@@ -188,7 +188,7 @@
 | `AT-PS-050` | 来源后来被更正或撤销有效性 | 形成新采用判断和必要的承诺调整版本，不删除原历史 |
 | `AT-PS-051` | 正式承诺提交成功但事件投递失败 | 不回退承诺，只重试同一发布意图 |
 | `AT-PS-052` | 跨租户或客户提交来源采用请求 | 答请求未受理，与查无同答，不泄露目标来源、包裹或承诺 |
-| `AT-PS-107` | 包裹取消已提交，此后到达的收寄来源发生时间不晚于取消的业务时间 | 收寄采用停在未决（`CANCELLATION_ORDER_CONFLICT`），不形成责任起点或正式承诺，已提交的取消不被改写；物理事实保留，等一份明确的业务决定解开（[ADR-0254](../../adr/0254-cancellation-and-boundary-fact-order-is-judged-by-their-business-times-and-a-late-earlier-boundary-fact-is-a-fact-conflict.md)） |
+| `AT-PS-107` | 包裹取消已提交，此后到达的收寄来源发生时间不晚于取消的业务时间 | 已提交的取消不被改写，收寄采用停在未决（`CANCELLATION_ORDER_CONFLICT`），不形成责任起点或正式承诺，收寄后处置不形成；物理事实保留，等一份明确的业务决定解开（[ADR-0254](../../adr/0254-cancellation-and-boundary-fact-order-is-judged-by-their-business-times-and-a-late-earlier-boundary-fact-is-a-fact-conflict.md)） |
 
 ## 给开发的交接
 
