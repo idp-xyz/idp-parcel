@@ -1,6 +1,6 @@
 # ADR-0079: 接受前控制策略视图凭商业解析回指提问——消费方只回显标识，提供方从已固定闭包取合同
 
-Status: Accepted
+Status: Accepted<!-- 索引注记 -->｜**表述更正**（指针 2026-10-21 补）：决定五「释放命令不带回指：释放不问控制策略，它按原请求身份在冻结账本上认领」里「在冻结账本上认领」一语成文时就写窄了，以 [ADR-0047](./0047-terms-control-forms-credit-exposure-not-a-freeze.md) 决定四「释放按原关联双账本认领」与 [ADR-0122](./0122-pre-acceptance-control-executes-the-policy-content-items-and-parcel-shipment-folds-by-the-joint-pass-condition.md) 决定三「释放两本账各认领一次」为准；该句的论点「释放不问控制策略」、不用回指与其余各条不变
 Date: 2026-08-26
 
 ## Context
@@ -95,3 +95,4 @@ LoadControlPolicy(ctx, tenant, scope, resolution) (domain.PreAcceptanceControlPo
 - [ADR-0025：跨上下文调用的适配器落在消费侧，翻译职责由它独占](./0025-cross-context-adapters-live-on-the-consumer-side.md)：甲案否决理由与全函数纪律
 - [`pn-02-w03`](../design/pn-02-w03-acceptance-rules-and-financial-control-evidence-request.md)：「结算模式不等于接受前财务控制策略」的禁推导句
 - [sa-preacceptance-policy-view/01](../../.scratch/sa-preacceptance-policy-view/issues/01-sa-preacceptance-control-policy-view-has-no-production-adapter.md)：三案对比、事实链取证与实现范围
+- [ADR-0122](./0122-pre-acceptance-control-executes-the-policy-content-items-and-parcel-shipment-folds-by-the-joint-pass-condition.md)：决定三「释放两本账各认领一次」——本记录决定五「在冻结账本上认领」一语以它与 ADR-0047 决定四为准

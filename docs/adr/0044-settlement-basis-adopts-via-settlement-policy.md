@@ -1,6 +1,6 @@
 # ADR-0044: 结算政策依据经政策采用，结果带回预付/账期方式与适用范围
 
-Status: Accepted  
+Status: Accepted<!-- 索引注记 -->｜**部分停用**（指针 2026-10-21 补）：其决定二「部分给出即`输入未受理`」一句在闭包解析键上已由 [ADR-0080](./0080-commercial-closure-resolves-the-contract-first-and-keys-settlement-by-it.md) 决定一停用——闭包键上的结算选择器只带相对方、费用范围、币种三维，合同维必须缺席、带上即整份键不受理，合同维由闭包先解出（ADR-0080 决定二）。**适用场景**：只限闭包解析键 `ClosureResolutionKey`；单依据键 `ResolutionKey` 仍要四维、判据不变，其余各条不变  
 Date: 2026-08-12
 
 ## Context
@@ -36,3 +36,4 @@ UC-PC-002 交接：「结算政策结果必须携带解析得到的预付/账期
 
 - [ADR-0034](./0034-pricing-closure-adopts-via-price-policy.md)：镜像先例
 - [UC-PC-002](../application/party-commercial/UC-PC-002-RESOLVE-COMMERCIAL-BASIS.md)：`AT-PC-031`/`AT-PC-032`
+- [ADR-0080](./0080-commercial-closure-resolves-the-contract-first-and-keys-settlement-by-it.md)：决定一停用本记录决定二「部分给出即`输入未受理`」在闭包解析键上的适用——闭包键合同维必须缺席；单依据键不变

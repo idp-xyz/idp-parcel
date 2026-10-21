@@ -1,6 +1,6 @@
 # ADR-0068: 版本化网络目录结构先行——七表由 CONTEXT 硬句推导，内容列与折叠规则等 PAR-NET-14
 
-Status: Accepted（**部分停用**：决定六「三个证据视图仍不读本目录」一句与其半句「目录修订与视图修订的合流属解析层设计，届时再裁」已由 [ADR-0148](./0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定六停用，自票 routing-first-cut/07 落地的那一笔起——可达性证据视图从本目录折出事实，`未配置`改由目录修订锚与判断时点适用于该服务目的的路由策略版本答，视图修订就是目录修订锚，0007 的定义登记册不再被读；初始路由证据视图同一条判法答`未配置`，已配置时在 routing-first-cut/09 之前照旧响亮上抛。护栏两处中迁移 `0008` 头注按 checksum 固定不改，改由迁移 `0011` 头注与 `NetworkCatalog` 类型注释承载。其余各条不变）<!-- 索引注记 -->｜**部分停用**：其决定六「三个证据视图仍不读本目录」一句（连同「目录修订与视图修订的合流属解析层设计，届时再裁」半句）已由 [ADR-0148](./0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定六停用（自 routing-first-cut/07 落地起）——可达性证据视图从本目录折出事实，视图修订就是目录修订锚。其余各条不变  
+Status: Accepted<!-- 索引注记 -->｜**部分停用**：其决定六「三个证据视图仍不读本目录」一句与其半句「目录修订与视图修订的合流属解析层设计，届时再裁」已由 [ADR-0148](./0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定六停用，自票 routing-first-cut/07 落地的那一笔起——可达性证据视图从本目录折出事实，`未配置`改由目录修订锚与判断时点适用于该服务目的的路由策略版本答，视图修订就是目录修订锚，0007 的定义登记册不再被读；初始路由证据视图同一条判法答`未配置`，已配置时在 routing-first-cut/09 之前照旧响亮上抛。护栏两处中迁移 `0008` 头注按 checksum 固定不改，改由迁移 `0011` 头注与 `NetworkCatalog` 类型注释承载。其余各条不变。**部分停用**（指针 2026-10-21 补）：其决定三中「路由策略的规则正文（过滤、排序、冻结边界、改善阈值、改路条件与权限）」「全属 `PAR-NET-14`」与决定六中「把目录折成逐候选事实的解析层属 `PAR-NET-14`」两处的归类已由 [ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定七改判——候选生成、硬约束过滤、排序策略族、冻结边界与已执行前缀的判定、自动 / 人工改路的判断结构属产品策略，开发方现在就做（首个形态见 ADR-0148，排序形态列由迁移 `0010` 扩出）。**适用场景**：只限决定七所列产品策略那几项；改善阈值、权限分派、服务区域地理覆盖与服务日历内容仍是租户取值，决定三「等形态定了以**新迁移扩列**，不改已施加迁移」不变，其余各条不变  
 Date: 2026-08-20
 
 ## Context
@@ -54,3 +54,4 @@ Date: 2026-08-20
 - [网络与路由上下文](../domain/network-routing/CONTEXT.md)：七类对象、版本化与时区硬句的权威来源
 - [参数登记册](../product/PILOT-PARAMETER-REGISTER.md)：`PAR-NET-14` 待提供；本记录不改其任何一行
 - 迁移 `migrations/network_routing/0008_network_catalog.sql` 与适配器 `internal/networkrouting/adapters/postgres/network_catalog.go`：本记录的实现落点
+- [ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)：决定七部分停用本记录决定三、决定六把过滤、排序与解析层归 `PAR-NET-14` 的句子——那几项属产品策略

@@ -1,6 +1,6 @@
 # ADR-0182：应收结算账户是客户收款的映射目标，账户级映射同时重算信用状况
 
-Status: Accepted（2026-10-14，用户原话「请你帮我彻底解决吧」。通道 1 据此裁定下面六条，接受方不改决定原文。派单 `task-0e5c89bc-35cc-43c3-8b97-418d2651370f` ← 通道 1，落在票 [product-strategy-boundary/26](../../.scratch/product-strategy-boundary/issues/26-demo-tenant-adopts-the-pre-acceptance-estimate-form.md) 的格 5。）<!-- 索引注记 -->｜**已接受**（2026-10-14，用户原话「请你帮我彻底解决吧」，通道 1 裁定六条决定）。**目标**：应收结算账户成为第四种映射目标；第一张对账单之前的预收映射到账户，不发空对账单，不直写余额。**信用状况**：没有已确认费用则逾期为假并写行，登记额度列插入 0 且不覆盖；缺到期日则这次不写。部分收窄 ADR-0181 决定五、决定六的首切边界。2026-10-14，票 product-strategy-boundary/26。
+Status: Accepted（2026-10-14，用户原话「请你帮我彻底解决吧」。通道 1 据此裁定下面六条，接受方不改决定原文。派单 `task-0e5c89bc-35cc-43c3-8b97-418d2651370f` ← 通道 1，落在票 [product-strategy-boundary/26](../../.scratch/product-strategy-boundary/issues/26-demo-tenant-adopts-the-pre-acceptance-estimate-form.md) 的格 5。部分收窄 [ADR-0181](./0181-posted-balance-is-recomputed-in-the-funds-mapping-transaction.md) 决定五、决定六的首切边界。）<!-- 索引注记 -->｜**目标**：应收结算账户成为第四种映射目标；第一张对账单之前的预收映射到账户，不发空对账单，不直写余额。**信用状况**：没有已确认费用则逾期为假并写行，登记额度列插入 0 且不覆盖；缺到期日则这次不写。
 
 Date: 2026-10-14
 
@@ -40,3 +40,8 @@ Date: 2026-10-14
 ## 接受记录（2026-10-14 通道 1）
 
 用户原话「请你帮我彻底解决吧」。通道 1 裁定格 5 要真的越过：受理前控制形成、冻结一笔、金额等于这一件的试算合计，两项都通过，不是业务限制。上面六条是该裁定的决定，接受时不改口。
+
+## Links
+
+- [ADR-0181](./0181-posted-balance-is-recomputed-in-the-funds-mapping-transaction.md)：入账余额求法 P − W 的出处；本记录收窄它的决定五「信用状况行在算得出逾期之前不写」与决定六「首切只挂决定一在客户收款映射及其撤销上的那一支」，求法与「无行仍是信用状况不可用」不改
+- 票 [product-strategy-boundary/26](../../.scratch/product-strategy-boundary/issues/26-demo-tenant-adopts-the-pre-acceptance-estimate-form.md)：格 5

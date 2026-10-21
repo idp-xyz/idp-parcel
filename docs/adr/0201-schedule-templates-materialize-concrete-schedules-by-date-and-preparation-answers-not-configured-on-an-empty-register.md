@@ -1,6 +1,6 @@
 # ADR-0201：运输机会——周期安排按日期物化成班次，初始路由形成后逐段准备，空册答未配置
 
-Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 [demo-chain-gaps/16](../../.scratch/demo-chain-gaps/issues/16-transport-schedule-templates-and-concrete-schedules-are-registered.md) 起草并落决定一至五，决定三的容量声明与决定一的容量池由票 17 落，决定六至八由票 18 落。越权风险点见文末，待 TF owner 复核，决定二与决定七待 NR owner 会签。）部分停用：[ADR-0217](./0217-route-plan-carries-a-delivery-leg-after-the-delivery-node.md)（被停条款：决定二末句「与计划履约段的比对……对的是 `PlannedLeg.From/To` 与窗口依据里的连接代码」只对节点间段成立，计划末尾的交付段不比对、不准备；适用场景见 adr/README 该行，其余各条不变，本记录正文不改写）<!-- 索引注记 -->｜**已接受**（2026-10-19，用户原话「你作为业务和系统专家自决」，Claude Code 会话代 TF owner 裁定，决定二、七待 NR owner 会签；票 demo-chain-gaps/16 起草，17、18 落其余条款）。TF 自有周期安排册，周期安排、班次与容量池走登记册配置写、CLI 与端点同一用例；方向身份是 NR 连接代码加起讫节点，自由串方向退役；周期文法只内置按周一种，到达用历时；同键同内容答已存在、异内容成下一版；班次身份由（周期安排代码、运行日期）派生，物化只在准备评估候选与显式登记两处，另可登临时班次；该连接空册答未配置并入账、不建占位班次；准备由初始路由形成触发、结果唯一、不发信封；需求量取申报测量。越权风险点待 TF owner 复核。｜**部分停用**：决定二末句「与计划履约段的比对只在 TF 的 `adapters/networkrouting` 里做，对的是 `PlannedLeg.From/To` 与窗口依据里的连接代码（票 18）」已由 [ADR-0217](./0217-route-plan-carries-a-delivery-leg-after-the-delivery-node.md) 停用，**适用场景**：只限计划末尾的交付段——它没有终点节点、窗口依据不指连接，不比对、不形成准备结果；节点间段照原句；自票 demo-chain-gaps/64 进 main 起生效；其余各条不变
+Status: Accepted（2026-10-19，Claude Code 会话代 TF owner 决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 [demo-chain-gaps/16](../../.scratch/demo-chain-gaps/issues/16-transport-schedule-templates-and-concrete-schedules-are-registered.md) 起草并落决定一至五，决定三的容量声明与决定一的容量池由票 17 落，决定六至八由票 18 落。越权风险点见文末，待 TF owner 复核，决定二与决定七待 NR owner 会签。）<!-- 索引注记 -->｜TF 自有周期安排册，周期安排、班次与容量池走登记册配置写、CLI 与端点同一用例；方向身份是 NR 连接代码加起讫节点，自由串方向退役；周期文法只内置按周一种，到达用历时；同键同内容答已存在、异内容成下一版；班次身份由（周期安排代码、运行日期）派生，物化只在准备评估候选与显式登记两处，另可登临时班次；该连接空册答未配置并入账、不建占位班次；准备由初始路由形成触发、结果唯一、不发信封；需求量取申报测量｜**部分停用**：决定二末句「与计划履约段的比对只在 TF 的 `adapters/networkrouting` 里做，对的是 `PlannedLeg.From/To` 与窗口依据里的连接代码（票 18）」已由 [ADR-0217](./0217-route-plan-carries-a-delivery-leg-after-the-delivery-node.md) 停用，**适用场景**：只限计划末尾的交付段——它没有终点节点、窗口依据不指连接，不比对、不形成准备结果；节点间段照原句；自票 demo-chain-gaps/64 进 main 起生效；其余各条不变，本记录正文不改写
 
 Date: 2026-10-19
 
@@ -87,6 +87,7 @@ Date: 2026-10-19
 - [UC-TF-003](../application/transport-fulfillment/UC-TF-003-PREPARE-TRANSPORT-OPPORTUNITY.md)：`AT-TF-027`、`AT-TF-028` 与 `AT-TF-100` 至 `AT-TF-104`
 - 计划 `.scratch/demo-chain-gaps/tf-chain-plan.md`「01 运输机会与班次」；票 `.scratch/demo-chain-gaps/issues/16-…`、`17-…`、`18-…`
 - [ADR-0217](./0217-route-plan-carries-a-delivery-leg-after-the-delivery-node.md)：初始路由计划末尾可带交付段，准备只为节点间段形成结果（部分停用决定二末句）
+- [ADR-0014](./0014-versioned-canonicalization-shape-for-content-digest.md)：本记录文末补记「迁移 0027」一条停用其 Consequences「每次变化都要新增一个规范化版本并长期支持它」一句，限 TF 容量池一册加维度一键那一次
 
 ## 补记：票 17 落地时的补充裁定（2026-10-19，Claude Code 会话代决，待 TF owner 复核）
 

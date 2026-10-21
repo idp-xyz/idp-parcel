@@ -1,6 +1,6 @@
 # ADR-0156：可达性资格的闭包标识从本轮已采用的商业解析回指
 
-Status: Accepted（2026-09-30。本项是机制。[ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定一：「机制与产品策略同属产品交付轨道，开发方现在就做。」通道 2 按 ADR-0064 的同一形补可达性这一条，不造解析号，不填租户截点。用户在本通道对「下一刀做 psb/16 第 1 项」的答复是检查队列，不是本记录的接受依据。）<!-- 索引注记 -->｜**回指**：解析标识随可达性命令带过，不进判断键，不另造映射。空引用仍是未形成。部分停用 ADR-0064 后果里可达性那一句与 Context 里「`ReachabilityClosureIdentity` 仍属实例半边」那一句。2026-09-30。本项是机制，接受依据是 ADR-0146 决定一「机制与产品策略同属产品交付轨道，开发方现在就做」，不是通道里的「继续」。
+Status: Accepted（2026-09-30。本项是机制。[ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定一：「机制与产品策略同属产品交付轨道，开发方现在就做。」通道 2 按 ADR-0064 的同一形补可达性这一条，不造解析号，不填租户截点。用户在本通道对「下一刀做 psb/16 第 1 项」的答复是检查队列，不是本记录的接受依据。另：决定一使 [ADR-0081](./0081-acceptance-judgment-is-envelope-driven.md) 决定六「可达性闭包标识」一格不再留 nil，见 ADR-0081 的 Status 行（指针 2026-10-21 补））<!-- 索引注记 -->｜**回指**：解析标识随可达性命令带过，不进判断键，不另造映射。空引用仍是未形成。部分停用 ADR-0064 后果里可达性那一句与 Context 里「`ReachabilityClosureIdentity` 仍属实例半边」那一句。
 Date: 2026-09-30
 
 ## Context
@@ -57,3 +57,4 @@ ADR-0064 已经否决过同一种空：判断键上没有解析标识，不等�
 - [ADR-0064：初始路由适用性闭包标识从已接受解析标识回指](./0064-initial-route-applicability-closure-from-accepted-resolution.md)：同一形；本记录停用其后果里可达性那一句，以及 Context 里「`ReachabilityClosureIdentity` 仍属实例半边」那一句
 - [ADR-0050：服务产品形态随解析闭包可观察](./0050-service-product-form-observable-through-the-resolution-closure.md)：翻译表不动
 - [ADR-0027：跨上下文多步协议的中间状态由提供方按解析标识保留](./0027-multi-step-cross-context-protocol-state-held-by-the-provider.md)
+- [ADR-0081](./0081-acceptance-judgment-is-envelope-driven.md)：决定六「可达性闭包标识」一格由本记录接上，不再留 nil

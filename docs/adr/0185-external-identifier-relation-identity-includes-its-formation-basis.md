@@ -1,6 +1,6 @@
 # ADR-0185：外部标识关联的身份含形成依据——同一分配方对同一对象再签同一个号是新的一条关联
 
-Status: Accepted（2026-10-16，部分停用 [ADR-0184](./0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md) 决定一的键，其余各条不变。由票 [ps-external-mark-relations/03](../../.scratch/ps-external-mark-relations/issues/03-channel-parcel-numbers-from-label-results-void-and-replacement.md) 的两轴评审揭出——Standards 轴报阻断、Spec 轴报非阻断，评审者是 `/code-review` 的隔离子代理（用户 2026-10-16 改裁允许子代理）。Claude Code 会话在用户「你帮我做决定吧」「开始」的同一授权下代 PS owner 裁定。）<!-- 索引注记 -->｜**已接受**（2026-10-16，部分停用 ADR-0184 决定一的键，由票 ps-external-mark-relations/03 两轴评审揭出）。**键**：（租户，标识类型，分配方，号码，被标识对象，形成依据）。换单沿用原号、作废后再签同号都是新关联；替代后继不得是被替代者自己。**越权风险点**已经 owner 复核（2026-10-19 代裁，见该记录文末）。
+Status: Accepted（2026-10-16，部分停用 [ADR-0184](./0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md) 决定一的键，其余各条不变。由票 [ps-external-mark-relations/03](../../.scratch/ps-external-mark-relations/issues/03-channel-parcel-numbers-from-label-results-void-and-replacement.md) 的两轴评审揭出——Standards 轴报阻断、Spec 轴报非阻断，评审者是 `/code-review` 的隔离子代理（用户 2026-10-16 改裁允许子代理）。Claude Code 会话在用户「你帮我做决定吧」「开始」的同一授权下代 PS owner 裁定。）<!-- 索引注记 -->｜**键**：（租户，标识类型，分配方，号码，被标识对象，形成依据）。换单沿用原号、作废后再签同号都是新关联；替代后继不得是被替代者自己。**越权风险点**已经 owner 复核（2026-10-19 代裁，见该记录文末）。
 
 Date: 2026-10-16
 
@@ -34,3 +34,8 @@ ADR-0184 决定一把关联的键定为（租户，标识类型，分配方，�
 ## 复核记录（2026-10-19，决定原文不动）
 
 1. **后果节在接受后被原地改写的补记**（出处：会话 `idp-parcel-9b` 裁票 02 评审遗留里 ADR-0184 后果节原地改写那一格时，一并核到本记录同日同形的一处。同一会话据用户原话「你作为业务和系统专家你来自决」补记，决定原文不动）：本记录在 `58c4c496` 以 Accepted 立下。同日，票 03 第二轮评审修补 `d8030e69` 在同一分支、进 main 之前，把 Consequences 以「不在本记录」起头那一条整句改写了。接受时原句是「不在本记录：同一条关联同时收到作废与替代时按写入先后立住终态，而不是按业务时间比先后——读口的答案不受影响（两者都让它不再算数），只是记下的终态种类可能与业务先后不符。票 03 的完成记录如实记为已知局限。」现行文字补进了「同一笔交易上后补一条业务时间更早的作废」那一格，理由见票 03 完成记录第二轮评审「ADR-0185 漏记「后补更早作废」一格」。Decision 与越权风险点都没动。同一笔把 `Status` 行的「修订」改称「部分停用」，属 ADR README「已接受决策」节头许可的标注，不在此列。现行文字与落地相符，保留、不回滚；接受时的原句，以本条引文与 `58c4c496` 为准。
+
+## Links
+
+- [ADR-0184](./0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md)：本记录部分停用它的决定一「键（租户，标识类型，分配方，号码，被标识对象）」——键加入形成依据；其余各条不变
+- 票 [ps-external-mark-relations/03](../../.scratch/ps-external-mark-relations/issues/03-channel-parcel-numbers-from-label-results-void-and-replacement.md)：两轴评审揭出本记录要裁的那一格

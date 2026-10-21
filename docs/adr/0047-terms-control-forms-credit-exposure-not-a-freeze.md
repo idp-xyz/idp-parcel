@@ -1,6 +1,6 @@
 # ADR-0047: 账期方式的接受前控制形成信用暴露，不冒充资金冻结
 
-Status: Accepted  
+Status: Accepted<!-- 索引注记 -->｜**部分停用**（指针 2026-10-21 补）：其决定二「账期分支形成信用暴露，走自己的账本」与 Consequences「SA 施加编排按方式分支」两处把结算方式当作选路判据，以及 Consequences 里同一委托两种控制「作用在**不同控制范围**上」一句，已由 [ADR-0122](./0122-pre-acceptance-control-executes-the-policy-content-items-and-parcel-shipment-folds-by-the-joint-pass-condition.md) 决定一、二停用——SA 的`要求`答复长成控制项集合，编排按判断顺序逐项执行，控制种类决定走哪本账，结算方式只作保存；同一范围里可以组合多项控制。决定一要求带方式与采用政策、决定二「两本账互不借用」、决定三的 `CREDIT_EXPOSED` 词汇（ADR-0125 降为投影而保留）与决定四两本账都要认领不变。**部分停用**（指针 2026-10-21 补）：其决定二「预付读运营余额，账期读 `CreditStanding`」那半句括注里当前额度的来源已由 [ADR-0127](./0127-credit-basis-is-handed-over-by-the-commercial-closure-resolution.md) 决定四停用——授信额度取闭包交出的信用依据（`CreditStanding.WithAuthorizedLimit`），已占用暴露与逾期仍取本上下文的账本与状况登记；其余各条不变  
 Date: 2026-08-12
 
 ## Context
@@ -64,3 +64,5 @@ HELD/RESTRICTED/NOT_APPLICABLE：账期控制通过若译成 `HELD`，就是在�
 - [SA CONTEXT](../domain/settlement-accounting/CONTEXT.md)：冻结/信用暴露分立与控制结果保存政策的硬句
 - [PILOT-ACCEPTANCE-MATRIX](../product/PILOT-ACCEPTANCE-MATRIX.md)：SET-02/SET-03
 - [UC-PS-001](../application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md)：`AT-PS-035`
+- [ADR-0122](./0122-pre-acceptance-control-executes-the-policy-content-items-and-parcel-shipment-folds-by-the-joint-pass-condition.md)：决定一、二部分停用本记录「方式即选路」——控制种类决定走哪本账，同一范围可组合多项控制；两本账互不借用不变
+- [ADR-0127](./0127-credit-basis-is-handed-over-by-the-commercial-closure-resolution.md)：决定四部分停用本记录决定二里当前额度的来源——授信额度取闭包交出的信用依据

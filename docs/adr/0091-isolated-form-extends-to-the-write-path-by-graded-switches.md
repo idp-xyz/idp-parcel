@@ -1,6 +1,6 @@
 # ADR-0091：隔离形态从查阅面扩到写路径，按分级开关放行——入格判据取代枚举；写面有持久化，可分辨物由 `SYN-` 前缀承担
 
-Status: Accepted（2026-09-02，用户经 IDP 队列通道 5 在四路范围选项间裁定「一份 ADR 同时裁两格」；本记录据此把写面 Intake 与生产归属范围目录合并裁决）；**部分停用**：决定六「隔离形态不因真渠道出现而自动退场」一句已由 [ADR-0150](./0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md) 停用——隔离形态是真渠道缺位时的过渡，某一口真渠道 Intake 落地即在同一笔撤下该口的隔离放行；同句「也不因它出现而获得任何真实租户」与其余各条不变<!-- 索引注记 -->｜**部分停用**：其决定六「隔离形态不因真渠道出现而自动退场」一句已由 [ADR-0150](./0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md) 停用——隔离形态是真渠道缺位时的过渡，某一口真渠道 Intake 落地即在同一笔撤下该口的隔离放行。同句「也不因它出现而获得任何真实租户」与其余各条不变
+Status: Accepted（2026-09-02，用户经 IDP 队列通道 5 在四路范围选项间裁定「一份 ADR 同时裁两格」；本记录据此把写面 Intake 与生产归属范围目录合并裁决。另：决定一至四逐口放行隔离写面，使 [ADR-0078](./0078-isolated-environment-operations-reads-admit-by-assembly-injection.md) 决定五「两项未决照旧拦着真渠道 Intake 与一切命令面」里「一切命令面」不再成立，适用场景是隔离写开关逐口放行的命令面（指针 2026-10-21 补））<!-- 索引注记 -->｜**部分停用**：其决定六「隔离形态不因真渠道出现而自动退场」一句已由 [ADR-0150](./0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md) 停用——隔离形态是真渠道缺位时的过渡，某一口真渠道 Intake 落地即在同一笔撤下该口的隔离放行。同句「也不因它出现而获得任何真实租户」与其余各条不变
 Date: 2026-09-02
 
 ## Context
@@ -52,7 +52,7 @@ Date: 2026-09-02
 
 ## Links
 
-- [ADR-0078：隔离环境运营查阅按装配注入放行](./0078-isolated-environment-operations-reads-admit-by-assembly-injection.md)：本记录的形状来源；其 Decision 四「按环境选择的只有装配点上查阅行的 Intake 一件事」由本记录停用，同条另两句不变
+- [ADR-0078：隔离环境运营查阅按装配注入放行](./0078-isolated-environment-operations-reads-admit-by-assembly-injection.md)：本记录的形状来源；其 Decision 四「按环境选择的只有装配点上查阅行的 Intake 一件事」由本记录停用，同条另两句不变；逐口放行隔离写面也使其 Decision 五「一切命令面」不再成立
 - [ADR-0055：业务端点 Intake 增设「未配置」格](./0055-business-endpoint-intake-has-an-unconfigured-grade.md)：未配置格与替换缝；其 Decision 五两项未决对生产装配照旧有效
 - [ADR-0072：接入渠道能力属共享技术能力，登记册形状等渠道证据](./0072-access-channel-capability-is-shared-and-registry-shape-awaits-channel-evidence.md)：本记录不触碰其 Decision 二，并在 Alternatives 里维持
 - [ADR-0089：一线作业过渡走受控批量导入并内置结构性拆除期限](./0089-frontline-transition-controlled-import-with-structural-sunset.md)：「来源标记落在事实自己的来源表达上、不另立旁表」的形状与理由出处，Decision 三沿用

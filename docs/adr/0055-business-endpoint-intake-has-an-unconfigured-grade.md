@@ -1,6 +1,6 @@
 # ADR-0055: 业务端点 Intake 增设「未配置」格，端点装配属机制半边
 
-Status: Accepted（**数目勘误**：正文所说「七个端点/七个处理器」沿承开发主线的算术口径错——逐项枚举五组（PS 提交/撤回、NO 收寄登记、TF 交付登记双端点、VE 视图查询/索赔受理、CC 外部结果接收）实为**八**个端点、八个 `New*Endpoint` 构造，TF 双端点此前被计作一项。以逐项枚举与 `cmd/parcel-api` 的装配测试为准，各条决定不受影响；实现 `93165cd` 已按八个装配）  
+Status: Accepted（**数目勘误**：正文所说「七个端点/七个处理器」沿承开发主线的算术口径错——逐项枚举五组（PS 提交/撤回、NO 收寄登记、TF 交付登记双端点、VE 视图查询/索赔受理、CC 外部结果接收）实为**八**个端点、八个 `New*Endpoint` 构造，TF 双端点此前被计作一项。以逐项枚举与 `cmd/parcel-api` 的装配测试为准，各条决定不受影响；实现 `93165cd` 已按八个装配）<!-- 索引注记 -->｜**部分停用**（指针 2026-10-21 补）：其决定五「本记录不解锁 Intake 的另两项未决。」所说「载荷规范化摘要与准入范围装配（`PAR-GOV-03..07`）仍然拦着真渠道 Intake」已由 [ADR-0149](./0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md) 决定四按口逐一解——每个命令口由所属上下文定一版带形状版本的规范化形状、未定形状的口不开真渠道；生产形态下铸信封前按准入范围读 pilot-governance 当前的生产权威区间，不覆盖即答「不在准入范围」；客户面各口由 [ADR-0139](./0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md) 决定八照办。**适用场景**：作业事实、外部结果与外部资金事实两族的口（ADR-0149）与首方客户族各口（ADR-0139）；区间内容（`PAR-GOV-03..07`）仍是租户取值，「真渠道落地时它们必须先行或同批」与其余各条不变  
 Date: 2026-08-17
 
 ## Context
@@ -55,3 +55,5 @@ Date: 2026-08-17
 - [开发主线](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)：机制/实例两半划分的唯一权威，「视图的内容属实例半边，实现不是」判别句出处
 - [参数登记册](../product/PILOT-PARAMETER-REGISTER.md)：`PAR-INT-01`/`PAR-INT-03` 等各接入面所等参数的登记处
 - [评审 081701](../review/081701.md)：触发本记录的 P1 记录与实现排序的出处
+- [ADR-0149](./0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md)：决定四把本记录决定五「仍然拦着真渠道 Intake」的两项未决按口逐一解
+- [ADR-0139](./0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md)：决定八把同一按口解法延到首方客户族各口

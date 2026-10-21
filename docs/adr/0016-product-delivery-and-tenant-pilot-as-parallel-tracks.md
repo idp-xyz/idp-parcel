@@ -1,6 +1,6 @@
 # ADR-0016: 产品交付与租户试点作为两条并行验收轨道
 
-Status: Accepted  
+Status: Accepted<!-- 索引注记 -->｜**部分停用**（指针 2026-10-21 补）：其 Decision「机制是规则、判断、版本化、门禁与记录形态，属产品交付；实例是某租户的真实客户、线路、伙伴、参数与阶段决定，属租户上线」一句的两分，与产品交付轨道「判据三项：骨架完整、受控案例可复算、参数显式未配置」里第三条，已由 [ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 部分取代——机制与租户取值之间另立第三类产品策略（判断方法：文法、内置策略形态、连接器形态，以及随产品发布的参考配置），机制与产品策略同属产品交付轨道、开发方现在就做；第三条判据改为「租户取值显式未配置，产品策略有执行器」，另加第四条「演示动线走通」（ADR-0146 决定一、五，运行定义以开发主线为准）。两条轨道、「两条轨道不互相替代」、证据红线与其余各条不变，本记录正文不改写  
 Date: 2026-08-07
 
 ## Context
@@ -57,3 +57,4 @@ Date: 2026-08-07
 - [`party-commercial` 上下文](../domain/party-commercial/CONTEXT.md)：运营集团租户、责任法人与货主客户账户的定义
 - [首发试点范围](../product/PILOT-SCOPE.md)、[验收场景矩阵](../product/PILOT-ACCEPTANCE-MATRIX.md)、[参数登记册](../product/PILOT-PARAMETER-REGISTER.md)：本决定重新定性的三份模板
 - [ADR-0015：以封闭文法与开放词汇实现多承运商通用计价](./0015-closed-grammar-open-vocabulary-for-multi-carrier-rating.md)：产品通用性由文法承担，与本记录的能力/实例划分同源
+- [ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)：部分停用本记录 Decision 的机制 / 实例两分与产品交付轨道第三条判据——另立产品策略一类，判据改为四条；两条轨道与证据红线不变

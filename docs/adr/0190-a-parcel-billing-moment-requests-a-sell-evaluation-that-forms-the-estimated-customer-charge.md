@@ -1,6 +1,6 @@
 # ADR-0190：包裹计费时点发起 SELL 评价，形成预估客户费用——独立的 SELL 请求身份，内置「有效网络收寄已采用」「有效交付已终局」两种时点，按结算账户登记采用
 
-Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」，其后又令「继续」，按会话里报告过的次序先做客户费用。取代 [ADR-0169](./0169-sell-evaluation-forms-a-customer-charge.md) Consequences「形成编排不进 `cmd/parcel-dispatch`」与决定四「也不在本记录里把形成编排接进进程」，以及 [ADR-0170](./0170-settlement-orchestrations-enter-through-parcel-api.md) Context「SELL 评价形成客户费用的编排不进 `cmd/parcel-dispatch`」与「候选与反方」里否决「把 SELL 形成编排接进派发」那一条；为 [ADR-0171](./0171-pricing-input-resolver-uses-declaration-until-a-measurement-port-exists.md) 决定五在 SELL·客户费用预估这一格作答。越权风险点见文末，待 SA、PP owner 复核。）<!-- 索引注记 -->｜**已接受**（2026-10-19，用户原话「你作为业务和系统专家自决」，Claude Code 会话代 SA、PP owner 裁定）。**独立 SELL 请求身份**，不动 BUY。**内置两种计费时点**：有效网络收寄已采用、有效交付已终局，结算账户登记采用哪一种与计价范围，没登记答未配置。**选卡同受理前试算**，预估阶段没有实测时用申报并标明来源。**一份评价映一个费用项目**才形成预估客户费用。编排住 `cmd/parcel-dispatch`，取代 ADR-0169、0170 里「不进派发」的句子。**越权风险点**待 SA、PP owner 复核。｜**部分停用**（2026-10-21）：决定一「自然键（租户、包裹、计费时点）只守幂等」与决定五「计价侧没形成评价（未配置、适用冲突、输入不可得）时不发评价已记录信封，请求停在「已提交」」两句已由 [ADR-0229](./0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 停用——自然键加代次唯一，补登参数之后另起新一代请求续办；计价答不出评价时交「评价未形成」，请求记`未形成`连同停因。**适用场景**：决定一那句只停「唯一」的口径，同一件包裹在所采时点只发起一次照旧；越权风险点 3「请求卡死」由 ADR-0229 作答。其余各条不变
+Status: Accepted（2026-10-19，Claude Code 会话代 SA、PP owner 决：用户原话「你作为业务和系统专家自决……解决所有的问题」，其后又令「继续」，按会话里报告过的次序先做客户费用。取代 [ADR-0169](./0169-sell-evaluation-forms-a-customer-charge.md) Consequences「形成编排不进 `cmd/parcel-dispatch`」与决定四「也不在本记录里把形成编排接进进程」，以及 [ADR-0170](./0170-settlement-orchestrations-enter-through-parcel-api.md) Context「SELL 评价形成客户费用的编排不进 `cmd/parcel-dispatch`」与「候选与反方」里否决「把 SELL 形成编排接进派发」那一条；为 [ADR-0171](./0171-pricing-input-resolver-uses-declaration-until-a-measurement-port-exists.md) 决定五在 SELL·客户费用预估这一格作答。另，决定二把 ADR-0169 决定三「内置时点只有发生项形成」扩成两路（指针 2026-10-21 补）。越权风险点见文末，待 SA、PP owner 复核。）<!-- 索引注记 -->｜**独立 SELL 请求身份**，不动 BUY。**内置两种计费时点**：有效网络收寄已采用、有效交付已终局，结算账户登记采用哪一种与计价范围，没登记答未配置。**选卡同受理前试算**，预估阶段没有实测时用申报并标明来源。**一份评价映一个费用项目**才形成预估客户费用。编排住 `cmd/parcel-dispatch`｜**部分停用**（2026-10-21）：决定一「自然键（租户、包裹、计费时点）只守幂等」与决定五「计价侧没形成评价（未配置、适用冲突、输入不可得）时不发评价已记录信封，请求停在「已提交」」两句已由 [ADR-0229](./0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 停用——自然键加代次唯一，补登参数之后另起新一代请求续办；计价答不出评价时交「评价未形成」，请求记`未形成`连同停因。**适用场景**：决定一那句只停「唯一」的口径，同一件包裹在所采时点只发起一次照旧；越权风险点 3「请求卡死」由 ADR-0229 作答。其余各条不变
 
 Date: 2026-10-19
 
@@ -73,7 +73,7 @@ Date: 2026-10-19
 
 ## Links
 
-- [ADR-0169：SELL 评价形成客户费用，何时发起另册登记](./0169-sell-evaluation-forms-a-customer-charge.md)：部分取代
+- [ADR-0169：SELL 评价形成客户费用，何时发起另册登记](./0169-sell-evaluation-forms-a-customer-charge.md)：决定六部分停用其 Consequences「形成编排不进 `cmd/parcel-dispatch`」与决定四「也不在本记录里把形成编排接进进程」，决定二把其决定三「内置时点只有发生项形成」扩成两路
 - [ADR-0170：结算编排从 parcel-api 进入；确认与截单没登记就不做](./0170-settlement-orchestrations-enter-through-parcel-api.md)：部分取代
 - [ADR-0171：计价输入在没有实测读口时用申报，并标明来源](./0171-pricing-input-resolver-uses-declaration-until-a-measurement-port-exists.md)：决定五在本格作答
 - [ADR-0179：受理前控制金额由结算按委托当前提交版本的逐件 SELL 试算合计形成](./0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md)：选卡口径与采用册键形

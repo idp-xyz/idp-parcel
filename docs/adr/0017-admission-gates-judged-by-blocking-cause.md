@@ -1,6 +1,6 @@
 # ADR-0017: 实现准入闸门按阻断理由分别裁决
 
-Status: Accepted  
+Status: Accepted<!-- 索引注记 -->｜**部分停用**（指针 2026-10-21 补）：其「**Bento 持久化技术闸门原样保留。**」一段里「PostgreSQL Repository 实现、迁移、事务与 Outbox 仍然阻断」一句已由 [ADR-0026](./0026-persistence-written-for-consumer-proof-precedes-gate-passage.md) 收窄——为产出消费者证明而写的持久化实现在闸门通过前即可写（针对精确 SemVer 候选编写 PostgreSQL Repository、迁移、事务与 Outbox 实现及其合同测试，用途限于产出 `PBC-01` 至 `PBC-09` 的证明），把实现登记为发布基线仍在闸门后。**适用场景**：只限为产出消费者证明而写的实现；同段「仍不得建立本地框架替身」与其余各条不变。闸门此后的状态以开发主线与[首个消费者切片简报](../design/parcel-go-first-consumer-slice-decision-brief.md)为准  
 Date: 2026-08-10
 
 ## Context
@@ -55,3 +55,4 @@ Date: 2026-08-10
 - [Go 首个消费者切片决策简报](../design/parcel-go-first-consumer-slice-decision-brief.md)：被本记录重述的两道闸门所在处
 - [开发主线：切片的机制半边与实例半边](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)：两半划分与产品就绪判据的唯一权威
 - [UC-PS-001：客户提交国际小包请求](../application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md)：本记录放行后首个可推进的应用编排
+- [ADR-0026](./0026-persistence-written-for-consumer-proof-precedes-gate-passage.md)：「即刻解锁的范围」收窄本记录「PostgreSQL Repository 实现、迁移、事务与 Outbox 仍然阻断」一句——为产出消费者证明的实现可先写，发布基线登记仍在闸门后

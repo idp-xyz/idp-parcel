@@ -1,6 +1,6 @@
 # ADR-0170：结算编排从 parcel-api 进入；确认与截单没登记就不做
 
-Status: Accepted（2026-09-30。本项里装配与入口是机制，确认与截单的触发是产品策略。接受依据是 ADR-0146 决定一。）<!-- 索引注记 -->｜**部分被 ADR-0190 取代**（「不进派发」那几句）。**入口**：六个构造接在 parcel-api。审核在接收编排上。确认与截单空册不调用。2026-09-30。装配是机制，触发是产品策略，接受依据是 ADR-0146 决定一。
+Status: Accepted（2026-09-30。本项里装配与入口是机制，确认与截单的触发是产品策略。接受依据是 ADR-0146 决定一。）<!-- 索引注记 -->｜**部分停用**：其 Context「SELL 评价形成客户费用的编排不进 `cmd/parcel-dispatch`」一句与 Alternatives 里否决「把 SELL 形成编排接进派发」那一条已由 [ADR-0190](./0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 决定六停用——SELL 时点发起与形成两只编排都住在 `cmd/parcel-dispatch`、由派发器驱动；其余各条不变。**入口**：六个构造接在 parcel-api。审核在接收编排上。确认与截单空册不调用。
 Date: 2026-09-30
 
 ## Context

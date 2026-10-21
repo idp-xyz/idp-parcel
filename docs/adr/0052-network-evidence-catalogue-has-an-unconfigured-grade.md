@@ -1,6 +1,6 @@
 # ADR-0052: 网络证据端口增设「未配置」格，网络定义登记册的模式属机制半边
 
-Status: Accepted（**部分停用**：Decision 四的第一句「它要能承载……全部事实族」已由 [ADR-0053](./0053-network-fact-families-are-derived-not-registrable.md) 停用——九族是每次判断的推导结果，不可登记；其余各条不变）<!-- 索引注记 -->｜**部分停用**：其 Decision 四中「它要能承载 `NetworkEvidence` 与 `InitialRouteEvidence` 两个结构今天已声明的全部事实族」一句已由 [ADR-0053](./0053-network-fact-families-are-derived-not-registrable.md) 停用——九族以每次判断生成的 `CandidateID` 为轴、且判断键里没有目的地维，它们是推导结果不是可登记的目录行。其余各条（三格端口、专格未决原因、修订由登记册派生、空册与空集合可分辨）不变。  
+Status: Accepted<!-- 索引注记 -->｜**部分停用**：其 Decision 四中「它要能承载 `NetworkEvidence` 与 `InitialRouteEvidence` 两个结构今天已声明的全部事实族」一句已由 [ADR-0053](./0053-network-fact-families-are-derived-not-registrable.md) 停用——九族以每次判断生成的 `CandidateID` 为轴、且判断键里没有目的地维，它们是每次判断的推导结果，不是可登记的目录行。**部分停用**（指针 2026-10-21 补）：其 Decision 一中「`configured=false` 即**网络定义登记册对这个判断范围未配置**」的判法已由 [ADR-0148](./0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定六停用（自 routing-first-cut/07 落地起）——`未配置`改由目录修订锚与判断时点适用于该判断范围的路由策略版本答，定义登记册不再被读；同理 Decision 四「修订标识由登记册派生，不由调用方传入」里修订改取目录修订锚，「不由调用方传入」不变。**部分停用**（指针 2026-10-21 补）：其 Decision 五「逐候选事实的生成、过滤与排序规则仍属 `PAR-NET-14`」一句的归类已由 [ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定七改判——候选生成、硬约束过滤、排序策略族属产品策略，开发方现在就做（首个形态见 ADR-0148）。**适用场景**：只限决定七所列产品策略那几项；网络目录内容、阈值、日历与截单、选用哪种排序策略仍是租户取值，同条「本记录一条都不定」与「适配器只按范围取行、不评估、不排序、不补默认」不变。其余各条（三格端口、专格未决原因、空册与空集合可分辨）不变。  
 Date: 2026-08-17
 
 ## Context
@@ -59,3 +59,5 @@ Date: 2026-08-17
 - [UC-NR-001](../application/network-routing/UC-NR-001-CREATE-INITIAL-ROUTE.md)：`无当前有效路由`、`未决`与`已形成`三者不得合并
 - [网络与路由上下文](../domain/network-routing/CONTEXT.md)：网络定义与视图修订的所有权
 - [参数登记册](../product/PILOT-PARAMETER-REGISTER.md)：`PAR-NET-14` 的待提供状态
+- [ADR-0148](./0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md)：决定六部分停用本记录决定一`configured=false`的判法（定义登记册不再承载未配置）
+- [ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)：决定七部分停用本记录决定五对逐候选事实生成、过滤与排序的归类——那几项属产品策略

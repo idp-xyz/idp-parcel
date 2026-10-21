@@ -49,3 +49,4 @@ Date: 2026-08-31
 - [syn-wall-door-audit 票 12](../../.scratch/syn-wall-door-audit/issues/12-governance-registration-has-no-process-entry.md)：治理登记主体与首批三类的裁决，受众答案的出处
 - [admin-web-page-wiring-frontier 票 03](../../.scratch/admin-web-page-wiring-frontier/issues/03-governance-read-face-needs-a-tenant-key-ruling.md)：被本记录取代的在先裁决及其三条重开判据
 - [admin-skeleton-closure-batch spec](../../.scratch/admin-skeleton-closure-batch/spec.md)：本批范围裁定与用户授权来源句
+- [ADR-0155](./0155-takeover-register-read-opens-on-the-existing-catalogue.md)：部分停用本记录决定四里接管格「第二批未开」

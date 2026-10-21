@@ -1,6 +1,6 @@
 # ADR-0081: 接受判断由信封驱动——提交落库即交出「委托已提交」，推进落在派发一拍；提交事务随之改两段边界
 
-Status: Accepted（部分停用：决定六里「结算账户目录留 nil」这一格由 [ADR-0158](./0158-settlement-account-register-is-an-immutable-tuple.md) 停用——生产装配接结算账户登记册。决定六其余各格不由该记录停用。）<!-- 索引注记 -->｜**部分停用**：决定六「结算账户目录留 nil」由 [ADR-0158](./0158-settlement-account-register-is-an-immutable-tuple.md) 停用；决定六其余各格仍有效
+Status: Accepted<!-- 索引注记 -->｜**部分停用**：决定六「时点取值源、可达性闭包标识、结算账户目录、控制金额源全部留 nil」四格已逐格接上——结算账户目录一格由 [ADR-0158](./0158-settlement-account-register-is-an-immutable-tuple.md) 停用，生产装配接结算账户登记册；可达性闭包标识一格由 [ADR-0156](./0156-reachability-closure-identity-comes-from-the-adopted-resolution.md) 停用（指针 2026-10-21 补），生产装配不再传入 nil 身份映射；控制金额源一格由 [ADR-0179](./0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 决定一停用（指针 2026-10-21 补），受理前控制金额改由结算形成估价；时点取值源一格按 [ADR-0157](./0157-built-in-as-of-forms-are-adopted-as-reference-citations.md) 的内置时点形态「提交接收」接上（指针 2026-10-21 补，装配见 `pspartycommercial.NewSubmissionReceiptAsOf`）。决定六其余（解析键登记面接真、空册按「显式未配置」答`解析未决`）与其余各条不变
 Date: 2026-08-27
 
 ## Context
@@ -65,3 +65,6 @@ Date: 2026-08-27
 - [ADR-0017：准入闸门按阻塞原因裁判](./0017-admission-gates-judged-by-blocking-cause.md)：事务与 Outbox 不进应用层，Decision 五的依据
 - [ADR-0063：收寄硬资格证明由消费侧窄口取证](./0063-intake-qualification-proof-is-a-consumer-side-evidence-port.md)：「显式未配置」与恢复动作分界，Decision 六的判据
 - [ADR-0158：结算账户登记册是一行固定属性，接受前控制只查应收](./0158-settlement-account-register-is-an-immutable-tuple.md)：部分停用决定六的结算账户目录留 nil
+- [ADR-0156](./0156-reachability-closure-identity-comes-from-the-adopted-resolution.md)：可达性闭包标识一格接上，部分停用本记录决定六那一格的留 nil
+- [ADR-0179](./0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md)：决定一让受理前控制金额由结算形成估价，部分停用本记录决定六控制金额源一格的留 nil
+- [ADR-0157](./0157-built-in-as-of-forms-are-adopted-as-reference-citations.md)：内置时点形态「提交接收」接上本记录决定六时点取值源一格

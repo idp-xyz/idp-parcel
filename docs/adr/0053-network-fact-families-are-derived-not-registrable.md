@@ -1,6 +1,6 @@
 # ADR-0053: 网络事实族是推导结果不可登记；登记册只登定义存在，无解析层时一律答未配置
 
-Status: Accepted（**部分停用**：Decision 三的「现在不建表」半句已由 [ADR-0068](./0068-versioned-network-catalog-structure-precedes-rule-content.md) 停用——目录结构由 CONTEXT 硬句定死、不依赖 `PAR-NET-*` 取值，先行落表；Decision 四「查无登记 → `未配置`」一格已由 [ADR-0148](./0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定六停用，自票 routing-first-cut/07 落地的那一笔起——`未配置`改由目录修订锚与判断时点适用于该服务目的的路由策略版本答，定义登记册（`0007`）不再被读，表按迁移不可改的纪律留着；同条第二格「查到登记但本进程没有解析层 → 响亮报错」（今天读作「登记了而解不出」）与第三格「禁止：查到登记就答 `configured=true` 带空事实族」不变。「不从事实族倒推」「内容形态不替租户拟」与其余各条不变）<!-- 索引注记 -->｜**部分停用**：其 Decision 三中「现在不建表」半句已由 [ADR-0068](./0068-versioned-network-catalog-structure-precedes-rule-content.md) 停用——目录**结构**由 CONTEXT 硬句定死不依赖取值，先行落表；「不从事实族倒推」「内容形态不替租户拟」与其余各条不变。其 Decision 四「查无登记 → `未配置`」一格已由 [ADR-0148](./0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定六停用（自 routing-first-cut/07 落地起）——`未配置`改由目录修订锚与适用于该服务目的的路由策略版本答，定义登记册不再被读；同条「登记了而解不出 → 响亮报错」与「禁止带空事实族答已配置」两格不变，其余各条不变。  
+Status: Accepted<!-- 索引注记 -->｜**部分停用**：其 Decision 三中「现在不建表」半句已由 [ADR-0068](./0068-versioned-network-catalog-structure-precedes-rule-content.md) 停用——目录**结构**由 CONTEXT 硬句定死、不依赖 `PAR-NET-*` 取值，先行落表；Consequences「不要从事实族倒推」与 Decision 三的理由「列出来的字段是替租户拟的」（ADR-0068 称作「不从事实族倒推」「内容形态不替租户拟」两条护栏）与其余各条不变。**部分停用**：其 Decision 四「查无登记 → `未配置`」一格已由 [ADR-0148](./0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定六停用，自票 routing-first-cut/07 落地的那一笔起——`未配置`改由目录修订锚与判断时点适用于该服务目的的路由策略版本答，定义登记册（`0007`）不再被读，表按迁移不可改的纪律留着；同条第二格「查到登记但本进程没有解析层 → 响亮报错」（今天读作「登记了而解不出」）与第三格「禁止：查到登记就答 `configured=true` 带空事实族」不变，其余各条不变。**部分停用**（指针 2026-10-21 补）：其 Decision 二「事实族由解析层从原语派生，解析层属 `PAR-NET-14`」一句里解析层的归类已由 [ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定七改判——候选生成属产品策略，开发方现在就做（首个形态见 ADR-0148）。**适用场景**：只限决定七所列产品策略那几项；网络目录内容、阈值、日历与截单、选用哪种排序策略仍是租户取值，「事实族由解析层从原语派生」与「可登记的是定义原语，不是事实族」不变。  
 Date: 2026-08-17
 
 ## Context
@@ -55,3 +55,5 @@ Date: 2026-08-17
 - [ADR-0046](./0046-route-candidate-evaluation-lives-in-the-domain.md)：评估归领域、证据端口退为取数——本记录不动这条线
 - [UC-NR-001](../application/network-routing/UC-NR-001-CREATE-INITIAL-ROUTE.md)：`无当前有效路由`、`未决`与`已形成`三者不得合并
 - [参数登记册](../product/PILOT-PARAMETER-REGISTER.md)：`PAR-NET-14` 的待提供状态
+- [ADR-0068](./0068-versioned-network-catalog-structure-precedes-rule-content.md)：决定一部分停用本记录 Decision 三「现在不建表」半句，其余各条（含「不要从事实族倒推」）不变
+- [ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)：决定七部分停用本记录决定二对解析层的归类——候选生成属产品策略

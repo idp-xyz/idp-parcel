@@ -1,9 +1,8 @@
 # ADR-0012: 在 idp-parcel 内建立小包计价上下文
 
-Status: Accepted  
+Status: Accepted<!-- 索引注记 -->｜**部分停用**：其 Decision 中「它只消费其他上下文提供的事实快照」一句的适用范围已由 [ADR-0013](./0013-pricing-owns-versioned-external-reference-series.md) 限定——燃油费率与汇率没有产出它们的兄弟上下文，由计价拥有版本化的外部数值序列并在评价内完成币种换算。**适用场景**：仅限没有兄弟上下文产出的外部数值序列；边界划分不变，其余各条不变，本记录正文不改写。  
 Date: 2026-08-07  
-Supersedes: [ADR-0011](./0011-parcel-pricing-context-within-idp-parcel.md)  
-Amended by: [ADR-0013](./0013-pricing-owns-versioned-external-reference-series.md)（限定下文 Decision 中「它只消费其他上下文提供的事实快照」一句；本记录正文不改写，边界划分不变）
+Supersedes: [ADR-0011](./0011-parcel-pricing-context-within-idp-parcel.md)
 
 ## Context
 
@@ -53,3 +52,4 @@ Amended by: [ADR-0013](./0013-pricing-owns-versioned-external-reference-series.m
 - [ADR-0009：采用 Go 模块化单体并复用版本化 Bento 技术合同](./0009-go-modular-monolith-and-versioned-bento-contracts.md)
 - [`PP-S03-W01` Golden Case 源证据闭合工作单](../design/pp-s03-w01-golden-case-source-evidence-request.md)
 - [ADR-0011：在 idp-parcel 内建立小包计价上下文](./0011-parcel-pricing-context-within-idp-parcel.md)（已被本记录取代，仅作历史）
+- [ADR-0013：由计价拥有版本化的外部数值序列并在评价内完成币种换算](./0013-pricing-owns-versioned-external-reference-series.md)：部分停用本记录——限定 Decision「它只消费其他上下文提供的事实快照」一句的适用范围

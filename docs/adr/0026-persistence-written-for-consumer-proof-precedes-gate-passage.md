@@ -1,6 +1,6 @@
 # ADR-0026: 为产出消费者证明而写的持久化实现先于闸门通过，发布基线登记仍在闸门后
 
-Status: Accepted  
+Status: Accepted（另：「即刻解锁的范围」收窄 [ADR-0017](./0017-admission-gates-judged-by-blocking-cause.md)「PostgreSQL Repository 实现、迁移、事务与 Outbox 仍然阻断」一句，被停原句与适用场景见 ADR-0017 的 Status 行（指针 2026-10-21 补））  
 Date: 2026-08-11
 
 ## Context
@@ -54,7 +54,7 @@ Date: 2026-08-11
 
 ## Links
 
-- [ADR-0017：实现准入闸门按阻断理由分别裁决](./0017-admission-gates-judged-by-blocking-cause.md)：本记录沿用其「按阻断理由分别裁决」方法，并把同一手法用在实现与登记之间
+- [ADR-0017：实现准入闸门按阻断理由分别裁决](./0017-admission-gates-judged-by-blocking-cause.md)：本记录沿用其「按阻断理由分别裁决」方法，并把同一手法用在实现与登记之间；「即刻解锁的范围」收窄其「PostgreSQL Repository 实现、迁移、事务与 Outbox 仍然阻断」一句
 - [ADR-0016：产品交付与租户试点作为两条并行验收轨道](./0016-product-delivery-and-tenant-pilot-as-parallel-tracks.md)：机制半边不挂在实例半边上，本记录据以解除两道闸门的联判
 - [ADR-0009：采用 Go 模块化单体并复用版本化 Bento 技术合同](./0009-go-modular-monolith-and-versioned-bento-contracts.md)：Bento 技术闸门的依据，本记录不改动
 - [Go 首个消费者切片决策简报](../design/parcel-go-first-consumer-slice-decision-brief.md)：`PBC-01` 至 `PBC-09`、完成门禁与闸门表所在处，候选与 checksum 证据记在其闸门表

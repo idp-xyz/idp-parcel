@@ -1,6 +1,6 @@
 # ADR-0054: 接受前财务控制策略视图增设「未配置」格
 
-Status: Accepted  
+Status: Accepted<!-- 索引注记 -->｜**引用更正**（2026-10-21）：Decision 二里指向 ADR-0029 的链接文件名写错（`./0029-recovery-action-is-the-error-algebra.md`，本目录没有这个文件），所指是 [ADR-0029](./0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md)；正文不改，Links 节已改正  
 Date: 2026-08-17
 
 ## Context
@@ -58,7 +58,7 @@ LoadControlPolicy(ctx, tenant, scope) (domain.PreAcceptanceControlPolicy, bool, 
 ## Links
 
 - [ADR-0052：网络证据端口增设「未配置」格](./0052-network-evidence-catalogue-has-an-unconfigured-grade.md)：同病先例，本记录沿用它的三格形状与分格理由
-- [ADR-0029：错误代数按恢复动作划分](./0029-recovery-action-is-the-error-algebra.md)：`未配置`与`调不通`分成两格的判据出处
+- [ADR-0029：错误代数按恢复动作划分](./0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md)：`未配置`与`调不通`分成两格的判据出处
 - [ADR-0044：结算依据经结算政策采用](./0044-settlement-basis-adopts-via-settlement-policy.md)：`要求`那一格的方式与采用政策由它提供，不由控制策略声明重造
 - [ADR-0047：账期控制形成信用暴露而非冻结](./0047-terms-control-forms-credit-exposure-not-a-freeze.md)：`要求`携带方式与采用政策引用的出处
 - [`pn-02-w03`](../design/pn-02-w03-acceptance-rules-and-financial-control-evidence-request.md)：「结算模式不等于接受前财务控制策略」的禁推导句

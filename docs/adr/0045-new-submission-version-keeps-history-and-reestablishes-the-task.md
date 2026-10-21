@@ -37,6 +37,6 @@ Date: 2026-08-12
 
 ## Links
 
-- [ADR-0028](./0028-aggregate-revision-moves-only-at-the-commit-boundary.md)：转移不动 revision 的出处
-- [ADR-0030](./0030-rehydration-admits-only-the-submitted-state.md)：重建门只收`已提交`
+- [ADR-0028](./0028-aggregate-rehydration-is-a-separate-door-that-validates-without-recomputing.md)：转移不动 revision 的出处
+- [ADR-0030](./0030-rehydration-admits-one-state-at-a-time-by-snapshot-expressiveness.md)：重建门只收`已提交`
 - [UC-PS-001](../application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md)（`AT-PS-036`）与 parcel-shipment CONTEXT「委托提交版本」词条：硬句出处
