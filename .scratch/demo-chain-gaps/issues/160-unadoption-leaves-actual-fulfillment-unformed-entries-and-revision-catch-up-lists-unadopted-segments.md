@@ -11,6 +11,8 @@ Blocked by: 票 [57](./57-segment-commission-adoption-has-no-correction-and-star
   - 一段解除采用时，册上那一段已有的未形成条目照留，查阅页仍把它们列成要换版去补的待办，而那一段已经不按那份委托采购了。
   - 换版门铃的补形成按委托读采用册全表列段（`SegmentCommissionAdoptions.ListByCommission`）。解除若另记一表或在采用行上加标记，列段会把已解除的段也列进来，对它们按那份委托再补形成。
 
+- 采用门铃的信封 ID 已带这一次采用的登记时刻（票 88 评审）：解除之后同一段再采用同一份委托，第二封门铃不会被当成第一封的重发吞掉、两次采用之间结束的参与照样补形成。票 57 让采用册按代记之后，指纹里的登记时刻换成代次（`OutboxSegmentCommissionAdoptionHandoff.HandOffSegmentCommissionAdoption`）。
+
 ## 要做的
 
 - 解除采用那一笔交一封门铃（或复用采用门铃的消费口另立一种类型），补形成看到段已不采用时把册上那一段的未形成条目作罢（册多一种状态，或复用了结的一格并记原因）。

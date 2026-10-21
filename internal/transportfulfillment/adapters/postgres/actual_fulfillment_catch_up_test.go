@@ -343,3 +343,47 @@ func TestTheCatchUpDoorbellsRefuseToRunOutsideATransaction(t *testing.T) {
 		}
 	}
 }
+
+// Covers: AT-TF-300 的存储半边（ADR-0231 决定一）——同一段两次采用同一份委托（解除采用之后再采用）各交一封门铃：信封 ID 带这一次采用的
+// 登记时刻，第二封不被当成第一封的重发吞掉；同一次采用重交（含从册上读回、时刻只到微秒的那一份）落回同一个 ID、不多一封。
+func TestEachAdoptionOfTheSameSegmentAndCommissionRingsItsOwnDoorbell(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := outbox.NewStore(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handoff, err := adapter.NewOutboxSegmentCommissionAdoptionHandoff(db, store, tfHandoffClock{at: commissionAt})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tenant := deliveryValue(t, domain.NewTenantID, "tenant-a")
+	segment := deliveryValue(t, domain.NewFulfillmentSegmentReference, "SEG-READOPTED")
+	adoption, err := domain.RehydrateSegmentCommissionAdoption(domain.RehydrateSegmentCommissionAdoptionSpec{
+		TenantID:   tenant,
+		Segment:    segment,
+		Commission: deliveryValue(t, domain.NewTransportCommissionReference, "commission-readopted"),
+		Provider:   deliveryValue(t, domain.NewServiceProviderReference, "partner-1"),
+		StartBasis: deliveryValue(t, domain.NewParticipationBasisReference, "TRANSPORT-HANDOVER/readopted"),
+		StartedAt:  commissionAt,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := commissionAt.Add(time.Hour).Add(123 * time.Nanosecond)
+	for _, recordedAt := range []time.Time{first, first.Truncate(time.Microsecond), first.Add(24 * time.Hour)} {
+		mustWithinDeliveryTransaction(t, db.Transactor(), t.Context(), func(txCtx context.Context) error {
+			return handoff.HandOffSegmentCommissionAdoption(txCtx, ports.SegmentCommissionAdoptedIntent{Record: ports.SegmentCommissionAdoptionRecord{
+				Key:      ports.SegmentCommissionAdoptionKey{TenantID: tenant, Segment: segment},
+				Adoption: adoption, RecordedAt: recordedAt,
+			}})
+		})
+	}
+	bells := doorbellsOf(t, pool, adapter.SegmentCommissionAdoptionRegisteredEventType)
+	if len(bells) != 2 || bells[0].id == bells[1].id {
+		t.Fatalf("门铃 = %+v, want 两次采用各一封、同一次重交不多一封", bells)
+	}
+}

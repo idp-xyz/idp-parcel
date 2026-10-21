@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"go.idp.xyz/idp-bento-go/eventing"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
+	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
@@ -51,16 +53,17 @@ type segmentCommissionAdoptionPayload struct {
 	Commission string `json:"commission"`
 }
 
-// HandOffSegmentCommissionAdoption 把一封门铃入队。信封 ID 由（租户、段、委托）经指纹铸出：今天一段只采用一份委托，委托进 ID 是为了
-// 日后段改采用另一份委托时那一封不被 EnqueueOnce 当成重发吞掉。分区取「租户/履约段」：门铃彼此没有先后，同一段的门铃排一条队只为
-// 不与别的段互相挡。键缺席是装配缺陷，响亮报错不入队。
+// HandOffSegmentCommissionAdoption 把一封门铃入队。信封 ID 由（租户、段、委托、这一次采用的登记时刻）经指纹铸出：一次采用一封。只取
+// （租户、段、委托）不够——解除采用之后同一段再采用同一份委托，铸出的是同一个 ID，EnqueueOnce 把第二封当成重发吞掉，两次采用之间结束
+// 的参与就没人补了。登记时刻折到登记册精度再进指纹：从册上读回的同一次采用重交，铸出的仍是同一个 ID。采用册日后有了代次，换成代次。
+// 分区取「租户/履约段」：门铃彼此没有先后，同一段的门铃排一条队只为不与别的段互相挡。键缺席是装配缺陷，响亮报错不入队。
 func (handoff *OutboxSegmentCommissionAdoptionHandoff) HandOffSegmentCommissionAdoption(
 	ctx context.Context,
 	intent ports.SegmentCommissionAdoptedIntent,
 ) error {
 	key := intent.Record.Key
 	commission := intent.Record.Adoption.Commission()
-	if key.TenantID.String() == "" || key.Segment.String() == "" || commission.String() == "" {
+	if key.TenantID.String() == "" || key.Segment.String() == "" || commission.String() == "" || intent.Record.RecordedAt.IsZero() {
 		return fmt.Errorf("hand off segment commission adoption: adoption key is required")
 	}
 	payload, err := json.Marshal(segmentCommissionAdoptionPayload{
@@ -74,7 +77,8 @@ func (handoff *OutboxSegmentCommissionAdoptionHandoff) HandOffSegmentCommissionA
 	envelope := eventing.Envelope{
 		SpecVersion: eventing.SpecVersion,
 		ID: outboxintent.FingerprintEventID("segment-commission-adoption-registered",
-			key.TenantID.String(), key.Segment.String(), commission.String()),
+			key.TenantID.String(), key.Segment.String(), commission.String(),
+			domain.AtRegistryPrecision(intent.Record.RecordedAt).Format(time.RFC3339Nano)),
 		Source:       tfEventSource,
 		Type:         SegmentCommissionAdoptionRegisteredEventType,
 		Version:      1,
