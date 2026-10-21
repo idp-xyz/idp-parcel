@@ -53,6 +53,8 @@ type occurrenceRegistryDouble struct {
 	coverageErr     error
 	saves           int
 	coverageQueries []ports.ChargeOccurrenceCoverageQuery
+	// ignoreInvalidatedInCoverage 让覆盖一问照真册那样不认链头已失效的项（替身不追版本链，按「这一身份有没有失效版」近似）。
+	ignoreInvalidatedInCoverage bool
 }
 
 func newOccurrenceRegistry() *occurrenceRegistryDouble {
@@ -89,6 +91,9 @@ func (double *occurrenceRegistryDouble) FindCovering(
 			occurrence.FactBasis().Source() != query.FactBasis.Source() {
 			continue
 		}
+		if double.ignoreInvalidatedInCoverage && double.invalidated(key) {
+			continue
+		}
 		_, unit := occurrence.Quantity()
 		if query.WholeScope || slices.Contains(query.ScopeUnits, unit) {
 			return record, true, nil
@@ -103,6 +108,15 @@ func (double *occurrenceRegistryDouble) FindCovering(
 		}
 	}
 	return ports.ChargeOccurrenceRecord{}, false, nil
+}
+
+func (double *occurrenceRegistryDouble) invalidated(key ports.ChargeOccurrenceKey) bool {
+	for other, record := range double.records {
+		if other.TenantID == key.TenantID && other.Occurrence == key.Occurrence && record.Occurrence.Invalidated() {
+			return true
+		}
+	}
+	return false
 }
 
 func (double *occurrenceRegistryDouble) Save(

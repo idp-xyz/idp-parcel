@@ -37,6 +37,8 @@ type RehydrateChargeOccurrenceSpec struct {
 	RevisionKind  OccurrenceRevisionKind
 	RevisionBasis OccurrenceBasisReference
 	RevisedAt     time.Time
+	// RevisedBy 只随修订版本出现，可缺：经修订入口（ADR-0232）形成的版本都带它，此前直接调 ReviseValidity 形成的不带。
+	RevisedBy RegistrantReference
 }
 
 // RehydrateChargeOccurrence 从库面重建一个发生项版本。
@@ -71,6 +73,9 @@ func RehydrateChargeOccurrence(spec RehydrateChargeOccurrenceSpec) (TransportCha
 		return TransportChargeOccurrence{}, ErrInvalidChargeOccurrence
 	}
 	if !revised {
+		if spec.RevisedBy.valid() {
+			return TransportChargeOccurrence{}, ErrInvalidChargeOccurrence
+		}
 		return occurrence, nil
 	}
 
@@ -86,5 +91,6 @@ func RehydrateChargeOccurrence(spec RehydrateChargeOccurrenceSpec) (TransportCha
 	occurrence.revisionKind = spec.RevisionKind
 	occurrence.revisionBasis = spec.RevisionBasis
 	occurrence.revisedAt = spec.RevisedAt.UTC()
+	occurrence.revisedBy = spec.RevisedBy
 	return occurrence, nil
 }

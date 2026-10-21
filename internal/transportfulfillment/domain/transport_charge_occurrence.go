@@ -341,6 +341,9 @@ type TransportChargeOccurrence struct {
 	revisionKind  OccurrenceRevisionKind
 	revisionBasis OccurrenceBasisReference
 	revisedAt     time.Time
+	// revisedBy 是作出这一次修订决定的人（或本上下文的系统身份），与发生条件上的登记者同一个写法。它是修订的出处，
+	// 不是发生项的内容：不进 SameContentAs，另一位操作者照原样再交同一次失效，说的仍是册上那一版。
+	revisedBy RegistrantReference
 }
 
 // FormTransportChargeOccurrence 固定发生项的全部依据。不能根据当前伙伴、当前线路或
@@ -894,5 +897,6 @@ func (occurrence TransportChargeOccurrence) ReviseValidity(
 	revised.revisionKind = kind
 	revised.revisionBasis = basis
 	revised.revisedAt = revisedAt.UTC()
+	revised.revisedBy = RegistrantReference{}
 	return revised, nil
 }

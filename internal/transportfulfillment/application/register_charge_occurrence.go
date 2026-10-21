@@ -511,10 +511,30 @@ func (handler *RegisterChargeOccurrenceHandler) register(
 	} else if covered {
 		return alreadyCovered(covering, coverage), nil
 	}
+	// 范围锁已在手：此刻读到的链头不会被同一范围上另一笔登记或失效改掉。链头仍有效，这一次是重放或冲突；链头已失效，这件事实凭
+	// 这一次的判断重新成立，从失效版本长出替代版本（ADR-0232 决定五）——不再按首版 V1 作答，否则失效之后同内容重登仍答已存在、
+	// 回显一份已失效的首版，那件事的成本就永远登不回来（ADR-0207 Consequences「已知限制」）。
+	head, found, err := occurrenceChainHead(ctx, handler.deps.Occurrences, command.TenantID, key.Occurrence)
+	if errors.Is(err, ErrChargeOccurrenceChainBroken) {
+		return RegisterChargeOccurrenceResult{}, err
+	}
+	if err != nil {
+		return chargeUndecided(OccurrenceRegistryUnavailable, continuation), nil
+	}
+	now := handler.deps.Clock.Now().UTC()
+	if found {
+		if !head.Occurrence.Invalidated() {
+			return handler.replayAgainst(ctx, head, occurrence, continuation)
+		}
+		if occurrence, err = domain.ReestablishChargeOccurrence(head.Occurrence, occurrence, now); err != nil {
+			return RegisterChargeOccurrenceResult{}, fmt.Errorf("register charge occurrence: reestablishing %s: %w", key.Occurrence, err)
+		}
+		key.Validity = occurrence.Validity()
+	}
 	record := ports.ChargeOccurrenceRecord{
 		Key:        key,
 		Occurrence: occurrence,
-		RecordedAt: handler.deps.Clock.Now().UTC(),
+		RecordedAt: now,
 	}
 	saved, err := handler.deps.Occurrences.Save(ctx, record)
 	if err != nil {
@@ -551,11 +571,15 @@ func (handler *RegisterChargeOccurrenceHandler) selfOperated(
 	if covered {
 		return alreadyCovered(covering, coverage), nil
 	}
-	existing, found, err := handler.deps.Occurrences.FindByKey(ctx, key)
+	existing, found, err := occurrenceChainHead(ctx, handler.deps.Occurrences, key.TenantID, key.Occurrence)
+	if errors.Is(err, ErrChargeOccurrenceChainBroken) {
+		return RegisterChargeOccurrenceResult{}, err
+	}
 	if err != nil {
 		return chargeUndecided(OccurrenceRegistryUnavailable, continuation), nil
 	}
-	if found {
+	// 链头已失效的那一项此刻不说有外部成本，同一件事再答不适用不与它相抵。
+	if found && !existing.Occurrence.Invalidated() {
 		return RegisterChargeOccurrenceResult{outcome: ChargeOccurrenceConflict, record: existing, hasRecord: true}, nil
 	}
 	return RegisterChargeOccurrenceResult{outcome: ChargeOccurrenceNotApplicable, detail: detail}, nil
@@ -601,8 +625,7 @@ func (handler *RegisterChargeOccurrenceHandler) segmentJudgedSelfOperated(
 	return identified && subject.Kind() == domain.OwnOperatingLegalEntity, nil
 }
 
-// replay 答撞键的那一次：同内容是已存在，异内容是冲突，两格都回显册上原有的那一份。已存在那一格重交同一份意图：
-// 意图按信封 ID 认领（ADR-0043），已入队的那一封不会多出第二封，而先前若有一次交接没落成，这一次把它补上。
+// replay 答撞键的那一次：按键读回册上那一份，再按 replayAgainst 作答。
 func (handler *RegisterChargeOccurrenceHandler) replay(
 	ctx context.Context,
 	key ports.ChargeOccurrenceKey,
@@ -613,7 +636,19 @@ func (handler *RegisterChargeOccurrenceHandler) replay(
 	if err != nil || !found {
 		return chargeUndecided(OccurrenceRegistryUnavailable, continuation), nil
 	}
-	if !existing.Occurrence.SameContentAs(formed) {
+	return handler.replayAgainst(ctx, existing, formed, continuation)
+}
+
+// replayAgainst 拿册上仍有效的那一版比这一次形成的：说的是同一件事、同一份判断是已存在，不同是冲突，两格都回显册上那一版。比的是
+// 事实内容，不比有效性版本与修订四件——链头可能是失效之后重新成立的替代版本，这一次形成的总是首版形状。已存在那一格重交同一份意图：
+// 意图按信封 ID 认领（ADR-0043），已入队的那一封不会多出第二封，而先前若有一次交接没落成，这一次把它补上。
+func (handler *RegisterChargeOccurrenceHandler) replayAgainst(
+	ctx context.Context,
+	existing ports.ChargeOccurrenceRecord,
+	formed domain.TransportChargeOccurrence,
+	continuation string,
+) (RegisterChargeOccurrenceResult, error) {
+	if !existing.Occurrence.SameFactContentAs(formed) {
 		return RegisterChargeOccurrenceResult{outcome: ChargeOccurrenceConflict, record: existing, hasRecord: true}, nil
 	}
 	if err := handler.deps.Handoff.HandOffChargeOccurrence(ctx, ports.ChargeOccurrenceIntent{Record: existing}); err != nil {

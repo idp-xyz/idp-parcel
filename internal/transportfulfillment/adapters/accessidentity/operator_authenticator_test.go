@@ -110,6 +110,8 @@ func TestEveryTFDecisionMapsToItsOwnDecisionKind(t *testing.T) {
 		tfhttp.OperatorDecisionBookingRequestCancellation:           identity.DecisionBookingRequestCancellation,
 		tfhttp.OperatorDecisionDeliveryDispatchReask:                identity.DecisionDeliveryDispatchReask,
 		tfhttp.OperatorDecisionTransportCommissionAgreementRevision: identity.DecisionTransportCommissionAgreementRevision,
+		tfhttp.OperatorDecisionSegmentCommissionAdoptionWithdrawal:  identity.DecisionFulfillmentSegmentCommissionAdoptionWithdrawal,
+		tfhttp.OperatorDecisionChargeOccurrenceInvalidation:         identity.DecisionTransportChargeOccurrenceInvalidation,
 	}
 	for decision, kind := range decisions {
 		for other, otherKind := range decisions {

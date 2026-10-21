@@ -138,6 +138,12 @@ type chargeOccurrenceBody struct {
 	ConditionAssertion  string   `json:"conditionAssertion,omitempty"`
 	RegisteredBy        string   `json:"registeredBy"`
 	RecordedAt          string   `json:"recordedAt"`
+	// 修订五件只随修订版本出现（ADR-0232）：回指的前一版、走向（INVALIDATED 或 SUPERSEDED）、依据、修订时刻与作出那次决定的人。
+	Corrects      string `json:"corrects,omitempty"`
+	RevisionKind  string `json:"revisionKind,omitempty"`
+	RevisionBasis string `json:"revisionBasis,omitempty"`
+	RevisedAt     string `json:"revisedAt,omitempty"`
+	RevisedBy     string `json:"revisedBy,omitempty"`
 }
 
 func chargeOccurrenceBodyOf(record ports.ChargeOccurrenceRecord) chargeOccurrenceBody {
@@ -169,6 +175,13 @@ func chargeOccurrenceBodyOf(record ports.ChargeOccurrenceRecord) chargeOccurrenc
 	}
 	if registrant, asserted := occurrence.Condition().AssertedBy(); asserted {
 		body.ConditionAssertedBy = registrant.String()
+	}
+	if corrects, revised := occurrence.Corrects(); revised {
+		kind, basis, at, _ := occurrence.Revision()
+		body.Corrects, body.RevisionKind, body.RevisionBasis, body.RevisedAt = corrects.String(), kind.String(), basis.String(), rfc3339(at)
+		if reviser, present := occurrence.RevisedBy(); present {
+			body.RevisedBy = reviser.String()
+		}
 	}
 	return body
 }

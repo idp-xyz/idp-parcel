@@ -45,7 +45,7 @@ func (repository *ChargeOccurrences) FindByKey(
 	}
 
 	var journey, legalEntity, provider, agreement, reason, factBasis, scope, unit, conditionBasis, registeredBy string
-	var conditionAssertedBy, conditionAssertion, correctsVersion, revisionKind, revisionBasis *string
+	var conditionAssertedBy, conditionAssertion, correctsVersion, revisionKind, revisionBasis, revisedBy *string
 	var quantity int64
 	var occurredAt, recordedAt time.Time
 	var revisedAt *time.Time
@@ -53,14 +53,14 @@ func (repository *ChargeOccurrences) FindByKey(
 		`SELECT journey_ref, legal_entity_ref, provider_ref, agreement_ref, reason,
 		        fact_basis, scope_ref, quantity, unit_ref, occurred_at,
 		        condition_basis, condition_asserted_by, condition_assertion, registered_by,
-		        corrects_version, revision_kind, revision_basis, revised_at, recorded_at
+		        corrects_version, revision_kind, revision_basis, revised_at, revised_by, recorded_at
 		   FROM transport_fulfillment.transport_charge_occurrence
 		  WHERE tenant_id = $1 AND occurrence_ref = $2 AND validity_version = $3`,
 		key.TenantID.String(), key.Occurrence.String(), key.Validity.String(),
 	).Scan(&journey, &legalEntity, &provider, &agreement, &reason,
 		&factBasis, &scope, &quantity, &unit, &occurredAt,
 		&conditionBasis, &conditionAssertedBy, &conditionAssertion, &registeredBy,
-		&correctsVersion, &revisionKind, &revisionBasis, &revisedAt, &recordedAt)
+		&correctsVersion, &revisionKind, &revisionBasis, &revisedAt, &revisedBy, &recordedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.ChargeOccurrenceRecord{}, false, nil
 	}
@@ -110,6 +110,11 @@ func (repository *ChargeOccurrences) FindByKey(
 	}
 	if err := applyOccurrenceRevision(&spec, correctsVersion, revisionKind, revisionBasis, revisedAt); err != nil {
 		return ports.ChargeOccurrenceRecord{}, false, fmt.Errorf("find charge occurrence: %w", err)
+	}
+	if revisedBy != nil {
+		if spec.RevisedBy, err = domain.NewRegistrantReference(*revisedBy); err != nil {
+			return ports.ChargeOccurrenceRecord{}, false, fmt.Errorf("find charge occurrence: %w", err)
+		}
 	}
 
 	occurrence, err := domain.RehydrateChargeOccurrence(spec)
@@ -254,11 +259,8 @@ func (repository *ChargeOccurrences) FindCovering(
 	if err != nil {
 		return ports.ChargeOccurrenceRecord{}, false, fmt.Errorf("find covering charge occurrence: %w", err)
 	}
-	if _, err := executor.Exec(ctx,
-		`SELECT pg_advisory_xact_lock(hashtext('transport_fulfillment.charge_occurrence.scope'), hashtext($1 || chr(31) || $2 || chr(31) || $3))`,
-		query.TenantID.String(), query.Reason.String(), query.Scope.String(),
-	); err != nil {
-		return ports.ChargeOccurrenceRecord{}, false, fmt.Errorf("find covering charge occurrence: 取范围锁：%w", err)
+	if err := holdChargeOccurrenceScope(ctx, executor, query.TenantID, query.Reason, query.Scope); err != nil {
+		return ports.ChargeOccurrenceRecord{}, false, fmt.Errorf("find covering charge occurrence: %w", err)
 	}
 	members := make([]string, 0, len(query.Members))
 	for _, member := range query.Members {
@@ -385,11 +387,15 @@ func (repository *ChargeOccurrences) Save(
 		value := corrects.String()
 		correctsVersion = &value
 	}
-	var revisionKind, revisionBasis *string
+	var revisionKind, revisionBasis, revisedBy *string
 	var revisedAt *time.Time
 	if kind, basis, at, revised := occurrence.Revision(); revised {
 		kindName, basisValue, moment := kind.String(), basis.String(), at.UTC()
 		revisionKind, revisionBasis, revisedAt = &kindName, &basisValue, &moment
+	}
+	if reviser, present := occurrence.RevisedBy(); present {
+		value := reviser.String()
+		revisedBy = &value
 	}
 
 	tag, err := executor.Exec(ctx,
@@ -398,8 +404,8 @@ func (repository *ChargeOccurrences) Save(
 		      journey_ref, legal_entity_ref, provider_ref, agreement_ref, reason,
 		      fact_basis, scope_ref, quantity, unit_ref, occurred_at,
 		      corrects_version, revision_kind, revision_basis, revised_at, recorded_at,
-		      condition_basis, condition_asserted_by, condition_assertion, registered_by)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+		      condition_basis, condition_asserted_by, condition_assertion, registered_by, revised_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Occurrence.String(),
@@ -423,6 +429,7 @@ func (repository *ChargeOccurrences) Save(
 		conditionAssertedBy,
 		conditionAssertion,
 		registeredBy,
+		revisedBy,
 	)
 	if err != nil {
 		return ports.ChargeOccurrenceSaveOutcomeInvalid, fmt.Errorf("save charge occurrence: %w", err)
