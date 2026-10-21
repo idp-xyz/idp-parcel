@@ -199,6 +199,7 @@
 | `AT-NR-083` | internal/networkrouting/adapters/postgres/route_reassessment_position_test.go::TestReadingTheLatestTriggerSerializesPerJudgmentKey、::TestTheLatestTriggerIsReadPerJudgmentKey（无事务拒那一半） |
 | `AT-NR-084` | internal/networkrouting/domain/offsite_pickup_reassessment_test.go::TestAPickupLeavesTheWholePlanUnexecuted（领域半边）；internal/networkrouting/application/offsite_pickup_reassessment_test.go::TestAPickupLapseOnlySuggestsBecauseNoControllableNodeIsHeld；internal/networkrouting/adapters/parcelshipment/reassess_on_pickup_test.go::TestAnAdoptedOffsitePickupWithARestrictedPlanOnlySuggests（收寄采用一路）；cmd/parcel-dispatch/reassess_offsite_pickup_test.go::TestAnOffsitePickupWithARestrictedPlanOnlySuggestsOnTheDatabase（授权决定面归 docs-consistency/code/29） |
 | `AT-NR-085` | internal/networkrouting/domain/cost_improvement_basis_test.go::TestACostImprovementQualifiesOnlyWhenStrictlyOverTheThreshold、::TestACostImprovementBasisRefusesWhatCouldNotHaveSwitched（领域半边）；internal/networkrouting/application/improvement_reroute_basis_test.go::TestAnImprovementRerouteRecordsItsImprovementBasis、::TestAnImprovementAtTheThresholdKeepsThePlanWithoutABasis；internal/networkrouting/adapters/postgres/route_reassessment_improvement_basis_test.go::TestAnImprovementRerouteRoundTripsWithItsImprovementBasis（复核册）；cmd/parcel-dispatch/reassess_improvement_reroute_test.go::TestAnImprovementRerouteBeforeTheFreezeBoundaryLandsOnTheDatabase（交接一路） |
+| `AT-NR-086` | internal/networkrouting/application/initial_route_effective_from_test.go::TestUnderAHandoffBacklogTheInitialPlanTakesEffectAtAcceptance（编排半边，失效与改善替代）；cmd/parcel-dispatch/initial_route_backlog_test.go::TestUnderAHandoffBacklogTheInitialPlanTakesEffectAtAcceptanceOnTheDatabase（收寄采用一路） |
 | `AT-PC-001` | internal/partycommercial/domain/party_relationship_test.go::TestLegalEntityReferenceAndCustomerPartyAreFormedSeparately |
 | `AT-PC-002` | internal/partycommercial/domain/commercial_registry_test.go::TestRegisteringTheSameContentTwiceIsAReplay |
 | `AT-PC-003` | internal/partycommercial/domain/commercial_registry_test.go::TestSameVersionWithChangedContentConflicts |
@@ -1615,3 +1616,5 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-10-21 追记（票 demo-chain-gaps/115）：复核向候选成本取数侧取成本。`AT-NR-039`、`AT-NR-053` 两行去掉「生产接法上复核不取候选成本」的注、补点名编排与派发真库用例；`AT-NR-037`、`AT-NR-042` 早有编排用例点名（`reroute_after_lapse_test.go`），由②移入①，另点名本票的候选成本用例。计数进 main 时由推送方重算。
 
 2026-10-21 追记（票 docs-consistency/code/53，含隔离评审修订）：UC-NR-003 新立 `AT-NR-085`（仍适用线上改善严格大于阈值即自动切换，`已改路`带改善依据、不带失效依据），已有领域、编排、复核册与派发真库用例点名，入①。计数进 main 时由推送方重算。
+
+2026-10-21 追记（票 docs-consistency/code/60）：UC-NR-001 新立 `AT-NR-086`（路由交接积压时初始计划从委托接受的时刻起生效，其间的控制触发照常让原计划失效或被替代），已有编排与派发真库用例点名，入①。计数进 main 时由推送方重算。

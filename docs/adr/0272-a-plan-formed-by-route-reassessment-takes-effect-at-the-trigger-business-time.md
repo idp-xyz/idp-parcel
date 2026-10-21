@@ -1,6 +1,6 @@
 # ADR-0272：复核形成的路由计划从所判触发的业务时间起生效，被它替代的计划在同一刻离场；判断时刻仍取处理时钟
 
-Status: Accepted（2026-10-21，Claude Code 会话代 NR owner 决：用户原话「你作为业务和系统专家自决……解决所有的问题」，常设授权「你作为业务和系统专家自决」；票 [docs-consistency/code/52](../../.scratch/docs-consistency/code/52-reassessment-reads-the-initial-route-row-instead-of-the-current-plan-or-no-route.md) 隔离评审 R1 的协调方裁定。无条款停用：已接受记录里没有一句定过复核形成的计划取哪个时钟生效。越权风险点见文末，待 NR owner 复核，第 1 点同时待 TF、VE owner 会签。）<!-- 索引注记 -->｜**生效**：复核形成的计划（失效线改路、改善替代、原先无路由时形成首个计划）从所判触发的业务时间起生效；改善替代时原计划在同一刻离场，失效时刻本就取触发的业务时间。判断时刻仍取处理时钟。**理由**：生效边界是业务边界，并发按权威业务时间裁决、不按到达顺序（ADR-0174）；取处理时钟时，积压之下下一次触发的失效早于生效，被离场门拒。初始路由仍按处理时钟生效，口径不一归票 code/60
+Status: Accepted（2026-10-21，Claude Code 会话代 NR owner 决：用户原话「你作为业务和系统专家自决……解决所有的问题」，常设授权「你作为业务和系统专家自决」；票 [docs-consistency/code/52](../../.scratch/docs-consistency/code/52-reassessment-reads-the-initial-route-row-instead-of-the-current-plan-or-no-route.md) 隔离评审 R1 的协调方裁定。无条款停用：已接受记录里没有一句定过复核形成的计划取哪个时钟生效。越权风险点见文末，待 NR owner 复核，第 1 点同时待 TF、VE owner 会签。）<!-- 索引注记 -->｜**生效**：复核形成的计划（失效线改路、改善替代、原先无路由时形成首个计划）从所判触发的业务时间起生效；改善替代时原计划在同一刻离场，失效时刻本就取触发的业务时间。判断时刻仍取处理时钟。**理由**：生效边界是业务边界，并发按权威业务时间裁决、不按到达顺序（ADR-0174）；取处理时钟时，积压之下下一次触发的失效早于生效，被离场门拒。初始路由仍按处理时钟生效，口径不一归票 code/60｜**越权风险点 2 已答**（2026-10-21）：越权风险点 2「初始路由与复核形成的计划口径不一」由票 [docs-consistency/code/60](../../.scratch/docs-consistency/code/60-initial-route-takes-effect-at-processing-time-unlike-reassessment.md) 回答（落地）——初始路由计划从委托接受的时刻起生效，判断时刻仍取处理时钟，与本记录同口径，规则落在 [network-routing CONTEXT](../domain/network-routing/CONTEXT.md)「路由计划适用性」；无条款停用，其余各条不变
 Date: 2026-10-21
 
 ## Context
