@@ -1,7 +1,7 @@
 # 155 NR 初始路由的未配置类未决照样重投到 ABANDONED
 
 Category: bug
-Status: needs-triage——2026-10-21 Claude Code 会话立（票 131 实施时读代码发现，与 131 同族；用户「要我裁定的部分，你作为业务和系统专家，请你自决吧」授权）
+Status: in-progress——完工待评审与进 main，分支 claude-dcg155（2026-10-21，见文末「完成记录」）。此前 needs-triage——2026-10-21 Claude Code 会话立（票 131 实施时读代码发现，与 131 同族；用户「要我裁定的部分，你作为业务和系统专家，请你自决吧」授权）
 Blocked by: 无
 出处：票 [131](./131-network-reassessment-undecided-is-split-by-reason.md) 实施；[ADR-0235](../../../docs/adr/0235-route-reassessment-settles-what-a-retry-cannot-change-and-does-not-judge-triggers-older-than-the-current-position.md) 决定六
 
@@ -47,3 +47,84 @@ Blocked by: 无
 ## 备注（2026-10-21，票 demo-chain-gaps/115 隔离评审）
 
 同族一格：候选成本取数侧的确定性错误也落进了重投桶。`internal/networkrouting/adapters/parcelpricing` 的 `errUntranslatableEvaluation`（含候选没有线路引用、比较币种译不出）与 `errNotACostEvaluation`（方案方向或用途配错）重投多少次都一样，初始路由却把它们与依赖读不回一起答 `COST_SOURCE_UNAVAILABLE`、回滚重投。票 115 让复核照同一口径接取数侧，无路由那条线上同样答 `REASSESS_COST_SOURCE_UNAVAILABLE`、回滚重投，继承了这一格。修时两路一起分：确定性错误不进未决哨兵。
+
+## 完成记录（2026-10-21，Claude Code 作者子代理，分支 `claude-dcg155`，基于 main `f4a7e226a`）
+
+### 接票时核实
+
+票面与审计扩充的三件都成立：`outcomeToConsumption` 任一件包裹未决即交 `ErrRouteHandoffUndecided`；未配置各格、并列、成本待判断、不可计价、币种不齐重投多少次都一样；`InitialRoutes.Save` 与消费门同一事务，整封回滚时同一交接里判成的计划一起撤掉。另核得一处票面没写的：SYN 纵切的委托不申报地址要素，演示网络上那一条候选落「证据未知」（`GEO_ELEMENTS_MISSING`、`CUSTOMS_ENDPOINT_COUNTRY_MISSING`），原先也走 `CANDIDATE_EVIDENCE_INCOMPLETE` 重投；受理基线一经固定不再改写，这一格永远推不动。
+
+### 代决（用户授权「你作为业务和系统专家自决……解决所有的问题」，代 NR owner）
+
+权威在 [ADR-0273](../../../docs/adr/0273-a-settled-wait-for-registration-may-enter-without-a-same-change-resume-and-adr-0094-decision-four-binds-only-the-acceptance-chain.md) 决定二（重投推不动、只等一次登记的格先入账，原因与对象同笔落库）与 ADR-0029（恢复动作不同必须分）。本票不立新 ADR、不改 ADR 正文。
+
+1. **推不动的九格入账为`路由未形成`**：证据未配置、候选空间立不起来、候选证据不全、排序形态未声明、最低成本并列、待判断、不可计价、币种不齐、取数侧没接。判据只在编排一处：这九格从 `RouteUndecidedReason` 移到 `ports.InitialRouteNotFormedReason`，码不变；适配器只按结果折。候选证据不全入这一格，依据是 ADR-0250 决定一的那条纪律：取数侧只交「状态未知」的来源一律是重投推不动的缺口，真依赖故障在取数侧交错误。
+2. **推得动的照旧未决、整封回滚重投**：判断库、证据、商业适用性、交接登记读不回，取号故障，证据连续换代，成本读不回；另加一格 `NOT_FORMED_UNRECORDED`（原因写不进未形成登记，护栏同 ADR-0094 决定五）。
+3. **原因另立一册，不复用复核未判登记**：`network_routing.initial_route_not_formed`（迁移 0025），主键是完整判断键，与 `initial_route` 同一组维。复核未判登记按触发关联、答「这一次为什么没判」；这里答「这件包裹此刻为什么还没有初始路由」。所以同一判断键再停一次按最新一次改写，不像复核那样只留先到那一行。
+4. **判成与未形成同在一封交接时整封入账**：判成的照常提交、交意图，未形成的那几件各留一行原因，不连坐（AT-NR-088）。
+5. **并列留痕落库**：全部候选、并列的那几家、各自打平的金额与币种（AT-NR-089）。候选证据不全另记全部候选与缺口，形照 ADR-0250 的「登记同行记缺口」（AT-NR-090）。授权角色的人工选择入口不同票，仍归 [docs-consistency/code/29](../../docs-consistency/code/29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md)。
+6. **成本取数侧的确定性错误给一个哨兵** `ports.ErrRouteCostAnswerUnusable`：`errUntranslatableEvaluation`（含候选没有线路引用、比较币种或方案引用译不出）、`errNotACostEvaluation`（方案方向或用途配错）、`errUntranslatableParcelFacts` 都挂在它名下。初始路由与复核无路由那条线据它响亮报错，不进未决哨兵，也不落未形成登记：它不是等登记的缺口，落了就是一条点名租户没登记的假原因（AT-NR-092、093）。复核失效线与仍适用线照常落、不拦（失效必须照常落库的硬句；仍适用已判定）。
+7. **取数侧没接（`COST_SOURCE_NOT_CONFIGURED`）在初始路由入账为未形成**，先例是 ADR-0250 把「关务来源未接」入账未判；装配没给未形成登记、而包裹真停在那几格时响亮报错（`ErrNotFormedRegisterMissing`）。
+8. **续办在本票停下**：ADR-0273 决定四要登记信封驱动，可重驱初始路由要随请求携带的地理投影。ADR-0075 决定三不许 NR 落地址本体，ADR-0215 决定二「经消费侧适配器取受理基线那一版」的适用场景只到「不由小包托运信封触发的路由复核」，明写初始路由随请求携带。让初始路由重驱也这样取，要先有一份记录扩那条适用场景。照任务约束不立新 ADR，续办并入票 154，那张票的「要裁的」第二条正是同一问（已在 154 记「并入」一节）。ADR-0273 决定二允许先入账、续办另票，缺口就记在 154 上。
+
+### 越权风险点
+
+1. **入账之后没有续办**（NR owner）。登记补齐、部署接入或授权裁决之后，这几件包裹不会自动形成初始路由。此后它们的每一次复核都落「没有路由历史」未判。原先烧到 ABANDONED 同样丢了这次判断，还拖住分区；现在至少原因与对象可查。全靠票 154。
+2. **未形成没有读面**（NR owner）。只能在库里按原因、按包裹查，读面随票 154 定。未形成也不发布任何业务事实：VE、NO 看不到这件包裹为什么没有路由，这一点与`无当前有效路由`不同。
+3. **依赖类未决仍连坐**（NR owner）。依赖未决的那一件让整封回滚，同一交接里判成的计划随之回滚，重投时再判一次，可能判出别的结果。`AT-NR-012` 依赖未决那一件因此仍未实现，UC-NR-001 交接表记「待立票」。
+4. **取数侧答用不了照样占着分区**（NR owner）。响亮报错按派发预算重投到 ABANDONED，失败码是 `dispatch.publish_failed`，不再是 `consumer_undecided`。方案方向配错多半是租户登记错，owner 若要它入账未形成，改的是决定 6 的分格。
+5. **复核两条线吞下取数侧用不了**（NR owner）。失效线把它记成候选评估未决，仍适用线不试改善，缺陷只在无路由那条线上报出来。
+6. **登记按最新一次改写**（NR owner）。第一次停住的原因不再留下，「这次为什么」只能看最新一行。
+7. **候选证据不全一格混着永久缺口**（NR、PS owner）。受理基线缺国家补不上，等登记的限制状态未知补得上，两者同在一个原因码下，靠缺口那一列区分。补救在 PS：受理时就拒收缺国家的投影，同 ADR-0250 越权风险点 2。
+8. **取数侧没接一格两边口径不一**（NR owner）。初始路由入账未形成，复核响亮报错（`ErrReassessCostSourceNotConfigured`，这一处没改）。生产装配今天两边都到不了这一格。
+9. **装配改了 `assemble.go` 一行**（NR owner）。`acceptanceConsumer` 本就在那个文件里，没有特性文件可改，只在 `CreateInitialRouteDeps` 里加了 `NotFormed: routeStore`，同一只判断库兼作未形成登记。哨兵名单与路由文件都没动，只改了 `routes_accepted_decision.go` 的注释。
+
+### 做了什么
+
+- 端口 `ports.go`：`InitialRouteNotFormedReason`、`InitialRouteNotFormed`、`InitialRouteNotFormedRegister`、`ErrRouteCostAnswerUnusable`。
+- 迁移 `migrations/network_routing/0025_initial_route_not_formed.sql`。原因在库里封闭，在场件逐原因钉住。
+- postgres：`InitialRoutes.RecordNotFormed`，写在新文件 `initial_route_not_formed.go` 里，要事务、按最新一次改写；缺口行模型 `rowsOfGaps` 与可达性判断共用。
+- 编排 `create_initial_route.go`：新结果 `ParcelRouteNotFormed`（`NOT_FORMED`）；`RouteUndecidedReason` 只留推得动的格，加 `NOT_FORMED_UNRECORDED`；`recordNotFormed` 落登记，写不进就改答未决；成本答用不了时响亮报错；`CreateInitialRouteDeps.NotFormed`。
+- 复核 `reassess_route.go`：`candidateCosts` 把用不了随错误交回，无路由线上抛，失效线与仍适用线不拦。
+- 取数侧 `adapters/parcelpricing`：三个确定性错误挂到哨兵下。
+- 适配器 `route_on_acceptance.go`：只改注释，折法本就只看 `ParcelRouteUndecided`。
+- 派发：`assemble.go` 那一行，`routes_accepted_decision.go` 只改注释。
+- 文档：NR CONTEXT「路由形成与选择」补初始路由两格；UC-NR-001 结果表、未形成结束、候选判断规则、步骤 8C、提交边界、`AT-NR-012` 注记、`AT-NR-088`–`092`、交接表；UC-NR-003「复核未决」一格与 `AT-NR-093`；AT 盘点加六行、改 `AT-NR-006` 行内用例并追记（计数未动）；票 154 记并入。
+
+### 用例
+
+测试与实现同轮写成，没有严格做到先红后绿。判别力用变异核对：把适配器的折法临时改成「未形成也交本路哨兵」，`TestSYNAcceptedDecisionSettlesAnUnconfiguredRouteAsNotFormed` 与 `TestAnUnresolvableCandidateSettlesTheAcceptanceThroughProductionRoutes` 都红，接受信封 `PENDING` + `dispatch.consumer_undecided`；改回后绿。
+
+- 编排（`create_initial_route_not_formed_test.go` 与改写的既有用例）：
+  - 七格逐一入账，兄弟包裹照常形成计划（AT-NR-088）；取数侧没接入账。
+  - 依赖四格仍未决、不留行，含原因写不进那一格（AT-NR-091）。
+  - 取数侧用不了响亮报错（AT-NR-092）；装配没给登记时响亮报错。
+  - 并列记候选与打平金额（AT-NR-089）；关务资格未知记候选与缺口（AT-NR-090）。
+- 复核：`TestAnUnusableCostAnswerIsLoudOnlyWhereNothingIsSettled` 走三条线（AT-NR-093）。
+- 取数侧：`TestDeterministicCostAnswersAreUnusableNotUnreadable` 覆盖方向配错、没有线路引用、币种译不出三种。
+- 适配器：`TestANotFormedParcelIsAccountedNotRetried`（未形成入账）；`TestAnUndecidedParcelRollsTheDeliveryBack`（依赖未决回滚）。
+- 未形成登记真库：一行往返且按最新一次改写、并列三列、原因与在场件封闭、无事务拒写、回滚无痕。
+- 派发真库，经生产路由表：
+  - SYN 空目录：接受信封 `PUBLISHED`，未形成一行 `ROUTE_EVIDENCE_NOT_CONFIGURED`，交接登记一行，再拍不翻倍。
+  - 演示网络、基线缺国家：`CANDIDATE_EVIDENCE_INCOMPLETE`，记下候选与两条缺口。
+  - 没种适用性（依赖不可用）：`dispatch.consumer_undecided`，NR inbox 无账，未形成零行。
+  - SYN 纵切八条以第一拍定稿条数作证的用例改为数接受信封那一条（`synAcceptanceSettledOnFirstBeat`）。
+
+### 验证
+
+于 `ce3bc30f5`：
+
+- `go build ./...`、`go vet ./...`、`gofmt -l cmd internal migrations tools` 干净。头两笔代码提交 `4503772b9`、`5769bffd5` 在一次性 worktree 里各自单独 `go build ./...` 并 vet NR 与派发，通过。
+- `TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh` 跑了 `./internal/networkrouting/...`、`./cmd/parcel-dispatch/`、`./cmd/parcel-api/`、`./cmd/parcel-network-register/`，PS、TF、VE 各自的 `adapters/networkrouting`，`./internal/architecture/...`、`./migrations/...`：21 个包 ok，0 FAIL。
+- 新用例另跑 `-count=3`，全绿。
+- 演示种子在一次性库 `dcg155seed` 上灌一遍，零报错、迁移 0025 建表、未形成零行，灌完删库。
+- 未跑全量；未重生成机制清点、ADR 索引与 AT 计数。
+
+迁移落号 `network_routing/0025`。
+
+### 未决事项
+
+1. 续办：并入票 154，先裁地理投影从哪里来（可能要一份记录扩 ADR-0215 决定二的适用场景）。也要定 PP 价卡登记的信封送不送到 NR。
+2. 依赖类未决连坐兄弟包裹（`AT-NR-012` 依赖未决那一件）待立票，号由协调方取。可能的修法是逐包裹的重投信封，或者给判成的包裹单独提交。
+3. 越权风险点 4、8 两处口径要 owner 定。
+
