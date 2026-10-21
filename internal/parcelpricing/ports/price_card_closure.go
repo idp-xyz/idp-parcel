@@ -22,8 +22,8 @@ const (
 //
 // 先锁再读是判据的要求，不是性能取舍：收尾判的是「旧版此刻的选用」与「后继接不接得住」，读的是册上的整段收尾史。只靠
 // 写入那一刻的行锁，两笔对同一旧版的收尾会各自读到未收尾的样子、各自判过，后提交的那条照样落下——例如两次截止各让位
-// 给不同的后继，后到的那一条截止点落在先到那一条之后，旧版被截出一段它此刻已经选不到的区间。锁住旧版行，后到者停在锁上，
-// 先到者提交之后它读到的就是已收尾的样子。
+// 给不同的后继，截止点更晚的那一条后提交，就成了最新一条，把旧版的选用放宽回先到那一条已经截掉的那一段，两版在那一段
+// 重新同时适用。锁住旧版行，后到者停在锁上，先到者提交之后它读到的就是已收尾的样子。
 type PriceCardClosureRegistry interface {
 	// LockPriceCardVersionForClosure 锁住本租户这一版的版本行，直到调用方事务结束。found=false 是这一版不在册，不是故障。
 	LockPriceCardVersionForClosure(ctx context.Context, tenant domain.TenantID, plan domain.VersionReference) (bool, error)
