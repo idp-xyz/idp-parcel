@@ -118,7 +118,7 @@ Date: 2026-10-19
 ## Links
 
 - [ADR-0218](./0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md)：部分停用其决定一两句与决定六「响亮失败」下一条（适用场景见「对已接受记录的作用」）
-- [ADR-0213](./0213-a-transport-handover-declares-its-releasing-receiving-and-onward-nodes.md)：文末补记（票 66）「那次交接」的认法与停点 `ENTRY_HANDOVER_AMBIGUOUS`；按业务时间再分的先例
+- [ADR-0213](./0213-a-transport-handover-declares-its-releasing-receiving-and-onward-nodes.md)：部分停用「补记：票 66 落决定五时的补充裁定」里「参与的入场依据只带交接版本、不带交接范围。」一句（决定一、五；适用场景限按交接键铸的新入场依据，见 ADR-0213 的 Status 行）；同一补记的停点 `ENTRY_HANDOVER_AMBIGUOUS` 不停用、只出自存量；按业务时间再分的先例
 - [ADR-0214](./0214-node-control-transfers-out-and-in-on-an-authoritative-transport-handover.md)：NO 转出引用不变；转入依据的长度前缀铸法是先例；越权风险点「转入依据由本上下文铸、不复用 TF 的转出引用」
 - [ADR-0216](./0216-delivery-dispatch-is-triggered-in-process-from-the-handover-envelope-per-object.md)：派送任务引用由入场依据派生
 - [ADR-0204](./0204-a-fulfillment-segment-adopts-a-transport-commission-by-declaration-and-a-started-commission-cannot-be-cancelled.md)：委托与段采用的开始依据抄参与的入场依据
