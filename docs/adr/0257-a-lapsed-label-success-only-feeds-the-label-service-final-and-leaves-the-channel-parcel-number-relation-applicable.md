@@ -5,6 +5,8 @@ Date: 2026-10-21
 
 ## Context
 
+以下所引 PS CONTEXT 生命周期的原句是本记录接受前的文字，已随本记录删去（见 Consequences）。
+
 - PS CONTEXT「外部标识关联」生命周期：「适用 → 已失效：渠道确认或接受时固定的有效期规则届满」。
 - [ADR-0184](./0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md) 决定七：「已失效没有执行器：有效期规则今天没有登记处，本记录不造。」代码 `domain.ExternalIdentifierChangeKind` 只有作废与替代两格，头注照此写。
 - [ADR-0119](./0119-label-validity-is-a-declaration-slot-on-the-final-rule-content.md)（2026-09-07，早于 ADR-0184）早已把有效期立为终局规则声明上的一格：起算时刻种类加时长，缺席即不失效。代码里 `ports.LabelValidityRuleView` 由 `DeclaredLabelValidityRule` 实现，经面单服务终局判断编排喂给 `LabelServiceFinalInput.LapsedTransactions`（取证于 main `f329f5059`）。

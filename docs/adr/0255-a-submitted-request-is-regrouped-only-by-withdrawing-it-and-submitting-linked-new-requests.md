@@ -5,6 +5,8 @@ Date: 2026-10-21
 
 ## Context
 
+以下所引 PS CONTEXT 与业务决策简报的原句是本记录接受前的文字，已随本记录改写（见 Consequences）。
+
 - PS CONTEXT Rules：「接受决定前，普通资料纠错或补充在同一委托下形成新的提交版本并重新判断；删除、拆分、重组成员，或者改变客户账户、合同责任范围、寄收件关系或目的服务范围时，必须形成一份或多份关联新委托并保留原成员去向。」它没写原委托在重组之后怎么处置。
 - UC-PS-001 业务决策简报 BD-PS-007 边界示例：「客户可以在决定前明确重组，重组后的委托各自取得完整决定。」
 - [ADR-0132](./0132-authorized-disposition-decides-the-destination-of-a-restricted-request-as-its-own-wait-state-and-never-passes.md) 决定一把越出委托边界的补充写成「受控补充的一种结果」。
