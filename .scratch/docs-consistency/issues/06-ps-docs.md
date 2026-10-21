@@ -50,9 +50,9 @@ Blocked by: 无（01 进 main 后开工）
 | PS-17 「授权处置」另作他义 | A | 已改；TF 那句交横切 | UC-PS-006 `AT-PS-082`；PS CONTEXT 届满一句；BD-PS-001 同句；`cancel_parcel.go` 注释入 code/38；交横切 X7 |
 | PS-18 UC-PS-002 结果分格与代码不对 | A | 已改 | UC-PS-002 结果语义契约按 `AmendmentOutcome` 重写，步骤 4、6、阶段节、元数据对齐 ADR-0116、0118、0120 |
 | PS-19 UC-PS-003 交接与现状、闸门相反 | A | 已改 | UC-PS-003「给开发的交接」删现状句、闸门改引 ADR-0017、0026、0146，列缺口表 |
-| PS-20 「按上一条」位置引用 | A | 已改 | UC-PS-003 改按「先合法形成者保留」引文与 `AT-PS-049`；UC-PS-004「上面的采用流程」改按节名，另两处「上面的结果表」「下面两种」同改 |
-| PS-21 技术未形成算不算未决 | B | 代决 ADR-0256；已改；不立代码票（02 交来的条件性 B，裁为不加 `NOT_FORMED`） | UC-PS-001「尚未决定」、UC-PS-002 结果表与元数据、UC-PS-004、UC-PS-005 元数据；PS CONTEXT 资料版本生命周期 |
-| PS-22 外部标识关联的`已失效` | B | 代决 ADR-0257；已改；不立代码票（02 交来的条件性 B，裁为不形成） | ADR-0184 挂回答与表述更正；PS CONTEXT 生命周期删「适用 → 已失效」、终态改两种、Rules 一条；`ExternalIdentifierChangeKind` 头注入 code/38 |
+| PS-20 「按上一条」位置引用 | A | 已改 | UC-PS-003 改按「先合法形成者保留」引文与 `AT-PS-049`；UC-PS-004「上面的采用流程」改按节名（本票修订时自己新写的文字里也出现过两处位置引用，已在同一票内改掉，不在 main 上） |
+| PS-21 技术未形成算不算未决 | B | 代决 ADR-0256；已改；不加 `NOT_FORMED`（02 交来的条件性 B）；评审轮补「重放须接着办」，代码半边归 code/39（提交）与 [code/44](../code/44-withdrawal-and-amendment-replays-short-circuit-after-an-undecided-round.md)（撤回、资料修订） | UC-PS-001「尚未决定」、UC-PS-002 结果表与元数据、UC-PS-004、UC-PS-005 元数据；PS CONTEXT 资料版本生命周期 |
+| PS-22 外部标识关联的`已失效` | B | 代决 ADR-0257；已改；不立代码票（02 交来的条件性 B，裁为不形成） | ADR-0184 挂回答、表述更正与决定一终态列举的部分停用（评审轮改）；PS CONTEXT 生命周期删「适用 → 已失效」、终态改两种、Rules 一条；`ExternalIdentifierChangeKind` 头注入 code/38 |
 | PS-23 POD 失效表达不出 | C | 既有代码票承接；文档加缺口注 | [code/23](../code/23-final-outcome-rederivation-cannot-express-a-voided-delivery.md)；UC-PS-004「给开发的交接」 |
 | PS-24 `/v1`、问题详情未落 | C | 既有代码票承接；文档加缺口注 | code/22；UC-PS-001「给开发的交接」 |
 | PS-25 0140 注记「不带 detail」 | A | 已改 | 0140 注记对齐 Decision 三 |
@@ -83,7 +83,7 @@ Blocked by: 无（01 进 main 后开工）
 | PS-50 歧义信号、范围相容只在 PS 定义 | A | 交横切 | X3 |
 | PS-51 「账号授权的版本生命周期」 | A | 已改；GLOSSARY 交横切 | PS CONTEXT Boundaries PC 一条（ADR-0093）；交横切 X4 |
 
-去向计数（按主去向）：已改 36（A 31，B 5——PS-03、06、21、22、30）；已由 docs-consistency/01 消解 7（PS-10、11、13、14、40、41、43，其中 PS-10 是 B）；交横切 3（PS-29、47、50；另有多条的 GLOSSARY、CONTEXT-MAP 或设计文档一半交横切，见 X1–X12）；既有代码票承接 5（C 类 PS-01、02、07、23、24，code/20–23）。新立代码票 5：code/35（PS-03 的代码半边）、code/36 与 code/39（修订时读码新发现，不在审计条目里）、code/37（审计顺带点出、未单列）、code/38（各条的注释半边）。
+去向计数（按主去向）：已改 36（A 31，B 5——PS-03、06、21、22、30）；已由 docs-consistency/01 消解 7（PS-10、11、13、14、40、41、43，其中 PS-10 是 B）；交横切 3（PS-29、47、50；另有多条的 GLOSSARY、CONTEXT-MAP 或设计文档一半交横切，见 X1–X12）；既有代码票承接 5（C 类 PS-01、02、07、23、24，code/20–23）。新立代码票 6：code/35（PS-03 的代码半边）、code/36 与 code/39（修订时读码新发现，不在审计条目里）、code/37（审计顺带点出、未单列）、code/38（各条的注释半边）、code/44（评审轮 B2 立，撤回与资料修订重放短路）。
 
 审计范围外顺带记下的「受控关闭与重开没有 UC 承载」：本票不补 UC，留给 PS owner 判要不要立。
 
@@ -127,3 +127,27 @@ Blocked by: 无（01 进 main 后开工）
 - 改过的全部 `.md` 相对链接与锚点逐个解析，全部能解析。
 - 新写的文字里没有行号、跨文件计数与「上一条」式位置引用（逐行扫过）。
 - `git diff main --stat` 只含：PS CONTEXT；`docs/application/parcel-shipment/` 下 7 份；新 ADR 0254–0258；ADR 0045、0061、0081、0086、0094、0106、0118、0132、0140、0184、0185 的 Status 行与 Links；`.scratch/at-coverage-inventory.md`；`.scratch/docs-consistency/` 下本票与 code/21、22、35–39。不改代码。
+
+## 评审记录（2026-10-21，隔离评审第 1 轮 → 作者修订）
+
+阻断两条、建议合入前修 5 条、顺手 8 条，全部照办；未采纳：无。
+
+| 条 | 评审意见 | 处置 |
+|---|---|---|
+| B1 阻断 | 保全之后出错，ADR-0256 决定一第 2 格说答未决格，UC-PS-001 说答 5xx；代码 `SubmitOutcome` 没有未决格 | 照协调方裁定改 ADR-0256：决定一第 2 格写明提交编排不在内（ADR-0081 下提交只答归属与`已提交`，保全之后出错答 5xx，重发须接着办，code/39）；Context 补提交编排取证；标题、注记、越权风险点 3、Links 同步；UC-PS-001 那句保留，依据改指 ADR-0256 决定一 |
+| B2 阻断 | 「重放走已有结果那条路」在提交、撤回、资料修订三只编排上走不通，只有受控补充编排接着办 | ADR-0256 决定一第 2 格续办改为「重放须接着办」并注明今天只有受控补充编排做到；Context 补三只编排的短路取证；Consequences 去掉「代码不改」改指代码票；立 [code/44](../code/44-withdrawal-and-amendment-replays-short-circuit-after-an-undecided-round.md)（撤回、资料修订，含业务未决之后重放与资料修订注释误判，建议 R2，44 号已 `ls` 确认空着）；code/39 保持 R1、只管提交；UC-PS-002、UC-PS-005「给开发的交接」各补一行指 code/44 |
+| 1 | 面单冲突三处写成「停在未决」 | code/21 裁向、code/35 修法第 4 条、UC-PS-006 规则一节改为「不形成终局、指名冲突（`LABEL_SERVICE_NOT_FINAL` 加一格原因）」，UC-PS-006 那句的「停在未决」只留给网络服务 |
+| 2 | 第 1 格不比时间与「到达顺序不参与」相抵 | 照协调方裁定保留不对称：ADR-0254 决定一标题与正文、注记、CONTEXT 取消一条写明「两边都在册之后只比业务时间，谁先越过提交边界只决定走哪一格」及理由；补越权风险点 5（同一对业务时间因到达先后不同而结果不同） |
+| 3 | 地址要素「受理之后」「受理基线」 | CONTEXT 改为「接受之后」「接受基线」 |
+| 4 | `AT-PS-079` 场景 | UC-PS-006 改为「取消到达提交边界时收寄已采用」；UC-PS-003 `AT-PS-045`「同 `AT-PS-079`」核过一致 |
+| 5 | 已有结果不带原归属结果 | UC-PS-001「给开发的交接」补一行，并入 code/39 修法第 2、3 条 |
+| 6 | 0254 第 1 格引的 CONTEXT 旧句已删 | 改引新句「此刻已在册的收寄或终局使取消不成立」 |
+| 7 | 面单一侧时间的引法 | 改为引 ADR-0135 决定三原句「业务发生时间取自依据、不由本上下文铸；依据是外部承运轨迹事实时取它已判断的有效时间。」 |
+| 8 | ADR-0257「只有两种终态」收窄了 ADR-0184 决定一 | 改为部分停用 0184 决定一那一句的终态列举，逐字引原句、写适用场景；0257 前段、「对已接受记录的作用」、Links，0184 注记（「不改」改为部分停用）与 Links 两头补齐 |
+| 9 | UC-PS-006 步骤 2 未获授权 | 注明 `CANCELLATION_REFUSED` 即 CONTEXT「统一不可见结果」词条所说的未获授权那一格 |
+| 10 | 未决原因码列全 | UC-PS-002 去掉「例如」、按 `JudgmentPendingReason.String()` 与编排调用点列全（补 `SHIPMENT_REQUEST_UNAVAILABLE`、`SOURCE_DATA_VERSION_IDENTITY_UNAVAILABLE`、`STALE_SHIPMENT_REQUEST_REVISION`）；UC-PS-005 同法列全（补 `SHIPMENT_REQUEST_UNAVAILABLE`） |
+| 11 | UC-PS-005 首段与步骤 7 | 补未获授权与来源冲突两格 |
+| 12 | 完成记录 PS-20 一行不实 | 按 main 实况改写 |
+| 13 | code/35 书名号、0061「推进」 | code/35 证据去掉非原文书名号；0061 注记改写为「停用（ADR-0188 自称「推进」，即把门扩到这一格）」 |
+
+修订后的检查（main 仍是 `3619f5c0e`，未再 rebase）：scratchpad 副本上 `go run ./tools/adr-index` 后 `-check` 退 0；改过的 ADR 去掉 Status 行与 Links 后与 main 逐字节相同（11 份，0 份不同）；Status 行新引文逐字核过被停方正文（ADR-0184 决定一那句、0132、0081、0061、0185、0045），未命中的两处是引 UC 节名与引别份 ADR 原句，属预期；改过的 `.md` 相对链接与锚点全部能解析。
