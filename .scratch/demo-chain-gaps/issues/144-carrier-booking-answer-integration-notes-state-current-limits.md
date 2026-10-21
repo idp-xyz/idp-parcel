@@ -13,4 +13,4 @@ Blocked by: 无
 
 ## 补注（2026-10-21，票 [145](./145-booking-answers-from-a-non-provider-answer-booking-not-found.md) 的作者子代理）
 
-票 145 改了答复口的一格，集成说明照 [ADR-0239](../../../docs/adr/0239-a-carrier-answer-from-a-non-provider-is-answered-booking-not-found-and-the-basis-is-kept-on-a-refusal-register.md) 写：答复方不是订舱所属委托的服务提供方时答 `200` `BOOKING_NOT_FOUND`，与订舱不在册同一格、同一副响应，线上不再有 `SOURCE_NOT_SERVICE_PROVIDER`；这一格的续办写「找租户核对订舱标识」，不写「这份答复不归你答」。凭什么拒只记在租户侧的承运答复拒收册，不对承运方透出。
+票 145 改了答复口的一格，集成说明照 [ADR-0239](../../../docs/adr/0239-a-carrier-answer-from-a-non-provider-is-answered-booking-not-found-and-the-basis-is-kept-on-a-bounce-register.md) 写：答复方不是订舱所属委托的服务提供方时答 `200` `BOOKING_NOT_FOUND`，与订舱不在册同一格、同一副响应，线上不再有 `SOURCE_NOT_SERVICE_PROVIDER`；这一格的续办写「找租户核对订舱标识」，不写「这份答复不归你答」。凭什么挡回只记在租户侧的承运答复挡回册，不对承运方透出。
