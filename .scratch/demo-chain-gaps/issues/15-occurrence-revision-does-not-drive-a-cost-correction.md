@@ -61,3 +61,17 @@ none
 
 **验证**：同票 57 的完成记录（逐笔 build+vet、相关包与反向依赖真库测试 48 包 ok）。
 
+## 评审记录（一轮，变基前；2026-10-21，Claude Code 作者子代理，分支 claude-dcg57，未变基）
+
+隔离评审中归本票的各条逐条去向；B1、3 与 TF 一侧的注释见 [57](./57-segment-commission-adoption-has-no-correction-and-start-does-not-rederive.md) 的同名一节。
+
+- **4 供应商账单匹配不看 `withdrawn`——已修，`1335884b`，不另立票 174。** `ReceiveSupplierBillHandler` 读回一行点名的版本之后，它是失效纠错版本、或已有后继（新读口 `ExpectedCostSuccessionView.LoadExpectedCostSuccessor`，账单编排多一口必备依赖 `Successions`），答独立一格 `EXPECTED_COST_NOT_CURRENT`（带出行、版本、撤下与否与后继），不落账单、不交意图；点名当前那一版照常匹配。用例 `TestABillLineNamingANonCurrentExpectedCostIsNotMatched`，真库读口 `TestTheSuccessorOfAnExpectedCostVersionIsReadBack`。ADR-0232 决定七补一条、越权风险点 10 改写；UC-SA-004 补 `AT-SA-211`。
+- **5 `RequestedSupplierExpectedCostFirstVersionExists` 注释与请求层用例——已修，`87bb3023`。** 注释改成「同一版发生项、另一份请求已先形成首版」的直接陈述；补 `TestAnotherRequestOnTheSameOccurrenceVersionFindsTheFirstVersion`。
+- **6 `supplier_cost_occurrence_state.go`「三件事都先读它」——已修，`87bb3023`。** 改点名 `FormSupplierExpectedCostHandler` 与 `WithdrawSupplierExpectedCostHandler`。
+- **7 `ErrCorrectionChangesSettlementCurrency` 单元用例——已补，`87bb3023`。** `TestASupersedingEvaluationChangingTheSettlementCurrencyIsRaised`：断言这个错误，成本册上只有首版与失效纠错版本。
+- **8 UC-SA-002 与 ADR-0229 的口径——已修，`35b7da92`、`c7cdd183`。** `AT-SA-186` 结果列改为「失效版本不发起、不记；替代版本没登触发行时与首版一样记停办、补登后续办」；`AT-SA-191` 同引 ADR-0232；ADR-0232「对已接受记录的作用」加一条写明 ADR-0229 决定四「不记的」里「修订版不发起」一格随之收窄，ADR-0229 的 Status 行与 Links 加前向指针（正文不改）。
+- **9 结算侧乱序窄窗——已修，`87bb3023`，修法与评审建议的字面不同。** 评审建议「这份评价的发生项版本早于链头的就不接」；结算手里的发生项版本是运输履约交来的不透明引用（拼法 `V` 加序号是 TF 的派生规则，不是交接的公开语言），读出先后就多一处要跟着 TF 改的地方，所以不比版本号。改为按领域不变量收口：替代版本只从失效版本长出（`ReestablishChargeOccurrence`），纠错因此**只接在失效纠错版本后面**；链头依的那一版还没被撤下，就是撤下那一路还没把失效记到结算——答未决 `OCCURRENCE_INVALIDATION_NOT_RECORDED`（重投，零写入）。两种乱序于是都等撤下那一路：替代版本的评价先于失效到的，失效记下之后接在失效纠错版本后面；早一版的评价晚于替代版本的评价到的，失效记下之后答 `OCCURRENCE_INVALIDATED`、入账，链头不退。用例 `TestASupersedingEvaluationWaitsForTheInvalidationToReachSettlement`、`TestALateEvaluationOfAnEarlierVersionIsNotAppendedAfterTheSupersedingOne`；`AT-SA-207` 改写并补这两格（原 `TestARequestNamingANewerOccurrenceVersionAppendsACorrection` 改为先失效、再由 v3 纠错）。代价记作 ADR-0232 越权风险点 15：撤下那一路卡住时替代评价随它未决、烧自己的重投预算。中途试过「按链上走过的版本认早晚」一版，覆盖不到早一版从没形成过成本的那一种乱序，未提交。
+
+**未采纳**：9 的字面修法（比版本先后），理由同上；效果（早一版的评价不接在替代版本后面）已做到。
+
+**验证**：同票 57 那一节。

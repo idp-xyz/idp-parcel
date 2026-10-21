@@ -53,3 +53,22 @@ Blocked by: 无——用户决定一格已于 2026-10-20 代决，见 [triage-20
 
 **未决与知会**：越权风险点见 ADR-0232 文末。票 88 会改 `adopt_segment_commission.go`、`assemble_segment_commission_adoption.go` 及其测试、`tfhttp/register_charge_occurrence.go`、`operator_authenticator_test.go`、`cmd/parcel-dispatch/actual_fulfillment_on_participation_end_test.go`——本票在这几处只加（一口必备依赖 `CommissionHold` 与取锁一行、响应里修订五格、决定映射两行、测试构造一格），后进 main 的一方合并；88 的 access_identity 迁移若也取 0021、TF 若取 0048，后进的一方改号。管理台预期成本页还没显示 `withdrawn`（admin-web 另做）。
 
+## 评审记录（一轮，变基前；2026-10-21，Claude Code 作者子代理，分支 claude-dcg57，未变基）
+
+隔离评审的各条逐条去向。票 15 那几条（4、5、7、8、9）记在 [15](./15-occurrence-revision-does-not-drive-a-cost-correction.md) 的同名一节。
+
+- **B1（阻断）解除与采用的重放产生新效果——已修，`3db95e8a`。** 采用回显带 `generation`（采用口与解除口回显的采用都带）；解除载荷加必填 `generation`，按（段、委托、代次）认：点名那一代已解除且委托相同答 `EXISTING_WITHDRAWAL`，委托不同答 `ADOPTION_MISMATCH` 回显那一次，当前那一代不是点名那一代答 `GENERATION_NOT_CURRENT` 回显当前那一代；端口改为 `FindWithdrawal(key, generation)`（`FindLatestWithdrawal` 留给采用那一侧判有没有历史）。采用一侧：段上一代已解除时请求必须带 `afterGeneration`，缺了或不符答 `ADOPTION_ALREADY_WITHDRAWN` 并回显那一次解除，不落新一代；从没解除过的段不受影响。PG 写口在 `INSERT … SELECT` 里再守一次代次，并发两笔再采用不会各落一代。评审那份真库复现收为 `cmd/parcel-api/fulfillment_corrections_test.go::TestReplayingAnOldAdoptionOrWithdrawalHasNoNewEffect`（采用、解除；旧采用请求重交答已被解除、不落新一代；点名第 1 代的再采用落第 2 代；第 1 代那一次解除重交答重放、不解除第 2 代；点名第 3 代答代次不是当前并回显第 2 代；册上采用 2 行、解除 1 行）。ADR-0232 决定一与越权风险点 5、UC-TF-004 `AT-TF-306`、`310`、TF `CONTEXT` 与种子 README 的更正次序随之改口（`c7cdd183`、`35b7da92`、`d9167fb5e`）。
+- **3 同刻并列时解除不相干的段也改开始——已修，`b95a5046`。** `WithdrawSegmentCommissionAdoption` 在取最早一条之前先看其余各段里有没有一条恰是开始的（依据、时刻），有就记 `KEPT`、开始不动；评审复现收为 `TestWithdrawingAnUnrelatedSegmentUnderATieKeepsTheStart`。ADR-0232 决定二与 `AT-TF-308` 补这一格。
+- **6 注释（TF 与 cmd 那几处）——已修，`ae29b24b`。** `endpoints_fulfillment_corrections.go`「上一口」改为点名「运输收费发生项失效口」；`invalidate_charge_occurrence.go` 头注与 `register_charge_occurrence.go` 改成直接陈述；顺手扫本分支新增注释，`segment_commission_adoption.go` 里「迁移 0048 的两道约束」（计数且带将变的迁移号）改点约束名，`charge_occurrence_rehydration.go` 一处「此前」去掉。SA 那一处见票 15。新用例 Covers 里的评审出处去掉（`083f710c`）。
+
+**未采纳**：无。
+
+**验证**：本轮每一笔代码提交单独 `go build ./... && go vet ./...`（各自 `git archive` 出来跑）；`gofmt -l` 干净；`scripts/test-full.sh` 跑 TF、SA、access-identity 的包与全部反向依赖、`./internal/architecture/...`、`./migrations/...`，以及两边的 domain 包：除 `cmd/parcel-dispatch` 的 `TestATransportPreparationUndecidedRedeliveryDoesNotReprojectVisibility` 在包并发下红过一次之外全绿；那一条与本票无关（运输准备与可见性投影），单独跑三遍与整包重跑都绿，记作并发负载下的偶发。
+
+**变基时做**（88 进 main 之后，协调方通知）：
+
+- `formedUnder` 与 88 的委托协议换版：88 换版之后按业务时间形成的项带后继版本的协议快照，只比 `commission.Agreement()` 认不出、解除会被放行——改为与委托上全部协议快照（提交版加 `AgreementRevisions()`）比，或让发生项记下委托标识；补用例。
+- 88 的补形成与失效：委托一换版，门铃补形成会以系统身份把人工失效过的项长回 V(n+1)——只有操作者登记才从失效版本长出替代版本；系统身份遇已失效链头答已了结（除非失效之后采用换了代），或补形成跳过已失效链头；补用例。
+- 迁移与种子号：TF 取 main 下一个空号（88 占 0048 则本票 0049），access_identity 以 main 最新为底只加本票两个词（88 占 0021 则本票 0022，CHECK 并入 88 的 `TRANSPORT_COMMISSION_AGREEMENT_REVISION`）；种子 `data/access/11`、`12` 与 `data/governance/48`、`49` 改空号；`access_identity 0021` 等迁移号在注释与 ADR-0232 Consequences 里的引用随之改。
+- `ListByCommission`（88）与 `FindCurrentByCommission`（本票）同一问两份口径，变基后统一（票 160 管的那一半写清）。
+- AT 编号：本轮新用 `AT-SA-211`（UC-SA-004），变基时核一次 main 上有没有别的票先占了。
