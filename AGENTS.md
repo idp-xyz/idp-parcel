@@ -121,7 +121,7 @@ Skill 是 Agent 作业流程，不是 shell 命令；Cursor 不一定显示 skil
 
 - 用例：[UC-PS-001](./docs/application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md)
 - 技术边界：[parcel-go-first-consumer-slice-decision-brief.md](./docs/design/parcel-go-first-consumer-slice-decision-brief.md)
-- 范围：机制与产品策略已放行，租户取值与 Bento 持久化闸门仍阻断；边界以 [ADR-0017](./docs/adr/0017-admission-gates-judged-by-blocking-cause.md) 与 [ADR-0146](./docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 为准，不在此复述
+- 范围：机制与产品策略已放行，租户取值仍阻断；Bento 持久化闸门的 Parcel 半边已过、持久化进生产装配获准，`B-06` 登记仍在闸门后；边界以 [ADR-0017](./docs/adr/0017-admission-gates-judged-by-blocking-cause.md)、[ADR-0146](./docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 与 [ADR-0277](./docs/adr/0277-the-parcel-half-of-the-bento-persistence-gate-has-passed-and-registration-still-waits-for-both-consumers.md) 为准，不在此复述
 
 ## Agent skills
 

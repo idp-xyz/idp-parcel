@@ -1,6 +1,6 @@
 # ADR-0026: 为产出消费者证明而写的持久化实现先于闸门通过，发布基线登记仍在闸门后
 
-Status: Accepted（另：「即刻解锁的范围」收窄 [ADR-0017](./0017-admission-gates-judged-by-blocking-cause.md)「PostgreSQL Repository 实现、迁移、事务与 Outbox 仍然阻断」一句，被停原句与适用场景见 ADR-0017 的 Status 行（指针 2026-10-21 补））  
+Status: Accepted（另：「即刻解锁的范围」收窄 [ADR-0017](./0017-admission-gates-judged-by-blocking-cause.md)「PostgreSQL Repository 实现、迁移、事务与 Outbox 仍然阻断」一句，被停原句与适用场景见 ADR-0017 的 Status 行（指针 2026-10-21 补））<!-- 索引注记 -->｜**部分停用**（2026-10-21）：其「**即刻解锁的范围**」里「用途限于产出 `PBC-01` 至 `PBC-09` 的证明」一句已由 [ADR-0277](./0277-the-parcel-half-of-the-bento-persistence-gate-has-passed-and-registration-still-waits-for-both-consumers.md) 停用——锁定候选的 Parcel 半边（空缓存下载与 `PBC-01` 至 `PBC-09` 对同一 checksum 全部通过）自 `ccbf79e` 成立之后，持久化实现进生产装配不再限于产出证明。**适用场景**：只限锁定候选的 Parcel 半边成立期间，候选一变、复评未过即回到本记录的取证用途；「**仍然禁止的范围不变**」一段、把实现登记为发布基线仍在闸门后、闸门的通过条件一项不改与其余各条不变  
 Date: 2026-08-11
 
 ## Context
@@ -60,3 +60,4 @@ Date: 2026-08-11
 - [Go 首个消费者切片决策简报](../design/parcel-go-first-consumer-slice-decision-brief.md)：`PBC-01` 至 `PBC-09`、完成门禁与闸门表所在处，候选与 checksum 证据记在其闸门表
 - [开发主线：切片的机制半边与实例半边](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)：两半划分与横切缺口状态的唯一权威
 - 归档实现基线 tag `archive/impl-baseline-20260731`（合并 `b05539f` 的第二父提交 `636a296`）：本记录所裁路径的既有先例，含 PostgreSQL 适配器、迁移 runner、`tests/bentocontract/` 合同与证明产出器。领域模型此后已大幅分化，该谱系取作 Bento API 用法的参考，不作直接还原
+- [ADR-0277](./0277-the-parcel-half-of-the-bento-persistence-gate-has-passed-and-registration-still-waits-for-both-consumers.md)：前向指针——部分停用「即刻解锁的范围」里「用途限于产出 `PBC-01` 至 `PBC-09` 的证明」一句

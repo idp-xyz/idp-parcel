@@ -39,7 +39,7 @@
 
 ### 当前执行边界
 
-本切片是未来业务契约和隔离测试向量。**当前可编码范围以 [ADR-0017](../adr/0017-admission-gates-judged-by-blocking-cause.md) 为准，本节只引用不另立口径。** 按该记录：纯业务规则/值对象与 Parcel 自有语义端口的**接口定义**属机制半边，现在可以建立；`party-commercial` 与 `settlement-accounting` 的持久化对象、Repository、事务与 Outbox 仍阻断于 Bento 持久化闸门。
+本切片是未来业务契约和隔离测试向量。**当前可编码范围以 [ADR-0017](../adr/0017-admission-gates-judged-by-blocking-cause.md) 为准，本节只引用不另立口径。** 按该记录：纯业务规则/值对象与 Parcel 自有语义端口的**接口定义**属机制半边，现在可以建立；`party-commercial` 与 `settlement-accounting` 的持久化对象、Repository、事务与 Outbox 自 Bento 持久化闸门的 Parcel 半边通过起进生产装配获准，登记 `B-06` 仍在闸门后（[ADR-0277](../adr/0277-the-parcel-half-of-the-bento-persistence-gate-has-passed-and-registration-still-waits-for-both-consumers.md)）。
 
 与闸门无关、始终不得逾越的另有两条：不得调用真实冻结、信用、应收、收款或核销协作；合成结果始终标记为隔离 `S`，生产结论保持 `No-Go / 待参数化`。这两条约束的是实例半边与证据层级，不因任何闸门放行而松动。
 

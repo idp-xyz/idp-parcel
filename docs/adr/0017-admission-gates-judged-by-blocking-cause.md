@@ -1,6 +1,6 @@
 # ADR-0017: 实现准入闸门按阻断理由分别裁决
 
-Status: Accepted<!-- 索引注记 -->｜**部分停用**（指针 2026-10-21 补）：其「**Bento 持久化技术闸门原样保留。**」一段里「PostgreSQL Repository 实现、迁移、事务与 Outbox 仍然阻断」一句已由 [ADR-0026](./0026-persistence-written-for-consumer-proof-precedes-gate-passage.md) 收窄——为产出消费者证明而写的持久化实现在闸门通过前即可写（针对精确 SemVer 候选编写 PostgreSQL Repository、迁移、事务与 Outbox 实现及其合同测试，用途限于产出 `PBC-01` 至 `PBC-09` 的证明），把实现登记为发布基线仍在闸门后。**适用场景**：只限为产出消费者证明而写的实现；同段「仍不得建立本地框架替身」与其余各条不变。闸门此后的状态以开发主线与[首个消费者切片简报](../design/parcel-go-first-consumer-slice-decision-brief.md)为准  
+Status: Accepted<!-- 索引注记 -->｜**部分停用**（指针 2026-10-21 补）：其「**Bento 持久化技术闸门原样保留。**」一段里「PostgreSQL Repository 实现、迁移、事务与 Outbox 仍然阻断」一句已由 [ADR-0026](./0026-persistence-written-for-consumer-proof-precedes-gate-passage.md) 收窄——为产出消费者证明而写的持久化实现在闸门通过前即可写（针对精确 SemVer 候选编写 PostgreSQL Repository、迁移、事务与 Outbox 实现及其合同测试，用途限于产出 `PBC-01` 至 `PBC-09` 的证明），把实现登记为发布基线仍在闸门后。**适用场景**：只限为产出消费者证明而写的实现；同段「仍不得建立本地框架替身」与其余各条不变。闸门此后的状态以开发主线与[首个消费者切片简报](../design/parcel-go-first-consumer-slice-decision-brief.md)为准｜**部分停用**（2026-10-21）：其「**Bento 持久化技术闸门原样保留。**」一段里「PostgreSQL Repository 实现、迁移、事务与 Outbox 仍然阻断」一句（已由 ADR-0026 收窄，见上），与「**端口接口与端口实现分开裁决。**」一段里「它的 PostgreSQL 适配器属 Bento 技术闸门范围，仍阻断。」一句，已由 [ADR-0277](./0277-the-parcel-half-of-the-bento-persistence-gate-has-passed-and-registration-still-waits-for-both-consumers.md) 停用——闸门分 Parcel 半边与登记半边，Parcel 半边（锁定候选的空缓存下载与 `PBC-01` 至 `PBC-09` 对同一 checksum 全部通过）成立之后，这些实现进生产装配获准；登记 `B-06` 与宣称闸门已通过仍等双消费者证明。**适用场景**：只限锁定候选的 Parcel 半边成立期间，候选一变、复评未过即回到 ADR-0026 的取证用途；同段「仍不得建立本地框架替身」、端口接口与端口实现分开裁决的方法、业务语义闸门各句与其余各条不变。上句「闸门此后的状态」以 ADR-0277 决定三的写法为准  
 Date: 2026-08-10
 
 ## Context
@@ -56,3 +56,4 @@ Date: 2026-08-10
 - [开发主线：切片的机制半边与实例半边](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)：两半划分与产品就绪判据的唯一权威
 - [UC-PS-001：客户提交国际小包请求](../application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md)：本记录放行后首个可推进的应用编排
 - [ADR-0026](./0026-persistence-written-for-consumer-proof-precedes-gate-passage.md)：「即刻解锁的范围」收窄本记录「PostgreSQL Repository 实现、迁移、事务与 Outbox 仍然阻断」一句——为产出消费者证明的实现可先写，发布基线登记仍在闸门后
+- [ADR-0277](./0277-the-parcel-half-of-the-bento-persistence-gate-has-passed-and-registration-still-waits-for-both-consumers.md)：前向指针——部分停用「PostgreSQL Repository 实现、迁移、事务与 Outbox 仍然阻断」与「它的 PostgreSQL 适配器属 Bento 技术闸门范围，仍阻断。」两句，闸门此后的现状写法
