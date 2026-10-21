@@ -391,6 +391,24 @@ func (handler *RegisterChargeOccurrenceHandler) register(
 	}
 	continuation := chargeOccurrenceContinuation(command.TenantID.String(), key.Occurrence.String())
 
+	if command.Automatic {
+		// 自动形成先问链头是不是运营决定失效的那一版，排在协议核对之前：失效过的那一项不该再被答成「未配置」「未生效」之类，那几格
+		// 叫租户去发一版协议、给委托换版，而运营已判过它不成立。这里还没取范围锁；锁下读链头时再判一次（同一个 keptInvalidated），
+		// 并发的那一次失效在这里看不见，就在那里接住。
+		head, found, err := occurrenceChainHead(ctx, handler.deps.Occurrences, command.TenantID, key.Occurrence)
+		if errors.Is(err, ErrChargeOccurrenceChainBroken) {
+			return RegisterChargeOccurrenceResult{}, err
+		}
+		if err != nil {
+			return chargeUndecided(OccurrenceRegistryUnavailable, continuation), nil
+		}
+		if found && head.Occurrence.Invalidated() {
+			if answer, kept := handler.keptInvalidated(ctx, command.TenantID, fact, head, continuation); kept {
+				return answer, nil
+			}
+		}
+	}
+
 	procurementGiven := strings.TrimSpace(command.Provider) != "" ||
 		strings.TrimSpace(command.AgreementObject) != "" ||
 		strings.TrimSpace(command.AgreementVersion) != ""
@@ -551,14 +569,8 @@ func (handler *RegisterChargeOccurrenceHandler) register(
 			return handler.replayAgainst(ctx, head, occurrence, continuation)
 		}
 		if command.Automatic {
-			reopened, err := handler.adoptedAfter(ctx, command.TenantID, fact, head.RecordedAt)
-			if err != nil {
-				return chargeUndecided(ProcurementSourceUnavailable, continuation), nil
-			}
-			if !reopened {
-				return RegisterChargeOccurrenceResult{
-					outcome: ChargeOccurrenceExisting, detail: OccurrenceInvalidatedByDecision, record: head, hasRecord: true,
-				}, nil
+			if answer, kept := handler.keptInvalidated(ctx, command.TenantID, fact, head, continuation); kept {
+				return answer, nil
 			}
 		}
 		if occurrence, err = domain.ReestablishChargeOccurrence(head.Occurrence, occurrence, now); err != nil {
@@ -772,24 +784,31 @@ func (handler *RegisterChargeOccurrenceHandler) adoptionChangedSince(
 }
 
 // errProcurementSourceUnreadable 只在本包流转：采用连线或委托读不动，由调用方答未决。
-// adoptedAfter 答这一段此刻的采用是不是晚于 at 才落册。锁下读：与 adoptionChangedSince 同一把范围锁，解除与再采用在这把锁下排过先后。
-func (handler *RegisterChargeOccurrenceHandler) adoptedAfter(
+var errProcurementSourceUnreadable = errors.New("register charge occurrence: adoption or commission unreadable")
+
+// keptInvalidated 判自动形成遇上运营决定失效的链头时留不留它：这一段此刻的采用不晚于那一次失效（同一刻算不晚于），答已存在、细格
+// OccurrenceInvalidatedByDecision、回显失效版本，kept 为真；读采用读不动答未决，kept 也为真；采用晚于失效，kept 为假，由调用方照常长出替代版本。
+// 解除采用在发生项范围锁下排过先后；再采用经门铃，在它那一笔提交之后才触发补形成，所以采用的落册时刻先后就是两次决定的先后。
+func (handler *RegisterChargeOccurrenceHandler) keptInvalidated(
 	ctx context.Context,
 	tenant domain.TenantID,
 	fact chargeOccurrenceFact,
-	at time.Time,
-) (bool, error) {
-	if !fact.hasSegment {
-		return false, nil
+	head ports.ChargeOccurrenceRecord,
+	continuation string,
+) (RegisterChargeOccurrenceResult, bool) {
+	if fact.hasSegment {
+		adoption, adopted, err := handler.deps.Adoptions.FindBySegment(ctx, ports.SegmentCommissionAdoptionKey{TenantID: tenant, Segment: fact.segment})
+		if err != nil {
+			return chargeUndecided(ProcurementSourceUnavailable, continuation), true
+		}
+		if adopted && adoption.RecordedAt.After(head.RecordedAt) {
+			return RegisterChargeOccurrenceResult{}, false
+		}
 	}
-	adoption, adopted, err := handler.deps.Adoptions.FindBySegment(ctx, ports.SegmentCommissionAdoptionKey{TenantID: tenant, Segment: fact.segment})
-	if err != nil {
-		return false, err
-	}
-	return adopted && adoption.RecordedAt.After(at), nil
+	return RegisterChargeOccurrenceResult{
+		outcome: ChargeOccurrenceExisting, detail: OccurrenceInvalidatedByDecision, record: head, hasRecord: true,
+	}, true
 }
-
-var errProcurementSourceUnreadable = errors.New("register charge occurrence: adoption or commission unreadable")
 
 // ErrAdoptionWithoutCommission 说明段的采用连线指名的委托读不回来。连线落册时委托在册（迁移 0035 的外键），委托又不删，读不回
 // 就是库里的数据违约；答「没有采用」会让这件外包的事改按登记方报的采购上下文登，答未受理会让登记方去改一份本来没错的请求。

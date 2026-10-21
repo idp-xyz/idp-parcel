@@ -127,6 +127,29 @@ func (register *ActualFulfillmentUnformeds) SettleNotCharged(
 	return nil
 }
 
+// SettleInvalidatedByDecision 把一条改成运营决定失效，记下那一版失效版本；册上没有这一件就什么也不写。
+func (register *ActualFulfillmentUnformeds) SettleInvalidatedByDecision(
+	ctx context.Context,
+	key ports.ActualFulfillmentUnformedKey,
+	invalidated ports.ChargeOccurrenceKey,
+	at time.Time,
+) error {
+	executor, err := register.db.RequireExecutor(ctx)
+	if err != nil {
+		return unformedWriteFailure("settle actual fulfillment unformed as invalidated by decision", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`UPDATE transport_fulfillment.actual_fulfillment_unformed
+		    SET state = 'INVALIDATED_BY_DECISION', occurrence_ref = $4, occurrence_version = $5, not_charged_by = NULL, settled_at = $6
+		  WHERE tenant_id = $1 AND segment_ref = $2 AND object_ref = $3`,
+		key.TenantID.String(), key.Segment.String(), key.Object.String(),
+		invalidated.Occurrence.String(), invalidated.Validity.String(), at.UTC(),
+	); err != nil {
+		return unformedWriteFailure("settle actual fulfillment unformed as invalidated by decision", err)
+	}
+	return nil
+}
+
 // unformedWriteFailure 把写口的失败分成两种：确定性拒绝（没有环境事务、约束类 SQLSTATE 23xxx）带上
 // ports.ErrActualFulfillmentUnformedWriteRefused，补形成据此按缺陷处置；其余照原样交出，补形成当「此刻读写不动」等重投。
 func unformedWriteFailure(verb string, err error) error {
@@ -255,10 +278,13 @@ func scanActualFulfillmentUnformed(row pgx.Row) (ports.ActualFulfillmentUnformed
 	switch state {
 	case ports.ActualFulfillmentUnformed.String():
 		record.State = ports.ActualFulfillmentUnformed
-	case ports.ActualFulfillmentUnformedFormed.String():
+	case ports.ActualFulfillmentUnformedFormed.String(), ports.ActualFulfillmentUnformedInvalidatedByDecision.String():
 		record.State = ports.ActualFulfillmentUnformedFormed
+		if state == ports.ActualFulfillmentUnformedInvalidatedByDecision.String() {
+			record.State = ports.ActualFulfillmentUnformedInvalidatedByDecision
+		}
 		if occurrenceRef == nil || occurrenceVersion == nil {
-			return ports.ActualFulfillmentUnformedRecord{}, fmt.Errorf("formed unformed entry without its occurrence")
+			return ports.ActualFulfillmentUnformedRecord{}, fmt.Errorf("%s unformed entry without its occurrence", state)
 		}
 		record.Occurrence.TenantID = entry.Key.TenantID
 		if record.Occurrence.Occurrence, err = domain.NewChargeOccurrenceReference(*occurrenceRef); err != nil {

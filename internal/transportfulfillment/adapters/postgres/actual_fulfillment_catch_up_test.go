@@ -276,6 +276,9 @@ func TestTheUnformedRegisterRefusesWhatItCannotHold(t *testing.T) {
 		"SettleNotCharged": func() error {
 			return register.SettleNotCharged(t.Context(), key, deliveryValue(t, domain.NewAgreementSnapshotReference, "agreement-1/v1"), at)
 		},
+		"SettleInvalidatedByDecision": func() error {
+			return register.SettleInvalidatedByDecision(t.Context(), key, ports.ChargeOccurrenceKey{}, at)
+		},
 	} {
 		if err := write(); !errors.Is(err, bentopg.ErrTransactionRequired) || !errors.Is(err, ports.ErrActualFulfillmentUnformedWriteRefused) {
 			t.Errorf("%s 无事务应返回 ErrTransactionRequired 并带确定性拒绝，实得：%v", name, err)

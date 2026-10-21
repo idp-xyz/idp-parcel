@@ -9,7 +9,7 @@ import (
 )
 
 // 实际履约未形成册的存取口（ADR-0231 决定六）。补形成那一处答「这一次不形成」时立或刷新一条，之后形成了或认出已被盖住时了结为已形成，
-// 那一版改说不计费时了结为不计费；写它的只有补形成那一处（自动形成与采用、换版之后的补形成共用的那一个后半），读它的是查阅页。
+// 那一版改说不计费时了结为不计费，那一件的发生项是运营决定失效的那一版时了结为运营决定失效（ADR-0232 决定五）；写它的只有补形成那一处（自动形成与采用、换版之后的补形成共用的那一个后半），读它的是查阅页。
 
 // ErrActualFulfillmentUnformedWriteRefused 是册的写口给出的确定性拒绝：没有环境事务、库上的约束不让写。原样重来一万次都一样，调用方
 // 不该把它当成「册此刻读写不动」去重投；别的写入失败不带它。
@@ -68,6 +68,9 @@ const (
 	ActualFulfillmentUnformedFormed
 	// ActualFulfillmentUnformedNotCharged：之后某一次作答的那一版协议明说不计费。
 	ActualFulfillmentUnformedNotCharged
+	// ActualFulfillmentUnformedInvalidatedByDecision：那一件的发生项链头是运营决定失效的那一版，自动形成不把它长回来（ADR-0232 决定五）。
+	// 不是已形成——没有一项仍有效的发生项盖住它；也不是待补的缺口——运营已判过它不成立，不该叫租户去发协议、给委托换版。
+	ActualFulfillmentUnformedInvalidatedByDecision
 )
 
 func (state ActualFulfillmentUnformedState) String() string {
@@ -78,6 +81,8 @@ func (state ActualFulfillmentUnformedState) String() string {
 		return "FORMED"
 	case ActualFulfillmentUnformedNotCharged:
 		return "NOT_CHARGED"
+	case ActualFulfillmentUnformedInvalidatedByDecision:
+		return "INVALIDATED_BY_DECISION"
 	default:
 		return ""
 	}
@@ -102,7 +107,7 @@ type ActualFulfillmentUnformedRecord struct {
 	FirstAnsweredAt time.Time
 	LastAnsweredAt  time.Time
 	State           ActualFulfillmentUnformedState
-	// Occurrence 只在已形成时给出：盖住它的那一项发生项。
+	// Occurrence 只在已形成与运营决定失效时给出：已形成是盖住它的那一项发生项，运营决定失效是那一版失效版本。
 	Occurrence ChargeOccurrenceKey
 	// NotChargedBy 只在不计费时给出：作答的那一版协议快照。
 	NotChargedBy string
@@ -115,8 +120,10 @@ type ActualFulfillmentUnformedRecord struct {
 //     只在确认没有一项仍有效的发生项盖住它之后才记未形成，盖住它的那一项此后失效了，它就又是未形成的。
 //   - SettleFormed：把一条改成已形成；册上没有这一件就什么也不写——册只记未形成过的那几件，顺利形成的不进册。
 //   - SettleNotCharged：同上，改成不计费。
+//   - SettleInvalidatedByDecision：同上，改成运营决定失效，记下那一版失效版本。
 type ActualFulfillmentUnformedRegister interface {
 	RecordUnformed(ctx context.Context, entry ActualFulfillmentUnformedEntry, answeredAt time.Time) error
 	SettleFormed(ctx context.Context, key ActualFulfillmentUnformedKey, occurrence ChargeOccurrenceKey, at time.Time) error
 	SettleNotCharged(ctx context.Context, key ActualFulfillmentUnformedKey, agreement domain.AgreementSnapshotReference, at time.Time) error
+	SettleInvalidatedByDecision(ctx context.Context, key ActualFulfillmentUnformedKey, invalidated ChargeOccurrenceKey, at time.Time) error
 }

@@ -11,6 +11,7 @@ import (
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	tfapplication "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
+	tfports "go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
 // 本文件对真实 PostgreSQL 证票 88 的补形成与票 57 的更正两口合在一起之后的两处接缝（ADR-0231、ADR-0232）：自动形成不把运营决定失效过的
@@ -223,4 +224,78 @@ func TestAnOccurrenceFormedUnderTheRevisedAgreementBlocksTheWithdrawal(t *testin
 		blocked.FormedOccurrences()[0].Key.Occurrence.String() != formed[0].occurrence {
 		t.Fatalf("按后继形成的那一项仍有效时解除 = %s %d 项", blocked.Outcome(), len(blocked.FormedOccurrences()))
 	}
+}
+
+// Covers: AT-TF-312 的未形成册那一格（S，ADR-0232 决定五、ADR-0231 决定六）——补形成遇上运营决定失效的链头时册怎么记，两种走法：
+//   - 册上已有那一条：委托指名的 v1 没声明条件，SIN 交接答未配置、立一条；换版到 v2 补形成、那一条了结为已形成；运营让那一项失效之后
+//     再换版到 v3，补形成答已存在（失效链头），那一条改记 INVALIDATED_BY_DECISION、指名失效版本 V2——不留在「已形成」上，也不回到待补的
+//     未形成上，查阅页不列。
+//   - 册上没有那一条：按 v1 形成、运营失效之后换版到一版没声明条件的 v2，补形成先认出失效链头、不去核那一版协议，不立「未配置」那一条。
+func TestCatchUpOnAnInvalidatedOccurrenceSettlesTheUnformedRegisterAsInvalidatedByDecision(t *testing.T) {
+	t.Run("册上已有那一条", func(t *testing.T) {
+		const parcel = "SYN-PARCEL-DCG57-03"
+		beat, db, store := wiredBeat(t)
+		start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		publishTrunkVersion(t, db, "v1", start, false)
+		publishTrunkVersion(t, db, "v2", start, true)
+		publishTrunkVersion(t, db, "v3", start, true)
+		saveTrunkCommission(t, db, parcel)
+		register := newHandoverRegistration(t, db, store)
+		handOverAtSZX(t, register, db, parcel)
+		adoptTrunkCommission(t, db)
+		dispatchUntilPublished(t, beat, db, handOverAtSIN(t, register, db, parcel))
+		if entry, found := unformedEntryOf(t, db, parcel); !found || entry.State != tfports.ActualFulfillmentUnformed {
+			t.Fatalf("v1 没声明条件 = %+v %v", entry, found)
+		}
+		reviseTrunkCommission(t, db, store, "v2", formationAt(0))
+		dispatchBeats(t, beat, 3)
+		formed := formationOccurrences(t, db)
+		if entry, _ := unformedEntryOf(t, db, parcel); len(formed) != 1 || entry.State != tfports.ActualFulfillmentUnformedFormed {
+			t.Fatalf("换版到 v2 = %+v，册上 %s", formed, entry.State)
+		}
+
+		invalidateFormed(t, db, store, formed[0].occurrence, "V1")
+		reviseTrunkCommission(t, db, store, "v3", formationAt(0))
+		dispatchBeats(t, beat, 3)
+		entry, found := unformedEntryOf(t, db, parcel)
+		if !found || entry.State != tfports.ActualFulfillmentUnformedInvalidatedByDecision ||
+			entry.Occurrence.Occurrence.String() != formed[0].occurrence || entry.Occurrence.Validity.String() != "V2" {
+			t.Fatalf("失效之后再换版，册上那一条 = %+v %v, want INVALIDATED_BY_DECISION、指名 V2", entry, found)
+		}
+		if listed := listedUnformed(t, db, formationTenant); len(listed) != 0 {
+			t.Fatalf("查阅页列了 %+v", listed)
+		}
+		if versions := occurrenceVersions(t, db, formed[0].occurrence); len(versions) != 2 {
+			t.Fatalf("各版 = %+v, want 只有 V1 与失效版本", versions)
+		}
+	})
+
+	t.Run("册上没有那一条", func(t *testing.T) {
+		const parcel = "SYN-PARCEL-DCG57-04"
+		beat, db, store := wiredBeat(t)
+		start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		publishTrunkVersion(t, db, "v1", start, true)
+		publishTrunkVersion(t, db, "v2", start, false)
+		saveTrunkCommission(t, db, parcel)
+		register := newHandoverRegistration(t, db, store)
+		handOverAtSZX(t, register, db, parcel)
+		adoptTrunkCommission(t, db)
+		dispatchUntilPublished(t, beat, db, handOverAtSIN(t, register, db, parcel))
+		formed := formationOccurrences(t, db)
+		if len(formed) != 1 {
+			t.Fatalf("按 v1 形成 = %+v", formed)
+		}
+
+		invalidateFormed(t, db, store, formed[0].occurrence, "V1")
+		reviseTrunkCommission(t, db, store, "v2", formationAt(0))
+		dispatchBeats(t, beat, 3)
+		for id, status := range outboxEventsOf(t, db, tfpostgres.CommissionAgreementRevisedEventType) {
+			if status != "PUBLISHED" {
+				t.Fatalf("换版门铃 %s = %s（%s）", id, status, recordedFailureCode(t, db, id))
+			}
+		}
+		if entry, found := unformedEntryOf(t, db, parcel); found {
+			t.Fatalf("失效链头换到没声明条件的那一版，册上立了 %+v", entry)
+		}
+	})
 }

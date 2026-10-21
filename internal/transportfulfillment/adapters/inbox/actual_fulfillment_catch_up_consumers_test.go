@@ -207,6 +207,10 @@ func (*unformedSink) SettleNotCharged(context.Context, ports.ActualFulfillmentUn
 	return nil
 }
 
+func (*unformedSink) SettleInvalidatedByDecision(context.Context, ports.ActualFulfillmentUnformedKey, ports.ChargeOccurrenceKey, time.Time) error {
+	return nil
+}
+
 type catchUpClock struct{}
 
 func (catchUpClock) Now() time.Time { return time.Date(2026, 10, 21, 3, 0, 0, 0, time.UTC) }

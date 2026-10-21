@@ -96,3 +96,27 @@ ALTER TABLE transport_fulfillment.segment_commission_adoption
     ADD CONSTRAINT segment_commission_adoption_previous_withdrawn
         FOREIGN KEY (tenant_id, segment_ref, previous_generation)
         REFERENCES transport_fulfillment.segment_commission_adoption_withdrawal (tenant_id, segment_ref, generation);
+
+-- 实际履约未形成册（迁移 0048 立的那一张）多一种了结：运营决定失效（ADR-0232 决定五）。那一件的发生项链头是运营决定失效的那一版时，
+-- 自动形成不把它长回来，册上那一条既不是已形成（没有一项仍有效的发生项盖住它），也不是待补的缺口（运营已判过它不成立）；记下那一版
+-- 失效版本，与已形成同两列。
+ALTER TABLE transport_fulfillment.actual_fulfillment_unformed
+    DROP CONSTRAINT actual_fulfillment_unformed_state_closed;
+
+ALTER TABLE transport_fulfillment.actual_fulfillment_unformed
+    ADD CONSTRAINT actual_fulfillment_unformed_state_closed
+        CHECK (state IN ('UNFORMED', 'FORMED', 'NOT_CHARGED', 'INVALIDATED_BY_DECISION'));
+
+ALTER TABLE transport_fulfillment.actual_fulfillment_unformed
+    DROP CONSTRAINT actual_fulfillment_unformed_settlement_coupled;
+
+ALTER TABLE transport_fulfillment.actual_fulfillment_unformed
+    ADD CONSTRAINT actual_fulfillment_unformed_settlement_coupled
+        CHECK (
+            (state = 'UNFORMED' AND occurrence_ref IS NULL AND occurrence_version IS NULL AND not_charged_by IS NULL AND settled_at IS NULL)
+            OR (state IN ('FORMED', 'INVALIDATED_BY_DECISION') AND occurrence_ref IS NOT NULL AND btrim(occurrence_ref) <> ''
+                AND occurrence_version IS NOT NULL AND btrim(occurrence_version) <> ''
+                AND not_charged_by IS NULL AND settled_at IS NOT NULL)
+            OR (state = 'NOT_CHARGED' AND not_charged_by IS NOT NULL AND btrim(not_charged_by) <> ''
+                AND occurrence_ref IS NULL AND occurrence_version IS NULL AND settled_at IS NOT NULL)
+        );

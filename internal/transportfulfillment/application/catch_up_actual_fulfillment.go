@@ -311,6 +311,14 @@ func (handler *FormActualFulfillmentOnParticipationEndHandler) keepUnformedRegis
 	key := ports.ActualFulfillmentUnformedKey{TenantID: tenant, Segment: segment, Object: participation.Object()}
 	now := handler.deps.Clock.Now().UTC()
 	var reason ports.ActualFulfillmentUnformedReason
+	if registered.Outcome() == ChargeOccurrenceExisting && registered.Detail() == OccurrenceInvalidatedByDecision {
+		// 链头是运营决定失效的那一版：没有一项仍有效的发生项盖住它，不是已形成；运营已判过它不成立，也不是待补的缺口。
+		record, present := registered.Record()
+		if !present {
+			return FormationUndecidedReasonNone, fmt.Errorf("keep actual fulfillment unformed: %s without the invalidated version", registered.Detail())
+		}
+		return unformedWrite(handler.deps.Unformed.SettleInvalidatedByDecision(ctx, key, record.Key, now))
+	}
 	switch registered.Outcome() {
 	case ChargeOccurrenceRegistered, ChargeOccurrenceExisting, ChargeOccurrenceConflict:
 		record, present := registered.Record()
@@ -384,7 +392,8 @@ func (handler *FormActualFulfillmentOnParticipationEndHandler) unlessCovered(
 }
 
 // coveringOccurrence 问这件参与是不是已有一项发生项盖住：同一段上同一件事实已被另一项计过（成员交集或按段计过），或同一身份那一项
-// 已在册。依据、范围与身份取登记用例同一处的派生（charge_occurrence_identity.go）；按身份读只读首版，与登记用例的重放同一个读法。
+// 已在册、链头仍有效。依据、范围与身份取登记用例同一处的派生（charge_occurrence_identity.go）；按身份读的是链头，与登记用例同一个读法
+// （occurrenceChainHead）：链头是运营决定失效的那一版就不算盖住——没有一项仍有效的发生项，只读首版会把它当成已形成。
 //
 // 派生不出来是本上下文自己的缺陷，交 err、上抛；读不动是此刻的事，交 readErr、答未决重投——两者混在一格，缺陷就会被当成等得来的依赖反复
 // 重投。
@@ -406,8 +415,14 @@ func (handler *FormActualFulfillmentOnParticipationEndHandler) coveringOccurrenc
 	if readErr != nil || covered {
 		return covering, covered, readErr, nil
 	}
-	covering, covered, readErr = handler.deps.Coverage.FindByKey(ctx, key)
-	return covering, covered, readErr, nil
+	head, found, readErr := occurrenceChainHead(ctx, handler.deps.Coverage, tenant, key.Occurrence)
+	if errors.Is(readErr, ErrChargeOccurrenceChainBroken) {
+		return ports.ChargeOccurrenceRecord{}, false, nil, readErr
+	}
+	if readErr != nil || !found || head.Occurrence.Invalidated() {
+		return ports.ChargeOccurrenceRecord{}, false, readErr, nil
+	}
+	return head, true, nil, nil
 }
 
 // unformedWrite 把册写口的失败分开：确定性拒绝是缺陷、上抛；其余是此刻写不动，答未决重投。

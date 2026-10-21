@@ -62,6 +62,17 @@ func (double *unformedRegisterDouble) SettleNotCharged(_ context.Context, key po
 	return nil
 }
 
+func (double *unformedRegisterDouble) SettleInvalidatedByDecision(_ context.Context, key ports.ActualFulfillmentUnformedKey, invalidated ports.ChargeOccurrenceKey, at time.Time) error {
+	if double.writeErr != nil {
+		return double.writeErr
+	}
+	if record, existed := double.records[key]; existed {
+		record.State, record.Occurrence, record.NotChargedBy, record.SettledAt = ports.ActualFulfillmentUnformedInvalidatedByDecision, invalidated, "", at
+		double.records[key] = record
+	}
+	return nil
+}
+
 func (double *unformedRegisterDouble) entry(t *testing.T, object string) (ports.ActualFulfillmentUnformedRecord, bool) {
 	t.Helper()
 	record, found := double.records[ports.ActualFulfillmentUnformedKey{
