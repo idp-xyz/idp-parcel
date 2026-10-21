@@ -123,11 +123,24 @@ var transportCommandLines = map[string]transportCommandLine{
 			if err != nil {
 				t.Fatalf("装配派送发起执行器：%v", err)
 			}
-			return tfhttp.NewTriggerDeliveryDispatchEndpoint(work, trigger)
+			return tfhttp.NewTriggerDeliveryDispatchEndpoint(decisions, trigger)
 		},
 		body:    `{"segment":"SYN-SEGMENT-08-09","object":"SYN-PARCEL-08-09","occurredAt":"2026-09-25T07:00:00+08:00"}`,
 		status:  http.StatusOK,
 		outcome: "NOT_A_DELIVERY_TRIGGER",
+	},
+	// 按派送待形成册批量重问：空库里册上没有待形成的——问过了、零件，200。
+	"/transport-fulfillment-delivery-dispatch-reasks": {
+		endpoint: func(t *testing.T, db *bentopg.DB, decisions *tfhttp.OperatorDecisionIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
+			reask, err := buildDeliveryDispatchReask(db)
+			if err != nil {
+				t.Fatalf("装配按册重问：%v", err)
+			}
+			return tfhttp.NewReaskDeliveryDispatchesEndpoint(decisions, reask)
+		},
+		body:    `{"scope":"ALL","limit":10}`,
+		status:  http.StatusOK,
+		outcome: "PENDING_DELIVERY_DISPATCHES_REASKED",
 	},
 	// 交付生效首登：各格齐，但指名的派送尝试不在册。交付只能落在已登记的派送尝试结果上（「一个入口同时造尝试和造交付，
 	// 就没有东西拦得住先声称到过场再声称交付成功」），编排如实答`未受理`，200。尝试登记之后交付走得过去，见
@@ -211,6 +224,7 @@ var operationDecisionTransportFaces = []accessidentity.DecisionKind{
 	accessidentity.DecisionDispatchTaskRegistration,
 	accessidentity.DecisionEffectiveTimeJudgment,
 	accessidentity.DecisionCarrierFirstEffectivePickupJudgment,
+	accessidentity.DecisionDeliveryDispatchReask,
 }
 
 // operatorDecisionTransportForTest 装 TF 运营决定口的操作者渠道 Intake，准入走生产的准入范围桥（ADR-0180）：

@@ -124,7 +124,9 @@ type taskReferenceRig struct {
 	db           *bentopg.DB
 	controlFacts controlFactOrchestrations
 	owners       *taskReferenceOwners
-	trigger      http.Handler
+	// decisions 是运营决定渠道的 Intake：补拍口与手工建任务口都挂在这一面，一只库上只登一次准入对照。
+	decisions *tfhttp.OperatorDecisionIntake
+	trigger   http.Handler
 }
 
 func newTaskReferenceRig(t *testing.T) *taskReferenceRig {
@@ -143,12 +145,14 @@ func newTaskReferenceRig(t *testing.T) *taskReferenceRig {
 	if err != nil {
 		t.Fatalf("装配派送发起执行器：%v", err)
 	}
+	decisions := operatorDecisionTransportForTest(t, db)
 	return &taskReferenceRig{
 		pool:         pool,
 		db:           db,
 		controlFacts: controlFacts,
 		owners:       owners,
-		trigger:      tfhttp.NewTriggerDeliveryDispatchEndpoint(workFactTransportForTest(t), trigger),
+		decisions:    decisions,
+		trigger:      tfhttp.NewTriggerDeliveryDispatchEndpoint(decisions, trigger),
 	}
 }
 
@@ -194,7 +198,7 @@ func (rig *taskReferenceRig) tick(t *testing.T, segment, object, occurredAt stri
 		t.Fatal(err)
 	}
 	request := httptest.NewRequest(http.MethodPost, "/transport-fulfillment-delivery-dispatch-triggers", strings.NewReader(string(body)))
-	stampWorkFact(request, "OFFSITE", "SYN-OFFSITE-01", "SYN-DEVICE-OFFSITE")
+	request.Header.Set("Authorization", "Bearer presented.operator.token")
 	recorder := httptest.NewRecorder()
 	rig.trigger.ServeHTTP(recorder, request)
 	var view taskReferenceView
@@ -289,7 +293,7 @@ func TestTheManualFaceCannotTakeTheExecutorsReferenceAndAStockOccupantIsAnswered
 	if err != nil {
 		t.Fatalf("装配段运营编排：%v", err)
 	}
-	manual := tfhttp.NewOpenDispatchTaskEndpoint(operatorDecisionTransportForTest(t, rig.db), operations.opener)
+	manual := tfhttp.NewOpenDispatchTaskEndpoint(rig.decisions, operations.opener)
 	for _, named := range []string{reference, legacyExecutorReference(segment, object, "SYN-HANDOVER-SCOPE-09-01", version)} {
 		request := httptest.NewRequest(http.MethodPost, "/transport-fulfillment-dispatch-task-registrations", strings.NewReader(fmt.Sprintf(
 			`{"task":%q,"kind":"PICKUP","objects":["SYN-PARCEL-OTHER-99"],"place":"SYN-PLACE/elsewhere",`+

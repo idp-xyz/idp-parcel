@@ -54,7 +54,6 @@ var (
 	_ HandoverRegistrationIntake    = (*WorkFactCommandIntake)(nil)
 	_ HandoverCorrectionIntake      = (*WorkFactCommandIntake)(nil)
 	_ MovementFactIntake            = (*WorkFactCommandIntake)(nil)
-	_ DeliveryDispatchTriggerIntake = (*WorkFactCommandIntake)(nil)
 	_ DeliveryRegistrationIntake    = (*WorkFactCommandIntake)(nil)
 	_ DeliveryProofCorrectionIntake = (*WorkFactCommandIntake)(nil)
 	_ DeliveryAttemptIntake         = (*WorkFactCommandIntake)(nil)
@@ -157,18 +156,6 @@ func (intake *WorkFactCommandIntake) IntakeDepartureGatePreview(ctx context.Cont
 	var payload DepartureGatePreviewPayload
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.PreviewDepartureGateCommand{}, err
-	}
-	return payload.Command(tenant)
-}
-
-func (intake *WorkFactCommandIntake) IntakeDeliveryDispatchTrigger(ctx context.Context, request *http.Request) (application.TriggerDeliveryDispatchCommand, error) {
-	tenant, err := intake.tenantFrom(ctx, request)
-	if err != nil {
-		return application.TriggerDeliveryDispatchCommand{}, err
-	}
-	var payload DeliveryDispatchTriggerPayload
-	if err := decodeClosedPayload(request.Body, &payload); err != nil {
-		return application.TriggerDeliveryDispatchCommand{}, err
 	}
 	return payload.Command(tenant)
 }

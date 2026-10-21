@@ -123,13 +123,6 @@ var workFactLines = map[string]workFactLine{
 		},
 		valid: workFactMovementFactBody,
 	},
-	"/transport-fulfillment-delivery-dispatch-triggers": {
-		intake: func(intake *tfhttp.WorkFactCommandIntake, request *http.Request) error {
-			_, err := intake.IntakeDeliveryDispatchTrigger(context.Background(), request)
-			return err
-		},
-		valid: workFactDeliveryDispatchTriggerBody,
-	},
 	"/transport-fulfillment/deliveries": {
 		intake: func(intake *tfhttp.WorkFactCommandIntake, request *http.Request) error {
 			_, err := intake.IntakeRegistration(context.Background(), request)
@@ -193,28 +186,6 @@ func TestWorkFactCommandIntakeTranslatesDeliveryProofCorrectionWithItsPredecesso
 		command.PredecessorVersion != "SYN-DRV-08-10-1" || command.NewProof != "SYN-POD/signature-10b" ||
 		!command.CorrectedAt.Equal(time.Date(2026, 9, 6, 8, 0, 0, 0, time.UTC)) {
 		t.Fatalf("command = %+v，与认证结果与载荷不符", command)
-	}
-}
-
-const workFactDeliveryDispatchTriggerBody = `{"segment":"SYN-SEGMENT-08-09","object":"SYN-PARCEL-08-09","occurredAt":"2026-09-25T07:00:00+08:00"}`
-
-// Covers: DeliveryDispatchTriggerIntake 契约「租户从信封给，段、对象与这一拍的业务时间从请求收」——请求里没有任何地点、
-// 时间窗或条件（ADR-0114 决定三），载荷形状只有段、对象与业务时间。
-func TestWorkFactCommandIntakeTranslatesDeliveryDispatchTriggerWithTheAuthenticatedTenant(t *testing.T) {
-	command, err := workFactIntakeForTest(t).IntakeDeliveryDispatchTrigger(context.Background(), commandRequest(workFactDeliveryDispatchTriggerBody))
-	if err != nil {
-		t.Fatalf("intake：%v", err)
-	}
-	if command.TenantID.String() != workFactTenant || command.Segment != "SYN-SEGMENT-08-09" || command.Object != "SYN-PARCEL-08-09" {
-		t.Fatalf("command = %+v，与认证结果与载荷不符", command)
-	}
-	if want := time.Date(2026, 9, 24, 23, 0, 0, 0, time.UTC); !command.OccurredAt.Equal(want) {
-		t.Fatalf("OccurredAt = %s, want %s", command.OccurredAt, want)
-	}
-	_, err = workFactIntakeForTest(t).IntakeDeliveryDispatchTrigger(context.Background(),
-		commandRequest(`{"segment":"s","object":"o","place":"SYN-PLACE/x"}`))
-	if !errors.Is(err, tfhttp.ErrMalformedRequest) {
-		t.Fatalf("带地点的触发：err = %v, want ErrMalformedRequest——地点由执行器向所有者取，调用方给不了也不该给", err)
 	}
 }
 
@@ -532,7 +503,6 @@ func TestWorkFactCommandIntakeServesOnlyWorkFactLines(t *testing.T) {
 		"交接首登口":   isA[tfhttp.HandoverRegistrationIntake](intake),
 		"交接更正口":   isA[tfhttp.HandoverCorrectionIntake](intake),
 		"移动事实口":   isA[tfhttp.MovementFactIntake](intake),
-		"派送发起口":   isA[tfhttp.DeliveryDispatchTriggerIntake](intake),
 		"交付生效首登口": isA[tfhttp.DeliveryRegistrationIntake](intake),
 		"交付更正口":   isA[tfhttp.DeliveryProofCorrectionIntake](intake),
 		"派送尝试登记口": isA[tfhttp.DeliveryAttemptIntake](intake),
@@ -549,6 +519,9 @@ func TestWorkFactCommandIntakeServesOnlyWorkFactLines(t *testing.T) {
 		"承运商收寄判断口（运营决定）":  isA[tfhttp.CarrierPickupJudgmentIntake](intake),
 		"装载分配口（运营决定）":     isA[tfhttp.LoadAssignmentIntake](intake),
 		"终止参与口（运营决定）":     isA[tfhttp.ParticipationTerminationIntake](intake),
+		"派送补拍口（运营决定）":     isA[tfhttp.DeliveryDispatchTriggerIntake](intake),
+		"按册重问口（运营决定）":     isA[tfhttp.DeliveryDispatchReaskIntake](intake),
+		"重问间隔登记口（登记写面）":   isA[tfhttp.ReaskCadenceIntake](intake),
 		"承运凭证登记口（登记写面）":   isA[tfhttp.CredentialIntake](intake),
 		"有效时间规则登记口（登记写面）": isA[tfhttp.EffectiveTimeRuleIntake](intake),
 		"总单登记口（登记写面）":     isA[tfhttp.MasterDocumentIntake](intake),

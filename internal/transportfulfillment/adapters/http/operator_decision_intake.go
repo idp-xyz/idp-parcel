@@ -60,6 +60,10 @@ const (
 	OperatorDecisionBookingRequestCancellation      OperatorDecision = "BOOKING_REQUEST_CANCELLATION"
 )
 
+// OperatorDecisionDeliveryDispatchReask 是派送重问（ADR-0230 决定四、七）：按册批量重问与对单个（段，对象）补拍是同一种权力——
+// 让执行器再问一次所有者，形成不了所有者没给齐的任务——两口共用这一种。
+const OperatorDecisionDeliveryDispatchReask OperatorDecision = "DELIVERY_DISPATCH_REASK"
+
 // OperatorIdentity 是一次运营决定出示认证出的身份：租户与做出决定的操作者。操作者写成「发行方#sub」：sub 只在它的
 // 发行方之内唯一，单拿 sub 会让两个发行方的同一个 sub 在留痕里读成一个人（ADR-0100 决定二第三条）；与 PS、NO 的
 // 运营决定认证方同一个写法。多数口只取租户；发生项登记把操作者记作断言人（ADR-0207 决定三）。
@@ -100,6 +104,9 @@ var (
 	_ SegmentCommissionAdoptionIntake       = (*OperatorDecisionIntake)(nil)
 	_ TransportCommissionCancellationIntake = (*OperatorDecisionIntake)(nil)
 	_ BookingRequestCancellationIntake      = (*OperatorDecisionIntake)(nil)
+
+	_ DeliveryDispatchTriggerIntake = (*OperatorDecisionIntake)(nil)
+	_ DeliveryDispatchReaskIntake   = (*OperatorDecisionIntake)(nil)
 )
 
 func NewOperatorDecisionIntake(authenticator OperatorAuthenticator) (*OperatorDecisionIntake, error) {
@@ -262,6 +269,33 @@ func (intake *OperatorDecisionIntake) IntakeBookingRequestCancellation(ctx conte
 	var payload BookingRequestCancellationPayload
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.CancelBookingCommand{}, err
+	}
+	return payload.Command(tenant)
+}
+
+// IntakeDeliveryDispatchTrigger 译对单个（段，对象）补拍一次派送发起（`/transport-fulfillment-delivery-dispatch-triggers`，
+// ADR-0230 决定七）。线格式不变，仍是段、对象与这一拍的业务时间。
+func (intake *OperatorDecisionIntake) IntakeDeliveryDispatchTrigger(ctx context.Context, request *http.Request) (application.TriggerDeliveryDispatchCommand, error) {
+	tenant, err := intake.tenantFor(ctx, request, OperatorDecisionDeliveryDispatchReask)
+	if err != nil {
+		return application.TriggerDeliveryDispatchCommand{}, err
+	}
+	var payload DeliveryDispatchTriggerPayload
+	if err := decodeClosedPayload(request.Body, &payload); err != nil {
+		return application.TriggerDeliveryDispatchCommand{}, err
+	}
+	return payload.Command(tenant)
+}
+
+// IntakeDeliveryDispatchReask 译按派送待形成册批量重问（`/transport-fulfillment-delivery-dispatch-reasks`，ADR-0230 决定四）。
+func (intake *OperatorDecisionIntake) IntakeDeliveryDispatchReask(ctx context.Context, request *http.Request) (application.ReaskPendingDeliveryDispatchesCommand, error) {
+	tenant, err := intake.tenantFor(ctx, request, OperatorDecisionDeliveryDispatchReask)
+	if err != nil {
+		return application.ReaskPendingDeliveryDispatchesCommand{}, err
+	}
+	var payload DeliveryDispatchReaskPayload
+	if err := decodeClosedPayload(request.Body, &payload); err != nil {
+		return application.ReaskPendingDeliveryDispatchesCommand{}, err
 	}
 	return payload.Command(tenant)
 }

@@ -141,6 +141,14 @@ func TestEachTFDecisionFaceAuthenticatesForItsOwnDecision(t *testing.T) {
 			_, err := intake.IntakeBookingRequestCancellation(ctx, bearerRequest("t", "!!not-json!!"))
 			return err
 		}},
+		{tfhttp.OperatorDecisionDeliveryDispatchReask, func() error {
+			_, err := intake.IntakeDeliveryDispatchTrigger(ctx, bearerRequest("t", "!!not-json!!"))
+			return err
+		}},
+		{tfhttp.OperatorDecisionDeliveryDispatchReask, func() error {
+			_, err := intake.IntakeDeliveryDispatchReask(ctx, bearerRequest("t", "!!not-json!!"))
+			return err
+		}},
 	}
 	for _, face := range faces {
 		asked = nil
