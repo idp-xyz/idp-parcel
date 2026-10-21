@@ -1,7 +1,7 @@
 # 39 PS 来源保全之后建单失败的提交，重发只答「已有结果」，这份提交再也不建单
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code39（见文末「完成记录」）。此前 needs-triage——建议 R1（上线前必修）：静默丢单。来源保全与建单是两个事务（首个消费者切片简报「事务边界」），保全提交之后，归属判断依赖失败或建单事务失败都答 5xx；客户照 ADR-0022 原样重发，提交编排按已保全的来源只答 `EXISTING_RESULT`、不指名委托，不再走归属与建单。客户拿到一个「已有结果」，系统里却没有这份委托。第一次数据库抖动就会撞上。2026-10-21 文档自洽 06 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc06。分级由协调方定稿。
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code39（见文末「完成记录」）。此前 needs-triage——建议 R1（上线前必修）：静默丢单。来源保全与建单是两个事务（首个消费者切片简报「事务边界」），保全提交之后，归属判断依赖失败或建单事务失败都答 5xx；客户照 ADR-0022 原样重发，提交编排按已保全的来源只答 `EXISTING_RESULT`、不指名委托，不再走归属与建单。客户拿到一个「已有结果」，系统里却没有这份委托。第一次数据库抖动就会撞上。2026-10-21 文档自洽 06 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc06。分级由协调方定稿。
 Blocked by: 无
 出处：文档自洽 06 修订 UC-PS-001 结果语义契约（「没有形成答案」那一段，评审轮补「已有结果不带原归属结果」）与 [ADR-0256](../../../docs/adr/0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md) 时读码所得，不在审计报告条目里；UC-PS-001「给开发的交接」。
 
@@ -153,3 +153,10 @@ M：重放那条路要分得出「保全过、建成了」「保全过、归属�
 - 改动用例 `-count=3` 另跑：`cmd/parcel-api`、PS `adapters/postgres`、`application` 全 ok。
 - `go build ./...`、`go vet ./...`、`gofmt -l` 干净。
 - scratchpad 副本上 `go run ./tools/adr-index` 生成后 `-check` 退 0；`docs/adr/README.md` 未手改。
+
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-code39` 由协调方 rebase 到 main `01a181db5`（无冲突）后快进，tip `ce08016c1`；两轮隔离评审的阻断全部消掉（第一轮 ADR-0081 停用指针 → ADR-0266；第二轮 ADR-0128 接上指针、他方未确认的例外写全）。
+- 协调方在 tip 上单独提交重生成的 ADR 索引、AT 计数与机制清点，`-check` 均退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净；演示种子在一次性库上灌通（迁移 `parcel_shipment/0028_submission_answer` 一并施加），用后删库。
+- 去向：撤回与资料修订的同类短路仍归 code/44。
