@@ -66,44 +66,44 @@ func TestABookingIsReadBackWithItsCommissionsProviderInOneStatement(t *testing.T
 	}
 }
 
-// Covers: `AT-TF-327`（存取面）、ADR-0239 决定二的拒收册——一次拒收立一行；同键再来只加次数、推后最近一次时刻，首次时刻不动；依据不同另起一行；
+// Covers: `AT-TF-327`（存取面）、ADR-0239 决定二的挡回册——一次挡回立一行；同键再来只加次数、推后最近一次时刻，首次时刻不动；依据不同另起一行；
 // 只在事务里写，事务回滚不留痕；封闭集外的依据与空来源在写之前就拒。
-func TestARefusedAnswerIsCountedOnItsOwnRowPerBasis(t *testing.T) {
+func TestABouncedAnswerIsCountedOnItsOwnRowPerBasis(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
-	refusals, err := adapter.NewBookingAnswerRefusals(db)
+	bounces, err := adapter.NewBookingAnswerBounces(db)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx := t.Context()
 	at := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
-	refusal := ports.BookingAnswerRefusal{
+	bounce := ports.BookingAnswerBounce{
 		Key: ports.BookingKey{
 			TenantID: deliveryValue(t, domain.NewTenantID, "tenant-a"),
 			Booking:  deliveryValue(t, domain.NewBookingReference, "booking-1"),
 		},
 		Source:     "partner-2",
 		Acceptance: deliveryValue(t, domain.NewCarrierAcceptanceReference, "answer-1"),
-		Basis:      ports.RefusedSourceNotServiceProvider,
-		RefusedAt:  at,
+		Basis:      ports.BouncedSourceNotServiceProvider,
+		BouncedAt:  at,
 	}
-	record := func(refusal ports.BookingAnswerRefusal) {
+	record := func(bounce ports.BookingAnswerBounce) {
 		t.Helper()
 		mustWithinDeliveryTransaction(t, db.Transactor(), ctx, func(txCtx context.Context) error {
-			return refusals.RecordRefusal(txCtx, refusal)
+			return bounces.RecordBounce(txCtx, bounce)
 		})
 	}
 
-	record(refusal)
-	again := refusal
-	again.RefusedAt = at.Add(time.Hour)
+	record(bounce)
+	again := bounce
+	again.BouncedAt = at.Add(time.Hour)
 	record(again)
-	otherBasis := refusal
-	otherBasis.Basis = ports.RefusedBookingNotRegistered
-	otherBasis.RefusedAt = at.Add(2 * time.Hour)
+	otherBasis := bounce
+	otherBasis.Basis = ports.BouncedBookingNotRegistered
+	otherBasis.BouncedAt = at.Add(2 * time.Hour)
 	record(otherBasis)
 
 	type row struct {
@@ -112,10 +112,10 @@ func TestARefusedAnswerIsCountedOnItsOwnRowPerBasis(t *testing.T) {
 		count       int64
 	}
 	rows, err := pool.Query(ctx,
-		`SELECT refusal_basis, first_refused_at, last_refused_at, refusal_count
-		   FROM transport_fulfillment.booking_answer_refusal
+		`SELECT basis, first_bounced_at, last_bounced_at, bounce_count
+		   FROM transport_fulfillment.booking_answer_bounce
 		  WHERE tenant_id = 'tenant-a' AND source_ref = 'partner-2' AND booking_id = 'booking-1' AND acceptance_id = 'answer-1'
-		  ORDER BY refusal_basis`)
+		  ORDER BY basis`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,17 +132,17 @@ func TestARefusedAnswerIsCountedOnItsOwnRowPerBasis(t *testing.T) {
 		got[0].basis != "BOOKING_NOT_REGISTERED" || got[0].count != 1 ||
 		got[1].basis != "SOURCE_NOT_SERVICE_PROVIDER" || got[1].count != 2 ||
 		!got[1].first.Equal(at) || !got[1].last.Equal(at.Add(time.Hour)) {
-		t.Fatalf("拒收册 = %+v", got)
+		t.Fatalf("挡回册 = %+v", got)
 	}
 
-	if err := refusals.RecordRefusal(ctx, refusal); !errors.Is(err, bentopg.ErrTransactionRequired) {
-		t.Fatalf("事务外写拒收册：%v，want ErrTransactionRequired", err)
+	if err := bounces.RecordBounce(ctx, bounce); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("事务外写挡回册：%v，want ErrTransactionRequired", err)
 	}
 	errRollback := errors.New("回滚")
-	stray := refusal
+	stray := bounce
 	stray.Acceptance = deliveryValue(t, domain.NewCarrierAcceptanceReference, "answer-rolled-back")
 	if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
-		if err := refusals.RecordRefusal(txCtx, stray); err != nil {
+		if err := bounces.RecordBounce(txCtx, stray); err != nil {
 			return err
 		}
 		return errRollback
@@ -151,21 +151,21 @@ func TestARefusedAnswerIsCountedOnItsOwnRowPerBasis(t *testing.T) {
 	}
 	var strays int
 	if err := pool.QueryRow(ctx,
-		`SELECT count(*) FROM transport_fulfillment.booking_answer_refusal WHERE acceptance_id = 'answer-rolled-back'`).Scan(&strays); err != nil || strays != 0 {
-		t.Fatalf("回滚的拒收留下了 %d 行（%v）", strays, err)
+		`SELECT count(*) FROM transport_fulfillment.booking_answer_bounce WHERE acceptance_id = 'answer-rolled-back'`).Scan(&strays); err != nil || strays != 0 {
+		t.Fatalf("回滚的挡回留下了 %d 行（%v）", strays, err)
 	}
 
-	unnamedBasis, blankSource := refusal, refusal
-	unnamedBasis.Basis = ports.BookingAnswerRefusalBasisInvalid
+	unnamedBasis, blankSource := bounce, bounce
+	unnamedBasis.Basis = ports.BookingAnswerBounceBasisInvalid
 	blankSource.Source = " "
-	for name, broken := range map[string]ports.BookingAnswerRefusal{
+	for name, broken := range map[string]ports.BookingAnswerBounce{
 		"依据不在封闭集": unnamedBasis,
 		"来源为空":    blankSource,
 	} {
 		if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
-			return refusals.RecordRefusal(txCtx, broken)
+			return bounces.RecordBounce(txCtx, broken)
 		}); err == nil {
-			t.Fatalf("%s 照样写进了拒收册", name)
+			t.Fatalf("%s 照样写进了挡回册", name)
 		}
 	}
 }

@@ -119,7 +119,7 @@ func (double *bookingStoreDouble) Replace(
 }
 
 // bookingWithProviderDouble 照 BookingWithProviderReader 的契约从订舱与委托两个替身里连读：订舱在、委托不在时照样交回订舱，
-// 标出委托不在。reads 数的是答复编排读了几次——两条拒收路都只该读一次。
+// 标出委托不在。reads 数的是答复编排读了几次——两条挡回路都只该读一次。
 type bookingWithProviderDouble struct {
 	bookings    *bookingStoreDouble
 	commissions *commissionStoreDouble
@@ -150,35 +150,35 @@ func (double *bookingWithProviderDouble) FindBookingWithProvider(
 	return addressed, true, nil
 }
 
-// answerRefusalDouble 照拒收册的契约按（租户、答复方、订舱、答复标识、依据）计次；writes 数写了几次，不论成不成。
-type answerRefusalDouble struct {
+// answerBounceDouble 照挡回册的契约按（租户、答复方、订舱、答复标识、依据）计次；writes 数写了几次，不论成不成。
+type answerBounceDouble struct {
 	counts map[string]int
 	err    error
 	writes int
 }
 
-func newAnswerRefusals() *answerRefusalDouble {
-	return &answerRefusalDouble{counts: map[string]int{}}
+func newAnswerBounces() *answerBounceDouble {
+	return &answerBounceDouble{counts: map[string]int{}}
 }
 
-func refusalKey(source, booking, acceptance string, basis ports.BookingAnswerRefusalBasis) string {
+func bounceKey(source, booking, acceptance string, basis ports.BookingAnswerBounceBasis) string {
 	return strings.Join([]string{"tenant-1", source, booking, acceptance, basis.String()}, "|")
 }
 
-func (double *answerRefusalDouble) RecordRefusal(_ context.Context, refusal ports.BookingAnswerRefusal) error {
+func (double *answerBounceDouble) RecordBounce(_ context.Context, bounce ports.BookingAnswerBounce) error {
 	double.writes++
 	if double.err != nil {
 		return double.err
 	}
 	double.counts[strings.Join([]string{
-		refusal.Key.TenantID.String(), refusal.Source, refusal.Key.Booking.String(), refusal.Acceptance.String(), refusal.Basis.String(),
+		bounce.Key.TenantID.String(), bounce.Source, bounce.Key.Booking.String(), bounce.Acceptance.String(), bounce.Basis.String(),
 	}, "|")]++
 	return nil
 }
 
-// countOf 交本租户下某一（答复方、订舱、答复标识、依据）被拒了几次。
-func (double *answerRefusalDouble) countOf(source, booking, acceptance string, basis ports.BookingAnswerRefusalBasis) int {
-	return double.counts[refusalKey(source, booking, acceptance, basis)]
+// countOf 交本租户下某一（答复方、订舱、答复标识、依据）被挡回了几次。
+func (double *answerBounceDouble) countOf(source, booking, acceptance string, basis ports.BookingAnswerBounceBasis) int {
+	return double.counts[bounceKey(source, booking, acceptance, basis)]
 }
 
 // answerStoreDouble 照迁移 0029 的三条唯一约束办：同一答复标识、同一订舱第二份候补、第二份定局都答已有应答。
@@ -327,7 +327,7 @@ type commissionFixture struct {
 	bookings     *bookingStoreDouble
 	withProvider *bookingWithProviderDouble
 	answers      *answerStoreDouble
-	refusals     *answerRefusalDouble
+	bounces      *answerBounceDouble
 	schedules    *scheduleReaderDouble
 	agreements   *agreementSourceDouble
 	handoff      *commissionHandoffDouble
@@ -340,7 +340,7 @@ func newCommissionFixture(t *testing.T) *commissionFixture {
 		commissions: newCommissionStore(),
 		bookings:    newBookingStore(),
 		answers:     newAnswerStore(),
-		refusals:    newAnswerRefusals(),
+		bounces:     newAnswerBounces(),
 		schedules:   &scheduleReaderDouble{registered: map[string]bool{"tenant-1|schedule-1": true}},
 		agreements:  &agreementSourceDouble{check: registeredAgreement(t)},
 		handoff:     &commissionHandoffDouble{},
@@ -352,7 +352,7 @@ func newCommissionFixture(t *testing.T) *commissionFixture {
 		BookingCancellations: fixture.bookings,
 		BookingsWithProvider: fixture.withProvider,
 		Answers:              fixture.answers,
-		AnswerRefusals:       fixture.refusals,
+		AnswerBounces:        fixture.bounces,
 		Schedules:            fixture.schedules,
 		Agreements:           fixture.agreements,
 		Downstream:           fixture.handoff,
@@ -550,7 +550,7 @@ func TestABookingAnswerCannotBeOverwritten(t *testing.T) {
 		}
 	})
 
-	t.Run("answering an absent booking is not a payload refusal", func(t *testing.T) {
+	t.Run("answering an absent booking is not a payload error", func(t *testing.T) {
 		missing := answerBookingCommand(t, domain.BookingAccepted)
 		missing.Booking = "booking-9"
 		result, err := fixture.handler.AnswerBooking(context.Background(), missing)

@@ -14,7 +14,7 @@ import (
 
 // 本文件钉票 demo-chain-gaps/24 的编排面（ADR-0202 决定二、五与文末补记）：订舱引在册班次、挂在在册且未取消的委托下；
 // 承运答复只由该订舱所属委托的服务提供方答，五值，候补之后可接一份定局。不是服务方的答复与订舱不在册对外是同一格、对内
-// 记进拒收册分清依据，由票 demo-chain-gaps/145 钉（ADR-0239）。
+// 记进挡回册分清依据，由票 demo-chain-gaps/145 钉（ADR-0239）。
 
 func submittedCommissionFixture(t *testing.T) *commissionFixture {
 	t.Helper()
@@ -196,9 +196,9 @@ func TestAConcurrentBookingLoserIsJudgedByContent(t *testing.T) {
 	}
 }
 
-// Covers: `AT-TF-149`（编排面）——答复方的来源身份不是该订舱所属委托的服务提供方：答订舱不在册，零写入答复册，拒收册记
+// Covers: `AT-TF-149`（编排面）——答复方的来源身份不是该订舱所属委托的服务提供方：答订舱不在册，零写入答复册，挡回册记
 // 「不是服务提供方」；按同一串字面比，大小写不同就是另一个来源；来源核对排在重放之前，拿别人的答复标识原样重放也读不回别人
-// 的答复，拒收册那一行只加一次。
+// 的答复，挡回册那一行只加一次。
 func TestOnlyTheCommissionedProviderAnswersItsBooking(t *testing.T) {
 	fixture := newBookedFixture(t)
 	foreign := answerBookingCommand(t, domain.BookingAccepted)
@@ -210,8 +210,8 @@ func TestOnlyTheCommissionedProviderAnswersItsBooking(t *testing.T) {
 	if fixture.answers.answersOf("booking-1") != 0 {
 		t.Fatal("来源不符的答复落了行")
 	}
-	if got := fixture.refusals.countOf("partner-2", "booking-1", "acceptance-1", ports.RefusedSourceNotServiceProvider); got != 1 {
-		t.Fatalf("拒收册上「不是服务提供方」= %d 次，want 1", got)
+	if got := fixture.bounces.countOf("partner-2", "booking-1", "acceptance-1", ports.BouncedSourceNotServiceProvider); got != 1 {
+		t.Fatalf("挡回册上「不是服务提供方」= %d 次，want 1", got)
 	}
 
 	cased := answerBookingCommand(t, domain.BookingAccepted)
@@ -231,13 +231,13 @@ func TestOnlyTheCommissionedProviderAnswersItsBooking(t *testing.T) {
 	if _, present := replayByForeign.Answer(); present {
 		t.Fatal("来源不符的答复带回了在册答复")
 	}
-	if got := fixture.refusals.countOf("partner-2", "booking-1", "acceptance-1", ports.RefusedSourceNotServiceProvider); got != 2 {
-		t.Fatalf("同一份答复再被拒，拒收册 = %d 次，want 2", got)
+	if got := fixture.bounces.countOf("partner-2", "booking-1", "acceptance-1", ports.BouncedSourceNotServiceProvider); got != 2 {
+		t.Fatalf("同一份答复再被挡回，挡回册 = %d 次，want 2", got)
 	}
 }
 
 // Covers: `AT-TF-326`（编排面）——不是本服务方的答复方答一个在册订舱，与任何答复方答一个不在册订舱，交回的结果逐字段相同：同一
-// 格、不带答复、不带续办引用。两条路各读一次订舱连服务方、各写一次拒收册，都不碰答复册（答复册此刻读不动也照样答订舱不在册）；
+// 格、不带答复、不带续办引用。两条路各读一次订舱连服务方、各写一次挡回册，都不碰答复册（答复册此刻读不动也照样答订舱不在册）；
 // 读不动、写不动时两条路答同一个未决原因。
 func TestANonProviderAndAnAbsentBookingAreAnsweredAlike(t *testing.T) {
 	notProvider := answerBookingCommand(t, domain.BookingAccepted)
@@ -255,7 +255,7 @@ func TestANonProviderAndAnAbsentBookingAreAnsweredAlike(t *testing.T) {
 	var reference application.CommissionResult
 	for name, command := range paths {
 		fixture := newBookedFixture(t)
-		fixture.answers.findErr = errors.New("拒收路不该问答复册")
+		fixture.answers.findErr = errors.New("挡回路不该问答复册")
 		result, err := fixture.handler.AnswerBooking(context.Background(), command)
 		if err != nil || result.Outcome() != application.BookingNotFound {
 			t.Fatalf("%s = %q %v, want BOOKING_NOT_FOUND", name, result.Outcome(), err)
@@ -263,11 +263,11 @@ func TestANonProviderAndAnAbsentBookingAreAnsweredAlike(t *testing.T) {
 		if reference.Outcome() == application.CommissionOutcomeInvalid {
 			reference = result
 		} else if !reflect.DeepEqual(result, reference) {
-			t.Fatalf("%s 的结果 %+v 与另一条拒收路 %+v 分得开", name, result, reference)
+			t.Fatalf("%s 的结果 %+v 与另一条挡回路 %+v 分得开", name, result, reference)
 		}
-		if fixture.withProvider.reads != 1 || fixture.refusals.writes != 1 || fixture.answers.saves != 0 {
-			t.Fatalf("%s：读订舱 %d 次、写拒收册 %d 次、写答复册 %d 次，want 1/1/0", name,
-				fixture.withProvider.reads, fixture.refusals.writes, fixture.answers.saves)
+		if fixture.withProvider.reads != 1 || fixture.bounces.writes != 1 || fixture.answers.saves != 0 {
+			t.Fatalf("%s：读订舱 %d 次、写挡回册 %d 次、写答复册 %d 次，want 1/1/0", name,
+				fixture.withProvider.reads, fixture.bounces.writes, fixture.answers.saves)
 		}
 	}
 
@@ -276,7 +276,7 @@ func TestANonProviderAndAnAbsentBookingAreAnsweredAlike(t *testing.T) {
 		reason  application.CommissionUndecidedReason
 	}{
 		"订舱读不动":  {func(fixture *commissionFixture) { fixture.withProvider.findErr = errors.New("down") }, application.BookingStoreUnavailable},
-		"拒收册写不动": {func(fixture *commissionFixture) { fixture.refusals.err = errors.New("down") }, application.AnswerStoreUnavailable},
+		"挡回册写不动": {func(fixture *commissionFixture) { fixture.bounces.err = errors.New("down") }, application.AnswerStoreUnavailable},
 	} {
 		for path, command := range paths {
 			fixture := newBookedFixture(t)
@@ -289,9 +289,9 @@ func TestANonProviderAndAnAbsentBookingAreAnsweredAlike(t *testing.T) {
 	}
 }
 
-// Covers: `AT-TF-327`（编排面）——拒收册分得清两种依据：订舱不在册记「订舱不在册」，不是服务方记「不是服务提供方」，各记答复方、
+// Covers: `AT-TF-327`（编排面）——挡回册分得清两种依据：订舱不在册记「订舱不在册」，不是服务方记「不是服务提供方」，各记答复方、
 // 订舱与答复标识；同一份原样重交只加次数，不另起一份。
-func TestTheRefusalLedgerTellsTheTwoBasesApart(t *testing.T) {
+func TestTheBounceLedgerTellsTheTwoBasesApart(t *testing.T) {
 	fixture := newBookedFixture(t)
 	absent := answerBookingCommand(t, domain.BookingAccepted)
 	absent.Booking = "booking-9"
@@ -302,20 +302,20 @@ func TestTheRefusalLedgerTellsTheTwoBasesApart(t *testing.T) {
 			t.Fatalf("answer %+v = %q %v", command, result.Outcome(), err)
 		}
 	}
-	if got := fixture.refusals.countOf("partner-1", "booking-9", "acceptance-1", ports.RefusedBookingNotRegistered); got != 1 {
+	if got := fixture.bounces.countOf("partner-1", "booking-9", "acceptance-1", ports.BouncedBookingNotRegistered); got != 1 {
 		t.Fatalf("「订舱不在册」= %d 次，want 1", got)
 	}
-	if got := fixture.refusals.countOf("partner-2", "booking-1", "acceptance-1", ports.RefusedSourceNotServiceProvider); got != 2 {
+	if got := fixture.bounces.countOf("partner-2", "booking-1", "acceptance-1", ports.BouncedSourceNotServiceProvider); got != 2 {
 		t.Fatalf("「不是服务提供方」= %d 次，want 2", got)
 	}
-	if len(fixture.refusals.counts) != 2 {
-		t.Fatalf("拒收册 %d 行，want 2：%v", len(fixture.refusals.counts), fixture.refusals.counts)
+	if len(fixture.bounces.counts) != 2 {
+		t.Fatalf("挡回册 %d 行，want 2：%v", len(fixture.bounces.counts), fixture.bounces.counts)
 	}
 }
 
-// Covers: `AT-TF-328`（编排面）——拒收不挡后来的正当答复：运营侧还没录订舱时服务方先答，答订舱不在册、拒收册记「订舱不在册」；
-// 订舱录入之后同一份答复重交照常受理，原样再交答已有答复、不多落一份；拒收册那一行照留，不因受理而改写。
-func TestARefusedAnswerIsTakenOnceTheBookingIsEntered(t *testing.T) {
+// Covers: `AT-TF-328`（编排面）——挡回不妨碍后来的正当答复：运营侧还没录订舱时服务方先答，答订舱不在册、挡回册记「订舱不在册」；
+// 订舱录入之后同一份答复重交照常受理，原样再交答已有答复、不多落一份；挡回册那一行照留，不因受理而改写。
+func TestABouncedAnswerIsTakenOnceTheBookingIsEntered(t *testing.T) {
 	fixture := submittedCommissionFixture(t)
 	early := answerBookingCommand(t, domain.BookingAccepted)
 	if result, err := fixture.handler.AnswerBooking(context.Background(), early); err != nil || result.Outcome() != application.BookingNotFound {
@@ -333,8 +333,8 @@ func TestARefusedAnswerIsTakenOnceTheBookingIsEntered(t *testing.T) {
 	if fixture.answers.answersOf("booking-1") != 1 {
 		t.Fatalf("答复册 %d 份，want 1", fixture.answers.answersOf("booking-1"))
 	}
-	if got := fixture.refusals.countOf("partner-1", "booking-1", "acceptance-1", ports.RefusedBookingNotRegistered); got != 1 || len(fixture.refusals.counts) != 1 {
-		t.Fatalf("拒收册 = %v，want 录入之前那一次照留", fixture.refusals.counts)
+	if got := fixture.bounces.countOf("partner-1", "booking-1", "acceptance-1", ports.BouncedBookingNotRegistered); got != 1 || len(fixture.bounces.counts) != 1 {
+		t.Fatalf("挡回册 = %v，want 录入之前那一次照留", fixture.bounces.counts)
 	}
 }
 
@@ -422,8 +422,8 @@ func TestAnAnswerRecoveryDiscipline(t *testing.T) {
 	if _, err := orphan.handler.AnswerBooking(context.Background(), answerBookingCommand(t, domain.BookingAccepted)); !errors.Is(err, application.ErrBookingWithoutCommission) {
 		t.Fatalf("订舱的委托读不回：err = %v", err)
 	}
-	if orphan.refusals.writes != 0 {
-		t.Fatal("数据违约记成了一次拒收")
+	if orphan.bounces.writes != 0 {
+		t.Fatal("数据违约记成了一次挡回")
 	}
 
 	for name, testCase := range map[string]struct {

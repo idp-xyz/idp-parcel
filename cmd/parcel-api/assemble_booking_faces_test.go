@@ -347,16 +347,16 @@ func postWithTokenRaw(endpoint http.Handler, path, token, body string) (int, str
 	return response.Code, response.Body.String()
 }
 
-// refusalRows 交拒收册上本租户的全部行，按答复方、订舱、答复标识、依据排：每行「答复方|订舱|答复标识|依据|次数」。
-func refusalRows(t *testing.T, pool *pgxpool.Pool) []string {
+// bounceRows 交挡回册上本租户的全部行，按答复方、订舱、答复标识、依据排：每行「答复方|订舱|答复标识|依据|次数」。
+func bounceRows(t *testing.T, pool *pgxpool.Pool) []string {
 	t.Helper()
 	rows, err := pool.Query(t.Context(),
-		`SELECT source_ref, booking_id, acceptance_id, refusal_basis, refusal_count
-		   FROM transport_fulfillment.booking_answer_refusal
+		`SELECT source_ref, booking_id, acceptance_id, basis, bounce_count
+		   FROM transport_fulfillment.booking_answer_bounce
 		  WHERE tenant_id = 'SYN-TENANT-01'
-		  ORDER BY source_ref, booking_id, acceptance_id, refusal_basis`)
+		  ORDER BY source_ref, booking_id, acceptance_id, basis`)
 	if err != nil {
-		t.Fatalf("读拒收册：%v", err)
+		t.Fatalf("读挡回册：%v", err)
 	}
 	defer rows.Close()
 	var got []string
@@ -364,21 +364,21 @@ func refusalRows(t *testing.T, pool *pgxpool.Pool) []string {
 		var source, booking, acceptance, basis string
 		var count int64
 		if err := rows.Scan(&source, &booking, &acceptance, &basis, &count); err != nil {
-			t.Fatalf("读拒收册：%v", err)
+			t.Fatalf("读挡回册：%v", err)
 		}
 		got = append(got, fmt.Sprintf("%s|%s|%s|%s|%d", source, booking, acceptance, basis, count))
 	}
 	if err := rows.Err(); err != nil {
-		t.Fatalf("读拒收册：%v", err)
+		t.Fatalf("读挡回册：%v", err)
 	}
 	return got
 }
 
 // Covers: `AT-TF-326`、`AT-TF-327`、`AT-TF-328` 真库面，票 demo-chain-gaps/145 完成判据（S）——
 //   - 末端承运客户端答干线订舱、末端与干线承运客户端各答一个不在册的订舱：三次都是 200，响应体逐字相同（BOOKING_NOT_FOUND）。
-//   - 拒收册分得清：末端答干线订舱记「不是服务提供方」，答不在册订舱记「订舱不在册」，各带答复方、订舱与答复标识；末端原样重交
+//   - 挡回册分得清：末端答干线订舱记「不是服务提供方」，答不在册订舱记「订舱不在册」，各带答复方、订舱与答复标识；末端原样重交
 //     只把那一行的次数加到 2。答复册一行不落。
-//   - 干线承运客户端先答一个还没录的订舱被拒；运营录入之后同一份答复重交 201，原样再交 200 EXISTING_ANSWER；拒收册那一行照留。
+//   - 干线承运客户端先答一个还没录的订舱被挡回；运营录入之后同一份答复重交 201，原样再交 200 EXISTING_ANSWER；挡回册那一行照留。
 func TestTheWiredBookingAnswerFaceAnswersANonProviderAsBookingNotFoundAndKeepsTheBasis(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -399,16 +399,16 @@ func TestTheWiredBookingAnswerFaceAnswersANonProviderAsBookingNotFoundAndKeepsTh
 	}
 
 	absentAnswer := strings.Replace(trunkAcceptedAnswer, "SYN-BOOKING-TRUNK-DCG24", "SYN-BOOKING-DCG145-NOWHERE", 1)
-	refusedStatus, refusedBody := postWithTokenRaw(endpoints.lastMile, bookingAnswerPath, "presented.client.token", trunkAcceptedAnswer)
-	if refusedStatus != http.StatusOK || strings.TrimSpace(refusedBody) != `{"outcome":"BOOKING_NOT_FOUND"}` {
-		t.Fatalf("末端承运客户端答干线订舱 = %d %s", refusedStatus, refusedBody)
+	bouncedStatus, bouncedBody := postWithTokenRaw(endpoints.lastMile, bookingAnswerPath, "presented.client.token", trunkAcceptedAnswer)
+	if bouncedStatus != http.StatusOK || strings.TrimSpace(bouncedBody) != `{"outcome":"BOOKING_NOT_FOUND"}` {
+		t.Fatalf("末端承运客户端答干线订舱 = %d %s", bouncedStatus, bouncedBody)
 	}
 	for name, endpoint := range map[string]http.Handler{"末端承运客户端": endpoints.lastMile, "干线承运客户端": endpoints.trunk} {
-		if status, body := postWithTokenRaw(endpoint, bookingAnswerPath, "presented.client.token", absentAnswer); status != refusedStatus || body != refusedBody {
-			t.Fatalf("%s答不在册订舱 = %d %s，与不是服务方那一次 %d %s 分得开", name, status, body, refusedStatus, refusedBody)
+		if status, body := postWithTokenRaw(endpoint, bookingAnswerPath, "presented.client.token", absentAnswer); status != bouncedStatus || body != bouncedBody {
+			t.Fatalf("%s答不在册订舱 = %d %s，与不是服务方那一次 %d %s 分得开", name, status, body, bouncedStatus, bouncedBody)
 		}
 	}
-	if status, body := postWithTokenRaw(endpoints.lastMile, bookingAnswerPath, "presented.client.token", trunkAcceptedAnswer); status != refusedStatus || body != refusedBody {
+	if status, body := postWithTokenRaw(endpoints.lastMile, bookingAnswerPath, "presented.client.token", trunkAcceptedAnswer); status != bouncedStatus || body != bouncedBody {
 		t.Fatalf("末端原样重交 = %d %s", status, body)
 	}
 	want := []string{
@@ -416,8 +416,8 @@ func TestTheWiredBookingAnswerFaceAnswersANonProviderAsBookingNotFoundAndKeepsTh
 		"SYN-PARTY-CARRIER-LM-01|SYN-BOOKING-TRUNK-DCG24|SYN-CARRIER-ANSWER-DCG24|SOURCE_NOT_SERVICE_PROVIDER|2",
 		"SYN-PARTY-CARRIER-TRUNK-01|SYN-BOOKING-DCG145-NOWHERE|SYN-CARRIER-ANSWER-DCG24|BOOKING_NOT_REGISTERED|1",
 	}
-	if got := refusalRows(t, pool); strings.Join(got, "\n") != strings.Join(want, "\n") {
-		t.Fatalf("拒收册 =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	if got := bounceRows(t, pool); strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("挡回册 =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 	var answers int
 	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM transport_fulfillment.booking_answer`).Scan(&answers); err != nil || answers != 0 {
@@ -434,15 +434,15 @@ func TestTheWiredBookingAnswerFaceAnswersANonProviderAsBookingNotFoundAndKeepsTh
 	if status, answer := postWithToken(t, endpoints.trunk, bookingAnswerPath, "presented.client.token", absentAnswer); status != http.StatusOK || answer["outcome"] != "EXISTING_ANSWER" {
 		t.Fatalf("原样再交 = %d %v", status, answer)
 	}
-	if got := refusalRows(t, pool); strings.Join(got, "\n") != strings.Join(want, "\n") {
-		t.Fatalf("受理之后拒收册被改写：\n%s", strings.Join(got, "\n"))
+	if got := bounceRows(t, pool); strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("受理之后挡回册被改写：\n%s", strings.Join(got, "\n"))
 	}
 }
 
-// 拒收册写不动时 PostgreSQL 把整笔事务置为 aborted：照常提交只换回提交错误，线上落成 500。这里让拒收册在真库上写不进（改表名），
+// 挡回册写不动时 PostgreSQL 把整笔事务置为 aborted：照常提交只换回提交错误，线上落成 500。这里让挡回册在真库上写不进（改表名），
 // 钉住答复方拿到的是未决、指名等答复册，不是订舱不在册，且答复册一行不落。
-// Covers: `AT-TF-327`「拒收册写不动答未决、不答订舱不在册」那一支（真库面，事务已中止）。
-func TestTheWiredBookingAnswerFaceAnswersUndecidedWhenTheRefusalCannotBeKept(t *testing.T) {
+// Covers: `AT-TF-327`「挡回册写不动答未决、不答订舱不在册」那一支（真库面，事务已中止）。
+func TestTheWiredBookingAnswerFaceAnswersUndecidedWhenTheBounceCannotBeKept(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
@@ -450,19 +450,19 @@ func TestTheWiredBookingAnswerFaceAnswersUndecidedWhenTheRefusalCannotBeKept(t *
 	}
 	endpoints := bookingFacesForTest(t, db)
 	if _, err := pool.Exec(t.Context(),
-		`ALTER TABLE transport_fulfillment.booking_answer_refusal RENAME TO booking_answer_refusal_unreachable`); err != nil {
-		t.Fatalf("让拒收册写不进：%v", err)
+		`ALTER TABLE transport_fulfillment.booking_answer_bounce RENAME TO booking_answer_bounce_unreachable`); err != nil {
+		t.Fatalf("让挡回册写不进：%v", err)
 	}
 	status, answer := postWithToken(t, endpoints.lastMile, bookingAnswerPath, "presented.client.token", trunkAcceptedAnswer)
 	if status != http.StatusOK || answer["outcome"] != "COMMISSION_UNDECIDED" || answer["undecidedReason"] != "ANSWER_STORE_UNAVAILABLE" {
-		t.Fatalf("拒收册写不动 = %d %v，want 200 COMMISSION_UNDECIDED / ANSWER_STORE_UNAVAILABLE", status, answer)
+		t.Fatalf("挡回册写不动 = %d %v，want 200 COMMISSION_UNDECIDED / ANSWER_STORE_UNAVAILABLE", status, answer)
 	}
-	var answers, refusals int
+	var answers, bounces int
 	if err := pool.QueryRow(t.Context(),
 		`SELECT (SELECT count(*) FROM transport_fulfillment.booking_answer),
-		        (SELECT count(*) FROM transport_fulfillment.booking_answer_refusal_unreachable)`).Scan(&answers, &refusals); err != nil ||
-		answers != 0 || refusals != 0 {
-		t.Fatalf("答复册 %d 行、拒收册 %d 行（%v），want 0/0", answers, refusals, err)
+		        (SELECT count(*) FROM transport_fulfillment.booking_answer_bounce_unreachable)`).Scan(&answers, &bounces); err != nil ||
+		answers != 0 || bounces != 0 {
+		t.Fatalf("答复册 %d 行、挡回册 %d 行（%v），want 0/0", answers, bounces, err)
 	}
 }
 

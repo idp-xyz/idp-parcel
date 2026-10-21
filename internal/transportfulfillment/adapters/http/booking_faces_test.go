@@ -83,10 +83,10 @@ func (double bookingWithProviderDouble) FindBookingWithProvider(ctx context.Cont
 	return addressed, true, nil
 }
 
-// refusalLedgerStub 收下每一次拒收：线格式这一层只看两条拒收路答出来的字节，册上记了什么由编排与真库用例钉。
-type refusalLedgerStub struct{}
+// bounceLedgerStub 收下每一次挡回：线格式这一层只看两条挡回路答出来的字节，册上记了什么由编排与真库用例钉。
+type bounceLedgerStub struct{}
 
-func (refusalLedgerStub) RecordRefusal(context.Context, ports.BookingAnswerRefusal) error { return nil }
+func (bounceLedgerStub) RecordBounce(context.Context, ports.BookingAnswerBounce) error { return nil }
 
 type scheduleRegisterStub struct{ registered string }
 
@@ -112,7 +112,7 @@ func bookingHandler(t *testing.T) *application.CommissionTransportHandler {
 		Bookings:             bookings,
 		BookingsWithProvider: bookingWithProviderDouble{bookings: bookings, commissions: commissions},
 		Answers:              &answerLedgerDouble{},
-		AnswerRefusals:       refusalLedgerStub{},
+		AnswerBounces:        bounceLedgerStub{},
 		Schedules:            scheduleRegisterStub{registered: trunkSchedule},
 		Agreements:           agreementCheckStub{supplier: trunkCarrier},
 		Downstream:           commissionHandoffStub{},
@@ -258,7 +258,7 @@ func TestTheBookingAnswerFaceAnswersOnTheWire(t *testing.T) {
 	missingStatus, missingBody := postBookingFaceRaw(carrier, path, "presented.client.token", missing)
 	if strangerStatus != http.StatusOK || strings.TrimSpace(strangerBody) != `{"outcome":"BOOKING_NOT_FOUND"}` ||
 		missingStatus != strangerStatus || missingBody != strangerBody {
-		t.Fatalf("别的承运商答在册订舱 = %d %s；服务方答不在册订舱 = %d %s——两条拒收路分得开", strangerStatus, strangerBody, missingStatus, missingBody)
+		t.Fatalf("别的承运商答在册订舱 = %d %s；服务方答不在册订舱 = %d %s——两条挡回路分得开", strangerStatus, strangerBody, missingStatus, missingBody)
 	}
 	status, answer := postBookingFace(t, carrier, path, "presented.client.token", acceptedAnswerBody)
 	if status != http.StatusCreated || answer["outcome"] != "BOOKING_ANSWERED" {

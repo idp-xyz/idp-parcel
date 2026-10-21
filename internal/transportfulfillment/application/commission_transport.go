@@ -261,7 +261,7 @@ type CommissionTransportDeps struct {
 	BookingCancellations ports.BookingCancellationStore
 	BookingsWithProvider ports.BookingWithProviderReader
 	Answers              ports.BookingAnswerLedger
-	AnswerRefusals       ports.BookingAnswerRefusalLedger
+	AnswerBounces        ports.BookingAnswerBounceLedger
 	Schedules            ports.TransportScheduleReader
 	Agreements           ports.SupplierAgreementSource
 	Downstream           ports.TransportCommissionHandoff
@@ -474,8 +474,8 @@ func answerFromStoredBooking(stored ports.BookingRecord, digest, subject string)
 // AnswerBooking 登记承运方对订舱的答复（UC-TF-004 步 4；ADR-0202 决定二、五）：订舱在册、答复方是该订舱所属委托的服务
 // 提供方 → 同一答复标识分重放与冲突 → 答复过构造门 → 已有答复时只有候补接得上后继 → 落库。
 //
-// 订舱不在册与答复方不是服务方答同一格、同一副响应，凭什么拒只记进拒收册（ADR-0239 决定一、二）。两条拒收路做一样多的事——
-// 订舱连服务方一次读回、拒收册写一行——读写不动时答的未决原因也一样（决定三）：多一次读、换一个原因，都会把合并了的两种情形
+// 订舱不在册与答复方不是服务方答同一格、同一副响应，凭什么挡回只记进挡回册（ADR-0239 决定一、二）。两条挡回路做一样多的事——
+// 订舱连服务方一次读回、挡回册写一行——读写不动时答的未决原因也一样（决定三）：多一次读、换一个原因，都会把合并了的两种情形
 // 重新分开。
 //
 // 来源核对排在重放之前：同一租户下的另一个承运商拿别人的答复标识原样重放，不该读回别人的答复。答复方与服务方按同一串
@@ -505,14 +505,14 @@ func (handler *CommissionTransportHandler) AnswerBooking(
 		return commissionUndecided(BookingStoreUnavailable, command.Booking), nil
 	}
 	if !found {
-		return handler.refuseAnswer(ctx, command, key, acceptanceRef, ports.RefusedBookingNotRegistered), nil
+		return handler.bounceAnswer(ctx, command, key, acceptanceRef, ports.BouncedBookingNotRegistered), nil
 	}
 	if !addressed.CommissionRegistered {
 		return CommissionResult{}, fmt.Errorf("%w: booking %s, commission %s", ErrBookingWithoutCommission,
 			bookingRef, addressed.Booking.Booking.Commission())
 	}
 	if addressed.Provider.String() != command.Source {
-		return handler.refuseAnswer(ctx, command, key, acceptanceRef, ports.RefusedSourceNotServiceProvider), nil
+		return handler.bounceAnswer(ctx, command, key, acceptanceRef, ports.BouncedSourceNotServiceProvider), nil
 	}
 
 	_, digest, err := domain.CanonicalizeBookingAnswerPayload(command.Outcome, command.Acceptance, command.Quantity, command.Basis, command.DecidedAt)
@@ -566,21 +566,21 @@ func (handler *CommissionTransportHandler) AnswerBooking(
 	}
 }
 
-// refuseAnswer 把这次拒收记进拒收册，答订舱不在册。册写不动答未决、整笔回滚，不答订舱不在册：留痕不全，运营就又分不清这一次
-// 是哪一种。未决的原因取答复册，与订舱在不在、答复方是谁无关，两条拒收路答的仍是同一副。
-func (handler *CommissionTransportHandler) refuseAnswer(
+// bounceAnswer 把这次挡回记进挡回册，答订舱不在册。册写不动答未决、整笔回滚，不答订舱不在册：留痕不全，运营就又分不清这一次
+// 是哪一种。未决的原因取答复册，与订舱在不在、答复方是谁无关，两条挡回路答的仍是同一副。
+func (handler *CommissionTransportHandler) bounceAnswer(
 	ctx context.Context,
 	command AnswerBookingCommand,
 	key ports.BookingKey,
 	acceptance domain.CarrierAcceptanceReference,
-	basis ports.BookingAnswerRefusalBasis,
+	basis ports.BookingAnswerBounceBasis,
 ) CommissionResult {
-	if err := handler.deps.AnswerRefusals.RecordRefusal(ctx, ports.BookingAnswerRefusal{
+	if err := handler.deps.AnswerBounces.RecordBounce(ctx, ports.BookingAnswerBounce{
 		Key:        key,
 		Source:     command.Source,
 		Acceptance: acceptance,
 		Basis:      basis,
-		RefusedAt:  handler.deps.Clock.Now(),
+		BouncedAt:  handler.deps.Clock.Now(),
 	}); err != nil {
 		return commissionUndecided(AnswerStoreUnavailable, command.Booking)
 	}
