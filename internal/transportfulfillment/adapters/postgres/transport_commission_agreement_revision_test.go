@@ -12,7 +12,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// 本文件证委托协议换版的库面（迁移 TF 0047，ADR-0231）：换版随委托按键读回，号与依据在同一份委托内各自唯一、撞上答已登记不覆盖，
+// 本文件证委托协议换版的库面（迁移 TF 0048，ADR-0231）：换版随委托按键读回，号与依据在同一份委托内各自唯一、撞上答已登记不覆盖，
 // 换版锁不在事务里取被拒。证据只记 S。
 
 func revisionOf(t *testing.T, commission domain.TransportCommission, version, basis string, appliesFrom time.Time) (domain.TransportCommission, domain.CommissionAgreementRevision) {

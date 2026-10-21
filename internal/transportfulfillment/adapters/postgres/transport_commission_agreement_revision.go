@@ -11,7 +11,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// 委托协议换版的读写（ADR-0231 决定三、四；迁移 0047）。写口挂在 TransportCommissions 上：换版是委托上的一串版本，委托按键读回时
+// 委托协议换版的读写（ADR-0231 决定三、四；迁移 0048）。写口挂在 TransportCommissions 上：换版是委托上的一串版本，委托按键读回时
 // 连同它们一起装回，读与写同一个适配器。
 
 var _ ports.CommissionAgreementRevisionStore = (*TransportCommissions)(nil)

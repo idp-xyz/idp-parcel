@@ -37,7 +37,7 @@ M
 - **取版**：发生项登记从委托取采购上下文时（订舱、取消、已采用委托的实际履约），协议版本、快照与法人取委托在事实业务时间所凭的那一版（起用不晚于业务时间的换版里最后登记的那一版，没有就是提交那一版）；答复带回作答那一版的号与问 PC 的那一版，冲突回显那一版。
 - **已结束而未形成**：TF 实际履约未形成册——登记答未配置、协议未生效、已终止、缺采购上下文时立或刷新一条（先问是否已有一项盖住，换版之后参与终点所凭的那一版可能已不是当初形成它的那一版），形成或认出已盖住了结，不计费只了结已在册的；只在形成后半一处写、与 inbox 同笔；查阅页 `GET /transport-fulfillment-records?registry=actual-fulfillment-unformed` 只列本租户未形成的。覆盖票 50 评审要的收尾两格。
 - 文档：ADR-0231；ADR-0204、0207、0218、0233 Status 行与 Links 前向指针；TF CONTEXT「委托协议换版」「实际履约未形成」两词条与成本来源规则；UC-TF-004 `AT-TF-296`–`299`、UC-TF-005 `AT-TF-300`–`305`；演示动线补记；AT 盘点加行（总览未重算）。
-- 迁移：transport_fulfillment `0047`（换版册与未形成册同一份）；access_identity `0021`（决定种类 CHECK 以 0020 为底取并集加一词）。种子：`steps/475-access-commission-agreement-revision.sh`，数据 `data/access/11`、`12`、`data/governance/48`；一次性库 `dcg88_seed` 上 `seed.sh` 实灌零报错，灌完删库。
+- 迁移：transport_fulfillment `0048`（换版册与未形成册同一份）；access_identity `0021`（决定种类 CHECK 以 0020 为底取并集加一词）。种子：`steps/475-access-commission-agreement-revision.sh`，数据 `data/access/11`、`12`、`data/governance/48`；一次性库 `dcg88_seed` 上 `seed.sh` 实灌零报错，灌完删库。
 
 ### 代决与越权风险点（全文见 ADR-0231）
 

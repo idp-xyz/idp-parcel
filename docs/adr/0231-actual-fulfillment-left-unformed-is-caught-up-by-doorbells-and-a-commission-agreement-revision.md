@@ -1,6 +1,6 @@
 # ADR-0231：自动形成没赶上的实际履约由门铃补形成——采用成立与委托协议换版各在自己那一笔交一封门铃，派发进程把已结束的参与交回同一个形成后半；委托协议换版是一种运营决定，委托出新一版、事实按业务时间取所凭的那一版；没形成的留痕在册
 
-Status: Accepted（2026-10-21，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」，2026-10-20 又答「要我裁定的部分，你作为业务和系统专家，请你自决吧」；票 demo-chain-gaps/88，裁定的单一权威是 `.scratch/demo-chain-gaps/triage-2026-10-19.md`「上线就绪评估（2026-10-20）」关于 88 的那一条，票 50 评审（2026-10-21）追加的「重跑与查阅面要覆盖收尾造成的已终止、未生效两格」并进本记录。回答 [ADR-0218](./0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md) 越权风险点 1、6 与 [ADR-0233](./0233-an-older-commercial-version-is-closed-for-a-named-successor-by-a-cut-or-a-same-start-retirement.md) 越权风险点 1；**部分停用** [ADR-0204](./0204-a-fulfillment-segment-adopts-a-transport-commission-by-declaration-and-a-started-commission-cannot-be-cancelled.md) 决定一一句与决定二末条、[ADR-0207](./0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md) 文末补记一句、ADR-0218 决定七末段两项、ADR-0233 决定一的运营约束（被停原句与适用场景见「对已接受记录的作用」，四份正文不改，只在其 Status 行与 Links 加前向指针）。越权风险点见文末，待 TF owner 复核，第 1、3、15 点同时待 PC owner，第 5、8、9 点同时待 SA owner。）<!-- 索引注记 -->｜**已接受**（2026-10-21，用户原话「你作为业务和系统专家自决」，Claude Code 会话代 TF owner 裁定；票 demo-chain-gaps/88）。**采用晚到**：采用成立的那一笔交一封自家门铃（不内联形成），派发进程把那一段上以下一次交接或有效交付结束的参与逐件交回自动形成的同一个形成后半，消费前复核采用仍在册，明确终止结束的不补；同一身份，重投与重放答已存在。**委托协议换版**：运营决定新种类 `TRANSPORT_COMMISSION_AGREEMENT_REVISION`，口 `/transport-fulfillment-transport-commission-agreement-revisions`，指名同一协议对象的后继版本、起用时刻与依据；先取换版锁再读委托，后继在起用时刻按委托的服务方核，委托出新一版（第 2 版起）、旧版留历史，同一笔交换版门铃；不随 PC 新版自动改指。**取版**：事实按业务时间取委托那一刻所凭的那一版——起用不晚于业务时间的换版里最后登记的那一版，没有就是提交那一版；实际履约、订舱、取消同一判法。**换版门铃**：消费那一刻按委托列出采用它的各段逐段补形成。**实际履约未形成册**（迁移 0047）：登记答未配置、协议未生效、已终止、缺采购上下文时立或刷新一条（先问是否已有一项盖住），形成或认出已盖住了结，不计费只了结已在册的；只在形成后半一处写、与 inbox 同笔；查阅页 `registry=actual-fulfillment-unformed` 只列本租户未形成的。部分停用 ADR-0204 决定一一句与决定二末条、ADR-0207 文末补记一句、ADR-0218 决定七末段两项、ADR-0233 决定一运营约束。越权风险点含动了委托快照语义、起用时刻由人给、换版只认同一协议对象、后登记覆盖、已形成的不按新版重判、一封门铃一笔事务、不补明确终止、没有采用连线与不计费不进册、盖住按首版认、补形成不重跑订舱与取消、解除采用不作罢、收尾不再被挡
+Status: Accepted（2026-10-21，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」，2026-10-20 又答「要我裁定的部分，你作为业务和系统专家，请你自决吧」；票 demo-chain-gaps/88，裁定的单一权威是 `.scratch/demo-chain-gaps/triage-2026-10-19.md`「上线就绪评估（2026-10-20）」关于 88 的那一条，票 50 评审（2026-10-21）追加的「重跑与查阅面要覆盖收尾造成的已终止、未生效两格」并进本记录。回答 [ADR-0218](./0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md) 越权风险点 1、6 与 [ADR-0233](./0233-an-older-commercial-version-is-closed-for-a-named-successor-by-a-cut-or-a-same-start-retirement.md) 越权风险点 1；**部分停用** [ADR-0204](./0204-a-fulfillment-segment-adopts-a-transport-commission-by-declaration-and-a-started-commission-cannot-be-cancelled.md) 决定一一句与决定二末条、[ADR-0207](./0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md) 文末补记一句、ADR-0218 决定七末段两项、ADR-0233 决定一的运营约束（被停原句与适用场景见「对已接受记录的作用」，四份正文不改，只在其 Status 行与 Links 加前向指针）。越权风险点见文末，待 TF owner 复核，第 1、3、15 点同时待 PC owner，第 5、8、9 点同时待 SA owner。）<!-- 索引注记 -->｜**已接受**（2026-10-21，用户原话「你作为业务和系统专家自决」，Claude Code 会话代 TF owner 裁定；票 demo-chain-gaps/88）。**采用晚到**：采用成立的那一笔交一封自家门铃（不内联形成），派发进程把那一段上以下一次交接或有效交付结束的参与逐件交回自动形成的同一个形成后半，消费前复核采用仍在册，明确终止结束的不补；同一身份，重投与重放答已存在。**委托协议换版**：运营决定新种类 `TRANSPORT_COMMISSION_AGREEMENT_REVISION`，口 `/transport-fulfillment-transport-commission-agreement-revisions`，指名同一协议对象的后继版本、起用时刻与依据；先取换版锁再读委托，后继在起用时刻按委托的服务方核，委托出新一版（第 2 版起）、旧版留历史，同一笔交换版门铃；不随 PC 新版自动改指。**取版**：事实按业务时间取委托那一刻所凭的那一版——起用不晚于业务时间的换版里最后登记的那一版，没有就是提交那一版；实际履约、订舱、取消同一判法。**换版门铃**：消费那一刻按委托列出采用它的各段逐段补形成。**实际履约未形成册**（迁移 0048）：登记答未配置、协议未生效、已终止、缺采购上下文时立或刷新一条（先问是否已有一项盖住），形成或认出已盖住了结，不计费只了结已在册的；只在形成后半一处写、与 inbox 同笔；查阅页 `registry=actual-fulfillment-unformed` 只列本租户未形成的。部分停用 ADR-0204 决定一一句与决定二末条、ADR-0207 文末补记一句、ADR-0218 决定七末段两项、ADR-0233 决定一运营约束。越权风险点含动了委托快照语义、起用时刻由人给、换版只认同一协议对象、后登记覆盖、已形成的不按新版重判、一封门铃一笔事务、不补明确终止、没有采用连线与不计费不进册、盖住按首版认、补形成不重跑订舱与取消、解除采用不作罢、收尾不再被挡
 Date: 2026-10-21
 
 ## Context
@@ -39,7 +39,7 @@ Date: 2026-10-21
   - 后继不是委托指名的那个协议对象答 `AGREEMENT_OBJECT_MISMATCH`：换版换的是同一份协议的版本，换一份协议是换了采购安排，该另起委托。委托提交时没记下版本（迁移 TF 0038 之前）的，第一次换版定下对象。
   - 起用早于委托提交答 `APPLIES_BEFORE_SUBMISSION`：委托下的事实都不早于提交。
   - 后继在起用时刻、按委托的服务方经 PC 核一次，四个协议否定格各答一格（`AGREEMENT_NOT_REGISTERED` / `AGREEMENT_NOT_EFFECTIVE` / `AGREEMENT_TERMINATED` / `PROVIDER_MISMATCH`，后者带回约定的供应商）：起用之后的事实都按它判，它在那一刻不支持采购，那一刻起结束的参与就都形成不了。
-- 成立：委托出新一版（提交那一版是第 1 版，换版从第 2 版起连续编号），记后继、PC 拼回的快照、采购责任法人、起用时刻、依据、决定人与登记时刻；只插不改，另册保存（迁移 TF 0047），委托那一行不改写。同一笔交换版门铃（决定五）。答 201 `COMMISSION_AGREEMENT_REVISED`；其余各格 200，装配整笔回滚。
+- 成立：委托出新一版（提交那一版是第 1 版，换版从第 2 版起连续编号），记后继、PC 拼回的快照、采购责任法人、起用时刻、依据、决定人与登记时刻；只插不改，另册保存（迁移 TF 0048），委托那一行不改写。同一笔交换版门铃（决定五）。答 201 `COMMISSION_AGREEMENT_REVISED`；其余各格 200，装配整笔回滚。
 - **不随 PC 新版自动改指**：PC 发了新版、截止或退役了旧版，委托都不动；只有这一种决定改它。旧版留在委托上，起用之前的事实仍按它判。
 - 已取消的委托也能换版：取消费按取消时刻判，那一版被收尾时同样要有承接。
 
@@ -58,7 +58,7 @@ Date: 2026-10-21
 
 **六、实际履约未形成册：没形成的留痕，查阅页列出。**（机制；哪几格进册是产品策略）
 
-- 册上一件是（租户，段，对象）：同一段同一对象只有一条参与替代链，一条参与只结束一次。记这一段采用的委托、作答的那一版在委托上的号、参与终点（业务时间）、哪一格、问 PC 的那一版、首次与最近一次答复时刻（派发时钟的登记时刻）；状态三格：未形成、已形成（记盖住它的那一项发生项）、不计费（记作答的那一版快照）。迁移 TF 0047，与换版册同一份。
+- 册上一件是（租户，段，对象）：同一段同一对象只有一条参与替代链，一条参与只结束一次。记这一段采用的委托、作答的那一版在委托上的号、参与终点（业务时间）、哪一格、问 PC 的那一版、首次与最近一次答复时刻（派发时钟的登记时刻）；状态三格：未形成、已形成（记盖住它的那一项发生项）、不计费（记作答的那一版快照）。迁移 TF 0048，与换版册同一份。
 - 只在形成后半一处写（决定二的那一段），与那一拍其余写入同笔——派发进程里就是 inbox 那一笔。人工登记口不写册。
 - 照入账的登记答复写：
   - 已登记、已存在、冲突（同一身份异内容、成员或范围已被计过）：有一项发生项盖住这件参与，册上若有它就了结为已形成。
@@ -111,7 +111,7 @@ Date: 2026-10-21
   - 端口另立文件：`ports/commission_agreement_revision.go`（换版写口与门铃）、`ports/actual_fulfillment_catch_up.go`（采用门铃、按委托列段）、`ports/actual_fulfillment_unformed.go`（未形成册）；查阅读口加一口。
   - 应用：`application/revise_commission_agreement.go`；`application/catch_up_actual_fulfillment.go`（补形成两口、册的写法）；`form_actual_fulfillment_on_participation_end.go` 拆出共用的形成后半；登记用例按业务时间取那一版、答复带回作答的那一版与所问的那一版；采用编排多一个必备依赖（门铃）。
   - 适配器：postgres 换版读写、采用与换版门铃的交出口、按委托列段、未形成册与查阅；inbox 补形成的消费门；HTTP 换版口、查阅一格。
-  - 迁移：transport_fulfillment `0047`（换版册与未形成册）；access_identity `0021`（决定种类 CHECK 加一词）。
+  - 迁移：transport_fulfillment `0048`（换版册与未形成册）；access_identity `0021`（决定种类 CHECK 加一词）。
 - 接入身份：决定种类加 `TRANSPORT_COMMISSION_AGREEMENT_REVISION`。
 - 装配：parcel-api 新特性文件 `endpoints_commission_agreement_revision.go`、`assemble_commission_agreement_revision.go`，采用装配接门铃；parcel-dispatch 新路由文件 `routes_actual_fulfillment_catch_up.go` 与 `assemble_actual_fulfillment_catch_up.go`，自动形成的装配接未形成册与「盖住」一问。
 - 演示种子：新一节 `steps/475-access-commission-agreement-revision.sh`，配置员持「委托协议换版」的授予、对照与权威区间；不换任何委托的版。

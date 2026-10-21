@@ -15,7 +15,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// ActualFulfillmentUnformeds 实现实际履约未形成册（ADR-0231 决定六；迁移 0047）：补形成写册的三口与查阅页读的列表口。
+// ActualFulfillmentUnformeds 实现实际履约未形成册（ADR-0231 决定六；迁移 0048）：补形成写册的三口与查阅页读的列表口。
 //
 // 写口一律要环境事务：册上那一行与补形成那一拍的其余写入同笔，否则一拍回滚了、册上那一条却留下来，就成了一件没人答过的未形成。读口走
 // ReadExecutor。所有语句显式带租户条件。
