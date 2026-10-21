@@ -229,6 +229,16 @@ type RegisterChargeOccurrenceResult struct {
 	continuation   string
 	commission     ports.TransportCommissionRecord
 	hasCommission  bool
+	procurement    procurementTrace
+}
+
+// procurementTrace 记这一次登记问到了哪一步：事实所属的委托在业务时间按哪一版采购，问 PC 的是哪一版。答复的各格都可能带它，
+// 由 Register 在出口一处盖上，不在每一格的返回处各写一遍。
+type procurementTrace struct {
+	terms    domain.CommissionAgreementTerms
+	hasTerms bool
+	asked    domain.SupplierAgreementVersion
+	hasAsked bool
 }
 
 func (result RegisterChargeOccurrenceResult) Outcome() ChargeOccurrenceOutcome { return result.outcome }
@@ -249,6 +259,18 @@ func (result RegisterChargeOccurrenceResult) Agreement() string { return result.
 
 // Continuation 在未决格交回续办引用：同一请求原样重交即可。
 func (result RegisterChargeOccurrenceResult) Continuation() string { return result.continuation }
+
+// CommissionTerms 在事实带着委托时交回委托在业务时间按哪一版采购（ADR-0231 决定四）：提交那一版，或起用不晚于业务时间的那一次
+// 换版。事实不带委托、或在取到委托之前就答了的格答 false。
+func (result RegisterChargeOccurrenceResult) CommissionTerms() (domain.CommissionAgreementTerms, bool) {
+	return result.procurement.terms, result.procurement.hasTerms
+}
+
+// AskedAgreement 交回这一次去问 party-commercial 的那一版协议；在问之前就答了的格答 false。协议否定格、未配置与不计费据它说出是
+// 哪一版这样答的。
+func (result RegisterChargeOccurrenceResult) AskedAgreement() (domain.SupplierAgreementVersion, bool) {
+	return result.procurement.asked, result.procurement.hasAsked
+}
 
 // Commission 在采购上下文冲突那一格交回事实所属的那份委托：登记方据它看出委托上的服务方与协议是什么，改的是自己报的那几格，
 // 或者去查是不是指错了段与订舱。
@@ -294,7 +316,9 @@ type chargeOccurrenceFact struct {
 	hasSegment    bool
 	commission    ports.TransportCommissionRecord
 	hasCommission bool
-	form          func(domain.TransportChargeOccurrenceSpec) (domain.TransportChargeOccurrence, error)
+	// terms 是委托在业务时间按哪一版采购，只在 hasCommission 时有值，由 Register 在取到事实之后按业务时间填。
+	terms domain.CommissionAgreementTerms
+	form  func(domain.TransportChargeOccurrenceSpec) (domain.TransportChargeOccurrence, error)
 }
 
 // Register 取事实 → 派生身份 → 判委托冲突或自营 → 定采购上下文 → 核协议 → 按协议判条件、数数量 → 形成 → 查覆盖 → 落册
@@ -306,6 +330,20 @@ type chargeOccurrenceFact struct {
 func (handler *RegisterChargeOccurrenceHandler) Register(
 	ctx context.Context,
 	command RegisterChargeOccurrenceCommand,
+) (RegisterChargeOccurrenceResult, error) {
+	var trace procurementTrace
+	result, err := handler.register(ctx, command, &trace)
+	if err != nil {
+		return RegisterChargeOccurrenceResult{}, err
+	}
+	result.procurement = trace
+	return result, nil
+}
+
+func (handler *RegisterChargeOccurrenceHandler) register(
+	ctx context.Context,
+	command RegisterChargeOccurrenceCommand,
+	trace *procurementTrace,
 ) (RegisterChargeOccurrenceResult, error) {
 	if strings.TrimSpace(command.TenantID.String()) == "" || strings.TrimSpace(command.Registrant) == "" {
 		return chargeNotAccepted(ChargeRequestMalformed), nil
@@ -356,9 +394,13 @@ func (handler *RegisterChargeOccurrenceHandler) Register(
 		strings.TrimSpace(command.AgreementObject) != "" ||
 		strings.TrimSpace(command.AgreementVersion) != ""
 	if fact.hasCommission {
+		// 委托在业务时间按哪一版采购，按事实的业务时间取（ADR-0231 决定四）：事实发生那一刻委托凭的那一版，不因事后换版而改变；
+		// 那一刻之前起用的换版才管得着它。
+		fact.terms = fact.commission.Commission.AgreementTermsAt(fact.occurredAt)
+		trace.terms, trace.hasTerms = fact.terms, true
 		// 委托说这件事外包给了它的服务方：声明自营、或报来另一家服务方与另一版协议，都与它相抵。不替任何一方改，摆出委托交
 		// 登记方处置；判在承运商判断之前——登记方自己报错了，先告诉他。
-		if declaredAgainstCommission(command, fact.commission.Commission) {
+		if declaredAgainstCommission(command, fact.commission.Commission, fact.terms) {
 			return procurementConflict(fact.commission), nil
 		}
 	} else if command.SelfOperated {
@@ -392,6 +434,7 @@ func (handler *RegisterChargeOccurrenceHandler) Register(
 		return chargeNotAccepted(ChargeRequestMalformed), nil
 	}
 	spec.Provider = provider
+	trace.asked, trace.hasAsked = agreement, true
 
 	check, err := handler.deps.Agreements.CheckSupplierAgreement(ctx, command.TenantID, agreement, spec.Provider, fact.occurredAt)
 	if err != nil {
@@ -399,16 +442,16 @@ func (handler *RegisterChargeOccurrenceHandler) Register(
 	}
 	if fact.hasCommission && (check.Standing == ports.SupplierAgreementNotRegistered ||
 		check.Standing == ports.SupplierAgreementProviderMismatch) {
-		// 委托提交时核过它那一版在册、约定的供应商就是委托的服务方（CommissionTransportHandler.SubmitCommission），版本一经
-		// 发布不可变，所以这两格不会是委托那一版的如实答案。委托记着那一版时，是两边数据走岔了，同下面的快照走岔一样上抛；
+		// 委托提交时核过它那一版在册、约定的供应商就是委托的服务方（CommissionTransportHandler.SubmitCommission），换版时对后继
+		// 同样核过（ReviseCommissionAgreementHandler），版本一经发布不可变，所以这两格不会是委托那一版的如实答案。委托记着那一版时，是两边数据走岔了，同下面的快照走岔一样上抛；
 		// 委托没记下时问的是登记方报的那一版，这两格说明他报的不是委托采用的那一版，同快照不同一样答冲突、摆出委托——照协议
 		// 否定格答「不在册」会叫他去 PC 发布，答「供应商不符」更说不通，服务方是从委托取的，他没报。未生效、已终止可能就是
 		// 委托那一版在业务时间的如实答案，照常答。
 		commission := fact.commission.Commission
-		if _, recorded := commission.AgreementVersion(); recorded {
+		if _, recorded := fact.terms.Version(); recorded {
 			return RegisterChargeOccurrenceResult{}, fmt.Errorf(
-				"register charge occurrence: the agreement check answered %s for %s/%s, which commission %s was submitted under",
-				check.Standing, agreement.Object(), agreement.Version(), commission.Commission())
+				"register charge occurrence: the agreement check answered %s for %s/%s, which commission %s names as revision %d",
+				check.Standing, agreement.Object(), agreement.Version(), commission.Commission(), fact.terms.Revision())
 		}
 		return procurementConflict(fact.commission), nil
 	}
@@ -433,21 +476,21 @@ func (handler *RegisterChargeOccurrenceHandler) Register(
 	spec.Agreement = check.Snapshot
 	if fact.hasCommission {
 		commission := fact.commission.Commission
-		if check.Snapshot != commission.Agreement() {
-			// 委托记着它那一版协议时，问的就是那一版，PC 拼回的快照只能与委托上的同一串；不同是两边数据走岔了，重试不会变，
-			// 响亮上抛。委托没记下（迁移 0038 之前提交的）时问的是登记方给的那一版，快照不同就是登记方报的与委托采用的
+		if check.Snapshot != fact.terms.Snapshot() {
+			// 委托记着作答那一版协议时，问的就是那一版，PC 拼回的快照只能与委托上的同一串；不同是两边数据走岔了，重试不会变，
+			// 响亮上抛。委托没记下（迁移 0038 之前提交、也没换过版）时问的是登记方给的那一版，快照不同就是登记方报的与委托采用的
 			// 不是同一版，答冲突。
-			if _, recorded := commission.AgreementVersion(); recorded {
+			if _, recorded := fact.terms.Version(); recorded {
 				return RegisterChargeOccurrenceResult{}, fmt.Errorf(
-					"register charge occurrence: the agreement check answered snapshot %s for commission %s, which adopted %s",
-					check.Snapshot, commission.Commission(), commission.Agreement())
+					"register charge occurrence: the agreement check answered snapshot %s for commission %s, which names %s as revision %d",
+					check.Snapshot, commission.Commission(), fact.terms.Snapshot(), fact.terms.Revision())
 			}
 			return procurementConflict(fact.commission), nil
 		}
-		// 法人与快照取委托上的那一份（ADR-0204 决定一：服务方、协议快照与采购责任法人的权威是委托那一行）；PC 这一问只答
-		// 那一版在业务时间是否支持采购、声明了哪些条件。
-		spec.LegalEntity = commission.LegalEntity()
-		spec.Agreement = commission.Agreement()
+		// 法人与快照取委托上作答那一版的（ADR-0204 决定一：服务方、协议快照与采购责任法人的权威是委托；换版之后是委托上业务时间所凭
+		// 的那一版，ADR-0231 决定四）；PC 这一问只答那一版在业务时间是否支持采购、声明了哪些条件。
+		spec.LegalEntity = fact.terms.LegalEntity()
+		spec.Agreement = fact.terms.Snapshot()
 	}
 
 	// 条件按这一版协议的声明判（ADR-0209 决定四）。没声明与不计费都不落册、不问册：两格说的是这一版协议怎么约定，
@@ -740,8 +783,9 @@ func chargeOccurrenceSpecFrom(
 
 // procurementOf 定这一次登记问协议的服务方与那一版协议。missing 为真答未受理「缺采购上下文」，err 非空答坏请求。
 //
-// 事实带着委托时，服务方取委托的，协议取委托提交时记下的那一版；委托没记下（迁移 0038 之前提交的）就要登记方给出协议
-// 对象与版本，核过之后在 Register 里与委托比（答不在册、供应商不符或快照不同都是报的不是委托那一版）。服务方与协议不从快照串里拆：快照是 PC 一处拼出的指称
+// 事实带着委托时，服务方取委托的，协议取委托在业务时间所凭的那一版（提交时记下的那一版，或起用不晚于业务时间的那一次换版）；
+// 那一版没记下（迁移 0038 之前提交、也没换过版）就要登记方给出协议对象与版本，核过之后在 Register 里与委托比（答不在册、供应商
+// 不符或快照不同都是报的不是委托那一版）。服务方与协议不从快照串里拆：快照是 PC 一处拼出的指称
 // （domain.SupplierAgreementVersion 头注）。与委托不一致的报值在此之前已答冲突，走到这里给了的都与委托相同。
 //
 // 事实不带委托时三格都由登记方给，缺一格答缺采购上下文（ADR-0207 决定二）。
@@ -751,7 +795,7 @@ func procurementOf(
 ) (domain.ServiceProviderReference, domain.SupplierAgreementVersion, bool, error) {
 	if fact.hasCommission {
 		commission := fact.commission.Commission
-		if version, recorded := commission.AgreementVersion(); recorded {
+		if version, recorded := fact.terms.Version(); recorded {
 			return commission.Provider(), version, false, nil
 		}
 		if strings.TrimSpace(command.AgreementObject) == "" || strings.TrimSpace(command.AgreementVersion) == "" {
@@ -775,15 +819,19 @@ func procurementOf(
 
 // declaredAgainstCommission 答登记方报来的采购上下文是否与委托相抵：声明自营，或给了服务方、协议对象、版本标签之一而与委托
 // 上的不是同一串。留空不算相抵——委托在，留空就是取委托的。按同一串字面比，不比名称、不归一（ADR-0202 决定四同一条
-// 纪律）。委托没记下那一版的两格时，协议只能在核过之后按快照比，这里只比服务方。
-func declaredAgainstCommission(command RegisterChargeOccurrenceCommand, commission domain.TransportCommission) bool {
+// 纪律）。协议比的是委托在业务时间所凭的那一版；那一版没记下两格时，协议只能在核过之后按快照比，这里只比服务方。
+func declaredAgainstCommission(
+	command RegisterChargeOccurrenceCommand,
+	commission domain.TransportCommission,
+	terms domain.CommissionAgreementTerms,
+) bool {
 	if command.SelfOperated {
 		return true
 	}
 	if differs(command.Provider, commission.Provider().String()) {
 		return true
 	}
-	if version, recorded := commission.AgreementVersion(); recorded {
+	if version, recorded := terms.Version(); recorded {
 		return differs(command.AgreementObject, version.Object()) || differs(command.AgreementVersion, version.Version())
 	}
 	return false

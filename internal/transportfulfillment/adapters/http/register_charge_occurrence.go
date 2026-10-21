@@ -105,15 +105,17 @@ type chargeOccurrenceResponse struct {
 	Occurrence            *chargeOccurrenceBody           `json:"occurrence,omitempty"`
 }
 
-// chargeOccurrenceCommissionBody 是冲突那一格回显的委托采购上下文：服务方、协议快照与采购责任法人，权威都是委托那一行。
-// 委托提交时记下了协议对象与版本标签就一并给出，登记方照它改载荷最直接。
+// chargeOccurrenceCommissionBody 是冲突那一格回显的委托采购上下文：服务方、协议快照与采购责任法人，权威都是委托。协议三格与法人是
+// 委托在这件事实的业务时间所凭的那一版，agreementRevision 是那一版在委托上的号（1 是提交那一版，ADR-0231）。那一版记下了协议对象与
+// 版本标签就一并给出，登记方照它改载荷最直接。
 type chargeOccurrenceCommissionBody struct {
-	Commission       string `json:"commission"`
-	Provider         string `json:"provider"`
-	Agreement        string `json:"agreement"`
-	AgreementObject  string `json:"agreementObject,omitempty"`
-	AgreementVersion string `json:"agreementVersion,omitempty"`
-	LegalEntity      string `json:"legalEntity"`
+	Commission        string `json:"commission"`
+	Provider          string `json:"provider"`
+	Agreement         string `json:"agreement"`
+	AgreementObject   string `json:"agreementObject,omitempty"`
+	AgreementVersion  string `json:"agreementVersion,omitempty"`
+	AgreementRevision int    `json:"agreementRevision,omitempty"`
+	LegalEntity       string `json:"legalEntity"`
 }
 
 // chargeOccurrenceBody 逐字段透出一个发生项版本。occurredAt 是业务时间，recordedAt 是登记时刻，两者归属不同不合并。
@@ -196,7 +198,13 @@ func writeChargeOccurrenceOutcome(response http.ResponseWriter, result applicati
 			Agreement:   commission.Agreement().String(),
 			LegalEntity: commission.LegalEntity().String(),
 		}
-		if version, recorded := commission.AgreementVersion(); recorded {
+		version, recorded := commission.AgreementVersion()
+		// 冲突那一格总带着委托在这件事实的业务时间所凭的那一版（ADR-0231 决定四），回显它：登记方要对照的是那一版，不是提交那一版。
+		if terms, named := result.CommissionTerms(); named {
+			echoed.Agreement, echoed.LegalEntity, echoed.AgreementRevision = terms.Snapshot().String(), terms.LegalEntity().String(), terms.Revision()
+			version, recorded = terms.Version()
+		}
+		if recorded {
 			echoed.AgreementObject, echoed.AgreementVersion = version.Object(), version.Version()
 		}
 		body.Commission = &echoed
