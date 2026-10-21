@@ -103,4 +103,6 @@ Blocked by: 无（01 进 main 后开工）
 | 9 安排 | 03、04、05 撞号 | code/26、27 改名 code/28、29，另立 code/33；票面、ADR-0249、0250、UC-NR-001、UC-NR-003、code/16 等分支内引用全部同步 |
 | 10 安排 | AT 盘点移行由本票做 | `.scratch/at-coverage-inventory.md`：`AT-NR-034`、`AT-NR-051` 由②、`AT-NO-031` 由③移入④；新加 `AT-NR-084`（④）、`AT-NO-131`（①，`AT-NO-062` 行末句那三条 Covers 移来）；`AT-NR-033`、`036`、`037`、`040` 改场景文字；末尾加追记一条；总览计数不改 |
 
+另照 [10](./10-cross-cutting-docs.md) 新增的跨组约定第 5 条（出自本票评审），NR、NO 两份 CONTEXT 头部各加一句不含票号的固定指针「规则与实现的差距见各 UC『给开发的交接』」；两份 CONTEXT 的规则条目里没有挂票号。收口前已 `git rebase main`（main `f928c5ba`）。
+
 修订后的检查：scratchpad 副本上 `go run ./tools/adr-index` 后 `-check` 退 0（README 不随票提交）；`go run ./tools/at-coverage-counts -check` 只报计数过期；改动的 `.md` 相对链接全部解析；ADR-0249、0250 引的被停原句在 ADR-0172、0173、0235 正文里逐字核过。
