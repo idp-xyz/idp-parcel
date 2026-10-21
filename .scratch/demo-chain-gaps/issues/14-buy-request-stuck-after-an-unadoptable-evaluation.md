@@ -1,7 +1,7 @@
 # 14 BUY 评价采用不了之后请求卡死，补登卡上取值也不回补
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg14。此前 in-progress——2026-10-21 认领；此前 ready-for-agent——2026-10-20 上线就绪评估归 R1（上线前必修），裁定与批次见 [triage-2026-10-19](../triage-2026-10-19.md)「上线就绪评估（2026-10-20）」。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [08](./08-buy-evaluation-recorded-consumer-never-forms-supplier-expected-cost.md) 的隔离评审。
+Status: resolved——2026-10-21 进 main（全量钉 `97841f2d`：`scripts/test-full.sh` 158 ok / 0 FAIL，见文末「进 main 记录」）；要换一版卡才解得开的几格（取整未声明、不可计价、评价冲突、缺重量段）等票 [150](./150-price-card-has-no-controlled-cut-off-for-a-superseded-version.md)，停着的请求没有查阅面与管理台续办入口转票 [151](./151-stalled-evaluation-queue-has-no-operator-view.md)，结算政策没采用无续办路转票 [158](./158-settlement-policy-not-adopted-has-no-resumption-path.md)。此前 in-progress——完工待评审与进 main，分支 claude-dcg14。此前 in-progress——2026-10-21 认领；此前 ready-for-agent——2026-10-20 上线就绪评估归 R1（上线前必修），裁定与批次见 [triage-2026-10-19](../triage-2026-10-19.md)「上线就绪评估（2026-10-20）」。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [08](./08-buy-evaluation-recorded-consumer-never-forms-supplier-expected-cost.md) 的隔离评审。
 Blocked by: 无
 出处：[ADR-0200](../../../docs/adr/0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md) 越权风险点 3；SELL 那一路同一格见 [ADR-0190](../../../docs/adr/0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 越权风险点 3。
 
@@ -124,3 +124,7 @@ none
 - 停着的评价请求查阅面、管理台运营续办（运营决定种类）→ 票 [151](./151-stalled-evaluation-queue-has-no-operator-view.md)。没有新开 access_identity 迁移。
 - 「结算政策没采用」没有续办路：闭包在委托接受时固定，任何登记都改不了那一拍的答案，运营续办重跑读到的是同一份闭包、照样停下；本票不改 PC、不立替代出路，去向 → 票 [158](./158-settlement-policy-not-adopted-has-no-resumption-path.md)（等 SA、PC owner 裁）。
 - 迁移前已卡住、停在`已提交`的请求不回补（越权风险点 7）。
+
+## 进 main 记录
+
+2026-10-21 协调方合入。作者在二轮修订时把分支重建到 `40d63aef`（即当时 main，票 140 已在其中：SA 迁移让号为 0042、0043 与 140 的 0041 连号；与 140 同名的 `optionalText` 去重；一轮那两笔「结算收窄 / 计价交面」合成一笔，消掉中间那笔测试红），因此不需重放，分支 SHA 原样进 main（`fb79b781`…`4337c4c8`）。一轮隔离评审无阻断；二轮评审（只看修订段）一条阻断——「序列读不出」「目录读不出」成了只有新一版卡解得开、价卡登记却不续办的死格——已改为两格都认价卡登记并补派发用例。本票没改种子文件，但改了种子调用的计价与结算登记，在 55432 一次性库上 `seed.sh` 全程退 0，用完 `DROP … WITH (FORCE)`。其上按 parallel-sessions.md 重生成 ADR 索引、重算 AT 盘点计数、重生成机制清点（`97841f2d`），各自单独成笔；`adr-index -check` 与 `at-coverage-counts -check` 退 0。在干净的隔离树上对 `97841f2d` 跑 `go build ./...`、`go vet ./...`、`gofmt -l` 干净，`scripts/test-full.sh` 全量 158 ok、0 FAIL（`-count=1`，无缓存）；推 `97841f2d:main`。迁移落号：`settlement_accounting/0042`、`0043`（连号）。偏离装配约定一处（改了 `cmd/parcel-dispatch/assemble.go` 里既有的哨兵名单与构造），两轮评审均判理由成立。
