@@ -4,7 +4,8 @@ import (
 	psinbox "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
 )
 
-// TF 对象级场外揽收登记 → FanOut（先 VE 投影，再 PS 来源采用）。
+// TF 对象级场外揽收登记 → FanOut：本文件登 VE 揽收投影与 PS 来源采用；同一封信上别的路登在各自的 routes_*.go，先后只看各路的
+// position。
 func init() {
 	registerRoutes(func(sources dispatchSources) ([]routeLeg, error) {
 		pickups, err := adoptOffsitePickupConsumer(sources.db, sources.outbox, sources.inbox, sources.clock)

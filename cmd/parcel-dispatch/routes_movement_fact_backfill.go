@@ -9,7 +9,7 @@ import (
 // 按段列移动事实，又不走信号；交接那份与揽收那份只差回读控制事实那一站。
 //
 // 不在名单里：ErrHandoverRecordInconsistent、ErrPickupRecordInconsistent 与 ErrMovementFactRecordInconsistent（仓储不变量已破，
-// 含按对象列得出、按键取不回的段，以及按段列出却没声明这一段的事实）、ErrHandoverUntranslatableAnswer、
+// 含按对象列得出、按键却答没有的段，以及按段列出却没声明这一段或装不回的事实）、ErrHandoverUntranslatableAnswer、
 // ErrPickupUntranslatableAnswer 与 ErrMovementFactUntranslatableAnswer（引用坏了）、ErrProjectionHandoffPending（要查 outbox
 // 下游）、veconsume.ErrUnexpectedProjectionOutcome（封闭集合外）。
 var (
@@ -28,8 +28,7 @@ var (
 )
 
 // TF 权威交接登记、对象级场外揽收登记 → VE 移动事实补派生（票 demo-chain-gaps/53，ADR-0224）。各排在同一封信上的 VE 投影之后、
-// 主业务路之前：补派生与投影同属追踪，不挡在派送发起、节点控制、路由复核与来源采用后面；投影先落，补派生停在未决重投时，投影
-// 那一路按 inbox 跳过。
+// 主业务各路之前：补派生与投影同属追踪，不挡在主业务各路后面；投影先落，补派生停在未决重投时，投影那一路按 inbox 跳过。
 func init() {
 	registerRoutes(func(sources dispatchSources) ([]routeLeg, error) {
 		onHandover, err := backfillMovementFactsOnHandoverConsumer(sources.db, sources.inbox, sources.projectionDerive)

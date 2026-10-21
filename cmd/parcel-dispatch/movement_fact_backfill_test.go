@@ -18,9 +18,9 @@ import (
 	vedomain "go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 )
 
-// 本文件证先于段登记的移动事实经交接那一封补进全程追踪（票 demo-chain-gaps/53，ADR-0224），走的是生产 wireDispatcher：出发先登、
-// 段不在册，移动事实那一路入账不派生；随后一次`已交接`经生产登记编排把对象交进那一段、立起段，交接信封上的补派生那一路在对象
-// 身上补出出发，按演示种子的里程碑映射归 DEPARTED。证据只记 S。
+// 本文件证先于段登记的移动事实经控制事实那一封补进全程追踪（票 demo-chain-gaps/53，ADR-0224），走的是生产 wireDispatcher：出发
+// 先登、段不在册，移动事实那一路入账不派生；随后一次`已交接`或一次对象级场外揽收经生产登记编排把对象送进那一段、立起段，那一封
+// 信上的补派生在对象身上补出出发，按演示种子的里程碑映射归 DEPARTED。另证补派生两路的失败分区。证据只记 S。
 
 const (
 	backfillConsumerName         = "visibility-exception/backfill-movement-facts-on-transport-handover"
