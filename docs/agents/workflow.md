@@ -26,7 +26,7 @@
 | `/to-tickets` 拆带阻塞边的工单 | `docs/design/*handoff*` 的 `W01..W09` 工作包，阻塞关系写在交接文档里 | 直接认领 `W` 包，不重拆 |
 | `/setup-idp-skills` 配 tracker 与布局 | [issue-tracker.md](./issue-tracker.md)、[triage-labels.md](./triage-labels.md)、[domain.md](./domain.md) | 前置已满足，不用跑 |
 
-`/grill-with-docs` 与 `/domain-modeling` 仍然常用，但在本仓是**演进**而非创建：九个 `CONTEXT.md` 与 [ADR 索引](../adr/README.md)里已成文的全部记录都已经存在。这里不复述 ADR 份数——每新增一条就会让它过期，此前写死的「十一份」正是这样烂掉的，而现行与已被取代的划分只在那份索引里权威。改动走 [AGENTS.md 的「改文档」](../../AGENTS.md#改文档)——ADR 只新增或 supersede，不改写已接受的历史。
+`/grill-with-docs` 与 `/domain-modeling` 仍然常用，但在本仓是**演进**而非创建：各上下文的 `CONTEXT.md` 与 [ADR 索引](../adr/README.md)里已成文的全部记录都已经存在。这里不复述 ADR 份数——每新增一条就会让它过期，此前写死的「十一份」正是这样烂掉的，而现行与已被取代的划分只在那份索引里权威。改动走 [AGENTS.md 的「改文档」](../../AGENTS.md#改文档)：新 ADR、取代与部分停用各怎么写在那里与 [adr/README](../adr/README.md) 顶部，本文不复述。
 
 `.scratch/` 留给**交接文档没覆盖**的工作：外来 bug、临时需求、基线之外的探索。已经是 `W` 包的东西不进 tracker，也不要 `/triage`。
 
@@ -44,7 +44,7 @@ flowchart TD
     unconfigured --> implement
     real --> implement
     implement --> review["/code-review 双轴<br/>Standards + Spec"]
-    review -- Spec 轴对照 --> usecase["对应的 UC-* 文档"]
+    review -- Spec 轴对照 --> usecase["票面判据与裁决<br/>+ 所引的 UC-* 文档"]
     review --> commit["提交；证据层级如实记录"]
 ```
 
@@ -54,11 +54,11 @@ flowchart TD
 
 **租户取值是否已确认**只看[参数登记册](../product/PILOT-PARAMETER-REGISTER.md)。登记册说「待提供」就是待提供——不用技术默认值补齐，也不因为合成数据跑通了就改状态。
 
-**`/code-review` 的 Spec 轴**对照的是 `UC-*` 用例文档，不是工单描述。用例的输入、结果、失败边界就是验收口径。
+**`/code-review` 的 Spec 轴**对照什么，只在下文「进 main 的步骤」定义：票面判据与所引 UC 一起对照，相抵时以 UC 为准。
 
 ## 红线在哪一步生效
 
-四条红线不是审查清单，是流程里的具体动作。
+[AGENTS.md 红线表](../../AGENTS.md#红线)的每一行都不是审查清单，是流程里的具体动作。
 
 **证据层级诚实**——在提交那一步。三件事最容易做错：
 
@@ -72,11 +72,34 @@ flowchart TD
 
 **单一权威**——在写文档那一步。用例与交接只引用，不复制第二套口径。本文自己也守这条：凡是别处有权威的都用链接。
 
+**敏感实例外置**——在写票面、登记册与测试夹具那一步。真实名称、账号、凭据与映射不进仓库；票面与登记册只写脱敏标识与证据索引，夹具用 `SYN-` 合成数据。
+
+## 进 main 的步骤
+
+后端票与改现行规则的文档票（CONTEXT、UC、ADR、产品与协作文档），不论一个会话还是几个会话做，进 main 都照这一串；diff 全在 `apps/admin-web/**` 的票走下一节「前端切片」。这一串照 2026-10-21 文档自洽修订各票的实际做法写下（会话代决，待用户复核）；每一步的来历与理由在 [parallel-sessions](./parallel-sessions.md) 对应各节，这里只给步骤与入口。
+
+1. **作者**在自己的分支或 worktree 上做完，自验只跑受影响范围（parallel-sessions「全量只跑一次」节「作者」一条），每笔提交后推分支。动 ADR 停用链时一件事只写一处：去向写在停用方，来向只写在被停方的索引注记，规则见 [adr/README](../adr/README.md) 顶部「一件事只写一处」。作者不重生成 ADR 索引、AT 盘点计数与机制清点（parallel-sessions「生成物不占号」）。 
+ **完成**：票面完成记录写完，分支 tip 已推。
+2. **隔离评审**：非作者在隔离检出上评，两轴照 idp-skills 的 `code-review`。**Spec 轴对照票面完成判据与裁决，加所引 `UC-*` 的输入、结果与失败边界；两者相抵时以 UC 为准，并记为阻断。** 谁评、报什么、时限、哪些不评，见 parallel-sessions「合入前独立评审」。 
+ **完成**：票面「评审记录」写明钉的 SHA 与结论。
+3. **修订轮**：有阻断回作者在同一分支修；评审用来取证的探针（脚本、检索、对照）在修完的 tip 上重跑一遍，不只读作者的回应。 
+ **完成**：阻断清零，重跑结果写进评审记录。
+4. **推送方**在隔离树上把分支重放到 `main` tip（rebase 或 cherry-pick 后快进，不在共享树上 rebase，见 parallel-sessions「别人分支上的活怎么进 main」），再在新 tip 上重生成 ADR 索引（`go run ./tools/adr-index`）、重算 AT 盘点计数（`go run ./tools/at-coverage-counts`）、重生成机制清点（`tools/mechanism-inventory`），**各单独成笔**。 
+ **完成**：三者 `-check` 退 0。
+5. **全量真库测试**：对那个 tip 跑 `scripts/test-full.sh`（含 DSN、`-count=1`）。只动 `.md` 的票可免，进 main 记录如实写「未跑」。 
+ **完成**：退 0。
+6. **种子灌一次性库**：`scripts/demo-seeds/seed.sh` 灌进一次性库，用后删库；只动 `.md` 的票同上。 
+ **完成**：灌入退 0。
+7. **推确切 SHA**：`git push origin <sha>:main`，推验过的那个 SHA，不推会动的分支名（parallel-sessions「推送：推经验证的确切 SHA」）。 
+ **完成**：`origin/main` 等于该 SHA。
+8. **票面收口**：Status → resolved，补「进 main 记录」：main 上的 SHA、分支 SHA 作出处、评审结论与上面几步各自的结果。 
+ **完成**：票面与 main 一致。
+
 ## 前端切片：一人在 main 上直接做
 
 2026-09-21 用户裁定。适用条件一条：**这张票的 diff 全部落在 `apps/admin-web/**` 与它自己的票面里。** 碰到 Go / SQL / `ci.yml` / 领域文档的任何一行，整张票回到[并行会话](./parallel-sessions.md)那条路。
 
-另开一条路的理由：那条路上的每一样——隔离树、`-p 1` 全量、占号、cherry-pick 重放与 SHA 对照、`merged/` 改名、tasks.md 叙事——病根都在后端（六个会话共享一只 55432 互相锁等、未提交现场被共享树抹掉）。admin-web 一件都不沾：三道门十秒、node:test 纯逻辑、CI 的 `admin-web` job 与 Go 分片互不相干。09-20 至 09-21 用那条路落五张前端票的实测：集成时延中位 25 分/票；wsform/03 的接线写完到进 main 隔了 15 小时，其中没有一分钟在改代码。一个 agent 在 `main` 上顺序做，比五个通道加一个推送方快。
+另开一条路的理由：那条路上的每一样——隔离树、全量真库测试、占号、cherry-pick 重放与 SHA 对照、`merged/` 改名、tasks.md 叙事——病根都在后端（六个会话共享一只 55432 互相锁等、未提交现场被共享树抹掉）。admin-web 一件都不沾：三道门十秒、node:test 纯逻辑、CI 的 `admin-web` job 与 Go 分片互不相干。09-20 至 09-21 用那条路落五张前端票的实测：集成时延中位 25 分/票；wsform/03 的接线写完到进 main 隔了 15 小时，其中没有一分钟在改代码。一个 agent 在 `main` 上顺序做，比五个通道加一个推送方快。
 
 1. **就在共享树的 `main` 上做**——不 `worktree add`、不另起分支；票面 Status → in-progress 随第一笔一起提。 
  **完成**：第一笔已推。
@@ -93,7 +116,7 @@ flowchart TD
 
 ## 本机环境
 
-这些查不到，踩过才知道。分两节是因为其中一半只在当前宿主成立：**换宿主时整节删掉下面的「当前宿主」，不要逐条判断**；「与宿主无关」那节继续有效。
+这些查不到，踩过才知道。按宿主分节是因为其中一部分只在某一宿主成立（2026-10-16 起 Cursor 与 Claude Code 两种会话并存，见「当前宿主之二」）：**换宿主时整节删掉下面的「当前宿主」，不要逐条判断**；「与宿主无关」那节继续有效。
 
 2026-10-10 换到现宿主时没有整节删：仓库与 git 搬进了 WSL，agent 的 shell 却仍是 Windows PowerShell 5.1，下面讲 PowerShell 编码与渲染的那几条照样成立，AGENTS.md 与 [parallel-sessions](./parallel-sessions.md) 也有指针指着它们。换掉的是只属上一台机器（`D:\tops`、Windows 侧 git、GCM）的条目，新宿主的事实补在节首。
 
@@ -108,7 +131,7 @@ flowchart TD
   三处的共同出路：**多步命令写成 `/tmp` 下的脚本，再 `wsl -d Ubuntu-24.04 -e bash /tmp/<脚本>`**。脚本用 Cursor 的 `Write` 写到 `\\wsl.localhost\Ubuntu-24.04\tmp\`，引号照 bash 的规矩写，提交也放进脚本里做——署名改写只认 Shell 命令文本，不碰脚本文件的内容。
 - **Cursor 的文件工具（`Write`、`StrReplace`）写 `\\wsl.localhost` 下的文件都是 LF**，BOM 有则保留、无则不加（通道 1 与通道 2 于 2026-10-10 各自实测，含带 BOM 的中文 `.ps1`，工作区内外各一次）。但工作副本里本来就躺着不少 CRLF：实测于 `6f766cb7`，`git ls-files --eol` 为 `w/crlf` 的已跟踪文件里除了 `.ts`、`.tsx`、`.json`，还有 `.md` 与 `.go`——这两类 `.gitattributes` 钉了 `eol=lf`，检出给不出 CRLF，只可能是检出之外的途径写进来的。改这类文件时 CR 原样留着，而 git 照 `.gitattributes` 规范化后的 diff 只显示真改动，从 diff 上看不出来；要量字节：`grep -c $'\r' <file>`，有就在 WSL 里 `sed -i 's/\r$//' <file>`（BOM 不受影响）。通道 1 改 `scripts/branch-state.ps1` 后量到整份 CRLF，但当时没量改前，同一份原文复测不再出现，所以归不到 `StrReplace` 头上。WSL 侧 `core.autocrlf` 未设，检出一律 LF。
 - **GitHub 出网走 Windows 上的 Clash Verge（`127.0.0.1:7897`），它得开着、出口节点得通。** WSL 是 mirrored 网络，`127.0.0.1` 就是 Windows 的回环，仓库级 `http.proxy` 指 `http://127.0.0.1:7897`。2026-10-10 一天里三种失败都见过：12:39 端口上没有服务（`Failed to connect … after 0 ms`，Clash 12:47 才起）；起来之后端口通了、TLS 在握手时被掐（`SSL_ERROR_SYSCALL`，同一刻 `https://www.google.com` 也不通，是出口节点的事）；直连 GitHub 时而 200 时而 `Connection reset by peer`，release 资源下载被重置而 `packages.microsoft.com` 下得动。所以 fetch 失败先分清是哪一种：`curl -sS -m 10 -o /dev/null -w '%{http_code}' -x http://127.0.0.1:7897 https://www.google.com`。**别拿一次直连成功当依据去删仓库代理**——当天就这么删过一次，几分钟后直连也断了，又加了回去。
-- **凭据走 WSL 里的 `gh`，没有 GCM。** `~/.gitconfig` 里 `credential.https://github.com.helper` 为 `!/home/tops/.local/bin/gh auth git-credential`；`gh auth status` 为账号 `idpxyz`、scope `gist`、`read:org`、`repo`，没有 `workflow`——按 GitHub 的规则，改 `.github/workflows/` 的推送会因此被拒（未实测）。`.git/config` 里的 `credential.https://github.com.username idpxyz` 是上一台机器给 GCM 钉账号留下的，对 `gh` 无影响。
+- **凭据走 WSL 里的 `gh`，没有 GCM。** `~/.gitconfig` 里 `credential.https://github.com.helper` 为 `!/home/tops/.local/bin/gh auth git-credential`；`gh auth status` 为账号 `idpxyz`、scope `gist`、`read:org`、`repo`、`workflow`（2026-10-20 补上 `workflow`，改 `.github/workflows/` 的推送可直接推，`9045b6fd6` 为证）。`.git/config` 里的 `credential.https://github.com.username idpxyz` 是上一台机器给 GCM 钉账号留下的，对 `gh` 无影响。
 - **Go 只在 WSL 里，出网要自己带 `HTTPS_PROXY`。** `/usr/local/go/bin/go` 是 go1.24.6，不在 PATH 上；`go.mod` 要 `go 1.26.0` 与 `toolchain go1.26.5`，`~/.config/go/env` 又设了 `GOTOOLCHAIN=go1.26.8+auto`、`GOPROXY=https://proxy.golang.org,direct`，所以它先要下载 go1.26.8。go 的下载不吃 git 的仓库级 `http.proxy`；私有模块 `go.idp.xyz/idp-bento-go` 是 go 自己调 git 去拉的，那份 git 不在本仓目录里跑，本仓的 `http.proxy` 同样管不到；WSL 的环境里又没有 `HTTPS_PROXY`。于是直连被重置，第一行就报 `connection reset by peer`——那不是代码坏了。实测于 2026-10-10：带上 `HTTPS_PROXY=http://127.0.0.1:7897 NO_PROXY=localhost,127.0.0.1` 后 go1.26.8 与全部依赖下进缓存，`go build ./...` 退 0；此后缓存里有的不再联网，新依赖照样要带。`-race` 要的 C 工具链是齐的（`/usr/bin/gcc` 13.3），未验。
 - **门禁库容器跑在 WSL 的 docker 里**：`idp-parcel-postgres-gate`（`postgres:16.14`）发布在 `127.0.0.1:55432`，WSL 里直接可达，DSN 照「与宿主无关」一节那条写。同一个 docker 里另有一组 `idp-*` 容器，其中 `idp-postgres` 占着 5432，不属本仓。
 - **`scripts/*.ps1` 在 WSL 里用 `pwsh` 跑**，如 `wsl -d Ubuntu-24.04 -e bash -lc 'cd /home/tops/workspace/idp-parcel && pwsh -NoProfile -File scripts/branch-state.ps1'`。pwsh 7.6.6 装在用户目录 `~/.local/share/powershell/7.6.6`，入口 `~/.local/bin/pwsh`：GitHub 的 release 包下载被重置，改用 `packages.microsoft.com` 的 deb，SHA256 与 GitHub 发布说明所列一致，`dpkg-deb -x` 解出，免 sudo。脚本若把 git 给的路径改写成反斜杠，在这里就找不到目录，`branch-state.ps1` 的 `$sep` 是改法。
@@ -132,7 +155,7 @@ flowchart TD
   # 都没有（新写、未 add）—— 不必判，直接 gofmt -w
   ```
 
-  **第二行与第一行的区别是会咬人的那一格**：`HEAD:` 量的是**上一版**，而你想知道的是这一次提上去的那份会不会红，两者在输出上一模一样，且你刚改的这一次恰恰最可能引入 BOM。`core.autocrlf=true` 在**暂存时**就把 CRLF 收成 LF，所以索引里那份 blob 不多不少正是将要入库的内容。
+  **第二行与第一行的区别是会咬人的那一格**：`HEAD:` 量的是**上一版**，而你想知道的是这一次提上去的那份会不会红，两者在输出上一模一样，且你刚改的这一次恰恰最可能引入 BOM。`.gitattributes` 的 `* text=auto` 与 `eol=lf` 在**暂存时**就把 CRLF 收成 LF（上一宿主另有 `core.autocrlf=true`，现宿主未设），所以索引里那份 blob 不多不少正是将要入库的内容。
 
   这一步同时排掉**行尾**与 **BOM** 两个成因（都是字节层的事实），剩下还被 `gofmt -l` 列出的才是真的格式差异（如 CJK 键的对齐——`gofmt` 按字节数对齐，手写时看着齐了它不认）。
 
@@ -143,7 +166,7 @@ flowchart TD
   **CRLF 那一半的来源点得出名：Cursor 的 `Write` 工具在本机新建文件时逐行写 `\r\n`。** 探针实测于 2026-09-04（上一宿主；现宿主上的实测见节首「文件工具」那条）：用它在仓库外新建一份 `.go` 与一份 `.sql`，字节里 CR 数与 LF 数相等、无 BOM；`gofmt -l` 点名那份 `.go`，`gofmt -d` 的删行数与增行数都等于文件行数——整文件差，而内容一字未动；`gofmt -w` 之后 CR 归零。同一天在临时 worktree 上实测，`eol=lf` 让这台机器上的**检出**也是 LF，所以主树 `git ls-files --eol` 里凡是 `w/crlf` 的，都是被工具写过而没再检出的那些，不是 Windows 检出的常态。
 
   顺带一格不属这一族但同源：**`.sql` 写成 CRLF 是真问题，不是误报**。迁移校验和按字节算，CRLF 会让已施加的库在干净检出下报漂移；`migrations/eol_guard_test.go` 的 `TestEmbeddedMigrationAssetsCarryNoCarriageReturnOrBOM` 读的是嵌入进二进制的工作副本字节，所以 `Write` 新建的迁移文件不归一就在本机直接红，BOM 一并拦。`.sql`、`.md` 这些 `gofmt` 管不到的文件，归一用与 `Set-Content` 那条同一套读写——`[System.IO.File]::ReadAllText($p, (New-Object System.Text.UTF8Encoding $false))` 读、``-replace "`r`n","`n"`` 、`WriteAllText($p, $text, (New-Object System.Text.UTF8Encoding $false))` 写回，只碰文件，不动索引。2026-09-04 当天的新文件都这么过了一遍：MCP-1 的 `operator_registration_queue.go` 与 `0013_operator_registration_queue.sql`、MCP-6 新建的每一份 `.sql`、MCP-3 的 `0016_audited_payable_and_credit_note.sql`；事后 `git ls-files --eol` 对它们给的是 `i/lf w/lf`。
-- **`git hash-object -w` 省掉 `--path` 不一定错，但对错的依据会从仓里换到机器上。** 「HEAD＋只有自己的块」那套（见 [parallel-sessions](./parallel-sessions.md)）要把一份临时副本写成 blob，而副本从工作树拷来时带 CRLF。带 `--path <目标路径>` 时 `hash-object` 按仓内 `.gitattributes` 规范化；不带则落到本机 `core.autocrlf`，而它在这台机器上恰好是 `true`，于是也对。实测于 `54ae107`（真提交，非演练）：没带 `--path`、副本是工作树 CRLF，入库仍是 LF，`git show --numstat` 为 21 行纯新增零删除，`git ls-files --eol` 给 `i/lf w/crlf`。**仍建议带上，理由是依据的出处**——`.gitattributes` 跟着仓走、人人一致，`core.autocrlf` 是一个人可以改、换台机器就不同的开关。**把理由写准要紧**：这一条先前被写成「不带就会入库 CRLF」，那是推的不是量的；而一条理由错的纪律，第一个验出它不必要的人会把它整条丢掉。
+- **`git hash-object -w` 省掉 `--path` 不一定错，但对错的依据会从仓里换到机器上。** 「HEAD＋只有自己的块」那套（见 [parallel-sessions](./parallel-sessions.md)）要把一份临时副本写成 blob，而副本从工作树拷来时带 CRLF。带 `--path <目标路径>` 时 `hash-object` 按仓内 `.gitattributes` 规范化；不带时上一宿主落到本机 `core.autocrlf=true`，于是也对；现宿主未设 `core.autocrlf`，2026-10-21 实测同一份 CRLF 副本不带 `--path`、带 `--path` 与等价 LF 文件三者哈希相同，起作用的是 `.gitattributes` 的 `* text=auto`。实测于 `54ae107`（真提交，非演练）：没带 `--path`、副本是工作树 CRLF，入库仍是 LF，`git show --numstat` 为 21 行纯新增零删除，`git ls-files --eol` 给 `i/lf w/crlf`。**仍建议带上，理由是依据的出处**——`.gitattributes` 跟着仓走、人人一致，`core.autocrlf` 是一个人可以改、换台机器就不同的开关。**把理由写准要紧**：这一条先前被写成「不带就会入库 CRLF」，那是推的不是量的；而一条理由错的纪律，第一个验出它不必要的人会把它整条丢掉。
 - **`git worktree remove` 的退出码两个方向都不可信，收尾动作因此不能按它写。** 本机实测到过它报 `Permission denied` 退 **255**，而它其实**已经把工作树内容删光、登记也从 `.git/worktrees` 摘掉了**，只剩最后一层空目录没删成；照退出码判会读成「拆失败」，于是去重试、或者加 `--force`——而 `--force` 在别的场合会连真正未提交的改动一起丢。反方向同样不成立：退 0 只说明命令自认为成功。它还是**间歇**的而不是 Windows 必发，同一天里有会话连拆五处全部退 0、零残留，所以别写成「Windows 上必然如此」，那会让下一个人看到退 0 反而怀疑自己。可靠的收尾是四步各自查自己那一格：`git worktree remove <path>`（**永不加 `--force`**）→ `git worktree prune` → `Test-Path <path>`，有壳才 `Remove-Item -Recurse -Force` → `git worktree list` 复核登记已摘。
 - **数命令输出的行数时让 git 自己数，别用 `@(...).Count`。** 上一条那个吃换行的毛病同样打在**自验时用来数东西的方法**上，而这一层最难察觉：结果不是报错，是一个小一点的数。实测同一段区间——`@(git log --oneline A..HEAD).Count` 给 **1**，先设 `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8` 再跑同一句给 **2**，`git rev-list --count A..HEAD` 给 **2**（中文提交消息末尾那个字吃掉了换行，两行并成一行）；同一份 diff 默认管道数出 22 行、设 UTF-8 后 34 行、`git diff --numstat` 是 18 增 1 删。**用 `git rev-list --count`、`git diff --numstat` 这类由 git 自己出数的写法**，根本不经 PowerShell 解码——比「记得先设 `OutputEncoding`」那条纪律硬，因为它不依赖谁记得。**但换成 git 自己数只挡住了解码那一半，传参这一半仍在人手里**，而且只有一种写法会坏——别因此一律改写。同一时刻同一仓，正确答案 3：
 
@@ -165,14 +188,23 @@ git rev-list --count origin/main~3..HEAD              # → 3   对，裸字面�
 ```
 
 反向那次真的数出了 23，字面量与解码路径才算都验过。顺带注意两行的**退出码都是 0、包行都是 `ok`**，差别只在秒数与那两个计数——这正是「PostgreSQL 集成用例默认不跑而包照样显示 `ok`」那条的现场，秒表只配起疑，定性仍要看 `-v` 下的字样。
-- 开发机 `idp-110-dev`（`/workspace/idp/`）上技能装在 `~/.claude/skills` 与 `~/.agents/skills`，是 `scripts/link-skills.sh` 建的符号链接，与本机布局不同。
+- 开发机 `idp-110-dev`（`/workspace/idp/`）上技能装在 `~/.claude/skills` 与 `~/.agents/skills`，是 idp-skills 仓的 `scripts/link-skills.sh` 建的符号链接，与本机布局不同。
 
 **换宿主时要重新确认的，不是照抄新路径就完事：** 竞态检测能否直接跑（有无 C 工具链）、GitHub 出网方式与凭据存放、shell 如何渲染 stderr 与写文件编码、技能装在哪几个根。工具链版本不在此列——`go.mod` 锁的 `go1.26.5` 与 CI 的 `ubuntu-24.04` 不随宿主变化。但宿主自己的 `GOTOOLCHAIN` 可能把它往上抬并触发下载，现宿主就是（见节首 Go 那条）。
 
+### 当前宿主之二：WSL 里的 Claude Code 会话
+
+2026-10-16 起的作者、评审与协调会话多是 Claude Code（主会话与它派的子代理），与上一节的 Cursor 会话并存。两种宿主的差别只记在这里（2026-10-21 会话代决，照实际作业写下，待用户复核）：
+
+- **shell 就是 WSL 的 bash**：git、go、docker、pnpm、`pwsh` 直接调用，不经 `wsl -d … bash -lc`；上一节讲 Windows PowerShell 5.1 编码、渲染、引号拆参与 Cursor 署名改写的各条对它不适用。`scripts/*.ps1` 照样用 `pwsh -NoProfile -File` 跑。
+- **一个作者一棵 worktree**：同级的 `/home/tops/workspace/idp-parcel-<名>`，一条分支；临时文件放会话的 scratchpad 目录，不放仓库里。不用 `git stash`——它跨 worktree 共享。
+- **技能**：Claude Code 不读 `~/.cursor/skills`；2026-10-21 观察 `~/.claude/skills` 下没有 idp-skills。AGENTS.md 路由的技能按名调不到时，读 idp-skills 仓 `skills/<分类>/<名>/SKILL.md` 照做，并照 AGENTS.md「Skill 可见执行」点名。Claude Code 自带的 `/code-review` 不是 idp-skills 那份双轴评审，评审门要的是后者（本文「进 main 的步骤」）。
+- **多会话协调不走 idp-mcp**：没有 `list_sessions`、`broadcast`、`dispatch_task`，也读不到 `.cursor/rules/idp-mcp-messenger.mdc`（它被 `.gitignore` 忽略、只在主树本地，Claude Code 也不加载 `.cursor/rules`）。协调方派子代理时把地盘、号段与规矩写进派单，结果交回协调方；parallel-sessions 里依赖 idp-mcp 工具的几节（点名、度量五数）只对 Cursor 多通道形态成立。
+
 ### 与宿主无关
 
-- `~/.cursor/skills` 那 37 个里有 22 个在 `SKILL.md` 前置声明了 `disable-model-invocation: true`，**只在你显式打 `/name` 时才跑，agent 不会自主拾取**，因此不出现在 agent 的可用技能列表里。上方路由表提到的 `/which-skill`、`/ubiquitous-language`、`/implement`、`/triage`、`/to-spec`、`/to-tickets`、`/wayfinder`、`/handoff`、`/grill-with-docs`、`/improve-codebase-architecture`、`/wizard` 都属这一类：装了、能用、但看不见。看不见不等于没装，别去重装。
-- **Cursor 同时扫三个技能根**：`~/.cursor/skills-cursor`（Cursor 自带）、`~/.cursor/skills`（上面那 37 个）、`~/.codex/skills`（Codex CLI 的目录，跨工具互通一并读取）。同名技能存在于多个根时去重会挑中 `.codex` 那份，而本机 `~/.codex/skills` 磁盘上只剩六个 `.system` 技能，`domain-modeling`、`grilling`、`grill-with-docs` 的 `.codex` 副本早已删除。结果是 **agent 拿到的技能路径指向不存在的文件，读取失败**，容易误判成「这个技能没装」。两份副本内容还可能不同，`.codex` 那份是旧版。读不到时去 `~/.cursor/skills/<name>/SKILL.md` 找同名的；新开会话通常也能让路径指回 `.cursor`。
+- `~/.cursor/skills` 里不少技能在 `SKILL.md` 前置声明了 `disable-model-invocation: true`，**只在你显式打 `/name` 时才跑，agent 不会自主拾取**，因此不出现在 agent 的可用技能列表里。[AGENTS.md 的技能路由表](../../AGENTS.md#skills-路由)提到的 `/which-skill`、`/ubiquitous-language`、`/implement`、`/triage`、`/to-spec`、`/to-tickets`、`/wayfinder`、`/handoff`、`/grill-with-docs`、`/improve-codebase-architecture`、`/wizard` 都属这一类：装了、能用、但看不见。看不见不等于没装，别去重装。
+- **Cursor 同时扫三个技能根**：`~/.cursor/skills-cursor`（Cursor 自带）、`~/.cursor/skills`（idp-skills 的安装副本）、`~/.codex/skills`（Codex CLI 的目录，跨工具互通一并读取）。同名技能存在于多个根时去重会挑中 `.codex` 那份，而本机 `~/.codex/skills` 磁盘上只剩六个 `.system` 技能，`domain-modeling`、`grilling`、`grill-with-docs` 的 `.codex` 副本早已删除。结果是 **agent 拿到的技能路径指向不存在的文件，读取失败**，容易误判成「这个技能没装」。两份副本内容还可能不同，`.codex` 那份是旧版。读不到时去 `~/.cursor/skills/<name>/SKILL.md` 找同名的；新开会话通常也能让路径指回 `.cursor`。
 - 技能变更**要新开会话才加载**。当前会话的技能列表是会话开始时的快照。
 - **本仓允许子代理（用户 2026-10-16 裁定，取代 2026-09-16 的「本仓不用子代理」）。** 旧裁定的起因在上一宿主：Cursor 的子代理（`Task` 工具）自 2026-09-14 起一律 `Authentication error`，几张票的评审门因此退到推送方自审，当时定为不随宿主变；10-16 同日稍早，票 operator-channel/26 立票时还据它维持过一次，用户随后改裁为后续都允许。现在：skill 正文里「起隔离子代理」的步骤（`/code-review` 两轴、`/implement` 的评审段、`/research` 的独立 worker）照原文做；评审门回到[并行会话](./parallel-sessions.md)「合入前独立评审」的原样——有空闲通道先派非作者通道，没有就用 `/code-review` 的隔离子代理评，不由作者自评；子代理也起不来（宿主报错、额度用尽）才自审，并在票面如实写「自审，不算非作者评审」。两次裁定之间落下的票面评审记录照当时的规矩写成，不回改。
 - **PostgreSQL 集成用例默认不跑，而那个包照样显示 `ok`。** `internal/platform/migrate` 的用例要真实 PostgreSQL 16，未设 `IDP_PARCEL_POSTGRES_DSN` 时它们 `t.Skip`；而包级默认输出里，全部跳过与全部通过同样只是一行 `ok`，只有 `-v` 才看得见 `SKIP`。所以本机默认状态下的「全仓 go test 绿」对这些证据是**零覆盖**，不是少盖一块；包数同理，只说明没红，说明不了验了多少。**报构建状态时写明含不含 PG**——「绿（含 PG）」与「绿（未设 DSN，PG 用例跳过）」是两个强度不同的断言，别让读的人以为证据已被重现。要真跑：`docker compose up -d`（仓库根 `compose.yaml`，一次性库，镜像钉 `postgres:16.14`），再 `$env:IDP_PARCEL_POSTGRES_DSN = "postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable"`；端口错开 55432 是因为宿主机 5432 已被占。CI 里缺 DSN 是 `t.Fatal` 而不是跳过，所以门禁不会因为某次 workflow 被改坏而静默蒸发。

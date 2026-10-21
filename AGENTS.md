@@ -53,10 +53,11 @@
 ## 改文档
 
 - 改领域语言、不变量或生命周期 → 改对应 `CONTEXT.md`（必要时 CONTEXT-MAP / GLOSSARY / SCENARIOS），再改引用它的 `UC-*`。
-- 改难逆转技术或产品取舍 → 新 ADR 或 supersede；不改写已接受 ADR 历史。
+- 改难逆转技术或产品取舍 → 新 ADR 或 supersede；不改写已接受 ADR 历史。新 ADR 只改掉前一份的某几句时是部分停用：被停 ADR 的 `Status` 行索引注记与 Links 各加一条前向指针，正文不动，写法见 [adr/README](./docs/adr/README.md) 顶部；同一笔把 `CONTEXT.md` 里被停的句子改成现行规则。
+- `CONTEXT.md` 写成现行、代码尚未到的规则 → 规则句上不挂票号；规则与实现的差距写在各 UC 的「给开发的交接」，`CONTEXT.md` 头部只放一句同形的固定指针。
 - 改试点实例状态 → [参数登记册](./docs/product/PILOT-PARAMETER-REGISTER.md)，不写入领域文档当长期事实。
 - 新增权威文档 → 在 [docs/README.md](./docs/README.md) 补入口与职责一句。
-- 引另一个文件的某句或某段 → 优先用符号名，无符号可指时用引文，一律**不用行号，也不用计数**。行号失效时仍然指得很稳，只是指错了，没有任何东西会报；引文至少失配可见，但中文注释一折行就搜不中。**计数与行号同构**：「另一个包里有几道校验」「本包另三套门禁」数的都是别处的东西，被数那一侧增减一项是完全正当的改动，而改的人不会路过你这句话，于是它无声地变错——同一条理由，同一种守不住。只有一个例外：**数本身就是论点时**（举证「这几处各不相同」）必须写，且必须锚住取证时的 SHA，否则那几处被修好之后举证自己成了假话。ADR 尤其要守——它引的常是它自己要改的那份代码，Context 会在决定落地那一刻失效。**Go 注释里的跨文件引用同受此约束**，理由一字不差地成立：全仓抽验六处行号引用四处已经指错（实测于 `1dbc680`），而往被引文档头部插五行之后 `go build`、`go vet` 与全仓 `go test` 零信号——`internal/` 下没有任何测试读过 `.md` 的内容，这一类**结构上守不了**，只能靠不写。
+- 引另一个文件的某句或某段 → 优先用符号名，无符号可指时用引文，一律**不用行号，也不用计数**；跨文件的序数（「第三条」）与位置词（「上一条」「上节」）同属，同此。行号失效时仍然指得很稳，只是指错了，没有任何东西会报；引文至少失配可见，但中文注释一折行就搜不中。**计数与行号同构**：「另一个包里有几道校验」「本包另三套门禁」数的都是别处的东西，被数那一侧增减一项是完全正当的改动，而改的人不会路过你这句话，于是它无声地变错——同一条理由，同一种守不住。只有一个例外：**数本身就是论点时**（举证「这几处各不相同」）必须写，且必须锚住取证时的 SHA，否则那几处被修好之后举证自己成了假话。ADR 尤其要守——它引的常是它自己要改的那份代码，Context 会在决定落地那一刻失效。**Go 注释里的跨文件引用同受此约束**，理由一字不差地成立：全仓抽验六处行号引用四处已经指错（实测于 `1dbc680`），而往被引文档头部插五行之后 `go build`、`go vet` 与全仓 `go test` 零信号——`internal/` 下没有任何测试读过 `.md` 的内容，这一类**结构上守不了**，只能靠不写。
 
 ## Skills 路由
 
@@ -91,7 +92,7 @@ Skill 是 Agent 作业流程，不是 shell 命令；Cursor 不一定显示 skil
 | 只要测试先行的小行为 | `/tdd` |
 | 相对固定点评审分支/PR | `/code-review` |
 
-默认：边界清晰 → `/implement`（或 `/tdd`）→ 必要时再 `/code-review`。  
+默认：边界清晰 → `/implement`（或 `/tdd`）→ 必要时再 `/code-review`。「必要时」只指作者自己额外的评审：代码票与改现行规则的文档票落 main 前都要一份非作者评审，步骤见 [workflow.md「进 main 的步骤」](./docs/agents/workflow.md#进-main-的步骤)，前端切片按其「前端切片」一节。  
 多会话：`/grill-with-docs` → `/to-spec` → `/to-tickets` → **每票清上下文**再 `/implement`。
 
 ### 入口与旁路
@@ -143,4 +144,4 @@ How the generic skill flow maps onto this repo's PN slices, handoff work package
 
 ### Parallel sessions
 
-Territory, committing, and reporting when several sessions write one working tree. Single-session work does not need it. See [`docs/agents/parallel-sessions.md`](./docs/agents/parallel-sessions.md). 多会话时开工第一眼看 `scripts/branch-state.ps1` 算出来的状态页（main 与 origin、各树未提交、在途分支），派单前带 `-Path <地盘>` 查半成品；不读任何人的自报。**diff 全在 `apps/admin-web/**` 的票不走它**：一人在 `main` 上直接做，落法见 [workflow.md「前端切片」](./docs/agents/workflow.md#前端切片一人在-main-上直接做)。
+Territory, committing, and reporting when several sessions write one working tree. Single-session work can skip its territory, numbering and roll-call sections, but the steps into `main` bind every session: see [`docs/agents/workflow.md`「进 main 的步骤」](./docs/agents/workflow.md#进-main-的步骤). See [`docs/agents/parallel-sessions.md`](./docs/agents/parallel-sessions.md). 多会话时开工第一眼看 `scripts/branch-state.ps1` 算出来的状态页（main 与 origin、各树未提交、在途分支），派单前带 `-Path <地盘>` 查半成品；不读任何人的自报。**diff 全在 `apps/admin-web/**` 的票不走它**：一人在 `main` 上直接做，落法见 [workflow.md「前端切片」](./docs/agents/workflow.md#前端切片一人在-main-上直接做)。

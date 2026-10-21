@@ -16,11 +16,12 @@ How the engineering skills should consume this repo's Bounded Context records, U
   directory; there is no per-context `docs/adr/` beside each `CONTEXT.md` yet.
   Number new ADRs by scanning `docs/adr/` only.
 
-If a mapped `CONTEXT.md` is intentionally absent (currently
-`collection-remittance` — first-release COD out of scope), record map-only
-boundaries and do not invent empty context docs. If other domain files are
-missing for an area under work, **proceed silently** and note the gap; lazy
-creation belongs to `/domain-modeling` after language is resolved.
+Every mapped context has a `CONTEXT.md` today, including
+`collection-remittance` (its mechanism is built; the first-release pilot does not
+enable COD — that is a pilot-scope fact in `docs/product/PILOT-SCOPE.md`, not a
+reason to skip the context). If other domain files are missing for an area under
+work, **proceed silently** and note the gap; lazy creation belongs to
+`/domain-modeling` after language is resolved.
 
 ## File structure
 
@@ -41,7 +42,8 @@ creation belongs to `/domain-modeling` after language is resolved.
 │   │   ├── transport-fulfillment/CONTEXT.md
 │   │   ├── customs-compliance/CONTEXT.md
 │   │   ├── visibility-exception/CONTEXT.md
-│   │   └── settlement-accounting/CONTEXT.md
+│   │   ├── settlement-accounting/CONTEXT.md
+│   │   └── collection-remittance/CONTEXT.md
 │   └── adr/                           ← shared product ADRs
 └── internal/<context>/                ← implementation packages (not domain authority)
 ```
@@ -59,7 +61,7 @@ Mapped context records (relative to `docs/domain/`):
 | `customs-compliance` | `customs-compliance/CONTEXT.md` |
 | `visibility-exception` | `visibility-exception/CONTEXT.md` |
 | `settlement-accounting` | `settlement-accounting/CONTEXT.md` |
-| `collection-remittance` | map-only until COD enters product scope |
+| `collection-remittance` | `collection-remittance/CONTEXT.md` |
 
 For a future context-local ADR directory, write under `docs/adr/` relative to that
 context's mapped `CONTEXT.md` directory and number by scanning only that target.
