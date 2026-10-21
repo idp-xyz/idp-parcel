@@ -1,7 +1,7 @@
 # 145 非本服务方的承运商答复与订舱不存在分两格作答，泄露一位信息
 
 Category: bug
-Status: in-progress——二轮评审无阻断，二轮修订已做，待进 main，分支 claude-dcg145（基于 main `b290b777`）。2026-10-21 认领；此前 ready-for-agent——2026-10-20 代决复核立（上线前必修），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: resolved——2026-10-21 进 main（全量钉 `7278bf09`：`scripts/test-full.sh` 158 ok / 0 FAIL，见文末「进 main 记录」）；挡回册查阅面转票 [167](./167-booking-answer-bounce-register-has-no-read-face.md)，保留期与聚合转票 [170](./170-booking-answer-bounce-register-has-no-retention-or-aggregation.md)。此前 in-progress——二轮评审无阻断，二轮修订已做，待进 main，分支 claude-dcg145（基于 main `b290b777`）。2026-10-21 认领；此前 ready-for-agent——2026-10-20 代决复核立（上线前必修），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 R9；ADR-0202 越权风险点 14
 
@@ -147,3 +147,7 @@ Blocked by: 无
   - `TestTheBookingAnswerFaceBoundsWhatItReads` 补「恰好 1 MiB 照收」，越界改为只多一个字节；
   - `TestBothBasesWriteKeysOfTheSameWidthAtTheByteBound` 改用随机十六进制串；
   - 迁移拒绝门用例加「长答复依据不挡」一格。
+
+## 进 main 记录
+
+2026-10-21 协调方合入。分支基于 `b290b777`（即当时 main），不需重放，分支 SHA 原样进 main（`750d6cfc`…`958e2c4d`）。一轮隔离评审一条阻断（超长答复标识让两条拒收路答复不同、那一位信息漏回）已由作者修（依据定宽、键内标识 512 字节界、命令载荷限读 1 MiB）；二轮评审无阻断。进 main 时协调方把 TF 迁移 `0050` 改为下一个空号 `0047`（本票先落；在途的票 88、57 顺延到 0048、0049），引用随改（`4f13952b`）；改号后在 55432 一次性库上 `seed.sh` 全程退 0（0047 已施加），用完 `DROP … WITH (FORCE)`。其上按 parallel-sessions.md 重生成 ADR 索引、重算 AT 盘点计数、重生成机制清点（`7278bf09`），各自单独成笔；`adr-index -check` 与 `at-coverage-counts -check` 退 0。在干净的隔离树上对 `7278bf09` 跑 `go build ./...`、`go vet ./...`、`gofmt -l` 干净，`scripts/test-full.sh` 全量 158 ok、0 FAIL（`-count=1`，无缓存）；推 `7278bf09:main`。
