@@ -37,7 +37,8 @@ const currentAdoptionCondition = `NOT EXISTS (
 		           AND withdrawal.generation = adoption.generation)`
 
 // FindBySegment 按（租户、段）取回当前采用：最后一代、且没有解除，经重建门复验各格成形。各代排成一条线、只有最后一代可能没有解除
-// （迁移 0048 的两道约束），按代次倒序取第一条没解除的就是它。
+// （约束 segment_commission_adoption_generation_chained 与外键 segment_commission_adoption_previous_withdrawn），按代次倒序取第一条
+// 没解除的就是它。
 func (repository *SegmentCommissionAdoptions) FindBySegment(
 	ctx context.Context,
 	key ports.SegmentCommissionAdoptionKey,

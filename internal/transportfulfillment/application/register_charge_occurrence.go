@@ -525,8 +525,8 @@ func (handler *RegisterChargeOccurrenceHandler) register(
 		}
 	}
 	// 范围锁已在手：此刻读到的链头不会被同一范围上另一笔登记或失效改掉。链头仍有效，这一次是重放或冲突；链头已失效，这件事实凭
-	// 这一次的判断重新成立，从失效版本长出替代版本（ADR-0232 决定五）——不再按首版 V1 作答，否则失效之后同内容重登仍答已存在、
-	// 回显一份已失效的首版，那件事的成本就永远登不回来（ADR-0207 Consequences「已知限制」）。
+	// 这一次的判断重新成立，从失效版本长出替代版本（ADR-0232 决定五）。读的是链头而不是首版：按首版作答，失效之后同内容重登会答
+	// 已存在、回显一份已失效的首版，那件事的成本就永远登不回来。
 	head, found, err := occurrenceChainHead(ctx, handler.deps.Occurrences, command.TenantID, key.Occurrence)
 	if errors.Is(err, ErrChargeOccurrenceChainBroken) {
 		return RegisterChargeOccurrenceResult{}, err

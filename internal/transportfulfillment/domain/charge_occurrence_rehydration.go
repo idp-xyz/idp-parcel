@@ -37,7 +37,7 @@ type RehydrateChargeOccurrenceSpec struct {
 	RevisionKind  OccurrenceRevisionKind
 	RevisionBasis OccurrenceBasisReference
 	RevisedAt     time.Time
-	// RevisedBy 只随修订版本出现，可缺：经修订入口（ADR-0232）形成的版本都带它，此前直接调 ReviseValidity 形成的不带。
+	// RevisedBy 只随修订版本出现，可缺：经修订入口（ADR-0232）形成的版本都带它，直接调 ReviseValidity 形成的不带。
 	RevisedBy RegistrantReference
 }
 

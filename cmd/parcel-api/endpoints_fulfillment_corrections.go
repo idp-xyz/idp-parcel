@@ -39,7 +39,8 @@ func init() {
 				// 能力面的运输收费发生项失效一种；能登记的不因此能失效。写开关换不了它（ADR-0150 决定三）。
 				{Pattern: "/transport-fulfillment-charge-occurrence-invalidations", Handler: tfhttp.NewInvalidateChargeOccurrenceEndpoint(channels.operatorDecisions.transport, wiring.chargeOccurrenceInvalidation)},
 				// 解除履约段采用口（ADR-0232 决定一至三）：撤回一段与一份委托之间的声明，委托的开始随之撤回或重新派生；段上已按这份委托
-				// 形成的发生项要先经上一口失效。挂「运营决定」能力面的解除履约段采用一种；能采用的不因此能解除。写开关换不了它（ADR-0150 决定三）。
+				// 形成的发生项要先经运输收费发生项失效口失效。挂「运营决定」能力面的解除履约段采用一种；能采用的不因此能解除。写开关换不了它
+				// （ADR-0150 决定三）。
 				{Pattern: "/transport-fulfillment-segment-commission-adoption-withdrawals", Handler: tfhttp.NewWithdrawSegmentCommissionAdoptionEndpoint(channels.operatorDecisions.transport, wiring.segmentCommissionWithdrawal)},
 			}
 		},
