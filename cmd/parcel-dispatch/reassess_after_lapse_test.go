@@ -28,7 +28,7 @@ func reassessmentOf(t *testing.T, syn *synVerticalFixture, correlation string) n
 	return record
 }
 
-// Covers: AT-NR-053、AT-NR-039（真库，两路）与 ADR-0249 越权风险点 3——揽收复核时选中候选被有效硬限制淘汰，原计划失效、
+// Covers: AT-NR-039（真库，收寄采用与交接两路）与 ADR-0249 越权风险点 3——揽收复核时选中候选被有效硬限制淘汰，原计划失效、
 // 没有别的合格候选。随后：
 //  1. 交进新加坡枢纽（在原计划上）、限制仍在：走无路由那条线，入账一行 `PLAN_LAPSED`、没有被复核计划、候选评估
 //     `NO_QUALIFIED_CANDIDATES`；信封入账，不回滚重投；

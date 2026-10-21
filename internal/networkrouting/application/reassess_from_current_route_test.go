@@ -23,7 +23,8 @@ func lapsedOnPickup(t *testing.T, fixture *reassessFixture) {
 	}
 }
 
-// Covers: AT-NR-053、AT-NR-039（编排半边）与 ADR-0249 越权风险点 3——揽收复核按硬限制让原计划失效（无替代候选），之后：
+// Covers: AT-NR-039（编排半边，先前无路由一格含失效之后）与 ADR-0249 越权风险点 3——揽收复核按硬限制让原计划失效（无替代
+// 候选），之后：
 //  1. 节点收寄、限制仍在：走无路由那条线，候选评估确认没有合格候选，结论仍是无当前有效路由；入账，不答
 //     REASSESS_STORE_UNAVAILABLE、不回滚重投，也不再动已失效计划的适用性；
 //  2. 限制撤掉：不对已失效的计划答仍适用（已失效不得原地恢复），而是重新评估、形成首个当前有效路由计划，换新的计划版本；
@@ -113,6 +114,39 @@ func TestAfterALapseAnUndecidedOrTiedReviewStaysNoRoute(t *testing.T) {
 				t.Fatalf("候选评估 = %q, want CANDIDATE_REVIEW_UNDECIDED", stayed.CandidateState)
 			}
 		})
+	}
+}
+
+// Covers: AT-NR-053（编排半边）——原计划失效、候选评估未决，下一次触发时证据补齐并找到合格候选：无路由期间那一行原样保留，
+// 形成新的计划版本，从这次触发的业务时间起生效（明确边界），不恢复原计划。
+func TestAfterALapseACompletedReviewFormsANewPlanVersion(t *testing.T) {
+	fixture := newReassessFixture(t)
+	record := currentPlanRecord(t)
+	fixture.routes.records[record.Key] = record
+	fixture.evidence.byParcel["parcel-1"] = restrictedSelectedCandidate(t, evidenceBeforeFreeze(t))
+	lapsedOnPickup(t, fixture)
+
+	undecided := evidenceBeforeFreeze(t)
+	undecided.ServiceAreas = nil
+	fixture.evidence.byParcel["parcel-1"] = undecided
+	pending := handleOK(t, fixture, reassessCommandAt(t, "trigger-2", "node-origin", reassessedAt.Add(time.Hour)))
+	if kept, _ := pending.Record(); pending.Outcome() != application.ReassessedPlanLapsed ||
+		kept.CandidateState != ports.CandidateReviewUndecided {
+		t.Fatalf("评估未决 = %q/%q, want PLAN_LAPSED、CANDIDATE_REVIEW_UNDECIDED", pending.Outcome(), kept.CandidateState)
+	}
+
+	fixture.evidence.byParcel["parcel-1"] = evidenceBeforeFreeze(t)
+	completedAt := reassessedAt.Add(2 * time.Hour)
+	completed := handleOK(t, fixture, reassessCommandAt(t, "trigger-3", "node-origin", completedAt))
+	if completed.Outcome() != application.ReassessedFirstPlanFormed {
+		t.Fatalf("评估补齐 = %q, want FIRST_PLAN_FORMED", completed.Outcome())
+	}
+	formed, _ := completed.Record()
+	if formed.NewPlan.Version() == record.Plan.Version() || !formed.NewPlan.EffectiveFrom().Equal(completedAt) {
+		t.Fatalf("新计划 = %s、生效 %s, want 新版本、从 %s 起生效", formed.NewPlan.Version(), formed.NewPlan.EffectiveFrom(), completedAt)
+	}
+	if _, kept := fixture.store.byCorrelation[value(t, domain.NewRequestCorrelationID, "trigger-2")]; !kept {
+		t.Fatal("无路由期间那一行不见了")
 	}
 }
 
