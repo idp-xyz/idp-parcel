@@ -586,6 +586,7 @@
 | `AT-VE-157` | internal/visibilityexception/application/derive_customer_view_test.go::TestANonDisclosableDimensionIsWithheldAloneWithoutHidingTheOthers |
 | `AT-VE-161` | internal/visibilityexception/application/derive_customer_view_test.go::TestANewerProjectionSupersedesTheCurrentViewKeepingHistory |
 | `AT-VE-168` | internal/visibilityexception/adapters/http/query_customer_tracking_view_test.go::TestAnUnreadableStoreIsNoAnswerNotNotFound |
+| `AT-VE-169` | cmd/parcel-dispatch/acceptance_rederive_test.go::TestALateAcceptanceRederivesTheCustomerViewFromTheCurrentProjection；internal/visibilityexception/adapters/parcelshipment/derive_customer_view_on_acceptance_test.go::TestAProjectedParcelRederivesTheCustomerView（消费侧半边） |
 | `AT-VE-171` | internal/visibilityexception/adapters/http/customer_tracking_view_intake_test.go::TestCustomerTrackingViewQueryStringIsClosed；cmd/parcel-api/assemble_customer_tracking_view_test.go::TestACustomerClientReadsItsOwnTrackingViewAgainstARealDatabase |
 | `AT-VE-172` | internal/accessidentity/customer_client_query_test.go::TestTrackingViewQueryNeedsItsOwnGrant；internal/visibilityexception/adapters/accessidentity/customer_tracking_view_authenticator_test.go::TestTrackingViewQueryGradesTranslateIntoVisibilityGrades；cmd/parcel-api/assemble_customer_tracking_view_test.go::TestCustomerTrackingViewLineRefusesOtherFamiliesAndClientsWithoutTheGrant |
 | `AT-VE-173` | internal/accessidentity/customer_client_query_test.go::TestTrackingViewQueryDoesNotAskTheAdmissionScope；internal/visibilityexception/adapters/accessidentity/customer_tracking_view_authenticator_test.go::TestTrackingViewQueryAuthenticatesToTheBoundCustomerAccount；cmd/parcel-api/assemble_customer_tracking_view_test.go::TestACustomerClientReadsItsOwnTrackingViewAgainstARealDatabase |
@@ -599,6 +600,13 @@
 | `AT-VE-182` | internal/visibilityexception/adapters/transportfulfillment/backfill_movement_facts_test.go::TestABackfilledCorrectionChainKeepsItsSupersession |
 | `AT-VE-183` | internal/visibilityexception/adapters/transportfulfillment/derive_on_movement_fact_consolidation_test.go::TestABlockedBagSignalsTheBlockedMemberNotTheBag |
 | `AT-VE-186` | cmd/parcel-dispatch/successive_customs_results_projection_test.go::TestAPartialThenFullReleaseReachesCustomsClearedInEitherArrivalOrder |
+| `AT-VE-189` | internal/visibilityexception/adapters/transportfulfillment/derive_on_movement_fact_test.go::TestADepartureProjectsOntoEveryObjectUnderControlAndSignalsTheBlockedOne、::TestInTransitAndArrivalFactsCarryTheirOwnKindsAndRaiseNoSignal；cmd/parcel-dispatch/movement_fact_projection_test.go::TestADepartureClassifiesAsDepartedUnderTheDemoMappingThroughTheProductionRoute（真库与演示映射半边）（Covers 现点 UC-TF-005 `AT-TF-157`，改点名归 docs-consistency/code/28） |
+| `AT-VE-190` | internal/visibilityexception/adapters/transportfulfillment/derive_on_movement_fact_test.go::TestAMovementFactWithNoObjectToProjectIsAccountedForWithoutDeriving（Covers 现点 UC-TF-005 `AT-TF-159`，改点名归 docs-consistency/code/28） |
+| `AT-VE-191` | internal/visibilityexception/adapters/transportfulfillment/derive_on_movement_fact_test.go::TestMovementFactFailuresKeepTheirSentinels；cmd/parcel-dispatch/movement_fact_projection_test.go::TestMovementFactFailuresLandInTheRightPartition（派发半边）（投影半边）（Covers 现点 UC-TF-005 `AT-TF-160`，改点名归 docs-consistency/code/28） |
+| `AT-VE-192` | internal/visibilityexception/adapters/transportfulfillment/derive_on_movement_fact_test.go::TestACorrectedDepartureProjectsWithItsSupersessionButRaisesNoSecondSignal（投影半边）（Covers 现点 UC-TF-005 `AT-TF-161`，改点名归 docs-consistency/code/28） |
+| `AT-VE-193` | internal/visibilityexception/application/raise_departure_gate_signal_test.go::TestABlockedDepartureRaisesTheRegisteredSignal、::TestAnUnregisteredDepartureGateRuleRaisesNothing；internal/visibilityexception/adapters/postgres/departure_gate_signal_rule_test.go::TestRegisteredDepartureGateSignalRuleBecomesReadableAndIsNotOverwritten（规则册半边）；cmd/parcel-dispatch/movement_fact_projection_test.go::TestABlockedDepartureRaisesTheAdoptedSignalThroughTheProductionRoute（真库半边）（Covers 现点 UC-TF-005 `AT-TF-158`，改点名归 docs-consistency/code/28） |
+| `AT-VE-194` | internal/visibilityexception/adapters/transportfulfillment/derive_on_movement_fact_test.go::TestMovementFactFailuresKeepTheirSentinels；cmd/parcel-dispatch/movement_fact_projection_test.go::TestMovementFactFailuresLandInTheRightPartition（派发半边）（信号规则半边）（Covers 现点 UC-TF-005 `AT-TF-160`，改点名归 docs-consistency/code/28） |
+| `AT-VE-195` | internal/visibilityexception/adapters/transportfulfillment/derive_on_movement_fact_test.go::TestACorrectedDepartureProjectsWithItsSupersessionButRaisesNoSecondSignal（信号半边）（Covers 现点 UC-TF-005 `AT-TF-161`，改点名归 docs-consistency/code/28） |
 
 ## ② 机制候选（补 Covers 或小块测试）
 
@@ -1399,8 +1407,9 @@
 | `AT-VE-160` | 只有有效交付扫描但终局尚未形成 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-163` | 一个维度存在无法裁决的事实冲突 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-164` | `UC-VE-006` 已批准当前客户可见异常 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
-| `AT-VE-169` | 内部 ETA 已形成，且适用质量、合同和客户服务规则条件明确满足 | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
 | `AT-VE-170` | 内部 ETA 已形成，但适用合同、门槛或客户服务规则缺失或冲突 | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
+| `AT-VE-187` | 内部 ETA 已形成，且适用质量、合同和客户服务规则条件明确满足 | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
+| `AT-VE-188` | C1 的包裹已受理（客户归属已确立），初始路由投影尚未形成、没有客户视图；C1 查询它，C2 用同一包裹号查询 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 
 ## 重盘变化摘要（0cddbba）
 
@@ -1544,3 +1553,5 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-10-21 追记（票 docs-consistency/05）：UC-NR-003 新立 `AT-NR-084`（揽收复核时原计划失效只出建议，ADR-0249），未实现，入④；`AT-NR-034`（揽收复核不比节点，ADR-0249，今天按地点比节点判失效，code/16）与 `AT-NR-051`（适用性看不清入账未判，ADR-0250，今天回滚重投，code/28）由②移入④；`AT-NO-031` 与同场景的 UC-NO-002 `AT-NO-022` 由③移入④（ADR-0251 之后它们是作业端按下发依据判的机制，下发未实现，不是等实例参数）；`AT-NR-033`、`036`、`037`、`040` 只改场景文字，桶不变。UC-NO-002 `AT-NO-062` 拆出 `AT-NO-131`（无范围、只经客户件号时追加不记冲突的待识别），原行末句那三条 Covers 移到新行，入①。计数进 main 时由推送方重算。
 
 2026-10-21 追记（票 docs-consistency/03）：UC-CC-005 新立 `AT-CC-448`（提交执行时单元的就绪判断没登答未决并指名就绪未配置，替代 `AT-CC-109` 在「不存在」一格的结果名，ADR-0243），入①。
+
+2026-10-21 追记（票 docs-consistency/04，文档自洽 VE 组）：`AT-VE-169` 重号——UC-VE-003 的 ETA 客户可见那一行改号为 `AT-VE-187`（④ 移行，场景不变）；UC-VE-008 的客户归属确立补派生那一行保留 `AT-VE-169`，它早已被测试点名，今补进 ①。UC-VE-008 新立 `AT-VE-188`（归属方查视图未形成的包裹答当前无可见结果，ADR-0246；实现票 code/27），入 ④。UC-TF-005 `AT-TF-157`–`161` 里全程追踪自己的行为迁入 UC-VE-002 `AT-VE-189`–`192` 与 UC-VE-004 `AT-VE-193`–`195`，测试照旧是那几个，入 ①；测试 Covers 改点新号归 code/28，UC-TF-005 原行改为引用归票 docs-consistency/10，那时 ① 里 `AT-TF-157`–`161` 几行随之移行或删去。总览计数由协调方进 main 时重算。
