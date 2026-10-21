@@ -132,7 +132,7 @@ Date: 2026-10-21
 10. **失效纠错版本今天只有列表认它**（SA owner）。读预期成本的另一处是供应商账单逐行匹配，按版本读、不看 `withdrawn`：账单指向一版已撤下的成本时不拦（UC-SA-004 那一侧另定）。管理台预期成本页面还没显示这一格（admin-web 那一侧另做）；经营口径的「当前有效供应商预期成本」今天没有读者。
 11. **替代版本的新评价换了合同结算币**（SA owner）。纠错版本表达不了，响亮失败落 `publish_failed` 等人处置；租户若真会因换协议而换结算币，要另裁这一格（另起首版链、或由人撤下后重形成）。
 12. **结算按「失效版本回指的那一版」撤**（SA owner）。只认本记录这条修订入口长出的线性版本链；直接调 `ReviseValidity` 形成的、不回指链头的替代版本不在此列。失效记录只增不删：被失效的那一版的评价无论多晚到都不再形成成本。
-13. **与票 demo-chain-gaps/14 的「代次」对齐**（SA owner）。票 14 在另一工作树里给 SA 的 BUY 请求册加停因与代次、续办另起新一代请求回指前一代，ADR-0229 尚未进 main。对齐点：续办出的那一代若落在已失效的发生项版本上，按本记录决定七答 `OCCURRENCE_INVALIDATED`、入账；续办那一代的评价若来自替代版本，按决定八形成纠错而不是首版；票 14 若在形成编排外层记停因，要为本记录新加的那一格定停因；本记录在 `ExpectedCostRegistry` 加了一口 `LoadOccurrenceCostState`，票 14 新写的替身要补上它。进 main 时由协调方核这几处。
+13. **与 [ADR-0229](./0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md)（票 demo-chain-gaps/14 的停因与代次）的对齐**（SA owner）。ADR-0229 先进 main，本记录变基其上时这样接：形成编排答 `OCCURRENCE_INVALIDATED` 的那一格不记停因——没有哪一种参数登记补得回一版已失效的发生项，记成停因只会让续办重跑一份注定不形成成本的请求；续办另起的那一代若落在已失效的发生项版本上，同样答这一格、入账；续办那一代的评价若来自替代版本，按决定八形成纠错而不是首版；发起停办册「修订版不记」从此只指失效版本（替代版本照常发起，没登触发行时照常记停办、补登后续办，`AT-SA-191` 随之改口）。本记录在 `ExpectedCostRegistry` 加的 `LoadOccurrenceCostState` 一口，ADR-0229 那一侧日后新写的替身要补上。
 14. **种类粒度**（psb/07，access-identity owner 知会）。同 ADR-0202 越权风险点 8：解除与失效各成一种，与采用、登记分开授予。
 
 ## Links
@@ -142,6 +142,7 @@ Date: 2026-10-21
 - [ADR-0208：BUY 评价由发生项已形成信封发起](./0208-buy-evaluation-is-requested-from-the-charge-occurrence-formed-envelope.md)：决定五「修订版不发起」被本记录部分停用（限替代版本）
 - [ADR-0200：BUY 评价按回指的请求形成供应商预期成本](./0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md)：决定三一句被本记录部分停用；回答其越权风险点 4
 - [ADR-0067：预期成本纠错版本整组重述一个评价的计价结果](./0067-cost-correction-restates-the-whole-evaluation-result.md)：决定八照它重述
+- [ADR-0229：停下的评价请求按停因续办](./0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md)：越权风险点 13 记两者怎样接
 - [ADR-0112](./0112-source-correction-rederives-participation-as-a-superseding-version-on-the-same-segment.md)：替代与失效版本的形状，决定五照参与关系的「从失效版本长出替代版本」
 - [ADR-0218](./0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md)：自动形成经同一个登记用例，答未决即重投
 - [ADR-0151](./0151-unassigned-command-faces-get-their-families.md)：两种决定的定族判据
