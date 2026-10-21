@@ -17,12 +17,12 @@ Blocked by: 无
 
 ### 做了什么
 
-- **接入身份**：运营决定加两种——`EXTERNAL_FUNDS_FACT_ADOPTION`（资金事实首版与更正同一种）、`REGULATORY_CREDENTIAL_REGISTRATION`；迁移 `access_identity/0021` 重建决定种类 CHECK。
+- **接入身份**：运营决定加两种——`EXTERNAL_FUNDS_FACT_ADOPTION`（资金事实首版与更正同一种）、`REGULATORY_CREDENTIAL_REGISTRATION`；迁移 `access_identity/0020` 重建决定种类 CHECK。
 - **SA**：资金事实版本行加操作证据列（迁移 `settlement_accounting/0041`）；采用与更正命令带 `OperationEvidence`，落在那一版上，不进内容摘要与重放比对，重放不顶替；`settlementhttp.OperatorDecisionIntake` 与 `adapters/accessidentity.OperatorDecisionAuthenticator`（按决定种类铸信封、判准入）；`/settlement-funds-applications` 透出链头那一版的 `operationEvidence`。
 - **CC**：凭证行加操作证据列（迁移 `customs_compliance/0026`）；`ports.CredentialRegistry.RegisterCredential` 多收一参操作证据，登记命令带 `OperationEvidence`；既有 `customshttp.OperatorDecisionIntake` 加凭证登记一口；`/customs-credentials` 透出 `operationEvidence`。
 - **parcel-api**：新特性文件 `endpoints_manual_external_facts.go` 登三行——`/settlement-external-funds-fact-manual-registrations`、`/settlement-external-funds-fact-correction-manual-registrations`、`/customs-regulatory-credential-manual-registrations`，挂 `decisionFace`，编排取集成客户端那边同一套构造；`assemble_operator_decisions.go` 的 `operatorDecisionIntakes` 加 `settlement` 一格（只加不改）。集成客户端族原三口一行未改。
 - **管理台**：收付款核销页「采用资金事实」签（首版、更正）与关务案件页凭证登记签改发手工口，形状提示去掉 `tenantId`、补上要持哪一种授予；两本册读签加「采用人」「登记人」栏（缺席答「未记（非手工…）」）；两页错误码说明补 `OUTSIDE_ADMISSION_SCOPE`、`IDENTITY_DEPENDENCY_UNAVAILABLE`。
-- **演示种子**：配置员加两种授予（`data/access/02`）、准入对照两行（`03`）、权威区间两份（`data/governance/45`、`46`，新步 `steps/470-manual-external-facts.sh`）；README 授予表与说明段、演示动线文档补记。
+- **演示种子**：配置员加两种授予（`data/access/02`）、准入对照两行（`03`）、权威区间两份（`data/governance/46`、`47`，新步 `steps/470-manual-external-facts.sh`）；README 授予表与说明段、演示动线文档补记。
 - **文档**：ADR-0236；ADR-0149、ADR-0151 的 Status 行与 Links 加部分停用前向指针（正文未动，`docs/adr/README.md` 未手改，待重生成）；SA CONTEXT（唯一采用口那条补人工采用与操作证据）、CC CONTEXT（监管凭证一节加一条）；UC-SA-005 加 `AT-SA-200`、`201`，UC-CC-003 加 `AT-CC-446`、`447`；AT 盘点 ① 加四行（未改总览计数）。
 
 ### 代决与越权风险点
@@ -62,8 +62,8 @@ Blocked by: 无
 
 - 逐字段表单 → 票 [156](./156-admin-web-manual-external-fact-forms-replace-json-entry.md)；集成客户端一路记提交方 → 票 [157](./157-integration-client-adoptions-record-the-submitting-client.md)。
 - 映射、核销与核销撤销仍只有受控 CLI，本票不开在线口；职责分离不强制，归角色模型（票 product-strategy-boundary/07）。
-- **迁移号**：`access_identity/0021`、`customs_compliance/0026` 照号段；**`settlement_accounting/0041` 是自取**——号段没给 SA 迁移号，而记提交人非落在 SA 版本行不可（main 上 SA 最大 0040）。进 main 时协调方按落地顺序改号；在途票 14（SA）若也取 0041 会撞号。
-- **0021 的 CHECK 全集**以 main 的 0018 为底加本份两词；并行票占的 0019、0020 若也重建这条 CHECK，最后落地的那一份要取并集（读码所见：票 70 分支上的 0020 加 `DELIVERY_DISPATCH_REASK`，且以 0016 为底，缺 0018 的三个关务词）。
+- **迁移号**（变基到 main `4d181b01` 后）：`access_identity/0020`（原 0021，票 70 占了 0019）、`customs_compliance/0026`、`settlement_accounting/0041`。SA 那一号号段原没给、本票自取，协调方定为保持 0041（本票先落地，票 14 改到 0042 起）。
+- **0020 的 CHECK 全集**以 main 上 0019 那一份（票 70，加 `DELIVERY_DISPATCH_REASK`）为底，加本份两词；变基时核过：0020 词集 = 0019 词集 + 2，`accessidentity` 的 `decisionKinds` 与 CHECK 逐词相同（28 个）。
 - 不重生成机制清点、ADR 索引与 AT 计数。
 
 ## 评审记录（2026-10-21，隔离评审：无阻断项；协调方转作者修订，本轮未变基）
@@ -83,5 +83,5 @@ Blocked by: 无
 
 验证（修订后）：`scripts/test-full.sh ./cmd/parcel-api/... ./cmd/parcel-customs-register/... ./cmd/parcel-settlement-register/... ./internal/accessidentity/... ./internal/settlementaccounting/... ./internal/customscompliance/... ./internal/architecture/... ./migrations/...`：33 ok、2 无测试文件、0 FAIL；`go build ./...`、`go vet ./...`、`gofmt -l` 干净，修订里两笔 Go 提交逐个检出 build/vet 都过；admin-web 三道门：tsc 退 0、run-tests 598/598、vite build 退 0。
 
-待变基（协调方通知后办）：票 70 先进 main，占 `access_identity/0019`（加 `DELIVERY_DISPATCH_REASK`）、种子 `data/governance/45` 与 `data/access` 的改动。届时本票的 access_identity 迁移改成 main 上下一个空号、CHECK 取并集；种子数据号改空号；`settlement_accounting/0041` 按 main 定号（票 14 也取了 0041、0042）。
+变基记录（2026-10-21，协调方通知后办）：票 70 进 main 后变基到 `4d181b01`。冲突逐处取两边并集：`internal/accessidentity/operation_decision.go`（`DecisionDeliveryDispatchReask` 与本票两种并存）、`scripts/demo-seeds/README.md` 配置员授予那一行、ADR-0151 的 Status 行与 Links（ADR-0230 与 ADR-0236 两条部分停用并存）。迁移 `access_identity/0021` 改名 `0020`、CHECK 改以 0019 为底；种子权威区间 `data/governance/45`、`46` 改到 `46`、`47`（45 已被票 70 的派送重问占）；`data/access/02`、`03` 票 70 没有动（它另起 `09`、`10`），本票的行原样；步 `470` 仍空。
 

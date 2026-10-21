@@ -1,6 +1,6 @@
 # ADR-0236：租户财务、关务人员在管理台手工采用外部资金事实与监管凭证——操作者渠道「运营决定」能力面另开三个手工口，两类各一种决定、提交人记成操作证据，与集成客户端族并存
 
-Status: Accepted（2026-10-21，Claude Code 会话代决：用户原话「要我裁定的部分，你作为业务和系统专家，请你自决吧」与「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/140，落地代决复核报告 R1 那一格的裁定「是」。**部分停用** ADR-0149 决定一、决定三各一句与 ADR-0151 决定四一句，见决定六。越权风险点见文末，待 owner 复核；两种决定种类与授予粒度待 PC owner 在角色模型（票 product-strategy-boundary/07）里会签。）<!-- 索引注记 -->｜**已接受**（2026-10-21，用户原话「你作为业务和系统专家自决」，Claude Code 会话代决；票 demo-chain-gaps/140，承代决复核 R1）。**入口**：`POST /settlement-external-funds-fact-manual-registrations`、`/settlement-external-funds-fact-correction-manual-registrations`、`/customs-regulatory-credential-manual-registrations` 三口挂操作者渠道「运营决定」能力面，两种决定 `EXTERNAL_FUNDS_FACT_ADOPTION`（首版与更正同一种）、`REGULATORY_CREDENTIAL_REGISTRATION`（access_identity 0021），谁持哪一种是租户取值，未授予答 `OPERATOR_NOT_GRANTED`；铸信封前判准入（能力 `OPERATION_DECISION`、事实类型取决定种类）。**编排与载荷**与集成客户端族那三口同一份，两族只差 Intake；集成客户端三口不改、并存。**操作证据**：提交人记成 `OPERATOR/<发行方>#<sub>` 落在采用的那一版资金事实（settlement_accounting 0041）与凭证行（customs_compliance 0026）上，只进审计、不进内容比对与任何门，重放不顶替；集成客户端与受控 CLI 两路记 NULL；两本册的读面透出。**更正不绑原采用族**：两族在同一事实键上顺序到达答 `FUNDS_FACT_CONFLICT` 或`未受理`，外部系统一侧转人工；并发那一格的缺陷归票 demo-chain-gaps/125。管理台收付款核销页两张、关务案件页一张登记签改走手工口。部分停用 ADR-0149 决定一「外部结果与外部资金事实……的提交者是外部系统」与决定三对外部资金事实、监管凭证两类的独占，ADR-0151 决定四「外部资金事实更正随原事实归集成客户端族」，适用场景只限三手工口。越权风险点含 R1 本身（owner 答否即撤三张签与三口）、首版与更正同一种授予、更正不绑族且职责分离不强制（持采用授予的人能更正银行接口送来的金额，UC-SA-005「结算人员不能更改银行事实」，去向票 product-strategy-boundary/07）、重放不留第二人、集成客户端一路不记提交方、管理台仍以 JSON 录入、凭证挂运营决定而非登记写面、两族准入是两套坐标，待 owner 复核
+Status: Accepted（2026-10-21，Claude Code 会话代决：用户原话「要我裁定的部分，你作为业务和系统专家，请你自决吧」与「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/140，落地代决复核报告 R1 那一格的裁定「是」。**部分停用** ADR-0149 决定一、决定三各一句与 ADR-0151 决定四一句，见决定六。越权风险点见文末，待 owner 复核；两种决定种类与授予粒度待 PC owner 在角色模型（票 product-strategy-boundary/07）里会签。）<!-- 索引注记 -->｜**已接受**（2026-10-21，用户原话「你作为业务和系统专家自决」，Claude Code 会话代决；票 demo-chain-gaps/140，承代决复核 R1）。**入口**：`POST /settlement-external-funds-fact-manual-registrations`、`/settlement-external-funds-fact-correction-manual-registrations`、`/customs-regulatory-credential-manual-registrations` 三口挂操作者渠道「运营决定」能力面，两种决定 `EXTERNAL_FUNDS_FACT_ADOPTION`（首版与更正同一种）、`REGULATORY_CREDENTIAL_REGISTRATION`（access_identity 0020），谁持哪一种是租户取值，未授予答 `OPERATOR_NOT_GRANTED`；铸信封前判准入（能力 `OPERATION_DECISION`、事实类型取决定种类）。**编排与载荷**与集成客户端族那三口同一份，两族只差 Intake；集成客户端三口不改、并存。**操作证据**：提交人记成 `OPERATOR/<发行方>#<sub>` 落在采用的那一版资金事实（settlement_accounting 0041）与凭证行（customs_compliance 0026）上，只进审计、不进内容比对与任何门，重放不顶替；集成客户端与受控 CLI 两路记 NULL；两本册的读面透出。**更正不绑原采用族**：两族在同一事实键上顺序到达答 `FUNDS_FACT_CONFLICT` 或`未受理`，外部系统一侧转人工；并发那一格的缺陷归票 demo-chain-gaps/125。管理台收付款核销页两张、关务案件页一张登记签改走手工口。部分停用 ADR-0149 决定一「外部结果与外部资金事实……的提交者是外部系统」与决定三对外部资金事实、监管凭证两类的独占，ADR-0151 决定四「外部资金事实更正随原事实归集成客户端族」，适用场景只限三手工口。越权风险点含 R1 本身（owner 答否即撤三张签与三口）、首版与更正同一种授予、更正不绑族且职责分离不强制（持采用授予的人能更正银行接口送来的金额，UC-SA-005「结算人员不能更改银行事实」，去向票 product-strategy-boundary/07）、重放不留第二人、集成客户端一路不记提交方、管理台仍以 JSON 录入、凭证挂运营决定而非登记写面、两族准入是两套坐标，待 owner 复核
 Date: 2026-10-21
 
 ## Context
@@ -12,7 +12,7 @@ Date: 2026-10-21
 
 ## Decision
 
-**一、两类各一种运营决定。** 操作者渠道「运营决定」能力面加两种决定：`EXTERNAL_FUNDS_FACT_ADOPTION`（外部资金事实采用，首版与更正同一种）与 `REGULATORY_CREDENTIAL_REGISTRATION`（监管凭证登记）。两种分开授予——管钱的与管关务的通常不是一个人，持其一不因此能用另一类的口，也不因持关务建案、授权或提交那几种而能登凭证。更正与首版同一种：更正是采用的一种，走同一个用例，判据同 ADR-0151 决定四「更正与首登认证与授予同一份」。有哪些种类是产品策略；谁持哪一种是租户取值，没有授予答 `OPERATOR_NOT_GRANTED`。迁移 `access_identity/0021` 重建决定种类那条 CHECK。
+**一、两类各一种运营决定。** 操作者渠道「运营决定」能力面加两种决定：`EXTERNAL_FUNDS_FACT_ADOPTION`（外部资金事实采用，首版与更正同一种）与 `REGULATORY_CREDENTIAL_REGISTRATION`（监管凭证登记）。两种分开授予——管钱的与管关务的通常不是一个人，持其一不因此能用另一类的口，也不因持关务建案、授权或提交那几种而能登凭证。更正与首版同一种：更正是采用的一种，走同一个用例，判据同 ADR-0151 决定四「更正与首登认证与授予同一份」。有哪些种类是产品策略；谁持哪一种是租户取值，没有授予答 `OPERATOR_NOT_GRANTED`。迁移 `access_identity/0020` 重建决定种类那条 CHECK。
 
 **二、三个手工口与集成客户端三口并存。** `POST /settlement-external-funds-fact-manual-registrations`、`/settlement-external-funds-fact-correction-manual-registrations` 按第一种认证，`/customs-regulatory-credential-manual-registrations` 按第二种认证；铸信封前读生产权威区间（能力 `OPERATION_DECISION`、事实类型取决定种类），不覆盖答 `OUTSIDE_ADMISSION_SCOPE`。载荷形状、编排、幂等与答案代数与集成客户端那三口同一份：载荷仍由各自的 `registrationjson` 译装，租户取信封，载荷自报租户即拒；采用编排、凭证登记编排与事务壳在装配点由同一套构造给出，两族只差 Intake。集成客户端三口一行不改：有接口的外部系统照旧推，没接口的由人照单录。路径带 `manual` 让两族在端点表上一眼分得开。合成租户与真实租户同一条命令面，不加隔离放行。
 
@@ -55,7 +55,7 @@ UC-SA-005 的业务规则写明「结算人员不能更改银行事实，也不�
 ## Consequences
 
 - 生产进程有了租户人员手工采用外部资金事实与登记监管凭证的路：持对应授予的操作者经三口采用、更正、登记，采用信封照旧交给 CC，版本行与凭证行记下提交人。`cmd/parcel-api` 的真库用例经生产装配与真操作者册证三口的答复格、操作证据、两种授予互不相用与集成客户端三口照旧可用；2026-10-21 在一次性库上按 `seed.sh` 灌入、起 `parcel-api`，用配置员的 Dex 令牌走通三口与重放，查阅员三口都答 `OPERATOR_NOT_GRANTED`，合成银行与合成报关服务商的客户端令牌经原两口照旧采用（实测，只记 `S`）。
-- 迁移 `access_identity/0021`（决定种类 CHECK）、`settlement_accounting/0041`（资金事实版本的操作证据列）、`customs_compliance/0026`（凭证行的操作证据列）。
+- 迁移 `access_identity/0020`（决定种类 CHECK）、`settlement_accounting/0041`（资金事实版本的操作证据列）、`customs_compliance/0026`（凭证行的操作证据列）。
 - SA CONTEXT「外部资金事实进入本产品只有本上下文的采用这一口」那条补人工采用与操作证据；CC CONTEXT「监管凭证、限制与处置」加一条两路登记与操作证据；UC-SA-005 加 `AT-SA-200`、`201`，UC-CC-003 加 `AT-CC-446`、`447`。
 - 演示种子：配置员加两种授予，准入对照与权威区间各两行（步 `470`）。
 - 立票 demo-chain-gaps/156（逐字段表单）、157（集成客户端一路记提交方）。
