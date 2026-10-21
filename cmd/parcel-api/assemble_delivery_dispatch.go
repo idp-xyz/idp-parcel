@@ -62,8 +62,8 @@ func (trigger transactionalDeliveryDispatchTrigger) Trigger(
 // （判据同 NewCarrierIdentityDirectory）。自此执行器不再有 *_SOURCE_NOT_WIRED 的停点，每条缝的所有者答什么就是什么
 // （ADR-0114 决定三：所有者答「没有」任务保持待形成，不填默认）。
 //
-// 一拍一对象，没有拍频可选（ADR-0216 决定二）。端点挂作业事实渠道的 Intake（ADR-0149 决定二；
-// 派送发起口为何留在那一族，见 ADR-0151 越权风险点 7），渠道没配时那一口如实答未配置（ADR-0055）。
+// 一拍一对象，没有拍频可选（ADR-0216 决定二）。端点挂运营决定「派送重问」的 Intake（ADR-0230 决定七：再发起的人在管理台上，
+// 手里没有设备），渠道没配时那一口如实答未配置（ADR-0055）。按册重问调的也是这一只（buildDeliveryDispatchReask）。
 func buildDeliveryDispatchTrigger(db *bentopg.DB) (transactionalDeliveryDispatchTrigger, error) {
 	shipmentRequests, err := pspostgres.NewShipmentRequests(db)
 	if err != nil {
