@@ -24,7 +24,7 @@ Status: Confirmed
 - `UC-PS-001` 已确认“委托已提交”的业务语义，以及业务状态、决定记录和事件发布意图的原子提交要求。
 - `BD-PS-001` 至 `BD-PS-008` 的接单机制已经确认，但不扩大本简报首个“来源保全并进入已提交”子切片的范围。真实合同规则、角色、金额、阈值、判断时点和试点归属参数仍阻塞生产接受。
 - `idp-bento-go` 的正式 module path、Git 远端、DNS、TLS 和 vanity metadata 已建立；`go.idp.xyz/idp-bento-go?go-get=1` 的 `go-import` 指向 `https://github.com/idp-xyz/idp-bento-go.git`，候选附注 tag `v0.1.0-rc.1` 与 `v0.1.0-rc.2` 已存在于该远端（`asOf` 2026-08-11，由 Parcel 侧 `git ls-remote` 与 vanity metadata 只读核验；`v0.1.0-rc.2` 的 tag 对象为 `5aa0974`，剥离后指向提交 `56322dc25373b872ab5c49a74c0d544d7c088184`，`PBC-09` 要绑的是后者而非 tag 对象）。按 [ADR-0026](../adr/0026-persistence-written-for-consumer-proof-precedes-gate-passage.md)，tag 存在不认定工件不可变，不可变性由 module checksum 认定；空缓存下载证明仍未取得。该远端 `asOf` 同日为公开仓库，禁用凭据助手的匿名读取已核验通过，原列的「私有读取身份」前置当前不适用；仓库转为私有则该前置复活。
-- Parcel 本地工作区已经初始化 Git `main`、`go.idp.xyz/idp-parcel` 单 module、Go `1.26.5` toolchain、`chi/v5 v5.3.1` 基础 API 和只读权限基础 CI，并建立了建单前的作用域身份、来源重放/冲突、最小委托候选与同租户提交批次候选领域内核；WSL race test、本机 `go test`、`go vet` 与 build 已通过。首个提交与远端已绑定，`origin` 为 `github.com/idp-xyz/idp-parcel`；当前仍没有可持久化业务切片或 Bento 候选依赖。
+- Parcel 本地工作区已经初始化 Git `main`、`go.idp.xyz/idp-parcel` 单 module、Go `1.26.5` toolchain、`chi/v5 v5.3.1` 基础 API 和只读权限基础 CI，并建立了建单前的作用域身份、来源重放/冲突、最小委托候选与同租户提交批次候选领域内核；WSL race test、本机 `go test`、`go vet` 与 build 已通过。首个提交与远端已绑定，`origin` 为 `github.com/idp-xyz/idp-parcel`；那时还没有可持久化业务切片或 Bento 候选依赖（此后 `go.mod` 锁定候选 `v0.1.0-rc.2`，持久化现状见下文「实现准入检查」节与开发主线「机制半边现状」）。
 
 ## 已确认决定
 
@@ -51,27 +51,29 @@ Status: Confirmed
 
 ```text
 cmd/
-  parcel-api/                 HTTP API 进程
-  parcel-migrate/             显式迁移命令
-  parcel-outbox/              Outbox 发布进程
+  parcel-api/                 HTTP API 进程，端点按特性文件登记
+  parcel-dispatch/            派发进程：Outbox 投递与进程内直投消费
+  parcel-*-register/ 等       各上下文的受控登记入口（CLI）
 internal/
   platform/
-    bootstrap/                依赖装配、配置与生命周期
-    postgres/                 连接池、Bento DB 与 schema 检查
-    observability/            slog 与 OpenTelemetry SDK 装配
+    migrate/                  各模块迁移的统一计划与执行
+    dispatch/、outboxintent/、inboxconsume/   派发一拍、发布意图与消费门
+    httpapi/                  路由与成品端点挂载（不放业务端点）
   parcelshipment/
     domain/                   委托、声明包裹、提交版本、接受判断任务与领域事件
     application/              命令、结果和用例编排
     ports/                    语义化 Repository 与相邻上下文端口
     adapters/postgres/        显式 SQL、扫描和映射
     adapters/http/            chi 请求/响应映射
-  partycommercial/            后续按真实切片建立，不预建空模型
-  networkrouting/             后续按真实切片建立，不预建空模型
+    adapters/<提供方>/        消费侧跨上下文适配器（ADR-0025）
+  partycommercial/ 等         其余各上下文同此分层
 migrations/
-  parcel_shipment/            Parcel 自有不可变业务迁移
+  parcel_shipment/ 等         各模块自有不可变业务迁移
 tests/
-  bento_contract/             仅测试依赖的真实消费者合同
+  bentocontract/              仅测试依赖的真实消费者合同
 ```
+
+上面是取证于 `4e7874ba0` 的形状摘要，不逐个列出各上下文与各登记入口；首个提交时这里写的是计划中的 `parcel-migrate`、`parcel-outbox` 与 `platform/bootstrap`、`postgres`、`observability`，后来没有按那几个名字落地。
 
 约束如下：
 
@@ -82,7 +84,7 @@ tests/
 - 模块不能直接读取其他模块拥有的表。将来同进程调用也必须通过应用端口或已确认事件语义。
 - `internal/platform` 只放进程级共享技术设施；业务 HTTP 端点一律落在 `internal/<context>/adapters/http`，不因就近而写入 `platform/httpapi`。
 - 新增进程入口与对外交付形态（额外 `cmd/` 二进制、前端或其他客户端）是加法：它们在 `internal/` 之外落位，不改变本节包布局，因此不为将来的多端形态提前重排目录或预建空壳。
-- 面向人的客户端应用落在顶层 `apps/`，每端一个子目录；端之间的共享物落在顶层 `packages/`。判据是它服务谁——服务租户自己作业与治理人员的端属于产品的一部分，与后端同仓同版本发布；租户的锚点货主客户走 [`PAR-INT-01`](../product/PILOT-PARAMETER-REGISTER.md) 登记的租户现有渠道，那不是本仓要建的界面。已确认的两个端是租户管理界面与一线作业客户端；完整取舍、判据与被否决方案见 [ADR-0021](../adr/0021-frontline-operations-client-is-part-of-the-product.md)，本节不另立口径。两条按该记录不落在这里：开发方自用的跨租户运维后台不属于产品；后台 worker 是 Go 进程入口，仍落上表的 `cmd/`。两个目录都等第一个真实端落地时才建，按上一条不预建空壳；端的存在也不倒推领域或应用层改动，因为用例层按 [application/README](../application/README.md) 刻意不绑定 API、文件或门户等传输方式。
+- 面向人的客户端应用落在顶层 `apps/`，每端一个子目录；端之间的共享物落在顶层 `packages/`。判据是它服务谁——服务租户自己作业与治理人员的端属于产品的一部分，与后端同仓同版本发布；租户的锚点货主客户经首方客户 API（[ADR-0139](../adr/0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md)）或 [`PAR-INT-01`](../product/PILOT-PARAMETER-REGISTER.md) 登记的租户既有渠道接入，那不是本仓要建的界面。已确认的两个端是租户管理界面与一线作业客户端；完整取舍、判据与被否决方案见 [ADR-0021](../adr/0021-frontline-operations-client-is-part-of-the-product.md)，本节不另立口径。两条按该记录不落在这里：开发方自用的跨租户运维后台不属于产品；后台 worker 是 Go 进程入口，仍落上表的 `cmd/`。两个目录都等第一个真实端落地时才建，按上一条不预建空壳；端的存在也不倒推领域或应用层改动，因为用例层按 [application/README](../application/README.md) 刻意不绑定 API、文件或门户等传输方式。
 
 ## Bento 使用边界
 
@@ -134,7 +136,7 @@ tests/
 - 一个或多个 `DeclaredParcelID`
 - 来源发生时间（`occurredAt`）、系统接收时间（`receivedAt`）和客户请求生效时间（`requestEffectiveAt`）
 
-`SourceRequestKey` 的真实组成由各接入适配器依据 `PAR-INT-01` 绑定，不能直接把客户参考号当作全局幂等键。Parcel 持久化唯一性至少覆盖租户、客户账户、来源和来源请求键：
+`SourceRequestKey` 的真实组成由各接入适配器给出：首方客户族由首方契约的「接入请求标识」经 `RequestKeyDerivation` 推导（[ADR-0139](../adr/0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md) 决定五），租户既有渠道的适配依据 `PAR-INT-01` 绑定；不能直接把客户参考号当作全局幂等键。Parcel 持久化唯一性至少覆盖租户、客户账户、来源和来源请求键：
 
 - 同键、同摘要：是重放，即使 `occurredAt`/`receivedAt` 不同也一样，只追加本次观察；作答见 [UC-PS-001](../application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md)「结果语义契约」一节「重发接着办」那段。
 - 同键、不同摘要：返回接入冲突，保留原内容，不覆盖、不再建单；`requestEffectiveAt` 的值或缺失/显式存在状态变化必须通过摘要变化进入该路径。
@@ -287,7 +289,7 @@ go.idp.xyz/idp-bento-go v0.1.0-rc.2/go.mod h1:RFR6ylLNIIA7e4PPGVCzojYiH6DB8eHd2s
 4. 先按 [`PN02-W01`](./pn-02-w01-anchor-commercial-scope-evidence-request.md) 和 [`PN02-W02`](./pn-02-w02-ingress-production-ownership-evidence-request.md) 核验完整范围、版本、时点、当前权威和安全交接语义，再形成业务语义闸门**实例半边**的决定；机制半边不等待该决定。
 5. 按 [ADR-0026](../adr/0026-persistence-written-for-consumer-proof-precedes-gate-passage.md)，针对精确 SemVer 候选建立 PostgreSQL 16 Repository、迁移、事务、Outbox 及其集成合同，用途限于产出 `PBC-01` 至 `PBC-09`（这些证明对锁定候选全部通过之后，用途限定按 ADR-0277 解除）；不等业务语义闸门，不得建立本地替身，全部证明通过前不得登记 `B-06` 候选基线或宣称闸门已通过。取证顺序按依赖关系：`PBC-01`（须以独立 `GOMODCACHE` 复跑，空缓存下载与编译是两项证明；checksum 走公共透明日志已决，见「实现准入检查」节）与 `PBC-08` 先行，其后 `PBC-06`、`PBC-02`、`PBC-03`，最后 `PBC-04`、`PBC-07`、`PBC-05`、`PBC-09`。`PBC-04` 与 `PBC-07` 的幂等、冲突与重放形状须与 [ADR-0021](../adr/0021-frontline-operations-client-is-part-of-the-product.md) 约束下的接入面语义同时成形——离线与弱网容忍是「设计不出来就补不上」的一类要求，先把 Repository 侧冻结会返工。
 6. 等 TMS 与 Parcel 都形成适用最小切片提交后，再绑定 `B-06`、执行空缓存下载和双消费者证明。
-7. 两项机制半边缺口不受任何闸门阻断，与第 5 条并行：按 [ADR-0025](../adr/0025-cross-context-adapters-live-on-the-consumer-side.md) 落 `internal/parcelshipment/adapters/partycommercial/`，接上 `CommercialBasisResolver` 与 `UC-PC-002` 的两阶段解析；以及把 `UC-PS-001` 已成型的 HTTP 处理器接入 `cmd/parcel-api` 路由。接线须一并处理 [ADR-0022](../adr/0022-http-status-carries-answer-formed-not-business-verdict.md) 的状态码分界、六处委托 `!found` 到`统一不可见结果`的映射，并与业务语义闸门禁止的「任何租户流量进入生产接单」显式隔开。
+7. 两项机制半边缺口不受任何闸门阻断，与第 5 条并行：按 [ADR-0025](../adr/0025-cross-context-adapters-live-on-the-consumer-side.md) 落 `internal/parcelshipment/adapters/partycommercial/`，接上 `CommercialBasisResolver` 与 `UC-PC-002` 的两阶段解析；以及把 `UC-PS-001` 已成型的 HTTP 处理器接入 `cmd/parcel-api` 路由。接线须一并处理 [ADR-0022](../adr/0022-http-status-carries-answer-formed-not-business-verdict.md) 的状态码分界、各委托编排 `!found` 分支到`统一不可见结果`的映射，并与业务语义闸门禁止的「任何租户流量进入生产接单」显式隔开。
 
 ## 链接
 

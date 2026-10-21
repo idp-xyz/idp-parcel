@@ -144,7 +144,7 @@
 **已实现。** 本节此前列的两条约束都已了结，其中第二条的预判是错的，记在这里以免再犯：
 
 - **执行门禁在前——已满足。** 方案一旦声明任何结构，评价此前直接返回`未形成`（`PLAN_STRUCTURES_NOT_EXECUTABLE`），因此排除规则必须排在附加费执行之后；提前实现只会得到一条保证让评价`未形成`的规则。计价规则模型的七步实施顺序全部落地后该门禁已空，这条约束随之解除。
-- **规范化版本要批——预判有误，实际不需要。** 此前判「给 `PricingPlanStructures` 增加排除规则是形状改动，按 [ADR-0014](../adr/0014-versioned-canonicalization-shape-for-content-digest.md) 要新增一个规范化版本」。实际不是：排除规则在规范化方案文档里是一个 `omitempty` 的可选字段，不声明排除的方案输出逐字节不变，既有摘要继续可比。判据与 [ADR-0015](../adr/0015-closed-grammar-open-vocabulary-for-multi-carrier-rating.md) 的 `Amended by` 一致——看规范化形状是否改变，不看是否新增概念。同批的换算步骤后来也按同一理由未升版本。
+- **规范化版本要批——预判有误，实际不需要。** 此前判「给 `PricingPlanStructures` 增加排除规则是形状改动，按 [ADR-0014](../adr/0014-versioned-canonicalization-shape-for-content-digest.md) 要新增一个规范化版本」。实际不是：排除规则在规范化方案文档里是一个 `omitempty` 的可选字段，不声明排除的方案输出逐字节不变，既有摘要继续可比。判据与 [ADR-0015](../adr/0015-closed-grammar-open-vocabulary-for-multi-carrier-rating.md)  Status 行注记里的「读法限定」一致——看规范化形状是否改变，不看是否新增概念。同批的换算步骤后来也按同一理由未升版本。
 
 **「唯一可以先做且零成本的是补齐特征来源」也已完成**，且它确实是共同前提：排除规则复用了附加费的同一套触发条件语法，只是效果不同——一个加钱，一个使价格不成立。
 
