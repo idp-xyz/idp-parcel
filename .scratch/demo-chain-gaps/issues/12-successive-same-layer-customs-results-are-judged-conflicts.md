@@ -1,7 +1,7 @@
 # 12 同层先后到达的关务结果一律判冲突：先部分放行、后全部放行时，全部放行被吞
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-dcg12（2026-10-21，见文末「完成记录」）。此前 2026-10-20 升 A 并认领（product-strategy-boundary/18 同期开工）；needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [11](./11-external-result-received-has-no-subscriber.md) 的隔离评审。
+Status: in-progress——隔离评审无阻断项、评审修订完，待进 main，分支 claude-dcg12（2026-10-21，见文末「完成记录」「评审记录」）。此前 2026-10-20 升 A 并认领（product-strategy-boundary/18 同期开工）；needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [11](./11-external-result-received-has-no-subscriber.md) 的隔离评审。
 Blocked by: [product-strategy-boundary/18](../../product-strategy-boundary/issues/18-customs-case-and-declaration-submission-entry.md)（关务立案与申报提交入口；那张开工时本票须同期或先修，见 [triage-2026-10-19](../triage-2026-10-19.md)）
 出处：[ADR-0197](../../../docs/adr/0197-customs-external-results-enter-tracking-projection-per-layer.md) 越权风险点 5。
 
@@ -95,3 +95,28 @@ none
 - [product-strategy-boundary/10](../../product-strategy-boundary/issues/10-cc-declaration-channel-and-public-regulatory-reference-configuration.md) 第 5 项「待核：……外部结果冲突、冲突前当前判断……的判断规则」：判断方法中的同层后续与冲突一半，现在有了执行器（ADR-0226）。本票没改那张票面与参数登记册，留给它核对时引用。
 - 进 main 时：ADR 号、票号 124、AT 号若改号，全仓搜 `ADR-0226`、`0226-`、`124-customs-layer-conflict`、`AT-CC-43[1-6]`、`AT-VE-186` 一并替换。ADR 索引、AT 盘点计数、机制清点按批重生成。
 - 已在演示库里手工走过「先部分后全部」的，旧冲突标记留着，要 `--reset`。种子本身不含外部结果。
+
+## 评审记录（2026-10-21）
+
+隔离评审判无阻断项。逐条去向如下。
+
+- **必修 1 并发竞态（已修）**：编排先做比对读、后落册，事务隔离是读已提交，路上没有锁。两份不同来源标识的同层结果并发到达时互相读不到，会双双判「不矛盾」，ADR-0226「未记冲突的事实两两不矛盾」只在串行时成立。
+  - 修法：`ExternalResults.LoadForSubmission` 在查询之前取 `pg_advisory_xact_lock(hashtext('customs_compliance.external_result.submission_version'), hashtext(租户 || chr(31) || 提交版本))`，并改走 `RequireExecutor`，事务外调用即被拒。锁键派生照 TF `BookingAnswers.FindAnswersForUpdate` 与 NO `Receptions.FindOtherUnitIntakes`；CC 原先没有咨询锁，命名空间不与别的锁撞。
+  - 锁放在读面里而不放在编排里，同两处先例：读面本就要求在落册那笔事务里调，锁和「读到的就是此刻的在册事实」是同一个承诺。这一契约写进 `ports.ExternalResultStore` 头注。
+  - 用例：派发真库 `TestTwoContradictingResultsArrivingConcurrentlyRecordExactlyOneConflict`，挂在 `AT-CC-434` 的并发半边上，没有另取 AT 号。先到那笔持锁落下全部放行、未提交时，后到那笔挂在咨询锁上（观察连接看 `pg_stat_activity`）；放行后恰一份记冲突，成员上只有先到那条。把锁临时换成空语句，这条用例按「后到那笔在先到提交之前就答了 RESULT_RECORDED」红，换回后绿；`-count=10` 连跑绿。
+  - 结果库补「事务外拒读」用例；既有的两条读面用例改在事务里读。
+  - ADR-0226 决定二补串行化的依据、锁的位置与粒度；Consequences 补后到要等先到事务结束；UC-CC-006 `AT-CC-434` 补并发到达；CC CONTEXT 新增那条补「同一提交版本上的比对与落册串行」。
+- **必修 2 位置式引用（已修）**：ADR-0226 Links 与 CC CONTEXT 新增那条里的「上面一条」「上一条」，改为引原句「与同层现有事实冲突时，不得据此猜测提交……」。ADR-0226 决定三里的「CONTEXT 那句话」也一并改成引文。
+- **顺手 3 注释说过头（已修）**：`CheckLayerConsistency` 头注改为「序列按业务时间自洽」，并写明矛盾不传递：部分、附条件、全部依次发生时，被标的是前两者中后到的那份。领域用例补这一格。测试名改为 `TestTheJudgmentIsSymmetricAndAConsistentChainRecordsNoConflictInAnyOrder`，AT 盘点同步改名。ADR-0226 决定二也补了这一段。
+- **顺手 4 坏行两种答法（已修）**：读面重建失败（分层事实装不回、放行行不全或装不回）一律包 `ports.ErrLayerFactInconsistent`。编排认出它就整笔报错、不答 `LayerFactsUnavailable` 未决，与在册事实的放行事实配不上层次同一格。补结果库真库用例（改坏一行的层次即答这一哨兵）与编排用例（不答未决、不带续办引用、不落记录）。ADR-0226 决定四、Consequences、越权风险点 9 随之改。
+- **顺带核得、未改**：同一来源标识、不同内容的两份并发到达时，后到那笔在锁之前的幂等读看不见先到者；落册撞键后读回赢家，答的是 `EXISTING_RESULT`，而不是 `SOURCE_CONFLICT`。这是本票之前就有的缝，不在同层判法里，没有改动它，留给评审定是否另立票。
+
+修订提交：`1705fae0`（锁、哨兵与用例）、`993b246a`（注释、领域用例与改名）、`32fc368e`（ADR-0226、CC CONTEXT、UC-CC-006）。
+
+验证：于 `32fc368e`，`go build ./...`、`go vet ./...`、`gofmt -l cmd internal scripts tools` 干净。`scripts/test-full.sh` 跑了以下各包，全绿：
+- `./internal/customscompliance/...`
+- 反向依赖：NR、PS、SA、TF、VE 各自的 customscompliance 适配器
+- `./internal/visibilityexception/...`，含 customscompliance 与 inbox 适配器
+- `./internal/architecture/...`、`./migrations/...`
+- `./cmd/...`，含 parcel-dispatch 与 parcel-api
+
