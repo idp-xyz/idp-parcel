@@ -1,7 +1,7 @@
 # 150 价卡没有截止旧版的受控口，补登卡上取值只能靠期间不重叠的新版
 
 Category: enhancement
-Status: needs-triage——2026-10-21 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权），出自票 [14](./14-buy-request-stuck-after-an-unadoptable-evaluation.md) 实现时的发现。
+Status: ready-for-agent——2026-10-21 协调方分诊升为上线前必修（R1），见 [triage-2026-10-19](../triage-2026-10-19.md) 末节「票 14 落地时追加的上线前必修（2026-10-21）」。此前 needs-triage——2026-10-21 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权），出自票 [14](./14-buy-request-stuck-after-an-unadoptable-evaluation.md) 实现时的发现。
 Blocked by: 无
 出处：[ADR-0229](../../../docs/adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 越权风险点 6。
 
