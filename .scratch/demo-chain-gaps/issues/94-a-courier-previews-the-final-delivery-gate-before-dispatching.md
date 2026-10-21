@@ -1,7 +1,7 @@
 # 94 派送出发之前问一次交付门禁
 
 Category: enhancement
-Status: needs-triage——2026-10-19 Claude Code 作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [66](./66-effective-delivery-records-a-final-delivery-gate-reading.md) 的完成记录。
+Status: ready-for-agent——2026-10-20 代决复核升为上线前必修（R14），见 [owner-review-20261020](../../owner-review-20261020/report.md)。此前 needs-triage——2026-10-19 Claude Code 作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [66](./66-effective-delivery-records-a-final-delivery-gate-reading.md) 的完成记录。
 Blocked by: [66](./66-effective-delivery-records-a-final-delivery-gate-reading.md)（读数内核与 `DeliveryGateReader` 随它进 main）
 地盘：TF 新 `application/preview_delivery_gate.go`（复用 `DeliveryGateReader` 取 at 的那一步）、新 tfhttp 问询口；新 `cmd/parcel-api/assemble_delivery_gate_preview.go` + `endpoints.go` 一行（装配令牌）；文档 UC-TF-006 AT、ADR（号认领时由协调方给）。
 出处：[ADR-0213](../../../docs/adr/0213-a-transport-handover-declares-its-releasing-receiving-and-onward-nodes.md) 文末「补记：票 66 落决定五时的补充裁定」越权风险点 20；先例 [ADR-0219](../../../docs/adr/0219-a-device-previews-the-departure-gate-before-departing-and-reads-what-the-departure-will-record.md)（设备出发前门禁问询）。
@@ -25,3 +25,7 @@ Blocked by: [66](./66-effective-delivery-records-a-final-delivery-gate-reading.m
 ## 规模
 
 M
+
+## 代决复核追加（2026-10-20）
+
+出处：[owner-review-20261020](../../owner-review-20261020/report.md) 的 R14。代决「是」：列为上线前必修。不做则交付侧关务门禁只能事后记账，受限或被扣的包裹照样交到收件人手里。照 ADR-0219 同形，排在票 42 之后。

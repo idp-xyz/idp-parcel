@@ -1,8 +1,8 @@
 # 121 先于段登记的出发永不补问门禁——本该阻断也不形成阻断信号
 
 Category: enhancement
-Status: needs-triage——2026-10-20 票 [53](./53-movement-facts-recorded-before-their-segment-never-reach-tracking.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0224](../../../docs/adr/0224-tracking-backfills-movement-facts-recorded-before-their-segment-when-a-control-fact-puts-the-object-in-it.md) 决定五与越权风险点 3。
-Blocked by: 用户决定（TF、CC owner：补问机制的形状——ADR-0205 越权风险点 2「补问要另立机制」）
+Status: ready-for-agent——2026-10-20 代决复核撤掉用户决定阻断（M5），见 [owner-review-20261020](../../owner-review-20261020/report.md)。此前 needs-triage——2026-10-20 票 [53](./53-movement-facts-recorded-before-their-segment-never-reach-tracking.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0224](../../../docs/adr/0224-tracking-backfills-movement-facts-recorded-before-their-segment-when-a-control-fact-puts-the-object-in-it.md) 决定五与越权风险点 3。
+Blocked by: 无——用户决定一格已于 2026-10-20 代决撤掉（M5）（此前 用户决定（TF、CC owner：补问机制的形状——ADR-0205 越权风险点 2「补问要另立机制」））
 地盘：TF 出发门禁读数（`internal/transportfulfillment/application/record_movement_fact.go`、`domain/departure_gate_reading.go`、移动事实登记册的读数列）；VE 出发门禁阻断信号（`DeriveOnMovementFactAdapter.signalBlocked`）。
 
 ## 现象（读码钉票 53 的分支，只记 `S`）
@@ -25,3 +25,12 @@ Blocked by: 用户决定（TF、CC owner：补问机制的形状——ADR-0205 �
 ## 既有票
 
 - [53](./53-movement-facts-recorded-before-their-segment-never-reach-tracking.md)、[114](./114-deterministic-failures-answered-as-retryable-undecided-across-consumers.md)（确定性缺陷被答成可重试未决）
+
+## 代决复核追加（2026-10-20）
+
+出处：[owner-review-20261020](../../owner-review-20261020/report.md) 的 M5。
+
+- **撤掉「Blocked by 用户决定」**：票面自己把补问归为机制、把唤醒与次数归为产品策略，租户取值为无，按 AGENTS 的三类都由开发方现在就定。
+- **两问按机制自决**：补问追加一版读数，不改首版；补问得到的阻断信号以出发时点为业务时间。
+- **前置条件**：先把段册、班次册的「装不回」与「连不上」分开，这一步并进票 114 或在本票内做。
+- 分级：上线后尽快（关务读不动期间本该阻断的出发不会补问）。
