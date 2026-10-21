@@ -112,7 +112,8 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
 另起 `steps/457-access-fulfillment-corrections.sh` 一节，数据是 `data/access/11`、`12` 与 `data/governance/48`、`49`。种子不解除任何采用、
 不让任何发生项失效。指错了委托时的更正次序：先 `POST /transport-fulfillment-charge-occurrence-invalidations`（`occurrence`、链头的
 `version`、`basis`）让这一段上按那份委托形成的发生项失效，再 `POST /transport-fulfillment-segment-commission-adoption-withdrawals`
-（`segment`、`commission`）解除采用，然后采用对的那一份、对同一件事实重登发生项（长出替代版本）。
+（`segment`、`commission`、采用回显的 `generation`）解除采用，然后采用对的那一份（`afterGeneration` 填被解除的那一代）、对同一件
+事实重登发生项（长出替代版本）。
 
 配置员另持运营决定「订舱提交」（ADR-0202 决定一、五；`data/access/02` 的授予、`03` 的对照与 `data/governance/30` 那份运营决定
 区间各一行），承运答复口另认合成干线承运商的集成客户端（`data/access/05`、`06` 各一行，`03` 的对照与 `data/governance/31` 那份
