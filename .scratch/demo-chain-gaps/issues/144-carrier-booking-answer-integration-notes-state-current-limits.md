@@ -10,3 +10,7 @@ Blocked by: 无
 现象、证据与修法的完整写法以复核报告 R8 一条为准（单一权威），此处只记要点：
 
 代决「是」：按现形作为首版集成契约；集成说明写明候补位次更新、候补后分批接受目前进不来。
+
+## 补注（2026-10-21，票 [145](./145-booking-answers-from-a-non-provider-answer-booking-not-found.md) 的作者子代理）
+
+票 145 改了答复口的一格，集成说明照 [ADR-0239](../../../docs/adr/0239-a-carrier-answer-from-a-non-provider-is-answered-booking-not-found-and-the-basis-is-kept-on-a-refusal-register.md) 写：答复方不是订舱所属委托的服务提供方时答 `200` `BOOKING_NOT_FOUND`，与订舱不在册同一格、同一副响应，线上不再有 `SOURCE_NOT_SERVICE_PROVIDER`；这一格的续办写「找租户核对订舱标识」，不写「这份答复不归你答」。凭什么拒只记在租户侧的承运答复拒收册，不对承运方透出。
