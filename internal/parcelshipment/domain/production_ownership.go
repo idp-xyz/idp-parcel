@@ -370,6 +370,25 @@ func (decision ProductionOwnershipDecision) WithSafeHandoff(assessment SafeHando
 	return decision, nil
 }
 
+// WithReassessedHandoff 把同一次交接尝试重查所得的评估换到决定上，交回新的决定值；原值不动。
+//
+// 只在已记的评估未确认、新评估出自同一次尝试（同一尝试身份、同一范围、同一对方）时成立：重发一份「他方、交接未确认」的提交，
+// 要接着问的是那一次尝试交过去没有，不是另判一次归属——另判可能因登记册翻转而落到本产品，同一范围就会一边交给他方、一边
+// 在本地建单（ADR-0128 决定二「同一份决定对应同一次尝试」）。已确认的评估不换：确认之后范围已归他方，没有再查的余地。
+func (decision ProductionOwnershipDecision) WithReassessedHandoff(assessment SafeHandoffAssessment) (ProductionOwnershipDecision, error) {
+	if !decision.valid() ||
+		!decision.hasSafeHandoff ||
+		decision.safeHandoff.status == SafeHandoffConfirmed ||
+		!assessment.valid() ||
+		assessment.attemptID != decision.safeHandoff.attemptID ||
+		assessment.scope != decision.scope ||
+		assessment.targetAuthority != decision.otherAuthorityRef {
+		return ProductionOwnershipDecision{}, ErrInvalidProductionOwnershipDecision
+	}
+	decision.safeHandoff = assessment
+	return decision, nil
+}
+
 // SafeHandoff 交回记在这份决定上的交接评估；没记过即第二个返回值为假。它与 HandoffReference
 // 各答各的问题，调用方不得拿其中一格去推另一格。
 func (decision ProductionOwnershipDecision) SafeHandoff() (SafeHandoffAssessment, bool) {

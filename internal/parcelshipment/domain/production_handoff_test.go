@@ -346,6 +346,56 @@ func TestSafeHandoffOnlyRecordsOntoTheMatchingOtherAuthorityDecision(t *testing.
 	}
 }
 
+// Covers: 票 docs-consistency/code/39——重发一份交接未确认的`其他权威`提交，只把同一次尝试的重查评估换上去：未确认可换成确认，
+// 别的尝试身份、已确认之后、从没记过评估的决定都不许换。
+func TestAReassessedHandoffReplacesOnlyTheSameUnconfirmedAttempt(t *testing.T) {
+	other := mustDecision(t, ownershipSpec(t, domain.ProductionAuthorityOther, domain.AdmissionControlOpen, "scope-1", "rev-1"))
+	timedOut := baseHandoffSpec(t, domain.HandoffObservationTimedOut)
+	timedOut.ContinuationRef = mustValue(t, domain.NewOwnershipContinuationReference, "continuation-1")
+	unresolved, err := domain.AssessSafeHandoff(timedOut)
+	if err != nil {
+		t.Fatalf("assess: %v", err)
+	}
+	pending, err := other.WithSafeHandoff(unresolved)
+	if err != nil {
+		t.Fatalf("with safe handoff: %v", err)
+	}
+	confirmed, err := domain.AssessSafeHandoff(completeHandoffSpec(t, "scope-1"))
+	if err != nil {
+		t.Fatalf("assess: %v", err)
+	}
+
+	reassessed, err := pending.WithReassessedHandoff(confirmed)
+	if err != nil {
+		t.Fatalf("reassess the same attempt: %v", err)
+	}
+	if recorded, _ := reassessed.SafeHandoff(); recorded.Status() != domain.SafeHandoffConfirmed {
+		t.Fatalf("reassessed status = %v, want CONFIRMED", recorded.Status())
+	}
+	if recorded, _ := pending.SafeHandoff(); recorded.Status() != domain.SafeHandoffUnresolved {
+		t.Fatal("reassessing mutated the original decision value")
+	}
+
+	anotherAttempt := completeHandoffSpec(t, "scope-1")
+	anotherAttempt.AttemptID = mustValue(t, domain.NewHandoffAttemptID, "handoff-attempt-2")
+	elsewhere, err := domain.AssessSafeHandoff(anotherAttempt)
+	if err != nil {
+		t.Fatalf("assess: %v", err)
+	}
+	for name, attempt := range map[string]func() (domain.ProductionOwnershipDecision, error){
+		"another attempt":       func() (domain.ProductionOwnershipDecision, error) { return pending.WithReassessedHandoff(elsewhere) },
+		"already confirmed":     func() (domain.ProductionOwnershipDecision, error) { return reassessed.WithReassessedHandoff(confirmed) },
+		"never assessed before": func() (domain.ProductionOwnershipDecision, error) { return other.WithReassessedHandoff(confirmed) },
+		"a zero assessment": func() (domain.ProductionOwnershipDecision, error) {
+			return pending.WithReassessedHandoff(domain.SafeHandoffAssessment{})
+		},
+	} {
+		if _, err := attempt(); !errors.Is(err, domain.ErrInvalidProductionOwnershipDecision) {
+			t.Errorf("%s: error = %v, want ErrInvalidProductionOwnershipDecision", name, err)
+		}
+	}
+}
+
 // Covers: ADR-0128 决定四的门禁半边——记了评估的`其他权威`决定仍是一份合法决定，门禁照样按`其他权威`
 // 阻断；评估不改归属身份，只补「交出去了没有」这一格。
 func TestFutureSubmissionGateStillBlocksOtherAuthorityAfterSafeHandoff(t *testing.T) {
