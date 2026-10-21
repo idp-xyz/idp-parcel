@@ -63,7 +63,7 @@ M（按裁向，可能涉及计划模型加揽收段，则 L）。
 - 与 ADR-0249 相反的注释一并改掉：`TriggerReassessment` 头注（「两类都是当前可控节点依据」）、`freezeOf`（「触发又只会是节点收寄或权威交接」）、`JudgeExecutedPrefix`、`ControlEvidenceKind` 头注。
 - 派发真库（评审 B1 后补）：`cmd/parcel-dispatch/reassess_offsite_pickup_test.go` 在 `reassessBothLanesFixture` 上传场外揽收、地点 `customer-warehouse-2`，经生产同形的收寄采用消费门落复核册：`AT-NR-034` 一行 `STILL_APPLICABLE`、引用 `SYN-RPV-63`、`trigger_occurred_at` 等于揽收时间、冻结形态未声明也不落 `FREEZE_FORM_UNCONFIGURED`；`AT-NR-084` 一行 `PLAN_LAPSED`、依据点名限制、`SUGGESTION_ONLY`、阻塞只有 `NOT_AT_CONTROLLED_NODE`，过得了逐结论 CHECK。夹具 `intakeAt` 的来源类型改成参数、夹具多带证据替身；`savePlan` 的段链拆出 `legsThrough` 供替代候选用。把适配器的译格退回 `TransportHandoverControl` 时两条都红（答 `PLAN_LAPSED` 与 `REROUTED`）。
 - 测试：领域 `offsite_pickup_reassessment_test.go`（揽收立得起触发却不建立可控节点、揽收复核不比节点只看硬约束、揽收全部未执行且地点与节点同名也不切前缀）；编排 `offsite_pickup_reassessment_test.go`（`AT-NR-034` 仍适用且不落冻结未配置、不因更便宜的候选改路；`AT-NR-084` 失效只出建议；原先无路由形成首个计划；揽收复核计入当前控制位置；揽收与权威交接是不同触发）；收寄采用适配器 `reassess_on_pickup_test.go`（`AT-NR-034`、`AT-NR-084` 端到端，采用记录真经 PS 领域形成）。适配器两条先跑红（今天答 `REROUTED`），改后绿。
-- 文档：UC-NR-003 `AT-NR-034`、`AT-NR-084` 的缺口注改为已补，`AT-NR-084` 另点名生产接法上还缺候选成本（demo-chain-gaps/115）与授权决定面（code/29）；「给开发的交接」去掉揽收复核一行、已实现一句补上。CONTEXT 与 ADR 由 docs-consistency/05 改过，未动。
+- 文档：UC-NR-003 `AT-NR-034`、`AT-NR-084` 的缺口注改为已补，`AT-NR-084` 另点名生产接法上还缺候选成本（demo-chain-gaps/115，已由该票补齐，2026-10-21）与授权决定面（code/29）；「给开发的交接」去掉揽收复核一行、已实现一句补上。CONTEXT 与 ADR 由 docs-consistency/05 改过，未动。
 - 装配、迁移、派发路由与 `internal/nodeoperations/**` 都没动。
 
 ### 代决
@@ -79,7 +79,7 @@ M（按裁向，可能涉及计划模型加揽收段，则 L）。
 1. **改格之前落过的揽收触发指纹失配**（NR owner）。上线前只有演示租户；同一封信封重投由消费门跳过，到不了复核编排；只有携带同一揽收触发的另一封信封会答触发冲突，生产上今天没有工具发出这样一封。演示库 `scripts/demo-seeds --reset` 重灌即无旧指纹。
 2. **复核册里看不见揽收地点**（NR owner）。只读 NR 复核册做审计时，要顺关联去 PS 收寄采用记录取地点。owner 若要复核册自带位置，加一列与一次迁移即可，判断不变。
 3. **揽收在计划起点范围之外也判仍适用**（NR、TF owner）。即 ADR-0249 越权风险点 1，代码照它落地：偏差由包裹交进首个节点时的交接复核接住。
-4. **AT-NR-084 的建议在生产接法上还形成不了**（NR owner）。复核今天不取候选成本（demo-chain-gaps/115），失效线上候选评估记未决，退回纯失效；建议之后的授权决定面归 code/29。本票只证复核这一半在成本到位时的走向。
+4. **AT-NR-084 的建议在生产接法上还形成不了**（NR owner）。复核今天不取候选成本（demo-chain-gaps/115），失效线上候选评估记未决，退回纯失效；建议之后的授权决定面归 code/29。本票只证复核这一半在成本到位时的走向。候选成本这一半已由票 [demo-chain-gaps/115](../../demo-chain-gaps/issues/115-route-reassessment-never-loads-candidate-costs.md) 补齐（2026-10-21）：复核向候选成本取数侧取成本，失效线上判得出候选、形成建议。
 
 ### AT
 

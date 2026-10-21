@@ -1,7 +1,7 @@
 # 53 NR 仍适用线上的改善改路落 `REROUTED` 复核记录时不带失效依据，过不了 `route_reassessment_rerouted_shape`
 
 Category: bug
-Status: ready-for-agent——R2（上线前必修，但今天生产走不到）：仍适用线上一旦按改善阈值自动改路，复核册那一行必然被 CHECK 拒，整笔回滚；生产上复核今天不取候选成本（[demo-chain-gaps/115](../../demo-chain-gaps/issues/115-route-reassessment-never-loads-candidate-costs.md)），走不到这条线，115 一落地就撞上。2026-10-21 协调方立（code/16 作者读码所得，见 [code/52](./52-reassessment-reads-the-initial-route-row-instead-of-the-current-plan-or-no-route.md)「相关」一节；协调方读码核实）。
+Status: ready-for-agent——R2（上线前必修）：仍适用线上一旦按改善阈值自动改路，复核册那一行必然被 CHECK 拒，整笔回滚。复核不取候选成本那一格已由票 [demo-chain-gaps/115](../../demo-chain-gaps/issues/115-route-reassessment-never-loads-candidate-costs.md) 补齐（2026-10-21），这条线随之在生产接法上走得到：策略版本声明了自动改路、原计划未越过冻结边界、另有一条更便宜且改善严格大于阈值的候选时，落册被 CHECK 拒，复核编排把写库失败答成 `REASSESS_STORE_UNAVAILABLE` 未决，回滚重投到 `ABANDONED`。演示链走不到：演示策略版本没声明自动改路，演示网络只有一条候选。115 不一并修本票的理由见其完成记录。2026-10-21 协调方立（code/16 作者读码所得，见 [code/52](./52-reassessment-reads-the-initial-route-row-instead-of-the-current-plan-or-no-route.md)「相关」一节；协调方读码核实）。
 Blocked by: 无
 出处：code/16 修订时读码所得，不在审计报告条目里。
 
