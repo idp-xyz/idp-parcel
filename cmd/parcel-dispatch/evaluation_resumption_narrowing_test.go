@@ -20,6 +20,7 @@ import (
 	saapplication "go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
 	sadomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	saports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
+	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
 // 本文件对真实 PostgreSQL 16 在生产路由表上证 ADR-0229 续办的收窄：参数登记只续办这一次登记真解得开的那几件——序列按绑了
@@ -30,6 +31,24 @@ import (
 // 停着的请求」，卡上的价不重要。
 func fxBoundBuyCard(t *testing.T, planID, scope string) ppdomain.PriceCardRegistration {
 	t.Helper()
+	binding, err := ppdomain.NewReferenceSeriesBinding(ppdomain.ReferenceSeriesExchangeRate, "SYN-SERIES-FX-CNY-SGD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	structures, err := ppdomain.NewPricingPlanStructures(nil, nil, []ppdomain.ReferenceSeriesBinding{binding})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return syntheticBuyCard(t, planID, scope, "SGD", structures)
+}
+
+// syntheticBuyCard 造一张 BUY·供应商成本卡：Z1 一行 [0, 30] 公斤 10，卡上绑什么由 structures 给。
+func syntheticBuyCard(
+	t *testing.T,
+	planID, scope, currency string,
+	structures ppdomain.PricingPlanStructures,
+) ppdomain.PriceCardRegistration {
+	t.Helper()
 	base := pptest.Plan(t, pptest.PlanSpec{
 		Reference:             pptest.IdentityReference(t, ppdomain.ArtifactPricingPlan, planID, "v1"),
 		TableReference:        pptest.IdentityReference(t, ppdomain.ArtifactRateTable, planID+"-TABLE", "v1"),
@@ -38,7 +57,7 @@ func fxBoundBuyCard(t *testing.T, planID, scope string) ppdomain.PriceCardRegist
 		Direction:             ppdomain.PricingDirectionBuy,
 		Purpose:               ppdomain.PricingPurposeSupplierCost,
 		BaseChargeCode:        "BASE_FREIGHT",
-		Currency:              "SGD",
+		Currency:              currency,
 		Period: pptest.Period{
 			StartsAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 			EndsAt:   time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC),
@@ -51,18 +70,10 @@ func fxBoundBuyCard(t *testing.T, planID, scope string) ppdomain.PriceCardRegist
 		WeightRounding:      ppdomain.RoundingNone,
 		WeightStepKilograms: "1",
 	})
-	binding, err := ppdomain.NewReferenceSeriesBinding(ppdomain.ReferenceSeriesExchangeRate, "SYN-SERIES-FX-CNY-SGD")
-	if err != nil {
-		t.Fatal(err)
-	}
-	structures, err := ppdomain.NewPricingPlanStructures(nil, nil, []ppdomain.ReferenceSeriesBinding{binding})
-	if err != nil {
-		t.Fatal(err)
-	}
 	plan, err := ppdomain.NewPricingPlanVersion(base.Reference(), base.Scope(), base.Direction(), base.Purpose(),
 		base.BaseChargeCode(), base.EffectivePeriod(), base.RateTable(), base.WeightPolicy(), nil, structures)
 	if err != nil {
-		t.Fatalf("绑汇率序列的卡：%v", err)
+		t.Fatalf("卡 %s：%v", planID, err)
 	}
 	source, err := ppdomain.NewSourceFileIdentity("SYN-"+planID+".xlsx", strings.Repeat("ab", 32))
 	if err != nil {
@@ -379,4 +390,44 @@ func TestAStallWhoseAccountAdoptsAnotherMomentIsClosed(t *testing.T) {
 	}, 10); err != nil || len(items) != 0 {
 		t.Fatalf("运营点名这件包裹 = %+v err=%v，want 终止的那一拍不再进队列", items, err)
 	}
+}
+
+// Covers: AT-SA-189、AT-SA-195——卡没绑分区目录、发生项也没带分区，计价答目录读不出：这一格只有绑了目录的新一版卡解得开
+// （没有目录信封会落到这张卡的范围上）。租户在同一范围上登一张绑了分区目录的卡，价卡登记的信封按范围与方向续办出第二代；
+// 第一代原样；第二代因旧卡退不了场停在适用冲突。
+func TestARequestStalledOnAnUnboundZoneCatalogueResumesOnACardThatBindsIt(t *testing.T) {
+	fixture, beat, store := buyResumptionFixture(t)
+	registerBuyTriggers(t, fixture.db, demoTenant)
+	registerPriceCardForTest(t, fixture.db, syntheticBuyCard(t, "SYN-PLAN-UNBOUND-COST-01", "SYN-SCOPE-01", "CNY",
+		ppdomain.PricingPlanStructures{}))
+	drainBeats(t, beat)
+	insertChargeOccurrence(t, fixture.db, demoTenant, "SYN-OCC-TRUNK-ZONE", tfdomain.ActualFulfillmentOccurrence, trunkAgreementObject+"/v1")
+	enqueueOccurrenceFormed(t, fixture.db, store, "occ-trunk-zone", "SYN-OCC-TRUNK-ZONE")
+	drainBeats(t, beat)
+	stalled := buyRequestsOf(t, fixture.db, "SYN-OCC-TRUNK-ZONE")
+	if len(stalled) != 1 || stalled[0].stopCause != "EVALUATION_CATALOGUE_UNRESOLVED" {
+		t.Fatalf("卡没绑目录时的 BUY 请求册 = %+v，want 一份第一代、停在 EVALUATION_CATALOGUE_UNRESOLVED", stalled)
+	}
+
+	link, err := ppdomain.NewReferenceCatalogueLink(ppdomain.CatalogueKindZone, "SYN-CAT-ZONE-CN-SG")
+	if err != nil {
+		t.Fatal(err)
+	}
+	zoned, err := ppdomain.PricingPlanStructures{}.WithReferenceCatalogues(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registerPriceCardForTest(t, fixture.db, syntheticBuyCard(t, "SYN-PLAN-ZONED-COST-01", "SYN-SCOPE-01", "CNY", zoned))
+	drainBeats(t, beat)
+	lineage := buyRequestsOf(t, fixture.db, "SYN-OCC-TRUNK-ZONE")
+	if len(lineage) < 2 || lineage[0].stopCause != "EVALUATION_CATALOGUE_UNRESOLVED" || lineage[1].previous != lineage[0].id ||
+		!strings.HasPrefix(lineage[1].basis, "PARAMREG/PRICE_CARD/") {
+		t.Fatalf("登了绑目录的卡之后 = %+v，want 第一代原样、凭价卡登记续办出第二代", lineage)
+	}
+	// 旧卡退不了场：同一范围上两张卡同时适用，第二代照实停在适用冲突，等票 150 的截止口（ADR-0229 越权风险点「要换一版卡
+	// 才解得开的几格，今天续办不出评价」）。
+	if lineage[1].stopCause != "PRICE_CARD_APPLICABILITY_CONFLICT" {
+		t.Fatalf("第二代停因 = %q，want PRICE_CARD_APPLICABILITY_CONFLICT", lineage[1].stopCause)
+	}
+	assertNothingAbandoned(t, fixture.db, "parcel-pricing.pricing-parameter.registered", "parcel-pricing.evaluation-request.unformed")
 }

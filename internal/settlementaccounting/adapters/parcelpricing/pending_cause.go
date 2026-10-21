@@ -6,7 +6,9 @@ import (
 )
 
 // pendingIssueCauses 把提供方`待判断`评价的问题项原词译成本上下文的停因细分。按缺的是哪一类东西分，分法就是续办的分法：
-// 分区与偏远档位出自目录，参考序列与汇率出自序列，价表上没有这一段出自卡，尺寸与包裹特征出自包裹那一侧的事实。
+// 分区与偏远档位读不出（卡绑了目录却没映到，或卡根本没绑目录），参考序列与汇率读不出（卡绑了序列却缺一期，或卡没绑
+// 汇率序列），价表上没有这一段，尺寸与包裹特征不全。哪一类登记解得开哪一格由 domain.EvaluationStopCause.ResumedBy 定，
+// 本表只分格。
 var pendingIssueCauses = map[string]sadomain.EvaluationStopCause{
 	"ZONE_UNRESOLVED":              sadomain.StopEvaluationCatalogueUnresolved,
 	"REMOTE_TIER_UNRESOLVED":       sadomain.StopEvaluationCatalogueUnresolved,

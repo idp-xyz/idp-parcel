@@ -65,9 +65,9 @@ func TestEvaluationStopCausesSitOnTheirStageAndDirection(t *testing.T) {
 	}
 }
 
-// Covers: AT-SA-189 一类参数登记只续办它解得开的停因——判据是登了之后同一个问题再问一次可能不同；序列只推序列读不出、
-// 目录只推目录读不出（周期喂价不推缺分区的请求）；结算政策没采用、包裹没有商业解析、计价输入不可得与包裹事实不全
-// 哪一类登记都解不开。
+// Covers: AT-SA-189 一类参数登记只续办它解得开的停因——判据是登了之后同一个问题再问一次可能不同；序列不推目录读不出、
+// 目录不推序列读不出（周期喂价不推缺分区的请求），两格都认价卡（卡没绑那一类时只有新一版卡解得开）；价表没有这一段
+// 认价卡与目录；结算政策没采用、包裹没有商业解析、计价输入不可得与包裹事实不全哪一类登记都解不开。
 func TestAParameterRegistrationResumesOnlyTheCausesItCanUnblock(t *testing.T) {
 	want := map[domain.EvaluationParameterKind][]domain.EvaluationStopCause{
 		domain.ParameterSettlementAccount:         {domain.StopSettlementAccountNotRegistered},
@@ -78,14 +78,16 @@ func TestAParameterRegistrationResumesOnlyTheCausesItCanUnblock(t *testing.T) {
 			domain.StopPriceCardNotConfigured, domain.StopPriceCardApplicabilityConflict,
 			domain.StopEvaluationPendingJudgment, domain.StopEvaluationUnratable, domain.StopEvaluationConflict,
 			domain.StopEvaluationFailed, domain.StopAmountRoundingUndeclared, domain.StopConversionStepMissing,
-			domain.StopEvaluationRateNotFound, domain.StopPendingJudgmentCauseUnrecorded,
+			domain.StopEvaluationCatalogueUnresolved, domain.StopEvaluationSeriesUnresolved, domain.StopEvaluationRateNotFound,
+			domain.StopPendingJudgmentCauseUnrecorded,
 		},
 		domain.ParameterReferenceSeries: {
 			domain.StopEvaluationPendingJudgment, domain.StopConversionStepMissing, domain.StopEvaluationSeriesUnresolved,
 			domain.StopPendingJudgmentCauseUnrecorded,
 		},
 		domain.ParameterReferenceCatalogue: {
-			domain.StopEvaluationPendingJudgment, domain.StopEvaluationCatalogueUnresolved, domain.StopPendingJudgmentCauseUnrecorded,
+			domain.StopEvaluationPendingJudgment, domain.StopEvaluationCatalogueUnresolved, domain.StopEvaluationRateNotFound,
+			domain.StopPendingJudgmentCauseUnrecorded,
 		},
 	}
 	for kind, causes := range want {

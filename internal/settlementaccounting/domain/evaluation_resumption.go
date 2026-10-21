@@ -86,8 +86,8 @@ const (
 	StopPriceCardNotConfigured
 	StopPriceCardApplicabilityConflict
 	StopPricingInputUnavailable
-	// 评价采用不了：评价已形成，结算这一侧形成不了费用或成本。待判断按缺的是什么再分几格，缺的东西不同，补登的就是
-	// 不同的册：目录读不出（分区、偏远档位）、序列读不出（参考序列、汇率）、价表上没有这一段、包裹事实不全；分不清
+	// 评价采用不了：评价已形成，结算这一侧形成不了费用或成本。待判断按缺的是什么再分几格，缺的东西不同，解得开它的
+	// 登记就不同：目录读不出（分区、偏远档位）、序列读不出（参考序列、汇率）、价表上没有这一段、包裹事实不全；分不清
 	// 或不止一样缺的，落笼统的那一格。
 	StopEvaluationPendingJudgment
 	StopEvaluationUnratable
@@ -246,8 +246,11 @@ func (cause EvaluationStopCause) OccursIn(direction EvaluationDirection) bool {
 //     闭包——今天没有续办路（ADR-0229 越权风险点「结算政策没采用今天没有续办路」）。
 //   - 包裹没有商业解析、计价输入不可得、包裹事实不全：缺的是小包托运或运输履约那一侧的事实，那一侧补上之后由运营续办
 //     口点名。
-//   - 目录读不出只认目录、序列读不出只认序列：周期喂进来的序列不推缺分区的请求。
-//   - 不可计价、评价冲突、评价失败、金额取整未声明、价表没有这一段：答案出自卡，换一版卡才可能变。
+//   - 目录读不出：卡绑了目录却没映到，补一版目录解得开；卡根本没绑目录、请求也没带分区，只有绑了目录的新一版卡解得开。
+//     序列读不出同理：绑了却缺一期读数是序列的事，卡没绑汇率序列是卡的事。所以两格都认卡，各自再认自己那一类；序列
+//     不推缺分区的请求。
+//   - 价表没有这一段：多半出自卡，换一版卡才可能变；卡绑了目录、目录把邮编映到了错区时补一版目录也解得开。
+//   - 不可计价、评价冲突、评价失败、金额取整未声明：答案出自卡，换一版卡才可能变。
 //   - 换算步骤缺席：卡没绑汇率序列，或序列在计价基准时点没有在用版本。
 //   - 笼统的待判断：分不清缺哪一样，卡、序列、目录三类登记都可能解开。
 func (cause EvaluationStopCause) ResumedBy(kind EvaluationParameterKind) bool {
@@ -259,12 +262,12 @@ func (cause EvaluationStopCause) ResumedBy(kind EvaluationParameterKind) bool {
 	case StopOccurrenceReasonNotRegistered, StopTriggerFeeItemNotRegistered:
 		return kind == ParameterBuyEvaluationTrigger
 	case StopPriceCardNotConfigured, StopPriceCardApplicabilityConflict, StopEvaluationUnratable,
-		StopEvaluationConflict, StopEvaluationFailed, StopAmountRoundingUndeclared, StopEvaluationRateNotFound:
+		StopEvaluationConflict, StopEvaluationFailed, StopAmountRoundingUndeclared:
 		return kind == ParameterPriceCard
-	case StopEvaluationCatalogueUnresolved:
-		return kind == ParameterReferenceCatalogue
+	case StopEvaluationCatalogueUnresolved, StopEvaluationRateNotFound:
+		return kind == ParameterPriceCard || kind == ParameterReferenceCatalogue
 	case StopEvaluationSeriesUnresolved:
-		return kind == ParameterReferenceSeries
+		return kind == ParameterPriceCard || kind == ParameterReferenceSeries
 	case StopEvaluationPendingJudgment:
 		return kind == ParameterPriceCard || kind == ParameterReferenceSeries || kind == ParameterReferenceCatalogue
 	case StopConversionStepMissing:
@@ -352,9 +355,11 @@ func EvaluationParameterKindFromName(name string) (EvaluationParameterKind, erro
 //     SELL 那一路问同一个范围的请求照样等着；一条序列喂了一期，没绑它的卡上停着的请求不是在等它。
 //   - BUY 触发册带发生项原因：登的是这一个原因那一行，别的原因上停着的发生项照样缺。
 //   - SELL 计费时点采用带户：采用是按户登的。
-//   - 结算账户与费用项目映射不带：账户没登时链还没走到户，停办上记不下等的是哪一户；映射是按计价费用代码登的，
-//     停下的请求上记的是映射不全、没有记缺哪一个代码。这两类按种类续办：多推的发起停办重跑后照样停着，只换上这一次的
-//     依据与时刻；多推的请求起了下一代，照样停在同一格（ADR-0229 越权风险点「收窄到哪一层」）。
+//   - 结算账户不带：「结算账户已登记」那一封与小包托运共用，载荷只有租户与种类，不带账户键。停在账户没登的那一刻账户键
+//     其实已求出、记得下，缺的是信封上可比的那一格；每登一户（含应付户）都把全租户停在账户没登上的发起停办重跑一遍，
+//     多推的那几拍照样停着，只换上这一次的依据与时刻。
+//   - 费用项目映射不带：映射按计价费用代码登，停下的请求上记的是映射不全，没有记缺哪一个代码；多推的请求起了下一代，
+//     照样停在同一格（ADR-0229 越权风险点「收窄到哪一层」）。
 type EvaluationParameterNarrowing struct {
 	PricingScope     bool
 	Direction        bool
