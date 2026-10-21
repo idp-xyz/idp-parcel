@@ -83,7 +83,7 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
 
 | 登录邮箱 | 授予（自 2026-01-01 生效，不设终点） |
 |---|---|
-| `syn-operator-config-01@syn-tenant-01.example.invalid` | 登记册配置写、主数据与运营查阅读、运营决定（装载分配、终止参与、关段、建派送任务、有效时间判断、承运商首次有效收寄判断；复核完成、主动拒绝、授权处置、受控关闭、受控重开——委托侧这几种越过 Intake 的前提见表后说明；待识别重核——节点作业复核页上的「重核」；身份冲突处置——同一页上的「处置」；运输委托提交；订舱提交；履约段采用运输委托、取消运输委托、取消订舱；送站交接确认——依授权交付关系确认送站交接单的绑定）；作业事实登记，按作业范围给：演示网络各节点（收寄），华东场外揽收与新加坡尾程派送两个场外范围（运输履约各口），每个范围配一台合成设备（`data/access/04`） |
+| `syn-operator-config-01@syn-tenant-01.example.invalid` | 登记册配置写、主数据与运营查阅读、运营决定（装载分配、终止参与、关段、建派送任务、有效时间判断、承运商首次有效收寄判断；复核完成、主动拒绝、授权处置、受控关闭、受控重开——委托侧这几种越过 Intake 的前提见表后说明；待识别重核——节点作业复核页上的「重核」；身份冲突处置——同一页上的「处置」；运输委托提交；订舱提交；履约段采用运输委托、取消运输委托、取消订舱；送站交接确认——依授权交付关系确认送站交接单的绑定；关务建案、提交授权确认、申报提交执行）；作业事实登记，按作业范围给：演示网络各节点（收寄），华东场外揽收与新加坡尾程派送两个场外范围（运输履约各口），每个范围配一台合成设备（`data/access/04`） |
 | `syn-operator-viewer-01@syn-tenant-01.example.invalid` | 主数据与运营查阅读 |
 
 委托侧各种运营决定的授予只开门。权威串设了之后，越过 Intake 还要指名的对象在演示租户下查得到：复核完成、主动拒绝、
@@ -121,6 +121,15 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
 交接单：交接单在节点当场开立，走法见演示文档「送站交接单」一段。运营决定确认时问的授权交付关系是 `data/commercial/register-authorized-delivery.json`
 那一条（合成交付方 `SYN-PARTY-DELIVERER-01` 替 `SYN-ACCOUNT-01` 送站）。
 
+配置员另持运营决定「关务建案」「提交授权确认」「申报提交执行」三种（ADR-0227；票 product-strategy-boundary/18；`data/access/02` 的授予、
+`03` 的对照各三行，`data/governance/42`、`43`、`44` 的权威区间由 `steps/460-customs-declaration-faces.sh` 登）。同一步还给演示申报单元
+`SYN-UNIT-CN-EXPORT-DEMO-01` 登一份就绪判断（`data/customs/31`），不登授权：授权要由持授权确认授予的人逐次确认。种子不建任何案件或提交：
+委托被接受之后，`IDP_PARCEL_API_BASE=… scripts/demo-seeds/declare-one-parcel.sh <包裹号>` 用配置员令牌依次打 `POST /customs-cases`、
+`/customs-submission-authorizations`、`/customs-declaration-submissions`，末行打出案件号、提交版本号与首次尝试的结果——恒为
+`REGISTERED_PENDING_SEND`：本产品还没有把申报交给海关或报关服务商的连接器，提交执行口不发送任何东西。包裹号取 `submit-one-shipment.sh`
+末行那一个，委托要已成`已接受`（dispatch 跑过一拍）；没接受答 `PARCEL_NOT_ACCEPTED`。三口的权力分开授予，查阅员持哪一种都没有，三口都答
+403 `OPERATOR_NOT_GRANTED`。证据只记 `S`。
+
 单要一枚令牌：`scripts/demo-seeds/operator-channel/operator-token.sh <邮箱>` 打印访问令牌，末尾加 `claims` 打印两枚
 令牌的载荷。它与管理台走同一个公共客户端、同一条 authorization_code + PKCE 流，管理台不必在跑。
 
@@ -144,7 +153,7 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
 | `data/commercial/register-legal-entity-profiles.json` | `cmd/parcel-commercial register-legal-entity-profiles` | 法人资料（ADR-0145 决定三）：`SYN-LE-01` 两笔修订——修订 1 不带开票资料（按它生效的时段解析答「资料不全」），修订 2 自 3 月起补上开票抬头；注册地址在 `CN`，与法人身份层的注册国家一致，税号取目录里 `CN` 的资料层合成类型。排在参与方身份之后：资料引用已登记的责任法人 |
 | `data/pricing/` | `cmd/parcel-pricing-register` | 两张价卡（SELL 首重续重 / BUY 重量段）+ 两条参考序列（燃油、汇率）+ 两份序列复核 + 一份分区参考目录与其复核（不复核不在用，ADR-0099 / ADR-0109）；售价卡绑燃油序列与这本分区目录，成本卡也绑这本分区目录（票 demo-chain-gaps/43，同样就地改 v1）；两张卡都声明金额取整（合计点 0.01 CNY 四舍五入），成本卡这一格是就地改 v1，不另发 v2（两版同时在用，在用解析答适用冲突）——由 `seedgen` 生成，勿手改 |
 | `data/network/` | `cmd/parcel-network-register` | 稳定定义由演示租户显式采用参考配置 `network-routing/network-catalog/SYN-CN-SG@1`（ADR-0147，登记行 `adopt` 格，依据格随之写成 `REFCFG-1:…@1`）：4 节点、3 连接、1 线路（三段成本依据引 BUY 卡）、2 服务区（CN 收寄 / SG 交付覆盖）、7 份日历（4 节点的处理时长与截单、3 连接的衔接缓冲）、1 路由策略（成本单维）；上海枢纽修订 2 是采用后的租户修订，依据换成租户自己的。路由策略修订 2 同样是租户修订，补上参考配置装不下的冻结形态：剩余段数，剩余不超过一段即冻结（`23-route-strategy-cn-sg-v2.json`）。另直接登记 1 条台风停运调整与 1 行自动改路事实（判断键对齐 `SYN-ACCOUNT-01` 与 `SYN-RS-CN-SG-01`，不是一笔已受理委托的运行时产物），以及演示线路各段的段计价区域（`22-leg-pricing-zones-cn-sg-v1.json`，ADR-0189；每段登 `Z1`，是租户取值。成本卡自票 demo-chain-gaps/43 起绑了分区目录，区由包裹邮编路线经目录读出，这三行不再被读，只留作段计价区域登记那一路的演示行）。产品本身不带任何网络：参考配置不采用就不进任何租户的目录 |
-| `data/customs/` | `cmd/parcel-customs-register` | 十一册 30 份：就绪与授权（第三单元先就绪再撤销就绪；第二单元只撤授权）、解释规则（含一次换版）、义务目录+两项（已了结/已承接）、门禁目录+判断（含一份只登目录的空清单格）、建案要求两向（要求/显式不要求）、口岸目录（SZX 含一次换版 + SIN）、申报路径两向（CN 出口 / SG 进口）、监管凭证两版（一版写明次数额度、一版来源未提供额度）、税费付款协作两格（核定税费 / 明确无需付款）、节点关务区域四份（上海枢纽、深圳口岸在 `SYN-ZONE-CN`，新加坡枢纽与末端在 `SYN-ZONE-SG`；ADR-0206，租户取值）。税费付款核对不在包内，见已知边界 |
+| `data/customs/` | `cmd/parcel-customs-register` | 十一册 31 份：就绪与授权（第三单元先就绪再撤销就绪；第二单元只撤授权；演示申报单元 `SYN-UNIT-CN-EXPORT-DEMO-01` 只登就绪，授权走 `/customs-submission-authorizations`，ADR-0227）、解释规则（含一次换版）、义务目录+两项（已了结/已承接）、门禁目录+判断（含一份只登目录的空清单格）、建案要求两向（要求/显式不要求）、口岸目录（SZX 含一次换版 + SIN）、申报路径两向（CN 出口 / SG 进口）、监管凭证两版（一版写明次数额度、一版来源未提供额度）、税费付款协作两格（核定税费 / 明确无需付款）、节点关务区域四份（上海枢纽、深圳口岸在 `SYN-ZONE-CN`，新加坡枢纽与末端在 `SYN-ZONE-SG`；ADR-0206，租户取值）。税费付款核对不在包内，见已知边界 |
 | `data/visibility/` | `cmd/parcel-ve-register` | 里程碑映射、分诊规则、通知策略、索赔资格、索赔授权两格（一格空名单）、披露策略两版（v2 起 `SYN-ACCOUNT-01` 的终局展示，票 demo-chain-gaps/97）、异常披露规则、冲突信号规则、索赔材料收讫两笔（照片留下、发票收讫后撤销）、出发门禁阻断信号规则（票 demo-chain-gaps/33） |
 | `data/collection/` | `cmd/parcel-collection-register` | 一条 COD 指令走全程（渠道报收、银行短收、短款、清分进应付客户）+ SGD 分户账只开立；CNY 账两笔回汇批次（已归集 / 已交出汇付主张），SGD 账无批次 |
 | `data/settlement/` | `cmd/parcel-settlement-register` 的 `settlement-account` / `external-funds-fact` / `funds-mapping` / `pre-acceptance-estimate-adoption` / `sell-billing-moment-adoption` / `fee-item-mapping` / `buy-evaluation-trigger` | 结算账户登记册（ADR-0158）1 行：货主 `SYN-PARTY-SHIPPER-01` 在法人 `SYN-LE-01` 下的 CNY 应收账户 `SYN-SETTLEMENT-ACCOUNT-01`，结算政策 `SYN-SETTLEMENT-PREPAID-01`，责任依据是该政策所引的客户合同 `SYN-CONTRACT-01`。五维照发布批里那份结算政策的正文配，受理前财务控制的作用域经它找到账户。另有一笔合成收款 `SYN-FUNDS-RECEIPT-01`（200.00 CNY）映射到该账户（ADR-0182），金额只盖这一件的试算合计，不是生产默认。受理前估价采用册（ADR-0179 决定五）1 行：这一户采用「逐件 SELL 试算合计」（`PER_PARCEL_SELL_TRIAL_SUM`），计价范围 `SYN-SCOPE-01`，与售价卡 `SYN-PLAN-CN-SG-01` 的范围同值，估价按它解析在用售价卡。SELL 计费时点采用册（ADR-0190 决定三）1 行：这一户在「有效网络收寄已采用」那一拍发起 SELL 评价，计价范围同上。费用项目映射（决定五）2 行：基础运费与偏远附加都映到 `SYN-FEE-ITEM-FREIGHT-01`，是 SYN 简化。售价卡声明了金额取整（总额，0.01 CNY，四舍五入），结算由评价形成客户费用时要这一格。BUY 触发册（ADR-0164、ADR-0208）1 行：原因 `ACTUAL_FULFILLMENT` 采用「发生项形成」，费用项目 `SYN-FEE-ITEM-TRUNK-COST-01`；干线实际履约发生项一形成就发起 BUY 评价，主要范围取发生项上干线协议 `SYN-SUPPLIER-TRUNK-CN-SG-01/v1` 的商业范围 `SYN-SCOPE-01`。别的原因不登，形成了答未配置 |

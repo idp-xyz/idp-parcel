@@ -226,6 +226,30 @@
       "basis": "SYN-MAP-BASIS-01"
     },
     {
+      "mappingId": "SYN-MAP-OD-CUSTOMS-CASE-ESTABLISHMENT-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "CUSTOMS_CASE_ESTABLISHMENT",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    },
+    {
+      "mappingId": "SYN-MAP-OD-CUSTOMS-SUBMISSION-AUTHORIZATION-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "CUSTOMS_SUBMISSION_AUTHORIZATION",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    },
+    {
+      "mappingId": "SYN-MAP-OD-CUSTOMS-DECLARATION-SUBMISSION-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "CUSTOMS_DECLARATION_SUBMISSION",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    },
+    {
       "mappingId": "SYN-MAP-CC-DELIVERY-HANDOVER-CONFIRMATION-01",
       "capability": "CUSTOMER_COMMAND",
       "factKind": "DELIVERY_HANDOVER_CONFIRMATION",
