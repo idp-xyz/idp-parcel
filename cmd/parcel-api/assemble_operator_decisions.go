@@ -33,11 +33,13 @@ import (
 )
 
 // operatorDecisionIntakes 是操作者渠道「运营决定」能力面在各上下文的 Intake（ADR-0151；票 operator-channel/15）。nodeOperations
-// 是复核页人工重核待识别实物（ADR-0199 决定三；票 no-reception-source/03）。
+// 是复核页人工重核待识别实物（ADR-0199 决定三；票 no-reception-source/03）。customs 是建案、提交授权确认与申报提交执行三口
+// （ADR-0227 决定一）。
 type operatorDecisionIntakes struct {
 	shipment       *shipmenthttp.OperatorDecisionIntake
 	transport      *tfhttp.OperatorDecisionIntake
 	nodeOperations *nodeopshttp.OperatorDecisionIntake
+	customs        *customshttp.OperatorDecisionIntake
 }
 
 // buildOperatorMinter 建本进程唯一一只操作者铸造器：运营决定与登记写面各口共用它。
@@ -148,7 +150,15 @@ func buildOperatorDecisionIntakes(
 	if err != nil {
 		return operatorDecisionIntakes{}, err
 	}
-	return operatorDecisionIntakes{shipment: shipment, transport: transport, nodeOperations: nodeOperations}, nil
+	customsAuthenticator, err := ccaccess.NewOperatorDecisionAuthenticator(minter)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	customs, err := customshttp.NewOperatorDecisionIntake(customsAuthenticator)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	return operatorDecisionIntakes{shipment: shipment, transport: transport, nodeOperations: nodeOperations, customs: customs}, nil
 }
 
 // operatorRegistryIntakes 是操作者渠道登记册配置写能力面在各上下文的 Intake（ADR-0100 决定四；票 operator-channel/04）。
