@@ -81,6 +81,15 @@ const (
 // 与手工建派送任务（DISPATCH_TASK_REGISTRATION）不是一回事。
 const DecisionDeliveryDispatchReask DecisionKind = "DELIVERY_DISPATCH_REASK"
 
+// 外部资金事实采用与监管凭证登记（ADR-0236 决定一）：租户的财务、关务人员照银行回单、凭证原件在管理台手工采用。事实本身仍由外部
+// 系统拥有，采用的这一步是运营人员作出的生产决定，所以归运营决定而不归作业事实面；两类各成一种——能采用资金事实的不因此能登凭证，
+// 反过来也一样，管钱的与管关务的通常不是一个人。资金事实的更正与首版同一种：更正是采用的一种，随首版的认证与授予（ADR-0151 决定四
+// 的同一条判据）。
+const (
+	DecisionExternalFundsFactAdoption        DecisionKind = "EXTERNAL_FUNDS_FACT_ADOPTION"
+	DecisionRegulatoryCredentialRegistration DecisionKind = "REGULATORY_CREDENTIAL_REGISTRATION"
+)
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -96,6 +105,7 @@ var decisionKinds = []DecisionKind{
 	DecisionDeliveryHandoverConfirmation,
 	DecisionCustomsCaseEstablishment, DecisionCustomsSubmissionAuthorization, DecisionCustomsDeclarationSubmission,
 	DecisionDeliveryDispatchReask,
+	DecisionExternalFundsFactAdoption, DecisionRegulatoryCredentialRegistration,
 }
 
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。
