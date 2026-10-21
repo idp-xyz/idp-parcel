@@ -1,6 +1,6 @@
-# ADR-0267：在已接规范化的册正文里加键（含可缺键）是形状变化，照 ADR-0014 换号；同号改形只在写明前提时成立——上线前已存摘要随演示库重灌即消，上线后只在那一册没有已存摘要时；既往各次同号改形逐次认定
+# ADR-0267：在已接规范化的册正文里加键（含可缺键）是形状变化，照 ADR-0014 换号；同号改形只在写明前提时成立——首个租户实例进生产之前已存摘要随演示库重灌即消，进生产之后只认那一面不存摘要、两侧从本体现算；既往各次同号改形逐次认定
 
-Status: Accepted（2026-10-21，Claude Code 会话代 PC、PP、TF owner 决：用户 2026-10-21 原话「需要修改文档，确保自洽，正确」，常设授权「你作为业务和系统专家自决」；票 docs-consistency/11，出处审计 [audit/cross.md](../../.scratch/docs-consistency/audit/cross.md) B2·B2-04，隔离评审 B1 补清点。部分停用 [ADR-0014](./0014-versioned-canonicalization-shape-for-content-digest.md) Consequences 一句（适用场景只限决定四表里既往各次）、[ADR-0129](./0129-credit-ratio-base-is-declared-on-the-credit-policy-content.md) 决定一括注一句与 [ADR-0176](./0176-customer-service-rule-contract-tier-selection-and-inheritance.md) 决定五括注一句，被停原句与适用场景见「对已接受记录的作用」；三份正文不改，只在其 Status 行与 Links 加前向指针。[ADR-0126](./0126-commercial-publication-digest-is-computed-server-side-per-register-and-approval-comes-through-a-pending-carrier.md)、[ADR-0209](./0209-supplier-agreements-declare-charge-occurrence-conditions-and-registration-judges-by-them.md) 无条款停用。代码不改，不立代码票：清点出的既往各次前提都成立。越权风险点见文末，待 PC、PP、TF owner 复核。）<!-- 索引注记 -->｜**判据**：一册（一面）已经接进某个规范化版本之后，它的文档加键、删键、改键，可缺键也算，都是 ADR-0014 所说的结构变化，默认照换号；旧构建读到带新键的文档会把它当未知键丢掉、算出对不上的摘要而报不出形状变了（ADR-0209 候选与反方）。**加册**：一册从没接到接上、或同一前缀下新开一面，不是形状变化（ADR-0126 决定一）。**同号改形**：只在没有要按旧形回放的已存摘要、也没有不认新形的构建会读新文档时可以，并要在记录里写明前提、部分停用 ADR-0014 Consequences「每次变化都要新增一个规范化版本并长期支持它」一句，只写在代码头注里不算。首个租户实例进生产之前：已存摘要只在演示库与测试夹具里，失配的随 `scripts/demo-seeds --reset` 重灌即消，进生产的构建都已认得新形；进生产之后只剩一种：那一册没有已存摘要（迁移在表里有行时拒绝施加，或那一面不存摘要、两侧从本体现算）。**既往**：按 json 定形的各规范化正文逐提交清点，同号改形除 ADR-0129、0177、0201、0202 自记的几次外，另有计价评价与参考序列、商业发布的服务产品与客户合同、运输履约的具体班次、周期安排与移动事实各次，都在上线前、前提成立，由本记录认定，不回头换号
+Status: Accepted（2026-10-21，Claude Code 会话代 PC、PP、TF owner 决：用户 2026-10-21 原话「需要修改文档，确保自洽，正确」，常设授权「你作为业务和系统专家自决」；票 docs-consistency/11，出处审计 [audit/cross.md](../../.scratch/docs-consistency/audit/cross.md) B2·B2-04，隔离评审 B1 补清点。部分停用 [ADR-0014](./0014-versioned-canonicalization-shape-for-content-digest.md) Consequences 一句（适用场景只限决定四表里既往各次）、[ADR-0129](./0129-credit-ratio-base-is-declared-on-the-credit-policy-content.md) 决定一括注一句与 [ADR-0176](./0176-customer-service-rule-contract-tier-selection-and-inheritance.md) 决定五括注一句，被停原句与适用场景见「对已接受记录的作用」；三份正文不改，只在其 Status 行与 Links 加前向指针。[ADR-0126](./0126-commercial-publication-digest-is-computed-server-side-per-register-and-approval-comes-through-a-pending-carrier.md)、[ADR-0209](./0209-supplier-agreements-declare-charge-occurrence-conditions-and-registration-judges-by-them.md) 无条款停用。代码不改，不立代码票：清点出的既往各次前提都成立。越权风险点见文末，待 PC、PP、TF owner 复核。）<!-- 索引注记 -->｜**判据**：一册（一面）已经接进某个规范化版本之后，它的文档加键、删键、改键，可缺键也算，都是 ADR-0014 所说的结构变化，默认照换号；旧构建读到带新键的文档会把它当未知键丢掉、算出对不上的摘要而报不出形状变了（ADR-0209 候选与反方）。**加册**：一册从没接到接上、或同一前缀下新开一面，不是形状变化（ADR-0126 决定一）。**同号改形**：只在没有要按旧形回放的已存摘要、也没有不认新形的构建会读新文档时可以，并要在记录里写明前提、部分停用 ADR-0014 Consequences「每次变化都要新增一个规范化版本并长期支持它」一句，只写在代码头注里不算。首个租户实例进生产之前（对全产品一次结束，不按实例或册划分）：已存摘要只在演示库与测试夹具里，失配的随 `scripts/demo-seeds/seed.sh --reset` 重灌即消，进生产的构建都已认得新形；进生产之后只认一种：那一面不存摘要、两侧都从本体现算，迁移在表里有行时拒绝施加那一种不算（滚动发布、回滚或多版本并存时不认新形的构建会读到新摘要），其余一律照换号。**既往**：按 json 定形的各规范化正文逐提交清点，同号改形除 ADR-0129、0177、0201、0202 自记的几次外，另有计价评价与参考序列、商业发布的服务产品与客户合同、运输履约的具体班次、周期安排与移动事实各次，都在上线前、前提成立，由本记录认定，不回头换号
 
 Date: 2026-10-21
 
@@ -32,8 +32,8 @@ Date: 2026-10-21
 
 前提是两件同时成立：没有要按旧形回放的已存摘要；也没有不认新形的构建会读到新文档。分两个阶段：
 
-- **首个租户实例进生产之前**：已存摘要只在演示库与测试夹具里，改形让它们失配的，随 `scripts/demo-seeds --reset` 重灌即消；进生产的每个构建都已认得新形，旧构建读新文档那一格到不了生产。这一阶段同号改形可以，但要写明。
-- **进生产之后**：只剩一种——那一册（面）确实没有已存摘要：迁移在表里有行时拒绝施加（ADR-0201、0202 的做法），或那一面不存摘要、两侧都从本体现算。
+- **首个租户实例进生产之前**：已存摘要只在演示库与测试夹具里，改形让它们失配的，随 `scripts/demo-seeds/seed.sh --reset` 重灌即消；进生产的每个构建都已认得新形，旧构建读新文档那一格到不了生产。这一阶段同号改形可以，但要写明。这一阶段对全产品一次结束：首个租户实例进生产那一刻起，不按实例、不按册划分——演示租户此后与真实租户同样对待（ADR-0150），它的库也不再是可以随手重灌而不计的存量。
+- **进生产之后**：只认一种——那一面不存摘要、两侧都从本体现算。迁移在表里有行时拒绝施加（ADR-0201、0202 上线前用过的做法）在生产上不算：表空只说明此刻没有存量，挡不住滚动发布、回滚或多版本并存时不认新形的构建读到新写下的摘要，ADR-0209 要避的正是这一格。除这一种外，一律照 ADR-0014 换号。
 
 写明的方式照 ADR-0177、0201、0202 的形：在记录里写前提，并部分停用 ADR-0014 Consequences「每次变化都要新增一个规范化版本并长期支持它」一句，适用场景只限那一次改形。只写在代码头注或提交说明里不算写明。上线前阶段可以同号，不等于该同号：ADR-0209 在这一阶段照换号，同样合规。
 
@@ -45,7 +45,7 @@ Date: 2026-10-21
 
 | 规范化 | 提交 | 改了什么 | 前提 |
 |---|---|---|---|
-| 计价评价 `PPC-3` | `ccd1cd15e`、`e95e07840`、`8f8a48fc3`（2026-08-08） | 评价摘要加参考序列、汇率换算、排除规则各节（可缺键） | 那时没有持久化层（ADR-0014 Consequences「仓库仍无持久化层」），没有已存摘要 |
+| 计价价卡内容与评价 `PPC-3` | `ccd1cd15e`、`e95e07840`、`8f8a48fc3`（2026-08-08） | 价卡内容与评价摘要加参考序列、汇率换算、排除规则各节（可缺键） | 那时没有持久化层（ADR-0014 Consequences「仓库仍无持久化层」），没有已存摘要 |
 | 计价评价与价卡内容 `PPC-5`、参考序列登记 `PRS-2` | `70dbf5a61`、`c31c729ff`、`a20cacae2`、`615adf180`、`fc1a75735`（2026-09-04） | 加金额取整、目录绑定与目录读数、第三种序列（含序列登记的币种）、聚合成员与单位（都是可缺键） | 上线前；旧文档逐字节不变 |
 | 计价评价 `PPC-5` | `5b0d46f2a`（2026-10-08） | 评价加比较币种（可缺键） | 上线前；旧文档逐字节不变 |
 | 商业发布 `PCC-1` | `bebe0c7bd`（2026-09-10，票 admin-write-faces/25） | 服务产品册加 `serviceProduct` 正文、客户合同册加 `deliveryConditions`（可缺键）；即 ADR-0209 点的服务产品那一个先例 | 上线前；提交说明写两格文档「字节与此前逐字节同」 |
@@ -76,15 +76,15 @@ Date: 2026-10-21
 - 代码不改：决定四表里各次与 ADR-0129 那一次都认作前提成立的同号改形，`PCC-2` 与 `NRS-2` 是决定一的做法。`publication_canonicalization.go` 里信用政策正文那段头注与本记录一致，不改。
 - ADR-0014、0129、0176 的 Status 行与 Links 补指针，见「对已接受记录的作用」。
 - 此后改任何一册（面）的规范化文档：按决定一换号；要同号改形，按决定三在记录里写明前提并挂停用指针。
-- 首个租户实例进生产时（PN-08 对它作出 `Go`），决定三的上线前阶段对那个实例上已有的册结束；此后的同号改形只剩没有已存摘要那一种。
+- 首个租户实例进生产时（PN-08 对它作出 `Go`），决定三的上线前阶段对全产品结束；此后的同号改形只认那一面不存摘要、两侧从本体现算那一种，其余一律换号。
 - 不改 CONTEXT：规范化版本是摘要的技术合同，不进领域语言。
 
 ## 越权风险点
 
 1. **代 PC、PP、TF owner 定了全仓的换号判据**（PC、PP、TF owner）。决定一对各上下文的规范化版本一体适用；某个上下文若要进生产之后仍可缺键不换号，要另立记录说清它的折回口怎样认出形状变了。
 2. **既往各次照上线前阶段认定**（PC、PP、TF owner）。决定四表里可缺键那几次与 ADR-0129 那一次，旧构建读新文档会丢键；本仓到今天没有生产实例、没有滚动发布，这一格没有到过生产，也不会到——进生产的构建都认得这些键。若有哪个环境把演示库与测试夹具之外的数据带进了上线（例如租户的预生产库），那几次的前提要对那个环境重核。
-3. **清点只核了以 json 结构体标签定形的正文**（各 owner）。按字符串拼接定形的摘要（例如 `ESRC`、`GRP`、`DPR`）只核了提交历史里摘要函数有没有动过；漏网的同号改形，照决定三补记。
-4. **决定三进生产之后那一种由作者自证**（PC、PP、TF owner）。「册上没有已存摘要」靠迁移在有行时拒绝施加或那一面不存摘要；没有这道闸的同号改形，前提只是一句陈述。
+3. **清点只核了以 json 结构体标签定形的正文**（各 owner）。按字符串拼接定形的摘要（例如 `ESRC`、`GRP`、`DPR`）只核了提交历史里摘要函数有没有动过；漏网的同号改形，照决定三补记。[ADR-0123](./0123-decimal-canonical-spelling-is-a-value-invariant-and-digests-compare-canonical-spellings.md) 决定四「不换规范化版本。」不在清点之内，也不构成决定一的反例：它改的是值的写法（「本记录不动 `fingerprint.go` 里任何文档形状」），不是文档的键集。
+4. **进生产之后只认不存摘要那一种**（PC、PP、TF owner）。迁移闸那一种在生产上不算，表空的册改形也要换号，多一个要长期支持的版本；「那一面不存摘要、两侧从本体现算」由作者在记录里指名那一口与它的比对方式，评审逐口核。
 5. **折回口不拒未知键**（PC owner）。决定一的理由建立在这一事实上；它本身是一处可加固的地方，本记录不改，留给 PC owner 判要不要另立票。
 
 ## Links
@@ -94,7 +94,7 @@ Date: 2026-10-21
 - [ADR-0129](./0129-credit-ratio-base-is-declared-on-the-credit-policy-content.md)：部分停用决定一括注一句；认定决定一「PCC-1 不换号」是对 ADR-0014 的部分停用
 - [ADR-0176](./0176-customer-service-rule-contract-tier-selection-and-inheritance.md)：部分停用决定五括注「若要改则按加 omitempty 键不换号的先例另核」一句
 - [ADR-0177](./0177-customer-contract-names-its-customer-account-and-the-closure-narrows-by-it.md)：决定三对 ADR-0176 决定五先例的显式偏离与对 ADR-0014 的部分停用，决定三写明前提的形照它
-- [ADR-0201](./0201-schedule-templates-materialize-concrete-schedules-by-date-and-preparation-answers-not-configured-on-an-empty-register.md)、[ADR-0202](./0202-transport-commission-booking-and-carrier-answer-entry-families-and-supplier-agreement-check.md)：同号改形的前提与迁移闸
+- [ADR-0201](./0201-schedule-templates-materialize-concrete-schedules-by-date-and-preparation-answers-not-configured-on-an-empty-register.md)、[ADR-0202](./0202-transport-commission-booking-and-carrier-answer-entry-families-and-supplier-agreement-check.md)：上线前同号改形的前提与迁移闸
 - [ADR-0209](./0209-supplier-agreements-declare-charge-occurrence-conditions-and-registration-judges-by-them.md)：决定三换号与按内容取最低一版；候选与反方里旧构建丢键的理由与它点的先例
 - [参数登记册](../product/PILOT-PARAMETER-REGISTER.md)：当前尚无租户实例
 - 票 `.scratch/docs-consistency/issues/11-unclaimed-cross-adr-contradictions.md`
