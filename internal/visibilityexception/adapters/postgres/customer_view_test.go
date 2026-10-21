@@ -362,7 +362,7 @@ func TestOtherScopesAreInvisible(t *testing.T) {
 	}
 }
 
-// TestWritesRefuseToRunOutsideATransaction 证写入不会在缺少事务时改用连接池。
+// TestWritesRefuseToRunOutsideATransaction 证写入（保存与重新确认）不会在缺少事务时改用连接池。
 func TestWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	repository, _ := newCustomerViews(t)
 	ctx := t.Context()
@@ -371,6 +371,13 @@ func TestWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	view := firstView(t, "view-1")
 	if err := repository.Save(ctx, tenant, view); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务保存应返回 ErrTransactionRequired，实得：%v", err)
+	}
+	reaffirmed, err := view.Reaffirm(build(t, domain.NewProjectionVersionID, "projection-2"), view.Dimensions())
+	if err != nil {
+		t.Fatalf("重新确认：%v", err)
+	}
+	if err := repository.Reaffirm(ctx, tenant, reaffirmed, view.BasedOn()); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务重新确认应返回 ErrTransactionRequired，实得：%v", err)
 	}
 
 	_, exists, err := repository.FindCurrent(ctx, tenant, view.Customer(), view.Parcel())
