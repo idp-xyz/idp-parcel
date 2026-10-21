@@ -250,8 +250,8 @@ type ChargeOccurrenceRegistration interface {
 	Register(ctx context.Context, command RegisterChargeOccurrenceCommand) (RegisterChargeOccurrenceResult, error)
 }
 
-// ActualFulfillmentCoverageView 是发生项登记册的两口只读：登记答了「这一次不形成」时，问这件参与是不是已有一项仍有效的发生项盖住
-// （ChargeOccurrenceRegistry 的同名两口，真实装配接同一个适配器）。
+// ActualFulfillmentCoverageView 是发生项登记册的只读一面：登记答了「这一次不形成」时，问这件参与是不是已有一项仍有效的发生项盖住
+// （ChargeOccurrenceRegistry 的同名方法，真实装配接同一个适配器）。
 type ActualFulfillmentCoverageView interface {
 	FindByKey(ctx context.Context, key ports.ChargeOccurrenceKey) (ports.ChargeOccurrenceRecord, bool, error)
 	FindCovering(ctx context.Context, query ports.ChargeOccurrenceCoverageQuery) (ports.ChargeOccurrenceRecord, bool, error)

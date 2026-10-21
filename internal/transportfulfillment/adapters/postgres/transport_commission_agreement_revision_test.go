@@ -112,7 +112,7 @@ func TestACommissionReadsBackItsAgreementRevisions(t *testing.T) {
 	}
 }
 
-// Covers: AT-TF-298 的存储半边——换版的两个写口无环境事务即拒：换版锁要与读委托、落行同一笔才守得住铸号，
+// Covers: AT-TF-298 的存储半边——换版的写口无环境事务即拒：换版锁要与读委托、落行同一笔才守得住铸号，
 // 落行要与门铃同一笔，事务外跑就是一次没有门铃的换版。
 func TestTheRevisionWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	commissions, _, _, _, _ := newCommissionStores(t)

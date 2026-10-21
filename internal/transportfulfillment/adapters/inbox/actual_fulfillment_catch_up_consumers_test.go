@@ -16,7 +16,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// 本文件对真实 PostgreSQL 证实际履约补形成的两扇门（ADR-0231 决定一、五）：编排答出的三种处置各落成 inbox 的一种动作，键维缺一是毒丸
+// 本文件对真实 PostgreSQL 证实际履约补形成的消费门（ADR-0231 决定一、五）：编排答出的三种处置各落成 inbox 的一种动作，键维缺一是毒丸
 // 入账、不交处理方。处理方是真编排，前面几口用替身；逐件形成的各种答复由应用层与 cmd/parcel-dispatch 的真库用例证。夹具全部合成。
 
 type adoptionLookupDouble struct {

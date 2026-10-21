@@ -14,24 +14,24 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
-// 本文件是本上下文消费自己交出的两封门铃、补形成实际履约发生项的两扇门（ADR-0231 决定一、五）：采用成立与委托换版。处理方直接是应用
-// 编排，编排答出的处置（入账 / 重投 / 缺陷）在这里落成 inbox 的三种动作；未决与缺陷沿用自动形成那两扇门的两个哨兵——停住的是同一个
-// 形成后半，续办相同。
+// 本文件是本上下文消费自己交出的补形成门铃、补形成实际履约发生项的消费门（ADR-0231 决定一、五）：采用成立一扇、委托换版一扇。处理方
+// 直接是应用编排，编排答出的处置（入账 / 重投 / 缺陷）在这里落成 inbox 的三种动作；未决与缺陷沿用自动形成消费门的哨兵
+// （ErrActualFulfillmentFormationUndecided、ErrActualFulfillmentFormationDefect）——停住的是同一个形成后半，续办相同。
 
-// 两个消费者名各自分家，理由同自动形成那两扇门。改名等于换消费者。
+// 消费者名各自分家，理由同自动形成的消费门。改名等于换消费者。
 const (
 	catchUpOnAdoptionConsumerName = "transport-fulfillment/catch-up-actual-fulfillment-on-segment-commission-adoption"
 	catchUpOnRevisionConsumerName = "transport-fulfillment/catch-up-actual-fulfillment-on-commission-agreement-revision"
 )
 
-// 两封门铃的类型。串在本包写出，不去拿提供方 postgres 适配器里的那两个常量（本包不依赖它）；相等由 cmd/parcel-dispatch 用生产交出口入队
+// 门铃的类型。串在本包写出，不去拿提供方 postgres 适配器里的同名常量（本包不依赖它）；相等由 cmd/parcel-dispatch 用生产交出口入队
 // 的真库用例钉住。
 const (
 	SegmentCommissionAdoptionRegisteredEventType eventing.EventType = "transport-fulfillment.segment-commission-adoption.registered"
 	CommissionAgreementRevisedEventType          eventing.EventType = "transport-fulfillment.transport-commission.agreement-revised"
 )
 
-// ActualFulfillmentCatchUp 是两扇门转交的那一口，真实装配接 application.FormActualFulfillmentOnParticipationEndHandler。
+// ActualFulfillmentCatchUp 是补形成消费门转交的那一口，真实装配接 application.FormActualFulfillmentOnParticipationEndHandler。
 type ActualFulfillmentCatchUp interface {
 	CatchUpOnAdoption(ctx context.Context, command application.CatchUpActualFulfillmentOnAdoptionCommand) (application.CatchUpActualFulfillmentResult, error)
 	CatchUpOnRevision(ctx context.Context, command application.CatchUpActualFulfillmentOnRevisionCommand) (application.CatchUpActualFulfillmentResult, error)

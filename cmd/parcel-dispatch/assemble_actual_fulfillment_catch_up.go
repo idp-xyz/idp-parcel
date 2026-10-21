@@ -14,7 +14,7 @@ import (
 // actualFulfillmentCatchUpOnAdoptionUndecidedSentinels 只给「采用门铃 → TF 实际履约补形成」这一路（ADR-0231 决定一）。补形成停住的是自动
 // 形成的同一个后半，可续办的那一格同是 ErrActualFulfillmentFormationUndecided；名单仍跟着路分开列，日后一路多一格未决不会顺带宣布到别的路上。
 //
-// 不在名单里的同自动形成那两路：确定性错误（缺陷哨兵、库面不一致、旅程平局、连线指名的委托不在册、采用连线指名的段不在册、未形成册的
+// 不在名单里的与自动形成各路相同：确定性错误（缺陷哨兵、库面不一致、旅程平局、连线指名的委托不在册、采用连线指名的段不在册、未形成册的
 // 确定性拒写）都不进——重投不会变。
 var actualFulfillmentCatchUpOnAdoptionUndecidedSentinels = []error{
 	tfinbox.ErrActualFulfillmentFormationUndecided,

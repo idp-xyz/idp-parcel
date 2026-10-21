@@ -19,7 +19,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// 本文件对真实 PostgreSQL 证实际履约补形成的库面（ADR-0231 决定一、五、六；迁移 0048）：采用与换版两封门铃与各自那一笔同落、重发不出
+// 本文件对真实 PostgreSQL 证实际履约补形成的库面（ADR-0231 决定一、五、六；迁移 0048）：采用与换版的门铃与各自那一笔同落、重发不出
 // 第二封；按委托列段只列这份委托的、本租户的；实际履约未形成册立、刷新、了结、只列未形成的、按租户隔离，写口无事务即拒、库面约束拒的
 // 一律带确定性拒绝。夹具全是合成登记，证据只记 S。
 
@@ -291,7 +291,7 @@ func TestTheUnformedRegisterRefusesWhatItCannotHold(t *testing.T) {
 	}
 }
 
-// Covers: AT-TF-303 的存储半边——两封门铃的交出口无环境事务即拒：门铃要与采用连线、换版同一笔落，事务外入队
+// Covers: AT-TF-303 的存储半边——门铃的交出口无环境事务即拒：门铃要与采用连线、换版同一笔落，事务外入队
 // 就是一封与采用或换版脱了钩的门铃。
 func TestTheCatchUpDoorbellsRefuseToRunOutsideATransaction(t *testing.T) {
 	pool := pgtest.Pool(t)
