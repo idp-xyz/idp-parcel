@@ -1,7 +1,7 @@
 # 07 ADR 的 Status 行里同一次停用写了两遍：标记前的旧注记与索引注记合一
 
 Category: enhancement
-Status: needs-triage
+Status: resolved——2026-10-21 并入 [docs-consistency/01](../../docs-consistency/issues/01-adr-suspension-chains.md) 一并做完，进 main `62b76d54c`（合并两写 111 份，前后对照见 01 的附表；`tools/adr-index -check` 新增校验防止重复再长）。此前 needs-triage
 Blocked by: [03](./03-adr-index-and-at-coverage-counts-are-generated.md) 进 main
 地盘：各 ADR 的 `Status` 行（只改这一行）；`docs/adr/README.md` 只经 `go run ./tools/adr-index` 重生成
 出处：票 03 完成记录「越权风险点」第 2 条。
