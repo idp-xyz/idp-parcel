@@ -144,3 +144,17 @@ Blocked by: 无（01 进 main 后开工；票 57+15 已进 main）
 
 修订后的检查（main `e8cd3de65`）：scratchpad 副本上 `go run ./tools/adr-index` 后 `-check` 退 0；改动的 `.md` 链接与锚点全部能解析；0082、0168、0190、0198、0236 去掉 Status 行与 Links 后与 main 逐字节相同；新写的码与符号逐个在 `internal/`、`cmd/` 里确认存在；三式用 grep 证明在 ADR-0271、CR CONTEXT、code/14 逐字一致。
 
+## 评审记录（第 3 轮，2026-10-21）
+
+阻断 1 条、顺手 4 条，全部照办；main 仍是 `e8cd3de65`，未再 rebase。
+
+| 条 | 评审意见 | 处置 |
+|---|---|---|
+| B1 | code/47 缺「证据」与「最小的诚实修法」 | 补「证据」：`PostingBasisKind` 没有抵扣依据、`FundPosition` 没有抵扣位置、迁移 `collection_remittance/0001` 的 `subledger_posting` 各列 CHECK 封住同一份词表；补「最小的诚实修法」：形定之前代码不动，认可的抵扣额留在`渠道在途`，汇付与对账时要看得出是未了结的认可抵扣、不当作渠道欠款追收 |
+| N2 | ADR-0269 决定四那句没覆盖全是已出账、已出账与晚于本期混着 | 后半句改为「一件都入不了本期而其中没有判不出归属日的，也不形成草稿，逐件指名晚于本期或已出账，不答未配置」，ADR-0269 决定四、SA CONTEXT 进入对账单那一条、UC-SA-003「未配置结束」、`AT-SA-213`、code/11 五处逐字同改（grep 整句各命中一次）；ADR-0269 索引注记的缩写同步；`AT-SA-212` 那一格对齐 |
+| N3 | 余额不足之后的出路少了短款冲正 | ADR-0271 决定二补「或短款冲正（决定四）回到`渠道在途`后再移」，CR CONTEXT 同义句补「或短款冲正回`渠道在途`（ADR-0271 决定四）」 |
+| N4 | code/47 Blocked by | 改为「14；用户（CR owner）决定抵扣记账形（ADR-0271 越权风险点 6）」 |
+| N5 | UC-SA-002 BUY 一格的另一个装配点 | 补 `cmd/parcel-settlement-register` 的 `evaluation_resume.go`（读码确认它构造 `TriggerBuyEvaluationOnOccurrenceFormedHandler`） |
+
+检查：scratchpad 副本上 `go run ./tools/adr-index` 后 `-check` 退 0；改过的 `.md` 链接与锚点全部能解析。
+
