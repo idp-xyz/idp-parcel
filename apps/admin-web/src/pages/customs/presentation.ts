@@ -109,7 +109,7 @@ export const problemCodeNotes: Record<string, string> = {
   INTAKE_FAILED: '接入解析未能完成,本次没有形成任何业务答案,可稍后重试。',
   NO_ANSWER_FORMED: '服务端处理未能完成,本次没有形成任何业务答案,可稍后重试。',
   OUTSIDE_ADMISSION_SCOPE: '这笔生产写不在治理登记的生产权威区间内,要阶段治理去登记区间;什么都没登记,重试不会好。',
-  IDENTITY_DEPENDENCY_UNAVAILABLE: '接入身份依赖读不动,本次什么都没登记,可稍后重试。',
+  IDENTITY_DEPENDENCY_UNAVAILABLE: '接入身份依赖读不动(发行方公钥集、操作者册或准入范围),可稍后重试。',
 };
 
 export function problemNote(code: string): string {
@@ -150,6 +150,16 @@ function snapshotHint(kind: CustomsRegistrationKind | DutyRegistrationKind, fiel
   return (
     `登记快照 JSON 的形状与受控登记口 parcel-customs-register ${kind} -input 吃的同一份;` +
     '本页不逐字段建表单,因为「渠道原始载荷 → 登记快照」的翻译属渠道接入契约,随 PAR-INT-01 提供。' +
+    fields
+  );
+}
+
+// 凭证一类单拼提示句:它经手工口由关务人员照原件录入(ADR-0236),中间没有「渠道原始载荷 → 登记快照」那一步要等接入
+// 契约,snapshotHint 那条不建表单的理由对它不成立。暂以 JSON 录入只是表单还没做(票 demo-chain-gaps/156),提示句照实说。
+function manualEntryHint(kind: CustomsRegistrationKind, fields: string): string {
+  return (
+    `登记快照 JSON 的形状与受控登记口 parcel-customs-register ${kind} -input 吃的同一份,也与外部系统经集成客户端送来的相同;` +
+    '本页暂以 JSON 录入,逐字段表单尚未提供。' +
     fields
   );
 }
@@ -198,7 +208,7 @@ export const registrationSnapshotHints: Record<CustomsRegistrationKind, string> 
   // 凭证的两端有效期都是输入——它不是版本册,没有「换版落定终点」那回事;uses 缺席与 0 同义
   // (来源未提供次数额度),不是「额度已用尽」,提示句把这一格点出来,免得登记方为「没有额度」
   // 特意填 0 还是空。
-  'regulatory-credential': snapshotHint(
+  'regulatory-credential': manualEntryHint(
     'regulatory-credential',
     '键为 credentialId / issuerRef / holderRef / procedureRef / validFrom / validTo / uses(租户取登录账号的绑定、登记人由服务端记下,' +
       '载荷带 tenantId 即拒;登记要持「监管凭证登记」这一种授予);' +

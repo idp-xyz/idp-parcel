@@ -61,7 +61,8 @@ const columns: ListColumn<ExternalFundsFactRecord>[] = [
   },
   {
     id: 'adoptedBy',
-    header: '采用人',
+    // 一行是一条事实、金额取链头那一版，提交方也取链头那一版：首版与各次更正可能出自不同的人，表头点明是哪一版的。
+    header: '采用人（链头那一版）',
     className: 'font-mono text-xs',
     // 缺席是那一路不记提交方（外部系统经集成客户端送入或受控 CLI），照实说出缘由，不留白也不写「无」。
     render: (row) => row.operationEvidence ?? '未记（非手工采用）',

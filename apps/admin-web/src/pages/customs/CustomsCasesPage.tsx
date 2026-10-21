@@ -38,7 +38,7 @@ const info = moduleInfoById['customs-cases'];
 // 「关闭义务」（案件维，目录连义务项），都接 GET /customs-case-registers 按
 // registry 分派；以及监管凭证册一签（票 sa-cc/10），接 GET /customs-credentials
 // ——凭证是 UC-CC-003 就绪门禁第 4 道的依据，所以挂在就绪与授权签旁；凭证的登记签
-// （票 sa-cc/07 步二；票 demo-chain-gaps/140 起接手工口 POST /customs-regulatory-credential-manual-registrations）跟着读签
+// （票 sa-cc/07 步二，接手工口 POST /customs-regulatory-credential-manual-registrations，ADR-0236）跟着读签
 // 落在本页——写签跟着读签走。本页只有凭证一本册有在线登记口：就绪、授权与关闭义务
 // 改的是案上此刻的事实，按票 admin-write-faces/02 的范围裁定不进写面。
 //

@@ -135,7 +135,7 @@ export const problemCodeNotes: Record<string, string> = {
     '采用信封被框架确定性拒收（引用太长把信封顶过上限），本次什么都没登记；要改的是引用的长度或形，重发同一份永远同一个结果。',
   OUTSIDE_ADMISSION_SCOPE:
     '这笔生产写不在治理登记的生产权威区间内，要阶段治理去登记区间；什么都没登记，重试不会好。',
-  IDENTITY_DEPENDENCY_UNAVAILABLE: '接入身份依赖读不动，本次什么都没登记，可稍后重试。',
+  IDENTITY_DEPENDENCY_UNAVAILABLE: '接入身份依赖读不动（发行方公钥集、操作者册或准入范围），可稍后重试。',
 };
 
 export function problemNote(code: string): string {
@@ -154,7 +154,7 @@ export const fundsRegistrationTitles: Record<FundsRegistrationKind, string> = {
 
 /**
  * 登记输入形状的提示句。两类只差子命令一词（与端点路径、CLI 子命令同字），所以由一处拼出：逐类抄一遍会让
- * 「不逐字段建表单」这条理由在其中一遍被改动时悄悄分叉。
+ * 同一句提示在其中一遍被改动时悄悄分叉。暂以 JSON 录入只是逐字段表单还没做（票 demo-chain-gaps/156）。
  */
 function snapshotHint(kind: FundsRegistrationKind, fields: string): string {
   return (
