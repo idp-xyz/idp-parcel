@@ -60,6 +60,13 @@ const columns: ListColumn<ExternalFundsFactRecord>[] = [
     render: (row) => `${row.amount} ${row.currency}`,
   },
   {
+    id: 'adoptedBy',
+    header: '采用人',
+    className: 'font-mono text-xs',
+    // 缺席是那一路不记提交方（外部系统经集成客户端送入或受控 CLI），照实说出缘由，不留白也不写「无」。
+    render: (row) => row.operationEvidence ?? '未记（非手工采用）',
+  },
+  {
     id: 'applied',
     header: '已分配金额',
     align: 'right',

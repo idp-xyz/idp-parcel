@@ -266,6 +266,11 @@ export interface CredentialRecord {
   validTo: string;
   uses?: number;
   registeredAt: string;
+  /**
+   * 登记这一版的操作证据（ADR-0236 决定三）：经管理台手工登记时是 `OPERATOR/<发行方>#<sub>`；缺席是那一路不记登记人
+   * （集成客户端或受控 CLI 送入），不是「无人登记」。
+   */
+  operationEvidence?: string;
 }
 
 export interface CredentialListResponseBody {
@@ -385,7 +390,9 @@ export const customsRegistrationEndpoints: Record<CustomsRegistrationKind, strin
   'gate-catalog': '/customs-gate-catalog-registrations',
   'candidate-port': '/customs-candidate-port-registrations',
   'declaration-path': '/customs-declaration-path-registrations',
-  'regulatory-credential': '/customs-regulatory-credential-registrations',
+  // 凭证取手工口（ADR-0236）：挂「运营决定」能力面、按 REGULATORY_CREDENTIAL_REGISTRATION 认证，服务端记下登记人。不带 manual
+  // 的那一口是集成客户端族给外部系统用的，认客户端凭据，管理台的操作者令牌过不去。CLI 子命令仍叫 regulatory-credential。
+  'regulatory-credential': '/customs-regulatory-credential-manual-registrations',
 };
 
 /**

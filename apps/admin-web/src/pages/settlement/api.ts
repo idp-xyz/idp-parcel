@@ -266,6 +266,11 @@ export interface ExternalFundsFactRecord {
   occurredAt: string;
   corrects?: string;
   correctedAt?: string;
+  /**
+   * 采用链头那一版的提交方（ADR-0236 决定三）：经管理台手工采用时是 `OPERATOR/<发行方>#<sub>`；缺席是那一路不记提交方
+   * （集成客户端或受控 CLI 送入），不是「无人提交」。
+   */
+  operationEvidence?: string;
   appliedAmount: string;
   reversedAmount: string;
   unappliedAmount: string;
@@ -381,23 +386,23 @@ export function listSettlementOperatingResults<Registry extends OperatingRegistr
   );
 }
 
-// —— 收付款核销页的登记签：外部资金事实采用 / 更正两口（ADR-0085，票 sa-cc/31；27 裁决 2 第二步）——
+// —— 收付款核销页的登记签：外部资金事实采用 / 更正两口（ADR-0085，票 sa-cc/31；手工口 ADR-0236，票 demo-chain-gaps/140）——
 // 形状以 internal/settlementaccounting/adapters/http/register_external_funds_fact.go 为准。
 //
-// 登记端点与其余命令面同挂字面量 UnconfiguredIntake{}：写准入不另立形，隔离读准入（ADR-0078）
-// 换得了读行换不了写行。因此墙降之前提交必然答 403 ACCESS_CHANNEL_NOT_CONFIGURED，那是诚实答案
-// 不是接线缺陷；登记参数（PAR-INT-01，实例半边）到位后由装配点换真 Intake 即点亮，本文件一行不用改。
-// 此前采用与更正仍走受控登记 CLI parcel-settlement-register——两口消费同一登记用例、答案代数一致。
+// 本签发向的是两个手工口（`…-manual-registrations`）：挂操作者渠道的「运营决定」能力面，按决定种类
+// EXTERNAL_FUNDS_FACT_ADOPTION 认证，首版与更正同一种授予；服务端把登录操作者记成那一版的提交方。没有这一种授予答 403
+// OPERATOR_NOT_GRANTED，由面板的接入拒绝那一格说清续办。路径不带 manual 的那两口仍在，是集成客户端族给有接口的外部系统用的，
+// 认的是客户端凭据而不是操作者令牌，管理台发过去只会被拒——本签因此不用它们。
 //
-// 请求体形状此刻没有契约。页面收的是登记输入 JSON 本体，与受控 CLI <命令> -input 吃的同一份形状
-// （译装在服务端只有 registrationjson 那一份），原样作请求体送出；不逐字段建表单，理由同各登记签。
+// 页面收的是登记输入 JSON 本体，与受控 CLI <命令> -input 吃的同一份形状（译装在服务端只有 registrationjson 那一份），原样作请求体
+// 送出；租户取登录操作者的绑定，载荷带 tenantId 即拒。
 
 /** 采用 / 更正两口封闭二格，词与端点路径、受控 CLI 子命令逐字同一个。 */
 export type FundsRegistrationKind = 'external-funds-fact' | 'external-funds-fact-correction';
 
 export const fundsRegistrationEndpoints: Record<FundsRegistrationKind, string> = {
-  'external-funds-fact': '/settlement-external-funds-fact-registrations',
-  'external-funds-fact-correction': '/settlement-external-funds-fact-correction-registrations',
+  'external-funds-fact': '/settlement-external-funds-fact-manual-registrations',
+  'external-funds-fact-correction': '/settlement-external-funds-fact-correction-manual-registrations',
 };
 
 export function registerExternalFundsFact(

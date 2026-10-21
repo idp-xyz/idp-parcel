@@ -28,6 +28,14 @@ export function credentialUsesLabel(uses?: number): string {
   return `${uses} 次`;
 }
 
+/**
+ * 登记人一格。缺席是那一路不记登记人(集成客户端或受控 CLI 送入,ADR-0236 决定三),照实说「未记」并点出缘由,不显成空白
+ * ——空白读起来像渲染丢了东西,也不显成「无」——那会被读成没有人登记过。
+ */
+export function credentialRegistrantLabel(evidence?: string): string {
+  return evidence ? evidence : '未记(非手工登记)';
+}
+
 // 有效期两端合成一段区间、登记时间另列:三个时刻是三件事(0014 自注),混进一列读者就分不出
 // 「何时登进来」与「何时有效」。
 export function credentialRows(records: CredentialRecord[]): RegisterRow[] {
@@ -42,6 +50,7 @@ export function credentialRows(records: CredentialRecord[]): RegisterRow[] {
       validity: formatRange(record.validFrom, record.validTo),
       uses: credentialUsesLabel(record.uses),
       registeredAt: formatInstant(record.registeredAt),
+      registeredBy: credentialRegistrantLabel(record.operationEvidence),
     },
   }));
 }

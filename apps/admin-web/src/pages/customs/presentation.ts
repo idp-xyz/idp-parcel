@@ -108,6 +108,8 @@ export const problemCodeNotes: Record<string, string> = {
     '请求构造不出查询(registry 缺席或不在封闭集),重发同样的内容不会改变结果。',
   INTAKE_FAILED: '接入解析未能完成,本次没有形成任何业务答案,可稍后重试。',
   NO_ANSWER_FORMED: '服务端处理未能完成,本次没有形成任何业务答案,可稍后重试。',
+  OUTSIDE_ADMISSION_SCOPE: '这笔生产写不在治理登记的生产权威区间内,要阶段治理去登记区间;什么都没登记,重试不会好。',
+  IDENTITY_DEPENDENCY_UNAVAILABLE: '接入身份依赖读不动,本次什么都没登记,可稍后重试。',
 };
 
 export function problemNote(code: string): string {
@@ -198,7 +200,8 @@ export const registrationSnapshotHints: Record<CustomsRegistrationKind, string> 
   // 特意填 0 还是空。
   'regulatory-credential': snapshotHint(
     'regulatory-credential',
-    '键为 tenantId / credentialId / issuerRef / holderRef / procedureRef / validFrom / validTo / uses;' +
+    '键为 credentialId / issuerRef / holderRef / procedureRef / validFrom / validTo / uses(租户取登录账号的绑定、登记人由服务端记下,' +
+      '载荷带 tenantId 即拒;登记要持「监管凭证登记」这一种授予);' +
       'validFrom 与 validTo 两端都是输入(一身份一版、不可变,换期限是另一张凭证);' +
       'uses 缺席与 0 同义——来源未提供次数额度,不是已用尽。同身份换任何一项都答内容冲突,不覆盖。',
   ),

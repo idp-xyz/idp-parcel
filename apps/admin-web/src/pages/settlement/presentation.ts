@@ -133,6 +133,9 @@ export const problemCodeNotes: Record<string, string> = {
     '事实已采用（版本行已落），但向 customs-compliance 交的采用信封因依赖故障未出——重发同一份即补发同一封，不会重复采用。',
   HANDOFF_ENVELOPE_REJECTED:
     '采用信封被框架确定性拒收（引用太长把信封顶过上限），本次什么都没登记；要改的是引用的长度或形，重发同一份永远同一个结果。',
+  OUTSIDE_ADMISSION_SCOPE:
+    '这笔生产写不在治理登记的生产权威区间内，要阶段治理去登记区间；什么都没登记，重试不会好。',
+  IDENTITY_DEPENDENCY_UNAVAILABLE: '接入身份依赖读不动，本次什么都没登记，可稍后重试。',
 };
 
 export function problemNote(code: string): string {
@@ -155,8 +158,8 @@ export const fundsRegistrationTitles: Record<FundsRegistrationKind, string> = {
  */
 function snapshotHint(kind: FundsRegistrationKind, fields: string): string {
   return (
-    `登记输入 JSON 的形状与受控登记口 parcel-settlement-register ${kind} -input 吃的同一份；` +
-    '本页不逐字段建表单，因为「渠道原始载荷 → 登记输入」的翻译属渠道接入契约，随 PAR-INT-01 提供。' +
+    `登记输入 JSON 的形状与受控登记口 parcel-settlement-register ${kind} -input 吃的同一份，也与外部系统经集成客户端送来的相同；` +
+    '租户取登录账号的绑定、提交人由服务端记下，载荷里不带这两格（带 tenantId 即拒）；采用要持「外部资金事实采用」这一种授予。' +
     fields
   );
 }
@@ -169,7 +172,7 @@ function snapshotHint(kind: FundsRegistrationKind, fields: string): string {
 export const fundsRegistrationSnapshotHints: Record<FundsRegistrationKind, string> = {
   'external-funds-fact': snapshotHint(
     'external-funds-fact',
-    '键为 tenantId / factRef / sourceRef / payerRef / kind / currency / amountMinor / version / occurredAt；' +
+    '键为 factRef / sourceRef / payerRef / kind / currency / amountMinor / version / occurredAt；' +
       '种类取封闭三词 RECEIPT_CONFIRMED / PAYMENT_FAILED / FUNDS_RETURNED，缺席同样拒；' +
       'payerRef 可缺席（来源未提供付款人是事实的一个诚实状态），给了却全是空白则拒；' +
       'amountMinor 是最小单位整数；occurredAt 是外部事实的业务发生时刻，不是登记时刻。' +
@@ -177,7 +180,7 @@ export const fundsRegistrationSnapshotHints: Record<FundsRegistrationKind, strin
   ),
   'external-funds-fact-correction': snapshotHint(
     'external-funds-fact-correction',
-    '键为 tenantId / factRef / corrects / version / amountMinor / correctedAt；' +
+    '键为 factRef / corrects / version / amountMinor / correctedAt；' +
       'corrects 必须等于该事实当前链头的版本，version 是这次更正形成的新版本，只有金额变——' +
       '来源、付款人、种类、币种与发生时刻从链头照抄，载荷带了它们按未知字段拒（其余若也变了那是另一条事实）。' +
       '回指自己、回指非链头、更正一条未采用的事实都答`未受理`；原版本保留，更正形成新有效版本。',

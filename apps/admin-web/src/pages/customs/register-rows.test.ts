@@ -44,6 +44,16 @@ test('凭证有效期两端成一段区间，登记时间另列', () => {
   equal(row.values.registeredAt, '2026-08-13 08:00:00 UTC');
 });
 
+// Covers: AT-CC-446（管理台半边）——登记人照服务端那一格原样显示；缺席是那一路不记登记人，说「未记」并点出缘由，不留白、不写「无」。
+test('凭证登记人：手工登记的照原样显示，不记的一路答未记', () => {
+  const [manual, unattributed] = credentialRows([
+    credential({ operationEvidence: 'OPERATOR/http://127.0.0.1:5556/dex#SYN-CUSTOMS-01' }),
+    credential({ credential: 'SYN-CRED-02' }),
+  ]);
+  equal(manual.values.registeredBy, 'OPERATOR/http://127.0.0.1:5556/dex#SYN-CUSTOMS-01');
+  equal(unattributed.values.registeredBy, '未记(非手工登记)');
+});
+
 function collaboration(over: Partial<DutyCollaborationRecord>): DutyCollaborationRecord {
   return {
     scope: 'SYN-UNIT-01',
