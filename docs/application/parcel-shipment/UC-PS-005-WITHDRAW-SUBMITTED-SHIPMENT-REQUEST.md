@@ -4,7 +4,7 @@
 
 ## 目标与边界
 
-本用例从客户或其当前有效授权代表请求撤回一份仍为`已提交`的委托开始，到 `parcel-shipment` 形成不可覆盖的撤回决定、返回已经先行形成的接受/拒绝结果、保持业务未决，或明确本次请求未受理为止。
+本用例从客户或其当前有效授权代表请求撤回一份仍为`已提交`的委托开始，到 `parcel-shipment` 形成不可覆盖的撤回决定、答未获授权、返回已经先行形成的接受/拒绝结果、认出来源冲突、保持业务未决，或明确本次请求未受理为止。
 
 撤回只终止整份尚未决定的服务请求，不是运营企业拒绝，也不删除原始提交、提交版本、接受判断历史或财务控制结果。决定前要重组成员或改变共享约束的，也走这一用例：先撤回整份原委托，再提交以撤回重提方向关联它的新委托（[ADR-0255](../../adr/0255-a-submitted-request-is-regrouped-only-by-withdrawing-it-and-submitting-linked-new-requests.md)）。委托已经接受后，客户对一个、多个或全部包裹提出的取消或停止服务请求转入 [`UC-PS-006`](./UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md)；委托已经拒绝或撤回后产生的新服务需求形成关联新委托。
 
@@ -59,7 +59,7 @@
 | 未获授权（`NOT_AUTHORIZED`） | 请求方与所查授权依据 | 不形成撤回、不释放；授权规则未登记不答这一格 |
 | 已有决定（`DECISION_ALREADY_FORMED`） | 已先行提交的接受、拒绝或撤回引用；撞上既有撤回时带原补偿关联 | 后到请求不覆盖原决定 |
 | 来源冲突（`SOURCE_CONFLICT`） | 原请求引用 | 同一请求身份携带不同内容；不覆盖原请求，不再撤回一次 |
-| 撤回未决（`UNDECIDED`） | 已知事实、缺口、未决原因（例如 `WITHDRAWAL_AUTHORITY_UNAVAILABLE`、`WITHDRAWAL_AUTHORITY_RULES_NOT_CONFIGURED`、`DECISION_IDENTITY_UNAVAILABLE`、`DECISION_NOT_RECORDED`、`STALE_SHIPMENT_REQUEST_REVISION`）和续办入口 | 不默认撤回或接受 |
+| 撤回未决（`UNDECIDED`） | 已知事实、缺口、续办入口与未决原因，原因是 `SHIPMENT_REQUEST_UNAVAILABLE`、`WITHDRAWAL_AUTHORITY_UNAVAILABLE`、`WITHDRAWAL_AUTHORITY_RULES_NOT_CONFIGURED`、`DECISION_IDENTITY_UNAVAILABLE`、`DECISION_NOT_RECORDED`、`STALE_SHIPMENT_REQUEST_REVISION` 之一 | 不默认撤回或接受 |
 | 统一不可见（不是一格结果） | 委托查无、跨租户或跨客户：`404` 加上下文统一不可见码（[ADR-0022](../../adr/0022-http-status-carries-answer-formed-not-business-verdict.md)） | 不区分不存在与他人的 |
 
 ## 应用流程
@@ -72,7 +72,7 @@
 | 4 | `parcel-shipment` | 在决定提交边界重新检查并提交撤回 | 与接受/拒绝竞争，只有一个决定成立 |
 | 5 | `parcel-shipment` | 同一提交保存撤回、任务停止、审计和发布意图；委托声明过客户包裹件号时，同一笔按每个号交出声明撤除（PS CONTEXT「一份带客户包裹件号的委托由`已提交`转为`已拒绝`或`已撤回`时」一条） | 不删除判断历史 |
 | 6 | `settlement-accounting` | 按原业务关联幂等释放已成立各项的占用；没有任何项成立时不发释放 | 失败时续办原补偿，不回滚撤回 |
-| 7 | 接入适配器 | 返回撤回、已有决定、未决或未受理结果 | 响应丢失时按稳定请求关联查询 |
+| 7 | 接入适配器 | 返回撤回、未获授权、已有决定、来源冲突、未决或未受理结果 | 响应丢失时按稳定请求关联查询 |
 
 ## 规则、补偿与并发
 
@@ -115,3 +115,4 @@
 |---|---|---|
 | `AT-PS-075`，「统一不可见」一行 | 撤回编排对查无的委托上抛错误，HTTP 适配器答 `500 NO_ANSWER_FORMED`；本行预期结果不变 | [code/22](../../../.scratch/docs-consistency/code/22-customer-face-http-contract-misses-accepted-adrs.md) |
 | `AT-PS-068`、`AT-PS-076` 与撤回后关联重提（[ADR-0255](../../adr/0255-a-submitted-request-is-regrouped-only-by-withdrawing-it-and-submitting-linked-new-requests.md)） | 已撤回委托在真库上读不回：重建门不开`已撤回`、撤回决定不进快照，重复撤回与以撤回重提关联原委托在真库上走不通；本行预期结果不变 | [code/36](../../../.scratch/docs-consistency/code/36-withdrawn-shipment-requests-cannot-be-read-back-from-the-store.md) |
+| 「撤回未决」一行，ADR-0256 决定一第 2 格「重放须接着办」 | 撤回停在未决时装配事务照样提交来源保全，重放同一请求对仍为`已提交`的委托答 `DECISION_ALREADY_FORMED`、不带任何决定，这次撤回从此不会形成；本行预期结果不变 | [code/44](../../../.scratch/docs-consistency/code/44-withdrawal-and-amendment-replays-short-circuit-after-an-undecided-round.md) |

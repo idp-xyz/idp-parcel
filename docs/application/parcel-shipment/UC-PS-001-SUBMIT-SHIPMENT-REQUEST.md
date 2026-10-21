@@ -115,7 +115,7 @@
 | 原委托不可见 | `PRIOR_REQUEST_NOT_FOUND` | 关联新委托指名的原委托查无此委托、编号不符，或属于别的租户、客户——三种同答 | 无（不回显原委托任何内容） | 不得区分三种原因，否则可以借此枚举别人的委托 |
 | 关联不适用 | `LINK_INELIGIBLE` | 原委托可见、也属这个客户，但它的状态不承认所声明的关联方向；关联只锚在已拒绝、已接受、已撤回三种终态上，原委托仍为`已提交`时客户该走同一委托的新提交版本（普通纠错），或先撤回原委托再关联重提（重组，[ADR-0255](../../adr/0255-a-submitted-request-is-regrouped-only-by-withdrawing-it-and-submitting-linked-new-requests.md)） | 关联方向与原委托当前状态 | 不得与「原委托不可见」并成一格，不得替客户撤回原委托 |
 
-提交编排没有形成答案时（来源保全之前的认证与解析失败，或保全之后归属判断、建单等一步出错）接 HTTP 答 5xx，调用方原样重发同一请求；本用例不另设「技术未形成」一格（[ADR-0256](../../adr/0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md)）。保全之后建单没有落成的那一次，重发时按已保全的来源只答`已有结果`、不指名委托，这份提交不会再建单——这是现状缺口，见「给开发的交接」。
+提交编排没有形成答案时（来源保全之前的认证与解析失败，或保全之后归属判断、建单等一步出错）接 HTTP 答 5xx，调用方原样重发同一请求；本用例不另设「技术未形成」一格，提交编排也不在「未决」那一格内（[ADR-0256](../../adr/0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md) 决定一）。保全之后建单没有落成的那一次，重发时按已保全的来源只答`已有结果`、不指名委托，这份提交不会再建单——这是现状缺口，见「给开发的交接」。
 
 ### 接受判断结果（接受链 `AdvanceAcceptanceChainHandler`）
 
@@ -303,4 +303,5 @@
 | `AT-PS-035`「接受提交未成立时按原关联释放已成立各项形成的占用」 | 提交版本被新版本取代（客户补件、授权处置交客户补充之后的补件）时，旧版本已成立的占用没有释放；本行预期结果不变 | [code/20](../../../.scratch/docs-consistency/code/20-superseded-submission-version-keeps-its-control-occupation.md) |
 | 提交答复与问题详情 | 首方提交口还没有 `/v1` 前缀，问题体还不是 `application/problem+json`（ADR-0140 决定二、三） | [code/22](../../../.scratch/docs-consistency/code/22-customer-face-http-contract-misses-accepted-adrs.md) |
 | 「未决结束」的安全续办 | 来源保全之后、建单之前出错（归属判断依赖失败、建单事务失败）的那次提交，重发时按已保全的来源只答`已有结果`、不指名委托，不再走归属与建单，这份提交就此丢失 | [code/39](../../../.scratch/docs-consistency/code/39-a-preserved-submission-whose-build-failed-is-never-built-on-replay.md) |
+| 提交答复「已有结果」一行「已经形成生产归属时返回原归属结果」 | 重放走 `resolvePreserved`，只答 `EXISTING_RESULT`、按来源身份找到委托时指名它，不带原归属决定；归属挡下的那次提交重放时客户拿不到原归属结果；本行预期结果不变 | [code/39](../../../.scratch/docs-consistency/code/39-a-preserved-submission-whose-build-failed-is-never-built-on-replay.md) |
 | 关联不适用 / 撤回重提（[ADR-0255](../../adr/0255-a-submitted-request-is-regrouped-only-by-withdrawing-it-and-submitting-linked-new-requests.md)） | 已撤回委托在真库上读不回（重建门不开`已撤回`、撤回决定不进快照），以 `WITHDRAWN_RESUBMISSION` 关联原委托在真库上走不通；`AT-PS-076` 同此 | [code/36](../../../.scratch/docs-consistency/code/36-withdrawn-shipment-requests-cannot-be-read-back-from-the-store.md) |
