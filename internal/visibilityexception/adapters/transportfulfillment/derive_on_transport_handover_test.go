@@ -155,9 +155,15 @@ func (clock handoverClock) Now() time.Time { return clock.at }
 
 func registeredHandover(t *testing.T, verdict tfdomain.HandoverVerdict) tfports.TransportHandoverRecord {
 	t.Helper()
+	return registeredHandoverOf(t, verdict, "parcel-1")
+}
+
+// registeredHandoverOf 同 registeredHandover，交接的对象是 object。
+func registeredHandoverOf(t *testing.T, verdict tfdomain.HandoverVerdict, object string) tfports.TransportHandoverRecord {
+	t.Helper()
 	spec := tfdomain.TransportHandoverSpec{
 		TenantID:   handoverValue(t, tfdomain.NewTenantID, "tenant-1"),
-		Object:     handoverValue(t, tfdomain.NewCarriedObjectReference, "parcel-1"),
+		Object:     handoverValue(t, tfdomain.NewCarriedObjectReference, object),
 		Scope:      handoverValue(t, tfdomain.NewHandoverScopeReference, "scope-1"),
 		ReleasedBy: handoverValue(t, tfdomain.NewHandoverPartyReference, "node-1"),
 		ReceivedBy: handoverValue(t, tfdomain.NewHandoverPartyReference, "carrier-1"),
@@ -179,7 +185,7 @@ func registeredHandover(t *testing.T, verdict tfdomain.HandoverVerdict) tfports.
 	return tfports.TransportHandoverRecord{
 		Key: tfports.TransportHandoverKey{
 			TenantID: handoverValue(t, tfdomain.NewTenantID, "tenant-1"),
-			Object:   handoverValue(t, tfdomain.NewCarriedObjectReference, "parcel-1"),
+			Object:   handoverValue(t, tfdomain.NewCarriedObjectReference, object),
 			Scope:    handoverValue(t, tfdomain.NewHandoverScopeReference, "scope-1"),
 			Version:  handoverValue(t, tfdomain.NewHandoverResultVersion, "handover-result/v1"),
 		},

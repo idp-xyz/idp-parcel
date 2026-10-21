@@ -41,13 +41,21 @@ func (double *externalTrackingFinderDouble) FindByKey(
 
 func judgedTrackingRecord(t *testing.T, version, supersedes string, judgment tfdomain.EffectiveTimeJudgment) tfports.ExternalTrackingFactRecord {
 	t.Helper()
+	return judgedTrackingRecordOf(t, version, supersedes, judgment, "parcel-1")
+}
+
+// judgedTrackingRecordOf 同 judgedTrackingRecord，轨迹的对象是 object。
+func judgedTrackingRecordOf(
+	t *testing.T, version, supersedes string, judgment tfdomain.EffectiveTimeJudgment, object string,
+) tfports.ExternalTrackingFactRecord {
+	t.Helper()
 	spec := tfdomain.ExternalTrackingFactSpec{
 		TenantID:    deliveryValue(t, tfdomain.NewTenantID, "tenant-1"),
 		Fact:        deliveryValue(t, tfdomain.NewExternalTrackingFactReference, "EXTF-1"),
 		Version:     deliveryValue(t, tfdomain.NewExternalTrackingFactVersion, version),
 		Source:      deliveryValue(t, tfdomain.NewTrackingSourceReference, "aggregator-a"),
 		Credential:  deliveryValue(t, tfdomain.NewExternalCarrierCredentialReference, "carrier-x/1Z999"),
-		Object:      deliveryValue(t, tfdomain.NewCarriedObjectReference, "parcel-1"),
+		Object:      deliveryValue(t, tfdomain.NewCarriedObjectReference, object),
 		SourceEvent: deliveryValue(t, tfdomain.NewSourceEventReference, "evt-"+version),
 		Status:      deliveryValue(t, tfdomain.NewRawStatusReference, "DELIVERED"),
 		OccurredAt:  trackingOccurredAtVE,

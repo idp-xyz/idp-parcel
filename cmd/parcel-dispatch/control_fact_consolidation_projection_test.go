@@ -24,6 +24,7 @@ import (
 const (
 	controlFactBag                  = "SYN-BAG-CODE75"
 	controlFactParcel               = "SYN-PARCEL-CODE75"
+	controlFactBagLikeParcel        = "SYN-BAG-NOT-IN-BOOK"
 	deriveExternalTrackingInboxName = "visibility-exception/derive-projection-from-external-carrier-tracking"
 )
 
@@ -84,7 +85,8 @@ func consumeControlFact(t *testing.T, fixture *synVerticalFixture, route control
 }
 
 // Covers: AT-VE-199 真库半边（证据 S）——各路经生产装配：对象是节点作业册上的一袋，那一封信入账（inbox 一行），袋不立已接受
-// 事实也不立追踪投影；对象是不在单元册上的包裹，照旧派生一份事实、一个条目。
+// 事实也不立追踪投影；对象是不在单元册上的包裹，照旧派生一份事实、一个条目——串长得像袋号的也一样，是不是单元只看单元册，
+// 不按串形或前缀猜。
 func TestAControlFactOnABagIsAccountedForWithoutATrackingProjection(t *testing.T) {
 	for _, route := range controlFactRoutes() {
 		t.Run(route.name, func(t *testing.T) {
@@ -99,12 +101,14 @@ func TestAControlFactOnABagIsAccountedForWithoutATrackingProjection(t *testing.T
 				t.Fatalf("袋立了追踪投影，条目 %d 个", len(entries))
 			}
 
-			parcelFact := consumeControlFact(t, fixture, route, controlFactParcel, "code75-parcel")
-			if n := acceptedFactVersions(t, fixture, parcelFact); n != 1 {
-				t.Fatalf("包裹上的事实 %d 份, want 1", n)
-			}
-			if entries := projectionEntries(t, fixture, controlFactParcel); len(entries) != 1 {
-				t.Fatalf("包裹条目 %d 个, want 1", len(entries))
+			for _, parcel := range []string{controlFactParcel, controlFactBagLikeParcel} {
+				parcelFact := consumeControlFact(t, fixture, route, parcel, "code75-"+parcel)
+				if n := acceptedFactVersions(t, fixture, parcelFact); n != 1 {
+					t.Fatalf("%s 上的事实 %d 份, want 1", parcel, n)
+				}
+				if entries := projectionEntries(t, fixture, parcel); len(entries) != 1 {
+					t.Fatalf("%s 条目 %d 个, want 1", parcel, len(entries))
+				}
 			}
 		})
 	}

@@ -37,24 +37,26 @@ func (double *unitQuestionDouble) MembersAt(
 	return veports.ConsolidationMembership{}, nil
 }
 
-// controlFactLane 是一路：handle 把对象为 parcel-1 的一份登记经真派生编排交给适配器，交回落下的事实份数；at 是那份事实的业务
+// controlFactLane 是一路：handle 把对象为 object 的一份登记经真派生编排交给适配器，交回落下的事实份数；at 是那份事实的业务
 // 发生时间。
 type controlFactLane struct {
 	name   string
 	at     time.Time
-	handle func(t *testing.T, members veports.ConsolidationMembershipView) (int, error)
+	handle func(t *testing.T, members veports.ConsolidationMembershipView, object string) (int, error)
 }
 
 func controlFactLanes() []controlFactLane {
-	handover := func(verdict tfdomain.HandoverVerdict) func(*testing.T, veports.ConsolidationMembershipView) (int, error) {
-		return func(t *testing.T, members veports.ConsolidationMembershipView) (int, error) {
+	handover := func(verdict tfdomain.HandoverVerdict) func(*testing.T, veports.ConsolidationMembershipView, string) (int, error) {
+		return func(t *testing.T, members veports.ConsolidationMembershipView, object string) (int, error) {
 			derive, facts, _ := handoverDeriveHandler(t, handoverMappingViewDouble{}, handoverProjectionDownstreamDouble{})
 			subject, err := adapter.NewDeriveOnTransportHandoverAdapter(
-				&handoverFinderDouble{record: registeredHandover(t, verdict), found: true}, members, derive)
+				&handoverFinderDouble{record: registeredHandoverOf(t, verdict, object), found: true}, members, derive)
 			if err != nil {
 				t.Fatalf("构造：%v", err)
 			}
-			err = subject.HandleRegisteredTransportHandover(t.Context(), registeredHandoverRef())
+			ref := registeredHandoverRef()
+			ref.Object = object
+			err = subject.HandleRegisteredTransportHandover(t.Context(), ref)
 			return len(facts.byKey), err
 		}
 	}
@@ -62,35 +64,39 @@ func controlFactLanes() []controlFactLane {
 		{name: "交接已交接", at: handoverJudgedAt, handle: handover(tfdomain.ObjectHandedOver)},
 		{name: "交接已拒收", at: handoverJudgedAt, handle: handover(tfdomain.HandoverRefused)},
 		{name: "交接待确认", at: handoverJudgedAt, handle: handover(tfdomain.HandoverPendingConfirmation)},
-		{name: "场外揽收", at: pickedUpAt, handle: func(t *testing.T, members veports.ConsolidationMembershipView) (int, error) {
+		{name: "场外揽收", at: pickedUpAt, handle: func(t *testing.T, members veports.ConsolidationMembershipView, object string) (int, error) {
 			derive, facts, _ := pickupDeriveHandler(t, pickupMappingViewDouble{}, pickupProjectionDownstreamDouble{})
 			subject, err := adapter.NewDeriveOnOffsitePickupAdapter(
-				&pickupRegistryDouble{record: registeredPickup(t, "parcel-1"), found: true}, members, derive)
+				&pickupRegistryDouble{record: registeredPickup(t, object), found: true}, members, derive)
 			if err != nil {
 				t.Fatalf("构造：%v", err)
 			}
-			err = subject.HandleRegisteredOffsitePickup(t.Context(), registeredPickupRef())
+			ref := registeredPickupRef()
+			ref.Object = object
+			err = subject.HandleRegisteredOffsitePickup(t.Context(), ref)
 			return len(facts.byKey), err
 		}},
-		{name: "有效交付", at: deliveredAt, handle: func(t *testing.T, members veports.ConsolidationMembershipView) (int, error) {
+		{name: "有效交付", at: deliveredAt, handle: func(t *testing.T, members veports.ConsolidationMembershipView, object string) (int, error) {
 			derive, facts, _ := deliveryDeriveHandler(t, deliveryMappingViewDouble{}, deliveryProjectionDownstreamDouble{})
 			subject, err := adapter.NewDeriveOnEffectiveDeliveryAdapter(
-				&deliveryFinderDouble{record: registeredDelivery(t, "parcel-1"), found: true}, members, derive)
+				&deliveryFinderDouble{record: registeredDelivery(t, object), found: true}, members, derive)
 			if err != nil {
 				t.Fatalf("构造：%v", err)
 			}
-			err = subject.HandleRegisteredEffectiveDelivery(t.Context(), registeredDeliveryRef())
+			ref := registeredDeliveryRef()
+			ref.Object = object
+			err = subject.HandleRegisteredEffectiveDelivery(t.Context(), ref)
 			return len(facts.byKey), err
 		}},
 		// 外部承运轨迹有三个时间：问单元取源给的发生时间，与进投影的业务发生时间同一格，不取判断过的有效时间。
-		{name: "外部承运轨迹", at: trackingOccurredAtVE, handle: func(t *testing.T, members veports.ConsolidationMembershipView) (int, error) {
+		{name: "外部承运轨迹", at: trackingOccurredAtVE, handle: func(t *testing.T, members veports.ConsolidationMembershipView, object string) (int, error) {
 			judgment, err := tfdomain.JudgeEffectiveTimeExplicitly(trackingEffectiveVE)
 			if err != nil {
 				t.Fatalf("有效时间判断：%v", err)
 			}
 			derive, facts, _ := deliveryDeriveHandler(t, deliveryMappingViewDouble{}, deliveryProjectionDownstreamDouble{})
 			subject, err := adapter.NewDeriveOnExternalCarrierTrackingAdapter(
-				&externalTrackingFinderDouble{record: judgedTrackingRecord(t, "EXTV-1", "", judgment), found: true}, members, derive)
+				&externalTrackingFinderDouble{record: judgedTrackingRecordOf(t, "EXTV-1", "", judgment, object), found: true}, members, derive)
 			if err != nil {
 				t.Fatalf("构造：%v", err)
 			}
@@ -100,13 +106,13 @@ func controlFactLanes() []controlFactLane {
 	}
 }
 
-func assertAskedOnceAt(t *testing.T, members *unitQuestionDouble, at time.Time) {
+func assertAskedOnceAt(t *testing.T, members *unitQuestionDouble, object string, at time.Time) {
 	t.Helper()
 	if len(members.asked) != 1 {
 		t.Fatalf("问了 %d 次是不是单元, want 1", len(members.asked))
 	}
 	query := members.asked[0]
-	if query.Object != "parcel-1" || query.TenantID.String() != "tenant-1" || !query.At.Equal(at) {
+	if query.Object != object || query.TenantID.String() != "tenant-1" || !query.At.Equal(at) {
 		t.Fatalf("问的是 %s / %s / %s，要按事实的对象、本租户、业务发生时间问", query.Object, query.TenantID, query.At)
 	}
 }
@@ -117,32 +123,35 @@ func TestAControlFactOnAConsolidationUnitIsAccountedForWithoutDeriving(t *testin
 	for _, lane := range controlFactLanes() {
 		t.Run(lane.name, func(t *testing.T) {
 			members := &unitQuestionDouble{t: t, units: map[string]bool{"parcel-1": true}}
-			facts, err := lane.handle(t, members)
+			facts, err := lane.handle(t, members, "parcel-1")
 			if err != nil {
 				t.Fatalf("单元那一份应入账，got %v", err)
 			}
 			if facts != 0 {
 				t.Fatalf("单元被当成一件追踪包裹立了 %d 份事实", facts)
 			}
-			assertAskedOnceAt(t, members, lane.at)
+			assertAskedOnceAt(t, members, "parcel-1", lane.at)
 		})
 	}
 }
 
-// Covers: AT-VE-199——对象那一刻不是集运单元时照旧：同一份事实派生到这件包裹上。
+// Covers: AT-VE-199——对象那一刻不是集运单元时照旧：同一份事实派生到这件包裹上。串长得像单元（unit-cons-1）也一样：是不是单元只看
+// 节点作业的单元册，不按串形或前缀猜。
 func TestAControlFactOnAParcelStillDerives(t *testing.T) {
 	for _, lane := range controlFactLanes() {
-		t.Run(lane.name, func(t *testing.T) {
-			members := &unitQuestionDouble{t: t}
-			facts, err := lane.handle(t, members)
-			if err != nil {
-				t.Fatalf("handle: %v", err)
-			}
-			if facts != 1 {
-				t.Fatalf("包裹上的事实 %d 份, want 1", facts)
-			}
-			assertAskedOnceAt(t, members, lane.at)
-		})
+		for _, object := range []string{"parcel-1", "unit-cons-1"} {
+			t.Run(lane.name+"/"+object, func(t *testing.T) {
+				members := &unitQuestionDouble{t: t}
+				facts, err := lane.handle(t, members, object)
+				if err != nil {
+					t.Fatalf("handle: %v", err)
+				}
+				if facts != 1 {
+					t.Fatalf("包裹上的事实 %d 份, want 1", facts)
+				}
+				assertAskedOnceAt(t, members, object, lane.at)
+			})
+		}
 	}
 }
 
@@ -158,7 +167,7 @@ func TestControlFactUnitQuestionFailuresKeepTheirSentinels(t *testing.T) {
 			"答复译不回": {err: veports.ErrConsolidationMembershipUntranslatable, want: adapter.ErrConsolidationMembershipInconsistent},
 		} {
 			t.Run(lane.name+"/"+name, func(t *testing.T) {
-				facts, err := lane.handle(t, &unitQuestionDouble{t: t, err: test.err})
+				facts, err := lane.handle(t, &unitQuestionDouble{t: t, err: test.err}, "parcel-1")
 				if !errors.Is(err, test.want) {
 					t.Fatalf("err = %v, want %v", err, test.want)
 				}
