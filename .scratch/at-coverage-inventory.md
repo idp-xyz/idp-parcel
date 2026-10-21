@@ -620,6 +620,21 @@
 
 | AT | 场景 | UC |
 |---|---|---|
+| `AT-CR-001` | 同一代收指令同内容重登答已在册、换内容答内容冲突 | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
+| `AT-CR-002` | 代收指令缺一格不落册、答未受理 | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
+| `AT-CR-003` | 代收事实的指令不在册答依据不在册 | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
+| `AT-CR-004` | 代收事实未声明来源层级或证据引用答未受理 | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
+| `AT-CR-005` | 分户账键缺一维答未受理；记账进未开立的账答依据不在册 | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
+| `AT-CR-009` | 凭指令清分到应付客户；凭代收事实直接到应付客户答未受理 | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
+| `AT-CR-010` | 超过来源位置余额答余额不足、确定没落账 | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
+| `AT-CR-011` | 重放已落账记账、来源此后已移空答已在册 | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
+| `AT-CR-012` | 形成回汇批次；分户账未开立答依据不在册 | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
+| `AT-CR-013` | 凭批次汇付；批次交出后新成员答批次已交出；重放成员答已在册 | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
+| `AT-CR-014` | 交出汇付主张两次与不在册批次 | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
+| `AT-CR-015` | 差异事项只登不落账，差额另凭事项记账 | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
+| `AT-CR-018` | 冲正是反向同额；入账不能冲正 | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
+| `AT-CR-022` | 依赖故障答未决、重跑续办 | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
+| `AT-CR-023` | 运营查阅代收分户账册：空册答空列表、读口故障答 NO_ANSWER_FORMED | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
 | `AT-NO-001` | 当前有效查验协作事项明确指向节点控制的 P1 及受控开封、呈验和重封动作 | UC-NO-001-ACCEPT-AND-EXECUTE-CUSTOMS-NODE-COLLABORATION.md |
 | `AT-NO-002` | 请求覆盖 P1、P2，但节点只控制并能合法处理 P1 | UC-NO-001-ACCEPT-AND-EXECUTE-CUSTOMS-NODE-COLLABORATION.md |
 | `AT-NO-003` | 请求缺少明确对象、动作、节点或必要授权依据 | UC-NO-001-ACCEPT-AND-EXECUTE-CUSTOMS-NODE-COLLABORATION.md |
@@ -1284,6 +1299,14 @@
 | `AT-CC-407` | 引用和关系提交成功，但发布首次失败 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
 | `AT-CC-408` | 来源已保全，但关联结果技术提交失败 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
 | `AT-CC-410` | 检查本用例直接形成或修改的对象 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
+| `AT-CR-006` | 只凭渠道代收报告入账（code/14） | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
+| `AT-CR-007` | 真实到账按指令移位、上限按指令算（code/14） | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
+| `AT-CR-008` | 同一条事实换记账标识再记答内容冲突（code/14） | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
+| `AT-CR-016` | 短款只从渠道在途、溢款只从待清分落入（code/14） | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
+| `AT-CR-017` | 场景十七：报告 100、到账 96、认可抵扣 3、短款 1（code/14、code/47） | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
+| `AT-CR-019` | 来源更正追加事实并回指原事实（code/15） | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
+| `AT-CR-020` | 真实到账凭结算已采用事实引用登记，金额之和不超额（ADR-0274；code/54） | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
+| `AT-CR-021` | 批次只收归集截点前已处于应付客户的本金（code/15） | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
 | `AT-NO-022` | 包裹无当前有效路由（同 `AT-NO-031`：方向依据随对象下发、带有效区间，作业端判；ADR-0024、ADR-0251） | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
 | `AT-NO-031` | 包裹没有当前有效路由（方向依据随对象下发、带有效区间，作业端判；ADR-0024、ADR-0251） | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NR-051` | 选中候选的限制状态未知：关务目录为空、受理基线缺端点国家或关务来源未接（ADR-0250） | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
@@ -1584,3 +1607,5 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-10-21 追记（票 docs-consistency/08，文档自洽 TF 组）：UC-TF-005 新立 `AT-TF-329`（待确认或拒收更正成`已交接`即进段、结束先前段的参与；今天对象仍挂在先前的段里，票 demo-chain-gaps/130），未实现，入④；`AT-TF-018`、`AT-TF-070`（逐对象结果待确认，code/01）、`AT-TF-054`（单元成员随单元受控的派生规则未立，ADR-0263、票 demo-chain-gaps/80）、`AT-TF-087`、`AT-TF-088`（节点实测后的再准备未实现，票 demo-chain-gaps/44）由②移入④；`AT-TF-037`（准备结果不入队信封，ADR-0201 决定七）、`AT-TF-089`（出发不读容量与需求快照，ADR-0264）改场景文字，留②；`AT-TF-081`（三类口径，ADR-0146、ADR-0150）改场景文字，留③。UC-TF-004 `AT-TF-181` 删去重号的旧行，盘点里本无此号。总览计数不改，由推送方重算。
 
 2026-10-21 追记（票 docs-consistency/code/39，含隔离评审修订）：UC-PS-001 新立 `AT-PS-111`（保全之后没有形成答案，重发重判仍放行即接着建单、并发只建一份且后到者不判）、`AT-PS-112`（生产归属未决之后重发重判、按这一次作答）、`AT-PS-113`（准入暂停、交接已确认的他方归属与三格拒绝之后重发答已有结果带原结果、不重判）、`AT-PS-114`（他方交接未确认之后重发重投同一次尝试、不重判），四行随代码与测试同票落地，入①；`AT-PS-003` 改限为原处理已经建单、带建单所据的原归属结果，该行补点真库用例；`AT-PS-104` 的重放一支限到这次也没有建单。总览计数未改，由推送方重算。
+
+2026-10-21 追记（票 docs-consistency/10，10a 半边）：新立 UC-CR-001（collection-remittance 此前没有 UC，「给开发的交接」自 CR CONTEXT 迁入），`AT-CR-001`–`023`：编排已有、测试未点名的十五行入②，未实现的八行（code/14、15、47、54）入④；UC-TF-005 `AT-TF-157`–`161` 改为引用 UC-VE-002、UC-VE-004 的对应行，①的几行不动。计数随进 main 重算。
