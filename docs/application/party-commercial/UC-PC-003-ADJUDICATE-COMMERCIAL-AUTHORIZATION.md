@@ -86,7 +86,7 @@
 
 ## 首切范围与现状
 
-动作集合 `AuthorizedAction` 今天是封闭五格：人工复核（`MANUAL_REVIEW`）、主动拒绝（`ACTIVE_REJECTION`）、资料修订（`SOURCE_DATA_AMENDMENT`，[ADR-0116](../../adr/0116-source-data-amendment-is-an-authorized-action-and-contract-delegation-resolves-the-actual-decider.md) 决定一）、受控关闭（`CONTROLLED_CLOSURE`）与重开（`REOPENING`）。裁定交回动作、所命中的授权规则版本、原因、证据、时点与实际决定方（`Authorization.Decider()`，ADR-0116 决定三）。消费侧 `parcel-shipment` 的主动拒绝、人工复核、资料修订、受控关闭与重开各有授权适配器，按本用例的答复集合翻译。撤回不在动作集内，归建模未决一；`parcel-shipment` 的撤回适配器已在，折不出请求即答未形成，不译成授权规则未配置。
+动作集合 `AuthorizedAction` 是封闭集：人工复核（`MANUAL_REVIEW`）、主动拒绝（`ACTIVE_REJECTION`）、资料修订（`SOURCE_DATA_AMENDMENT`，[ADR-0116](../../adr/0116-source-data-amendment-is-an-authorized-action-and-contract-delegation-resolves-the-actual-decider.md) 决定一）、受控关闭（`CONTROLLED_CLOSURE`）与重开（`REOPENING`）。裁定交回动作、所命中的授权规则版本、原因、证据、时点与实际决定方（`Authorization.Decider()`，ADR-0116 决定三）。消费侧 `parcel-shipment` 的主动拒绝、人工复核、资料修订、受控关闭与重开各有授权适配器，按本用例的答复集合翻译；`适用冲突`今天不在它们的翻译集合内，落进各自的 `default` 交回 error（未形成），补这一格见 code/24。撤回不在动作集内，归建模未决一；`parcel-shipment` 的撤回适配器已在，折不出请求即答未形成，不译成授权规则未配置。
 
 ## 建模未决与已作的裁定
 

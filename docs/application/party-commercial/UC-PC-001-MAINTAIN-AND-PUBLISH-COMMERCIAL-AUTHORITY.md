@@ -88,7 +88,7 @@
 | 换版收尾 `CloseCommercialVersionHandler`（`/commercial-version-successor-cuts`、`/commercial-version-retirements`、`register-version-closures`） | `REGISTERED` | 已收尾（新登一条截止或一次退役） |
 | 同上 | `ALREADY_REGISTERED` | 重复（同一次收尾重放） |
 | 同上 | `NOT_ACCEPTED` | 未受理（收尾不成立，原因随结果交回）；没有内容冲突一格 |
-| 参与方身份与关系登记 `register_party_identity` | `REGISTERED`、`DEACTIVATED` | 已建立、已停用 |
+| 参与方身份与关系登记 `RegisterPartyIdentityHandler` | `REGISTERED`、`DEACTIVATED` | 已建立、已停用 |
 | 同上 | `ALREADY_REGISTERED`、`CONTENT_CONFLICT`、`NOT_ACCEPTED`、`NOT_FOUND` | 重复、内容冲突、未受理、停用的身份从未登记 |
 
 管理台待批准载体那一路（预览、录入、批准、发布载体）另有自己的结果码，批准由审批职责规则判，发布时把已批准的载体交给受控发布（[ADR-0126](../../adr/0126-commercial-publication-digest-is-computed-server-side-per-register-and-approval-comes-through-a-pending-carrier.md)）；产品—渠道映射、渠道账号使用授权、法人资料与注册号类型各有自己的登记编排。本表不列这几只。
