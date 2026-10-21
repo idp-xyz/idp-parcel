@@ -16,12 +16,38 @@ type versionFold struct {
 	closed bool
 }
 
-// narrowedBy 折进壳上最新一条区间更正。调用方先核更正指的是不是这一版。
+// narrowedBy 折进壳上最新一条区间更正。调用方先核更正指的是不是这一版，并只交最新的那一条（登记顺序上的最后一条，
+// ADR-0056）——先截晚、再截早，判的是后一条。
 func (fold versionFold) narrowedBy(correction ValidityCorrection) versionFold {
 	if end, bounded := correction.corrected.EndsAt(); bounded {
-		fold.cutAt = end
+		return fold.cutAtEnd(end)
 	}
 	return fold
+}
+
+// cutAtEnd 折进一个已经取出的截止点，给只拿得到更正终点的读法用（CommercialRegistry.correctionEndOf）。
+func (fold versionFold) cutAtEnd(end time.Time) versionFold {
+	fold.cutAt = end
+	return fold
+}
+
+// selectable 交回自带区间的正文折进截止点之后还能被选中的那一段：只截终点，正文本就在截止点之前结束的原样交回；
+// 收窄之后一刻也不剩时第二个返回值为假。整版离开不在这里判，问 excludes。
+func (fold versionFold) selectable(body EffectiveInterval) (EffectiveInterval, bool) {
+	if fold.cutAt.IsZero() {
+		return body, true
+	}
+	if !fold.cutAt.After(body.StartsAt()) {
+		return EffectiveInterval{}, false
+	}
+	if bodyEnd, bounded := body.EndsAt(); bounded && !bodyEnd.After(fold.cutAt) {
+		return body, true
+	}
+	narrowed, err := NewEffectiveInterval(body.StartsAt(), fold.cutAt)
+	if err != nil {
+		return EffectiveInterval{}, false
+	}
+	return narrowed, true
 }
 
 // closedWhole 折进整版离开：退役只管退役登记之后作出的新决定，而问到这里的决定都在其后，所以与业务时点无关地一律

@@ -382,18 +382,18 @@ func (authorization Authorization) Decider() (Decider, bool) {
 // 这个范围表过态、只是没把这一项放进去——那是它给出的答案，不是它还没被问过。反过来，规则
 // 全部过期与从未登记同落`未配置`：在请求那个时刻，这个范围都没有一条管得着的规则，两者要做
 // 的事同为「让一条现行规则存在」。「现行」按折完所挂版本收尾的授予判（InForceAt）：已退役与截止
-// 之后的授予不算（ADR-0261 决定一）。收尾要求后继接得住旧版此后的那一段，所以一次成立的收尾不会
-// 把`已配置`变成`未配置`。
+// 之后的授予不算（ADR-0261 决定一）。后继版本在同一范围登了接得住的授予时，一次成立的收尾不会把
+// `已配置`变成`未配置`；收尾门只看两版的壳，不看后继版本上登没登授予，没登的那一段就答`未配置`。
 //
 // 命中多于一条授予答 ErrAuthorityApplicabilityConflict（ADR-0261 决定三）：不取首个，不按版本标签、
 // 装载顺序或生效时点挑——任何这类规则都是在替租户挑一版，而消费方会把挑出来的那一版当作「所采用的
-// 授权规则版本」保存下来。两条是同一授权规则对象换版未收尾，还是不同对象各授一份，同一答法。
+// 授权规则版本」保存下来。两条是同一授权规则对象换版未收尾，还是不同对象各授一份，同一答法。冲突先于
+// 解决定方判：决定三不带例外，即便这次请求无论采用哪一条都会因决定方被拒（委派缺席、客户账户请求关闭或
+// 重开），也先答冲突——多条命中本身是一处配置错误，理清之后同一请求照常答拒绝。
 //
 // 授权命中之后再解实际决定方（ADR-0116 Decision 三）。委派只回答「谁替谁」，顶替不了「许不许」：
 // 规则缺席时不看委派照旧`未配置`；规则在场而运营角色代录的决定权归客户的动作没有有效委派，
 // 是 ErrDelegationAbsent——它 Is ErrNotAuthorized，因为缺的是客户把决定权交出来，不是租户的规则。
-// 决定方的解法与命中的是哪一条授予无关，所以先解决定方：它答出`不允许`时，命中几条授予都改变不了
-// 这个答案，照答不允许，不报适用冲突——冲突说的是「采用哪一版」答不出，而一次拒绝不采用任何一版。
 //
 // 「谁有权复核」同样走这里，带 ManualReviewAction，不另立一个按范围加时刻的谓词：那种谓词没有
 // 主体、没有等级、没有三值，答不了「谁有权」，也不该答「要不要」——后者的单一权威是接单规则
@@ -419,12 +419,12 @@ func Authorize(
 		}
 		return Authorization{}, ErrNotAuthorized
 	}
+	if len(hits) > 1 {
+		return Authorization{}, ErrAuthorityApplicabilityConflict
+	}
 	decider, err := resolveDecider(delegations, request)
 	if err != nil {
 		return Authorization{}, err
-	}
-	if len(hits) > 1 {
-		return Authorization{}, ErrAuthorityApplicabilityConflict
 	}
 	return Authorization{
 		action:   request.action,

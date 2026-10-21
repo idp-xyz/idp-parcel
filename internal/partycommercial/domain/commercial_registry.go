@@ -317,8 +317,8 @@ func (registry *CommercialRegistry) bodyExcludedAt(version CommercialVersion, at
 	if registered, found := registry.versions[key]; found && registered.status != CommercialVersionEffective {
 		fold = fold.closedWhole()
 	}
-	if list := registry.corrections[key]; len(list) > 0 {
-		fold = fold.narrowedBy(list[len(list)-1])
+	if end, cut := registry.correctionEndOf(key); cut {
+		fold = fold.cutAtEnd(end)
 	}
 	return fold.excludes(at)
 }

@@ -209,3 +209,52 @@ func TestADelegationLeavesWithTheClosureOfItsContractVersion(t *testing.T) {
 		}
 	})
 }
+
+// Covers: ADR-0056「选用区间取登记顺序上的最后一条」延伸到授予与正文——同一版先截晚（截在 v3 的起点）、再截早（截在 v2
+// 的起点），授予与供应商协议正文都按后一条判：两者之间的时刻旧版已不现行。按前一条判，授予会与 v2 并存成适用冲突，
+// 正文会照旧支持采购。
+func TestTheLatestOfTwoCutsGovernsTheGrantAndTheBody(t *testing.T) {
+	fixture := newAuthorityClosureFixture(t)
+
+	old := fixture.saveRuleWithGrant(t, "v1", cutRowPredecessorStart)
+	fixture.saveRuleWithGrant(t, "v2", cutRowSuccessorStart)
+	fixture.saveRuleWithGrant(t, "v3", cutRowLaterStart)
+	if result := fixture.cut(t, cutCommand(t, old, "v3", "SYN-CUT-AUTH-LATE")); result.Outcome() != application.VersionClosureRegistered {
+		t.Fatalf("cut at v3 outcome = %q (cause %v)", result.Outcome(), result.Cause())
+	}
+	if result := fixture.cut(t, cutCommand(t, old, "v2", "SYN-CUT-AUTH-EARLY")); result.Outcome() != application.VersionClosureRegistered {
+		t.Fatalf("cut at v2 outcome = %q (cause %v)", result.Outcome(), result.Cause())
+	}
+	if got := fixture.correctionRows(t); got != 2 {
+		t.Fatalf("更正册 %d 行, want 2", got)
+	}
+	if got := fixture.loadedGrantLabels(t, cutRowAfter); len(got) != 1 || got[0] != "v2" {
+		t.Fatalf("两次截止之间的时刻装载 = %v, want 只有 v2——按后一条（较早的截止点）判", got)
+	}
+	authorized, err := fixture.adjudicate(t, grantRejectionRequest(t, pcScope(t).String(), cutRowAfter))
+	if err != nil || authorized.GrantVersion().Version().String() != "v2" {
+		t.Fatalf("adjudicate = %v / %v, want 已授权指名 v2", authorized.GrantVersion().Version(), err)
+	}
+
+	contents, err := adapter.NewSupplierAgreementContents(fixture.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a1 := cutVersion(t, domain.SupplierAgreementObject, "agreement-1", "v1", cutRowPredecessorStart)
+	fixture.saveAgreement(t, a1)
+	fixture.saveAgreement(t, cutVersion(t, domain.SupplierAgreementObject, "agreement-1", "v2", cutRowSuccessorStart))
+	fixture.saveAgreement(t, cutVersion(t, domain.SupplierAgreementObject, "agreement-1", "v3", cutRowLaterStart))
+	if result := fixture.cut(t, cutCommand(t, a1, "v3", "SYN-CUT-AGREEMENT-LATE")); result.Outcome() != application.VersionClosureRegistered {
+		t.Fatalf("cut agreement at v3 outcome = %q (cause %v)", result.Outcome(), result.Cause())
+	}
+	if result := fixture.cut(t, cutCommand(t, a1, "v2", "SYN-CUT-AGREEMENT-EARLY")); result.Outcome() != application.VersionClosureRegistered {
+		t.Fatalf("cut agreement at v2 outcome = %q (cause %v)", result.Outcome(), result.Cause())
+	}
+	body, found, err := contents.LoadSupplierAgreement(t.Context(), a1.Tenant(), a1)
+	if err != nil || !found {
+		t.Fatalf("正文点读 v1：found=%v err=%v", found, err)
+	}
+	if body.SupportsProcurementAt(cutRowAfter) || !body.SupportsProcurementAt(cutRowBefore) {
+		t.Fatal("正文没有按后一条（较早的截止点）判")
+	}
+}

@@ -151,9 +151,11 @@ func TestTwoMatchingGrantsAreAnApplicabilityConflict(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if len(loaded) != 2 || loaded[0].Version().ObjectID().String() != "auth-a" {
-		t.Fatalf("loaded = %d grants, first %q; want 2, auth-a first（按 object_id 排序，不是登记先后）",
-			len(loaded), loaded[0].Version().ObjectID())
+	if len(loaded) != 2 {
+		t.Fatalf("loaded %d grants, want 2", len(loaded))
+	}
+	if loaded[0].Version().ObjectID().String() != "auth-a" {
+		t.Fatalf("first loaded = %q, want auth-a（按 object_id 排序，不是登记先后）", loaded[0].Version().ObjectID())
 	}
 
 	handler := application.NewAdjudicateCommercialAuthorizationHandler(grants)

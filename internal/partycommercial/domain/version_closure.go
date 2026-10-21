@@ -309,27 +309,19 @@ func (registry *CommercialRegistry) requireTakeOver(old, next CommercialVersion,
 }
 
 // bodySelectionOf 取一版自带区间的政策正文此刻在解析里还能被选中的那一段：正文区间被壳上最新一条区间更正的终点收窄，
-// 判法与 bodyExcludedAt 同一条（只截终点）。carried 为假是这一版没登正文或不是这几类；selects 为假是收窄之后一刻也不剩。
+// 折法在 versionFold.selectable（与 bodyExcludedAt 同一处）。carried 为假是这一版没登正文或不是这几类；selects 为假是
+// 收窄之后一刻也不剩。
 func (registry *CommercialRegistry) bodySelectionOf(version CommercialVersion) (interval EffectiveInterval, carried, selects bool) {
 	body, carried := registry.policyBodyIntervalOf(version)
 	if !carried {
 		return EffectiveInterval{}, false, false
 	}
-	end, cut := registry.correctionEndOf(keyOf(version))
-	if !cut {
-		return body, true, true
+	fold := versionFold{}
+	if end, cut := registry.correctionEndOf(keyOf(version)); cut {
+		fold = fold.cutAtEnd(end)
 	}
-	if !end.After(body.StartsAt()) {
-		return EffectiveInterval{}, true, false
-	}
-	if bodyEnd, bounded := body.EndsAt(); bounded && !bodyEnd.After(end) {
-		return body, true, true
-	}
-	narrowed, err := NewEffectiveInterval(body.StartsAt(), end)
-	if err != nil {
-		return EffectiveInterval{}, true, false
-	}
-	return narrowed, true, true
+	interval, selects = fold.selectable(body)
+	return interval, true, selects
 }
 
 // reachesEndOf 答 outer 是否一直延续到 inner 的终点（含开放结束）。

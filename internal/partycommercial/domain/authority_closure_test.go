@@ -243,28 +243,31 @@ func TestAClosureFoldsOnlyIntoTheVersionItNames(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0261 决定三的边界——适用冲突只在「采用哪一版」有分别时答。答案与选哪一条授予无关时照答确定的那一格：
-// 客户账户请求只能由运营角色形成的关闭，哪一条授予都改变不了它是`不允许`；运营角色代录而委派缺席，同理。
-func TestARefusalThatNoGrantChoiceChangesIsNotAConflict(t *testing.T) {
+// Covers: ADR-0261 决定三首句不带例外——多条命中先答适用冲突，先于解实际决定方：客户账户请求只能由运营角色形成的关闭，
+// 或运营角色代录而委派缺席，命中两条授予时都答冲突，不答 ErrCustomerAccountCannotDecide / ErrDelegationAbsent。冲突
+// 理清（只剩一条）之后，同一请求照常答拒绝。
+func TestSeveralHitsAreAConflictBeforeTheDeciderIsResolved(t *testing.T) {
 	whole := closureInterval(t, closureRuleStart, closureRuleEnd)
 	closures := []domain.AuthorityGrant{
 		closureGrantOn(t, liveVersion(t, domain.AuthorizationRuleObject, "auth-close-a", "v1"), domain.ControlledClosureAction, whole),
 		closureGrantOn(t, liveVersion(t, domain.AuthorizationRuleObject, "auth-close-b", "v1"), domain.ControlledClosureAction, whole),
 	}
-	_, err := domain.Authorize(closures, nil,
-		requestBy(t, customerRequester(t, "account-1"), domain.ControlledClosureAction, "level-commercial", "scope-a"))
-	if !errors.Is(err, domain.ErrCustomerAccountCannotDecide) {
-		t.Fatalf("error = %v, want ErrCustomerAccountCannotDecide", err)
+	customerClosure := requestBy(t, customerRequester(t, "account-1"), domain.ControlledClosureAction, "level-commercial", "scope-a")
+	_, err := domain.Authorize(closures, nil, customerClosure)
+	assertApplicabilityConflict(t, err)
+	if _, err := domain.Authorize(closures[:1], nil, customerClosure); !errors.Is(err, domain.ErrCustomerAccountCannotDecide) {
+		t.Fatalf("只剩一条时 error = %v, want ErrCustomerAccountCannotDecide", err)
 	}
 
 	amendments := []domain.AuthorityGrant{
 		closureGrantOn(t, liveVersion(t, domain.AuthorizationRuleObject, "auth-amend-a", "v1"), domain.SourceDataAmendmentAction, whole),
 		closureGrantOn(t, liveVersion(t, domain.AuthorizationRuleObject, "auth-amend-b", "v1"), domain.SourceDataAmendmentAction, whole),
 	}
-	_, err = domain.Authorize(amendments, nil,
-		requestBy(t, operatorRequester(t, "operator-1", "account-1"), domain.SourceDataAmendmentAction, "level-commercial", "scope-a"))
-	if !errors.Is(err, domain.ErrDelegationAbsent) {
-		t.Fatalf("error = %v, want ErrDelegationAbsent", err)
+	operatorAmendment := requestBy(t, operatorRequester(t, "operator-1", "account-1"), domain.SourceDataAmendmentAction, "level-commercial", "scope-a")
+	_, err = domain.Authorize(amendments, nil, operatorAmendment)
+	assertApplicabilityConflict(t, err)
+	if _, err := domain.Authorize(amendments[:1], nil, operatorAmendment); !errors.Is(err, domain.ErrDelegationAbsent) {
+		t.Fatalf("只剩一条时 error = %v, want ErrDelegationAbsent", err)
 	}
 
 	_, err = domain.Authorize(amendments, nil,
