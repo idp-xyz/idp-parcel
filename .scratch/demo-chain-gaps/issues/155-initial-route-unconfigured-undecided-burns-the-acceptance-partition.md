@@ -1,7 +1,7 @@
 # 155 NR 初始路由的未配置类未决照样重投到 ABANDONED
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-dcg155（2026-10-21，见文末「完成记录」）。此前 needs-triage——2026-10-21 Claude Code 会话立（票 131 实施时读代码发现，与 131 同族；用户「要我裁定的部分，你作为业务和系统专家，请你自决吧」授权）
+Status: in-progress——隔离评审无阻断项、评审修订完，待进 main，分支 claude-dcg155（2026-10-21，见文末「完成记录」「评审记录」）。此前完工待评审。此前 needs-triage——2026-10-21 Claude Code 会话立（票 131 实施时读代码发现，与 131 同族；用户「要我裁定的部分，你作为业务和系统专家，请你自决吧」授权）
 Blocked by: 无
 出处：票 [131](./131-network-reassessment-undecided-is-split-by-reason.md) 实施；[ADR-0235](../../../docs/adr/0235-route-reassessment-settles-what-a-retry-cannot-change-and-does-not-judge-triggers-older-than-the-current-position.md) 决定六
 
@@ -60,7 +60,7 @@ Blocked by: 无
 
 1. **推不动的九格入账为`路由未形成`**：证据未配置、候选空间立不起来、候选证据不全、排序形态未声明、最低成本并列、待判断、不可计价、币种不齐、取数侧没接。判据只在编排一处：这九格从 `RouteUndecidedReason` 移到 `ports.InitialRouteNotFormedReason`，码不变；适配器只按结果折。候选证据不全入这一格，依据是 ADR-0250 决定一的那条纪律：取数侧只交「状态未知」的来源一律是重投推不动的缺口，真依赖故障在取数侧交错误。
 2. **推得动的照旧未决、整封回滚重投**：判断库、证据、商业适用性、交接登记读不回，取号故障，证据连续换代，成本读不回；另加一格 `NOT_FORMED_UNRECORDED`（原因写不进未形成登记，护栏同 ADR-0094 决定五）。
-3. **原因另立一册，不复用复核未判登记**：`network_routing.initial_route_not_formed`（迁移 0025），主键是完整判断键，与 `initial_route` 同一组维。复核未判登记按触发关联、答「这一次为什么没判」；这里答「这件包裹此刻为什么还没有初始路由」。所以同一判断键再停一次按最新一次改写，不像复核那样只留先到那一行。
+3. **原因另立一册，不复用复核未判登记**：`network_routing.initial_route_not_formed`（迁移 0025），主键是完整判断键，与 `initial_route` 同一组维。复核未判登记按触发关联、答「这一次为什么没判」；这里答这件包裹「最近一次停住的原因」。所以同一判断键再停一次按最新一次改写，不像复核那样只留先到那一行。
 4. **判成与未形成同在一封交接时整封入账**：判成的照常提交、交意图，未形成的那几件各留一行原因，不连坐（AT-NR-088）。
 5. **并列留痕落库**：全部候选、并列的那几家、各自打平的金额与币种（AT-NR-089）。候选证据不全另记全部候选与缺口，形照 ADR-0250 的「登记同行记缺口」（AT-NR-090）。授权角色的人工选择入口不同票，仍归 [docs-consistency/code/29](../../docs-consistency/code/29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md)。
 6. **成本取数侧的确定性错误给一个哨兵** `ports.ErrRouteCostAnswerUnusable`：`errUntranslatableEvaluation`（含候选没有线路引用、比较币种或方案引用译不出）、`errNotACostEvaluation`（方案方向或用途配错）、`errUntranslatableParcelFacts` 都挂在它名下。初始路由与复核无路由那条线据它响亮报错，不进未决哨兵，也不落未形成登记：它不是等登记的缺口，落了就是一条点名租户没登记的假原因（AT-NR-092、093）。复核失效线与仍适用线照常落、不拦（失效必须照常落库的硬句；仍适用已判定）。
@@ -69,12 +69,12 @@ Blocked by: 无
 
 ### 越权风险点
 
-1. **入账之后没有续办**（NR owner）。登记补齐、部署接入或授权裁决之后，这几件包裹不会自动形成初始路由。此后它们的每一次复核都落「没有路由历史」未判。原先烧到 ABANDONED 同样丢了这次判断，还拖住分区；现在至少原因与对象可查。全靠票 154。
+1. **入账之后没有续办**（NR owner）。登记补齐、部署接入或授权裁决之后，这几件包裹不会自动形成初始路由。此后它们的每一次复核都落「没有路由历史」未判。原先烧到 ABANDONED 同样丢了这次判断，还拖住分区；现在至少原因与对象可查。阻塞链：初始路由的续办并在票 154 里，154 又 Blocked by 票 14（同族续办形状），要先等 14、再等 154。
 2. **未形成没有读面**（NR owner）。只能在库里按原因、按包裹查，读面随票 154 定。未形成也不发布任何业务事实：VE、NO 看不到这件包裹为什么没有路由，这一点与`无当前有效路由`不同。
 3. **依赖类未决仍连坐**（NR owner）。依赖未决的那一件让整封回滚，同一交接里判成的计划随之回滚，重投时再判一次，可能判出别的结果。`AT-NR-012` 依赖未决那一件因此仍未实现，UC-NR-001 交接表记「待立票」。
 4. **取数侧答用不了照样占着分区**（NR owner）。响亮报错按派发预算重投到 ABANDONED，失败码是 `dispatch.publish_failed`，不再是 `consumer_undecided`。方案方向配错多半是租户登记错，owner 若要它入账未形成，改的是决定 6 的分格。
 5. **复核两条线吞下取数侧用不了**（NR owner）。失效线把它记成候选评估未决，仍适用线不试改善，缺陷只在无路由那条线上报出来。
-6. **登记按最新一次改写**（NR owner）。第一次停住的原因不再留下，「这次为什么」只能看最新一行。
+6. **登记按最新一次改写**（NR owner）。第一次停住的原因不再留下，「这次为什么」只能看最新一行；并列的候选与打平金额、候选证据不全的缺口这些依据也随改写一起丢掉。
 7. **候选证据不全一格混着永久缺口**（NR、PS owner）。受理基线缺国家补不上，等登记的限制状态未知补得上，两者同在一个原因码下，靠缺口那一列区分。补救在 PS：受理时就拒收缺国家的投影，同 ADR-0250 越权风险点 2。
 8. **取数侧没接一格两边口径不一**（NR owner）。初始路由入账未形成，复核响亮报错（`ErrReassessCostSourceNotConfigured`，这一处没改）。生产装配今天两边都到不了这一格。
 9. **装配改了 `assemble.go` 一行**（NR owner）。`acceptanceConsumer` 本就在那个文件里，没有特性文件可改，只在 `CreateInitialRouteDeps` 里加了 `NotFormed: routeStore`，同一只判断库兼作未形成登记。哨兵名单与路由文件都没动，只改了 `routes_accepted_decision.go` 的注释。
@@ -125,6 +125,20 @@ Blocked by: 无
 ### 未决事项
 
 1. 续办：并入票 154，先裁地理投影从哪里来（可能要一份记录扩 ADR-0215 决定二的适用场景）。也要定 PP 价卡登记的信封送不送到 NR。
-2. 依赖类未决连坐兄弟包裹（`AT-NR-012` 依赖未决那一件）待立票，号由协调方取。可能的修法是逐包裹的重投信封，或者给判成的包裹单独提交。
+2. 依赖类未决连坐兄弟包裹（`AT-NR-012` 依赖未决那一件）已立票 [docs-consistency/code/78](../../docs-consistency/code/78-initial-route-dependency-undecided-drags-formed-siblings.md)。
 3. 越权风险点 4、8 两处口径要 owner 定。
+
+## 评审记录（2026-10-21，协调方隔离评审：无阻断项；作者子代理同分支修订）
+
+评审核过九格的判定、整封部分提交与「按最新一次改写」一册的取舍，三条变异都被用例抓住。分支先 `git rebase main`（`8d68c7bab`），无冲突。逐条去向：
+
+1. **`cost_source.go` var 块头注「下面两格」是计数式的跨行引用**——已修：头注拆进 `errUntranslatableEvaluation`、`errNotACostEvaluation` 各自的注释，各自点名挂在 `nrports.ErrRouteCostAnswerUnusable` 名下。
+2. **演示动线脚本没告诉人路由未形成时去哪儿查**——已修：`docs/design/synthetic-demo-journey-script.md`「起 dispatch」一节补带日期的补记，写明接受信封答 `PUBLISHED`，原因要查 `network_routing.initial_route_not_formed`，附查询。
+3. **「此刻为什么还没有初始路由」说过头了**（改写的是最近一次停住，不是此刻的权威状态）——已修：`ports.InitialRouteNotFormedRegister`、迁移 0025 头注、postgres 写口注释、NR CONTEXT 与本票代决 3 都改成「最近一次停住的原因」。迁移 0025 未进 main，就地改。越权风险点 6 补「并列与缺口的依据也随改写丢掉」。
+4. **`planReference` 里 `NewVersionReferenceIdentity` 的错误没挂哨兵**——已修：照切不开那一支包进 `errUntranslatableEvaluation`；`resolveLegs` 调用处补段号与候选上下文、照旧上抛。`TestDeterministicCostAnswersAreUnusableNotUnreadable` 补一格「方案引用立不成」（引用 `plan-x /v1`）；变异核对：拿掉这一层包装，这一格红，改回后绿。
+5. **越权风险点 1 没写阻塞链**——已修：初始路由的续办并在票 154，154 Blocked by 票 14，要先等 14、再等 154。
+6. **AT 盘点 `AT-NR-006` 行少点一名**——已修：补 `internal/networkrouting/adapters/customscompliance/customs_source_test.go::TestAnUnreadableCatalogIsADependencyFailureNotAGap`（关务目录读不到以 `ErrCustomsCatalogUnreadable` 上抛，取数侧半边）。
+7. **未决 2 另立票**——已立 [docs-consistency/code/78](../../docs-consistency/code/78-initial-route-dependency-undecided-drags-formed-siblings.md)（R3，Blocked by 票 154；修法候选 (a) 判成的照常提交、未决那件入队逐包裹重试信封，(b) savepoint 不推荐；验收 `AT-NR-012` 三件各保留自己的结果），立前 ls 确认号未占。UC-NR-001 交接表「待立票」改指 code/78；完成记录未决事项 2 同改。
+
+**未采纳**：无。
 
