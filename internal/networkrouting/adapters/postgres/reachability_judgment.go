@@ -284,21 +284,7 @@ func marshalFinding(finding domain.ReachabilityFinding) ([]byte, []byte, error) 
 			Reason:  candidate.Reason().String(),
 		})
 	}
-	gaps := finding.EvidenceGaps()
-	gapRows := make([]gapRow, 0, len(gaps))
-	for _, gap := range gaps {
-		affected := gap.AffectedCandidates()
-		ids := make([]string, 0, len(affected))
-		for _, id := range affected {
-			ids = append(ids, id.String())
-		}
-		gapRows = append(gapRows, gapRow{
-			Reference:    gap.Reference().String(),
-			Scope:        gap.Scope().String(),
-			Affected:     ids,
-			Reassessment: gap.ReassessmentCondition().String(),
-		})
-	}
+	gapRows := rowsOfGaps(finding.EvidenceGaps())
 
 	candidatesJSON, err := json.Marshal(candidateRows)
 	if err != nil {

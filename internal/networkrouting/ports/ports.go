@@ -239,6 +239,12 @@ type InitialRouteEvidenceView interface {
 // 缺输入不走这一格：只缺某一段的区域，那一段待判断；缺包裹事实，各段都待判断。候选随之缺成本依据。
 var ErrRouteCostSourceNotConfigured = errors.New("network routing: route cost source not configured")
 
+// ErrRouteCostAnswerUnusable 说取数侧交回或读到的东西本桥用不了，而且重投多少次都一样：提供方交回认不出的形状、比较
+// 币种或方案引用译不出、方案的方向或用途答的不是这一段的成本、候选没有线路引用、包裹事实立不成。它与依赖读不回分格
+// （ADR-0029：恢复动作不同必须分）：读不回等依赖恢复、重投推得动；这一格要有人改登记或改代码，重投只会把同一个错再答
+// 一遍、空占着分区。编排见它响亮报错，不折成任何一格未决。
+var ErrRouteCostAnswerUnusable = errors.New("network routing: route cost answer is unusable")
+
 // RouteCandidateCosts 是取数侧为一次判断交回的成本族：逐候选三态事实 + 逐候选逐段评价出处。
 type RouteCandidateCosts struct {
 	Facts     []domain.CandidateCostFact
@@ -326,6 +332,89 @@ type InitialRouteStore interface {
 		key domain.InitialRouteJudgmentKey,
 	) (InitialRouteRecord, bool, error)
 	Save(ctx context.Context, record InitialRouteRecord) (InitialRouteSaveOutcome, error)
+}
+
+// InitialRouteNotFormedReason 指名一件包裹的初始路由判断为什么停在重投推不动的一格（ADR-0273 决定二）。入格判据是恢复
+// 动作，与复核的 NotJudgedReason 同一条：重投改变不了结果，只有一次登记、一次部署或授权角色的裁决推得动；依赖读不回之类
+// 重投推得动的不在这里，照旧整封回滚重投。码与这几格进本集合之前作未决原因时的码相同，运维按码查的口径不变。
+type InitialRouteNotFormedReason uint8
+
+const (
+	InitialRouteNotFormedReasonInvalid InitialRouteNotFormedReason = iota
+	// NotFormedEvidenceNotConfigured 是网络目录为空，或判断时点没有适用于该服务目的的路由策略版本（ADR-0052、ADR-0148
+	// 决定六）：等租户登记网络定义。绝不译成`无当前有效路由`——还没人说过网络长什么样。
+	NotFormedEvidenceNotConfigured
+	// NotFormedCandidateSpaceNotEstablished 是证据里一条服务区域解析都没有，候选空间立不起来：等登记服务区域。
+	NotFormedCandidateSpaceNotEstablished
+	// NotFormedCandidateEvidenceIncomplete 是还有证据未知的候选，既选不出也立不成`无当前有效路由`：地址信息不足（受理基线
+	// 一经固定不再改写）或限制状态未知（关务目录为空、来源未接）。限制状态未知的来源只交「状态未知」时一律是重投推不动的
+	// 缺口，真依赖故障在取数侧交错误（ADR-0250 决定一同一条）。
+	NotFormedCandidateEvidenceIncomplete
+	// NotFormedRankingFormNotConfigured 是路由策略版本没有声明排序形态：等租户选形态（ADR-0146）。
+	NotFormedRankingFormNotConfigured
+	// NotFormedCandidatesTied 是最低成本并列、选不出唯一一条（`PAR-NET-16`）：候选可行、等授权角色裁。同一份依据再判仍
+	// 是同一个并列，重投推不动。
+	NotFormedCandidatesTied
+	// NotFormedCandidateCostsPending 是合格候选无一已计价、至少一条待判断：等段依据、段计价区域、价卡或参考序列登记。
+	NotFormedCandidateCostsPending
+	// NotFormedCandidateCostsUnpriceable 是合格候选无一已计价、都不可计价：要有人改价卡或候选集合（ADR-0029）。
+	NotFormedCandidateCostsUnpriceable
+	// NotFormedCandidateCostCurrenciesDiffer 是已计价候选币种不齐、策略版本又没登比较币种：等租户登比较币种。
+	NotFormedCandidateCostCurrenciesDiffer
+	// NotFormedCostSourceNotConfigured 是候选成本取数侧没接计价输入路径：那半是消费方的实例半边，等部署接入。
+	NotFormedCostSourceNotConfigured
+)
+
+func (reason InitialRouteNotFormedReason) String() string {
+	switch reason {
+	case NotFormedEvidenceNotConfigured:
+		return "ROUTE_EVIDENCE_NOT_CONFIGURED"
+	case NotFormedCandidateSpaceNotEstablished:
+		return "CANDIDATE_SPACE_NOT_ESTABLISHED"
+	case NotFormedCandidateEvidenceIncomplete:
+		return "CANDIDATE_EVIDENCE_INCOMPLETE"
+	case NotFormedRankingFormNotConfigured:
+		return "RANKING_FORM_NOT_CONFIGURED"
+	case NotFormedCandidatesTied:
+		return "CANDIDATES_TIED"
+	case NotFormedCandidateCostsPending:
+		return "CANDIDATE_COSTS_PENDING"
+	case NotFormedCandidateCostsUnpriceable:
+		return "CANDIDATE_COSTS_UNPRICEABLE"
+	case NotFormedCandidateCostCurrenciesDiffer:
+		return "CANDIDATE_COST_CURRENCIES_DIFFER"
+	case NotFormedCostSourceNotConfigured:
+		return "COST_SOURCE_NOT_CONFIGURED"
+	default:
+		return ""
+	}
+}
+
+// InitialRouteNotFormed 是一件包裹的初始路由停在重投推不动一格时留下的原因与对象：原因没落库，编排不得答`路由未形成`
+// （ADR-0273 决定二、ADR-0094 决定五同一条护栏）。它不是判断结果：不进 initial_route，不挡同一判断键以后再判。
+//
+// Candidates 在并列与候选证据不全时给出：本轮评估过的全部候选及各自的选择或淘汰依据。Tied 与 TiedCosts 只在并列时给出：
+// 并列的那几家与各自的候选成本事实，是并列的理由——授权角色裁的时候要看得见在哪几家之间、按什么金额打平。Gaps 只在候选
+// 证据不全时给出：缺什么、什么条件再判。
+//
+// AcceptedAt 是委托接受的业务时间（计划日后若形成，从它起生效）；SettledAt 是入账那一刻的处理时钟。
+type InitialRouteNotFormed struct {
+	Key         domain.InitialRouteJudgmentKey
+	Correlation domain.RequestCorrelationID
+	Reason      InitialRouteNotFormedReason
+	Candidates  []domain.RouteCandidate
+	Tied        []domain.CandidateID
+	TiedCosts   []domain.CandidateCostFact
+	Gaps        []domain.EvidenceGap
+	AcceptedAt  time.Time
+	SettledAt   time.Time
+}
+
+// InitialRouteNotFormedRegister 留下初始路由未形成的原因与对象。同一判断键再来一次（携带同一基线的另一封交接）停在
+// 未形成时按最新这一次改写：这一行答的是「这件包裹此刻为什么还没有初始路由」，不是某一次投递为什么没判。写口要事务：
+// 这一行与同一交接里已判成的包裹、交接登记与 inbox 的入账同笔提交。
+type InitialRouteNotFormedRegister interface {
+	RecordNotFormed(ctx context.Context, record InitialRouteNotFormed) error
 }
 
 // RouteHandoffLog 按交接关联登记内容指纹，供重放与冲突分界（UC-NR-001 步骤 2）：同关联
