@@ -342,10 +342,10 @@ func ambiguousJourneysFor(t *testing.T, object string) []ports.AlternateJourneyR
 	return records
 }
 
-// Covers: AT-TF-303（ADR-0231 决定二、六）——补形成里一件撞上确定性缺陷（旅程平局；登记用例上抛的数据违约），那一件记进未形成册（格
-// FORMATION_DEFECT、记下停在哪里，号与问的那一版在问到委托之前停住时不记），同一封门铃里的其余各件照常形成，整封入账；未形成册连缺陷都
-// 记不下（确定性拒写）时整封响亮失败。
-func TestADefectiveParticipationIsRecordedWhileTheRestOfTheDoorbellForms(t *testing.T) {
+// Covers: AT-TF-303（ADR-0231 决定二、六）——补形成里一件撞上数据缺陷（旅程平局；采用连线指名的委托读不回；PC 对委托记着的那一版答不在册、
+// 供应商不符或拼回另一串快照），那一件记进未形成册：格 FORMATION_DEFECT，类别码连同完整错误原文，号与问的那一版不记；交回的答复带着那一件
+// 与完整错误，同一封门铃里的其余各件照常形成，整封入账。未形成册连缺陷都记不下（确定性拒写）时整封响亮失败。
+func TestADataDefectIsRecordedWhileTheRestOfTheDoorbellForms(t *testing.T) {
 	rig, occurrences := catchUpRig(t, adoptedCommission(t),
 		participationRow(t, trunkParcel, true), participationRow(t, trunkSecondParcel, true))
 	rig.journeys.records = ambiguousJourneysFor(t, trunkSecondParcel)
@@ -355,27 +355,50 @@ func TestADefectiveParticipationIsRecordedWhileTheRestOfTheDoorbellForms(t *test
 		t.Fatalf("门铃 = %s，%d 件, want 整封入账、两件都有答复", result.Disposition(), len(result.Formations()))
 	}
 	registeredOccurrence(t, result.Formations()[0].Registration())
-	if result.Formations()[1].Outcome() != application.FormationDefectRecorded || occurrences.registry.saves != 1 {
-		t.Fatalf("平局那一件 = %s，册上 %d 项", result.Formations()[1].Outcome(), occurrences.registry.saves)
+	defective := result.Formations()[1]
+	if defective.Outcome() != application.FormationDefectRecorded || defective.Object() != trunkSecondParcel ||
+		defective.Segment() != trunkSegment || !errors.Is(defective.Defect(), domain.ErrAmbiguousJourney) || occurrences.registry.saves != 1 {
+		t.Fatalf("平局那一件 = %s %q %v，册上 %d 项", defective.Outcome(), defective.Object(), defective.Defect(), occurrences.registry.saves)
 	}
 	entry, found := rig.unformed.entry(t, trunkSecondParcel)
 	if !found || entry.State != ports.ActualFulfillmentUnformed || entry.Entry.Reason != ports.UnformedFormationDefect ||
-		entry.Entry.Defect != "AMBIGUOUS_JOURNEY" || entry.Entry.Revision != 0 || entry.Entry.Commission.String() != bkCommission ||
-		!entry.Entry.EndedAt.Equal(occurrenceEndedAt) {
+		entry.Entry.Defect != "AMBIGUOUS_JOURNEY: "+defective.Defect().Error() || entry.Entry.Revision != 0 ||
+		entry.Entry.Commission.String() != bkCommission || !entry.Entry.EndedAt.Equal(occurrenceEndedAt) {
 		t.Fatalf("缺陷那一条 = %+v %v", entry, found)
 	}
 	if _, found := rig.unformed.entry(t, trunkParcel); found {
 		t.Fatal("顺利形成的那一件进了册")
 	}
 
-	violated, violatedOccurrences := catchUpRig(t, adoptedCommission(t), participationRow(t, trunkParcel, true))
-	violatedOccurrences.agreements.check = ports.SupplierAgreementCheck{Standing: ports.SupplierAgreementNotRegistered}
-	if result := violated.onAdoption(t); result.Disposition() != application.FormationSettled {
-		t.Fatalf("数据违约那一封 = %s", result.Disposition())
-	}
-	if entry, _ := violated.unformed.entry(t, trunkParcel); entry.Entry.Reason != ports.UnformedFormationDefect ||
-		!strings.HasPrefix(entry.Entry.Defect, "DATA_VIOLATION: ") {
-		t.Fatalf("数据违约那一条 = %+v", entry)
+	for name, data := range map[string]struct {
+		mutate   func(*occurrenceRig)
+		code     string
+		sentinel error
+	}{
+		"委托读不回": {func(occurrences *occurrenceRig) { occurrences.commissions = commissionViewDouble{} },
+			"ADOPTION_WITHOUT_COMMISSION: ", application.ErrAdoptionWithoutCommission},
+		"协议核对答不在册": {func(occurrences *occurrenceRig) {
+			occurrences.agreements.check = ports.SupplierAgreementCheck{Standing: ports.SupplierAgreementNotRegistered}
+		}, "COMMISSION_AGREEMENT_DRIFT: ", application.ErrCommissionAgreementDrift},
+		"快照走岔": {func(occurrences *occurrenceRig) {
+			occurrences.agreements.check.Snapshot = occurrenceValue(t, domain.NewAgreementSnapshotReference, revisedSnapshot)
+		}, "COMMISSION_AGREEMENT_DRIFT: ", application.ErrCommissionAgreementDrift},
+	} {
+		t.Run(name, func(t *testing.T) {
+			rig, occurrences := catchUpRig(t, adoptedCommission(t), participationRow(t, trunkParcel, true))
+			data.mutate(occurrences)
+			rig.spy.inner = occurrences.handler()
+			result := rig.onAdoption(t)
+			if result.Disposition() != application.FormationSettled || len(result.Formations()) != 1 ||
+				!errors.Is(result.Formations()[0].Defect(), data.sentinel) {
+				t.Fatalf("那一封 = %s %+v", result.Disposition(), result.Formations())
+			}
+			entry, _ := rig.unformed.entry(t, trunkParcel)
+			if entry.Entry.Reason != ports.UnformedFormationDefect ||
+				entry.Entry.Defect != data.code+result.Formations()[0].Defect().Error() {
+				t.Fatalf("那一条 = %+v", entry)
+			}
+		})
 	}
 
 	refused, _ := catchUpRig(t, adoptedCommission(t), participationRow(t, trunkParcel, true))
@@ -385,5 +408,87 @@ func TestADefectiveParticipationIsRecordedWhileTheRestOfTheDoorbellForms(t *test
 		TenantID: occurrenceValue(t, domain.NewTenantID, occurrenceTenant), Segment: trunkSegment,
 	}); !errors.Is(err, ports.ErrActualFulfillmentUnformedWriteRefused) {
 		t.Fatalf("缺陷也记不下 err = %v, want 上抛", err)
+	}
+}
+
+// Covers: AT-TF-303（ADR-0231 决定二）——数据缺陷那一路上读写不动照样重投、什么都不记；缺陷若出在那一件已有发生项盖住之后，照已形成了结。
+func TestTheDefectPathRetriesWhatItCannotReadAndSettlesWhatIsCovered(t *testing.T) {
+	for name, mutate := range map[string]func(*formationRig, *occurrenceRig){
+		"盖住那一问": func(_ *formationRig, occurrences *occurrenceRig) {
+			occurrences.registry.coverageErr = errors.New("occurrences down")
+		},
+		"未形成册": func(rig *formationRig, _ *occurrenceRig) { rig.unformed.writeErr = errors.New("connection reset") },
+	} {
+		t.Run(name, func(t *testing.T) {
+			rig, occurrences := catchUpRig(t, adoptedCommission(t), participationRow(t, trunkParcel, true))
+			rig.journeys.records = ambiguousJourneysFor(t, trunkParcel)
+			mutate(rig, occurrences)
+			result := rig.onAdoption(t)
+			if _, found := rig.unformed.entry(t, trunkParcel); result.Disposition() != application.FormationRetry ||
+				result.UndecidedReason() == application.FormationUndecidedReasonNone || found {
+				t.Fatalf("disposition = %s reason = %s 进册 = %v, want 重投、指名停在哪一口、不进册", result.Disposition(), result.UndecidedReason(), found)
+			}
+		})
+	}
+
+	rig, _ := catchUpRig(t, adoptedCommission(t), participationRow(t, trunkParcel, true))
+	formed := registeredOccurrence(t, rig.onAdoption(t).Formations()[0].Registration())
+	key := ports.ActualFulfillmentUnformedKey{
+		TenantID: occurrenceValue(t, domain.NewTenantID, occurrenceTenant),
+		Segment:  occurrenceValue(t, domain.NewFulfillmentSegmentReference, trunkSegment),
+		Object:   occurrenceValue(t, domain.NewCarriedObjectReference, trunkParcel),
+	}
+	rig.unformed.records[key] = ports.ActualFulfillmentUnformedRecord{State: ports.ActualFulfillmentUnformed}
+	rig.journeys.records = ambiguousJourneysFor(t, trunkParcel)
+	result := rig.onAdoption(t)
+	if result.Disposition() != application.FormationSettled || result.Formations()[0].Outcome() != application.FormationDefectRecorded {
+		t.Fatalf("已被盖住的缺陷那一封 = %s %+v", result.Disposition(), result.Formations())
+	}
+	if entry := rig.unformed.records[key]; entry.State != ports.ActualFulfillmentUnformedFormed || entry.Occurrence.Occurrence != formed.Occurrence() {
+		t.Fatalf("已被盖住的那一件 = %+v, want 照已形成了结、记下那一项", entry)
+	}
+}
+
+// Covers: AT-TF-303（ADR-0231 决定二）——编程缺陷不进册：协议核对口交回集外的一格、登记用例答出本路不该见的一格或集外的答复，补形成照
+// 交接、交付两路一样响亮失败（上抛或整封答缺陷），未形成册上什么都不记，同一封里排在后面的那一件也不再问。
+func TestAProgrammingDefectFailsTheWholeDoorbellAndRecordsNothing(t *testing.T) {
+	rows := []domain.RehydrateParticipationSpec{participationRow(t, trunkParcel, true), participationRow(t, trunkSecondParcel, true)}
+
+	t.Run("核对口集外一格", func(t *testing.T) {
+		rig, occurrences := catchUpRig(t, adoptedCommission(t), rows...)
+		occurrences.agreements.check = ports.SupplierAgreementCheck{Standing: ports.SupplierAgreementStanding(250)}
+		rig.spy.inner = occurrences.handler()
+		_, err := rig.handler().CatchUpOnAdoption(t.Context(), application.CatchUpActualFulfillmentOnAdoptionCommand{
+			TenantID: occurrenceValue(t, domain.NewTenantID, occurrenceTenant), Segment: trunkSegment,
+		})
+		if err == nil || !strings.Contains(err.Error(), "outside its closed set") {
+			t.Fatalf("err = %v, want 上抛", err)
+		}
+		if len(rig.unformed.records) != 0 || len(rig.spy.commands) != 1 {
+			t.Fatalf("册上 %d 条、交登记 %d 次, want 不进册、停在第一件", len(rig.unformed.records), len(rig.spy.commands))
+		}
+	})
+
+	for name, canned := range map[string]application.RegisterChargeOccurrenceResult{
+		"不适用":     cannedRegistration(t, application.ChargeOccurrenceNotApplicable),
+		"采购上下文冲突": cannedRegistration(t, application.ChargeOccurrenceConflict),
+		"集外答复":    {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			rig, _ := catchUpRig(t, adoptedCommission(t), rows...)
+			rig.spy = &registrationSpy{canned: canned}
+			for doorbell, answer := range map[string]func() application.CatchUpActualFulfillmentResult{
+				"采用": func() application.CatchUpActualFulfillmentResult { return rig.onAdoption(t) },
+				"换版": func() application.CatchUpActualFulfillmentResult { return rig.onRevision(t, 2) },
+			} {
+				rig.spy.commands = nil
+				if result := answer(); result.Disposition() != application.FormationDefect || len(rig.spy.commands) != 1 {
+					t.Fatalf("%s门铃 = %s，交登记 %d 次, want 缺陷、停在第一件", doorbell, result.Disposition(), len(rig.spy.commands))
+				}
+				if len(rig.unformed.records) != 0 {
+					t.Fatalf("%s门铃把编程缺陷记进了册：%+v", doorbell, rig.unformed.records)
+				}
+			}
+		})
 	}
 }

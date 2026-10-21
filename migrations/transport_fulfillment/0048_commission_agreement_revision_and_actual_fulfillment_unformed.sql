@@ -59,10 +59,11 @@ CREATE TABLE transport_fulfillment.transport_commission_agreement_revision (
 --
 -- 已采用委托的段上，一个对象的参与以下一次权威交接或有效交付结束，自动形成那一路（或采用、换版之后的补形成）把它交给登记用例，登记
 -- 用例答了「这一次不形成」：委托那一版没声明实际履约的收费发生条件（未配置）、那一版在参与终点未生效或已终止（截止与退役之后就落这两
--- 格，ADR-0233），或委托提交时没记下协议版本（缺采购上下文）；补形成那一路上某一件撞上本上下文自己的确定性缺陷（旅程平局、数据违约、
--- 登记用例答出本路不该见的一格），也记成一条，同一封门铃里的其余各件照常形成。哪个段里的哪个对象、在哪份委托下按第几版、为什么、问的是哪一版协议、
--- 首次与最近一次答复时刻，记在这里；之后某一次形成了、或认出已有一项发生项盖住它，了结为已形成；那一版改说不计费，了结为不计费。
--- 写它的只有补形成那一处（application.FormActualFulfillmentOnParticipationEndHandler），与那一拍同笔：派发进程里就是 inbox 那一笔。
+-- 格，ADR-0233），或委托提交时没记下协议版本（缺采购上下文）；补形成那一路上某一件撞上数据缺陷（哪几种只由 application 的
+-- formationDefectOf 认），也记成一条，同一封门铃里的其余各件照常形成。哪个段里的哪个对象、在哪份委托下按第几版、为什么、问的是
+-- 哪一版协议、首次与最近一次答复时刻，记在这里；之后某一次形成了、或认出已有一项发生项盖住它，了结为已形成；那一版改说不计费，了结
+-- 为不计费。写它的只有实际履约形成编排（application.FormActualFulfillmentOnParticipationEndHandler），与那一拍同笔：派发进程里就是
+-- inbox 那一笔。
 --
 -- **一个（租户，段，对象）一行。** 同一段同一对象只有一条参与替代链（再次进入是新的段），一条参与只结束一次。
 --
@@ -84,7 +85,7 @@ CREATE TABLE transport_fulfillment.actual_fulfillment_unformed (
     -- 最近一次答「未形成」时去问 PC 的那一版；缺采购上下文那一格没问，两列同缺。
     agreement_object   text,
     agreement_version  text,
-    -- 缺陷那一格停在哪里：本上下文自己的缺陷类别，数据违约另带错误原文的前段。只随 FORMATION_DEFECT。
+    -- 缺陷那一格停在哪里：类别码连同完整错误原文（取法只在 application 的 formationDefectOf）。只随 FORMATION_DEFECT。
     defect             text,
     first_answered_at  timestamptz NOT NULL,
     last_answered_at   timestamptz NOT NULL,
@@ -126,7 +127,7 @@ CREATE TABLE transport_fulfillment.actual_fulfillment_unformed (
             OR (reason <> 'FORMATION_DEFECT' AND defect IS NULL)
         ),
 
-    -- 问过的那一版两格同在或同缺；缺采购上下文没问 PC，必缺；缺陷那一格问没问到都可能；其余三格必在。
+    -- 问过的那一版两格同在或同缺；缺采购上下文没问 PC，必缺；缺陷那一格可缺；其余三格必在。
     CONSTRAINT actual_fulfillment_unformed_agreement_coupled
         CHECK (
             (agreement_object IS NULL AND agreement_version IS NULL

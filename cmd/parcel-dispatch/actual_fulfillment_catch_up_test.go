@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -450,7 +451,7 @@ func saveAmbiguousJourneys(t *testing.T, db *bentopg.DB, parcel string) {
 }
 
 // Covers: AT-TF-303（S，ADR-0231 决定二）——采用晚到的那一段上两件包裹，其中一件的旅程在旅程册上平局：采用门铃 PUBLISHED，另一件照常补
-// 形成，平局那一件记进未形成册（FORMATION_DEFECT、AMBIGUOUS_JOURNEY）、查阅页列出——不因一件缺陷整封烧完失败预算、其余各件静默缺失。
+// 形成，平局那一件记进未形成册（FORMATION_DEFECT，类别码 AMBIGUOUS_JOURNEY 连同完整错误、根因在尾部）、查阅页列出——不因一件缺陷整封烧完失败预算、其余各件静默缺失。
 func TestOneDefectiveParticipationDoesNotSinkTheLateAdoptionCatchUp(t *testing.T) {
 	const parcel, tied = "SYN-PARCEL-DCG88-31", "SYN-PARCEL-DCG88-32"
 	beat, db, store := wiredBeat(t)
@@ -475,7 +476,8 @@ func TestOneDefectiveParticipationDoesNotSinkTheLateAdoptionCatchUp(t *testing.T
 		t.Fatalf("补形成 = %+v, want 只有旅程定得下来的那一件", occurrences)
 	}
 	entry, found := unformedEntryOf(t, db, tied)
-	if !found || entry.Entry.Reason != tfports.UnformedFormationDefect || entry.Entry.Defect != "AMBIGUOUS_JOURNEY" {
+	if !found || entry.Entry.Reason != tfports.UnformedFormationDefect || !strings.HasPrefix(entry.Entry.Defect, "AMBIGUOUS_JOURNEY: ") ||
+		!strings.HasSuffix(entry.Entry.Defect, tfdomain.ErrAmbiguousJourney.Error()) {
 		t.Fatalf("平局那一件 = %+v %v", entry, found)
 	}
 	if listed := listedUnformed(t, db, formationTenant); len(listed) != 1 || listed[0].Entry.Key.Object.String() != tied {

@@ -722,8 +722,8 @@ type actualFulfillmentUnformedListResponse struct {
 }
 
 // actualFulfillmentUnformedBody 是册上一件。endedAt 是参与终点的业务时间，两个答复时刻是登记时刻；agreementObject 与 agreementVersion 是
-// 那一次问 PC 的那一版，缺采购上下文那一格没问、两键不出现。defect 只随 FORMATION_DEFECT，说停在哪里；那一格可能在问到委托之前就停了，
-// commissionRevision 与协议两键随之不出现。
+// 那一次问 PC 的那一版，缺采购上下文那一格没问、两键不出现。defect 只随 FORMATION_DEFECT，是类别码连同完整错误原文；那一格停在登记
+// 答复之前，commissionRevision 与协议两键随之不出现。
 type actualFulfillmentUnformedBody struct {
 	Segment            string `json:"segment"`
 	Object             string `json:"object"`

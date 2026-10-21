@@ -25,7 +25,8 @@ import (
 // 回滚、信封重投，不让物理登记为它失败，也不留一份没人重试的派生步骤。
 //
 // 采用晚于这封信、或委托此后换了协议版本时，那一拍答的「不形成」由采用与换版的门铃回头再问（catch_up_actual_fulfillment.go，
-// ADR-0231）：交接、交付两路与补形成共用同一个形成后半，没形成的那几格只在那一处记进实际履约未形成册。
+// ADR-0231）：交接、交付两路与补形成共用同一个形成后半，登记答了「这一次不形成」的那几格在那一处记进实际履约未形成册。缺陷在三路上
+// 都响亮失败，只有补形成那一路把数据缺陷另记进册（recordFormationDefect）。
 
 // ActualFulfillmentFormationRegistrant 是自动形成那一路的登记者。登记者记「这一次登记决定出自谁」（ADR-0209 决定五）：
 // 人工登记取操作者信封的主体，自动形成没有操作者，决定出自本上下文的内置策略，于是记本上下文自己的身份。写成「发行方#sub」
@@ -57,7 +58,8 @@ const (
 	FormationNotAccepted
 	FormationUndecided
 	FormationEndedParticipationAmbiguous
-	// FormationDefectRecorded 只出自补形成：这一件撞上本上下文自己的确定性缺陷，已记进实际履约未形成册（ADR-0231 决定二）。
+	// FormationDefectRecorded 只出自补形成：这一件撞上数据缺陷（formationDefectOf 认得的那几种），已记进实际履约未形成册（ADR-0231
+	// 决定二）；Object 与 Defect 交回是哪一件、完整的错误。
 	FormationDefectRecorded
 )
 
@@ -168,6 +170,8 @@ type FormActualFulfillmentResult struct {
 	outcome      ActualFulfillmentFormationOutcome
 	reason       ActualFulfillmentFormationUndecidedReason
 	segment      string
+	object       string
+	defect       error
 	registration RegisterChargeOccurrenceResult
 }
 
@@ -183,6 +187,16 @@ func (result FormActualFulfillmentResult) UndecidedReason() ActualFulfillmentFor
 // Segment 是被这件事实结束参与的那一段；没找到时为空。
 func (result FormActualFulfillmentResult) Segment() string {
 	return result.segment
+}
+
+// Object 与 Defect 只在 FormationDefectRecorded 时非零：记进册的是哪一件对象，停在哪里的完整错误。册上只留类别码连同错误原文；
+// 错误同时交给消费门写日志，运维不必先去翻查阅页。
+func (result FormActualFulfillmentResult) Object() string {
+	return result.object
+}
+
+func (result FormActualFulfillmentResult) Defect() error {
+	return result.defect
 }
 
 // Registration 只在`已交给登记用例`时有意义，交回登记的完整答复。
@@ -214,7 +228,7 @@ func (result FormActualFulfillmentResult) Disposition() ActualFulfillmentFormati
 //   - 缺陷：本路走不到、走到了就说明两边走岔的格。其余未受理（本编排交的命令过不了登记用例的门，或找到的已结束参与在登记
 //     时不认）；不适用（本编排只交已采用委托的段、不声明自营）；协议不在册、供应商不符与采购上下文冲突——本编排不报服务方、
 //     协议与自营，段又已采用委托，登记用例在委托记着版本时把前两格上抛、没记着时先答缺采购上下文，三格都轮不到。登记用例
-//     日后在这几格上改了行为，本路要响起来让人重看，不能静默入账。
+//     日后在这几格上改了行为，交接、交付与补形成三路都要响起来让人重看，不能静默入账，也不替它记进册。
 func registrationDisposition(registered RegisterChargeOccurrenceResult) ActualFulfillmentFormationDisposition {
 	switch registered.Outcome() {
 	case ChargeOccurrenceRegistered,
@@ -420,7 +434,8 @@ func (handler *FormActualFulfillmentOnParticipationEndHandler) formFor(
 }
 
 // formEnded 是交接、交付两路与补形成（catch_up_actual_fulfillment.go）共用的后半：那一段已采用委托，这一条参与已结束 → 定旅程 →
-// 交登记用例 → 照登记的答复写实际履约未形成册。交接、交付与补形成都走这一处，册也就只有这一处在写（ADR-0231 决定六）。
+// 交登记用例 → 照登记的答复写实际履约未形成册（ADR-0231 决定六）。登记答了「这一次不形成」的那几格只在这一处写；上抛的错误不在这里
+// 写：交接、交付两路缺陷响亮失败，补形成那一路由 recordFormationDefect 记数据缺陷。
 func (handler *FormActualFulfillmentOnParticipationEndHandler) formEnded(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -459,7 +474,7 @@ func (handler *FormActualFulfillmentOnParticipationEndHandler) formEnded(
 		segment:      segment.String(),
 		registration: registered,
 	}
-	// 只在入账的答复上写册：重投的答复整笔回滚，写了也留不下；缺陷要响亮，不替它留痕。
+	// 只在入账的答复上写册：重投的答复整笔回滚，写了也留不下；登记答出本路不该见的一格是编程缺陷，三路都响亮失败，不替它留痕。
 	if result.Disposition() != FormationSettled {
 		return result, nil
 	}

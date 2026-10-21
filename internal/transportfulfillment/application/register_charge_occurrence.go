@@ -429,15 +429,15 @@ func (handler *RegisterChargeOccurrenceHandler) register(
 	if fact.hasCommission && (check.Standing == ports.SupplierAgreementNotRegistered ||
 		check.Standing == ports.SupplierAgreementProviderMismatch) {
 		// 委托提交时核过它那一版在册、约定的供应商就是委托的服务方（CommissionTransportHandler.SubmitCommission），换版时对后继
-		// 同样核过（ReviseCommissionAgreementHandler），版本一经发布不可变，所以这两格不会是委托那一版的如实答案。委托记着那一版时，是两边数据走岔了，同下面的快照走岔一样上抛；
-		// 委托没记下时问的是登记方报的那一版，这两格说明他报的不是委托采用的那一版，同快照不同一样答冲突、摆出委托——照协议
+		// 同样核过（ReviseCommissionAgreementHandler），版本一经发布不可变，所以这两格不会是委托那一版的如实答案。委托记着那一版时，
+		// 是两边数据走岔了，上抛 ErrCommissionAgreementDrift，与快照走岔同一个哨兵；委托没记下时问的是登记方报的那一版，这两格说明他报的不是委托采用的那一版，同快照不同一样答冲突、摆出委托——照协议
 		// 否定格答「不在册」会叫他去 PC 发布，答「供应商不符」更说不通，服务方是从委托取的，他没报。未生效、已终止可能就是
 		// 委托那一版在业务时间的如实答案，照常答。
 		commission := fact.commission.Commission
 		if _, recorded := fact.terms.Version(); recorded {
 			return RegisterChargeOccurrenceResult{}, fmt.Errorf(
-				"register charge occurrence: the agreement check answered %s for %s/%s, which commission %s names as revision %d",
-				check.Standing, agreement.Object(), agreement.Version(), commission.Commission(), fact.terms.Revision())
+				"register charge occurrence: %w: the agreement check answered %s for %s/%s, which commission %s names as revision %d",
+				ErrCommissionAgreementDrift, check.Standing, agreement.Object(), agreement.Version(), commission.Commission(), fact.terms.Revision())
 		}
 		return procurementConflict(fact.commission), nil
 	}
@@ -468,8 +468,8 @@ func (handler *RegisterChargeOccurrenceHandler) register(
 			// 不是同一版，答冲突。
 			if _, recorded := fact.terms.Version(); recorded {
 				return RegisterChargeOccurrenceResult{}, fmt.Errorf(
-					"register charge occurrence: the agreement check answered snapshot %s for commission %s, which names %s as revision %d",
-					check.Snapshot, commission.Commission(), fact.terms.Snapshot(), fact.terms.Revision())
+					"register charge occurrence: %w: the agreement check answered snapshot %s for commission %s, which names %s as revision %d",
+					ErrCommissionAgreementDrift, check.Snapshot, commission.Commission(), fact.terms.Snapshot(), fact.terms.Revision())
 			}
 			return procurementConflict(fact.commission), nil
 		}
@@ -691,6 +691,10 @@ var errProcurementSourceUnreadable = errors.New("register charge occurrence: ado
 // ErrAdoptionWithoutCommission 说明段的采用连线指名的委托读不回来。连线落册时委托在册（迁移 0035 的外键），委托又不删，读不回
 // 就是库里的数据违约；答「没有采用」会让这件外包的事改按登记方报的采购上下文登，答未受理会让登记方去改一份本来没错的请求。
 var ErrAdoptionWithoutCommission = errors.New("transport fulfillment: segment adoption names a commission that is not registered")
+
+// ErrCommissionAgreementDrift 说明委托记着作答那一版协议，PC 对那一版的答复却与委托上的对不上：说它不在册或供应商不符，或拼回的快照
+// 不是委托上那一串。委托提交与换版时都对那一版核过，版本一经发布不可变，所以这是两边数据走岔了，重试不会变。
+var ErrCommissionAgreementDrift = errors.New("transport fulfillment: the supplier agreement check disagrees with the agreement version the commission names")
 
 // commissionAdoptedBy 按段读采用连线，有就读那份委托（ADR-0204 决定二末条）。没有连线答 adopted=false：没有连线的段不读作
 // 自营也不读作外包（ADR-0204 决定四），采购上下文照旧由登记方给。

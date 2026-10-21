@@ -89,8 +89,9 @@ func (result CatchUpActualFulfillmentResult) Formations() []FormActualFulfillmen
 	return slices.Clone(result.formations)
 }
 
-// Disposition 把一封门铃的答复折成对信封的处置，判据同 FormActualFulfillmentResult.Disposition：逐件里有一件是缺陷，整封是缺陷；有一件
-// 要重投，整封重投（整笔回滚，已答的各件下一次再答一遍，同一身份落回同一项）；都入账才入账。
+// Disposition 把一封门铃的答复折成对信封的处置，判据同 FormActualFulfillmentResult.Disposition：逐件里有一件是缺陷（登记用例答出本路
+// 不该见的一格），整封是缺陷、响亮失败；有一件要重投，整封重投（整笔回滚，已答的各件下一次再答一遍，同一身份落回同一项）；都入账才
+// 入账。已记进册的数据缺陷那一件是入账（recordFormationDefect）。
 func (result CatchUpActualFulfillmentResult) Disposition() ActualFulfillmentFormationDisposition {
 	switch result.outcome {
 	case CatchUpSegmentNotAdopted:
@@ -130,11 +131,10 @@ func (handler *FormActualFulfillmentOnParticipationEndHandler) CatchUpOnAdoption
 	if !adopted {
 		return CatchUpActualFulfillmentResult{outcome: CatchUpSegmentNotAdopted}, nil
 	}
-	var result CatchUpActualFulfillmentResult
+	result := CatchUpActualFulfillmentResult{outcome: CatchUpAnswered}
 	if stop, err := handler.catchUpSegment(ctx, command.TenantID, adoption, &result); err != nil || stop != FormationUndecidedReasonNone {
 		return catchUpStopped(stop, err)
 	}
-	result.outcome = CatchUpAnswered
 	return result, nil
 }
 
@@ -152,21 +152,28 @@ func (handler *FormActualFulfillmentOnParticipationEndHandler) CatchUpOnRevision
 	if err != nil {
 		return catchUpUndecided(FormationAdoptionRegistryUnavailable), nil
 	}
-	var result CatchUpActualFulfillmentResult
+	result := CatchUpActualFulfillmentResult{outcome: CatchUpAnswered}
 	for _, adoption := range adoptions {
 		if stop, err := handler.catchUpSegment(ctx, command.TenantID, adoption, &result); err != nil || stop != FormationUndecidedReasonNone {
 			return catchUpStopped(stop, err)
 		}
+		if result.Disposition() != FormationSettled {
+			break
+		}
 	}
-	result.outcome = CatchUpAnswered
 	return result, nil
 }
 
-// catchUpSegment 对一段上已结束的参与逐件交 formEnded，答复追加进 result。哪一件未决就停在那一件：整封会回滚重投，往下问只是白问。
+// catchUpSegment 对一段上已结束的参与逐件交 formEnded，答复追加进 result。哪一件不入账（未决或缺陷）就停在那一件：整封会回滚重投或
+// 响亮失败，往下问只是白问。
 //
-// 哪一件撞上本上下文自己的确定性缺陷（formEnded 上抛，或登记用例答出本路不该见的一格），把它记进实际履约未形成册、这一件入账，接着问
-// 下一件（recordFormationDefect）：缺陷原样重来不会变，若让整封响亮失败，门铃烧完失败预算落 ABANDONED 之后，同一封里其余各件既不形成
+// formEnded 上抛的错误里，只有数据层面、逐件的确定性错误（formationDefectOf 认得的那几种）记进实际履约未形成册、这一件入账，接着问
+// 下一件（recordFormationDefect）：它们原样重来不会变，若让整封响亮失败，门铃烧完失败预算落 ABANDONED 之后，同一封里其余各件既不形成
 // 也不进册——采用门铃尤甚，那些参与当初以「段没有采用连线」入账，本来就不在册上，一件的旅程平局就会让整段的补形成静默缺失。
+// 其余错误（集外的值、形状错、册拒写）与登记用例答出本路不该见的一格，是本上下文自己的编程缺陷，照交接、交付两路一样整封响亮失败：
+// 吞进册里，入账之后就再没人看见。
+//
+// 门铃指名的段读不回不逐段记：册的一行是一件参与，读不回的段说不出有哪几件，只能整封上抛（ADR-0231 越权风险点 16）。
 func (handler *FormActualFulfillmentOnParticipationEndHandler) catchUpSegment(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -184,52 +191,45 @@ func (handler *FormActualFulfillmentOnParticipationEndHandler) catchUpSegment(
 	}
 	for _, participation := range endedByHandoverOrDelivery(record.Segment) {
 		formed, err := handler.formEnded(ctx, tenant, segmentRef, adoption, participation)
-		if err == nil && formed.Disposition() != FormationDefect {
-			result.formations = append(result.formations, formed)
-			if formed.Outcome() == FormationUndecided {
-				return formed.UndecidedReason(), nil
+		if err != nil {
+			defect, data := formationDefectOf(err)
+			if !data {
+				return FormationUndecidedReasonNone, err
 			}
+			formed, stop, err := handler.recordFormationDefect(ctx, tenant, segmentRef, adoption, participation, defect, err)
+			if err != nil || stop != FormationUndecidedReasonNone {
+				return stop, err
+			}
+			result.formations = append(result.formations, formed)
 			continue
 		}
-		recorded, stop, err := handler.recordFormationDefect(ctx, tenant, segmentRef, adoption, participation, formed, err)
-		if err != nil || stop != FormationUndecidedReasonNone {
-			return stop, err
+		result.formations = append(result.formations, formed)
+		if formed.Disposition() != FormationSettled {
+			return formed.UndecidedReason(), nil
 		}
-		result.formations = append(result.formations, recorded)
 	}
 	return FormationUndecidedReasonNone, nil
 }
 
-// recordFormationDefect 把一件的确定性缺陷记进实际履约未形成册（格 FORMATION_DEFECT，记下停在哪里），交回这一件入账的答复。先问一次
-// 「盖住」：缺陷若出在登记之后（发生项已落下），这一件其实已形成。未形成册自己确定性拒写时记不下痕，只能上抛、整封响亮失败。
+// recordFormationDefect 把一件的数据缺陷记进实际履约未形成册（格 FORMATION_DEFECT，记下 defect），交回这一件入账的答复，连同完整的
+// 错误，由消费门写进日志。先问一次「盖住」：缺陷若出在登记之后（发生项已落下），这一件其实已形成。号与问的那一版不记：这几种错误都在
+// 登记用例答复之前上抛，答复里的委托条款与协议拿不到。
 func (handler *FormActualFulfillmentOnParticipationEndHandler) recordFormationDefect(
 	ctx context.Context,
 	tenant domain.TenantID,
 	segment domain.FulfillmentSegmentReference,
 	adoption ports.SegmentCommissionAdoptionRecord,
 	participation domain.FulfillmentParticipation,
-	formed FormActualFulfillmentResult,
+	defect string,
 	cause error,
 ) (FormActualFulfillmentResult, ActualFulfillmentFormationUndecidedReason, error) {
-	if errors.Is(cause, ports.ErrActualFulfillmentUnformedWriteRefused) {
-		return FormActualFulfillmentResult{}, FormationUndecidedReasonNone, cause
-	}
 	_, _, endedAt, _ := participation.End()
 	entry := ports.ActualFulfillmentUnformedEntry{
 		Key:        ports.ActualFulfillmentUnformedKey{TenantID: tenant, Segment: segment, Object: participation.Object()},
 		Commission: adoption.Adoption.Commission(),
 		EndedAt:    endedAt,
 		Reason:     ports.UnformedFormationDefect,
-		Defect:     formationDefectOf(formed, cause),
-	}
-	if cause == nil {
-		registered := formed.Registration()
-		if terms, named := registered.CommissionTerms(); named {
-			entry.Revision = terms.Revision()
-		}
-		if asked, present := registered.AskedAgreement(); present {
-			entry.Agreement = asked
-		}
+		Defect:     defect,
 	}
 	stop, err := handler.unlessCovered(ctx, tenant, segment, participation.Object(), func(now time.Time) error {
 		return handler.deps.Unformed.RecordUnformed(ctx, entry, now)
@@ -237,32 +237,29 @@ func (handler *FormActualFulfillmentOnParticipationEndHandler) recordFormationDe
 	if err != nil || stop != FormationUndecidedReasonNone {
 		return FormActualFulfillmentResult{}, stop, err
 	}
-	return FormActualFulfillmentResult{outcome: FormationDefectRecorded, segment: segment.String(), registration: formed.Registration()},
-		FormationUndecidedReasonNone, nil
+	return FormActualFulfillmentResult{
+		outcome: FormationDefectRecorded,
+		segment: segment.String(),
+		object:  participation.Object().String(),
+		defect:  cause,
+	}, FormationUndecidedReasonNone, nil
 }
 
-// formationDefectExcerptRunes 是数据违约留进册的错误原文的长度上限：册是给人看的待办，不是日志；原文前段足够认出是哪一种违约。
-const formationDefectExcerptRunes = 300
-
-// formationDefectOf 写出一件停在哪里：旅程平局、登记用例答出的那一格，或数据违约连同错误原文的前段。
-func formationDefectOf(formed FormActualFulfillmentResult, cause error) string {
+// formationDefectOf 认 formEnded 上抛的错误是不是数据层面、逐件的确定性缺陷，是则交回记进册的那一格：类别码连同完整错误原文，不截
+// ——Go 的错误把根因包在尾部。认得的都是库里两份记录之间的不一致，人能照着去查；本上下文自己写错了的不在此列，见 catchUpSegment。
+func formationDefectOf(cause error) (string, bool) {
+	var code string
 	switch {
 	case errors.Is(cause, domain.ErrAmbiguousJourney):
-		return "AMBIGUOUS_JOURNEY"
-	case cause != nil:
-		excerpt := []rune(cause.Error())
-		if len(excerpt) > formationDefectExcerptRunes {
-			excerpt = excerpt[:formationDefectExcerptRunes]
-		}
-		return "DATA_VIOLATION: " + string(excerpt)
+		code = "AMBIGUOUS_JOURNEY"
+	case errors.Is(cause, ErrAdoptionWithoutCommission):
+		code = "ADOPTION_WITHOUT_COMMISSION"
+	case errors.Is(cause, ErrCommissionAgreementDrift):
+		code = "COMMISSION_AGREEMENT_DRIFT"
 	default:
-		registered := formed.Registration()
-		code := "REGISTRATION_ANSWERED " + registered.Outcome().String()
-		if detail := registered.Detail().String(); detail != "" {
-			code += "/" + detail
-		}
-		return code
+		return "", false
 	}
+	return code + ": " + cause.Error(), true
 }
 
 // endedByHandoverOrDelivery 取一段上各对象的当前参与（替代链链尾、不是失效版本）里，以下一次权威交接或有效交付结束的那几条，按对象排序。
