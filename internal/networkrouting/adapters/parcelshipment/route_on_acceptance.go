@@ -21,14 +21,12 @@ import (
 var ErrEnvelopeContradictsAuthority = errors.New(
 	"network routing parcelshipment adapter: the envelope contradicts the shipment authority")
 
-// ErrRouteHandoffUndecided 说明本轮至少有一个包裹停在未决（依赖读不回、证据换代、
-// 标识签不出）。它上抛让消费门整体回滚重投，而不是让投递就此入账。
+// ErrRouteHandoffUndecided 说明本轮至少有一个包裹停在未决。它只在重投推得动时交出（依赖读不回、证据换代、标识签不出、
+// 未形成原因写不进），上抛让消费门整体回滚重投；重投推不动的那几格编排答`路由未形成`、原因已落登记，本适配器入账。
 //
-// 这一格是有代价的取舍：回滚会连同本轮已经合法形成的其他包裹计划一起撤掉，而
-// `AT-NR-012` 要的是「任一结果不回滚或掩盖其他结果」。取它是因为另一条路更糟——
-// 消费门只有提交、回滚重投、拒收三格，就此入账等于把未决包裹的路由义务永久丢掉，
-// 而本仓今天没有任何重驱动器会回来捡它。回滚重投不丢东西：判断库按判断键幂等，
-// 重投时已成的计划照原样再形成一次，未决的那个再试一次。
+// 依赖类未决整封回滚是有代价的取舍：同一交接里判成的包裹也一起回滚，重投时按判断键再判一次。取它是因为消费门只有提交、
+// 回滚重投、拒收三格，就此入账等于把未决包裹的路由义务丢掉，而依赖恢复之后没有别的东西会回来捡它；回滚的那几件还没越过
+// 提交边界，下游没见过它们。
 var ErrRouteHandoffUndecided = errors.New(
 	"network routing parcelshipment adapter: initial route handoff is undecided")
 
@@ -270,7 +268,8 @@ func (adapter *RouteOnAcceptanceAdapter) handoffSpecFor(
 
 // outcomeToConsumption 把编排结果折成消费门认得的两格：nil 是「这份投递处理完了」，
 // error 是「回滚重投」。折叠规则按「重投会不会改变结果」分——不会改变的一律入账，
-// 否则丢的是投递；会改变的一律回滚，否则丢的是路由义务。
+// 否则丢的是投递；会改变的一律回滚，否则丢的是路由义务。哪一格推得动由编排按结果答，
+// 这里不看原因：`路由未形成`入账，`未决`回滚。
 func outcomeToConsumption(result nrapplication.CreateInitialRouteResult) error {
 	switch result.Outcome() {
 	case nrapplication.RouteHandoffProcessed:

@@ -62,16 +62,13 @@ func TestSYNIncompleteJudgmentsStayUndecidedWithoutAnAcceptanceEnvelope(t *testi
 	}
 }
 
-// Covers: SYN-V0 已决定路径——PS 应用 handler 形成接受并入队真实 Outbox，Dispatcher
-// 把信封投进 FanOut（先 VE 客户归属确立补派生，后 NR 初始路由）；已接受重建门已开
-// （ADR-0061），NR 消费者按引用读回委托并进入 CreateInitialRoute。生产装配按已接受
-// 解析回指闭包（ADR-0064）；本用例调同一份 SYN-PC-PRODUCT 种子让 SYN-RES-01 采用可
-// 观察的 NetworkServiceForm，适用性译成要求判断。网络目录空册，NR 腿停在
-// ROUTE_EVIDENCE_NOT_CONFIGURED；VE 腿常态空转（包裹还没流转、无当前投影）成功入账
-// ——两本 inbox 互不隶属，VE 成功不改变 NR 腿的未决记账，整封失败码仍是
-// dispatch.consumer_undecided（仅全路未决才记未决，外部评审票 01 的分格）。不得写可
-// 执行路由，也不得把未决当成已处理入账，更不得因空转发明客户视图。
-func TestSYNAcceptedDecisionStopsAtUnconfiguredRouteEvidence(t *testing.T) {
+// Covers: SYN-V0 已决定路径与 `AT-NR-088` 的派发半边——PS 应用 handler 形成接受并入队真实 Outbox，Dispatcher 把信封投进
+// FanOut（先 VE 客户归属确立补派生，后 NR 初始路由）；已接受重建门已开（ADR-0061），NR 消费者按引用读回委托并进入
+// CreateInitialRoute。生产装配按已接受解析回指闭包（ADR-0064）；本用例调同一份 SYN-PC-PRODUCT 种子让 SYN-RES-01 采用可
+// 观察的 NetworkServiceForm，适用性译成要求判断。网络目录空册，NR 腿落`路由未形成` ROUTE_EVIDENCE_NOT_CONFIGURED：重投
+// 推不动，原因落未形成登记，信封定稿 PUBLISHED，不占着分区烧到 ABANDONED（ADR-0273 决定二）。不得写可执行路由，也不得
+// 因 VE 空转发明客户视图；同一封再拍由两本 inbox 跳过，业务结果不翻倍。
+func TestSYNAcceptedDecisionSettlesAnUnconfiguredRouteAsNotFormed(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
 	ctx := t.Context()
 
@@ -115,19 +112,16 @@ func TestSYNAcceptedDecisionStopsAtUnconfiguredRouteEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("第一拍：%v", err)
 	}
-	if published != 0 {
-		t.Fatalf("证据未配置却定稿了 %d 条；失败码 = %q",
+	if published != 1 {
+		t.Fatalf("证据未配置的接受信封定稿 %d 条, want 1（入账，不回滚重投）；失败码 = %q",
 			published, recordedFailureCode(t, fixture.db, synV0DecisionID))
 	}
-	if got := recordedFailureCode(t, fixture.db, synV0DecisionID); got != "dispatch.consumer_undecided" {
-		t.Fatalf("failure_code = %q, want dispatch.consumer_undecided（空册未配置，不是适用性也不是重建门）", got)
+	if status := outboxStatus(t, fixture.db, synV0DecisionID); status != "PUBLISHED" {
+		t.Fatalf("接受信封 status = %q, want PUBLISHED", status)
 	}
-
-	if n := fixture.countInbox(t, synV0AcceptanceConsumer, synV0DecisionID); n != 0 {
-		t.Fatalf("inbox 行数 = %d, want 0——未决必须回滚，不能冒充已处理", n)
+	if n := fixture.countInbox(t, synV0AcceptanceConsumer, synV0DecisionID); n != 1 {
+		t.Fatalf("NR inbox 行数 = %d, want 1——路由未形成入账", n)
 	}
-	// VE 腿与 NR 腿两本账互不隶属：包裹还没流转、无当前投影，VE 腿空转并在自己的
-	// 事务里入账；NR 腿的未决不把它的入账也卡住（FanOut 每路都调到）。
 	if n := fixture.countInbox(t, synV0VERederiveConsumer, synV0DecisionID); n != 1 {
 		t.Fatalf("VE 补派生 inbox 行数 = %d, want 1——空转也要入账，重投由账本跳过", n)
 	}
@@ -135,11 +129,12 @@ func TestSYNAcceptedDecisionStopsAtUnconfiguredRouteEvidence(t *testing.T) {
 		t.Fatalf("customer_view_version 行数 = %d, want 0——无投影不得发明视图", n)
 	}
 	fixture.assertNoInitialRoute(t)
-	if n := fixture.countRouteHandoffLogs(t); n != 0 {
-		t.Fatalf("route_handoff_log 行数 = %d, want 0——未决事务回滚后登记册应无痕", n)
+	if n := fixture.countRouteHandoffLogs(t); n != 1 {
+		t.Fatalf("route_handoff_log 行数 = %d, want 1——交接与未形成原因同笔提交", n)
 	}
+	fixture.assertAcceptanceSettledAsUnconfigured(t)
 
-	// 同一份接受信封再拍一次：inbox 无账，派发会再投；业务结果仍不得翻倍。
+	// 同一份接受信封再拍一次：已定稿，派发不再投；业务结果不翻倍。
 	published, err = fixture.beat.DispatchOnce(ctx)
 	if err != nil {
 		t.Fatalf("重拍：%v", err)
@@ -151,11 +146,35 @@ func TestSYNAcceptedDecisionStopsAtUnconfiguredRouteEvidence(t *testing.T) {
 		t.Fatalf("接受信封变成 %d 封——重投不得再入队一份", n)
 	}
 	fixture.assertNoInitialRoute(t)
-	if n := fixture.countInbox(t, synV0AcceptanceConsumer, synV0DecisionID); n != 0 {
-		t.Fatalf("重拍后 inbox 行数 = %d, want 仍为 0", n)
+	if n := fixture.countSQL(t, `SELECT count(*) FROM network_routing.initial_route_not_formed`); n != 1 {
+		t.Fatalf("未形成登记 %d 行, want 仍为 1", n)
 	}
-	if n := fixture.countInbox(t, synV0VERederiveConsumer, synV0DecisionID); n != 1 {
-		t.Fatalf("重拍后 VE 补派生 inbox 行数 = %d, want 仍为 1——重投由账本跳过，不重跑", n)
+}
+
+// synAcceptanceSettledOnFirstBeat 是 SYN 纵切第一拍里接受信封那一条定稿：网络目录空册，NR 腿落`路由未形成`、原因落未形成
+// 登记、信封入账（ADR-0273 决定二）。几条以第一拍定稿条数作证的用例照它数，证的是自己那封信没定稿，不是整拍一条不定。
+const synAcceptanceSettledOnFirstBeat = 1
+
+// assertAcceptanceSettledAsUnconfigured 钉住接受信封的去向：定稿，SYN-PARCEL-01 落未形成登记一行、原因证据未配置、关联
+// 是这次接受决定。
+func (fixture *synVerticalFixture) assertAcceptanceSettledAsUnconfigured(t *testing.T) {
+	t.Helper()
+	if status := outboxStatus(t, fixture.db, synV0DecisionID); status != "PUBLISHED" {
+		t.Fatalf("接受信封 status = %q, want PUBLISHED（路由未形成入账）", status)
+	}
+	querier, err := fixture.db.ReadExecutor(t.Context())
+	if err != nil {
+		t.Fatalf("取读执行器：%v", err)
+	}
+	var parcel, reason, correlation string
+	if err := querier.QueryRow(t.Context(),
+		`SELECT declared_parcel_id, reason, correlation_id FROM network_routing.initial_route_not_formed`,
+	).Scan(&parcel, &reason, &correlation); err != nil {
+		t.Fatalf("读未形成登记：%v", err)
+	}
+	if parcel != "SYN-PARCEL-01" || reason != "ROUTE_EVIDENCE_NOT_CONFIGURED" || correlation != "acceptance/"+synV0DecisionID {
+		t.Fatalf("未形成登记 = %s/%s/%s, want SYN-PARCEL-01/ROUTE_EVIDENCE_NOT_CONFIGURED/acceptance/%s",
+			parcel, reason, correlation, synV0DecisionID)
 	}
 }
 

@@ -39,12 +39,12 @@ const (
 // 停点必须是 dispatch.consumer_undecided：SYN-PC-SEED 不种 PAR-COM-17 终局行，
 // LoadFinalRule found=false，JudgeFinalOutcome 答未配置。种终局行会让本链越过本格，
 // 那是实例半边，本用例禁止。同一拍会投接受信封：种子已嵌 NetworkServiceForm，那封
-// 停在 ROUTE_EVIDENCE_NOT_CONFIGURED，不得形成路由计划；published==0 与
-// assertNoInitialRoute 一起挡住。
+// 落`路由未形成`（ROUTE_EVIDENCE_NOT_CONFIGURED）入账定稿，不得形成路由计划；第一拍定稿
+// 条数只许是它那一条，与 assertNoInitialRoute 一起挡住。
 //
 // FanOut 先把同一封投给 VE：映射未配置时投影未归类入账，并入队
 // tracking-projection.derived（由客户视图链接住，重拍时定稿）。本用例不停投影；PS 终局
-// 未配置仍让整封 Publish 失败，第一拍 published 必须是 0。重拍得 1 而不是 0：交付信封
+// 未配置仍让整封 Publish 失败，第一拍定稿的只有接受信封那一条。重拍得 1 而不是 0：交付信封
 // 与派生信封自 ADR-0074 起不同分区，未决的交付不再把已派生的可见性堵在队头。
 func TestARegisteredEffectiveDeliveryStopsAtUnconfiguredFinalRule(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
@@ -66,7 +66,7 @@ func TestARegisteredEffectiveDeliveryStopsAtUnconfiguredFinalRule(t *testing.T) 
 	if err != nil {
 		t.Fatalf("第一拍：%v", err)
 	}
-	if published != 0 {
+	if published != synAcceptanceSettledOnFirstBeat {
 		t.Fatalf("终局规则未配置却定稿了 %d 条；交付信封失败码 = %q",
 			published, recordedFailureCode(t, fixture.db, eventID))
 	}

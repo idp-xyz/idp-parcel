@@ -110,6 +110,7 @@ func TestACatalogWriteBeforeCommitRejudgesOnTheRealReadSide(t *testing.T) {
 		Applicability: calendarApplicability{eligibility: eligibility},
 		Evidence:      view,
 		Store:         store,
+		NotFormed:     store,
 		Log:           &calendarHandoffLog{digests: map[domain.RequestCorrelationID]string{}},
 		Downstream:    calendarDownstream{},
 		Identities:    &calendarIdentities{},
@@ -282,8 +283,14 @@ func (double calendarApplicability) AssessRoutingApplicability(
 }
 
 type calendarRouteStore struct {
-	saved    int
-	revision string
+	saved     int
+	revision  string
+	notFormed int
+}
+
+func (store *calendarRouteStore) RecordNotFormed(context.Context, ports.InitialRouteNotFormed) error {
+	store.notFormed++
+	return nil
 }
 
 func (store *calendarRouteStore) FindByKey(context.Context, domain.InitialRouteJudgmentKey) (ports.InitialRouteRecord, bool, error) {

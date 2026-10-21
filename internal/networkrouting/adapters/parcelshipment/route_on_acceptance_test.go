@@ -165,9 +165,8 @@ func TestAStateOutsideTheDecisionVocabularyIsNotAccountedSilently(t *testing.T) 
 	}
 }
 
-// Covers: 消费门第三条「处理失败整体回滚可重投」在真实编排上的落点——包裹停在未决时
-// 上抛，让投递回滚重投；就此入账会把这个包裹的路由义务永久丢掉，而本仓没有重驱动器
-// 会回来捡它。
+// Covers: 消费门第三条「处理失败整体回滚可重投」在真实编排上的落点——包裹停在依赖类未决（`AT-NR-091`）时上抛，让投递
+// 回滚重投；就此入账会把这个包裹的路由义务丢掉，依赖恢复之后没有别的东西会回来捡它。
 func TestAnUndecidedParcelRollsTheDeliveryBack(t *testing.T) {
 	subject, routes := newRouteOnAcceptance(t, nrports.InitialRouteEvidence{}, errors.New("evidence down"))
 
@@ -178,6 +177,64 @@ func TestAnUndecidedParcelRollsTheDeliveryBack(t *testing.T) {
 	if len(routes.saved) != 0 {
 		t.Fatal("未决却落了库")
 	}
+}
+
+// Covers: `AT-NR-088` 的适配器半边——包裹落`路由未形成`（这里是策略版本没声明排序形态）时投递入账、不回滚：原因已由
+// 编排落进未形成登记，重投推不动，回滚只会占着分区烧到 ABANDONED。适配器不看原因，只按结果折。
+func TestANotFormedParcelIsAccountedNotRetried(t *testing.T) {
+	routes := newAcceptanceRouteStore()
+	register := &notFormedRegisterDouble{}
+	coverage, err := nrdomain.NewServiceAreaResolution(nrdomain.ServiceAreaResolutionSpec{
+		Candidate:   value(t, nrdomain.NewCandidateID, "candidate-1"),
+		Outcome:     nrdomain.AreaCoversDestination,
+		AreaVersion: value(t, nrdomain.NewServiceAreaVersionReference, "area-v1"),
+	})
+	if err != nil {
+		t.Fatalf("service area resolution: %v", err)
+	}
+	handler := nrapplication.NewCreateInitialRouteHandler(nrapplication.CreateInitialRouteDeps{
+		Applicability: routingApplicabilityDouble{},
+		Evidence: acceptanceEvidenceDouble{evidence: nrports.InitialRouteEvidence{
+			ServiceAreas: []nrdomain.ServiceAreaResolution{coverage},
+			Strategy:     value(t, nrdomain.NewRouteStrategyReference, "strategy-1/v1"),
+			ViewRevision: value(t, nrdomain.NewNetworkViewRevision, "net-view-rev-1"),
+		}},
+		Costs:      costPassthrough{},
+		Store:      routes,
+		NotFormed:  register,
+		Log:        &logDouble{digests: map[nrdomain.RequestCorrelationID]string{}},
+		Downstream: routeDownstreamDouble{},
+		Identities: &identityDouble{},
+		Clock:      fixedClock{at: acceptedAt},
+	})
+	subject, err := adapter.NewRouteOnAcceptanceAdapter(
+		&acceptedRequestSourceDouble{request: acceptedShipmentRequest(t)},
+		handler,
+		value(t, nrdomain.NewServicePurpose, "NETWORK_SERVICE"),
+	)
+	if err != nil {
+		t.Fatalf("构造适配器：%v", err)
+	}
+
+	if err := subject.HandleAcceptedDecision(context.Background(), acceptedEnvelope()); err != nil {
+		t.Fatalf("err = %v, want nil——路由未形成入账", err)
+	}
+	if len(register.records) != 1 || register.records[0].Reason != nrports.NotFormedRankingFormNotConfigured {
+		t.Fatalf("未形成登记 = %+v, want 一行 RANKING_FORM_NOT_CONFIGURED", register.records)
+	}
+	if len(routes.saved) != 0 {
+		t.Fatal("未形成却落了判断库")
+	}
+}
+
+// notFormedRegisterDouble 记下每一次未形成登记。
+type notFormedRegisterDouble struct {
+	records []nrports.InitialRouteNotFormed
+}
+
+func (double *notFormedRegisterDouble) RecordNotFormed(_ context.Context, record nrports.InitialRouteNotFormed) error {
+	double.records = append(double.records, record)
+	return nil
 }
 
 // Covers: 服务目的未配置停下不猜（与 ReassessOnIntakeAdapter 同一条装配纪律）。

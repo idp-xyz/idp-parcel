@@ -37,7 +37,7 @@ func TestAMappedNodeIntakeKindClassifiesTheProjectionWhileAdoptionStaysUnproven(
 	if err != nil {
 		t.Fatalf("第一拍：%v", err)
 	}
-	if published != 0 {
+	if published != synAcceptanceSettledOnFirstBeat {
 		t.Fatalf("PS 未决却定稿了 %d 条；收寄信封失败码 = %q",
 			published, recordedFailureCode(t, fixture.db, eventID))
 	}

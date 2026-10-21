@@ -1215,7 +1215,7 @@ func planGivenEstimateEvaluations(db *bentopg.DB, clock systemClock) (*ppapplica
 //
 // 商业适用性视图的解析标识来源是实例半边，今天没有租户登记过，因此它按「依赖不可用」
 // 答复，编排形成`未决`。初始路由证据视图读版本化网络目录：目录为空或没有适用的路由策略
-// 版本答`未配置`；已配置时初始路由事实族还没折出（routing-first-cut/09、10），照旧响亮上抛。
+// 版本答`未配置`，包裹落`路由未形成`、原因落未形成登记（与判断库同一只），信封入账。
 // 两者都不是接线错误——首发就该停在这里，而不是靠一份编出来的默认值往下走。
 func acceptanceConsumer(
 	db *bentopg.DB,
@@ -1261,6 +1261,7 @@ func acceptanceConsumer(
 		Evidence:      evidence,
 		Costs:         routeCosts(db, clock),
 		Store:         routeStore,
+		NotFormed:     routeStore,
 		Log:           handoffLog,
 		Downstream:    downstream,
 		Identities:    identities,

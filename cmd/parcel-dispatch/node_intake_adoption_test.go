@@ -42,12 +42,13 @@ const (
 // JudgeIntakeEligibility 答 NOT_ESTABLISHED（INTAKE_QUALIFICATION_UNPROVEN/第一项）。
 // 空清单会直接 ESTABLISHED 并形成承诺；只靠失败码分不出 UNCONFIGURED 与本格，拍前用
 // 真读口与生产资格适配器另证。同一拍会投接受信封：种子已嵌 NetworkServiceForm，
-// 那封停在 ROUTE_EVIDENCE_NOT_CONFIGURED，不得形成路由计划；published==0 挡住误入账，
-// assertNoAdoptionTrace 另数 initial_route 与 formed 信封。
+// 那封落`路由未形成`（ROUTE_EVIDENCE_NOT_CONFIGURED）入账定稿，不得形成路由计划；第一拍
+// 定稿条数只许是它那一条，挡住收寄信封误入账，assertNoAdoptionTrace 另数 initial_route 与
+// formed 信封。
 //
 // FanOut 先把同一封投给 VE：映射未配置时投影未归类入账，并入队
 // tracking-projection.derived。那一封由客户视图链接住（WIRE-CUSTOMER-VIEW），在重拍
-// 时各自定稿——第一拍 published 仍必须是 0（收寄信封被 PS 未决整封挡下），重拍恰好
+// 时各自定稿——第一拍定稿的仍只有接受信封那一条（收寄信封被 PS 未决整封挡下），重拍恰好
 // 定稿派生信封一条，不得把资格未证明测宽成「收寄也算成功定稿」。
 //
 // 未决不得留痕：PS inbox 无账、采用无行、下游采用意图不入队。重拍不得翻倍。
@@ -71,7 +72,7 @@ func TestAFormedNodeIntakeStopsAtUnprovenIntakeEligibility(t *testing.T) {
 	if err != nil {
 		t.Fatalf("第一拍：%v", err)
 	}
-	if published != 0 {
+	if published != synAcceptanceSettledOnFirstBeat {
 		t.Fatalf("资格未成立却定稿了 %d 条；收寄信封失败码 = %q",
 			published, recordedFailureCode(t, fixture.db, eventID))
 	}

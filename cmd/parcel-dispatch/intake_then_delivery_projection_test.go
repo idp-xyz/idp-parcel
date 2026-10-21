@@ -37,7 +37,7 @@ func TestNodeIntakeThenEffectiveDeliveryAppendsASecondUnclassifiedFact(t *testin
 	if err != nil {
 		t.Fatalf("第一拍：%v", err)
 	}
-	if published != 0 {
+	if published != synAcceptanceSettledOnFirstBeat {
 		t.Fatalf("第一拍定稿了 %d 条", published)
 	}
 	if got := recordedFailureCode(t, fixture.db, intakeEventID); got != "dispatch.consumer_undecided" {

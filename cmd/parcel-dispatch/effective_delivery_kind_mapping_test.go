@@ -47,7 +47,7 @@ func TestAMappedEffectiveDeliveryKindClassifiesTheProjectionWhileFinalStaysUncon
 			break
 		}
 	}
-	if published != 0 {
+	if published != synAcceptanceSettledOnFirstBeat {
 		t.Fatalf("终局未配置却定稿了 %d 条；交付信封失败码 = %q",
 			published, recordedFailureCode(t, fixture.db, eventID))
 	}

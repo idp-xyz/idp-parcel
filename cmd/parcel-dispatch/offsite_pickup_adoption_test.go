@@ -36,13 +36,13 @@ const (
 // 停点必须是 dispatch.consumer_undecided：声明列出硬资格，取证缝属实例半边，
 // JudgeIntakeEligibility 答 NOT_ESTABLISHED。只种 NODE_INTAKE 会让本链走 NOT_APPLICABLE
 // 并入账，所以种子必须两种来源都允许。空清单会 ESTABLISHED 并形成承诺。同一拍会投
-// 接受信封：种子已嵌 NetworkServiceForm，那封停在 ROUTE_EVIDENCE_NOT_CONFIGURED，
-// 不得形成路由计划；published==0 与 assertNoPickupAdoptionTrace 的 initial_route
-// 计数一起挡住。
+// 接受信封：种子已嵌 NetworkServiceForm，那封落`路由未形成`（ROUTE_EVIDENCE_NOT_CONFIGURED）
+// 入账定稿，不得形成路由计划；第一拍定稿条数只许是它那一条，与 assertNoPickupAdoptionTrace
+// 的 initial_route 计数一起挡住。
 //
 // FanOut 先把同一封投给 VE：映射未配置时投影未归类入账，并入队
 // tracking-projection.derived（由客户视图链接住，重拍时定稿）。本用例不停投影；PS
-// 未决仍让整封 Publish 失败，第一拍 published 必须是 0。
+// 未决仍让整封 Publish 失败，第一拍定稿的只有接受信封那一条。
 func TestARegisteredOffsitePickupStopsAtUnprovenIntakeEligibility(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
 	ctx := t.Context()
@@ -63,7 +63,7 @@ func TestARegisteredOffsitePickupStopsAtUnprovenIntakeEligibility(t *testing.T) 
 	if err != nil {
 		t.Fatalf("第一拍：%v", err)
 	}
-	if published != 0 {
+	if published != synAcceptanceSettledOnFirstBeat {
 		t.Fatalf("资格未成立却定稿了 %d 条；揽收信封失败码 = %q",
 			published, recordedFailureCode(t, fixture.db, eventID))
 	}

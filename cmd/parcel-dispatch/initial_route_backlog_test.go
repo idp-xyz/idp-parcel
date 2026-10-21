@@ -163,6 +163,7 @@ func routeBacklogged(t *testing.T, fixture *reassessBothLanesFixture) {
 		Evidence:      fixture.evidence,
 		Costs:         fixture.costs,
 		Store:         routeStore,
+		NotFormed:     routeStore,
 		Log:           handoffLog,
 		Downstream:    downstream,
 		Identities:    identities,

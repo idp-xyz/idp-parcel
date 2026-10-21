@@ -218,6 +218,38 @@ func (double *routeStoreDouble) Save(
 	return ports.InitialRouteSaved, nil
 }
 
+// notFormedDouble 是未形成登记的替身：按判断键记最新一次，err 非空时写不进。
+type notFormedDouble struct {
+	records map[domain.InitialRouteJudgmentKey]ports.InitialRouteNotFormed
+	writes  int
+	err     error
+}
+
+func newNotFormed() *notFormedDouble {
+	return &notFormedDouble{records: map[domain.InitialRouteJudgmentKey]ports.InitialRouteNotFormed{}}
+}
+
+func (double *notFormedDouble) RecordNotFormed(_ context.Context, record ports.InitialRouteNotFormed) error {
+	if double.err != nil {
+		return double.err
+	}
+	double.writes++
+	double.records[record.Key] = record
+	return nil
+}
+
+// only 交回唯一那一行；不是恰一行即失败。
+func (double *notFormedDouble) only(t *testing.T) ports.InitialRouteNotFormed {
+	t.Helper()
+	if len(double.records) != 1 {
+		t.Fatalf("未形成登记 %d 行, want 1", len(double.records))
+	}
+	for _, record := range double.records {
+		return record
+	}
+	panic("unreachable")
+}
+
 type handoffLogDouble struct {
 	digests map[domain.RequestCorrelationID]string
 	findErr error
@@ -277,6 +309,7 @@ type routeFixture struct {
 	applicability *applicabilityDouble
 	evidence      *routeEvidenceDouble
 	store         *routeStoreDouble
+	notFormed     *notFormedDouble
 	log           *handoffLogDouble
 	downstream    *routeDownstreamDouble
 }
@@ -295,6 +328,7 @@ func newRouteFixture(t *testing.T) *routeFixture {
 			unconfigured: map[string]bool{},
 		},
 		store:      newRouteStore(),
+		notFormed:  newNotFormed(),
 		log:        newHandoffLog(),
 		downstream: &routeDownstreamDouble{},
 	}
@@ -303,6 +337,7 @@ func newRouteFixture(t *testing.T) *routeFixture {
 		Evidence:      fixture.evidence,
 		Costs:         passthroughCosts{},
 		Store:         fixture.store,
+		NotFormed:     fixture.notFormed,
 		Log:           fixture.log,
 		Downstream:    fixture.downstream,
 		Identities:    &routeIdentityDouble{},
@@ -333,16 +368,17 @@ func (unconfiguredCosts) LoadCandidateCosts(
 	return ports.RouteCandidateCosts{}, ports.ErrRouteCostSourceNotConfigured
 }
 
-// Covers: 证据齐、候选合格，而成本取数侧没接计价输入——包裹形成未决 `COST_SOURCE_NOT_CONFIGURED`：不拿缺依据
-// 的候选出价，不落库，不交下游意图（ADR-0175 Consequences「成本缺席时不能形成计划」）。票 routing-first-cut/11
-// 判据一在生产装配上今天停在这一格。
-func TestAnUnconfiguredCostSourceLeavesTheParcelUndecided(t *testing.T) {
+// Covers: 证据齐、候选合格，而成本取数侧没接计价输入——包裹落`路由未形成` `COST_SOURCE_NOT_CONFIGURED`：不拿缺依据
+// 的候选出价，不落判断库，不交下游意图（ADR-0175 Consequences「成本缺席时不能形成计划」）；没接是等部署，重投推不动，
+// 原因落未形成登记（ADR-0273 决定二）。
+func TestAnUnconfiguredCostSourceSettlesTheParcelAsNotFormed(t *testing.T) {
 	fixture := newRouteFixture(t)
 	fixture.handler = application.NewCreateInitialRouteHandler(application.CreateInitialRouteDeps{
 		Applicability: fixture.applicability,
 		Evidence:      fixture.evidence,
 		Costs:         unconfiguredCosts{},
 		Store:         fixture.store,
+		NotFormed:     fixture.notFormed,
 		Log:           fixture.log,
 		Downstream:    fixture.downstream,
 		Identities:    &routeIdentityDouble{},
@@ -355,12 +391,15 @@ func TestAnUnconfiguredCostSourceLeavesTheParcelUndecided(t *testing.T) {
 		t.Fatalf("handle: %v", err)
 	}
 	parcels := result.Parcels()
-	if len(parcels) != 1 || parcels[0].Outcome() != application.ParcelRouteUndecided ||
-		parcels[0].UndecidedReason() != application.RouteCostSourceNotConfigured {
-		t.Fatalf("parcels = %+v，想要 UNDECIDED/COST_SOURCE_NOT_CONFIGURED", parcels)
+	if len(parcels) != 1 || parcels[0].Outcome() != application.ParcelRouteNotFormed ||
+		parcels[0].NotFormedReason() != ports.NotFormedCostSourceNotConfigured {
+		t.Fatalf("parcels = %+v，想要 NOT_FORMED/COST_SOURCE_NOT_CONFIGURED", parcels)
 	}
 	if fixture.store.saved != 0 || len(fixture.downstream.intents) != 0 {
-		t.Fatalf("saved = %d intents = %d：未决不落库、不交意图", fixture.store.saved, len(fixture.downstream.intents))
+		t.Fatalf("saved = %d intents = %d：未形成不落判断库、不交意图", fixture.store.saved, len(fixture.downstream.intents))
+	}
+	if record := fixture.notFormed.only(t); record.Reason != ports.NotFormedCostSourceNotConfigured {
+		t.Fatalf("未形成登记原因 = %s, want COST_SOURCE_NOT_CONFIGURED", record.Reason)
 	}
 }
 
@@ -389,6 +428,7 @@ func TestTheCarriedProjectionReachesTheCostSource(t *testing.T) {
 		Evidence:      fixture.evidence,
 		Costs:         costs,
 		Store:         fixture.store,
+		NotFormed:     fixture.notFormed,
 		Log:           fixture.log,
 		Downstream:    fixture.downstream,
 		Identities:    &routeIdentityDouble{},
@@ -496,6 +536,7 @@ func TestTwoPricedCandidatesFormAPlanCitingOnlyTheSelectedOne(t *testing.T) {
 					legCostCitations(t, "candidate-1", test.otherLegs),
 					legCostCitations(t, "candidate-2", test.selectedLegs)...)},
 				Store:      fixture.store,
+				NotFormed:  fixture.notFormed,
 				Log:        fixture.log,
 				Downstream: fixture.downstream,
 				Identities: &routeIdentityDouble{},
@@ -594,10 +635,10 @@ func TestThreeParcelsKeepThreeIndependentResults(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0052 的「未配置」格在初始路由这一侧——登记册未配置的包裹停在带专格原因的
-// 未决，既不落库也不交意图，且**不与同一委托里其他包裹的结果互相掩盖**（`AT-NR-012`）。
-// 专格的意义在恢复动作：`ROUTE_EVIDENCE_NOT_CONFIGURED` 要租户去登记网络定义，而
-// `ROUTE_EVIDENCE_UNAVAILABLE` 要运维去救依赖；混成一格会把这两拨人都指错方向。
+// Covers: ADR-0052 的「未配置」格在初始路由这一侧——登记册未配置的包裹落`路由未形成`、原因与对象落未形成登记，
+// 既不落判断库也不交意图，且**不与同一委托里其他包裹的结果互相掩盖**（`AT-NR-012`、`AT-NR-088`）。专格的意义在恢复
+// 动作：`ROUTE_EVIDENCE_NOT_CONFIGURED` 要租户去登记网络定义，而 `ROUTE_EVIDENCE_UNAVAILABLE` 要运维去救依赖；混成
+// 一格会把这两拨人都指错方向。
 func TestAnUnconfiguredCatalogueStallsOnlyItsOwnParcel(t *testing.T) {
 	fixture := newRouteFixture(t)
 	fixture.evidence.byParcel["parcel-1"] = routableEvidence(t)
@@ -615,10 +656,10 @@ func TestAnUnconfiguredCatalogueStallsOnlyItsOwnParcel(t *testing.T) {
 	if parcels[0].Outcome() != application.ParcelRouteFormed {
 		t.Fatalf("parcel-1 = %q; 另一个包裹的未配置掩盖了它", parcels[0].Outcome())
 	}
-	if parcels[1].Outcome() != application.ParcelRouteUndecided ||
-		parcels[1].UndecidedReason() != application.RouteEvidenceNotConfigured {
-		t.Fatalf("parcel-2 = %q/%q, want UNDECIDED/ROUTE_EVIDENCE_NOT_CONFIGURED",
-			parcels[1].Outcome(), parcels[1].UndecidedReason())
+	if parcels[1].Outcome() != application.ParcelRouteNotFormed ||
+		parcels[1].NotFormedReason() != ports.NotFormedEvidenceNotConfigured {
+		t.Fatalf("parcel-2 = %q/%q, want NOT_FORMED/ROUTE_EVIDENCE_NOT_CONFIGURED",
+			parcels[1].Outcome(), parcels[1].NotFormedReason())
 	}
 	if _, present := parcels[1].NoCurrentRoute(); present {
 		t.Fatal("未配置被判成了`无当前有效路由`——那是领域从全部候选确定性淘汰得出的判断")
@@ -627,7 +668,13 @@ func TestAnUnconfiguredCatalogueStallsOnlyItsOwnParcel(t *testing.T) {
 		t.Fatal("未配置无法安全续办")
 	}
 	if fixture.store.saved != 1 {
-		t.Fatalf("saved = %d, want 1——未配置不落库", fixture.store.saved)
+		t.Fatalf("saved = %d, want 1——未配置不落判断库", fixture.store.saved)
+	}
+	record := fixture.notFormed.only(t)
+	if record.Key != parcels[1].Key() || record.Reason != ports.NotFormedEvidenceNotConfigured ||
+		record.Correlation.String() != "route-handoff-1" || !record.AcceptedAt.Equal(routeJudgedAt.Add(-time.Hour)) ||
+		!record.SettledAt.Equal(routeJudgedAt) || len(record.Candidates) != 0 || len(record.Tied) != 0 {
+		t.Fatalf("未形成登记 = %+v, want parcel-2、证据未配置、交接关联与接受时刻、不带候选", record)
 	}
 }
 
@@ -783,8 +830,8 @@ func TestTwoParcelsFormTwoIndependentPlans(t *testing.T) {
 }
 
 // Covers: `PAR-NET-16`「并列且无法选出唯一一条时为冲突，交人工裁决，不得任选」在初始路由这一侧
-// ——最低成本并列既不形成计划也不形成`无当前有效路由`，停在带专格原因的未决、可续办，并交回
-// 全部候选与并列的那几家供留痕；不落库、不交意图。人工选择入口不在本期（UC-NR-001）。
+// ——最低成本并列既不形成计划也不形成`无当前有效路由`，落`路由未形成`、可续办；全部候选、并列的那几家与它们打平的
+// 金额落未形成登记（`AT-NR-089`）；不落判断库、不交意图。人工选择入口不在本期（UC-NR-001）。
 func TestALowestCostTieFormsNeitherPlanNorNoRoute(t *testing.T) {
 	fixture := newRouteFixture(t)
 	fixture.evidence.byParcel["parcel-1"] = tiedEvidence(t)
@@ -794,8 +841,8 @@ func TestALowestCostTieFormsNeitherPlanNorNoRoute(t *testing.T) {
 		t.Fatalf("handle: %v", err)
 	}
 	parcel := result.Parcels()[0]
-	if parcel.Outcome() != application.ParcelRouteUndecided || parcel.UndecidedReason() != application.RouteCandidatesTied {
-		t.Fatalf("parcel = %q/%q, want UNDECIDED/CANDIDATES_TIED", parcel.Outcome(), parcel.UndecidedReason())
+	if parcel.Outcome() != application.ParcelRouteNotFormed || parcel.NotFormedReason() != ports.NotFormedCandidatesTied {
+		t.Fatalf("parcel = %q/%q, want NOT_FORMED/CANDIDATES_TIED", parcel.Outcome(), parcel.NotFormedReason())
 	}
 	if _, present := parcel.Plan(); present {
 		t.Fatal("并列时形成了计划——那等于替授权角色任选了一家")
@@ -813,14 +860,25 @@ func TestALowestCostTieFormsNeitherPlanNorNoRoute(t *testing.T) {
 		t.Fatalf("candidates = %v; 全部候选要随并列理由一起交回", candidates)
 	}
 	if fixture.store.saved != 0 || len(fixture.downstream.intents) != 0 {
-		t.Fatalf("saved = %d, intents = %d; 并列不落库也不交意图", fixture.store.saved, len(fixture.downstream.intents))
+		t.Fatalf("saved = %d, intents = %d; 并列不落判断库也不交意图", fixture.store.saved, len(fixture.downstream.intents))
+	}
+	record := fixture.notFormed.only(t)
+	if record.Reason != ports.NotFormedCandidatesTied || len(record.Candidates) != 2 || len(record.Tied) != 2 ||
+		len(record.TiedCosts) != 2 {
+		t.Fatalf("未形成登记 = %+v, want 并列、两家候选、两家并列与各自成本", record)
+	}
+	for _, cost := range record.TiedCosts {
+		if cost.AmountMinor() != 4200 || cost.Currency() != "CNY" {
+			t.Fatalf("并列理由 = %+v, want 两家都是 4200 CNY", record.TiedCosts)
+		}
 	}
 }
 
-// Covers: `AT-NR-006`「关务资格服务暂时不可用，无法判断候选是否合法——形成路由判断未决
-// 并安全续办；不得记录为无当前有效路由或选择未经验证的口岸」。资格状态未知折成证据未知
-// 候选，选不出也立不成无路由，停在未决。
-func TestUnknownCustomsEligibilityStaysUndecidedNotNoRoute(t *testing.T) {
+// Covers: 关务资格状态未知（关务目录为空、来源未接）折成证据未知候选，选不出也立不成无路由：落`路由未形成`
+// `CANDIDATE_EVIDENCE_INCOMPLETE`，全部候选与缺口落未形成登记（`AT-NR-090`）。状态未知不是依赖故障，重投推不动；关务
+// 资格服务真读不动时取数侧交错误，落`ROUTE_EVIDENCE_UNAVAILABLE`、整封重投，那是 `AT-NR-006`（见
+// TestThreeParcelsKeepThreeIndependentResults 的第三件）。两格都不记成无当前有效路由，也不选未经验证的口岸。
+func TestUnknownCustomsEligibilityIsNotFormedNotNoRoute(t *testing.T) {
 	fixture := newRouteFixture(t)
 	evidence := routableEvidence(t)
 	unknown, err := domain.NewHardConstraintFinding(domain.HardConstraintFindingSpec{
@@ -841,13 +899,19 @@ func TestUnknownCustomsEligibilityStaysUndecidedNotNoRoute(t *testing.T) {
 	}
 
 	parcel := result.Parcels()[0]
-	if parcel.Outcome() != application.ParcelRouteUndecided ||
-		parcel.UndecidedReason() != application.RouteCandidateEvidenceIncomplete {
-		t.Fatalf("outcome = %q/%q, want UNDECIDED/CANDIDATE_EVIDENCE_INCOMPLETE",
-			parcel.Outcome(), parcel.UndecidedReason())
+	if parcel.Outcome() != application.ParcelRouteNotFormed ||
+		parcel.NotFormedReason() != ports.NotFormedCandidateEvidenceIncomplete {
+		t.Fatalf("outcome = %q/%q, want NOT_FORMED/CANDIDATE_EVIDENCE_INCOMPLETE",
+			parcel.Outcome(), parcel.NotFormedReason())
 	}
 	if fixture.store.saved != 0 {
 		t.Fatal("资格未知被记成了领域结果")
+	}
+	record := fixture.notFormed.only(t)
+	if len(record.Candidates) != 1 || record.Candidates[0].Outcome() != domain.CandidateEvidenceUnknown ||
+		len(record.Gaps) != 1 || record.Gaps[0].Reference().String() != "CUSTOMS_ELIGIBILITY" ||
+		record.Gaps[0].ReassessmentCondition().String() != "WHEN_CUSTOMS_AUTHORITY_ANSWERS" {
+		t.Fatalf("未形成登记 = %+v, want 一家证据未知候选与关务资格那条缺口", record)
 	}
 }
 
@@ -1054,6 +1118,7 @@ func TestAnUnrebuildableInitialRouteRowIsLoud(t *testing.T) {
 			Evidence:      fixture.evidence,
 			Costs:         passthroughCosts{},
 			Store:         store,
+			NotFormed:     fixture.notFormed,
 			Log:           fixture.log,
 			Downstream:    fixture.downstream,
 			Identities:    &routeIdentityDouble{},

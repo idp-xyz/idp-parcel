@@ -20,6 +20,10 @@ var ErrIncompleteRouteEvidence = errors.New("network routing: initial route evid
 // ErrUnexpectedRouteSaveOutcome 说明路由库交回了封闭集合以外的写入结果。
 var ErrUnexpectedRouteSaveOutcome = errors.New("network routing: unexpected initial route save outcome")
 
+// ErrNotFormedRegisterMissing 说一件包裹停在了重投推不动的一格，装配却没给未形成登记可写。只有装配缺漏到得了这里，响亮
+// 报错：折成未决会让一个装配缺陷占着分区重投，假装在等依赖。
+var ErrNotFormedRegisterMissing = errors.New("network routing: initial route has no not-formed register to record into")
+
 // RouteHandoffOutcome 是整份交接的应用处理结果。逐包裹结果另有自己的集合：`已处理`只说
 // 交接被受理且逐包裹各有答案，不说每个包裹都有了计划——委托级「已路由」正是被禁的。
 type RouteHandoffOutcome uint8
@@ -50,8 +54,9 @@ func (outcome RouteHandoffOutcome) String() string {
 	}
 }
 
-// ParcelRouteOutcome 是一个包裹的处理结果。`无当前有效路由`是领域判断、`未决`是应用
-// 结果，两者与`已形成`三分——用例明写三者不能合并为一个通用失败状态。
+// ParcelRouteOutcome 是一个包裹的处理结果。`无当前有效路由`是领域判断、`未决`与`路由未形成`是应用结果，三者与`已形成`
+// 分开——用例明写它们不能合并为一个通用失败状态。`未决`与`路由未形成`按恢复动作分（ADR-0029、ADR-0273 决定二）：前者重投
+// 推得动，消费门回滚重投；后者重投推不动，原因落未形成登记、入账，同一交接里已判成的包裹照常提交。
 type ParcelRouteOutcome uint8
 
 const (
@@ -60,6 +65,7 @@ const (
 	ParcelNoCurrentRoute
 	ParcelRouteUndecided
 	ParcelExistingResult
+	ParcelRouteNotFormed
 )
 
 func (outcome ParcelRouteOutcome) String() string {
@@ -72,46 +78,34 @@ func (outcome ParcelRouteOutcome) String() string {
 		return "UNDECIDED"
 	case ParcelExistingResult:
 		return "EXISTING_RESULT"
+	case ParcelRouteNotFormed:
+		return "NOT_FORMED"
 	default:
 		return ""
 	}
 }
 
-// RouteUndecidedReason 指名一个包裹为何停在未决。封闭集合，按依赖阶段分类统计。
+// RouteUndecidedReason 指名一个包裹为何停在未决。封闭集合，只收重投推得动的格——依赖读不回、证据换代、标识签不出、
+// 原因写不进；重投推不动的归 ports.InitialRouteNotFormedReason，判据只在本编排一处（ADR-0273 决定二），适配器按结果折、
+// 不持原因字面量。
 type RouteUndecidedReason uint8
 
 const (
 	RouteUndecidedReasonNone RouteUndecidedReason = iota
 	RouteStoreUnavailable
+	// RouteEvidenceUnavailable 是证据视图读不回，与`路由未形成`的证据未配置分格：未配置要租户去登记网络定义，不可用要
+	// 运维去救依赖，混成一格会把这两拨人都指错方向。
 	RouteEvidenceUnavailable
-	// RouteEvidenceNotConfigured 是这个范围未配置：网络目录为空，或判断时点没有适用于该服务目的的
-	// 路由策略版本（ADR-0052、ADR-0148 决定六）。它与
-	// RouteEvidenceUnavailable 分格，因为恢复动作相反：未配置要租户去登记网络定义，
-	// 不可用要运维去救依赖。也绝不译成`无当前有效路由`——那是领域从「全部候选确定性
-	// 淘汰」得出的判断，而这里是还没人说过网络长什么样。
-	RouteEvidenceNotConfigured
-	RouteCandidateSpaceNotEstablished
-	RouteCandidateEvidenceIncomplete
 	RouteIdentityUnavailable
 	RouteHandoffLogUnavailable
 	RoutingApplicabilityUnavailable
 	RouteEvidenceSuperseded
-	// RouteRankingFormNotConfigured 是路由策略版本没有声明排序形态：等租户选形态（ADR-0146），
-	// 与证据未配置同属「等登记」，但要登记的是另一样东西。
-	RouteRankingFormNotConfigured
-	// RouteCandidatesTied 是最低成本并列、选不出唯一一条（`PAR-NET-16`）：候选可行、等授权角色
-	// 裁，所以既不是计划也不是`无当前有效路由`。
-	RouteCandidatesTied
-	// RouteCandidateCostsPending 与 RouteCandidateCostsUnpriceable 都是合格候选无一已计价，分格
-	// 是因为恢复动作相反：前者等评价形成会自己好，后者要有人改价卡或候选集合（ADR-0029）。
-	RouteCandidateCostsPending
-	RouteCandidateCostsUnpriceable
-	RouteCandidateCostCurrenciesDiffer
-	// RouteCostSourceNotConfigured 是候选成本取数侧没接计价输入路径（票 routing-first-cut/10）：
-	// 那半是消费方的实例半边，没接就没有成本依据，等接入。
-	RouteCostSourceNotConfigured
-	// RouteCostSourceUnavailable 是取数侧执行失败（依赖读不回）：等依赖恢复重试。
+	// RouteCostSourceUnavailable 是取数侧执行失败（依赖读不回）：等依赖恢复重试。取数侧答「用不了」不在这里，响亮报错
+	// （ports.ErrRouteCostAnswerUnusable）。
 	RouteCostSourceUnavailable
+	// RouteNotFormedUnrecorded 是包裹停在了重投推不动的一格，原因却写不进未形成登记：原因没落库不得入账，改答未决、
+	// 整封回滚重投。
+	RouteNotFormedUnrecorded
 )
 
 func (reason RouteUndecidedReason) String() string {
@@ -120,12 +114,6 @@ func (reason RouteUndecidedReason) String() string {
 		return "ROUTE_STORE_UNAVAILABLE"
 	case RouteEvidenceUnavailable:
 		return "ROUTE_EVIDENCE_UNAVAILABLE"
-	case RouteEvidenceNotConfigured:
-		return "ROUTE_EVIDENCE_NOT_CONFIGURED"
-	case RouteCandidateSpaceNotEstablished:
-		return "CANDIDATE_SPACE_NOT_ESTABLISHED"
-	case RouteCandidateEvidenceIncomplete:
-		return "CANDIDATE_EVIDENCE_INCOMPLETE"
 	case RouteIdentityUnavailable:
 		return "ROUTE_IDENTITY_UNAVAILABLE"
 	case RouteHandoffLogUnavailable:
@@ -134,20 +122,10 @@ func (reason RouteUndecidedReason) String() string {
 		return "ROUTING_APPLICABILITY_UNAVAILABLE"
 	case RouteEvidenceSuperseded:
 		return "ROUTE_EVIDENCE_SUPERSEDED"
-	case RouteRankingFormNotConfigured:
-		return "RANKING_FORM_NOT_CONFIGURED"
-	case RouteCandidatesTied:
-		return "CANDIDATES_TIED"
-	case RouteCandidateCostsPending:
-		return "CANDIDATE_COSTS_PENDING"
-	case RouteCandidateCostsUnpriceable:
-		return "CANDIDATE_COSTS_UNPRICEABLE"
-	case RouteCandidateCostCurrenciesDiffer:
-		return "CANDIDATE_COST_CURRENCIES_DIFFER"
-	case RouteCostSourceNotConfigured:
-		return "COST_SOURCE_NOT_CONFIGURED"
 	case RouteCostSourceUnavailable:
 		return "COST_SOURCE_UNAVAILABLE"
+	case RouteNotFormedUnrecorded:
+		return "NOT_FORMED_UNRECORDED"
 	default:
 		return ""
 	}
@@ -165,8 +143,9 @@ type CreateInitialRouteCommand struct {
 	Carried    ports.RequestCarriedContent
 }
 
-// ParcelRouteResult 是一个包裹的独立结果。计划与无路由各按在场标志给出，未决带原因与
-// 续办引用；并列的未决另带全部候选与并列的那几家，授权角色裁的时候要看得见在哪几家之间裁。
+// ParcelRouteResult 是一个包裹的独立结果。计划与无路由各按在场标志给出，未决与路由未形成各带原因与续办引用；并列另带
+// 全部候选、并列的那几家与它们的成本事实，授权角色裁的时候要看得见在哪几家之间、按什么金额打平；候选证据不全另带全部
+// 候选与缺口。
 type ParcelRouteResult struct {
 	key          domain.InitialRouteJudgmentKey
 	outcome      ParcelRouteOutcome
@@ -175,10 +154,13 @@ type ParcelRouteResult struct {
 	noRoute      domain.NoCurrentRouteJudgment
 	hasNoRoute   bool
 	reason       RouteUndecidedReason
+	notFormed    ports.InitialRouteNotFormedReason
 	continuation ContinuationReference
 	handoff      ContinuationReference
 	candidates   []domain.RouteCandidate
 	tied         []domain.CandidateID
+	tiedCosts    []domain.CandidateCostFact
+	gaps         []domain.EvidenceGap
 }
 
 func (result ParcelRouteResult) Key() domain.InitialRouteJudgmentKey {
@@ -201,6 +183,11 @@ func (result ParcelRouteResult) UndecidedReason() RouteUndecidedReason {
 	return result.reason
 }
 
+// NotFormedReason 只在`路由未形成`时给出。
+func (result ParcelRouteResult) NotFormedReason() ports.InitialRouteNotFormedReason {
+	return result.notFormed
+}
+
 func (result ParcelRouteResult) ContinuationReference() ContinuationReference {
 	return result.continuation
 }
@@ -210,13 +197,23 @@ func (result ParcelRouteResult) RouteHandoffReference() ContinuationReference {
 	return result.handoff
 }
 
-// Candidates 只在`候选并列`时给出：本轮评估过的全部候选及各自的选择或淘汰依据。
+// Candidates 只在候选并列与候选证据不全时给出：本轮评估过的全部候选及各自的选择或淘汰依据。
 func (result ParcelRouteResult) Candidates() []domain.RouteCandidate {
 	return append([]domain.RouteCandidate(nil), result.candidates...)
 }
 
 func (result ParcelRouteResult) TiedCandidates() []domain.CandidateID {
 	return append([]domain.CandidateID(nil), result.tied...)
+}
+
+// TiedCosts 只在并列时给出：并列那几家各自的候选成本事实。
+func (result ParcelRouteResult) TiedCosts() []domain.CandidateCostFact {
+	return append([]domain.CandidateCostFact(nil), result.tiedCosts...)
+}
+
+// EvidenceGaps 只在候选证据不全时给出：缺什么、什么条件再判。
+func (result ParcelRouteResult) EvidenceGaps() []domain.EvidenceGap {
+	return append([]domain.EvidenceGap(nil), result.gaps...)
 }
 
 type CreateInitialRouteResult struct {
@@ -248,10 +245,12 @@ type CreateInitialRouteDeps struct {
 	Evidence      ports.InitialRouteEvidenceView
 	Costs         ports.RouteCandidateCostSource
 	Store         ports.InitialRouteStore
-	Log           ports.RouteHandoffLog
-	Downstream    ports.InitialRouteHandoff
-	Identities    ports.RouteIdentityFactory
-	Clock         ports.Clock
+	// NotFormed 收重投推不动那几格的原因与对象。只有包裹真停在那几格时才问它；那时它为 nil 是装配缺漏，响亮报错。
+	NotFormed  ports.InitialRouteNotFormedRegister
+	Log        ports.RouteHandoffLog
+	Downstream ports.InitialRouteHandoff
+	Identities ports.RouteIdentityFactory
+	Clock      ports.Clock
 }
 
 type CreateInitialRouteHandler struct {
@@ -263,8 +262,9 @@ func NewCreateInitialRouteHandler(deps CreateInitialRouteDeps) *CreateInitialRou
 }
 
 // Handle 把一份委托接受交接推进到逐包裹结果：受理 → 重放/冲突分界 → 适用性 → 逐包裹
-// 「已有结果 / 评估管线 / 提交 / 发布意图」。单个包裹未决或无路由不回滚其他包裹已经
-// 合法形成的计划（`AT-NR-012`），也不被一个委托级状态掩盖。
+// 「已有结果 / 评估管线 / 提交 / 发布意图 / 未形成留原因」。单个包裹无路由或路由未形成不回滚其他包裹已经合法形成的
+// 计划（`AT-NR-012`），也不被一个委托级状态掩盖。依赖类未决由消费门整封回滚重投：同一交接里判成的包裹那时还没越过
+// 提交边界，重投时按判断键再判一次。
 func (handler *CreateInitialRouteHandler) Handle(
 	ctx context.Context,
 	command CreateInitialRouteCommand,
@@ -317,6 +317,12 @@ func (handler *CreateInitialRouteHandler) Handle(
 		if err != nil {
 			return CreateInitialRouteResult{}, err
 		}
+		if result.outcome == ParcelRouteNotFormed {
+			result, err = handler.recordNotFormed(ctx, handoff.Correlation(), handoff.AcceptedAt(), result)
+			if err != nil {
+				return CreateInitialRouteResult{}, err
+			}
+		}
 		results = append(results, result)
 	}
 	return CreateInitialRouteResult{outcome: RouteHandoffProcessed, parcels: results}, nil
@@ -353,7 +359,7 @@ func (handler *CreateInitialRouteHandler) routeOneParcel(
 		return handler.undecidedParcel(key, RouteEvidenceUnavailable), nil
 	}
 	if !configured {
-		return handler.undecidedParcel(key, RouteEvidenceNotConfigured), nil
+		return handler.notFormedParcel(key, ports.NotFormedEvidenceNotConfigured), nil
 	}
 
 	for attempt := 0; attempt < 2; attempt++ {
@@ -369,7 +375,7 @@ func (handler *CreateInitialRouteHandler) routeOneParcel(
 		if !configured {
 			// 判断中途登记册被撤下：重校对不出修订，提交这一版等于拿一份已经没有出处
 			// 的证据定案。
-			return handler.undecidedParcel(key, RouteEvidenceNotConfigured), nil
+			return handler.notFormedParcel(key, ports.NotFormedEvidenceNotConfigured), nil
 		}
 		if fresh.ViewRevision != evidence.ViewRevision {
 			evidence = fresh
@@ -398,13 +404,13 @@ func (handler *CreateInitialRouteHandler) judgeParcel(
 
 	// 评估在领域执行（ADR-0046），按层次推进：区域 → 承诺分界 → 可执行性 → 硬约束 →
 	// 时间可行性。事实本身不成立是端口坏了，响亮上抛。
-	candidates, _, err := domain.EvaluateServiceAreas(evidence.ServiceAreas)
+	candidates, areaGaps, err := domain.EvaluateServiceAreas(evidence.ServiceAreas)
 	if err != nil {
 		return none, nil, fmt.Errorf("evaluate service areas: %w", err)
 	}
 	if len(candidates) == 0 {
-		undecided := handler.undecidedParcel(key, RouteCandidateSpaceNotEstablished)
-		return none, &undecided, nil
+		notFormed := handler.notFormedParcel(key, ports.NotFormedCandidateSpaceNotEstablished)
+		return none, &notFormed, nil
 	}
 	candidates, err = domain.EvaluateRouteRequirements(candidates, evidence.RouteRequirements)
 	if err != nil {
@@ -414,10 +420,11 @@ func (handler *CreateInitialRouteHandler) judgeParcel(
 	if err != nil {
 		return none, nil, fmt.Errorf("evaluate path executability: %w", err)
 	}
-	candidates, _, err = domain.EvaluateHardConstraints(candidates, evidence.HardConstraints)
+	candidates, constraintGaps, err := domain.EvaluateHardConstraints(candidates, evidence.HardConstraints)
 	if err != nil {
 		return none, nil, fmt.Errorf("evaluate hard constraints: %w", err)
 	}
+	gaps := append(append([]domain.EvidenceGap(nil), areaGaps...), constraintGaps...)
 	candidates, err = domain.EvaluateTimeFeasibility(candidates, evidence.Projections, evidence.CommittedBound)
 	if err != nil {
 		return none, nil, fmt.Errorf("evaluate time feasibility: %w", err)
@@ -425,17 +432,21 @@ func (handler *CreateInitialRouteHandler) judgeParcel(
 
 	judgedAt := handler.deps.Clock.Now()
 
-	// 成本族在取数侧兑现（routing-first-cut/10）：取数侧没接或执行失败都如实未决，
-	// 不拿缺依据的候选装成可排序的事实。
+	// 成本族在取数侧兑现（routing-first-cut/10）：取数侧没接是等部署、读不回是等依赖，都不拿缺依据的候选装成可排序的
+	// 事实。取数侧答「用不了」重投多少次都一样，又不是一格等登记的缺口——折成未形成会在登记里留一条点名租户没登记的
+	// 假原因——所以响亮报错。
 	if handler.deps.Costs == nil {
-		undecided := handler.undecidedParcel(key, RouteCostSourceNotConfigured)
-		return none, &undecided, nil
+		notFormed := handler.notFormedParcel(key, ports.NotFormedCostSourceNotConfigured)
+		return none, &notFormed, nil
 	}
 	costs, err := handler.deps.Costs.LoadCandidateCosts(ctx, key, evidence, carried)
 	if err != nil {
-		if errors.Is(err, ports.ErrRouteCostSourceNotConfigured) {
-			undecided := handler.undecidedParcel(key, RouteCostSourceNotConfigured)
-			return none, &undecided, nil
+		switch {
+		case errors.Is(err, ports.ErrRouteCostSourceNotConfigured):
+			notFormed := handler.notFormedParcel(key, ports.NotFormedCostSourceNotConfigured)
+			return none, &notFormed, nil
+		case errors.Is(err, ports.ErrRouteCostAnswerUnusable):
+			return none, nil, fmt.Errorf("load candidate costs: %w", err)
 		}
 		undecided := handler.undecidedParcel(key, RouteCostSourceUnavailable)
 		return none, &undecided, nil
@@ -451,24 +462,25 @@ func (handler *CreateInitialRouteHandler) judgeParcel(
 		selected, _ := ranking.Selected()
 		return handler.planRecord(ctx, key, selected, candidates, evidence, costs.CitationsOf(selected), judgedAt, acceptedAt)
 	case domain.RankingNoQualifiedCandidate:
-		return handler.noRouteRecord(key, candidates, evidence, judgedAt)
+		return handler.noRouteRecord(key, candidates, gaps, evidence, judgedAt)
 	case domain.RankingTied:
-		undecided := handler.undecidedParcel(key, RouteCandidatesTied)
-		undecided.candidates = append([]domain.RouteCandidate(nil), candidates...)
-		undecided.tied = ranking.Tied()
-		return none, &undecided, nil
+		notFormed := handler.notFormedParcel(key, ports.NotFormedCandidatesTied)
+		notFormed.candidates = append([]domain.RouteCandidate(nil), candidates...)
+		notFormed.tied = ranking.Tied()
+		notFormed.tiedCosts = costsOf(evidence.CandidateCosts, notFormed.tied)
+		return none, &notFormed, nil
 	case domain.RankingFormNotDeclared:
-		undecided := handler.undecidedParcel(key, RouteRankingFormNotConfigured)
-		return none, &undecided, nil
+		notFormed := handler.notFormedParcel(key, ports.NotFormedRankingFormNotConfigured)
+		return none, &notFormed, nil
 	case domain.RankingCostsPending:
-		undecided := handler.undecidedParcel(key, RouteCandidateCostsPending)
-		return none, &undecided, nil
+		notFormed := handler.notFormedParcel(key, ports.NotFormedCandidateCostsPending)
+		return none, &notFormed, nil
 	case domain.RankingCostsUnpriceable:
-		undecided := handler.undecidedParcel(key, RouteCandidateCostsUnpriceable)
-		return none, &undecided, nil
+		notFormed := handler.notFormedParcel(key, ports.NotFormedCandidateCostsUnpriceable)
+		return none, &notFormed, nil
 	case domain.RankingCurrenciesDiffer:
-		undecided := handler.undecidedParcel(key, RouteCandidateCostCurrenciesDiffer)
-		return none, &undecided, nil
+		notFormed := handler.notFormedParcel(key, ports.NotFormedCandidateCostCurrenciesDiffer)
+		return none, &notFormed, nil
 	default:
 		return none, nil, fmt.Errorf("network routing: unhandled ranking outcome %d", ranking.Outcome())
 	}
@@ -534,6 +546,7 @@ func (handler *CreateInitialRouteHandler) planRecord(
 func (handler *CreateInitialRouteHandler) noRouteRecord(
 	key domain.InitialRouteJudgmentKey,
 	candidates []domain.RouteCandidate,
+	gaps []domain.EvidenceGap,
 	evidence ports.InitialRouteEvidence,
 	judgedAt time.Time,
 ) (ports.InitialRouteRecord, *ParcelRouteResult, error) {
@@ -546,8 +559,10 @@ func (handler *CreateInitialRouteHandler) noRouteRecord(
 		JudgedAt:     judgedAt,
 	})
 	if errors.Is(err, domain.ErrCandidateSpaceUndecided) {
-		undecided := handler.undecidedParcel(key, RouteCandidateEvidenceIncomplete)
-		return none, &undecided, nil
+		notFormed := handler.notFormedParcel(key, ports.NotFormedCandidateEvidenceIncomplete)
+		notFormed.candidates = append([]domain.RouteCandidate(nil), candidates...)
+		notFormed.gaps = gaps
+		return none, &notFormed, nil
 	}
 	if err != nil {
 		return none, nil, fmt.Errorf("form no-current-route judgment: %w", err)
@@ -646,8 +661,65 @@ func (handler *CreateInitialRouteHandler) undecidedParcel(
 		key:          key,
 		outcome:      ParcelRouteUndecided,
 		reason:       reason,
-		continuation: routeContinuation(key, reason),
+		continuation: routeContinuation(key, reason.String()),
 	}
+}
+
+// notFormedParcel 让一个包裹停在`路由未形成`。原因此刻还没落库：Handle 逐件判完之后经 recordNotFormed 落登记，落不下
+// 就改回未决。
+func (handler *CreateInitialRouteHandler) notFormedParcel(
+	key domain.InitialRouteJudgmentKey,
+	reason ports.InitialRouteNotFormedReason,
+) ParcelRouteResult {
+	return ParcelRouteResult{
+		key:          key,
+		outcome:      ParcelRouteNotFormed,
+		notFormed:    reason,
+		continuation: routeContinuation(key, reason.String()),
+	}
+}
+
+// recordNotFormed 把一件`路由未形成`的原因与对象落进未形成登记（ADR-0273 决定二）。原因没落库不得入账：写不进时改答
+// 未决，整封回滚重投。
+func (handler *CreateInitialRouteHandler) recordNotFormed(
+	ctx context.Context,
+	correlation domain.RequestCorrelationID,
+	acceptedAt time.Time,
+	result ParcelRouteResult,
+) (ParcelRouteResult, error) {
+	if handler.deps.NotFormed == nil {
+		return ParcelRouteResult{}, fmt.Errorf("%w: parcel %q stopped at %s",
+			ErrNotFormedRegisterMissing, result.key.DeclaredParcelID, result.notFormed)
+	}
+	err := handler.deps.NotFormed.RecordNotFormed(ctx, ports.InitialRouteNotFormed{
+		Key:         result.key,
+		Correlation: correlation,
+		Reason:      result.notFormed,
+		Candidates:  result.Candidates(),
+		Tied:        result.TiedCandidates(),
+		TiedCosts:   result.TiedCosts(),
+		Gaps:        result.EvidenceGaps(),
+		AcceptedAt:  acceptedAt,
+		SettledAt:   handler.deps.Clock.Now(),
+	})
+	if err != nil {
+		return handler.undecidedParcel(result.key, RouteNotFormedUnrecorded), nil
+	}
+	return result, nil
+}
+
+// costsOf 取出指名那几家候选的成本事实，序照指名的序。
+func costsOf(facts []domain.CandidateCostFact, candidates []domain.CandidateID) []domain.CandidateCostFact {
+	out := make([]domain.CandidateCostFact, 0, len(candidates))
+	for _, candidate := range candidates {
+		for _, fact := range facts {
+			if fact.Candidate() == candidate {
+				out = append(out, fact)
+				break
+			}
+		}
+	}
+	return out
 }
 
 // undecidedHandoff 让整份交接停在未决：日志或适用性读不回时，逐包裹都还没被判断过。
@@ -666,9 +738,9 @@ func (handler *CreateInitialRouteHandler) undecidedHandoff(
 	}
 }
 
-func routeContinuation(key domain.InitialRouteJudgmentKey, reason RouteUndecidedReason) ContinuationReference {
+func routeContinuation(key domain.InitialRouteJudgmentKey, reason string) ContinuationReference {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
-		reason.String(),
+		reason,
 		key.TenantID.String(),
 		key.CustomerAccountID.String(),
 		key.ShipmentRequestID.String(),
