@@ -1,7 +1,7 @@
 # 57 段采用委托与委托取消都没有更正面，首个参与被更正后委托的开始也不重派生
 
 Category: enhancement
-Status: in-progress——2026-10-21 认领（57、15 同批），分支 claude-dcg57。此前 ready-for-agent——2026-10-20 上线就绪评估归 R1，与 88 同批；「解除采用」的裁定见 [triage-2026-10-19](../triage-2026-10-19.md)「上线就绪评估（2026-10-20）」。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [25](./25-segment-adopts-transport-commission-and-cancellation-faces.md) 完成记录与 [ADR-0204](../../../docs/adr/0204-a-fulfillment-segment-adopts-a-transport-commission-by-declaration-and-a-started-commission-cannot-be-cancelled.md) 越权风险点 1、2、8（风险点 8 由票 25 隔离评审补入）。
+Status: in-progress——完工待评审与进 main，分支 claude-dcg57。此前 in-progress——2026-10-21 认领（57、15 同批）；此前 ready-for-agent——2026-10-20 上线就绪评估归 R1，与 88 同批；「解除采用」的裁定见 [triage-2026-10-19](../triage-2026-10-19.md)「上线就绪评估（2026-10-20）」。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [25](./25-segment-adopts-transport-commission-and-cancellation-faces.md) 完成记录与 [ADR-0204](../../../docs/adr/0204-a-fulfillment-segment-adopts-a-transport-commission-by-declaration-and-a-started-commission-cannot-be-cancelled.md) 越权风险点 1、2、8（风险点 8 由票 25 隔离评审补入）。
 Blocked by: 无——用户决定一格已于 2026-10-20 代决，见 [triage-2026-10-19](../triage-2026-10-19.md)「上线就绪评估（2026-10-20）」（此前 用户决定（TF owner 复核 ADR-0204 风险点 1、2、8：采用错了怎么改，「已开始」能不能回退，采用登记之前成立的取消怎么更正））
 
 ## 现象
@@ -31,3 +31,25 @@ Blocked by: 无——用户决定一格已于 2026-10-20 代决，见 [triage-20
 - **须新 ADR**（M9 问题一）：部分停用 ADR-0204 决定一末两句（「采用之后不改、不解除」）与决定二「只前移不后移」。
 - **发生项失效的生产入口纳入本批**（M9 问题三）：「已形成的先走发生项失效」那条路今天不存在（TF `ReviseValidity` 无生产调用方）。本票连同 88 一批做时，一并给出发生项失效的生产入口；做不到就在完工记录里写明成本纠错暂缺时的绕法。88 的门铃消费者形成发生项之前，先复核采用是否仍在册。票 15 随之升为上线前必修（分诊表本就注明「那个入口一落地即升 A」）。
 - **其余三问拆出**（M9 问题二）：首个参与被更正后是否重新派生、取消的更正、「取消送达服务方」事实，三问不在本票，由协调方另立 needs-triage 子票；本票只留解除采用。
+
+## 完成记录（2026-10-21，Claude Code 作者子代理，分支 claude-dcg57，变基在 main `7b598e47` 之上）
+
+与票 [15](./15-occurrence-revision-does-not-drive-a-cost-correction.md) 同批，共用一份新 ADR [ADR-0232](../../../docs/adr/0232-a-segment-commission-adoption-is-withdrawn-by-decision-only-before-occurrences-form-and-occurrence-revision-drives-the-supplier-cost-correction.md)。裁定的单一权威是分诊「上线就绪评估（2026-10-20）」关于本票那一条与「代决复核追加的上线前必修」、代决复核 R10 与 M9；正文没写的细节代决，逐条记在 ADR-0232 决定一至九，越权风险点见其文末（第 1 至 9、14 点归本票）。
+
+**做了什么**
+
+- 运营决定「解除履约段采用」（`POST /transport-fulfillment-segment-commission-adoption-withdrawals`，载荷段与点名的委托）：段上还有按这份委托形成（服务方与协议快照同委托）、仍有效的实际履约发生项答 `OCCURRENCES_FORMED` 并回显，续办是先失效；段上采用的不是点名那一份答 `ADOPTION_MISMATCH`；没有当前采用答 `ADOPTION_NOT_FOUND`（最近一次解的正是这一份答 `EXISTING_WITHDRAWAL`）。解除另记一行（之前的开始、变法、之后的开始、解除人），采用那一行不改；采用册改为按代，解除之后同段再采用是下一代。
+- R10：委托再无别的已采用段时开始撤回、回到已提交（之后又取消得了）；还有时按其余各段采用上记的开始取最早的那一条（可以后移）；不是开始所依的那一段时不动。部分停用 ADR-0204 决定一末两句与决定二「只前移不后移」（限解除采用），ADR-0204 Status 行与 Links 加前向指针、正文不动。
+- M9 问题三：发生项失效的生产入口（`POST /transport-fulfillment-charge-occurrence-invalidations`，运营决定「运输收费发生项失效」）：点名链头那一版与一条依据，取范围锁、长出 V(n+1) 失效版本、记修订者，已形成信封同笔交出；票 15 由此升为上线前必修并在同一分支做完。登记用例改读链头（ADR-0207「已知限制」兑现）：失效之后同一件事实再登从失效版本长出替代版本，所以错采用的那一段改采用对的委托之后，成本能在对的委托下重新形成。
+- 并发：解除先取这一段实际履约范围的发生项锁（与登记查覆盖同一把）再读发生项；登记拿到这把锁之后重读采用、变了答未决 `PROCUREMENT_SOURCE_CHANGED`（88 的门铃消费者经同一个登记用例，「形成之前先复核采用是否仍在册」由这一步做到）；采用与解除共用委托的开始锁（新空间 `transport_fulfillment.transport_commission.start`）。三条真库并发用例（解除对登记两个方向、采用对解除），各在拆掉对应那一步时变红（实测）。
+- M9 问题二：其余三问拆成 needs-triage 子票 [162](./162-commission-start-does-not-rederive-when-the-first-participation-is-corrected.md)、[163](./163-a-cancellation-dated-after-the-start-has-no-correction-face.md)、[164](./164-whether-a-cancellation-reached-the-provider-is-not-recorded.md)。
+- 文档：TF `CONTEXT` 段采用委托一条、委托生命周期、发生项生命周期；UC-TF-004 补 `AT-TF-306`–`310`、`315` 与一致性一条，UC-TF-005 补 `AT-TF-311`–`314`；AT 盘点①加行。演示种子另起 `steps/457`（配置员持两种决定，`data/access/11`、`12`，`data/governance/48`、`49`），一次性库上实灌两遍零报错。
+
+**迁移**：access_identity `0021`（决定种类 CHECK 以 main 上的 0020 为底取并集加两词）、transport_fulfillment `0048`（main 上 0047 已被票 145 占用；修订者一列、一版至多被修订一次、采用册代次与解除册）。
+
+**提交**（变基之后）：`000dbe15` 决定种类；`f535839a` 发生项失效入口与再登；`ca01be22` 解除采用；`5ace0366` 种子；`20a2427f`、`57720489` ADR；`ea00cc0b` CONTEXT 与 UC；`38884472` 子票；`e37d1765` AT 盘点。票 15 那一笔见其完成记录。
+
+**验证**：每一笔提交 `go build ./... && go vet ./...`（`git rebase --exec` 逐笔跑过）；`gofmt -l` 干净；`scripts/test-full.sh` 跑 TF、SA、access-identity 与它们的全部反向依赖（含 cmd/parcel-api、parcel-dispatch、parcel-access-register、parcel-settlement-register、parcel-transport-register）、`./internal/architecture/...`、`./migrations/...`，48 包 ok、0 FAIL；清单在会话 scratchpad 的 `dcg57/test-packages.txt`。未跑全量，未重生成机制清点、ADR 索引与 AT 计数。
+
+**未决与知会**：越权风险点见 ADR-0232 文末。票 88 会改 `adopt_segment_commission.go`、`assemble_segment_commission_adoption.go` 及其测试、`tfhttp/register_charge_occurrence.go`、`operator_authenticator_test.go`、`cmd/parcel-dispatch/actual_fulfillment_on_participation_end_test.go`——本票在这几处只加（一口必备依赖 `CommissionHold` 与取锁一行、响应里修订五格、决定映射两行、测试构造一格），后进 main 的一方合并；88 的 access_identity 迁移若也取 0021、TF 若取 0048，后进的一方改号。管理台预期成本页还没显示 `withdrawn`（admin-web 另做）。
+
