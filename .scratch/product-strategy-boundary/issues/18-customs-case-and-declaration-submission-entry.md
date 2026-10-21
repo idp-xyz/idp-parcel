@@ -1,7 +1,7 @@
 # 18 关务立案与提交申报：生产入口与触发面
 
 Category: enhancement
-Status: in-progress——评审修订完，待进 main，分支 claude-psb18（2026-10-21 隔离评审无阻断，必修与顺手修已改，见文末「评审记录」；完成记录在其前）。此前 in-progress——完工待评审与进 main（2026-10-21 Claude Code 作者子代理收口）。此前 in-progress——2026-10-20 分诊并认领，分支 claude-psb18。此前 ready-for-agent——2026-10-20 Claude Code 会话代 CC owner 分诊（用户原话「你作为业务和系统专家自决……解决所有的问题」），「要裁的」三问裁定见文末「分诊裁定」。更早的 needs-triage——2026-09-24 通道 2 立票（用户令通道 2 独立承接）；分诊时先定「要裁的」再转 ready-for-agent
+Status: resolved——2026-10-21 进 main（全量钉 `3268f7f1`：`scripts/test-full.sh` 158 ok / 0 FAIL，见文末「进 main 记录」）；内置立案触发转票 [35](./35-built-in-customs-case-trigger-from-acceptance.md)，授权按使用建模与业务角色面其余转票 [36](./36-submission-authorization-business-role-face-remainder.md)，发送连接器仍归票 [10](./10-cc-declaration-channel-and-public-regulatory-reference-configuration.md)。此前 in-progress——评审修订完，待进 main，分支 claude-psb18（2026-10-21 隔离评审无阻断，必修与顺手修已改，见文末「评审记录」；完成记录在其前）。此前 in-progress——完工待评审与进 main（2026-10-21 Claude Code 作者子代理收口）。此前 in-progress——2026-10-20 分诊并认领，分支 claude-psb18。此前 ready-for-agent——2026-10-20 Claude Code 会话代 CC owner 分诊（用户原话「你作为业务和系统专家自决……解决所有的问题」），「要裁的」三问裁定见文末「分诊裁定」。更早的 needs-triage——2026-09-24 通道 2 立票（用户令通道 2 独立承接）；分诊时先定「要裁的」再转 ready-for-agent
 Blocked by: 无；触发面与 [routing-first-cut/12](../../routing-first-cut/issues/12-cc-customs-applicability-judgment-for-route-candidates.md)（候选的关务适用性）、[票 10](./10-cc-declaration-channel-and-public-regulatory-reference-configuration.md) 第 1 项（申报发送连接器）相邻，分诊时划清
 地盘：`internal/customscompliance`（入口与触发）、`cmd/parcel-api` 或 `cmd/parcel-dispatch` 的装配。
 出处：[票 05](./05-demo-journey-criterion-evidence.md) 格 9——开发主线重定级表 PN-05 第一项记「未见缺口」，动线取证补出这一格。
@@ -93,3 +93,7 @@ UC-CC-004 的拒绝、撤销、再次申请，授权目标绑定到组成 / 资�
 未采纳：无。
 
 验证：`scripts/test-full.sh` 覆盖 `./internal/customscompliance/...`、`./internal/accessidentity/...`、`./cmd/parcel-api/...`、`./cmd/parcel-dispatch/...`、`./cmd/parcel-customs-register/...`、`./cmd/parcel-access-register/...` 与两者其余的反向依赖、`./internal/architecture/...`、`./migrations/...`，全部 ok；`go build ./...`、`go vet ./...` 干净，`gofmt -l` 空；评审修订的每笔提交单独 build 与 vet 都过。迁移改号之后在 55432 的一次性库上重灌 `seed.sh` 退 0，灌完即删库。没有用 `git stash`。
+
+## 进 main 记录
+
+2026-10-21 协调方合入。分支基点 `8bf7a231`，其后 main 多了票 demo-chain-gaps/12、42、上线就绪评估与代决复核的文档、`ci.yml`；与本分支只在 `.scratch/at-coverage-inventory.md` 与 CC `CONTEXT.md` 重叠，cherry-pick 22 笔按原序到 `3d22a5b1` 无冲突（CONTEXT 两边改的是不同条目），其余各文件与分支逐字相同；SHA 随之换新（分支 `10ecbe34`…`94e34b0c` 作封存出处，main 上为 `d32c5ff5`…`5349c4d0`）。评审「不修」那一条（提交执行撞键不比内容指纹）由协调方追记进票 demo-chain-gaps/125（`572905de`）。其上按 parallel-sessions.md 重生成 ADR 索引（`5f84b6ed`）、重算 AT 盘点计数（`fb3d67d6`）、重生成机制清点（`3268f7f1`），各自单独成笔；`adr-index -check` 与 `at-coverage-counts -check` 退 0。在干净的隔离树上对 `3268f7f1` 跑 `go build ./...`、`go vet ./...`、`gofmt -l` 干净，`scripts/test-full.sh` 全量 158 ok、0 FAIL（`-count=1`，无缓存）；main 自基点以来未动 `scripts/demo-seeds/`，作者在改号后那次一次性库实灌仍成立；推 `3268f7f1:main`。迁移落号：`access_identity/0018`、`customs_compliance/0025`（连号）。过程记录里那份 stash：协调方核得 `refs/stash` 已不存在，即 dcg50 的作者已自行取回，非仍在栈顶。
