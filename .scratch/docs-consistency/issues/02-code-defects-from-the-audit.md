@@ -1,7 +1,7 @@
 # 02 把审计里的代码错（C 类）归拢成代码票
 
 Category: enhancement
-Status: in-progress——2026-10-21 认领，分支 claude-dc02（原：ready-for-agent——2026-10-21 协调方立，文档自洽修订第一波，见 [README](../README.md)「修订执行」）
+Status: in-progress——完工待评审与进 main，分支 claude-dc02（见文末「完成记录」）。此前 in-progress——2026-10-21 认领；原 ready-for-agent——2026-10-21 协调方立（文档自洽修订第一波，见 [README](../README.md)「修订执行」）。
 Blocked by: 无
 出处：八份审计报告（[audit/](../audit/)）里归类为 C 的 37 条，以及 B 类里明说「裁完要改代码」的那些（只登记，不裁）。
 
