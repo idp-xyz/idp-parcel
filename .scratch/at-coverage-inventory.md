@@ -660,6 +660,7 @@
 | `AT-NR-052` | 原计划失效，候选评估确认没有合格候选 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-NR-053` | 原计划失效，候选评估未决后补齐并找到合格候选 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-PC-016` | 发布提交成功但事件投递失败 | UC-PC-001-MAINTAIN-AND-PUBLISH-COMMERCIAL-AUTHORITY.md |
+| `AT-PP-013` | 在用 `SELL` 卡自带体积系数、金额取整与汇率序列，同范围销售价格政策另有口径；评价只按卡上的条款算（ADR-0260） | UC-PP-001-FORM-ESTIMATE-EVALUATIONS.md |
 | `AT-PS-009` | 接受后客户合同或产品发布新版本 | UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md |
 | `AT-PS-011` | 接受成功后检查下游对象 | UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md |
 | `AT-PS-018` | 无法识别目标委托、包裹或资料范围 | UC-PS-002-AMEND-CUSTOMER-SOURCE-DATA.md |
@@ -1284,6 +1285,13 @@
 | `AT-NR-034` | 场外揽收交接已采用，尚未到节点；选中候选的硬约束仍满足（ADR-0249） | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-NR-051` | 选中候选的限制状态未知：关务目录为空、受理基线缺端点国家或关务来源未接（ADR-0250） | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-NR-084` | 场外揽收复核时原计划被有效硬限制淘汰，存在替代候选，策略版本允许自动改路（ADR-0249） | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
+| `AT-PC-042` | 同一范围同一时点两条授予都允许该动作，答适用冲突、不取首个（ADR-0261 决定三；今天取首个命中，code/24） | UC-PC-003-ADJUDICATE-COMMERCIAL-AUTHORIZATION.md |
+| `AT-PC-059` | 同一授权规则对象同起点重发 `v2` 并退役 `v1`，询问只命中 `v2`（ADR-0261 决定一；code/24） | UC-PC-003-ADJUDICATE-COMMERCIAL-AUTHORIZATION.md |
+| `AT-PC-060` | 授权规则旧版被截止，截止点之后只命中后继（ADR-0261 决定一；code/24） | UC-PC-003-ADJUDICATE-COMMERCIAL-AUTHORIZATION.md |
+| `AT-PC-061` | 客户合同版本被退役或截止之后，挂在旧版上的委派不再解出实际决定方（ADR-0261 决定二；code/24） | UC-PC-003-ADJUDICATE-COMMERCIAL-AUTHORIZATION.md |
+| `AT-PC-062` | 价格政策口径带体积系数答未受理，只有税务与汇率的销售政策发布成立（ADR-0260 决定二；今天销售方向必填体积系数，code/25） | UC-PC-001-MAINTAIN-AND-PUBLISH-COMMERCIAL-AUTHORITY.md |
+| `AT-PP-014` | 租户没登参考复核职责规则时人工复核答未配置、不落复核行（ADR-0262；今天写死不同主体，code/41） | UC-PP-001-FORM-ESTIMATE-EVALUATIONS.md |
+| `AT-PP-015` | 参考复核按规则判不同主体与要求授予（ADR-0262；code/41） | UC-PP-001-FORM-ESTIMATE-EVALUATIONS.md |
 | `AT-PS-083` | 已收寄且普通退运决定、责任和路径齐备 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
 | `AT-PS-084` | 监管退运要求到达 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
 | `AT-PS-086` | 包裹已有终局后请求取消 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
@@ -1562,3 +1570,5 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-10-21 追记（票 docs-consistency/04，文档自洽 VE 组）：`AT-VE-169` 重号——UC-VE-003 的 ETA 客户可见那一行改号为 `AT-VE-187`（④ 移行，场景不变）；UC-VE-008 的客户归属确立补派生那一行保留 `AT-VE-169`，它早已被测试点名，今补进 ①。UC-VE-008 新立 `AT-VE-188`（归属方查视图未形成的包裹答当前无可见结果，ADR-0246；实现票 code/31），入 ④。UC-TF-005 `AT-TF-157`–`161` 里全程追踪自己的行为迁入 UC-VE-002 `AT-VE-189`–`192` 与 UC-VE-004 `AT-VE-193`–`195`，测试照旧是那几个，入 ①；测试 Covers 改点新号归 code/32，UC-TF-005 原行改为引用归票 docs-consistency/10，那时 ① 里 `AT-TF-157`–`161` 几行随之移行或删去。总览计数由协调方进 main 时重算。
 
 2026-10-21 追记（票 docs-consistency/06）：UC-PS-002 新立 `AT-PS-106`（委托查无或属别人答统一不可见，今天答 500，code/22），入④；`AT-PS-019` 改为可见范围内无修订授权（未获授权）。UC-PS-003 新立 `AT-PS-107`（取消已提交后才到、发生不晚于取消的收寄停在未决，ADR-0254；机制已在 `TestTheCancellationBoundaryJudgesByBusinessTime`，缺 Covers 点名），入②；`AT-PS-045` 限到收寄已采用后取消才到。UC-PS-004 新立 `AT-PS-108`（面单渠道同一情形，今天答 CANCELLATION_STANDS，code/35），入④。UC-PS-005 新立 `AT-PS-109`（只有信用暴露的撤回按原关联释放，机制已在 `TestAWithdrawalReleasesEveryOccupationRegardlessOfTheConclusion`，那里点的是 `AT-PS-035`）、`AT-PS-110`（可见范围内无撤回授权，机制已在 `TestAnUnauthorizedWithdrawalFormsNothing`，那里点的是 `AT-PS-075`），入②。UC-PS-006 `AT-PS-083`、`AT-PS-084`、`AT-PS-088`（收寄后服务处置决定没有模型，code/37）与 `AT-PS-086`（终局后取消答既有终局，今天不读终局，code/21）由②移入④。总览计数未改，由推送方重算。
+
+2026-10-21 追记（票 docs-consistency/07）：UC-PC-003 新立 `AT-PC-059`–`061`（授予与委派随所挂版本收尾，ADR-0261），`AT-PC-042` 由待评审改为适用冲突，UC-PC-001 新立 `AT-PC-062`（价格政策口径不收体积系数，ADR-0260），UC-PP-001 新立 `AT-PP-014`、`015`（参考复核读租户复核职责规则，ADR-0262），均未实现，入④（承接 code/24、25、41）；UC-PP-001 新立 `AT-PP-013`（计价条款只从价卡读，ADR-0260），行为已对、缺 Covers 点名，入②。`AT-PC-037`–`053` 本就不在本盘点内，`AT-PC-042` 是其中唯一随本票加行的一条。`AT-PC-006`、`003`、`033`、`036`、`058` 只改场景文字，测试归属不变。
