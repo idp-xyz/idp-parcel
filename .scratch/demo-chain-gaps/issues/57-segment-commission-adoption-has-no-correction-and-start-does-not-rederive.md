@@ -90,3 +90,21 @@ Blocked by: 无——用户决定一格已于 2026-10-20 代决，见 [triage-20
 **未采纳**：无。
 
 **验证**：变基过程中每一笔都跑过 `go build ./... && go vet ./...`（`git rebase` 的 exec），filter-branch 只改种子文件名与步骤里的路径；`gofmt -l` 干净。`scripts/test-full.sh` 覆盖 TF、SA、access-identity 的包与全部反向依赖（含 cmd/parcel-api、parcel-dispatch、parcel-access-register、parcel-settlement-register、parcel-transport-register）、`./internal/architecture/...`、`./migrations/...`：51 个包 ok、0 FAIL。变基后没走 exec 的前几笔另用 `git archive` 单独 build、vet 过。
+
+## 评审记录（二轮；2026-10-21，Claude Code 作者子代理，分支 claude-dcg57）
+
+二轮评审无阻断。逐条去向：
+
+- **1 未形成册把失效版本记成「已形成」——已修，`8749495c2`。** 选「另立一个状态并了结那一条」：未形成册多一格 `INVALIDATED_BY_DECISION`（记下失效版本，迁移 TF 0049 放开状态与了结两条约束），端口多一口 `SettleInvalidatedByDecision`；`keepUnformedRegister` 遇已存在、细格 `OCCURRENCE_INVALIDATED_BY_DECISION` 单独走这一口，不再走已形成那一支。查阅面只列 `UNFORMED`，新状态不上列；端口与 TF CONTEXT 同步。不选「不写」：册上已有的那一条（例如先答过未配置、后来形成又被失效）就会停在 FORMED 或 UNFORMED 上，两种都说错话。
+  - 自动形成的失效链头判定提到协议核对之前（锁外先判，锁下照旧再判，同一个 `keptInvalidated`），失效链头 + 委托换到一版没声明条件的协议不再答未配置、不立那一条。
+  - 同族一处一并改：补形成问「盖住」按身份只读首版（`coveringOccurrence`），失效之后也当成已盖住、了结为已形成指向 V1——改读链头、链头已失效不算盖住。这部分停用 ADR-0231 决定六「状态三格」与「按身份读只读首版」两句（ADR-0232「对已接受记录的作用」、ADR-0231 Status 与 Links 前向指针），回答 ADR-0231 越权风险点 10。
+  - 真库用例 `TestCatchUpOnAnInvalidatedOccurrenceSettlesTheUnformedRegisterAsInvalidatedByDecision` 两格：册上已有那一条 → 了结为 `INVALIDATED_BY_DECISION`、指名 V2、查阅页不列；册上没有 → 失效链头换到无条件协议不立未配置那一条。拆掉了结那一支，前一格红（读到 FORMED）；拆掉提前那一判，后一格红（立了 NOT_CONFIGURED）——后一格只有在「盖住」改读链头之后才测得出，读首版时那一判拆了也被首版「盖住」掩过去。库面用例 `TestTheUnformedRegisterSettlesAnInvalidatedOccurrenceAsInvalidatedByDecision`；无事务负例加进 88 的 `TestTheUnformedRegisterRefusesWhatItCannotHold`（证据门）。
+- **2 中段提交测试红——已重写。** 用 `git filter-branch --tree-filter`（不用 rebase -i）把夹具补丁按各夹具引入的那一笔折进去：解除那一笔（`1804e65ac`）补 Doorbell 与 88 补形成用例的 CommissionHold，B1 那一笔（`0e3d71b9f`）补 Withdrawals 与编排面用例的 Doorbell，parcel-api 并发用例在引入它的那一笔补 outbox 门铃；原补丁那一笔重写后成空、已删。重写前后最终树逐字节相同（`git diff` 0 字节）。抽验原红的三笔（解除那一笔、B1、评审 6 那一笔）在 `./internal/transportfulfillment/...` 与 `./cmd/parcel-api/` 上真库全绿。
+- **3 首次采用的 201 多了 `generation`——写明，不改。** ADR-0232 决定一与 UC-TF-004 `AT-TF-310` 写明它是新增回显字段、只加不改；段此刻已有当前采用时同一份委托再交答 `EXISTING_ADOPTION`、不看 `afterGeneration`，写明是有意的宽松接受（那一次什么都不落）。探针重跑：首次采用 201 COMMISSION_ADOPTED、原样再交 200 EXISTING_ADOPTION、带 `afterGeneration:1` 再交 200 EXISTING_ADOPTION，三份响应去掉时刻后与评审留下的分支探针逐字相同；前两份去掉 `generation` 与 main 探针相同（main 上第三份答 MALFORMED_REQUEST，是 main 不认这一格）。
+- **4 `adoptedAfter` 的注释——已修，`8749495c2`。** 判法收进 `keptInvalidated`（锁外、锁下两处共用），被顶上去的 `errProcurementSourceUnreadable` 注释移回原变量；锁序改为「解除在发生项范围锁下排过先后；再采用经门铃，在它那一笔提交之后才触发补形成」。
+- **5 采用与失效同一刻——已补，`1a824e954`。** `TestAnAdoptionRecordedAtTheSameMomentAsTheInvalidationDoesNotReopenIt`：同一刻答已存在、不长出，晚一微秒才长；变异成 `!Before` 即红。ADR-0232 决定五与越权风险点 16 写明「同一刻算不晚于」。
+- **6 种子 README 更正次序——已改。** 结尾改为「再采用的门铃补形成自动从失效版本长出替代版本；人工重登也只会答已存在」。
+
+**未采纳**：无。
+
+**验证**：变基到 main `8e9014e87`（67438a0f 之后只进了 `.scratch` 文档，冲突只在本票与票 15 的票面，按并集合）。`go build ./... && go vet ./...`、`gofmt -l` 干净；`scripts/test-full.sh` 覆盖 TF、SA、access-identity 的包与全部反向依赖（含各 cmd 包）、`./internal/architecture/...`、`./migrations/...`：52 个包 ok、0 FAIL。种子在一次性库上实灌：TF 0049、access_identity 0022 施加，457 一节全部 RECORDED/REGISTERED，库已删。
