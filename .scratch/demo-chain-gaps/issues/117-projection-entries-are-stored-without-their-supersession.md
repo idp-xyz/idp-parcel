@@ -38,3 +38,12 @@ S（只补落库）；M（连同被替代条目进投影版本）。
 审计补充的一点：管理台 `apps/admin-web/src/pages/visibility/TrackingProjectionPage.tsx` 的 `currentEffectiveEntries` 按 CONTEXT 的假设在前端再滤一遍被替代条目，在后端今天的形状下什么也不滤——前后端对同一读模型的理解相反。本票裁「连同 CONTEXT 前半一起落」时，前端那一步才有意义；裁「只补落库那一格」时，那一步应删。
 
 分级建议（文档自洽 02）：R3——运营查阅「少说」，不对客答错（客户视图只读当前有效条目）。若 owner 认定「事实库留档已够」，改走 B（新 ADR 部分停用 ADR-0065 决定七那句），归修订票 docs-consistency/04。
+
+## 文档自洽 04 裁向（2026-10-21）
+
+「要裁的」一格按现行规则裁为**后者**：连同 CONTEXT 前半一起落。依据是已接受的 [ADR-0065](../../../docs/adr/0065-projection-versions-are-append-only-and-supersession-is-source-given.md) 决定七「被替代条目留在版本内但不参与派生」与 VE CONTEXT「被替代的条目继续留在投影版本内并标明替代关系」，两处都是现行规则，文档不迁就代码，修订票 [docs-consistency/04](../../docs-consistency/issues/04-ve-docs.md) 没有改它们。
+
+- 被替代条目进投影版本、标明已被替代，派生各维度与 `CarriesCustomerServiceFinal` 一类读法只看当前有效条目；当前那一条照旧带前身。
+- 管理台 `currentEffectiveEntries` 那一步随之有意义，不删。
+- [ADR-0245](../../../docs/adr/0245-a-forked-supersession-chain-is-never-ordered-by-business-time-and-stays-pending-in-the-projection-version.md) 要分叉各方同样进投影版本、带分叉标记、不参与派生，实现票 [docs-consistency/code/26](../../docs-consistency/code/26-forked-supersession-is-judged-by-business-time-and-not-kept-pending.md)，改的是同一组条目形状与派生过滤，宜同批或紧接。
+- 规模按票面的 M 计。
