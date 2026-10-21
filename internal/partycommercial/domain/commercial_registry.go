@@ -299,6 +299,23 @@ func (registry *CommercialRegistry) selectionInterval(version CommercialVersion)
 	return version.effective
 }
 
+// correctionExcludes 答版本壳上的区间更正有没有把 at 排除在这一版之外，给自带区间的正文（价格、结算、信用政策）选候选
+// 时用：正文按自己的区间参选，壳上有更正时再被更正后的区间收窄。
+//
+// 只有在有更正时才会排除。没更正时正文自带的区间照旧是唯一判据，不拿壳上的原区间去收窄它——两者从未被要求相等，
+// 今天按正文区间选中的版本不能因为多了这一道而落选。有更正时取交而不取代：更正改的是壳的选用区间，取代会让正文
+// 起点晚于壳的那一段反被放宽。
+func (registry *CommercialRegistry) correctionExcludes(version CommercialVersion, at time.Time) bool {
+	if registry == nil {
+		return false
+	}
+	list := registry.corrections[keyOf(version)]
+	if len(list) == 0 {
+		return false
+	}
+	return !list[len(list)-1].corrected.Contains(at)
+}
+
 // ViewRevision 是租户+范围级的权威视图修订：一个按内容单调变化的引用，用于证明某范围
 // 解析当时的商业视图是否仍是同一个。它由该租户该范围内所有版本派生，而不是手工递增——
 // 手工递增总会有人忘记，派生值不可能与登记册实际内容脱节。

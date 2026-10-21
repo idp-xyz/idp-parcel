@@ -450,7 +450,14 @@ func resolvePriceRuleBasis(
 	if err != nil {
 		return Resolution{outcome: InputNotAccepted}
 	}
-	policy, err := ResolveCommercialPricePolicy(registry.policies, query, standingOf)
+	admitted := make([]CommercialPricePolicy, 0, len(registry.policies))
+	for _, policy := range registry.policies {
+		if registry.correctionExcludes(policy.version, key.Anchor.At()) {
+			continue
+		}
+		admitted = append(admitted, policy)
+	}
+	policy, err := ResolveCommercialPricePolicy(admitted, query, standingOf)
 	switch {
 	case err == nil:
 		result.outcome = UniquelyResolved
@@ -502,6 +509,9 @@ func resolveSettlementPolicyBasis(registry *CommercialRegistry, key ResolutionKe
 		if policy.version.tenant != key.TenantID || policy.version.scope != key.Scope {
 			continue
 		}
+		if registry.correctionExcludes(policy.version, key.Anchor.At()) {
+			continue
+		}
 		inScope = append(inScope, policy)
 	}
 	policy, err := ResolveSettlementPolicy(inScope, query)
@@ -549,6 +559,9 @@ func resolveCreditPolicyBasis(registry *CommercialRegistry, key ResolutionKey) R
 	inScope := make([]CreditPolicy, 0, len(registry.creditPolicies))
 	for _, policy := range registry.creditPolicies {
 		if policy.version.tenant != key.TenantID || policy.version.scope != key.Scope {
+			continue
+		}
+		if registry.correctionExcludes(policy.version, key.Anchor.At()) {
 			continue
 		}
 		inScope = append(inScope, policy)
