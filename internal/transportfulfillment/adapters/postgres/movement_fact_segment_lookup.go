@@ -9,11 +9,10 @@ import (
 
 var _ ports.MovementFactsOfSegment = (*MovementFacts)(nil)
 
-// FindBySegment 列出声明了这一段的全部在册版本（ADR-0224 决定二）。按事实分组、组内按登记时刻排，同一时刻再按版本串排，
-// 好让次序在重放时一字不变。段只是登记方声明的引用、没有外键（迁移 0026），所以本口不问段在不在册：段不在册时照样交回声明
-// 了它的事实，那正是补派生要找的那一批。
+// FindBySegment 列出声明了这一段的全部在册版本（ADR-0224 决定二），排序契约在 ports.MovementFactsOfSegment。段没有外键（迁移
+// 0026），本口不问段在不在册。
 //
-// 一行装不回就整次报错，不跳过那一行：跳过会让补派生把「漏了一条」当成「全补完了」。
+// 一行装不回就整次报错，不跳过那一行：跳过会让调用方把「漏了一条」当成「列全了」。
 func (repository *MovementFacts) FindBySegment(
 	ctx context.Context,
 	key ports.FulfillmentSegmentKey,

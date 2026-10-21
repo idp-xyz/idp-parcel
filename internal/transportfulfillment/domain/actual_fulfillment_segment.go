@@ -327,7 +327,7 @@ func (segment ActualFulfillmentSegment) JoinWithPickup(
 	pickup OffsitePickup,
 	planned PlannedSegmentReference,
 ) (ActualFulfillmentSegment, error) {
-	basis, err := NewParticipationBasisReference("OFFSITE-PICKUP/" + pickup.Version().String())
+	basis, err := pickupParticipationBasis(pickup.Version())
 	if err != nil {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
 	}
@@ -338,6 +338,21 @@ func (segment ActualFulfillmentSegment) JoinWithPickup(
 		entryBasis: basis,
 		enteredAt:  pickup.OccurredAt(),
 	}, pickup.TenantID())
+}
+
+// pickupParticipationBasis 由有效收寄的版本铸参与依据。进段、重派生与认（EnteredByPickup）都经这一处：拼写散在几处时，改了
+// 一处的那一天，认的那一侧就认不出进段那一侧铸的串。
+func pickupParticipationBasis(version PickupResultVersion) (ParticipationBasisReference, error) {
+	return NewParticipationBasisReference("OFFSITE-PICKUP/" + version.String())
+}
+
+// EnteredByPickup 说这条参与是不是凭这一版有效收寄进的段：入场种类是场外揽收、同一件对象、入场依据正是这一版铸出的那一串。
+// 依据只带版本也认得唯一——收寄版本由本上下文的序列签发、不复用（NextPickupResultVersion），不像交接版本只在（对象，范围）
+// 之内唯一（ADR-0221）。
+func (participation FulfillmentParticipation) EnteredByPickup(pickup OffsitePickup) bool {
+	basis, err := pickupParticipationBasis(pickup.Version())
+	return err == nil && participation.entryKind == EnteredByOffsitePickup &&
+		participation.object == pickup.Object() && participation.entryBasis == basis
 }
 
 // JoinWithHandover 让对象凭`已交接`的权威交接加入段。拒收与待确认不转出控制，自然也
@@ -420,11 +435,11 @@ func (segment ActualFulfillmentSegment) RederiveParticipationWithPickup(pickup O
 	if !corrected {
 		return ActualFulfillmentSegment{}, ErrNoParticipationToRederive
 	}
-	replaced, err := NewParticipationBasisReference("OFFSITE-PICKUP/" + corrects.String())
+	replaced, err := pickupParticipationBasis(corrects)
 	if err != nil {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
 	}
-	basis, err := NewParticipationBasisReference("OFFSITE-PICKUP/" + pickup.Version().String())
+	basis, err := pickupParticipationBasis(pickup.Version())
 	if err != nil {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
 	}
