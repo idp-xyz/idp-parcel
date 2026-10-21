@@ -26,7 +26,19 @@ type Record struct {
 	Note           string
 }
 
+// AcceptedInNote 出现在注记里，就是把接受出处又说了一遍：接受出处只写在标记前段。
+const AcceptedInNote = "**已接受**"
+
 var (
+	// 来向（后来哪份记录停用、收窄或回答了本记录）写进标记前段的三种写法。去向（本记录停用了谁）
+	// 写作「部分停用 [ADR-…]」「收窄 [ADR-…]」，主语是本记录、不带「由」，所以不会被认成来向。
+	// 这是查重的网，不是取注记的办法：注记仍只认标记，理由见 NoteMarker。
+	incomingInFront = regexp.MustCompile(`已由\s*\[ADR-\d{4}\]` +
+		`|由\s*\[ADR-\d{4}\]\([^)]*\)[^。；）\]]{0,24}?(停用|收窄|回答|作答|改指|限定|取代|按口解)` +
+		`|部分停用[：:]\s*\[ADR-\d{4}\]`)
+	// 头部停用行不进索引：读索引的人看不到它，它与注记写的又是同一件事。
+	suspensionHeader = regexp.MustCompile(`^(Partially suspended by|Amended by)\s*:`)
+
 	recordFile = regexp.MustCompile(`^(\d{4})-[^/]+\.md$`)
 	// 冒号全角半角都收：早期记录的 H1 用半角加空格，后来统一成全角，正文不改，所以两种都在。
 	recordHeading = regexp.MustCompile(`^# ADR-(\d{4})\s*[：:]\s*(.+?)\s*$`)
@@ -63,9 +75,11 @@ func ParseRecord(file, content string) (Record, error) {
 		if strings.HasPrefix(line, "## ") {
 			break
 		}
-		if strings.HasPrefix(line, "Status:") {
+		if suspensionHeader.MatchString(line) {
+			return Record{}, fmt.Errorf("%s：头部有「%s」行；部分停用写进 Status 行的索引注记，不另设头部行", file, strings.SplitN(line, ":", 2)[0])
+		}
+		if strings.HasPrefix(line, "Status:") && !found {
 			status, found = line, true
-			break
 		}
 	}
 	if !found {
@@ -83,6 +97,13 @@ func ParseRecord(file, content string) (Record, error) {
 	// 别的 HTML 注释多半是把标记写走了样（少个空格、换了字）；放过去，那句注记就静默地不进索引。
 	if strings.Contains(body, "<!--") || strings.Contains(record.Note, "<!--") {
 		return Record{}, fmt.Errorf("%s：Status 行里有不是「%s」的 HTML 注释", file, NoteMarker)
+	}
+	// 同一件事在一行里写两遍，两份措辞迟早分岔，读的人不知道哪份算数（票 infra-speed/07 的来由）。
+	if m := incomingInFront.FindString(body); m != "" {
+		return Record{}, fmt.Errorf("%s：Status 行标记前段写了来向「%s」；后来者的停用与回答只写在「%s」之后", file, m, NoteMarker)
+	}
+	if strings.Contains(record.Note, AcceptedInNote) {
+		return Record{}, fmt.Errorf("%s：索引注记里又写了一段「%s」；接受出处只写在标记前段", file, AcceptedInNote)
 	}
 
 	rest := strings.TrimSpace(strings.TrimPrefix(body, "Status:"))

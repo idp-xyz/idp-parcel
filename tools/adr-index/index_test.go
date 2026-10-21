@@ -87,6 +87,46 @@ func TestReadRecordsRefusesWhatWouldSilentlyMisindex(t *testing.T) {
 	}
 }
 
+// 同一次停用或同一份接受出处在 Status 行里写两遍、或另起一行头部，都在读的时候拒，不等作者自觉。
+func TestReadRecordsRefusesWhatWouldBeWrittenTwice(t *testing.T) {
+	cases := map[string]string{
+		"前段写「已由」来向":    "Status: Accepted（决定一「甲」已由 [ADR-0002](./0002-b.md) 停用）",
+		"前段写「由…收窄」来向":  "Status: Accepted（决定一由 [ADR-0002](./0002-b.md) 决定三收窄）",
+		"前段写「由…回答」来向":  "Status: Accepted（越权风险点 1 由 [ADR-0002](./0002-b.md) 回答）",
+		"前段写「部分停用：」来向": "Status: Accepted。部分停用：[ADR-0002](./0002-b.md)（被停条款：决定一）",
+		"注记里重说接受出处":    "Status: Accepted（2026-10-19，某会话代决）" + NoteMarker + "｜" + AcceptedInNote + "（2026-10-19）。**判据**：一句",
+	}
+	for name, status := range cases {
+		fsys := fstest.MapFS{
+			"0001-a.md": adr("# ADR-0001：甲", status),
+			"0002-b.md": adr("# ADR-0002：乙", "Status: Accepted"),
+		}
+		if _, err := ReadRecords(fsys); err == nil {
+			t.Errorf("%s：想要报错，却读成功了", name)
+		}
+	}
+	for _, header := range []string{"Partially suspended by: [ADR-0002](./0002-b.md)", "Amended by: [ADR-0002](./0002-b.md)"} {
+		fsys := fstest.MapFS{
+			"0001-a.md": {Data: []byte("# ADR-0001：甲\n\nStatus: Accepted\nDate: 2026-10-19\n" + header + "\n\n## Context\n")},
+			"0002-b.md": adr("# ADR-0002：乙", "Status: Accepted"),
+		}
+		if _, err := ReadRecords(fsys); err == nil {
+			t.Errorf("头部行「%s」：想要报错，却读成功了", header)
+		}
+	}
+}
+
+// 去向写在前段、来向写在注记，是规则要的样子，不能被查重的网误伤。
+func TestReadRecordsAcceptsOutgoingInFrontAndIncomingInNote(t *testing.T) {
+	fsys := fstest.MapFS{
+		"0001-a.md": adr("# ADR-0001：甲", "Status: Accepted"+NoteMarker+"｜**部分停用**：其决定一「甲」已由 [ADR-0002](./0002-b.md) 停用；越权风险点 1 由 [ADR-0002](./0002-b.md) 回答；其余各条不变"),
+		"0002-b.md": adr("# ADR-0002：乙", "Status: Accepted（2026-10-19，某会话代决。部分停用 [ADR-0001](./0001-a.md) 决定一一句，收窄 [ADR-0001](./0001-a.md) 的适用场景）"+NoteMarker+"｜**判据**：一句"),
+	}
+	if _, err := ReadRecords(fsys); err != nil {
+		t.Fatalf("合规的写法被拒：%v", err)
+	}
+}
+
 // 整条链路对一棵临时仓库跑：标记外的手写说明一字不动，-check 在重生成前后各答一次。
 func TestRunRewritesOnlyTheMarkedListsAndCheckFollows(t *testing.T) {
 	root := t.TempDir()
