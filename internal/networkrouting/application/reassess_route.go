@@ -16,6 +16,9 @@ import (
 // ErrUnexpectedReassessmentSave 说明复核库交回了封闭集合以外的写入结果。
 var ErrUnexpectedReassessmentSave = errors.New("network routing: unexpected reassessment save outcome")
 
+// ErrInconsistentRouteStart 说明路由历史答不出判断起点：最近一份计划既不当前有效，也不是失效而无接班。
+var ErrInconsistentRouteStart = errors.New("network routing: the routing history yields no reassessment starting point")
+
 // ReassessOutcome 是复核请求的应用处理结果。三种领域走向（仍适用/已失效/首个计划）各占
 // 一格，未决、已有结果、冲突、未受理与未判是应用格——用例明写这些结果不能合并为通用失败。
 type ReassessOutcome uint8
@@ -159,8 +162,8 @@ func NewReassessRouteHandler(deps ReassessRouteDeps) *ReassessRouteHandler {
 }
 
 // Handle 把一次权威触发推进到复核结论：触发受理（线索在构造期就被拒）→ 重复/冲突分界
-// → 载入历史结果（没有历史不得凭空假定初始计划）→ 两条独立判断线（6A 计划适用性、
-// 6B 替代候选）→ 提交。失效即失效：候选评估未决拦不住失效落库，三件并存（硬句）。
+// → 载入历史结果（没有历史不得凭空假定初始计划）→ 定判断起点（当前有效计划，或无当前有效路由）→ 两条独立判断线
+// （6A 计划适用性、6B 替代候选）→ 提交。失效即失效：候选评估未决拦不住失效落库，三件并存（硬句）。
 // 判断前提里重投推不动的那几格不答未决，入账未判、留下原因；早于当前位置的触发同样入账不判（ADR-0235）。
 func (handler *ReassessRouteHandler) Handle(
 	ctx context.Context,
@@ -173,39 +176,44 @@ func (handler *ReassessRouteHandler) Handle(
 	key := trigger.Key()
 
 	digest := triggerDigest(trigger, command.Carried.Geo)
-	recorded, found, err := handler.deps.Log.FindDigest(ctx, key.TenantID, trigger.Correlation())
+	recorded, logged, err := handler.deps.Log.FindDigest(ctx, key.TenantID, trigger.Correlation())
 	if err != nil {
 		return handler.undecided(key, ReassessLogUnavailable), nil
 	}
-	if found && recorded != digest {
+	if logged && recorded != digest {
 		return ReassessRouteResult{outcome: ReassessTriggerConflict}, nil
 	}
-	if found {
-		existing, present, err := handler.deps.Store.FindByCorrelation(ctx, key.TenantID, trigger.Correlation())
-		if err != nil {
-			return handler.undecided(key, ReassessStoreUnavailable), nil
+	if !logged {
+		if err := handler.deps.Log.Append(ctx, key.TenantID, trigger.Correlation(), digest); err != nil {
+			return handler.undecided(key, ReassessLogUnavailable), nil
 		}
-		if present {
-			return ReassessRouteResult{
-				outcome:   outcomeFor(existing),
-				record:    existing,
-				hasRecord: true,
-			}, nil
-		}
-		// 指纹在册而复核不在，只会是上一次这个触发入账未判：其余出口要么连指纹一起回滚，要么同笔
-		// 落了复核。携带同一触发的另一封信封走到这里时往下重新判——前提此刻齐了就判，仍缺就再入账；
-		// 答「登记册读不回」会把一份合法的未判卡回重投，烧到 ABANDONED（ADR-0235）。同一封信封入账
-		// 之后由消费门按 inbox 跳过，到不了这里。
-	} else if err := handler.deps.Log.Append(ctx, key.TenantID, trigger.Correlation(), digest); err != nil {
-		return handler.undecided(key, ReassessLogUnavailable), nil
 	}
 
-	// UC-NR-003 复核顺序「触发有效性」那一层问业务时间是否当前：包裹已经在更晚的控制位置上判过，这次触发不再据以
-	// 失效或改路（ADR-0235）。放在已有结果分界之后：已判过的触发再投读回原结果，不因它后来被更晚的复核超过而改答。
+	// 读当前位置即取判断键锁，此后读起点、判、落册都在锁里（ADR-0235）。
 	positionAt, positioned, err := handler.deps.Store.LatestTriggerAt(ctx, key)
 	if err != nil {
 		return handler.undecided(key, ReassessStoreUnavailable), nil
 	}
+	// 已有结果分界放在锁里：同一触发的另一笔事务可能刚在锁前提交了复核，这时起点已被它换过，按新起点再判一次就是重复
+	// 决定，还会再写一次适用性。指纹先前就在册的，是重放，按原结论作答；指纹是本笔刚登的，是并发里输给了赢家，答已有
+	// 结果，与提交时撞键同一格。
+	existing, present, err := handler.deps.Store.FindByCorrelation(ctx, key.TenantID, trigger.Correlation())
+	if err != nil {
+		return handler.undecided(key, ReassessStoreUnavailable), nil
+	}
+	if present {
+		outcome := outcomeFor(existing)
+		if !logged {
+			outcome = ReassessExistingResult
+		}
+		return ReassessRouteResult{outcome: outcome, record: existing, hasRecord: true}, nil
+	}
+	// 指纹在册而复核不在，只会是上一次这个触发入账未判：其余出口要么连指纹一起回滚，要么同笔落了复核。携带同一触发的
+	// 另一封信封走到这里时往下重新判——前提此刻齐了就判，仍缺就再入账；答「登记册读不回」会把一份合法的未判卡回重投，
+	// 烧到 ABANDONED（ADR-0235）。同一封信封入账之后由消费门按 inbox 跳过，到不了这里。
+
+	// UC-NR-003 复核顺序「触发有效性」那一层问业务时间是否当前：包裹已经在更晚的控制位置上判过，这次触发不再据以
+	// 失效或改路（ADR-0235）。放在已有结果分界之后：已判过的触发再投读回原结果，不因它后来被更晚的复核超过而改答。
 	if positioned && trigger.PrecedesPosition(positionAt) {
 		return handler.notJudged(ctx, trigger, ports.NotJudgedTriggerPrecedesCurrentPosition, positionAt)
 	}
@@ -217,6 +225,13 @@ func (handler *ReassessRouteHandler) Handle(
 	if !found {
 		// 「没有历史结果时不得凭空假定初始计划」——复核复的是一份已有判断。
 		return handler.notJudged(ctx, trigger, ports.NotJudgedNoRoutingHistory, time.Time{})
+	}
+	start, stalled, err := handler.startingPoint(ctx, key, history)
+	if err != nil {
+		return ReassessRouteResult{}, err
+	}
+	if stalled != ReassessUndecidedReasonNone {
+		return handler.undecided(key, stalled), nil
 	}
 
 	evidence, configured, err := handler.deps.Evidence.LoadInitialRouteEvidence(ctx, key, command.Carried)
@@ -230,10 +245,60 @@ func (handler *ReassessRouteHandler) Handle(
 		return ReassessRouteResult{}, ErrIncompleteRouteEvidence
 	}
 
-	if history.HasPlan {
-		return handler.reassessPlan(ctx, trigger, history.Plan, evidence)
+	if start.hasPlan {
+		return handler.reassessPlan(ctx, trigger, start, evidence)
 	}
 	return handler.reassessNoRoute(ctx, trigger, evidence)
+}
+
+// routeStart 是复核的判断起点：这件包裹此刻的当前有效计划连同它的适用性，或无当前有效路由（hasPlan 为假）。
+type routeStart struct {
+	plan          domain.InitialRoutePlan
+	applicability domain.PlanApplicability
+	hasPlan       bool
+}
+
+// startingPoint 定复核从哪里判。受理时落的初始路由那一行此后不变，复核的结论与新计划只落复核册与适用性册，所以起点要
+// 三本册合起来读：最近一份计划是复核册里最近形成的新计划，没有就是初始计划；它的适用性答它是否仍当前有效。已失效而无
+// 接班即无当前有效路由，下一次复核走无路由那条线（CONTEXT 生命周期）——拿已失效的计划再复核一次，限制仍在时撞上
+// 「不得二次离场」，限制已撤时把它原地答回仍适用，两样都是生命周期不许的。
+//
+// 适用性没有登记行即当前有效：计划形成时不另写一行，离场才写。最近一份计划已被替代或已结束是坏起点：替代必有更晚的
+// 接班计划，结束之后不再有复核；照哪一边判都是凭空假定，响亮报错。
+func (handler *ReassessRouteHandler) startingPoint(
+	ctx context.Context,
+	key domain.InitialRouteJudgmentKey,
+	history ports.InitialRouteRecord,
+) (routeStart, ReassessUndecidedReason, error) {
+	plan, formed, err := handler.deps.Store.LatestNewPlan(ctx, key)
+	if err != nil {
+		return routeStart{}, RoutingHistoryUnavailable, nil
+	}
+	if !formed {
+		if !history.HasPlan {
+			return routeStart{}, ReassessUndecidedReasonNone, nil
+		}
+		plan = history.Plan
+	}
+	applicability, registered, err := handler.deps.Applicability.FindByPlan(ctx, plan.Version())
+	if err != nil {
+		return routeStart{}, ApplicabilityStoreUnavailable, nil
+	}
+	if !registered {
+		applicability, err = domain.EstablishPlanApplicability(plan.Version(), plan.EffectiveFrom())
+		if err != nil {
+			return routeStart{}, ReassessUndecidedReasonNone, fmt.Errorf("establish plan applicability: %w", err)
+		}
+	}
+	switch applicability.State() {
+	case domain.PlanCurrentlyEffective:
+		return routeStart{plan: plan, applicability: applicability, hasPlan: true}, ReassessUndecidedReasonNone, nil
+	case domain.PlanLapsed:
+		return routeStart{}, ReassessUndecidedReasonNone, nil
+	default:
+		return routeStart{}, ReassessUndecidedReasonNone, fmt.Errorf(
+			"%w: the latest plan %s is %s", ErrInconsistentRouteStart, plan.Version().String(), applicability.State())
+	}
 }
 
 // planNodesOf 取计划的节点序列，只由节点间段推（ADR-0217）：交付段之后没有可控节点，把它计入
@@ -287,10 +352,11 @@ func freezeOf(
 func (handler *ReassessRouteHandler) reassessPlan(
 	ctx context.Context,
 	trigger domain.ReassessmentTrigger,
-	plan domain.InitialRoutePlan,
+	start routeStart,
 	evidence ports.InitialRouteEvidence,
 ) (ReassessRouteResult, error) {
 	key := trigger.Key()
+	plan := start.plan
 	review, err := domain.ReviewPlanApplicability(plan, trigger.Control(), trigger.Location(), evidence.HardConstraints)
 	if err != nil {
 		return ReassessRouteResult{}, fmt.Errorf("review plan applicability: %w", err)
@@ -324,7 +390,7 @@ func (handler *ReassessRouteHandler) reassessPlan(
 		if judgment.Crossed() {
 			return handler.commit(ctx, trigger, record)
 		}
-		switched, err := handler.tryImprovementReroute(ctx, trigger, plan, evidence, record)
+		switched, err := handler.tryImprovementReroute(ctx, trigger, start, evidence, record)
 		if err != nil {
 			return ReassessRouteResult{}, err
 		}
@@ -335,20 +401,10 @@ func (handler *ReassessRouteHandler) reassessPlan(
 
 	case domain.PlanNoLongerApplicable:
 		basis, _ := review.LapseBasis()
-		applicability, err := handler.loadApplicability(ctx, plan)
+		// 起点在判断键锁里读、只取当前有效的计划，重复触发也在锁里按关联读回了，走到这里的计划不会已经离场；离场失败
+		// 是编程错误，响亮报错。
+		lapsed, err := start.applicability.Lapse(basis, trigger.OccurredAt())
 		if err != nil {
-			return handler.undecided(key, ApplicabilityStoreUnavailable), nil
-		}
-		lapsed, err := applicability.Lapse(basis, trigger.OccurredAt())
-		if err != nil {
-			// 已经离场的计划再失效一次是重复触发撞上并发赢家，按已有结果读回。
-			if errors.Is(err, domain.ErrPlanNoLongerCurrent) {
-				existing, present, findErr := handler.deps.Store.FindByCorrelation(ctx, key.TenantID, trigger.Correlation())
-				if findErr == nil && present {
-					return ReassessRouteResult{outcome: outcomeFor(existing), record: existing, hasRecord: true}, nil
-				}
-				return handler.undecided(key, ReassessStoreUnavailable), nil
-			}
 			return ReassessRouteResult{}, fmt.Errorf("lapse plan applicability: %w", err)
 		}
 		if err := handler.deps.Applicability.Save(ctx, lapsed); err != nil {
@@ -430,7 +486,7 @@ func (handler *ReassessRouteHandler) rerouteAfterLapse(
 		return record, nil
 
 	case domain.AutomaticRerouteAllowed:
-		selection, err := handler.formPlanFromEvidence(ctx, trigger.Key(), candidates, evidence)
+		selection, err := handler.formPlanFromEvidence(ctx, trigger, candidates, evidence)
 		if errors.Is(err, errRouteIdentityUnavailable) {
 			// 取号依赖故障：失效已定不回滚，自动改路留给重触发——记录保留判定，
 			// 决定缺席如实表示「允许了但没形成」。
@@ -534,10 +590,11 @@ func (handler *ReassessRouteHandler) suggestionOnly(
 func (handler *ReassessRouteHandler) tryImprovementReroute(
 	ctx context.Context,
 	trigger domain.ReassessmentTrigger,
-	plan domain.InitialRoutePlan,
+	start routeStart,
 	evidence ports.InitialRouteEvidence,
 	record ports.ReassessmentRecord,
 ) (ports.ReassessmentRecord, error) {
+	plan := start.plan
 	authority, _, err := structuralAutoReroute(trigger, plan, evidence)
 	if err != nil {
 		return ports.ReassessmentRecord{}, err
@@ -549,7 +606,7 @@ func (handler *ReassessRouteHandler) tryImprovementReroute(
 	if err != nil || undecided {
 		return record, nil
 	}
-	selection, err := handler.formPlanFromEvidence(ctx, trigger.Key(), candidates, evidence)
+	selection, err := handler.formPlanFromEvidence(ctx, trigger, candidates, evidence)
 	if errors.Is(err, errRouteIdentityUnavailable) {
 		return record, nil
 	}
@@ -582,15 +639,12 @@ func (handler *ReassessRouteHandler) tryImprovementReroute(
 	if err != nil {
 		return ports.ReassessmentRecord{}, fmt.Errorf("form reroute decision: %w", err)
 	}
-	applicability, err := handler.loadApplicability(ctx, plan)
-	if err != nil {
-		return ports.ReassessmentRecord{}, err
-	}
 	basis, err := domain.NewApplicabilityBasisReference("COST_IMPROVEMENT")
 	if err != nil {
 		return ports.ReassessmentRecord{}, err
 	}
-	superseded, err := applicability.Supersede(selection.plan.Version(), basis, now)
+	// 原计划在接班计划生效的那一刻离场，两者同取触发的业务时间（见 formPlanFromEvidence）。
+	superseded, err := start.applicability.Supersede(selection.plan.Version(), basis, trigger.OccurredAt())
 	if err != nil {
 		return ports.ReassessmentRecord{}, fmt.Errorf("supersede plan applicability: %w", err)
 	}
@@ -665,12 +719,17 @@ type evidenceSelection struct {
 // formPlanFromEvidence 从收敛候选选路，选中时按证据组计划；选不中的各格原样交回排序结局，
 // 由调用方按自己那条线分派——形不成计划不是故障。证据答了候选却缺执行路径是装配坏，响亮
 // 报错不静默。
+//
+// 复核形成的计划从这次触发的业务时间起生效，判断时刻仍取处理时钟。新计划是下一次复核的起点，那一次的失效时刻取它
+// 自己触发的业务时间，不得早于生效（domain.PlanApplicability 的离场门）；生效取处理时钟，业务时间落后于处理时钟的
+// 下一次触发就失效不了。按当前位置判据（ADR-0235），能判的下一次触发都不早于这一次。
 func (handler *ReassessRouteHandler) formPlanFromEvidence(
 	ctx context.Context,
-	key domain.InitialRouteJudgmentKey,
+	trigger domain.ReassessmentTrigger,
 	candidates []domain.RouteCandidate,
 	evidence ports.InitialRouteEvidence,
 ) (evidenceSelection, error) {
+	key := trigger.Key()
 	ranking, err := domain.RankRouteCandidates(evidence.RankingForm, candidates, evidence.CandidateCosts)
 	if err != nil {
 		return evidenceSelection{}, fmt.Errorf("rank route candidates: %w", err)
@@ -703,7 +762,7 @@ func (handler *ReassessRouteHandler) formPlanFromEvidence(
 		Strategy:      evidence.Strategy,
 		ViewRevision:  evidence.ViewRevision,
 		JudgedAt:      judgedAt,
-		EffectiveFrom: judgedAt,
+		EffectiveFrom: trigger.OccurredAt(),
 	})
 	if err != nil {
 		return evidenceSelection{}, fmt.Errorf("form plan from evidence: %w", err)
@@ -711,8 +770,9 @@ func (handler *ReassessRouteHandler) formPlanFromEvidence(
 	return evidenceSelection{ranking: ranking, plan: plan}, nil
 }
 
-// reassessNoRoute 是原先无路由的那条线：候选评估完成且有合格候选时形成首个当前有效
-// 计划（CONTEXT 生命周期），未决则继续保持无路由并单独记录评估未决。
+// reassessNoRoute 是原先无当前有效路由的那条线：初始路由本就无路由，或最近一份计划已失效、没有接班。候选评估完成且
+// 有合格候选时形成首个当前有效计划（CONTEXT 生命周期），未决则继续保持无路由并单独记录评估未决。失效之后来到这里的，
+// 形成的是新的计划版本，不是把原计划恢复回当前有效；也不是改路，不比改善阈值、不要求可控节点（ADR-0249 决定二）。
 func (handler *ReassessRouteHandler) reassessNoRoute(
 	ctx context.Context,
 	trigger domain.ReassessmentTrigger,
@@ -735,7 +795,7 @@ func (handler *ReassessRouteHandler) reassessNoRoute(
 		return handler.commit(ctx, trigger, record)
 	}
 
-	selection, err := handler.formPlanFromEvidence(ctx, key, candidates, evidence)
+	selection, err := handler.formPlanFromEvidence(ctx, trigger, candidates, evidence)
 	if errors.Is(err, errRouteIdentityUnavailable) {
 		return handler.undecided(key, ReassessIdentityUnavailable), nil
 	}
@@ -868,20 +928,6 @@ func (handler *ReassessRouteHandler) commit(
 	default:
 		return ReassessRouteResult{}, fmt.Errorf("%w: %d", ErrUnexpectedReassessmentSave, saved)
 	}
-}
-
-func (handler *ReassessRouteHandler) loadApplicability(
-	ctx context.Context,
-	plan domain.InitialRoutePlan,
-) (domain.PlanApplicability, error) {
-	existing, found, err := handler.deps.Applicability.FindByPlan(ctx, plan.Version())
-	if err != nil {
-		return domain.PlanApplicability{}, err
-	}
-	if found {
-		return existing, nil
-	}
-	return domain.EstablishPlanApplicability(plan.Version(), plan.EffectiveFrom())
 }
 
 // notJudged 先把原因落进未判登记，再答`未判`。原因没落库就不得答这一格（护栏同 ADR-0094 决定五）：
