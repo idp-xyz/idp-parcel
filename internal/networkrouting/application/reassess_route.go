@@ -794,7 +794,7 @@ func (handler *ReassessRouteHandler) formPlanFromEvidence(
 	return evidenceSelection{ranking: ranking, plan: plan}, nil
 }
 
-// reassessNoRoute 是原先无当前有效路由的那条线：初始路由本就无路由，或最近一份计划已失效、没有接班。候选评估完成且
+// reassessNoRoute 是原先无当前有效路由的那条线：初始路由本就无路由，或路由历史里的计划都已离场、没有一份当前有效。候选评估完成且
 // 有合格候选时形成首个当前有效计划（CONTEXT 生命周期），未决则继续保持无路由并单独记录评估未决。失效之后来到这里的，
 // 形成的是新的计划版本，不是把原计划恢复回当前有效；也不是改路，不比改善阈值、不要求可控节点（ADR-0249 决定二）。
 func (handler *ReassessRouteHandler) reassessNoRoute(
