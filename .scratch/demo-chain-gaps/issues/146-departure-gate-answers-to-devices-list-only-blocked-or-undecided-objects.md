@@ -1,7 +1,7 @@
 # 146 出发前问询与出发两口向设备逐对象列出段内全部对象
 
 Category: bug
-Status: in-progress——三轮评审一条阻断（文档自洽）已修，待协调方核过进 main，分支 claude-dcg146（2026-10-21，变基到 main `875b7d51`，见文末「评审记录」三轮一节）。此前 in-progress——二轮评审两条阻断已修，待复审与进 main，分支 claude-dcg146（2026-10-21，变基到 main `4384a85a`，见文末「评审记录」二轮一节）。此前 in-progress——评审两条阻断已修，待复审与进 main，分支 claude-dcg146（2026-10-21，见文末「评审记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg146（2026-10-21 Claude Code 作者子代理，变基到 main `b290b777`；见文末「完成记录」）。此前 in-progress——2026-10-21 认领（146、94 同批），分支 claude-dcg146。此前 ready-for-agent——2026-10-20 代决复核立（上线前必修），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: resolved——2026-10-21 进 main（全量钉 `e6374798`：`scripts/test-full.sh` 158 ok / 0 FAIL，见文末「进 main 记录」）；问询按作业范围或派送指派限对象并留痕转票 [171](./171-gate-previews-are-scoped-to-the-asking-devices-work-and-leave-a-trace.md)；设备在核不上的段上配假班次换得一位汇总（ADR-0237 越权风险点 12）同归 171。此前 in-progress——三轮评审一条阻断（文档自洽）已修，待协调方核过进 main，分支 claude-dcg146（2026-10-21，变基到 main `875b7d51`，见文末「评审记录」三轮一节）。此前 in-progress——二轮评审两条阻断已修，待复审与进 main，分支 claude-dcg146（2026-10-21，变基到 main `4384a85a`，见文末「评审记录」二轮一节）。此前 in-progress——评审两条阻断已修，待复审与进 main，分支 claude-dcg146（2026-10-21，见文末「评审记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg146（2026-10-21 Claude Code 作者子代理，变基到 main `b290b777`；见文末「完成记录」）。此前 in-progress——2026-10-21 认领（146、94 同批），分支 claude-dcg146。此前 ready-for-agent——2026-10-20 代决复核立（上线前必修），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 R11；ADR-0219 越权风险点 5（连带 ADR-0205 越权风险点 13）
 
@@ -196,3 +196,7 @@ Blocked by: 无
 **变基**：只在 AT 盘点与 UC-TF-005 上有冲突，两边都留；UC-TF-005 的验收表与票 88 的行按号排好、无重号；AT 盘点里 146 那段追记又留下两份旧稿，已去掉。
 
 **验证**（实测，只记 `S`）：`go build ./...`、`go vet ./...` 通过，`gofmt -l internal cmd migrations` 干净；`scripts/test-full.sh ./internal/transportfulfillment/... ./cmd/parcel-api/... ./internal/architecture/... ./migrations/...` 全 ok、0 FAIL。无迁移；无被权限检查拦下的仓库改动。
+
+## 进 main 记录
+
+2026-10-21 协调方合入，146、94 同批。作者在三轮修订后把分支变基到 `875b7d51`（即当时 main，票 88 已在其中），不需重放，分支 SHA 原样进 main（`daf9c14b`…`5c6015b6`）。一轮评审两条阻断（B1：设备借跨区班次诱发全列，R11 未堵；B2：CONTEXT/ADR 说重放回显不收窄、与代码相反）已修——出发意图的起讫与声明的段绑定；二轮评审两条阻断（B-A：凭收寄进段的段出发读数不再问关务、VE 出发阻断信号消失，覆盖面相对 main 回退；B-B：ADR-0205 Status 行口径）已修——「说不出」照问关务、落册记全、设备只见整格与 `entryUnbound`，「对不上」停在本侧；三轮评审代码层面无问题，一条文档自洽阻断（ADR-0237 候选与停点数残留）已修，协调方 grep 核过一轮残留词在 ADR、CONTEXT、UC、代码中均已清除。在 55432 一次性库上 `seed.sh` 全程退 0，用完 `DROP … WITH (FORCE)`。其上按 parallel-sessions.md 重生成 ADR 索引、重算 AT 盘点计数、重生成机制清点（`e6374798`），各自单独成笔；`adr-index -check` 与 `at-coverage-counts -check` 退 0。在干净的隔离树上对 `e6374798` 跑 `go build ./...`、`go vet ./...`、`gofmt -l` 干净，`scripts/test-full.sh` 全量 158 ok、0 FAIL（`-count=1`，无缓存）；推 `e6374798:main`。无迁移。

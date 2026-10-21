@@ -1,7 +1,7 @@
 # 94 派送出发之前问一次交付门禁
 
 Category: enhancement
-Status: in-progress——二轮评审两条阻断已修，待复审与进 main，分支 claude-dcg146（2026-10-21，变基到 main `4384a85a`，见文末「评审记录」二轮一节）。此前 in-progress——评审两条阻断已修，待复审与进 main，分支 claude-dcg146（2026-10-21，见文末「评审记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg146（2026-10-21 Claude Code 作者子代理，变基到 main `b290b777`；见文末「完成记录」）。此前 in-progress——2026-10-21 认领（146、94 同批），分支 claude-dcg146。此前 ready-for-agent——2026-10-20 代决复核升为上线前必修（R14），见 [owner-review-20261020](../../owner-review-20261020/report.md)。此前 needs-triage——2026-10-19 Claude Code 作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [66](./66-effective-delivery-records-a-final-delivery-gate-reading.md) 的完成记录。
+Status: resolved——2026-10-21 进 main（全量钉 `e6374798`：`scripts/test-full.sh` 158 ok / 0 FAIL，见文末「进 main 记录」）；CC 侧词条与请求时机转票 [165](./165-customs-docs-name-the-delivery-gate-preview-as-a-request-timing.md)，问询限对象与留痕转票 [171](./171-gate-previews-are-scoped-to-the-asking-devices-work-and-leave-a-trace.md)，关务判断册保留期与限流转票 [172](./172-customs-judgement-register-grows-with-every-gate-preview.md)。此前 in-progress——二轮评审两条阻断已修，待复审与进 main，分支 claude-dcg146（2026-10-21，变基到 main `4384a85a`，见文末「评审记录」二轮一节）。此前 in-progress——评审两条阻断已修，待复审与进 main，分支 claude-dcg146（2026-10-21，见文末「评审记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg146（2026-10-21 Claude Code 作者子代理，变基到 main `b290b777`；见文末「完成记录」）。此前 in-progress——2026-10-21 认领（146、94 同批），分支 claude-dcg146。此前 ready-for-agent——2026-10-20 代决复核升为上线前必修（R14），见 [owner-review-20261020](../../owner-review-20261020/report.md)。此前 needs-triage——2026-10-19 Claude Code 作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [66](./66-effective-delivery-records-a-final-delivery-gate-reading.md) 的完成记录。
 Blocked by: [66](./66-effective-delivery-records-a-final-delivery-gate-reading.md)（读数内核与 `DeliveryGateReader` 随它进 main）
 地盘：TF 新 `application/preview_delivery_gate.go`（复用 `DeliveryGateReader` 取 at 的那一步）、新 tfhttp 问询口；新 `cmd/parcel-api/assemble_delivery_gate_preview.go` + `endpoints.go` 一行（装配令牌）；文档 UC-TF-006 AT、ADR（号认领时由协调方给）。
 出处：[ADR-0213](../../../docs/adr/0213-a-transport-handover-declares-its-releasing-receiving-and-onward-nodes.md) 文末「补记：票 66 落决定五时的补充裁定」越权风险点 20；先例 [ADR-0219](../../../docs/adr/0219-a-device-previews-the-departure-gate-before-departing-and-reads-what-the-departure-will-record.md)（设备出发前门禁问询）。
@@ -119,3 +119,7 @@ M
 - `read_delivery_gate.go::deliveryNode` 对 `entryHandoverFinding` 的 switch 补了显式 `case entryHandoverFound` 与 default 报错（顺手 3）。交付读数的行为与停点不变。
 - tfhttp 的 `gateObjectViewsOf` 改为收领域判好的那几格，交付与交接视图改成 `gateObjectViewsOf(domain.ExecutorGateCells(...))`，线格式不变。交付前问询与交付登记的线格式用例原样全过。
 - 验证同票 146 二轮一节，同一跑。
+
+## 进 main 记录
+
+2026-10-21 协调方合入，146、94 同批。作者在三轮修订后把分支变基到 `875b7d51`（即当时 main，票 88 已在其中），不需重放，分支 SHA 原样进 main（`daf9c14b`…`5c6015b6`）。一轮评审两条阻断（B1：设备借跨区班次诱发全列，R11 未堵；B2：CONTEXT/ADR 说重放回显不收窄、与代码相反）已修——出发意图的起讫与声明的段绑定；二轮评审两条阻断（B-A：凭收寄进段的段出发读数不再问关务、VE 出发阻断信号消失，覆盖面相对 main 回退；B-B：ADR-0205 Status 行口径）已修——「说不出」照问关务、落册记全、设备只见整格与 `entryUnbound`，「对不上」停在本侧；三轮评审代码层面无问题，一条文档自洽阻断（ADR-0237 候选与停点数残留）已修，协调方 grep 核过一轮残留词在 ADR、CONTEXT、UC、代码中均已清除。在 55432 一次性库上 `seed.sh` 全程退 0，用完 `DROP … WITH (FORCE)`。其上按 parallel-sessions.md 重生成 ADR 索引、重算 AT 盘点计数、重生成机制清点（`e6374798`），各自单独成笔；`adr-index -check` 与 `at-coverage-counts -check` 退 0。在干净的隔离树上对 `e6374798` 跑 `go build ./...`、`go vet ./...`、`gofmt -l` 干净，`scripts/test-full.sh` 全量 158 ok、0 FAIL（`-count=1`，无缓存）；推 `e6374798:main`。无迁移。
