@@ -182,6 +182,23 @@ func TestAWithdrawalIsRefusedWhileTheSegmentHasOccurrencesFormedUnderTheCommissi
 	}
 }
 
+// Covers: AT-TF-309 的换版那一格（ADR-0232 决定一、ADR-0231 决定四）——委托换版到后继之后，段上按后继的快照形成、仍有效的那一项同样
+// 按这份委托形成：解除被挡、回显它；提交那一版形成的照旧挡。不在委托各版里的快照不挡。
+func TestAnOccurrenceFormedUnderARevisedAgreementBlocksTheWithdrawal(t *testing.T) {
+	fixture := newWithdrawalFixture(t)
+	fixture.commission = revisedTrunkCommission(t, occurrenceEndedAt.Add(-time.Hour))
+	for _, snapshot := range []string{revisedSnapshot, trunkSnapshot} {
+		fixture.heads = scopeHeadsDouble{heads: []ports.ChargeOccurrenceRecord{occurrenceOnTheSegment(t, trunkProvider, snapshot)}}
+		if result := fixture.withdraw(t, bkCommission); result.Outcome() != application.AdoptionWithdrawalOccurrencesFormed {
+			t.Fatalf("按 %s 形成的那一项 = %q, want OCCURRENCES_FORMED", snapshot, result.Outcome())
+		}
+	}
+	fixture.heads = scopeHeadsDouble{heads: []ports.ChargeOccurrenceRecord{occurrenceOnTheSegment(t, trunkProvider, "SYN-SUPPLIER-TRUNK-CN-SG-01/v9")}}
+	if result := fixture.withdraw(t, bkCommission); result.Outcome() != application.AdoptionWithdrawn {
+		t.Fatalf("不在委托各版里的快照挡了解除：%q", result.Outcome())
+	}
+}
+
 // Covers: AT-TF-306、AT-TF-307 的编排面——唯一一段解除：委托撤回到已提交，写口收到开始清空的那一份；原样再交答重放；点名另一份委托答
 // 委托不符、回显在册那一份；从没采用过的段答不在册。
 func TestWithdrawingTheOnlyAdoptionWithdrawsTheStartAndIsIdempotent(t *testing.T) {

@@ -172,6 +172,21 @@ func (commission TransportCommission) AgreementRevisions() []CommissionAgreement
 	return slices.Clone(commission.revisions)
 }
 
+// BoundAgreementSnapshot 答委托有没有按这一版协议快照采购过：提交那一版，或任一次换版的后继。按委托形成的事实带的是它业务时间所凭的
+// 那一版（AgreementTermsAt），换过版之后可以是其中任一版，后一次换版又可以把前一次覆盖的那一段改掉——所以认的是全集，不是此刻那一版，
+// 也不是按事实的业务时间重算的那一版。
+func (commission TransportCommission) BoundAgreementSnapshot(snapshot AgreementSnapshotReference) bool {
+	if commission.agreement == snapshot {
+		return true
+	}
+	for _, revision := range commission.revisions {
+		if revision.snapshot == snapshot {
+			return true
+		}
+	}
+	return false
+}
+
 // AgreementRevisionBy 按依据找一次换版：同一份决定只换一次版。
 func (commission TransportCommission) AgreementRevisionBy(basis CommissionAgreementRevisionBasisReference) (CommissionAgreementRevision, bool) {
 	for _, revision := range commission.revisions {

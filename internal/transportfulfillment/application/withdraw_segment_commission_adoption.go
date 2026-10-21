@@ -321,13 +321,14 @@ func (handler *WithdrawSegmentCommissionAdoptionHandler) answerFromWithdrawal(
 	return AdoptionWithdrawalResult{outcome: AdoptionWithdrawalExisting, withdrawal: withdrawn, hasWithdrawal: true}, true, nil
 }
 
-// formedUnder 挑出段上仍有效的实际履约发生项里采购上下文出自这份委托的那几项：服务方与协议快照都与委托那一行同。段已采用委托时登记
-// 从委托取这两样（ADR-0207 文末补记），所以凡同的都算按它形成；登记方在采用之前自报了另一家、另一版协议的那几项不是这份委托的成本
-// 来源，解除不挡它们。
+// formedUnder 挑出段上仍有效的实际履约发生项里采购上下文出自这份委托的那几项：服务方同，协议快照是委托提交那一版或任一次换版的后继
+// （TransportCommission.BoundAgreementSnapshot）。段已采用委托时登记从委托取这两样（ADR-0207 文末补记），换过版之后取业务时间所凭的那一版
+// （ADR-0231 决定四），所以凡落在这一集里的都算按它形成；只比提交那一版，换版之后按后继形成的项就认不出、解除被放行。登记方在采用之前
+// 自报了另一家、另一版协议的那几项不是这份委托的成本来源，解除不挡它们。
 func formedUnder(heads []ports.ChargeOccurrenceRecord, commission domain.TransportCommission) []ports.ChargeOccurrenceRecord {
 	var formed []ports.ChargeOccurrenceRecord
 	for _, head := range heads {
-		if head.Occurrence.Provider() == commission.Provider() && head.Occurrence.Agreement() == commission.Agreement() {
+		if head.Occurrence.Provider() == commission.Provider() && commission.BoundAgreementSnapshot(head.Occurrence.Agreement()) {
 			formed = append(formed, head)
 		}
 	}
