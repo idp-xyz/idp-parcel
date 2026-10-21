@@ -1,6 +1,6 @@
 # ADR-0172：冻结边界的首版形态是剩余计划段数，没声明就不是未冻结
 
-Status: Accepted（2026-09-30。本项是产品策略，接受依据是 ADR-0146 决定二、决定七：判断形态归产品，租户选形态、填取值。）<!-- 索引注记 -->｜**冻结**：剩余段数不超过登记值即越过边界。未声明答未配置。
+Status: Accepted（2026-09-30。本项是产品策略，接受依据是 ADR-0146 决定二、决定七：判断形态归产品，租户选形态、填取值。）<!-- 索引注记 -->｜**冻结**：剩余段数不超过登记值即越过边界。未声明答未配置。｜**部分停用**（2026-10-21）：其决定三「节点收寄或权威运输交接才能切前缀。」一句与决定四「复核在原计划仍可执行时先看冻结。」一句已由 [ADR-0249](./0249-offsite-pickup-reassessment-checks-hard-constraints-only-and-does-not-establish-a-controllable-node.md) 停用。**适用场景**：场外揽收触发的复核——揽收不建立当前可控节点，已执行前缀为空、不切前缀；原计划仍适用即保留，不看冻结。节点收寄与交进声明的接收节点的交接照旧切前缀、先看冻结，其余各条不变
 Date: 2026-09-30
 
 ## Context
@@ -35,6 +35,7 @@ Date: 2026-09-30
 ## Links
 
 - [ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)
+- [ADR-0249](./0249-offsite-pickup-reassessment-checks-hard-constraints-only-and-does-not-establish-a-controllable-node.md)：后继——部分停用决定三「节点收寄或权威运输交接才能切前缀。」一句与决定四「复核在原计划仍可执行时先看冻结。」一句，适用场景限场外揽收触发的复核
 - [network-routing CONTEXT](../domain/network-routing/CONTEXT.md)
 - [UC-NR-003](../application/network-routing/UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md)
 - 票 `.scratch/routing-first-cut/issues/04-freeze-boundary-and-executed-prefix.md`
