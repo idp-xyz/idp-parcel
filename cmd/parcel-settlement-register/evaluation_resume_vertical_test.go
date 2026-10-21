@@ -25,6 +25,7 @@ func evaluationResumeDocument(direction, occurrence, version, parcel, reference 
 		version + `", "parcel": "` + parcel + `", "resumeReference": "` + reference + `"}`
 }
 
+// Covers: AT-SA-196 运营续办口点名一版发生项续办一代，同一个引用重跑是重放，点名与方向对不上在事务之前拒。
 func TestTheOperatorResumesAStalledBuyRequestOnceOnRealPostgres(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
