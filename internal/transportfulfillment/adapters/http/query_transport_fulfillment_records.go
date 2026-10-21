@@ -661,6 +661,7 @@ func serveReaskCadences(
 		bodies = append(bodies, reaskCadenceBody{
 			Version:         row.Cadence.Version().String(),
 			IntervalMinutes: int64(row.Cadence.Interval().Minutes()),
+			Basis:           row.Cadence.Basis(),
 			RecordedAt:      rfc3339(row.RecordedAt),
 		})
 	}
@@ -675,6 +676,7 @@ type reaskCadenceListResponse struct {
 type reaskCadenceBody struct {
 	Version         string `json:"version"`
 	IntervalMinutes int64  `json:"intervalMinutes"`
+	Basis           string `json:"basis"`
 	RecordedAt      string `json:"recordedAt"`
 }
 

@@ -15,17 +15,21 @@ type ReaskCadenceIntake interface {
 	IntakeReaskCadenceRegistration(ctx context.Context, request *http.Request) (application.RegisterReaskCadenceCommand, error)
 }
 
-// ReaskCadenceRegistrationPayload 是线格式：登记方指名的版本与按整分钟的间隔。间隔不是正的整分钟由编排答`未受理`（200）。
+// ReaskCadenceRegistrationPayload 是线格式：登记方指名的版本、按整分钟的间隔与登记依据。间隔不是正的整分钟、依据空白由编排答
+// `未受理`（200）。
 type ReaskCadenceRegistrationPayload struct {
 	Version         string `json:"version"`
 	IntervalMinutes int    `json:"intervalMinutes"`
+	Basis           string `json:"basis"`
 }
 
 func (payload ReaskCadenceRegistrationPayload) Command(tenant domain.TenantID) (application.RegisterReaskCadenceCommand, error) {
 	if tenant.String() == "" {
 		return application.RegisterReaskCadenceCommand{}, ErrOperatorIdentityMissing
 	}
-	return application.RegisterReaskCadenceCommand{TenantID: tenant, Version: payload.Version, IntervalMinutes: payload.IntervalMinutes}, nil
+	return application.RegisterReaskCadenceCommand{
+		TenantID: tenant, Version: payload.Version, IntervalMinutes: payload.IntervalMinutes, Basis: payload.Basis,
+	}, nil
 }
 
 // ReaskCadenceRegistrar 是本口转交的编排。
@@ -56,6 +60,7 @@ type reaskCadenceResponse struct {
 	Outcome         string `json:"outcome"`
 	Version         string `json:"version,omitempty"`
 	IntervalMinutes int64  `json:"intervalMinutes,omitempty"`
+	Basis           string `json:"basis,omitempty"`
 	RecordedAt      string `json:"recordedAt,omitempty"`
 }
 
@@ -69,6 +74,7 @@ func writeReaskCadenceOutcome(response http.ResponseWriter, result application.R
 	if record, present := result.Record(); present {
 		body.Version = record.Cadence.Version().String()
 		body.IntervalMinutes = int64(record.Cadence.Interval().Minutes())
+		body.Basis = record.Cadence.Basis()
 		body.RecordedAt = rfc3339(record.RecordedAt)
 	}
 	// ADR-0022：只有新落了一版用 201；重放、冲突、未受理、未决都是形成了的答案（200）。

@@ -41,7 +41,7 @@ func reaskCadenceRecord(t *testing.T, tenant, version string, interval time.Dura
 	if err != nil {
 		t.Fatal(err)
 	}
-	cadence, err := domain.NewDeliveryDispatchReaskCadence(tenantID, versionRef, interval)
+	cadence, err := domain.NewDeliveryDispatchReaskCadence(tenantID, versionRef, interval, "SYN-BASIS/"+version)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestReaskCadencesAreVersionedAndTheLatestIsCurrent(t *testing.T) {
 		t.Fatalf("此刻生效 = %+v found=%v err=%v, want 最近登记的 v2", current, found, err)
 	}
 	held, found, err := register.FindByVersion(t.Context(), tenant, current.Cadence.Version())
-	if err != nil || !found || !held.RecordedAt.Equal(at.Add(time.Hour)) {
+	if err != nil || !found || !held.RecordedAt.Equal(at.Add(time.Hour)) || held.Cadence.Basis() != "SYN-BASIS/SYN-REASK/v2" {
 		t.Fatalf("按版本读回 = %+v found=%v err=%v", held, found, err)
 	}
 	unregistered := reaskCadenceRecord(t, "SYN-TENANT-03", "x", time.Minute, at).Cadence.TenantID()

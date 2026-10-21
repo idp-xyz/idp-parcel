@@ -29,7 +29,7 @@ func (stub cadenceReaderStub) CurrentCadence(context.Context, domain.TenantID) (
 func cadenceOf(t *testing.T, interval time.Duration) cadenceReaderStub {
 	t.Helper()
 	cadence, err := domain.NewDeliveryDispatchReaskCadence(value(t, domain.NewTenantID, "tenant-1"),
-		value(t, domain.NewDeliveryDispatchReaskCadenceVersion, "reask/v1"), interval)
+		value(t, domain.NewDeliveryDispatchReaskCadenceVersion, "reask/v1"), interval, "SYN-BASIS/reask")
 	if err != nil {
 		t.Fatal(err)
 	}

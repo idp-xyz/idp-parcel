@@ -38,11 +38,12 @@ func (outcome ReaskCadenceRegistrationOutcome) String() string {
 	}
 }
 
-// RegisterReaskCadenceCommand 是一版重问间隔：租户取认证结果，版本由登记方指名，间隔按整分钟。
+// RegisterReaskCadenceCommand 是一版重问间隔：租户取认证结果，版本由登记方指名，间隔按整分钟，登记依据必备。
 type RegisterReaskCadenceCommand struct {
 	TenantID        domain.TenantID
 	Version         string
 	IntervalMinutes int
+	Basis           string
 }
 
 type RegisterReaskCadenceResult struct {
@@ -88,7 +89,8 @@ func (handler *RegisterReaskCadenceHandler) Register(
 	if command.IntervalMinutes <= 0 || int64(command.IntervalMinutes) > math.MaxInt64/int64(time.Minute) {
 		return RegisterReaskCadenceResult{outcome: ReaskCadenceRegistrationNotAccepted}, nil
 	}
-	cadence, err := domain.NewDeliveryDispatchReaskCadence(command.TenantID, version, time.Duration(command.IntervalMinutes)*time.Minute)
+	cadence, err := domain.NewDeliveryDispatchReaskCadence(command.TenantID, version, time.Duration(command.IntervalMinutes)*time.Minute,
+		command.Basis)
 	if err != nil {
 		return RegisterReaskCadenceResult{outcome: ReaskCadenceRegistrationNotAccepted}, nil
 	}

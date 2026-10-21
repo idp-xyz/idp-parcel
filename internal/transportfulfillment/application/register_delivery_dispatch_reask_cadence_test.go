@@ -45,10 +45,15 @@ var cadenceRegisteredAt = time.Date(2026, 10, 21, 8, 0, 0, 0, time.UTC)
 
 func registerCadence(t *testing.T, registry *cadenceRegistryDouble, version string, minutes int) application.RegisterReaskCadenceResult {
 	t.Helper()
+	return registerCadenceWithBasis(t, registry, version, minutes, "SYN-BASIS/reask")
+}
+
+func registerCadenceWithBasis(t *testing.T, registry *cadenceRegistryDouble, version string, minutes int, basis string) application.RegisterReaskCadenceResult {
+	t.Helper()
 	result, err := application.NewRegisterReaskCadenceHandler(application.RegisterReaskCadenceDeps{
 		Cadences: registry, Clock: handoverClock{at: cadenceRegisteredAt},
 	}).Register(t.Context(), application.RegisterReaskCadenceCommand{
-		TenantID: value(t, domain.NewTenantID, "tenant-1"), Version: version, IntervalMinutes: minutes,
+		TenantID: value(t, domain.NewTenantID, "tenant-1"), Version: version, IntervalMinutes: minutes, Basis: basis,
 	})
 	if err != nil {
 		t.Fatalf("登记重问间隔：%v", err)
@@ -57,7 +62,8 @@ func registerCadence(t *testing.T, registry *cadenceRegistryDouble, version stri
 }
 
 // Covers: AT-TF-287（ADR-0230 决定五）——重问间隔是登记出来的租户取值：首登答已登记、记下登记时刻；同版本同正文是重放、交回在册那
-// 一版；同版本异正文是冲突、在册那一版不动；间隔不是正的整分钟、版本空白都不受理；并发下另一方先落了同一版，读回它再分。
+// 一版；同版本异正文（间隔或登记依据不同）是冲突、在册那一版不动；间隔不是正的整分钟、版本或依据空白都不受理；并发下另一方先落了
+// 同一版，读回它再分。
 func TestAReaskCadenceIsRegisteredOncePerVersion(t *testing.T) {
 	registry := &cadenceRegistryDouble{rows: map[string]ports.DeliveryDispatchReaskCadenceRecord{}}
 	first := registerCadence(t, registry, "reask/v1", 360)
@@ -82,10 +88,16 @@ func TestAReaskCadenceIsRegisteredOncePerVersion(t *testing.T) {
 	if result := registerCadence(t, registry, " ", 60); result.Outcome() != application.ReaskCadenceRegistrationNotAccepted {
 		t.Errorf("版本空白 = %s, want INPUT_NOT_ACCEPTED", result.Outcome())
 	}
+	if result := registerCadenceWithBasis(t, registry, "reask/v2", 60, " "); result.Outcome() != application.ReaskCadenceRegistrationNotAccepted {
+		t.Errorf("登记依据空白 = %s, want INPUT_NOT_ACCEPTED", result.Outcome())
+	}
+	if result := registerCadenceWithBasis(t, registry, "reask/v1", 360, "SYN-BASIS/other"); result.Outcome() != application.ReaskCadenceContentConflict {
+		t.Errorf("同版本换了登记依据 = %s, want CONTENT_CONFLICT", result.Outcome())
+	}
 
 	registry.beforeSave = func() {
 		cadence, err := domain.NewDeliveryDispatchReaskCadence(value(t, domain.NewTenantID, "tenant-1"),
-			value(t, domain.NewDeliveryDispatchReaskCadenceVersion, "reask/v3"), 30*time.Minute)
+			value(t, domain.NewDeliveryDispatchReaskCadenceVersion, "reask/v3"), 30*time.Minute, "SYN-BASIS/reask")
 		if err != nil {
 			t.Fatal(err)
 		}

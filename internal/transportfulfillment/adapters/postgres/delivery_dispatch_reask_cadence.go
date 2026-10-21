@@ -41,7 +41,7 @@ func (register *DeliveryDispatchReaskCadences) FindByVersion(
 		return ports.DeliveryDispatchReaskCadenceRecord{}, false, fmt.Errorf("find delivery dispatch reask cadence: %w", err)
 	}
 	record, err := scanReaskCadence(querier.QueryRow(ctx,
-		`SELECT tenant_id, version, interval_minutes, recorded_at
+		`SELECT tenant_id, version, interval_minutes, basis, recorded_at
 		   FROM transport_fulfillment.delivery_dispatch_reask_cadence
 		  WHERE tenant_id = $1 AND version = $2`,
 		tenant.String(), version.String(),
@@ -59,7 +59,7 @@ func (register *DeliveryDispatchReaskCadences) CurrentCadence(
 		return ports.DeliveryDispatchReaskCadenceRecord{}, false, fmt.Errorf("current delivery dispatch reask cadence: %w", err)
 	}
 	record, err := scanReaskCadence(querier.QueryRow(ctx,
-		`SELECT tenant_id, version, interval_minutes, recorded_at
+		`SELECT tenant_id, version, interval_minutes, basis, recorded_at
 		   FROM transport_fulfillment.delivery_dispatch_reask_cadence
 		  WHERE tenant_id = $1
 		  ORDER BY recorded_at DESC, version DESC
@@ -77,10 +77,11 @@ func (register *DeliveryDispatchReaskCadences) Save(ctx context.Context, record 
 	}
 	cadence := record.Cadence
 	tag, err := executor.Exec(ctx,
-		`INSERT INTO transport_fulfillment.delivery_dispatch_reask_cadence (tenant_id, version, interval_minutes, recorded_at)
-		 VALUES ($1, $2, $3, $4)
+		`INSERT INTO transport_fulfillment.delivery_dispatch_reask_cadence (tenant_id, version, interval_minutes, basis, recorded_at)
+		 VALUES ($1, $2, $3, $4, $5)
 		 ON CONFLICT DO NOTHING`,
-		cadence.TenantID().String(), cadence.Version().String(), int(cadence.Interval()/time.Minute), record.RecordedAt.UTC(),
+		cadence.TenantID().String(), cadence.Version().String(), int(cadence.Interval()/time.Minute), cadence.Basis(),
+		record.RecordedAt.UTC(),
 	)
 	if err != nil {
 		return false, fmt.Errorf("save delivery dispatch reask cadence: %w", err)
@@ -102,7 +103,7 @@ func (catalogue *ReviewCatalogue) ListDeliveryDispatchReaskCadences(
 		return nil, fmt.Errorf("list delivery dispatch reask cadences: %w", err)
 	}
 	rows, err := querier.Query(ctx,
-		`SELECT tenant_id, version, interval_minutes, recorded_at
+		`SELECT tenant_id, version, interval_minutes, basis, recorded_at
 		   FROM transport_fulfillment.delivery_dispatch_reask_cadence
 		  WHERE tenant_id = $1
 		  ORDER BY recorded_at DESC, version DESC
@@ -128,10 +129,10 @@ func (catalogue *ReviewCatalogue) ListDeliveryDispatchReaskCadences(
 }
 
 func scanReaskCadence(row pgx.Row) (ports.DeliveryDispatchReaskCadenceRecord, error) {
-	var tenantText, versionText string
+	var tenantText, versionText, basis string
 	var minutes int
 	var recordedAt time.Time
-	if err := row.Scan(&tenantText, &versionText, &minutes, &recordedAt); err != nil {
+	if err := row.Scan(&tenantText, &versionText, &minutes, &basis, &recordedAt); err != nil {
 		return ports.DeliveryDispatchReaskCadenceRecord{}, err
 	}
 	tenant, err := domain.NewTenantID(tenantText)
@@ -142,7 +143,7 @@ func scanReaskCadence(row pgx.Row) (ports.DeliveryDispatchReaskCadenceRecord, er
 	if err != nil {
 		return ports.DeliveryDispatchReaskCadenceRecord{}, err
 	}
-	cadence, err := domain.NewDeliveryDispatchReaskCadence(tenant, version, time.Duration(minutes)*time.Minute)
+	cadence, err := domain.NewDeliveryDispatchReaskCadence(tenant, version, time.Duration(minutes)*time.Minute, basis)
 	if err != nil {
 		return ports.DeliveryDispatchReaskCadenceRecord{}, err
 	}

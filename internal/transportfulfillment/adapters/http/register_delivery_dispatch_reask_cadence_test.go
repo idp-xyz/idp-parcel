@@ -28,7 +28,8 @@ func (sink *cadenceSink) Save(context.Context, ports.DeliveryDispatchReaskCadenc
 	return true, nil
 }
 
-// Covers: AT-TF-287 的线格式那一半（ADR-0230 决定五）——重问间隔登记挂登记册配置写：租户取认证结果，首登 201 带版本、整分钟与登记时刻；
+// Covers: AT-TF-287 的线格式那一半（ADR-0230 决定五）——重问间隔登记挂登记册配置写：租户取认证结果，首登 201 带版本、整分钟、登记依据
+// 与登记时刻；
 // 间隔不是正的整分钟 200 INPUT_NOT_ACCEPTED、不写；载荷夹带租户 400。
 func TestTheReaskCadenceRegistrationFaceTranslatesFieldByField(t *testing.T) {
 	sink := &cadenceSink{}
@@ -40,25 +41,26 @@ func TestTheReaskCadenceRegistrationFaceTranslatesFieldByField(t *testing.T) {
 		endpoint.ServeHTTP(recorder, registryRequest("t", body))
 		return recorder
 	}
-	if refused := post(`{"version":"SYN-REASK/v1","intervalMinutes":0}`); refused.Code != http.StatusOK ||
+	if refused := post(`{"version":"SYN-REASK/v1","intervalMinutes":0,"basis":"SYN-BASIS/reask"}`); refused.Code != http.StatusOK ||
 		!strings.Contains(refused.Body.String(), `"INPUT_NOT_ACCEPTED"`) || sink.saved {
 		t.Fatalf("零分钟答 %d %s、写了=%v", refused.Code, refused.Body.String(), sink.saved)
 	}
-	if smuggled := post(`{"version":"SYN-REASK/v1","intervalMinutes":60,"tenantId":"SYN-TENANT-02"}`); smuggled.Code != http.StatusBadRequest {
+	if smuggled := post(`{"version":"SYN-REASK/v1","intervalMinutes":60,"basis":"SYN-BASIS/reask","tenantId":"SYN-TENANT-02"}`); smuggled.Code != http.StatusBadRequest {
 		t.Fatalf("夹带租户答 %d %s", smuggled.Code, smuggled.Body.String())
 	}
-	registered := post(`{"version":"SYN-REASK/v1","intervalMinutes":360}`)
+	registered := post(`{"version":"SYN-REASK/v1","intervalMinutes":360,"basis":"SYN-BASIS/reask"}`)
 	var body struct {
 		Outcome         string `json:"outcome"`
 		Version         string `json:"version"`
 		IntervalMinutes int64  `json:"intervalMinutes"`
+		Basis           string `json:"basis"`
 		RecordedAt      string `json:"recordedAt"`
 	}
 	if err := json.Unmarshal(registered.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
 	if registered.Code != http.StatusCreated || body.Outcome != "REASK_CADENCE_REGISTERED" || body.Version != "SYN-REASK/v1" ||
-		body.IntervalMinutes != 360 || body.RecordedAt != "2026-10-21T08:00:00Z" {
+		body.IntervalMinutes != 360 || body.Basis != "SYN-BASIS/reask" || body.RecordedAt != "2026-10-21T08:00:00Z" {
 		t.Fatalf("首登答 %d %s", registered.Code, registered.Body.String())
 	}
 }

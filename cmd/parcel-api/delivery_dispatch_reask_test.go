@@ -222,10 +222,10 @@ func TestReaskingWhatIsDueNeedsTheTenantsRegisteredCadence(t *testing.T) {
 			t.Fatalf("登记 %s 答 %d %v, want %d %s", body, status, answer, wantStatus, wantOutcome)
 		}
 	}
-	register(`{"version":"SYN-REASK/v1","intervalMinutes":60}`, http.StatusCreated, "REASK_CADENCE_REGISTERED")
-	register(`{"version":"SYN-REASK/v1","intervalMinutes":60}`, http.StatusOK, "EXISTING_VERSION")
-	register(`{"version":"SYN-REASK/v1","intervalMinutes":30}`, http.StatusOK, "CONTENT_CONFLICT")
-	register(`{"version":"SYN-REASK/v0","intervalMinutes":0}`, http.StatusOK, "INPUT_NOT_ACCEPTED")
+	register(`{"version":"SYN-REASK/v1","intervalMinutes":60,"basis":"SYN-BASIS/reask-v1"}`, http.StatusCreated, "REASK_CADENCE_REGISTERED")
+	register(`{"version":"SYN-REASK/v1","intervalMinutes":60,"basis":"SYN-BASIS/reask-v1"}`, http.StatusOK, "EXISTING_VERSION")
+	register(`{"version":"SYN-REASK/v1","intervalMinutes":30,"basis":"SYN-BASIS/reask-v1"}`, http.StatusOK, "CONTENT_CONFLICT")
+	register(`{"version":"SYN-REASK/v0","intervalMinutes":0,"basis":"SYN-BASIS/reask-v0"}`, http.StatusOK, "INPUT_NOT_ACCEPTED")
 
 	outcome, items, answer := rig.reaskWith(t, `{"scope":"DUE","limit":10}`)
 	var version string
@@ -238,7 +238,7 @@ func TestReaskingWhatIsDueNeedsTheTenantsRegisteredCadence(t *testing.T) {
 		t.Fatalf("到期重问答复没带到期时刻：%v", answer)
 	}
 
-	register(`{"version":"SYN-REASK/v2","intervalMinutes":5256000}`, http.StatusCreated, "REASK_CADENCE_REGISTERED")
+	register(`{"version":"SYN-REASK/v2","intervalMinutes":5256000,"basis":"SYN-BASIS/reask-v2"}`, http.StatusCreated, "REASK_CADENCE_REGISTERED")
 	if _, items, _ := rig.reaskWith(t, `{"scope":"DUE","limit":10}`); len(items) != 0 {
 		t.Fatalf("换成十年的间隔后仍问了 %+v——最近登记的那一版该生效", items)
 	}
@@ -247,11 +247,13 @@ func TestReaskingWhatIsDueNeedsTheTenantsRegisteredCadence(t *testing.T) {
 	var cadences []struct {
 		Version         string `json:"version"`
 		IntervalMinutes int64  `json:"intervalMinutes"`
+		Basis           string `json:"basis"`
 	}
 	if err := json.Unmarshal(listed["cadences"], &cadences); err != nil || status != http.StatusOK {
 		t.Fatalf("间隔那一格答 %d %v", status, listed)
 	}
-	if len(cadences) != 2 || cadences[0].Version != "SYN-REASK/v2" || cadences[1].IntervalMinutes != 60 {
+	if len(cadences) != 2 || cadences[0].Version != "SYN-REASK/v2" || cadences[1].IntervalMinutes != 60 ||
+		cadences[1].Basis != "SYN-BASIS/reask-v1" {
 		t.Fatalf("间隔那一格列出 %+v, want v2 在前、v1 六十分钟", cadences)
 	}
 }
