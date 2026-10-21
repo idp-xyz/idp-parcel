@@ -27,7 +27,8 @@ func NewHandoverGateView(judge ActionAdmissionJudge) (*HandoverGateView, error) 
 var _ tfports.HandoverGateView = (*HandoverGateView)(nil)
 
 // ReadHandoverGate 以交出意图问一件对象：at 取交出节点，onward 取去向节点，没声明去向就不带——关务据此不列跨关务区域
-// 那一道（ADR-0206 决定二），本包不替登记方补一个去向。对象引用的译法与出发同一条（袋或集运单元由关务按自己的规则作答）。
+// 那一道（ADR-0206 决定二），本包不替登记方补一个去向。对象引用按同一串译成关务的包裹引用。交出读数
+// 不展开集运单元（ADR-0225 只展开出发读数），交出的若是一袋，关务按自己的规则作答，读数对它不是干净信号。
 func (view *HandoverGateView) ReadHandoverGate(
 	ctx context.Context,
 	query tfports.HandoverGateQuery,

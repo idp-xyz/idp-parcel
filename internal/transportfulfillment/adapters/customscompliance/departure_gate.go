@@ -44,8 +44,8 @@ func NewDepartureGateView(judge ActionAdmissionJudge) (*DepartureGateView, error
 var _ tfports.DepartureGateView = (*DepartureGateView)(nil)
 
 // ReadDepartureGate 以出发意图问一件对象。对象引用按同一串译成关务的包裹引用：载运对象是包裹时两个上下文说的是
-// 同一串；是袋或集运单元时关务解析不到它的案卷，按自己的规则作答（ADR-0206 越权风险点「对象只认包裹」），本包不替谁展开
-// 成员。
+// 同一串。集运单元不交到这里——关务按包裹认对象，问它只会答出一格假的干净读数；读数先经集运成员关系认出它、按成员逐件问
+// （ADR-0225），展开是编排的事，不在本包。
 func (view *DepartureGateView) ReadDepartureGate(
 	ctx context.Context,
 	query tfports.DepartureGateQuery,
