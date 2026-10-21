@@ -51,7 +51,7 @@ M（按裁向，可能涉及计划模型加揽收段，则 L）。
 
 ## 完成记录（2026-10-21，分支 claude-code16）
 
-用户授权原话「你作为业务和系统专家自决……解决所有的问题」；下列「代决」由作者会话代 NR owner 作出，待 NR owner 复核。照裁向（ADR-0249）实现，读码后没有发现与已接受 ADR 相抵之处。
+用户授权原话「你作为业务和系统专家自决……解决所有的问题」；下列「代决」由作者会话代 NR owner 作出，待 NR owner 复核。照裁向（ADR-0249）实现。初稿写「读码后没有发现与已接受 ADR 相抵之处」，不确：ADR-0249 决定二末两条与越权风险点 3 依赖的「失效之后交接复核走原先无当前有效路由那条线」，代码里不存在——复核以初始路由那一行为起点（评审 N1，main 上同病、非本票引入），另立 [code/52](./52-reassessment-reads-the-initial-route-row-instead-of-the-current-plan-or-no-route.md)。本票改动本身与 ADR-0249 逐条相符。
 
 ### 做了什么
 
@@ -61,6 +61,7 @@ M（按裁向，可能涉及计划模型加揽收段，则 L）。
 - 复核编排 `reassessPlan`：仍适用且控制依据不建立可控节点时直接提交仍适用，不进 `freezeOf`、不进 `tryImprovementReroute`；`structuralAutoReroute` 的两个结构条件改问上面两处，揽收时「位于可控节点」为假、「只改未执行部分」为真，失效线上只形成建议、阻塞只有 `NOT_AT_CONTROLLED_NODE`。原先无路由那条线不动，揽收照常形成首个计划。
 - 收寄采用适配器 `controlKindFor` 把 `OffsitePickupSource` 译成 `OffsitePickupControl`，不再译成 `TransportHandoverControl`。
 - 与 ADR-0249 相反的注释一并改掉：`TriggerReassessment` 头注（「两类都是当前可控节点依据」）、`freezeOf`（「触发又只会是节点收寄或权威交接」）、`JudgeExecutedPrefix`、`ControlEvidenceKind` 头注。
+- 派发真库（评审 B1 后补）：`cmd/parcel-dispatch/reassess_offsite_pickup_test.go` 在 `reassessBothLanesFixture` 上传场外揽收、地点 `customer-warehouse-2`，经生产同形的收寄采用消费门落复核册：`AT-NR-034` 一行 `STILL_APPLICABLE`、引用 `SYN-RPV-63`、`trigger_occurred_at` 等于揽收时间、冻结形态未声明也不落 `FREEZE_FORM_UNCONFIGURED`；`AT-NR-084` 一行 `PLAN_LAPSED`、依据点名限制、`SUGGESTION_ONLY`、阻塞只有 `NOT_AT_CONTROLLED_NODE`，过得了逐结论 CHECK。夹具 `intakeAt` 的来源类型改成参数、夹具多带证据替身；`savePlan` 的段链拆出 `legsThrough` 供替代候选用。把适配器的译格退回 `TransportHandoverControl` 时两条都红（答 `PLAN_LAPSED` 与 `REROUTED`）。
 - 测试：领域 `offsite_pickup_reassessment_test.go`（揽收立得起触发却不建立可控节点、揽收复核不比节点只看硬约束、揽收全部未执行且地点与节点同名也不切前缀）；编排 `offsite_pickup_reassessment_test.go`（`AT-NR-034` 仍适用且不落冻结未配置、不因更便宜的候选改路；`AT-NR-084` 失效只出建议；原先无路由形成首个计划；揽收复核计入当前控制位置；揽收与权威交接是不同触发）；收寄采用适配器 `reassess_on_pickup_test.go`（`AT-NR-034`、`AT-NR-084` 端到端，采用记录真经 PS 领域形成）。适配器两条先跑红（今天答 `REROUTED`），改后绿。
 - 文档：UC-NR-003 `AT-NR-034`、`AT-NR-084` 的缺口注改为已补，`AT-NR-084` 另点名生产接法上还缺候选成本（demo-chain-gaps/115）与授权决定面（code/29）；「给开发的交接」去掉揽收复核一行、已实现一句补上。CONTEXT 与 ADR 由 docs-consistency/05 改过，未动。
 - 装配、迁移、派发路由与 `internal/nodeoperations/**` 都没动。
@@ -68,11 +69,10 @@ M（按裁向，可能涉及计划模型加揽收段，则 L）。
 ### 代决
 
 1. **控制依据加一格，不复用权威运输交接。** 裁向给的形状照办；枚举值追加在末尾，码值不落库（复核册与未判登记都不存控制依据），没有迁移。
-2. **「揽收地点原样记入复核依据」落在触发上，复核册不另存。** 触发原样保全地点、地点进触发指纹（换地点即触发冲突），触发关联 `intake/<租户>/<包裹>/<来源类型>/<来源版本>` 就是 PS 收寄采用记录的键，地点在那里按原样可查。节点收寄那一路今天也不在复核册存位置，失效时只在依据里点名；揽收这一路若在复核册加列，等于 NR 复制一份 TF 的位置事实，还要一次迁移。
+2. **「揽收地点原样记入复核依据」：NR 不存地点。** 经触发关联取地点：关联 `intake/<租户>/<包裹>/<来源类型>/<来源版本>` 就是 PS 收寄采用记录的键，地点在那里按原样可查；地点进触发指纹，换地点即触发冲突。节点收寄那一路今天也不在复核册存位置，失效时只在依据里点名；揽收这一路若在复核册加列，等于 NR 复制一份 TF 的位置事实，还要一次迁移。
 3. **已执行前缀另立「全部未执行」一格，不放宽线索那一格。** 线索那一格答的是「不知道包裹在哪」，`OnlyUnexecutedAffected` 对它答假；揽收答的是「确知还没进任何节点」，答真。合成一格要么让揽收多出不实的 `EXECUTED_PREFIX_AFFECTED`，要么让日后线索也被当成只改未执行部分。
 4. **揽收时选中候选限制状态未知，照旧答未决、回滚重投。** 这一格归 code/28（ADR-0250 改为入账未判）；本票不碰，code/28 落地后揽收复核同走那一格（code/28 票面「揽收复核（code/16 落地后）同走这一格」一句）。
 5. **揽收与权威交接共用同一触发关联时答触发冲突。** 触发指纹含控制依据的码值，换格就换指纹。见越权风险点 1。
-6. **不补派发真库用例。** SYN 垂直上的揽收采用今天停在收寄资格未证（`cmd/parcel-dispatch` 的 `TestARegisteredOffsitePickupStopsAtUnprovenIntakeEligibility`），生产路由走不到揽收复核；装配也没改。揽收复核在领域、编排与收寄采用适配器三层用例上钉住。
 
 ### 越权风险点
 
@@ -83,10 +83,33 @@ M（按裁向，可能涉及计划模型加揽收段，则 L）。
 
 ### AT
 
-- `AT-NR-034`、`AT-NR-084`：AT 盘点由 ④ 移入 ①，各点名领域、编排与收寄采用适配器用例；`AT-NR-084` 行内注明授权决定面归 code/29。总览计数未动，由协调方进 main 时重算。
+- `AT-NR-034`、`AT-NR-084`：AT 盘点由 ④ 移入 ①，各点名领域、编排、收寄采用适配器与派发真库用例；`AT-NR-084` 行内注明授权决定面归 code/29。总览计数未动，由协调方进 main 时重算。
 
 ### 验证（分支 claude-code16）
 
 - `go build ./...`、`go vet ./...`、`gofmt -l`（全部已跟踪与新增 Go 文件）干净。
 - `TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/networkrouting/... ./cmd/parcel-dispatch ./cmd/parcel-api ./cmd/parcel-network-register ./internal/parcelshipment/adapters/networkrouting ./internal/transportfulfillment/adapters/networkrouting ./internal/visibilityexception/adapters/networkrouting ./internal/architecture/... ./migrations/...`：21 个包 ok，退出码 0（`cmd/*` 与三个 `adapters/networkrouting` 是改动包的反向依赖）。
-- 演示种子不读写复核依据的控制格，也不走揽收复核，未灌一次性库。
+- 演示种子不读写复核依据的控制格，也没有揽收数据，未灌一次性库。
+- 评审修订之后的重跑见下节「评审记录」。
+
+## 评审记录
+
+### 第 1 轮（2026-10-21，隔离评审，协调方转达）
+
+评审核过：节点收寄与权威交接两路没有回归（变异测试已钉住），逐条与 ADR-0249 一致，派发哨兵正确。
+
+| 条 | 评审意见 | 处置 |
+|---|---|---|
+| B1（阻断） | 「生产路由走不到揽收复核」不成立：`/transport-fulfillment/offsite-pickups` → `routes_offsite_pickup.go` → `routes_network_intake.go` → `NewReassessOnIntakeAdapter` 全接着；那条停在收寄资格未证的用例是夹具故意种了非空硬资格清单，演示种子的 `intakeQualification` 没写 `qualifications`，空清单答 Established | 删去代决 6；在 `reassessBothLanesFixture` 上补派发真库用例 `TestAnOffsitePickupKeepsThePlanOnTheDatabase`（`AT-NR-034`）、`TestAnOffsitePickupWithARestrictedPlanOnlySuggestsOnTheDatabase`（`AT-NR-084`），AT 盘点两行补点名 |
+| N1 | 失效之后的下一次复核不走「原先无当前有效路由」：`Handle` 读初始路由那一行，失效后仍是 `ROUTE_FORMED`；限制仍在答 `UNDECIDED/REASSESS_STORE_UNAVAILABLE` 重投到耗尽，限制解除对已失效计划答 `STILL_APPLICABLE`。main 同病 | 探针复现三步（见 code/52 证据）；立 [code/52](./52-reassessment-reads-the-initial-route-row-instead-of-the-current-plan-or-no-route.md)，建议 R1；UC-NR-003 交接表加一行、code/29 绕法与 ADR-0249 索引注记各点名依赖 code/52，ADR 正文未改；本票完成记录开头那句改正 |
+| N2 | `EstablishesControllableNode` 头注逐一列调用方 | 改说规则本身：凡问「包裹在不在节点上」的判断都问这一处 |
+| N3 | `ReviewPlanApplicability` 头注「场外揽收只走后三条」 | 改为「场外揽收不走节点比对那一条」 |
+| N4 | 「原样保全」的说法 | UC-NR-003 `AT-NR-034` 注与代决 2 改为：NR 不存地点；经触发关联指回 PS 收寄采用记录取地点；地点进触发指纹 |
+
+立 code/52 时顺带读到一处疑似同族的问题，记在 code/52「相关」一节，未跑探针：仍适用线上自动改路形成的 `REROUTED` 记录不带失效依据，而复核册 `route_reassessment_rerouted_shape` 要求失效依据非空。
+
+验证（修订后，分支 claude-code16）：
+
+- `go build ./...`、`go vet ./...`、`gofmt -l` 干净。
+- 同一组包 `TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/networkrouting/... ./cmd/parcel-dispatch ./cmd/parcel-api ./cmd/parcel-network-register ./internal/parcelshipment/adapters/networkrouting ./internal/transportfulfillment/adapters/networkrouting ./internal/visibilityexception/adapters/networkrouting ./internal/architecture/... ./migrations/...`：21 个包 ok，退出码 0。
+- 新真库用例另跑 `scripts/test-full.sh -count=3 -run 'OffsitePickup.*OnTheDatabase|TestAnEarlierIntakeArrivingAfterAJudgedHandoverIsNotJudgedOnTheDatabase|TestOutOfOrderReassessmentTriggersHaveADeterminedAnswerOnTheDatabase' ./cmd/parcel-dispatch`：ok（`-v` 核过两条新用例各跑三遍、全 PASS）；后两条是 `intakeAt` 改签名波及的现有用例。
