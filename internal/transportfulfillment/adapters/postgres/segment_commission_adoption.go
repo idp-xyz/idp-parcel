@@ -13,7 +13,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// SegmentCommissionAdoptions 实现 ports.SegmentCommissionAdoptionStore（迁移 TF 0035、0048）与解除册的几口。采用与解除都只有
+// SegmentCommissionAdoptions 实现 ports.SegmentCommissionAdoptionStore（迁移 TF 0035、0049）与解除册的几口。采用与解除都只有
 // INSERT 与读：解除另记一行、不改采用那一行，这个适配器上没有任何 UPDATE 或 DELETE。
 type SegmentCommissionAdoptions struct {
 	db *bentopg.DB

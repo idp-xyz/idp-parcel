@@ -16,7 +16,7 @@ var (
 	_ ports.SegmentCommissionAdoptionWithdrawalStore = (*SegmentCommissionAdoptions)(nil)
 )
 
-// FindWithdrawal 交这一段那一代采用的解除（迁移 TF 0048 的解除册），经重建门复验。
+// FindWithdrawal 交这一段那一代采用的解除（迁移 TF 0049 的解除册），经重建门复验。
 func (repository *SegmentCommissionAdoptions) FindWithdrawal(
 	ctx context.Context,
 	key ports.SegmentCommissionAdoptionKey,

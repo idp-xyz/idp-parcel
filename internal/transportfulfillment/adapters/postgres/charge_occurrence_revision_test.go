@@ -12,7 +12,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// 本文件对真库证发生项修订入口要的几样（ADR-0232 决定四、五；迁移 TF 0048）：修订者随修订版往返；一版至多被修订一次；按范围列链头
+// 本文件对真库证发生项修订入口要的几样（ADR-0232 决定四、五；迁移 TF 0049）：修订者随修订版往返；一版至多被修订一次；按范围列链头
 // 不认被替代与失效的版本；范围锁不在事务里取由实现拒。
 
 // invalidatedRecord 让 first 那一版失效，交回 V2 的落册记录。

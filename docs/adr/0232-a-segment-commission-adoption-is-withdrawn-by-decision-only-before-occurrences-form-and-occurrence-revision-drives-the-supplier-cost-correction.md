@@ -24,7 +24,7 @@ Date: 2026-10-21
   - 段上还有按这份委托形成、此刻仍有效的实际履约发生项：`OCCURRENCES_FORMED`，回显那几项（链头），续办是逐项经决定四的口失效之后再来。「按这份委托形成」认的是服务方与协议快照都与委托那一行同——段已采用委托时登记从委托取这两样（ADR-0207 文末补记），所以凡同的都算；登记方在采用之前自报了另一家、另一版协议的那几项不是这份委托的成本来源，不挡。订舱与取消发生项属于订舱所属的委托，不归段的采用，也不挡。
   - 未受理 `INPUT_NOT_ACCEPTED`、未决 `WITHDRAWAL_UNDECIDED`（带原因与续办引用）。
   - 只有真解除了一段答 201 `ADOPTION_WITHDRAWN`，回显解除与委托此后的样子。
-- 解除另记一行（迁移 TF 0048 的解除册）：被解除的那一代、委托、解除人、委托的开始在这一次之前是什么、怎么变、之后是什么。采用那一行不改不删：它记着「当时这样声明过」与这一段在委托下的原开始，是历史。
+- 解除另记一行（迁移 TF 0049 的解除册）：被解除的那一代、委托、解除人、委托的开始在这一次之前是什么、怎么变、之后是什么。采用那一行不改不删：它记着「当时这样声明过」与这一段在委托下的原开始，是历史。
 - 解除之后同一段可以再采用（指错了委托，解除之后采用对的那一份），再采用是这一段的下一代。再采用的请求必须点名接在哪一代之后（`afterGeneration`，即被解除的那一代）；缺了或点错答 `ADOPTION_ALREADY_WITHDRAWN` 并回显那一次解除，不落新一代、不动委托——只凭（段、委托、服务方）分不出解除之后那一次是新的决定，还是解除之前那一次采用请求被原样重交。从没解除过的段采用照旧不必点名，采用与解除回显的采用都带 `generation`。采用册的主键因此扩成（租户、段、代次），既有的行都是第一代；第二代起必须接在已解除的上一代后面（`previous_generation = generation - 1` 且上一代在解除册上，外键守），一段此刻至多一份当前采用。按段读采用的各处（采用的已有与冲突、发生项登记的采购上下文、自动形成的「段已采用」）读的都是当前那一代。
 - 解除不入队：今天没有它的消费者。
 
@@ -42,7 +42,7 @@ Date: 2026-10-21
 - 决定种类 `TRANSPORT_CHARGE_OCCURRENCE_INVALIDATION`，口 `POST /transport-fulfillment-charge-occurrence-invalidations`，挂「运营决定」能力面；能登记的不因此能失效。载荷是发生项、作决定的人看到的那一版（链头）与一条依据（证据或决定编号，原样记作修订依据）。
 - 编排先读链头只为知道锁哪个范围，再取那个范围的发生项锁（与登记查覆盖同一把），锁下再读链头才作数。链头恰是点名那一版且仍有效：长出下一版失效版本——版本号由前一版派生（V1、V2……，不签发：两笔并发修订同一版撞同一个主键），回指链头、标失效，内容原样带过去（失效说的是那件事的范围不成立，不是另一件事），记修订者；已形成信封与失效版本同一事务交出（[ADR-0207](./0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md) 决定五同一类信封，版本在信封 ID 里）。
 - 其余各格：链头已是点名那一版的失效、依据也同，答 `EXISTING_INVALIDATION`（重交同一封信）；链头不是点名那一版，答 `VERSION_NOT_CURRENT` 回显链头；点名的就是链头而它已失效，答 `OCCURRENCE_ALREADY_INVALIDATED`；不在册 `OCCURRENCE_NOT_FOUND`。新落一版答 201。
-- 一版至多被修订一次（迁移 TF 0048 的唯一索引）：版本链是一条线，链头只有一个。
+- 一版至多被修订一次（迁移 TF 0049 的唯一索引）：版本链是一条线，链头只有一个。
 
 **五、失效之后同一件事实再登，从失效版本长出替代版本。**（机制）
 
@@ -122,7 +122,7 @@ Date: 2026-10-21
 
 - 代码（运输履约）：领域 `SegmentCommissionAdoptionWithdrawal`、`WithdrawSegmentCommissionAdoption`、`CommissionStartCorrection`、`NextOccurrenceValidity`、`InvalidateChargeOccurrence`、`ReestablishChargeOccurrence`、`TransportChargeOccurrence.SameFactContentAs`、`RevisedBy`；编排 `WithdrawSegmentCommissionAdoptionHandler`、`InvalidateChargeOccurrenceHandler`，`RegisterChargeOccurrenceHandler` 改读链头、锁下重读采用（未决细格 `PROCUREMENT_SOURCE_CHANGED`），`AdoptSegmentCommissionHandler` 多两口必备依赖 `CommissionHold`、`Withdrawals`，命令多 `AfterGeneration`、结果多一格 `ADOPTION_ALREADY_WITHDRAWN`，解除命令带 `Generation`、结果有 `GENERATION_NOT_CURRENT` 一格；端口另立文件（`charge_occurrence_scope.go`、`segment_commission_adoption_withdrawal.go`），`SegmentCommissionAdoptionRecord` 多 `Generation`；PG 适配器按代读写采用册、解除册、委托开始锁与改开始的写口、发生项范围锁与按范围列链头。
 - 代码（结算）：领域 `SupplierExpectedCost.Withdraw`、`Withdrawn`、`SupplierCostWithdrawalVersionID`（前缀 `BUYSCW`）、两种纠错原因；`FormSupplierExpectedCostHandler` 先读成本状态再定首版或纠错、多一格 `OCCURRENCE_INVALIDATED` 与一个未决原因 `OCCURRENCE_INVALIDATION_NOT_RECORDED`；`ReceiveSupplierBillHandler` 多一口必备依赖 `Successions`（新读口 `ExpectedCostSuccessionView`）、多一格 `EXPECTED_COST_NOT_CURRENT`；新编排 `WithdrawSupplierExpectedCostHandler`；`ExpectedCostRegistry` 多一口 `LoadOccurrenceCostState`，另立 `SupplierCostOccurrenceInvalidations`；消费者 `sainbox.ChargeOccurrenceInvalidatedConsumer` 与适配器 `WithdrawOnChargeOccurrenceInvalidatedAdapter`；发起那一路的适配器只把失效版本标为不发起。预期成本列表与查阅口多 `withdrawn` 一格（管理台页面未改）。
-- 迁移：access_identity `0021`（决定种类 CHECK 以 0020 为底取并集加两词）；transport_fulfillment `0048`（修订者一列、一版至多被修订一次；采用册加代次与上一代、解除册）；settlement_accounting `0044`（`withdrawn` 一列、一版至多被纠正一次、发生项失效记录一册）。
+- 迁移：access_identity `0022`（决定种类 CHECK 以 0021 为底取并集加两词）；transport_fulfillment `0049`（修订者一列、一版至多被修订一次；采用册加代次与上一代、解除册）；settlement_accounting `0044`（`withdrawn` 一列、一版至多被纠正一次、发生项失效记录一册）。
 - 接口：两口挂运营决定面，装配在 `cmd/parcel-api/endpoints_fulfillment_corrections.go` 与 `assemble_fulfillment_corrections.go`；派发路由 `cmd/parcel-dispatch/routes_supplier_cost_on_occurrence_invalidated.go`。
 - 演示种子：配置员持两种决定，授予、对照与区间另起 `steps/457` 一节。
 - 文档：TF `CONTEXT` 段采用委托一条、委托生命周期一条、发生项生命周期一条；SA `CONTEXT` 供应商成本两条；UC-TF-004 补 `AT-TF-306` 至 `310`、`315`，UC-TF-005 补 `AT-TF-311` 至 `314`，UC-SA-002 补 `AT-SA-206` 至 `210`，UC-SA-004 补 `AT-SA-211`；ADR-0204、0208、0200、0229 的 Status 行与 Links、ADR-0207 的 Links 加前向指针；子票 demo-chain-gaps/162–164。

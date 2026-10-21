@@ -109,7 +109,7 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
 （`POST /transport-fulfillment-delivery-dispatch-triggers`）不看它。待形成的那几件在 `GET /transport-fulfillment-records?registry=delivery-dispatch-pending`。
 
 配置员另持运营决定「解除履约段采用」与「运输收费发生项失效」两种（ADR-0232 决定一、四；票 demo-chain-gaps/57）：授予、对照与权威区间
-另起 `steps/457-access-fulfillment-corrections.sh` 一节，数据是 `data/access/11`、`12` 与 `data/governance/48`、`49`。种子不解除任何采用、
+另起 `steps/457-access-fulfillment-corrections.sh` 一节，数据是 `data/access/13`、`14` 与 `data/governance/49`、`50`。种子不解除任何采用、
 不让任何发生项失效。指错了委托时的更正次序：先 `POST /transport-fulfillment-charge-occurrence-invalidations`（`occurrence`、链头的
 `version`、`basis`）让这一段上按那份委托形成的发生项失效，再 `POST /transport-fulfillment-segment-commission-adoption-withdrawals`
 （`segment`、`commission`、采用回显的 `generation`）解除采用，然后采用对的那一份（`afterGeneration` 填被解除的那一代）、对同一件
