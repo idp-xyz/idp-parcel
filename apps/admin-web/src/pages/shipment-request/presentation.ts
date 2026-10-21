@@ -95,7 +95,7 @@ export const cancellationOutcomeViews: Record<CancellationOutcome, OutcomeView> 
   },
   CANCELLATION_REFUSED: {
     label: '取消被拒绝',
-    note: '当前有效规则明确不允许所请求的取消,规则依据随结果返回。这是业务答案,不是故障;包裹当前状态不变。',
+    note: '当前有效规则明确不允许所请求的取消,规则依据随结果返回:授权不允许,或面单渠道服务的实际承运商首次有效收寄已经在册(依据指名那一代收寄)。这是业务答案,不是故障;包裹当前状态不变。',
   },
   CANCELLATION_UNDECIDED: {
     label: '未决',
@@ -112,6 +112,10 @@ export const cancellationOutcomeViews: Record<CancellationOutcome, OutcomeView> 
   REQUEST_NOT_ACCEPTED: {
     label: '请求未受理',
     note: '必要内容缺失,或指名的委托与包裹在当前客户范围内查不到。统一不可见结果,不区分「不存在」与「无权查看」,也不提示差在哪一段指名。',
+  },
+  FINAL_OUTCOME_STANDS: {
+    label: '已有终局',
+    note: '包裹已经形成终局(非取消终局,或已成立的取消),返回既有终局,不形成取消也不重开原结果。新的服务需求请建立关联委托。',
   },
 };
 
@@ -153,6 +157,18 @@ export const cancellationPendingReasonViews: Record<string, PendingReasonView> =
   CANCELLATION_IDENTITY_UNAVAILABLE: {
     label: '取消标识签发暂不可用',
     note: '取消决定标识本次没能签发,决定未形成。可稍后按续办引用续办。',
+  },
+  FINAL_OUTCOME_STORE_UNAVAILABLE: {
+    label: '终局读取暂不可用',
+    note: '本次没能读到包裹当前有效终局,取消边界无法核验,不放行取消。可稍后按续办引用续办。',
+  },
+  CARRIER_PICKUP_UNAVAILABLE: {
+    label: '承运商收寄读取暂不可用',
+    note: '本次没能读到面单渠道服务的实际承运商首次有效收寄,取消边界无法核验,不放行取消。可稍后按续办引用续办。',
+  },
+  CARRIER_PICKUP_PENDING: {
+    label: '承运商收寄待确认',
+    note: '实际承运商首次有效收寄已判过但仍待确认(来源冲突或承运主体未登记)。收寄事实存在但有效性待确认,取消保持未决,不先取消后等事实。',
   },
 };
 

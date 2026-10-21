@@ -341,6 +341,9 @@ function CancellationOutcomeCard({
         {body.refusalBasis ? (
           <DetailRow label="规则依据" value={body.refusalBasis} mono />
         ) : null}
+        {body.standingFinal ? (
+          <DetailRow label="既有终局" value={body.standingFinal} mono />
+        ) : null}
         {body.pendingReason ? (
           <DetailRow
             label="未决原因"

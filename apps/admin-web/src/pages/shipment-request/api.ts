@@ -87,8 +87,9 @@ export interface WithdrawalResponseBody {
 
 // UC-PS-006 接受后取消(POST /shipment-requests/parcel-cancellations)。词取
 // application.CancelParcelOutcome 的原字符串:三种已提交走向(取消成立、待处置、
-// 拒绝)加未决、重复、冲突、不受理。REQUEST_NOT_ACCEPTED 兼收「委托或包裹在当前
-// 客户范围内查不到」——统一不可见在编排内作答(AT-PS-090),不走 4xx,是终局业务答案。
+// 拒绝)加未决、重复、冲突、不受理,以及包裹已有终局时交回既有终局那一格。
+// REQUEST_NOT_ACCEPTED 兼收「委托或包裹在当前客户范围内查不到」——统一不可见在编排内
+// 作答(AT-PS-090),不走 4xx,是终局业务答案。
 export type CancellationOutcome =
   | 'PARCEL_CANCELLED'
   | 'DISPOSITION_PENDING'
@@ -96,17 +97,19 @@ export type CancellationOutcome =
   | 'CANCELLATION_UNDECIDED'
   | 'EXISTING_RESULT'
   | 'REQUEST_CONFLICT'
-  | 'REQUEST_NOT_ACCEPTED';
+  | 'REQUEST_NOT_ACCEPTED'
+  | 'FINAL_OUTCOME_STANDS';
 
 // 与 adapters/http 的 cancellationResponse 一一对应:三种已提交走向各带自己的凭据
 // ——取消成立带取消决定标识、待处置带越过的收寄版本(调用方要知道输给了哪次收寄)、
-// 拒绝带规则依据;未决带原因与续办引用;取消成立而发布意图未交出时带重发引用
-// (重放同一请求会重发同一份意图,决定本身不受影响)。
+// 拒绝带规则依据;既有终局带指名那份终局的引用;未决带原因与续办引用;取消成立而
+// 发布意图未交出时带重发引用(重放同一请求会重发同一份意图,决定本身不受影响)。
 export interface CancellationResponseBody {
   outcome: CancellationOutcome;
   cancellationId?: string;
   intakeVersion?: string;
   refusalBasis?: string;
+  standingFinal?: string;
   decidedAt?: string;
   pendingReason?: string;
   continuationReference?: string;
