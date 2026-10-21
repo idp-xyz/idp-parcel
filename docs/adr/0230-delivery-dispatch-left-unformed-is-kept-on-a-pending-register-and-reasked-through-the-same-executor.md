@@ -38,7 +38,7 @@ Date: 2026-10-21
 
 **四、再发起：内置运营按册批量重问（产品策略）。**
 
-- 口：`POST /transport-fulfillment-delivery-dispatch-reasks`，载荷只有问法（`ALL` 全部 / `DUE` 只问到期的）与一次最多问几件。挂操作者渠道的「运营决定」能力面，决定种类新立「派送重问」（`DELIVERY_DISPATCH_REASK`，access_identity 迁移 0020）。
+- 口：`POST /transport-fulfillment-delivery-dispatch-reasks`，载荷只有问法（`ALL` 全部 / `DUE` 只问到期的）与一次最多问几件。挂操作者渠道的「运营决定」能力面，决定种类新立「派送重问」（`DELIVERY_DISPATCH_REASK`，access_identity 迁移 0019）。
 - 逐件把（段，对象）交回同一个执行器，业务时间取重问那一刻，不带期望交接——重问问的是对象此刻在这个段里的那条参与，不替哪一次交接说话。
 - 不另判任何一格：派送段、在场、入场依据、查在册、取件都是执行器的门，册怎么了结也由执行器那一拍写。所以重问是幂等的：已形成的答`已在册`，从不另立第二项；仍缺的刷新最近一次答复时刻；对象离场的作罢。
 - 这不是 ADR-0216 否掉的「按拍批量发起」：问的只是册上已知待形成的那几件，不扫段找对象，也不需要第二份「在场且未派」的读面。
@@ -84,12 +84,12 @@ Date: 2026-10-21
   - 执行器 `application/trigger_delivery_dispatch.go` 多一个必备依赖 `Pending`、两个错误、一格拒绝 `ENTRY_NOT_THIS_HANDOVER`、命令一格可缺的 `ExpectedHandover`，以及沿替代链回看在册；`trigger_dispatch_on_handover.go` 传期望交接。
   - 新 `application/reask_pending_delivery_dispatches.go`、`register_delivery_dispatch_reask_cadence.go`；领域 `domain/delivery_dispatch_reask_cadence.go`；端口 `ports/delivery_dispatch_pending.go`、`ports/delivery_dispatch_reask_cadence.go`，查阅读口加两口。
   - 适配器 `adapters/postgres/delivery_dispatch_pending.go`、`delivery_dispatch_reask_cadence.go`；HTTP 两口、查阅两格；补拍口的 Intake 从作业事实那一面移到运营决定那一面。
-  - 迁移 transport_fulfillment `0045`（派送待形成册）、`0046`（重问间隔册）；access_identity `0020`（决定种类 CHECK 加一词）。
+  - 迁移 transport_fulfillment `0045`（派送待形成册）、`0046`（重问间隔册）；access_identity `0019`（决定种类 CHECK 加一词）。
 - 接入身份：决定种类加 `DELIVERY_DISPATCH_REASK`。
 - 装配：
   - parcel-api 新特性文件 `endpoints_delivery_dispatch_reask.go`、`assemble_delivery_dispatch_reask.go`；`endpoints_delivery_dispatch.go` 那一行改面。
   - parcel-dispatch 的派送发起那一路交真册，册写不动登进本路未决哨兵。
-- 演示种子：新一节 `steps/460-access-delivery-dispatch-reask.sh`，配置员持「派送重问」的授予、对照与权威区间；不登重问间隔。
+- 演示种子：新一节 `steps/455-access-delivery-dispatch-reask.sh`，配置员持「派送重问」的授予、对照与权威区间；不登重问间隔。
 - 文档：
   - TF CONTEXT「派送待形成」词条与「揽收、派送与交付」那一句；
   - UC-TF-006 触发行与 `AT-TF-281`–`291`；
@@ -121,7 +121,7 @@ Date: 2026-10-21
 5. **一次最多 200 件是产品常量**（产品）。不是租户取值；册上多于 200 件时要多按几次。
 6. **一件给不出答复时整口报错**（TF owner）。前面各件已各自提交；答复里看不到问到了第几件，要再按一次。
 7. **补拍与按册重问共用一种决定「派送重问」**（产品、接入身份 owner）。若 owner 要分开授予，加一种决定、改一处 Intake。
-8. **补拍口改族**（TF owner、接入身份 owner）。持场外设备作业事实授予的一线端打不了这一口了，要换成运营决定的令牌；线格式与答复不变。access_identity 迁移 0020 重建决定种类 CHECK 时取本分支基线上的并集，与并行票新增的种类合并时要取并集。
+8. **补拍口改族**（TF owner、接入身份 owner）。持场外设备作业事实授予的一线端打不了这一口了，要换成运营决定的令牌；线格式与答复不变。access_identity 迁移 0019 重建决定种类 CHECK 时取本分支基线上的并集，与并行票新增的种类合并时要取并集。
 9. **重问间隔的语义**（产品、TF owner）。取「最近一次答复之后多久到期」，不是扫描频率。自动驱动没做（票 152），今天到期重问只在有人按的时候发生。
 10. **最近登记的那一版生效，没有生效起点，也撤销不回未配置**（产品）。要停掉到期重问只能登一版很长的间隔。
 11. **间隔只收整分钟**（TF owner）。上限按时长溢出界挡，不另设业务上限。
