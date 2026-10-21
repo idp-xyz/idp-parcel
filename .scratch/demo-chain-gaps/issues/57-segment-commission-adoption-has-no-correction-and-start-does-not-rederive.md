@@ -1,8 +1,8 @@
 # 57 段采用委托与委托取消都没有更正面，首个参与被更正后委托的开始也不重派生
 
 Category: enhancement
-Status: needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [25](./25-segment-adopts-transport-commission-and-cancellation-faces.md) 完成记录与 [ADR-0204](../../../docs/adr/0204-a-fulfillment-segment-adopts-a-transport-commission-by-declaration-and-a-started-commission-cannot-be-cancelled.md) 越权风险点 1、2、8（风险点 8 由票 25 隔离评审补入）。
-Blocked by: 用户决定（TF owner 复核 ADR-0204 风险点 1、2、8：采用错了怎么改，「已开始」能不能回退，采用登记之前成立的取消怎么更正）
+Status: ready-for-agent——2026-10-20 上线就绪评估归 R1，与 88 同批；「解除采用」的裁定见 [triage-2026-10-19](../triage-2026-10-19.md)「上线就绪评估（2026-10-20）」。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [25](./25-segment-adopts-transport-commission-and-cancellation-faces.md) 完成记录与 [ADR-0204](../../../docs/adr/0204-a-fulfillment-segment-adopts-a-transport-commission-by-declaration-and-a-started-commission-cannot-be-cancelled.md) 越权风险点 1、2、8（风险点 8 由票 25 隔离评审补入）。
+Blocked by: 无——用户决定一格已于 2026-10-20 代决，见 [triage-2026-10-19](../triage-2026-10-19.md)「上线就绪评估（2026-10-20）」（此前 用户决定（TF owner 复核 ADR-0204 风险点 1、2、8：采用错了怎么改，「已开始」能不能回退，采用登记之前成立的取消怎么更正））
 
 ## 现象
 

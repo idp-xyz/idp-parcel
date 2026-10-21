@@ -1,7 +1,7 @@
 # 88 自动形成没赶上的参与不补：采用晚到、协议后补条件的段，实际履约发生项要人记得去登
 
 Category: enhancement
-Status: needs-triage——2026-10-19 票 [67](./67-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0218](../../../docs/adr/0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md) 越权风险点 1、6。
+Status: ready-for-agent——2026-10-20 上线就绪评估归 R1（上线前必修），裁定与批次见 [triage-2026-10-19](../triage-2026-10-19.md)「上线就绪评估（2026-10-20）」。此前 needs-triage——2026-10-19 票 [67](./67-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0218](../../../docs/adr/0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md) 越权风险点 1、6。
 Blocked by: 无
 
 ## 现象
