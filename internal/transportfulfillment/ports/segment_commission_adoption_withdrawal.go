@@ -17,9 +17,12 @@ type SegmentCommissionAdoptionWithdrawalRecord struct {
 	RecordedAt time.Time
 }
 
-// SegmentCommissionAdoptionWithdrawalStore 是解除册：只插、按段读最近一次。
+// SegmentCommissionAdoptionWithdrawalStore 是解除册：只插，按（段、代次）读一次解除，按段读最近一次。
 type SegmentCommissionAdoptionWithdrawalStore interface {
-	// FindLatestWithdrawal 交这一段最近一次解除（代次最大的那一次）；从没解除过答 found=false。原样再交的解除据它答重放。
+	// FindWithdrawal 交这一段那一代采用的解除；那一代没解除过答 found=false。解除按（段、委托、代次）认重放，据它作答。
+	FindWithdrawal(ctx context.Context, key SegmentCommissionAdoptionKey, generation int) (SegmentCommissionAdoptionWithdrawalRecord, bool, error)
+	// FindLatestWithdrawal 交这一段最近一次解除（代次最大的那一次）；从没解除过答 found=false。采用据它判这一段有没有历史、新一代
+	// 该接在哪一代之后。
 	FindLatestWithdrawal(ctx context.Context, key SegmentCommissionAdoptionKey) (SegmentCommissionAdoptionWithdrawalRecord, bool, error)
 	// SaveWithdrawal 撞上同一段同一代已有的解除答 AdoptionAlreadyRegistered，不覆盖先到者。
 	SaveWithdrawal(ctx context.Context, record SegmentCommissionAdoptionWithdrawalRecord) (AdoptionSaveOutcome, error)

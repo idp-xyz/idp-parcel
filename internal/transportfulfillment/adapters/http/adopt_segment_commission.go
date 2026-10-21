@@ -28,6 +28,8 @@ type SegmentCommissionAdoptionPayload struct {
 	Segment    string `json:"segment"`
 	Commission string `json:"commission"`
 	Provider   string `json:"provider"`
+	// AfterGeneration 只在这一段的上一代采用已被解除时必填：新一代接在哪一代之后（ADR-0232 决定一）。首次采用不带它。
+	AfterGeneration int `json:"afterGeneration,omitempty"`
 }
 
 // Command 把载荷连同信封给的租户翻成采用命令。各格成不成立、段与委托在不在册由编排答。
@@ -36,10 +38,11 @@ func (payload SegmentCommissionAdoptionPayload) Command(tenant domain.TenantID) 
 		return application.AdoptSegmentCommissionCommand{}, ErrOperatorIdentityMissing
 	}
 	return application.AdoptSegmentCommissionCommand{
-		TenantID:   tenant,
-		Segment:    payload.Segment,
-		Commission: payload.Commission,
-		Provider:   payload.Provider,
+		TenantID:        tenant,
+		Segment:         payload.Segment,
+		Commission:      payload.Commission,
+		Provider:        payload.Provider,
+		AfterGeneration: payload.AfterGeneration,
 	}, nil
 }
 
@@ -67,6 +70,8 @@ type segmentCommissionAdoptionResponse struct {
 	Adoption              *segmentCommissionAdoptionBody `json:"adoption,omitempty"`
 	Commission            *commissionTransitionBody      `json:"commission,omitempty"`
 	SegmentStart          *segmentStartBody              `json:"segmentStart,omitempty"`
+	// Withdrawal 只随 `ADOPTION_ALREADY_WITHDRAWN` 出现：这一段最近那一次解除，新一代要接在它那一代之后（ADR-0232 决定一）。
+	Withdrawal *adoptionWithdrawalBody `json:"withdrawal,omitempty"`
 }
 
 // segmentStartBody 是段的首个当前参与：入场依据与入场时刻（RFC 3339 UTC）。
@@ -76,9 +81,10 @@ type segmentStartBody struct {
 }
 
 // segmentCommissionAdoptionBody 逐字段透出在册那一份采用：`startBasis`、`startedAt` 是这一段在委托下开始的依据与时刻（采用
-// 时段的首个参与）。时间一律 RFC 3339 UTC。
+// 时段的首个参与），`generation` 是它是这一段的第几代采用——解除要点名它（ADR-0232 决定一）。时间一律 RFC 3339 UTC。
 type segmentCommissionAdoptionBody struct {
 	Segment    string `json:"segment"`
+	Generation int    `json:"generation"`
 	Commission string `json:"commission"`
 	Provider   string `json:"provider"`
 	StartBasis string `json:"startBasis"`
@@ -105,6 +111,7 @@ func writeSegmentCommissionAdoptionOutcome(response http.ResponseWriter, result 
 		basis, startedAt := adoption.Started()
 		body.Adoption = &segmentCommissionAdoptionBody{
 			Segment:    adoption.Segment().String(),
+			Generation: record.Generation,
 			Commission: adoption.Commission().String(),
 			Provider:   adoption.Provider().String(),
 			StartBasis: basis.String(),
@@ -117,6 +124,9 @@ func writeSegmentCommissionAdoptionOutcome(response http.ResponseWriter, result 
 	}
 	if basis, startedAt, present := result.SegmentStart(); present {
 		body.SegmentStart = &segmentStartBody{Basis: basis.String(), StartedAt: rfc3339(startedAt)}
+	}
+	if record, present := result.Withdrawal(); present {
+		body.Withdrawal = adoptionWithdrawalBodyOf(record)
 	}
 	// ADR-0022：只有这次真把段挂到委托上用 201；已有采用、冲突、前置条件不满足的各格、未受理、未决都是形成了的答案（200）。
 	status := http.StatusOK

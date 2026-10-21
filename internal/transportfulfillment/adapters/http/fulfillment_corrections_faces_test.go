@@ -116,18 +116,18 @@ func (freeCommissionHold) HoldCommissionStart(context.Context, ports.TransportCo
 	return nil
 }
 
-// Covers: AT-TF-306 的线格式半边——解除口按「解除履约段采用」认证，租户与操作者取认证结果，载荷只有段与委托；夹带租户或开始一律 400。
+// Covers: AT-TF-306 的线格式半边——解除口按「解除履约段采用」认证，租户与操作者取认证结果，载荷只有段、委托与代次；夹带租户或开始一律 400。
 // 编排答未受理时是 200、不带解除。
 func TestTheWithdrawalFaceTranslatesUnderItsOwnDecision(t *testing.T) {
 	var asked []tfhttp.OperatorDecision
 	intake := operatorIntake(t, authenticatorFake{asked: &asked})
 	command, err := intake.IntakeSegmentCommissionAdoptionWithdrawal(context.Background(),
-		bearerRequest("t", `{"segment":"SYN-SEG-SZX-SIN-01","commission":"SYN-COMMISSION-TRUNK-01"}`))
+		bearerRequest("t", `{"segment":"SYN-SEG-SZX-SIN-01","commission":"SYN-COMMISSION-TRUNK-01","generation":2}`))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if command.TenantID.String() != operatorTenant || command.Operator != operatorSubject || command.Segment != "SYN-SEG-SZX-SIN-01" ||
-		command.Commission != "SYN-COMMISSION-TRUNK-01" || len(asked) != 1 || asked[0] != tfhttp.OperatorDecisionSegmentCommissionAdoptionWithdrawal {
+		command.Commission != "SYN-COMMISSION-TRUNK-01" || command.Generation != 2 || len(asked) != 1 || asked[0] != tfhttp.OperatorDecisionSegmentCommissionAdoptionWithdrawal {
 		t.Fatalf("command = %+v，问的决定 %v", command, asked)
 	}
 	for name, malformed := range map[string]string{
@@ -145,4 +145,19 @@ func TestTheWithdrawalFaceTranslatesUnderItsOwnDecision(t *testing.T) {
 	if recorder.Code != http.StatusOK || !jsonHas(t, recorder, "outcome", "INPUT_NOT_ACCEPTED") {
 		t.Fatalf("未受理 = %d %s", recorder.Code, recorder.Body.String())
 	}
+}
+
+// noWithdrawals 是解除册的替身：线格式用例里的段从没解除过。
+type noWithdrawals struct{}
+
+func (noWithdrawals) FindWithdrawal(context.Context, ports.SegmentCommissionAdoptionKey, int) (ports.SegmentCommissionAdoptionWithdrawalRecord, bool, error) {
+	return ports.SegmentCommissionAdoptionWithdrawalRecord{}, false, nil
+}
+
+func (noWithdrawals) FindLatestWithdrawal(context.Context, ports.SegmentCommissionAdoptionKey) (ports.SegmentCommissionAdoptionWithdrawalRecord, bool, error) {
+	return ports.SegmentCommissionAdoptionWithdrawalRecord{}, false, nil
+}
+
+func (noWithdrawals) SaveWithdrawal(context.Context, ports.SegmentCommissionAdoptionWithdrawalRecord) (ports.AdoptionSaveOutcome, error) {
+	return ports.AdoptionSaveOutcomeInvalid, errors.New("采用用例不该落解除")
 }

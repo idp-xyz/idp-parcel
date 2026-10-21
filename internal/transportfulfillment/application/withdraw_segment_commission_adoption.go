@@ -25,8 +25,9 @@ var (
 	ErrCommissionStartMovedUnderHold = errors.New("transport fulfillment: the commission start moved while its hold was held")
 )
 
-// AdoptionWithdrawalOutcome 是解除的应用结果。各格续办两两不同：不在册（这一段此刻没有采用，核段，或它早被解除了）、委托不符（这一段
-// 采用的是另一份——回显在册那一份）、已形成发生项（先让它们失效——回显那几项）、未受理（改请求）、未决（原样重交）。
+// AdoptionWithdrawalOutcome 是解除的应用结果。各格续办两两不同：不在册（这一段此刻没有采用，核段）、代次不是当前（点名的那一代早已
+// 不是这一段的当前采用，也没有它的解除——回显当前那一代）、委托不符（点名那一代采用的是另一份——回显它）、已形成发生项（先让它们失效
+// ——回显那几项）、未受理（改请求）、未决（原样重交）。
 type AdoptionWithdrawalOutcome uint8
 
 const (
@@ -34,6 +35,7 @@ const (
 	AdoptionWithdrawn
 	AdoptionWithdrawalExisting
 	AdoptionWithdrawalNotFound
+	AdoptionWithdrawalGenerationNotCurrent
 	AdoptionWithdrawalCommissionMismatch
 	AdoptionWithdrawalOccurrencesFormed
 	AdoptionWithdrawalNotAccepted
@@ -48,6 +50,8 @@ func (outcome AdoptionWithdrawalOutcome) String() string {
 		return "EXISTING_WITHDRAWAL"
 	case AdoptionWithdrawalNotFound:
 		return "ADOPTION_NOT_FOUND"
+	case AdoptionWithdrawalGenerationNotCurrent:
+		return "GENERATION_NOT_CURRENT"
 	case AdoptionWithdrawalCommissionMismatch:
 		return "ADOPTION_MISMATCH"
 	case AdoptionWithdrawalOccurrencesFormed:
@@ -84,13 +88,15 @@ func (reason AdoptionWithdrawalUndecidedReason) String() string {
 	}
 }
 
-// WithdrawSegmentCommissionAdoptionCommand 携带一次解除：哪一段、解的是哪一份委托。委托由登记方点名而不由段推出：段上此刻采用的若已
-// 不是他以为的那一份（别人先解除又采用了另一份），这一次不该落在别人的采用上。租户与操作者取自认证结果。
+// WithdrawSegmentCommissionAdoptionCommand 携带一次解除：哪一段、解的是哪一代采用、那一代采用的是哪一份委托。代次与委托都由登记方
+// 点名而不由段推出：段上此刻的采用若已不是他看到的那一代（他那一次早已解除，之后又再采用了），原样重交的旧请求不该落在新那一代上——
+// 同一份委托解除又再采用，只凭（段、委托）分不出这是重放还是新的一次。租户与操作者取自认证结果。
 type WithdrawSegmentCommissionAdoptionCommand struct {
 	TenantID   domain.TenantID
 	Operator   string
 	Segment    string
 	Commission string
+	Generation int
 }
 
 type AdoptionWithdrawalResult struct {
@@ -112,12 +118,12 @@ func (result AdoptionWithdrawalResult) UndecidedReason() AdoptionWithdrawalUndec
 	return result.reason
 }
 
-// Withdrawal 在解除成立与重放时交回那一次解除。
+// Withdrawal 在解除成立、重放与委托不符（点名那一代已解除、解的是另一份委托）时交回那一次解除。
 func (result AdoptionWithdrawalResult) Withdrawal() (ports.SegmentCommissionAdoptionWithdrawalRecord, bool) {
 	return result.withdrawal, result.hasWithdrawal
 }
 
-// Adoption 在解除成立、委托不符与已形成发生项时交回段上那一份当前采用。
+// Adoption 在解除成立、代次不是当前、委托不符与已形成发生项时交回段上那一份当前采用。
 func (result AdoptionWithdrawalResult) Adoption() (ports.SegmentCommissionAdoptionRecord, bool) {
 	return result.adoption, result.hasAdoption
 }
@@ -155,8 +161,9 @@ func NewWithdrawSegmentCommissionAdoptionHandler(deps WithdrawSegmentCommissionA
 	return &WithdrawSegmentCommissionAdoptionHandler{deps: deps}
 }
 
-// Withdraw 受理 → 取这一段实际履约范围的发生项锁 → 读当前采用（没有就看最近一次解除答重放或不在册）→ 委托须同 → 取委托的开始锁 →
-// 读委托 → 判这一段上按它形成、仍有效的发生项 → 读其余各段的当前采用 → 领域判开始怎么变 → 落解除 → 写委托的开始。
+// Withdraw 受理 → 取这一段实际履约范围的发生项锁 → 点名那一代已有解除就按它答重放或委托不符 → 读当前采用（没有答不在册，不是点名
+// 那一代答代次不是当前）→ 委托须同 → 取委托的开始锁 → 读委托 → 判这一段上按它形成、仍有效的发生项 → 读其余各段的当前采用 → 领域
+// 判开始怎么变 → 落解除 → 写委托的开始。
 //
 // 两把锁各管一种并发（ADR-0232 决定六）。发生项锁与登记查覆盖是同一把：登记在锁下重读采用，解除在锁下读这一段的发生项，两者排成
 // 先后——登记先提交，解除读得到那一项、答已形成发生项；解除先提交，登记重读到采用已不在、答未决让登记方重交。开始锁与采用共用：
@@ -177,7 +184,7 @@ func (handler *WithdrawSegmentCommissionAdoptionHandler) Withdraw(
 		return AdoptionWithdrawalResult{outcome: AdoptionWithdrawalNotAccepted}, nil
 	}
 	operator, err := domain.NewRegistrantReference(command.Operator)
-	if err != nil {
+	if err != nil || command.Generation < 1 {
 		return AdoptionWithdrawalResult{outcome: AdoptionWithdrawalNotAccepted}, nil
 	}
 	scope, err := domain.SegmentOccurrenceScope(segmentRef)
@@ -190,12 +197,18 @@ func (handler *WithdrawSegmentCommissionAdoptionHandler) Withdraw(
 		return withdrawalUndecided(AdoptionWithdrawalOccurrenceRegistryUnavailable, continuation), nil
 	}
 	key := ports.SegmentCommissionAdoptionKey{TenantID: command.TenantID, Segment: segmentRef}
+	if answer, answered, err := handler.answerFromWithdrawal(ctx, key, command.Generation, commissionRef, continuation); err != nil || answered {
+		return answer, err
+	}
 	current, adopted, err := handler.deps.Adoptions.FindBySegment(ctx, key)
 	if err != nil {
 		return withdrawalUndecided(AdoptionWithdrawalStoreUnavailable, continuation), nil
 	}
 	if !adopted {
-		return handler.withoutCurrentAdoption(ctx, key, commissionRef, continuation)
+		return AdoptionWithdrawalResult{outcome: AdoptionWithdrawalNotFound}, nil
+	}
+	if current.Generation != command.Generation {
+		return AdoptionWithdrawalResult{outcome: AdoptionWithdrawalGenerationNotCurrent, adoption: current, hasAdoption: true}, nil
 	}
 	if current.Adoption.Commission() != commissionRef {
 		return AdoptionWithdrawalResult{outcome: AdoptionWithdrawalCommissionMismatch, adoption: current, hasAdoption: true}, nil
@@ -251,7 +264,10 @@ func (handler *WithdrawSegmentCommissionAdoptionHandler) Withdraw(
 	case ports.AdoptionSaved:
 	case ports.AdoptionAlreadyRegistered:
 		// 同一段并发的另一次解除先落了同一代：它握过同一把锁、已写好委托的开始，读回它作答。
-		return handler.withoutCurrentAdoption(ctx, key, commissionRef, continuation)
+		if answer, answered, err := handler.answerFromWithdrawal(ctx, key, command.Generation, commissionRef, continuation); err != nil || answered {
+			return answer, err
+		}
+		return withdrawalUndecided(AdoptionWithdrawalStoreUnavailable, continuation), nil
 	default:
 		return AdoptionWithdrawalResult{}, fmt.Errorf("%w: %d", ErrUnexpectedWithdrawalSave, saved)
 	}
@@ -282,22 +298,27 @@ func (handler *WithdrawSegmentCommissionAdoptionHandler) Withdraw(
 	}, nil
 }
 
-// withoutCurrentAdoption 答这一段此刻没有当前采用的那一次：最近一次解除解的正是点名的委托，是重放；否则不在册——这一段从没采用过，
-// 或最近一次解的是另一份委托。
-func (handler *WithdrawSegmentCommissionAdoptionHandler) withoutCurrentAdoption(
+// answerFromWithdrawal 按点名那一代的解除作答：那一代已解除、解的正是点名的委托，是重放；解的是另一份委托，是委托不符。那一代没有
+// 解除答 answered=false，由调用方往下判。幂等因此按（段、委托、代次）认：解除之后同一份委托再采用，旧那一次原样重交点名的仍是旧那一代，
+// 答重放，不落到新那一代上。
+func (handler *WithdrawSegmentCommissionAdoptionHandler) answerFromWithdrawal(
 	ctx context.Context,
 	key ports.SegmentCommissionAdoptionKey,
+	generation int,
 	commission domain.TransportCommissionReference,
 	continuation string,
-) (AdoptionWithdrawalResult, error) {
-	latest, found, err := handler.deps.Withdrawals.FindLatestWithdrawal(ctx, key)
+) (AdoptionWithdrawalResult, bool, error) {
+	withdrawn, found, err := handler.deps.Withdrawals.FindWithdrawal(ctx, key, generation)
 	if err != nil {
-		return withdrawalUndecided(AdoptionWithdrawalStoreUnavailable, continuation), nil
+		return withdrawalUndecided(AdoptionWithdrawalStoreUnavailable, continuation), true, nil
 	}
-	if found && latest.Withdrawal.Commission() == commission {
-		return AdoptionWithdrawalResult{outcome: AdoptionWithdrawalExisting, withdrawal: latest, hasWithdrawal: true}, nil
+	if !found {
+		return AdoptionWithdrawalResult{}, false, nil
 	}
-	return AdoptionWithdrawalResult{outcome: AdoptionWithdrawalNotFound}, nil
+	if withdrawn.Withdrawal.Commission() != commission {
+		return AdoptionWithdrawalResult{outcome: AdoptionWithdrawalCommissionMismatch, withdrawal: withdrawn, hasWithdrawal: true}, true, nil
+	}
+	return AdoptionWithdrawalResult{outcome: AdoptionWithdrawalExisting, withdrawal: withdrawn, hasWithdrawal: true}, true, nil
 }
 
 // formedUnder 挑出段上仍有效的实际履约发生项里采购上下文出自这份委托的那几项：服务方与协议快照都与委托那一行同。段已采用委托时登记

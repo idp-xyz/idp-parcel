@@ -142,6 +142,7 @@ func newAdoptionFaces(t *testing.T) adoptionFaces {
 		StartAdvancement: unreachableStartAdvancement{t: t},
 		Doorbell:         adoptionDoorbellStub{},
 		CommissionHold:   freeCommissionHold{},
+		Withdrawals:      noWithdrawals{},
 		Clock:            fixedCommissionClock{},
 	})
 	intake := operatorIntake(t, authenticatorFake{})

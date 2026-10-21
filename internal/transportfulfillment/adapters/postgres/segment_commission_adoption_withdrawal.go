@@ -17,10 +17,28 @@ var (
 	_ ports.CommissionAdoptionsView                  = (*SegmentCommissionAdoptions)(nil)
 )
 
-// FindLatestWithdrawal 交这一段最近一次解除（迁移 TF 0048 的解除册），经重建门复验。
+// FindWithdrawal 交这一段那一代采用的解除（迁移 TF 0048 的解除册），经重建门复验。
+func (repository *SegmentCommissionAdoptions) FindWithdrawal(
+	ctx context.Context,
+	key ports.SegmentCommissionAdoptionKey,
+	generation int,
+) (ports.SegmentCommissionAdoptionWithdrawalRecord, bool, error) {
+	return repository.findWithdrawal(ctx, key, `AND generation = $3`, generation)
+}
+
+// FindLatestWithdrawal 交这一段最近一次解除：代次最大的那一次。
 func (repository *SegmentCommissionAdoptions) FindLatestWithdrawal(
 	ctx context.Context,
 	key ports.SegmentCommissionAdoptionKey,
+) (ports.SegmentCommissionAdoptionWithdrawalRecord, bool, error) {
+	return repository.findWithdrawal(ctx, key, ``)
+}
+
+func (repository *SegmentCommissionAdoptions) findWithdrawal(
+	ctx context.Context,
+	key ports.SegmentCommissionAdoptionKey,
+	narrowing string,
+	args ...any,
 ) (ports.SegmentCommissionAdoptionWithdrawalRecord, bool, error) {
 	querier, err := repository.db.ReadExecutor(ctx)
 	if err != nil {
@@ -37,9 +55,10 @@ func (repository *SegmentCommissionAdoptions) FindLatestWithdrawal(
 		   FROM transport_fulfillment.segment_commission_adoption_withdrawal
 		  WHERE tenant_id = $1
 		    AND segment_ref = $2
+		    `+narrowing+`
 		  ORDER BY generation DESC
 		  LIMIT 1`,
-		key.TenantID.String(), key.Segment.String(),
+		append([]any{key.TenantID.String(), key.Segment.String()}, args...)...,
 	).Scan(&generation, &commissionID, &withdrawnBy, &beforeBasis, &beforeAt, &change, &afterBasis, &afterAt, &recordedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.SegmentCommissionAdoptionWithdrawalRecord{}, false, nil

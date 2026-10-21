@@ -205,3 +205,18 @@ type freeCommissionHold struct{}
 func (freeCommissionHold) HoldCommissionStart(context.Context, ports.TransportCommissionKey) error {
 	return nil
 }
+
+// noWithdrawals 是解除册的替身：这些用例里的段从没解除过。
+type noWithdrawals struct{}
+
+func (noWithdrawals) FindWithdrawal(context.Context, ports.SegmentCommissionAdoptionKey, int) (ports.SegmentCommissionAdoptionWithdrawalRecord, bool, error) {
+	return ports.SegmentCommissionAdoptionWithdrawalRecord{}, false, nil
+}
+
+func (noWithdrawals) FindLatestWithdrawal(context.Context, ports.SegmentCommissionAdoptionKey) (ports.SegmentCommissionAdoptionWithdrawalRecord, bool, error) {
+	return ports.SegmentCommissionAdoptionWithdrawalRecord{}, false, nil
+}
+
+func (noWithdrawals) SaveWithdrawal(context.Context, ports.SegmentCommissionAdoptionWithdrawalRecord) (ports.AdoptionSaveOutcome, error) {
+	return ports.AdoptionSaveOutcomeInvalid, errors.New("采用用例不该落解除")
+}

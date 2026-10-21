@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
@@ -164,8 +165,14 @@ func TestAnOccurrenceIsInvalidatedAndReestablishedThroughTheProductionFaces(t *t
 		invalidationBody(occurrence, "V2", "SYN-EVIDENCE-DCG57"), http.StatusOK, "VERSION_NOT_CURRENT")
 }
 
-func withdrawalBody(segment, commission string) string {
-	return `{"segment": "` + segment + `", "commission": "` + commission + `"}`
+func withdrawalBody(segment, commission string, generation int) string {
+	return `{"segment": "` + segment + `", "commission": "` + commission + `", "generation": ` + strconv.Itoa(generation) + `}`
+}
+
+// readoptionBody 是解除之后的再采用：点名新一代接在哪一代之后。
+func readoptionBody(segment, commission, provider string, after int) string {
+	return `{"segment": "` + segment + `", "commission": "` + commission + `", "provider": "` + provider +
+		`", "afterGeneration": ` + strconv.Itoa(after) + `}`
 }
 
 func countAdoptionRows(t *testing.T, db *bentopg.DB) (adoptions, withdrawals int) {
@@ -191,7 +198,7 @@ func TestAnAdoptionIsWithdrawnOnlyAfterItsOccurrencesAreInvalidated(t *testing.T
 	endpoints := correctionFacesForTest(t, db)
 	occurrence, provider := adoptedTrunkOccurrence(t, db, endpoints)
 
-	refused := mustPost(t, endpoints.withdrawal, adoptionWithdrawalPath, withdrawalBody(adoptedChargeSegment, adoptedChargeCommiss),
+	refused := mustPost(t, endpoints.withdrawal, adoptionWithdrawalPath, withdrawalBody(adoptedChargeSegment, adoptedChargeCommiss, 1),
 		http.StatusOK, "OCCURRENCES_FORMED")
 	if formed, _ := refused["formedOccurrences"].([]any); len(formed) != 1 || formed[0].(map[string]any)["occurrence"] != occurrence {
 		t.Fatalf("已形成发生项 = %v", refused)
@@ -199,7 +206,7 @@ func TestAnAdoptionIsWithdrawnOnlyAfterItsOccurrencesAreInvalidated(t *testing.T
 	mustPost(t, endpoints.invalidation, occurrenceInvalidationPath, invalidationBody(occurrence, "V1", "SYN-EVIDENCE-DCG57"),
 		http.StatusCreated, "OCCURRENCE_INVALIDATED")
 
-	answer := mustPost(t, endpoints.withdrawal, adoptionWithdrawalPath, withdrawalBody(adoptedChargeSegment, adoptedChargeCommiss),
+	answer := mustPost(t, endpoints.withdrawal, adoptionWithdrawalPath, withdrawalBody(adoptedChargeSegment, adoptedChargeCommiss, 1),
 		http.StatusCreated, "ADOPTION_WITHDRAWN")
 	withdrawal, _ := answer["withdrawal"].(map[string]any)
 	commission, _ := answer["commission"].(map[string]any)
@@ -207,13 +214,13 @@ func TestAnAdoptionIsWithdrawnOnlyAfterItsOccurrencesAreInvalidated(t *testing.T
 		withdrawal["withdrawnBy"] == nil || commission["startedAt"] != nil {
 		t.Fatalf("解除 = %v", answer)
 	}
-	mustPost(t, endpoints.withdrawal, adoptionWithdrawalPath, withdrawalBody(adoptedChargeSegment, adoptedChargeCommiss),
+	mustPost(t, endpoints.withdrawal, adoptionWithdrawalPath, withdrawalBody(adoptedChargeSegment, adoptedChargeCommiss, 1),
 		http.StatusOK, "EXISTING_WITHDRAWAL")
 	if adoptions, withdrawals := countAdoptionRows(t, db); adoptions != 1 || withdrawals != 1 {
 		t.Fatalf("采用 %d 行、解除 %d 行，want 1 / 1", adoptions, withdrawals)
 	}
 
-	mustPost(t, endpoints.adoption, adoptionPath, adoptionBody(adoptedChargeSegment, adoptedChargeCommiss, provider),
+	mustPost(t, endpoints.adoption, adoptionPath, readoptionBody(adoptedChargeSegment, adoptedChargeCommiss, provider, 1),
 		http.StatusCreated, "COMMISSION_ADOPTED")
 	answer = mustPost(t, endpoints.charge, chargeOccurrencePath, adoptedFulfillmentBody(), http.StatusCreated, "REGISTERED")
 	if reestablished, _ := answer["occurrence"].(map[string]any); reestablished["version"] != "V3" || reestablished["corrects"] != "V2" {
@@ -240,7 +247,7 @@ func TestAWithdrawnCommissionCanBeCancelledAgain(t *testing.T) {
 	cancellation := `{"commission": "` + adoptedChargeCommiss + `", "cancelledAt": "2026-10-19T13:00:00Z"}`
 	mustPost(t, endpoints.cancellation, "/transport-fulfillment-transport-commission-cancellations", cancellation,
 		http.StatusOK, "TRANSPORT_ALREADY_STARTED")
-	mustPost(t, endpoints.withdrawal, adoptionWithdrawalPath, withdrawalBody(adoptedChargeSegment, adoptedChargeCommiss),
+	mustPost(t, endpoints.withdrawal, adoptionWithdrawalPath, withdrawalBody(adoptedChargeSegment, adoptedChargeCommiss, 1),
 		http.StatusCreated, "ADOPTION_WITHDRAWN")
 	mustPost(t, endpoints.cancellation, "/transport-fulfillment-transport-commission-cancellations", cancellation,
 		http.StatusCreated, "COMMISSION_CANCELLED")
@@ -255,7 +262,7 @@ func TestTheCorrectionFacesRefuseAnOperatorWithoutTheirGrants(t *testing.T) {
 		adoptionWithdrawalPath:     endpoints.withdrawal,
 		occurrenceInvalidationPath: endpoints.invalidation,
 	} {
-		status, answer := postWithToken(t, endpoint, path, operatorTokenForTests, withdrawalBody(adoptedChargeSegment, adoptedChargeCommiss))
+		status, answer := postWithToken(t, endpoint, path, operatorTokenForTests, withdrawalBody(adoptedChargeSegment, adoptedChargeCommiss, 1))
 		if problem, _ := answer["error"].(map[string]any); status != http.StatusForbidden || problem["code"] != "OPERATOR_NOT_GRANTED" {
 			t.Fatalf("%s 无授予 = %d %v", path, status, answer)
 		}
@@ -302,6 +309,7 @@ func raceWithdrawalCommand(t *testing.T) tfapp.WithdrawSegmentCommissionAdoption
 		Operator:   "https://id.syn.example/dex#SYN-OPERATOR-RACE",
 		Segment:    adoptedChargeSegment,
 		Commission: adoptedChargeCommiss,
+		Generation: 1,
 	}
 }
 
@@ -530,7 +538,7 @@ func TestAnAdoptionRacingAWithdrawalOfTheSameCommissionSerializesOnItsStart(t *t
 	}
 	adopter := transactionalSegmentCommissionAdopter{transactor: db.Transactor(), inner: tfapp.NewAdoptSegmentCommissionHandler(tfapp.AdoptSegmentCommissionDeps{
 		Adoptions: paused, Segments: segments, Commissions: commissions, StartAdvancement: commissions, CommissionHold: commissions,
-		Doorbell: doorbell, Clock: systemClock{},
+		Withdrawals: adoptions, Doorbell: doorbell, Clock: systemClock{},
 	})}
 	adopted, err := adopter.Adopt(t.Context(), tfapp.AdoptSegmentCommissionCommand{
 		TenantID: chargeValue(t, tfdomain.NewTenantID, chargeTenant), Segment: laterSegment, Commission: adoptedChargeCommiss,
@@ -552,5 +560,50 @@ func TestAnAdoptionRacingAWithdrawalOfTheSameCommissionSerializesOnItsStart(t *t
 		record.Withdrawal.StartChange() != tfdomain.CommissionStartRederived || !present ||
 		afterBasis.String() != "TRANSPORT-HANDOVER/SYN-HO-"+laterSegment || !afterAt.Equal(laterAt) {
 		t.Fatalf("采用 %q、解除 %q %+v", adopted.Outcome(), withdrawn.Outcome(), record.Withdrawal)
+	}
+}
+
+// Covers: AT-TF-310 的生产装配半边（ADR-0232 决定一，评审 B1 复现）——采用答回显带代次；解除之后，解除之前那一次采用请求原样重交答
+// 200 ADOPTION_ALREADY_WITHDRAWN 并回显那一次解除，不落新一代；点名接在第 1 代之后的再采用落成第 2 代、委托重新开始；再采用之后第 1 代
+// 那一次解除原样重交答 200 EXISTING_WITHDRAWAL，不解除第 2 代。册上采用 2 行、解除 1 行。
+func TestReplayingAnOldAdoptionOrWithdrawalHasNoNewEffect(t *testing.T) {
+	db := migratedChargeDB(t)
+	endpoints := correctionFacesForTest(t, db)
+	seeded := publishSeededSupplierAgreements(t, db)
+	trunk := seeded["SYN-SUPPLIER-TRUNK-CN-SG-01"]
+	provider := trunk.Declarations.SupplierAgreementBody.Supplier
+	mustPost(t, endpoints.commission, commissionSubmissionPath,
+		commissionBody(adoptedChargeCommiss, provider, trunk.ObjectID, trunk.Version, "2026-10-19T08:00:00Z"),
+		http.StatusCreated, "COMMISSION_SUBMITTED")
+	saveEndedTrunkSegment(t, db)
+	adopt := adoptionBody(adoptedChargeSegment, adoptedChargeCommiss, provider)
+	answer := mustPost(t, endpoints.adoption, adoptionPath, adopt, http.StatusCreated, "COMMISSION_ADOPTED")
+	if adoption, _ := answer["adoption"].(map[string]any); adoption["generation"] != float64(1) {
+		t.Fatalf("首次采用回显 = %v", answer)
+	}
+	withdraw := withdrawalBody(adoptedChargeSegment, adoptedChargeCommiss, 1)
+	mustPost(t, endpoints.withdrawal, adoptionWithdrawalPath, withdraw, http.StatusCreated, "ADOPTION_WITHDRAWN")
+
+	answer = mustPost(t, endpoints.adoption, adoptionPath, adopt, http.StatusOK, "ADOPTION_ALREADY_WITHDRAWN")
+	if withdrawn, _ := answer["withdrawal"].(map[string]any); withdrawn["generation"] != float64(1) {
+		t.Fatalf("已被解除回显 = %v", answer)
+	}
+	if adoptions, withdrawals := countAdoptionRows(t, db); adoptions != 1 || withdrawals != 1 {
+		t.Fatalf("旧采用重放之后采用 %d 行、解除 %d 行，want 1 / 1", adoptions, withdrawals)
+	}
+
+	answer = mustPost(t, endpoints.adoption, adoptionPath, readoptionBody(adoptedChargeSegment, adoptedChargeCommiss, provider, 1),
+		http.StatusCreated, "COMMISSION_ADOPTED")
+	if adoption, _ := answer["adoption"].(map[string]any); adoption["generation"] != float64(2) {
+		t.Fatalf("再采用回显 = %v", answer)
+	}
+	mustPost(t, endpoints.withdrawal, adoptionWithdrawalPath, withdraw, http.StatusOK, "EXISTING_WITHDRAWAL")
+	answer = mustPost(t, endpoints.withdrawal, adoptionWithdrawalPath, withdrawalBody(adoptedChargeSegment, adoptedChargeCommiss, 3),
+		http.StatusOK, "GENERATION_NOT_CURRENT")
+	if adoption, _ := answer["adoption"].(map[string]any); adoption["generation"] != float64(2) {
+		t.Fatalf("代次不是当前回显 = %v", answer)
+	}
+	if adoptions, withdrawals := countAdoptionRows(t, db); adoptions != 2 || withdrawals != 1 {
+		t.Fatalf("采用 %d 行、解除 %d 行，want 2 / 1", adoptions, withdrawals)
 	}
 }

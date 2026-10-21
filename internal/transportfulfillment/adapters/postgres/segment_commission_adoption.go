@@ -103,8 +103,9 @@ func scanAdoption(tenant domain.TenantID, row pgx.Row) (ports.SegmentCommissionA
 	}, nil
 }
 
-// Save 写下这一段的下一代采用：代次取最后一代加一，且只在最后一代已解除（或这一段从没采用过）时落行。这一段还有当前采用、或另一笔
-// 并发首交先落了同一代，都答`已登记`，不覆盖先到者。只认主键那一种冲突：外键不满足（段或委托不在册）是编排核过之后的违约，照实报错，
+// Save 写下这一段的下一代采用：代次取最后一代加一，且只在最后一代已解除（或这一段从没采用过）时落行；record 带了代次时还要恰是这一代，
+// 编排据最近一次解除算出的代次与此刻的册对不上（另一笔并发采用先落了），同样不落。这一段还有当前采用、或另一笔并发首交先落了同一代，
+// 都答`已登记`，不覆盖先到者。只认主键那一种冲突：外键不满足（段或委托不在册）是编排核过之后的违约，照实报错，
 // 不吞成「已登记」。
 func (repository *SegmentCommissionAdoptions) Save(
 	ctx context.Context,
@@ -129,7 +130,8 @@ func (repository *SegmentCommissionAdoptions) Save(
 		           AND adoption.segment_ref = $2
 		         ORDER BY adoption.generation DESC
 		         LIMIT 1) AS latest ON true
-		  WHERE latest.generation IS NULL OR latest.withdrawn
+		  WHERE (latest.generation IS NULL OR latest.withdrawn)
+		    AND ($9::integer = 0 OR COALESCE(latest.generation, 0) + 1 = $9::integer)
 		 ON CONFLICT ON CONSTRAINT segment_commission_adoption_pkey DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Segment.String(),
@@ -139,6 +141,7 @@ func (repository *SegmentCommissionAdoptions) Save(
 		startedAt.UTC(),
 		record.ContentDigest,
 		record.RecordedAt.UTC(),
+		record.Generation,
 	)
 	if err != nil {
 		return ports.AdoptionSaveOutcomeInvalid, fmt.Errorf("save segment commission adoption: %w", err)

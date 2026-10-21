@@ -325,7 +325,7 @@ func TestTheAdoptionShellRollsBackALinkWhenTheCommissionIsCancelledUnderneath(t 
 		transactor: db.Transactor(),
 		inner: tfapp.NewAdoptSegmentCommissionHandler(tfapp.AdoptSegmentCommissionDeps{
 			Adoptions: adoptions, Segments: segments, Commissions: racing, StartAdvancement: commissions, Doorbell: doorbell,
-			CommissionHold: commissions, Clock: systemClock{},
+			CommissionHold: commissions, Withdrawals: adoptions, Clock: systemClock{},
 		}),
 	}
 	result, err := adopter.Adopt(t.Context(), tfapp.AdoptSegmentCommissionCommand{

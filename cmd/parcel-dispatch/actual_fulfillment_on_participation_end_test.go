@@ -163,7 +163,7 @@ func adoptTrunkCommission(t *testing.T, db *bentopg.DB) {
 	}
 	adopter := tfapplication.NewAdoptSegmentCommissionHandler(tfapplication.AdoptSegmentCommissionDeps{
 		Adoptions: adoptions, Segments: segments, Commissions: commissions, StartAdvancement: commissions, CommissionHold: commissions,
-		Doorbell: doorbell, Clock: systemClock{},
+		Doorbell: doorbell, Withdrawals: adoptions, Clock: systemClock{},
 	})
 	var adopted tfapplication.CommissionAdoptionResult
 	mustWithinTX(t, db.Transactor(), t.Context(), func(txCtx context.Context) error {

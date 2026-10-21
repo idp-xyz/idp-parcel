@@ -39,6 +39,9 @@ const (
 	CommissionAdoptionSegmentStartedBeforeCommission
 	CommissionAdoptionNotAccepted
 	CommissionAdoptionUndecided
+	// CommissionAdoptionAlreadyWithdrawn：这一段的上一代采用已被解除，而请求没有点名、或点错了新一代接在哪一代之后（ADR-0232 决定一）。
+	// 回显那一次解除：多半是解除之前那一次采用请求被原样重交，不该在解除之后悄悄落成新一代。
+	CommissionAdoptionAlreadyWithdrawn
 )
 
 func (outcome CommissionAdoptionOutcome) String() string {
@@ -67,6 +70,8 @@ func (outcome CommissionAdoptionOutcome) String() string {
 		return "INPUT_NOT_ACCEPTED"
 	case CommissionAdoptionUndecided:
 		return "ADOPTION_UNDECIDED"
+	case CommissionAdoptionAlreadyWithdrawn:
+		return "ADOPTION_ALREADY_WITHDRAWN"
 	default:
 		return ""
 	}
@@ -106,6 +111,8 @@ type AdoptSegmentCommissionCommand struct {
 	Segment    string
 	Commission string
 	Provider   string
+	// AfterGeneration 是新一代接在哪一代之后，只在这一段的上一代采用已被解除时必填（ADR-0232 决定一）；首次采用为零。
+	AfterGeneration int
 }
 
 type CommissionAdoptionResult struct {
@@ -119,6 +126,8 @@ type CommissionAdoptionResult struct {
 	segmentStartBasis  domain.ParticipationBasisReference
 	segmentStartedAt   time.Time
 	continuation       string
+	withdrawal         ports.SegmentCommissionAdoptionWithdrawalRecord
+	hasWithdrawal      bool
 }
 
 func (result CommissionAdoptionResult) Outcome() CommissionAdoptionOutcome {
@@ -155,6 +164,11 @@ func (result CommissionAdoptionResult) ContinuationReference() string {
 	return result.continuation
 }
 
+// Withdrawal 只在`已被解除`时有值：这一段最近那一次解除。
+func (result CommissionAdoptionResult) Withdrawal() (ports.SegmentCommissionAdoptionWithdrawalRecord, bool) {
+	return result.withdrawal, result.hasWithdrawal
+}
+
 // AdoptSegmentCommissionDeps 全部必备。Doorbell 是采用成立时交给实际履约补形成的那封门铃（ADR-0231 决定一）。
 type AdoptSegmentCommissionDeps struct {
 	Adoptions        ports.SegmentCommissionAdoptionStore
@@ -165,7 +179,10 @@ type AdoptSegmentCommissionDeps struct {
 	// CommissionHold 在读委托之前取它「开始」的锁，与解除采用排先后（ADR-0232 决定六）。必备：缺了它，一笔判「不动」的采用与一笔把
 	// 开始撤回的解除并发时，会留下段挂在一份已回到已提交的委托上。
 	CommissionHold ports.TransportCommissionStartHold
-	Clock          ports.Clock
+	// Withdrawals 读这一段最近一次解除，判新一代该接在哪一代之后（ADR-0232 决定一）。必备：缺了它，解除之后那一次旧采用请求原样
+	// 重交就会悄悄落成新一代、让委托重新开始。
+	Withdrawals ports.SegmentCommissionAdoptionWithdrawalStore
+	Clock       ports.Clock
 }
 
 type AdoptSegmentCommissionHandler struct {
@@ -176,7 +193,8 @@ func NewAdoptSegmentCommissionHandler(deps AdoptSegmentCommissionDeps) *AdoptSeg
 	return &AdoptSegmentCommissionHandler{deps: deps}
 }
 
-// Adopt 登记一次采用（ADR-0204）：声明过构造门 → 按（租户、段）分已有与冲突 → 段在册 → 取委托的开始锁、委托在册 → 领域判服务方、取消、
+// Adopt 登记一次采用（ADR-0204）：声明过构造门 → 按（租户、段）分已有与冲突 → 这一段解除过就核新一代接在哪一代之后（ADR-0232
+// 决定一）→ 段在册 → 取委托的开始锁、委托在册 → 领域判服务方、取消、
 // 首个参与与开始先后 → 落连线 → 把委托的开始写成已采用各段首个参与里最早的那一条（尚未开始的标开始，开始晚于这一段的
 // 前移，其余不动）。
 //
@@ -221,6 +239,10 @@ func (handler *AdoptSegmentCommissionHandler) Adopt(
 	if found {
 		return answerFromStoredCommissionAdoption(existing, digest, command.Segment), nil
 	}
+	generation, refused, err := handler.nextGeneration(ctx, key, command)
+	if err != nil || refused.outcome != CommissionAdoptionOutcomeInvalid {
+		return refused, err
+	}
 
 	segment, found, err := handler.deps.Segments.FindByKey(ctx, ports.FulfillmentSegmentKey{TenantID: command.TenantID, Segment: segmentRef})
 	if err != nil {
@@ -250,7 +272,7 @@ func (handler *AdoptSegmentCommissionHandler) Adopt(
 	}
 
 	now := handler.deps.Clock.Now()
-	record := ports.SegmentCommissionAdoptionRecord{Key: key, ContentDigest: digest, Adoption: adoption, RecordedAt: now}
+	record := ports.SegmentCommissionAdoptionRecord{Key: key, ContentDigest: digest, Adoption: adoption, RecordedAt: now, Generation: generation}
 	saved, err := handler.deps.Adoptions.Save(ctx, record)
 	if err != nil {
 		return commissionAdoptionUndecided(CommissionAdoptionStoreUnavailable, command.Segment), nil
@@ -321,6 +343,33 @@ func (handler *AdoptSegmentCommissionHandler) ringAdopted(
 		return commissionAdoptionUndecided(CommissionAdoptionDoorbellUnavailable, subject), nil
 	}
 	return CommissionAdoptionResult{outcome: CommissionAdopted, adoption: record, hasAdoption: true, commission: commission, hasCommission: true}, nil
+}
+
+// nextGeneration 判这一次采用是这一段的第几代：从没解除过是第一代，请求不必点名；上一代已解除，请求必须点名接在那一代之后，缺了或
+// 点错答`已被解除`并回显那一次解除，不落新一代——只凭（段、委托、服务方）分不出解除之后那一次是新的决定，还是解除之前那一次被原样
+// 重交（ADR-0232 决定一）。
+func (handler *AdoptSegmentCommissionHandler) nextGeneration(
+	ctx context.Context,
+	key ports.SegmentCommissionAdoptionKey,
+	command AdoptSegmentCommissionCommand,
+) (int, CommissionAdoptionResult, error) {
+	if handler.deps.Withdrawals == nil {
+		return 0, CommissionAdoptionResult{}, errors.New("transport fulfillment: segment commission adoption is wired without the withdrawal register")
+	}
+	latest, withdrawn, err := handler.deps.Withdrawals.FindLatestWithdrawal(ctx, key)
+	if err != nil {
+		return 0, commissionAdoptionUndecided(CommissionAdoptionStoreUnavailable, command.Segment), nil
+	}
+	if !withdrawn {
+		if command.AfterGeneration != 0 {
+			return 0, CommissionAdoptionResult{outcome: CommissionAdoptionNotAccepted}, nil
+		}
+		return 1, CommissionAdoptionResult{}, nil
+	}
+	if command.AfterGeneration != latest.Withdrawal.Generation() {
+		return 0, CommissionAdoptionResult{outcome: CommissionAdoptionAlreadyWithdrawn, withdrawal: latest, hasWithdrawal: true}, nil
+	}
+	return latest.Withdrawal.Generation() + 1, CommissionAdoptionResult{}, nil
 }
 
 // maxCommissionStartAttempts 是写委托开始的轮数上限，理由见 Adopt 里那一轮循环的注释。

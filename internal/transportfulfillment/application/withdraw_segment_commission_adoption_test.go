@@ -37,6 +37,15 @@ func (double *withdrawalStoresDouble) FindLatestWithdrawal(_ context.Context, ke
 	return record, found, nil
 }
 
+// FindWithdrawal 替身里一段至多一次解除：代次对得上才算那一代的解除。
+func (double *withdrawalStoresDouble) FindWithdrawal(_ context.Context, key ports.SegmentCommissionAdoptionKey, generation int) (ports.SegmentCommissionAdoptionWithdrawalRecord, bool, error) {
+	record, found := double.withdrawals[key.Segment]
+	if !found || record.Withdrawal.Generation() != generation {
+		return ports.SegmentCommissionAdoptionWithdrawalRecord{}, false, nil
+	}
+	return record, true, nil
+}
+
 func (double *withdrawalStoresDouble) SaveWithdrawal(_ context.Context, record ports.SegmentCommissionAdoptionWithdrawalRecord) (ports.AdoptionSaveOutcome, error) {
 	if _, exists := double.withdrawals[record.Key.Segment]; exists {
 		return ports.AdoptionAlreadyRegistered, nil
@@ -120,6 +129,7 @@ func (fixture *withdrawalFixture) withdraw(t *testing.T, commission string) appl
 	})
 	result, err := handler.Withdraw(t.Context(), application.WithdrawSegmentCommissionAdoptionCommand{
 		TenantID: fixture.commission.Key.TenantID, Operator: withdrawingOperator, Segment: trunkSegment, Commission: commission,
+		Generation: 1,
 	})
 	if err != nil {
 		t.Fatalf("解除不该上抛：%v", err)
@@ -195,8 +205,37 @@ func TestWithdrawingTheOnlyAdoptionWithdrawsTheStartAndIsIdempotent(t *testing.T
 	if replay := fixture.withdraw(t, bkCommission); replay.Outcome() != application.AdoptionWithdrawalExisting || len(fixture.correction.written) != 1 {
 		t.Fatalf("重放 = %q", replay.Outcome())
 	}
-	if other := fixture.withdraw(t, "SYN-COMMISSION-OTHER"); other.Outcome() != application.AdoptionWithdrawalNotFound {
-		t.Fatalf("已解除后点名另一份 = %q", other.Outcome())
+	if other := fixture.withdraw(t, "SYN-COMMISSION-OTHER"); other.Outcome() != application.AdoptionWithdrawalCommissionMismatch {
+		t.Fatalf("已解除的那一代点名另一份委托 = %q, want ADOPTION_MISMATCH", other.Outcome())
+	} else if echoed, present := other.Withdrawal(); !present || echoed.Withdrawal.Commission().String() != bkCommission {
+		t.Fatal("委托不符没回显那一次解除")
+	}
+}
+
+// Covers: AT-TF-310 的编排面（ADR-0232 决定一）——解除按（段、委托、代次）认：点名的代次不是段上当前那一代、也没有它的解除，答代次不是
+// 当前并回显当前那一代；段上从没采用过的答不在册。
+func TestAWithdrawalNamingAnotherGenerationIsNotApplied(t *testing.T) {
+	fixture := newWithdrawalFixture(t)
+	handler := application.NewWithdrawSegmentCommissionAdoptionHandler(application.WithdrawSegmentCommissionAdoptionDeps{
+		Adoptions: fixture.stores, Withdrawals: fixture.stores, CommissionLinks: fixture.stores,
+		Occurrences: fixture.heads, OccurrenceScope: fixture.scopes,
+		Commissions:     commissionViewDouble{records: map[domain.TransportCommissionReference]ports.TransportCommissionRecord{fixture.commission.Key.Commission: fixture.commission}},
+		CommissionHold:  freeCommissionHold{},
+		StartCorrection: fixture.correction,
+		Clock:           occurrenceClock{},
+	})
+	result, err := handler.Withdraw(t.Context(), application.WithdrawSegmentCommissionAdoptionCommand{
+		TenantID: fixture.commission.Key.TenantID, Operator: withdrawingOperator, Segment: trunkSegment, Commission: bkCommission, Generation: 2,
+	})
+	if err != nil || result.Outcome() != application.AdoptionWithdrawalGenerationNotCurrent || len(fixture.correction.written) != 0 {
+		t.Fatalf("点名第二代 = %q %v，写委托 %d 次", result.Outcome(), err, len(fixture.correction.written))
+	}
+	if echoed, present := result.Adoption(); !present || echoed.Generation != 1 {
+		t.Fatalf("没回显当前那一代：%+v", echoed)
+	}
+	delete(fixture.stores.current, fixture.segment)
+	if missing := fixture.withdraw(t, bkCommission); missing.Outcome() != application.AdoptionWithdrawalNotFound {
+		t.Fatalf("没有采用 = %q", missing.Outcome())
 	}
 }
 
@@ -209,9 +248,10 @@ func TestAWithdrawalThatCannotHoldTheSegmentScopeIsUndecided(t *testing.T) {
 		t.Fatalf("取锁失败 = %q/%q", result.Outcome(), result.UndecidedReason())
 	}
 	for _, malformed := range []application.WithdrawSegmentCommissionAdoptionCommand{
-		{TenantID: fixture.commission.Key.TenantID, Operator: withdrawingOperator, Segment: "", Commission: bkCommission},
-		{TenantID: fixture.commission.Key.TenantID, Operator: withdrawingOperator, Segment: trunkSegment, Commission: ""},
-		{TenantID: fixture.commission.Key.TenantID, Operator: "", Segment: trunkSegment, Commission: bkCommission},
+		{TenantID: fixture.commission.Key.TenantID, Operator: withdrawingOperator, Segment: "", Commission: bkCommission, Generation: 1},
+		{TenantID: fixture.commission.Key.TenantID, Operator: withdrawingOperator, Segment: trunkSegment, Commission: "", Generation: 1},
+		{TenantID: fixture.commission.Key.TenantID, Operator: "", Segment: trunkSegment, Commission: bkCommission, Generation: 1},
+		{TenantID: fixture.commission.Key.TenantID, Operator: withdrawingOperator, Segment: trunkSegment, Commission: bkCommission},
 	} {
 		handler := application.NewWithdrawSegmentCommissionAdoptionHandler(application.WithdrawSegmentCommissionAdoptionDeps{})
 		if result, err := handler.Withdraw(t.Context(), malformed); err != nil || result.Outcome() != application.AdoptionWithdrawalNotAccepted {
@@ -262,4 +302,60 @@ func TestARegistrationWhoseAdoptionChangedUnderTheScopeHoldIsUndecided(t *testin
 
 	steady := adoptedTrunkRig(t, commission)
 	registeredOccurrence(t, steady.register(t, omitted))
+}
+
+// withdrawnOnce 是解除册的替身：这一段第 1 代已解除过。
+type withdrawnOnce struct {
+	noWithdrawals
+	latest ports.SegmentCommissionAdoptionWithdrawalRecord
+}
+
+func (double withdrawnOnce) FindLatestWithdrawal(context.Context, ports.SegmentCommissionAdoptionKey) (ports.SegmentCommissionAdoptionWithdrawalRecord, bool, error) {
+	return double.latest, true, nil
+}
+
+// Covers: AT-TF-310 的采用那一半（ADR-0232 决定一）——这一段解除过之后，采用必须点名接在哪一代之后：没点名（多半是解除之前那一次采用
+// 被原样重交）或点错，答已被解除并回显那一次解除，不落新一代、不动委托；点对了落成第 2 代。首次采用点了代次是坏请求。
+func TestAnAdoptionAfterAWithdrawalMustNameTheGenerationItFollows(t *testing.T) {
+	fixture := newCommissionAdoptionFixture(t)
+	tenant, _ := domain.NewTenantID("tenant-1")
+	withdrawal, err := domain.RehydrateSegmentCommissionAdoptionWithdrawal(domain.RehydrateSegmentCommissionAdoptionWithdrawalSpec{
+		TenantID: tenant, Segment: occurrenceValue(t, domain.NewFulfillmentSegmentReference, "SEG-1"), Generation: 1,
+		Commission: occurrenceValue(t, domain.NewTransportCommissionReference, "commission-1"), WithdrawnBy: occurrenceValue(t, domain.NewRegistrantReference, withdrawingOperator),
+		StartBeforeBasis: occurrenceValue(t, domain.NewParticipationBasisReference, "HO/before"), StartBeforeAt: segmentEnteredAt,
+		StartChange: domain.CommissionStartWithdrawn,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	adopter := application.NewAdoptSegmentCommissionHandler(application.AdoptSegmentCommissionDeps{
+		Adoptions: fixture.adoptions, Segments: fixture.segments, Commissions: fixture.racing, StartAdvancement: fixture.racing,
+		CommissionHold: freeCommissionHold{}, Doorbell: fixture.doorbell,
+		Withdrawals: withdrawnOnce{latest: ports.SegmentCommissionAdoptionWithdrawalRecord{Withdrawal: withdrawal}},
+		Clock:       commissionClock{at: commissionNowAt},
+	})
+	for _, after := range []int{0, 2} {
+		command := adoptCommand("SEG-1", "commission-1", "partner-1")
+		command.AfterGeneration = after
+		result, err := adopter.Adopt(context.Background(), command)
+		echoed, present := result.Withdrawal()
+		if err != nil || result.Outcome() != application.CommissionAdoptionAlreadyWithdrawn || !present || echoed.Withdrawal.Generation() != 1 {
+			t.Fatalf("接在第 %d 代之后 = %q %v", after, result.Outcome(), err)
+		}
+	}
+	if fixture.adoptions.saves != 0 {
+		t.Fatalf("没点对代次也落了 %d 次采用", fixture.adoptions.saves)
+	}
+	command := adoptCommand("SEG-1", "commission-1", "partner-1")
+	command.AfterGeneration = 1
+	result, err := adopter.Adopt(context.Background(), command)
+	if record, _ := result.Adoption(); err != nil || result.Outcome() != application.CommissionAdopted || record.Generation != 2 {
+		t.Fatalf("点对代次 = %q %v，代次 %d", result.Outcome(), err, record.Generation)
+	}
+
+	first := adoptCommand("SEG-2", "commission-1", "partner-1")
+	first.AfterGeneration = 1
+	if result, err := fixture.adopter.Adopt(context.Background(), first); err != nil || result.Outcome() != application.CommissionAdoptionNotAccepted {
+		t.Fatalf("首次采用点了代次 = %q %v", result.Outcome(), err)
+	}
 }

@@ -60,7 +60,7 @@ func TestAnEstablishedAdoptionLeavesOneDoorbellAndIsListedByItsCommission(t *tes
 	mustSaveSegment(t, stores.transactor, ctx, stores.segments, segmentRecord(t, "SEG-ADOPT-2", activeMember(t, "parcel-2")))
 	adopter := application.NewAdoptSegmentCommissionHandler(application.AdoptSegmentCommissionDeps{
 		Adoptions: stores.adoptions, Segments: stores.segments, Commissions: stores.commissions, StartAdvancement: stores.commissions,
-		Doorbell: stores.doorbell, CommissionHold: stores.commissions,
+		Doorbell: stores.doorbell, CommissionHold: stores.commissions, Withdrawals: stores.adoptions,
 		Clock: fixedAdoptionClock{at: segmentEnteredAtFixture.Add(24 * time.Hour)},
 	})
 	tenant := deliveryValue(t, domain.NewTenantID, "tenant-1")
