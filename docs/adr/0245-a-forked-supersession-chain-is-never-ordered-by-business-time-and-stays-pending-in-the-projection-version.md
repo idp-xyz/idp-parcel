@@ -1,6 +1,6 @@
 # ADR-0245：替代链分叉不按业务时间或任何其他维度裁决——分叉各方随投影版本留存、不参与派生，那一条事实流保持信息待确认，并形成适用异常信号
 
-Status: Accepted（2026-10-21，Claude Code 会话代 VE owner 决（代决）：用户 2026-10-21 原话「需要修改文档，确保自洽，正确」，常设授权「你作为业务和系统专家自决」；票 docs-consistency/04，审计条目 [audit/ve.md](../../.scratch/docs-consistency/audit/ve.md) VE-04（归 B）。给 [ADR-0065](./0065-projection-versions-are-append-only-and-supersession-is-source-given.md) 决定六作读法注，不停用任何已接受记录的条款；ADR-0065 正文不改，只在其 Status 行与 Links 加前向指针。要改的代码另立票 docs-consistency/code/26。越权风险点见文末，待 VE owner 复核。）<!-- 索引注记 -->｜**判据**：替代链分叉是源上下文在同一事实引用下给出了两份以上都指名同一前身的更正；在两个后继之间选出当前那一份，就是判断「谁更正了谁」，ADR-0065 决定三不许本上下文从业务时间、到达先后或任何其他线索推断。业务发生时间是被更正事实的发生时间，不是更正的先后。所以分叉一律无法裁决，不进 `ResolveByBusinessTime` 或任何裁决函数；冲突裁决的各维度只用于跨源上下文、跨事实引用的冲突。**呈现**：前身与各后继都留在投影版本内并标明分叉关系，都不参与派生；那一条事实流（同一源上下文、同一事实引用）在投影上答信息待确认，同包裹其他事实流照常派生；客户视图的相应维答待确认。**留存**：分叉关系随投影版本存下，不靠重放、不另立冲突关系库；信号规则未配置时不形成信号，分叉照样留在版本里。**解开**：今天的源上下文更正形状只能指名一个前身，分叉没有在源侧解开的办法，待确认会一直持续，靠信号进分诊、由案件向源上下文发处置请求。
+Status: Accepted（2026-10-21，Claude Code 会话代 VE owner 决（代决）：用户 2026-10-21 原话「需要修改文档，确保自洽，正确」，常设授权「你作为业务和系统专家自决」；票 docs-consistency/04，审计条目 [audit/ve.md](../../.scratch/docs-consistency/audit/ve.md) VE-04（归 B）。给 [ADR-0065](./0065-projection-versions-are-append-only-and-supersession-is-source-given.md) 决定六作读法注，不停用任何已接受记录的条款；ADR-0065 正文不改，只在其 Status 行与 Links 加前向指针。要改的代码另立票 docs-consistency/code/30。越权风险点见文末，待 VE owner 复核。）<!-- 索引注记 -->｜**判据**：替代链分叉是源上下文在同一事实引用下给出了两份以上都指名同一前身的更正；在两个后继之间选出当前那一份，就是判断「谁更正了谁」，ADR-0065 决定三不许本上下文从业务时间、到达先后或任何其他线索推断。业务发生时间是被更正事实的发生时间，不是更正的先后。所以分叉一律无法裁决，不进 `ResolveByBusinessTime` 或任何裁决函数；冲突裁决的各维度只用于跨源上下文、跨事实引用的冲突。**呈现**：前身与各后继都留在投影版本内并标明分叉关系，都不参与派生；那一条事实流（同一源上下文、同一事实引用）在投影上答信息待确认，同包裹其他事实流照常派生；客户视图的相应维答待确认。**留存**：分叉关系随投影版本存下，不靠重放、不另立冲突关系库；信号规则未配置时不形成信号，分叉照样留在版本里。**解开**：今天的源上下文更正形状只能指名一个前身，分叉没有在源侧解开的办法，待确认会一直持续，靠信号进分诊、由案件向源上下文发处置请求。
 
 Date: 2026-10-21
 
@@ -49,7 +49,7 @@ Date: 2026-10-21
 
 ## Consequences
 
-- 代码票 [docs-consistency/code/26](../../.scratch/docs-consistency/code/26-forked-supersession-is-judged-by-business-time-and-not-kept-pending.md)：
+- 代码票 [docs-consistency/code/30](../../.scratch/docs-consistency/code/30-forked-supersession-is-judged-by-business-time-and-not-kept-pending.md)：
   - `judgeForks` 不再调 `ResolveByBusinessTime`。分叉按链头从全量事实里找，不只在当前有效集里找。
   - 分叉各方进投影版本、带分叉标记、不参与派生；受影响的事实流答待确认。
   - 客户视图相应维答待确认（与 [code/06](../../.scratch/docs-consistency/code/06-customer-view-shows-dimensions-without-a-visible-judgement.md) 的里程碑维兜底同一处）。
@@ -81,4 +81,4 @@ Date: 2026-10-21
 - [UC-VE-008](../application/visibility-exception/UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md)：`AT-VE-163`
 - [票 mechanism-executor-triage/08](../../.scratch/mechanism-executor-triage/issues/08-ve-six-executors-behind-existing-uc-steps.md)：VE-d 组，按业务时间裁决分叉的出处
 - [票 demo-chain-gaps/117](../../.scratch/demo-chain-gaps/issues/117-projection-entries-are-stored-without-their-supersession.md)：被替代条目进投影版本，与决定二同一车道
-- [docs-consistency/code/26](../../.scratch/docs-consistency/code/26-forked-supersession-is-judged-by-business-time-and-not-kept-pending.md)：实现票
+- [docs-consistency/code/30](../../.scratch/docs-consistency/code/30-forked-supersession-is-judged-by-business-time-and-not-kept-pending.md)：实现票

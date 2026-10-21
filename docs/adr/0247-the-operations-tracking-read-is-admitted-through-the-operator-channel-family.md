@@ -9,10 +9,10 @@ Date: 2026-10-21
 取证于 main `205eb254`，只记 `S`。
 
 - ADR-0076 决定三写的是：运营接入面的认证方式「属接入渠道实例半边、未登记」，「未登记前装配 UnconfiguredIntake，一律 403 `ACCESS_CHANNEL_NOT_CONFIGURED`」。Consequences 写的是「接入渠道认证参数未登记前，没有任何选项能让页面显示真轨迹——本记录不改变该深度上限，真轨迹属实例半边」。ADR-0076 的 Status 行只有 `Accepted`。
-- 九天后，ADR-0100 决定一定了「运营操作者身份是产品自有的接入渠道族，属机制半边」；决定二列出的授予能力面有「主数据与运营查阅读」一格。但它的决定四只把覆盖面写成「ADR-0085 Decision 一那一族登记端点」与 ADR-0077 那一族目录查阅端点，没有点名 ADR-0076 的 `/tracking-projections`，部分停用清单里也没有 ADR-0076。
+- 十天后，ADR-0100 决定一定了「运营操作者身份是产品自有的接入渠道族，属机制半边」；决定二列出的授予能力面有「主数据与运营查阅读」一格。但它的决定四只把覆盖面写成「ADR-0085 Decision 一那一族登记端点」与 ADR-0077 那一族目录查阅端点，没有点名 ADR-0076 的 `/tracking-projections`，部分停用清单里也没有 ADR-0076。
 - 代码早已按操作者族做：
   - `internal/visibilityexception/adapters/http/operator_read_intake.go` 的 `OperatorOperationsReadIntake` 自称「操作者渠道在运营查阅面的 Intake（ADR-0100 决定四）」，作用域引用取能力面名 `MASTER_DATA_AND_OPERATIONS_READ`。
-  - `cmd/parcel-api` 把 `/tracking-projections` 与 VE 的 `/exception-triage-records`、`/exception-case-records`、`/claims-recovery-records`、`/visibility-catalogues` 都挂在 `operationsReadFace()` 上，答 `401` / `403` 各格。
+  - `cmd/parcel-api` 把 `/tracking-projections` 与 VE 的 `/exception-triage-records`、`/exception-case-records`、`/claims-recovery-records` 都挂在 `operationsReadFace()` 上，答 `401` / `403` 各格（同挂在那里的 `/visibility-catalogues` 属 ADR-0077 目录族，已在 ADR-0100 决定四覆盖面内）。
 - 于是两份已接受记录一个说「实例半边、未登记即一律 403」，一个的判据与能力面已经包住了它，却没有明文停用它。读 ADR-0076 的作者会以为运营追踪页在租户登记接入参数之前看不到真轨迹，会以为那一面没有 `401`。
 
 ## Decision

@@ -1,6 +1,6 @@
 # ADR-0246：客户追踪查询对已归属本账户、视图尚未形成的包裹答「当前无可见结果」——只在读不到视图时问一次归属，其余没有视图的情形对外仍是同一格
 
-Status: Accepted（2026-10-21，Claude Code 会话代 VE owner 决（代决）：用户 2026-10-21 原话「需要修改文档，确保自洽，正确」，常设授权「你作为业务和系统专家自决」；票 docs-consistency/04，审计条目 [audit/ve.md](../../.scratch/docs-consistency/audit/ve.md) VE-05（归 B）。回答 [ADR-0223](./0223-the-first-party-submission-answer-names-each-parcel-and-the-tracking-view-locates-by-it.md) 越权风险点 3，不停用任何已接受记录的条款；ADR-0223 正文不改，只在其 Status 行与 Links 加前向指针。要改的代码另立票 docs-consistency/code/27。越权风险点见文末，待 VE owner 复核，第 1 点同时待 PS owner 会签。）<!-- 索引注记 -->｜**三格**：`CURRENT_VIEW`（有当前客户视图）；`NO_VISIBLE_RESULT`（读不到视图，而 `parcel-shipment` 的当前已接受委托把这件包裹唯一归属于请求方的货主客户账户）；`VIEW_NOT_FOUND`（其余一切读不到视图的情形：包裹不存在、归属别的账户、归属不可确定含委托接受之前、多份当前已接受委托同时声明）。**判据**：只在读不到视图时问一次客户归属，问的是「这件归不归你」；请求方账户只取自客户渠道册的绑定，答出区别的只有归属方本人，对别人仍是同一格同一副响应。归属读不动答未形成，与视图读不回同一格。**范围**：「当前无可见结果」只指视图尚未形成；视图已形成而各维待确认或不展示，照旧答当前视图、逐维如实。标识冲突与接受前的包裹对外不另分格。
+Status: Accepted（2026-10-21，Claude Code 会话代 VE owner 决（代决）：用户 2026-10-21 原话「需要修改文档，确保自洽，正确」，常设授权「你作为业务和系统专家自决」；票 docs-consistency/04，审计条目 [audit/ve.md](../../.scratch/docs-consistency/audit/ve.md) VE-05（归 B）。部分停用 [ADR-0223](./0223-the-first-party-submission-answer-names-each-parcel-and-the-tracking-view-locates-by-it.md) 决定三一句，同时回答其越权风险点 3（被停原句与适用场景见 ADR-0223 的 Status 行）；ADR-0223 正文不改，只在其 Status 行与 Links 加前向指针。要改的代码另立票 docs-consistency/code/31。越权风险点见文末，待 VE owner 复核，第 1 点同时待 PS owner 会签。）<!-- 索引注记 -->｜**三格**：`CURRENT_VIEW`（有当前客户视图）；`NO_VISIBLE_RESULT`（读不到视图，而 `parcel-shipment` 的当前已接受委托把这件包裹唯一归属于请求方的货主客户账户）；`VIEW_NOT_FOUND`（其余一切读不到视图的情形：包裹不存在、归属别的账户、归属不可确定含委托接受之前、多份当前已接受委托同时声明）。**判据**：只在读不到视图时问一次客户归属，问的是「这件归不归你」；请求方账户只取自客户渠道册的绑定，答出区别的只有归属方本人，对别人仍是同一格同一副响应。归属读不动答未形成，与视图读不回同一格。**范围**：「当前无可见结果」只指视图尚未形成；视图已形成而各维待确认或不展示，照旧答当前视图、逐维如实。标识冲突与接受前的包裹对外不另分格。
 
 Date: 2026-10-21
 
@@ -11,7 +11,7 @@ Date: 2026-10-21
 - UC-VE-008 的结果语义有一格「当前无可见结果」：「对象已授权，但当前没有满足对客展示条件的里程碑、ETA 或终局；不表示未收寄、未运输或遗失」。主流程第 8 步也说返回「当前视图、当前无可见结果、信息待确认、无权查询、标识冲突或未形成」。
 - 代码只有封闭两格。`adapters/http/query_customer_tracking_view.go` 的业务结果是 `CURRENT_VIEW` / `VIEW_NOT_FOUND`，头注写「包裹不存在、不属于请求账户、或视图尚未形成，一律这一格」。端点只读客户视图库：库按（租户，客户账户，包裹）键，读不到就答 `VIEW_NOT_FOUND`。
 - 视图在两种时候形成：投影派生之后按当前归属派生；客户归属确立时按当前投影补派生（UC-VE-008 `AT-VE-169`）。包裹已接受、初始路由投影还没形成时（或 `network-routing` 一直形不成投影时），归属方查自己的包裹，拿到的答复与无权查询相同。
-- ADR-0223 越权风险点 3 记下了同一件事：「接受前查视图答 `VIEW_NOT_FOUND`，与不存在不分……要分开得在 VE 的答复代数里加一格，那会给枚举开口，归 VE owner；本记录不改。」
+- ADR-0223 决定三把这一格写成了首方契约的一部分：「视图在委托`已接受`、初始路由投影形成之后才派生。在那之前，客户查自己的号也答 `VIEW_NOT_FOUND`，与不存在不分」。它的越权风险点 3 记下了代价：「接受前查视图答 `VIEW_NOT_FOUND`，与不存在不分……要分开得在 VE 的答复代数里加一格，那会给枚举开口，归 VE owner；本记录不改。」
 - ADR-0076 Context 四把这一格的三义合并称作「ADR-0029 纪律与 UC-VE-008 验收」。ADR-0029 的判据是按消费方的恢复动作分格：「稍后再查」与「核对你给的号」恰是两种恢复动作。
 - CONTEXT 的约束是「对未授权对象的外部响应不得泄露对象是否存在或属于其他客户」。保护的是对**未授权**对象的作答。
 
@@ -45,16 +45,17 @@ Date: 2026-10-21
 **五、不另分的两种。**（产品策略）
 
 - **委托接受之前**：CONTEXT 的客户归属由当前已接受委托给出，接受之前本上下文没有归属可核，答 `VIEW_NOT_FOUND`。客户系统手里有首方提交答复给的件号（ADR-0223），这时的续办是读 `parcel-shipment` 的提交与受理状态，不在本口。
-- **标识冲突**：内部照 CONTEXT 处理——不择一、不形成视图、按待确认处理。对外答 `VIEW_NOT_FOUND`：说出「冲突」，就等于告诉请求方另有账户也声明了这件包裹，正撞「不得泄露……属于其他客户」。UC-VE-008 主流程里的「标识冲突」是本上下文内部的判断，不是对外的一格。按外部标识定位时的多候选（`AT-VE-152`）推后到票 119 的客户参考定位，不在本记录。
+- **标识冲突**：内部照 CONTEXT 处理——不择一、不形成视图、按待确认处理。对外答 `VIEW_NOT_FOUND`。对不是声明方的请求方，这一格与不存在不可分，说出「冲突」就等于告诉他另有账户也声明了这件包裹，正撞「不得泄露……属于其他客户」。对声明方之一，这一格已经和他预期的 `NO_VISIBLE_RESULT` 不同，他推得出「这件不唯一归我」（越权风险点 6），但推不出另一方是谁、有几方；不另立「冲突」一格，是不把这一位以外的东西再交出去。UC-VE-008 主流程里的「标识冲突」是本上下文内部的判断，不是对外的一格。按外部标识定位时的多候选（`AT-VE-152`）推后到票 119 的客户参考定位，不在本记录。
 
 三类：决定一、五是**产品策略**（内置一种答法）；决定二是**机制**；客户渠道册上谁绑哪个账户、谁有查阅授予是**租户取值**（`PAR-INT-13`），演示租户以 `SYN-` 登记，证据只记 `S`。
 
 ## Consequences
 
-- 代码票 [docs-consistency/code/27](../../.scratch/docs-consistency/code/27-customer-tracking-query-cannot-say-no-visible-result-for-its-own-parcel.md)：
+- 代码票 [docs-consistency/code/31](../../.scratch/docs-consistency/code/31-customer-tracking-query-cannot-say-no-visible-result-for-its-own-parcel.md)：
   - 端点加 `NO_VISIBLE_RESULT` 一格，读不到视图时经归属反查口判。
   - 头注「一律这一格」改为本记录的三格。
   - 首方契约描述（ADR-0140）同步加这个取值。
+- ADR-0223 决定三「在那之前，客户查自己的号也答 `VIEW_NOT_FOUND`，与不存在不分」一句部分停用：委托已接受、客户视图未形成、包裹唯一归属请求方时改答 `NO_VISIBLE_RESULT`；委托接受之前不变。ADR-0223 的 Status 行与 Links 挂前向指针，同时记其越权风险点 3 由本记录回答。
 - 首方 API 尚未发布兼容性基线（ADR-0140 Decision 五），今天加一个 `outcome` 取值不破坏任何集成方。
 - 文档：UC-VE-008 结果语义「当前无可见结果」一行写明判据，主流程第 8 步与元数据随之改，另立验收行。
 
@@ -72,10 +73,11 @@ Date: 2026-10-21
 3. **读次数相同不等于时延相同。** 反查答「是你的」与答「不是你的」可能快慢不同。差别与网络抖动同阶，本记录不加常数时间。
 4. **`NO_VISIBLE_RESULT` 可能长期不变。** `network-routing` 一直形不成初始路由投影时，归属方会一直读到它。原因只在运营追踪查阅看得见，客户这一侧没有更多说明。
 5. **首方契约加一个取值。** 基线发布前加是无痛的；基线之后再改就是破坏性变更，所以应在首个基线前落地。
+6. **声明方读得出「这件不唯一归我」。** 已受理委托的声明方查自己声明过的包裹，本该答 `NO_VISIBLE_RESULT` 却答 `VIEW_NOT_FOUND`，就推得出这件包裹此刻不唯一归他：要么另有当前已接受委托同时声明它（标识冲突），要么归属已转到别的账户。出现条件只有这两种，且只对他自己声明过的包裹成立——首方口的件号由服务端现签、只交回提交方（ADR-0223 决定一），请求方拿不到别人的号，这一格不构成枚举口。续办：读 `parcel-shipment` 的委托受理状态，或请租户客服核对归属。
 
 ## Links
 
-- [ADR-0223](./0223-the-first-party-submission-answer-names-each-parcel-and-the-tracking-view-locates-by-it.md)：越权风险点 3 由本记录回答——接受之后、视图形成之前分开，接受之前维持合并
+- [ADR-0223](./0223-the-first-party-submission-answer-names-each-parcel-and-the-tracking-view-locates-by-it.md)：部分停用决定三「在那之前，客户查自己的号也答 `VIEW_NOT_FOUND`，与不存在不分」一句（适用场景：委托已接受、客户视图未形成、包裹唯一归属请求方），同时回答越权风险点 3；接受之前维持合并
 - [ADR-0029](./0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md)：按恢复动作分格
 - [ADR-0022](./0022-http-status-carries-answer-formed-not-business-verdict.md)：状态码只回答有没有形成答案
 - [ADR-0139](./0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md)：决定四，客户账户只取自客户渠道册的绑定
@@ -83,4 +85,4 @@ Date: 2026-10-21
 - [ADR-0076](./0076-operations-tracking-read-is-a-separate-endpoint-on-the-projection-store.md)：运营查阅分开作答的先例；Alternatives「给客户视图库补全景行」
 - [visibility-exception CONTEXT](../domain/visibility-exception/CONTEXT.md)：「客户归属」词条；「客户可见性与通知」账户核对与存在性一条
 - [UC-VE-008](../application/visibility-exception/UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md)：结果语义、主流程第 8 步、`AT-VE-168`、`AT-VE-169`、`AT-VE-171`
-- [docs-consistency/code/27](../../.scratch/docs-consistency/code/27-customer-tracking-query-cannot-say-no-visible-result-for-its-own-parcel.md)：实现票
+- [docs-consistency/code/31](../../.scratch/docs-consistency/code/31-customer-tracking-query-cannot-say-no-visible-result-for-its-own-parcel.md)：实现票
