@@ -2,7 +2,7 @@
 
 Status: Confirmed
 
-本上下文管理国际小包业务中可执行的价卡、费率表、计价策略、价格方向、版本发布、纯计价评价、解释和回放。它位于 `party-commercial` 的商业绑定与 `settlement-accounting` 的金额责任之间；它不是独立产品或独立运行系统。上下文边界和与其他上下文的关系以[领域上下文地图](../CONTEXT-MAP.md)和 [ADR-0012](../../adr/0012-parcel-pricing-context-within-idp-parcel.md) 为准。规则与实现的差距见各 UC「给开发的交接」。
+本上下文管理国际小包业务中可执行的价卡、费率表、计价策略、价格方向、版本发布、纯计价评价、解释和回放。它位于 `party-commercial` 的商业绑定与 `settlement-accounting` 的金额责任之间；它不是独立产品或独立运行系统。跨上下文术语以[统一领域语言](../GLOSSARY.md)为准，上下文边界和与其他上下文的关系以[领域上下文地图](../CONTEXT-MAP.md)和 [ADR-0012](../../adr/0012-parcel-pricing-context-within-idp-parcel.md) 为准。规则与实现的差距见各 UC「给开发的交接」。
 
 ## Language
 
