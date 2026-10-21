@@ -1,6 +1,6 @@
 # ADR-0197：关务外部结果按层进全程追踪投影——事实类型词逐层分开、放行再按全部/部分/附条件分开，沿结果范围指名的申报单元逐成员展开，同层冲突的那份不进投影；参考映射只把全部放行映成清关
 
-Status: Accepted（2026-10-19。用户授权「你作为业务和系统专家自决，解决所有的问题」；Claude Code 会话代 VE、CC owner 裁定，落在票 [demo-chain-gaps/11](../../.scratch/demo-chain-gaps/issues/11-external-result-received-has-no-subscriber.md)。越权风险点待 VE、CC owner 复核。）<!-- 索引注记 -->｜**已接受**（2026-10-19，用户授权「你作为业务和系统专家自决」，Claude Code 会话代 VE、CC owner 裁定，落在票 demo-chain-gaps/11）。**消费方**：VE 投影订阅 `customs-compliance.external-result.received`，只投 VE；CC 放行门禁核对按动作请求驱动、不订阅。**类型词**：按层分开，放行层再按全部/部分/附条件分开，不设跨层词、没有「清关成功」；里程碑归映射目录，未登记即未归类。**展开**：结果范围→申报单元→组成逐成员，引用含成员与来源标识，版本取提交版本。**不派生**：同层冲突的那份入账不派生；归属不上、放行三件与层次不配为不变量已破。**参考映射**：演示租户只把全部放行映成 `CUSTOMS_CLEARED`。越权风险点待 VE、CC owner 复核
+Status: Accepted（2026-10-19。用户授权「你作为业务和系统专家自决，解决所有的问题」；Claude Code 会话代 VE、CC owner 裁定，落在票 [demo-chain-gaps/11](../../.scratch/demo-chain-gaps/issues/11-external-result-received-has-no-subscriber.md)。越权风险点待 VE、CC owner 复核。）越权风险点 5 后半「CC 的层内一致性核对把同层、同版本、同范围下原始语义不同的两份一律判冲突」已由 [ADR-0226](./0226-successive-same-layer-customs-results-are-successors-unless-they-contradict.md) 回答（2026-10-21）：同层先分后续与矛盾——放行按种类偏序随业务时间只进不退，监管过程决定按业务时间成序列，只有矛盾才标冲突；决定五「同层冲突的那份入账不派生」与本记录各条不变。<!-- 索引注记 -->｜**已接受**（2026-10-19，用户授权「你作为业务和系统专家自决」，Claude Code 会话代 VE、CC owner 裁定，落在票 demo-chain-gaps/11）。**消费方**：VE 投影订阅 `customs-compliance.external-result.received`，只投 VE；CC 放行门禁核对按动作请求驱动、不订阅。**类型词**：按层分开，放行层再按全部/部分/附条件分开，不设跨层词、没有「清关成功」；里程碑归映射目录，未登记即未归类。**展开**：结果范围→申报单元→组成逐成员，引用含成员与来源标识，版本取提交版本。**不派生**：同层冲突的那份入账不派生；归属不上、放行三件与层次不配为不变量已破。**参考映射**：演示租户只把全部放行映成 `CUSTOMS_CLEARED`。越权风险点待 VE、CC owner 复核｜**同层后续已答**（2026-10-21）：越权风险点 5 后半「CC 的层内一致性核对……一律判冲突」由 [ADR-0226](./0226-successive-same-layer-customs-results-are-successors-unless-they-contradict.md) 回答——放行按种类偏序随业务时间只进不退、监管过程决定按业务时间成序列，同一时刻两种结论与放行回退仍是冲突；先部分后全部时成员归入 `CUSTOMS_CLEARED`；VE 冲突信号另票；无条款停用，其余各条不变
 
 Date: 2026-10-19
 
@@ -91,3 +91,4 @@ Date: 2026-10-19
 - [ADR-0102](./0102-external-fact-three-times-are-minted-by-ownership.md)：外部事实三个时间的归属
 - [ADR-0137](./0137-customs-gate-judgments-are-registered-facts-driven-by-assessment-requests-payment-gate-rule-is-registered-and-funds-facts-are-minted-only-in-settlement-accounting.md)：门禁判断由请求驱动
 - [ADR-0049](./0049-publish-channel-is-in-process-delivery-until-load-evidence.md)：接得住才登记
+- [ADR-0226](./0226-successive-same-layer-customs-results-are-successors-unless-they-contradict.md)：后继——回答越权风险点 5 的后半，同层后续事件不再判冲突；决定五不变
