@@ -161,8 +161,8 @@ func (intake *WorkFactCommandIntake) IntakeDepartureGatePreview(ctx context.Cont
 	return payload.Command(tenant)
 }
 
-// IntakeDeliveryGatePreview 与 IntakeRegistration 同一道 tenantFrom：问得了的就是登得了有效交付的。载荷换成只收两格的
-// DeliveryGatePreviewPayload。
+// IntakeDeliveryGatePreview 与 IntakeRegistration 同一道 tenantFrom：问得了的就是登得了有效交付的。载荷换成问询自己的
+// DeliveryGatePreviewPayload，只收读数取决于的那几格。
 func (intake *WorkFactCommandIntake) IntakeDeliveryGatePreview(ctx context.Context, request *http.Request) (application.PreviewDeliveryGateCommand, error) {
 	tenant, err := intake.tenantFrom(ctx, request)
 	if err != nil {

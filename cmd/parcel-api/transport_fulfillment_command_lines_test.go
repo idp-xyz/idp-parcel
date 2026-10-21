@@ -216,6 +216,20 @@ var transportCommandLines = map[string]transportCommandLine{
 		status:  http.StatusOK,
 		outcome: "DEPARTURE_GATE_PREVIEWED",
 	},
+	// 派送出发前的交付门禁问询（ADR-0238）：对象此刻不在任何段里，问到的读数停在本侧答未决——问询照样形成答案，200
+	// DELIVERY_GATE_PREVIEWED；只读，不落任何东西。
+	"/transport-fulfillment/delivery-gate-previews": {
+		endpoint: func(t *testing.T, db *bentopg.DB, decisions *tfhttp.OperatorDecisionIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
+			preview, err := buildDeliveryGatePreview(db)
+			if err != nil {
+				t.Fatalf("装配交付前问询：%v", err)
+			}
+			return tfhttp.NewPreviewDeliveryGateEndpoint(work, preview)
+		},
+		body:    `{"object":"SYN-PARCEL-08-10","deliversAt":"2026-09-24T15:30:00+08:00"}`,
+		status:  http.StatusOK,
+		outcome: "DELIVERY_GATE_PREVIEWED",
+	},
 }
 
 // operationDecisionTransportFaces 是本表里走「运营决定」各口的决定种类。

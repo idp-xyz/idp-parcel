@@ -36,7 +36,7 @@ func deliveryPreviewHandler(t *testing.T, fixture *deliveryGateFixture) *applica
 
 // Covers: AT-TF-322、AT-TF-323 编排半边——问询交回的读数与随后同参登记的那次交付同格：整格、at、停点、那一格连同关务判断标识与依据
 // 都相同，问关务的问法也逐问相同。关务的五格与两种没形成答复、本侧取不到节点的各停点各至少一例：同一条路径，任何一格都不该分岔。
-// 受限的那一件答阻断，放行的答放行或不受门禁。派送尝试读面那一格只属登记：问询不读派送尝试，见本文件末一条用例。
+// 受限的那一件答阻断，放行的答放行或不受门禁。派送尝试读面那一格只属登记：问询不读派送尝试，见 TestADeliveryPreviewWritesNothingAndIsNotHandedToTheDelivery。
 func TestADeliveryPreviewAnswersTheSameReadingAsTheDeliveryWithTheSameParameters(t *testing.T) {
 	type arrangement func(*testing.T, *deliveryGateFixture)
 	entered := func(t *testing.T, fixture *deliveryGateFixture) { fixture.enteredByHandover(t, "SYN-NODE-SIN-HUB") }
