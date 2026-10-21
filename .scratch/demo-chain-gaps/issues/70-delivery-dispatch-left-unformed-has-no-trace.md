@@ -1,7 +1,7 @@
 # 70 要求缺失入账之后不留痕：待形成的派送查不到，补拍全凭人记
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg70（2026-10-21 作者子代理，见文末「完成记录」；票 129 同批同分支）。此前 in-progress——2026-10-21 认领。此前 ready-for-agent——2026-10-20 上线就绪评估归 R1（上线前必修），裁定与批次见 [triage-2026-10-19](../triage-2026-10-19.md)「上线就绪评估（2026-10-20）」。此前 needs-triage——2026-10-19 票 [60](./60-delivery-dispatch-is-triggered-in-process-from-the-handover-envelope.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0216](../../../docs/adr/0216-delivery-dispatch-is-triggered-in-process-from-the-handover-envelope-per-object.md) 越权风险点 1「要求缺失不会自愈」。
+Status: resolved——2026-10-21 进 main（全量钉 `cdf46ed7`：`scripts/test-full.sh` 158 ok / 0 FAIL，见文末「进 main 记录」）；到期重问的进程内驱动转票 [152](./152-delivery-dispatch-reask-has-no-in-process-driver.md)，所有者门铃转票 [153](./153-delivery-requirement-owners-ring-no-doorbell-when-they-fill-in.md)。此前 in-progress——完工待评审与进 main，分支 claude-dcg70（2026-10-21 作者子代理，见文末「完成记录」；票 129 同批同分支）。此前 in-progress——2026-10-21 认领。此前 ready-for-agent——2026-10-20 上线就绪评估归 R1（上线前必修），裁定与批次见 [triage-2026-10-19](../triage-2026-10-19.md)「上线就绪评估（2026-10-20）」。此前 needs-triage——2026-10-19 票 [60](./60-delivery-dispatch-is-triggered-in-process-from-the-handover-envelope.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0216](../../../docs/adr/0216-delivery-dispatch-is-triggered-in-process-from-the-handover-envelope-per-object.md) 越权风险点 1「要求缺失不会自愈」。
 Blocked by: 无
 
 ## 现象
@@ -224,3 +224,6 @@ M
 - 本轮每一笔改 Go 的提交都经 `git archive` 单独导出，build 与 vet 通过。
 - `scripts/test-full.sh ./internal/transportfulfillment/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./internal/accessidentity/... ./internal/architecture/... ./migrations/...`：21 ok、0 FAIL，另 1 个包没有测试文件。
 
+## 进 main 记录
+
+2026-10-21 协调方合入，70、129 同批。作者在评审修订时把分支变基到 `c1828dd1`（access_identity 迁移改为 0019、以 0018 为底取并集；种子改为步 455 与 `data/governance/45`）；其后 main 多了票 131、132（NR），与本分支只在 `.scratch/at-coverage-inventory.md` 重叠。cherry-pick 31 笔按原序到 `70b1d75f`：盘点两处冲突都是末尾追记两边各加一行，两边都留（本批追记取二轮修订后的新版），其余各文件与分支逐字相同；SHA 随之换新（分支 `95ae2613`…`18a8813c` 作封存出处，main 上为 `34e94faf`…`53b41517`）。一轮隔离评审无阻断；二轮评审（只看修订段）一条阻断——形成锁「先占后读」没有测试钉住——由作者补测试，并以两组变异实测（锁改空操作、取锁挪到答复之后）证明会红。在 55432 一次性库上 `seed.sh` 全程退 0，用完 `DROP … WITH (FORCE)`。其上按 parallel-sessions.md 重生成 ADR 索引、重算 AT 盘点计数、重生成机制清点（`cdf46ed7`），各自单独成笔；`adr-index -check` 与 `at-coverage-counts -check` 退 0。在干净的隔离树上对 `cdf46ed7` 跑 `go build ./...`、`go vet ./...`、`gofmt -l` 干净，`scripts/test-full.sh` 全量 158 ok、0 FAIL（`-count=1`，无缓存）；推 `cdf46ed7:main`。迁移落号：`transport_fulfillment/0045`、`0046`，`access_identity/0019`（均连号）。

@@ -1,7 +1,7 @@
 # 129 派送触发不核期望入场依据，证据更正后自动另立第二项派送任务
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-dcg70（与 70 同批）。此前 ready-for-agent——2026-10-20 代决复核立（上线前必修），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: resolved——2026-10-21 进 main（全量钉 `cdf46ed7`：`scripts/test-full.sh` 158 ok / 0 FAIL，见文末「进 main 记录」）；与 70 同批；待确认更正为已交接那一类经补拍仍可能形成任务，归票 [130](./130-handover-correction-from-pending-to-handed-over-enters-the-segment.md)。此前 in-progress——完工待评审与进 main，分支 claude-dcg70（与 70 同批）。此前 ready-for-agent——2026-10-20 代决复核立（上线前必修），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 M7（第一件）、M8；ADR-0216 越权风险点 2、7
 
@@ -77,3 +77,6 @@ in-progress——完工待评审与进 main，与票 70 同批同分支。基线
 - 「任务口撞键读回赢家」那一道改由替身层 `TestATaskLandingBetweenTheCheckAndTheWriteIsReadBackAsTheWinner` 守。
 - 锁改用本仓双 int 形式。
 
+## 进 main 记录
+
+2026-10-21 协调方合入，70、129 同批。作者在评审修订时把分支变基到 `c1828dd1`（access_identity 迁移改为 0019、以 0018 为底取并集；种子改为步 455 与 `data/governance/45`）；其后 main 多了票 131、132（NR），与本分支只在 `.scratch/at-coverage-inventory.md` 重叠。cherry-pick 31 笔按原序到 `70b1d75f`：盘点两处冲突都是末尾追记两边各加一行，两边都留（本批追记取二轮修订后的新版），其余各文件与分支逐字相同；SHA 随之换新（分支 `95ae2613`…`18a8813c` 作封存出处，main 上为 `34e94faf`…`53b41517`）。一轮隔离评审无阻断；二轮评审（只看修订段）一条阻断——形成锁「先占后读」没有测试钉住——由作者补测试，并以两组变异实测（锁改空操作、取锁挪到答复之后）证明会红。在 55432 一次性库上 `seed.sh` 全程退 0，用完 `DROP … WITH (FORCE)`。其上按 parallel-sessions.md 重生成 ADR 索引、重算 AT 盘点计数、重生成机制清点（`cdf46ed7`），各自单独成笔；`adr-index -check` 与 `at-coverage-counts -check` 退 0。在干净的隔离树上对 `cdf46ed7` 跑 `go build ./...`、`go vet ./...`、`gofmt -l` 干净，`scripts/test-full.sh` 全量 158 ok、0 FAIL（`-count=1`，无缓存）；推 `cdf46ed7:main`。迁移落号：`transport_fulfillment/0045`、`0046`，`access_identity/0019`（均连号）。
