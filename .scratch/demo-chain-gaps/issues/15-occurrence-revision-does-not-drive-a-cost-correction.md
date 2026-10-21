@@ -1,8 +1,8 @@
 # 15 发生项更正不驱动供应商预期成本的计价纠错
 
 Category: enhancement
-Status: needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [08](./08-buy-evaluation-recorded-consumer-never-forms-supplier-expected-cost.md) 的隔离评审。
-Blocked by: [27](./27-transport-charge-occurrences-are-registered-and-handed-off.md)（发生项先要有生产路径；原票 07 已拆分）
+Status: in-progress——2026-10-21 认领（57、15 同批），分支 claude-dcg57。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [08](./08-buy-evaluation-recorded-consumer-never-forms-supplier-expected-cost.md) 的隔离评审。
+Blocked by: 无——[27] 已进 main。此前 [27](./27-transport-charge-occurrences-are-registered-and-handed-off.md)（发生项先要有生产路径；原票 07 已拆分）
 出处：[ADR-0200](../../../docs/adr/0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md) 越权风险点 4。
 
 ## 现象
@@ -34,3 +34,7 @@ none
 审计条目：[audit/sa-cr.md](../../docs-consistency/audit/sa-cr.md) M8（归 C，审计已点名本票，不另立）：SA CONTEXT「供应商成本与共享分摊」与 UC-SA-002 `AT-SA-164` 写发生项有效性更正「追加新的预期成本版本表达计价纠错」，同表 `AT-SA-186` 与代码是「修订版不发起、不记」（结果 `OCCURRENCE_REVISION_NOT_TRIGGERED`，ADR-0208 决定五把怎样驱动纠错归本票）。按 main `67438a0f` 复核，SA 代码未改，现象仍在。
 
 分级：R1，与上线就绪评估「代决复核追加」一致（本票随票 57 的发生项失效入口一并升）。文档侧（`AT-SA-164` 注「未实现，见票 15」并与 `AT-SA-186` 互指）由修订票 docs-consistency/09 做；本票落地时去掉那条注。
+
+## 分诊（2026-10-21，协调方代决：随 57 升为上线前必修，见代决复核追加）
+
+[triage-2026-10-19](../triage-2026-10-19.md) 分诊表把本票归 C，并注「TF `ReviseValidity` 无生产调用方……那个入口一落地即升 A」；代决复核 [owner-review-20261020](../../owner-review-20261020/report.md) 的 M9 把发生项失效的生产入口纳入票 57 那一批，「代决复核追加的上线前必修（2026-10-20）」一节随之把本票升为上线前必修。本票与 57 同一分支、同一份新 ADR（ADR-0232）做；「要裁的」两问（纠错由发生项新版本还是由评价结果不同触发、无变化时是否仍追加）在 ADR-0232 里代决。
