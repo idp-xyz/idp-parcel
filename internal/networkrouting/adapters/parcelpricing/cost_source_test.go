@@ -749,3 +749,40 @@ func factOf(t *testing.T, facts []nrdomain.CandidateCostFact, candidate string) 
 	t.Fatalf("候选 %s 没有事实：%+v", candidate, facts)
 	return nrdomain.CandidateCostFact{}
 }
+
+// Covers: `AT-NR-092`、`AT-NR-093` 取数侧那一半——方案方向配错、候选没有线路引用、比较币种译不出都挂在 nrports.ErrRouteCostAnswerUnusable
+// 名下：重投多少次都一样，编排据它响亮报错，不与依赖读不回同进重投。目录读不回那一格不在这里（见
+// TestAnUnreadableCatalogueFailsTheWholeCostLoad）。
+func TestDeterministicCostAnswersAreUnusableNotUnreadable(t *testing.T) {
+	cases := map[string]func(t *testing.T) (*testSource, nrports.InitialRouteEvidence){
+		"方案方向配错": func(t *testing.T) (*testSource, nrports.InitialRouteEvidence) {
+			source := newAdapter(t,
+				map[string][]nrports.LineSegmentCostBasis{
+					"line-x": {{SegmentIndex: 0, Kind: nrports.SupplierBuyPlanBasis, Reference: "plan-internal/v1"}},
+				},
+				map[string]ppdomain.PricingPlanVersion{"plan-internal/v1": syntheticInternalPlan(t, "plan-internal", "v1", "5")},
+			)
+			return source, evidenceWithComparison(t, "USD", pathOf(t, "line-x", 1))
+		},
+		"候选没有线路引用": func(t *testing.T) (*testSource, nrports.InitialRouteEvidence) {
+			source := newAdapter(t, map[string][]nrports.LineSegmentCostBasis{}, map[string]ppdomain.PricingPlanVersion{})
+			return source, evidenceWithComparison(t, "USD", nrports.CandidatePath{
+				Candidate: value(t, nrdomain.NewCandidateID, "not-a-line-candidate"),
+				Legs:      make([]nrdomain.PlannedLeg, 1),
+			})
+		},
+		"比较币种译不出": func(t *testing.T) (*testSource, nrports.InitialRouteEvidence) {
+			source := newAdapter(t, map[string][]nrports.LineSegmentCostBasis{}, map[string]ppdomain.PricingPlanVersion{})
+			return source, evidenceWithComparison(t, "not a currency", pathOf(t, "line-x", 1))
+		},
+	}
+	for name, arrange := range cases {
+		t.Run(name, func(t *testing.T) {
+			source, evidence := arrange(t)
+			_, err := source.LoadCandidateCosts(context.Background(), judgmentKey(t), evidence)
+			if !errors.Is(err, nrports.ErrRouteCostAnswerUnusable) {
+				t.Fatalf("err = %v, want ErrRouteCostAnswerUnusable", err)
+			}
+		})
+	}
+}

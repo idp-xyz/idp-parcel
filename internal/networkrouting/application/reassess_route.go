@@ -667,6 +667,10 @@ func (handler *ReassessRouteHandler) tryImprovementReroute(
 	// 成本读不回就判不出改善，原计划照旧保留，与取号故障同一处置：仍适用本身已判定，切换只是可选的那一步。读不回若是
 	// 库里读失败，事务已经中毒，随后落册失败、整笔回滚（票 docs-consistency/code/67）。
 	evidence, costs, unavailable, err := handler.candidateCosts(ctx, trigger.Key(), evidence, carried)
+	if errors.Is(err, ports.ErrRouteCostAnswerUnusable) {
+		// 取数侧答用不了同样判不出改善；仍适用已判定，拦它就是让一个可选的切换挡住已成的结论。
+		return record, nil
+	}
 	if err != nil {
 		return ports.ReassessmentRecord{}, err
 	}
@@ -872,7 +876,8 @@ func (handler *ReassessRouteHandler) reassessNoRoute(
 		// 原先就无当前有效路由：结论仍是无路由，候选评估未决单独记录。
 		return handler.commit(ctx, trigger, record)
 	}
-	// 这条线上没有已定的失效要先落，成本读不回就整笔回滚重投，等依赖恢复再判。
+	// 这条线上没有已定的失效要先落，成本读不回就整笔回滚重投，等依赖恢复再判；取数侧答用不了重投推不动，也不是等登记的
+	// 缺口，随错误响亮上抛。
 	evidence, costs, unavailable, err := handler.candidateCosts(ctx, key, evidence, carried)
 	if err != nil {
 		return ReassessRouteResult{}, err
@@ -984,6 +989,10 @@ func (handler *ReassessRouteHandler) reviewCandidates(
 		return undecided, nil
 	}
 	evidence, costs, unavailable, err := handler.candidateCosts(ctx, key, evidence, carried)
+	if errors.Is(err, ports.ErrRouteCostAnswerUnusable) {
+		// 取数侧答用不了照样不得拦失效落库（硬句），记候选评估未决。
+		return undecided, nil
+	}
 	if err != nil {
 		return candidateReview{}, err
 	}
@@ -1024,7 +1033,8 @@ var ErrReassessCostSourceNotConfigured = errors.New("network routing: reassessme
 // 也不问：排序在比成本之前就答形态未声明。
 //
 // unavailable 为真即读不回，是依赖故障、重投推得动，各条线怎么落在各自调用处写。取数侧答「整条取数路径没接」与没装配
-// 同一处置，响亮报错。
+// 同一处置，响亮报错。取数侧答用不了（ports.ErrRouteCostAnswerUnusable）随错误交回、不算读不回：重投推不动，各条线
+// 怎么落同在各自调用处写。
 func (handler *ReassessRouteHandler) candidateCosts(
 	ctx context.Context,
 	key domain.InitialRouteJudgmentKey,
@@ -1040,6 +1050,9 @@ func (handler *ReassessRouteHandler) candidateCosts(
 	costs, err := handler.deps.Costs.LoadCandidateCosts(ctx, key, evidence, carried)
 	if errors.Is(err, ports.ErrRouteCostSourceNotConfigured) {
 		return evidence, ports.RouteCandidateCosts{}, false, fmt.Errorf("%w: %w", ErrReassessCostSourceNotConfigured, err)
+	}
+	if errors.Is(err, ports.ErrRouteCostAnswerUnusable) {
+		return evidence, ports.RouteCandidateCosts{}, false, fmt.Errorf("load candidate costs: %w", err)
 	}
 	if err != nil {
 		return evidence, ports.RouteCandidateCosts{}, true, nil

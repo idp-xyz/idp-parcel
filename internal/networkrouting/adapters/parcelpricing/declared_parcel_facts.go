@@ -2,18 +2,19 @@ package parcelpricing
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
+	nrports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
 // errUntranslatableParcelFacts 说判断键或客户声明译不进计价输入的词汇（租户、声明包裹、事实引用）。那是两侧词汇表
-// 出了分歧，不是这件包裹没有事实，所以上抛，不答 found=false。
-var errUntranslatableParcelFacts = errors.New("network routing: untranslatable parcel facts")
+// 出了分歧，不是这件包裹没有事实，所以上抛，不答 found=false；重投多少次都一样，挂在 nrports.ErrRouteCostAnswerUnusable
+// 名下，不进依赖读不回的重投。
+var errUntranslatableParcelFacts = fmt.Errorf("%w: untranslatable parcel facts", nrports.ErrRouteCostAnswerUnusable)
 
 // DeclaredParcelFacts 是预路由的包裹事实取数侧：按判断键里的声明包裹问 parcel-shipment 的客户声明，译成计价输入要的
 // 实重与外廓（network-routing CONTEXT「预路由使用客户声明快照」，ADR-0148 决定四第 7 条）。来源标在事实引用的版本串

@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -294,4 +295,61 @@ func TestAnUndeclaredRankingFormNeverAsksForCosts(t *testing.T) {
 	if len(fixture.costs.carried) != asked {
 		t.Fatalf("取数侧被问了 %d 次, want 不问", len(fixture.costs.carried)-asked)
 	}
+}
+
+// Covers: 取数侧答用不了（交回认不出的形状、方案方向配错、候选没有线路引用）重投多少次都一样，不进依赖读不回的那一格
+// （`AT-NR-093`）。无路由那条线上没有已定的结论要落，响亮报错，不答 REASSESS_COST_SOURCE_UNAVAILABLE 让消费门回滚重投；
+// 失效线不拦失效落库、候选评估记未决；仍适用线只是不试改善、原计划照旧——那两条线上结论已定，拦它们是让一个判不出的
+// 可选步骤挡住已成的判断。
+func TestAnUnusableCostAnswerIsLoudOnlyWhereNothingIsSettled(t *testing.T) {
+	unusable := fmt.Errorf("%w: plan direction is SELL", ports.ErrRouteCostAnswerUnusable)
+	t.Run("无路由线", func(t *testing.T) {
+		fixture := newReassessFixture(t)
+		record := currentPlanRecord(t)
+		fixture.routes.records[record.Key] = record
+		fixture.evidence.byParcel["parcel-1"] = withoutCosts(restrictedSelectedCandidate(t, evidenceBeforeFreeze(t)))
+		lapsedOnPickup(t, fixture)
+		fixture.costs.err = unusable
+
+		fixture.evidence.byParcel["parcel-1"] = withoutCosts(cheaperAlternative(t, 100))
+		_, err := fixture.handler.Handle(context.Background(),
+			reassessCommandAt(t, "trigger-2", "node-origin", reassessedAt.Add(time.Hour)))
+		if !errors.Is(err, ports.ErrRouteCostAnswerUnusable) {
+			t.Fatalf("err = %v, want ErrRouteCostAnswerUnusable 响亮上抛", err)
+		}
+		if _, recorded := fixture.store.byCorrelation[value(t, domain.NewRequestCorrelationID, "trigger-2")]; recorded ||
+			len(fixture.store.notJudged) != 0 {
+			t.Fatalf("响亮报错却落了复核 %v 或未判 %d 行", recorded, len(fixture.store.notJudged))
+		}
+	})
+	t.Run("失效线", func(t *testing.T) {
+		fixture := rerouteFixture(t)
+		fixture.costs.err = unusable
+		fixture.evidence.byParcel["parcel-1"] = withoutCosts(declareCostImprovement(cheaperAlternative(t, 100), 0))
+
+		result := handleOK(t, fixture, reassessCommand(t, "node-actual-elsewhere"))
+		record, _ := result.Record()
+		if result.Outcome() != application.ReassessedPlanLapsed || record.CandidateState != ports.CandidateReviewUndecided ||
+			record.HasSuggestion || record.HasNewPlan {
+			t.Fatalf("outcome = %q、候选评估 %q、建议 %v、新计划 %v, want 失效照落、候选评估未决、不挂建议",
+				result.Outcome(), record.CandidateState, record.HasSuggestion, record.HasNewPlan)
+		}
+	})
+	t.Run("仍适用线", func(t *testing.T) {
+		fixture := newReassessFixture(t)
+		fixture.costs.err = unusable
+		record := currentPlanRecord(t)
+		fixture.routes.records[record.Key] = record
+		evidence := withoutCosts(declareCostImprovement(cheaperAlternative(t, 100), 0))
+		limit := 0
+		evidence.FreezeForm = domain.RemainingSegmentCountFreeze
+		evidence.FreezeRemainingSegmentLimit = &limit
+		fixture.evidence.byParcel["parcel-1"] = evidence
+
+		result := handleOK(t, fixture, reassessCommand(t, "node-origin"))
+		kept, _ := result.Record()
+		if result.Outcome() != application.ReassessedStillApplicable || kept.HasNewPlan {
+			t.Fatalf("outcome = %q、新计划 %v, want STILL_APPLICABLE、原计划保留", result.Outcome(), kept.HasNewPlan)
+		}
+	})
 }
