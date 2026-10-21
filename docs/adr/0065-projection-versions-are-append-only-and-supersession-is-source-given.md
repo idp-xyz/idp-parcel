@@ -1,6 +1,6 @@
 # ADR-0065: 追踪投影版本只增不改写；替代关系由源上下文给出，不进冲突裁决
 
-Status: Accepted  
+Status: Accepted<!-- 索引注记 -->｜**读法注**（2026-10-21）：其决定六「替代链分叉进冲突」由 [ADR-0245](./0245-a-forked-supersession-chain-is-never-ordered-by-business-time-and-stays-pending-in-the-projection-version.md) 读作进**无法裁决的**冲突——分叉不经业务时间或任何其他维度裁决，分叉各方随投影版本留存、不参与派生，那一条事实流保持信息待确认并形成适用异常信号；无条款停用，其余各条不变  
 Date: 2026-08-19
 
 ## Context
@@ -58,3 +58,4 @@ Date: 2026-08-19
 - [ADR-0045](./0045-new-submission-version-keeps-history-and-reestablishes-the-task.md)：当前版本单指针加历史追加；其留作可再议的「仓储层版本表」由本记录在 VE 侧作答
 - [UC-VE-002](../application/visibility-exception/UC-VE-002-BUILD-TRACKING-PROJECTION.md)：`AT-VE-043` 与 `AT-VE-044`
 - [全程追踪与异常上下文](../domain/visibility-exception/CONTEXT.md)：「来源事实替代关系」词条与追踪投影各条不变量
+- [ADR-0245](./0245-a-forked-supersession-chain-is-never-ordered-by-business-time-and-stays-pending-in-the-projection-version.md)：给决定六作读法注——替代链分叉一律无法裁决，分叉各方随投影版本留存、不参与派生

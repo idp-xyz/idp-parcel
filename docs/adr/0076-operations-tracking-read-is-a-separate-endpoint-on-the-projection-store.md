@@ -1,6 +1,6 @@
 # ADR-0076: 运营追踪查阅走独立读口消费投影库，不复用客户视图端点；运营作用域是租户级、无客户维
 
-Status: Accepted  
+Status: Accepted<!-- 索引注记 -->｜**部分停用**（2026-10-21）：其决定三「运营接入面的认证方式属接入渠道实例半边、未登记」与「未登记前装配 UnconfiguredIntake，一律 403 `ACCESS_CHANNEL_NOT_CONFIGURED`」两句、Consequences「接入渠道认证参数未登记前，没有任何选项能让页面显示真轨迹——本记录不改变该深度上限，真轨迹属实例半边」一句已由 [ADR-0247](./0247-the-operations-tracking-read-is-admitted-through-the-operator-channel-family.md) 停用——运营追踪查阅面的真 Intake 是 ADR-0100 的操作者渠道 Intake，能力面是「主数据与运营查阅读」，答复照 ADR-0100 决定四三格。**适用场景**：本记录那一族运营查阅端点；决定三其余各句（沿 ADR-0055 的 Intake 接口、禁落「开发用」采信实现、作用域只在真 Intake 之后由认证结果铸造、角色与权限细分不在本记录）与其余各条不变  
 Date: 2026-08-24
 
 ## Context
@@ -60,3 +60,4 @@ Date: 2026-08-24
 - [UC-VE-008](../application/visibility-exception/UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md)：客户面验收口径，本记录不触碰
 - [追踪页运营查阅作用域裁决简报](../../.scratch/admin-web-uiux-20260824/tracking-scope-decision-brief.md)：四层取证的原始记录
 - [ve-operations-tracking-read 规格](../../.scratch/ve-operations-tracking-read/spec.md)：方向 B 的授权来源句与本轮票序
+- [ADR-0247](./0247-the-operations-tracking-read-is-admitted-through-the-operator-channel-family.md)：部分停用决定三两句与 Consequences 一句——运营追踪查阅面归操作者渠道族，答复照 ADR-0100 决定四三格

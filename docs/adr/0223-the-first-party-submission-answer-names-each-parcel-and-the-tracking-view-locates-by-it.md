@@ -1,6 +1,6 @@
 # ADR-0223：首方提交答复逐件带回包裹号——建成委托的答复带 `parcels`，每件配客户包裹参考；号从委托读，重放读回已签的、不重签；首方契约对客户追踪视图承诺的查询标识就是这个号
 
-Status: Accepted（2026-10-19，Claude Code 会话代 PS owner 决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/101，协调方代决先走「答复带回号」这条路。补 [ADR-0140](./0140-first-party-api-contract-is-generated-from-endpoint-descriptors-with-url-major-version-and-problem-details.md) 的首方契约：ADR-0140 Decision 八把端点字段留给各上下文 owner 与其用例，本记录定提交答复的一格与客户追踪视图对外承诺的查询标识。ADR-0140 正文不改，只在其 Status 行与 Links 加前向指针；不停用任何已接受记录的条款。越权风险点见文末，待 PS owner 复核；决定三（连同 UC-VE-008 查询标识一行的改动）与第 3、6、7 点同时待 VE owner 会签。）<!-- 索引注记 -->｜**答复**：`SUBMITTED` 与指名了原委托的 `EXISTING_RESULT` 带 `parcels`，每件 `parcelId` 加客户为它声明的 `customerParcelReference`（没声明整键缺席），次序同首个提交版本，件号回显委托上去过两端空白的声明值；没建成委托的答复整键不出现。**号从委托读**：建成、重放、并发建单撞已存在都读委托，接单入口重放时现签的号不出现、不重签。**查询标识**：首方契约对 `/customer-tracking-view` 承诺的是这个号；标识只定位不是凭证，VE 答复代数不变。不另开按委托号读回逐件号的读面（号在答复形成时已在）；按客户参考号直接定位推后到票 119。越权风险点含加键是契约变更、次序是附带承诺、接受前查视图与不存在同答、号在接受前交给客户、非首方口无件号的件只能按次序对、内部标识成了客户可见的契约键且拆分合并后成历史身份、决定三替 VE 许诺
+Status: Accepted（2026-10-19，Claude Code 会话代 PS owner 决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/101，协调方代决先走「答复带回号」这条路。补 [ADR-0140](./0140-first-party-api-contract-is-generated-from-endpoint-descriptors-with-url-major-version-and-problem-details.md) 的首方契约：ADR-0140 Decision 八把端点字段留给各上下文 owner 与其用例，本记录定提交答复的一格与客户追踪视图对外承诺的查询标识。ADR-0140 正文不改，只在其 Status 行与 Links 加前向指针；不停用任何已接受记录的条款。越权风险点见文末，待 PS owner 复核；决定三（连同 UC-VE-008 查询标识一行的改动）与第 3、6、7 点同时待 VE owner 会签。）<!-- 索引注记 -->｜**答复**：`SUBMITTED` 与指名了原委托的 `EXISTING_RESULT` 带 `parcels`，每件 `parcelId` 加客户为它声明的 `customerParcelReference`（没声明整键缺席），次序同首个提交版本，件号回显委托上去过两端空白的声明值；没建成委托的答复整键不出现。**号从委托读**：建成、重放、并发建单撞已存在都读委托，接单入口重放时现签的号不出现、不重签。**查询标识**：首方契约对 `/customer-tracking-view` 承诺的是这个号；标识只定位不是凭证，VE 答复代数不变。不另开按委托号读回逐件号的读面（号在答复形成时已在）；按客户参考号直接定位推后到票 119。越权风险点含加键是契约变更、次序是附带承诺、接受前查视图与不存在同答、号在接受前交给客户、非首方口无件号的件只能按次序对、内部标识成了客户可见的契约键且拆分合并后成历史身份、决定三替 VE 许诺｜**已答**（2026-10-21）：越权风险点 3「接受前查视图答 `VIEW_NOT_FOUND`，与不存在不分」由 [ADR-0246](./0246-the-customer-tracking-query-answers-no-visible-result-for-a-parcel-attributed-to-the-requesting-account-before-its-view-forms.md) 回答——委托接受之后、客户视图形成之前，归属方查自己的包裹答 `NO_VISIBLE_RESULT`（当前无可见结果）；接受之前维持与不存在同一格。上文「VE 答复代数不变」说的是本记录自己的决定。无条款停用，其余各条不变
 Date: 2026-10-19
 
 ## Context
@@ -87,6 +87,7 @@ Date: 2026-10-19
 - [GLOSSARY](../domain/GLOSSARY.md)「包裹内部标识」：拆分合并另起新标识；内部标识不要求展示给客户
 - [PS CONTEXT](../domain/parcel-shipment/CONTEXT.md)：声明包裹的永久内部标识；包裹内部标识在同一物理服务件存续期间不变；外部标识关联随接受形成
 - 票 `.scratch/demo-chain-gaps/issues/101-customer-tracking-view-locates-by-the-internal-parcel-id-only.md`；后续票 `119`
+- [ADR-0246](./0246-the-customer-tracking-query-answers-no-visible-result-for-a-parcel-attributed-to-the-requesting-account-before-its-view-forms.md)：回答越权风险点 3——接受之后、视图形成之前答「当前无可见结果」，接受之前维持合并
 
 ## 复核记录（2026-10-20，Claude Code 会话代决，非 owner 本人复核）
 
