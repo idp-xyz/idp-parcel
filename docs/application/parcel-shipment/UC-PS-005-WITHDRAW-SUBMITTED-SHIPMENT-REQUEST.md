@@ -45,7 +45,7 @@
 |---|---|---|
 | `PS-RULE` | 委托撤回、唯一决定边界和历史不可覆盖 | [小包托运上下文](../../domain/parcel-shipment/CONTEXT.md) |
 | `PS-SUBMIT` | 委托提交、接受、拒绝与接受前财务控制编排 | [`UC-PS-001`](./UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md) |
-| `SA-CONTROL` | 资金冻结、释放和补偿结果 | [`UC-SA-002`](../settlement-accounting/UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md) |
+| `SA-CONTROL` | 资金冻结、信用暴露、释放和补偿结果 | [`UC-SA-002`](../settlement-accounting/UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md) |
 | `ADR-FACT` | 来源事实、有效事件和派生状态分离 | [ADR-0005](../../adr/0005-source-facts-effective-events-derived-state.md) |
 
 ## 输入与结果语义
