@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"go.idp.xyz/idp-parcel/internal/customscompliance/adapters/registrationjson"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/application"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
@@ -23,6 +24,10 @@ const (
 	OperatorDecisionSubmissionAuthorization OperatorDecision = "CUSTOMS_SUBMISSION_AUTHORIZATION"
 	OperatorDecisionDeclarationSubmission   OperatorDecision = "CUSTOMS_DECLARATION_SUBMISSION"
 )
+
+// OperatorDecisionRegulatoryCredentialRegistration 是监管凭证登记（ADR-0236 决定一）：租户关务人员照凭证原件在管理台手工登记一版
+// 凭证。与上面三种同一面、分开授予——能建案或提交的不因此能往册上添凭证。
+const OperatorDecisionRegulatoryCredentialRegistration OperatorDecision = "REGULATORY_CREDENTIAL_REGISTRATION"
 
 // OperatorIdentity 是一次运营决定出示认证出的身份：租户与做出决定的操作者（「发行方#sub」）。
 type OperatorIdentity struct {
@@ -61,9 +66,10 @@ type OperatorDecisionIntake struct {
 }
 
 var (
-	_ CaseEstablishmentIntake       = (*OperatorDecisionIntake)(nil)
-	_ SubmissionAuthorizationIntake = (*OperatorDecisionIntake)(nil)
-	_ DeclarationSubmissionIntake   = (*OperatorDecisionIntake)(nil)
+	_ CaseEstablishmentIntake                = (*OperatorDecisionIntake)(nil)
+	_ SubmissionAuthorizationIntake          = (*OperatorDecisionIntake)(nil)
+	_ DeclarationSubmissionIntake            = (*OperatorDecisionIntake)(nil)
+	_ RegulatoryCredentialRegistrationIntake = (*OperatorDecisionIntake)(nil)
 )
 
 func NewOperatorDecisionIntake(authenticator OperatorDecisionAuthenticator) (*OperatorDecisionIntake, error) {
@@ -185,6 +191,25 @@ func (intake *OperatorDecisionIntake) IntakeDeclarationSubmission(ctx context.Co
 		return application.SubmitDeclarationCommand{}, err
 	}
 	return payload.Command(operator.Tenant), nil
+}
+
+// IntakeRegulatoryCredentialRegistration 按监管凭证登记这一种决定认证（ADR-0236 决定二）。载荷与集成客户端那一口同一份形状，仍由
+// registrationjson 译装、载荷自报租户即拒；两族只差谁在登记、凭什么授予。登记人记成命令上的操作证据，只进审计。
+func (intake *OperatorDecisionIntake) IntakeRegulatoryCredentialRegistration(ctx context.Context, request *http.Request) (application.RegisterCredentialCommand, error) {
+	operator, err := intake.authenticator.AuthenticateOperatorDecision(ctx, httpapi.BearerToken(request), OperatorDecisionRegulatoryCredentialRegistration)
+	if err != nil {
+		return application.RegisterCredentialCommand{}, err
+	}
+	payload, err := readSinglePayload(io.LimitReader(request.Body, maxRegistrationBytes+1))
+	if err != nil {
+		return application.RegisterCredentialCommand{}, err
+	}
+	command, err := registrationjson.RegulatoryCredentialFromJSONForTenant(payload, operator.Tenant)
+	if err != nil {
+		return application.RegisterCredentialCommand{}, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
+	}
+	command.OperationEvidence = "OPERATOR/" + operator.Operator
+	return command, nil
 }
 
 // decodeClosedPayload 解封闭载荷：未知字段、多余内容、读超限都是坏报文。

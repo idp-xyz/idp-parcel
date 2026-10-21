@@ -24,8 +24,9 @@ import (
 // RegulatoryCredentialRegistrationIntake 把一次已认证的接入请求翻译成凭证版本登记命令。
 //
 // 三个 Intake 都是接口而不是本包内的解析代码，判据同配置族（ADR-0085 Decision 二）：登记
-// 快照本体的译装在 registrationjson 已有一份（与受控 CLI 的 -input 同源）。凭证口的提交方是集成客户端
-// （ADR-0149），真 Intake 是 IntegrationClientIntake；协作与核对仍走操作者渠道的登记写面。采信报文自称
+// 快照本体的译装在 registrationjson 已有一份（与受控 CLI 的 -input 同源）。凭证口两族并存：外部系统送来的
+// 走集成客户端族（ADR-0149，IntegrationClientIntake），租户关务人员照原件手工登记的走运营决定能力面（ADR-0236，
+// OperatorDecisionIntake）；协作与核对仍走操作者渠道的登记写面。采信报文自称
 // 的租户会穿透 ADR-0003 的隔离边界。逐类分设而不合成一个按种类分派的口子，理由同上——
 // 三类命令类型互不相同，合成一个就得在 Intake 里先认种类再定形状。
 type RegulatoryCredentialRegistrationIntake interface {
