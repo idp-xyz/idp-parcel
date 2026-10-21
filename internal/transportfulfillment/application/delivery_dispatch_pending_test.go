@@ -1,6 +1,7 @@
 package application_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
@@ -160,6 +161,9 @@ func TestTheBeatGivesNoAnswerWhenThePendingRegisterCannotBeWritten(t *testing.T)
 	if !errors.Is(err, application.ErrDeliveryDispatchPendingUnavailable) {
 		t.Fatalf("err = %v, want ErrDeliveryDispatchPendingUnavailable", err)
 	}
+	if len(fixture.pending.held) != 1 || fixture.places.calls != 1 {
+		t.Fatalf("占过 %d 件、问地点 %d 次, want 都是 1——这一拍该走到答复之后写册那一步才失败", len(fixture.pending.held), fixture.places.calls)
+	}
 
 	fixture.deps.Trigger = func() application.DeliveryDispatchTrigger {
 		deps := fixture.dispatchTriggerFixture.deps
@@ -184,21 +188,66 @@ func TestARefusedPendingWriteIsADefectNotAWait(t *testing.T) {
 	if !errors.Is(err, application.ErrDeliveryDispatchPendingRefused) || errors.Is(err, application.ErrDeliveryDispatchPendingUnavailable) {
 		t.Fatalf("err = %v, want ErrDeliveryDispatchPendingRefused 且不是 ErrDeliveryDispatchPendingUnavailable", err)
 	}
+	if fixture.places.calls != 1 {
+		t.Fatalf("问地点 %d 次, want 1——这一拍该走到写册那一步才被拒", fixture.places.calls)
+	}
 }
 
-// Covers: AT-TF-295 的编排半边（ADR-0230 决定四）——每一拍先占住这一件（租户，段，对象）再读段、查在册；受理不了的命令不占。
+// Covers: AT-TF-294 的取锁那一半（ADR-0230 决定一）——取形成锁就失败：这一拍还没有答复，不读段、不问所有者；读写不动交
+// ErrDeliveryDispatchPendingUnavailable，确定性拒绝（没有事务）交 ErrDeliveryDispatchPendingRefused。
+func TestABeatThatCannotHoldItsEntryGivesNoAnswer(t *testing.T) {
+	for name, testCase := range map[string]struct {
+		holdErr error
+		want    error
+	}{
+		"锁读写不动": {errors.New("advisory lock unavailable"), application.ErrDeliveryDispatchPendingUnavailable},
+		"没有事务":  {fmt.Errorf("no transaction: %w", ports.ErrDeliveryDispatchPendingWriteRefused), application.ErrDeliveryDispatchPendingRefused},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fixture := newDispatchTriggerFixture(t)
+			fixture.enterByHandover(t, "parcel-1", "FINAL_DELIVERY", handoverJudgedTime)
+			fixture.pending.holdErr = testCase.holdErr
+			_, err := fixture.handler().Trigger(t.Context(), triggerCommand(t, "parcel-1"))
+			if !errors.Is(err, testCase.want) || fixture.places.calls != 0 || fixture.pending.writes != 0 {
+				t.Fatalf("err = %v、问地点 %d 次、写册 %d 次, want %v、0、0", err, fixture.places.calls, fixture.pending.writes, testCase.want)
+			}
+		})
+	}
+}
+
+// heldAtSegmentRead 包着段登记册：每次按键读段时记下那一刻派送待形成册替身上已占过几件。
+type heldAtSegmentRead struct {
+	ports.ActualFulfillmentSegmentRegistry
+	pending *pendingRegisterDouble
+	seen    *[]int
+}
+
+func (segments heldAtSegmentRead) FindByKey(ctx context.Context, key ports.FulfillmentSegmentKey) (ports.FulfillmentSegmentRecord, bool, error) {
+	*segments.seen = append(*segments.seen, len(segments.pending.held))
+	return segments.ActualFulfillmentSegmentRegistry.FindByKey(ctx, key)
+}
+
+// Covers: AT-TF-295 的编排半边（ADR-0230 决定一、四）——每一拍先占住这一件（租户，段，对象）再读段：读段那一刻形成锁已经占上了，
+// 恰是这一件；受理不了的命令不占、也不读段。
 func TestEveryBeatHoldsItsEntryBeforeAnswering(t *testing.T) {
 	fixture := newDispatchTriggerFixture(t)
 	fixture.enterByHandover(t, "parcel-1", "FINAL_DELIVERY", handoverJudgedTime)
+	var seen []int
+	fixture.deps.Segments = heldAtSegmentRead{ActualFulfillmentSegmentRegistry: fixture.deps.Segments, pending: fixture.pending, seen: &seen}
 	if _, err := fixture.handler().Trigger(t.Context(), triggerCommand(t, "parcel-1")); err != nil {
 		t.Fatal(err)
+	}
+	if len(seen) != 1 || seen[0] != 1 {
+		t.Fatalf("读段时已占过的件数 = %v, want [1]——先占后读", seen)
 	}
 	if len(fixture.pending.held) != 1 || fixture.pending.held[0].Object.String() != "parcel-1" || fixture.pending.held[0].Segment.String() != "segment-1" {
 		t.Fatalf("占过 %v, want 恰 segment-1/parcel-1 那一件", fixture.pending.held)
 	}
 	malformed := triggerCommand(t, "parcel-1")
 	malformed.Segment = " "
-	if result, err := fixture.handler().Trigger(t.Context(), malformed); err != nil || result.Outcome() != application.DeliveryDispatchNotAccepted || len(fixture.pending.held) != 1 {
-		t.Fatalf("受理不了的命令 = %s err=%v、占过 %d 件, want INPUT_NOT_ACCEPTED、不占", result.Outcome(), err, len(fixture.pending.held))
+	if result, err := fixture.handler().Trigger(t.Context(), malformed); err != nil || result.Outcome() != application.DeliveryDispatchNotAccepted ||
+		len(fixture.pending.held) != 1 || len(seen) != 1 {
+		t.Fatalf("受理不了的命令 = %s err=%v、占过 %d 件、读段 %d 次, want INPUT_NOT_ACCEPTED、不占、不读", result.Outcome(), err,
+			len(fixture.pending.held), len(seen))
 	}
 }

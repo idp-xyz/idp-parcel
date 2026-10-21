@@ -11,18 +11,20 @@ import (
 )
 
 // pendingRegisterDouble 是派送待形成册的内存替身：写口照迁移 0045 那张表的改写规则（立或刷新、已形成的不改回、了结不改指、只作罢
-// 待形成的、只给待形成的记问过），队列口照 ListPending 的排序与筛法。err 非空时各写口都答它，扮演册读写不动。
+// 待形成的、只给待形成的记问过），队列口照 ListPending 的排序与筛法。err 非空时各写口都答它，扮演册读写不动；holdErr 非空时
+// 只有取形成锁那一口答它——两者分开，写册失败的用例才真走到答复之后那一步。
 type pendingRegisterDouble struct {
 	rows   map[ports.DeliveryDispatchPendingKey]ports.DeliveryDispatchPendingRecord
 	err    error
 	writes int
 	// held 记下每一拍占过的那一件，次序照调用。
-	held []ports.DeliveryDispatchPendingKey
+	held    []ports.DeliveryDispatchPendingKey
+	holdErr error
 }
 
 func (double *pendingRegisterDouble) HoldFormation(_ context.Context, key ports.DeliveryDispatchPendingKey) error {
-	if double.err != nil {
-		return double.err
+	if double.holdErr != nil {
+		return double.holdErr
 	}
 	double.held = append(double.held, key)
 	return nil

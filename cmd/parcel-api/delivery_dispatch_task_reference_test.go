@@ -9,9 +9,11 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
@@ -32,13 +34,14 @@ import (
 const taskReferenceTenant = "SYN-TENANT-01"
 
 // taskReferenceOwners 扮三个所有者，都答「给了」；用例可以把地点改答「没有」、让时间窗读不到、换条件引用，用来证在册
-// 之后的重放不随所有者改答漂移。calls 记三条缝一共被问了几次。
+// 之后的重放不随所有者改答漂移。calls 记三条缝一共被问了几次。onPlace 不为空时，问地点那一刻先跑它（在锁外跑，它可以等）。
 type taskReferenceOwners struct {
 	mu           sync.Mutex
 	placeMissing bool
 	windowFails  bool
 	conditions   string
 	calls        int
+	onPlace      func()
 }
 
 func newTaskReferenceOwners() *taskReferenceOwners {
@@ -58,6 +61,12 @@ func (owners *taskReferenceOwners) askedSoFar() int {
 }
 
 func (owners *taskReferenceOwners) LoadDeliveryPlace(context.Context, tfdomain.TenantID, tfdomain.CarriedObjectReference) (string, tfports.RequirementResolution, error) {
+	owners.mu.Lock()
+	hook := owners.onPlace
+	owners.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
 	owners.mu.Lock()
 	defer owners.mu.Unlock()
 	owners.calls++
@@ -169,6 +178,24 @@ func (rig *taskReferenceRig) tick(t *testing.T, segment, object, occurredAt stri
 	var view taskReferenceView
 	_ = json.Unmarshal(recorder.Body.Bytes(), &view)
 	return recorder.Code, view, recorder.Body.String()
+}
+
+// waitForAdvisoryLockWaiter 轮询本测试库里有没有正等在咨询锁上、还没拿到的事务，看到就答 true，到时限答 false。只看本库：
+// 实例上别的包的用例各有各的库，它们的迁移会话锁不算。
+func waitForAdvisoryLockWaiter(conn *pgx.Conn, limit time.Duration) bool {
+	deadline := time.Now().Add(limit)
+	for time.Now().Before(deadline) {
+		var waiting int
+		if err := conn.QueryRow(context.Background(),
+			`SELECT count(*) FROM pg_locks
+			  WHERE locktype = 'advisory' AND NOT granted
+			    AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`,
+		).Scan(&waiting); err == nil && waiting > 0 {
+			return true
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return false
 }
 
 func (rig *taskReferenceRig) taskRows(t *testing.T) int {
@@ -427,14 +454,30 @@ func TestAReplayAfterTheOwnersChangeTheirAnswersEchoesTheRegisteredTask(t *testi
 	replay("对象离开派送段")
 }
 
-// Covers: 票 tf-face-algebra/09 完成判据「并发首拍真库回归照过：一笔 201，另一笔读回赢家答已在册」；AT-TF-295（ADR-0230 决定四）。
-// 自 ADR-0230 起两拍先占住同一件（租户，段，对象）再读段、查在册，于是并发首拍被排成一前一后：先拿到的那笔 201，另一笔等它提交
-// 之后查在册就查到了，答 200 已在册、回显同一项，所有者只被问一轮。执行器落库撞键读回赢家那一道（任务口答`已建立`）仍在，守的是
-// 不经执行器写进来的那一种。
+// Covers: 票 tf-face-algebra/09 完成判据「并发首拍真库回归照过：一笔 201，另一笔读回赢家答已在册」；AT-TF-295（ADR-0230 决定一、四）。
+// 两拍先占住同一件（租户，段，对象）的形成锁再读段、查在册：先拿到锁的那一拍问到地点时停住，直到库里看得见另一拍正等在一把咨询锁
+// 上才放行——证的是后一拍确实被形成锁挡在读段之前，而不是两拍碰巧先后跑。放行之后先拿到的那笔 201，另一笔等它提交之后查在册就
+// 查到了，答 200 已在册、回显同一项，所有者只被问一轮。
 func TestConcurrentFirstTicksFormOneTaskAndTheOtherReadsTheWinner(t *testing.T) {
 	rig := newTaskReferenceRig(t)
 	const object, segment = "SYN-PARCEL-09-06", "SYN-DELIVERY-SEGMENT-09-06"
 	rig.enter(t, object, segment, "SYN-HANDOVER-SCOPE-09-06", "SYN-HANDOVER-RESULT/09-06/v1", tfdomain.SegmentServesFinalDelivery)
+	// 看锁的那一条连接单独开：池只有两条，两拍各占一条，再从池里取就会和停住的那一拍互等。
+	watcher, err := pgx.ConnectConfig(t.Context(), rig.pool.Config().ConnConfig.Copy())
+	if err != nil {
+		t.Fatalf("开看锁的连接：%v", err)
+	}
+	defer func() { _ = watcher.Close(context.Background()) }()
+	var paused atomic.Bool
+	var sawWaiter atomic.Bool
+	rig.owners.change(func(owners *taskReferenceOwners) {
+		owners.onPlace = func() {
+			if !paused.CompareAndSwap(false, true) {
+				return
+			}
+			sawWaiter.Store(waitForAdvisoryLockWaiter(watcher, 10*time.Second))
+		}
+	})
 
 	type answer struct {
 		code int
@@ -452,6 +495,9 @@ func TestConcurrentFirstTicksFormOneTaskAndTheOtherReadsTheWinner(t *testing.T) 
 		}()
 	}
 	group.Wait()
+	if !sawWaiter.Load() {
+		t.Fatal("后一拍没在形成锁上等：先到的那一拍停在取件处 10 秒，库里始终没有等在咨询锁上的事务")
+	}
 	if asked := rig.owners.askedSoFar(); asked != 3 {
 		t.Fatalf("所有者被问 %d 次, want 3——后一拍该在前一拍提交之后查到在册，不再取件", asked)
 	}
