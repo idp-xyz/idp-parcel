@@ -90,13 +90,16 @@ func (outcome ChargeOccurrenceOutcome) String() string {
 	}
 }
 
-// ChargeOccurrenceDetail 指名不适用、冲突、未决或未受理各自落在哪一格。登记方据它决定下一步：不适用的两格说为什么
+// ChargeOccurrenceDetail 指名已存在、不适用、冲突、未决或未受理各自落在哪一格。登记方据它决定下一步：不适用的两格说为什么
 // 本来就不该有外部成本，冲突那一格说撞的不是同一身份而是成员已被另一项计过，未决的各格说哪一口答不出、重试哪一次，
 // 未受理的各格说请求哪里要改。
 type ChargeOccurrenceDetail uint8
 
 const (
 	ChargeOccurrenceDetailNone ChargeOccurrenceDetail = iota
+	// 已存在：链头是运营决定失效的那一版，自动形成交来的登记不凭同一份证据把它长回来（RegisterChargeOccurrenceCommand.Automatic）。
+	// 回显的是那一版失效版本。
+	OccurrenceInvalidatedByDecision
 	// 不适用：两格都是正确答案，不是缺席（ADR-0098 决定三）。
 	SelfOperatedDeclared
 	ActualCarrierJudgedSelfOperated
@@ -137,6 +140,8 @@ const (
 
 func (detail ChargeOccurrenceDetail) String() string {
 	switch detail {
+	case OccurrenceInvalidatedByDecision:
+		return "OCCURRENCE_INVALIDATED_BY_DECISION"
 	case SelfOperatedDeclared:
 		return "SELF_OPERATED_DECLARED"
 	case ActualCarrierJudgedSelfOperated:
@@ -221,6 +226,12 @@ type RegisterChargeOccurrenceCommand struct {
 	Provider         string
 	AgreementObject  string
 	AgreementVersion string
+
+	// Automatic 说这一次登记出自自动形成（系统身份，FormActualFulfillmentOnParticipationEndHandler 的交接、交付与补形成三路），不是
+	// 操作者的判断。链头已失效时，自动形成不凭它长出替代版本：失效是操作者说那件事的范围不成立，同一份证据再推一遍不推翻那个决定，
+	// 答已存在、回显那一版失效版本（OccurrenceInvalidatedByDecision）。只有这一段的当前采用落册晚于那一次失效（解除之后再采用，或
+	// 失效之后才采用）时照常长出——采购来源在失效之后换了，正是补形成要补的那一件（ADR-0232 决定五）。
+	Automatic bool
 }
 
 type RegisterChargeOccurrenceResult struct {
@@ -539,6 +550,17 @@ func (handler *RegisterChargeOccurrenceHandler) register(
 		if !head.Occurrence.Invalidated() {
 			return handler.replayAgainst(ctx, head, occurrence, continuation)
 		}
+		if command.Automatic {
+			reopened, err := handler.adoptedAfter(ctx, command.TenantID, fact, head.RecordedAt)
+			if err != nil {
+				return chargeUndecided(ProcurementSourceUnavailable, continuation), nil
+			}
+			if !reopened {
+				return RegisterChargeOccurrenceResult{
+					outcome: ChargeOccurrenceExisting, detail: OccurrenceInvalidatedByDecision, record: head, hasRecord: true,
+				}, nil
+			}
+		}
 		if occurrence, err = domain.ReestablishChargeOccurrence(head.Occurrence, occurrence, now); err != nil {
 			return RegisterChargeOccurrenceResult{}, fmt.Errorf("register charge occurrence: reestablishing %s: %w", key.Occurrence, err)
 		}
@@ -750,6 +772,23 @@ func (handler *RegisterChargeOccurrenceHandler) adoptionChangedSince(
 }
 
 // errProcurementSourceUnreadable 只在本包流转：采用连线或委托读不动，由调用方答未决。
+// adoptedAfter 答这一段此刻的采用是不是晚于 at 才落册。锁下读：与 adoptionChangedSince 同一把范围锁，解除与再采用在这把锁下排过先后。
+func (handler *RegisterChargeOccurrenceHandler) adoptedAfter(
+	ctx context.Context,
+	tenant domain.TenantID,
+	fact chargeOccurrenceFact,
+	at time.Time,
+) (bool, error) {
+	if !fact.hasSegment {
+		return false, nil
+	}
+	adoption, adopted, err := handler.deps.Adoptions.FindBySegment(ctx, ports.SegmentCommissionAdoptionKey{TenantID: tenant, Segment: fact.segment})
+	if err != nil {
+		return false, err
+	}
+	return adopted && adoption.RecordedAt.After(at), nil
+}
+
 var errProcurementSourceUnreadable = errors.New("register charge occurrence: adoption or commission unreadable")
 
 // ErrAdoptionWithoutCommission 说明段的采用连线指名的委托读不回来。连线落册时委托在册（迁移 0035 的外键），委托又不删，读不回

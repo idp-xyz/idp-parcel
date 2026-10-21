@@ -465,6 +465,7 @@ func (handler *FormActualFulfillmentOnParticipationEndHandler) formEnded(
 		Segment:    segment.String(),
 		Objects:    []string{object.String()},
 		Journey:    journey.String(),
+		Automatic:  true,
 	})
 	if err != nil {
 		return FormActualFulfillmentResult{}, err
