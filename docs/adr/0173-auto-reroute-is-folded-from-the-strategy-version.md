@@ -1,6 +1,6 @@
 # ADR-0173：自动改路由策略版本折出，事实目录不再是判断权威
 
-Status: Accepted（2026-09-30。本项是产品策略，接受依据是 ADR-0146 决定二、决定七：判断形态归产品，租户选形态、填取值。）<!-- 索引注记 -->｜**自动改路**：成本改善严格大于已登记阈值才自动切换。未声明只形成建议。
+Status: Accepted（2026-09-30。本项是产品策略，接受依据是 ADR-0146 决定二、决定七：判断形态归产品，租户选形态、填取值。）<!-- 索引注记 -->｜**自动改路**：成本改善严格大于已登记阈值才自动切换。未声明只形成建议。｜**部分停用**（2026-10-21）：其决定三「原计划仍可执行时，先看冻结。」与「未越过且改善超过阈值，才自动切换。」两句已由 [ADR-0249](./0249-offsite-pickup-reassessment-checks-hard-constraints-only-and-does-not-establish-a-controllable-node.md) 停用。**适用场景**：场外揽收触发的复核——揽收不建立当前可控节点，原计划仍适用即保留，不看冻结、不试成本改善切换；可控节点上的复核照旧，决定三「硬约束失效仍走失效重判；失效后同样按本形态折自动条件」一句不变，其余各条不变
 Date: 2026-09-30
 
 ## Context
@@ -37,6 +37,7 @@ Date: 2026-09-30
 
 - [ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)
 - [ADR-0172](./0172-route-freeze-is-remaining-segment-count.md)
+- [ADR-0249](./0249-offsite-pickup-reassessment-checks-hard-constraints-only-and-does-not-establish-a-controllable-node.md)：后继——部分停用决定三「原计划仍可执行时，先看冻结。」与「未越过且改善超过阈值，才自动切换。」两句，适用场景限场外揽收触发的复核
 - [network-routing CONTEXT](../domain/network-routing/CONTEXT.md)
 - [UC-NR-003](../application/network-routing/UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md)
 - 票 `.scratch/routing-first-cut/issues/05-auto-reroute-conditions-folded-from-strategy.md`
