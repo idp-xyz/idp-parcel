@@ -149,7 +149,7 @@
 - 同一包裹、同一来源类型和同一来源结果版本只能形成一个有效网络收寄采用结果。
 - 客户送站与场外揽收都指向同一包裹时不能形成两个责任起点。先合法形成者保留，后续来源作为重复、冲突或后续物理事实处理。
 - 多包裹委托逐包裹提交；一个成员未决或不采用不回滚其他成员已经形成的正式承诺。
-- 取消与收寄的先后按两者的业务时间比，不按消息到达或提交顺序（[ADR-0254](../../adr/0254-cancellation-and-boundary-fact-order-is-judged-by-their-business-times-and-a-late-earlier-boundary-fact-is-a-fact-conflict.md)）：收寄已采用之后到达的取消不成立；取消已提交之后到达的收寄，发生晚于取消的业务时间即不采用（`SOURCE_NOT_ADOPTED`），不晚于取消即停在未决（原因 `CANCELLATION_ORDER_CONFLICT`），不形成责任起点、不抹取消，冲突留在册上、按包裹查得出；这一格重投推不动，消费门入账而不回滚重投，等一份明确的业务决定解开。已经发生的物理事实始终保留。
+- 取消与收寄的先后按两者的业务时间比，不按消息到达或提交顺序（[ADR-0254](../../adr/0254-cancellation-and-boundary-fact-order-is-judged-by-their-business-times-and-a-late-earlier-boundary-fact-is-a-fact-conflict.md)）：收寄已采用之后到达的取消不成立；取消已提交之后到达的收寄，发生晚于取消的业务时间即不采用（`SOURCE_NOT_ADOPTED`），不晚于取消即停在未决（原因 `CANCELLATION_ORDER_CONFLICT`），不形成责任起点、不抹取消，冲突留在册上、按包裹查得出；这一格重投推不动，消费门入账而不回滚重投，等一份明确的业务决定解开。冲突记不下时答未决 `CONFLICT_REGISTER_UNAVAILABLE`，照常回滚重投。已经发生的物理事实始终保留。
 - 来源更正、撤销或身份关系变化形成新的采用判断版本。原责任判断和承诺历史不能删除；当前承诺影响通过带原因的新版本表达。同来源更正以来源所有者声明的更正关系识别——新版本自报更正的恰是该包裹当前采用的那一版；来源种类相同而无更正声明的新版本按「先合法形成者保留」那一条（`AT-PS-049`）作竞争处理（[ADR-0117](../../adr/0117-same-source-correction-forms-a-superseding-adoption-version-chained-to-the-current-responsibility-start.md)）。
 - 提交结果不确定时按稳定关联查询原采用结果、承诺和发布意图，不盲目重复提交。
 
