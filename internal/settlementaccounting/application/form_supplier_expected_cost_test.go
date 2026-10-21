@@ -422,7 +422,7 @@ func TestNonCompletedEvaluationsDoNotBecomeCosts(t *testing.T) {
 			application.EvaluationViewUnavailable, application.EvaluationPending, application.EvaluationNotFormed,
 			application.ConversionStepMissing, application.ExpectedCostRegistryUnavailable,
 			application.EvaluationAmountPrecisionUndeclared, application.BuyEvaluationRequestViewUnavailable,
-			application.BuyEvaluationRequestRegisterUnavailable,
+			application.BuyEvaluationRequestRegisterUnavailable, application.OccurrenceInvalidationNotRecorded,
 		}
 		for _, reason := range reasons {
 			label := reason.String()

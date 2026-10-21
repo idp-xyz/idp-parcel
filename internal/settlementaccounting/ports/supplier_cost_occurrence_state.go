@@ -8,8 +8,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 )
 
-// 一项发生项在结算这一侧的成本状态（ADR-0232 决定七、八）：它在各费用项目上的版本链头，与结算记下的它已失效的那几版。形成首版、
-// 按替代版本的新评价纠错、按失效版本撤下，三件事都先读它、在同一把发生项锁下读。另立文件、不并进 ports.go。
+// 一项发生项在结算这一侧的成本状态（ADR-0232 决定七、八）：它在各费用项目上的版本链头，与结算记下的它已失效的那几版。形成编排
+// （FormSupplierExpectedCostHandler）与撤下编排（WithdrawSupplierExpectedCostHandler）都在同一把发生项锁下读它。另立文件、不并进 ports.go。
 
 // ErrSeveralCostChainsOnOneFeeItem 说明同一发生项、同一费用项目上有不止一条版本链。首版按（发生项、费用项目、规则版本）唯一，同一份
 // 发生项版本只有一份请求，所以合格的册上一个费用项目只有一条链；多于一条是库被改过或另有一条路形成了首版，不挑一条去纠正。

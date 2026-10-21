@@ -164,18 +164,20 @@ func TestARequestedBuyEvaluationFormsTheFirstVersionUnderTheDerivedIdentity(t *t
 	}
 }
 
-// Covers: AT-SA-207——另一份请求点名同一发生项的新版本、同一费用项目，评价命中同一规则版本：不再答`已有首版`即止（ADR-0200 越权风险点
-// 4、票 demo-chain-gaps/15），而是按新评价重述全额、接在链头后面追加一个纠错版本：回指首版、原因是发生项替代、发生项版本随评价换成新的
-// 那一版，版本标识由这份请求派生；首版一字不动。金额与首版相同也追加——纠错由发生项新版本触发，不由评价结果不同触发。重放不多一份。
+// Covers: AT-SA-207——发生项 v1 失效（v2）之后长出替代版本 v3，另一份请求点名 v3、同一费用项目，评价命中同一规则版本：不再答`已有首版`
+// 即止（ADR-0200 越权风险点 4、票 demo-chain-gaps/15），而是按新评价重述全额、接在失效纠错版本后面追加一个纠错版本：回指它、原因是
+// 发生项替代、发生项版本随评价换成 v3，版本标识由这份请求派生；首版一字不动。金额与首版相同也追加——纠错由发生项新版本触发，不由评价
+// 结果不同触发。重放不多一份。
 func TestARequestNamingANewerOccurrenceVersionAppendsACorrection(t *testing.T) {
 	fixture := newRequestedCostFixture(t)
-	fixture.requests.register(t, "EVREQ-SYN-2", "occurrence-7/v2")
+	fixture.requests.register(t, "EVREQ-SYN-3", "occurrence-7/v3")
 	if _, err := fixture.handle(t, "buy-eval-1", "EVREQ-SYN-1"); err != nil {
 		t.Fatalf("首版：%v", err)
 	}
-	fixture.evaluations.adoptions["buy-eval-2"] = completedAdoption(t, "buy-eval-2")
+	withdraw(t, withdrawalHandler(t, fixture), "occurrence-7/v2", "occurrence-7/v1")
+	fixture.evaluations.adoptions["buy-eval-3"] = completedAdoption(t, "buy-eval-3")
 
-	result, err := fixture.handle(t, "buy-eval-2", "EVREQ-SYN-2")
+	result, err := fixture.handle(t, "buy-eval-3", "EVREQ-SYN-3")
 	if err != nil || result.Outcome() != application.RequestedSupplierExpectedCostAdopted ||
 		result.Formation().Outcome() != application.ExpectedCostFormed {
 		t.Fatalf("outcome = %s / %s err=%v, want 追加纠错", result.Outcome(), result.Formation().Outcome(), err)
@@ -183,16 +185,16 @@ func TestARequestNamingANewerOccurrenceVersionAppendsACorrection(t *testing.T) {
 	corrected, _ := result.Formation().Cost()
 	prior, corrects := corrected.PriorVersion()
 	reason, _ := corrected.CorrectionReason()
-	if corrected.Version().String() != "BUYSC-EVREQ-SYN-2" || !corrects || prior.String() != "BUYSC-EVREQ-SYN-1" ||
-		reason.String() != "OCCURRENCE_SUPERSEDED" || corrected.Occurrence().Version().String() != "occurrence-7/v2" ||
-		corrected.Evaluation().String() != "buy-eval-2" || corrected.Withdrawn() {
+	if corrected.Version().String() != "BUYSC-EVREQ-SYN-3" || !corrects || prior.String() != "BUYSCW-BUYSC-EVREQ-SYN-1" ||
+		reason.String() != "OCCURRENCE_SUPERSEDED" || corrected.Occurrence().Version().String() != "occurrence-7/v3" ||
+		corrected.Evaluation().String() != "buy-eval-3" || corrected.Withdrawn() {
 		t.Fatalf("纠错版本 = %+v", corrected)
 	}
-	if first := fixture.registry.costs["BUYSC-EVREQ-SYN-1"]; first.Occurrence().Version().String() != "occurrence-7/v1" || len(fixture.registry.costs) != 2 {
+	if first := fixture.registry.costs["BUYSC-EVREQ-SYN-1"]; first.Occurrence().Version().String() != "occurrence-7/v1" || len(fixture.registry.costs) != 3 {
 		t.Fatalf("首版被改或成本 %d 份", len(fixture.registry.costs))
 	}
-	replay, err := fixture.handle(t, "buy-eval-2", "EVREQ-SYN-2")
-	if err != nil || replay.Formation().Outcome() != application.ExpectedCostExistingResult || len(fixture.registry.costs) != 2 {
+	replay, err := fixture.handle(t, "buy-eval-3", "EVREQ-SYN-3")
+	if err != nil || replay.Formation().Outcome() != application.ExpectedCostExistingResult || len(fixture.registry.costs) != 3 {
 		t.Fatalf("重放 = %s err=%v，成本 %d 份", replay.Formation().Outcome(), err, len(fixture.registry.costs))
 	}
 }

@@ -76,6 +76,7 @@ func (outcome ExpectedCostOutcome) String() string {
 // ExpectedCostUndecidedReason 指名形成停在哪一步等谁。评价待判断等提供方以新评价补齐事实
 // 或汇率序列；评价未形成等重试；换算步骤缺席等提供方在评价内换算（AT-SA-177，不自行补算）；
 // 金额未声明等租户在价卡上声明金额取整、再评价一份（ADR-0107 决定五，不自行补取整）。
+// 发生项失效未记等撤下那一路把链头所依的那一版记成已失效（ADR-0232 决定八）。
 // BuyEvaluationRequestViewUnavailable 与 BuyEvaluationRequestRegisterUnavailable 只由按回指形成的那只外层编排交出
 // （FormRequestedSupplierExpectedCostHandler：读不回请求、记不下停因），与本编排的各格同属「形成停在哪个依赖上」，所以
 // 同用一个词表，不另立第二套。
@@ -91,6 +92,7 @@ const (
 	EvaluationAmountPrecisionUndeclared
 	BuyEvaluationRequestViewUnavailable
 	BuyEvaluationRequestRegisterUnavailable
+	OccurrenceInvalidationNotRecorded
 )
 
 func (reason ExpectedCostUndecidedReason) String() string {
@@ -111,6 +113,8 @@ func (reason ExpectedCostUndecidedReason) String() string {
 		return "BUY_EVALUATION_REQUEST_VIEW_UNAVAILABLE"
 	case BuyEvaluationRequestRegisterUnavailable:
 		return "BUY_EVALUATION_REQUEST_REGISTER_UNAVAILABLE"
+	case OccurrenceInvalidationNotRecorded:
+		return "OCCURRENCE_INVALIDATION_NOT_RECORDED"
 	default:
 		return ""
 	}
@@ -149,7 +153,7 @@ func (result ExpectedCostResult) UndecidedReason() ExpectedCostUndecidedReason {
 	return result.reason
 }
 
-// UndecidedCause 是`未决`那一格的根因：依赖答不出时是它的原错误，形成门拒时是领域的哨兵。评价自己停在
+// UndecidedCause 是`未决`那一格的根因：依赖答不出时是它的原错误，形成门拒时是领域的哨兵，等撤下那一路时说链头停在哪一版。评价自己停在
 // 待判断、未形成或金额未声明时没有错误可交，为 nil——原因已在 UndecidedReason 里说全。
 func (result ExpectedCostResult) UndecidedCause() error {
 	return result.cause
@@ -235,6 +239,11 @@ func (handler *FormSupplierExpectedCostHandler) Handle(
 	// 先在发生项锁下读这一项的成本状态（ADR-0232 决定七、八）：评价所依的那一版已失效就不再形成；这个费用项目上已有一条链、链头依的
 	// 是另一版发生项，这份评价来自替代版本，按它重述全额、接在链头后面——纠错由发生项新版本触发，金额同不同都追加（重述的发生项版本
 	// 与业务时点本身就是这一版计价结果的一部分，ADR-0067 决定二）；否则照旧形成首版。
+	//
+	// 只接在失效纠错版本后面：替代版本只从失效版本长出（TF 的 ReestablishChargeOccurrence），所以链头依的那一版若还没被撤下，是撤下那一路
+	// 还没把失效记到结算，而不是这份评价可以接。结算不知道发生项各版的先后，这时接上去会把两种乱序分不开——替代版本的评价先于失效到，
+	// 与早一版的评价晚于替代版本的评价到；后一种接上去，链头就被拉回一版已失效的发生项。两种都等撤下那一路：它记下失效之后，前一种
+	// 接在失效纠错版本后面，后一种答已失效。
 	state, err := handler.deps.Registry.LoadOccurrenceCostState(ctx, command.TenantID, command.Occurrence.ID())
 	if err != nil {
 		return expectedCostUndecided(ExpectedCostRegistryUnavailable, command.Version.String(), err), nil
@@ -249,6 +258,10 @@ func (handler *FormSupplierExpectedCostHandler) Handle(
 	}
 	var cost domain.SupplierExpectedCost
 	if chained && head.Occurrence().Version() != command.Occurrence.Version() {
+		if !head.Withdrawn() {
+			return expectedCostUndecided(OccurrenceInvalidationNotRecorded, head.Version().String(),
+				fmt.Errorf("chain head %s rests on occurrence version %s, which is not withdrawn yet", head.Version(), head.Occurrence().Version())), nil
+		}
 		if settlementCurrency, _ := head.SettlementAmount(); settlementCurrency != adoption.SettlementCurrency {
 			return ExpectedCostResult{}, fmt.Errorf("%w: occurrence %s from %s to %s",
 				ErrCorrectionChangesSettlementCurrency, command.Occurrence.ID(), settlementCurrency, adoption.SettlementCurrency)

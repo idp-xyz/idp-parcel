@@ -32,8 +32,8 @@ const (
 	RequestedSupplierExpectedCostOutcomeInvalid RequestedSupplierExpectedCostOutcome = iota
 	// RequestedSupplierExpectedCostAdopted：派生版本上有了这份评价的预期成本首版——本次形成，或早已形成（重放）。
 	RequestedSupplierExpectedCostAdopted
-	// RequestedSupplierExpectedCostFirstVersionExists：同一发生项、费用项目与规则版本已有另一个版本标识的首版（例如
-	// 另一份点名同一发生项新版本的请求先形成了）。不得重复形成首版；要重述走计价纠错，不在本编排。
+	// RequestedSupplierExpectedCostFirstVersionExists：同一版发生项、同一费用项目与规则版本上，另一份请求已先形成了首版（版本标识不同）。
+	// 不得重复形成首版。点名发生项另一版的请求不落这一格：链头已撤下时接在后面形成纠错版本（ADR-0232 决定八）。
 	RequestedSupplierExpectedCostFirstVersionExists
 	// RequestedSupplierExpectedCostEvaluationNotAdopted：这份评价形成不了预期成本，不写成本行，只在 BUY 请求册上记停因——
 	// 不可计价、评价冲突、评价待判断、评价未形成、跨币种却没带换算步骤、价卡没声明金额取整。评价不可变，计价对同一份
@@ -200,7 +200,7 @@ func foldUndecidedFormation(
 	version domain.SupplierCostVersionID,
 ) (RequestedSupplierExpectedCostResult, error) {
 	switch formed.UndecidedReason() {
-	case EvaluationViewUnavailable, ExpectedCostRegistryUnavailable:
+	case EvaluationViewUnavailable, ExpectedCostRegistryUnavailable, OccurrenceInvalidationNotRecorded:
 		return RequestedSupplierExpectedCostResult{
 			outcome:   RequestedSupplierExpectedCostUndecided,
 			formation: formed,
