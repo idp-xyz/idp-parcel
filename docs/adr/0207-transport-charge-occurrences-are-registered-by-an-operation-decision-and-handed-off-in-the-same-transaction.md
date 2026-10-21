@@ -88,6 +88,7 @@ Date: 2026-10-19
 - [ADR-0218：实际履约发生项由交接与有效交付信封自动形成](./0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md)：部分停用本记录决定七后半句与越权风险点 3（限有采用连线的段）、决定四末句的演示约定，以及决定四「旅程由登记方声明，本上下文没有它的权威来源，不核」一句（限自动形成那一路）
 - [ADR-0231](./0231-actual-fulfillment-left-unformed-is-caught-up-by-doorbells-and-a-commission-agreement-revision.md)：委托协议换版；部分停用文末补记「发生项按它回问 PC」一句（换版之后按业务时间取那一版）
 - [ADR-0232](./0232-a-segment-commission-adoption-is-withdrawn-by-decision-only-before-occurrences-form-and-occurrence-revision-drives-the-supplier-cost-correction.md)：Consequences「已知限制」由它兑现——重放与自营两条路径改读链头，链头已失效时同一件事实再登从失效版本长出替代版本；发生项失效经运营决定进生产，是文末补记越权风险点 10、11、15 说的「发生项修订入口」
+- [ADR-0204](./0204-a-fulfillment-segment-adopts-a-transport-commission-by-declaration-and-a-started-commission-cannot-be-cancelled.md)：其「自营只能显式声明（ADR-0207 的读法不变）」一句只指不由有无委托推断自营，按实际承运商判断认自营照本记录决定二（读法注，见 ADR-0204 的 Status 行）
 
 ## 补记：票 28 落地时的补充裁定（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；待 TF owner 复核，风险点 9 同时待 PC owner）
 
