@@ -11,7 +11,7 @@ import (
 	veinbox "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/inbox"
 )
 
-// 本文件对真实 PostgreSQL 证交接信封上补派生那一路的消费门（ADR-0224）：与交接投影同一封信、各记各的账，恰一次，毒丸照拒。
+// 本文件对真实 PostgreSQL 证交接与揽收信封上补派生各一路的消费门（ADR-0224）：与同一封信上的投影各记各的账，恰一次，毒丸照拒。
 
 // Covers: AT-VE-178 消费门半边——同一封交接信封，投影与补派生两路各处理一次；补派生那一路重投按 inbox 跳过。两路共一本账时，
 // 先到的一路会把另一路当重复跳过，补派生就永远不跑。
@@ -50,6 +50,44 @@ func TestTheBackfillLaneKeepsItsOwnLedgerOnTheHandoverEnvelope(t *testing.T) {
 	if got := backfillHandler.calls[0]; got.TenantID != "tenant-a" || got.Object != "parcel-1" ||
 		got.Scope != "scope-1" || got.Version != "handover-result/v1" {
 		t.Fatalf("补派生那一路译码 = %+v，want 与投影同四维", got)
+	}
+}
+
+// Covers: AT-VE-178 消费门半边（揽收）——同一封对象级揽收信封，揽收投影与补派生两路各处理一次；补派生那一路重投按 inbox 跳过。
+func TestTheBackfillLaneKeepsItsOwnLedgerOnThePickupEnvelope(t *testing.T) {
+	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	store, err := inbox.NewStore(db)
+	if err != nil {
+		t.Fatalf("构造 Inbox Store：%v", err)
+	}
+	projectionHandler := &veRegisteredPickupHandlerDouble{}
+	projection, err := veinbox.NewOffsitePickupConsumer(db.Transactor(), store, projectionHandler)
+	if err != nil {
+		t.Fatalf("构造揽收投影消费者：%v", err)
+	}
+	backfillHandler := &veRegisteredPickupHandlerDouble{}
+	backfill, err := veinbox.NewMovementFactBackfillOnOffsitePickupConsumer(db.Transactor(), store, backfillHandler)
+	if err != nil {
+		t.Fatalf("构造补派生消费者：%v", err)
+	}
+
+	envelope := veOffsitePickupEnvelope(t, "pickup-shared-1")
+	if err := projection.Consume(t.Context(), envelope); err != nil {
+		t.Fatalf("投影投递：%v", err)
+	}
+	for range 2 {
+		if err := backfill.Consume(t.Context(), envelope); err != nil {
+			t.Fatalf("补派生投递：%v", err)
+		}
+	}
+	if len(projectionHandler.calls) != 1 || len(backfillHandler.calls) != 1 {
+		t.Fatalf("两本账应各处理一次：投影 = %d，补派生 = %d", len(projectionHandler.calls), len(backfillHandler.calls))
+	}
+	if backfillHandler.calls[0] != projectionHandler.calls[0] {
+		t.Fatalf("补派生那一路译码 = %+v，want 与投影同三维 %+v", backfillHandler.calls[0], projectionHandler.calls[0])
 	}
 }
 
@@ -95,5 +133,14 @@ func TestTheBackfillConsumerRefusesMissingDependencies(t *testing.T) {
 	}
 	if _, err := veinbox.NewMovementFactBackfillOnHandoverConsumer(db.Transactor(), store, nil); err == nil {
 		t.Fatal("缺处理方构造成功了")
+	}
+	if _, err := veinbox.NewMovementFactBackfillOnOffsitePickupConsumer(nil, store, &veRegisteredPickupHandlerDouble{}); err == nil {
+		t.Fatal("揽收那一路缺事务器构造成功了")
+	}
+	if _, err := veinbox.NewMovementFactBackfillOnOffsitePickupConsumer(db.Transactor(), nil, &veRegisteredPickupHandlerDouble{}); err == nil {
+		t.Fatal("揽收那一路缺 inbox 构造成功了")
+	}
+	if _, err := veinbox.NewMovementFactBackfillOnOffsitePickupConsumer(db.Transactor(), store, nil); err == nil {
+		t.Fatal("揽收那一路缺处理方构造成功了")
 	}
 }

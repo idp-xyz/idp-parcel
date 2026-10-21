@@ -8,6 +8,7 @@ import (
 	"go.idp.xyz/idp-bento-go/postgres/inbox"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	tfapplication "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	veinbox "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/inbox"
@@ -22,10 +23,12 @@ import (
 // 身上补出出发，按演示种子的里程碑映射归 DEPARTED。证据只记 S。
 
 const (
-	backfillConsumerName = "visibility-exception/backfill-movement-facts-on-transport-handover"
-	backfillScope        = "SYN-SCOPE-SHA-HUB-DISPATCH"
-	backfillVersion      = "SYN-HANDOVER-RESULT/DEP-01/v1"
-	backfillFact         = "SYN-MOVE-BACKFILL-01"
+	backfillConsumerName         = "visibility-exception/backfill-movement-facts-on-transport-handover"
+	backfillOnPickupConsumerName = "visibility-exception/backfill-movement-facts-on-offsite-pickup"
+	backfillPickupAttempt        = "SYN-PICKUP-ATTEMPT-DEP-01"
+	backfillScope                = "SYN-SCOPE-SHA-HUB-DISPATCH"
+	backfillVersion              = "SYN-HANDOVER-RESULT/DEP-01/v1"
+	backfillFact                 = "SYN-MOVE-BACKFILL-01"
 )
 
 // Covers: AT-VE-178 真库半边、票面判据「先登移动事实、后立段，追踪里出现该事实派生的里程碑」（证据 S）——出发先于段登记时投影里
@@ -66,43 +69,93 @@ func TestADepartureRecordedBeforeItsSegmentReachesTrackingOnceTheHandoverEstabli
 	}
 }
 
-// Covers: AT-VE-181 派发半边——补派生这一路的失败分格：交接读不回、对象的段读不动、按段列事实读不动、派生编排未决落
-// dispatch.consumer_undecided，其余保持 dispatch.publish_failed。名单取 veMovementFactBackfillUndecidedSentinels 本身，理由同移动
-// 事实那一份。
+// Covers: AT-VE-181 派发半边——补派生两路的失败分格：控制事实读不回、对象的段读不动、按段列事实读不动、派生编排未决落
+// dispatch.consumer_undecided，其余保持 dispatch.publish_failed。名单取各路的哨兵变量本身，理由同移动事实那一份。
 func TestMovementFactBackfillFailuresLandInTheRightPartition(t *testing.T) {
-	tests := []struct {
+	type failure struct {
 		name     string
 		err      error
 		wantCode string
-	}{
-		{"交接读不回", vetf.ErrHandoverNotVisible, "dispatch.consumer_undecided"},
-		{"对象的段读不动", vetf.ErrHandoverSegmentNotVisible, "dispatch.consumer_undecided"},
+	}
+	shared := []failure{
+		{"对象的段读不动", vetf.ErrObjectSegmentsNotVisible, "dispatch.consumer_undecided"},
 		{"按段列事实读不动", vetf.ErrMovementFactsOfSegmentNotVisible, "dispatch.consumer_undecided"},
 		{"派生编排未决", vetf.ErrProjectionUndecided, "dispatch.consumer_undecided"},
-		{"交接记录不变量已破", vetf.ErrHandoverRecordInconsistent, "dispatch.publish_failed"},
 		{"段册或事实不变量已破", vetf.ErrMovementFactRecordInconsistent, "dispatch.publish_failed"},
-		{"交接引用译不出", vetf.ErrHandoverUntranslatableAnswer, "dispatch.publish_failed"},
 		{"事实引用译不出", vetf.ErrMovementFactUntranslatableAnswer, "dispatch.publish_failed"},
 		{"投影意图待发", vetf.ErrProjectionHandoffPending, "dispatch.publish_failed"},
 		{"投影封闭集合外", veconsume.ErrUnexpectedProjectionOutcome, "dispatch.publish_failed"},
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			beat, db, store := beatWithSentinelledConsumer(t, &stallingConsumer{err: test.err},
-				veinbox.TransportHandoverRegisteredEventType, veMovementFactBackfillUndecidedSentinels)
-			enqueueForBeat(t, db, store, "handover-1", veinbox.TransportHandoverRegisteredEventType, `{}`)
+	lanes := []struct {
+		name      string
+		event     eventing.EventType
+		sentinels []error
+		own       []failure
+	}{
+		{"交接", veinbox.TransportHandoverRegisteredEventType, veMovementFactBackfillOnHandoverUndecidedSentinels, []failure{
+			{"交接读不回", vetf.ErrHandoverNotVisible, "dispatch.consumer_undecided"},
+			{"交接记录不变量已破", vetf.ErrHandoverRecordInconsistent, "dispatch.publish_failed"},
+			{"交接引用译不出", vetf.ErrHandoverUntranslatableAnswer, "dispatch.publish_failed"},
+		}},
+		{"揽收", veinbox.OffsitePickupRegisteredEventType, veMovementFactBackfillOnPickupUndecidedSentinels, []failure{
+			{"揽收读不回", vetf.ErrPickupNotVisible, "dispatch.consumer_undecided"},
+			{"揽收记录不变量已破", vetf.ErrPickupRecordInconsistent, "dispatch.publish_failed"},
+			{"揽收引用译不出", vetf.ErrPickupUntranslatableAnswer, "dispatch.publish_failed"},
+		}},
+	}
+	for _, lane := range lanes {
+		for _, test := range append(lane.own, shared...) {
+			t.Run(lane.name+"/"+test.name, func(t *testing.T) {
+				beat, db, store := beatWithSentinelledConsumer(t, &stallingConsumer{err: test.err}, lane.event, lane.sentinels)
+				enqueueForBeat(t, db, store, "control-fact-1", lane.event, `{}`)
 
-			published, err := beat.DispatchOnce(t.Context())
-			if err != nil {
-				t.Fatalf("一拍：%v", err)
-			}
-			if published != 0 {
-				t.Fatalf("失败的投递被定稿了 %d 条", published)
-			}
-			if got := recordedFailureCode(t, db, "handover-1"); got != test.wantCode {
-				t.Fatalf("failure_code = %q, want %q", got, test.wantCode)
-			}
-		})
+				published, err := beat.DispatchOnce(t.Context())
+				if err != nil {
+					t.Fatalf("一拍：%v", err)
+				}
+				if published != 0 {
+					t.Fatalf("失败的投递被定稿了 %d 条", published)
+				}
+				if got := recordedFailureCode(t, db, "control-fact-1"); got != test.wantCode {
+					t.Fatalf("failure_code = %q, want %q", got, test.wantCode)
+				}
+			})
+		}
+	}
+}
+
+// Covers: AT-VE-178 真库半边（揽收）——出发先于段登记；对象随后经生产登记编排凭场外揽收立起那一段，生产路由一拍：揽收那一封上的
+// 补派生在对象身上补出出发，归 DEPARTED。同一封信上 PS 来源采用那一路在本夹具里停在未决，不影响排在它前面的追踪两路落账。
+func TestADepartureRecordedBeforeItsSegmentReachesTrackingOnceAPickupEstablishesIt(t *testing.T) {
+	fixture := newSYNVerticalFixture(t)
+	registerDemoMilestoneMapping(t, fixture)
+
+	factEvent := recordDepartureThroughProduction(t, fixture, backfillFact)
+	if published, err := fixture.beat.DispatchOnce(t.Context()); err != nil || published != 1 {
+		t.Fatalf("出发那一拍 published = %d err = %v；失败码 = %q", published, err, recordedFailureCode(t, fixture.db, factEvent))
+	}
+
+	pickupEvent := registerPickupIntoMovementSegment(t, fixture)
+	if _, err := fixture.beat.DispatchOnce(t.Context()); err != nil {
+		t.Fatalf("揽收那一拍：%v", err)
+	}
+	if n := fixture.countInbox(t, backfillOnPickupConsumerName, pickupEvent); n != 1 {
+		t.Fatalf("补派生 inbox 行数 = %d, want 1——路由表没把揽收信封投给补派生那一路；失败码 = %q",
+			n, recordedFailureCode(t, fixture.db, pickupEvent))
+	}
+	entries := projectionEntries(t, fixture, movementParcelOnBoard)
+	var departed int
+	for _, entry := range entries {
+		if entry.Fact().Fact().String() != "movement-fact/"+movementParcelOnBoard+"/"+backfillFact {
+			continue
+		}
+		departed++
+		if milestone, classified := entry.Milestone(); !classified || milestone.String() != "DEPARTED" {
+			t.Fatalf("补出的出发归类 %q（%v），want DEPARTED", milestone, classified)
+		}
+	}
+	if departed != 1 {
+		t.Fatalf("出发条目 %d 个, want 1（条目共 %d 个）", departed, len(entries))
 	}
 }
 
@@ -140,6 +193,61 @@ func registerHandoverIntoMovementSegment(t *testing.T, fixture *synVerticalFixtu
 		t.Fatalf("登记交接：outcome=%s debt=%q", result.Outcome(), result.SegmentContinuationReference())
 	}
 	return tenant.String() + "/" + movementParcelOnBoard + "/" + backfillScope + "/" + backfillVersion
+}
+
+// registerPickupIntoMovementSegment 经生产登记编排（真揽收登记册、真段册、真版本签发、真 outbox 交出）登一次场外揽收：在控那一件
+// 在出发前一小时被揽走，段由这一次收寄立起。交回对象级揽收信封的事件 ID。
+func registerPickupIntoMovementSegment(t *testing.T, fixture *synVerticalFixture) string {
+	t.Helper()
+	store, err := outbox.NewStore(fixture.db)
+	if err != nil {
+		t.Fatalf("构造 Outbox Store：%v", err)
+	}
+	pickups, err := tfpostgres.NewOffsitePickupRegistrations(fixture.db)
+	if err != nil {
+		t.Fatalf("揽收登记库：%v", err)
+	}
+	segments, err := tfpostgres.NewFulfillmentSegments(fixture.db)
+	if err != nil {
+		t.Fatalf("段登记库：%v", err)
+	}
+	judgments, err := tfpostgres.NewActualCarrierJudgments(fixture.db)
+	if err != nil {
+		t.Fatalf("实际承运商判断库：%v", err)
+	}
+	versions, err := tfpostgres.NewResultVersions(fixture.db)
+	if err != nil {
+		t.Fatalf("版本签发：%v", err)
+	}
+	handoff, err := tfpostgres.NewOutboxOffsitePickupRegistrationHandoff(fixture.db, store, systemClock{})
+	if err != nil {
+		t.Fatalf("揽收登记交出：%v", err)
+	}
+	register := tfapplication.NewRegisterOffsitePickupHandler(tfapplication.RegisterOffsitePickupDeps{
+		Pickups: pickups, Segments: segments, Judgments: judgments, Versions: versions, Downstream: handoff, Clock: systemClock{},
+	})
+	tenant := mustTF(t, tfdomain.NewTenantID, fixture.identity.TenantID().String())
+	command := tfapplication.RegisterOffsitePickupCommand{
+		TenantID:   tenant,
+		Object:     movementParcelOnBoard,
+		Task:       "SYN-PICKUP-TASK-DEP-01",
+		Attempt:    backfillPickupAttempt,
+		Place:      "SYN-PLACE-DEP-01",
+		Control:    "SYN-CONTROL-DEP-01",
+		ExecutedBy: "SYN-COURIER-DEP-01",
+		OccurredAt: movementHandedOverAt,
+		Segment:    movementSegment,
+	}
+	var result tfapplication.RegisterOffsitePickupResult
+	mustWithinTX(t, fixture.transactor, t.Context(), func(txCtx context.Context) error {
+		var registerErr error
+		result, registerErr = register.Register(txCtx, command)
+		return registerErr
+	})
+	if result.Outcome() != tfapplication.PickupRegistered || result.SegmentContinuationReference() != "" {
+		t.Fatalf("登记揽收：outcome=%s debt=%q", result.Outcome(), result.SegmentContinuationReference())
+	}
+	return tenant.String() + "/" + movementParcelOnBoard + "/" + backfillPickupAttempt + "/offsite-pickup-registration"
 }
 
 func assertBackfilledDeparture(t *testing.T, fixture *synVerticalFixture) {

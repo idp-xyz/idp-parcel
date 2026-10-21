@@ -146,9 +146,9 @@ func movementFactRecordAgrees(record tfports.MovementFactRecord, key tfports.Mov
 		!fact.OccurredAt().IsZero() && !record.RecordedAt.IsZero()
 }
 
-// deriveMovementFactOnto 在一件对象上派生这一版事实。正常路径与补派生（ADR-0224）都走这一处：引用、版本、三个时间与替代关系
-// 只由 movementProjectionCommand 定，两路交进派生编排的是同一把幂等键与同一份内容，谁先到谁派生，后到的一路答已有结果，不出
-// 第二个条目。
+// deriveMovementFactOnto 在一件对象上派生这一版事实。正常路径与补派生（ADR-0224）都走这一处：引用、版本、发生/有效/接收时间与
+// 替代关系只由 movementProjectionCommand 定，两路交进派生编排的是同一把幂等键与同一份内容，谁先到谁派生，后到的一路答已有结果，
+// 不出第二个条目。
 func deriveMovementFactOnto(
 	ctx context.Context,
 	derive MovementProjectionHandler,
@@ -169,8 +169,8 @@ func deriveMovementFactOnto(
 
 // objectsOf 取事实声明的段里、事实发生那一刻在控的对象——与出发门禁读数问关务时同一条口径（ADR-0205 决定四，口径只在
 // ActualFulfillmentSegment.ObjectsUnderControlAt 定义一处）。没声明段、段不在册、那一刻段里没有在控对象，都交回空：事实照样
-// 入账，只是没有可投的对象。段不在册不等它：事实本就可以先于段登记（ADR-0205 决定四），这封信等不来段。对象日后凭交接进了
-// 这一段，由交接那一封信的补派生按段找回本事实（ADR-0224），不靠本信重投。
+// 入账，只是没有可投的对象。段不在册不等它：事实本就可以先于段登记（ADR-0205 决定四），这封信等不来段。对象日后凭交接或场外
+// 揽收进了这一段，由那一封控制事实信封上的补派生按段找回本事实（ADR-0224），不靠本信重投。
 func (adapter *DeriveOnMovementFactAdapter) objectsOf(
 	ctx context.Context,
 	fact tfdomain.TransportMovementFact,

@@ -88,26 +88,9 @@ func (adapter *DeriveOnOffsitePickupAdapter) HandleRegisteredOffsitePickup(
 	ctx context.Context,
 	registered veinbox.RegisteredOffsitePickup,
 ) error {
-	key, err := pickupKeyFor(registered)
+	record, err := findRegisteredPickup(ctx, adapter.pickups, registered)
 	if err != nil {
 		return err
-	}
-	record, found, err := adapter.pickups.FindByKey(ctx, key)
-	if err != nil {
-		return fmt.Errorf("%w: %v", ErrPickupNotVisible, err)
-	}
-	if !found {
-		return fmt.Errorf("%w: object %q attempt %q",
-			ErrPickupNotVisible, registered.Object, registered.Attempt)
-	}
-	if record.Key != key || record.Pickup.Object() != key.Object ||
-		record.Pickup.Attempt() != key.Attempt || record.Pickup.TenantID() != key.TenantID {
-		return fmt.Errorf("%w: object %q attempt %q",
-			ErrPickupRecordInconsistent, registered.Object, registered.Attempt)
-	}
-	if record.Pickup.OccurredAt().IsZero() || record.RecordedAt.IsZero() {
-		return fmt.Errorf("%w: object %q attempt %q",
-			ErrPickupRecordInconsistent, registered.Object, registered.Attempt)
 	}
 
 	command, err := pickupProjectionCommand(registered, record)
@@ -119,6 +102,38 @@ func (adapter *DeriveOnOffsitePickupAdapter) HandleRegisteredOffsitePickup(
 		return err
 	}
 	return veconsume.Consumption(result)
+}
+
+// findRegisteredPickup 按信封键取回对象级揽收并核它与键一致。揽收投影与移动事实补派生（ADR-0224）两路都按同一封信读同一条
+// 登记，核对只写这一处，理由同 findRegisteredHandover。
+func findRegisteredPickup(
+	ctx context.Context,
+	pickups OffsitePickupFinder,
+	registered veinbox.RegisteredOffsitePickup,
+) (tfports.OffsitePickupRecord, error) {
+	none := tfports.OffsitePickupRecord{}
+	key, err := pickupKeyFor(registered)
+	if err != nil {
+		return none, err
+	}
+	record, found, err := pickups.FindByKey(ctx, key)
+	if err != nil {
+		return none, fmt.Errorf("%w: %v", ErrPickupNotVisible, err)
+	}
+	if !found {
+		return none, fmt.Errorf("%w: object %q attempt %q",
+			ErrPickupNotVisible, registered.Object, registered.Attempt)
+	}
+	if record.Key != key || record.Pickup.Object() != key.Object ||
+		record.Pickup.Attempt() != key.Attempt || record.Pickup.TenantID() != key.TenantID {
+		return none, fmt.Errorf("%w: object %q attempt %q",
+			ErrPickupRecordInconsistent, registered.Object, registered.Attempt)
+	}
+	if record.Pickup.OccurredAt().IsZero() || record.RecordedAt.IsZero() {
+		return none, fmt.Errorf("%w: object %q attempt %q",
+			ErrPickupRecordInconsistent, registered.Object, registered.Attempt)
+	}
+	return record, nil
 }
 
 // pickupKeyFor 把信封三维译成 TF 的幂等键。译不出来是引用坏了，不是等谁。

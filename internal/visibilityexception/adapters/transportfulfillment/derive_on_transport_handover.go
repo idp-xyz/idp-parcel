@@ -99,7 +99,7 @@ func (adapter *DeriveOnTransportHandoverAdapter) HandleRegisteredTransportHandov
 	return veconsume.Consumption(result)
 }
 
-// findRegisteredHandover 按信封四维取回交接并核它与键一致。交接投影与移动事实补派生（ADR-0224）两路都按同一封信读同一条
+// findRegisteredHandover 按信封键取回交接并核它与键一致。交接投影与移动事实补派生（ADR-0224）两路都按同一封信读同一条
 // 登记，核对只写这一处：两路各核一份，日后一路加了一格、另一路没加，同一条坏记录就会在一路当毒丸、在另一路照常派生。
 func findRegisteredHandover(
 	ctx context.Context,

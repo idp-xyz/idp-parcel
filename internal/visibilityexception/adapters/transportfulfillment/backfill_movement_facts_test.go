@@ -12,8 +12,8 @@ import (
 	veapplication "go.idp.xyz/idp-parcel/internal/visibilityexception/application"
 )
 
-// 本文件证交接信封上的移动事实补派生（票 demo-chain-gaps/53，ADR-0224）：对象凭这一版`已交接`进段，声明了这一段、发生那一刻
-// 对象在控的在册移动事实就在它身上补派生；与移动事实那一路同一判据、同一幂等键，两路谁先谁后都只留一份。派生一侧用真的派生
+// 本文件证控制事实信封上的移动事实补派生（票 demo-chain-gaps/53，ADR-0224）：对象凭这一版`已交接`或场外揽收进段，声明了这一段、
+// 发生那一刻对象在控的在册移动事实就在它身上补派生；与移动事实那一路同一判据、同一幂等键，两路谁先谁后都只留一份。派生一侧用真的派生
 // 编排接替身端口，与移动事实那一份用例共用同包的替身。
 
 type objectSegmentsDouble struct {
@@ -87,8 +87,9 @@ func backfillSegment(
 }
 
 type backfillFixture struct {
-	subject   *adapter.BackfillMovementFactsOnHandoverAdapter
+	subject   *adapter.BackfillMovementFactsAdapter
 	handovers *handoverFinderDouble
+	pickups   *pickupRegistryDouble
 	segments  *objectSegmentsDouble
 	facts     *segmentFactsDouble
 	derive    *veapplication.DeriveProjectionHandler
@@ -105,6 +106,7 @@ func newBackfillFixture(t *testing.T, mapping handoverMappingViewDouble) *backfi
 	derive, store, views := handoverDeriveHandler(t, mapping, handoverProjectionDownstreamDouble{})
 	fixture := &backfillFixture{
 		handovers: &handoverFinderDouble{record: handover, found: true},
+		pickups:   &pickupRegistryDouble{record: registeredPickup(t, "parcel-1"), found: true},
 		segments: &objectSegmentsDouble{
 			keys:    []tfports.FulfillmentSegmentKey{segment.Key},
 			records: map[tfports.FulfillmentSegmentKey]tfports.FulfillmentSegmentRecord{segment.Key: segment},
@@ -116,7 +118,8 @@ func newBackfillFixture(t *testing.T, mapping handoverMappingViewDouble) *backfi
 		store:  store,
 		views:  views,
 	}
-	subject, err := adapter.NewBackfillMovementFactsOnHandoverAdapter(fixture.handovers, fixture.segments, fixture.facts, derive)
+	subject, err := adapter.NewBackfillMovementFactsAdapter(
+		fixture.handovers, fixture.pickups, fixture.segments, fixture.facts, derive)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -144,7 +147,7 @@ func (fixture *backfillFixture) entriesOf(t *testing.T, parcel string) int {
 }
 
 // Covers: AT-VE-178——事实先于段登记、对象后凭`已交接`进段：交接那一封补出与正常路径同一份事实——类型词、带对象维的引用、版本与
-// 三个时间都同移动事实那一路；只补这一件，同段别的对象不在这一封里补。
+// 发生/有效/接收时间都同移动事实那一路；只补这一件，同段别的对象不在这一封里补。
 func TestAHandoverIntoTheSegmentBackfillsTheFactRecordedBeforeIt(t *testing.T) {
 	fixture := newBackfillFixture(t, handoverMappingViewDouble{})
 
@@ -163,7 +166,7 @@ func TestAHandoverIntoTheSegmentBackfillsTheFactRecordedBeforeIt(t *testing.T) {
 		}
 		if !fact.OccurredAt().Equal(movementDepartedAt) || !fact.EffectiveAt().Equal(movementDepartedAt) ||
 			!fact.ReceivedAt().Equal(movementRecordedAt) {
-			t.Fatalf("三个时间 = %s / %s / %s", fact.OccurredAt(), fact.EffectiveAt(), fact.ReceivedAt())
+			t.Fatalf("发生/有效/接收时间 = %s / %s / %s", fact.OccurredAt(), fact.EffectiveAt(), fact.ReceivedAt())
 		}
 		found = true
 	}
@@ -287,9 +290,9 @@ func TestBackfillFailuresKeepTheirSentinels(t *testing.T) {
 	}{
 		{"交接读不回", func(_ *testing.T, fixture *backfillFixture) { fixture.handovers.found = false }, adapter.ErrHandoverNotVisible},
 		{"对象的段列不出", func(_ *testing.T, fixture *backfillFixture) { fixture.segments.listErr = unreadable },
-			adapter.ErrHandoverSegmentNotVisible},
+			adapter.ErrObjectSegmentsNotVisible},
 		{"段按键取不动", func(_ *testing.T, fixture *backfillFixture) { fixture.segments.findErr = unreadable },
-			adapter.ErrHandoverSegmentNotVisible},
+			adapter.ErrObjectSegmentsNotVisible},
 		{"按段列事实读不动", func(_ *testing.T, fixture *backfillFixture) { fixture.facts.err = unreadable },
 			adapter.ErrMovementFactsOfSegmentNotVisible},
 		{"派生停在未决", nil, adapter.ErrProjectionUndecided},
@@ -385,22 +388,27 @@ func TestABackfilledCorrectionChainKeepsItsSupersession(t *testing.T) {
 
 func TestTheBackfillAdapterRefusesMissingDependencies(t *testing.T) {
 	derive, _, _ := handoverDeriveHandler(t, handoverMappingViewDouble{}, handoverProjectionDownstreamDouble{})
-	handovers, segments, facts := &handoverFinderDouble{}, &objectSegmentsDouble{}, &segmentFactsDouble{}
+	handovers, pickups := &handoverFinderDouble{}, &pickupRegistryDouble{}
+	segments, facts := &objectSegmentsDouble{}, &segmentFactsDouble{}
 	for name, build := range map[string]func() error{
 		"缺交接读口": func() error {
-			_, err := adapter.NewBackfillMovementFactsOnHandoverAdapter(nil, segments, facts, derive)
+			_, err := adapter.NewBackfillMovementFactsAdapter(nil, pickups, segments, facts, derive)
+			return err
+		},
+		"缺揽收读口": func() error {
+			_, err := adapter.NewBackfillMovementFactsAdapter(handovers, nil, segments, facts, derive)
 			return err
 		},
 		"缺段读口": func() error {
-			_, err := adapter.NewBackfillMovementFactsOnHandoverAdapter(handovers, nil, facts, derive)
+			_, err := adapter.NewBackfillMovementFactsAdapter(handovers, pickups, nil, facts, derive)
 			return err
 		},
 		"缺按段列事实": func() error {
-			_, err := adapter.NewBackfillMovementFactsOnHandoverAdapter(handovers, segments, nil, derive)
+			_, err := adapter.NewBackfillMovementFactsAdapter(handovers, pickups, segments, nil, derive)
 			return err
 		},
 		"缺派生": func() error {
-			_, err := adapter.NewBackfillMovementFactsOnHandoverAdapter(handovers, segments, facts, nil)
+			_, err := adapter.NewBackfillMovementFactsAdapter(handovers, pickups, segments, facts, nil)
 			return err
 		},
 	} {
@@ -408,4 +416,74 @@ func TestTheBackfillAdapterRefusesMissingDependencies(t *testing.T) {
 			t.Fatalf("%s 构造成功了", name)
 		}
 	}
+}
+
+// pickupFixture 把现场换成「事实先登、对象后凭场外揽收立段」：parcel-1 凭 pickup-result/v1 立 segment-1，parcel-2 凭另一次收寄
+// 加入。
+func pickupFixture(t *testing.T) *backfillFixture {
+	t.Helper()
+	fixture := newBackfillFixture(t, handoverMappingViewDouble{})
+	key := fixture.segments.keys[0]
+	established, err := tfdomain.EstablishSegmentWithPickup(key.Segment, fixture.pickups.record.Pickup, tfdomain.PlannedSegmentReference{})
+	if err != nil {
+		t.Fatalf("立段：%v", err)
+	}
+	joined, err := established.JoinWithPickup(registeredPickup(t, "parcel-2").Pickup, tfdomain.PlannedSegmentReference{})
+	if err != nil {
+		t.Fatalf("加入：%v", err)
+	}
+	fixture.segments.records[key] = tfports.FulfillmentSegmentRecord{Key: key, Segment: joined}
+	return fixture
+}
+
+// Covers: AT-VE-178（揽收）——对象凭场外揽收立段时，揽收那一封补出同一份事实；只补这一件。
+func TestAPickupIntoTheSegmentBackfillsTheFactRecordedBeforeIt(t *testing.T) {
+	fixture := pickupFixture(t)
+
+	if err := fixture.subject.HandleRegisteredOffsitePickup(t.Context(), registeredPickupRef()); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if facts, entries := fixture.factsOf("parcel-1"), fixture.entriesOf(t, "parcel-1"); facts != 1 || entries != 1 {
+		t.Fatalf("parcel-1 事实 %d 份、条目 %d 个，want 各 1", facts, entries)
+	}
+	if n := fixture.factsOf("parcel-2"); n != 0 {
+		t.Fatalf("同段别的对象也在这一封里补了 %d 份", n)
+	}
+	for _, record := range fixture.store.byKey {
+		if record.Fact.Fact().String() != "movement-fact/parcel-1/move-1" || record.Fact.Kind().String() != "movement-departure" {
+			t.Fatalf("补派生的事实 = %s %s", record.Fact.Kind(), record.Fact.Fact())
+		}
+	}
+}
+
+// Covers: AT-VE-180、AT-VE-181（揽收）——收寄没带段（对象不在任何段）入账不补；有参与的段是凭交接进的、不是这一次收寄进的，不补；
+// 揽收读不回是续办。
+func TestAPickupThatPutsNoObjectIntoTheSegmentBackfillsNothing(t *testing.T) {
+	t.Run("对象不在任何段", func(t *testing.T) {
+		fixture := pickupFixture(t)
+		fixture.segments.keys = nil
+		if err := fixture.subject.HandleRegisteredOffsitePickup(t.Context(), registeredPickupRef()); err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if len(fixture.store.byKey) != 0 {
+			t.Fatalf("不该补却派生了 %d 份", len(fixture.store.byKey))
+		}
+	})
+	t.Run("段是凭交接进的", func(t *testing.T) {
+		fixture := newBackfillFixture(t, handoverMappingViewDouble{})
+		if err := fixture.subject.HandleRegisteredOffsitePickup(t.Context(), registeredPickupRef()); err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if len(fixture.store.byKey) != 0 || fixture.facts.calls != 0 {
+			t.Fatalf("段不是这一次收寄进的，却列了 %d 次事实、派生了 %d 份", fixture.facts.calls, len(fixture.store.byKey))
+		}
+	})
+	t.Run("揽收读不回", func(t *testing.T) {
+		fixture := pickupFixture(t)
+		fixture.pickups.found = false
+		err := fixture.subject.HandleRegisteredOffsitePickup(t.Context(), registeredPickupRef())
+		if !errors.Is(err, adapter.ErrPickupNotVisible) {
+			t.Fatalf("err = %v, want ErrPickupNotVisible", err)
+		}
+	})
 }
