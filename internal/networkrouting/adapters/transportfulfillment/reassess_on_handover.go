@@ -31,8 +31,9 @@ var (
 	// 触发过不了复核的门。编程错误，不折成「不复核」。
 	ErrUntranslatableAnswer = errors.New(
 		"network routing transportfulfillment adapter: untranslatable answer")
-	// ErrHandoverReassessmentUndecided 说明这次复核停在未决（复核登记册或路由历史读不回、证据未配置、适用性看不清、
-	// 取号依赖故障）。与收寄采用那一路的同类哨兵分设：各条触发等的依赖不同，运维读到失败要分得出是哪一路。
+	// ErrHandoverReassessmentUndecided 说明这次复核停在未决：复核编排只对重投推得动的那几格答未决（ADR-0235），
+	// 重投推不动的答`未判`、入账，不走到这里。与收寄采用那一路的同类哨兵分设：各条触发等的依赖不同，运维读到
+	// 失败要分得出是哪一路。
 	ErrHandoverReassessmentUndecided = errors.New(
 		"network routing transportfulfillment adapter: route reassessment on transport handover is undecided")
 )
@@ -257,6 +258,10 @@ func reassessmentToConsumption(result nrapplication.ReassessRouteResult) error {
 		return nil
 	case nrapplication.ReassessTriggerConflict:
 		// 同一关联登记过另一份内容（例如委托换了受理基线之后重投），原触发与原结果不被覆盖，重投也不会变。
+		return nil
+	case nrapplication.ReassessTriggerNotJudged:
+		// 入账未判，原因已由复核编排落进未判登记（ADR-0235）。重投推不动它，让它占着交接分区，只会把同一封信上
+		// 的别的各路与同一对象之后的交接信封一起拖到 ABANDONED。
 		return nil
 	case nrapplication.ReassessUndecided:
 		return fmt.Errorf("%w: %s", ErrHandoverReassessmentUndecided, result.UndecidedReason())

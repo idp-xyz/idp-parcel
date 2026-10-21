@@ -17,7 +17,7 @@ import (
 var ErrUnexpectedReassessmentSave = errors.New("network routing: unexpected reassessment save outcome")
 
 // ReassessOutcome 是复核请求的应用处理结果。三种领域走向（仍适用/已失效/首个计划）各占
-// 一格，未决、已有结果、冲突与未受理是应用格——用例明写这些结果不能合并为通用失败。
+// 一格，未决、已有结果、冲突、未受理与未判是应用格——用例明写这些结果不能合并为通用失败。
 type ReassessOutcome uint8
 
 const (
@@ -30,6 +30,10 @@ const (
 	ReassessExistingResult
 	ReassessTriggerConflict
 	ReassessTriggerNotAccepted
+	// ReassessTriggerNotJudged 是触发入账、这一次不形成判断，原因已落未判登记（ADR-0235）。
+	// 与未决分开，因为两者的恢复动作不同：未决等依赖恢复、回滚重投；这一格重投推不动，让它
+	// 占着分区重投只会烧到 ABANDONED，照样丢掉这次复核，还挡住同一分区后面的信封。
+	ReassessTriggerNotJudged
 )
 
 func (outcome ReassessOutcome) String() string {
@@ -50,29 +54,29 @@ func (outcome ReassessOutcome) String() string {
 		return "TRIGGER_CONFLICT"
 	case ReassessTriggerNotAccepted:
 		return "TRIGGER_NOT_ACCEPTED"
+	case ReassessTriggerNotJudged:
+		return "TRIGGER_NOT_JUDGED"
 	default:
 		return ""
 	}
 }
 
 // ReassessUndecidedReason 指名复核停在哪一步。封闭集合，按依赖阶段分类统计。
+//
+// 只收重投推得动的格（ADR-0235，判据同 ADR-0029 按恢复动作分格）。没有路由历史、证据未配置、
+// 冻结形态未配置重投多少次都一样，归 ports.NotJudgedReason，入账留原因。往这里加一格之前先答
+// 它重投会不会变：不会变的放进来，消费门就会对着它烧完失败预算。
 type ReassessUndecidedReason uint8
 
 const (
 	ReassessUndecidedReasonNone ReassessUndecidedReason = iota
 	ReassessLogUnavailable
 	RoutingHistoryUnavailable
-	NoRoutingHistory
 	ReassessEvidenceUnavailable
-	// ReassessEvidenceNotConfigured 与 ReassessEvidenceUnavailable 分格，理由同
-	// RouteEvidenceNotConfigured（ADR-0052）：未配置等租户登记，不可用等依赖恢复。
-	ReassessEvidenceNotConfigured
 	PlanReviewInconclusive
 	ApplicabilityStoreUnavailable
 	ReassessStoreUnavailable
 	ReassessIdentityUnavailable
-	// FreezeFormUnconfigured 是策略版本没有声明冻结形态。不能把它当成未冻结。
-	FreezeFormUnconfigured
 )
 
 func (reason ReassessUndecidedReason) String() string {
@@ -81,12 +85,8 @@ func (reason ReassessUndecidedReason) String() string {
 		return "REASSESS_LOG_UNAVAILABLE"
 	case RoutingHistoryUnavailable:
 		return "ROUTING_HISTORY_UNAVAILABLE"
-	case NoRoutingHistory:
-		return "NO_ROUTING_HISTORY"
 	case ReassessEvidenceUnavailable:
 		return "REASSESS_EVIDENCE_UNAVAILABLE"
-	case ReassessEvidenceNotConfigured:
-		return "REASSESS_EVIDENCE_NOT_CONFIGURED"
 	case PlanReviewInconclusive:
 		return "PLAN_REVIEW_INCONCLUSIVE"
 	case ApplicabilityStoreUnavailable:
@@ -95,8 +95,6 @@ func (reason ReassessUndecidedReason) String() string {
 		return "REASSESS_STORE_UNAVAILABLE"
 	case ReassessIdentityUnavailable:
 		return "REASSESS_IDENTITY_UNAVAILABLE"
-	case FreezeFormUnconfigured:
-		return "FREEZE_FORM_UNCONFIGURED"
 	default:
 		return ""
 	}
@@ -114,6 +112,7 @@ type ReassessRouteResult struct {
 	record       ports.ReassessmentRecord
 	hasRecord    bool
 	reason       ReassessUndecidedReason
+	notJudged    ports.NotJudgedReason
 	continuation ContinuationReference
 }
 
@@ -128,6 +127,11 @@ func (result ReassessRouteResult) Record() (ports.ReassessmentRecord, bool) {
 
 func (result ReassessRouteResult) UndecidedReason() ReassessUndecidedReason {
 	return result.reason
+}
+
+// NotJudgedReason 只在结果为`未判`时有值。
+func (result ReassessRouteResult) NotJudgedReason() ports.NotJudgedReason {
+	return result.notJudged
 }
 
 func (result ReassessRouteResult) ContinuationReference() ContinuationReference {
@@ -157,6 +161,7 @@ func NewReassessRouteHandler(deps ReassessRouteDeps) *ReassessRouteHandler {
 // Handle 把一次权威触发推进到复核结论：触发受理（线索在构造期就被拒）→ 重复/冲突分界
 // → 载入历史结果（没有历史不得凭空假定初始计划）→ 两条独立判断线（6A 计划适用性、
 // 6B 替代候选）→ 提交。失效即失效：候选评估未决拦不住失效落库，三件并存（硬句）。
+// 判断前提里重投推不动的那几格不答未决，入账未判、留下原因（ADR-0235）。
 func (handler *ReassessRouteHandler) Handle(
 	ctx context.Context,
 	command ReassessRouteCommand,
@@ -177,16 +182,20 @@ func (handler *ReassessRouteHandler) Handle(
 	}
 	if found {
 		existing, present, err := handler.deps.Store.FindByCorrelation(ctx, key.TenantID, trigger.Correlation())
-		if err != nil || !present {
+		if err != nil {
 			return handler.undecided(key, ReassessStoreUnavailable), nil
 		}
-		return ReassessRouteResult{
-			outcome:   outcomeFor(existing),
-			record:    existing,
-			hasRecord: true,
-		}, nil
-	}
-	if err := handler.deps.Log.Append(ctx, key.TenantID, trigger.Correlation(), digest); err != nil {
+		if present {
+			return ReassessRouteResult{
+				outcome:   outcomeFor(existing),
+				record:    existing,
+				hasRecord: true,
+			}, nil
+		}
+		// 指纹在册而复核不在，只会是上一次这个触发入账未判：其余出口要么连指纹一起回滚，要么同笔
+		// 落了复核。重投与另一封信封都往下重新判——前提此刻齐了就判，仍缺就再入账；答「登记册
+		// 读不回」会把一份合法的未判卡回重投，烧到 ABANDONED（ADR-0235）。
+	} else if err := handler.deps.Log.Append(ctx, key.TenantID, trigger.Correlation(), digest); err != nil {
 		return handler.undecided(key, ReassessLogUnavailable), nil
 	}
 
@@ -196,7 +205,7 @@ func (handler *ReassessRouteHandler) Handle(
 	}
 	if !found {
 		// 「没有历史结果时不得凭空假定初始计划」——复核复的是一份已有判断。
-		return handler.undecided(key, NoRoutingHistory), nil
+		return handler.notJudged(ctx, trigger, ports.NotJudgedNoRoutingHistory)
 	}
 
 	evidence, configured, err := handler.deps.Evidence.LoadInitialRouteEvidence(ctx, key, command.Carried)
@@ -204,7 +213,7 @@ func (handler *ReassessRouteHandler) Handle(
 		return handler.undecided(key, ReassessEvidenceUnavailable), nil
 	}
 	if !configured {
-		return handler.undecided(key, ReassessEvidenceNotConfigured), nil
+		return handler.notJudged(ctx, trigger, ports.NotJudgedEvidenceNotConfigured)
 	}
 	if !evidence.ViewRevision.Valid() || !evidence.Strategy.Valid() {
 		return ReassessRouteResult{}, ErrIncompleteRouteEvidence
@@ -276,7 +285,7 @@ func (handler *ReassessRouteHandler) reassessPlan(
 			return ReassessRouteResult{}, err
 		}
 		if unconfigured {
-			return handler.undecided(key, FreezeFormUnconfigured), nil
+			return handler.notJudged(ctx, trigger, ports.NotJudgedFreezeFormUnconfigured)
 		}
 		record := ports.ReassessmentRecord{
 			Correlation:  trigger.Correlation(),
@@ -847,6 +856,27 @@ func (handler *ReassessRouteHandler) loadApplicability(
 		return existing, nil
 	}
 	return domain.EstablishPlanApplicability(plan.Version(), plan.EffectiveFrom())
+}
+
+// notJudged 先把原因落进未判登记，再答`未判`。原因没落库就不得答这一格（护栏同 ADR-0094 决定五）：
+// 消费门见`未判`就入账，原因随之只剩一份没人读的处理结果；落库失败改答登记册那一格的未决，
+// 照旧回滚重投，下一轮重新走到这里。
+func (handler *ReassessRouteHandler) notJudged(
+	ctx context.Context,
+	trigger domain.ReassessmentTrigger,
+	reason ports.NotJudgedReason,
+) (ReassessRouteResult, error) {
+	key := trigger.Key()
+	if err := handler.deps.Store.RecordNotJudged(ctx, ports.NotJudgedTrigger{
+		Correlation:       trigger.Correlation(),
+		Key:               key,
+		Reason:            reason,
+		TriggerOccurredAt: trigger.OccurredAt(),
+		SettledAt:         handler.deps.Clock.Now(),
+	}); err != nil {
+		return handler.undecided(key, ReassessStoreUnavailable), nil
+	}
+	return ReassessRouteResult{outcome: ReassessTriggerNotJudged, notJudged: reason}, nil
 }
 
 func (handler *ReassessRouteHandler) undecided(

@@ -12,8 +12,8 @@ import (
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
-// ErrReassessmentUndecided 说明这次复核停在未决（复核登记册或路由历史读不回、证据
-// 未配置、适用性看不清、取号依赖故障）。它上抛让消费门整体回滚重投。
+// ErrReassessmentUndecided 说明这次复核停在未决：复核编排只对重投推得动的那几格答未决
+// （ADR-0235），重投推不动的答`未判`、入账，不走到这里。它上抛让消费门整体回滚重投。
 //
 // 与 ErrRouteHandoffUndecided 分设而不共用：两条链等的依赖不同，运维读到失败码要能
 // 分出该去查初始路由那条还是复核这条。两者在装配点都登记进未决哨兵翻译——不翻的话
@@ -149,6 +149,10 @@ func reassessmentToConsumption(result nrapplication.ReassessRouteResult) error {
 		return nil
 	case nrapplication.ReassessTriggerConflict:
 		// 同一关联登记过另一份内容：原触发与原结果不被覆盖，重投也不会变。
+		return nil
+	case nrapplication.ReassessTriggerNotJudged:
+		// 入账未判，原因已由复核编排落进未判登记（ADR-0235）。重投推不动它，让它占着小包托运的分区，只会
+		// 把同一封信上的别的各路与同一分区之后的信封一起拖到 ABANDONED。
 		return nil
 	case nrapplication.ReassessUndecided:
 		return fmt.Errorf("%w: %s", ErrReassessmentUndecided, result.UndecidedReason())

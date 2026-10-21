@@ -76,13 +76,30 @@ func reassessorSeeing(t *testing.T, seen *nrports.RequestCarriedContent) *adapte
 	return adapter.NewReassessOnIntakeAdapter(handler, value(t, nrdomain.NewServicePurpose, "NETWORK_SERVICE"))
 }
 
-// reassessorWithoutHistory 造一个查不到路由历史的复核编排：复核停在`未决`
-// （NO_ROUTING_HISTORY），这是消费门那一格「回滚重投」的真实来源。
-func reassessorWithoutHistory(t *testing.T) *adapter.ReassessOnIntakeAdapter {
+// reassessorWithoutHistory 造一个查不到路由历史的复核编排：复核答`未判`（NO_ROUTING_HISTORY），原因落进 store。
+func reassessorWithoutHistory(t *testing.T, store *reassessStoreDouble) *adapter.ReassessOnIntakeAdapter {
 	t.Helper()
 	handler := nrapplication.NewReassessRouteHandler(nrapplication.ReassessRouteDeps{
 		Routes:        &routeStoreDouble{records: map[nrdomain.InitialRouteJudgmentKey]nrports.InitialRouteRecord{}},
 		Evidence:      evidenceDouble{},
+		Applicability: &applicabilityStoreDouble{byPlan: map[nrdomain.RoutePlanVersionID]nrdomain.PlanApplicability{}},
+		Store:         store,
+		Log:           &logDouble{digests: map[nrdomain.RequestCorrelationID]string{}},
+		Identities:    &identityDouble{},
+		Clock:         fixedClock{at: intakeAt},
+	})
+	return adapter.NewReassessOnIntakeAdapter(handler, value(t, nrdomain.NewServicePurpose, "NETWORK_SERVICE"))
+}
+
+// reassessorWithUnreadableEvidence 造一个取证据时依赖故障的复核编排：复核停在`未决`（REASSESS_EVIDENCE_UNAVAILABLE），
+// 这是消费门那一格「回滚重投」的真实来源。
+func reassessorWithUnreadableEvidence(t *testing.T) *adapter.ReassessOnIntakeAdapter {
+	t.Helper()
+	handler := nrapplication.NewReassessRouteHandler(nrapplication.ReassessRouteDeps{
+		Routes: &routeStoreDouble{records: map[nrdomain.InitialRouteJudgmentKey]nrports.InitialRouteRecord{
+			reassessKey(t): planOnFile(t),
+		}},
+		Evidence:      evidenceDouble{err: errors.New("catalog read timed out")},
 		Applicability: &applicabilityStoreDouble{byPlan: map[nrdomain.RoutePlanVersionID]nrdomain.PlanApplicability{}},
 		Store:         &reassessStoreDouble{byCorrelation: map[nrdomain.RequestCorrelationID]nrports.ReassessmentRecord{}},
 		Log:           &logDouble{digests: map[nrdomain.RequestCorrelationID]string{}},
@@ -192,10 +209,29 @@ func TestARefusedAdoptionIsRecordedNotRetried(t *testing.T) {
 // Covers: 复核未决即回滚重投 — 未决是「依赖还答不出」，重投会改变结果；就此入账等于
 // 把复核义务永久丢掉。折叠规则与接受决定那条线一致：按「重投会不会改变结果」分。
 func TestAnUndecidedReassessmentRollsBackForRedelivery(t *testing.T) {
-	subject := subjectFor(t, sourceHolding(adoptedRecord(t)), reassessorWithoutHistory(t))
+	subject := subjectFor(t, sourceHolding(adoptedRecord(t)), reassessorWithUnreadableEvidence(t))
 
 	err := subject.HandleAdoptedNetworkIntake(context.Background(), envelopeFor(t))
 	if !errors.Is(err, adapter.ErrReassessmentUndecided) {
 		t.Fatalf("err = %v, want ErrReassessmentUndecided", err)
+	}
+}
+
+// Covers: AT-NR-074（收寄采用一路）——没有路由历史：重投推不动，入账（交回 nil，不登本路未决哨兵），原因落未判登记。
+// 与交接一路同一份判据，判据只在复核编排里。
+func TestAReassessmentWithoutRoutingHistorySettlesWithItsReason(t *testing.T) {
+	store := &reassessStoreDouble{byCorrelation: map[nrdomain.RequestCorrelationID]nrports.ReassessmentRecord{}}
+	subject := subjectFor(t, sourceHolding(adoptedRecord(t)), reassessorWithoutHistory(t, store))
+
+	if err := subject.HandleAdoptedNetworkIntake(context.Background(), envelopeFor(t)); err != nil {
+		t.Fatalf("没有路由历史应入账，而不是回滚重投：%v", err)
+	}
+	if len(store.byCorrelation) != 0 || len(store.notJudged) != 1 {
+		t.Fatalf("复核 %d 条、未判 %d 行, want 0 与 1", len(store.byCorrelation), len(store.notJudged))
+	}
+	for _, noted := range store.notJudged {
+		if noted.Reason != nrports.NotJudgedNoRoutingHistory {
+			t.Fatalf("未判原因 = %s, want NO_ROUTING_HISTORY", noted.Reason)
+		}
 	}
 }

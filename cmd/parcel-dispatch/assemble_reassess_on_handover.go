@@ -24,8 +24,8 @@ import (
 //
 // 不在名单里：nrtransportfulfillment.ErrHandoverRecordInconsistent 与 nrparcelshipment.ErrAcceptedRequestInconsistent
 // （仓储不变量已破）、nrtransportfulfillment 与 nrparcelshipment 各自的 ErrUntranslatableAnswer（编程错误）、psdomain.ErrAmbiguousParcelTarget（两份已接受委托
-// 声明同一件包裹，要人去看）——重投都不会变。不是复核触发的交接与不是当前已接受包裹的对象不在任何名单里：它们入账，
-// 不是错误。
+// 声明同一件包裹，要人去看）——重投都不会变。不是复核触发的交接、不是当前已接受包裹的对象与复核答`未判`的触发不在任何
+// 名单里：它们入账，不是错误（ADR-0235）。
 var reassessOnHandoverUndecidedSentinels = []error{
 	nrtransportfulfillment.ErrHandoverNotVisible,
 	nrparcelshipment.ErrAcceptedParcelUnreadable,

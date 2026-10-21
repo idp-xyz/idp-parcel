@@ -225,6 +225,46 @@ func (repository *RouteReassessments) Save(
 	return ports.ReassessmentSaved, nil
 }
 
+// RecordNotJudged 留下一次入账未判的原因（ADR-0235）。同（租户，触发关联）已有一行时撞键不写、答成功：
+// 编排在同一触发再投时会重新判，这一行只答第一次为何没判，后来的再投不该改写它。走 RequireExecutor：
+// 这一行与 route_handoff_log 里那条指纹、inbox 的入账同笔提交，脱开事务写会留下一条没人入账的原因。
+func (repository *RouteReassessments) RecordNotJudged(ctx context.Context, record ports.NotJudgedTrigger) error {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("record reassessment not judged: %w", err)
+	}
+	reason := record.Reason.String()
+	if reason == "" {
+		return fmt.Errorf("record reassessment not judged: unknown reason %d", record.Reason)
+	}
+	if record.TriggerOccurredAt.IsZero() || record.SettledAt.IsZero() {
+		return fmt.Errorf("record reassessment not judged: trigger or settlement time is zero")
+	}
+	key := record.Key
+	if _, err := executor.Exec(ctx,
+		`INSERT INTO network_routing.route_reassessment_not_judged
+			(tenant_id, correlation_id,
+			 customer_account_id, shipment_request_id,
+			 acceptance_baseline, declared_parcel_id, service_purpose,
+			 reason, trigger_occurred_at, settled_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		 ON CONFLICT DO NOTHING`,
+		key.TenantID.String(),
+		record.Correlation.String(),
+		key.CustomerAccountID.String(),
+		key.ShipmentRequestID.String(),
+		key.AcceptanceBaseline.String(),
+		key.DeclaredParcelID.String(),
+		key.ServicePurpose.String(),
+		reason,
+		record.TriggerOccurredAt.UTC(),
+		record.SettledAt.UTC(),
+	); err != nil {
+		return fmt.Errorf("record reassessment not judged: %w", err)
+	}
+	return nil
+}
+
 type reassessmentRowColumns struct {
 	conclusion     string
 	reviewedPlan   *string

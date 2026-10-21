@@ -514,6 +514,46 @@ const (
 	ReassessmentAlreadyRecorded
 )
 
+// NotJudgedReason 指名一次复核触发为什么入账却不形成判断（ADR-0235）。入格判据是恢复动作：
+// 重投推不动、只等登记或等下一次控制触发的才在这里；依赖读不回之类重投推得动的，仍是应用层
+// 的未决原因、整笔回滚。
+type NotJudgedReason uint8
+
+const (
+	NotJudgedReasonInvalid NotJudgedReason = iota
+	// NotJudgedNoRoutingHistory 是这件包裹没有初始路由判断可复核：复核复的是一份已有判断，
+	// 不凭空假定初始计划。
+	NotJudgedNoRoutingHistory
+	// NotJudgedEvidenceNotConfigured 是判断时点没有适用的网络证据，等租户登记（ADR-0052）。
+	NotJudgedEvidenceNotConfigured
+	// NotJudgedFreezeFormUnconfigured 是原计划仍可执行、策略版本却没声明冻结形态：不当成未冻结。
+	NotJudgedFreezeFormUnconfigured
+)
+
+func (reason NotJudgedReason) String() string {
+	switch reason {
+	case NotJudgedNoRoutingHistory:
+		return "NO_ROUTING_HISTORY"
+	case NotJudgedEvidenceNotConfigured:
+		return "REASSESS_EVIDENCE_NOT_CONFIGURED"
+	case NotJudgedFreezeFormUnconfigured:
+		return "FREEZE_FORM_UNCONFIGURED"
+	default:
+		return ""
+	}
+}
+
+// NotJudgedTrigger 是一次入账未判的复核触发留下的原因。触发本身已由 RouteHandoffLog 保全，
+// 这一行只答「为什么这一次没判」；它不是复核结论，不进路由历史，也不挡同一触发以后再判。
+type NotJudgedTrigger struct {
+	Correlation domain.RequestCorrelationID
+	Key         domain.InitialRouteJudgmentKey
+	Reason      NotJudgedReason
+	// TriggerOccurredAt 是触发的业务时间，不是处理时刻。
+	TriggerOccurredAt time.Time
+	SettledAt         time.Time
+}
+
 // ReassessmentStore 按触发关联找回并保存复核结果：同一触发和输入版本已经处理即返回
 // 原结果，不重复决定。
 type ReassessmentStore interface {
@@ -527,4 +567,7 @@ type ReassessmentStore interface {
 		correlation domain.RequestCorrelationID,
 		record ReassessmentRecord,
 	) (ReassessmentSaveOutcome, error)
+	// RecordNotJudged 留下一次入账未判的原因。同（租户，触发关联）已有一行时保留先到那一行、
+	// 答成功：同一触发再投时编排会重新判一遍，仍判不成就再来这里。
+	RecordNotJudged(ctx context.Context, record NotJudgedTrigger) error
 }

@@ -186,17 +186,23 @@ func (double *routeStoreDouble) Save(context.Context, nrports.InitialRouteRecord
 	return 0, errors.New("not part of this seam")
 }
 
-// evidenceSpy 记下复核取证据时交进来的携带内容。
+// evidenceSpy 记下复核取证据时交进来的携带内容。err 是取数依赖故障，unconfigured 是判断时点没有适用的网络证据：
+// 前者重投推得动，后者推不动，两格要分开演。
 type evidenceSpy struct {
-	evidence nrports.InitialRouteEvidence
-	seen     []nrports.RequestCarriedContent
+	evidence     nrports.InitialRouteEvidence
+	seen         []nrports.RequestCarriedContent
+	err          error
+	unconfigured bool
 }
 
 func (spy *evidenceSpy) LoadInitialRouteEvidence(
 	_ context.Context, _ nrdomain.InitialRouteJudgmentKey, carried nrports.RequestCarriedContent,
 ) (nrports.InitialRouteEvidence, bool, error) {
 	spy.seen = append(spy.seen, carried)
-	return spy.evidence, true, nil
+	if spy.err != nil {
+		return nrports.InitialRouteEvidence{}, false, spy.err
+	}
+	return spy.evidence, !spy.unconfigured, nil
 }
 
 type applicabilityStoreDouble struct {
@@ -217,6 +223,17 @@ func (double *applicabilityStoreDouble) Save(_ context.Context, applicability nr
 
 type reassessStoreDouble struct {
 	byCorrelation map[nrdomain.RequestCorrelationID]nrports.ReassessmentRecord
+	notJudged     map[nrdomain.RequestCorrelationID]nrports.NotJudgedTrigger
+}
+
+func (double *reassessStoreDouble) RecordNotJudged(_ context.Context, record nrports.NotJudgedTrigger) error {
+	if double.notJudged == nil {
+		double.notJudged = map[nrdomain.RequestCorrelationID]nrports.NotJudgedTrigger{}
+	}
+	if _, exists := double.notJudged[record.Correlation]; !exists {
+		double.notJudged[record.Correlation] = record
+	}
+	return nil
 }
 
 func (double *reassessStoreDouble) FindByCorrelation(
@@ -475,8 +492,8 @@ func TestAHandoverOfAnObjectThatIsNotACurrentAcceptedParcelSettles(t *testing.T)
 	}
 }
 
-// Covers: AT-NR-067——交接读不回或读不动、PS 读不动、复核停在未决：各答本路未决哨兵之一，消费门回滚重投；仓储不变量破了
-// 与本包缺陷响亮上抛，不落在那几格里。
+// Covers: AT-NR-067——交接读不回或读不动、PS 读不动、复核停在依赖类未决（证据读不动）：各答本路未决哨兵之一，消费门回滚
+// 重投，也不落未判；仓储不变量破了与本包缺陷响亮上抛，不落在那几格里。
 func TestUnreadableDependenciesRollBackAndDefectsAreLoud(t *testing.T) {
 	handover := formHandover(t, handoverSpec{
 		object: "parcel-1", version: "handover/v1", verdict: tfdomain.ObjectHandedOver, receiving: planTransfer,
@@ -502,26 +519,30 @@ func TestUnreadableDependenciesRollBackAndDefectsAreLoud(t *testing.T) {
 	cases := map[string]struct {
 		handovers   *handoverFinderDouble
 		accepted    *acceptedLookupDouble
-		withHistory bool
+		evidenceErr error
 		want        error
 		retry       bool
 	}{
-		"交接还读不回":   {newHandoverFinder(), acceptedParcel(t), true, adapter.ErrHandoverNotVisible, true},
-		"交接登记册读不动": {&handoverFinderDouble{err: errors.New("pool closed")}, acceptedParcel(t), true, adapter.ErrHandoverNotVisible, true},
+		"交接还读不回":   {newHandoverFinder(), acceptedParcel(t), nil, adapter.ErrHandoverNotVisible, true},
+		"交接登记册读不动": {&handoverFinderDouble{err: errors.New("pool closed")}, acceptedParcel(t), nil, adapter.ErrHandoverNotVisible, true},
 		"PS 读不动": {
-			newHandoverFinder(handover), &acceptedLookupDouble{err: nrparcelshipment.ErrAcceptedParcelUnreadable}, true,
+			newHandoverFinder(handover), &acceptedLookupDouble{err: nrparcelshipment.ErrAcceptedParcelUnreadable}, nil,
 			nrparcelshipment.ErrAcceptedParcelUnreadable, true,
 		},
-		"复核未决：没有路由历史":  {newHandoverFinder(handover), acceptedParcel(t), false, adapter.ErrHandoverReassessmentUndecided, true},
-		"读回的交接指着另一个对象": {mismatched, acceptedParcel(t), true, adapter.ErrHandoverRecordInconsistent, false},
+		"复核未决：证据读不动": {
+			newHandoverFinder(handover), acceptedParcel(t), errors.New("catalog read timed out"),
+			adapter.ErrHandoverReassessmentUndecided, true,
+		},
+		"读回的交接指着另一个对象": {mismatched, acceptedParcel(t), nil, adapter.ErrHandoverRecordInconsistent, false},
 		"已接受委托自相矛盾": {
-			newHandoverFinder(handover), &acceptedLookupDouble{err: nrparcelshipment.ErrAcceptedRequestInconsistent}, true,
+			newHandoverFinder(handover), &acceptedLookupDouble{err: nrparcelshipment.ErrAcceptedRequestInconsistent}, nil,
 			nrparcelshipment.ErrAcceptedRequestInconsistent, false,
 		},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			built := newSubject(t, tc.handovers, tc.accepted, tc.withHistory)
+			built := newSubject(t, tc.handovers, tc.accepted, true)
+			built.evidence.err = tc.evidenceErr
 			err := built.deliver(t, handover)
 			if !errors.Is(err, tc.want) {
 				t.Fatalf("err = %v, want %v", err, tc.want)
@@ -531,6 +552,51 @@ func TestUnreadableDependenciesRollBackAndDefectsAreLoud(t *testing.T) {
 			}
 			if n := len(built.reassessments.byCorrelation); n != 0 {
 				t.Fatalf("停下了却落了 %d 条复核", n)
+			}
+			if n := len(built.reassessments.notJudged); n != 0 {
+				t.Fatalf("重投那几格却落了 %d 行未判", n)
+			}
+		})
+	}
+}
+
+// Covers: AT-NR-074、AT-NR-075、AT-NR-076（交接一路）——没有路由历史、证据未配置、冻结形态未配置：重投推不动，入账（交回
+// nil，不登本路未决哨兵），原因落未判登记，零复核。
+func TestReassessmentsThatCannotBeJudgedYetSettleWithTheirReason(t *testing.T) {
+	handover := formHandover(t, handoverSpec{
+		object: "parcel-1", version: "handover/v1", verdict: tfdomain.ObjectHandedOver, receiving: planTransfer,
+	})
+	cases := map[string]struct {
+		withHistory  bool
+		unconfigured bool
+		undeclared   bool
+		want         nrports.NotJudgedReason
+	}{
+		"没有路由历史":  {withHistory: false, want: nrports.NotJudgedNoRoutingHistory},
+		"证据未配置":   {withHistory: true, unconfigured: true, want: nrports.NotJudgedEvidenceNotConfigured},
+		"冻结形态未配置": {withHistory: true, undeclared: true, want: nrports.NotJudgedFreezeFormUnconfigured},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			built := newSubject(t, newHandoverFinder(handover), acceptedParcel(t), tc.withHistory)
+			built.evidence.unconfigured = tc.unconfigured
+			if tc.undeclared {
+				built.evidence.evidence.FreezeForm = nrdomain.FreezeFormUndeclared
+				built.evidence.evidence.FreezeRemainingSegmentLimit = nil
+			}
+			if err := built.deliver(t, handover); err != nil {
+				t.Fatalf("deliver = %v, want 入账", err)
+			}
+			if n := len(built.reassessments.byCorrelation); n != 0 {
+				t.Fatalf("未判却落了 %d 条复核", n)
+			}
+			if len(built.reassessments.notJudged) != 1 {
+				t.Fatalf("未判登记 = %d 行, want 1", len(built.reassessments.notJudged))
+			}
+			for _, noted := range built.reassessments.notJudged {
+				if noted.Reason != tc.want || !noted.TriggerOccurredAt.Equal(handedOverAt) {
+					t.Fatalf("未判登记 = %+v, want 原因 %s、业务时间取交接", noted, tc.want)
+				}
 			}
 		})
 	}

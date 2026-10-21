@@ -101,9 +101,11 @@ func (double *routeStoreDouble) Save(
 }
 
 // evidenceDouble 记下复核取证据时交进来的携带内容（seen 非空时）。
+// evidenceDouble 的 err 是取数依赖故障（重投推得动），与「证据未配置」那一格不是一回事。
 type evidenceDouble struct {
 	evidence nrports.InitialRouteEvidence
 	seen     *nrports.RequestCarriedContent
+	err      error
 }
 
 func (double evidenceDouble) LoadInitialRouteEvidence(
@@ -111,6 +113,9 @@ func (double evidenceDouble) LoadInitialRouteEvidence(
 ) (nrports.InitialRouteEvidence, bool, error) {
 	if double.seen != nil {
 		*double.seen = carried
+	}
+	if double.err != nil {
+		return nrports.InitialRouteEvidence{}, false, double.err
 	}
 	return double.evidence, true, nil
 }
@@ -133,6 +138,17 @@ func (double *applicabilityStoreDouble) Save(_ context.Context, applicability nr
 
 type reassessStoreDouble struct {
 	byCorrelation map[nrdomain.RequestCorrelationID]nrports.ReassessmentRecord
+	notJudged     map[nrdomain.RequestCorrelationID]nrports.NotJudgedTrigger
+}
+
+func (double *reassessStoreDouble) RecordNotJudged(_ context.Context, record nrports.NotJudgedTrigger) error {
+	if double.notJudged == nil {
+		double.notJudged = map[nrdomain.RequestCorrelationID]nrports.NotJudgedTrigger{}
+	}
+	if _, exists := double.notJudged[record.Correlation]; !exists {
+		double.notJudged[record.Correlation] = record
+	}
+	return nil
 }
 
 func (double *reassessStoreDouble) FindByCorrelation(

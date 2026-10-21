@@ -40,17 +40,23 @@ const (
 
 var reassessHandoverAt = time.Date(2026, 10, 21, 2, 0, 0, 0, time.UTC)
 
-// carriedGeoEvidence 是证据视图替身：交回给定的证据，并记下复核取证据时所携的投影。
+// carriedGeoEvidence 是证据视图替身：交回给定的证据，并记下复核取证据时所携的投影。err 演取数依赖故障（重投推得动），
+// unconfigured 演判断时点没有适用的网络证据（重投推不动）。
 type carriedGeoEvidence struct {
-	evidence nrports.InitialRouteEvidence
-	seen     []nrports.RequestCarriedContent
+	evidence     nrports.InitialRouteEvidence
+	seen         []nrports.RequestCarriedContent
+	err          error
+	unconfigured bool
 }
 
 func (spy *carriedGeoEvidence) LoadInitialRouteEvidence(
 	_ context.Context, _ nrdomain.InitialRouteJudgmentKey, carried nrports.RequestCarriedContent,
 ) (nrports.InitialRouteEvidence, bool, error) {
 	spy.seen = append(spy.seen, carried)
-	return spy.evidence, true, nil
+	if spy.err != nil {
+		return nrports.InitialRouteEvidence{}, false, spy.err
+	}
+	return spy.evidence, !spy.unconfigured, nil
 }
 
 type reassessOnHandoverFixture struct {
@@ -478,9 +484,11 @@ func TestHandoversThatAreNotAReassessmentTriggerSettleOnTheDatabase(t *testing.T
 	}
 }
 
-// Covers: AT-NR-067——复核停在未决（已接受包裹没有路由历史）：本路哨兵翻成派发器认的未决，整笔回滚，inbox 无痕、零复核。
+// Covers: AT-NR-067——复核停在依赖类未决（取证据读不动）：本路哨兵翻成派发器认的未决，整笔回滚，inbox 无痕、零复核，
+// 也不落未判（ADR-0235：只有重投推不动的才入账）。
 func TestAnUndecidedReassessmentOnAHandoverRollsBackOnTheDatabase(t *testing.T) {
-	fixture := newReassessOnHandoverFixture(t, true, false)
+	fixture := newReassessOnHandoverFixture(t, true, true)
+	fixture.evidence.err = errors.New("network catalog read timed out")
 	eventID := registerHandover(t, fixture.syn, fixture.register, handoverCommand(t, reassessHandoverParcel,
 		"SYN-HANDOVER/63/v1", tfdomain.ObjectHandedOver, "", reassessHandoverReceiving))
 
@@ -493,6 +501,9 @@ func TestAnUndecidedReassessmentOnAHandoverRollsBackOnTheDatabase(t *testing.T) 
 	}
 	if rows := reassessmentRows(t, fixture.syn); len(rows) != 0 {
 		t.Fatalf("未决却落了复核：%+v", rows)
+	}
+	if rows := notJudgedRows(t, fixture.syn); len(rows) != 0 {
+		t.Fatalf("依赖类未决却落了未判：%+v", rows)
 	}
 }
 

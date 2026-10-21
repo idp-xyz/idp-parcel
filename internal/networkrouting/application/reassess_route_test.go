@@ -2,6 +2,7 @@ package application_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -103,11 +104,27 @@ func (double *applicabilityStoreDouble) Save(_ context.Context, applicability do
 
 type reassessmentStoreDouble struct {
 	byCorrelation map[domain.RequestCorrelationID]ports.ReassessmentRecord
+	notJudged     map[domain.RequestCorrelationID]ports.NotJudgedTrigger
+	notJudgedErr  error
 	saved         int
 }
 
 func newReassessmentStore() *reassessmentStoreDouble {
-	return &reassessmentStoreDouble{byCorrelation: map[domain.RequestCorrelationID]ports.ReassessmentRecord{}}
+	return &reassessmentStoreDouble{
+		byCorrelation: map[domain.RequestCorrelationID]ports.ReassessmentRecord{},
+		notJudged:     map[domain.RequestCorrelationID]ports.NotJudgedTrigger{},
+	}
+}
+
+// RecordNotJudged 与真库同一条：同一关联已有一行时保留先到那一行。
+func (double *reassessmentStoreDouble) RecordNotJudged(_ context.Context, record ports.NotJudgedTrigger) error {
+	if double.notJudgedErr != nil {
+		return double.notJudgedErr
+	}
+	if _, exists := double.notJudged[record.Correlation]; !exists {
+		double.notJudged[record.Correlation] = record
+	}
+	return nil
 }
 
 func (double *reassessmentStoreDouble) FindByCorrelation(
@@ -275,6 +292,8 @@ func TestACostImprovementBeforeTheFreezeBoundaryFormsANewPlan(t *testing.T) {
 	}
 }
 
+// Covers: AT-NR-076——原计划仍可执行、策略版本没声明冻结形态：不当成未冻结，也不答未决；入账未判，原因落未判登记，
+// 业务时间取触发那一刻，原计划与适用性都不动。
 func TestAnUndeclaredFreezeFormDoesNotCountAsUnfrozen(t *testing.T) {
 	fixture := newReassessFixture(t)
 	record := currentPlanRecord(t)
@@ -285,8 +304,116 @@ func TestAnUndeclaredFreezeFormDoesNotCountAsUnfrozen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("handle: %v", err)
 	}
-	if result.Outcome() != application.ReassessUndecided || result.UndecidedReason() != application.FreezeFormUnconfigured {
-		t.Fatalf("outcome = %q reason = %q", result.Outcome(), result.UndecidedReason())
+	if result.Outcome() != application.ReassessTriggerNotJudged ||
+		result.NotJudgedReason() != ports.NotJudgedFreezeFormUnconfigured {
+		t.Fatalf("outcome = %q reason = %q, want TRIGGER_NOT_JUDGED/FREEZE_FORM_UNCONFIGURED",
+			result.Outcome(), result.NotJudgedReason())
+	}
+	assertOnlyNotJudged(t, fixture, ports.NotJudgedFreezeFormUnconfigured)
+	if len(fixture.applicability.saved) != 0 {
+		t.Fatalf("未判却动了适用性：%d 次", len(fixture.applicability.saved))
+	}
+}
+
+// assertOnlyNotJudged 钉一次未判只留下一行未判原因：判断键与触发业务时间取自触发，入账时刻取处理时钟，没有复核结论。
+func assertOnlyNotJudged(t *testing.T, fixture *reassessFixture, want ports.NotJudgedReason) {
+	t.Helper()
+	if fixture.store.saved != 0 {
+		t.Fatalf("未判却落了 %d 条复核", fixture.store.saved)
+	}
+	if len(fixture.store.notJudged) != 1 {
+		t.Fatalf("未判登记 = %d 行, want 1", len(fixture.store.notJudged))
+	}
+	noted := fixture.store.notJudged[value(t, domain.NewRequestCorrelationID, "trigger-1")]
+	if noted.Reason != want || noted.Key != reassessKey(t) ||
+		!noted.TriggerOccurredAt.Equal(reassessedAt) || !noted.SettledAt.Equal(reassessedAt) {
+		t.Fatalf("未判登记 = %+v, want 原因 %s、键与触发业务时间取自触发", noted, want)
+	}
+}
+
+// Covers: AT-NR-075——判断时点没有适用的网络证据：等租户登记，重投推不动，入账未判、原因落未判登记；证据读不动是依赖
+// 故障，照旧答未决等重投，不落未判（AT-NR-067）。
+func TestUnconfiguredEvidenceIsNotJudgedWhileUnreadableEvidenceStaysUndecided(t *testing.T) {
+	unconfigured := newReassessFixture(t)
+	record := currentPlanRecord(t)
+	unconfigured.routes.records[record.Key] = record
+	unconfigured.evidence.unconfigured = map[string]bool{"parcel-1": true}
+
+	result, err := unconfigured.handler.Handle(context.Background(), reassessCommand(t, "node-origin"))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.ReassessTriggerNotJudged ||
+		result.NotJudgedReason() != ports.NotJudgedEvidenceNotConfigured {
+		t.Fatalf("outcome = %q reason = %q, want TRIGGER_NOT_JUDGED/REASSESS_EVIDENCE_NOT_CONFIGURED",
+			result.Outcome(), result.NotJudgedReason())
+	}
+	assertOnlyNotJudged(t, unconfigured, ports.NotJudgedEvidenceNotConfigured)
+
+	unreadable := newReassessFixture(t)
+	unreadable.routes.records[record.Key] = record
+	unreadable.evidence.errs["parcel-1"] = errors.New("catalog read timed out")
+	stalled, err := unreadable.handler.Handle(context.Background(), reassessCommand(t, "node-origin"))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if stalled.Outcome() != application.ReassessUndecided ||
+		stalled.UndecidedReason() != application.ReassessEvidenceUnavailable {
+		t.Fatalf("outcome = %q reason = %q, want UNDECIDED/REASSESS_EVIDENCE_UNAVAILABLE",
+			stalled.Outcome(), stalled.UndecidedReason())
+	}
+	if len(unreadable.store.notJudged) != 0 {
+		t.Fatalf("依赖故障落了未判：%+v", unreadable.store.notJudged)
+	}
+}
+
+// Covers: AT-NR-078——同一触发入账未判之后再投：不答「登记册读不回」，重新判一遍；前提补齐了就判、落一条复核，未判
+// 登记只留第一次那一行。未判原因落不了库时不得答未判：改答登记册那一格的未决，照旧回滚重投。
+func TestANotJudgedTriggerIsJudgedAgainWhenItIsDeliveredAgain(t *testing.T) {
+	fixture := newReassessFixture(t)
+	fixture.evidence.byParcel["parcel-1"] = evidenceBeforeFreeze(t)
+
+	first, err := fixture.handler.Handle(context.Background(), reassessCommand(t, "node-origin"))
+	if err != nil {
+		t.Fatalf("first handle: %v", err)
+	}
+	if first.Outcome() != application.ReassessTriggerNotJudged {
+		t.Fatalf("first outcome = %q, want TRIGGER_NOT_JUDGED", first.Outcome())
+	}
+	again, err := fixture.handler.Handle(context.Background(), reassessCommand(t, "node-origin"))
+	if err != nil {
+		t.Fatalf("again handle: %v", err)
+	}
+	if again.Outcome() != application.ReassessTriggerNotJudged {
+		t.Fatalf("again outcome = %q, want TRIGGER_NOT_JUDGED——前提仍缺，再入账", again.Outcome())
+	}
+
+	record := currentPlanRecord(t)
+	fixture.routes.records[record.Key] = record
+	resumed, err := fixture.handler.Handle(context.Background(), reassessCommand(t, "node-origin"))
+	if err != nil {
+		t.Fatalf("resumed handle: %v", err)
+	}
+	if resumed.Outcome() != application.ReassessedStillApplicable {
+		t.Fatalf("resumed outcome = %q, want STILL_APPLICABLE——历史补齐之后再投就判", resumed.Outcome())
+	}
+	if fixture.store.saved != 1 || len(fixture.store.notJudged) != 1 {
+		t.Fatalf("复核 %d 条、未判 %d 行, want 1 与 1", fixture.store.saved, len(fixture.store.notJudged))
+	}
+	if noted := fixture.store.notJudged[value(t, domain.NewRequestCorrelationID, "trigger-1")]; noted.Reason != ports.NotJudgedNoRoutingHistory {
+		t.Fatalf("未判原因 = %s, want 第一次那一格 NO_ROUTING_HISTORY", noted.Reason)
+	}
+
+	unrecorded := newReassessFixture(t)
+	unrecorded.store.notJudgedErr = errors.New("pool closed")
+	stalled, err := unrecorded.handler.Handle(context.Background(), reassessCommand(t, "node-origin"))
+	if err != nil {
+		t.Fatalf("unrecorded handle: %v", err)
+	}
+	if stalled.Outcome() != application.ReassessUndecided ||
+		stalled.UndecidedReason() != application.ReassessStoreUnavailable {
+		t.Fatalf("outcome = %q reason = %q, want UNDECIDED/REASSESS_STORE_UNAVAILABLE——原因没落库不得入账",
+			stalled.Outcome(), stalled.UndecidedReason())
 	}
 }
 
@@ -408,7 +535,8 @@ func TestAFormerNoRouteWithATiedLowestCostFormsNoFirstPlan(t *testing.T) {
 }
 
 // Covers: 结果「已有结果：同一触发和输入版本已经处理——不重复决定」与「触发冲突：同一
-// 触发身份携带不同事实或版本——不覆盖原判断」；没有历史结果时不得凭空假定初始计划。
+// 触发身份携带不同事实或版本——不覆盖原判断」；没有历史结果时不得凭空假定初始计划，
+// 入账未判（AT-NR-074）。
 func TestReplayConflictAndMissingHistoryStayDisciplined(t *testing.T) {
 	fixture := newReassessFixture(t)
 	record := currentPlanRecord(t)
@@ -444,10 +572,11 @@ func TestReplayConflictAndMissingHistoryStayDisciplined(t *testing.T) {
 	if err != nil {
 		t.Fatalf("missing history handle: %v", err)
 	}
-	if missing.Outcome() != application.ReassessUndecided ||
-		missing.UndecidedReason() != application.NoRoutingHistory {
-		t.Fatalf("outcome = %q/%q, want UNDECIDED/NO_ROUTING_HISTORY", missing.Outcome(), missing.UndecidedReason())
+	if missing.Outcome() != application.ReassessTriggerNotJudged ||
+		missing.NotJudgedReason() != ports.NotJudgedNoRoutingHistory {
+		t.Fatalf("outcome = %q/%q, want TRIGGER_NOT_JUDGED/NO_ROUTING_HISTORY", missing.Outcome(), missing.NotJudgedReason())
 	}
+	assertOnlyNotJudged(t, bare, ports.NotJudgedNoRoutingHistory)
 
 	hint := reassessCommand(t, "node-origin")
 	hint.Trigger.Control = domain.SourceHint
