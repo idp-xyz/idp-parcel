@@ -48,7 +48,7 @@ func withdraw(t *testing.T, handler *application.WithdrawSupplierExpectedCostHan
 	return result
 }
 
-// Covers: AT-SA-206——依 v1 形成的首版在发生项 v2 失效之后撤下：长出一版失效纠错版本，回指首版、原因是发生项失效、发生项引用换成 v2，
+// Covers: AT-SA-164、AT-SA-206——依 v1 形成的首版在发生项 v2 失效之后撤下：长出一版失效纠错版本，回指首版、原因是发生项失效、发生项引用换成 v2，
 // 金额原样；首版一字不动，不形成账单贷项。同一封失效信重投答重放、不多一版；一封依别的版本的旧失效信不动它。
 func TestAnOccurrenceInvalidationWithdrawsTheCostFormedFromThatVersion(t *testing.T) {
 	fixture := newRequestedCostFixture(t)
