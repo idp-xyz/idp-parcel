@@ -1,7 +1,7 @@
 # 52 NR 路由复核读的是初始路由那一行，不是当前有效计划或无路由：失效之后的复核回滚重投到耗尽，或对一份已失效的计划答仍适用
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code52（基于 main `e8cd3de65`），见文末「完成记录」。此前 ready-for-agent——建议 R1（上线前必修）：答错且会卡住分区。原计划经一次复核失效之后，下一次控制触发（收寄采用或交接）还是拿那份已失效的初始计划去复核：限制仍在时答 `UNDECIDED/REASSESS_STORE_UNAVAILABLE`，占着交接分区或小包托运分区回滚重投，直到 `ABANDONED`，同一分区后面的信封跟着推迟，失败码还指向一个没坏的依赖；限制解除时对已失效的计划答 `STILL_APPLICABLE`，复核册说这份计划仍适用，适用性册说它已失效，两册打架。ADR-0249 决定二「交进首个节点时，交接复核走『原先无当前有效路由』那条线」那一格，代码里不存在，code/29 的绕法与 ADR-0249 越权风险点 3 的缓解都靠它。没有绕法。2026-10-21 由 code/16 的隔离评审发现（N1），作者会话立票（用户「你作为业务和系统专家自决」授权），分级由协调方定稿。
+Status: in-progress——第 1 轮评审已修，待进 main，分支 claude-code52（已 rebase 到 main `4e7874ba0`），见文末「完成记录」「评审记录」。此前 ready-for-agent——建议 R1（上线前必修）：答错且会卡住分区。原计划经一次复核失效之后，下一次控制触发（收寄采用或交接）还是拿那份已失效的初始计划去复核：限制仍在时答 `UNDECIDED/REASSESS_STORE_UNAVAILABLE`，占着交接分区或小包托运分区回滚重投，直到 `ABANDONED`，同一分区后面的信封跟着推迟，失败码还指向一个没坏的依赖；限制解除时对已失效的计划答 `STILL_APPLICABLE`，复核册说这份计划仍适用，适用性册说它已失效，两册打架。ADR-0249 决定二「交进首个节点时，交接复核走『原先无当前有效路由』那条线」那一格，代码里不存在，code/29 的绕法与 ADR-0249 越权风险点 3 的缓解都靠它。没有绕法。2026-10-21 由 code/16 的隔离评审发现（N1），作者会话立票（用户「你作为业务和系统专家自决」授权），分级由协调方定稿。
 Blocked by: 无
 出处：docs-consistency/code/16 隔离评审 N1。main `14443ac03` 上同病，不是 code/16 引入的。
 
@@ -66,52 +66,58 @@ M：一个读口（或给 `InitialRouteStore` 旁另立「当前路由」读口�
 
 ### 做了什么
 
-- 复核册加读口 `ports.ReassessmentStore.LatestNewPlan`：按判断键取最近一次形成的新计划（`REROUTED` 或 `FIRST_PLAN_FORMED` 那一行的 `new_plan`），按触发业务时间取最晚、同一时刻取处理时刻较晚的，迁移 0022 之前没有业务时间的行排在后面。真库实现在 `internal/networkrouting/adapters/postgres/route_reassessment.go`，走 0022 的判断键加业务时间索引。没有加表，也没有迁移。
-- 复核编排 `Handle` 改由 `startingPoint` 定判断起点：最近一份计划取复核册最近形成的新计划，没有就取初始计划；再按计划版本读适用性册。当前有效（含没有登记行）就复核这份计划；已失效、没有接班就走 `reassessNoRoute`；已被替代或已结束是坏起点，答 `ErrInconsistentRouteStart`、响亮报错。起点在 `LatestTriggerAt` 取的判断键锁里读。
+- 复核册加读口 `ports.ReassessmentStore.FormedPlans`（评审 N2 后由「取最近一份」改成）：按判断键交回形成过的全部新计划（`REROUTED` 或 `FIRST_PLAN_FORMED` 那一行的 `new_plan`），迁移 0022 之前没有业务时间的行一并读回；先后只为读来可复现。在册计划重建不出来交 `ports.ErrStoredRoutePlanUnreadable`。真库实现在 `internal/networkrouting/adapters/postgres/route_reassessment.go`。没有加表，也没有迁移。
+- 复核编排 `Handle` 改由 `startingPoint` 定判断起点：路由历史里的计划是初始计划加复核形成过的全部新计划，逐份按计划版本读适用性册。恰一份当前有效（含没有登记行）就复核它；一份都没有就走 `reassessNoRoute`；不止一份、某份已被替代而接班的不在路由历史里、某份已结束，都是坏起点，答 `ErrInconsistentRouteStart`、响亮报错。重建不出来的在册计划也响亮报错，不折成未决。起点在 `LatestTriggerAt` 取的判断键锁里读。
 - 已有结果分界挪进判断键锁里：取锁之后先按关联读复核册。指纹原先就在册的是重放，按原结论作答。指纹是本笔刚登的，说明并发里输给了赢家，答 `EXISTING_RESULT`，与提交时撞键同一格。这样同一触发的后到一方不会按赢家换过的起点再判一次、再写一次适用性。
-- `reassessPlan` 遇 `ErrPlanNoLongerCurrent` 不再折成「登记册读不回」，离场失败一律响亮报错。起点在锁里读、只取当前有效的计划，重复触发也已在锁里读回，这个错误不再有正当来由。去掉 `loadApplicability`，适用性随起点交给失效与改善替代两处，不读第二次。
-- 复核形成的计划改为从这次触发的业务时间起生效，判断时刻仍取处理时钟；改善替代时原计划的离场时刻也取触发业务时间。理由见代决 6。
+- `reassessPlan` 遇 `ErrPlanNoLongerCurrent` 不再折成「登记册读不回」，响亮报错：起点在锁里读、只取当前有效的计划，重复触发也已在锁里读回，这个错误不再有正当来由，是编程错误。离场门的其余拒法也响亮报错，但不是编程错误一类，例如离场早于生效（见 code/60）。去掉 `loadApplicability`，适用性随起点交给失效与改善替代两处，不读第二次。
+- 复核形成的计划改为从这次触发的业务时间起生效，判断时刻仍取处理时钟；改善替代时原计划的离场时刻也取触发业务时间。单一权威是 [ADR-0272](../../../docs/adr/0272-a-plan-formed-by-route-reassessment-takes-effect-at-the-trigger-business-time.md)（评审 R1 后立）。
 - 测试：
   - 编排 `internal/networkrouting/application/reassess_from_current_route_test.go`，钉以下各格：
     - 票面探针三步：失效之后限制仍在答 `PLAN_LAPSED/NO_QUALIFIED_CANDIDATES`，没有被复核计划，不答未决；限制撤掉形成首个计划、换新的计划版本，原计划仍 `LAPSED`；再下一次复核引用新计划。
     - 失效之后候选评估未决或最低成本并列，都仍无路由、不挂建议。
     - 失效之后评估补齐，形成新计划版本，从触发业务时间起生效，无路由期间那一行保留。
     - 失效线自动改路与改善替代形成的新计划都成为下一次复核的起点。
-    - 坏起点响亮报错。
+    - 坏起点响亮报错：替代的接班不在路由历史里、不止一份当前有效，都答 `ErrInconsistentRouteStart`；在册计划重建不出来答 `ErrStoredRoutePlanUnreadable`。
+    - 同一业务时刻形成的两份计划，处理时钟回拨，起点仍是当前有效的那一份。
+    - 积压之下（处理时钟比触发晚十小时）失效、形成首个计划、再失效、走无路由线，评审 R2 那条用例；生效改回判断时刻即红。
     - 读不出新计划答 `ROUTING_HISTORY_UNAVAILABLE`，读不出适用性答 `APPLICABILITY_STORE_UNAVAILABLE`。
     - 并发输家在锁里读回赢家，不写适用性。
-    - 测试替身补了 `LatestNewPlan` 与锁时钩子。
-  - 复核册真库 `route_reassessment_latest_plan_test.go`：按判断键、按业务时间取，与落库先后无关；不带新计划的复核、别的判断键、别的租户都不掺进来。
+    - 测试替身补了 `FormedPlans`（排法与真库同：业务时间，同一时刻按处理时刻）与锁时钩子。
+  - 复核册真库 `route_reassessment_formed_plans_test.go`：按判断键全部读回，迁移 0022 之前的旧行也在（排在最前）；不带新计划的复核、别的判断键、别的租户都不掺进来；重建不出来的计划交 `ErrStoredRoutePlanUnreadable`。
   - 派发真库 `cmd/parcel-dispatch/reassess_after_lapse_test.go`，在 `reassessBothLanesFixture` 上依次投四次：
     - 场外揽收，限制淘汰选中候选，原计划失效；
     - 交进新加坡枢纽，限制仍在，入账一行 `PLAN_LAPSED`，没有被复核计划、没有失效依据、`NO_QUALIFIED_CANDIDATES`，inbox `PROCESSED`；
     - 限制撤掉再交进，`FIRST_PLAN_FORMED`，换新版本，`SYN-RPV-63` 仍 `LAPSED`；
     - 又一次交进，`STILL_APPLICABLE`，引用新计划。
+  - 同一文件另一条派发真库用例：路由历史里有一份旧行（没有业务时间、已失效）与同一业务时刻的两份计划（先判的已失效、后判的当前有效，处理时刻倒序），交接复核的起点是当前有效的那一份。
   - 先跑红：把新测试放到 main `e8cd3de65` 的导出副本上跑，编排新用例 8 条全红；派发那条在第二次投递答 `REASSESS_STORE_UNAVAILABLE`，与探针一致。
 - 文档：
   - UC-NR-003「给开发的交接」去掉「依赖 code/52」一行，已实现一句补上复核起点；`AT-NR-039`、`AT-NR-053` 的现状注改为已补，仍点名 demo-chain-gaps/115。
   - code/29 Status 行绕法里的依赖改为已补。
-  - ADR-0249 Status 行索引注记的「落地依赖」改为「落地依赖已补」，ADR 正文没动；`docs/adr/README.md` 索引未重生成，由协调方进 main 时重生成。
+  - ADR-0249 Status 行索引注记的「落地依赖」改为「落地依赖已补」，ADR 正文没动。
+  - 新立 ADR-0272，NR CONTEXT「路由计划适用性」首条补一句引它，UC-NR-003 `AT-NR-053` 改为引它。
+  - `docs/adr/README.md` 索引未重生成，由协调方进 main 时重生成。
   - CONTEXT「此前处于无当前有效路由时……」一句与代码相符，未改。
 - 装配、迁移、派发路由、未决哨兵名单、`internal/nodeoperations/**` 都没动。
 
 ### 代决
 
-1. **起点按联查读，不加当前路由表。** 最近一份计划取自复核册与初始路由，状态取自适用性册。适用性册按全局唯一的计划版本取行，版本来自本租户的判断行，不构成跨租读路，口径同 `RoutePlanCatalogue`。
-2. **最近一份计划按触发业务时间取，同一时刻取处理时刻较晚的。** 同一判断键的复核在判断键锁里串行，后判的那一次读过先判的结果，处理时刻必在其后。不顺适用性的接班链走：失效线上的自动改路只把原计划记为 `LAPSED`，不记接班，链走不通。
-3. **适用性没有登记行即当前有效。** 沿用原先 `loadApplicability` 的口径：计划形成时不写适用性行，离场才写。
-4. **最近一份计划已被替代或已结束，响亮报错，不折未决、不进哨兵名单。** 替代必有更晚的接班计划；照「当前有效」判是复核一份离了场的计划，照「无路由」判会凭空另形成一份计划。已结束今天没有写入方。
+1. **起点按联查读，不加当前路由表。** 路由历史里的计划取自复核册与初始路由，状态取自适用性册。适用性册按全局唯一的计划版本取行，版本来自本租户的判断行，不构成跨租读路，口径同 `RoutePlanCatalogue`。
+2. **起点按适用性认，不按先后取「最近一份」**（评审 N2 后改）。路由历史里每份计划各问一次适用性，恰一份当前有效即起点，一份都没有即无路由。初稿按触发业务时间取最近一份、同一时刻取处理时刻较晚的，同一业务时刻的平局就靠处理时钟分，时钟回拨即取错。协调方建议的修法是选中那份若已离场就顺接班走，但失效之后从无路由线形成的首个计划不记接班（复核册那一行没有被复核计划），顺链走不到它。所以改成逐份问。代价是每份计划一次适用性读，一件包裹通常不过三份。
+3. **适用性没有登记行即当前有效。** 失效线改路与首个计划形成时不写行，改善替代写接班行；离场必写。所以凡已离场的计划都有一行，没有行的就是当前有效的那一份。
+4. **路由历史自相矛盾，响亮报错，不折未决、不进哨兵名单。** 包括不止一份当前有效、某份已被替代而接班的不在路由历史里、某份已结束。照「当前有效」判是复核一份离了场的计划，照「无路由」判会凭空另形成一份计划。已结束今天没有写入方。在册计划重建不出来同样响亮报错（评审 N3）：坏数据重投推不动。
 5. **已有结果分界挪进锁里，重放也取判断键锁。** 并发输家答 `EXISTING_RESULT`，与提交撞键同一格；重放仍答原结论。票面修法第 3 条的两种选法里取「串行之后改成响亮报错」。
-6. **复核形成的计划从触发的业务时间起生效。** 新计划成了下一次复核的起点；那一次失效的时刻取它自己触发的业务时间，而离场门要求离场不早于生效。生效若取处理时钟，业务时间落后于处理时钟的下一次触发就让离场门拒掉，整封信封响亮失败。按当前位置判据（ADR-0235），能判的下一次触发都不早于这一次，所以取触发业务时间之后离场门不会误拒。改善替代时原计划的离场时刻同取它，原计划离场与接班计划生效落在同一刻。判断时刻 `JudgedAt` 仍是处理时钟。
+6. **复核形成的计划从触发的业务时间起生效，被它替代的计划同刻离场。** 评审 R1 后立为 [ADR-0272](../../../docs/adr/0272-a-plan-formed-by-route-reassessment-takes-effect-at-the-trigger-business-time.md)，理由与越权风险点以它为准，这里不复述。
 7. **失效之后形成的计划仍答 `FIRST_PLAN_FORMED`、落「首个计划」那一形状。** 票面修法第 2 条已核过逐结论 CHECK。这里的「首个」按 CONTEXT 读作「无当前有效路由之后的首个当前有效计划」。
 
 ### 越权风险点
 
 1. **「首个计划」不等于包裹史上第一份计划**（NR owner）。复核册里一件包裹可以先 `PLAN_LAPSED` 再 `FIRST_PLAN_FORMED`。只读这一行做审计时，要联看前面的失效行才知道它接的是哪份已失效的计划。owner 若要区分，加一格结论要一次迁移。
-2. **新计划的生效时刻改用业务时间**（NR owner；运输准备消费新计划时知会 TF owner）。复核形成的新计划今天不另发信封（demo-chain-gaps/34），只在复核册与查阅面上看得到生效时刻。消费方日后若把它当处理时刻用，会早于判断时刻。owner 若坚持取处理时钟，离场门要另给一个下限，不然业务时间较早的下一次触发会响亮失败。
+2. **新计划的生效时刻改用业务时间**（NR、TF、VE owner）。各点见 ADR-0272 越权风险点，含装载并发裁决接上线后的「改路先有效」误裁，与初始路由口径不一（票 code/60）。
 3. **坏起点响亮报错，照样占着分区到 `ABANDONED`**（NR owner）。今天到不了：仍适用线的改善替代那一行落不了复核册（code/53），已结束没有写入方。code/53 落地之后，替代必带接班行，仍到不了。到了就是数据坏了，不是等租户登记。
-4. **每次复核多两条读，重放也排在判断键锁上**（NR owner）。多出的两条是复核册最近新计划与适用性；重放原先不取锁。同一判断键的触发本就串行，代价是重放等前一笔提交。
+4. **每次复核多读几次，重放也排在判断键锁上**（NR owner）。多出的是复核册一次与路由历史里每份计划各一次适用性；重放原先不取锁。同一判断键的触发本就串行，代价是重放等前一笔提交。
 5. **复核之外的读方仍读初始路由那一行**（NR、TF owner）。本票只改复核取起点。运输准备与查阅面今天读到的「当前路由」仍是受理时那份计划，不知道它已失效或已被替换。这一缺口归 demo-chain-gaps/34，本票未动。
+6. **演示库要重灌**（NR owner）。本票之前落过的演示数据里，失效之后的那次复核若停在未决、或对已失效的计划答过仍适用，复核册与适用性册会留着那一行。新起点按适用性认，不受它干扰，但查阅面会看到旧答法。`scripts/demo-seeds --reset` 重灌即清。
 
 ### AT
 
@@ -121,6 +127,31 @@ M：一个读口（或给 `InitialRouteStore` 旁另立「当前路由」读口�
 
 - `go build ./...`、`go vet ./...`、`gofmt -l`（本分支改动的全部 Go 文件）干净。
 - `TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/networkrouting/... ./cmd/parcel-dispatch ./cmd/parcel-api ./cmd/parcel-network-register ./internal/parcelshipment/adapters/networkrouting ./internal/transportfulfillment/adapters/networkrouting ./internal/visibilityexception/adapters/networkrouting ./internal/architecture/... ./migrations/...`：21 个包 ok，退出码 0。
-- 新真库用例 `TestAfterALapseTheNextTriggersReassessFromNoRouteOnTheDatabase`、`TestTheLatestNewPlanIsReadPerJudgmentKeyByBusinessTime` 另跑 `-count=3`，都 ok。
+- 新真库用例 `TestAfterALapseTheNextTriggersReassessFromNoRouteOnTheDatabase`、`TestTheLatestNewPlanIsReadPerJudgmentKeyByBusinessTime` 另跑 `-count=3`，都 ok（后者在评审修订里换成 `TestFormedPlansAreReadPerJudgmentKey`，见下节）。
 - 中途一次整包跑里 `cmd/parcel-dispatch` 的 `TestAClosedAgreementVersionIsTracedAndRecoveredByRevision`（TF 实际履约补形成，不经 NR 复核）红过一次。单跑 `-count=3` 绿，整包重跑绿，判为与本票无关的偶发，交协调方留意。
+
+## 评审记录
+
+### 第 1 轮（2026-10-21，隔离评审，协调方转达）
+
+无阻断。三条合入前修（R1–R3），四条建议（N1–N4），逐条处置如下：
+
+| 条 | 意见 | 处置 |
+|---|---|---|
+| R1 | 「复核计划从触发业务时间起生效」只写在票面代决与 UC 里，没有单一权威 | 立 [ADR-0272](../../../docs/adr/0272-a-plan-formed-by-route-reassessment-takes-effect-at-the-trigger-business-time.md)。核过 ADR-0172、0173、0174、0215、0217、0235、0249，没有一句定过复核形成的计划取哪个时钟生效，无条款停用，不挂指针。越权风险点含装载并发裁决接上线后的误裁（待 NR、TF、VE owner 会签）与初始路由口径不一。NR CONTEXT「路由计划适用性」首条补一句引它，UC-NR-003 `AT-NR-053` 改引它，代码注释改引它，代决 6 改为指向它 |
+| R2 | 积压场景用例（失效 → 首个计划 → 处理时钟 +10h 下再失效 → 无路由）正式入册 | 加进 `reassess_from_current_route_test.go`，名 `TestUnderABacklogAFormedPlanLapsesAtItsTriggersBusinessTime`。把生效改回 `judgedAt` 时它与 `AT-NR-053` 那条一起红，已复验 |
+| R3 | 两处注释与代码不符 | `startingPoint` 头注与代决 3 改为「失效线改路与首个计划形成时不写行，改善替代写接班行；离场必写」；`reassessPlan` 里「编程错误」收窄到 `ErrPlanNoLongerCurrent` |
+| N1 | 改善替代取触发业务时间而初始计划按处理时钟生效，新出一种响亮失败，失效线同病 | 另立 [code/60](./60-initial-route-takes-effect-at-processing-time-unlike-reassessment.md)，建议 R2，注明今天走不到（依赖 code/53、demo-chain-gaps/115） |
+| N2 | 同一时刻的平局靠应用时钟决定 | 改法比建议多走一步，理由见代决 2：读口改为交回全部新计划，起点逐份问适用性，不再取「最近一份」，平局与时钟无关；不加迁移。补编排平局用例、多份当前有效用例，与派发真库平局用例（处理时刻倒序、同一业务时刻，外加一行没有业务时间的旧行）；复核册真库用例覆盖旧行读回。头注那句「后判的那一次读过先判的结果」随读口一起删去 |
+| N3 | `rebuildPlan` 失败不该折成 `RoutingHistoryUnavailable` | 适配器包 `ports.ErrStoredRoutePlanUnreadable`，编排遇它响亮报错；编排与复核册真库各补一条 |
+| N4 | 坏起点用例改问错误身份；两处适配器替身补同一时刻规则；「三本册」点名；越权风险点补演示库重灌 | 用例改名 `TestASupersededPlanWhoseSuccessorIsMissingIsLoud`，改用 `errors.Is(err, application.ErrInconsistentRouteStart)`；两处替身随读口改成 `FormedPlans`，排法与真库同；头注点名 `initial_route`、`route_reassessment`、`plan_applicability`；越权风险点 6 补 `--reset` |
+
+修订后已 `git rebase main`（`4e7874ba0`），无冲突。
+
+验证（修订后）：
+
+- `go build ./...`、`go vet ./...`、`gofmt -l`（相对 main 改动的 Go 文件）干净。
+- 同一组包 `TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/networkrouting/... ./cmd/parcel-dispatch ./cmd/parcel-api ./cmd/parcel-network-register ./internal/parcelshipment/adapters/networkrouting ./internal/transportfulfillment/adapters/networkrouting ./internal/visibilityexception/adapters/networkrouting ./internal/architecture/... ./migrations/...`：21 个包 ok。
+- 新用例另跑 `-count=3`：派发真库两条、复核册真库两条、编排新增四条，都 ok。
+- `tools/adr-index`：在 scratchpad 的 `git archive HEAD` 副本上重生成之后 `-check` 退 0，ADR-0272 进索引，标〔代决·待 NR owner 复核〕。本分支的 `docs/adr/README.md` 未动。
 
