@@ -12,7 +12,7 @@ ADR-0254 定了取消与边界事实按两者的业务时间比、晚到的更�
 ## 证据
 
 - 网络服务：`internal/parcelshipment/application/adopt_network_intake.go` 的 `AdoptNetworkIntakeHandler.Handle` 读到已成立的取消，`cancellation.RequestedAt()` 早于 `source.OccurredAt()` 即不采用（`CANCELLED_BEFORE_INTAKE/<取消标识>`），否则答 `ELIGIBILITY_UNDECIDED`、原因 `CANCELLATION_ORDER_CONFLICT`。注释写「收寄发生早于取消决定」，比的却是取消的业务时间。
-- 冲突之后：没有命令口、运营决定面或续办信封能把这一格解开；同一来源再投仍落在同一格。
+- 冲突之后：没有命令口、运营决定面或续办信封能把这一格解开；同一来源再投仍落在同一格。`internal/parcelshipment/adapters/adoptconsume/adoptconsume.go` 的 `Consumption` 把 `IntakeEligibilityUndecided` 一律译成未决哨兵、回滚重投，这一格因此会重投到失败预算耗尽，而重投推不动它。
 - 面单渠道：`internal/parcelshipment/domain/label_service_final.go` 的 `JudgeLabelServiceFinal` 在 `input.CancellationStands` 为真时直接答 `CANCELLATION_STANDS`；`application/judge_label_service_final.go` 只读「有没有有效取消」，不读取消的业务时间，也不比承运商首次有效收寄的发生时间。
 - 文档：PS CONTEXT「形成取消决定前……」一条，UC-PS-003 `AT-PS-107`，UC-PS-004 `AT-PS-095`、`AT-PS-108`，UC-PS-006 决定矩阵。
 
@@ -22,11 +22,12 @@ ADR-0254 定了取消与边界事实按两者的业务时间比、晚到的更�
 
 ## 规模
 
-M：面单渠道终局判断多比一次时间并多一格未决原因；一个授权决定面（命令、授权、只追加记录、续办信封）；收寄采用那段注释改口。
+M：面单渠道终局判断多比一次时间并多一格不形成原因；收寄采用消费门对冲突入账；一个授权决定面（命令、授权、只追加记录、续办信封）；收寄采用那段注释改口。
 
 ## 最小的诚实修法
 
-1. 面单服务终局判断读到有效取消时，读出取消的业务时间，与承运商首次有效收寄的发生时间比：收寄晚于取消，照旧 `CANCELLATION_STANDS`；不晚于取消，答 `JUDGMENT_UNDECIDED` 并带一格新原因（例如 `CANCELLATION_ORDER_CONFLICT`），不形成终局。
+1. 面单服务终局判断读到有效取消时，读出取消的业务时间，与承运商首次有效收寄的发生时间比：收寄晚于取消，照旧 `CANCELLATION_STANDS`；不晚于取消，不形成终局并指名冲突——宜作 `LABEL_SERVICE_NOT_FINAL` 加一格新的不形成原因（例如 `CANCELLATION_ORDER_CONFLICT`），这样 ADR-0134 决定二的翻译表照旧把它译成已消费，不必另加一格结果；不要答 `JUDGMENT_UNDECIDED`，那一格按 ADR-0134 是重投会改变结果的读口未决。
+1a. 收寄采用一侧：冲突那一格入账、留下冲突，不进未决哨兵（按恢复动作，ADR-0254 决定二）；可以另立一格结果，或在 `Consumption` 里按原因分出，判据只放一处。
 2. 立一个授权决定面解开冲突，去向至少有：认定取消依据不成立、包裹转入收寄后服务处置（随后重驱收寄采用或终局判断）；认定边界事实有误、交来源方更正。决定只追加，不改写已提交的取消。
 3. `adopt_network_intake.go` 那段注释的「取消决定」改为「取消的业务时间」。
 4. 补用例：网络服务冲突后经决定解开；面单渠道收寄不晚于取消停在未决（`AT-PS-108`）。

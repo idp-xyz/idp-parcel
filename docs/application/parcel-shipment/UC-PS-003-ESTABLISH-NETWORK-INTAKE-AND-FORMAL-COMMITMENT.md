@@ -198,6 +198,6 @@
 
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
-| `AT-PS-107` 与「一致性、幂等与并发」取消与收寄一条 | 冲突停在未决之后没有解开它的业务决定面，冲突包裹没有责任起点、也不触发收寄后的路由复核；本行预期结果不变 | [code/35](../../../.scratch/docs-consistency/code/35-cancellation-and-boundary-fact-order-conflict-has-no-label-half-and-no-resolution-face.md) |
+| `AT-PS-107` 与「一致性、幂等与并发」取消与收寄一条 | 冲突之后没有解开它的业务决定面，冲突包裹没有责任起点、也不触发收寄后的路由复核；采用消费门还把这一格当依赖类未决回滚重投，而它重投推不动；本行预期结果不变 | [code/35](../../../.scratch/docs-consistency/code/35-cancellation-and-boundary-fact-order-conflict-has-no-label-half-and-no-resolution-face.md) |
 
 完成本用例只闭合网络服务责任起点和正式承诺，不证明路由仍适用、节点作业完成、运输已经开始或包裹已经终局。
