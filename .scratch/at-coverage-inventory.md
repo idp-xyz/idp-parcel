@@ -663,7 +663,7 @@
 | `AT-PS-009` | 接受后客户合同或产品发布新版本 | UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md |
 | `AT-PS-011` | 接受成功后检查下游对象 | UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md |
 | `AT-PS-018` | 无法识别目标委托、包裹或资料范围 | UC-PS-002-AMEND-CUSTOMER-SOURCE-DATA.md |
-| `AT-PS-019` | 请求方无客户、委托或字段范围授权 | UC-PS-002-AMEND-CUSTOMER-SOURCE-DATA.md |
+| `AT-PS-019` | 委托在请求方可见范围内，但请求方对这处资料没有修订授权 | UC-PS-002-AMEND-CUSTOMER-SOURCE-DATA.md |
 | `AT-PS-021` | 过期基础版本与当前版本在同一字段重叠 | UC-PS-002-AMEND-CUSTOMER-SOURCE-DATA.md |
 | `AT-PS-024` | 请求改变客户账户、责任法人、合同、服务产品或共享服务范围 | UC-PS-002-AMEND-CUSTOMER-SOURCE-DATA.md |
 | `AT-PS-025` | 客户重量/尺寸更正与节点实测冲突 | UC-PS-002-AMEND-CUSTOMER-SOURCE-DATA.md |
@@ -672,19 +672,18 @@
 | `AT-PS-028` | 关务已提交后形成客户资料更正 | UC-PS-002-AMEND-CUSTOMER-SOURCE-DATA.md |
 | `AT-PS-029` | 关务案件已关闭或服务已完成后收到更正 | UC-PS-002-AMEND-CUSTOMER-SOURCE-DATA.md |
 | `AT-PS-030` | 业务有效时间早于系统接收时间的迟到更正 | UC-PS-002-AMEND-CUSTOMER-SOURCE-DATA.md |
-| `AT-PS-045` | 收寄事实先发生，取消消息后到 | UC-PS-003-ESTABLISH-NETWORK-INTAKE-AND-FORMAL-COMMITMENT.md |
+| `AT-PS-045` | 收寄已采用、责任起点已成立之后，同一包裹的取消请求才到 | UC-PS-003-ESTABLISH-NETWORK-INTAKE-AND-FORMAL-COMMITMENT.md |
 | `AT-PS-046` | 包裹已经终局或被身份谱系替代后到站 | UC-PS-003-ESTABLISH-NETWORK-INTAKE-AND-FORMAL-COMMITMENT.md |
 | `AT-PS-058` | 普通退运旅程开始 | UC-PS-004-FORM-PARCEL-FINAL-SERVICE-OUTCOME.md |
 | `AT-PS-059` | 退运完成满足合同终局规则 | UC-PS-004-FORM-PARCEL-FINAL-SERVICE-OUTCOME.md |
 | `AT-PS-060` | 被拆分替代的来源包裹收到迟到交付结果 | UC-PS-004-FORM-PARCEL-FINAL-SERVICE-OUTCOME.md |
-| `AT-PS-083` | 已收寄且普通退运决定、责任和路径齐备 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
-| `AT-PS-084` | 监管退运要求到达 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
 | `AT-PS-085` | 只有拒收或无路由信号 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
-| `AT-PS-086` | 包裹已有终局后请求取消 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
 | `AT-PS-087` | 取消包裹已有面单交易 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
-| `AT-PS-088` | 处置请求已发出但运输方拒绝承接 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
 | `AT-PS-089` | 收寄后服务终止执行结果满足合同终局规则 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
 | `AT-PS-093` | 异常案件认定可能遗失，但权威服务责任结果尚未形成 | UC-PS-004-FORM-PARCEL-FINAL-SERVICE-OUTCOME.md |
+| `AT-PS-107` | 包裹取消已提交，此后到达的收寄来源发生时间不晚于取消的业务时间（ADR-0254） | UC-PS-003-ESTABLISH-NETWORK-INTAKE-AND-FORMAL-COMMITMENT.md |
+| `AT-PS-109` | 只有信用校验一项且成立（形成信用暴露）的委托撤回 | UC-PS-005-WITHDRAW-SUBMITTED-SHIPMENT-REQUEST.md |
+| `AT-PS-110` | 委托在请求方可见范围内，但请求方没有撤回授权 | UC-PS-005-WITHDRAW-SUBMITTED-SHIPMENT-REQUEST.md |
 | `AT-SA-001` | 合法关务交接到达 | UC-SA-001-ASSESS-ACTUAL-ADVANCE-AND-FORM-CUSTOMER-RECOVERY.md |
 | `AT-SA-007` | 运营企业付款但合同明确由其最终承担 | UC-SA-001-ASSESS-ACTUAL-ADVANCE-AND-FORM-CUSTOMER-RECOVERY.md |
 | `AT-SA-008` | 付款事实完整但客户责任版本不明确 | UC-SA-001-ASSESS-ACTUAL-ADVANCE-AND-FORM-CUSTOMER-RECOVERY.md |
@@ -1285,6 +1284,12 @@
 | `AT-NR-034` | 场外揽收交接已采用，尚未到节点；选中候选的硬约束仍满足（ADR-0249） | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-NR-051` | 选中候选的限制状态未知：关务目录为空、受理基线缺端点国家或关务来源未接（ADR-0250） | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-NR-084` | 场外揽收复核时原计划被有效硬限制淘汰，存在替代候选，策略版本允许自动改路（ADR-0249） | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
+| `AT-PS-083` | 已收寄且普通退运决定、责任和路径齐备 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
+| `AT-PS-084` | 监管退运要求到达 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
+| `AT-PS-086` | 包裹已有终局后请求取消 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
+| `AT-PS-088` | 处置请求已发出但运输方拒绝承接 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
+| `AT-PS-106` | 指名的委托不存在，或属于别的租户、客户 | UC-PS-002-AMEND-CUSTOMER-SOURCE-DATA.md |
+| `AT-PS-108` | 面单渠道包裹已有有效取消，随后的首次有效收寄发生不晚于取消的业务时间（ADR-0254） | UC-PS-004-FORM-PARCEL-FINAL-SERVICE-OUTCOME.md |
 | `AT-VE-001` | `UC-CC-006` 提供已接受、范围明确的关务结果 | UC-VE-001-COORDINATE-CUSTOMS-EXCEPTIONS-AND-CUSTOMER-DISCLOSURE.md |
 | `AT-VE-002` | 只有原始监管消息、截图或操作员备注，尚未被关务接受 | UC-VE-001-COORDINATE-CUSTOMS-EXCEPTIONS-AND-CUSTOMER-DISCLOSURE.md |
 | `AT-VE-003` | 只有技术送达/监管接收且不存在适用异常条件 | UC-VE-001-COORDINATE-CUSTOMS-EXCEPTIONS-AND-CUSTOMER-DISCLOSURE.md |
@@ -1555,3 +1560,5 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-10-21 追记（票 docs-consistency/03）：UC-CC-005 新立 `AT-CC-448`（提交执行时单元的就绪判断没登答未决并指名就绪未配置，替代 `AT-CC-109` 在「不存在」一格的结果名，ADR-0243），入①。
 
 2026-10-21 追记（票 docs-consistency/04，文档自洽 VE 组）：`AT-VE-169` 重号——UC-VE-003 的 ETA 客户可见那一行改号为 `AT-VE-187`（④ 移行，场景不变）；UC-VE-008 的客户归属确立补派生那一行保留 `AT-VE-169`，它早已被测试点名，今补进 ①。UC-VE-008 新立 `AT-VE-188`（归属方查视图未形成的包裹答当前无可见结果，ADR-0246；实现票 code/31），入 ④。UC-TF-005 `AT-TF-157`–`161` 里全程追踪自己的行为迁入 UC-VE-002 `AT-VE-189`–`192` 与 UC-VE-004 `AT-VE-193`–`195`，测试照旧是那几个，入 ①；测试 Covers 改点新号归 code/32，UC-TF-005 原行改为引用归票 docs-consistency/10，那时 ① 里 `AT-TF-157`–`161` 几行随之移行或删去。总览计数由协调方进 main 时重算。
+
+2026-10-21 追记（票 docs-consistency/06）：UC-PS-002 新立 `AT-PS-106`（委托查无或属别人答统一不可见，今天答 500，code/22），入④；`AT-PS-019` 改为可见范围内无修订授权（未获授权）。UC-PS-003 新立 `AT-PS-107`（取消已提交后才到、发生不晚于取消的收寄停在未决，ADR-0254；机制已在 `TestTheCancellationBoundaryJudgesByBusinessTime`，缺 Covers 点名），入②；`AT-PS-045` 限到收寄已采用后取消才到。UC-PS-004 新立 `AT-PS-108`（面单渠道同一情形，今天答 CANCELLATION_STANDS，code/35），入④。UC-PS-005 新立 `AT-PS-109`（只有信用暴露的撤回按原关联释放，机制已在 `TestAWithdrawalReleasesEveryOccupationRegardlessOfTheConclusion`，那里点的是 `AT-PS-035`）、`AT-PS-110`（可见范围内无撤回授权，机制已在 `TestAnUnauthorizedWithdrawalFormsNothing`，那里点的是 `AT-PS-075`），入②。UC-PS-006 `AT-PS-083`、`AT-PS-084`、`AT-PS-088`（收寄后服务处置决定没有模型，code/37）与 `AT-PS-086`（终局后取消答既有终局，今天不读终局，code/21）由②移入④。总览计数未改，由推送方重算。
