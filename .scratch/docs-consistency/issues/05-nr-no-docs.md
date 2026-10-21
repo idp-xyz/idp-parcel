@@ -22,3 +22,66 @@ Blocked by: 无（01 进 main 后开工）
 
 - 审计报告本组每一条 A、B 都有去向（已改 / 已由某票消解 / 交横切 / 立代码票）。
 - 完成记录里一张对照表：审计条目 → 去向。
+
+## 完成记录（2026-10-21，分支 claude-dc05，基 main `205eb254`）
+
+审计 [audit/nr-no.md](../audit/nr-no.md) 26 条逐条按 main `205eb254` 复核（审计钉 `6b0074d0`；其间进 main 的票没有动 NR、NO 的代码与本组文档，只有文档自洽 01 动了 ADR 的 Status 行）。除 L13 外，现象全部仍在。
+
+### 审计条目 → 去向
+
+| 条目 | 归类 | 去向 | 落在哪 |
+|---|---|---|---|
+| H1 初始路由整封回滚、并列不留痕 | C | 既有代码票承接；文档加未实现注记 | [demo-chain-gaps/155](../../demo-chain-gaps/issues/155-initial-route-unconfigured-undecided-burns-the-acceptance-partition.md)（02 已扩范围）；UC-NR-001 新「给开发的交接」表、`AT-NR-012` 注记 |
+| H2 揽收复核拿揽收地点比计划节点 | B | 代决 [ADR-0249](../../../docs/adr/0249-offsite-pickup-reassessment-checks-hard-constraints-only-and-does-not-establish-a-controllable-node.md)；已改；代码票解除阻塞 | NR CONTEXT Language「当前可控节点」、「路由形成与选择」两条、「路由稳定性与受控改路」前缀一句、生命周期；UC-NR-003 复核点 1、输入契约、复核顺序层次 2、`AT-NR-034` 改写、新立 `AT-NR-084`；ADR-0172 Status 行与 Links 挂前向指针；[code/16](../code/16-pickup-reassessment-compares-the-pickup-place-with-plan-nodes.md) 写明裁向、Blocked by 改为无 |
+| H3 复核不取候选成本 | C | 既有代码票承接；文档加注记 | [demo-chain-gaps/115](../../demo-chain-gaps/issues/115-route-reassessment-never-loads-candidate-costs.md)；UC-NR-003「给开发的交接」表、`AT-NR-039`、`AT-NR-053` 注记 |
+| M1 UC-NO-006 漏了只因歧义信号的冲突 | A | 已改 | UC-NO-006 输入契约「归入」、步骤 7、`AT-NO-075`，引 NO CONTEXT 重核对象 |
+| M2 UC-NR-003 用「未决」写重投推不动的格，缺「触发未受理」 | A | 已改 | UC-NR-003 首段、元数据、启动条件、步骤 3、5、`AT-NR-040`；结果表补「触发未受理」 |
+| M3 「当前位置」同词异义 | A | 已改；GLOSSARY 一侧交横切 X1 | NR CONTEXT Language 定义「当前控制位置」，CONTEXT 与 UC-NR-003 一律改用，码值不改 |
+| M4 仍适用线从不形成改路建议 | C | 既有代码票承接（复核：不走「限到失效线」那条路） | [code/17](../code/17-still-applicable-plan-never-forms-a-reroute-suggestion.md) 记复核结论；UC-NR-003 `AT-NR-042` 注记 |
+| M5 承接决定缺「待补充」 | C | 既有代码票承接；文档加注记 | [code/18](../code/18-node-customs-collaboration-acceptance-lacks-pending-supplement.md)；UC-NO-001 状态行、`AT-NO-003` 注记 |
+| M6 集运包含不查环 | C | 既有代码票承接；文档加注记 | [code/19](../code/19-consolidation-containment-is-not-checked-for-cycles.md)；UC-NO-003 阶段 3、`AT-NO-039` 注记 |
+| M7 方向性作业受阻：UC 挡、CONTEXT 与代码照记 | B | 代决 [ADR-0251](../../../docs/adr/0251-directional-node-work-is-paused-by-a-reading-before-the-action-and-recorded-moves-are-never-refused.md)（把 no-directional-basis/01「裁定修订」定为记录）；已改；代码不改 | NO CONTEXT「集运、封装与载具」括注、「作业授权与执行」暂停一条；UC-NO-003 启动条件、结果「方向性作业受阻」、阶段 3、`AT-NO-031`、`AT-NO-033`；读面随 no-directional-basis/01、/02 |
+| M8 「适用性看不清」的来源都推不动 | B | 代决 [ADR-0250](../../../docs/adr/0250-unclear-plan-applicability-in-reassessment-is-settled-as-not-judged-and-resume-in-the-same-change-stays-in-the-acceptance-chain.md) 决定一；已改；立代码票 | ADR-0235 Status 行与 Links 挂前向指针；NR CONTEXT 复核前提缺口一条；UC-NR-003 结果表（「当前计划适用性未决」并入「触发未判」）、结果表后一段、步骤 6A、`AT-NR-051`、`AT-NR-067`；[code/26](../code/26-unclear-plan-applicability-in-reassessment-is-retried-instead-of-settled.md) |
+| L1 重核对象两处口径不一，缺「信号没了、只缺范围」 | A | 已改 | NO CONTEXT 生命周期「待识别实物与身份关联」定义重核对象一处，「送站交接单」改为引用；规则与生命周期补第三支（ADR-0212 决定六） |
+| L2 过时的实现现状句 | A | 已改 | UC-NR-003、UC-NO-002（交接一节与结果段那句）、UC-NO-003「给开发的交接」；UC-NO-006 状态行改已实现 |
+| L3 以现行口吻写尚无代码的能力 | C（交本票注记） | 已改；无票的一块立代码票 | UC-NR-003、UC-NO-003「给开发的交接」各列一张未实现表，相关 AT 行加注记：路由指令、集运兼容 → no-directional-basis/02；偏离 → demo-chain-gaps/35；复评新计划信封 → demo-chain-gaps/34；实测触发 → pp-pricing-input-seams/04、product-strategy-boundary/08、demo-chain-gaps/44（NR 侧消费票不立，NO 没有实测登记册之前它没有生产者）；人工改路决定 → 新立 [code/27](../code/27-reroute-suggestions-and-ties-have-no-authorized-decision-face.md) |
+| L4 AT-NR-033、036 缺冻结形态已声明的前提 | A | 已改 | UC-NR-003 `AT-NR-033`、`AT-NR-036` |
+| L5 失效后自动改路仍比改善 | B | 按已接受的 ADR-0173 决定三写进文档，不另立 ADR | ADR-0173 决定三原句「失效后同样按本形态折自动条件」已明写，代码与之一致，相抵只在 CONTEXT 漏写；NR CONTEXT 自动改路一条与 `AT-NR-037` 补上条件与 `IMPROVEMENT_BELOW_THRESHOLD` |
+| L6 币种不齐没提比较币种 | A | 已改 | NR CONTEXT「路由形成与选择」排序一条（ADR-0148 决定四） |
+| L7 现行规则节里写历史经过 | A | 已改 | NR CONTEXT 删并列出口的历史一段，只留现行一句 |
+| L8 CONTEXT-MAP 的 NR 条目只写 `BUY` 评价、「成本维度」 | A | 交横切 X2 | — |
+| L9 UC-NR-002 写「读取」客户地址与申报资料 | A | 已改 | UC-NR-002 输入契约「包裹声明」行 |
+| L10 GLOSSARY 与 NR/NO CONTEXT 同词重复定义 | A | 交横切 X3 | — |
+| L11 「可以形成单元控制」以现行口吻写 | A | 已改；GLOSSARY 一侧交横切 X4 | NO CONTEXT「接收、控制与交接」那条补「规则尚未确立」；UC-NO-003 `AT-NO-038` 注记 |
+| L12 AT-NO-062 一行叠两套结果 | A | 已改 | UC-NO-002 拆成 `AT-NO-062`（有范围或渠道件号）与新立 `AT-NO-131`（无范围、只经客户件号），去掉「ADR-0212 之后」 |
+| L13 14 份 ADR 的 Status 行把同一次停用写两遍 | A | 已由 docs-consistency/01 消解 | 01 进 main（`205eb254`）后逐份复核：14 份 Status 行标记前段只剩去向，来向只在注记，`adr-index -check` 校这一条 |
+| L14 ADR-0235 落`未判`不带续办，与 ADR-0094 决定四相抵 | B | 代决 ADR-0250 决定二 | ADR-0235 注记挂「由 ADR-0250 回答」（越权风险点 1，无条款停用）；ADR-0094 不动，决定二读的就是它注记里写的适用场景 |
+| L15 两处 Go 注释与 ADR 相反或过时 | C | 既有代码票承接 | demo-chain-gaps/115（02 已并入） |
+
+去向计数（按主去向）：已改文档 17（A 11、B 5、L3 一条）；交横切 2（L8、L10；另 M3、L11 各有 GLOSSARY 一半交横切）；已由某票消解 1（L13）；既有代码票承接 6（H1、H3、M4、M5、M6、L15）。新立代码票 2（code/26 承 M8，code/27 承 L3 的人工改路），已立的 code/16 解除阻塞。
+
+### 代决与越权风险点
+
+用户授权「你作为业务和系统专家自决」，三份新 ADR 全是会话代决，Status 写明代谁、待谁复核，越权风险点见各记录文末。
+
+- **ADR-0249（H2，代 NR owner，待 NR owner 复核，第 1 点同待 TF owner）**：揽收触发的复核只按选中候选的硬约束判原计划适用性，揽收地点原样记入复核依据、不与计划节点比；揽收不建立当前可控节点——已执行前缀为空、不判冻结、不试改善切换，失效时只出建议（`NOT_AT_CONTROLLED_NODE`），决定从包裹交进的首个节点生效；揽收照复核、节点交给运输方照旧不复核；揽收复核计入当前控制位置。部分停用 ADR-0172 决定三、决定四各一句（限揽收复核）。越权风险点：揽收地点与声明不符时 NR 不知；揽收时不试改善；失效只出建议、决定面未落地前停在无路由；计入当前控制位置；原先无路由时揽收就形成首个计划。
+- **ADR-0250（M8、L14，代 NR owner，待 NR owner 复核）**：「适用性看不清」的来源（关务目录为空、受理基线缺端点国家、关务来源未接）重投都推不动，改答`未判`、原因 `PLAN_APPLICABILITY_UNCLEAR`，未判登记另记缺口与再判条件；真依赖故障在取数侧交错误、照旧重投。ADR-0094 决定四「续办触发同笔落地」只管受理判断链，路由复核每次控制触发都会重判，`未判`可以先于续办落地，续办仍归票 154。部分停用 ADR-0235 决定一一句的那一格，回答其越权风险点 1。越权风险点：关务来源未接也入账、不再有失败码；缺端点国家是永久缺口（补救在 PS 受理侧）；看不见的关务限制下原计划继续走；最后一个节点上的未判再无复核。
+- **ADR-0251（M7，代 NO owner，待 NO owner 复核，第 3 点同待 NR owner）**：方向性作业的「暂停」由作业端在动作之前问方向依据预检来执行；写口对已经发生的方向性作业（在线口、导入、离线回传一样）照记、同笔留方向依据记录，不答「受阻」；集运兼容判断是读面的一格依据。把票 no-directional-basis/01「裁定修订」定为记录，无条款停用。越权风险点：在线口也不拒；读面建成之前没有任何门；不兼容的成员照记。
+- 不另立 ADR 的 B 类：L5 按 ADR-0173 决定三写进 CONTEXT（理由见对照表）。M4 归 C，复核时不取审计给的「限到失效线」那条路，code/17 照立。
+
+### 交横切（交 docs-consistency/10，另一条交协调方）
+
+- **X1 GLOSSARY「作业位置与当前位置」**（M3）。引文：「当前位置是依据当前有效位置和集运包含关系派生的结果。」改成什么：词条末加一条「避免与 `network-routing` 的『当前控制位置』（路由历史里业务时间最晚的已判控制触发，ADR-0235 决定四称『当前位置』）混用」。依据：NR CONTEXT Language「当前控制位置」。
+- **X2 CONTEXT-MAP NR「拥有」与 `parcel-pricing → network-routing` 边**（L8）。引文：「择优消费 `parcel-pricing` 对每个候选形成的 `BUY` 评价作为成本维度」；「计价对每个候选分别形成 `BUY` 评价……网络与路由把这些评价作为成本维度并入择优」。改成什么：「`BUY` 评价或内部价格政策评价（ADR-0148 决定四），按比较币种合成为候选成本事实」，去掉「成本维度」，或注明首发排序形态是成本单维。依据：ADR-0148 决定四第 1、2 条；NR CONTEXT「候选成本事实」。
+- **X3 GLOSSARY 与 NR/NO CONTEXT 同词重复定义**（L10）。按审计 L10 逐条：「实物控制」（NO CONTEXT）与「实物控制关系」（GLOSSARY）统一为一个名；GLOSSARY「待识别实物」「正式身份由 `parcel-shipment` 确认」半句改为「正式包裹身份由 `parcel-shipment` 给出，实物与包裹的关联与身份冲突处置归 `node-operations`」（依据 NO CONTEXT「身份冲突处置」、ADR-0210）；GLOSSARY「集运单元」「把多个包裹临时组合」改为「临时组合包裹或其他允许成员（含嵌套的集运单元）」（依据 NO CONTEXT「集运单元实例」、`ports.ConsolidationMemberAt.NestedUnit`）；NR、NO Language 里与 GLOSSARY 各有一份全文定义的词条（物流节点、无当前有效路由、路由指令、待识别实物、可验证交付范围等）只留 GLOSSARY 一处、CONTEXT 引用，合并时以 CONTEXT 现行措辞为准（例如「物流节点」的作业种类、「无当前有效路由」是「明确判断」）。
+- **X4 GLOSSARY「实物控制关系」**（L11）。引文：「封签连续且相符的封闭集运单元被有效接收后，成员可以派生为“随单元受控”，但不形成逐件实收」。改成什么：句末加「单元控制规则尚未确立，确立之前集运单元的交接不推进成员控制（NO CONTEXT「接收、控制与交接」、UC-NO-005）」。
+- **X5 CONTEXT-MAP `node-operations / transport-fulfillment → network-routing` 边**（H2）。引文：「运输履约提供场外揽收、权威运输交接和实际移动事实」。改成什么：补半句「场外揽收触发复核但不建立当前可控节点，交进声明的接收节点的权威运输交接才建立（ADR-0249、ADR-0215）」。依据：ADR-0249 决定二、三。
+- **X6 `.scratch/at-coverage-inventory.md`（交协调方，不属 10 的文件）**。本票改了 AT 行的文字或立了新号，盘点的行要随之移：`AT-NR-034`（场景改写，揽收不比节点）、`AT-NR-040`（改答触发未受理）、`AT-NR-051`（改答触发未判）、`AT-NR-067`（去掉适用性看不清）、`AT-NR-033`/`036`/`037`（补前提）；新立 `AT-NR-084`（揽收时失效只出建议），未实现、入未覆盖桶；`AT-NO-062` 拆出 `AT-NO-131`——盘点里 `AT-NO-062` 行标「末句」「没有范围时」的那几条 Covers（`TestAnAmbiguityOnlyConflictWithoutAScopeIsReleasedIntoAnUnverifiedPendingUnit`、`TestAManualRecheckThatReleasesAnAmbiguityIntoAnUnverifiedUnitAnswersCreated`、`TestTheWiredDispatchReleasesAnUnscopedAmbiguityIntoAnUnverifiedPendingUnit`）移到 `AT-NO-131` 新行，计数随之由推送方重算。
+
+### 检查
+
+- `go run ./tools/adr-index` 重生成后 `-check` 退 0。重生成的 `docs/adr/README.md` 不随本票提交：照 [parallel-sessions「生成物不占号」](../../../docs/agents/parallel-sessions.md#生成物不占号但只在干净检出上生成)，带新 ADR、改 Status 行的票只改 ADR 文件，索引由推送方在 tip 上重生成。
+- `go run ./tools/at-coverage-counts -check` 退 0（本票没动盘点文件，见 X6）。
+- 本票改动的全部 `.md` 里的相对链接与锚点用脚本逐个解析，全部能解析。
+- `git diff main --stat` 只含：本组两份 CONTEXT、NR、NO 的 UC（UC-NR-001、002、003，UC-NO-001、002、003、005、006）、新 ADR 三份、被停的 ADR-0172 与 ADR-0235 的 Status 行与 Links、`.scratch/docs-consistency/` 下本票与 code/16、17、26、27。
+- 编号：新代码票取 code/26、27（立票时 code/ 最大号 25）；03、04 等并行修订票若也立代码票，进 main 时撞号由协调方改号。
