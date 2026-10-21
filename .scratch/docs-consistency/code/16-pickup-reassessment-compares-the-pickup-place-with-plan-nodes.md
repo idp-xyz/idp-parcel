@@ -1,7 +1,7 @@
 # 16 NR 场外揽收触发的复核把揽收地点当成计划节点来比，地点不是节点码，原计划就判失效
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code16（基于 main `14443ac03`）。原分级 R1（上线前必修）不变；此前 ready-for-agent——R1（上线前必修）：答错。揽收复核已在生产装配（`cmd/parcel-dispatch/assemble.go` 经 `adapters/parcelshipment/reassess_on_intake.go`）；揽收地点是客户场所、不是节点码，于是第一天起每一次场外揽收复核都让初始计划失效，包裹落无当前有效路由或被改路，与 `AT-NR-034` 期望的「保留原路由」相反。没有绕法（运营无法让复核不比节点）。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code16（基于 main `14443ac03`）。原分级 R1（上线前必修）不变；此前 ready-for-agent——R1（上线前必修）：答错。揽收复核已在生产装配（`cmd/parcel-dispatch/assemble.go` 经 `adapters/parcelshipment/reassess_on_intake.go`）；揽收地点是客户场所、不是节点码，于是第一天起每一次场外揽收复核都让初始计划失效，包裹落无当前有效路由或被改路，与 `AT-NR-034` 期望的「保留原路由」相反。没有绕法（运营无法让复核不比节点）。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
 Blocked by: 无——2026-10-21 docs-consistency/05 已裁（[ADR-0249](../../../docs/adr/0249-offsite-pickup-reassessment-checks-hard-constraints-only-and-does-not-establish-a-controllable-node.md)），裁向见文末「裁向」。原 Blocked by：docs-consistency/05 先裁 [audit/nr-no.md](../audit/nr-no.md) H2 的三件（揽收复核时位置与计划怎样比；揽收算不算可控节点；它与 CONTEXT「交给运输方的交接不建立可控节点」那一句的关系）。
 出处：[audit/nr-no.md](../audit/nr-no.md) H2（审计归 B，建议修法写明「随后改 CONTEXT 这三句与 AT-NR-034，再立代码票」；无论裁向，今天的比法都要改。审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，NR 代码在此期间未改）。
 
@@ -113,3 +113,10 @@ M（按裁向，可能涉及计划模型加揽收段，则 L）。
 - `go build ./...`、`go vet ./...`、`gofmt -l` 干净。
 - 同一组包 `TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/networkrouting/... ./cmd/parcel-dispatch ./cmd/parcel-api ./cmd/parcel-network-register ./internal/parcelshipment/adapters/networkrouting ./internal/transportfulfillment/adapters/networkrouting ./internal/visibilityexception/adapters/networkrouting ./internal/architecture/... ./migrations/...`：21 个包 ok，退出码 0。
 - 新真库用例另跑 `scripts/test-full.sh -count=3 -run 'OffsitePickup.*OnTheDatabase|TestAnEarlierIntakeArrivingAfterAJudgedHandoverIsNotJudgedOnTheDatabase|TestOutOfOrderReassessmentTriggersHaveADeterminedAnswerOnTheDatabase' ./cmd/parcel-dispatch`：ok（`-v` 核过两条新用例各跑三遍、全 PASS）；后两条是 `intakeAt` 改签名波及的现有用例。
+
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-code16` tip `0918dd09c` 在 main `14443ac03` 上快进；隔离评审的阻断（缺派发真库用例）已补，修订轮只加测试与注释，协调方核过不动生产逻辑。
+- 协调方在 tip 上单独提交重生成的 ADR 索引、AT 计数与机制清点，`-check` 均退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净。无迁移、无种子改动。
+- 去向：code/52（复核读初始路由一行，R1）；协调方另立 [code/53](./53-improvement-reroute-record-violates-the-rerouted-shape-check.md)（改善改路的 `REROUTED` 过不了 CHECK，R2）。
