@@ -1,6 +1,6 @@
 # ADR-0008: 试点证据采用自建 MinIO S3 对象存储
 
-Status: Accepted
+Status: Accepted<!-- 索引注记 -->｜**部分停用**（2026-10-21）：其 Decision「为 `idp-parcel` 建设公司自建的 MinIO S3 兼容对象存储，使用逻辑命名空间 `idp-parcel/pilot` 保存试点证据和脱敏映射。」一句里「建设公司自建的 MinIO」那一半，与 Consequences「公司保持证据存储和访问边界的自主控制，不依赖外部文档平台的租户或发布周期。」「自建 MinIO 的实施和运维责任由基础设施团队承担，具体运行要求在其实施文档中管理。」两句，已由 [ADR-0278](./0278-evidence-storage-is-an-s3-compatible-connector-and-the-platform-instance-is-a-tenant-value.md) 停用——证据存储的形态（S3 兼容对象存储、按对象版本引用、`idp-parcel/pilot` 命名空间约定）归产品，用哪一个平台、谁建谁运维是租户取值，登在该租户的 `PAR-GOV-11`。**适用场景**：全部租户；S3 兼容、命名空间、登记后才算就绪、存储不拥有业务对象、临时存储不作权威源与其余各条按「证据存储」读照旧成立
 Date: 2026-07-31
 
 ## Context
@@ -35,3 +35,4 @@ MinIO 的部署拓扑、运行安全、备份、容量和运维流程不在本 A
 - [首发试点参数与证据登记册](../product/PILOT-PARAMETER-REGISTER.md)
 - [首发试点验收场景矩阵](../product/PILOT-ACCEPTANCE-MATRIX.md)
 - [架构决策记录](./README.md)
+- [ADR-0278](./0278-evidence-storage-is-an-s3-compatible-connector-and-the-platform-instance-is-a-tenant-value.md)：前向指针——部分停用 Decision 一句里「建设公司自建的 MinIO」那一半与 Consequences 两句，平台与实例归租户

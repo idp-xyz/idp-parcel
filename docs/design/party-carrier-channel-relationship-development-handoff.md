@@ -166,7 +166,7 @@ flowchart LR
 - 不把 Carrier Service、渠道账号、面单交易、运输委托和实际履约段合并成一个对象。
 - 不根据品牌、单号前缀、API 主体或最后一条消息自动认定实际承运商。
 - 不因为代理商关系自动生成采购、退款、应付或索赔责任。
-- 不在本交接文档中保存真实账号凭据、合同正文、伙伴名称或 MinIO 对象内容。
+- 不在本交接文档中保存真实账号凭据、合同正文、伙伴名称或 证据存储对象内容。
 - 不因新增关系矩阵创建新的限界上下文；它只连接现有 `party-commercial`、`parcel-shipment`、`transport-fulfillment`、`parcel-pricing` 和 `settlement-accounting`。
 
 ## 完成定义

@@ -4,7 +4,7 @@
 
 本文执行[关务切片 0](./customs-slice-0-business-development-handoff.md)中的 `CC-S0-W02`，覆盖 `PAR-CUS-01`、`PAR-CUS-02`、`PAR-INT-02` 和 `PAR-INT-03`。真实国家、监管程序、责任承运商、服务方、渠道、账号、来源契约、当前状态和证据索引仍只在[首发试点参数与证据登记册](../product/PILOT-PARAMETER-REGISTER.md)中维护。
 
-本文不规定监管报文、API、数据库字段、消息 Schema、渠道 SDK、文件目录、凭据保存、MinIO 实施或未经证据确认的结果代码、查询间隔、重发时限和默认程序。
+本文不规定监管报文、API、数据库字段、消息 Schema、渠道 SDK、文件目录、凭据保存、证据存储实施或未经证据确认的结果代码、查询间隔、重发时限和默认程序。
 
 ## 权威依据
 
