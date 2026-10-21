@@ -14,7 +14,6 @@ import (
 
 var (
 	_ ports.SegmentCommissionAdoptionWithdrawalStore = (*SegmentCommissionAdoptions)(nil)
-	_ ports.CommissionAdoptionsView                  = (*SegmentCommissionAdoptions)(nil)
 )
 
 // FindWithdrawal 交这一段那一代采用的解除（迁移 TF 0048 的解除册），经重建门复验。
@@ -144,41 +143,4 @@ func (repository *SegmentCommissionAdoptions) SaveWithdrawal(
 		return ports.AdoptionAlreadyRegistered, nil
 	}
 	return ports.AdoptionSaved, nil
-}
-
-// FindCurrentByCommission 列出这份委托此刻在各段上的当前采用，按段排。走迁移 0035 那条按委托的索引。
-func (repository *SegmentCommissionAdoptions) FindCurrentByCommission(
-	ctx context.Context,
-	key ports.TransportCommissionKey,
-) ([]ports.SegmentCommissionAdoptionRecord, error) {
-	querier, err := repository.db.ReadExecutor(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("find current adoptions of commission: %w", err)
-	}
-	rows, err := querier.Query(ctx,
-		`SELECT adoption.segment_ref, adoption.generation, adoption.commission_id, adoption.provider_ref, adoption.start_basis,
-		        adoption.started_at, adoption.content_digest, adoption.recorded_at
-		   FROM transport_fulfillment.segment_commission_adoption AS adoption
-		  WHERE adoption.tenant_id = $1
-		    AND adoption.commission_id = $2
-		    AND `+currentAdoptionCondition+`
-		  ORDER BY adoption.segment_ref`,
-		key.TenantID.String(), key.Commission.String(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("find current adoptions of commission: %w", err)
-	}
-	defer rows.Close()
-	var records []ports.SegmentCommissionAdoptionRecord
-	for rows.Next() {
-		record, err := scanAdoption(key.TenantID, rows)
-		if err != nil {
-			return nil, fmt.Errorf("find current adoptions of commission: %w", err)
-		}
-		records = append(records, record)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("find current adoptions of commission: %w", err)
-	}
-	return records, nil
 }

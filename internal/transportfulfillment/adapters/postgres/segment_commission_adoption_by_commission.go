@@ -3,16 +3,16 @@ package postgres
 import (
 	"context"
 	"fmt"
-	"time"
 
-	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
 var _ ports.SegmentCommissionAdoptionsByCommission = (*SegmentCommissionAdoptions)(nil)
 
-// ListByCommission 按（租户、委托）列出采用了它的各段，按段排序（迁移 0035 的按委托索引）。一行装不回就整次报错，不跳过它：跳过一段，
-// 换版之后那一段的补形成就无声地缺了。
+// ListByCommission 按（租户、委托）列出此刻仍采用它的各段，各段只交当前那一代，按段排序（迁移 0035 的按委托索引）。已解除的那几代不列：
+// 换版之后的补形成不该再按这份委托去补一段已不按它采购的段，解除之后委托的开始也只按仍采用它的各段重新派生——两处问的是同一件事，
+// 「当前」与 FindBySegment 同一个判法（currentAdoptionCondition）。一行装不回就整次报错，不跳过它：跳过一段，换版之后那一段的补形成
+// 就无声地缺了，解除之后的开始也会少算一段。
 func (repository *SegmentCommissionAdoptions) ListByCommission(
 	ctx context.Context,
 	key ports.TransportCommissionKey,
@@ -22,11 +22,13 @@ func (repository *SegmentCommissionAdoptions) ListByCommission(
 		return nil, fmt.Errorf("list segment commission adoptions by commission: %w", err)
 	}
 	rows, err := querier.Query(ctx,
-		`SELECT segment_ref, provider_ref, start_basis, started_at, content_digest, recorded_at
-		   FROM transport_fulfillment.segment_commission_adoption
-		  WHERE tenant_id = $1
-		    AND commission_id = $2
-		  ORDER BY segment_ref`,
+		`SELECT adoption.segment_ref, adoption.generation, adoption.commission_id, adoption.provider_ref, adoption.start_basis,
+		        adoption.started_at, adoption.content_digest, adoption.recorded_at
+		   FROM transport_fulfillment.segment_commission_adoption AS adoption
+		  WHERE adoption.tenant_id = $1
+		    AND adoption.commission_id = $2
+		    AND `+currentAdoptionCondition+`
+		  ORDER BY adoption.segment_ref`,
 		key.TenantID.String(), key.Commission.String(),
 	)
 	if err != nil {
@@ -35,31 +37,11 @@ func (repository *SegmentCommissionAdoptions) ListByCommission(
 	defer rows.Close()
 	var records []ports.SegmentCommissionAdoptionRecord
 	for rows.Next() {
-		var segmentRef, provider, startBasis, digest string
-		var startedAt, recordedAt time.Time
-		if err := rows.Scan(&segmentRef, &provider, &startBasis, &startedAt, &digest, &recordedAt); err != nil {
-			return nil, fmt.Errorf("list segment commission adoptions by commission: %w", err)
-		}
-		spec := domain.RehydrateSegmentCommissionAdoptionSpec{TenantID: key.TenantID, Commission: key.Commission, StartedAt: startedAt}
-		if spec.Segment, err = domain.NewFulfillmentSegmentReference(segmentRef); err != nil {
-			return nil, fmt.Errorf("list segment commission adoptions by commission: %w", err)
-		}
-		if spec.Provider, err = domain.NewServiceProviderReference(provider); err != nil {
-			return nil, fmt.Errorf("list segment commission adoptions by commission: %w", err)
-		}
-		if spec.StartBasis, err = domain.NewParticipationBasisReference(startBasis); err != nil {
-			return nil, fmt.Errorf("list segment commission adoptions by commission: %w", err)
-		}
-		adoption, err := domain.RehydrateSegmentCommissionAdoption(spec)
+		record, err := scanAdoption(key.TenantID, rows)
 		if err != nil {
-			return nil, fmt.Errorf("list segment commission adoptions by commission: segment %s: %w", segmentRef, err)
+			return nil, fmt.Errorf("list segment commission adoptions by commission: %w", err)
 		}
-		records = append(records, ports.SegmentCommissionAdoptionRecord{
-			Key:           ports.SegmentCommissionAdoptionKey{TenantID: key.TenantID, Segment: spec.Segment},
-			ContentDigest: digest,
-			Adoption:      adoption,
-			RecordedAt:    recordedAt.UTC(),
-		})
+		records = append(records, record)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("list segment commission adoptions by commission: %w", err)

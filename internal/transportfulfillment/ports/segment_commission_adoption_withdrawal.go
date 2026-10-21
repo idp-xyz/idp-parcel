@@ -28,11 +28,6 @@ type SegmentCommissionAdoptionWithdrawalStore interface {
 	SaveWithdrawal(ctx context.Context, record SegmentCommissionAdoptionWithdrawalRecord) (AdoptionSaveOutcome, error)
 }
 
-// CommissionAdoptionsView 按委托列出它此刻在各段上的当前采用。解除一段之后，委托的开始按其余各段重新派生，要的就是这一张单子。
-type CommissionAdoptionsView interface {
-	FindCurrentByCommission(ctx context.Context, key TransportCommissionKey) ([]SegmentCommissionAdoptionRecord, error)
-}
-
 // TransportCommissionStartHold 取一份委托「开始」的事务级串行锁，直到事务结束。采用（可能标开始或前移）与解除（可能撤回或后移）都在
 // 读委托之前握着它：采用读到委托已开始、这一段不更早就不写委托，解除读其余各段再定开始——两笔若并发，各自凭对方还没提交的样子判，
 // 会留下「委托已撤回到已提交、段却还挂在它上面」。不在事务里调用由实现拒。

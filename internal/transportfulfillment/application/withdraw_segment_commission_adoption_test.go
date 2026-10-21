@@ -55,7 +55,7 @@ func (double *withdrawalStoresDouble) SaveWithdrawal(_ context.Context, record p
 	return ports.AdoptionSaved, nil
 }
 
-func (double *withdrawalStoresDouble) FindCurrentByCommission(_ context.Context, key ports.TransportCommissionKey) ([]ports.SegmentCommissionAdoptionRecord, error) {
+func (double *withdrawalStoresDouble) ListByCommission(_ context.Context, key ports.TransportCommissionKey) ([]ports.SegmentCommissionAdoptionRecord, error) {
 	var records []ports.SegmentCommissionAdoptionRecord
 	for _, record := range double.current {
 		if record.Adoption.Commission() == key.Commission {

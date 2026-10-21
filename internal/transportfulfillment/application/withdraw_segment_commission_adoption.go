@@ -144,7 +144,7 @@ func (result AdoptionWithdrawalResult) ContinuationReference() string { return r
 type WithdrawSegmentCommissionAdoptionDeps struct {
 	Adoptions       ports.SegmentCommissionAdoptionStore
 	Withdrawals     ports.SegmentCommissionAdoptionWithdrawalStore
-	CommissionLinks ports.CommissionAdoptionsView
+	CommissionLinks ports.SegmentCommissionAdoptionsByCommission
 	Occurrences     ports.ChargeOccurrenceScopeView
 	OccurrenceScope ports.ChargeOccurrenceScopeHold
 	Commissions     ports.TransportCommissionView
@@ -239,7 +239,7 @@ func (handler *WithdrawSegmentCommissionAdoptionHandler) Withdraw(
 		}, nil
 	}
 
-	links, err := handler.deps.CommissionLinks.FindCurrentByCommission(ctx, commissionKey)
+	links, err := handler.deps.CommissionLinks.ListByCommission(ctx, commissionKey)
 	if err != nil {
 		return withdrawalUndecided(AdoptionWithdrawalStoreUnavailable, continuation), nil
 	}

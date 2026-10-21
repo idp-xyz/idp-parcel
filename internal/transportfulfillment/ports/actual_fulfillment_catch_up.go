@@ -17,8 +17,9 @@ type SegmentCommissionAdoptionHandoff interface {
 	HandOffSegmentCommissionAdoption(ctx context.Context, intent SegmentCommissionAdoptedIntent) error
 }
 
-// SegmentCommissionAdoptionsByCommission 按委托列出采用了它的各段，按段排序。委托换版之后的补形成据它找该去哪几段（ADR-0231 决定五）：
-// 门铃消费的那一刻才列，晚于换版落下的采用由它自己的门铃补。
+// SegmentCommissionAdoptionsByCommission 按委托列出此刻仍采用它的各段（各段的当前那一代，已解除的不列），按段排序。委托换版之后的补形成
+// 据它找该去哪几段（ADR-0231 决定五）：门铃消费的那一刻才列，晚于换版落下的采用由它自己的门铃补。解除一段之后委托的开始按其余各段
+// 重新派生（ADR-0232 决定二），要的也是这一张单子。
 type SegmentCommissionAdoptionsByCommission interface {
 	ListByCommission(ctx context.Context, key TransportCommissionKey) ([]SegmentCommissionAdoptionRecord, error)
 }
