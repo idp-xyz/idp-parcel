@@ -1,7 +1,6 @@
 # ADR-0048: 声明测量是成员级保真画像，不换算不推导
 
-Status: Accepted<!-- 索引注记 -->｜**部分停用**：决定三第三增量的落点（金额缝装配器放在 PS 消费侧）已由 [ADR-0179](./0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 决定一停用，受理前控制金额改由结算形成估价；决定一、二不变  
-Partially suspended by: [ADR-0179](./0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 决定一（决定三第三增量的落点：金额缝装配器不再放在 PS 消费侧，受理前控制金额改由结算形成估价；决定一、二与决定三前两个增量不变，本记录正文不改写）  
+Status: Accepted<!-- 索引注记 -->｜**部分停用**：决定三第三增量「金额缝装配器经 `DeclaredMeasurementSource` 读画像译 PP 评价输入」的落点已由 [ADR-0179](./0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 决定一停用——金额缝装配器不再放在 PS 消费侧，受理前控制金额改由结算形成估价；决定一、二与决定三前两个增量不变，其余各条不变，本记录正文不改写  
 Date: 2026-08-12
 
 ## Context

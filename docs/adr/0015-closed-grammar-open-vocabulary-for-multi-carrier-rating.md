@@ -1,8 +1,7 @@
 # ADR-0015: 以封闭文法与开放词汇实现多承运商通用计价
 
-Status: Accepted  
-Date: 2026-08-08  
-Amended by: [ADR-0014](./0014-versioned-canonicalization-shape-for-content-digest.md) 的 Decision（限定下文 Decision 中「词汇按证据增长」一段末尾「并按 ADR-0014 形成新的规范化版本」这半句：是否形成新版本由**规范化文档的形状是否改变**决定，不由词汇是否扩充决定。本记录正文不改写，其余内容不变，见下文「与 ADR-0014 的分工」）
+Status: Accepted<!-- 索引注记 -->｜**读法限定**（不是停用）：Decision「词汇按证据增长」一段末尾「并按 [ADR-0014](./0014-versioned-canonicalization-shape-for-content-digest.md) 形成新的规范化版本」这半句按本记录「与 ADR-0014 的分工」一节读——是否形成新版本由**规范化文档的形状是否改变**决定，不由词汇是否扩充决定，判据在 ADR-0014 的 Decision；本记录正文不改写，其余内容不变。  
+Date: 2026-08-08
 
 ## Context
 
