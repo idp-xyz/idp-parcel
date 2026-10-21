@@ -130,11 +130,11 @@ func TestAStoppedDepartureReadingRoundTrips(t *testing.T) {
 		t.Fatal("没读到班次的读数读回来带了起讫")
 	}
 
-	// AT-TF-114 真库半边（ADR-0237 决定五）：核班次是不是载着这一段的那几种停点同样往返。
+	// AT-TF-114 真库半边（ADR-0237 决定五）：核班次是不是载着这一段的那两种停点同样往返。
 	from, _ := domain.NewNetworkNodeReference("NODE-SHA")
 	to, _ := domain.NewNetworkNodeReference("NODE-SZX")
 	for fact, stops := range map[string][]domain.DepartureGateStop{
-		"MF-0007-ENTRY":    {domain.DepartureSegmentEntryNodesUnknown, domain.DepartureScheduleNotServingSegment},
+		"MF-0007-MISMATCH": {domain.DepartureScheduleNotServingSegment},
 		"MF-0007-HANDOVER": {domain.DepartureHandoverRegistryUnavailable},
 	} {
 		bound, err := domain.FormDepartureGateReading(domain.DepartureGateReadingSpec{From: from, To: to, Stops: stops})
@@ -150,6 +150,47 @@ func TestAStoppedDepartureReadingRoundTrips(t *testing.T) {
 		}
 		if back, _ := found.Fact.GateReading(); !slices.Equal(back.Stops(), stops) || back.Answer() != bound.Answer() {
 			t.Fatalf("%s 读回成了 %s %v", fact, back.Answer(), back.Stops())
+		}
+	}
+}
+
+// Covers: AT-TF-317 真库半边（ADR-0237 决定五）——起讫没能与段核上的读数带着「未绑定」那一位与每一格往返：库面明细多一个
+// entryUnbound 键，读回的读数照旧每件一格、带着那一位；没有这一位的读数库面也没有这个键，存量照读。
+func TestAnUnboundDepartureReadingRoundTripsWithItsFindings(t *testing.T) {
+	repository, transactor, pool := newMovementFacts(t)
+	ctx := t.Context()
+
+	bound := movementFactSpec(t, "MF-0008-BOUND", "v1", domain.DepartureFact)
+	mustSaveMovementFact(t, transactor, ctx, repository, movementFactRecordOf(t, bound))
+
+	unbound := movementFactSpec(t, "MF-0008-UNBOUND", "v1", domain.DepartureFact)
+	from, to, _ := bound.GateReading.Direction()
+	reading, err := domain.FormDepartureGateReading(domain.DepartureGateReadingSpec{
+		From: from, To: to, Findings: bound.GateReading.Findings(), EntryUnbound: true,
+	})
+	if err != nil {
+		t.Fatalf("未绑定的读数：%v", err)
+	}
+	unbound.GateReading = reading
+	mustSaveMovementFact(t, transactor, ctx, repository, movementFactRecordOf(t, unbound))
+
+	found, exists, err := repository.FindByKey(ctx, movementFactKeyFixture(t, "tenant-1", "MF-0008-UNBOUND", "v1"))
+	if err != nil || !exists {
+		t.Fatalf("取回事实：%v exists=%v", err, exists)
+	}
+	back, _ := found.Fact.GateReading()
+	if !back.EntryUnbound() || back.Answer() != reading.Answer() || len(back.Findings()) != len(reading.Findings()) {
+		t.Fatalf("读回成了 %s，%d 格，未绑定 = %v", back.Answer(), len(back.Findings()), back.EntryUnbound())
+	}
+	for fact, want := range map[string]bool{"MF-0008-BOUND": false, "MF-0008-UNBOUND": true} {
+		var keyed bool
+		if err := pool.QueryRow(ctx,
+			`SELECT gate_reading_detail ? 'entryUnbound' FROM transport_fulfillment.transport_movement_fact WHERE fact_ref = $1`, fact,
+		).Scan(&keyed); err != nil {
+			t.Fatalf("读库面 %s：%v", fact, err)
+		}
+		if keyed != want {
+			t.Fatalf("%s 库面有 entryUnbound 键 = %v, want %v", fact, keyed, want)
 		}
 	}
 }

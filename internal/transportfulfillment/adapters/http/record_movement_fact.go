@@ -126,16 +126,18 @@ type movementFactResponse struct {
 
 // departureGateReadingView 是出发门禁读数回给报事实一方的线格式：整格、问关务时的起讫、本上下文这一侧的停点与逐对象的
 // 那一格。逐对象那一格不只给整格：执行方要知道车上被挡的是哪一件，才能去处置那一件而不是整车；但只列没得出放行的那几件，
-// 判法只在 domain.ExecutorGateCells（ADR-0237）。整格与停点照实给全：放行的对象不列，不等于读数没问它们。
+// 起讫没能与段核上时一件也不列（`entryUnbound`），判法只在领域（DepartureGateReading.ExecutorCells，ADR-0237）。整格与停点照实
+// 给全：不列的对象，不等于读数没问它们。
 //
 // 关务判断标识与依据原文（限制标识、放行来源、申报单元或程序引用）不回给设备，只随事实落册供运营与 VE 查：同段可能
 // 是跨客户共同运输，执行方只拿当前履约所需的最小范围（UC-TF-005 规则，ADR-0205 决定一）。
 type departureGateReadingView struct {
-	Answer  string                    `json:"answer"`
-	From    string                    `json:"from,omitempty"`
-	To      string                    `json:"to,omitempty"`
-	Stops   []string                  `json:"stops,omitempty"`
-	Objects []departureGateObjectView `json:"objects,omitempty"`
+	Answer       string                    `json:"answer"`
+	From         string                    `json:"from,omitempty"`
+	To           string                    `json:"to,omitempty"`
+	EntryUnbound bool                      `json:"entryUnbound,omitempty"`
+	Stops        []string                  `json:"stops,omitempty"`
+	Objects      []departureGateObjectView `json:"objects,omitempty"`
 }
 
 // departureGateObjectView 的 `members` 只在集运单元那一格上有（ADR-0225）：袋里那几件同样列出的直接成员在同一份答复里另有一格，
@@ -146,10 +148,11 @@ type departureGateObjectView struct {
 	Members *[]string `json:"members,omitempty"`
 }
 
-// gateObjectViewsOf 是各门禁读数回给设备的逐对象那一格：只经 domain.ExecutorGateCells 取，本包不另判哪几格可以给。
-func gateObjectViewsOf(findings []domain.GateFinding) []departureGateObjectView {
+// gateObjectViewsOf 把领域判出的回给执行方那几格写成线格式；哪几格可以给只在领域判（domain.ExecutorGateCells 与出发读数的
+// ExecutorCells），本包不另判。
+func gateObjectViewsOf(cells []domain.ExecutorGateCell) []departureGateObjectView {
 	var views []departureGateObjectView
-	for _, cell := range domain.ExecutorGateCells(findings) {
+	for _, cell := range cells {
 		object := departureGateObjectView{Object: cell.Object.String(), Answer: cell.Answer.String()}
 		if cell.Unit {
 			names := make([]string, 0, len(cell.Members))
@@ -171,7 +174,8 @@ func departureGateReadingViewOf(reading domain.DepartureGateReading) *departureG
 	for _, stop := range reading.Stops() {
 		view.Stops = append(view.Stops, stop.String())
 	}
-	view.Objects = gateObjectViewsOf(reading.Findings())
+	view.EntryUnbound = reading.EntryUnbound()
+	view.Objects = gateObjectViewsOf(reading.ExecutorCells())
 	return view
 }
 

@@ -127,6 +127,25 @@ func TestABlockedDepartureRaisesTheAdoptedSignalThroughTheProductionRoute(t *tes
 	}
 }
 
+// Covers: AT-TF-317 派发半边（ADR-0237 决定五，证据 S）——起讫没能与段核上的出发（凭收寄进段、进段交接没声明全）读数照样记全，
+// 全程追踪据它照旧给阻断的那一件形成发作期：回给设备的不列对象，不改落册与信号。
+func TestAnUnboundBlockedDepartureStillRaisesTheSignal(t *testing.T) {
+	fixture := newSYNVerticalFixture(t)
+	registerDemoDepartureGateSignalRule(t, fixture)
+	saveDepartureSegment(t, fixture)
+
+	eventID := recordDepartureReadingThroughProduction(t, fixture, "SYN-MOVE-DISPATCH-UNBOUND", true)
+	if published, err := fixture.beat.DispatchOnce(t.Context()); err != nil || published != 1 {
+		t.Fatalf("第一拍 published = %d err = %v；失败码 = %q", published, err, recordedFailureCode(t, fixture.db, eventID))
+	}
+	if n := signalEpisodes(t, fixture, movementParcelBlocked); n != 1 {
+		t.Fatalf("阻断的那一件形成了 %d 个发作期, want 1", n)
+	}
+	if n := signalEpisodes(t, fixture, movementParcelOnBoard); n != 0 {
+		t.Fatalf("不受门禁的那一件形成了 %d 个发作期", n)
+	}
+}
+
 // Covers: AT-TF-160 派发半边——移动事实这一路的失败分格：读不回事实、段册读不动、信号搁置、派生编排未决落 dispatch.consumer_undecided，其余保持
 // dispatch.publish_failed。名单取 veMovementFactUndecidedSentinels 本身：测试里重列一份会让漏登记的哨兵在测试里绿、在生产里塌成
 // publish_failed。
@@ -224,6 +243,13 @@ func saveDepartureSegment(t *testing.T, fixture *synVerticalFixture) {
 // 交回移动事实信封的事件 ID。
 func recordDepartureThroughProduction(t *testing.T, fixture *synVerticalFixture, fact string) string {
 	t.Helper()
+	return recordDepartureReadingThroughProduction(t, fixture, fact, false)
+}
+
+// recordDepartureReadingThroughProduction 同 recordDepartureThroughProduction；entryUnbound 为真时读数标「起讫未与段绑定」
+// （ADR-0237 决定五：凭收寄进段或进段交接没声明全的段照问关务、读数记全）。
+func recordDepartureReadingThroughProduction(t *testing.T, fixture *synVerticalFixture, fact string, entryUnbound bool) string {
+	t.Helper()
 	facts, err := tfpostgres.NewMovementFacts(fixture.db)
 	if err != nil {
 		t.Fatalf("构造移动事实册：%v", err)
@@ -247,9 +273,10 @@ func recordDepartureThroughProduction(t *testing.T, fixture *synVerticalFixture,
 		return built
 	}
 	reading, err := tfdomain.FormDepartureGateReading(tfdomain.DepartureGateReadingSpec{
-		From:     mustTF(t, tfdomain.NewNetworkNodeReference, "SYN-NODE-SHA-HUB"),
-		To:       mustTF(t, tfdomain.NewNetworkNodeReference, "SYN-NODE-SZX-GATE"),
-		Findings: []tfdomain.DepartureGateFinding{finding(movementParcelOnBoard, tfdomain.DepartureGateNotGuarded), finding(movementParcelBlocked, tfdomain.DepartureGateBlocked)},
+		From:         mustTF(t, tfdomain.NewNetworkNodeReference, "SYN-NODE-SHA-HUB"),
+		To:           mustTF(t, tfdomain.NewNetworkNodeReference, "SYN-NODE-SZX-GATE"),
+		Findings:     []tfdomain.DepartureGateFinding{finding(movementParcelOnBoard, tfdomain.DepartureGateNotGuarded), finding(movementParcelBlocked, tfdomain.DepartureGateBlocked)},
+		EntryUnbound: entryUnbound,
 	})
 	if err != nil {
 		t.Fatalf("读数：%v", err)

@@ -2,10 +2,14 @@ package application
 
 import (
 	"context"
+	"errors"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
+
+// errEntryHandoverFindingUnknown：认进段交接的答复落在封闭集外。那是实现坏了，不是哪一件读不动——记成一格只会把它藏起来。
+var errEntryHandoverFindingUnknown = errors.New("transport fulfillment: the entry handover finding is outside its closed set")
 
 // entryHandoverFinding 是「这条参与是凭哪一版`已交接`进的段」的答复。交付读数按它取 at，出发读数按它核班次的起讫；各自按自己的
 // 停点作答，认法只在 entryHandoverOf 一处。

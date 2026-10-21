@@ -138,6 +138,17 @@ func movementGateReaderOver(
 	memberships movementMembershipsDouble,
 ) *application.DepartureGateReader {
 	t.Helper()
+	return movementGateReaderEntering(t, customs, memberships, true)
+}
+
+// movementGateReaderEntering 同 movementGateReaderOver；registered 为假时交接册里找不到那次进段交接，读数核不上段（未绑定）。
+func movementGateReaderEntering(
+	t *testing.T,
+	customs *movementCustomsDouble,
+	memberships movementMembershipsDouble,
+	registered bool,
+) *application.DepartureGateReader {
+	t.Helper()
 	tenant := httpValue(t, domain.NewTenantID, "tenant-1")
 	entry := domain.TransportHandoverSpec{
 		TenantID:          tenant,
@@ -181,7 +192,7 @@ func movementGateReaderOver(
 	reader, err := application.NewDepartureGateReader(application.DepartureGateReadDeps{
 		Segments:  movementSegmentsDouble{segment: segment},
 		Schedules: movementSchedulesDouble{schedule: schedule},
-		Handovers: entryHandoversStub{handovers: []domain.TransportHandover{handover}},
+		Handovers: entryHandoversStub{handovers: registeredEntries(registered, handover)},
 		Members:   memberships,
 		Customs:   customs,
 	})
@@ -189,6 +200,13 @@ func movementGateReaderOver(
 		t.Fatalf("装读数编排：%v", err)
 	}
 	return reader
+}
+
+func registeredEntries(registered bool, handover domain.TransportHandover) []domain.TransportHandover {
+	if !registered {
+		return nil
+	}
+	return []domain.TransportHandover{handover}
 }
 
 // ---- 请求体与 intake 替身 ----
@@ -396,6 +414,39 @@ func TestADepartureThatPassesShowsTheExecutorNoObjects(t *testing.T) {
 		if recorded, _ := record.Fact.GateReading(); len(recorded.Findings()) != 1 || recorded.Findings()[0].Object().String() != "parcel-1" {
 			t.Fatalf("落册的读数 = %+v，要照旧记着那一件", recorded.Findings())
 		}
+	}
+}
+
+// Covers: AT-TF-317 线格式半边（ADR-0237 决定五）——起讫没能与段核上（交接册里找不到那次进段交接）的出发照样 201：读数阻断、
+// 起讫照实，答复带 `entryUnbound` 而没有 `objects`——被挡的那一件也不列；出发前问询同参答同一段字节。
+func TestAnUnboundDepartureShowsTheWholeCellAndNoObjects(t *testing.T) {
+	customs := &movementCustomsDouble{answer: domain.DepartureGateBlocked}
+	handler := application.NewRecordMovementFactHandler(application.RecordMovementFactDeps{
+		Facts:   newMovementFactRegistry(),
+		Handoff: movementHandoffDouble{},
+		Clock:   tfClock{at: time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)},
+	})
+	gate := movementGateReaderEntering(t, customs, movementMembershipsDouble{}, false)
+	record := tfhttp.NewRecordMovementFactEndpoint(&movementFactIntakeDouble{tenant: httpValue(t, domain.NewTenantID, "tenant-1")},
+		readThenRecord{gate: gate, inner: handler})
+	departure := defaultMovementFactBody()
+	departure.Kind, departure.Fact, departure.Segment = "DEPARTURE", "movement-fact-unbound", "segment-1"
+
+	departed := postTo(t, record, "/transport-fulfillment/movement-facts", departure)
+	if departed.Code != http.StatusCreated {
+		t.Fatalf("status = %d; body = %s", departed.Code, departed.Body.String())
+	}
+	if raw := rawGateReading(t, departed); raw != `{"answer":"BLOCKED","from":"NODE-SHA","to":"NODE-SZX","entryUnbound":true}` {
+		t.Fatalf("gateReading = %s，want 整格、起讫与未绑定那一位，一件不列", raw)
+	}
+	preview, err := application.NewPreviewDepartureGateHandler(gate)
+	if err != nil {
+		t.Fatalf("装问询编排：%v", err)
+	}
+	previewed := servePreview(tfhttp.NewPreviewDepartureGateEndpoint(workFactIntakeForTest(t), preview),
+		commandRequest(`{"schedule":"schedule-1","segment":"segment-1","departsAt":"2026-09-05T10:00:00Z"}`))
+	if previewed.Code != http.StatusOK || rawGateReading(t, previewed) != rawGateReading(t, departed) {
+		t.Fatalf("问询 %d：%s，出发：%s", previewed.Code, rawGateReading(t, previewed), rawGateReading(t, departed))
 	}
 }
 

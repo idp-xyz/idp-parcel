@@ -51,10 +51,8 @@ const (
 	// DepartureRecordedBeforeGateReading 只出现在迁移前就已落册的出发上（迁移 0026 的存量回填）：那时没问过关务，
 	// 如实答未决而不是猜一格。新登记的出发不会停在这里，构造门拒它。
 	DepartureRecordedBeforeGateReading
-	// DepartureSegmentEntryNodesUnknown：出发那一刻段里在控的某一件，说不出它是在哪个节点交进这一段、往哪个节点去——凭收寄进段、
-	// 进段那次`已交接`没声明交出或去向节点，或那次交接在册上认不出。说不出就核不了班次是不是载着这一段（DepartureEntryStops）。
-	DepartureSegmentEntryNodesUnknown
-	// DepartureScheduleNotServingSegment：班次的起讫与段里在控各件交进来时声明的交出、去向节点对不上，这一班载的不是这一段。
+	// DepartureScheduleNotServingSegment：段里在控的某一件交进来时声明的交出或去向节点与班次的起讫对不上，这一班载的不是这一段
+	// （BindDepartureEntries）。
 	DepartureScheduleNotServingSegment
 
 	// 读不动：哪一口
@@ -72,8 +70,7 @@ func (stop DepartureGateStop) valid() bool {
 func (stop DepartureGateStop) Answer() DepartureGateAnswer {
 	switch stop {
 	case DepartureSegmentNotDeclared, DepartureSegmentNotRegistered, DepartureNoObjectUnderControl,
-		DepartureScheduleNotRegistered, DepartureRecordedBeforeGateReading,
-		DepartureSegmentEntryNodesUnknown, DepartureScheduleNotServingSegment:
+		DepartureScheduleNotRegistered, DepartureRecordedBeforeGateReading, DepartureScheduleNotServingSegment:
 		return DepartureGateUndecided
 	case DepartureSegmentRegistryUnavailable, DepartureScheduleRegistryUnavailable, DepartureHandoverRegistryUnavailable:
 		return DepartureGateUnreadable
@@ -94,8 +91,6 @@ func (stop DepartureGateStop) String() string {
 		return "SCHEDULE_NOT_REGISTERED"
 	case DepartureRecordedBeforeGateReading:
 		return "RECORDED_BEFORE_GATE_READING"
-	case DepartureSegmentEntryNodesUnknown:
-		return "SEGMENT_ENTRY_NODES_UNKNOWN"
 	case DepartureScheduleNotServingSegment:
 		return "SCHEDULE_NOT_SERVING_SEGMENT"
 	case DepartureSegmentRegistryUnavailable:
@@ -132,20 +127,25 @@ func NewDepartureGateFinding(
 
 // DepartureGateReadingSpec 是一次读数的全部内容。停点与逐对象答复二者恰有其一：停在本上下文这一侧就没问关务，
 // 问了关务就没有停点。起讫是问关务时那一份出发意图，取自班次方向；班次读不到时两格皆空。
+//
+// EntryUnbound 只在问了关务的读数上可为真：起讫取自班次，却没能与段里各件的进段声明核上（DepartureEntryUnbound）。它不改
+// 任何一格，只改回给执行方的那一层（ExecutorCells）。
 type DepartureGateReadingSpec struct {
-	From     NetworkNodeReference
-	To       NetworkNodeReference
-	Stops    []DepartureGateStop
-	Findings []DepartureGateFinding
+	From         NetworkNodeReference
+	To           NetworkNodeReference
+	Stops        []DepartureGateStop
+	Findings     []DepartureGateFinding
+	EntryUnbound bool
 }
 
 // DepartureGateReading 是一条出发的门禁读数。
 type DepartureGateReading struct {
-	answer   DepartureGateAnswer
-	from     NetworkNodeReference
-	to       NetworkNodeReference
-	stops    []DepartureGateStop
-	findings []DepartureGateFinding
+	answer       DepartureGateAnswer
+	from         NetworkNodeReference
+	to           NetworkNodeReference
+	stops        []DepartureGateStop
+	findings     []DepartureGateFinding
+	entryUnbound bool
 }
 
 // FormDepartureGateReading 形成一次新读数。存量回填那一种停点只由重建门收：新登记的出发都问过，不能声称没问。
@@ -172,6 +172,10 @@ func RehydrateDepartureGateReading(spec DepartureGateReadingSpec, recorded Depar
 
 func formDepartureGateReading(spec DepartureGateReadingSpec) (DepartureGateReading, error) {
 	if (len(spec.Stops) == 0) == (len(spec.Findings) == 0) {
+		return DepartureGateReading{}, ErrInvalidDepartureGateReading
+	}
+	if spec.EntryUnbound && len(spec.Findings) == 0 {
+		// 停在本侧的读数没有问出什么可回给执行方的，「未绑定」那一位说的只是问了关务的读数。
 		return DepartureGateReading{}, ErrInvalidDepartureGateReading
 	}
 	directed := spec.From.valid() || spec.To.valid()
@@ -214,11 +218,12 @@ func formDepartureGateReading(spec DepartureGateReadingSpec) (DepartureGateReadi
 		return DepartureGateReading{}, fmt.Errorf("%w: %w", ErrInvalidDepartureGateReading, err)
 	}
 	return DepartureGateReading{
-		answer:   answer,
-		from:     spec.From,
-		to:       spec.To,
-		stops:    stops,
-		findings: findings,
+		answer:       answer,
+		from:         spec.From,
+		to:           spec.To,
+		stops:        stops,
+		findings:     findings,
+		entryUnbound: spec.EntryUnbound,
 	}, nil
 }
 
@@ -240,6 +245,19 @@ func (reading DepartureGateReading) Stops() []DepartureGateStop {
 
 func (reading DepartureGateReading) Findings() []DepartureGateFinding {
 	return append([]DepartureGateFinding(nil), reading.findings...)
+}
+
+// EntryUnbound 说这份读数的起讫是不是没能与段里各件的进段声明核上（ADR-0237 决定五）。
+func (reading DepartureGateReading) EntryUnbound() bool { return reading.entryUnbound }
+
+// ExecutorCells 是这份出发读数回给执行方的逐对象那几格（ADR-0237）：通常就是 ExecutorGateCells 判出的那几格；起讫没能与段核上时
+// 一件也不给。那时起讫是设备给的那一班的方向，本上下文说不出它载的是不是这一段——设备若配一班别的方向的去问，关务按一份不属于这
+// 一车的意图逐件作答，列出来就等于让设备自己把每件变成「没得出放行」。整格照给，执行方仍知道这一车能不能走；落册的那一份照旧记全。
+func (reading DepartureGateReading) ExecutorCells() []ExecutorGateCell {
+	if reading.entryUnbound {
+		return nil
+	}
+	return ExecutorGateCells(reading.findings)
 }
 
 func (reading DepartureGateReading) recordedBeforeGateReading() bool {
@@ -264,7 +282,7 @@ func (segment ActualFulfillmentSegment) ObjectsUnderControlAt(at time.Time) []Ca
 }
 
 // ParticipationsUnderControlAt 交回 ObjectsUnderControlAt 那几件各自在控的那一版参与，口径与次序都同它：要知道那几件是凭什么
-// 进的这一段时用（出发读数核班次是不是载着这一段，DepartureEntryStops）。
+// 进的这一段时用（出发读数核班次是不是载着这一段，BindDepartureEntries）。
 func (segment ActualFulfillmentSegment) ParticipationsUnderControlAt(at time.Time) []FulfillmentParticipation {
 	moment := AtRegistryPrecision(at)
 	var inControl []FulfillmentParticipation
@@ -288,33 +306,56 @@ func (segment ActualFulfillmentSegment) ParticipationsUnderControlAt(at time.Tim
 	return inControl
 }
 
-// DepartureEntryStops 答这一班能不能替段里出发那一刻在控的这几件问出发意图（ADR-0237 决定五）。班次与段都是登记方或问询方
-// 声明的：两样不互相核对，配一班别的方向的班次去问，关务就会按一份不属于这一车的意图作答——例如把一段境内段配上一班跨关务区域的
-// 班次，段里不在案卷的每件都答未决、都回给设备。所以核的是段自己的事实：每件交进这一段时那次`已交接`声明的交出节点就是班次的起点、
-// 去向节点就是班次的终点。
+// DepartureEntryBinding 是班次与段核对的答复（ADR-0237 决定五），只在 BindDepartureEntries 一处判。
+type DepartureEntryBinding uint8
+
+const (
+	DepartureEntryBindingInvalid DepartureEntryBinding = iota
+	// DepartureEntryBound：段里在控的每一件，进段那次`已交接`都声明了交出与去向节点，且正是班次的起讫。照问关务，回给执行方照常。
+	DepartureEntryBound
+	// DepartureEntryUnbound：没有一件对不上，但至少一件说不出——凭收寄进段（揽收事实没有节点）、进段交接没声明全那两格、或那次
+	// 交接在册上认不出。照班次方向问关务、读数落册记全，回给执行方的只有整格与起讫、一件对象也不列（DepartureGateReading.ExecutorCells）。
+	DepartureEntryUnbound
+	// DepartureEntryMismatched：至少一件进段交接声明了的交出或去向节点与班次的起讫不同。这一班载的不是这一段，停在
+	// DepartureScheduleNotServingSegment、不问关务。
+	DepartureEntryMismatched
+)
+
+func (binding DepartureEntryBinding) String() string {
+	switch binding {
+	case DepartureEntryBound:
+		return "BOUND"
+	case DepartureEntryUnbound:
+		return "UNBOUND"
+	case DepartureEntryMismatched:
+		return "MISMATCHED"
+	default:
+		return ""
+	}
+}
+
+// BindDepartureEntries 答这一班能不能替段里出发那一刻在控的这几件问出发意图。班次与段都是登记方或问询方声明的：两样不互相核对，
+// 配一班别的方向的班次去问，关务就会按一份不属于这一车的意图作答——例如把一段境内段配上一班跨关务区域的班次，段里不在案卷的每件都
+// 答未决。核的是段自己的事实：每件交进这一段时那次`已交接`声明的交出节点是不是班次的起点、去向节点是不是班次的终点。
 //
-// entries 是认出来的那几次进段交接；unresolved 说有没有一件认不出（凭收寄进段，或那次交接在册上认不出）。说不出那两格答
-// DepartureSegmentEntryNodesUnknown，声明了却与班次起讫对不上答 DepartureScheduleNotServingSegment，两样可以同在；都停在本侧、
-// 不问关务。只核起讫节点、不核班次身份：同一方向换一班（改搭快班、顺延下一班）照样载得了这一段。
-func DepartureEntryStops(direction ScheduleDirection, entries []TransportHandover, unresolved bool) []DepartureGateStop {
-	unknown, mismatched := unresolved, false
+// entries 是认出来的那几次进段交接；unresolved 说有没有一件认不出（凭收寄进段，或那次交接在册上认不出）。声明了的那一格只要有一格
+// 与班次不同就是对不上，哪怕另一格没声明：声明本身已经说了这一段不是自那里出发或不往那里去。没有对不上、但有说不出的，是未绑定：
+// 说不出不等于对不上——凭揽收进段的段本就没有节点可声明，停在本侧会让这类段的出发再也问不到关务。只核起讫节点、不核班次身份：同一
+// 方向换一班（改搭快班、顺延下一班）照样载得了这一段。
+func BindDepartureEntries(direction ScheduleDirection, entries []TransportHandover, unresolved bool) DepartureEntryBinding {
+	unbound := unresolved
 	for _, entry := range entries {
 		releasing, releasingDeclared := entry.ReleasingNode()
 		onward, onwardDeclared := entry.OnwardNode()
+		if (releasingDeclared && releasing != direction.From()) || (onwardDeclared && onward != direction.To()) {
+			return DepartureEntryMismatched
+		}
 		if !releasingDeclared || !onwardDeclared {
-			unknown = true
-			continue
-		}
-		if releasing != direction.From() || onward != direction.To() {
-			mismatched = true
+			unbound = true
 		}
 	}
-	var stops []DepartureGateStop
-	if unknown {
-		stops = append(stops, DepartureSegmentEntryNodesUnknown)
+	if unbound {
+		return DepartureEntryUnbound
 	}
-	if mismatched {
-		stops = append(stops, DepartureScheduleNotServingSegment)
-	}
-	return stops
+	return DepartureEntryBound
 }

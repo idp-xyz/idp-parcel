@@ -29,6 +29,7 @@ const (
 
 var (
 	errDepartureGateViewMisanswered = errors.New("transport fulfillment: the departure gate view answered for another object")
+	errDepartureEntryBindingUnknown = errors.New("transport fulfillment: the departure entry binding answered outside its closed set")
 	errConsolidationMemberMisshaped = errors.New("transport fulfillment: the consolidation membership view answered a member of no known kind")
 )
 
@@ -121,10 +122,10 @@ func gateReferencesFrom(
 	return scheduleRef, segmentRef, true
 }
 
-// readIntent 先在本上下文这一侧找齐问关务要的东西：段里出发那一刻在控的对象、班次的方向，以及这一班确是载着这一段的
-// （entryStops）。缺哪样就停在哪样、不问关务——没有对象就没有可问的，没有方向就说不出「自哪到哪」，方向不是这一段的就是在替
-// 别的一车问。找齐了才逐对象问（集运单元按成员展开，见 departureGateExpansion）；某一件读不动不停下，其余照问，每件各记一格。
-// error 只留给读数自己拼不出来（实现坏了）。
+// readIntent 先在本上下文这一侧找齐问关务要的东西：段里出发那一刻在控的对象、班次的方向，再核这一班与这一段（entryBinding）。
+// 缺哪样就停在哪样、不问关务——没有对象就没有可问的，没有方向就说不出「自哪到哪」，班次对不上这一段就是在替别的一车问。核不上
+// 但也对不出错的（未绑定）照问，读数标上那一位，回给执行方时一件不列。找齐了才逐对象问（集运单元按成员展开，见
+// departureGateExpansion）；某一件读不动不停下，其余照问，每件各记一格。error 只留给读数自己拼不出来（实现坏了）。
 func (reader *DepartureGateReader) readIntent(ctx context.Context, intent departureGateIntent) (domain.DepartureGateReading, error) {
 	var stops []domain.DepartureGateStop
 	var inControl []domain.FulfillmentParticipation
@@ -163,8 +164,23 @@ func (reader *DepartureGateReader) readIntent(ctx context.Context, intent depart
 	if len(stops) > 0 {
 		return domain.FormDepartureGateReading(reading)
 	}
-	if reading.Stops = reader.entryStops(ctx, intent.tenant, direction, inControl); len(reading.Stops) > 0 {
+	binding, readable, err := reader.entryBinding(ctx, intent.tenant, direction, inControl)
+	if err != nil {
+		return domain.DepartureGateReading{}, err
+	}
+	if !readable {
+		reading.Stops = []domain.DepartureGateStop{domain.DepartureHandoverRegistryUnavailable}
 		return domain.FormDepartureGateReading(reading)
+	}
+	switch binding {
+	case domain.DepartureEntryMismatched:
+		reading.Stops = []domain.DepartureGateStop{domain.DepartureScheduleNotServingSegment}
+		return domain.FormDepartureGateReading(reading)
+	case domain.DepartureEntryUnbound:
+		reading.EntryUnbound = true
+	case domain.DepartureEntryBound:
+	default:
+		return domain.DepartureGateReading{}, fmt.Errorf("%w: %d", errDepartureEntryBindingUnknown, binding)
 	}
 
 	expansion := departureGateExpansion{
@@ -186,14 +202,14 @@ func (reader *DepartureGateReader) readIntent(ctx context.Context, intent depart
 	return domain.FormDepartureGateReading(reading)
 }
 
-// entryStops 认段里在控各件进段的那次`已交接`，交领域核班次的起讫是不是它们声明的交出、去向节点（domain.DepartureEntryStops）。
-// 交接册读不动时停在读不动、不核也不问关务：核不了就说不出这一班载的是不是这一段。
-func (reader *DepartureGateReader) entryStops(
+// entryBinding 认段里在控各件进段的那次`已交接`，交领域核班次的起讫是不是它们声明的交出、去向节点（domain.BindDepartureEntries）。
+// 交接册读不动时 readable 为假：核不了就说不出这一班载的是不是这一段，调用方停在读不动、不问关务。
+func (reader *DepartureGateReader) entryBinding(
 	ctx context.Context,
 	tenant domain.TenantID,
 	direction domain.ScheduleDirection,
 	inControl []domain.FulfillmentParticipation,
-) []domain.DepartureGateStop {
+) (binding domain.DepartureEntryBinding, readable bool, err error) {
 	entries := make([]domain.TransportHandover, 0, len(inControl))
 	unresolved := false
 	for _, participation := range inControl {
@@ -202,12 +218,14 @@ func (reader *DepartureGateReader) entryStops(
 		case entryHandoverFound:
 			entries = append(entries, entry)
 		case entryHandoverUnreadable:
-			return []domain.DepartureGateStop{domain.DepartureHandoverRegistryUnavailable}
-		default:
+			return domain.DepartureEntryBindingInvalid, false, nil
+		case entryByPickup, entryHandoverNotOnRegister, entryHandoverAmbiguous:
 			unresolved = true
+		default:
+			return domain.DepartureEntryBindingInvalid, false, fmt.Errorf("%w: %d", errEntryHandoverFindingUnknown, recognised)
 		}
 	}
-	return domain.DepartureEntryStops(direction, entries, unresolved)
+	return domain.BindDepartureEntries(direction, entries, unresolved), true, nil
 }
 
 // departureGateExpansion 是一次读数里逐对象问的那一遍（ADR-0225）。段里在控的每一件先问 node-operations 是不是集运单元：不是就按

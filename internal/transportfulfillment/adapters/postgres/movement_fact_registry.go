@@ -248,11 +248,15 @@ func movementFactKindFrom(raw string) (domain.MovementFactKind, error) {
 
 // departureGateReadingDetail 是 gate_reading_detail 列的形状。词都取领域枚举自己的 String()，读回时按封闭集认，认不出的
 // 行不装回——那是库面被绕过构造门写过，不是一格可读的答复。
+//
+// EntryUnbound 只在起讫没能与段里各件的进段声明核上时写（ADR-0237 决定五），不写即没有这一位：这一键出现之前落册的读数照读，
+// 不迁移，重放回显也就与首次逐字节相同。
 type departureGateReadingDetail struct {
-	From     *string                      `json:"from"`
-	To       *string                      `json:"to"`
-	Stops    []string                     `json:"stops"`
-	Findings []departureGateFindingDetail `json:"findings"`
+	From         *string                      `json:"from"`
+	To           *string                      `json:"to"`
+	Stops        []string                     `json:"stops"`
+	Findings     []departureGateFindingDetail `json:"findings"`
+	EntryUnbound bool                         `json:"entryUnbound,omitempty"`
 }
 
 // Members 只在集运单元那一格上有（ADR-0225），空单元也写成空数组——键在不在就是「这一格是不是单元那一格」。这一键出现之前
@@ -283,6 +287,7 @@ func departureGateReadingDetailOf(reading domain.DepartureGateReading) departure
 	for _, finding := range reading.Findings() {
 		detail.Findings = append(detail.Findings, gateFindingDetailOf(finding))
 	}
+	detail.EntryUnbound = reading.EntryUnbound()
 	return detail
 }
 
@@ -373,7 +378,7 @@ func departureGateReadingFrom(answerText string, raw []byte) (domain.DepartureGa
 	if err := json.Unmarshal(raw, &detail); err != nil {
 		return none, fmt.Errorf("gate reading detail: %w", err)
 	}
-	var spec domain.DepartureGateReadingSpec
+	spec := domain.DepartureGateReadingSpec{EntryUnbound: detail.EntryUnbound}
 	if (detail.From == nil) != (detail.To == nil) {
 		return none, fmt.Errorf("gate reading detail: half a direction")
 	}
@@ -418,7 +423,7 @@ func departureGateStopFrom(raw string) (domain.DepartureGateStop, error) {
 	for _, stop := range []domain.DepartureGateStop{
 		domain.DepartureSegmentNotDeclared, domain.DepartureSegmentNotRegistered, domain.DepartureNoObjectUnderControl,
 		domain.DepartureScheduleNotRegistered, domain.DepartureRecordedBeforeGateReading,
-		domain.DepartureSegmentEntryNodesUnknown, domain.DepartureScheduleNotServingSegment,
+		domain.DepartureScheduleNotServingSegment,
 		domain.DepartureSegmentRegistryUnavailable, domain.DepartureScheduleRegistryUnavailable,
 		domain.DepartureHandoverRegistryUnavailable,
 	} {

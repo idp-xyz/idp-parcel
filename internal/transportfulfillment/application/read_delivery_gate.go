@@ -159,6 +159,7 @@ func (reader *DeliveryGateReader) deliveryNode(
 	}
 	entry, recognised := entryHandoverOf(ctx, reader.deps.Handovers, tenant, participation)
 	switch recognised {
+	case entryHandoverFound:
 	case entryByPickup:
 		return none, domain.DeliveryEnteredByPickup, nil
 	case entryHandoverNotOnRegister:
@@ -167,6 +168,8 @@ func (reader *DeliveryGateReader) deliveryNode(
 		return none, domain.DeliveryEntryHandoverAmbiguous, nil
 	case entryHandoverUnreadable:
 		return none, domain.DeliveryHandoverRegistryUnavailable, nil
+	default:
+		return none, domain.DeliveryGateStopInvalid, fmt.Errorf("%w: %d", errEntryHandoverFindingUnknown, recognised)
 	}
 	node, declared := entry.ReleasingNode()
 	if !declared {

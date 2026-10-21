@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 	tfapp "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
@@ -217,8 +218,9 @@ func (line *previewLine) askOn(schedule, segment string) string {
 // Covers: AT-TF-114、AT-TF-319 真库（ADR-0237 决定五，证据 S）——评审 PoC 的那一格：演示动线上一段境内的上海→深圳自营段装着两个客户
 // 的包裹，都不在任何关务案卷里。设备按本班问，答不受门禁、一件不列。设备改配演示种子里一班深圳→新加坡的跨区班次去问同一段：读数
 // 停在本侧「班次不服务该段」、答未决，一件不列，整库一张表都不变——连关务都没被问到，于是它也问不出「段里每件跨区无案、都未决」那
-// 一份全列的读数。照这么配登出发，出发照样 201 落册，读数同样停在本侧、库面没有逐对象那一格。另一段的交接没声明交出与去向节点：
-// 读数停在「段的进段节点说不出」，同样一件不列、不问关务。
+// 一份全列的读数。照这么配登出发，出发照样 201 落册，读数同样停在本侧、库面没有逐对象那一格。另一段的交接没声明交出与去向节点、
+// 核不上段：按本班问照问关务、答不受门禁，回给设备的标「未绑定」、一件不列；给它也配那一班跨区班次去问，关务逐件答未决，回给设备的
+// 仍只有整格与那一位——配假班次在这类段上只换得到一位汇总（AT-TF-317 真库半边）。
 func TestPairingASegmentWithAnotherSchedulesDirectionNoLongerWidensTheReading(t *testing.T) {
 	line := newPreviewLine(t)
 	line.registerSeededSchedule("02-schedule-template-szx-sin.json", "2026-10-21")
@@ -268,8 +270,109 @@ func TestPairingASegmentWithAnotherSchedulesDirectionNoLongerWidensTheReading(t 
 		t.Fatalf("落册的读数有逐对象那几格 %v，want 停在本侧", recorded)
 	}
 
-	stopped := line.askOn(departureLineSchedule, undeclared)
-	if !strings.Contains(stopped, `"stops":["SEGMENT_ENTRY_NODES_UNKNOWN"]`) || strings.Contains(stopped, undeclaredP) {
-		t.Fatalf("交接没声明节点的段 = %s，want 停在本侧、一件不列", stopped)
+	unbound := line.askOn(departureLineSchedule, undeclared)
+	if !strings.Contains(unbound, `"gateReading":{"answer":"NOT_GUARDED","from":"SYN-NODE-SHA-HUB","to":"SYN-NODE-SZX-GATE","entryUnbound":true}`) {
+		t.Fatalf("交接没声明节点的段按本班问 = %s，want 照问关务、标未绑定、一件不列", unbound)
+	}
+	faked := line.askOn(crossZone, undeclared)
+	if !strings.Contains(faked, `"gateReading":{"answer":"UNDECIDED","from":"SYN-NODE-SZX-GATE","to":"SYN-NODE-SIN-HUB","entryUnbound":true}`) ||
+		strings.Contains(faked, undeclaredP) {
+		t.Fatalf("核不上的段配跨区班次问 = %s，want 只有整格与未绑定那一位、一件不列", faked)
+	}
+}
+
+// pickUp 把一件凭场外揽收交进 segment：揽收事实只有客户门口、没有节点，这一段的进段节点本就说不出。
+func (line *previewLine) pickUp(segment, parcel string) {
+	line.t.Helper()
+	controlFacts, err := buildControlFactOrchestrations(line.db)
+	if err != nil {
+		line.t.Fatalf("装配控制事实：%v", err)
+	}
+	result, err := controlFacts.pickupRegistration.Register(line.t.Context(), tfapp.RegisterOffsitePickupCommand{
+		TenantID:   mustValue(line.t, tfdomain.NewTenantID, departureLineTenant),
+		Object:     parcel,
+		Task:       "SYN-PICKUP-TASK-" + parcel,
+		Attempt:    "SYN-ATTEMPT-" + parcel,
+		Place:      "SYN-DOOR-" + parcel,
+		Control:    "SYN-TRANSPORT-CONTROL-" + parcel,
+		ExecutedBy: "SYN-COURIER-146",
+		OccurredAt: departureLineDepartedAt.Add(-2 * time.Hour),
+		Segment:    segment,
+	})
+	if err != nil || result.Outcome() != tfapp.PickupRegistered {
+		line.t.Fatalf("揽收 %s：%v / %v", parcel, result.Outcome(), err)
+	}
+}
+
+// recordedDetail 取库面那一行的明细：逐对象各格的对象、格、首条依据，以及「未绑定」那一位。
+func (line *previewLine) recordedDetail(fact string) (map[string][2]string, bool) {
+	line.t.Helper()
+	var raw []byte
+	if err := line.pool.QueryRow(line.t.Context(),
+		`SELECT gate_reading_detail FROM transport_fulfillment.transport_movement_fact WHERE fact_ref = $1`, fact).Scan(&raw); err != nil {
+		line.t.Fatalf("读库面：%v", err)
+	}
+	var detail struct {
+		EntryUnbound bool `json:"entryUnbound"`
+		Findings     []struct {
+			Object    string `json:"object"`
+			Answer    string `json:"answer"`
+			Judgement string `json:"judgement"`
+			Bases     []struct {
+				Cause string `json:"cause"`
+			} `json:"bases"`
+		} `json:"findings"`
+	}
+	if err := json.Unmarshal(raw, &detail); err != nil {
+		line.t.Fatalf("解库面：%v", err)
+	}
+	cells := map[string][2]string{}
+	for _, finding := range detail.Findings {
+		if !strings.HasPrefix(finding.Judgement, "AADJ-") || len(finding.Bases) == 0 {
+			line.t.Fatalf("库面 %s 那一格没有关务判断标识或依据：%s", finding.Object, raw)
+		}
+		cells[finding.Object] = [2]string{finding.Answer, finding.Bases[0].Cause}
+	}
+	return cells, detail.EntryUnbound
+}
+
+// Covers: AT-TF-317 真库（ADR-0237 决定五，证据 S；二轮评审探针那一格）——凭场外揽收进的一段装着两件包裹，一件被关务限制装载出发：
+// 揽收事实没有节点，起讫核不上段，但不停在本侧——按演示班次上海→深圳问关务。问询与同参出发都答阻断，回给设备的只有整格、起讫与
+// 「未绑定」那一位，被挡那一件也不列，两口逐字节相同；库面那一行两件各一格、带关务判断标识，被扣那一件依据是那条限制，明细记着那一位
+// ——全程追踪据它照旧形成出发门禁阻断信号（派发那一半在 cmd/parcel-dispatch）。另一段的进段交接只声明了交出节点、没报去向（演示尾程
+// 交接的样子），同样照问、同样只回整格。
+func TestASegmentEnteredByPickupStillAsksCustomsAndRecordsTheBlock(t *testing.T) {
+	line := newPreviewLine(t)
+	const (
+		pickupSegment = "SYN-SEG-146-PICKUP"
+		held          = "SYN-PARCEL-146-PICKUP-HELD"
+		clean         = "SYN-PARCEL-146-PICKUP-CLEAN"
+		noOnward      = "SYN-SEG-146-NO-ONWARD"
+		noOnwardHeld  = "SYN-PARCEL-146-NO-ONWARD-HELD"
+	)
+	line.pickUp(pickupSegment, held)
+	line.pickUp(pickupSegment, clean)
+	line.hold(held)
+	line.handOverDeclaring(noOnward, noOnwardHeld, "SYN-NODE-SHA-HUB", "")
+	line.hold(noOnwardHeld)
+
+	for segment, fact := range map[string]string{pickupSegment: "SYN-MOVE-146-PICKUP", noOnward: "SYN-MOVE-146-NO-ONWARD"} {
+		asked := line.ask(segment)
+		departed := line.departAs(fact, segment)
+		if asked.Code != http.StatusOK || departed.Code != http.StatusCreated {
+			t.Fatalf("%s 问询 %d / 出发 %d：%s", segment, asked.Code, departed.Code, departed.Body.String())
+		}
+		const want = `{"answer":"BLOCKED","from":"SYN-NODE-SHA-HUB","to":"SYN-NODE-SZX-GATE","entryUnbound":true}`
+		if previewed, recorded := gateReadingBytes(t, asked), gateReadingBytes(t, departed); previewed != want || recorded != want {
+			t.Fatalf("%s 回给设备的：\n问询 %s\n出发 %s\nwant %s", segment, previewed, recorded, want)
+		}
+	}
+
+	cells, unbound := line.recordedDetail("SYN-MOVE-146-PICKUP")
+	if !unbound || len(cells) != 2 || cells[held] != [2]string{"BLOCKED", "RESTRICTION_IN_FORCE"} || cells[clean][0] != "NOT_GUARDED" {
+		t.Fatalf("库面 = %v，未绑定 %v，want 两件各一格、被扣那一件阻断、依据那条限制、记着未绑定", cells, unbound)
+	}
+	if cells, unbound := line.recordedDetail("SYN-MOVE-146-NO-ONWARD"); !unbound || cells[noOnwardHeld][0] != "BLOCKED" {
+		t.Fatalf("没报去向那一段的库面 = %v，未绑定 %v", cells, unbound)
 	}
 }

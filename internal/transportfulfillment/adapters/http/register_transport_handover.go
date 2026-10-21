@@ -213,7 +213,7 @@ func handoverGateReadingViewOf(reading domain.HandoverGateReading) *handoverGate
 		view.Stops = []string{stop.String()}
 	}
 	if finding, asked := reading.Finding(); asked {
-		view.Objects = gateObjectViewsOf([]domain.GateFinding{finding})
+		view.Objects = gateObjectViewsOf(domain.ExecutorGateCells([]domain.GateFinding{finding}))
 	}
 	return view
 }
