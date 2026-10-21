@@ -102,7 +102,8 @@ func TestAPendingEntryIsRecordedOnceAndRefreshed(t *testing.T) {
 }
 
 // Covers: AT-TF-282、AT-TF-283（ADR-0230 决定一）——了结与作罢：了结不改指先落下的那一项；作罢只动待形成的那一条；了结或作罢的
-// 不再列队；之后又答要求缺失（参与重新在场）改回待形成。册上没有的那一件了结什么也不写。
+// 不再列队；之后又答要求缺失（参与重新在场）改回待形成，已形成的那一条却不因一次缺失答复改回、不清掉它指名的任务。册上没有的那一件
+// 了结什么也不写。
 func TestSettlementAndLapseFollowTheLatestAnswer(t *testing.T) {
 	register, transactor, _ := newDeliveryDispatchPendings(t)
 	formed := pendingKey(t, "SYN-TENANT-01", "SYN-SEG-70", "SYN-PARCEL-70-B")
@@ -156,6 +157,15 @@ func TestSettlementAndLapseFollowTheLatestAnswer(t *testing.T) {
 	if record := mustFindPending(t, register, lapsed); record.State != ports.DeliveryDispatchPending ||
 		record.LapsedBy != "" || !record.SettledAt.IsZero() || !record.FirstAnsweredAt.Equal(pendingAnsweredAt) {
 		t.Fatalf("重新待形成 = %+v, want 待形成、作罢三件清空、首次答复时刻不动", record)
+	}
+
+	// 已形成的那一条再收到一次要求缺失：不改回待形成，指名的任务不清掉。
+	withinPendingTransaction(t, transactor, func(ctx context.Context) error {
+		return register.RecordMissing(ctx, formed, pendingBasis(t, "basis/v9"), []string{"DELIVERY_PLACE"}, pendingAnsweredAt.Add(5*time.Hour))
+	})
+	if record := mustFindPending(t, register, formed); record.State != ports.DeliveryDispatchPendingFormed ||
+		record.Task != "DELIVERY-DISPATCH/task-1" || record.EntryBasis.String() != "basis/v1" {
+		t.Fatalf("已形成那一条被缺失答复改写：%+v", record)
 	}
 }
 

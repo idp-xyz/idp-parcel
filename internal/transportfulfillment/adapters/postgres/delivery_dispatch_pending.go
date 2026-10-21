@@ -34,8 +34,9 @@ func NewDeliveryDispatchPendings(db *bentopg.DB) (*DeliveryDispatchPendings, err
 	return &DeliveryDispatchPendings{db: db}, nil
 }
 
-// RecordMissing 立一条，或把已有那一条改回待形成。首次答复时刻只在立的那一刻写；入场依据、缺件与最近一次答复时刻取这一次——
-// 册随执行器最近一次答复，不取较晚的业务时间（补拍报的时刻可以早于先前那一拍）。
+// RecordMissing 立一条，或把待形成、已作罢的那一条刷新为待形成。首次答复时刻只在立的那一刻写；入场依据、缺件与最近一次答复
+// 时刻取这一次——册随执行器最近一次答复，不取较晚的业务时间（补拍报的时刻可以早于先前那一拍）。已形成的不动：它指名的任务
+// 还在，执行器查在册先于取件，正常走不到对它再答要求缺失；真走到了也不拿一次缺失的答复抹掉那一项任务。
 func (register *DeliveryDispatchPendings) RecordMissing(
 	ctx context.Context,
 	key ports.DeliveryDispatchPendingKey,
@@ -61,7 +62,8 @@ func (register *DeliveryDispatchPendings) RecordMissing(
 		        state            = 'PENDING',
 		        task_ref         = NULL,
 		        lapsed_by        = NULL,
-		        settled_at       = NULL`,
+		        settled_at       = NULL
+		  WHERE transport_fulfillment.delivery_dispatch_pending.state <> 'FORMED'`,
 		key.TenantID.String(), key.Segment.String(), key.Object.String(),
 		entryBasis.String(), slices.Clone(missing), answeredAt.UTC(),
 	); err != nil {

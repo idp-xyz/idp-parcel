@@ -30,6 +30,9 @@ func (double *pendingRegisterDouble) RecordMissing(
 	}
 	double.writes++
 	row, existed := double.rows[key]
+	if existed && row.State == ports.DeliveryDispatchPendingFormed {
+		return nil
+	}
 	if !existed {
 		row = ports.DeliveryDispatchPendingRecord{Key: key, FirstAnsweredAt: at}
 	}

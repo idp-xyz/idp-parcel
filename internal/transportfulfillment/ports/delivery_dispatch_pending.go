@@ -62,7 +62,8 @@ type DeliveryDispatchPendingRecord struct {
 
 // DeliveryDispatchPendingRegister 是执行器写册的三口。三口都要环境事务：册上那一行与执行器那一拍的其余写入同笔。
 //
-// - RecordMissing：立一条或把已有那一条改回待形成，入场依据、缺件与最近一次答复时刻取这一次；首次答复时刻只在立的那一刻写。
+// - RecordMissing：立一条，或把待形成、已作罢的那一条刷新为待形成，入场依据、缺件与最近一次答复时刻取这一次；首次答复时刻只在
+//   立的那一刻写。已形成的不动。
 // - SettleFormed：把一条改成已形成；册上没有这一件就什么也不写——册只记待形成过的那几件，顺利形成的任务不进册。
 // - SettleLapsed：只把待形成的那一条改成已作罢；已形成的不动——它的任务还在，对象离场是任务之后的事。
 type DeliveryDispatchPendingRegister interface {
