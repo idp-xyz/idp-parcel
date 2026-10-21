@@ -15,7 +15,7 @@ UC-SA-005 主流程按指示或唯一匹配形成核销、处理撤销与退回�
 
 ## 证据
 
-- 文档：UC-SA-005 主流程步 4、步 6，`AT-SA-113`、`AT-SA-116`、`AT-SA-117`；SA CONTEXT「运营余额、收付款与坏账」入账余额那一条与核销各条；[ADR-0182](../../../docs/adr/0182-receivable-account-is-a-funds-mapping-target.md) 决定二「核销与核销撤销仍没有命令」。
+- 文档：UC-SA-005 主流程「按明确指定范围形成核销」与「处理外部撤销、退回或更正，形成反向资金映射、核销撤销或重分配」，`AT-SA-113`、`AT-SA-116`、`AT-SA-117`；SA CONTEXT「运营余额、收付款与坏账」入账余额那一条与核销各条；[ADR-0182](../../../docs/adr/0182-receivable-account-is-a-funds-mapping-target.md) 决定二「核销与核销撤销仍没有命令」。
 - [ADR-0236](../../../docs/adr/0236-operators-adopt-external-funds-facts-and-regulatory-credentials-through-operator-decision-faces.md) 决定四附段与决定七说映射与核销「只有受控 CLI」，与代码不符；文档自洽 09 已在它的 Status 行注记里按 ADR-0182 决定二更正，正文不改。
 - 代码：`application.MapExternalFundsHandler.Apply`、`.Reverse`；`ApplySettlementCommand`、`ReverseApplicationCommand`；`unversionedApplyDigest` 已备好载荷摘要。
 

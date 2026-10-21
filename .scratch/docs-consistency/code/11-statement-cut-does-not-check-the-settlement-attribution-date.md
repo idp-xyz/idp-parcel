@@ -39,13 +39,13 @@ M：截单编排读（或当场判）每件费用的归属日，归属日晚于�
 
 ## 裁向（文档自洽 09，2026-10-21）
 
-[ADR-0269](../../../docs/adr/0269-business-time-zone-and-cutoff-belong-to-the-statement-arrangement-of-the-settlement-account-and-the-cut-admits-by-attribution-date.md) 裁定，本票照它实现，「最小的诚实修法」与「要裁的」两节以下面为准：
+[ADR-0269](../../../docs/adr/0269-business-time-zone-and-cutoff-belong-to-the-statement-arrangement-of-the-settlement-account-and-the-cut-admits-by-attribution-date.md) 裁定，本票照它实现，「最小的诚实修法」与「要裁的」以本节为准：
 
 1. **对账安排登记册**：按（租户、结算账户）登记业务时区（IANA 名）与截单时刻（当天的分钟数 0–1439，0 是一份登记），可追加新一版、读最新一版；没登记答未配置。迁移另取号；`parcel-settlement-register` 另立登记命令。
 2. **费用项目一册只登形态**：`domain.ChargeAttributionRegistration` 的 `timeZone`、`cutoffMinute` 退场，判定改读该费用所属结算账户的对账安排；`charge-attribution` 命令随之收窄。今天这一册没有任何种子行，迁移不必搬数。
 3. **归属日随费用确认形成**：确认同笔判并落库，此后不变；判不出不挡确认，归属日留空。`domain.CustomerCharge` 今天不带来源发生时点（`CustomerChargeSpec` 没有这一格），形态为来源发生时判不出；形成费用时从它的来源事实钉上这一时点（包裹计费时点那一路可取 SELL 请求上的计价基准时点——ADR-0190 决定二定它就是这件包裹的责任起点或终局的生效时点），这一格在本票内补。
 4. **截单按归属日纳入**：截单命令加「本期最后一个归属日」一格；命令列出的费用里归属日晚于它的不入本期并逐件指名，已出账的不再纳入；归属日留空的当场判（`JudgeChargeAttributionHandler` 接进截单编排）、判出即落库，判不出答未配置（`CHARGE_ATTRIBUTION_UNCONFIGURED`）并指名缺哪一册。`CutOffAt` 照旧记在草稿与快照上，不参与纳入。
-5. 用例：UC-SA-003 `AT-SA-062`、`AT-SA-212`、`AT-SA-213`，UC-SA-002 主流程步 6。
+5. 用例：UC-SA-003 `AT-SA-062`、`AT-SA-212`、`AT-SA-213`，UC-SA-002 主流程里确认费用的那一步（「按费用类型确认条件形成确认费用，或保持暂估」）。
 
 建议分级不变（R2）。
 
