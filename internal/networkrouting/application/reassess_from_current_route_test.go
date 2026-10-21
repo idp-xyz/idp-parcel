@@ -177,7 +177,8 @@ func TestARerouteAfterALapseIsTheNextStartingPoint(t *testing.T) {
 }
 
 // Covers: 仍适用线上按改善自动改路之后的那一次复核——原计划已被替代：起点是接班的新计划，不再复核已被替代的原计划。
-// 阈值 0 是本测试交入的租户取值。这条线在真库上还落不了复核册（docs-consistency/code/53），这里只钉编排取起点。
+// 阈值 0 是本测试交入的租户取值。这里只钉编排取起点；改善改路那一行落复核册、下一次复核以新计划为起点的真库一格，见
+// cmd/parcel-dispatch 的 TestAnImprovementRerouteBeforeTheFreezeBoundaryLandsOnTheDatabase。
 func TestAnImprovementRerouteIsTheNextStartingPoint(t *testing.T) {
 	fixture := newReassessFixture(t)
 	record := currentPlanRecord(t)
