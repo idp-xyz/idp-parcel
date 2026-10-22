@@ -267,7 +267,7 @@ func (handler *DisposeShipmentRequestHandler) Handle(
 		decision:       decision,
 		hasDecision:    formed,
 		currentVersion: current,
-		compensation:   handler.releaseOccupation(ctx, command),
+		compensation:   handler.releaseOccupation(ctx, command, disposed),
 	}, nil
 }
 
@@ -307,54 +307,22 @@ func (handler *DisposeShipmentRequestHandler) inadmissible(
 	}
 }
 
-// releaseOccupation 在处置落库后按原关联解除本版本的资金控制，形照 RejectShipmentRequestHandler 的同名
-// 段：读不回已记录的判断时不发释放（不知道关联就发，settlement-accounting 无从认领哪一笔），交回补偿
-// 续办引用；按「有没有成立的项」发而不按结论（ADR-0125 决定四）。
+// releaseOccupation 在处置落库后按原关联解除资金控制：本版本在前，这份委托被取代各版随后（理由同
+// WithdrawShipmentRequestHandler.releaseOccupation）。`交客户补充`这一去向不是终局，被取代各版按理已在本版那一轮
+// 链开头放过；这里再请求一次，提供方按幂等答原释放，两个去向因此走同一条路。
 //
 // 释放失败不回滚处置：处置已经越过提交边界，回滚它等于让一次补偿失败改写业务结果；补偿按原关联另行
 // 续办，续办方是系统——责任引用答的是谁承担失败或补偿责任，不改变谁来重试（ADR-0132 决定四）。
 func (handler *DisposeShipmentRequestHandler) releaseOccupation(
 	ctx context.Context,
 	command DisposeShipmentRequestCommand,
+	request domain.ShipmentRequest,
 ) domain.OwnershipContinuationReference {
-	recorded, err := handler.deps.Judgments.LoadRecordedJudgments(
-		ctx, command.Identity.TenantID(), command.ShipmentRequestID, command.SubmissionVersion)
-	if err != nil {
-		return handler.compensationReference(command, RecordedJudgmentsUnavailable)
+	scope := occupationRelease{
+		judgments: handler.deps.Judgments,
+		release:   handler.deps.Release,
+		identity:  command.Identity,
+		request:   command.ShipmentRequestID,
 	}
-	if !recorded.FinancialControl.OccupationFormed() {
-		return domain.OwnershipContinuationReference{}
-	}
-
-	if err := handler.deps.Release.ReleasePreAcceptanceControl(ctx, ports.ControlReleaseRequest{
-		Identity:          command.Identity,
-		ShipmentRequestID: command.ShipmentRequestID,
-		SubmissionVersion: command.SubmissionVersion,
-		ControlResultID:   recorded.FinancialControl.ResultID(),
-	}); err != nil {
-		return handler.compensationReference(
-			command,
-			ControlReleasePending,
-			recorded.FinancialControl.ResultID().String(),
-		)
-	}
-	return domain.OwnershipContinuationReference{}
-}
-
-// compensationReference 派生一次补偿的续办引用。释放失败那一条带上控制关联，与主动拒绝和自动拒绝派生的
-// 引用逐字一致：同一笔占用因同一原因停下，三条路径必须给出同一个引用，续办方才不必先知道这次是谁停的。
-func (handler *DisposeShipmentRequestHandler) compensationReference(
-	command DisposeShipmentRequestCommand,
-	reason JudgmentPendingReason,
-	scope ...string,
-) domain.OwnershipContinuationReference {
-	return judgmentContinuation(
-		reason,
-		append([]string{
-			command.Identity.TenantID().String(),
-			command.Identity.CustomerAccountID().String(),
-			command.ShipmentRequestID.String(),
-			command.SubmissionVersion.String(),
-		}, scope...)...,
-	)
+	return scope.reference(scope.releaseEvery(ctx, request, command.SubmissionVersion))
 }

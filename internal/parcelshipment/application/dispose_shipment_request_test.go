@@ -501,6 +501,12 @@ func (fixture *dispositionFixture) assertNoIdentityIssued(t *testing.T) {
 // 译成`无法判定`+ 续办路径「授权处置」。这一层是被测行为的前提而不是它的一部分。
 func awaitingDispositionRequest(t *testing.T) domain.ShipmentRequest {
 	t.Helper()
+	return awaitingDispositionRequestOn(t, submittedRequest(t))
+}
+
+// awaitingDispositionRequestOn 把 base 的当前版本推到`等待授权处置`；base 带被取代版本时，处置面对的就是补件之后那一版。
+func awaitingDispositionRequestOn(t *testing.T, base domain.ShipmentRequest) domain.ShipmentRequest {
+	t.Helper()
 	groups := []domain.AcceptanceCheckGroup{
 		domain.CustomerRelationshipCheck,
 		domain.LegalEntityAndContractCheck,
@@ -554,7 +560,7 @@ func awaitingDispositionRequest(t *testing.T) domain.ShipmentRequest {
 	}
 	checks = append(checks, control)
 
-	waiting, err := submittedRequest(t).Decide(domain.AcceptanceDecisionSpec{
+	waiting, err := base.Decide(domain.AcceptanceDecisionSpec{
 		DecisionID: mustValue(t, domain.NewAcceptanceDecisionID, "decision-1"),
 		Checks:     checks,
 		Basis:      snapshot,

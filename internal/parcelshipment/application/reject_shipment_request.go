@@ -195,7 +195,7 @@ func (handler *RejectShipmentRequestHandler) Handle(
 		state:        rejected.State(),
 		decision:     decision,
 		hasDecision:  true,
-		compensation: handler.releaseOccupation(ctx, command),
+		compensation: handler.releaseOccupation(ctx, command, rejected),
 	}, nil
 }
 
@@ -222,58 +222,20 @@ func (handler *RejectShipmentRequestHandler) inadmissible(
 // releaseOccupation 在主动拒绝越过提交边界后按原关联解除资金控制。主动拒绝同样是「接受确定未
 // 成立」，冻结不能因为拒绝出自运营之手就留在原处占着货主的钱。
 //
-// 读不回已记录的判断时不发释放：不知道关联就发，settlement-accounting 无从认领哪一笔。这一
-// 轮交回补偿续办引用，由续办去补。
+// 放的是这份委托各版已成立的占用，理由同 WithdrawShipmentRequestHandler.releaseOccupation：拒绝是终局，之后再没有
+// 轮次去放被取代那一版。释放没收口时交回补偿续办引用，由续办去补。
 func (handler *RejectShipmentRequestHandler) releaseOccupation(
 	ctx context.Context,
 	command RejectShipmentRequestCommand,
+	request domain.ShipmentRequest,
 ) domain.OwnershipContinuationReference {
-	// 释放的是本版形成的那次冻结：ControlReleaseRequest 本就按提交版本关联，读判断也按同一版。
-	recorded, err := handler.deps.Judgments.LoadRecordedJudgments(
-		ctx, command.Identity.TenantID(), command.ShipmentRequestID, command.SubmissionVersion)
-	if err != nil {
-		return handler.compensationReference(command, RecordedJudgmentsUnavailable)
+	scope := occupationRelease{
+		judgments: handler.deps.Judgments,
+		release:   handler.deps.Release,
+		identity:  command.Identity,
+		request:   command.ShipmentRequestID,
 	}
-	// 按「有没有成立的项」发而不按结论，理由同 FormAcceptanceDecisionHandler.releaseIfRejected。
-	if !recorded.FinancialControl.OccupationFormed() {
-		return domain.OwnershipContinuationReference{}
-	}
-
-	if err := handler.deps.Release.ReleasePreAcceptanceControl(ctx, ports.ControlReleaseRequest{
-		Identity:          command.Identity,
-		ShipmentRequestID: command.ShipmentRequestID,
-		SubmissionVersion: command.SubmissionVersion,
-		ControlResultID:   recorded.FinancialControl.ResultID(),
-	}); err != nil {
-		return handler.compensationReference(
-			command,
-			ControlReleasePending,
-			recorded.FinancialControl.ResultID().String(),
-		)
-	}
-	return domain.OwnershipContinuationReference{}
-}
-
-// compensationReference 派生一次补偿的续办引用。附加范围由调用方给出，因为两个调用点手里的
-// 东西不一样：判断读不回来时根本没有控制关联可带，释放失败时带得出。
-//
-// 释放失败这一条必须带上控制关联，才能与自动拒绝在 form_acceptance_decision.go 里派生的引用
-// 逐字一致——同一笔冻结因同一原因停下，两条决定路径必须给出同一个引用。不一致的话，续办方得
-// 先知道这次拒绝是规则形成的还是运营主动形成的，才查得回原次尝试，而它没有理由知道。
-func (handler *RejectShipmentRequestHandler) compensationReference(
-	command RejectShipmentRequestCommand,
-	reason JudgmentPendingReason,
-	scope ...string,
-) domain.OwnershipContinuationReference {
-	return judgmentContinuation(
-		reason,
-		append([]string{
-			command.Identity.TenantID().String(),
-			command.Identity.CustomerAccountID().String(),
-			command.ShipmentRequestID.String(),
-			command.SubmissionVersion.String(),
-		}, scope...)...,
-	)
+	return scope.reference(scope.releaseEvery(ctx, request, command.SubmissionVersion))
 }
 
 // undecided 交回本轮的未决结果。state 由调用点给出而不是在这里假定`已提交`：未决要交回的是

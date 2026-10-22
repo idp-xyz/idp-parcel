@@ -477,6 +477,9 @@ func (handler *FormAcceptanceDecisionHandler) revalidateReachability(
 // 释放失败不回滚拒绝——决定已经越过提交边界，回滚它等于让一次补偿失败改写业务结果；补偿
 // 按原关联另行续办，这正是 CONTEXT 说的「撤回提交和释放属于可补偿编排，不要求跨上下文
 // 分布式事务」。
+//
+// 本版那一笔用本轮已读回的控制结果；这份委托的其余各版随后逐版读回再放。拒绝是终局，之后再没有轮次去放被取代
+// 那一版：接受链开头本轮已放过一次时，这里再请求一次，提供方按幂等答原释放。
 func (handler *FormAcceptanceDecisionHandler) releaseIfRejected(
 	ctx context.Context,
 	command FormAcceptanceDecisionCommand,
@@ -486,30 +489,19 @@ func (handler *FormAcceptanceDecisionHandler) releaseIfRejected(
 	if decided.State() != domain.ShipmentRequestRejected {
 		return domain.OwnershipContinuationReference{}
 	}
-	// 释放看「有没有成立的项」，不看接受侧结论（ADR-0125 决定四）：账期额度占用与「第一项冻结成立、
-	// 第二项受限」那笔冻结都在提供方账本上，按结论只放 `HELD` 会把它们留成孤儿。反过来，什么都没
-	// 占下（从未形成控制、明确无控制、唯一一项受限）就没有可释放的关联——凭空发一次释放会让
-	// settlement-accounting 去认领一笔不存在的占用。
-	if !control.OccupationFormed() {
-		return domain.OwnershipContinuationReference{}
-	}
+	scope := handler.occupationRelease(command)
+	gap := scope.releaseFormed(ctx, command.SubmissionVersion, control)
+	gap = gap.or(scope.releaseRecorded(ctx, versionsOtherThan(decided, command.SubmissionVersion)))
+	return scope.reference(gap)
+}
 
-	if err := handler.deps.Release.ReleasePreAcceptanceControl(ctx, ports.ControlReleaseRequest{
-		Identity:          command.Identity,
-		ShipmentRequestID: command.ShipmentRequestID,
-		SubmissionVersion: command.SubmissionVersion,
-		ControlResultID:   control.ResultID(),
-	}); err != nil {
-		return judgmentContinuation(
-			ControlReleasePending,
-			command.Identity.TenantID().String(),
-			command.Identity.CustomerAccountID().String(),
-			command.ShipmentRequestID.String(),
-			command.SubmissionVersion.String(),
-			control.ResultID().String(),
-		)
+func (handler *FormAcceptanceDecisionHandler) occupationRelease(command FormAcceptanceDecisionCommand) occupationRelease {
+	return occupationRelease{
+		judgments: handler.deps.Judgments,
+		release:   handler.deps.Release,
+		identity:  command.Identity,
+		request:   command.ShipmentRequestID,
 	}
-	return domain.OwnershipContinuationReference{}
 }
 
 // assembleChecks 把已记录的判断逐条译成校验结果。有结果就记，没有就不记。

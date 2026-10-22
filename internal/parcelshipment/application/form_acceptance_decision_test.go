@@ -999,6 +999,8 @@ type controlReleaseDouble struct {
 	// 只看计数分不出放的是哪一版。
 	versions []domain.SubmissionVersionID
 	err      error
+	// errFor 按提交版本让那一版的释放失败，压过 err：终局路径逐版放时，一版放不掉不该挡住其余各版。
+	errFor map[string]error
 	// record 在场时把释放记进夹具的调用序，供断言「释放先于判断新版本」。
 	record func(string)
 }
@@ -1013,6 +1015,9 @@ func (double *controlReleaseDouble) ReleasePreAcceptanceControl(
 	double.calls++
 	double.controlResultID = request.ControlResultID.String()
 	double.versions = append(double.versions, request.SubmissionVersion)
+	if err, listed := double.errFor[request.SubmissionVersion.String()]; listed {
+		return err
+	}
 	return double.err
 }
 

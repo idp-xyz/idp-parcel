@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
-	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
 // releaseSuperseded 在判当前版本之前，按原业务关联放掉被取代各版已成立的占用。
@@ -24,8 +23,7 @@ import (
 // 释放随整轮一起提交：它与新版本的判断同在消费门那一笔事务里，这一轮因别的原因回滚，释放也一起回滚。所以新版本
 // 那一轮能提交之前，被取代那一版一直占着——先放后判守住的是新版本的控制看不到旧占用，不是旧占用尽早腾出来。
 //
-// 每一轮都问，不记「放过没有」：认领与幂等归提供方的账本（ADR-0122 决定三），已释放的再请求一次答原释放；本方另存
-// 一份释放状态，就是同一事实的第二处定义。只问「有没有成立的项」，不看结论（ADR-0125 决定四）。
+// 每一轮都问，不记「放过没有」，只问「有没有成立的项」，不看结论：逐版怎么认、发不发归 occupationRelease。
 //
 // 不论委托此刻是否已形成决定都照放：被取代的版本从来不是接受所在的那一版（决定形成后不再换代），放它碰不到合法
 // 占用。
@@ -34,7 +32,7 @@ func (handler *AdvanceAcceptanceChainHandler) releaseSuperseded(
 	command AdvanceAcceptanceChainCommand,
 	request domain.ShipmentRequest,
 ) (AdvanceAcceptanceChainResult, bool, error) {
-	priors := request.PriorSubmissionVersions()
+	priors := versionsOtherThan(request, command.SubmissionVersion)
 	if len(priors) == 0 {
 		return AdvanceAcceptanceChainResult{}, false, nil
 	}
@@ -43,52 +41,22 @@ func (handler *AdvanceAcceptanceChainHandler) releaseSuperseded(
 		return AdvanceAcceptanceChainResult{}, false, ErrAcceptanceChainNotAssembled
 	}
 
-	for _, prior := range priors {
-		version := prior.VersionID()
-		recorded, err := decision.Judgments.LoadRecordedJudgments(
-			ctx, command.Identity.TenantID(), command.ShipmentRequestID, version)
-		if err != nil {
-			// 不知道旧版本形成过什么就发，settlement-accounting 无从认领；跳过它去判新版本，又会让一笔可能还在的占用
-			// 压着新版本的控制。
-			return supersededReleaseStall(command, request, RecordedJudgmentsUnavailable, version.String()), true, nil
-		}
-		control := recorded.FinancialControl
-		if !control.OccupationFormed() {
-			continue
-		}
-		if err := decision.Release.ReleasePreAcceptanceControl(ctx, ports.ControlReleaseRequest{
-			Identity:          command.Identity,
-			ShipmentRequestID: command.ShipmentRequestID,
-			SubmissionVersion: version,
-			ControlResultID:   control.ResultID(),
-		}); err != nil {
-			// 续办引用的范围与那一版若被拒绝时 releaseIfRejected 派生的逐字一致：同一笔占用因同一原因没放掉，无论
-			// 停在哪条路上，续办方都拿到同一个引用。
-			return supersededReleaseStall(
-				command, request, ControlReleasePending, version.String(), control.ResultID().String()), true, nil
-		}
+	scope := occupationRelease{
+		judgments: decision.Judgments,
+		release:   decision.Release,
+		identity:  command.Identity,
+		request:   command.ShipmentRequestID,
+	}
+	// 读不回某一版的判断也停：不知道旧版本形成过什么就发，settlement-accounting 无从认领；跳过它去判新版本，又会
+	// 让一笔可能还在的占用压着新版本的控制。
+	if gap := scope.releaseRecorded(ctx, priors); gap.open() {
+		return AdvanceAcceptanceChainResult{
+			outcome:      AcceptanceChainUndecided,
+			stage:        AcceptanceChainSupersededReleaseStage,
+			state:        request.State(),
+			reason:       gap.reason,
+			continuation: scope.reference(gap),
+		}, true, nil
 	}
 	return AdvanceAcceptanceChainResult{}, false, nil
-}
-
-func supersededReleaseStall(
-	command AdvanceAcceptanceChainCommand,
-	request domain.ShipmentRequest,
-	reason JudgmentPendingReason,
-	scope ...string,
-) AdvanceAcceptanceChainResult {
-	return AdvanceAcceptanceChainResult{
-		outcome: AcceptanceChainUndecided,
-		stage:   AcceptanceChainSupersededReleaseStage,
-		state:   request.State(),
-		reason:  reason,
-		continuation: judgmentContinuation(
-			reason,
-			append([]string{
-				command.Identity.TenantID().String(),
-				command.Identity.CustomerAccountID().String(),
-				command.ShipmentRequestID.String(),
-			}, scope...)...,
-		),
-	}
 }

@@ -296,7 +296,7 @@ func TestWithdrawalAndRejectionDeriveTheSameCompensationReference(t *testing.T) 
 // 分别统计、各走各的续办路径」——同一份委托因两种不同原因停下，绝不能收敛成同一个引用。
 //
 // 拒绝那条路上同一条性质已由 `TestBothRejectionPathsDeriveTheSameCompensationReference` 挡住，
-// 但撤回有自己的 compensationReference 与自己的两个调用点：那边全绿也拦不住这边把原因写岔。
+// 但撤回经自己的编排走到释放：那边全绿也拦不住这边把原因写岔。
 // `RecordedJudgmentsUnavailable`（判断读不回来，压根不知道该释放哪一笔）与 `ControlReleasePending`
 // （关联清楚，释放没确认完成）要补的东西完全不同，而只断言引用非空的测试对写岔是全盲的。
 func TestTwoDifferentStoppingCausesNeverShareOneCompensationReference(t *testing.T) {

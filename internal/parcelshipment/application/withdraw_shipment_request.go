@@ -240,7 +240,7 @@ func (handler *WithdrawShipmentRequestHandler) Handle(
 		state:         withdrawn.State(),
 		withdrawal:    record,
 		hasWithdrawal: true,
-		compensation:  handler.releaseOccupation(ctx, command),
+		compensation:  handler.releaseOccupation(ctx, command, withdrawn),
 	}, nil
 }
 
@@ -300,7 +300,7 @@ func (handler *WithdrawShipmentRequestHandler) existing(
 
 	compensation := domain.OwnershipContinuationReference{}
 	if hasWithdrawal {
-		compensation = handler.releaseOccupation(ctx, command)
+		compensation = handler.releaseOccupation(ctx, command, request)
 	}
 
 	return WithdrawShipmentRequestResult{
@@ -320,55 +320,21 @@ func (handler *WithdrawShipmentRequestHandler) existing(
 // 释放失败不回滚撤回：`UC-PS-005` 要求「撤回提交成功后不等待财务释放才生效」，且不得为了保持
 // 表面原子性把委托改回`已提交`。这一轮交回补偿续办引用，由续办去补。
 //
-// 读不回已记录的判断时不发释放：不知道关联就发，settlement-accounting 无从认领哪一笔。
-// 从未形成过冻结时既不发释放也不留补偿引用——`AT-PS-074` 要的是撤回成立并保存财务补偿不适用
-// 依据，凭空造一个待续补偿会让对账去追一笔不存在的释放。
+// 放的是这份委托已成立的占用（步骤 6），不只是命令指名那一版：撤回是终局，被取代那一版若在新版本那一轮链提交之前
+// 还占着，之后再没有轮次去放它。从未形成过冻结时既不发释放也不留补偿引用——`AT-PS-074` 要的是撤回成立并保存
+// 财务补偿不适用依据，凭空造一个待续补偿会让对账去追一笔不存在的释放。
 func (handler *WithdrawShipmentRequestHandler) releaseOccupation(
 	ctx context.Context,
 	command WithdrawShipmentRequestCommand,
+	request domain.ShipmentRequest,
 ) domain.OwnershipContinuationReference {
-	// 释放的是本版形成的那次冻结：ControlReleaseRequest 本就按提交版本关联，读判断也按同一版。
-	recorded, err := handler.deps.Judgments.LoadRecordedJudgments(
-		ctx, command.Identity.TenantID(), command.ShipmentRequestID, command.SubmissionVersion)
-	if err != nil {
-		return handler.compensationReference(command, RecordedJudgmentsUnavailable)
+	scope := occupationRelease{
+		judgments: handler.deps.Judgments,
+		release:   handler.deps.Release,
+		identity:  command.Identity,
+		request:   command.ShipmentRequestID,
 	}
-	// 按「有没有成立的项」发而不按结论，理由同 FormAcceptanceDecisionHandler.releaseIfRejected。
-	if !recorded.FinancialControl.OccupationFormed() {
-		return domain.OwnershipContinuationReference{}
-	}
-
-	if err := handler.deps.Release.ReleasePreAcceptanceControl(ctx, ports.ControlReleaseRequest{
-		Identity:          command.Identity,
-		ShipmentRequestID: command.ShipmentRequestID,
-		SubmissionVersion: command.SubmissionVersion,
-		ControlResultID:   recorded.FinancialControl.ResultID(),
-	}); err != nil {
-		return handler.compensationReference(
-			command,
-			ControlReleasePending,
-			recorded.FinancialControl.ResultID().String(),
-		)
-	}
-	return domain.OwnershipContinuationReference{}
-}
-
-// compensationReference 派生一次补偿的续办引用，范围与两条拒绝路径逐字一致：同一笔冻结因同一
-// 原因停下，无论停在接受、拒绝还是撤回哪条路上，续办方都必须拿到同一个引用。
-func (handler *WithdrawShipmentRequestHandler) compensationReference(
-	command WithdrawShipmentRequestCommand,
-	reason JudgmentPendingReason,
-	scope ...string,
-) domain.OwnershipContinuationReference {
-	return judgmentContinuation(
-		reason,
-		append([]string{
-			command.Identity.TenantID().String(),
-			command.Identity.CustomerAccountID().String(),
-			command.ShipmentRequestID.String(),
-			command.SubmissionVersion.String(),
-		}, scope...)...,
-	)
+	return scope.reference(scope.releaseEvery(ctx, request, command.SubmissionVersion))
 }
 
 // undecided 交回本轮的未决结果。state 由调用点给出而不是在这里假定`已提交`：未决要交回的是
