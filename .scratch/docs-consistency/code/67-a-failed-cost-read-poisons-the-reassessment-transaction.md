@@ -111,3 +111,20 @@ S–M：
 1. 越权风险点 2（取号同族）要不要一并包，归 NR owner。
 2. code/78 修法 (a) 落地时，其余依赖读口的隔离要另定（已记在 code/78 备注）。
 
+
+## 评审记录（2026-10-21，协调方隔离评审：无阻断，三条变异都被抓住；作者子代理同分支修订）
+
+逐条去向：
+
+1. **`TestAnInitialRouteCostReadFailureIsReportedAsTheCostSource` 头注「与上一条」是位置引用**——已修：改为点名 `TestALapseLandsThroughTheProductionRouteWhenPriceCardsAreUnreadable`。
+2. **适配器层缺「同一事务里先后几次」的用例**——已补 `TestSuccessiveCostReadsInOneTransactionEachRecover`：同一只装饰器在一笔事务里依次失败、失败、成功，两次失败各自交回错误，第三次读数照常交回，随后写交接登记、提交成功、读得回。初始路由逐件包裹、复核每次排序都重用同一个 savepoint 名，这条钉的就是这种重用。替身 `sqlCostSource` 加 `sequence`，其余用例不设，行为不变。
+3. **两处超长注释**——已折行：`TestALapseLandsThroughTheProductionRouteWhenPriceCardsAreUnreadable` 与 `TestAnInitialRouteCostReadFailureIsReportedAsTheCostSource` 的头注。
+4. **savepoint 装饰器三份同形副本**——已立 [docs-consistency/code/80](./80-savepoint-decorators-are-three-copies-of-one-helper.md)（R3，立前 ls 主树与本分支、看过在途分支，80 未占）：抽 `internal/platform` 泛型助手，NR 一份与 NO 两份改成薄封装。票面另记可选项：加一道 architecture 门禁，钉住「候选成本取数侧的装配必须包隔离」，即本票越权风险点 1。
+
+**未采纳**：无。
+
+### 验证（修订后）
+
+- `go build ./...`、`go vet ./internal/networkrouting/... ./cmd/parcel-dispatch/` 干净；`gofmt -l cmd internal` 为空。
+- `TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/networkrouting/... ./cmd/parcel-dispatch/`：14 个包 ok、0 FAIL。
+- 新用例与改过头注的两条另跑 `-count=3`：ok。
