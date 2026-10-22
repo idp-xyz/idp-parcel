@@ -269,7 +269,7 @@ func TestAStaleProjectionEnvelopeCannotCarryTheConfirmedBasisBack(t *testing.T) 
 }
 
 // Covers: 四维变化那一格——视图尚未形成，P1 那封信停在判完新旧之后，P2 期间形成；P1 那一路
-// 收工后当前视图的内容与形成依据都是 P2 的，P1 的内容即便留下也只能是被替代的前一版。
+// 收工后当前视图的内容与形成依据都是 P2 的，并指回依据 P1 形成的前一版。
 func TestAStaleProjectionEnvelopeCannotSupersedeTheViewWithStaleContent(t *testing.T) {
 	race := newStaleEnvelopeRace(t, notePerProjectionPolicy{})
 	ctx := t.Context()
@@ -288,16 +288,18 @@ func TestAStaleProjectionEnvelopeCannotSupersedeTheViewWithStaleContent(t *testi
 	if !shown || content.String() != "SYN-NOTE-"+race.second.Version().String() {
 		t.Fatalf("追踪说明 = %q（%v），want P2 的内容", content.String(), shown)
 	}
-	if prior, superseding := view.PriorVersion(); superseding {
-		earlier, found, err := race.views.FindVersion(ctx,
-			finalValue(t, vedomain.NewTenantID, "tenant-1"),
-			finalValue(t, vedomain.NewCustomerAccountReference, "customer-1"),
-			finalValue(t, vedomain.NewTrackedParcelReference, "parcel-1"), prior)
-		if err != nil || !found {
-			t.Fatalf("读前一版：err=%v found=%v", err, found)
-		}
-		if earlier.BasedOn() != race.first.Version() {
-			t.Fatalf("前一版形成时依据 = %s，want %s", earlier.BasedOn(), race.first.Version())
-		}
+	prior, superseding := view.PriorVersion()
+	if !superseding {
+		t.Fatal("当前视图没有指回前一版，want 替代 P1 形成的那一版")
+	}
+	earlier, found, err := race.views.FindVersion(ctx,
+		finalValue(t, vedomain.NewTenantID, "tenant-1"),
+		finalValue(t, vedomain.NewCustomerAccountReference, "customer-1"),
+		finalValue(t, vedomain.NewTrackedParcelReference, "parcel-1"), prior)
+	if err != nil || !found {
+		t.Fatalf("读前一版：err=%v found=%v", err, found)
+	}
+	if earlier.BasedOn() != race.first.Version() {
+		t.Fatalf("前一版形成时依据 = %s，want %s", earlier.BasedOn(), race.first.Version())
 	}
 }
