@@ -252,7 +252,7 @@ func rejectionOrchestrationWith(
 		Authorizer: authorizer,
 		Judgments:  judgments,
 		Recorder:   judgments,
-		Release:    release,
+		Release:    pspostgres.NewSavepointedControlRelease(db, release),
 		Identities: identities,
 		Clock:      clock,
 	})

@@ -866,7 +866,7 @@ func acceptanceChainConsumers(
 			Reachability: reachability,
 			Judgments:    judgments,
 			Recorder:     judgments,
-			Release:      control,
+			Release:      pspostgres.NewSavepointedControlRelease(db, control),
 			Downstream:   downstream,
 			Identities:   identities,
 			Clock:        clock,

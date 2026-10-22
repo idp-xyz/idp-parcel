@@ -103,7 +103,7 @@ func dispositionOrchestrationWith(
 		Requests:   requests,
 		Authorizer: authorizer,
 		Judgments:  judgments,
-		Release:    release,
+		Release:    pspostgres.NewSavepointedControlRelease(db, release),
 		Identities: identities,
 		Clock:      clock,
 	})

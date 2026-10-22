@@ -53,7 +53,9 @@ type customerSupplementLoopFixture struct {
 	submittedHandoff *pspostgres.OutboxShipmentRequestSubmittedHandoff
 	supplement       *psapplication.FormNewSubmissionVersionHandler
 	chain            *psapplication.AdvanceAcceptanceChainHandler
-	commercial       *synRSwitchableAsOfCommercialBasis
+	// decision 是链里形成决定那一步，直驱它才读得到链不透出的补偿引用。
+	decision   *psapplication.FormAcceptanceDecisionHandler
+	commercial *synRSwitchableAsOfCommercialBasis
 }
 
 // customerSupplementLoopLegs 是夹具里可换的两口：财务控制与占用释放。缺省是合成替身（控制恒成立、释放恒成功）；
@@ -157,6 +159,7 @@ func newCustomerSupplementLoopFixtureWith(t *testing.T, legs customerSupplementL
 		submittedHandoff:   submittedHandoff,
 		supplement:         supplement,
 		chain:              chain,
+		decision:           decision,
 		commercial:         commercial,
 	}
 }
