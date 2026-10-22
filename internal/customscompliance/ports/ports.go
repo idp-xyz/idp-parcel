@@ -44,6 +44,10 @@ type ExternalResultRecord struct {
 	// 记录、同一事务——放行结果不是从分层事实推导出来的第二份东西，是同一次接收按来源
 	// 权威语义拆出的另一面；分开存只是因为它的形状（种类/机构/条件）不是每一层都有。
 	Release *domain.CustomsReleaseOutcome
+	// CorrectionInForce 说这份带着来源的更正指向（Result.Corrects）到达时，更正关系在同一范围上生效了：
+	// 所更正那份从此退出当前判断，只留作历史。它是接收那一刻的判断，与 LayerConflict 一样只建立不改写；
+	// 判法见 domain.CheckLayerConsistency。
+	CorrectionInForce bool
 }
 
 type ExternalResultSaveOutcome uint8
@@ -56,7 +60,8 @@ const (
 
 // ExternalResultStore 按幂等键找回并保存接收记录（写入代数同 ADR-0031），并按提交
 // 版本读回同一提交已保存的各层事实供同层一致性比对。读回的放行层事实带着同一次接收
-// 拆出的放行事实：放行层的先后按放行种类判，少了它就分不出推进与回退。
+// 拆出的放行事实：放行层的先后按放行种类判，少了它就分不出推进与回退。各份事实连同它的
+// 更正指向与更正是否生效一起读回：被生效更正取代的那份不再参与比对，只许更正链尾也靠它判。
 //
 // LoadForSubmission 必须在随后落册的那笔事务里调，并从这一刻起到事务结束把同一（租户，
 // 提交版本）上的另一次比对读挡在外面。读已提交下两份同层结果并发到达时，各自读不到对方

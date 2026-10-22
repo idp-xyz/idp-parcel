@@ -73,6 +73,10 @@ const (
 	// 却无权威解释。真实代码映射（PAR-CUS-01/02）属实例半边，没有它接入侧拆不出种类；
 	// 编排不从原始文字猜「放行」是全部还是部分。
 	ReleaseSemanticsUninterpreted
+	// CorrectedResultNotRecorded：来源指名了所更正的那一份，它却还不在册。可能是乱序——原结果后到——
+	// 此刻判断不了这份更正与谁之间成立关系；不当作不带更正指向的结果去判（那等于丢掉来源的更正语义），
+	// 也不落一份等原结果补到，来源重投即可续办。
+	CorrectedResultNotRecorded
 )
 
 func (reason ExternalResultUndecidedReason) String() string {
@@ -93,6 +97,8 @@ func (reason ExternalResultUndecidedReason) String() string {
 		return "JURISDICTION_UNRESOLVED"
 	case ReleaseSemanticsUninterpreted:
 		return "RELEASE_SEMANTICS_UNINTERPRETED"
+	case CorrectedResultNotRecorded:
+		return "CORRECTED_RESULT_NOT_RECORDED"
 	default:
 		return ""
 	}
@@ -126,6 +132,9 @@ type ReceiveExternalResultCommand struct {
 	OccurredAt     time.Time
 	ReceivedAt     time.Time
 	Release        *ReleaseContent
+	// Corrects 是来源明确声明本结果所更正的那一份的来源标识，可缺。缺席即没有更正语义，照同层判法判后续
+	// 事件或矛盾；本编排不从业务时间或语义差别猜更正（UC-CC-006「没有更正语义的矛盾结果保持冲突」）。
+	Corrects string
 }
 
 type ReceiveExternalResultResult struct {
@@ -181,8 +190,9 @@ func NewReceiveExternalResultHandler(deps ReceiveExternalResultDeps) *ReceiveExt
 
 // Handle 把一条外部监管响应推进到分层事实：幂等/冲突按内容指纹分界 → 关联原提交
 // （找不到→留存不猜）→ 评估时点与适用辖区（取不出→未决）→ 按时点与辖区解析解释
-// 规则版本（未配置→未决）→ 领域解释（放行层另落放行事实，拆不出放行三件→未决）与
-// 同层一致性（同层后续事件照常记下，矛盾留存双方并标冲突）→ 原子提交 → 发布意图。
+// 规则版本（未配置→未决）→ 领域解释（放行层另落放行事实，拆不出放行三件→未决）→ 更正
+// 指向所指那份在册（还没有→未决）→ 同层一致性（同层后续事件照常记下，来源指明的更正形成
+// 更正关系，矛盾留存双方并标冲突）→ 原子提交 → 发布意图。
 // 意图投递失败不翻结果，重放重发同一份。
 func (handler *ReceiveExternalResultHandler) Handle(
 	ctx context.Context,
@@ -208,16 +218,21 @@ func (handler *ReceiveExternalResultHandler) Handle(
 			Condition: command.Release.Condition,
 		}
 	}
-	_, digest, err := domain.CanonicalizeExternalResultPayload(command.Layer, command.RawSemantics, command.ClaimedVersion, command.Attempt, command.Scope, command.OccurredAt, releaseContent)
+	_, digest, err := domain.CanonicalizeExternalResultPayload(command.Layer, command.RawSemantics, command.ClaimedVersion, command.Attempt, command.Scope, command.OccurredAt, releaseContent, command.Corrects)
 	if err != nil {
 		return ReceiveExternalResultResult{}, err
+	}
+	unversioned := ""
+	if command.Corrects == "" {
+		// 无版本那一版表达不了更正指向，带指向的命令没有无版本摘要可比。
+		unversioned = unversionedExternalResultDigest(command)
 	}
 	existing, found, err := handler.deps.Results.FindByKey(ctx, key)
 	if err != nil {
 		return resultStoreUndecided(command.SourceID), nil
 	}
 	if found {
-		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedExternalResultDigest(command)) {
+		switch domain.CompareStoredExternalResultDigest(existing.ContentDigest, digest, unversioned) {
 		case domain.SamePayload:
 			return handler.existingResult(ctx, existing)
 		case domain.DifferentPayload:
@@ -318,6 +333,7 @@ func (handler *ReceiveExternalResultHandler) Handle(
 		Scope:        scope,
 		OccurredAt:   command.OccurredAt,
 		ReceivedAt:   command.ReceivedAt,
+		Corrects:     command.Corrects,
 	})
 	if err != nil {
 		return ReceiveExternalResultResult{outcome: ResultNotAccepted}, nil
@@ -340,6 +356,22 @@ func (handler *ReceiveExternalResultHandler) Handle(
 		release = &received
 	}
 
+	// 所更正那份在不在册先在这里问：同层、同版本那些关系由领域判，这里只分「还没有」与「是一份留存、没有
+	// 监管事实可更正」。所指那份一旦在册就不会消失，所以这一读不必与比对读串在同一把锁下。
+	if corrected, has := interpreted.Corrects(); has {
+		target, found, err := handler.deps.Results.FindByKey(ctx, ports.ExternalResultKey{TenantID: command.TenantID, SourceID: corrected})
+		if err != nil {
+			return resultStoreUndecided(command.SourceID), nil
+		}
+		if !found {
+			return ReceiveExternalResultResult{outcome: ResultUndecided, reason: CorrectedResultNotRecorded,
+				continuation: resultContinuation("CORRECTED_RESULT_NOT_RECORDED", command.SourceID)}, nil
+		}
+		if target.Unattributable {
+			return ReceiveExternalResultResult{outcome: ResultNotAccepted}, nil
+		}
+	}
+
 	layerFacts, err := handler.deps.Results.LoadForSubmission(ctx, command.TenantID, version)
 	if errors.Is(err, ports.ErrLayerFactInconsistent) {
 		// 在册的某一行装不回来，重投多少次都是同一行坏：与在册事实配不上层次（同层一致性核对交出
@@ -358,13 +390,18 @@ func (handler *ReceiveExternalResultHandler) Handle(
 		RecordedAt:    handler.deps.Clock.Now(),
 	}
 	outcome := ResultRecorded
-	switch err := domain.CheckLayerConsistency(layerFacts, domain.LayerFact{Result: interpreted, Release: release}); {
+	switch inForce, err := domain.CheckLayerConsistency(layerFacts, domain.LayerFact{Result: interpreted, Release: release}); {
 	case errors.Is(err, domain.ErrLayerConflict):
 		// 同层冲突：双方事实都留存，不选边、不改当前判断——冲突以标记与结果格显式可见。同层
-		// 后续事件不走到这里，它按业务时间进入当前判断。
+		// 后续事件与来源指明的更正不走到这里，前者按业务时间、后者按更正关系进入当前判断。
 		record.LayerConflict = true
 		outcome = ResultLayerConflict
-	case err != nil:
+	case errors.Is(err, domain.ErrCorrectionOutsideSubmission), errors.Is(err, domain.ErrCorrectionAcrossLayers):
+		// 更正指向跨了提交版本或层次：矛盾输入，构造不出一条同层更正关系。
+		return ReceiveExternalResultResult{outcome: ResultNotAccepted}, nil
+	case err == nil:
+		record.CorrectionInForce = inForce
+	default:
 		// 新到这份由本编排刚解释成形，走到这里是在册事实的放行事实与层次配不上——仓储
 		// 不变量已破，不是来源的错，不答未受理；整笔不作答。
 		return ReceiveExternalResultResult{}, fmt.Errorf("customs compliance: layer facts of %s: %w", version, err)

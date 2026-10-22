@@ -140,7 +140,7 @@ func TestReleasesAdvanceByKindAlongBusinessTime(t *testing.T) {
 		"说不出种类的存量，原始语义不同":  {layerFact(t, "r-1", domain.ReleaseResultLayer, "RELEASED", domain.ReleaseKindInvalid, earlierAt), release(t, "r-2", domain.FullRelease, laterAt), true},
 	} {
 		t.Run(name, func(t *testing.T) {
-			err := domain.CheckLayerConsistency([]domain.LayerFact{test.existing}, test.incoming)
+			_, err := domain.CheckLayerConsistency([]domain.LayerFact{test.existing}, test.incoming)
 			if test.conflict && !errors.Is(err, domain.ErrLayerConflict) {
 				t.Fatalf("err = %v; 这是矛盾，却没判冲突——后到的一方会按最后到达改掉当前判断", err)
 			}
@@ -175,7 +175,7 @@ func TestProcessDecisionsFormASequenceAndOtherLayersHoldOneConclusion(t *testing
 		"处置决定换了一种":        {single(domain.DispositionDecisionLayer, "x-1", "RETURN", earlierAt), single(domain.DispositionDecisionLayer, "x-2", "DESTROY", laterAt), true},
 	} {
 		t.Run(name, func(t *testing.T) {
-			err := domain.CheckLayerConsistency([]domain.LayerFact{test.existing}, test.incoming)
+			_, err := domain.CheckLayerConsistency([]domain.LayerFact{test.existing}, test.incoming)
 			if test.conflict && !errors.Is(err, domain.ErrLayerConflict) {
 				t.Fatalf("err = %v, want ErrLayerConflict", err)
 			}
@@ -199,8 +199,8 @@ func TestTheJudgmentIsSymmetricAndAConsistentChainRecordsNoConflictInAnyOrder(t 
 	}
 	for _, one := range pool {
 		for _, other := range pool {
-			forward := domain.CheckLayerConsistency([]domain.LayerFact{one}, other)
-			backward := domain.CheckLayerConsistency([]domain.LayerFact{other}, one)
+			_, forward := domain.CheckLayerConsistency([]domain.LayerFact{one}, other)
+			_, backward := domain.CheckLayerConsistency([]domain.LayerFact{other}, one)
 			if errors.Is(forward, domain.ErrLayerConflict) != errors.Is(backward, domain.ErrLayerConflict) {
 				t.Fatalf("%s 与 %s 的判断随到达顺序翻转：%v / %v",
 					one.Result.SourceID(), other.Result.SourceID(), forward, backward)
@@ -217,7 +217,7 @@ func TestTheJudgmentIsSymmetricAndAConsistentChainRecordsNoConflictInAnyOrder(t 
 	for _, order := range [][]int{{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}} {
 		var booked []domain.LayerFact
 		for _, index := range order {
-			if err := domain.CheckLayerConsistency(booked, chain[index]); err != nil {
+			if _, err := domain.CheckLayerConsistency(booked, chain[index]); err != nil {
 				t.Fatalf("到达顺序 %v 上 %s 被判 %v", order, chain[index].Result.SourceID(), err)
 			}
 			booked = append(booked, chain[index])
@@ -235,7 +235,7 @@ func TestTheJudgmentIsSymmetricAndAConsistentChainRecordsNoConflictInAnyOrder(t 
 		"部分先到":  {[]domain.LayerFact{partial, full}, conditional},
 		"附条件先到": {[]domain.LayerFact{conditional, full}, partial},
 	} {
-		if err := domain.CheckLayerConsistency(order.booked, order.flagged); !errors.Is(err, domain.ErrLayerConflict) {
+		if _, err := domain.CheckLayerConsistency(order.booked, order.flagged); !errors.Is(err, domain.ErrLayerConflict) {
 			t.Fatalf("%s：后到的 %s 该记冲突：%v", name, order.flagged.Result.SourceID(), err)
 		}
 	}
@@ -262,11 +262,11 @@ func TestTheJudgmentIsSymmetricAndAConsistentChainRecordsNoConflictInAnyOrder(t 
 	if err != nil {
 		t.Fatalf("release: %v", err)
 	}
-	if err := domain.CheckLayerConsistency(
+	if _, err := domain.CheckLayerConsistency(
 		[]domain.LayerFact{{Result: movedResult, Release: &movedRelease}}, regression); err != nil {
 		t.Fatalf("err = %v; 别的范围上的全部放行不约束这一范围", err)
 	}
-	if err := domain.CheckLayerConsistency(
+	if _, err := domain.CheckLayerConsistency(
 		[]domain.LayerFact{layerFact(t, "o-3", domain.ProcessDecisionLayer, "INSPECTION_ORDERED", domain.ReleaseKindInvalid, laterAt)},
 		layerFact(t, "o-4", domain.ReleaseResultLayer, "RELEASE/PARTIAL", domain.PartialRelease, laterAt)); err != nil {
 		t.Fatalf("err = %v; 不同层的事实各归各位", err)
@@ -278,15 +278,15 @@ func TestTheJudgmentIsSymmetricAndAConsistentChainRecordsNoConflictInAnyOrder(t 
 func TestMismatchedReleaseShapesAreInvalidNotSilentlyConsistent(t *testing.T) {
 	partial := release(t, "s-1", domain.PartialRelease, earlierAt)
 	bare := layerFact(t, "s-2", domain.ReleaseResultLayer, "RELEASE/FULL", domain.ReleaseKindInvalid, laterAt)
-	if err := domain.CheckLayerConsistency(nil, bare); !errors.Is(err, domain.ErrInvalidExternalResult) {
+	if _, err := domain.CheckLayerConsistency(nil, bare); !errors.Is(err, domain.ErrInvalidExternalResult) {
 		t.Fatalf("err = %v; 新到的放行层说不出种类，排不进放行的先后", err)
 	}
 	smuggled := layerFact(t, "s-3", domain.BusinessAcceptanceLayer, "ACCEPTED", domain.ReleaseKindInvalid, laterAt)
 	smuggled.Release = partial.Release
-	if err := domain.CheckLayerConsistency(nil, smuggled); !errors.Is(err, domain.ErrInvalidExternalResult) {
+	if _, err := domain.CheckLayerConsistency(nil, smuggled); !errors.Is(err, domain.ErrInvalidExternalResult) {
 		t.Fatalf("err = %v; 非放行层夹带放行事实", err)
 	}
-	if err := domain.CheckLayerConsistency([]domain.LayerFact{smuggled}, partial); !errors.Is(err, domain.ErrInvalidExternalResult) {
+	if _, err := domain.CheckLayerConsistency([]domain.LayerFact{smuggled}, partial); !errors.Is(err, domain.ErrInvalidExternalResult) {
 		t.Fatalf("err = %v; 在册事实配不上层次也不得当作没有冲突", err)
 	}
 	strayScope, err := domain.ReceiveReleaseOutcome(domain.FullRelease, partial.Release.Authority(),
@@ -296,7 +296,7 @@ func TestMismatchedReleaseShapesAreInvalidNotSilentlyConsistent(t *testing.T) {
 	}
 	stray := release(t, "s-4", domain.FullRelease, laterAt)
 	stray.Release = &strayScope
-	if err := domain.CheckLayerConsistency(nil, stray); !errors.Is(err, domain.ErrInvalidExternalResult) {
+	if _, err := domain.CheckLayerConsistency(nil, stray); !errors.Is(err, domain.ErrInvalidExternalResult) {
 		t.Fatalf("err = %v; 放行范围与结果范围不符", err)
 	}
 }

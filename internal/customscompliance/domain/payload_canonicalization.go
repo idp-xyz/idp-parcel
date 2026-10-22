@@ -16,9 +16,18 @@ import (
 // 凭证门禁指纹的词形被既有注释钉住，不在这一版里改写。
 const payloadCanonicalizationVersion = "CCC-1"
 
+// externalResultCorrectionCanonicalizationVersion 是外部结果口带「更正哪一份」时的形状。加这一键是在已接的
+// 册正文里加键，照 ADR-0267 决定一换号；换号后按内容取能表达它的最低一版——不带更正指向的外部结果与其余各口
+// 照旧写 CCC-1、逐字节不变，只有带更正指向的外部结果写这一版。
+const externalResultCorrectionCanonicalizationVersion = "CCC-2"
+
 func canonicalPayloadDigest(document []byte) string {
+	return versionedPayloadDigest(payloadCanonicalizationVersion, document)
+}
+
+func versionedPayloadDigest(version string, document []byte) string {
 	sum := sha256.Sum256(document)
-	return payloadCanonicalizationVersion + ":" + hex.EncodeToString(sum[:])
+	return version + ":" + hex.EncodeToString(sum[:])
 }
 
 // StoredDigestComparison 是已存摘要与本次命令的比对结论。摘要只在同一形状版本内可比
@@ -48,6 +57,17 @@ func CompareStoredDigest(stored, current, unversioned string) StoredDigestCompar
 	default:
 		return UnknownPayloadShape
 	}
+}
+
+// CompareStoredExternalResultDigest 是外部结果口的比对：在 CompareStoredDigest 认得的形状之外还认 CCC-2。
+// 两侧都按内容取能表达它的最低一版，所以同内容必同形状同串；形状不同说明一侧带更正指向、另一侧不带，
+// 照字符串比答异串正是内容冲突。本次命令带更正指向时无版本那一版表达不了它，调用方传空串，存量的无版本
+// 摘要因而一律答异串。
+func CompareStoredExternalResultDigest(stored, current, unversioned string) StoredDigestComparison {
+	if shape, _, versioned := strings.Cut(stored, ":"); versioned && shape == externalResultCorrectionCanonicalizationVersion {
+		return payloadComparison(stored == current)
+	}
+	return CompareStoredDigest(stored, current, unversioned)
 }
 
 func payloadComparison(same bool) StoredDigestComparison {
@@ -85,8 +105,9 @@ type ExternalReleaseContent struct {
 	Condition string
 }
 
-// CanonicalizeExternalResultPayload 定形「接收外部监管结果」。来源身份与角色不进摘要。
-func CanonicalizeExternalResultPayload(layer ResultLayer, rawSemantics, claimedVersion string, attempt int, scope string, occurredAt time.Time, release *ExternalReleaseContent) ([]byte, string, error) {
+// CanonicalizeExternalResultPayload 定形「接收外部监管结果」。来源身份与角色不进摘要。corrects 为空时是
+// CCC-1 那一形、逐字节不变；非空时多一键 corrects、写 CCC-2（见 externalResultCorrectionCanonicalizationVersion）。
+func CanonicalizeExternalResultPayload(layer ResultLayer, rawSemantics, claimedVersion string, attempt int, scope string, occurredAt time.Time, release *ExternalReleaseContent, corrects string) ([]byte, string, error) {
 	type releaseDocument struct {
 		Kind      string `json:"kind"`
 		Authority string `json:"authority"`
@@ -100,7 +121,7 @@ func CanonicalizeExternalResultPayload(layer ResultLayer, rawSemantics, claimedV
 			Condition: release.Condition,
 		}
 	}
-	return marshalPayload(struct {
+	type body struct {
 		Canonicalization string           `json:"canonicalization"`
 		Face             string           `json:"face"`
 		Layer            string           `json:"layer"`
@@ -110,7 +131,8 @@ func CanonicalizeExternalResultPayload(layer ResultLayer, rawSemantics, claimedV
 		Scope            string           `json:"scope"`
 		OccurredAt       string           `json:"occurred_at"`
 		Release          *releaseDocument `json:"release"`
-	}{
+	}
+	document := body{
 		Canonicalization: payloadCanonicalizationVersion,
 		Face:             "RECEIVE_EXTERNAL_RESULT",
 		Layer:            layer.String(),
@@ -120,7 +142,19 @@ func CanonicalizeExternalResultPayload(layer ResultLayer, rawSemantics, claimedV
 		Scope:            scope,
 		OccurredAt:       canonicalInstant(occurredAt),
 		Release:          encoded,
-	})
+	}
+	if corrects == "" {
+		return marshalPayload(document)
+	}
+	document.Canonicalization = externalResultCorrectionCanonicalizationVersion
+	encodedDocument, err := json.Marshal(struct {
+		body
+		Corrects string `json:"corrects"`
+	}{document, corrects})
+	if err != nil {
+		return nil, "", fmt.Errorf("customs compliance: canonicalize command payload: %w", err)
+	}
+	return encodedDocument, versionedPayloadDigest(externalResultCorrectionCanonicalizationVersion, encodedDocument), nil
 }
 
 // CanonicalizeDeclarationPayload 定形申报提交与更正共用的内容判据：程序、资料、角色

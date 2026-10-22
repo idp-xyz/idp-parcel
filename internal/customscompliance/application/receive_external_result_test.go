@@ -83,7 +83,7 @@ func (double *resultStoreDouble) LoadForSubmission(
 		if record.Unattributable || record.Result.Version() != version {
 			continue
 		}
-		facts = append(facts, domain.LayerFact{Result: record.Result, Release: record.Release})
+		facts = append(facts, domain.LayerFact{Result: record.Result, Release: record.Release, CorrectionInForce: record.CorrectionInForce})
 	}
 	return facts, nil
 }
@@ -437,6 +437,7 @@ func TestUnconfiguredRulesAndDependencyFailuresStayUndecided(t *testing.T) {
 			application.InterpretationRuleUnconfigured, application.LayerFactsUnavailable,
 			application.EvaluationInstantUntrusted, application.CaseChainUnavailable,
 			application.JurisdictionUnresolved, application.ReleaseSemanticsUninterpreted,
+			application.CorrectedResultNotRecorded,
 		} {
 			label := reason.String()
 			if label == "" {
@@ -444,11 +445,11 @@ func TestUnconfiguredRulesAndDependencyFailuresStayUndecided(t *testing.T) {
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 8 {
+		if len(labels) != 9 {
 			t.Fatalf("labels collapsed into %d", len(labels))
 		}
 		if application.ExternalResultUndecidedReason(len(labels)+1).String() != "" {
-			t.Fatal("第九个未决原因带了标签——封闭集合被悄悄放开")
+			t.Fatal("第十个未决原因带了标签——封闭集合被悄悄放开")
 		}
 	})
 }

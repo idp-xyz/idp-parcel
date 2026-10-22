@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,7 +53,7 @@ func TestCommandPayloadsRoundTripAsCCC1(t *testing.T) {
 			call: func() ([]byte, string, error) {
 				return domain.CanonicalizeExternalResultPayload(domain.ReleaseResultLayer, "RAW", "v1", 2, "SCOPE", at, &domain.ExternalReleaseContent{
 					Kind: domain.FullRelease, Authority: "AUTH", Condition: "COND",
-				})
+				}, "")
 			},
 		},
 		{
@@ -60,7 +61,7 @@ func TestCommandPayloadsRoundTripAsCCC1(t *testing.T) {
 			document: `{"canonicalization":"CCC-1","face":"RECEIVE_EXTERNAL_RESULT","layer":"REGULATORY_RECEIPT","raw_semantics":"RAW","claimed_version":"v1","attempt":2,"scope":"SCOPE","occurred_at":"2026-03-05T02:11:12.345678901Z","release":null}`,
 			digest:   "CCC-1:b909d924e04e9a9ca3152c09d7044ecd79156001db2222fa3993e102c64588be",
 			call: func() ([]byte, string, error) {
-				return domain.CanonicalizeExternalResultPayload(domain.RegulatoryReceiptLayer, "RAW", "v1", 2, "SCOPE", at, nil)
+				return domain.CanonicalizeExternalResultPayload(domain.RegulatoryReceiptLayer, "RAW", "v1", 2, "SCOPE", at, nil, "")
 			},
 		},
 		{
@@ -118,6 +119,47 @@ func TestCommandPayloadsRoundTripAsCCC1(t *testing.T) {
 			}
 			if roundTrip["canonicalization"] != "CCC-1" {
 				t.Fatalf("canonicalization %v", roundTrip["canonicalization"])
+			}
+		})
+	}
+}
+
+// Covers: ADR-0267 决定一——外部结果口加「更正哪一份」是在已接的册正文里加键，照 ADR-0014 换号；换号之后按内容
+// 取能表达它的最低一版：不带更正指向的文档仍写 CCC-1、逐字节不变（上一用例钉着），带更正指向的写 CCC-2。
+func TestAnExternalResultNamingACorrectedResultIsCanonicalizedAsCCC2(t *testing.T) {
+	document, digest, err := domain.CanonicalizeExternalResultPayload(domain.AssessedDutyLayer, "RAW", "v1", 2, "SCOPE", cccInstant(), nil, "SOURCE-0")
+	if err != nil {
+		t.Fatalf("canonicalize: %v", err)
+	}
+	const want = `{"canonicalization":"CCC-2","face":"RECEIVE_EXTERNAL_RESULT","layer":"ASSESSED_DUTY","raw_semantics":"RAW","claimed_version":"v1","attempt":2,"scope":"SCOPE","occurred_at":"2026-03-05T02:11:12.345678901Z","release":null,"corrects":"SOURCE-0"}`
+	if string(document) != want {
+		t.Fatalf("document\n got %s\nwant %s", document, want)
+	}
+	if !strings.HasPrefix(digest, "CCC-2:") {
+		t.Fatalf("digest %s 不带 CCC-2 前缀", digest)
+	}
+	_, plain, err := domain.CanonicalizeExternalResultPayload(domain.AssessedDutyLayer, "RAW", "v1", 2, "SCOPE", cccInstant(), nil, "")
+	if err != nil {
+		t.Fatalf("canonicalize: %v", err)
+	}
+	_, other, err := domain.CanonicalizeExternalResultPayload(domain.AssessedDutyLayer, "RAW", "v1", 2, "SCOPE", cccInstant(), nil, "SOURCE-1")
+	if err != nil {
+		t.Fatalf("canonicalize: %v", err)
+	}
+	for name, test := range map[string]struct {
+		stored, current, unversioned string
+		want                         domain.StoredDigestComparison
+	}{
+		"同一份更正重放":           {digest, digest, "", domain.SamePayload},
+		"更正指向换了一份":          {digest, other, "", domain.DifferentPayload},
+		"在册的不带更正指向，本次带":     {plain, digest, "", domain.DifferentPayload},
+		"在册的带更正指向，本次不带":     {digest, plain, "bb", domain.DifferentPayload},
+		"在册的是无版本存量，本次带更正指向": {"bb", digest, "", domain.DifferentPayload},
+		"认不出的形状":            {"CCC-3:aa", digest, "", domain.UnknownPayloadShape},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := domain.CompareStoredExternalResultDigest(test.stored, test.current, test.unversioned); got != test.want {
+				t.Fatalf("CompareStoredExternalResultDigest = %d, want %d", got, test.want)
 			}
 		})
 	}
