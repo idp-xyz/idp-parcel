@@ -1,9 +1,9 @@
 # 84 VE 跟随 CC 外部结果更正关系
 
 Category: enhancement
-Status: needs-triage——建议 R2（上线后尽快）：CC 已形成层内更正关系（[code/04](./04-customs-external-results-have-no-in-layer-correction-relation.md)），当前判断按更正取；VE 运营投影仍把生效的更正当作一条独立条目派生，被更正的原条目照旧当前有效。客户视图今天不列里程碑明细，演示映射下改前改后客户面输出相同，所以不列 R1；接真实关务程序、或客户视图开始按条目披露之前升 R1。2026-10-21 协调方据 code/04 隔离评审立（作者子代理代笔；用户「你作为业务和系统专家自决……解决所有的问题」授权）。分级由协调方定稿。
-Blocked by: 一篇待接受的新 ADR（见「要裁的」）；code/04 进 main。
-出处：code/04 完成记录代决第 9 条与越权风险点 7；code/04 隔离评审 N1。
+Status: ready-for-agent——R2（上线后尽快）：CC 已形成层内更正关系（[code/04](./04-customs-external-results-have-no-in-layer-correction-relation.md)），当前判断按更正取；VE 运营投影仍把生效的更正当作一条独立条目派生，被更正的原条目照旧当前有效。客户视图今天不列里程碑明细，演示映射下改前改后客户面输出相同，所以不列 R1；接真实关务程序、或客户视图开始按条目披露之前升 R1。2026-10-21 协调方据 code/04 隔离评审立（作者子代理代笔；用户「你作为业务和系统专家自决……解决所有的问题」授权）。
+Blocked by: [code/04](./04-customs-external-results-have-no-in-layer-correction-relation.md)（进 main 之后开工）
+出处：code/04 完成记录的代决「VE 不跟随更正关系」与越权风险点「CC 当前判断与 VE 运营投影分叉」；code/04 隔离评审 N1。
 
 ## 现象
 
@@ -24,7 +24,12 @@ CC 收到来源明确指名所更正那份的同层结果时，记下更正关�
 
 ## 规模
 
-M：新 ADR（部分停用 ADR-0197 决定三「所以不登前身」一句与 ADR-0226 决定三「VE 一侧不必改」一句）；只改 VE 消费 CC 外部结果的适配器与它的用例，CC 一侧已给出需要的全部字段。
+M：一篇新 ADR 加适配器改动。新 ADR 部分停用 ADR-0197 决定三中事实引用、事实版本与前身的取法，视裁法而定；「要裁的」第 4 件按推荐裁时还触及 ADR-0226 决定三「投影把每一份未记冲突的接收各派生成本层条目」。代码只改 VE 消费 CC 外部结果的适配器与它的用例，CC 一侧已给出需要的全部字段。
+
+## 做法
+
+1. 起草新 ADR，裁下「要裁的」各件，并照 [adr/README](../../../docs/adr/README.md) 顶部写法在被部分停用的 ADR 上挂前向指针。ADR 号向编号分配方取，不自取。起草与接受由协调方代决（用户已授权自决），越权风险点照常列出。
+2. ADR 接受后改适配器，把 `TestAnInForceCorrectionIsDerivedAsAnIndependentEntryWithoutAPredecessor` 翻成新口径，并补真库派发用例。
 
 ## 要裁的（新 ADR）
 
