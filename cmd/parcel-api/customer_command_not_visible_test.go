@@ -33,10 +33,11 @@ func (intake fixedSupplementIntake) IntakeSupplement(context.Context, *http.Requ
 	return intake.command, nil
 }
 
-// Covers: ADR-0022「`!found` 一律映射为对应上下文的`统一不可见结果`，用 `404`」在客户面四个命令口的生产编排上——库里没有
-// 那份委托，真仓储查过，端点答 404 `SHIPMENT_REQUEST_NOT_VISIBLE`、不带 outcome，不再是 5xx `NO_ANSWER_FORMED`（离线客户端会
-// 把 5xx 留在队里无限重投）。取消口这一格此前是 200 `REQUEST_NOT_ACCEPTED`，与字段缺并成一格（UC-PS-006 结果语义）。Intake 是
-// 固定替身：这四行今天挂未配置即拒，采信身份那半归首方 Intake 逐口换上时；测试输入是隔离合成，只记 `S`。
+// Covers: `AT-PS-075`、`AT-PS-090`、`AT-PS-106` 的传输层半边——ADR-0022「`!found` 一律映射为对应上下文的`统一不可见结果`，
+// 用 `404`」在客户面四个命令口的生产编排上：库里没有那份委托，真仓储查过，端点答 404 `SHIPMENT_REQUEST_NOT_VISIBLE`、
+// 不带 outcome。不答 5xx `NO_ANSWER_FORMED`：离线客户端会把 5xx 留在队里无限重投；取消口也不并进字段缺的
+// `REQUEST_NOT_ACCEPTED`（UC-PS-006 结果语义）。Intake 是固定替身：这四行今天挂未配置即拒，采信身份那半归首方 Intake
+// 逐口换上时；测试输入是隔离合成，只记 `S`。
 func TestCustomerCommandsNamingAnAbsentRequestAnswerNotFoundOnTheWiredOrchestrations(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
