@@ -1,7 +1,7 @@
 # 22 PS 客户面 HTTP 契约没按已接受的 ADR 落：`!found` 答 500 而非 404，`/v1` 与问题详情没落地
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code22
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code22
 Blocked by: 无
 出处：[audit/ps.md](../audit/ps.md) PS-07、PS-24，取证 [audit/ps-code.md](../audit/ps-code.md) 第 3、12 条。两条同一上下文、同一根因——客户面 HTTP 适配器的契约形状没跟上已接受的契约 ADR——合成本票（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，现象仍在）。
 
@@ -119,3 +119,10 @@ M–L：路径加 `/v1`（旧路径是否在过渡期双挂见「要裁的」）
 | — | 装配层只有 403 探针 | `TestCustomerFacingLinesAnswerProblemDetails` 补 405 探针：处理器自答、`Allow` 头、问题详情、`METHOD_NOT_ALLOWED` |
 
 验证（修订后，同一分支，main `be6b5ad20` 上无需再 rebase）：`go build ./...`、`go vet ./...`、`gofmt -l` 干净；`TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/parcelshipment/... ./internal/visibilityexception/... ./internal/nodeoperations/... ./internal/platform/httpapi/... ./cmd/parcel-api/ ./internal/architecture/...` 48 个包 ok、退出码 0；改过的用例另跑 `-count=3` 全过；admin-web 三道门：`tsc -b --noEmit` 退 0、`run-tests.mjs` 601 过 0 失败、`vite build` 成功。种子脚本不读改名的码，未复灌。
+
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-code22` 由协调方 rebase 到 main `9e787f2c0`（`git rebase main` 退 0）后快进，tip `51b848064`；隔离评审无阻断，基线前改法按协调方裁定已收（`type` 用 tag URI、资料修订未接受改回 400 + `SHIPMENT_REQUEST_NOT_YET_ACCEPTED`、契约文档限定处理器作答、后续票改号 code/82）。协调方放行本票改 `cmd/parcel-api/endpoints_test.go` 的最小几处与 `endpoints.go` 一句注释（ADR-0222 防并行撞文件，此时只有本票动 parcel-api）。
+- 协调方在 tip 上单独提交重算的 AT 计数与重生成的机制清点；ADR 索引无变化；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净；admin-web `tsc -b --noEmit`、`run-tests.mjs` 601/601、`vite build` 都过；演示种子在一次性库上灌通，用后删库。
+- 去向：code/82（操作者、作业事实、集成三族改问题详情，集成族加 `/v1`，路由层 404/405 与 panic 问题体，端点描述符与生成器，R3）。首方契约首个兼容性基线自本笔起成立，此后改 `type`/`title`/码名属破坏性变更（ADR-0140 决定五、六）。
