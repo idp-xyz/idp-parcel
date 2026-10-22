@@ -32,10 +32,12 @@ var (
 		"visibility exception parcelshipment adapter: customer account lookup is unavailable")
 )
 
-// CurrentProjectionView 按（租户+包裹）读回当前投影。由 vepostgres.Projections 满足。
-// 只读当前版：客户视图只基于当前投影形成（UC-VE-008），历史版由投影库自己留存。
+// CurrentProjectionView 按（租户+包裹）读回当前投影，并让它在本消费事务结束前一直是当前版。
+// 由 vepostgres.Projections.LockCurrent 满足。只读当前版：客户视图只基于当前投影形成
+// （UC-VE-008），历史版由投影库自己留存。「一直是当前版」是新旧判断站得住的前提——判完新旧
+// 之后还要读写客户视图，这段里当前版若能换掉，旧信封就会按已被替代的投影写回视图。
 type CurrentProjectionView interface {
-	FindCurrent(
+	LockCurrent(
 		ctx context.Context,
 		tenant vedomain.TenantID,
 		parcel vedomain.TrackedParcelReference,
@@ -91,7 +93,8 @@ var _ veinbox.DerivedTrackingProjectionHandler = (*DeriveCustomerViewOnProjectio
 //
 // 版本判新旧：只为仍是当前版的信封派生视图。信封宣告的版本落后于当前版时业务终局
 // 跳过——每个投影版本在同一事务里各入队一封信，后继信封必然在途或已到，为旧版派生
-// 会让当前视图倒退到已被替代的投影内容。
+// 会让当前视图倒退到已被替代的投影内容。判出来的当前版在本事务里不会再换
+// （CurrentProjectionView），后继投影只能落在本事务提交之后，由它自己那封信再派生。
 //
 // 账户反查三格（ADR-0060 的零/一/多，勘察报告已裁）：零行不派生视图、不发明账户，
 // 投影照旧存在——未派生的记录就是本消费账上这封已入账而无视图行的信封，零行的两种
@@ -115,7 +118,7 @@ func (adapter *DeriveCustomerViewOnProjectionAdapter) HandleDerivedTrackingProje
 		return fmt.Errorf("%w: projection version: %v", ErrDerivedProjectionUntranslatable, err)
 	}
 
-	current, found, err := adapter.projections.FindCurrent(ctx, tenant, parcel)
+	current, found, err := adapter.projections.LockCurrent(ctx, tenant, parcel)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrDerivedProjectionUnreadable, err)
 	}

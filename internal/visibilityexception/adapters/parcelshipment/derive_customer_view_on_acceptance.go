@@ -140,7 +140,8 @@ func (adapter *DeriveCustomerViewOnAcceptanceAdapter) HandleFormedAcceptanceDeci
 			return fmt.Errorf("%w: declared parcel: %v", ErrAcceptanceDecisionUntranslatable, err)
 		}
 
-		projection, projectionFound, err := adapter.projections.FindCurrent(ctx, tenant, parcel)
+		// 与投影派生那路同一把锁：补派生按的这一版，在整封提交之前不会被后继投影换掉。
+		projection, projectionFound, err := adapter.projections.LockCurrent(ctx, tenant, parcel)
 		if err != nil {
 			return fmt.Errorf("%w: %v", ErrDerivedProjectionUnreadable, err)
 		}

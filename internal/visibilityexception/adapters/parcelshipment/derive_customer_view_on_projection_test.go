@@ -57,7 +57,7 @@ type currentProjectionDouble struct {
 	err        error
 }
 
-func (double *currentProjectionDouble) FindCurrent(
+func (double *currentProjectionDouble) LockCurrent(
 	_ context.Context, _ vedomain.TenantID, _ vedomain.TrackedParcelReference,
 ) (vedomain.TrackingProjection, bool, error) {
 	if double.err != nil {

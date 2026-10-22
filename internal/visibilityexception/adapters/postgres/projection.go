@@ -85,6 +85,61 @@ func (repository *Projections) FindCurrent(
 	return projection, true, nil
 }
 
+// LockCurrent 读回当前投影，并对当前标记持共享锁到环境事务结束：同一包裹的下一版投影要移标记，
+// 就得等这笔事务提交。客户视图派生的消费链用它——判过「信封宣告的仍是当前版」之后，读客户视图、
+// 写回视图都还在这笔事务里；读已提交下后继投影若能在这段里整段提交，连同它那封信先把视图带到
+// 新投影，这一路再按旧投影写回，视图写口的乐观锁拦不住（它读到的当前版正是后继刚写的那一版）。
+// 运营查阅与其余读面照旧走 FindCurrent，不排这把锁。
+//
+// 锁与读分两条语句：带连接的 FOR SHARE 撞上并发移标记时，读已提交只对被锁的标记行取最新版重核，
+// 连接进来的版本行仍是原先那一行，两边对不上整行被滤掉，读回的会是「没有当前投影」。先锁标记、
+// 再按它指名的版本取行，第二条语句的快照必然看得见那一版（版本行与标记同一事务落库）。
+func (repository *Projections) LockCurrent(
+	ctx context.Context,
+	tenant domain.TenantID,
+	parcel domain.TrackedParcelReference,
+) (domain.TrackingProjection, bool, error) {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return domain.TrackingProjection{}, false, fmt.Errorf("lock current projection: %w", err)
+	}
+
+	var versionID string
+	err = executor.QueryRow(ctx,
+		`SELECT version_id
+		   FROM visibility_exception.tracking_projection_current
+		  WHERE tenant_id = $1 AND parcel_ref = $2
+		    FOR SHARE`,
+		tenant.String(), parcel.String(),
+	).Scan(&versionID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.TrackingProjection{}, false, nil
+	}
+	if err != nil {
+		return domain.TrackingProjection{}, false, fmt.Errorf("lock current projection: %w", err)
+	}
+
+	var derivedAt time.Time
+	var priorVersion *string
+	var entriesRaw []byte
+	err = executor.QueryRow(ctx,
+		`SELECT derived_at, prior_version, entries
+		   FROM visibility_exception.tracking_projection_version
+		  WHERE tenant_id = $1 AND parcel_ref = $2 AND version_id = $3`,
+		tenant.String(), parcel.String(), versionID,
+	).Scan(&derivedAt, &priorVersion, &entriesRaw)
+	if err != nil {
+		// 标记经外键只能指名存下来的版本行，查无同样是读失败，不折成「没有当前投影」。
+		return domain.TrackingProjection{}, false, fmt.Errorf("lock current projection version: %w", err)
+	}
+
+	projection, err := rebuildProjection(versionID, parcel, derivedAt, priorVersion, entriesRaw)
+	if err != nil {
+		return domain.TrackingProjection{}, false, fmt.Errorf("rebuild projection: %w", err)
+	}
+	return projection, true, nil
+}
+
 // ListCurrent 按租户列出各包裹的当前投影版本（运营追踪查阅的列表读面,ADR-0076）。
 // 新派生的在前,同刻并列按包裹引用倒序,保证分页可重复;limit 非正是调用方编程错误
 // ——静默答一页会把「忘了传」变成一个没人决定过的页大小（判据与委托查阅读口同款）。
