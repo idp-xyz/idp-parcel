@@ -410,7 +410,8 @@ type DeliveryConditionView interface {
 type CommercialResolutionStore interface {
 	CommercialResolutionView
 	// Save 固定一次解析（ADR-0027 / UC-PC-002 步骤 5）。同标识同内容是重放，同标识
-	// 异内容是冲突——两者都不是 error，且绝不覆盖（ADR-0031）。
+	// 异内容是冲突——两者都不是 error，且绝不覆盖（ADR-0031）。内容只在同一规范化版本内可比
+	// （ADR-0014）：已固定的那一份按本构建不认得的版本写下时，重放与冲突都答不出，是 error。
 	Save(ctx context.Context, closure domain.CommercialClosure) (ResolutionSaveOutcome, error)
 }
 
