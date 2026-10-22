@@ -228,7 +228,7 @@ func newStatementFixture(t *testing.T) *statementFixture {
 		handoff:      &statementHandoffDouble{},
 	}
 	fixture.billing = &billingLockDouble{statements: fixture.statements}
-	fixture.handler = application.NewCutOffPublishStatementHandler(application.CutOffPublishStatementDeps{
+	handler, err := application.NewCutOffPublishStatementHandler(application.CutOffPublishStatementDeps{
 		Statements:       fixture.statements,
 		Charges:          fixture.charges,
 		Billing:          fixture.billing,
@@ -240,6 +240,10 @@ func newStatementFixture(t *testing.T) *statementFixture {
 		Downstream:       fixture.handoff,
 		Clock:            statementClock{at: statementNowAt},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.handler = handler
 	fixture.charges.charges["charge-A"] = confirmedStatementCharge(t, "charge-A", 12000)
 	fixture.charges.charges["charge-B"] = confirmedStatementCharge(t, "charge-B", 8000)
 	fixture.charges.charges["charge-late"] = confirmedStatementCharge(t, "charge-late", 3000)
@@ -315,7 +319,7 @@ func publishCommand(t *testing.T) application.PublishStatementCommand {
 	return application.PublishStatementCommand{
 		TenantID:            tenant,
 		Number:              "STMT-2026-08-001",
-		Account:             "settlement-account-1",
+		Account:             "ACCOUNT/syn-1",
 		Period:              "2026-08",
 		Version:             "draft/v1",
 		Currency:            "USD",

@@ -178,7 +178,7 @@ func newConfirmFixture(t *testing.T) *confirmFixture {
 		facts:        &factsViewDouble{configured: true, facts: registeredFacts(t)},
 		handoff:      &confirmationHandoffDouble{},
 	}
-	fixture.handler = application.NewConfirmChargeHandler(application.ConfirmChargeDeps{
+	handler, err := application.NewConfirmChargeHandler(application.ConfirmChargeDeps{
 		Charges:      fixture.store,
 		Conditions:   fixture.conditions,
 		Facts:        fixture.facts,
@@ -186,6 +186,10 @@ func newConfirmFixture(t *testing.T) *confirmFixture {
 		Downstream:   fixture.handoff,
 		Clock:        confirmClock{at: chargeConfirmedAt},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.handler = handler
 	fixture.store.charges["charge-1"] = provisionalCharge(t)
 	return fixture
 }

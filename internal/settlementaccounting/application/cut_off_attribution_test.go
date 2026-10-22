@@ -380,3 +380,151 @@ func TestACutStopsOnItsDependenciesAndRefusesAMalformedLastDay(t *testing.T) {
 		}
 	})
 }
+
+// foreignAccountStatementCharge 是确认时固定在另一个结算账户上的已确认费用，归属日已形成。
+func foreignAccountStatementCharge(t *testing.T, id string, amount int64) domain.CustomerCharge {
+	t.Helper()
+	facts := registeredFacts(t)
+	facts.SettlementAccount = billValue(t, domain.NewSettlementAccountID, "ACCOUNT/syn-2")
+	confirmed, err := estimatedOnlyCharge(t, id, amount).Confirm(
+		facts, billValue(t, domain.NewConfirmationBasisReference, "delivery-confirmed-"+id), statementCutOffAt.Add(-24*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	attributed, err := confirmed.WithAttributionDate(domain.AttributionDate{Year: 2026, Month: time.August, Day: 30})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return attributed
+}
+
+// noSourceInstantStatementCharge 是已确认、没有归属日、形成时没带来源发生时点的费用。
+func noSourceInstantStatementCharge(t *testing.T, id string, amount int64) domain.CustomerCharge {
+	t.Helper()
+	confirmed, err := estimatedOnlyCharge(t, id, amount).Confirm(
+		registeredFacts(t), billValue(t, domain.NewConfirmationBasisReference, "delivery-confirmed-"+id), statementCutOffAt.Add(-24*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return confirmed
+}
+
+// Covers: UC-SA-003「按结算账户隔离」与「同一费用被两个账户同时纳入形成归属冲突」的截单面：命令列了确认在别户的
+// 费用是提交矛盾，整笔未受理、不形成草稿、不落任何归属日；迟到纳入同理。
+func TestAChargeConfirmedOnAnotherAccountIsNotAcceptedByTheCut(t *testing.T) {
+	fixture := newStatementFixture(t)
+	fixture.forms.register(t, "fee-freight", domain.ChargeAttributionSourceOccurred)
+	fixture.arrangements.register(t, "ACCOUNT/syn-2", "Asia/Shanghai", 0)
+	fixture.charges.charges["charge-foreign"] = foreignAccountStatementCharge(t, "charge-foreign", 3000)
+	fixture.charges.charges["charge-unattributed"] = unattributedStatementCharge(t, "charge-unattributed", 3000)
+	command := publishCommand(t)
+	command.ChargeIDs = []string{"charge-unattributed", "charge-A", "charge-foreign"}
+
+	result, err := fixture.handler.Publish(context.Background(), command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome() != application.StatementNotAccepted || len(result.Exclusions()) != 0 {
+		t.Fatalf("outcome = %s exclusions = %+v", result.Outcome(), exclusionsOf(result))
+	}
+	if len(fixture.statements.records) != 0 || fixture.charges.records != 0 || len(fixture.billing.locks) != 0 {
+		t.Fatalf("别户费用进了截单：statements=%d records=%d locks=%v", len(fixture.statements.records), fixture.charges.records, fixture.billing.locks)
+	}
+
+	t.Run("nor by a late inclusion", func(t *testing.T) {
+		fixture := newStatementFixture(t)
+		fixture.charges.charges["charge-foreign"] = foreignAccountStatementCharge(t, "charge-foreign", 3000)
+		if _, err := fixture.handler.Publish(context.Background(), publishCommand(t)); err != nil {
+			t.Fatal(err)
+		}
+		tenant, _ := domain.NewTenantID("tenant-1")
+		result, err := fixture.handler.IncludeLateCharge(context.Background(), application.IncludeLateChargeCommand{
+			TenantID: tenant, Inclusion: "inclusion-foreign", Number: "STMT-2026-08-001", ChargeID: "charge-foreign",
+			SubsequentPeriod: "2026-09", IncludedAt: statementPublishAt.Add(48 * time.Hour),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Outcome() != application.StatementNotAccepted || len(fixture.inclusions.records) != 0 {
+			t.Fatalf("outcome = %s inclusions = %d", result.Outcome(), len(fixture.inclusions.records))
+		}
+	})
+}
+
+// Covers: ADR-0029「从取值里读出接下来做什么」在两册都登了仍判不出那一格：形态要来源发生时点而费用上没有，只拿掉
+// 这一件并指名，不计入未配置；其余照常入本期；一件都入不了时答本期无费用、不答未配置。
+func TestAChargeWithoutItsSourceInstantIsExcludedByName(t *testing.T) {
+	fixture := newStatementFixture(t)
+	fixture.forms.register(t, "fee-freight", domain.ChargeAttributionSourceOccurred)
+	fixture.arrangements.register(t, "ACCOUNT/syn-1", "UTC", 23*60+59)
+	fixture.charges.charges["charge-no-instant"] = noSourceInstantStatementCharge(t, "charge-no-instant", 3000)
+	command := publishCommand(t)
+	command.ChargeIDs = []string{"charge-A", "charge-no-instant", "charge-B"}
+
+	result, err := fixture.handler.Publish(context.Background(), command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome() != application.StatementPublished {
+		t.Fatalf("outcome = %s", result.Outcome())
+	}
+	if lines := statementLines(t, result); !reflect.DeepEqual(lines, []string{"charge-A", "charge-B"}) {
+		t.Fatalf("lines = %v", lines)
+	}
+	want := []exclusionView{{charge: "charge-no-instant", cause: application.ExcludedSourceInstantMissing}}
+	if got := exclusionsOf(result); !reflect.DeepEqual(got, want) {
+		t.Fatalf("exclusions = %+v, want %+v", got, want)
+	}
+	if want[0].cause.String() != "SOURCE_INSTANT_MISSING" {
+		t.Fatalf("cause = %s", want[0].cause)
+	}
+	if _, attributed := fixture.charges.charges["charge-no-instant"].AttributionDate(); attributed || fixture.charges.records != 0 {
+		t.Fatal("判不出却落了归属日")
+	}
+
+	t.Run("alone it is nothing in period, not unconfigured", func(t *testing.T) {
+		alone := command
+		alone.Number = "STMT-2026-08-002"
+		alone.ChargeIDs = []string{"charge-no-instant"}
+		alone.DeclaredTotalMinor = 0
+		result, err := fixture.handler.Publish(context.Background(), alone)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Outcome() != application.StatementNoChargeInPeriod || !reflect.DeepEqual(exclusionsOf(result), want) {
+			t.Fatalf("outcome = %s exclusions = %+v", result.Outcome(), exclusionsOf(result))
+		}
+	})
+}
+
+// 排除原因集封闭：每个取值有标签、标签不重、集合外没有标签。
+func TestTheExclusionCauseSetIsClosed(t *testing.T) {
+	labels := map[string]struct{}{}
+	causes := []application.StatementExclusionCause{
+		application.ExcludedAfterPeriod, application.ExcludedAlreadyBilled,
+		application.ExcludedAttributionUnconfigured, application.ExcludedSourceInstantMissing,
+	}
+	for _, cause := range causes {
+		label := cause.String()
+		if label == "" {
+			t.Fatalf("cause %d has no label", cause)
+		}
+		labels[label] = struct{}{}
+	}
+	if len(labels) != len(causes) {
+		t.Fatalf("labels collapsed into %d", len(labels))
+	}
+	if application.StatementExclusionCause(len(causes)+1).String() != "" || application.StatementExclusionCauseInvalid.String() != "" {
+		t.Fatal("封闭集合之外的排除原因带了标签")
+	}
+}
+
+// 缺依赖在装配时就报，不等到截单或确认那一刻才撞空指针。
+func TestTheCutAndConfirmHandlersRefuseMissingDependencies(t *testing.T) {
+	if _, err := application.NewCutOffPublishStatementHandler(application.CutOffPublishStatementDeps{}); !errors.Is(err, application.ErrNilDependency) {
+		t.Fatalf("截单编排缺依赖却构造成功：%v", err)
+	}
+	if _, err := application.NewConfirmChargeHandler(application.ConfirmChargeDeps{}); !errors.Is(err, application.ErrNilDependency) {
+		t.Fatalf("确认编排缺依赖却构造成功：%v", err)
+	}
+}

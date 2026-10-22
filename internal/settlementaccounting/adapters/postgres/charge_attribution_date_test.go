@@ -104,6 +104,33 @@ func TestTheAttributionDateIsStoredOnceOnAConfirmedCharge(t *testing.T) {
 		WHERE tenant_id = $1 AND charge_id = $2`, tenant.String(), estimated.ID().String()); err == nil {
 		t.Fatal("库上的约束放进了一行带归属日的预估费用")
 	}
+
+	// 生产确认路径：预估行先在，确认是对它的改写，归属日与来源发生时点都要随这一次改写留在行上。
+	promoted, err := estimated.Confirm(saConfirmationFacts(t),
+		saValue(t, domain.NewConfirmationBasisReference, "DELIVERY_FINALIZED/final-3"), chargeConfirmedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if promoted, err = promoted.WithAttributionDate(day); err != nil {
+		t.Fatal(err)
+	}
+	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
+		saved, err := charges.SaveConfirmed(txCtx, tenant, promoted)
+		if err != nil || saved != ports.ChargeSaved {
+			return errors.Join(err, errors.New("改写预估行的确认没落下"))
+		}
+		return nil
+	})
+	found, _, err = charges.FindByID(ctx, tenant, estimated.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if date, ok := found.AttributionDate(); !ok || date != day {
+		t.Fatalf("改写预估行的确认丢了归属日：%s ok=%v", date, ok)
+	}
+	if at, ok := found.SourceOccurredAt(); !ok || !at.Equal(occurred) {
+		t.Fatalf("改写预估行的确认丢了来源发生时点：%v ok=%v", at, ok)
+	}
 }
 
 // Covers: UC-SA-003「已出账的不再纳入」的读法——费用在一张未作废的已发布对账单上就答已出账并交回单号；整单作废后

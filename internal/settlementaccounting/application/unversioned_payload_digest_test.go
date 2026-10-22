@@ -335,7 +335,7 @@ func statementUnversionedCase(t *testing.T) unversionedDigestCase {
 	command := publishCommand(t)
 	return unversionedDigestCase{
 		name:        "PUBLISH_STATEMENT",
-		unversioned: "e857f1cfa1186eb4ec5a5e6565b8d5f6ce3180b888729f80838d1650c612fd69",
+		unversioned: "8627d8a4ce532bc4f624f2b399d6764e5d79d4c1dac6dfb5fe18d16e4fd40618",
 		shape:       "SAC-2",
 		first: func(t *testing.T) (string, func(string)) {
 			result, err := fixture.handler.Publish(context.Background(), command)

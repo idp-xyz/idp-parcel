@@ -15,7 +15,10 @@ var (
 	ErrChargeNotAttributed = errors.New("settlement accounting: the charge has no attribution date")
 	// ErrChargeAfterPeriod：归属日晚于本期最后一个归属日的费用不入本期。
 	ErrChargeAfterPeriod = errors.New("settlement accounting: the charge is attributed after the period")
-	ErrInvalidStatement  = errors.New("settlement accounting: invalid customer statement")
+	// ErrChargeAccountMismatch：费用确认时固定的结算账户不是这张单的账户。结算账户按责任范围归集同方向费用
+	// （CONTEXT「结算账户」），别户的费用进来就是把别人的数记到这个账户头上，与别户调整进草稿同一条理由。
+	ErrChargeAccountMismatch = errors.New("settlement accounting: the charge belongs to another settlement account")
+	ErrInvalidStatement      = errors.New("settlement accounting: invalid customer statement")
 	// ErrStatementImbalance：费用行金额与声明总额不勾稽时发布被阻断，不修正为「约等于」
 	// （AT-SA-065）。
 	ErrStatementImbalance = errors.New("settlement accounting: statement lines do not reconcile with the declared total")
@@ -102,6 +105,9 @@ func CutStatementDraft(spec StatementDraftSpec) (StatementDraft, error) {
 		}
 		if charge.Stage() != ChargeConfirmed {
 			return StatementDraft{}, ErrChargeNotConfirmed
+		}
+		if facts, _ := charge.ConfirmedFacts(); facts.SettlementAccount != spec.Account {
+			return StatementDraft{}, ErrChargeAccountMismatch
 		}
 		date, attributed := charge.AttributionDate()
 		if !attributed {
@@ -445,6 +451,9 @@ func IncludeLateChargeInSubsequentPeriod(
 	}
 	if charge.Stage() != ChargeConfirmed {
 		return SubsequentInclusion{}, ErrChargeNotConfirmed
+	}
+	if facts, _ := charge.ConfirmedFacts(); facts.SettlementAccount != statement.account {
+		return SubsequentInclusion{}, ErrChargeAccountMismatch
 	}
 	if subsequentPeriod == statement.period {
 		return SubsequentInclusion{}, ErrInclusionBackfillsPeriod

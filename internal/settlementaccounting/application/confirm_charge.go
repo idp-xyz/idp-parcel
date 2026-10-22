@@ -136,8 +136,13 @@ type ConfirmChargeHandler struct {
 	deps ConfirmChargeDeps
 }
 
-func NewConfirmChargeHandler(deps ConfirmChargeDeps) *ConfirmChargeHandler {
-	return &ConfirmChargeHandler{deps: deps}
+// NewConfirmChargeHandler 在装配时核齐依赖：缺件在这里报，不等到确认那一刻才撞空指针。
+func NewConfirmChargeHandler(deps ConfirmChargeDeps) (*ConfirmChargeHandler, error) {
+	if deps.Charges == nil || deps.Conditions == nil || deps.Facts == nil || deps.Attributions == nil ||
+		deps.Downstream == nil || deps.Clock == nil {
+		return nil, fmt.Errorf("%w: confirm charge", ErrNilDependency)
+	}
+	return &ConfirmChargeHandler{deps: deps}, nil
 }
 
 // Handle 把一笔预估/暂估费用推进到确认：找回费用 → 已确认即重放返原确认不二确 →

@@ -147,7 +147,7 @@ func buildSettlementOrchestrations(db *bentopg.DB) (settlementOrchestrations, er
 		return none, fmt.Errorf("parcel-api: statement arrangements: %w", err)
 	}
 	// 确认与截单共用这一份判定：归属日随确认形成，确认时没判出的截单当场判（ADR-0269 决定三）。两本册空着时
-	// 答未配置，不为此种任何行。
+	// 答未配置，不为此种下任何行。
 	attributions, err := saapplication.NewJudgeChargeAttributionHandler(attributionForms, arrangements)
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: judge charge attribution: %w", err)
@@ -160,18 +160,26 @@ func buildSettlementOrchestrations(db *bentopg.DB) (settlementOrchestrations, er
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: admit settlement moment: %w", err)
 	}
+	confirm, err := saapplication.NewConfirmChargeHandler(saapplication.ConfirmChargeDeps{
+		Charges: charges, Conditions: conditions, Facts: catalogues, Attributions: attributions,
+		Downstream: confirmHandoff, Clock: clock,
+	})
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: confirm charge: %w", err)
+	}
+	cutoff, err := saapplication.NewCutOffPublishStatementHandler(saapplication.CutOffPublishStatementDeps{
+		Statements: statements, Charges: charges, Billing: statements, Attributions: attributions,
+		AttributionDates: charges, Adjustments: adjustments, Inclusions: inclusions,
+		Disputes: disputes, Downstream: statementHandoff, Clock: clock,
+	})
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: cut-off publish statement: %w", err)
+	}
 	return settlementOrchestrations{
 		transactor: db.Transactor(),
 		moments:    moments,
-		confirm: saapplication.NewConfirmChargeHandler(saapplication.ConfirmChargeDeps{
-			Charges: charges, Conditions: conditions, Facts: catalogues, Attributions: attributions,
-			Downstream: confirmHandoff, Clock: clock,
-		}),
-		cutoff: saapplication.NewCutOffPublishStatementHandler(saapplication.CutOffPublishStatementDeps{
-			Statements: statements, Charges: charges, Billing: statements, Attributions: attributions,
-			AttributionDates: charges, Adjustments: adjustments, Inclusions: inclusions,
-			Disputes: disputes, Downstream: statementHandoff, Clock: clock,
-		}),
+		confirm:    confirm,
+		cutoff:     cutoff,
 		adjust: saapplication.NewRecordChargeAdjustmentHandler(saapplication.RecordChargeAdjustmentDeps{
 			Charges: charges, Adjustments: adjustments, Clock: clock,
 		}),

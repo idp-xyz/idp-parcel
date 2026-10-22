@@ -159,6 +159,9 @@ const (
 	// ExcludedAttributionUnconfigured：没有归属日、当场也判不出——对账安排或归属日形态没登，Missing 指名
 	// 缺哪一册。码沿用归属日判定的那一格，截单不另起一个词。
 	ExcludedAttributionUnconfigured
+	// ExcludedSourceInstantMissing：两册都登了仍判不出——形态要来源发生时点，这件费用上没有。补登哪一册都
+	// 补不上，不计入未配置；只拿掉这一件，其余照常入本期（ADR-0029：调用方要从取值里读出接下来做什么）。
+	ExcludedSourceInstantMissing
 )
 
 func (cause StatementExclusionCause) String() string {
@@ -169,6 +172,8 @@ func (cause StatementExclusionCause) String() string {
 		return "ALREADY_BILLED"
 	case ExcludedAttributionUnconfigured:
 		return ChargeAttributionUnconfigured.String()
+	case ExcludedSourceInstantMissing:
+		return "SOURCE_INSTANT_MISSING"
 	default:
 		return ""
 	}
@@ -303,8 +308,14 @@ type CutOffPublishStatementHandler struct {
 	deps CutOffPublishStatementDeps
 }
 
-func NewCutOffPublishStatementHandler(deps CutOffPublishStatementDeps) *CutOffPublishStatementHandler {
-	return &CutOffPublishStatementHandler{deps: deps}
+// NewCutOffPublishStatementHandler 在装配时核齐依赖：缺件在这里报，不等到截单那一刻才撞空指针。
+func NewCutOffPublishStatementHandler(deps CutOffPublishStatementDeps) (*CutOffPublishStatementHandler, error) {
+	if deps.Statements == nil || deps.Charges == nil || deps.Billing == nil || deps.Attributions == nil ||
+		deps.AttributionDates == nil || deps.Adjustments == nil || deps.Inclusions == nil ||
+		deps.Disputes == nil || deps.Downstream == nil || deps.Clock == nil {
+		return nil, fmt.Errorf("%w: cut-off publish statement", ErrNilDependency)
+	}
+	return &CutOffPublishStatementHandler{deps: deps}, nil
 }
 
 // Publish 截单并发布：费用从库读回（只收已确认，未确认 → CHARGE_NOT_CONFIRMED 业务负向）→ 逐件定是否入
@@ -319,6 +330,10 @@ func (handler *CutOffPublishStatementHandler) Publish(
 		return StatementResult{outcome: StatementNotAccepted}, nil
 	}
 	last, err := domain.ParseAttributionDate(command.LastAttributionDate)
+	if err != nil {
+		return StatementResult{outcome: StatementNotAccepted}, nil
+	}
+	account, err := domain.NewSettlementAccountID(command.Account)
 	if err != nil {
 		return StatementResult{outcome: StatementNotAccepted}, nil
 	}
@@ -350,6 +365,10 @@ func (handler *CutOffPublishStatementHandler) Publish(
 			// 未确认费用进不了截单快照：先确认再来——后到费用归后续账期，不回填。先于判归属日拒，
 			// 未确认的费用没有确认时点也没有所属账户，判不出的缘由会被错指成缺册。
 			return StatementResult{outcome: StatementChargeNotConfirmed}, nil
+		}
+		if facts, _ := charge.ConfirmedFacts(); facts.SettlementAccount != account {
+			// 列了别户的费用是提交矛盾，整笔拒。先于判归属日：否则会照别户的对账安排判出一个归属日并落库。
+			return StatementResult{outcome: StatementNotAccepted}, nil
 		}
 		charges = append(charges, charge)
 	}
@@ -487,9 +506,10 @@ func (handler *CutOffPublishStatementHandler) admit(
 			case ChargeAttributionViewUnavailable:
 				return cutAdmission{}, statementUndecided(StatementAttributionViewUnavailable, charge.ID().String()), true
 			default:
-				// 册都登了仍判不出，只剩形态要的时点费用上没有：费用本身缺格，补登哪一册都补不上，按提交
-				// 矛盾整笔拒，不把它当缺册指名。
-				return cutAdmission{}, StatementResult{outcome: StatementNotAccepted}, true
+				// 册都登了仍判不出，只剩形态要的时点费用上没有：费用本身缺格，不当缺册指名，也不计入未配置。
+				admission.exclusions = append(admission.exclusions,
+					StatementExclusion{Charge: charge.ID(), Cause: ExcludedSourceInstantMissing})
+				continue
 			}
 			recorded, err := handler.deps.AttributionDates.RecordAttributionDate(ctx, command.TenantID, charge.ID(), date)
 			if err != nil {

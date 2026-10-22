@@ -90,7 +90,7 @@ func creditAdjustment(t *testing.T, id, chargeID string, amountMinor int64) doma
 func cutDraft(t *testing.T) domain.StatementDraft {
 	t.Helper()
 	draft, err := domain.CutStatementDraft(domain.StatementDraftSpec{
-		Account:             settlementValue(t, domain.NewSettlementAccountID, "account-1"),
+		Account:             settlementValue(t, domain.NewSettlementAccountID, "ACCOUNT/syn-1"),
 		Period:              settlementValue(t, domain.NewBillingPeriodReference, "period-2026-08"),
 		Version:             settlementValue(t, domain.NewStatementDraftVersion, "draft/v1"),
 		Currency:            settlementValue(t, domain.NewCurrencyCode, "USD"),
@@ -132,7 +132,7 @@ func TestACutOffDraftAdmitsOnlyConfirmedCharges(t *testing.T) {
 
 	t.Run("an estimated charge is refused", func(t *testing.T) {
 		if _, err := domain.CutStatementDraft(domain.StatementDraftSpec{
-			Account:             settlementValue(t, domain.NewSettlementAccountID, "account-1"),
+			Account:             settlementValue(t, domain.NewSettlementAccountID, "ACCOUNT/syn-1"),
 			Period:              settlementValue(t, domain.NewBillingPeriodReference, "period-2026-08"),
 			Version:             settlementValue(t, domain.NewStatementDraftVersion, "draft/v1"),
 			Currency:            settlementValue(t, domain.NewCurrencyCode, "USD"),
@@ -146,7 +146,7 @@ func TestACutOffDraftAdmitsOnlyConfirmedCharges(t *testing.T) {
 
 	t.Run("an adjustment for a charge outside the draft is refused", func(t *testing.T) {
 		if _, err := domain.CutStatementDraft(domain.StatementDraftSpec{
-			Account:             settlementValue(t, domain.NewSettlementAccountID, "account-1"),
+			Account:             settlementValue(t, domain.NewSettlementAccountID, "ACCOUNT/syn-1"),
 			Period:              settlementValue(t, domain.NewBillingPeriodReference, "period-2026-08"),
 			Version:             settlementValue(t, domain.NewStatementDraftVersion, "draft/v1"),
 			Currency:            settlementValue(t, domain.NewCurrencyCode, "USD"),
@@ -161,6 +161,37 @@ func TestACutOffDraftAdmitsOnlyConfirmedCharges(t *testing.T) {
 		}
 	})
 
+	t.Run("a charge attributed on the last day of the period is admitted", func(t *testing.T) {
+		// 归属日 8 月 30 日、本期最后一个归属日也是 8 月 30 日：不晚于，入本期。
+		draft, err := domain.CutStatementDraft(domain.StatementDraftSpec{
+			Account:             settlementValue(t, domain.NewSettlementAccountID, "ACCOUNT/syn-1"),
+			Period:              settlementValue(t, domain.NewBillingPeriodReference, "period-2026-08"),
+			Version:             settlementValue(t, domain.NewStatementDraftVersion, "draft/v1"),
+			Currency:            settlementValue(t, domain.NewCurrencyCode, "USD"),
+			CutOffAt:            statementCutOffAt,
+			LastAttributionDate: domain.AttributionDate{Year: 2026, Month: time.August, Day: 30},
+			Charges:             []domain.CustomerCharge{confirmedCharge(t, "charge-1", 10000)},
+		})
+		if err != nil || len(draft.Charges()) != 1 {
+			t.Fatalf("err = %v charges = %d：归属日等于本期最后一日的费用没入本期", err, len(draft.Charges()))
+		}
+	})
+
+	t.Run("a charge confirmed on another settlement account is refused", func(t *testing.T) {
+		// 费用确认时固定的是 ACCOUNT/syn-1，草稿立在另一个账户上：别户的数不进这个账户。
+		if _, err := domain.CutStatementDraft(domain.StatementDraftSpec{
+			Account:             settlementValue(t, domain.NewSettlementAccountID, "ACCOUNT/syn-2"),
+			Period:              settlementValue(t, domain.NewBillingPeriodReference, "period-2026-08"),
+			Version:             settlementValue(t, domain.NewStatementDraftVersion, "draft/v1"),
+			Currency:            settlementValue(t, domain.NewCurrencyCode, "USD"),
+			CutOffAt:            statementCutOffAt,
+			LastAttributionDate: statementLastDay,
+			Charges:             []domain.CustomerCharge{confirmedCharge(t, "charge-1", 10000)},
+		}); !errors.Is(err, domain.ErrChargeAccountMismatch) {
+			t.Fatalf("error = %v, want ErrChargeAccountMismatch", err)
+		}
+	})
+
 	t.Run("a charge without an attribution date is refused", func(t *testing.T) {
 		unattributed, err := estimatedStatementCharge(t, "charge-8").Confirm(
 			confirmationFacts(t),
@@ -170,7 +201,7 @@ func TestACutOffDraftAdmitsOnlyConfirmedCharges(t *testing.T) {
 			t.Fatalf("confirm: %v", err)
 		}
 		if _, err := domain.CutStatementDraft(domain.StatementDraftSpec{
-			Account:             settlementValue(t, domain.NewSettlementAccountID, "account-1"),
+			Account:             settlementValue(t, domain.NewSettlementAccountID, "ACCOUNT/syn-1"),
 			Period:              settlementValue(t, domain.NewBillingPeriodReference, "period-2026-08"),
 			Version:             settlementValue(t, domain.NewStatementDraftVersion, "draft/v1"),
 			Currency:            settlementValue(t, domain.NewCurrencyCode, "USD"),
@@ -185,7 +216,7 @@ func TestACutOffDraftAdmitsOnlyConfirmedCharges(t *testing.T) {
 	t.Run("a charge attributed after the last day of the period is refused", func(t *testing.T) {
 		// 归属日 8 月 30 日、本期最后一个归属日 8 月 29 日：晚于本期。截单时刻 CutOffAt 在 8 月 31 日，不参与。
 		if _, err := domain.CutStatementDraft(domain.StatementDraftSpec{
-			Account:             settlementValue(t, domain.NewSettlementAccountID, "account-1"),
+			Account:             settlementValue(t, domain.NewSettlementAccountID, "ACCOUNT/syn-1"),
 			Period:              settlementValue(t, domain.NewBillingPeriodReference, "period-2026-08"),
 			Version:             settlementValue(t, domain.NewStatementDraftVersion, "draft/v1"),
 			Currency:            settlementValue(t, domain.NewCurrencyCode, "USD"),
@@ -353,6 +384,27 @@ func TestLateChargesAndAdjustmentsGoToSubsequentPeriods(t *testing.T) {
 		}
 		if inclusion.Kind() != domain.IncludedLateCharge {
 			t.Fatalf("kind = %q", inclusion.Kind())
+		}
+	})
+
+	t.Run("a late charge confirmed on another settlement account is refused", func(t *testing.T) {
+		foreign := confirmationFacts(t)
+		foreign.SettlementAccount = settlementValue(t, domain.NewSettlementAccountID, "ACCOUNT/syn-2")
+		charge, err := estimatedStatementCharge(t, "charge-late-7").Confirm(
+			foreign,
+			settlementValue(t, domain.NewConfirmationBasisReference, "delivery-confirmed-7"),
+			statementCutOffAt.Add(-48*time.Hour))
+		if err != nil {
+			t.Fatalf("confirm: %v", err)
+		}
+		if _, err := domain.IncludeLateChargeInSubsequentPeriod(
+			statement,
+			charge,
+			settlementValue(t, domain.NewInclusionReference, "inclusion-w"),
+			subsequent,
+			statementPublishedAt.Add(96*time.Hour),
+		); !errors.Is(err, domain.ErrChargeAccountMismatch) {
+			t.Fatalf("error = %v, want ErrChargeAccountMismatch（别户的费用不进这张单的后续账期）", err)
 		}
 	})
 
