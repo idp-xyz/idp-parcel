@@ -72,9 +72,10 @@ func (result FormAcceptanceDecisionResult) ContinuationReference() domain.Owners
 	return result.continuation
 }
 
-// CompensationReference 只在决定已经成立、而随附的资金释放没能确定完成时给出。它与
-// ContinuationReference 分开：后者续办的是尚未形成的决定，前者续办的是已成立决定留下的
-// 补偿。合成一个会让调用方分不清该重判还是该重放。
+// CompensationReference 在接受已确定不成立的那一版留下的资金释放没能确定完成时给出：拒绝
+// 已成立，或这一版已停进`等待受控补充`（那时本轮结果是未决，与 ContinuationReference 同时在场）。
+// 它与 ContinuationReference 分开：后者续办的是尚未形成的决定，前者续办的是释放这件随附事项。
+// 合成一个会让调用方分不清该重判还是该重放。
 func (result FormAcceptanceDecisionResult) CompensationReference() domain.OwnershipContinuationReference {
 	return result.compensation
 }
@@ -283,11 +284,12 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 // 相同：那一版只由新提交版本的信封续办、不会再被判（ADR-0106 决定三），占着客户的资金或额度等一份不会到来的接受
 // 没有依据；Decide 自己停进这一格与授权处置选`交客户补充`转进这一格，停住的版本是同一种处境。放在落库之后：暂停
 // 没落库时这一轮整体回滚重投，此刻放掉就是在一份不知道停没停住的版本上宣告它不会再被判。放不掉不撤销暂停——
-// 暂停已经落库、原因照旧交回，补偿另行续办，与拒绝那一支同一条理由；客户补件之后，接受链开头放被取代各版那一步
-// 会对同一笔再请求一次，提供方按幂等答原释放。
+// 暂停已经落库、原因照旧交回，与拒绝那一支同一条理由。这一路的补偿引用只交在本结果上：接受链不透出它，也没有
+// 持久的待补偿记录，没有东西会按它重放。那一笔的兜底是另两条路：客户补件之后，接受链开头放被取代各版那一步对同
+// 一笔再请求一次；客户撤回时，撤回逐版释放。两者都按原关联请求，提供方按幂等答原释放。
 //
-// `等待人工复核`与`等待授权处置`不放：前者复核完成后仍由任务按规则判、可以接受，那时那笔占用是合法的；后者由
-// 处置命令自己放，这里再放就是两条路认领同一笔。
+// `等待人工复核`与`等待授权处置`不放：前者复核完成后仍由任务按规则判、可以接受，那时那笔占用是合法的；后者的
+// 释放时刻由 ADR-0132 决定一定在处置那一刻，停下时处置角色还没选去向。
 func (handler *FormAcceptanceDecisionHandler) pauseForExternalResume(
 	ctx context.Context,
 	command FormAcceptanceDecisionCommand,

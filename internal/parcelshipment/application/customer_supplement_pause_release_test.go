@@ -41,8 +41,8 @@ func TestACustomerSupplementPauseReleasesThePausedVersionsOccupation(t *testing.
 	}
 }
 
-// Covers: 同上那一格的「释放失败按补偿续办」与 CONTEXT「撤回提交和释放属于可补偿编排」——放不掉不撤销暂停：等待态
-// 照旧落库、原因照旧是`等待受控补充`（消费门据它入账），补偿引用与那一版若被拒绝时派生的逐字一致。
+// Covers: 同上那一格的「释放失败不撤销暂停」与 CONTEXT「撤回提交和释放属于可补偿编排」——放不掉时等待态照旧落库、
+// 原因照旧是`等待受控补充`（消费门据它入账），补偿引用与那一版若被拒绝时派生的逐字一致。
 func TestAFailedPauseReleaseKeepsThePauseAndLeavesCompensationPending(t *testing.T) {
 	paused := newDecisionFixture(t)
 	paused.judgments.reachability["parcel-2"] = domain.ReachabilityInsufficientEvidence
@@ -122,7 +122,7 @@ func TestAPauseThatFailedToPersistReleasesNothing(t *testing.T) {
 }
 
 // Covers: 只有`等待受控补充`随暂停释放——`等待人工复核`那一版复核完成后仍由任务按规则判、可以接受，那时那笔占用是
-// 合法的；`等待授权处置`由处置命令自己放（ADR-0132 决定一），形成决定这一步再放一次就是两条路认领同一笔。
+// 合法的；`等待授权处置`的释放时刻由 ADR-0132 决定一定在处置那一刻，停下时处置角色还没选去向。
 func TestOnlyTheCustomerSupplementPauseReleases(t *testing.T) {
 	review := newDecisionFixture(t)
 	review.commercial.manualReview = domain.ManualReviewRequiredByRules
