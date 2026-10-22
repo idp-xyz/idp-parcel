@@ -9,6 +9,8 @@ var (
 	ErrInvalidCustomerCharge = errors.New("settlement accounting: invalid customer charge")
 	ErrChargeAlreadyFinal    = errors.New("settlement accounting: the charge is already confirmed")
 	ErrInvalidAdjustment     = errors.New("settlement accounting: invalid charge adjustment")
+	// ErrAttributionDateAlreadyFormed：归属日已经形成，不再钉第二次。
+	ErrAttributionDateAlreadyFormed = errors.New("settlement accounting: the charge already has its attribution date")
 )
 
 // ChargeStage 是普通客户费用的三段封闭演进（UC-SA-002：费用可以经历预估、暂估和
@@ -162,6 +164,9 @@ type CustomerChargeSpec struct {
 	Conversion         ConversionStepReference
 	Stage              ChargeStage
 	FormedAt           time.Time
+	// SourceOccurredAt 是费用来源事实的发生时点，归属日形态为来源发生时取它（ADR-0269 决定三）。形成门
+	// 不强求：判不出归属日不挡费用本身，是否必带由各形成编排按它手上的来源事实定。
+	SourceOccurredAt time.Time
 }
 
 // CustomerCharge 是普通客户费用：预估或暂估起步，确认条件满足后定格。费用只进不退
@@ -181,6 +186,9 @@ type CustomerCharge struct {
 	facts              ConfirmedChargeFacts
 	formedAt           time.Time
 	confirmedAt        time.Time
+	sourceOccurredAt   time.Time
+	attributionDate    AttributionDate
+	attributed         bool
 }
 
 // FormCustomerCharge 形成一笔预估或暂估费用。直接以`已确认`起步不允许——确认条件
@@ -220,7 +228,15 @@ func FormCustomerCharge(spec CustomerChargeSpec) (CustomerCharge, error) {
 		conversion:         spec.Conversion,
 		stage:              spec.Stage,
 		formedAt:           spec.FormedAt.UTC(),
+		sourceOccurredAt:   utcOrZero(spec.SourceOccurredAt),
 	}, nil
+}
+
+func utcOrZero(at time.Time) time.Time {
+	if at.IsZero() {
+		return time.Time{}
+	}
+	return at.UTC()
 }
 
 func (charge CustomerCharge) ID() CustomerChargeID {
@@ -271,6 +287,31 @@ func (charge CustomerCharge) ConfirmedAt() (time.Time, bool) {
 // ConfirmedFacts 只在已确认费用上给出。
 func (charge CustomerCharge) ConfirmedFacts() (ConfirmedChargeFacts, bool) {
 	return charge.facts, charge.stage == ChargeConfirmed
+}
+
+// SourceOccurredAt 是来源事实的发生时点；形成时没带上就没有。
+func (charge CustomerCharge) SourceOccurredAt() (time.Time, bool) {
+	return charge.sourceOccurredAt, !charge.sourceOccurredAt.IsZero()
+}
+
+// AttributionDate 只在已形成归属日的已确认费用上给出。
+func (charge CustomerCharge) AttributionDate() (AttributionDate, bool) {
+	return charge.attributionDate, charge.attributed
+}
+
+// WithAttributionDate 给已确认费用钉上归属日。只钉一次：归属日一经形成不变，对账安排换版也不回改它
+// （ADR-0269 决定一、决定三）；第二次钉同一天也拒，免得调用方把「已形成」读成「刚判出」。
+func (charge CustomerCharge) WithAttributionDate(date AttributionDate) (CustomerCharge, error) {
+	if charge.stage != ChargeConfirmed || !date.Valid() {
+		return CustomerCharge{}, ErrInvalidCustomerCharge
+	}
+	if charge.attributed {
+		return CustomerCharge{}, ErrAttributionDateAlreadyFormed
+	}
+	attributed := charge
+	attributed.attributionDate = date
+	attributed.attributed = true
+	return attributed, nil
 }
 
 // Confirm 在确认条件满足时定格费用（UC-SA-002 结果契约「费用已确认」）。确认依据

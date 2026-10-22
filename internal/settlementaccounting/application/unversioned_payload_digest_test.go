@@ -20,9 +20,11 @@ import (
 type unversionedDigestCase struct {
 	name        string
 	unversioned string
-	first       func(t *testing.T) (string, func(string))
-	replay      func(t *testing.T)
-	conflict    func(t *testing.T)
+	// shape 是新记录落下的摘要形状；空即 SAC-1。改过规范化形状的口在这里写它的现行号（ADR-0014）。
+	shape    string
+	first    func(t *testing.T) (string, func(string))
+	replay   func(t *testing.T)
+	conflict func(t *testing.T)
 }
 
 // onlyDigest 交回替身里唯一那条记录的摘要，与把它改写成别的串的办法。
@@ -100,13 +102,17 @@ func TestRecordsStoredBeforeSAC1AreComparedUnderTheirOwnShape(t *testing.T) {
 	}
 }
 
-// Covers: 新记录写的是 SAC-1 形——无版本那一版只用来比旧记录，误写进新记录时上一例照样绿，
+// Covers: 新记录写的是各口的现行形——无版本那一版只用来比旧记录，误写进新记录时上一例照样绿，
 // 要在这里断。
 func TestNewRecordsAreStoredUnderSAC1(t *testing.T) {
 	for _, testCase := range unversionedDigestCases(t) {
 		t.Run(testCase.name, func(t *testing.T) {
-			if stored, _ := testCase.first(t); !strings.HasPrefix(stored, "SAC-1:") {
-				t.Fatalf("新记录落下的摘要是 %q，want SAC-1 形", stored)
+			shape := testCase.shape
+			if shape == "" {
+				shape = "SAC-1"
+			}
+			if stored, _ := testCase.first(t); !strings.HasPrefix(stored, shape+":") {
+				t.Fatalf("新记录落下的摘要是 %q，want %s 形", stored, shape)
 			}
 		})
 	}
@@ -330,6 +336,7 @@ func statementUnversionedCase(t *testing.T) unversionedDigestCase {
 	return unversionedDigestCase{
 		name:        "PUBLISH_STATEMENT",
 		unversioned: "e857f1cfa1186eb4ec5a5e6565b8d5f6ce3180b888729f80838d1650c612fd69",
+		shape:       "SAC-2",
 		first: func(t *testing.T) (string, func(string)) {
 			result, err := fixture.handler.Publish(context.Background(), command)
 			wantOutcome(t, result.Outcome(), err, application.StatementPublished)

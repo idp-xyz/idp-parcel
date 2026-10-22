@@ -10,7 +10,12 @@ var (
 	// ErrChargeNotConfirmed：只有达到确认条件的费用进入对账单；预估与暂估保持在外
 	// （AT-SA-060）——纳入它们等于把未定的数发给客户。
 	ErrChargeNotConfirmed = errors.New("settlement accounting: the charge has not reached confirmation")
-	ErrInvalidStatement   = errors.New("settlement accounting: invalid customer statement")
+	// ErrChargeNotAttributed：进草稿的费用必须已形成归属日。没形成的由截单编排先判；判不出的不入本期，
+	// 不按调用方列出的清单放行（ADR-0269 决定四）。
+	ErrChargeNotAttributed = errors.New("settlement accounting: the charge has no attribution date")
+	// ErrChargeAfterPeriod：归属日晚于本期最后一个归属日的费用不入本期。
+	ErrChargeAfterPeriod = errors.New("settlement accounting: the charge is attributed after the period")
+	ErrInvalidStatement  = errors.New("settlement accounting: invalid customer statement")
 	// ErrStatementImbalance：费用行金额与声明总额不勾稽时发布被阻断，不修正为「约等于」
 	// （AT-SA-065）。
 	ErrStatementImbalance = errors.New("settlement accounting: statement lines do not reconcile with the declared total")
@@ -49,38 +54,44 @@ func NewStatementVoidBasisReference(value string) (StatementVoidBasisReference, 
 	return StatementVoidBasisReference{required}, err
 }
 
-// StatementDraftSpec 是形成一次截单草稿所需的全部输入。
+// StatementDraftSpec 是形成一次截单草稿所需的全部输入。LastAttributionDate 是截单命令点名的本期最后
+// 一个归属日，判哪一件费用属于本期只看它；CutOffAt 是截单这一动作的业务时点，记在草稿上，不参与纳入
+// （ADR-0269 决定四）。
 type StatementDraftSpec struct {
-	Account     SettlementAccountID
-	Period      BillingPeriodReference
-	Version     StatementDraftVersion
-	Currency    CurrencyCode
-	CutOffAt    time.Time
-	Charges     []CustomerCharge
-	Adjustments []ChargeAdjustment
+	Account             SettlementAccountID
+	Period              BillingPeriodReference
+	Version             StatementDraftVersion
+	Currency            CurrencyCode
+	CutOffAt            time.Time
+	LastAttributionDate AttributionDate
+	Charges             []CustomerCharge
+	Adjustments         []ChargeAdjustment
 }
 
 // StatementDraft 是当前可重算的候选费用集合（UC-SA-003「草稿」）。草稿不是已发布
 // 对账单也不是客户应付确认；它只纳入唯一创建用例已形成的费用与既有调整，本用例不
 // 创建任何金额。
 type StatementDraft struct {
-	account     SettlementAccountID
-	period      BillingPeriodReference
-	version     StatementDraftVersion
-	currency    CurrencyCode
-	cutOffAt    time.Time
-	charges     []CustomerCharge
-	adjustments []ChargeAdjustment
+	account             SettlementAccountID
+	period              BillingPeriodReference
+	version             StatementDraftVersion
+	currency            CurrencyCode
+	cutOffAt            time.Time
+	lastAttributionDate AttributionDate
+	charges             []CustomerCharge
+	adjustments         []ChargeAdjustment
 }
 
-// CutStatementDraft 形成截单草稿。只有已确认费用可入（AT-SA-059/060）；调整必须
-// 挂在草稿内的费用上、币种一致——别的费用的调整进来就是把别人的数记到这个账户头上。
+// CutStatementDraft 形成截单草稿。只有已确认、已形成归属日且归属日不晚于本期最后一个归属日的费用
+// 可入（AT-SA-059/060、AT-SA-212）；调整必须挂在草稿内的费用上、币种一致——别的费用的调整进来就是
+// 把别人的数记到这个账户头上。
 func CutStatementDraft(spec StatementDraftSpec) (StatementDraft, error) {
 	if !spec.Account.valid() ||
 		!spec.Period.valid() ||
 		!spec.Version.valid() ||
 		!spec.Currency.valid() ||
 		spec.CutOffAt.IsZero() ||
+		!spec.LastAttributionDate.Valid() ||
 		len(spec.Charges) == 0 {
 		return StatementDraft{}, ErrInvalidStatementDraft
 	}
@@ -91,6 +102,13 @@ func CutStatementDraft(spec StatementDraftSpec) (StatementDraft, error) {
 		}
 		if charge.Stage() != ChargeConfirmed {
 			return StatementDraft{}, ErrChargeNotConfirmed
+		}
+		date, attributed := charge.AttributionDate()
+		if !attributed {
+			return StatementDraft{}, ErrChargeNotAttributed
+		}
+		if date.After(spec.LastAttributionDate) {
+			return StatementDraft{}, ErrChargeAfterPeriod
 		}
 		// 对账单以合同结算币立单，入单比对的是费用的结算币一对。
 		currency, _ := charge.SettlementAmount()
@@ -115,14 +133,20 @@ func CutStatementDraft(spec StatementDraftSpec) (StatementDraft, error) {
 		}
 	}
 	return StatementDraft{
-		account:     spec.Account,
-		period:      spec.Period,
-		version:     spec.Version,
-		currency:    spec.Currency,
-		cutOffAt:    spec.CutOffAt.UTC(),
-		charges:     append([]CustomerCharge(nil), spec.Charges...),
-		adjustments: append([]ChargeAdjustment(nil), spec.Adjustments...),
+		account:             spec.Account,
+		period:              spec.Period,
+		version:             spec.Version,
+		currency:            spec.Currency,
+		cutOffAt:            spec.CutOffAt.UTC(),
+		lastAttributionDate: spec.LastAttributionDate,
+		charges:             append([]CustomerCharge(nil), spec.Charges...),
+		adjustments:         append([]ChargeAdjustment(nil), spec.Adjustments...),
 	}, nil
+}
+
+// LastAttributionDate 是这份草稿的本期最后一个归属日。
+func (draft StatementDraft) LastAttributionDate() AttributionDate {
+	return draft.lastAttributionDate
 }
 
 func (draft StatementDraft) Account() SettlementAccountID {
@@ -178,13 +202,14 @@ func (draft StatementDraft) Recut(
 		return StatementDraft{}, ErrInvalidStatementDraft
 	}
 	return CutStatementDraft(StatementDraftSpec{
-		Account:     draft.account,
-		Period:      draft.period,
-		Version:     version,
-		Currency:    draft.currency,
-		CutOffAt:    cutOffAt,
-		Charges:     charges,
-		Adjustments: adjustments,
+		Account:             draft.account,
+		Period:              draft.period,
+		Version:             version,
+		Currency:            draft.currency,
+		CutOffAt:            cutOffAt,
+		LastAttributionDate: draft.lastAttributionDate,
+		Charges:             charges,
+		Adjustments:         adjustments,
 	})
 }
 

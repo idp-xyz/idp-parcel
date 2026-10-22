@@ -20,6 +20,8 @@ var (
 type statementStoreDouble struct {
 	records map[string]ports.StatementRecord
 	findErr error
+	// missFinds 让接下来这么多次 FindByKey 答查无此单：模拟另一笔同单号截单在本笔读单号之后才提交。
+	missFinds int
 }
 
 func newStatementStore() *statementStoreDouble {
@@ -37,8 +39,44 @@ func (double *statementStoreDouble) FindByKey(
 	if double.findErr != nil {
 		return ports.StatementRecord{}, false, double.findErr
 	}
+	if double.missFinds > 0 {
+		double.missFinds--
+		return ports.StatementRecord{}, false, nil
+	}
 	record, found := double.records[statementKey(key)]
 	return record, found, nil
+}
+
+// billingLockDouble 照 ports.ChargeBillingLock 读同一份对账单册：费用在一张未作废的已发布单上就算已出账。
+type billingLockDouble struct {
+	statements *statementStoreDouble
+	err        error
+	locks      []string
+}
+
+func (double *billingLockDouble) LockChargeBilling(
+	_ context.Context,
+	tenant domain.TenantID,
+	charge domain.CustomerChargeID,
+) (domain.StatementNumber, bool, error) {
+	if double.err != nil {
+		return domain.StatementNumber{}, false, double.err
+	}
+	double.locks = append(double.locks, charge.String())
+	for _, record := range double.statements.records {
+		if record.Key.TenantID != tenant {
+			continue
+		}
+		if _, _, voided := record.Statement.Voided(); voided {
+			continue
+		}
+		for _, line := range record.Statement.Lines() {
+			if line.Charge == charge {
+				return record.Key.Number, true, nil
+			}
+		}
+	}
+	return domain.StatementNumber{}, false, nil
 }
 
 func (double *statementStoreDouble) Save(
@@ -165,33 +203,42 @@ type statementClock struct{ at time.Time }
 func (clock statementClock) Now() time.Time { return clock.at }
 
 type statementFixture struct {
-	statements  *statementStoreDouble
-	charges     *chargeStoreDouble
-	adjustments *adjustmentViewDouble
-	inclusions  *inclusionStoreDouble
-	disputes    *disputeStoreDouble
-	handoff     *statementHandoffDouble
-	handler     *application.CutOffPublishStatementHandler
+	statements   *statementStoreDouble
+	billing      *billingLockDouble
+	forms        *attributionFormsDouble
+	arrangements *arrangementsDouble
+	charges      *chargeStoreDouble
+	adjustments  *adjustmentViewDouble
+	inclusions   *inclusionStoreDouble
+	disputes     *disputeStoreDouble
+	handoff      *statementHandoffDouble
+	handler      *application.CutOffPublishStatementHandler
 }
 
 func newStatementFixture(t *testing.T) *statementFixture {
 	t.Helper()
 	fixture := &statementFixture{
-		statements:  newStatementStore(),
-		charges:     newChargeStore(),
-		adjustments: newAdjustmentView(),
-		inclusions:  newInclusionStore(),
-		disputes:    newDisputeStore(),
-		handoff:     &statementHandoffDouble{},
+		statements:   newStatementStore(),
+		forms:        newAttributionFormsDouble(),
+		arrangements: newArrangementsDouble(),
+		charges:      newChargeStore(),
+		adjustments:  newAdjustmentView(),
+		inclusions:   newInclusionStore(),
+		disputes:     newDisputeStore(),
+		handoff:      &statementHandoffDouble{},
 	}
+	fixture.billing = &billingLockDouble{statements: fixture.statements}
 	fixture.handler = application.NewCutOffPublishStatementHandler(application.CutOffPublishStatementDeps{
-		Statements:  fixture.statements,
-		Charges:     fixture.charges,
-		Adjustments: fixture.adjustments,
-		Inclusions:  fixture.inclusions,
-		Disputes:    fixture.disputes,
-		Downstream:  fixture.handoff,
-		Clock:       statementClock{at: statementNowAt},
+		Statements:       fixture.statements,
+		Charges:          fixture.charges,
+		Billing:          fixture.billing,
+		Attributions:     newAttributionJudge(t, fixture.forms, fixture.arrangements),
+		AttributionDates: fixture.charges,
+		Adjustments:      fixture.adjustments,
+		Inclusions:       fixture.inclusions,
+		Disputes:         fixture.disputes,
+		Downstream:       fixture.handoff,
+		Clock:            statementClock{at: statementNowAt},
 	})
 	fixture.charges.charges["charge-A"] = confirmedStatementCharge(t, "charge-A", 12000)
 	fixture.charges.charges["charge-B"] = confirmedStatementCharge(t, "charge-B", 8000)
@@ -200,7 +247,20 @@ func newStatementFixture(t *testing.T) *statementFixture {
 	return fixture
 }
 
+// confirmedStatementCharge 是已确认、归属日 2026-08-30 的费用：落在 publishCommand 点名的本期里。
 func confirmedStatementCharge(t *testing.T, id string, amount int64) domain.CustomerCharge {
+	t.Helper()
+	attributed, err := unattributedStatementCharge(t, id, amount).WithAttributionDate(
+		domain.AttributionDate{Year: 2026, Month: time.August, Day: 30})
+	if err != nil {
+		t.Fatalf("attribute charge: %v", err)
+	}
+	return attributed
+}
+
+// unattributedStatementCharge 是确认时没判出归属日的已确认费用。来源发生时点 2026-08-31T17:30Z：在 UTC 是 8 月
+// 31 日，在 Asia/Shanghai 已是 9 月 1 日。
+func unattributedStatementCharge(t *testing.T, id string, amount int64) domain.CustomerCharge {
 	t.Helper()
 	charge, err := domain.FormCustomerCharge(domain.CustomerChargeSpec{
 		ID:                 billValue(t, domain.NewCustomerChargeID, id),
@@ -212,6 +272,7 @@ func confirmedStatementCharge(t *testing.T, id string, amount int64) domain.Cust
 		SettlementMinor:    amount,
 		Stage:              domain.ChargeProvisional,
 		FormedAt:           statementCutOffAt.Add(-72 * time.Hour),
+		SourceOccurredAt:   time.Date(2026, 8, 31, 17, 30, 0, 0, time.UTC),
 	})
 	if err != nil {
 		t.Fatalf("form charge: %v", err)
@@ -252,16 +313,17 @@ func publishCommand(t *testing.T) application.PublishStatementCommand {
 		t.Fatalf("tenant: %v", err)
 	}
 	return application.PublishStatementCommand{
-		TenantID:           tenant,
-		Number:             "STMT-2026-08-001",
-		Account:            "settlement-account-1",
-		Period:             "2026-08",
-		Version:            "draft/v1",
-		Currency:           "USD",
-		ChargeIDs:          []string{"charge-A", "charge-B"},
-		DeclaredTotalMinor: 20000,
-		CutOffAt:           statementCutOffAt,
-		PublishedAt:        statementPublishAt,
+		TenantID:            tenant,
+		Number:              "STMT-2026-08-001",
+		Account:             "settlement-account-1",
+		Period:              "2026-08",
+		Version:             "draft/v1",
+		Currency:            "USD",
+		ChargeIDs:           []string{"charge-A", "charge-B"},
+		LastAttributionDate: "2026-08-31",
+		DeclaredTotalMinor:  20000,
+		CutOffAt:            statementCutOffAt,
+		PublishedAt:         statementPublishAt,
 	}
 }
 
@@ -289,10 +351,12 @@ func TestAStatementPublishesOnlyConfirmedCharges(t *testing.T) {
 	}
 
 	t.Run("an imbalance blocks the publication", func(t *testing.T) {
+		// 另起一套夹具：同一批费用已出账在 STMT-2026-08-001 上，再截就成了本期无费用。
+		fresh := newStatementFixture(t)
 		imbalanced := publishCommand(t)
 		imbalanced.Number = "STMT-2026-08-002"
 		imbalanced.DeclaredTotalMinor = 19999
-		result, err := fixture.handler.Publish(context.Background(), imbalanced)
+		result, err := fresh.handler.Publish(context.Background(), imbalanced)
 		if err != nil {
 			t.Fatalf("publish: %v", err)
 		}
@@ -604,7 +668,7 @@ func TestStatementRecoveryDiscipline(t *testing.T) {
 		for _, reason := range []application.StatementUndecidedReason{
 			application.StatementStoreUnavailable, application.StatementChargeStoreUnavailable,
 			application.InclusionStoreUnavailable, application.DisputeStoreUnavailable,
-			application.AdjustmentViewUnavailable,
+			application.AdjustmentViewUnavailable, application.StatementAttributionViewUnavailable,
 		} {
 			label := reason.String()
 			if label == "" {
@@ -612,11 +676,11 @@ func TestStatementRecoveryDiscipline(t *testing.T) {
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 5 {
+		if len(labels) != 6 {
 			t.Fatalf("labels collapsed into %d", len(labels))
 		}
 		if application.StatementUndecidedReason(len(labels)+1).String() != "" {
-			t.Fatal("第六个未决原因带了标签——封闭集合被悄悄放开")
+			t.Fatal("封闭集合之外的未决原因带了标签——封闭集合被悄悄放开")
 		}
 	})
 }

@@ -22,9 +22,11 @@ type chargeStoreDouble struct {
 	charges     map[string]domain.CustomerCharge
 	findErr     error
 	saveErr     error
+	recordErr   error
 	saveResult  ports.ChargeSaveOutcome
 	forceResult bool
 	saves       int
+	records     int
 }
 
 func newChargeStore() *chargeStoreDouble {
@@ -60,6 +62,32 @@ func (double *chargeStoreDouble) SaveConfirmed(
 	}
 	double.charges[charge.ID().String()] = charge
 	return ports.ChargeSaved, nil
+}
+
+// RecordAttributionDate 照 ports.ChargeAttributionDateRecorder：已有归属日的不改，交回册上那一天。
+func (double *chargeStoreDouble) RecordAttributionDate(
+	_ context.Context,
+	_ domain.TenantID,
+	id domain.CustomerChargeID,
+	date domain.AttributionDate,
+) (domain.AttributionDate, error) {
+	if double.recordErr != nil {
+		return domain.AttributionDate{}, double.recordErr
+	}
+	charge, found := double.charges[id.String()]
+	if !found || charge.Stage() != domain.ChargeConfirmed {
+		return domain.AttributionDate{}, errors.New("charge is not a confirmed charge in the register")
+	}
+	if stored, attributed := charge.AttributionDate(); attributed {
+		return stored, nil
+	}
+	attributed, err := charge.WithAttributionDate(date)
+	if err != nil {
+		return domain.AttributionDate{}, err
+	}
+	double.charges[id.String()] = attributed
+	double.records++
+	return date, nil
 }
 
 type conditionViewDouble struct {
@@ -131,27 +159,32 @@ type confirmClock struct{ at time.Time }
 func (clock confirmClock) Now() time.Time { return clock.at }
 
 type confirmFixture struct {
-	store      *chargeStoreDouble
-	conditions *conditionViewDouble
-	facts      *factsViewDouble
-	handoff    *confirmationHandoffDouble
-	handler    *application.ConfirmChargeHandler
+	store        *chargeStoreDouble
+	forms        *attributionFormsDouble
+	arrangements *arrangementsDouble
+	conditions   *conditionViewDouble
+	facts        *factsViewDouble
+	handoff      *confirmationHandoffDouble
+	handler      *application.ConfirmChargeHandler
 }
 
 func newConfirmFixture(t *testing.T) *confirmFixture {
 	t.Helper()
 	fixture := &confirmFixture{
-		store:      newChargeStore(),
-		conditions: &conditionViewDouble{configured: true, met: true},
-		facts:      &factsViewDouble{configured: true, facts: registeredFacts(t)},
-		handoff:    &confirmationHandoffDouble{},
+		store:        newChargeStore(),
+		forms:        newAttributionFormsDouble(),
+		arrangements: newArrangementsDouble(),
+		conditions:   &conditionViewDouble{configured: true, met: true},
+		facts:        &factsViewDouble{configured: true, facts: registeredFacts(t)},
+		handoff:      &confirmationHandoffDouble{},
 	}
 	fixture.handler = application.NewConfirmChargeHandler(application.ConfirmChargeDeps{
-		Charges:    fixture.store,
-		Conditions: fixture.conditions,
-		Facts:      fixture.facts,
-		Downstream: fixture.handoff,
-		Clock:      confirmClock{at: chargeConfirmedAt},
+		Charges:      fixture.store,
+		Conditions:   fixture.conditions,
+		Facts:        fixture.facts,
+		Attributions: newAttributionJudge(t, fixture.forms, fixture.arrangements),
+		Downstream:   fixture.handoff,
+		Clock:        confirmClock{at: chargeConfirmedAt},
 	})
 	fixture.store.charges["charge-1"] = provisionalCharge(t)
 	return fixture
@@ -481,6 +514,7 @@ func TestConditionGridsSplitByRecoveryAction(t *testing.T) {
 		for _, reason := range []application.ConfirmUndecidedReason{
 			application.ChargeStoreUnavailable, application.ConditionViewUnavailable, application.ConditionUnconfigured,
 			application.FactsViewUnavailable, application.ConfirmationFactsUnconfigured,
+			application.ConfirmAttributionViewUnavailable,
 		} {
 			label := reason.String()
 			if label == "" {
@@ -488,11 +522,11 @@ func TestConditionGridsSplitByRecoveryAction(t *testing.T) {
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 5 {
+		if len(labels) != 6 {
 			t.Fatalf("labels collapsed into %d", len(labels))
 		}
 		if application.ConfirmUndecidedReason(len(labels)+1).String() != "" {
-			t.Fatal("第四个未决原因带了标签——封闭集合被悄悄放开")
+			t.Fatal("封闭集合之外的未决原因带了标签——封闭集合被悄悄放开")
 		}
 	})
 }

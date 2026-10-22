@@ -35,6 +35,7 @@ const (
 	commandAccountingConnector         = "accounting-connector"
 	commandPeriodicFee                 = "periodic-fee"
 	commandChargeAttribution           = "charge-attribution"
+	commandStatementArrangement        = "statement-arrangement"
 	commandSellEvaluationTrigger       = "sell-evaluation-trigger"
 	commandSettlementMoment            = "settlement-moment"
 	commandPreAcceptanceEstimate       = "pre-acceptance-estimate-adoption"
@@ -59,6 +60,7 @@ var allCommands = []string{
 	commandAccountingConnector,
 	commandPeriodicFee,
 	commandChargeAttribution,
+	commandStatementArrangement,
 	commandSellEvaluationTrigger,
 	commandSettlementMoment,
 	commandPreAcceptanceEstimate,
@@ -297,6 +299,19 @@ func commandFor(command string, raw []byte) (dispatchFunc, error) {
 				return "", 0, err
 			}
 			message, code := catalogueAnswer(commandChargeAttribution, effect, registration.FeeItem().String())
+			return message, code, nil
+		}, nil
+	case commandStatementArrangement:
+		tenant, arrangement, err := registrationjson.StatementArrangementFromJSON(raw)
+		if err != nil {
+			return nil, err
+		}
+		return func(ctx context.Context, registrar registrar) (string, int, error) {
+			effect, err := registrar.arrangements.RegisterStatementArrangement(ctx, tenant, arrangement)
+			if err != nil {
+				return "", 0, err
+			}
+			message, code := catalogueAnswer(commandStatementArrangement, effect, arrangement.Account().String())
 			return message, code, nil
 		}, nil
 	case commandPeriodicFee:

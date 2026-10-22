@@ -70,13 +70,15 @@ func (reason SellChargeUndecidedReason) String() string {
 	}
 }
 
-// FormSellCustomerChargeCommand 指名费用身份和费用项目。金额不在命令上。
+// FormSellCustomerChargeCommand 指名费用身份和费用项目。金额不在命令上。SourceOccurredAt 是来源事实的发生时点，
+// 归属日形态为来源发生时取它（ADR-0269 决定三）；包裹计费时点那一路是 SELL 请求上的计价基准时点。
 type FormSellCustomerChargeCommand struct {
-	TenantID   domain.TenantID
-	Charge     string
-	FeeItem    string
-	Evaluation string
-	FormedAt   time.Time
+	TenantID         domain.TenantID
+	Charge           string
+	FeeItem          string
+	Evaluation       string
+	FormedAt         time.Time
+	SourceOccurredAt time.Time
 }
 
 type SellChargeResult struct {
@@ -123,7 +125,8 @@ func (handler *FormSellCustomerChargeHandler) Handle(
 		return SellChargeResult{outcome: SellChargeNotAccepted}, nil
 	}
 	evaluation, err := domain.NewSellEvaluationReference(command.Evaluation)
-	if err != nil || command.FormedAt.IsZero() {
+	// 来源发生时点缺席不当未知收下：形成之后再没有一处能把它补上，形态为来源发生的归属日就永远判不出。
+	if err != nil || command.FormedAt.IsZero() || command.SourceOccurredAt.IsZero() {
 		return SellChargeResult{outcome: SellChargeNotAccepted}, nil
 	}
 	adoption, found, err := handler.evaluations.LoadSellEvaluation(ctx, command.TenantID, evaluation)
@@ -161,6 +164,7 @@ func (handler *FormSellCustomerChargeHandler) Handle(
 		Conversion:         adoption.Conversion,
 		Stage:              domain.ChargeEstimated,
 		FormedAt:           command.FormedAt,
+		SourceOccurredAt:   command.SourceOccurredAt,
 	})
 	if err != nil {
 		return SellChargeResult{outcome: SellChargeNotAccepted}, nil

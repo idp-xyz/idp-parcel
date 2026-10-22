@@ -59,6 +59,7 @@ const (
 	ConditionUnconfigured
 	FactsViewUnavailable
 	ConfirmationFactsUnconfigured
+	ConfirmAttributionViewUnavailable
 )
 
 func (reason ConfirmUndecidedReason) String() string {
@@ -73,6 +74,8 @@ func (reason ConfirmUndecidedReason) String() string {
 		return "FACTS_VIEW_UNAVAILABLE"
 	case ConfirmationFactsUnconfigured:
 		return "CONFIRMATION_FACTS_UNCONFIGURED"
+	case ConfirmAttributionViewUnavailable:
+		return "ATTRIBUTION_VIEW_UNAVAILABLE"
 	default:
 		return ""
 	}
@@ -118,12 +121,15 @@ func (result ConfirmChargeResult) ConfirmationHandoffReference() string {
 	return result.handoff
 }
 
+// ConfirmChargeDeps 是确认编排的依赖。Attributions 是归属日判定本体：确认同笔判归属日，判法与截单时当场判
+// 的是同一份（ADR-0269 决定三）。
 type ConfirmChargeDeps struct {
-	Charges    ports.CustomerChargeStore
-	Conditions ports.ConfirmationConditionView
-	Facts      ports.ConfirmedChargeFactsView
-	Downstream ports.ChargeConfirmationHandoff
-	Clock      ports.Clock
+	Charges      ports.CustomerChargeStore
+	Conditions   ports.ConfirmationConditionView
+	Facts        ports.ConfirmedChargeFactsView
+	Attributions *JudgeChargeAttributionHandler
+	Downstream   ports.ChargeConfirmationHandoff
+	Clock        ports.Clock
 }
 
 type ConfirmChargeHandler struct {
@@ -195,6 +201,21 @@ func (handler *ConfirmChargeHandler) Handle(
 	confirmed, err := charge.Confirm(facts, condition.Basis, handler.deps.Clock.Now())
 	if err != nil {
 		return ConfirmChargeResult{outcome: ConfirmNotAccepted}, nil
+	}
+
+	// 归属日随确认同笔形成。判不出（对账安排或归属日形态没登，或形态要的时点费用上没有）不挡确认：确认
+	// 条件与归属日是两件事，归属日留空，截单时当场再判（ADR-0269 决定三）。读不出册是另一回事——判得出
+	// 判不出此刻不知道，留空会让截单改用那时在册的一版，所以等重投。
+	attribution := handler.deps.Attributions.JudgeConfirmedCharge(ctx, command.TenantID, confirmed)
+	switch attribution.Outcome() {
+	case ChargeAttributionJudged:
+		date, _ := attribution.Date()
+		if confirmed, err = confirmed.WithAttributionDate(date); err != nil {
+			return ConfirmChargeResult{outcome: ConfirmNotAccepted}, nil
+		}
+	case ChargeAttributionViewUnavailable:
+		return ConfirmChargeResult{outcome: ConfirmUndecided, reason: ConfirmAttributionViewUnavailable,
+			continuation: confirmContinuation("ATTRIBUTION_VIEW_UNAVAILABLE", command.ChargeID)}, nil
 	}
 
 	saved, err := handler.deps.Charges.SaveConfirmed(ctx, command.TenantID, confirmed)

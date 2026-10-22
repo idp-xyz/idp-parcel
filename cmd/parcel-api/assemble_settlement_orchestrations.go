@@ -138,6 +138,20 @@ func buildSettlementOrchestrations(db *bentopg.DB) (settlementOrchestrations, er
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: claim settlement handoff: %w", err)
 	}
+	attributionForms, err := sapostgres.NewChargeAttributions(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: charge attributions: %w", err)
+	}
+	arrangements, err := sapostgres.NewStatementArrangements(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: statement arrangements: %w", err)
+	}
+	// 确认与截单共用这一份判定：归属日随确认形成，确认时没判出的截单当场判（ADR-0269 决定三）。两本册空着时
+	// 答未配置，不为此种任何行。
+	attributions, err := saapplication.NewJudgeChargeAttributionHandler(attributionForms, arrangements)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: judge charge attribution: %w", err)
+	}
 	momentStore, err := sapostgres.NewSettlementMoments(db)
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: settlement moments: %w", err)
@@ -150,10 +164,12 @@ func buildSettlementOrchestrations(db *bentopg.DB) (settlementOrchestrations, er
 		transactor: db.Transactor(),
 		moments:    moments,
 		confirm: saapplication.NewConfirmChargeHandler(saapplication.ConfirmChargeDeps{
-			Charges: charges, Conditions: conditions, Facts: catalogues, Downstream: confirmHandoff, Clock: clock,
+			Charges: charges, Conditions: conditions, Facts: catalogues, Attributions: attributions,
+			Downstream: confirmHandoff, Clock: clock,
 		}),
 		cutoff: saapplication.NewCutOffPublishStatementHandler(saapplication.CutOffPublishStatementDeps{
-			Statements: statements, Charges: charges, Adjustments: adjustments, Inclusions: inclusions,
+			Statements: statements, Charges: charges, Billing: statements, Attributions: attributions,
+			AttributionDates: charges, Adjustments: adjustments, Inclusions: inclusions,
 			Disputes: disputes, Downstream: statementHandoff, Clock: clock,
 		}),
 		adjust: saapplication.NewRecordChargeAdjustmentHandler(saapplication.RecordChargeAdjustmentDeps{

@@ -13,7 +13,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
-// ChargeAttributions 是费用项目选用哪套归属日判定的登记册。空册答 found=false。
+// ChargeAttributions 是费用项目选用哪套归属日形态的登记册。空册答 found=false。
 type ChargeAttributions struct {
 	db *bentopg.DB
 }
@@ -45,13 +45,11 @@ func (repository *ChargeAttributions) SaveChargeAttribution(
 	}
 	_, err = executor.Exec(ctx, `
 		INSERT INTO settlement_accounting.charge_attribution (
-			tenant_id, fee_item, form, timezone_name, cutoff_minute, registered_at
-		) VALUES ($1, $2, $3, $4, $5, $6)`,
+			tenant_id, fee_item, form, registered_at
+		) VALUES ($1, $2, $3, $4)`,
 		tenant.String(),
 		registration.FeeItem().String(),
 		registration.Form().String(),
-		registration.TimeZone(),
-		registration.CutoffMinute(),
 		at.UTC(),
 	)
 	if err == nil {
@@ -64,7 +62,7 @@ func (repository *ChargeAttributions) SaveChargeAttribution(
 		return 0, fmt.Errorf("save charge attribution: %w", err)
 	}
 	loaded, found, err := scanChargeAttribution(executor.QueryRow(ctx, `
-		SELECT form, timezone_name, cutoff_minute
+		SELECT form
 		  FROM settlement_accounting.charge_attribution
 		 WHERE tenant_id = $1 AND fee_item = $2`,
 		tenant.String(), registration.FeeItem().String()), registration.FeeItem())
@@ -87,7 +85,7 @@ func (repository *ChargeAttributions) LoadChargeAttribution(
 		return domain.ChargeAttributionRegistration{}, false, fmt.Errorf("load charge attribution: %w", err)
 	}
 	registration, found, err := scanChargeAttribution(querier.QueryRow(ctx, `
-		SELECT form, timezone_name, cutoff_minute
+		SELECT form
 		  FROM settlement_accounting.charge_attribution
 		 WHERE tenant_id = $1 AND fee_item = $2`,
 		tenant.String(), feeItem.String()), feeItem)
@@ -98,9 +96,8 @@ func (repository *ChargeAttributions) LoadChargeAttribution(
 }
 
 func scanChargeAttribution(row pgx.Row, feeItem domain.FeeItemReference) (domain.ChargeAttributionRegistration, bool, error) {
-	var formName, zone string
-	var cutoff int
-	err := row.Scan(&formName, &zone, &cutoff)
+	var formName string
+	err := row.Scan(&formName)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.ChargeAttributionRegistration{}, false, nil
 	}
@@ -111,7 +108,7 @@ func scanChargeAttribution(row pgx.Row, feeItem domain.FeeItemReference) (domain
 	if err != nil {
 		return domain.ChargeAttributionRegistration{}, false, err
 	}
-	registration, err := domain.NewChargeAttributionRegistration(feeItem, form, zone, cutoff)
+	registration, err := domain.NewChargeAttributionRegistration(feeItem, form)
 	if err != nil {
 		return domain.ChargeAttributionRegistration{}, false, err
 	}

@@ -31,6 +31,55 @@ func NewCustomerStatements(db *bentopg.DB) (*CustomerStatements, error) {
 	return &CustomerStatements{db: db}, nil
 }
 
+var (
+	_ ports.PublishedStatementStore = (*CustomerStatements)(nil)
+	_ ports.ChargeBillingLock       = (*CustomerStatements)(nil)
+)
+
+// LockChargeBilling 先以 FOR UPDATE 锁住费用行，再查它在不在一张未作废的已发布对账单上。锁住的是费用行而不是
+// 对账单：要挡的是两笔截单并发各自读到「未出账」，它们共同碰到的只有费用行。读已提交隔离下，等锁之后的
+// 那条查询拿新快照，读得到先到者已提交的单。必须在事务里：锁到提交才放，离开事务就只是一次读。
+func (repository *CustomerStatements) LockChargeBilling(
+	ctx context.Context,
+	tenant domain.TenantID,
+	charge domain.CustomerChargeID,
+) (domain.StatementNumber, bool, error) {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return domain.StatementNumber{}, false, fmt.Errorf("lock charge billing: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`SELECT 1
+		   FROM settlement_accounting.customer_charge
+		  WHERE tenant_id = $1
+		    AND charge_id = $2
+		    FOR UPDATE`,
+		tenant.String(), charge.String()); err != nil {
+		return domain.StatementNumber{}, false, fmt.Errorf("lock charge billing: %w", err)
+	}
+	var number string
+	err = executor.QueryRow(ctx,
+		`SELECT statement_number
+		   FROM settlement_accounting.customer_statement
+		  WHERE tenant_id = $1
+		    AND voided_at IS NULL
+		    AND lines @> jsonb_build_array(jsonb_build_object('charge', $2::text))
+		  ORDER BY published_at, statement_number
+		  LIMIT 1`,
+		tenant.String(), charge.String()).Scan(&number)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.StatementNumber{}, false, nil
+	}
+	if err != nil {
+		return domain.StatementNumber{}, false, fmt.Errorf("lock charge billing: %w", err)
+	}
+	billed, err := domain.NewStatementNumber(number)
+	if err != nil {
+		return domain.StatementNumber{}, false, fmt.Errorf("lock charge billing: %w", err)
+	}
+	return billed, true, nil
+}
+
 // statementLineRow 与 statementAdjustmentRow 是两列 jsonb 的行模型。方向存封闭字串，
 // 读回经 adjustmentDirectionFrom 译码。
 type statementLineRow struct {

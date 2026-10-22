@@ -72,7 +72,7 @@ func chargeAttributionRegistration(t *testing.T) domain.ChargeAttributionRegistr
 	if err != nil {
 		t.Fatal(err)
 	}
-	registration, err := domain.NewChargeAttributionRegistration(fee, domain.ChargeAttributionSourceOccurred, "UTC", 18*60)
+	registration, err := domain.NewChargeAttributionRegistration(fee, domain.ChargeAttributionSourceOccurred)
 	if err != nil {
 		t.Fatal(err)
 	}

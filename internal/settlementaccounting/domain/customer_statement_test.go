@@ -13,6 +13,8 @@ import (
 var (
 	statementCutOffAt    = time.Date(2026, 8, 31, 16, 0, 0, 0, time.UTC)
 	statementPublishedAt = time.Date(2026, 8, 31, 18, 0, 0, 0, time.UTC)
+	// statementLastDay 是本组夹具的本期最后一个归属日；confirmedCharge 给的归属日在它前一天。
+	statementLastDay = domain.AttributionDate{Year: 2026, Month: time.August, Day: 31}
 )
 
 func confirmedCharge(t *testing.T, id string, amountMinor int64) domain.CustomerCharge {
@@ -39,7 +41,11 @@ func confirmedCharge(t *testing.T, id string, amountMinor int64) domain.Customer
 	if err != nil {
 		t.Fatalf("confirm charge: %v", err)
 	}
-	return confirmed
+	attributed, err := confirmed.WithAttributionDate(domain.AttributionDate{Year: 2026, Month: time.August, Day: 30})
+	if err != nil {
+		t.Fatalf("attribute charge: %v", err)
+	}
+	return attributed
 }
 
 func estimatedStatementCharge(t *testing.T, id string) domain.CustomerCharge {
@@ -84,11 +90,12 @@ func creditAdjustment(t *testing.T, id, chargeID string, amountMinor int64) doma
 func cutDraft(t *testing.T) domain.StatementDraft {
 	t.Helper()
 	draft, err := domain.CutStatementDraft(domain.StatementDraftSpec{
-		Account:  settlementValue(t, domain.NewSettlementAccountID, "account-1"),
-		Period:   settlementValue(t, domain.NewBillingPeriodReference, "period-2026-08"),
-		Version:  settlementValue(t, domain.NewStatementDraftVersion, "draft/v1"),
-		Currency: settlementValue(t, domain.NewCurrencyCode, "USD"),
-		CutOffAt: statementCutOffAt,
+		Account:             settlementValue(t, domain.NewSettlementAccountID, "account-1"),
+		Period:              settlementValue(t, domain.NewBillingPeriodReference, "period-2026-08"),
+		Version:             settlementValue(t, domain.NewStatementDraftVersion, "draft/v1"),
+		Currency:            settlementValue(t, domain.NewCurrencyCode, "USD"),
+		CutOffAt:            statementCutOffAt,
+		LastAttributionDate: statementLastDay,
 		Charges: []domain.CustomerCharge{
 			confirmedCharge(t, "charge-1", 10000),
 			confirmedCharge(t, "charge-2", 6000),
@@ -125,12 +132,13 @@ func TestACutOffDraftAdmitsOnlyConfirmedCharges(t *testing.T) {
 
 	t.Run("an estimated charge is refused", func(t *testing.T) {
 		if _, err := domain.CutStatementDraft(domain.StatementDraftSpec{
-			Account:  settlementValue(t, domain.NewSettlementAccountID, "account-1"),
-			Period:   settlementValue(t, domain.NewBillingPeriodReference, "period-2026-08"),
-			Version:  settlementValue(t, domain.NewStatementDraftVersion, "draft/v1"),
-			Currency: settlementValue(t, domain.NewCurrencyCode, "USD"),
-			CutOffAt: statementCutOffAt,
-			Charges:  []domain.CustomerCharge{estimatedStatementCharge(t, "charge-9")},
+			Account:             settlementValue(t, domain.NewSettlementAccountID, "account-1"),
+			Period:              settlementValue(t, domain.NewBillingPeriodReference, "period-2026-08"),
+			Version:             settlementValue(t, domain.NewStatementDraftVersion, "draft/v1"),
+			Currency:            settlementValue(t, domain.NewCurrencyCode, "USD"),
+			CutOffAt:            statementCutOffAt,
+			LastAttributionDate: statementLastDay,
+			Charges:             []domain.CustomerCharge{estimatedStatementCharge(t, "charge-9")},
 		}); !errors.Is(err, domain.ErrChargeNotConfirmed) {
 			t.Fatalf("error = %v, want ErrChargeNotConfirmed", err)
 		}
@@ -138,17 +146,54 @@ func TestACutOffDraftAdmitsOnlyConfirmedCharges(t *testing.T) {
 
 	t.Run("an adjustment for a charge outside the draft is refused", func(t *testing.T) {
 		if _, err := domain.CutStatementDraft(domain.StatementDraftSpec{
-			Account:  settlementValue(t, domain.NewSettlementAccountID, "account-1"),
-			Period:   settlementValue(t, domain.NewBillingPeriodReference, "period-2026-08"),
-			Version:  settlementValue(t, domain.NewStatementDraftVersion, "draft/v1"),
-			Currency: settlementValue(t, domain.NewCurrencyCode, "USD"),
-			CutOffAt: statementCutOffAt,
-			Charges:  []domain.CustomerCharge{confirmedCharge(t, "charge-1", 10000)},
+			Account:             settlementValue(t, domain.NewSettlementAccountID, "account-1"),
+			Period:              settlementValue(t, domain.NewBillingPeriodReference, "period-2026-08"),
+			Version:             settlementValue(t, domain.NewStatementDraftVersion, "draft/v1"),
+			Currency:            settlementValue(t, domain.NewCurrencyCode, "USD"),
+			CutOffAt:            statementCutOffAt,
+			LastAttributionDate: statementLastDay,
+			Charges:             []domain.CustomerCharge{confirmedCharge(t, "charge-1", 10000)},
 			Adjustments: []domain.ChargeAdjustment{
 				creditAdjustment(t, "adjustment-x", "charge-9", 500),
 			},
 		}); !errors.Is(err, domain.ErrInvalidStatementDraft) {
 			t.Fatalf("error = %v; 别的费用的调整被记进了这个账户", err)
+		}
+	})
+
+	t.Run("a charge without an attribution date is refused", func(t *testing.T) {
+		unattributed, err := estimatedStatementCharge(t, "charge-8").Confirm(
+			confirmationFacts(t),
+			settlementValue(t, domain.NewConfirmationBasisReference, "delivery-confirmed-8"),
+			statementCutOffAt.Add(-48*time.Hour))
+		if err != nil {
+			t.Fatalf("confirm: %v", err)
+		}
+		if _, err := domain.CutStatementDraft(domain.StatementDraftSpec{
+			Account:             settlementValue(t, domain.NewSettlementAccountID, "account-1"),
+			Period:              settlementValue(t, domain.NewBillingPeriodReference, "period-2026-08"),
+			Version:             settlementValue(t, domain.NewStatementDraftVersion, "draft/v1"),
+			Currency:            settlementValue(t, domain.NewCurrencyCode, "USD"),
+			CutOffAt:            statementCutOffAt,
+			LastAttributionDate: statementLastDay,
+			Charges:             []domain.CustomerCharge{unattributed},
+		}); !errors.Is(err, domain.ErrChargeNotAttributed) {
+			t.Fatalf("error = %v, want ErrChargeNotAttributed（不按调用方列出的清单放行）", err)
+		}
+	})
+
+	t.Run("a charge attributed after the last day of the period is refused", func(t *testing.T) {
+		// 归属日 8 月 30 日、本期最后一个归属日 8 月 29 日：晚于本期。截单时刻 CutOffAt 在 8 月 31 日，不参与。
+		if _, err := domain.CutStatementDraft(domain.StatementDraftSpec{
+			Account:             settlementValue(t, domain.NewSettlementAccountID, "account-1"),
+			Period:              settlementValue(t, domain.NewBillingPeriodReference, "period-2026-08"),
+			Version:             settlementValue(t, domain.NewStatementDraftVersion, "draft/v1"),
+			Currency:            settlementValue(t, domain.NewCurrencyCode, "USD"),
+			CutOffAt:            statementCutOffAt,
+			LastAttributionDate: domain.AttributionDate{Year: 2026, Month: time.August, Day: 29},
+			Charges:             []domain.CustomerCharge{confirmedCharge(t, "charge-1", 10000)},
+		}); !errors.Is(err, domain.ErrChargeAfterPeriod) {
+			t.Fatalf("error = %v, want ErrChargeAfterPeriod", err)
 		}
 	})
 

@@ -225,6 +225,8 @@ func (handler *FormEstimatedCustomerChargeHandler) Handle(
 		FeeItem:    feeItem.String(),
 		Evaluation: adoption.Evaluation.String(),
 		FormedAt:   handler.deps.Clock.Now(),
+		// 计价基准时点就是这件包裹的责任起点或终局的生效时点（ADR-0190 决定二），即这笔费用的来源发生时点。
+		SourceOccurredAt: record.Request.PricingBasisAt(),
 	})
 	if err != nil {
 		return EstimatedCustomerChargeResult{}, err

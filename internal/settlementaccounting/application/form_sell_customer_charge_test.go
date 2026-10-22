@@ -95,6 +95,8 @@ func TestSellChargeUsesTheEvaluationAmount(t *testing.T) {
 		FeeItem:    "BASE_FREIGHT",
 		Evaluation: "sell-eval-1",
 		FormedAt:   time.Date(2026, 9, 30, 8, 0, 0, 0, time.UTC),
+		// 来源发生时点在形成时点之前：计价基准时点是包裹的责任起点，评价随后才形成。
+		SourceOccurredAt: time.Date(2026, 9, 29, 22, 0, 0, 0, time.UTC),
 	})
 	if err != nil {
 		t.Fatalf("form: %v", err)
@@ -112,6 +114,40 @@ func TestSellChargeUsesTheEvaluationAmount(t *testing.T) {
 	}
 	if len(store.saved) != 1 {
 		t.Fatalf("saved = %d", len(store.saved))
+	}
+}
+
+// Covers: ADR-0269 决定三「来源发生时点出自费用的来源事实」——形成时没带上这一格就不形成：形成之后再没有一处能
+// 把它补上。
+func TestASellChargeWithoutItsSourceInstantIsNotFormed(t *testing.T) {
+	currency, err := domain.NewCurrencyCode("CNY")
+	if err != nil {
+		t.Fatal(err)
+	}
+	evaluation, err := domain.NewSellEvaluationReference("sell-eval-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &estimatedChargeStore{}
+	handler, err := application.NewFormSellCustomerChargeHandler(&sellEvaluationView{
+		adoption: ports.SellEvaluationAdoption{
+			Evaluation: evaluation, Outcome: ports.SellEvaluationCompleted,
+			OriginalCurrency: currency, OriginalMinor: 12000, SettlementCurrency: currency, SettlementMinor: 12000,
+		},
+	}, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tenant, _ := domain.NewTenantID("tenant-1")
+	result, err := handler.Handle(context.Background(), application.FormSellCustomerChargeCommand{
+		TenantID: tenant, Charge: "charge-1", FeeItem: "BASE_FREIGHT", Evaluation: "sell-eval-1",
+		FormedAt: time.Date(2026, 9, 30, 8, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome() != application.SellChargeNotAccepted || len(store.saved) != 0 {
+		t.Fatalf("outcome = %s saved = %d", result.Outcome(), len(store.saved))
 	}
 }
 

@@ -43,7 +43,7 @@ func (repository *CustomerCharges) FindByID(
 	var conversion *string
 	var formedAt, recordedAt time.Time
 	var confirmation *string
-	var confirmedAt *time.Time
+	var confirmedAt, sourceOccurredAt, attributionDate *time.Time
 	var facts confirmationFactColumns
 	err = querier.QueryRow(ctx,
 		`SELECT fee_item, evaluation_ref, original_currency, original_minor,
@@ -51,7 +51,7 @@ func (repository *CustomerCharges) FindByID(
 		        confirmation_basis, formed_at, confirmed_at, recorded_at,
 		        responsible_entity, counterparty_ref, charge_direction,
 		        settlement_account_id, contract_basis, primary_charging_scope,
-		        source_fact_ref
+		        source_fact_ref, source_occurred_at, attribution_date
 		   FROM settlement_accounting.customer_charge
 		  WHERE tenant_id = $1
 		    AND charge_id = $2`,
@@ -62,7 +62,7 @@ func (repository *CustomerCharges) FindByID(
 		&confirmation, &formedAt, &confirmedAt, &recordedAt,
 		&facts.responsibleEntity, &facts.counterparty, &facts.direction,
 		&facts.settlementAccount, &facts.contractBasis, &facts.primaryChargingScope,
-		&facts.sourceFact)
+		&facts.sourceFact, &sourceOccurredAt, &attributionDate)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.CustomerCharge{}, false, nil
 	}
@@ -84,6 +84,8 @@ func (repository *CustomerCharges) FindByID(
 		facts:              facts,
 		formedAt:           formedAt,
 		confirmedAt:        confirmedAt,
+		sourceOccurredAt:   sourceOccurredAt,
+		attributionDate:    attributionDate,
 	})
 	if err != nil {
 		return domain.CustomerCharge{}, false, fmt.Errorf("find customer charge: %w", err)
@@ -123,6 +125,8 @@ func (repository *CustomerCharges) SaveConfirmed(
 		value := reference.String()
 		conversion = &value
 	}
+	sourceOccurredAt := sourceOccurredColumn(charge)
+	attributionDate := attributionDateColumn(charge)
 
 	// 七项随确认同笔落库、冲突分支同笔改写：分两笔写会让库上出现一个七项为空的已确认
 	// 行，而 customer_charge_confirmation_facts_coupled 正是要挡住它。
@@ -133,11 +137,12 @@ func (repository *CustomerCharges) SaveConfirmed(
 			 stage, confirmation_basis, formed_at, confirmed_at, recorded_at,
 			 responsible_entity, counterparty_ref, charge_direction,
 			 settlement_account_id, contract_basis, primary_charging_scope,
-			 source_fact_ref)
+			 source_fact_ref, source_occurred_at, attribution_date)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'CONFIRMED', $10, $11, $12, $12,
-		         $13, $14, $15, $16, $17, $18, $19)
+		         $13, $14, $15, $16, $17, $18, $19, $20, $21::date)
 		 ON CONFLICT (tenant_id, charge_id) DO UPDATE
 		    SET stage = 'CONFIRMED',
+		        attribution_date = EXCLUDED.attribution_date,
 		        confirmation_basis = EXCLUDED.confirmation_basis,
 		        confirmed_at = EXCLUDED.confirmed_at,
 		        recorded_at = EXCLUDED.recorded_at,
@@ -168,6 +173,8 @@ func (repository *CustomerCharges) SaveConfirmed(
 		facts.ContractBasis.String(),
 		facts.PrimaryChargingScope.String(),
 		facts.SourceFact.String(),
+		sourceOccurredAt,
+		attributionDate,
 	)
 	if err != nil {
 		return ports.ChargeSaveOutcomeInvalid, fmt.Errorf("save confirmed charge: %w", err)
@@ -202,8 +209,8 @@ func (repository *CustomerCharges) SaveEstimated(
 		`INSERT INTO settlement_accounting.customer_charge
 			(tenant_id, charge_id, fee_item, evaluation_ref, original_currency,
 			 original_minor, settlement_currency, settlement_minor, conversion_ref,
-			 stage, formed_at, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
+			 stage, formed_at, recorded_at, source_occurred_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11, $12)
 		 ON CONFLICT DO NOTHING`,
 		tenant.String(),
 		charge.ID().String(),
@@ -216,6 +223,7 @@ func (repository *CustomerCharges) SaveEstimated(
 		conversion,
 		charge.Stage().String(),
 		charge.FormedAt().UTC(),
+		sourceOccurredColumn(charge),
 	)
 	if err != nil {
 		return ports.ChargeSaveOutcomeInvalid, fmt.Errorf("save estimated charge: %w", err)
@@ -224,6 +232,79 @@ func (repository *CustomerCharges) SaveEstimated(
 		return ports.ChargeAlreadyConfirmed, nil
 	}
 	return ports.ChargeSaved, nil
+}
+
+// RecordAttributionDate 把截单时当场判出的归属日落到已确认费用上。WHERE 带 attribution_date IS NULL：已有归属日的
+// 行不改，读回册上那一天交回——归属日一经形成不变（ADR-0269 决定三）。行不在、或不是已确认，报错：截单只给
+// 已确认费用判归属日，走到这里是编排与册说法矛盾。
+func (repository *CustomerCharges) RecordAttributionDate(
+	ctx context.Context,
+	tenant domain.TenantID,
+	id domain.CustomerChargeID,
+	date domain.AttributionDate,
+) (domain.AttributionDate, error) {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return domain.AttributionDate{}, fmt.Errorf("record attribution date: %w", err)
+	}
+	if !date.Valid() {
+		return domain.AttributionDate{}, fmt.Errorf("record attribution date: invalid date")
+	}
+	var stored *time.Time
+	var stageName string
+	err = executor.QueryRow(ctx,
+		`WITH formed AS (
+		     UPDATE settlement_accounting.customer_charge
+		        SET attribution_date = $3::date
+		      WHERE tenant_id = $1
+		        AND charge_id = $2
+		        AND stage = 'CONFIRMED'
+		        AND attribution_date IS NULL
+		  RETURNING attribution_date, stage)
+		 SELECT attribution_date, stage FROM formed
+		 UNION ALL
+		 SELECT attribution_date, stage
+		   FROM settlement_accounting.customer_charge
+		  WHERE tenant_id = $1
+		    AND charge_id = $2
+		    AND NOT EXISTS (SELECT 1 FROM formed)`,
+		tenant.String(), id.String(), date.String(),
+	).Scan(&stored, &stageName)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.AttributionDate{}, fmt.Errorf("record attribution date: charge %s is not in the register", id)
+	}
+	if err != nil {
+		return domain.AttributionDate{}, fmt.Errorf("record attribution date: %w", err)
+	}
+	if stageName != domain.ChargeConfirmed.String() || stored == nil {
+		return domain.AttributionDate{}, fmt.Errorf("record attribution date: charge %s is not confirmed", id)
+	}
+	return attributionDateFrom(*stored), nil
+}
+
+// sourceOccurredColumn 把没带上的来源发生时点落成 NULL：零值时刻会被读回成一个真实的公元元年时点。
+func sourceOccurredColumn(charge domain.CustomerCharge) *time.Time {
+	at, present := charge.SourceOccurredAt()
+	if !present {
+		return nil
+	}
+	utc := at.UTC()
+	return &utc
+}
+
+func attributionDateColumn(charge domain.CustomerCharge) *string {
+	date, attributed := charge.AttributionDate()
+	if !attributed {
+		return nil
+	}
+	value := date.String()
+	return &value
+}
+
+// attributionDateFrom 取 date 列的公历日。pgx 把 date 读成 UTC 零点，取它的年月日不涉任何业务时区。
+func attributionDateFrom(at time.Time) domain.AttributionDate {
+	year, month, day := at.UTC().Date()
+	return domain.AttributionDate{Year: year, Month: month, Day: day}
 }
 
 // chargeRow 是 customer_charge 一行的原始列值，交给重建走形成门。
@@ -241,6 +322,8 @@ type chargeRow struct {
 	facts              confirmationFactColumns
 	formedAt           time.Time
 	confirmedAt        *time.Time
+	sourceOccurredAt   *time.Time
+	attributionDate    *time.Time
 }
 
 // confirmationFactColumns 是确认时固定的七项在行上的原始列值。全部可空：非确认行按
@@ -341,6 +424,10 @@ func rebuildCustomerCharge(row chargeRow) (domain.CustomerCharge, error) {
 	if stage == domain.ChargeConfirmed {
 		formStage = domain.ChargeEstimated
 	}
+	var sourceOccurredAt time.Time
+	if row.sourceOccurredAt != nil {
+		sourceOccurredAt = *row.sourceOccurredAt
+	}
 	charge, err := domain.FormCustomerCharge(domain.CustomerChargeSpec{
 		ID:                 row.id,
 		FeeItem:            feeRef,
@@ -352,11 +439,15 @@ func rebuildCustomerCharge(row chargeRow) (domain.CustomerCharge, error) {
 		Conversion:         conversion,
 		Stage:              formStage,
 		FormedAt:           row.formedAt,
+		SourceOccurredAt:   sourceOccurredAt,
 	})
 	if err != nil {
 		return domain.CustomerCharge{}, err
 	}
 	if stage != domain.ChargeConfirmed {
+		if row.attributionDate != nil {
+			return domain.CustomerCharge{}, fmt.Errorf("unconfirmed charge carries an attribution date")
+		}
 		return charge, nil
 	}
 	if row.confirmation == nil || row.confirmedAt == nil {
@@ -370,7 +461,11 @@ func rebuildCustomerCharge(row chargeRow) (domain.CustomerCharge, error) {
 	if err != nil {
 		return domain.CustomerCharge{}, err
 	}
-	return charge.Confirm(facts, basis, *row.confirmedAt)
+	confirmed, err := charge.Confirm(facts, basis, *row.confirmedAt)
+	if err != nil || row.attributionDate == nil {
+		return confirmed, err
+	}
+	return confirmed.WithAttributionDate(attributionDateFrom(*row.attributionDate))
 }
 
 func chargeStageFrom(raw string) (domain.ChargeStage, error) {

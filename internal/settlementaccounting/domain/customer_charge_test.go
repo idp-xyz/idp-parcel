@@ -359,3 +359,38 @@ func TestAdjustmentCurrencyTripleMirrorsTheChargeGate(t *testing.T) {
 		t.Fatalf("err = %v; 同币种两额不等被收下了", err)
 	}
 }
+
+// Covers: ADR-0269 决定三「归属日随费用确认形成、落库后不变」的领域面：未确认的费用没有归属日可钉，已钉的
+// 不钉第二次（同一天也拒），来源发生时点随形成带上、读回原值。
+func TestAnAttributionDateIsFormedOnceOnAConfirmedCharge(t *testing.T) {
+	charge := estimatedCharge(t)
+	day := domain.AttributionDate{Year: 2026, Month: time.August, Day: 31}
+	if _, err := charge.WithAttributionDate(day); !errors.Is(err, domain.ErrInvalidCustomerCharge) {
+		t.Fatalf("预估费用钉上了归属日：%v", err)
+	}
+	confirmed, err := charge.Confirm(confirmationFacts(t),
+		mustValue(t, domain.NewConfirmationBasisReference, "delivery-confirmed-1"),
+		charge.FormedAt().Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, attributed := confirmed.AttributionDate(); attributed {
+		t.Fatal("确认本身凭空带了归属日")
+	}
+	if _, err := confirmed.WithAttributionDate(domain.AttributionDate{Year: 2026, Month: time.February, Day: 30}); !errors.Is(err, domain.ErrInvalidCustomerCharge) {
+		t.Fatalf("不存在的一天被钉成归属日：%v", err)
+	}
+	attributed, err := confirmed.WithAttributionDate(day)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := attributed.AttributionDate(); !ok || got != day {
+		t.Fatalf("归属日 = %s ok=%v", got, ok)
+	}
+	if _, err := attributed.WithAttributionDate(day); !errors.Is(err, domain.ErrAttributionDateAlreadyFormed) {
+		t.Fatalf("已形成的归属日被钉了第二次：%v", err)
+	}
+	if _, has := confirmed.SourceOccurredAt(); has {
+		t.Fatal("没带来源发生时点的费用答出了一个")
+	}
+}

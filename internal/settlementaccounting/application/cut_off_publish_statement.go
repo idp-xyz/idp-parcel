@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -16,9 +17,10 @@ import (
 // ErrUnexpectedStatementSave 说明对账单库交回了封闭集合以外的写入结果。
 var ErrUnexpectedStatementSave = errors.New("settlement accounting: unexpected statement save outcome")
 
-// StatementOutcome 是对账单编排的应用处理结果。三个业务负向格（ADR-0029）：勾稽不平
-// （改申报总额再来）、费用未确认（先确认再截单）、纳入回填（只能归后续账期）——都是
-// 已知答案，不是改单形状也不是等依赖。
+// StatementOutcome 是对账单编排的应用处理结果。业务负向格（ADR-0029）：勾稽不平
+// （改申报总额再来）、费用未确认（先确认再截单）、纳入回填（只能归后续账期）、本期无费用
+// （列出的费用都晚于本期或已出账，换本期或换清单再来）——都是已知答案，不是改单形状也不是
+// 等依赖。截单未配置是另一种恢复动作：补登对账安排或归属日形态之后再截。
 type StatementOutcome uint8
 
 const (
@@ -42,6 +44,8 @@ const (
 	DisputeAlreadyResolved
 	StatementNotAccepted
 	StatementUndecided
+	StatementNoChargeInPeriod
+	StatementCutUnconfigured
 )
 
 func (outcome StatementOutcome) String() string {
@@ -84,6 +88,10 @@ func (outcome StatementOutcome) String() string {
 		return "SOURCE_NOT_ACCEPTED"
 	case StatementUndecided:
 		return "STATEMENT_UNDECIDED"
+	case StatementNoChargeInPeriod:
+		return "NO_CHARGE_IN_PERIOD"
+	case StatementCutUnconfigured:
+		return "STATEMENT_CUT_UNCONFIGURED"
 	default:
 		return ""
 	}
@@ -99,6 +107,7 @@ const (
 	InclusionStoreUnavailable
 	DisputeStoreUnavailable
 	AdjustmentViewUnavailable
+	StatementAttributionViewUnavailable
 )
 
 func (reason StatementUndecidedReason) String() string {
@@ -113,24 +122,66 @@ func (reason StatementUndecidedReason) String() string {
 		return "DISPUTE_STORE_UNAVAILABLE"
 	case AdjustmentViewUnavailable:
 		return "ADJUSTMENT_VIEW_UNAVAILABLE"
+	case StatementAttributionViewUnavailable:
+		return "ATTRIBUTION_VIEW_UNAVAILABLE"
 	default:
 		return ""
 	}
 }
 
-// PublishStatementCommand 携带截单+发布：指名费用集合（从费用库读回，只收已确认），
-// 申报总额与行勾稽不平即阻断。
+// PublishStatementCommand 携带截单+发布：指名候选费用集合（从费用库读回，只收已确认），点名本期最后
+// 一个归属日（YYYY-MM-DD）——列出的费用里只有归属日不晚于它、尚未出账的入本期，其余逐件指名，不按
+// 列出的清单放行（ADR-0269 决定四）。申报总额与入本期的行勾稽，不平即阻断。CutOffAt 是截单这一动作
+// 的业务时点，记在草稿上，不参与判哪一件入本期。
 type PublishStatementCommand struct {
-	TenantID           domain.TenantID
-	Number             string
-	Account            string
-	Period             string
-	Version            string
-	Currency           string
-	ChargeIDs          []string
-	DeclaredTotalMinor int64
-	CutOffAt           time.Time
-	PublishedAt        time.Time
+	TenantID            domain.TenantID
+	Number              string
+	Account             string
+	Period              string
+	Version             string
+	Currency            string
+	ChargeIDs           []string
+	LastAttributionDate string
+	DeclaredTotalMinor  int64
+	CutOffAt            time.Time
+	PublishedAt         time.Time
+}
+
+// StatementExclusionCause 是命令列出的一件费用没入本期的缘由。
+type StatementExclusionCause uint8
+
+const (
+	StatementExclusionCauseInvalid StatementExclusionCause = iota
+	// ExcludedAfterPeriod：归属日晚于本期最后一个归属日，归后续账期。
+	ExcludedAfterPeriod
+	// ExcludedAlreadyBilled：已在一张未作废的已发布对账单上，不再纳入。
+	ExcludedAlreadyBilled
+	// ExcludedAttributionUnconfigured：没有归属日、当场也判不出——对账安排或归属日形态没登，Missing 指名
+	// 缺哪一册。码沿用归属日判定的那一格，截单不另起一个词。
+	ExcludedAttributionUnconfigured
+)
+
+func (cause StatementExclusionCause) String() string {
+	switch cause {
+	case ExcludedAfterPeriod:
+		return "ATTRIBUTED_AFTER_PERIOD"
+	case ExcludedAlreadyBilled:
+		return "ALREADY_BILLED"
+	case ExcludedAttributionUnconfigured:
+		return ChargeAttributionUnconfigured.String()
+	default:
+		return ""
+	}
+}
+
+// StatementExclusion 逐件指名一件没入本期的费用。AttributionDate 只在晚于本期时有，BilledOn 只在已出账时有，
+// Missing 只在归属日判不出时有。
+type StatementExclusion struct {
+	Charge          domain.CustomerChargeID
+	Cause           StatementExclusionCause
+	AttributionDate domain.AttributionDate
+	BilledOn        domain.StatementNumber
+	Missing         []domain.AttributionRegister
 }
 
 // VoidStatementCommand 携带整单作废：依据必备、原单保留、替代单用新单号。
@@ -186,6 +237,7 @@ type ResolveDisputeCommand struct {
 type StatementResult struct {
 	outcome      StatementOutcome
 	reason       StatementUndecidedReason
+	exclusions   []StatementExclusion
 	statement    ports.StatementRecord
 	inclusion    ports.InclusionRecord
 	dispute      ports.DisputeRecord
@@ -201,6 +253,12 @@ func (result StatementResult) Outcome() StatementOutcome {
 // UndecidedReason 只在`未决`时非零。
 func (result StatementResult) UndecidedReason() StatementUndecidedReason {
 	return result.reason
+}
+
+// Exclusions 逐件指名这一次截单里没入本期的费用，按命令列出的次序。只在本次截单走到判纳入那一步时有：
+// 发布、勾稽不平、本期无费用与截单未配置。重放答已有对账单，不重判——此刻再判可能已是另一个答案。
+func (result StatementResult) Exclusions() []StatementExclusion {
+	return append([]StatementExclusion(nil), result.exclusions...)
 }
 
 func (result StatementResult) Statement() (ports.StatementRecord, bool) {
@@ -226,15 +284,19 @@ func (result StatementResult) StatementHandoffReference() string {
 
 // CutOffPublishStatementDeps 是截单编排的依赖。Adjustments 是只读口：本用例对调整只有
 // 纳入关系的所有权（CONTEXT「调整类型与唯一所有权」表），依赖上放不下写口，理由与
-// 那个只读接口分名的理由是同一条，写在 ports.ChargeAdjustmentView 上。
+// 那个只读接口分名的理由是同一条，写在 ports.ChargeAdjustmentView 上。Attributions 与
+// 确认编排用的是同一份判定；AttributionDates 只落截单当场判出的那几件。
 type CutOffPublishStatementDeps struct {
-	Statements  ports.PublishedStatementStore
-	Charges     ports.CustomerChargeStore
-	Adjustments ports.ChargeAdjustmentView
-	Inclusions  ports.SubsequentInclusionStore
-	Disputes    ports.StatementDisputeStore
-	Downstream  ports.StatementHandoff
-	Clock       ports.Clock
+	Statements       ports.PublishedStatementStore
+	Charges          ports.CustomerChargeStore
+	Billing          ports.ChargeBillingLock
+	Attributions     *JudgeChargeAttributionHandler
+	AttributionDates ports.ChargeAttributionDateRecorder
+	Adjustments      ports.ChargeAdjustmentView
+	Inclusions       ports.SubsequentInclusionStore
+	Disputes         ports.StatementDisputeStore
+	Downstream       ports.StatementHandoff
+	Clock            ports.Clock
 }
 
 type CutOffPublishStatementHandler struct {
@@ -245,14 +307,18 @@ func NewCutOffPublishStatementHandler(deps CutOffPublishStatementDeps) *CutOffPu
 	return &CutOffPublishStatementHandler{deps: deps}
 }
 
-// Publish 截单并发布：费用从库读回（只收已确认，未确认 → CHARGE_NOT_CONFIRMED 业务
-// 负向）→ CutStatementDraft+PublishStatement（勾稽不平 → STATEMENT_IMBALANCE 阻断，
-// 不修正为约等于）→ 幂等按（租户+单号）→ 意图交下游。
+// Publish 截单并发布：费用从库读回（只收已确认，未确认 → CHARGE_NOT_CONFIRMED 业务负向）→ 逐件定是否入
+// 本期（admit）→ CutStatementDraft+PublishStatement（勾稽不平 → STATEMENT_IMBALANCE 阻断，不修正为约等于）
+// → 幂等按（租户+单号）→ 意图交下游。
 func (handler *CutOffPublishStatementHandler) Publish(
 	ctx context.Context,
 	command PublishStatementCommand,
 ) (StatementResult, error) {
 	number, err := domain.NewStatementNumber(command.Number)
+	if err != nil {
+		return StatementResult{outcome: StatementNotAccepted}, nil
+	}
+	last, err := domain.ParseAttributionDate(command.LastAttributionDate)
 	if err != nil {
 		return StatementResult{outcome: StatementNotAccepted}, nil
 	}
@@ -264,14 +330,7 @@ func (handler *CutOffPublishStatementHandler) Publish(
 		return statementUndecided(StatementStoreUnavailable, command.Number), nil
 	}
 	if found {
-		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedPublishDigest(command)) {
-		case domain.DifferentPayload:
-			// 同一单号携带不同截单集合或总额：已发布快照不可顶替，替代走作废+新单号。
-			return StatementResult{outcome: StatementConflict}, nil
-		case domain.UnknownPayloadShape:
-			return statementUndecided(StatementStoreUnavailable, command.Number), nil
-		}
-		return handler.existingStatement(ctx, existing), nil
+		return handler.answerExisting(ctx, existing, command, digest), nil
 	}
 
 	charges := make([]domain.CustomerCharge, 0, len(command.ChargeIDs))
@@ -287,12 +346,29 @@ func (handler *CutOffPublishStatementHandler) Publish(
 		if !chargeFound {
 			return StatementResult{outcome: StatementNotAccepted}, nil
 		}
+		if charge.Stage() != domain.ChargeConfirmed {
+			// 未确认费用进不了截单快照：先确认再来——后到费用归后续账期，不回填。先于判归属日拒，
+			// 未确认的费用没有确认时点也没有所属账户，判不出的缘由会被错指成缺册。
+			return StatementResult{outcome: StatementChargeNotConfirmed}, nil
+		}
 		charges = append(charges, charge)
 	}
 
-	draft, err := draftFrom(command, charges)
+	admission, stopped, stop := handler.admit(ctx, command, number, charges, last)
+	if stop {
+		return stopped, nil
+	}
+	if len(admission.inPeriod) == 0 {
+		// 一件都入不了本期不形成草稿。有判不出归属日的，整笔答未配置——补登之后再截，那几件可能就入了本期；
+		// 没有的，答本期无费用，不答未配置：补登什么都改变不了这个答案（ADR-0269 决定四）。
+		if admission.unconfigured {
+			return StatementResult{outcome: StatementCutUnconfigured, exclusions: admission.exclusions}, nil
+		}
+		return StatementResult{outcome: StatementNoChargeInPeriod, exclusions: admission.exclusions}, nil
+	}
+
+	draft, err := draftFrom(command, admission.inPeriod, last)
 	if errors.Is(err, domain.ErrChargeNotConfirmed) {
-		// 未确认费用进不了截单快照：先确认再来——后到费用归后续账期，不回填。
 		return StatementResult{outcome: StatementChargeNotConfirmed}, nil
 	}
 	if err != nil {
@@ -300,8 +376,9 @@ func (handler *CutOffPublishStatementHandler) Publish(
 	}
 	statement, err := domain.PublishStatement(draft, number, command.DeclaredTotalMinor, command.PublishedAt)
 	if errors.Is(err, domain.ErrStatementImbalance) {
-		// 申报总额与行勾稽不平：阻断，不修正为「约等于」（AT-SA-065）。
-		return StatementResult{outcome: StatementImbalanceOutcome}, nil
+		// 申报总额与入本期的行勾稽不平：阻断，不修正为「约等于」（AT-SA-065）。不入本期的那几件照样指名，
+		// 申报方据此知道差在哪几件。
+		return StatementResult{outcome: StatementImbalanceOutcome, exclusions: admission.exclusions}, nil
 	}
 	if err != nil {
 		return StatementResult{outcome: StatementNotAccepted}, nil
@@ -314,7 +391,7 @@ func (handler *CutOffPublishStatementHandler) Publish(
 	}
 	switch saved {
 	case ports.StatementSaved:
-		result := StatementResult{outcome: StatementPublished, statement: record, hasRecord: true}
+		result := StatementResult{outcome: StatementPublished, statement: record, hasRecord: true, exclusions: admission.exclusions}
 		result.handoff = handler.handOff(ctx, ports.StatementIntent{Statement: record}, command.Number)
 		return result, nil
 	case ports.StatementAlreadyPublished:
@@ -326,6 +403,111 @@ func (handler *CutOffPublishStatementHandler) Publish(
 	default:
 		return StatementResult{}, fmt.Errorf("%w: %d", ErrUnexpectedStatementSave, saved)
 	}
+}
+
+// answerExisting 按已有的同单号对账单作答：同内容是重放，异内容是冲突——已发布快照不可顶替，替代走
+// 作废+新单号。
+func (handler *CutOffPublishStatementHandler) answerExisting(
+	ctx context.Context,
+	existing ports.StatementRecord,
+	command PublishStatementCommand,
+	digest string,
+) StatementResult {
+	switch domain.CompareStoredPublishDigest(existing.ContentDigest, digest, sac1PublishDigest(command), unversionedPublishDigest(command)) {
+	case domain.DifferentPayload:
+		return StatementResult{outcome: StatementConflict}
+	case domain.UnknownPayloadShape:
+		return statementUndecided(StatementStoreUnavailable, command.Number)
+	}
+	return handler.existingStatement(ctx, existing)
+}
+
+// cutAdmission 是命令列出的已确认费用逐件定下的去向：入本期的按列出次序，没入的逐件指名。
+type cutAdmission struct {
+	inPeriod     []domain.CustomerCharge
+	exclusions   []StatementExclusion
+	unconfigured bool
+}
+
+// admit 逐件定命令列出的费用是否入本期：已出账的不再纳入；没有归属日的当场判，判出即落库，判不出的指名
+// 缺哪一册；归属日晚于本期最后一个归属日的归后续账期（ADR-0269 决定三、决定四）。交回的布尔为真时
+// 截单就此作答，答复是交回的 StatementResult。
+func (handler *CutOffPublishStatementHandler) admit(
+	ctx context.Context,
+	command PublishStatementCommand,
+	number domain.StatementNumber,
+	charges []domain.CustomerCharge,
+	last domain.AttributionDate,
+) (cutAdmission, StatementResult, bool) {
+	// 出账锁按费用标识的次序取：两笔截单以不同次序列了同几件费用，按列出次序加锁会互等成死锁。
+	order := make([]int, len(charges))
+	for index := range order {
+		order[index] = index
+	}
+	sort.Slice(order, func(a, b int) bool { return charges[order[a]].ID().String() < charges[order[b]].ID().String() })
+	billedOn := make(map[int]domain.StatementNumber, len(charges))
+	for _, index := range order {
+		billed, isBilled, err := handler.deps.Billing.LockChargeBilling(ctx, command.TenantID, charges[index].ID())
+		if err != nil {
+			return cutAdmission{}, statementUndecided(StatementStoreUnavailable, command.Number), true
+		}
+		if !isBilled {
+			continue
+		}
+		if billed == number {
+			// 同单号的另一笔截单在本笔读单号之后、加锁之前提交了：这是并发重放，按那张单作答。
+			winner, found, err := handler.deps.Statements.FindByKey(ctx, ports.StatementKey{TenantID: command.TenantID, Number: number})
+			if err != nil || !found {
+				return cutAdmission{}, statementUndecided(StatementStoreUnavailable, command.Number), true
+			}
+			return cutAdmission{}, handler.answerExisting(ctx, winner, command, publishDigest(command)), true
+		}
+		billedOn[index] = billed
+	}
+
+	var admission cutAdmission
+	for index, charge := range charges {
+		if billed, isBilled := billedOn[index]; isBilled {
+			admission.exclusions = append(admission.exclusions,
+				StatementExclusion{Charge: charge.ID(), Cause: ExcludedAlreadyBilled, BilledOn: billed})
+			continue
+		}
+		date, attributed := charge.AttributionDate()
+		if !attributed {
+			judged := handler.deps.Attributions.JudgeConfirmedCharge(ctx, command.TenantID, charge)
+			switch judged.Outcome() {
+			case ChargeAttributionJudged:
+				date, _ = judged.Date()
+			case ChargeAttributionUnconfigured:
+				admission.unconfigured = true
+				admission.exclusions = append(admission.exclusions, StatementExclusion{
+					Charge: charge.ID(), Cause: ExcludedAttributionUnconfigured, Missing: judged.Missing(),
+				})
+				continue
+			case ChargeAttributionViewUnavailable:
+				return cutAdmission{}, statementUndecided(StatementAttributionViewUnavailable, charge.ID().String()), true
+			default:
+				// 册都登了仍判不出，只剩形态要的时点费用上没有：费用本身缺格，补登哪一册都补不上，按提交
+				// 矛盾整笔拒，不把它当缺册指名。
+				return cutAdmission{}, StatementResult{outcome: StatementNotAccepted}, true
+			}
+			recorded, err := handler.deps.AttributionDates.RecordAttributionDate(ctx, command.TenantID, charge.ID(), date)
+			if err != nil {
+				return cutAdmission{}, statementUndecided(StatementChargeStoreUnavailable, charge.ID().String()), true
+			}
+			if charge, err = charge.WithAttributionDate(recorded); err != nil {
+				return cutAdmission{}, StatementResult{outcome: StatementNotAccepted}, true
+			}
+			date = recorded
+		}
+		if date.After(last) {
+			admission.exclusions = append(admission.exclusions,
+				StatementExclusion{Charge: charge.ID(), Cause: ExcludedAfterPeriod, AttributionDate: date})
+			continue
+		}
+		admission.inPeriod = append(admission.inPeriod, charge)
+	}
+	return admission, StatementResult{}, false
 }
 
 // Void 依据作废整单：原单保留（Replace 换值、版链在本体），已作废重放返原不二废。
@@ -672,10 +854,11 @@ func (handler *CutOffPublishStatementHandler) ResolveDispute(
 	return StatementResult{outcome: DisputeResolvedOutcome, dispute: existing, hasRecord: true}, nil
 }
 
-func draftFrom(command PublishStatementCommand, charges []domain.CustomerCharge) (domain.StatementDraft, error) {
+func draftFrom(command PublishStatementCommand, charges []domain.CustomerCharge, last domain.AttributionDate) (domain.StatementDraft, error) {
 	spec := domain.StatementDraftSpec{
-		CutOffAt: command.CutOffAt,
-		Charges:  charges,
+		CutOffAt:            command.CutOffAt,
+		LastAttributionDate: last,
+		Charges:             charges,
 	}
 	var err error
 	if spec.Account, err = domain.NewSettlementAccountID(command.Account); err != nil {
@@ -732,6 +915,13 @@ func statementContinuation(parts ...string) string {
 }
 
 func publishDigest(command PublishStatementCommand) string {
+	return settlementCanonicalDigest(domain.CanonicalizePublishStatementPayloadByAttributionDate(
+		command.Account, command.Period, command.Version, command.Currency, command.DeclaredTotalMinor, command.CutOffAt,
+		command.LastAttributionDate, command.ChargeIDs))
+}
+
+// sac1PublishDigest 按 SAC-1 那一版算本次命令：只用于与已存的 SAC-1 发布摘要比对（domain.CompareStoredPublishDigest）。
+func sac1PublishDigest(command PublishStatementCommand) string {
 	return settlementCanonicalDigest(domain.CanonicalizePublishStatementPayload(
 		command.Account, command.Period, command.Version, command.Currency, command.DeclaredTotalMinor, command.CutOffAt, command.ChargeIDs))
 }

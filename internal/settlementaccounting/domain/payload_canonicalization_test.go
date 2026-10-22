@@ -256,3 +256,45 @@ func TestStoredDigestIsComparedWithinItsOwnShape(t *testing.T) {
 		})
 	}
 }
+
+// Covers: ADR-0014「改规范化形状换号」在「发布对账单」一口：SAC-2 比 SAC-1 多本期最后一个归属日一格，其余各口仍是
+// SAC-1；已存的 SAC-1 发布摘要按 SAC-1 那一版重算比对，不因多了这一格被读成冲突。
+func TestThePublishFaceComparesEachStoredShapeOnItsOwnTerms(t *testing.T) {
+	at := sacInstant()
+	document, digest, err := domain.CanonicalizePublishStatementPayloadByAttributionDate("ACC", "P", "V1", "CNY", 9, at, "2026-03-04", []string{"C-B", "C-A"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = `{"canonicalization":"SAC-2","face":"PUBLISH_STATEMENT","account":"ACC","period":"P","version":"V1","currency":"CNY","declared_total_minor":9,"cut_off_at":"2026-03-05T02:11:12.345678901Z","last_attribution_date":"2026-03-04","charges":["C-A","C-B"]}`
+	if string(document) != want {
+		t.Fatalf("document\n got %s\nwant %s", document, want)
+	}
+	_, other, err := domain.CanonicalizePublishStatementPayloadByAttributionDate("ACC", "P", "V1", "CNY", 9, at, "2026-03-05", []string{"C-B", "C-A"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, sac1, err := domain.CanonicalizePublishStatementPayload("ACC", "P", "V1", "CNY", 9, at, []string{"C-B", "C-A"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const unversioned = "bb"
+	cases := []struct {
+		name   string
+		stored string
+		want   domain.StoredDigestComparison
+	}{
+		{"SAC-2 same content", digest, domain.SamePayload},
+		{"SAC-2 another last attribution date", other, domain.DifferentPayload},
+		{"SAC-1 compared on the SAC-1 shape", sac1, domain.SamePayload},
+		{"SAC-1 different content", "SAC-1:cc", domain.DifferentPayload},
+		{"unversioned same content", unversioned, domain.SamePayload},
+		{"a later shape", "SAC-3:aa", domain.UnknownPayloadShape},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := domain.CompareStoredPublishDigest(testCase.stored, digest, sac1, unversioned); got != testCase.want {
+				t.Fatalf("CompareStoredPublishDigest(%q) = %d, want %d", testCase.stored, got, testCase.want)
+			}
+		})
+	}
+}

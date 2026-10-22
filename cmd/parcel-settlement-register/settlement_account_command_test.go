@@ -73,19 +73,38 @@ func TestTheChargeAttributionCommandTranslatesBeforeTheTransaction(t *testing.T)
 	raw := []byte(`{
 		"tenantId": "SYN-T1",
 		"feeItem": "BASE",
-		"form": "SOURCE_OCCURRED",
-		"timeZone": "UTC",
-		"cutoffMinute": 1080
+		"form": "SOURCE_OCCURRED"
 	}`)
 	dispatch, err := commandFor(commandChargeAttribution, raw)
 	if err != nil || dispatch == nil {
 		t.Fatalf("charge-attribution 译装失败：dispatch=%v err=%v", dispatch, err)
 	}
-	if _, err := commandFor(commandChargeAttribution, []byte(`{"tenantId":"SYN-T1","feeItem":"BASE","form":"DELIVERED","timeZone":"UTC","cutoffMinute":1080}`)); err == nil {
+	if _, err := commandFor(commandChargeAttribution, []byte(`{"tenantId":"SYN-T1","feeItem":"BASE","form":"DELIVERED"}`)); err == nil {
 		t.Fatal("签收被收成归属日形态")
 	}
-	if _, err := commandFor(commandChargeAttribution, []byte(`{"tenantId":"SYN-T1","feeItem":"BASE","form":"SOURCE_OCCURRED","cutoffMinute":1080}`)); err == nil {
-		t.Fatal("缺时区仍被收成归属日判定")
+	// 时区与截单时刻登在对账安排上（ADR-0269 决定二）：旧写法按未知字段拒，不另存一份。
+	if _, err := commandFor(commandChargeAttribution, []byte(`{"tenantId":"SYN-T1","feeItem":"BASE","form":"SOURCE_OCCURRED","timeZone":"UTC","cutoffMinute":1080}`)); err == nil {
+		t.Fatal("费用项目一册又收下了时区与截单时刻")
+	}
+}
+
+func TestTheStatementArrangementCommandTranslatesBeforeTheTransaction(t *testing.T) {
+	raw := []byte(`{"tenantId":"SYN-T1","accountId":"SYN-ACCOUNT-1","timeZone":"Asia/Shanghai","cutoffMinute":0}`)
+	dispatch, err := commandFor(commandStatementArrangement, raw)
+	if err != nil || dispatch == nil {
+		t.Fatalf("statement-arrangement 译装失败：dispatch=%v err=%v", dispatch, err)
+	}
+	for name, body := range map[string]string{
+		"缺截单时刻":   `{"tenantId":"SYN-T1","accountId":"SYN-ACCOUNT-1","timeZone":"UTC"}`,
+		"缺时区":     `{"tenantId":"SYN-T1","accountId":"SYN-ACCOUNT-1","cutoffMinute":1080}`,
+		"服务器时区":   `{"tenantId":"SYN-T1","accountId":"SYN-ACCOUNT-1","timeZone":"Local","cutoffMinute":1080}`,
+		"截单时刻越界":  `{"tenantId":"SYN-T1","accountId":"SYN-ACCOUNT-1","timeZone":"UTC","cutoffMinute":1440}`,
+		"缺账户":     `{"tenantId":"SYN-T1","timeZone":"UTC","cutoffMinute":1080}`,
+		"带对账周期日历": `{"tenantId":"SYN-T1","accountId":"SYN-ACCOUNT-1","timeZone":"UTC","cutoffMinute":1080,"period":"MONTHLY"}`,
+	} {
+		if _, err := commandFor(commandStatementArrangement, []byte(body)); err == nil {
+			t.Fatalf("%s 被收成对账安排", name)
+		}
 	}
 }
 

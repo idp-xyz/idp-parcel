@@ -15,9 +15,17 @@ import (
 // 哪些字段进摘要，沿用各口原先的内容判据；没有内容判据的口不在这里发明形状。
 const payloadCanonicalizationVersion = "SAC-1"
 
+// publishStatementCanonicalizationVersion 是「发布对账单」一口的现行形状：它比 SAC-1 多本期最后一个归属日
+// 一格。只这一口换号，其余各口仍是 SAC-1；已存的 SAC-1 发布摘要按 SAC-1 那一版重算比对（ADR-0014）。
+const publishStatementCanonicalizationVersion = "SAC-2"
+
 func canonicalPayloadDigest(document []byte) string {
+	return versionedPayloadDigest(payloadCanonicalizationVersion, document)
+}
+
+func versionedPayloadDigest(version string, document []byte) string {
 	sum := sha256.Sum256(document)
-	return payloadCanonicalizationVersion + ":" + hex.EncodeToString(sum[:])
+	return version + ":" + hex.EncodeToString(sum[:])
 }
 
 // StoredDigestComparison 是已存摘要与本次命令的比对结论。摘要只在同一形状版本内可比
@@ -44,6 +52,23 @@ func CompareStoredDigest(stored, current, unversioned string) StoredDigestCompar
 		return payloadComparison(stored == unversioned)
 	case shape == payloadCanonicalizationVersion:
 		return payloadComparison(stored == current)
+	default:
+		return UnknownPayloadShape
+	}
+}
+
+// CompareStoredPublishDigest 是「发布对账单」一口的 CompareStoredDigest：带 SAC-2 前缀的与 current 比，带 SAC-1
+// 前缀的与 sac1（本次命令按 SAC-1 那一版算出的摘要）比，不带前缀的与 unversioned 比，其余前缀答
+// UnknownPayloadShape。SAC-1 那一版没有本期最后一个归属日，按它比就不看这一格：那时的截单本来不按归属日纳入。
+func CompareStoredPublishDigest(stored, current, sac1, unversioned string) StoredDigestComparison {
+	shape, _, versioned := strings.Cut(stored, ":")
+	switch {
+	case !versioned:
+		return payloadComparison(stored == unversioned)
+	case shape == publishStatementCanonicalizationVersion:
+		return payloadComparison(stored == current)
+	case shape == payloadCanonicalizationVersion:
+		return payloadComparison(stored == sac1)
 	default:
 		return UnknownPayloadShape
 	}
@@ -117,7 +142,8 @@ func CanonicalizeSupplierExpectedCostPayload(version, occurrenceID, occurrenceRe
 	})
 }
 
-// CanonicalizePublishStatementPayload 定形「发布对账单」。费用集合排序后进入摘要。
+// CanonicalizePublishStatementPayload 定形「发布对账单」的 SAC-1 那一版。费用集合排序后进入摘要。已存的 SAC-1
+// 发布摘要只能按这一版重算比对，所以它留着，现行形状见 CanonicalizePublishStatementPayloadByAttributionDate。
 func CanonicalizePublishStatementPayload(account, period, version, currency string, declaredTotalMinor int64, cutOffAt time.Time, charges []string) ([]byte, string, error) {
 	return marshalPayload(struct {
 		Canonicalization   string   `json:"canonicalization"`
@@ -140,6 +166,38 @@ func CanonicalizePublishStatementPayload(account, period, version, currency stri
 		CutOffAt:           canonicalInstant(cutOffAt),
 		Charges:            sortedStrings(charges),
 	})
+}
+
+// CanonicalizePublishStatementPayloadByAttributionDate 定形「发布对账单」的 SAC-2 那一版。本期最后一个归属日
+// 决定命令列出的费用里哪几件入本期，同单号换一个日期就是另一份截单，所以它进摘要。
+func CanonicalizePublishStatementPayloadByAttributionDate(account, period, version, currency string, declaredTotalMinor int64, cutOffAt time.Time, lastAttributionDate string, charges []string) ([]byte, string, error) {
+	encoded, err := json.Marshal(struct {
+		Canonicalization    string   `json:"canonicalization"`
+		Face                string   `json:"face"`
+		Account             string   `json:"account"`
+		Period              string   `json:"period"`
+		Version             string   `json:"version"`
+		Currency            string   `json:"currency"`
+		DeclaredTotalMinor  int64    `json:"declared_total_minor"`
+		CutOffAt            string   `json:"cut_off_at"`
+		LastAttributionDate string   `json:"last_attribution_date"`
+		Charges             []string `json:"charges"`
+	}{
+		Canonicalization:    publishStatementCanonicalizationVersion,
+		Face:                "PUBLISH_STATEMENT",
+		Account:             account,
+		Period:              period,
+		Version:             version,
+		Currency:            currency,
+		DeclaredTotalMinor:  declaredTotalMinor,
+		CutOffAt:            canonicalInstant(cutOffAt),
+		LastAttributionDate: lastAttributionDate,
+		Charges:             sortedStrings(charges),
+	})
+	if err != nil {
+		return nil, "", fmt.Errorf("settlement accounting: canonicalize command payload: %w", err)
+	}
+	return encoded, versionedPayloadDigest(publishStatementCanonicalizationVersion, encoded), nil
 }
 
 // CanonicalizeLateChargeInclusionPayload 定形「纳入迟到费用」。

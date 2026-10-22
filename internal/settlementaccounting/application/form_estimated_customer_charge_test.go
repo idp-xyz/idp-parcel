@@ -285,6 +285,10 @@ func TestEveryChargeLineMappingToOneFeeItemFormsTheEstimatedCustomerCharge(t *te
 	if !charge.FormedAt().Equal(estimatedChargeAt) {
 		t.Fatalf("形成时刻 = %v，want 时钟给的 %v", charge.FormedAt(), estimatedChargeAt)
 	}
+	// 来源发生时点钉的是请求上的计价基准时点，不是形成时刻（ADR-0269 决定三）。
+	if occurred, has := charge.SourceOccurredAt(); !has || !occurred.Equal(estimatedChargeAt.Add(-time.Hour)) {
+		t.Fatalf("来源发生时点 = %v %v，want 请求上的计价基准时点 %v", occurred, has, estimatedChargeAt.Add(-time.Hour))
+	}
 	if stored := fixture.storedState(t); stored.State != domain.SellRequestFormed || stored.FormedCharge.String() != derivedChargeID {
 		t.Fatalf("请求册 = %s / %q，want FORMED / %s", stored.State, stored.FormedCharge, derivedChargeID)
 	}
