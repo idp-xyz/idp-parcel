@@ -278,6 +278,10 @@ func (costs RouteCandidateCosts) CitationsOf(candidate domain.CandidateID) []dom
 //
 // carried 是随这次判断请求携带的内容，与证据视图收到的是同一份：绑了分区目录的卡要包裹的邮编
 // 路线才解得出区域（ADR-0189 决定一），路线只在请求里，本上下文不另开读地址的口（ADR-0075）。
+//
+// 读失败不得连累调用方的事务：编排在判断那一笔事务里调它，读失败之后还要照常落别的册——复核失效线上的失效与复核记录、
+// 仍适用线上的仍适用，初始路由那一件的提交前重校也还要读证据。取数侧的仓储读口在事务里走同一笔事务，所以生产装配给它
+// 包一层 savepoint（postgres.SavepointedRouteCandidateCosts）；编排只据错误落格，不碰事务。
 type RouteCandidateCostSource interface {
 	LoadCandidateCosts(
 		ctx context.Context,
