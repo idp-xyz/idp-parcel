@@ -23,7 +23,8 @@ var (
 	ErrResultScopeUnitNotVisible = errors.New(
 		"visibility exception customscompliance adapter: declaration unit named by the result scope is not yet visible")
 	// ErrExternalResultRecordInconsistent 表示按键取回的记录指着另一个键、是归属不上的
-	// 留存、时间为零、放行三件与层次不配，或范围单元答非所问、组成为空。仓储不变量已破
+	// 留存、时间为零、放行三件与层次不配，或范围单元答非所问、组成为空；沿更正链回读时
+	// 前身读不回、成环或与更正不同层、不同提交版本、不同范围，也落这一格。仓储不变量已破
 	// （ADR-0029），不是等谁。禁止进 WithUndecidedSentinels。
 	ErrExternalResultRecordInconsistent = errors.New(
 		"visibility exception customscompliance adapter: external result disagrees with its key")
@@ -66,7 +67,7 @@ type ResultProjectionHandler interface {
 // 一封外部结果只说它自己那一层：类型词按层分开、放行层再按全部 / 部分 / 附条件分开，
 // 不存在「清关成功」这样一个能盖住各层的类型词（CC CONTEXT「不能使用一个“清关成功”
 // 状态覆盖各层事实」）。哪一层映成哪个标准里程碑由版本化映射目录决定，未登记即未归类。
-// 类型词表与展开口径的取舍见 ADR-0197。
+// 类型词表与展开口径的取舍见 ADR-0197，层内更正怎样译成替代关系见 ADR-0281。
 type DeriveOnExternalResultAdapter struct {
 	results ExternalResultFinder
 	units   DeclarationUnitFinder
@@ -134,6 +135,10 @@ func (adapter *DeriveOnExternalResultAdapter) HandleReceivedExternalResult(
 	if err != nil {
 		return err
 	}
+	lineage, err := adapter.correctionLineage(ctx, record)
+	if err != nil {
+		return err
+	}
 
 	// 结果范围指名申报单元（CC 接收编排沿同一条链取辖区）。组成取单元本体而不取提交
 	// 版本快照：放行与处置只作用于决定明确覆盖的范围，而范围指名的正是这个单元。
@@ -157,7 +162,7 @@ func (adapter *DeriveOnExternalResultAdapter) HandleReceivedExternalResult(
 	}
 
 	for _, member := range members {
-		command, err := externalResultProjectionCommand(record, kind, member)
+		command, err := externalResultProjectionCommand(record, kind, lineage, member)
 		if err != nil {
 			return err
 		}
@@ -236,9 +241,93 @@ func externalResultKind(record ccports.ExternalResultRecord) (vedomain.SourceFac
 	return kind, nil
 }
 
+// externalResultLineage 是一份接收在 VE 上的事实身份：落在哪条链根的引用下、取哪一版、指名哪一版为前身。
+type externalResultLineage struct {
+	rootSource string
+	version    string
+	supersedes string
+}
+
+// correctionLineage 把 CC 的层内更正关系译成 VE 的来源事实替代关系（ADR-0281）。
+//
+// VE 的替代只在同一事实引用的版本之间成立（VE CONTEXT「来源事实替代关系」），而 CC 的更正是另一次接收、
+// 另一个来源标识，只指名它所更正的那一份。所以生效的更正落在链根的引用下：沿 Corrects() 逐份回读，
+// 停在第一份不带生效更正的记录上，那份的来源标识就是引用里的来源标识。不生效的更正（范围不等、记了冲突）
+// 不取代任何结果，CC 在它自己的范围上独立判断，它就是自己的链根。
+//
+// 链根取提交版本，与没有更正的结果同一身份，更正到来时不必改写已派生的那一份。链上各份取
+// 「提交版本/来源标识」：生效的更正与所更正那份同一提交版本，只靠提交版本分不开；来源标识在
+// 租户内唯一，拼上它，版本在同一引用下唯一且重投不变。
+//
+// 回读读不动是续办，与按信封键读不动同一格。读回来不对是仓储不变量已破：CC 的外键钉住所指在册、
+// 记录只建立不改写，所以所指读不回、成环都不是等得来的；生效的更正与所更正那份同层、同提交版本、
+// 同范围，链中段的每一份都是生效的更正、不记冲突（CC 迁移约束 external_result_correction_shape），
+// 不合这些就是库坏了。
+func (adapter *DeriveOnExternalResultAdapter) correctionLineage(
+	ctx context.Context,
+	record ccports.ExternalResultRecord,
+) (externalResultLineage, error) {
+	submission := record.Result.Version().String()
+	if !record.CorrectionInForce {
+		return externalResultLineage{rootSource: record.Key.SourceID, version: submission}, nil
+	}
+	lineage := externalResultLineage{version: correctionFactVersion(submission, record.Key.SourceID)}
+	visited := map[string]bool{record.Key.SourceID: true}
+	successor := record
+	for {
+		corrected, has := successor.Result.Corrects()
+		if !has {
+			return externalResultLineage{}, fmt.Errorf("%w: source %q is a correction in force without a corrected result",
+				ErrExternalResultRecordInconsistent, successor.Key.SourceID)
+		}
+		if visited[corrected] {
+			return externalResultLineage{}, fmt.Errorf("%w: correction chain of source %q loops at %q",
+				ErrExternalResultRecordInconsistent, record.Key.SourceID, corrected)
+		}
+		visited[corrected] = true
+		key := ccports.ExternalResultKey{TenantID: record.Key.TenantID, SourceID: corrected}
+		predecessor, found, err := adapter.results.FindByKey(ctx, key)
+		if err != nil {
+			return externalResultLineage{}, fmt.Errorf("%w: corrected result %q: %v", ErrExternalResultNotVisible, corrected, err)
+		}
+		if !found {
+			return externalResultLineage{}, fmt.Errorf("%w: corrected result %q is not on record",
+				ErrExternalResultRecordInconsistent, corrected)
+		}
+		if predecessor.Key != key || predecessor.Unattributable ||
+			predecessor.Result.Layer() != record.Result.Layer() ||
+			predecessor.Result.Version() != record.Result.Version() ||
+			predecessor.Result.Scope() != record.Result.Scope() {
+			return externalResultLineage{}, fmt.Errorf("%w: corrected result %q does not match its correction",
+				ErrExternalResultRecordInconsistent, corrected)
+		}
+		if !predecessor.CorrectionInForce {
+			lineage.rootSource = corrected
+			if lineage.supersedes == "" {
+				lineage.supersedes = submission
+			}
+			return lineage, nil
+		}
+		if predecessor.LayerConflict {
+			return externalResultLineage{}, fmt.Errorf("%w: correction %q in force carries a layer conflict",
+				ErrExternalResultRecordInconsistent, corrected)
+		}
+		if lineage.supersedes == "" {
+			lineage.supersedes = correctionFactVersion(submission, corrected)
+		}
+		successor = predecessor
+	}
+}
+
+// correctionFactVersion 是链上一份生效更正在链根引用下的版本，前身指名同一拼法。
+func correctionFactVersion(submission, source string) string {
+	return submission + "/" + source
+}
+
 func externalResultProjectionCommand(
 	record ccports.ExternalResultRecord,
 	kind vedomain.SourceFactKind,
+	lineage externalResultLineage,
 	member ccdomain.DeclaredParcelReference,
 ) (veapplication.DeriveProjectionCommand, error) {
 	none := veapplication.DeriveProjectionCommand{}
@@ -251,19 +340,22 @@ func externalResultProjectionCommand(
 		return none, fmt.Errorf("%w: declared parcel: %v", ErrExternalResultRecordInconsistent, err)
 	}
 	// 成员维进引用（ADR-0066）：缺它，同一封信的第二个成员就撞同键异内容的来源冲突并被
-	// 当业务终局静默吞掉。来源标识随后——一次接收的身份就是（租户，来源标识），同一包裹
-	// 的下一层结果来自另一次接收、另一个来源标识，各占各的引用。
-	fact, err := vedomain.NewSourceFactReference("external-result/" + member.String() + "/" + record.Key.SourceID)
+	// 当业务终局静默吞掉。来源标识随后，取链根的——同一包裹的下一层结果来自另一次接收、
+	// 另一个来源标识，各占各的引用；生效的更正与它所更正的那条链共用一个引用，替代关系才登得上。
+	fact, err := vedomain.NewSourceFactReference("external-result/" + member.String() + "/" + lineage.rootSource)
 	if err != nil {
 		return none, fmt.Errorf("%w: source fact: %v", ErrExternalResultUntranslatableAnswer, err)
 	}
-	// 版本取结果所关联的提交版本。接收记录只建立不改写：来源更正在 CC 形成另一次接收、
-	// 另一个来源标识，落在另一个事实引用下。CC 记下的更正关系（Result.Corrects 与
-	// CorrectionInForce）因此登不成前身——替代关系只在同一事实引用的版本之间成立（VE CONTEXT
-	// 「来源事实替代关系」），引用与版本的取法定在 ADR-0197 决定三，要跟上更正关系得先改那条（票 docs-consistency/code/84）。
-	version, err := vedomain.NewSourceFactVersion(record.Result.Version().String())
+	version, err := vedomain.NewSourceFactVersion(lineage.version)
 	if err != nil {
 		return none, fmt.Errorf("%w: submission version: %v", ErrExternalResultUntranslatableAnswer, err)
+	}
+	// 前身只转写 CC 已经作出的更正关系，不从业务时间或语义差别推断谁更正了谁。
+	var supersedes vedomain.SourceFactVersion
+	if lineage.supersedes != "" {
+		if supersedes, err = vedomain.NewSourceFactVersion(lineage.supersedes); err != nil {
+			return none, fmt.Errorf("%w: corrected version: %v", ErrExternalResultUntranslatableAnswer, err)
+		}
 	}
 	// 发生与有效同取 CC 保存的「业务发生或适用时间」：那是 CC 按已登记解释规则对这一层
 	// 作出的时间判断，也是它选规则所用的评估时点；投影不替所有者另判一个有效时间。接收
@@ -277,6 +369,7 @@ func externalResultProjectionCommand(
 			Fact:        fact,
 			Kind:        kind,
 			Version:     version,
+			Supersedes:  supersedes,
 			OccurredAt:  occurred,
 			EffectiveAt: occurred,
 			ReceivedAt:  record.RecordedAt,
