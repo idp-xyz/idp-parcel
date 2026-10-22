@@ -131,5 +131,5 @@
 |---|---|---|
 | 收寄后服务处置决定；`AT-PS-083`、`AT-PS-084`、`AT-PS-088` | 编排越过边界时只记`待处置`，收寄后服务处置决定没有模型、没有决定面，也不向下游提出范围化请求；本行预期结果不变 | [code/37](../../../.scratch/docs-consistency/code/37-post-intake-service-disposition-decision-has-no-model.md) |
 | 面单渠道服务的取消边界；`AT-PS-086` | 已补：提交边界上先读当前有效终局，已有终局答 `FINAL_OUTCOME_STANDS`；再读网络收寄的采用链与面单渠道服务的首次有效收寄，已形成的收寄答 `CANCELLATION_REFUSED` 并指名那一代，待确认答未决 `CARRIER_PICKUP_PENDING` | [code/21](../../../.scratch/docs-consistency/code/21-label-channel-parcel-cancellation-ignores-carrier-pickup-and-finals.md) |
-| 统一不可见 | 委托查无、编号不符、跨租户与成员出界今天答 `REQUEST_NOT_ACCEPTED`，与字段缺并成一格 | [code/22](../../../.scratch/docs-consistency/code/22-customer-face-http-contract-misses-accepted-adrs.md) |
+| 统一不可见 | 已补：委托查无、编号不符、跨租户与成员出界由取消编排认成同一个统一不可见错误，HTTP 答 `404 SHIPMENT_REQUEST_NOT_VISIBLE`；`REQUEST_NOT_ACCEPTED` 只剩字段缺 | [code/22](../../../.scratch/docs-consistency/code/22-customer-face-http-contract-misses-accepted-adrs.md) |
 | 决定矩阵「事实冲突」一行 | 判法与留存已补：两条消费链都把冲突记进冲突册、消费门入账（[code/35](../../../.scratch/docs-consistency/code/35-cancellation-and-boundary-fact-order-conflict-has-no-label-half-and-no-resolution-face.md)）；解开它的业务决定面仍没有 | [code/76](../../../.scratch/docs-consistency/code/76-a-cancellation-order-conflict-has-no-resolution-decision-face.md) |

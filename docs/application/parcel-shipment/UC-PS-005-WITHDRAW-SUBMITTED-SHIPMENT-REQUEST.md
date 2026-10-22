@@ -113,7 +113,7 @@
 
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
-| `AT-PS-075`，「统一不可见」一行 | 撤回编排对查无的委托上抛错误，HTTP 适配器答 `500 NO_ANSWER_FORMED`；本行预期结果不变 | [code/22](../../../.scratch/docs-consistency/code/22-customer-face-http-contract-misses-accepted-adrs.md) |
+| `AT-PS-075`，「统一不可见」一行 | 已补：撤回编排对查无的委托上抛统一不可见错误，HTTP 适配器答 `404 SHIPMENT_REQUEST_NOT_VISIBLE`，不带 `outcome`、不带 `detail`（ADR-0022）；本行预期结果不变 | [code/22](../../../.scratch/docs-consistency/code/22-customer-face-http-contract-misses-accepted-adrs.md) |
 | `AT-PS-068`、`AT-PS-076` 与撤回后关联重提（[ADR-0255](../../adr/0255-a-submitted-request-is-regrouped-only-by-withdrawing-it-and-submitting-linked-new-requests.md)） | 已撤回委托在真库上读不回：重建门不开`已撤回`、撤回决定不进快照，重复撤回与以撤回重提关联原委托在真库上走不通；本行预期结果不变 | [code/36](../../../.scratch/docs-consistency/code/36-withdrawn-shipment-requests-cannot-be-read-back-from-the-store.md) |
 | 「撤回未决」一行，ADR-0256 决定一第 2 格「重放须接着办」 | 撤回停在未决时装配事务照样提交来源保全，重放同一请求对仍为`已提交`的委托答 `DECISION_ALREADY_FORMED`、不带任何决定，这次撤回从此不会形成；本行预期结果不变 | [code/44](../../../.scratch/docs-consistency/code/44-withdrawal-and-amendment-replays-short-circuit-after-an-undecided-round.md) |
 | 「撤回未决」一行的授权适用冲突（ADR-0261） | 已补：`party-commercial` 多条命中答适用冲突（UC-PC-003 `AT-PC-042`），撤回授权适配器译成 `APPLICABILITY_CONFLICT`，编排停在未决、原因 `WITHDRAWAL_AUTHORITY_APPLICABILITY_CONFLICT` | [code/24](../../../.scratch/docs-consistency/code/24-closed-authorization-rule-and-contract-versions-keep-granting.md) |
