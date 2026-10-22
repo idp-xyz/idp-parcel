@@ -51,7 +51,7 @@ func TestAProblemCarriesTheRFC9457MembersAndTheRequestID(t *testing.T) {
 		t.Fatalf("status = %d", response.Code)
 	}
 	body := decodeProblem(t, response)
-	if body.Type != "urn:idp-parcel:problem:ACCESS_CHANNEL_NOT_CONFIGURED" || body.Title != "Access channel not configured" ||
+	if body.Type != "tag:idp.xyz,2026:problem:ACCESS_CHANNEL_NOT_CONFIGURED" || body.Title != "Access channel not configured" ||
 		body.Status != http.StatusForbidden || body.Code != "ACCESS_CHANNEL_NOT_CONFIGURED" || body.RequestID != "SYN-REQ-1" {
 		t.Fatalf("problem = %s", response.Body.Bytes())
 	}
@@ -65,7 +65,7 @@ func TestAProblemCarriesTheRFC9457MembersAndTheRequestID(t *testing.T) {
 func TestDetailOnlyTravelsWithAFixableFourHundred(t *testing.T) {
 	cases := map[int]bool{
 		http.StatusBadRequest:          true,
-		http.StatusConflict:            true,
+		http.StatusTooManyRequests:     true,
 		http.StatusForbidden:           false,
 		http.StatusNotFound:            false,
 		http.StatusInternalServerError: false,

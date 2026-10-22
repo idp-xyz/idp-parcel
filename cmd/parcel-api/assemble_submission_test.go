@@ -30,7 +30,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
-// Covers: 审计票 13——`/shipment-requests` 的第二参是真编排：整条链在真实 PostgreSQL
+// Covers: 审计票 13——`/v1/shipment-requests` 的第二参是真编排：整条链在真实 PostgreSQL
 // 上装得起来；治理目录未配置时归属如实答`权威未确定`、提交停在 OWNERSHIP_UNRESOLVED
 // 且带着归属决定；来源保全确实落库——重放同一份输入被认作同一请求、追加一次观察，再按
 // 未决续办重判归属（ADR-0266 部分停用 ADR-0081 Consequences 那一句的这一格：生产归属未决的

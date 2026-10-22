@@ -375,7 +375,7 @@ func (UnconfiguredIntake) IntakeDeliveryHandoverConclusion(context.Context, *htt
 }
 
 // handoverEndpoint 是五口共用的 HTTP 外壳：方法门 → Intake（各格照信封族映射）→ 编排 → 按 ADR-0022 映射答复。shape 定问题体的
-// 形状：客户结论口是首方客户族、写问题详情，其余四口照旧（见 problemWriter）。
+// 形状：客户结论口是首方客户族、写问题详情，开立、归入、关闭与运营确认照旧（见 problemWriter）。
 func handoverEndpoint[Command any](
 	intake func(context.Context, *http.Request) (Command, error),
 	handle func(context.Context, Command) (application.DeliveryHandoverResult, error),

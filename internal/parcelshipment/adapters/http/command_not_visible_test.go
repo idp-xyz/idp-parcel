@@ -88,7 +88,7 @@ func TestCommandsNamingAnInvisibleShipmentRequestAnswerNotFound(t *testing.T) {
 			if _, present := fields["detail"]; present || problemCode(t, response) != "SHIPMENT_REQUEST_NOT_VISIBLE" {
 				t.Fatalf("problem = %s, want 只带 SHIPMENT_REQUEST_NOT_VISIBLE", response.Body.Bytes())
 			}
-			// 客户面四口写问题详情，操作者三口照旧（ADR-0140 决定三；操作者族迁移另立后续票）。
+			// 客户面命令口（customerFaceCommands）写问题详情，操作者族各口照旧（ADR-0140 决定三；操作者族迁移另立后续票）。
 			want := "application/json"
 			if customerFaceCommands[name] {
 				want = "application/problem+json"
@@ -126,7 +126,7 @@ func TestAmendmentCallerErrorsAreNotNoAnswerFormed(t *testing.T) {
 	}{
 		"意图未声明":   {err: application.ErrAmendmentIntentNotDeclared, status: http.StatusBadRequest, code: "MALFORMED_REQUEST", withDetail: true},
 		"内容与范围不配": {err: application.ErrAmendmentContentUnfit, status: http.StatusBadRequest, code: "MALFORMED_REQUEST", withDetail: true},
-		"委托未接受":   {err: application.ErrAmendedRequestNotAccepted, status: http.StatusConflict, code: "SHIPMENT_REQUEST_NOT_ACCEPTED"},
+		"委托未接受":   {err: application.ErrAmendedRequestNotAccepted, status: http.StatusBadRequest, code: "SHIPMENT_REQUEST_NOT_YET_ACCEPTED"},
 	}
 	for name, testCase := range cases {
 		t.Run(name, func(t *testing.T) {

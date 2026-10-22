@@ -9,7 +9,7 @@ import (
 	nodeopshttp "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/http"
 )
 
-// Covers: ADR-0140 决定三在本包的分界——首方客户族的三个口写 `application/problem+json`，作业事实与操作者族的口照旧（迁移另立
+// Covers: ADR-0140 决定三在本包的分界——首方客户族各口（送站预报的提交与撤回、交接单的客户结论）写 `application/problem+json`，作业事实与操作者族的口照旧（迁移另立
 // 后续票）；同一个外壳、同一份映射，只是形状随口定。
 func TestOnlyTheFirstPartyLinesWriteProblemDetails(t *testing.T) {
 	unconfigured := nodeopshttp.UnconfiguredIntake{}
