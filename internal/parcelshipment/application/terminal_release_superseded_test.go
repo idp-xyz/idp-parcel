@@ -223,3 +223,100 @@ func TestAnAuthorizedDispositionReleasesEverySupersededVersionsOccupation(t *tes
 		})
 	}
 }
+
+// bothFail 与 namedFails 是两版都放不掉、只有命令指名那一版放不掉两种注入。
+func bothFail() map[string]error {
+	return map[string]error{
+		"version-1": errors.New("settlement-accounting unavailable"),
+		"version-2": errors.New("settlement-accounting unavailable"),
+	}
+}
+
+func namedFails() map[string]error {
+	return map[string]error{"version-2": errors.New("settlement-accounting unavailable")}
+}
+
+// assertNamedVersionReferenceWins 钉「补偿引用交第一处」：两版都放不掉时交回的引用，等于只有命令指名那一版放不掉时那一个——
+// 那一笔正是这次命令在办的那一份；交成被取代那一版的，续办方按引用查回来的是另一笔。
+func assertNamedVersionReferenceWins(t *testing.T, both, named domain.OwnershipContinuationReference) {
+	t.Helper()
+	if both.String() == "" || named.String() == "" {
+		t.Fatalf("两版都放不掉 %q、指名那一版放不掉 %q——放不掉却没有补偿引用", both, named)
+	}
+	if both.String() != named.String() {
+		t.Fatalf("两版都放不掉交回 %q, want 指名那一版的 %q", both, named)
+	}
+}
+
+// Covers: AT-PS-073 两版都放不掉那一格——撤回交回的补偿引用是命令指名那一版的。
+func TestAWithdrawalWhoseVersionsAllFailReportsTheNamedVersion(t *testing.T) {
+	refFor := func(errFor map[string]error) domain.OwnershipContinuationReference {
+		fixture, command := supersededWithdrawal(t)
+		fixture.release.errFor = errFor
+		result, err := fixture.handler.Handle(context.Background(), command)
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		return result.CompensationReference()
+	}
+	assertNamedVersionReferenceWins(t, refFor(bothFail()), refFor(namedFails()))
+}
+
+// Covers: AT-PS-035 两版都放不掉那一格——主动拒绝交回的补偿引用是命令指名那一版的。
+func TestAnActiveRejectionWhoseVersionsAllFailReportsTheNamedVersion(t *testing.T) {
+	refFor := func(errFor map[string]error) domain.OwnershipContinuationReference {
+		fixture := newRejectionFixture(t)
+		superseded := supersededRequest(t)
+		fixture.requests.stored = &superseded
+		fixture.judgments.controlByVersion = bothVersionsOccupied()
+		fixture.release.errFor = errFor
+		command := fixture.command(t)
+		command.SubmissionVersion = mustValue(t, domain.NewSubmissionVersionID, "version-2")
+		result, err := fixture.handler.Handle(context.Background(), command)
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		return result.CompensationReference()
+	}
+	assertNamedVersionReferenceWins(t, refFor(bothFail()), refFor(namedFails()))
+}
+
+// Covers: AT-PS-035 两版都放不掉那一格——自动拒绝交回的补偿引用是命令指名那一版的。
+func TestAnAutomaticRejectionWhoseVersionsAllFailReportsTheNamedVersion(t *testing.T) {
+	refFor := func(errFor map[string]error) domain.OwnershipContinuationReference {
+		fixture := newDecisionFixture(t)
+		superseded := supersededRequest(t)
+		fixture.requests.saved, fixture.requests.sticky = &superseded, true
+		fixture.judgments.controlByVersion = bothVersionsOccupied()
+		fixture.judgments.reachability["parcel-2"] = domain.ReachabilityUnreachable
+		fixture.release.errFor = errFor
+		command := fixture.command(t)
+		command.SubmissionVersion = mustValue(t, domain.NewSubmissionVersionID, "version-2")
+		result, err := fixture.handler.Handle(context.Background(), command)
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		return result.CompensationReference()
+	}
+	assertNamedVersionReferenceWins(t, refFor(bothFail()), refFor(namedFails()))
+}
+
+// Covers: ADR-0132 决定一的释放、两版都放不掉那一格——处置交回的补偿引用是命令指名那一版的。
+func TestAnAuthorizedDispositionWhoseVersionsAllFailReportsTheNamedVersion(t *testing.T) {
+	refFor := func(errFor map[string]error) domain.OwnershipContinuationReference {
+		fixture := newDispositionFixture(t)
+		fixture.requests.request = awaitingDispositionRequestOn(t, supersededRequest(t))
+		fixture.judgments.controlByVersion = map[string]domain.FinancialControlOutcome{
+			"version-1": domain.FinancialControlHeld,
+		}
+		fixture.release.errFor = errFor
+		command := fixture.command(t, domain.DisposeByRejection)
+		command.SubmissionVersion = mustValue(t, domain.NewSubmissionVersionID, "version-2")
+		result, err := fixture.handler.Handle(context.Background(), command)
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		return result.CompensationReference()
+	}
+	assertNamedVersionReferenceWins(t, refFor(bothFail()), refFor(namedFails()))
+}
