@@ -12,6 +12,7 @@ Blocked by: 无
 - NR `internal/networkrouting/adapters/postgres` 的 `SavepointedRouteCandidateCosts`（code/67）；
 - NO `internal/nodeoperations/adapters/postgres` 的 `SavepointedServiceResultView`（ADR-0186 决定七）；
 - NO 同一包的 `SavepointedParcelIdentityView`（ADR-0199 决定五）。
+- PS `internal/parcelshipment/adapters/postgres` 的 `SavepointedControlRelease`（code/72、73 评审 N1；隔的是 PS 调 settlement-accounting 释放那一次，与上面三份同形，构造函数不报错、少接一件在调用时答错误，收编时一并对齐）。（2026-10-21 据 code/72、73 隔离评审补）
 
 三份各自持有 `RequireExecutor` 判事务、三条 `Exec`、错误包装与「退不回」那一支。下一处要隔离的读口（code/67 越权风险点 2 的取号、code/78 修法 (a) 要隔的那几口）会再抄一份；哪一份日后修了一处边角（比如 ctx 已取消时 `ROLLBACK TO SAVEPOINT` 的处理），另几份不会跟着改。
 
