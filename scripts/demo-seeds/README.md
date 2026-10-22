@@ -221,7 +221,7 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
 
 ## 首方客户渠道：演示发行方
 
-票 `first-party-api/00`。提交口（`POST /shipment-requests`）认首方客户族的令牌（ADR-0139 决定二）：货主客户的系统以 OAuth 2.0
+票 `first-party-api/00`。提交口（`POST /v1/shipment-requests`）认首方客户族的令牌（ADR-0139 决定二）：货主客户的系统以 OAuth 2.0
 客户端凭据取令牌，`parcel-api` 自己验签名、`iss`、`aud` 与有效期，再查客户渠道册与授予。隔离写开关不放行提交口（ADR-0150 决定三）。
 
 1. 发行方与集成客户端族是同一只（`integration-issuer`，`http://127.0.0.1:5558/dex`），受众另是一个：`idp-parcel-customer-api`，
@@ -238,8 +238,8 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
    操作者令牌与集成客户端令牌在提交口一律答 401。
 5. 生产归属：PS 的生产归属目录还没立，演示提交要越过`权威未确定`仍靠隔离写开关那一格合成坐标（`IDP_PARCEL_ISOLATED_WRITE_TENANT`），
    它不放行任何命令面，只给提交编排读得到委托受理那条合成区间。
-6. 送站预报（票 ps-external-mark-relations/09，ADR-0212 决定二）：`POST /node-operations/delivery-pre-advices` 交预报，
-   `POST /node-operations/delivery-pre-advice-withdrawals` 撤回，同一台合成货主系统、同一枚首方令牌，各要自己那一格授予
+6. 送站预报（票 ps-external-mark-relations/09，ADR-0212 决定二）：`POST /v1/node-operations/delivery-pre-advices` 交预报，
+   `POST /v1/node-operations/delivery-pre-advice-withdrawals` 撤回，同一台合成货主系统、同一枚首方令牌，各要自己那一格授予
    （`DELIVERY_PRE_ADVICE_SUBMISSION`、`DELIVERY_PRE_ADVICE_WITHDRAWAL`）。预报是生产写，准入范围在铸造侧判：起进程还要设
    `IDP_PARCEL_GOVERNANCE_SELF_AUTHORITY=SYN-AUTH/idp-parcel-pilot`（与操作者渠道那一节同一件），不设答 403
    `OUTSIDE_ADMISSION_SCOPE`；隔离开关与它无关。`scripts/demo-seeds/submit-one-pre-advice.sh [客户包裹件号 ...]` 取令牌、交一份，
@@ -263,7 +263,7 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
    `DELIVERY_HANDOVER_CONFIRMATION`），只对已关闭、声称了 `SYN-ACCOUNT-01` 的交接单。声称的客户账户全部确认的那一笔自投「交付范围
    成立」门铃，dispatch 投给重核消费者，名下的待识别追加一版 `INTAKE_FORMED`、核对态 `VERIFIED`。五口都要
    `IDP_PARCEL_GOVERNANCE_SELF_AUTHORITY`，不设答 403 `OUTSIDE_ADMISSION_SCOPE`。载荷与答复见演示文档「送站交接单」一段。证据只记 `S`。
-9. 客户追踪视图（票 demo-chain-gaps/96，ADR-0139 决定四，UC-VE-008）：`GET /customer-tracking-view?parcel=<包裹号>`，同一台合成货主系统、
+9. 客户追踪视图（票 demo-chain-gaps/96，ADR-0139 决定四，UC-VE-008）：`GET /v1/customer-tracking-view?parcel=<包裹号>`，同一台合成货主系统、
    同一枚首方令牌，要 `CUSTOMER_TRACKING_VIEW_QUERY` 那一格授予。客户账户只取自客户渠道册上的绑定：查询串只认 `parcel` 一格，带别的
    （例如自报 `customerAccount`）答 400 `MALFORMED_REQUEST`。本账户的包裹答 200 `CURRENT_VIEW`；别的账户的包裹与不存在的包裹同答 200
    `VIEW_NOT_FOUND`，字节相同。查阅不判准入范围，不设治理自授权也照答。包裹号是正式包裹号（`DPCL-…`），从首方提交答复的 `parcels`
@@ -436,7 +436,7 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
   SGD 账仍无批次，分户账页对空批次继续写「未配置」。不带 `--reset` 重放本节仍会在既有记账处
   因余额不足中止，批次与交出这两步本身重放走 0。
 - 运行时只多一步，而且**不在** `seed.sh` 里：`submit-one-shipment.sh` 先替合成货主系统取一枚首方客户端令牌，再对已经在跑的
-  `parcel-api` 打 `POST /shipment-requests`（草案带寄 / 收两端国家码 `CN` / `SG`，演示网络的服务区域
+  `parcel-api` 打 `POST /v1/shipment-requests`（草案带寄 / 收两端国家码 `CN` / `SG`，演示网络的服务区域
   按国家覆盖；另带两端邮编 `200000` / `018000` 与这一件的尺寸，受理前估价按邮编路线经分区目录解出 Z1、
   按 MAX 计费重算体积重），断言 `201` / `SUBMITTED`，再从
   `GET /shipment-request-views` 把同一笔读回来。起进程要带首方族三件（上面「首方客户渠道」一节），并与 `parcel.sh` 一样同时设

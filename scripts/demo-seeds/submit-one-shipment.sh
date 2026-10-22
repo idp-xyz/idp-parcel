@@ -2,7 +2,7 @@
 # 步 0（票 seed-completeness/04）：对已经在跑的 parcel-api 打一次真提交，断言答复是已提交，
 # 再从委托查阅把同一笔读回来。
 # 答复的 parcels 逐件带回包裹号，配草案里的客户包裹参考（ADR-0223）：本脚本断言草案那一件带回来了，末行打出包裹号——
-# 客户追踪视图 GET /customer-tracking-view?parcel=<包裹号> 用的就是它，不用再经操作者渠道去读。
+# 客户追踪视图 GET /v1/customer-tracking-view?parcel=<包裹号> 用的就是它，不用再经操作者渠道去读。
 #
 # 提交走首方客户渠道（票 first-party-api/00，ADR-0139）：先替合成货主系统向演示发行方取一枚客户端凭据令牌
 # （operator-channel/customer-token.sh；设了 IDP_PARCEL_CUSTOMER_TOKEN 就直接用它），再带 Bearer 令牌提交。载荷里的
@@ -78,7 +78,7 @@ post_file="$(mktemp)"
 trap 'rm -f "$post_file"' EXIT
 post_code="$(curl -sS -o "$post_file" -w '%{http_code}' -X POST \
   -H 'Content-Type: application/json' -H "Authorization: Bearer ${token}" \
-  --data "$body" "${base}/shipment-requests")"
+  --data "$body" "${base}/v1/shipment-requests")"
 
 python3 - "$post_code" "$post_file" "$access_request" "$parcel_ref" <<'PY'
 import json, sys

@@ -62,7 +62,7 @@ post_file="$(mktemp)"
 trap 'rm -f "$post_file"' EXIT
 post_code="$(curl -sS -o "$post_file" -w '%{http_code}' -X POST \
   -H 'Content-Type: application/json' -H "Authorization: Bearer ${token}" \
-  --data "$body" "${base}/node-operations/delivery-pre-advices")"
+  --data "$body" "${base}/v1/node-operations/delivery-pre-advices")"
 
 python3 - "$post_code" "$post_file" "$access_request" <<'PY'
 import json, sys

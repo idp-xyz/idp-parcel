@@ -495,14 +495,14 @@ POD 后来被证明无效时，原证据和原判断继续保留，运输控制�
 
 | 入口 | 类型 | 所属上下文 | 对应能力 | 接入面族 |
 |---|---|---|---|---|
-| `/shipment-requests` | 命令 | `parcel-shipment` | 提交委托、来源保全、生产归属和接单判断 | 首方客户族（ADR-0139）：发行方未配置时拒绝 |
+| `/v1/shipment-requests` | 命令 | `parcel-shipment` | 提交委托、来源保全、生产归属和接单判断 | 首方客户族（ADR-0139）：发行方未配置时拒绝 |
 | `/shipment-requests/withdrawals` | 命令 | `parcel-shipment` | 决定前撤回 | 未配置即拒（ADR-0055），尚未归族 |
 | `/shipment-requests/parcel-cancellations` | 命令 | `parcel-shipment` | 逐包裹取消/收寄后处置 | 未配置即拒（ADR-0055），尚未归族 |
 | `/shipment-request-views` | 查阅 | `parcel-shipment` | 委托列表与详情 | 隔离读准入（ADR-0078），只在注入 `SYN-` 合成作用域时可读 |
 | `/node-operations/receptions` | 命令 | `node-operations` | 节点收寄 | 操作者渠道「作业事实登记」，节点作业范围（ADR-0149） |
 | `/transport-fulfillment/deliveries` | 命令 | `transport-fulfillment` | 有效交付登记 | 操作者渠道「作业事实登记」，场外作业范围（ADR-0149） |
 | `/transport-fulfillment/delivery-proof-corrections` | 命令 | `transport-fulfillment` | POD/交付证明更正 | 操作者渠道「作业事实登记」，场外作业范围（ADR-0149） |
-| `/customer-tracking-view` | 查阅 | `visibility-exception` | 客户授权全程追踪 | 首方客户渠道（ADR-0139）：发行方未配置时拒绝，客户账户只取自客户渠道册 |
+| `/v1/customer-tracking-view` | 查阅 | `visibility-exception` | 客户授权全程追踪 | 首方客户渠道（ADR-0139）：发行方未配置时拒绝，客户账户只取自客户渠道册 |
 | `/tracking-projections` | 查阅 | `visibility-exception` | 运营追踪投影 | 操作者渠道「主数据与运营查阅读」（ADR-0100） |
 | `/claims` | 命令 | `visibility-exception` | 接收客户索赔 | 未配置即拒（ADR-0055），尚未归族 |
 | `/customs/external-results` | 命令 | `customs-compliance` | 接收外部监管结果 | 集成客户端族（ADR-0149） |

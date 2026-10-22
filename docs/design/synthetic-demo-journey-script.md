@@ -171,7 +171,7 @@ SELECT declared_parcel_id, reason, correlation_id FROM network_routing.initial_r
 |---|---|---|
 | 委托查阅 | `GET /shipment-request-views` | **空态**：`200`，`{"outcome":"LISTED","requests":[]}` |
 | 追踪投影 | `GET /tracking-projections` | **空态**：`200`，`{"outcome":"PROJECTIONS_LISTED","projections":[]}` |
-| 提交委托 | `POST /shipment-requests` | 见下面「委托侧两种跑法」 |
+| 提交委托 | `POST /v1/shipment-requests` | 见下面「委托侧两种跑法」 |
 | 取消包裹 | `POST /shipment-requests/parcel-cancellations` | **未配置态**：`403`，`ACCESS_CHANNEL_NOT_CONFIGURED` |
 
 两种状态挨在一起出现，正好把第 1 步埋的那句话兑现：查阅面已经放行了（读得到，答的是「册里没有」），写面根本没放行（连问都没问成，答的是「这条渠道没人配过」）。管理台在这两态下的呈现不同，且**未配置态不得显示「0 条」**——那会与状态区「这不是目录为空」自相矛盾。
@@ -180,7 +180,7 @@ SELECT declared_parcel_id, reason, correlation_id FROM network_routing.initial_r
 
 提交口挂首方客户渠道的 Intake（[ADR-0139](../adr/0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md) 决定四），两个隔离开关都换不了它（[ADR-0150](../adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md) 决定三）。两种跑法分在写开关设不设：它只管下面「墙二」那一格，给开关那个租户的委托受理注入合成归属坐标。表里前两行是两种跑法共有的门。
 
-| 起进程时 | `POST /shipment-requests` |
+| 起进程时 | `POST /v1/shipment-requests` |
 |---|---|
 | 不设首方客户族三件（隔离开关设不设都一样） | **未配置态**：`403`，`ACCESS_CHANNEL_NOT_CONFIGURED`——开关换不了提交口 |
 | 设首方客户族三件，请求不带令牌 | `401`，`CUSTOMER_CLIENT_CREDENTIAL_REJECTED` |
@@ -193,7 +193,7 @@ SELECT declared_parcel_id, reason, correlation_id FROM network_routing.initial_r
 
 委托侧原本是三堵各自独立的墙，任一堵单独就足以拦住。墙一由首方客户渠道拆掉，生产形态同样开；墙二只在隔离形态下、只为开关那个租户拆掉；第三堵的现状见它下面的补记。演示时按这个顺序讲：
 
-**墙一 · 委托侧的入库通道（首方客户渠道，生产形态同样开）。** `/shipment-requests` 在 `cmd/parcel-api` 的 `assembleBusinessEndpoints` 里挂首方客户渠道的 Intake：货主客户的系统以 OAuth 2.0 客户端凭据取令牌，`parcel-api` 验令牌、查客户渠道册与授予，来源信封的租户、客户账户与来源只取自册上那一行，请求里自报什么都不看。它不经任何隔离开关，生产装配里就是这一行；首方族三件不设时整族答 `403 ACCESS_CHANNEL_NOT_CONFIGURED`。撤回、取消等其余客户面命令仍挂不经任何变量的字面量 `UnconfiguredIntake{}`，逐口换上首方 Intake（各自另立票）。`cmd/parcel-dispatch` 不是入口，它只转投已在 Outbox 里的信封。
+**墙一 · 委托侧的入库通道（首方客户渠道，生产形态同样开）。** `/v1/shipment-requests` 在 `cmd/parcel-api` 的 `assembleBusinessEndpoints` 里挂首方客户渠道的 Intake：货主客户的系统以 OAuth 2.0 客户端凭据取令牌，`parcel-api` 验令牌、查客户渠道册与授予，来源信封的租户、客户账户与来源只取自册上那一行，请求里自报什么都不看。它不经任何隔离开关，生产装配里就是这一行；首方族三件不设时整族答 `403 ACCESS_CHANNEL_NOT_CONFIGURED`。撤回、取消等其余客户面命令仍挂不经任何变量的字面量 `UnconfiguredIntake{}`，逐口换上首方 Intake（各自另立票）。`cmd/parcel-dispatch` 不是入口，它只转投已在 Outbox 里的信封。
 **生产形态下过了这堵墙仍停在墙二**：PS 生产归属目录未立，任何租户经首方口提交都答 `OWNERSHIP_UNRESOLVED`（票 first-party-api/04）。`PAR-INT-01` 只管给某租户的客户账户开哪一条渠道，与该客户既有渠道（标准文件、门户、非本产品契约的 API）的适配（ADR-0139 决定一），不挡首方渠道；首方 API 的载荷形状是产品契约，不是任何租户的渠道契约，**不能当成 `PAR-INT-01` 已有答案**。
 
 **墙二 · 生产归属（隔离形态下只为开关租户开，生产仍拦）。** 生产形态下 `buildSubmissionOrchestration` 把 `Directory` 与 `SelfAuthority` 留空（实例半边，不代拟坐标），而归属适配器的 `governanceScope` 在这两样任一缺席时**先于**读治理登记册就返回未配置，归属如实答`权威未确定`，提交停在 `OWNERSHIP_UNRESOLVED`。**注意这一格不是「登记一条权威区间」就能解开的**——目录缺席时那条区间根本不会被读到。
@@ -281,7 +281,7 @@ SELECT declared_parcel_id, reason, correlation_id FROM network_routing.initial_r
 
 #### 送站预报：客户在送站之前交
 
-客户账户经首方客户渠道交送站预报（[ADR-0212](../adr/0212-a-customer-number-hit-needs-a-verifiable-delivery-scope.md) 决定二；票 [ps-external-mark-relations/09](../../.scratch/ps-external-mark-relations/issues/09-pre-advice-submission-on-the-first-party-customer-channel.md)）：`POST /node-operations/delivery-pre-advices` 交，`POST /node-operations/delivery-pre-advice-withdrawals` 撤。同一台合成货主系统、同一枚首方令牌，各要自己那一格授予，种子都登了。预报是节点的到货计划，不形成也不改变委托；节点作业签发预报标识答回客户，送站时随交付出示。
+客户账户经首方客户渠道交送站预报（[ADR-0212](../adr/0212-a-customer-number-hit-needs-a-verifiable-delivery-scope.md) 决定二；票 [ps-external-mark-relations/09](../../.scratch/ps-external-mark-relations/issues/09-pre-advice-submission-on-the-first-party-customer-channel.md)）：`POST /v1/node-operations/delivery-pre-advices` 交，`POST /v1/node-operations/delivery-pre-advice-withdrawals` 撤。同一台合成货主系统、同一枚首方令牌，各要自己那一格授予，种子都登了。预报是节点的到货计划，不形成也不改变委托；节点作业签发预报标识答回客户，送站时随交付出示。
 
 预报是生产写，准入范围在铸造侧判（ADR-0139 决定八）：除首方族三件，起进程还要设 `IDP_PARCEL_GOVERNANCE_SELF_AUTHORITY`（上面「前置」那一件），种子里能力为 `CUSTOMER_COMMAND` 的两条对照与两条权威区间才认得上；不设答 `403 OUTSIDE_ADMISSION_SCOPE`。两个隔离开关都换不了这两口。演示用 `scripts/demo-seeds/submit-one-pre-advice.sh [客户包裹件号 ...]`：取令牌、交一份，把签发的标识单独一行打到标准输出。给号码时就用 `submit-one-shipment.sh` 那一笔的客户包裹参考。
 
@@ -325,7 +325,7 @@ SELECT declared_parcel_id, reason, correlation_id FROM network_routing.initial_r
 | `POST /node-operations/delivery-handover-assignments` 归入 | 同上 | `factId`、`noteId`、`unit`、`assignedAt` |
 | `POST /node-operations/delivery-handover-closures` 关闭 | 同上 | `factId`、`noteId`、`closedAt` |
 | `POST /node-operations/delivery-handover-confirmations` 运营决定确认 | 运营决定（配置员令牌） | `noteId`、`customerAccount`、`deliveringParticipant`（PC 参与方）、`basis` |
-| `POST /node-operations/delivery-handover-conclusions` 客户确认或否认 | 首方客户渠道（合成货主系统令牌） | `accessRequestId`、`noteId`、`conclusion`（`CONFIRMED` / `DENIED`） |
+| `POST /v1/node-operations/delivery-handover-conclusions` 客户确认或否认 | 首方客户渠道（合成货主系统令牌） | `accessRequestId`、`noteId`、`conclusion`（`CONFIRMED` / `DENIED`） |
 
 | 请求 | 答复 |
 |---|---|
@@ -344,7 +344,7 @@ SELECT declared_parcel_id, reason, correlation_id FROM network_routing.initial_r
 
 #### 客户追踪视图：客户经首方渠道读回
 
-客户系统用同一枚首方令牌读本账户包裹的客户视图（[ADR-0139](../adr/0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md) 决定四；[UC-VE-008](../application/visibility-exception/UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md)；票 [demo-chain-gaps/96](../../.scratch/demo-chain-gaps/issues/96-customer-tracking-view-has-no-first-party-customer-intake.md)）：`GET /customer-tracking-view?parcel=<正式包裹号>`。授予是 `CUSTOMER_TRACKING_VIEW_QUERY`，种子登了。查阅不判准入范围（ADR-0139 决定八），两个隔离开关都换不了这一口。视图在委托`已接受`、初始路由投影形成之后由 dispatch 派生，各维展示与否照演示租户的披露策略。
+客户系统用同一枚首方令牌读本账户包裹的客户视图（[ADR-0139](../adr/0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md) 决定四；[UC-VE-008](../application/visibility-exception/UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md)；票 [demo-chain-gaps/96](../../.scratch/demo-chain-gaps/issues/96-customer-tracking-view-has-no-first-party-customer-intake.md)）：`GET /v1/customer-tracking-view?parcel=<正式包裹号>`。授予是 `CUSTOMER_TRACKING_VIEW_QUERY`，种子登了。查阅不判准入范围（ADR-0139 决定八），两个隔离开关都换不了这一口。视图在委托`已接受`、初始路由投影形成之后由 dispatch 派生，各维展示与否照演示租户的披露策略。
 
 | 请求 | 答复 |
 |---|---|
