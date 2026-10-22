@@ -201,7 +201,9 @@ func (handler *ReceiveExternalResultHandler) Handle(
 	if strings.TrimSpace(command.TenantID.String()) == "" ||
 		strings.TrimSpace(command.SourceID) == "" ||
 		strings.TrimSpace(command.RawSemantics) == "" ||
-		strings.TrimSpace(command.ClaimedVersion) == "" {
+		strings.TrimSpace(command.ClaimedVersion) == "" ||
+		(command.Corrects != "" && strings.TrimSpace(command.Corrects) == "") {
+		// 全空白的更正指向在这里就拦：它指不到任何一份，若放到归属判断之后，归属不上的那一格会把它当留存收下。
 		return ReceiveExternalResultResult{outcome: ResultNotAccepted}, nil
 	}
 	if command.Release != nil && command.Layer != domain.ReleaseResultLayer {

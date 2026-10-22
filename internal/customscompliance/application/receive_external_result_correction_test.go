@@ -32,7 +32,7 @@ func recordOf(t *testing.T, result application.ReceiveExternalResultResult) port
 }
 
 // Covers: AT-CC-156 的编排半边——来源明确指名更正哪一份时，后一份核定税费照常记下、带着生效的更正关系交给
-// 下游，不记冲突；原结果一行不动。不带更正指向的同一份内容照今天判冲突。
+// 下游，不记冲突；原结果一行不动。对照：另一份金额不带更正指向时判同层冲突。
 func TestAnExplicitCorrectionIsRecordedWithItsRelationAndWithoutAConflict(t *testing.T) {
 	fixture := newResultFixture(t)
 	results := handleInOrder(t, fixture,
@@ -131,8 +131,8 @@ func TestOnlyTheTailOfACorrectionChainCanBeCorrected(t *testing.T) {
 }
 
 // Covers: 更正指向坏了的几格——所指那份还没在册是此刻判断不了（可能是乱序，原结果后到），停在指名的未决、
-// 带续办引用、什么也不落；所指那份是归属不上的留存、在另一层、属另一版提交，或指名自己，都是矛盾输入，
-// 不受理。读不动所指那份同读不动结果库。
+// 带续办引用、什么也不落；所指那份是归属不上的留存、在另一层、属另一版提交，指名自己，或指向全空白，都是
+// 矛盾输入，不受理。读不动所指那份同读不动结果库。
 func TestABrokenCorrectionPointerIsUndecidedOrNotAccepted(t *testing.T) {
 	t.Run("所指那份还没在册", func(t *testing.T) {
 		fixture := newResultFixture(t)
@@ -179,6 +179,13 @@ func TestABrokenCorrectionPointerIsUndecidedOrNotAccepted(t *testing.T) {
 			t.Fatal("矛盾输入落了记录")
 		}
 	}
+
+	t.Run("全空白的更正指向", func(t *testing.T) {
+		notAccepted(t, newResultFixture(t), assessedDuty(t, "duty-1", "USD-120.00", "   "))
+		unattributable := newResultFixture(t)
+		unattributable.submissions.found = false
+		notAccepted(t, unattributable, assessedDuty(t, "duty-1", "USD-120.00", "  "))
+	})
 
 	t.Run("指名自己", func(t *testing.T) {
 		notAccepted(t, newResultFixture(t), assessedDuty(t, "duty-1", "USD-120.00", "duty-1"))

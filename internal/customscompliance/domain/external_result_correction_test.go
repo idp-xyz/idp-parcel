@@ -64,7 +64,7 @@ func inForce(fact domain.LayerFact) domain.LayerFact {
 }
 
 // Covers: AT-CC-156 的领域半边（范围只到申报单元一级）——来源明确指名更正哪一份时形成更正关系，不进
-// 与所更正那份的矛盾判断：核定税费换金额、处置决定换种类、放行收窄这三种今天一律判同层冲突的明确更正，
+// 与所更正那份的矛盾判断：核定税费换金额、处置决定换种类、放行收窄这三种不带更正指向时判同层冲突的明确更正，
 // 都不判冲突，而且更正关系在同一范围上生效（所更正那份退出当前判断）。不带更正指向的同一份内容照判冲突。
 func TestAnExplicitSameLayerCorrectionFormsACorrectionRelationInsteadOfAConflict(t *testing.T) {
 	for name, test := range map[string]struct {
@@ -163,7 +163,7 @@ func TestACorrectionOnAnotherScopeLeavesTheOriginalAndIsJudgedOnItsOwnScope(t *t
 
 // Covers: CC CONTEXT「任何前一层成功都不能自动生成后一层结果」与 UC-CC-006「同一层次和业务事项的后续明确
 // 更正」——更正只在同层、同一提交版本的在册事实之间成立：所指那份不在这一版提交的在册事实里、在另一层，
-// 或指名自己，都是矛盾输入；在册事实自称更正生效却说不出更正哪一份，是仓储不变量已破。
+// 或指名自己，都是矛盾输入，全空白的指向立不起结果；在册事实自称更正生效却说不出更正哪一份，是仓储不变量已破。
 func TestACorrectionMustNameASameLayerFactOfTheSameSubmission(t *testing.T) {
 	original := layerFact(t, "duty-1", domain.AssessedDutyLayer, "DUTY/USD-120.00", domain.ReleaseKindInvalid, earlierAt)
 	stranger := correcting(t,
@@ -200,6 +200,11 @@ func TestACorrectionMustNameASameLayerFactOfTheSameSubmission(t *testing.T) {
 	}
 	if _, err := domain.InterpretExternalResult(self); !errors.Is(err, domain.ErrInvalidExternalResult) {
 		t.Fatalf("err = %v；一份结果不能更正它自己", err)
+	}
+	blank := self
+	blank.Corrects = "   "
+	if _, err := domain.InterpretExternalResult(blank); !errors.Is(err, domain.ErrInvalidExternalResult) {
+		t.Fatalf("err = %v；全空白的更正指向指不到任何一份", err)
 	}
 
 	claimless := inForce(layerFact(t, "duty-4", domain.AssessedDutyLayer, "DUTY/USD-95.50", domain.ReleaseKindInvalid, laterAt))

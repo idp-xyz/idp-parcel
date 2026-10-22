@@ -125,7 +125,7 @@ func TestCommandPayloadsRoundTripAsCCC1(t *testing.T) {
 }
 
 // Covers: ADR-0267 决定一——外部结果口加「更正哪一份」是在已接的册正文里加键，照 ADR-0014 换号；换号之后按内容
-// 取能表达它的最低一版：不带更正指向的文档仍写 CCC-1、逐字节不变（上一用例钉着），带更正指向的写 CCC-2。
+// 取能表达它的最低一版：不带更正指向的文档仍写 CCC-1、逐字节不变（TestCommandPayloadsRoundTripAsCCC1 钉着），带更正指向的写 CCC-2。
 func TestAnExternalResultNamingACorrectedResultIsCanonicalizedAsCCC2(t *testing.T) {
 	document, digest, err := domain.CanonicalizeExternalResultPayload(domain.AssessedDutyLayer, "RAW", "v1", 2, "SCOPE", cccInstant(), nil, "SOURCE-0")
 	if err != nil {
