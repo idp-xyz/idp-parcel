@@ -10,7 +10,7 @@
 | architecture（非业务） | 0 | 14 | 0 | 0 | 0 | 0 |
 | collectionremittance | 24 | 12 | 4 | 6 | 0 | 3 |
 | customscompliance | 126 | 126 | 24 | 47 | 10 | 18 |
-| networkrouting | 82 | 95 | 9 | 15 | 2 | 7 |
+| networkrouting | 83 | 96 | 9 | 16 | 2 | 7 |
 | nodeoperations | 109 | 116 | 15 | 29 | 4 | 16 |
 | parcelpricing | 142 | 129 | 19 | 19 | 1 | 24 |
 | parcelshipment | 215 | 213 | 21 | 41 | 10 | 19 |
@@ -20,9 +20,9 @@
 | settlementaccounting | 229 | 169 | 38 | 67 | 13 | 10 |
 | transportfulfillment | 279 | 281 | 50 | 57 | 15 | 50 |
 | visibilityexception | 115 | 113 | 12 | 31 | 8 | 12 |
-| **合计** | 1578 | 1537 | 211 | 367 | 65 | 204 |
+| **合计** | 1579 | 1538 | 211 | 368 | 65 | 204 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 218、测试 327。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 218、测试 328。
 
 ## 跨上下文消费缝：50 组，153 个生产文件
 
