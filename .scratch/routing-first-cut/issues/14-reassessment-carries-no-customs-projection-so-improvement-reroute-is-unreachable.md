@@ -16,3 +16,4 @@ Status: needs-triage——2026-10-10 通道 1 立（用户授权自决），出�
 - 复核与改路该不该携带候选关务投影（与可达性、初始路由同源取），还是这一支本来就要等别的票——分诊先答这一问，再定地盘与阻塞边。
 - 是否与 auto-reroute-demo-reachability/02 合并处理：那张走的是失效后改路，本条挡的是改善改路，可能共用同一处缺口。
 - 先实跑确认一次：上面是按代码判的，分诊时在演示租户或真库用例上取一次 `PlanReviewInconclusive` 的现场。
+  - 2026-10-21 注记（docs-consistency/code/28 起）：这一格不再答未决 `PlanReviewInconclusive`，而是入账为`未判` `PLAN_APPLICABILITY_UNCLEAR`（ADR-0250）；复现时改看未判登记的 `evidence_gap` 一列。
