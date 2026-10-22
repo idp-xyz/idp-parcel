@@ -287,14 +287,19 @@ func (repository *RouteReassessments) RecordNotJudged(ctx context.Context, recor
 		return fmt.Errorf("record reassessment not judged: shipment acceptance time must come with %s and only with it",
 			ports.NotJudgedTriggerPrecedesShipmentAcceptance)
 	}
+	gap, condition, err := notJudgedGap(record)
+	if err != nil {
+		return err
+	}
 	key := record.Key
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO network_routing.route_reassessment_not_judged
 			(tenant_id, correlation_id,
 			 customer_account_id, shipment_request_id,
 			 acceptance_baseline, declared_parcel_id, service_purpose,
-			 reason, trigger_occurred_at, current_position_at, shipment_accepted_at, settled_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			 reason, trigger_occurred_at, current_position_at, shipment_accepted_at,
+			 evidence_gap, reassessment_condition, settled_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		 ON CONFLICT DO NOTHING`,
 		key.TenantID.String(),
 		record.Correlation.String(),
@@ -307,11 +312,29 @@ func (repository *RouteReassessments) RecordNotJudged(ctx context.Context, recor
 		record.TriggerOccurredAt.UTC(),
 		positionAt,
 		acceptedAt,
+		gap,
+		condition,
 		record.SettledAt.UTC(),
 	); err != nil {
 		return fmt.Errorf("record reassessment not judged: %w", err)
 	}
 	return nil
+}
+
+// notJudgedGap 与迁移 0026 的 CHECK 同一条，先拒一次：缺口与再判条件成对，适用性看不清必带；其余原因可空（ADR-0250）。
+func notJudgedGap(record ports.NotJudgedTrigger) (*string, *string, error) {
+	missing, reassess := record.Missing.String(), record.Reassess.String()
+	if (missing == "") != (reassess == "") {
+		return nil, nil, fmt.Errorf("record reassessment not judged: evidence gap and reassessment condition come as a pair")
+	}
+	if missing == "" {
+		if record.Reason == ports.NotJudgedPlanApplicabilityUnclear {
+			return nil, nil, fmt.Errorf("record reassessment not judged: %s must carry its evidence gap",
+				ports.NotJudgedPlanApplicabilityUnclear)
+		}
+		return nil, nil, nil
+	}
+	return &missing, &reassess, nil
 }
 
 // LatestTriggerAt 交回这一判断键在册复核里最近一次控制触发的业务时间（ADR-0235）。

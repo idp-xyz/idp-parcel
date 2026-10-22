@@ -76,7 +76,6 @@ const (
 	ReassessLogUnavailable
 	RoutingHistoryUnavailable
 	ReassessEvidenceUnavailable
-	PlanReviewInconclusive
 	ApplicabilityStoreUnavailable
 	ReassessStoreUnavailable
 	ReassessIdentityUnavailable
@@ -91,8 +90,6 @@ func (reason ReassessUndecidedReason) String() string {
 		return "ROUTING_HISTORY_UNAVAILABLE"
 	case ReassessEvidenceUnavailable:
 		return "REASSESS_EVIDENCE_UNAVAILABLE"
-	case PlanReviewInconclusive:
-		return "PLAN_REVIEW_INCONCLUSIVE"
 	case ApplicabilityStoreUnavailable:
 		return "APPLICABILITY_STORE_UNAVAILABLE"
 	case ReassessStoreUnavailable:
@@ -107,7 +104,7 @@ func (reason ReassessUndecidedReason) String() string {
 }
 
 // ReassessRouteCommand 携带复核触发与随触发带来的内容。Carried 与 CreateInitialRouteCommand 的同名格一个来处、
-// 一种用法：复核取证据时用它，关务适用性才问得到两端国家；空着就只能答两端未知、复核停在看不清（ADR-0075）。
+// 一种用法：复核取证据时用它，关务适用性才问得到两端国家；空着就只能答两端未知、复核入账为适用性看不清（ADR-0075）。
 type ReassessRouteCommand struct {
 	Trigger domain.ReassessmentTriggerSpec
 	Carried ports.RequestCarriedContent
@@ -402,7 +399,7 @@ func freezeOf(
 }
 
 // reassessPlan 是原来有计划的那条线：6A 独立判定，仍适用即保留、失效即失效（候选状态
-// 另存）、看不清停未决。可控节点上仍适用时先看冻结：未声明停未配置；已越过边界则保留原计划，
+// 另存）、看不清入账未判。可控节点上仍适用时先看冻结：未声明停未配置；已越过边界则保留原计划，
 // 轻微改善不改路。场外揽收不建立可控节点，仍适用即保留，不看冻结也不试改善（ADR-0249 决定二）：
 // 冻结与改善问的都是「从这个节点起往后怎么走」，揽收时没有这个节点；改善等包裹交进首个节点后的交接复核。
 func (handler *ReassessRouteHandler) reassessPlan(
@@ -421,8 +418,17 @@ func (handler *ReassessRouteHandler) reassessPlan(
 
 	switch review.Outcome() {
 	case domain.PlanReviewUndecided:
-		// 适用性本身没有足够依据：不动计划、不动适用性，未决续办。
-		return handler.undecided(key, PlanReviewInconclusive), nil
+		// 适用性本身没有足够依据：不动计划、不动适用性。限制状态未知的来处都是重投推不动的缺口，答未决只会占着分区
+		// 烧到 ABANDONED，失败码还指向一个没坏的依赖；真依赖故障在取数侧交错误，已在取证据那一步答了未决（ADR-0250）。
+		gap, present := review.Gap()
+		if !present {
+			return ReassessRouteResult{}, fmt.Errorf("network routing: plan %s review is undecided without a gap",
+				plan.Version().String())
+		}
+		record := notJudgedFor(trigger, ports.NotJudgedPlanApplicabilityUnclear)
+		record.Missing = gap.Reference()
+		record.Reassess = gap.ReassessmentCondition()
+		return handler.notJudged(ctx, record)
 
 	case domain.PlanStillApplicable:
 		record := ports.ReassessmentRecord{
@@ -1087,7 +1093,7 @@ func (handler *ReassessRouteHandler) commit(
 	}
 }
 
-// notJudgedFor 是不带比较时刻的那几格未判：缺的是判断前提，不是业务时间早于谁。
+// notJudgedFor 是不带比较时刻的那几格未判：缺的是判断前提，不是业务时间早于谁。适用性看不清另由调用方补上缺口。
 func notJudgedFor(trigger domain.ReassessmentTrigger, reason ports.NotJudgedReason) ports.NotJudgedTrigger {
 	return ports.NotJudgedTrigger{
 		Correlation:       trigger.Correlation(),

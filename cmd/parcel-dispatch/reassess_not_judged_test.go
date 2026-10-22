@@ -11,7 +11,8 @@ import (
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
-// 本文件对真实 PostgreSQL 证复核未判（ADR-0235）：重投推不动的三格——没有路由历史、证据未配置、冻结形态未配置——入账，
+// 本文件对真实 PostgreSQL 证复核未判（ADR-0235）：重投推不动的几格——没有路由历史、证据未配置、冻结形态未配置、原计划
+// 适用性看不清（ADR-0250）——入账，
 // 原因落 NR 的未判登记，不登本路未决哨兵；携带同一触发的另一封信封再来时重新判一遍。复核路与生产同形（同一个 Over、同一份哨兵名单），
 // 只把证据视图与成本取数侧换成替身；失败分区那一条全走生产路由表。依赖类未决仍回滚重投，由 AT-NR-067 那条用例钉。夹具全部合成，
 // 只记 `S`。
@@ -20,6 +21,7 @@ type notJudgedRow struct {
 	correlation, reason string
 	triggerAt           time.Time
 	positionAt          *time.Time
+	gap, condition      *string
 }
 
 func notJudgedRows(t *testing.T, syn *synVerticalFixture) []notJudgedRow {
@@ -29,7 +31,7 @@ func notJudgedRows(t *testing.T, syn *synVerticalFixture) []notJudgedRow {
 		t.Fatalf("取读执行器：%v", err)
 	}
 	rows, err := querier.Query(t.Context(),
-		`SELECT correlation_id, reason, trigger_occurred_at, current_position_at
+		`SELECT correlation_id, reason, trigger_occurred_at, current_position_at, evidence_gap, reassessment_condition
 		   FROM network_routing.route_reassessment_not_judged WHERE tenant_id = $1 ORDER BY correlation_id`, "SYN-TENANT-01")
 	if err != nil {
 		t.Fatalf("列未判：%v", err)
@@ -38,7 +40,7 @@ func notJudgedRows(t *testing.T, syn *synVerticalFixture) []notJudgedRow {
 	var found []notJudgedRow
 	for rows.Next() {
 		var row notJudgedRow
-		if err := rows.Scan(&row.correlation, &row.reason, &row.triggerAt, &row.positionAt); err != nil {
+		if err := rows.Scan(&row.correlation, &row.reason, &row.triggerAt, &row.positionAt, &row.gap, &row.condition); err != nil {
 			t.Fatalf("扫未判行：%v", err)
 		}
 		found = append(found, row)
@@ -65,18 +67,22 @@ func inboxStatusOf(t *testing.T, syn *synVerticalFixture, consumer, eventID stri
 	return status
 }
 
-// Covers: AT-NR-074、AT-NR-075、AT-NR-076、AT-NR-078——没有路由历史、证据未配置、冻结形态未配置：投递入账（处理完毕，不翻成
-// 未决），未判登记一行、原因点名那一格、业务时间取交接，零复核；同一版交接另一封信封再投，仍判不成，再入账，未判仍一行。
+// Covers: AT-NR-074、AT-NR-075、AT-NR-076、AT-NR-078、AT-NR-051——没有路由历史、证据未配置、冻结形态未配置、原计划适用性
+// 看不清（选中候选的限制状态未知，这里演关务来源未接）：投递入账（处理完毕，不翻成未决），未判登记一行、原因点名那一格、
+// 业务时间取交接，适用性看不清那一格另带取数侧交回的缺口与再判条件，零复核；同一版交接另一封信封再投，仍判不成，再入账，
+// 未判仍一行。
 func TestReassessmentsThatCannotBeJudgedYetSettleWithTheirReasonOnTheDatabase(t *testing.T) {
 	cases := map[string]struct {
 		withPlan     bool
 		unconfigured bool
 		undeclared   bool
+		unclear      bool
 		want         string
 	}{
 		"没有路由历史":  {withPlan: false, want: "NO_ROUTING_HISTORY"},
 		"证据未配置":   {withPlan: true, unconfigured: true, want: "REASSESS_EVIDENCE_NOT_CONFIGURED"},
 		"冻结形态未配置": {withPlan: true, undeclared: true, want: "FREEZE_FORM_UNCONFIGURED"},
+		"适用性看不清":  {withPlan: true, unclear: true, want: "PLAN_APPLICABILITY_UNCLEAR"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -85,6 +91,18 @@ func TestReassessmentsThatCannotBeJudgedYetSettleWithTheirReasonOnTheDatabase(t 
 			if tc.undeclared {
 				fixture.evidence.evidence.FreezeRemainingSegmentLimit = nil
 				fixture.evidence.evidence.FreezeForm = nrdomain.FreezeFormUndeclared
+			}
+			if tc.unclear {
+				unknown, err := nrdomain.NewHardConstraintFinding(nrdomain.HardConstraintFindingSpec{
+					Candidate: mustNR(t, nrdomain.NewCandidateID, "SYN-CANDIDATE-01"),
+					Outcome:   nrdomain.ConstraintStatusUnknown,
+					Missing:   mustNR(t, nrdomain.NewEvidenceGapReference, "CUSTOMS_APPLICABILITY_NOT_CONNECTED"),
+					Reassess:  mustNR(t, nrdomain.NewReassessmentCondition, "CUSTOMS_APPLICABILITY_SOURCE_CONNECTED"),
+				})
+				if err != nil {
+					t.Fatalf("限制状态未知：%v", err)
+				}
+				fixture.evidence.evidence.HardConstraints = []nrdomain.HardConstraintFinding{unknown}
 			}
 			eventID := registerHandover(t, fixture.syn, fixture.register, handoverCommand(t, reassessHandoverParcel,
 				"SYN-HANDOVER/63/v1", tfdomain.ObjectHandedOver, "", reassessHandoverReceiving))
@@ -106,6 +124,11 @@ func TestReassessmentsThatCannotBeJudgedYetSettleWithTheirReasonOnTheDatabase(t 
 			}
 			if want := "handover/13:SYN-TENANT-01/13:SYN-PARCEL-01/21:SYN-HANDOVER-SCOPE-63/18:SYN-HANDOVER/63/v1"; rows[0].correlation != want {
 				t.Fatalf("未判关联 = %q, want %q", rows[0].correlation, want)
+			}
+			gapped := rows[0].gap != nil && rows[0].condition != nil &&
+				*rows[0].gap == "CUSTOMS_APPLICABILITY_NOT_CONNECTED" && *rows[0].condition == "CUSTOMS_APPLICABILITY_SOURCE_CONNECTED"
+			if tc.unclear != gapped || (!tc.unclear && (rows[0].gap != nil || rows[0].condition != nil)) {
+				t.Fatalf("缺口 = %v、再判条件 = %v；适用性看不清必带取数侧那一对，其余几格不带", rows[0].gap, rows[0].condition)
 			}
 		})
 	}

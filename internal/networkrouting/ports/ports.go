@@ -640,6 +640,10 @@ const (
 	// 起生效，据这次触发离场会早于生效。与早于当前位置分开：那一格比的是路由历史里的已判复核，这一格比的是委托本身，
 	// 审计要答得出早于的是哪一个。同样是终局的入账。
 	NotJudgedTriggerPrecedesShipmentAcceptance
+	// NotJudgedPlanApplicabilityUnclear 是原计划选中候选的限制状态未知，适用性看不清（ADR-0250）。限制状态未知的来处都在
+	// 取数侧、都是重投推不动的缺口——等目录登记、等部署接上关务判断口，或受理基线缺的端点国家永远补不上；依赖读不动在
+	// 取数侧交错误，到不了这一格。补法各不相同，所以这一格必带取数侧交回的缺口与再判条件。
+	NotJudgedPlanApplicabilityUnclear
 )
 
 func (reason NotJudgedReason) String() string {
@@ -654,6 +658,8 @@ func (reason NotJudgedReason) String() string {
 		return "TRIGGER_PRECEDES_CURRENT_POSITION"
 	case NotJudgedTriggerPrecedesShipmentAcceptance:
 		return "TRIGGER_PRECEDES_SHIPMENT_ACCEPTANCE"
+	case NotJudgedPlanApplicabilityUnclear:
+		return "PLAN_APPLICABILITY_UNCLEAR"
 	default:
 		return ""
 	}
@@ -671,7 +677,11 @@ type NotJudgedTrigger struct {
 	CurrentPositionAt time.Time
 	// ShipmentAcceptedAt 只在触发早于委托接受时有值：比较所用的委托接受时刻。
 	ShipmentAcceptedAt time.Time
-	SettledAt          time.Time
+	// Missing 与 Reassess 是取数侧交回的缺口与再判条件，适用性看不清时必带：运维按缺口查哪几件包裹在等哪一项登记，
+	// 续办据此认该重驱哪几行。两件成对，缺口没有出口就是一句续不上的否定（AT-NR-018）。
+	Missing   domain.EvidenceGapReference
+	Reassess  domain.ReassessmentCondition
+	SettledAt time.Time
 }
 
 // ReassessmentStore 按触发关联找回并保存复核结果：同一触发和输入版本已经处理即返回

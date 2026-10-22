@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
@@ -130,5 +131,77 @@ func TestANotJudgedTriggerIsWrittenOnlyInsideATransaction(t *testing.T) {
 	}
 	if _, present := notJudgedRowOf(t, pool, "tenant-1", "trigger-nj-4"); present {
 		t.Error("回滚后未判行仍在")
+	}
+}
+
+// Covers: AT-NR-051（登记册那一半）——「适用性看不清」的未判同行记下取数侧交回的缺口与再判条件，原样读回；这一格原因
+// 不带缺口、缺口与再判条件只带一件，适配器先拒、不送到库，绕过适配器直插时库再拒一次（ADR-0250 决定一）。
+func TestAnUnclearApplicabilityCarriesItsGap(t *testing.T) {
+	_, reassessments, transactor, pool := newRouteStores(t)
+	ctx := t.Context()
+	key := routeKey(t, "tenant-1", "parcel-1")
+
+	unclear := notJudged(t, key, "trigger-g-unclear", ports.NotJudgedPlanApplicabilityUnclear)
+	unclear.Missing = scalar(t, domain.NewEvidenceGapReference, "CUSTOMS_ENDPOINT_COUNTRY_MISSING/ORIGIN")
+	unclear.Reassess = scalar(t, domain.NewReassessmentCondition, "CUSTOMS_ENDPOINT_COUNTRY_SUPPLEMENTED")
+	within(t, transactor, ctx, func(txCtx context.Context) error {
+		return reassessments.RecordNotJudged(txCtx, unclear)
+	})
+	var reason string
+	var gap, condition *string
+	if err := pool.QueryRow(ctx,
+		`SELECT reason, evidence_gap, reassessment_condition FROM network_routing.route_reassessment_not_judged
+		  WHERE tenant_id = 'tenant-1' AND correlation_id = 'trigger-g-unclear'`).Scan(&reason, &gap, &condition); err != nil {
+		t.Fatalf("读未判行：%v", err)
+	}
+	if reason != "PLAN_APPLICABILITY_UNCLEAR" || gap == nil || condition == nil ||
+		*gap != "CUSTOMS_ENDPOINT_COUNTRY_MISSING/ORIGIN" || *condition != "CUSTOMS_ENDPOINT_COUNTRY_SUPPLEMENTED" {
+		t.Fatalf("未判行 = %q、缺口 %v、再判条件 %v, want 适用性看不清带取数侧那一对", reason, gap, condition)
+	}
+	if _, present := notJudgedRowOf(t, pool, "tenant-1", "trigger-g-unclear"); !present {
+		t.Fatal("未判行没落库")
+	}
+
+	for name, record := range map[string]ports.NotJudgedTrigger{
+		"适用性看不清却没带缺口": notJudged(t, key, "trigger-g-bare", ports.NotJudgedPlanApplicabilityUnclear),
+		"只带缺口没带再判条件": func() ports.NotJudgedTrigger {
+			record := notJudged(t, key, "trigger-g-half", ports.NotJudgedPlanApplicabilityUnclear)
+			record.Missing = unclear.Missing
+			return record
+		}(),
+		"只带再判条件没带缺口": func() ports.NotJudgedTrigger {
+			record := notJudged(t, key, "trigger-g-other-half", ports.NotJudgedPlanApplicabilityUnclear)
+			record.Reassess = unclear.Reassess
+			return record
+		}(),
+	} {
+		err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+			return reassessments.RecordNotJudged(txCtx, record)
+		})
+		var refused *pgconn.PgError
+		if err == nil || errors.As(err, &refused) {
+			t.Errorf("%s：err = %v, want 适配器先拒、不送到库", name, err)
+		}
+	}
+	for name, insert := range map[string]string{
+		"适用性看不清却没带缺口": `INSERT INTO network_routing.route_reassessment_not_judged
+			(tenant_id, correlation_id, customer_account_id, shipment_request_id, acceptance_baseline,
+			 declared_parcel_id, service_purpose, reason, trigger_occurred_at, settled_at)
+		 VALUES ('tenant-1', 'trigger-g-raw', 'customer-a', 'request-1', 'baseline-v1',
+		         'parcel-1', 'LAST_MILE_DELIVERY', 'PLAN_APPLICABILITY_UNCLEAR', now(), now())`,
+		"缺口没有再判条件": `INSERT INTO network_routing.route_reassessment_not_judged
+			(tenant_id, correlation_id, customer_account_id, shipment_request_id, acceptance_baseline,
+			 declared_parcel_id, service_purpose, reason, trigger_occurred_at, evidence_gap, settled_at)
+		 VALUES ('tenant-1', 'trigger-g-raw-half', 'customer-a', 'request-1', 'baseline-v1',
+		         'parcel-1', 'LAST_MILE_DELIVERY', 'PLAN_APPLICABILITY_UNCLEAR', now(), 'CUSTOMS_PORT_PATH_CATALOG_EMPTY', now())`,
+		"缺口是空白": `INSERT INTO network_routing.route_reassessment_not_judged
+			(tenant_id, correlation_id, customer_account_id, shipment_request_id, acceptance_baseline,
+			 declared_parcel_id, service_purpose, reason, trigger_occurred_at, evidence_gap, reassessment_condition, settled_at)
+		 VALUES ('tenant-1', 'trigger-g-raw-blank', 'customer-a', 'request-1', 'baseline-v1',
+		         'parcel-1', 'LAST_MILE_DELIVERY', 'PLAN_APPLICABILITY_UNCLEAR', now(), ' ', 'CUSTOMS_PORT_PATH_CATALOG_REGISTERED', now())`,
+	} {
+		if _, err := pool.Exec(ctx, insert); err == nil {
+			t.Errorf("%s：绕过适配器直插进了库", name)
+		}
 	}
 }

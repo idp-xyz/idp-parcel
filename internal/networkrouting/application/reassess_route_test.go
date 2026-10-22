@@ -459,6 +459,53 @@ func TestUnconfiguredEvidenceIsNotJudgedWhileUnreadableEvidenceStaysUndecided(t 
 	}
 }
 
+// Covers: AT-NR-051——选中候选的限制状态未知（这里演关务口岸路径目录为空）：节点收寄与场外揽收两路同答`未判`，原因
+// PLAN_APPLICABILITY_UNCLEAR，未判登记同行记下取数侧交回的缺口与再判条件；不答未决、不回滚重投，计划与适用性都不动，
+// 不落复核（ADR-0250 决定一）。
+func TestAnUnclearPlanApplicabilityIsNotJudgedWithItsGap(t *testing.T) {
+	unknown, err := domain.NewHardConstraintFinding(domain.HardConstraintFindingSpec{
+		Candidate: value(t, domain.NewCandidateID, "candidate-1"),
+		Outcome:   domain.ConstraintStatusUnknown,
+		Missing:   value(t, domain.NewEvidenceGapReference, "CUSTOMS_PORT_PATH_CATALOG_EMPTY"),
+		Reassess:  value(t, domain.NewReassessmentCondition, "CUSTOMS_PORT_PATH_CATALOG_REGISTERED"),
+	})
+	if err != nil {
+		t.Fatalf("new unknown constraint: %v", err)
+	}
+	for name, command := range map[string]application.ReassessRouteCommand{
+		"节点收寄": reassessCommand(t, "node-origin"),
+		"场外揽收": pickupCommand(t),
+	} {
+		t.Run(name, func(t *testing.T) {
+			fixture := newReassessFixture(t)
+			record := currentPlanRecord(t)
+			fixture.routes.records[record.Key] = record
+			evidence := evidenceBeforeFreeze(t)
+			evidence.HardConstraints = []domain.HardConstraintFinding{unknown}
+			fixture.evidence.byParcel["parcel-1"] = evidence
+
+			result := handleOK(t, fixture, command)
+			if result.Outcome() != application.ReassessTriggerNotJudged ||
+				result.NotJudgedReason() != ports.NotJudgedPlanApplicabilityUnclear {
+				t.Fatalf("outcome = %q/%q/%q, want TRIGGER_NOT_JUDGED/PLAN_APPLICABILITY_UNCLEAR",
+					result.Outcome(), result.NotJudgedReason(), result.UndecidedReason())
+			}
+			assertOnlyNotJudged(t, fixture, ports.NotJudgedPlanApplicabilityUnclear)
+			noted := fixture.store.notJudged[value(t, domain.NewRequestCorrelationID, "trigger-1")]
+			if noted.Missing.String() != "CUSTOMS_PORT_PATH_CATALOG_EMPTY" ||
+				noted.Reassess.String() != "CUSTOMS_PORT_PATH_CATALOG_REGISTERED" {
+				t.Fatalf("缺口 = %q、再判条件 = %q, want 取数侧交回的那一对", noted.Missing, noted.Reassess)
+			}
+			if !noted.CurrentPositionAt.IsZero() || !noted.ShipmentAcceptedAt.IsZero() {
+				t.Fatalf("未判登记 = %+v; 适用性看不清不带比较时刻", noted)
+			}
+			if len(fixture.applicability.saved) != 0 {
+				t.Fatalf("未判却动了适用性：%d 次", len(fixture.applicability.saved))
+			}
+		})
+	}
+}
+
 // Covers: AT-NR-078——同一触发入账未判之后由另一封信封再带来：不答「登记册读不回」，重新判一遍；前提补齐了就判、落一条
 // 复核，未判登记只留第一次那一行。未判原因落不了库时不得答未判：改答登记册那一格的未决，照旧回滚重投。
 func TestANotJudgedTriggerIsJudgedAgainWhenItIsDeliveredAgain(t *testing.T) {
