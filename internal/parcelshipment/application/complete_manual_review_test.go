@@ -150,14 +150,14 @@ func TestAConflictedSaveReportsTheConflict(t *testing.T) {
 }
 
 // Covers: 与形成决定那一步同一判断——指名一份查不到的委托是调用方的错，上抛而不是造一个
-// 业务取值；HTTP 侧与其余未形成答案一并 5xx，维持统一不可见结果。
+// 业务取值；HTTP 侧答统一不可见结果的 404（ADR-0022）。
 func TestACompletionForAMissingRequestIsACallerError(t *testing.T) {
 	fixture := newReviewCompletionFixture(t)
 	fixture.requests.missing = true
 
 	_, err := fixture.handler.Handle(context.Background(), fixture.command(t))
-	if !errors.Is(err, domain.ErrInvalidShipmentRequest) {
-		t.Fatalf("err = %v, want ErrInvalidShipmentRequest", err)
+	if !errors.Is(err, application.ErrShipmentRequestNotVisible) {
+		t.Fatalf("err = %v, want ErrShipmentRequestNotVisible", err)
 	}
 }
 

@@ -30,8 +30,7 @@ type SupplementHandler interface {
 // NewFormNewSubmissionVersionEndpoint 交回受控补充的 HTTP 入口：客户在`已提交`委托上形成同一
 // 委托的新提交版本（`AT-PS-036` 第一支）。
 //
-// 委托查不到时应用层上抛技术错误，本端点把它与其余没形成答案的失败一并回 5xx
-// `NO_ANSWER_FORMED`——统一不可见结果不拆开，理由同撤回端点。
+// 委托查不到答`统一不可见结果`的 404，理由同撤回端点；其余没形成答案的失败回 5xx `NO_ANSWER_FORMED`。
 func NewFormNewSubmissionVersionEndpoint(intake SupplementIntake, handler SupplementHandler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodPost {
@@ -56,7 +55,7 @@ func NewFormNewSubmissionVersionEndpoint(intake SupplementIntake, handler Supple
 
 		result, err := handler.Handle(request.Context(), command)
 		if err != nil {
-			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+			writeCommandProblem(response, err)
 			return
 		}
 		writeSupplementOutcome(response, result)

@@ -10,6 +10,18 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
+// 修订编排在受理阶段认出的三种调用方的错：都不是业务答案（不进 `AmendmentOutcome`），也不是没形成答案——重发同一份请求
+// 结果不变，ADR-0022 归 4xx。三者各有自己的名字，是因为同一个领域错误在编排后段也会因别的缘故冒出来（版本构造与委托上的
+// 修订都会拒），HTTP 适配器只能认受理阶段这几个具名的，后段的照旧是没形成答案。
+var (
+	// ErrAmendmentIntentNotDeclared：修订意图是最低业务语义（UC-PS-002 输入语义表），没声明就立不起这份修订。
+	ErrAmendmentIntentNotDeclared = fmt.Errorf("%w: amendment intent is not declared", domain.ErrInvalidCustomerSourceDataVersion)
+	// ErrAmendmentContentUnfit：内容的形与范围、意图不配（pp-seams/05 裁决 3）。
+	ErrAmendmentContentUnfit = fmt.Errorf("%w: content does not fit the amendment scope and intent", domain.ErrInvalidCustomerSourceDataVersion)
+	// ErrAmendedRequestNotAccepted：指名的委托还没接受。决定前的纠错走受控补充，不走资料修订。
+	ErrAmendedRequestNotAccepted = fmt.Errorf("%w: amendment needs an accepted request", domain.ErrShipmentRequestNotAccepted)
+)
+
 // AmendmentOutcome 是修订这一步的应用处理结果。
 type AmendmentOutcome uint8
 
@@ -166,14 +178,14 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 	// （AT-PS-020），意图立不起来，授权与规则的答案都无从成立。这是调用方的错，不是业务
 	// 未决——续办补不出一个没声明的意图。请求到达过这件事已由上面的来源保全留痕。
 	if !command.Intent.Declared() {
-		return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w", domain.ErrInvalidCustomerSourceDataVersion)
+		return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w", ErrAmendmentIntentNotDeclared)
 	}
 	// 内容的形要配范围与意图（pp-seams/05 裁决 3）：一份落在收件范围上的测量、或一份带着邮编的「显式清空」，与意图
 	// 没声明同一格——调用方的错，续办补不出来。在这里先问而不是等 FormCustomerSourceDataVersion 拒：那一步在授权、
 	// 阶段、矩阵与签发版本号之后，一条注定不成立的命令不该跑到那里才被拒。判断只有一处（domain 那道构造门），这里
 	// 只是早问。
 	if !command.Content.FitsAmendment(command.Scope, command.Intent) {
-		return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w", domain.ErrInvalidCustomerSourceDataVersion)
+		return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w", ErrAmendmentContentUnfit)
 	}
 
 	request, found, err := handler.deps.Requests.FindBySourceIdentity(ctx, command.Identity)
@@ -181,10 +193,9 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 		return handler.undecided(command, ShipmentRequestUnavailable), nil
 	}
 	if !found {
-		// 命令指名了一份不存在的委托。这不是依赖答不出，而是调用方对世界的判断就是错的，
-		// 因此上抛而不是形成未决。接 HTTP 时它必须映射为`统一不可见结果`，理由与出处见
-		// form_acceptance_decision.go：否定结果不区分「不存在」与「属于别的租户」。
-		return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w", domain.ErrInvalidShipmentRequest)
+		// 命令指名了一份查不到的委托。这不是依赖答不出，而是调用方对世界的判断就是错的，
+		// 因此上抛而不是形成未决：答`统一不可见结果`（ErrShipmentRequestNotVisible）。
+		return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w", ErrShipmentRequestNotVisible)
 	}
 
 	authorization, err := handler.deps.Authorizer.AuthorizeSourceDataAmendment(
@@ -234,8 +245,8 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 	if err != nil {
 		if errors.Is(err, domain.ErrShipmentRequestNotAccepted) {
 			// 委托没接受，本用例根本不成立（UC-PS-002 从已接受委托开始）。上抛而不形成未决：
-			// 那是调用方对世界的判断错了，续办等不来一份接受；接 HTTP 时归`没形成答案`那一格。
-			return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w", err)
+			// 那是调用方对世界的判断错了，续办等不来一份接受——决定前的纠错走受控补充。
+			return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w", ErrAmendedRequestNotAccepted)
 		}
 		// 事实读不回与事实答「不知道」分开：前者等依赖恢复，后者等读面接上——合成一格，续办方
 		// 就分不清该重试还是该去接线。
@@ -382,8 +393,8 @@ func (handler *AmendCustomerSourceDataHandler) resolvePreserved(
 		return handler.undecided(command, ShipmentRequestUnavailable), nil
 	}
 	if !found {
-		// 同上一处：查不到是调用方的错，接 HTTP 时同样映射为`统一不可见结果`。
-		return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w", domain.ErrInvalidShipmentRequest)
+		// 同上一处：查不到是调用方的错，答`统一不可见结果`。
+		return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w", ErrShipmentRequestNotVisible)
 	}
 	return handler.existing(ctx, command, request), nil
 }

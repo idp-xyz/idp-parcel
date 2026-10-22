@@ -27,10 +27,8 @@ type WithdrawalHandler interface {
 
 // NewWithdrawShipmentRequestEndpoint 交回 `UC-PS-005` 决定前撤回编排的 HTTP 入口。
 //
-// 委托查不到时应用层上抛技术错误（指名一份查不到的委托是调用方的错），本端点把它与
-// 其余没形成答案的失败一并回 5xx `NO_ANSWER_FORMED`——不细分，因为 `FindBySourceIdentity`
-// 的否定结果不区分「不存在」与「属于别的租户」，细分出一个「未找到」码就把统一不可见
-// 结果拆开了（UC-PS-001 语义，撤回照办）。
+// 委托查不到（`FindBySourceIdentity` 的否定结果不区分「不存在」与「属于别的租户」）是调用方的错，
+// 答`统一不可见结果`的 404（ADR-0022，见 writeCommandProblem）；其余没形成答案的失败回 5xx `NO_ANSWER_FORMED`。
 func NewWithdrawShipmentRequestEndpoint(intake WithdrawalIntake, handler WithdrawalHandler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodPost {
@@ -55,7 +53,7 @@ func NewWithdrawShipmentRequestEndpoint(intake WithdrawalIntake, handler Withdra
 
 		result, err := handler.Handle(request.Context(), command)
 		if err != nil {
-			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+			writeCommandProblem(response, err)
 			return
 		}
 		writeWithdrawalOutcome(response, result)

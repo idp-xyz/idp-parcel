@@ -49,7 +49,7 @@ func NewDisposeShipmentRequestEndpoint(
 
 		result, err := handler.Handle(request.Context(), command)
 		if err != nil {
-			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+			writeCommandProblem(response, err)
 			return
 		}
 		writeAuthorizedDispositionOutcome(response, result)

@@ -163,9 +163,8 @@ func (handler *FormNewSubmissionVersionHandler) Handle(
 		return handler.undecided(command, ShipmentRequestUnavailable), nil
 	}
 	if !found {
-		// 与形成决定、撤回、修订同一判断：指名一份查不到的委托是调用方的错。接 HTTP 时
-		// 映射`统一不可见结果`，理由见 form_acceptance_decision.go。
-		return FormNewSubmissionVersionResult{}, fmt.Errorf("form new submission version: %w", domain.ErrInvalidShipmentRequest)
+		// 与撤回、修订同一判断：指名一份查不到的委托是调用方的错，答`统一不可见结果`。
+		return FormNewSubmissionVersionResult{}, fmt.Errorf("form new submission version: %w", ErrShipmentRequestNotVisible)
 	}
 
 	// 决定已越过提交边界时先短路：一份已决定的委托不该再消耗版本与任务身份（先例：撤回的

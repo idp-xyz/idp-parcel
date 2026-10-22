@@ -51,7 +51,7 @@ func NewRejectShipmentRequestEndpoint(
 
 		result, err := handler.Handle(request.Context(), command)
 		if err != nil {
-			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+			writeCommandProblem(response, err)
 			return
 		}
 		writeActiveRejectionOutcome(response, result)

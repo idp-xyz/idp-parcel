@@ -216,8 +216,40 @@ func TestAnAmendmentToARequestThatIsNotYetAcceptedIsNotReportedAsOutsideTheBasel
 
 	_, err := fixture.handler.Handle(context.Background(), command)
 
-	if !errors.Is(err, domain.ErrShipmentRequestNotAccepted) {
-		t.Fatalf("error = %v, want ErrShipmentRequestNotAccepted; a request that fixed no baseline cannot have been reached past one", err)
+	if !errors.Is(err, application.ErrAmendedRequestNotAccepted) {
+		t.Fatalf("error = %v, want ErrAmendedRequestNotAccepted; a request that fixed no baseline cannot have been reached past one", err)
+	}
+}
+
+// Covers: `AT-PS-106` 结果语义「委托查无、跨租户或跨客户」——指名一份查不到的委托答统一不可见（ADR-0022：接 HTTP 是 404），
+// 授权在定位之后，一份查不到的委托连授权都不问：授权服务的答复本身就会泄露对象存在与否。
+func TestAnAmendmentToAnUnknownRequestIsUniformlyInvisible(t *testing.T) {
+	fixture := newAmendmentFixture(t)
+	fixture.requests.missing = true
+
+	_, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+
+	if !errors.Is(err, application.ErrShipmentRequestNotVisible) {
+		t.Fatalf("err = %v, want ErrShipmentRequestNotVisible", err)
+	}
+	if fixture.authorizer.calls != 0 {
+		t.Fatal("对一份查不到的委托问了授权——答复本身会泄露对象存在与否")
+	}
+}
+
+// Covers: UC-PS-002 输入语义「修订意图」为最低业务语义——意图没声明是调用方的错，改请求才会好（ADR-0022 4xx），在授权之前就拒。
+func TestAnAmendmentWithoutADeclaredIntentIsACallerError(t *testing.T) {
+	fixture := newAmendmentFixture(t)
+	command := fixture.command(t)
+	command.Intent = domain.AmendmentIntentInvalid
+
+	_, err := fixture.handler.Handle(context.Background(), command)
+
+	if !errors.Is(err, application.ErrAmendmentIntentNotDeclared) {
+		t.Fatalf("err = %v, want ErrAmendmentIntentNotDeclared", err)
+	}
+	if fixture.authorizer.calls != 0 {
+		t.Fatal("意图没声明还问了授权")
 	}
 }
 
@@ -855,8 +887,10 @@ type amendableRequestStore struct {
 	t *testing.T
 	// notYetAccepted 交回一份停在`已提交`的委托，用来分开「没有基线」与「越过基线」。
 	notYetAccepted bool
-	err            error
-	saveErr        error
+	// missing 答查无：端口否定结果不区分不存在与属于别人。
+	missing bool
+	err     error
+	saveErr error
 	// saveConflict 用布尔而不是直接收枚举：那个枚举的零值是`未设`，收它会让每一处没显式
 	// 设过的构造都变成一次端口坏了。
 	saveConflict bool
@@ -870,6 +904,9 @@ func (store *amendableRequestStore) FindBySourceIdentity(
 	store.t.Helper()
 	if store.err != nil {
 		return domain.ShipmentRequest{}, false, store.err
+	}
+	if store.missing {
+		return domain.ShipmentRequest{}, false, nil
 	}
 	if store.notYetAccepted {
 		return submittedRequest(store.t), true, nil

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -14,8 +15,8 @@ import (
 
 // Covers: `/shipment-requests/parcel-cancellations` 的第二参是真编排——委托仓储、
 // 收寄采认读口、取消决定库、PCXL 标识签发与 Outbox 意图交付在真实 PostgreSQL 上装得
-// 起来。三个钉：指名不存在的委托如实答未受理（真仓储查过，查无与编号不符同答，
-// AT-PS-090 的隔离面——不是未决，不造委托）；授权目录未配置（PAR-COM-17 实例半边，
+// 起来。三个钉：指名不存在的委托答统一不可见（真仓储查过，查无与编号不符同答，
+// AT-PS-090 的隔离面——不是未决，不造委托，也不是字段缺的未受理）；授权目录未配置（PAR-COM-17 实例半边，
 // 采用版本缺席）时停在 AUTHORITY_UNCONFIGURED 而非 AUTHORITY_UNAVAILABLE——恢复动作
 // 是登记规则不是修服务，且绝不默认任何角色可/不可取消；未决什么也不落库——重放同一
 // 份输入仍走整套判断，不走已有结果。测试输入是隔离合成，只记 `S`，不进生产装配。
@@ -32,12 +33,9 @@ func TestTheWiredCancellationAnswersHonestlyAgainstARealDatabase(t *testing.T) {
 	}
 
 	identity := cancellationSeedIdentity(t, "SYN-SUBMIT-KEY-1")
-	absent, err := cancellation.Handle(t.Context(), cancelParcelCommand(t, cancellationSeedIdentity(t, "SYN-SUBMIT-KEY-ABSENT")))
-	if err != nil {
-		t.Fatalf("指名不存在的委托：%v", err)
-	}
-	if got := absent.Outcome(); got != shipmentapp.CancellationNotAccepted {
-		t.Fatalf("outcome = %v, want REQUEST_NOT_ACCEPTED——委托查无是提交矛盾，不是未决", got)
+	_, err = cancellation.Handle(t.Context(), cancelParcelCommand(t, cancellationSeedIdentity(t, "SYN-SUBMIT-KEY-ABSENT")))
+	if !errors.Is(err, shipmentapp.ErrShipmentRequestNotVisible) {
+		t.Fatalf("指名不存在的委托：err = %v, want ErrShipmentRequestNotVisible——委托查无是调用方的错，不是未决", err)
 	}
 
 	seedSubmittedShipmentRequest(t, db, identity)

@@ -130,7 +130,7 @@ func TestALateWithdrawalAfterAnAcceptanceKeepsItsLawfulFreeze(t *testing.T) {
 
 // Covers: `AT-PS-075` 的不泄露半边「其他客户账户请求撤回 → 不泄露对象」——查不到与越权在
 // 端口上是同一个否定答案（FindBySourceIdentity 以完整来源身份为键），这条出口上抛统一的
-// ErrInvalidShipmentRequest，接 HTTP 时映射`统一不可见结果`（ADR-0022）。授权在定位之后，
+// ErrShipmentRequestNotVisible，接 HTTP 时映射`统一不可见结果`的 404（ADR-0022）。授权在定位之后，
 // 一个查不到的对象连授权都不该问——问了，授权服务的答复本身就泄露了对象存在与否。
 func TestAWithdrawalForAnUnknownRequestIsUniformlyInvisible(t *testing.T) {
 	fixture := newWithdrawalFixture(t)
@@ -138,8 +138,8 @@ func TestAWithdrawalForAnUnknownRequestIsUniformlyInvisible(t *testing.T) {
 
 	_, err := fixture.handler.Handle(context.Background(), fixture.command(t))
 
-	if !errors.Is(err, domain.ErrInvalidShipmentRequest) {
-		t.Fatalf("err = %v, want ErrInvalidShipmentRequest——统一不可见出口没有生效", err)
+	if !errors.Is(err, application.ErrShipmentRequestNotVisible) {
+		t.Fatalf("err = %v, want ErrShipmentRequestNotVisible——统一不可见出口没有生效", err)
 	}
 	if fixture.authorizer.calls != 0 {
 		t.Fatal("对一份查不到的委托问了授权——答复本身会泄露对象存在与否")

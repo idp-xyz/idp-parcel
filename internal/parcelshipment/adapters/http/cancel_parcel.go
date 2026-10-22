@@ -29,9 +29,8 @@ type CancellationHandler interface {
 
 // NewCancelParcelEndpoint 交回 `UC-PS-006` 接受后取消编排的 HTTP 入口。
 //
-// 与撤回端点的一处分流差别：委托查无、编号不符、成员出界与跨租户由取消编排折成 2xx 的
-// REQUEST_NOT_ACCEPTED（统一不可见在编排内作答，AT-PS-090），不经由本端点的 5xx——
-// 这里的 5xx 只剩真正没形成答案的失败。
+// 委托查无、编号不符、成员出界与跨租户由取消编排认成同一个统一不可见错误，答 404（ADR-0022，
+// AT-PS-090），与字段缺的 `REQUEST_NOT_ACCEPTED` 分开；其余没形成答案的失败回 5xx `NO_ANSWER_FORMED`。
 func NewCancelParcelEndpoint(intake CancellationIntake, handler CancellationHandler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodPost {
@@ -56,7 +55,7 @@ func NewCancelParcelEndpoint(intake CancellationIntake, handler CancellationHand
 
 		result, err := handler.Handle(request.Context(), command)
 		if err != nil {
-			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+			writeCommandProblem(response, err)
 			return
 		}
 		writeCancellationOutcome(response, result)

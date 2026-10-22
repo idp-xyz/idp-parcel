@@ -144,9 +144,8 @@ func (handler *CompleteManualReviewHandler) Handle(
 		return CompleteManualReviewResult{}, fmt.Errorf("complete manual review: %w", err)
 	}
 	if !found {
-		// 指名一份查不到的委托是调用方的错。接 HTTP 时与其余未形成答案一并 5xx，
-		// 不细分出「未找到」——理由同撤回端点：拆开就是把统一不可见结果拆开。
-		return CompleteManualReviewResult{}, fmt.Errorf("complete manual review: %w", domain.ErrInvalidShipmentRequest)
+		// 指名一份查不到的委托是调用方的错，答`统一不可见结果`（ErrShipmentRequestNotVisible），理由同撤回。
+		return CompleteManualReviewResult{}, fmt.Errorf("complete manual review: %w", ErrShipmentRequestNotVisible)
 	}
 
 	authority, err := handler.deps.Authorizer.AuthorizeManualReview(ctx, ports.ManualReviewAuthorizationQuery{

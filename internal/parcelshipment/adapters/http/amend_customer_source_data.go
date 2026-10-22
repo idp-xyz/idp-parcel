@@ -30,9 +30,9 @@ type AmendmentHandler interface {
 // NewAmendCustomerSourceDataEndpoint 交回资料修订的 HTTP 入口：客户或其授权代表在`已接受`委托上形成
 // 一份客户原始资料新版本（`AT-PS-014`..`AT-PS-032`）。
 //
-// 委托查不到时应用层上抛技术错误，本端点把它与其余没形成答案的失败一并回 5xx `NO_ANSWER_FORMED`
-// ——统一不可见结果不拆开，理由同撤回端点。委托未接受、修订意图未声明同样以错误上抛，同一格：
-// 那是调用方对世界的判断错了，不是一个可续办的业务答案。
+// 委托查不到答`统一不可见结果`的 404，理由同撤回端点。委托未接受、修订意图未声明、内容与范围不配也以
+// 错误上抛：那是调用方对世界的判断错了，不是一个可续办的业务答案，答 4xx（见 writeAmendmentProblem）；
+// 其余没形成答案的失败回 5xx `NO_ANSWER_FORMED`。
 func NewAmendCustomerSourceDataEndpoint(intake SourceDataAmendmentIntake, handler AmendmentHandler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodPost {
@@ -57,7 +57,7 @@ func NewAmendCustomerSourceDataEndpoint(intake SourceDataAmendmentIntake, handle
 
 		result, err := handler.Handle(request.Context(), command)
 		if err != nil {
-			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+			writeAmendmentProblem(response, err)
 			return
 		}
 		writeAmendmentOutcome(response, result)

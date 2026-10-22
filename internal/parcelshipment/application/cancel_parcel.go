@@ -194,15 +194,16 @@ func (handler *CancelParcelHandler) Handle(
 		return CancelParcelResult{outcome: CancellationNotAccepted}, nil
 	}
 
-	// 委托按来源身份加编号双重指名。查无、编号不符、成员出界与跨租户同答——可区分即可
-	// 枚举别人的包裹（AT-PS-090 的隔离面）。
+	// 委托按来源身份加编号双重指名。查无、编号不符、成员出界与跨租户同答`统一不可见结果`——可区分即可
+	// 枚举别人的包裹（AT-PS-090 的隔离面）。它不是`请求未受理`：那一格只说字段缺、请求立不起来（UC-PS-006
+	// 结果语义），并进去，客户就分不清该补字段还是该核对自己指名的委托与包裹。
 	request, found, err := handler.deps.Requests.FindBySourceIdentity(ctx, command.Identity)
 	if err != nil {
 		return handler.undecided(command, CancelRequestUnavailable), nil
 	}
 	if !found || request.ShipmentRequestID() != command.ShipmentRequestID ||
 		!memberOfCurrentVersion(request, command.Parcel) {
-		return CancelParcelResult{outcome: CancellationNotAccepted}, nil
+		return CancelParcelResult{}, fmt.Errorf("cancel parcel: %w", ErrShipmentRequestNotVisible)
 	}
 
 	key := ports.CancellationRequestKey{

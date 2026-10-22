@@ -85,7 +85,7 @@ func TestAnAmendmentCarryingContentFormsAVersionThatKeepsIt(t *testing.T) {
 }
 
 // Covers: 裁决 3「形与范围不配 → 未受理」「显式清空时内容必须为空，非空 → 未受理」——本编排里「调用方对世界的判断错了」
-// 走的是与意图未声明同一格：上抛 ErrInvalidCustomerSourceDataVersion（接 HTTP 归`没形成答案`），在授权之前就拒、不签
+// 走的是与意图未声明并列的一格：上抛 ErrAmendmentContentUnfit（接 HTTP 答 400，改请求才会好），在授权之前就拒、不签
 // 版本号、不形成版本；请求到达过这件事由来源保全留痕。
 func TestAmendmentContentThatDoesNotFitTheScopeOrIntentIsRefusedBeforeAuthorization(t *testing.T) {
 	cases := map[string]func(*testing.T, *application.AmendCustomerSourceDataCommand){
@@ -109,8 +109,8 @@ func TestAmendmentContentThatDoesNotFitTheScopeOrIntentIsRefusedBeforeAuthorizat
 			mutate(t, &command)
 
 			result, err := fixture.handler.Handle(context.Background(), command)
-			if !errors.Is(err, domain.ErrInvalidCustomerSourceDataVersion) {
-				t.Fatalf("err = %v, want ErrInvalidCustomerSourceDataVersion", err)
+			if !errors.Is(err, application.ErrAmendmentContentUnfit) {
+				t.Fatalf("err = %v, want ErrAmendmentContentUnfit", err)
 			}
 			if _, formed := result.Version(); formed {
 				t.Fatal("a refused command still formed a version")

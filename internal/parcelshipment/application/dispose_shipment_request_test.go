@@ -611,8 +611,10 @@ func (double *dispositionAuthorizerDouble) AuthorizeDisposition(
 
 // disposableRequestStore 交回夹具摆好的那一份委托，并留住被处置后保存的那一份。
 type disposableRequestStore struct {
-	t        *testing.T
-	request  domain.ShipmentRequest
+	t       *testing.T
+	request domain.ShipmentRequest
+	// missing 答查无：端口否定结果不区分不存在与属于别人。
+	missing  bool
 	saved    *domain.ShipmentRequest
 	conflict bool
 }
@@ -621,6 +623,9 @@ func (store *disposableRequestStore) FindBySourceIdentity(
 	_ context.Context,
 	_ domain.SourceIdentity,
 ) (domain.ShipmentRequest, bool, error) {
+	if store.missing {
+		return domain.ShipmentRequest{}, false, nil
+	}
 	return store.request, true, nil
 }
 

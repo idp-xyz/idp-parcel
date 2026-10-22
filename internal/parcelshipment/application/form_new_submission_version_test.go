@@ -13,8 +13,10 @@ import (
 // supplementableRequestStore 交回一份`已提交`委托并把保存黏住：重放要跨两次调用才谈得上，
 // 每次交回干净的一份，第二次调用就看不见第一次的换代。
 type supplementableRequestStore struct {
-	t            *testing.T
-	decided      bool
+	t       *testing.T
+	decided bool
+	// missing 答查无：端口否定结果不区分不存在与属于别人。
+	missing      bool
 	err          error
 	saveErr      error
 	saveConflict bool
@@ -28,6 +30,9 @@ func (store *supplementableRequestStore) FindBySourceIdentity(
 	store.t.Helper()
 	if store.err != nil {
 		return domain.ShipmentRequest{}, false, store.err
+	}
+	if store.missing {
+		return domain.ShipmentRequest{}, false, nil
 	}
 	if store.saved != nil {
 		return *store.saved, true, nil

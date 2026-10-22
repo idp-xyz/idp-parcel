@@ -157,10 +157,9 @@ func (handler *WithdrawShipmentRequestHandler) Handle(
 		return handler.undecided(ctx, command, ShipmentRequestUnavailable, domain.ShipmentRequestStateInvalid), nil
 	}
 	if !found {
-		// 与形成决定那一步同一判断：指名一份查不到的委托是调用方的错，不是业务结果。接
-		// HTTP 时同样必须映射为`统一不可见结果`，理由见 form_acceptance_decision.go。
+		// 指名一份查不到的委托是调用方的错，不是业务结果：答`统一不可见结果`（ErrShipmentRequestNotVisible）。
 		// `AT-PS-075` 要求越权撤回不泄露对象存在与否，走的正是这条出口。
-		return WithdrawShipmentRequestResult{}, fmt.Errorf("withdraw shipment request: %w", domain.ErrInvalidShipmentRequest)
+		return WithdrawShipmentRequestResult{}, fmt.Errorf("withdraw shipment request: %w", ErrShipmentRequestNotVisible)
 	}
 
 	authority, err := handler.deps.Authorizer.AuthorizeWithdrawal(ctx, ports.WithdrawalAuthorizationQuery{
@@ -275,7 +274,7 @@ func (handler *WithdrawShipmentRequestHandler) resolvePreserved(
 		return handler.undecided(ctx, command, ShipmentRequestUnavailable, domain.ShipmentRequestStateInvalid), nil
 	}
 	if !found {
-		return WithdrawShipmentRequestResult{}, fmt.Errorf("withdraw shipment request: %w", domain.ErrInvalidShipmentRequest)
+		return WithdrawShipmentRequestResult{}, fmt.Errorf("withdraw shipment request: %w", ErrShipmentRequestNotVisible)
 	}
 	return handler.existing(ctx, command, request), nil
 }

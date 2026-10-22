@@ -32,8 +32,7 @@ type ManualReviewCompletionHandler interface {
 // NewCompleteManualReviewEndpoint 交回复核完成的 HTTP 入口（票 09；ADR-0081 的命令面
 // 保留条款）。
 //
-// 委托查不到时应用层上抛技术错误，本端点把它与其余没形成答案的失败一并回 5xx
-// `NO_ANSWER_FORMED`——统一不可见结果不拆开，理由同撤回端点。
+// 委托查不到答`统一不可见结果`的 404，理由同撤回端点；其余没形成答案的失败回 5xx `NO_ANSWER_FORMED`。
 func NewCompleteManualReviewEndpoint(
 	intake ManualReviewCompletionIntake,
 	handler ManualReviewCompletionHandler,
@@ -53,7 +52,7 @@ func NewCompleteManualReviewEndpoint(
 
 		result, err := handler.Handle(request.Context(), command)
 		if err != nil {
-			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+			writeCommandProblem(response, err)
 			return
 		}
 		writeManualReviewCompletionOutcome(response, result)

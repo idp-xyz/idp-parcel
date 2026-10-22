@@ -571,30 +571,53 @@ func TestAuthorityRefusalGapAndReplayStayDisciplined(t *testing.T) {
 	})
 }
 
-// Covers: `AT-PS-090` 的隔离面——跨客户/查无/成员出界统一不可见（两探同形整结构比对，
-// 同采用侧的纪律）；取消成立但意图投递失败不翻决定、留续办引用重发同一份。
+// Covers: `AT-PS-090` 的隔离面——跨客户、查无、编号不符与成员出界答同一个统一不可见错误（ADR-0022：接 HTTP 是 404，
+// 不是 `REQUEST_NOT_ACCEPTED`——UC-PS-006 结果语义把那一格限在字段缺），四探的错误逐字相同；取消成立但意图投递失败不翻
+// 决定、留续办引用重发同一份。
 func TestForeignProbesAndFailedIntentsStayDisciplined(t *testing.T) {
-	t.Run("foreign and miss probes are indistinguishable", func(t *testing.T) {
+	t.Run("foreign, miss, mismatched and non-member probes are indistinguishable", func(t *testing.T) {
 		fixture := newCancelFixture(t)
 		foreign := cancelCommand(t, "parcel-1")
 		foreign.Identity = sourceIdentity(t, "tenant-1", "customer-2", "source-a", "key-1")
-		foreignResult, err := fixture.handler.Handle(context.Background(), foreign)
-		if err != nil {
-			t.Fatalf("foreign probe: %v", err)
-		}
-
 		miss := cancelCommand(t, "parcel-1")
 		miss.Identity = sourceIdentity(t, "tenant-1", "customer-1", "source-a", "key-unknown")
-		missResult, err := fixture.handler.Handle(context.Background(), miss)
-		if err != nil {
-			t.Fatalf("miss probe: %v", err)
-		}
+		mismatched := cancelCommand(t, "parcel-1")
+		mismatched.ShipmentRequestID = mustValue(t, domain.NewShipmentRequestID, "request-9")
+		outsider := cancelCommand(t, "parcel-9")
 
-		if foreignResult != missResult {
-			t.Fatalf("foreign = %#v miss = %#v; 两探必须同形", foreignResult, missResult)
+		var answers []string
+		for name, probe := range map[string]application.CancelParcelCommand{
+			"foreign": foreign, "miss": miss, "mismatched": mismatched, "outsider": outsider,
+		} {
+			result, err := fixture.handler.Handle(context.Background(), probe)
+			if !errors.Is(err, application.ErrShipmentRequestNotVisible) {
+				t.Fatalf("%s: err = %v, want ErrShipmentRequestNotVisible", name, err)
+			}
+			if result != (application.CancelParcelResult{}) {
+				t.Fatalf("%s: 统一不可见不带结果：%#v", name, result)
+			}
+			answers = append(answers, err.Error())
 		}
-		if foreignResult.Outcome() != application.CancellationNotAccepted {
-			t.Fatalf("outcome = %q", foreignResult.Outcome())
+		for _, answer := range answers {
+			if answer != answers[0] {
+				t.Fatalf("answers = %q; 四探必须逐字同答", answers)
+			}
+		}
+		if fixture.store.saved != 0 {
+			t.Fatalf("saved = %d; 看不见的委托上不落任何记录", fixture.store.saved)
+		}
+	})
+
+	t.Run("a missing field is still not accepted", func(t *testing.T) {
+		fixture := newCancelFixture(t)
+		missing := cancelCommand(t, "parcel-1")
+		missing.RequestedAt = time.Time{}
+		result, err := fixture.handler.Handle(context.Background(), missing)
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.CancellationNotAccepted {
+			t.Fatalf("outcome = %q, want REQUEST_NOT_ACCEPTED", result.Outcome())
 		}
 	})
 
