@@ -181,8 +181,8 @@ func (repository *CommercialResolutions) Save(
 		return ports.ResolutionSaveOutcomeInvalid, fmt.Errorf("save commercial resolution: %w", err)
 	}
 	// 两版不同不是冲突（ADR-0014 Decision）：按那一行自己的版本重写本次闭包再比。那一行的版本本构建不认得——滚动发布或回滚时
-	// 后来的构建写下的——就既证明不了重放、也定不了冲突：答冲突会挡住一份可能完全相同的解析，答重放是冒认，于是报错，
-	// 恢复动作是换一个认得它的构建。
+	// 后来的构建写下的——就既证明不了重放、也定不了冲突：答冲突是把「本构建比不了」报成两份解析内容不同，答重放是冒认，
+	// 于是报错，恢复动作是换一个认得它的构建。
 	stored := digestCanonicalization(existingDigest)
 	comparable, known := document.renderedAs(stored)
 	if !known {
