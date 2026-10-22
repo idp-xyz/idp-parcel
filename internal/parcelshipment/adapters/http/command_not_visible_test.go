@@ -50,6 +50,8 @@ func (stub authorizedDispositionHandlerStub) Handle(context.Context, application
 	return application.DisposeShipmentRequestResult{}, stub.err
 }
 
+var customerFaceCommands = map[string]bool{"撤回": true, "资料修订": true, "受控补充": true, "逐包裹取消": true}
+
 // commandEndpointsFailingWith 交回指名一份委托的各命令口，编排一律交回 err。
 func commandEndpointsFailingWith(err error) map[string]http.Handler {
 	return map[string]http.Handler{
@@ -83,17 +85,16 @@ func TestCommandsNamingAnInvisibleShipmentRequestAnswerNotFound(t *testing.T) {
 			if _, present := fields["outcome"]; present {
 				t.Fatalf("404 带了 outcome：%s", response.Body.Bytes())
 			}
-			var body struct {
-				Error struct {
-					Code   string `json:"code"`
-					Detail string `json:"detail"`
-				} `json:"error"`
-			}
-			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
-				t.Fatalf("decode %s: %v", response.Body.Bytes(), err)
-			}
-			if body.Error.Code != "SHIPMENT_REQUEST_NOT_VISIBLE" || body.Error.Detail != "" {
+			if _, present := fields["detail"]; present || problemCode(t, response) != "SHIPMENT_REQUEST_NOT_VISIBLE" {
 				t.Fatalf("problem = %s, want 只带 SHIPMENT_REQUEST_NOT_VISIBLE", response.Body.Bytes())
+			}
+			// 客户面四口写问题详情，操作者三口照旧（ADR-0140 决定三；操作者族迁移另立后续票）。
+			want := "application/json"
+			if customerFaceCommands[name] {
+				want = "application/problem+json"
+			}
+			if got := response.Header().Get("Content-Type"); got != want {
+				t.Fatalf("Content-Type = %q, want %q", got, want)
 			}
 		})
 	}
@@ -137,17 +138,18 @@ func TestAmendmentCallerErrorsAreNotNoAnswerFormed(t *testing.T) {
 			if response.Code != testCase.status {
 				t.Fatalf("status = %d, want %d", response.Code, testCase.status)
 			}
+			if got := response.Header().Get("Content-Type"); got != "application/problem+json" {
+				t.Fatalf("Content-Type = %q, want application/problem+json", got)
+			}
 			var body struct {
 				Outcome *string `json:"outcome"`
-				Error   struct {
-					Code   string `json:"code"`
-					Detail string `json:"detail"`
-				} `json:"error"`
+				Code    string  `json:"code"`
+				Detail  string  `json:"detail"`
 			}
 			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 				t.Fatalf("decode %s: %v", response.Body.Bytes(), err)
 			}
-			if body.Outcome != nil || body.Error.Code != testCase.code || (body.Error.Detail != "") != testCase.withDetail {
+			if body.Outcome != nil || body.Code != testCase.code || (body.Detail != "") != testCase.withDetail {
 				t.Fatalf("problem = %s, want code %s detail %v", response.Body.Bytes(), testCase.code, testCase.withDetail)
 			}
 		})

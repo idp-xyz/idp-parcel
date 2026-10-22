@@ -2,7 +2,6 @@ package shipmenthttp
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
@@ -31,32 +30,25 @@ type WithdrawalHandler interface {
 // 答`统一不可见结果`的 404（ADR-0022，见 writeCommandProblem）；其余没形成答案的失败回 5xx `NO_ANSWER_FORMED`。
 func NewWithdrawShipmentRequestEndpoint(intake WithdrawalIntake, handler WithdrawalHandler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		problem := problemDetails(response, request)
 		if request.Method != http.MethodPost {
 			response.Header().Set("Allow", http.MethodPost)
-			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+			problem(http.StatusMethodNotAllowed, codeMethodNotAllowed, "")
 			return
 		}
 
 		command, err := intake.IntakeWithdrawal(request.Context(), request)
 		if err != nil {
-			if errors.Is(err, ErrAccessChannelNotConfigured) {
-				writeProblem(response, http.StatusForbidden, codeAccessChannelNotConfigured)
-				return
-			}
-			if errors.Is(err, ErrMalformedRequest) {
-				writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-				return
-			}
-			writeProblem(response, http.StatusInternalServerError, codeIntakeFailed)
+			answerIntakeFailure(problem, err)
 			return
 		}
 
 		result, err := handler.Handle(request.Context(), command)
 		if err != nil {
-			writeCommandProblem(response, err)
+			answerCommandFailure(problem, err)
 			return
 		}
-		writeWithdrawalOutcome(response, result)
+		writeWithdrawalOutcome(response, problem, result)
 	})
 }
 
@@ -74,10 +66,10 @@ type withdrawalResponse struct {
 	CompensationReference string `json:"compensationReference,omitempty"`
 }
 
-func writeWithdrawalOutcome(response http.ResponseWriter, result application.WithdrawShipmentRequestResult) {
+func writeWithdrawalOutcome(response http.ResponseWriter, problem problemWriter, result application.WithdrawShipmentRequestResult) {
 	outcome := result.Outcome().String()
 	if outcome == "" {
-		writeProblem(response, http.StatusInternalServerError, codeUnnamedOutcome)
+		problem(http.StatusInternalServerError, codeUnnamedOutcome, "")
 		return
 	}
 

@@ -90,24 +90,25 @@ const (
 // NewSubmitShipmentRequestEndpoint 交回 `UC-PS-001` 提交编排的 HTTP 入口。
 func NewSubmitShipmentRequestEndpoint(intake SubmissionIntake, handler SubmissionHandler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		problem := problemDetails(response, request)
 		if request.Method != http.MethodPost {
 			response.Header().Set("Allow", http.MethodPost)
-			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+			problem(http.StatusMethodNotAllowed, codeMethodNotAllowed, "")
 			return
 		}
 
 		command, err := intake.IntakeSubmission(request.Context(), request)
 		if err != nil {
-			writeIntakeProblem(response, err)
+			answerIntakeFailure(problem, err)
 			return
 		}
 
 		result, err := handler.Handle(request.Context(), command)
 		if err != nil {
-			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+			problem(http.StatusInternalServerError, codeNoAnswerFormed, "")
 			return
 		}
-		writeOutcome(response, result)
+		writeOutcome(response, problem, result)
 	})
 }
 
@@ -175,12 +176,12 @@ type problemDetail struct {
 	Detail string `json:"detail,omitempty"`
 }
 
-func writeOutcome(response http.ResponseWriter, result application.SubmitShipmentRequestResult) {
+func writeOutcome(response http.ResponseWriter, problem problemWriter, result application.SubmitShipmentRequestResult) {
 	outcome := result.Outcome().String()
 	if outcome == "" {
 		// 应用层交回了一个没有名字的结果。这是编程错误，不是业务答案，因此不能带 `outcome`
 		// 上线——空字符串会被客户端当成一种新的业务结果。
-		writeProblem(response, http.StatusInternalServerError, codeUnnamedOutcome)
+		problem(http.StatusInternalServerError, codeUnnamedOutcome, "")
 		return
 	}
 

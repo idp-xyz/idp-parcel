@@ -43,14 +43,13 @@ func gateDraft(accessRequestID, shipmentReference, parcelReference string) strin
 }
 
 // gateSubmissionAnswer 是提交口答复里本文件要看的几格：成功时的 outcome，坏报文时的 error。
+// gateSubmissionAnswer 读提交口的答复：业务答案带 outcome，问题详情的 code 与 detail 在顶层（ADR-0140 决定三）。
 type gateSubmissionAnswer struct {
 	status  int
 	raw     string
 	Outcome string `json:"outcome"`
-	Error   struct {
-		Code   string `json:"code"`
-		Detail string `json:"detail"`
-	} `json:"error"`
+	Code    string `json:"code"`
+	Detail  string `json:"detail"`
 }
 
 // Covers: 票 ps-external-mark-relations/06 裁定二与完成判据「越界的客户包裹件号答 400 点名该格，委托不落」——提交口经现行生产
@@ -100,7 +99,7 @@ func TestTheWiredSubmissionRefusesACustomerParcelReferenceTheRegisterCannotStore
 	token := issuer.token(t, syntheticCustomerAudience, syntheticCustomerSubject)
 	post := func(body string) gateSubmissionAnswer {
 		t.Helper()
-		request := httptest.NewRequest(http.MethodPost, "/shipment-requests", strings.NewReader(body))
+		request := httptest.NewRequest(http.MethodPost, "/v1/shipment-requests", strings.NewReader(body))
 		request.Header.Set("Authorization", "Bearer "+token)
 		recorder := httptest.NewRecorder()
 		endpoint.ServeHTTP(recorder, request)
@@ -121,11 +120,11 @@ func TestTheWiredSubmissionRefusesACustomerParcelReferenceTheRegisterCannotStore
 	} {
 		t.Run(refused.name, func(t *testing.T) {
 			answer := post(gateDraft(refused.access, refused.shipment, refused.parcel))
-			if answer.status != http.StatusBadRequest || answer.Error.Code != "MALFORMED_REQUEST" {
+			if answer.status != http.StatusBadRequest || answer.Code != "MALFORMED_REQUEST" {
 				t.Fatalf("答 %d %s, want 400 MALFORMED_REQUEST", answer.status, answer.raw)
 			}
-			if !strings.HasPrefix(answer.Error.Detail, "parcels[0].customerParcelReference: ") {
-				t.Fatalf("detail %q, want 点名 parcels[0].customerParcelReference", answer.Error.Detail)
+			if !strings.HasPrefix(answer.Detail, "parcels[0].customerParcelReference: ") {
+				t.Fatalf("detail %q, want 点名 parcels[0].customerParcelReference", answer.Detail)
 			}
 			if strings.Contains(answer.raw, "PPPP") || strings.Contains(answer.raw, "SYN-PCL") {
 				t.Fatalf("答复把号码本身抄了回来：%s", answer.raw)

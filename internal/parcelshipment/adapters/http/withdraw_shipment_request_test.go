@@ -43,10 +43,9 @@ func (double *withdrawalHandlerDouble) Handle(
 	return double.result, nil
 }
 
+// withdrawalErrorBody 是客户面命令口的问题详情（ADR-0140 决定三）：`code` 在顶层。
 type withdrawalErrorBody struct {
-	Error struct {
-		Code string `json:"code"`
-	} `json:"error"`
+	Code string `json:"code"`
 }
 
 func postWithdrawal(
@@ -82,8 +81,8 @@ func TestWithdrawalTransportFailuresSplitByRetryAction(t *testing.T) {
 	if malformed.Code != http.StatusBadRequest {
 		t.Fatalf("malformed status = %d", malformed.Code)
 	}
-	if body := decodeWithdrawalError(t, malformed); body.Error.Code != "MALFORMED_REQUEST" {
-		t.Fatalf("error code = %q", body.Error.Code)
+	if body := decodeWithdrawalError(t, malformed); body.Code != "MALFORMED_REQUEST" {
+		t.Fatalf("error code = %q", body.Code)
 	}
 
 	intakeDown := postWithdrawal(t,
@@ -94,8 +93,8 @@ func TestWithdrawalTransportFailuresSplitByRetryAction(t *testing.T) {
 	if intakeDown.Code != http.StatusInternalServerError {
 		t.Fatalf("intake failure status = %d; 依赖不可用误标 4xx 会让该重试的请求被丢掉", intakeDown.Code)
 	}
-	if body := decodeWithdrawalError(t, intakeDown); body.Error.Code != "INTAKE_FAILED" {
-		t.Fatalf("error code = %q", body.Error.Code)
+	if body := decodeWithdrawalError(t, intakeDown); body.Code != "INTAKE_FAILED" {
+		t.Fatalf("error code = %q", body.Code)
 	}
 
 	noAnswer := postWithdrawal(t,
@@ -106,8 +105,8 @@ func TestWithdrawalTransportFailuresSplitByRetryAction(t *testing.T) {
 	if noAnswer.Code != http.StatusInternalServerError {
 		t.Fatalf("no answer status = %d", noAnswer.Code)
 	}
-	if body := decodeWithdrawalError(t, noAnswer); body.Error.Code != "NO_ANSWER_FORMED" {
-		t.Fatalf("error code = %q; 统一不可见结果不拆出未找到码", body.Error.Code)
+	if body := decodeWithdrawalError(t, noAnswer); body.Code != "NO_ANSWER_FORMED" {
+		t.Fatalf("error code = %q; 统一不可见结果不拆出未找到码", body.Code)
 	}
 
 	unnamed := postWithdrawal(t,
@@ -118,8 +117,8 @@ func TestWithdrawalTransportFailuresSplitByRetryAction(t *testing.T) {
 	if unnamed.Code != http.StatusInternalServerError {
 		t.Fatalf("unnamed status = %d; 没有名字的结果不能带 outcome 上线", unnamed.Code)
 	}
-	if body := decodeWithdrawalError(t, unnamed); body.Error.Code != "UNNAMED_OUTCOME" {
-		t.Fatalf("error code = %q", body.Error.Code)
+	if body := decodeWithdrawalError(t, unnamed); body.Code != "UNNAMED_OUTCOME" {
+		t.Fatalf("error code = %q", body.Code)
 	}
 
 	wrongMethod := postWithdrawal(t, &withdrawalIntakeDouble{}, &withdrawalHandlerDouble{}, http.MethodGet)
@@ -133,6 +132,9 @@ func TestWithdrawalTransportFailuresSplitByRetryAction(t *testing.T) {
 
 func decodeWithdrawalError(t *testing.T, response *httptest.ResponseRecorder) withdrawalErrorBody {
 	t.Helper()
+	if got := response.Header().Get("Content-Type"); got != "application/problem+json" {
+		t.Fatalf("Content-Type = %q, want application/problem+json", got)
+	}
 	var body withdrawalErrorBody
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 		t.Fatalf("decode body: %v", err)

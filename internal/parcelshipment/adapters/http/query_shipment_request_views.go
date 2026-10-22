@@ -149,43 +149,35 @@ func serveDetail(
 // writeIntakeProblem 是本包 Intake 失败的唯一映射：各口不再各抄一份。操作者渠道与首方客户族的各格与未配置并列，
 // 各对一种恢复动作（ADR-0029）；操作者渠道与首方客户族的令牌格与授予格各用各的错误码，不合并。
 func writeIntakeProblem(response http.ResponseWriter, err error) {
-	if errors.Is(err, ErrAccessChannelNotConfigured) {
-		writeProblem(response, http.StatusForbidden, codeAccessChannelNotConfigured)
-		return
-	}
-	if errors.Is(err, ErrOperatorCredentialRejected) {
-		writeProblem(response, http.StatusUnauthorized, codeOperatorCredentialRejected)
-		return
-	}
-	if errors.Is(err, ErrOperatorNotGranted) {
-		writeProblem(response, http.StatusForbidden, codeOperatorNotGranted)
-		return
-	}
-	if errors.Is(err, ErrCustomerClientCredentialRejected) {
-		writeProblem(response, http.StatusUnauthorized, codeCustomerClientCredentialRejected)
-		return
-	}
-	if errors.Is(err, ErrCustomerClientNotGranted) {
-		writeProblem(response, http.StatusForbidden, codeCustomerClientNotGranted)
-		return
-	}
-	if errors.Is(err, ErrOutsideAdmissionScope) {
-		writeProblem(response, http.StatusForbidden, codeOutsideAdmissionScope)
-		return
-	}
-	if errors.Is(err, ErrIdentityDependencyUnavailable) {
-		writeProblem(response, http.StatusServiceUnavailable, codeIdentityDependencyUnavailable)
-		return
-	}
-	if errors.Is(err, ErrMalformedRequest) {
-		problem := problemDetail{Code: codeMalformedRequest}
+	answerIntakeFailure(legacyProblems(response), err)
+}
+
+// answerIntakeFailure 是 writeIntakeProblem 的映射本身，客户面处理器以问题详情的写法调它。
+func answerIntakeFailure(problem problemWriter, err error) {
+	switch {
+	case errors.Is(err, ErrAccessChannelNotConfigured):
+		problem(http.StatusForbidden, codeAccessChannelNotConfigured, "")
+	case errors.Is(err, ErrOperatorCredentialRejected):
+		problem(http.StatusUnauthorized, codeOperatorCredentialRejected, "")
+	case errors.Is(err, ErrOperatorNotGranted):
+		problem(http.StatusForbidden, codeOperatorNotGranted, "")
+	case errors.Is(err, ErrCustomerClientCredentialRejected):
+		problem(http.StatusUnauthorized, codeCustomerClientCredentialRejected, "")
+	case errors.Is(err, ErrCustomerClientNotGranted):
+		problem(http.StatusForbidden, codeCustomerClientNotGranted, "")
+	case errors.Is(err, ErrOutsideAdmissionScope):
+		problem(http.StatusForbidden, codeOutsideAdmissionScope, "")
+	case errors.Is(err, ErrIdentityDependencyUnavailable):
+		problem(http.StatusServiceUnavailable, codeIdentityDependencyUnavailable, "")
+	case errors.Is(err, ErrMalformedRequest):
+		detail := ""
 		if malformed := (*malformedFieldError)(nil); errors.As(err, &malformed) {
-			problem.Detail = malformed.detail()
+			detail = malformed.detail()
 		}
-		writeJSON(response, http.StatusBadRequest, problemResponse{Error: problem})
-		return
+		problem(http.StatusBadRequest, codeMalformedRequest, detail)
+	default:
+		problem(http.StatusInternalServerError, codeIntakeFailed, "")
 	}
-	writeProblem(response, http.StatusInternalServerError, codeIntakeFailed)
 }
 
 type viewsListResponse struct {

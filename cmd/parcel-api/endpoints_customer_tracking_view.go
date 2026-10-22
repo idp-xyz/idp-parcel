@@ -18,7 +18,7 @@ type customerTrackingViewWiring struct {
 func init() {
 	registerEndpoints(endpointFeature[customerTrackingViewWiring]{
 		lines: map[string]endpointLine{
-			"/customer-tracking-view": {
+			"/v1/customer-tracking-view": {
 				method: http.MethodGet, face: customerClientFace(accessidentity.CustomerCapabilityTrackingViewQuery), ownIntake: true,
 			},
 		},
@@ -33,7 +33,7 @@ func init() {
 		},
 		mount: func(_ endpointChannels, wiring customerTrackingViewWiring) []httpapi.BusinessEndpoint {
 			return []httpapi.BusinessEndpoint{
-				{Pattern: "/customer-tracking-view", Handler: visibilityhttp.NewQueryCustomerTrackingViewEndpoint(customerTrackingViewQueryIntake(wiring.customerTrackingView), wiring.trackingViews)},
+				{Pattern: "/v1/customer-tracking-view", Handler: visibilityhttp.NewQueryCustomerTrackingViewEndpoint(customerTrackingViewQueryIntake(wiring.customerTrackingView), wiring.trackingViews)},
 			}
 		},
 	})

@@ -250,7 +250,7 @@ func (boundary submissionBoundary) Save(
 	return outcome, nil
 }
 
-// buildSubmissionOrchestration 装配 `/shipment-requests` 的真编排（UC-PS-001；审计票 13）。
+// buildSubmissionOrchestration 装配 `/v1/shipment-requests` 的真编排（UC-PS-001；审计票 13）。
 //
 // 建单落库即在同一事务交出「委托已提交」信封（ADR-0081 的出站半边）：submissionBoundary
 // 携 OutboxShipmentRequestSubmittedHandoff，事件类型 `parcel-shipment.shipment-request.submitted`，

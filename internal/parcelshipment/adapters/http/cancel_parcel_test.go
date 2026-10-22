@@ -73,8 +73,8 @@ func TestCancellationTransportFailuresSplitByRetryAction(t *testing.T) {
 	if malformed.Code != http.StatusBadRequest {
 		t.Fatalf("malformed status = %d", malformed.Code)
 	}
-	if body := decodeWithdrawalError(t, malformed); body.Error.Code != "MALFORMED_REQUEST" {
-		t.Fatalf("error code = %q", body.Error.Code)
+	if body := decodeWithdrawalError(t, malformed); body.Code != "MALFORMED_REQUEST" {
+		t.Fatalf("error code = %q", body.Code)
 	}
 
 	intakeDown := postCancellation(t,
@@ -85,8 +85,8 @@ func TestCancellationTransportFailuresSplitByRetryAction(t *testing.T) {
 	if intakeDown.Code != http.StatusInternalServerError {
 		t.Fatalf("intake failure status = %d; 依赖不可用误标 4xx 会让该重试的请求被丢掉", intakeDown.Code)
 	}
-	if body := decodeWithdrawalError(t, intakeDown); body.Error.Code != "INTAKE_FAILED" {
-		t.Fatalf("error code = %q", body.Error.Code)
+	if body := decodeWithdrawalError(t, intakeDown); body.Code != "INTAKE_FAILED" {
+		t.Fatalf("error code = %q", body.Code)
 	}
 
 	noAnswer := postCancellation(t,
@@ -97,8 +97,8 @@ func TestCancellationTransportFailuresSplitByRetryAction(t *testing.T) {
 	if noAnswer.Code != http.StatusInternalServerError {
 		t.Fatalf("no answer status = %d", noAnswer.Code)
 	}
-	if body := decodeWithdrawalError(t, noAnswer); body.Error.Code != "NO_ANSWER_FORMED" {
-		t.Fatalf("error code = %q", body.Error.Code)
+	if body := decodeWithdrawalError(t, noAnswer); body.Code != "NO_ANSWER_FORMED" {
+		t.Fatalf("error code = %q", body.Code)
 	}
 
 	unnamed := postCancellation(t,
@@ -109,8 +109,8 @@ func TestCancellationTransportFailuresSplitByRetryAction(t *testing.T) {
 	if unnamed.Code != http.StatusInternalServerError {
 		t.Fatalf("unnamed status = %d; 没有名字的结果不能带 outcome 上线", unnamed.Code)
 	}
-	if body := decodeWithdrawalError(t, unnamed); body.Error.Code != "UNNAMED_OUTCOME" {
-		t.Fatalf("error code = %q", body.Error.Code)
+	if body := decodeWithdrawalError(t, unnamed); body.Code != "UNNAMED_OUTCOME" {
+		t.Fatalf("error code = %q", body.Code)
 	}
 
 	wrongMethod := postCancellation(t, &cancellationIntakeDouble{}, &cancellationHandlerDouble{}, http.MethodGet)

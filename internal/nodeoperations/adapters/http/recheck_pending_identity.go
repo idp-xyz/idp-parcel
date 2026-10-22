@@ -69,21 +69,26 @@ func NewRecheckPendingIdentityEndpoint(intake IdentityRecheckIntake, handler Ide
 
 // writeIntakeProblem 逐格映射 Intake 的拒答：每一格对一种恢复动作（ADR-0029），不合并。
 func writeIntakeProblem(response http.ResponseWriter, err error) {
+	answerIntakeFailure(legacyProblems(response, nil), err)
+}
+
+// answerIntakeFailure 是 writeIntakeProblem 的映射本身，首方客户族各口以问题详情的写法调它。
+func answerIntakeFailure(problem problemWriter, err error) {
 	switch {
 	case errors.Is(err, ErrAccessChannelNotConfigured):
-		writeProblem(response, http.StatusForbidden, codeAccessChannelNotConfigured)
+		problem(http.StatusForbidden, codeAccessChannelNotConfigured, "")
 	case errors.Is(err, ErrOperatorCredentialRejected):
-		writeProblem(response, http.StatusUnauthorized, codeOperatorCredentialRejected)
+		problem(http.StatusUnauthorized, codeOperatorCredentialRejected, "")
 	case errors.Is(err, ErrOperatorNotGranted):
-		writeProblem(response, http.StatusForbidden, codeOperatorNotGranted)
+		problem(http.StatusForbidden, codeOperatorNotGranted, "")
 	case errors.Is(err, ErrOutsideAdmissionScope):
-		writeProblem(response, http.StatusForbidden, codeOutsideAdmissionScope)
+		problem(http.StatusForbidden, codeOutsideAdmissionScope, "")
 	case errors.Is(err, ErrIdentityDependencyUnavailable):
-		writeProblem(response, http.StatusServiceUnavailable, codeIdentityDependencyUnavailable)
+		problem(http.StatusServiceUnavailable, codeIdentityDependencyUnavailable, "")
 	case errors.Is(err, ErrMalformedRequest):
-		writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
+		problem(http.StatusBadRequest, codeMalformedRequest, "")
 	default:
-		writeProblem(response, http.StatusInternalServerError, codeIntakeFailed)
+		problem(http.StatusInternalServerError, codeIntakeFailed, "")
 	}
 }
 

@@ -374,37 +374,40 @@ func (UnconfiguredIntake) IntakeDeliveryHandoverConclusion(context.Context, *htt
 	return application.ConcludeDeliveryHandoverCommand{}, ErrAccessChannelNotConfigured
 }
 
-// handoverEndpoint 是五口共用的 HTTP 外壳：方法门 → Intake（各格照信封族映射）→ 编排 → 按 ADR-0022 映射答复。
+// handoverEndpoint 是五口共用的 HTTP 外壳：方法门 → Intake（各格照信封族映射）→ 编排 → 按 ADR-0022 映射答复。shape 定问题体的
+// 形状：客户结论口是首方客户族、写问题详情，其余四口照旧（见 problemWriter）。
 func handoverEndpoint[Command any](
 	intake func(context.Context, *http.Request) (Command, error),
 	handle func(context.Context, Command) (application.DeliveryHandoverResult, error),
 	respond func(http.ResponseWriter, Command, application.DeliveryHandoverResult),
+	shape func(http.ResponseWriter, *http.Request) problemWriter,
 ) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		problem := shape(response, request)
 		if request.Method != http.MethodPost {
 			response.Header().Set("Allow", http.MethodPost)
-			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+			problem(http.StatusMethodNotAllowed, codeMethodNotAllowed, "")
 			return
 		}
 		command, err := intake(request.Context(), request)
 		if err != nil {
-			writeHandoverIntakeProblem(response, err)
+			answerHandoverIntakeFailure(problem, err)
 			return
 		}
 		result, err := handle(request.Context(), command)
 		switch {
 		case errors.Is(err, application.ErrDeliveryHandoverNoteNotFound):
-			writeProblem(response, http.StatusNotFound, codeDeliveryHandoverNoteNotVisible)
+			problem(http.StatusNotFound, codeDeliveryHandoverNoteNotVisible, "")
 			return
 		case errors.Is(err, application.ErrDeliveryHandoverCommandRejected):
-			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
+			problem(http.StatusBadRequest, codeMalformedRequest, "")
 			return
 		case err != nil:
-			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+			problem(http.StatusInternalServerError, codeNoAnswerFormed, "")
 			return
 		}
 		if result.Outcome().String() == "" {
-			writeProblem(response, http.StatusInternalServerError, codeUnnamedOutcome)
+			problem(http.StatusInternalServerError, codeUnnamedOutcome, "")
 			return
 		}
 		respond(response, command, result)
@@ -413,38 +416,38 @@ func handoverEndpoint[Command any](
 
 // NewOpenDeliveryHandoverNoteEndpoint 交回开立口。首次开立答 201；已有结果与来源冲突答 200 带 outcome，回显在册那一张。
 func NewOpenDeliveryHandoverNoteEndpoint(intake DeliveryHandoverNoteOpeningIntake, handler DeliveryHandoverNoteHandler) http.Handler {
-	return handoverEndpoint(intake.IntakeDeliveryHandoverNoteOpening, handler.Open, writeOperatorHandoverAnswer[application.OpenDeliveryHandoverNoteCommand])
+	return handoverEndpoint(intake.IntakeDeliveryHandoverNoteOpening, handler.Open, writeOperatorHandoverAnswer[application.OpenDeliveryHandoverNoteCommand], legacyProblems)
 }
 
 // NewAssignToDeliveryHandoverNoteEndpoint 交回归入口。首次归入答 201；已有结果、来源冲突与交接单状态不符答 200 带 outcome。
 func NewAssignToDeliveryHandoverNoteEndpoint(intake DeliveryHandoverAssignmentIntake, handler DeliveryHandoverNoteHandler) http.Handler {
-	return handoverEndpoint(intake.IntakeDeliveryHandoverAssignment, handler.Assign, writeOperatorHandoverAnswer[application.AssignToDeliveryHandoverNoteCommand])
+	return handoverEndpoint(intake.IntakeDeliveryHandoverAssignment, handler.Assign, writeOperatorHandoverAnswer[application.AssignToDeliveryHandoverNoteCommand], legacyProblems)
 }
 
 // NewCloseDeliveryHandoverNoteEndpoint 交回关闭口。首次关闭答 201；已有结果与来源冲突答 200 带 outcome。
 func NewCloseDeliveryHandoverNoteEndpoint(intake DeliveryHandoverClosureIntake, handler DeliveryHandoverNoteHandler) http.Handler {
-	return handoverEndpoint(intake.IntakeDeliveryHandoverClosure, handler.Close, writeOperatorHandoverAnswer[application.CloseDeliveryHandoverNoteCommand])
+	return handoverEndpoint(intake.IntakeDeliveryHandoverClosure, handler.Close, writeOperatorHandoverAnswer[application.CloseDeliveryHandoverNoteCommand], legacyProblems)
 }
 
 // NewConfirmDeliveryHandoverEndpoint 交回运营决定确认口。首次确认答 201；已有结果、已有结论、不在授权交付关系内与未配置答 200 带
 // outcome——服务端知道为什么没落结论，这不是调用方的错，也不是没形成答案。授权交付判断读不动答 500：没形成答案。
 func NewConfirmDeliveryHandoverEndpoint(intake DeliveryHandoverConfirmationIntake, handler DeliveryHandoverNoteHandler) http.Handler {
-	return handoverEndpoint(intake.IntakeDeliveryHandoverConfirmation, handler.ConfirmByOperationDecision, writeOperatorHandoverAnswer[application.ConfirmDeliveryHandoverCommand])
+	return handoverEndpoint(intake.IntakeDeliveryHandoverConfirmation, handler.ConfirmByOperationDecision, writeOperatorHandoverAnswer[application.ConfirmDeliveryHandoverCommand], legacyProblems)
 }
 
 // NewConcludeDeliveryHandoverEndpoint 交回客户结论口。首次确认或否认答 201；已有结果、已有结论与交接单状态不符答 200 带 outcome；
 // 交接单不存在或没声称信封里的客户账户答 404，两种同答。
 func NewConcludeDeliveryHandoverEndpoint(intake DeliveryHandoverConclusionIntake, handler DeliveryHandoverNoteHandler) http.Handler {
-	return handoverEndpoint(intake.IntakeDeliveryHandoverConclusion, handler.ConcludeByCustomer, writeCustomerHandoverAnswer)
+	return handoverEndpoint(intake.IntakeDeliveryHandoverConclusion, handler.ConcludeByCustomer, writeCustomerHandoverAnswer, problemDetails)
 }
 
-// writeHandoverIntakeProblem 先映射作业事实一族的设备一格与首方客户族自己的两格，其余各格与操作者族各口同码。
-func writeHandoverIntakeProblem(response http.ResponseWriter, err error) {
+// answerHandoverIntakeFailure 先映射作业事实一族的设备一格与首方客户族自己的两格，其余各格与操作者族各口同码。
+func answerHandoverIntakeFailure(problem problemWriter, err error) {
 	if errors.Is(err, ErrDeviceNotInUse) {
-		writeProblem(response, http.StatusForbidden, codeDeviceNotInUse)
+		problem(http.StatusForbidden, codeDeviceNotInUse, "")
 		return
 	}
-	writeCustomerIntakeProblem(response, err)
+	answerCustomerIntakeFailure(problem, err)
 }
 
 func handoverStatus(outcome application.DeliveryHandoverOutcome) int {

@@ -15,7 +15,7 @@ type submissionWiring struct {
 func init() {
 	registerEndpoints(endpointFeature[submissionWiring]{
 		lines: map[string]endpointLine{
-			"/shipment-requests": {method: http.MethodPost, face: customerClientFace(accessidentity.CustomerCapabilityShipmentRequestSubmission)},
+			"/v1/shipment-requests": {method: http.MethodPost, face: customerClientFace(accessidentity.CustomerCapabilityShipmentRequestSubmission)},
 		},
 		build: func(sources endpointSources) (submissionWiring, error) {
 			submission, err := buildSubmissionOrchestration(sources.db, sources.isolatedWrite, sources.selfAuthority)
@@ -30,7 +30,7 @@ func init() {
 				submissionIntake = channels.customerSubmission
 			}
 			return []httpapi.BusinessEndpoint{
-				{Pattern: "/shipment-requests", Handler: shipmenthttp.NewSubmitShipmentRequestEndpoint(submissionIntake, wiring.submission)},
+				{Pattern: "/v1/shipment-requests", Handler: shipmenthttp.NewSubmitShipmentRequestEndpoint(submissionIntake, wiring.submission)},
 			}
 		},
 	})

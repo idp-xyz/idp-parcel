@@ -13,6 +13,7 @@ import (
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
@@ -87,6 +88,9 @@ func TestCustomerCommandsNamingAnAbsentRequestAnswerNotFoundOnTheWiredOrchestrat
 			}
 			if _, present := fields["outcome"]; present {
 				t.Fatalf("404 带了 outcome：%s", response.Body)
+			}
+			if got := response.Header().Get("Content-Type"); got != httpapi.ProblemMediaType {
+				t.Fatalf("Content-Type = %q, want %s", got, httpapi.ProblemMediaType)
 			}
 			if got := problemCode(t, response); got != "SHIPMENT_REQUEST_NOT_VISIBLE" {
 				t.Fatalf("code = %q, want SHIPMENT_REQUEST_NOT_VISIBLE", got)

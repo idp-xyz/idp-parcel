@@ -106,7 +106,7 @@ func TestBuildIsolatedWriteAdmissionRefusesTenantMismatch(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0150 决定三与票 first-party-api/00「隔离提交放行已撤」——写开关开着、首方客户族没配时，`/shipment-requests`
+// Covers: ADR-0150 决定三与票 first-party-api/00「隔离提交放行已撤」——写开关开着、首方客户族没配时，`/v1/shipment-requests`
 // 答的是首方族的未配置，与生产形态逐字节相同：写开关不进业务端点的装配，它换不了任何命令面。读开关同样换不了这一行
 // （ADR-0091 决定四）。
 func TestNeitherIsolatedSwitchOpensTheSubmissionLine(t *testing.T) {
@@ -121,14 +121,13 @@ func TestNeitherIsolatedSwitchOpensTheSubmissionLine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build isolated read intakes: %v", err)
 	}
-	const unconfigured = `{"error":{"code":"ACCESS_CHANNEL_NOT_CONFIGURED"}}` + "\n"
 	router := httpapi.NewWithEndpoints(buildinfo.Info{},
 		assembleUnwiredBusinessEndpointsWith(intakes, unconfiguredCustomerSubmission(t)))
 
 	response := httptest.NewRecorder()
-	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/shipment-requests", strings.NewReader(`{"any":"body"}`)))
-	if response.Code != http.StatusForbidden || response.Body.String() != unconfigured {
-		t.Fatalf("/shipment-requests: %d %q, want 403 %q——两个隔离开关都开不了提交口", response.Code, response.Body.String(), unconfigured)
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/shipment-requests", strings.NewReader(`{"any":"body"}`)))
+	if !answersFirstPartyUnconfigured(t, response) {
+		t.Fatalf("/v1/shipment-requests: %d %q, want 403 %s——两个隔离开关都开不了提交口", response.Code, response.Body.String(), firstPartyUnconfigured)
 	}
 }
 

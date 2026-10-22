@@ -140,16 +140,14 @@ func TestCustomerChannelParametersRefuseToStartWhenPartialOrSharingAnAudience(t 
 // 字节相同，且一个字节的载荷都没读。
 func TestSubmissionLineAnswersNotConfiguredByteForByteWhenTheCustomerFamilyIsUnset(t *testing.T) {
 	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWith(nil, unconfiguredCustomerSubmission(t)))
-	const unconfigured = `{"error":{"code":"ACCESS_CHANNEL_NOT_CONFIGURED"}}` + "\n"
 	probe := &readProbe{}
-	request := httptest.NewRequest(http.MethodPost, "/shipment-requests", probe)
+	request := httptest.NewRequest(http.MethodPost, "/v1/shipment-requests", probe)
 	request.Header.Set("Authorization", "Bearer any.presented.token")
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 
-	if response.Code != http.StatusForbidden || response.Body.String() != unconfigured ||
-		response.Header().Get("Content-Type") != "application/json" {
-		t.Fatalf("/shipment-requests: %d %q %q, want 403 %q", response.Code, response.Header().Get("Content-Type"), response.Body.String(), unconfigured)
+	if !answersFirstPartyUnconfigured(t, response) {
+		t.Fatalf("/v1/shipment-requests: %d %q %q, want 403 %s", response.Code, response.Header().Get("Content-Type"), response.Body.String(), firstPartyUnconfigured)
 	}
 	if probe.read {
 		t.Fatal("首方族未配置却读了载荷")
@@ -248,7 +246,7 @@ func TestSubmissionLineAnswersTheCustomerChannelGrades(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			router := httpapi.NewWithEndpoints(buildinfo.Info{},
 				assembleUnwiredBusinessEndpointsWith(nil, customerSubmissionWith(t, testCase.verifier, testCase.registry)))
-			request := httptest.NewRequest(http.MethodPost, "/shipment-requests", strings.NewReader(customerDraftBody("SYN-ACCESS-REQUEST-0001")))
+			request := httptest.NewRequest(http.MethodPost, "/v1/shipment-requests", strings.NewReader(customerDraftBody("SYN-ACCESS-REQUEST-0001")))
 			if testCase.token != "" {
 				request.Header.Set("Authorization", "Bearer "+testCase.token)
 			}
@@ -257,7 +255,7 @@ func TestSubmissionLineAnswersTheCustomerChannelGrades(t *testing.T) {
 			if response.Code != testCase.status || problemCode(t, response) != testCase.code {
 				t.Fatalf("answer = %d %q, want %d %q", response.Code, problemCode(t, response), testCase.status, testCase.code)
 			}
-			assertNoOutcome(t, response, "/shipment-requests")
+			assertNoOutcome(t, response, "/v1/shipment-requests")
 		})
 	}
 }
@@ -327,7 +325,7 @@ func TestOtherFamiliesTokensAreRefusedAtTheSubmissionLine(t *testing.T) {
 		"customer token, unregistered": {syntheticCustomerAudience, http.StatusForbidden, "CUSTOMER_CLIENT_NOT_GRANTED"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodPost, "/shipment-requests", strings.NewReader(customerDraftBody("SYN-ACCESS-REQUEST-0001")))
+			request := httptest.NewRequest(http.MethodPost, "/v1/shipment-requests", strings.NewReader(customerDraftBody("SYN-ACCESS-REQUEST-0001")))
 			request.Header.Set("Authorization", "Bearer "+issuer.token(t, testCase.audience, syntheticCustomerSubject))
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, request)
@@ -384,7 +382,7 @@ func TestACustomerClientSubmitsThroughTheFirstPartyLineAgainstARealDatabase(t *t
 	endpoint := shipmenthttp.NewSubmitShipmentRequestEndpoint(intake, submission)
 	token := issuer.token(t, syntheticCustomerAudience, syntheticCustomerSubject)
 	post := func(body string) *httptest.ResponseRecorder {
-		request := httptest.NewRequest(http.MethodPost, "/shipment-requests", strings.NewReader(body))
+		request := httptest.NewRequest(http.MethodPost, "/v1/shipment-requests", strings.NewReader(body))
 		request.Header.Set("Authorization", "Bearer "+token)
 		response := httptest.NewRecorder()
 		endpoint.ServeHTTP(response, request)
@@ -490,7 +488,7 @@ func TestTheWriteSwitchLendsItsCoordinatesOnlyToItsOwnTenant(t *testing.T) {
 			}
 			registerCustomerClient(t, db, registry, subject, testCase.tenant, testCase.account, "SYN-CUSTOMER-GRANT-"+testCase.subject)
 
-			request := httptest.NewRequest(http.MethodPost, "/shipment-requests", strings.NewReader(customerDraftBody("SYN-ACCESS-REQUEST-"+testCase.subject)))
+			request := httptest.NewRequest(http.MethodPost, "/v1/shipment-requests", strings.NewReader(customerDraftBody("SYN-ACCESS-REQUEST-"+testCase.subject)))
 			request.Header.Set("Authorization", "Bearer "+issuer.token(t, syntheticCustomerAudience, testCase.subject))
 			response := httptest.NewRecorder()
 			endpoint.ServeHTTP(response, request)

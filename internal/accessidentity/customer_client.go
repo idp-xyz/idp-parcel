@@ -109,16 +109,16 @@ var ErrCustomerCapabilityUnknown = errors.New("access identity: customer capabil
 type CustomerCapability string
 
 const (
-	// CustomerCapabilityShipmentRequestSubmission 是委托提交（`/shipment-requests`，UC-PS-001）。
+	// CustomerCapabilityShipmentRequestSubmission 是委托提交（`/v1/shipment-requests`，UC-PS-001）。
 	CustomerCapabilityShipmentRequestSubmission CustomerCapability = "SHIPMENT_REQUEST_SUBMISSION"
-	// CustomerCapabilityDeliveryPreAdviceSubmission 是送站预报提交（`/node-operations/delivery-pre-advices`，UC-NO-006；ADR-0212 决定二）。
+	// CustomerCapabilityDeliveryPreAdviceSubmission 是送站预报提交（`/v1/node-operations/delivery-pre-advices`，UC-NO-006；ADR-0212 决定二）。
 	CustomerCapabilityDeliveryPreAdviceSubmission CustomerCapability = "DELIVERY_PRE_ADVICE_SUBMISSION"
-	// CustomerCapabilityDeliveryPreAdviceWithdrawal 是送站预报撤回（`/node-operations/delivery-pre-advice-withdrawals`，UC-NO-006）。
+	// CustomerCapabilityDeliveryPreAdviceWithdrawal 是送站预报撤回（`/v1/node-operations/delivery-pre-advice-withdrawals`，UC-NO-006）。
 	CustomerCapabilityDeliveryPreAdviceWithdrawal CustomerCapability = "DELIVERY_PRE_ADVICE_WITHDRAWAL"
-	// CustomerCapabilityDeliveryHandoverConfirmation 是送站交接确认（`/node-operations/delivery-handover-conclusions`，UC-NO-006；ADR-0212
+	// CustomerCapabilityDeliveryHandoverConfirmation 是送站交接确认（`/v1/node-operations/delivery-handover-conclusions`，UC-NO-006；ADR-0212
 	// 决定三）：客户账户对声称了自己的已关闭送站交接单确认或否认。
 	CustomerCapabilityDeliveryHandoverConfirmation CustomerCapability = "DELIVERY_HANDOVER_CONFIRMATION"
-	// CustomerCapabilityTrackingViewQuery 是客户追踪视图查阅（`/customer-tracking-view`，UC-VE-008；ADR-0139 决定四）。查阅口不判准入
+	// CustomerCapabilityTrackingViewQuery 是客户追踪视图查阅（`/v1/customer-tracking-view`，UC-VE-008；ADR-0139 决定四）。查阅口不判准入
 	// 范围（ADR-0139 决定八），所以它不进 customerCapabilitiesAdmittedAtMint。
 	CustomerCapabilityTrackingViewQuery CustomerCapability = "CUSTOMER_TRACKING_VIEW_QUERY"
 )

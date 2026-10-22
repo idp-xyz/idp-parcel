@@ -29,8 +29,8 @@ import (
 // 合成客户端取令牌交预报、撤回，册上各一行，撤销授予之后再交答未授予。合成主体、账户与号码只记 `S`。
 
 const (
-	preAdvicePath           = "/node-operations/delivery-pre-advices"
-	preAdviceWithdrawalPath = "/node-operations/delivery-pre-advice-withdrawals"
+	preAdvicePath           = "/v1/node-operations/delivery-pre-advices"
+	preAdviceWithdrawalPath = "/v1/node-operations/delivery-pre-advice-withdrawals"
 	customerCommandScope    = "SYN-PILOT-SCOPE/customer-commands@v1"
 )
 
@@ -96,7 +96,6 @@ func TestPreAdviceLinesAnswerNotConfiguredByteForByteWhenTheCustomerFamilyIsUnse
 	if err != nil || configured {
 		t.Fatalf("unset parameters: configured=%v err=%v", configured, err)
 	}
-	const unconfigured = `{"error":{"code":"ACCESS_CHANNEL_NOT_CONFIGURED"}}` + "\n"
 	for _, intake := range []*nodeopshttp.CustomerPreAdviceIntake{nil, preAdviceIntakeWith(t, verifier, absentCustomerRegister{}, admissionScopeUnset())} {
 		for path, endpoint := range preAdviceEndpoints(intake, unwiredDeliveryPreAdvices{}) {
 			probe := &readProbe{}
@@ -104,8 +103,8 @@ func TestPreAdviceLinesAnswerNotConfiguredByteForByteWhenTheCustomerFamilyIsUnse
 			request.Header.Set("Authorization", "Bearer any.presented.token")
 			response := httptest.NewRecorder()
 			endpoint.ServeHTTP(response, request)
-			if response.Code != http.StatusForbidden || response.Body.String() != unconfigured {
-				t.Fatalf("%s（intake %v）：%d %q, want 403 %q", path, intake != nil, response.Code, response.Body.String(), unconfigured)
+			if !answersFirstPartyUnconfigured(t, response) {
+				t.Fatalf("%s（intake %v）：%d %q, want 403 %s", path, intake != nil, response.Code, response.Body.String(), firstPartyUnconfigured)
 			}
 			if probe.read {
 				t.Fatalf("%s：首方族未配置却读了载荷", path)

@@ -129,15 +129,20 @@ func (probe *readProbe) Read([]byte) (int, error) {
 	return 0, io.EOF
 }
 
+// problemCode 两种问题体都认：客户面处理器写问题详情、`code` 在顶层（ADR-0140 决定三），操作者族各口仍是 {"error":{"code"}}。
 func problemCode(t *testing.T, response *httptest.ResponseRecorder) string {
 	t.Helper()
 	var body struct {
+		Code  string `json:"code"`
 		Error struct {
 			Code string `json:"code"`
 		} `json:"error"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode problem response %s: %v", response.Body.Bytes(), err)
+	}
+	if body.Code != "" {
+		return body.Code
 	}
 	return body.Error.Code
 }

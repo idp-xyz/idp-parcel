@@ -240,22 +240,23 @@ func (UnconfiguredIntake) IntakeDeliveryPreAdviceWithdrawal(context.Context, *ht
 // 答案，答 200 带 outcome 并回显在册那一份。编排拒形答坏载荷；编排读写不动答没形成答案，册上什么也没落。
 func NewSubmitDeliveryPreAdviceEndpoint(intake DeliveryPreAdviceSubmissionIntake, handler DeliveryPreAdviceHandler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		problem := problemDetails(response, request)
 		if request.Method != http.MethodPost {
 			response.Header().Set("Allow", http.MethodPost)
-			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+			problem(http.StatusMethodNotAllowed, codeMethodNotAllowed, "")
 			return
 		}
 		command, err := intake.IntakeDeliveryPreAdviceSubmission(request.Context(), request)
 		if err != nil {
-			writeCustomerIntakeProblem(response, err)
+			answerCustomerIntakeFailure(problem, err)
 			return
 		}
 		result, err := handler.Submit(request.Context(), command)
 		if err != nil {
-			writePreAdviceProblem(response, err)
+			answerPreAdviceFailure(problem, err)
 			return
 		}
-		writePreAdviceOutcome(response, result.Outcome(), deliveryPreAdviceResponse{PreAdvice: preAdviceBodyOf(result.PreAdvice())},
+		writePreAdviceOutcome(response, problem, result.Outcome(), deliveryPreAdviceResponse{PreAdvice: preAdviceBodyOf(result.PreAdvice())},
 			application.DeliveryPreAdviceRegistered)
 	})
 }
@@ -264,49 +265,50 @@ func NewSubmitDeliveryPreAdviceEndpoint(intake DeliveryPreAdviceSubmissionIntake
 // 答 404，两种同答，与越权探针同答。
 func NewWithdrawDeliveryPreAdviceEndpoint(intake DeliveryPreAdviceWithdrawalIntake, handler DeliveryPreAdviceHandler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		problem := problemDetails(response, request)
 		if request.Method != http.MethodPost {
 			response.Header().Set("Allow", http.MethodPost)
-			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+			problem(http.StatusMethodNotAllowed, codeMethodNotAllowed, "")
 			return
 		}
 		command, err := intake.IntakeDeliveryPreAdviceWithdrawal(request.Context(), request)
 		if err != nil {
-			writeCustomerIntakeProblem(response, err)
+			answerCustomerIntakeFailure(problem, err)
 			return
 		}
 		result, err := handler.Withdraw(request.Context(), command)
 		if err != nil {
-			writePreAdviceProblem(response, err)
+			answerPreAdviceFailure(problem, err)
 			return
 		}
 		withdrawal := result.Withdrawal()
-		writePreAdviceOutcome(response, result.Outcome(), deliveryPreAdviceResponse{Withdrawal: &deliveryPreAdviceWithdrawalBody{
+		writePreAdviceOutcome(response, problem, result.Outcome(), deliveryPreAdviceResponse{Withdrawal: &deliveryPreAdviceWithdrawalBody{
 			PreAdviceID: withdrawal.PreAdvice().String(),
 			WithdrawnAt: rfc3339(withdrawal.WithdrawnAt()),
 		}}, application.DeliveryPreAdviceWithdrawn)
 	})
 }
 
-// writeCustomerIntakeProblem 先映射首方客户族自己的两格，其余各格与操作者族各口同码，交给 writeIntakeProblem。
-func writeCustomerIntakeProblem(response http.ResponseWriter, err error) {
+// answerCustomerIntakeFailure 先映射首方客户族自己的两格，其余各格与操作者族各口同码，交给 answerIntakeFailure。
+func answerCustomerIntakeFailure(problem problemWriter, err error) {
 	switch {
 	case errors.Is(err, ErrCustomerClientCredentialRejected):
-		writeProblem(response, http.StatusUnauthorized, codeCustomerClientCredentialRejected)
+		problem(http.StatusUnauthorized, codeCustomerClientCredentialRejected, "")
 	case errors.Is(err, ErrCustomerClientNotGranted):
-		writeProblem(response, http.StatusForbidden, codeCustomerClientNotGranted)
+		problem(http.StatusForbidden, codeCustomerClientNotGranted, "")
 	default:
-		writeIntakeProblem(response, err)
+		answerIntakeFailure(problem, err)
 	}
 }
 
-func writePreAdviceProblem(response http.ResponseWriter, err error) {
+func answerPreAdviceFailure(problem problemWriter, err error) {
 	switch {
 	case errors.Is(err, application.ErrDeliveryPreAdviceNotFound):
-		writeProblem(response, http.StatusNotFound, codeDeliveryPreAdviceNotVisible)
+		problem(http.StatusNotFound, codeDeliveryPreAdviceNotVisible, "")
 	case errors.Is(err, application.ErrDeliveryPreAdviceRejected):
-		writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
+		problem(http.StatusBadRequest, codeMalformedRequest, "")
 	default:
-		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+		problem(http.StatusInternalServerError, codeNoAnswerFormed, "")
 	}
 }
 
@@ -357,13 +359,14 @@ func preAdviceBodyOf(preAdvice domain.DeliveryPreAdvice) *deliveryPreAdviceBody 
 // 500、不带 outcome。
 func writePreAdviceOutcome(
 	response http.ResponseWriter,
+	problem problemWriter,
 	outcome application.DeliveryPreAdviceOutcome,
 	body deliveryPreAdviceResponse,
 	created application.DeliveryPreAdviceOutcome,
 ) {
 	body.Outcome = outcome.String()
 	if body.Outcome == "" {
-		writeProblem(response, http.StatusInternalServerError, codeUnnamedOutcome)
+		problem(http.StatusInternalServerError, codeUnnamedOutcome, "")
 		return
 	}
 	status := http.StatusOK

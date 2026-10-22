@@ -17,10 +17,10 @@ type deliveryPreAdviceWiring struct {
 func init() {
 	registerEndpoints(endpointFeature[deliveryPreAdviceWiring]{
 		lines: map[string]endpointLine{
-			"/node-operations/delivery-pre-advices": {
+			"/v1/node-operations/delivery-pre-advices": {
 				method: http.MethodPost, face: customerClientFace(accessidentity.CustomerCapabilityDeliveryPreAdviceSubmission), ownIntake: true,
 			},
-			"/node-operations/delivery-pre-advice-withdrawals": {
+			"/v1/node-operations/delivery-pre-advice-withdrawals": {
 				method: http.MethodPost, face: customerClientFace(accessidentity.CustomerCapabilityDeliveryPreAdviceWithdrawal), ownIntake: true,
 			},
 		},
@@ -41,8 +41,8 @@ func init() {
 				// 送站预报的提交口与撤回口（ADR-0212 决定二；UC-NO-006）：节点作业在客户面开的写口，挂首方客户渠道族，一口一项客户面能力。
 				// 路径随本上下文命令口的 /node-operations/ 前缀；撤回另立子资源，理由同 /shipment-requests/withdrawals：命令形状与恢复动作
 				// 都不同。
-				{Pattern: "/node-operations/delivery-pre-advices", Handler: nodeopshttp.NewSubmitDeliveryPreAdviceEndpoint(preAdviceSubmissionIntake, wiring.deliveryPreAdvices)},
-				{Pattern: "/node-operations/delivery-pre-advice-withdrawals", Handler: nodeopshttp.NewWithdrawDeliveryPreAdviceEndpoint(preAdviceWithdrawalIntake, wiring.deliveryPreAdvices)},
+				{Pattern: "/v1/node-operations/delivery-pre-advices", Handler: nodeopshttp.NewSubmitDeliveryPreAdviceEndpoint(preAdviceSubmissionIntake, wiring.deliveryPreAdvices)},
+				{Pattern: "/v1/node-operations/delivery-pre-advice-withdrawals", Handler: nodeopshttp.NewWithdrawDeliveryPreAdviceEndpoint(preAdviceWithdrawalIntake, wiring.deliveryPreAdvices)},
 			}
 		},
 	})

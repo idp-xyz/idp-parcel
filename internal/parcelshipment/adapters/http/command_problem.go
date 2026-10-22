@@ -15,28 +15,29 @@ const codeRequestNotAccepted = "SHIPMENT_REQUEST_NOT_ACCEPTED"
 // 在本上下文只有一个传输层写法，404 本身就是「不存在」与「属于别人」的同答，不带 detail。只认那一个具名错误——别的错误里
 // 碰巧也说了「not found」不算；其余一律是没形成答案。
 func writeCommandProblem(response http.ResponseWriter, err error) {
-	if errors.Is(err, application.ErrShipmentRequestNotVisible) {
-		writeProblem(response, http.StatusNotFound, codeRequestNotVisible)
-		return
-	}
-	writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+	answerCommandFailure(legacyProblems(response), err)
 }
 
-// writeAmendmentProblem 先答资料修订受理阶段的三种调用方的错，其余交 writeCommandProblem。意图与内容两格改请求才会好，带
+// answerCommandFailure 是 writeCommandProblem 的映射本身，客户面命令口以问题详情的写法调它。
+func answerCommandFailure(problem problemWriter, err error) {
+	if errors.Is(err, application.ErrShipmentRequestNotVisible) {
+		problem(http.StatusNotFound, codeRequestNotVisible, "")
+		return
+	}
+	problem(http.StatusInternalServerError, codeNoAnswerFormed, "")
+}
+
+// answerAmendmentFailure 先答资料修订受理阶段的三种调用方的错，其余交 answerCommandFailure。意图与内容两格改请求才会好，带
 // 只谈调用方自己载荷的 detail（ADR-0140 决定三）；委托未接受要换一条路而不是改这一份，答 409、不带 detail。
-func writeAmendmentProblem(response http.ResponseWriter, err error) {
+func answerAmendmentFailure(problem problemWriter, err error) {
 	switch {
 	case errors.Is(err, application.ErrAmendmentIntentNotDeclared):
-		writeJSON(response, http.StatusBadRequest, problemResponse{Error: problemDetail{
-			Code: codeMalformedRequest, Detail: "intent: the amendment intent is not declared",
-		}})
+		problem(http.StatusBadRequest, codeMalformedRequest, "intent: the amendment intent is not declared")
 	case errors.Is(err, application.ErrAmendmentContentUnfit):
-		writeJSON(response, http.StatusBadRequest, problemResponse{Error: problemDetail{
-			Code: codeMalformedRequest, Detail: "content: does not fit the declared scope and intent",
-		}})
+		problem(http.StatusBadRequest, codeMalformedRequest, "content: does not fit the declared scope and intent")
 	case errors.Is(err, application.ErrAmendedRequestNotAccepted):
-		writeProblem(response, http.StatusConflict, codeRequestNotAccepted)
+		problem(http.StatusConflict, codeRequestNotAccepted, "")
 	default:
-		writeCommandProblem(response, err)
+		answerCommandFailure(problem, err)
 	}
 }

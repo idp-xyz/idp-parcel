@@ -24,7 +24,7 @@ import (
 // 他族令牌答令牌不过、没有这一格授予答未授予；真库上经生产装配的同一组构造函数，合成客户端读本账户包裹的视图答当前视图，别的账户的
 // 包裹与不存在的包裹同答；查阅不判准入范围。合成主体、账户与包裹只记 `S`。
 
-const customerTrackingViewPath = "/customer-tracking-view"
+const customerTrackingViewPath = "/v1/customer-tracking-view"
 
 // customerTrackingViewEndpoint 按端点表那一行的写法装：Intake 经 customerTrackingViewQueryIntake 取，nil 即字面量未配置。
 func customerTrackingViewEndpoint(intake *visibilityhttp.CustomerTrackingViewIntake, reader visibilityhttp.TrackingViewReader) http.Handler {
@@ -73,11 +73,10 @@ func TestCustomerTrackingViewLineAnswersNotConfiguredByteForByteWhenTheCustomerF
 	if err != nil || configured {
 		t.Fatalf("unset parameters: configured=%v err=%v", configured, err)
 	}
-	const unconfigured = `{"error":{"code":"ACCESS_CHANNEL_NOT_CONFIGURED"}}` + "\n"
 	for _, intake := range []*visibilityhttp.CustomerTrackingViewIntake{nil, trackingViewIntakeWith(t, verifier, absentCustomerRegister{})} {
 		response := getTrackingView(customerTrackingViewEndpoint(intake, untouchedViews{t}), "any.presented.token", "?parcel=SYN-PARCEL-01")
-		if response.Code != http.StatusForbidden || response.Body.String() != unconfigured {
-			t.Fatalf("intake %v：%d %q, want 403 %q", intake != nil, response.Code, response.Body.String(), unconfigured)
+		if !answersFirstPartyUnconfigured(t, response) {
+			t.Fatalf("intake %v：%d %q, want 403 %s", intake != nil, response.Code, response.Body.String(), firstPartyUnconfigured)
 		}
 	}
 }

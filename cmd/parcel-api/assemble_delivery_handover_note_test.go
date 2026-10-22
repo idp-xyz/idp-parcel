@@ -30,7 +30,7 @@ const (
 	handoverAssignmentsPath   = "/node-operations/delivery-handover-assignments"
 	handoverClosuresPath      = "/node-operations/delivery-handover-closures"
 	handoverConfirmationsPath = "/node-operations/delivery-handover-confirmations"
-	handoverConclusionsPath   = "/node-operations/delivery-handover-conclusions"
+	handoverConclusionsPath   = "/v1/node-operations/delivery-handover-conclusions"
 	scopeEstablishedType      = "node-operations.delivery-scope.established"
 )
 

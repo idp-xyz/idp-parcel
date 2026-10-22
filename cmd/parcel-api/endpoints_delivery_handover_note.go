@@ -21,7 +21,7 @@ func init() {
 			"/node-operations/delivery-handover-confirmations": {
 				method: http.MethodPost, face: decisionFace(accessidentity.DecisionDeliveryHandoverConfirmation),
 			},
-			"/node-operations/delivery-handover-conclusions": {
+			"/v1/node-operations/delivery-handover-conclusions": {
 				method: http.MethodPost, face: customerClientFace(accessidentity.CustomerCapabilityDeliveryHandoverConfirmation), ownIntake: true,
 			},
 		},
@@ -42,7 +42,7 @@ func init() {
 				{Pattern: "/node-operations/delivery-handover-assignments", Handler: nodeopshttp.NewAssignToDeliveryHandoverNoteEndpoint(deliveryHandoverNotes.assignmentIntake(), deliveryHandoverNotes.handler)},
 				{Pattern: "/node-operations/delivery-handover-closures", Handler: nodeopshttp.NewCloseDeliveryHandoverNoteEndpoint(deliveryHandoverNotes.closureIntake(), deliveryHandoverNotes.handler)},
 				{Pattern: "/node-operations/delivery-handover-confirmations", Handler: nodeopshttp.NewConfirmDeliveryHandoverEndpoint(channels.operatorDecisions.nodeOperations, deliveryHandoverNotes.handler)},
-				{Pattern: "/node-operations/delivery-handover-conclusions", Handler: nodeopshttp.NewConcludeDeliveryHandoverEndpoint(deliveryHandoverNotes.conclusionIntake(), deliveryHandoverNotes.handler)},
+				{Pattern: "/v1/node-operations/delivery-handover-conclusions", Handler: nodeopshttp.NewConcludeDeliveryHandoverEndpoint(deliveryHandoverNotes.conclusionIntake(), deliveryHandoverNotes.handler)},
 			}
 		},
 	})

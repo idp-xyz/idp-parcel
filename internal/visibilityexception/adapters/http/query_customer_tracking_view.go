@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
@@ -71,18 +72,20 @@ const (
 	outcomeViewNotFound = "VIEW_NOT_FOUND"
 )
 
-// NewQueryCustomerTrackingViewEndpoint 交回 `UC-VE-008` 普通追踪查询的 HTTP 入口。
+// NewQueryCustomerTrackingViewEndpoint 交回 `UC-VE-008` 普通追踪查询的 HTTP 入口。它是首方客户族的口，4xx/5xx 写 RFC 9457
+// 问题详情（ADR-0140 决定三）；本包操作者族各口仍写 {"error":{"code"}}，迁移另立后续票。读不到视图是业务答案
+// `VIEW_NOT_FOUND`（200，ADR-0246 决定一），不是 404。
 func NewQueryCustomerTrackingViewEndpoint(intake QueryIntake, views TrackingViewReader) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet {
 			response.Header().Set("Allow", http.MethodGet)
-			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+			httpapi.WriteProblem(response, request, http.StatusMethodNotAllowed, codeMethodNotAllowed)
 			return
 		}
 
 		query, err := intake.IntakeQuery(request.Context(), request)
 		if err != nil {
-			writeCustomerQueryIntakeProblem(response, err)
+			writeCustomerQueryIntakeProblem(response, request, err)
 			return
 		}
 
@@ -90,7 +93,7 @@ func NewQueryCustomerTrackingViewEndpoint(intake QueryIntake, views TrackingView
 		if err != nil {
 			// 读不回是答案未形成，不是「无轨迹」也不是「无权」——伪装成后两者会让
 			// 调用方把一次该重试的故障当成终局（UC-VE-008 AT-VE-168 的半边）。
-			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+			httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
 		if !found {
@@ -105,20 +108,20 @@ func NewQueryCustomerTrackingViewEndpoint(intake QueryIntake, views TrackingView
 }
 
 // writeCustomerQueryIntakeProblem 按恢复动作分格答 Intake 的失败（ADR-0139 决定四；ADR-0029），各格都不带 outcome（ADR-0022）。
-func writeCustomerQueryIntakeProblem(response http.ResponseWriter, err error) {
+func writeCustomerQueryIntakeProblem(response http.ResponseWriter, request *http.Request, err error) {
 	switch {
 	case errors.Is(err, ErrAccessChannelNotConfigured):
-		writeProblem(response, http.StatusForbidden, codeAccessChannelNotConfigured)
+		httpapi.WriteProblem(response, request, http.StatusForbidden, codeAccessChannelNotConfigured)
 	case errors.Is(err, ErrCustomerClientCredentialRejected):
-		writeProblem(response, http.StatusUnauthorized, codeCustomerClientCredentialRejected)
+		httpapi.WriteProblem(response, request, http.StatusUnauthorized, codeCustomerClientCredentialRejected)
 	case errors.Is(err, ErrCustomerClientNotGranted):
-		writeProblem(response, http.StatusForbidden, codeCustomerClientNotGranted)
+		httpapi.WriteProblem(response, request, http.StatusForbidden, codeCustomerClientNotGranted)
 	case errors.Is(err, ErrIdentityDependencyUnavailable):
-		writeProblem(response, http.StatusServiceUnavailable, codeIdentityDependencyUnavailable)
+		httpapi.WriteProblem(response, request, http.StatusServiceUnavailable, codeIdentityDependencyUnavailable)
 	case errors.Is(err, ErrMalformedRequest):
-		writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
+		httpapi.WriteProblem(response, request, http.StatusBadRequest, codeMalformedRequest)
 	default:
-		writeProblem(response, http.StatusInternalServerError, codeIntakeFailed)
+		httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeIntakeFailed)
 	}
 }
 

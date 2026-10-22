@@ -425,7 +425,7 @@ func TestAnOtherAuthorityDecisionReachesTheEndpointWithItsHandoffContinuation(t 
 
 	response := httptest.NewRecorder()
 	endpoint.ServeHTTP(response, httptest.NewRequest(
-		http.MethodPost, "/shipment-requests", strings.NewReader("{}"),
+		http.MethodPost, "/v1/shipment-requests", strings.NewReader("{}"),
 	))
 
 	if response.Code != http.StatusOK {

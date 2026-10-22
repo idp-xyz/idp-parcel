@@ -201,16 +201,17 @@ func TestAMalformedQueryIsBadRequestWithoutOutcome(t *testing.T) {
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", recorder.Code)
 	}
+	if got := recorder.Header().Get("Content-Type"); got != "application/problem+json" {
+		t.Fatalf("Content-Type = %q, want application/problem+json（首方客户族，ADR-0140 决定三）", got)
+	}
 	var body struct {
-		Error struct {
-			Code string `json:"code"`
-		} `json:"error"`
+		Code string `json:"code"`
 	}
 	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if body.Error.Code != "MALFORMED_REQUEST" {
-		t.Fatalf("code = %q, want MALFORMED_REQUEST", body.Error.Code)
+	if body.Code != "MALFORMED_REQUEST" {
+		t.Fatalf("code = %q, want MALFORMED_REQUEST", body.Code)
 	}
 	assertNoOutcome(t, recorder)
 }
@@ -227,14 +228,12 @@ func TestAnUnreadableStoreIsNoAnswerNotNotFound(t *testing.T) {
 	}
 	var body struct {
 		Outcome string `json:"outcome"`
-		Error   struct {
-			Code string `json:"code"`
-		} `json:"error"`
+		Code    string `json:"code"`
 	}
 	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if body.Outcome != "" || body.Error.Code != "NO_ANSWER_FORMED" {
+	if body.Outcome != "" || body.Code != "NO_ANSWER_FORMED" {
 		t.Fatalf("body = %+v; 故障不得伪装成业务答案", body)
 	}
 }
@@ -251,14 +250,12 @@ func TestTransportGridsStayClosed(t *testing.T) {
 		t.Fatalf("status = %d, want 500", intakeDown.Code)
 	}
 	var body struct {
-		Error struct {
-			Code string `json:"code"`
-		} `json:"error"`
+		Code string `json:"code"`
 	}
 	if err := json.Unmarshal(intakeDown.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if body.Error.Code != "INTAKE_FAILED" {
-		t.Fatalf("code = %q, want INTAKE_FAILED", body.Error.Code)
+	if body.Code != "INTAKE_FAILED" {
+		t.Fatalf("code = %q, want INTAKE_FAILED", body.Code)
 	}
 }

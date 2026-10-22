@@ -319,7 +319,7 @@ func TestUnconfiguredDoesNotSwallowTheMethodGate(t *testing.T) {
 	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnconfiguredBusinessEndpoints())
 
 	response := httptest.NewRecorder()
-	router.ServeHTTP(response, httptest.NewRequest(http.MethodDelete, "/shipment-requests", nil))
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodDelete, "/v1/shipment-requests", nil))
 
 	if response.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusMethodNotAllowed)
@@ -335,18 +335,33 @@ func TestAssembledEndpointsIgnoreSelfReportedIdentity(t *testing.T) {
 	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnconfiguredBusinessEndpoints())
 
 	baseline := httptest.NewRecorder()
-	router.ServeHTTP(baseline, httptest.NewRequest(http.MethodPost, "/shipment-requests", nil))
+	router.ServeHTTP(baseline, httptest.NewRequest(http.MethodPost, "/v1/shipment-requests", nil))
 
-	reported := httptest.NewRequest(http.MethodPost, "/shipment-requests", nil)
+	reported := httptest.NewRequest(http.MethodPost, "/v1/shipment-requests", nil)
 	reported.Header.Set("X-Reported-Tenant", "TENANT-9")
 	reported.Header.Set("Authorization", "Bearer whatever")
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, reported)
 
-	if response.Code != baseline.Code || response.Body.String() != baseline.Body.String() {
+	// requestId 是路由中间件逐请求生成的对账句柄（ADR-0140 决定三），两次本来就不同；除它之外须逐字相同。
+	if response.Code != baseline.Code || withoutRequestID(t, response) != withoutRequestID(t, baseline) {
 		t.Fatalf("answer differs from baseline: %d %s vs %d %s",
 			response.Code, response.Body.String(), baseline.Code, baseline.Body.String())
 	}
+}
+
+func withoutRequestID(t *testing.T, response *httptest.ResponseRecorder) string {
+	t.Helper()
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(response.Body.Bytes(), &fields); err != nil {
+		t.Fatalf("decode response %s: %v", response.Body.Bytes(), err)
+	}
+	delete(fields, "requestId")
+	canonical, err := json.Marshal(fields)
+	if err != nil {
+		t.Fatalf("re-encode response: %v", err)
+	}
+	return string(canonical)
 }
 
 func assembleUnconfiguredBusinessEndpoints() []httpapi.BusinessEndpoint {
@@ -406,15 +421,21 @@ func unwiredChannels(
 	}
 }
 
+// problemCode 两种问题体都认：首方族与 PS 客户面命令口是 RFC 9457 问题详情、`code` 在顶层（ADR-0140 决定三），其余各族仍是
+// `{"error":{"code"}}`，迁到问题详情之前两种并存。
 func problemCode(t *testing.T, response *httptest.ResponseRecorder) string {
 	t.Helper()
 	var body struct {
+		Code  string `json:"code"`
 		Error struct {
 			Code string `json:"code"`
 		} `json:"error"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode problem response %s: %v", response.Body.Bytes(), err)
+	}
+	if body.Code != "" {
+		return body.Code
 	}
 	return body.Error.Code
 }
