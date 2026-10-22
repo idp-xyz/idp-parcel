@@ -44,16 +44,18 @@ M：PC 领域解析加一格、快照文档加一格（jsonb，不加迁移）�
 - UC-PC-002、UC-VE-007「给开发的交接」各记了这一缺口。
 - ADR-0233：截止与同起点退役是底座事后离开新选择的来路。
 
-## 完成记录（2026-10-21，分支 claude-code61，基于 main `4bd28bc11`）
+## 完成记录（2026-10-21，分支 claude-code61，rebase 于 main `0a7937cd5`）
 
 ### 做了什么
 
-- `08bd30ac4` 领域：`resolveCustomerServiceRuleBasis` 采纳合同层那一版时，拿同一次分层（`customerServiceRuleTiers`）的产品层选底座——恰一版记在这一项采纳上，零版记「固定了、没有」，多版这一项答`适用冲突`；`AdoptedBasis.InheritedProductBase()` 交回（底座、在场、已固定）三格。`namedReferencesConfirmed` 经 `namingVersions` 把底座纳入核对，底座不进 `adoptedByKind`。重建门 `RehydrateAdoptedBasisSpec` 加三格，拒写不出的形（底座挂在非合同版那一格、挂在产品层那一版上、底座挂合同、底座别租户或别范围、底座不是客户服务规则、在场却未标已固定）。
-- `cd7f11955` 快照：`adoptedDocument` 加可缺的 `productBase`（在场即已固定，内含整份 `versionDocument` 或缺席即「没有」），写读对称；缺这一格读回为「未固定」，不补成「没有」。jsonb，不加迁移。
-- `fc3827e45` 层次读口：`CustomerServiceRuleLayerView.LoadCustomerServiceRuleLayers(ctx, tenant, closure)` 改收整份闭包；固定了一版按它点读，固定了没有答`无适用依据`，旧快照才按闭包锚点与声明产品经 `CustomerServiceRuleProductBase` 现选。VE 适配器把闭包整份交给它；`productBase`、`contractTierDimensions`、`tiedToAdoptedContract`、`adoptedRule` 头注随改（「ADR-0136 决定五」订正为越权风险点 5，比较对象补 ADR-0268 决定二）；`cmd/parcel-api/assemble_claims.go` 装配注随改，装配代码不变。用例：领域七条、真库四条（事后同起点退役与有效性更正两格、固定了没有不拾后来的一版、两版底座接受时冲突、删掉底座一格的旧快照照旧现选）、既有层次读口真库用例改走旧快照一路并补问法立不住五格、VE 合同点核比闭包合同不比查询合同、parcel-api 装配用例补「底座更正后索赔照旧继承」。
-- `99e283515` UC-PC-002、UC-VE-007「给开发的交接」里指向本票的现状缺口注改为已补。
+- `fc0bff171` 领域：`resolveCustomerServiceRuleBasis` 采纳合同层那一版时，拿同一次分层（`customerServiceRuleTiers`）的产品层选底座——恰一版记在这一项采纳上，零版记「固定了、没有」，多版这一项答`适用冲突`；`AdoptedBasis.InheritedProductBase()` 交回（底座、在场、已固定）三格。`namedReferencesConfirmed` 经 `namingVersions` 把底座纳入核对，底座不进 `adoptedByKind`。重建门 `RehydrateAdoptedBasisSpec` 加三格，拒写不出的形（底座挂在非合同版那一格、挂在产品层那一版上、底座挂合同、底座别租户或别范围、底座不是客户服务规则、在场却未标已固定）。
+- `90f6124d1` 快照：`adoptedDocument` 加可缺的 `productBase`（在场即已固定，内含整份 `versionDocument` 或缺席即「没有」），写读对称；缺这一格读回为「未固定」，不补成「没有」。jsonb，不加迁移。
+- `c64609b40` 层次读口：`CustomerServiceRuleLayerView.LoadCustomerServiceRuleLayers(ctx, tenant, closure)` 改收整份闭包；固定了一版按它点读，固定了没有答`无适用依据`，旧快照才按闭包锚点与声明产品经 `CustomerServiceRuleProductBase` 现选。VE 适配器把闭包整份交给它；`productBase`、`contractTierDimensions`、`tiedToAdoptedContract`、`adoptedRule` 头注随改（「ADR-0136 决定五」订正为越权风险点 5，比较对象补 ADR-0268 决定二）；`cmd/parcel-api/assemble_claims.go` 装配注随改，装配代码不变。用例：领域七条、真库四条（事后同起点退役与有效性更正两格、固定了没有不拾后来的一版、两版底座接受时冲突、删掉底座一格的旧快照照旧现选）、既有层次读口真库用例改走旧快照一路并补问法立不住五格、VE 合同点核比闭包合同不比查询合同、parcel-api 装配用例补「底座更正后索赔照旧继承」。
+- `917fed864` UC-PC-002、UC-VE-007「给开发的交接」里指向本票的现状缺口注改为已补。
 
 PC CONTEXT、VE CONTEXT 与 ADR 正文未改（ADR-0268 票已改 CONTEXT）。AT 盘点无对应行，未动。
+
+**合并后演示库须 `scripts/demo-seeds/seed.sh --reset` 重灌**（ADR-0268 决定三）：灌种子本身不形成闭包，但运行期接受过的合同版委托，快照没有底座一格，会照旧按锚点现选。
 
 ### 代决
 
@@ -62,7 +64,7 @@ PC CONTEXT、VE CONTEXT 与 ADR 正文未改（ADR-0268 票已改 CONTEXT）。A
 1. 端口签名（票面留给领票时定）：改收整份闭包，不另加「底座版本」入参。来路只有闭包分得清；让 VE 先拆闭包再挑来路，等于把「哪一版算底座」的判断搬到消费侧。
 2. 解析标识不纳入底座。底座是（键，登记册）的函数，而视图修订已覆盖范围内全部版本、状态与更正；纳入只会让既有解析标识改口（`TestAnExistingProductOnlyRegistrationResolvesAsBefore` 钉的那一个不受影响，产品层采纳本来就不记底座）。
 3. 快照记整份版本文档而不只版本身份，与采用成员同形：点读口要壳（租户、范围、指名引用），只记身份就得回登记册查，读时又依赖登记册。
-4. 快照不换号、不加迁移：`commercial_resolution.snapshot` 的摘要是本适配器对整份 JSON 的散列，只用来在撞键时分重放与冲突，不是已接规范化的册正文，ADR-0267 不适用。
+4. 快照不换号、不加迁移：快照未接规范化版本，ADR-0267 决定一不触发；按决定三的实质，同号改形的前提成立——首个租户实例进生产之前，已存摘要只在演示库，重灌即消。快照摘要不带版本本身违背 ADR-0014 Decision「不携带版本的摘要视为不完整」，进生产之后再改形就没有规则可依，另立 [code/80](./80-the-commercial-resolution-snapshot-digest-carries-no-canonicalization-version.md)。
 5. 存量快照不回填：生产没有存量；演示库灌种子不形成闭包（一次性库 `code61seed` 上 `seed.sh --reset` 后 `party_commercial.commercial_resolution` 为 0 行），闭包要到运行期接受时才写；回填等于事后按此刻登记册给旧闭包补底座，正是本票要防的现选。ADR-0268 越权风险点 3 已认。
 6. 固定了「没有」答`无适用依据`，不回落现选：那会把「接受时没有底座」换成「此刻有一版」。
 7. 层次读口的问法收紧为：闭包唯一已解析、属显式租户、采纳了一版壳上指名客户合同的客户服务规则、那一版在闭包键的范围里；任一条不成立即 error。之前采纳产品层那一版的闭包问到这里会把它自己选成底座。
@@ -83,4 +85,14 @@ PC CONTEXT、VE CONTEXT 与 ADR 正文未改（ADR-0268 票已改 CONTEXT）。A
 - `scripts/test-full.sh ./internal/parcelshipment/...`：19 个包 ok（PS 未改，跑它是因为 PS 接受链走真解析）。
 - 新用例 `-count=3`（PC 领域、PC postgres、VE 适配器、parcel-api）：4 个包 ok。
 - 演示种子：一次性库 `code61seed` 上 `seed.sh --reset` 灌完无错，用后已删。
+
+## 评审记录（2026-10-21，协调方隔离评审）
+
+结论：无阻断；写读对称与变异测试已核。合入前收口的几件，均在 rebase 于 main `0a7937cd5` 之后的分支上改：
+
+- N1：代决 4 的理由改为「快照未接规范化版本，ADR-0267 决定一不触发；按决定三的实质，前提成立」；快照摘要不带版本、进生产后再改形无规则可依那一格另立 [code/80](./80-the-commercial-resolution-snapshot-digest-carries-no-canonicalization-version.md)（R2）。ADR-0014 注记不动。
+- N2：完成记录补「合并后演示库须 `seed.sh --reset` 重灌」。
+- N3：VE 适配器 `productBase` 头注里`无适用依据`那一格按来路分写恢复动作：闭包上固定了没有，已接受委托无恢复动作；旧快照现选那一路，恢复动作是登一版产品版。
+- N4：`TestTheRehydrationGateKeepsTheFixedProductBaseHonest` 拒绝表补「底座属别的租户」一格；变异核对：去掉重建门里的租户比较，这一格红，恢复后绿。
+- 顺手：底座冲突时 `candidateCount` 报产品层的候选数；端口与 VE 适配器两处超长头注折行；`legacyClosureOver` 头注改用测试符号名指路，不写文件名。
 
