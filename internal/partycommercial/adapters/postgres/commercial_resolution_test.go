@@ -245,7 +245,8 @@ func TestResolutionReplayAndConflictSplitByContent(t *testing.T) {
 // 先于合同声明、在改动前已固定的那份解析，新代码重解后再固定一次，答`已记录`，不答`内容冲突`。
 //
 // 改动前固定的那一行由重建门按改动前的成员次序造出（声明次序：规则在前、合同在后）。它的内容摘要是改动前的代码
-// （基 1d67e27c）对同一夹具实算后钉住的——夹具若与改动前写下的那一行差一个字节，先红的是第一处断言。
+// （基 1d67e27c）对同一夹具实算后钉住的；那时快照还没接规范化版本，这一行于是落成无版本那一形。夹具若与改动前写下的
+// 那一行差一个字节，先红的是它自己的重放。
 func TestAResolutionFixedWithTheServiceRuleDeclaredFirstReplaysAsRecorded(t *testing.T) {
 	const fixedBeforeDigest = "05d151b57978ad040ea5389042ba648c7ca3ca3a521f800bf28b72ed2769ccbe"
 	repository, transactor, pool := newResolutions(t)
@@ -254,8 +255,9 @@ func TestAResolutionFixedWithTheServiceRuleDeclaredFirstReplaysAsRecorded(t *tes
 
 	fixedBefore := rebuiltInDeclaredOrder(t, resolved)
 	mustSaveResolution(t, transactor, ctx, repository, fixedBefore)
-	if got := storedContentDigest(t, pool, fixedBefore); got != fixedBeforeDigest {
-		t.Fatalf("改动前那一行的内容摘要 = %s, want %s（基 1d67e27c 实算）", got, fixedBeforeDigest)
+	regressToUnversioned(t, pool, fixedBefore, fixedBeforeDigest)
+	if outcome := saveOutcome(t, transactor, repository, fixedBefore); outcome != ports.ResolutionAlreadyRecorded {
+		t.Fatalf("改动前那一行自己重放 = %s, want ALREADY_RECORDED（摘要钉的是基 1d67e27c 实算）", outcome)
 	}
 
 	var replay ports.ResolutionSaveOutcome

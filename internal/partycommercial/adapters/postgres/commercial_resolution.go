@@ -1,12 +1,14 @@
 package postgres
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -18,8 +20,8 @@ import (
 
 // CommercialResolutions 实现 ports.CommercialResolutionStore：按标识固定并取回一次解析。
 //
-// Save 撞键不覆盖：ON CONFLICT DO NOTHING 保事务可用，零行命中后读回摘要——同内容是
-// 重放，异内容是冲突。
+// Save 撞键不覆盖：ON CONFLICT DO NOTHING 保事务可用，零行命中后读回摘要，按那一行的规范化版本重算本次闭包再比
+// ——同内容是重放，异内容是冲突；那一行的版本本构建不认得时两样都答不出，报错。
 type CommercialResolutions struct {
 	db *bentopg.DB
 }
@@ -32,6 +34,55 @@ func NewCommercialResolutions(db *bentopg.DB) (*CommercialResolutions, error) {
 }
 
 var _ ports.CommercialResolutionStore = (*CommercialResolutions)(nil)
+
+// resolutionCanonicalizationVersion 标识解析快照文档的形状：快照文档的 canonicalization 一键与摘要串的前缀都写它，
+// 摘要只在同一版本内可比（ADR-0014 Decision）。没有它，形状一变，新旧构建并存时旧构建对新写下的行重放答内容冲突、
+// 读新快照把不认得的键静默丢掉（例如底座一格，丢了就回到按锚点现选）。
+//
+// PCR-1 是接版本那一刻的形状，连同此前历次同形加入、各自可缺的键；那些键在文档里缺席的读法照旧（底座一格缺席是
+// ADR-0268 决定三那一种）。此后文档加键、删键或改键，可缺键也算，照 ADR-0267 决定一换号，按内容取能表达它的最低一版。
+const resolutionCanonicalizationVersion = "PCR-1"
+
+// canonicalDigestSeparator 把版本前缀与十六进制摘要分开：`PCR-1:<hex>`，与商业发布的 `PCC-1:<hex>` 同一落法——版本随串走，
+// 不另开一列，没版本的旧串与有版本的新串在库上一眼可分。
+const canonicalDigestSeparator = ":"
+
+// renderedAs 答本次闭包按某一版形状写成的文档；本构建不认得的版本答 false。
+//
+// 空串是快照接版本之前写下的那一形（无版本）：它与 PCR-1 只差版本键本身，其余各键逐字节同，所以同一份文档去掉
+// 版本键就是它。存量不回写（ADR-0014「既有评价永远按其原规范化版本重放」），这一形要一直算得出。
+func (document closureDocument) renderedAs(version string) (closureDocument, bool) {
+	switch version {
+	case "", resolutionCanonicalizationVersion:
+		document.Canonicalization = version
+		return document, true
+	default:
+		return closureDocument{}, false
+	}
+}
+
+// encoded 交出文档字节与它的摘要串：有版本的串带前缀，无版本那一形照它当初的写法不带。
+func (document closureDocument) encoded() ([]byte, string, error) {
+	raw, err := json.Marshal(document)
+	if err != nil {
+		return nil, "", err
+	}
+	sum := sha256.Sum256(raw)
+	digest := hex.EncodeToString(sum[:])
+	if document.Canonicalization == "" {
+		return raw, digest, nil
+	}
+	return raw, document.Canonicalization + canonicalDigestSeparator + digest, nil
+}
+
+// digestCanonicalization 读出摘要串带的版本；不带分隔符的是无版本那一形。
+func digestCanonicalization(digest string) string {
+	version, _, versioned := strings.Cut(digest, canonicalDigestSeparator)
+	if !versioned {
+		return ""
+	}
+	return version
+}
 
 func (repository *CommercialResolutions) LoadResolution(
 	ctx context.Context,
@@ -47,13 +98,14 @@ func (repository *CommercialResolutions) LoadResolution(
 	}
 
 	var raw []byte
+	var digest string
 	err = querier.QueryRow(ctx,
-		`SELECT snapshot
+		`SELECT snapshot, content_digest
 		   FROM party_commercial.commercial_resolution
 		  WHERE tenant_id = $1 AND resolution_id = $2`,
 		tenant.String(),
 		resolution.String(),
-	).Scan(&raw)
+	).Scan(&raw, &digest)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.CommercialClosure{}, false, nil
 	}
@@ -61,9 +113,9 @@ func (repository *CommercialResolutions) LoadResolution(
 		return domain.CommercialClosure{}, false, fmt.Errorf("load commercial resolution: %w", err)
 	}
 
-	var document closureDocument
-	if err := json.Unmarshal(raw, &document); err != nil {
-		return domain.CommercialClosure{}, false, fmt.Errorf("load commercial resolution: 快照不是本适配器写下的形状：%w", err)
+	document, err := decodeSnapshot(raw, digest)
+	if err != nil {
+		return domain.CommercialClosure{}, false, fmt.Errorf("load commercial resolution: %w", err)
 	}
 	closure, err := document.closure()
 	if err != nil {
@@ -90,12 +142,10 @@ func (repository *CommercialResolutions) Save(
 	}
 
 	document := documentOfClosure(closure)
-	raw, err := json.Marshal(document)
+	raw, contentDigest, err := document.encoded()
 	if err != nil {
 		return ports.ResolutionSaveOutcomeInvalid, fmt.Errorf("save commercial resolution: %w", err)
 	}
-	digest := sha256.Sum256(raw)
-	contentDigest := hex.EncodeToString(digest[:])
 
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO party_commercial.commercial_resolution
@@ -130,23 +180,82 @@ func (repository *CommercialResolutions) Save(
 	if err != nil {
 		return ports.ResolutionSaveOutcomeInvalid, fmt.Errorf("save commercial resolution: %w", err)
 	}
-	if existingDigest == contentDigest {
+	// 两版不同不是冲突（ADR-0014 Decision）：按那一行自己的版本重写本次闭包再比。那一行的版本本构建不认得——滚动发布或回滚时
+	// 后来的构建写下的——就既证明不了重放、也定不了冲突：答冲突会挡住一份可能完全相同的解析，答重放是冒认，于是报错，
+	// 恢复动作是换一个认得它的构建。
+	stored := digestCanonicalization(existingDigest)
+	comparable, known := document.renderedAs(stored)
+	if !known {
+		return ports.ResolutionSaveOutcomeInvalid, fmt.Errorf(
+			"save commercial resolution: %w: 已固定的那一行按 %q 写下，本构建写 %s",
+			domain.ErrCanonicalizationUnsupported, stored, resolutionCanonicalizationVersion)
+	}
+	_, comparableDigest, err := comparable.encoded()
+	if err != nil {
+		return ports.ResolutionSaveOutcomeInvalid, fmt.Errorf("save commercial resolution: %w", err)
+	}
+	if existingDigest == comparableDigest {
 		return ports.ResolutionAlreadyRecorded, nil
 	}
 	return ports.ResolutionContentConflict, nil
 }
 
+// decodeSnapshot 按快照的版本分派解码。快照文档里的版本键与摘要串的前缀必须说同一版：两处各说一版的行不是本适配器
+// 写下的，无从知道该信哪一处。
+//
+// PCR-1 拒未知键：同一版里出现本构建不认得的键，是形状变了却没换号，丢掉它就是静默改口。无版本那一形照接版本之前的
+// 读法不拒——那时的构建历次改过形，存量里可能留着已经退役的键，拒了只会让一份当时合法的快照读不回。
+func decodeSnapshot(raw []byte, digest string) (closureDocument, error) {
+	var probe struct {
+		Canonicalization *string `json:"canonicalization"`
+	}
+	if err := json.Unmarshal(raw, &probe); err != nil {
+		return closureDocument{}, fmt.Errorf("快照不是本适配器写下的形状：%w", err)
+	}
+	version := ""
+	if probe.Canonicalization != nil {
+		if *probe.Canonicalization == "" {
+			return closureDocument{}, fmt.Errorf("快照不是本适配器写下的形状：版本键在场却为空")
+		}
+		version = *probe.Canonicalization
+	}
+	if stored := digestCanonicalization(digest); stored != version {
+		return closureDocument{}, fmt.Errorf("快照不是本适配器写下的形状：文档说 %q，摘要串说 %q", version, stored)
+	}
+
+	var document closureDocument
+	switch version {
+	case "":
+		if err := json.Unmarshal(raw, &document); err != nil {
+			return closureDocument{}, fmt.Errorf("快照不是本适配器写下的形状：%w", err)
+		}
+	case resolutionCanonicalizationVersion:
+		decoder := json.NewDecoder(bytes.NewReader(raw))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&document); err != nil {
+			return closureDocument{}, fmt.Errorf("快照不是 %s 的形状：%w", version, err)
+		}
+	default:
+		return closureDocument{}, fmt.Errorf("%w: 快照按 %q 写下，本构建读 %s",
+			domain.ErrCanonicalizationUnsupported, version, resolutionCanonicalizationVersion)
+	}
+	return document, nil
+}
+
 type closureDocument struct {
-	Outcome      uint8     `json:"outcome"`
-	ResolutionID string    `json:"resolutionId"`
-	TenantID     string    `json:"tenantId"`
-	Customer     string    `json:"customerAccountId"`
-	LegalEntity  string    `json:"legalEntity"`
-	Scope        string    `json:"scope"`
-	Purpose      uint8     `json:"purpose"`
-	Direction    uint8     `json:"priceDirection"`
-	AnchorAt     time.Time `json:"anchorAt"`
-	AnchorPolicy string    `json:"anchorPolicy"`
+	// Canonicalization 是这份文档的形状版本，本适配器写下的总在场。omitempty 只为无版本那一形：去掉它，字节就与快照接
+	// 版本之前写下的逐字节同，见 renderedAs。
+	Canonicalization string    `json:"canonicalization,omitempty"`
+	Outcome          uint8     `json:"outcome"`
+	ResolutionID     string    `json:"resolutionId"`
+	TenantID         string    `json:"tenantId"`
+	Customer         string    `json:"customerAccountId"`
+	LegalEntity      string    `json:"legalEntity"`
+	Scope            string    `json:"scope"`
+	Purpose          uint8     `json:"purpose"`
+	Direction        uint8     `json:"priceDirection"`
+	AnchorAt         time.Time `json:"anchorAt"`
+	AnchorPolicy     string    `json:"anchorPolicy"`
 	// Settlement 只在必需依据含结算政策时出现（ADR-0044 的「含则必填、不含则必缺」）。
 	// 它必须原样写下来：解析键的最小身份把选择器算在内，落库时丢掉，读回的键就立不起来，
 	// 于是一份写得进去的闭包永远读不回来——写成功、读失败，两侧都不报错。
@@ -224,16 +333,17 @@ type settlementPolicyDocument struct {
 func documentOfClosure(closure domain.CommercialClosure) closureDocument {
 	key := closure.ResolutionKey()
 	document := closureDocument{
-		Outcome:      uint8(closure.Outcome()),
-		ResolutionID: closure.ResolutionID().String(),
-		TenantID:     key.TenantID.String(),
-		Customer:     key.CustomerAccountID.String(),
-		LegalEntity:  key.LegalEntityCandidate.String(),
-		Scope:        key.Scope.String(),
-		Purpose:      uint8(key.Purpose),
-		Direction:    uint8(key.PriceDirection),
-		AnchorAt:     key.Anchor.At().UTC(),
-		AnchorPolicy: key.Anchor.PolicyVersion().String(),
+		Canonicalization: resolutionCanonicalizationVersion,
+		Outcome:          uint8(closure.Outcome()),
+		ResolutionID:     closure.ResolutionID().String(),
+		TenantID:         key.TenantID.String(),
+		Customer:         key.CustomerAccountID.String(),
+		LegalEntity:      key.LegalEntityCandidate.String(),
+		Scope:            key.Scope.String(),
+		Purpose:          uint8(key.Purpose),
+		Direction:        uint8(key.PriceDirection),
+		AnchorAt:         key.Anchor.At().UTC(),
+		AnchorPolicy:     key.Anchor.PolicyVersion().String(),
 	}
 	if !key.Settlement.Empty() {
 		document.Settlement = &settlementSelectorDocument{
