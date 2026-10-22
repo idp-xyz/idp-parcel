@@ -6,7 +6,7 @@ import { problemCodeOf, problemDetailOf } from './problem-body';
 // {"error":{"code","detail"}}。读错一边，页面就把一个有名字的拒绝显示成「未知错误码」。
 test('读得出问题详情顶层的 code 与 detail', () => {
   const body = {
-    type: 'urn:idp-parcel:problem:MALFORMED_REQUEST',
+    type: 'tag:idp.xyz,2026:problem:MALFORMED_REQUEST',
     title: 'Malformed request',
     status: 400,
     code: 'MALFORMED_REQUEST',

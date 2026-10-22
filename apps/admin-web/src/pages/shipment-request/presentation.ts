@@ -274,7 +274,7 @@ export const problemCodeNotes: Record<string, string> = {
   UNNAMED_OUTCOME: '服务端交回了无法命名的结果,已按未形成答案处理,可稍后重试。',
   SHIPMENT_REQUEST_NOT_VISIBLE:
     '指名的委托或包裹在当前范围内查不到。统一不可见结果,不区分「不存在」与「无权查看」,也不提示差在哪一段指名。请核对后再提交,重发同样的内容不会改变结果。',
-  SHIPMENT_REQUEST_NOT_ACCEPTED: '委托尚未接受,资料修订不成立。决定前的纠错请走受控补充。',
+  SHIPMENT_REQUEST_NOT_YET_ACCEPTED: '委托尚未接受,资料修订不成立。决定前的纠错请走受控补充。',
 };
 
 export function problemNote(code: string): string {
