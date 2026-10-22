@@ -1,7 +1,7 @@
 # 04 CC 外部结果没有层内更正关系：来源明确的更正照判同层冲突
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code04（见文末「完成记录」）。此前 ready-for-agent——R2（上线后尽快）：外部结果接收已在生产装配（`cmd/parcel-api/assemble_external_results.go`）；监管核定税费换金额、处置决定换种类、放行收窄这类明确更正一到，就被判冲突，进不了当前判断，也到不了 VE。偏保守（不会误放），但核定税费的更正碰钱、且冲突今天无人可见、无处置入口。首发关务只接受控模拟与沙箱，真实程序的更正形态（`PAR-CUS` 一类）尚未给出，所以列 R2；接真实关务程序之前升 R1。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code04（见文末「完成记录」）。此前 ready-for-agent——R2（上线后尽快）：外部结果接收已在生产装配（`cmd/parcel-api/assemble_external_results.go`）；监管核定税费换金额、处置决定换种类、放行收窄这类明确更正一到，就被判冲突，进不了当前判断，也到不了 VE。偏保守（不会误放），但核定税费的更正碰钱、且冲突今天无人可见、无处置入口。首发关务只接受控模拟与沙箱，真实程序的更正形态（`PAR-CUS` 一类）尚未给出，所以列 R2；接真实关务程序之前升 R1。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
 Blocked by: 无
 出处：[audit/cc.md](../audit/cc.md) M9（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，现象仍在）。
 
@@ -129,3 +129,10 @@ B1 修法正确完整，两处变异都杀掉，merge-tree 干净。N5 原文由
 | 用例头注 | 「（所更正那份退出当前判断）」改为「（自更正的业务时间起退出当前判断）」 |
 
 第二轮测试：`TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/customscompliance/... ./internal/visibilityexception/... ./internal/transportfulfillment/adapters/customscompliance/ ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./internal/architecture/... ./migrations/...` 30 包 ok；新用例 `-count=3` 全 ok；`go build ./...`、`go vet ./...` 干净，`gofmt -l` 无输出。迁移 0027 改了注释，在一次性库 `c04seed` 上随 `scripts/demo-seeds/seed.sh` 灌通（租户 SYN-TENANT-01 各上下文全部落库，两列在），用后已删库。
+
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-code04` 由协调方 rebase 到 main `142338122`（`git rebase main` 退 0）后快进，tip `8805b3480` 之上的 rebase 结果；两轮隔离评审：第一轮 B1（放行读口不按时点）、第二轮 B2（同层比对不按时点排除被取代那份）均已修，B2 修法照评审给的形状落，协调方核过 diff 后未再起第三轮。
+- 协调方单独提交重算的 AT 计数与重生成的机制清点；ADR 索引无变化；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净；演示种子在一次性库上灌通（迁移 CC 0027），用后删库。
+- 去向：code/84（VE 跟随 CC 外部结果更正关系，需新 ADR，R2）。
