@@ -208,3 +208,29 @@ func releaseReadings(t *testing.T, view *adapter.ReleaseOutcomeView, scope domai
 	}
 	return bySource
 }
+
+// Covers: 读口对称——生效后继在、却说不出业务发生时间时整笔报错，与原放行缺业务时间同一格；不当成未被取代，
+// 否则更正被静默放过。旁路写入用显式 SQL 造出这一行。
+func TestTheReleaseViewRefusesASuccessorWithoutAnOccurrenceTime(t *testing.T) {
+	fixture := newViewFixture(t)
+	repository, err := adapter.NewExternalResults(fixture.db)
+	if err != nil {
+		t.Fatalf("构造登记册：%v", err)
+	}
+	full := releaseRecord(t, "tenant-a", "resp-full", domain.FullRelease, "")
+	saveAll(t, repository, fixture.db.Transactor(), full)
+	fixture.seed(t, `INSERT INTO customs_compliance.external_result
+		(tenant_id, source_id, content_digest, unattributable, raw_semantics, claimed_version,
+		 layer_conflict, result, submission_version, recorded_at, corrects_source_id, correction_in_force)
+		VALUES ('tenant-a', 'resp-broken', 'digest', false, '', '', false,
+		        '{"layer":"RELEASE_RESULT","sourceId":"resp-broken"}', 'submission-release', $1, 'resp-full', true)`,
+		externalReceivedAt)
+
+	view, err := adapter.NewReleaseOutcomeView(fixture.db)
+	if err != nil {
+		t.Fatalf("构造放行读口：%v", err)
+	}
+	if _, err := view.ListReleaseOutcomes(t.Context(), make2(t, domain.NewTenantID, "tenant-a"), full.Result.Scope()); err == nil {
+		t.Fatal("后继缺业务时间却答了读数——原放行被当成未被取代")
+	}
+}

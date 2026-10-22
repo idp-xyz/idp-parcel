@@ -65,7 +65,7 @@ func inForce(fact domain.LayerFact) domain.LayerFact {
 
 // Covers: AT-CC-156 的领域半边（范围只到申报单元一级）——来源明确指名更正哪一份时形成更正关系，不进
 // 与所更正那份的矛盾判断：核定税费换金额、处置决定换种类、放行收窄这三种不带更正指向时判同层冲突的明确更正，
-// 都不判冲突，而且更正关系在同一范围上生效（所更正那份退出当前判断）。不带更正指向的同一份内容照判冲突。
+// 都不判冲突，而且更正关系在同一范围上生效（自更正的业务时间起退出当前判断）。不带更正指向的同一份内容照判冲突。
 func TestAnExplicitSameLayerCorrectionFormsACorrectionRelationInsteadOfAConflict(t *testing.T) {
 	for name, test := range map[string]struct {
 		original, correction domain.LayerFact
@@ -210,5 +210,47 @@ func TestACorrectionMustNameASameLayerFactOfTheSameSubmission(t *testing.T) {
 	claimless := inForce(layerFact(t, "duty-4", domain.AssessedDutyLayer, "DUTY/USD-95.50", domain.ReleaseKindInvalid, laterAt))
 	if _, err := domain.CheckLayerConsistency([]domain.LayerFact{claimless}, original); !errors.Is(err, domain.ErrInvalidExternalResult) {
 		t.Fatalf("err = %v；更正生效却不指名所更正那份", err)
+	}
+}
+
+// Covers: ADR-0226 决定二与 CONTEXT「不得……按最后到达直接改变当前判断」在更正出现后的读法——被取代的结果
+// 只对业务时间不早于更正的后到结果退出比对：在它仍算数的那段时间（原结果到更正之间）里，与它矛盾、又不带
+// 更正指向的后到结果照判冲突；业务时间在更正之后的，才只与更正后的结果比。
+func TestASupersededFactStillJudgesLaterArrivalsInsideItsOwnWindow(t *testing.T) {
+	middle := earlierAt.Add(time.Hour)
+	after := laterAt.Add(time.Hour)
+	for name, test := range map[string]struct {
+		original, correction, incoming domain.LayerFact
+		conflict                       bool
+	}{
+		"全部之后收窄，窗口里到一份部分": {
+			release(t, "o-1", domain.FullRelease, earlierAt),
+			release(t, "c-1", domain.PartialRelease, laterAt),
+			release(t, "x-1", domain.PartialRelease, middle),
+			true,
+		},
+		"部分之后放宽，窗口里到一份附条件": {
+			release(t, "o-1", domain.PartialRelease, earlierAt),
+			release(t, "c-1", domain.FullRelease, laterAt),
+			release(t, "x-1", domain.ConditionalRelease, middle),
+			true,
+		},
+		"全部之后收窄，更正之后再到一份部分": {
+			release(t, "o-1", domain.FullRelease, earlierAt),
+			release(t, "c-1", domain.PartialRelease, laterAt),
+			release(t, "x-1", domain.PartialRelease, after),
+			false,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			booked := []domain.LayerFact{test.original, inForce(correcting(t, test.correction, "o-1"))}
+			_, err := domain.CheckLayerConsistency(booked, test.incoming)
+			if test.conflict && !errors.Is(err, domain.ErrLayerConflict) {
+				t.Fatalf("err = %v；原结果在这段时间仍算数，与它矛盾的后到结果该记冲突", err)
+			}
+			if !test.conflict && err != nil {
+				t.Fatalf("err = %v；更正之后的结果只与更正后的那份比", err)
+			}
+		})
 	}
 }

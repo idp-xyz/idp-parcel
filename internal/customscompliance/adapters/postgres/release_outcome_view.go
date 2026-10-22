@@ -42,7 +42,7 @@ func (view *ReleaseOutcomeView) ListReleaseOutcomes(
 	rows, err := querier.Query(ctx,
 		`SELECT r.source_id, r.kind, r.authority_ref, r.scope_ref, r.condition, r.received_at,
 		        (e.result ->> 'occurredAt')::timestamptz,
-		        (s.result ->> 'occurredAt')::timestamptz
+		        s.source_id, (s.result ->> 'occurredAt')::timestamptz
 		   FROM customs_compliance.release_outcome r
 		   JOIN customs_compliance.external_result e
 		     ON e.tenant_id = r.tenant_id AND e.source_id = r.source_id
@@ -66,8 +66,10 @@ func (view *ReleaseOutcomeView) ListReleaseOutcomes(
 			source, kindRaw, authorityRaw, scopeRaw, condition string
 			receivedAt                                         time.Time
 			occurredAt, supersededAt                           *time.Time
+			successor                                          *string
 		)
-		if err := rows.Scan(&source, &kindRaw, &authorityRaw, &scopeRaw, &condition, &receivedAt, &occurredAt, &supersededAt); err != nil {
+		if err := rows.Scan(&source, &kindRaw, &authorityRaw, &scopeRaw, &condition, &receivedAt, &occurredAt,
+			&successor, &supersededAt); err != nil {
 			return nil, fmt.Errorf("list release outcomes: %w", err)
 		}
 		if occurredAt == nil {
@@ -91,7 +93,11 @@ func (view *ReleaseOutcomeView) ListReleaseOutcomes(
 			return nil, fmt.Errorf("list release outcomes: %w", err)
 		}
 		reading := domain.ReleaseReading{Source: source, Release: release, OccurredAt: occurredAt.UTC()}
-		if supersededAt != nil {
+		if successor != nil {
+			if supersededAt == nil {
+				// 后继在、却说不出业务时间：与原放行缺业务时间同一格，行坏了上抛——当成未被取代就是静默放过更正。
+				return nil, fmt.Errorf("list release outcomes: successor %s of %s carries no occurrence time", *successor, source)
+			}
 			reading.SupersededAt = supersededAt.UTC()
 		}
 		readings = append(readings, reading)

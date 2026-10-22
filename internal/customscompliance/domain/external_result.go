@@ -186,9 +186,9 @@ func (result ExternalResult) Corrects() (string, bool) {
 // LayerFact 是同层一致性核对读的一份事实：分层事实本体，放行层另带同一次接收拆出的放行
 // 事实。放行层的先后要按放行种类判，而种类不在分层事实上，所以两面一起交进来。
 //
-// CorrectionInForce 说这份到达时，它对所更正那份的更正关系在同一范围上生效了：所更正那份不再
-// 参与此后到达结果的比对，在当前判断里自更正的业务发生时间起不再算数，原记录留作历史。它是
-// 接收那一刻的判断，与冲突标记一样只建立不改写。
+// CorrectionInForce 说这份到达时，它对所更正那份的更正关系在同一范围上生效了：自这份更正的
+// 业务发生时间起，所更正那份不再算数——当前判断按时点取，此后到达的结果只在业务发生时间不早于
+// 更正时不再与它比；原记录留作历史。它是接收那一刻的判断，与冲突标记一样只建立不改写。
 type LayerFact struct {
 	Result            ExternalResult
 	Release           *CustomsReleaseOutcome
@@ -215,7 +215,10 @@ type LayerFact struct {
 //     业务时间择一都是替来源判断谁更正了谁，所以新到那份记冲突。
 //   - 更正关系只解释新到那份与所指那份之间的差别，不进它俩之间的矛盾判断；与其余在册事实照常
 //     比——没有更正语义的矛盾结果保持冲突（AT-CC-156）。
-//   - 已被生效更正取代的在册事实不再参与比对：来源已经收回了它的说法，它只留作历史。
+//   - 已被生效更正取代的在册事实只对业务发生时间不早于那份更正的新到结果退出比对：自那一刻起
+//     来源收回了它的说法。在它仍算数的那段时间里（它自己到更正之间），与它矛盾、又不带更正指向
+//     的新到结果照判冲突——否则这样一份结果不记冲突就进了那段时间的当前判断，正是 ADR-0226
+//     决定二要挡的。
 //
 // 第一个返回值说更正关系是否在同一范围上生效：范围今天只到申报单元一级（ADR-0226），新旧范围
 // 的交集与差集退化为相等与不等——相等时所指那份自更正的业务发生时间起整份不再算数（当前判断按时点取，见 ReleaseReading）；不等时交集为空，所指那份在
@@ -232,13 +235,15 @@ func CheckLayerConsistency(existing []LayerFact, incoming LayerFact) (bool, erro
 	if incoming.Result.layer == ReleaseResultLayer && incoming.Release == nil {
 		return false, ErrInvalidExternalResult
 	}
-	superseded := make(map[string]bool, len(existing))
+	// supersededAt 记被生效更正取代的事实与取代时点（那份更正的业务发生时间）。只许更正链尾只看
+	// 有没有后继；比对时的排除按时点。
+	supersededAt := make(map[string]time.Time, len(existing))
 	for _, fact := range existing {
 		if err := fact.wellFormed(); err != nil {
 			return false, err
 		}
 		if corrected, has := fact.Result.Corrects(); has && fact.CorrectionInForce {
-			superseded[corrected] = true
+			supersededAt[corrected] = fact.Result.occurredAt
 		}
 	}
 
@@ -258,7 +263,7 @@ func CheckLayerConsistency(existing []LayerFact, incoming LayerFact) (bool, erro
 		if target.Result.layer != incoming.Result.layer {
 			return false, ErrCorrectionAcrossLayers
 		}
-		if superseded[corrected] {
+		if _, already := supersededAt[corrected]; already {
 			return false, ErrLayerConflict
 		}
 	}
@@ -267,8 +272,10 @@ func CheckLayerConsistency(existing []LayerFact, incoming LayerFact) (bool, erro
 		if fact.Result.layer != incoming.Result.layer ||
 			fact.Result.version != incoming.Result.version ||
 			fact.Result.scope != incoming.Result.scope ||
-			superseded[fact.Result.sourceID] ||
 			(correcting && fact.Result.sourceID == corrected) {
+			continue
+		}
+		if at, superseded := supersededAt[fact.Result.sourceID]; superseded && !incoming.Result.occurredAt.Before(at) {
 			continue
 		}
 		if contradicts(fact, incoming) {
