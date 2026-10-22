@@ -1,4 +1,4 @@
-# 80 跨上下文读口的 savepoint 装饰器是同一段代码的三份副本：抽成 `internal/platform` 的泛型助手
+# 81 跨上下文读口的 savepoint 装饰器是同一段代码的三份副本：抽成 `internal/platform` 的泛型助手
 
 Category: enhancement
 Status: needs-triage——建议 R3（重构，不改行为）。2026-10-21 协调方据票 [docs-consistency/code/67](./67-a-failed-cost-read-poisons-the-reassessment-transaction.md) 隔离评审立（作者子代理代笔；用户「你作为业务和系统专家自决……解决所有的问题」授权）。
