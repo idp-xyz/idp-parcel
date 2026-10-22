@@ -1,7 +1,7 @@
 # 11 SA 对账单纳入不核「结算归属日」，归属日判定也没接进任何进程
 
 Category: bug
-Status: in-progress——隔离评审无阻断，修订轮已改完，待进 main，分支 claude-code11。原分级 R2（上线后尽快）：截单发布已装配、无入口（`cmd/parcel-api/assemble_settlement_orchestrations.go` 的 `CutOffPublishStatementHandler`；`cmd/parcel-api/main.go` 只为启动即查而装，没有端点也没有派发路由，ADR-0222 决定六）。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——隔离评审无阻断，修订轮已改完，待进 main，分支 claude-code11。原分级 R2（上线后尽快）：截单发布已装配、无入口（`cmd/parcel-api/assemble_settlement_orchestrations.go` 的 `CutOffPublishStatementHandler`；`cmd/parcel-api/main.go` 只为启动即查而装，没有端点也没有派发路由，ADR-0222 决定六）。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
 Blocked by: 无——2026-10-21 文档自洽 09 已裁（[ADR-0269](../../../docs/adr/0269-business-time-zone-and-cutoff-belong-to-the-statement-arrangement-of-the-settlement-account-and-the-cut-admits-by-attribution-date.md)），裁向见文末「裁向（文档自洽 09，2026-10-21）」。此前：docs-consistency/09（SA+CR 修订）先裁 [audit/sa-cr.md](../audit/sa-cr.md) M11：业务时区与截单时刻的唯一权威是「对账安排」还是费用项目的归属日登记。纳入判据读哪一处，随这一裁。
 出处：[audit/sa-cr.md](../audit/sa-cr.md) M7（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，SA 代码在此期间未改）。
 
@@ -121,3 +121,10 @@ M：截单编排读（或当场判）每件费用的归属日，归属日晚于�
 - 一次性库三步：main（`5cc309c5b`）`seed.sh` 灌 → 分支 `go run ./scripts/demo-seeds/migrate`（`applied=1`，施加 `0045`）→ 分支再跑一次 migrate（`applied=0`）：三步都退 0；灌完 `customer_charge` 0 行、`statement_arrangement` 0 行、`charge_attribution` 只剩 `tenant_id`/`fee_item`/`form`/`registered_at`/`inserted_at` 五列。用后删库。
 - 顺带一笔，与本票无关：把「再跑一次」读成在同一库上再跑一遍 `seed.sh` 时，退 3，停在 network-routing 的 `node` 登记（`logistics_node_version_pkey` 重复键）；对照组 main 自己的 `seed.sh` 在同一库上连跑两遍也在同一处退 3，是种子脚本本就不幂等，不是 `0045` 带来的。
 - `go run ./tools/at-coverage-counts -check` 在 tip 上报不一致（本票只移行、不手算总览计数），留给推送方重生成。
+
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-code11` 由作者 rebase 到 main `5cc309c5b` 后快进，tip `4161b7567`；隔离评审无阻断，N1–N3 由协调方裁定后在修订轮收：code/86（截单不核费用所属结算账户）并入本票修、号不回收；归属日落库补「预估行改写成确认」真库证据；两册都登了仍判不出的存量行改为逐件 `SOURCE_INSTANT_MISSING` 排除。修订 diff 与评审处方一致，协调方核过后未再起第二轮评审。
+- 协调方单独提交重算的 AT 计数与重生成的机制清点；ADR 索引无变化；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净；演示种子在一次性库上灌通（迁移 SA 0045），用后删库。评审另在一次性库验过「main 灌种子 → 分支升级 → 再跑一次」三步。
+- 去向：无新票（code/86 已并入）。截单与确认两只编排今天「已装配、无入口」（ADR-0222 决定六），端点落地时要把新结果格接进译装。
