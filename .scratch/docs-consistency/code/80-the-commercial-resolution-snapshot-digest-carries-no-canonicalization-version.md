@@ -1,7 +1,7 @@
 # 80 商业解析快照的内容摘要不带规范化版本，形状一变，新旧构建彼此答内容冲突或静默回到现选
 
 Category: bug
-Status: in-progress——隔离评审无阻断，评审意见已收，待进 main，分支 claude-code80。原分诊：needs-triage——R2（上线后尽快）：首个租户实例进生产之前改形有规则可依（ADR-0267 决定三，已存摘要只在演示库、重灌即消）；进生产之后快照再改一次形就没有规则可依——滚动发布或回滚时新旧构建并存，旧构建对新构建写下的快照重放 Save 答内容冲突、挡住接受，旧构建读新快照会把不认得的键丢掉，例如 code/61 的底座一格丢掉之后静默回到按锚点现选。今天演示租户不撞，绕法：上线前不再改快照形状。2026-10-21 协调方据票 code/61 隔离评审 N1 立（用户「你作为业务和系统专家自决」授权）。
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——隔离评审无阻断，评审意见已收，待进 main，分支 claude-code80。原分诊：needs-triage——R2（上线后尽快）：首个租户实例进生产之前改形有规则可依（ADR-0267 决定三，已存摘要只在演示库、重灌即消）；进生产之后快照再改一次形就没有规则可依——滚动发布或回滚时新旧构建并存，旧构建对新构建写下的快照重放 Save 答内容冲突、挡住接受，旧构建读新快照会把不认得的键丢掉，例如 code/61 的底座一格丢掉之后静默回到按锚点现选。今天演示租户不撞，绕法：上线前不再改快照形状。2026-10-21 协调方据票 code/61 隔离评审 N1 立（用户「你作为业务和系统专家自决」授权）。
 Blocked by: 无
 上下文：PC（参与方与商业），商业解析库。
 出处：票 [code/61](./61-a-contract-tier-service-rule-reads-its-product-base-at-claim-time.md) 隔离评审 N1。
@@ -97,3 +97,10 @@ PC CONTEXT、UC-PC-002 与 ADR 正文未改；AT 盘点未动（无对应行要�
 - N3 用例：`TestASnapshotWhoseVersionDisagreesWithItsDigestIsNotRead` 加子用例「版本键在场却为空」（`jsonb_set(snapshot,'{canonicalization}','""')` 配无前缀摘要）。变异核对：去掉空键校验，这一格红，复原后绿。
 - 票面措辞：代决 3 改实（重写出的是 main `32dc1d98d` 那一版的字节，更早形状的存量与 main 同，靠 code/61 的重灌消掉）；代决 1 改为「没有别的摘要前缀叫 `PCR-`」。
 - 可选一条已收：`ErrCanonicalizationUnsupported` 头注放宽到商业发布与解析快照两面。
+
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-code80` 基于 main `32dc1d98d`，无需 rebase，快进到 tip `5e5b953e9`；隔离评审无阻断，评审 N1–N3 与票面措辞已收。
+- 协调方单独提交重生成的机制清点；ADR 索引与 AT 计数无变化；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净。无迁移，未灌种子。
+- 去向：code/85（`loadPrior` 读不回不记提供方日志，R3）。
