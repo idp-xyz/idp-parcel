@@ -11,18 +11,18 @@
 | collectionremittance | 24 | 12 | 4 | 6 | 0 | 3 |
 | customscompliance | 126 | 126 | 24 | 47 | 10 | 18 |
 | networkrouting | 83 | 96 | 9 | 16 | 2 | 7 |
-| nodeoperations | 109 | 116 | 15 | 29 | 4 | 16 |
+| nodeoperations | 110 | 117 | 15 | 29 | 4 | 17 |
 | parcelpricing | 142 | 129 | 19 | 19 | 1 | 24 |
-| parcelshipment | 215 | 213 | 21 | 41 | 10 | 19 |
+| parcelshipment | 218 | 215 | 22 | 41 | 10 | 21 |
 | partycommercial | 171 | 184 | 14 | 43 | 1 | 39 |
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
-| platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
+| platform（非业务） | 26 | 24 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 229 | 169 | 38 | 67 | 13 | 10 |
 | transportfulfillment | 279 | 281 | 50 | 57 | 15 | 50 |
 | visibilityexception | 115 | 115 | 12 | 31 | 8 | 12 |
-| **合计** | 1579 | 1540 | 211 | 368 | 65 | 204 |
+| **合计** | 1584 | 1544 | 212 | 368 | 65 | 207 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 218、测试 329。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 218、测试 331。
 
 ## 跨上下文消费缝：50 组，153 个生产文件
 
