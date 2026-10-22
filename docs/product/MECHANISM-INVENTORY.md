@@ -17,12 +17,12 @@
 | partycommercial | 171 | 185 | 14 | 43 | 1 | 39 |
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 26 | 24 | 0 | 0 | 0 | 0 |
-| settlementaccounting | 229 | 169 | 38 | 67 | 13 | 10 |
+| settlementaccounting | 230 | 173 | 38 | 68 | 13 | 10 |
 | transportfulfillment | 279 | 281 | 50 | 57 | 15 | 50 |
 | visibilityexception | 115 | 116 | 12 | 31 | 8 | 12 |
-| **合计** | 1586 | 1553 | 213 | 369 | 65 | 207 |
+| **合计** | 1587 | 1557 | 213 | 370 | 65 | 207 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 218、测试 335。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 218、测试 336。
 
 ## 跨上下文消费缝：50 组，153 个生产文件
 
@@ -79,7 +79,7 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 8 |
 
-## 迁移：12 个模块共 301 份 SQL
+## 迁移：12 个模块共 302 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -92,7 +92,7 @@
 | parcel_shipment | 29 |
 | party_commercial | 40 |
 | pilot_governance | 8 |
-| settlement_accounting | 43 |
+| settlement_accounting | 44 |
 | transport_fulfillment | 44 |
 | visibility_exception | 28 |
 
@@ -145,7 +145,7 @@
 | （未归类） | 1 |
 | **合计** | 39 |
 
-## 端口：声明 585 个；基线口径缺 37，精确口径缺 2
+## 端口：声明 589 个；基线口径缺 38，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
@@ -162,6 +162,7 @@
 - `settlementaccounting.AmountGrammarView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.AmountGrammars）
 - `settlementaccounting.AuditEscalationCeilingRegister` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.AuditEscalationCeilings）
 - `settlementaccounting.AuditEscalationCeilingView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.AuditEscalationCeilings）
+- `settlementaccounting.ChargeAttributionDateRecorder` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.CustomerCharges）
 - `settlementaccounting.ChargeConfirmationFactRegister` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.SettlementCatalogues）
 - `settlementaccounting.ClaimAmountRuleRegister` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.SettlementCatalogues）
 - `settlementaccounting.ClaimAmountRuleView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.SettlementCatalogues）
