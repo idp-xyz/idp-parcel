@@ -1,7 +1,7 @@
 # 72 停在等待受控补充的那一轮也释放本版本已成立的占用
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code72（见文末「完成记录」）。此前 ready-for-agent——R2（上线后尽快）：Decide 判出资料不足、停在`等待受控补充`时，本版本已成立的冻结或额度占用一直占着，直到客户补件（code/20 在取代时放）或撤回。客户不补件也不撤回时，那一笔就一直占下去。协调方已裁定照下文做（见「要裁的」）。2026-10-21 协调方据 code/20 隔离评审与越权风险点 2 立。
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code72（见文末「完成记录」）。此前 ready-for-agent——R2（上线后尽快）：Decide 判出资料不足、停在`等待受控补充`时，本版本已成立的冻结或额度占用一直占着，直到客户补件（code/20 在取代时放）或撤回。客户不补件也不撤回时，那一笔就一直占下去。协调方已裁定照下文做（见「要裁的」）。2026-10-21 协调方据 code/20 隔离评审与越权风险点 2 立。
 Blocked by: 无
 出处：code/20 完成记录越权风险点 2；code/20 隔离评审。
 
@@ -106,3 +106,10 @@ AT 盘点：`AT-PS-035` 行再补三条路两版都放不掉的编排用例，`A
 - 新用例与改动用例 `-count=3`（PS `application` 释放相关、PS `adapters/postgres` 的 savepoint 用例、`cmd/parcel-dispatch` 中毒释放、再驱与受控补充释放各条）：ok。
 - 变异：装饰器改成直通，两条中毒真库用例变红；`or` 改成后者胜出，N4 四条变红。恢复后绿。
 - `go build ./...`、`go vet ./...`、`gofmt -l` 干净。
+
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-code72`（code/72 与 code/73 同批）已由作者 rebase 到 main `e0d0909cf`，快进到 tip `8ae0a780a`；隔离评审无阻断，N1–N4 已收。N1（释放与暂停同笔、无保存点）由协调方裁定在本票内修，放行 `cmd/parcel-dispatch/assemble.go` 与 `cmd/parcel-api` 三个 assemble 文件各改一行包上 `SavepointedControlRelease`；协调方核过装饰器与装配 diff，未再起第二轮评审。
+- 协调方单独提交重生成的机制清点；ADR 索引与 AT 计数无变化；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净。无迁移，未灌种子。
+- 去向：保存点装饰器是又一份副本，已登记在 code/81。
