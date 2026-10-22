@@ -23,6 +23,8 @@ import (
 // 本文件对真实 PostgreSQL 16 证「资料不足 → 已占用 → 补件取代」那一格（票 docs-consistency/code/20）：可达性答`证据不足`时
 // 接受链照常进入接受前财务控制、在 settlement-accounting 的冻结账本上占下首版那一笔，形成决定处停在`等待受控补充`；客户
 // 补件形成新版本，「新提交版本已形成」那一封驱链时先按原关联放掉首版那一笔，再判新版本——新版本照常进入控制、重新占一笔。
+// 暂停那一轮本就释放首版那一笔（customer_supplement_pause_release_test.go）；这里让那一次放不掉、留成补偿，首版补件时
+// 仍占着，链开头那一步就是它的兜底。
 //
 // 夹具借受控补充那条闭环（customer_supplement_resume_loop_test.go），把控制与释放两口换成生产的 PS→SA 适配器：作用域源、
 // 账户目录、SA 施加与释放两只编排、两本账、采用册与留痕册都是生产实现、读写夹具自己的库；只有控制策略视图与试算口是替身
@@ -45,7 +47,9 @@ func TestASupersededVersionsFreezeIsReleasedOnceBeforeTheNewVersionIsControlled(
 	firstVersion := fixture.requestID.String() + "/SYN-VER-01"
 	newVersion := fixture.requestID.String() + "/" + synRSupplementVersionID
 
-	// 首版：资料不足照样进控制，冻结账本上占下首版那一笔；决定停在`等待受控补充`，本份投递入账。
+	// 首版：资料不足照样进控制，冻结账本上占下首版那一笔；决定停在`等待受控补充`，本份投递入账。暂停那一轮的释放
+	// 放不掉：暂停照旧入账，首版那一笔留着等补偿。
+	release.failuresLeft = 1
 	fixture.submit(t, ctx)
 	request := fixture.mustLoadRequest(t, ctx)
 	mustWithinTX(t, fixture.transactor, ctx, func(txCtx context.Context) error {
@@ -61,7 +65,10 @@ func TestASupersededVersionsFreezeIsReleasedOnceBeforeTheNewVersionIsControlled(
 		t.Fatalf("等待态 = %v（present=%v）, want CUSTOMER_SUPPLEMENT", waiting, present)
 	}
 	if got := fixture.freeze(t, ctx, firstVersion); !got.present || got.status != 1 || got.amount != synRSupersededFreezeMinor {
-		t.Fatalf("首版冻结 = %+v, want 已冻结 %d——资料不足时控制照常占下了这一笔", got, synRSupersededFreezeMinor)
+		t.Fatalf("首版冻结 = %+v, want 已冻结 %d——资料不足时控制照常占下了这一笔，暂停那一次释放放不掉", got, synRSupersededFreezeMinor)
+	}
+	if release.failuresLeft != 0 {
+		t.Fatal("暂停那一轮没有去放首版那一笔")
 	}
 	fixture.markPublished(t, submittedDelivery)
 

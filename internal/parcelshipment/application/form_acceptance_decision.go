@@ -224,7 +224,7 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 		// 规则要求的人工复核尚未完成。委托保持`已提交`，任务继续可续办。
 		reason := pendingReasonFor(decided)
 		if reason == ManualReviewPending || reason == CustomerSupplementPending || reason == AuthorizedDispositionPending {
-			return handler.pauseForExternalResume(ctx, command, request, decided, reason)
+			return handler.pauseForExternalResume(ctx, command, request, decided, reason, recorded.FinancialControl)
 		}
 		return handler.undecided(ctx, command, reason, request.State()), nil
 	}
@@ -278,12 +278,23 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 // 没落库就交它，等待态会随本轮回滚蒸发，队列上从此没有这份委托。改交保存那一格自己的原因
 // （没落库/换代冲突），消费门照旧回滚重投，下一轮重新走到这里。集合外的保存结果按端口坏了
 // 上抛，与越过提交边界那一支同一判断。
+//
+// 停进`等待受控补充`的那一版，暂停落库之后按原关联释放它已成立的占用。理由与 ADR-0132 决定一给`交客户补充`的那句
+// 相同：那一版只由新提交版本的信封续办、不会再被判（ADR-0106 决定三），占着客户的资金或额度等一份不会到来的接受
+// 没有依据；Decide 自己停进这一格与授权处置选`交客户补充`转进这一格，停住的版本是同一种处境。放在落库之后：暂停
+// 没落库时这一轮整体回滚重投，此刻放掉就是在一份不知道停没停住的版本上宣告它不会再被判。放不掉不撤销暂停——
+// 暂停已经落库、原因照旧交回，补偿另行续办，与拒绝那一支同一条理由；客户补件之后，接受链开头放被取代各版那一步
+// 会对同一笔再请求一次，提供方按幂等答原释放。
+//
+// `等待人工复核`与`等待授权处置`不放：前者复核完成后仍由任务按规则判、可以接受，那时那笔占用是合法的；后者由
+// 处置命令自己放，这里再放就是两条路认领同一笔。
 func (handler *FormAcceptanceDecisionHandler) pauseForExternalResume(
 	ctx context.Context,
 	command FormAcceptanceDecisionCommand,
 	request domain.ShipmentRequest,
 	decided domain.ShipmentRequest,
 	waiting JudgmentPendingReason,
+	control domain.FinancialControlResult,
 ) (FormAcceptanceDecisionResult, error) {
 	saved, err := handler.deps.Requests.Save(ctx, command.Identity, decided)
 	if err != nil {
@@ -296,7 +307,12 @@ func (handler *FormAcceptanceDecisionHandler) pauseForExternalResume(
 		}
 		return handler.undecided(ctx, command, reason, request.State()), nil
 	}
-	return handler.undecided(ctx, command, waiting, decided.State()), nil
+	paused := handler.undecided(ctx, command, waiting, decided.State())
+	if waiting == CustomerSupplementPending {
+		scope := handler.occupationRelease(command)
+		paused.compensation = scope.reference(scope.releaseFormed(ctx, command.SubmissionVersion, control))
+	}
+	return paused, nil
 }
 
 // revalidateOrResolve 执行 `UC-PC-002` 步骤 8：已经有采用过的解析时按它重解，看这份依据在
