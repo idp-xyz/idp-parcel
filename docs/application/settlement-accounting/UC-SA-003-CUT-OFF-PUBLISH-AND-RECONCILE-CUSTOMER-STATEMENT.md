@@ -1,6 +1,6 @@
 # UC-SA-003 截单、发布并处理客户对账单
 
-状态：客户截单、对账单、金额争议和既有调整纳入编排已形成，按结算归属日纳入与对账安排登记未落（见「给开发的交接」）；真实客户结算账户、账期、时区、币种、付款条件和争议规则待提供，生产分支保持 `No-Go / 待参数化`
+状态：客户截单、对账单、金额争议、既有调整纳入编排、对账安排登记与按结算归属日纳入已形成；真实客户结算账户、账期、时区、币种、付款条件和争议规则待提供，生产分支保持 `No-Go / 待参数化`
 
 ## 目标与边界
 
@@ -34,7 +34,7 @@
 | 成功结束 | 形成草稿、已发布对账单、争议范围或既有调整的后续账期纳入关系，并保留原周期关系 |
 | 负向结束 | 没有达到确认条件的费用或该周期明确不产生对账单 |
 | 待判断结束 | 账户政策、税务映射或费用确认条件不足 |
-| 未配置结束 | 租户取值没登记，如实答未配置，补登之后再截。按编排：截单触发门（`AdmitSettlementMomentHandler`）答 `SETTLEMENT_MOMENT_UNCONFIGURED`，不调用截单（ADR-0170 决定二）；归属日判不出（对账安排或费用项目的归属日形态没登记，`JudgeChargeAttributionHandler` 答 `CHARGE_ATTRIBUTION_UNCONFIGURED`）的那一件不入本期并被指名，其余合格费用照常纳入、草稿照常形成；命令列出的费用一件都入不了本期、且其中有判不出归属日的，不形成草稿，整笔答未配置并指名缺哪一册；一件都入不了本期而其中没有判不出归属日的，也不形成草稿，逐件指名晚于本期或已出账，不答未配置（[ADR-0269](../../adr/0269-business-time-zone-and-cutoff-belong-to-the-statement-arrangement-of-the-settlement-account-and-the-cut-admits-by-attribution-date.md) 决定四） |
+| 未配置结束 | 租户取值没登记，如实答未配置，补登之后再截。按编排：截单触发门（`AdmitSettlementMomentHandler`）答 `SETTLEMENT_MOMENT_UNCONFIGURED`，不调用截单（ADR-0170 决定二）；归属日判不出（对账安排或费用项目的归属日形态没登记，`JudgeChargeAttributionHandler` 答 `CHARGE_ATTRIBUTION_UNCONFIGURED`）的那一件不入本期并被指名，其余合格费用照常纳入、草稿照常形成；命令列出的费用一件都入不了本期、且其中有判不出归属日的，不形成草稿，整笔答未配置并指名缺哪一册（截单编排 `CutOffPublishStatementHandler` 答 `STATEMENT_CUT_UNCONFIGURED`）；一件都入不了本期而其中没有判不出归属日的，也不形成草稿，逐件指名晚于本期或已出账，不答未配置（[ADR-0269](../../adr/0269-business-time-zone-and-cutoff-belong-to-the-statement-arrangement-of-the-settlement-account-and-the-cut-admits-by-attribution-date.md) 决定四） |
 | 冲突结束 | 同一费用范围被多个周期/账户或不同版本同时要求纳入，无法按有效政策裁决 |
 | 未受理结束 | 请求主体、账户、客户、责任法人或权限不能合法关联 |
 | 未形成结束 | 截单、快照、发布或纳入关系提交因技术原因未完成 |
@@ -153,7 +153,6 @@
 
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
-| 元数据「未配置结束」一行，主流程步 2、步 3，`AT-SA-062`、`AT-SA-212`、`AT-SA-213` | 截单只核费用阶段是不是已确认，纳入清单与截单时刻全由调用方给，不读也不判归属日；`CHARGE_ATTRIBUTION_UNCONFIGURED` 今天只出自 `JudgeChargeAttributionHandler`，它在 `cmd/` 下没有构造，截单不交这个码——落地后截单对判不出的那一件带出它；截单编排也没有整笔未配置这一格，归属日判定的结果没有「缺哪一册」的原因格；时区与截单时刻还登在费用项目一册上，没有对账安排登记册；各行预期结果不变 | [code/11](../../../.scratch/docs-consistency/code/11-statement-cut-does-not-check-the-settlement-attribution-date.md) |
 | 生命周期「需要重新出具时创建新单并关联旧单」，`AT-SA-069` | 作废只留作废痕，新单与原单之间没有替代关系；本行预期结果不变 | [code/13](../../../.scratch/docs-consistency/code/13-voided-statement-has-no-replacement-relation.md) |
 
 ## 生产参数与待决风险

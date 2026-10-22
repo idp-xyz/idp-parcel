@@ -229,6 +229,5 @@
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
 | 接受前财务控制：估价采用与 SELL 计费时点采用同户一份计价范围 | 两只登记编排各写各的册、互不读，同一户可以登两个范围 | [code/62](../../../.scratch/docs-consistency/code/62-the-estimate-and-billing-moment-adoptions-may-register-different-pricing-scopes.md) |
-| 主流程步 6 的结算归属日随确认形成 | 确认不形成归属日；归属日判定编排在 `cmd/` 下没有构造，时区与截单时刻还登在费用项目一册上；规则不变 | [code/11](../../../.scratch/docs-consistency/code/11-statement-cut-does-not-check-the-settlement-attribution-date.md) |
 
 完成本用例只证明纯计价评价、财务采用、费用生命周期和接受前财务控制能够保持独立、可追溯和追加式；客户对账、供应商审核、真实收付款和经营结果分别由其他 PN-07 用例形成。

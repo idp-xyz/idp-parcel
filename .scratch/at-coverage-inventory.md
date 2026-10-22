@@ -360,6 +360,7 @@
 | `AT-SA-056` | internal/settlementaccounting/domain/customer_charge_test.go::TestAdjustmentsDemandTheirSemanticKind |
 | `AT-SA-059` | internal/settlementaccounting/domain/customer_statement_test.go::TestACutOffDraftAdmitsOnlyConfirmedCharges |
 | `AT-SA-060` | internal/settlementaccounting/domain/customer_statement_test.go::TestACutOffDraftAdmitsOnlyConfirmedCharges |
+| `AT-SA-062` | internal/settlementaccounting/application/cut_off_attribution_test.go::TestACutJudgesAnUnattributedChargeInTheAccountsTimeZoneAndRecordsIt；internal/settlementaccounting/domain/charge_attribution_test.go::TestAttributionDateFallsInTheArrangementTimeZone |
 | `AT-SA-063` | internal/settlementaccounting/domain/customer_statement_test.go::TestACutOffDraftAdmitsOnlyConfirmedCharges |
 | `AT-SA-064` | internal/settlementaccounting/domain/customer_statement_test.go::TestLateChargesAndAdjustmentsGoToSubsequentPeriods |
 | `AT-SA-065` | internal/settlementaccounting/application/cut_off_publish_statement_test.go::TestAStatementPublishesOnlyConfirmedCharges；internal/settlementaccounting/domain/customer_statement_test.go::TestAPublishedStatementIsASealedSnapshot |
@@ -433,6 +434,8 @@
 | `AT-SA-209` | internal/settlementaccounting/application/withdraw_supplier_expected_cost_test.go::TestALateEvaluationOfAnInvalidatedVersionFormsNothingAndTheSupersedingOneRestatesTheCost |
 | `AT-SA-210` | internal/settlementaccounting/adapters/transportfulfillment/request_on_charge_occurrence_formed_test.go::TestARevisedOccurrenceIsMarkedForTheTrigger；cmd/parcel-dispatch/supplier_cost_on_occurrence_invalidated_test.go::TestAnInvalidatedOccurrenceWithdrawsItsSupplierCostAndTheReestablishedOneIsEvaluatedAgain（生产依赖图） |
 | `AT-SA-211` | internal/settlementaccounting/application/receive_supplier_bill_not_current_test.go::TestABillLineNamingANonCurrentExpectedCostIsNotMatched；internal/settlementaccounting/adapters/postgres/supplier_cost_occurrence_state_test.go::TestTheSuccessorOfAnExpectedCostVersionIsReadBack（后继读口） |
+| `AT-SA-212` | internal/settlementaccounting/application/cut_off_attribution_test.go::TestACutAdmitsByTheLastAttributionDateAndNamesTheLaterCharge；internal/settlementaccounting/application/cut_off_attribution_test.go::TestACutWithNothingInPeriodFormsNoDraftAndNamesEachCharge |
+| `AT-SA-213` | internal/settlementaccounting/application/cut_off_attribution_test.go::TestACutNamesTheRegisterAnUnjudgeableChargeIsMissing；internal/settlementaccounting/application/cut_off_attribution_test.go::TestACutWithNothingInPeriodAndAnUnjudgeableChargeIsUnconfigured；internal/settlementaccounting/application/cut_off_attribution_test.go::TestACutJudgesAnUnattributedChargeInTheAccountsTimeZoneAndRecordsIt |
 | `AT-TF-002` | internal/transportfulfillment/application/accept_regulatory_disposition_test.go::TestANodeOnlyCollaborationBuildsNoTransportObject |
 | `AT-TF-003` | internal/transportfulfillment/application/accept_regulatory_disposition_test.go::TestDetentionWithoutMovementAuthorityIsSupplementRequired |
 | `AT-TF-004` | internal/transportfulfillment/application/accept_regulatory_disposition_test.go::TestDetentionWithoutMovementAuthorityIsSupplementRequired |
@@ -824,8 +827,6 @@
 | `AT-SA-173` | 相同输入快照、方向、目的和版本清单重复请求 | UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md |
 | `AT-SA-174` | SELL 评价完成但价格费用代码没有唯一费用项目映射 | UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md |
 | `AT-SA-175` | 节点实测重量超出价卡明确排除范围，`parcel-pricing` 返回不可计价 | UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md |
-| `AT-SA-212` | 截单命令列出的已确认费用里，有一件的归属日晚于命令点名的本期最后一个归属日 | UC-SA-003-CUT-OFF-PUBLISH-AND-RECONCILE-CUSTOMER-STATEMENT.md |
-| `AT-SA-213` | 截单命令列出的已确认费用没有归属日，本账户的对账安排或该费用项目的归属日形态没登记 | UC-SA-003-CUT-OFF-PUBLISH-AND-RECONCILE-CUSTOMER-STATEMENT.md |
 | `AT-TF-001` | 当前有效监管退运决定、明确对象及新路由均有效 | UC-TF-001-ACCEPT-AND-FULFILL-REGULATORY-TRANSPORT-DISPOSITION.md |
 | `AT-TF-005` | 运输协作已承接且完成订舱/承运接受，但尚未交接 | UC-TF-001-ACCEPT-AND-FULFILL-REGULATORY-TRANSPORT-DISPOSITION.md |
 | `AT-TF-007` | 节点已装载并扫描交出，但双方证据尚不足 | UC-TF-001-ACCEPT-AND-FULFILL-REGULATORY-TRANSPORT-DISPOSITION.md |
@@ -989,7 +990,6 @@
 | `AT-SA-033` | 批量含成立、不成立、待判断、冲突和越权范围 | 查询/权限/审计面（接入与持久化闸门后） | UC-SA-001-ASSESS-ACTUAL-ADVANCE-AND-FORM-CUSTOMER-RECOVERY.md |
 | `AT-SA-057` | 批量含确认、待判断和技术失败范围 | 查询/权限/审计面（接入与持久化闸门后） | UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md |
 | `AT-SA-058` | 检查本用例形成的对象 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md |
-| `AT-SA-062` | 账户时区跨日 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-SA-003-CUT-OFF-PUBLISH-AND-RECONCILE-CUSTOMER-STATEMENT.md |
 | `AT-SA-066` | 税务系统只返回未税金额 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-SA-003-CUT-OFF-PUBLISH-AND-RECONCILE-CUSTOMER-STATEMENT.md |
 | `AT-SA-099` | 批量含通过、争议、拒绝和技术失败行 | 查询/权限/审计面（接入与持久化闸门后） | UC-SA-004-RECEIVE-MATCH-AND-AUDIT-SUPPLIER-BILL.md |
 | `AT-SA-116` | 供应商审核应付或客户赔付义务已形成，匹配的真实付款事实到达 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-SA-005-MAP-EXTERNAL-FUNDS-AND-APPLY-SETTLEMENT.md |
