@@ -113,4 +113,11 @@ M：截单编排读（或当场判）每件费用的归属日，归属日晚于�
 - **N3**：两册都登了仍判不出改为逐件排除（代决 5 改写）：新排除原因 `SOURCE_INSTANT_MISSING`，不计入未配置；一件都入不了时整笔 `NO_CHARGE_IN_PERIOD`。排除原因集补封闭纪律用例。UC-SA-003 结果表没有列整笔 `SOURCE_NOT_ACCEPTED` 这一格，不改。
 - **顺手**：领域层补「归属日等于本期最后一日 → 入本期」用例（评审 `|| date == last` 变异重跑报红）；`NewConfirmChargeHandler`、`NewCutOffPublishStatementHandler` 补 nil 守（代决 12）；assemble 注释「不为此种任何行」改「不为此种下任何行」；越权风险点加 tzdata 旧名与 `customer_charge_id` 无 UNIQUE 两笔。
 
-修订轮探针重跑结果与最终 SHA 见下。
+修订轮探针（在 `git rebase main` 到 `5cc309c5b` 之后的 tip `da62fc0d0` 上重跑，无冲突）：
+
+- `go build ./... && go vet ./...` 退 0；`git diff main` 涉及的 `.go` 文件 `gofmt -l` 无输出。
+- `TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/settlementaccounting/... ./cmd/parcel-settlement-register/... ./cmd/parcel-api/... ./internal/architecture/... ./migrations/...`：退 0。
+- 新用例 `-count=3`（含修订轮新加的账户核对、`SOURCE_INSTANT_MISSING`、封闭集合、nil 守、N2 真库、等于本期最后一日各例）：退 0。
+- 一次性库三步：main（`5cc309c5b`）`seed.sh` 灌 → 分支 `go run ./scripts/demo-seeds/migrate`（`applied=1`，施加 `0045`）→ 分支再跑一次 migrate（`applied=0`）：三步都退 0；灌完 `customer_charge` 0 行、`statement_arrangement` 0 行、`charge_attribution` 只剩 `tenant_id`/`fee_item`/`form`/`registered_at`/`inserted_at` 五列。用后删库。
+- 顺带一笔，与本票无关：把「再跑一次」读成在同一库上再跑一遍 `seed.sh` 时，退 3，停在 network-routing 的 `node` 登记（`logistics_node_version_pkey` 重复键）；对照组 main 自己的 `seed.sh` 在同一库上连跑两遍也在同一处退 3，是种子脚本本就不幂等，不是 `0045` 带来的。
+- `go run ./tools/at-coverage-counts -check` 在 tip 上报不一致（本票只移行、不手算总览计数），留给推送方重生成。
