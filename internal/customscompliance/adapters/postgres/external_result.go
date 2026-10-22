@@ -59,21 +59,22 @@ func (repository *ExternalResults) FindByKey(
 	}
 
 	var (
-		digest, rawSemantics, claimedVersion string
-		unattributable, layerConflict        bool
-		resultJSON                           []byte
-		recordedAt                           time.Time
+		digest, rawSemantics, claimedVersion             string
+		unattributable, layerConflict, correctionInForce bool
+		resultJSON                                       []byte
+		corrects                                         *string
+		recordedAt                                       time.Time
 	)
 	err = querier.QueryRow(ctx,
 		`SELECT content_digest, unattributable, raw_semantics, claimed_version,
-		        layer_conflict, result, recorded_at
+		        layer_conflict, result, recorded_at, corrects_source_id, correction_in_force
 		   FROM customs_compliance.external_result
 		  WHERE tenant_id = $1
 		    AND source_id = $2`,
 		key.TenantID.String(),
 		key.SourceID,
 	).Scan(&digest, &unattributable, &rawSemantics, &claimedVersion,
-		&layerConflict, &resultJSON, &recordedAt)
+		&layerConflict, &resultJSON, &recordedAt, &corrects, &correctionInForce)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.ExternalResultRecord{}, false, nil
 	}
@@ -89,9 +90,11 @@ func (repository *ExternalResults) FindByKey(
 		ClaimedVersion: claimedVersion,
 		LayerConflict:  layerConflict,
 		RecordedAt:     recordedAt.UTC(),
+		// 生效标记照库里读回，不在读口另判：它是接收那一刻的判断。
+		CorrectionInForce: correctionInForce,
 	}
 	if len(resultJSON) > 0 {
-		result, err := rebuildResult(resultJSON)
+		result, err := rebuildResult(resultJSON, corrects)
 		if err != nil {
 			return ports.ExternalResultRecord{}, false, fmt.Errorf("find external result: %w", err)
 		}
@@ -122,7 +125,7 @@ func (repository *ExternalResults) Save(
 	}
 
 	var resultJSON []byte
-	var submissionVersion *string
+	var submissionVersion, corrects *string
 	if !record.Unattributable {
 		row := rowOf(record.Result)
 		resultJSON, err = json.Marshal(row)
@@ -131,14 +134,20 @@ func (repository *ExternalResults) Save(
 		}
 		version := record.Result.Version().String()
 		submissionVersion = &version
+		if corrected, has := record.Result.Corrects(); has {
+			corrects = &corrected
+		}
 	}
 
+	// ON CONFLICT 只认主键：更正关系的外键、形状 CHECK 与「至多一份生效的更正」唯一索引被撞上是写入方
+	// 违了不变量，照错误上抛，不译成`已有记录`。
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO customs_compliance.external_result
 			(tenant_id, source_id, content_digest, unattributable, raw_semantics,
-			 claimed_version, layer_conflict, result, submission_version, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		 ON CONFLICT DO NOTHING`,
+			 claimed_version, layer_conflict, result, submission_version, recorded_at,
+			 corrects_source_id, correction_in_force)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		 ON CONFLICT ON CONSTRAINT external_result_pkey DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.SourceID,
 		record.ContentDigest,
@@ -149,6 +158,8 @@ func (repository *ExternalResults) Save(
 		resultJSON,
 		submissionVersion,
 		record.RecordedAt.UTC(),
+		corrects,
+		record.CorrectionInForce,
 	)
 	if err != nil {
 		return ports.ExternalResultSaveOutcomeInvalid, fmt.Errorf("save external result: %w", err)
@@ -251,7 +262,7 @@ func releaseKindFrom(raw string) (domain.ReleaseKind, error) {
 // 比对。只回可归属事实——归属不上的留存记录没有监管事实可比。记了同层冲突的也回：冲突
 // 关系在两份事实之间，被标的那份仍要参与比对（判法见 domain.CheckLayerConsistency）。
 // 放行层连同放行事实一起读回；放行事实落点建立之前的放行层存量没有那一行，如实不带。
-// 顺序按入库序稳定。
+// 被生效更正取代的那份也回：取代与否由领域按后继行判，读面不替它滤。顺序按入库序稳定。
 //
 // 查询之前按（租户、提交版本）取事务级咨询锁，把「读同一提交的在册事实 → 判同层一致性 →
 // 落册」串起来：读已提交下两份同层结果在两笔并发事务里到达，各自读不到对方尚未提交的那一行，
@@ -279,7 +290,8 @@ func (repository *ExternalResults) LoadForSubmission(
 	}
 
 	rows, err := executor.Query(ctx,
-		`SELECT e.source_id, e.result, r.kind, r.authority_ref, r.scope_ref, r.condition, r.received_at
+		`SELECT e.source_id, e.result, e.corrects_source_id, e.correction_in_force,
+		        r.kind, r.authority_ref, r.scope_ref, r.condition, r.received_at
 		   FROM customs_compliance.external_result e
 		   LEFT JOIN customs_compliance.release_outcome r
 		     ON r.tenant_id = e.tenant_id AND r.source_id = e.source_id
@@ -299,17 +311,20 @@ func (repository *ExternalResults) LoadForSubmission(
 		var (
 			sourceID                          string
 			resultJSON                        []byte
+			corrects                          *string
+			correctionInForce                 bool
 			kind, authority, scope, condition *string
 			releaseReceivedAt                 *time.Time
 		)
-		if err := rows.Scan(&sourceID, &resultJSON, &kind, &authority, &scope, &condition, &releaseReceivedAt); err != nil {
+		if err := rows.Scan(&sourceID, &resultJSON, &corrects, &correctionInForce,
+			&kind, &authority, &scope, &condition, &releaseReceivedAt); err != nil {
 			return nil, fmt.Errorf("load external results: %w", err)
 		}
-		result, err := rebuildResult(resultJSON)
+		result, err := rebuildResult(resultJSON, corrects)
 		if err != nil {
 			return nil, fmt.Errorf("load external results: %s: %w: %w", sourceID, ports.ErrLayerFactInconsistent, err)
 		}
-		fact := domain.LayerFact{Result: result}
+		fact := domain.LayerFact{Result: result, CorrectionInForce: correctionInForce}
 		if kind != nil {
 			if authority == nil || scope == nil || condition == nil || releaseReceivedAt == nil {
 				return nil, fmt.Errorf("load external results: %s: %w: release outcome row is incomplete",
@@ -345,10 +360,16 @@ func rowOf(result domain.ExternalResult) resultRow {
 	}
 }
 
-func rebuildResult(raw []byte) (domain.ExternalResult, error) {
+// rebuildResult 把 result jsonb 与更正指向一列一起经领域构造函数重建。更正指向不进 jsonb：它要被外键与唯一
+// 索引钉住，只在列上存一份。
+func rebuildResult(raw []byte, corrects *string) (domain.ExternalResult, error) {
 	var row resultRow
 	if err := json.Unmarshal(raw, &row); err != nil {
 		return domain.ExternalResult{}, err
+	}
+	corrected := ""
+	if corrects != nil {
+		corrected = *corrects
 	}
 	layer, err := resultLayerFrom(row.Layer)
 	if err != nil {
@@ -381,6 +402,7 @@ func rebuildResult(raw []byte) (domain.ExternalResult, error) {
 		Scope:        scope,
 		OccurredAt:   row.OccurredAt,
 		ReceivedAt:   row.ReceivedAt,
+		Corrects:     corrected,
 	})
 }
 

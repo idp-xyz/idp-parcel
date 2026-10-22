@@ -105,6 +105,23 @@ func TestIntegrationClientIntakeLeavesAnAbsentReleaseAbsent(t *testing.T) {
 	if command.Release != nil {
 		t.Fatalf("Release = %+v, want nil", command.Release)
 	}
+	if command.Corrects != "" {
+		t.Fatalf("Corrects = %q, want 空——没带更正指向就没有更正语义", command.Corrects)
+	}
+}
+
+// Covers: UC-CC-006「同一层次和业务事项的后续明确更正形成新结果及更正关系」的接入半边——载荷可带来源声明所更正那份的
+// 来源标识，原样交给编排，接入侧不判它指不指得到。
+func TestIntegrationClientIntakeCarriesTheCorrectedSourceIdentity(t *testing.T) {
+	command, err := clientIntakeForTest(t, nil).IntakeResult(context.Background(), commandRequest(
+		`{"sourceId":"s-2","layer":"ASSESSED_DUTY","role":"r","rawSemantics":"DUTY/USD-95.50","claimedVersion":"v","scope":"u",`+
+			`"occurredAt":"2026-09-24T10:30:00+08:00","correctsSourceId":"s-1"}`))
+	if err != nil {
+		t.Fatalf("intake：%v", err)
+	}
+	if command.Corrects != "s-1" {
+		t.Fatalf("Corrects = %q, want s-1", command.Corrects)
+	}
 }
 
 func TestIntegrationClientIntakeRefusesMalformedExternalResults(t *testing.T) {

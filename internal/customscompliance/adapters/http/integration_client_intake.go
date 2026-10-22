@@ -101,6 +101,7 @@ func (intake *IntegrationClientIntake) IntakeResult(
 		Attempt:        document.Attempt,
 		Scope:          document.Scope,
 		ReceivedAt:     intake.clock.Now().UTC(),
+		Corrects:       document.CorrectsSourceID,
 	}
 	if document.Layer != "" {
 		if command.Layer, err = resultLayerFromWord(document.Layer); err != nil {
@@ -153,6 +154,8 @@ type externalResultDocument struct {
 	Scope          string                   `json:"scope"`
 	OccurredAt     string                   `json:"occurredAt"`
 	Release        *externalReleaseDocument `json:"release,omitempty"`
+	// CorrectsSourceID 是来源声明本结果所更正的那一份的来源标识，可缺；指不指得到由编排判。
+	CorrectsSourceID string `json:"correctsSourceId,omitempty"`
 }
 
 type externalReleaseDocument struct {
