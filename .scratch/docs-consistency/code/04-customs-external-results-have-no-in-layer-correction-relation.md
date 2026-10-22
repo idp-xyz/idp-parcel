@@ -1,7 +1,7 @@
 # 04 CC 外部结果没有层内更正关系：来源明确的更正照判同层冲突
 
 Category: bug
-Status: ready-for-agent——R2（上线后尽快）：外部结果接收已在生产装配（`cmd/parcel-api/assemble_external_results.go`）；监管核定税费换金额、处置决定换种类、放行收窄这类明确更正一到，就被判冲突，进不了当前判断，也到不了 VE。偏保守（不会误放），但核定税费的更正碰钱、且冲突今天无人可见、无处置入口。首发关务只接受控模拟与沙箱，真实程序的更正形态（`PAR-CUS` 一类）尚未给出，所以列 R2；接真实关务程序之前升 R1。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
+Status: in-progress——完工待评审与进 main，分支 claude-code04（见文末「完成记录」）。此前 ready-for-agent——R2（上线后尽快）：外部结果接收已在生产装配（`cmd/parcel-api/assemble_external_results.go`）；监管核定税费换金额、处置决定换种类、放行收窄这类明确更正一到，就被判冲突，进不了当前判断，也到不了 VE。偏保守（不会误放），但核定税费的更正碰钱、且冲突今天无人可见、无处置入口。首发关务只接受控模拟与沙箱，真实程序的更正形态（`PAR-CUS` 一类）尚未给出，所以列 R2；接真实关务程序之前升 R1。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
 Blocked by: 无
 出处：[audit/cc.md](../audit/cc.md) M9（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，现象仍在）。
 
@@ -39,3 +39,59 @@ M：接收载荷与 `ExternalResultRecord` 加「更正哪一份」、迁移另�
 
 - 所指的那一份本身已被更正过时：按链取当前那一份，还是只许更正链尾。归 CC owner，作者可代决并写越权风险点。
 - VE 收到更正后的外部结果时怎样替代原条目：沿用 VE 替代链（推荐）还是另立更正关系。
+
+## 完成记录
+
+2026-10-21，分支 `claude-code04`（基于 main `be6b5ad20`），用户授权「你作为业务和系统专家自决……解决所有的问题」。
+
+### 做了什么
+
+- 领域：外部结果多一格来源内容「更正哪一份」（`ExternalResultSpec.Corrects`）；`CheckLayerConsistency` 先认更正关系再判矛盾，交回更正是否在同一范围上生效。所指那份须是同一提交版本、同一层的在册事实（否则 `ErrCorrectionOutsideSubmission` / `ErrCorrectionAcrossLayers`）；被生效更正取代的事实退出比对。
+- 编排：命令带 `Corrects`；所指那份未在册答未决 `CORRECTED_RESULT_NOT_RECORDED`（带续办引用、什么也不落），所指是归属不上的留存、跨版本、跨层或指向自身答未受理；生效与否随记录（`ExternalResultRecord.CorrectionInForce`）落下并交给下游。
+- 摘要：带更正指向的外部结果口写 `CCC-2`（ADR-0267 决定一：在已接的册正文里加键即换号），不带的照旧 `CCC-1` 逐字节不变；`CompareStoredExternalResultDigest` 认两版。带指向的命令没有无版本摘要可比。
+- 迁移 `migrations/customs_compliance/0027_external_result_correction_relation.sql`：`corrects_source_id`、`correction_in_force` 两列记在更正一侧新行上，所更正那行不动；外键钉所指在册，CHECK 守形状，部分唯一索引守只许更正链尾。
+- 读口：结果登记册的按键读与同层一致性读面连同更正关系读回；放行读口（动作准入与离港门禁读的那一口）排掉被生效更正取代的那份。
+- 接入：集成客户端载荷收 `correctsSourceId`。
+- 文档：CC CONTEXT「外部结果与规则时效」加一条「来源明确的层内更正不是同层冲突」；UC-CC-006 来源权威一节、`AT-CC-156` 首发注、待决表「同层冲突裁决」与结果表「外部结果冲突」改为已补、改指 CONTEXT 那一条；AT 盘点把 `AT-CC-156` 从④移到①（总览计数未动，进 main 时重算）。ADR 正文未改。
+- VE：只改 `internal/visibilityexception/adapters/customscompliance/derive_on_external_result.go` 的头注，派生行为不变，理由见代决第 9 条。
+
+### 代决
+
+1. **只许更正链尾**（票面「要裁的」第一条）。所指那份已被另一份生效更正取代时，两份更正都声称取代它，按到达先后或业务时间择一都是替来源判断谁更正了谁，所以后到那份记同层冲突，原有更正关系不变。不取「按链取当前那一份」：那等于把指名 A 的更正改读成指名 B。
+2. **更正只解释它与所指那份之间的差别。** 与其余同层在册事实（含已记冲突的，照 ADR-0226 决定二）仍照同层判法比；被生效更正取代的事实退出比对——来源已经收回了它的说法。这是 ADR-0226 决定二「与某一份……在册事实矛盾就记冲突」在更正出现后的读法：UC-CC-006 的`外部结果冲突`本就是「无法按权威、更正或时效规则裁决」的矛盾。
+3. **记了冲突的更正不生效**，不取代任何结果：冲突的一方不得改变当前判断（CONTEXT「不得……按最后到达直接改变当前判断」）。所指那份本身记了冲突时，更正照样可以生效，但它仍要与那份当初与之矛盾的事实比，矛盾就记冲突——按更正裁决冲突仍等冲突处置入口（ADR-0226 越权风险点 7）。
+4. **范围单元一级退化**：新旧范围相等即整份取代；不等则交集为空，关系照记、不取代，更正在自己的范围上照同层判法独立判断（`AT-CC-156`「新扩展范围独立校验」）。
+5. **所指未在册答未决、不落**，不当作不带更正指向的结果去判（那会丢掉来源的更正语义，原结果后到时反被判冲突）；与解释规则未配置、辖区解析不出那几格同一做法。所指为留存、跨版本、跨层或自身是矛盾输入，未受理。
+6. **更正指向是来源内容、进内容比对**：同一来源标识换了指向、丢了指向或补上指向都是来源响应冲突。按 ADR-0267 决定一换号到 `CCC-2`，按内容取能表达它的最低一版。
+7. **「已被取代」是派生问答**：从后继行的生效标记派生，被取代行一列不动（接收记录只建立不改写）。生效标记是接收那一刻的判断，与冲突标记一样不重判。迁移给 `correction_in_force` 留了默认 false：不写更正指向的行本就没有更正关系；带指向的行由适配器显式写下。
+8. **放行读口对任何时点都排掉被取代的那份**：更正读作「原结果按更正后的样子成立」，不按更正的业务时间切分前后。
+9. **VE 不跟随更正关系**（票面「要裁的」第二条，未裁成）。推荐的「沿用 VE 替代链」要求更正与原结果落在同一事实引用下、以版本链接前身（VE CONTEXT「来源事实替代关系只能由源上下文给出，且只在同一源上下文、同一事实引用的版本之间成立」）；而 [ADR-0197](../../../docs/adr/0197-customs-external-results-enter-tracking-projection-per-layer.md) 决定三定了「事实引用 `external-result/<成员>/<来源标识>`……事实版本取结果关联的提交版本……所以不登前身」，ADR-0226 决定三又写「投影把每一份未记冲突的接收各派生成本层条目」。改引用或版本取法、或让 VE 对生效更正入账不派生，都与这两条相抵，需要新 ADR 才能定；按本票约束停下，不立 ADR。今天的行为：生效的更正不再记冲突，VE 把它当一份独立条目派生，原条目仍是当前有效条目。
+10. 载荷字段名取 `correctsSourceId`（与 `sourceId` 同一词干）。
+
+### 越权风险点（待 CC owner 复核；第 7 点同时待 VE owner）
+
+1. **只许链尾偏保守**：推送与查询各送一份内容相同、都指名原结果的更正（两个来源标识）时，后到那份记冲突、不进当前判断。
+2. **未被指名的同义副本挡住更正**：原结果经推送与查询各到一份（同义、都不记冲突），更正只指名其中一份时，与另一份矛盾，更正记冲突。不从语义相同推「这两份是同一结果」。
+3. **已记冲突的分叉更正挡住此后的链尾更正**：比对含已记冲突的在册事实（ADR-0226 越权风险点 6 同一边）。
+4. **更正不按时点生效**（代决第 8 条）：真实程序的更正若带自己的生效时点（`PAR-CUS-01/02`），放行读口要改成按时点取。
+5. **所指未在册不留存**：来源不重投，这份更正就停在通道侧；与其余几格未决同一风险。
+6. **单元以下范围**：真实程序给出申报行或成员范围后，要补交集与差集的真判法（ADR-0226 越权风险点 2 同一处）。
+7. **VE 投影与 CC 当前判断分叉**（代决第 9 条）：放行收窄更正之后，CC 放行读口只交出部分放行，VE 投影仍有原全部放行那条并归入 `CUSTOMS_CLEARED`，另多一条部分放行条目；核定税费与处置决定的更正同样两条并存。客户可见面会把已被更正的清关当作当前事实。要等一份改 ADR-0197 决定三（更正落在原结果的事实引用下、版本链接前身）的新 ADR。
+8. **新扩展范围不另校验来源权威**：`AT-CC-156`「新扩展范围独立校验来源权威和适用性」在单元一级退化为与其余结果同一套接收校验，更正与原结果的权威角色不互比。
+
+### 未决
+
+- VE 跟随更正关系要新 ADR（见代决第 9 条、越权风险点 7），需另立票。
+- 票 [demo-chain-gaps/124](../../demo-chain-gaps/issues/124-customs-layer-conflict-relation-and-tracking-signal.md)（冲突关系）改同一组文件：它要立的冲突关系宜与本票的更正关系同一形状（记在后到一侧、只建立不改写）。
+- AT 盘点总览计数与机制清点进 main 时重算，本分支未重生成。
+
+### 被权限拦下的改动
+
+无。
+
+### 测试
+
+- `TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh -count=1 ./internal/customscompliance/... ./internal/visibilityexception/adapters/customscompliance/ ./internal/networkrouting/adapters/customscompliance/ ./internal/parcelshipment/adapters/customscompliance/ ./internal/settlementaccounting/adapters/customscompliance/ ./internal/transportfulfillment/adapters/customscompliance/ ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./cmd/parcel-customs-register/ ./internal/architecture/... ./migrations/...`：20 包 ok，无失败。
+- 新用例 `-count=3`：`scripts/test-full.sh -count=3 -run '<新用例名>' ./internal/customscompliance/... ./cmd/parcel-api/`，全 ok。
+- `go build ./...`、`go vet ./...` 干净，改动的 `.go` 文件 `gofmt -l` 无输出。
+- 种子未受影响（`scripts/demo-seeds` 不写外部结果），未灌一次性库。
