@@ -117,3 +117,5 @@ M–L：路径加 `/v1`（旧路径是否在过渡期双挂见「要裁的」）
 | N9 | `form_acceptance_decision.go` 的 `!found` 注释说「映射成 404 会透露存在性」 | 改为与 ADR-0022 一致：404 正是两者的同答，透露存在性的是把两者拆成两格 |
 | — | `assemble_submission_test.go` 头注仍是旧路径 | 改 `/v1/shipment-requests` |
 | — | 装配层只有 403 探针 | `TestCustomerFacingLinesAnswerProblemDetails` 补 405 探针：处理器自答、`Allow` 头、问题详情、`METHOD_NOT_ALLOWED` |
+
+验证（修订后，同一分支，main `be6b5ad20` 上无需再 rebase）：`go build ./...`、`go vet ./...`、`gofmt -l` 干净；`TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/parcelshipment/... ./internal/visibilityexception/... ./internal/nodeoperations/... ./internal/platform/httpapi/... ./cmd/parcel-api/ ./internal/architecture/...` 48 个包 ok、退出码 0；改过的用例另跑 `-count=3` 全过；admin-web 三道门：`tsc -b --noEmit` 退 0、`run-tests.mjs` 601 过 0 失败、`vite build` 成功。种子脚本不读改名的码，未复灌。
