@@ -37,6 +37,7 @@
 - [核心领域场景](./domain/SCENARIOS.md)：用端到端场景验证对象身份、业务规则和跨上下文边界。
 - [架构决策记录](./adr/README.md)：解释已经接受且难以逆转的架构选择及其代价。
 - [应用用例](./application/README.md)：把已确认领域规则组织成面向开发的输入、结果、应用编排、失败边界和验收条件；当前已覆盖 PN-02 商业权威/接单/撤回、PN-03 接受后路由/收寄/节点作业、PN-04 常规运输/逐包裹取消/终局、PN-06 内部投影/普通客户追踪/异常索赔和 PN-07 通用运营结算，并保留关务专项协作。真实参数、联合验证和代码实现仍待推进；它不重新定义领域规则或真实试点参数。
+- [首方客户 API 契约](./api/first-party-api-contract.md)：首方客户族对调用方的横切契约——URL 主版本 `/v1`、兼容性基线与弃用窗口、状态码三类与未识别 `outcome` 交人、RFC 9457 问题详情的成员、来源信封不收客户声明的发生时间、重放与今天开着的口；各条取舍归 ADR-0022、0139、0140、0223、0246、0258、0266，本文只写成调用方读得懂的一份。逐端点字段以处理器响应结构体为准，生成的 OpenAPI 契约落地后以生成物为准。
 - [Go 首个消费者切片实施决策简报](./design/parcel-go-first-consumer-slice-decision-brief.md)：固定 Parcel 的 Go 模块化单体、PostgreSQL/显式 SQL、Bento 技术边界和 `UC-PS-001` 首个可编码子切片；未确认业务参数不得因此成为生产默认值。
 - [`PN-02` 真实参数取证与开发交接](./design/pn-02-real-parameter-evidence-and-development-handoff.md)：把商业权威发布与唯一解析、锚点商业范围、生产接入与归属、接单/决定前撤回、财务策略、接受前可达性和联合准入组织成五个工作包，并明确稳定骨架、`R/S` 配置验证和生产分支的不同门槛。
 - [代理商、Carrier 与 Carrier Service 关系开发交接](./design/party-carrier-channel-relationship-development-handoff.md)：冻结渠道服务方、账号持有人、合同与结算相对方、底层承运商、实际承运商和责任承担方的关系矩阵及最小开发字段；不新增上下文或通用 Carrier 主数据平台。
