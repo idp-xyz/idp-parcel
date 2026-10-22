@@ -111,7 +111,7 @@ export const cancellationOutcomeViews: Record<CancellationOutcome, OutcomeView> 
   },
   REQUEST_NOT_ACCEPTED: {
     label: '请求未受理',
-    note: '必要内容缺失,或指名的委托与包裹在当前客户范围内查不到。统一不可见结果,不区分「不存在」与「无权查看」,也不提示差在哪一段指名。',
+    note: '必要内容缺失(包裹、请求方、原因或业务时间),请求立不起来。请补齐后以新的请求身份重新提出。',
   },
   FINAL_OUTCOME_STANDS: {
     label: '已有终局',
@@ -272,6 +272,9 @@ export const problemCodeNotes: Record<string, string> = {
   INTAKE_FAILED: '接入解析未能完成,本次没有形成任何业务答案,可稍后重试。',
   NO_ANSWER_FORMED: '服务端处理未能完成,本次没有形成任何业务答案,可稍后重试。',
   UNNAMED_OUTCOME: '服务端交回了无法命名的结果,已按未形成答案处理,可稍后重试。',
+  SHIPMENT_REQUEST_NOT_VISIBLE:
+    '指名的委托或包裹在当前范围内查不到。统一不可见结果,不区分「不存在」与「无权查看」,也不提示差在哪一段指名。请核对后再提交,重发同样的内容不会改变结果。',
+  SHIPMENT_REQUEST_NOT_ACCEPTED: '委托尚未接受,资料修订不成立。决定前的纠错请走受控补充。',
 };
 
 export function problemNote(code: string): string {
