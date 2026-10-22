@@ -47,3 +47,7 @@ M–L：路径加 `/v1`（旧路径是否在过渡期双挂见「要裁的」）
 - 资料修订口同族的另几格：委托未接受、修订意图未声明、内容与范围不配，今天同样以错误上抛、答 5xx `NO_ANSWER_FORMED`；它们是调用方的错，照 ADR-0022 属 4xx。随本票第 1 条一起改，UC-PS-002「给开发的交接」已指本票。
 - 首方契约文档写明不收客户声明的来源发生时间、信封以接收时刻记（[ADR-0258](../../../docs/adr/0258-the-first-party-family-declares-no-source-occurrence-time-and-records-the-receipt-instant.md)），随本票第 2 条的契约形状一起落；代码取法今天已是如此，不改。
 - 取消口「查无与字段缺分开」一条：UC-PS-006 新立的结果语义契约把 `REQUEST_NOT_ACCEPTED` 限到字段缺，查无、跨租户、跨客户与成员出界归统一不可见，「给开发的交接」已指本票。
+
+## code/05 补记（2026-10-21）
+
+- 客户追踪视图口（`/customer-tracking-view`）的响应体已由 [code/05](./05-customer-tracking-view-overwrites-published-versions.md) 删去 `basedOnProjection`：对客契约删字段，客户的采用版本只由 `version` 承担（code/05 代决 1、越权风险点 1）。首方契约在基线之前定形，本票落契约文档时按删后的形状写，不再列这一格。
