@@ -61,7 +61,7 @@ func TestAWithdrawalReleasesEverySupersededVersionsOccupation(t *testing.T) {
 	}
 }
 
-// Covers: UC-PS-005「撤回提交成功后不等待财务释放才生效」与步骤 6「失败时续办原补偿，不回滚撤回」— 被取代那一版放
+// Covers: UC-PS-005 AT-PS-073、「撤回提交成功后不等待财务释放才生效」与步骤 6「失败时续办原补偿，不回滚撤回」— 被取代那一版放
 // 不掉时撤回照样成立，补偿引用指名那一版那一笔；一版放不掉不挡住其余各版。
 func TestAFailedSupersededReleaseKeepsTheWithdrawalAndLeavesCompensationPending(t *testing.T) {
 	fixture, command := supersededWithdrawal(t)
