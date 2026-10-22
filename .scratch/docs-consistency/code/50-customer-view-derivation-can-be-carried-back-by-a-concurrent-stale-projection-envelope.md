@@ -1,7 +1,7 @@
 # 50 VE 客户视图派生在 READ COMMITTED 下会被并发的旧投影信封带回旧依据或旧内容
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code50（基于 main `be6b5ad20`，见文末「完成记录」）。此前 needs-triage——建议 R2（上线后尽快）：答错且静默，但要两封同一包裹的投影派生信封并发消费、交错落在一个窄窗口里才出现。2026-10-21 文档自洽 code/05 隔离评审立（用户「你作为业务和系统专家自决」授权），分支 claude-code05。分级由协调方定稿。
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code50（基于 main `be6b5ad20`，见文末「完成记录」）。此前 needs-triage——建议 R2（上线后尽快）：答错且静默，但要两封同一包裹的投影派生信封并发消费、交错落在一个窄窗口里才出现。2026-10-21 文档自洽 code/05 隔离评审立（用户「你作为业务和系统专家自决」授权），分支 claude-code05。分级由协调方定稿。
 Blocked by: 无（建在 [code/05](./05-customer-tracking-view-overwrites-published-versions.md) 的 `ConfirmedOn` 之上，随 code/05 进 main）
 出处：code/05 隔离评审 N4。code/05 只修存储形状与换代判据，不修这个竞态。
 
@@ -97,3 +97,10 @@ S–M。
 | 4 | `LockCurrent` 头注措辞；等锁 SQL 三份重复 | 头注改为「走 FindCurrent，不排这把锁」；三份等锁 SQL 记进 [code/81](./81-savepoint-decorators-are-three-copies-of-one-helper.md) 票面，本票不抽 |
 
 验证（修订后）：`go build ./...`、`go vet ./...`、`gofmt -l` 干净；`TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/visibilityexception/... ./cmd/parcel-dispatch/`：16 个包 ok，退出码 0。
+
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-code50` tip `ae0ad543b` 在 main `be6b5ad20` 上快进；隔离评审无阻断（锁级别、两语句无窗口、EPQ 论证均变异实测），小改已收。
+- 协调方在 tip 上单独提交重生成的机制清点；ADR 索引与 AT 计数无变化；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净。无迁移、无种子改动。
+- 去向：code/83（多成员投影派生与补派生取锁次序相反的死锁，R3，协调方定级）。
