@@ -1,7 +1,7 @@
 # 61 合同版客户服务规则的产品底座在索赔时按锚点现选，不随接受时的闭包固定；底座多候选留到索赔时才报
 
 Category: bug
-Status: ready-for-agent——建议 R2（上线后尽快）：包裹接受之后，产品底座那一版若被截止、同起点退役或有效性更正，客户合同继承来的首次索赔期限与最低材料会在事后改口；首发链路上要等运营对产品版客户服务规则收尾或更正才撞得上，今天演示租户不撞。绕法：无（运营可以不对仍被在途委托继承的产品版收尾，靠人记）。2026-10-21 文档自洽 11 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc11。
+Status: in-progress——完工待评审与进 main，分支 claude-code61（见文末「完成记录」）。此前 ready-for-agent——建议 R2（上线后尽快）：包裹接受之后，产品底座那一版若被截止、同起点退役或有效性更正，客户合同继承来的首次索赔期限与最低材料会在事后改口；首发链路上要等运营对产品版客户服务规则收尾或更正才撞得上，今天演示租户不撞。绕法：无（运营可以不对仍被在途委托继承的产品版收尾，靠人记）。2026-10-21 文档自洽 11 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc11。
 Blocked by: 无
 出处：审计 [audit/cross.md](../audit/cross.md) B3·2、B3·3；裁定 [ADR-0268](../../../docs/adr/0268-a-contract-tier-service-rule-inherits-from-a-product-base-fixed-with-the-acceptance-time-closure.md)。
 
@@ -43,3 +43,44 @@ M：PC 领域解析加一格、快照文档加一格（jsonb，不加迁移）�
 
 - UC-PC-002、UC-VE-007「给开发的交接」各记了这一缺口。
 - ADR-0233：截止与同起点退役是底座事后离开新选择的来路。
+
+## 完成记录（2026-10-21，分支 claude-code61，基于 main `4bd28bc11`）
+
+### 做了什么
+
+- `08bd30ac4` 领域：`resolveCustomerServiceRuleBasis` 采纳合同层那一版时，拿同一次分层（`customerServiceRuleTiers`）的产品层选底座——恰一版记在这一项采纳上，零版记「固定了、没有」，多版这一项答`适用冲突`；`AdoptedBasis.InheritedProductBase()` 交回（底座、在场、已固定）三格。`namedReferencesConfirmed` 经 `namingVersions` 把底座纳入核对，底座不进 `adoptedByKind`。重建门 `RehydrateAdoptedBasisSpec` 加三格，拒写不出的形（底座挂在非合同版那一格、挂在产品层那一版上、底座挂合同、底座别租户或别范围、底座不是客户服务规则、在场却未标已固定）。
+- `cd7f11955` 快照：`adoptedDocument` 加可缺的 `productBase`（在场即已固定，内含整份 `versionDocument` 或缺席即「没有」），写读对称；缺这一格读回为「未固定」，不补成「没有」。jsonb，不加迁移。
+- `fc3827e45` 层次读口：`CustomerServiceRuleLayerView.LoadCustomerServiceRuleLayers(ctx, tenant, closure)` 改收整份闭包；固定了一版按它点读，固定了没有答`无适用依据`，旧快照才按闭包锚点与声明产品经 `CustomerServiceRuleProductBase` 现选。VE 适配器把闭包整份交给它；`productBase`、`contractTierDimensions`、`tiedToAdoptedContract`、`adoptedRule` 头注随改（「ADR-0136 决定五」订正为越权风险点 5，比较对象补 ADR-0268 决定二）；`cmd/parcel-api/assemble_claims.go` 装配注随改，装配代码不变。用例：领域七条、真库四条（事后同起点退役与有效性更正两格、固定了没有不拾后来的一版、两版底座接受时冲突、删掉底座一格的旧快照照旧现选）、既有层次读口真库用例改走旧快照一路并补问法立不住五格、VE 合同点核比闭包合同不比查询合同、parcel-api 装配用例补「底座更正后索赔照旧继承」。
+- `99e283515` UC-PC-002、UC-VE-007「给开发的交接」里指向本票的现状缺口注改为已补。
+
+PC CONTEXT、VE CONTEXT 与 ADR 正文未改（ADR-0268 票已改 CONTEXT）。AT 盘点无对应行，未动。
+
+### 代决
+
+用户授权「你作为业务和系统专家自决……解决所有的问题」。
+
+1. 端口签名（票面留给领票时定）：改收整份闭包，不另加「底座版本」入参。来路只有闭包分得清；让 VE 先拆闭包再挑来路，等于把「哪一版算底座」的判断搬到消费侧。
+2. 解析标识不纳入底座。底座是（键，登记册）的函数，而视图修订已覆盖范围内全部版本、状态与更正；纳入只会让既有解析标识改口（`TestAnExistingProductOnlyRegistrationResolvesAsBefore` 钉的那一个不受影响，产品层采纳本来就不记底座）。
+3. 快照记整份版本文档而不只版本身份，与采用成员同形：点读口要壳（租户、范围、指名引用），只记身份就得回登记册查，读时又依赖登记册。
+4. 快照不换号、不加迁移：`commercial_resolution.snapshot` 的摘要是本适配器对整份 JSON 的散列，只用来在撞键时分重放与冲突，不是已接规范化的册正文，ADR-0267 不适用。
+5. 存量快照不回填：生产没有存量；演示库灌种子不形成闭包（一次性库 `code61seed` 上 `seed.sh --reset` 后 `party_commercial.commercial_resolution` 为 0 行），闭包要到运行期接受时才写；回填等于事后按此刻登记册给旧闭包补底座，正是本票要防的现选。ADR-0268 越权风险点 3 已认。
+6. 固定了「没有」答`无适用依据`，不回落现选：那会把「接受时没有底座」换成「此刻有一版」。
+7. 层次读口的问法收紧为：闭包唯一已解析、属显式租户、采纳了一版壳上指名客户合同的客户服务规则、那一版在闭包键的范围里；任一条不成立即 error。之前采纳产品层那一版的闭包问到这里会把它自己选成底座。
+8. VE 适配器 `productBase` 里`适用冲突`、`解析未决`两格保留，只留给旧快照；不删，删了旧快照那一路就没有全函数翻译。
+9. 原用例「锚点缺席答`解析未决`」删去：唯一已解析的闭包在重建门就立不起没有锚点的样子，端口收闭包之后这一格到不了。
+
+### 越权风险点
+
+1. **采纳产品层那一版的闭包问层次读口改答 error**（PC owner）。VE 今天只在合同版时问它，生产不撞；别的消费方若照旧拿产品层那一版来问会失败而不是拿回自己。
+2. **演示库存量快照重放 Save 答内容冲突**（PC owner）。本票之前固定的合同版闭包若再被同一键、同一视图重解并 Save，快照多了底座一格，摘要不同；演示库重灌即消，生产没有存量。
+3. **底座进指名引用核对会挡接受**（PC owner）。闭包键没声明服务产品、底座壳上指名的又不是闭包采用的那个产品时，接受停在`解析未决`（`NAMED_REFERENCE_NOT_CONFIRMED`）。实测演示租户：`SYN-ACCOUNT-02` 声明 `SYN-PROD-CN-SG-EXPRESS` 时闭包唯一解析、底座固定为 `SYN-SERVICE-RULE-01`；声明 `SYN-PROD-CN-SG-ECON` 时那一版底座在选法里就落选，不撞这一格（该声明今天另因接单规则包缺席答`无适用依据`，与本票无关）。
+4. **VE 改动范围**（VE owner）：只动 `internal/visibilityexception/adapters/partycommercial/claim_service_rules.go` 与它的合同版用例文件，未碰 code/22、code/75 的文件。
+
+### 跑过的测试
+
+- `go build ./...`、`go vet ./...`、`gofmt -l`：干净。
+- `TMPDIR=… scripts/test-full.sh ./internal/partycommercial/... ./internal/visibilityexception/... ./cmd/parcel-api ./cmd/parcel-dispatch ./cmd/parcel-commercial ./cmd/parcel-settlement-register ./internal/{networkrouting,nodeoperations,parcelshipment,settlementaccounting,transportfulfillment}/adapters/partycommercial ./internal/transportfulfillment/application ./internal/architecture/... ./migrations/...`：33 个包 ok。
+- `scripts/test-full.sh ./internal/parcelshipment/...`：19 个包 ok（PS 未改，跑它是因为 PS 接受链走真解析）。
+- 新用例 `-count=3`（PC 领域、PC postgres、VE 适配器、parcel-api）：4 个包 ok。
+- 演示种子：一次性库 `code61seed` 上 `seed.sh --reset` 灌完无错，用后已删。
+
