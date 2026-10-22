@@ -72,8 +72,8 @@ S–M。
 ### 越权风险点（待 VE owner 复核）
 
 1. **同一包裹的投影派生排在客户视图派生之后。** 视图派生事务（含账户反查、披露策略读、视图写、意图入队）持锁期间，这件包裹的下一版投影等着；常态下这一段很短。归属确立补派生持的是一份委托全部有投影成员的锁，持到整封提交，成员多时等得更久。
-2. **死锁（今天走得到，会自愈）。** 一笔投影派生可在同一事务里改多件包裹的标记（例如集运单元的移动事实按成员派生），归属确立补派生也按成员逐件取锁；两边次序相反时互等，PostgreSQL 约 1s 后中止其中一路、整笔回滚。补派生那一路落 `ErrDerivedProjectionUnreadable` 未决重投；投影那一路按它自己的写失败格走，重投即自愈。两边都按包裹引用排序取锁可消掉这一格，本票没改投影那一侧，也没另立票；接入面真有大委托、集运单元高并发时再立。日志里只看得到「投影库读不通」，看不出是 40P01。
-3. **锁失败与投影库读不回同一格**（`ErrDerivedProjectionUnreadable`），运维从失败码分不出是锁等超时、死锁还是库读不回。
+2. **死锁（今天走得到，会自愈）。** 一笔投影派生可在同一事务里改多件包裹的标记（例如集运单元的移动事实按成员派生），归属确立补派生也按成员逐件取锁；两边次序相反时互等，PostgreSQL 约 1s 后以 40P01 中止其中一路、整笔回滚，重投即自愈。两边按（租户，包裹引用）排序取锁的修法与投影之间同形的死锁，另立 [code/83](./83-multi-parcel-projection-derivation-and-acceptance-rederive-lock-markers-in-opposite-orders.md)（R3）。
+3. **失败码分不出死锁。** 视图派生这一侧，锁读失败与投影库读不回同落 `ErrDerivedProjectionUnreadable`，失败码相同，日志正文里带着原错误的 SQLSTATE 40P01；投影派生那一侧 `DeriveProjectionHandler` 在 `Save` 失败时只答 `ProjectionStoreUnavailable`，连正文也丢了（code/83 附带收）。锁等超时今天走不到（全仓生产代码没设 `lock_timeout`），将来设了 `lock_timeout` 时落同一格。
 4. **视图写口仍只看视图版本与确认依据。** 绕过这两路消费、直接调派生编排的调用方不受这把锁保护；今天生产上没有这样的调用方（派生编排只在派发进程装配，经这两路进来）。
 5. 存量：首发前只有演示租户；已经被旧信封带回的视图不会自愈，要等这件包裹的下一份投影派生，或 `--reset` 重灌。
 
@@ -82,3 +82,18 @@ S–M。
 - `go build ./...`、`go vet ./...`、`gofmt -l cmd internal migrations tools` 干净。
 - `TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/visibilityexception/... ./cmd/parcel-dispatch/ ./cmd/parcel-api/ ./cmd/parcel-ve-register/ ./internal/architecture/... ./migrations/...`：20 个包 ok，退出码 0。
 - 新用例 `-count=3` 与 `-race` 各一跑，涉及的三个包 ok。
+
+## 评审记录
+
+### 第 1 轮（2026-10-21，隔离评审；协调方转达，无阻断）
+
+评审实测确认锁级别、两条语句之间不留窗口与 EPQ 的论证成立。
+
+| 条 | 意见 | 处理 |
+|---|---|---|
+| 1 | 死锁另立票 | 立 [code/83](./83-multi-parcel-projection-derivation-and-acceptance-rederive-lock-markers-in-opposite-orders.md)，建议 R3：多成员投影派生几路与补派生按（租户，包裹引用）排序后逐件处理，口径同 ADR-0210；投影之间同形的死锁一并收；附带让 `DeriveProjectionHandler` 保留 `Save` 原错误。越权风险点 2 改指 code/83 |
+| 2 | 越权风险点 2、3 不准 | 改写：失败码分不出；视图派生侧日志正文带 40P01，投影派生侧连正文也丢；锁等超时今天走不到（无 `lock_timeout`），将来设了落同一格 |
+| 3 | `TestAStaleProjectionEnvelopeCannotSupersedeTheViewWithStaleContent` 没有前版时静默放过 | 改为没有前版即 Fatal，与 `cmd/parcel-dispatch` 那条一致 |
+| 4 | `LockCurrent` 头注措辞；等锁 SQL 三份重复 | 头注改为「走 FindCurrent，不排这把锁」；三份等锁 SQL 记进 [code/81](./81-savepoint-decorators-are-three-copies-of-one-helper.md) 票面，本票不抽 |
+
+验证（修订后）：`go build ./...`、`go vet ./...`、`gofmt -l` 干净；`TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/visibilityexception/... ./cmd/parcel-dispatch/`：16 个包 ok，退出码 0。

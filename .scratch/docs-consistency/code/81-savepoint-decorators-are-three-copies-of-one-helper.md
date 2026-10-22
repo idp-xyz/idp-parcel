@@ -37,3 +37,4 @@ Blocked by: 无
 ## 相关
 
 - settlementaccounting 的 postgres 适配器里另有一批 `SAVEPOINT` 用法，吞的是本上下文自己的撞键，语义不同（不是隔离跨上下文读），不在本票范围；领票时看一眼能否同样用助手，不强求。
+- 测试里「等别的会话在锁上」的轮询 SQL 也有同形副本，可在本票一并抽成 `internal/platform/pgtest` 的助手：[code/50](./50-customer-view-derivation-can-be-carried-back-by-a-concurrent-stale-projection-envelope.md) 新加的三份（`internal/visibilityexception/adapters/postgres` 的 `waitForRowLockWaiter`、`adapters/parcelshipment` 的 `rowLockWaiterSeen`、`cmd/parcel-dispatch` 的 `lockWaiterSeenInThisDatabase`，都按 `pg_locks` 联 `pg_stat_activity` 筛本库），以及既有的 `cmd/parcel-api` 的 `waitForAdvisoryLockWaiter`、`cmd/parcel-collection-register` 的 `waitForLockWaiters`（按锁类型筛）。抽时注意事务号锁不属任何库，只按 `pg_locks.database` 筛会漏掉或混进别的库的等待。（2026-10-21 据 code/50 隔离评审补）
