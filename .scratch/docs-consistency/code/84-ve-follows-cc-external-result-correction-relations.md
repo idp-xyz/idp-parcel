@@ -1,7 +1,7 @@
 # 84 VE 跟随 CC 外部结果更正关系
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-code84（见文末「完成记录」）。此前 ready-for-agent——R2（上线后尽快）：CC 已形成层内更正关系（[code/04](./04-customs-external-results-have-no-in-layer-correction-relation.md)），当前判断按更正取；VE 运营投影仍把生效的更正当作一条独立条目派生，被更正的原条目照旧当前有效。客户视图今天不列里程碑明细，演示映射下改前改后客户面输出相同，所以不列 R1；接真实关务程序、或客户视图开始按条目披露之前升 R1。2026-10-21 协调方据 code/04 隔离评审立（作者子代理代笔；用户「你作为业务和系统专家自决……解决所有的问题」授权）。
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code84（见文末「完成记录」）。此前 ready-for-agent——R2（上线后尽快）：CC 已形成层内更正关系（[code/04](./04-customs-external-results-have-no-in-layer-correction-relation.md)），当前判断按更正取；VE 运营投影仍把生效的更正当作一条独立条目派生，被更正的原条目照旧当前有效。客户视图今天不列里程碑明细，演示映射下改前改后客户面输出相同，所以不列 R1；接真实关务程序、或客户视图开始按条目披露之前升 R1。2026-10-21 协调方据 code/04 隔离评审立（作者子代理代笔；用户「你作为业务和系统专家自决……解决所有的问题」授权）。
 Blocked by: [code/04](./04-customs-external-results-have-no-in-layer-correction-relation.md)（进 main 之后开工）
 出处：code/04 完成记录的代决「VE 不跟随更正关系」与越权风险点「CC 当前判断与 VE 运营投影分叉」；code/04 隔离评审 N1。
 
@@ -97,3 +97,11 @@ M：一篇新 ADR 加适配器改动。新 ADR 部分停用 ADR-0197 决定三�
 - 新用例 `-count=3`（适配器七个、派发真库一个）全 ok。
 - `go build ./...`、`go vet ./...` 干净，`gofmt -l` 无输出；`go run ./tools/adr-index -check`、`go run ./tools/at-coverage-counts -check` 退 0（前者在索引重生成那笔之后）。
 - 无迁移，种子未受影响（演示种子不写外部结果），未灌一次性库。
+
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-code84` 由协调方 rebase 到 main `bedb374b2`（`git rebase main` 退 0）后快进；隔离评审无阻断。N1（ADR-0281 越权风险点「前身不在场」失实：投影条目今天不带前身，前身只在事实库）由协调方在分支上改准后进 main——ADR 此刻尚未冻结；N2（作者在分支上重生成了 ADR 索引）由协调方丢弃该笔、在新 tip 上单独成笔重生成。
+- ADR-0281 为新接受 ADR（号段由对端协调会话分配，0281–0320 归本会话），部分停用 ADR-0197 决定三与 ADR-0226 决定三各两句；评审首要检查点「收窄更正把已归入的清关拉回」与 VE CONTEXT 无相抵——CONTEXT 只要求里程碑由当前有效条目派生、不再有效的内容不得显示为当前事实。
+- 协调方单独提交重生成的 ADR 索引与机制清点；AT 计数无变化；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净。无迁移，未灌种子。
+- 去向：无新票。评审信息项（成环变异靠超时而非断言杀；ADR 引 code/04 的代决序数属灰区，code/04 已 resolved 冻结）记此备查。
