@@ -1,7 +1,7 @@
 # 67 NR 复核里候选成本读失败会让收件箱事务中毒：失效与「仍适用」一并回滚，与「候选评估未决不拦失效落库」相抵
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code67（2026-10-21 作者子代理，见文末「完成记录」）。此前 ready-for-agent——建议 R2（上线后尽快）：失败是响亮的（整封回滚重投，最终 `ABANDONED`），错在把一次可降级的读失败扩成整笔失败，并误报成写库故障。2026-10-21 协调方裁定立（票 [demo-chain-gaps/115](../../demo-chain-gaps/issues/115-route-reassessment-never-loads-candidate-costs.md) 隔离评审建议 2；用户「你作为业务和系统专家自决……解决所有的问题」授权），115 作者子代理执笔，分支 claude-dcg115。
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code67（2026-10-21 作者子代理，见文末「完成记录」）。此前 ready-for-agent——建议 R2（上线后尽快）：失败是响亮的（整封回滚重投，最终 `ABANDONED`），错在把一次可降级的读失败扩成整笔失败，并误报成写库故障。2026-10-21 协调方裁定立（票 [demo-chain-gaps/115](../../demo-chain-gaps/issues/115-route-reassessment-never-loads-candidate-costs.md) 隔离评审建议 2；用户「你作为业务和系统专家自决……解决所有的问题」授权），115 作者子代理执笔，分支 claude-dcg115。
 Blocked by: 无
 出处：demo-chain-gaps/115 隔离评审建议 2。
 
@@ -128,3 +128,10 @@ S–M：
 - `go build ./...`、`go vet ./internal/networkrouting/... ./cmd/parcel-dispatch/` 干净；`gofmt -l cmd internal` 为空。
 - `TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh ./internal/networkrouting/... ./cmd/parcel-dispatch/`：14 个包 ok、0 FAIL。
 - 新用例与改过头注的两条另跑 `-count=3`：ok。
+
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-code67` 由协调方 rebase 到 main `39e1b6ed2`（无冲突）后快进，tip `3354f30c1`；隔离评审无阻断，三条变异均被抓住，小改已收；协调方把跟进票由 code/80 改号为 code/81（与 code/61 立的 code/80 撞号）。
+- 协调方在 tip 上单独提交重生成的机制清点；ADR 索引与 AT 计数无变化；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净。无迁移、无种子改动。
+- 去向：code/81（三份 savepoint 装饰器抽泛型助手，R3）。
