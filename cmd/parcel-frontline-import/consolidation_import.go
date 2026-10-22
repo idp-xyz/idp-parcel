@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -177,8 +178,8 @@ func submitConsolidation(
 //   - 已有结果 → 重放：同一来源身份同一内容，原结果原样；
 //   - 单元已在册 / 成员已在本单元 → 重放：别的来源先做了同一件事，本行没有作业发生、不留
 //     来源事实，重跑答同一句——对内勤而言与重放要做的事相同：不用管；
-//   - 成员在别的单元 / 单元不在册 / 未受理 / 来源冲突 → 被拒：四种都是重跑同一文件不会变的
-//     答案，要人核对纸单——抄错了单元、行序颠倒、还是这一步在当前三相下本就做不得。
+//   - 成员在别的单元 / 包含循环 / 单元不在册 / 未受理 / 来源冲突 → 被拒：五种都是重跑同一文件不会变的
+//     答案，要人核对纸单——抄错了单元、袋套袋装反了、行序颠倒、还是这一步在当前三相下本就做不得。
 //
 // 未决不从这里出：本方册读写失败时编排交回 error，由 importConsolidation 整笔回滚、记`NO_ANSWER_FORMED`。
 // 编排答一格而不交 error 的话，同一笔事务里已写下的单元那一步会随提交落册，留下没有来源事实的半截。
@@ -205,6 +206,9 @@ func consolidationRowDisposition(row consolidationRow, result application.Consol
 		answer.Disposition = rowRejected
 		answer.Detail = "成员此刻在别的单元 " + result.Elsewhere().String() +
 			" 里——同一时点最多一个直接物理父级；先从那里移出（" + domain.RemoveMemberAction.String() + "），不是重试"
+	case application.ContainmentCycle:
+		answer.Disposition = rowRejected
+		answer.Detail = describeContainmentCycle(row, result.Lineage())
 	case application.UnitNotFound:
 		answer.Disposition = rowRejected
 		answer.Detail = "单元不在册——核对 " + columnUnitRef + "，或把 " + domain.OpenUnitAction.String() + " 行补在本行之前"
@@ -224,6 +228,23 @@ func consolidationRowDisposition(row consolidationRow, result application.Consol
 		answer.Detail += "；封装快照意图未交出，续办引用 " + handoff
 	}
 	return answer
+}
+
+// describeContainmentCycle 把`包含循环`译给对纸单的人：链路只有目标自身是把袋装进了自己；更长的链路是成员已经（直接
+// 或逐级）装着目标——多半是装反了，要真这么装，先把目标从它的直接父级里移出。链路按 ⊂ 从目标写到成员，与编排交回的
+// 次序一致：目标在先、逐级直接父级、成员那一级在末。
+func describeContainmentCycle(row consolidationRow, lineage domain.ContainmentLineage) string {
+	command, _ := row.Command.(application.AddMemberCommand)
+	if len(lineage) <= 1 {
+		return "成员就是单元 " + command.Unit.String() + " 本身——单元装不进自己；核对 " + columnUnitRef + " 与成员两格"
+	}
+	chain := make([]string, 0, len(lineage))
+	for _, unit := range lineage {
+		chain = append(chain, unit.String())
+	}
+	return "成员 " + command.Member.String() + " 此刻已经装着单元 " + command.Unit.String() +
+		"（" + strings.Join(chain, " ⊂ ") + " 逐级直接包含）——集运包含不得成环；核对是否装反，要真这么装先把 " +
+		lineage[0].String() + " 从 " + lineage[1].String() + " 移出（" + domain.RemoveMemberAction.String() + "），不是重试"
 }
 
 // describeUnit 给报告一句单元现状：三相、成员数、快照数——运维对纸单时看得出这一行推到了哪。

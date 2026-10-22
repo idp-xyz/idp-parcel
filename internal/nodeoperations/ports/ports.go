@@ -658,6 +658,10 @@ type RoutingBasisView interface {
 	FindRoutingBasis(ctx context.Context, query RoutingBasisQuery) (domain.RoutingBasis, error)
 }
 
+// ErrContainmentLineageCyclic 说当前容纳索引沿直接父级走回了自己：册上已经成环（CONTEXT「集运包含关系必须无循环」
+// 已被破），不是这一次移入的事。它与读不动分开：读不动重试可能好，成环的册重试一万次也不会好，要人去断开。
+var ErrContainmentLineageCyclic = errors.New("node operations: the containment index already forms a cycle")
+
 // ContainmentIndex 回答一件实物当前被哪个未关闭单元直接包含。跨单元的「同一时点
 // 最多一个直接物理父级」需要仓储视野，领域对象只守住自己这一侧（重复加入拒）——
 // 加入前的跨单元核对靠这里。
@@ -667,6 +671,19 @@ type ContainmentIndex interface {
 		tenant domain.TenantID,
 		member domain.HandlingUnitID,
 	) (domain.ConsolidationUnitID, bool, error)
+
+	// LineageForUpdate 读目标单元此刻的直接父级链路（自身在先、到根为止），同时把本租户此后的成员关系写入排到本事务
+	// 之后。移入前判「成员是不是目标自身或其祖先」读的是这条链路，而读与随后落下成员关系之间不能插进另一笔移入：两袋
+	// 互装时各自读到对方还是根、双双放行，提交后就是一个环；主键守得住单父级，守不住环。锁随事务释放，所以它只在事务
+	// 里答、事务外拒——取锁那条语句自动提交当场放锁，什么也挡不住，静默放过比报错更糟。
+	//
+	// 链路上出现回到自身的边是册已经成环，作为 ErrContainmentLineageCyclic 交回、不在它上面再判；读不动作为别的错误
+	// 交回。两者都不是答案（ADR-0022）。目标单元不在册时链路只有它自己，单元在不在册归 ConsolidationStore 答。
+	LineageForUpdate(
+		ctx context.Context,
+		tenant domain.TenantID,
+		unit domain.ConsolidationUnitID,
+	) (domain.ContainmentLineage, error)
 }
 
 // ParcelContainment 是按正式包裹的版本化关联答「此刻在不在某个未关闭集运单元里」的封闭

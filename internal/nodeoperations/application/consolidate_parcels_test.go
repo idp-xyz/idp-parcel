@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -61,10 +62,37 @@ func (double *consolidationStoreDouble) Update(
 }
 
 // containmentIndexDouble 按替身库里全部未关闭单元的当前成员作答——与真实实现同一
-// 语义：封装态成员仍被包含，关闭态不算。
+// 语义：封装态成员仍被包含，关闭态不算。lineageErr 让祖先链那一问交回错误。
 type containmentIndexDouble struct {
-	store *consolidationStoreDouble
-	err   error
+	store      *consolidationStoreDouble
+	err        error
+	lineageErr error
+}
+
+// LineageForUpdate 沿 CurrentParent 逐级上溯；替身里没有事务，锁那一半在真库用例上证。
+func (double *containmentIndexDouble) LineageForUpdate(
+	ctx context.Context,
+	tenant domain.TenantID,
+	unit domain.ConsolidationUnitID,
+) (domain.ContainmentLineage, error) {
+	if double.lineageErr != nil {
+		return nil, double.lineageErr
+	}
+	lineage := domain.ContainmentLineage{unit}
+	for {
+		member, err := domain.NewHandlingUnitID(lineage[len(lineage)-1].String())
+		if err != nil {
+			return nil, err
+		}
+		parent, contained, err := double.CurrentParent(ctx, tenant, member)
+		if err != nil {
+			return nil, err
+		}
+		if !contained {
+			return lineage, nil
+		}
+		lineage = append(lineage, parent)
+	}
 }
 
 func (double *containmentIndexDouble) CurrentParent(
@@ -529,6 +557,10 @@ func TestConsolidationOwnStoreFailuresFormNoAnswer(t *testing.T) {
 			opened(t, fixture)
 			fixture.containment.err = errConsolidationStoreDown
 		}, add},
+		{"祖先链读不动", func(t *testing.T, fixture *consolidateFixture) {
+			opened(t, fixture)
+			fixture.containment.lineageErr = errConsolidationStoreDown
+		}, add},
 		{"移入写单元库失败", func(t *testing.T, fixture *consolidateFixture) {
 			opened(t, fixture)
 			fixture.store.updateErr = errConsolidationStoreDown
@@ -616,5 +648,106 @@ func TestConsolidationAssemblyRefusesMissingDependencies(t *testing.T) {
 				t.Fatalf("缺%s仍装配成功", name)
 			}
 		})
+	}
+}
+
+func memberNames(members []domain.HandlingUnitID) string {
+	names := make([]string, 0, len(members))
+	for _, member := range members {
+		names = append(names, member.String())
+	}
+	return strings.Join(names, ",")
+}
+
+func lineageNames(lineage domain.ContainmentLineage) string {
+	names := make([]string, 0, len(lineage))
+	for _, unit := range lineage {
+		names = append(names, unit.String())
+	}
+	return strings.Join(names, ",")
+}
+
+// Covers: `AT-NO-039`「集运单元嵌套形成循环→拒绝成员关系，原关系不被覆盖」（NO CONTEXT「集运包含关系必须无循环」）——
+// 袋 C 在袋 B 里、B 在 A 里时，把 A 装进 C 答`包含循环`、带从 C 到 A 那一段直接父级链路；把一只袋装进它自己同答，链路只有
+// 它自己——已在别的袋里的 C 装进自己也答环而不是「在别处」：先从 B 移出再装仍成环，恢复动作不是那一个（ADR-0029）；三只袋
+// 的成员与来源事实登记都原样，拒绝不交 error（确定性拒绝不是未决）。跨单元的结构事实先于单元三相：B 封装后把 A 装进 B 仍答
+// `包含循环`而不是未受理——与「已在别处」先于三相同一条次序。
+func TestNestingThatWouldCloseACycleIsRefusedAndTheOriginalRelationsStay(t *testing.T) {
+	fixture := newConsolidateFixture(t)
+	tenant := consolidationTenant(t)
+	for _, id := range []string{"bag-a", "bag-b", "bag-c"} {
+		openUnit(t, fixture, id)
+	}
+	addMemberTo(t, fixture, "bag-a", "bag-b", "src-nest-b-in-a")
+	addMemberTo(t, fixture, "bag-b", "bag-c", "src-nest-c-in-b")
+	facts := len(fixture.facts.byKey)
+
+	closing, err := fixture.handler.AddMember(context.Background(), application.AddMemberCommand{
+		TenantID: tenant,
+		Unit:     unitID(t, "bag-c"),
+		Member:   handlingUnit(t, "bag-a"),
+		Source:   workSource(t, "src-close-cycle", consolidationAt.Add(time.Minute)),
+	}, judgedBasis(t))
+	if err != nil {
+		t.Fatalf("把根装进最里面那只袋：%v", err)
+	}
+	if closing.Outcome() != application.ContainmentCycle || lineageNames(closing.Lineage()) != "bag-c,bag-b,bag-a" {
+		t.Fatalf("outcome = %q lineage = %q；要答包含循环并带从目标到成员那一段链路", closing.Outcome(), lineageNames(closing.Lineage()))
+	}
+
+	self, err := fixture.handler.AddMember(context.Background(), application.AddMemberCommand{
+		TenantID: tenant,
+		Unit:     unitID(t, "bag-a"),
+		Member:   handlingUnit(t, "bag-a"),
+		Source:   workSource(t, "src-self", consolidationAt.Add(2*time.Minute)),
+	}, judgedBasis(t))
+	if err != nil {
+		t.Fatalf("把袋装进自己：%v", err)
+	}
+	if self.Outcome() != application.ContainmentCycle || lineageNames(self.Lineage()) != "bag-a" {
+		t.Fatalf("outcome = %q lineage = %q；单元装不进自己", self.Outcome(), lineageNames(self.Lineage()))
+	}
+	nestedSelf, err := fixture.handler.AddMember(context.Background(), application.AddMemberCommand{
+		TenantID: tenant,
+		Unit:     unitID(t, "bag-c"),
+		Member:   handlingUnit(t, "bag-c"),
+		Source:   workSource(t, "src-nested-self", consolidationAt.Add(2*time.Minute+time.Second)),
+	}, judgedBasis(t))
+	if err != nil {
+		t.Fatalf("把已在 B 里的 C 装进自己：%v", err)
+	}
+	if nestedSelf.Outcome() != application.ContainmentCycle || lineageNames(nestedSelf.Lineage()) != "bag-c" {
+		t.Fatalf("outcome = %q lineage = %q；环先于「在别处」", nestedSelf.Outcome(), lineageNames(nestedSelf.Lineage()))
+	}
+
+	for unit, want := range map[string]string{"bag-a": "bag-b", "bag-b": "bag-c", "bag-c": ""} {
+		if got := memberNames(fixture.store.byID[unit].Members()); got != want {
+			t.Fatalf("%s 的成员 = %q，要 %q；拒绝改写了原关系", unit, got, want)
+		}
+	}
+	if len(fixture.facts.byKey) != facts {
+		t.Fatalf("来源事实 %d → %d；被拒的移入留了登记", facts, len(fixture.facts.byKey))
+	}
+
+	if _, err := fixture.handler.Seal(context.Background(), application.SealUnitCommand{
+		TenantID: tenant,
+		Unit:     unitID(t, "bag-b"),
+		Seal:     mustValue(t, domain.NewSealReference, "seal-b"),
+		Basis:    mustValue(t, domain.NewWorkBasisReference, "PACK/b"),
+		Source:   workSource(t, "src-seal-b", consolidationAt.Add(3*time.Minute)),
+	}); err != nil {
+		t.Fatalf("封装 B：%v", err)
+	}
+	sealed, err := fixture.handler.AddMember(context.Background(), application.AddMemberCommand{
+		TenantID: tenant,
+		Unit:     unitID(t, "bag-b"),
+		Member:   handlingUnit(t, "bag-a"),
+		Source:   workSource(t, "src-cycle-into-sealed", consolidationAt.Add(4*time.Minute)),
+	}, judgedBasis(t))
+	if err != nil {
+		t.Fatalf("把 A 装进已封装的 B：%v", err)
+	}
+	if sealed.Outcome() != application.ContainmentCycle || lineageNames(sealed.Lineage()) != "bag-b,bag-a" {
+		t.Fatalf("outcome = %q lineage = %q；结构事实先于三相", sealed.Outcome(), lineageNames(sealed.Lineage()))
 	}
 }

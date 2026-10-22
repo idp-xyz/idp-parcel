@@ -29,6 +29,7 @@ const (
 	MemberAdded
 	MemberAlreadyContained
 	MemberElsewhereContained
+	ContainmentCycle
 	MemberRemoved
 	UnitSealedRecorded
 	UnitUnsealed
@@ -51,6 +52,8 @@ func (outcome ConsolidationOutcome) String() string {
 		return "MEMBER_ALREADY_CONTAINED"
 	case MemberElsewhereContained:
 		return "MEMBER_ELSEWHERE_CONTAINED"
+	case ContainmentCycle:
+		return "CONTAINMENT_CYCLE"
 	case MemberRemoved:
 		return "MEMBER_REMOVED"
 	case UnitSealedRecorded:
@@ -127,6 +130,7 @@ type ConsolidationResult struct {
 	outcome    ConsolidationOutcome
 	unit       *domain.ConsolidationUnit
 	elsewhere  domain.ConsolidationUnitID
+	lineage    domain.ContainmentLineage
 	handoffRef string
 	basis      domain.DirectionalBasisRecord
 }
@@ -142,6 +146,13 @@ func (result ConsolidationResult) Unit() (*domain.ConsolidationUnit, bool) {
 // Elsewhere 只在成员已被别的单元包含时给出——违反单父级的恢复动作是先从那里移出。
 func (result ConsolidationResult) Elsewhere() domain.ConsolidationUnitID {
 	return result.elsewhere
+}
+
+// Lineage 只在答`包含循环`时给出：从目标单元起、逐级直接父级、到成员那一级为止的那一段链路（只有目标自身即成员就是
+// 目标本身）。恢复动作是核对是不是装反了，或先把这一段上的某一级从它的直接父级里移出，不是重试——与 Elsewhere 同一条
+// 道理：拒绝要带着能据以行动的那件东西（ADR-0029）。
+func (result ConsolidationResult) Lineage() domain.ContainmentLineage {
+	return result.lineage
 }
 
 // HandoffReference 非空说明封装快照已入册但意图还没交出去，重放会重发同一份。
@@ -234,9 +245,16 @@ func (handler *ConsolidateParcelsHandler) Open(
 	}
 }
 
-// AddMember 把实物移入单元：先跨单元核对「同一时点最多一个直接物理父级」——已在
-// 本单元是幂等重放、在别的未关闭单元里是业务负向带对方标识（恢复动作是先从那里
-// 移出，不是重试）；封装/关闭态由领域拦。
+// AddMember 把实物移入单元：先跨单元核对两条包含不变量——「全部包含链无循环」：成员是目标自身或目标的某一级祖先
+// 即答`包含循环`带那一段链路（恢复动作是核对是否装反、或先把链上某一级移出）；「同一时点最多一个直接物理父级」：
+// 已在本单元是幂等重放、在别的未关闭单元里是业务负向带对方标识（恢复动作是先从那里移出，不是重试）。环先于单父级：
+// 一只已在别的袋里的袋被装进自己或装进它装着的袋，答「先从那里移出」会把人引去做一件做完仍成环的事，而恢复动作
+// 正是结果格要分的东西（ADR-0029）。两条都是跨单元的结构事实，排在单元三相之前；封装/关闭态由领域拦。
+//
+// 祖先链在读单元之前取（LineageForUpdate 同时把本租户此后的移入排到本事务之后）：两袋互装各自看到对方还是根时双双
+// 放行，提交后就是一个环，读链与落成员之间不能插进另一笔移入。锁先于单元那一读，同一单元的两笔移入也随之串起来；
+// 移出、封装、开封、关闭五口不取这把锁，它们与移入并发时单元行的覆盖写仍是票 no-consolidation-fact-provenance/02 记
+// 下的那条缺口。
 //
 // basis 是调用方在写事务之前判好的方向依据记录（DirectionalBasisJudge），只在形成新的移入事实时与事实同一笔
 // 落册。它不挡事实：缺依据、读不动都照常 MEMBER_ADDED——UC-NO-003「已经发生的错误分拣保留为事实并形成偏离，
@@ -262,6 +280,11 @@ func (handler *ConsolidateParcelsHandler) AddMember(
 		return gate.result, nil
 	}
 
+	lineage, err := handler.deps.Containment.LineageForUpdate(ctx, command.TenantID, command.Unit)
+	if err != nil {
+		return ConsolidationResult{}, fmt.Errorf("look up containment lineage: %w", err)
+	}
+
 	unit, found, err := handler.deps.Store.FindByID(ctx, command.TenantID, command.Unit)
 	if err != nil {
 		return ConsolidationResult{}, fmt.Errorf("look up consolidation unit: %w", err)
@@ -270,6 +293,9 @@ func (handler *ConsolidateParcelsHandler) AddMember(
 		return ConsolidationResult{outcome: UnitNotFound}, nil
 	}
 
+	if segment, closes := lineage.ClosesCycle(command.Member); closes {
+		return ConsolidationResult{outcome: ContainmentCycle, unit: unit, lineage: segment}, nil
+	}
 	parent, contained, err := handler.deps.Containment.CurrentParent(ctx, command.TenantID, command.Member)
 	if err != nil {
 		return ConsolidationResult{}, fmt.Errorf("look up current parent: %w", err)

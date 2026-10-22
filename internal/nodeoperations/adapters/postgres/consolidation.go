@@ -211,6 +211,75 @@ func (repository *ConsolidationUnits) CurrentParent(
 	return id, true, nil
 }
 
+// LineageForUpdate 沿当前容纳索引从目标单元逐级上溯到根，自身在先；先取（租户）的事务级咨询锁，再读。
+//
+// 锁按租户而不按链上的行：要锁的那几行在走完链之前不知道是哪几行，边走边锁的次序随链而异、两笔反向走会互等；而
+// 成环只会由移入造出来（移出、关闭只删边），移入按租户串起来就够——CHECK 引用不了别的行，这一半库面守不住，
+// 只能靠这把锁。走 RequireExecutor：连接池上取到的锁随那条语句自动提交当场放掉，读链与落成员之间不再串行。
+// 键照本仓其余事务级锁的双 int 形式，撞上只让两个租户多等一会儿。同一事务里再取是重入。
+//
+// 上溯用 path 数组带着走过的各级，再次踏上已走过的一级即停并交回 ErrContainmentLineageCyclic：册已成环时不带 path
+// 的递归不会终止，而成环的册不是这一次移入能判的东西。每件对象至多一个直接父级（容纳主键），所以链路是一条线，
+// 按 path 长度排序就是从目标到根的次序。
+func (repository *ConsolidationUnits) LineageForUpdate(
+	ctx context.Context,
+	tenant domain.TenantID,
+	unit domain.ConsolidationUnitID,
+) (domain.ContainmentLineage, error) {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("containment lineage: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext('node_operations.containment_current.tenant'), hashtext($1))`,
+		tenant.String(),
+	); err != nil {
+		return nil, fmt.Errorf("containment lineage: 取租户成员关系锁：%w", err)
+	}
+
+	rows, err := executor.Query(ctx,
+		`WITH RECURSIVE lineage AS (
+		     SELECT $2::text AS unit_id, ARRAY[$2::text] AS path, false AS revisited
+		      UNION ALL
+		     SELECT parent.unit_id, step.path || parent.unit_id, parent.unit_id = ANY (step.path)
+		       FROM lineage AS step
+		       JOIN node_operations.containment_current AS parent
+		         ON parent.tenant_id = $1 AND parent.member_id = step.unit_id
+		      WHERE NOT step.revisited
+		 )
+		 SELECT unit_id, revisited
+		   FROM lineage
+		  ORDER BY cardinality(path)`,
+		tenant.String(),
+		unit.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("containment lineage: %w", err)
+	}
+	defer rows.Close()
+
+	var lineage domain.ContainmentLineage
+	for rows.Next() {
+		var raw string
+		var revisited bool
+		if err := rows.Scan(&raw, &revisited); err != nil {
+			return nil, fmt.Errorf("containment lineage: %w", err)
+		}
+		if revisited {
+			return nil, fmt.Errorf("containment lineage: %w: %s reached again above %s", ports.ErrContainmentLineageCyclic, raw, unit)
+		}
+		ancestor, err := domain.NewConsolidationUnitID(raw)
+		if err != nil {
+			return nil, fmt.Errorf("containment lineage: %w", err)
+		}
+		lineage = append(lineage, ancestor)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("containment lineage: %w", err)
+	}
+	return lineage, nil
+}
+
 func (repository *ConsolidationUnits) syncContainment(
 	ctx context.Context,
 	executor bentopg.Executor,

@@ -208,10 +208,10 @@ func consolidationLineFor(factRef, action, unit, asset, member, seal, basis stri
 	}, ",") + "\n"
 }
 
-// TestFrontlineConsolidationImportRejectsWithoutRecording 证四种被拒在真库上各自成立且**一条来源
+// TestFrontlineConsolidationImportRejectsWithoutRecording 证五种被拒在真库上各自成立且**一条来源
 // 事实都不留**：单元不在册、成员在别的单元（报出对方标识）、空单元封装与成员未清空却无处置
-// 依据的关闭（领域拦，答未受理）；另证「单元已由别的来源开启」答重放而非冲突。被拒的行不留
-// 登记，改文件重跑同一行事实号才不会被当成冲突。
+// 依据的关闭（领域拦，答未受理）、袋套袋成环（装反与装进自己，报出那一段链路；`AT-NO-039`）；另证
+// 「单元已由别的来源开启」答重放而非冲突。被拒的行不留登记，改文件重跑同一行事实号才不会被当成冲突。
 func TestFrontlineConsolidationImportRejectsWithoutRecording(t *testing.T) {
 	importer, units, facts := consolidationVerticalImporter(t)
 
@@ -223,10 +223,13 @@ func TestFrontlineConsolidationImportRejectsWithoutRecording(t *testing.T) {
 		consolidationLineFor("SYN-WORK-E", "ADD_MEMBER", "SYN-CU-8", "", "SYN-HU-7", "", "") + // 成员已在 CU-7
 		consolidationLineFor("SYN-WORK-F", "SEAL_UNIT", "SYN-CU-8", "", "", "SYN-SEAL-8", "SYN-BASIS-8") + // 空单元
 		consolidationLineFor("SYN-WORK-G", "CLOSE_UNIT", "SYN-CU-7", "", "", "", "") + // 有成员无处置依据
-		consolidationLineFor("SYN-WORK-H", "OPEN_UNIT", "SYN-CU-7", "SYN-CAGE-7B", "", "", "") // 别的来源再开同一单元
+		consolidationLineFor("SYN-WORK-H", "OPEN_UNIT", "SYN-CU-7", "SYN-CAGE-7B", "", "", "") + // 别的来源再开同一单元
+		consolidationLineFor("SYN-WORK-I", "ADD_MEMBER", "SYN-CU-7", "", "SYN-CU-8", "", "") + // 袋套袋：CU-8 进 CU-7
+		consolidationLineFor("SYN-WORK-J", "ADD_MEMBER", "SYN-CU-8", "", "SYN-CU-7", "", "") + // 装反：CU-7 已装着 CU-8
+		consolidationLineFor("SYN-WORK-K", "ADD_MEMBER", "SYN-CU-8", "", "SYN-CU-8", "", "") // 装进自己
 	results := importConsolidationTemplate(t, importer, []byte(raw))
-	if len(results) != 8 {
-		t.Fatalf("结果行数 = %d，要 8", len(results))
+	if len(results) != 11 {
+		t.Fatalf("结果行数 = %d，要 11", len(results))
 	}
 	assertDisposition(t, results, 0, rowRejected, "UNIT_NOT_FOUND")
 	assertDisposition(t, results, 1, rowLanded, "OPENED")
@@ -236,33 +239,55 @@ func TestFrontlineConsolidationImportRejectsWithoutRecording(t *testing.T) {
 	assertDisposition(t, results, 5, rowRejected, "NOT_ACCEPTED")
 	assertDisposition(t, results, 6, rowRejected, "NOT_ACCEPTED")
 	assertDisposition(t, results, 7, rowReplayed, "EXISTING")
+	assertDisposition(t, results, 8, rowLanded, "MEMBER_ADDED")
+	assertDisposition(t, results, 9, rowRejected, "CONTAINMENT_CYCLE")
+	assertDisposition(t, results, 10, rowRejected, "CONTAINMENT_CYCLE")
 	if !strings.Contains(results[4].Detail, "SYN-CU-7") {
 		t.Fatalf("成员在别处的报文没点名对方单元：%q", results[4].Detail)
+	}
+	if !strings.Contains(results[9].Detail, "SYN-CU-8 ⊂ SYN-CU-7") || !strings.Contains(results[9].Detail, domain.RemoveMemberAction.String()) {
+		t.Fatalf("装反的报文没点名那一段链路与断开它的动作：%q", results[9].Detail)
+	}
+	if !strings.Contains(results[10].Detail, "装不进自己") {
+		t.Fatalf("装进自己的报文没说清：%q", results[10].Detail)
 	}
 	if code := exitCodeFor(results); code != exitRejected {
 		t.Fatalf("退出码 = %d，要 %d", code, exitRejected)
 	}
 
 	// 被拒与重放的行都不留来源事实；落地的行留。
-	for _, factRef := range []string{"SYN-WORK-A", "SYN-WORK-E", "SYN-WORK-F", "SYN-WORK-G", "SYN-WORK-H"} {
+	for _, factRef := range []string{"SYN-WORK-A", "SYN-WORK-E", "SYN-WORK-F", "SYN-WORK-G", "SYN-WORK-H", "SYN-WORK-J", "SYN-WORK-K"} {
 		if _, found := findFact(t, facts, "FTI/CONSOLIDATION-1/SYN-BATCH-2/"+factRef); found {
 			t.Fatalf("%s 没有作业发生却留了来源事实", factRef)
 		}
 	}
-	for _, factRef := range []string{"SYN-WORK-B", "SYN-WORK-C", "SYN-WORK-D"} {
+	for _, factRef := range []string{"SYN-WORK-B", "SYN-WORK-C", "SYN-WORK-D", "SYN-WORK-I"} {
 		if _, found := findFact(t, facts, "FTI/CONSOLIDATION-1/SYN-BATCH-2/"+factRef); !found {
 			t.Fatalf("%s 落地了却没留来源事实", factRef)
 		}
 	}
-	// 被拒的行没留半截状态：CU-8 仍开放且空，CU-7 仍开放且载具是第一次开启时的。
+	// 被拒的行没留半截状态：CU-8 仍开放且空（它自己在 CU-7 里，不等于它装着东西），CU-7 仍开放、载具是第一次
+	// 开启时的、成员只有 HU-7 与 CU-8——装反与装进自己都没改写原关系。
 	eight := findUnit(t, units, "SYN-CU-8")
 	if eight.Sealed() || eight.Closed() || len(eight.Members()) != 0 {
-		t.Fatalf("空单元封装被拒后 CU-8 状态变了：封装=%v 关闭=%v 成员=%d", eight.Sealed(), eight.Closed(), len(eight.Members()))
+		t.Fatalf("被拒后 CU-8 状态变了：封装=%v 关闭=%v 成员=%d", eight.Sealed(), eight.Closed(), len(eight.Members()))
 	}
 	seven := findUnit(t, units, "SYN-CU-7")
-	if seven.Closed() || seven.Asset().String() != "SYN-CAGE-7" || memberIDs(seven.Members()) != "SYN-HU-7" {
+	if seven.Closed() || seven.Asset().String() != "SYN-CAGE-7" || memberIDs(seven.Members()) != "SYN-CU-8,SYN-HU-7" {
 		t.Fatalf("CU-7 状态变了：关闭=%v 载具=%s 成员=%q", seven.Closed(), seven.Asset(), memberIDs(seven.Members()))
 	}
+	if parent, contained, err := units.CurrentParent(t.Context(), synTenant(t), mustHandlingUnit(t, "SYN-CU-7")); err != nil || contained {
+		t.Fatalf("装反被拒后 CU-7 有了父级：parent=%v contained=%v err=%v", parent, contained, err)
+	}
+}
+
+func mustHandlingUnit(t *testing.T, raw string) domain.HandlingUnitID {
+	t.Helper()
+	unit, err := domain.NewHandlingUnitID(raw)
+	if err != nil {
+		t.Fatalf("作业实物 %q：%v", raw, err)
+	}
+	return unit
 }
 
 // factSaveFails 让来源事实那一步写失败、其余照常。坏在这里，是因为单元那一步已在同一笔事务里写下：编排若答一格
