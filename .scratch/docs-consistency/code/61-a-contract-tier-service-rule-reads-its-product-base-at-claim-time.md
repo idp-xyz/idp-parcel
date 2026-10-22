@@ -1,7 +1,7 @@
 # 61 合同版客户服务规则的产品底座在索赔时按锚点现选，不随接受时的闭包固定；底座多候选留到索赔时才报
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code61（见文末「完成记录」）。此前 ready-for-agent——建议 R2（上线后尽快）：包裹接受之后，产品底座那一版若被截止、同起点退役或有效性更正，客户合同继承来的首次索赔期限与最低材料会在事后改口；首发链路上要等运营对产品版客户服务规则收尾或更正才撞得上，今天演示租户不撞。绕法：无（运营可以不对仍被在途委托继承的产品版收尾，靠人记）。2026-10-21 文档自洽 11 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc11。
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code61（见文末「完成记录」）。此前 ready-for-agent——建议 R2（上线后尽快）：包裹接受之后，产品底座那一版若被截止、同起点退役或有效性更正，客户合同继承来的首次索赔期限与最低材料会在事后改口；首发链路上要等运营对产品版客户服务规则收尾或更正才撞得上，今天演示租户不撞。绕法：无（运营可以不对仍被在途委托继承的产品版收尾，靠人记）。2026-10-21 文档自洽 11 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc11。
 Blocked by: 无
 出处：审计 [audit/cross.md](../audit/cross.md) B3·2、B3·3；裁定 [ADR-0268](../../../docs/adr/0268-a-contract-tier-service-rule-inherits-from-a-product-base-fixed-with-the-acceptance-time-closure.md)。
 
@@ -96,3 +96,9 @@ PC CONTEXT、VE CONTEXT 与 ADR 正文未改（ADR-0268 票已改 CONTEXT）。A
 - N4：`TestTheRehydrationGateKeepsTheFixedProductBaseHonest` 拒绝表补「底座属别的租户」一格；变异核对：去掉重建门里的租户比较，这一格红，恢复后绿。
 - 顺手：底座冲突时 `candidateCount` 报产品层的候选数；端口与 VE 适配器两处超长头注折行；`legacyClosureOver` 头注改用测试符号名指路，不写文件名。
 
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-code61` tip `8e996e7db` 在 main `0a7937cd5` 上快进；隔离评审无阻断，四条建议已收（变异补证别租户底座一格）。
+- 协调方在 tip 上单独提交重生成的机制清点；ADR 索引与 AT 计数无变化；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净；演示种子在一次性库上灌通，用后删库。共享演示库合并后须 `scripts/demo-seeds/seed.sh --reset` 重灌。
+- 去向：code/80（PC 解析快照摘要不带规范化版本，R2）。
