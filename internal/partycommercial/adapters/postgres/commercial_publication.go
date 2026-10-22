@@ -294,6 +294,9 @@ func (repository *CommercialPublications) SaveVersion(
 // versionDocument 是快照列里的文档形状——RehydrateCommercialVersionSpec 的 JSON
 // 表达。键与链查列（摘要/区间/状态）在文档里仍整份保留：列是查询投影，文档是重建
 // 来源，重建只信文档一处。
+//
+// 解析快照的已采用项与底座也嵌这一份（连同 approvalDocument、referenceDocument）：在这里加键、删键或改键，
+// 同时改掉解析快照的形状，要照 resolutionCanonicalizationVersion 的头注换号。
 type versionDocument struct {
 	TenantID      string              `json:"tenantId"`
 	Kind          uint8               `json:"kind"`

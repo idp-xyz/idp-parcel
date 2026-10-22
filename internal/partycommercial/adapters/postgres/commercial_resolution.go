@@ -41,6 +41,11 @@ var _ ports.CommercialResolutionStore = (*CommercialResolutions)(nil)
 //
 // PCR-1 是接版本那一刻的形状，连同此前历次同形加入、各自可缺的键；那些键在文档里缺席的读法照旧（底座一格缺席是
 // ADR-0268 决定三那一种）。此后文档加键、删键或改键，可缺键也算，照 ADR-0267 决定一换号，按内容取能表达它的最低一版。
+// 文档里嵌的已采用版本是 commercial_publication.go 的 versionDocument，在那里加键同样改掉本形状。
+//
+// 换号那一刻，先把无版本与 PCR-1 两支各自冻结成独立的写法，不再从现行的 closureDocument 派生：renderedAs 今天能靠
+// 「同一份结构体去掉版本键」算出两形，只因为两形此刻只差那一键；结构体一加键，两支就会跟着悄悄改形，存量行重放答成冲突。
+// 先例是 SAC、CCC、TFC 冻结的无版本摘要函数（各自的 unversioned_payload_digest.go）。
 const resolutionCanonicalizationVersion = "PCR-1"
 
 // canonicalDigestSeparator 把版本前缀与十六进制摘要分开：`PCR-1:<hex>`，与商业发布的 `PCC-1:<hex>` 同一落法——版本随串走，

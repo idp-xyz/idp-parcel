@@ -3,7 +3,6 @@ package postgres_test
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -22,6 +21,8 @@ import (
 const (
 	unversionedDigestOfUniqueClosure     = "72236e55ae994bb6300503d5bac672160b4269a1d3d640c211ff29cd55eb37c0"
 	unversionedDigestOfFixedBaseAccepted = "96273b6f2939904aea1db3e1255d8409efe22ac2764eb39e1fd21fef03c796c6"
+	// pcr1DigestOfUniqueClosure 是 PCR-1 的金样：同一夹具在快照接版本那一笔上实算。它一变，就是 PCR-1 改了形却没换号。
+	pcr1DigestOfUniqueClosure = "PCR-1:c26fd65e6c4b7798b655f9ea7dcfce3f34229a27c892ddb92fb9c8202253ba67"
 )
 
 func TestANewSnapshotCarriesItsCanonicalization(t *testing.T) {
@@ -29,8 +30,8 @@ func TestANewSnapshotCarriesItsCanonicalization(t *testing.T) {
 	closure := uniqueClosure(t)
 	mustSaveResolution(t, transactor, t.Context(), repository, closure)
 
-	if digest := storedContentDigest(t, pool, closure); !strings.HasPrefix(digest, "PCR-1:") {
-		t.Fatalf("content_digest = %q, want PCR-1:<hex>——不带版本的摘要是不完整的（ADR-0014）", digest)
+	if digest := storedContentDigest(t, pool, closure); digest != pcr1DigestOfUniqueClosure {
+		t.Fatalf("content_digest = %q, want %s——不带版本的摘要是不完整的（ADR-0014），同版本的字节不得变", digest, pcr1DigestOfUniqueClosure)
 	}
 	if shape := storedSnapshotShape(t, pool, closure); shape != "PCR-1" {
 		t.Fatalf("snapshot.canonicalization = %q, want PCR-1", shape)
@@ -171,6 +172,10 @@ func TestASnapshotWhoseVersionDisagreesWithItsDigestIsNotRead(t *testing.T) {
 		"快照有版本、摘要无版本": `UPDATE party_commercial.commercial_resolution SET content_digest = 'bare'
 			WHERE tenant_id = $1 AND resolution_id = $2`,
 		"快照无版本、摘要有版本": `UPDATE party_commercial.commercial_resolution SET snapshot = snapshot - 'canonicalization'
+			WHERE tenant_id = $1 AND resolution_id = $2`,
+		// 空版本键配无前缀摘要：两处都像「无版本」，可写下它的不是本适配器——无版本那一形根本没有这一键。
+		"版本键在场却为空": `UPDATE party_commercial.commercial_resolution
+			SET snapshot = jsonb_set(snapshot, '{canonicalization}', '""'), content_digest = 'bare'
 			WHERE tenant_id = $1 AND resolution_id = $2`,
 	} {
 		t.Run(name, func(t *testing.T) {

@@ -25,8 +25,9 @@ var (
 	// ErrPublicationContentKindMismatch 表示正文的册与版本壳声明的类别不是同一个：一册的正文不得冒
 	// 另一册的名，也不得让「壳说信用政策、正文是结算政策」这种输入静默折成某一册的摘要。
 	ErrPublicationContentKindMismatch = errors.New("party commercial: publication content does not belong to the declared kind")
-	// ErrCanonicalizationUnsupported 表示声明的摘要带着本构建不认识的规范化版本：既不能重算也不能比，
-	// 与「算出来不相等」是两格——后者改正文或改串，前者要换构建（ADR-0014）。
+	// ErrCanonicalizationUnsupported 表示一份摘要或文档带着本构建不认识的规范化版本：既不能重算也不能比，
+	// 与「算出来不相等」是两格——后者改正文或改串，前者要换构建（ADR-0014）。商业发布的声明摘要与已固定的
+	// 解析快照都答它。
 	ErrCanonicalizationUnsupported = errors.New("party commercial: canonicalization version not supported by this build")
 )
 
