@@ -124,7 +124,7 @@
 - 方向性分拣必须引用当前有效路由指令；指令失效后停止尚未执行范围。
 - 拟组合包裹先按下发的方向依据取得 `network-routing` 的成员级集运兼容判断。部分成员不兼容不回滚其他合格成员；不兼容的成员实际被移入时照记，偏离归 `network-routing` 判。
 - 兼容判断只允许执行，不自动建立成员。实际移入才形成集运成员关系。
-- 每个作业实物同一时点最多一个直接物理父级，全部包含链无循环（不查环未实现，见 [docs-consistency/code/19](../../../.scratch/docs-consistency/code/19-consolidation-containment-is-not-checked-for-cycles.md)）。
+- 每个作业实物同一时点最多一个直接物理父级，全部包含链无循环。
 - 作业批次只组织任务，不取得成员、控制、位置或运输责任。
 
 ### 4. 封装、开封与重封
@@ -198,7 +198,7 @@
 | `AT-NO-036` | 封装后需要移出一个成员 | 先授权开封，再移出并重新封装；两版快照和封签均保留 |
 | `AT-NO-037` | 封签破损或与记录不符 | 隔离单元，不按原快照推导成员到站或受控 |
 | `AT-NO-038` | 封签连续且相符的封闭单元被有效控制 | 可派生成员随单元受控，但不伪造逐件扫描或实收（单元控制规则未立：今天集运单元的交接不推进成员控制，见 [UC-NO-005](./UC-NO-005-ADVANCE-NODE-CONTROL-ON-AN-AUTHORITATIVE-TRANSPORT-HANDOVER.md)） |
-| `AT-NO-039` | 集运单元嵌套形成循环 | 拒绝成员关系，原关系不被覆盖（未实现，见 [docs-consistency/code/19](../../../.scratch/docs-consistency/code/19-consolidation-containment-is-not-checked-for-cycles.md)） |
+| `AT-NO-039` | 集运单元嵌套形成循环 | 拒绝成员关系，原关系不被覆盖 |
 | `AT-NO-040` | 已关闭集运单元或同一载具再次使用 | 原实例不重开；新使用创建新实例 |
 | `AT-NO-041` | 客户资料值与节点实测不同 | 两者分别保留，下游独立判断，不做覆盖对平 |
 | `AT-NO-042` | 已取消或终局包裹仍在节点 | 如实作业和控制，不恢复服务；方向性处置等待授权 |
@@ -213,13 +213,12 @@
 
 实现必须分别表达作业任务、作业批次、来源事实、有效作业事实、当前实测/位置、集运单元、成员关系、封装快照和封签记录。一个通用 `warehouse_status`、库存表或可覆盖成员清单不能满足本用例。
 
-已实现的是集运单元实例的开立、移入、移出、封装、开封与关闭，移入同笔落的方向依据记录与偏离标记，以及按（对象，时点）答单元直接成员的读口（`AT-NO-129`、`AT-NO-130`）。今天生产上构造集运编排的只有一线过渡导入。下列各块尚未实现，验收行里以现行口吻写到它们的，以本表为准：
+已实现的是集运单元实例的开立、移入、移出、封装、开封与关闭，移入前沿目标单元的直接父级链路查包含循环（`AT-NO-039`；并发移入按租户串行，单元装进自己另由库面 CHECK 守），移入同笔落的方向依据记录与偏离标记，以及按（对象，时点）答单元直接成员的读口（`AT-NO-129`、`AT-NO-130`）。今天生产上构造集运编排的只有一线过渡导入。下列各块尚未实现，验收行里以现行口吻写到它们的，以本表为准：
 
 | 能力 | 现状 | 承接 |
 |---|---|---|
 | 方向依据随对象下发、带有效区间（`AT-NO-031`、`AT-NO-033`、结果「方向性作业受阻」；ADR-0024、ADR-0251） | 没有下发口；随一线作业端排 | [no-directional-basis/01](../../../.scratch/no-directional-basis/issues/01-consolidation-adds-members-without-any-directional-basis.md)（下发半边：该票「裁定修订」第 1 条的「现问」已于 2026-10-21 更正作废，照 ADR-0024、ADR-0251） |
 | 路由指令与成员级集运兼容判断（启动条件、阶段 3、步骤 6） | `network-routing` 没有这两者的模型，方向依据记录的路由一格答`未配置` | [no-directional-basis/02](../../../.scratch/no-directional-basis/issues/02-network-routing-has-no-routing-instruction-or-consolidation-compatibility-judgment.md) |
-| 集运包含查环（阶段 3、`AT-NO-039`） | 移入只拒单元不存在（`UnitNotFound`）、单元已封装或已关闭、重复成员，以及成员已在别的单元（`MemberElsewhereContained`，`AT-NO-035`）；不查祖先链，也不拒成员就是单元本身 | [docs-consistency/code/19](../../../.scratch/docs-consistency/code/19-consolidation-containment-is-not-checked-for-cycles.md) |
 | 实际测量与当前有效实测（`AT-NO-029`、`AT-NO-030`、阶段 2、步骤 4、5） | 没有实际测量登记册与派生；实测也不触发路由复核 | [pp-pricing-input-seams/04](../../../.scratch/pp-pricing-input-seams/issues/04-no-actual-measurement-registry-and-valid-measurements-read-port.md)、[product-strategy-boundary/08](../../../.scratch/product-strategy-boundary/issues/08-no-current-valid-measurement-derivation.md)；运输准备按实测再准备见 [demo-chain-gaps/44](../../../.scratch/demo-chain-gaps/issues/44-tf-re-prepares-on-node-actual-measurement.md) |
 | 路由偏离（`AT-NO-044`、一致性一节的偏离） | `network-routing` 没有偏离的模型 | [demo-chain-gaps/35](../../../.scratch/demo-chain-gaps/issues/35-network-routing-route-deviation-consumes-movement-facts.md) |
 | 作业任务、作业批次、扫描、作业位置、状况观察、在场核对 | 没有模型；这几块是机制，不等租户参数，租户取值（作业清单、位置层级、设备）照 `PAR-NET-04..06` 登记 | [docs-consistency/code/33](../../../.scratch/docs-consistency/code/33-node-operations-has-no-work-task-batch-scan-location-condition-or-presence-check-model.md) |

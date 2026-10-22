@@ -125,6 +125,7 @@
 | `AT-NO-027` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestReplayConflictAndFailedIntentStayDisciplined |
 | `AT-NO-035` | internal/nodeoperations/application/consolidate_parcels_test.go::TestOneDirectParentIsEnforcedAcrossUnits |
 | `AT-NO-036` | internal/nodeoperations/application/consolidate_parcels_test.go::TestSealingFreezesTheSnapshotAndClosureIsFinal |
+| `AT-NO-039` | internal/nodeoperations/application/consolidate_parcels_test.go::TestNestingThatWouldCloseACycleIsRefusedAndTheOriginalRelationsStay；internal/nodeoperations/domain/consolidation_lineage_test.go::TestAMemberAlreadyOnTheLineageClosesACycle（判法半边）；internal/nodeoperations/adapters/postgres/consolidation_lineage_test.go::TestLineageForUpdateWaitsForTheConcurrentMembershipWrite、::TestAUnitCannotBeRecordedAsItsOwnMember（真库锁与库面半边）；cmd/parcel-frontline-import/consolidation_cycle_test.go::TestConcurrentMutualNestingAdmitsOnlyOneSideOnTheDatabase、cmd/parcel-frontline-import/consolidation_vertical_test.go::TestFrontlineConsolidationImportRejectsWithoutRecording（生产装配并发与导入半边） |
 | `AT-NO-040` | internal/nodeoperations/application/consolidate_parcels_test.go::TestSealingFreezesTheSnapshotAndClosureIsFinal |
 | `AT-NO-047` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestEveryObservationKeepsItsDeliverySource；cmd/parcel-api/reception_delivery_source_test.go::TestTheWiredReceptionKeepsTheDeliverySourceOfEveryObservation |
 | `AT-NO-048` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestAReplayAfterAnIdentityConflictAnswersTheCurrentVersion；internal/nodeoperations/application/receive_delivered_unit_test.go::TestAReplayOfAnUndecidedOrRefusedJudgmentAnswersItsOwnVersion；cmd/parcel-api/reception_delivery_source_test.go::TestTheWiredReplayAfterAnIdentityConflictAnswersTheCurrentVersion |
@@ -688,7 +689,6 @@
 | `AT-NO-033` | 三个包裹中两个兼容、一个不兼容 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NO-034` | 作业批次包含多个包裹 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NO-038` | 封签连续且相符的封闭单元被有效控制 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
-| `AT-NO-039` | 集运单元嵌套形成循环 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NO-041` | 客户资料值与节点实测不同 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NO-042` | 已取消或终局包裹仍在节点 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NO-043` | 同一来源事实重复或内容冲突 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
@@ -1652,3 +1652,5 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-10-21 追记（票 docs-consistency/code/28）：`AT-NR-051` 由④移入①（复核里原计划适用性看不清入账未判、未判登记带缺口与再判条件，ADR-0250）。总览计数未改，由推送方重算。
 
 2026-10-25 追记（票 docs-consistency/code/31）：`AT-VE-188` 由④移入①（客户追踪查询读不到视图时问一次归属：归属方答当前无可见结果，别的账户与不存在同答，归属读不动答未形成，ADR-0246）；`AT-VE-151` 行补点名，`AT-VE-168` 行补客户归属读取半边。总览计数未改，由推送方重算。
+
+2026-10-21 追记（票 docs-consistency/code/19）：`AT-NO-039` 由②移入①（移入前沿目标单元的直接父级链路查包含循环，答`包含循环`带那一段链路；并发互装靠租户级事务锁只成立一方；单元装进自己另由迁移 0022 的 CHECK 守）。总览计数未改，由推送方重算。
