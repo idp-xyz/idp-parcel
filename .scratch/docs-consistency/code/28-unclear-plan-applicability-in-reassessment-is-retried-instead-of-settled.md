@@ -1,7 +1,7 @@
 # 28 NR 路由复核的「适用性看不清」回滚重投到 ABANDONED，照 ADR-0250 改为入账未判、留下缺口
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code28
+Status: resolved——2026-10-21 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code28
 Blocked by: 无
 出处：[audit/nr-no.md](../audit/nr-no.md) M8（审计归 B，由 docs-consistency/05 立 [ADR-0250](../../../docs/adr/0250-unclear-plan-applicability-in-reassessment-is-settled-as-not-judged-and-resume-in-the-same-change-stays-in-the-acceptance-chain.md) 代决）。
 
@@ -66,3 +66,10 @@ S–M：一个新原因、一处折法、一次迁移、用例。
 - 变异（都被杀）：编排不填缺口（编排用例、派发真库用例红，后者答 `REASSESS_STORE_UNAVAILABLE`）；编排改回答未决（两处红）；迁移去掉「这一格必带」子句（登记册直插用例红）；适配器去掉成对检查（登记册用例红：要求适配器先拒、不送到库）。
 - `scripts/test-full.sh`：改动包与其 `go list -test` 反向依赖共 17 个包，加 `./internal/architecture/...`、`./migrations/...`，全绿。
 - 一次性库 `c28seed` 灌演示种子成功、新约束在位，用完已删。
+
+## 进 main 记录（2026-10-21，协调方）
+
+- 分支 `claude-code28` 由协调方 rebase 到 main `673b827a1`（`git rebase main` 在 AT 盘点追记区有一处机械冲突，两段追记都保留）后快进；隔离评审无阻断，N1（rebase）与 N2（routing-first-cut/14 补注记）由协调方在分支上补一笔后收口。
+- 协调方单独提交重算的 AT 计数；机制清点在分支内已重生成、与 main 自动合并后无差；ADR 索引无变化；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净；演示种子在一次性库上灌通（迁移 NR 0026），用后删库。
+- 去向：无新票。续办票 demo-chain-gaps/154 按缺口认行时要知道「同一触发再投留先到那一行的缺口」（票面越权风险点）。
