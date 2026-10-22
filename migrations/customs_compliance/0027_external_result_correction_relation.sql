@@ -2,7 +2,7 @@
 --
 -- corrects_source_id 是来源明确声明本结果所更正的那一份的来源标识：来源内容，与接收记录同一行、同一次落下，
 -- 不由本上下文从业务时间或语义差别推出；没有更正语义时为 NULL。correction_in_force 是接收那一刻的判断——
--- 更正关系在同一范围上生效，所更正那份从此退出当前判断。两列都记在更正一侧的新行上，所更正那一行一列不动：
+-- 更正关系在同一范围上生效，所更正那份自更正的业务发生时间起不再算数。两列都记在更正一侧的新行上，所更正那一行一列不动：
 -- 接收记录只建立不改写，「已被取代」是从后继行派生出来的问答，不是被取代行上的可变标记。
 --
 -- 存量行都不带更正语义：此前接收口收不进更正指向，NULL 与 false 如实。默认 false 留着，是给不写更正指向的
@@ -32,7 +32,7 @@ ALTER TABLE customs_compliance.external_result
         );
 
 -- 只许更正链尾：一份事实至多被一份生效的更正取代。同一提交版本上的比对与落册已按提交版本串行（ADR-0226
--- 决定二），这里在库里再守一遍；它同时是放行读口按「有没有生效的后继」排掉被取代那份时走的索引。
+-- 决定二），这里在库里再守一遍；它同时是放行读口左连生效后继、取取代时点时走的索引。
 CREATE UNIQUE INDEX external_result_one_correction_in_force
     ON customs_compliance.external_result (tenant_id, corrects_source_id)
     WHERE correction_in_force;
