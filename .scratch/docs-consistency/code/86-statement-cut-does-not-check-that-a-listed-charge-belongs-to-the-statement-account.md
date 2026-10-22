@@ -1,7 +1,7 @@
 # 86 截单不核命令列出的费用是否属于这张对账单的结算账户，迟到费用纳入也不核
 
 Category: bug
-Status: needs-triage——建议 R2（截单发布已在生产装配，碰钱：别的账户的费用可以进这张单，不丢不重但错户出账）。2026-10-21 票 [docs-consistency/code/11](./11-statement-cut-does-not-check-the-settlement-attribution-date.md) 作者会话读码时发现并立（用户「你作为业务和系统专家自决」授权），分支 claude-code11。
+Status: resolved——2026-10-21 并入 [code/11](./11-statement-cut-does-not-check-the-settlement-attribution-date.md) 修（见该票完成记录代决 11 与评审记录 N1），号不回收。原建议 R2（截单发布已装配、无入口——`cmd/parcel-api/main.go` 只为启动即查而装，没有端点也没有派发路由，ADR-0222 决定六；碰钱：别的账户的费用可以进这张单，不丢不重但错户出账）。2026-10-21 票 [docs-consistency/code/11](./11-statement-cut-does-not-check-the-settlement-attribution-date.md) 作者会话读码时发现并立（用户「你作为业务和系统专家自决」授权），分支 claude-code11。
 Blocked by: 无
 上下文：SA（结算与经营核算），领域层与截单编排。
 出处：code/11 实现时读码，钉在分支 claude-code11 的基 `e0d0909cf`。

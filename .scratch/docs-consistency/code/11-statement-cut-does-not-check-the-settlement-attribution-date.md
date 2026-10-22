@@ -1,7 +1,7 @@
 # 11 SA 对账单纳入不核「结算归属日」，归属日判定也没接进任何进程
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code11。原分级 R2（上线后尽快）：截单发布已在生产装配（`cmd/parcel-api/assemble_settlement_orchestrations.go` 的 `CutOffPublishStatementHandler`）。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
+Status: in-progress——隔离评审无阻断，修订轮已改完，待进 main，分支 claude-code11。原分级 R2（上线后尽快）：截单发布已装配、无入口（`cmd/parcel-api/assemble_settlement_orchestrations.go` 的 `CutOffPublishStatementHandler`；`cmd/parcel-api/main.go` 只为启动即查而装，没有端点也没有派发路由，ADR-0222 决定六）。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
 Blocked by: 无——2026-10-21 文档自洽 09 已裁（[ADR-0269](../../../docs/adr/0269-business-time-zone-and-cutoff-belong-to-the-statement-arrangement-of-the-settlement-account-and-the-cut-admits-by-attribution-date.md)），裁向见文末「裁向（文档自洽 09，2026-10-21）」。此前：docs-consistency/09（SA+CR 修订）先裁 [audit/sa-cr.md](../audit/sa-cr.md) M11：业务时区与截单时刻的唯一权威是「对账安排」还是费用项目的归属日登记。纳入判据读哪一处，随这一裁。
 出处：[audit/sa-cr.md](../audit/sa-cr.md) M7（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，SA 代码在此期间未改）。
 
@@ -69,12 +69,14 @@ M：截单编排读（或当场判）每件费用的归属日，归属日晚于�
 2. **排除清单只在本次截单走到判纳入时交回**（发布、勾稽不平、本期无费用、截单未配置四格）；重放答 `EXISTING_STATEMENT`，不重判也不重给——此刻再判可能已是另一个答案。排除清单与本期最后一个归属日不另落在对账单行上，后者进发布摘要；与 `CutOffAt` 今天不落在 `customer_statement` 上同一处理。
 3. **「已出账」= 在一张未作废的已发布对账单上**；整单作废后替代单可重收那几件费用。出账判断以 `FOR UPDATE` 锁费用行再查对账单行（jsonb 包含，加 GIN 索引），锁与对账单的写在同一事务里，锁按费用标识的次序取以免互等。读到的已出账恰在本命令的同一单号上时，按并发重放答已有对账单。
 4. **未确认费用仍整笔答 `CHARGE_NOT_CONFIRMED`**，先于判归属日，不改成逐件排除（AT-SA-060 的既有口径）。
-5. **两册都登了仍判不出**（形态为来源发生、费用上没有来源发生时点）：确认时不挡确认、留空；截单时整笔 `SOURCE_NOT_ACCEPTED`，不当缺册指名——补登哪一册都补不上。这一情形只出现在迁移回填不到的存量行。
+5. **两册都登了仍判不出**（形态为来源发生、费用上没有来源发生时点）：确认时不挡确认、留空；截单时只拿掉这一件，以排除原因 `SOURCE_INSTANT_MISSING` 逐件指名，不计入未配置、不当缺册——补登哪一册都补不上；其余照常入本期，一件都入不了时整笔 `NO_CHARGE_IN_PERIOD`。评审 N3 裁定改成这样（原写法是整笔 `SOURCE_NOT_ACCEPTED` 不指名哪一件，调用方不知该拿掉哪件、一件存量拖住整期，不合 ADR-0029）。这一情形只出现在迁移回填不到的存量行。
 6. **确认时读不出两本册**：确认答未决（`ATTRIBUTION_VIEW_UNAVAILABLE`）、不落确认，而不是留空归属日放行——留空会让截单改用那时在册的一版（ADR-0269 越权风险点 3 的那一差别），本是判得出的。截单时读不出同样答未决。
 7. **对账安排换版**：与最新一版同内容答重放；否则追加新一版，换回更早一版的内容也落新一版；不答冲突。`Local`（服务器时区别名）不收。
 8. **发布摘要只这一口换号 `SAC-2`**（多本期最后一个归属日一格），已存 `SAC-1` 发布摘要按 `SAC-1` 那一版重算比对（`domain.CompareStoredPublishDigest`），其余各口仍是 `SAC-1`。这是照 ADR-0014「改规范化形状照本记录换号」办，不另立 ADR。
 9. **来源发生时点**：`FormSellCustomerChargeHandler` 要求必带（缺席答 `SOURCE_NOT_ACCEPTED`，形成之后再没有一处能补）；领域形成门不强求，存量行要能重建。迁移按 SELL 请求的 `customer_charge_id` 回指回填 `pricing_basis_at`，对不上请求的留空，不另找时点顶上。
 10. **演示种子不登对账安排与归属日形态**：ADR-0269 Context 记「没有演示种子登过归属日形态」，本票不改；演示租户的确认照常确认、归属日留空，截单对没有归属日的费用答未配置。
+11. **code/86 并入本票修**（评审 N1 裁定，号不回收）：`CutStatementDraft` 与 `IncludeLateChargeInSubsequentPeriod` 核费用确认时固定的结算账户等于这张单的账户，不等答新哨兵 `ErrChargeAccountMismatch`；截单编排在读回费用那一步、判归属日之前核账户，不等整笔 `SOURCE_NOT_ACCEPTED`（提交矛盾），免得照别户的对账安排判出归属日并落库。应用层夹具原本就是这个错形（命令账户 `settlement-account-1`、费用事实账户 `ACCOUNT/syn-1`），改成同一账户，`PUBLISH_STATEMENT` 的无版本摘要常量按 main 的 `unversionedPublishDigest` 重算。
+12. **构造器补 nil 守**：`NewConfirmChargeHandler`、`NewCutOffPublishStatementHandler` 改为交回 `(*Handler, error)`，缺件答 `ErrNilDependency`，装配时就报。
 
 ### 越权风险点（待 SA owner 复核）
 
@@ -86,15 +88,29 @@ M：截单编排读（或当场判）每件费用的归属日，归属日晚于�
 6. 迁移删 `charge_attribution` 的时区与截单时刻两列不搬数：ADR-0269 只核了种子，生产库这一册有没有行本票没核；有行就丢那两格，要在对账安排上补登。
 7. 存量费用的来源发生时点按 SELL 请求的计价基准时点回填；回填只在迁移里跑一次，对不上请求的行留空。
 8. 申报总额对入本期的行勾稽（代决 1）：调用方若按列出的清单申报，晚于本期的费用会让整单勾稽不平而不发布。
+9. `time.LoadLocation` 还收 `EST`、`PST8PDT` 这类 tzdata 旧名，`NewStatementArrangement` 只拒空串与 `Local`，不是严格的 IANA 区名校验；登记方写了旧名会被收下。
+10. `sell_evaluation_request.customer_charge_id` 没有 UNIQUE，迁移回填 `source_occurred_at` 时一件费用若对上多条请求，取任意一行的计价基准时点（理论上一费用只有一条 FORMED 请求）。
+11. 缺来源发生时点的存量费用在截单里被逐件排除（代决 5），不整笔拒：排除清单不落库，这一件要靠调用方看当次答复补上来源事实后再截；本票没有给它补来源发生时点的入口。
 
 ### 新票
 
-- [code/86](./86-statement-cut-does-not-check-that-a-listed-charge-belongs-to-the-statement-account.md)：截单与迟到纳入不核费用的结算账户是否等于这张单的账户（读码时发现，本票不改）。
+- [code/86](./86-statement-cut-does-not-check-that-a-listed-charge-belongs-to-the-statement-account.md)：截单与迟到纳入不核费用的结算账户是否等于这张单的账户（读码时发现时立；评审 N1 裁定并入本票修，见代决 11，该票 resolved、号不回收）。
 
 ### 测试（含 PG，`TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh`）
 
 - 改动包的反向依赖（`go list -test` 算出 66 个包，含 `./migrations` 依赖链上的各 postgres 适配器与 `cmd/*`）加 `./internal/architecture/...`、`./migrations/...`：退 0（含 PBC-08 门禁：新写口 `SaveStatementArrangement`、`RecordAttributionDate`、`LockChargeBilling` 都有事务外被拒的同包负向证据）。
 - 新用例 `-count=3`：退 0。
 - 种子灌一次性库 `c11seed`：退 0，用后删库。迁移回填语句另在一次性库 `c11mig` 上对造的两行验过（对得上请求的补上、对不上的留空），用后删库；`pgtest` 的库都从空表施加迁移，迁移里的回填在用例里没有数据可跑。
-- 变异（每处改完都跑红、复原后跑绿）：截单不看本期最后一个归属日；整笔未配置并进本期无费用；已出账照收；判定只报先查到的一本缺；确认不钉归属日；截单判出不落库；`LockChargeBilling` 去掉 `voided_at IS NULL`；`RecordAttributionDate` 去掉 `attribution_date IS NULL`；`LockChargeBilling` 去掉 `FOR UPDATE`（并发用例 `TestTwoCutsListingTheSameChargeAreSerializedByTheBillingLock` 报红）。
+- 变异（每处改完都跑红、复原后跑绿）：截单不看本期最后一个归属日；整笔未配置并进本期无费用；已出账照收；判定只报先查到的一本缺；确认不钉归属日；截单判出不落库；`LockChargeBilling` 去掉 `voided_at IS NULL`；`RecordAttributionDate` 去掉 `attribution_date IS NULL`；`LockChargeBilling` 去掉 `FOR UPDATE`（并发用例 `TestTwoCutsListingTheSameChargeAreSerializedByTheBillingLock` 报红）。修订轮再加：`CutStatementDraft` 不核账户、`IncludeLateChargeInSubsequentPeriod` 不核账户、`CutStatementDraft` 加 `|| date == last`（评审那一变异）、截单编排去账户核对、缺来源发生时点计入未配置、`SaveConfirmed` 改写路径删 `attribution_date = EXCLUDED.attribution_date`（评审 N2 那一变异）——各自报红。
 - 顺序如实记：实现先于新用例写成，「先红」是靠上面的变异把各行为逐一拿掉看到的，不是先写用例再实现。作者会话中途用过一次 `git checkout <file>` 撤回自己未提交的一处改动（摘要形状），违了派单「不用 `git checkout -- <file>`」一条；只动本 worktree 本人改动，无他人内容受影响。
+
+## 评审记录（2026-10-21，协调方隔离评审，钉 `89bf86e5a`）
+
+结论：无阻断。ADR-0269 五条照字面落地，SAC-1 重算逐字节核过，迁移在「main 灌种子 → 分支升级 → 再跑一次」三步都退 0。修订轮由作者在同一分支改完：
+
+- **N1**：code/86 并入本票修（代决 11）。`CutStatementDraft`、`IncludeLateChargeInSubsequentPeriod` 核费用确认时固定的结算账户，不等答 `ErrChargeAccountMismatch`；截单编排在判归属日之前核账户，不等整笔未受理；夹具账户改成同一户，无版本摘要常量重算。两张票里「截单发布已在生产装配」改为「已装配、无入口」（`cmd/parcel-api/main.go` 只为启动即查而装，没有端点也没有派发路由，ADR-0222 决定六）。
+- **N2**：生产确认路径（预估行先在、确认是改写）的归属日落库补真库证据：`TestTheAttributionDateIsStoredOnceOnAConfirmedCharge` 加一段先 `SaveEstimated` 再 `SaveConfirmed` 一份带归属日的费用，`FindByID` 断言归属日与来源发生时点都在；评审那一变异（删 `attribution_date = EXCLUDED.attribution_date,`）重跑报红。
+- **N3**：两册都登了仍判不出改为逐件排除（代决 5 改写）：新排除原因 `SOURCE_INSTANT_MISSING`，不计入未配置；一件都入不了时整笔 `NO_CHARGE_IN_PERIOD`。排除原因集补封闭纪律用例。UC-SA-003 结果表没有列整笔 `SOURCE_NOT_ACCEPTED` 这一格，不改。
+- **顺手**：领域层补「归属日等于本期最后一日 → 入本期」用例（评审 `|| date == last` 变异重跑报红）；`NewConfirmChargeHandler`、`NewCutOffPublishStatementHandler` 补 nil 守（代决 12）；assemble 注释「不为此种任何行」改「不为此种下任何行」；越权风险点加 tzdata 旧名与 `customer_charge_id` 无 UNIQUE 两笔。
+
+修订轮探针重跑结果与最终 SHA 见下。
