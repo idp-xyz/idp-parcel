@@ -260,7 +260,7 @@ func externalResultProjectionCommand(
 	// 版本取结果所关联的提交版本。接收记录只建立不改写：来源更正在 CC 形成另一次接收、
 	// 另一个来源标识，落在另一个事实引用下。CC 记下的更正关系（Result.Corrects 与
 	// CorrectionInForce）因此登不成前身——替代关系只在同一事实引用的版本之间成立（VE CONTEXT
-	// 「来源事实替代关系」），引用与版本的取法定在 ADR-0197 决定三，要跟上更正关系得先改那条。
+	// 「来源事实替代关系」），引用与版本的取法定在 ADR-0197 决定三，要跟上更正关系得先改那条（票 docs-consistency/code/84）。
 	version, err := vedomain.NewSourceFactVersion(record.Result.Version().String())
 	if err != nil {
 		return none, fmt.Errorf("%w: submission version: %v", ErrExternalResultUntranslatableAnswer, err)
