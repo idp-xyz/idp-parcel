@@ -230,6 +230,6 @@
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
 | 输入语义契约「修订意图」一行的来源更正或撤销关系 | 意图只有补充、更正、显式清空（`domain.AmendmentIntent`），party-commercial 资料修订允许声明的镜像同样只有这几格；来源更正与撤销关系没有意图格，随其机制实现时两边一起加；规则不变 | 未立票：来源更正与撤销关系的机制尚未裁 |
-| `AT-PS-106`，结果语义契约「委托查无、跨租户或跨客户」一行 | 已补：查无的委托答 `404 SHIPMENT_REQUEST_NOT_VISIBLE`（ADR-0022）；受理阶段的另三格是调用方的错、答 4xx：修订意图未声明、内容与范围不配答 `400 MALFORMED_REQUEST` 并在 `detail` 点名那一格，委托未接受答 `409 SHIPMENT_REQUEST_NOT_ACCEPTED`（决定前的纠错走受控补充）。本行预期结果不变 | [code/22](../../../.scratch/docs-consistency/code/22-customer-face-http-contract-misses-accepted-adrs.md) |
+| `AT-PS-106`，结果语义契约「委托查无、跨租户或跨客户」一行 | 已补：查无的委托答 `404 SHIPMENT_REQUEST_NOT_VISIBLE`（ADR-0022）；受理阶段的另三格是调用方的错、答 4xx：修订意图未声明、内容与范围不配答 `400 MALFORMED_REQUEST` 并在 `detail` 点名那一格，委托未接受答 `400 SHIPMENT_REQUEST_NOT_YET_ACCEPTED`（码与改载荷那一格分开；决定前的纠错走受控补充）。本行预期结果不变 | [code/22](../../../.scratch/docs-consistency/code/22-customer-face-http-contract-misses-accepted-adrs.md) |
 | 「未决」一行，ADR-0256 决定一第 2 格「重放须接着办」 | 来源保全落下之后版本没落成（保存失败、并发抢先或业务未决），重放同一请求只答 `ALREADY_HANDLED`、不带版本，这次修订从此不会形成；本行预期结果不变 | [code/44](../../../.scratch/docs-consistency/code/44-withdrawal-and-amendment-replays-short-circuit-after-an-undecided-round.md) |
 | 「未决」一行的授权适用冲突（ADR-0261） | 已补：`party-commercial` 多条命中答适用冲突（UC-PC-003 `AT-PC-042`），资料修订授权适配器译成 `APPLICABILITY_CONFLICT`，编排停在未决、原因 `SOURCE_DATA_AMENDMENT_AUTHORITY_APPLICABILITY_CONFLICT` | [code/24](../../../.scratch/docs-consistency/code/24-closed-authorization-rule-and-contract-versions-keep-granting.md) |

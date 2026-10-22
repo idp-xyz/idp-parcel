@@ -2,7 +2,7 @@
 
 本文是首方客户 API（租户的货主客户系统调用的那一族，[ADR-0139](../adr/0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md)）对调用方的契约说明：版本、状态码、问题详情、身份与时间、重放这几条横切规则，以及首方族今天开着哪几口。各条的取舍归所引的 ADR，本文只把它们写成调用方读得懂的一份，不另立口径；冲突时以 ADR 为准。
 
-逐端点的请求与响应字段今天以各上下文 `adapters/http` 里处理器的响应结构体为准。机器可读的 OpenAPI 契约从端点描述符生成（[ADR-0140](../adr/0140-first-party-api-contract-is-generated-from-endpoint-descriptors-with-url-major-version-and-problem-details.md) 决定一），生成器、描述符与 `/docs`、`/openapi/v1.json` 入口还没落，见票 [docs-consistency/code/80](../../.scratch/docs-consistency/code/80-operator-and-integration-families-still-answer-the-legacy-problem-shape-and-the-contract-is-not-generated.md)；落地之后字段以生成物为准，本文的横切规则并进生成物的说明。
+逐端点的请求与响应字段今天以各上下文 `adapters/http` 里处理器的响应结构体为准。机器可读的 OpenAPI 契约从端点描述符生成（[ADR-0140](../adr/0140-first-party-api-contract-is-generated-from-endpoint-descriptors-with-url-major-version-and-problem-details.md) 决定一），生成器、描述符与 `/docs`、`/openapi/v1.json` 入口还没落，见票 [docs-consistency/code/82](../../.scratch/docs-consistency/code/82-operator-and-integration-families-still-answer-the-legacy-problem-shape-and-the-contract-is-not-generated.md)；落地之后字段以生成物为准，本文的横切规则并进生成物的说明。
 
 证据层级：本文所述行为只在演示租户 `SYN-TENANT-01` 上走通过，只记 `S`。
 
@@ -26,15 +26,15 @@
 
 - 不收 `Idempotency-Key`（ADR-0022）：重放的识别靠接入请求标识与规范化内容摘要，见下文「重放」。
 - **指名的对象看不见答 `404`**：委托、预报、交接单不存在，或属于别的租户、别的客户账户，同答一格，不分「不存在」与「无权」（ADR-0022）。码按上下文：`SHIPMENT_REQUEST_NOT_VISIBLE`、`DELIVERY_PRE_ADVICE_NOT_VISIBLE`、`DELIVERY_HANDOVER_NOTE_NOT_VISIBLE`。
-- **客户追踪视图是例外**：读不到视图是业务答案，答 `200`，`outcome` 为 `VIEW_NOT_FOUND`；查询串只认 `parcel` 一格（[ADR-0246](../adr/0246-the-customer-tracking-query-answers-no-visible-result-for-a-parcel-attributed-to-the-requesting-account-before-its-view-forms.md)）。
+- **客户追踪视图是例外**：读不到视图也是业务答案，答 `200`；`outcome` 取 `CURRENT_VIEW`（有当前视图）或 `VIEW_NOT_FOUND`（不存在、属别的账户、归属未定等读不到视图的情形同答一格）。视图尚未形成、包裹唯一归属请求方账户时答 `NO_VISIBLE_RESULT`，由票 [code/31](../../.scratch/docs-consistency/code/31-customer-tracking-query-cannot-say-no-visible-result-for-its-own-parcel.md) 落（[ADR-0246](../adr/0246-the-customer-tracking-query-answers-no-visible-result-for-a-parcel-attributed-to-the-requesting-account-before-its-view-forms.md) 决定一）。查询串只认 `parcel` 一格。
 
 ## 问题详情
 
-`4xx` 与 `5xx` 的响应体是 RFC 9457 问题详情，媒体类型 `application/problem+json`（ADR-0140 决定三）。
+各口处理器作答的 `4xx` 与 `5xx`，响应体是 RFC 9457 问题详情，媒体类型 `application/problem+json`（ADR-0140 决定三）。仅限这一类（方法不对的 `405` 由处理器自答，在内）：路径不存在的 `404` 与进程兜底的 `500`（处理器崩溃时由恢复中间件答）出自路由层，今天不是问题详情，并入票 [code/82](../../.scratch/docs-consistency/code/82-operator-and-integration-families-still-answer-the-legacy-problem-shape-and-the-contract-is-not-generated.md)。
 
 | 成员 | 内容 |
 |---|---|
-| `type` | 一码一个稳定 URI：`urn:idp-parcel:problem:<code>` |
+| `type` | 一码一个稳定 URI：`tag:idp.xyz,2026:problem:<code>` |
 | `title` | 码的固定短语，同一个码永远同一句，不随请求变 |
 | `status` | HTTP 状态码 |
 | `code` | 稳定错误码，调用方据以分流 |
@@ -69,4 +69,4 @@
 
 - 提交答复建成委托时带 `parcels`：每件 `parcelId` 加客户为它声明的 `customerParcelReference`。`parcelId` 就是查客户追踪视图用的号（[ADR-0223](../adr/0223-the-first-party-submission-answer-names-each-parcel-and-the-tracking-view-locates-by-it.md)）。
 - 客户追踪视图的答复带视图版本 `version` 与逐维三态，不带它所依据的内部投影版本；客户采用哪一版只看 `version`。
-- 委托的撤回、资料修订、受控补充与逐包裹取消四个客户面命令口已经按本文的问题详情作答，但还没挂首方渠道 Intake，今天在无前缀的 `/shipment-requests/...` 下答 `403 ACCESS_CHANNEL_NOT_CONFIGURED`；首方 Intake 逐口换上时迁到 `/v1/shipment-requests/...`。
+- 委托的撤回、资料修订、受控补充与逐包裹取消这几个客户面命令口已经按本文的问题详情作答，但还没挂首方渠道 Intake，今天在无前缀的 `/shipment-requests/...` 下答 `403 ACCESS_CHANNEL_NOT_CONFIGURED`；首方 Intake 逐口换上时迁到 `/v1/shipment-requests/...`。
