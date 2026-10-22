@@ -147,17 +147,20 @@ func TestTheWiredExternalResultsFormACorrectionRelationForAnExplicitCorrection(t
 }
 
 // Covers: AT-CC-156 与 CC CONTEXT「后续监管更正形成新的外部事实及当前判断，不覆盖原放行结果」——全部放行之后
-// 来源明确收窄成部分放行：更正照常记下、不判冲突，放行读口（动作准入与离港门禁读的那一口）只交出更正后的部分
-// 放行，原全部放行留在库里；对照：同样的收窄不带更正指向，是放行回退，照判冲突，放行读口照旧交出全部放行。
+// 来源明确收窄成部分放行：更正照常记下、不判冲突；放行读口（动作准入与离港门禁读的那一口）交出原全部放行并带上
+// 更正发生的时点作取代时点，更正那份按它自己的业务发生时间另作一份——更正之前的时点仍由原放行答，之后由更正答
+// （领域按时点取，见 domain 的准入用例）。原全部放行留在库里。对照：同样的收窄不带更正指向，是放行回退，照判
+// 冲突，放行读口只交出原全部放行、不带取代时点。
 func TestTheWiredExternalResultsLetANarrowingReleaseCorrectionIntoTheCurrentJudgement(t *testing.T) {
 	earlier := externalResultOccurredAt.Add(-2 * time.Hour)
 	for name, test := range map[string]struct {
-		corrects string
-		want     customsapp.ExternalResultOutcome
-		current  string
+		corrects   string
+		want       customsapp.ExternalResultOutcome
+		superseded time.Time
+		sources    int
 	}{
-		"来源指明更正": {"SYN-RELEASE-1", customsapp.ResultRecorded, "SYN-RELEASE-2"},
-		"不带更正指向": {"", customsapp.ResultLayerConflict, "SYN-RELEASE-1"},
+		"来源指明更正": {"SYN-RELEASE-1", customsapp.ResultRecorded, externalResultOccurredAt, 2},
+		"不带更正指向": {"", customsapp.ResultLayerConflict, time.Time{}, 1},
 	} {
 		t.Run(name, func(t *testing.T) {
 			chain := newCorrectionChain(t, customsdomain.ReleaseResultLayer)
@@ -174,8 +177,23 @@ func TestTheWiredExternalResultsLetANarrowingReleaseCorrectionIntoTheCurrentJudg
 			if err != nil {
 				t.Fatalf("放行读口：%v", err)
 			}
-			if len(readings) != 1 || readings[0].Source != test.current {
-				t.Fatalf("放行读口交出 %+v，want 只有 %s", readings, test.current)
+			if len(readings) != test.sources {
+				t.Fatalf("放行读口交出 %+v，want %d 份", readings, test.sources)
+			}
+			for _, reading := range readings {
+				switch reading.Source {
+				case "SYN-RELEASE-1":
+					if !reading.OccurredAt.Equal(earlier) || !reading.SupersededAt.Equal(test.superseded) {
+						t.Fatalf("原全部放行 occurred=%s superseded=%s，want %s / %s",
+							reading.OccurredAt, reading.SupersededAt, earlier, test.superseded)
+					}
+				case "SYN-RELEASE-2":
+					if !reading.OccurredAt.Equal(externalResultOccurredAt) || !reading.SupersededAt.IsZero() {
+						t.Fatalf("更正 occurred=%s superseded=%s——更正不继承原结果的时间", reading.OccurredAt, reading.SupersededAt)
+					}
+				default:
+					t.Fatalf("放行读口交出意外的 %s", reading.Source)
+				}
 			}
 			if got := countExternalResultRows(t, chain.pool, "SYN-TENANT-1", "SYN-RELEASE-1"); got != 1 {
 				t.Fatalf("原全部放行行数 = %d，want 1——原结果保持历史", got)

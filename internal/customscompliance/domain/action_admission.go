@@ -221,10 +221,24 @@ type GateReading struct {
 
 // ReleaseReading 是一份已接收、未记同层冲突的放行事实及其业务发生或适用时间。同层冲突的那份不进来：CC 对
 // 冲突双方都留存、当前判断不因后到的一方改变（ADR-0197 决定五同一理由）。
+//
+// 被来源明确更正取代的那份照样进来，SupersededAt 带取代它的那份更正的业务发生或适用时间；没被取代时为零。
+// 当前判断按所问时点取（ADR-0226 决定三）：所问时点早于更正发生，这份仍算数；不早于，就由更正那份答。更正
+// 那份另作一份读数、按它自己的业务发生时间算数，不继承原结果的时间——否则收窄更正会把更正之前那段时间的
+// 放行也改写掉，放宽更正又会让更正之前的动作提前读到全部放行。
 type ReleaseReading struct {
-	Source     string
-	Release    CustomsReleaseOutcome
-	OccurredAt time.Time
+	Source       string
+	Release      CustomsReleaseOutcome
+	OccurredAt   time.Time
+	SupersededAt time.Time
+}
+
+// inForceAt 说这份放行读数在所问时点是否算数：已经发生，且还没被生效更正取代。
+func (reading ReleaseReading) inForceAt(at time.Time) bool {
+	if reading.OccurredAt.After(at) {
+		return false
+	}
+	return reading.SupersededAt.IsZero() || reading.SupersededAt.After(at)
 }
 
 // ActionAdmissionFinding 是一个适用动作的答复与支撑它的依据（只列出与答复同格的那些）。
@@ -475,7 +489,7 @@ func (input ActionAdmissionInput) unitBases(action GuardedAction, unit UnitScope
 
 	var full, partial, conditional []string
 	for _, release := range input.Releases {
-		if release.Release.scope != unit.Scope || release.OccurredAt.After(input.At) {
+		if release.Release.scope != unit.Scope || !release.inForceAt(input.At) {
 			continue
 		}
 		switch release.Release.kind {

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -116,7 +117,8 @@ func InterpretExternalResult(spec ExternalResultSpec) (ExternalResult, error) {
 		!spec.Scope.valid() ||
 		spec.OccurredAt.IsZero() ||
 		spec.ReceivedAt.IsZero() ||
-		spec.Corrects == spec.SourceID {
+		spec.Corrects == spec.SourceID ||
+		(spec.Corrects != "" && strings.TrimSpace(spec.Corrects) == "") {
 		return ExternalResult{}, ErrInvalidExternalResult
 	}
 	return ExternalResult{
@@ -184,8 +186,9 @@ func (result ExternalResult) Corrects() (string, bool) {
 // LayerFact 是同层一致性核对读的一份事实：分层事实本体，放行层另带同一次接收拆出的放行
 // 事实。放行层的先后要按放行种类判，而种类不在分层事实上，所以两面一起交进来。
 //
-// CorrectionInForce 说这份到达时，它对所更正那份的更正关系在同一范围上生效了——所更正那份
-// 从此退出当前判断，只留作历史。它是接收那一刻的判断，与冲突标记一样只建立不改写。
+// CorrectionInForce 说这份到达时，它对所更正那份的更正关系在同一范围上生效了：所更正那份不再
+// 参与此后到达结果的比对，在当前判断里自更正的业务发生时间起不再算数，原记录留作历史。它是
+// 接收那一刻的判断，与冲突标记一样只建立不改写。
 type LayerFact struct {
 	Result            ExternalResult
 	Release           *CustomsReleaseOutcome
@@ -215,7 +218,7 @@ type LayerFact struct {
 //   - 已被生效更正取代的在册事实不再参与比对：来源已经收回了它的说法，它只留作历史。
 //
 // 第一个返回值说更正关系是否在同一范围上生效：范围今天只到申报单元一级（ADR-0226），新旧范围
-// 的交集与差集退化为相等与不等——相等时所指那份整份退出当前判断；不等时交集为空，所指那份在
+// 的交集与差集退化为相等与不等——相等时所指那份自更正的业务发生时间起整份不再算数（当前判断按时点取，见 ReleaseReading）；不等时交集为空，所指那份在
 // 它的范围上保持原判断，新到那份在自己的范围上照同层判法独立判断（AT-CC-156）。记了冲突的更正
 // 不生效：冲突的一方不得改变当前判断（CONTEXT「不得……按最后到达直接改变当前判断」）。
 func CheckLayerConsistency(existing []LayerFact, incoming LayerFact) (bool, error) {

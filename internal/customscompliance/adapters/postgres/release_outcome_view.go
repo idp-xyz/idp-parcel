@@ -14,8 +14,9 @@ import (
 // ReleaseOutcomeView 实现 ports.ReleaseOutcomeView：按申报范围盘出放行事实（0015），连同那次接收保存的业务发生
 // 或适用时间（external_result.result 的 occurredAt——CC 按已登记解释规则对这一层作出的时间判断，ADR-0197
 // 决定四同一取法）。记了同层冲突的那份不交出：冲突双方都在库里，当前判断不因后到的一方改变。被生效更正取代的
-// 那份也不交出：来源已经收回了它的说法，当前判断按更正后的那份（CONTEXT「后续监管更正形成新的外部事实及当前
-// 判断，不覆盖原放行结果」）；它的行仍在库里。取代与否按接收时落下的更正生效标记读，不在读口另判。
+// 那份照样交出，带上取代它那份更正的业务发生时间（SupersededAt）：哪个时点算哪一份归领域按时点判（ADR-0226
+// 决定三），读口不按「此刻」替它滤掉——滤掉了，更正发生之前那段时间就两份都读不到。取代与否按接收时落下的
+// 更正生效标记读，不在读口另判；一份事实至多一份生效的更正（迁移 0027 的部分唯一索引），连接不会翻出两行。
 type ReleaseOutcomeView struct {
 	db *bentopg.DB
 }
@@ -40,17 +41,17 @@ func (view *ReleaseOutcomeView) ListReleaseOutcomes(
 	}
 	rows, err := querier.Query(ctx,
 		`SELECT r.source_id, r.kind, r.authority_ref, r.scope_ref, r.condition, r.received_at,
-		        (e.result ->> 'occurredAt')::timestamptz
+		        (e.result ->> 'occurredAt')::timestamptz,
+		        (s.result ->> 'occurredAt')::timestamptz
 		   FROM customs_compliance.release_outcome r
 		   JOIN customs_compliance.external_result e
 		     ON e.tenant_id = r.tenant_id AND e.source_id = r.source_id
+		   LEFT JOIN customs_compliance.external_result s
+		     ON s.tenant_id = e.tenant_id
+		    AND s.corrects_source_id = e.source_id
+		    AND s.correction_in_force
 		  WHERE r.tenant_id = $1 AND r.scope_ref = $2
 		    AND NOT e.layer_conflict
-		    AND NOT EXISTS (
-		        SELECT 1 FROM customs_compliance.external_result s
-		         WHERE s.tenant_id = e.tenant_id
-		           AND s.corrects_source_id = e.source_id
-		           AND s.correction_in_force)
 		  ORDER BY r.source_id`,
 		tenant.String(), scope.String(),
 	)
@@ -64,9 +65,9 @@ func (view *ReleaseOutcomeView) ListReleaseOutcomes(
 		var (
 			source, kindRaw, authorityRaw, scopeRaw, condition string
 			receivedAt                                         time.Time
-			occurredAt                                         *time.Time
+			occurredAt, supersededAt                           *time.Time
 		)
-		if err := rows.Scan(&source, &kindRaw, &authorityRaw, &scopeRaw, &condition, &receivedAt, &occurredAt); err != nil {
+		if err := rows.Scan(&source, &kindRaw, &authorityRaw, &scopeRaw, &condition, &receivedAt, &occurredAt, &supersededAt); err != nil {
 			return nil, fmt.Errorf("list release outcomes: %w", err)
 		}
 		if occurredAt == nil {
@@ -89,7 +90,11 @@ func (view *ReleaseOutcomeView) ListReleaseOutcomes(
 		if err != nil {
 			return nil, fmt.Errorf("list release outcomes: %w", err)
 		}
-		readings = append(readings, domain.ReleaseReading{Source: source, Release: release, OccurredAt: occurredAt.UTC()})
+		reading := domain.ReleaseReading{Source: source, Release: release, OccurredAt: occurredAt.UTC()}
+		if supersededAt != nil {
+			reading.SupersededAt = supersededAt.UTC()
+		}
+		readings = append(readings, reading)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("list release outcomes: %w", err)

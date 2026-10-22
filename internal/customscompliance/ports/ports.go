@@ -45,7 +45,7 @@ type ExternalResultRecord struct {
 	// 权威语义拆出的另一面；分开存只是因为它的形状（种类/机构/条件）不是每一层都有。
 	Release *domain.CustomsReleaseOutcome
 	// CorrectionInForce 说这份带着来源的更正指向（Result.Corrects）到达时，更正关系在同一范围上生效了：
-	// 所更正那份从此退出当前判断，只留作历史。它是接收那一刻的判断，与 LayerConflict 一样只建立不改写；
+	// 所更正那份自更正的业务发生时间起不再算数（按时点取，见 domain.ReleaseReading），原记录留作历史。它是接收那一刻的判断，与 LayerConflict 一样只建立不改写；
 	// 判法见 domain.CheckLayerConsistency。
 	CorrectionInForce bool
 }

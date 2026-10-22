@@ -3,6 +3,7 @@ package postgres_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 
@@ -132,9 +133,10 @@ func TestTheRegisterRejectsMalformedCorrectionRelations(t *testing.T) {
 	fixture.seed(t, insert, "resp-7", false, true, body("resp-7"), version, externalReceivedAt, "resp-1", false)
 }
 
-// Covers: AT-CC-156 与 CC CONTEXT「后续监管更正形成新的外部事实及当前判断，不覆盖原放行结果」的读口半边——放行读口排掉被
-// 生效更正取代的那份，原行仍在库里；更正不生效（范围交集为空、记了冲突）时原放行照旧交出。
-func TestTheReleaseViewLeavesOutAReleaseSupersededByACorrection(t *testing.T) {
+// Covers: AT-CC-156 与 CC CONTEXT「后续监管更正形成新的外部事实及当前判断，不覆盖原放行结果」的读口半边——放行读口把
+// 被生效更正取代的那份照样交出，带上更正那份的业务发生时间作取代时点，更正那份另作一份、带它自己的业务发生时间；
+// 哪个时点算哪一份归领域。原行仍在库里。更正不生效（记了冲突）时原放行不带取代时点。
+func TestTheReleaseViewCarriesWhenACorrectionSupersededARelease(t *testing.T) {
 	fixture := newViewFixture(t)
 	repository, err := adapter.NewExternalResults(fixture.db)
 	if err != nil {
@@ -142,18 +144,23 @@ func TestTheReleaseViewLeavesOutAReleaseSupersededByACorrection(t *testing.T) {
 	}
 	full := releaseRecord(t, "tenant-a", "resp-full", domain.FullRelease, "")
 	narrowed := correctingRecord(t, releaseRecord(t, "tenant-a", "resp-partial", domain.PartialRelease, ""), "resp-full", true)
+	narrowed.Result = occurringAt(t, narrowed.Result, full.Result.OccurredAt().Add(30*time.Minute))
 	saveAll(t, repository, fixture.db.Transactor(), full, narrowed)
 
 	view, err := adapter.NewReleaseOutcomeView(fixture.db)
 	if err != nil {
 		t.Fatalf("构造放行读口：%v", err)
 	}
-	readings := releaseSources(t, view, full.Result.Scope())
-	if len(readings) != 1 || readings[0] != "resp-partial" {
-		t.Fatalf("放行读口交出 %v，want 只有 resp-partial——被取代的全部放行不再是当前判断", readings)
+	readings := releaseReadings(t, view, full.Result.Scope())
+	if len(readings) != 2 {
+		t.Fatalf("放行读口交出 %+v，want 原放行与更正两份", readings)
 	}
-	if _, exists, err := repository.FindByKey(t.Context(), full.Key); err != nil || !exists {
-		t.Fatalf("被取代的原放行不在库里了：%v exists=%v", err, exists)
+	if got := readings["resp-full"]; !got.OccurredAt.Equal(full.Result.OccurredAt()) || !got.SupersededAt.Equal(narrowed.Result.OccurredAt()) {
+		t.Fatalf("原放行 occurred=%s superseded=%s，want %s / %s", got.OccurredAt, got.SupersededAt,
+			full.Result.OccurredAt(), narrowed.Result.OccurredAt())
+	}
+	if got := readings["resp-partial"]; !got.OccurredAt.Equal(narrowed.Result.OccurredAt()) || !got.SupersededAt.IsZero() {
+		t.Fatalf("更正 occurred=%s superseded=%s——更正按它自己的业务发生时间算数、没被取代", got.OccurredAt, got.SupersededAt)
 	}
 
 	other := newViewFixture(t)
@@ -168,20 +175,36 @@ func TestTheReleaseViewLeavesOutAReleaseSupersededByACorrection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("构造放行读口：%v", err)
 	}
-	if got := releaseSources(t, otherView, full.Result.Scope()); len(got) != 1 || got[0] != "resp-full" {
-		t.Fatalf("不生效的更正取代了原放行：%v", got)
+	got := releaseReadings(t, otherView, full.Result.Scope())
+	if len(got) != 1 || !got["resp-full"].SupersededAt.IsZero() {
+		t.Fatalf("不生效的更正取代了原放行：%+v", got)
 	}
 }
 
-func releaseSources(t *testing.T, view *adapter.ReleaseOutcomeView, scope domain.DecisionScopeReference) []string {
+// occurringAt 换掉一份结果的业务发生时间，其余各件照旧。
+func occurringAt(t *testing.T, result domain.ExternalResult, at time.Time) domain.ExternalResult {
+	t.Helper()
+	corrected, _ := result.Corrects()
+	rebuilt, err := domain.InterpretExternalResult(domain.ExternalResultSpec{
+		Layer: result.Layer(), SourceID: result.SourceID(), Role: result.Role(), RawSemantics: result.RawSemantics(),
+		Rule: result.Rule(), Version: result.Version(), Attempt: result.Attempt(), Scope: result.Scope(),
+		OccurredAt: at, ReceivedAt: result.ReceivedAt(), Corrects: corrected,
+	})
+	if err != nil {
+		t.Fatalf("改业务发生时间：%v", err)
+	}
+	return rebuilt
+}
+
+func releaseReadings(t *testing.T, view *adapter.ReleaseOutcomeView, scope domain.DecisionScopeReference) map[string]domain.ReleaseReading {
 	t.Helper()
 	readings, err := view.ListReleaseOutcomes(t.Context(), make2(t, domain.NewTenantID, "tenant-a"), scope)
 	if err != nil {
 		t.Fatalf("放行读口：%v", err)
 	}
-	var sources []string
+	bySource := make(map[string]domain.ReleaseReading, len(readings))
 	for _, reading := range readings {
-		sources = append(sources, reading.Source)
+		bySource[reading.Source] = reading
 	}
-	return sources
+	return bySource
 }

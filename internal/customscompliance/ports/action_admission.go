@@ -70,7 +70,8 @@ type RestrictionScopeView interface {
 
 // ReleaseOutcomeView 按申报范围盘出已接收的放行事实，每份带其业务发生或适用时间。记了同层冲突的那份不交出：
 // CC 对冲突双方都留存，当前判断不因后到的一方改变（ADR-0197 决定五）；部分与附条件放行照交——它们不等于放行，
-// 怎么读归领域。
+// 怎么读归领域。被来源明确更正取代的那份也照交，带上取代它那份更正的业务发生时间（domain.ReleaseReading 的
+// SupersededAt），更正那份另作一份交出：所问时点算哪一份由领域按时点判，读口不按此刻替它滤。
 type ReleaseOutcomeView interface {
 	ListReleaseOutcomes(
 		ctx context.Context,
