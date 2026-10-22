@@ -94,12 +94,17 @@ func reassessRouteHandler(db *bentopg.DB, clock systemClock) (*nrapplication.Rea
 }
 
 // reassessRouteHandlerOver 把判断库各册接到给定的证据视图、候选成本取数侧与时钟上。各册都是 db 上的无状态包装，每次现建。
+// 取数侧在这里包 savepoint，不在 routeCosts 里包：真库用例交进来的替身也在 inbox 那一笔事务里读库，与生产走同一层隔离。
 func reassessRouteHandlerOver(
 	db *bentopg.DB,
 	clock nrports.Clock,
 	evidence nrports.InitialRouteEvidenceView,
 	costs nrports.RouteCandidateCostSource,
 ) (*nrapplication.ReassessRouteHandler, error) {
+	isolatedCosts, err := nrpostgres.NewSavepointedRouteCandidateCosts(db, costs)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: reassessment candidate costs savepoint: %w", err)
+	}
 	routeStore, err := nrpostgres.NewInitialRoutes(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: initial route store: %w", err)
@@ -127,7 +132,7 @@ func reassessRouteHandlerOver(
 	return nrapplication.NewReassessRouteHandler(nrapplication.ReassessRouteDeps{
 		Routes:        routeStore,
 		Evidence:      evidence,
-		Costs:         costs,
+		Costs:         isolatedCosts,
 		Applicability: applicabilities,
 		Store:         reassessments,
 		Log:           handoffLog,

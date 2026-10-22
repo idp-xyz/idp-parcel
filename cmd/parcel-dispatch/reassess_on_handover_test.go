@@ -62,14 +62,23 @@ func (spy *carriedGeoEvidence) LoadInitialRouteEvidence(
 }
 
 // reassessCostsDouble 是候选成本取数侧替身。answer 空时交回证据替身里的成本事实：生产证据视图不折成本，用例把成本写在
-// 证据替身上，这里原样转交，好让一份夹具同时给证据与成本。
+// 证据替身上，这里原样转交，好让一份夹具同时给证据与成本。read 非空时先在调用方的 ctx 上跑它、出错即原样交回：生产取数侧
+// 的仓储读口在事务里走同一笔事务，一条 SQL 级读错误会把那笔事务打进中止态，用例借它演这一种读失败。
 type reassessCostsDouble struct {
 	answer *nrports.RouteCandidateCosts
+	read   func(ctx context.Context) error
+	asked  int
 }
 
 func (double *reassessCostsDouble) LoadCandidateCosts(
-	_ context.Context, _ nrdomain.InitialRouteJudgmentKey, evidence nrports.InitialRouteEvidence, _ nrports.RequestCarriedContent,
+	ctx context.Context, _ nrdomain.InitialRouteJudgmentKey, evidence nrports.InitialRouteEvidence, _ nrports.RequestCarriedContent,
 ) (nrports.RouteCandidateCosts, error) {
+	double.asked++
+	if double.read != nil {
+		if err := double.read(ctx); err != nil {
+			return nrports.RouteCandidateCosts{}, err
+		}
+	}
 	if double.answer != nil {
 		return *double.answer, nil
 	}

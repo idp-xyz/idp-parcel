@@ -155,7 +155,8 @@ func TestAnImprovementRerouteComparesCostsTheSourceLoads(t *testing.T) {
 
 // Covers: 票 demo-chain-gaps/115「要裁的」——成本读不回是依赖故障，重投推得动。无路由那条线答未决
 // REASSESS_COST_SOURCE_UNAVAILABLE，不落复核、不入账未判。失效线上不拦失效落库，候选评估记未决、不挂建议；仍适用线上
-// 只是不试改善，原计划照旧保留。这里的读不回不碰事务；库里读失败让事务中毒的那一种归票 docs-consistency/code/67。
+// 只是不试改善，原计划照旧保留。这里的替身不碰事务；库里读失败不连累判断那一笔事务，由生产装配的 savepoint 兑现，真库那一半
+// 在 cmd/parcel-dispatch 的 reassess_cost_read_isolation_test.go。
 func TestAnUnreadableCostSourceSettlesPerLine(t *testing.T) {
 	unreadable := errors.New("parcel pricing answered an untranslatable evaluation")
 	t.Run("无路由线", func(t *testing.T) {

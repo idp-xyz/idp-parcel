@@ -1268,10 +1268,17 @@ func acceptanceConsumer(
 		return nil, fmt.Errorf("parcel-dispatch: routing applicability: %w", err)
 	}
 
+	// 取数侧包 savepoint：一件包裹的成本读失败之后，编排还要重读证据做提交前重校，事务若已中毒，那一读跟着失败，未决原因
+	// 就被报成网络证据读不动。
+	costs, err := nrpostgres.NewSavepointedRouteCandidateCosts(db, routeCosts(db, clock))
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: initial route candidate costs savepoint: %w", err)
+	}
+
 	routeHandler := nrapplication.NewCreateInitialRouteHandler(nrapplication.CreateInitialRouteDeps{
 		Applicability: applicability,
 		Evidence:      evidence,
-		Costs:         routeCosts(db, clock),
+		Costs:         costs,
 		Store:         routeStore,
 		NotFormed:     routeStore,
 		Log:           handoffLog,

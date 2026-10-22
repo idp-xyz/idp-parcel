@@ -664,8 +664,8 @@ func (handler *ReassessRouteHandler) tryImprovementReroute(
 	if err != nil || undecided {
 		return record, nil
 	}
-	// 成本读不回就判不出改善，原计划照旧保留，与取号故障同一处置：仍适用本身已判定，切换只是可选的那一步。读不回若是
-	// 库里读失败，事务已经中毒，随后落册失败、整笔回滚（票 docs-consistency/code/67）。
+	// 成本读不回就判不出改善，原计划照旧保留，与取号故障同一处置：仍适用本身已判定，切换只是可选的那一步。库里读失败也
+	// 落这一格：取数侧的读失败不连累这一笔事务（ports.RouteCandidateCostSource），仍适用照常落册。
 	evidence, costs, unavailable, err := handler.candidateCosts(ctx, trigger.Key(), evidence, carried)
 	if errors.Is(err, ports.ErrRouteCostAnswerUnusable) {
 		// 取数侧答用不了同样判不出改善；仍适用已判定，拦它就是让一个可选的切换挡住已成的结论。
@@ -974,9 +974,8 @@ type candidateReview struct {
 
 // reviewCandidates 在失效路径上给出候选评估状态（另存，不拦失效）。并列算有候选：候选可行，
 // 只是要授权角色裁；排不出唯一一条的各格与证据装配坏了都记未决，不冒充「没有合格候选」这个
-// 业务结论。成本读不回同记未决，因为候选评估未决不得拦失效落库（硬句）；读不回若是库里读失败，
-// 事务已经中毒，失效随整笔一起回滚，这一格只在不碰事务的读不回上成立（票 docs-consistency/code/67）。
-// 只有成本取数侧装配缺漏才交错误。
+// 业务结论。成本读不回同记未决，因为候选评估未决不得拦失效落库（硬句）；库里读失败也落这一格，取数侧的
+// 读失败不连累这一笔事务（ports.RouteCandidateCostSource），失效随后照常落册。只有成本取数侧装配缺漏才交错误。
 func (handler *ReassessRouteHandler) reviewCandidates(
 	ctx context.Context,
 	key domain.InitialRouteJudgmentKey,
