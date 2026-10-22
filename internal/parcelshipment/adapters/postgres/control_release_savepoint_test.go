@@ -83,6 +83,9 @@ func TestASavepointKeepsAFailedReleaseFromAbortingTheCaller(t *testing.T) {
 // Covers: 装饰器的无事务一支与装配缺口——ctx 不在事务里时直通内层、不发 SAVEPOINT；少接一件时答错误，不 panic。
 func TestASavepointPassesTheReleaseThroughOutsideATransaction(t *testing.T) {
 	db, inner, release := controlReleaseSavepointFixture(t, `SELECT 1`)
+	if _, err := db.RequireExecutor(t.Context()); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("前提不成立：ctx 应在事务外，RequireExecutor 却答 %v", err)
+	}
 	if err := release.ReleasePreAcceptanceControl(t.Context(), ports.ControlReleaseRequest{}); err != nil || inner.asked != 1 {
 		t.Fatalf("事务外 err = %v 问内层 %d 次, want 直通一次", err, inner.asked)
 	}
