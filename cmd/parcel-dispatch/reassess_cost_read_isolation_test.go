@@ -133,8 +133,8 @@ func withholdPriceCardVersions(t *testing.T, syn *synVerticalFixture) (restore f
 	return restore
 }
 
-// Covers: AT-NR-053（真库，生产装配，候选评估因成本读失败而未决的那一种）——演示租户采用了演示网络、登了与演示成本卡同身份的 CNY 卡，委托已接受且带客户声明
-// 2.5 KG；证据视图、关务来源、候选成本取数侧与复核编排全是生产接法，经生产路由表一拍。
+// Covers: AT-NR-053（真库，生产装配，候选评估因成本读失败而未决的那一种）——演示租户采用了演示网络、登了与演示成本卡同身份的
+// CNY 卡，委托已接受且带客户声明 2.5 KG；证据视图、关务来源、候选成本取数侧与复核编排全是生产接法，经生产路由表一拍。
 //  1. 价卡版本表读不动时交进吉隆坡枢纽：信封入账；原计划失效，候选评估未决，不挂建议；
 //  2. 表挪回之后交进新加坡枢纽：走无路由那条线，形成首个当前有效路由计划——上一次没判成的候选评估由下一次控制触发补上。
 func TestALapseLandsThroughTheProductionRouteWhenPriceCardsAreUnreadable(t *testing.T) {
@@ -181,9 +181,11 @@ func TestALapseLandsThroughTheProductionRouteWhenPriceCardsAreUnreadable(t *test
 	}
 }
 
-// Covers: 初始路由那一件读不回（生产装配，UC-NR-001）——与上一条同一份演示网络与成本卡，SYN-RES-01 照 SYN-PC-PRODUCT 种子要求
-// 网络路由判断；接受决定信封交给生产装配的接受决定消费者，价卡版本表读不动。信封照旧回滚重投（成本读不回是依赖故障），未决原因如实指向取数侧：取成本之后编排还要重读一次证据
-// 做提交前重校，事务若已中毒，那一读跟着失败，原因就被报成网络证据读不动，运维会去查网络目录而不是 parcel-pricing。
+// Covers: 初始路由那一件读不回（生产装配，UC-NR-001）——演示网络与成本卡的登法同
+// TestALapseLandsThroughTheProductionRouteWhenPriceCardsAreUnreadable，SYN-RES-01 照 SYN-PC-PRODUCT 种子要求网络路由判断；
+// 接受决定信封交给生产装配的接受决定消费者，价卡版本表读不动。信封照旧回滚重投（成本读不回是依赖故障），未决原因如实指向
+// 取数侧：取成本之后编排还要重读一次证据做提交前重校，事务若已中毒，那一读跟着失败，原因就被报成网络证据读不动，运维会去查
+// 网络目录而不是 parcel-pricing。
 func TestAnInitialRouteCostReadFailureIsReportedAsTheCostSource(t *testing.T) {
 	syn := newSYNVerticalFixture(t)
 	acceptDemoParcelWithGeoAndWeight(t, syn)

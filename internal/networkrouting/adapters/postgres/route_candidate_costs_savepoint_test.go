@@ -18,23 +18,29 @@ import (
 // 替身取数侧与生产的仓储读口一样经 ReadExecutor 在调用方的事务里发 SQL。随后的写借交接登记册，它与复核、初始路由的落册同在
 // network_routing 一笔事务里。断言一律在事务闭包外。
 
-// sqlCostSource 在调用方的事务里发一条 SQL；query 出错时把错误原样交回，像一张读不动的价卡表那样。
+// sqlCostSource 在调用方的事务里发一条 SQL；query 出错时把错误原样交回，像一张读不动的价卡表那样。sequence 非空时第 n 次
+// 调用发其中第 n 条，演同一笔事务里先后几次取成本。
 type sqlCostSource struct {
-	db    *bentopg.DB
-	query string
-	asked int
+	db       *bentopg.DB
+	query    string
+	sequence []string
+	asked    int
 }
 
 func (source *sqlCostSource) LoadCandidateCosts(
 	ctx context.Context, _ domain.InitialRouteJudgmentKey, _ ports.InitialRouteEvidence, _ ports.RequestCarriedContent,
 ) (ports.RouteCandidateCosts, error) {
 	source.asked++
+	query := source.query
+	if len(source.sequence) > 0 {
+		query = source.sequence[source.asked-1]
+	}
 	querier, err := source.db.ReadExecutor(ctx)
 	if err != nil {
 		return ports.RouteCandidateCosts{}, err
 	}
 	var amount int64
-	if err := querier.QueryRow(ctx, source.query).Scan(&amount); err != nil {
+	if err := querier.QueryRow(ctx, query).Scan(&amount); err != nil {
 		return ports.RouteCandidateCosts{}, err
 	}
 	candidate, err := domain.NewCandidateID("SYN-CANDIDATE-01")
@@ -106,6 +112,38 @@ func TestASavepointKeepsAFailedCostReadFromAbortingTheJudgment(t *testing.T) {
 		t.Fatalf("取数侧读失败连带了随后的写：%v", err)
 	}
 	if !digestLogged(t, log, "corr-after-failed-costs") {
+		t.Fatal("提交之后读不回随后写的那一行")
+	}
+}
+
+// Covers: 同一笔事务里先后几次取成本各开各收——初始路由逐件包裹、复核每次排序各取一次，savepoint 名重用。依次失败、失败、
+// 成功：两次失败各自退回、错误原样交回，第三次读数照常交回；随后的写照常提交、读得回。若某次退回没退干净（退到别处或残留
+// 中止态），第三次读或随后的写就会答 25P02。
+func TestSuccessiveCostReadsInOneTransactionEachRecover(t *testing.T) {
+	db, log, inner, costs := candidateCostsSavepointFixture(t, "")
+	inner.sequence = []string{`SELECT (1/0)::bigint`, `SELECT (1/0)::bigint`, `SELECT 2700::bigint`}
+
+	errs := make([]error, 0, len(inner.sequence))
+	var loaded ports.RouteCandidateCosts
+	err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		for range inner.sequence {
+			var readErr error
+			loaded, readErr = costs.LoadCandidateCosts(txCtx, domain.InitialRouteJudgmentKey{}, ports.InitialRouteEvidence{},
+				ports.RequestCarriedContent{})
+			errs = append(errs, readErr)
+		}
+		return appendAfterCosts(txCtx, t, log, "corr-after-successive-costs")
+	})
+	if len(errs) != 3 || errs[0] == nil || errs[1] == nil || errs[2] != nil {
+		t.Fatalf("三次读的错误 = %v, want 失败、失败、成功", errs)
+	}
+	if len(loaded.Facts) != 1 || loaded.Facts[0].AmountMinor() != 2700 {
+		t.Fatalf("第三次读回 %+v, want 一条 2700", loaded.Facts)
+	}
+	if err != nil {
+		t.Fatalf("两次读失败之后提交：%v", err)
+	}
+	if !digestLogged(t, log, "corr-after-successive-costs") {
 		t.Fatal("提交之后读不回随后写的那一行")
 	}
 }
