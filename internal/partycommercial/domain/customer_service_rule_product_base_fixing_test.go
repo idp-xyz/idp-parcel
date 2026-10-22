@@ -180,6 +180,7 @@ func TestTheRehydrationGateKeepsTheFixedProductBaseHonest(t *testing.T) {
 	otherContractRule := registerServiceRule(t, scratch, "csr-other-contract", "v1", namesContract("contract-2"))
 	otherScopeRule := effectiveNaming(t, scratch, domain.CustomerServiceRuleObject,
 		"csr-scope-b", "v1", "sha256:csr-scope-b", "scope-b", namesProduct("product-a"))
+	otherTenantRule := otherTenantServiceRule(t, "csr-tenant-2")
 
 	accepted := map[string]struct {
 		rule        domain.CommercialVersion
@@ -218,6 +219,8 @@ func TestTheRehydrationGateKeepsTheFixedProductBaseHonest(t *testing.T) {
 			ProductBase: otherContractRule, HasProductBase: true, ProductBaseFixed: true}},
 		"底座在别的范围": {contractRule, domain.RehydrateAdoptedBasisSpec{
 			ProductBase: otherScopeRule, HasProductBase: true, ProductBaseFixed: true}},
+		"底座属别的租户": {contractRule, domain.RehydrateAdoptedBasisSpec{
+			ProductBase: otherTenantRule, HasProductBase: true, ProductBaseFixed: true}},
 		"底座不是客户服务规则": {contractRule, domain.RehydrateAdoptedBasisSpec{
 			ProductBase:    effectiveIn(t, scratch, domain.ServiceProductObject, "product-a", "v1", "sha256:product-a", "scope-a"),
 			HasProductBase: true, ProductBaseFixed: true}},
@@ -277,4 +280,29 @@ func TestTheFixedProductBaseDoesNotFollowALaterProductVersion(t *testing.T) {
 	if base, _, _ := inheritedBaseOf(t, again); base.Version().String() != "v2" {
 		t.Fatalf("同一键此刻重解底座 = %q, want v2——夹具没咬到", base.Version())
 	}
+}
+
+// otherTenantServiceRule 造一版同范围、挂 product-a、却属 tenant-2 的已发布客户服务规则：除租户之外与合格底座一模一样，
+// 重建门要单凭租户这一维拒它。
+func otherTenantServiceRule(t *testing.T, objectID string) domain.CommercialVersion {
+	t.Helper()
+	spec := commercialSpec(t, domain.CustomerServiceRuleObject, objectID, "v1", "sha256:"+objectID)
+	spec.TenantID = commercialValue(t, domain.NewTenantID, "tenant-2")
+	spec.Scope = commercialValue(t, domain.NewCommercialScopeReference, "scope-a")
+	spec.References = map[domain.CommercialObjectKind]domain.CommercialObjectID{
+		domain.ServiceProductObject: commercialValue(t, domain.NewCommercialObjectID, "product-a"),
+	}
+	draft, err := domain.NewCommercialDraft(spec)
+	if err != nil {
+		t.Fatalf("new draft: %v", err)
+	}
+	productPublished := func(domain.CommercialObjectKind, domain.CommercialObjectID) domain.NamedReferenceStanding {
+		return domain.NamedReferencePublished
+	}
+	published, err := draft.Publish(approval(t, "approval-tenant-2-"+objectID), domain.ApprovalRoleConfirmed,
+		time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC), productPublished)
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	return published
 }

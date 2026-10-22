@@ -161,7 +161,7 @@ var noDeclaredProduct = domain.CommercialObjectID{}
 
 // legacyClosureOver 经重建门造一份采纳了 contractRule 的已固定闭包，**没有底座一格**——ADR-0268 之前形成的快照就是
 // 这个样子（决定三），层次读口对它按闭包锚点与键上声明的服务产品现选底座。本文件证的正是这条现选的路；底座随闭包
-// 固定的那一路见 customer_service_rule_product_base_fixing_test.go。declaredProduct 非空时闭包也采用那个服务产品，
+// 固定的那一路见 TestAnAcceptedClosureKeepsReadingTheProductBaseFixedAtAcceptance 一族。declaredProduct 非空时闭包也采用那个服务产品，
 // 键上声明它（键要求声明的产品在必需依据里）。
 func legacyClosureOver(t *testing.T, tenant string, contractRule domain.CommercialVersion, declaredProduct string) domain.CommercialClosure {
 	t.Helper()

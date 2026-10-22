@@ -628,7 +628,9 @@ func resolveCustomerServiceRuleBasis(
 			result.productBase = base
 			result.hasProductBase = true
 		case ApplicabilityConflict:
+			// 冲突出在底座那一层，报的候选数随它：去更正登记的人要看的是产品层有几版同期生效。
 			outcome = ApplicabilityConflict
+			result.candidateCount = len(productTier)
 		}
 		result.productBaseFixed = outcome == UniquelyResolved
 	}

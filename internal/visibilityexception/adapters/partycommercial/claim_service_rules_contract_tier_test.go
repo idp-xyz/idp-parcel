@@ -154,8 +154,8 @@ func contractTierFixture(t *testing.T) (*resolutionFixture, pcdomain.CommercialV
 }
 
 // Covers: 票 04 做什么 1、2 / ADR-0176 决定二、ADR-0268 决定一——采纳合同版时把第二段取回的那份闭包整份交给层次读口、
-// 问恰一次，不走单版点读（底座固定在闭包上，读哪一版由 PC 按闭包定）；合同版有行的那一维用合同版并冻它的版本引用，合同版无行的那一维
-// 取底座行并冻底座的版本引用。
+// 问恰一次，不走单版点读（底座固定在闭包上，读哪一版由 PC 按闭包定）；合同版有行的那一维用合同版并冻它的版本
+// 引用，合同版无行的那一维取底座行并冻底座的版本引用。
 func TestAContractTierRuleTakesItsOwnRowsAndInheritsTheRestFromTheProductBase(t *testing.T) {
 	fixture, contractRule := contractTierFixture(t)
 
