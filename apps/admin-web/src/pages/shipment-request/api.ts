@@ -22,6 +22,7 @@
 
 import { accessRefusalOf, type AccessRefusal } from '../../auth/access-refusal';
 import { withBearer } from '../../auth/bearer';
+import { problemCodeOf } from '../problem-body';
 
 // 路径前缀已裁决:前端统一带 /api 发起,开发代理剥前缀转发;由装配侧在 bootstrap
 // 调 configureShipmentRequestApi({ basePrefix: '/api' }) 注入。默认空串只是未装配
@@ -579,7 +580,7 @@ export type ApiResult<Body> =
 export function submitShipmentRequest(
   draft: ShipmentRequestDraft,
 ): Promise<ApiResult<SubmitResponseBody>> {
-  return post<SubmitResponseBody>('/shipment-requests', draft);
+  return post<SubmitResponseBody>('/v1/shipment-requests', draft);
 }
 
 export function withdrawShipmentRequest(
@@ -693,8 +694,7 @@ async function exchange<Body>(path: string, init: RequestShape): Promise<ApiResu
     return { kind: 'outcome', status: response.status, body: parsed as Body };
   }
 
-  const code =
-    (parsed as { error?: { code?: string } } | null)?.error?.code ?? 'UNKNOWN';
+  const code = problemCodeOf(parsed);
   const refusal = accessRefusalOf(response.status, code);
   if (refusal) return refusal;
   if (response.status >= 500) {

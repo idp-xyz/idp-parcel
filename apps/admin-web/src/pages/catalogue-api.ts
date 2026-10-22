@@ -1,5 +1,6 @@
 import { accessRefusalOf, type AccessRefusal } from '../auth/access-refusal';
 import { withBearer } from '../auth/bearer';
+import { problemCodeOf, problemDetailOf } from './problem-body';
 
 export type ApiResult<Body> =
   | { kind: 'outcome'; status: number; body: Body }
@@ -131,8 +132,7 @@ function classifyMasterDataResponse<Body>(
     return { kind: 'outcome', status: response.status, body: payload as Body };
   }
 
-  const problem = (payload as { error?: { code?: string; detail?: unknown } } | null)?.error;
-  const code = problem?.code ?? 'UNKNOWN';
+  const code = problemCodeOf(payload);
   const refusal = accessRefusalOf(response.status, code);
   if (refusal) return refusal;
   if (response.status >= 500) {
@@ -140,7 +140,7 @@ function classifyMasterDataResponse<Body>(
   }
   // 只在服务端真给了一句字符串时才带上这一格：别的形状不是散文，不冒充；缺席时不多出一个值为 undefined 的键，
   // 调用侧按「有没有这一格」判，不必再判值。
-  const detail = typeof problem?.detail === 'string' ? problem.detail : undefined;
+  const detail = problemDetailOf(payload);
   return detail === undefined
     ? { kind: 'callerProblem', status: response.status, code }
     : { kind: 'callerProblem', status: response.status, code, detail };

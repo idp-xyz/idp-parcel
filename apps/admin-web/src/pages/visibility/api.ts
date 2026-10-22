@@ -23,6 +23,7 @@
 
 import { accessRefusalOf, type AccessRefusal } from '../../auth/access-refusal';
 import { withBearer } from '../../auth/bearer';
+import { problemCodeOf } from '../problem-body';
 
 // 路径前缀与委托查阅同一裁决:前端统一带 /api 发起,开发代理剥前缀转发;由装配侧
 // 在 bootstrap 调 configureVisibilityApi({ basePrefix: '/api' }) 注入。
@@ -76,7 +77,7 @@ export interface ProjectionListResponseBody {
 /**
  * 单件读法的封闭结果。「投影未形成」与「版本未留存」对租户内已授权的运营查阅是
  * 如实的 2xx 业务答案,不承袭客户面 VIEW_NOT_FOUND 的三义合并(ADR-0076 第四条);
- * 对外部客户面的合并义务不因此松动,那在 /customer-tracking-view 一侧照旧。
+ * 对外部客户面的合并义务不因此松动,那在 /v1/customer-tracking-view 一侧照旧。
  */
 export type ProjectionDetailOutcome =
   | 'CURRENT_PROJECTION'
@@ -148,8 +149,7 @@ async function exchange<Body>(path: string, init: RequestShape): Promise<ApiResu
     return { kind: 'outcome', status: response.status, body: parsed as Body };
   }
 
-  const code =
-    (parsed as { error?: { code?: string } } | null)?.error?.code ?? 'UNKNOWN';
+  const code = problemCodeOf(parsed);
   const refusal = accessRefusalOf(response.status, code);
   if (refusal) return refusal;
   if (response.status >= 500) {

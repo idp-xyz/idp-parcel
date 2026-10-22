@@ -7,7 +7,7 @@ import { HttpsProxyAgent } from 'https-proxy-agent';
 // 目标换别处用 PARCEL_API_TARGET。
 // 路径约定：前端一律带 /api 前缀发起（装配侧 configureShipmentRequestApi
 // 传 basePrefix='/api'），代理剥掉前缀转发——parcel-api 的路由本身不带
-// /api（如 POST /shipment-requests），前缀只属前端侧的转发约定，
+// /api（如 POST /v1/shipment-requests），前缀只属前端侧的转发约定，
 // 这样单条代理规则即可覆盖全部端点，不必逐路径枚举。
 const apiTarget = process.env.PARCEL_API_TARGET || 'http://localhost:19080';
 // 操作者族发行方：与 src/auth/oidc.ts 的 ISSUER 同源，换发行方时两处一起改。
