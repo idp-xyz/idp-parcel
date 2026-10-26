@@ -286,7 +286,7 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
    五口都已开。`steps/479-access-customer-command-faces.sh` 对同一台合成货主系统各登一笔授予（`data/access/18`）、各一行准入范围对照
    （`data/access/19`，能力 `CUSTOMER_COMMAND`）与各一段权威区间（`data/governance/53`–`57`），五口的生产写在铸造侧判准入，所以都要
    `IDP_PARCEL_GOVERNANCE_SELF_AUTHORITY`（第 5 条），不设答 403 `OUTSIDE_ADMISSION_SCOPE`。这三样是五口共有的底座；各口再靠哪份种子：
-   - 补充、撤回：只要上面的授予与准入，不另要种子。
+   - 补充、撤回：在提交口那套种子（见第 5 条）之上，只要上面的授予与准入，不另要种子。
    - 修订：授权由商业权威裁定（ADR-0311），靠发布批（`data/commercial/publish-batch.json`）里授权规则 `SYN-AUTH-SOURCE-AMEND-01` 声明的授予
      （`SOURCE_DATA_AMENDMENT` × `CUSTOMER_SELF_SERVICE`）、同一发布批里 `sourceDataAmendment` 的允许矩阵（四个资料组 `SENDER_PLACE`、
      `DELIVERY_PLACE`、`DECLARED_MEASUREMENT`、`SYN-GROUP-CONSIGNEE-ADDRESS` 各在`已接受未收寄`与`报关已提交`两阶段登了意图格），以及

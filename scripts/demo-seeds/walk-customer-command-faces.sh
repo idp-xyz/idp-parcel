@@ -79,7 +79,7 @@ PY
 # step <标签> <路径> <载荷> <要的状态码> <要的 outcome，空串表示不看>：POST 并断言，答复留在 $resp。
 step() {
   local label="$1" path="$2" body="$3" want_code="$4" want_outcome="$5" code
-  code="$(curl -sS -o "$resp" -w '%{http_code}' -X POST \
+  code="$(curl -sS --max-time 30 -o "$resp" -w '%{http_code}' -X POST \
     -H 'Content-Type: application/json' -H "Authorization: Bearer ${token}" \
     --data "$body" "${base}${path}")"
   python3 - "$label" "$code" "$resp" "$want_code" "$want_outcome" <<'PY'
@@ -150,7 +150,7 @@ b_access="$access" b_request="$request_id" b_version="$version_id" b_parcel="$pa
 
 deadline=$((SECONDS + accept_timeout))
 while :; do
-  view_code="$(curl -sS -o "$resp" -w '%{http_code}' -H "Authorization: Bearer ${token}" \
+  view_code="$(curl -sS --max-time 30 -o "$resp" -w '%{http_code}' -H "Authorization: Bearer ${token}" \
     --get "${base}/v1/customer-tracking-view" --data-urlencode "parcel=${b_parcel}")"
   if [[ "$view_code" != "200" ]]; then
     printf 'walk-customer-command-faces: 客户追踪视图 HTTP %s，要 200：\n%s\n' "$view_code" "$(cat "$resp")" >&2
