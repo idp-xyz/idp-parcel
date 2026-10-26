@@ -298,8 +298,8 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
 
    `scripts/demo-seeds/walk-customer-command-faces.sh` 把五口各实走一遍（补充、撤回停在`已提交`的委托，修订、索赔、取消落在要`已接受`的另一份委托，
    外加两条 404 与一条 400 反例），用法与同一 UTC 秒重跑的行为见该脚本头注；委托的接受靠 `cmd/parcel-dispatch`，不起它脚本等到超时并说明该起什么。
-   **撤回口对外开放以 `docs-consistency/code/102` 进 main 为前提**：委托撤回之后，迟到的接受链会在控制作用域锁上新占一笔资金冻结，
-   没有任何路径去放（孤儿冻结）；该票未进 main 之前，演示可以走撤回，但不要把撤回授予发给真租户。证据只记 `S`。
+   委托撤回之后迟到的接受链，会在控制作用域锁上把自己占下的资金冻结逐版放掉，不留孤儿冻结
+   （`docs-consistency/code/102`，[ADR-0290](../../docs/adr/0290-an-acceptance-chain-round-that-finds-the-request-withdrawn-or-rejected-releases-the-occupation-it-formed.md)）；撤回口对外开放的这一前提已满足。证据只记 `S`。
 
 ## 数据故事（同一合成租户 SYN-TENANT-01，范围 SYN-SCOPE-01）
 
