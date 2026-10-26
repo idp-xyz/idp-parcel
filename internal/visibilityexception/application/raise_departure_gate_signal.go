@@ -37,11 +37,18 @@ func (outcome DepartureGateSignalOutcome) String() string {
 	}
 }
 
-// RaiseDepartureGateSignalCommand 是一件出发时被关务判为阻断的对象。只带对象，不带读数：命中条件（阻断）由调用方按源事实判过，
+// RaiseDepartureGateSignalCommand 是一件出发时被关务判为阻断的对象，连同那一次出发：命中条件（阻断）由调用方按源事实判过，
 // 本用例不重判关务的答复，也不另存一份读数。
+//
+// Fact 与 Version 指回那一条移动事实在这件包裹上的引用与版本（`movement-fact/<对象>/<事实>`，与投影那一路同一把键），Judgement
+// 是读数里这件对象那一格的关务判断标识。三样一起是信号的事实依据，Fact 同时是因果条件——一次违规出发就是一个原因，各开一期、
+// 各自分诊（代决复核报告 M18）。
 type RaiseDepartureGateSignalCommand struct {
-	TenantID domain.TenantID
-	Parcel   domain.TrackedParcelReference
+	TenantID  domain.TenantID
+	Parcel    domain.TrackedParcelReference
+	Fact      domain.SourceFactReference
+	Version   domain.SourceFactVersion
+	Judgement string
 }
 
 type RaiseDepartureGateSignalResult struct {
@@ -78,9 +85,10 @@ func NewRaiseDepartureGateSignalHandler(deps RaiseDepartureGateSignalDeps) (*Rai
 
 // Handle 按本租户登记的出发门禁阻断信号规则形成一次信号命中，交分诊（ADR-0205 决定五）。
 //
-// 类型、规则版本与可信度三样全来自登记——未配置即如实答「规则未配置」，不替租户拟一种异常类型。命中时刻取判断那一刻而不取
-// 出发的业务时间：同一件对象先后几次出发的信封不保序（各条移动事实各占一个分区），按业务时间记命中，后到的较早一次出发
-// 会让活跃发作期的命中时刻倒退，被领域拒；判断时刻单调，CONTEXT 要信号保存的也正是「判断时间」。
+// 类型、规则版本与可信度三样全来自登记——未配置即如实答「规则未配置」，不替租户拟一种异常类型。因果条件是那一条移动事实：
+// 同一件包裹另一次出发被阻断是另一个原因，另开一期、重新分诊；同一次出发的信封重投落在同一期，只记一次命中。这一期没有恢复
+// 边界——原因是一次已经发生的出发，事后不会「不再成立」，替它结束发作期就是虚构一次恢复；后续处置归分诊与案件。命中时刻取
+// 判断那一刻而不取出发的业务时间：CONTEXT 要信号保存的是「判断时间」，同一期的重复命中按判断时刻也不会倒退。
 func (handler *RaiseDepartureGateSignalHandler) Handle(
 	ctx context.Context,
 	command RaiseDepartureGateSignalCommand,
@@ -92,13 +100,24 @@ func (handler *RaiseDepartureGateSignalHandler) Handle(
 	if !configured {
 		return RaiseDepartureGateSignalResult{outcome: DepartureGateSignalRuleNotConfigured}, nil
 	}
+	cause, err := domain.SourceFactCausalCondition(domain.SourceTransportFulfillment, command.Fact)
+	if err != nil {
+		return RaiseDepartureGateSignalResult{}, fmt.Errorf("%w: causal condition: %v", ErrUnexpectedDepartureGateSignalOutcome, err)
+	}
 	raised, err := handler.deps.Signals.Handle(ctx, RaiseSignalCommand{
 		TenantID:   command.TenantID,
 		Kind:       rule.Kind,
 		Parcel:     command.Parcel,
+		Cause:      cause,
 		Rule:       rule.Rule,
 		Confidence: rule.Confidence,
-		HitAt:      handler.deps.Clock.Now(),
+		Basis: []domain.SignalFactBasis{{
+			Source:    domain.SourceTransportFulfillment,
+			Fact:      command.Fact,
+			Version:   command.Version,
+			Judgement: command.Judgement,
+		}},
+		HitAt: handler.deps.Clock.Now(),
 	})
 	if err != nil {
 		return RaiseDepartureGateSignalResult{}, fmt.Errorf("hand departure gate signal to triage: %w", err)

@@ -57,7 +57,7 @@ func (review *CaseReview) ListSignalEpisodes(
 	}
 
 	rows, err := querier.Query(ctx,
-		`SELECT e.episode_id, e.parcel_ref, e.kind_ref, e.rule_ref, e.confidence_ref,
+		`SELECT e.episode_id, e.parcel_ref, e.kind_ref, e.causal_condition, e.fact_basis, e.rule_ref, e.confidence_ref,
 		        e.hits, e.started_at, e.last_hit_at,
 		        COALESCE(e.release_basis, ''), e.ended_at,
 		        COALESCE(e.prior_episode, ''),
@@ -81,12 +81,13 @@ func (review *CaseReview) ListSignalEpisodes(
 	for rows.Next() {
 		var (
 			row       ports.SignalEpisodeCatalogueRow
+			basisJSON []byte
 			hits      int32
 			endedAt   *time.Time
 			triagedAt *time.Time
 		)
 		if err := rows.Scan(
-			&row.EpisodeID, &row.Parcel, &row.Kind, &row.Rule, &row.Confidence,
+			&row.EpisodeID, &row.Parcel, &row.Kind, &row.CausalCondition, &basisJSON, &row.Rule, &row.Confidence,
 			&hits, &row.StartedAt, &row.LastHitAt,
 			&row.ReleaseBasis, &endedAt,
 			&row.PriorEpisode,
@@ -95,6 +96,14 @@ func (review *CaseReview) ListSignalEpisodes(
 			return nil, fmt.Errorf("list signal episodes: %w", err)
 		}
 		row.Hits = int64(hits)
+		var basis []signalFactBasisRow
+		if err := json.Unmarshal(basisJSON, &basis); err != nil {
+			return nil, fmt.Errorf("list signal episodes: fact basis: %w", err)
+		}
+		row.FactBasis = make([]ports.SignalEpisodeFactBasisRow, 0, len(basis))
+		for _, item := range basis {
+			row.FactBasis = append(row.FactBasis, ports.SignalEpisodeFactBasisRow(item))
+		}
 		if endedAt != nil {
 			utc := endedAt.UTC()
 			row.EndedAt = &utc

@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -27,15 +28,37 @@ func NewSignalEpisodes(db *bentopg.DB) (*SignalEpisodes, error) {
 	return &SignalEpisodes{db: db}, nil
 }
 
-// FindLatest 按租户+对象+类型取回最近一次发作期，含已结束的——「已结束+再命中」
-// 要据它建立关联的新发作期，只查活跃会把重开误判成首启。重开的首命中允许与前期结束
-// 同刻，started_at 并列时由到达序（seq）裁决。读回经 RehydrateSignalEpisode 重验
-// 生命周期形状。
+// FindLatestForCause 按租户+对象+类型+因果条件取回最近一次发作期，含已结束的——「已结束+再命中」要据它建立关联的新发作期，
+// 只查活跃会把重开误判成首启。重开的首命中允许与前期结束同刻，started_at 并列时由到达序（seq）裁决。读回经
+// RehydrateSignalEpisode 重验生命周期形状。
+func (repository *SignalEpisodes) FindLatestForCause(
+	ctx context.Context,
+	tenant domain.TenantID,
+	parcel domain.TrackedParcelReference,
+	kind domain.ExceptionSignalKindReference,
+	cause domain.CausalConditionReference,
+) (*domain.SignalEpisode, bool, error) {
+	return repository.findLatest(ctx, tenant, parcel, kind,
+		` AND causal_condition = $4`, cause.String())
+}
+
+// FindLatest 按租户+对象+类型取回最近一次发作期，不问因果条件（端口头注说了谁用、谁不该用）。
 func (repository *SignalEpisodes) FindLatest(
 	ctx context.Context,
 	tenant domain.TenantID,
 	parcel domain.TrackedParcelReference,
 	kind domain.ExceptionSignalKindReference,
+) (*domain.SignalEpisode, bool, error) {
+	return repository.findLatest(ctx, tenant, parcel, kind, ``)
+}
+
+func (repository *SignalEpisodes) findLatest(
+	ctx context.Context,
+	tenant domain.TenantID,
+	parcel domain.TrackedParcelReference,
+	kind domain.ExceptionSignalKindReference,
+	narrowing string,
+	narrowingArgs ...any,
 ) (*domain.SignalEpisode, bool, error) {
 	querier, err := repository.db.ReadExecutor(ctx)
 	if err != nil {
@@ -43,21 +66,23 @@ func (repository *SignalEpisodes) FindLatest(
 	}
 
 	var (
-		episodeID, ruleRef, confidenceRef string
-		hits                              int
-		startedAt, lastHitAt              time.Time
-		releaseBasis, priorEpisode        *string
-		endedAt                           *time.Time
+		episodeID, causeRef, ruleRef, confidenceRef string
+		basisJSON                                   []byte
+		hits                                        int
+		startedAt, lastHitAt                        time.Time
+		releaseBasis, priorEpisode                  *string
+		endedAt                                     *time.Time
 	)
+	args := append([]any{tenant.String(), parcel.String(), kind.String()}, narrowingArgs...)
 	err = querier.QueryRow(ctx,
-		`SELECT episode_id, rule_ref, confidence_ref, hits, started_at, last_hit_at,
+		`SELECT episode_id, causal_condition, rule_ref, confidence_ref, fact_basis, hits, started_at, last_hit_at,
 		        release_basis, ended_at, prior_episode
 		   FROM visibility_exception.signal_episode
-		  WHERE tenant_id = $1 AND parcel_ref = $2 AND kind_ref = $3
+		  WHERE tenant_id = $1 AND parcel_ref = $2 AND kind_ref = $3`+narrowing+`
 		  ORDER BY started_at DESC, seq DESC
 		  LIMIT 1`,
-		tenant.String(), parcel.String(), kind.String(),
-	).Scan(&episodeID, &ruleRef, &confidenceRef, &hits, &startedAt, &lastHitAt,
+		args...,
+	).Scan(&episodeID, &causeRef, &ruleRef, &confidenceRef, &basisJSON, &hits, &startedAt, &lastHitAt,
 		&releaseBasis, &endedAt, &priorEpisode)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, false, nil
@@ -76,10 +101,16 @@ func (repository *SignalEpisodes) FindLatest(
 	if snapshot.ID, err = domain.NewEpisodeID(episodeID); err != nil {
 		return nil, false, fmt.Errorf("rebuild episode: %w", err)
 	}
+	if snapshot.Cause, err = domain.NewCausalConditionReference(causeRef); err != nil {
+		return nil, false, fmt.Errorf("rebuild episode: %w", err)
+	}
 	if snapshot.Rule, err = domain.NewSignalRuleVersionReference(ruleRef); err != nil {
 		return nil, false, fmt.Errorf("rebuild episode: %w", err)
 	}
 	if snapshot.Confidence, err = domain.NewConfidenceReference(confidenceRef); err != nil {
+		return nil, false, fmt.Errorf("rebuild episode: %w", err)
+	}
+	if snapshot.Basis, err = signalFactBasisFromJSON(basisJSON); err != nil {
 		return nil, false, fmt.Errorf("rebuild episode: %w", err)
 	}
 	if releaseBasis != nil {
@@ -99,6 +130,53 @@ func (repository *SignalEpisodes) FindLatest(
 		return nil, false, fmt.Errorf("rebuild episode: %w", err)
 	}
 	return episode, true, nil
+}
+
+// signalFactBasisRow 是事实依据一条在 fact_basis 列里的形状（迁移 0029）。判断标识可缺，缺时不写键。
+type signalFactBasisRow struct {
+	Source    string `json:"source"`
+	Fact      string `json:"fact"`
+	Version   string `json:"version"`
+	Judgement string `json:"judgement,omitempty"`
+}
+
+func signalFactBasisToJSON(basis []domain.SignalFactBasis) ([]byte, error) {
+	rows := make([]signalFactBasisRow, 0, len(basis))
+	for _, item := range basis {
+		rows = append(rows, signalFactBasisRow{
+			Source:    item.Source.String(),
+			Fact:      item.Fact.String(),
+			Version:   item.Version.String(),
+			Judgement: item.Judgement,
+		})
+	}
+	return json.Marshal(rows)
+}
+
+// signalFactBasisFromJSON 把列值译回事实依据。每一格都经领域构造函数重立，立不起来就整行报错：跳过一条会把「依据少了一条」
+// 读成「依据就这些」。
+func signalFactBasisFromJSON(raw []byte) ([]domain.SignalFactBasis, error) {
+	var rows []signalFactBasisRow
+	if err := json.Unmarshal(raw, &rows); err != nil {
+		return nil, fmt.Errorf("fact basis: %w", err)
+	}
+	basis := make([]domain.SignalFactBasis, 0, len(rows))
+	for _, row := range rows {
+		source, err := sourceContextFrom(row.Source)
+		if err != nil {
+			return nil, fmt.Errorf("fact basis: %w", err)
+		}
+		fact, err := domain.NewSourceFactReference(row.Fact)
+		if err != nil {
+			return nil, fmt.Errorf("fact basis: %w", err)
+		}
+		version, err := domain.NewSourceFactVersion(row.Version)
+		if err != nil {
+			return nil, fmt.Errorf("fact basis: %w", err)
+		}
+		basis = append(basis, domain.SignalFactBasis{Source: source, Fact: fact, Version: version, Judgement: row.Judgement})
+	}
+	return basis, nil
 }
 
 // SaveRaised 把新开或重开的发作期、它的分诊结论以及（走向为自动建案时）随之建立的
@@ -133,17 +211,23 @@ func (repository *SignalEpisodes) SaveRaised(
 		return fmt.Errorf("save raised signal: case root disagrees with the signalled parcel")
 	}
 
+	basisJSON, err := signalFactBasisToJSON(snapshot.Basis)
+	if err != nil {
+		return fmt.Errorf("save raised signal: fact basis: %w", err)
+	}
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO visibility_exception.signal_episode
-			(tenant_id, episode_id, parcel_ref, kind_ref, rule_ref, confidence_ref,
+			(tenant_id, episode_id, parcel_ref, kind_ref, causal_condition, rule_ref, confidence_ref, fact_basis,
 			 hits, started_at, last_hit_at, release_basis, ended_at, prior_episode)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
 		record.Tenant.String(),
 		snapshot.ID.String(),
 		snapshot.Parcel.String(),
 		snapshot.Kind.String(),
+		snapshot.Cause.String(),
 		snapshot.Rule.String(),
 		snapshot.Confidence.String(),
+		basisJSON,
 		snapshot.Hits,
 		snapshot.StartedAt,
 		snapshot.LastHitAt,

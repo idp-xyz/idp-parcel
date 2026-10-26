@@ -21,8 +21,8 @@ var (
 	// ErrMovementSegmentNotVisible 表示事实声明的段那一本册读不动。段在册与否要读得出来才说得清，读不动是依赖的事，续办格。
 	ErrMovementSegmentNotVisible = errors.New(
 		"visibility exception transportfulfillment adapter: the segment declared by the movement fact cannot be read")
-	// ErrMovementFactRecordInconsistent 表示按键取回的记录指着另一个键、时间为零、种类落在封闭三值之外，或段册按键交回了
-	// 另一个段；补派生（ADR-0224）那一侧还有：按对象列得出的段按键取不到、按段列出的事实没声明这一段或某一行装不回。仓储
+	// ErrMovementFactRecordInconsistent 表示按键取回的记录指着另一个键、时间为零、种类落在封闭三值之外、出发读数里阻断的那一格
+	// 没有关务判断标识，或段册按键交回了另一个段；补派生（ADR-0224）那一侧还有：按对象列得出的段按键取不到、按段列出的事实没声明这一段或某一行装不回。仓储
 	// 不变量已破（ADR-0029），不是等谁。禁止进 WithUndecidedSentinels。
 	ErrMovementFactRecordInconsistent = errors.New(
 		"visibility exception transportfulfillment adapter: movement fact disagrees with its key")
@@ -212,6 +212,9 @@ func (adapter *DeriveOnMovementFactAdapter) objectsOf(
 //
 // 更正版不再形成：领域的更正版沿用原登记那一刻的读数（ADR-0205 越权风险点 8），同一次出发、同一份读数，原版已经命中过一次，
 // 再命中一次只会把同一件事在分诊里记成两回。
+//
+// 每一件带上这一次出发作事实依据与因果条件：这件包裹上的事实引用（与投影同一把键）、事实版本，以及读数里它那一格的关务判断
+// 标识。阻断那一格必有判断标识（只有读不动没有），没有就是登记册里那一格坏了。
 func (adapter *DeriveOnMovementFactAdapter) signalBlocked(ctx context.Context, fact tfdomain.TransportMovementFact) error {
 	reading, read := fact.GateReading()
 	if !read || reading.Answer() != tfdomain.DepartureGateBlocked {
@@ -232,7 +235,25 @@ func (adapter *DeriveOnMovementFactAdapter) signalBlocked(ctx context.Context, f
 		if err != nil {
 			return fmt.Errorf("%w: blocked object: %v", ErrMovementFactUntranslatableAnswer, err)
 		}
-		result, err := adapter.signals.Handle(ctx, veapplication.RaiseDepartureGateSignalCommand{TenantID: tenant, Parcel: parcel})
+		judgement, judged := finding.Judgement()
+		if !judged {
+			return fmt.Errorf("%w: blocked object %q carries no customs judgement", ErrMovementFactRecordInconsistent, finding.Object())
+		}
+		reference, err := movementFactSourceReference(parcel, fact.Fact())
+		if err != nil {
+			return err
+		}
+		version, err := vedomain.NewSourceFactVersion(fact.Version().String())
+		if err != nil {
+			return fmt.Errorf("%w: movement fact version: %v", ErrMovementFactUntranslatableAnswer, err)
+		}
+		result, err := adapter.signals.Handle(ctx, veapplication.RaiseDepartureGateSignalCommand{
+			TenantID:  tenant,
+			Parcel:    parcel,
+			Fact:      reference,
+			Version:   version,
+			Judgement: judgement,
+		})
 		if err != nil {
 			return err
 		}
@@ -280,11 +301,9 @@ func movementProjectionCommand(
 	if err != nil {
 		return none, fmt.Errorf("%w: tenant: %v", ErrMovementFactUntranslatableAnswer, err)
 	}
-	// 对象维进引用（ADR-0066 决定二）：一条移动事实在每件包裹上各是一份事实；前缀把它与同包交接、揽收、交付错开。袋里的成员取
-	// 成员自己的包裹引用，与它直接在段里时同一把键——同一件不论经哪一路投到，都只有一份。
-	reference, err := vedomain.NewSourceFactReference("movement-fact/" + parcel.String() + "/" + fact.Fact().String())
+	reference, err := movementFactSourceReference(parcel, fact.Fact())
 	if err != nil {
-		return none, fmt.Errorf("%w: source fact: %v", ErrMovementFactUntranslatableAnswer, err)
+		return none, err
 	}
 	version, err := vedomain.NewSourceFactVersion(fact.Version().String())
 	if err != nil {
@@ -312,6 +331,20 @@ func movementProjectionCommand(
 			ReceivedAt:  record.RecordedAt,
 		},
 	}, nil
+}
+
+// movementFactSourceReference 是一条移动事实在一件包裹上的事实引用 `movement-fact/<对象>/<事实>`。对象维进引用（ADR-0066 决定二）：
+// 一条移动事实在每件包裹上各是一份事实；前缀把它与同包交接、揽收、交付错开。袋里的成员取成员自己的包裹引用，与它直接在段里时
+// 同一把键——同一件不论经哪一路投到，都只有一份。阻断信号的事实依据也用这一把，复核时据它就找得回投影上的那一条。
+func movementFactSourceReference(
+	parcel vedomain.TrackedParcelReference,
+	fact tfdomain.MovementFactReference,
+) (vedomain.SourceFactReference, error) {
+	reference, err := vedomain.NewSourceFactReference("movement-fact/" + parcel.String() + "/" + fact.String())
+	if err != nil {
+		return vedomain.SourceFactReference{}, fmt.Errorf("%w: source fact: %v", ErrMovementFactUntranslatableAnswer, err)
+	}
+	return reference, nil
 }
 
 // kindForMovementFact 把封闭三值种类译成三个映射类型字面量。出发、移动、到达语义不同，共用一个类型词会让目录一行把三格都

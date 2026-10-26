@@ -115,18 +115,17 @@ type decideFixture struct {
 func newDecideFixture(t *testing.T) *decideFixture {
 	t.Helper()
 	episodes := newEpisodeStore()
-	episode, err := domain.OpenEpisode(
-		mustValue(t, domain.NewEpisodeID, "episode-1"),
-		mustValue(t, domain.NewExceptionSignalKindReference, "ETA_BREACH_RISK"),
-		mustValue(t, domain.NewTrackedParcelReference, "parcel-1"),
-		mustValue(t, domain.NewSignalRuleVersionReference, "signal-rules/v3"),
-		mustValue(t, domain.NewConfidenceReference, "HIGH/route-deviation"),
-		disclosureEpisodeAt,
-	)
+	opening := raiseCommand(t, disclosureEpisodeAt)
+	hit := domain.SignalHit{
+		Kind: opening.Kind, Parcel: opening.Parcel, Cause: opening.Cause, Rule: opening.Rule,
+		Confidence: opening.Confidence, Basis: opening.Basis, At: opening.HitAt,
+	}
+	episode, err := domain.OpenEpisode(mustValue(t, domain.NewEpisodeID, "episode-1"), hit)
 	if err != nil {
 		t.Fatalf("open episode: %v", err)
 	}
-	episodes.latest[episodeKey{
+	// 披露只认对象与类型，取这一类最近的那一期（FindLatest），不问因果条件。
+	episodes.latestKind[episodeKey{
 		tenant: mustValue(t, domain.NewTenantID, "tenant-1"),
 		parcel: episode.Snapshot().Parcel,
 		kind:   episode.Snapshot().Kind,

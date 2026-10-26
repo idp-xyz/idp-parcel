@@ -94,16 +94,21 @@ func serveSignalEpisodes(
 	bodies := make([]signalEpisodeBody, 0, len(rows))
 	for _, row := range rows {
 		body := signalEpisodeBody{
-			EpisodeID:    row.EpisodeID,
-			Parcel:       row.Parcel,
-			Kind:         row.Kind,
-			Rule:         row.Rule,
-			Confidence:   row.Confidence,
-			Hits:         row.Hits,
-			StartedAt:    catalogueInstant(row.StartedAt),
-			ReleaseBasis: row.ReleaseBasis,
-			PriorEpisode: row.PriorEpisode,
-			LastHitAt:    catalogueInstant(row.LastHitAt),
+			EpisodeID:       row.EpisodeID,
+			Parcel:          row.Parcel,
+			Kind:            row.Kind,
+			CausalCondition: row.CausalCondition,
+			FactBasis:       make([]signalFactBasisBody, 0, len(row.FactBasis)),
+			Rule:            row.Rule,
+			Confidence:      row.Confidence,
+			Hits:            row.Hits,
+			StartedAt:       catalogueInstant(row.StartedAt),
+			ReleaseBasis:    row.ReleaseBasis,
+			PriorEpisode:    row.PriorEpisode,
+			LastHitAt:       catalogueInstant(row.LastHitAt),
+		}
+		for _, basis := range row.FactBasis {
+			body.FactBasis = append(body.FactBasis, signalFactBasisBody(basis))
 		}
 		if row.EndedAt != nil {
 			body.EndedAt = catalogueInstant(*row.EndedAt)
@@ -177,19 +182,29 @@ type signalEpisodeListResponse struct {
 // 队列该停在哪一步这层真话抹掉。ended 两件缺席表示发作期仍活跃。页面详情区想要的
 // 「事实依据」在发作期行上没有登记格，本体不带那一键（无处可登不代填，票 06
 // Comments 记明）。
+// signalEpisodeBody 的 factBasis 恒为数组：存量行（因果条件 RECORDED_BEFORE_CAUSAL_CONDITION）是空数组，缺键与空数组不混用。
 type signalEpisodeBody struct {
-	EpisodeID    string                `json:"episodeId"`
-	Parcel       string                `json:"parcel"`
-	Kind         string                `json:"kind"`
-	Rule         string                `json:"rule"`
-	Confidence   string                `json:"confidence"`
-	Hits         int64                 `json:"hits"`
-	StartedAt    string                `json:"startedAt"`
-	LastHitAt    string                `json:"lastHitAt"`
-	ReleaseBasis string                `json:"releaseBasis,omitempty"`
-	EndedAt      string                `json:"endedAt,omitempty"`
-	PriorEpisode string                `json:"priorEpisode,omitempty"`
-	Triage       *triageConclusionBody `json:"triage,omitempty"`
+	EpisodeID       string                `json:"episodeId"`
+	Parcel          string                `json:"parcel"`
+	Kind            string                `json:"kind"`
+	CausalCondition string                `json:"causalCondition"`
+	FactBasis       []signalFactBasisBody `json:"factBasis"`
+	Rule            string                `json:"rule"`
+	Confidence      string                `json:"confidence"`
+	Hits            int64                 `json:"hits"`
+	StartedAt       string                `json:"startedAt"`
+	LastHitAt       string                `json:"lastHitAt"`
+	ReleaseBasis    string                `json:"releaseBasis,omitempty"`
+	EndedAt         string                `json:"endedAt,omitempty"`
+	PriorEpisode    string                `json:"priorEpisode,omitempty"`
+	Triage          *triageConclusionBody `json:"triage,omitempty"`
+}
+
+type signalFactBasisBody struct {
+	Source    string `json:"source"`
+	Fact      string `json:"fact"`
+	Version   string `json:"version"`
+	Judgement string `json:"judgement,omitempty"`
 }
 
 type triageConclusionBody struct {

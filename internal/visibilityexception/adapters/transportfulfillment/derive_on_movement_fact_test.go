@@ -51,18 +51,20 @@ func (double *movementSegmentDouble) FindByKey(
 	return double.record, double.found, double.err
 }
 
-// movementSignalDouble 记下每一件被交进来的对象，按 outcome 作答。
+// movementSignalDouble 记下每一件被交进来的对象与整条命令，按 outcome 作答。
 type movementSignalDouble struct {
-	parcels []string
-	answer  func(t *testing.T) veapplication.RaiseDepartureGateSignalResult
-	err     error
-	t       *testing.T
+	parcels  []string
+	commands []veapplication.RaiseDepartureGateSignalCommand
+	answer   func(t *testing.T) veapplication.RaiseDepartureGateSignalResult
+	err      error
+	t        *testing.T
 }
 
 func (double *movementSignalDouble) Handle(
 	_ context.Context, command veapplication.RaiseDepartureGateSignalCommand,
 ) (veapplication.RaiseDepartureGateSignalResult, error) {
 	double.parcels = append(double.parcels, command.Parcel.String())
+	double.commands = append(double.commands, command)
 	if double.err != nil {
 		return veapplication.RaiseDepartureGateSignalResult{}, double.err
 	}
@@ -257,6 +259,13 @@ func TestADepartureProjectsOntoEveryObjectUnderControlAndSignalsTheBlockedOne(t 
 	}
 	if len(fixture.signals.parcels) != 1 || fixture.signals.parcels[0] != "parcel-1" {
 		t.Fatalf("交进信号编排的 = %v, want 只有阻断的 parcel-1", fixture.signals.parcels)
+	}
+	// `AT-VE-202` 的适配器半边：阻断那一件带上这一次出发作事实依据——这件包裹上的事实引用（与投影同一把键）、事实版本与读数里
+	// 它那一格的关务判断标识。
+	command := fixture.signals.commands[0]
+	if command.Fact.String() != "movement-fact/parcel-1/move-1" || command.Version.String() != "v1" ||
+		command.Judgement != "AADJ-parcel-1" {
+		t.Fatalf("信号的事实依据 = %s / %s / %q", command.Fact, command.Version, command.Judgement)
 	}
 }
 

@@ -10,16 +10,32 @@ import (
 
 var firstHitAt = time.Date(2026, 8, 11, 8, 0, 0, 0, time.UTC)
 
+// signalHit 立一次命中：因果条件是一份源事实，依据就是那一份事实。
+func signalHit(t *testing.T, fact string, at time.Time) domain.SignalHit {
+	t.Helper()
+	reference := mustValue(t, domain.NewSourceFactReference, fact)
+	cause, err := domain.SourceFactCausalCondition(domain.SourceTransportFulfillment, reference)
+	if err != nil {
+		t.Fatalf("causal condition: %v", err)
+	}
+	return domain.SignalHit{
+		Kind:       mustValue(t, domain.NewExceptionSignalKindReference, "ETA_BREACH_RISK"),
+		Parcel:     mustValue(t, domain.NewTrackedParcelReference, "parcel-1"),
+		Cause:      cause,
+		Rule:       mustValue(t, domain.NewSignalRuleVersionReference, "signal-rules/v3"),
+		Confidence: mustValue(t, domain.NewConfidenceReference, "HIGH/route-deviation"),
+		Basis: []domain.SignalFactBasis{{
+			Source:  domain.SourceTransportFulfillment,
+			Fact:    reference,
+			Version: mustValue(t, domain.NewSourceFactVersion, "v1"),
+		}},
+		At: at,
+	}
+}
+
 func openEpisode(t *testing.T) *domain.SignalEpisode {
 	t.Helper()
-	episode, err := domain.OpenEpisode(
-		mustValue(t, domain.NewEpisodeID, "episode-1"),
-		mustValue(t, domain.NewExceptionSignalKindReference, "ETA_BREACH_RISK"),
-		mustValue(t, domain.NewTrackedParcelReference, "parcel-1"),
-		mustValue(t, domain.NewSignalRuleVersionReference, "signal-rules/v3"),
-		mustValue(t, domain.NewConfidenceReference, "HIGH/route-deviation"),
-		firstHitAt,
-	)
+	episode, err := domain.OpenEpisode(mustValue(t, domain.NewEpisodeID, "episode-1"), signalHit(t, "movement-fact/parcel-1/MF-1", firstHitAt))
 	if err != nil {
 		t.Fatalf("open episode: %v", err)
 	}
@@ -41,7 +57,7 @@ func TestAnEpisodeAbsorbsHitsEndsAndReopensLinked(t *testing.T) {
 	}
 
 	if _, err := episode.ReopenAsLinked(
-		mustValue(t, domain.NewEpisodeID, "episode-2"), firstHitAt.Add(2*time.Hour),
+		mustValue(t, domain.NewEpisodeID, "episode-2"), signalHit(t, "movement-fact/parcel-1/MF-1", firstHitAt.Add(2*time.Hour)),
 	); !errors.Is(err, domain.ErrEpisodeStillActive) {
 		t.Fatalf("err = %v; 活跃发作期被重启了", err)
 	}
@@ -57,7 +73,7 @@ func TestAnEpisodeAbsorbsHitsEndsAndReopensLinked(t *testing.T) {
 	}
 
 	linked, err := episode.ReopenAsLinked(
-		mustValue(t, domain.NewEpisodeID, "episode-2"), firstHitAt.Add(5*time.Hour))
+		mustValue(t, domain.NewEpisodeID, "episode-2"), signalHit(t, "movement-fact/parcel-1/MF-1", firstHitAt.Add(5*time.Hour)))
 	if err != nil {
 		t.Fatalf("reopen linked: %v", err)
 	}

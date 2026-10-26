@@ -43,8 +43,7 @@ func NewOutboxTriageHandoff(
 
 var _ ports.TriageHandoff = (*OutboxTriageHandoff)(nil)
 
-// triagePayload 是意图载荷的传输形状：只有下游 FindLatest 所需的租户/包裹/类型，
-// 外加发作期标识，不带分诊走向明细。
+// triagePayload 是意图载荷的传输形状：租户/包裹/类型，外加发作期标识，不带分诊走向明细。
 type triagePayload struct {
 	TenantID  string `json:"tenantId"`
 	Parcel    string `json:"parcel"`
@@ -55,14 +54,14 @@ type triagePayload struct {
 // triageEventIDPort 是本口指纹 ID 的口名前缀。
 const triageEventIDPort = "triage"
 
-func triageEventID(tenant, parcel, kind string) string {
+func triageEventID(tenant, parcel, kind, episode string) string {
 	return string(outboxintent.FingerprintEventID(triageEventIDPort,
-		tenant, parcel, kind))
+		tenant, parcel, kind, episode))
 }
 
-// HandOffTriage 把一份意图入队。信封 ID 取租户加对象加类型——与 FindLatest 键一致
-// （ADR-0003 / ADR-0043）。缺租户维时两租户同包裹+类型会合成一份。租户、对象、类型
-// 或结论缺席是装配缺陷，响亮报错不入队。
+// HandOffTriage 把一份意图入队。信封 ID 取租户加对象加类型加发作期（ADR-0003 / ADR-0043）：一期一份结论，重放同一期重发
+// 同一份；同一对象同一类型的另一期（另一个因果条件，或恢复后再发生）是另一份结论，缺发作期维时会在入队那一步被当成重放吞掉。
+// 缺租户维时两租户同包裹+类型会合成一份。租户、对象、类型或结论缺席是装配缺陷，响亮报错不入队。
 func (handoff *OutboxTriageHandoff) HandOffTriage(
 	ctx context.Context,
 	intent ports.TriageHandoffIntent,
@@ -85,7 +84,8 @@ func (handoff *OutboxTriageHandoff) HandOffTriage(
 	}
 
 	now := handoff.clock.Now().UTC()
-	eventID := triageEventID(intent.TenantID.String(), intent.Parcel.String(), intent.Kind.String())
+	eventID := triageEventID(intent.TenantID.String(), intent.Parcel.String(), intent.Kind.String(),
+		intent.Conclusion.Episode().String())
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
 		ID:           eventing.EventID(eventID),

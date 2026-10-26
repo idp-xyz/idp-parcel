@@ -316,10 +316,20 @@ type RaisedSignalRecord struct {
 	Case       *domain.ExceptionCase
 }
 
-// SignalEpisodeStore 按租户+对象+类型找回最近一次发作期并保存。租户是最高数据隔离
-// 边界（ADR-0003），跨越它必须在签名上看得见。最近一次含已结束的——「已结束+再命中」
-// 要据它建立关联的新发作期，只查活跃会把重开误判成首启。
+// SignalEpisodeStore 找回最近一次发作期并保存。租户是最高数据隔离边界（ADR-0003），跨越它必须在签名上看得见。
+//
+// 两种找法答的是两个问题。FindLatestForCause 按租户+对象+类型+因果条件找，是信号命中定位发作期的那一把键（CONTEXT「同一
+// 对象、类型、因果条件和连续影响期」）：最近一次含已结束的——「已结束+再命中」要据它建立关联的新发作期，只查活跃会把重开误判
+// 成首启。FindLatest 不问因果条件，答这件对象这一类信号最近的那一期，供只认对象与类型的读者（披露决定）用；命中定位不得用它，
+// 用了就又把不同原因的命中并进同一期。
 type SignalEpisodeStore interface {
+	FindLatestForCause(
+		ctx context.Context,
+		tenant domain.TenantID,
+		parcel domain.TrackedParcelReference,
+		kind domain.ExceptionSignalKindReference,
+		cause domain.CausalConditionReference,
+	) (*domain.SignalEpisode, bool, error)
 	FindLatest(
 		ctx context.Context,
 		tenant domain.TenantID,
@@ -343,10 +353,9 @@ type CaseIdentityFactory interface {
 	NextCaseID(ctx context.Context) (domain.CaseID, error)
 }
 
-// TriageHandoffIntent 把分诊结论交给适用下游（建案、复核队列的输入）。意图由租户加
-// 对象加类型认领（与 FindLatest 键一致），重放重发同一份（ADR-0043）。租户随意图到达
-// （ADR-0003）：下游按（租户+包裹+类型）查库；信封 ID 缺租户维时两租户同包裹+类型
-// 会合成一份。
+// TriageHandoffIntent 把分诊结论交给适用下游（建案、复核队列的输入）。一期一份结论，意图按结论所属的发作期认领，重放重发同一份
+// （ADR-0043）；同一对象同一类型先后几期（不同因果条件，或恢复后再发生）各交一份，按对象加类型认领会让后几期的意图在入队那一步
+// 被当成重放吞掉。租户随意图到达（ADR-0003）。
 type TriageHandoffIntent struct {
 	TenantID   domain.TenantID
 	Parcel     domain.TrackedParcelReference
@@ -354,8 +363,8 @@ type TriageHandoffIntent struct {
 	Conclusion domain.TriageConclusion
 }
 
-// TriageHandoff 把分诊结论写入 Outbox（`OutboxTriageHandoff`）。信封 ID 由租户加对象
-// 加类型认领，入队由 outboxintent.EnqueueOnce 承担；重放重发同一份（ADR-0043）。
+// TriageHandoff 把分诊结论写入 Outbox（`OutboxTriageHandoff`）。信封 ID 由租户加对象加类型加发作期认领，入队由
+// outboxintent.EnqueueOnce 承担；重放重发同一份（ADR-0043）。
 type TriageHandoff interface {
 	HandOffTriage(ctx context.Context, intent TriageHandoffIntent) error
 }
