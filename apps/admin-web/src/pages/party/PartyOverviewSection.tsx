@@ -44,13 +44,14 @@ const note = 'text-[12px] text-idpxyz-textMuted';
 
 function SectionBody<Row>({
   state,
-  endpoint,
+  what,
   emptyNote,
   retry,
   renderRow,
 }: {
   state: OverviewSectionState<Row>;
-  endpoint: string;
+  /** 这一段读的是什么，用在读不到时的说明里；读的人是配置员，不给端点。 */
+  what: string;
   emptyNote: string;
   retry: () => void;
   renderRow: (row: Row) => ReactNode;
@@ -61,12 +62,12 @@ function SectionBody<Row>({
     case 'unconfigured':
       return (
         <p className={note}>
-          访问通道尚未配置：{endpoint} 当前不可用（403）。这不是「没有」——今天没有问到；配置该上下文的访问通道后重新打开抽屉。
+          暂时读不到{what}：接入渠道还没有配置。这不代表没有记录；配置好之后重新打开即可。
         </p>
       );
     case 'loginRequired':
     case 'notGranted':
-      return <OperatorRefusalNote kind={state.kind} what={endpoint} className={note} />;
+      return <OperatorRefusalNote kind={state.kind} what={what} className={note} />;
     case 'callerProblem':
       return (
         <p className={note}>
@@ -81,7 +82,7 @@ function SectionBody<Row>({
     case 'mismatch':
       return (
         <p className={note}>
-          答案回显的册种与所问（{endpoint}）不符，已丢弃；请检查前端与服务端版本是否一致。
+          读回的数据与所问的{what}对不上，已丢弃；请确认前端与服务端是同一版本。
           <Button variant="ghost" size="sm" className="ml-2" onClick={retry}>
             重试
           </Button>
@@ -203,14 +204,14 @@ export function PartyOverviewSection({
           {countText(agreementState)} · 结算政策 {countText(settlementState)}
         </p>
         <p className={`mt-1 ${note}`}>
-          只列参与方与商业自己的册；授信、余额与委托不在此处，归各自上下文。角色摘要只看登记为「已生效」的关系。
+          授信、余额与委托不在这里显示。角色只统计已生效的关系。
         </p>
       </section>
 
       <Section title="参与方关系" state={relationshipState}>
         <SectionBody
           state={relationshipState}
-          endpoint="GET /commercial-party-relationships"
+          what="参与方关系"
           emptyNote="关系册上没有以本参与方为持有方或相对方的关系。"
           retry={retryRelationships}
           renderRow={(view) => (
@@ -243,7 +244,7 @@ export function PartyOverviewSection({
       <Section title="货主客户账户" moduleId="party-contracts" state={accountState}>
         <SectionBody
           state={accountState}
-          endpoint="GET /commercial-customer-accounts"
+          what="货主客户账户"
           emptyNote="客户账户册上没有关联到本参与方的货主客户账户。"
           retry={accounts.retry}
           renderRow={(row) => (
@@ -265,7 +266,7 @@ export function PartyOverviewSection({
       <Section title="责任法人" moduleId="group-legal-entities" state={entityState}>
         <SectionBody
           state={entityState}
-          endpoint="GET /commercial-group-legal-entities"
+          what="责任法人"
           emptyNote="本参与方不是本集团登记的责任法人（法人册上没有钉着它的法人）。"
           retry={entities.retry}
           renderRow={(row) => (
@@ -287,7 +288,7 @@ export function PartyOverviewSection({
       <Section title="供应商协议" moduleId="supplier-agreements" state={agreementState}>
         <SectionBody
           state={agreementState}
-          endpoint="GET /commercial-supplier-agreements"
+          what="供应商协议"
           emptyNote="供应商协议册上没有供应商是本参与方的已登记正文。"
           retry={agreements.retry}
           renderRow={(row) => (
@@ -316,14 +317,14 @@ export function PartyOverviewSection({
           )}
         />
         {agreementState.kind === 'answered' ? (
-          <p className={`mt-2 ${note}`}>正文未登记的协议版本壳没有「供应商」一格，归不进任何参与方，不在此列。</p>
+          <p className={`mt-2 ${note}`}>还没随发布登记正文的协议版本不带供应商，所以不在此列。</p>
         ) : null}
       </Section>
 
       <Section title="结算政策（本方为客户相对方）" moduleId="commercial-policies" state={settlementState}>
         <SectionBody
           state={settlementState}
-          endpoint="GET /commercial-policies?kind=SETTLEMENT_POLICY"
+          what="结算政策"
           emptyNote="结算政策册上没有以本参与方为客户相对方的政策。"
           retry={settlement.retry}
           renderRow={(row) => (

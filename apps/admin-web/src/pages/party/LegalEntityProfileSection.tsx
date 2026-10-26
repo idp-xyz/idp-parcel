@@ -174,7 +174,7 @@ function ResolutionAnswer({
   if (answer.kind === 'unconfigured') {
     return (
       <p className={note}>
-        访问通道尚未配置：法人资料按时点解析读口当前不可用（403）。这不是「资料不全」——今天没有问到；配置该上下文的访问通道后重新打开这一页。
+        暂时读不到法人资料：接入渠道还没有配置。这不代表资料不全；配置好之后重新打开本页即可。
       </p>
     );
   }

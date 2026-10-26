@@ -782,11 +782,11 @@ export function registerCommercial(
  * 先发布被引对象；折成「提交失败」会让人以为重试有用。
  */
 export const publicationOutcomeLabels: Record<string, string> = {
-  PUBLISHED_EFFECTIVE: '已发布并已生效（生效边界已开，本版此刻算数）',
-  PLANNED_EFFECTIVE: '已发布、已计划生效（边界未开，此刻还不参与生产解析）',
-  REPLAYED: '同一份重放（原版本不被顶替，本次没有造第二个版本）',
-  CONTENT_CONFLICT: '内容冲突（同键异内容，原版本不被顶替；改内容要发新版本号）',
-  PENDING: '发布未决（批准角色未确认，或正文指名的对象尚未发布；一个字节没写）',
+  PUBLISHED_EFFECTIVE: '已发布，已生效：这一版现在起作用。',
+  PLANNED_EFFECTIVE: '已发布，尚未生效：到生效时点后才起作用。',
+  REPLAYED: '已发布过同样的内容：原版本不变，这次没有新建版本。',
+  CONTENT_CONFLICT: '内容冲突：这个版本号已发布过不同的内容，原版本不变。要改内容，请用新的版本号发布。',
+  PENDING: '发布暂未完成：批准角色还没确认，或正文引用的对象还没发布。没有写入任何内容。',
 };
 
 /**
@@ -799,8 +799,8 @@ export const publicationOutcomeLabels: Record<string, string> = {
  */
 export const declarationLandingLabels: Record<string, string> = {
   SAVED: '已登记',
-  ALREADY_REGISTERED: '同拥有版本同正文重放（原正文不被顶替）',
-  CONTENT_CONFLICT: '内容冲突（同拥有版本携带了不同正文；声明随发布固定，改声明要发新版本）',
+  ALREADY_REGISTERED: '这一版已登记过同样的正文，原正文不变。',
+  CONTENT_CONFLICT: '内容冲突：这一版已带了不同的正文。正文随发布固定，要改请发新版本。',
 };
 
 /**
@@ -810,26 +810,26 @@ export const declarationLandingLabels: Record<string, string> = {
  * 登记方要去查的是册面。
  */
 export const partyIdentityOutcomeLabels: Record<string, string> = {
-  REGISTERED: '已登记（本次落库）',
-  DEACTIVATED: '已停用（停用是修订链上新的一笔，原修订不被改写）',
-  ALREADY_REGISTERED: '同键同内容重放（原修订不被顶替）',
-  CONTENT_CONFLICT: '内容冲突（同修订号异内容；更正要占下一个修订号，不覆盖）',
-  NOT_ACCEPTED: '受理门拒绝（修订错位或引用悬空，一个字节没写；原因随答复交回）',
-  NOT_FOUND: '册上没有这一个身份（停用的对象从未登记）',
+  REGISTERED: '已登记。',
+  DEACTIVATED: '已停用：停用记为新的一笔修订，之前的修订不变。',
+  ALREADY_REGISTERED: '已登记过同样的内容，原修订不变。',
+  CONTENT_CONFLICT: '内容冲突：这个修订号已登记过不同的内容。要更正，请用下一个修订号登记。',
+  NOT_ACCEPTED: '未受理：修订号对不上，或引用的对象不存在。没有写入任何内容。',
+  NOT_FOUND: '没有找到这个身份：要停用的对象从未登记。',
 };
 
 /** 法人资料登记口的答案代数（`application.LegalEntityProfileRegistrationOutcome` 原名）。资料没有停用，没有 DEACTIVATED。 */
 export const legalEntityProfileOutcomeLabels: Record<string, string> = {
-  REGISTERED: '已登记（本次落库；新修订自其生效时点起取代前一修订）',
-  ALREADY_REGISTERED: '同键同内容重放（原修订不被顶替）',
-  CONTENT_CONFLICT: '内容冲突（同修订号异内容；资料修订不可覆盖，要改就登下一个修订号）',
-  NOT_ACCEPTED: '受理门拒绝（法人不在册、修订错位、地址国家与身份不一致或税号不合目录等，一个字节没写；原因随答复交回）',
+  REGISTERED: '已登记：新修订从它的生效时点起取代前一修订。',
+  ALREADY_REGISTERED: '已登记过同样的资料，原修订不变。',
+  CONTENT_CONFLICT: '内容冲突：这个修订号已登记过不同的资料。资料修订不能覆盖，要改请用下一个修订号。',
+  NOT_ACCEPTED: '未受理：法人不存在、修订号对不上、地址国家与身份不一致或税号不合要求等。没有写入任何内容。',
 };
 
 /** 服务形态与产品—渠道映射的登记答案代数（`application.ProductChannelOutcome` 原名）。 */
 export const productChannelOutcomeLabels: Record<string, string> = {
-  REGISTERED: '已登记（本次落库）',
-  ALREADY_REGISTERED: '同键同内容重放（原修订不被顶替）',
-  CONTENT_CONFLICT: '内容冲突（同修订号异内容；更正要占下一个修订号，不覆盖）',
-  NOT_ACCEPTED: '受理门拒绝（产品版本悬空、已收尾或修订错位，一个字节没写；原因随答复交回）',
+  REGISTERED: '已登记。',
+  ALREADY_REGISTERED: '已登记过同样的内容，原修订不变。',
+  CONTENT_CONFLICT: '内容冲突：这个修订号已登记过不同的内容。要更正，请用下一个修订号登记。',
+  NOT_ACCEPTED: '未受理：产品版本不存在或已结束，或修订号对不上。没有写入任何内容。',
 };

@@ -50,20 +50,19 @@ test('信用政策是第七本册：chip 词表与列集都有它', () => {
   );
 });
 
-// 票 admin-write-faces/03：册与发布口对象类别是两条分类轴，页面不对齐词表而是逐册写清「谁喂它」。
-// 钉两件：每本册都有那一句；两对近形不同词（PRICE_POLICY 册 ← PRICE_RULE 类别、
-// PRE_ACCEPTANCE_CONTROL 册 ← 挂 CUSTOMER_CONTRACT 版本的声明）在句子里点名了对方的词，
-// 少了哪一句操作者就会照 chip 抄词进发布快照。
-test('每本册都写明由发布口的哪一类版本或哪个声明通道喂入', () => {
+// 票 admin-write-faces/03：册与发布类别码是两条分类轴，照册名抄类别码进发布快照会被拒。party-commercial-uiux/01
+// 起，册说明只讲业务、不上类别码；对照只写在 JSON 发布签的提示里（下一条用例钉）。这里钉三件：每本册都有说明；
+// 说明里没有类别码；没有自己版本的两本说清了随谁发布，否则「版本」列会被读成这一册自己的版本。
+test('每本册都有一句业务说明，不出现发布类别码，随所属版本发布的两本说清随谁发布', () => {
   for (const kind of commercialPolicyKinds) {
-    ok(policyKindSources[kind].trim().length > 0, `${kind} 缺「谁喂它」那一句`);
+    ok(policyKindSources[kind].trim().length > 0, `${kind} 缺册说明`);
+    ok(!/[A-Z][A-Z_]{4,}/.test(policyKindSources[kind]), `${kind} 的册说明里有类别码`);
   }
-  ok(policyKindSources.PRICE_POLICY.includes('PRICE_RULE'));
-  ok(policyKindSources.PRE_ACCEPTANCE_CONTROL.includes('CUSTOMER_CONTRACT'));
-  ok(policyKindSources.AS_OF_POLICY.includes('ACCEPTANCE_RULE_PACKAGE'));
+  ok(policyKindSources.PRE_ACCEPTANCE_CONTROL.includes('随合同一起发布'));
+  ok(policyKindSources.AS_OF_POLICY.includes('随接单规则包一起发布'));
 });
 
-test('发布签的提示句把十个对象类别词与「两条分类轴」都说出来', () => {
+test('发布签的提示句列出十个类别码，并说明它们与册名不是一一对应', () => {
   const hint = registrationSnapshotHints.publication;
   for (const word of [
     'SERVICE_PRODUCT',
@@ -79,7 +78,7 @@ test('发布签的提示句把十个对象类别词与「两条分类轴」都�
   ]) {
     ok(hint.includes(word), `提示句缺对象类别 ${word}`);
   }
-  ok(hint.includes('两条分类轴'));
+  ok(hint.includes('不是一一对应'));
   // 此前的理由（翻译属渠道接入契约、随 PAR-INT-01 提供）已被 ADR-0101 收窄为只适用客户渠道，
   // 操作者面不得再这样说。
   ok(!hint.includes('PAR-INT-01'));
@@ -104,7 +103,6 @@ test('接受前财务控制策略册：chip 词表、列集与「谁喂它」都
       '发布时间',
     ],
   );
-  ok(policyKindSources.PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY.includes('PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY_BODY'));
   ok(policyKindSources.PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY.includes('接受前财务控制」册'));
   ok(policyKindSources.PRE_ACCEPTANCE_CONTROL.includes('接受前财务控制策略」册'));
   ok(!policyKindSources.PRE_ACCEPTANCE_CONTROL.includes('没有册可看'));
@@ -178,8 +176,8 @@ test('布尔说已登记而正文节缺了是响应不合契约，如实点名�
     policies: [{ ...controlPolicies.policies[0], objectId: 'fcp-odd', contentRegistered: true }],
   } as CommercialPolicyListResponseBody);
 
-  equal(odd.values.contentRegistered, '正文缺失(响应不合契约)');
-  equal(odd.values.controls, '正文缺失(响应不合契约)');
+  equal(odd.values.contentRegistered, '数据异常：缺正文');
+  equal(odd.values.controls, '数据异常：缺正文');
 });
 
 // 票 admin-write-faces/21（后端第八册 0023，ADR-0104）：客户服务规则版本从此有册可看。钉三件：chip 词表与列集
@@ -195,7 +193,7 @@ test('客户服务规则册：chip 词表、列集与「谁喂它」都有它，
       '适用范围',
       '生命周期状态',
       '正文',
-      '适用对象(服务产品 / 客户合同恰一)',
+      '适用对象（服务产品或客户合同）',
       '责任方',
       '规则范围',
       '索赔期限(种类 · 起算事件 · 天数 · 日历)',
@@ -204,8 +202,6 @@ test('客户服务规则册：chip 词表、列集与「谁喂它」都有它，
       '发布时间',
     ],
   );
-  ok(policyKindSources.CUSTOMER_SERVICE_RULE.includes('CUSTOMER_SERVICE_RULE'));
-  ok(policyKindSources.CUSTOMER_SERVICE_RULE.includes('CUSTOMER_SERVICE_RULE_BODY'));
   ok(registrationSnapshotHints.publication.includes('CUSTOMER_SERVICE_RULE'));
   ok(registrationSnapshotHints.publication.includes('客户服务规则册'));
 });
@@ -322,10 +318,10 @@ test('客户服务规则布尔说已登记而正文节缺了是响应不合契�
     policies: [{ ...customerServiceRules.policies[0], objectId: 'csr-odd', contentRegistered: true }],
   } as CommercialPolicyListResponseBody);
 
-  equal(odd.values.contentRegistered, '正文缺失(响应不合契约)');
-  equal(odd.values.appliesTo, '正文缺失(响应不合契约)');
-  equal(odd.values.claimDeadlines, '正文缺失(响应不合契约)');
-  equal(odd.values.minimumMaterials, '正文缺失(响应不合契约)');
+  equal(odd.values.contentRegistered, '数据异常：缺正文');
+  equal(odd.values.appliesTo, '数据异常：缺正文');
+  equal(odd.values.claimDeadlines, '数据异常：缺正文');
+  equal(odd.values.minimumMaterials, '数据异常：缺正文');
 });
 
 test('客户服务规则正文两键皆无或皆有的适用对象是响应不合契约，如实点名', () => {
@@ -339,8 +335,8 @@ test('客户服务规则正文两键皆无或皆有的适用对象是响应不�
     ],
   } as CommercialPolicyListResponseBody);
 
-  equal(neither.values.appliesTo, '适用对象缺失(响应不合契约)');
-  equal(both.values.appliesTo, '适用对象两键并存(响应不合契约)');
+  equal(neither.values.appliesTo, '数据异常：缺适用对象');
+  equal(both.values.appliesTo, '数据异常：适用对象同时填了两项');
 });
 
 test('零金额额度上列为金额 0，不是「未声明」也不是缺席', () => {
@@ -382,7 +378,7 @@ test('额度两键都缺是响应不合契约，如实点名而不是显示成�
     policies: [{ ...creditPolicies.policies[0], limitMinor: undefined }],
   });
 
-  equal(row.values.limit, '额度缺失（响应不合契约）');
+  equal(row.values.limit, '数据异常：缺额度');
 });
 
 // 输入照后端 query_commercial_catalogue_test.go 里价格政策册各行的形状（票 admin-write-faces/14「结果在同册立刻可见（含口径列）」），
@@ -455,7 +451,7 @@ test('商业价格政策册多一列口径：两段各显自己的真话，历�
   );
   equal(plain.values.caliber, '税务 税务不适用;汇率 未声明');
   equal(bare.values.caliber, '未登记');
-  equal(pricePolicyCaliberCell({ ...pricePolicies.policies[0], caliber: undefined }), '口径缺失（响应不合契约）');
+  equal(pricePolicyCaliberCell({ ...pricePolicies.policies[0], caliber: undefined }), '数据异常：缺计价口径');
 });
 
 // 抽出行转写时顺带钉住取消授权的三态：这三句是页面替目录说的话，抽出来之后不能变。

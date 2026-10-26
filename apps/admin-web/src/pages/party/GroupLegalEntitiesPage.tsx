@@ -41,7 +41,7 @@ import {
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['group-legal-entities'];
 
-const emptyDescription = '用页头「登记责任法人」登记第一个，或用受控 CLI parcel-commercial register-parties 灌入。';
+const emptyDescription = '还没有登记任何责任法人。用页头的「登记责任法人」登记第一个。';
 
 // 行首圆点的颜色随身份状态；待补的行圆点闪，与参照页「逾期 / 暂挂」同一个记号。
 const statusDotClass: Record<string, string> = {

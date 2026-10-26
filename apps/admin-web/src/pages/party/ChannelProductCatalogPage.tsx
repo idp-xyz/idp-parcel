@@ -117,7 +117,8 @@ function ProductChannelMappingTable() {
   return (
     <ListPageTemplate<ProductChannelMappingRecord>
       title={info.title}
-      description={`${info.owner}——行对象是产品—渠道映射的最新登记修订，渠道以标识引用，渠道本体待接入`}
+      // 渠道本体还没有读口，渠道只能按标识显示。
+      description="每个服务产品版本可以走哪些渠道；每条映射显示最新一笔登记修订，渠道暂以标识显示。"
       search={{
         value: search,
         onChange: setSearch,
@@ -136,7 +137,7 @@ function ProductChannelMappingTable() {
         endpoint: 'GET /commercial-product-channel-mappings',
         emptyTitle: '当前租户尚无产品—渠道映射登记',
         emptyDescription:
-          '读取入口已配置，但登记册为空；页面不会预置映射或渠道候选。登记可走本页「登记」签，或受控 CLI parcel-commercial register-products。',
+          '还没有登记任何产品—渠道映射。在「登记映射」签登记第一条；本页不会预置映射或渠道候选。',
       })}
     />
   );

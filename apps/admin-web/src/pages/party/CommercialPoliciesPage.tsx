@@ -83,7 +83,8 @@ function PolicyRegisters({ published }: { published: PublishedNotice | null }) {
   return (
     <ListPageTemplate<PolicyRow>
       title={info.title}
-      description={`${info.owner}——各本政策册分别查阅,重叠候选仍是适用冲突而非「同时生效」。接单规则包一栏另列挂在同一版本上的收寄资格与终局规则声明,授权规则一栏按请求方逐格列出取消授权,信用政策一栏的额度按金额或比例恰一上列,客户服务规则一栏的适用对象按服务产品或客户合同恰一上列;「接受前财务控制」与「接受前财务控制策略」是两本册:前者列合同的「要不要」声明,后者列策略版本的「控制怎么做」正文`}
+      // 各册自己是什么写在选中册下方的册说明里（policyKindSources），页面说明只说这页怎么用，不被截断。
+      description="按册查看各类商业规则与策略的版本；选一本册，下方会说明它列的是什么。"
       search={{
         value: search,
         onChange: setSearch,
@@ -116,7 +117,7 @@ function PolicyRegisters({ published }: { published: PublishedNotice | null }) {
         module: info,
         endpoint: `GET /commercial-policies?kind=${kind}`,
         emptyTitle: `当前租户尚无${policyKindLabels[kind]}`,
-        emptyDescription: '读取入口已配置,但该政策册为空;页面不会生成默认政策。',
+        emptyDescription: '这本册还没有任何版本；本页不会替你生成默认政策。',
       })}
     />
   );

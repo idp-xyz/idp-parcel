@@ -461,7 +461,7 @@ function BusinessPartyIdentitiesTable({
           module: info,
           endpoint: 'GET /commercial-business-parties',
           emptyTitle: '当前租户尚无参与方身份登记',
-          emptyDescription: '读取入口已配置，但登记册为空；页面不会预置参与方。在「登记」签登记第一个。',
+          emptyDescription: '还没有登记任何业务参与方。在「登记」页签登记第一个；本页不会预置参与方。',
         })}
       />
       <BusinessPartyDrawer
@@ -571,7 +571,7 @@ function PartyRelationshipsTable({
           module: info,
           endpoint: 'GET /commercial-party-relationships',
           emptyTitle: '当前租户尚无参与方关系登记',
-          emptyDescription: '读取入口已配置，但登记册为空；页面不会预置参与方或关系。在「登记」签登记第一个。',
+          emptyDescription: '还没有登记任何参与方关系。在「登记」页签登记第一段；本页不会预置参与方或关系。',
         })}
       />
       <PartyRelationshipDrawer row={selected} onClose={() => setSelectedId(null)} />

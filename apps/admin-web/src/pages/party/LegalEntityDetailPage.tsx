@@ -118,14 +118,14 @@ function viewStateOf(
       : {
           kind: 'empty',
           title: '册上没有这个法人',
-          description: '当前租户的责任法人册里没有这个标识。不存在与其他租户的对象在本页同一句话，本页不作区分。',
+          description: '本租户没有登记过这个法人标识。请检查链接或标识是否正确。',
         };
   }
   return catalogueViewState(answer, 1, retry, {
     module: info,
     endpoint: 'GET /commercial-group-legal-entities',
     emptyTitle: '当前租户尚无责任法人登记',
-    emptyDescription: '用列表页头「登记责任法人」登记第一个，或用受控 CLI parcel-commercial register-parties 灌入。',
+    emptyDescription: '还没有登记任何责任法人。回到列表，用页头的「登记责任法人」登记第一个。',
   });
 }
 

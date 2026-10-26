@@ -208,7 +208,7 @@ export function profileRevisionTimeline(
 
 export function profileRevisionHistoryNote(count: number): string {
   return count === 0
-    ? '这个法人还没有登记过资料（法人可以先登记、后补资料，ADR-0145 决定六）。'
+    ? '这个法人还没有登记过资料。法人可以先登记，资料之后再补。'
     : `共 ${count} 笔资料修订，从新到旧；新修订自其生效时点起取代前一修订，登记过的不被覆盖。`;
 }
 

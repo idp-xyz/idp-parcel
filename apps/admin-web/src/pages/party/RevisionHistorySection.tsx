@@ -73,8 +73,7 @@ export function RevisionHistorySection<Body>({
   if (answer.kind === 'unconfigured') {
     return (
       <p className={note}>
-        访问通道尚未配置：修订历史读口（{register.endpoint}）当前不可用（403）。这不是「这个{register.subject}
-        没有历史」——今天没有问到；配置该上下文的访问通道后再看这一段。
+        暂时读不到修订历史：接入渠道还没有配置。这不代表这个{register.subject}没有历史；配置好之后再看这一段。
       </p>
     );
   }

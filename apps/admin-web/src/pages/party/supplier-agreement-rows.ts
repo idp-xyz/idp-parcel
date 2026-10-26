@@ -50,14 +50,14 @@ const requiredBodyKeys = [
   'registeredAt',
 ] as const;
 
-const missingNote = '缺失(响应不合契约)';
+const missingNote = '数据异常：缺这一项';
 
 // 正文在场与否由服务端的显式布尔说，页面不拿正文键的有无去推：没登记正文与登记了正文但某键为空都表现为键缺席，
 // 恢复动作相反（前者去发布正文，后者去查写侧）。布尔为真而键缺是响应不合契约，点名而不是折成「—」——那会让
 // 一次坏响应长得像一格正常的空（判据同 policy-rows.ts 的 contentRegisteredCell）。
 function contentRegisteredCell(record: SupplierAgreementRecord): string {
   if (!record.contentRegistered) return '未登记';
-  if (requiredBodyKeys.some((key) => !record[key])) return '正文缺失(响应不合契约)';
+  if (requiredBodyKeys.some((key) => !record[key])) return '数据异常：缺正文';
   return '已登记';
 }
 

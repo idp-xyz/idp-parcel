@@ -27,7 +27,7 @@
 
 **Category:** enhancement
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
 - [ ] 十张发布表单与 `PublicationDraftFlow` 上屏文字不含：ADR / AT / PAR 编号，端点，类别码，册号 `(00xx)`，JSON 路径，对照表「删」那几类实现词与「载体 / 载荷 / 信封 / 逐字节」。以上屏字符串扫描为证。
 - [ ] 结果词每条以中文结论开头，下一步可读。

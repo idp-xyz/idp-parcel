@@ -138,7 +138,7 @@ export const kindColumns: Record<CommercialPolicyKind, ListColumn<PolicyRow>[]> 
     col('scope', '适用范围', true),
     col('status', '生命周期状态'),
     col('contentRegistered', '正文'),
-    col('appliesTo', '适用对象(服务产品 / 客户合同恰一)', true),
+    col('appliesTo', '适用对象（服务产品或客户合同）', true),
     col('responsibleParty', '责任方', true),
     col('ruleScope', '规则范围', true),
     col('claimDeadlines', '索赔期限(种类 · 起算事件 · 天数 · 日历)', true),
@@ -156,7 +156,7 @@ function contentRegisteredCell(record: {
   content?: { registeredAt: string };
 }): string {
   if (!record.contentRegistered) return '未登记';
-  if (!record.content) return '正文缺失(响应不合契约)';
+  if (!record.content) return '数据异常：缺正文';
   return `已登记(${formatInstant(record.content.registeredAt)})`;
 }
 
@@ -165,7 +165,7 @@ function contentRegisteredCell(record: {
 // 的如实呈现,不该读起来像正常态。未登记那态正是票 admin-write-faces/06 立票时看不见的那一格。
 function controlsCell(record: PreAcceptanceFinancialControlPolicyRecord): string {
   if (!record.contentRegistered) return '未登记正文';
-  if (!record.content) return '正文缺失(响应不合契约)';
+  if (!record.content) return '数据异常：缺正文';
   if (record.content.controls.length === 0) return '已登记,正文为空';
   return record.content.controls
     .map(
@@ -182,14 +182,14 @@ function controlsCell(record: PreAcceptanceFinancialControlPolicyRecord): string
 // 同一个标识串作产品与作合同是两件事,只显标识串会让两类在这一列里长得一模一样。
 export function serviceRuleAppliesToCell(record: CustomerServiceRuleRecord): string {
   if (!record.contentRegistered) return '—';
-  if (!record.content) return '正文缺失(响应不合契约)';
+  if (!record.content) return '数据异常：缺正文';
   const { serviceProduct, customerContract } = record.content;
   if (serviceProduct !== undefined && customerContract !== undefined) {
-    return '适用对象两键并存(响应不合契约)';
+    return '数据异常：适用对象同时填了两项';
   }
   if (serviceProduct !== undefined) return `服务产品:${serviceProduct}`;
   if (customerContract !== undefined) return `客户合同:${customerContract}`;
-  return '适用对象缺失(响应不合契约)';
+  return '数据异常：缺适用对象';
 }
 
 // 两张子表各自三态:未登记正文 / 已登记且有行 / 已登记而空数组。第三态与控制项那一栏相反,**不是坏
@@ -199,7 +199,7 @@ export function serviceRuleAppliesToCell(record: CustomerServiceRuleRecord): str
 // 原词直显、不自造译法(票 admin-write-faces/21 判据 1);起算事件、日历、索赔类型与材料都是引用,同样原词。
 export function serviceRuleClaimDeadlinesCell(record: CustomerServiceRuleRecord): string {
   if (!record.contentRegistered) return '未登记正文';
-  if (!record.content) return '正文缺失(响应不合契约)';
+  if (!record.content) return '数据异常：缺正文';
   if (record.content.claimDeadlines.length === 0) return serviceRuleEmptyTableCell(record);
   return record.content.claimDeadlines
     .map((item) => `${item.kind} · ${item.startEvent} · ${item.durationDays} 天 · ${item.calendar}`)
@@ -213,7 +213,7 @@ function serviceRuleEmptyTableCell(record: CustomerServiceRuleRecord): string {
 
 export function serviceRuleMinimumMaterialsCell(record: CustomerServiceRuleRecord): string {
   if (!record.contentRegistered) return '未登记正文';
-  if (!record.content) return '正文缺失(响应不合契约)';
+  if (!record.content) return '数据异常：缺正文';
   if (record.content.minimumMaterials.length === 0) return serviceRuleEmptyTableCell(record);
   return record.content.minimumMaterials
     .map((item) => `${item.claimKind}:${item.materials.join('、')}`)
@@ -230,7 +230,7 @@ function creditLimitCell(record: CreditPolicyRecord): string {
     const base = record.ratioBase ? `基数 ${labelOf(creditRatioBaseLabels, record.ratioBase)}` : '基数未声明';
     return `比例 ${record.limitRatioBasisPoints / 100}% · ${base}`;
   }
-  return '额度缺失（响应不合契约）';
+  return '数据异常：缺额度';
 }
 
 // 口径三态:未登记(0010 早于 0022,只有正文没有口径的行是合法状态)/ 已登记 / 布尔说已登记而节缺了(响应不合契约,
@@ -240,7 +240,7 @@ function creditLimitCell(record: CreditPolicyRecord): string {
 export function pricePolicyCaliberCell(record: PricePolicyRecord): string {
   if (!record.caliberDeclared) return '未登记';
   const caliber = record.caliber;
-  if (!caliber) return '口径缺失（响应不合契约）';
+  if (!caliber) return '数据异常：缺计价口径';
   const tax = caliber.taxClassification
     ? `${labelOf(taxDispositionLabels, caliber.taxDisposition)}@${caliber.taxClassification}`
     : labelOf(taxDispositionLabels, caliber.taxDisposition);

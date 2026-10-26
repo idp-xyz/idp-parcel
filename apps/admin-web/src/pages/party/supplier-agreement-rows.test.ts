@@ -97,13 +97,13 @@ test('布尔说已登记而正文键缺了是响应不合契约，如实点名�
     agreements: [{ ...agreements.agreements[1], objectId: 'agreement-odd', contentRegistered: true }],
   });
 
-  equal(odd.values.contentRegistered, '正文缺失(响应不合契约)');
-  equal(odd.values.supplier, '缺失(响应不合契约)');
-  equal(odd.values.legalEntity, '缺失(响应不合契约)');
-  equal(odd.values.purchasePlan, '缺失(响应不合契约)');
-  equal(odd.values.agreementScope, '缺失(响应不合契约)');
-  equal(odd.values.agreementEffective, '缺失(响应不合契约)');
-  equal(odd.values.registeredAt, '缺失(响应不合契约)');
+  equal(odd.values.contentRegistered, '数据异常：缺正文');
+  equal(odd.values.supplier, '数据异常：缺这一项');
+  equal(odd.values.legalEntity, '数据异常：缺这一项');
+  equal(odd.values.purchasePlan, '数据异常：缺这一项');
+  equal(odd.values.agreementScope, '数据异常：缺这一项');
+  equal(odd.values.agreementEffective, '数据异常：缺这一项');
+  equal(odd.values.registeredAt, '数据异常：缺这一项');
 });
 
 // 协议区间无上界是登记方说出的合法声明（发布签那格「留空即无上界」），不是键缺：不得点名成不合契约。

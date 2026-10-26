@@ -161,7 +161,9 @@ function CustomerContractsTable({ publishedKey }: { publishedKey: number }) {
   return (
     <ListPageTemplate<CustomerContractRecord>
       title={info.title}
-      description={`${info.owner}——行对象是客户合同版本壳与已登记正文（接单规则包、按费用范围的财务控制约定）；合同版本壳不带货主客户账户与责任法人坐标，两列不上`}
+      // 客户与责任法人两列不上：合同读口答的是版本壳与正文，壳上没有货主客户账户与责任法人，页面不另行拼接。
+      // 用户会找这两列，所以说明里点一句；读口带出它们之前不留空列、不填假值（README「列表页上列通则」）。
+      description="客户合同的各个版本，以及合同约定的接单规则包与接受前财务控制。客户与责任法人暂不在本列表显示。"
       search={{
         value: search,
         onChange: setSearch,
@@ -179,7 +181,7 @@ function CustomerContractsTable({ publishedKey }: { publishedKey: number }) {
         module: info,
         endpoint: 'GET /commercial-customer-contracts',
         emptyTitle: '当前租户尚无客户合同版本',
-        emptyDescription: '读取入口已配置，但目录为空；页面不会预置合同或控制约定。',
+        emptyDescription: '还没有发布任何客户合同。在「发布合同版本」签发布第一份；本页不会预置合同。',
       })}
     />
   );
@@ -274,7 +276,7 @@ function CustomerAccountsTable() {
   return (
     <ListPageTemplate<CustomerAccountRecord>
       title={info.title}
-      description={`${info.owner}——行对象是货主客户账户的最新登记修订，名称从参与方册转写，状态按装载时点导出`}
+      description="货主客户账户，每个账户显示最新一笔登记修订；名称取自所属业务参与方，状态按打开页面时的时点判断。"
       search={{
         value: search,
         onChange: setSearch,
@@ -291,7 +293,7 @@ function CustomerAccountsTable() {
         endpoint: 'GET /commercial-customer-accounts',
         emptyTitle: '当前租户尚无货主客户账户登记',
         emptyDescription:
-          '读取入口已配置，但登记册为空；页面不会预置账户。登记可走本页「登记账户」签，或受控 CLI parcel-commercial register-parties。',
+          '还没有登记任何货主客户账户。在「登记账户」签登记第一个；本页不会预置账户。',
         narrowed: catalogueConditionsNarrow(conditions),
       })}
     />

@@ -64,8 +64,8 @@ Status: in-progress
 
 | # | 票 | 阻塞于 | 状态 |
 |---|---|---|---|
-| 01 | [浏览页说业务话](issues/01-browse-pages-speak-business.md) | — | in-progress |
-| 02 | [发布流程与发布表单说业务话](issues/02-publication-forms-speak-business.md) | — | ready-for-agent |
+| 01 | [浏览页说业务话](issues/01-browse-pages-speak-business.md) | — | resolved |
+| 02 | [发布流程与发布表单说业务话](issues/02-publication-forms-speak-business.md) | — | in-progress |
 | 03 | [逐格问题说中文](issues/03-field-problems-in-chinese.md) | — | ready-for-agent |
 | 04 | [状态一律用徽章](issues/04-status-badges-everywhere.md) | — | ready-for-agent |
 | 05 | [商业规则与策略页布局](issues/05-commercial-policies-layout.md) | 01 | ready-for-agent |

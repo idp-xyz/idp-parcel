@@ -111,7 +111,8 @@ function ServiceProductVersionsTable({ refreshKey }: { refreshKey: number }) {
   return (
     <ListPageTemplate<ServiceProductRecord>
       title={info.title}
-      description={`${info.owner}——本页上列服务产品版本壳,产品—渠道映射在渠道产品目录页,账号授权读取尚未建立`}
+      // 渠道账号的业务使用授权还没有读口，本页不为它留列。
+      description="服务产品的各个版本与交付条件。产品对应哪些渠道，看「渠道产品目录」页。"
       search={{
         value: search,
         onChange: setSearch,
@@ -129,7 +130,7 @@ function ServiceProductVersionsTable({ refreshKey }: { refreshKey: number }) {
         endpoint: 'GET /commercial-service-products',
         emptyTitle: '当前租户尚无服务产品版本',
         emptyDescription:
-          '读取入口已配置,但目录为空;页面不会预置服务产品或渠道映射。版本从本页「发布版本」签走五步发出;「登记服务形态」签补的是既有版本的形态,不产生版本本身。',
+          '还没有发布任何服务产品。在「发布版本」签发布第一个版本；「登记服务形态」签只给已有版本补形态，不产生新版本。',
       })}
     />
   );

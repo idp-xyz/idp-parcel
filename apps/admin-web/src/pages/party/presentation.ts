@@ -27,7 +27,8 @@ export const policyKindLabels: Record<CommercialPolicyKind, string> = {
   PRE_ACCEPTANCE_CONTROL: '接受前财务控制',
   PRICE_POLICY: '商业价格政策',
   SETTLEMENT_POLICY: '结算政策',
-  AS_OF_POLICY: '时点锚声明',
+  // PC CONTEXT 全名「接受判断时点选择策略」；册按钮上取短名，全名在册说明里。
+  AS_OF_POLICY: '接受判断时点策略',
   AUTHORIZATION_RULE: '授权规则',
   CREDIT_POLICY: '信用政策',
   // 与「接受前财务控制」是两本册不是一本的两个名字：那一本列合同的「要不要」声明，这一本列策略
@@ -51,35 +52,29 @@ export const commercialPolicyKinds: CommercialPolicyKind[] = [
 ];
 
 /**
- * 每本册列的是什么、由发布口的哪一类版本（或哪个声明通道）喂进来。
+ * 每本册列的是什么、什么时候看它。页面在选中的册下方原样显示这一句。
  *
- * 册（`?kind=`）与发布口的对象类别是两条分类轴，**刻意不对齐**：后端 query_commercial_policies.go
- * 头注写明「种类命名册子而不是商业对象类别……拿对象类别当种类名会指错拥有者」。同屏只摆两套词
- * 而不说清关系，操作者会照 chip 抄一个 PRICE_POLICY 进发布快照，然后被受理门拒——票
- * admin-write-faces/03 记的正是这一格。所以这里逐册把「谁喂它」写成一句，页面在册名旁原样显示。
+ * 读的人是配置员与查阅员，所以只讲业务：发布类别码与声明通道不上屏。册（`?kind=`）与发布类别码是两条
+ * 分类轴、刻意不对齐（后端 query_commercial_policies.go 头注）；照册名抄类别码进发布快照会被拒，那份对照
+ * 只对 JSON 发布那一签有用，写在 `registrationSnapshotHints.publication` 里，不在这里重复。
  *
- * 声明通道两本（接受前财务控制、时点锚）没有自己的版本：它们是随所属版本一并发布的 `declarations`，
- * 页面上的「版本」列指的是所属版本。
+ * 随所属版本发布、没有自己版本的两本（接受前财务控制、接受判断时点策略）要说出来，否则「版本」列
+ * 会被读成这一册自己的版本。
  */
 export const policyKindSources: Record<CommercialPolicyKind, string> = {
-  ACCEPTANCE_RULE_PACKAGE:
-    '列接单规则包版本及其正文；由发布口对象类别 ACCEPTANCE_RULE_PACKAGE 喂入，正文经声明通道 RULE_PACKAGE_BODY 随发布登记。',
+  ACCEPTANCE_RULE_PACKAGE: '接单规则包的各个版本及其正文：组装规则、允许的收寄来源、收寄资格与终局规则。',
   PRE_ACCEPTANCE_CONTROL:
-    '列「这份合同要不要接受前财务控制」的声明；它挂在 CUSTOMER_CONTRACT 版本下、经声明通道 PRE_ACCEPTANCE_CONTROL 随合同发布登记——不是 PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY 版本本身（那一类版本的正文在「接受前财务控制策略」册）。',
+    '每份客户合同对「接受前要不要做财务控制」的声明。它随合同一起发布，「版本」列是所属合同的版本；控制具体怎么做，看「接受前财务控制策略」册。',
   PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY:
-    '列接受前财务控制策略版本及其正文（要执行的控制项与共同通过条件）；由发布口对象类别 PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY 喂入，正文经声明通道 PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY_BODY 随发布登记。「明确无控制」不在这里——它是合同的声明，看「接受前财务控制」册。',
-  PRICE_POLICY:
-    '列商业价格政策正文（方向 × 定价方案绑定）；它挂在发布口对象类别 PRICE_RULE 的版本下，经声明通道 PRICE_POLICY_BODY 随发布登记。',
-  SETTLEMENT_POLICY:
-    '列结算政策正文；由发布口对象类别 SETTLEMENT_POLICY 喂入，正文经声明通道 SETTLEMENT_POLICY_BODY 随发布登记。',
+    '接受前财务控制策略的各个版本：要执行哪些控制项、怎样算共同通过。合同上「明确不做控制」的声明不在这里，看「接受前财务控制」册。',
+  PRICE_POLICY: '商业价格政策：每个价格方向绑定哪一个定价方案。它随价格规则的版本一起发布。',
+  SETTLEMENT_POLICY: '结算政策的各个版本及其正文。',
   AS_OF_POLICY:
-    '列时点锚声明；它没有自己的版本，挂在 ACCEPTANCE_RULE_PACKAGE 版本下、经声明通道 AS_OF_POLICY 随规则包发布登记。',
-  AUTHORIZATION_RULE:
-    '列授权规则版本及按请求方逐格的取消授权；由发布口对象类别 AUTHORIZATION_RULE 喂入，取消授权经声明通道 CANCELLATION_AUTHORITY 随发布登记。',
-  CREDIT_POLICY:
-    '列信用政策正文；由发布口对象类别 CREDIT_POLICY 喂入，正文经声明通道 CREDIT_POLICY_BODY 随发布登记。',
+    '接受判断时点选择策略：每类接受判断按哪个时点取依据。它随接单规则包一起发布，「版本」列是所属规则包的版本。',
+  AUTHORIZATION_RULE: '授权规则的各个版本，以及每类请求方的取消授权。',
+  CREDIT_POLICY: '信用政策的各个版本及其正文；额度按金额或按比例，二者只取其一。',
   CUSTOMER_SERVICE_RULE:
-    '列客户服务规则版本及其正文（挂在哪个服务产品或客户合同上、责任方、索赔期限与最低材料）；由发布口对象类别 CUSTOMER_SERVICE_RULE 喂入，正文经声明通道 CUSTOMER_SERVICE_RULE_BODY 随发布登记。只列 PC 这一侧的正文；索赔类型与材料目录、起算事件的解释归可见性与异常那侧，这里按引用原词展示。',
+    '客户服务规则的各个版本：适用于哪个服务产品或客户合同、责任方、索赔期限与最低材料。索赔类型、材料与起算事件的解释在可见性与异常那边，这里照原词显示。',
 };
 
 // 商业方向封闭三格(domain CommercialDirection),中文与计价方向同词——同一个方向
@@ -258,14 +253,12 @@ export const profileIncompleteCauseLabels: Record<string, string> = {
 
 export const problemCodeNotes: Record<string, string> = {
   METHOD_NOT_ALLOWED: '请求方法不被该端点允许。这是调用方式问题,不是业务答案。',
-  // 一句覆盖读写两侧:problemNote 的签名只有 code,今天分不出这个 400 来自目录读口(kind)还是登记口
-  // (载荷形状),只写读口那半会让登记被拒的人读到一条与真相无关的原因。写口那半的成因清单对照
-  // isolated_write_intake.go 里包 ErrMalformedRequest 的那几道门;服务端带 detail 归票
-  // admin-web-group-legal-entities/11,落地后这一句只需收短,不必再猜。
+  // 一句覆盖读写两侧：problemNote 只拿得到 code，分不出这个 400 来自目录读口（kind）还是登记口（载荷形状），
+  // 只写读口那半会让登记被拒的人读到与真相无关的原因。成因对照 isolated_write_intake.go 里包
+  // ErrMalformedRequest 的那几道判断；服务端带 detail 之后这一句只需收短。
   MALFORMED_REQUEST:
-    '请求形状不合,重发同样的内容不会改变结果。目录读口:kind 缺席或不在封闭集。' +
-    '登记口:载荷带了 tenantId(含 null)、多出未知键、不恰一项(零项、多项或混入别的口的项)、' +
-    '修订号不是整数、时刻不是 RFC 3339、封闭集词不在集内、标识或依据为空,或尾随第二个 JSON 值。',
+    '请求的格式不对，原样重发不会改变结果。常见原因：带了 tenantId、有不认识的键、一次粘了多项或一项都没有、' +
+    '修订号不是整数、时间格式不对、可选词不在范围内、标识或依据为空，或 JSON 后面还多了内容。',
   INTAKE_FAILED: '接入解析未能完成,本次没有形成任何业务答案,可稍后重试。',
   NO_ANSWER_FORMED: '服务端处理未能完成,本次没有形成任何业务答案,可稍后重试。',
   // 只可能来自登记写面：服务端交回了一个没有名字的答案，那是实现坏了，不是一种新的
@@ -301,39 +294,20 @@ export const registrationTitles: Record<CommercialRegistrationKind, string> = {
   'product-channel-mapping': '登记产品—渠道映射修订',
 };
 
-// 登记快照形状的提示句。八类共用的前半由一处拼出：抄八遍会让「这一签是什么」那句
-// 在其中一遍被改动时悄悄分叉。
+// 登记快照形状的提示句。各类共用的开头由一处拼出：抄几遍会让「这一签是什么」那句在其中一遍被改时悄悄分叉。
 //
-// `subcommand` 是受控 CLI 的子命令名，与端点路径的种类词不逐字相同（CLI 一个子命令收
-// 一整批四类，在线口一类一个端点）——所以提示句里同时说清「本签收一项，不是 CLI 那份
-// 整批」。这不是措辞讲究：把整批粘进来会被译装拒绝，而拒绝理由说的是形状不对，操作者
-// 看不出自己错在多包了一层。
+// 这一签的定位按 ADR-0101 决定一：JSON 快照签是受控批量口的在线镜像，给熟悉登记格式的人用，不是配置员的主路径。
+// 「一次一项，不是整批」要说：把受控 CLI 的整批粘进来会被拒，而拒绝理由只说形状不对，看不出自己多包了一层。
 //
-// 这一签的定位按 ADR-0101 决定一：JSON 快照签是受控批量口的在线镜像，不是运营配置员的
-// 主路径；各册的逐字段表单由实施票逐册裁形另建。此前这里写的理由（「渠道原始载荷 →
-// 登记快照」的翻译属渠道接入契约、随 PAR-INT-01 提供）被 ADR-0101 收窄为只适用客户渠道
-// 载荷，对操作者面不成立，故不再这样说。
-//
-// 「不带 tenantId」那句同理只写在这里一处，且只给在线口已放行的那几签：身份族的隔离
-// Intake（`refuseSelfReportedTenant`）对载荷里的 tenantId 键在场即拒、含 null——租户格由
-// 接入渠道填入，不采信自报（`register_party_identity.go` 包注释；ADR-0100 决定二）。此前
-// 身份族各句把整批的 tenantId 也列进键里，那是受控 CLI 批文的形状，照它填在线口答的是
-// 400，而 400 到页面只剩 code（票 admin-web-group-legal-entities/08）。发布口与产品渠道族
-// 那几口今天仍挂 UnconfiguredIntake 答 403，它们的提示句照批文形状说，等那几口放行时随其票
-// 改——现在改了也验不了，一句验不了的否定与一句验不了的肯定同样不可信。
-const tenantGridFilledByChannel =
-  '载荷里**不带 tenantId**——在线口的租户格由接入渠道填入,带了(含 null)即 400。';
+// 「不要带 tenantId」只给在线口已放行的那几签：身份族的隔离 Intake（`refuseSelfReportedTenant`）对载荷里的
+// tenantId 键在场即拒、含 null——租户由接入渠道填入，不采信自报（ADR-0100 决定二）。发布口与产品渠道族那几签的
+// 提示句照批文形状说，等那几口放行时随其票改。
+const tenantGridFilledByChannel = '不要带 tenantId：租户由你的登录身份决定，带了（含 null）会被拒。';
 
-function snapshotHint(
-  subcommand: string,
-  fields: string,
-  options?: { tenantGridFilledByChannel: true },
-): string {
+function snapshotHint(fields: string, options?: { tenantGridFilledByChannel: true }): string {
   return (
-    `登记快照 JSON 的键与受控登记口 parcel-commercial ${subcommand} -input 吃的同一份;` +
-    '在线口收的是其中**一项**,不是整批——批不是聚合,逐项各起事务,在线口把一项作为一次请求。' +
+    '这是高级入口：粘贴一项登记的 JSON，一次一项，不是整批。' +
     (options?.tenantGridFilledByChannel ? tenantGridFilledByChannel : '') +
-    '本签是受控批量口的在线镜像(ADR-0101),不是运营配置员的主路径;逐字段表单按各册实施票另建。' +
     fields
   );
 }
@@ -348,81 +322,67 @@ function snapshotHint(
  */
 export const registrationSnapshotHints: Record<CommercialRegistrationKind, string> = {
   publication: snapshotHint(
-    'publish',
-    '一项的键为 tenantId / kind / objectId / version / scope / contentDigest / ' +
-      'effectiveStartsAt / approval{reference,source,approvedAt} / approvalRoleStanding,' +
-      '可选 effectiveEndsAt / references / declarations。kind 是**发布轴的对象类别**,封闭十词:' +
-      'SERVICE_PRODUCT / CUSTOMER_CONTRACT / SUPPLIER_AGREEMENT / ACCEPTANCE_RULE_PACKAGE / ' +
-      'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY / PRICE_RULE / SETTLEMENT_POLICY / ' +
-      'CREDIT_POLICY / AUTHORIZATION_RULE / CUSTOMER_SERVICE_RULE。**它与本台各页的册名是两条分类轴,不逐字对应**:' +
-      '前三类各显示在服务产品、客户与合同、供应商协议三页;后七类的版本与正文显示在「商业规则与策略」' +
-      '页对应的册里(PRICE_RULE → 商业价格政策册,PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY → 接受前财务控制策略册——' +
-      '与「接受前财务控制」册是两本:后者列的是挂在 CUSTOMER_CONTRACT 版本下的声明;CUSTOMER_SERVICE_RULE → 客户服务规则册)。' +
-      '本页不代填也不校验 kind。declarations 里的通道(AS_OF_POLICY、PRE_ACCEPTANCE_CONTROL、' +
-      'RULE_PACKAGE_BODY、PRICE_POLICY_BODY 等)不是 kind:它们没有自己的版本,随所属版本一并发布,' +
-      '各自显示在册名旁写着的那本册。声明只能随发布登记:正文随发布固定,事后补声明等于改一份' +
-      '已固定的正文,那要发新版本。',
+    '一项的键：tenantId、kind、objectId、version、scope、contentDigest、effectiveStartsAt、' +
+      'approval{reference,source,approvedAt}、approvalRoleStanding，可选 effectiveEndsAt、references、declarations。' +
+      'kind 是发布类别码，共十个：SERVICE_PRODUCT、CUSTOMER_CONTRACT、SUPPLIER_AGREEMENT、ACCEPTANCE_RULE_PACKAGE、' +
+      'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY、PRICE_RULE、SETTLEMENT_POLICY、CREDIT_POLICY、AUTHORIZATION_RULE、' +
+      'CUSTOMER_SERVICE_RULE。类别码与本台的页名、册名不是一一对应：前三类分别显示在服务产品、客户与合同、' +
+      '供应商协议三页；其余七类显示在「商业规则与策略」页对应的册里（PRICE_RULE 显示在商业价格政策册；' +
+      'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY 显示在接受前财务控制策略册，它与「接受前财务控制」册是两本，' +
+      '后者列的是随客户合同发布的声明；CUSTOMER_SERVICE_RULE 显示在客户服务规则册）。本页不替你填写或检查 kind。' +
+      'declarations 里的各项（如 AS_OF_POLICY、PRE_ACCEPTANCE_CONTROL、RULE_PACKAGE_BODY、PRICE_POLICY_BODY）不是 kind：' +
+      '它们没有自己的版本，随所属版本一起发布。声明只能随发布一起登记，发布后要改须发新版本。',
   ),
   'business-party': snapshotHint(
-    'register-parties',
-    'businessParties 数组里一项的键为 partyId / name / revision / basis / effectiveFrom。' +
-      '首笔修订必须是 1,此后必须连续——跳号说明你看到的册面已陈旧,会被受理门拒绝而不是替你猜。',
+    'businessParties 数组里一项的键：partyId、name、revision、basis、effectiveFrom。' +
+      '首笔修订号必须是 1，之后必须连续；跳号说明你看到的列表已过时，会被拒，不会替你猜。',
     { tenantGridFilledByChannel: true },
   ),
   'legal-entity': snapshotHint(
-    'register-parties',
-    'legalEntities 数组里一项的键为 legalEntityId / partyId / revision / basis / effectiveFrom，' +
-      '身份层可带 registrationCountry / lifetimeRegistrationNumbers[{typeCode, number}] / identityCorrectionBasis' +
-      '（首笔两格缺一拒登；更正依据只在更正修订上收）。' +
-      '参与方必须已登记且在法人生效时点已生效——法人不钉悬空身份。',
+    'legalEntities 数组里一项的键：legalEntityId、partyId、revision、basis、effectiveFrom；' +
+      '身份部分可带 registrationCountry、lifetimeRegistrationNumbers[{typeCode, number}]、identityCorrectionBasis' +
+      '（首笔登记两格缺一不可；更正依据只在更正修订上填）。' +
+      '所钉的业务参与方必须已登记，且在法人生效时已生效。',
     { tenantGridFilledByChannel: true },
   ),
   'legal-entity-profile': snapshotHint(
-    'register-legal-entity-profiles',
-    'profiles 数组里一项的键为 legalEntityId / revision / basis / effectiveFrom，可选 registeredAddress{country, lines} / ' +
-      'taxRegistrationNumbers[{typeCode, number}] / invoiceTitle / contacts[{name, email, phone}]。新修订自其生效时点起' +
-      '取代前一修订，可以登记未来生效的修订；注册地址国家须与身份上的注册国家 / 地区一致。invoiceTitle 缺席即这笔不带' +
-      '开票资料，给了空串照样拒。',
+    'profiles 数组里一项的键：legalEntityId、revision、basis、effectiveFrom，可选 registeredAddress{country, lines}、' +
+      'taxRegistrationNumbers[{typeCode, number}]、invoiceTitle、contacts[{name, email, phone}]。新修订从它的生效时点起' +
+      '取代前一修订，可以登记未来生效的修订；注册地址的国家须与法人身份上的注册国家 / 地区一致。不填 invoiceTitle 表示' +
+      '这一笔不带开票资料，填空字符串会被拒。',
     { tenantGridFilledByChannel: true },
   ),
   'customer-account': snapshotHint(
-    'register-parties',
-    'customerAccounts 数组里一项的键为 accountId / customerPartyId / revision / basis / ' +
-      'effectiveFrom。引用判据同法人登记;跨租户绑定由领域构造门拒绝。' +
-      '结果显示在本页「客户账户」签(客户与合同页)。',
+    'customerAccounts 数组里一项的键：accountId、customerPartyId、revision、basis、effectiveFrom。' +
+      '所指的业务参与方要求同法人登记；不能绑定别的租户的参与方。' +
+      '登记结果显示在客户与合同页的「客户账户」签。',
     { tenantGridFilledByChannel: true },
   ),
   'party-relationship': snapshotHint(
-    'register-parties',
-    'relationships 数组里一项的键为 relationshipId / revision / holder / counterparty / role / ' +
-      'scope / basis / effectiveStartsAt,可选 effectiveEndsAt 与 approval{reference,approvedAt}。' +
-      '角色取封闭五词 CUSTOMER / SUPPLIER / CARRIER_AGENT / RESELLER / ACCOUNT_HOLDER。' +
-      '缺 approval 即登记为候选关系,批准另行形成新修订。',
+    'relationships 数组里一项的键：relationshipId、revision、holder、counterparty、role、scope、basis、effectiveStartsAt，' +
+      '可选 effectiveEndsAt 与 approval{reference,approvedAt}。' +
+      'role 只能取 CUSTOMER、SUPPLIER、CARRIER_AGENT、RESELLER、ACCOUNT_HOLDER 之一。' +
+      '不带 approval 登记为候选关系，批准另登一笔新修订。',
     { tenantGridFilledByChannel: true },
   ),
   'identity-deactivation': snapshotHint(
-    'deactivate-party-identity',
-    'deactivations 数组里一项的键为 kind / id / revision / basis / at。' +
-      '身份种类取封闭三词 BUSINESS_PARTY / LEGAL_ENTITY / CUSTOMER_ACCOUNT——关系不在内,' +
-      '关系的终止走撤销/到期/替代,不叫停用。revision 是停用落点的修订号(册上最新 + 1):' +
-      '你声明自己看到的册面,错位说明册面已被并发推进或意图已陈旧。' +
-      '**法人与客户账户的停用也走本签**(一个命令带种类),结果分别显示在集团与法人页、以及' +
-      '客户与合同页的「客户账户」签上。',
+    'deactivations 数组里一项的键：kind、id、revision、basis、at。' +
+      'kind 只能取 BUSINESS_PARTY、LEGAL_ENTITY、CUSTOMER_ACCOUNT 之一；关系不在其中，' +
+      '关系的结束走撤销、到期或替代，不叫停用。revision 是停用这一笔的修订号（列表上最新的修订号 + 1）；' +
+      '对不上说明有人刚登过一笔，或你看到的列表已过时。' +
+      '法人与客户账户也在这里停用，结果分别显示在集团与法人页、客户与合同页的「客户账户」签。',
     { tenantGridFilledByChannel: true },
   ),
   'service-product-form': snapshotHint(
-    'register-products',
-    'forms 数组里一项的键为 productId / version / form,外加整批的 tenantId 与 scope。' +
-      '服务形态取封闭两词 NETWORK_SERVICE / LABEL_CHANNEL_SERVICE(面单渠道服务已由 ADR-0088 ' +
-      '纳入首发对客形态,PAR-COM-12 随之改为纳入)。' +
-      '版本必须已在册且已生效——形态是解析采用的内容,挂在未生效或已收尾的版本上永远选不中。',
+    'forms 数组里一项的键：productId、version、form，外加整批的 tenantId 与 scope。' +
+      'form 只能取 NETWORK_SERVICE（网络服务产品）或 LABEL_CHANNEL_SERVICE（面单渠道服务）。' +
+      '所指的产品版本必须已发布且已生效：挂在未生效或已结束的版本上永远不会被选中。',
   ),
   'product-channel-mapping': snapshotHint(
-    'register-products',
-    'mappings 数组里一项的键为 mappingId / revision / productId / productVersion / channels / ' +
-      'basis / effectiveStartsAt,可选 effectiveEndsAt;外加整批的 tenantId 与 scope。' +
-      'channels 缺席是输入缺件,写 [] 才是登记者说出的“未配置”声明(该产品尚无可用渠道候选)——' +
-      '两者不可分辨会让一句商业声明冒充一次漏填。映射标识钉着它的产品版本:改指产品是另一笔' +
-      '映射,登记新映射标识,不是本映射的新修订。',
+    'mappings 数组里一项的键：mappingId、revision、productId、productVersion、channels、basis、effectiveStartsAt，' +
+      '可选 effectiveEndsAt；外加整批的 tenantId 与 scope。' +
+      '不带 channels 算漏填；写 [] 才表示「这个产品暂无可用渠道」。映射钉在它的产品版本上：' +
+      '要改指别的产品，登记一个新的映射标识，而不是本映射的新修订。',
   ),
 };
+

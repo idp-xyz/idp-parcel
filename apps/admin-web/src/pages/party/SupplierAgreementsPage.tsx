@@ -53,7 +53,7 @@ function SupplierAgreementCatalogue({ reloadToken }: { reloadToken: number }) {
   return (
     <ListPageTemplate<SupplierAgreementRow>
       title={info.title}
-      description={`${info.owner}——行对象是供应商协议版本壳与已登记正文（供应商、责任法人、采购方案引用、协议范围与区间）；壳可先入册、正文随发布登记，只有壳的行正文列显「未登记」`}
+      description="供应商协议的各个版本：供应商、责任法人、采购方案、协议范围与有效区间。正文还没随发布登记的版本，「正文」列显示「未登记」。"
       search={{
         value: search,
         onChange: setSearch,
@@ -71,7 +71,7 @@ function SupplierAgreementCatalogue({ reloadToken }: { reloadToken: number }) {
         module: info,
         endpoint: 'GET /commercial-supplier-agreements',
         emptyTitle: '当前租户尚无供应商协议版本',
-        emptyDescription: '读取入口已配置，但目录为空；页面不会预置供应商或采购条件。',
+        emptyDescription: '还没有任何供应商协议。在「发布协议版本」签发布第一份；本页不会预置供应商或采购条件。',
       })}
     />
   );

@@ -116,7 +116,7 @@ export function LegalEntityBanners({ row }: { row: GroupLegalEntityRecord }) {
         <div className={`flex items-center gap-2 rounded border px-2.5 py-1.5 text-[12px] ${statusToneBanner.warning}`}>
           <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${statusToneText.warning}`} aria-hidden="true" />
           <span>
-            待查：{partyNameUnknownNote}（{row.partyId}）。这是写入门失败留下的悬空，登记新修订补不上，需到业务参与方页核对参与方册。
+            待查：{partyNameUnknownNote}（{row.partyId}）。多半是当初登记时出了问题，登记新修订补不上；请到业务参与方页核对这个参与方。
           </span>
         </div>
       )}

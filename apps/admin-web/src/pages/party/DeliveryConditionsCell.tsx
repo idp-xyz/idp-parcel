@@ -21,7 +21,7 @@ export function DeliveryConditionsCell({ conditions }: { conditions?: DeliveryCo
       <p>
         <span className="text-idpxyz-textMuted">方式：</span>
         {conditions.methods.length === 0 ? (
-          <span className="text-idpxyz-textMuted">（登记了零种——坏行，去查写侧）</span>
+          <span className="text-idpxyz-textMuted">（数据异常：一种交付方式都没有）</span>
         ) : (
           conditions.methods.map((method, index) => (
             <span key={method} className="font-mono text-idpxyz-text">
