@@ -9,9 +9,10 @@ var (
 	// ErrInvalidAcceptanceBaselineGeoProjection 是构造时缺格：委托、客户账户或基线版本的引用缺一个，固定时刻为零，或投影
 	// 不是「带了」的那一形。
 	ErrInvalidAcceptanceBaselineGeoProjection = errors.New("parcel shipment: invalid acceptance baseline geo projection")
-	// ErrAcceptanceBaselineInconsistent 说一份已接受委托的接受基线自相矛盾：没有接受基线、基线没有固定时刻，或基线所指的
-	// 那一版提交不在本委托的版本里。基线在接受时与版本同笔固定、此后不再改写，读到这三种只能是存储坏了，重投不会变
-	// （ADR-0029）。读口把它与读不动分开交出，消费方据以分响亮失败与重投。
+	// ErrAcceptanceBaselineInconsistent 说一份已接受委托的接受基线自相矛盾，重建门会拒这份委托：没有接受基线、基线不指
+	// 当前提交版本、基线没有固定时刻、基线成员与当前提交版本不一致，或基线时刻不等于接受决定的时刻。基线在接受时与
+	// 版本、决定同笔固定、此后不再改写，读到这几种只能是存储坏了，重投不会变（ADR-0029）。读口把它与读不动分开交出，
+	// 消费方据以分响亮失败与重投。
 	ErrAcceptanceBaselineInconsistent = errors.New(
 		"parcel shipment: the accepted shipment request carries an inconsistent acceptance baseline")
 )
