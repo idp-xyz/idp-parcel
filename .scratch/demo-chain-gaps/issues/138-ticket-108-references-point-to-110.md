@@ -1,7 +1,7 @@
 # 138 ADR-0201 与种子 README 把票 110 写成 108
 
 Category: bug
-Status: in-progress——2026-10-26 复评阻断已修，待进 main，分支 claude-dcgdocs tip `82656f52e`（修订轮二本票无改动，票面那一笔在其上；见文末「复评」「修订轮二」）。此前 in-progress——2026-10-26 评审阻断已修、修订轮完，待复评与进 main，分支 claude-dcgdocs tip `867b157d2`（修订轮本票无改动，票面那一笔在其上；见文末「评审记录」「修订轮」）。此前 in-progress——2026-10-25 作者完工，待隔离评审与进 main，分支 claude-dcgdocs tip `ac6f096b1`（本票内容 `a102d8581`，票面那一笔在其上；见文末「完成记录」）。此前 in-progress——2026-10-25 会话 `tops-20`（Claude Code）认领，文档票同批（128、134、137、138、141、144），分支 `claude-dcgdocs`（worktree `idp-parcel-dcgdocs`）。此前 ready-for-agent——2026-10-20 代决复核立（文档），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: resolved——2026-10-26 进 main `5347f6431`（见文末「进 main 记录」）。此前 in-progress——2026-10-26 复评阻断已修，待进 main，分支 claude-dcgdocs tip `82656f52e`（修订轮二本票无改动，票面那一笔在其上；见文末「复评」「修订轮二」）。此前 in-progress——2026-10-26 评审阻断已修、修订轮完，待复评与进 main，分支 claude-dcgdocs tip `867b157d2`（修订轮本票无改动，票面那一笔在其上；见文末「评审记录」「修订轮」）。此前 in-progress——2026-10-25 作者完工，待隔离评审与进 main，分支 claude-dcgdocs tip `ac6f096b1`（本票内容 `a102d8581`，票面那一笔在其上；见文末「完成记录」）。此前 in-progress——2026-10-25 会话 `tops-20`（Claude Code）认领，文档票同批（128、134、137、138、141、144），分支 `claude-dcgdocs`（worktree `idp-parcel-dcgdocs`）。此前 ready-for-agent——2026-10-20 代决复核立（文档），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 M21；ADR-0201 越权风险点 29
 
@@ -49,3 +49,12 @@ Blocked by: 无
 ## 复评（2026-10-26，钉 `3637253f7`）
 
 本票无新发现、无改动。复评要点与修订轮二全文见票 [141](./141-pricing-basis-moment-is-product-strategy-in-sa-context.md) 的「复评」「修订轮二」两节。
+
+## 进 main 记录（2026-10-26，推送方会话 tops-20；文档批 128、134、137、138、141、144 同批）
+
+- **main**：`5347f6431`。出处：分支 `claude-dcgdocs` tip `e9b4230cb`；认领那笔 `d3aa57fc3` 与 main 上的 `f74b3e8c8` 内容相同，重放时跳过。
+- **重放对照**（分支 → main）：`d63c9e52b` → `ae8c19b36`（134）；`7b5681a6e` → `8810dcab4`（137）；`a102d8581` → `f7ccfbfa0`（138）；`1951c6657` → `ba382a93b`、`ac6f096b1` → `f8a3482a5`（144）；`472dae3aa` → `a729f566a`；修订轮 `7b7e1dd97` → `63675d80c`（141）、`6da0fa119` → `4832e09af`（134）、`867b157d2` → `d29b9ac58`（144）、`3637253f7` → `9a10ec514`；修订轮二 `2f035d3d4` → `7deff5999`（141）、`5f3ef27d3` → `08d0fde67`（144）、`82656f52e` → `bc8fab2c4`（134）、`e9b4230cb` → `b8e379304`。
+- **重放冲突**：`.scratch/at-coverage-inventory.md` 文末追记与 main 上票 147 的追记相邻，两边都留（照 tops-26 与本会话约定）；修订轮二对 134 追记的改写取分支一侧。
+- **生成物**：AT 盘点总览计数 `5347f6431`；ADR 索引与机制清点重生成无变化；三件 `-check` 退 0。
+- **评审**：隔离子代理钉 `472dae3aa`：阻断 2（144 未引 ADR-0140 的路径前缀与错误体；141 四处残句）、非阻断 3。修订轮后同一评审者在 `3637253f7` 上复评：144 阻断清零；141 另有一处同义残句（模块指南交接表「和计价时点」）记为阻断，另三条非阻断。修订轮二收掉；推送方在 `e9b4230cb` 上照复评者口径重跑检索（docs/ 不含 adr、archive：「计价时点」「定价时点」「价格时点」「计价日」「评价基准」「基准时刻」等），余下命中都不是商业侧声明或交来计价时点（见「评审记录」「复评」「修订轮二」）。
+- **全量真库测试与种子**：只动 `.md`（含 `scripts/demo-seeds/README.md`），照 workflow「进 main 的步骤」第 5、6 步免，未跑。
