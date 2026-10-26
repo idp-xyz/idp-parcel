@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
-	veps "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/parcelshipment"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
@@ -131,9 +130,10 @@ func NewQueryCustomerTrackingViewEndpoint(
 // 每一次读不到视图的查询都问且只问一次，不论答出什么——问不问取决于答案的话，读的次数本身就成了探针看得见的区别
 // （决定三）。比的只是「唯一归属账户等于请求方账户」这一位，答复不带归属于谁。
 //
-// 多于一份当前已接受委托同时声明这件包裹：派生一侧据同一具名错误落未决、不择一；查询一侧它是读不到视图的又一种，答
-// `VIEW_NOT_FOUND`（决定五）。其余错误（反查读不动，或答复译不成本上下文的账户）都没形成归属结论，formed 为假，与视图
-// 读不回同一格——降成任何业务格都会让客户系统把一次该重试的故障当成终局（UC-VE-008 AT-VE-168）。
+// 多于一份当前已接受委托同时声明这件包裹（ports.ErrAmbiguousCustomerAccount）：派生一侧据它落未决、不择一；查询一侧它是
+// 读不到视图的又一种，答 `VIEW_NOT_FOUND`（决定五）。其余错误（反查读不动，或 ports.ErrCustomerAccountUntranslatable）都
+// 没形成归属结论，formed 为假，与视图读不回同一格——降成任何业务格都会让客户系统把一次该重试的故障当成终局（UC-VE-008
+// AT-VE-168）。
 func outcomeWithoutView(
 	ctx context.Context,
 	attributions ports.ParcelCustomerAccountView,
@@ -141,7 +141,7 @@ func outcomeWithoutView(
 ) (outcome string, formed bool) {
 	account, attributed, err := attributions.FindCustomerAccount(ctx, query.Tenant, query.Parcel)
 	switch {
-	case errors.Is(err, veps.ErrAmbiguousCustomerAccount):
+	case errors.Is(err, ports.ErrAmbiguousCustomerAccount):
 		return outcomeViewNotFound, true
 	case err != nil:
 		return "", false

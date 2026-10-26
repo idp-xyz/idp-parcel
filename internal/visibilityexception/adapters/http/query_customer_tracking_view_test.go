@@ -7,13 +7,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	visibilityhttp "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/http"
-	veps "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/parcelshipment"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
+	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
 type intakeDouble struct {
@@ -75,7 +76,7 @@ func (double *attributionDouble) FindCustomerAccount(
 		return none, false, double.err
 	}
 	if double.ambiguous[parcel.String()] {
-		return none, false, fmt.Errorf("%w: parcel %q", veps.ErrAmbiguousCustomerAccount, parcel.String())
+		return none, false, fmt.Errorf("%w: parcel %q", ports.ErrAmbiguousCustomerAccount, parcel.String())
 	}
 	owner, attributed := double.owners[parcel.String()]
 	if !attributed {
@@ -274,27 +275,36 @@ func TestEveryOtherUnformedViewIsByteForByteAMissingParcel(t *testing.T) {
 		t.Fatalf("不存在的包裹 = %d %s, want 200 VIEW_NOT_FOUND", missing.Code, missing.Body.String())
 	}
 	for name, probe := range map[string]*httptest.ResponseRecorder{
-		"归属别的账户":           ask("customer-2", "parcel-1"),
-		"多份委托同时声明，别人来查":    ask("customer-2", "parcel-conflict"),
-		"多份委托同时声明，声明方之一来查": ask("customer-1", "parcel-conflict"),
+		"归属别的账户": ask("customer-2", "parcel-1"),
+		"多份已接受委托同时声明，别人来查":    ask("customer-2", "parcel-conflict"),
+		"多份已接受委托同时声明，声明方之一来查": ask("customer-1", "parcel-conflict"),
 	} {
 		if probe.Code != missing.Code || probe.Body.String() != missing.Body.String() {
 			t.Errorf("%s = %d %q，与不存在的包裹 %d %q 可分辨", name, probe.Code, probe.Body.String(), missing.Code, missing.Body.String())
+		}
+		if !reflect.DeepEqual(probe.Header(), missing.Header()) {
+			t.Errorf("%s 的响应头 %v 与不存在的包裹 %v 可分辨", name, probe.Header(), missing.Header())
 		}
 	}
 }
 
 // Covers: UC-VE-008 `AT-VE-188` 末句与 `AT-VE-168` 的客户归属读取半边「归属读不动时返回未形成」——反查读不动答 500
 // NO_ANSWER_FORMED，与视图读不回同一格，不降成 VIEW_NOT_FOUND，也不降成 NO_VISIBLE_RESULT（ADR-0246 决定二；ADR-0029）。
+// 答复译不成标识（ports.ErrCustomerAccountUntranslatable）同样没形成归属结论，答同一格，不并进多份声明那一格。
 func TestAnUnreadableAttributionIsNoAnswerNotABusinessGrade(t *testing.T) {
-	attributions := &attributionDouble{err: errors.New("parcel shipment down")}
+	for name, failure := range map[string]error{
+		"读不动":   errors.New("parcel shipment down"),
+		"答复译不成": fmt.Errorf("%w: customer account: blank value", ports.ErrCustomerAccountUntranslatable),
+	} {
+		attributions := &attributionDouble{err: failure}
 
-	recorder := serve(t, intakeDouble{query: queryOf(t, "customer-1", "parcel-1")}, readerDouble{}, attributions, http.MethodGet)
+		recorder := serve(t, intakeDouble{query: queryOf(t, "customer-1", "parcel-1")}, readerDouble{}, attributions, http.MethodGet)
 
-	if recorder.Code != http.StatusInternalServerError || problemCode(t, recorder) != "NO_ANSWER_FORMED" {
-		t.Fatalf("answer = %d %s, want 500 NO_ANSWER_FORMED", recorder.Code, recorder.Body.String())
+		if recorder.Code != http.StatusInternalServerError || problemCode(t, recorder) != "NO_ANSWER_FORMED" {
+			t.Fatalf("%s：answer = %d %s, want 500 NO_ANSWER_FORMED", name, recorder.Code, recorder.Body.String())
+		}
+		assertNoOutcome(t, recorder)
 	}
-	assertNoOutcome(t, recorder)
 }
 
 // Covers: ADR-0246 决定二、三——只在读不到视图时问归属，每一次读不到视图的查询都问且只问一次，不论答出什么：读的次数对归属方、

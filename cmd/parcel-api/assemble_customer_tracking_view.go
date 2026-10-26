@@ -41,7 +41,8 @@ func customerTrackingViewQueryIntake(intake *visibilityhttp.CustomerTrackingView
 
 // buildCustomerTrackingViewAttributions 装查阅口读不到视图时问归属的那只反查口（ADR-0246 决定二）：parcel-dispatch 的视图
 // 派生与补派生用的同一个适配器，读的是同一份当前已接受委托。查询与派生对「这件归谁」各问各的、问的是同一份事实，不另造一份
-// 映射；多份委托同时声明时适配器交回同一具名错误，查询这一侧答 VIEW_NOT_FOUND，派生那一侧落未决。只读，不写 PS 的库。
+// 映射；多份当前已接受委托同时声明时适配器包住 ports.ErrAmbiguousCustomerAccount 交回，查询这一侧答 VIEW_NOT_FOUND，派生那一
+// 侧落未决。只读，不写 PS 的库。
 func buildCustomerTrackingViewAttributions(db *bentopg.DB) (*veps.ParcelCustomerAccountLookup, error) {
 	requests, err := pspostgres.NewShipmentRequests(db)
 	if err != nil {

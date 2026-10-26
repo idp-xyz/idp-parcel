@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -307,8 +308,9 @@ func TestTheProductionTrackingViewLineWalksAParcelThroughItsThreeGradesAgainstAR
 		if missing.Code != http.StatusOK || outcomeOf(t, missing) != "VIEW_NOT_FOUND" {
 			t.Fatalf("%s：另一账户查不存在的号 = %d %s, want 200 VIEW_NOT_FOUND", stage, missing.Code, missing.Body.String())
 		}
-		if probe.Code != missing.Code || probe.Body.String() != missing.Body.String() {
-			t.Fatalf("%s：另一账户查这件 %d %q 与查不存在的号 %d %q 可分辨", stage, probe.Code, probe.Body.String(), missing.Code, missing.Body.String())
+		if probe.Code != missing.Code || probe.Body.String() != missing.Body.String() || !reflect.DeepEqual(probe.Header(), missing.Header()) {
+			t.Fatalf("%s：另一账户查这件 %d %v %q 与查不存在的号 %d %v %q 可分辨", stage,
+				probe.Code, probe.Header(), probe.Body.String(), missing.Code, missing.Header(), missing.Body.String())
 		}
 		return ownerAnswer
 	}

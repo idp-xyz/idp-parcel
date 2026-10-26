@@ -12,17 +12,14 @@ import (
 )
 
 var (
-	// ErrCustomerAccountUntranslatable 表示查询维或答复译不成对方领域标识。引用坏了，
-	// 不是等谁；禁止进 WithUndecidedSentinels。
-	ErrCustomerAccountUntranslatable = errors.New(
-		"visibility exception parcelshipment adapter: untranslatable customer account lookup")
-	// ErrAmbiguousCustomerAccount 是 PS 的 ErrAmbiguousParcelTarget 在本上下文的译名：
-	// 同一租户下多份当前已接受委托都声明了这件对象。PS 机制拒绝自动采认，本侧同样不得
-	// 按时间或行序任选一个账户。派生一侧（视图派生与补派生）据它落未决/待确认、不形成
-	// 视图（UC-VE-008 AT-VE-152）；客户追踪查询一侧据它答 `VIEW_NOT_FOUND`，与零份、
-	// 归属别户同一格，对外不另立冲突一格（ADR-0246 决定五）。
-	ErrAmbiguousCustomerAccount = errors.New(
-		"visibility exception parcelshipment adapter: ambiguous customer account for tracked parcel")
+	// ErrCustomerAccountUntranslatable 是端口哨兵在本译名包的同名引用：本包派生适配器按这个
+	// 名字认它。引用坏了，不是等谁；禁止进 WithUndecidedSentinels。
+	ErrCustomerAccountUntranslatable = veports.ErrCustomerAccountUntranslatable
+	// ErrAmbiguousCustomerAccount 是端口哨兵在本译名包的同名引用：PS 的
+	// ErrAmbiguousParcelTarget（同一租户下多份当前已接受委托都声明了这件对象）在本上下文
+	// 译成它，本包派生适配器与 parcel-dispatch 的未决哨兵名单按这个名字认它。PS 机制拒绝
+	// 自动采认，本侧同样不得按时间或行序任选一个账户；两侧各怎么分格见端口。
+	ErrAmbiguousCustomerAccount = veports.ErrAmbiguousCustomerAccount
 )
 
 // ParcelCustomerAccountLookup 把 PS 的按包裹反查读口（CurrentAcceptedParcelTargetView）

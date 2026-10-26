@@ -4,6 +4,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
@@ -148,11 +149,13 @@ type ProjectionHandoff interface {
 //     `VIEW_NOT_FOUND`。
 //   - 一：交回唯一归属账户。派生一侧按它形成视图；查询一侧只比它是否等于请求方账户，等于
 //     答 `NO_VISIBLE_RESULT`，不等于答 `VIEW_NOT_FOUND`。
-//   - 多：适配器以具名错误交回，绝不按时间或行序任选。派生一侧是未决/待确认，不择一、不
-//     形成视图（UC-VE-008 AT-VE-152）；查询一侧答 `VIEW_NOT_FOUND`，对外不另立冲突一格
-//     （ADR-0246 决定五）。
+//   - 多：适配器包住 ErrAmbiguousCustomerAccount 交回，绝不按时间或行序任选。派生一侧是
+//     未决/待确认，不择一、不形成视图（UC-VE-008 AT-VE-152）；查询一侧答 `VIEW_NOT_FOUND`，
+//     对外不另立冲突一格（ADR-0246 决定五）。
 //
-// 依赖调不通作为别的错误返回：派生一侧落未决，查询一侧答未形成，两侧都不把它当成零。
+// 三格之外：答复或查询维译不成标识，包住 ErrCustomerAccountUntranslatable 交回；依赖调不通
+// 原样交回。两种都没形成归属结论，两侧都不把它们当成零：查询一侧都答未形成；派生一侧把
+// 依赖调不通落未决，把译不成当编程错误响亮上抛、不进未决。
 type ParcelCustomerAccountView interface {
 	FindCustomerAccount(
 		ctx context.Context,
@@ -160,6 +163,17 @@ type ParcelCustomerAccountView interface {
 		parcel domain.TrackedParcelReference,
 	) (domain.CustomerAccountReference, bool, error)
 }
+
+// ErrAmbiguousCustomerAccount 是 ParcelCustomerAccountView「多」那一格：同一租户下多于一份
+// 当前已接受委托声明这件对象。各消费方要按它分格，它因此住在端口里——认一个哨兵不该
+// 要消费方导入出站的跨上下文译名包，连带依赖 parcel-shipment 的领域与端口。
+var ErrAmbiguousCustomerAccount = errors.New(
+	"visibility exception: ambiguous customer account for tracked parcel")
+
+// ErrCustomerAccountUntranslatable 说归属反查的查询维或答复译不成对方或本上下文的标识：
+// 引用坏了，重问还是同一个结果，不是等谁。住在端口里的理由同 ErrAmbiguousCustomerAccount。
+var ErrCustomerAccountUntranslatable = errors.New(
+	"visibility exception: untranslatable customer account lookup")
 
 // DimensionDisclosure 是披露策略对客户视图一维的答复：获准展示时带内容来处，
 // 内容尚未到位时待确认，授权或披露规则不允许时不展示。State 取领域的封闭三态，

@@ -8,6 +8,7 @@ import (
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	adapter "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/parcelshipment"
 	vedomain "go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
+	veports "go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
 // 本文件证账户反查适配器的三格译法与哨兵映射（ADR-0060 的零/一/多）：零行如实
@@ -122,15 +123,19 @@ func TestASingleAcceptedTargetYieldsItsCustomerAccount(t *testing.T) {
 	}
 }
 
-// 多行是未决/待确认（UC-VE-008 AT-VE-152），不是「无视图」：调用方只见 VE 具名哨兵，
-// PS 的 ErrAmbiguousParcelTarget 不外泄——放行它会让编排绕过本上下文的词汇直接判
-// 邻居的错误。
+// 多行不任选账户（派生一侧落未决/待确认，UC-VE-008 AT-VE-152；查询一侧答 VIEW_NOT_FOUND，
+// ADR-0246 决定五）：调用方只见 VE 具名哨兵，PS 的 ErrAmbiguousParcelTarget 不外泄——放行它
+// 会让编排绕过本上下文的词汇直接判邻居的错误。
 func TestAnAmbiguousTargetBecomesTheVENamedSentinel(t *testing.T) {
 	subject := newLookupSubject(t, &targetFinderDouble{err: psdomain.ErrAmbiguousParcelTarget})
 
 	account, found, err := subject.FindCustomerAccount(t.Context(), lookupTenant(t), lookupParcel(t))
 	if !errors.Is(err, adapter.ErrAmbiguousCustomerAccount) {
 		t.Fatalf("err = %v, want ErrAmbiguousCustomerAccount", err)
+	}
+	// 客户追踪查询不导入本包，按端口哨兵分格：本包交回的必须就是端口那一个。
+	if !errors.Is(err, veports.ErrAmbiguousCustomerAccount) {
+		t.Fatalf("err = %v, want 端口哨兵 ports.ErrAmbiguousCustomerAccount", err)
 	}
 	if errors.Is(err, psdomain.ErrAmbiguousParcelTarget) {
 		t.Fatal("PS 哨兵外泄了——跨上下文翻译白做")
@@ -192,6 +197,9 @@ func TestAnUntranslatableAnswerKeepsItsSentinel(t *testing.T) {
 	_, found, err := subject.FindCustomerAccount(t.Context(), lookupTenant(t), lookupParcel(t))
 	if !errors.Is(err, adapter.ErrCustomerAccountUntranslatable) {
 		t.Fatalf("err = %v, want ErrCustomerAccountUntranslatable", err)
+	}
+	if !errors.Is(err, veports.ErrCustomerAccountUntranslatable) {
+		t.Fatalf("err = %v, want 端口哨兵 ports.ErrCustomerAccountUntranslatable", err)
 	}
 	if found {
 		t.Fatal("译不出账户却交回 found=true")

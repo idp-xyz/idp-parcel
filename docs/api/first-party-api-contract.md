@@ -29,7 +29,7 @@
 - **客户追踪视图是例外**：读不到视图也是业务答案，答 `200`。`outcome` 三格（[ADR-0246](../adr/0246-the-customer-tracking-query-answers-no-visible-result-for-a-parcel-attributed-to-the-requesting-account-before-its-view-forms.md) 决定一），按调用方的续办分：
   - `CURRENT_VIEW`：有当前视图，带 `view`。各维待确认或不展示也是这一格，逐维看。
   - `NO_VISIBLE_RESULT`：包裹所在委托已`已接受`、唯一归属本账户，视图尚未形成。稍后再查；不表示未收寄、未运输或遗失。
-  - `VIEW_NOT_FOUND`：不存在、属别的账户、归属未定（含委托接受之前）、多份委托同时声明，同答一格、同一份字节。核对你给的号。刚从提交答复拿到、委托还没接受的号也落这一格：稍后再查，或请租户客服核对（决定五）。
+  - `VIEW_NOT_FOUND`：不存在、属别的账户、归属未定（含委托接受之前）、多份已接受委托同时声明，同答一格、同一份字节。核对你给的号。刚从提交答复拿到、委托还没接受的号也落这一格：稍后再查，或请租户客服核对（决定五）。
   - 后两格只有 `outcome`。归属读不动答 `500 NO_ANSWER_FORMED`，与视图读不回同一格，照 5xx 退避重发。
   - 查询串只认 `parcel` 一格。
 
