@@ -47,10 +47,18 @@ type CustomerReceiptBooks interface {
 		account string,
 	) (domain.SettlementScope, bool, error)
 
+	// FactCustomerScopes 交回一条事实经对账单或账户映射落到的客户应收作用域，次序不作数。P 怎么记这条事实看的就是
+	// 这一组有几个（CustomerDirectionNets）；映射、核销与撤销据它取要重算的作用域。
+	FactCustomerScopes(
+		ctx context.Context,
+		tenant domain.TenantID,
+		fact domain.FundsFactReference,
+	) ([]domain.SettlementScope, error)
+
 	// CustomerDirectionNets 交回该作用域的 P、W、已确认应收。
-	// P 加总已映射到本作用域对账单或应收账户上的确认到账与资金退回，取链头金额；一条事实映到本作用域几个目标也只算
-	// 一次。去重只在本作用域之内：同一条事实映到别的作用域时，那边也按全额算一次（票 docs-consistency/code/94）。
-	// W 只加总尚未撤销、且指向本作用域对账单的核销分配。
+	// P 逐条事实记一次确认到账（进）与资金退回（出），一条事实映到本作用域几个目标也只算一次：只落到本作用域一个的
+	// 取链头全额；落到几个客户应收作用域的只记指向本作用域、尚未撤销的核销分配，没核销的那部分收款不计入任何作用域、
+	// 退回在每个作用域都先扣（ADR-0283）。W 只加总尚未撤销、且指向本作用域对账单的核销分配。
 	CustomerDirectionNets(
 		ctx context.Context,
 		tenant domain.TenantID,

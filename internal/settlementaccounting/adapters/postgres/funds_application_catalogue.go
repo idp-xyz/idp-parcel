@@ -81,6 +81,9 @@ func (catalogue *FundsApplicationCatalogue) ListExternalFundsFacts(
 		`SELECT f.fact_id, f.source_ref, f.kind, f.currency, f.amount_minor, f.version,
 		        f.occurred_at, f.corrects, f.corrected_at, f.operation_evidence,
 		        applied.applied_minor, applied.reversed_minor, applied.application_count,
+		        (SELECT COUNT(DISTINCT mapped.account_id)
+		           FROM (`+mappingReceivableScopesSQL+`) AS mapped
+		          WHERE mapped.fact_id = f.fact_id),
 		        (SELECT COALESCE(
 		                    json_agg(
 		                        json_build_object(
@@ -157,7 +160,7 @@ func (catalogue *FundsApplicationCatalogue) ListExternalFundsFacts(
 		if err := rows.Scan(
 			&row.Fact, &row.Source, &row.Kind, &row.Currency, &row.AmountMinor, &row.Version,
 			&occurredAt, &corrects, &correctedAt, &evidence,
-			&row.AppliedMinor, &row.ReversedMinor, &row.ApplicationCount,
+			&row.AppliedMinor, &row.ReversedMinor, &row.ApplicationCount, &row.CustomerScopeCount,
 			&mappingsJSON, &applicationsJSON,
 		); err != nil {
 			return nil, fmt.Errorf("list external funds facts: %w", err)
@@ -169,6 +172,11 @@ func (catalogue *FundsApplicationCatalogue) ListExternalFundsFacts(
 		// 未核销余额只扣未撤销那一笔：撤销把金额退回未结，它不该继续算作已分配。外部更正把金额改到已核销合计以下时
 		// 它为负，那是超核唯一可读的信号，不截成 0。
 		row.UnappliedMinor = row.AmountMinor - row.AppliedMinor
+		// 落到几个客户应收作用域的事实按核销记入，没核销的那一截不在任何一个作用域的全额里（ADR-0283）；判法与
+		// CustomerReceiptPostings.CustomerDirectionNets 同一个作用域口径。超核时那一截是 0，超核本身已由上一格的负数说出。
+		if row.CustomerScopeCount > 1 && row.UnappliedMinor > 0 {
+			row.UnscopedUnappliedMinor = row.UnappliedMinor
+		}
 
 		var mappingDocuments []fundsMappingDocument
 		if err := json.Unmarshal(mappingsJSON, &mappingDocuments); err != nil {

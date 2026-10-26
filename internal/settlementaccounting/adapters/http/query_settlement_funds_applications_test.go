@@ -33,6 +33,34 @@ func fundsEndpoint(register *stubFundsApplicationCatalogue) http.Handler {
 	return settlementhttp.NewQuerySettlementFundsApplicationsEndpoint(grantedIntake(), register)
 }
 
+// Covers: ADR-0283 读面那一格——一条事实落到几个客户应收作用域、多少未分配没记进任何作用域，照册上原样透出，两格总在场。
+func TestExternalFundsFactQueryShowsTheScopeSpreadAndTheUnscopedUnapplied(t *testing.T) {
+	register := &stubFundsApplicationCatalogue{
+		facts: []ports.ExternalFundsFactCatalogueRow{
+			{Fact: "SYN-FACT-SPREAD", Kind: "RECEIPT_CONFIRMED", AmountMinor: 5000, UnappliedMinor: 2000,
+				CustomerScopeCount: 2, UnscopedUnappliedMinor: 2000, OccurredAt: catalogueBaseAt},
+			{Fact: "SYN-FACT-SINGLE", Kind: "RECEIPT_CONFIRMED", AmountMinor: 5000, UnappliedMinor: 5000,
+				CustomerScopeCount: 1, OccurredAt: catalogueBaseAt},
+		},
+	}
+	response := serveGet(fundsEndpoint(register), "/settlement-funds-applications")
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+	}
+	var body struct {
+		Facts []map[string]json.RawMessage `json:"facts"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || len(body.Facts) != 2 {
+		t.Fatalf("decode %s: %v", response.Body.Bytes(), err)
+	}
+	for index, want := range []struct{ scopes, unscoped string }{{"2", `"2000"`}, {"1", `"0"`}} {
+		fact := body.Facts[index]
+		if string(fact["customerScopes"]) != want.scopes || string(fact["unscopedUnappliedAmount"]) != want.unscoped {
+			t.Fatalf("第 %d 行作用域两格走样：%s", index, response.Body.String())
+		}
+	}
+}
+
 // Covers: 三个金额各算各的 — 已核销、已撤销与未核销分别在场，不合成净额；映射与核销
 // 分两个数组；未撤销的核销不带撤销两键。
 func TestExternalFundsFactQuerySplitsAppliedFromReversed(t *testing.T) {

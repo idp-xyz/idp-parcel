@@ -272,9 +272,16 @@ type ExternalFundsFactCatalogueRow struct {
 	AppliedMinor      int64
 	ReversedMinor     int64
 	UnappliedMinor    int64
-	ApplicationCount  int64
-	Mappings          []FundsMappingEntry
-	Applications      []SettlementApplicationEntry
+	// CustomerScopeCount 是这条事实经对账单或账户映射落到的客户应收作用域个数：1 即全额记入那一个作用域的入账余额，
+	// 大于 1 即按核销记入——每个作用域只记指向它的分配（ADR-0283）。UnscopedUnappliedMinor 是这时还没分到任何一个
+	// 作用域头上的累计未分配：收款的这一截不计入任何作用域，退回的这一截在每个作用域都先扣；只落到一个或零个作用域时
+	// 为 0（那一截要么在那个作用域的全额里，要么本来就不是客户收款这一支）。不并进 UnappliedMinor：「未分配」与「未分配
+	// 而且哪个作用域都没记它」续办不同，后者要人先把钱分到作用域上，余额才放行。
+	CustomerScopeCount     int64
+	UnscopedUnappliedMinor int64
+	ApplicationCount       int64
+	Mappings               []FundsMappingEntry
+	Applications           []SettlementApplicationEntry
 }
 
 // FundsApplicationCatalogueRead 是收付款核销页的伴生列表读端口。行对象是已采用的

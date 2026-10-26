@@ -469,9 +469,36 @@ func applicationSubjectOf(result application.FundsResult) string {
 		// 外部更正把事实金额改到了已核销合计以下：负数是超核的唯一信号，照实说出来，不截成 0。
 		subject += fmt.Sprintf("；事实 %s 累计超核 %d", record.Application.Fact().String(), -unapplied)
 	default:
-		subject += fmt.Sprintf("；事实 %s 累计未分配 %d", record.Application.Fact().String(), unapplied)
+		subject += fmt.Sprintf("；事实 %s 累计未分配 %d", record.Application.Fact().String(), unapplied) + scopeNoteOf(result)
 	}
 	return subject
+}
+
+// mappingSubjectOf 只在映射让这条事实落到几个客户应收作用域上时开口：那一刻原来那个作用域从全额记改为按核销记，入账
+// 余额会降，操作员要知道余额为什么动了、钱还停在哪（ADR-0283）。落到一个或零个作用域的映射照旧只报结果格。
+func mappingSubjectOf(result application.FundsResult) string {
+	record, found := result.Mapping()
+	posting, posted := result.FactScopePosting()
+	unapplied, known := result.FactUnappliedMinor()
+	if !found || !posted || !posting.ByApplication() || !known {
+		return ""
+	}
+	return fmt.Sprintf("映射 %s；事实 %s 累计未分配 %d", record.Key.Mapping.String(), record.Mapping.Fact().String(), unapplied) +
+		scopeNoteOf(result)
+}
+
+// scopeNoteOf 说累计未分配在入账余额上怎么算：事实落到几个客户应收作用域时它不在任何一个作用域的全额里——收款的这一截
+// 哪个作用域都不记，退回的这一截每个作用域都先扣，要人把它核到作用域上余额才跟着走（ADR-0283）。只落到一个作用域时
+// 不开口，那一截照旧在那个作用域的全额里。
+func scopeNoteOf(result application.FundsResult) string {
+	posting, posted := result.FactScopePosting()
+	if !posted || !posting.ByApplication() {
+		return ""
+	}
+	if posting.Kind == sadomain.FundsReturned {
+		return fmt.Sprintf("（落在 %d 个客户应收作用域上，按核销记入：未分配的退回在每个作用域都先扣）", posting.Scopes)
+	}
+	return fmt.Sprintf("（落在 %d 个客户应收作用域上，按核销记入：未分配不计入任何作用域）", posting.Scopes)
 }
 
 // fundsAnswer 把 `application.FundsOutcome` 的封闭各格译成退出码，不增不减。一族一张表：采用、映射、核销与撤销几条

@@ -322,6 +322,12 @@ func (idleReceiptBooks) ReceivableAccountScope(
 	return domain.SettlementScope{}, false, nil
 }
 
+func (idleReceiptBooks) FactCustomerScopes(
+	context.Context, domain.TenantID, domain.FundsFactReference,
+) ([]domain.SettlementScope, error) {
+	return nil, nil
+}
+
 func (idleReceiptBooks) CustomerDirectionNets(
 	context.Context, domain.TenantID, domain.SettlementScope,
 ) (int64, int64, int64, error) {

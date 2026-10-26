@@ -105,6 +105,8 @@ func externalFundsFactBodyOf(row ports.ExternalFundsFactCatalogueRow) externalFu
 		AppliedAmount:     minorAmount(row.AppliedMinor),
 		ReversedAmount:    minorAmount(row.ReversedMinor),
 		UnappliedAmount:   minorAmount(row.UnappliedMinor),
+		CustomerScopes:    row.CustomerScopeCount,
+		UnscopedAmount:    minorAmount(row.UnscopedUnappliedMinor),
 		ApplicationCount:  row.ApplicationCount,
 		Mappings:          mappings,
 		Applications:      applications,
@@ -129,6 +131,10 @@ type externalFundsFactListResponse struct {
 // 退回」压成同一格。
 //
 // operationEvidence 只在链头那一版记了提交方时在场（ADR-0236 决定三）：缺席是「那一路不记」，不写空串冒充「无人提交」。
+//
+// customerScopes 是这条事实经对账单或账户映射落到的客户应收作用域个数；大于 1 时它按核销记入各作用域的入账余额，
+// unscopedUnappliedAmount 是还没分到任何一个作用域头上的累计未分配——收款的这一截不计入任何作用域，退回的这一截在
+// 每个作用域都先扣（ADR-0283）。两格总在场：0 个作用域与 1 个作用域是两种照实的状态，不靠缺席表达。
 type externalFundsFactBody struct {
 	Fact              string                      `json:"fact"`
 	Source            string                      `json:"source"`
@@ -143,6 +149,8 @@ type externalFundsFactBody struct {
 	AppliedAmount     string                      `json:"appliedAmount"`
 	ReversedAmount    string                      `json:"reversedAmount"`
 	UnappliedAmount   string                      `json:"unappliedAmount"`
+	CustomerScopes    int64                       `json:"customerScopes"`
+	UnscopedAmount    string                      `json:"unscopedUnappliedAmount"`
 	ApplicationCount  int64                       `json:"applicationCount"`
 	Mappings          []fundsMappingBody          `json:"mappings"`
 	Applications      []settlementApplicationBody `json:"applications"`

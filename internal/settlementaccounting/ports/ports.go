@@ -925,9 +925,13 @@ type SettlementApplicationStore interface {
 //
 // 资金侧的锁只按一个全序取：事实（本口）→ 金额本体（ClaimSettlementTargets.LockClaimTarget，按格、引用）→ 运营余额
 // 作用域（OperationalBalanceAdvance.LockOperationalBalanceScope，按法人、账户、币种）。哪条路径用不到前面的就从后面接着取，
-// 不倒回去——两笔事务各握一半等另一半就是这样排除的。核销与撤销路上随写入隐式取的行锁（核销主键插入时的等待、
-// operational_balance 与 credit_standing 的 upsert、Outbox 入队）都落在作用域锁之后。映射在取作用域锁之前先插映射行，
-// 那一处等待只会撞上同一映射键的另一笔映射，而映射在插映射行之前不握任何一把，所以也接不成环。
+// 不倒回去——两笔事务各握一半等另一半就是这样排除的。同一类里要取几把时按同一个键序取：金额本体按（格、引用），作用域
+// 按（法人、账户、币种）——一条事实落到几个客户应收作用域时，映射、核销与撤销都要一次锁住它们（ADR-0283）。核销与撤销
+// 路上随写入隐式取的行锁（核销主键插入时的等待、operational_balance 与 credit_standing 的 upsert、Outbox 入队）都落在
+// 作用域锁之后。映到对账单或账户的映射先取本口、再插映射行、再取作用域；插映射行时的等待只会撞上同一映射键的另一笔
+// 映射，那一笔已过了它自己的事实锁、往后只取作用域锁，而握作用域锁的事务都已过了事实锁、不会回头等哪一条事实或哪一行
+// 映射，所以接不成环；映到别的目标的映射不取任何一把。作用域咨询锁的键是哈希，两个作用域撞上同一把锁时这把锁的先后
+// 不再跟着键序，最坏由库的死锁检测拒掉其中一笔、答未决重试。
 type FundsFactApplicationLock interface {
 	LockFundsFactApplications(ctx context.Context, key FundsFactKey) (appliedMinor int64, found bool, err error)
 }

@@ -200,6 +200,27 @@ type FundsResult struct {
 	handoff      string
 	unapplied    int64
 	hasUnapplied bool
+	posting      FactScopePosting
+	hasPosting   bool
+}
+
+// FactScopePosting 说这一步之后一条资金事实怎样记入客户应收作用域的入账余额（ADR-0283）：Scopes 是它经对账单或账户映射
+// 落到的客户应收作用域个数。只落到一个作用域的全额记入那一个；落到几个作用域的按核销记入——每个作用域只记指向它的
+// 未撤销分配，收款没核销的那部分不计入任何作用域，退回没核销的那部分在每个作用域都先扣。Kind 让读的人分得清是哪一种。
+type FactScopePosting struct {
+	Scopes int
+	Kind   domain.FundsFactKind
+}
+
+// ByApplication 为真即这条事实按核销记入，累计未分配不在任何一个作用域的全额里。
+func (posting FactScopePosting) ByApplication() bool {
+	return posting.Scopes > 1
+}
+
+// FactScopePosting 只在映射、核销与撤销碰到客户收款这一支（确认到账或资金退回）时交回；第二值为 false 即这一格没有
+// 作用域语境。
+func (result FundsResult) FactScopePosting() (FactScopePosting, bool) {
+	return result.posting, result.hasPosting
 }
 
 func (result FundsResult) Outcome() FundsOutcome {
@@ -486,6 +507,10 @@ func (handler *MapExternalFundsHandler) handOffFact(
 
 // Map 建立一条资金映射：显式依据由 MapFundsToTarget 把门（巧合不证明映射）；失败
 // 付款 → UNFUNDABLE_FACT 业务负向（ErrUnfundableFact 哨兵分格）。
+//
+// 映到对账单或账户的，先锁事实身份行再读事实、插映射行（锁序见 ports.FundsFactApplicationLock 头注）：一条事实落到
+// 几个客户应收作用域决定每个作用域怎么记它（ADR-0283），两笔映射把同一条事实并发映到两个作用域时，不在同一把锁上
+// 排队就各自只看见自己那一条、各按全额记。这把锁与核销、撤销同一把，映射与核销也因此排队。
 func (handler *MapExternalFundsHandler) Map(
 	ctx context.Context,
 	command MapFundsCommand,
@@ -499,8 +524,20 @@ func (handler *MapExternalFundsHandler) Map(
 		return FundsResult{outcome: FundsNotAccepted}, nil
 	}
 
-	factRecord, found, err := handler.deps.Facts.FindByKey(ctx,
-		ports.FundsFactKey{TenantID: command.TenantID, Fact: factRef})
+	factKey := ports.FundsFactKey{TenantID: command.TenantID, Fact: factRef}
+	customerTarget := command.TargetKind == domain.TargetStatement || command.TargetKind == domain.TargetAccount
+	alreadyApplied := int64(0)
+	if customerTarget {
+		applied, found, err := handler.deps.FactLocks.LockFundsFactApplications(ctx, factKey)
+		if err != nil {
+			return fundsUndecided(FundsFactStoreUnavailable, command.Fact), nil
+		}
+		if !found {
+			return FundsResult{outcome: FundsNotAccepted}, nil
+		}
+		alreadyApplied = applied
+	}
+	factRecord, found, err := handler.deps.Facts.FindByKey(ctx, factKey)
 	if err != nil {
 		return fundsUndecided(FundsFactStoreUnavailable, command.Fact), nil
 	}
@@ -508,6 +545,7 @@ func (handler *MapExternalFundsHandler) Map(
 		// 映射一个未采用的事实：提交矛盾，先采用再映射。
 		return FundsResult{outcome: FundsNotAccepted}, nil
 	}
+	_, factMinor := factRecord.Fact.Amount()
 
 	mapping, err := mappingFrom(command, factRecord.Fact, mappingRef)
 	if errors.Is(err, domain.ErrUnfundableFact) {
@@ -552,10 +590,16 @@ func (handler *MapExternalFundsHandler) Map(
 	}
 	switch saved {
 	case ports.FundsMappingSaved:
-		if err := handler.advanceCustomerReceipt(ctx, command, factRecord.Fact); err != nil {
+		posting, posted, err := handler.advanceCustomerReceipt(ctx, command, factRecord.Fact)
+		if err != nil {
 			return FundsResult{}, err
 		}
-		return FundsResult{outcome: FundsMapped, mapping: record, hasRecord: true}, nil
+		result := FundsResult{outcome: FundsMapped, mapping: record, hasRecord: true}
+		if posted {
+			result.posting, result.hasPosting = posting, true
+			result.unapplied, result.hasUnapplied = factMinor-alreadyApplied, true
+		}
+		return result, nil
 	case ports.FundsMappingAlreadyRecorded:
 		winner, found, err := handler.deps.Mappings.FindByKey(ctx, key)
 		if err != nil || !found {
@@ -569,11 +613,12 @@ func (handler *MapExternalFundsHandler) Map(
 
 // Apply 落一次核销：核销是显式判断（依据必备）；分配必须有映射背书（凭巧合分钱在领域被拒）；跨币种无换算 →
 // CROSS_CURRENCY；净额越界、事实上的核销合计越过事实金额、金额本体未核销不够 → APPLICATION_IMBALANCE；指向对账单的分配
-// 会让作用域已确认未结为负 → 未受理。落行之后在同一事务里重算指向对账单的那几个作用域（ADR-0181 决定一），意图交
-// 下游已结视图。
+// 会让作用域已确认未结为负 → 未受理。落行之后在同一事务里重算这条事实落到的客户应收作用域（ADR-0181 决定一，
+// 取哪几个见 applicationScopes），意图交下游已结视图。
 //
-// 锁按资金侧的全序取：事实 → 金额本体 → 运营余额作用域（ports.FundsFactApplicationLock 头注）。同键与事实上限都在锁后
-// 判：并发两份同键，后到的那份在事实锁上等，先到的提交后它查得到那一行，答已存在；在锁前查就会被事实上限判成失衡。
+// 锁按资金侧的全序取：事实 → 金额本体 → 运营余额作用域，作用域之间按键序（ports.FundsFactApplicationLock 头注）。
+// 同键与事实上限都在锁后判：并发两份同键，后到的那份在事实锁上等，先到的提交后它查得到那一行，答已存在；在锁前查就会
+// 被事实上限判成失衡。
 func (handler *MapExternalFundsHandler) Apply(
 	ctx context.Context,
 	command ApplySettlementCommand,
@@ -625,7 +670,11 @@ func (handler *MapExternalFundsHandler) Apply(
 		case domain.UnknownPayloadShape:
 			return fundsUndecided(ApplicationStoreUnavailable, command.Application), nil
 		}
-		return handler.existingApplication(ctx, existingApplication, factMinor-alreadyApplied)
+		result, err := handler.existingApplication(ctx, existingApplication, factMinor-alreadyApplied)
+		if err != nil {
+			return FundsResult{}, err
+		}
+		return handler.withFactPosting(ctx, command.TenantID, factRecord.Fact, result)
 	}
 
 	mappings := make([]domain.FundsMapping, 0, len(command.MappingRefs))
@@ -673,7 +722,7 @@ func (handler *MapExternalFundsHandler) Apply(
 	if stop {
 		return refused, nil
 	}
-	scopes, refused, stop, err := handler.admitStatementScopes(ctx, command.TenantID, application)
+	scopes, refused, stop, err := handler.admitApplicationScopes(ctx, command.TenantID, application)
 	if err != nil {
 		return FundsResult{}, err
 	}
@@ -695,8 +744,9 @@ func (handler *MapExternalFundsHandler) Apply(
 		if err != nil {
 			return FundsResult{}, err
 		}
-		return FundsResult{outcome: SettlementApplied, application: record, hasRecord: true, handoff: handoff,
-			unapplied: factMinor - alreadyApplied - application.AppliedMinor(), hasUnapplied: true}, nil
+		result := FundsResult{outcome: SettlementApplied, application: record, hasRecord: true, handoff: handoff,
+			unapplied: factMinor - alreadyApplied - application.AppliedMinor(), hasUnapplied: true}
+		return handler.withFactPosting(ctx, command.TenantID, factRecord.Fact, result)
 	case ports.SettlementApplicationAlreadyApplied:
 		// 同键在事实锁后查过仍会走到这里：同一核销引用、不同事实的两份并发交，各锁各的事实，都查不到对方未提交的那行。
 		// 照锁后那段分出冲突与已存在；赢家可能落在另一条事实上，这里手上的已核销合计不是它的，不报累计未分配。
@@ -721,10 +771,11 @@ func (handler *MapExternalFundsHandler) Apply(
 }
 
 // Reverse 撤销一次核销：原分配不删、撤销一次为限（ErrApplicationReversed 哨兵分格），撤销版随意图重新交下游；同一事务里
-// 重算原分配指向对账单的那几个作用域，已核销分配等额回到已确认未结（ADR-0181 决定一、AT-SA-113）。
+// 重算与核销时同一组作用域（applicationScopes），已核销分配等额回到已确认未结（ADR-0181 决定一、AT-SA-113）；多作用域
+// 事实上撤下的那一截回到未分配，照 ADR-0283 的记法离开它原来指向的那个作用域。
 //
-// 锁取全序（ports.FundsFactApplicationLock 头注）的子序列：事实 → 运营余额作用域。锁事实之后再读一次核销：并发两份
-// 撤销，后到的那份读到的已是撤销版，答已撤销。
+// 锁取全序（ports.FundsFactApplicationLock 头注）的子序列：事实 → 运营余额作用域（按键序）。锁事实之后再读一次核销：
+// 并发两份撤销，后到的那份读到的已是撤销版，答已撤销。
 func (handler *MapExternalFundsHandler) Reverse(
 	ctx context.Context,
 	command ReverseApplicationCommand,
@@ -771,20 +822,19 @@ func (handler *MapExternalFundsHandler) Reverse(
 	reversed, err := existing.Application.Reverse(basis, command.ReversedAt)
 	if errors.Is(err, domain.ErrApplicationReversed) {
 		// 已撤销重放：返回原撤销，不二撤。
-		return FundsResult{outcome: ApplicationAlreadyReversed, application: existing, hasRecord: true,
-			unapplied: factMinor - alreadyApplied, hasUnapplied: true}, nil
+		return handler.withFactPosting(ctx, command.TenantID, factRecord.Fact, FundsResult{
+			outcome: ApplicationAlreadyReversed, application: existing, hasRecord: true,
+			unapplied: factMinor - alreadyApplied, hasUnapplied: true})
 	}
 	if err != nil {
 		return FundsResult{outcome: FundsNotAccepted}, nil
 	}
-	scopes, err := handler.statementScopes(ctx, command.TenantID, existing.Application)
+	scopes, err := handler.applicationScopes(ctx, command.TenantID, existing.Application)
 	if err != nil {
 		return FundsResult{}, err
 	}
-	for _, scope := range scopes {
-		if err := handler.deps.Balances.LockOperationalBalanceScope(ctx, command.TenantID, scope.scope); err != nil {
-			return FundsResult{}, err
-		}
+	if err := handler.lockScopes(ctx, command.TenantID, scopes); err != nil {
+		return FundsResult{}, err
 	}
 
 	existing.Application = reversed
@@ -803,24 +853,45 @@ func (handler *MapExternalFundsHandler) Reverse(
 	if err != nil {
 		return FundsResult{}, err
 	}
-	return FundsResult{outcome: ApplicationReversedOutcome, application: existing, hasRecord: true, handoff: handoff,
-		unapplied: factMinor - (alreadyApplied - reversed.AppliedMinor()), hasUnapplied: true}, nil
+	return handler.withFactPosting(ctx, command.TenantID, factRecord.Fact, FundsResult{
+		outcome: ApplicationReversedOutcome, application: existing, hasRecord: true, handoff: handoff,
+		unapplied: factMinor - (alreadyApplied - reversed.AppliedMinor()), hasUnapplied: true})
 }
 
-// statementScope 是一次核销里指向同一个客户应收作用域的对账单分配，与它们的净额（借加贷减，同 W 的求法）。
-type statementScope struct {
-	scope domain.SettlementScope
-	net   int64
+// withFactPosting 给核销与撤销的答复补上这条事实此刻怎样记入客户应收作用域。
+func (handler *MapExternalFundsHandler) withFactPosting(
+	ctx context.Context,
+	tenant domain.TenantID,
+	fact domain.ExternalFundsFact,
+	result FundsResult,
+) (FundsResult, error) {
+	posting, posted, err := handler.factPosting(ctx, tenant, fact)
+	if err != nil {
+		return FundsResult{}, err
+	}
+	result.posting, result.hasPosting = posting, posted
+	return result, nil
 }
 
-// statementScopes 把一次核销里指向对账单的分配收成客户应收作用域、按作用域合计，按（法人、账户、币种）排序交回——
-// 锁按这个顺序取。对账单收不成应收作用域的那几片不是客户收款这一支，W 也不算它们，不进来。
-func (handler *MapExternalFundsHandler) statementScopes(
+// customerScope 是一次核销或撤销要重算的一个客户应收作用域。statement 为真即本次有分配指向它的对账单，writeoff 是那几片
+// 的净额（借加贷减，同 W 的求法），落行之前按它判已确认未结会不会为负。
+type customerScope struct {
+	scope     domain.SettlementScope
+	statement bool
+	writeoff  int64
+}
+
+// applicationScopes 交回一次核销或撤销要重算的客户应收作用域，按键序排好（sortScopes）——锁按这个顺序取。是这条事实
+// 落到的全部客户应收作用域，加上分配指向的对账单收成的作用域：W 只在对账单分配指向的作用域上动；P 在单作用域事实上
+// 不随核销动，在多作用域事实上随指向各作用域的分配动，退回没核销的那部分又在每个作用域都扣（ADR-0283）——按事实取
+// 全部作用域就把这几种都盖住。分配都沿这条事实的映射走，对账单收成的作用域本该已在其中，并进来是为了不靠这一点。
+// 对账单收不成应收作用域的那几片不是客户收款这一支，W 也不算它们，不进来。
+func (handler *MapExternalFundsHandler) applicationScopes(
 	ctx context.Context,
 	tenant domain.TenantID,
 	application domain.SettlementApplication,
-) ([]statementScope, error) {
-	byScope := map[domain.SettlementScope]int64{}
+) ([]customerScope, error) {
+	byScope := map[domain.SettlementScope]customerScope{}
 	for _, allocation := range application.Allocations() {
 		if allocation.TargetKind != domain.TargetStatement {
 			continue
@@ -832,61 +903,82 @@ func (handler *MapExternalFundsHandler) statementScopes(
 		if !found {
 			continue
 		}
+		entry := byScope[scope]
+		entry.statement = true
 		if allocation.Direction == domain.AllocationDebit {
-			byScope[scope] += allocation.AmountMinor
+			entry.writeoff += allocation.AmountMinor
 		} else {
-			byScope[scope] -= allocation.AmountMinor
+			entry.writeoff -= allocation.AmountMinor
 		}
+		byScope[scope] = entry
 	}
-	scopes := make([]statementScope, 0, len(byScope))
-	for scope, net := range byScope {
-		scopes = append(scopes, statementScope{scope: scope, net: net})
+	factScopes, err := handler.deps.Books.FactCustomerScopes(ctx, tenant, application.Fact())
+	if err != nil {
+		return nil, err
 	}
-	sort.Slice(scopes, func(i, j int) bool {
-		left, right := scopes[i].scope, scopes[j].scope
-		if left.LegalEntity() != right.LegalEntity() {
-			return left.LegalEntity().String() < right.LegalEntity().String()
-		}
-		if left.Account() != right.Account() {
-			return left.Account().String() < right.Account().String()
-		}
-		return left.Currency().String() < right.Currency().String()
-	})
+	keys := append([]domain.SettlementScope(nil), factScopes...)
+	for scope := range byScope {
+		keys = append(keys, scope)
+	}
+	keys = sortScopes(keys)
+	scopes := make([]customerScope, 0, len(keys))
+	for _, scope := range keys {
+		entry := byScope[scope]
+		entry.scope = scope
+		scopes = append(scopes, entry)
+	}
 	return scopes, nil
 }
 
-// admitStatementScopes 逐个锁住本次核销指向对账单的作用域，按账判这一笔落下之后已确认未结会不会为负：会就答`未受理`、
-// 什么都不落——分给对账单的钱超出了该作用域已确认的应收，这是分配写错了，改分配才行，重交同一份永远同一个结果。
-// 第三值为真即已作答。
-func (handler *MapExternalFundsHandler) admitStatementScopes(
+// admitApplicationScopes 按键序逐个锁住本次核销要重算的作用域，在指向对账单的那几个上按账判这一笔落下之后已确认未结
+// 会不会为负：会就答`未受理`、什么都不落——分给对账单的钱超出了该作用域已确认的应收，这是分配写错了，改分配才行，
+// 重交同一份永远同一个结果。第三值为真即已作答。
+func (handler *MapExternalFundsHandler) admitApplicationScopes(
 	ctx context.Context,
 	tenant domain.TenantID,
 	application domain.SettlementApplication,
-) ([]statementScope, FundsResult, bool, error) {
-	scopes, err := handler.statementScopes(ctx, tenant, application)
+) ([]customerScope, FundsResult, bool, error) {
+	scopes, err := handler.applicationScopes(ctx, tenant, application)
 	if err != nil {
 		return nil, FundsResult{}, false, err
 	}
+	if err := handler.lockScopes(ctx, tenant, scopes); err != nil {
+		return nil, FundsResult{}, false, err
+	}
 	for _, scope := range scopes {
-		if err := handler.deps.Balances.LockOperationalBalanceScope(ctx, tenant, scope.scope); err != nil {
-			return nil, FundsResult{}, false, err
+		if !scope.statement {
+			continue
 		}
 		postedNet, writeoffNet, confirmed, err := handler.deps.Books.CustomerDirectionNets(ctx, tenant, scope.scope)
 		if err != nil {
 			return nil, FundsResult{}, false, err
 		}
-		if _, _, err := domain.PostedAndUnsettled(postedNet, writeoffNet+scope.net, confirmed); errors.Is(err, domain.ErrNegativeConfirmedUnsettled) {
+		if _, _, err := domain.PostedAndUnsettled(postedNet, writeoffNet+scope.writeoff, confirmed); errors.Is(err, domain.ErrNegativeConfirmedUnsettled) {
 			return nil, FundsResult{outcome: FundsNotAccepted}, true, nil
 		}
 	}
 	return scopes, FundsResult{}, false, nil
 }
 
+// lockScopes 按交来的次序（applicationScopes 已排好键序）取作用域咨询锁。
+func (handler *MapExternalFundsHandler) lockScopes(
+	ctx context.Context,
+	tenant domain.TenantID,
+	scopes []customerScope,
+) error {
+	for _, scope := range scopes {
+		if err := handler.deps.Balances.LockOperationalBalanceScope(ctx, tenant, scope.scope); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // recomputeScopes 在调用方已锁住的作用域上逐个重算推进；锁再取一次是重入。
 func (handler *MapExternalFundsHandler) recomputeScopes(
 	ctx context.Context,
 	tenant domain.TenantID,
-	scopes []statementScope,
+	scopes []customerScope,
 ) error {
 	for _, scope := range scopes {
 		if _, err := handler.recomputeScope(ctx, tenant, scope.scope); err != nil {
@@ -894,6 +986,29 @@ func (handler *MapExternalFundsHandler) recomputeScopes(
 		}
 	}
 	return nil
+}
+
+// factPosting 交回一条事实此刻怎样记入客户应收作用域，给核销与撤销的答复用；收付之外的事实与没落到任何客户应收
+// 作用域的事实第二值为 false。
+func (handler *MapExternalFundsHandler) factPosting(
+	ctx context.Context,
+	tenant domain.TenantID,
+	fact domain.ExternalFundsFact,
+) (FactScopePosting, bool, error) {
+	switch fact.Kind() {
+	case domain.FundsReceiptConfirmed, domain.FundsReturned:
+	default:
+		return FactScopePosting{}, false, nil
+	}
+	scopes, err := handler.deps.Books.FactCustomerScopes(ctx, tenant, fact.Fact())
+	if err != nil {
+		return FactScopePosting{}, false, err
+	}
+	scopes = sortScopes(scopes)
+	if len(scopes) == 0 {
+		return FactScopePosting{}, false, nil
+	}
+	return FactScopePosting{Scopes: len(scopes), Kind: fact.Kind()}, true, nil
 }
 
 // recomputeScope 是入账余额与已确认未结唯一的求法入口（ADR-0181 决定三「函数只有一个」）：映射、核销、核销撤销都从
@@ -1071,52 +1186,109 @@ func (handler *MapExternalFundsHandler) handOff(
 	return fundsContinuation("SETTLEMENT_APPLICATION_HANDOFF", record.Key.TenantID.String(), record.Key.Application.String()), nil
 }
 
-// advanceCustomerReceipt 在客户对账单或应收结算账户上的确认到账与资金退回之后重算。
-// 供应商应付、贷项、两格金额本体与确认费用都不从这里进；核销与撤销从 recomputeScopes 进同一个求法。对账单收不成应收作用域时映射照旧成立，
-// 余额不动——那不是这一支。账户目标收不成应收作用域则整笔失败。已确认未结求出为负则整笔失败，
-// 调用方的事务一起回滚。信用状况只在账户级映射上重算。
+// advanceCustomerReceipt 在客户对账单或应收结算账户上的确认到账与资金退回之后，重算这条事实落到的全部客户应收作用域：
+// 它从一个作用域变成几个的那一刻，原来那个作用域从全额记改为按核销记（ADR-0283），入账余额会降，不在这一笔里跟上就
+// 停在多出来的数上。作用域锁按键序取（sortScopes）。供应商应付、贷项、两格金额本体与确认费用都不从这里进；核销与撤销
+// 从 recomputeScopes 进同一个求法。对账单收不成应收作用域时映射照旧成立，余额不动——那不是这一支。账户目标收不成应收
+// 作用域则整笔失败。已确认未结求出为负则整笔失败，调用方的事务一起回滚。信用状况只在账户级映射的那个作用域上重算。
+// 第二值为 false 即这条事实没有落到任何客户应收作用域上，交回的记入方式不作数。
 func (handler *MapExternalFundsHandler) advanceCustomerReceipt(
 	ctx context.Context,
 	command MapFundsCommand,
 	fact domain.ExternalFundsFact,
-) error {
+) (FactScopePosting, bool, error) {
 	switch fact.Kind() {
 	case domain.FundsReceiptConfirmed, domain.FundsReturned:
 	default:
-		return nil
+		return FactScopePosting{}, false, nil
 	}
 
 	var (
-		scope domain.SettlementScope
-		found bool
-		err   error
+		target domain.SettlementScope
+		found  bool
+		err    error
 	)
 	switch command.TargetKind {
 	case domain.TargetStatement:
-		scope, found, err = handler.deps.Books.CustomerStatementScope(ctx, command.TenantID, command.Target)
-		if err != nil || !found {
-			return err
+		target, found, err = handler.deps.Books.CustomerStatementScope(ctx, command.TenantID, command.Target)
+		if err != nil {
+			return FactScopePosting{}, false, err
 		}
 	case domain.TargetAccount:
-		scope, found, err = handler.deps.Books.ReceivableAccountScope(ctx, command.TenantID, command.Target)
+		target, found, err = handler.deps.Books.ReceivableAccountScope(ctx, command.TenantID, command.Target)
 		if err != nil {
-			return err
+			return FactScopePosting{}, false, err
 		}
 		if !found {
-			return domain.ErrNotReceivableAccount
+			return FactScopePosting{}, false, domain.ErrNotReceivableAccount
 		}
 	default:
-		return nil
+		return FactScopePosting{}, false, nil
 	}
 
-	asOf, err := handler.recomputeScope(ctx, command.TenantID, scope)
+	scopes, err := handler.deps.Books.FactCustomerScopes(ctx, command.TenantID, fact.Fact())
 	if err != nil {
-		return err
+		return FactScopePosting{}, false, err
+	}
+	if found {
+		scopes = append(scopes, target)
+	}
+	scopes = sortScopes(scopes)
+	if len(scopes) == 0 {
+		return FactScopePosting{}, false, nil
+	}
+	posting := FactScopePosting{Scopes: len(scopes), Kind: fact.Kind()}
+	if !found {
+		return posting, true, nil
+	}
+
+	for _, scope := range scopes {
+		if err := handler.deps.Balances.LockOperationalBalanceScope(ctx, command.TenantID, scope); err != nil {
+			return FactScopePosting{}, false, err
+		}
+	}
+	var targetAsOf time.Time
+	for _, scope := range scopes {
+		asOf, err := handler.recomputeScope(ctx, command.TenantID, scope)
+		if err != nil {
+			return FactScopePosting{}, false, err
+		}
+		if scope == target {
+			targetAsOf = asOf
+		}
 	}
 	if command.TargetKind != domain.TargetAccount {
-		return nil
+		return posting, true, nil
 	}
-	return handler.advanceCreditStanding(ctx, command.TenantID, scope, asOf)
+	if err := handler.advanceCreditStanding(ctx, command.TenantID, target, targetAsOf); err != nil {
+		return FactScopePosting{}, false, err
+	}
+	return posting, true, nil
+}
+
+// sortScopes 去重并按（法人、账户、币种）排序：资金侧作用域咨询锁的键序。一笔事务要取几个作用域时都按这个次序取，
+// 两笔事务各握一个、等另一个就接不成环（ports.FundsFactApplicationLock 头注）。
+func sortScopes(scopes []domain.SettlementScope) []domain.SettlementScope {
+	seen := make(map[domain.SettlementScope]bool, len(scopes))
+	unique := make([]domain.SettlementScope, 0, len(scopes))
+	for _, scope := range scopes {
+		if seen[scope] {
+			continue
+		}
+		seen[scope] = true
+		unique = append(unique, scope)
+	}
+	sort.Slice(unique, func(i, j int) bool {
+		left, right := unique[i], unique[j]
+		if left.LegalEntity() != right.LegalEntity() {
+			return left.LegalEntity().String() < right.LegalEntity().String()
+		}
+		if left.Account() != right.Account() {
+			return left.Account().String() < right.Account().String()
+		}
+		return left.Currency().String() < right.Currency().String()
+	})
+	return unique
 }
 
 // advanceCreditStanding 按已确认费用的到期画像决定这次写不写信用状况。

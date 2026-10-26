@@ -104,10 +104,84 @@ func (repository *CustomerReceiptPostings) ReceivableAccountScope(
 	return scope, true, nil
 }
 
-// CustomerDirectionNets 的 P 按（租户、事实）去重：一笔收款映射到同一作用域下的几张对账单或兼映到账户（一对多核销要
-// 先这样映射），在这个作用域里只算一次；按映射行求和会把它记成几笔，可用余额凭空多出来。对账单段与账户段先并成一个
-// 事实集（UNION 去重）再取链头金额求和。去重只在本作用域之内：同一条事实映到别的作用域时，每个作用域都按全额记入，
-// 钱并没有到两次——这一格未修，见票 docs-consistency/code/94。
+// mappingReceivableScopesSQL 把租户 $1 的每条资金映射收成它落到的客户应收作用域（法人、账户、币种）：对账单映射经那张
+// 对账单落到它的应收账户上（单与账户同币种），账户映射落到那个应收账户本身；收不成的（应付、贷项、金额本体两格，或
+// 账户不是应收）不出行。CustomerStatementScope 与 ReceivableAccountScope 收单个目标用同一组条件。一条事实落在几个作用域
+// 上、一笔分配指向哪个作用域（分配沿它的映射走，目标与映射一致）、读面数作用域、编排取要重算的作用域都从这一处取，
+// 口径不分叉。账户在租户内唯一，账户一定作用域就定。
+const mappingReceivableScopesSQL = `
+	SELECT m.mapping_id, m.fact_id, a.legal_entity_id, a.account_id, a.currency
+	  FROM settlement_accounting.funds_mapping AS m
+	  JOIN settlement_accounting.customer_statement AS s
+	    ON s.tenant_id = m.tenant_id
+	   AND s.statement_number = m.target_ref
+	  JOIN settlement_accounting.settlement_account AS a
+	    ON a.tenant_id = s.tenant_id
+	   AND a.account_id = s.account_id
+	 WHERE m.tenant_id = $1
+	   AND m.target_kind = 'STATEMENT'
+	   AND a.direction = 'RECEIVABLE'
+	   AND s.currency = a.currency
+	UNION ALL
+	SELECT m.mapping_id, m.fact_id, a.legal_entity_id, a.account_id, a.currency
+	  FROM settlement_accounting.funds_mapping AS m
+	  JOIN settlement_accounting.settlement_account AS a
+	    ON a.tenant_id = m.tenant_id
+	   AND a.account_id = m.target_ref
+	 WHERE m.tenant_id = $1
+	   AND m.target_kind = 'ACCOUNT'
+	   AND a.direction = 'RECEIVABLE'`
+
+// FactCustomerScopes 交回一条事实经对账单或账户映射落到的客户应收作用域。币种与事实不同的作用域也算一个：它从这条
+// 事实上什么都记不到，可映射到它本身就说明这笔钱该归谁还没分清（ADR-0283），不能因此让另一个作用域按全额放行。
+// 次序不作数，编排自己按键排。
+func (repository *CustomerReceiptPostings) FactCustomerScopes(
+	ctx context.Context,
+	tenant domain.TenantID,
+	fact domain.FundsFactReference,
+) ([]domain.SettlementScope, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("fact customer scopes: %w", err)
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT DISTINCT mapped.legal_entity_id, mapped.account_id, mapped.currency
+		   FROM (`+mappingReceivableScopesSQL+`) AS mapped
+		  WHERE mapped.fact_id = $2`,
+		tenant.String(),
+		fact.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("fact customer scopes: %w", err)
+	}
+	defer rows.Close()
+	var scopes []domain.SettlementScope
+	for rows.Next() {
+		var legalEntity, account, currency string
+		if err := rows.Scan(&legalEntity, &account, &currency); err != nil {
+			return nil, fmt.Errorf("fact customer scopes: %w", err)
+		}
+		scope, err := scopeFrom(legalEntity, account, currency)
+		if err != nil {
+			return nil, fmt.Errorf("fact customer scopes: %w", err)
+		}
+		scopes = append(scopes, scope)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("fact customer scopes: %w", err)
+	}
+	return scopes, nil
+}
+
+// CustomerDirectionNets 的 P 按（租户、事实）各算一次，按这条事实落到几个客户应收作用域分两种记法（ADR-0283）：
+//
+//   - 只落到本作用域一个：取链头全额。一笔收款映射到同一作用域下的几张对账单或兼映到账户（一对多核销要先这样映射），
+//     在这里只算一次；按映射行求和会把它记成几笔，可用余额凭空多出来。
+//   - 落到几个作用域：本作用域只记指向它的未撤销核销分配净额（分配沿的映射落在本作用域上，对账单分配与账户分配都算），
+//     收款没核销的那部分不计入任何作用域，退回没核销的那部分在每个作用域都先扣。每个作用域都按全额记，钱只到了一次
+//     却在几处各当一次用；没核销的那部分该归谁要人去分，分之前哪一边都不按它放行。
+//
+// 收款进入、退回离开，币种与作用域不同的事实不进。W 照旧只加总指向本作用域对账单、尚未撤销的核销分配。
 func (repository *CustomerReceiptPostings) CustomerDirectionNets(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -119,54 +193,77 @@ func (repository *CustomerReceiptPostings) CustomerDirectionNets(
 	}
 
 	err = querier.QueryRow(ctx,
-		`SELECT
+		`WITH mapped AS (`+mappingReceivableScopesSQL+`),
+		      here AS (
+		          SELECT DISTINCT mapped.fact_id
+		            FROM mapped
+		           WHERE mapped.legal_entity_id = $2
+		             AND mapped.account_id = $3
+		             AND mapped.currency = $4),
+		      spread AS (
+		          SELECT mapped.fact_id, COUNT(DISTINCT mapped.account_id) AS scopes
+		            FROM mapped
+		            JOIN here ON here.fact_id = mapped.fact_id
+		           GROUP BY mapped.fact_id),
+		      head AS (
+		          SELECT v.fact_id,
+		                 CASE v.kind
+		                     WHEN 'RECEIPT_CONFIRMED' THEN 1
+		                     WHEN 'FUNDS_RETURNED' THEN -1
+		                     ELSE 0
+		                 END AS sign,
+		                 v.amount_minor
+		            FROM settlement_accounting.external_funds_fact_version AS v
+		            JOIN here ON here.fact_id = v.fact_id
+		           WHERE v.tenant_id = $1
+		             AND v.currency = $4
+		             AND NOT EXISTS (
+		                 SELECT 1
+		                   FROM settlement_accounting.external_funds_fact_version AS newer
+		                  WHERE newer.tenant_id = v.tenant_id
+		                    AND newer.fact_id = v.fact_id
+		                    AND newer.corrects = v.version)),
+		      applied AS (
+		          SELECT app.fact_id, SUM(app.applied_minor) AS applied_minor
+		            FROM settlement_accounting.settlement_application AS app
+		            JOIN here ON here.fact_id = app.fact_id
+		           WHERE app.tenant_id = $1
+		             AND app.reversal_basis IS NULL
+		           GROUP BY app.fact_id),
+		      directed AS (
+		          SELECT app.fact_id,
+		                 SUM(
+		                     CASE elem->>'direction'
+		                         WHEN 'DEBIT' THEN (elem->>'amountMinor')::bigint
+		                         WHEN 'CREDIT' THEN -(elem->>'amountMinor')::bigint
+		                         ELSE 0
+		                     END) AS net
+		            FROM settlement_accounting.settlement_application AS app
+		            JOIN here ON here.fact_id = app.fact_id
+		           CROSS JOIN LATERAL jsonb_array_elements(app.allocations) AS elem
+		            JOIN mapped
+		              ON mapped.mapping_id = elem->>'mapping'
+		             AND mapped.fact_id = app.fact_id
+		           WHERE app.tenant_id = $1
+		             AND app.reversal_basis IS NULL
+		             AND mapped.legal_entity_id = $2
+		             AND mapped.account_id = $3
+		             AND mapped.currency = $4
+		           GROUP BY app.fact_id)
+		SELECT
 		    COALESCE((
 		        SELECT SUM(
-		            CASE v.kind
-		                WHEN 'RECEIPT_CONFIRMED' THEN v.amount_minor
-		                WHEN 'FUNDS_RETURNED' THEN -v.amount_minor
-		                ELSE 0
+		            head.sign * CASE
+		                WHEN spread.scopes = 1 THEN head.amount_minor
+		                WHEN head.sign < 0 THEN COALESCE(directed.net, 0)
+		                    + GREATEST(head.amount_minor - COALESCE(applied.applied_minor, 0), 0)
+		                ELSE COALESCE(directed.net, 0)
 		            END)
-		          FROM (
-		              SELECT m.fact_id
-		                FROM settlement_accounting.funds_mapping AS m
-		                JOIN settlement_accounting.customer_statement AS s
-		                  ON s.tenant_id = m.tenant_id
-		                 AND s.statement_number = m.target_ref
-		                JOIN settlement_accounting.settlement_account AS a
-		                  ON a.tenant_id = s.tenant_id
-		                 AND a.account_id = s.account_id
-		               WHERE m.tenant_id = $1
-		                 AND m.target_kind = 'STATEMENT'
-		                 AND a.direction = 'RECEIVABLE'
-		                 AND a.legal_entity_id = $2
-		                 AND a.account_id = $3
-		                 AND a.currency = $4
-		                 AND s.currency = a.currency
-		              UNION
-		              SELECT m.fact_id
-		                FROM settlement_accounting.funds_mapping AS m
-		                JOIN settlement_accounting.settlement_account AS a
-		                  ON a.tenant_id = m.tenant_id
-		                 AND a.account_id = m.target_ref
-		               WHERE m.tenant_id = $1
-		                 AND m.target_kind = 'ACCOUNT'
-		                 AND a.direction = 'RECEIVABLE'
-		                 AND a.legal_entity_id = $2
-		                 AND a.account_id = $3
-		                 AND a.currency = $4
-		          ) AS mapped
-		          JOIN settlement_accounting.external_funds_fact_version AS v
-		            ON v.tenant_id = $1
-		           AND v.fact_id = mapped.fact_id
-		         WHERE v.currency = $4
-		           AND NOT EXISTS (
-		               SELECT 1
-		                 FROM settlement_accounting.external_funds_fact_version AS newer
-		                WHERE newer.tenant_id = v.tenant_id
-		                  AND newer.fact_id = v.fact_id
-		                  AND newer.corrects = v.version)
-		    ), 0),
+		          FROM head
+		          JOIN spread ON spread.fact_id = head.fact_id
+		          LEFT JOIN applied ON applied.fact_id = head.fact_id
+		          LEFT JOIN directed ON directed.fact_id = head.fact_id
+		    ), 0)::bigint,
 		    COALESCE((
 		        SELECT SUM(
 		            CASE elem->>'direction'
@@ -233,7 +330,8 @@ func (repository *CustomerReceiptPostings) CustomerDirectionNets(
 
 // LockOperationalBalanceScope 取（租户，结算作用域）的事务级咨询锁。不锁 operational_balance 行：作用域第一次重算时还没有
 // 行可锁。锁空间与接受前控制的作用域锁分开——那一路只读余额、不重算，与重算排在同一把锁上只会多等，不多护什么。
-// 键照本仓其余事务级锁的双 int 形式；撞上只让两个不相干的作用域多等一会儿。
+// 键照本仓其余事务级锁的双 int 形式；撞上时两个不相干的作用域共用一把锁，一笔事务要取几个作用域时这会打乱键序，
+// 后果见 ports.FundsFactApplicationLock 头注。
 func (repository *CustomerReceiptPostings) LockOperationalBalanceScope(
 	ctx context.Context,
 	tenant domain.TenantID,

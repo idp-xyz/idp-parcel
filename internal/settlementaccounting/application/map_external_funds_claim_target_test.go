@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -385,18 +386,26 @@ func (double *factLockDouble) LockFundsFactApplications(ctx context.Context, key
 	return applied, true, nil
 }
 
-// scopeBooksDouble 让登了的对账单收成一个应收作用域，记下作用域锁与推进的先后；没登的对账单不是客户收款这一支。
-// 已确认应收给得够大，这里不证已确认未结的边界（那一格在 postgres 用例里对真账证）。
+// scopeBooksDouble 让登了的对账单与账户各收成一个应收作用域，记下作用域锁与推进的先后；没登的不是客户收款这一支。
+// 一条事实落到哪几个作用域从映射替身里按它的映射收，**故意按键序倒过来交回**：端口不许诺次序，编排得自己排，排漏了
+// 锁序用例就红。已确认应收给得够大，这里不证已确认未结的边界（那一格在 postgres 用例里对真账证）。
 type scopeBooksDouble struct {
 	statements map[string]domain.SettlementScope
+	accounts   map[string]domain.SettlementScope
+	mappings   *fundsMappingStoreDouble
 	log        *[]string
 }
 
-func newScopeBooks(log *[]string) *scopeBooksDouble {
-	return &scopeBooksDouble{statements: map[string]domain.SettlementScope{}, log: log}
+func newScopeBooks(log *[]string, mappings *fundsMappingStoreDouble) *scopeBooksDouble {
+	return &scopeBooksDouble{
+		statements: map[string]domain.SettlementScope{},
+		accounts:   map[string]domain.SettlementScope{},
+		mappings:   mappings,
+		log:        log,
+	}
 }
 
-func (double *scopeBooksDouble) registerStatement(t *testing.T, statement, account string) {
+func bookScope(t *testing.T, account string) domain.SettlementScope {
 	t.Helper()
 	scope, err := domain.NewSettlementScope(
 		fundsRef(t, domain.NewLegalEntityReference, "legal-entity-1"),
@@ -405,7 +414,17 @@ func (double *scopeBooksDouble) registerStatement(t *testing.T, statement, accou
 	if err != nil {
 		t.Fatalf("作用域：%v", err)
 	}
-	double.statements[statement] = scope
+	return scope
+}
+
+func (double *scopeBooksDouble) registerStatement(t *testing.T, statement, account string) {
+	t.Helper()
+	double.statements[statement] = bookScope(t, account)
+}
+
+func (double *scopeBooksDouble) registerAccount(t *testing.T, account string) {
+	t.Helper()
+	double.accounts[account] = bookScope(t, account)
 }
 
 func (double *scopeBooksDouble) CustomerStatementScope(
@@ -416,9 +435,38 @@ func (double *scopeBooksDouble) CustomerStatementScope(
 }
 
 func (double *scopeBooksDouble) ReceivableAccountScope(
-	context.Context, domain.TenantID, string,
+	_ context.Context, _ domain.TenantID, account string,
 ) (domain.SettlementScope, bool, error) {
-	return domain.SettlementScope{}, false, nil
+	scope, found := double.accounts[account]
+	return scope, found, nil
+}
+
+func (double *scopeBooksDouble) FactCustomerScopes(
+	_ context.Context, tenant domain.TenantID, fact domain.FundsFactReference,
+) ([]domain.SettlementScope, error) {
+	seen := map[domain.SettlementScope]bool{}
+	var scopes []domain.SettlementScope
+	for _, record := range double.mappings.records {
+		if record.Key.TenantID != tenant || record.Mapping.Fact() != fact {
+			continue
+		}
+		var (
+			scope domain.SettlementScope
+			found bool
+		)
+		switch record.Mapping.TargetKind() {
+		case domain.TargetStatement:
+			scope, found = double.statements[record.Mapping.Target().String()]
+		case domain.TargetAccount:
+			scope, found = double.accounts[record.Mapping.Target().String()]
+		}
+		if found && !seen[scope] {
+			seen[scope] = true
+			scopes = append(scopes, scope)
+		}
+	}
+	sort.Slice(scopes, func(i, j int) bool { return scopes[i].Account().String() > scopes[j].Account().String() })
+	return scopes, nil
 }
 
 func (double *scopeBooksDouble) CustomerDirectionNets(
