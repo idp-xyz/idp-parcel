@@ -453,10 +453,15 @@
 | `AT-SA-104` | internal/settlementaccounting/domain/external_funds_test.go::TestMappingNeedsExplicitBasisBeyondCoincidence |
 | `AT-SA-106` | internal/settlementaccounting/domain/external_funds_test.go::TestApplicationConservesAmountsPerAllocation |
 | `AT-SA-107` | internal/settlementaccounting/domain/external_funds_test.go::TestApplicationConservesAmountsPerAllocation |
+| `AT-SA-108` | internal/settlementaccounting/domain/claim_settlement_target_test.go::TestAClaimTargetStandingAdmitsOnlyWithinItsOwnRemainder（金额本体目标半边） |
+| `AT-SA-109` | internal/settlementaccounting/domain/claim_settlement_target_test.go::TestAClaimTargetStandingAdmitsOnlyWithinItsOwnRemainder（金额本体目标半边） |
+| `AT-SA-110` | internal/settlementaccounting/domain/claim_settlement_target_test.go::TestAClaimTargetStandingAdmitsOnlyWithinItsOwnRemainder（金额本体目标半边）；internal/settlementaccounting/application/map_external_funds_claim_target_test.go::TestAClaimTargetInAnotherCurrencyStaysUndecidedWhateverTheCommandSays（金额本体目标半边） |
 | `AT-SA-111` | internal/settlementaccounting/domain/external_funds_test.go::TestMappingNeedsExplicitBasisBeyondCoincidence |
-| `AT-SA-112` | internal/settlementaccounting/application/map_external_funds_test.go::TestApplicationConservesAndReversesOnce；internal/settlementaccounting/domain/external_funds_test.go::TestReversalAppendsWithoutDeletingTheOriginal |
-| `AT-SA-113` | internal/settlementaccounting/domain/external_funds_test.go::TestReversalAppendsWithoutDeletingTheOriginal |
+| `AT-SA-112` | internal/settlementaccounting/application/map_external_funds_test.go::TestApplicationConservesAndReversesOnce；internal/settlementaccounting/domain/external_funds_test.go::TestReversalAppendsWithoutDeletingTheOriginal；cmd/parcel-settlement-register/funds_application_vertical_test.go::TestFundsApplicationCommandsRunThroughTheControlledEntryOnRealPostgres |
+| `AT-SA-113` | internal/settlementaccounting/domain/external_funds_test.go::TestReversalAppendsWithoutDeletingTheOriginal；internal/settlementaccounting/application/map_external_funds_claim_target_test.go::TestACompensationPaymentMapsAndAppliesAgainstThatCompensationOnly；internal/settlementaccounting/adapters/postgres/claim_settlement_target_test.go::TestAClaimTargetStandingCountsOnlyLiveApplicationsOfItsOwn；cmd/parcel-settlement-register/funds_application_vertical_test.go::TestFundsApplicationCommandsRunThroughTheControlledEntryOnRealPostgres |
 | `AT-SA-114` | internal/settlementaccounting/domain/external_funds_test.go::TestAnAdoptedFundsFactIsAReferenceNotABalance |
+| `AT-SA-116` | internal/settlementaccounting/domain/claim_settlement_target_test.go::TestClaimAmountTargetsAreMappableKinds（客户赔付半边）；internal/settlementaccounting/application/map_external_funds_claim_target_test.go::TestACompensationPaymentMapsAndAppliesAgainstThatCompensationOnly（客户赔付半边）；cmd/parcel-settlement-register/funds_application_vertical_test.go::TestFundsApplicationCommandsRunThroughTheControlledEntryOnRealPostgres（客户赔付半边） |
+| `AT-SA-117` | internal/settlementaccounting/domain/claim_settlement_target_test.go::TestClaimAmountTargetsAreMappableKinds（追偿认可半边）；internal/settlementaccounting/application/map_external_funds_claim_target_test.go::TestARecoveryReceiptMapsOnlyToAnAcknowledgementInItsOwnTenant（追偿认可半边）；cmd/parcel-settlement-register/funds_application_vertical_test.go::TestFundsApplicationCommandsRunThroughTheControlledEntryOnRealPostgres（追偿认可半边） |
 | `AT-SA-122` | internal/settlementaccounting/domain/cost_allocation_test.go::TestAllocationNeedsAVersionedRule |
 | `AT-SA-123` | internal/settlementaccounting/application/allocate_costs_test.go::TestAllocationNeedsAConfiguredRule；internal/settlementaccounting/domain/cost_allocation_test.go::TestAllocationNeedsAVersionedRule |
 | `AT-SA-124` | internal/settlementaccounting/domain/cost_allocation_test.go::TestAllocationNeedsAVersionedRule |
@@ -470,7 +475,8 @@
 | `AT-SA-150` | internal/settlementaccounting/application/settle_claim_amounts_test.go::TestRecoveryAndAcknowledgementAreLayered；internal/settlementaccounting/domain/claim_recovery_amount_test.go::TestAcknowledgementCoversOnlyTheAcceptedRange |
 | `AT-SA-152` | internal/settlementaccounting/application/settle_claim_amounts_test.go::TestAdjustmentsAttachToExistingAmounts；internal/settlementaccounting/domain/claim_recovery_amount_test.go::TestAdjustmentsAppendWithoutRewritingAmounts |
 | `AT-SA-153` | internal/settlementaccounting/application/settle_claim_amounts_test.go::TestClaimAmountsFormOnlyFromConclusionsAndRules；internal/settlementaccounting/domain/claim_recovery_amount_test.go::TestClaimAmountsFormOnlyFromResponsibilityConclusions |
-| `AT-SA-155` | internal/settlementaccounting/domain/claim_recovery_amount_test.go::TestAdjustmentsAppendWithoutRewritingAmounts |
+| `AT-SA-154` | internal/settlementaccounting/application/map_external_funds_claim_target_test.go::TestACompensationPaymentMapsAndAppliesAgainstThatCompensationOnly（UC-SA-005 映射与核销半边）；cmd/parcel-settlement-register/funds_application_vertical_test.go::TestFundsApplicationCommandsRunThroughTheControlledEntryOnRealPostgres（UC-SA-005 映射与核销半边） |
+| `AT-SA-155` | internal/settlementaccounting/domain/claim_recovery_amount_test.go::TestAdjustmentsAppendWithoutRewritingAmounts；internal/settlementaccounting/application/map_external_funds_claim_target_test.go::TestARecoveryReceiptMapsOnlyToAnAcknowledgementInItsOwnTenant（UC-SA-005 映射与核销半边）；cmd/parcel-settlement-register/funds_application_vertical_test.go::TestFundsApplicationCommandsRunThroughTheControlledEntryOnRealPostgres（UC-SA-005 映射、核销与撤销半边） |
 | `AT-SA-164` | internal/settlementaccounting/application/withdraw_supplier_expected_cost_test.go::TestAnOccurrenceInvalidationWithdrawsTheCostFormedFromThatVersion（不形成账单贷项）；cmd/parcel-dispatch/supplier_cost_on_occurrence_invalidated_test.go::TestAnInvalidatedOccurrenceWithdrawsItsSupplierCostAndTheReestablishedOneIsEvaluatedAgain |
 | `AT-SA-167` | internal/settlementaccounting/domain/external_funds_test.go::TestApplicationConservesAmountsPerAllocation；internal/settlementaccounting/domain/external_funds_test.go::TestReversalAppendsWithoutDeletingTheOriginal |
 | `AT-SA-168` | internal/settlementaccounting/application/map_external_funds_test.go::TestApplicationConservesAndReversesOnce；internal/settlementaccounting/domain/external_funds_test.go::TestApplicationConservesAmountsPerAllocation |
@@ -960,9 +966,6 @@
 | `AT-SA-097` | 供应商已收到运营方付款通知 | UC-SA-004-RECEIVE-MATCH-AND-AUDIT-SUPPLIER-BILL.md |
 | `AT-SA-103` | 付款指示明确指定一张对账单 | UC-SA-005-MAP-EXTERNAL-FUNDS-AND-APPLY-SETTLEMENT.md |
 | `AT-SA-105` | 无付款指示存在两个同额候选 | UC-SA-005-MAP-EXTERNAL-FUNDS-AND-APPLY-SETTLEMENT.md |
-| `AT-SA-108` | 付款金额不足 | UC-SA-005-MAP-EXTERNAL-FUNDS-AND-APPLY-SETTLEMENT.md |
-| `AT-SA-109` | 付款金额超出明确费用范围 | UC-SA-005-MAP-EXTERNAL-FUNDS-AND-APPLY-SETTLEMENT.md |
-| `AT-SA-110` | 付款币种与账户币种不同且无有效换算 | UC-SA-005-MAP-EXTERNAL-FUNDS-AND-APPLY-SETTLEMENT.md |
 | `AT-SA-115` | 运营方收到付款通知但财务未确认 | UC-SA-005-MAP-EXTERNAL-FUNDS-AND-APPLY-SETTLEMENT.md |
 | `AT-SA-118` | 核销结果发布失败 | UC-SA-005-MAP-EXTERNAL-FUNDS-AND-APPLY-SETTLEMENT.md |
 | `AT-SA-125` | 分摊产生最小货币单位尾差 | UC-SA-006-ALLOCATE-COSTS-AND-DERIVE-OPERATING-RESULTS.md |
@@ -981,7 +984,6 @@
 | `AT-SA-145` | 一个索赔批次含多个索赔项 | UC-SA-007-SETTLE-CLAIMS-AND-RECOVERY-AMOUNTS.md |
 | `AT-SA-146` | 客户责任只覆盖部分对象 | UC-SA-007-SETTLE-CLAIMS-AND-RECOVERY-AMOUNTS.md |
 | `AT-SA-151` | VE 记录对方拒绝或追偿失权 | UC-SA-007-SETTLE-CLAIMS-AND-RECOVERY-AMOUNTS.md |
-| `AT-SA-154` | 客户赔付金额已形成但运营企业尚未向客户支付 | UC-SA-007-SETTLE-CLAIMS-AND-RECOVERY-AMOUNTS.md |
 | `AT-SA-156` | 同一责任范围被两个索赔项认领 | UC-SA-007-SETTLE-CLAIMS-AND-RECOVERY-AMOUNTS.md |
 | `AT-SA-157` | 责任方、客户或币种不一致 | UC-SA-007-SETTLE-CLAIMS-AND-RECOVERY-AMOUNTS.md |
 | `AT-SA-159` | 结果发布失败 | UC-SA-007-SETTLE-CLAIMS-AND-RECOVERY-AMOUNTS.md |
@@ -1170,8 +1172,6 @@
 | `AT-SA-058` | 检查本用例形成的对象 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md |
 | `AT-SA-066` | 税务系统只返回未税金额 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-SA-003-CUT-OFF-PUBLISH-AND-RECONCILE-CUSTOMER-STATEMENT.md |
 | `AT-SA-099` | 批量含通过、争议、拒绝和技术失败行 | 查询/权限/审计面（接入与持久化闸门后） | UC-SA-004-RECEIVE-MATCH-AND-AUDIT-SUPPLIER-BILL.md |
-| `AT-SA-116` | 供应商审核应付或客户赔付义务已形成，匹配的真实付款事实到达 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-SA-005-MAP-EXTERNAL-FUNDS-AND-APPLY-SETTLEMENT.md |
-| `AT-SA-117` | 代垫回收或供应商/保险追偿应收已形成但真实到账尚未发生，随后到账事实到达 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-SA-005-MAP-EXTERNAL-FUNDS-AND-APPLY-SETTLEMENT.md |
 | `AT-SA-119` | 同一外部事实重复通过文件和回调到达 | 事务发布/接入通道（ADR-0017 Bento/Outbox 闸门后） | UC-SA-005-MAP-EXTERNAL-FUNDS-AND-APPLY-SETTLEMENT.md |
 | `AT-SA-120` | 批量含唯一、未分配、冲突和无权限范围 | 查询/权限/审计面（接入与持久化闸门后） | UC-SA-005-MAP-EXTERNAL-FUNDS-AND-APPLY-SETTLEMENT.md |
 | `AT-SA-121` | 检查本用例形成的对象 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-SA-005-MAP-EXTERNAL-FUNDS-AND-APPLY-SETTLEMENT.md |
