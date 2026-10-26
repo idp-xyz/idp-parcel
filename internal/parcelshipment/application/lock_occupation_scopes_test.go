@@ -74,7 +74,7 @@ func TestAWithdrawalLocksEachVersionsScopeBeforeSavingTheRequest(t *testing.T) {
 	}
 }
 
-// Covers: 同上，主动拒绝。
+// Covers: 主动拒绝同样在保存委托之前按版本形成顺序取齐各版作用域的锁。
 func TestAnActiveRejectionLocksEachVersionsScopeBeforeSavingTheRequest(t *testing.T) {
 	fixture := newRejectionFixture(t)
 	superseded := supersededRequest(t)
@@ -97,7 +97,7 @@ func TestAnActiveRejectionLocksEachVersionsScopeBeforeSavingTheRequest(t *testin
 	assertEveryReleaseWasLockedFirst(t, fixture.scopeLocks.scopes, fixture.release.scopes)
 }
 
-// Covers: 同上，授权处置的两个去向：都释放占用，都先 S 后 R。
+// Covers: 授权处置的两个去向都释放占用，都先 S 后 R。
 func TestAnAuthorizedDispositionLocksEachVersionsScopeBeforeSavingTheRequest(t *testing.T) {
 	for name, choice := range map[string]domain.AuthorizedDispositionChoice{
 		"拒绝":    domain.DisposeByRejection,
@@ -179,6 +179,40 @@ func TestAPauseForTheCustomerLocksTheVersionsScopeBeforeSavingButOtherOutcomesLo
 	if len(accepted.scopeLocks.scopes) != 0 {
 		t.Fatalf("接受不释放，却取了锁 %v", accepted.scopeLocks.scopes)
 	}
+}
+
+// Covers: 锁序按版本形成顺序——被取代各版依次在前、当前版本在后。只有一个被取代版本的委托分不出「被取代各版内部按形成顺序」与
+// 「被取代各版内部反序」（被取代的只有一项，怎么排都是它自己在前），所以这里摆两个被取代版本：与接受链开头依次放被取代各版
+// 的次序不一致时，同一份委托上两边的锁之间会成环。
+func TestTheScopeLocksOfSeveralSupersededVersionsAreTakenInFormationOrderWithTheCurrentVersionLast(t *testing.T) {
+	fixture := newWithdrawalFixture(t)
+	request := twiceSupersededRequest(t)
+	fixture.requests.stored = &request
+	fixture.judgments.controlByVersion = map[string]domain.FinancialControlOutcome{
+		"version-1": domain.FinancialControlHeld,
+		"version-2": domain.FinancialControlHeld,
+		"version-3": domain.FinancialControlHeld,
+	}
+	observed := lockObserver(fixture.scopeLocks, func() bool { return fixture.requests.saved != nil })
+	command := fixture.command(t)
+	command.SubmissionVersion = mustValue(t, domain.NewSubmissionVersionID, "version-3")
+
+	result, err := fixture.handler.Handle(context.Background(), command)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.WithdrawalFormed {
+		t.Fatalf("outcome = %q, want FORMED", result.Outcome())
+	}
+	want := []string{
+		"SYN-ACCOUNT-SAC-version-1 before-save",
+		"SYN-ACCOUNT-SAC-version-2 before-save",
+		"SYN-ACCOUNT-SAC-version-3 before-save",
+	}
+	if !slices.Equal(*observed, want) {
+		t.Fatalf("取锁 = %v, want %v——被取代各版按形成顺序、当前版本在后", *observed, want)
+	}
+	assertEveryReleaseWasLockedFirst(t, fixture.scopeLocks.scopes, fixture.release.scopes)
 }
 
 // Covers: 同一作用域只取一次；没有成立占用的版本、没存作用域的存量结果都不取（释放那一侧本来就不会为它们碰账本）。
@@ -299,6 +333,106 @@ func TestAReplayOverADecidedRequestTakesNoScopeLockWhileOneOverASubmittedRequest
 			t.Fatalf("取锁 = %v, want %v", *observed, want)
 		}
 	})
+}
+
+// 以下三条证「已决态首次到达不取锁」：新来源身份（主动拒绝与授权处置没有来源保全，就是头一次读到）头一次到达一份已经决定的委托，
+// 走的是撤回的 decide、主动拒绝的 ActiveRejectionAdmissible、授权处置的 AuthorizedDispositionAdmissible 自己的已决态判断，
+// 而不是 resolvePreserved 重放那条在进 decide 之前就短路的路。取锁挪到这些判断之前时，
+// TestAReplayOverADecidedRequestTakesNoScopeLockWhileOneOverASubmittedRequestDoes 仍绿（重放根本到不了取锁），只有这三条会红。
+// 已决态不保存委托，没有行锁可倒挂，也就不为它白取锁。
+//
+// 三条路径里授权都先于已决态判断（授权先于一切写动作），所以这里不断言「不问授权」；断言的是取锁口零调用、不保存委托、
+// 不领决定标识。
+
+// decidedRequests 是首次到达时已经越过决定边界的两种委托：接受与客户撤回。夹具的判断读回都带一笔成立的占用，取锁若被触发就一定
+// 留下痕迹。
+var decidedRequests = map[string]func(*testing.T) domain.ShipmentRequest{
+	"已接受": acceptedRequest,
+	"已撤回": withdrawnRequest,
+}
+
+// Covers: 撤回先 S 后 R 只在会保存委托的路径上取锁——撤回：新来源身份头一次到达一份已接受或已撤回的委托，答已有决定，不取锁、不保存、不领决定标识。
+func TestAFirstArrivalWithdrawalOverADecidedRequestTakesNoScopeLock(t *testing.T) {
+	for name, decided := range decidedRequests {
+		t.Run(name, func(t *testing.T) {
+			fixture := newWithdrawalFixture(t)
+			request := decided(t)
+			fixture.requests.stored = &request
+			command := fixture.command(t)
+			if len(fixture.sources.records) != 0 {
+				t.Fatal("夹具里已有被保全的来源，这就不是首次到达")
+			}
+
+			result, err := fixture.handler.Handle(context.Background(), command)
+			if err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+			if result.Outcome() != application.WithdrawalDecisionAlreadyFormed {
+				t.Fatalf("outcome = %q, want DECISION_ALREADY_FORMED", result.Outcome())
+			}
+			if _, preserved, _ := fixture.sources.FindPreserved(context.Background(), command.WithdrawalIdentity); !preserved {
+				t.Fatal("这次撤回的来源身份没有被保全，走的不是首次到达的路")
+			}
+			if len(fixture.scopeLocks.scopes) != 0 {
+				t.Fatalf("已决态首次到达却取了锁 %v", fixture.scopeLocks.scopes)
+			}
+			if fixture.requests.saved != nil || fixture.identities.issued != 0 {
+				t.Fatalf("已决态首次到达保存了委托或领了决定标识（%d 个）", fixture.identities.issued)
+			}
+		})
+	}
+}
+
+// Covers: 同一条规则的主动拒绝：一份已接受或已撤回的委托，答任务已完结并交回既有决定，不取锁、不保存、不领决定标识、不发释放。
+func TestAnActiveRejectionOverADecidedRequestTakesNoScopeLock(t *testing.T) {
+	for name, decided := range decidedRequests {
+		t.Run(name, func(t *testing.T) {
+			fixture := newRejectionFixture(t)
+			request := decided(t)
+			fixture.requests.stored = &request
+
+			result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+			if err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+			if result.Outcome() != application.ActiveRejectionTaskAlreadyClosed {
+				t.Fatalf("outcome = %q, want TASK_ALREADY_CLOSED", result.Outcome())
+			}
+			if len(fixture.scopeLocks.scopes) != 0 {
+				t.Fatalf("已决态首次到达却取了锁 %v", fixture.scopeLocks.scopes)
+			}
+			if fixture.requests.saved != nil || fixture.identities.issued != 0 || fixture.release.calls != 0 {
+				t.Fatal("已决态首次到达保存了委托、领了决定标识或发了释放")
+			}
+		})
+	}
+}
+
+// Covers: 同一条规则的授权处置：一份已接受或已撤回的委托，两个去向都答任务已完结，不取锁、不保存、不领决定标识、不发释放。
+func TestAnAuthorizedDispositionOverADecidedRequestTakesNoScopeLock(t *testing.T) {
+	for name, decided := range decidedRequests {
+		for choiceName, choice := range map[string]domain.AuthorizedDispositionChoice{
+			"拒绝":    domain.DisposeByRejection,
+			"交客户补充": domain.DisposeByCustomerSupplement,
+		} {
+			t.Run(name+"/"+choiceName, func(t *testing.T) {
+				fixture := newDispositionFixture(t)
+				fixture.requests.request = decided(t)
+
+				result, err := fixture.handler.Handle(context.Background(), fixture.command(t, choice))
+				if err != nil {
+					t.Fatalf("handle: %v", err)
+				}
+				if result.Outcome() != application.AuthorizedDispositionTaskAlreadyClosed {
+					t.Fatalf("outcome = %q, want TASK_ALREADY_CLOSED", result.Outcome())
+				}
+				if len(fixture.scopeLocks.scopes) != 0 {
+					t.Fatalf("已决态首次到达却取了锁 %v", fixture.scopeLocks.scopes)
+				}
+				fixture.assertNothingWritten(t)
+			})
+		}
+	}
 }
 
 // Covers: 取不到锁与保存不了同一格——业务事实尚未形成：撤回与主动拒绝答`决定没落库`、不保存委托、不领决定标识、不发释放；
