@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
+import { TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, useAddressKeyword, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { RegistrationPanel } from '../../components/registration';
@@ -7,6 +7,7 @@ import type { ApiResult } from '../catalogue-api';
 import { catalogueConditionsNarrow } from '../catalogue-query';
 import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { CustomerContractPublicationForm } from './CustomerContractPublicationForm';
+import { KeepAliveTabs, KeepAliveTabsContent } from './keep-alive-tabs';
 import { VersionStatusChips } from './VersionStatusChips';
 import {
   groupedByObject,
@@ -357,32 +358,32 @@ export function PartyContractsPage() {
   const [publishedKey, setPublishedKey] = useState(0);
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <Tabs defaultValue="contracts" className="flex-1 flex flex-col overflow-hidden gap-0">
+      <KeepAliveTabs defaultValue="contracts" className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="contracts">客户合同</TabsTrigger>
           <TabsTrigger value="publish-contract">发布合同版本</TabsTrigger>
           <TabsTrigger value="accounts">客户账户</TabsTrigger>
           <TabsTrigger value="register">登记账户</TabsTrigger>
         </TabsList>
-        <TabsContent
+        <KeepAliveTabsContent
           value="contracts"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
           <CustomerContractsTable publishedKey={publishedKey} />
-        </TabsContent>
-        <TabsContent
+        </KeepAliveTabsContent>
+        <KeepAliveTabsContent
           value="publish-contract"
           className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
         >
           <CustomerContractPublicationForm onPublished={() => setPublishedKey((value) => value + 1)} />
-        </TabsContent>
-        <TabsContent
+        </KeepAliveTabsContent>
+        <KeepAliveTabsContent
           value="accounts"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
           <CustomerAccountsTable />
-        </TabsContent>
-        <TabsContent
+        </KeepAliveTabsContent>
+        <KeepAliveTabsContent
           value="register"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
@@ -395,8 +396,8 @@ export function PartyContractsPage() {
             outcomeLabels={partyIdentityOutcomeLabels}
             problemNote={problemNote}
           />
-        </TabsContent>
-      </Tabs>
+        </KeepAliveTabsContent>
+      </KeepAliveTabs>
     </div>
   );
 }

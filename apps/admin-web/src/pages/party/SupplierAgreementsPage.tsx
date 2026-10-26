@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
+import { TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { ListPageTemplate } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState } from '../catalogue-view';
 import { useAddressKeyword } from '../../templates/use-address-keyword';
 import { listSupplierAgreements, type SupplierAgreementListResponseBody } from './api';
+import { KeepAliveTabs, KeepAliveTabsContent } from './keep-alive-tabs';
 import { VersionStatusChips } from './VersionStatusChips';
 import {
   groupedByObject,
@@ -119,24 +120,24 @@ export function SupplierAgreementsPage() {
   const [reloadToken, setReloadToken] = useState(0);
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <Tabs defaultValue="catalogue" className="flex-1 flex flex-col overflow-hidden gap-0">
+      <KeepAliveTabs defaultValue="catalogue" className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="catalogue">协议目录</TabsTrigger>
           <TabsTrigger value="publish">发布协议版本</TabsTrigger>
         </TabsList>
-        <TabsContent
+        <KeepAliveTabsContent
           value="catalogue"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
           <SupplierAgreementCatalogue reloadToken={reloadToken} />
-        </TabsContent>
-        <TabsContent
+        </KeepAliveTabsContent>
+        <KeepAliveTabsContent
           value="publish"
           className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
         >
           <SupplierAgreementPublicationForm onPublished={() => setReloadToken((value) => value + 1)} />
-        </TabsContent>
-      </Tabs>
+        </KeepAliveTabsContent>
+      </KeepAliveTabs>
     </div>
   );
 }

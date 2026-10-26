@@ -1,7 +1,7 @@
 # 参与方与商业区 UI/UX 评估与跟进
 
 Category: enhancement
-Status: resolved——第一段 01–06 与第二段先拆的 07、08 全部 resolved；第二段其余与第三段仍在「后续」，未拆票
+Status: in-progress——第一段 01–06 与第二段 07–09 resolved，第二段其余继续拆；第二段其余与第三段仍在「后续」，未拆票
 
 出处：2026-10-25，用户在会话里要求「评估 commercial party 的 UI/UX」，读完评估后说「按你建议的顺序开始」。建议的顺序是：先改文案和组件（成本低），再做要设计的，最后是要后端配合的。本批先落第一段，第二、三段列在「后续」，等第一段收口后再拆票。
 
@@ -47,7 +47,7 @@ Status: resolved——第一段 01–06 与第二段先拆的 07、08 全部 res
 - 发布表单统一时刻控件（照登记表单的 `WallTimeField`，按本地时区填、回显 UTC）；今天三套规则，只填日期按 UTC 零点补，对国内租户差 8 小时。
 - 引用他物的格一律用选择器（今天合同的货主客户账户、信用政策的责任法人等要手敲 ID）。
 - 发布前给人读得懂的预览卡与确认框；批准、发布分开按钮区。
-- 切页签不丢草稿（Tabs 卸载非当前页签），未保存提醒推广到全部写入页。
+- ~~切页签不丢草稿~~ → [09](issues/09-drafts-survive-tab-switches.md)；未保存提醒推广到全部写入页仍在后续。
 - 「基于此版本发新版本」预填；标识旁列出在册版本、提示区间重叠。
 - 接入态与拒绝态（共享件 `catalogue-view.ts`、`components/states`、`components/registration` 的「提交打到 …」）把端点、错误码、文档出处收进「技术详情」——碰共享面，要评审。
 - 业务参与方、参与方关系两张登记表单的说明同样是开发话（「修订是否连续由服务端按册面判」「提交打到 …」），照 02 的用词改；参与方关系那张等 ps-external-mark-relations/17 进 main 之后再动。
@@ -61,7 +61,7 @@ Status: resolved——第一段 01–06 与第二段先拆的 07、08 全部 res
 
 ## 子票
 
-01–08 只改 `apps/admin-web` 与本票面，走 [workflow.md「前端切片」](../../docs/agents/workflow.md#前端切片一人在-main-上直接做)。与上一节的差别一处：当时有别的会话在主树上做合入，本批在独立 worktree（第一段 `idp-parcel-pcux`，第二段 `idp-parcel-pcux2`）上做，每笔先 rebase 到 `origin/main` 再推确切 SHA，不碰主树。
+01–09 只改 `apps/admin-web` 与本票面，走 [workflow.md「前端切片」](../../docs/agents/workflow.md#前端切片一人在-main-上直接做)。与上一节的差别一处：当时有别的会话在主树上做合入，本批在独立 worktree（第一段 `idp-parcel-pcux`，第二段 `idp-parcel-pcux2`）上做，每笔先 rebase 到 `origin/main` 再推确切 SHA，不碰主树。
 
 | # | 票 | 阻塞于 | 状态 |
 |---|---|---|---|
@@ -73,6 +73,7 @@ Status: resolved——第一段 01–06 与第二段先拆的 07、08 全部 res
 | 06 | [法人停用入口与确认](issues/06-legal-entity-deactivation-entry.md) | — | resolved |
 | 07 | [引用可点、显示名称](issues/07-references-are-links-with-names.md) | — | resolved |
 | 08 | [版本按对象排在一起、可只看在用的](issues/08-versions-grouped-with-in-use-filter.md) | — | resolved |
+| 09 | [切页签、换册不丢草稿](issues/09-drafts-survive-tab-switches.md) | — | resolved |
 
 ## 界面用词对照（本批各票共用）
 

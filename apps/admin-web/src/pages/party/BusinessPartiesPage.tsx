@@ -1,14 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  Button,
-  Drawer,
-  DrawerBody,
-  DrawerHeader,
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from '@idpxyz/ui-primitives';
+import { Button, Drawer, DrawerBody, DrawerHeader, Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, useAddressKeyword, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { chipClass } from '../../components/registration';
@@ -24,6 +15,7 @@ import {
   type PartyRelationshipListResponseBody,
   type PartyRelationshipRecord,
 } from './api';
+import { KeepAliveTabs, KeepAliveTabsContent, useVisited } from './keep-alive-tabs';
 import {
   identityStatusLabels,
   labelOf,
@@ -592,8 +584,9 @@ function PartyRelationshipsTable({
  * 那是管理台编一条服务端没有的约束——页面不教一条不真的规则。停用表单里种类是一格下拉，别处读面上结果的去处由
  * 格下那句说出。
  *
- * 换册即换表单：各册草稿是各自表单的内部状态，切走再切回从空白起——三册的格互不相容，留着上一册的草稿没有可以
- * 「带过去」的东西，与 MultiRegistrationPanel 换册清草稿是同一条纪律。
+ * 换册即换表单：各册草稿是各自表单的内部状态，三册的格互不相容，一册的草稿从不带进另一册——与 MultiRegistrationPanel
+ * 换册清草稿是同一条纪律（那里只有一个快照框，换册必须清）。访问过的表单切走后仍挂着、只藏起来，切回来草稿还在
+ * （票 party-commercial-uiux/09）：此前切走即卸载，切到别的册查一眼再回来，填了一半的整张表单就没了。
  */
 type RegisterId = 'business-party' | 'party-relationship' | 'identity-deactivation';
 
@@ -625,6 +618,7 @@ function RegistrationTab({
   useEffect(() => {
     if (preset) setSelected('identity-deactivation');
   }, [preset]);
+  const seen = useVisited(selected);
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="flex flex-wrap items-center gap-2 px-4 pt-4">
@@ -639,17 +633,25 @@ function RegistrationTab({
           </button>
         ))}
       </div>
-      {selected === 'business-party' ? (
-        <BusinessPartyRegistrationForm knownParties={knownParties} onRegistered={onPartiesChanged} />
-      ) : selected === 'party-relationship' ? (
-        <PartyRelationshipRegistrationForm
-          knownRelationships={knownRelationships}
-          parties={parties}
-          onRegistered={onRelationshipsChanged}
-        />
-      ) : (
-        <IdentityDeactivationForm parties={parties} onDeactivated={onPartiesChanged} preset={preset} />
-      )}
+      {seen('business-party') ? (
+        <div className={selected === 'business-party' ? 'contents' : 'hidden'}>
+          <BusinessPartyRegistrationForm knownParties={knownParties} onRegistered={onPartiesChanged} />
+        </div>
+      ) : null}
+      {seen('party-relationship') ? (
+        <div className={selected === 'party-relationship' ? 'contents' : 'hidden'}>
+          <PartyRelationshipRegistrationForm
+            knownRelationships={knownRelationships}
+            parties={parties}
+            onRegistered={onRelationshipsChanged}
+          />
+        </div>
+      ) : null}
+      {seen('identity-deactivation') ? (
+        <div className={selected === 'identity-deactivation' ? 'contents' : 'hidden'}>
+          <IdentityDeactivationForm parties={parties} onDeactivated={onPartiesChanged} preset={preset} />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -685,13 +687,13 @@ export function BusinessPartiesPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <Tabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden gap-0">
+      <KeepAliveTabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="identities">参与方身份</TabsTrigger>
           <TabsTrigger value="relationships">参与方关系</TabsTrigger>
           <TabsTrigger value="register">登记</TabsTrigger>
         </TabsList>
-        <TabsContent
+        <KeepAliveTabsContent
           value="identities"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
@@ -701,14 +703,14 @@ export function BusinessPartiesPage() {
             relationships={relationships.answer}
             retryRelationships={relationships.retry}
           />
-        </TabsContent>
-        <TabsContent
+        </KeepAliveTabsContent>
+        <KeepAliveTabsContent
           value="relationships"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
           <PartyRelationshipsTable answer={relationships.answer} retry={relationships.retry} />
-        </TabsContent>
-        <TabsContent
+        </KeepAliveTabsContent>
+        <KeepAliveTabsContent
           value="register"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
@@ -720,8 +722,8 @@ export function BusinessPartiesPage() {
             onRelationshipsChanged={relationships.retry}
             preset={preset}
           />
-        </TabsContent>
-      </Tabs>
+        </KeepAliveTabsContent>
+      </KeepAliveTabs>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Button, Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
+import { Button, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { ListPageTemplate } from '../../templates';
 import { ADDRESS_KEYWORD_PARAM, hashWithQueryValue } from '../../templates/address-query';
@@ -16,6 +16,7 @@ import {
   type CommercialPolicyKind,
   type CommercialPolicyListResponseBody,
 } from './api';
+import { KeepAliveTabs, KeepAliveTabsContent, useVisited } from './keep-alive-tabs';
 import { VersionStatusChips } from './VersionStatusChips';
 import {
   groupedByObject,
@@ -179,7 +180,8 @@ function PublishPane({
   onPublished: (kind: CommercialPolicyKind) => void;
 }) {
   const target = publishTargetOf(register);
-  let body: ReactNode;
+  const seen = useVisited(register);
+  let body: ReactNode = null;
   if (target.kind === 'with-rule-package') {
     body = (
       <WhereToPublish
@@ -198,13 +200,19 @@ function PublishPane({
         }}
       />
     );
-  } else {
-    body = publicationFormOf(register, () => onPublished(register));
   }
   return (
     <div className="flex-1 flex flex-col overflow-auto">
       <RegisterChooser value={register} onChange={onRegisterChange} />
       {body}
+      {/* 换册不丢草稿：访问过的册的表单一直挂着、只藏起来（票 party-commercial-uiux/09）；各册草稿各在各的表单里，不互相带。 */}
+      {commercialPolicyKinds
+        .filter((kind) => seen(kind) && publishTargetOf(kind).kind === 'form')
+        .map((kind) => (
+          <div key={kind} className={kind === register ? 'contents' : 'hidden'}>
+            {publicationFormOf(kind, () => onPublished(kind))}
+          </div>
+        ))}
     </div>
   );
 }
@@ -293,7 +301,7 @@ export function CommercialPoliciesPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <Tabs
+      <KeepAliveTabs
         value={tab}
         onValueChange={(next) => place(next as PoliciesTab, register)}
         className="flex-1 flex flex-col overflow-hidden gap-0"
@@ -303,21 +311,21 @@ export function CommercialPoliciesPage() {
           <TabsTrigger value="publish">发布新版本</TabsTrigger>
           <TabsTrigger value="json">JSON 发布（高级）</TabsTrigger>
         </TabsList>
-        <TabsContent
+        <KeepAliveTabsContent
           value="registers"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
           <RegisterChooser value={register} onChange={(kind) => place('registers', kind)} />
           {/* 按册重挂：检索词从地址重读（换册时已清掉），不带上一本册的词。 */}
           <PolicyRegisters key={register} kind={register} reloadKey={reloadKey} directory={directory} />
-        </TabsContent>
-        <TabsContent
+        </KeepAliveTabsContent>
+        <KeepAliveTabsContent
           value="publish"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
           <PublishPane register={register} onRegisterChange={(kind) => place('publish', kind)} onPublished={notePublished} />
-        </TabsContent>
-        <TabsContent
+        </KeepAliveTabsContent>
+        <KeepAliveTabsContent
           value="json"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
@@ -331,8 +339,8 @@ export function CommercialPoliciesPage() {
             declarationLandingLabels={declarationLandingLabels}
             problemNote={problemNote}
           />
-        </TabsContent>
-      </Tabs>
+        </KeepAliveTabsContent>
+      </KeepAliveTabs>
     </div>
   );
 }

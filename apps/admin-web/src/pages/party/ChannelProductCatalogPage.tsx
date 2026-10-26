@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
+import { TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { RegistrationPanel } from '../../components/registration';
@@ -14,6 +14,7 @@ import {
   type ProductChannelMappingListResponseBody,
   type ProductChannelMappingRecord,
 } from './api';
+import { KeepAliveTabs, KeepAliveTabsContent } from './keep-alive-tabs';
 import { RefLink } from './RefLink';
 import { problemNote, registrationSnapshotHints, registrationTitles } from './presentation';
 
@@ -159,18 +160,18 @@ function ProductChannelMappingTable() {
 export function ChannelProductCatalogPage() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <Tabs defaultValue="catalog" className="flex-1 flex flex-col overflow-hidden gap-0">
+      <KeepAliveTabs defaultValue="catalog" className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="catalog">渠道产品目录</TabsTrigger>
           <TabsTrigger value="register">登记映射</TabsTrigger>
         </TabsList>
-        <TabsContent
+        <KeepAliveTabsContent
           value="catalog"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
           <ProductChannelMappingTable />
-        </TabsContent>
-        <TabsContent
+        </KeepAliveTabsContent>
+        <KeepAliveTabsContent
           value="register"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
@@ -183,8 +184,8 @@ export function ChannelProductCatalogPage() {
             outcomeLabels={productChannelOutcomeLabels}
             problemNote={problemNote}
           />
-        </TabsContent>
-      </Tabs>
+        </KeepAliveTabsContent>
+      </KeepAliveTabs>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
+import { TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { RegistrationPanel } from '../../components/registration';
@@ -14,6 +14,7 @@ import {
   type ServiceProductListResponseBody,
   type ServiceProductRecord,
 } from './api';
+import { KeepAliveTabs, KeepAliveTabsContent } from './keep-alive-tabs';
 import { VersionStatusChips } from './VersionStatusChips';
 import {
   groupedByObject,
@@ -191,25 +192,25 @@ export function ServiceProductsPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <Tabs defaultValue="versions" className="flex-1 flex flex-col overflow-hidden gap-0">
+      <KeepAliveTabs defaultValue="versions" className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="versions">服务产品</TabsTrigger>
           <TabsTrigger value="publish">发布版本</TabsTrigger>
           <TabsTrigger value="register">登记服务形态</TabsTrigger>
         </TabsList>
-        <TabsContent
+        <KeepAliveTabsContent
           value="versions"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
           <ServiceProductVersionsTable refreshKey={refreshKey} />
-        </TabsContent>
-        <TabsContent
+        </KeepAliveTabsContent>
+        <KeepAliveTabsContent
           value="publish"
           className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
         >
           <ServiceProductPublicationForm onPublished={() => setRefreshKey((value) => value + 1)} />
-        </TabsContent>
-        <TabsContent
+        </KeepAliveTabsContent>
+        <KeepAliveTabsContent
           value="register"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
@@ -223,8 +224,8 @@ export function ServiceProductsPage() {
             outcomeLabels={productChannelOutcomeLabels}
             problemNote={problemNote}
           />
-        </TabsContent>
-      </Tabs>
+        </KeepAliveTabsContent>
+      </KeepAliveTabs>
     </div>
   );
 }
