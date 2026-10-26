@@ -1,6 +1,6 @@
 # ADR-0306：已完成而合计为零的评价是负向结束——两本评价请求册记「负向结束（零额）」，入账不重投、不建费用行，不再作两侧矛盾上抛
 
-Status: Accepted（2026-10-26，Claude Code 会话代 SA owner 决（代决）：用户 2026-10-20 原话「要我裁定的部分，你作为业务和系统专家，请你自决吧」；票 demo-chain-gaps/133，裁定出处为代决复核报告 `.scratch/owner-review-20261020/report.md` 的 M12（单一权威）。部分停用 [ADR-0198](./0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md) 决定四一句并回答其越权风险点 4，部分停用 [ADR-0200](./0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md) 决定四一句（被停原句与适用场景见下文「对已接受记录的作用」与两份记录的 Status 行）；两份记录正文不改，只在其 Status 行与 Links 加前向指针。越权风险点见文末，待 SA owner 复核，第 4 点同时待 PP owner。）<!-- 索引注记 -->｜**零额不是矛盾**：计价扣减恰好扣到零照样落成已完成，那是卡给出的价格；结算的形成门（客户费用、供应商预期成本首版与纠错版本）对合计为零另答一格，不并入未受理。**合计**按合同结算币判（跨币种时是评价内换算后的那一个）。**落法**：SELL 请求册状态格加`负向结束（零额）`，BUY 请求册加同名一格、与停因互斥；两路都入账不重投、不建费用行（成本行，含零金额，替代版本上也不追加纠错版本），不带停因、不进续办队列。**次序**：结算币种核对、费用项目映射、发生项失效、换算步骤与同币种两额先判，零额不吞矛盾。迁移 settlement_accounting 0048。越权风险点含零额不续办、映射先于零额、替代版本零额不接纠错、按结算币判零、迁移前停在`已提交`的不回补
+Status: Accepted（2026-10-26，Claude Code 会话代 SA owner 决（代决）：用户 2026-10-20 原话「要我裁定的部分，你作为业务和系统专家，请你自决吧」；票 demo-chain-gaps/133，裁定出处为代决复核报告 `.scratch/owner-review-20261020/report.md` 的 M12（单一权威）。部分停用 [ADR-0198](./0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md) 决定四一句并回答其越权风险点 4，部分停用 [ADR-0200](./0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md) 决定四一句，部分停用 [ADR-0232](./0232-a-segment-commission-adoption-is-withdrawn-by-decision-only-before-occurrences-form-and-occurrence-revision-drives-the-supplier-cost-correction.md) 决定八两句，部分停用 [ADR-0169](./0169-sell-evaluation-forms-a-customer-charge.md) 决定二一句（被停原句与适用场景见下文「对已接受记录的作用」与各记录的 Status 行）；各记录正文不改，只在其 Status 行与 Links 加前向指针。越权风险点见文末，待 SA owner 复核，第 4 点同时待 PP owner。）<!-- 索引注记 -->｜**零额不是矛盾**：计价扣减恰好扣到零照样落成已完成，那是卡给出的价格；结算的形成门（客户费用、供应商预期成本首版与纠错版本）对合计为零另答一格，不并入未受理。**合计**按合同结算币判（跨币种时是评价内换算后的那一个）。**落法**：SELL 请求册状态格加`负向结束（零额）`，BUY 请求册加同名一格、与停因互斥；两路都入账不重投、不建费用行（成本行，含零金额，替代版本上也不追加纠错版本），不带停因、不进续办队列。**次序**：结算币种核对、费用项目映射、发生项失效、换算步骤与同币种两额先判，零额不吞矛盾。迁移 settlement_accounting 0047。越权风险点含零额不续办、映射先于零额、替代版本零额不接纠错、按结算币判零、迁移前停在`已提交`的不回补
 Date: 2026-10-26
 
 ## Context
@@ -28,10 +28,10 @@ Date: 2026-10-26
 **三、BUY 请求册加同名一格（机制）。**
 
 - BUY 请求册没有状态格（ADR-0200 决定三与「候选与反方」）。本记录只加一格 `ZERO_TOTAL`，与停因互斥：记了零额不再记停因，有停因不再记零额，撞上答另有去向、作矛盾上抛。不记它，这份请求在册上与「评价还没回来」分不出——复核报告 M12 要求的「在请求册上可辨认」落在这里。
-- 首版与纠错版本都不形成。失效之后长出的替代版本，评价合计为零时不追加纠错版本：链头仍是失效纠错版本，当前有效供应商预期成本照旧为空（ADR-0232 决定七、八；越权风险点 3）。发生项那一版已失效先判，答已失效、不记零额。
+- 首版与纠错版本都不形成。失效之后长出的替代版本，评价合计为零时不追加纠错版本：链头仍是失效纠错版本，当前有效供应商预期成本照旧为空（ADR-0232 决定七；部分停用其决定八两句，见「对已接受记录的作用」；越权风险点 3）。发生项那一版已失效先判，答已失效、不记零额。
 - 入账不重投；不带停因，不进续办队列。
 
-**四、迁移（机制）。** `settlement_accounting/0048`：SELL 请求册的状态格与停因配对两条 CHECK 收下 `ZERO_TOTAL`、不带停因；BUY 请求册加一列，CHECK 只收 `ZERO_TOTAL` 一个词、与停因互斥。号取 0048、空着 0047：0047 留给在途的另一张结算票，两份迁移互不相干。
+**四、迁移（机制）。** `settlement_accounting/0047`：SELL 请求册的状态格与停因配对两条 CHECK 收下 `ZERO_TOTAL`、不带停因；BUY 请求册加一列，CHECK 只收 `ZERO_TOTAL` 一个词、与停因互斥。
 
 三类：
 
@@ -51,15 +51,17 @@ Date: 2026-10-26
 
 - 代码（符号名）：领域 `ErrZeroEvaluationTotal`（上述形成门同答），`SellRequestZeroTotal`、`NewZeroTotalSellEvaluationRequestConclusion`、`SellEvaluationRequestState.CarriesStopCause`；应用 `SellChargeZeroTotal`、`ExpectedCostZeroTotal`、`RequestedSupplierExpectedCostZeroTotal`、`ErrBuyEvaluationRequestStoppedBeforeZeroTotal`，`FormRequestedSupplierExpectedCostDeps.ZeroTotals`；端口 `EvaluationRequestZeroTotalRecorder`、`EvaluationRequestRecord.ZeroTotal`；适配器 `postgres.EvaluationRequests.RecordZeroTotal`，`RecordStop` 不再覆盖零额；`cmd/parcel-dispatch` 的 BUY 形成装配接上零额写口。
 - 计价不改：扣减恰到零落成已完成本就是现状，补一条用例钉住。
-- 迁移 `settlement_accounting/0048_evaluation_request_zero_total_end.sql`。
-- UC-SA-002 补 `AT-SA-215`，改记 `AT-SA-184`，元数据「负向结束」一行与主流程步 4 补零额；settlement-accounting `CONTEXT` 改写 SELL 请求结论与 BUY 首版两条里各一句。
+- 迁移 `settlement_accounting/0047_evaluation_request_zero_total_end.sql`。
+- UC-SA-002 补 `AT-SA-215`，改记 `AT-SA-184`，元数据「负向结束」一行与主流程步 4 补零额；settlement-accounting `CONTEXT` 改写 SELL 评价形成那一条（首句与请求结论那一句）、BUY 首版那一条与「发生项某一版失效时」那一条里各一句。
 
 ## 对已接受记录的作用
 
-两份记录正文不改，只在 Status 行与 Links 加前向指针、被停条款写进索引注记，其余各条不变。
+各记录正文不改，只在 Status 行与 Links 加前向指针、被停条款写进索引注记，其余各条不变。
 
 - **部分停用 ADR-0198 决定四一句**：「评价刚读到`已完成`，形成时却未受理，例如合计为零。」——合计为零移出两侧矛盾清单，改记`负向结束（零额）`、入账不重投、不建费用行（本记录决定一、二）。**适用场景**：只限合计为零；合计不为零而形成时未受理照旧上抛，决定四其余各格不变。**回答 ADR-0198 越权风险点 4**「合计为零的已完成评价」。
 - **部分停用 ADR-0200 决定四一句**：「评价已完成，形成时却未受理，例如合计为零。」——合计为零移出上抛清单，BUY 请求册记`负向结束（零额）`、入账不重投、不形成成本（本记录决定一、三）。**适用场景**：只限合计为零；合计不为零而形成时未受理照旧上抛，决定四其余各格不变。
+- **部分停用 ADR-0232 决定八两句**：「这份评价按 `AppendCorrection` 重述全额、接在链头后面」与「纠错由**发生项新版本**触发，不由评价结果不同触发；同一规则版本、同一金额也追加」——替代版本的新评价合计为零时不追加纠错版本，链头停在失效纠错版本，当前有效供应商预期成本为空，这份请求在 BUY 请求册上记`负向结束（零额）`（本记录决定三）。**适用场景**：只限替代版本的新评价合计为零；合计不为零照旧接在链头后面重述全额，纠错照旧由发生项新版本触发、金额与被纠正那一版相同也追加，决定八其余各句不变。
+- **部分停用 ADR-0169 决定二一句**：「已完成的 SELL 评价形成预估客户费用。」——已完成而合计为零的 SELL 评价不形成预估客户费用，包裹计费时点那一路的请求记`负向结束（零额）`（本记录决定一、二）。**适用场景**：只限合计为零；合计不为零照旧形成，原币、结算币和换算步骤整组出自评价、命令不带金额、评价未完成时不落零额，决定二其余各句不变。
 
 ## 越权风险点
 
@@ -74,7 +76,7 @@ Date: 2026-10-26
 - [ADR-0198：包裹计费时点那一路，SELL 请求怎样下结论，矛盾怎样上抛](./0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md)：部分停用决定四一句，回答越权风险点 4
 - [ADR-0200：BUY 评价按回指的请求形成供应商预期成本](./0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md)：部分停用决定四一句
 - [ADR-0229：停下的评价请求按停因续办](./0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md)：续办按停因取件，零额不带停因
-- [ADR-0232](./0232-a-segment-commission-adoption-is-withdrawn-by-decision-only-before-occurrences-form-and-occurrence-revision-drives-the-supplier-cost-correction.md)：决定七、八，失效纠错版本与替代版本
-- [ADR-0169](./0169-sell-evaluation-forms-a-customer-charge.md)：决定二「评价未完成时……不落零额」说的是未完成的评价，与本记录不相抵
+- [ADR-0232](./0232-a-segment-commission-adoption-is-withdrawn-by-decision-only-before-occurrences-form-and-occurrence-revision-drives-the-supplier-cost-correction.md)：部分停用决定八两句（限替代版本的新评价合计为零）；决定七的失效纠错版本照旧
+- [ADR-0169](./0169-sell-evaluation-forms-a-customer-charge.md)：部分停用决定二一句「已完成的 SELL 评价形成预估客户费用。」（限合计为零）；同一条后几句（金额整组出自评价、命令不带金额、「评价未完成时……不落零额」）说的是形成的那一笔与未完成的评价，与本记录不相抵
 - [UC-SA-002](../application/settlement-accounting/UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md)：`AT-SA-215`，改记 `AT-SA-184`
 - 票 [demo-chain-gaps/133](../../.scratch/demo-chain-gaps/issues/133-a-completed-zero-total-evaluation-ends-the-request-without-a-charge.md)，复核报告 [owner-review-20261020](../../.scratch/owner-review-20261020/report.md) M12
