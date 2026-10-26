@@ -144,6 +144,10 @@ func (fixture *customerSupplementLoopFixture) withdrawal(
 	if err != nil {
 		t.Fatalf("构造来源仓储：%v", err)
 	}
+	refusals, err := pspostgres.NewControlReleaseRefusals(fixture.db)
+	if err != nil {
+		t.Fatalf("构造释放未受理册：%v", err)
+	}
 	return psapplication.NewWithdrawShipmentRequestHandler(psapplication.WithdrawShipmentRequestDeps{
 		Sources:    sources,
 		Requests:   fixture.requests,
@@ -151,6 +155,7 @@ func (fixture *customerSupplementLoopFixture) withdrawal(
 		Judgments:  fixture.judgments,
 		Recorder:   fixture.judgments,
 		Release:    release,
+		Refusals:   refusals,
 		Identities: &synSDecisionIdentities{},
 		Clock:      systemClock{},
 	})

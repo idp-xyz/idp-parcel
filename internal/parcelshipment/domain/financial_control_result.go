@@ -33,6 +33,55 @@ func NewControlBasisReference(value string) (ControlBasisReference, error) {
 	return ControlBasisReference{required}, err
 }
 
+// OccupationScope 是提供方为一次控制形成占用时所在的结算作用域：责任法人、结算账户、币种三段引用。本上下文
+// 只原样存下、释放时原样交回，不解释任何一段。
+//
+// 它随控制结果存下，是因为释放要认领的是占用当时所在的那一份作用域（CONTEXT 词条「控制项结果」）。释放那一刻
+// 再从商业解析与账户登记推一次，政策回显或账户登记在施加之后变了，推出来的就是另一份作用域：提供方在那里找
+// 不到这一笔、答无可释放，原占用静默成孤儿。
+//
+// 零值是「没存下」：施加时还不存作用域的存量结果读回来就是它，释放照样把它交给提供方，由提供方答未受理
+// （ADR-0282 决定四）。
+type OccupationScope struct {
+	legalEntity requiredValue
+	account     requiredValue
+	currency    requiredValue
+}
+
+// NewOccupationScope 三段都必填：缺一段的作用域认领不到任何一笔，存下它只会让释放以为自己有据可依。
+func NewOccupationScope(legalEntity, account, currency string) (OccupationScope, error) {
+	entity, err := newRequiredValue("occupation scope legal entity", legalEntity)
+	if err != nil {
+		return OccupationScope{}, err
+	}
+	settlementAccount, err := newRequiredValue("occupation scope settlement account", account)
+	if err != nil {
+		return OccupationScope{}, err
+	}
+	code, err := newRequiredValue("occupation scope currency", currency)
+	if err != nil {
+		return OccupationScope{}, err
+	}
+	return OccupationScope{legalEntity: entity, account: settlementAccount, currency: code}, nil
+}
+
+func (scope OccupationScope) LegalEntity() string {
+	return scope.legalEntity.String()
+}
+
+func (scope OccupationScope) Account() string {
+	return scope.account.String()
+}
+
+func (scope OccupationScope) Currency() string {
+	return scope.currency.String()
+}
+
+// Recorded 报告这份作用域是否存下了。三段由构造器一起立，所以看一段就够。
+func (scope OccupationScope) Recorded() bool {
+	return scope.legalEntity.valid()
+}
+
 // ControlItemKind 镜像策略正文里一项控制的种类：本上下文自有封闭集，与 settlement-accounting /
 // party-commercial 的同名词汇不 import（ADR-0025 两侧各有封闭集、适配器全函数翻译）。
 //
@@ -225,6 +274,7 @@ type FinancialControlResult struct {
 	asOf      JudgmentAsOf
 	items     []ControlItemResult
 	jointPass JointPassCondition
+	scope     OccupationScope
 }
 
 // ExecutedFinancialControlSpec 是一次已执行控制在本上下文的全部输入：结论不在其中，由构造期推出。
@@ -235,6 +285,9 @@ type ExecutedFinancialControlSpec struct {
 	Items     []ControlItemResult
 	JointPass JointPassCondition
 	AsOf      JudgmentAsOf
+	// Scope 是这次控制所在的结算作用域，释放按它认领。可以缺：构造期不要求，是因为存量结果读回来本就没有，
+	// 而缺了的那一笔交给提供方会答未受理，不会被静默当成已收口。
+	Scope OccupationScope
 }
 
 // NewExecutedFinancialControlResult 从逐项结果按共同通过条件推出接受侧结论。
@@ -261,6 +314,7 @@ func NewExecutedFinancialControlResult(spec ExecutedFinancialControlSpec) (Finan
 		asOf:      spec.AsOf,
 		items:     items,
 		jointPass: spec.JointPass,
+		scope:     spec.Scope,
 	}, nil
 }
 
@@ -288,6 +342,7 @@ type RehydrateFinancialControlResultSpec struct {
 	AsOf      JudgmentAsOf
 	Items     []ControlItemResult
 	JointPass JointPassCondition
+	Scope     OccupationScope
 }
 
 // RehydrateFinancialControlResult 是登记册重建采用结果的那扇门（ADR-0028 重建只校验不重算）。
@@ -297,7 +352,9 @@ type RehydrateFinancialControlResultSpec struct {
 // FinancialControlResult 拒绝，让读的人去查那一行或写它的适配器。一致时交回的与首次构造等值。
 func RehydrateFinancialControlResult(spec RehydrateFinancialControlResultSpec) (FinancialControlResult, error) {
 	if spec.Outcome == FinancialControlNotApplicable {
-		if len(spec.Items) != 0 || spec.JointPass != JointPassConditionInvalid || spec.ResultID.valid() {
+		// `明确无控制`没有占用，也就没有占用所在的作用域：记了一份就是那一行不可能是本上下文写的。
+		if len(spec.Items) != 0 || spec.JointPass != JointPassConditionInvalid || spec.ResultID.valid() ||
+			spec.Scope.Recorded() {
 			return FinancialControlResult{}, ErrInvalidRehydratedFinancialControlResult
 		}
 		result, err := NewInapplicableFinancialControlResult(spec.Basis, spec.AsOf)
@@ -311,6 +368,7 @@ func RehydrateFinancialControlResult(spec RehydrateFinancialControlResultSpec) (
 		Items:     spec.Items,
 		JointPass: spec.JointPass,
 		AsOf:      spec.AsOf,
+		Scope:     spec.Scope,
 	})
 	if err != nil {
 		return FinancialControlResult{}, ErrInvalidRehydratedFinancialControlResult
@@ -400,6 +458,11 @@ func (result FinancialControlResult) Items() []ControlItemResult {
 // JointPassCondition 是结论按哪个条件推出的；`明确无控制`与尚未形成都是零值。
 func (result FinancialControlResult) JointPassCondition() JointPassCondition {
 	return result.jointPass
+}
+
+// Scope 是这次控制所在的结算作用域，释放按它认领；`明确无控制`、尚未形成与存量结果都是零值。
+func (result FinancialControlResult) Scope() OccupationScope {
+	return result.scope
 }
 
 // OccupationFormed 报告提供方账本上有没有为这次控制形成占用：任一项成立即有。

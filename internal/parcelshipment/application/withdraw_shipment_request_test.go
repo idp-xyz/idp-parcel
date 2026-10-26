@@ -203,7 +203,7 @@ func TestAWithdrawalReleasesEveryOccupationRegardlessOfTheConclusion(t *testing.
 // 与「不得为了保持表面原子性…把委托改回`已提交`」。
 func TestAFailedReleaseKeepsTheWithdrawalAndLeavesCompensationPending(t *testing.T) {
 	fixture := newWithdrawalFixture(t)
-	fixture.release.err = errors.New("settlement authority unavailable")
+	fixture.release.outcome = ports.ControlReleaseNotFormed
 
 	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
 	if err != nil {
@@ -269,7 +269,7 @@ func TestAnUnavailableWithdrawalAuthorizerIsUndecidedRatherThanUnauthorized(t *t
 // 拒绝与规则拒绝，与本测试共用主动拒绝这一端，三条因而首尾相连。
 func TestWithdrawalAndRejectionDeriveTheSameCompensationReference(t *testing.T) {
 	withdrawal := newWithdrawalFixture(t)
-	withdrawal.release.err = errors.New("settlement authority unavailable")
+	withdrawal.release.outcome = ports.ControlReleaseNotFormed
 
 	byWithdrawal, err := withdrawal.handler.Handle(context.Background(), withdrawal.command(t))
 	if err != nil {
@@ -277,7 +277,7 @@ func TestWithdrawalAndRejectionDeriveTheSameCompensationReference(t *testing.T) 
 	}
 
 	rejection := newRejectionFixture(t)
-	rejection.release.err = errors.New("settlement authority unavailable")
+	rejection.release.outcome = ports.ControlReleaseNotFormed
 
 	byRejection, err := rejection.handler.Handle(context.Background(), rejection.command(t))
 	if err != nil {
@@ -309,7 +309,7 @@ func TestTwoDifferentStoppingCausesNeverShareOneCompensationReference(t *testing
 	}
 
 	unreleased := newWithdrawalFixture(t)
-	unreleased.release.err = errors.New("settlement authority unavailable")
+	unreleased.release.outcome = ports.ControlReleaseNotFormed
 
 	byPendingRelease, err := unreleased.handler.Handle(context.Background(), unreleased.command(t))
 	if err != nil {
@@ -385,7 +385,7 @@ func TestTheReasonItselfParticipatesInTheContinuationDerivation(t *testing.T) {
 // 「按原业务关联幂等形成适用冻结释放」— 重复请求读回原撤回，释放按幂等重跑而不是再撤一次。
 func TestARepeatedWithdrawalReturnsTheOriginalWithdrawalAndItsCompensation(t *testing.T) {
 	first := newWithdrawalFixture(t)
-	first.release.err = errors.New("settlement authority unavailable")
+	first.release.outcome = ports.ControlReleaseNotFormed
 
 	original, err := first.handler.Handle(context.Background(), first.command(t))
 	if err != nil {
@@ -394,7 +394,7 @@ func TestARepeatedWithdrawalReturnsTheOriginalWithdrawalAndItsCompensation(t *te
 
 	repeat := newWithdrawalFixture(t)
 	repeat.requests.withdrawn = true
-	repeat.release.err = errors.New("settlement authority unavailable")
+	repeat.release.outcome = ports.ControlReleaseNotFormed
 
 	again, err := repeat.handler.Handle(context.Background(), repeat.command(t))
 	if err != nil {
@@ -566,6 +566,7 @@ type withdrawalFixture struct {
 	authorizer *withdrawalAuthorizerDouble
 	judgments  *recordedJudgmentsDouble
 	release    *controlReleaseDouble
+	refusals   *controlReleaseRefusalDouble
 	identities *countingIdentityFactory
 	steps      []string
 }
@@ -577,6 +578,7 @@ func newWithdrawalFixture(t *testing.T) *withdrawalFixture {
 		authorizer: &withdrawalAuthorizerDouble{t: t, granted: true},
 		judgments:  &recordedJudgmentsDouble{t: t, controlOutcome: domain.FinancialControlHeld},
 		release:    &controlReleaseDouble{},
+		refusals:   &controlReleaseRefusalDouble{},
 		identities: &countingIdentityFactory{t: t},
 	}
 	value.sources = &sourceRepositoryDouble{
@@ -591,6 +593,7 @@ func newWithdrawalFixture(t *testing.T) *withdrawalFixture {
 		Judgments:  value.judgments,
 		Recorder:   &judgmentRequestStore{},
 		Release:    value.release,
+		Refusals:   value.refusals,
 		Identities: value.identities,
 		Clock:      fixedClock{at: handlerClockAt},
 	})

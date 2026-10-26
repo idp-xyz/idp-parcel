@@ -235,7 +235,7 @@ func TestAnUnavailableAuthorizerIsUndecidedRatherThanUnauthorized(t *testing.T) 
 // 编排」— 主动拒绝这一侧同样不因释放失败回滚已经越过提交边界的决定。
 func TestAFailedReleaseKeepsTheActiveRejectionAndLeavesCompensationPending(t *testing.T) {
 	fixture := newRejectionFixture(t)
-	fixture.release.err = errors.New("settlement authority unavailable")
+	fixture.release.outcome = ports.ControlReleaseNotFormed
 
 	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
 	if err != nil {
@@ -279,7 +279,7 @@ func TestAnActiveRejectionWithUnreadableJudgmentsSendsNoRelease(t *testing.T) {
 func TestBothRejectionPathsDeriveTheSameCompensationReference(t *testing.T) {
 	automatic := newDecisionFixture(t)
 	automatic.judgments.reachability["parcel-2"] = domain.ReachabilityUnreachable
-	automatic.release.err = errors.New("settlement authority unavailable")
+	automatic.release.outcome = ports.ControlReleaseNotFormed
 
 	byRule, err := automatic.handler.Handle(context.Background(), automatic.command(t))
 	if err != nil {
@@ -287,7 +287,7 @@ func TestBothRejectionPathsDeriveTheSameCompensationReference(t *testing.T) {
 	}
 
 	active := newRejectionFixture(t)
-	active.release.err = errors.New("settlement authority unavailable")
+	active.release.outcome = ports.ControlReleaseNotFormed
 
 	byAuthority, err := active.handler.Handle(context.Background(), active.command(t))
 	if err != nil {
@@ -323,6 +323,7 @@ type rejectionFixture struct {
 	authorizer *rejectionAuthorizerDouble
 	judgments  *recordedJudgmentsDouble
 	release    *controlReleaseDouble
+	refusals   *controlReleaseRefusalDouble
 	identities *countingIdentityFactory
 	recorder   *judgmentRequestStore
 }
@@ -334,6 +335,7 @@ func newRejectionFixture(t *testing.T) *rejectionFixture {
 		authorizer: &rejectionAuthorizerDouble{t: t, granted: true},
 		judgments:  &recordedJudgmentsDouble{t: t, controlOutcome: domain.FinancialControlHeld},
 		release:    &controlReleaseDouble{},
+		refusals:   &controlReleaseRefusalDouble{},
 		identities: &countingIdentityFactory{t: t},
 		recorder:   &judgmentRequestStore{},
 	}
@@ -343,6 +345,7 @@ func newRejectionFixture(t *testing.T) *rejectionFixture {
 		Judgments:  value.judgments,
 		Recorder:   value.recorder,
 		Release:    value.release,
+		Refusals:   value.refusals,
 		Identities: value.identities,
 		Clock:      fixedClock{at: handlerClockAt},
 	})

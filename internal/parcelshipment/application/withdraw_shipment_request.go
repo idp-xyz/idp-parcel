@@ -57,15 +57,16 @@ type WithdrawShipmentRequestCommand struct {
 }
 
 type WithdrawShipmentRequestResult struct {
-	outcome       WithdrawalOutcome
-	state         domain.ShipmentRequestState
-	withdrawal    domain.Withdrawal
-	hasWithdrawal bool
-	decision      domain.AcceptanceDecision
-	hasDecision   bool
-	reason        JudgmentPendingReason
-	continuation  domain.OwnershipContinuationReference
-	compensation  domain.OwnershipContinuationReference
+	outcome        WithdrawalOutcome
+	state          domain.ShipmentRequestState
+	withdrawal     domain.Withdrawal
+	hasWithdrawal  bool
+	decision       domain.AcceptanceDecision
+	hasDecision    bool
+	reason         JudgmentPendingReason
+	continuation   domain.OwnershipContinuationReference
+	compensation   domain.OwnershipContinuationReference
+	releaseRefused bool
 }
 
 func (result WithdrawShipmentRequestResult) Outcome() WithdrawalOutcome {
@@ -100,6 +101,12 @@ func (result WithdrawShipmentRequestResult) CompensationReference() domain.Owner
 	return result.compensation
 }
 
+// ControlReleaseNotAccepted 报告撤回已经成立、而随附释放里有一笔提供方确定不受理，已记进释放未受理册待人处理
+// （ADR-0282 决定二）。它与补偿引用并列而不并进去：那一笔重放推不动，留一条续办引用只会让调用方以为系统会把它补上。
+func (result WithdrawShipmentRequestResult) ControlReleaseNotAccepted() bool {
+	return result.releaseRefused
+}
+
 type WithdrawShipmentRequestDeps struct {
 	Sources    ports.SourceSubmissionRepository
 	Requests   ports.ShipmentRequestRepository
@@ -107,6 +114,8 @@ type WithdrawShipmentRequestDeps struct {
 	Judgments  ports.RecordedJudgmentReader
 	Recorder   ports.AcceptanceJudgmentRecorder
 	Release    ports.PreAcceptanceControlRelease
+	// Refusals 是释放未受理册：随附释放被提供方确定不受理时记在这里交人处理。
+	Refusals   ports.ControlReleaseRefusalRegister
 	Identities ports.AcceptanceDecisionIdentity
 	Clock      ports.Clock
 }
@@ -235,12 +244,14 @@ func (handler *WithdrawShipmentRequestHandler) Handle(
 	}
 
 	record, _ := withdrawn.Withdrawal()
+	compensation, refused := handler.releaseOccupation(ctx, command, withdrawn)
 	return WithdrawShipmentRequestResult{
-		outcome:       WithdrawalFormed,
-		state:         withdrawn.State(),
-		withdrawal:    record,
-		hasWithdrawal: true,
-		compensation:  handler.releaseOccupation(ctx, command, withdrawn),
+		outcome:        WithdrawalFormed,
+		state:          withdrawn.State(),
+		withdrawal:     record,
+		hasWithdrawal:  true,
+		compensation:   compensation,
+		releaseRefused: refused,
 	}, nil
 }
 
@@ -298,19 +309,20 @@ func (handler *WithdrawShipmentRequestHandler) existing(
 	decision, hasDecision := request.AcceptanceDecision()
 	record, hasWithdrawal := request.Withdrawal()
 
-	compensation := domain.OwnershipContinuationReference{}
+	compensation, refused := domain.OwnershipContinuationReference{}, false
 	if hasWithdrawal {
-		compensation = handler.releaseOccupation(ctx, command, request)
+		compensation, refused = handler.releaseOccupation(ctx, command, request)
 	}
 
 	return WithdrawShipmentRequestResult{
-		outcome:       WithdrawalDecisionAlreadyFormed,
-		state:         request.State(),
-		withdrawal:    record,
-		hasWithdrawal: hasWithdrawal,
-		decision:      decision,
-		hasDecision:   hasDecision,
-		compensation:  compensation,
+		outcome:        WithdrawalDecisionAlreadyFormed,
+		state:          request.State(),
+		withdrawal:     record,
+		hasWithdrawal:  hasWithdrawal,
+		decision:       decision,
+		hasDecision:    hasDecision,
+		compensation:   compensation,
+		releaseRefused: refused,
 	}
 }
 
@@ -318,7 +330,8 @@ func (handler *WithdrawShipmentRequestHandler) existing(
 // 冻结不能因为终止请求出自客户之手就留在原处占着他的钱。
 //
 // 释放失败不回滚撤回：`UC-PS-005` 要求「撤回提交成功后不等待财务释放才生效」，且不得为了保持
-// 表面原子性把委托改回`已提交`。这一轮交回补偿续办引用，由续办去补。
+// 表面原子性把委托改回`已提交`。放不掉的交回补偿续办引用，由续办去补；提供方确定不受理的记进释放未受理册
+// 交人处理（ADR-0282 决定二），撤回照样成立。
 //
 // 放的是这份委托已成立的占用（步骤 6），不只是命令指名那一版：撤回是终局，被取代那一版若在新版本那一轮链提交之前
 // 还占着，之后再没有轮次去放它。从未形成过冻结时既不发释放也不留补偿引用——`AT-PS-074` 要的是撤回成立并保存
@@ -327,14 +340,16 @@ func (handler *WithdrawShipmentRequestHandler) releaseOccupation(
 	ctx context.Context,
 	command WithdrawShipmentRequestCommand,
 	request domain.ShipmentRequest,
-) domain.OwnershipContinuationReference {
+) (domain.OwnershipContinuationReference, bool) {
 	scope := occupationRelease{
 		judgments: handler.deps.Judgments,
 		release:   handler.deps.Release,
 		identity:  command.Identity,
 		request:   command.ShipmentRequestID,
+		refusals:  handler.deps.Refusals,
+		clock:     handler.deps.Clock,
 	}
-	return scope.reference(scope.releaseEvery(ctx, request, command.SubmissionVersion))
+	return scope.settle(ctx, scope.releaseEvery(ctx, request, command.SubmissionVersion))
 }
 
 // undecided 交回本轮的未决结果。state 由调用点给出而不是在这里假定`已提交`：未决要交回的是

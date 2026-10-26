@@ -2,12 +2,12 @@ package application_test
 
 import (
 	"context"
-	"errors"
 	"slices"
 	"testing"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
 // 本文件证终局路径放的是这份委托已成立的占用，不只是当前版本那一笔（UC-PS-005 步骤 6；PS CONTEXT 生命周期「已提交
@@ -65,7 +65,7 @@ func TestAWithdrawalReleasesEverySupersededVersionsOccupation(t *testing.T) {
 // 不掉时撤回照样成立，补偿引用指名那一版那一笔；一版放不掉不挡住其余各版。
 func TestAFailedSupersededReleaseKeepsTheWithdrawalAndLeavesCompensationPending(t *testing.T) {
 	fixture, command := supersededWithdrawal(t)
-	fixture.release.errFor = map[string]error{"version-1": errors.New("settlement-accounting unavailable")}
+	fixture.release.outcomeFor = map[string]ports.ControlReleaseOutcome{"version-1": ports.ControlReleaseNotFormed}
 
 	result, err := fixture.handler.Handle(context.Background(), command)
 	if err != nil {
@@ -83,7 +83,7 @@ func TestAFailedSupersededReleaseKeepsTheWithdrawalAndLeavesCompensationPending(
 
 	// 当前版本那一笔先放不掉时，引用指名的是它——本版那一笔正是这次撤回在办的那一份；被取代那一版照样去放。
 	current, command := supersededWithdrawal(t)
-	current.release.errFor = map[string]error{"version-2": errors.New("settlement-accounting unavailable")}
+	current.release.outcomeFor = map[string]ports.ControlReleaseOutcome{"version-2": ports.ControlReleaseNotFormed}
 	byCurrent, err := current.handler.Handle(context.Background(), command)
 	if err != nil {
 		t.Fatalf("handle: %v", err)
@@ -126,7 +126,7 @@ func TestAWithdrawalSkipsASupersededVersionWithoutOccupation(t *testing.T) {
 // 补偿引用与首次一致。
 func TestARepeatedWithdrawalAsksForEverySupersededReleaseAgain(t *testing.T) {
 	fixture, command := supersededWithdrawal(t)
-	fixture.release.errFor = map[string]error{"version-1": errors.New("settlement-accounting unavailable")}
+	fixture.release.outcomeFor = map[string]ports.ControlReleaseOutcome{"version-1": ports.ControlReleaseNotFormed}
 	original, err := fixture.handler.Handle(context.Background(), command)
 	if err != nil {
 		t.Fatalf("first: %v", err)
@@ -154,7 +154,7 @@ func TestAnActiveRejectionReleasesEverySupersededVersionsOccupation(t *testing.T
 	fixture.judgments.controlByVersion = bothVersionsOccupied()
 	command := fixture.command(t)
 	command.SubmissionVersion = mustValue(t, domain.NewSubmissionVersionID, "version-2")
-	fixture.release.errFor = map[string]error{"version-1": errors.New("settlement-accounting unavailable")}
+	fixture.release.outcomeFor = map[string]ports.ControlReleaseOutcome{"version-1": ports.ControlReleaseNotFormed}
 
 	result, err := fixture.handler.Handle(context.Background(), command)
 	if err != nil {
@@ -225,15 +225,15 @@ func TestAnAuthorizedDispositionReleasesEverySupersededVersionsOccupation(t *tes
 }
 
 // bothFail 与 namedFails 是两版都放不掉、只有命令指名那一版放不掉两种注入。
-func bothFail() map[string]error {
-	return map[string]error{
-		"version-1": errors.New("settlement-accounting unavailable"),
-		"version-2": errors.New("settlement-accounting unavailable"),
+func bothFail() map[string]ports.ControlReleaseOutcome {
+	return map[string]ports.ControlReleaseOutcome{
+		"version-1": ports.ControlReleaseNotFormed,
+		"version-2": ports.ControlReleaseNotFormed,
 	}
 }
 
-func namedFails() map[string]error {
-	return map[string]error{"version-2": errors.New("settlement-accounting unavailable")}
+func namedFails() map[string]ports.ControlReleaseOutcome {
+	return map[string]ports.ControlReleaseOutcome{"version-2": ports.ControlReleaseNotFormed}
 }
 
 // assertNamedVersionReferenceWins 钉「补偿引用交第一处」：两版都放不掉时交回的引用，等于只有命令指名那一版放不掉时那一个——
@@ -250,9 +250,9 @@ func assertNamedVersionReferenceWins(t *testing.T, both, named domain.OwnershipC
 
 // Covers: AT-PS-073 两版都放不掉那一格——撤回交回的补偿引用是命令指名那一版的。
 func TestAWithdrawalWhoseVersionsAllFailReportsTheNamedVersion(t *testing.T) {
-	refFor := func(errFor map[string]error) domain.OwnershipContinuationReference {
+	refFor := func(outcomeFor map[string]ports.ControlReleaseOutcome) domain.OwnershipContinuationReference {
 		fixture, command := supersededWithdrawal(t)
-		fixture.release.errFor = errFor
+		fixture.release.outcomeFor = outcomeFor
 		result, err := fixture.handler.Handle(context.Background(), command)
 		if err != nil {
 			t.Fatalf("handle: %v", err)
@@ -264,12 +264,12 @@ func TestAWithdrawalWhoseVersionsAllFailReportsTheNamedVersion(t *testing.T) {
 
 // Covers: AT-PS-035 两版都放不掉那一格——主动拒绝交回的补偿引用是命令指名那一版的。
 func TestAnActiveRejectionWhoseVersionsAllFailReportsTheNamedVersion(t *testing.T) {
-	refFor := func(errFor map[string]error) domain.OwnershipContinuationReference {
+	refFor := func(outcomeFor map[string]ports.ControlReleaseOutcome) domain.OwnershipContinuationReference {
 		fixture := newRejectionFixture(t)
 		superseded := supersededRequest(t)
 		fixture.requests.stored = &superseded
 		fixture.judgments.controlByVersion = bothVersionsOccupied()
-		fixture.release.errFor = errFor
+		fixture.release.outcomeFor = outcomeFor
 		command := fixture.command(t)
 		command.SubmissionVersion = mustValue(t, domain.NewSubmissionVersionID, "version-2")
 		result, err := fixture.handler.Handle(context.Background(), command)
@@ -283,13 +283,13 @@ func TestAnActiveRejectionWhoseVersionsAllFailReportsTheNamedVersion(t *testing.
 
 // Covers: AT-PS-035 两版都放不掉那一格——自动拒绝交回的补偿引用是命令指名那一版的。
 func TestAnAutomaticRejectionWhoseVersionsAllFailReportsTheNamedVersion(t *testing.T) {
-	refFor := func(errFor map[string]error) domain.OwnershipContinuationReference {
+	refFor := func(outcomeFor map[string]ports.ControlReleaseOutcome) domain.OwnershipContinuationReference {
 		fixture := newDecisionFixture(t)
 		superseded := supersededRequest(t)
 		fixture.requests.saved, fixture.requests.sticky = &superseded, true
 		fixture.judgments.controlByVersion = bothVersionsOccupied()
 		fixture.judgments.reachability["parcel-2"] = domain.ReachabilityUnreachable
-		fixture.release.errFor = errFor
+		fixture.release.outcomeFor = outcomeFor
 		command := fixture.command(t)
 		command.SubmissionVersion = mustValue(t, domain.NewSubmissionVersionID, "version-2")
 		result, err := fixture.handler.Handle(context.Background(), command)
@@ -303,13 +303,13 @@ func TestAnAutomaticRejectionWhoseVersionsAllFailReportsTheNamedVersion(t *testi
 
 // Covers: ADR-0132 决定一的释放、两版都放不掉那一格——处置交回的补偿引用是命令指名那一版的。
 func TestAnAuthorizedDispositionWhoseVersionsAllFailReportsTheNamedVersion(t *testing.T) {
-	refFor := func(errFor map[string]error) domain.OwnershipContinuationReference {
+	refFor := func(outcomeFor map[string]ports.ControlReleaseOutcome) domain.OwnershipContinuationReference {
 		fixture := newDispositionFixture(t)
 		fixture.requests.request = awaitingDispositionRequestOn(t, supersededRequest(t))
 		fixture.judgments.controlByVersion = map[string]domain.FinancialControlOutcome{
 			"version-1": domain.FinancialControlHeld,
 		}
-		fixture.release.errFor = errFor
+		fixture.release.outcomeFor = outcomeFor
 		command := fixture.command(t, domain.DisposeByRejection)
 		command.SubmissionVersion = mustValue(t, domain.NewSubmissionVersionID, "version-2")
 		result, err := fixture.handler.Handle(context.Background(), command)

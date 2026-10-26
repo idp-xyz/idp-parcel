@@ -7,6 +7,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
 // Covers: PS CONTEXT 词条「控制项结果」与生命周期「判断遇到客户可补充缺口 → 等待受控补充」、ADR-0132 决定一的理由与
@@ -46,7 +47,7 @@ func TestACustomerSupplementPauseReleasesThePausedVersionsOccupation(t *testing.
 func TestAFailedPauseReleaseKeepsThePauseAndLeavesCompensationPending(t *testing.T) {
 	paused := newDecisionFixture(t)
 	paused.judgments.reachability["parcel-2"] = domain.ReachabilityInsufficientEvidence
-	paused.release.err = errors.New("settlement authority unavailable")
+	paused.release.outcome = ports.ControlReleaseNotFormed
 
 	result, err := paused.handler.Handle(context.Background(), paused.command(t))
 	if err != nil {
@@ -68,7 +69,7 @@ func TestAFailedPauseReleaseKeepsThePauseAndLeavesCompensationPending(t *testing
 
 	rejected := newDecisionFixture(t)
 	rejected.judgments.reachability["parcel-2"] = domain.ReachabilityUnreachable
-	rejected.release.err = errors.New("settlement authority unavailable")
+	rejected.release.outcome = ports.ControlReleaseNotFormed
 	byRejection, err := rejected.handler.Handle(context.Background(), rejected.command(t))
 	if err != nil {
 		t.Fatalf("handle rejection: %v", err)

@@ -90,6 +90,7 @@ type DisposeShipmentRequestResult struct {
 	hasDecision    bool
 	currentVersion domain.SubmissionVersionID
 	compensation   domain.OwnershipContinuationReference
+	releaseRefused bool
 }
 
 func (result DisposeShipmentRequestResult) Outcome() AuthorizedDispositionOutcome {
@@ -123,11 +124,19 @@ func (result DisposeShipmentRequestResult) CompensationReference() domain.Owners
 	return result.compensation
 }
 
+// ControlReleaseNotAccepted 报告处置已经记下、而随附释放里有一笔提供方确定不受理，已记进释放未受理册待人处理。两个
+// 去向同一判法（ADR-0282 决定二）。
+func (result DisposeShipmentRequestResult) ControlReleaseNotAccepted() bool {
+	return result.releaseRefused
+}
+
 type DisposeShipmentRequestDeps struct {
 	Requests   ports.ShipmentRequestRepository
 	Authorizer ports.AuthorizedDispositionAuthorizer
 	Judgments  ports.RecordedJudgmentReader
 	Release    ports.PreAcceptanceControlRelease
+	// Refusals 是释放未受理册：随附释放被提供方确定不受理时记在这里交人处理。
+	Refusals   ports.ControlReleaseRefusalRegister
 	Identities ports.AcceptanceDecisionIdentity
 	Clock      ports.Clock
 }
@@ -259,6 +268,7 @@ func (handler *DisposeShipmentRequestHandler) Handle(
 	}
 
 	decision, formed := disposed.AcceptanceDecision()
+	compensation, refused := handler.releaseOccupation(ctx, command, disposed)
 	return DisposeShipmentRequestResult{
 		outcome:        AuthorizedDispositionRecorded,
 		state:          disposed.State(),
@@ -267,7 +277,8 @@ func (handler *DisposeShipmentRequestHandler) Handle(
 		decision:       decision,
 		hasDecision:    formed,
 		currentVersion: current,
-		compensation:   handler.releaseOccupation(ctx, command, disposed),
+		compensation:   compensation,
+		releaseRefused: refused,
 	}, nil
 }
 
@@ -311,18 +322,21 @@ func (handler *DisposeShipmentRequestHandler) inadmissible(
 // WithdrawShipmentRequestHandler.releaseOccupation）。`交客户补充`这一去向不是终局，被取代各版按理已在本版那一轮
 // 链开头放过；这里再请求一次，提供方按幂等答原释放，两个去向因此走同一条路。
 //
-// 释放失败不回滚处置：处置已经越过提交边界，回滚它等于让一次补偿失败改写业务结果；补偿按原关联另行
-// 续办，续办方是系统——责任引用答的是谁承担失败或补偿责任，不改变谁来重试（ADR-0132 决定四）。
+// 释放失败不回滚处置：处置已经越过提交边界，回滚它等于让一次补偿失败改写业务结果。放不掉的按原关联另行续办，
+// 续办方是系统——责任引用答的是谁承担失败或补偿责任，不改变谁来重试（ADR-0132 决定四）；提供方确定不受理的记进
+// 释放未受理册交人处理，两个去向同一判法（ADR-0282 决定二）。
 func (handler *DisposeShipmentRequestHandler) releaseOccupation(
 	ctx context.Context,
 	command DisposeShipmentRequestCommand,
 	request domain.ShipmentRequest,
-) domain.OwnershipContinuationReference {
+) (domain.OwnershipContinuationReference, bool) {
 	scope := occupationRelease{
 		judgments: handler.deps.Judgments,
 		release:   handler.deps.Release,
 		identity:  command.Identity,
 		request:   command.ShipmentRequestID,
+		refusals:  handler.deps.Refusals,
+		clock:     handler.deps.Clock,
 	}
-	return scope.reference(scope.releaseEvery(ctx, request, command.SubmissionVersion))
+	return scope.settle(ctx, scope.releaseEvery(ctx, request, command.SubmissionVersion))
 }

@@ -218,7 +218,7 @@ func TestDisposingToCustomerSupplementMovesTheWaitAndReleasesTheOccupation(t *te
 // 逐字一致（同一笔占用因同一原因停下，续办方不必先知道是谁停的）。
 func TestAFailedReleaseAfterDispositionYieldsTheSharedCompensationReference(t *testing.T) {
 	fixture := newDispositionFixture(t)
-	fixture.release.err = errors.New("settlement unreachable")
+	fixture.release.outcome = ports.ControlReleaseNotFormed
 
 	result, err := fixture.handler.Handle(context.Background(), fixture.command(t, domain.DisposeByRejection))
 	if err != nil {
@@ -433,6 +433,7 @@ type dispositionFixture struct {
 	authorizer *dispositionAuthorizerDouble
 	judgments  *recordedJudgmentsDouble
 	release    *controlReleaseDouble
+	refusals   *controlReleaseRefusalDouble
 	identities *decisionIdentityFactory
 }
 
@@ -447,6 +448,7 @@ func newDispositionFixture(t *testing.T) *dispositionFixture {
 		},
 		judgments:  &recordedJudgmentsDouble{t: t, control: &control},
 		release:    &controlReleaseDouble{},
+		refusals:   &controlReleaseRefusalDouble{},
 		identities: &decisionIdentityFactory{t: t},
 	}
 	fixture.handler = application.NewDisposeShipmentRequestHandler(application.DisposeShipmentRequestDeps{
@@ -454,6 +456,7 @@ func newDispositionFixture(t *testing.T) *dispositionFixture {
 		Authorizer: fixture.authorizer,
 		Judgments:  fixture.judgments,
 		Release:    fixture.release,
+		Refusals:   fixture.refusals,
 		Identities: fixture.identities,
 		Clock:      fixedClock{at: handlerClockAt},
 	})

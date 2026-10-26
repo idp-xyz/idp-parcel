@@ -2,6 +2,8 @@ package application
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
@@ -116,7 +118,7 @@ func NewAdvanceFinancialControlJudgmentHandler(
 // 授权的时点上发出的资金占用，既收不回来也解释不了自己按哪一版策略执行。
 //
 // 控制端口答不出同样形成未决而不上抛，未决原因指名是这个依赖停了。它与`明确无控制`因此
-// 分得开：后者是合同声明并带商业依据，前者是问过了没答案。
+// 分得开：后者是合同声明并带商业依据，前者是问过了没答案。答复译不进端口的封闭集合时不在此列，上抛。
 func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 	ctx context.Context,
 	command AdvanceFinancialControlJudgmentCommand,
@@ -160,6 +162,11 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 		AsOf:              adopted.asOf,
 	})
 	if err != nil {
+		if errors.Is(err, ports.ErrUntranslatableProviderAnswer) {
+			// 提供方答出的东西译不进端口的封闭集合：重投同一封信封得到同一份答复，折成`财务控制不可用`会内部重试到失败
+			// 预算耗尽，看起来像一直在等依赖（ADR-0081 决定三）。原样上抛，消费门落 publish_failed。
+			return AdvanceFinancialControlJudgmentResult{}, fmt.Errorf("apply pre-acceptance financial control: %w", err)
+		}
 		return handler.undecided(ctx, command, FinancialControlUnavailable), nil
 	}
 	if assessment.Outcome != ports.PreAcceptanceControlFormed {

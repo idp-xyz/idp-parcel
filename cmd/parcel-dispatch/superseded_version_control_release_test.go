@@ -264,8 +264,8 @@ func (fixture *customerSupplementLoopFixture) freeze(t *testing.T, ctx context.C
 	return row
 }
 
-// synRFlakyRelease 把释放转给生产适配器；failuresLeft 大于零时先失败那么多次、不到提供方。released 只数到达提供方且
-// 成功的那几次。
+// synRFlakyRelease 把释放转给生产适配器；failuresLeft 大于零时先答那么多次`可重试未形成`、不到提供方。released 只数到达
+// 提供方且收口的那几次。
 type synRFlakyRelease struct {
 	inner        psports.PreAcceptanceControlRelease
 	failuresLeft int
@@ -275,16 +275,21 @@ type synRFlakyRelease struct {
 func (release *synRFlakyRelease) ReleasePreAcceptanceControl(
 	ctx context.Context,
 	request psports.ControlReleaseRequest,
-) error {
+) (psports.ControlReleaseAnswer, error) {
 	if release.failuresLeft > 0 {
 		release.failuresLeft--
-		return errors.New("settlement-accounting unavailable")
+		reason, err := psdomain.NewCheckReason("SA-FREEZE_LEDGER_UNAVAILABLE")
+		if err != nil {
+			return psports.ControlReleaseAnswer{}, err
+		}
+		return psports.ControlReleaseAnswer{Outcome: psports.ControlReleaseNotFormed, Reason: reason}, nil
 	}
-	if err := release.inner.ReleasePreAcceptanceControl(ctx, request); err != nil {
-		return err
+	answer, err := release.inner.ReleasePreAcceptanceControl(ctx, request)
+	if err != nil || answer.Outcome != psports.ControlReleaseSettled {
+		return answer, err
 	}
 	release.released++
-	return nil
+	return answer, nil
 }
 
 var _ psports.PreAcceptanceControlRelease = (*synRFlakyRelease)(nil)

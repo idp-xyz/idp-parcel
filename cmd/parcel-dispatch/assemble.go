@@ -241,12 +241,15 @@ func assembleDispatcher(
 // 三步各自的未决（商业依据、时点策略、可达性权威、财务控制、人工复核……）在编排里已经
 // 收成同一个「本轮没形成决定」，消费门这一侧只认得那一格，停在哪一步与原因都在错误正文里。
 //
-// 两个不在名单里，恢复动作与「等一个依赖」相反：
+// 不在名单里的，恢复动作与「等一个依赖」相反：
 //   - psinbox.ErrUnexpectedAcceptanceChainOutcome——编排交回了封闭集合以外的结果，是
 //     编程错误。登记成未决只会一路重投到失败预算耗尽，而重投改不了它。
 //   - psapplication.ErrAcceptanceChainNotAssembled / ErrAcceptanceChainHasNoMembers——
 //     前者是本文件漏接了一步，后者是发布侧发了一份没有声明成员的委托。两者都不会因为
 //     等下去而长出来，保持 dispatch.publish_failed 让它们响亮。
+//   - psapplication.ErrControlReleaseNotAccepted 与包着 psports.ErrUntranslatableProviderAnswer 的错误——
+//     放被取代各版时提供方确定不受理，或财务控制、释放两口答出了译不动的东西。重投得到同一份答复，要人来看
+//     （ADR-0282 决定三，ADR-0081 决定三）。
 var acceptanceChainUndecidedSentinels = []error{
 	psinbox.ErrAcceptanceChainUndecided,
 }
@@ -853,6 +856,12 @@ func acceptanceChainConsumers(
 	if err != nil {
 		return none, fmt.Errorf("parcel-dispatch: acceptance decision handoff: %w", err)
 	}
+	// 释放未受理册：自动拒绝与停进`等待受控补充`之后随附释放被提供方确定不受理时记在这里交人处理（ADR-0282 决定二）。
+	// 链开头放被取代各版那一步不用它，遇到拒收响亮停下（决定三）。
+	refusals, err := pspostgres.NewControlReleaseRefusals(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-dispatch: control release refusals: %w", err)
+	}
 
 	chain := psapplication.NewAdvanceAcceptanceChainHandler(psapplication.AdvanceAcceptanceChainDeps{
 		Requests: requests,
@@ -867,6 +876,7 @@ func acceptanceChainConsumers(
 			Judgments:    judgments,
 			Recorder:     judgments,
 			Release:      pspostgres.NewSavepointedControlRelease(db, control),
+			Refusals:     refusals,
 			Downstream:   downstream,
 			Identities:   identities,
 			Clock:        clock,
@@ -1049,8 +1059,8 @@ func acceptanceReachability(
 // 与估价留痕册三件都接真。采用册空着就停在金额未配置——那一行是租户取值，这里不登，也不为验它造一份。
 //
 // 它与三条判断腿共用同一个商业依据适配器：作用域从**那一次**解析的结算政策回显派生
-// （ADR-0044/0047 接通的缝），另建一个解析入口会给出第二次解析的机会，而施加与释放两径
-// 同引用正靠同源。
+// （ADR-0044/0047 接通的缝），另建一个解析入口会给出第二次解析的机会。释放不问作用域源：
+// 施加时用的那一份随控制结果存下，释放按它认领（ADR-0282 决定四）。
 func acceptanceFinancialControl(
 	db *bentopg.DB,
 	commercial *pspartycommercial.CommercialBasisAdapter,

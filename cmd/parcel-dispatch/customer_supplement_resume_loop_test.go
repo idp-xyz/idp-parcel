@@ -100,6 +100,10 @@ func newCustomerSupplementLoopFixtureWith(t *testing.T, legs customerSupplementL
 	if err != nil {
 		t.Fatalf("构造接受决定交接：%v", err)
 	}
+	refusals, err := pspostgres.NewControlReleaseRefusals(base.db)
+	if err != nil {
+		t.Fatalf("构造释放未受理册：%v", err)
+	}
 	firstVersion := mustPS(t, psdomain.NewSubmissionVersionID, "SYN-VER-01")
 	// 两版同一时点（见文件头）：时点策略对哪一版都答 synRAsOfAnchor。
 	commercial := &synRSwitchableAsOfCommercialBasis{inner: &synRCommercialBasis{t: t}, t: t, configured: true}
@@ -111,6 +115,7 @@ func newCustomerSupplementLoopFixtureWith(t *testing.T, legs customerSupplementL
 		Judgments:    base.judgments,
 		Recorder:     base.judgments,
 		Release:      legs.release,
+		Refusals:     refusals,
 		Downstream:   decisionHandoff,
 		Identities:   &synSDecisionIdentities{},
 		Clock:        systemClock{},

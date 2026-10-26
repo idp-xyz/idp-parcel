@@ -24,8 +24,9 @@ type SettlementAccountDirectory interface {
 // 的那条缝）：解析回显给出法人与币种，账户目录补上结算账户；同一次解析的标识一并交回，
 // 作为 SA 向商业侧提问控制策略的键。
 //
-// 它走 CommercialBasisResolver 而不是另开取数口：解析幂等（同一查询交回同一采用），施加
-// 与释放两条路径因此拿到同一个作用域，不需要在请求上多背一份回显。
+// 它走 CommercialBasisResolver 而不是另开取数口：解析幂等（同一查询交回同一采用），与三条
+// 判断腿采用的是同一份依据。只有施加问它；释放按施加时随结果存下的那一份作用域认领，不再
+// 问它——政策回显或账户登记在施加之后可以变，现查得到的是另一份作用域（ADR-0282 决定四）。
 type PolicyBackedControlScopeSource struct {
 	commercial psports.CommercialBasisResolver
 	directory  SettlementAccountDirectory

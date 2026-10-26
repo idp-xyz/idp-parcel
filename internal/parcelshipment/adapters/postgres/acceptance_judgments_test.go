@@ -119,6 +119,55 @@ func TestACombinedControlRoundTripsEveryItemAndTheJointPassCondition(t *testing.
 	}
 }
 
+// TestAControlResultRoundTripsTheScopeItOccupied 证占用所在的作用域随结果同行落库、原样读回（ADR-0282 决定四，迁移 0030）：
+// 释放按读回的这一份认领。没存作用域的存量行读回如实是「没存下」，由其余往返用例守着；库里 CHECK 拒只存了一半的作用域，
+// 也拒`明确无控制`带作用域。
+func TestAControlResultRoundTripsTheScopeItOccupied(t *testing.T) {
+	judgments, transactor, pool := newAcceptanceJudgments(t)
+	ctx := t.Context()
+	tenant, requestID := psTenant(t, "tenant-1"), taskRequestID(t, "REQ-1")
+
+	scope, err := domain.NewOccupationScope("SYN-LEGAL-ENTITY-1", "SYN-ACCOUNT-1", "CNY")
+	if err != nil {
+		t.Fatalf("new occupation scope: %v", err)
+	}
+	held, err := domain.NewExecutedFinancialControlResult(domain.ExecutedFinancialControlSpec{
+		ResultID:  mustBuild(t, domain.NewFinancialControlResultID, "REQ-1/VER-1"),
+		Items:     []domain.ControlItemResult{controlItem(t, domain.PrepaidFreezeControlItem, 1, domain.ControlItemSatisfied, "")},
+		JointPass: domain.AllControlsPass,
+		AsOf:      taskJudgmentAsOf(t, domain.FinancialControlJudgmentKind, taskAsOfFirst),
+		Scope:     scope,
+	})
+	if err != nil {
+		t.Fatalf("形成已执行财务控制结果：%v", err)
+	}
+	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		return judgments.RecordFinancialControlResult(txCtx, tenant, requestID, taskVersion(t, "VER-1"), held)
+	})
+
+	recorded, err := judgments.LoadRecordedJudgments(ctx, tenant, requestID, taskVersion(t, "VER-1"))
+	if err != nil {
+		t.Fatalf("读回已采用判断：%v", err)
+	}
+	if !reflect.DeepEqual(recorded.FinancialControl, held) || recorded.FinancialControl.Scope() != scope {
+		t.Fatalf("带作用域的控制结果往返变形：%+v", recorded.FinancialControl)
+	}
+
+	if _, err := pool.Exec(ctx,
+		`UPDATE parcel_shipment.acceptance_financial_control SET occupation_currency = NULL
+		  WHERE tenant_id = 'tenant-1' AND shipment_request_id = 'REQ-1'`); err == nil {
+		t.Fatal("只存了一半的作用域进了库——缺一段的作用域认领不到任何一笔")
+	}
+	// 除作用域外这一句改成的是一行合法的`明确无控制`（带依据、无标识、无条件），拒它的只能是作用域那一条 CHECK。
+	if _, err := pool.Exec(ctx,
+		`UPDATE parcel_shipment.acceptance_financial_control
+		    SET control_outcome = 'NOT_APPLICABLE', result_id = NULL, joint_pass_condition = NULL,
+		        basis_ref = 'CONTRACT-NO-CONTROL'
+		  WHERE tenant_id = 'tenant-1' AND shipment_request_id = 'REQ-1'`); err == nil {
+		t.Fatal("`明确无控制`带着占用作用域进了库——它根本没有占用")
+	}
+}
+
 // TestARestrictedItemRoundTripsItsAdoptedDisposition 证受限项的采用引用（失败处置 × 责任引用，ADR-0132 决定三，
 // 迁移 0021）随项落库并原样读回：读回的结果 `AwaitsAuthorizedDisposition` 为真——正文登了`进入授权处置`的受限
 // 控制在读面与决定那一步都不再按过渡口径拒绝；成立项两列为空、读回不带处置。

@@ -8,6 +8,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
 // supersededChainFixture 让委托停在受控补充之后：当前版本是 version-2，version-1 被取代。命令指名的是当前版本，
@@ -95,7 +96,7 @@ func TestASupersededVersionWithoutOccupationIsNotReleased(t *testing.T) {
 // 改写成了业务结果。
 func TestAFailedSupersededReleaseStopsTheChainBeforeTheNewVersionIsJudged(t *testing.T) {
 	fixture, command := supersededChainFixture(t, domain.FinancialControlHeld)
-	fixture.release.err = errors.New("settlement-accounting unavailable")
+	fixture.release.outcome = ports.ControlReleaseNotFormed
 
 	result, err := fixture.handler.Handle(context.Background(), command)
 	if err != nil {
@@ -130,11 +131,11 @@ func TestAFailedSupersededReleaseStopsTheChainBeforeTheNewVersionIsJudged(t *tes
 // 本方不记「放过没有」第二份事实。
 func TestARedrivenChainAsksForTheSameSupersededReleaseAgain(t *testing.T) {
 	fixture, command := supersededChainFixture(t, domain.FinancialControlHeld)
-	fixture.release.err = errors.New("settlement-accounting unavailable")
+	fixture.release.outcome = ports.ControlReleaseNotFormed
 	if _, err := fixture.handler.Handle(context.Background(), command); err != nil {
 		t.Fatalf("first round: %v", err)
 	}
-	fixture.release.err = nil
+	fixture.release.outcome = ports.ControlReleaseSettled
 
 	result, err := fixture.handler.Handle(context.Background(), command)
 	if err != nil {

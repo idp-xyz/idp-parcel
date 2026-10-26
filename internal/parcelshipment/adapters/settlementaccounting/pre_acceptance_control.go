@@ -15,8 +15,10 @@ import (
 )
 
 // ErrUntranslatableAnswer 表示某一侧交出了本适配器词汇表之外的内容——编程错误而不是业务
-// 答案，理由同 partycommercial 适配器的同名哨兵。
-var ErrUntranslatableAnswer = errors.New("parcel shipment settlementaccounting adapter: untranslatable answer")
+// 答案，理由同 partycommercial 适配器的同名哨兵。它包着端口的 ErrUntranslatableProviderAnswer：编排不导入本包，
+// 凭端口那一个哨兵认出这一格，不把它折成依赖不可用（ADR-0081 决定三）。
+var ErrUntranslatableAnswer = fmt.Errorf("parcel shipment settlementaccounting adapter: untranslatable answer: %w",
+	psports.ErrUntranslatableProviderAnswer)
 
 // 本适配器自有的停摆原因引用。都是消费方这一侧没形成的东西，不冠 SA- 前缀；提供方状态
 // 译过来的引用冠 SA-（见 assessmentFor）。
@@ -33,8 +35,9 @@ const (
 
 // ControlScope 是一次控制请求的资金坐标连同它的商业来路。两者装在一个值里而不是分两个
 // 方法取，是因为资金作用域本就是从那次商业解析的结算政策回显派生的：同出一次解析，就该
-// 同进同出。拆成两口会给出两次解析的机会，而「施加与释放两径同引用」正靠它们同源——
-// 一旦分头取，同源就退化成一条谁也没在证的约定。
+// 同进同出（ADR-0079 决定五）。拆成两口会给出两次解析的机会：施加时问控制策略用的回指与
+// 冻结落在哪个作用域，就可能出自两次解析。释放不取它，按施加时随结果存下的那一份作用域认领
+// （ADR-0282 决定四）。
 type ControlScope struct {
 	Settlement sadomain.SettlementScope
 	Resolution sadomain.CommercialResolutionReference
@@ -87,7 +90,7 @@ type PreAcceptanceControlAdapterDeps struct {
 }
 
 // NewPreAcceptanceControlAdapter 装配两侧。Scopes 允许为 nil：那是装配缺口，施加停在`未形成`、报
-// CONTROL_SCOPE_NOT_ASSEMBLED，释放同码交可重试错误。
+// CONTROL_SCOPE_NOT_ASSEMBLED。释放用不到它，只接释放半边的装配可以不接。
 func NewPreAcceptanceControlAdapter(deps PreAcceptanceControlAdapterDeps) *PreAcceptanceControlAdapter {
 	return &PreAcceptanceControlAdapter{
 		apply:   deps.Apply,
@@ -151,62 +154,90 @@ func (adapter *PreAcceptanceControlAdapter) ApplyPreAcceptanceFinancialControl(
 	if err != nil {
 		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("apply pre-acceptance control: %w", err)
 	}
-	return assessmentFor(request, answer)
+	return assessmentFor(request, controlScope.Settlement, answer)
 }
 
-// ReleasePreAcceptanceControl 执行释放半边。`无可释放`与`已释放`都交回 nil：两者之下都没有
-// 资金停留在占用状态，补偿要收口的正是这一点。读不回/存不回与作用域未配置都交回错误——
-// 决定那一侧会留下补偿续办引用，配置齐或依赖恢复后重放同一请求即可。
+// ReleasePreAcceptanceControl 执行释放半边：按施加时随结果存下的那份作用域认领，把提供方的封闭答复逐格译成端口的
+// 三格（ADR-0282 决定一、四）。
+//
+// 作用域不在这里重新推导。释放那一刻再从商业解析与账户登记推一次，政策回显或账户登记在施加之后变了，推出来的就是
+// 另一份作用域：提供方在那里找不到这一笔、答`无可释放`，本上下文当成已收口，原占用静默成孤儿。存量结果没存作用域
+// 时照样交零值给提供方，由它短路答`未受理`——不在这里替它先答，与 applyCommandFor 同一条纪律。
 func (adapter *PreAcceptanceControlAdapter) ReleasePreAcceptanceControl(
 	ctx context.Context,
 	request psports.ControlReleaseRequest,
-) error {
-	if adapter.scopes == nil {
-		return fmt.Errorf("release pre-acceptance control: %s", reasonScopeNotAssembled)
+) (psports.ControlReleaseAnswer, error) {
+	if adapter.release == nil {
+		return psports.ControlReleaseAnswer{}, errors.New(
+			"parcel shipment settlementaccounting adapter: release handler is not assembled")
 	}
-	controlScope, gap, err := adapter.scopes.FormControlScope(
-		ctx, request.Identity, request.ShipmentRequestID, request.SubmissionVersion)
-	if err != nil {
-		return fmt.Errorf("form control scope: %w", err)
-	}
-	switch gap {
-	case ControlScopeFormed:
-	case ControlScopeAccountNotRegistered:
-		return fmt.Errorf("release pre-acceptance control: %s", reasonScopeNotConfigured)
-	case ControlScopeSettlementPolicyNotAdopted:
-		return fmt.Errorf("release pre-acceptance control: %s", reasonScopeSettlementPolicyNotAdopted)
-	case ControlScopeNotAssembled:
-		return fmt.Errorf("release pre-acceptance control: %s", reasonScopeNotAssembled)
-	default:
-		return fmt.Errorf("%w: control scope gap %d", ErrUntranslatableAnswer, uint8(gap))
-	}
-
-	// 释放命令不带商业解析回指：释放不问控制策略，它按原请求身份在冻结账本上认领
-	// （ReleasePreAcceptanceControlCommand 的注释已把「不带额外入参」的理由写在那里）。
-	// 回指在这条路径上取到了却不用，是因为它与施加路径共用同一个作用域来源。
 	answer, err := adapter.release.Handle(ctx, saapplication.ReleasePreAcceptanceControlCommand{
 		TenantID:  tenantFor(request.Identity),
 		RequestID: releaseRequestIdentity(request.ControlResultID),
-		Scope:     controlScope.Settlement,
+		Scope:     settlementScopeFor(request.Scope),
 	})
 	if err != nil {
-		return fmt.Errorf("release pre-acceptance control: %w", err)
+		// 提供方没在自己的封闭集合里作答（刚找到的冻结释放不了：编程错误或时钟异常），它自己也写明不是调用方能据以
+		// 行动的业务答案。
+		return psports.ControlReleaseAnswer{}, fmt.Errorf("%w: release pre-acceptance control: %w",
+			ErrUntranslatableAnswer, err)
 	}
+	return releaseAnswerFor(answer)
+}
+
+// releaseAnswerFor 是提供方释放答复到端口三格的全函数，逐取值落点，default 报错不吸收（ADR-0025）。
+func releaseAnswerFor(answer saapplication.ReleasePreAcceptanceControlResult) (psports.ControlReleaseAnswer, error) {
 	switch answer.Outcome() {
 	case saapplication.ControlReleased, saapplication.NothingToRelease:
 		// `无可释放`不是失败：这个关联下没有资金停留在占用状态（控制从未形成，或只形成过
 		// 业务限制），补偿据此收口，而不是对着一笔不存在的占用无休止重试。
-		return nil
+		return psports.ControlReleaseAnswer{Outcome: psports.ControlReleaseSettled}, nil
 	case saapplication.ReleaseNotFormed:
-		return fmt.Errorf("release pre-acceptance control: %s", answer.NotFormedReason())
+		reason := answer.NotFormedReason().String()
+		if reason == "" {
+			return psports.ControlReleaseAnswer{}, fmt.Errorf("%w: release not-formed reason %d",
+				ErrUntranslatableAnswer, uint8(answer.NotFormedReason()))
+		}
+		return releaseAnswer(psports.ControlReleaseNotFormed, "SA-"+reason)
 	case saapplication.ReleaseRequestNotAccepted:
-		// 身份是本适配器译的，被提供方拒收说明翻译或调用方的引用坏了——不是一种可重试的
-		// 未决。这条判断建立在「控制请求标识只由本适配器铸造」上（controlRequestIdentity）；
-		// 若日后出现第二个铸造点，这格要重审。
-		return fmt.Errorf("%w: release request not accepted", ErrUntranslatableAnswer)
+		// 提供方在读任何账本之前就拒收了：身份或作用域立不起来。身份是本适配器译的、作用域是施加时存下的，被拒收说明
+		// 那一份引用坏了或根本没存下——重放同一请求得到同一个答复，不是一种可重试的未决。
+		return releaseAnswer(psports.ControlReleaseNotAccepted, "SA-"+answer.Outcome().String())
 	default:
-		return fmt.Errorf("%w: release outcome %d", ErrUntranslatableAnswer, answer.Outcome())
+		return psports.ControlReleaseAnswer{}, fmt.Errorf("%w: release outcome %d", ErrUntranslatableAnswer, answer.Outcome())
 	}
+}
+
+func releaseAnswer(outcome psports.ControlReleaseOutcome, label string) (psports.ControlReleaseAnswer, error) {
+	reason, err := psdomain.NewCheckReason(label)
+	if err != nil {
+		return psports.ControlReleaseAnswer{}, fmt.Errorf("%w: check reason: %v", ErrUntranslatableAnswer, err)
+	}
+	return psports.ControlReleaseAnswer{Outcome: outcome, Reason: reason}, nil
+}
+
+// settlementScopeFor 把存下的作用域译回提供方的值。没存下或译不动都交零值，由提供方短路答`未受理`。
+func settlementScopeFor(scope psdomain.OccupationScope) sadomain.SettlementScope {
+	if !scope.Recorded() {
+		return sadomain.SettlementScope{}
+	}
+	legalEntity, err := sadomain.NewLegalEntityReference(scope.LegalEntity())
+	if err != nil {
+		return sadomain.SettlementScope{}
+	}
+	account, err := sadomain.NewSettlementAccountID(scope.Account())
+	if err != nil {
+		return sadomain.SettlementScope{}
+	}
+	currency, err := sadomain.NewCurrencyCode(scope.Currency())
+	if err != nil {
+		return sadomain.SettlementScope{}
+	}
+	settlement, err := sadomain.NewSettlementScope(legalEntity, account, currency)
+	if err != nil {
+		return sadomain.SettlementScope{}
+	}
+	return settlement
 }
 
 // applyCommandFor 把消费方请求译成提供方命令。身份立不起来的部分译成零值交提供方短路作答
@@ -275,11 +306,12 @@ func controlAsOfFor(asOf psdomain.JudgmentAsOf) (sadomain.ControlAsOf, error) {
 // 不吸收（ADR-0025）。
 func assessmentFor(
 	request psports.FinancialControlRequest,
+	scope sadomain.SettlementScope,
 	answer saapplication.ApplyPreAcceptanceControlResult,
 ) (psports.PreAcceptanceControlAssessment, error) {
 	switch answer.Outcome() {
 	case saapplication.ControlApplied:
-		return appliedControlAssessment(request, answer)
+		return appliedControlAssessment(request, scope, answer)
 	case saapplication.ControlNotApplicable:
 		asOf, err := judgmentAsOfFor(answer.AsOf())
 		if err != nil {
@@ -374,8 +406,11 @@ func notFormedOutcomeFor(reason saapplication.NotFormedReason) (psports.PreAccep
 // CONTEXT 把这一步判给 parcel-shipment，判的是接受语言，所以住在领域层而不在适配器里）。
 //
 // 一项都没执行的`已执行`是阶段契约被打破；条件集外由领域拒绝，这里不先替它折。
+//
+// 施加用的那一份作用域随结果交回，由编排随结果存下：释放按它认领，不在释放那一刻重新推导（ADR-0282 决定四）。
 func appliedControlAssessment(
 	request psports.FinancialControlRequest,
+	scope sadomain.SettlementScope,
 	answer saapplication.ApplyPreAcceptanceControlResult,
 ) (psports.PreAcceptanceControlAssessment, error) {
 	executed := answer.ExecutedControls()
@@ -405,11 +440,18 @@ func appliedControlAssessment(
 		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("%w: control result ID: %v",
 			ErrUntranslatableAnswer, err)
 	}
+	occupationScope, err := psdomain.NewOccupationScope(
+		scope.LegalEntity().String(), scope.Account().String(), scope.Currency().String())
+	if err != nil {
+		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("%w: occupation scope: %v",
+			ErrUntranslatableAnswer, err)
+	}
 	result, err := psdomain.NewExecutedFinancialControlResult(psdomain.ExecutedFinancialControlSpec{
 		ResultID:  resultID,
 		Items:     items,
 		JointPass: jointPass,
 		AsOf:      asOf,
+		Scope:     occupationScope,
 	})
 	if err != nil {
 		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("%w: financial control result: %v",

@@ -668,8 +668,8 @@ type synSControlRelease struct{}
 func (synSControlRelease) ReleasePreAcceptanceControl(
 	_ context.Context,
 	_ psports.ControlReleaseRequest,
-) error {
-	return nil
+) (psports.ControlReleaseAnswer, error) {
+	return psports.ControlReleaseAnswer{Outcome: psports.ControlReleaseSettled}, nil
 }
 
 type synSSubmissionIdentities struct{}

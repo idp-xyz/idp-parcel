@@ -5,6 +5,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
@@ -1135,11 +1136,18 @@ type PreAcceptanceControlAssessment struct {
 	Reason  domain.CheckReason
 }
 
+// ErrUntranslatableProviderAnswer 是消费侧适配器把提供方的答复译不进本上下文端口封闭集合时交回的错误所包的
+// 哨兵：提供方答出了词汇表外的东西，或阶段契约被打破（刚施加的控制交回已释放的冻结之类）。
+//
+// 它与依赖调不通分开，是因为恢复动作相反：依赖会自己回来，重试是对的；同一请求重投得到的是同一份答复，折进
+// 依赖不可用会内部重试到失败预算耗尽，看起来像一直在等某个依赖（ADR-0081 决定三）。编排见到它不折成未决。
+var ErrUntranslatableProviderAnswer = errors.New("parcel shipment: provider answer is outside the port's closed set")
+
 // PreAcceptanceFinancialController 是 parcel-shipment 视角下的接受前财务控制。没有一个
 // 取值是接受决定，本上下文也不得在这里据其推导出一个。
 //
 // 依赖调不通仍作为错误返回。把它读成`明确无控制`正是用例禁止的默认放行：一次故障会因此
-// 变成一个看起来通过了的接受前控制。
+// 变成一个看起来通过了的接受前控制。答复译不进本端口的封闭集合时，错误包着 ErrUntranslatableProviderAnswer。
 type PreAcceptanceFinancialController interface {
 	ApplyPreAcceptanceFinancialControl(
 		ctx context.Context,
@@ -1147,21 +1155,101 @@ type PreAcceptanceFinancialController interface {
 	) (PreAcceptanceControlAssessment, error)
 }
 
-// ControlReleaseRequest 指名要释放哪一次接受前资金控制。它只携带原控制的业务关联，不带
-// 金额、账户或币种：释放哪一笔由 settlement-accounting 按原关联认领，冻结不属本上下文。
+// ControlReleaseRequest 指名要释放哪一次接受前资金控制。它只携带原控制的业务关联与施加时存下的那份作用域，
+// 不带金额：释放哪一笔、放多少由 settlement-accounting 按原关联认领，冻结不属本上下文。
+//
+// Scope 取控制结果上存下的那一份，不在释放时重新推导（ADR-0282 决定四）；存量结果没有，就交零值。
 type ControlReleaseRequest struct {
 	Identity          domain.SourceIdentity
 	ShipmentRequestID domain.ShipmentRequestID
 	SubmissionVersion domain.SubmissionVersionID
 	ControlResultID   domain.FinancialControlResultID
+	Scope             domain.OccupationScope
+}
+
+// ControlReleaseOutcome 是一次释放请求的答复在本上下文的落点，按调用方的恢复动作分三格（ADR-0029、ADR-0282
+// 决定一）：
+//
+//   - `已收口`：已释放，或这一关联下无可释放。没有资金停留在占用状态，补偿就此收口。
+//   - `可重试未形成`：账本读不回或存不回、依赖答不出。重放同一请求可能放得掉，照旧走补偿续办。
+//   - `确定未受理`：提供方拒收了这次请求（身份或作用域立不起来）。重放一万次也是同一个答复，补偿续办推不动它，
+//     要人来处理。
+//
+// 后两格必须分开：并成一格，确定的拒收就会被当成补偿续办或内部重试，永远收不了口。
+type ControlReleaseOutcome uint8
+
+const (
+	ControlReleaseOutcomeInvalid ControlReleaseOutcome = iota
+	ControlReleaseSettled
+	ControlReleaseNotFormed
+	ControlReleaseNotAccepted
+)
+
+func (outcome ControlReleaseOutcome) String() string {
+	switch outcome {
+	case ControlReleaseSettled:
+		return "SETTLED"
+	case ControlReleaseNotFormed:
+		return "NOT_FORMED"
+	case ControlReleaseNotAccepted:
+		return "NOT_ACCEPTED"
+	default:
+		return ""
+	}
+}
+
+// ControlReleaseAnswer 是一次释放请求的答复。Reason 是提供方给的稳定原因引用，非`已收口`时给出，本上下文原样
+// 记录、不重新解释。
+type ControlReleaseAnswer struct {
+	Outcome ControlReleaseOutcome
+	Reason  domain.CheckReason
 }
 
 // PreAcceptanceControlRelease 在接受确定未成立后按原关联请求解除资金控制。
 //
 // 它与 PreAcceptanceFinancialController 分开：施加控制由推进判断那一步发起，解除由形成决定
 // 那一步发起，合并成一个端口会让形成决定的编排依赖一个它根本不会调用的方法。
+//
+// 答复落在 ControlReleaseOutcome 的三格里，依赖答不出也在`可重试未形成`里答，不作错误。错误只在形不成三格之一时
+// 交回：提供方的答复译不进来（包着 ErrUntranslatableProviderAnswer），或释放口本身没装齐。两者都是确定性的，各路
+// 不把它当作一次可重试的放不掉（ADR-0282 决定一）。
 type PreAcceptanceControlRelease interface {
-	ReleasePreAcceptanceControl(ctx context.Context, request ControlReleaseRequest) error
+	ReleasePreAcceptanceControl(ctx context.Context, request ControlReleaseRequest) (ControlReleaseAnswer, error)
+}
+
+// ControlReleaseRefusal 是一笔释放确定未受理、待人处理的占用：哪一份委托的哪一版、哪一次控制、存下的作用域，以
+// 及提供方（或本上下文译不动答复时自己）给的原因。
+type ControlReleaseRefusal struct {
+	TenantID          domain.TenantID
+	CustomerAccountID domain.CustomerAccountID
+	ShipmentRequestID domain.ShipmentRequestID
+	SubmissionVersion domain.SubmissionVersionID
+	ControlResultID   domain.FinancialControlResultID
+	Scope             domain.OccupationScope
+	Reason            domain.CheckReason
+	RecordedAt        time.Time
+}
+
+type ControlReleaseRefusalSaveOutcome uint8
+
+const (
+	ControlReleaseRefusalSaveOutcomeInvalid ControlReleaseRefusalSaveOutcome = iota
+	ControlReleaseRefusalRecorded
+	// ControlReleaseRefusalAlreadyRecorded：这一笔占用已经在册。重放撤回、或暂停与撤回先后遇到同一笔，拒收的都是
+	// 同一笔占用，不是第二份。
+	ControlReleaseRefusalAlreadyRecorded
+)
+
+// ControlReleaseRefusalRegister 是释放未受理册（ADR-0282 决定二）：只追加，一笔占用一行。业务事实照常成立、不因
+// 释放回滚，释放这一侧落在这里交人处理，而不是留一条没有东西推得动的补偿续办引用。写口要环境事务：登记与
+// 那件业务事实同笔落地，事实提交了登记却没记下就丢了这一笔。
+type ControlReleaseRefusalRegister interface {
+	Record(ctx context.Context, refusal ControlReleaseRefusal) (ControlReleaseRefusalSaveOutcome, error)
+	ListByShipmentRequest(
+		ctx context.Context,
+		tenant domain.TenantID,
+		requestID domain.ShipmentRequestID,
+	) ([]ControlReleaseRefusal, error)
 }
 
 // ControlDispositionQuery 凭本轮已采用的商业解析回指策略正文：失败处置与责任引用按控制种类登记在闭包里

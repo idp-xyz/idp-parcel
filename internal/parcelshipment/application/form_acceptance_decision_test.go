@@ -490,7 +490,7 @@ func TestAnAcceptanceDoesNotReleaseTheFreeze(t *testing.T) {
 func TestAFailedReleaseKeepsTheRejectionAndLeavesCompensationPending(t *testing.T) {
 	fixture := newDecisionFixture(t)
 	fixture.judgments.reachability["parcel-2"] = domain.ReachabilityUnreachable
-	fixture.release.err = errors.New("settlement authority unavailable")
+	fixture.release.outcome = ports.ControlReleaseNotFormed
 
 	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
 	if err != nil {
@@ -912,6 +912,7 @@ type decisionFixture struct {
 	judgments    *recordedJudgmentsDouble
 	requests     *decidableRequestStore
 	release      *controlReleaseDouble
+	refusals     *controlReleaseRefusalDouble
 	recorder     *judgmentRequestStore
 	downstream   *decisionHandoffDouble
 	identities   *decisionIdentityFactory
@@ -938,6 +939,7 @@ func newDecisionFixture(t *testing.T) *decisionFixture {
 	}
 	value.requests = &decidableRequestStore{t: t}
 	value.release = &controlReleaseDouble{}
+	value.refusals = &controlReleaseRefusalDouble{}
 	value.recorder = &judgmentRequestStore{}
 	value.downstream = &decisionHandoffDouble{}
 	value.identities = &decisionIdentityFactory{t: t}
@@ -949,6 +951,7 @@ func newDecisionFixture(t *testing.T) *decisionFixture {
 		Judgments:    value.judgments,
 		Recorder:     value.recorder,
 		Release:      value.release,
+		Refusals:     value.refusals,
 		Downstream:   value.downstream,
 		Identities:   value.identities,
 		Clock:        fixedClock{at: handlerClockAt},
@@ -998,9 +1001,14 @@ type controlReleaseDouble struct {
 	// versions 按序留下每次释放指名的提交版本：被取代版本的释放与本版拒绝的释放走同一个端口，
 	// 只看计数分不出放的是哪一版。
 	versions []domain.SubmissionVersionID
-	err      error
-	// errFor 按提交版本让那一版的释放失败，压过 err：终局路径逐版放时，一版放不掉不该挡住其余各版。
-	errFor map[string]error
+	// scopes 按序留下每次释放交出的作用域：释放要按施加时存下的那一份认领（ADR-0282 决定四）。
+	scopes []domain.OccupationScope
+	// outcome 是各版释放的答复格，零值按`已收口`答。
+	outcome ports.ControlReleaseOutcome
+	// outcomeFor 按提交版本给答复格，压过 outcome：终局路径逐版放时，一版没收口不该挡住其余各版。
+	outcomeFor map[string]ports.ControlReleaseOutcome
+	// err 让端口形不成三格之一（答出了集合之外），压过两种答复格。
+	err error
 	// record 在场时把释放记进夹具的调用序，供断言「释放先于判断新版本」。
 	record func(string)
 }
@@ -1008,17 +1016,71 @@ type controlReleaseDouble struct {
 func (double *controlReleaseDouble) ReleasePreAcceptanceControl(
 	_ context.Context,
 	request ports.ControlReleaseRequest,
-) error {
+) (ports.ControlReleaseAnswer, error) {
 	if double.record != nil {
 		double.record("release-control")
 	}
 	double.calls++
 	double.controlResultID = request.ControlResultID.String()
 	double.versions = append(double.versions, request.SubmissionVersion)
-	if err, listed := double.errFor[request.SubmissionVersion.String()]; listed {
-		return err
+	double.scopes = append(double.scopes, request.Scope)
+	if double.err != nil {
+		return ports.ControlReleaseAnswer{}, double.err
 	}
-	return double.err
+	outcome := double.outcome
+	if listed, present := double.outcomeFor[request.SubmissionVersion.String()]; present {
+		outcome = listed
+	}
+	switch outcome {
+	case ports.ControlReleaseOutcomeInvalid, ports.ControlReleaseSettled:
+		return ports.ControlReleaseAnswer{Outcome: ports.ControlReleaseSettled}, nil
+	case ports.ControlReleaseNotFormed:
+		return ports.ControlReleaseAnswer{Outcome: outcome, Reason: checkReasonFor("SA-FREEZE_LEDGER_UNAVAILABLE")}, nil
+	default:
+		return ports.ControlReleaseAnswer{Outcome: outcome, Reason: checkReasonFor("SA-RELEASE_REQUEST_NOT_ACCEPTED")}, nil
+	}
+}
+
+// controlReleaseRefusalDouble 是释放未受理册的替身：留住每一笔登记，err 在场时写不进。同一笔占用（版本 × 控制结果）
+// 再登记答已有记录，与真库主键同一判法。
+type controlReleaseRefusalDouble struct {
+	recorded []ports.ControlReleaseRefusal
+	err      error
+}
+
+func (double *controlReleaseRefusalDouble) Record(
+	_ context.Context,
+	refusal ports.ControlReleaseRefusal,
+) (ports.ControlReleaseRefusalSaveOutcome, error) {
+	if double.err != nil {
+		return ports.ControlReleaseRefusalSaveOutcomeInvalid, double.err
+	}
+	for _, existing := range double.recorded {
+		if existing.SubmissionVersion == refusal.SubmissionVersion && existing.ControlResultID == refusal.ControlResultID {
+			return ports.ControlReleaseRefusalAlreadyRecorded, nil
+		}
+	}
+	double.recorded = append(double.recorded, refusal)
+	return ports.ControlReleaseRefusalRecorded, nil
+}
+
+func (double *controlReleaseRefusalDouble) ListByShipmentRequest(
+	context.Context,
+	domain.TenantID,
+	domain.ShipmentRequestID,
+) ([]ports.ControlReleaseRefusal, error) {
+	return append([]ports.ControlReleaseRefusal(nil), double.recorded...), nil
+}
+
+var _ ports.ControlReleaseRefusalRegister = (*controlReleaseRefusalDouble)(nil)
+
+// checkReasonFor 只给替身用：原因串是字面量，立不起来就是测试自己写错了。
+func checkReasonFor(label string) domain.CheckReason {
+	reason, err := domain.NewCheckReason(label)
+	if err != nil {
+		panic(err)
+	}
+	return reason
 }
 
 func (value *decisionFixture) command(t *testing.T) application.FormAcceptanceDecisionCommand {
@@ -1128,6 +1190,7 @@ func heldThenRestrictedControl(t *testing.T) domain.FinancialControlResult {
 		Items:     []domain.ControlItemResult{freeze, credit},
 		JointPass: domain.AllControlsPass,
 		AsOf:      formedAsOfFor(t, domain.FinancialControlJudgmentKind, controlPolicyFormedAsOf),
+		Scope:     occupationScopeOf(t, "SAC-1"),
 	})
 	if err != nil {
 		t.Fatalf("new executed financial control result: %v", err)

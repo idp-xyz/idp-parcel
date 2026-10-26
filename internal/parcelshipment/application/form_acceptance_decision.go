@@ -38,14 +38,15 @@ type FormAcceptanceDecisionCommand struct {
 }
 
 type FormAcceptanceDecisionResult struct {
-	outcome      AcceptanceDecisionOutcome
-	state        domain.ShipmentRequestState
-	decision     domain.AcceptanceDecision
-	hasDecision  bool
-	reason       JudgmentPendingReason
-	continuation domain.OwnershipContinuationReference
-	compensation domain.OwnershipContinuationReference
-	handoff      domain.OwnershipContinuationReference
+	outcome        AcceptanceDecisionOutcome
+	state          domain.ShipmentRequestState
+	decision       domain.AcceptanceDecision
+	hasDecision    bool
+	reason         JudgmentPendingReason
+	continuation   domain.OwnershipContinuationReference
+	compensation   domain.OwnershipContinuationReference
+	handoff        domain.OwnershipContinuationReference
+	releaseRefused bool
 }
 
 func (result FormAcceptanceDecisionResult) Outcome() AcceptanceDecisionOutcome {
@@ -80,6 +81,12 @@ func (result FormAcceptanceDecisionResult) CompensationReference() domain.Owners
 	return result.compensation
 }
 
+// ControlReleaseNotAccepted 报告接受已确定不成立的那一版（拒绝已成立，或已停进`等待受控补充`）随附释放里有一笔提供方
+// 确定不受理，已记进释放未受理册待人处理（ADR-0282 决定二）。决定与暂停都不因它回滚。
+func (result FormAcceptanceDecisionResult) ControlReleaseNotAccepted() bool {
+	return result.releaseRefused
+}
+
 // DecisionHandoffReference 只在决定已经成立、而它的发布意图没能确定交出时给出。与
 // CompensationReference 平行，也同样与 ContinuationReference 分开：三者续办的分别是发布、
 // 补偿与尚未形成的决定，合成一个会让调用方分不清该重放哪一件（`AT-PS-013`）。
@@ -97,9 +104,11 @@ type FormAcceptanceDecisionDeps struct {
 	Judgments    ports.RecordedJudgmentReader
 	Recorder     ports.AcceptanceJudgmentRecorder
 	Release      ports.PreAcceptanceControlRelease
-	Downstream   ports.AcceptanceDecisionHandoff
-	Identities   ports.AcceptanceDecisionIdentity
-	Clock        ports.Clock
+	// Refusals 是释放未受理册：拒绝或停进`等待受控补充`之后随附释放被提供方确定不受理时记在这里交人处理。
+	Refusals   ports.ControlReleaseRefusalRegister
+	Downstream ports.AcceptanceDecisionHandoff
+	Identities ports.AcceptanceDecisionIdentity
+	Clock      ports.Clock
 }
 
 type FormAcceptanceDecisionHandler struct {
@@ -253,13 +262,15 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 		return handler.undecided(ctx, command, reason, request.State()), nil
 	}
 
+	compensation, refused := handler.releaseIfRejected(ctx, command, decided, recorded.FinancialControl)
 	return FormAcceptanceDecisionResult{
-		outcome:      AcceptanceDecided,
-		state:        decided.State(),
-		decision:     decision,
-		hasDecision:  true,
-		compensation: handler.releaseIfRejected(ctx, command, decided, recorded.FinancialControl),
-		handoff:      handler.handOffDecision(ctx, command, decided),
+		outcome:        AcceptanceDecided,
+		state:          decided.State(),
+		decision:       decision,
+		hasDecision:    true,
+		compensation:   compensation,
+		handoff:        handler.handOffDecision(ctx, command, decided),
+		releaseRefused: refused,
 	}, nil
 }
 
@@ -284,7 +295,8 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 // 相同：那一版只由新提交版本的信封续办、不会再被判（ADR-0106 决定三），占着客户的资金或额度等一份不会到来的接受
 // 没有依据；Decide 自己停进这一格与授权处置选`交客户补充`转进这一格，停住的版本是同一种处境。放在落库之后：暂停
 // 没落库时这一轮整体回滚重投，此刻放掉就是在一份不知道停没停住的版本上宣告它不会再被判。放不掉不撤销暂停——
-// 暂停已经落库、原因照旧交回，与拒绝那一支同一条理由。这一路的补偿引用只交在本结果上：接受链不透出它，也没有
+// 暂停已经落库、原因照旧交回，与拒绝那一支同一条理由；提供方确定不受理的记进释放未受理册，暂停同样照旧
+// （ADR-0282 决定二）。这一路的补偿引用只交在本结果上：接受链不透出它，也没有
 // 持久的待补偿记录，没有东西会按它重放。那一笔的兜底是另两条路：客户补件之后，接受链开头放被取代各版那一步对同
 // 一笔再请求一次；客户撤回时，撤回逐版释放。两者都按原关联请求，提供方按幂等答原释放。
 //
@@ -312,7 +324,8 @@ func (handler *FormAcceptanceDecisionHandler) pauseForExternalResume(
 	paused := handler.undecided(ctx, command, waiting, decided.State())
 	if waiting == CustomerSupplementPending {
 		scope := handler.occupationRelease(command)
-		paused.compensation = scope.reference(scope.releaseFormed(ctx, command.SubmissionVersion, control))
+		paused.compensation, paused.releaseRefused = scope.settle(ctx,
+			scope.releaseFormed(ctx, command.SubmissionVersion, control))
 	}
 	return paused, nil
 }
@@ -497,20 +510,21 @@ func (handler *FormAcceptanceDecisionHandler) revalidateReachability(
 // 分布式事务」。
 //
 // 本版那一笔用本轮已读回的控制结果；这份委托的其余各版随后逐版读回再放。拒绝是终局，之后再没有轮次去放被取代
-// 那一版：接受链开头本轮已放过一次时，这里再请求一次，提供方按幂等答原释放。
+// 那一版：接受链开头本轮已放过一次时，这里再请求一次，提供方按幂等答原释放。提供方确定不受理的记进释放未受理册，
+// 拒绝不回滚（ADR-0282 决定二）——这一步跑在接受链那一轮里，上抛会让已成立的拒绝随整轮回滚、重投到失败预算耗尽。
 func (handler *FormAcceptanceDecisionHandler) releaseIfRejected(
 	ctx context.Context,
 	command FormAcceptanceDecisionCommand,
 	decided domain.ShipmentRequest,
 	control domain.FinancialControlResult,
-) domain.OwnershipContinuationReference {
+) (domain.OwnershipContinuationReference, bool) {
 	if decided.State() != domain.ShipmentRequestRejected {
-		return domain.OwnershipContinuationReference{}
+		return domain.OwnershipContinuationReference{}, false
 	}
 	scope := handler.occupationRelease(command)
-	gap := scope.releaseFormed(ctx, command.SubmissionVersion, control)
-	gap = gap.or(scope.releaseRecorded(ctx, versionsOtherThan(decided, command.SubmissionVersion)))
-	return scope.reference(gap)
+	outcome := scope.releaseFormed(ctx, command.SubmissionVersion, control)
+	outcome = outcome.and(scope.releaseRecorded(ctx, versionsOtherThan(decided, command.SubmissionVersion)))
+	return scope.settle(ctx, outcome)
 }
 
 func (handler *FormAcceptanceDecisionHandler) occupationRelease(command FormAcceptanceDecisionCommand) occupationRelease {
@@ -519,6 +533,8 @@ func (handler *FormAcceptanceDecisionHandler) occupationRelease(command FormAcce
 		release:   handler.deps.Release,
 		identity:  command.Identity,
 		request:   command.ShipmentRequestID,
+		refusals:  handler.deps.Refusals,
+		clock:     handler.deps.Clock,
 	}
 }
 

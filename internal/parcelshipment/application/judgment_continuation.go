@@ -13,7 +13,7 @@ import (
 
 // JudgmentPendingReason 指名本轮为何有一件事没有办完：多数取值说的是接受判断任务没能推进，
 // `ControlReleasePending` 说的是一份接受已确定不成立的版本（决定已经成立，或已被新提交版本取代）
-// 占下的资金没能确定放掉。两类共用一个封闭集合，是因为续办引用由「原因 + 范围」派生，原因分成
+// 占下的资金没能确定放掉、重放可能放得掉。提供方确定不受理的释放不在这一格（ADR-0282 决定一、二）。两类共用一个封闭集合，是因为续办引用由「原因 + 范围」派生，原因分成
 // 两套会让同一范围派生出两族互不相认的引用。
 //
 // 它是封闭集合而非自由文本，这样未决才能按依赖阶段分类统计——用例的可观测性一节明禁用自由
@@ -170,6 +170,12 @@ const (
 	RejectionAuthorityApplicabilityConflict
 	WithdrawalAuthorityApplicabilityConflict
 	SourceDataAmendmentAuthorityApplicabilityConflict
+
+	// ControlReleaseRefusalNotRecorded 说的是一笔释放提供方确定不受理、本该记进释放未受理册交人处理，册却没记下（没接上
+	// 或写不进）。它与 ControlReleasePending 同类——都是接受已确定不成立的那一版留下的随附事项——而分格：那一格是
+	// 放不掉、重放可能放得掉；这一格是拒收已成定局、重放只为把它记进册。续办引用由原因派生，共用会让运维拿一条引用
+	// 查回来另一种缺口。只出现在补偿引用里：接受链开头那一步遇到拒收不记册，响亮停下（ADR-0282 决定三）。
+	ControlReleaseRefusalNotRecorded
 
 	// judgmentPendingReasonEnd 不是一个原因，是封闭集合的上界，**必须永远排在最后**。
 	//
@@ -367,6 +373,8 @@ func (reason JudgmentPendingReason) String() string {
 		return "WITHDRAWAL_AUTHORITY_APPLICABILITY_CONFLICT"
 	case SourceDataAmendmentAuthorityApplicabilityConflict:
 		return "SOURCE_DATA_AMENDMENT_AUTHORITY_APPLICABILITY_CONFLICT"
+	case ControlReleaseRefusalNotRecorded:
+		return "CONTROL_RELEASE_REFUSAL_NOT_RECORDED"
 	default:
 		return ""
 	}

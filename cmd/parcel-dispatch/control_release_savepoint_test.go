@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -21,18 +20,26 @@ import (
 // superseded_version_control_release_test.go；「中毒」的释放口在调用方事务里执行 `SELECT 1/0`，像一本读写不动的账本那样，
 // 把那一笔事务打进中止态。
 
-// synRPoisonedRelease 在调用方事务里执行一条必然失败的 SQL，把错误交回。
+// synRPoisonedRelease 在调用方事务里执行一条必然失败的 SQL，再像 settlement-accounting 的释放编排那样把它折成`可重试未形成`
+// 正常交回——事务却已中止。
 type synRPoisonedRelease struct{ db *bentopg.DB }
 
-func (poison synRPoisonedRelease) ReleasePreAcceptanceControl(ctx context.Context, _ psports.ControlReleaseRequest) error {
+func (poison synRPoisonedRelease) ReleasePreAcceptanceControl(
+	ctx context.Context,
+	_ psports.ControlReleaseRequest,
+) (psports.ControlReleaseAnswer, error) {
 	executor, err := poison.db.RequireExecutor(ctx)
 	if err != nil {
-		return err
+		return psports.ControlReleaseAnswer{}, err
 	}
-	if _, err := executor.Exec(ctx, `SELECT 1/0`); err != nil {
-		return fmt.Errorf("settlement-accounting ledger: %w", err)
+	if _, err := executor.Exec(ctx, `SELECT 1/0`); err == nil {
+		return psports.ControlReleaseAnswer{}, errors.New("SELECT 1/0 竟然成功了")
 	}
-	return errors.New("SELECT 1/0 竟然成功了")
+	reason, err := psdomain.NewCheckReason("SA-FREEZE_LEDGER_UNAVAILABLE")
+	if err != nil {
+		return psports.ControlReleaseAnswer{}, err
+	}
+	return psports.ControlReleaseAnswer{Outcome: psports.ControlReleaseNotFormed, Reason: reason}, nil
 }
 
 var _ psports.PreAcceptanceControlRelease = synRPoisonedRelease{}
@@ -155,8 +162,8 @@ func TestAPoisonedWithdrawalReleaseStillCommitsTheWithdrawal(t *testing.T) {
 }
 
 // Covers: 停在`等待受控补充`、占用已随暂停释放的那一版若被再驱一拍，链在形成决定之前就停：控制那一步按同一请求身份重施加，
-// settlement-accounting 交回那笔已释放的冻结，PS 侧译不出它，停在接受前财务控制、原因`财务控制不可用`；不会在一笔已释放的
-// 冻结上形成接受。
+// settlement-accounting 交回那笔已释放的冻结，PS 侧译不出它，财务控制那一步响亮上抛（票 code/71「控制端口同此」，ADR-0081
+// 决定三）——不折成`财务控制不可用`内部重试到失败预算耗尽，也不会在一笔已释放的冻结上形成接受；整轮回滚，等待态与冻结原样。
 func TestARedrivenPausedVersionStopsAtTheReleasedFreeze(t *testing.T) {
 	fixture, release, adapter := poisonedFixture(t)
 	ctx := t.Context()
@@ -169,7 +176,7 @@ func TestARedrivenPausedVersionStopsAtTheReleasedFreeze(t *testing.T) {
 	}
 
 	var result psapplication.AdvanceAcceptanceChainResult
-	mustWithinTX(t, fixture.transactor, ctx, func(txCtx context.Context) error {
+	err := fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
 		var err error
 		result, err = fixture.chain.Handle(txCtx, psapplication.AdvanceAcceptanceChainCommand{
 			Identity:          fixture.identity,
@@ -179,14 +186,9 @@ func TestARedrivenPausedVersionStopsAtTheReleasedFreeze(t *testing.T) {
 		})
 		return err
 	})
-	if result.Outcome() != psapplication.AcceptanceChainUndecided ||
-		result.Stage() != psapplication.AcceptanceChainFinancialControlStage ||
-		result.PendingReason() != psapplication.FinancialControlUnavailable {
-		t.Fatalf("outcome = %q stage = %q reason = %q, want UNDECIDED / FINANCIAL_CONTROL_JUDGMENT / FINANCIAL_CONTROL_UNAVAILABLE",
-			result.Outcome(), result.Stage(), result.PendingReason())
-	}
-	if result.ResumePath() != psdomain.ResumeByInternalRetry {
-		t.Fatalf("resume path = %q, want INTERNAL_RETRY", result.ResumePath())
+	if !errors.Is(err, psports.ErrUntranslatableProviderAnswer) {
+		t.Fatalf("err = %v（outcome = %q stage = %q reason = %q）, want 包着 ErrUntranslatableProviderAnswer 的错误——译不动的答复"+
+			"折成内部重试会一直重投到失败预算耗尽", err, result.Outcome(), result.Stage(), result.PendingReason())
 	}
 	after := fixture.mustLoadRequest(t, ctx)
 	if after.State() != psdomain.ShipmentRequestSubmitted {

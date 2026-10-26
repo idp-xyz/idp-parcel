@@ -49,13 +49,14 @@ type RejectShipmentRequestCommand struct {
 }
 
 type RejectShipmentRequestResult struct {
-	outcome      ActiveRejectionOutcome
-	state        domain.ShipmentRequestState
-	decision     domain.AcceptanceDecision
-	hasDecision  bool
-	reason       JudgmentPendingReason
-	continuation domain.OwnershipContinuationReference
-	compensation domain.OwnershipContinuationReference
+	outcome        ActiveRejectionOutcome
+	state          domain.ShipmentRequestState
+	decision       domain.AcceptanceDecision
+	hasDecision    bool
+	reason         JudgmentPendingReason
+	continuation   domain.OwnershipContinuationReference
+	compensation   domain.OwnershipContinuationReference
+	releaseRefused bool
 }
 
 func (result RejectShipmentRequestResult) Outcome() ActiveRejectionOutcome {
@@ -84,12 +85,20 @@ func (result RejectShipmentRequestResult) CompensationReference() domain.Ownersh
 	return result.compensation
 }
 
+// ControlReleaseNotAccepted 报告拒绝已经成立、而随附释放里有一笔提供方确定不受理，已记进释放未受理册待人处理
+// （ADR-0282 决定二）。理由同 WithdrawShipmentRequestResult 的同名方法。
+func (result RejectShipmentRequestResult) ControlReleaseNotAccepted() bool {
+	return result.releaseRefused
+}
+
 type RejectShipmentRequestDeps struct {
 	Requests   ports.ShipmentRequestRepository
 	Authorizer ports.ActiveRejectionAuthorizer
 	Judgments  ports.RecordedJudgmentReader
 	Recorder   ports.AcceptanceJudgmentRecorder
 	Release    ports.PreAcceptanceControlRelease
+	// Refusals 是释放未受理册：随附释放被提供方确定不受理时记在这里交人处理。
+	Refusals   ports.ControlReleaseRefusalRegister
 	Identities ports.AcceptanceDecisionIdentity
 	Clock      ports.Clock
 }
@@ -190,12 +199,14 @@ func (handler *RejectShipmentRequestHandler) Handle(
 	}
 
 	decision, _ := rejected.AcceptanceDecision()
+	compensation, refused := handler.releaseOccupation(ctx, command, rejected)
 	return RejectShipmentRequestResult{
-		outcome:      ActiveRejectionFormed,
-		state:        rejected.State(),
-		decision:     decision,
-		hasDecision:  true,
-		compensation: handler.releaseOccupation(ctx, command, rejected),
+		outcome:        ActiveRejectionFormed,
+		state:          rejected.State(),
+		decision:       decision,
+		hasDecision:    true,
+		compensation:   compensation,
+		releaseRefused: refused,
 	}, nil
 }
 
@@ -223,19 +234,21 @@ func (handler *RejectShipmentRequestHandler) inadmissible(
 // 成立」，冻结不能因为拒绝出自运营之手就留在原处占着货主的钱。
 //
 // 放的是这份委托各版已成立的占用，理由同 WithdrawShipmentRequestHandler.releaseOccupation：拒绝是终局，之后再没有
-// 轮次去放被取代那一版。释放没收口时交回补偿续办引用，由续办去补。
+// 轮次去放被取代那一版。放不掉交回补偿续办引用，由续办去补；提供方确定不受理的记进释放未受理册，拒绝不回滚。
 func (handler *RejectShipmentRequestHandler) releaseOccupation(
 	ctx context.Context,
 	command RejectShipmentRequestCommand,
 	request domain.ShipmentRequest,
-) domain.OwnershipContinuationReference {
+) (domain.OwnershipContinuationReference, bool) {
 	scope := occupationRelease{
 		judgments: handler.deps.Judgments,
 		release:   handler.deps.Release,
 		identity:  command.Identity,
 		request:   command.ShipmentRequestID,
+		refusals:  handler.deps.Refusals,
+		clock:     handler.deps.Clock,
 	}
-	return scope.reference(scope.releaseEvery(ctx, request, command.SubmissionVersion))
+	return scope.settle(ctx, scope.releaseEvery(ctx, request, command.SubmissionVersion))
 }
 
 // undecided 交回本轮的未决结果。state 由调用点给出而不是在这里假定`已提交`：未决要交回的是

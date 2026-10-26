@@ -3,7 +3,6 @@ package settlementaccounting_test
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -77,13 +76,16 @@ type ledgerDouble struct {
 	ledger  *sadomain.FreezeLedger
 	loadErr error
 	saveErr error
+	// scopes 按序留下每次读账本时问的作用域：释放要在施加时那一份作用域上认领，替身的账本不分作用域，只能从问法上看。
+	scopes []sadomain.SettlementScope
 }
 
 func (double *ledgerDouble) LoadForScope(
 	_ context.Context,
 	_ sadomain.TenantID,
-	_ sadomain.SettlementScope,
+	scope sadomain.SettlementScope,
 ) (*sadomain.FreezeLedger, error) {
+	double.scopes = append(double.scopes, scope)
 	if double.loadErr != nil {
 		return nil, double.loadErr
 	}
@@ -1206,8 +1208,8 @@ func (double failingRatioBaseDouble) LoadCreditRatioBase(
 }
 
 // Covers: UC-PS-005/UC-PS-001 的释放补偿经适配器按原关联认领——本上下文记下的结果标识
-// 译回提供方的控制请求身份，原冻结被释放；`无可释放`不是失败，补偿据此收口（AT-PS-074
-// 的 SA 半边）；读不回是可重试错误，补偿续办留在决定那一侧。
+// 译回提供方的控制请求身份，原冻结被释放、答`已收口`；`无可释放`同样是`已收口`，补偿据此收口（AT-PS-074
+// 的 SA 半边）；账本读不回是`可重试未形成`，带提供方的原因，不是错误（ADR-0282 决定一）。
 func TestAReleaseByTheRecordedResultIdentityFreesTheOriginalFreeze(t *testing.T) {
 	fixture := newControlFixture(t)
 	assessment, err := fixture.adapter.ApplyPreAcceptanceFinancialControl(context.Background(), fixture.request(t))
@@ -1215,15 +1217,10 @@ func TestAReleaseByTheRecordedResultIdentityFreesTheOriginalFreeze(t *testing.T)
 		t.Fatalf("apply: %v", err)
 	}
 
-	request := fixture.request(t)
-	release := psports.ControlReleaseRequest{
-		Identity:          request.Identity,
-		ShipmentRequestID: request.ShipmentRequestID,
-		SubmissionVersion: request.SubmissionVersion,
-		ControlResultID:   assessment.Result.ResultID(),
-	}
-	if err := fixture.adapter.ReleasePreAcceptanceControl(context.Background(), release); err != nil {
-		t.Fatalf("release pre-acceptance control: %v", err)
+	release := releaseRequestFor(t, fixture, assessment.Result)
+	answer, err := fixture.adapter.ReleasePreAcceptanceControl(context.Background(), release)
+	if err != nil || answer.Outcome != psports.ControlReleaseSettled {
+		t.Fatalf("release = %+v err = %v, want SETTLED", answer, err)
 	}
 
 	requestID := value(t, sadomain.NewControlRequestID, "request-1/version-1")
@@ -1232,84 +1229,136 @@ func TestAReleaseByTheRecordedResultIdentityFreesTheOriginalFreeze(t *testing.T)
 		t.Fatalf("freeze = %#v found = %v, want the original freeze RELEASED", freeze, found)
 	}
 
-	t.Run("nothing to release is not an error", func(t *testing.T) {
+	t.Run("nothing to release is settled", func(t *testing.T) {
 		fresh := newControlFixture(t)
-		if err := fresh.adapter.ReleasePreAcceptanceControl(context.Background(), release); err != nil {
-			t.Fatalf("release with nothing frozen: %v——对着一笔不存在的占用报错，补偿会无休止重试", err)
+		answer, err := fresh.adapter.ReleasePreAcceptanceControl(context.Background(), release)
+		if err != nil || answer.Outcome != psports.ControlReleaseSettled {
+			t.Fatalf("release with nothing frozen = %+v err = %v——对着一笔不存在的占用不收口，补偿会无休止重试", answer, err)
 		}
 	})
 
 	t.Run("an unreachable ledger keeps the release retryable", func(t *testing.T) {
 		broken := newControlFixture(t)
 		broken.ledger.loadErr = errors.New("ledger unavailable")
-		if err := broken.adapter.ReleasePreAcceptanceControl(context.Background(), release); err == nil {
-			t.Fatal("账本读不回却答成功，补偿会按一笔其实还占着的资金收口")
+		answer, err := broken.adapter.ReleasePreAcceptanceControl(context.Background(), release)
+		if err != nil {
+			t.Fatalf("账本读不回答成了错误 %v——依赖答不出在`可重试未形成`里答", err)
+		}
+		if answer.Outcome != psports.ControlReleaseNotFormed || answer.Reason.String() != "SA-FREEZE_LEDGER_UNAVAILABLE" {
+			t.Fatalf("answer = %+v, want NOT_FORMED / SA-FREEZE_LEDGER_UNAVAILABLE", answer)
 		}
 	})
 }
 
-// Covers: 释放那一径作用域没形成时按缺口报码、交可重试错误，不去账本上认领（票 routing-first-cut/19 增量复评 Spec ②、
-// Standards ③）：装配缺口报 CONTROL_SCOPE_NOT_ASSEMBLED，与账户没登记的 CONTROL_SCOPE_NOT_CONFIGURED 是两个码——只接释放
-// 半边、留空作用域源的装配走得到的正是前者，借后者就是一个码落进两格。
-func TestAReleaseWithoutAFormedScopeNamesItsGapAndClaimsNothing(t *testing.T) {
-	cases := map[string]struct {
-		arrange func(*controlFixture) *adapter.PreAcceptanceControlAdapter
-		want    string
-	}{
-		"no scope source": {
-			arrange: func(fixture *controlFixture) *adapter.PreAcceptanceControlAdapter {
-				return adapter.NewPreAcceptanceControlAdapter(adapter.PreAcceptanceControlAdapterDeps{
-					Release: saapplication.NewReleasePreAcceptanceControlHandler(fixture.ledger,
-						&exposureLedgerDouble{ledger: sadomain.NewCreditExposureLedger()}, scopeLockDouble{}, fixedClock{at: controlledAt.Add(time.Hour)}),
-				})
-			},
-			want: "CONTROL_SCOPE_NOT_ASSEMBLED",
-		},
-		"scope source halves not assembled": {
-			arrange: func(fixture *controlFixture) *adapter.PreAcceptanceControlAdapter {
-				fixture.scopes.gap = adapter.ControlScopeNotAssembled
-				return fixture.adapter
-			},
-			want: "CONTROL_SCOPE_NOT_ASSEMBLED",
-		},
-		"account not registered": {
-			arrange: func(fixture *controlFixture) *adapter.PreAcceptanceControlAdapter {
-				fixture.scopes.gap = adapter.ControlScopeAccountNotRegistered
-				return fixture.adapter
-			},
-			want: "CONTROL_SCOPE_NOT_CONFIGURED",
-		},
-		"resolution adopted no settlement policy": {
-			arrange: func(fixture *controlFixture) *adapter.PreAcceptanceControlAdapter {
-				fixture.scopes.gap = adapter.ControlScopeSettlementPolicyNotAdopted
-				return fixture.adapter
-			},
-			want: "CONTROL_SCOPE_SETTLEMENT_POLICY_NOT_ADOPTED",
-		},
+// releaseRequestFor 按一份已形成的控制结果装释放请求：结果标识与存下的作用域都取结果自己的。
+func releaseRequestFor(t *testing.T, fixture *controlFixture, result psdomain.FinancialControlResult) psports.ControlReleaseRequest {
+	t.Helper()
+	request := fixture.request(t)
+	return psports.ControlReleaseRequest{
+		Identity:          request.Identity,
+		ShipmentRequestID: request.ShipmentRequestID,
+		SubmissionVersion: request.SubmissionVersion,
+		ControlResultID:   result.ResultID(),
+		Scope:             result.Scope(),
 	}
-	for name, testCase := range cases {
+}
+
+// Covers: ADR-0282 决定四——施加用的那一份作用域随结果交回，三段与提供方冻结所在的作用域逐段相同。
+func TestAnAppliedControlCarriesTheScopeItOccupied(t *testing.T) {
+	fixture := newControlFixture(t)
+	assessment, err := fixture.adapter.ApplyPreAcceptanceFinancialControl(context.Background(), fixture.request(t))
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	scope := assessment.Result.Scope()
+	want := settlementScope(t)
+	if !scope.Recorded() || scope.LegalEntity() != want.LegalEntity().String() ||
+		scope.Account() != want.Account().String() || scope.Currency() != want.Currency().String() {
+		t.Fatalf("结果上的作用域 = %+v, want 施加时那一份 %v/%v/%v", scope,
+			want.LegalEntity(), want.Account(), want.Currency())
+	}
+}
+
+// Covers: ADR-0282 决定四；票 code/71 风险一节（评审 N6）——释放按施加时存下的那一份作用域认领，不在释放时问作用域源。
+// 施加之后作用域源变了（这里是答不出、换了一份账户两种），释放照样在原作用域上放掉原冻结；现查的话，前者放不了，
+// 后者去另一个作用域认领、答无可释放，原占用静默成孤儿。
+func TestAReleaseClaimsInTheScopeRecordedAtApplyTime(t *testing.T) {
+	for name, drift := range map[string]func(*testing.T, *controlFixture){
+		"作用域源答不出": func(_ *testing.T, fixture *controlFixture) {
+			fixture.scopes.gap = adapter.ControlScopeNotAssembled
+		},
+		"账户换了一份": func(t *testing.T, fixture *controlFixture) {
+			moved, err := sadomain.NewSettlementScope(
+				value(t, sadomain.NewLegalEntityReference, "SYN-LEGAL-ENTITY-MOVED"),
+				value(t, sadomain.NewSettlementAccountID, "SYN-ACCOUNT-MOVED"),
+				value(t, sadomain.NewCurrencyCode, "USD"))
+			if err != nil {
+				t.Fatalf("new settlement scope: %v", err)
+			}
+			fixture.scopes.scope.Settlement = moved
+		},
+	} {
 		t.Run(name, func(t *testing.T) {
 			fixture := newControlFixture(t)
 			assessment, err := fixture.adapter.ApplyPreAcceptanceFinancialControl(context.Background(), fixture.request(t))
 			if err != nil {
 				t.Fatalf("apply: %v", err)
 			}
-			request := fixture.request(t)
-			release := psports.ControlReleaseRequest{
-				Identity:          request.Identity,
-				ShipmentRequestID: request.ShipmentRequestID,
-				SubmissionVersion: request.SubmissionVersion,
-				ControlResultID:   assessment.Result.ResultID(),
-			}
+			drift(t, fixture)
+			fixture.ledger.scopes = nil
 
-			err = testCase.arrange(fixture).ReleasePreAcceptanceControl(context.Background(), release)
-			if err == nil || !strings.Contains(err.Error(), testCase.want) || errors.Is(err, adapter.ErrUntranslatableAnswer) {
-				t.Fatalf("err = %v, 想要报 %s 的可重试错误", err, testCase.want)
+			answer, err := fixture.adapter.ReleasePreAcceptanceControl(context.Background(),
+				releaseRequestFor(t, fixture, assessment.Result))
+			if err != nil || answer.Outcome != psports.ControlReleaseSettled {
+				t.Fatalf("release = %+v err = %v, want SETTLED", answer, err)
+			}
+			if len(fixture.ledger.scopes) == 0 || fixture.ledger.scopes[0] != settlementScope(t) {
+				t.Fatalf("释放读账本问的作用域 = %v, want 施加时那一份 %v", fixture.ledger.scopes, settlementScope(t))
 			}
 			freeze, found := fixture.ledger.ledger.FindByRequest(value(t, sadomain.NewControlRequestID, "request-1/version-1"))
-			if !found || freeze.Status() != sadomain.FreezeHeld {
-				t.Fatalf("freeze = %#v found = %v, 想要作用域没形成时原冻结原样占着", freeze, found)
+			if !found || freeze.Status() != sadomain.FreezeReleased {
+				t.Fatalf("freeze = %#v found = %v, want 原冻结已释放", freeze, found)
 			}
 		})
+	}
+}
+
+// Covers: ADR-0282 决定一、四——没存下作用域的存量结果，适配器照样交零值作用域给提供方，由它短路答`未受理`，译成
+// `确定未受理`、带提供方的原因；不去账本上认领，原冻结原样占着、等人处理。
+func TestAReleaseWithoutARecordedScopeIsNotAccepted(t *testing.T) {
+	fixture := newControlFixture(t)
+	assessment, err := fixture.adapter.ApplyPreAcceptanceFinancialControl(context.Background(), fixture.request(t))
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	release := releaseRequestFor(t, fixture, assessment.Result)
+	release.Scope = psdomain.OccupationScope{}
+	fixture.ledger.scopes = nil
+
+	answer, err := fixture.adapter.ReleasePreAcceptanceControl(context.Background(), release)
+	if err != nil {
+		t.Fatalf("release: %v——提供方的拒收是封闭集合里的一格，不是错误", err)
+	}
+	if answer.Outcome != psports.ControlReleaseNotAccepted || answer.Reason.String() != "SA-RELEASE_REQUEST_NOT_ACCEPTED" {
+		t.Fatalf("answer = %+v, want NOT_ACCEPTED / SA-RELEASE_REQUEST_NOT_ACCEPTED", answer)
+	}
+	if len(fixture.ledger.scopes) != 0 {
+		t.Fatalf("拒收前读了账本 %v", fixture.ledger.scopes)
+	}
+	freeze, found := fixture.ledger.ledger.FindByRequest(value(t, sadomain.NewControlRequestID, "request-1/version-1"))
+	if !found || freeze.Status() != sadomain.FreezeHeld {
+		t.Fatalf("freeze = %#v found = %v, want 原冻结原样占着", freeze, found)
+	}
+}
+
+// Covers: 票 code/71「控制端口同此」——译不动的答复交回的错误包着端口的 ErrUntranslatableProviderAnswer，编排凭它认出这一格、
+// 响亮上抛，不折成依赖不可用；本包自己的 ErrUntranslatableAnswer 照旧认得出。
+func TestAnUntranslatableControlAnswerCarriesThePortSentinel(t *testing.T) {
+	fixture := newControlFixture(t)
+	fixture.scopes.gap = adapter.ControlScopeGap(99)
+
+	_, err := fixture.adapter.ApplyPreAcceptanceFinancialControl(context.Background(), fixture.request(t))
+	if !errors.Is(err, psports.ErrUntranslatableProviderAnswer) || !errors.Is(err, adapter.ErrUntranslatableAnswer) {
+		t.Fatalf("err = %v, want 同时认得出端口哨兵与本包哨兵", err)
 	}
 }

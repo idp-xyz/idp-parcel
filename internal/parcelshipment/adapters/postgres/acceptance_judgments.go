@@ -101,12 +101,15 @@ func (repository *AcceptanceJudgments) RecordFinancialControlResult(
 	}
 
 	asOf := result.AsOf()
+	// 占用所在的作用域随结果同行落库，释放按它认领（ADR-0282 决定四）；`明确无控制`没有，三列写 NULL。
+	scope := result.Scope()
 	_, err = executor.Exec(ctx,
 		`INSERT INTO parcel_shipment.acceptance_financial_control
 			(tenant_id, shipment_request_id, submission_version, as_of_at,
 			 result_id, control_outcome, basis_ref, joint_pass_condition,
-			 as_of_kind, as_of_semantics, as_of_policy)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			 as_of_kind, as_of_semantics, as_of_policy,
+			 occupation_legal_entity, occupation_settlement_account, occupation_currency)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		 ON CONFLICT DO NOTHING`,
 		tenant.String(),
 		requestID.String(),
@@ -119,6 +122,9 @@ func (repository *AcceptanceJudgments) RecordFinancialControlResult(
 		asOf.Kind().String(),
 		asOf.Semantics().String(),
 		asOf.PolicyVersion().String(),
+		nullableText(scope.LegalEntity()),
+		nullableText(scope.Account()),
+		nullableText(scope.Currency()),
 	)
 	if err != nil {
 		return fmt.Errorf("record financial control result: %w", err)
@@ -384,14 +390,16 @@ func loadFinancialControl(
 	version domain.SubmissionVersionID,
 ) (domain.FinancialControlResult, error) {
 	var (
-		outcomeRaw                    string
-		resultID, basisRef, jointPass *string
-		asOfAt                        time.Time
-		kindRaw, semantics, policyRaw string
+		outcomeRaw                          string
+		resultID, basisRef, jointPass       *string
+		asOfAt                              time.Time
+		kindRaw, semantics, policyRaw       string
+		scopeEntity, scopeAccount, scopeCcy *string
 	)
 	err := querier.QueryRow(ctx,
 		`SELECT result_id, control_outcome, basis_ref, joint_pass_condition,
-		        as_of_at, as_of_kind, as_of_semantics, as_of_policy
+		        as_of_at, as_of_kind, as_of_semantics, as_of_policy,
+		        occupation_legal_entity, occupation_settlement_account, occupation_currency
 		   FROM parcel_shipment.acceptance_financial_control
 		  WHERE tenant_id = $1
 		    AND shipment_request_id = $2
@@ -401,7 +409,8 @@ func loadFinancialControl(
 		tenant.String(),
 		requestID.String(),
 		version.String(),
-	).Scan(&resultID, &outcomeRaw, &basisRef, &jointPass, &asOfAt, &kindRaw, &semantics, &policyRaw)
+	).Scan(&resultID, &outcomeRaw, &basisRef, &jointPass, &asOfAt, &kindRaw, &semantics, &policyRaw,
+		&scopeEntity, &scopeAccount, &scopeCcy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.FinancialControlResult{}, nil
 	}
@@ -422,6 +431,7 @@ func loadFinancialControl(
 		jointPass: jointPass,
 		asOf:      asOfRow{at: asOfAt, kind: kindRaw, semantics: semantics, policy: policyRaw},
 		items:     items,
+		scope:     occupationScopeRow{legalEntity: scopeEntity, account: scopeAccount, currency: scopeCcy},
 	})
 	if err != nil {
 		return domain.FinancialControlResult{}, fmt.Errorf("load financial control result: %w", err)
@@ -527,6 +537,7 @@ type financialControlRow struct {
 	jointPass *string
 	asOf      asOfRow
 	items     []controlItemRow
+	scope     occupationScopeRow
 }
 
 type controlItemRow struct {
@@ -618,7 +629,26 @@ func rebuildFinancialControl(row financialControlRow) (domain.FinancialControlRe
 		}
 		spec.Items = append(spec.Items, item)
 	}
+	if spec.Scope, err = row.scope.occupationScope(); err != nil {
+		return domain.FinancialControlResult{}, err
+	}
 	return domain.RehydrateFinancialControlResult(spec)
+}
+
+// occupationScopeRow 是控制结果行上的三列作用域。库里 CHECK 已守三列同进同出；三列全空即存量行没存下。
+type occupationScopeRow struct {
+	legalEntity, account, currency *string
+}
+
+func (row occupationScopeRow) occupationScope() (domain.OccupationScope, error) {
+	if row.legalEntity == nil && row.account == nil && row.currency == nil {
+		return domain.OccupationScope{}, nil
+	}
+	if row.legalEntity == nil || row.account == nil || row.currency == nil {
+		return domain.OccupationScope{}, fmt.Errorf("%w: occupation scope is partly recorded",
+			domain.ErrInvalidRehydratedFinancialControlResult)
+	}
+	return domain.NewOccupationScope(*row.legalEntity, *row.account, *row.currency)
 }
 
 func rebuildControlItem(row controlItemRow) (domain.ControlItemResult, error) {

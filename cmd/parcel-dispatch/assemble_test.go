@@ -32,6 +32,7 @@ import (
 	pstf "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/transportfulfillment"
 	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/dispatch"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
@@ -1543,6 +1544,11 @@ func TestAcceptanceChainFailuresLandInTheRightPartition(t *testing.T) {
 		{"封闭集合外", psinbox.ErrUnexpectedAcceptanceChainOutcome, "dispatch.publish_failed"},
 		{"装配缺件", psapplication.ErrAcceptanceChainNotAssembled, "dispatch.publish_failed"},
 		{"成员清单为空", psapplication.ErrAcceptanceChainHasNoMembers, "dispatch.publish_failed"},
+		// ADR-0282 决定三：放被取代各版时提供方确定不受理，重投得到同一个答复。
+		{"被取代版本的释放确定未受理", fmt.Errorf("%w: superseded version v1", psapplication.ErrControlReleaseNotAccepted),
+			"dispatch.publish_failed"},
+		// ADR-0081 决定三：财务控制或释放口答出了译不动的东西。
+		{"提供方答复译不动", fmt.Errorf("apply: %w", psports.ErrUntranslatableProviderAnswer), "dispatch.publish_failed"},
 	}
 
 	for _, test := range tests {

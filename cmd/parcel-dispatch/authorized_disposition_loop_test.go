@@ -446,10 +446,10 @@ type synRRecordingRelease struct {
 func (release *synRRecordingRelease) ReleasePreAcceptanceControl(
 	_ context.Context,
 	request psports.ControlReleaseRequest,
-) error {
+) (psports.ControlReleaseAnswer, error) {
 	release.calls++
 	release.resultID = request.ControlResultID.String()
-	return nil
+	return psports.ControlReleaseAnswer{Outcome: psports.ControlReleaseSettled}, nil
 }
 
 var (

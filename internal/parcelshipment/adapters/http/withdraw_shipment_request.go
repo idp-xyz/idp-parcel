@@ -55,7 +55,8 @@ func NewWithdrawShipmentRequestEndpoint(intake WithdrawalIntake, handler Withdra
 // withdrawalResponse 是本端点的封闭响应形状。`outcome` 取应用结果枚举的原名；撞上
 // 既有决定时带决定视图（调用方要知道输给了接受还是拒绝）；撤回成立而随附释放未确定
 // 完成时带补偿续办引用——补偿与判断续办分开，合成一个会让调用方分不清该重判还是该
-// 续补偿。
+// 续补偿；随附释放有一笔提供方确定不受理、已记进释放未受理册待人处理时带
+// `controlReleaseNotAccepted`，与补偿引用分开——那一笔重放推不动（ADR-0282 决定二）。
 type withdrawalResponse struct {
 	Outcome               string `json:"outcome"`
 	RequestState          string `json:"requestState,omitempty"`
@@ -64,6 +65,7 @@ type withdrawalResponse struct {
 	PendingReason         string `json:"pendingReason,omitempty"`
 	ContinuationReference string `json:"continuationReference,omitempty"`
 	CompensationReference string `json:"compensationReference,omitempty"`
+	ControlReleaseRefused bool   `json:"controlReleaseNotAccepted,omitempty"`
 }
 
 func writeWithdrawalOutcome(response http.ResponseWriter, problem problemWriter, result application.WithdrawShipmentRequestResult) {
@@ -96,6 +98,7 @@ func writeWithdrawalOutcome(response http.ResponseWriter, problem problemWriter,
 	if compensation := result.CompensationReference().String(); compensation != "" {
 		body.CompensationReference = compensation
 	}
+	body.ControlReleaseRefused = result.ControlReleaseNotAccepted()
 
 	status := http.StatusOK
 	if result.Outcome() == application.WithdrawalFormed {

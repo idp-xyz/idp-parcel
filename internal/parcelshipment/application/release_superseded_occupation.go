@@ -2,9 +2,16 @@ package application
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
+
+// ErrControlReleaseNotAccepted 说明接受链判当前版本之前放被取代各版时，提供方确定不受理其中一笔的释放。它不进未决：
+// 重投同一封信封得到同一个答复，折进内部重试会一直重投到失败预算耗尽（ADR-0081 决定三，ADR-0282 决定三）；本步也
+// 不记释放未受理册——这一轮整笔回滚，记下的会随之撤回。上抛之后消费门落 `dispatch.publish_failed`，要人来看这一笔。
+var ErrControlReleaseNotAccepted = errors.New("parcel shipment: control release was not accepted by the provider")
 
 // releaseSuperseded 在判当前版本之前，按原业务关联放掉被取代各版已成立的占用。
 //
@@ -24,6 +31,9 @@ import (
 // 那一轮能提交之前，被取代那一版一直占着——先放后判守住的是新版本的控制看不到旧占用，不是旧占用尽早腾出来。
 //
 // 每一轮都问，不记「放过没有」，只问「有没有成立的项」，不看结论：逐版怎么认、发不发归 occupationRelease。
+//
+// 提供方确定不受理某一笔（或释放口形不成三格之一）时响亮上抛，不停在本步内部重试：重投推不动它，新版本却一直被挡着
+// （ADR-0282 决定三）。可续办的缺口与拒收同时出现时也上抛——拒收不解开，续办成功了也判不了新版本。
 //
 // 不论委托此刻是否已形成决定都照放：被取代的版本从来不是接受所在的那一版（决定形成后不再换代），放它碰不到合法
 // 占用。
@@ -47,9 +57,13 @@ func (handler *AdvanceAcceptanceChainHandler) releaseSuperseded(
 		identity:  command.Identity,
 		request:   command.ShipmentRequestID,
 	}
+	outcome := scope.releaseRecorded(ctx, priors)
+	if len(outcome.refusals) > 0 {
+		return AdvanceAcceptanceChainResult{}, false, refusedSupersededRelease(outcome.refusals[0])
+	}
 	// 读不回某一版的判断也停：不知道旧版本形成过什么就发，settlement-accounting 无从认领；跳过它去判新版本，又会
 	// 让一笔可能还在的占用压着新版本的控制。
-	if gap := scope.releaseRecorded(ctx, priors); gap.open() {
+	if gap := outcome.pending; gap.open() {
 		return AdvanceAcceptanceChainResult{
 			outcome:      AcceptanceChainUndecided,
 			stage:        AcceptanceChainSupersededReleaseStage,
@@ -59,4 +73,15 @@ func (handler *AdvanceAcceptanceChainHandler) releaseSuperseded(
 		}, true, nil
 	}
 	return AdvanceAcceptanceChainResult{}, false, nil
+}
+
+// refusedSupersededRelease 把第一笔拒收译成上抛的错误。版本、控制关联与原因都写进正文：路由条目把它记成
+// publish_failed，原错误原样留在链上供运维读。释放口形不成三格之一时带着原错误，提供方拒收时带本包的哨兵。
+func refusedSupersededRelease(refusal occupationRefusal) error {
+	if refusal.cause != nil {
+		return fmt.Errorf("release superseded version %s, control %s: %w",
+			refusal.version, refusal.control.ResultID(), refusal.cause)
+	}
+	return fmt.Errorf("%w: superseded version %s, control %s, reason %s",
+		ErrControlReleaseNotAccepted, refusal.version, refusal.control.ResultID(), refusal.reason)
 }

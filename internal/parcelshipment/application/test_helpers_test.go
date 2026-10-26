@@ -78,11 +78,23 @@ func financialControlOf(
 		Items:     []domain.ControlItemResult{item},
 		JointPass: domain.AllControlsPass,
 		AsOf:      asOf,
+		Scope:     occupationScopeOf(t, resultID),
 	})
 	if err != nil {
 		t.Fatalf("new executed financial control result: %v", err)
 	}
 	return result
+}
+
+// occupationScopeOf 是夹具里已执行结果存下的作用域。账户段带结果标识，好让「释放交的是这一笔存下的那一份」在逐版
+// 释放时也验得出来。
+func occupationScopeOf(t *testing.T, resultID string) domain.OccupationScope {
+	t.Helper()
+	scope, err := domain.NewOccupationScope("SYN-LEGAL-ENTITY-1", "SYN-ACCOUNT-"+resultID, "CNY")
+	if err != nil {
+		t.Fatalf("new occupation scope: %v", err)
+	}
+	return scope
 }
 
 func validity(t *testing.T) domain.OwnershipValidityInterval {

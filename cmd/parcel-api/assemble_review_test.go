@@ -505,11 +505,13 @@ func seedSYNRejectionGrant(t *testing.T, db *bentopg.DB) {
 
 // decisionAnswer 是运营决定各口响应里本组用例要读的那几格。
 type decisionAnswer struct {
-	Outcome         string `json:"outcome"`
-	DecisionKind    string `json:"decisionKind"`
-	Decider         string `json:"decider"`
-	RejectionReason string `json:"rejectionReason"`
-	PendingReason   string `json:"pendingReason"`
+	Outcome                   string `json:"outcome"`
+	DecisionKind              string `json:"decisionKind"`
+	Decider                   string `json:"decider"`
+	RejectionReason           string `json:"rejectionReason"`
+	PendingReason             string `json:"pendingReason"`
+	CompensationReference     string `json:"compensationReference"`
+	ControlReleaseNotAccepted bool   `json:"controlReleaseNotAccepted"`
 }
 
 // postDecision 以 token 为操作者向 endpoint 投一份运营决定，交回状态码与读出的答复。

@@ -61,7 +61,8 @@ func NewRejectShipmentRequestEndpoint(
 // activeRejectionResponse 是本端点的封闭响应形状。`已形成`与`任务已完结`带决定视图——后者交回
 // 的是先到那一个（可能是接受），操作员要知道输给了什么：决定带主动拒绝留痕时再带实际决定方与
 // 结构化原因，后到者凭它们自己比出是重放还是输给了别人；未决带原因与续办引用；拒绝成立而随附
-// 释放未确定完成时带补偿续办引用，与判断续办分开。
+// 释放未确定完成时带补偿续办引用，与判断续办分开；随附释放有一笔提供方确定不受理、已记进释放
+// 未受理册待人处理时带 `controlReleaseNotAccepted`（ADR-0282 决定二）。
 type activeRejectionResponse struct {
 	Outcome               string `json:"outcome"`
 	RequestState          string `json:"requestState,omitempty"`
@@ -71,6 +72,7 @@ type activeRejectionResponse struct {
 	PendingReason         string `json:"pendingReason,omitempty"`
 	ContinuationReference string `json:"continuationReference,omitempty"`
 	CompensationReference string `json:"compensationReference,omitempty"`
+	ControlReleaseRefused bool   `json:"controlReleaseNotAccepted,omitempty"`
 }
 
 func writeActiveRejectionOutcome(
@@ -99,6 +101,7 @@ func writeActiveRejectionOutcome(
 	if compensation := result.CompensationReference().String(); compensation != "" {
 		body.CompensationReference = compensation
 	}
+	body.ControlReleaseRefused = result.ControlReleaseNotAccepted()
 
 	status := http.StatusOK
 	if result.Outcome() == application.ActiveRejectionFormed {
