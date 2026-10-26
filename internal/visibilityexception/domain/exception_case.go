@@ -43,12 +43,16 @@ func NewConfidenceReference(value string) (ConfidenceReference, error) {
 // SignalEpisode 是同一对象、信号类型、因果条件和连续影响期间的一次信号生命周期。
 // 连续命中更新同一发作期；明确恢复后再次命中形成关联的新发作期（CONTEXT 语言）。
 // 类型上没有案件字段——发作期结束不自动关闭关联案件，两个生命周期各走各的。
+//
+// 因果条件与事实依据随开期那一次命中固定：同一期后来的命中只推进判断历史（命中数与末次命中），不改写开期时的依据。
 type SignalEpisode struct {
 	id           EpisodeID
 	kind         ExceptionSignalKindReference
 	parcel       TrackedParcelReference
+	cause        CausalConditionReference
 	rule         SignalRuleVersionReference
 	confidence   ConfidenceReference
+	basis        []SignalFactBasis
 	hits         int
 	startedAt    time.Time
 	lastHitAt    time.Time
@@ -57,33 +61,36 @@ type SignalEpisode struct {
 	priorEpisode EpisodeID
 }
 
-// OpenEpisode 依据首次满足条件建立发作期。
-func OpenEpisode(
-	id EpisodeID,
-	kind ExceptionSignalKindReference,
-	parcel TrackedParcelReference,
-	rule SignalRuleVersionReference,
-	confidence ConfidenceReference,
-	firstHitAt time.Time,
-) (*SignalEpisode, error) {
-	if !id.valid() || !kind.valid() || !parcel.valid() || !rule.valid() ||
-		!confidence.valid() || firstHitAt.IsZero() {
+// OpenEpisode 依据首次满足条件建立发作期，保存规则版本、因果条件、依据和可信度（CONTEXT 生命周期首条）。
+func OpenEpisode(id EpisodeID, hit SignalHit) (*SignalEpisode, error) {
+	if !id.valid() || !hit.valid() {
 		return nil, ErrInvalidEpisode
 	}
 	return &SignalEpisode{
 		id:         id,
-		kind:       kind,
-		parcel:     parcel,
-		rule:       rule,
-		confidence: confidence,
+		kind:       hit.Kind,
+		parcel:     hit.Parcel,
+		cause:      hit.Cause,
+		rule:       hit.Rule,
+		confidence: hit.Confidence,
+		basis:      copyBasis(hit.Basis),
 		hits:       1,
-		startedAt:  firstHitAt.UTC(),
-		lastHitAt:  firstHitAt.UTC(),
+		startedAt:  hit.At.UTC(),
+		lastHitAt:  hit.At.UTC(),
 	}, nil
 }
 
 func (episode *SignalEpisode) ID() EpisodeID {
 	return episode.id
+}
+
+func (episode *SignalEpisode) Cause() CausalConditionReference {
+	return episode.cause
+}
+
+// Basis 交回开期那一次命中的事实依据（副本）。存量发作期（CausalConditionRecordedBeforeCauses）没有依据，交回空。
+func (episode *SignalEpisode) Basis() []SignalFactBasis {
+	return copyBasis(episode.basis)
 }
 
 func (episode *SignalEpisode) Hits() int {
@@ -129,17 +136,18 @@ func (episode *SignalEpisode) End(releaseBasis string, at time.Time) error {
 
 // ReopenAsLinked 在明确恢复后再次命中时建立关联的新发作期：新标识、指回前发作期；
 // 原发作期保持已结束。是否建案重新经过分诊规则——这里不带任何案件动作。
-func (episode *SignalEpisode) ReopenAsLinked(
-	id EpisodeID,
-	firstHitAt time.Time,
-) (*SignalEpisode, error) {
+//
+// 新一期只认同一对象、同一类型、同一因果条件的命中——别的原因是另一条发作期链，不是这一条的恢复后再发生。规则版本、可信度与
+// 事实依据取这一次命中的：再发生是一次新的判断，按的是此刻适用的那一版规则、此刻的那几份事实，不承继前一期的。
+func (episode *SignalEpisode) ReopenAsLinked(id EpisodeID, hit SignalHit) (*SignalEpisode, error) {
 	if episode.Active() {
 		return nil, ErrEpisodeStillActive
 	}
-	if !id.valid() || id == episode.id || firstHitAt.IsZero() || firstHitAt.Before(episode.endedAt) {
+	if !id.valid() || id == episode.id || !hit.valid() || hit.At.Before(episode.endedAt) ||
+		hit.Kind != episode.kind || hit.Parcel != episode.parcel || hit.Cause != episode.cause {
 		return nil, ErrInvalidEpisode
 	}
-	linked, err := OpenEpisode(id, episode.kind, episode.parcel, episode.rule, episode.confidence, firstHitAt)
+	linked, err := OpenEpisode(id, hit)
 	if err != nil {
 		return nil, err
 	}
@@ -154,8 +162,10 @@ type SignalEpisodeSnapshot struct {
 	ID           EpisodeID
 	Kind         ExceptionSignalKindReference
 	Parcel       TrackedParcelReference
+	Cause        CausalConditionReference
 	Rule         SignalRuleVersionReference
 	Confidence   ConfidenceReference
+	Basis        []SignalFactBasis
 	Hits         int
 	StartedAt    time.Time
 	LastHitAt    time.Time
@@ -170,8 +180,10 @@ func (episode *SignalEpisode) Snapshot() SignalEpisodeSnapshot {
 		ID:           episode.id,
 		Kind:         episode.kind,
 		Parcel:       episode.parcel,
+		Cause:        episode.cause,
 		Rule:         episode.rule,
 		Confidence:   episode.confidence,
+		Basis:        copyBasis(episode.basis),
 		Hits:         episode.hits,
 		StartedAt:    episode.startedAt,
 		LastHitAt:    episode.lastHitAt,
@@ -184,13 +196,25 @@ func (episode *SignalEpisode) Snapshot() SignalEpisodeSnapshot {
 // RehydrateSignalEpisode 从快照重建发作期。读回的东西同样要过一遍不变量——生命周期
 // 形状（命中序、结束依据与结束时间同在场、指回不指自己）在这里重验，一次坏写入不得
 // 变成一个看起来合法的发作期。
+//
+// 事实依据至少一条，唯一的例外是存量那一格（CausalConditionRecordedBeforeCauses）：它们落库时还没有依据可记，依据为空才是如实；
+// 那一格带着依据反倒说明写坏了。
 func RehydrateSignalEpisode(snapshot SignalEpisodeSnapshot) (*SignalEpisode, error) {
-	if !snapshot.ID.valid() || !snapshot.Kind.valid() || !snapshot.Parcel.valid() ||
+	if !snapshot.ID.valid() || !snapshot.Kind.valid() || !snapshot.Parcel.valid() || !snapshot.Cause.valid() ||
 		!snapshot.Rule.valid() || !snapshot.Confidence.valid() ||
 		snapshot.Hits < 1 ||
 		snapshot.StartedAt.IsZero() || snapshot.LastHitAt.IsZero() ||
 		snapshot.LastHitAt.Before(snapshot.StartedAt) {
 		return nil, ErrInvalidEpisode
+	}
+	recordedBeforeCauses := snapshot.Cause.String() == CausalConditionRecordedBeforeCauses
+	if recordedBeforeCauses != (len(snapshot.Basis) == 0) {
+		return nil, ErrInvalidEpisode
+	}
+	for _, basis := range snapshot.Basis {
+		if !basis.valid() {
+			return nil, ErrInvalidEpisode
+		}
 	}
 	ended := !snapshot.EndedAt.IsZero()
 	if ended != (snapshot.ReleaseBasis != "") {
@@ -206,8 +230,10 @@ func RehydrateSignalEpisode(snapshot SignalEpisodeSnapshot) (*SignalEpisode, err
 		id:           snapshot.ID,
 		kind:         snapshot.Kind,
 		parcel:       snapshot.Parcel,
+		cause:        snapshot.Cause,
 		rule:         snapshot.Rule,
 		confidence:   snapshot.Confidence,
+		basis:        copyBasis(snapshot.Basis),
 		hits:         snapshot.Hits,
 		startedAt:    snapshot.StartedAt.UTC(),
 		lastHitAt:    snapshot.LastHitAt.UTC(),

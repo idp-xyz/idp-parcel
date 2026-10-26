@@ -127,6 +127,74 @@ func TestABlockedDepartureRaisesTheAdoptedSignalThroughTheProductionRoute(t *tes
 	}
 }
 
+// Covers: AT-VE-201、AT-VE-202 真库半边（票 demo-chain-gaps/135，代决复核报告 M18，证据 S）——同一件包裹先后两次出发都被关务判
+// 阻断：经生产路由各开一个发作期、各自分诊、各交一份分诊意图；每期的因果条件是那一条移动事实，事实依据是这件包裹上的事实引用、
+// 事实版本与读数里它那一格的关务判断标识。此前第二次违规只给第一期记一次命中、不再分诊。
+func TestEachBlockedDepartureOfAParcelIsTriagedOnItsOwnThroughTheProductionRoute(t *testing.T) {
+	fixture := newSYNVerticalFixture(t)
+	registerDemoDepartureGateSignalRule(t, fixture)
+	saveDepartureSegment(t, fixture)
+
+	facts := []string{"SYN-MOVE-DISPATCH-03", "SYN-MOVE-DISPATCH-04"}
+	for _, fact := range facts {
+		recordDepartureThroughProduction(t, fixture, fact)
+	}
+	if published, err := fixture.beat.DispatchOnce(t.Context()); err != nil || published != 2 {
+		t.Fatalf("第一拍 published = %d err = %v, want 两封出发都定稿", published, err)
+	}
+
+	querier, err := fixture.db.ReadExecutor(t.Context())
+	if err != nil {
+		t.Fatalf("读执行器：%v", err)
+	}
+	rows, err := querier.Query(t.Context(),
+		`SELECT e.episode_id, e.causal_condition, e.fact_basis->0->>'fact', e.fact_basis->0->>'version',
+		        e.fact_basis->0->>'judgement', jsonb_array_length(e.fact_basis), e.hits, c.outcome
+		   FROM visibility_exception.signal_episode e
+		   JOIN visibility_exception.triage_conclusion c ON c.episode_id = e.episode_id
+		  WHERE e.tenant_id = $1 AND e.parcel_ref = $2
+		  ORDER BY e.fact_basis->0->>'fact'`,
+		fixture.identity.TenantID().String(), movementParcelBlocked,
+	)
+	if err != nil {
+		t.Fatalf("读阻断那一件的发作期：%v", err)
+	}
+	defer rows.Close()
+	var episodes []string
+	for rows.Next() {
+		var episode, cause, fact, version, judgement, outcome string
+		var basisCount, hits int
+		if err := rows.Scan(&episode, &cause, &fact, &version, &judgement, &basisCount, &hits, &outcome); err != nil {
+			t.Fatalf("扫发作期：%v", err)
+		}
+		want := "movement-fact/" + movementParcelBlocked + "/" + facts[len(episodes)]
+		if fact != want || version != "v1" || judgement != "AADJ-"+movementParcelBlocked || basisCount != 1 {
+			t.Fatalf("第 %d 期依据 = %s / %s / %s（%d 条），want %s / v1 / AADJ-%s", len(episodes)+1, fact, version, judgement,
+				basisCount, want, movementParcelBlocked)
+		}
+		if cause != "source-fact/TRANSPORT_FULFILLMENT/"+want || hits != 1 || outcome != "MANUAL_REVIEW" {
+			t.Fatalf("第 %d 期 cause = %s hits = %d outcome = %s", len(episodes)+1, cause, hits, outcome)
+		}
+		episodes = append(episodes, episode)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("扫发作期：%v", err)
+	}
+	if len(episodes) != 2 {
+		t.Fatalf("阻断的那一件有 %d 期，want 两次违规出发各一期", len(episodes))
+	}
+	var intents int
+	if err := querier.QueryRow(t.Context(),
+		`SELECT count(*) FROM `+migrate.SchemaBento+`.outbox WHERE event_type = $1 AND subject = ANY($2)`,
+		"visibility-exception.signal-triage.concluded", episodes,
+	).Scan(&intents); err != nil {
+		t.Fatalf("数分诊意图：%v", err)
+	}
+	if intents != 2 {
+		t.Fatalf("分诊意图 %d 份，want 两期各一份——后一期的意图被当成前一期的重放吞掉了", intents)
+	}
+}
+
 // Covers: AT-TF-317 派发半边（ADR-0237 决定五，证据 S）——起讫没能与段核上的出发（凭收寄进段、进段交接没声明全）读数照样记全，
 // 全程追踪据它照旧给阻断的那一件形成发作期：回给设备的不列对象，不改落册与信号。
 func TestAnUnboundBlockedDepartureStillRaisesTheSignal(t *testing.T) {

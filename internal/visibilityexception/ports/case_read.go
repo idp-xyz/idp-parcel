@@ -31,23 +31,34 @@ import (
 // （ATTACH_TO_EXISTING / AUTO_ESTABLISH / MANUAL_REVIEW / NO_CASE）。Ended 两件
 // 成对缺席表示发作期仍活跃——结束依据与结束时间同在场是 0002 的在场规则。
 //
-// 页面详情区想要的「事实依据」在发作期行上没有登记格：已接受事实按（租户+包裹）
-// 登在 accepted_fact，行上不指回发作期，本行不代连（票 06 Comments 记明）。
+// 因果条件与事实依据照发作期行上登记的原样转写（VE 迁移 0029）：依据每条指回已接受事实的源上下文、引用与版本，可带源事实里
+// 随带的判断标识；因果条件立起来之前落库的存量行，因果条件是 RECORDED_BEFORE_CAUSAL_CONDITION、依据为空——那是如实回填，
+// 读口不代补。
 type SignalEpisodeCatalogueRow struct {
-	EpisodeID    string
-	Parcel       string
-	Kind         string
-	Rule         string
-	Confidence   string
-	Hits         int64
-	StartedAt    time.Time
-	LastHitAt    time.Time
-	ReleaseBasis string
-	EndedAt      *time.Time
-	PriorEpisode string
-	Outcome      string
-	OutcomeRule  string
-	TriagedAt    *time.Time
+	EpisodeID       string
+	Parcel          string
+	Kind            string
+	CausalCondition string
+	FactBasis       []SignalEpisodeFactBasisRow
+	Rule            string
+	Confidence      string
+	Hits            int64
+	StartedAt       time.Time
+	LastHitAt       time.Time
+	ReleaseBasis    string
+	EndedAt         *time.Time
+	PriorEpisode    string
+	Outcome         string
+	OutcomeRule     string
+	TriagedAt       *time.Time
+}
+
+// SignalEpisodeFactBasisRow 是发作期行上一条事实依据的转写。Judgement 缺席即那份源事实没有随带判断标识。
+type SignalEpisodeFactBasisRow struct {
+	Source    string
+	Fact      string
+	Version   string
+	Judgement string
 }
 
 // DispositionRequestCatalogueRow 是处置请求册上列的一行：请求六要件、发送与接受

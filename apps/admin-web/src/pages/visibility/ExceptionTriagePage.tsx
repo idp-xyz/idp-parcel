@@ -83,12 +83,41 @@ const registryOf: Record<TriageView, ExceptionTriageRegistry> = {
   requests: 'disposition-request',
 };
 
+// 存量发作期的因果条件（VE 迁移 0029 回填的那一格）。
+const recordedBeforeCauses = 'RECORDED_BEFORE_CAUSAL_CONDITION';
+
 /** 发作期详情：逐字段照实转写，缺席按端点在场规则给词（成对缺席即仍活跃/未分诊）。 */
 function episodeDetailFields(episode: SignalEpisodeRecord): DetailField[] {
   const fields: DetailField[] = [
     { label: '发作期标识', value: <span className="font-mono">{episode.episodeId}</span> },
     { label: '目标包裹', value: <span className="font-mono">{episode.parcel}</span> },
     { label: '信号类型', value: <span className="font-mono">{episode.kind}</span> },
+    {
+      label: '因果条件',
+      value:
+        episode.causalCondition === recordedBeforeCauses ? (
+          '登记于因果条件之前（存量）'
+        ) : (
+          <span className="font-mono">{episode.causalCondition}</span>
+        ),
+    },
+    {
+      label: '事实依据',
+      value:
+        episode.factBasis.length === 0 ? (
+          '无（登记于因果条件之前）'
+        ) : (
+          <span className="font-mono">
+            {episode.factBasis
+              .map(
+                (basis) =>
+                  `${labelOf(sourceContextLabels, basis.source)} · ${basis.fact} · ${basis.version}` +
+                  (basis.judgement ? ` · 判断 ${basis.judgement}` : ''),
+              )
+              .join('；')}
+          </span>
+        ),
+    },
     { label: '判定规则', value: <span className="font-mono">{episode.rule}</span> },
     { label: '可信度', value: <span className="font-mono">{episode.confidence}</span> },
     { label: '命中次数', value: String(episode.hits) },

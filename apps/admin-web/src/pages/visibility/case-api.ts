@@ -23,13 +23,28 @@ export interface TriageConclusionRecord {
 }
 
 /**
+ * 发作期的一条事实依据：指回已接受事实的源上下文、事实引用与版本；judgement 缺席即
+ * 那份源事实没有随带判断标识（出发门禁阻断信号带的是关务判断标识）。
+ */
+export interface SignalFactBasisRecord {
+  source: string;
+  fact: string;
+  version: string;
+  judgement?: string;
+}
+
+/**
  * 一段信号发作期连同它的分诊结论。ended 两键成对缺席即仍活跃；triage 缺席即尚未
  * 分诊——缺席即答案，页面不代判。信号类型与可信度是开放引用，原词直示。
+ * causalCondition 是同一对象同一类型分期的那一维；因果条件立起来之前落库的存量行
+ * 如实是 RECORDED_BEFORE_CAUSAL_CONDITION、factBasis 为空数组，页面不代补。
  */
 export interface SignalEpisodeRecord {
   episodeId: string;
   parcel: string;
   kind: string;
+  causalCondition: string;
+  factBasis: SignalFactBasisRecord[];
   rule: string;
   confidence: string;
   hits: number;

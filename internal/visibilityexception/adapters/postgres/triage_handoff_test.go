@@ -20,7 +20,7 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 16 证分诊结论意图：与业务行同一提交、回滚一并消失、重发
-// 同一份、无事务拒、缺对象类型响亮报错。信封 ID 由租户加对象加类型认领。入队走 EnqueueOnce。
+// 同一份、无事务拒、缺对象类型响亮报错。信封 ID 由租户加对象加类型加发作期认领。入队走 EnqueueOnce。
 
 type triageHandoffClock struct{ at time.Time }
 
@@ -66,7 +66,12 @@ func (fixture *triageHandoffFixture) inTx(t *testing.T, ctx context.Context, fn 
 
 func triageIntent(t *testing.T, tenant, parcel, kind string) (ports.TriageHandoffIntent, ports.RaisedSignalRecord) {
 	t.Helper()
-	episode := openedEpisode(t, "ep-1", parcel, kind, factBaseAt)
+	return triageIntentOf(t, "ep-1", tenant, parcel, kind)
+}
+
+func triageIntentOf(t *testing.T, episodeID, tenant, parcel, kind string) (ports.TriageHandoffIntent, ports.RaisedSignalRecord) {
+	t.Helper()
+	episode := openedEpisodeFor(t, episodeID, parcel, kind, "fact/"+episodeID, factBaseAt)
 	record := raisedRecord(t, episode, tenant, parcel, kind, domain.AutoEstablishCase)
 	return ports.TriageHandoffIntent{
 		TenantID:   record.Tenant,
@@ -77,7 +82,11 @@ func triageIntent(t *testing.T, tenant, parcel, kind string) (ports.TriageHandof
 }
 
 func triageHandoffEventID(tenant, parcel, kind string) string {
-	return string(outboxintent.FingerprintEventID("triage", tenant, parcel, kind))
+	return triageHandoffEventIDOf(tenant, parcel, kind, "ep-1")
+}
+
+func triageHandoffEventIDOf(tenant, parcel, kind, episode string) string {
+	return string(outboxintent.FingerprintEventID("triage", tenant, parcel, kind, episode))
 }
 
 func TestTriageIntentCommitsAtomicallyWithTheEpisode(t *testing.T) {
@@ -206,6 +215,27 @@ func TestCrossTenantTriageIntentsDoNotShareAnEnvelope(t *testing.T) {
 	}
 	if count := countTriageIntents(t, fixture.pool, triageHandoffEventID("tenant-b", "parcel-1", "STALLED")); count != 1 {
 		t.Fatalf("租户 B outbox 行数 = %d，want 1", count)
+	}
+}
+
+// TestTwoEpisodesOfOneParcelAndKindEachHandOffTheirOwnIntent 证 `AT-VE-201` 的意图半边：同一对象同一类型先后两期（不同原因）的
+// 分诊结论各入一队。信封 ID 缺发作期维时，后一期的意图在 EnqueueOnce 那一步被当成重放吞掉，下游永远等不到它。
+func TestTwoEpisodesOfOneParcelAndKindEachHandOffTheirOwnIntent(t *testing.T) {
+	fixture := newTriageHandoffFixture(t)
+	ctx := t.Context()
+	first, _ := triageIntentOf(t, "ep-1", "tenant-a", "parcel-1", "DEPARTURE_GATE_BLOCKED")
+	second, _ := triageIntentOf(t, "ep-2", "tenant-a", "parcel-1", "DEPARTURE_GATE_BLOCKED")
+
+	for _, intent := range []ports.TriageHandoffIntent{first, second} {
+		fixture.inTx(t, ctx, func(txCtx context.Context) error {
+			return fixture.handoff.HandOffTriage(txCtx, intent)
+		})
+	}
+	for _, episode := range []string{"ep-1", "ep-2"} {
+		if count := countTriageIntents(t, fixture.pool,
+			triageHandoffEventIDOf("tenant-a", "parcel-1", "DEPARTURE_GATE_BLOCKED", episode)); count != 1 {
+			t.Fatalf("%s 的 outbox 行数 = %d，want 1", episode, count)
+		}
 	}
 }
 

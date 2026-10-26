@@ -17,10 +17,12 @@ type episodeKey struct {
 	tenant domain.TenantID
 	parcel domain.TrackedParcelReference
 	kind   domain.ExceptionSignalKindReference
+	cause  domain.CausalConditionReference
 }
 
 type episodeStoreDouble struct {
 	latest      map[episodeKey]*domain.SignalEpisode
+	latestKind  map[episodeKey]*domain.SignalEpisode
 	conclusions []domain.TriageConclusion
 	cases       []*domain.ExceptionCase
 	findErr     error
@@ -31,7 +33,24 @@ type episodeStoreDouble struct {
 }
 
 func newEpisodeStore() *episodeStoreDouble {
-	return &episodeStoreDouble{latest: map[episodeKey]*domain.SignalEpisode{}}
+	return &episodeStoreDouble{
+		latest:     map[episodeKey]*domain.SignalEpisode{},
+		latestKind: map[episodeKey]*domain.SignalEpisode{},
+	}
+}
+
+func (double *episodeStoreDouble) FindLatestForCause(
+	_ context.Context,
+	tenant domain.TenantID,
+	parcel domain.TrackedParcelReference,
+	kind domain.ExceptionSignalKindReference,
+	cause domain.CausalConditionReference,
+) (*domain.SignalEpisode, bool, error) {
+	if double.findErr != nil {
+		return nil, false, double.findErr
+	}
+	episode, found := double.latest[episodeKey{tenant: tenant, parcel: parcel, kind: kind, cause: cause}]
+	return episode, found, nil
 }
 
 func (double *episodeStoreDouble) FindLatest(
@@ -43,7 +62,7 @@ func (double *episodeStoreDouble) FindLatest(
 	if double.findErr != nil {
 		return nil, false, double.findErr
 	}
-	episode, found := double.latest[episodeKey{tenant: tenant, parcel: parcel, kind: kind}]
+	episode, found := double.latestKind[episodeKey{tenant: tenant, parcel: parcel, kind: kind}]
 	return episode, found, nil
 }
 
@@ -51,8 +70,9 @@ func (double *episodeStoreDouble) SaveRaised(_ context.Context, record ports.Rai
 	if double.raiseErr != nil {
 		return double.raiseErr
 	}
-	key := episodeKey{tenant: record.Tenant, parcel: record.Parcel, kind: record.Kind}
+	key := episodeKey{tenant: record.Tenant, parcel: record.Parcel, kind: record.Kind, cause: record.Episode.Cause()}
 	double.latest[key] = record.Episode
+	double.latestKind[episodeKey{tenant: record.Tenant, parcel: record.Parcel, kind: record.Kind}] = record.Episode
 	double.conclusions = append(double.conclusions, record.Conclusion)
 	if record.Case != nil {
 		double.cases = append(double.cases, record.Case)
@@ -169,13 +189,30 @@ func newRaiseFixture(t *testing.T) *raiseFixture {
 
 func raiseCommand(t *testing.T, hitAt time.Time) application.RaiseSignalCommand {
 	t.Helper()
+	return raiseCommandFor(t, "movement-fact/parcel-1/MF-1", hitAt)
+}
+
+// raiseCommandFor 立一次以某一份源事实为因果条件、以它为依据的命中。
+func raiseCommandFor(t *testing.T, fact string, hitAt time.Time) application.RaiseSignalCommand {
+	t.Helper()
+	reference := mustValue(t, domain.NewSourceFactReference, fact)
+	cause, err := domain.SourceFactCausalCondition(domain.SourceTransportFulfillment, reference)
+	if err != nil {
+		t.Fatalf("causal condition: %v", err)
+	}
 	return application.RaiseSignalCommand{
 		TenantID:   mustValue(t, domain.NewTenantID, "tenant-1"),
 		Kind:       mustValue(t, domain.NewExceptionSignalKindReference, "ETA_BREACH_RISK"),
 		Parcel:     mustValue(t, domain.NewTrackedParcelReference, "parcel-1"),
+		Cause:      cause,
 		Rule:       mustValue(t, domain.NewSignalRuleVersionReference, "signal-rules/v3"),
 		Confidence: mustValue(t, domain.NewConfidenceReference, "HIGH/route-deviation"),
-		HitAt:      hitAt,
+		Basis: []domain.SignalFactBasis{{
+			Source:  domain.SourceTransportFulfillment,
+			Fact:    reference,
+			Version: mustValue(t, domain.NewSourceFactVersion, "v1"),
+		}},
+		HitAt: hitAt,
 	}
 }
 
@@ -421,6 +458,61 @@ func TestAHitAfterRecoveryReopensALinkedEpisodeAndRetriages(t *testing.T) {
 	}
 }
 
+// Covers: `AT-VE-201` 的编排半边与 CONTEXT「同一对象、类型、因果条件和连续影响期内的重复命中更新同一信号发作期」——同一对象、
+// 同一类型、另一个原因的命中不落进已活跃的那一期：另开一期、重新分诊、另交一份意图；回到前一个原因的命中仍只记在前一期上。
+func TestAHitWithAnotherCauseOpensItsOwnEpisodeAndIsTriagedAgain(t *testing.T) {
+	fixture := newRaiseFixture(t)
+	ctx := context.Background()
+
+	first, err := fixture.handler.Handle(ctx, raiseCommandFor(t, "movement-fact/parcel-1/MF-1", signalHitAt))
+	if err != nil {
+		t.Fatalf("first handle: %v", err)
+	}
+	firstEpisode, _ := first.Episode()
+
+	second, err := fixture.handler.Handle(ctx, raiseCommandFor(t, "movement-fact/parcel-1/MF-2", signalHitAt.Add(time.Hour)))
+	if err != nil {
+		t.Fatalf("second handle: %v", err)
+	}
+	if second.Outcome() != application.SignalEpisodeOpened {
+		t.Fatalf("outcome = %q, want EPISODE_OPENED——另一个原因被并进了前一期", second.Outcome())
+	}
+	secondEpisode, _ := second.Episode()
+	if secondEpisode.ID() == firstEpisode.ID() {
+		t.Fatal("another cause reused the active episode")
+	}
+	if _, linked := secondEpisode.PriorEpisode(); linked {
+		t.Fatal("an episode of another cause claims to be the recovery of the first one")
+	}
+	if !firstEpisode.Active() {
+		t.Fatal("opening another cause ended the first episode")
+	}
+	if fixture.triage.calls != 2 || len(fixture.episodes.conclusions) != 2 {
+		t.Fatalf("triage calls = %d conclusions = %d; each cause must be triaged on its own",
+			fixture.triage.calls, len(fixture.episodes.conclusions))
+	}
+	if len(fixture.downstream.intents) != 2 ||
+		fixture.downstream.intents[1].Conclusion.Episode() != secondEpisode.ID() {
+		t.Fatal("the second episode handed off no triage intent of its own")
+	}
+	if basis := secondEpisode.Basis(); len(basis) != 1 || basis[0].Fact.String() != "movement-fact/parcel-1/MF-2" {
+		t.Fatalf("basis = %+v; the second episode must carry the fact that caused it", basis)
+	}
+
+	repeat, err := fixture.handler.Handle(ctx, raiseCommandFor(t, "movement-fact/parcel-1/MF-1", signalHitAt.Add(2*time.Hour)))
+	if err != nil {
+		t.Fatalf("repeat handle: %v", err)
+	}
+	repeated, _ := repeat.Episode()
+	if repeat.Outcome() != application.SignalHitRecorded || repeated.ID() != firstEpisode.ID() {
+		t.Fatalf("outcome = %q episode = %q; a repeat of the first cause must land on the first episode",
+			repeat.Outcome(), repeated.ID())
+	}
+	if fixture.triage.calls != 2 {
+		t.Fatal("a repeat of the first cause was triaged again")
+	}
+}
+
 // Covers: 派工约束「未配置 → 人工复核格 ManualReviewRequired 如实不自动建案，不是未决」
 // 与 CONTEXT「高可信、高影响且命中版本化分诊规则的信号可以自动建立或关联案件」的反面
 // ——没命中版本化规则就没有自动建案，空白不是放行也不是故障。
@@ -513,7 +605,7 @@ func TestAFailedTriageHandoffKeepsTheRaisedEpisodeWithAResumableReference(t *tes
 	}
 }
 
-// Covers: 受理半边「规则版本+可信度必备——来自命中事实不自造」——缺任何一样即未受理，
+// Covers: 受理半边「规则版本+可信度+因果条件+事实依据必备——来自命中事实不自造」——缺任何一样即未受理，
 // 不读依赖、不补默认值。
 func TestACommandWithoutItsSignalFactsIsNotAccepted(t *testing.T) {
 	fixture := newRaiseFixture(t)
@@ -536,6 +628,21 @@ func TestACommandWithoutItsSignalFactsIsNotAccepted(t *testing.T) {
 	}
 	if noTime.Outcome() != application.RaiseSignalNotAccepted {
 		t.Fatalf("outcome = %q, want NOT_ACCEPTED", noTime.Outcome())
+	}
+
+	// `AT-VE-202`：因果条件与事实依据同样必备——缺了它们，发作期定位不了，复核也追不回是哪一份事实。
+	missingCause := raiseCommand(t, signalHitAt)
+	missingCause.Cause = domain.CausalConditionReference{}
+	missingBasis := raiseCommand(t, signalHitAt)
+	missingBasis.Basis = nil
+	for name, command := range map[string]application.RaiseSignalCommand{"缺因果条件": missingCause, "缺事实依据": missingBasis} {
+		result, err := fixture.handler.Handle(context.Background(), command)
+		if err != nil {
+			t.Fatalf("%s：handle: %v", name, err)
+		}
+		if result.Outcome() != application.RaiseSignalNotAccepted {
+			t.Fatalf("%s：outcome = %q, want NOT_ACCEPTED", name, result.Outcome())
+		}
 	}
 
 	missingTenant := raiseCommand(t, signalHitAt)

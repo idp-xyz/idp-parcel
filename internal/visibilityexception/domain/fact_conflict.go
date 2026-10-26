@@ -159,3 +159,13 @@ func (signal ExceptionSignal) Facts() []AcceptedSourceFact {
 func (signal ExceptionSignal) RaisedAt() time.Time {
 	return signal.raisedAt
 }
+
+// Basis 交回信号的事实依据：保留下来的每一份事实各一条，指回它的源上下文、事实引用与版本。处置者凭它找回冲突各方，不用回头
+// 再拼现场。
+func (signal ExceptionSignal) Basis() []SignalFactBasis {
+	basis := make([]SignalFactBasis, 0, len(signal.facts))
+	for _, fact := range signal.facts {
+		basis = append(basis, SignalFactBasis{Source: fact.source, Fact: fact.fact, Version: fact.version})
+	}
+	return basis
+}

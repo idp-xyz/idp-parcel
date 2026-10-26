@@ -132,9 +132,13 @@ func TestExceptionTriageRecordsListSignalEpisodesVerbatim(t *testing.T) {
 	reader := &triageReaderDouble{
 		episodes: []ports.SignalEpisodeCatalogueRow{
 			{
-				EpisodeID:    "episode-1",
-				Parcel:       "parcel-1",
-				Kind:         "DELIVERY_FAILED",
+				EpisodeID:       "episode-1",
+				Parcel:          "parcel-1",
+				Kind:            "DELIVERY_FAILED",
+				CausalCondition: "source-fact/TRANSPORT_FULFILLMENT/movement-fact/parcel-1/MF-1",
+				FactBasis: []ports.SignalEpisodeFactBasisRow{{
+					Source: "TRANSPORT_FULFILLMENT", Fact: "movement-fact/parcel-1/MF-1", Version: "v1", Judgement: "CC-J-1",
+				}},
 				Rule:         "triage/v1",
 				Confidence:   "CARRIER_CONFIRMED",
 				Hits:         3,
@@ -148,14 +152,15 @@ func TestExceptionTriageRecordsListSignalEpisodesVerbatim(t *testing.T) {
 				TriagedAt:    &triagedAt,
 			},
 			{
-				EpisodeID:  "episode-2",
-				Parcel:     "parcel-2",
-				Kind:       "STALLED",
-				Rule:       "triage/v1",
-				Confidence: "SINGLE_SOURCE",
-				Hits:       1,
-				StartedAt:  operationsBaseAt,
-				LastHitAt:  operationsBaseAt,
+				EpisodeID:       "episode-2",
+				Parcel:          "parcel-2",
+				Kind:            "STALLED",
+				CausalCondition: "RECORDED_BEFORE_CAUSAL_CONDITION",
+				Rule:            "triage/v1",
+				Confidence:      "SINGLE_SOURCE",
+				Hits:            1,
+				StartedAt:       operationsBaseAt,
+				LastHitAt:       operationsBaseAt,
 			},
 		},
 	}
@@ -168,9 +173,16 @@ func TestExceptionTriageRecordsListSignalEpisodesVerbatim(t *testing.T) {
 	var body struct {
 		Outcome  string `json:"outcome"`
 		Episodes []struct {
-			EpisodeID    string `json:"episodeId"`
-			Parcel       string `json:"parcel"`
-			Kind         string `json:"kind"`
+			EpisodeID       string `json:"episodeId"`
+			Parcel          string `json:"parcel"`
+			Kind            string `json:"kind"`
+			CausalCondition string `json:"causalCondition"`
+			FactBasis       []struct {
+				Source    string `json:"source"`
+				Fact      string `json:"fact"`
+				Version   string `json:"version"`
+				Judgement string `json:"judgement"`
+			} `json:"factBasis"`
 			Confidence   string `json:"confidence"`
 			Hits         int64  `json:"hits"`
 			StartedAt    string `json:"startedAt"`
@@ -204,10 +216,21 @@ func TestExceptionTriageRecordsListSignalEpisodesVerbatim(t *testing.T) {
 		concluded.Triage.TriagedAt != triagedAt.Format(time.RFC3339Nano) {
 		t.Fatalf("分诊结论三件应成对在场：%+v", concluded.Triage)
 	}
+	// `AT-VE-202` 的线格式半边：因果条件与事实依据逐条透出，判断标识原样。
+	if concluded.CausalCondition != "source-fact/TRANSPORT_FULFILLMENT/movement-fact/parcel-1/MF-1" ||
+		len(concluded.FactBasis) != 1 || concluded.FactBasis[0].Fact != "movement-fact/parcel-1/MF-1" ||
+		concluded.FactBasis[0].Version != "v1" || concluded.FactBasis[0].Judgement != "CC-J-1" ||
+		concluded.FactBasis[0].Source != "TRANSPORT_FULFILLMENT" {
+		t.Fatalf("因果条件与事实依据走样：%+v", concluded)
+	}
 	active := body.Episodes[1]
 	// 活跃未分诊行：ended 与 triage 缺席即答案——「进行中」不由读面代判成任何结论。
 	if active.EpisodeID != "episode-2" || active.EndedAt != nil || active.Triage != nil {
 		t.Fatalf("活跃行不得带 ended/triage：%+v", active)
+	}
+	// `AT-VE-203`：存量行的因果条件如实是「登记于因果条件之前」，依据是空数组而不是缺键。
+	if active.CausalCondition != "RECORDED_BEFORE_CAUSAL_CONDITION" || active.FactBasis == nil || len(active.FactBasis) != 0 {
+		t.Fatalf("存量行的因果条件与依据走样：%+v", active)
 	}
 	if reader.tenant.String() != "tenant-1" || reader.limit != 50 {
 		t.Fatalf("读口收到 tenant=%q limit=%d，应来自 Intake 裁决（tenant-1/50）",

@@ -80,17 +80,31 @@ func (reason RaiseSignalUndecidedReason) String() string {
 	}
 }
 
-// RaiseSignalCommand 携带一次信号命中。规则版本与可信度必备且来自命中事实——「每个
-// 信号必须保存对象、类型、规则版本、判断时间、事实依据、可信度」（CONTEXT），编排不
-// 替命中补任何一样。租户显式随命令到达（ADR-0003）：发作期按租户内的对象+类型定位，
-// 编排不替命中补租户。
+// RaiseSignalCommand 携带一次信号命中。「每个信号必须保存对象、类型、规则版本、判断时间、事实依据、可信度、当前发作期和变化
+// 历史」（CONTEXT）：除发作期与变化历史由本编排形成之外，其余各样都随命令来、缺一即未受理，编排不替命中补任何一样——判断时间
+// 就是 HitAt，事实依据至少一条。因果条件同样随命令来：发作期按租户内的对象+类型+因果条件定位（CONTEXT「同一对象、类型、因果
+// 条件和连续影响期」），原因是什么只有形成这一类信号的一方说得出。租户显式随命令到达（ADR-0003）。
 type RaiseSignalCommand struct {
 	TenantID   domain.TenantID
 	Kind       domain.ExceptionSignalKindReference
 	Parcel     domain.TrackedParcelReference
+	Cause      domain.CausalConditionReference
 	Rule       domain.SignalRuleVersionReference
 	Confidence domain.ConfidenceReference
+	Basis      []domain.SignalFactBasis
 	HitAt      time.Time
+}
+
+func (command RaiseSignalCommand) hit() domain.SignalHit {
+	return domain.SignalHit{
+		Kind:       command.Kind,
+		Parcel:     command.Parcel,
+		Cause:      command.Cause,
+		Rule:       command.Rule,
+		Confidence: command.Confidence,
+		Basis:      command.Basis,
+		At:         command.HitAt,
+	}
 }
 
 type RaiseSignalResult struct {
@@ -151,7 +165,7 @@ func NewRaiseSignalHandler(deps RaiseSignalDeps) *RaiseSignalHandler {
 }
 
 // Handle 把一次信号命中推进到发作期与分诊：受理（命中事实缺一即未受理，不读依赖）→
-// 按对象+类型找最近发作期 → 活跃则记命中不建重复、不重新分诊、不重复建案 → 已结束或
+// 按对象+类型+因果条件找最近发作期 → 活跃则记命中不建重复、不重新分诊、不重复建案 → 已结束或
 // 无既往则分诊（规则未配置即人工复核格，如实不自动建案）→ 开启或重开（重开指回前
 // 发作期）→ 走向为`自动建案`时建立案件（根对象取信号对象、责任团队取规则条目登记的
 // 那个、主状态待响应）→ 发作期、分诊结论与案件同一提交 → 发布意图。
@@ -164,18 +178,13 @@ func (handler *RaiseSignalHandler) Handle(
 	ctx context.Context,
 	command RaiseSignalCommand,
 ) (RaiseSignalResult, error) {
-	// 先判命中事实再读依赖：规则版本或可信度立不起来的输入构不成信号，而一次已经发出
-	// 的查询收不回来。
-	if command.TenantID.String() == "" ||
-		command.Kind.String() == "" ||
-		command.Parcel.String() == "" ||
-		command.Rule.String() == "" ||
-		command.Confidence.String() == "" ||
-		command.HitAt.IsZero() {
+	// 先判命中事实再读依赖：规则版本、可信度、因果条件或事实依据立不起来的输入构不成信号，而一次已经发出的查询收不回来。
+	if command.TenantID.String() == "" || !command.hit().Complete() {
 		return RaiseSignalResult{outcome: RaiseSignalNotAccepted}, nil
 	}
 
-	latest, found, err := handler.deps.Episodes.FindLatest(ctx, command.TenantID, command.Parcel, command.Kind)
+	latest, found, err := handler.deps.Episodes.FindLatestForCause(
+		ctx, command.TenantID, command.Parcel, command.Kind, command.Cause)
 	if err != nil {
 		return RaiseSignalResult{outcome: RaiseSignalUndecided, reason: SignalEpisodeStoreUnavailable}, nil
 	}
@@ -222,17 +231,10 @@ func (handler *RaiseSignalHandler) Handle(
 	var raiseOutcome RaiseSignalOutcome
 	if found {
 		// 条件明确解除后再次发生：建立关联的新发作期指回前期，原发作期保持已结束。
-		episode, err = latest.ReopenAsLinked(episodeID, command.HitAt)
+		episode, err = latest.ReopenAsLinked(episodeID, command.hit())
 		raiseOutcome = SignalEpisodeReopened
 	} else {
-		episode, err = domain.OpenEpisode(
-			episodeID,
-			command.Kind,
-			command.Parcel,
-			command.Rule,
-			command.Confidence,
-			command.HitAt,
-		)
+		episode, err = domain.OpenEpisode(episodeID, command.hit())
 		raiseOutcome = SignalEpisodeOpened
 	}
 	if err != nil {

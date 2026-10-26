@@ -409,16 +409,39 @@ func establishedCase(t *testing.T, id, root string, at time.Time) *domain.Except
 	return exceptionCase
 }
 
+// episodeHit 立一次命中：因果条件与依据都是 fact 这一份源事实（版本 v1，随带判断标识 J-<fact>）。
+func episodeHit(t *testing.T, parcel, kind, fact string, at time.Time) domain.SignalHit {
+	t.Helper()
+	reference := factValue(t, domain.NewSourceFactReference, fact)
+	cause, err := domain.SourceFactCausalCondition(domain.SourceTransportFulfillment, reference)
+	if err != nil {
+		t.Fatalf("因果条件：%v", err)
+	}
+	return domain.SignalHit{
+		Kind:       factValue(t, domain.NewExceptionSignalKindReference, kind),
+		Parcel:     factValue(t, domain.NewTrackedParcelReference, parcel),
+		Cause:      cause,
+		Rule:       factValue(t, domain.NewSignalRuleVersionReference, "signal-rule/v1"),
+		Confidence: factValue(t, domain.NewConfidenceReference, "confidence/high"),
+		Basis: []domain.SignalFactBasis{{
+			Source:    domain.SourceTransportFulfillment,
+			Fact:      reference,
+			Version:   factValue(t, domain.NewSourceFactVersion, "v1"),
+			Judgement: "J-" + fact,
+		}},
+		At: at,
+	}
+}
+
+// openedEpisode 开一期，原因是这件对象上的同一份事实 fact/<parcel>——同对象的几期默认同一个原因，要分原因用 openedEpisodeFor。
 func openedEpisode(t *testing.T, id, parcel, kind string, firstHitAt time.Time) *domain.SignalEpisode {
 	t.Helper()
-	episode, err := domain.OpenEpisode(
-		factValue(t, domain.NewEpisodeID, id),
-		factValue(t, domain.NewExceptionSignalKindReference, kind),
-		factValue(t, domain.NewTrackedParcelReference, parcel),
-		factValue(t, domain.NewSignalRuleVersionReference, "signal-rule/v1"),
-		factValue(t, domain.NewConfidenceReference, "confidence/high"),
-		firstHitAt,
-	)
+	return openedEpisodeFor(t, id, parcel, kind, "fact/"+parcel, firstHitAt)
+}
+
+func openedEpisodeFor(t *testing.T, id, parcel, kind, fact string, firstHitAt time.Time) *domain.SignalEpisode {
+	t.Helper()
+	episode, err := domain.OpenEpisode(factValue(t, domain.NewEpisodeID, id), episodeHit(t, parcel, kind, fact, firstHitAt))
 	if err != nil {
 		t.Fatalf("开启发作期：%v", err)
 	}
@@ -548,7 +571,8 @@ func TestReopenedEpisodeWinsFindLatest(t *testing.T) {
 		return fixture.episodes.SaveHit(txCtx, factValue(t, domain.NewTenantID, "tenant-a"), first)
 	})
 
-	reopened, err := first.ReopenAsLinked(factValue(t, domain.NewEpisodeID, "ep-second"), factBaseAt)
+	reopened, err := first.ReopenAsLinked(factValue(t, domain.NewEpisodeID, "ep-second"),
+		episodeHit(t, "parcel-1", "STALLED", "fact/parcel-1", factBaseAt))
 	if err != nil {
 		t.Fatalf("重开发作期：%v", err)
 	}
@@ -705,5 +729,97 @@ func TestSaveHitOnMissingEpisodeFails(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatalf("不存在的发作期被 SaveHit 接受了")
+	}
+}
+
+// TestEpisodesOfOneParcelAndKindAreFoundByTheirCause 证 `AT-VE-201`、`AT-VE-202` 的落库半边：同一对象同一类型两个原因各一期，
+// FindLatestForCause 按原因各取各的、事实依据（含判断标识）原样读回；FindLatest 不问原因，交回这一类最近的那一期。
+func TestEpisodesOfOneParcelAndKindAreFoundByTheirCause(t *testing.T) {
+	fixture := newFactFixture(t)
+	ctx := t.Context()
+	tenant := factValue(t, domain.NewTenantID, "tenant-a")
+	parcel := factValue(t, domain.NewTrackedParcelReference, "parcel-1")
+	kind := factValue(t, domain.NewExceptionSignalKindReference, "DEPARTURE_GATE_BLOCKED")
+
+	first := openedEpisodeFor(t, "ep-mf-1", "parcel-1", "DEPARTURE_GATE_BLOCKED", "movement-fact/parcel-1/MF-1", factBaseAt)
+	second := openedEpisodeFor(t, "ep-mf-2", "parcel-1", "DEPARTURE_GATE_BLOCKED", "movement-fact/parcel-1/MF-2", factBaseAt.Add(time.Hour))
+	for _, episode := range []*domain.SignalEpisode{first, second} {
+		fixture.inTx(t, ctx, func(txCtx context.Context) error {
+			return fixture.episodes.SaveRaised(txCtx,
+				raisedRecord(t, episode, "tenant-a", "parcel-1", "DEPARTURE_GATE_BLOCKED", domain.ManualReviewRequired))
+		})
+	}
+
+	for _, want := range []*domain.SignalEpisode{first, second} {
+		found, exists, err := fixture.episodes.FindLatestForCause(ctx, tenant, parcel, kind, want.Cause())
+		if err != nil || !exists {
+			t.Fatalf("按原因 %s 读回：err=%v exists=%v", want.Cause(), err, exists)
+		}
+		if found.ID() != want.ID() {
+			t.Fatalf("原因 %s 交回了 %s，想要 %s", want.Cause(), found.ID(), want.ID())
+		}
+		basis := found.Basis()
+		if len(basis) != 1 || basis[0] != want.Basis()[0] {
+			t.Fatalf("依据没原样读回：%+v，想要 %+v", basis, want.Basis())
+		}
+	}
+	other, err := domain.SourceFactCausalCondition(domain.SourceTransportFulfillment,
+		factValue(t, domain.NewSourceFactReference, "movement-fact/parcel-1/MF-3"))
+	if err != nil {
+		t.Fatalf("因果条件：%v", err)
+	}
+	if _, exists, err := fixture.episodes.FindLatestForCause(ctx, tenant, parcel, kind, other); err != nil || exists {
+		t.Fatalf("没有发作期的原因读出了一期：err=%v exists=%v", err, exists)
+	}
+
+	latest, exists, err := fixture.episodes.FindLatest(ctx, tenant, parcel, kind)
+	if err != nil || !exists || latest.ID() != second.ID() {
+		t.Fatalf("不问原因的最近一期 = %v（err=%v exists=%v），想要 ep-mf-2", latest, err, exists)
+	}
+}
+
+// TestAnEpisodeRecordedBeforeCausesStaysReadableButClaimsNoNewHit 证 `AT-VE-203`：迁移 0029 把存量行回填为「登记于因果条件之前」、
+// 依据为空数组——照旧按对象与类型读得回，但不认领任何带原因的命中；库面 CHECK 只放存量那一格没有依据，存量那一格也不许带依据。
+func TestAnEpisodeRecordedBeforeCausesStaysReadableButClaimsNoNewHit(t *testing.T) {
+	fixture := newFactFixture(t)
+	ctx := t.Context()
+	tenant := factValue(t, domain.NewTenantID, "tenant-a")
+	parcel := factValue(t, domain.NewTrackedParcelReference, "parcel-1")
+	kind := factValue(t, domain.NewExceptionSignalKindReference, "STALLED")
+
+	insert := func(episodeID, cause, basis string) error {
+		_, err := fixture.pool.Exec(ctx,
+			`INSERT INTO visibility_exception.signal_episode
+				(tenant_id, episode_id, parcel_ref, kind_ref, causal_condition, rule_ref, confidence_ref, fact_basis,
+				 hits, started_at, last_hit_at)
+			 VALUES ('tenant-a', $1, 'parcel-1', 'STALLED', $2, 'signal-rule/v0', 'confidence/high', $3::jsonb, 3, $4, $4)`,
+			episodeID, cause, basis, factBaseAt)
+		return err
+	}
+	if err := insert("ep-legacy", domain.CausalConditionRecordedBeforeCauses, `[]`); err != nil {
+		t.Fatalf("写存量行：%v", err)
+	}
+
+	legacy, exists, err := fixture.episodes.FindLatest(ctx, tenant, parcel, kind)
+	if err != nil || !exists {
+		t.Fatalf("存量发作期读不回：err=%v exists=%v", err, exists)
+	}
+	if legacy.Cause().String() != domain.CausalConditionRecordedBeforeCauses || len(legacy.Basis()) != 0 || legacy.Hits() != 3 {
+		t.Fatalf("存量发作期走样：cause=%s basis=%v hits=%d", legacy.Cause(), legacy.Basis(), legacy.Hits())
+	}
+	hit := episodeHit(t, "parcel-1", "STALLED", "fact/parcel-1", factBaseAt.Add(time.Hour))
+	if _, exists, err := fixture.episodes.FindLatestForCause(ctx, tenant, parcel, kind, hit.Cause); err != nil || exists {
+		t.Fatalf("带原因的命中认领了存量发作期：err=%v exists=%v", err, exists)
+	}
+
+	if err := insert("ep-no-basis", "source-fact/TRANSPORT_FULFILLMENT/fact/parcel-1", `[]`); err == nil {
+		t.Fatal("有原因却没依据的行被库收下了")
+	}
+	if err := insert("ep-legacy-basis", domain.CausalConditionRecordedBeforeCauses,
+		`[{"source":"TRANSPORT_FULFILLMENT","fact":"fact/parcel-1","version":"v1"}]`); err == nil {
+		t.Fatal("存量那一格带着依据被库收下了")
+	}
+	if err := insert("ep-object-basis", "source-fact/TRANSPORT_FULFILLMENT/fact/parcel-1", `{}`); err == nil {
+		t.Fatal("依据不是数组的行被库收下了")
 	}
 }

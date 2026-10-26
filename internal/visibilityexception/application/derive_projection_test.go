@@ -379,17 +379,29 @@ func TestAForkedSupersessionKeepsBothSuccessorsInTheProjection(t *testing.T) {
 	if conflict.Disposition() != application.ConflictSignalRaised {
 		t.Fatalf("disposition = %s, want SIGNAL_RAISED", conflict.Disposition())
 	}
-	// 信号真的进了分诊：发作期按（租户+对象+类型）开启，规则版本与可信度是登记的那两样。
+	// 信号真的进了分诊：发作期按（租户+对象+类型+因果条件）开启，因果条件是分叉的那一条事实流，规则版本与可信度是登记的那
+	// 两样，事实依据是保留下来的双方（`AT-VE-202` 的冲突信号半边）。
+	retained := conflict.Judgment().Retained()
+	cause, err := domain.SupersessionForkCausalCondition(retained[0].Source(), retained[0].Fact())
+	if err != nil {
+		t.Fatalf("fork cause: %v", err)
+	}
 	episode, found := fixture.signals.episodes.latest[episodeKey{
 		tenant: mustValue(t, domain.NewTenantID, "tenant-1"),
 		parcel: signal.Parcel(),
 		kind:   signal.Kind(),
+		cause:  cause,
 	}]
 	if !found || !episode.Active() {
-		t.Fatal("冲突信号没有在分诊侧开启发作期")
+		t.Fatal("冲突信号没有在分诊侧按分叉的事实流开启发作期")
 	}
-	if snapshot := episode.Snapshot(); snapshot.Rule.String() != "signal-rules/v3" || snapshot.Confidence.String() != "SOURCE_FORK" {
+	snapshot := episode.Snapshot()
+	if snapshot.Rule.String() != "signal-rules/v3" || snapshot.Confidence.String() != "SOURCE_FORK" {
 		t.Fatalf("episode = %+v; 规则版本与可信度必须来自登记的冲突信号规则", snapshot)
+	}
+	if len(snapshot.Basis) != 2 || snapshot.Basis[0].Fact != retained[0].Fact() ||
+		snapshot.Basis[0].Version == snapshot.Basis[1].Version {
+		t.Fatalf("basis = %+v; 冲突信号的事实依据是分叉的双方", snapshot.Basis)
 	}
 	if !versions["handover/v2a"] || !versions["handover/v2b"] {
 		t.Fatal("信号形成后有一方被挤出了投影——信号不使任何源事实失效")

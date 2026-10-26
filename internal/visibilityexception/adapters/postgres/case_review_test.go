@@ -13,6 +13,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	adapter "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
+	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
 // 本文件对真实 PostgreSQL 16 证案件侧三页查阅目录的读面（票 admin-skeleton-closure-
@@ -137,6 +138,14 @@ func TestCaseReviewListsSignalEpisodesWithConclusions(t *testing.T) {
 		latest.EndedAt != nil ||
 		latest.PriorEpisode != "" {
 		t.Errorf("发作期行转写变形：%+v", latest)
+	}
+	// `AT-VE-202` 的查阅半边：因果条件与事实依据照行转写，复核据它追得回是哪一份事实、凭哪一份判断。
+	if latest.CausalCondition != "source-fact/TRANSPORT_FULFILLMENT/fact/parcel-2" ||
+		len(latest.FactBasis) != 1 ||
+		latest.FactBasis[0] != (ports.SignalEpisodeFactBasisRow{
+			Source: "TRANSPORT_FULFILLMENT", Fact: "fact/parcel-2", Version: "v1", Judgement: "J-fact/parcel-2",
+		}) {
+		t.Errorf("因果条件与事实依据转写变形：%+v", latest)
 	}
 	if latest.Outcome != "MANUAL_REVIEW" ||
 		latest.OutcomeRule != "triage-rule/v1" ||

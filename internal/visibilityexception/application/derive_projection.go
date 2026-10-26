@@ -310,8 +310,8 @@ func (handler *DeriveProjectionHandler) Handle(
 // 进分诊。其余裁决维度（因果、权威范围）各有自己的函数，这里不混判也不新写。
 //
 // 信号那一步失败不推翻派生：各方已经留在投影里按信息待确认表达，冲突本身没有丢；丢的
-// 只是「这次没把它交进分诊」，记成搁置让重放补上——分诊那一侧对同对象同类型的再命中
-// 本就按同一发作期记，重放不会造出第二个信号。
+// 只是「这次没把它交进分诊」，记成搁置让重放补上——因果条件是分叉的那一条事实流，分诊
+// 那一侧对同对象、同类型、同一事实流的再命中按同一发作期记，重放不会造出第二个信号。
 func (handler *DeriveProjectionHandler) judgeForks(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -326,7 +326,12 @@ func (handler *DeriveProjectionHandler) judgeForks(
 		if judgment.Resolved() {
 			continue
 		}
-		conflict, err := handler.raiseConflict(ctx, tenant, judgment)
+		// 分叉按（源上下文、事实引用、前身）成组，同组各方同一条事实流（SupersessionForks）。
+		cause, err := domain.SupersessionForkCausalCondition(fork[0].Source(), fork[0].Fact())
+		if err != nil {
+			return nil, fmt.Errorf("fork causal condition: %w", err)
+		}
+		conflict, err := handler.raiseConflict(ctx, tenant, judgment, cause)
 		if err != nil {
 			return nil, err
 		}
@@ -337,11 +342,16 @@ func (handler *DeriveProjectionHandler) judgeForks(
 
 // raiseConflict 依据一份未裁决的判断形成信号并交进分诊。信号的类型、规则版本与可信度
 // 三样全来自已登记的冲突信号规则（`PAR-VIS-04`）——未配置即如实记「无适用信号」，不替
-// 租户拟一种异常类型。
+// 租户拟一种异常类型。事实依据是判断保留下来的每一份事实（ExceptionSignal.Basis）。
+//
+// 这一类发作期还没有恢复边界：分叉解没解要按链头判（ADR-0245），今天的分叉只在当前有效集里找，源上下文更正其中一支后旧链头
+// 离场、分叉就找不到了，可两个链头其实仍都当前有效——拿「找不到了」结束发作期就是虚构一次恢复。按链头判分叉与据此结束发作期
+// 同归票 docs-consistency/code/30。
 func (handler *DeriveProjectionHandler) raiseConflict(
 	ctx context.Context,
 	tenant domain.TenantID,
 	judgment domain.ConflictJudgment,
+	cause domain.CausalConditionReference,
 ) (FactConflict, error) {
 	rule, configured, err := handler.deps.ConflictRules.ConflictSignalRule(ctx)
 	if err != nil {
@@ -363,8 +373,10 @@ func (handler *DeriveProjectionHandler) raiseConflict(
 		TenantID:   tenant,
 		Kind:       signal.Kind(),
 		Parcel:     signal.Parcel(),
+		Cause:      cause,
 		Rule:       rule.Rule,
 		Confidence: rule.Confidence,
+		Basis:      signal.Basis(),
 		HitAt:      signal.RaisedAt(),
 	})
 	if err != nil {

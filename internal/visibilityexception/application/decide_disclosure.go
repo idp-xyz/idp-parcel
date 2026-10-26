@@ -71,8 +71,8 @@ func (reason DecideDisclosureUndecidedReason) String() string {
 	}
 }
 
-// DecideDisclosureCommand 指名要对哪个信号形成披露决定：对象与信号类型定位发作期
-// （SignalEpisodeStore 的键）。命令里没有客户账户——客户归属由 parcel-shipment 的当前
+// DecideDisclosureCommand 指名要对哪个信号形成披露决定：对象与信号类型取这一类最近的那一期
+// （SignalEpisodeStore.FindLatest，不问因果条件）。命令里没有客户账户——客户归属由 parcel-shipment 的当前
 // 已接受委托给出，本上下文只按包裹反查（CONTEXT「客户归属」），调用方不替它断言。
 // 也没有披露结论——结论由规则与用例形成，命令带结论就是让调用方替规则作判断。租户
 // 显式随命令到达（ADR-0003）。
