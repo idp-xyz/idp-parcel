@@ -62,3 +62,4 @@ Date: 2026-08-11
 - [UC-PS-001：提交委托请求](../application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md)：`已提交`可达字段与三处业务结果改变的不变式出处
 - [ADR-0061：已接受委托的重建门按快照表达能力开门](./0061-accepted-shipment-request-rehydration-by-snapshot-expressiveness.md)：本记录「今天只开`已提交`」那一格被推进到`已接受`；Status 与其余各条不变
 - [ADR-0188：已拒绝委托的重建门按快照表达能力开门](./0188-rejected-shipment-request-rehydration-by-snapshot-expressiveness.md)：继 ADR-0061 之后再推进到`已拒绝`；判据与其余各条不变
+- [ADR-0286：已撤回委托的重建门按快照表达能力开门](./0286-withdrawn-shipment-request-rehydration-by-snapshot-expressiveness.md)：再推进到`已撤回`，四个状态至此全开；判据与其余各条不变
