@@ -26,7 +26,7 @@ Blocked by: 无
 - 起点 `fe43ee99b`，分支 `claude-dcg183`；代码、用例、文档一笔 `e2838233a`，其上一笔补本记录。
 - 改了什么：`handOverIntoSegment`（首登与更正共用）在结束先前段参与之前，对转出控制的一版先问 `laterControlFacts`；答拒绝格时交回 `LATER_CONTROL_FACTS`、不结束不进段。更正那一路原有的同一检查移进这里，不留两份。登记册读不动（欠账）时不在此处作答，落回结束参与那一步响亮失败，与此前一致（`TestRegisterHandoverExposesTheSegmentDebtWhenTheRegistryIsDown` 钉着）。拒收与待确认、段登记册缺席不问。HTTP 层本就透出 `segmentEntryRefusal`，只改了注释。无迁移、无 CONTEXT 改动、无新 ADR。
 - 代决：记下交接、不进段、不拒登（理由：首登是真实发生过的交接，离线补登拒登会丢事实；与段不在册时「交接照登、段另说」同形）。答格取 `LATER_CONTROL_FACTS` 而非欠账引用——重试不会变，不是欠账。没发现「记下交接」会破坏别的不变量：交接意图照交，下游 NO/NR 按交接事实自分。
-- 越权风险点：（1）晚到首登的对象在声明的段里没有参与、不形成该段的实际履约发生项，与 ADR-0307 风险点 1 同理；（2）读不动登记册时晚到检查让位给结束参与那一步，更正口在此极端情形下也随之由「答欠账」变为「响亮失败」，仅限登记册整体读不动那一种。
+- 越权风险点：（1）晚到首登的对象在声明的段里没有参与、不形成该段的实际履约发生项，与 ADR-0307 风险点 1 同理；（2）读不动登记册时晚到检查让位给结束参与那一步，评审曾设想更正口读册失败也整笔不落，核码并非如此：更正先走重派生，读册失败在那里就答欠账返回，走不到这一检查，行为未变（`TestACorrectionIntoTheSegmentWithTheSegmentRegistryDownWritesNothing` 钉着）；只有首登口读册失败改由结束参与那一步响亮失败（本来如此）。守卫只认拒绝格，源码已注明。
 - 判据 → 用例：晚到首登不进段、交接在册、重放答已有版本 → `TestALateFirstHandoverIsRecordedWithoutEnteringTheSegment`（application/late_first_handover_test.go）；真库不两段同时在场、此后交接正常 → `TestALateFirstHandoverLeavesTheObjectInOneSegmentInTheDatabase`；正常时序首登 → 既有首登/结束参与用例未改仍绿。改坏验证：把新检查置为不执行，两条新用例均红（真库那条因结束参与答未受理、对象落进两段）。
 - 文档：UC-TF-005 新立 `AT-TF-356`，`AT-TF-051`、`AT-TF-060` 与「一致性」一节补一句；AT 盘点①表补行并追记；ADR-0307 Status 索引注记与 Links 补票 183（正文未动）。
 - 自验：`go build ./...`、`go vet ./internal/transportfulfillment/...`、gofmt 干净；带 PG DSN 跑 `./internal/transportfulfillment/... ./cmd/parcel-api/... ./cmd/parcel-dispatch/... ./internal/architecture/... ./migrations/...` 全绿；`at-coverage-counts -check` 只报生成物过期（未重生成）。
