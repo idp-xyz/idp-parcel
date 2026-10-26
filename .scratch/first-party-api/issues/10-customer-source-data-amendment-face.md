@@ -1,7 +1,7 @@
 # 10 资料修订口经首方渠道接通
 
 Category: enhancement
-Status: in-progress——2026-10-26 评审无阻断、修订轮完，待进 main，分支 `claude-fpa10`（代码最后一笔 271319f57）。此前in-progress——2026-10-26 会话 `tops-20` 认领（前置 code/36、code/44 已进 main），分支 `claude-fpa10`。此前 ready-for-agent——R1（上线前必修，用户 2026-10-26 定首发要这一口）。
+Status: resolved——2026-10-26 进 main `3fb64d477`（见文末「进 main 记录」）。此前 in-progress——2026-10-26 评审无阻断、修订轮完，待进 main，分支 `claude-fpa10`（代码最后一笔 271319f57）。此前in-progress——2026-10-26 会话 `tops-20` 认领（前置 code/36、code/44 已进 main），分支 `claude-fpa10`。此前 ready-for-agent——R1（上线前必修，用户 2026-10-26 定首发要这一口）。
 Blocked by: 06；docs-consistency/code/44（tops-26）
 出处：用户 2026-10-26「都需要」（首个租户上线时客户经首方 API 要能撤回、取消、修订、补充、索赔）、「每个客户系统只代表它自己的账户（直客），只考虑这个吧」、「首发不要客户状态读口」、「首发不做限流」；技术取舍由会话 `tops-20` 代决（用户「你帮我决定吧」）。 计划见 [spec](../spec.md)「五口上线」与 [摸底报告](../customer-faces-scoping-2026-10-26.md)。
 
@@ -45,3 +45,15 @@ L
 - **未走**：一次性库上 `seed.sh` 之后用演示客户端实走——本环境没有 `psql` 建一次性库，且实走要 OIDC 发行方；种子形状由票 13 自己验过，本票用例取同形的授予与矩阵。
 - 三条评审注释：PC 侧不按证据区分两次修订、区分靠 PS 版本（`CustomerSelfAmendmentRequestSource`、ADR-0311 决定四）；`buildSourceDataAmendmentAuthorizer` 只供首方直客修订装配、运营侧须另起映射；`namedAmendmentChecker.Handle` 查找出错 / 查不到放行给 inner 的隐式依赖写明。
 - 自验含 PG：`./cmd/parcel-api/... ./internal/parcelshipment/... ./internal/accessidentity/... ./internal/architecture/... ./internal/partycommercial/... ./migrations/...` 全绿。
+
+## 评审记录
+
+评审 ← tops-20 隔离子代理(sonnet) · 钉 `7f33fad5d`：阻断无。非阻断：1. 同一委托同一资料范围的两次修订证据串相同——PC 只校验证据非空、授予匹配不用它，修订请求身份在 PS 版本上可区分；修订轮写明「PC 侧不按证据区分、区分靠 PS 版本」。2. `buildSourceDataAmendmentAuthorizer` 写死客户账户请求方映射，今天只被首方修订装配调用——修订轮注释写明运营侧须另起映射。3. `namedAmendmentChecker.Handle` 查找出错放行给 inner 的隐式依赖——修订轮注释写明。4. 代决 2（`shipmentRequestId` 必填）合理，与补充口同做法。无发现：来源映射、账户隔离、`reason` 必填与 `basisVersionId` 缺省、内容不落范围答 400、PAM-1 摘要、契约、号均符合。
+
+## 进 main 记录（2026-10-26，推送方会话 tops-20）
+
+- **main**：`3fb64d477`。出处：分支 `claude-fpa10` tip `3f11fa9c3`（作者为 Sonnet 子代理；ADR-0311；修订轮在票 13 进 main 后 rebase，并把生产装配真库用例改走票 13 的授予持久化口与种子同形矩阵：`ACCEPTED_NOT_YET_RECEIVED` 阶段更正答 201，`CUSTOMS_SUBMITTED` 阶段同组更正答不允许）。修订轮只收非阻断，推送方读了修订 diff。
+- **生成物**：三件推送方重生成，`-check` 退 0。
+- **全量真库测试**：`scripts/test-full.sh` 跑在 `3fb64d477`：158 ok / 0 FAIL。**种子**：一次性库灌入退 0，用后删库。
+- **未做**：一次性库上用演示客户端经真 OIDC 实走（需发行方），由生产装配真库用例代替；归收尾票 12 的演示实走。
+- **号**：`AT-PS-140`–`143`。
