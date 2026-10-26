@@ -1,7 +1,7 @@
 # 143 NR 读回整份委托聚合只为取受理基线地理维
 
 Category: enhancement
-Status: in-progress——2026-10-25 评审阻断已修、修订轮完，待评审复核与进 main，分支 `claude-dcg142` tip `7e78cb155`（修订轮末笔；本票面一笔随后）。此前 in-progress——2026-10-25 作者完工，待隔离评审与进 main，分支 `claude-dcg142` tip `ff13558ed`（代码末笔；本票与 142 的完成记录随后一笔）。此前 in-progress——2026-10-25 会话 `tops-20`（Claude Code）认领，与 142 同批，分支 `claude-dcg142`（worktree `idp-parcel-dcg142`）。此前 ready-for-agent——2026-10-20 代决复核立（上线后尽快），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: in-progress——2026-10-26 复评无阻断，待进 main，分支 `claude-dcg142` tip `4c45d65e2`（复评收尾末笔；本票面一笔随后）。此前 in-progress——2026-10-25 评审阻断已修、修订轮完，待评审复核与进 main，分支 `claude-dcg142` tip `7e78cb155`（修订轮末笔；本票面一笔随后）。此前 in-progress——2026-10-25 作者完工，待隔离评审与进 main，分支 `claude-dcg142` tip `ff13558ed`（代码末笔；本票与 142 的完成记录随后一笔）。此前 in-progress——2026-10-25 会话 `tops-20`（Claude Code）认领，与 142 同批，分支 `claude-dcg142`（worktree `idp-parcel-dcg142`）。此前 ready-for-agent——2026-10-20 代决复核立（上线后尽快），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 R6；ADR-0215 越权风险点 1
 
@@ -136,3 +136,19 @@ ADR 索引仍没重生成。本地试跑 `go run ./tools/adr-index` 能生成：
 - `go build ./...` 与 `go vet ./...` 全仓通过；改动的 `.go` 都已 `gofmt -w`，`gofmt -l` 无输出。
 - 带 DSN `go test -count=1 -p 4 ./internal/parcelshipment/... ./internal/networkrouting/... ./cmd/parcel-dispatch/... ./internal/architecture/...`：34 个包全 ok，退 0。真库包确实跑了：PS `adapters/postgres` 16.5 秒，NR `adapters/postgres` 7.9 秒，`cmd/parcel-dispatch` 39.4 秒，`architecture` 8.4 秒。
 - 全量留给推送方。
+
+## 复评
+
+以下照抄协调方转来的 `rereview-142-143.md`，两票同一份。
+
+复评 ← tops-20 隔离子代理 · 钉 `f4902c73b` · 00:01
+
+结论：上轮阻断已清零，修订后无新阻断。
+
+探针（重跑于 `f4902c73b`，overlay `probe143/o-142b.json`）：三形里 `FindBySourceIdentity` 都被重建门拒；读口对两个成员都答 found=false、err 包 `ErrAcceptanceBaselineInconsistent`、投影零值——基线挂历史版本「not on the current submission version」；成员收窄「members differ」；时刻不等「fixed time differs from the acceptance decision time」。另：相关包 go vet 无输出；读口真库用例全绿（`TestAnInconsistentAcceptanceBaselineIsNamed` 六子格）；`internal/architecture`、NR 适配器、PS 领域绿；adr-index -check 只报生成物。
+
+Spec：阻断无（判断顺序与 `acceptedProductsValidForRehydration` 基线各条一致；先判后问；SQL 只多读 `currentVersion.versionId`、`declaredParcelIds`、`elements` 与 `decision.decidedAt`，`TestTheProjectionDoesNotReadTheRestOfTheAggregate` 作证；用例翻转到位）。非阻断无新增（上轮那条已在代决 4 补注）。无发现：NR 适配器分格与两路哨兵名单不变。
+
+Standards（只看新增改动）：阻断无。非阻断 1：PS CONTEXT「地址要素」末句括注「（不指当前提交版本，成员或时刻与当前提交版本、接受决定对不上）」只列了 ADR-0301 决定一五格里的三格，缺「没有基线」「基线没有固定时刻」；CONTEXT 是现行规则唯一出处，括注易读成穷举——补上两格或改举例口吻。无发现：ADR-0279「理由限定」注记合 ADR-0008 先例、引文逐字、正文未动；ADR-0301 修订去向写法、决定一二与风险点 1、2 随实现改；PS CONTEXT 末句已改成现行规则；注释中文无行号计数。
+
+复评非阻断 1 的收法：PS CONTEXT「地址要素」末句括注补齐五形（没有接受基线、基线不指当前提交版本、基线没有固定时刻、基线成员与当前提交版本不一致、基线时刻不等于接受决定的时刻），取穷举而不取举例口吻——CONTEXT 是现行规则唯一出处，五形就是读口判的全部，写全比举例准；提交 `4c45d65e2`。ADR-0301 Consequences 那句只说「接受基线自相矛盾答矛盾」、不列格，未改。只改文档，未重跑 go 用例。
