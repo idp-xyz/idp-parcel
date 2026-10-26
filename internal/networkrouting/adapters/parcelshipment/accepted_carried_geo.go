@@ -16,9 +16,9 @@ var (
 	// 矛盾。生产装配把它登进交接触发与收寄采用两路复核的未决哨兵。
 	ErrAcceptedParcelUnreadable = errors.New(
 		"network routing parcelshipment adapter: the current accepted parcel is not readable right now")
-	// ErrAcceptedRequestInconsistent 说明读回的已接受委托自相矛盾：PS 读口答接受基线自相矛盾（没有基线、基线没有固定
-	// 时刻、基线指的提交版本不在委托里），或与一份收寄采用记录指着两份委托、两条基线。仓储不变量已破，重投不会变，
-	// 禁止进未决哨兵（ADR-0029）。
+	// ErrAcceptedRequestInconsistent 说明读回的已接受委托自相矛盾：PS 读口答接受基线自相矛盾（各形见
+	// psdomain.ErrAcceptanceBaselineInconsistent 头注），或与一份收寄采用记录指着两份委托、两条基线。仓储不变量已破，
+	// 重投不会变，禁止进未决哨兵（ADR-0029）。
 	ErrAcceptedRequestInconsistent = errors.New(
 		"network routing parcelshipment adapter: the accepted shipment request contradicts itself")
 )
