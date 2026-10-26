@@ -1,7 +1,7 @@
 # PS 生产归属目录：隔离写开关退场的前件
 
 Category: enhancement
-Status: in-progress——2026-10-26 会话 `tops-20`（Claude Code）分诊为 R1（上线前必修：生产形态下真实租户一单也提交不进来，见 [分诊报告](../../needs-triage-sweep-2026-10-26.md)）并认领，分支 `claude-fpa04`；新 ADR 取 0308。此前 needs-triage——2026-10-19 票 [00](./00-first-party-customer-intake.md) 立。
+Status: in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 claude-fpa04（代码最后一笔 8e34dff89）。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）分诊为 R1（上线前必修：生产形态下真实租户一单也提交不进来，见 [分诊报告](../../needs-triage-sweep-2026-10-26.md)）并认领，分支 `claude-fpa04`；新 ADR 取 0308。此前 needs-triage——2026-10-19 票 [00](./00-first-party-customer-intake.md) 立。
 Blocked by: 无
 出处：[ADR-0180](../../../docs/adr/0180-admission-scope-tenant-mapping-is-an-access-identity-register-and-self-authority-is-a-deployment-parameter.md) 决定三「目录本身归 PS 生产归属那一票」与越权风险点「PS 生产归属的能力与事实类型词不在本记录内」；[ADR-0150](../../../docs/adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md) 决定一、三；[ADR-0141](../../../docs/adr/0141-integrator-sandbox-is-a-deployment-form-of-the-first-party-api-on-synthetic-data.md) 决定四「不许写一个直接返回已确定的假目录」。
 
@@ -22,3 +22,37 @@ Blocked by: 无
 
 - 生产形态（不设写开关）下，演示租户经首方口提交一单答 `SUBMITTED`；对照或区间没登答 `OWNERSHIP_UNRESOLVED`（不代拟）。
 - 证据只记 `S`。
+
+## 完成记录
+
+起点 `b6f0c10ba`；代码提交 `8e34dff89`（分支 `claude-fpa04`）。本轮做「做什么」第 1–3 步；第 4 步（写开关退场）不在本轮，归 operator-channel/53，写开关代码未删。没有迁移（对照册与区间册现成，PS 迁移号 0032 未取用）。
+
+### 各层改了什么
+
+- 领域/接入身份：`accessidentity.ShipmentRequestSubmissionAdmission()` 是委托提交那一对词的唯一定义；`checkAdmissionRequirement` 单独认下它（登得进对照），`customerCapabilitiesAdmittedAtMint` 不动，铸造侧仍不判它。
+- PS 适配器：`internal/parcelshipment/adapters/accessidentity` 新增 `ProductionGovernanceScopeDirectory`（实现 `pspilot.GovernanceScopeDirectory`；放这里是 ADR-0025 消费方侧位置，不让 `pilotgovernance` 适配器多导入第三个上下文）；`pilotgovernance` 新增 `NewGovernanceScopeOfObjectScope`（试点范围版本取对象范围本身）。
+- 装配：`buildProductionOwnership` 在 `isolated == nil` 时装生产目录；设写开关仍装注入式合成目录。
+- 种子：`data/access/17`（对照）、`data/governance/52`（区间）、`steps/478-access-shipment-request-submission.sh`；`scripts/demo-seeds/README.md` 第 5 条改写。
+- 文档：ADR-0308；ADR-0180 的 Status 索引注记与 Links 加前向指针（正文未动）；`docs/adr/README.md` 加 0308 行并给 0180 行加后续注记；UC-PS-001 验收表与 `.scratch/at-coverage-inventory.md` ①分桶表补 `AT-PS-117..119`（总览计数未重算，由推送方重算）。未改任何 `docs/domain` 下 CONTEXT。
+
+### 能力与事实类型词、试点范围版本
+
+- 能力 `CUSTOMER_COMMAND`，事实类型 `SHIPMENT_REQUEST_SUBMISSION`，产品词、不带 `SYN-`；与首方客户族已有取法同族（ADR-0180 决定四末项）。
+- 试点范围版本由对照的对象范围本身给，不设第二来源。
+
+### 代决与越权风险点（均见 ADR-0308，待 PS owner 复核）
+
+- 代决 1 词（决定一）；代决 2 对照册收下词而铸造侧不判（决定二）；代决 3 目录读对照、不代拟，缺席与故障分格（决定三）；代决 4 试点范围版本 = 对象范围（决定四）；代决 5 写开关形态保留注入式目录（决定五）。
+- 越权风险点：1 键粒度是租户不是客户账户；2「试点范围版本 = 对象范围」是假设；3 设写开关时开关租户之外的租户即使登了对照也答`权威未确定`（过渡期）；4 `CUSTOMER_COMMAND` 下混着铸造侧判与不判两类口；5 权威串未设时登得再齐也答`权威未确定`；6 没读 ADR-0139、ADR-0025 全文与暂停迁移。
+
+### 判据对用例
+
+- 不设写开关，演示租户经首方口 `SUBMITTED`：`TestWithoutTheWriteSwitchARegisteredTenantSubmitsThroughTheProductionDirectory`（真库，AT-PS-118）；写开关形态仍成立：`TestTheWriteSwitchLendsItsCoordinatesOnlyToItsOwnTenant`。
+- 对照或区间没登答 `OWNERSHIP_UNRESOLVED`：`TestWithoutTheWriteSwitchAMissingMappingOrIntervalLeavesOwnershipUnresolved`（只登区间、只登对照、对照登给别的租户）与 `TestWithoutTheWriteSwitchSyntheticCoordinatesAloneDoNotAdmit`（AT-PS-119）。
+- 目录读法（查到、查不到、读不动、重叠）：`production_governance_scope_directory_test.go` 三个用例（AT-PS-117）。
+- 证据只记 `S`。
+
+### 自验
+
+含 PG（`IDP_PARCEL_POSTGRES_DSN` 指本机 55432）：`go build ./...`、`go vet`（parcelshipment、accessidentity、cmd）通过，改过的 `.go` 已 `gofmt`；`go test -count=1 -p 1 ./internal/parcelshipment/... ./internal/accessidentity/... ./cmd/parcel-api/... ./internal/architecture/... ./migrations/...` 全绿（架构门禁曾拦下事务回调里的 `t.Fatalf`，已改）。种子灌入一次性库 `fpa04_seed`（`seed.sh` 退出 0，新对照与区间各一行），已 `DROP`。`go run ./tools/at-coverage-counts -check` 只报生成物过期。未跑全量。
+
