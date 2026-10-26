@@ -1,10 +1,17 @@
 # 承运订舱答复口集成说明（首版）
 
-本文是承运订舱答复口 `POST /transport-fulfillment/booking-answers` 对承运方系统的首版集成说明：谁来调、怎样认证、载荷怎样写、一次订舱能答几份、各格怎样续办，以及现形进不来的答复与以后怎样扩形。
+本文是承运订舱答复口 `POST /transport-fulfillment/booking-answers`（路径前缀是现状，见「路径前缀与错误体是现状」一节）对承运方系统的首版集成说明：谁来调、怎样认证、载荷怎样写、一次订舱能答几份、各格怎样续办，以及现形进不来的答复与以后怎样扩形。
 
-本文不另立规则。各格的权威在 [ADR-0202](../adr/0202-transport-commission-booking-and-carrier-answer-entry-families-and-supplier-agreement-check.md) 决定二、五与文末补记、[ADR-0239](../adr/0239-a-carrier-answer-from-a-non-provider-is-answered-booking-not-found-and-the-basis-is-kept-on-a-bounce-register.md)、[运输履约上下文](../domain/transport-fulfillment/CONTEXT.md)「订舱」词条与生命周期，以及 [UC-TF-004](../application/transport-fulfillment/UC-TF-004-COMMISSION-AND-ACCEPT-TRANSPORT.md) 的 `AT-TF-149`、`AT-TF-150`、`AT-TF-151`、`AT-TF-153`、`AT-TF-154`、`AT-TF-326`；本文与它们相抵时以它们为准。
+除「以后怎样扩形」一节那条对接方纪律另注依据之外，本文不另立规则。各格的权威在 [ADR-0202](../adr/0202-transport-commission-booking-and-carrier-answer-entry-families-and-supplier-agreement-check.md) 决定二、五与「补记：票 24 落地时的补充裁定」一节、[ADR-0239](../adr/0239-a-carrier-answer-from-a-non-provider-is-answered-booking-not-found-and-the-basis-is-kept-on-a-bounce-register.md)、[运输履约上下文](../domain/transport-fulfillment/CONTEXT.md)「订舱」词条与生命周期，以及 [UC-TF-004](../application/transport-fulfillment/UC-TF-004-COMMISSION-AND-ACCEPT-TRANSPORT.md) 的 `AT-TF-149`、`AT-TF-150`、`AT-TF-151`、`AT-TF-153`、`AT-TF-154`、`AT-TF-326`；路径前缀与错误体的去向在 [ADR-0140](../adr/0140-first-party-api-contract-is-generated-from-endpoint-descriptors-with-url-major-version-and-problem-details.md) 决定二、三。本文与它们相抵时以它们为准。
 
-**首版契约**：2026-10-20 代决复核 R8 裁定，这一口按现形作为对承运商的首版集成契约，以后扩形只加取值（[ADR-0202](../adr/0202-transport-commission-booking-and-carrier-answer-entry-families-and-supplier-agreement-check.md) 文末复核记录）。证据层级：首发前没有真实承运商接入，本文所述行为只在演示租户 `SYN-TENANT-01` 上走通过，只记 `S`。演示里怎样取令牌、用哪一台合成承运商，见[种子 README](../../scripts/demo-seeds/README.md)「集成客户端渠道：演示发行方」一节。
+**首版契约**：2026-10-20 代决复核 R8 裁定，这一口按现形作为对承运商的首版集成契约，以后扩形只加取值（[ADR-0202](../adr/0202-transport-commission-booking-and-carrier-answer-entry-families-and-supplier-agreement-check.md)「复核记录（2026-10-20…）」一节）。证据层级：首发前没有真实承运商接入，本文所述行为只在演示租户 `SYN-TENANT-01` 上走通过，只记 `S`。演示里怎样取令牌、用哪一台合成承运商，见[种子 README](../../scripts/demo-seeds/README.md)「集成客户端渠道：演示发行方」一节。
+
+## 路径前缀与错误体是现状
+
+这两格是今天的样子，**不在「只加取值」承诺之内**，随票 [docs-consistency/code/82](../../.scratch/docs-consistency/code/82-operator-and-integration-families-still-answer-the-legacy-problem-shape-and-the-contract-is-not-generated.md) 改；改时承运方要跟着改请求路径与错误体的解析：
+
+- **路径**：今天不带 URL 主版本，是 `/transport-fulfillment/booking-answers`。[ADR-0140](../adr/0140-first-party-api-contract-is-generated-from-endpoint-descriptors-with-url-major-version-and-problem-details.md) 决定二把 `/v1` 延到集成客户端族各口，前缀由装配点按族加。
+- **错误体**：认证没过、坏报文与 `5xx` 今天答 `{"error":{"code":"…"}}`，媒体类型 `application/json`。ADR-0140 决定三定 4xx 与 5xx 一律 `application/problem+json`（RFC 9457）；`code` 的取值原样保留，变的是它在响应体里的位置与媒体类型。
 
 ## 谁来调，怎样认证
 
@@ -12,9 +19,9 @@
 - 承运方系统用客户端凭据（OAuth 2.0 client credentials）向租户配置的集成客户端发行方取令牌，请求头带 `Authorization: Bearer <令牌>`。集成客户端册要求证书绑定时，还要在同一条 TLS 连接上出示绑定的那张客户端证书。
 - 租户与来源身份只取自集成客户端的绑定，载荷里不收；多写一个字段即坏报文。
 - **只能答自己的订舱**：来源身份要等于这次订舱所属运输委托的服务提供方，按同一串字面比、不归一。不是的话答 `BOOKING_NOT_FOUND`，与订舱不在册同一格，见「响应」一节。
-- 订舱标识由租户在订舱时定，经租户与承运方之间既有的渠道带给承运方；本产品今天没有出站订舱连接器（ADR-0202 文末补记「订舱与答复都不入队」一条）。
+- 订舱标识由租户在订舱时定，经租户与承运方之间既有的渠道带给承运方；本产品今天没有出站订舱连接器（ADR-0202「补记：票 24 落地时的补充裁定」一节「订舱与答复都不入队」一条）。
 
-认证没过，不进业务判断，答问题体 `{"error":{"code":"…"}}`：
+认证没过，不进业务判断，答问题体 `{"error":{"code":"…"}}`（错误体是现状，见「路径前缀与错误体是现状」一节）：
 
 | 状态码 | `code` | 含义 | 续办 |
 |---|---|---|---|
@@ -26,7 +33,7 @@
 
 ## 载荷
 
-`Content-Type: application/json`，封闭解码：不认识的字段、多余内容、超出大小上限、`outcome` 不在本文所列取值之内、`decidedAt` 解不出，都答 `400` `MALFORMED_REQUEST`。
+`Content-Type: application/json`，封闭解码：不认识的字段、多余内容、超出大小上限、`outcome` 不在本文所列取值之内、`decidedAt` 解不出，都答 `400` `MALFORMED_REQUEST`（错误体同认证各格，是现状）。
 
 | 字段 | 含义 |
 |---|---|
@@ -62,7 +69,7 @@
 
 ## 现形进不来的答复
 
-按现形作为首版契约（R8），下列答复今天进不来，都答 `ANSWER_CONFLICT`，在册的仍是原来那一份（ADR-0202 文末补记越权风险点 13）。承运方要表达它们，只能请租户另起一次订舱，再对新订舱作答：
+按现形作为首版契约（R8），下列答复今天进不来，都答 `ANSWER_CONFLICT`，在册的仍是原来那一份（ADR-0202「补记：票 24 落地时的补充裁定」一节越权风险点 13）。承运方要表达它们，只能请租户另起一次订舱，再对新订舱作答：
 
 - **候补位次更新**：已候补之后，再交一份候补报告新的位次（例如从第五位升到第二位）。一次订舱只收一份候补。
 - **候补后分批接受**：候补之后先接受一部分、再补接受余量。第一份接受（接受量少于申请量即部分确认）就是定局，补接受的那一份是定局之后的又一份。没有候补、直接部分接受之后再补接受，同此。
@@ -71,6 +78,6 @@
 
 ## 以后怎样扩形
 
-以后扩形只加取值（R8）：本文所列各取值的含义不改、不删；候补位次更新、分批接受这一类新形进来时，以新增的 `outcome` 取值（请求里的与响应里的）进来，已有的写法照旧作答。
+以后扩形只加取值（R8）：本文所列各取值的含义不改、不删（这一承诺管 `outcome` 与各格的取值，不管路径前缀与错误体）；候补位次更新、分批接受这一类新形进来时，以新增的 `outcome` 取值（请求里的与响应里的）进来，已有的写法照旧作答。
 
-对接方因此要守一条：**遇到不认识的响应 `outcome`，视为服务端已形成答案、但本端不会处置，出队交人**，不重发，也不当成失败。这一条与[首方客户 API 契约](./first-party-api-contract.md)「`outcome` 新增取值不算破坏」对调用方的要求同形。
+对接方因此要守一条：**遇到不认识的响应 `outcome`，视为服务端已形成答案、但本端不会处置，出队交人**，不重发，也不当成失败。依据是 R8「只加取值」加 ADR-0140 决定五的写法：那一条的主语是首方契约（给 `outcome` 新增取值不算破坏，条件是契约写明客户端遇到未识别的 `outcome` 交人，见[首方客户 API 契约](./first-party-api-contract.md)「`outcome` 新增取值不算破坏」），这里延到集成客户端族的这一口，是代决，待 TF owner 复核。它不改服务端行为，是「只加取值」对已上线的对接方成立的前提，与 [ADR-0022](../adr/0022-http-status-carries-answer-formed-not-business-verdict.md)「4xx 出队交人」同向。
