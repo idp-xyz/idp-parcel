@@ -161,8 +161,8 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 	if err != nil {
 		return AmendCustomerSourceDataResult{}, fmt.Errorf("preserve amendment source: %w", err)
 	}
-	// 先看这个来源身份是不是已经到过。放到业务判断之后再查就晚了：那时授权与规则已经重跑
-	// 过一遍，而重跑正是重放要挡住的事。
+	// 先看这个来源身份是不是已经到过。放到业务判断之后再查就晚了：已经形成版本的重放不该再重跑一遍授权与规则，
+	// 而到过不等于形成过，所以这一问只决定走重放那条路，不替业务判断作答。
 	preserved, arrived, err := handler.deps.Sources.FindPreserved(ctx, command.AmendmentIdentity)
 	if err != nil {
 		return AmendCustomerSourceDataResult{}, fmt.Errorf("find preserved amendment source: %w", err)
@@ -174,18 +174,8 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 		return AmendCustomerSourceDataResult{}, fmt.Errorf("preserve amendment source: %w", err)
 	}
 
-	// 修订意图是最低业务语义（`UC-PS-002` 输入语义表）：矩阵按它分辨「改成新值」与「清掉」
-	// （AT-PS-020），意图立不起来，授权与规则的答案都无从成立。这是调用方的错，不是业务
-	// 未决——续办补不出一个没声明的意图。请求到达过这件事已由上面的来源保全留痕。
-	if !command.Intent.Declared() {
-		return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w", ErrAmendmentIntentNotDeclared)
-	}
-	// 内容的形要配范围与意图（pp-seams/05 裁决 3）：一份落在收件范围上的测量、或一份带着邮编的「显式清空」，与意图
-	// 没声明同一格——调用方的错，续办补不出来。在这里先问而不是等 FormCustomerSourceDataVersion 拒：那一步在授权、
-	// 阶段、矩阵与签发版本号之后，一条注定不成立的命令不该跑到那里才被拒。判断只有一处（domain 那道构造门），这里
-	// 只是早问。
-	if !command.Content.FitsAmendment(command.Scope, command.Intent) {
-		return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w", ErrAmendmentContentUnfit)
+	if err := handler.admit(command); err != nil {
+		return AmendCustomerSourceDataResult{}, err
 	}
 
 	request, found, err := handler.deps.Requests.FindBySourceIdentity(ctx, command.Identity)
@@ -197,7 +187,39 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 		// 因此上抛而不是形成未决：答`统一不可见结果`（ErrShipmentRequestNotVisible）。
 		return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w", ErrShipmentRequestNotVisible)
 	}
+	return handler.decide(ctx, command, incoming, request)
+}
 
+// admit 认出受理阶段调用方的错。请求到达过这件事已由来源保全留痕，所以这两道可以放在保全之后：
+// 它们只依赖命令本身，同一份请求重放时结果不变。
+func (handler *AmendCustomerSourceDataHandler) admit(command AmendCustomerSourceDataCommand) error {
+	// 修订意图是最低业务语义（`UC-PS-002` 输入语义表）：矩阵按它分辨「改成新值」与「清掉」
+	// （AT-PS-020），意图立不起来，授权与规则的答案都无从成立。这是调用方的错，不是业务
+	// 未决——续办补不出一个没声明的意图。
+	if !command.Intent.Declared() {
+		return fmt.Errorf("amend customer source data: %w", ErrAmendmentIntentNotDeclared)
+	}
+	// 内容的形要配范围与意图（pp-seams/05 裁决 3）：一份落在收件范围上的测量、或一份带着邮编的「显式清空」，与意图
+	// 没声明同一格——调用方的错，续办补不出来。在这里先问而不是等 FormCustomerSourceDataVersion 拒：那一步在授权、
+	// 阶段、矩阵与签发版本号之后，一条注定不成立的命令不该跑到那里才被拒。判断只有一处（domain 那道构造门），这里
+	// 只是早问。
+	if !command.Content.FitsAmendment(command.Scope, command.Intent) {
+		return fmt.Errorf("amend customer source data: %w", ErrAmendmentContentUnfit)
+	}
+	return nil
+}
+
+// decide 是来源保全与受理之后的业务判断：授权、阶段、矩阵、版本形成与保存、交接。首次到达与重放里没找到这次请求
+// 版本的那一路走的是同一条，所以两者的授权、停点与保存结果也是同一套。
+//
+// source 是形成版本时记在版本上的请求留痕：首次到达是刚保全的这一份，重放是当初保全下来的那一份，不是重放这次到达
+// 的时间——版本上的请求留痕要与来源保全表里的那一条对得上。
+func (handler *AmendCustomerSourceDataHandler) decide(
+	ctx context.Context,
+	command AmendCustomerSourceDataCommand,
+	source domain.SourceSubmissionFingerprint,
+	request domain.ShipmentRequest,
+) (AmendCustomerSourceDataResult, error) {
 	authorization, err := handler.deps.Authorizer.AuthorizeSourceDataAmendment(
 		ctx,
 		ports.SourceDataAmendmentAuthorizationQuery{
@@ -274,7 +296,7 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 		//
 		// 停下之后两种答案要分开。已登记为不允许是确定的业务拒绝，复核也翻不了案；未登记是
 		// 「还没人说这处资料能不能改」，停在`待复核`等矩阵登记——判成拒绝会让客户以为自己
-		// 请求有错，而错的是我们还没登记规则。请求到达过这件事由上面的来源保全承担。
+		// 请求有错，而错的是我们还没登记规则。请求到达过这件事由来源保全承担。
 		outcome := AmendmentAwaitingReview
 		if allowance == ports.SourceDataAmendmentDisallowed {
 			outcome = AmendmentDisallowed
@@ -292,7 +314,7 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 		Scope:       command.Scope,
 		Basis:       command.Basis,
 		Intent:      command.Intent,
-		Request:     incoming,
+		Request:     source,
 		Reason:      command.Reason,
 		Requester:   command.Requester,
 		Decider:     authorization.Decider,
@@ -316,8 +338,9 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 		return handler.undecided(command, AmendedRequestNotSaved), nil
 	}
 	if saved != ports.ShipmentRequestSaved {
-		// 同上不交回`已记录并采用`。重放这次修订时来源保全会认出同一个身份，走 existing
-		// 那条路——那时聚合已是新的一份，版本重新形成一次的风险由那条路的版本查找挡住。
+		// 同上不交回`已记录并采用`。来源保全只说明这次修订到达过，不说明版本形成过：重放时在委托的资料版本里按这次
+		// 请求身份找版本，找不到就按首次请求接着办，找到了（抢先的恰是同一次请求的另一轮）读回它——版本重新形成一次
+		// 的风险由那一查挡住，不由来源保全认出身份挡住。
 		reason, err := saveStallReason(saved)
 		if err != nil {
 			return AmendCustomerSourceDataResult{}, err
@@ -363,9 +386,13 @@ func (handler *AmendCustomerSourceDataHandler) handOff(
 
 // resolvePreserved 回答一个来源身份已经到过的修订请求。
 //
-// 同身份同内容是重复到达：追加一次观察，再读回它当初形成的那份版本，绝不重跑授权与规则。重跑
-// 不只是浪费——授权与登记矩阵在两次之间都可能变，同一个请求身份会因此读出两种回执，而用例要求
-// 重试「返回已有结果」，且「不能创建第二个资料版本」。
+// 同身份同内容是重复到达：追加一次观察，再在委托的资料版本里找这次请求身份的版本。找到了，就读回它并交回已有结果，
+// 绝不重跑授权与规则——重跑不只是浪费，授权与登记矩阵在两次之间都可能变，同一个请求身份会因此读出两种回执，而用例
+// 要求重试「返回已有结果」，且「不能创建第二个资料版本」。
+//
+// 找不到，说明上一轮停在版本落库之前（授权、阶段、矩阵未决，读不回，允许声明未声明答等复核，保存失败，并发抢先），
+// 来源保全只留下了这次请求到达过。这时重放要接着办（ADR-0256 决定一第 2 格），按首次请求走受理、授权、阶段、矩阵与
+// 保存；上一轮若是确定的业务拒绝，条件没变就重新得到同一个拒绝。
 //
 // 同身份不同内容是请求冲突：原请求与原版本都不被覆盖，也不形成第二份版本。它与重复到达分成两
 // 个结果，因为客户要做的事不同——一个是这次请求已经办过了，一个是先说清到底提交的是哪一份。
@@ -396,7 +423,13 @@ func (handler *AmendCustomerSourceDataHandler) resolvePreserved(
 		// 同上一处：查不到是调用方的错，答`统一不可见结果`。
 		return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w", ErrShipmentRequestNotVisible)
 	}
-	return handler.existing(ctx, command, request), nil
+	if result, formed := handler.existing(ctx, command, request); formed {
+		return result, nil
+	}
+	if err := handler.admit(command); err != nil {
+		return AmendCustomerSourceDataResult{}, err
+	}
+	return handler.decide(ctx, command, preserved, request)
 }
 
 // undecided 交回本轮的未决结果：封闭原因加一个续办引用，而不是一个 error——用例要求未决同时
@@ -436,11 +469,11 @@ func (handler *AmendCustomerSourceDataHandler) continuationReference(
 	)
 }
 
-// existing 读回这次修订请求当初形成的那份版本。版本自带形成它的那次请求指纹，所以不必另存一张
-// 请求到版本的映射——留痕本身就是索引，而多存一张映射就多一处会与版本对不上的地方。
+// existing 读回这次修订请求当初形成的那份版本，找到了交回已有结果，没找到交回 false 让调用方接着办。版本自带形成它
+// 的那次请求指纹，所以不必另存一张请求到版本的映射——留痕本身就是索引，而多存一张映射就多一处会与版本对不上的地方。
 //
-// 找不到版本时照样交回`已有结果`，只是不带版本：上一轮可能停在`待复核`或业务拒绝，那些同样是
-// 已经形成的结果，也没有版本可交给下游。这里不重跑一遍去补个版本出来，重跑正是本路径要挡住的事。
+// 找不到版本不等于上一轮办完了：上一轮可能停在授权、阶段、矩阵、允许声明或保存上，那些都没有形成版本。把它答成
+// 「已有结果」就是对客户说这次修订已经办过，而它从此不会形成。
 //
 // 读回版本时重发同一份意图。上一轮可能正停在交接失败上，而这条路上没有别的东西会去补发——只答
 // `已有结果`就收工，那份版本会永远停在「本上下文已形成、下游从不知道」。重发的是同一份而不是
@@ -449,7 +482,7 @@ func (handler *AmendCustomerSourceDataHandler) existing(
 	ctx context.Context,
 	command AmendCustomerSourceDataCommand,
 	request domain.ShipmentRequest,
-) AmendCustomerSourceDataResult {
+) (AmendCustomerSourceDataResult, bool) {
 	for _, version := range request.CustomerSourceDataVersions() {
 		if version.Request().Identity() != command.AmendmentIdentity {
 			continue
@@ -458,7 +491,7 @@ func (handler *AmendCustomerSourceDataHandler) existing(
 		// 所在范围此刻的采用判断。
 		adoption, derived := request.CurrentSourceDataAdoption(version.Scope())
 		if err := handler.handOff(ctx, command, version, adoption); err != nil {
-			return handler.undecided(command, SourceDataVersionNotHandedOff)
+			return handler.undecided(command, SourceDataVersionNotHandedOff), true
 		}
 		return AmendCustomerSourceDataResult{
 			outcome:     AmendmentAlreadyHandled,
@@ -466,9 +499,9 @@ func (handler *AmendCustomerSourceDataHandler) existing(
 			hasVersion:  true,
 			adoption:    adoption,
 			hasAdoption: derived,
-		}
+		}, true
 	}
-	return AmendCustomerSourceDataResult{outcome: AmendmentAlreadyHandled}
+	return AmendCustomerSourceDataResult{}, false
 }
 
 // judgeStage 判出这次修订所处的「资料修订阶段」。

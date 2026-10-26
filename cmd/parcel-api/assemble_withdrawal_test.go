@@ -21,8 +21,9 @@ var withdrawalSeedAt = time.Date(2026, 8, 24, 9, 0, 0, 0, time.UTC)
 // 仓储、撤回授权经 PC 裁定、判断读写、SA 释放、决定标识）在真实 PostgreSQL 上装得起来；
 // 授权请求映射未配置（实例半边）时编排如实停在`撤回授权不可用`，不代拟坐标、不冒充
 // `授权规则未配置`、也不默认任何角色有撤回权（UC-PS-005 明禁两个方向的默认）；来源保全
-// 确实落库——重放同一份输入走已保全路径，证明首笔事务真的提交了。测试输入是隔离合成，
-// 只记 `S`，不进生产装配。
+// 确实落库——重放同一份输入认出已保全的来源并追加观察，证明首笔事务真的提交了，而委托
+// 仍是已提交，所以重放按首次请求接着办、停在同一个点上。测试输入是隔离合成，只记 `S`，
+// 不进生产装配。
 func TestTheWiredWithdrawalAnswersHonestlyAgainstARealDatabase(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -56,14 +57,22 @@ func TestTheWiredWithdrawalAnswersHonestlyAgainstARealDatabase(t *testing.T) {
 		t.Fatal("未决没带续办引用，调用方无从查询原次尝试")
 	}
 
-	// 重放走已保全路径而不再问授权，正证明首笔事务（含来源保全）已提交；答案的形状
-	// （resolvePreserved → 读回既有状态）由应用层拥有并在其单测钉住，这里只认路径。
+	// 首笔事务（含来源保全）确实提交了：重放认出这个来源身份而不是再保全一份，只追加一次观察。委托仍是`已提交`，
+	// 授权映射仍未配置，所以重放按首次请求接着办、停在同一个点上——来源保全不等于撤回形成过，不能把它答成已有决定
+	// （ADR-0256 决定一第 2 格；授权放行之后重放形成撤回的格见 assemble_withdrawal_replay_test.go）。
 	replay, err := withdrawal.Handle(t.Context(), command)
 	if err != nil {
 		t.Fatalf("重放同一份输入：%v", err)
 	}
-	if got := replay.Outcome(); got == shipmentapp.WithdrawalUndecided {
-		t.Fatalf("outcome = %v；重放仍走了整套判断——首笔事务的来源保全没有提交", got)
+	if replay.Outcome() != shipmentapp.WithdrawalUndecided || replay.PendingReason() != shipmentapp.WithdrawalAuthorityUnavailable {
+		t.Fatalf("重放 outcome = %v reason = %v, want UNDECIDED / WITHDRAWAL_AUTHORITY_UNAVAILABLE——授权仍答不出，委托仍是已提交，"+
+			"重放不得答成已有决定", replay.Outcome(), replay.PendingReason())
+	}
+	if rows := preservedSourceRows(t, db, command.WithdrawalIdentity); rows != 1 {
+		t.Fatalf("来源保全行数 = %d, want 1——重放认出已保全的来源，不再保全一份", rows)
+	}
+	if rows := sourceObservationRows(t, db, command.WithdrawalIdentity); rows != 1 {
+		t.Fatalf("来源观察行数 = %d, want 1——重放追加一次观察", rows)
 	}
 }
 

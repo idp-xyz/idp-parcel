@@ -170,7 +170,16 @@ func (handler *WithdrawShipmentRequestHandler) Handle(
 		// `AT-PS-075` 要求越权撤回不泄露对象存在与否，走的正是这条出口。
 		return WithdrawShipmentRequestResult{}, fmt.Errorf("withdraw shipment request: %w", ErrShipmentRequestNotVisible)
 	}
+	return handler.decide(ctx, command, request)
+}
 
+// decide 是来源保全之后的业务判断：授权、决定标识、撤回转移与保存。首次到达与重放里仍为`已提交`的委托走的是
+// 同一条路，所以两者的授权、停点与保存结果也是同一套。
+func (handler *WithdrawShipmentRequestHandler) decide(
+	ctx context.Context,
+	command WithdrawShipmentRequestCommand,
+	request domain.ShipmentRequest,
+) (WithdrawShipmentRequestResult, error) {
 	authority, err := handler.deps.Authorizer.AuthorizeWithdrawal(ctx, ports.WithdrawalAuthorizationQuery{
 		Identity:          command.Identity,
 		ShipmentRequestID: command.ShipmentRequestID,
@@ -234,8 +243,9 @@ func (handler *WithdrawShipmentRequestHandler) Handle(
 	}
 	if saved != ports.ShipmentRequestSaved {
 		// 本方这次撤回确定没落库，抢先那一方写下的可能是接受，因此不发释放。客户重试这次撤回
-		// 时会重读到新的那一份，走 existing 那条路读回既有结果——交回的 state 是读取时那一份、
-		// 已知不是库里此刻那一份，理由见 form_acceptance_decision.go 的同一支。
+		// 时会重读到新的那一份：抢先的是决定，就走 existing 读回既有结果；不是，委托仍为`已提交`，
+		// 就按首次请求接着办——交回的 state 是读取时那一份、已知不是库里此刻那一份，理由见
+		// form_acceptance_decision.go 的同一支。
 		reason, err := saveStallReason(saved)
 		if err != nil {
 			return WithdrawShipmentRequestResult{}, err
@@ -257,8 +267,13 @@ func (handler *WithdrawShipmentRequestHandler) Handle(
 
 // resolvePreserved 回答一个来源身份已被保全过的撤回请求。
 //
-// 同身份同内容是重复到达：追加一次观察，然后交回原处理结果，绝不再走一遍授权与决定边界。
-// 走第二遍不只是浪费——授权在两次之间可能已经失效，同一个已经成立的撤回会因此读出两种回执。
+// 同身份同内容是重复到达：追加一次观察，再按委托此刻的状态答。来源保全只说明这次请求到达过，不说明它形成过撤回——
+// 撤回的装配事务在编排交回业务答案时照样提交保全，所以授权未决、读不回、版本冲突的那一轮之后，保全在而委托仍是
+// `已提交`。这时重放要接着办（ADR-0256 决定一第 2 格），按首次请求走授权与决定提交；撤回自己不带请求身份，没法
+// 凭请求身份找到「这次请求形成的撤回」，能认的只有委托此刻的状态。
+//
+// 委托已经越过提交边界（已撤回、已接受、已拒绝）时答已有决定并带上那份决定，不再问授权：授权在两次之间可能已经
+// 失效，同一个已经成立的撤回会因此读出两种回执。
 //
 // 同身份不同内容是来源冲突：原请求不被覆盖，也不形成第二次撤回。它与「决定已成立」分成两个
 // 结果，因为客户要做的事不同——一个是纠正自己这次请求的内容，一个是接受这单已经有结论了。
@@ -287,7 +302,10 @@ func (handler *WithdrawShipmentRequestHandler) resolvePreserved(
 	if !found {
 		return WithdrawShipmentRequestResult{}, fmt.Errorf("withdraw shipment request: %w", ErrShipmentRequestNotVisible)
 	}
-	return handler.existing(ctx, command, request), nil
+	if request.State() != domain.ShipmentRequestSubmitted {
+		return handler.existing(ctx, command, request), nil
+	}
+	return handler.decide(ctx, command, request)
 }
 
 // existing 交回那个先到的决定。它可能是接受、拒绝，也可能是本方此前形成的一次撤回——
