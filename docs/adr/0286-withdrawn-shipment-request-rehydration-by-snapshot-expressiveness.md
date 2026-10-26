@@ -1,6 +1,6 @@
 # ADR-0286: 已撤回委托的重建门按快照表达能力开门
 
-Status: Accepted（2026-10-26，票 [docs-consistency/code/36](../../.scratch/docs-consistency/code/36-withdrawn-shipment-requests-cannot-be-read-back-from-the-store.md)。Claude Code 会话在用户「你作为业务和系统专家自决」的授权下代 PS owner 裁定；协调方分诊定了存量口径（已撤回而没带撤回决定的存量行按坏数据响亮拒绝、不推回）与推进写法，对账表、坏数据判据和任务处置的互斥格由作者代决。越权风险点见文末，待 PS owner 复核。）<!-- 索引注记 -->｜**推进** [ADR-0061](./0061-accepted-shipment-request-rehydration-by-snapshot-expressiveness.md) 决定一里`已撤回`那一半：快照补上撤回决定（决定标识、授权引用、请求方、结构化原因、决定时刻）之后，重建门开到`已撤回`，四个状态全开；正文有`已撤回`的对账表与坏数据判据（撤回决定五格缺任一格、边界未越过、带接受或拒绝决定及其产物、任务未停止，以及其余三个状态带着撤回，都是坏数据）。补表达前写下的已撤回行没有撤回决定，按坏数据拒绝、不推回。**接受链**在第一步之前见到`已撤回`即停，答`已决定`、不带决定，不为撤回之后才消费的提交信封占资金
+Status: Accepted（2026-10-26，票 [docs-consistency/code/36](../../.scratch/docs-consistency/code/36-withdrawn-shipment-requests-cannot-be-read-back-from-the-store.md)。Claude Code 会话在用户「你作为业务和系统专家自决」的授权下代 PS owner 裁定；协调方分诊定了存量口径（已撤回而没带撤回决定的存量行按坏数据响亮拒绝、不推回）与推进写法，对账表、坏数据判据和任务处置的互斥格由作者代决。越权风险点见文末，待 PS owner 复核。）<!-- 索引注记 -->｜**推进** [ADR-0061](./0061-accepted-shipment-request-rehydration-by-snapshot-expressiveness.md) 决定一里`已撤回`那一半：快照补上撤回决定（决定标识、授权引用、请求方、结构化原因、决定时刻）之后，重建门开到`已撤回`，四个状态全开；正文有`已撤回`的对账表与坏数据判据（撤回决定五格缺任一格、边界未越过、带接受或拒绝决定及其产物、任务未停止，以及其余三个状态带着撤回，都是坏数据）。补表达前写下的已撤回行没有撤回决定，按坏数据拒绝、不推回。**接受链**在第一步之前见到`已撤回`即停，答`已决定`、不带决定，不为撤回之后才消费的提交信封占资金｜**读法限定**（不是停用）：决定六「守卫是未加锁的先读后判：读到未撤回之后、占用形成之前撤回成立的窗口，由 PS 申报视图对已撤回的状态过滤（估价读不到已撤回委托，冻结形不成）和票 docs-consistency/code/99（撤回、拒绝、处置与接受链取委托行锁与控制作用域锁次序相反）兜住；不为本票补并发用例。」一句里的「兜住」按 [ADR-0290](./0290-an-acceptance-chain-round-that-finds-the-request-withdrawn-or-rejected-releases-the-occupation-it-formed.md) 的 Context 读——它覆盖估价读之前撤回成立的窗口与锁序，不覆盖估价之后到链提交之前的窗口；后者由 ADR-0290 决定一在形成决定那一步关上。本记录正文不改写，其余内容不变。
 
 Date: 2026-10-26
 
@@ -87,4 +87,5 @@ Date: 2026-10-26
 - [ADR-0028：聚合的重建与构造分属两扇门](./0028-aggregate-rehydration-is-a-separate-door-that-validates-without-recomputing.md)：只校验不重算，缺撤回决定的存量行据此不推回
 - [ADR-0029：按标识取回原状态失败时按恢复动作分格](./0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md)：完好的行不得报成未开门，缺撤回决定的行不得报成未开门
 - [ADR-0255：决定前重组只有撤回再关联重提一条路](./0255-a-submitted-request-is-regrouped-only-by-withdrawing-it-and-submitting-linked-new-requests.md)：撤回重提关联与重复撤回在真库上走得通，靠本记录
+- [ADR-0290：接受链形成决定处读到已撤回或已拒绝的委托，就放掉这份委托各版的占用](./0290-an-acceptance-chain-round-that-finds-the-request-withdrawn-or-rejected-releases-the-occupation-it-formed.md)：读法限定决定六的「兜住」，估价之后到链提交之前的窗口由它关上
 - [UC-PS-005：撤回已提交委托](../application/parcel-shipment/UC-PS-005-WITHDRAW-SUBMITTED-SHIPMENT-REQUEST.md)：`AT-PS-068`、`AT-PS-076`
