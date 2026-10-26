@@ -257,22 +257,37 @@ func NewBookingAnswers(db *bentopg.DB) (*BookingAnswers, error) {
 
 const bookingAnswerColumns = `acceptance_id, outcome, quantity, basis, decided_at, content_digest, recorded_at`
 
-// FindByKey 按订舱键取回当前那一份答复：有定局取定局，否则取候补。读回经重建门复验五值形状。
+// bookingAnswersOfBooking 读一次订舱名下的全部答复，按答复时刻先后、同刻按落库先后。
+const bookingAnswersOfBooking = `SELECT ` + bookingAnswerColumns + `
+   FROM transport_fulfillment.booking_answer
+  WHERE tenant_id = $1
+    AND booking_id = $2
+  ORDER BY decided_at, inserted_at`
+
+// FindByKey 按订舱键取回当前那一份答复：读回名下全部答复，交 domain.CurrentCarrierAcceptance 选，不在 SQL 里按答复值另排
+// 一遍。名下答复凑不成一段答复史时答包着 domain.ErrBookingAnswersInconsistent 的错误、不挑一份，调用方凭它与读不动分开。
+// 读回经重建门复验五值形状。
 func (repository *BookingAnswers) FindByKey(
 	ctx context.Context,
 	key ports.BookingKey,
 ) (ports.BookingAnswerRecord, bool, error) {
-	records, err := repository.query(ctx, key, "find booking answer",
-		`SELECT `+bookingAnswerColumns+`
-		   FROM transport_fulfillment.booking_answer
-		  WHERE tenant_id = $1
-		    AND booking_id = $2
-		  ORDER BY (outcome <> 'WAITLISTED') DESC, decided_at DESC
-		  LIMIT 1`)
-	if err != nil || len(records) == 0 {
+	const operation = "find booking answer"
+	records, err := repository.query(ctx, key, operation, bookingAnswersOfBooking)
+	if err != nil {
 		return ports.BookingAnswerRecord{}, false, err
 	}
-	return records[0], true, nil
+	acceptances := make([]domain.CarrierAcceptance, 0, len(records))
+	for _, record := range records {
+		acceptances = append(acceptances, record.Acceptance)
+	}
+	current, err := domain.CurrentCarrierAcceptance(acceptances)
+	if err != nil {
+		return ports.BookingAnswerRecord{}, false, fmt.Errorf("%s: booking %q: %w", operation, key.Booking, err)
+	}
+	if current < 0 {
+		return ports.BookingAnswerRecord{}, false, nil
+	}
+	return records[current], true, nil
 }
 
 // FindAnswersForUpdate 先取（租户、订舱）这一键的事务级咨询锁，再按订舱键取回名下全部答复，按答复时刻先后；同刻按落库
@@ -296,12 +311,7 @@ func (repository *BookingAnswers) FindAnswersForUpdate(
 	); err != nil {
 		return nil, fmt.Errorf("%s: 取订舱锁：%w", operation, err)
 	}
-	return repository.query(ctx, key, operation,
-		`SELECT `+bookingAnswerColumns+`
-		   FROM transport_fulfillment.booking_answer
-		  WHERE tenant_id = $1
-		    AND booking_id = $2
-		  ORDER BY decided_at, inserted_at`)
+	return repository.query(ctx, key, operation, bookingAnswersOfBooking)
 }
 
 func (repository *BookingAnswers) query(
@@ -349,30 +359,7 @@ func rehydrateBookingAnswer(
 	digest string,
 	recordedAt time.Time,
 ) (ports.BookingAnswerRecord, error) {
-	outcome, err := carrierOutcomeFrom(outcomeName)
-	if err != nil {
-		return ports.BookingAnswerRecord{}, err
-	}
-	acceptanceRef, err := domain.NewCarrierAcceptanceReference(acceptanceID)
-	if err != nil {
-		return ports.BookingAnswerRecord{}, err
-	}
-	spec := domain.RehydrateCarrierAcceptanceSpec{
-		TenantID:   key.TenantID,
-		Acceptance: acceptanceRef,
-		Booking:    key.Booking,
-		Outcome:    outcome,
-		Quantity:   quantity,
-		DecidedAt:  decidedAt,
-	}
-	if basis != nil {
-		basisRef, err := domain.NewAcceptanceBasisReference(*basis)
-		if err != nil {
-			return ports.BookingAnswerRecord{}, err
-		}
-		spec.Basis = basisRef
-	}
-	acceptance, err := domain.RehydrateCarrierAcceptance(spec)
+	acceptance, err := rehydrateCarrierAcceptance(key, acceptanceID, outcomeName, quantity, basis, decidedAt)
 	if err != nil {
 		return ports.BookingAnswerRecord{}, err
 	}
@@ -423,6 +410,40 @@ func (repository *BookingAnswers) Save(
 		return ports.BookingAlreadyAnswered, nil
 	}
 	return ports.BookingAnswerSaved, nil
+}
+
+// rehydrateCarrierAcceptance 把答复行的几列经重建门读回成一份承运答复；答复写口与查阅口的订舱册共用。
+func rehydrateCarrierAcceptance(
+	key ports.BookingKey,
+	acceptanceID, outcomeName string,
+	quantity int64,
+	basis *string,
+	decidedAt time.Time,
+) (domain.CarrierAcceptance, error) {
+	outcome, err := carrierOutcomeFrom(outcomeName)
+	if err != nil {
+		return domain.CarrierAcceptance{}, err
+	}
+	acceptanceRef, err := domain.NewCarrierAcceptanceReference(acceptanceID)
+	if err != nil {
+		return domain.CarrierAcceptance{}, err
+	}
+	spec := domain.RehydrateCarrierAcceptanceSpec{
+		TenantID:   key.TenantID,
+		Acceptance: acceptanceRef,
+		Booking:    key.Booking,
+		Outcome:    outcome,
+		Quantity:   quantity,
+		DecidedAt:  decidedAt,
+	}
+	if basis != nil {
+		basisRef, err := domain.NewAcceptanceBasisReference(*basis)
+		if err != nil {
+			return domain.CarrierAcceptance{}, err
+		}
+		spec.Basis = basisRef
+	}
+	return domain.RehydrateCarrierAcceptance(spec)
 }
 
 func carrierOutcomeFrom(raw string) (domain.CarrierAcceptanceOutcome, error) {

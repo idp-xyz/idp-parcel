@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -9,6 +10,9 @@ var (
 	ErrInvalidTransportCommission = errors.New("transport fulfillment: invalid transport commission")
 	ErrInvalidBookingRequest      = errors.New("transport fulfillment: invalid booking request")
 	ErrInvalidCarrierAcceptance   = errors.New("transport fulfillment: invalid carrier acceptance")
+	// ErrBookingAnswersInconsistent：一次订舱名下的答复凑不成一段答复史，选不出当前那一份（CurrentCarrierAcceptance）。
+	// 重试不会变，与读不动不同格（ADR-0029 按恢复动作分格）。
+	ErrBookingAnswersInconsistent = errors.New("transport fulfillment: booking answers do not form one answer history")
 	// ErrTransportAlreadyStarted：实际运输开始前可以取消或释放运输意图；开始后只能依据
 	// 事实形成中断、改降、折返或其他实际结果（CONTEXT 班次节）。已成立履约段的不可取消
 	// 由 ActualFulfillmentSegment 钉后半，这里钉前半。
@@ -578,4 +582,42 @@ func (acceptance CarrierAcceptance) AdmitsSuccessor(next CarrierAcceptance) bool
 		next.booking == acceptance.booking &&
 		next.acceptance != acceptance.acceptance &&
 		!next.decidedAt.Before(acceptance.decidedAt)
+}
+
+// CurrentCarrierAcceptance 从一次订舱名下的全部答复里选出当前那一份，交回它在 answers 里的位置，没有答复交 -1：有定局取
+// 定局，否则取候补。收费发生项读订舱的当前答复、查阅口读订舱状态词都经它，不各按答复值或排序另选一遍。answers 的次序不影响
+// 选法。
+//
+// 名下答复凑不成 ADR-0202「补记：票 24 落地时的补充裁定」那一种答复史——两份定局、两份候补、定局不是候补的合格后继
+// （AdmitsSuccessor：早于候补、在别的订舱上），或混进一份未成形的答复——答 ErrBookingAnswersInconsistent，不从中挑一份。这些
+// 都只可能是绕过答复编排落的行；挑哪一份（最新的、定局优先的）都是替承运方下结论。
+func CurrentCarrierAcceptance(answers []CarrierAcceptance) (int, error) {
+	settling, waitlist := -1, -1
+	for index, answer := range answers {
+		if !answer.outcome.valid() {
+			return -1, fmt.Errorf("%w: answer %d is not a formed carrier acceptance", ErrBookingAnswersInconsistent, index)
+		}
+		if !answer.Settles() {
+			if waitlist >= 0 {
+				return -1, fmt.Errorf("%w: two waitlisted answers %q and %q",
+					ErrBookingAnswersInconsistent, answers[waitlist].acceptance, answer.acceptance)
+			}
+			waitlist = index
+			continue
+		}
+		if settling >= 0 {
+			return -1, fmt.Errorf("%w: two settling answers %q and %q",
+				ErrBookingAnswersInconsistent, answers[settling].acceptance, answer.acceptance)
+		}
+		settling = index
+	}
+	switch {
+	case settling < 0:
+		return waitlist, nil
+	case waitlist >= 0 && !answers[waitlist].AdmitsSuccessor(answers[settling]):
+		return -1, fmt.Errorf("%w: settling answer %q does not succeed waitlisted answer %q",
+			ErrBookingAnswersInconsistent, answers[settling].acceptance, answers[waitlist].acceptance)
+	default:
+		return settling, nil
+	}
 }

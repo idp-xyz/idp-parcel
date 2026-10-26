@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -307,6 +308,36 @@ func TestABookingOccurrenceNeedsASettledAcceptanceOverCommissionMembers(t *testi
 		t.Fatalf("err = %v, want ErrBookingWithoutCommission", err)
 	}
 	assertNothingWritten(t, rig)
+}
+
+// Covers: 票 demo-chain-gaps/177 写面的答法——答复读口说订舱名下的答复凑不成一段答复史（包着
+// domain.ErrBookingAnswersInconsistent），订舱费与取消费都上抛、不形成答案，不答未决（重试不会变，ADR-0029），也不按哪一份
+// 登；不问协议、不写。同一个读口只是读不动时照旧答未决，两格的续办不同。
+func TestABrokenAnswerHistoryFormsNoChargeAnswer(t *testing.T) {
+	booking := trunkBooking(t, bkRequestedAt, bkCancelledAt)
+	accepted := trunkAnswer(t, booking, domain.BookingAccepted, bkAcceptedAt)
+	broken := fmt.Errorf("find booking answer: booking %q: %w", bkBooking, domain.ErrBookingAnswersInconsistent)
+	for _, reason := range []domain.ChargeOccurrenceReason{domain.BookingOccurrence, domain.CancellationOccurrence} {
+		t.Run(reason.String(), func(t *testing.T) {
+			rig := bookingRig(t, trunkCommission(t, commissionShape{}), booking, &accepted)
+			rig.answers = bookingAnswerViewDouble{err: broken}
+			result, err := rig.handler().Register(t.Context(), bookingCommand(t, reason))
+			if !errors.Is(err, domain.ErrBookingAnswersInconsistent) {
+				t.Fatalf("outcome/detail = %q/%q err = %v，want 上抛 ErrBookingAnswersInconsistent", result.Outcome(), result.Detail(), err)
+			}
+			if len(rig.agreements.asked) != 0 {
+				t.Fatal("答复史坏了不该去问协议")
+			}
+			assertNothingWritten(t, rig)
+
+			unreadable := bookingRig(t, trunkCommission(t, commissionShape{}), booking, &accepted)
+			unreadable.answers = bookingAnswerViewDouble{err: errors.New("answers down")}
+			if result := unreadable.register(t, bookingCommand(t, reason)); result.Outcome() != application.ChargeOccurrenceUndecided ||
+				result.Detail() != application.FactSourceUnavailable {
+				t.Fatalf("读不动 outcome/detail = %q/%q，want 未决", result.Outcome(), result.Detail())
+			}
+		})
+	}
 }
 
 // Covers: AT-TF-208——尚未开始范围的订舱取消形成取消发生项：依据是那一次订舱取消，范围是那一次订舱，业务时间是取消时刻；

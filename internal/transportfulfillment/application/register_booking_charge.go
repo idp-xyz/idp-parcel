@@ -60,6 +60,11 @@ func (handler *RegisterChargeOccurrenceHandler) bookingFact(
 			ErrBookingWithoutCommission, bookingRef, booking.Booking.Commission())
 	}
 	answer, answered, err := handler.deps.BookingAnswers.FindByKey(ctx, key)
+	if errors.Is(err, domain.ErrBookingAnswersInconsistent) {
+		// 订舱名下的答复凑不成一段答复史，是绕过答复编排落的行：答未决会引登记方重试一个重试不会变的读（ADR-0029），按其中
+		// 一份登又是替承运方下结论。同上面委托读不回，是数据违约，上抛、不形成答案。
+		return chargeOccurrenceFact{}, RegisterChargeOccurrenceResult{}, false, fmt.Errorf("register charge occurrence: booking %s: %w", bookingRef, err)
+	}
 	if err != nil {
 		return chargeOccurrenceFact{}, chargeUndecided(FactSourceUnavailable, continuation), true, nil
 	}
