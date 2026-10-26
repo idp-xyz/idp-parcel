@@ -1,7 +1,7 @@
 # 13 PC 授权册的授予没有生产登记入口，资料修订口在任何租户上都答未配置
 
 Category: enhancement
-Status: in-progress——2026-10-26 会话 `tops-20`（Claude Code）立并认领，分支 `claude-fpa13`。R1（上线前必修：用户 2026-10-26 定首发要资料修订口，见 [spec](../spec.md)「五口上线」）。
+Status: in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 claude-fpa13（代码最后一笔 6918deeac）。此前：in-progress——2026-10-26 会话 `tops-20`（Claude Code）立并认领，分支 `claude-fpa13`。R1（上线前必修：用户 2026-10-26 定首发要资料修订口，见 [spec](../spec.md)「五口上线」）。
 Blocked by: 无
 出处：票 [10](./10-customer-source-data-amendment-face.md) 作者读码发现：`AuthorityGrantStore.SaveGrant` 非测试调用方为零（`ports.AuthorityGrantRegistered` 注释自承「今天没有任何生产编排发这一格」）；发布批 `AUTHORIZATION_RULE` 只带 `cancellationAuthority` 声明，`DeclarationChannel` 里没有授予通道；于是种子登不进任何授予，PC 对每次资料修订都答 `ErrAuthorityRulesNotConfigured`。
 
@@ -14,10 +14,22 @@ Blocked by: 无
 
 ## 完成判据
 
-- [ ] 生产入口能登授予，重放与冲突代数有用例（含真库）。
-- [ ] 演示种子 `seed.sh` 退 0，登进去之后 PC 对演示客户端的修订授权判断答允许（真库用例）。
-- [ ] Go 门禁；全量用 `scripts/test-full.sh`；新 AT 与盘点表行。
+- [x] 生产入口能登授予，重放与冲突代数有用例（含真库）。
+- [x] 演示种子 `seed.sh` 退 0，登进去之后 PC 对演示客户端的修订授权判断答允许（真库用例）。
+- [ ] Go 门禁；全量用 `scripts/test-full.sh`（作者未跑全量，留评审/协调方）；新 AT 与盘点表行（已补，AT-PC-063/064）。
 
 ## 规模
 
 M
+
+## 完成记录（2026-10-26，作者）
+
+- **起点** `2b4cb1f29`；**代码提交** `6918deeac`（分支 `claude-fpa13`，已推）。
+- **入口选发布批声明通道**（不走子命令）：授予在库里的主键就是所挂授权规则版本（`authorization_grant` 主键 租户/对象/版本），生命周期与那一版同一（ADR-0261 决定一的截止/退役折法），与既有取消授权目录、合同委派同写法，同一发布同一事务，重放与冲突代数复用既有。子命令会把一个版本的两半拆在两个入口。
+- **授予形状**：`CommercialDeclarations.AuthorityGrant`（动作、责任法人、等级、范围、有效区间），批文键 `declarations.authorityGrant`；一版一条；等级逐字串，PC 与翻译层不认任何值。新端口 `PublicationRegistry.SaveAuthorityGrant`，与授权册 `SaveGrant` 共用 `insertAuthorityGrant`；通道 `AUTHORITY_GRANT`，登记成功交 `AuthorityGrantRegistered`（原注释「没有生产编排发这一格」已改）。
+- **迁移**：无（表与动作 CHECK 已含 SOURCE_DATA_AMENDMENT，0025/0032）。
+- **顺手修的真缺陷**：授予行内容摘要原盖整份快照（含版本壳发布/取效时刻），同一批文重放会答内容冲突（整批种子重放首次撞出）。摘要改盖版本身份加五格授予内容；此前无生产调用方，无存量，无迁移。
+- **种子**：`publish-batch.json` 新增 `SYN-AUTH-SOURCE-AMEND-01/v1`（动作 SOURCE_DATA_AMENDMENT、法人 SYN-LE-01、等级 `CUSTOMER_SELF_SERVICE`、范围 SYN-SCOPE-01、自 2026-01-01，批准引用 SYN-APPROVAL-2026-022）；`sourceDataAmendment` 矩阵在既有一格后追加：ACCEPTED_NOT_YET_RECEIVED 的 SUPPLEMENT/EXPLICIT_CLEAR 允许，CUSTOMS_SUBMITTED 的 SUPPLEMENT 允许、CORRECTION/EXPLICIT_CLEAR 不允许；规则包摘要照算出摘要重算。`publish_answer_test.go` 的整批回显（19 到 20 项）同步。
+- **代决与越权风险点**：见 ADR-0312（授予不进规范化正文、摘要盖不住授予，故同版再带取消授权目录整项拒；一版一条；摘要口径改动）。另：矩阵里「已提交」取 `CUSTOMS_SUBMITTED` 并用 DISALLOWED 演示不允许，阶段/意图取舍请票 10 评审核对；`docs/adr/README.md` 由 `tools/adr-index` 生成（未手改）。
+- **判据对用例**：入口重放/冲突/无事务拒 `TestAnAuthorityGrantPublishedThroughTheDeclarationChannelReplaysAndConflicts`（真库）；编排/交接/同版拒 `TestAnAuthorityGrantPublishesWithItsRuleVersion`；批文译装 `TestAnAuthorityGrantTranslatesItsFiveDimensions`；登后 Authorize 答允许、异等级不允许、无授予租户未配置 `TestAPublishedSourceDataAmendmentGrantAllowsItsLevelAndLeavesOtherTenantsUnconfigured`（真库）；整批种子首发/重放 `TestTheControlledPublishAnswersTheDemoSeedAlike`（真库）。新 AT：AT-PC-063/064（UC-PC-001），盘点表已补行。
+- **自验**：`go build ./...`、`go vet ./internal/partycommercial/... ./cmd/...`、gofmt 干净；带 DSN `go test -count=1 -p 1 ./internal/partycommercial/... ./cmd/parcel-commercial/... ./cmd/parcel-api/... ./internal/architecture/... ./migrations/...` 全绿；一次性库 `fpa13_seed` 跑 `seed.sh --reset` 退 0、20 项全 PUBLISHED_EFFECTIVE、授予行读回正确，已删库；`at-coverage-counts -check` 只报生成物过期；`adr-index -check` 过。未跑全量。
