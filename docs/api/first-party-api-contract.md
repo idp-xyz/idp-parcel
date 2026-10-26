@@ -85,6 +85,6 @@
 
 - **载荷**（封闭，其外任何一格答 `400 MALFORMED_REQUEST`，自报的租户、账户、操作者与提交时间都在此列）：`accessRequestId`、`batch`（客户侧批次引用）、`item`（项标识，批次内唯一）、`applicant`（申请人引用）、`contract`（合同责任范围引用）、`target`（目标包裹，用提交答复里的 `parcelId`）、`kind`（索赔类型引用）。租户与货主客户账户取自册上绑定。
 - **提交时间**取本系统收到请求的时刻，不收客户自报；首次索赔期限从它起算。
-- **唯一性**以（账户、批次、项）为自然键（ADR-0310 取舍 F）。同一对（批次、项）再次到达答 `200 CLAIM_EXISTING_RESULT` 并回显原项，**不比对内容**，没有「同键换内容」的冲突格；`accessRequestId` 只管传输重放，不进任何判据。已在案的（批次、项）若属于同租户的另一个账户，答 `200 NOT_ACCEPTED`、不带原项。
+- **唯一性**以（账户、批次、项）为自然键（ADR-0310 取舍 F）。同一对（批次、项）再次到达：申请人、合同、目标、类型都相同当重放，答 `200 CLAIM_EXISTING_RESULT` 并回显原项；任一不同答 `200 NOT_ACCEPTED`，带 `notAcceptedReason: CLAIM_CONTENT_DIFFERS_FROM_ACCEPTED`、不带原项，原项不被覆盖；`accessRequestId` 只管传输重放，不进任何判据。已在案的（批次、项）若属于同租户的另一个账户，答 `200 NOT_ACCEPTED`、不带原项。
 - **引用核对**：`target` 须是信封账户当前已接受委托声明的包裹，`contract` 须登记在信封账户名下；不属于、不存在、多份委托同时声明同一包裹都答 `404 CLAIM_REFERENCE_NOT_FOUND`，字节相同，不泄露别的账户的引用存在与否。`applicant` 不在这里核：授权名单按（租户、账户）登记，由资格审核的授权维核，名单外的申请人形成不予受理，不是请求错误。
 - **答复**：受理 `201 CLAIM_RECEIVED`，回执只带 `batch`、`item`、`submittedAt`，资格与责任结论字段结构上不存在。`401 CUSTOMER_CLIENT_CREDENTIAL_REJECTED`、`403 CUSTOMER_CLIENT_NOT_GRANTED`、`403 OUTSIDE_ADMISSION_SCOPE`（索赔提交在铸造侧判准入范围）、`503 IDENTITY_DEPENDENCY_UNAVAILABLE` 都是问题详情，不带 `outcome`。

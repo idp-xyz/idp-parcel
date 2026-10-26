@@ -86,9 +86,11 @@ func writeClaimIntakeProblem(response http.ResponseWriter, request *http.Request
 // 结论字段结构上不存在：已有项重放读回的索赔即便已过审，提交面也只答「已受理在案」，
 // 审核进度是另一个授权面的事。
 type claimResponse struct {
-	Outcome         string        `json:"outcome"`
-	UndecidedReason string        `json:"undecidedReason,omitempty"`
-	Claim           *claimReceipt `json:"claim,omitempty"`
+	Outcome         string `json:"outcome"`
+	UndecidedReason string `json:"undecidedReason,omitempty"`
+	// NotAcceptedReason 只随`未受理`且有可说的原因时在场（同键内容与已受理的那一项不同）。
+	NotAcceptedReason string        `json:"notAcceptedReason,omitempty"`
+	Claim             *claimReceipt `json:"claim,omitempty"`
 }
 
 type claimReceipt struct {
@@ -108,6 +110,9 @@ func writeClaimOutcome(response http.ResponseWriter, request *http.Request, resu
 	body := claimResponse{Outcome: outcome}
 	if reason := result.UndecidedReason().String(); result.Outcome() == application.HandleClaimUndecided && reason != "" {
 		body.UndecidedReason = reason
+	}
+	if result.Outcome() == application.HandleClaimNotAccepted {
+		body.NotAcceptedReason = result.NotAcceptedReason().String()
 	}
 	if claim, present := result.Claim(); present {
 		body.Claim = &claimReceipt{

@@ -145,6 +145,22 @@ func (reason HandleClaimUndecidedReason) String() string {
 	}
 }
 
+// HandleClaimNotAcceptedReason 指名未受理的原因。要件缺失与他账户撞键不给原因（后者给了就是泄露），所以零值是「无」。
+type HandleClaimNotAcceptedReason uint8
+
+const (
+	HandleClaimNotAcceptedReasonNone HandleClaimNotAcceptedReason = iota
+	// ClaimContentDiffersFromAccepted：同账户同（批次+项）已受理过一项，申请人、合同、目标或类型与之不同。
+	ClaimContentDiffersFromAccepted
+)
+
+func (reason HandleClaimNotAcceptedReason) String() string {
+	if reason == ClaimContentDiffersFromAccepted {
+		return "CLAIM_CONTENT_DIFFERS_FROM_ACCEPTED"
+	}
+	return ""
+}
+
 // ReceiveClaimCommand 携带一项索赔的原始提交。项标识由客户提交侧建立并随批次唯一，
 // 编排不签发——重复到达要靠它认得出自己。租户显式随命令到达（ADR-0003）：批次引用
 // 只在租户内唯一，编排不替提交侧补租户。申请人随提交事实到达且必备（CONTEXT 硬句
@@ -220,6 +236,8 @@ type HandleClaimResult struct {
 	hasAction  bool
 	reason     HandleClaimUndecidedReason
 	handoffRef string
+	// notAcceptedReason 只在未受理且有可说的原因时在场。
+	notAcceptedReason HandleClaimNotAcceptedReason
 }
 
 func (result HandleClaimResult) Outcome() HandleClaimOutcome {
@@ -239,6 +257,10 @@ func (result HandleClaimResult) Recovery() (domain.RecoveryMatter, bool) {
 // RecoveryAction 只在动作节点入账时给出。
 func (result HandleClaimResult) RecoveryAction() (domain.RecoveryAction, bool) {
 	return result.action, result.hasAction
+}
+
+func (result HandleClaimResult) NotAcceptedReason() HandleClaimNotAcceptedReason {
+	return result.notAcceptedReason
 }
 
 func (result HandleClaimResult) UndecidedReason() HandleClaimUndecidedReason {
@@ -292,10 +314,7 @@ func (handler *HandleClaimHandler) ReceiveClaim(
 		return HandleClaimResult{outcome: HandleClaimUndecided, reason: ClaimStoreUnavailable}, nil
 	}
 	if found {
-		if !sameClaimOwner(existing, command) {
-			return HandleClaimResult{outcome: HandleClaimNotAccepted}, nil
-		}
-		return HandleClaimResult{outcome: ClaimExistingResult, claim: existing}, nil
+		return answerExistingClaim(existing, command), nil
 	}
 
 	claim, err := domain.ReceiveClaimItem(domain.ClaimItemSpec{
@@ -327,20 +346,28 @@ func (handler *HandleClaimHandler) ReceiveClaim(
 		if err != nil || !found {
 			return HandleClaimResult{outcome: HandleClaimUndecided, reason: ClaimStoreUnavailable}, nil
 		}
-		if !sameClaimOwner(existing, command) {
-			return HandleClaimResult{outcome: HandleClaimNotAccepted}, nil
-		}
-		return HandleClaimResult{outcome: ClaimExistingResult, claim: existing}, nil
+		return answerExistingClaim(existing, command), nil
 	default:
 		return HandleClaimResult{}, fmt.Errorf("receive claim: unexpected save outcome %d", saved)
 	}
 }
 
-// sameClaimOwner 核已在案的（批次+项）是不是这个账户的。存储键是（租户+批次+项）、不含账户，同租户另一账户撞上同一对键时，
-// 原项不属于提交者：交回原项就把别人的索赔回执给了不相干的账户，所以答`未受理`、不带原项。残留的信息量是「这对键已被占用」
-// 一比特；键含账户需改主键与全部按（批次+项）取项的路径，另票处理（票 first-party-api/09 越权风险点）。
-func sameClaimOwner(existing *domain.ClaimItem, command ReceiveClaimCommand) bool {
-	return existing.Customer() == command.Customer
+// answerExistingClaim 答（批次+项）已在案时的受理。存储键是（租户+批次+项）、不含账户：
+//   - 原项不属于提交者（同租户另一账户撞键）：答`未受理`、不带原项、不给原因，交回原项就把别人的索赔回执给了不相干的账户。
+//     残留的信息量是「这对键已被占用」一比特；键含账户需改主键与全部按（批次+项）取项的路径，另票处理（票 first-party-api/09）。
+//   - 同账户、内容相同（申请人、合同、目标、类型）：重放，答原项。
+//   - 同账户、内容不同：答`未受理`并写明原因，不带原项——静默答原项会让客户以为新内容已受理，与补充口同口径。
+//     提交时间不比：它取到达时刻，重放时必然不同。
+func answerExistingClaim(existing *domain.ClaimItem, command ReceiveClaimCommand) HandleClaimResult {
+	if existing.Customer() != command.Customer {
+		return HandleClaimResult{outcome: HandleClaimNotAccepted}
+	}
+	applicant, carried := existing.Applicant()
+	if existing.Contract() != command.Contract || existing.Target() != command.Target || existing.Kind() != command.Kind ||
+		(carried && applicant != command.Applicant) {
+		return HandleClaimResult{outcome: HandleClaimNotAccepted, notAcceptedReason: ClaimContentDiffersFromAccepted}
+	}
+	return HandleClaimResult{outcome: ClaimExistingResult, claim: existing}
 }
 
 // recordClaim 落一步判断转移并把仓储的写入代数译成应答。三个判断入口共用这一段：
