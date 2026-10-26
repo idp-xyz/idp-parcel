@@ -156,6 +156,18 @@ export const registrationRefusalReasonLabels: Record<string, string> = {
   ADJUSTMENT_KIND_UNKNOWN:
     '调整种类不在封闭集（SUSPENSION / CLOSURE / RESUMPTION / SCOPE_ADJUSTMENT）',
   SOURCE_MISSING: '缺来源——调整必须记录来源，否则这条陈述说不出自己凭什么',
+  RANKING_FORM_UNKNOWN: '排序形态不在封闭集——路由策略版本声明了族外的排序形态；改成族内的一种，或不声明',
+  COVERAGE_MALFORMED:
+    '覆盖不成形——国家码或邮编前缀写法不对，或没登覆盖国家却带了前缀；改覆盖那一格',
+  NODE_ROLE_BLANK: '节点角色里有空白节点——补上节点身份',
+  NODE_ROLE_DUPLICATED: '同一角色里一个节点登了两次——删掉重复的那一个',
+  NODE_ROLES_WITHOUT_COVERAGE: '没登覆盖却登了节点角色——先登覆盖，再挂节点角色',
+  CALENDAR_CONTENT_OUT_OF_RANGE:
+    '日历取值越界——截单不在本地当日的分钟范围内，或处理时长、衔接缓冲、派送时长为负；改那个数',
+  COST_BASIS_MALFORMED:
+    '逐段成本依据不成形——段号不在段链内、同一段写了两条、种类不在封闭两类或引用空白；改依据那一行',
+  LEG_ZONE_MALFORMED: '段计价区域不成形——没给段、段号为负、同一段写了两次、区域或依据空白；改那一行',
+  LEG_ZONE_WITHOUT_COST_BASIS: '要登区域的段没挂成本依据，或线路版本不在册——先给这一段挂成本依据',
 };
 
 // ——以下为路由判断两册的检索列面(GET /route-plans,票 admin-skeleton-closure-batch/03)。
