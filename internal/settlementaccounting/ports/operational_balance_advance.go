@@ -76,6 +76,11 @@ type ChargeDuePicture struct {
 // OperationalBalanceAdvance 在调用方已经打开的事务里推进运营余额登记。
 // 新行的授信额度列写 0；之后的推进不覆盖该列。
 type OperationalBalanceAdvance interface {
+	// LockOperationalBalanceScope 在调用方的事务里锁住一个作用域的重算：映射、核销、核销撤销各自按账求 P、W 再推进，
+	// 并发两笔不锁就各按自己的快照求、后提交的那笔盖掉前一笔的贡献。锁之后另起的读才看得到先到那笔已提交的账。
+	// 在资金侧锁序全序的末位（FundsFactApplicationLock 头注）；同一事务里再取一次是重入。无环境事务即拒。
+	LockOperationalBalanceScope(ctx context.Context, tenant domain.TenantID, scope domain.SettlementScope) error
+
 	AdvanceOperationalBalance(
 		ctx context.Context,
 		tenant domain.TenantID,

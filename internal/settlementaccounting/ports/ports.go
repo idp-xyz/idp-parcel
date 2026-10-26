@@ -919,6 +919,17 @@ type SettlementApplicationStore interface {
 	Replace(ctx context.Context, record SettlementApplicationRecord) (bool, error)
 }
 
+// FundsFactApplicationLock 锁一条资金事实并交回它上面未撤销核销的 applied 合计，核销据此判事实一级的上限
+// （domain.SettlementApplication.AdmitWithinFact）。锁在调用方的事务里取、随事务结束放；锁后另起一句求合计，等锁的
+// 那一路读得到先到那笔已提交的核销。found=false 即本租户没有这条事实。无环境事务即拒。
+//
+// 资金侧的锁只按一个全序取：事实（本口）→ 金额本体（ClaimSettlementTargets.LockClaimTarget，按格、引用）→ 运营余额
+// 作用域（OperationalBalanceAdvance.LockOperationalBalanceScope，按法人、账户、币种）。哪条路径用不到前面的就从后面接着取，
+// 不倒回去——两笔事务各握一半等另一半就是这样排除的。
+type FundsFactApplicationLock interface {
+	LockFundsFactApplications(ctx context.Context, key FundsFactKey) (appliedMinor int64, found bool, err error)
+}
+
 // ClaimSettlementTargets 读、锁资金映射指向的两格金额本体：客户赔付（`customer_claim_amount` 那一条）与追偿认可
 // （`recovery_acknowledgement` 那一条）。只读不写——映射与核销不改被指向的金额。按租户取：他租户的与不存在的同答
 // false，两者对调用方是同一件事（ADR-0029）。
@@ -927,6 +938,7 @@ type ClaimSettlementTargets interface {
 	FindClaimTarget(ctx context.Context, tenant domain.TenantID, key domain.ClaimTargetKey) (bool, error)
 	// LockClaimTarget 在调用方的事务里先锁住那条金额，再读指向它、尚未撤销的核销分配净额，交回它的未核销面。
 	// 锁与随后落核销同一笔事务：两笔并发核销同一条金额时后到的那笔等前一笔提交，读到的已核销含前一笔。
+	// 在锁序全序里排在事实之后、运营余额作用域之前（FundsFactApplicationLock 头注）。
 	// 无环境事务即拒（bentopg.ErrTransactionRequired）。
 	LockClaimTarget(ctx context.Context, tenant domain.TenantID, key domain.ClaimTargetKey) (domain.ClaimTargetStanding, bool, error)
 }

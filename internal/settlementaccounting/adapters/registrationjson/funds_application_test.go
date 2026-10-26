@@ -47,11 +47,11 @@ const fundsMappingDocument = `{
 }`
 
 // Covers: `AT-SA-116`、`AT-SA-117` 的入口面——资金映射的目标词表收客户赔付与追偿认可两格，与领域 String() 同字；
-// 词表外的名字（含把认可叫成 ACKNOWLEDGEMENT 的那一种）照旧拒。
+// 词表外的名字照旧拒，含 `RECOVERY_RECEIVABLE`：同上下文里它是应追偿金额（`AdjustedAmountKind`），不是核销目标。
 func TestFundsMappingFromJSONTakesTheClaimAmountTargets(t *testing.T) {
 	for name, kind := range map[string]domain.SettlementTargetKind{
-		"CUSTOMER_COMPENSATION": domain.TargetCustomerCompensation,
-		"RECOVERY_RECEIVABLE":   domain.TargetRecoveryReceivable,
+		"CUSTOMER_COMPENSATION":    domain.TargetCustomerCompensation,
+		"RECOVERY_ACKNOWLEDGEMENT": domain.TargetRecoveryAcknowledgement,
 	} {
 		raw := strings.Replace(fundsMappingDocument, `"CUSTOMER_COMPENSATION"`, `"`+name+`"`, 1)
 		command, err := registrationjson.FundsMappingFromJSON([]byte(raw))
@@ -62,7 +62,7 @@ func TestFundsMappingFromJSONTakesTheClaimAmountTargets(t *testing.T) {
 			t.Fatalf("%s 译成 %s/%s", name, command.TargetKind, command.Target)
 		}
 	}
-	raw := strings.Replace(fundsMappingDocument, `"CUSTOMER_COMPENSATION"`, `"RECOVERY_ACKNOWLEDGEMENT"`, 1)
+	raw := strings.Replace(fundsMappingDocument, `"CUSTOMER_COMPENSATION"`, `"RECOVERY_RECEIVABLE"`, 1)
 	if _, err := registrationjson.FundsMappingFromJSON([]byte(raw)); err == nil || !strings.Contains(err.Error(), "targetKind") {
 		t.Fatalf("词表外的目标：err = %v，要拒并指名 targetKind", err)
 	}

@@ -28,7 +28,7 @@ func NewClaimSettlementTargets(db *bentopg.DB) (*ClaimSettlementTargets, error) 
 var _ ports.ClaimSettlementTargets = (*ClaimSettlementTargets)(nil)
 
 // claimTargetRowQuery 交回读那一条金额本体的语句：客户赔付取赔付金额，追偿认可取认可金额——应追偿金额不是这一格的
-// 目标（domain.TargetRecoveryReceivable 头注）。键都带租户：他租户的行与不存在同样读不到。
+// 目标（domain.TargetRecoveryAcknowledgement 头注）。键都带租户：他租户的行与不存在同样读不到。
 func claimTargetRowQuery(kind domain.SettlementTargetKind) (string, error) {
 	switch kind {
 	case domain.TargetCustomerCompensation:
@@ -36,7 +36,7 @@ func claimTargetRowQuery(kind domain.SettlementTargetKind) (string, error) {
 		          FROM settlement_accounting.customer_claim_amount
 		         WHERE tenant_id = $1
 		           AND amount_id = $2`, nil
-	case domain.TargetRecoveryReceivable:
+	case domain.TargetRecoveryAcknowledgement:
 		return `SELECT currency, acknowledged_minor
 		          FROM settlement_accounting.recovery_acknowledgement
 		         WHERE tenant_id = $1

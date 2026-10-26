@@ -240,6 +240,31 @@ func (repository *CustomerReceiptPostings) CustomerDirectionNets(
 	return postedNet, writeoffNet, confirmed, nil
 }
 
+// LockOperationalBalanceScope 取（租户，结算作用域）的事务级咨询锁。不锁 operational_balance 行：作用域第一次重算时还没有
+// 行可锁。锁空间与接受前控制的作用域锁分开——那一路只读余额、不重算，与重算排在同一把锁上只会多等，不多护什么。
+// 键照本仓其余事务级锁的双 int 形式；撞上只让两个不相干的作用域多等一会儿。
+func (repository *CustomerReceiptPostings) LockOperationalBalanceScope(
+	ctx context.Context,
+	tenant domain.TenantID,
+	scope domain.SettlementScope,
+) error {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("lock operational balance scope: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext('settlement_accounting.operational_balance.scope'),
+		        hashtext($1 || chr(31) || $2 || chr(31) || $3 || chr(31) || $4))`,
+		tenant.String(),
+		scope.LegalEntity().String(),
+		scope.Account().String(),
+		scope.Currency().String(),
+	); err != nil {
+		return fmt.Errorf("lock operational balance scope: %w", err)
+	}
+	return nil
+}
+
 // AdvanceOperationalBalance 插入时授信额度列写 0，冲突更新不碰该列。
 // 同键只准往前：截至时点不更新则交回未推进。
 func (repository *CustomerReceiptPostings) AdvanceOperationalBalance(

@@ -8,4 +8,4 @@ ALTER TABLE settlement_accounting.funds_mapping
 ALTER TABLE settlement_accounting.funds_mapping
     ADD CONSTRAINT funds_mapping_target_kind_closed
         CHECK (target_kind IN ('STATEMENT', 'PAYABLE', 'CREDIT_NOTE', 'ACCOUNT',
-                               'CUSTOMER_COMPENSATION', 'RECOVERY_RECEIVABLE'));
+                               'CUSTOMER_COMPENSATION', 'RECOVERY_ACKNOWLEDGEMENT'));

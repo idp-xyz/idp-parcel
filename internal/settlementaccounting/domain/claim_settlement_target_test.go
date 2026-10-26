@@ -11,8 +11,8 @@ import (
 // 账户与费用之外的既有四格不动。
 func TestClaimAmountTargetsAreMappableKinds(t *testing.T) {
 	for kind, name := range map[domain.SettlementTargetKind]string{
-		domain.TargetCustomerCompensation: "CUSTOMER_COMPENSATION",
-		domain.TargetRecoveryReceivable:   "RECOVERY_RECEIVABLE",
+		domain.TargetCustomerCompensation:    "CUSTOMER_COMPENSATION",
+		domain.TargetRecoveryAcknowledgement: "RECOVERY_ACKNOWLEDGEMENT",
 	} {
 		if kind.String() != name {
 			t.Fatalf("%d.String() = %q，要 %q", kind, kind.String(), name)
@@ -36,7 +36,7 @@ func TestClaimAmountTargetsAreMappableKinds(t *testing.T) {
 			t.Fatalf("%s 被认成了金额本体", kind)
 		}
 	}
-	if domain.SettlementTargetKind(domain.TargetRecoveryReceivable+1).String() != "" {
+	if domain.SettlementTargetKind(domain.TargetRecoveryAcknowledgement+1).String() != "" {
 		t.Fatal("封闭集合外多出一格带名字的目标")
 	}
 }
@@ -86,7 +86,7 @@ func TestAClaimAmountTargetTakesOnlyDebitAllocations(t *testing.T) {
 // 顺序取，两笔并发核销不会互等成环；对账单与应付这几格不在其中。
 func TestClaimTargetDemandsAreSummedPerTargetInLockOrder(t *testing.T) {
 	fact := adoptedFact(t, domain.FundsReceiptConfirmed, 10000)
-	recovery := mappingFor(t, fact, "mapping-recovery", domain.TargetRecoveryReceivable, "acknowledgement-1")
+	recovery := mappingFor(t, fact, "mapping-recovery", domain.TargetRecoveryAcknowledgement, "acknowledgement-1")
 	compensationB := mappingFor(t, fact, "mapping-compensation-b", domain.TargetCustomerCompensation, "compensation-b")
 	compensationA := mappingFor(t, fact, "mapping-compensation-a", domain.TargetCustomerCompensation, "compensation-a")
 	payable := mappingFor(t, fact, "mapping-payable", domain.TargetPayable, "payable-1")
@@ -115,7 +115,7 @@ func TestClaimTargetDemandsAreSummedPerTargetInLockOrder(t *testing.T) {
 	}{
 		{domain.TargetCustomerCompensation, "compensation-a", 1500},
 		{domain.TargetCustomerCompensation, "compensation-b", 2700},
-		{domain.TargetRecoveryReceivable, "acknowledgement-1", 1000},
+		{domain.TargetRecoveryAcknowledgement, "acknowledgement-1", 1000},
 	}
 	if len(demands) != len(want) {
 		t.Fatalf("demands = %+v，要 %d 条", demands, len(want))

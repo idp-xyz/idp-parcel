@@ -234,21 +234,21 @@ const (
 	// TargetCustomerCompensation 指名一条客户方向索赔金额：赔付义务或索赔费用退款，两者都是运营企业对客户的
 	// 应付、贷记或退款义务（UC-SA-005「将客户赔付的真实付款与运营企业对客户的应付/贷记/退款义务关联」）。
 	TargetCustomerCompensation
-	// TargetRecoveryReceivable 指名一条追偿认可金额，不指名应追偿金额：追偿到账核销的是对方认可的那部分应收。
+	// TargetRecoveryAcknowledgement 指名一条追偿认可金额，不指名应追偿金额：追偿到账核销的是对方认可的那部分应收。
 	// 对方没认可就付了款，这笔钱停在未分配，直到 UC-SA-007 凭 visibility-exception 判定有效的对方响应形成认可金额；
 	// 本格不替它推定认可。
-	TargetRecoveryReceivable
+	TargetRecoveryAcknowledgement
 )
 
 func (kind SettlementTargetKind) valid() bool {
-	return kind >= TargetStatement && kind <= TargetRecoveryReceivable
+	return kind >= TargetStatement && kind <= TargetRecoveryAcknowledgement
 }
 
 // PointsAtClaimAmount 说这一格指向 UC-SA-007 形成的一条金额本体。那几本册只增不改，映射指名的那一条就是
 // 映射时那一版：责任、规则或认可范围更正时追加调整或另立一条认可，各有各的身份，不改已有映射，也不并进
 // 它的未核销。
 func (kind SettlementTargetKind) PointsAtClaimAmount() bool {
-	return kind == TargetCustomerCompensation || kind == TargetRecoveryReceivable
+	return kind == TargetCustomerCompensation || kind == TargetRecoveryAcknowledgement
 }
 
 func (kind SettlementTargetKind) String() string {
@@ -263,8 +263,8 @@ func (kind SettlementTargetKind) String() string {
 		return "ACCOUNT"
 	case TargetCustomerCompensation:
 		return "CUSTOMER_COMPENSATION"
-	case TargetRecoveryReceivable:
-		return "RECOVERY_RECEIVABLE"
+	case TargetRecoveryAcknowledgement:
+		return "RECOVERY_ACKNOWLEDGEMENT"
 	default:
 		return ""
 	}
@@ -323,7 +323,7 @@ func MapFundsToTarget(
 	if fact.kind == FundsPaymentFailed {
 		return FundsMapping{}, ErrUnfundableFact
 	}
-	if !basis.valid() {
+	if !basis.valid() || !returnedFundsKeptOffClaimAmounts(fact.kind, targetKind) {
 		return FundsMapping{}, ErrInvalidFundsMapping
 	}
 	return FundsMapping{
@@ -465,7 +465,7 @@ func ApplySettlement(
 			// （AT-SA-168）。
 			return SettlementApplication{}, ErrInvalidApplication
 		}
-		if !claimAllocationDirected(allocation) {
+		if !claimAllocationDirected(allocation) || !returnedFundsKeptOffClaimAmounts(fact.kind, allocation.TargetKind) {
 			return SettlementApplication{}, ErrInvalidApplication
 		}
 		if allocation.Direction == AllocationDebit {
@@ -493,6 +493,12 @@ func ApplySettlement(
 // 别的账，那是应收应付净额抵销，UC-SA-005「默认不做应收应付净额抵销」；要做得像供应商贷项那样先有抵销依据的规则。
 func claimAllocationDirected(allocation SettlementAllocation) bool {
 	return !allocation.TargetKind.PointsAtClaimAmount() || allocation.Direction == AllocationDebit
+}
+
+// returnedFundsKeptOffClaimAmounts 守资金退回不落到金额本体两格上：赔付付款被退回、追偿到账被退回，走的是原核销的撤销
+// （AT-SA-112、AT-SA-155），把退回映射或核销到那条赔付、认可上，就把一笔退回记成了又一笔付款或收款。
+func returnedFundsKeptOffClaimAmounts(factKind FundsFactKind, targetKind SettlementTargetKind) bool {
+	return factKind != FundsReturned || !targetKind.PointsAtClaimAmount()
 }
 
 // ApplySettlementInCurrency 是跨币种入口的守门面：目标币种与事实币种不同且无换算
@@ -524,8 +530,18 @@ func (application SettlementApplication) Allocations() []SettlementAllocation {
 	return append([]SettlementAllocation(nil), application.allocations...)
 }
 
-// AppliedMinor 是本次核销使用的净金额；RemainderMinor 是事实金额中仍未分配的剩余
-// ——部分到账/超额都以剩余表达，原事实与原费用不动（AT-SA-108/109）。
+// AdmitWithinFact 判这一笔落下之后，事实上未撤销核销的合计会不会超过事实金额（这一笔形成时那一版，即当前有效版本）。
+// ApplySettlement 只看本笔；同一笔钱换个核销引用再交一次，单笔都守恒，合计却把一笔付款当两笔用（UC-SA-005 金额
+// 守恒、AT-SA-109 超额保持未分配）。alreadyAppliedMinor 是这条事实上已有的、未撤销的核销合计。
+func (application SettlementApplication) AdmitWithinFact(alreadyAppliedMinor int64) error {
+	if alreadyAppliedMinor < 0 || alreadyAppliedMinor+application.appliedMinor > application.factMinor {
+		return ErrApplicationImbalance
+	}
+	return nil
+}
+
+// AppliedMinor 是本次核销使用的净金额；RemainderMinor 是事实金额减去本次核销的部分，不含同一事实上别的核销——
+// 事实的累计未分配由编排按该事实全部未撤销核销另算。部分到账/超额都以剩余表达，原事实与原费用不动（AT-SA-108/109）。
 func (application SettlementApplication) AppliedMinor() int64 {
 	return application.appliedMinor
 }

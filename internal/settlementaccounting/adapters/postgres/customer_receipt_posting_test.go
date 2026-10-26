@@ -344,6 +344,7 @@ func mustFundsHandler(
 		Balances:     postings,
 		Standings:    postings,
 		ClaimTargets: absentClaimTargets{},
+		FactLocks:    applications,
 	})
 	if err != nil {
 		t.Fatal(err)

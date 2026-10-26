@@ -270,10 +270,10 @@ func TestFundsApplicationCommandsRunThroughTheControlledEntryOnRealPostgres(t *t
 
 	// 追偿到账映射到追偿认可并部分核销。
 	run(commandExternalFundsFact, receiptDocument("SYN-FACT-RECOVERY-1", "4000"), exitRegistered, "FUNDS_FACT_ADOPTED")
-	run(commandFundsMapping, claimMappingDocument("SYN-MAPPING-RECOVERY-1", "SYN-FACT-RECOVERY-1", "RECOVERY_RECEIVABLE", "SYN-ACK-1"),
+	run(commandFundsMapping, claimMappingDocument("SYN-MAPPING-RECOVERY-1", "SYN-FACT-RECOVERY-1", "RECOVERY_ACKNOWLEDGEMENT", "SYN-ACK-1"),
 		exitRegistered, "FUNDS_MAPPED")
 	run(commandFundsApplication,
-		applicationDocument("SYN-APPLICATION-R1", "SYN-FACT-RECOVERY-1", "SYN-MAPPING-RECOVERY-1", "RECOVERY_RECEIVABLE", "SYN-ACK-1", "4000"),
+		applicationDocument("SYN-APPLICATION-R1", "SYN-FACT-RECOVERY-1", "SYN-MAPPING-RECOVERY-1", "RECOVERY_ACKNOWLEDGEMENT", "SYN-ACK-1", "4000"),
 		exitRegistered, "SETTLEMENT_APPLIED")
 
 	if after := readClaimAmountRow(t, pool); after != amountBefore {

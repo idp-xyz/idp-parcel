@@ -102,8 +102,13 @@ type compensationApplication struct {
 
 func compensationApplicationOf(t *testing.T, id string, amount int64) compensationApplication {
 	t.Helper()
-	fact := adoptedFactRecord(t, "tenant-a", "bank-fact-"+id, domain.FundsReceiptConfirmed, 8000)
-	mapping := mappingRecord(t, "tenant-a", "mapping-"+id, fact.Fact, domain.TargetCustomerCompensation, "compensation-1")
+	return compensationApplicationIn(t, "tenant-a", id, amount)
+}
+
+func compensationApplicationIn(t *testing.T, tenant, id string, amount int64) compensationApplication {
+	t.Helper()
+	fact := adoptedFactRecord(t, tenant, "bank-fact-"+id, domain.FundsReceiptConfirmed, 8000)
+	mapping := mappingRecord(t, tenant, "mapping-"+id, fact.Fact, domain.TargetCustomerCompensation, "compensation-1")
 	application, err := domain.ApplySettlement(fact.Fact, []domain.FundsMapping{mapping.Mapping},
 		[]domain.SettlementAllocation{{
 			Mapping: mapping.Mapping.Mapping(), TargetKind: domain.TargetCustomerCompensation, Target: mapping.Mapping.Target(),
@@ -116,7 +121,7 @@ func compensationApplicationOf(t *testing.T, id string, amount int64) compensati
 		t.Fatalf("构造核销：%v", err)
 	}
 	return compensationApplication{fact: fact, mapping: mapping, application: ports.SettlementApplicationRecord{
-		Key:           ports.SettlementApplicationKey{TenantID: saTenant(t, "tenant-a"), Application: application.Application()},
+		Key:           ports.SettlementApplicationKey{TenantID: saTenant(t, tenant), Application: application.Application()},
 		ContentDigest: "digest-" + id,
 		Application:   application,
 		RecordedAt:    fundsAppliedAt,
@@ -147,11 +152,11 @@ func TestClaimTargetsAreFoundOnlyInTheirOwnTenant(t *testing.T) {
 		want   bool
 	}{
 		{"tenant-a", claimKey(t, domain.TargetCustomerCompensation, "compensation-1"), true},
-		{"tenant-a", claimKey(t, domain.TargetRecoveryReceivable, "acknowledgement-1"), true},
+		{"tenant-a", claimKey(t, domain.TargetRecoveryAcknowledgement, "acknowledgement-1"), true},
 		{"tenant-c", claimKey(t, domain.TargetCustomerCompensation, "compensation-1"), false},
-		{"tenant-b", claimKey(t, domain.TargetRecoveryReceivable, "acknowledgement-1"), false},
+		{"tenant-b", claimKey(t, domain.TargetRecoveryAcknowledgement, "acknowledgement-1"), false},
 		{"tenant-a", claimKey(t, domain.TargetCustomerCompensation, "compensation-never"), false},
-		{"tenant-a", claimKey(t, domain.TargetRecoveryReceivable, "receivable-1"), false},
+		{"tenant-a", claimKey(t, domain.TargetRecoveryAcknowledgement, "receivable-1"), false},
 		{"tenant-a", claimKey(t, domain.TargetCustomerCompensation, "acknowledgement-1"), false},
 	} {
 		found, err := rig.targets.FindClaimTarget(ctx, saTenant(t, probe.tenant), probe.key)
@@ -173,7 +178,7 @@ func TestClaimTargetsAreFoundOnlyInTheirOwnTenant(t *testing.T) {
 			t.Fatalf("客户赔付未核销面 = %s %d/%d", compensation.Currency(), compensation.AppliedMinor(), compensation.AmountMinor())
 		}
 		acknowledgement, found, err := rig.targets.LockClaimTarget(txCtx, saTenant(t, "tenant-a"),
-			claimKey(t, domain.TargetRecoveryReceivable, "acknowledgement-1"))
+			claimKey(t, domain.TargetRecoveryAcknowledgement, "acknowledgement-1"))
 		if err != nil || !found {
 			t.Fatalf("锁追偿认可：found=%v err=%v", found, err)
 		}
@@ -199,8 +204,13 @@ func TestAClaimTargetStandingCountsOnlyLiveApplicationsOfItsOwn(t *testing.T) {
 
 	firstPrepared := compensationApplicationOf(t, "application-1", 3000)
 	secondPrepared := compensationApplicationOf(t, "application-2", 1500)
+	// 别的租户在同名的 compensation-1 上也核了一笔：tenant-a 的已核销不该把它算进来。
+	foreignPrepared := compensationApplicationIn(t, "tenant-b", "application-foreign", 2000)
 	saWithin(t, rig.transactor, ctx, func(txCtx context.Context) error {
 		if err := rig.save(txCtx, firstPrepared); err != nil {
+			return err
+		}
+		if err := rig.save(txCtx, foreignPrepared); err != nil {
 			return err
 		}
 		return rig.save(txCtx, secondPrepared)
@@ -337,12 +347,12 @@ func TestTheMappingTargetCheckAdmitsTheClaimAmountKindsOnly(t *testing.T) {
 			 VALUES ('tenant-a', $1, 'f-1', $2, 't-1', 'b', now(), 'd', now())`, id, kind)
 		return err
 	}
-	for _, kind := range []string{"STATEMENT", "PAYABLE", "CREDIT_NOTE", "ACCOUNT", "CUSTOMER_COMPENSATION", "RECOVERY_RECEIVABLE"} {
+	for _, kind := range []string{"STATEMENT", "PAYABLE", "CREDIT_NOTE", "ACCOUNT", "CUSTOMER_COMPENSATION", "RECOVERY_ACKNOWLEDGEMENT"} {
 		if err := insert("m-"+kind, kind); err != nil {
 			t.Fatalf("目标 %s 进不了映射库：%v", kind, err)
 		}
 	}
-	for _, kind := range []string{"RECOVERY_ACKNOWLEDGEMENT", "CHARGE", "CLAIM_AMOUNT"} {
+	for _, kind := range []string{"RECOVERY_RECEIVABLE", "CHARGE", "CLAIM_AMOUNT"} {
 		if err := insert("m-bad-"+kind, kind); err == nil {
 			t.Fatalf("词表外的目标 %s 溜进了映射库", kind)
 		}
@@ -355,12 +365,12 @@ func TestMappingsAndApplicationsOnClaimTargetsRoundTrip(t *testing.T) {
 	ctx := t.Context()
 	fact := adoptedFactRecord(t, "tenant-a", "bank-fact-roundtrip", domain.FundsReceiptConfirmed, 8000)
 	compensation := mappingRecord(t, "tenant-a", "mapping-compensation", fact.Fact, domain.TargetCustomerCompensation, "compensation-1")
-	recovery := mappingRecord(t, "tenant-a", "mapping-recovery", fact.Fact, domain.TargetRecoveryReceivable, "acknowledgement-1")
+	recovery := mappingRecord(t, "tenant-a", "mapping-recovery", fact.Fact, domain.TargetRecoveryAcknowledgement, "acknowledgement-1")
 	application, err := domain.ApplySettlement(fact.Fact, []domain.FundsMapping{compensation.Mapping, recovery.Mapping},
 		[]domain.SettlementAllocation{
 			{Mapping: compensation.Mapping.Mapping(), TargetKind: domain.TargetCustomerCompensation, Target: compensation.Mapping.Target(),
 				Direction: domain.AllocationDebit, AmountMinor: 3000},
-			{Mapping: recovery.Mapping.Mapping(), TargetKind: domain.TargetRecoveryReceivable, Target: recovery.Mapping.Target(),
+			{Mapping: recovery.Mapping.Mapping(), TargetKind: domain.TargetRecoveryAcknowledgement, Target: recovery.Mapping.Target(),
 				Direction: domain.AllocationDebit, AmountMinor: 2000},
 		},
 		saValue(t, domain.NewApplicationReference, "application-roundtrip"),
@@ -396,7 +406,7 @@ func TestMappingsAndApplicationsOnClaimTargetsRoundTrip(t *testing.T) {
 		t.Fatalf("核销读回：exists=%v err=%v", exists, err)
 	}
 	if got := found.Application.ClaimTargetDemands(); len(got) != 2 ||
-		got[0].Key.Kind != domain.TargetCustomerCompensation || got[1].Key.Kind != domain.TargetRecoveryReceivable {
+		got[0].Key.Kind != domain.TargetCustomerCompensation || got[1].Key.Kind != domain.TargetRecoveryAcknowledgement {
 		t.Fatalf("读回的分配 = %+v", got)
 	}
 }

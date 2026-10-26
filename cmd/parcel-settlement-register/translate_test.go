@@ -75,7 +75,7 @@ func TestCommandForAcceptsTheApplicationCommands(t *testing.T) {
 	application := []byte(`{
 		"tenantId": "SYN-T1", "applicationRef": "SYN-APPLICATION-1", "factRef": "SYN-FACT-1", "targetCurrency": "XTS",
 		"mappingRefs": ["SYN-MAPPING-1"],
-		"allocations": [{"mappingRef": "SYN-MAPPING-1", "targetKind": "RECOVERY_RECEIVABLE", "targetRef": "SYN-ACK-1", "direction": "DEBIT", "amountMinor": 100}],
+		"allocations": [{"mappingRef": "SYN-MAPPING-1", "targetKind": "RECOVERY_ACKNOWLEDGEMENT", "targetRef": "SYN-ACK-1", "direction": "DEBIT", "amountMinor": 100}],
 		"basis": "SYN-PAYMENT-INSTRUCTION-1", "appliedAt": "2026-09-03T08:00:00Z"
 	}`)
 	reversal := []byte(`{"tenantId": "SYN-T1", "applicationRef": "SYN-APPLICATION-1", "basis": "SYN-FUNDS-RETURNED-1", "reversedAt": "2026-09-04T08:00:00Z"}`)

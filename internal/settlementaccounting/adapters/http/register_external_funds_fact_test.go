@@ -271,6 +271,11 @@ func (stores unreachableFundsSideStores) LockClaimTarget(
 	return domain.ClaimTargetStanding{}, false, nil
 }
 
+func (stores unreachableFundsSideStores) LockFundsFactApplications(context.Context, ports.FundsFactKey) (int64, bool, error) {
+	stores.fail()
+	return 0, false, nil
+}
+
 type unreachableApplicationStore struct{ t *testing.T }
 
 func (store unreachableApplicationStore) FindByKey(
@@ -337,6 +342,10 @@ func (idleBalanceAdvance) AdvanceOperationalBalance(
 	return ports.OperationalBalanceAdvanced, nil
 }
 
+func (idleBalanceAdvance) LockOperationalBalanceScope(context.Context, domain.TenantID, domain.SettlementScope) error {
+	return nil
+}
+
 type idleCreditStanding struct{}
 
 func (idleCreditStanding) AdvanceCreditStanding(
@@ -368,6 +377,7 @@ func fundsHandlerOver(t *testing.T, stub *fundsStoreStub) *application.MapExtern
 		Balances:     idleBalanceAdvance{},
 		Standings:    idleCreditStanding{},
 		ClaimTargets: unreachableFundsSideStores{t: t},
+		FactLocks:    unreachableFundsSideStores{t: t},
 	})
 	if err != nil {
 		t.Fatalf("构造编排：%v", err)

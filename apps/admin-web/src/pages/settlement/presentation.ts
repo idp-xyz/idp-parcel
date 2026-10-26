@@ -63,8 +63,8 @@ export const settlementTargetKindLabels: Record<string, string> = {
   PAYABLE: '供应商审核应付',
   CREDIT_NOTE: '供应商费用贷项',
   ACCOUNT: '应收结算账户',
-  CUSTOMER_COMPENSATION: '客户赔付',
-  RECOVERY_RECEIVABLE: '追偿认可金额',
+  CUSTOMER_COMPENSATION: '客户赔付或索赔费用退款',
+  RECOVERY_ACKNOWLEDGEMENT: '追偿认可金额',
 };
 
 // 经营指标口径的封闭三值，中文取 OperatingBasis 注释原词。索赔调整后口径必须声明所依附的

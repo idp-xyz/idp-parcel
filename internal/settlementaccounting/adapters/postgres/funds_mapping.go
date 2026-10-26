@@ -135,8 +135,8 @@ func settlementTargetKindFrom(raw string) (domain.SettlementTargetKind, error) {
 		return domain.TargetAccount, nil
 	case domain.TargetCustomerCompensation.String():
 		return domain.TargetCustomerCompensation, nil
-	case domain.TargetRecoveryReceivable.String():
-		return domain.TargetRecoveryReceivable, nil
+	case domain.TargetRecoveryAcknowledgement.String():
+		return domain.TargetRecoveryAcknowledgement, nil
 	default:
 		return 0, fmt.Errorf("unknown settlement target kind %q", raw)
 	}

@@ -265,6 +265,10 @@ func (idleBalanceAdvance) AdvanceOperationalBalance(
 	return ports.OperationalBalanceAdvanced, nil
 }
 
+func (idleBalanceAdvance) LockOperationalBalanceScope(context.Context, domain.TenantID, domain.SettlementScope) error {
+	return nil
+}
+
 type idleCreditStanding struct{}
 
 func (idleCreditStanding) AdvanceCreditStanding(
@@ -280,6 +284,8 @@ type fundsFixture struct {
 	handoff      *settlementHandoffDouble
 	factHandoff  *fundsFactHandoffDouble
 	claims       *claimTargetsDouble
+	books        *scopeBooksDouble
+	locks        *[]string
 	handler      *application.MapExternalFundsHandler
 }
 
@@ -292,7 +298,10 @@ func newFundsFixture(t *testing.T) *fundsFixture {
 		handoff:      &settlementHandoffDouble{},
 		factHandoff:  newFundsFactHandoff(),
 	}
+	fixture.locks = &[]string{}
 	fixture.claims = newClaimTargets(fixture.applications)
+	fixture.claims.log = fixture.locks
+	fixture.books = newScopeBooks(fixture.locks)
 	handler, err := application.NewMapExternalFundsHandler(application.MapExternalFundsDeps{
 		Facts:        fixture.facts,
 		Mappings:     fixture.mappings,
@@ -300,13 +309,14 @@ func newFundsFixture(t *testing.T) *fundsFixture {
 		Downstream:   fixture.handoff,
 		FactHandoff:  fixture.factHandoff,
 		Clock:        fundsClock{at: fundsNowAt},
-		Books:        idleReceiptBooks{},
-		Balances:     idleBalanceAdvance{},
+		Books:        fixture.books,
+		Balances:     fixture.books,
 		Standings:    idleCreditStanding{},
 		ClaimTargets: fixture.claims,
+		FactLocks:    &factLockDouble{facts: fixture.facts, applications: fixture.applications, log: fixture.locks},
 	})
 	if err != nil {
-		t.Fatalf("十口全接替身仍被构造门拒：%v", err)
+		t.Fatalf("十一口全接替身仍被构造门拒：%v", err)
 	}
 	fixture.handler = handler
 	return fixture
@@ -328,10 +338,11 @@ func TestTheFundsHandlerRefusesANilDependencyAtConstruction(t *testing.T) {
 			Balances:     idleBalanceAdvance{},
 			Standings:    idleCreditStanding{},
 			ClaimTargets: newClaimTargets(newApplicationStore()),
+			FactLocks:    &factLockDouble{facts: newFundsFactStore(), applications: newApplicationStore(), log: &[]string{}},
 		}
 	}
 	if _, err := application.NewMapExternalFundsHandler(complete()); err != nil {
-		t.Fatalf("十口齐全被拒：%v", err)
+		t.Fatalf("十一口齐全被拒：%v", err)
 	}
 
 	missing := map[string]func(*application.MapExternalFundsDeps){
@@ -345,6 +356,7 @@ func TestTheFundsHandlerRefusesANilDependencyAtConstruction(t *testing.T) {
 		"operational balance advance":       func(deps *application.MapExternalFundsDeps) { deps.Balances = nil },
 		"credit standing advance":           func(deps *application.MapExternalFundsDeps) { deps.Standings = nil },
 		"claim settlement targets":          func(deps *application.MapExternalFundsDeps) { deps.ClaimTargets = nil },
+		"funds fact application lock":       func(deps *application.MapExternalFundsDeps) { deps.FactLocks = nil },
 	}
 	for name, remove := range missing {
 		deps := complete()

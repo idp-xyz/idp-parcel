@@ -33,7 +33,8 @@
 // 动作）；1 = 用法或输入不合法（含用例的`未受理`——回指非链头、更正未采用的事实、构造门拒——改请求，不是重试；
 // 也含采用信封、核销信封或结算账户已登记信封被框架确定性校验拒收那一格——什么都没登记、要改的是引用的长度或形，
 // 见 execute）；
-// 2 = 内容冲突（同版本字面异内容、同事实第二个首版：绝不覆盖，人工核对既有登记再续办）；3 = 未决（依赖故障，
+// 2 = 内容冲突（同版本字面异内容、同事实第二个首版：绝不覆盖，人工核对既有登记再续办；也含作用域账不平那一格，
+// 见 execute）；3 = 未决（依赖故障，
 // 登记与否未知；也含「行已落、信封未出」那一格——它需要人重跑同一命令补发同一封，不能与已登记同格）。
 package main
 
@@ -216,6 +217,7 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 		Balances:     postings,
 		Standings:    postings,
 		ClaimTargets: claimTargets,
+		FactLocks:    applications,
 	})
 	if err != nil {
 		return none, fmt.Errorf("构造外部资金采用编排：%w", err)
@@ -418,6 +420,15 @@ func execute(ctx context.Context, command string, raw []byte, registrar registra
 	if errors.Is(err, ports.ErrPreAcceptanceEstimateAdoptionHandoffRejected) {
 		return fmt.Sprintf("%s: 未登记——受理前估价采用已登记信封被框架确定性拒收，要改的是账户标识的长度或形，同一份再交仍会被拒：%v", command, err), exitUsage
 	}
+	if errors.Is(err, sadomain.ErrNotReceivableAccount) {
+		// 映射目标写成了一个不是应收的结算账户：改目标才行，重交同一份永远同一个结果（ADR-0029），不是未决。
+		return fmt.Sprintf("%s: 未登记——映射目标不是本租户的应收结算账户，改目标再交：%v", command, err), exitUsage
+	}
+	if errors.Is(err, sadomain.ErrNegativeConfirmedUnsettled) {
+		// 作用域按账求出的已确认未结为负：账已经不平（多半是一笔超额的对账单核销，或确认之后的贷记调整），这一笔连同
+		// 重算一起回滚。重交同一份永远同一个结果，要人核对该作用域的核销与调整、撤掉多出的那一笔——归冲突格，不是未决。
+		return fmt.Sprintf("%s: 未登记——该作用域按账求出的已确认未结为负（账不平），先核对它的核销与费用调整再续办：%v", command, err), exitConflict
+	}
 	if errors.Is(err, sadomain.ErrCatalogueTargetMissing) {
 		return fmt.Sprintf("%s: 未登记——指向的结算账户还不在账户册上，先登记账户再交这一行：%v", command, err), exitUsage
 	}
@@ -436,14 +447,25 @@ func subjectOf(result application.FundsResult) string {
 	return record.Key.Fact.String() + " 版本 " + record.Fact.Version().String()
 }
 
-// applicationSubjectOf 取核销或撤销落在哪一笔核销上，与它用掉、剩下的金额：部分核销留下的未分配要让操作员看得见。
+// applicationSubjectOf 取核销或撤销落在哪一笔核销上，与这一步之后该事实的累计未分配：同一笔钱上的别的核销也算在里头，
+// 部分核销留下的、撤销还回来的未分配都让操作员看得见。撤销那两格不报原核销的金额——撤销之后它已不在核。
 func applicationSubjectOf(result application.FundsResult) string {
 	record, found := result.Application()
 	if !found {
 		return ""
 	}
-	return fmt.Sprintf("核销 %s，核销 %d、未分配 %d", record.Key.Application.String(),
-		record.Application.AppliedMinor(), record.Application.RemainderMinor())
+	unapplied, known := result.FactUnappliedMinor()
+	subject := "核销 " + record.Key.Application.String()
+	switch result.Outcome() {
+	case application.ApplicationReversedOutcome, application.ApplicationAlreadyReversed:
+		subject += " 已撤销"
+	default:
+		subject += fmt.Sprintf("：本笔 %d", record.Application.AppliedMinor())
+	}
+	if known {
+		subject += fmt.Sprintf("；事实 %s 累计未分配 %d", record.Application.Fact().String(), unapplied)
+	}
+	return subject
 }
 
 // fundsAnswer 把 `application.FundsOutcome` 的封闭各格译成退出码，不增不减。一族一张表：采用、映射、核销与撤销几条
@@ -452,7 +474,8 @@ func applicationSubjectOf(result application.FundsResult) string {
 //   - 已采用 / 已存在 / 已映射 / 已核销 / 已撤销 / 重放各格 → 0。重放不是错误，无恢复动作。
 //   - `未受理` 与业务负向各格（不可映射的失败付款、分配失衡、跨币种无换算）→ 1：内容改对了才该重来，重跑同一份
 //     没有意义。回指非链头、更正一条未采用的事实、构造门拒、映射到不存在或不属本租户的赔付与追偿认可、撤销一笔
-//     不存在的核销都落在`未受理`；分到一条赔付或认可上超出它未核销的部分落在分配失衡。
+//     不存在的核销、分给对账单超出该作用域已确认应收的分配都落在`未受理`；分到一条赔付或认可上超出它未核销的部分、
+//     同一事实上的核销合计超出事实金额都落在分配失衡。
 //   - 内容冲突各格 → 2：同键异内容绝不覆盖，要人核对既有登记再决定续办。
 //   - 未决 → 3，带编排指名的原因（哪一本库读不回）。
 //   - 行已落、信封未出（续办引用非空）→ 3 并把续办引用打出：事实已采用、核销已落是真的，但下游等的那封没出去，

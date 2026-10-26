@@ -160,6 +160,50 @@ func (repository *SettlementApplications) Replace(
 	return tag.RowsAffected() > 0, nil
 }
 
+var _ ports.FundsFactApplicationLock = (*SettlementApplications)(nil)
+
+// LockFundsFactApplications 先以 FOR UPDATE 锁事实身份行（external_funds_fact），再另起一句求这条事实上未撤销核销的
+// applied 合计。锁身份行而不锁链头版本行：身份行一条事实一行、终身不换，链头随每次更正换一行；更正落版本行时外键
+// 对身份行取 KEY SHARE，与这里的 FOR UPDATE 互斥，于是核销与更正在同一行上排队，更正编排不必另取一把锁。不用咨询锁
+// 也是这个缘故——咨询锁挡不住不取它的更正。两句分开的理由同 ClaimSettlementTargets.LockClaimTarget。
+func (repository *SettlementApplications) LockFundsFactApplications(
+	ctx context.Context,
+	key ports.FundsFactKey,
+) (int64, bool, error) {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return 0, false, fmt.Errorf("lock funds fact applications: %w", err)
+	}
+	var locked int
+	err = executor.QueryRow(ctx,
+		`SELECT 1 FROM settlement_accounting.external_funds_fact
+		  WHERE tenant_id = $1
+		    AND fact_id = $2
+		    FOR UPDATE`,
+		key.TenantID.String(),
+		key.Fact.String(),
+	).Scan(&locked)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, fmt.Errorf("lock funds fact applications: %w", err)
+	}
+	var applied int64
+	if err := executor.QueryRow(ctx,
+		`SELECT COALESCE(SUM(applied_minor), 0)::bigint
+		   FROM settlement_accounting.settlement_application
+		  WHERE tenant_id = $1
+		    AND fact_id = $2
+		    AND reversal_basis IS NULL`,
+		key.TenantID.String(),
+		key.Fact.String(),
+	).Scan(&applied); err != nil {
+		return 0, false, fmt.Errorf("lock funds fact applications: %w", err)
+	}
+	return applied, true, nil
+}
+
 func rebuildSettlementApplication(
 	id domain.ApplicationReference,
 	factID, currency string,

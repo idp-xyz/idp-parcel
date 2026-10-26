@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ type claimTargetsDouble struct {
 	findErr      error
 	lockErr      error
 	locked       []domain.ClaimTargetKey
+	log          *[]string
 }
 
 type claimTargetAmount struct {
@@ -59,6 +61,9 @@ func (double *claimTargetsDouble) LockClaimTarget(
 		return domain.ClaimTargetStanding{}, false, double.lockErr
 	}
 	double.locked = append(double.locked, key)
+	if double.log != nil {
+		*double.log = append(*double.log, "claim:"+key.Kind.String()+"/"+key.Target.String())
+	}
 	amount, found := double.amounts[claimTargetKey(tenant, key)]
 	if !found {
 		return domain.ClaimTargetStanding{}, false, nil
@@ -182,15 +187,15 @@ func TestACompensationPaymentMapsAndAppliesAgainstThatCompensationOnly(t *testin
 func TestARecoveryReceiptMapsOnlyToAnAcknowledgementInItsOwnTenant(t *testing.T) {
 	fixture := newFundsFixture(t)
 	ctx := context.Background()
-	fixture.claims.register("tenant-1", domain.TargetRecoveryReceivable, "acknowledgement-1", "USD", 6000)
-	fixture.claims.register("tenant-2", domain.TargetRecoveryReceivable, "acknowledgement-foreign", "USD", 6000)
+	fixture.claims.register("tenant-1", domain.TargetRecoveryAcknowledgement, "acknowledgement-1", "USD", 6000)
+	fixture.claims.register("tenant-2", domain.TargetRecoveryAcknowledgement, "acknowledgement-foreign", "USD", 6000)
 	if _, err := fixture.handler.AdoptFact(ctx, adoptCommand(t, domain.FundsReceiptConfirmed)); err != nil {
 		t.Fatalf("adopt: %v", err)
 	}
 
-	foreign, err := fixture.handler.Map(ctx, claimMapCommand(t, "mapping-foreign", domain.TargetRecoveryReceivable, "acknowledgement-foreign"))
+	foreign, err := fixture.handler.Map(ctx, claimMapCommand(t, "mapping-foreign", domain.TargetRecoveryAcknowledgement, "acknowledgement-foreign"))
 	mustFunds(t, foreign, err, application.FundsNotAccepted, "映射到别的租户的认可")
-	missing, err := fixture.handler.Map(ctx, claimMapCommand(t, "mapping-missing", domain.TargetRecoveryReceivable, "acknowledgement-never"))
+	missing, err := fixture.handler.Map(ctx, claimMapCommand(t, "mapping-missing", domain.TargetRecoveryAcknowledgement, "acknowledgement-never"))
 	mustFunds(t, missing, err, application.FundsNotAccepted, "映射到不存在的认可")
 	if foreign.ContinuationReference() != missing.ContinuationReference() || foreign.UndecidedReason() != missing.UndecidedReason() {
 		t.Fatal("「不属本租户」与「不存在」答得出差别")
@@ -199,13 +204,13 @@ func TestARecoveryReceiptMapsOnlyToAnAcknowledgementInItsOwnTenant(t *testing.T)
 		t.Fatalf("未受理的映射落了 %d 行", len(fixture.mappings.records))
 	}
 
-	mapped, err := fixture.handler.Map(ctx, claimMapCommand(t, "mapping-recovery", domain.TargetRecoveryReceivable, "acknowledgement-1"))
+	mapped, err := fixture.handler.Map(ctx, claimMapCommand(t, "mapping-recovery", domain.TargetRecoveryAcknowledgement, "acknowledgement-1"))
 	mustFunds(t, mapped, err, application.FundsMapped, "映射到本租户的认可")
 	partial, err := fixture.handler.Apply(ctx, claimApplyCommand(t, "application-r1", "mapping-recovery",
-		domain.TargetRecoveryReceivable, "acknowledgement-1", 4000))
+		domain.TargetRecoveryAcknowledgement, "acknowledgement-1", 4000))
 	mustFunds(t, partial, err, application.SettlementApplied, "部分核销 4000")
 	over, err := fixture.handler.Apply(ctx, claimApplyCommand(t, "application-r2", "mapping-recovery",
-		domain.TargetRecoveryReceivable, "acknowledgement-1", 2001))
+		domain.TargetRecoveryAcknowledgement, "acknowledgement-1", 2001))
 	mustFunds(t, over, err, application.ApplicationImbalanceOutcome, "剩 2000 却核 2001")
 }
 
@@ -234,7 +239,7 @@ func TestClaimTargetsAreLockedInOneOrder(t *testing.T) {
 	ctx := context.Background()
 	fixture.claims.register("tenant-1", domain.TargetCustomerCompensation, "compensation-b", "USD", 5000)
 	fixture.claims.register("tenant-1", domain.TargetCustomerCompensation, "compensation-a", "USD", 5000)
-	fixture.claims.register("tenant-1", domain.TargetRecoveryReceivable, "acknowledgement-1", "USD", 5000)
+	fixture.claims.register("tenant-1", domain.TargetRecoveryAcknowledgement, "acknowledgement-1", "USD", 5000)
 	if _, err := fixture.handler.AdoptFact(ctx, adoptCommand(t, domain.FundsReceiptConfirmed)); err != nil {
 		t.Fatalf("adopt: %v", err)
 	}
@@ -243,7 +248,7 @@ func TestClaimTargetsAreLockedInOneOrder(t *testing.T) {
 		kind    domain.SettlementTargetKind
 		ref     string
 	}{
-		{"mapping-ack", domain.TargetRecoveryReceivable, "acknowledgement-1"},
+		{"mapping-ack", domain.TargetRecoveryAcknowledgement, "acknowledgement-1"},
 		{"mapping-b", domain.TargetCustomerCompensation, "compensation-b"},
 		{"mapping-a", domain.TargetCustomerCompensation, "compensation-a"},
 		{"mapping-1", domain.TargetStatement, "STMT-2026-08-001"},
@@ -255,7 +260,7 @@ func TestClaimTargetsAreLockedInOneOrder(t *testing.T) {
 	command.Application = "application-many"
 	command.MappingRefs = []string{"mapping-ack", "mapping-b", "mapping-a", "mapping-1"}
 	command.Allocations = []application.AllocationDirective{
-		{Mapping: "mapping-ack", TargetKind: domain.TargetRecoveryReceivable, Target: "acknowledgement-1", Direction: domain.AllocationDebit, AmountMinor: 1000},
+		{Mapping: "mapping-ack", TargetKind: domain.TargetRecoveryAcknowledgement, Target: "acknowledgement-1", Direction: domain.AllocationDebit, AmountMinor: 1000},
 		{Mapping: "mapping-b", TargetKind: domain.TargetCustomerCompensation, Target: "compensation-b", Direction: domain.AllocationDebit, AmountMinor: 1000},
 		{Mapping: "mapping-1", TargetKind: domain.TargetStatement, Target: "STMT-2026-08-001", Direction: domain.AllocationDebit, AmountMinor: 1000},
 		{Mapping: "mapping-a", TargetKind: domain.TargetCustomerCompensation, Target: "compensation-a", Direction: domain.AllocationDebit, AmountMinor: 1000},
@@ -266,7 +271,7 @@ func TestClaimTargetsAreLockedInOneOrder(t *testing.T) {
 	for _, key := range fixture.claims.locked {
 		order = append(order, key.Kind.String()+"/"+key.Target.String())
 	}
-	want := []string{"CUSTOMER_COMPENSATION/compensation-a", "CUSTOMER_COMPENSATION/compensation-b", "RECOVERY_RECEIVABLE/acknowledgement-1"}
+	want := []string{"CUSTOMER_COMPENSATION/compensation-a", "CUSTOMER_COMPENSATION/compensation-b", "RECOVERY_ACKNOWLEDGEMENT/acknowledgement-1"}
 	if !reflect.DeepEqual(order, want) {
 		t.Fatalf("锁序 = %v，要 %v", order, want)
 	}
@@ -349,4 +354,289 @@ func fundsRef[T any](t *testing.T, construct func(string) (T, error), raw string
 		t.Fatalf("构造 %q：%v", raw, err)
 	}
 	return value
+}
+
+// factLockDouble 照真库口径：事实在册才锁得到，已核销是同一只核销库替身里指向这条事实、未撤销的核销 applied 合计。
+type factLockDouble struct {
+	facts        *fundsFactStoreDouble
+	applications *applicationStoreDouble
+	err          error
+	log          *[]string
+}
+
+func (double *factLockDouble) LockFundsFactApplications(ctx context.Context, key ports.FundsFactKey) (int64, bool, error) {
+	if double.err != nil {
+		return 0, false, double.err
+	}
+	*double.log = append(*double.log, "fact:"+key.Fact.String())
+	if _, found, _ := double.facts.FindByKey(ctx, key); !found {
+		return 0, false, nil
+	}
+	applied := int64(0)
+	for _, record := range double.applications.records {
+		if record.Key.TenantID != key.TenantID || record.Application.Fact() != key.Fact {
+			continue
+		}
+		if _, _, reversed := record.Application.Reversed(); reversed {
+			continue
+		}
+		applied += record.Application.AppliedMinor()
+	}
+	return applied, true, nil
+}
+
+// scopeBooksDouble 让登了的对账单收成一个应收作用域，记下作用域锁与推进的先后；没登的对账单不是客户收款这一支。
+// 已确认应收给得够大，这里不证已确认未结的边界（那一格在 postgres 用例里对真账证）。
+type scopeBooksDouble struct {
+	statements map[string]domain.SettlementScope
+	log        *[]string
+}
+
+func newScopeBooks(log *[]string) *scopeBooksDouble {
+	return &scopeBooksDouble{statements: map[string]domain.SettlementScope{}, log: log}
+}
+
+func (double *scopeBooksDouble) registerStatement(t *testing.T, statement, account string) {
+	t.Helper()
+	scope, err := domain.NewSettlementScope(
+		fundsRef(t, domain.NewLegalEntityReference, "legal-entity-1"),
+		fundsRef(t, domain.NewSettlementAccountID, account),
+		fundsRef(t, domain.NewCurrencyCode, "USD"))
+	if err != nil {
+		t.Fatalf("作用域：%v", err)
+	}
+	double.statements[statement] = scope
+}
+
+func (double *scopeBooksDouble) CustomerStatementScope(
+	_ context.Context, _ domain.TenantID, statement string,
+) (domain.SettlementScope, bool, error) {
+	scope, found := double.statements[statement]
+	return scope, found, nil
+}
+
+func (double *scopeBooksDouble) ReceivableAccountScope(
+	context.Context, domain.TenantID, string,
+) (domain.SettlementScope, bool, error) {
+	return domain.SettlementScope{}, false, nil
+}
+
+func (double *scopeBooksDouble) CustomerDirectionNets(
+	context.Context, domain.TenantID, domain.SettlementScope,
+) (int64, int64, int64, error) {
+	return 0, 0, 1_000_000, nil
+}
+
+func (double *scopeBooksDouble) ConfirmedChargeAging(
+	context.Context, domain.TenantID, domain.SettlementScope, time.Time,
+) (ports.ChargeDuePicture, error) {
+	return ports.ChargeDuePicture{}, nil
+}
+
+func (double *scopeBooksDouble) LockOperationalBalanceScope(_ context.Context, _ domain.TenantID, scope domain.SettlementScope) error {
+	*double.log = append(*double.log, "scope:"+scope.Account().String())
+	return nil
+}
+
+func (double *scopeBooksDouble) AdvanceOperationalBalance(
+	_ context.Context, _ domain.TenantID, scope domain.SettlementScope, _, _ int64, _ time.Time,
+) (ports.OperationalBalanceAdvanceOutcome, error) {
+	*double.log = append(*double.log, "advance:"+scope.Account().String())
+	return ports.OperationalBalanceAdvanced, nil
+}
+
+// firstLocks 取锁记录里每把锁第一次出现的先后：同一事务里再取一次是重入，只有头一次取的先后决定会不会成环。
+func firstLocks(log []string) []string {
+	seen := map[string]bool{}
+	var order []string
+	for _, entry := range log {
+		if strings.HasPrefix(entry, "advance:") || seen[entry] {
+			continue
+		}
+		seen[entry] = true
+		order = append(order, entry)
+	}
+	return order
+}
+
+// Covers: 锁序全序——核销先锁事实身份行，再按（格、引用）锁金额本体，再按作用域锁运营余额；撤销取的是这条全序的
+// 子序列（事实、作用域）。全仓取这几把锁的路径都按这一个次序，两笔事务不会互等成环。核销与撤销都在自己的事务里推进
+// 指向对账单的那几个作用域（ADR-0181 决定一）。
+func TestApplyAndReverseTakeLocksInOneTotalOrderAndRecomputeTheirScopes(t *testing.T) {
+	fixture := newFundsFixture(t)
+	ctx := context.Background()
+	fixture.claims.register("tenant-1", domain.TargetCustomerCompensation, "compensation-b", "USD", 5000)
+	fixture.claims.register("tenant-1", domain.TargetCustomerCompensation, "compensation-a", "USD", 5000)
+	fixture.books.registerStatement(t, "STMT-B", "account-b")
+	fixture.books.registerStatement(t, "STMT-A", "account-a")
+	if _, err := fixture.handler.AdoptFact(ctx, adoptCommand(t, domain.FundsReceiptConfirmed)); err != nil {
+		t.Fatalf("adopt: %v", err)
+	}
+	for _, target := range []struct {
+		mapping string
+		kind    domain.SettlementTargetKind
+		ref     string
+	}{
+		{"mapping-stmt-b", domain.TargetStatement, "STMT-B"},
+		{"mapping-comp-b", domain.TargetCustomerCompensation, "compensation-b"},
+		{"mapping-stmt-a", domain.TargetStatement, "STMT-A"},
+		{"mapping-comp-a", domain.TargetCustomerCompensation, "compensation-a"},
+	} {
+		result, err := fixture.handler.Map(ctx, claimMapCommand(t, target.mapping, target.kind, target.ref))
+		mustFunds(t, result, err, application.FundsMapped, "映射 "+target.ref)
+	}
+	*fixture.locks = (*fixture.locks)[:0]
+
+	command := applyCommand(t)
+	command.Application = "application-order"
+	command.MappingRefs = []string{"mapping-stmt-b", "mapping-comp-b", "mapping-stmt-a", "mapping-comp-a"}
+	command.Allocations = nil
+	for _, allocation := range []struct {
+		mapping string
+		kind    domain.SettlementTargetKind
+		ref     string
+	}{
+		{"mapping-stmt-b", domain.TargetStatement, "STMT-B"},
+		{"mapping-comp-b", domain.TargetCustomerCompensation, "compensation-b"},
+		{"mapping-stmt-a", domain.TargetStatement, "STMT-A"},
+		{"mapping-comp-a", domain.TargetCustomerCompensation, "compensation-a"},
+	} {
+		command.Allocations = append(command.Allocations, application.AllocationDirective{
+			Mapping: allocation.mapping, TargetKind: allocation.kind, Target: allocation.ref,
+			Direction: domain.AllocationDebit, AmountMinor: 1000,
+		})
+	}
+	result, err := fixture.handler.Apply(ctx, command)
+	mustFunds(t, result, err, application.SettlementApplied, "一笔付两条赔付两张对账单")
+	want := []string{"fact:bank-receipt-1", "claim:CUSTOMER_COMPENSATION/compensation-a", "claim:CUSTOMER_COMPENSATION/compensation-b",
+		"scope:account-a", "scope:account-b"}
+	if got := firstLocks(*fixture.locks); !reflect.DeepEqual(got, want) {
+		t.Fatalf("核销取锁的先后 = %v，要 %v", got, want)
+	}
+	if !containsAll(*fixture.locks, "advance:account-a", "advance:account-b") {
+		t.Fatalf("核销没在自己的事务里推进两个作用域：%v", *fixture.locks)
+	}
+
+	*fixture.locks = (*fixture.locks)[:0]
+	tenant, _ := domain.NewTenantID("tenant-1")
+	reversed, err := fixture.handler.Reverse(ctx, application.ReverseApplicationCommand{
+		TenantID: tenant, Application: "application-order", Basis: "payment-returned-1", ReversedAt: fundsAppliedAt.Add(time.Hour),
+	})
+	mustFunds(t, reversed, err, application.ApplicationReversedOutcome, "撤销")
+	want = []string{"fact:bank-receipt-1", "scope:account-a", "scope:account-b"}
+	if got := firstLocks(*fixture.locks); !reflect.DeepEqual(got, want) {
+		t.Fatalf("撤销取锁的先后 = %v，要 %v", got, want)
+	}
+	if !containsAll(*fixture.locks, "advance:account-a", "advance:account-b") {
+		t.Fatalf("撤销没在自己的事务里推进两个作用域：%v", *fixture.locks)
+	}
+}
+
+func containsAll(log []string, entries ...string) bool {
+	for _, entry := range entries {
+		found := false
+		for _, logged := range log {
+			if logged == entry {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+// Covers: 资金退回事实映射或核销到客户赔付、追偿认可两格一律`未受理`：退回走核销撤销，不能记成一笔付款；
+// 对账单等既有四格照旧收资金退回。
+func TestAFundsReturnedFactNeitherMapsNorAppliesToAClaimAmount(t *testing.T) {
+	fixture := newFundsFixture(t)
+	ctx := context.Background()
+	fixture.claims.register("tenant-1", domain.TargetCustomerCompensation, "compensation-1", "USD", 5000)
+	returned := adoptCommand(t, domain.FundsReturned)
+	if _, err := fixture.handler.AdoptFact(ctx, returned); err != nil {
+		t.Fatalf("adopt: %v", err)
+	}
+	refused, err := fixture.handler.Map(ctx, claimMapCommand(t, "mapping-compensation", domain.TargetCustomerCompensation, "compensation-1"))
+	mustFunds(t, refused, err, application.FundsNotAccepted, "资金退回映射到客户赔付")
+	statement, err := fixture.handler.Map(ctx, claimMapCommand(t, "mapping-statement", domain.TargetStatement, "STMT-2026-08-001"))
+	mustFunds(t, statement, err, application.FundsMapped, "资金退回映射到对账单")
+
+	// 库里若已有一条指向赔付的映射（这条规则之前落下的那种），核销也立不成。
+	tenant, _ := domain.NewTenantID("tenant-1")
+	planted, err := domain.RehydrateFundsMapping(domain.RehydrateFundsMappingSpec{
+		Mapping:    fundsRef(t, domain.NewMappingReference, "mapping-legacy"),
+		Fact:       fundsRef(t, domain.NewFundsFactReference, "bank-receipt-1"),
+		TargetKind: domain.TargetCustomerCompensation,
+		Target:     fundsRef(t, domain.NewSettlementTargetReference, "compensation-1"),
+		Basis:      fundsRef(t, domain.NewMappingBasisReference, "payment-instruction-1"),
+		MappedAt:   fundsMappedAt,
+	})
+	if err != nil {
+		t.Fatalf("预置映射：%v", err)
+	}
+	legacyKey := ports.FundsMappingKey{TenantID: tenant, Mapping: planted.Mapping()}
+	fixture.mappings.records[fundsMappingKey(legacyKey)] = ports.FundsMappingRecord{Key: legacyKey, ContentDigest: "legacy", Mapping: planted}
+	applied, err := fixture.handler.Apply(ctx, claimApplyCommand(t, "application-returned", "mapping-legacy",
+		domain.TargetCustomerCompensation, "compensation-1", 1000))
+	mustFunds(t, applied, err, application.FundsNotAccepted, "资金退回核销到客户赔付")
+	if len(fixture.applications.records) != 0 {
+		t.Fatal("资金退回核销到赔付落了行")
+	}
+}
+
+// Covers: ADR-0029——被指向那一条的已核销已超过它的金额本体（账不平）是确定性的：重交同一份永远同一个结果，答分配失衡，
+// 不折成金额册不可用的未决。
+func TestABrokenClaimTargetStandingIsADeterministicImbalance(t *testing.T) {
+	fixture := newFundsFixture(t)
+	ctx := context.Background()
+	fixture.claims.register("tenant-1", domain.TargetCustomerCompensation, "compensation-1", "USD", 5000)
+	if _, err := fixture.handler.AdoptFact(ctx, adoptCommand(t, domain.FundsReceiptConfirmed)); err != nil {
+		t.Fatalf("adopt: %v", err)
+	}
+	if _, err := fixture.handler.Map(ctx, claimMapCommand(t, "mapping-compensation", domain.TargetCustomerCompensation, "compensation-1")); err != nil {
+		t.Fatalf("map: %v", err)
+	}
+	fixture.claims.lockErr = fmt.Errorf("lock claim target: %w", domain.ErrInvalidClaimTargetStanding)
+	result, err := fixture.handler.Apply(ctx, claimApplyCommand(t, "application-c1", "mapping-compensation",
+		domain.TargetCustomerCompensation, "compensation-1", 1000))
+	mustFunds(t, result, err, application.ApplicationImbalanceOutcome, "账不平的赔付")
+	if result.UndecidedReason() != application.FundsUndecidedReasonNone {
+		t.Fatalf("账不平答成了未决：%s", result.UndecidedReason())
+	}
+}
+
+// Covers: UC-SA-005 金额守恒与 `AT-SA-109` 在事实这一级——一笔事实的未撤销核销合计不超过它当前那一版的金额；答案带
+// 这一步之后该事实的累计未分配；撤销把额度还回来。
+func TestApplicationsOfOneFactStayWithinItsAmount(t *testing.T) {
+	fixture := newFundsFixture(t)
+	ctx := context.Background()
+	if _, err := fixture.handler.AdoptFact(ctx, adoptCommand(t, domain.FundsReceiptConfirmed)); err != nil {
+		t.Fatalf("adopt: %v", err)
+	}
+	if _, err := fixture.handler.Map(ctx, mapCommand(t)); err != nil {
+		t.Fatalf("map: %v", err)
+	}
+	first, err := fixture.handler.Apply(ctx, applyCommand(t))
+	mustFunds(t, first, err, application.SettlementApplied, "核销 15000")
+	if unapplied, ok := first.FactUnappliedMinor(); !ok || unapplied != 5000 {
+		t.Fatalf("核销后事实累计未分配 = %d（%v），要 5000", unapplied, ok)
+	}
+	second := applyCommand(t)
+	second.Application = "application-2"
+	second.Allocations[0].AmountMinor = 6000
+	over, err := fixture.handler.Apply(ctx, second)
+	mustFunds(t, over, err, application.ApplicationImbalanceOutcome, "已核 15000 再核 6000")
+
+	tenant, _ := domain.NewTenantID("tenant-1")
+	reversed, err := fixture.handler.Reverse(ctx, application.ReverseApplicationCommand{
+		TenantID: tenant, Application: "application-1", Basis: "payment-returned-1", ReversedAt: fundsAppliedAt.Add(time.Hour),
+	})
+	mustFunds(t, reversed, err, application.ApplicationReversedOutcome, "撤销")
+	if unapplied, ok := reversed.FactUnappliedMinor(); !ok || unapplied != 20000 {
+		t.Fatalf("撤销后事实累计未分配 = %d（%v），要 20000", unapplied, ok)
+	}
+	again, err := fixture.handler.Apply(ctx, second)
+	mustFunds(t, again, err, application.SettlementApplied, "撤销后再核 6000")
 }
