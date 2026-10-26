@@ -102,7 +102,7 @@ func recordedOperator(t *testing.T, pool *pgxpool.Pool, query string, args ...an
 	return values[0]
 }
 
-// Covers: `AT-TF-335`–`AT-TF-341` 生产装配半边（真库）——关段、明确终止、建派送任务、装载分配、有效时间判断、承运商首次有效
+// Covers: `AT-TF-335`、`AT-TF-336`、`AT-TF-337`、`AT-TF-338`、`AT-TF-339`、`AT-TF-340`、`AT-TF-341` 生产装配半边（真库）——关段、明确终止、建派送任务、装载分配、有效时间判断、承运商首次有效
 // 收寄判断与运输委托提交七口：首投的操作者落进各自那一列，另一位操作者原样再投答各口既有的重放或已有格、那一列不变、回执里
 // 没有操作者。
 func TestEachOperationDecisionRecordsTheOperatorWhoMadeItAgainstARealDatabase(t *testing.T) {

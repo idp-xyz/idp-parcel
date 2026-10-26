@@ -231,6 +231,8 @@
 | `AT-TF-309` | 段上已按这份委托形成了一项仍有效的实际履约发生项（含委托换版之后按后继快照形成的）；或段上那一项的服务方与协议不是这份委托的 | 前者答 `OCCURRENCES_FORMED` 并回显那一项，不落解除也不动委托，续办是先经发生项失效口失效；后者不挡解除（[ADR-0232](../../adr/0232-a-segment-commission-adoption-is-withdrawn-by-decision-only-before-occurrences-form-and-occurrence-revision-drives-the-supplier-cost-correction.md) 决定一） |
 | `AT-TF-310` | 同一次解除原样再交（含这一段此后已再采用了同一份委托）；解除之后同一段再采用：点名接在被解除那一代之后，或没点名、点错（解除之前那一次采用请求原样重交） | 重交解除答 `EXISTING_WITHDRAWAL`、不多一行、不动新那一代；点名的再采用落成这一段的第二代，委托随之重新开始；没点名或点错答 `ADOPTION_ALREADY_WITHDRAWN` 并回显那一次解除，不落新一代、不动委托；采用与解除回显的采用多一格新增字段 `generation`（只加不改，首次采用的请求照旧）；段此刻已有当前采用时同一份委托再交答 `EXISTING_ADOPTION`，不看 `afterGeneration`（有意的宽松接受，什么都不落）（[ADR-0232](../../adr/0232-a-segment-commission-adoption-is-withdrawn-by-decision-only-before-occurrences-form-and-occurrence-revision-drives-the-supplier-cost-correction.md) 决定一） |
 | `AT-TF-315` | 一段的采用（开始更晚、不写委托）与同一份委托上另一段的解除并发 | 两者在委托的开始锁上排成先后，解除读得到那一段、开始改按它重新派生，不撤回到已提交（[ADR-0232](../../adr/0232-a-segment-commission-adoption-is-withdrawn-by-decision-only-before-occurrences-form-and-occurrence-revision-drives-the-supplier-cost-correction.md) 决定六） |
+| `AT-TF-335` | 运营人员经运营决定口提交一份运输委托；另一位操作者原样再交，或带不同内容再交；规则生效之前提交的委托 | 委托上记下提交人，取自操作者信封（「发行方#sub」），载荷里自报即坏报文；原样再交答已有结果、交回原委托，在册的提交人不被顶替；异内容照旧答冲突；内容摘要与协议核对都不读提交人，命令不带它照样提交；取消与开始不改它；回执不带提交人；存量委托读回「没记下」（[ADR-0303](../../adr/0303-transport-fulfillment-operation-decisions-record-the-submitting-operator-as-operation-evidence.md) 决定一、三、四） |
+| `AT-TF-336` | 运营人员经运营决定口形成装载分配首版；另一位操作者同一版本重投 | 那一版记下分配人；重投答已在册、交回原版本连同原分配人；重放、链头、班次核对与容量保障各格都不读它，命令不带它照样形成；回执不带分配人（[ADR-0303](../../adr/0303-transport-fulfillment-operation-decisions-record-the-submitting-operator-as-operation-evidence.md) 决定一、三） |
 
 ## 给开发的交接
 

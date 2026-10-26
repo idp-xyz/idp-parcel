@@ -17,7 +17,7 @@ import (
 // 本文件钉 ADR-0303 的线格式半边：七个运营决定口把认证出的操作者（「发行方#sub」，与租户同一份信封）随命令交给编排，
 // 载荷里收不进操作者；判断口的回执照 ADR-0187 决定四不回操作证据，查阅面带出记下的那一位。夹具全为合成引用（S 级）。
 
-// Covers: `AT-TF-335`–`AT-TF-341` 线格式半边——七口各自把信封里的操作者交进命令；载荷里自报一位操作者是坏报文（封闭解码），
+// Covers: `AT-TF-335`、`AT-TF-336`、`AT-TF-337`、`AT-TF-338`、`AT-TF-339`、`AT-TF-340`、`AT-TF-341` 线格式半边——七口各自把信封里的操作者交进命令；载荷里自报一位操作者是坏报文（封闭解码），
 // 不会顶替信封给的那一位。
 func TestEachOperationDecisionFaceCarriesTheEnvelopeOperatorIntoItsCommand(t *testing.T) {
 	intake := operatorIntake(t, authenticatorFake{})

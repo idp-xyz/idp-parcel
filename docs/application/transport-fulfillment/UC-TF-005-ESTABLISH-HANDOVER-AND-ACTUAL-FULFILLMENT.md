@@ -234,6 +234,10 @@
 | `AT-TF-319` | 跨客户共同运输：同段有两个客户的包裹，只有一个客户的包裹被扣，装散件也装在袋里；或设备给一段境内段配一班跨关务区域的班次去问、去登出发 | 问询与出发回给设备的答复里只有被扣的那几件与装着它的袋，另一客户的包裹不出现；库面那一份照旧记全；配错班次的那一问停在本侧「班次不服务该段」、不问关务、一件不列，照这么配登的出发同样停在本侧（`AT-TF-063` 门禁读数那一半，ADR-0237 决定五） |
 | `AT-TF-320` | `已交接`的交出读数：那件对象得出了放行，或被阻断、未决、读不动 | 前者交接答复里没有逐对象那一格、整格与 at / onward 照实；后者列出那一件；落册与查阅不变（ADR-0237，部分停用 ADR-0213 票 65 补记一句） |
 | `AT-TF-330` | 租户登过节点关务区域、漏登了段的班次起讫里的一个节点；段已绑定，段里各件都不在任何关务案卷；设备出发前问询，随即同参出发 | 关务对每件答未配置并指名未登的节点（[ADR-0300](../../adr/0300-a-zoned-tenants-unbooked-object-answers-not-configured-on-the-cross-zone-line-naming-the-unregistered-node.md)），读数整格未决，回给设备的逐对象那一格列出段里每一件、各答未决，两口逐字节相同；依据原文（节点区域未登记、指名的节点、关务判断标识）只随出发落册，不回给设备（ADR-0205 决定一、二）。这是如实的读数；问询方可以是任一场外设备、问询不留痕，按问的设备的活限对象归票 [demo-chain-gaps/171](../../../.scratch/demo-chain-gaps/issues/171-gate-previews-are-scoped-to-the-asking-devices-work-and-leave-a-trace.md)（ADR-0237 越权风险点 2）。一条区域都没登的租户同一问询答不受门禁、一件不列 |
+| `AT-TF-337` | 运营人员关段；另一位操作者再关（含换一个关闭时刻） | 段上记下关段人；再关答早已关闭、回显在册的关闭时刻，关段人与关闭时刻都不被顶替；在场参与与关闭时序两道判断不读它，不带它照样关；关段人只出现在已关闭的段上；回执不带关段人（[ADR-0303](../../adr/0303-transport-fulfillment-operation-decisions-record-the-submitting-operator-as-operation-evidence.md) 决定一、三、四） |
+| `AT-TF-338` | 运营人员明确终止一条参与；另一位操作者重投同一次终止；之后来源更正在同段长出替代参与版本；同段另一件以有效交付或下一次交接结束 | 那一条参与的终点记下终止人；重投答已离场、回显在册终点，终止人不被顶替；替代版本承继终点时连同终止人一起承继；以交付或交接结束的参与没有终止人，终止人只出现在以明确终止结束的参与上；终点门不读它；回执不带终止人（[ADR-0303](../../adr/0303-transport-fulfillment-operation-decisions-record-the-submitting-operator-as-operation-evidence.md) 决定一、三、四） |
+| `AT-TF-339` | 判断方经运营决定口作承运商首次有效收寄判断；另一位操作者同依据同内容重放，或同依据异内容 | 本次落下的那一版记下判断人，每一版各记各的；同内容重放答已在册、链尾不动，异内容照旧答内容冲突，判断人都不被顶替；首次判据与同一依据上的比对都不读它；判断口回执不带，收寄链查阅面每一版带 `judgedBy`，没记下的那一版整键缺席（[ADR-0303](../../adr/0303-transport-fulfillment-operation-decisions-record-the-submitting-operator-as-operation-evidence.md) 决定一、三） |
+| `AT-TF-340` | 运营人员显式判断一条外部承运轨迹事实的有效时间；另一位操作者按同一时间再判；按规则判断或素材到达形成的版本 | 显式判断形成的那一版记下判断人；按同值再判答已按同值判过、不长新版本，判断人不被顶替；按规则判断与素材到达形成的版本没有判断人，库面也不收；交给全程追踪的意图不带它；判断口回执不带，轨迹事实查阅面带 `effectiveJudgedBy`（[ADR-0303](../../adr/0303-transport-fulfillment-operation-decisions-record-the-submitting-operator-as-operation-evidence.md) 决定一、三、四） |
 
 ## 给开发的交接
 
