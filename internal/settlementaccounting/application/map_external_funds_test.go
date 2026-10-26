@@ -279,6 +279,7 @@ type fundsFixture struct {
 	applications *applicationStoreDouble
 	handoff      *settlementHandoffDouble
 	factHandoff  *fundsFactHandoffDouble
+	claims       *claimTargetsDouble
 	handler      *application.MapExternalFundsHandler
 }
 
@@ -291,6 +292,7 @@ func newFundsFixture(t *testing.T) *fundsFixture {
 		handoff:      &settlementHandoffDouble{},
 		factHandoff:  newFundsFactHandoff(),
 	}
+	fixture.claims = newClaimTargets(fixture.applications)
 	handler, err := application.NewMapExternalFundsHandler(application.MapExternalFundsDeps{
 		Facts:        fixture.facts,
 		Mappings:     fixture.mappings,
@@ -301,9 +303,10 @@ func newFundsFixture(t *testing.T) *fundsFixture {
 		Books:        idleReceiptBooks{},
 		Balances:     idleBalanceAdvance{},
 		Standings:    idleCreditStanding{},
+		ClaimTargets: fixture.claims,
 	})
 	if err != nil {
-		t.Fatalf("九口全接替身仍被构造门拒：%v", err)
+		t.Fatalf("十口全接替身仍被构造门拒：%v", err)
 	}
 	fixture.handler = handler
 	return fixture
@@ -324,10 +327,11 @@ func TestTheFundsHandlerRefusesANilDependencyAtConstruction(t *testing.T) {
 			Books:        idleReceiptBooks{},
 			Balances:     idleBalanceAdvance{},
 			Standings:    idleCreditStanding{},
+			ClaimTargets: newClaimTargets(newApplicationStore()),
 		}
 	}
 	if _, err := application.NewMapExternalFundsHandler(complete()); err != nil {
-		t.Fatalf("九口齐全被拒：%v", err)
+		t.Fatalf("十口齐全被拒：%v", err)
 	}
 
 	missing := map[string]func(*application.MapExternalFundsDeps){
@@ -340,6 +344,7 @@ func TestTheFundsHandlerRefusesANilDependencyAtConstruction(t *testing.T) {
 		"customer receipt books":            func(deps *application.MapExternalFundsDeps) { deps.Books = nil },
 		"operational balance advance":       func(deps *application.MapExternalFundsDeps) { deps.Balances = nil },
 		"credit standing advance":           func(deps *application.MapExternalFundsDeps) { deps.Standings = nil },
+		"claim settlement targets":          func(deps *application.MapExternalFundsDeps) { deps.ClaimTargets = nil },
 	}
 	for name, remove := range missing {
 		deps := complete()
@@ -717,7 +722,7 @@ func TestFundsRecoveryDiscipline(t *testing.T) {
 		labels := map[string]struct{}{}
 		for _, reason := range []application.FundsUndecidedReason{
 			application.FundsFactStoreUnavailable, application.FundsMappingStoreUnavailable,
-			application.ApplicationStoreUnavailable,
+			application.ApplicationStoreUnavailable, application.ClaimTargetStoreUnavailable,
 		} {
 			label := reason.String()
 			if label == "" {
@@ -725,11 +730,11 @@ func TestFundsRecoveryDiscipline(t *testing.T) {
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 3 {
+		if len(labels) != 4 {
 			t.Fatalf("labels collapsed into %d", len(labels))
 		}
 		if application.FundsUndecidedReason(len(labels)+1).String() != "" {
-			t.Fatal("第四个未决原因带了标签——封闭集合被悄悄放开")
+			t.Fatal("第五个未决原因带了标签——封闭集合被悄悄放开")
 		}
 	})
 }

@@ -68,3 +68,27 @@ func TestCommandForAcceptsTheSellCustomerChargeRegisters(t *testing.T) {
 		t.Fatal("采用载荷送进映射命令没拒")
 	}
 }
+
+// TestCommandForAcceptsTheApplicationCommands 证核销与核销撤销两条命令接进了命令表、各自译装得过（落库在
+// funds_application_vertical_test）；两份载荷形状不同，送错命令按未知字段拒，不靠字段名巧合译进另一条。
+func TestCommandForAcceptsTheApplicationCommands(t *testing.T) {
+	application := []byte(`{
+		"tenantId": "SYN-T1", "applicationRef": "SYN-APPLICATION-1", "factRef": "SYN-FACT-1", "targetCurrency": "XTS",
+		"mappingRefs": ["SYN-MAPPING-1"],
+		"allocations": [{"mappingRef": "SYN-MAPPING-1", "targetKind": "RECOVERY_RECEIVABLE", "targetRef": "SYN-ACK-1", "direction": "DEBIT", "amountMinor": 100}],
+		"basis": "SYN-PAYMENT-INSTRUCTION-1", "appliedAt": "2026-09-03T08:00:00Z"
+	}`)
+	reversal := []byte(`{"tenantId": "SYN-T1", "applicationRef": "SYN-APPLICATION-1", "basis": "SYN-FUNDS-RETURNED-1", "reversedAt": "2026-09-04T08:00:00Z"}`)
+	if _, err := commandFor(commandFundsApplication, application); err != nil {
+		t.Fatalf("%s 译装被拒：%v", commandFundsApplication, err)
+	}
+	if _, err := commandFor(commandFundsApplicationReversal, reversal); err != nil {
+		t.Fatalf("%s 译装被拒：%v", commandFundsApplicationReversal, err)
+	}
+	if _, err := commandFor(commandFundsApplicationReversal, application); err == nil {
+		t.Fatal("核销载荷送进撤销命令没拒")
+	}
+	if _, err := commandFor(commandFundsApplication, reversal); err == nil {
+		t.Fatal("撤销载荷送进核销命令没拒")
+	}
+}

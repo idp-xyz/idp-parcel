@@ -259,6 +259,18 @@ func (stores unreachableFundsSideStores) Save(
 	return ports.FundsMappingSaveOutcomeInvalid, nil
 }
 
+func (stores unreachableFundsSideStores) FindClaimTarget(context.Context, domain.TenantID, domain.ClaimTargetKey) (bool, error) {
+	stores.fail()
+	return false, nil
+}
+
+func (stores unreachableFundsSideStores) LockClaimTarget(
+	context.Context, domain.TenantID, domain.ClaimTargetKey,
+) (domain.ClaimTargetStanding, bool, error) {
+	stores.fail()
+	return domain.ClaimTargetStanding{}, false, nil
+}
+
 type unreachableApplicationStore struct{ t *testing.T }
 
 func (store unreachableApplicationStore) FindByKey(
@@ -355,6 +367,7 @@ func fundsHandlerOver(t *testing.T, stub *fundsStoreStub) *application.MapExtern
 		Books:        idleReceiptBooks{},
 		Balances:     idleBalanceAdvance{},
 		Standings:    idleCreditStanding{},
+		ClaimTargets: unreachableFundsSideStores{t: t},
 	})
 	if err != nil {
 		t.Fatalf("构造编排：%v", err)

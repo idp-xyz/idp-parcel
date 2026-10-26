@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"go.idp.xyz/idp-bento-go/eventing"
@@ -109,6 +110,12 @@ func (handoff *OutboxSettlementApplicationHandoff) HandOffSettlementApplication(
 	}
 
 	if err := outboxintent.EnqueueOnce(ctx, handoff.db, handoff.store, envelope); err != nil {
+		// 框架 Envelope.Validate 的拒收是确定性的，与存储不可用分两格交出去（ports.ErrSettlementApplicationHandoffRejected
+		// 头注）。ID 已是定长指纹形，能走到这里的是 Subject / PartitionKey 取到超长的核销引用——引用多长归实例半边、
+		// 构造门只查非空。
+		if errors.Is(err, eventing.ErrInvalidEnvelope) {
+			return fmt.Errorf("hand off settlement application: %w: %w", ports.ErrSettlementApplicationHandoffRejected, err)
+		}
 		return fmt.Errorf("hand off settlement application: %w", err)
 	}
 	return nil

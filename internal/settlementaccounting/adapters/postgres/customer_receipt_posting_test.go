@@ -343,11 +343,25 @@ func mustFundsHandler(
 		Books:        postings,
 		Balances:     postings,
 		Standings:    postings,
+		ClaimTargets: absentClaimTargets{},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return handler
+}
+
+// absentClaimTargets 让本文件的客户收款用例碰不到两格金额本体：本文件只映射对账单与账户。
+type absentClaimTargets struct{}
+
+func (absentClaimTargets) FindClaimTarget(context.Context, domain.TenantID, domain.ClaimTargetKey) (bool, error) {
+	return false, nil
+}
+
+func (absentClaimTargets) LockClaimTarget(
+	context.Context, domain.TenantID, domain.ClaimTargetKey,
+) (domain.ClaimTargetStanding, bool, error) {
+	return domain.ClaimTargetStanding{}, false, nil
 }
 
 func receiptTenant(t *testing.T) domain.TenantID {

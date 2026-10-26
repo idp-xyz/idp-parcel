@@ -226,7 +226,7 @@ export function listSettlementStatements<Registry extends StatementRegistry>(
  */
 export interface FundsMappingRecord {
   mapping: string;
-  /** 封闭三格 STATEMENT / PAYABLE / CREDIT_NOTE；词表在 presentation.ts。 */
+  /** 封闭集，词表在 presentation.ts 的 settlementTargetKindLabels。 */
   targetKind: string;
   target: string;
   basis: string;

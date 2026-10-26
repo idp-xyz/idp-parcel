@@ -88,6 +88,7 @@ const (
 	FundsFactStoreUnavailable
 	FundsMappingStoreUnavailable
 	ApplicationStoreUnavailable
+	ClaimTargetStoreUnavailable
 )
 
 func (reason FundsUndecidedReason) String() string {
@@ -98,6 +99,8 @@ func (reason FundsUndecidedReason) String() string {
 		return "FUNDS_MAPPING_STORE_UNAVAILABLE"
 	case ApplicationStoreUnavailable:
 		return "APPLICATION_STORE_UNAVAILABLE"
+	case ClaimTargetStoreUnavailable:
+		return "CLAIM_TARGET_STORE_UNAVAILABLE"
 	default:
 		return ""
 	}
@@ -235,6 +238,10 @@ type MapExternalFundsDeps struct {
 	Books     ports.CustomerReceiptBooks
 	Balances  ports.OperationalBalanceAdvance
 	Standings ports.CreditStandingAdvance
+	// ClaimTargets 读、锁客户赔付与追偿认可两格金额本体：映射核它在本租户的册上，核销在同一事务里锁住它、按它自己的
+	// 金额本体减去已核销净额判这次分配能不能落。赔付付款与追偿到账都不是客户应收作用域上的收付：赔付是运营企业对客户
+	// 的应付，追偿是对供应商或保险方的应收，默认不与客户应收共用余额、不做净额抵销——所以上面三口不从这两格挂。
+	ClaimTargets ports.ClaimSettlementTargets
 }
 
 type MapExternalFundsHandler struct {
@@ -260,6 +267,7 @@ func NewMapExternalFundsHandler(deps MapExternalFundsDeps) (*MapExternalFundsHan
 		{"customer receipt books", deps.Books == nil},
 		{"operational balance advance", deps.Balances == nil},
 		{"credit standing advance", deps.Standings == nil},
+		{"claim settlement targets", deps.ClaimTargets == nil},
 	} {
 		if dependency.missing {
 			return nil, fmt.Errorf("%w: %s", ErrNilDependency, dependency.name)
@@ -507,6 +515,17 @@ func (handler *MapExternalFundsHandler) Map(
 		}
 		return FundsResult{outcome: FundsMappingExisting, mapping: existing, hasRecord: true}, nil
 	}
+	if mapping.TargetKind().PointsAtClaimAmount() {
+		exists, err := handler.deps.ClaimTargets.FindClaimTarget(ctx, command.TenantID,
+			domain.ClaimTargetKey{Kind: mapping.TargetKind(), Target: mapping.Target()})
+		if err != nil {
+			return fundsUndecided(ClaimTargetStoreUnavailable, command.Target), nil
+		}
+		if !exists {
+			// 不存在与不属本租户同一格：调用方的恢复动作都是改目标，分开答就是回答了一个它无权问的问题（ADR-0029）。
+			return FundsResult{outcome: FundsNotAccepted}, nil
+		}
+	}
 
 	record := ports.FundsMappingRecord{Key: key, ContentDigest: digest, Mapping: mapping, RecordedAt: handler.deps.Clock.Now()}
 	saved, err := handler.deps.Mappings.Save(ctx, record)
@@ -567,7 +586,7 @@ func (handler *MapExternalFundsHandler) Apply(
 		case domain.UnknownPayloadShape:
 			return fundsUndecided(ApplicationStoreUnavailable, command.Application), nil
 		}
-		return handler.existingApplication(ctx, existingApplication), nil
+		return handler.existingApplication(ctx, existingApplication)
 	}
 
 	factRecord, found, err := handler.deps.Facts.FindByKey(ctx,
@@ -614,6 +633,9 @@ func (handler *MapExternalFundsHandler) Apply(
 	case err != nil:
 		return FundsResult{outcome: FundsNotAccepted}, nil
 	}
+	if refused, stop := handler.admitClaimTargets(ctx, command.TenantID, factRecord.Fact, application); stop {
+		return refused, nil
+	}
 
 	record := ports.SettlementApplicationRecord{Key: key, ContentDigest: digest, Application: application, RecordedAt: handler.deps.Clock.Now()}
 	saved, err := handler.deps.Applications.Save(ctx, record)
@@ -622,15 +644,17 @@ func (handler *MapExternalFundsHandler) Apply(
 	}
 	switch saved {
 	case ports.SettlementApplicationSaved:
-		result := FundsResult{outcome: SettlementApplied, application: record, hasRecord: true}
-		result.handoff = handler.handOff(ctx, record)
-		return result, nil
+		handoff, err := handler.handOff(ctx, record)
+		if err != nil {
+			return FundsResult{}, err
+		}
+		return FundsResult{outcome: SettlementApplied, application: record, hasRecord: true, handoff: handoff}, nil
 	case ports.SettlementApplicationAlreadyApplied:
 		winner, found, err := handler.deps.Applications.FindByKey(ctx, key)
 		if err != nil || !found {
 			return fundsUndecided(ApplicationStoreUnavailable, command.Application), nil
 		}
-		return handler.existingApplication(ctx, winner), nil
+		return handler.existingApplication(ctx, winner)
 	default:
 		return FundsResult{}, fmt.Errorf("%w: %d", ErrUnexpectedFundsSave, saved)
 	}
@@ -678,9 +702,43 @@ func (handler *MapExternalFundsHandler) Reverse(
 	if !ok {
 		return FundsResult{outcome: FundsNotAccepted}, nil
 	}
-	result := FundsResult{outcome: ApplicationReversedOutcome, application: existing, hasRecord: true}
-	result.handoff = handler.handOff(ctx, existing)
-	return result, nil
+	handoff, err := handler.handOff(ctx, existing)
+	if err != nil {
+		return FundsResult{}, err
+	}
+	return FundsResult{outcome: ApplicationReversedOutcome, application: existing, hasRecord: true, handoff: handoff}, nil
+}
+
+// admitClaimTargets 按目标逐条判本次核销分给客户赔付、追偿认可两格的合计能不能落：在调用方的事务里先锁住那条金额，
+// 再读它的已核销净额——锁与随后的 Save 同一笔，并发核销同一条金额时后到的那笔读到的已核销含前一笔。锁序取
+// ClaimTargetDemands 给的顺序。金额本体只读不写：核销改的是核销状态与未分配余额，不是金额。
+// 第二值为真即已作答，调用方原样交回、什么都不落。
+func (handler *MapExternalFundsHandler) admitClaimTargets(
+	ctx context.Context,
+	tenant domain.TenantID,
+	fact domain.ExternalFundsFact,
+	application domain.SettlementApplication,
+) (FundsResult, bool) {
+	factCurrency, _ := fact.Amount()
+	for _, demand := range application.ClaimTargetDemands() {
+		standing, found, err := handler.deps.ClaimTargets.LockClaimTarget(ctx, tenant, demand.Key)
+		if err != nil {
+			return fundsUndecided(ClaimTargetStoreUnavailable, demand.Key.Target.String()), true
+		}
+		if !found {
+			// 分配都有映射背书、映射时核过在册，金额册又只增不改，正常走不到这里；走到了按映射时那一格答，不放它落下。
+			return FundsResult{outcome: FundsNotAccepted}, true
+		}
+		switch err := standing.Admit(factCurrency, demand.AmountMinor); {
+		case errors.Is(err, domain.ErrCrossCurrencyApplication):
+			return FundsResult{outcome: CrossCurrencyOutcome}, true
+		case errors.Is(err, domain.ErrApplicationImbalance):
+			return FundsResult{outcome: ApplicationImbalanceOutcome}, true
+		case err != nil:
+			return FundsResult{outcome: FundsNotAccepted}, true
+		}
+	}
+	return FundsResult{}, false
 }
 
 func factFrom(command AdoptFundsFactCommand) (domain.ExternalFundsFact, error) {
@@ -758,28 +816,33 @@ func fundsUndecided(reason FundsUndecidedReason, subject string) FundsResult {
 	}
 }
 
-// existingApplication 按已有核销作答并重发同一份意图。
+// existingApplication 按已有核销作答并重发同一份意图。同一份被确定性拒收的信封重放仍返 error，不答`已存在`
+// （existingFact 同一条理由）。
 func (handler *MapExternalFundsHandler) existingApplication(
 	ctx context.Context,
 	record ports.SettlementApplicationRecord,
-) FundsResult {
-	return FundsResult{
-		outcome:     ApplicationExisting,
-		application: record,
-		hasRecord:   true,
-		handoff:     handler.handOff(ctx, record),
+) (FundsResult, error) {
+	handoff, err := handler.handOff(ctx, record)
+	if err != nil {
+		return FundsResult{}, err
 	}
+	return FundsResult{outcome: ApplicationExisting, application: record, hasRecord: true, handoff: handoff}, nil
 }
 
-// handOff 把核销/撤销交给下游已结视图。投递失败不翻结果，留续办引用重放时重发同一份。
+// handOff 把核销/撤销交给下游已结视图，失败按种类分两格，判据同 handOffFact：信封被确定性拒收原样返 error，让事务壳
+// 把核销行一起回滚；其余失败不翻结果，留续办引用，重放时重发同一份。
 func (handler *MapExternalFundsHandler) handOff(
 	ctx context.Context,
 	record ports.SettlementApplicationRecord,
-) string {
-	if err := handler.deps.Downstream.HandOffSettlementApplication(ctx, ports.SettlementApplicationIntent{Record: record}); err == nil {
-		return ""
+) (string, error) {
+	err := handler.deps.Downstream.HandOffSettlementApplication(ctx, ports.SettlementApplicationIntent{Record: record})
+	if err == nil {
+		return "", nil
 	}
-	return fundsContinuation("SETTLEMENT_APPLICATION_HANDOFF", record.Key.TenantID.String(), record.Key.Application.String())
+	if errors.Is(err, ports.ErrSettlementApplicationHandoffRejected) {
+		return "", err
+	}
+	return fundsContinuation("SETTLEMENT_APPLICATION_HANDOFF", record.Key.TenantID.String(), record.Key.Application.String()), nil
 }
 
 // advanceCustomerReceipt 在客户对账单或应收结算账户上的确认到账与资金退回之后重算。

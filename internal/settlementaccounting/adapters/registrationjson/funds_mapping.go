@@ -19,7 +19,8 @@ type fundsMappingDocument struct {
 	MappedAt   time.Time `json:"mappedAt"`
 }
 
-// FundsMappingFromJSON 译装一次资金映射。目标种类是封闭四值，缺席与词表外都拒。
+// FundsMappingFromJSON 译装一次资金映射。目标种类是封闭集（domain.SettlementTargetKind），缺席与词表外都拒。
+// 指向客户赔付或追偿认可时，那一条在不在本租户的册上是用例的门，这里不碰库。
 func FundsMappingFromJSON(raw []byte) (application.MapFundsCommand, error) {
 	none := application.MapFundsCommand{}
 	var document fundsMappingDocument
@@ -67,8 +68,12 @@ func settlementTargetKindFrom(raw string) (domain.SettlementTargetKind, error) {
 		return domain.TargetCreditNote, nil
 	case "ACCOUNT":
 		return domain.TargetAccount, nil
+	case "CUSTOMER_COMPENSATION":
+		return domain.TargetCustomerCompensation, nil
+	case "RECOVERY_RECEIVABLE":
+		return domain.TargetRecoveryReceivable, nil
 	default:
 		return domain.SettlementTargetKindInvalid, fmt.Errorf(
-			"targetKind=%q 不在封闭四值（STATEMENT / PAYABLE / CREDIT_NOTE / ACCOUNT），缺席同样拒", raw)
+			"targetKind=%q 不在封闭集（STATEMENT / PAYABLE / CREDIT_NOTE / ACCOUNT / CUSTOMER_COMPENSATION / RECOVERY_RECEIVABLE），缺席同样拒", raw)
 	}
 }

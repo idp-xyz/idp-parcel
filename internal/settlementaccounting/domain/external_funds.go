@@ -216,10 +216,13 @@ func (fact ExternalFundsFact) CorrectAmount(
 	return corrected, nil
 }
 
-// SettlementTargetKind 是资金可映射目标的封闭四值：客户对账单、供应商审核应付、
-// 供应商费用贷项、应收结算账户。费用、赔付金额与追偿认可本体不在其中——映射与核销
-// 改不了那些金额（AT-SA-116/121）。账户这一格只指名结算账户身份；是不是应收方向由
-// 映射事务去账户册上核对（ADR-0182 决定一）。
+// SettlementTargetKind 是资金可映射目标的封闭集：客户对账单、供应商审核应付、供应商费用贷项、应收结算账户，
+// 以及 UC-SA-007 形成的两种金额本体——客户赔付与追偿认可。费用本体不在其中。映射到金额本体、核销它，都只改
+// 核销状态与未分配余额，不改被指向的金额：`AT-SA-116` 要的是「形成对应应付的付款映射和核销；不改写……赔付金额」，
+// `AT-SA-121` 禁的是形成或修改金额，不是映射到它。账户这一格只指名结算账户身份；是不是应收方向由映射事务去
+// 账户册上核对（ADR-0182 决定一）。
+//
+// 取值的序号进映射与核销的载荷摘要，新格只往后加。
 type SettlementTargetKind uint8
 
 const (
@@ -228,10 +231,24 @@ const (
 	TargetPayable
 	TargetCreditNote
 	TargetAccount
+	// TargetCustomerCompensation 指名一条客户方向索赔金额：赔付义务或索赔费用退款，两者都是运营企业对客户的
+	// 应付、贷记或退款义务（UC-SA-005「将客户赔付的真实付款与运营企业对客户的应付/贷记/退款义务关联」）。
+	TargetCustomerCompensation
+	// TargetRecoveryReceivable 指名一条追偿认可金额，不指名应追偿金额：追偿到账核销的是对方认可的那部分应收。
+	// 对方没认可就付了款，这笔钱停在未分配，直到 UC-SA-007 凭 visibility-exception 判定有效的对方响应形成认可金额；
+	// 本格不替它推定认可。
+	TargetRecoveryReceivable
 )
 
 func (kind SettlementTargetKind) valid() bool {
-	return kind >= TargetStatement && kind <= TargetAccount
+	return kind >= TargetStatement && kind <= TargetRecoveryReceivable
+}
+
+// PointsAtClaimAmount 说这一格指向 UC-SA-007 形成的一条金额本体。那几本册只增不改，映射指名的那一条就是
+// 映射时那一版：责任、规则或认可范围更正时追加调整或另立一条认可，各有各的身份，不改已有映射，也不并进
+// 它的未核销。
+func (kind SettlementTargetKind) PointsAtClaimAmount() bool {
+	return kind == TargetCustomerCompensation || kind == TargetRecoveryReceivable
 }
 
 func (kind SettlementTargetKind) String() string {
@@ -244,6 +261,10 @@ func (kind SettlementTargetKind) String() string {
 		return "CREDIT_NOTE"
 	case TargetAccount:
 		return "ACCOUNT"
+	case TargetCustomerCompensation:
+		return "CUSTOMER_COMPENSATION"
+	case TargetRecoveryReceivable:
+		return "RECOVERY_RECEIVABLE"
 	default:
 		return ""
 	}
@@ -444,6 +465,9 @@ func ApplySettlement(
 			// （AT-SA-168）。
 			return SettlementApplication{}, ErrInvalidApplication
 		}
+		if !claimAllocationDirected(allocation) {
+			return SettlementApplication{}, ErrInvalidApplication
+		}
 		if allocation.Direction == AllocationDebit {
 			net += allocation.AmountMinor
 		} else {
@@ -463,6 +487,12 @@ func ApplySettlement(
 		basis:        basis,
 		appliedAt:    appliedAt.UTC(),
 	}, nil
+}
+
+// claimAllocationDirected 守金额本体两格只收借向：这笔钱付掉一条赔付、收回一条追偿认可。贷向是拿这条金额去抵
+// 别的账，那是应收应付净额抵销，UC-SA-005「默认不做应收应付净额抵销」；要做得像供应商贷项那样先有抵销依据的规则。
+func claimAllocationDirected(allocation SettlementAllocation) bool {
+	return !allocation.TargetKind.PointsAtClaimAmount() || allocation.Direction == AllocationDebit
 }
 
 // ApplySettlementInCurrency 是跨币种入口的守门面：目标币种与事实币种不同且无换算

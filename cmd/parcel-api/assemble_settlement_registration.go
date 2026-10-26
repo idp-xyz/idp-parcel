@@ -123,6 +123,10 @@ func buildSettlementRegistrationOrchestration(db *bentopg.DB) (settlementRegistr
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: customer receipt postings: %w", err)
 	}
+	claimTargets, err := sapostgres.NewClaimSettlementTargets(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: settlement claim targets: %w", err)
+	}
 	// 构造门在构造期拒 nil 依赖（票 sa-cc/27 裁决 4）：装配疏漏在进程启动那一刻炸出来，不等第一条事实到达。
 	funds, err := settlementapp.NewMapExternalFundsHandler(settlementapp.MapExternalFundsDeps{
 		Facts:        facts,
@@ -134,6 +138,7 @@ func buildSettlementRegistrationOrchestration(db *bentopg.DB) (settlementRegistr
 		Books:        postings,
 		Balances:     postings,
 		Standings:    postings,
+		ClaimTargets: claimTargets,
 	})
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: settlement external funds orchestration: %w", err)

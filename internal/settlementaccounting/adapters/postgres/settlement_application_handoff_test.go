@@ -3,10 +3,12 @@ package postgres_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.idp.xyz/idp-bento-go/eventing"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
@@ -159,5 +161,26 @@ func TestSettlementApplicationRefusesABlankKey(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("缺幂等键的核销意图入了队")
+	}
+}
+
+// Covers: ADR-0029 在核销交接口上的适配器半边——框架 Envelope.Validate 的确定性拒收（这里以核销引用把 Subject 顶过
+// eventing.MaxSubjectLength 触发）以 ports.ErrSettlementApplicationHandoffRejected 交出来、原因链保留，且一行不落：
+// 编排据此整笔不作答，而不是折成一个重跑永远补不上的续办引用。
+func TestARejectedSettlementApplicationEnvelopeIsReportedAsRejectedAndLeavesNoRow(t *testing.T) {
+	handoff, db, pool := newSettlementApplicationHandoffFixture(t)
+
+	overlong := "application-" + strings.Repeat("x", eventing.MaxSubjectLength)
+	err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		return handoff.HandOffSettlementApplication(txCtx, settlementApplicationHandoffIntent(t, overlong))
+	})
+	if !errors.Is(err, ports.ErrSettlementApplicationHandoffRejected) {
+		t.Fatalf("err = %v，要 errors.Is ports.ErrSettlementApplicationHandoffRejected", err)
+	}
+	if !errors.Is(err, eventing.ErrInvalidEnvelope) {
+		t.Fatalf("err = %v，要保留框架拒收原因链（errors.Is eventing.ErrInvalidEnvelope）", err)
+	}
+	if count := countSAIntentsInPartition(t, pool, "tenant-a/application/"+overlong); count != 0 {
+		t.Fatalf("被拒的信封落了 %d 行", count)
 	}
 }

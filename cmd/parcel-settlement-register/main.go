@@ -6,6 +6,8 @@
 // 命令表在 translate.go 的 allCommands，一处列全：`external-funds-fact` 采用一条事实的首版，
 // `external-funds-fact-correction` 采用一次外部更正，`settlement-account` 登记一笔结算账户。
 // 资金两条是两个命令类型、两条用例方法，不共享入口：更正无回指时不能退化成首版。
+// `funds-mapping`、`funds-application`、`funds-application-reversal` 把一笔已采用的资金映射到目标、按写全的分配形成核销、
+// 撤销一次核销；映射、核销与核销撤销只有这一路进程入口，不与采用授予相通（ADR-0236 决定七不给它们开在线口）。
 // 结算账户是另一族答案：固定属性冲突绝不覆盖，册上没有的账户也不在这里代拟。
 // `allocation-form` 只登记一条分摊规则版本选用的分法，不登权重，也不在这里把来源金额展开成份额。
 // `accounting-connector` 只登记某个对方采用规范文书。没登记的外部交换不在这里放行，本口也不解析账单文件或财务系统报文。
@@ -24,12 +26,13 @@
 // 载荷，`internal` 导不进 `cmd`。本口不因端点长出而退场，它是同一能力的受控批量口。
 //
 // 环境事务由本入口给出，一次调用一笔事务：采用 / 更正的版本行与向 CC 交的采用信封落在同一只 db 的同一笔里
-// （Outbox 意图与登记同生同灭），结算账户行与向 parcel-shipment 交的「结算账户已登记」信封同理；写口无环境
-// 事务即拒。
+// （Outbox 意图与登记同生同灭），结算账户行与向 parcel-shipment 交的「结算账户已登记」信封同理，核销行、对被指向
+// 金额的锁与向已结视图交的核销信封也同理；写口无环境事务即拒。
 //
 // 退出码按恢复动作分四格（ADR-0029 判据；归格见 fundsAnswer）：0 = 已采用 / 幂等重放（重放不是错误，无恢复
 // 动作）；1 = 用法或输入不合法（含用例的`未受理`——回指非链头、更正未采用的事实、构造门拒——改请求，不是重试；
-// 也含采用信封或结算账户已登记信封被框架确定性校验拒收那一格——什么都没登记、要改的是引用的长度或形，见 execute）；
+// 也含采用信封、核销信封或结算账户已登记信封被框架确定性校验拒收那一格——什么都没登记、要改的是引用的长度或形，
+// 见 execute）；
 // 2 = 内容冲突（同版本字面异内容、同事实第二个首版：绝不覆盖，人工核对既有登记再续办）；3 = 未决（依赖故障，
 // 登记与否未知；也含「行已落、信封未出」那一格——它需要人重跑同一命令补发同一封，不能与已登记同格）。
 package main
@@ -198,6 +201,10 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造客户收款余额重算：%w", err)
 	}
+	claimTargets, err := sapostgres.NewClaimSettlementTargets(db)
+	if err != nil {
+		return none, fmt.Errorf("构造赔付与追偿认可目标口：%w", err)
+	}
 	funds, err := application.NewMapExternalFundsHandler(application.MapExternalFundsDeps{
 		Facts:        facts,
 		Mappings:     mappings,
@@ -208,6 +215,7 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 		Books:        postings,
 		Balances:     postings,
 		Standings:    postings,
+		ClaimTargets: claimTargets,
 	})
 	if err != nil {
 		return none, fmt.Errorf("构造外部资金采用编排：%w", err)
@@ -399,6 +407,10 @@ func execute(ctx context.Context, command string, raw []byte, registrar registra
 		// 会让人按未决那句「重跑补发」重跑到预算耗尽。答复点名框架给的原因，操作者据此改输入。
 		return fmt.Sprintf("%s: 未登记——采用信封被框架确定性拒收，要改的是输入引用的长度或形，同一份再交仍会被拒：%v", command, err), exitUsage
 	}
+	if errors.Is(err, ports.ErrSettlementApplicationHandoffRejected) {
+		// 归格理由同采用信封那一格：核销行随信封一起回滚，同一份输入再交仍会被拒，要改的是核销引用的长度或形。
+		return fmt.Sprintf("%s: 未登记——核销信封被框架确定性拒收，要改的是核销引用的长度或形，同一份再交仍会被拒：%v", command, err), exitUsage
+	}
 	if errors.Is(err, ports.ErrSettlementAccountHandoffRejected) {
 		// 归格理由同上一格：账户行随信封一起回滚，同一份输入再交仍会被拒，要改的是账户标识的长度。
 		return fmt.Sprintf("%s: 未登记——结算账户已登记信封被框架确定性拒收，要改的是账户标识的长度或形，同一份再交仍会被拒：%v", command, err), exitUsage
@@ -424,16 +436,27 @@ func subjectOf(result application.FundsResult) string {
 	return record.Key.Fact.String() + " 版本 " + record.Fact.Version().String()
 }
 
-// fundsAnswer 把 `application.FundsOutcome` 的封闭各格译成退出码，不增不减。一族一张表：核销那几格本口没有
-// 命令能交回，仍在表上——同一格不因来自哪条命令而换退出码（parcel-customs-register 的 dutyReconciliationAnswer
-// 同一条纪律）。归格只看恢复动作（裁决 5）：
+// applicationSubjectOf 取核销或撤销落在哪一笔核销上，与它用掉、剩下的金额：部分核销留下的未分配要让操作员看得见。
+func applicationSubjectOf(result application.FundsResult) string {
+	record, found := result.Application()
+	if !found {
+		return ""
+	}
+	return fmt.Sprintf("核销 %s，核销 %d、未分配 %d", record.Key.Application.String(),
+		record.Application.AppliedMinor(), record.Application.RemainderMinor())
+}
+
+// fundsAnswer 把 `application.FundsOutcome` 的封闭各格译成退出码，不增不减。一族一张表：采用、映射、核销与撤销几条
+// 命令共用——同一格不因来自哪条命令而换退出码（parcel-customs-register 的 dutyReconciliationAnswer 同一条纪律）。
+// 归格只看恢复动作（裁决 5）：
 //   - 已采用 / 已存在 / 已映射 / 已核销 / 已撤销 / 重放各格 → 0。重放不是错误，无恢复动作。
 //   - `未受理` 与业务负向各格（不可映射的失败付款、分配失衡、跨币种无换算）→ 1：内容改对了才该重来，重跑同一份
-//     没有意义。回指非链头、更正一条未采用的事实、构造门拒都落在`未受理`。
+//     没有意义。回指非链头、更正一条未采用的事实、构造门拒、映射到不存在或不属本租户的赔付与追偿认可、撤销一笔
+//     不存在的核销都落在`未受理`；分到一条赔付或认可上超出它未核销的部分落在分配失衡。
 //   - 内容冲突各格 → 2：同键异内容绝不覆盖，要人核对既有登记再决定续办。
-//   - 未决 → 3，带编排指名的原因（今天与采用相关的只有资金事实库不可用）。
-//   - 行已落、信封未出（续办引用非空）→ 3 并把续办引用打出：事实已采用是真的，但 CC 等的那封没出去，重跑同一命令
-//     会重发同一份（Outbox 按认领键吞重）；它需要人动手，不能与已登记同格。自票 sa-cc/32 起这一格只对依赖故障
+//   - 未决 → 3，带编排指名的原因（哪一本库读不回）。
+//   - 行已落、信封未出（续办引用非空）→ 3 并把续办引用打出：事实已采用、核销已落是真的，但下游等的那封没出去，
+//     重跑同一命令会重发同一份（Outbox 按认领键吞重）；它需要人动手，不能与已登记同格。自票 sa-cc/32 起这一格只对依赖故障
 //     成立——信封被确定性拒收的那一格编排返 error、在 execute 归用法格，到不了这里；「重跑补发」因此只对还能补发的
 //     因说话。
 func fundsAnswer(

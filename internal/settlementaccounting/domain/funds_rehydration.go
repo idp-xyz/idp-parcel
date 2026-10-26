@@ -104,7 +104,8 @@ func RehydrateSettlementApplication(spec RehydrateSettlementApplicationSpec) (Se
 	net := int64(0)
 	for _, allocation := range spec.Allocations {
 		if !allocation.Mapping.valid() || !allocation.TargetKind.valid() ||
-			!allocation.Target.valid() || !allocation.Direction.valid() || allocation.AmountMinor <= 0 {
+			!allocation.Target.valid() || !allocation.Direction.valid() || allocation.AmountMinor <= 0 ||
+			!claimAllocationDirected(allocation) {
 			return SettlementApplication{}, ErrInvalidApplication
 		}
 		if allocation.Direction == AllocationDebit {

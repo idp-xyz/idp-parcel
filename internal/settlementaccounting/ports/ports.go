@@ -919,13 +919,31 @@ type SettlementApplicationStore interface {
 	Replace(ctx context.Context, record SettlementApplicationRecord) (bool, error)
 }
 
+// ClaimSettlementTargets 读、锁资金映射指向的两格金额本体：客户赔付（`customer_claim_amount` 那一条）与追偿认可
+// （`recovery_acknowledgement` 那一条）。只读不写——映射与核销不改被指向的金额。按租户取：他租户的与不存在的同答
+// false，两者对调用方是同一件事（ADR-0029）。
+type ClaimSettlementTargets interface {
+	// FindClaimTarget 核这条金额在本租户的册上在不在。映射用它；金额本体只增不改，映射时不必锁。
+	FindClaimTarget(ctx context.Context, tenant domain.TenantID, key domain.ClaimTargetKey) (bool, error)
+	// LockClaimTarget 在调用方的事务里先锁住那条金额，再读指向它、尚未撤销的核销分配净额，交回它的未核销面。
+	// 锁与随后落核销同一笔事务：两笔并发核销同一条金额时后到的那笔等前一笔提交，读到的已核销含前一笔。
+	// 无环境事务即拒（bentopg.ErrTransactionRequired）。
+	LockClaimTarget(ctx context.Context, tenant domain.TenantID, key domain.ClaimTargetKey) (domain.ClaimTargetStanding, bool, error)
+}
+
 // SettlementApplicationIntent 把核销/撤销交给下游（对账单与应付的已结视图）。重放
 // 重发同一份（ADR-0043）。
 type SettlementApplicationIntent struct {
 	Record SettlementApplicationRecord
 }
 
-// SettlementApplicationHandoff 把核销与撤销写入 Outbox（`OutboxSettlementApplicationHandoff`）。
+// ErrSettlementApplicationHandoffRejected 表示核销或撤销信封被框架的确定性校验拒收（形状、长度、字符集）：同一份输入重投
+// 永远同一个结果，与 Outbox 存储不可用那类重投会变的失败是两格（同 ErrFundsFactHandoffRejected 那条判据）。编排据此整笔
+// 不作答、让事务壳回滚，不折成一个重跑永远补不上的续办引用。
+var ErrSettlementApplicationHandoffRejected = errors.New("settlement accounting: settlement application handoff envelope rejected by envelope validation")
+
+// SettlementApplicationHandoff 把核销与撤销写入 Outbox（`OutboxSettlementApplicationHandoff`）。信封被框架确定性校验拒收时
+// 交回的错误 errors.Is ErrSettlementApplicationHandoffRejected；别的失败都是依赖不可用。
 type SettlementApplicationHandoff interface {
 	HandOffSettlementApplication(ctx context.Context, intent SettlementApplicationIntent) error
 }

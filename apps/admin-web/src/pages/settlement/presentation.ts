@@ -56,12 +56,15 @@ export const fundsFactKindLabels: Record<string, string> = {
   FUNDS_RETURNED: '资金退回',
 };
 
-// 资金可映射目标的封闭三值，中文取 SettlementTargetKind 注释原词。费用、赔付金额与追偿
-// 认可本体不在其中——映射与核销改不了那些金额。
+// 资金可映射目标的封闭集，中文取 SettlementTargetKind 注释原词。费用本体不在其中；映射到客户赔付
+// 或追偿认可、核销它，只改核销状态与未分配余额，不改那条金额。
 export const settlementTargetKindLabels: Record<string, string> = {
   STATEMENT: '客户对账单',
   PAYABLE: '供应商审核应付',
   CREDIT_NOTE: '供应商费用贷项',
+  ACCOUNT: '应收结算账户',
+  CUSTOMER_COMPENSATION: '客户赔付',
+  RECOVERY_RECEIVABLE: '追偿认可金额',
 };
 
 // 经营指标口径的封闭三值，中文取 OperatingBasis 注释原词。索赔调整后口径必须声明所依附的

@@ -15,14 +15,16 @@ import (
 
 // 封闭命令表：资金事实的首版与更正是两个命令类型，不共享入口——更正命令上没有来源 / 付款人 / 种类 / 币种 /
 // 发生时刻（从链头照抄），首版命令上没有回指；一条更正无回指时不能退化成首版。结算账户是第三族命令，
-// 登记的是固定属性那一行，不走采用编排。资金映射有命令，调用已有的 Map。
-// 核销（Apply）与撤销（Reverse）没有命令：核销面归 UC-SA-005 另一段的票。
+// 登记的是固定属性那一行，不走采用编排。资金映射、核销与核销撤销各一条命令，调用已有的 Map、Apply、Reverse：
+// 命令只译载荷，分配由交进来的人写全、不在这里推导；撤销只登记核销关系失效，原分配不删。
 //
 // 用法文本与未知命令的错误文本都从 allCommands 生成，不各抄一遍（parcel-network-register supportedKinds 的教训）。
 const (
 	commandExternalFundsFact           = "external-funds-fact"
 	commandExternalFundsFactCorrection = "external-funds-fact-correction"
 	commandFundsMapping                = "funds-mapping"
+	commandFundsApplication            = "funds-application"
+	commandFundsApplicationReversal    = "funds-application-reversal"
 	commandSettlementAccount           = "settlement-account"
 	commandSupplierAuditAuthority      = "supplier-audit-authority"
 	commandSupplierPayableAccount      = "supplier-payable-account"
@@ -48,6 +50,8 @@ var allCommands = []string{
 	commandExternalFundsFact,
 	commandExternalFundsFactCorrection,
 	commandFundsMapping,
+	commandFundsApplication,
+	commandFundsApplicationReversal,
 	commandSettlementAccount,
 	commandSupplierAuditAuthority,
 	commandSupplierPayableAccount,
@@ -117,6 +121,34 @@ func commandFor(command string, raw []byte) (dispatchFunc, error) {
 			}
 			message, code := fundsAnswer(commandFundsMapping, result.Outcome(), result.UndecidedReason(),
 				result.FundsHandoffReference(), subjectOf(result))
+			return message, code, nil
+		}, nil
+	case commandFundsApplication:
+		translated, err := registrationjson.FundsApplicationFromJSON(raw)
+		if err != nil {
+			return nil, err
+		}
+		return func(ctx context.Context, registrar registrar) (string, int, error) {
+			result, err := registrar.funds.Apply(ctx, translated)
+			if err != nil {
+				return "", 0, err
+			}
+			message, code := fundsAnswer(commandFundsApplication, result.Outcome(), result.UndecidedReason(),
+				result.FundsHandoffReference(), applicationSubjectOf(result))
+			return message, code, nil
+		}, nil
+	case commandFundsApplicationReversal:
+		translated, err := registrationjson.FundsApplicationReversalFromJSON(raw)
+		if err != nil {
+			return nil, err
+		}
+		return func(ctx context.Context, registrar registrar) (string, int, error) {
+			result, err := registrar.funds.Reverse(ctx, translated)
+			if err != nil {
+				return "", 0, err
+			}
+			message, code := fundsAnswer(commandFundsApplicationReversal, result.Outcome(), result.UndecidedReason(),
+				result.FundsHandoffReference(), applicationSubjectOf(result))
 			return message, code, nil
 		}, nil
 	case commandSettlementAccount:
