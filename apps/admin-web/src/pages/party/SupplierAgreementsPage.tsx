@@ -4,7 +4,9 @@ import { ListPageTemplate } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState } from '../catalogue-view';
+import { useAddressKeyword } from '../../templates/use-address-keyword';
 import { listSupplierAgreements, type SupplierAgreementListResponseBody } from './api';
+import { useNameDirectory, withRefLinks } from './RefLink';
 import { withStatusBadge } from './detail-primitives';
 import {
   supplierAgreementColumns,
@@ -25,7 +27,9 @@ const info = moduleInfoById['supplier-agreements'];
 // 目录读面。reloadToken 由页面在发布签落定后递增，让同页目录立刻刷新可见（票 admin-write-faces/11 完成判据）；
 // 自己的「重试」另有一把键，两把任一变都重取。
 function SupplierAgreementCatalogue({ reloadToken }: { reloadToken: number }) {
-  const [search, setSearch] = useState('');
+  // 检索词在地址里（`?q=`）：别处的引用链接带着它过来，筛到那一条；刷新与换标签回来也还在。
+  const [search, setSearch] = useAddressKeyword();
+  const directory = useNameDirectory();
   const [reloadKey, setReloadKey] = useState(0);
   const [answer, setAnswer] = useState<ApiResult<SupplierAgreementListResponseBody> | null>(null);
 
@@ -65,7 +69,7 @@ function SupplierAgreementCatalogue({ reloadToken }: { reloadToken: number }) {
         // 「这不是目录为空」直接矛盾（README 列表页上列通则「计数摘要必须带 outcome 守卫」）。
         answer?.kind === 'outcome' ? `当前返回 ${rows.length} 份协议版本` : undefined
       }
-      columns={withStatusBadge(supplierAgreementColumns)}
+      columns={withRefLinks(withStatusBadge(supplierAgreementColumns), directory)}
       rows={visibleRows}
       rowKey={(row) => row.key}
       viewState={catalogueViewState(answer, rows.length, retry, {

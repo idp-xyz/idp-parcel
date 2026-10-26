@@ -17,6 +17,7 @@ import {
   sectionOf,
   settlementPoliciesOfParty,
   supplierAgreementsOfParty,
+  overviewSectionHash,
 } from './party-overview';
 
 // 本文件钉参与方全景（票 operator-workspace-gaps/01）的判读：各段只按参与方标识在已取回的行上关联，不下推查询；
@@ -284,4 +285,12 @@ test('计数只在业务答案下报数', () => {
   equal(countText({ kind: 'unconfigured' }), '—');
   equal(countText({ kind: 'mismatch' }), '—');
   equal(countText({ kind: 'transport', message: 'fetch failed' }), '—');
+});
+
+// 票 party-commercial-uiux/07：全景跳转带上参与方标识作检索词；客户账户那段只到页（检索词会先筛空默认的合同签）。
+test('全景各段的去处带上参与方标识，客户账户那段只到页', () => {
+  equal(overviewSectionHash('group-legal-entities', 'P1'), '#/group-legal-entities?q=P1');
+  equal(overviewSectionHash('supplier-agreements', 'P1'), '#/supplier-agreements?q=P1');
+  equal(overviewSectionHash('commercial-policies', 'P1'), '#/commercial-policies?register=SETTLEMENT_POLICY&q=P1');
+  equal(overviewSectionHash('party-contracts', 'P1'), '#/party-contracts');
 });

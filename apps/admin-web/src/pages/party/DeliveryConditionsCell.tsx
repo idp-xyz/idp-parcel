@@ -1,4 +1,5 @@
 import type { DeliveryConditionRecord } from './api';
+import { RefLink } from './RefLink';
 
 /**
  * 目录行上那一节交付条件的显法（票 admin-write-faces/25 裁读回折进两张既有目录行）：服务产品行显产品层，客户合同行显合同层
@@ -14,7 +15,7 @@ export function DeliveryConditionsCell({ conditions }: { conditions?: DeliveryCo
     <div className="text-xs space-y-0.5">
       {conditions.tightens ? (
         <p className="text-idpxyz-textMuted">
-          收紧自产品 <span className="font-mono text-idpxyz-text">{conditions.tightens.objectId}</span>
+          收紧自产品 <RefLink kind="service-product" id={conditions.tightens.objectId} />
           <span className="font-mono text-idpxyz-text"> @ {conditions.tightens.version}</span>
         </p>
       ) : null}

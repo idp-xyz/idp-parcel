@@ -26,10 +26,13 @@ import {
   settlementMethodLabels,
   taxDispositionLabels,
 } from './presentation';
+import type { RowRefs } from './ref-links';
 
 export interface PolicyRow {
   key: string;
   values: Readonly<Record<string, string>>;
+  /** 引用别的对象的那几格，页面据它画成链接（票 party-commercial-uiux/07）；行模型只交原值，不碰组件库。 */
+  refs?: RowRefs;
 }
 
 function col(id: string, header: string, mono = false): ListColumn<PolicyRow> {
@@ -192,6 +195,19 @@ export function serviceRuleAppliesToCell(record: CustomerServiceRuleRecord): str
   return '数据异常：缺适用对象';
 }
 
+// 适用对象恰一项时才画链接；两项都在或都缺是数据异常，那一格照旧显异常说法，不挑一项去链。
+function serviceRuleRefs(record: CustomerServiceRuleRecord): RowRefs {
+  const serviceProduct = record.content?.serviceProduct;
+  const customerContract = record.content?.customerContract;
+  if (serviceProduct !== undefined && customerContract === undefined) {
+    return { appliesTo: { kind: 'service-product', id: serviceProduct } };
+  }
+  if (customerContract !== undefined && serviceProduct === undefined) {
+    return { appliesTo: { kind: 'contract', id: customerContract } };
+  }
+  return {};
+}
+
 // 两张子表各自三态:未登记正文 / 已登记且有行 / 已登记而空数组。第三态与控制项那一栏相反,**不是坏
 // 数据**:0023 两张子表可各自为空(两项合起来至少一项由写入把守,那一条在这里判不出、也不该判)。空数组
 // 读作什么看正文挂在哪(ADR-0176 决定二):挂服务产品的那一版无行,索赔那一维答未登记;挂客户合同的那一版
@@ -309,6 +325,11 @@ export function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
           effective: formatRange(record.effectiveStartsAt, record.effectiveEndsAt),
           declaredAt: formatInstant(record.declaredAt),
         },
+        refs: {
+          serviceProduct: { kind: 'service-product', id: record.serviceProduct },
+          contract: { kind: 'contract', id: record.contract },
+          legalEntity: { kind: 'legal-entity', id: record.legalEntity },
+        },
       }));
     case 'PRE_ACCEPTANCE_CONTROL':
       return body.policies.map((record) => ({
@@ -319,6 +340,7 @@ export function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
           notApplicableBasis: record.notApplicableBasis ?? '—',
           declaredAt: formatInstant(record.declaredAt),
         },
+        refs: { contract: { kind: 'contract', id: record.contractObjectId } },
       }));
     case 'PRICE_POLICY':
       return body.policies.map((record) => ({
@@ -349,6 +371,10 @@ export function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
           effective: formatRange(record.effectiveStartsAt, record.effectiveEndsAt),
           registeredAt: formatInstant(record.registeredAt),
         },
+        refs: {
+          legalEntity: { kind: 'legal-entity', id: record.legalEntity },
+          counterparty: { kind: 'party', id: record.counterparty },
+        },
       }));
     case 'AS_OF_POLICY':
       return body.policies.map((record) => ({
@@ -360,6 +386,7 @@ export function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
           policyVersion: record.policyVersion,
           declaredAt: formatInstant(record.declaredAt),
         },
+        refs: { package: { kind: 'rule-package', id: record.rulePackageObjectId } },
       }));
     case 'AUTHORIZATION_RULE':
       return body.policies.map((record) => ({
@@ -386,6 +413,7 @@ export function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
           effective: formatRange(record.effectiveStartsAt, record.effectiveEndsAt),
           registeredAt: formatInstant(record.registeredAt),
         },
+        refs: { legalEntity: { kind: 'legal-entity', id: record.legalEntity } },
       }));
     case 'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY':
       return body.policies.map((record) => ({
@@ -419,6 +447,7 @@ export function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
           effective: formatRange(record.effectiveStartsAt, record.effectiveEndsAt),
           publishedAt: formatInstant(record.publishedAt),
         },
+        refs: serviceRuleRefs(record),
       }));
   }
 }

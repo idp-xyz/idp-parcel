@@ -474,3 +474,19 @@ test('取消授权按请求方三态作答：未声明 / 允许 / 不许取消',
     '未声明',
   );
 });
+
+// 票 party-commercial-uiux/07：引用格交原值给页面画链接；适用对象恰一项才有引用，异常与未登记的行不挑一项去链。
+test('客户服务规则的适用对象按挂在哪一类交引用原值，未登记的行没有引用', () => {
+  const rows = rowsOf(customerServiceRules);
+  const byId = (prefix: string) => rows.find((row) => row.key.includes(prefix));
+  deepEqual(byId('csr-full')?.refs, { appliesTo: { kind: 'contract', id: 'contract-1' } });
+  deepEqual(byId('csr-product')?.refs, { appliesTo: { kind: 'service-product', id: 'product-1' } });
+  deepEqual(byId('csr-bare')?.refs, {});
+});
+
+test('信用政策的责任法人交引用原值', () => {
+  for (const row of rowsOf(creditPolicies)) {
+    equal(row.refs?.legalEntity?.kind, 'legal-entity');
+    equal(row.refs?.legalEntity?.id, row.values.legalEntity);
+  }
+});

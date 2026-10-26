@@ -21,6 +21,7 @@ import {
   settlementPoliciesOfParty,
   supplierAgreementsOfParty,
   type OverviewSectionState,
+  overviewSectionHash,
 } from './party-overview';
 import {
   commercialStatusLabels,
@@ -100,16 +101,20 @@ function SectionBody<Row>({
 function Section<Row>({
   title,
   moduleId,
+  partyId,
   children,
   state,
 }: {
   title: string;
   /** 这段事实所在的页；缺席即就在本页另一签。 */
   moduleId?: string;
+  /** 带去目标页作检索词，见 overviewSectionHash。 */
+  partyId?: string;
   children: ReactNode;
   state: OverviewSectionState<Row>;
 }) {
   const target = moduleId ? moduleInfoById[moduleId] : undefined;
+  const href = moduleId ? overviewSectionHash(moduleId, partyId ?? '') : '';
   return (
     <section className="py-3 border-b border-idpxyz-border last:border-b-0">
       <header className="mb-2 flex items-center justify-between gap-2">
@@ -122,7 +127,7 @@ function Section<Row>({
             variant="ghost"
             size="sm"
             onClick={() => {
-              window.location.hash = `#/${moduleId}`;
+              window.location.hash = href;
             }}
           >
             去「{target.title}」
@@ -241,7 +246,7 @@ export function PartyOverviewSection({
         <p className={`mt-2 ${note}`}>全部关系在本页「参与方关系」签可筛看。</p>
       </Section>
 
-      <Section title="货主客户账户" moduleId="party-contracts" state={accountState}>
+      <Section title="货主客户账户" moduleId="party-contracts" partyId={partyId} state={accountState}>
         <SectionBody
           state={accountState}
           what="货主客户账户"
@@ -263,7 +268,7 @@ export function PartyOverviewSection({
         />
       </Section>
 
-      <Section title="责任法人" moduleId="group-legal-entities" state={entityState}>
+      <Section title="责任法人" moduleId="group-legal-entities" partyId={partyId} state={entityState}>
         <SectionBody
           state={entityState}
           what="责任法人"
@@ -285,7 +290,7 @@ export function PartyOverviewSection({
         />
       </Section>
 
-      <Section title="供应商协议" moduleId="supplier-agreements" state={agreementState}>
+      <Section title="供应商协议" moduleId="supplier-agreements" partyId={partyId} state={agreementState}>
         <SectionBody
           state={agreementState}
           what="供应商协议"
@@ -321,7 +326,7 @@ export function PartyOverviewSection({
         ) : null}
       </Section>
 
-      <Section title="结算政策（本方为客户相对方）" moduleId="commercial-policies" state={settlementState}>
+      <Section title="结算政策（本方为客户相对方）" moduleId="commercial-policies" partyId={partyId} state={settlementState}>
         <SectionBody
           state={settlementState}
           what="结算政策"

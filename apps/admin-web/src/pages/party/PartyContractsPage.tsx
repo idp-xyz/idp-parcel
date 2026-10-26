@@ -7,6 +7,7 @@ import type { ApiResult } from '../catalogue-api';
 import { catalogueConditionsNarrow } from '../catalogue-query';
 import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { CustomerContractPublicationForm } from './CustomerContractPublicationForm';
+import { RefLink } from './RefLink';
 import { statusBadge } from './detail-primitives';
 import { DeliveryConditionsCell } from './DeliveryConditionsCell';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
@@ -65,7 +66,7 @@ const columns: ListColumn<CustomerContractRecord>[] = [
     // 规则包必存（库上 NOT NULL），两者是不同的事实。
     render: (row) =>
       row.contentRegistered ? (
-        row.rulePackageId
+        row.rulePackageId ? <RefLink kind="rule-package" id={row.rulePackageId} /> : '—'
       ) : (
         <span className="font-sans text-idpxyz-textMuted">正文未登记</span>
       ),
@@ -114,7 +115,7 @@ function ControlBindings({ row }: { row: CustomerContractRecord }) {
           <span className="font-mono text-idpxyz-text">{binding.chargeScope}</span>
           <span className="text-idpxyz-textMuted"> · </span>
           {binding.policyId ? (
-            <span className="font-mono text-idpxyz-text">{binding.policyId}</span>
+            <RefLink kind="financial-control-policy" id={binding.policyId} />
           ) : (
             <span className="text-idpxyz-textMuted">
               不适用（{binding.inapplicabilityBasis}）
@@ -132,7 +133,8 @@ function ControlBindings({ row }: { row: CustomerContractRecord }) {
  * 由页面把 `publishedKey` 拨一格，本表随之重读——结果在同页目录（含绑定列）立刻可见。
  */
 function CustomerContractsTable({ publishedKey }: { publishedKey: number }) {
-  const [search, setSearch] = useState('');
+  // 检索词在地址里（`?q=`）：别处的引用链接带着它过来，筛到那一条。与客户账户签共用同一个检索词——它们在一页上。
+  const [search, setSearch] = useAddressKeyword();
   const [reloadKey, setReloadKey] = useState(0);
   const [answer, setAnswer] = useState<ApiResult<CustomerContractListResponseBody> | null>(null);
 

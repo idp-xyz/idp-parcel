@@ -6,10 +6,13 @@ import type { ListColumn } from '../../templates';
 import { formatInstant, formatRange } from '../catalogue-view';
 import type { SupplierAgreementListResponseBody, SupplierAgreementRecord } from './api';
 import { commercialStatusLabels, labelOf } from './presentation';
+import type { RowRefs } from './ref-links';
 
 export interface SupplierAgreementRow {
   key: string;
   values: Readonly<Record<string, string>>;
+  /** 供应商与责任法人两格的引用原值，页面据它画成带名称的链接（票 party-commercial-uiux/07）。 */
+  refs: RowRefs;
 }
 
 function col(id: string, header: string, mono = false): ListColumn<SupplierAgreementRow> {
@@ -92,6 +95,10 @@ export function supplierAgreementRowsOf(body: SupplierAgreementListResponseBody)
       publishedAt: formatInstant(record.publishedAt),
       contentRegistered: contentRegisteredCell(record),
       ...bodyValues(record),
+    },
+    refs: {
+      ...(record.supplier ? { supplier: { kind: 'party', id: record.supplier } } : {}),
+      ...(record.legalEntity ? { legalEntity: { kind: 'legal-entity', id: record.legalEntity } } : {}),
     },
   }));
 }

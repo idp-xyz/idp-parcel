@@ -71,8 +71,8 @@ Status: in-progress——第一段六票 01–06 resolved；第二段 2026-10-26
 | 04 | [状态一律用徽章](issues/04-status-badges-everywhere.md) | — | resolved |
 | 05 | [商业规则与策略页布局](issues/05-commercial-policies-layout.md) | 01 | resolved |
 | 06 | [法人停用入口与确认](issues/06-legal-entity-deactivation-entry.md) | — | resolved |
-| 07 | [引用可点、显示名称](issues/07-references-are-links-with-names.md) | — | in-progress |
-| 08 | [版本按对象排在一起、可只看在用的](issues/08-versions-grouped-with-in-use-filter.md) | — | ready-for-agent |
+| 07 | [引用可点、显示名称](issues/07-references-are-links-with-names.md) | — | resolved |
+| 08 | [版本按对象排在一起、可只看在用的](issues/08-versions-grouped-with-in-use-filter.md) | — | in-progress |
 
 ## 界面用词对照（本批各票共用）
 

@@ -14,6 +14,8 @@ import type {
 } from './api';
 import { byInstant, byString } from './list-order';
 import { partyRoleLabels } from './presentation';
+import { ADDRESS_KEYWORD_PARAM, hashWithQueryValue } from '../../templates/address-query';
+import { policiesHash } from './commercial-policies-address';
 
 /** 本方在一段关系里站哪一侧。方向由关系册「持有方 → 相对方」的字段次序表达（CONTEXT），这里只读次序，不解释成谁是谁的客户。 */
 export type RelationshipSide = 'HOLDER' | 'COUNTERPARTY';
@@ -173,4 +175,25 @@ export function sectionOf<Body, Row>(
 /** 段首与顶部摘要的计数：只在拿到业务答案后报数，零条报 0；其余各态报「—」，不拿 0 冒充「没有」（README 列表页上列通则第六条）。 */
 export function countText(state: OverviewSectionState<unknown>): string {
   return state.kind === 'answered' ? String(state.rows.length) : '—';
+}
+
+/**
+ * 全景各段「去「…」」按钮的去处（票 party-commercial-uiux/07）：带上这个参与方的标识作检索词，目标页筛到与它有关的那几行——
+ * 法人册、供应商协议册、结算政策册的检索都覆盖参与方标识。货主客户账户那一段例外：它的册在客户与合同页的第二个签上，
+ * 检索词会先筛默认的合同签、把它筛空，所以只到页、不带词。
+ */
+export function overviewSectionHash(moduleId: string, partyId: string): string {
+  switch (moduleId) {
+    case 'group-legal-entities':
+    case 'supplier-agreements':
+      return hashWithQueryValue(`#/${moduleId}`, ADDRESS_KEYWORD_PARAM, partyId);
+    case 'commercial-policies':
+      return hashWithQueryValue(
+        policiesHash('#/commercial-policies', { tab: 'registers', register: 'SETTLEMENT_POLICY' }),
+        ADDRESS_KEYWORD_PARAM,
+        partyId,
+      );
+    default:
+      return `#/${moduleId}`;
+  }
 }

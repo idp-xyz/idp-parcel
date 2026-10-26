@@ -5,6 +5,7 @@ import { ListPageTemplate, type ListColumn } from '../../templates';
 import { RegistrationPanel } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
+import { useAddressKeyword } from '../../templates/use-address-keyword';
 import {
   commercialRegistrationEndpoints,
   listServiceProducts,
@@ -83,7 +84,8 @@ const columns: ListColumn<ServiceProductRecord>[] = [
 //
 // `refreshKey` 由页面递增：「发布版本」签的载体到达发布那一步时刷本读面，让新版本在同页立刻可见。
 function ServiceProductVersionsTable({ refreshKey }: { refreshKey: number }) {
-  const [search, setSearch] = useState('');
+  // 检索词在地址里（`?q=`）：别处的引用链接带着它过来，筛到那一条；刷新与换标签回来也还在。
+  const [search, setSearch] = useAddressKeyword();
   const [reloadKey, setReloadKey] = useState(0);
   const [answer, setAnswer] = useState<ApiResult<ServiceProductListResponseBody> | null>(null);
 

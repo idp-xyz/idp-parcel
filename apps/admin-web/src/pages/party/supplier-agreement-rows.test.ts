@@ -116,3 +116,13 @@ test('协议区间不带结束是合法声明，按「持续有效」显示而�
   equal(open.values.contentRegistered, '已登记');
   equal(open.values.agreementEffective, '2026-01-01 00:00:00 UTC → 持续有效');
 });
+
+// 票 party-commercial-uiux/07：供应商与责任法人交引用原值给页面画带名称的链接；只有壳的行没有这两项。
+test('供应商与责任法人两格交引用原值，只有壳的行没有引用', () => {
+  const rows = supplierAgreementRowsOf(agreements);
+  deepEqual(rows[0].refs, {
+    supplier: { kind: 'party', id: 'supplier-1' },
+    legalEntity: { kind: 'legal-entity', id: 'legal-1' },
+  });
+  deepEqual(rows[1].refs, {});
+});

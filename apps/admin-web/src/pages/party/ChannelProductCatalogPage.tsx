@@ -5,6 +5,7 @@ import { moduleInfoById } from '../../navigation';
 import { RegistrationPanel } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
+import { useAddressKeyword } from '../../templates/use-address-keyword';
 import {
   commercialRegistrationEndpoints,
   listProductChannelMappings,
@@ -13,6 +14,7 @@ import {
   type ProductChannelMappingListResponseBody,
   type ProductChannelMappingRecord,
 } from './api';
+import { RefLink } from './RefLink';
 import { problemNote, registrationSnapshotHints, registrationTitles } from './presentation';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
@@ -38,7 +40,9 @@ const columns: ListColumn<ProductChannelMappingRecord>[] = [
     header: '服务产品版本',
     render: (row) => (
       <div className="min-w-44">
-        <p className="font-mono text-idpxyz-text">{row.productObjectId}</p>
+        <p>
+          <RefLink kind="service-product" id={row.productObjectId} />
+        </p>
         <p className="mt-0.5 font-mono text-xs text-idpxyz-textMuted">{row.productVersionLabel}</p>
       </div>
     ),
@@ -86,7 +90,8 @@ const columns: ListColumn<ProductChannelMappingRecord>[] = [
  * 区间形成新修订，不覆盖历史。
  */
 function ProductChannelMappingTable() {
-  const [search, setSearch] = useState('');
+  // 检索词在地址里（`?q=`）：别处的引用链接带着它过来，筛到那一条；刷新与换标签回来也还在。
+  const [search, setSearch] = useAddressKeyword();
   const [reloadKey, setReloadKey] = useState(0);
   const [answer, setAnswer] = useState<ApiResult<ProductChannelMappingListResponseBody> | null>(
     null,

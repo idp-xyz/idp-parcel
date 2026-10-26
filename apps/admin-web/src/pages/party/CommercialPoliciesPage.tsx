@@ -2,6 +2,8 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Button, Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { ListPageTemplate } from '../../templates';
+import { ADDRESS_KEYWORD_PARAM, hashWithQueryValue } from '../../templates/address-query';
+import { useAddressKeyword } from '../../templates/use-address-keyword';
 import { RegistrationPanel, chipClass } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState } from '../catalogue-view';
@@ -14,6 +16,8 @@ import {
   type CommercialPolicyKind,
   type CommercialPolicyListResponseBody,
 } from './api';
+import { useNameDirectory, withRefLinks } from './RefLink';
+import type { NameDirectory } from './ref-links';
 import {
   policiesHash,
   policiesRegisterOf,
@@ -71,8 +75,17 @@ function RegisterChooser({
 
 // 各政策册独立请求、独立列形；同页切换不把各类对象折成一份「大配置」。行与列的转写在 policy-rows.ts，本组件只管取数与渲染。
 // 列表标题就是选中的册名、说明就是这本册的册说明（policyKindSources）：页面层的话收进选册那一排，不再占一行被截断。
-function PolicyRegisters({ kind, reloadKey: externalReloadKey }: { kind: CommercialPolicyKind; reloadKey: number }) {
-  const [search, setSearch] = useState('');
+function PolicyRegisters({
+  kind,
+  reloadKey: externalReloadKey,
+  directory,
+}: {
+  kind: CommercialPolicyKind;
+  reloadKey: number;
+  directory: NameDirectory;
+}) {
+  // 检索词在地址里（`?q=`）：合同上的规则包、控制策略链接带着它过来，筛到那一条。换册时由页面清掉（见 usePoliciesPlace）。
+  const [search, setSearch] = useAddressKeyword();
   const [reloadKey, setReloadKey] = useState(0);
   const [loaded, setLoaded] = useState<{
     kind: CommercialPolicyKind;
@@ -112,7 +125,7 @@ function PolicyRegisters({ kind, reloadKey: externalReloadKey }: { kind: Commerc
         // 计数只在拿到业务答案后显示，未配置态不报「0 条」（与 pricing 两页同一守卫）。
         answer?.kind === 'outcome' ? `共 ${rows.length} 条` : undefined
       }
-      columns={withStatusBadge(kindColumns[kind])}
+      columns={withRefLinks(withStatusBadge(kindColumns[kind]), directory)}
       rows={visibleRows}
       rowKey={(row) => row.key}
       viewState={catalogueViewState(answer, rows.length, retry, {
@@ -218,11 +231,14 @@ function usePoliciesPlace(): [PoliciesTab, CommercialPolicyKind, (tab: PoliciesT
   }, []);
 
   const place = (nextTab: PoliciesTab, nextRegister: CommercialPolicyKind) => {
+    const registerChanged = nextRegister !== register;
     setTab(nextTab);
     setRegister(nextRegister);
     const hash = window.location.hash;
     if (!hash.startsWith('#/')) return;
-    window.history.replaceState(window.history.state, '', policiesHash(hash, { tab: nextTab, register: nextRegister }));
+    // 换册清掉检索词：上一本册的词留着会把新册筛空，读起来像新册没有内容。
+    const base = registerChanged ? hashWithQueryValue(hash, ADDRESS_KEYWORD_PARAM, '') : hash;
+    window.history.replaceState(window.history.state, '', policiesHash(base, { tab: nextTab, register: nextRegister }));
   };
   return [tab, register, place];
 }
@@ -239,6 +255,7 @@ function usePoliciesPlace(): [PoliciesTab, CommercialPolicyKind, (tab: PoliciesT
 export function CommercialPoliciesPage() {
   const [tab, register, place] = usePoliciesPlace();
   const [reloadKey, setReloadKey] = useState(0);
+  const directory = useNameDirectory();
   // 发布落定一版：读面那一册重读，切回政策册签时结果已在；仍停在发布签，让人看完答复。
   const notePublished = (kind: CommercialPolicyKind) => {
     if (kind === register) setReloadKey((value) => value + 1);
@@ -261,7 +278,8 @@ export function CommercialPoliciesPage() {
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
           <RegisterChooser value={register} onChange={(kind) => place('registers', kind)} />
-          <PolicyRegisters kind={register} reloadKey={reloadKey} />
+          {/* 按册重挂：检索词从地址重读（换册时已清掉），不带上一本册的词。 */}
+          <PolicyRegisters key={register} kind={register} reloadKey={reloadKey} directory={directory} />
         </TabsContent>
         <TabsContent
           value="publish"

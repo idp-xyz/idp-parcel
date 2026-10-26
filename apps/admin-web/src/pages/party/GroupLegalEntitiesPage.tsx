@@ -15,6 +15,7 @@ import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { primaryActionClass } from '../../components/primary-action';
 import { statusToneSurface, statusToneText } from '../../components/status-tone';
 import { catalogueViewState } from '../catalogue-view';
+import { useAddressKeyword } from '../../templates/use-address-keyword';
 import { listGroupLegalEntities, type GroupLegalEntityRecord } from './api';
 import { useBoundTenant } from '../use-operator-binding';
 import { groupLegalEntitiesViewOf, registerViewHash } from './group-legal-entities-address';
@@ -220,7 +221,8 @@ export function GroupLegalEntitiesPage() {
   const pushedRegister = useRef(false);
   const [registerUnsaved, setRegisterUnsaved] = useState(false);
   const [confirmingLeave, setConfirmingLeave] = useState(false);
-  const [search, setSearch] = useState('');
+  // 检索词在地址里（`?q=`）：别处的引用链接带着它过来，筛到那一条；刷新与换标签回来也还在。
+  const [search, setSearch] = useAddressKeyword();
   const [status, setStatus] = useState<LegalEntityStatusFilter>('ALL');
   const [attentionOnly, setAttentionOnly] = useState(false);
   const [sort, setSort] = useState<WorkbenchSort>(defaultLegalEntitySort);

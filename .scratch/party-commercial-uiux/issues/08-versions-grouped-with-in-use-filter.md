@@ -16,7 +16,7 @@
 
 **Category:** enhancement
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
 - [ ] 四类表（合同、协议、产品、带状态的政策册）同一对象的版本连续、新版在上。
 - [ ] 「全部 / 在用 / 其余」筛选带计数，默认全部；与检索叠加；筛空有提示行。
