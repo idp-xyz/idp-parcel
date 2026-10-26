@@ -127,9 +127,10 @@ type RegisterTransportHandoverResult struct {
 }
 
 // ParticipationEnd 是`已交接`落库后同事务触发的「结束前一段参与」那一半的答案（票 06 裁决 (i)：下一次
-// 权威交接结束对象在前一段的参与，是 TF 自己的生命周期规则）。只在首登成立且裁决转出控制时非零；拒收与
-// 待确认不转出控制，不结束任何参与。`NO_ACTIVE_PARTICIPATION` 是对象的第一次交接时的正常答案（此前不在任何
-// 段里），照实透出而不静默。
+// 权威交接结束对象在前一段的参与，是 TF 自己的生命周期规则）。只在这一版是对象进段的那一次交接时非零：首登即为
+// `已交接`，或前版没转出控制、更正成`已交接`（ADR-0307 决定一）；拒收与待确认不转出控制，不结束任何参与，仍为
+// `已交接`的更正只在同段替代、不是又一次交接。`NO_ACTIVE_PARTICIPATION` 是对象的第一次交接时的正常答案（此前不在
+// 任何段里），照实透出而不静默。
 func (result RegisterTransportHandoverResult) ParticipationEnd() ParticipationEndOutcome {
 	return result.participationEnd
 }
@@ -165,8 +166,9 @@ func (result RegisterTransportHandoverResult) SegmentContinuationReference() str
 }
 
 // SegmentEntryRefusal 非空说明交接（或更正）已登记、段那一半被领域正当拒绝——首登进段答`段已关闭`，
-// 更正重派生答`无可替代的参与`、`更正撤回了控制`或`更正后的起点晚于继承的终点`。它与
-// SegmentContinuationReference 不会同时非空：一个说这一半不会因重试而变，一个说等登记册恢复重试。
+// 更正重派生答`无可替代的参与`或`更正后的起点晚于继承的终点`，前版没转出控制的更正成`已交接`改走进段时另答进段那几格
+// 与`对象此后已有更晚的控制事实`。它与 SegmentContinuationReference 不会同时非空：一个说这一半不会因重试而变，一个说
+// 等登记册恢复重试。
 func (result RegisterTransportHandoverResult) SegmentEntryRefusal() SegmentEntryRefusal {
 	return result.segmentRefusal
 }
@@ -219,6 +221,10 @@ func (handler *RegisterTransportHandoverHandler) RegisterWithGateReading(
 	if err != nil {
 		return RegisterTransportHandoverResult{outcome: HandoverNotAccepted}, nil
 	}
+	declaration, err := segmentDeclarationOf(command)
+	if err != nil {
+		return RegisterTransportHandoverResult{outcome: HandoverNotAccepted}, nil
+	}
 
 	key := handoverRecordKey(command.TenantID, handover)
 	digest, err := registrationDigest(command, handover)
@@ -237,22 +243,39 @@ func (handler *RegisterTransportHandoverHandler) RegisterWithGateReading(
 	}
 
 	result, err := handler.commit(ctx, ports.TransportHandoverRecord{
-		Key:           key,
-		ContentDigest: digest,
-		Handover:      handover,
-		RecordedAt:    handler.deps.Clock.Now(),
+		Key:                key,
+		ContentDigest:      digest,
+		Handover:           handover,
+		RecordedAt:         handler.deps.Clock.Now(),
+		SegmentDeclaration: declaration,
 	}, unversionedHandoverDigest(command), HandoverRegistered)
 	if err != nil || result.outcome != HandoverRegistered {
 		return result, err
 	}
-	// 先结束前一段的参与，再进新段：结束那一半按对象找「此刻在场的段」，若先进了新段，它会找到两条
-	// 而响亮报错。顺序就是这条规则的一部分。
-	if result.participationEnd, err = handler.endPreviousParticipation(ctx, command, handover); err != nil {
+	var entry segmentEntry
+	if result.participationEnd, entry, err = handler.handOverIntoSegment(ctx, declaration, handover); err != nil {
 		return RegisterTransportHandoverResult{}, err
 	}
-	entry := handler.establishSegment(ctx, command, handover)
 	result.segment, result.segmentRefusal = entry.continuation, entry.refusal
 	return result, nil
+}
+
+// handOverIntoSegment 是一版`已交接`作为对象的又一次交接落库之后的段那一半：先结束对象此刻在场的参与，再进这一版声明的
+// 段。首登与「前版没转出控制、更正成`已交接`」的更正走的都是它（ADR-0307 决定一）——那一版更正就是对象的这一次交接，
+// 结果与首登即为`已交接`逐格相同，所以两处共用一道，不各写一份。
+//
+// 先结束、再进段：结束那一半按对象找「此刻在场的段」，若先进了新段，它会找到两条而响亮报错。顺序就是这条规则的一部分。
+// 拒收与待确认什么也不做。
+func (handler *RegisterTransportHandoverHandler) handOverIntoSegment(
+	ctx context.Context,
+	declaration ports.HandoverSegmentDeclaration,
+	handover domain.TransportHandover,
+) (ParticipationEndOutcome, segmentEntry, error) {
+	ended, err := handler.endPreviousParticipation(ctx, handover)
+	if err != nil {
+		return ParticipationEndOutcomeInvalid, segmentEntry{}, err
+	}
+	return ended, handler.establishSegment(ctx, declaration, handover), nil
 }
 
 // endPreviousParticipation 在`已交接`落库后同事务结束该对象在前一段的参与（CONTEXT 生命周期③「下一次权威
@@ -261,10 +284,9 @@ func (handler *RegisterTransportHandoverHandler) RegisterWithGateReading(
 // 只有转出控制的裁决走到这里：拒收与待确认没有让控制移入接收方，前段的参与照常在场——所以 ParticipationEnds
 // 缺席也只在这道门之后才成为失败，拒收与待确认照登。命令不带段也不带下一段——前段由结束参与那条编排按对象找；
 // 新段由本编排自己的 establishSegment 进（进段的拒绝格与欠账也在那边答），不让两条路各进一次。失败则整笔不落，
-// 理由同交付那一侧。
+// 理由同交付那一侧。键取这一版交接自己的：结束参与那条编排按键读回它作终点依据，更正落下的新版本与首登一样读得回。
 func (handler *RegisterTransportHandoverHandler) endPreviousParticipation(
 	ctx context.Context,
-	command RegisterTransportHandoverCommand,
 	handover domain.TransportHandover,
 ) (ParticipationEndOutcome, error) {
 	if !handover.TransfersControl() {
@@ -274,11 +296,11 @@ func (handler *RegisterTransportHandoverHandler) endPreviousParticipation(
 		return ParticipationEndOutcomeInvalid, fmt.Errorf("end participation on handover: %w", ErrParticipationEndsNotWired)
 	}
 	ended, err := handler.deps.ParticipationEnds.End(ctx, EndFulfillmentParticipationCommand{
-		TenantID: command.TenantID,
-		Object:   command.Object,
+		TenantID: handover.TenantID(),
+		Object:   handover.Object().String(),
 		Source:   ParticipationEndedByNextHandover,
-		Scope:    command.Scope,
-		Version:  command.Version,
+		Scope:    handover.Scope().String(),
+		Version:  handover.Version().String(),
 	})
 	if err != nil {
 		return ParticipationEndOutcomeInvalid, fmt.Errorf("end participation on handover: %w", err)
@@ -293,18 +315,19 @@ func (handler *RegisterTransportHandoverHandler) endPreviousParticipation(
 //
 // 本编排只提供交接那一侧的两道领域门：三裁决里只有`已交接`转出控制，拒收与待确认在
 // ParticipationBasis 上就被挡住，这里不重判一遍。其余判断（要不要进段、段是否已成立、
-// 失败算不算欠账）与收寄那一侧逐字相同，收在 enterFulfillmentSegment 里。
+// 失败算不算欠账）与收寄那一侧逐字相同，收在 enterFulfillmentSegment 里。段取登记方随那一版声明、与它一起留存的那一份：
+// 首登取命令里的，更正取从前版承继来的（ADR-0307 决定二）。
 func (handler *RegisterTransportHandoverHandler) establishSegment(
 	ctx context.Context,
-	command RegisterTransportHandoverCommand,
+	declaration ports.HandoverSegmentDeclaration,
 	handover domain.TransportHandover,
 ) segmentEntry {
 	return enterFulfillmentSegment(
 		ctx, handler.deps.Segments, handler.deps.Judgments, handler.deps.Clock,
-		command.TenantID, command.Segment, command.PlannedSegment,
+		handover.TenantID(), declaration.Segment, declaration.PlannedSegment,
 		segmentEntryDoors{
 			object:        handover.Object(),
-			serviceAction: command.SegmentServiceAction,
+			serviceAction: declaration.ServiceAction,
 			establish: func(
 				segment domain.FulfillmentSegmentReference,
 				planned domain.PlannedSegmentReference,
@@ -331,9 +354,11 @@ func (handler *RegisterTransportHandoverHandler) Correct(
 }
 
 // CorrectWithGateReading 对已登记的判断落更正版本：读回前版 → 领域 Correct（新版回指前身、完备性
-// 同首次裁决、同版本号拒）→ 带上交出门禁读数 → 以新版本键登记 → 意图重新交付下游 → 同事务在段上重派生该对象的参与
-// （ADR-0112 决定二）。仍`已交接`的更正形成替代参与版本；被更正为拒收或待确认的如实答
-// `更正撤回了控制`（决定四，失效格另票），原参与不动。这一半失败不翻更正，答法与首登进段同一格。
+// 同首次裁决、同版本号拒）→ 带上交出门禁读数 → 以新版本键登记（段声明照前版承继）→ 意图重新交付下游 → 同事务做段那一半
+// （correctionSegmentHalf）。凭前版入场的参与在段上重派生（ADR-0112 决定二）：仍`已交接`的更正形成替代参与版本，被更正为
+// 拒收或待确认的形成失效参与版本（决定四）。前版没转出控制、本版`已交接`而无可重派生的，这一版就是对象的这一次交接，
+// 改走进段（ADR-0307 决定一）。段那一半的拒绝与欠账不翻更正，答法与首登进段同一格；只有结束前段参与那一步失败整笔不落，
+// 理由同首登。
 //
 // 更正成`已交接`的那一版带自己的读数，不承继前版的：前版可能是待确认、根本没有读数；前版是`已交接`时意图与时点相同，
 // 关务三源没变就答同一份判断（ADR-0206 决定六按内容派生标识），变了就该记下变了的那一份。reading 由组合根在写事务之前
@@ -393,16 +418,20 @@ func (handler *RegisterTransportHandoverHandler) CorrectWithGateReading(
 	}
 
 	result, err := handler.commit(ctx, ports.TransportHandoverRecord{
-		Key:           key,
-		ContentDigest: correctionDigest,
-		Handover:      corrected,
-		RecordedAt:    handler.deps.Clock.Now(),
+		Key:                key,
+		ContentDigest:      correctionDigest,
+		Handover:           corrected,
+		RecordedAt:         handler.deps.Clock.Now(),
+		SegmentDeclaration: existing.SegmentDeclaration,
 	}, unversioned, HandoverCorrected)
 	if err != nil || result.outcome != HandoverCorrected {
-		// 并发落败读回赢家、或登记未决：段那一半由真把版本落下去的那一方重派生。
+		// 并发落败读回赢家、或登记未决：段那一半由真把版本落下去的那一方做。
 		return result, err
 	}
-	entry := handler.rederiveParticipation(ctx, command.TenantID, corrected)
+	var entry segmentEntry
+	if result.participationEnd, entry, err = handler.correctionSegmentHalf(ctx, existing, corrected); err != nil {
+		return RegisterTransportHandoverResult{}, err
+	}
 	result.segment, result.segmentRefusal = entry.continuation, entry.refusal
 	return result, nil
 }
@@ -689,6 +718,30 @@ func handoverFrom(command RegisterTransportHandoverCommand) (domain.TransportHan
 		}
 	}
 	return domain.FormTransportHandover(spec)
+}
+
+// segmentDeclarationOf 取首登命令里的段声明三格原样留存（ADR-0307 决定二）。空白读作没有声明，与进段那道门的缺席判据
+// 同一条；带 NUL 的串库面存不下，答未受理而不是落册时报登记册未决——与节点声明存不下同一个答法（ADR-0213）。其余怎么
+// 坏都原样存：段号立不起来、服务动作词不在封闭集合里，由进段那道门在进段那一刻作答，首登与更正带对象进段时答得一样。
+func segmentDeclarationOf(command RegisterTransportHandoverCommand) (ports.HandoverSegmentDeclaration, error) {
+	declaration := ports.HandoverSegmentDeclaration{}
+	for _, declared := range []struct {
+		raw  string
+		kept *string
+	}{
+		{command.Segment, &declaration.Segment},
+		{command.PlannedSegment, &declaration.PlannedSegment},
+		{command.SegmentServiceAction, &declaration.ServiceAction},
+	} {
+		if strings.TrimSpace(declared.raw) == "" {
+			continue
+		}
+		if strings.IndexByte(declared.raw, 0) >= 0 {
+			return ports.HandoverSegmentDeclaration{}, domain.ErrValueContainsNUL
+		}
+		*declared.kept = declared.raw
+	}
+	return declaration, nil
 }
 
 func correctionKey(command CorrectTransportHandoverCommand) (ports.TransportHandoverKey, error) {

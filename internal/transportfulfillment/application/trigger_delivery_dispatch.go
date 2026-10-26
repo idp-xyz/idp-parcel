@@ -92,8 +92,9 @@ const (
 	// 进入的对象照字面不触发，后续凭交接加入的对象才触发。
 	DeliveryTriggerRefusedEntryNotByHandover
 	// DeliveryTriggerRefusedEntryNotThisHandover：调用方说了这一拍是哪一次交接带对象进的段（命令里的期望交接），而链尾
-	// 不是凭它入场的。信封晚到、对象已被下一次交接带进别的段，或待确认更正为`已交接`而对象仍挂在先前的段里，都落这一格：
-	// 这次交接没有带对象进这个段，替这个段形成任务就是替一个对象已经交出去的段派送（票 demo-chain-gaps/129）。
+	// 不是凭它入场的。信封晚到、对象已被下一次交接带进别的段，或那一版是没能带对象进段的更正（对象此后已有更晚的控制事实，
+	// ADR-0307 决定三），都落这一格：这次交接没有带对象进这个段，替这个段形成任务就是替一个对象已经交出去的段派送（票
+	// demo-chain-gaps/129）。
 	DeliveryTriggerRefusedEntryNotThisHandover
 )
 

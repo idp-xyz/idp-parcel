@@ -193,6 +193,20 @@ type TransportHandoverRecord struct {
 	ContentDigest string
 	Handover      domain.TransportHandover
 	RecordedAt    time.Time
+	// SegmentDeclaration 是登记方随这一版声明的进段去处（ADR-0307 决定二）。它不是交接内容：不进摘要、不比对，同键重放
+	// 换了声明照答重放，在册的仍是先到的那一份。更正照前版承继，命令里没有这三格。
+	SegmentDeclaration HandoverSegmentDeclaration
+}
+
+// HandoverSegmentDeclaration 是首登命令里段、计划段与段服务动作三格的原样留存，空串即没有声明。
+//
+// 存原串而不是领域值：进段那道门（enterFulfillmentSegment）对坏串、未知服务动作词各有答法，前版没转出控制、日后由更正
+// 带对象进段时，要与首登即为`已交接`时同一道门、同一份输入、同一个答复（ADR-0307 决定一）。只有带 NUL 的串存不下，
+// 登记时就答未受理。
+type HandoverSegmentDeclaration struct {
+	Segment        string
+	PlannedSegment string
+	ServiceAction  string
 }
 
 type HandoverSaveOutcome uint8

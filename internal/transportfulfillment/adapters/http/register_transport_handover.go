@@ -159,7 +159,8 @@ func NewCorrectTransportHandoverEndpoint(intake HandoverCorrectionIntake, handle
 // 调用方要做的事不同——传输层吞掉任何一格，调用方就没法续办那一半。
 //
 // `segmentEntryRefusal` 是第四格（票 03 裁决 3）：段那一半被领域正当拒绝——首登进段答 `SEGMENT_CLOSED`
-// （「去另立新段」），更正口答重派生那一半的各格（ADR-0112：无可替代、撤回控制、起点晚于继承的终点），
+// （「去另立新段」），更正口答重派生那一半的各格（ADR-0112：无可替代、起点晚于继承的终点）；前版没转出控制的
+// 更正成`已交接`改走进段，答进段那几格，或对象此后已有更晚的控制事实（`LATER_CONTROL_FACTS`，ADR-0307）。
 // 与欠账那格恰相反（一个说别重试、一个说等恢复重试）。取值以 application.SegmentEntryRefusal 为准。
 type handoverResponse struct {
 	Outcome                      string `json:"outcome"`
@@ -174,7 +175,8 @@ type handoverResponse struct {
 	SegmentContinuationReference string `json:"segmentContinuationReference,omitempty"`
 	SegmentEntryRefusal          string `json:"segmentEntryRefusal,omitempty"`
 	// ParticipationEnd 是`已交接`落库后结束前段参与那一半的答案（票 06）：PARTICIPATION_ENDED、
-	// NO_ACTIVE_PARTICIPATION 等，拒收/待确认与重放时为空。
+	// NO_ACTIVE_PARTICIPATION 等。首登`已交接`与前版没转出控制、更正成`已交接`的那一版（ADR-0307）才有；拒收/待确认、
+	// 仍为`已交接`的更正（同段替代）与重放时为空。
 	ParticipationEnd string `json:"participationEnd,omitempty"`
 	// 三格节点声明回显在册那一版（ADR-0213）：重放答的是首登时的声明，更正答的是从前版承继来的声明。没声明的格不出现，
 	// 不声明节点的登记答复与节点进文法之前逐键相同。
