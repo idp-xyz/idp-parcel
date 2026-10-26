@@ -1,7 +1,7 @@
 # 180 TF 其余运营决定口与派送重问、补拍不记提交操作者
 
 Category: bug
-Status: in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg180` tip `34030af1c`（其后一笔只改本票面），见文末「完成记录」。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，分支 `claude-dcg180`（worktree `idp-parcel-dcg180`）；TF 迁移取 0054（0053 归票 130），ADR 若要取 0308。此前 ready-for-agent——2026-10-26 票 126 隔离评审之后立（上线前必修：真实租户上线后，没记下的决定无法补记，理由同复核报告 M1），见票 [126](./126-tf-operation-decisions-record-the-submitting-operator.md)「评审记录」Spec 非阻断 1、2 与「修订轮」
+Status: resolved——2026-10-26 进 main `acfda8eee`（见文末「进 main 记录」）。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg180` tip `34030af1c`（其后一笔只改本票面），见文末「完成记录」。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，分支 `claude-dcg180`（worktree `idp-parcel-dcg180`）；TF 迁移取 0054（0053 归票 130），ADR 若要取 0308。此前 ready-for-agent——2026-10-26 票 126 隔离评审之后立（上线前必修：真实租户上线后，没记下的决定无法补记，理由同复核报告 M1），见票 [126](./126-tf-operation-decisions-record-the-submitting-operator.md)「评审记录」Spec 非阻断 1、2 与「修订轮」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；票 126 隔离评审；[ADR-0303](../../../docs/adr/0303-transport-fulfillment-operation-decisions-record-the-submitting-operator-as-operation-evidence.md) 决定五与越权风险点 1、4；代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 M1；[ADR-0230](../../../docs/adr/0230-delivery-dispatch-left-unformed-is-kept-on-a-pending-register-and-reasked-through-the-same-executor.md) 决定七
 
@@ -79,3 +79,24 @@ Blocked by: 无
 于 `7c58e11ee`（其后只动文档与本票面）：`gofmt -l internal cmd migrations` 无输出；`go build ./...`、`go vet ./internal/transportfulfillment/... ./cmd/...` 退 0；**带 DSN**（`127.0.0.1:55432`）`go test -count=1 -p 1 ./internal/transportfulfillment/... ./cmd/parcel-api/... ./cmd/parcel-dispatch/... ./cmd/parcel-transport-register/... ./internal/architecture/... ./migrations/...` 全部 ok（新真库用例 `-v` 核过是 PASS 不是 SKIP）；文档提交之后另跑 `./internal/architecture/... ./migrations/... ./tools/...` 全 ok。`go run ./tools/at-coverage-counts -check` 只报「生成物与文件不一致」，不报缺行、多行。未重生成 ADR 索引、AT 计数、机制清点，未跑全量。已有一条旧用例（`TestTheReaskFaceAnswersItsWholeFaceGrades`）因 Intake 里带操作者而需要问询册，给它的夹具接了个内存替身，断言一字未改。
 
 进 main 时请留意：AT 盘点①八行插在 `AT-TF-346` 之后（`347` 留给 130），UC-TF-004 末尾追加六行（与 130 若也追加同一表会在该处重叠）；ADR-0303 文末追加一节，ADR-0151 只改 Links 里挂 0303 的那一条；迁移 `0054`（`0053` 归 130）。
+
+## 评审记录
+
+评审 ← tops-20 隔离子代理(sonnet) · 钉 `7f570a9d0`（只读 diff 与点名文件，未跑 go test）
+
+- **阻断**：无。
+- **非阻断**：
+  1. 容量池旁表，越权风险点 13 可接受：`Replace` 对每个预占、释放按 `record.ReservedBy[ref]`/`record.ReleasedBy[ref]` 写回（`insertReservations`）；`findPool` 读回只填有证据的键，`withReservedBy`/`withReleasedBy` 复制旧表再加新键，旧键不丢不错挂；非测试代码只有 `prepare_transport_opportunity.go` 新铸 `CapacityPoolRecord`（新建池，无旧证据可丢），其余经 `replacePool` 用读回的 record；无删除预占/释放的路径，明细先 DELETE 再 INSERT、缺键即 NULL 不残留；`findPool` 对池行 `FOR UPDATE`，预占与释放串行。只靠 `TestTheCapacityPoolKeepsTheReservingAndReleasingOperatorsAcrossReplacements` 守，可带着上线。
+  2. 补拍目标段或对象不合法（`deliveryTriggerTargetFrom` 不接受）时不写问询册——与代决 11 同类（按下没效果就没行），ADR-0303 复核记录风险点 11 只写了执行器报错一种，宜补一句（**未改，记在此处**）。
+- **无发现**：八口重放与冲突不读操作者（比对只用 `ContentDigest`、`Declares(...)`；重放分支在加键前返回；`Replace` 守卫 `cancelled_at IS NULL` 未改；`AdoptedBy` 不进规范化载荷；`TriggeredBy`/`ReaskedBy` 只决定写不写册）；问询册不影响执行器路径（执行器那一路 `TriggeredBy` 为空不写册；补拍同笔、重问另起一笔；未接册答 `ErrDeliveryDispatchAskLedgerNotWired`、写不下答 `ErrDeliveryDispatchAskUnrecorded`；旧用例 `TestTheReaskFaceAnswersItsWholeFaceGrades` 只动夹具、断言未改）；迁移 0054 各列可空、CHECK 先 `IS NULL`、问询册形状互斥、存量施加不失败；ADR-0303 只追加复核记录、ADR-0151 只改 Links；号不撞。
+
+## 进 main 记录（2026-10-26，推送方会话 tops-20）
+
+- **main**：`acfda8eee`。出处：分支 `claude-dcg180` tip `7f570a9d0`（作者为 Sonnet 子代理）。
+- **重放对照**（分支 → main）：`7c58e11ee` → `210eb7f12`（代码、TF 迁移 0054）；`34030af1c` → `b2b185fc8`（ADR-0303 复核记录、UC、AT 盘点）；`7f570a9d0` → `f785f7524`（完成记录）。
+- **重放冲突**：`.scratch/at-coverage-inventory.md` ①表 `AT-TF-347`（票 130）与本票 `AT-TF-348`–`355` 插在同一处，按号顺接；UC-TF-006 自动合并。
+- **生成物**：AT 盘点总览计数 `915a935e5`；机制清点 `acfda8eee`；ADR 索引无变化。三件 `-check` 退 0（含票 139 表行守卫）。
+- **评审**：见上「评审记录」，无阻断；非阻断 2（风险点 11 补一句）按用户 2026-10-26 节省 token 的要求未另开修订轮，记在评审记录。
+- **全量真库测试**：`scripts/test-full.sh` 跑在 `acfda8eee`（即所推 SHA）：158 ok / 0 FAIL，退 0。
+- **种子**：`scripts/demo-seeds/seed.sh` 灌一次性库（`acfda8eee` 上），退 0，用后删库。
+- **号**：TF 迁移 `0054`；`AT-TF-348`–`355`；未立新 ADR（ADR-0303 文末复核记录）。
