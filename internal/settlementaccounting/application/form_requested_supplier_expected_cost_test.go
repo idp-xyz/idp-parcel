@@ -441,3 +441,26 @@ func TestTheRequestedExpectedCostHandlerRefusesNilDependencies(t *testing.T) {
 		}
 	}
 }
+
+// Covers: AT-SA-184 与 AT-SA-215 的交界——派生版本上已有一份非零成本，同一份请求又来一份合计为零的评价：零额不吞掉这格矛盾，
+// 答 ErrSupplierCostVersionContradiction 上抛，请求册不记零额，成本不动（ADR-0306 决定一，隔离评审 S1）。
+func TestAZeroTotalOnADerivedVersionThatAlreadyCarriesACostIsAContradiction(t *testing.T) {
+	fixture := newRequestedCostFixture(t)
+	if _, err := fixture.handle(t, "buy-eval-1", "EVREQ-SYN-1"); err != nil {
+		t.Fatalf("首版：%v", err)
+	}
+	saves := fixture.registry.saves
+	zero := completedAdoption(t, "buy-eval-zero")
+	zero.OriginalMinor, zero.SettlementMinor = 0, 0
+	fixture.evaluations.adoptions["buy-eval-zero"] = zero
+
+	if _, err := fixture.handle(t, "buy-eval-zero", "EVREQ-SYN-1"); !errors.Is(err, application.ErrSupplierCostVersionContradiction) {
+		t.Fatalf("派生版本上已有成本而评价合计为零 err = %v，want ErrSupplierCostVersionContradiction", err)
+	}
+	if record := fixture.requests.records["tenant-1/EVREQ-SYN-1"]; record.ZeroTotal || record.StopCause != domain.EvaluationStopCauseInvalid {
+		t.Fatalf("矛盾时请求册 = 零额 %v 停因 %s，want 都不记", record.ZeroTotal, record.StopCause)
+	}
+	if fixture.registry.saves != saves || len(fixture.registry.costs) != 1 {
+		t.Fatalf("矛盾时成本动了：写 %d 次、%d 份", fixture.registry.saves-saves, len(fixture.registry.costs))
+	}
+}

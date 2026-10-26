@@ -47,7 +47,7 @@ const (
 	// 失效不会撤回，重投还是这一格。
 	ExpectedCostOccurrenceInvalidated
 	// ExpectedCostZeroTotal：评价已完成而合计为零，首版与纠错版本都不成行（ADR-0306 决定一、三）。是定局：评价不可变，重投
-	// 还是零。判在发生项失效之后——那一版已失效时答失效，不答零额。
+	// 还是零。判在发生项失效之后——那一版已失效时答失效，不答零额；派生版本上已有一份成本时答冲突，不答零额。
 	ExpectedCostZeroTotal
 )
 
@@ -242,8 +242,9 @@ func (handler *FormSupplierExpectedCostHandler) Handle(
 	}
 
 	// 先在发生项锁下读这一项的成本状态（ADR-0232 决定七、八）：评价所依的那一版已失效就不再形成；这个费用项目上已有一条链、链头依的
-	// 是另一版发生项，这份评价来自替代版本，按它重述全额、接在链头后面——纠错由发生项新版本触发，金额同不同都追加（重述的发生项版本
-	// 与业务时点本身就是这一版计价结果的一部分，ADR-0067 决定二）；否则照旧形成首版。
+	// 是另一版发生项，这份评价来自替代版本，按它重述全额、接在链头后面——纠错由发生项新版本触发，合计不为零时金额同不同都追加（重述的
+	// 发生项版本与业务时点本身就是这一版计价结果的一部分，ADR-0067 决定二）；合计为零不追加，链头停在失效纠错版本（ADR-0306 决定三）；
+	// 否则照旧形成首版。
 	//
 	// 只接在失效纠错版本后面：替代版本只从失效版本长出（TF 的 ReestablishChargeOccurrence），所以链头依的那一版若还没被撤下，是撤下那一路
 	// 还没把失效记到结算，而不是这份评价可以接。结算不知道发生项各版的先后，这时接上去会把两种乱序分不开——替代版本的评价先于失效到，
@@ -304,6 +305,15 @@ func (handler *FormSupplierExpectedCostHandler) Handle(
 		return expectedCostUndecided(ConversionStepMissing, command.Evaluation.String(), err), nil
 	}
 	if errors.Is(err, domain.ErrZeroEvaluationTotal) {
+		// 零额不成行，可派生版本上已有一份成本仍是两侧矛盾：一份请求至多一份评价，先前那一份形成了成本、这一份却说零，只可能
+		// 是库被改过或另有一条路占了这个标识。按版本先查一次，查到就答冲突，不让零额那一格把它吞掉（ADR-0306 决定一）。
+		_, found, loadErr := handler.deps.Costs.LoadExpectedCost(ctx, command.TenantID, command.Version)
+		if loadErr != nil {
+			return expectedCostUndecided(ExpectedCostRegistryUnavailable, command.Version.String(), loadErr), nil
+		}
+		if found {
+			return ExpectedCostResult{outcome: ExpectedCostConflict}, nil
+		}
 		return ExpectedCostResult{outcome: ExpectedCostZeroTotal,
 			continuation: costContinuation("EVALUATION_ZERO_TOTAL", command.Evaluation.String())}, nil
 	}

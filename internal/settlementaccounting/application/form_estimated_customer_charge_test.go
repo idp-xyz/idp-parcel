@@ -425,6 +425,33 @@ func TestACompletedEvaluationTotallingZeroEndsTheRequestWithoutACharge(t *testin
 	}
 }
 
+// Covers: SELL 那一路零额不吞矛盾格（隔离评审 S1 一并核）——ADR-0198 决定四的矛盾清单里没有「派生费用上已有另一份内容」，
+// 与它同位的是「请求册上已有另一份结论」，判在零额之前：请求早已`已形成`，零额评价答早有结论、零写入；记结论时撞上另一份
+// 结论照旧上抛 ErrSellEvaluationRequestConcludedOtherwise。
+func TestAZeroTotalDoesNotSwallowAnotherConclusionOnTheSellRequest(t *testing.T) {
+	mapped := map[string]string{"BASE_FREIGHT": "SYN-FEE-FREIGHT", "REMOTE_AREA_SURCHARGE": "SYN-FEE-FREIGHT"}
+	formed := newEstimatedChargeFixture(t, mapped)
+	if result, err := formed.handle(t); err != nil || result.State() != domain.SellRequestFormed {
+		t.Fatalf("首拍：%s / %s err = %v", result.Outcome(), result.State(), err)
+	}
+	formed.adoption.OriginalMinor, formed.adoption.SettlementMinor = 0, 0
+	formed.build(t)
+	result, err := formed.handle(t)
+	if err != nil || result.Outcome() != application.EstimatedCustomerChargeAlreadyConcluded || result.State() != domain.SellRequestFormed {
+		t.Fatalf("已形成之后来零额 = %s / %s err = %v，want 早有结论 FORMED", result.Outcome(), result.State(), err)
+	}
+	if len(formed.requests.concluded) != 1 || len(formed.charges.saved) != 1 {
+		t.Fatalf("零额改写了先到者：结论 %d 次、费用 %d 笔", len(formed.requests.concluded), len(formed.charges.saved))
+	}
+
+	racing := newEstimatedChargeFixture(t, mapped)
+	racing.adoption.OriginalMinor, racing.adoption.SettlementMinor = 0, 0
+	racing.requests.forceEffect = ports.SellEvaluationRequestConcludedOtherwise
+	if _, err := racing.handle(t); !errors.Is(err, application.ErrSellEvaluationRequestConcludedOtherwise) {
+		t.Fatalf("零额撞上另一份结论 err = %v，want ErrSellEvaluationRequestConcludedOtherwise", err)
+	}
+}
+
 // Covers: 已完成却未受理（合计不为零的坏金额，例如同币种两额不等）仍是两侧矛盾，上抛、零写入（ADR-0198 决定四余下的那一格）。
 func TestACompletedEvaluationTheGateStillRefusesIsAContradiction(t *testing.T) {
 	fixture := newEstimatedChargeFixture(t, map[string]string{
