@@ -861,7 +861,7 @@ Status: Confirmed
 
 - 所有者：`node-operations`。
 - 待识别实物具有永久作业记录；识别成功后通过版本化关联连接正式对象，不得删除原记录或复制已发生事实。
-- 同一条码对应多个实物或同一实物出现冲突标识时，各实物保持独立并形成身份冲突。正式包裹身份由 `parcel-shipment` 给出，实物与包裹的版本化关联与身份冲突处置归 `node-operations`（[ADR-0210](../adr/0210-identity-conflicts-are-disposed-by-an-operation-decision-and-the-identity-basis-reads-chain-heads.md)）。
+- 同一条码对应多个实物或同一实物出现冲突标识时，各实物保持独立并形成身份冲突。候选与正式包裹身份只由 `parcel-shipment` 给出；实物关联哪一件由 `node-operations` 按其答复判，冲突经身份冲突处置定（[ADR-0210](../adr/0210-identity-conflicts-are-disposed-by-an-operation-decision-and-the-identity-basis-reads-chain-heads.md)）。
 - 身份冲突经[身份冲突处置](#身份冲突处置)解除；只因歧义信号形成的那一格，声明它的委托被拒绝或撤回之后另可经重核解开。候选仍只来自 `parcel-shipment` 的答复。
 - 避免使用：临时包裹、无主库存、最后扫描即身份。
 
