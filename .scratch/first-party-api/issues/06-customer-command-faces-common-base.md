@@ -1,7 +1,7 @@
 # 06 首方客户命令五口的共用底座
 
 Category: enhancement
-Status: in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 claude-fpa06（代码最后一笔 b3a060615）。此前：in-progress——2026-10-26 会话 `tops-20`（Claude Code）立并认领。
+Status: resolved——2026-10-26 进 main `2188f171e`（见文末「进 main 记录」；各口接通归 07–11）。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 claude-fpa06（代码最后一笔 b3a060615）。此前：in-progress——2026-10-26 会话 `tops-20`（Claude Code）立并认领。
 Blocked by: 无
 出处：用户 2026-10-26「都需要」（首个租户上线时客户经首方 API 要能撤回、取消、修订、补充、索赔）、「每个客户系统只代表它自己的账户（直客），只考虑这个吧」、「首发不要客户状态读口」、「首发不做限流」；技术取舍由会话 `tops-20` 代决（用户「你帮我决定吧」）。 计划见 [spec](../spec.md)「五口上线」与 [摸底报告](../customer-faces-scoping-2026-10-26.md)。
 
@@ -64,3 +64,15 @@ M
 **未做 / 留给后续**：五口领域 Intake 与端点换真（07–11）；契约补章（12）；演示租户取消口的授权规则（随 11 登）；`docs/adr/README.md` 与盘点总览计数重跑生成器（协调方进 main 时）。
 
 **评审后补（同分支）**：(1) 提交口 `DeriveSubmissionRequestKey` 对以五个保留前缀之一开头的接入请求标识答推导不出（400）——**这是对已上线提交口的一处收紧**；保留前缀表 `reservedRequestKeyPrefixes` 一处定义、与五口推导共用；送站预报在节点作业自己的册里判重、不同空间，未收紧。用例 `TestSubmissionRequestKeyRejectsReservedCommandPrefixes`。ADR-0310 与契约已补一句。(2) `AT-PS-124` 补 VE 常量断言 `TestCustomerClaimShapeVersionIsNamed`。
+
+## 评审记录
+
+评审 ← tops-20 隔离子代理(sonnet) · 钉 `596d2a764`：阻断无。非阻断：1. 提交口裸标识 `withdrawal:abc` 的键恰等于标识 `abc` 的撤回键（同一判重空间）——修订轮 `23cd17a7d` 收：提交口拒以保留命令前缀开头的标识（400），保留前缀表 `reservedRequestKeyPrefixes` 一处定义；**这是对已上线提交口的一处收紧**，ADR-0310 与契约已写。2. 四个新推导挂在 `customerAPIRequestKeys`、接口未扩，07–11 不能单独注入推导替身——不挡开工。3. 提交回执加 `submissionVersionId` 只加不改；补充之后重放读回补充形成的当前版本，判非阻断（重放语义里现状字段本随时间推进，ADR-0310 越权风险点 4 已披露），补充后重放的用例留给票 08。4. `AT-PS-124` 写五口测四口——修订轮补 VE `TestCustomerClaimShapeVersionIsNamed`。无发现：提交与送站预报推导未变、五前缀互不为前缀、Mint 骨架与送站预报同形、五词一处定义、迁移 0024 存量施加不失败、种子不多登、ADR-0139 只动 Status 注记与 Links、号不撞。
+
+## 进 main 记录（2026-10-26，推送方会话 tops-20）
+
+- **main**：`2188f171e`。出处：分支 `claude-fpa06` tip `bbd582a32`（作者为 Sonnet 子代理）。main 上：`1e04719fa`（代码）、`b7e374de9`（完成记录）、`23cd17a7d`（评审修订）。
+- **重放冲突**：AT 盘点文末追记与 code/92、code/36 的追记相邻，两边都留。
+- **生成物**：ADR 索引 `43d10ba8d`；AT 盘点总览计数 `3b9dc50ad`；机制清点 `2188f171e`。三件 `-check` 退 0。
+- **全量真库测试**：`scripts/test-full.sh` 跑在 `2188f171e`：158 ok / 0 FAIL。**种子**：一次性库灌入退 0，用后删库。
+- **判据第 1 条**（经 `/v1` 该口提交成功等）属各口票 07–11，本票只立底座。
