@@ -1,7 +1,7 @@
 # 177 订舱当前答复的选法在读面与写面各实现一遍
 
 Category: enhancement
-Status: in-progress——2026-10-26 评审无阻断、修订轮完，待进 main，分支 `claude-dcg177` tip `11d4cba56`（其后一笔只改票面与 AT 盘点），见文末「评审记录」「修订轮」。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg177` tip `982101163`（其后一笔只改票面与 AT 盘点两行），见文末「完成记录」。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，分支 `claude-dcg177`（worktree `idp-parcel-dcg177`）。此前 ready-for-agent——2026-10-26 Claude Code 作者子代理按票 [48](./48-booking-requests-and-carrier-answers-have-no-read-face.md) 隔离评审 Spec 非阻断 1 立（会话 `tops-20` 派单；用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」授权）。分级 R3（不急）：迁移 0029 的两条部分唯一索引兜着，凡能经答复编排落库的答复，两处选出的是同一份，今天没有答错；规则一变（例如 ADR-0202 越权风险点 13 放宽候补的形）两处才会分叉，到那时须与规则改动同笔改，不能先上。
+Status: resolved——2026-10-26 进 main `0c48231d1`（见文末「进 main 记录」）。此前 in-progress——2026-10-26 评审无阻断、修订轮完，待进 main，分支 `claude-dcg177` tip `11d4cba56`（其后一笔只改票面与 AT 盘点），见文末「评审记录」「修订轮」。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg177` tip `982101163`（其后一笔只改票面与 AT 盘点两行），见文末「完成记录」。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，分支 `claude-dcg177`（worktree `idp-parcel-dcg177`）。此前 ready-for-agent——2026-10-26 Claude Code 作者子代理按票 [48](./48-booking-requests-and-carrier-answers-have-no-read-face.md) 隔离评审 Spec 非阻断 1 立（会话 `tops-20` 派单；用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」授权）。分级 R3（不急）：迁移 0029 的两条部分唯一索引兜着，凡能经答复编排落库的答复，两处选出的是同一份，今天没有答错；规则一变（例如 ADR-0202 越权风险点 13 放宽候补的形）两处才会分叉，到那时须与规则改动同笔改，不能先上。
 Blocked by: 无
 出处：票 48 完成记录「代决与越权风险点」第 5 条；票 48、127、167 隔离评审（钉 `c428ad2fc`）Spec 非阻断 1；[ADR-0202](../../../docs/adr/0202-transport-commission-booking-and-carrier-answer-entry-families-and-supplier-agreement-check.md)「补记：票 24 落地时的补充裁定」里「候补之后可接一份定局」一条的读法。
 地盘：TF 领域 `domain/transport_commission.go`（`CarrierAcceptance` 一组）与它的测试、`adapters/postgres/booking.go` 的 `BookingAnswers.FindByKey`、`adapters/postgres/review_catalogue.go` 的 `bookingStanding`（+ 各自测试）。
@@ -117,3 +117,12 @@ Blocked by: 无
 - **Spec 4**：只在完成记录代决 2 补一句，不改代码。
 
 重跑（于 `11d4cba56`）：`go build ./...`、`go vet`（TF 与 `cmd/parcel-api`）退 0，`gofmt -l` 无输出；`go run ./tools/at-coverage-counts -check` 退 0（没加行，总览不变）；带 DSN `go test -count=1 -p 1` 跑 `./internal/transportfulfillment/...`、`./cmd/parcel-api/...`、`./cmd/parcel-dispatch/...`、`./internal/architecture/...`：有用例的 15 个包全绿（含 PG），0 FAIL；`TestTheWriteAndReadFacesChooseTheSameCurrentAnswer`、`TestABookingChargeOnABrokenAnswerHistoryFormsNoAnswer` `-v` 确认 PASS 不是 SKIP。
+
+## 进 main 记录（2026-10-26，推送方会话 tops-20）
+
+- **main**：`0c48231d1`。出处：分支 `claude-dcg177` tip `5c5ce7762`。
+- **重放对照**（分支 → main）：`b553d2d5f`（rebase 前 `982101163`）→ `69e5951c5`；`3697b8217`（rebase 前 `9449e58bd`）→ `39f662cff`；修订轮 `11d4cba56` → `f4e1a299c`、`5c5ce7762` → `1cdf9fcf0`。
+- **生成物**：机制清点 `0c48231d1`；ADR 索引与 AT 盘点总览计数无变化。三件 `-check` 退 0（含票 139 表行守卫）。
+- **评审**：隔离子代理钉 `9449e58bd`，两轴无阻断；非阻断 Standards 1、2 与 Spec 1–3 在修订轮收（第三处选法 `application.currentAnswer` 收进 `domain.CurrentCarrierAcceptance`，坏答复史上抛 500 不答冲突；UC-TF-004 `AT-TF-154`、`AT-TF-207` 补失败边界），Spec 4 只在代决 2 补记（见「评审记录」「修订轮」）。修订轮只收非阻断，推送方读了修订 diff，未另派复评。
+- **全量真库测试**：`scripts/test-full.sh` 跑在 `0c48231d1`（即所推 SHA）：158 ok / 0 FAIL，退 0。
+- **种子**：`scripts/demo-seeds/seed.sh` 灌一次性库（`0c48231d1` 上），退 0，用后删库。
