@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
@@ -310,5 +311,69 @@ func TestAnUntranslatableControlAnswerFailsTheChainLoudly(t *testing.T) {
 	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
 	if !errors.Is(err, ports.ErrUntranslatableProviderAnswer) {
 		t.Fatalf("err = %v（reason = %q）, want 包着 ErrUntranslatableProviderAnswer 的错误", err, result.PendingReason())
+	}
+}
+
+// twiceSupersededRequest 让委托补件两次：当前版本 version-3，version-1、version-2 先后被取代。
+func twiceSupersededRequest(t *testing.T) domain.ShipmentRequest {
+	t.Helper()
+	supplementedAt := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
+	supplement, err := domain.NewSourceSubmissionFingerprint(
+		sourceIdentity(t, "tenant-1", "customer-1", "source-a", "supplement-key-2"),
+		mustValue(t, domain.NewPayloadDigest, "digest-3"),
+		supplementedAt,
+		supplementedAt.Add(time.Second),
+	)
+	if err != nil {
+		t.Fatalf("new supplement fingerprint: %v", err)
+	}
+	twice, err := supersededRequest(t).FormNewSubmissionVersion(domain.NewSubmissionVersionSpec{
+		VersionID:        mustValue(t, domain.NewSubmissionVersionID, "version-3"),
+		TaskID:           mustValue(t, domain.NewAcceptanceDecisionTaskID, "task-3"),
+		SourceSubmission: supplement,
+		DeclaredParcelIDs: []domain.DeclaredParcelID{
+			mustValue(t, domain.NewDeclaredParcelID, "parcel-1"),
+			mustValue(t, domain.NewDeclaredParcelID, "parcel-2"),
+		},
+		EstablishedAt: supplementedAt.Add(time.Second),
+	})
+	if err != nil {
+		t.Fatalf("form new submission version: %v", err)
+	}
+	return twice
+}
+
+// Covers: AT-PS-116；ADR-0282 决定三「可续办的缺口与拒收同时出现时也上抛」（code/71 评审 N2）——两版被取代、一版放不掉一版被
+// 拒收，不论哪一版在前，链都上抛 ErrControlReleaseNotAccepted，不停在本步内部重试：拒收不解开，续办成功了也判不了新版本。
+func TestARefusedAndAPendingSupersededReleaseStillFailTheChainLoudly(t *testing.T) {
+	for name, outcomes := range map[string]map[string]ports.ControlReleaseOutcome{
+		"放不掉在前": {"version-1": ports.ControlReleaseNotFormed, "version-2": ports.ControlReleaseNotAccepted},
+		"拒收在前":  {"version-1": ports.ControlReleaseNotAccepted, "version-2": ports.ControlReleaseNotFormed},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fixture := newChainFixture(t)
+			twice := twiceSupersededRequest(t)
+			fixture.requests.saved, fixture.requests.sticky = &twice, true
+			fixture.judgments.controlByVersion = map[string]domain.FinancialControlOutcome{
+				"version-1": domain.FinancialControlHeld,
+				"version-2": domain.FinancialControlHeld,
+				"version-3": domain.FinancialControlHeld,
+			}
+			fixture.release.outcomeFor = outcomes
+			command := fixture.command(t)
+			command.SubmissionVersion = mustValue(t, domain.NewSubmissionVersionID, "version-3")
+
+			result, err := fixture.handler.Handle(context.Background(), command)
+			if !errors.Is(err, application.ErrControlReleaseNotAccepted) {
+				t.Fatalf("err = %v（outcome = %q reason = %q）, want ErrControlReleaseNotAccepted", err, result.Outcome(), result.PendingReason())
+			}
+			if len(fixture.release.versions) != 2 {
+				t.Fatalf("释放请求了 %v, want 两版被取代的各一次", fixture.release.versions)
+			}
+			if fixture.reachability.calls != 0 || fixture.controller.calls != 0 {
+				t.Fatalf("被取代那一笔拒收了，链却判了 %d 个成员的可达性、发起了 %d 次资金占用",
+					fixture.reachability.calls, fixture.controller.calls)
+			}
+		})
 	}
 }

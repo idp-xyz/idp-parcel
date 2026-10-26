@@ -1362,3 +1362,15 @@ func TestAnUntranslatableControlAnswerCarriesThePortSentinel(t *testing.T) {
 		t.Fatalf("err = %v, want 同时认得出端口哨兵与本包哨兵", err)
 	}
 }
+
+// Covers: code/71 评审 N1；ADR-0282 决定一——提供方的施加编排交 error 只为编程错误（这里是试算口答了端口约定之外的错误），
+// 适配器把它落进译不动那一格、带上端口哨兵，编排上抛而不是折成`财务控制不可用`内部重试。
+func TestAnErrorFromTheProvidersApplyHandlerCarriesThePortSentinel(t *testing.T) {
+	fixture := newControlFixture(t)
+	fixture.trials.err = errors.New("pre-acceptance trials adapter: untranslatable price card answer")
+
+	_, err := fixture.adapter.ApplyPreAcceptanceFinancialControl(context.Background(), fixture.request(t))
+	if !errors.Is(err, psports.ErrUntranslatableProviderAnswer) || !errors.Is(err, adapter.ErrUntranslatableAnswer) {
+		t.Fatalf("err = %v, want 带端口哨兵与本包哨兵的错误", err)
+	}
+}

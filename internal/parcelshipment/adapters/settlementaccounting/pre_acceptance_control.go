@@ -152,7 +152,10 @@ func (adapter *PreAcceptanceControlAdapter) ApplyPreAcceptanceFinancialControl(
 	}
 	answer, err := adapter.apply.Handle(ctx, command)
 	if err != nil {
-		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("apply pre-acceptance control: %w", err)
+		// 提供方的施加编排只为编程错误交 error（依赖答不出它自己折成`未形成`），重投得到同一个错误：与释放那一侧同落译不动
+		// 那一格，编排上抛、不折成`财务控制不可用`（ADR-0282 决定一）。
+		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("%w: apply pre-acceptance control: %w",
+			ErrUntranslatableAnswer, err)
 	}
 	return assessmentFor(request, controlScope.Settlement, answer)
 }
