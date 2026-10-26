@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
-import { primaryActionClass } from '../../components/primary-action';
+import { Button, Card, CardContent, CardHeader, CardTitle, ConfirmDialog, Input } from '@idpxyz/ui-primitives';
+import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
+import { dangerActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
 import { RegistrationAnswerNote } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
 import {
-  commercialRegistrationEndpoints,
   listBusinessParties,
   listCustomerAccounts,
   listGroupLegalEntities,
@@ -31,7 +31,9 @@ import {
   legalEntityPickerOptions,
   useRegistrationForm,
 } from './party-registration-fields';
+import type { DeactivationPreset } from './business-parties-address';
 import {
+  deactivationConfirmation,
   emptyIdentityDeactivationDraft,
   identityDeactivationLocalProblems,
   identityDeactivationPayloadOf,
@@ -62,16 +64,20 @@ export interface IdentityDeactivationFormProps {
   parties: ApiResult<BusinessPartyListResponseBody> | null;
   /** 登记册答 `DEACTIVATED` 时回调，页面借它重取参与方列表让「已停用」+ 时点 + 依据立刻可见。 */
   onDeactivated: () => void;
+  /**
+   * 别的页经深链带来的种类与标识（如法人页「停用此责任法人…」）。只预填这两格：修订号、依据与时点要停用的人自己核过
+   * 再填。换一份预填（同一张标签里又从另一个法人点过来）就再填一次。
+   */
+  preset?: DeactivationPreset | null;
 }
 
 const info = moduleInfoById['business-parties'];
 const kind = 'identity-deactivation';
-const endpoint = `POST ${commercialRegistrationEndpoints[kind]}`;
 const kindOptions = identityKindOptions();
 
 const pickerNotes = {
-  emptyNote: '对应册今天为空；先登记身份，或手填标识由服务端判。',
-  optionsNote: '候选不按状态过滤：已停用的再停一次由服务端答，表单不拦。',
+  emptyNote: '这类身份还没有登记过；可以先登记，或手填标识。',
+  optionsNote: '候选里也有已停用的身份；对已停用的再停用，服务端会拒绝。',
 } as const;
 
 /** 种类 → 该册答案体的形状。三册体形各异（parties / entities / accounts），一个种类只在这里说一次它的体是什么。 */
@@ -156,6 +162,12 @@ function pairedTargetsOf<K extends IdentityKind>({ register, answer }: RegisterA
   return answer?.kind === 'outcome' ? register.targetsOf(answer.body) : null;
 }
 
+/** 配对里那一册上这个标识的候选文字（名称）；没取到或不在册即 null。 */
+function pairedLabelOf<K extends IdentityKind>({ register, answer }: RegisterAnswer<K>, id: string): string | null {
+  if (answer?.kind !== 'outcome') return null;
+  return register.optionsOf(answer.body).find((option) => option.value === id)?.label ?? null;
+}
+
 /**
  * 配对里那一册的候选：候选转写与读面名都取自配对里的册，不再按种类另查一遍。面上那几格（标签、路径、问题表、措辞）
  * 与体形无关，Omit 掉带 Body 的 optionsOf 之后 ReferencePickerFaceProps 的类型参数填什么都一样。
@@ -174,7 +186,8 @@ function RegisterPicker<K extends IdentityKind>({
   );
 }
 
-export function IdentityDeactivationForm({ parties, onDeactivated }: IdentityDeactivationFormProps) {
+export function IdentityDeactivationForm({ parties, onDeactivated, preset = null }: IdentityDeactivationFormProps) {
+  const [confirming, setConfirming] = useState(false);
   // 本表单自读那一册的答案，连同是哪一册（参与方册除外——它从页面来）。换种类即换册，上一册的答案不留：与「换种类连
   // 标识一起清」同一条纪律，上一册的候选留在下拉里会被送到另一册去查。
   const [loaded, setLoaded] = useState<AnyRegisterAnswer | null>(null);
@@ -226,8 +239,17 @@ export function IdentityDeactivationForm({ parties, onDeactivated }: IdentityDea
     };
   }, [selectedKind, reloadKey]);
 
+  const presetKey = preset ? `${preset.kind}:${preset.id}` : '';
+  useEffect(() => {
+    if (preset) patch({ kind: preset.kind, id: preset.id });
+    // 只在换了一份预填时填；patch 每帧是新函数，放进依赖会把操作者改过的两格又填回去。
+  }, [presetKey]);
+
   const selected = selectedRegisterFor(draft.kind);
   const known = targetsFor(draft.kind)?.find((row) => row.id === draft.id);
+  // 确认框里复述名称：候选取自同一份册答案，没取到就只报标识，不另读。
+  const selectedName = selected === null ? null : pairedLabelOf(selected, draft.id);
+  const confirmation = deactivationConfirmation(form.effectiveDraft, timeZone, selectedName);
   const pickerProps = {
     label: '身份标识 *',
     path: 'deactivations[0].id',
@@ -245,10 +267,9 @@ export function IdentityDeactivationForm({ parties, onDeactivated }: IdentityDea
           <CardTitle>{registrationTitles[kind]}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          {/* 修订号是操作者声明自己看到的册面（册上最新 + 1），错位由服务端拒而不是替人猜；租户由操作者身份给出，不在表单上。 */}
           <p className="text-xs text-idpxyz-textMuted">
-            停用形成修订链上新的一笔，原修订不被改写；自停用时点起该身份不再支持新的商业决定。修订号是你声明自己看到的
-            册面（册上最新 + 1），错位说明册面已被并发推进或意图已陈旧，由服务端拒而不是替你猜。关系不在这里停：关系的
-            终止走撤销 / 到期 / 替代。提交打到 <span className="font-mono">{endpoint}</span>；租户不在表单上。
+            {'停用会在这个身份的修订记录上新增一笔，之前的修订不变。从停用时点起，它不再支持新的商业决定；停用后不能撤回。修订号填列表上最新的修订号 + 1，对不上说明有人刚登记过，服务端会拒绝。参与方关系不在这里停用，关系的结束走撤销、到期或替代。'}
           </p>
 
           <div className="grid grid-cols-2 gap-3">
@@ -268,7 +289,7 @@ export function IdentityDeactivationForm({ parties, onDeactivated }: IdentityDea
                 ))}
               </select>
               <span className="block text-[11px] text-idpxyz-textMuted mt-1">
-                法人与客户账户的停用也走本签；结果分别显示在集团与法人页、客户与合同页的「客户账户」签。
+                法人与客户账户也在这里停用；结果分别显示在集团与法人页、客户与合同页的「客户账户」签。
               </span>
             </Field>
 
@@ -295,8 +316,8 @@ export function IdentityDeactivationForm({ parties, onDeactivated }: IdentityDea
                 // 落点显的就是建议值本身（同一份 rows、同一个标识算出来的），不在这里再加一次——「最新修订加一」只在
                 // suggestedNextRevision 一处。
                 known
-                  ? `对应册里该身份最新修订 r${known.revision}，建议停用落点 r${form.revisionField.suggestion}；册面可能已陈旧，错位由服务端判。`
-                  : '对应册里没有这一标识（或册没取到），建议为 1；停用一个不在册的身份会被服务端答「册上没有这一个身份」。'
+                  ? `这个身份最新的修订是 r${known.revision}，停用这一笔建议填 r${form.revisionField.suggestion}；如果期间有人登记过，服务端会拒绝。`
+                  : '列表里没有这个标识（或还没读到），建议填 1；停用一个从未登记的身份，服务端会答「没有找到这个身份」。'
               }
             />
 
@@ -322,10 +343,11 @@ export function IdentityDeactivationForm({ parties, onDeactivated }: IdentityDea
           </div>
 
           <div className="flex items-start gap-3">
+            {/* 停用是终态（PC CONTEXT「已停用」），按下之前再拦一道、复述要停的是谁；确认才发请求。 */}
             <Button
               variant="default"
-              className={primaryActionClass}
-              onClick={form.send}
+              className={dangerActionClass}
+              onClick={() => setConfirming(true)}
               disabled={locked || !form.canSend}
             >
               {locked ? '提交中…' : '提交停用'}
@@ -341,6 +363,31 @@ export function IdentityDeactivationForm({ parties, onDeactivated }: IdentityDea
       </Card>
 
       <SnapshotJsonDetails kind={kind} submit={form.submit} />
+
+      <ConfirmDialog
+        renderFooter={confirmDialogFooter}
+        open={confirming}
+        tone="danger"
+        title={confirmation.title}
+        message={confirmation.message}
+        extraContent={
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[13px]">
+            {confirmation.facts.map((fact) => (
+              <div key={fact.label} className="contents">
+                <dt className="text-idpxyz-textMuted">{fact.label}</dt>
+                <dd className="font-mono break-all text-idpxyz-text">{fact.value}</dd>
+              </div>
+            ))}
+          </dl>
+        }
+        confirmLabel="停用"
+        cancelLabel="不停用"
+        onConfirm={() => {
+          setConfirming(false);
+          form.send();
+        }}
+        onCancel={() => setConfirming(false)}
+      />
     </div>
   );
 }

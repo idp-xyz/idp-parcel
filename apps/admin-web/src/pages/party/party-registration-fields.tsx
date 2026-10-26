@@ -240,7 +240,7 @@ export function SnapshotJsonDetails({
   return (
     <details className="rounded border border-idpxyz-border">
       <summary className="cursor-pointer select-none px-4 py-2 text-[13px] text-idpxyz-breadcrumb">
-        高级：粘贴登记快照 JSON（受控批量口 parcel-commercial 的在线镜像）
+        高级：粘贴登记快照 JSON
       </summary>
       <RegistrationPanel
         moduleId="business-parties"

@@ -24,7 +24,7 @@
 
 **Category:** enhancement
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
 - [ ] 1440、1280 宽下页签一行放得下，册按钮不逐字竖排，计数不压工具位，过滤条不横滚。截图为证。
 - [ ] 选中的册在地址里，刷新后保持；政策册签与发布签选的是同一本。

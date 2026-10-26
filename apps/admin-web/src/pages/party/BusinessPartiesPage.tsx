@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Button,
   Drawer,
@@ -47,6 +47,7 @@ import { BusinessPartyRegistrationForm } from './BusinessPartyRegistrationForm';
 import { PartyRelationshipRegistrationForm } from './PartyRelationshipRegistrationForm';
 import { IdentityDeactivationForm } from './IdentityDeactivationForm';
 import { PartyRelationshipEndActions } from './PartyRelationshipEndActions';
+import { deactivationPresetOf, withoutDeactivationPreset, type DeactivationPreset } from './business-parties-address';
 import { PartyOverviewSection } from './PartyOverviewSection';
 import {
   businessPartyCountSummary,
@@ -621,6 +622,7 @@ function RegistrationTab({
   knownRelationships,
   onPartiesChanged,
   onRelationshipsChanged,
+  preset,
 }: {
   /** 页面持有的参与方列表答案：关系表单双方候选与停用表单参与方那一册都取它，不各自再读（票 13 第 5 条）。 */
   parties: ApiResult<BusinessPartyListResponseBody> | null;
@@ -628,8 +630,13 @@ function RegistrationTab({
   knownRelationships: readonly PartyRelationshipRecord[] | null;
   onPartiesChanged: () => void;
   onRelationshipsChanged: () => void;
+  /** 深链带来的停用预填；有它时这一签落在「身份停用」。 */
+  preset: DeactivationPreset | null;
 }) {
-  const [selected, setSelected] = useState<RegisterId>('business-party');
+  const [selected, setSelected] = useState<RegisterId>(preset ? 'identity-deactivation' : 'business-party');
+  useEffect(() => {
+    if (preset) setSelected('identity-deactivation');
+  }, [preset]);
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="flex flex-wrap items-center gap-2 px-4 pt-4">
@@ -653,7 +660,7 @@ function RegistrationTab({
           onRegistered={onRelationshipsChanged}
         />
       ) : (
-        <IdentityDeactivationForm parties={parties} onDeactivated={onPartiesChanged} />
+        <IdentityDeactivationForm parties={parties} onDeactivated={onPartiesChanged} preset={preset} />
       )}
     </div>
   );
@@ -671,9 +678,26 @@ export function BusinessPartiesPage() {
   const knownRelationships =
     relationships.answer?.kind === 'outcome' ? relationships.answer.body.relationships : null;
 
+  // 深链（法人页「停用此责任法人…」）带来的停用预填：读到就切到登记签、交给停用表单，然后从地址里去掉，免得换标签
+  // 回来、页面重新挂载时再预填一次。这一页的标签已开着时地址变了也认：壳层不重挂已开的标签。
+  const [preset, setPreset] = useState<DeactivationPreset | null>(() => deactivationPresetOf(window.location.hash));
+  const [tab, setTab] = useState(preset ? 'register' : 'identities');
+  useEffect(() => {
+    const take = () => {
+      const next = deactivationPresetOf(window.location.hash);
+      if (next === null) return;
+      setPreset(next);
+      setTab('register');
+      window.history.replaceState(window.history.state, '', withoutDeactivationPreset(window.location.hash));
+    };
+    take();
+    window.addEventListener('hashchange', take);
+    return () => window.removeEventListener('hashchange', take);
+  }, []);
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <Tabs defaultValue="identities" className="flex-1 flex flex-col overflow-hidden gap-0">
+      <Tabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="identities">参与方身份</TabsTrigger>
           <TabsTrigger value="relationships">参与方关系</TabsTrigger>
@@ -706,6 +730,7 @@ export function BusinessPartiesPage() {
             knownRelationships={knownRelationships}
             onPartiesChanged={parties.retry}
             onRelationshipsChanged={relationships.retry}
+            preset={preset}
           />
         </TabsContent>
       </Tabs>

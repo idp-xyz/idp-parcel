@@ -11,7 +11,7 @@
 // 各格不裁首尾空白、载荷不带租户格，理由同 business-party-form.ts。
 
 import type { BusinessPartyRecord, CustomerAccountRecord, GroupLegalEntityRecord } from './api';
-import { wallTimeToRfc3339 } from '../moment';
+import { formatInstant, wallTimeToRfc3339 } from '../moment';
 import { identityKindLabels, type IdentityKind } from './presentation';
 import { revisionOf, suggestedNextRevision } from './registration-form';
 import type { PickerOption } from './PublicationFormFields';
@@ -124,4 +124,46 @@ export const identityTargetOf = {
  */
 export function suggestedDeactivationRevision(rows: readonly RevisionedIdentity[] | null, id: string): number {
   return suggestedNextRevision(rows, id, (row) => row.id);
+}
+
+/** 停用确认框里要复述的一项。 */
+export interface DeactivationFact {
+  label: string;
+  value: string;
+}
+
+export interface DeactivationConfirmation {
+  title: string;
+  message: string;
+  facts: DeactivationFact[];
+}
+
+/**
+ * 停用确认框的文案（票 party-commercial-uiux/06）。停用在 PC CONTEXT 里是终态，按下之前把要停的是谁、从什么时候起、
+ * 凭什么复述一遍：种类、名称与标识、停用时点（本地墙钟与 UTC 各一份，跨 CN/SG 两地对时不必换算）、依据、修订号。
+ * 未填的格照实说未填——确认框不替表单判，送上去由服务端点名。
+ *
+ * `draft` 取表单真正要送的那一份（修订号未改时带着建议值）。`pickedLabel` 是下拉里选中那一项的文字，三册都写成
+ * 「名称 · 标识 · 当前状态」，有它就照它复述；手填的标识没有候选文字，只报标识。
+ */
+export function deactivationConfirmation(
+  draft: IdentityDeactivationDraft,
+  timeZone: string,
+  pickedLabel: string | null,
+): DeactivationConfirmation {
+  const kindLabel = isIdentityKind(draft.kind) ? identityKindLabels[draft.kind] : '';
+  const instant = wallTimeToRfc3339(draft.at, timeZone);
+  const id = draft.id.trim();
+  const revision = draft.revision.trim();
+  return {
+    title: kindLabel ? `停用这个${kindLabel}？` : '停用这个身份？',
+    message: '停用后不能撤回；要恢复，只能登记一个新的身份。从停用时点起，它不再支持新的商业决定。',
+    facts: [
+      { label: '身份种类', value: kindLabel || '（未选）' },
+      { label: '身份', value: id === '' ? '（未填）' : (pickedLabel ?? id) },
+      { label: '停用时点', value: instant ? `${formatInstant(instant, { timeZone })}（UTC ${instant}）` : '（未填或格式不对）' },
+      { label: '停用依据', value: draft.basis.trim() || '（未填）' },
+      { label: '修订号', value: revision === '' ? '（未填）' : `r${revision}` },
+    ],
+  };
 }

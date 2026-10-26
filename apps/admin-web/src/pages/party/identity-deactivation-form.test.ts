@@ -3,6 +3,7 @@ import { deepEqual, equal } from 'node:assert/strict';
 import type { BusinessPartyRecord, CustomerAccountRecord, GroupLegalEntityRecord } from './api';
 import { identityKindLabels } from './presentation';
 import {
+  deactivationConfirmation,
   emptyIdentityDeactivationDraft,
   identityDeactivationFieldPaths,
   identityDeactivationLocalProblems,
@@ -162,4 +163,40 @@ test('认领的路径表', () => {
     'deactivations[0].basis',
     'deactivations[0].at',
   ]);
+});
+
+// 票 party-commercial-uiux/06：停用是终态，按下前复述要停的是谁、从何时起、凭什么。
+test('停用确认框复述种类、名称与标识、本地与 UTC 两份时点、依据与修订号，并说清不能撤回', () => {
+  const confirmation = deactivationConfirmation(
+    { kind: 'LEGAL_ENTITY', id: 'SYN-LE-01', revision: '2', basis: 'SYN-DEREG-01', at: '2026-11-01T09:30' },
+    'Asia/Shanghai',
+    '合成运营方一号（演示） · SYN-LE-01 · 已生效',
+  );
+  equal(confirmation.title, '停用这个责任法人？');
+  equal(confirmation.message.includes('不能撤回'), true);
+  deepEqual(confirmation.facts, [
+    { label: '身份种类', value: '责任法人' },
+    { label: '身份', value: '合成运营方一号（演示） · SYN-LE-01 · 已生效' },
+    { label: '停用时点', value: '2026-11-01 09:30:00 UTC+8（UTC 2026-11-01T01:30:00Z）' },
+    { label: '停用依据', value: 'SYN-DEREG-01' },
+    { label: '修订号', value: 'r2' },
+  ]);
+});
+
+test('停用确认框对未填的格照实说未填，不替表单判', () => {
+  const confirmation = deactivationConfirmation(emptyIdentityDeactivationDraft(), 'Asia/Shanghai', null);
+  equal(confirmation.title, '停用这个身份？');
+  deepEqual(
+    confirmation.facts.map((fact) => fact.value),
+    ['（未选）', '（未填）', '（未填或格式不对）', '（未填）', '（未填）'],
+  );
+});
+
+test('停用确认框：手填的标识没有候选文字，只报标识', () => {
+  const confirmation = deactivationConfirmation(
+    { kind: 'CUSTOMER_ACCOUNT', id: 'SYN-ACCOUNT-09', revision: '1', basis: 'B', at: '' },
+    'Asia/Shanghai',
+    null,
+  );
+  equal(confirmation.facts[1].value, 'SYN-ACCOUNT-09');
 });

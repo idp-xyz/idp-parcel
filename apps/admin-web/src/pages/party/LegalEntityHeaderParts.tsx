@@ -1,8 +1,8 @@
-import { AlertTriangle, Ban, Copy, ExternalLink, MoreHorizontal, Users } from 'lucide-react';
+import { AlertTriangle, Ban, Copy, ExternalLink, MoreHorizontal } from 'lucide-react';
 import { Button, DropdownMenu, MenuItem, MenuSeparator } from '@idpxyz/ui-primitives';
 import { statusToneBanner, statusToneText } from '../../components/status-tone';
-import { ADDRESS_KEYWORD_PARAM, hashWithQueryValue } from '../../templates/address-query';
 import type { GroupLegalEntityRecord } from './api';
+import { deactivationLinkHash } from './business-parties-address';
 import { identityLayerAbsentNote, identityStatusLabels, labelOf, partyNameUnknownNote } from './presentation';
 import {
   legalEntityLifecycle,
@@ -156,13 +156,15 @@ export function LegalEntityMoreMenu({
         复制法人标识
       </MenuItem>
       <MenuSeparator />
+      {/* 法人的停用表单在业务参与方页「登记 › 身份停用」（一个命令带种类）；深链预填种类与这个法人的标识，
+          菜单上点名的是法人本身，不是它所钉的业务参与方——后者是另一个身份，停错了收不回。 */}
       <MenuItem
         onSelect={() => {
-          window.location.hash = hashWithQueryValue('#/business-parties', ADDRESS_KEYWORD_PARAM, row.partyId);
+          window.location.hash = deactivationLinkHash({ kind: 'LEGAL_ENTITY', id: row.legalEntityId });
         }}
       >
-        <Users className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
-        到业务参与方页停用 <span className="ml-1 font-mono text-idpxyz-breadcrumb">{row.partyId}</span>
+        <Ban className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+        停用此责任法人…
       </MenuItem>
     </DropdownMenu>
   );
