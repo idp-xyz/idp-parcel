@@ -1,7 +1,7 @@
 # 07 撤回口经首方渠道接通
 
 Category: enhancement
-Status: in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 claude-fpa07（代码最后一笔 f34131d90）。此前 in-progress——2026-10-26 会话 `tops-20` 认领（前置 code/36、code/44 已进 main），分支 `claude-fpa07`。此前 ready-for-agent——R1（上线前必修，用户 2026-10-26 定首发要这一口）。
+Status: resolved——2026-10-26 进 main `d7a891039`（见文末「进 main 记录」）。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 claude-fpa07（代码最后一笔 f34131d90）。此前 in-progress——2026-10-26 会话 `tops-20` 认领（前置 code/36、code/44 已进 main），分支 `claude-fpa07`。此前 ready-for-agent——R1（上线前必修，用户 2026-10-26 定首发要这一口）。
 Blocked by: 06；docs-consistency/code/36、code/44（tops-26）
 出处：用户 2026-10-26「都需要」（首个租户上线时客户经首方 API 要能撤回、取消、修订、补充、索赔）、「每个客户系统只代表它自己的账户（直客），只考虑这个吧」、「首发不要客户状态读口」、「首发不做限流」；技术取舍由会话 `tops-20` 代决（用户「你帮我决定吧」）。 计划见 [spec](../spec.md)「五口上线」与 [摸底报告](../customer-faces-scoping-2026-10-26.md)。
 
@@ -51,3 +51,14 @@ M
 - 防误装：`TestTheDirectCustomerWithdrawalAuthorizerIsBuiltOnlyByTheFirstPartyWiring`（internal/architecture）断言 `DirectCustomerWithdrawalAuthorizer{` 在非测试源码里只由 `cmd/parcel-api/assemble_withdrawal.go` 构造；选门禁不选非导出，因为首方装配在 cmd 包、授权器在 PS 适配器包，非导出过不了包界。
 - 契约补一句：重放须逐字节同载荷，补带 `shipmentRequestId` 答 `SOURCE_CONFLICT`。
 - 越权风险点 9：管理台撤回页草案形状与首方载荷不符，本票只改路径，页面接首方载荷归收尾票 12 或运营侧另议。
+
+## 评审记录
+
+评审 ← tops-20 隔离子代理(sonnet) · 钉 `acf5dfbb5`：阻断无。非阻断：1. 摘要带与不带委托号算两份内容，重发补委托号答 `SOURCE_CONFLICT`——与「同一标识内容变了即冲突」一致，修订轮契约补「重放须逐字节同载荷」。2. 管理台撤回页草案形状与首方载荷不符，改路径后仍发不成功（此前也是 403 未配置）——记越权风险点 9，归收尾票 12 或运营侧另议。3. `DirectCustomerWithdrawalAuthorizer` 是导出类型、有误装余地——修订轮加架构门禁 `direct_customer_withdrawal_authorizer_gate_test.go`，断言全仓非测试源码只有首方撤回装配一处构造它。无发现：授权＝绑定＋授予＋准入、撤回者须等于信封客户端来源，合 ADR-0310 取舍 B；他账户/别的客户端/不存在/委托号不符同答 404 同字节，`namedWithdrawalChecker` 与编排同用 `FindBySourceIdentity`、无竞态；契约四条都写；号不撞。
+
+## 进 main 记录（2026-10-26，推送方会话 tops-20）
+
+- **main**：`d7a891039`。出处：分支 `claude-fpa07` tip `841b12432`（作者为 Sonnet 子代理；修订轮只收非阻断，推送方读了修订 diff）。
+- **生成物**：三件推送方重生成，`-check` 退 0。
+- **全量真库测试**：`scripts/test-full.sh` 跑在 `d7a891039`：158 ok / 0 FAIL。**管理台三道门**：tsc 退 0、node:test 727/727、vite build 退 0。**种子**：一次性库灌入退 0，用后删库。
+- **号**：`AT-PS-134`–`137`。
