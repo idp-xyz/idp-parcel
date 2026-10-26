@@ -1,7 +1,7 @@
 # 176 连接代码含窗口依据分隔符 `+` 时登记口照收，TF 准备那一路每封初始路由信封都响亮失败
 
 Category: bug
-Status: in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg176` tip `08759bf96`（代码末笔；本票完成记录随后一笔）。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，分支 `claude-dcg176`（worktree `idp-parcel-dcg176`）。此前 ready-for-agent——R3（不急）：要租户把连接代码登成带 `+` 才撞，撞了是响亮失败（准备那一路每封信都失败、可见），不静默答错；补法清楚。2026-10-26 会话 `tops-20`（Claude Code）据票 [142](./142-network-routing-guards-the-connection-window-basis-spelling.md) 完成记录越权风险点 1 立（用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」授权）。
+Status: in-progress——2026-10-26 评审无阻断、修订轮完，待进 main，分支 `claude-dcg176` tip `ed802e3fa`（修订轮末笔；本票面一笔随后）。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg176` tip `08759bf96`（代码末笔；本票完成记录随后一笔）。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，分支 `claude-dcg176`（worktree `idp-parcel-dcg176`）。此前 ready-for-agent——R3（不急）：要租户把连接代码登成带 `+` 才撞，撞了是响亮失败（准备那一路每封信都失败、可见），不静默答错；补法清楚。2026-10-26 会话 `tops-20`（Claude Code）据票 [142](./142-network-routing-guards-the-connection-window-basis-spelling.md) 完成记录越权风险点 1 立（用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」授权）。
 Blocked by: 无
 地盘（建议）：NR 连接登记口（`RegisterConnectionVersion` 所在的 `internal/networkrouting` 应用层与领域构造门）及其 HTTP、CLI 拒因标签；admin-web 若有该拒因的中文标签一并补。
 出处：票 142 完成记录「越权风险点」1；[ADR-0201](../../../docs/adr/0201-schedule-templates-materialize-concrete-schedules-by-date-and-preparation-answers-not-configured-on-an-empty-register.md) 决定二与越权风险点 25；代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) R4。
@@ -49,7 +49,7 @@ Blocked by: 无
 
 ### 代决
 
-1. **只拒 `+`，`@` 与 `/` 照收。** TF `connectionOf` 在最后一个 `@` 处切版本，NR 拼的版本是 `strconv` 写出的十进制整数、不含 `@`，所以最后一个 `@` 恒是 NR 自己的分隔，代码里带多少个 `@`（含结尾带 `@`）都读回原样；`CONNECTION/` 前缀每格只切一次，代码里带 `/`、甚至以 `CONNECTION/` 开头，切完剩下的仍是原代码。`+` 不同：它是格与格之间的分隔，带上它一格就被切成两半，前缀那一半读不出版本，后半若恰拼成 `CONNECTION/…` 还会多出一格。票 142 的 `SYN@CONN/B-C` 已证前一半；本票新用例把 `SYN-CONN-B-C@`、`CONNECTION/SYN-B-C` 与四种带 `+` 的写法（头、尾、中间、后半截拼成另一格）放在同一份读法下逐个对着受理门证。
+1. **只拒 `+`，`@` 与 `/` 照收。** TF `connectionOf` 在最后一个 `@` 处切版本，NR 拼的版本是 `strconv` 写出的十进制整数、不含 `@`，所以最后一个 `@` 恒是 NR 自己的分隔，代码里带多少个 `@`（含结尾带 `@`）都读回原样；`CONNECTION/` 前缀每格只切一次，代码里带 `/`、甚至以 `CONNECTION/` 开头，切完剩下的仍是原代码。`+` 不同：它是格与格之间的分隔，带上它一格就被切开——前半截读不出版本的，准备那一路响亮失败；后半若恰拼成 `CONNECTION/…` 会多出一格；前半截自带版本的（`X@1+Y`）读成另一条连接 `X`，静默答错（修订轮据评审补）。票 142 的 `SYN@CONN/B-C` 已证前一半；本票新用例把 `SYN-CONN-B-C@`、`CONNECTION/SYN-B-C` 与五种带 `+` 的写法（头、尾、中间、后半截拼成另一格、前半截自带版本）放在同一份读法下逐个对着受理门证。
 2. **拒因落在应用受理门，不在领域构造门。** NR 没有连接定义的领域类型：登记行是 `ports.ConnectionDefinitionVersion`，各格的门都在 `NetworkCatalogRegistration` 里（先例 `ENDPOINTS_NOT_DISTINCT`），为这一格新立领域类型属重构，不在本票。
 3. **单立一格，不并进 `IDENTITY_MISSING`。** 身份不缺，续办是换代码不是补身份；折进去会让登记方去补错东西（`CatalogRefusalReason` 头注的分格理由）。
 4. **判在抬头五件之后、端点之前。** 一行同时差几格时先报抬头（租户、身份、版本、生效时间、区间），再报分隔符，再报端点与时区；顺序确定，与该口既有写法一致。
@@ -60,16 +60,16 @@ Blocked by: 无
 
 ### 越权风险点
 
-1. **两侧读法同步仍不受守**（NR、TF owner；票 142 越权风险点 2 同一类）。受理门与 0028 写死的是 ASCII `+`；TF 若改了 `connectionOf` 的分隔符或切法，这里不随之变。本票新用例把受理门与 NR 测试里那份读法放在一起，守的是「拒的恰是这份读法读不回的」，不守这份读法与 TF 的真读法一致。
+1. **两侧读法同步仍不受守**（NR、TF owner；票 142 越权风险点 2 同一类）。受理门与 0028 写死的是 ASCII `+`；TF 若改了 `connectionOf` 的分隔符或切法，这里不随之变。本票新用例把受理门与 NR 测试里那份读法放在一起，守的是「拒的恰是这份读法读不回的」，不守这份读法与 TF 的真读法一致。已另立 [181](./181-planned-leg-window-basis-spelling-and-reading-are-written-twice-across-nr-and-tf.md)。
 2. **只挡读不回，不挡别的不整洁**（NR owner）。首尾空白、制表符之类不拒：TF 读回的仍是原样代码，班次方向按原样比；要不要另加整洁度门由 NR owner 定。
-3. **admin-web 网络目录拒因标签本就缺若干格**（admin owner）：取证于 `f1fece40d`，`registrationRefusalReasonLabels` 没有 `RANKING_FORM_UNKNOWN`、`COVERAGE_MALFORMED`、`NODE_ROLE_BLANK`、`NODE_ROLE_DUPLICATED`、`NODE_ROLES_WITHOUT_COVERAGE`、`CALENDAR_CONTENT_OUT_OF_RANGE`、`COST_BASIS_MALFORMED`、`LEG_ZONE_MALFORMED`、`LEG_ZONE_WITHOUT_COST_BASIS`，页面按 `RegistrationAnswerNote` 的纪律示英文原名。本票只补本格，那几格不在票面，建议另立前端小票。
+3. **admin-web 网络目录拒因标签本就缺若干格**（admin owner）：取证于 `f1fece40d`，`registrationRefusalReasonLabels` 没有 `RANKING_FORM_UNKNOWN`、`COVERAGE_MALFORMED`、`NODE_ROLE_BLANK`、`NODE_ROLE_DUPLICATED`、`NODE_ROLES_WITHOUT_COVERAGE`、`CALENDAR_CONTENT_OUT_OF_RANGE`、`COST_BASIS_MALFORMED`、`LEG_ZONE_MALFORMED`、`LEG_ZONE_WITHOUT_COST_BASIS`，页面按 `RegistrationAnswerNote` 的纪律示英文原名。本票只补本格，那几格不在票面，已另立 [182](./182-admin-web-network-catalog-registration-refusal-labels-miss-nine-reasons.md)。
 4. **存量带 `+` 的库上 0028 挡住整次迁移作业**（NR owner、部署 owner）：与 0027 同一取舍——宁可停下列出，不静默改数据。首个租户实例进生产前没有这种存量；演示库重灌即消。
 
 ### 完成判据 → 用例
 
 | 判据 | 用例 |
 |---|---|
-| 领域/应用：带 `+` 的连接代码登记答未受理，原因指名分隔符；不带的照旧 | `internal/networkrouting/application/register_network_catalog_test.go::TestCatalogRegistrationRefusesIncompleteRowsBySlot`「连接代码带窗口依据分隔符」；`internal/networkrouting/application/connection_window_basis_contract_test.go::TestTheRegistrationGateRefusesExactlyTheConnectionCodesTheContractCannotReadBack`：逐个代码先经真证据视图折成计划段、按 TF 读法读，读不回的四种受理门指名拒且写入口零调用，读得回的四种（含 `@`、`/`、以 `CONNECTION/` 开头、结尾带 `@`）原样登记 |
+| 领域/应用：带 `+` 的连接代码登记答未受理，原因指名分隔符；不带的照旧 | `internal/networkrouting/application/register_network_catalog_test.go::TestCatalogRegistrationRefusesIncompleteRowsBySlot`「连接代码带窗口依据分隔符」；`internal/networkrouting/application/connection_window_basis_contract_test.go::TestTheRegistrationGateRefusesExactlyTheConnectionCodesTheContractCannotReadBack`：逐个代码先经真证据视图折成计划段、按 TF 读法读，读不回的五种（修订轮补「前半截自带版本、读成另一条连接」一种）受理门指名拒且写入口零调用，读得回的四种（含 `@`、`/`、以 `CONNECTION/` 开头、结尾带 `@`）原样登记 |
 | 真库：CHECK 拒带 `+` 的代码；迁移在演示种子上施加不失败 | `internal/networkrouting/adapters/postgres/connection_code_separator_test.go::TestMigration0028RefusesToApplyOverConnectionCodesCarryingTheSeparator`：停在 0028 之前落演示种子登的连接代码（从种子步脚本里认 `-kind connection` 那几份读出）、`SYN@CONN/B-C`、`CONNECTION/SYN-B-C` 与一行带 `+` 的；施加被拒、报文列出带 `+` 那一行且不列别的、行数不动；移走后施加成功；之后带 `+` 的行撞 `network_connection_version_code_without_basis_separator`。`::TestTheCatalogTableRefusesAConnectionCodeCarryingTheSeparator`：绕过受理门交目录写入口，撞同一约束、一行不落。`cmd/parcel-dispatch` 的演示网络装配用例在全迁移库上把演示种子经受理门照常登记（含 PG 跑过） |
 | HTTP、CLI、admin-web 拒因标签认这一格 | `internal/networkrouting/adapters/http/register_network_catalog_test.go::TestNetworkCatalogRegistrationTranscribesTheUseCaseAnswersVerbatim`「连接代码带窗口依据分隔符」：200 + `REFUSED` + `refusalReason` 原名；`cmd/parcel-network-register/main_test.go::TestExecuteRefusesAConnectionCodeCarryingTheWindowBasisSeparator`：退出码 1、消息指名、写入口零调用，带 `@`、`/` 的照常登记；admin-web 标签补齐，三道门过 |
 | Go 门禁；全量用 `scripts/test-full.sh` | 受影响范围见下；全量留给推送方 |
@@ -83,3 +83,43 @@ Blocked by: 无
 - admin-web：`tsc -b --noEmit` 退 0；`node scripts/run-tests.mjs` fail 0；`pnpm exec vite build` 成功。
 - `go run ./tools/at-coverage-counts -check` 只报「生成物与文件不一致」（总览计数待推送方重算），无缺行多行。
 - 全量 `scripts/test-full.sh` 留给推送方。
+
+## 评审记录
+
+### 隔离评审（照抄 `review-176.md`）
+
+评审 ← tops-20 隔离子代理 · 钉 `5116e6b7f` · 01:29
+
+结论：两轴无阻断；非阻断 4 条（注释措辞与用例强度），门的逻辑本身没错。
+
+#### Standards
+阻断：无。
+非阻断：
+1. 注释把失败面说窄了：`CatalogConnectionCodeCarriesBasisSeparator` 头注与 0028 头注写「带 `+` 的代码读不回，准备那一路每封初始路由信封都失败」。探针在真 `connectionOf` 上：`SYN-A@1+B`、`SYN-A@1+` 不报错，读成 `SYN-A`——照 ADR-0201「空册答未配置并入账」是静默答错，不是响亮失败。门拒所有 `+`，这一类也挡住了；两处头注宜改成「读不回，或读成另一条连接」。
+2. `TestTheCatalogTableRefusesAConnectionCodeCarryingTheSeparator` 头注「登记用例那一侧把它当未决」与 `RegisterCatalogOutcome` 头注「只有两格，没有`未决`……那一路交回错误」用词相抵，宜改成「交回错误」。
+无发现：NR 不导入 TF，`windowBasisSeparator` 两侧各留一份、边界没破；注释中文、符号名引用；未改 CONTEXT/ADR（窗口依据拼写本不在 NR CONTEXT，同票 142 例）。
+
+#### Spec
+阻断：无。
+非阻断：
+1. 用例表少「静默读错」一类：变异 M5（门只拒 TF 读法会报错的代码、放行 `X@1+Y`）NR application 整包仍全绿。加一格 `SYN-CONN-A@1+B`（现有判据 `code == test.code` 已能判成读不回）。两侧读法同步仍不受守（作者越权风险点 1，已披露）；`cmd/parcel-dispatch` 同时导入 NR application 与 TF 适配器，可在那里把真 `connectionOf` 绑进来，宜另立票。
+2. 作者越权风险点 3 缺标签九格与 Go `String()` 逐格对过、一个不差；顺手补属票面外、还会扩大与 code/29 在 `api.ts` 的冲突面，宜另立前端小票。
+无发现：四条完成判据都有用例；「存量先列出」做到；UC `AT-NR-094` 与代码一致。
+
+#### 逐条核对摘要
+只拒 `+` 论证成立（真 `connectionOf` + `NewScheduleDirection` 探 17 个代码：带 `@`、`/`、`CONNECTION/` 开头、尾 `@`、单 `@`、`@@`、首尾空白、`\n`、`\t` 读回原样；四种 `+` 报错；`X@1+Y` 静默读成 `X`；NUL 被 NR text 列拒（22021）；5000 字节照落照读；全仓只有 `connectionOf` 解析计划段窗口依据）。迁移 0028 没问题（DO 块 RAISE 同事务回滚、ALTER 不执行；CHECK/约束名/表列名与 0008 一致；runner `tx.Exec` 与 0027 同形；种子三条连接不带 `+`）。判断顺序与该口一致（变异 M3 挪顺序仍全绿，但既有各格本也不钉）。HTTP、CLI、admin-web 认这一格。新号不撞（NR 迁移 0028、`AT-NR-094`）。
+探针（修订轮可重跑）：scratchpad/probe176/（tf_probe_test.go + overlay.json；pg_nul_probe_test.go + ov_pg.json；m2/m3/m5 与 ov_m*.json；Replace 键写死评审检出路径，换树要改）。
+
+### 修订轮（2026-10-26，作者子代理，同分支 `claude-dcg176`）
+
+| SHA | 内容 |
+|---|---|
+| `e0d4e92a9` | fix(network-routing)：评审修订——带 `+` 的连接代码也会读成另一条连接，注释与用例补这一类 |
+| `ed802e3fa` | docs(scratch)：立票 181、182 |
+| 随后一笔 | docs(scratch)：本票评审记录与修订轮 |
+
+- **Standards 1**：`CatalogConnectionCodeCarriesBasisSeparator` 头注、`RegisterConnectionVersion` 里那一格的注释、迁移 0028 头注与拒绝施加的报文、admin-web 标签，失败面都改成「读不回，或读成另一条连接」（`X@1+Y` 读成 `X`，静默答错）。0028 尚未进 main、没有已施加的库，改正文不涉校验和。UC `AT-NR-094` 只写「拒登，原因指名分隔符」，没有说窄，未改；本票完成记录代决 1 与判据表那两句同步改了。票首「现象」一节是立票时的读码，只举 `A+B@1` 那一种响亮失败，照原样保留，以本节为准。
+- **Standards 2**：`TestTheCatalogTableRefusesAConnectionCodeCarryingTheSeparator` 头注「当未决」改为「原样交回错误」。
+- **Spec 1**：门与读法对照用例 `TestTheRegistrationGateRefusesExactlyTheConnectionCodesTheContractCannotReadBack` 加一格 `SYN-CONN-A@1+B`（读成 `SYN-CONN-A`，按 `code == test.code` 判为读不回）。评审变异 M5 复制一份 overlay 改成本树路径重跑（`probe176/ov_m5_dcg176.json`，原件未动）：现在 `SYN-CONN-A@1+B` 那一格红，修订前整包全绿。
+- **Spec 1 后半、Spec 2**：两侧读法同步另立 [181](./181-planned-leg-window-basis-spelling-and-reading-are-written-twice-across-nr-and-tf.md)，admin-web 缺的九格标签另立 [182](./182-admin-web-network-catalog-registration-refusal-labels-miss-nine-reasons.md)；立号前核过 `origin/main` 与各 `claude-*` 分支，`demo-chain-gaps` 票号最大 179，180 已预留，181、182 空着。
+- **重跑（实测于 `e0d4e92a9`）**：`go build ./...` 过，`go vet ./internal/networkrouting/...` 过，`gofmt -l` 无输出；带 DSN（`127.0.0.1:55432`，含 PG）`go test -count=1` 跑 `./internal/networkrouting/application/`、`./internal/networkrouting/adapters/postgres/`、`./migrations/...` 全 ok，两条新真库用例 `-v` 为 PASS；admin-web `tsc -b --noEmit` 退 0、`run-tests` pass 647 fail 0、`vite build` 成功。
