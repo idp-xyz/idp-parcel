@@ -1,7 +1,7 @@
 # 参与方与商业区 UI/UX 评估与跟进
 
 Category: enhancement
-Status: in-progress
+Status: resolved——本批六票 01–06 全部 resolved；「后续」两段未拆票，等用户定先做哪些
 
 出处：2026-10-25，用户在会话里要求「评估 commercial party 的 UI/UX」，读完评估后说「按你建议的顺序开始」。建议的顺序是：先改文案和组件（成本低），再做要设计的，最后是要后端配合的。本批先落第一段，第二、三段列在「后续」，等第一段收口后再拆票。
 
@@ -69,7 +69,7 @@ Status: in-progress
 | 02 | [发布流程与发布表单说业务话](issues/02-publication-forms-speak-business.md) | — | resolved |
 | 03 | [逐格问题说中文](issues/03-field-problems-in-chinese.md) | — | resolved |
 | 04 | [状态一律用徽章](issues/04-status-badges-everywhere.md) | — | resolved |
-| 05 | [商业规则与策略页布局](issues/05-commercial-policies-layout.md) | 01 | in-progress |
+| 05 | [商业规则与策略页布局](issues/05-commercial-policies-layout.md) | 01 | resolved |
 | 06 | [法人停用入口与确认](issues/06-legal-entity-deactivation-entry.md) | — | resolved |
 
 ## 界面用词对照（本批各票共用）

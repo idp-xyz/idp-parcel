@@ -430,6 +430,12 @@ function BusinessPartyIdentitiesTable({
           onChange: setSearch,
           placeholder: '搜索参与方标识、名称或状态',
         }}
+        // 排序走模板的排序位：放在主筛选位时，模板自己那个「排序」位仍是禁用、悬停说「本页尚未提供排序」，同一行自相矛盾。
+        sort={{
+          options: [...businessPartySortOptions],
+          value: sort,
+          onChange: (value) => setSort(value as BusinessPartySortKey),
+        }}
         filters={
           <>
             <select
@@ -439,18 +445,6 @@ function BusinessPartyIdentitiesTable({
               onChange={(event) => setStatus(event.target.value as BusinessPartyStatusFilter)}
             >
               {businessPartyStatusFilterOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <select
-              className={filterSelectClass}
-              value={sort}
-              aria-label="排序"
-              onChange={(event) => setSort(event.target.value as BusinessPartySortKey)}
-            >
-              {businessPartySortOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -526,6 +520,12 @@ function PartyRelationshipsTable({
           onChange: setSearch,
           placeholder: '搜索关系、参与方或角色',
         }}
+        // 排序走模板的排序位：放在主筛选位时，模板自己那个「排序」位仍是禁用、悬停说「本页尚未提供排序」，同一行自相矛盾。
+        sort={{
+          options: [...partyRelationshipSortOptions],
+          value: sort,
+          onChange: (value) => setSort(value as PartyRelationshipSortKey),
+        }}
         filters={
           <>
             <select
@@ -547,18 +547,6 @@ function PartyRelationshipsTable({
               onChange={(event) => setStatus(event.target.value as PartyRelationshipStatusFilter)}
             >
               {partyRelationshipStatusFilterOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <select
-              className={filterSelectClass}
-              value={sort}
-              aria-label="排序"
-              onChange={(event) => setSort(event.target.value as PartyRelationshipSortKey)}
-            >
-              {partyRelationshipSortOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>

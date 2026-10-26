@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Button, Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { ListPageTemplate } from '../../templates';
 import { RegistrationPanel, chipClass } from '../../components/registration';
@@ -14,6 +14,13 @@ import {
   type CommercialPolicyKind,
   type CommercialPolicyListResponseBody,
 } from './api';
+import {
+  policiesHash,
+  policiesRegisterOf,
+  policiesTabOf,
+  publishTargetOf,
+  type PoliciesTab,
+} from './commercial-policies-address';
 import { withStatusBadge } from './detail-primitives';
 import { CreditPolicyPublicationForm } from './CreditPolicyPublicationForm';
 import { AuthorizationRulePublicationForm } from './AuthorizationRulePublicationForm';
@@ -35,31 +42,42 @@ import {
 const info = moduleInfoById['commercial-policies'];
 
 /**
- * 发布签发布落定后对读面的一次通知：切到那一册并重读。`token` 每次递增，同一册连发两次也各刷一次；
- * 为 null 即从未发布过。
+ * 选册的一排按钮：政策册签与发布签共用，册名同一组。放在列表模板之外、能换行——模板的主筛选位不换行，九本册挤在那里
+ * 曾逐字竖排、把右端计数压到工具位上。
  */
-interface PublishedNotice {
-  token: number;
-  kind: CommercialPolicyKind;
+function RegisterChooser({
+  value,
+  onChange,
+}: {
+  value: CommercialPolicyKind;
+  onChange: (kind: CommercialPolicyKind) => void;
+}) {
+  return (
+    <div role="group" aria-label="政策册" className="flex flex-wrap items-center gap-2 px-4 pt-3 shrink-0">
+      {commercialPolicyKinds.map((candidate) => (
+        <button
+          key={candidate}
+          type="button"
+          aria-pressed={candidate === value}
+          className={`${chipClass(candidate === value)} whitespace-nowrap`}
+          onClick={() => onChange(candidate)}
+        >
+          {policyKindLabels[candidate]}
+        </button>
+      ))}
+    </div>
+  );
 }
 
-// 各政策册独立请求、独立列形;同页切换不把各类对象折成一份「大配置」。行与列的转写在
-// policy-rows.ts,本文件只管取数、切册与渲染。
-function PolicyRegisters({ published }: { published: PublishedNotice | null }) {
-  const [kind, setKind] = useState<CommercialPolicyKind>('ACCEPTANCE_RULE_PACKAGE');
+// 各政策册独立请求、独立列形；同页切换不把各类对象折成一份「大配置」。行与列的转写在 policy-rows.ts，本组件只管取数与渲染。
+// 列表标题就是选中的册名、说明就是这本册的册说明（policyKindSources）：页面层的话收进选册那一排，不再占一行被截断。
+function PolicyRegisters({ kind, reloadKey: externalReloadKey }: { kind: CommercialPolicyKind; reloadKey: number }) {
   const [search, setSearch] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [loaded, setLoaded] = useState<{
     kind: CommercialPolicyKind;
     answer: ApiResult<CommercialPolicyListResponseBody>;
   } | null>(null);
-
-  // 发布签落定一版，读面切到那一册并重读：完成判据是「结果在同册立刻可见」，不让操作者自己去点刷新。
-  useEffect(() => {
-    if (published === null) return;
-    setKind(published.kind);
-    setReloadKey((value) => value + 1);
-  }, [published]);
 
   useEffect(() => {
     let cancelled = false;
@@ -69,7 +87,7 @@ function PolicyRegisters({ published }: { published: PublishedNotice | null }) {
     return () => {
       cancelled = true;
     };
-  }, [kind, reloadKey]);
+  }, [kind, reloadKey, externalReloadKey]);
 
   const answer = loaded?.kind === kind ? loaded.answer : null;
   const rows = answer?.kind === 'outcome' ? rowsOf(answer.body) : [];
@@ -83,33 +101,16 @@ function PolicyRegisters({ published }: { published: PublishedNotice | null }) {
 
   return (
     <ListPageTemplate<PolicyRow>
-      title={info.title}
-      // 各册自己是什么写在选中册下方的册说明里（policyKindSources），页面说明只说这页怎么用，不被截断。
-      description="按册查看各类商业规则与策略的版本；选一本册，下方会说明它列的是什么。"
+      title={policyKindLabels[kind]}
+      description={policyKindSources[kind]}
       search={{
         value: search,
         onChange: setSearch,
         placeholder: '搜索政策对象、范围或引用',
       }}
-      filters={
-        <>
-          {commercialPolicyKinds.map((candidate) => (
-            <button
-              key={candidate}
-              type="button"
-              className={chipClass(candidate === kind)}
-              onClick={() => setKind(candidate)}
-            >
-              {policyKindLabels[candidate]}
-            </button>
-          ))}
-          {/* 册名旁写清「谁喂它」：册与发布口对象类别是两条轴，不写这句操作者会照 chip 抄词进发布快照。 */}
-          <p className="basis-full text-[11px] text-idpxyz-textMuted">{policyKindSources[kind]}</p>
-        </>
-      }
       filterSummary={
-        // 计数只在拿到业务答案后显示,未配置态不报「0 条」(与 pricing 两页同一守卫)。
-        answer?.kind === 'outcome' ? `${policyKindLabels[kind]} ${rows.length} 条` : undefined
+        // 计数只在拿到业务答案后显示，未配置态不报「0 条」（与 pricing 两页同一守卫）。
+        answer?.kind === 'outcome' ? `共 ${rows.length} 条` : undefined
       }
       columns={withStatusBadge(kindColumns[kind])}
       rows={visibleRows}
@@ -124,94 +125,152 @@ function PolicyRegisters({ published }: { published: PublishedNotice | null }) {
   );
 }
 
+/** 「发布新版本」签：选中的册有自己的表单就摆那张表单；随所属版本发布的两本说清去哪发。 */
+function PublishPane({
+  register,
+  onRegisterChange,
+  onPublished,
+}: {
+  register: CommercialPolicyKind;
+  onRegisterChange: (kind: CommercialPolicyKind) => void;
+  onPublished: (kind: CommercialPolicyKind) => void;
+}) {
+  const target = publishTargetOf(register);
+  let body: ReactNode;
+  if (target.kind === 'with-rule-package') {
+    body = (
+      <WhereToPublish
+        text="接受判断时点策略没有自己的版本，随接单规则包一起发布：在接单规则包的发布表单里填写。"
+        action="去发布接单规则包"
+        onAction={() => onRegisterChange('ACCEPTANCE_RULE_PACKAGE')}
+      />
+    );
+  } else if (target.kind === 'with-contract') {
+    body = (
+      <WhereToPublish
+        text="接受前财务控制是客户合同上按费用范围的约定，随合同一起发布：在客户与合同页的「发布合同版本」签里填写。控制具体怎么做，在「接受前财务控制策略」这本册发布。"
+        action="去客户与合同"
+        onAction={() => {
+          window.location.hash = '#/party-contracts';
+        }}
+      />
+    );
+  } else {
+    body = publicationFormOf(register, () => onPublished(register));
+  }
+  return (
+    <div className="flex-1 flex flex-col overflow-auto">
+      <RegisterChooser value={register} onChange={onRegisterChange} />
+      {body}
+    </div>
+  );
+}
+
+function WhereToPublish({ text, action, onAction }: { text: string; action: string; onAction: () => void }) {
+  return (
+    <div className="m-4 rounded border border-idpxyz-border p-4 flex flex-col items-start gap-3 text-[13px] text-idpxyz-text">
+      <p>{text}</p>
+      <Button variant="outline" onClick={onAction}>
+        {action}
+      </Button>
+    </div>
+  );
+}
+
 /**
- * 商业规则与策略（party-commercial）：各本政策册，外加发布口的受控镜像签。
+ * 册 → 那一册的发布表单。发布落定后读面要切到的册由调用方按册名给：价格政策表单发的是发布类别 PRICE_RULE，结果显示在
+ * 册名 PRICE_POLICY 那本册（两条分类轴，票 admin-write-faces/14），这里按册名进、按册名回，不经类别码。
+ */
+function publicationFormOf(register: CommercialPolicyKind, onPublished: () => void): ReactNode {
+  switch (register) {
+    case 'CREDIT_POLICY':
+      return <CreditPolicyPublicationForm onPublished={onPublished} />;
+    case 'AUTHORIZATION_RULE':
+      return <AuthorizationRulePublicationForm onPublished={onPublished} />;
+    case 'SETTLEMENT_POLICY':
+      return <SettlementPolicyPublicationForm onPublished={onPublished} />;
+    case 'PRICE_POLICY':
+      return <PricePolicyPublicationForm onPublished={onPublished} />;
+    case 'ACCEPTANCE_RULE_PACKAGE':
+      return <AcceptanceRulePackagePublicationForm onPublished={onPublished} />;
+    case 'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY':
+      return <PreAcceptanceFinancialControlPolicyPublicationForm onPublished={onPublished} />;
+    case 'CUSTOMER_SERVICE_RULE':
+      return <CustomerServiceRulePublicationForm onPublished={onPublished} />;
+    case 'PRE_ACCEPTANCE_CONTROL':
+    case 'AS_OF_POLICY':
+      return null;
+  }
+}
+
+/** 签与册的地址同步：读自 hash、写回 hash（replaceState，不压后退记录、不触发壳层的 hashchange），做法同 useAddressKeyword。 */
+function usePoliciesPlace(): [PoliciesTab, CommercialPolicyKind, (tab: PoliciesTab, register: CommercialPolicyKind) => void] {
+  const [tab, setTab] = useState<PoliciesTab>(() => policiesTabOf(window.location.hash));
+  const [register, setRegister] = useState<CommercialPolicyKind>(() => policiesRegisterOf(window.location.hash));
+
+  useEffect(() => {
+    const onHashChange = () => {
+      setTab(policiesTabOf(window.location.hash));
+      setRegister(policiesRegisterOf(window.location.hash));
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  const place = (nextTab: PoliciesTab, nextRegister: CommercialPolicyKind) => {
+    setTab(nextTab);
+    setRegister(nextRegister);
+    const hash = window.location.hash;
+    if (!hash.startsWith('#/')) return;
+    window.history.replaceState(window.history.state, '', policiesHash(hash, { tab: nextTab, register: nextRegister }));
+  };
+  return [tab, register, place];
+}
+
+/**
+ * 商业规则与策略（party-commercial）：政策册、发布新版本、JSON 发布三签。
  *
- * 发布签摆在这里而不摆在别处、也不另开专页，是票 admin-write-faces/03 的裁决：九类发布
- * 对象里六类的结果显示在本页的册里，本页是「写签跟着读签走」能走到的最大一页；专页
- * 会是九类结果一个都不在场的纯写页。同屏两套词（册名 vs 对象类别）曾是不摆的理由，
- * 处置不是把词对齐——它们是两条分类轴（见 policyKindSources 的注释）——而是把对应关系
- * 写在签上和册名旁，让页面教的是真规则。
+ * 发布摆在这里而不另开专页，是票 admin-write-faces/03 的裁决：发布对象里多数类的结果显示在本页的册里，写签跟着读签走。
+ * 发布签与政策册签共用同一组册名与同一个选中的册（票 party-commercial-uiux/05）：此前七个「发布 X 版本」签各占一签、
+ * 与读签册名对不上，十个签在常见宽度下挤成两行。
  *
- * 这一签按 ADR-0101 决定一是受控批量口的在线镜像，不是运营配置员的主路径，所以列在
- * 最后一签而不是首签；各册的逐字段表单按决定八逐册另裁另建。
- *
- * 「发布信用政策版本」是决定八下本页第一张逐字段表单签（票 admin-write-faces/16，公共半边的首例）：
- * 表单 → 预览摘要 → 存为待批准 → 批准 → 发布，结果在信用政策册立刻可见——发布落定后读面切到那一册
- * 并重读。摆在册签之后、镜像签之前：它是主路径，镜像签是高级口。其余各册的签由各自子票逐册接。
+ * JSON 发布签按 ADR-0101 决定一是受控批量口的在线镜像，不是配置员的主路径，标「高级」列在最后。
  */
 export function CommercialPoliciesPage() {
-  const [published, setPublished] = useState<PublishedNotice | null>(null);
-  const notePublished = (kind: CommercialPolicyKind) =>
-    setPublished((current) => ({ token: (current?.token ?? 0) + 1, kind }));
+  const [tab, register, place] = usePoliciesPlace();
+  const [reloadKey, setReloadKey] = useState(0);
+  // 发布落定一版：读面那一册重读，切回政策册签时结果已在；仍停在发布签，让人看完答复。
+  const notePublished = (kind: CommercialPolicyKind) => {
+    if (kind === register) setReloadKey((value) => value + 1);
+  };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <Tabs defaultValue="registers" className="flex-1 flex flex-col overflow-hidden gap-0">
+      <Tabs
+        value={tab}
+        onValueChange={(next) => place(next as PoliciesTab, register)}
+        className="flex-1 flex flex-col overflow-hidden gap-0"
+      >
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="registers">政策册</TabsTrigger>
-          <TabsTrigger value="publish-credit-policy">发布信用政策版本</TabsTrigger>
-          <TabsTrigger value="publish-authorization-rule">发布授权规则版本</TabsTrigger>
-          <TabsTrigger value="publish-settlement-policy">发布结算政策版本</TabsTrigger>
-          <TabsTrigger value="publish-price-policy">发布价格政策版本</TabsTrigger>
-          <TabsTrigger value="publish-acceptance-rule-package">发布规则包版本</TabsTrigger>
-          <TabsTrigger value="publish-pre-acceptance-financial-control-policy">发布接受前财务控制策略版本</TabsTrigger>
-          <TabsTrigger value="publish-customer-service-rule">发布客户服务规则版本</TabsTrigger>
-          <TabsTrigger value="publish">受控发布（JSON 镜像）</TabsTrigger>
+          <TabsTrigger value="publish">发布新版本</TabsTrigger>
+          <TabsTrigger value="json">JSON 发布（高级）</TabsTrigger>
         </TabsList>
         <TabsContent
           value="registers"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
-          <PolicyRegisters published={published} />
-        </TabsContent>
-        <TabsContent
-          value="publish-credit-policy"
-          className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
-        >
-          <CreditPolicyPublicationForm onPublished={() => notePublished('CREDIT_POLICY')} />
-        </TabsContent>
-        <TabsContent
-          value="publish-authorization-rule"
-          className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
-        >
-          <AuthorizationRulePublicationForm onPublished={() => notePublished('AUTHORIZATION_RULE')} />
-        </TabsContent>
-        <TabsContent
-          value="publish-settlement-policy"
-          className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
-        >
-          <SettlementPolicyPublicationForm onPublished={() => notePublished('SETTLEMENT_POLICY')} />
-        </TabsContent>
-        <TabsContent
-          value="publish-price-policy"
-          className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
-        >
-          {/* 票 admin-write-faces/14：发布类别 PRICE_RULE 的结果显示在册名 PRICE_POLICY 那本册（两条分类轴），落定后切到它并重读。 */}
-          <PricePolicyPublicationForm onPublished={() => notePublished('PRICE_POLICY')} />
-        </TabsContent>
-        <TabsContent
-          value="publish-acceptance-rule-package"
-          className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
-        >
-          <AcceptanceRulePackagePublicationForm onPublished={() => notePublished('ACCEPTANCE_RULE_PACKAGE')} />
-        </TabsContent>
-        <TabsContent
-          value="publish-pre-acceptance-financial-control-policy"
-          className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
-        >
-          <PreAcceptanceFinancialControlPolicyPublicationForm
-            onPublished={() => notePublished('PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY')}
-          />
-        </TabsContent>
-        <TabsContent
-          value="publish-customer-service-rule"
-          className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
-        >
-          <CustomerServiceRulePublicationForm onPublished={() => notePublished('CUSTOMER_SERVICE_RULE')} />
+          <RegisterChooser value={register} onChange={(kind) => place('registers', kind)} />
+          <PolicyRegisters kind={register} reloadKey={reloadKey} />
         </TabsContent>
         <TabsContent
           value="publish"
+          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <PublishPane register={register} onRegisterChange={(kind) => place('publish', kind)} onPublished={notePublished} />
+        </TabsContent>
+        <TabsContent
+          value="json"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
           <RegistrationPanel
