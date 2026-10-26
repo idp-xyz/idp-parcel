@@ -1,7 +1,7 @@
 # 180 TF 其余运营决定口与派送重问、补拍不记提交操作者
 
 Category: bug
-Status: in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，分支 `claude-dcg180`（worktree `idp-parcel-dcg180`）；TF 迁移取 0054（0053 归票 130），ADR 若要取 0308。此前 ready-for-agent——2026-10-26 票 126 隔离评审之后立（上线前必修：真实租户上线后，没记下的决定无法补记，理由同复核报告 M1），见票 [126](./126-tf-operation-decisions-record-the-submitting-operator.md)「评审记录」Spec 非阻断 1、2 与「修订轮」
+Status: in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg180` tip `34030af1c`（其后一笔只改本票面），见文末「完成记录」。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，分支 `claude-dcg180`（worktree `idp-parcel-dcg180`）；TF 迁移取 0054（0053 归票 130），ADR 若要取 0308。此前 ready-for-agent——2026-10-26 票 126 隔离评审之后立（上线前必修：真实租户上线后，没记下的决定无法补记，理由同复核报告 M1），见票 [126](./126-tf-operation-decisions-record-the-submitting-operator.md)「评审记录」Spec 非阻断 1、2 与「修订轮」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；票 126 隔离评审；[ADR-0303](../../../docs/adr/0303-transport-fulfillment-operation-decisions-record-the-submitting-operator-as-operation-evidence.md) 决定五与越权风险点 1、4；代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 M1；[ADR-0230](../../../docs/adr/0230-delivery-dispatch-left-unformed-is-kept-on-a-pending-register-and-reasked-through-the-same-executor.md) 决定七
 
@@ -25,3 +25,57 @@ Blocked by: 无
 - 六口每口：命令收操作者、记录加列、读回带出；同一决定由另一操作者重放答复不变、在册的不被顶替（每口一条用例钉）；不带操作者照样形成；库面拒空白与错位。
 - 补拍与重问：按的人可查，带 PG 的用例钉住；执行器形成的任务仍不记建任务人。
 - 生产装配真库用例：两个令牌各投一次，库里是首投者，回执不含操作者。
+
+## 完成记录（2026-10-26，Claude Code 作者子代理，会话 `tops-20` 派单，分支 `claude-dcg180`）
+
+起点：`51aca18cb`（含认领）。
+
+| 提交 | 内容 |
+|---|---|
+| `7c58e11ee` | 代码、TF 迁移 `0054` 与各层用例 |
+| `34030af1c` | ADR-0303 文末复核记录；ADR-0151 Links 补一句；UC-TF-004 立 `AT-TF-348`–`353`、UC-TF-006 立 `354`、`355`；AT 盘点①八行 |
+| 完成记录那一笔 | 本节与 Status 行 |
+
+### 做了什么
+
+- **八口 Intake** 全改走 `identityFor`（`tenantFor` 已无人用，删）；八个 `…Payload.Command` 改收 `OperatorIdentity`，操作者进命令的 `SubmittedBy`（订舱）、`CancelledBy`（取消订舱、取消委托）、`AdoptedBy`、`ReservedBy`、`ReleasedBy`、`TriggeredBy`、`ReaskedBy`。载荷里自报一律 400（封闭解码）。
+- **迁移** `migrations/transport_fulfillment/0054_remaining_operation_decisions_record_the_submitting_operator.sql`：`booking_request.submitted_by`/`cancelled_by`、`transport_commission.cancelled_by`、`segment_commission_adoption.adopted_by`、`capacity_reservation.reserved_by`、`capacity_release.released_by`，全部可空、不回填，CHECK 不准空白，取消人只在已取消的行上；新表 `delivery_dispatch_ask`（问询册）。
+- **编排**：六个命令各加一格，只做形状核（空白即缺席、NUL 答未受理，建在任何读写之前）后挂到记录上；重放、冲突比对与各门一行未改。取消那两口在 `Replace` 前给副本写取消人；委托开始（段采用）不写取消人。
+- **登记册**：订舱、委托、采用三张读写新列（取消只在取消那一次 `Replace` 写）；**容量池**按值换存时预占与释放明细整组删了再插回，故 `CapacityPoolRecord` 旁加 `ReservedBy`/`ReleasedBy` 两张按引用的表，读回时由明细行填、编排新作时只加那一份的键（复制新表，不原地改）、写回时随明细落列。
+- **查阅**：订舱册（`registry=booking-request`）每行带 `submittedBy`/`cancelledBy`（omitempty，只在订舱册行上，不进提交口回执用的 `bookingRequestBody`）。
+- **重问落点**：见下节。
+- **装配**（`cmd/parcel-api`）：补拍执行器接问询册（与那一拍同笔）；按册重问接 `transactionalAskLedger`（另起一笔事务）。`cmd/parcel-dispatch` 的执行器不接（它发起的那一路不带操作者）。
+
+### 重问落点（代决 1）
+
+**另立只增不改的问询册 `delivery_dispatch_ask`，一次按下一行**：补拍记段与对象，按册重问记问法与件数上限（一次一行，不逐件记）；`asked_by` 不可空，只有命令带了操作者才记，执行器随交接信封发起的那一路与重问逐件交来的都不记。不取「待形成册最近一次问旁记人」：那本册一行只留最近一次、留不下「每一次」，补拍的那一件也可能没有待形成行（一问就形成了不进册）。补拍与执行器那一拍同笔；重问先于逐件去问另起一笔，写不下一件也不问。不新增答复格，写不下答错误。候选与反方写在 ADR-0303 复核记录里；该落点是决定五「另记在重问决定处」里的落脚选择，不构成新取舍，故未另立 ADR-0308。
+
+### 代决与越权风险点（用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；编号对 ADR-0303 复核记录）
+
+1. **重问落点取问询册**（机制；ADR-0303 复核记录越权风险点 9）。
+2. **册写不下就不问、不答**（机制；风险点 10）：审计放在可用性之前。
+3. **执行器报错的补拍不留痕**（机制；风险点 11）：补拍记录与那一拍同笔，那一拍回滚则没有效果也没有痕迹。
+4. **问询册与委托取消人、采用人、预占人、释放人没有 HTTP 查阅面**（机制；风险点 12）。只订舱册带出；「按的人可查」在库与端口（`ListAsks`）层成立。本票不开新读面。
+5. **池证据靠记录带回**（机制；风险点 13）：任何以新铸 `CapacityPoolRecord` 调 `Replace` 的新代码会抹掉证据，今天只有读回再改的编排；靠同包用例守。
+6. **存量与册建立之前的按下永久缺席**（机制；风险点 14）。
+7. **范围里订舱册带出提交人与取消人，其余不带**（机制）：票面只点名订舱册。
+8. **新增 AT 号**：UC-TF-004 `AT-TF-348`–`353`、UC-TF-006 `354`、`355`。全仓与各 `claude-*` 分支核过：最大号在 `claude-dcg130` 的 `347`，`348` 起无人用；`347` 留给 130。
+9. **没读的**：UC-TF 各篇除验收示例外的正文，ADR-0201 至 0204 正文（风险点 15）。
+
+### 完成判据 → 用例
+
+| 判据 | 用例 |
+|---|---|
+| 六口命令收操作者、载荷自报 400 | `adapters/http/operation_evidence_remaining_test.go::TestEachRemainingDecisionFaceCarriesTheEnvelopeOperatorIntoItsCommand`（八口逐口，含补拍与重问） |
+| 记录加列、读回带出；另一位操作者重放答复不变、在册的不被顶替；不带操作者照样形成 | 编排 `application/operation_evidence_remaining_test.go`：订舱提交、取消订舱、取消委托、段采用、预占、释放各一条（含 NUL 答未受理、零写入）；真库 `adapters/postgres/operation_evidence_remaining_test.go`：订舱、委托、采用、池各一条（撞键 / 再取消写中 0 行、缺席落 NULL、取消人落在没取消的行被 CHECK 拒、池换存之后证据仍在）；订舱册读面 `::TestTheBookingRegistryShowsTheOperatorsAndTheReaskReceiptDoesNot` |
+| 库面拒空白与错位 | 真库各用例末尾的 `wantCheckViolation`（含问询册两种形状互斥、问法封闭、上限为正） |
+| 补拍与重问：按的人可查（带 PG）；执行器形成的任务仍不记建任务人 | 编排 `::TestADeliveryDispatchTriggerRecordsWhoAskedAndNeverTheTask`、`::TestAReaskRecordsWhoPressedItOnceAndAsksNothingWhenItCannot`；真库 `::TestTheDeliveryDispatchAskLedgerKeepsWhoPressedWhat`、`::TestTheDeliveryDispatchAskLedgerRefusesToRunOutsideATransaction`（无事务即拒，同时满足架构门的写口负向证据）；生产装配 `cmd/parcel-api/operation_decision_operator_remaining_test.go::TestTheDeliveryDispatchAsksRecordWhoPressedThemAgainstARealDatabase` |
+| 生产装配真库：两个令牌各投一次，库里是首投者，回执不含操作者 | 同文件 `::TestTheBookingCancellationAndAdoptionDecisionsRecordTheirOperatorsAgainstARealDatabase`（订舱提交、取消订舱、取消委托、采用）、`::TestTheCapacityDecisionsRecordTheirOperatorsAgainstARealDatabase`（预占、释放，含换存池后证据仍在） |
+
+改前核对（临时改坏、跑、改回，已确认工作树干净）：预占写明细时不落 `reserved_by` → `TestTheCapacityPoolKeepsTheReservingAndReleasingOperatorsAcrossReplacements` 红（预占人表为空）；`CancelCommission` 不把取消人挂到副本 → `TestACommissionCancellationRecordsItsOperatorAndAReplayByAnotherKeepsIt` 红；按册重问不记按下 → `TestAReaskRecordsWhoPressedItOnceAndAsksNothingWhenItCannot` 与 `cmd/parcel-api` 补拍重问用例红（问询册只剩两行补拍）。
+
+### 自验
+
+于 `7c58e11ee`（其后只动文档与本票面）：`gofmt -l internal cmd migrations` 无输出；`go build ./...`、`go vet ./internal/transportfulfillment/... ./cmd/...` 退 0；**带 DSN**（`127.0.0.1:55432`）`go test -count=1 -p 1 ./internal/transportfulfillment/... ./cmd/parcel-api/... ./cmd/parcel-dispatch/... ./cmd/parcel-transport-register/... ./internal/architecture/... ./migrations/...` 全部 ok（新真库用例 `-v` 核过是 PASS 不是 SKIP）；文档提交之后另跑 `./internal/architecture/... ./migrations/... ./tools/...` 全 ok。`go run ./tools/at-coverage-counts -check` 只报「生成物与文件不一致」，不报缺行、多行。未重生成 ADR 索引、AT 计数、机制清点，未跑全量。已有一条旧用例（`TestTheReaskFaceAnswersItsWholeFaceGrades`）因 Intake 里带操作者而需要问询册，给它的夹具接了个内存替身，断言一字未改。
+
+进 main 时请留意：AT 盘点①八行插在 `AT-TF-346` 之后（`347` 留给 130），UC-TF-004 末尾追加六行（与 130 若也追加同一表会在该处重叠）；ADR-0303 文末追加一节，ADR-0151 只改 Links 里挂 0303 的那一条；迁移 `0054`（`0053` 归 130）。
