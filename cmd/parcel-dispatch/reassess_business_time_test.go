@@ -83,7 +83,7 @@ func reassessBothLanesOver(t *testing.T, syn *synVerticalFixture) *reassessBothL
 	if err != nil {
 		t.Fatalf("构造采用仓储：%v", err)
 	}
-	accepted, err := nrparcelshipment.NewAcceptedCarriedGeoSource(syn.requests, syn.requests)
+	accepted, err := nrparcelshipment.NewAcceptedCarriedGeoSource(syn.requests)
 	if err != nil {
 		t.Fatalf("构造已接受委托读口：%v", err)
 	}

@@ -10,35 +10,23 @@ import (
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
-// 本文件证受理之后、不由 PS 信封触发的复核怎样取所携地理投影（ADR-0215 决定二）：按（租户，包裹）反查当前已接受委托，
-// 读受理基线那一版提交的投影，只到地理维。
+// 本文件证受理之后、不由 PS 信封触发的复核怎样取所携地理投影（ADR-0215 决定二，经 ADR-0301 改走 PS 的受理基线地理投影
+// 读口）：按（租户，包裹）问 PS 读口，译成判断键各维、接受时刻与地理维。PS 读口自己的答格（基线成员、基线那一版、自相
+// 矛盾的几格）由 PS 真库用例钉，这里钉的是本适配器怎样译、怎样把 PS 的答格分进重投与响亮失败。
 
-type parcelTargetDouble struct {
-	target psdomain.CurrentAcceptedParcelTarget
-	found  bool
-	err    error
-	asked  []psdomain.DeclaredParcelID
+// baselineGeoViewDouble 是 PS 受理基线地理投影读口的替身，记下被问的包裹。
+type baselineGeoViewDouble struct {
+	projection psdomain.AcceptanceBaselineGeoProjection
+	found      bool
+	err        error
+	asked      []psdomain.DeclaredParcelID
 }
 
-func (double *parcelTargetDouble) FindCurrentAcceptedByParcel(
+func (double *baselineGeoViewDouble) LoadAcceptanceBaselineGeoProjection(
 	_ context.Context, _ psdomain.TenantID, parcel psdomain.DeclaredParcelID,
-) (psdomain.CurrentAcceptedParcelTarget, bool, error) {
+) (psdomain.AcceptanceBaselineGeoProjection, bool, error) {
 	double.asked = append(double.asked, parcel)
-	return double.target, double.found, double.err
-}
-
-type countingRequestSource struct {
-	request psdomain.ShipmentRequest
-	found   bool
-	err     error
-	calls   int
-}
-
-func (double *countingRequestSource) FindBySourceIdentity(
-	_ context.Context, _ psdomain.SourceIdentity,
-) (psdomain.ShipmentRequest, bool, error) {
-	double.calls++
-	return double.request, double.found, double.err
+	return double.projection, double.found, double.err
 }
 
 // declaredCNToSG 是两端各报国家与邮编的地址要素，随首个提交版本申报，受理基线就钉在那一版上。
@@ -65,28 +53,33 @@ func declaredCNToSG(t *testing.T) psdomain.DeclaredAddressElements {
 	)
 }
 
-func targetFor(t *testing.T, request psdomain.ShipmentRequest, requestID string) psdomain.CurrentAcceptedParcelTarget {
+// baselineGeoOf 按 PS 读口的定义从一份真接受的委托上取受理基线地理投影：基线所指那一版、基线固定的时刻、那一版的投影。
+func baselineGeoOf(t *testing.T, request psdomain.ShipmentRequest) psdomain.AcceptanceBaselineGeoProjection {
 	t.Helper()
-	identity, err := psdomain.NewSourceIdentity(
-		value(t, psdomain.NewTenantID, "tenant-1"),
-		value(t, psdomain.NewCustomerAccountID, "customer-1"),
-		value(t, psdomain.NewSource, "source-a"),
-		value(t, psdomain.NewSourceRequestKey, "key-1"),
-	)
-	if err != nil {
-		t.Fatalf("identity: %v", err)
+	baseline, present := request.AcceptanceBaseline()
+	if !present {
+		t.Fatal("夹具委托没有受理基线")
 	}
-	target, err := psdomain.NewCurrentAcceptedParcelTarget(identity,
-		value(t, psdomain.NewShipmentRequestID, requestID), request.CurrentSubmissionVersion().VersionID())
-	if err != nil {
-		t.Fatalf("target: %v", err)
+	submission, present := request.SubmissionVersionByID(baseline.SubmissionVersionID())
+	if !present {
+		t.Fatal("夹具委托找不到基线那一版")
 	}
-	return target
+	projection, err := psdomain.NewAcceptanceBaselineGeoProjection(psdomain.AcceptanceBaselineGeoProjectionSpec{
+		ShipmentRequestID: request.ShipmentRequestID(),
+		CustomerAccountID: value(t, psdomain.NewCustomerAccountID, "customer-1"),
+		BaselineVersion:   baseline.SubmissionVersionID(),
+		FixedAt:           baseline.FixedAt(),
+		Geo:               submission.GeoProjection(),
+	})
+	if err != nil {
+		t.Fatalf("受理基线地理投影：%v", err)
+	}
+	return projection
 }
 
-func geoSourceOver(t *testing.T, targets *parcelTargetDouble, requests *countingRequestSource) *adapter.AcceptedCarriedGeoSource {
+func geoSourceOver(t *testing.T, view *baselineGeoViewDouble) *adapter.AcceptedCarriedGeoSource {
 	t.Helper()
-	source, err := adapter.NewAcceptedCarriedGeoSource(targets, requests)
+	source, err := adapter.NewAcceptedCarriedGeoSource(view)
 	if err != nil {
 		t.Fatalf("construct: %v", err)
 	}
@@ -104,12 +97,14 @@ func loadGeo(t *testing.T, source *adapter.AcceptedCarriedGeoSource, parcel stri
 // 固定的那一刻，与初始路由交接带来的同源。
 func TestAnAcceptedParcelAnswersItsJudgmentKeyAndTheBaselineVersionsGeo(t *testing.T) {
 	request := acceptedShipmentRequestDeclaring(t, declaredCNToSG(t))
-	targets := &parcelTargetDouble{target: targetFor(t, request, "request-1"), found: true}
-	source := geoSourceOver(t, targets, &countingRequestSource{request: request, found: true})
+	view := &baselineGeoViewDouble{projection: baselineGeoOf(t, request), found: true}
 
-	got, found, err := loadGeo(t, source, "parcel-1")
+	got, found, err := loadGeo(t, geoSourceOver(t, view), "parcel-1")
 	if err != nil || !found {
 		t.Fatalf("found=%v err=%v, want 当前已接受包裹", found, err)
+	}
+	if len(view.asked) != 1 || view.asked[0].String() != "parcel-1" {
+		t.Fatalf("问 PS 读口的包裹 = %v", view.asked)
 	}
 	if got.CustomerAccountID.String() != "customer-1" || got.ShipmentRequestID.String() != "request-1" ||
 		got.AcceptanceBaseline.String() != "version-1" {
@@ -129,9 +124,8 @@ func TestAnAcceptedParcelAnswersItsJudgmentKeyAndTheBaselineVersionsGeo(t *testi
 
 // 基线那一版一格地址要素都没报，投影照样是「带了」、各格缺席：与 PS 信封交出的同一形状，不是「没带」。
 func TestABaselineWithoutAddressElementsStillCarriesAnEmptyProjection(t *testing.T) {
-	request := acceptedShipmentRequest(t)
-	targets := &parcelTargetDouble{target: targetFor(t, request, "request-1"), found: true}
-	got, found, err := loadGeo(t, geoSourceOver(t, targets, &countingRequestSource{request: request, found: true}), "parcel-1")
+	view := &baselineGeoViewDouble{projection: baselineGeoOf(t, acceptedShipmentRequest(t)), found: true}
+	got, found, err := loadGeo(t, geoSourceOver(t, view), "parcel-1")
 	if err != nil || !found {
 		t.Fatalf("found=%v err=%v", found, err)
 	}
@@ -143,55 +137,32 @@ func TestABaselineWithoutAddressElementsStillCarriesAnEmptyProjection(t *testing
 	}
 }
 
-// Covers: AT-NR-066（取投影那一半）——没有当前已接受委托声明它，或声明它的委托的受理基线里没有它：都答「不是」，不是错误，
-// 也不再读委托聚合。
+// Covers: AT-NR-066（取投影那一半）——PS 读口答「不是」（没有当前已接受委托声明它，或受理基线里没有它）原样答「不是」，
+// 不是错误。
 func TestAnObjectThatIsNotACurrentAcceptedParcelAnswersNotFound(t *testing.T) {
-	t.Run("反查不中", func(t *testing.T) {
-		requests := &countingRequestSource{}
-		_, found, err := loadGeo(t, geoSourceOver(t, &parcelTargetDouble{}, requests), "SYN-UNIT-01")
-		if err != nil || found {
-			t.Fatalf("found=%v err=%v, want 不是、无错", found, err)
-		}
-		if requests.calls != 0 {
-			t.Fatalf("反查不中还读了 %d 次委托", requests.calls)
-		}
-	})
-	t.Run("基线里没有它", func(t *testing.T) {
-		request := acceptedShipmentRequest(t)
-		targets := &parcelTargetDouble{target: targetFor(t, request, "request-1"), found: true}
-		_, found, err := loadGeo(t, geoSourceOver(t, targets, &countingRequestSource{request: request, found: true}), "parcel-9")
-		if err != nil || found {
-			t.Fatalf("found=%v err=%v, want 不是、无错", found, err)
-		}
-	})
+	got, found, err := loadGeo(t, geoSourceOver(t, &baselineGeoViewDouble{}), "SYN-UNIT-01")
+	if err != nil || found {
+		t.Fatalf("found=%v err=%v, want 不是、无错", found, err)
+	}
+	if got != (adapter.AcceptedCarriedGeo{}) {
+		t.Fatalf("答「不是」还交回了 %+v", got)
+	}
 }
 
-// Covers: AT-NR-067（取投影那一半）——PS 读不动答可重投的哨兵；反查歧义与聚合自相矛盾响亮上抛，不进那一格。
+// Covers: AT-NR-067（取投影那一半）——PS 读不动答可重投的哨兵；反查歧义与受理基线自相矛盾响亮上抛，不进那一格。
 func TestAnUnreadableShipmentAnswerIsRetryableAndAContradictionIsLoud(t *testing.T) {
-	request := acceptedShipmentRequest(t)
-	hit := func() *parcelTargetDouble {
-		return &parcelTargetDouble{target: targetFor(t, request, "request-1"), found: true}
-	}
 	cases := map[string]struct {
-		targets   *parcelTargetDouble
-		requests  *countingRequestSource
+		err       error
 		retryable bool
 		sentinel  error
 	}{
-		"反查读口报错":     {&parcelTargetDouble{err: errors.New("pool closed")}, &countingRequestSource{}, true, adapter.ErrAcceptedParcelUnreadable},
-		"聚合读口报错":     {hit(), &countingRequestSource{err: errors.New("pool closed")}, true, adapter.ErrAcceptedParcelUnreadable},
-		"反查命中而聚合读不回": {hit(), &countingRequestSource{}, true, adapter.ErrAcceptedParcelUnreadable},
-		"反查歧义": {
-			&parcelTargetDouble{err: psdomain.ErrAmbiguousParcelTarget}, &countingRequestSource{}, false, psdomain.ErrAmbiguousParcelTarget,
-		},
-		"反查与聚合指着两份委托": {
-			&parcelTargetDouble{target: targetFor(t, request, "request-2"), found: true},
-			&countingRequestSource{request: request, found: true}, false, adapter.ErrAcceptedRequestInconsistent,
-		},
+		"读口报错":     {errors.New("pool closed"), true, adapter.ErrAcceptedParcelUnreadable},
+		"反查歧义":     {psdomain.ErrAmbiguousParcelTarget, false, psdomain.ErrAmbiguousParcelTarget},
+		"受理基线自相矛盾": {psdomain.ErrAcceptanceBaselineInconsistent, false, adapter.ErrAcceptedRequestInconsistent},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			_, found, err := loadGeo(t, geoSourceOver(t, tc.targets, tc.requests), "parcel-1")
+			_, found, err := loadGeo(t, geoSourceOver(t, &baselineGeoViewDouble{err: tc.err}), "parcel-1")
 			if found || !errors.Is(err, tc.sentinel) {
 				t.Fatalf("found=%v err=%v, want %v", found, err, tc.sentinel)
 			}
@@ -199,5 +170,11 @@ func TestAnUnreadableShipmentAnswerIsRetryableAndAContradictionIsLoud(t *testing
 				t.Fatalf("可重投 = %v, want %v：%v", retryable, tc.retryable, err)
 			}
 		})
+	}
+}
+
+func TestTheGeoSourceNeedsThePSView(t *testing.T) {
+	if _, err := adapter.NewAcceptedCarriedGeoSource(nil); err == nil {
+		t.Fatal("nil 读口应在构造期被拒")
 	}
 }
