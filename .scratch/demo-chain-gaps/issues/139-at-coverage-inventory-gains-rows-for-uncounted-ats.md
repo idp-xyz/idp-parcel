@@ -1,7 +1,7 @@
 # 139 AT 盘点约 160 个 AT 没有分桶表行，总览低报
 
 Category: bug
-Status: in-progress——2026-10-26 评审无阻断、修订轮完，待进 main，分支 `claude-dcg139` tip `b0e523467`（已 rebase 到 origin/main `e4bd1b150`；票面那一笔在其上；见文末「评审记录」「修订轮」）。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg139` tip `1f22fbb23`（rebase 前；票面那一笔在其上；见文末「完成记录」）。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，分支 `claude-dcg139`（worktree `idp-parcel-dcg139`）。此前 ready-for-agent——2026-10-20 代决复核立（文档与工具），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: resolved——2026-10-26 进 main `effb2ce27`（见文末「进 main 记录」）。此前 in-progress——2026-10-26 评审无阻断、修订轮完，待进 main，分支 `claude-dcg139` tip `b0e523467`（已 rebase 到 origin/main `e4bd1b150`；票面那一笔在其上；见文末「评审记录」「修订轮」）。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg139` tip `1f22fbb23`（rebase 前；票面那一笔在其上；见文末「完成记录」）。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，分支 `claude-dcg139`（worktree `idp-parcel-dcg139`）。此前 ready-for-agent——2026-10-20 代决复核立（文档与工具），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 M23；infra-speed/03 越权风险点 4
 
@@ -108,3 +108,12 @@ Blocked by: 无
 - `go run ./tools/at-coverage-counts -check` 只报「生成物与文件不一致」（预期，作者不重算），不报缺行或多行；一次性脚本两向复核：立号 1578 = 表行 1578，两向差 0。
 - `go build ./...`、`go vet ./tools/...` 过，`gofmt -l tools/` 空；`go test -count=1 ./tools/...` 全绿。
 - 各桶行序：除 ①里两处旧有乱序（CC-436→156、TF-265→226）外按号排。
+
+## 进 main 记录（2026-10-26，推送方会话 tops-20）
+
+- **main**：`effb2ce27`。出处：分支 `claude-dcg139` tip `bab001471`（作者修订轮后自行 rebase 到 main `e4bd1b150`，推送方重放为快进，SHA 不变：`045cf5cb8` 补行、`762e37ef4` 工具守卫、`8c9c014ea` 完成记录、`b0e523467` 修订轮、`bab001471` 票面；rebase 前出处 `6ceded3ea`、`1f22fbb23`、`e18cf2ef1`、`ad8da9dd3`）。
+- **生成物**：AT 盘点总览计数 `effb2ce27`（守卫生效后的首次重算，立号与表行两向差 0）；ADR 索引与机制清点无变化。三件 `-check` 退 0。
+- **评审**：隔离子代理钉 `e18cf2ef1`，两轴无阻断，非阻断 S1、S2、P1–P4 在修订轮全收（见「评审记录」「修订轮」）。修订轮只收非阻断，推送方读了修订 diff，未另派复评。
+- **全量真库测试**：`scripts/test-full.sh` 跑在 `effb2ce27`（即所推 SHA）：158 ok / 0 FAIL，退 0。
+- **种子**：`scripts/demo-seeds/seed.sh` 灌一次性库（`effb2ce27` 上），退 0，用后删库。
+- **生效提醒**：自本笔起，任何分支新立 AT 而盘点无表行，推送方重算 `at-coverage-counts`（写回与 `-check`）都退 2；已向另一会话 tops-26 广播。
