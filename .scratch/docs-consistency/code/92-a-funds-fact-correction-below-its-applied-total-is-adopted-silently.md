@@ -58,7 +58,7 @@ S–M。
 3. **重算集合取全部 `FactCustomerScopes`，不逐个判 P 动没动**（协调方裁，作者核过）：多作用域收款只在金额越过某个作用域的 d 时才真动，逐个判要把求 P 的 SQL 搬到应用层；我试想过用「新旧金额都不低于已核销合计就跳过」的捷径，反例是核销里有借贷混合分配、单个作用域的 d 可以大于合计，会漏，所以不取。
 4. **事实锁取在 `FindVersion` 之前**：重放路径也要数合计才能带出超核；代价是重放也排队，更正少见，可以接受。
 5. **作用域锁在落版本行之前取齐**（而不是留给 `recomputeScope` 自己取）：`recomputeScopes` 的契约是调用方已锁住；端口头注写明隐式行锁都落在作用域锁之后，更正落版本行与采用信封入队也守这条。有应用层用例钉「第一次推进之前两把作用域锁都已取」。
-6. **重放带出此刻的超核，只对仍是链头的那一版**：响应丢了重交，信号与第一次一致；这是字段语义的一部分，不是额外功能。
+6. **重放带出此刻的超核，只对仍是链头的那一版**：响应丢了重交仍能看到这个信号（两次答复之间若有核销撤销，数会不同，后一次才是此刻的）；这是字段语义的一部分，不是额外功能。
 7. **信用状况不重算**：它读已确认费用的到期画像，不读资金事实金额，更正不改它。
 8. **管理台示出超核**：派单点名 CLI/HTTP，管理台手工登记口走同一个响应体，不示出就是同一处静默换了个面；只动共享组件 `RegistrationPanel.tsx`（字段缺席时对其余登记面没有任何变化）与新增的纯函数，没碰 `pages/party/**`、`pages/operations/*`、`pages/network/api.ts`。
 9. **账不平拦更正的 HTTP 面不新立专名码**：见越权风险点 2。
@@ -89,3 +89,35 @@ S–M。
   6. 作用域不排键序 → application 一条红；
   7. 作用域锁不在落版本行之前取齐 → application 一条红（加了「第一次推进之前两把锁已取」的断言之后）；
   8. HTTP 响应体不带 `overAppliedMinor`、CLI 更正的答复不用 `correctionSubjectOf` → HTTP 一条、CLI 两条红。
+
+## 评审记录与修订轮（2026-10-26，协调方隔离评审：N1 行为回退须修；作者修订轮，分支 claude-code92，变基到修订轮开工时的 origin/main）
+
+### N1 更正被已不平的作用域拦住（协调方裁：照评审的最小补救）
+
+评审真库复现：收款 5000 映 stmt-1 核销 4000，再插一条确认后的价格纠错贷记 2000（库不拦、UC-SA-002 也不核已核销分配），已确认应收降到 3000 < 已核销 4000；此时更正 5000 → 4500，首轮实现整笔回滚（HTTP 500、CLI「账不平」），而基线同一用例更正照采。外部系统拥有资金事实，更正被内部账不平拦住就永远进不来，且 5xx 会让外部无限重投；ADR-0285 自己否决「超核时拒收更正」的理由同样适用，ADR-0283 否决「全部作用域重算」的理由也正是一个作用域的不平会把别的作用域上的操作拦成账不平。
+
+- `CorrectFact` 保存分支改走 `recomputeReachedScopes`：逐个 `recomputeScope`，`errors.Is(err, domain.ErrNegativeConfirmedUnsettled)` 时该作用域跳过、留在原值，身份记进 `FundsResult.UnreconciledScopes`（按键序，带法人/账户/币种）；别的错误（含 `ErrPostingNotAdvanced`）照旧上抛、整笔回滚。账不平在 `PostedAndUnsettled` 里求出，发生在任何写之前，跳过不会把事务打进中止态。`recomputeScopes`（核销、撤销用）没动。
+- HTTP：响应体 `unreconciledScopes`（`[{legalEntity, account, currency}]`，`omitempty`），状态码仍是 201。CLI：`correctionSubjectOf` 逐个点名「作用域 法人 X、账户 Y、币种 Z 账已不平，入账余额没有跟着新金额推进——先核对指向它的核销与调整……」，退出码 0。管理台：`over-applied-note.ts` 增 `unreconciledScopesNote`，`RegistrationResponseBody.unreconciledScopes`；原写死的「入账余额已按新金额重算」整句去掉（事实没映射到任何客户应收作用域，或有作用域被跳过时都不属实），超核说明只说超核与续办。
+- 文档：ADR-0285 决定三末条改为「账不平的作用域跳过、更正照采」，Context 补「作用域的账可以已经不平」，候选与反方补「账不平时整笔回滚」否决并在「更正提交后另起一笔事务」条里注明 ADR-0181 否决乙担心的「没有一格可答账已更正、余额还没跟上」由这个字段回答，越权风险点 2 改写为「账不平的作用域留在旧值」、风险点 3 的代价改写；SA `CONTEXT` 规则句与 UC-SA-005 并发一条、`AT-SA-114` 预期结果、状态行同步。这取代完成记录里的代决 9 与越权风险点 2。
+- 用例：①真库复现评审场景 `TestACorrectionIntoAnUnbalancedScopeIsAdoptedLeavesItAndNamesIt`（更正已采用、版本行 2、`operational_balance` 不变、结果点名 acct-1）；②真库 `TestACorrectionRepostsTheBalancedScopeAndOnlySkipsTheUnbalancedOne`（事实落两个作用域，A 平 B 不平，A 推进到 -200，B 留 0 / 1000，只点名 B）；③真库 `TestAScopeSkippedByACorrectionAdvancesAgainOnceItsBooksBalance`（撤销一笔核销使账回平，那一笔撤销按更正后的链头金额推进；其后再一次更正照常推进、不再点名）；④HTTP `TestACorrectionIntoAnUnbalancedScopeIsAdoptedAndNamesTheScopeInTheBody`（201 加该字段，键集恰为 outcome 与 unreconciledScopes）；⑤CLI `TestACorrectionIntoAnUnbalancedScopeIsAdoptedAndNamesTheScopeThroughTheCommand`（退出 0、点名句、同时说累计超核 500、运营余额不动、版本行 2）；⑥application `TestACorrectionSkipsAScopeWhoseBooksAreUnbalancedAndRecomputesTheRest`（不平的放键序第一位，跳过而不是停下，其余照推）与 `TestACorrectionStillFailsOnOtherRecomputeErrors`（推进答未推进仍上抛）；管理台纯函数用例补两条。
+- 红的证据：实现先于用例写成，红由变异给出——把 `continue` 改成上抛（回到首轮的整笔回滚）→ HTTP 一条、postgres 三条、application 一条、CLI 一条红。
+
+### N2 重放「仍是链头」条件无用例
+
+补 application 用例 `TestOnlyTheChainHeadsReplayCarriesTheOverApplied`：核销 15000，更正 v1 → v2（12000）再 v2 → v3（10000，评审例里的 20000 不超核，区分不出重放 v3 带不带，取 10000）；重放 v2 的命令答`已存在`、超核 0（已被 v3 取代），重放 v3 答此刻的超核 5000。变异：条件改成恒真 → 这条红。
+
+### N3 与措辞
+
+- 测试注释的决定编号改正：「更正先锁事实……再重算」是决定二、三，「没映射到任何作用域只取事实锁」是决定二。
+- 重放的说法统一：ADR-0285 决定一、越权风险点 6、`existingCorrection` 头注、application 用例注释与本票代决 6 都写「重放带出此刻的超核，两次答复在其间有撤销核销时会不同」。
+
+### 修订轮测试
+
+- `go build ./...`、`go vet ./...` 退 0，`gofmt -l` 无输出；范围 `./internal/settlementaccounting/...`、`./cmd/parcel-settlement-register/...`、`./cmd/parcel-api/`、`./cmd/parcel-dispatch/`、`./internal/architecture/...`、`./migrations/...` 及三个跨上下文适配器包：退 0。新用例 `-count=3`、并发用例 `-count=5`：退 0。`adr-index` 在工作副本上生成一次无错（生成物已还原）；`at-coverage-counts -check` 退 0。
+- 管理台三道门（Node 22，软链主树 `node_modules`，用后删，dist 与 tsbuildinfo 一并删）：`tsc -b --noEmit`、`scripts/run-tests.mjs`（717 过）、`vite build` 退 0。
+- 变异（改完跑红、拷回备份复原并 `cmp`），全部被杀：
+  1. 跳过改为上抛（`continue` → 回滚）→ HTTP、postgres 三条、application、CLI 各红；
+  2. 跳过但不记进结果 → 同一组用例红；
+  3. 不论什么错误都当账不平跳过（去掉 `errors.Is`）→ `TestACorrectionStillFailsOnOtherRecomputeErrors` 红；
+  4. 重放的链头条件恒真 → `TestOnlyTheChainHeadsReplayCarriesTheOverApplied` 红；
+  5. HTTP 不写 `unreconciledScopes`、CLI 不点名 → 各自一条红。
