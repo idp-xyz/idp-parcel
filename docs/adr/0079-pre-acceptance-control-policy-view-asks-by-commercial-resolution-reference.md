@@ -1,6 +1,6 @@
 # ADR-0079: 接受前控制策略视图凭商业解析回指提问——消费方只回显标识，提供方从已固定闭包取合同
 
-Status: Accepted<!-- 索引注记 -->｜**表述更正**（指针 2026-10-21 补）：决定五「释放命令不带回指：释放不问控制策略，它按原请求身份在冻结账本上认领」里「在冻结账本上认领」一语成文时就写窄了，以 [ADR-0047](./0047-terms-control-forms-credit-exposure-not-a-freeze.md) 决定四「释放按原关联双账本认领」与 [ADR-0122](./0122-pre-acceptance-control-executes-the-policy-content-items-and-parcel-shipment-folds-by-the-joint-pass-condition.md) 决定三「释放两本账各认领一次」为准；该句的论点「释放不问控制策略」、不用回指与其余各条不变
+Status: Accepted<!-- 索引注记 -->｜**表述更正**（指针 2026-10-21 补）：决定五「释放命令不带回指：释放不问控制策略，它按原请求身份在冻结账本上认领」里「在冻结账本上认领」一语成文时就写窄了，以 [ADR-0047](./0047-terms-control-forms-credit-exposure-not-a-freeze.md) 决定四「释放按原关联双账本认领」与 [ADR-0122](./0122-pre-acceptance-control-executes-the-policy-content-items-and-parcel-shipment-folds-by-the-joint-pass-condition.md) 决定三「释放两本账各认领一次」为准；该句的论点「释放不问控制策略」、不用回指与其余各条不变｜**读法注**（2026-10-26）：决定五末句「回指在释放路径上取到了却不用，正是同源的代价，也是它的证据。」是写下时释放路径现查作用域的现状；[ADR-0282](./0282-a-control-release-the-provider-refuses-is-registered-for-handling-instead-of-compensated.md) 决定四之后释放按施加时随控制结果存下的作用域认领、不再取作用域源，该句所说的代价不再发生。决定五「回指与资金作用域同出一次解析，同进同出」与「释放命令不带回指」照旧，无条款停用
 Date: 2026-08-26
 
 ## Context

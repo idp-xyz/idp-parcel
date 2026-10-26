@@ -119,7 +119,7 @@
 
 ### 接受判断结果（接受链 `AdvanceAcceptanceChainHandler`）
 
-接受链挂在「委托已提交」信封的消费者上，按「放掉被取代各版已成立的占用 → 逐成员可达性 → 整份委托财务控制 → 形成决定」推进；处理结果是 `DECIDED`（形成了已接受或已拒绝）、`UNDECIDED`（尚未决定，停在哪一步、为什么另行交回），或 `VERSION_SUPERSEDED`（信封指名的提交版本已被新版本取代，这一版不再有可判断的；不按未决重投）。停在哪一步按四格交回：`SUPERSEDED_CONTROL_RELEASE`（被取代版本的占用没能确定放掉，原因 `CONTROL_RELEASE_PENDING`，或读不回那一版的判断，原因 `RECORDED_JUDGMENTS_UNAVAILABLE`；都是内部重试，当前版本一步不判）、`REACHABILITY_JUDGMENT`、`FINANCIAL_CONTROL_JUDGMENT`、`ACCEPTANCE_DECISION`。
+接受链挂在「委托已提交」信封的消费者上，按「放掉被取代各版已成立的占用 → 逐成员可达性 → 整份委托财务控制 → 形成决定」推进；处理结果是 `DECIDED`（形成了已接受或已拒绝）、`UNDECIDED`（尚未决定，停在哪一步、为什么另行交回），或 `VERSION_SUPERSEDED`（信封指名的提交版本已被新版本取代，这一版不再有可判断的；不按未决重投）。停在哪一步按四格交回：`SUPERSEDED_CONTROL_RELEASE`（被取代版本的占用没能确定放掉，原因 `CONTROL_RELEASE_PENDING`，或读不回那一版的判断，原因 `RECORDED_JUDGMENTS_UNAVAILABLE`；都是内部重试，当前版本一步不判）、`REACHABILITY_JUDGMENT`、`FINANCIAL_CONTROL_JUDGMENT`、`ACCEPTANCE_DECISION`。被取代版本的释放被结算确定不受理时不停在这一格，链响亮失败、消费门落 `publish_failed`，当前版本一步不判，交人处理；接受前财务控制那一口答出译不动的东西时同样响亮失败（[ADR-0282](../../adr/0282-a-control-release-the-provider-refuses-is-registered-for-handling-instead-of-compensated.md) 决定三）。
 
 | 结果 | 业务含义 | 必须返回或可查询的依据 | 禁止行为 |
 |---|---|---|---|
@@ -264,6 +264,7 @@
 | `AT-PS-112` | 首次答`生产归属未决`（交接未确认的他方归属除外），客户原样重发 | 重判归属，按这一次的结果作答：放行就建单、答`已提交`；挡下就答对应那一格；每一次判断都留下，后一次不覆盖前一次 |
 | `AT-PS-113` | 上一次答`准入暂停`、交接已确认的`非本产品生产归属`、`输入未受理`、`原委托不可见`或`关联不适用`，客户原样重发（其间暂停原因已解除、原委托状态已变也一样） | 答`已有结果`并带原结果（`priorOutcome`），挡下的那几格连同原归属结果与门禁原因；不重判、不再交接，不建委托 |
 | `AT-PS-114` | 首次判为他方、交接未确认（答`生产归属未决`），客户原样重发（其间登记册已翻成本产品也一样） | 按记着的那次尝试重投、重查确认，不重判归属、不在本地建单：确认了答`非本产品生产归属`，仍未确认答`生产归属未决`；确认之后再重发答`已有结果`，带原结果 |
+| `AT-PS-116` | 客户补件形成新版本，被取代那一版已占下一笔，结算对它的释放确定不受理（请求或作用域立不起来，含施加时没存作用域的存量那一笔） | 新版本不判、不占；接受链不停在内部重试，响亮失败（消费门 `publish_failed`），交人处理；被取代那一笔原样占着 |
 
 ## 已确认业务决策与待提供参数
 
@@ -307,6 +308,7 @@
 | `AT-PS-035`「接受提交未成立时按原关联释放已成立各项形成的占用」 | 已补：提交版本被新版本取代（客户补件、授权处置交客户补充之后的补件）时，接受链判新版本之前先按原关联放掉旧版本已成立的占用；放不掉停在 `SUPERSEDED_CONTROL_RELEASE` 内部重试，新版本不判 | [code/20](../../../.scratch/docs-consistency/code/20-superseded-submission-version-keeps-its-control-occupation.md) |
 | `AT-PS-035`「接受提交未成立时按原关联释放已成立各项形成的占用」，停在`等待受控补充`那一格 | 已补：形成决定处停进`等待受控补充`、暂停落库之后，按原关联放掉停住那一版已成立的占用；放不掉不撤销暂停；这一路的补偿引用不透出、不持久，兜底是补件之后接受链开头对同一笔再请求一次，以及撤回逐版释放，提供方都按幂等答原释放 | [code/72](../../../.scratch/docs-consistency/code/72-a-customer-supplement-pause-releases-the-paused-versions-occupation.md) |
 | `AT-PS-035` 同一句，被取代版本在终局路径上那一格 | 已补：自动拒绝、主动拒绝与授权处置都放这份委托各版已成立的占用，不只是当前版本；一版放不掉不挡其余各版，补偿续办，不回滚决定 | [code/73](../../../.scratch/docs-consistency/code/73-terminal-paths-release-every-superseded-versions-occupation.md) |
+| `AT-PS-035` 同一句，释放被结算确定不受理那一格；`AT-PS-116` | 已补：释放答复分已收口、可重试未形成、确定未受理三格；自动拒绝、主动拒绝、授权处置两个去向与停进`等待受控补充`遇确定未受理，决定或暂停照常成立，那一笔记入释放未受理册待人处理，答复带 `controlReleaseNotAccepted`、不留补偿引用；接受链放被取代版本遇到它响亮失败；释放按施加时随控制结果存下的作用域认领（[ADR-0282](../../adr/0282-a-control-release-the-provider-refuses-is-registered-for-handling-instead-of-compensated.md)）。本行预期结果不变 | [code/71](../../../.scratch/docs-consistency/code/71-release-and-control-ports-answer-a-closed-set-instead-of-a-bare-error.md) |
 | 提交答复与问题详情 | 已补：首方提交口在 `/v1/shipment-requests`，旧路径直接改名、不并挂；4xx/5xx 是 `application/problem+json`（`type`、`title`、`status`、`code`、`requestId`，`detail` 只随可改正的 4xx），横切规则见[首方客户 API 契约](../../api/first-party-api-contract.md)（ADR-0140 决定二、三）；契约生成器与端点描述符未落 | [code/22](../../../.scratch/docs-consistency/code/22-customer-face-http-contract-misses-accepted-adrs.md)、[code/82](../../../.scratch/docs-consistency/code/82-operator-and-integration-families-still-answer-the-legacy-problem-shape-and-the-contract-is-not-generated.md) |
 | [ADR-0256](../../adr/0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md) 决定一第 2 格「重发必须接着办」 | 已补：重发按这份提交上一次实际走到的位置作答（[ADR-0266](../../adr/0266-a-submission-replay-answers-what-the-first-round-answered-and-only-unresolved-ownership-is-judged-again.md)），没有形成答案的接着判归属与建单，生产归属未决的重判（交接未确认的他方归属除外：按记着的尝试重投重查，不重判），同一来源身份的续办一次只走一路；答出的答案逐次留存（`AT-PS-111`、`AT-PS-112`、`AT-PS-114`） | [code/39](../../../.scratch/docs-consistency/code/39-a-preserved-submission-whose-build-failed-is-never-built-on-replay.md) |
 | 提交答复「已有结果」一行「已经形成生产归属时返回原归属结果」 | 已补：已有结果带原结果（`priorOutcome`）与原归属结果——已经建单时是建单所据的那一次，准入暂停与非本产品生产归属连同门禁原因（`AT-PS-003`、`AT-PS-113`） | [code/39](../../../.scratch/docs-consistency/code/39-a-preserved-submission-whose-build-failed-is-never-built-on-replay.md) |
