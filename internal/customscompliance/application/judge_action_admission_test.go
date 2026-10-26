@@ -20,6 +20,21 @@ var admissionAppAt = time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC)
 type zoneViewDouble struct {
 	zones map[string]string
 	err   error
+	// tenantErr 只让「租户登没登过区域」那一问读不动；anyAsked 数它被问了几次。
+	tenantErr error
+	anyAsked  int
+}
+
+// AnyNodeCustomsZoneInForce 按替身里登了几个节点作答：登了任一节点即「已登过区域」。
+func (double *zoneViewDouble) AnyNodeCustomsZoneInForce(context.Context, domain.TenantID, time.Time) (bool, error) {
+	double.anyAsked++
+	if double.err != nil {
+		return false, double.err
+	}
+	if double.tenantErr != nil {
+		return false, double.tenantErr
+	}
+	return len(double.zones) > 0, nil
 }
 
 func (double *zoneViewDouble) LoadNodeCustomsZone(
@@ -314,6 +329,52 @@ func TestEachUnreadableSourceStopsBeforeTheFold(t *testing.T) {
 				t.Fatal("读不动不该交出判断")
 			}
 		})
+	}
+}
+
+// 跨区待定时编排另问一句租户登没登过区域，答案交领域折（ADR-0300）：登过的租户，不在册对象的跨区那一道答未配置并
+// 指名未登的节点；一条都没登的租户这一道不列。判得出跨区时不问这一句；问不动停在区域那一口的读不动，不拿「没登」顶替。
+// Covers: AT-CC-426、AT-CC-427 的编排半边。
+func TestTheTenantsZoneRegisterIsAskedOnlyWhenCrossZoneIsUndetermined(t *testing.T) {
+	fixture := newAdmissionFixture()
+	result, err := fixture.handler(t).Handle(t.Context(), admissionCommand(t, "SYN-NODE-SZX-GATE", "SYN-NODE-KUL-HUB"))
+	if err != nil {
+		t.Fatalf("判：%v", err)
+	}
+	judgement, _ := judged(t, result)
+	if judgement.Answer() != domain.AdmissionNotConfigured || fixture.zones.anyAsked != 1 {
+		t.Fatalf("登过区域的租户、终点未登 = %s %+v，问了 %d 次", judgement.Answer(), judgement.Findings(), fixture.zones.anyAsked)
+	}
+	for _, finding := range judgement.Findings() {
+		if finding.Action == domain.CrossCustomsMovement &&
+			(finding.Bases[0].Cause != domain.CauseNodeZoneNotRegistered || finding.Bases[0].Sources[0] != "SYN-NODE-KUL-HUB") {
+			t.Fatalf("未配置要指名未登的节点：%+v", finding)
+		}
+	}
+
+	domestic := newAdmissionFixture()
+	domestic.zones.zones = map[string]string{}
+	result, err = domestic.handler(t).Handle(t.Context(), admissionCommand(t, "SYN-NODE-SHA-HUB", "SYN-NODE-SZX-GATE"))
+	if err != nil {
+		t.Fatalf("判：%v", err)
+	}
+	if judgement, _ := judged(t, result); judgement.Answer() != domain.AdmissionNotGuarded || len(judgement.Findings()) != 1 {
+		t.Fatalf("一条区域都没登的租户 = %s %+v", judgement.Answer(), judgement.Findings())
+	}
+
+	determined := newAdmissionFixture()
+	if _, err := determined.handler(t).Handle(t.Context(), admissionCommand(t, "SYN-NODE-SZX-GATE", "SYN-NODE-SIN-HUB")); err != nil {
+		t.Fatalf("判：%v", err)
+	}
+	if determined.zones.anyAsked != 0 {
+		t.Fatalf("判得出跨区时不该问租户登没登过区域：问了 %d 次", determined.zones.anyAsked)
+	}
+
+	failing := newAdmissionFixture()
+	failing.zones.tenantErr = errors.New("dependency down")
+	result, err = failing.handler(t).Handle(t.Context(), admissionCommand(t, "SYN-NODE-SZX-GATE", "SYN-NODE-KUL-HUB"))
+	if err != nil || result.Outcome() != application.ActionAdmissionUnreadable || result.UnreadableReason() != application.NodeZoneViewUnavailable {
+		t.Fatalf("问不动 = %s / %s，err = %v，要读不动 / %s", result.Outcome(), result.UnreadableReason(), err, application.NodeZoneViewUnavailable)
 	}
 }
 

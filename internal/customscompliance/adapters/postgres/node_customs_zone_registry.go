@@ -137,3 +137,35 @@ func (view *NodeCustomsZonePointView) LoadNodeCustomsZone(
 	}
 	return entry, true, nil
 }
+
+// AnyNodeCustomsZoneInForce 按租户在评估时点上问「有没有任一节点的区域在生效区间内」，区间判法与
+// LoadNodeCustomsZone 同一句。走主键的租户前缀，不读区域取值本身。
+func (view *NodeCustomsZonePointView) AnyNodeCustomsZoneInForce(
+	ctx context.Context,
+	tenant domain.TenantID,
+	evaluatedAt time.Time,
+) (bool, error) {
+	// 空租户与零时点同 LoadNodeCustomsZone：是调用方编程错误，不查成「一条都没登」。
+	if strings.TrimSpace(tenant.String()) == "" {
+		return false, fmt.Errorf("any node customs zone in force: the tenant is blank")
+	}
+	if evaluatedAt.IsZero() {
+		return false, fmt.Errorf("any node customs zone in force: the evaluation instant is zero")
+	}
+	querier, err := view.db.ReadExecutor(ctx)
+	if err != nil {
+		return false, fmt.Errorf("any node customs zone in force: %w", err)
+	}
+	var inForce bool
+	if err := querier.QueryRow(ctx,
+		`SELECT EXISTS (
+		    SELECT 1 FROM customs_compliance.node_customs_zone
+		     WHERE tenant_id = $1
+		       AND applies_from <= $2
+		       AND (applies_until IS NULL OR applies_until > $2))`,
+		tenant.String(), evaluatedAt.UTC(),
+	).Scan(&inForce); err != nil {
+		return false, fmt.Errorf("any node customs zone in force: %w", err)
+	}
+	return inForce, nil
+}

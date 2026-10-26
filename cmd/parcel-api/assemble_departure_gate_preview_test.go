@@ -24,7 +24,12 @@ type previewLine struct {
 
 func newPreviewLine(t *testing.T) *previewLine {
 	t.Helper()
-	line := newDepartureLine(t)
+	return previewLineOn(t, newDepartureLine(t))
+}
+
+// previewLineOn 在调用方立好的那一条线上装问询编排与两口端点。
+func previewLineOn(t *testing.T, line *departureLine) *previewLine {
+	t.Helper()
 	preview, err := buildDepartureGatePreview(line.db)
 	if err != nil {
 		t.Fatalf("装配出发前问询：%v", err)

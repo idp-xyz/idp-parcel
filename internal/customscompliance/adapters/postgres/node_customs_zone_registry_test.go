@@ -74,3 +74,54 @@ func TestNodeCustomsZoneRegistryVersionsOnRealPostgres(t *testing.T) {
 		t.Fatalf("首版之前该是未登记：%v / %v", found, err)
 	}
 }
+
+// 「租户登没登过区域」按评估时点在真库上读（隔离合成 S，ADR-0300）：首版起点之前答没登，之后答登了，换版不改这一答；
+// 别的租户登的不算。区间判法与按节点读的那一句同一，零租户与零时点是编程错误，不查成「没登」。
+// Covers: AT-CC-426、AT-CC-427 的读口半边。
+func TestAnyNodeCustomsZoneInForceReadsTheTenantsRegisterAtTheInstant(t *testing.T) {
+	fixture := newViewFixture(t)
+	registry, err := adapter.NewNodeCustomsZoneRegistrations(fixture.db)
+	if err != nil {
+		t.Fatalf("构造区域写口：%v", err)
+	}
+	view, err := adapter.NewNodeCustomsZonePointView(fixture.db)
+	if err != nil {
+		t.Fatalf("构造区域读口：%v", err)
+	}
+	tenant := viewValue(t, domain.NewTenantID, "SYN-TENANT-01")
+	other := viewValue(t, domain.NewTenantID, "SYN-TENANT-02")
+	january := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	june := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+	for _, from := range []time.Time{january, june} {
+		if err := fixture.db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+			_, err := registry.RegisterNodeCustomsZone(txCtx, tenant, viewValue(t, domain.NewNetworkNodeReference, "SYN-NODE-SZX-GATE"),
+				viewValue(t, domain.NewCustomsZoneReference, "SYN-ZONE-CN"), from)
+			return err
+		}); err != nil {
+			t.Fatalf("登区域：%v", err)
+		}
+	}
+
+	for _, probe := range []struct {
+		tenant domain.TenantID
+		at     time.Time
+		want   bool
+	}{
+		{tenant, january.Add(-time.Microsecond), false},
+		{tenant, january, true},
+		{tenant, time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), true},
+		{tenant, june.Add(24 * time.Hour), true},
+		{other, june.Add(24 * time.Hour), false},
+	} {
+		got, err := view.AnyNodeCustomsZoneInForce(t.Context(), probe.tenant, probe.at)
+		if err != nil || got != probe.want {
+			t.Fatalf("%s@%s = %v / %v，要 %v", probe.tenant, probe.at.Format(time.RFC3339Nano), got, err, probe.want)
+		}
+	}
+	if _, err := view.AnyNodeCustomsZoneInForce(t.Context(), tenant, time.Time{}); err == nil {
+		t.Fatal("零时点要报编程错误")
+	}
+	if _, err := view.AnyNodeCustomsZoneInForce(t.Context(), domain.TenantID{}, june); err == nil {
+		t.Fatal("空租户要报编程错误")
+	}
+}

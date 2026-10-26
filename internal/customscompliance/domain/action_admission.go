@@ -250,16 +250,21 @@ type ActionAdmissionFinding struct {
 
 // ActionAdmissionInput 是一次准入判断的全部输入。限制、门禁与放行读数由编排按对象解析出的范围盘好送进来；
 // 本折叠不读任何册子。
+//
+// TenantZonesInForce 说这个租户在动作时点至少有一个节点的关务区域在生效区间内——它已经按节点登区域，跨关务
+// 区域的移动在它那里是真问题（ADR-0300）。只在跨区待定时读；编排在跨区待定时必须读回它，读不到就停在读不动，
+// 不得拿零值顶替：零值把一个跨境租户当成了纯境内租户，正是 ADR-0300 要堵的那一格。
 type ActionAdmissionInput struct {
-	Object       DeclaredParcelReference
-	Intent       ActionIntent
-	At           time.Time
-	Zones        []NodeZoneReading
-	Scope        ObjectCustomsScope
-	Restrictions []RegulatoryRestriction
-	Gates        []GateReading
-	Releases     []ReleaseReading
-	JudgedAt     time.Time
+	Object             DeclaredParcelReference
+	Intent             ActionIntent
+	At                 time.Time
+	Zones              []NodeZoneReading
+	TenantZonesInForce bool
+	Scope              ObjectCustomsScope
+	Restrictions       []RegulatoryRestriction
+	Gates              []GateReading
+	Releases           []ReleaseReading
+	JudgedAt           time.Time
 }
 
 // ActionAdmissionJudgement 是一次动作准入判断。类型上没有「放行结果」——准入答放行只说这一步此刻可走，
@@ -319,9 +324,11 @@ func (judgement ActionAdmissionJudgement) AsRecordedAt(judgedAt time.Time) Actio
 //     未满足、部分满足、冲突答阻断，但已有全部放行时答未决——内部判断与外部决定不一致要处置，不能用内部
 //     结果覆盖外部事实，也不能当作没看见。
 //
-// 跨区待定（起讫有一端未登记区域）时，只有对象确实带着跨区的门——某单元的跨区门禁目录登了且这一道不是
-// 「不受门禁」，或有限制约束跨区移动——才答未配置并指名未登记的节点；否则这一道不列，免得没有跨境业务的
-// 租户为了不被挡而去登区域（ADR-0206 决定二）。
+// 跨区待定（起讫有一端未登记区域）时，对象确实带着跨区的门——某单元的跨区门禁目录登了且这一道不是
+// 「不受门禁」，或有限制约束跨区移动——就答未配置并指名未登记的节点（ADR-0206 决定二）。对象不在任何案件与
+// 单元里、而租户在动作时点已有节点登了区域时同样答未配置并指名那个节点：两端都登了区域时这一道会答未决，
+// 不登反而放过，跨境租户漏登一个节点就让没立案的包裹从那里静默出去（ADR-0300）。其余情形这一道不列，免得
+// 一条区域都没登的纯境内租户为了不被挡而去登区域。
 func JudgeActionAdmission(input ActionAdmissionInput) (ActionAdmissionJudgement, error) {
 	if !input.Object.valid() || input.At.IsZero() || input.JudgedAt.IsZero() {
 		return ActionAdmissionJudgement{}, ErrInvalidAdmissionInput
@@ -594,7 +601,14 @@ func foldFinding(action GuardedAction, bases []AdmissionBasis) (ActionAdmissionF
 
 // crossZoneMatters 判跨区待定时这一道是否落在对象身上（判据见 JudgeActionAdmission 头注末段）。门禁目录
 // 没登跨区那一道的单元不算——「有跨区目录行」是这一判据的前提，没登就说明这个范围本没有跨区的门。
+//
+// 不在册那一支只看租户登没登过区域，不看对象：不在册的对象没有单元可读，说不出它带不带跨区的门；跨区若判得
+// 出，它在这一道上本就答未决（ADR-0206 决定四）。在案而未成单元的对象不走这一支——它的每一道都已答未决，
+// 不会被放过。
 func (input ActionAdmissionInput) crossZoneMatters() (bool, error) {
+	if input.TenantZonesInForce && !input.Scope.inBooks() {
+		return true, nil
+	}
 	restricted, err := input.restrictionBases(CrossCustomsMovement)
 	if err != nil {
 		return false, err
