@@ -105,3 +105,42 @@ Date: 2026-10-26
 - [UC-TF-005](../application/transport-fulfillment/UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md)：`AT-TF-337`–`340`
 - [UC-TF-006](../application/transport-fulfillment/UC-TF-006-PERFORM-DELIVERY-AND-CAPTURE-POD.md)：`AT-TF-341`
 - 票 `.scratch/demo-chain-gaps/issues/126-tf-operation-decisions-record-the-submitting-operator.md`；代决复核 `.scratch/owner-review-20261020/report.md` M1；后继票 `.scratch/demo-chain-gaps/issues/180-the-remaining-tf-operation-decisions-and-the-delivery-dispatch-reask-record-the-submitting-operator.md`
+
+## 复核记录（2026-10-26，Claude Code 会话代决，非 owner 本人复核）
+
+用户 2026-10-20 原话「要我裁定的部分，你作为业务和系统专家，请你自决吧」。正文、Decision 与上文各节不变。本节兑现决定五与越权风险点 1、4 留给票 [demo-chain-gaps/180](../../.scratch/demo-chain-gaps/issues/180-the-remaining-tf-operation-decisions-and-the-delivery-dispatch-reask-record-the-submitting-operator.md) 的两件，不新立 ADR：待遇与形状一个字不改，只是把同一待遇延到同一能力面上其余的口；重问落点是在决定五已定的「另记在重问决定处」里选一个落脚，不构成新取舍。读过：本记录全文，票 126 的两笔提交（`f445c668e`、`8d19b6588`），六口与补拍、重问的 Intake、编排、登记册端口与 PostgreSQL 适配器，迁移 TF `0030`、`0035`、`0045` 与 `0051`。
+
+- **决定一续：六口落列（TF 迁移 `0054`）。** 同一待遇——只进审计，不进重放与内容冲突比对，不进任何门，写面回执不带，可空不回填，载荷自报一律 400，取值只来自信封。
+
+  | 口 | 决定记录 | 列 | 读回 |
+  |---|---|---|---|
+  | 订舱提交 `/transport-fulfillment-booking-request-submissions` | 订舱 | `booking_request.submitted_by` | `ports.BookingRecord.SubmittedBy` |
+  | 取消订舱 `/transport-fulfillment-booking-request-cancellations` | 订舱的取消 | `booking_request.cancelled_by` | `ports.BookingRecord.CancelledBy` |
+  | 取消运输委托 `/transport-fulfillment-transport-commission-cancellations` | 委托的取消 | `transport_commission.cancelled_by` | `ports.TransportCommissionRecord.CancelledBy` |
+  | 履约段采用运输委托 `/transport-fulfillment-segment-commission-adoptions` | 采用的那一代 | `segment_commission_adoption.adopted_by` | `ports.SegmentCommissionAdoptionRecord.AdoptedBy` |
+  | 容量预占 `/transport-fulfillment-capacity-reservations` | 那一份预占 | `capacity_reservation.reserved_by` | `ports.CapacityPoolRecord.ReservedBy[预占引用]` |
+  | 容量释放 `/transport-fulfillment-capacity-releases` | 那一次释放 | `capacity_release.released_by` | `ports.CapacityPoolRecord.ReleasedBy[释放引用]` |
+
+  - 取消人只出现在已取消的行上（CHECK 与 `0051` 的关段人同一条）；取消只改取消时刻与取消人，不碰提交人，两个人各记各的。委托的开始是段采用带出的状态转换，不是一位操作者的决定，不记人，开始那一次 `Replace` 不碰取消人。
+  - 容量池按值换存：`CapacityPools.Replace` 把预占与释放明细整组删了再插回，证据若只落在明细行上，下一次换存就丢。所以证据按引用挂在 `CapacityPoolRecord` 旁（两张按引用的表），不挂在池本体上——领域的守恒与有效区间在结构上读不到；读回时由明细行填表，编排新作一份预占或一次释放时只给那一份加键，已有的键原样带回去，另一位操作者重交走重放格、不改表。
+  - 订舱册（`registry=booking-request`）每一行带出 `submittedBy` 与 `cancelledBy`，没记下时整键缺席；订舱提交口与取消口的回执不带。委托、采用、预占、释放本无展示这几种记录的查阅面，不新开（见越权风险点 12）。
+
+- **决定五兑现：补拍与按册重问另记在问询册 `delivery_dispatch_ask`（`0054`）。** 不记在任务上、不改执行器的任何一格判断，也不记在派送待形成册上。
+  - **候选与反方。** 甲 · 记在派送待形成册「最近一次问」旁：不取。待形成册是随执行器最近一次答复改写的待办台账，一行只留最近一次，留不下「每一次是谁按的」；补拍的那一件也可能根本没有待形成行（一问就形成了，从没缺过的对象不进册，ADR-0230 决定一）；了结的行里最近一次问的时刻被了结时刻顶替。乙 · 记在任务上：决定五已排除。丙 · 另立只增不改的问询册，一次按下一行：取。补拍对单件、按册重问对批量，各自一行，补拍带段与对象、重问带问法与件数上限（库上 CHECK 钉两种形状互斥）；重问不逐件记，逐件交执行器的命令不带操作者，执行器与任务因此一个字不变。
+  - **谁进册。** 只有命令带了操作者才记（`asked_by` 不可空）：执行器随交接信封发起的那一路、按册重问逐件交来的，都不是一位操作者的按下，不写这本册。同一件被两位操作者各补拍一次就是两次按下，两行，不去重——这本册是审计，不是决定记录，没有「在册的不被顶替」这一说。
+  - **记在哪一笔。** 补拍与执行器那一拍同笔（`TriggerDeliveryDispatchHandler.Trigger` 在占住这一件之后记）：那一拍回滚，这一次按下一并回滚。按册重问先于逐件去问另起一笔事务（装配点的 `transactionalAskLedger`），提交了才开始问，一件问不动也不让这一次按下无处可查。
+  - **写不下与没接。** 册写不下答错误（`ErrDeliveryDispatchAskUnrecorded`），补拍整拍不答，重问一件也不问；操作者在场而装配没接册答错误（`ErrDeliveryDispatchAskLedgerNotWired`）。不新增答复格：重问与补拍的结果、答复形状、状态码与回执逐字节不变。带 NUL 的操作者答未受理，不进册。
+  - **读。** 端口 `ports.DeliveryDispatchAskLedger.ListAsks` 由近及远按租户列出；本票不开 HTTP 查阅口（越权风险点 12）。
+
+- **对已接受记录的作用。** 决定五「不在本记录的口」两条由本节兑现，不再「如实是不记」；越权风险点 1 与 4 的前提消除。ADR-0151 决定二 TF 一项一句的部分停用从七口延到这八口，同一适用场景（信封给租户与提交操作者，后者只作操作证据）；ADR-0151 Links 里挂本记录的那一条随之补一句。ADR-0230 决定四、五、七不变：渠道、Intake 与答复形状照旧。
+
+- **越权风险点（续上文编号）。**
+  9. **问询册是新增的一本册**（TF owner）。只增不改、没有保存期限、不随任何状态收口；保存期限与查阅权限是租户取值（风险点 3），本记录不设默认。若 owner 宁可不另立一本册，唯一的替代是把补拍与重问也记在待形成册上，那要放弃「每一次」与「没有待形成行的补拍」，见上文甲。
+  10. **册写不下就不问**（TF owner）。重问为了不留无处可查的按下，把审计放在可用性之前：问询册读写不动时，按册重问一件也不问，补拍整拍不答。要反过来（先问后记、记不下只报警）会重新引入「按过却查不到」。
+  11. **执行器报错的补拍不留痕**（TF owner）。补拍的记录与那一拍同笔，那一拍因册读写不动整笔回滚时，这次按下也没有留下；按下没有产生任何效果，调用方得到的是「没形成答案」，原样重按即可。若 owner 要连无效果的按下也留，补拍也得另起一笔事务。
+  12. **问询册与另五种记录没有查阅面**（TF owner、前端 owner）。除订舱册外，委托取消人、采用人、预占人、释放人与问询册只在库与端口可查，没有 HTTP 读面；产品没有逐请求的接入日志，审计要看得到它们得另开读面，本票不做。
+  13. **池证据靠记录带回**（TF owner）。预占人与释放人挂在 `CapacityPoolRecord` 旁，换存池时必须把读回的两张表原样交给 `Replace`；今天只有「读回再改」的编排，新代码若以一份新铸的 `CapacityPoolRecord` 调 `Replace`，会把已有证据抹成 NULL。架构上没有第二道闸，靠这一条与同包用例（`TestTheCapacityPoolKeepsTheReservingAndReleasingOperatorsAcrossReplacements`）守。
+  14. **存量永久缺席**（TF owner）。同风险点 5：`0054` 之前形成的订舱、取消、采用、预占、释放读回都是「没记下是谁」，补拍与重问在这本册建立之前的按下无处可查；生产今天没有租户，演示行是合成。
+  15. **没读的文档**。UC-TF 各篇除验收示例之外的正文、ADR-0201 至 0204 正文若另有关于这几口操作者留痕的说法，以原文为准，本节让位。
+
+- **验收示例。** UC-TF-004 立 `AT-TF-348`–`AT-TF-353`（订舱提交、取消订舱、取消委托、段采用、预占、释放），UC-TF-006 立 `AT-TF-354`、`AT-TF-355`（补拍、按册重问）；迁移 `transport_fulfillment/0054_remaining_operation_decisions_record_the_submitting_operator.sql`。

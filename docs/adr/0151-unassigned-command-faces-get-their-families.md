@@ -102,4 +102,4 @@ Date: 2026-09-24
 - [ADR-0187：受控关闭与重开把请求证据与操作证据落在决定上](./0187-controlled-closure-and-reopening-record-request-and-operation-evidence-on-the-decision.md)：部分停用本记录决定二受控关闭与重开一项「不进命令的任何一格」半句（只限受控关闭口与重开口）
 - [ADR-0230](./0230-delivery-dispatch-left-unformed-is-kept-on-a-pending-register-and-reasked-through-the-same-executor.md)：决定七——派送发起口改挂运营决定，部分停用决定六末句派送发起口那一项；越权风险点 7 的前提由此改写
 - [ADR-0236：租户财务、关务人员在管理台手工采用外部资金事实与监管凭证](./0236-operators-adopt-external-funds-facts-and-regulatory-credentials-through-operator-decision-faces.md)：在决定一的能力面上加两种决定；部分停用本记录决定四「外部资金事实更正随原事实归集成客户端族」一句（只限手工更正口）
-- [ADR-0303：TF 运营决定把提交操作者作为操作证据记在决定记录上](./0303-transport-fulfillment-operation-decisions-record-the-submitting-operator-as-operation-evidence.md)：部分停用本记录决定二 TF 一项「TF 各口：信封给租户，其余照各口既有载荷。」一句（只限七口）；回答越权风险点 5
+- [ADR-0303：TF 运营决定把提交操作者作为操作证据记在决定记录上](./0303-transport-fulfillment-operation-decisions-record-the-submitting-operator-as-operation-evidence.md)：部分停用本记录决定二 TF 一项「TF 各口：信封给租户，其余照各口既有载荷。」一句（只限七口）；回答越权风险点 5；复核记录（票 demo-chain-gaps/180）把同一待遇延到订舱提交与取消、取消委托、段采用委托、容量预占与释放及派送补拍、按册重问
