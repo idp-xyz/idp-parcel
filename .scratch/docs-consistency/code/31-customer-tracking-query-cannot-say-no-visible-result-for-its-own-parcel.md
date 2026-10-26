@@ -44,9 +44,9 @@ S–M：端点加一个依赖（归属反查口）与一格 `NO_VISIBLE_RESULT`�
 ### 做了什么（照「最小的诚实修法」逐条）
 
 1. 先读视图，读到照旧答 `CURRENT_VIEW`，不问归属（`NewQueryCustomerTrackingViewEndpoint`）。
-2. 读不到视图，`outcomeWithoutView` 经 `ports.ParcelCustomerAccountView.FindCustomerAccount` 问一次归属：答出唯一账户且等于查询键的账户 → `NO_VISIBLE_RESULT`；答零份、答别的账户、答 `ErrAmbiguousCustomerAccount` → `VIEW_NOT_FOUND`。端点构造器加第三个依赖 `attributions ports.ParcelCustomerAccountView`。
+2. 读不到视图，`outcomeWithoutView` 经 `ports.ParcelCustomerAccountView.FindCustomerAccount` 问一次归属：答出唯一账户且等于查询键的账户 → `NO_VISIBLE_RESULT`；答零份、答别的账户、答 `ports.ErrAmbiguousCustomerAccount` → `VIEW_NOT_FOUND`。端点构造器加第三个依赖 `attributions ports.ParcelCustomerAccountView`。
 3. 反查的其余错误 → `500 NO_ANSWER_FORMED`，与视图读不回同一格，不降成任何业务格。视图读不回时不问归属。
-4. 头注：`query_customer_tracking_view.go` 的业务结果常量改写为三格及各自续办；`queryResponse` 写明三格、`view` 只随 `CURRENT_VIEW`；`ports.ParcelCustomerAccountView` 头注按零/一/多逐格分写派生一侧与查询一侧；`customer_account_lookup.go` 的 `ErrAmbiguousCustomerAccount` 头注分清派生一侧落未决、查询一侧答 `VIEW_NOT_FOUND`。
+4. 头注：`query_customer_tracking_view.go` 的业务结果常量改写为三格及各自续办；`queryResponse` 写明三格、`view` 只随 `CURRENT_VIEW`；`ports.ParcelCustomerAccountView` 头注按零/一/多逐格分写派生一侧与查询一侧，三格之外的译不成与读不动两侧各怎么办也写明。修订轮起，「多」与「译不成」两只哨兵 `ErrAmbiguousCustomerAccount`、`ErrCustomerAccountUntranslatable` 定义在 `ports`，`customer_account_lookup.go` 里同名两只是端口哨兵的引用（见「评审记录与修订轮」）。
 5. 用例（Covers 点 `AT-VE-188`、`AT-VE-151`，另点 `AT-VE-168` 的客户归属读取半边）：
    - `internal/visibilityexception/adapters/http`：`TestTheAttributedAccountGetsNoVisibleResultBeforeItsViewForms`（响应体逐字 `{"outcome":"NO_VISIBLE_RESULT"}`）；`TestEveryOtherUnformedViewIsByteForByteAMissingParcel`（归属别户、多份声明别人来查、多份声明声明方之一来查，都与不存在逐字同答）；`TestAnUnreadableAttributionIsNoAnswerNotABusinessGrade`；`TestEveryViewlessQueryAsksTheAttributionExactlyOnce`（归属方、别户、不存在、多份声明各问一次）。既有用例补断言：读到视图不问归属、视图读不回不问归属；未配置面替身加「被问即失败」的归属口。
    - `cmd/parcel-api`：`TestTheProductionTrackingViewLineWalksAParcelThroughItsThreeGradesAgainstARealDatabase`——真库，经登记处里本特性的生产 `build` 与 `mount`，两台首方客户端（`SYN-ACCOUNT-01`、`SYN-ACCOUNT-02`）；一件包裹的委托`已提交`时归属方答 `VIEW_NOT_FOUND`（与查不存在逐字同答），`已接受`、视图未形成时答 `NO_VISIBLE_RESULT`，视图形成后答 `CURRENT_VIEW`；三个阶段另一账户查同一个号都与查不存在逐字同答。既有真库用例改接生产反查口。
@@ -66,8 +66,8 @@ S–M：端点加一个依赖（归属反查口）与一格 `NO_VISIBLE_RESULT`�
 
 ### 代决
 
-1. **多份委托同时声明，HTTP 适配器按 `adapters/parcelshipment` 的哨兵 `ErrAmbiguousCustomerAccount` 判，不把哨兵移进 `ports`。** 歧义哨兵的词汇本就住在译名包：同包的派生适配器、parcel-dispatch 的未决哨兵名单都据它分格。移进 `ports` 要改派生侧与装配的既有引用，超出票面。代价是 `adapters/http` 多一条到本上下文跨上下文译名包的导入；架构门禁只拦跨模块伸手，本模块内适配器互引不拦（`TestBusinessModulesDoNotReachIntoEachOther` 实跑通过）。
-2. **反查答复的其余错误（读不动，以及 `ErrCustomerAccountUntranslatable`）一律答未形成，不降成 `VIEW_NOT_FOUND`。** 票面第 3 条「读不动」按「没形成归属结论」读。查询一侧入参译不动今天不可达（VE 与 PS 的租户、包裹标识构造同一判据：非空白），能触发的只有 PS 行上的账户是空白——那是数据缺陷，答 5xx 比静默落成「不归你」诚实。
+1. **（修订轮改写，评审 N1）多份当前已接受委托同时声明，查询按端口哨兵 `ports.ErrAmbiguousCustomerAccount` 判。** 端口头注写着「多：适配器以具名错误交回」，具名错误就该在端口里；同形先例是 CC 的 `ccports.ErrAcceptedParcelAmbiguous`。译名包 `adapters/parcelshipment` 保留同名引用 `ErrAmbiguousCustomerAccount = veports.ErrAmbiguousCustomerAccount`，同包派生适配器与 `cmd/parcel-dispatch/assemble.go` 的未决哨兵名单一个字不动。HTTP 适配器因此不导入出站跨上下文译名包，也不经它传递依赖 PS 的领域与端口（`go list -deps` 核过）。初稿判的是译名包的哨兵，那是生产代码里 HTTP 适配器导入出站译名包的第一例。
+2. **反查答复的其余错误（读不动，以及 `ports.ErrCustomerAccountUntranslatable`）一律答未形成，不降成 `VIEW_NOT_FOUND`。** 票面第 3 条「读不动」按「没形成归属结论」读。查询一侧入参译不动今天不可达（VE 与 PS 的租户、包裹标识构造同一判据：非空白），能触发的只有 PS 行上的账户是空白——那是数据缺陷，答 5xx 比静默落成「不归你」诚实。修订轮（评审 N2）把「译不成」也上提为端口词汇（与 `ports.ErrConsolidationMembershipUntranslatable` 同形），并由 `TestAnUnreadableAttributionIsNoAnswerNotABusinessGrade` 的「答复译不成」一格钉住。
 3. **读次数**：读到视图不问；视图读不回不问（没有可依据的「读不到」）；每次读不到视图问且只问一次，不论答出什么——由 `TestEveryViewlessQueryAsksTheAttributionExactlyOnce` 与既有两条用例的补断言钉住（ADR-0246 决定二、三）。
 4. **parcel-api 另建一只 `pspostgres.ShipmentRequests` 喂反查口**，不与提交口等别的特性共享实例：仓储无状态，共享只会让依赖图看不出各自要什么（与 parcel-dispatch 两路派生「各建各的」同一理由，也是 ADR-0222 越权风险点里「委托查阅读适配器多建一只」的同性质）。
 5. **未接线占位答未接线错误（落未形成），不顶成零份**；放在特性测试文件，不进 `unwired_orchestration.go`（ADR-0222 决定一：占位是测试类型，不进生产文件）。
@@ -78,7 +78,7 @@ S–M：端点加一个依赖（归属反查口）与一格 `NO_VISIBLE_RESULT`�
 
 1. **查询多一次对 PS 的读**（ADR-0246 越权风险点 1，PS owner 会签仍待）：只在读不到视图时发生，经 PS 自己的仓储读口 `FindCurrentAcceptedByParcel` 读 `parcel_shipment.shipment_request`，parcel-api 进程从此读这张表。客户系统对新号高频轮询时，这一读与轮询同阶；本票没有加缓存，也不该加——加缓存就是第二份映射。
 2. **新格对违约的客户端**：不认识 `NO_VISIBLE_RESULT` 而又不守「未识别 `outcome` 交人」的集成方，会在委托接受后、视图形成前的窗口里撞上它。契约文档已写那条义务；首发前没有真实集成方。
-3. **`adapters/http` 导入跨上下文译名包**：将来若架构门禁收紧为「HTTP 适配器不得导入 `adapters/<provider>`」，要把歧义哨兵移进 `ports` 再改这里（代决 1 的代价）。
+3. **（修订轮消解）`adapters/http` 导入跨上下文译名包**：两只哨兵已上提到 `ports`，HTTP 适配器不再导入 `adapters/parcelshipment`。余下的是译名包里两只同名引用：若有人把其中一只改回本包自造的 `errors.New`，派生侧照旧能认、查询侧就认不出了；译名包用例已钉住交回的就是端口哨兵（见修订轮变异 MC、MD）。
 4. **时延差**（ADR-0246 越权风险点 3）：反查答「是你的」与答「不是你的」快慢可能不同，本票照 ADR 不加常数时间。读次数已相同。
 5. **演示未实走**：新格只由真库用例证（`S`），没在 `seed.sh` 灌的演示租户上实走——要在委托接受后、视图派生前那几拍里查，或让 NR 形不成初始路由投影。README 与动线表的新行是按代码与用例写的。
 6. **基线说法不一**：见上节末条。本票未改契约文档那一句，也未立票；契约生成器（code/82）落地、首个基线真正归档时一并统一为宜。
@@ -95,3 +95,26 @@ S–M：端点加一个依赖（归属反查口）与一格 `NO_VISIBLE_RESULT`�
 - `TMPDIR=… scripts/test-full.sh ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./cmd/parcel-ve-register/ ./internal/visibilityexception/... ./internal/architecture/...`：19 个包 ok（`ports` 无测试文件，不计），退出码 0。范围是改动包与 `go list -test` 算出的反向依赖（`cmd/parcel-dispatch`、`cmd/parcel-ve-register` 与 VE 各子包）加 `./internal/architecture/...`。
 - 新用例与两条既有探针用例 `-count=3`（真库）：全部 PASS，退出码 0。
 - 无迁移，未灌种子。
+
+## 评审记录与修订轮
+
+### 第 1 轮（2026-10-25，隔离评审；协调方转达，无阻断，可合入）
+
+| 条 | 意见 | 处理 |
+|---|---|---|
+| N1 | HTTP 适配器导入出站跨上下文译名包 `adapters/parcelshipment` 是生产代码第一例，且经它传递依赖 PS 的 domain/ports；端口头注写「多：适配器以具名错误交回」，具名错误却不在端口里 | 照做：`ports.ErrAmbiguousCustomerAccount` 定义在端口（头注写为何在端口）；译名包改为同名引用，派生适配器与 parcel-dispatch 哨兵名单不动；`outcomeWithoutView` 改判端口哨兵、删译名包导入；测试替身同改。代决 1 改写，越权风险点 3 消解 |
+| N2 | 代决 2 无用例钉住：变异 MB（把 `ErrCustomerAccountUntranslatable` 并进歧义那格答 `VIEW_NOT_FOUND`）全绿存活 | 判：「账户译不成」也上提为端口词汇 `ports.ErrCustomerAccountUntranslatable`（同上理由，且有 `ErrConsolidationMembershipUntranslatable` 同形先例）。`TestAnUnreadableAttributionIsNoAnswerNotABusinessGrade` 改为两格：读不动、替身返回 `fmt.Errorf("%w: customer account: blank value", ports.ErrCustomerAccountUntranslatable)`，都断言 500 `NO_ANSWER_FORMED`、不带 outcome。MB 已被杀 |
+| 措辞 | 首方契约与 UC-VE-008 缺口注「多份委托同时声明」改为 ADR-0246 原文口径（只提交未接受的重复声明不触发歧义） | 照做：两处改「多份已接受委托同时声明」；`assemble_customer_tracking_view.go` 头注与 HTTP 用例的子格名同步。UC-VE-008 结果语义「无权查询」一行与 VE CONTEXT 里同样的说法出自票 04，不在本票改动范围，未动 |
+| 可选 | 三格逐字比对的用例顺带比 `Header()` | 做了：`TestEveryOtherUnformedViewIsByteForByteAMissingParcel` 与生产装配真库用例三个阶段的另一账户探针都比响应头 |
+| 不改 | 「基线」两处说法不一留给 code/82；500 探针严重度低，按 ADR-0246 决定二维持读不动答未形成 | 未改 |
+
+修订轮另补：译名包用例 `TestAnAmbiguousTargetBecomesTheVENamedSentinel`、`TestAnUntranslatableAnswerKeepsItsSentinel` 加断言交回的错误就是端口哨兵——查询一侧不导入译名包，靠的是这一条；同文件歧义用例的头注改为两侧各自的分格。
+
+### 修订轮验证（分支 claude-code31，提交 `88295188b`）
+
+- 变异（每条改后跑、跑完原样复原）：MB 译不成并进歧义那格答 `VIEW_NOT_FOUND`——`TestAnUnreadableAttributionIsNoAnswerNotABusinessGrade` 红；MC 译名包的歧义哨兵改回本包自造——`TestAnAmbiguousTargetBecomesTheVENamedSentinel` 红；MD 译名包的译不成哨兵改回本包自造——`TestAnUntranslatableAnswerKeepsItsSentinel` 红。第一轮的 M1（别户也答 `NO_VISIBLE_RESULT`）、M2（读不动降成 `VIEW_NOT_FOUND`）、M3（多份声明落未形成）在改后的代码上重跑，仍被杀。
+- `go list -deps ./internal/visibilityexception/adapters/http/` 里已无 `parcelshipment`。
+- `go build ./...`、`go vet ./...` 干净，`gofmt -l internal cmd` 无输出。
+- `TMPDIR=… scripts/test-full.sh ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./cmd/parcel-ve-register/ ./internal/visibilityexception/... ./internal/architecture/...`：19 个包 ok（`ports` 无测试文件，不计），退出码 0。
+- 改到的用例 `-count=3`（真库）：七条全部三次 PASS，退出码 0。
+- main 仍在 `d19eeaafc`，未前移，未 rebase。
