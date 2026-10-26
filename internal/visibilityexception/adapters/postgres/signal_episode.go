@@ -132,7 +132,7 @@ func (repository *SignalEpisodes) findLatest(
 	return episode, true, nil
 }
 
-// signalFactBasisRow 是事实依据一条在 fact_basis 列里的形状（迁移 0030）。判断标识可缺，缺时不写键。
+// signalFactBasisRow 是事实依据一条在 fact_basis 列里的形状（迁移 0029）。判断标识可缺，缺时不写键。
 type signalFactBasisRow struct {
 	Source    string `json:"source"`
 	Fact      string `json:"fact"`
@@ -181,7 +181,7 @@ func signalFactBasisFromJSON(raw []byte) ([]domain.SignalFactBasis, error) {
 
 // SaveRaised 把新开或重开的发作期、它的分诊结论以及（走向为自动建案时）随之建立的
 // 案件同一事务写入。发作期是新键新行，并发撞键不是业务答案而是身份签发失守——不译
-// ON CONFLICT，让唯一约束如实报错，事务整体回退后重试会在 FindLatest 看到赢家。
+// ON CONFLICT，让唯一约束如实报错，事务整体回退后重试会在 FindLatestForCause 看到赢家。
 //
 // 走 RequireExecutor：几条 INSERT 必须同生共死，这正是本方法存在的理由。案件那一条
 // 与结论成对（ports.RaisedSignalRecord）：写入前核对，不成对的记录不落——落了就是一份
@@ -279,7 +279,7 @@ func (repository *SignalEpisodes) SaveRaised(
 }
 
 // SaveHit 落同一发作期内的判断历史推进（命中数、末次命中，或结束时的解除依据）。
-// 行不存在如实报错——命中只可能落在 FindLatest 刚交回的发作期上；租户条件进语句
+// 行不存在如实报错——命中只可能落在 FindLatestForCause 刚交回的发作期上；租户条件进语句
 // （ADR-0003），另一个租户拿着同名发作期标识也改不动这一行。
 func (repository *SignalEpisodes) SaveHit(
 	ctx context.Context,

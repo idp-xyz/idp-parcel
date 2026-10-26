@@ -83,7 +83,7 @@ const registryOf: Record<TriageView, ExceptionTriageRegistry> = {
   requests: 'disposition-request',
 };
 
-// 存量发作期的因果条件（VE 迁移 0030 回填的那一格）。
+// 存量发作期的因果条件（VE 迁移 0029 回填的那一格）。
 const recordedBeforeCauses = 'RECORDED_BEFORE_CAUSAL_CONDITION';
 
 /** 发作期详情：逐字段照实转写，缺席按端点在场规则给词（成对缺席即仍活跃/未分诊）。 */
