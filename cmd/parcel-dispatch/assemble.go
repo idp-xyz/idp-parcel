@@ -2798,6 +2798,13 @@ func parcelFinalAdoptionChain(
 	if err != nil {
 		return none, fmt.Errorf("parcel-dispatch: final outcome handoff: %w", err)
 	}
+	// 与 parcel-api 的取消编排、本进程的收寄采用与面单终局判断同一把锁：既有终局分派在读已成立的取消之前按包裹排队。有效交付
+	// 与面单判断两条链都经这只编排；面单判断已在判断前取过，同一事务里再取是重入。装 nil 时分派停在 FINAL_STORE_UNAVAILABLE、
+	// 回滚重投，终局永远形不成。
+	boundaryLocks, err := pspostgres.NewCancellationBoundaryLocks(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-dispatch: cancellation boundary locks: %w", err)
+	}
 
 	stageContent, err := pcpostgres.NewStageContentDeclarations(db)
 	if err != nil {
@@ -2845,6 +2852,7 @@ func parcelFinalAdoptionChain(
 		Identities:    identities,
 		Downstream:    downstream,
 		Clock:         clock,
+		BoundaryLock:  boundaryLocks,
 	})
 	return parcelFinalAdoption{
 		handler:       handler,

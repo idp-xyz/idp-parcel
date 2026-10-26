@@ -119,10 +119,20 @@ func (double unsatisfiedFinalRules) JudgeFinalOutcome(
 	return psports.FinalRuleJudgment{Satisfied: false, Basis: double.basis}, true, nil
 }
 
+// refusedBoundaryLock 答取不到取消边界锁。
+type refusedBoundaryLock struct{}
+
+func (refusedBoundaryLock) LockCancellationBoundary(context.Context, psdomain.TenantID, psdomain.DeclaredParcelID) error {
+	return errors.New("lock wait cancelled")
+}
+
 type finalHandlerConfig struct {
-	rules      psports.FinalRuleView
-	downstream psports.FinalOutcomeHandoff
-	requests   psports.ShipmentRequestRepository
+	rules         psports.FinalRuleView
+	downstream    psports.FinalOutcomeHandoff
+	requests      psports.ShipmentRequestRepository
+	cancellations psports.ParcelCancellationView
+	lock          psports.CancellationBoundaryLock
+	finals        *finalStoreDouble
 }
 
 func deliveryFinalHandler(t *testing.T, config finalHandlerConfig) *psapplication.FormParcelFinalHandler {
@@ -146,14 +156,27 @@ func deliveryFinalHandler(t *testing.T, config finalHandlerConfig) *psapplicatio
 			identity(t): acceptedRequest(t),
 		}}
 	}
+	finals := config.finals
+	if finals == nil {
+		finals = &finalStoreDouble{byKey: map[psports.FinalAdoptionKey]psports.FinalOutcomeRecord{}}
+	}
+	var cancellations psports.ParcelCancellationView = cancellationViewDouble{}
+	if config.cancellations != nil {
+		cancellations = config.cancellations
+	}
+	var lock psports.CancellationBoundaryLock = grantedBoundaryLock{}
+	if config.lock != nil {
+		lock = config.lock
+	}
 	return psapplication.NewFormParcelFinalHandler(psapplication.FormParcelFinalDeps{
 		Requests:      requests,
 		Rules:         rules,
-		Finals:        &finalStoreDouble{byKey: map[psports.FinalAdoptionKey]psports.FinalOutcomeRecord{}},
-		Cancellations: cancellationViewDouble{},
+		Finals:        finals,
+		Cancellations: cancellations,
 		Identities:    &finalIdentityDouble{},
 		Downstream:    downstream,
 		Clock:         fixedClock{at: deliveredAt.Add(time.Minute)},
+		BoundaryLock:  lock,
 	})
 }
 
@@ -489,6 +512,52 @@ func TestFinalOutcomesMapToConsumptionSlots(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "FINAL_RULE_NOT_SATISFIED") {
 			t.Fatalf("未决原因 = %v, want FINAL_RULE_NOT_SATISFIED", err)
+		}
+	})
+
+	// Covers: 取消在册的包裹，迟到的有效交付不形成终局：不采用入账（业务终局的负向，重试不会让取消消失），交付与来源保全在
+	// 不采用记录上，包裹上没有当前有效终局。ADR-0254 决定二第 3 格停着的包裹同走这一格，交付一路不绕过冲突。
+	t.Run("SOURCE_NOT_ADOPTED 入账，取消在册的包裹不留终局", func(t *testing.T) {
+		finals := &finalStoreDouble{byKey: map[psports.FinalAdoptionKey]psports.FinalOutcomeRecord{}}
+		cancellations := &standingCancellationDouble{}
+		cancellations.standAt(t, deliveredAt.Add(-time.Hour))
+		subject := deliveryThrough(t, deliveryFinalHandler(t, finalHandlerConfig{
+			cancellations: cancellations,
+			finals:        finals,
+		}))
+
+		if err := subject.HandleRegisteredEffectiveDelivery(t.Context(), registeredDeliveryRef()); err != nil {
+			t.Fatalf("err = %v, want nil——不采用是业务终局，入账收工", err)
+		}
+		tenant := value(t, psdomain.NewTenantID, "tenant-1")
+		parcel := value(t, psdomain.NewDeclaredParcelID, "parcel-1")
+		if _, found, _ := finals.FindCurrentFinal(t.Context(), tenant, parcel); found {
+			t.Fatal("取消在册的包裹被交付形成了当前有效终局")
+		}
+		if len(finals.byKey) != 1 {
+			t.Fatalf("终局库 %d 行，want 一份不采用记录保全来源", len(finals.byKey))
+		}
+		for _, record := range finals.byKey {
+			if record.Finalized || record.RefusalBasis.String() != "PARCEL_CANCELLATION/cancel-1" {
+				t.Fatalf("record = %+v, want 不采用、依据指名 PARCEL_CANCELLATION/cancel-1", record)
+			}
+		}
+	})
+
+	// Covers: 取不到取消边界锁是依赖未决——回滚重投，不入账、不落任何记录（ADR-0029）；原因停在 FINAL_STORE_UNAVAILABLE。
+	t.Run("取不到包裹边界锁回滚", func(t *testing.T) {
+		finals := &finalStoreDouble{byKey: map[psports.FinalAdoptionKey]psports.FinalOutcomeRecord{}}
+		subject := deliveryThrough(t, deliveryFinalHandler(t, finalHandlerConfig{
+			lock:   refusedBoundaryLock{},
+			finals: finals,
+		}))
+
+		err := subject.HandleRegisteredEffectiveDelivery(t.Context(), registeredDeliveryRef())
+		if !errors.Is(err, adapter.ErrFinalUndecided) || !strings.Contains(err.Error(), "FINAL_STORE_UNAVAILABLE") {
+			t.Fatalf("err = %v, want ErrFinalUndecided/FINAL_STORE_UNAVAILABLE", err)
+		}
+		if len(finals.byKey) != 0 {
+			t.Fatalf("终局库 %d 行，没排上队不该落任何记录", len(finals.byKey))
 		}
 	})
 

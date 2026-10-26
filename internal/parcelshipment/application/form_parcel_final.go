@@ -60,6 +60,7 @@ const (
 	FinalRuleUnavailable
 	FinalRuleUnconfigured
 	FinalRuleNotSatisfiedYet
+	// FinalStoreUnavailable：终局或已成立的取消读不回、取不到包裹边界锁，或终局提交没有落成。恢复动作同为重试。
 	FinalStoreUnavailable
 	FinalIdentityUnavailable
 )
@@ -135,6 +136,8 @@ func (result FormParcelFinalResult) FinalHandoffReference() domain.OwnershipCont
 	return result.handoff
 }
 
+// FormParcelFinalDeps 是采用编排的依赖。Cancellations 为 nil 是取消机制未接入：既有终局分派不读已成立的取消，也不取锁。
+// 接入时 BoundaryLock 让分派与同一包裹上的取消提交排队；BoundaryLock 为 nil 按取不到锁办，停在 FINAL_STORE_UNAVAILABLE。
 type FormParcelFinalDeps struct {
 	Requests      ports.ShipmentRequestRepository
 	Rules         ports.FinalRuleView
@@ -143,6 +146,7 @@ type FormParcelFinalDeps struct {
 	Identities    ports.FinalIdentityFactory
 	Downstream    ports.FinalOutcomeHandoff
 	Clock         ports.Clock
+	BoundaryLock  ports.CancellationBoundaryLock
 }
 
 type FormParcelFinalHandler struct {
@@ -154,9 +158,9 @@ func NewFormParcelFinalHandler(deps FormParcelFinalDeps) *FormParcelFinalHandler
 }
 
 // Handle 把一份责任结果推进到终局采用判断：受理（结果联合构造期拦）→ 委托与成员核验
-// （统一不可见）→ 幂等/冲突 → 既有终局分派（同源新版本重派生、异源不采用）→ 规则
-// （未配置即未决，不默认有效交付即终局）→ 提交与发布意图 → 委托完成派生。来源事实
-// 全程只读。
+// （统一不可见）→ 按包裹排队 → 幂等/冲突 → 既有终局分派（已成立的取消不采用、同源新版本
+// 重派生、异源不采用）→ 规则（未配置即未决，不默认有效交付即终局）→ 提交与发布意图 →
+// 委托完成派生。来源事实全程只读。
 func (handler *FormParcelFinalHandler) Handle(
 	ctx context.Context,
 	command FormParcelFinalCommand,
@@ -182,6 +186,15 @@ func (handler *FormParcelFinalHandler) Handle(
 		Version:  outcome.Version(),
 	}
 	digest := finalContentDigest(outcome)
+
+	// 取消已成立的包裹不再形成非取消终局，所以分派要读取消；读它之前与同一包裹上的取消提交排队
+	// （ports.CancellationBoundaryLock），锁持到本笔提交。锁在幂等读之前：同一份交付并发重投时，
+	// 后手要等先手落下记录再读，读到的才是已有结果。取不到锁归终局读的那一格：锁守的就是这几道读，
+	// 恢复动作同为重试。
+	if handler.deps.Cancellations != nil &&
+		!lockCancellationBoundary(ctx, handler.deps.BoundaryLock, key.TenantID, key.Parcel) {
+		return handler.undecided(command, outcome, FinalStoreUnavailable), nil
+	}
 	existing, found, err := handler.deps.Finals.FindByKey(ctx, key)
 	if err != nil {
 		return handler.undecided(command, outcome, FinalStoreUnavailable), nil
@@ -192,6 +205,23 @@ func (handler *FormParcelFinalHandler) Handle(
 			return FormParcelFinalResult{outcome: FinalSourceConflict}, nil
 		}
 		return handler.existingResult(ctx, command, request, existing), nil
+	}
+
+	// 取消已成立（含停在取消先后冲突上的，ADR-0254 决定二第 3 格）：来源不采用，依据指名那份取消，
+	// 来源与物理事实保留。取消先于终局规则判断——规则放行与否都不会让一件已取消的包裹长出非取消终局，
+	// 更正出的新版本到达同样如此。
+	if handler.deps.Cancellations != nil {
+		cancellation, cancelled, err := handler.deps.Cancellations.FindCancellation(ctx, key.TenantID, key.Parcel)
+		if err != nil {
+			return handler.undecided(command, outcome, FinalStoreUnavailable), nil
+		}
+		if cancelled {
+			reason, err := cancellationRefusalReason(cancellation, key.Parcel)
+			if err != nil {
+				return FormParcelFinalResult{}, err
+			}
+			return handler.refuse(ctx, command, request, key, digest, reason)
+		}
 	}
 
 	// 既有终局分派：同源（同来源种类）的新版本走重派生（AT-PS-063——来源更正形成新的
@@ -300,6 +330,25 @@ func (handler *FormParcelFinalHandler) refuse(
 		AdoptedAt:     handler.deps.Clock.Now(),
 	}
 	return handler.commit(ctx, command, request, record, FinalSourceNotAdopted)
+}
+
+// cancellationRefusalReason 指名那份已成立的取消作为不采用的依据。读口答了「有取消」却指不出是哪一份、或交回的是别的
+// 包裹的取消，是读口坏了：当成没有会让交付盖过一份真取消，编一个依据则让记录指向不存在的东西，所以响亮报错。
+func cancellationRefusalReason(
+	cancellation domain.ParcelCancellation,
+	parcel domain.DeclaredParcelID,
+) (domain.CheckReason, error) {
+	if cancellation.ID().String() == "" {
+		return domain.CheckReason{}, errors.New("form parcel final: the cancellation view answered a cancellation it cannot name")
+	}
+	if cancellation.Parcel() != parcel {
+		return domain.CheckReason{}, errors.New("form parcel final: the cancellation view answered another parcel's cancellation")
+	}
+	reason, err := domain.NewCheckReason("PARCEL_CANCELLATION/" + cancellation.ID().String())
+	if err != nil {
+		return domain.CheckReason{}, fmt.Errorf("refusal reason: %w", err)
+	}
+	return reason, nil
 }
 
 // commit 提交终局判断、交发布意图并派生委托完成摘要。

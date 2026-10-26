@@ -385,7 +385,7 @@ func (handler *CancelParcelHandler) finalStands(
 	return CancelParcelResult{outcome: CancellationFinalOutcomeStands, basis: basis}, true
 }
 
-// lockCancellationBoundary 取这件包裹的取消边界锁（取消、收寄采用、面单渠道服务终局判断三处共用）。没装锁与取不到锁同答
+// lockCancellationBoundary 取这件包裹的取消边界锁（取消、收寄采用、面单渠道服务终局判断与终局采用共用）。没装锁与取不到锁同答
 // false，调用方不读边界、按自己的原因格答未决：没装锁同冲突册未接入，按依赖缺口办，不当作可以不排队。
 func lockCancellationBoundary(
 	ctx context.Context,

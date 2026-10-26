@@ -190,7 +190,7 @@ func (rig *boundaryRig) adopt(t *testing.T, gated bool, into *application.AdoptN
 }
 
 // judge 装面单渠道终局判断，带着实际承运商首次有效收寄；gated 为真时屏障装在它唯一一道边界读（已成立的取消）上。终局采用
-// 路径的取消读口不包屏障：那一口只派生委托完成摘要。
+// 路径在同一笔事务里也读一遍取消（锁重入），那一口不包屏障：先手停在判断自己的读上。
 func (rig *boundaryRig) judge(t *testing.T, gated bool, into *application.LabelServiceFinalResult) func(context.Context) error {
 	t.Helper()
 	var cancellations ports.ParcelCancellationView = rig.cancellations
@@ -209,6 +209,7 @@ func (rig *boundaryRig) judge(t *testing.T, gated bool, into *application.LabelS
 		Identities:    boundaryFinalIDs{id: mustBuild(t, domain.NewFinalOutcomeVersionID, "FINAL-1")},
 		Downstream:    boundaryHandoffs{},
 		Clock:         boundaryClock{},
+		BoundaryLock:  rig.locks,
 	})
 	handler := application.NewJudgeLabelServiceFinalHandler(application.JudgeLabelServiceFinalDeps{
 		Transactions:  boundaryLabelTransactions{},

@@ -136,6 +136,7 @@ func TestAnEffectiveDeliveryFlowsThroughToAFinalOutcome(t *testing.T) {
 		Identities:    &finalIdentityDouble{},
 		Downstream:    finalDownstreamDouble{},
 		Clock:         fixedClock{at: deliveredAt.Add(time.Minute)},
+		BoundaryLock:  grantedBoundaryLock{},
 	})
 	subject := adapter.NewDeliveryOutcomeAdapter(handler)
 

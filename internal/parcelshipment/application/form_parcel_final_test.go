@@ -105,10 +105,18 @@ func (double *finalIdentityDouble) NextFinalOutcomeVersionID(
 
 type finalFixture struct {
 	handler       *application.FormParcelFinalHandler
+	deps          application.FormParcelFinalDeps
 	rules         *finalRuleDouble
 	finals        *finalStoreDouble
 	cancellations *cancellationViewDouble
 	downstream    *finalDownstreamDouble
+	lock          *boundaryLockDouble
+}
+
+// rebuild 按改过的依赖重装编排，同一份替身继续记账。
+func (fixture *finalFixture) rebuild(change func(*application.FormParcelFinalDeps)) {
+	change(&fixture.deps)
+	fixture.handler = application.NewFormParcelFinalHandler(fixture.deps)
 }
 
 func newFinalFixture(t *testing.T) *finalFixture {
@@ -130,8 +138,9 @@ func newFinalFixture(t *testing.T) *finalFixture {
 		finals:        newFinalStore(),
 		cancellations: &cancellationViewDouble{},
 		downstream:    &finalDownstreamDouble{},
+		lock:          &boundaryLockDouble{},
 	}
-	fixture.handler = application.NewFormParcelFinalHandler(application.FormParcelFinalDeps{
+	fixture.deps = application.FormParcelFinalDeps{
 		Requests:      requests,
 		Rules:         fixture.rules,
 		Finals:        fixture.finals,
@@ -139,7 +148,9 @@ func newFinalFixture(t *testing.T) *finalFixture {
 		Identities:    &finalIdentityDouble{},
 		Downstream:    fixture.downstream,
 		Clock:         fixedClock{at: finalOccurredAt.Add(time.Minute)},
-	})
+		BoundaryLock:  fixture.lock,
+	}
+	fixture.handler = application.NewFormParcelFinalHandler(fixture.deps)
 	return fixture
 }
 
@@ -196,10 +207,14 @@ func TestACancelledSiblingCountsTowardCompleteness(t *testing.T) {
 	fixture := newFinalFixture(t)
 	fixture.cancellations.cancelled = true
 	fixture.cancellations.cancellation = cancelledAt(t, finalOccurredAt.Add(-2*time.Hour))
+	fixture.cancellations.onlyFor = mustValue(t, domain.NewDeclaredParcelID, "parcel-1")
 
-	result, err := fixture.handler.Handle(context.Background(), finalCommand(t, "parcel-1"))
+	result, err := fixture.handler.Handle(context.Background(), finalCommand(t, "parcel-2"))
 	if err != nil {
 		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.ParcelFinalFormed {
+		t.Fatalf("outcome = %q; 被取消的是另一个成员，本成员的交付照常形成终局", result.Outcome())
 	}
 
 	summary, present := result.Completion()
@@ -371,4 +386,248 @@ func TestForeignProbesAndHalfShapesAreRefusedUniformly(t *testing.T) {
 	if refused.Outcome() != application.FinalRequestNotAccepted {
 		t.Fatalf("outcome = %q; 缺执行事实的结果构造不出", refused.Outcome())
 	}
+}
+
+// Covers: `AT-PS-080`「取消先成立，迟到消息……——取消不被覆盖」在有效交付一路上的对偶，以及 `AT-PS-107`（ADR-0254 决定二第 3 格）
+// 「不形成责任起点也不形成非取消终局」——包裹已有取消在册时迟到的有效交付不形成终局：不采用，依据指名那份取消，来源与交付
+// 保全在不采用记录上，并交下游一份不采用意图。终局规则放行也一样；规则未配置时同样答不采用，不停在 FINAL_RULE_UNCONFIGURED
+// 等一个永远不会开的终局。同一份交付重投答已有结果，更正出的新版本到达也仍不采用。
+func TestADeliveryOverAStandingCancellationIsNotAdopted(t *testing.T) {
+	arrange := func(t *testing.T) *finalFixture {
+		t.Helper()
+		fixture := newFinalFixture(t)
+		fixture.cancellations.cancelled = true
+		fixture.cancellations.cancellation = cancelledAt(t, finalOccurredAt.Add(-2*time.Hour))
+		fixture.cancellations.onlyFor = mustValue(t, domain.NewDeclaredParcelID, "parcel-1")
+		return fixture
+	}
+
+	t.Run("the delivery is refused naming the cancellation", func(t *testing.T) {
+		fixture := arrange(t)
+
+		result, err := fixture.handler.Handle(context.Background(), finalCommand(t, "parcel-1"))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.FinalSourceNotAdopted ||
+			result.Basis().String() != "PARCEL_CANCELLATION/cancel-1" {
+			t.Fatalf("outcome = %q basis = %q, want SOURCE_NOT_ADOPTED 指名 PARCEL_CANCELLATION/cancel-1",
+				result.Outcome(), result.Basis())
+		}
+		record, held := result.Record()
+		if !held || record.Finalized || record.Key.Kind != domain.EffectiveDeliveryOutcome ||
+			record.Key.Version.String() != "delivery-result/v1" {
+			t.Fatalf("record = %+v held = %v; 来源（种类与版本）必须保全在不采用记录上、不是终局", record, held)
+		}
+		if _, found, _ := fixture.finals.FindCurrentFinal(context.Background(), record.Key.TenantID, record.Key.Parcel); found {
+			t.Fatal("取消在册的包裹带上了当前有效终局")
+		}
+		if len(fixture.downstream.intents) != 1 || fixture.downstream.intents[0].Record.Finalized {
+			t.Fatalf("intents = %+v; 下游要知道有一份迟到来源没被采用", fixture.downstream.intents)
+		}
+		summary, present := result.Completion()
+		if !present || summary.Finalized() != 1 {
+			t.Fatalf("completion = %v %v; 取消终局照旧进汇总", present, summary)
+		}
+	})
+
+	t.Run("the refusal does not wait for the final rule", func(t *testing.T) {
+		fixture := arrange(t)
+		fixture.rules.configured = false
+
+		result, err := fixture.handler.Handle(context.Background(), finalCommand(t, "parcel-1"))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.FinalSourceNotAdopted {
+			t.Fatalf("outcome = %q/%q, want SOURCE_NOT_ADOPTED——取消在册，规则未配置也不该停着等终局",
+				result.Outcome(), result.UndecidedReason())
+		}
+	})
+
+	t.Run("a replay answers the refusal that was recorded", func(t *testing.T) {
+		fixture := arrange(t)
+		if _, err := fixture.handler.Handle(context.Background(), finalCommand(t, "parcel-1")); err != nil {
+			t.Fatalf("first handle: %v", err)
+		}
+
+		replay, err := fixture.handler.Handle(context.Background(), finalCommand(t, "parcel-1"))
+		if err != nil {
+			t.Fatalf("replay handle: %v", err)
+		}
+		if replay.Outcome() != application.ParcelFinalExistingResult ||
+			replay.Basis().String() != "PARCEL_CANCELLATION/cancel-1" {
+			t.Fatalf("replay = %q basis = %q, want EXISTING_RESULT 带原依据", replay.Outcome(), replay.Basis())
+		}
+		if fixture.finals.saved != 1 {
+			t.Fatalf("saved = %d; 重投不得再落一份", fixture.finals.saved)
+		}
+	})
+
+	t.Run("a corrected version of the delivery is refused too", func(t *testing.T) {
+		fixture := arrange(t)
+		if _, err := fixture.handler.Handle(context.Background(), finalCommand(t, "parcel-1")); err != nil {
+			t.Fatalf("first handle: %v", err)
+		}
+		corrected := finalCommand(t, "parcel-1")
+		corrected.Outcome.Version = mustValue(t, domain.NewResponsibilityOutcomeVersion, "delivery-result/v2")
+
+		result, err := fixture.handler.Handle(context.Background(), corrected)
+		if err != nil {
+			t.Fatalf("corrected handle: %v", err)
+		}
+		if result.Outcome() != application.FinalSourceNotAdopted ||
+			result.Basis().String() != "PARCEL_CANCELLATION/cancel-1" {
+			t.Fatalf("outcome = %q basis = %q; 更正出的新版本也不能绕过在册的取消", result.Outcome(), result.Basis())
+		}
+	})
+}
+
+// Covers: `AT-PS-053`「合格有效交付满足网络服务终局规则」不回归——没有取消的包裹交付照常形成终局，取消视图是读过的——「没有」是读出来的答案；读的是命令指名的（租户，包裹）。
+func TestADeliveryWithoutACancellationStillFormsTheFinalAfterReadingTheCancellationView(t *testing.T) {
+	fixture := newFinalFixture(t)
+
+	result, err := fixture.handler.Handle(context.Background(), finalCommand(t, "parcel-1"))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.ParcelFinalFormed {
+		t.Fatalf("outcome = %q, want FINAL_FORMED", result.Outcome())
+	}
+	if fixture.cancellations.asked == 0 {
+		t.Fatal("没读过取消视图就形成了终局")
+	}
+}
+
+// Covers: PS CONTEXT「同一包裹的取消提交、收寄采用与面单渠道服务的终局判断……」在网络服务有效交付终局这一侧——锁指名命令的
+// （租户，包裹），取在读已成立的取消与既有终局之前；取不到锁或没装锁就一道都不读、不落记录、不交意图，停在 FINAL_STORE_UNAVAILABLE
+// 并带续办引用（锁守的是既有终局分派那几道读，恢复动作同为重试）。取消机制未接入时不读也不取锁，交付照常形成终局。
+func TestTheFinalAdoptionQueuesOnItsParcelBeforeReadingTheCancellation(t *testing.T) {
+	t.Run("the lock comes before every read it guards", func(t *testing.T) {
+		fixture := newFinalFixture(t)
+		fixture.lock.onLock = func() {
+			if n := fixture.cancellations.asked; n != 0 {
+				t.Errorf("取锁之前已读了 %d 次取消——锁外读到的「没有取消」正是要防的那一份旧状态", n)
+			}
+			if n := len(fixture.finals.byKey); n != 0 {
+				t.Errorf("取锁之前终局库已有 %d 行", n)
+			}
+		}
+
+		result, err := fixture.handler.Handle(context.Background(), finalCommand(t, "parcel-1"))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.ParcelFinalFormed {
+			t.Fatalf("outcome = %q, want FINAL_FORMED", result.Outcome())
+		}
+		if len(fixture.lock.locked) != 1 || fixture.lock.locked[0] != "tenant-1/parcel-1" {
+			t.Fatalf("取锁 = %v, want 恰一次、指名 tenant-1/parcel-1", fixture.lock.locked)
+		}
+	})
+
+	t.Run("a request that is not accepted takes no lock", func(t *testing.T) {
+		fixture := newFinalFixture(t)
+		foreign := finalCommand(t, "parcel-1")
+		foreign.Identity = sourceIdentity(t, "tenant-1", "customer-2", "source-a", "key-1")
+
+		result, err := fixture.handler.Handle(context.Background(), foreign)
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.FinalRequestNotAccepted || len(fixture.lock.locked) != 0 {
+			t.Fatalf("outcome = %q locked = %v; 未受理的探测不排队、也不泄露", result.Outcome(), fixture.lock.locked)
+		}
+	})
+
+	stops := map[string]func(*finalFixture){
+		"an unavailable lock": func(fixture *finalFixture) { fixture.lock.err = errors.New("lock wait cancelled") },
+		"an unwired lock": func(fixture *finalFixture) {
+			fixture.rebuild(func(deps *application.FormParcelFinalDeps) { deps.BoundaryLock = nil })
+		},
+	}
+	for name, arrange := range stops {
+		t.Run(name, func(t *testing.T) {
+			fixture := newFinalFixture(t)
+			arrange(fixture)
+
+			result, err := fixture.handler.Handle(context.Background(), finalCommand(t, "parcel-1"))
+			if err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+			if result.Outcome() != application.ParcelFinalUndecided ||
+				result.UndecidedReason() != application.FinalStoreUnavailable ||
+				result.ContinuationReference().String() == "" {
+				t.Fatalf("outcome = %q/%q continuation = %q, want FINAL_UNDECIDED/FINAL_STORE_UNAVAILABLE 带续办引用",
+					result.Outcome(), result.UndecidedReason(), result.ContinuationReference())
+			}
+			if fixture.cancellations.asked != 0 || fixture.finals.saved != 0 || len(fixture.downstream.intents) != 0 {
+				t.Fatalf("asked = %d saved = %d intents = %d; 没排上队就什么都不读、不落、不交",
+					fixture.cancellations.asked, fixture.finals.saved, len(fixture.downstream.intents))
+			}
+		})
+	}
+
+	t.Run("an absent cancellation mechanism neither reads nor locks", func(t *testing.T) {
+		fixture := newFinalFixture(t)
+		fixture.rebuild(func(deps *application.FormParcelFinalDeps) { deps.Cancellations = nil })
+
+		result, err := fixture.handler.Handle(context.Background(), finalCommand(t, "parcel-1"))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.ParcelFinalFormed || len(fixture.lock.locked) != 0 {
+			t.Fatalf("outcome = %q locked = %v; 取消机制未接入，没有取消可争，排队没有对象",
+				result.Outcome(), fixture.lock.locked)
+		}
+	})
+}
+
+// Covers: ADR-0029 读不动才是未决——取消视图读不回，终局不放行也不落不采用记录（没读到不等于没有，更不等于有），停在
+// FINAL_STORE_UNAVAILABLE 带续办引用，重投再读。读口答了「有取消」却指不出是哪一份、或指的是别的包裹，是读口坏了，响亮报错，
+// 不当作没有取消让交付盖过一份真取消，也不编一个依据。
+func TestAnUnreadableOrBrokenCancellationViewNeverLetsTheDeliveryThrough(t *testing.T) {
+	t.Run("an unreadable view is undecided", func(t *testing.T) {
+		fixture := newFinalFixture(t)
+		fixture.cancellations.err = errors.New("cancellation store down")
+
+		result, err := fixture.handler.Handle(context.Background(), finalCommand(t, "parcel-1"))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.ParcelFinalUndecided ||
+			result.UndecidedReason() != application.FinalStoreUnavailable ||
+			result.ContinuationReference().String() == "" {
+			t.Fatalf("outcome = %q/%q, want FINAL_UNDECIDED/FINAL_STORE_UNAVAILABLE 带续办引用",
+				result.Outcome(), result.UndecidedReason())
+		}
+		if fixture.finals.saved != 0 || len(fixture.downstream.intents) != 0 {
+			t.Fatalf("saved = %d intents = %d; 读不回不落终局也不落不采用", fixture.finals.saved, len(fixture.downstream.intents))
+		}
+	})
+
+	t.Run("a cancellation that cannot be named is an error", func(t *testing.T) {
+		fixture := newFinalFixture(t)
+		fixture.cancellations.cancelled = true
+
+		if _, err := fixture.handler.Handle(context.Background(), finalCommand(t, "parcel-1")); err == nil {
+			t.Fatal("读口答了有取消却指不出是哪一份，却没报错")
+		}
+		if fixture.finals.saved != 0 {
+			t.Fatalf("saved = %d", fixture.finals.saved)
+		}
+	})
+
+	t.Run("a cancellation of another parcel is an error", func(t *testing.T) {
+		fixture := newFinalFixture(t)
+		fixture.cancellations.cancelled = true
+		fixture.cancellations.cancellation = cancelledAt(t, finalOccurredAt.Add(-2*time.Hour))
+
+		if _, err := fixture.handler.Handle(context.Background(), finalCommand(t, "parcel-2")); err == nil {
+			t.Fatal("读口交回了别的包裹的取消，却没报错")
+		}
+		if fixture.finals.saved != 0 {
+			t.Fatalf("saved = %d", fixture.finals.saved)
+		}
+	})
 }

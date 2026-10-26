@@ -687,21 +687,26 @@ func TestForeignOrUnacceptedTargetsRefuseWithoutLeaking(t *testing.T) {
 	})
 }
 
+// cancellationViewDouble 默认对任何包裹都答同一份取消；onlyFor 非空时只对那一件包裹答，别的包裹答没有。
 type cancellationViewDouble struct {
 	cancellation domain.ParcelCancellation
 	cancelled    bool
 	err          error
 	asked        int
+	onlyFor      domain.DeclaredParcelID
 }
 
 func (double *cancellationViewDouble) FindCancellation(
 	_ context.Context,
 	_ domain.TenantID,
-	_ domain.DeclaredParcelID,
+	parcel domain.DeclaredParcelID,
 ) (domain.ParcelCancellation, bool, error) {
 	double.asked++
 	if double.err != nil {
 		return domain.ParcelCancellation{}, false, double.err
+	}
+	if double.onlyFor.String() != "" && double.onlyFor != parcel {
+		return domain.ParcelCancellation{}, false, nil
 	}
 	return double.cancellation, double.cancelled, nil
 }
