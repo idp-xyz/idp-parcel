@@ -133,4 +133,4 @@
 - 分层落在 `internal/parcelpricing`：试算编排与补齐读数的共用件在 `application`；编排依赖里没有评价库写口与交付口（结构保证，ADR-0152 决定二）；`EvaluatePricingHandler` 改用共用件、行为不变。
 - 入口在 `internal/parcelpricing/adapters/http`：`cmd/parcel-api` 端点表把 `/pricing-estimates` 挂在操作者渠道的计价查阅读（`operatorRegistries.pricingOperationsRead`）——试算不写任何册、不形成生产事实，不挂登记册配置写；接口字段与错误码按 ADR-0152 决定七与 ADR-0022 定，不在本用例。
 - 真实价卡、目录与序列属租户取值（[参数登记册](../../product/PILOT-PARAMETER-REGISTER.md) `PAR-SET-02/03` 等），未提供时本用例如实答价卡未配置，不预置任何卡。演示租户 `SYN-TENANT-01` 的种子卡只作 `S` 走通。
-- 参考复核职责规则同属租户取值，经受控登记口 `parcel-pricing-register -kind reference-review-duty-rule` 登记，一租户一条；未登记时序列与目录的人工复核答未配置（`AT-PP-014`）。操作者面的两个复核口是 `/pricing-reference-series-reviews` 与 `/pricing-reference-catalogue-reviews`，复核者与授予集取自操作者信封；受控登记口的复核带不出授予集（`AT-PP-015`）。演示租户由种子在复核之前登一条要求不同主体、不要求授予的规则，只作 `S`。
+- 参考复核职责规则的受控登记口是 `parcel-pricing-register -kind reference-review-duty-rule`；操作者面的两个复核口是 `/pricing-reference-series-reviews` 与 `/pricing-reference-catalogue-reviews`。

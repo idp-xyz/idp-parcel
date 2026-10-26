@@ -61,7 +61,7 @@ M：领域规则类型、读口与表各一，两只编排各接一次，两格�
 
 ### 代决
 
-1. **授予先于主体比较。** UC-PP-001 `AT-PP-015`「经受控 CLI 复核而规则要求某一格授予时，不论复核者是谁，一律答复核者不合格」；先比主体的话，规则两格都要求时登记者本人经 CLI 复核答须换人，换了人照样过不去，指错恢复动作。价卡批准门（`PriceCardDraft.Approve`）是先比主体，两处顺序因此不同。
+1. **授予先于主体比较。** 一道共用的领域门、不按渠道区分时，只有这个顺序满足 UC-PP-001 `AT-PP-015`「经受控 CLI 复核而规则要求某一格授予时，不论复核者是谁，一律答复核者不合格」；先比主体的话，规则两格都要求时登记者本人经 CLI 复核答须换人，换了人照样过不去，指错恢复动作。价卡批准门（`PriceCardDraft.Approve`）是先比主体，两处顺序因此不同（见越权风险点 1）。
 2. **代写一格不导出、领域另立构造器。** 不导出让「只由来源喂价置位」由包可见性在结构上成立（操作者面与 CLI 在包外造命令，给不出这一格）；代写走 `NewExemptionDelegatedSeriesReview`，不在编排里伪造一条「要求不同主体」的规则——那样的规则看着像租户的声明。
 3. **结果格的名字**：`NOT_CONFIGURED` 与价卡批准同词；复核者不合格取 `REVIEWER_NOT_QUALIFIED`，照 `APPROVER_NOT_QUALIFIED` 的构词。CLI 退出码：两格与须换人同归治理答案 2。
 4. **CLI 两种复核文档改封闭解码**（未知键、尾随内容都答用法错），不只拒代写那一个键：只拒一个键名，换个拼法会被静默丢掉。仓内种子与测试批文没有多余键。
@@ -73,11 +73,11 @@ M：领域规则类型、读口与表各一，两只编排各接一次，两格�
 
 ### 越权风险点
 
-1. **授予先于主体**（PP owner）：见代决 1。要改回先比主体，`AT-PP-015` 的 CLI 那一支得同改。
+1. **授予先于主体**（PP owner）：见代决 1。要改回先比主体，`AT-PP-015` 的 CLI 那一支得同改。PC 商业发布批准（`partycommercial/domain/publication_draft.go` 的 `PublicationDraft.Approve`）与价卡批准同为先比主体；三门放行与拒绝的集合相同，只差两格都不满足时先报哪一格、续办提示不同。对齐另立 [code/93](./93-price-card-and-commercial-approval-gates-compare-subjects-before-the-required-grant.md)。
 2. **操作者授予集只是能力面名**（PP owner）：信封译进授予集的只有 `adapters/accessidentity` 的 `grantableFaces` 那几格能力面（登记册配置写、主数据与运营查阅读）。租户把规则的要求授予登成自定的等级名，操作者面恒答复核者不合格；登成 `REGISTRY_CONFIGURATION_WRITE`，到得了复核口的人都持有它，等于不要求。与价卡批准门同一暂定译法（那里的注释已写明），本票未动。
 3. **CLI 复核文档变严**（PP owner）：先前被静默忽略的多余键现在退出码 1；库外手写批文若带多余键要改。
 4. **规则文档缺键即拒**（PP owner）：比没有 CLI 口的价卡批准规则严；运营不要求授予时须写 `null`。
-5. **代写一格靠包边界**（PP owner）：`parcelpricing/application` 包内别的编排在结构上也置得上它；只有来源喂价置位这件事没有静态门禁。
+5. **代写一格的置位者靠两层守**（PP owner）：不导出挡住包外（操作者面、受控登记口）；包内由架构门禁 `internal/architecture/exemption_delegated_review_gate_test.go` 扫 `parcelpricing/application` 全部源码（含测试文件），认以 `delegatedUnderExemption` 为键的复合字面量与对它的赋值，只许 `feed_reference_series.go` 写、且命中数不为零。守不住的是取地址后经指针写与反射写，头注已如实写明。
 6. **已灌库按本分支重跑种子**：迁移 0014 施加、规则补登 `RECORDED`、复核答 `ALREADY_RECORDED`；之后网络目录那一节答未决（3）中止——main 自己在已灌库上重跑停在同一处（README 既有说明，用 `--reset`），不是本票引入。
 7. **生成物与登记册**：端点多一行，机制清点与 AT 盘点计数由推送方重生成；参数登记册 `PAR-SET-11` 的复核责任方一格未改（ADR-0262 Consequences 交文档自洽 10）。
 
@@ -89,3 +89,20 @@ M：领域规则类型、读口与表各一，两只编排各接一次，两格�
 - 变异（各自确认被杀后还原）：① 规则未登记时退回写死的不同主体比较 → 编排、真库、CLI 真库三条用例红；② CLI 复核文档退回宽松解码 → `TestReviewDocumentsCannotClaimTheExemptionDelegation` 红；③ 主体比较挪到授予之前 → 领域、编排与 CLI 真库用例红；④ 喂价不置代写一格 → 喂价编排四条用例红。
 - 管理台三道门（`tsc -b --noEmit`、`run-tests.mjs` 601 过 0 败、`vite build`）退 0；`node_modules` 软链主树，用后删去软链与产物。
 - 种子：一次性库 `c41seed` 干净灌入退 0，计价一节规则 `RECORDED`、两份序列复核与目录复核 `RECORDED`，库上三条复核行 `APPROVED`、复核者 `SYN-PRICING-REVIEW-01`，不退成未配置；另用临时 detached worktree 按 main 灌、再按分支重跑，结果见越权风险点 6。库已 `DROP … WITH (FORCE)`，临时 worktree 已删、登记已摘。
+
+## 评审记录与修订轮（2026-10-26，分支 claude-code41）
+
+隔离评审结论「可合入、无阻断」（评审记录由协调方转达，钉的 SHA 见协调方记录）。修订轮先 `git rebase origin/main` 退 0、无冲突（本地 `main` 未前移，前移的是 `origin/main`，主树分支不动），盘点三行原样在①。逐条：
+
+- **N1 代写格静态门禁**：新增 `internal/architecture/exemption_delegated_review_gate_test.go`，照 `charge_adjustment_ownership_gate_test.go` 同形——`TestOnlyTheSourceFeedSetsTheExemptionDelegatedReview` 解析 `internal/parcelpricing/application/*.go`（含 `_test.go`），认以 `delegatedUnderExemption` 为键的复合字面量与左边选中它的赋值，断言写它的文件只有 `feed_reference_series.go` 且命中数不为零；`TestTheExemptionDelegatedReviewGateCanActuallyCatchAViolation` 用合成源码逼出识别器两侧（字面量、取地址字面量、事后赋值、多值赋值算；只读、字段声明、名字相近不算）。变异：在 `register_reference_catalogue.go` 里加一个置位它的函数，门禁红、报出两个文件，还原后绿。越权风险点 5 随之改写。
+- **N2 两道批准门顺序**：代决 1 改准为「一道共用领域门、不按渠道区分时只有这个顺序满足 `AT-PP-015`」；越权风险点 1 补 PC 商业发布批准同为先比主体、三门集合相同只差先报哪一格。立 [code/93](./93-price-card-and-commercial-approval-gates-compare-subjects-before-the-required-grant.md)（R3，needs-triage：两门对齐到先判授予或一次报两格；顺带 PC `ErrApproverIsSubmitter` 注释指向 parcel-pricing 四眼门的那半句已过时；注明动 PC 前须协调）。取号前 ls 本目录与各分支、各 worktree，93 未占。
+- **N3 单一权威**：UC-PP-001 交接那一条删去复述 ADR-0262 的规则句，只留受控登记口种类名与两个复核端点路径。
+- **N4 位置词**：`TestFeedRegistersAndWritesTheExemptionReview`、`TestFeedReviewRefusalIsObservedButTheRegistrationStands` 的 Covers 改按内容指「规则未登记照常落复核行那一支」「登记者等于连接器身份那一支」。
+- **可选（已做）尾随内容**：本票新写的三处解码——CLI 的 `decodeReviewDocument`、`parseReviewDutyRuleDocument` 与 HTTP 的 `DecodeReferenceCatalogueReviewPayload`——把 `decoder.More()` 换成再 `Decode` 一次须见 `io.EOF`（customscompliance 先例），接住尾随的 `}`、`]`；先补用例看它们红（序列复核文档、规则文档、目录复核载荷各一条），再改绿。序列复核口的 `DecodeReferenceSeriesReviewPayload` 与 PP 其他既有解码处不在本票。
+
+修订轮验证：
+
+- `go build ./... && go vet ./...` 退 0；`gofmt -l` 无输出。
+- `scripts/test-full.sh ./internal/parcelpricing/... ./cmd/parcel-api/ ./cmd/parcel-pricing-register/... ./internal/architecture/... ./migrations/...`（含 PG）退 0、零 FAIL。
+- 新改用例 9 个（两条门禁、CLI 三条与真库一条、目录复核 Intake、喂价两条）`-count=3 -v`：27 次 PASS，零 FAIL、零 SKIP。
+
