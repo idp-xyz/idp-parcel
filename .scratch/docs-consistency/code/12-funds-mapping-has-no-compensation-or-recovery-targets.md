@@ -62,6 +62,10 @@ M：映射目标加两格（赔付义务、追偿应收），核销余额按目�
 7. **只收借向**：贷向是拿赔付或认可去抵客户应收、供应商应付，UC-SA-005「默认不做应收应付净额抵销」；本票不做抵销依据的规则，贷向一律未受理。
 8. **不进入账余额**：赔付付款与追偿收款不是客户应收作用域上的收付，`CustomerDirectionNets` 的 P 只加总映射到对账单与账户两格上的收付、W 只加总指向对账单的分配，映射与核销这两格不重算运营余额与信用状况（修订轮改准）。
 9. **锁**：行锁落在金额本体那一行，锁序按（格、引用），在事实之后、运营余额作用域之前（全序见「评审记录与修订轮」）；锁与求和分两句——并成一句时等锁的那一路读的是锁前快照（变异实测读到已核销 0，见「测试」）。
+10. **入账余额按事实去重是既有缺陷，本批顺修**（第二轮评审 N4，协调方裁本批修、不立票）。
+    - 缺陷：`CustomerReceiptPostings.CustomerDirectionNets` 的 P 原按 `funds_mapping` 行求和。一条事实映到同一作用域的两张对账单、或兼映到账户，P 记两次；10000 映到同账户下 stmt-1、stmt-2 得入账余额 20000，可用余额多出 10000。碰钱且静默：预付冻结读可用余额，比例额度读入账余额。
+    - 为什么本批修：缺陷早于本批，但只有一对多核销才会把一笔收款映到同一作用域的几个目标（`AT-SA-106`）。核销入口是本批开的，不修就是本批让它走得到。
+    - 修法：对账单段与账户段先 `UNION` 成一个事实集，再取链头金额求和。
 
 ### 越权风险点（待 SA owner 复核）
 
@@ -72,6 +76,7 @@ M：映射目标加两格（赔付义务、追偿应收），核销余额按目�
 5. **法人与结算账户一致性不核**（代决 6）：把甲法人的赔付付款映到乙法人的赔付上，产品不拦，只认付款指示。
 6. **索赔费用退款也收进 `CUSTOMER_COMPENSATION`**（代决 3）：若它已经对账单贷记给客户，再映射一笔现金付款就付了两遍；映射要显式依据，产品不交叉核对账单纳入。
 7. **未核销面的求和扫该租户全部未撤销核销的 jsonb 分配**，没有索引；与 `CustomerDirectionNets` 同形，量大时要加。
+8. **外部更正把事实金额改到已核销合计以下**（第二轮评审 N3）：更正照采，不读合计、不标超核、不重算它映射到的作用域；只有读面上为负的累计未分配与 CLI 的「累计超核」可见，对同一事实再核一律答分配失衡。核销与更正在事实身份行上排队只保证核销读到更正后的金额。去向 [code/92](./92-a-funds-fact-correction-below-its-applied-total-is-adopted-silently.md)。
 
 ### 新票
 
@@ -98,7 +103,7 @@ M：映射目标加两格（赔付义务、追偿应收），核销余额按目�
 评审结论与各条照协调方回给作者的原文摘要；修订轮在同一分支上加新提交，不改写旧提交（变基照规矩重放）；收尾时变基到本地 main `fb8ee7096`，修订轮期间 main 前移的那几笔不碰 settlement-accounting，变基无冲突，变基后重跑了测试（见 code/46 修订轮「测试」）。
 
 - **B1 阻断：同一笔资金事实能被多次核销，累计超过事实金额**（评审真库实测：5000 的收款换三个核销引用各交 5000，三笔都退 0）。病因：`Apply` 只靠 `domain.ApplySettlement` 看本笔，库上没有按事实的上限；CLI 答复的「未分配」取 `RemainderMinor()`，不跨核销累计。**修**：`Apply` 落行前先以 `FOR UPDATE` 锁事实身份行（`SettlementApplications.LockFundsFactApplications`，新口 `ports.FundsFactApplicationLock`），锁后另起一句求该事实未撤销核销的 `applied_minor` 合计；`domain.SettlementApplication.AdmitWithinFact` 判本笔加已有是否超过当前有效那一版的金额，超过答 `APPLICATION_IMBALANCE`、什么都不落。CLI 答复改为「本笔 X；事实 F 累计未分配 Y」，Y 是这一步之后该事实的累计未分配（`FundsResult.FactUnappliedMinor`）；撤销答复只说「已撤销」与累计未分配，不再报原核销金额。补真库竖切两条：`TestAFundsFactIsNotAppliedBeyondItsAmountAcrossApplications`（顺序超额）、`TestConcurrentApplicationsOfOneFactStayWithinItsAmount`（并发超额，一条自己的事务先占住身份行，等两路都在锁上排队——由 `pg_stat_activity` 认——再放开）。
-  - **锁选身份行不选链头、不选咨询锁的理由**：身份行一条事实一行、终身不换，链头随每次更正换一行；更正落版本行时外键对身份行取 KEY SHARE，与 `FOR UPDATE` 互斥（一次性库 `c12fk` 上实测：父行被 `FOR UPDATE` 占着时，子表插入等了约 2 秒，直到占锁事务提交），所以核销与更正天然在同一行上排队，更正编排不用另取一把锁；咨询锁挡不住不取它的更正。
+  - **锁选身份行不选链头、不选咨询锁的理由**：身份行一条事实一行、终身不换，链头随每次更正换一行；更正落版本行时外键对身份行取 KEY SHARE，与 `FOR UPDATE` 互斥（一次性库 `c12fk` 上实测：父行被 `FOR UPDATE` 占着时，子表插入等了约 2 秒，直到占锁事务提交），所以核销与更正在同一行上排队、核销读到的一定是更正之后的金额；咨询锁挡不住不取它的更正。（第三轮改准：原写「更正编排不用另取一把锁」不对——排队保不住已核销合计不超过事实金额，见文末第三轮 N3。）
 - **N1 改名**：`RECOVERY_RECEIVABLE` 全链路改为 `RECOVERY_ACKNOWLEDGEMENT`（领域常量 `TargetRecoveryAcknowledgement`、两张词表、迁移 0046 的 CHECK、管理台标签）；`RECOVERY_RECEIVABLE` 改作词表外值的反例——同上下文 `AdjustedAmountKind` 里它指应追偿金额。
 - **N2 并入 code/88**：见 [code/88](./88-settlement-application-and-reversal-do-not-recompute-the-posted-balance.md) 与 code/46 修订轮。`ErrInvalidClaimTargetStanding`（金额本体账不平）不再落进 `CLAIM_TARGET_STORE_UNAVAILABLE` 未决，改答分配失衡（确定性，ADR-0029）。
 - **N3**：UC-SA-005 目标与边界、输入表「未结项」、`AT-SA-117` 对齐到「核销到追偿认可金额，认可之前到账的追偿收款保持未分配」；越权风险点 1 保留。
@@ -121,3 +126,16 @@ M：映射目标加两格（赔付义务、追偿应收），核销余额按目�
 ### 修订轮测试（含 PG，变基后的 tip）
 
 见 code/46 修订轮「测试」，两票一并记。
+
+## 第二轮评审与第三轮修订（2026-10-26，协调方隔离评审：B1 已消、无阻断；作者第三轮修订，分支 claude-code12）
+
+变基到 origin/main `0f21df208`（评审时说的 `744a424b7` 之后又前移了几笔，都不碰 settlement-accounting），无冲突；AT 盘点两边的追记都留着。各条：
+
+- **N1 锁后取时**：`recomputeScope` 先取作用域锁再取 `Clock.Now()`，`advanceCustomerReceipt` 的信用状况那一步用它交回的同一时刻。锁下推进运营余额或信用状况答未推进就返 `ErrPostingNotAdvanced`、整笔回滚，CLI 落未决 3；只可能是跨进程时钟回拨，不该静默答成功。
+- **N2 作用域锁的守护**：补两条真库并发用例（code/46 第三轮）。
+- **N3 外部更正低于已核销合计**：本批不改代码，立 [code/92](./92-a-funds-fact-correction-below-its-applied-total-is-adopted-silently.md)。越权风险点补一条；UC-SA-005 恢复「给开发的交接」一节，放 `AT-SA-114` 一行；AT 盘点 `AT-SA-114` 注明只覆盖「事实是引用」那半边。锁选理由改准，见下一条。读面与 CLI 都不把负的累计未分配截成 0，CLI 说成「累计超核 X」。
+  - **锁选理由改准**：`SettlementApplications.LockFundsFactApplications` 头注与上一轮「锁选身份行」那段原说「更正编排不必另取一把锁」，不对。排队只保证核销读到更正后的金额，保不住「已核销合计不超过事实金额」。更正侧要核合计，得自己先对身份行 `FOR UPDATE` 再求和——插版本行时那把 KEY SHARE 来在读之后，晚了。
+- **N4 入账余额按事实去重**（代决 10）。
+- **N5**：金额本体账不平与作用域账不平续办相同，并成一格。编排对前者返包着 `ErrInvalidClaimTargetStanding` 的 error，`execute` 与 `ErrNegativeConfirmedUnsettled` 同一行归冲突格 2。
+- **N6、N7**：见 code/46 第三轮。
+- **N8**：UC-SA-005 `AT-SA-112` 补半句——原收款核销在两格金额本体上时，退回事实不映射、不核销到这两格，停在未分配，由本用例撤销那一笔原核销。

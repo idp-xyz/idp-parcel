@@ -61,6 +61,10 @@ M：`parcel-settlement-register` 加 `funds-application` 与 `funds-application-
 2. **（修订轮已修，见文末）入账余额在核销后停在旧值，直到同作用域下一次映射**；以入账余额为基数的比例额度这期间读旧值。另有一格本票让它走得到：分给对账单的分配超出该作用域已确认应收时，此后同作用域的映射重算求出负的已确认未结、整笔答未决；续办是用本票的撤销命令撤掉那一笔。两格都在 code/88。
 3. **撤销依据只是引用**：`Reverse` 不核依据指的资金退回或撤销事实是否已采用；登错依据产品不拦。
 4. **演示种子没有核销步**：演示租户今天的种子只有一笔映射到账户的收款，本票不加核销种子；演示要走核销须手跑这两条命令。
+5. **潜伏卡死：确认后的贷记调整让作用域账不平之后，撤销也撤不动**（第二轮评审实测）。
+   - 情形：两笔各 3000 核满对账单 C 的已确认应收 6000，之后来一笔确认后的贷记调整 4000，已确认应收变 2000。撤哪一笔 W 都还是 3000 > 2000，重算拒绝、整笔回滚，该作用域的撤销、映射、核销全堵。
+   - 今天不可达：费用调整没有入口，`buildSettlementOrchestrations` 只为启动即查而构造调整编排。
+   - 去向：等费用调整开入口时处理。入口归 [product-strategy-boundary/22](../../product-strategy-boundary/issues/22-settlement-orchestrations-assembly-and-triggers.md)「结算其余编排的装配、入口与触发面」；协调方转述时写的是 /12，那张是金额文法与分摊、已 resolved，不承接入口。思路是放行不让账变得更坏的撤销，或允许一次撤多笔。
 
 ### 新票
 
@@ -102,3 +106,24 @@ M：`parcel-settlement-register` 加 `funds-application` 与 `funds-application-
   5. 金额本体求和去掉租户条件（N7）→ 未核销面用例红；
   6. 事实身份行去掉 `FOR UPDATE` → 并发超额用例红（十秒内没有一路在身份行上排队）；
   7. 资金退回规则去掉 → 应用层退回用例红。
+
+## 第二轮评审与第三轮修订（2026-10-26，协调方隔离评审：B1 已消、无阻断；作者第三轮修订，分支 claude-code12）
+
+N1、N3、N4、N5、N8 记在 code/12 同名一节。本票这边：
+
+- **N2 作用域锁补真库用例**：照 `raceTwo` 抽出 `raceUnder`，占锁事务先拿住要证的那把锁，等两路都在锁上排队（`pg_stat_activity`）再放开。
+  - `TestConcurrentStatementApplicationsStayWithinTheConfirmedReceivable`：两路核销（两条事实）各核对账单 C 已确认应收 10000 的 60%，一路已核销、一路`未受理`，已确认未结停在 4000。
+  - `TestAMappingQueuedBehindTheScopeLockPostsBothReceipts`：一路映射排在作用域锁后面，占锁那笔事务以更晚的时刻推进另一笔映射并提交；排队那一笔拿锁后用锁后时刻推进，终值含两笔（N1 也靠它守）。
+- **N6 落行竞态**：`Apply` 落行答「已有」那一支照锁后那段用 `CompareStoredDigest` 分出冲突与已存在，不报累计未分配（赢家可能在另一条事实上）。原头注「只可能是不经事实锁的写入方」不成立，已改：同一核销引用、不同事实的两份并发交，各锁各的事实，都走得到这里。补 `TestALostSaveRaceComparesTheWinnerLikeTheLockedCheck`，用替身在锁后查键与落行之间落下赢家，让这一支确定走到。
+- **N7 并发撤销**：补 `TestConcurrentReversalsOfOneApplicationAnswerAlreadyReversed`，后到的那份在事实锁后再读到撤销版，答已撤销、退 0。
+- **N5 的入口用例**：`TestAClaimTargetAppliedBeyondItsAmountExitsAsConflict`，在库里垫一笔越额核销，再交一笔核销退 2、整笔回滚。
+- **记录**：越权风险点补潜伏卡死一条；`ports.FundsFactApplicationLock` 头注补一句——核销与撤销路上随写入隐式取的行锁都在作用域锁之后，映射在取作用域锁之前插映射行接不成环。
+
+### 第三轮测试（含 PG，`TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh`，变基后的 tip）
+
+- 变异（改完都跑红、复原后跑绿；复原是把备份拷回）：
+  1. N1 锁前取时（留着未推进报错）→ 排队映射那条红，退 3 并报 `posting did not advance`；锁前取时且吞掉未推进（即评审实测的原缺陷）→ 同一条红，入账余额停在 4000；
+  2. N2 作用域锁换成不取锁的 SELECT → 作用域两条并发用例红（十秒内没有一路在锁上排队）；
+  3. N4 去重去掉（`UNION ALL`）→ 一对多映射用例红，入账余额 20000；
+  4. N7 撤销去掉锁后再读 → 并发撤销用例 `-count=3` 三次全红，后到的那路答`未受理`；
+  5. N6 落行竞态不比内容 → 应用层用例红；N5 把账不平改回分配失衡 → 应用层与 CLI 两条红。
