@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	aipg "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/postgres"
 	nrpostgres "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/postgres"
+	nrapplication "go.idp.xyz/idp-parcel/internal/networkrouting/application"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	nrports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
@@ -37,13 +39,21 @@ const (
 type tieFixture struct {
 	db        *bentopg.DB
 	pool      *pgxpool.Pool
+	decider   transactionalInitialRouteTieDecider
 	endpoints map[string]http.Handler
 	key       nrdomain.InitialRouteJudgmentKey
 }
 
 func newTieFixture(t *testing.T, grant bool) *tieFixture {
 	t.Helper()
-	pool := pgtest.Pool(t)
+	// pgtest 的池只开两条连接；并发一格要一笔持锁、两笔裁决与一条探锁查询同时在库里，另开一只同库的池。
+	config := pgtest.Pool(t).Config().Copy()
+	config.MaxConns = 8
+	pool, err := pgxpool.NewWithConfig(t.Context(), config)
+	if err != nil {
+		t.Fatalf("开池：%v", err)
+	}
+	t.Cleanup(pool.Close)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
 		t.Fatalf("构造框架 DB：%v", err)
@@ -80,6 +90,7 @@ func newTieFixture(t *testing.T, grant bool) *tieFixture {
 	if err != nil {
 		t.Fatalf("装配裁决编排：%v", err)
 	}
+	fixture.decider = decider
 
 	operators, err := aipg.NewOperatorRegistry(db)
 	if err != nil {
@@ -233,6 +244,112 @@ func TestAnAuthorizedOperatorDecidesAnInitialRouteTieOnTheDatabase(t *testing.T)
 	if status != http.StatusOK || answer["outcome"] != "INITIAL_ROUTE_ALREADY_FORMED" ||
 		answer["existing"].(map[string]any)["conclusion"] != "ROUTE_FORMED" {
 		t.Fatalf("第二次裁决：%d %v", status, answer)
+	}
+	if rows := fixture.count(t, `SELECT count(*) FROM network_routing.initial_route_tie_decision WHERE tenant_id = $1`); rows != 1 {
+		t.Fatalf("裁决证据 %d 行, want 1", rows)
+	}
+}
+
+func (fixture *tieFixture) command(t *testing.T, operator, candidate string) nrapplication.DecideInitialRouteCommand {
+	t.Helper()
+	return nrapplication.DecideInitialRouteCommand{
+		Tenant:    fixture.key.TenantID,
+		Parcel:    fixture.key.DeclaredParcelID,
+		Candidate: mustNRValue(t, nrdomain.NewCandidateID, candidate),
+		Basis:     mustNRValue(t, nrdomain.NewRerouteDecisionBasisReference, "SYN-APPROVAL-CODE97"),
+		DecidedBy: mustNRValue(t, nrdomain.NewAuthorizedRoleReference, "OPERATOR/"+customsDecisionIssuer+"#"+operator),
+	}
+}
+
+// waitForAdvisoryWaiters 等本库里至少 n 个等在咨询锁上的请求：裁决真等在判断键锁上，才放行持锁那一笔。
+func (fixture *tieFixture) waitForAdvisoryWaiters(t *testing.T, n int) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var waiting int
+		if err := fixture.pool.QueryRow(t.Context(),
+			`SELECT count(*)
+			   FROM pg_locks l
+			   JOIN pg_database d ON d.oid = l.database
+			  WHERE l.locktype = 'advisory' AND NOT l.granted AND d.datname = current_database()`,
+		).Scan(&waiting); err != nil {
+			t.Fatal(err)
+		}
+		if waiting >= n {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("等判断键锁的请求 %d 个, want %d——裁决没有等判断键锁", waiting, n)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// Covers: AT-NR-101（ADR-0309 决定三「判断键锁里串行」）——另开一笔事务按判断键取锁（与复核、授权改路决定同一把）拦住，两个授权角色同时裁
+// 同一件包裹的并列都等在锁上，放行后只有一笔成立，另一笔读到先成的那一份、答 INITIAL_ROUTE_ALREADY_FORMED；判断库与裁决证据各一行。
+func TestTwoConcurrentTieDecisionsFormOnlyOneFirstPlan(t *testing.T) {
+	fixture := newTieFixture(t, true)
+	reassessments, err := nrpostgres.NewRouteReassessments(fixture.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	held := make(chan struct{})
+	release := make(chan struct{})
+	holder := make(chan error, 1)
+	go func() {
+		holder <- fixture.db.Transactor().WithinTransaction(context.Background(), func(txCtx context.Context) error {
+			if _, _, err := reassessments.LatestTriggerAt(txCtx, fixture.key); err != nil {
+				return err
+			}
+			close(held)
+			<-release
+			return nil
+		})
+	}()
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
+	select {
+	case <-held:
+	case err := <-holder:
+		t.Fatalf("持锁那一笔没取到锁：%v", err)
+	}
+
+	var wait sync.WaitGroup
+	results := make([]nrapplication.DecideInitialRouteResult, 2)
+	errs := make([]error, 2)
+	for index, choice := range []struct{ operator, candidate string }{
+		{tieOperator, "SYN-LINE-A@1"}, {tieOperator + "-2", "SYN-LINE-B@1"},
+	} {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			results[index], errs[index] = fixture.decider.Decide(context.Background(), fixture.command(t, choice.operator, choice.candidate))
+		}()
+	}
+	fixture.waitForAdvisoryWaiters(t, 2)
+	close(release)
+	if err := <-holder; err != nil {
+		t.Fatalf("持锁那一笔：%v", err)
+	}
+	wait.Wait()
+
+	outcomes := map[nrapplication.DecideInitialRouteOutcome]int{}
+	for index := range results {
+		if errs[index] != nil {
+			t.Fatalf("裁决 %d：%v", index, errs[index])
+		}
+		outcomes[results[index].Outcome()]++
+	}
+	if outcomes[nrapplication.InitialRouteTieDecided] != 1 || outcomes[nrapplication.InitialRouteAlreadyFormed] != 1 {
+		t.Fatalf("outcomes = %v, want 一笔成立、一笔已有结果", outcomes)
+	}
+	if rows := fixture.count(t, `SELECT count(*) FROM network_routing.initial_route WHERE tenant_id = $1`); rows != 1 {
+		t.Fatalf("判断库 %d 行, want 1", rows)
 	}
 	if rows := fixture.count(t, `SELECT count(*) FROM network_routing.initial_route_tie_decision WHERE tenant_id = $1`); rows != 1 {
 		t.Fatalf("裁决证据 %d 行, want 1", rows)

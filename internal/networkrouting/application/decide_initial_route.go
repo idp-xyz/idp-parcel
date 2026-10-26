@@ -161,7 +161,7 @@ type DecideInitialRouteDeps struct {
 	Clock      ports.Clock
 }
 
-// DecideInitialRouteHandler 是授权角色裁最低成本并列、形成首个计划的编排（UC-NR-001 步骤 8C；ADR-0309）。事务边界归装配点：
+// DecideInitialRouteHandler 是授权角色裁最低成本并列、形成首个计划的编排（UC-NR-001 步骤 8D；ADR-0309）。事务边界归装配点：
 // 判断键锁随事务释放，读已有结果、重判、落判断库、落决定证据与交发布意图要在同一笔里。
 type DecideInitialRouteHandler struct {
 	deps DecideInitialRouteDeps
