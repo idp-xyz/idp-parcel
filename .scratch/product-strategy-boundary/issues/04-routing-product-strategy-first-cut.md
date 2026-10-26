@@ -1,7 +1,7 @@
 # 04 路由第一刀：拆 `PAR-NET-14`，路由策略族与首个内置策略
 
 Category: enhancement
-Status: in-progress——跟踪容器：2026-09-24 通道 5 按 /to-tickets 拆为 [`.scratch/routing-first-cut/`](../../routing-first-cut/issues/) 下子票 01–11，切片计划见文末；本票自身不再有可执行工作。拆法认可：用户同日在 IDP 队列授权通道 5 自决（原话「你作为业务和系统专家，能能自决吗」），通道 5 以认可人身份重审后认可（作者即认可人，不算非作者复核），子票由 `draft` 转 ready-for-agent；子票放独立目录经通道 1 认可。此前：in-progress——2026-09-24 通道 5 认领（单 task-d12bb120-aac3-40b4-b1e9-a018b77afddc），分支 `mcp5-psb04` 基 `64b37f27`。此前：ready-for-agent（演示网络参考配置那半 Blocked by 03）
+Status: resolved——2026-10-26 跟踪容器收口：`.scratch/routing-first-cut/` 下子票 01–13、15–22 均已 resolved；子票 14（复核不带关务投影、改进型改路走不到）仍 needs-triage，作为独立票留在原处，不再挂本容器。见文末「代决（2026-10-26）」。此前 in-progress——跟踪容器：2026-09-24 通道 5 按 /to-tickets 拆为 [`.scratch/routing-first-cut/`](../../routing-first-cut/issues/) 下子票 01–11，切片计划见文末；本票自身不再有可执行工作。拆法认可：用户同日在 IDP 队列授权通道 5 自决（原话「你作为业务和系统专家，能能自决吗」），通道 5 以认可人身份重审后认可（作者即认可人，不算非作者复核），子票由 `draft` 转 ready-for-agent；子票放独立目录经通道 1 认可。此前：in-progress——2026-09-24 通道 5 认领（单 task-d12bb120-aac3-40b4-b1e9-a018b77afddc），分支 `mcp5-psb04` 基 `64b37f27`。此前：ready-for-agent（演示网络参考配置那半 Blocked by 03）
 Blocked by: 03（只挡演示网络参考配置那半）
 地盘：network-routing 的领域、应用与取数侧适配器；参数登记册 `PAR-NET-14` 一行的拆分结论。
 出处：[ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定七；票 `nr-route-evidence-views/01`（needs-info，其重启条件由本票替换）。
@@ -65,3 +65,10 @@ Blocked by: 03（只挡演示网络参考配置那半）
 - 碰 Go / SQL 的子票照[并行会话](../../../docs/agents/parallel-sessions.md)走隔离 worktree。迁移号各票开工时在频道预留，这里不预分——落地次序未定，预分会逼着按号序落。
 - 证据视图端口的导出签名在子票 07 改，开工前在频道报窗口。
 - 子票全部 resolved 后，本票按 [issue-tracker](../../../docs/agents/issue-tracker.md) 约定收口。
+
+## 代决（2026-10-26）
+
+用户 2026-10-26「我决定不了，你帮我决定吧」授权会话 `tops-20`（Claude Code）代决；越权风险点写给 owner 复核，推翻即按该节改。
+
+- **收口本跟踪容器。** 路由产品策略首版切分出的子票除 14 外都已进 main；14 是增强（改进型改路需要复核带关务投影），与首版切片的完成判据无关，作为独立票留在 `.scratch/routing-first-cut/issues/` 原处继续分诊。
+- **后果**：票 [05](./05-demo-journey-criterion-evidence.md) 收口那一步的 Blocked by 去掉本票。

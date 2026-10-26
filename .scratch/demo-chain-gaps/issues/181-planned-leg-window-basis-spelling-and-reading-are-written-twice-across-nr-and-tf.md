@@ -1,7 +1,7 @@
 # 181 计划段窗口依据的拼写与读法分在 NR、TF 两处各写一份，两侧同步没有用例守
 
 Category: enhancement
-Status: ready-for-agent——R3（不急）：两侧今天一致，票 142、176 的用例在 NR 侧按 TF 读法另写一份读过；只有一侧改了拼写或切法、另一侧没跟时才撞，撞了多半是准备那一路每封初始路由信封都响亮失败，少数形状（某格前半截自带版本）静默读成另一条连接。2026-10-26 会话 `tops-20`（Claude Code）据票 [176](./176-a-connection-code-with-the-window-basis-separator-is-accepted-at-registration.md) 完成记录越权风险点 1 与其评审记录 Spec 非阻断 1 立（用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」授权）。
+Status: ready-for-agent——R3（不急）；排期已代决，见文末「代决（2026-10-26）」。此前 ready-for-agent——R3（不急）：两侧今天一致，票 142、176 的用例在 NR 侧按 TF 读法另写一份读过；只有一侧改了拼写或切法、另一侧没跟时才撞，撞了多半是准备那一路每封初始路由信封都响亮失败，少数形状（某格前半截自带版本）静默读成另一条连接。2026-10-26 会话 `tops-20`（Claude Code）据票 [176](./176-a-connection-code-with-the-window-basis-separator-is-accepted-at-registration.md) 完成记录越权风险点 1 与其评审记录 Spec 非阻断 1 立（用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」授权）。
 Blocked by: 无
 地盘（建议）：`cmd/parcel-dispatch` 的测试（它同时导入 NR application 与 TF `adapters/networkrouting`）；NR、TF 生产代码不动。
 出处：票 176 完成记录「越权风险点」1、评审记录 Spec 非阻断 1；票 [142](./142-network-routing-guards-the-connection-window-basis-spelling.md) 完成记录「越权风险点」2；[ADR-0201](../../../docs/adr/0201-schedule-templates-materialize-concrete-schedules-by-date-and-preparation-answers-not-configured-on-an-empty-register.md) 决定二与越权风险点 25；代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) R4。
@@ -22,3 +22,10 @@ Blocked by: 无
 
 - [ ] `cmd/parcel-dispatch` 有一条用例经两侧生产代码绑住拼写与读法；变异 TF 的切法（如改按第一个 `@` 切）或 NR 的拼写，这条红。
 - [ ] Go 门禁；带 PG 跑 `cmd/parcel-dispatch`；全量用 `scripts/test-full.sh`。
+
+## 代决（2026-10-26）
+
+用户 2026-10-26「我决定不了，你帮我决定吧」授权会话 `tops-20`（Claude Code）代决；越权风险点写给 owner 复核，推翻即按该节改。
+
+- **不在上线前做，下次改 NR 计划段窗口依据或 TF `connectionOf` 时同笔补这条用例。** 今天两侧拼法与读法一致，没有错答；票 142、176 已各自守住一侧，缺的只是把两侧绑在一起的那一条。单独为它开一轮作者加评审，成本远大于它挡住的风险。
+- **越权风险点**：两侧若有人只改一侧、又没跑到对方的用例，会在准备那一路响亮失败（不会静默答错，`+` 那一格已由票 176 在登记口挡住）。

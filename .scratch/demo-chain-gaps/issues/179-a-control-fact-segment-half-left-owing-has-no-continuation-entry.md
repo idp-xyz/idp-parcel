@@ -1,7 +1,7 @@
 # 179 控制事实进段欠着的那一半没有续办入口，同一份控制事实重放也不重进段
 
 Category: enhancement
-Status: needs-triage——建议 R3：欠账只在控制事实登记时段那一半落不下（`SegmentContinuationReference`）才出现；追踪那一面已由票 136 的全扫兜住大半（下一份转出控制的交接或对象级揽收会补上），剩下的是段册本身一直欠着、要等另一份控制事实或人工直写。2026-10-26 会话 `tops-20`（Claude Code）据票 [136](./136-segment-continuation-wakes-the-movement-fact-backfill.md) 完成记录「另报一格」立（用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」授权）。续办入口的形状归 TF owner 裁，故 needs-triage。
+Status: ready-for-agent——R3（不急）；续办入口形状已代决，见文末「代决（2026-10-26）」。此前 needs-triage——建议 R3：欠账只在控制事实登记时段那一半落不下（`SegmentContinuationReference`）才出现；追踪那一面已由票 136 的全扫兜住大半（下一份转出控制的交接或对象级揽收会补上），剩下的是段册本身一直欠着、要等另一份控制事实或人工直写。2026-10-26 会话 `tops-20`（Claude Code）据票 [136](./136-segment-continuation-wakes-the-movement-fact-backfill.md) 完成记录「另报一格」立（用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」授权）。续办入口的形状归 TF owner 裁，故 needs-triage。
 Blocked by: 无
 地盘（建议）：TF 交接、对象级场外揽收登记与揽收执行三口的重放路径（`existingResult` 一支）与段册进段；tfhttp 对应注释。
 出处：票 136 完成记录「另报一格」；[ADR-0302](../../../docs/adr/0302-the-movement-fact-backfill-scans-every-segment-of-the-object-so-a-later-control-fact-heals-a-segment-entered-without-an-envelope.md) 越权风险点 1；ADR-0224 越权风险点 1。
@@ -21,3 +21,12 @@ Blocked by: 无
 
 - [ ] 欠账的那一半有确定的续办路，真库用例钉住续办后段册有参与。
 - [ ] 末段那一格追踪不再丢（或如实记为接受）。
+
+## 代决（2026-10-26）
+
+用户 2026-10-26「我决定不了，你帮我决定吧」授权会话 `tops-20`（Claude Code）代决；越权风险点写给 owner 复核，推翻即按该节改。
+
+- **形状：同一份控制事实重放时顺带续办欠着的那一半。** 交接、对象级揽收登记与揽收执行三口遇同内容重放仍答已有版本（`existingResult`），但若这一版的段那一半欠着（`SegmentContinuationReference`），就在同一笔里补进段；补成了答复多一格说明已续办，补不成照旧答欠账。不另立「续办进段」命令口。
+- **为什么**：欠账的产生方（设备、承运接口）本来就会因为没拿到完整答复而重投同一份事实，重放是现成的续办时机；另立命令口要多一个端点、多一套鉴权与幂等，而且得有人知道去按。补进段后 VE 补派生由票 136 的按对象全扫自然接上（ADR-0302），不需要另交唤醒信封。
+- **排期**：R3。追踪那一面已由票 136 兜住大半，剩下的口子要段登记在先失败、事后又没有任何重投才会留着；不进本轮。
+- **越权风险点**：1. 重放带副作用——同一份重放第一次补进段、第二次答已有，两次答复不同（只差续办那一格）；owner 若要求重放答复逐字节相同，改为另立命令口。2. 续办时段已关闭或对象已在别段，照票 183 的晚到检查答 `LATER_CONTROL_FACTS`、不进段。

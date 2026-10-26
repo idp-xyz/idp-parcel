@@ -1,7 +1,7 @@
 # 02 上游把 IconPicker 移出 ui-primitives 主入口，本仓换装新包并把超线改为构建失败
 
 Category: enhancement
-Status: ready-for-human——上游 `idp-ui` 半边归用户（或另开 `idp-ui` 会话）；本仓半边等上游发版后转 ready-for-agent
+Status: ready-for-human——上线后再做；排期已代决，见文末「代决（2026-10-26）」。此前 ready-for-human——上游 `idp-ui` 半边归用户（或另开 `idp-ui` 会话）；本仓半边等上游发版后转 ready-for-agent
 Blocked by: 01（门禁那半要求所有块都在线内）；另阻于本仓外：带本票上游改动的 `@idpxyz/ui-primitives` 新版本发布
 地盘：本仓半边为 `apps/admin-web/vendor/idpxyz-ui/`、`package.json` 的 `pnpm.overrides`、`pnpm-lock.yaml`、`vite.config.ts`、`README.md`「已知跟进」。
 出处：[spec](../spec.md)「现状」的 `vendor` 病根与「原型实测」的 A 格。
@@ -29,3 +29,10 @@ Blocked by: 01（门禁那半要求所有块都在线内）；另阻于本仓外
 - 三道门退 0；CI `admin-web` job 绿（它跑的就是 `vite build`，门禁随之进 CI）。
 
 ## Comments
+
+## 代决（2026-10-26）
+
+用户 2026-10-26「我决定不了，你帮我决定吧」授权会话 `tops-20`（Claude Code）代决；越权风险点写给 owner 复核，推翻即按该节改。
+
+- **上线后再做。** 这一张只关管理台首屏打包体积（构建时的超线告警），不影响任何功能与数据；本仓半边要等上游 `idp-ui` 发版，上游那半要另开 `idp-ui` 仓的会话。上线前不为它开上游会话。
+- **触发条件**：运营实测管理台首屏加载慢到影响使用，或上游 `idp-ui` 因别的原因发版时，顺带做上游那半，本仓随之换装并打开超线即失败的门禁。
