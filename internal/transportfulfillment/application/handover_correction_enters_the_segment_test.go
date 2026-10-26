@@ -460,3 +460,32 @@ func TestAHandoverKeepsItsSegmentDeclarationAndACorrectionInheritsIt(t *testing.
 		})
 	}
 }
+
+// 段登记册整体读不动时，改走进段的更正照旧答欠账（更正落下、重试可续办）——那是重派生那一口先读册失败给的，走不到晚到检查，也不写任何段；晚到检查本身读册失败
+// 不作答（见 handOverIntoSegment），所以这里不会有「更正落下、段那一半悄悄放行」的一格。
+func TestACorrectionIntoTheSegmentWithTheSegmentRegistryDownWritesNothing(t *testing.T) {
+	judgedAt := handoverJudgedTime.Add(3 * time.Hour)
+	fixture := newParticipationFixture(t)
+	handler := fixture.handoverHandlerEndingParticipations()
+	fixture.enterPreviousSegment(t, handler, "parcel-1", handoverJudgedTime)
+	if _, err := handler.Register(t.Context(), firstJudgment(t, domain.HandoverPendingConfirmation, judgedAt)); err != nil {
+		t.Fatalf("首登：%v", err)
+	}
+	fixture.segments.findErr = errors.New("segment registry down")
+	result, err := handler.Correct(t.Context(), confirmingAfter(t, enteringV1, enteringV2, judgedAt))
+	fixture.segments.findErr = nil
+	if err != nil || result.Outcome() != application.HandoverCorrected || result.SegmentContinuationReference() == "" {
+		t.Fatalf("更正：%v %s debt=%q, want 更正落下、答欠账", err, result.Outcome(), result.SegmentContinuationReference())
+	}
+	if result.ParticipationEnd() != application.ParticipationEndOutcomeInvalid {
+		t.Fatalf("读不动册却结束了参与：%s", result.ParticipationEnd())
+	}
+	for _, row := range fixture.segments.rows {
+		if row.key.Segment.String() == declaredSegment {
+			t.Fatal("声明的段被立起来了")
+		}
+	}
+	if active := fixture.activeSegmentsOf(t, "parcel-1"); len(active) != 1 || active[0] != previousSegment {
+		t.Fatalf("在场的段 = %v, want 仍只在 %s", active, previousSegment)
+	}
+}
