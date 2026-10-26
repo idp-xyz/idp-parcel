@@ -98,6 +98,44 @@ func TestASupersededVersionIsNotJudgedAgain(t *testing.T) {
 	}
 }
 
+// Covers: 票 docs-consistency/code/36、ADR-0286、UC-PS-005 步骤 6——客户在「委托已提交」信封被消费之前撤回了：信封指名的
+// 仍是委托的当前版本，链在第一步之前停下，三步都不走、一个权威都不问、什么也不记，答`已决定`、状态`已撤回`、不带决定。
+//
+// 走下去的代价是实的：撤回成立时已按原关联放掉了这份委托各版已成立的占用，控制那一步再为它占一次，就是撤回之后才
+// 长出来的占用，没有任何路径会再放它；形成决定那一步还会为一份永远不会有决定的委托耗掉一个决定标识。已撤回行读不回
+// 的时候链停在读错误上，这一格看不见；重建门开到`已撤回`之后它必须自己拦。
+func TestAWithdrawnRequestIsNotJudgedAgain(t *testing.T) {
+	fixture := newChainFixture(t)
+	withdrawn := withdrawnRequest(t)
+	fixture.requests.saved, fixture.requests.sticky = &withdrawn, true
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.AcceptanceChainDecided || result.State() != domain.ShipmentRequestWithdrawn {
+		t.Fatalf("outcome = %q state = %q stage = %q reason = %q, want DECIDED / WITHDRAWN",
+			result.Outcome(), result.State(), result.Stage(), result.PendingReason())
+	}
+	if _, present := result.AcceptanceDecision(); present {
+		t.Fatal("已撤回委托的链答案带出了一份决定：撤回不是接受也不是拒绝")
+	}
+	if len(fixture.calls) != 0 {
+		t.Fatalf("calls = %v；为已撤回的委托问了权威", fixture.calls)
+	}
+	if fixture.reachability.calls != 0 || fixture.controller.calls != 0 {
+		t.Fatalf("为已撤回的委托判了 %d 个成员的可达性、发起了 %d 次资金占用",
+			fixture.reachability.calls, fixture.controller.calls)
+	}
+	if len(fixture.downstream.intents) != 0 {
+		t.Fatal("已撤回的委托交出了一份接受决定意图")
+	}
+	if fixture.requests.saved != &withdrawn {
+		t.Fatal("已撤回的委托被链保存了一遍")
+	}
+}
+
 // Covers: UC-PS-001 结果语义契约`尚未决定` — 一条腿停下即整条停下，后面两步不再走。
 //
 // 往下走有害而不只是多余：形成决定读的是**已记录**的判断，缺一条它只会再答一次`尚未
@@ -396,4 +434,20 @@ func supersededRequest(t *testing.T) domain.ShipmentRequest {
 		t.Fatalf("form new submission version: %v", err)
 	}
 	return superseded
+}
+
+// withdrawnRequest 是 submittedRequest 经客户撤回形成的委托：版本仍是 version-1，任务已停止，决定槽位为空。
+func withdrawnRequest(t *testing.T) domain.ShipmentRequest {
+	t.Helper()
+	withdrawn, err := submittedRequest(t).WithdrawByCustomer(domain.WithdrawalSpec{
+		DecisionID: mustValue(t, domain.NewAcceptanceDecisionID, "withdrawal-1"),
+		Authority:  mustValue(t, domain.NewWithdrawalAuthorityReference, "WITHDRAW-ROLE-1"),
+		Requester:  mustValue(t, domain.NewWithdrawalRequesterReference, "CUSTOMER-CONTACT-1"),
+		Reason:     mustValue(t, domain.NewWithdrawalReasonReference, "CUSTOMER_NO_LONGER_REQUIRES_SERVICE"),
+		DecidedAt:  time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("withdraw by customer: %v", err)
+	}
+	return withdrawn
 }

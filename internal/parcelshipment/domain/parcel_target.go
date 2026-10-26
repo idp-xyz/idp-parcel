@@ -7,8 +7,8 @@ import "errors"
 var ErrAmbiguousParcelTarget = errors.New("parcel shipment: ambiguous current accepted parcel target")
 
 // CurrentAcceptedParcelTarget 是按包裹反查命中的**当前已接受**委托目标。
-// 它不是聚合本身：重建门只开到已提交（ADR-0030），已接受行不能经仓储读回；
-// 下游要的是采用/履约编排的三重指名（来源身份 + 委托号 + 当前提交版本）。
+// 它不是聚合本身：下游要的是采用/履约编排的三重指名（来源身份 + 委托号 + 当前提交版本），
+// 不必为此重建整份聚合。
 type CurrentAcceptedParcelTarget struct {
 	identity          SourceIdentity
 	shipmentRequestID ShipmentRequestID

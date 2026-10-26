@@ -87,15 +87,9 @@ func TestAWithdrawalOverAnUnscopedFreezeRecordsTheRefusalAndStands(t *testing.T)
 	if result.CompensationReference().String() != "" {
 		t.Fatalf("拒收已成定局却留了补偿引用 %q", result.CompensationReference())
 	}
-	// 已撤回的委托今天读不回聚合（票 code/36），状态取投影列。
-	var state int16
-	if err := fixture.pool.QueryRow(ctx,
-		`SELECT state FROM parcel_shipment.shipment_request WHERE shipment_request_id = $1`,
-		fixture.requestID.String()).Scan(&state); err != nil {
-		t.Fatalf("读状态投影：%v", err)
-	}
-	if state != int16(psdomain.ShipmentRequestWithdrawn) {
-		t.Fatalf("库里 state = %d, want WITHDRAWN", state)
+	stored := fixture.mustLoadRequest(t, ctx)
+	if _, formed := stored.Withdrawal(); stored.State() != psdomain.ShipmentRequestWithdrawn || !formed {
+		t.Fatalf("库里 state = %q（撤回决定在场=%v）, want WITHDRAWN 与撤回决定", stored.State(), formed)
 	}
 
 	refusals, err := pspostgres.NewControlReleaseRefusals(fixture.db)

@@ -3,6 +3,7 @@ package postgres_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -19,8 +20,8 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 16 证委托聚合仓储的行为：全聚合快照往返不丢字段、作用域
-// 隔离由 SQL 条件承担、重复建单由主键拦住、并发保存由乐观版本拦住、重建门开到
-// `已提交`、`已接受`与`已拒绝`（ADR-0061、ADR-0188）由读回侧如实透出。
+// 隔离由 SQL 条件承担、重复建单由主键拦住、并发保存由乐观版本拦住、重建门开到四个状态
+// （ADR-0061、ADR-0188、ADR-0286）由读回侧如实透出。
 
 func TestASubmittedRequestRoundTripsWholly(t *testing.T) {
 	repository, transactor, _ := newShipmentRequests(t)
@@ -272,20 +273,18 @@ func TestRequestWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	}
 }
 
-// TestUnsupportedStatesSurfaceOnRead 证门外状态与坏快照分格（ADR-0061、ADR-0188）：只把状态列推到
-// `已接受`或`已拒绝`、快照仍是已提交形状，读回是坏数据而不是「本期不支持」——门已经开了，缺产物就是
-// 这一行立不起来。`已撤回`仍走不支持哨兵。
-func TestUnsupportedStatesSurfaceOnRead(t *testing.T) {
+// TestAStateColumnAheadOfItsSnapshotIsBadDataOnRead 证状态列与快照对不上是坏快照（ADR-0061、ADR-0188、ADR-0286）：只把
+// 状态列推到`已接受`、`已拒绝`或`已撤回`、快照仍是已提交形状，读回走 ErrInvalidRehydratedShipmentRequest——门已经
+// 开了，缺产物、缺决定、缺撤回决定就是这一行立不起来，运维要去查库里那一行，不是等门开。
+func TestAStateColumnAheadOfItsSnapshotIsBadDataOnRead(t *testing.T) {
 	repository, transactor, pool := newShipmentRequests(t)
 	ctx := t.Context()
 
-	// 状态列推进到已开门的状态、文档仍是已提交形状：门开着，缺产物就是这一行立不起来（ADR-0061、ADR-0188）。
-	// `已拒绝`不再算门外——一份没有决定的已拒绝快照是坏数据，不是「等门开」。
-	opened := map[string]domain.ShipmentRequestState{
-		"req-key-accepted": domain.ShipmentRequestAccepted,
-		"req-key-rejected": domain.ShipmentRequestRejected,
-	}
-	for key, state := range opened {
+	for key, state := range map[string]domain.ShipmentRequestState{
+		"req-key-accepted":  domain.ShipmentRequestAccepted,
+		"req-key-rejected":  domain.ShipmentRequestRejected,
+		"req-key-withdrawn": domain.ShipmentRequestWithdrawn,
+	} {
 		mustInsert(t, transactor, ctx, repository, submittedShipmentRequest(t, key, "request-"+key))
 		if _, err := pool.Exec(ctx,
 			`UPDATE parcel_shipment.shipment_request SET state = $1 WHERE source_request_key = $2`,
@@ -296,17 +295,122 @@ func TestUnsupportedStatesSurfaceOnRead(t *testing.T) {
 		if !errors.Is(err, domain.ErrInvalidRehydratedShipmentRequest) {
 			t.Fatalf("%s 缺产物：err = %v, want ErrInvalidRehydratedShipmentRequest", state, err)
 		}
+		if errors.Is(err, domain.ErrRehydrationStateNotSupported) {
+			t.Fatalf("%s 缺产物：err = %v；门已开到这个状态，坏数据不得折成未开门", state, err)
+		}
+	}
+}
+
+// withdrawnShipmentRequest 是经领域转移撤回的一份委托，值一律合成。
+func withdrawnShipmentRequest(t *testing.T, request domain.ShipmentRequest) domain.ShipmentRequest {
+	t.Helper()
+	withdrawn, err := request.WithdrawByCustomer(domain.WithdrawalSpec{
+		DecisionID: mustBuild(t, domain.NewAcceptanceDecisionID, "SYN-DECISION-WITHDRAWN-1"),
+		Authority:  mustBuild(t, domain.NewWithdrawalAuthorityReference, "SYN-WITHDRAW-ROLE-1"),
+		Requester:  mustBuild(t, domain.NewWithdrawalRequesterReference, "SYN-CUSTOMER-CONTACT-1"),
+		Reason:     mustBuild(t, domain.NewWithdrawalReasonReference, "SYN-ORDER-CANCELLED"),
+		DecidedAt:  request.SubmittedAt().Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("撤回：%v", err)
+	}
+	return withdrawn
+}
+
+// Covers: ADR-0286 决定一、二——经真实写路径撤回并保存的委托读得回，撤回决定五格逐格相等，决定边界标志随快照落下，
+// 任务`已停止`、没有接受决定。写侧不落撤回决定，或读侧不开`已撤回`，凡按来源身份读委托的编排（重复撤回、撤回重提关联、
+// 提交重放）都读不回已撤回委托（`AT-PS-068`、`AT-PS-076`）。
+func TestAWithdrawnRequestRoundTripsWithItsWithdrawal(t *testing.T) {
+	repository, transactor, pool := newShipmentRequests(t)
+	ctx := t.Context()
+
+	mustInsert(t, transactor, ctx, repository, submittedShipmentRequest(t, "req-key-w", "request-w"))
+	withdrawn := withdrawnShipmentRequest(t, mustFind(t, repository, ctx, "req-key-w"))
+	mustSave(t, transactor, ctx, repository, requestIdentity(t, "req-key-w"), withdrawn)
+
+	var decisionID, authority, requester, reason, decidedAt *string
+	var decisionFormed *bool
+	if err := pool.QueryRow(ctx,
+		`SELECT snapshot->'withdrawal'->>'decisionId',
+		        snapshot->'withdrawal'->>'authority',
+		        snapshot->'withdrawal'->>'requester',
+		        snapshot->'withdrawal'->>'reason',
+		        snapshot->'withdrawal'->>'decidedAt',
+		        (snapshot->>'decisionFormed')::boolean
+		   FROM parcel_shipment.shipment_request WHERE source_request_key = 'req-key-w'`,
+	).Scan(&decisionID, &authority, &requester, &reason, &decidedAt, &decisionFormed); err != nil {
+		t.Fatalf("读快照撤回决定：%v", err)
+	}
+	want, _ := withdrawn.Withdrawal()
+	if decisionID == nil || *decisionID != want.DecisionID().String() ||
+		authority == nil || *authority != want.Authority().String() ||
+		requester == nil || *requester != want.Requester().String() ||
+		reason == nil || *reason != want.Reason().String() ||
+		decidedAt == nil || decisionFormed == nil || !*decisionFormed {
+		t.Fatalf("快照撤回决定 = %v/%v/%v/%v/%v 边界 %v, want %+v——撤回决定在落库那一刻丢了",
+			decisionID, authority, requester, reason, decidedAt, decisionFormed, want)
 	}
 
-	mustInsert(t, transactor, ctx, repository, submittedShipmentRequest(t, "req-key-withdrawn", "request-withdrawn"))
-	if _, err := pool.Exec(ctx,
-		`UPDATE parcel_shipment.shipment_request SET state = $1 WHERE source_request_key = $2`,
-		uint8(domain.ShipmentRequestWithdrawn), "req-key-withdrawn"); err != nil {
-		t.Fatalf("推进状态列到已撤回：%v", err)
+	found := mustFind(t, repository, ctx, "req-key-w")
+	if found.State() != domain.ShipmentRequestWithdrawn || found.Revision() != withdrawn.Revision()+1 {
+		t.Fatalf("state = %q revision = %d", found.State(), found.Revision())
 	}
-	_, _, err := repository.FindBySourceIdentity(ctx, requestIdentity(t, "req-key-withdrawn"))
-	if !errors.Is(err, domain.ErrRehydrationStateNotSupported) {
-		t.Fatalf("已撤回：err = %v, want ErrRehydrationStateNotSupported", err)
+	got, formed := found.Withdrawal()
+	if !formed || !reflect.DeepEqual(got, want) {
+		t.Fatalf("撤回决定往返不等（formed=%v）：\n got = %#v\nwant = %#v", formed, got, want)
+	}
+	if !reflect.DeepEqual(found.AcceptanceDecisionTask(), withdrawn.AcceptanceDecisionTask()) {
+		t.Fatalf("判断任务往返不等：\n got = %#v\nwant = %#v", found.AcceptanceDecisionTask(), withdrawn.AcceptanceDecisionTask())
+	}
+	if _, present := found.AcceptanceDecision(); present {
+		t.Fatal("已撤回委托读回长出了接受决定")
+	}
+	if _, err := found.WithdrawByCustomer(domain.WithdrawalSpec{}); !errors.Is(err, domain.ErrDecisionAlreadyFormed) {
+		t.Fatalf("读回的已撤回委托再撤一次：err = %v, want ErrDecisionAlreadyFormed——决定边界标志没随快照回来", err)
+	}
+}
+
+// Covers: ADR-0286 决定三——已撤回行缺撤回决定、或撤回决定残缺，读回是坏数据，响亮拒绝，走
+// ErrInvalidRehydratedShipmentRequest，不折成「本期不支持」，也不推回、不补默认值。补表达之前写下的已撤回行
+// （首发前只有演示租户的存量）就是第一例。
+func TestWithdrawnRowsWithoutOrWithBrokenWithdrawalAreInvalidOnRead(t *testing.T) {
+	repository, transactor, pool := newShipmentRequests(t)
+	ctx := t.Context()
+
+	cases := map[string]string{
+		"补表达前的已撤回行（没有撤回决定）": `snapshot - 'withdrawal'`,
+		"撤回决定是空对象":          `jsonb_set(snapshot, '{withdrawal}', '{}')`,
+		"撤回决定缺授权":           `jsonb_set(snapshot, '{withdrawal,authority}', '""')`,
+		"撤回决定缺请求方":          `jsonb_set(snapshot, '{withdrawal,requester}', '""')`,
+		"撤回决定缺原因":           `jsonb_set(snapshot, '{withdrawal,reason}', '""')`,
+		"撤回决定缺决定标识":         `snapshot #- '{withdrawal,decisionId}'`,
+		"撤回决定缺决定时刻":         `snapshot #- '{withdrawal,decidedAt}'`,
+		"决定边界没越过":           `snapshot - 'decisionFormed'`,
+		"又带了拒绝决定": `jsonb_set(snapshot, '{decision}',
+			'{"decisionId":"SYN-DECISION-X","accepted":false,"activeRejection":{"authority":"A","decider":"D","reason":"R","evidence":"E"},"basis":{"resolutionId":"","rulePackage":"","viewRevision":"","manualReview":0},"manualReview":0,"decidedAt":"2026-08-05T10:00:00Z"}')`,
+	}
+	row := 0
+	for name, rewrite := range cases {
+		row++
+		key := fmt.Sprintf("req-key-broken-%d", row)
+		t.Run(name, func(t *testing.T) {
+			mustInsert(t, transactor, ctx, repository, submittedShipmentRequest(t, key, fmt.Sprintf("request-broken-%d", row)))
+			withdrawn := withdrawnShipmentRequest(t, mustFind(t, repository, ctx, key))
+			mustSave(t, transactor, ctx, repository, requestIdentity(t, key), withdrawn)
+			if _, err := pool.Exec(ctx,
+				`UPDATE parcel_shipment.shipment_request SET snapshot = `+rewrite+` WHERE source_request_key = $1`, key,
+			); err != nil {
+				t.Fatalf("改写快照：%v", err)
+			}
+
+			_, _, err := repository.FindBySourceIdentity(ctx, requestIdentity(t, key))
+			if !errors.Is(err, domain.ErrInvalidRehydratedShipmentRequest) {
+				t.Fatalf("读回 err = %v, want ErrInvalidRehydratedShipmentRequest", err)
+			}
+			if errors.Is(err, domain.ErrRehydrationStateNotSupported) {
+				t.Fatalf("读回 err = %v；门已开到`已撤回`，坏数据不得折成未开门", err)
+			}
+		})
 	}
 }
 

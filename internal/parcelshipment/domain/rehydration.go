@@ -17,6 +17,9 @@ var ErrInvalidRehydratedShipmentRequest = errors.New("parcel shipment: invalid r
 // 它与 ErrInvalidRehydratedShipmentRequest 分开，依据是 ADR-0029 的分格规则：两者的恢复动作
 // 不同——一个是等这扇门开到那个状态，一个是去查库里那一行或写它的适配器。压成同一个取值，
 // 运维会照着一份完好的数据去找一处不存在的损坏。
+//
+// 四个状态都已开门，admitRehydratedState 没有一支产出它；它留着，是因为 ADR-0030 的两步顺序对新增的
+// 委托状态同样成立。
 var ErrRehydrationStateNotSupported = errors.New("parcel shipment: rehydration does not yet cover this shipment request state")
 
 // RehydrateShipmentRequestSpec 携带重建一份委托所需的全部字段。
@@ -24,8 +27,8 @@ var ErrRehydrationStateNotSupported = errors.New("parcel shipment: rehydration d
 // 它是本包唯一一处「相信输入」的地方（ADR-0028）：字段一律当**数据**收下，绝不从中重新
 // 推导 accepted、state、baseline 或任何派生字段。要重算的那扇门是 Decide，不是这里。
 //
-// ADR-0030 的准入判据是快照表达能力。今天开`已提交`、`已接受`与`已拒绝`：后两者可达的决定（含
-// 主动拒绝留痕）、基线、承诺与客户资料版本都有字段可填；`已撤回`仍少撤回的表达，由入口挡住（ADR-0188）。
+// ADR-0030 的准入判据是快照表达能力。四个状态都开：`已接受`与`已拒绝`可达的决定（含主动拒绝留痕）、
+// 基线、承诺与客户资料版本，`已撤回`可达的撤回决定，都有字段可填（ADR-0061、ADR-0188、ADR-0286）。
 type RehydrateShipmentRequestSpec struct {
 	// Revision 是这一行在库里的版本。重建的聚合必然已持久化，所以它必须从 1 起。
 	Revision          int64
@@ -48,12 +51,17 @@ type RehydrateShipmentRequestSpec struct {
 	// DeclareCustomerParcelNumber 造它。它在`已提交`下就有值；漏带回，接受时就形成不出外部标识关联。
 	CustomerParcelNumbers []CustomerParcelNumberDeclaration
 	// 以下四项在`已提交`下必然缺席；`已接受`下决定、基线、承诺必须在场，资料版本可空；`已拒绝`下只有
-	// 决定在场，其余三项必然缺席（ADR-0188 对账表）。
+	// 决定在场，其余三项必然缺席（ADR-0188 对账表）；`已撤回`下四项都缺席，决定边界由 DecisionFormed 与
+	// Withdrawal 表达。
 	Decision           RehydrateAcceptanceDecisionSpec
 	DecisionFormed     bool
 	Baseline           RehydrateAcceptanceBaselineSpec
 	Commitment         RehydrateExpectedCommitmentSpec
 	SourceDataVersions []CustomerSourceDataVersion
+	// Withdrawal 是撤回决定在库里的样子，只在`已撤回`下在场。撤回自带槽位而不写进 Decision：撤回不是接受
+	// 也不是拒绝，塞进去会让一次客户取消读成运营拒绝。漏带回，一份已撤回委托重建后只剩一个状态码，
+	// PS CONTEXT 要求保留的撤回决定标识、授权、请求方与原因全部丢失，重复撤回也答不出原撤回。
+	Withdrawal RehydrateWithdrawalSpec
 }
 
 // RehydrateAcceptanceDecisionSpec 是接受决定在库里的样子。决定是产物，没有公开构造器，
@@ -82,6 +90,17 @@ type RehydrateActiveRejectionSpec struct {
 
 func (spec RehydrateAcceptanceDecisionSpec) present() bool {
 	return spec.DecisionID.valid()
+}
+
+// RehydrateWithdrawalSpec 是撤回决定在库里的样子。Withdrawal 没有公开构造器（只由 WithdrawByCustomer 形成），
+// 按 ADR-0030 的判别式是产物，另立重建面；授权、请求方与原因收成品类型，它们各有公开构造器、字段未导出。
+// 五格缺任一格都是坏数据，不折成「没有撤回」：后者会把一次客户撤回读成从未发生。
+type RehydrateWithdrawalSpec struct {
+	DecisionID AcceptanceDecisionID
+	Authority  WithdrawalAuthorityReference
+	Requester  WithdrawalRequesterReference
+	Reason     WithdrawalReasonReference
+	DecidedAt  time.Time
 }
 
 // RehydrateAcceptanceBaselineSpec 是接受基线在库里的样子。基线没有公开构造器。
@@ -234,6 +253,13 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 			decidedAt: snapshot.Decision.DecidedAt,
 		},
 		decisionFormed: snapshot.DecisionFormed,
+		withdrawal: Withdrawal{
+			decisionID: snapshot.Withdrawal.DecisionID,
+			authority:  snapshot.Withdrawal.Authority,
+			requester:  snapshot.Withdrawal.Requester,
+			reason:     snapshot.Withdrawal.Reason,
+			decidedAt:  snapshot.Withdrawal.DecidedAt,
+		},
 		baseline: AcceptanceBaseline{
 			declaredParcelIDs: append([]DeclaredParcelID(nil), snapshot.Baseline.DeclaredParcelIDs...),
 			submissionVersion: snapshot.Baseline.SubmissionVersion,
@@ -251,19 +277,17 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 	return request, nil
 }
 
-// admitRehydratedState 判这扇门今天开到哪个状态。
+// admitRehydratedState 判这扇门开到哪个状态。
 //
-// 见 ADR-0030：一个状态只有在快照类型能表达它可达的全部字段时才准进来。今天满足这条的是
-// `已提交`、`已接受`与`已拒绝`（ADR-0061、ADR-0188）。`已撤回`的撤回在规格里仍没有字段可填，
-// 放进来重建出的聚合会缺撤回，而它此后看起来与真的一样。
+// 见 ADR-0030：一个状态只有在快照类型能表达它可达的全部字段时才准进来。四个状态都满足这条
+// （ADR-0061、ADR-0188、ADR-0286），所以没有状态落在 ErrRehydrationStateNotSupported 那一格；新增委托状态时，
+// 先在这里让它落到那一格，补齐快照表达之后再放行。
 func admitRehydratedState(state ShipmentRequestState) error {
 	switch state {
-	case ShipmentRequestSubmitted, ShipmentRequestAccepted, ShipmentRequestRejected:
+	case ShipmentRequestSubmitted, ShipmentRequestAccepted, ShipmentRequestRejected, ShipmentRequestWithdrawn:
 		return nil
 	case ShipmentRequestStateInvalid:
 		return rehydrationRefusal("委托状态未设")
-	case ShipmentRequestWithdrawn:
-		return fmt.Errorf("%w：%s", ErrRehydrationStateNotSupported, state)
 	default:
 		// 越界值印数字而不是名字：`String()` 对它交回空串，而一个说不出是哪个值的拒绝，
 		// 适配器作者只能靠猜。
@@ -310,6 +334,9 @@ func (request ShipmentRequest) validForRehydration() error {
 	if err := request.rejectedDecisionValidForRehydration(); err != nil {
 		return err
 	}
+	if err := request.withdrawnValidForRehydration(); err != nil {
+		return err
+	}
 	if err := request.linkValidForRehydration(); err != nil {
 		return err
 	}
@@ -329,7 +356,7 @@ func (request ShipmentRequest) acceptedProductsValidForRehydration() error {
 	hasBaseline := request.baseline.recorded()
 	hasCommitment := request.commitment.recorded()
 	hasSourceData := len(request.sourceDataVersions) != 0
-	hasWithdrawal := request.withdrawal.formed()
+	hasWithdrawal := request.withdrawal.anyRecorded()
 
 	if request.state == ShipmentRequestSubmitted {
 		if request.decisionFormed || hasDecision {
@@ -430,7 +457,7 @@ func (request ShipmentRequest) rejectedDecisionValidForRehydration() error {
 	if request.state != ShipmentRequestRejected {
 		return nil
 	}
-	if request.withdrawal.formed() {
+	if request.withdrawal.anyRecorded() {
 		return rehydrationRefusal("已拒绝委托携带了撤回")
 	}
 	if !request.decisionFormed {
@@ -472,6 +499,44 @@ func (request ShipmentRequest) rejectedDecisionValidForRehydration() error {
 	default:
 		return request.activeRejectionHolds()
 	}
+}
+
+// withdrawnValidForRehydration 校验`已撤回`。撤回与接受、主动拒绝共用一条不可覆盖的决定边界，却自带槽位而不写进
+// 决定：所以形状是边界已越过、撤回决定五格齐全、接受与拒绝的决定及其产物一概缺席、任务`已停止`且不在等待。
+//
+// 缺撤回决定是坏数据而不是「本期不支持」，也不从别处推回：撤回的授权、请求方与原因是当时的事实，重建只校验不重算
+// （ADR-0028），而补默认值等于替客户说了一句没说过的话。
+func (request ShipmentRequest) withdrawnValidForRehydration() error {
+	if request.state != ShipmentRequestWithdrawn {
+		return nil
+	}
+	if !request.withdrawal.anyRecorded() {
+		return rehydrationRefusal("已撤回委托没有撤回决定")
+	}
+	if !request.withdrawal.formed() {
+		return rehydrationRefusal("已撤回委托的撤回决定不完整")
+	}
+	if !request.decisionFormed {
+		return rehydrationRefusal("已撤回委托没有越过决定边界")
+	}
+	if request.decision.anyRecorded() {
+		return rehydrationRefusal("已撤回委托携带了接受或拒绝决定")
+	}
+	if request.baseline.recorded() || request.commitment.recorded() || len(request.sourceDataVersions) != 0 {
+		return rehydrationRefusal("已撤回委托携带了接受基线、预计承诺或客户资料版本")
+	}
+	if !request.acceptanceTask.IsStopped() {
+		return rehydrationRefusal("已撤回委托的判断任务没有停止")
+	}
+	if _, waiting := request.acceptanceTask.WaitingOn(); waiting {
+		return rehydrationRefusal("已撤回委托的判断任务仍在等待")
+	}
+	// 处置为`拒绝`自己就形成拒绝决定，越过边界之后撤回走不到；处置为`交客户补充`的任务可以在等待补充时被撤回。
+	if disposition, recorded := request.acceptanceTask.AuthorizedDisposition(); recorded &&
+		disposition.choice == DisposeByRejection {
+		return rehydrationRefusal("已撤回委托的任务处置为拒绝")
+	}
+	return nil
 }
 
 // ruleRejectionHolds 校验 Decide 有失败项形成的拒绝。依据可缺席（`没有适用合同`），复核状态照 Decide
@@ -716,6 +781,21 @@ func (commitment ExpectedCommitment) recorded() bool {
 func (rejection ActiveRejection) anyRecorded() bool {
 	return rejection.authority.valid() || rejection.decider.valid() ||
 		rejection.reason.valid() || rejection.evidence.valid()
+}
+
+// anyRecorded 回答撤回决定五格里有没有任何一格在场。formed 要五格齐全，拿它判「有没有撤回」会把半截的一份当成
+// 没有撤回放过去——而半截撤回只可能是坏数据，本上下文从不写出它。
+func (withdrawal Withdrawal) anyRecorded() bool {
+	return withdrawal.decisionID.valid() || withdrawal.authority.valid() || withdrawal.requester.valid() ||
+		withdrawal.reason.valid() || !withdrawal.decidedAt.IsZero()
+}
+
+// anyRecorded 回答决定上有没有任何一格在场，用于「这个状态不该有决定」的校验：只看决定标识会放过一份有校验明细
+// 或决定时刻却没有标识的残片。
+func (decision AcceptanceDecision) anyRecorded() bool {
+	return decision.decisionID.valid() || decision.accepted || len(decision.checks) != 0 || decision.basis.valid() ||
+		decision.manualReview != ManualReviewStateInvalid || decision.activeRejection.anyRecorded() ||
+		!decision.decidedAt.IsZero()
 }
 
 // rehydrationRefusal 让哨兵值对 errors.Is 仍然成立，同时把拒绝的那一条说出来。压平成一句

@@ -835,40 +835,224 @@ func activeRejectionTrail(t *testing.T) domain.RehydrateActiveRejectionSpec {
 	}
 }
 
-// Covers: ADR-0030「没开的状态由入口显式拒绝，且用一个与『这行数据不可能』不同的哨兵」。
-//
-// `已撤回`仍少撤回的完整表达（ADR-0188 决定一）。两个哨兵必须互相分得开。
-func TestRehydrationRefusesAStateThisDoorDoesNotYetCover(t *testing.T) {
-	unsupported := map[string]domain.ShipmentRequestState{
-		"已撤回": domain.ShipmentRequestWithdrawn,
+// withdrawnSnapshot 是`WithdrawByCustomer`形成的已撤回快照：决定边界已越过但决定槽位空着，撤回决定五格齐全，
+// 任务`已停止`且不在等待，没有任何接受产物（ADR-0286 对账表）。
+func withdrawnSnapshot(t *testing.T) domain.RehydrateShipmentRequestSpec {
+	t.Helper()
+	snapshot := submittedSnapshot(t)
+	snapshot.State = domain.ShipmentRequestWithdrawn
+	snapshot.AcceptanceTask.State = domain.AcceptanceTaskStopped
+	snapshot.DecisionFormed = true
+	snapshot.Withdrawal = domain.RehydrateWithdrawalSpec{
+		DecisionID: mustValue(t, domain.NewAcceptanceDecisionID, "SYN-DECISION-WITHDRAWN-1"),
+		Authority:  mustValue(t, domain.NewWithdrawalAuthorityReference, "SYN-WITHDRAW-ROLE-1"),
+		Requester:  mustValue(t, domain.NewWithdrawalRequesterReference, "SYN-CUSTOMER-CONTACT-1"),
+		Reason:     mustValue(t, domain.NewWithdrawalReasonReference, "SYN-ORDER-CANCELLED"),
+		DecidedAt:  decidedAt,
 	}
+	return snapshot
+}
 
-	for name, state := range unsupported {
+// Covers: ADR-0286 决定一、二——`已撤回`一份完好快照过得了门，撤回决定五格原样带进聚合，不重算；撤回之后的两条读路在
+// 重建后的聚合上成立：再撤一次撞决定边界（`AT-PS-068`），以撤回重提方向关联它成立（`AT-PS-076`）。
+// 等待受控补充时被撤回的委托（处置为`交客户补充`、带历史版本）同样过门。
+func TestRehydratingAWithdrawnRequestKeepsItsWithdrawal(t *testing.T) {
+	supplemented := withdrawnSnapshot(t)
+	supplemented.AcceptanceTask.AuthorizedDisposition = authorizedDisposition(t, domain.DisposeByCustomerSupplement)
+	supplemented.AcceptanceTask.ProcessingAttempts = []domain.ProcessingAttempt{
+		internalAttempt(t, "COMMERCIAL_BASIS_UNAVAILABLE", firstAttemptAt),
+	}
+	cases := map[string]domain.RehydrateShipmentRequestSpec{
+		"待决期间撤回":     withdrawnSnapshot(t),
+		"处置交客户补充后撤回": supplemented,
+	}
+	for name, snapshot := range cases {
 		t.Run(name, func(t *testing.T) {
-			snapshot := submittedSnapshot(t)
-			snapshot.State = state
-
-			_, err := domain.RehydrateShipmentRequest(snapshot)
-			if !errors.Is(err, domain.ErrRehydrationStateNotSupported) {
-				// 本条同时是那笔分期债的**到期提醒**。谁把这扇门开到某个状态，这里当天变红，
-				// 而这段文字是它唯一会被读到的时刻——写在 ADR 里的话，正好是没人会在那一刻
-				// 翻开的地方。
-				t.Fatalf("error = %v, want ErrRehydrationStateNotSupported。\n"+
-					"若你正是来把这扇门开到这个状态的，本条变红是预期的；但同一天有三笔债一起到期：\n"+
-					"（1）ADR-0028 点名的三组跨字段命题今天一条都没写，因为它们在`已提交`下根本造不"+
-					"出来：`state = 已接受` 配 `decisionFormed = false`、`decision.accepted = true` "+
-					"配任务未完成、`waitingOn` 有值而决定已形成。门一开它们全都造得出来，而那份记录"+
-					"说这是「最花时间、也最容易写漏的部分」。\n"+
-					"（2）`validForRehydration` 今天唯一那条跨字段命题（`已提交` ⇒ 任务运行中）对新开"+
-					"的状态没有对应物：`已接受`/`已拒绝` 该配任务`已完成`、`已撤回` 该配`已停止`，"+
-					"今天一条都没写。\n"+
-					"（3）`absentInSubmitted` 里那几个字段要挪进 `carriedByRehydration` 并各自补上快照"+
-					"表达，见 revision_test.go 的分类用例——它会同时变红，别只修这一条。", err)
+			request, err := domain.RehydrateShipmentRequest(snapshot)
+			if err != nil {
+				t.Fatalf("rehydrate: %v", err)
 			}
-			if errors.Is(err, domain.ErrInvalidRehydratedShipmentRequest) {
-				t.Fatalf("error = %v；这行数据没有毛病，缺的是门，两个哨兵不能互相冒充", err)
+			if request.State() != domain.ShipmentRequestWithdrawn {
+				t.Fatalf("state = %q, want WITHDRAWN", request.State())
+			}
+			withdrawal, formed := request.Withdrawal()
+			want := snapshot.Withdrawal
+			if !formed || withdrawal.DecisionID() != want.DecisionID || withdrawal.Authority() != want.Authority ||
+				withdrawal.Requester() != want.Requester || withdrawal.Reason() != want.Reason ||
+				!withdrawal.DecidedAt().Equal(want.DecidedAt) {
+				t.Fatalf("withdrawal = %+v（formed=%v）, want %+v", withdrawal, formed, want)
+			}
+			if _, present := request.AcceptanceDecision(); present {
+				t.Fatal("已撤回委托长出了接受决定：撤回不是接受也不是拒绝")
+			}
+			if !request.AcceptanceDecisionTask().IsStopped() {
+				t.Fatal("已撤回委托的任务没有停止")
+			}
+			if _, err := request.WithdrawByCustomer(domain.WithdrawalSpec{}); !errors.Is(err, domain.ErrDecisionAlreadyFormed) {
+				t.Fatalf("重建后的已撤回委托再撤一次：err = %v, want ErrDecisionAlreadyFormed", err)
+			}
+			link, err := domain.EstablishPriorRequestLink(request, domain.LinkWithdrawnResubmission)
+			if err != nil || link.PriorRequestID() != request.ShipmentRequestID() {
+				t.Fatalf("以撤回重提关联重建后的已撤回委托：link = %+v, err = %v", link, err)
+			}
+			if _, err := domain.EstablishPriorRequestLink(request, domain.LinkRejectedCorrection); !errors.Is(err, domain.ErrPriorStateIncompatibleWithLink) {
+				t.Fatalf("以已拒绝修正关联已撤回委托：err = %v, want ErrPriorStateIncompatibleWithLink", err)
 			}
 		})
+	}
+}
+
+// Covers: ADR-0286 决定三——`已撤回`的坏数据判据逐格各一例，全部走 ErrInvalidRehydratedShipmentRequest，不折成
+// 「本期不支持」。缺撤回决定与撤回决定残缺（五格缺任一格）都是这一类：不推回、不补默认值。
+func TestRehydrationRefusesImpossibleWithdrawnShapes(t *testing.T) {
+	cases := map[string]func() domain.RehydrateShipmentRequestSpec{
+		"撤回决定缺席（补表达前的已撤回行）": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := withdrawnSnapshot(t)
+			snapshot.Withdrawal = domain.RehydrateWithdrawalSpec{}
+			return snapshot
+		},
+		"撤回决定缺决定标识": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := withdrawnSnapshot(t)
+			snapshot.Withdrawal.DecisionID = domain.AcceptanceDecisionID{}
+			return snapshot
+		},
+		"撤回决定缺授权": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := withdrawnSnapshot(t)
+			snapshot.Withdrawal.Authority = domain.WithdrawalAuthorityReference{}
+			return snapshot
+		},
+		"撤回决定缺请求方": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := withdrawnSnapshot(t)
+			snapshot.Withdrawal.Requester = domain.WithdrawalRequesterReference{}
+			return snapshot
+		},
+		"撤回决定缺原因": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := withdrawnSnapshot(t)
+			snapshot.Withdrawal.Reason = domain.WithdrawalReasonReference{}
+			return snapshot
+		},
+		"撤回决定缺决定时刻": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := withdrawnSnapshot(t)
+			snapshot.Withdrawal.DecidedAt = time.Time{}
+			return snapshot
+		},
+		"没越过决定边界": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := withdrawnSnapshot(t)
+			snapshot.DecisionFormed = false
+			return snapshot
+		},
+		"带接受决定": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := withdrawnSnapshot(t)
+			snapshot.Decision = acceptedSnapshot(t).Decision
+			return snapshot
+		},
+		"带拒绝决定的残片（只有决定时刻）": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := withdrawnSnapshot(t)
+			snapshot.Decision.DecidedAt = decidedAt
+			return snapshot
+		},
+		"带主动拒绝留痕": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := withdrawnSnapshot(t)
+			snapshot.Decision.ActiveRejection = activeRejectionTrail(t)
+			return snapshot
+		},
+		"带接受基线": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := withdrawnSnapshot(t)
+			snapshot.Baseline = acceptedSnapshot(t).Baseline
+			return snapshot
+		},
+		"带预计承诺": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := withdrawnSnapshot(t)
+			snapshot.Commitment = acceptedSnapshot(t).Commitment
+			return snapshot
+		},
+		"带客户资料版本": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := withdrawnSnapshot(t)
+			snapshot.SourceDataVersions = []domain.CustomerSourceDataVersion{rejectedSourceDataVersion(t)}
+			return snapshot
+		},
+		"任务仍在运行": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := withdrawnSnapshot(t)
+			snapshot.AcceptanceTask.State = domain.AcceptanceTaskRunning
+			return snapshot
+		},
+		"任务已完成": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := withdrawnSnapshot(t)
+			snapshot.AcceptanceTask.State = domain.AcceptanceTaskComplete
+			return snapshot
+		},
+		"任务仍在等待": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := withdrawnSnapshot(t)
+			snapshot.AcceptanceTask.WaitingOn = domain.ResumeByInternalRetry
+			return snapshot
+		},
+		"任务处置为拒绝": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := withdrawnSnapshot(t)
+			snapshot.AcceptanceTask.AuthorizedDisposition = authorizedDisposition(t, domain.DisposeByRejection)
+			return snapshot
+		},
+	}
+	for name, build := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := domain.RehydrateShipmentRequest(build())
+			if !errors.Is(err, domain.ErrInvalidRehydratedShipmentRequest) {
+				t.Fatalf("error = %v, want ErrInvalidRehydratedShipmentRequest", err)
+			}
+			if errors.Is(err, domain.ErrRehydrationStateNotSupported) {
+				t.Fatalf("error = %v；门已开到`已撤回`，坏数据不得折成未开门", err)
+			}
+		})
+	}
+}
+
+// Covers: ADR-0286 决定三——撤回决定只属`已撤回`：其余三个状态带着它（整份或半截）都是拼出来的聚合。半截的一份尤其
+// 要拒：按「五格齐全」判在场，会把只剩一格的残片当成没有撤回放过去。
+func TestRehydrationRefusesAWithdrawalOnAnyOtherState(t *testing.T) {
+	withdrawal := withdrawnSnapshot(t).Withdrawal
+	partial := domain.RehydrateWithdrawalSpec{Reason: withdrawal.Reason}
+	bases := map[string]func() domain.RehydrateShipmentRequestSpec{
+		"已提交": func() domain.RehydrateShipmentRequestSpec { return submittedSnapshot(t) },
+		"已接受": func() domain.RehydrateShipmentRequestSpec { return acceptedSnapshot(t) },
+		"已拒绝": func() domain.RehydrateShipmentRequestSpec { return activelyRejectedSnapshot(t) },
+	}
+	carried := map[string]domain.RehydrateWithdrawalSpec{"整份撤回决定": withdrawal, "半截撤回决定": partial}
+	for stateName, base := range bases {
+		for carriedName, spec := range carried {
+			t.Run(stateName+"带"+carriedName, func(t *testing.T) {
+				snapshot := base()
+				snapshot.Withdrawal = spec
+				_, err := domain.RehydrateShipmentRequest(snapshot)
+				if !errors.Is(err, domain.ErrInvalidRehydratedShipmentRequest) {
+					t.Fatalf("error = %v, want ErrInvalidRehydratedShipmentRequest", err)
+				}
+			})
+		}
+	}
+}
+
+// Covers: ADR-0030「没开的状态由入口显式拒绝，且用一个与『这行数据不可能』不同的哨兵」——每个有名字的委托状态
+// 都已开门（ADR-0286），没有状态落在 ErrRehydrationStateNotSupported 那一格。新增委托状态时本条变红，变红是预期的：
+// 先在 admitRehydratedState 让它落到那个哨兵，补齐快照表达与这里的快照之后再放行（ADR-0030 的两步顺序）。
+func TestEveryNamedShipmentRequestStateIsAdmittedByTheDoor(t *testing.T) {
+	snapshots := map[domain.ShipmentRequestState]domain.RehydrateShipmentRequestSpec{
+		domain.ShipmentRequestSubmitted: submittedSnapshot(t),
+		domain.ShipmentRequestAccepted:  acceptedSnapshot(t),
+		domain.ShipmentRequestRejected:  activelyRejectedSnapshot(t),
+		domain.ShipmentRequestWithdrawn: withdrawnSnapshot(t),
+	}
+	named := 0
+	for state := domain.ShipmentRequestState(1); state.String() != ""; state++ {
+		named++
+		snapshot, covered := snapshots[state]
+		if !covered {
+			t.Fatalf("委托状态 %s 是新增的，本条没有它的快照：先按 ADR-0030 补快照表达，再在这里登记", state)
+		}
+		if _, err := domain.RehydrateShipmentRequest(snapshot); err != nil {
+			t.Errorf("%s：rehydrate: %v", state, err)
+		}
+	}
+	if named != len(snapshots) {
+		t.Fatalf("有名字的委托状态 %d 个，本条登记了 %d 个", named, len(snapshots))
 	}
 }
 

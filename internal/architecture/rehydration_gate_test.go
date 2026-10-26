@@ -26,7 +26,10 @@ var rehydrationEntryIdentifiers = map[string]bool{
 	"RehydrateExpectedCommitmentSpec": true,
 	// 主动拒绝留痕（票 operator-channel/33）。同类：留痕是授权角色拍板的产物，没有公开构造器；对其余
 	// 调用方开放，就等于让业务代码替一次没发生过的主动拒绝写下授权依据与决定方。
-	"RehydrateActiveRejectionSpec":    true,
+	"RehydrateActiveRejectionSpec": true,
+	// 撤回决定（ADR-0286）。同类：撤回决定是客户或其授权代表拍板的产物，没有公开构造器；对其余调用方开放，就等于让业务
+	// 代码替一次没发生过的撤回写下授权、请求方与原因。
+	"RehydrateWithdrawalSpec":         true,
 	"RehydrateParcelFinalOutcome":     true,
 	"RehydrateParcelFinalOutcomeSpec": true,
 	"RehydrateLabelTransaction":       true,
@@ -61,7 +64,7 @@ var rehydrationEntryIdentifiers = map[string]bool{
 // 与 ADR-0029 是同一种分格法：按消费方的恢复动作分，不按提供方观察到的原因分。
 var rehydrationSurfaceOpenIdentifiers = map[string]string{
 	"ErrInvalidRehydratedShipmentRequest": "重建拒绝的哨兵。errors.Is 它什么聚合都没造出来，落在 ADR-0028 要防的「业务代码断言判断路径造不出的结论」之外；放进受限名单等于禁止任何调用方判断这个拒绝。",
-	"ErrRehydrationStateNotSupported":     "同上，另一个拒绝理由：这扇门本期开到`已提交`、`已接受`与`已拒绝`。它与上一条按 ADR-0029 分格——恢复动作不同（等门开到那个状态，还是去查库里那一行），压成一个取值会让运维照着完好的数据去找一处不存在的损坏。分期期间编排要靠它分流，更不能拦。",
+	"ErrRehydrationStateNotSupported":     "同上，另一个拒绝理由：这扇门还没开到的委托状态（今天四个状态都已开门，日后新增状态时用它）。它与上一条按 ADR-0029 分格——恢复动作不同（等门开到那个状态，还是去查库里那一行），压成一个取值会让运维照着完好的数据去找一处不存在的损坏。分期期间编排要靠它分流，更不能拦。",
 	"SubmitShipmentRequest":               "构造那扇门，按 ADR-0028 与重建分属两扇：它从零版本创生，每一条不变量都当场算，因此不需要受限——受限要防的是「相信输入」，而它谁的话都不信。它被判据四（凭空交出一个聚合）认进重建面是对的：两扇门都得登记，只有登记了，第三扇门被人加出来时才会因为「两份名单都没有」而变红。",
 }
 

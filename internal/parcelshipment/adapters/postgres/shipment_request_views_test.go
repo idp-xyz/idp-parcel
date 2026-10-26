@@ -332,7 +332,7 @@ func TestFindVisibleAnswersAbsentAndOutOfScopeTheSame(t *testing.T) {
 	}
 }
 
-// Covers: 查阅读面跨生命周期——`已撤回`在聚合重建门外（ADR-0061），但操作员必须能看到
+// Covers: 查阅读面跨生命周期——读面直读投影列与快照文档、不经重建门，操作员必须能看到
 // 这份委托的存在与终局状态；决定缺席如实缺席，任务停在`已停止`。
 func TestAWithdrawnRequestStaysVisibleToTheView(t *testing.T) {
 	views, repository, transactor := newShipmentRequestViews(t)

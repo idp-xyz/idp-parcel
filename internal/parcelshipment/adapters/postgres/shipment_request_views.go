@@ -16,10 +16,9 @@ import (
 
 // ShipmentRequestViews 实现 ports.ShipmentRequestViews：委托查阅的只读面。
 //
-// 它与 ShipmentRequests 分立而不是再挂两个方法：仓储走聚合重建，重建门只开到`已提交`
-// 与`已接受`（ADR-0061），而查阅必须把`已拒绝`/`已撤回`也如实交代。本读面直读投影列
-// 与快照文档，不经 RehydrateShipmentRequest——读的是「登记过什么」，不是「聚合此刻能
-// 不能重建」。
+// 它与 ShipmentRequests 分立而不是再挂两个方法：仓储走聚合重建，一行过不了重建门的坏快照读不回，
+// 而查阅必须把每一行如实交代。本读面直读投影列与快照文档，不经 RehydrateShipmentRequest——
+// 读的是「登记过什么」，不是「聚合此刻能不能重建」。
 //
 // 可见性过滤在 SQL 键上（CONTEXT「授权查询作用域」）：租户与客户账户集合进 WHERE，
 // 读口因此答不出作用域外的行；否定结果不区分「不存在」与「作用域外」（`统一不可见

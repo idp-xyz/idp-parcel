@@ -357,15 +357,14 @@ func Unrelated(n int) int { return n }
 
 // TestEveryShipmentRequestFieldIsClassifiedForRehydration 守重建入口不静默漏掉新字段。
 //
-// `RehydrateShipmentRequest` 用具名字段的结构体字面量只写了七个字段，其余六个留零值——对
-// `已提交`这是对的（ADR-0030 逐条证过那六个在这个状态下必然缺席）。但 Go 的具名字段字面量
-// **不要求穷尽**：日后给 `ShipmentRequest` 加一个在`已提交`下就有值的字段，重建会静默把它
-// 留零，而 ADR-0028 说重建入口「此后是审计与评审的固定关注点」——固定关注点靠人记得是不够的。
-// 形状与 ADR-0028 亲自解决过的「第七个转移」相同，那里明否了「六处都要记得」。
+// `RehydrateShipmentRequest` 用具名字段的结构体字面量写字段，没写的留零值。Go 的具名字段字面量
+// **不要求穷尽**：日后给 `ShipmentRequest` 加一个某个状态下就有值的字段，重建会静默把它留零，而 ADR-0028 说
+// 重建入口「此后是审计与评审的固定关注点」——固定关注点靠人记得是不够的。形状与 ADR-0028 亲自解决过的
+// 「第七个转移」相同，那里明否了「六处都要记得」。
 //
-// 因此这里要的不是「字段数没变」，而是**每个字段恰好落在两份名单之一**，且带进来的那一份
-// 与字面量真正写下的键**逐个相等**——只有分类名单而不比对字面量，一个字段可以登记在册却
-// 从没被赋值，而那种漏法正是本条要防的。
+// 因此这里要的不是「字段数没变」，而是**每个字段都登记在 carriedByRehydration**，且登记的与字面量真正
+// 写下的键**逐个相等**——只有名单而不比对字面量，一个字段可以登记在册却从没被赋值，而那种漏法正是本条要防的。
+// 四个状态都开门之后没有字段是「某个状态下必然缺席因而可以不带」的：撤回也随快照往返（ADR-0286）。
 func TestEveryShipmentRequestFieldIsClassifiedForRehydration(t *testing.T) {
 	t.Parallel()
 
@@ -391,9 +390,7 @@ func TestEveryShipmentRequestFieldIsClassifiedForRehydration(t *testing.T) {
 		"baseline":           true,
 		"commitment":         true,
 		"sourceDataVersions": true,
-	}
-	// absentInSubmitted 是`已提交`下必然缺席、且本期仍未开门的判断产物。
-	absentInSubmitted := map[string]bool{
+		// 撤回决定：门开到 WITHDRAWN 后必须随快照往返（ADR-0286），其余三个状态下由 validForRehydration 拒绝携带。
 		"withdrawal": true,
 	}
 
@@ -405,24 +402,14 @@ func TestEveryShipmentRequestFieldIsClassifiedForRehydration(t *testing.T) {
 	for index := 0; index < aggregate.NumField(); index++ {
 		name := aggregate.Field(index).Name
 		declared[name] = true
-		carried, absent := carriedByRehydration[name], absentInSubmitted[name]
-		switch {
-		case carried && absent:
-			t.Errorf("ShipmentRequest.%s 两份名单都登记了；两份必须互斥", name)
-		case !carried && !absent:
-			t.Errorf("ShipmentRequest.%s 没有分类。它在`已提交`下有值，就补进 carriedByRehydration "+
-				"并在 RehydrateShipmentRequestSpec 上给它一个表达；在`已提交`下必然缺席，就补进 "+
-				"absentInSubmitted 并说明由哪条转移写下。留着不分类，重建会静默把它留零", name)
+		if !carriedByRehydration[name] {
+			t.Errorf("ShipmentRequest.%s 没有登记。补进 carriedByRehydration 并在 RehydrateShipmentRequestSpec 上给它一个表达；"+
+				"留着不登记，重建会静默把它留零", name)
 		}
 	}
 	for name := range carriedByRehydration {
 		if !declared[name] {
 			t.Errorf("carriedByRehydration 里的 %q 在聚合上已不存在；名单该清理", name)
-		}
-	}
-	for name := range absentInSubmitted {
-		if !declared[name] {
-			t.Errorf("absentInSubmitted 里的 %q 在聚合上已不存在；名单该清理", name)
 		}
 	}
 

@@ -1623,8 +1623,8 @@ type AcceptanceDecisionHandoff interface {
 }
 
 // ShipmentRequestSummaryRecord 是委托查阅列表的一行。它是读模型而不是聚合：查阅要跨
-// 生命周期覆盖`已拒绝`/`已撤回`，而聚合重建门只开到`已提交`与`已接受`（ADR-0061），
-// 走聚合仓储的查阅会让恰恰最需要交代的两种终局读不出来。
+// 生命周期覆盖四个状态，读的是「登记过什么」而不是「聚合此刻能不能重建」：一行坏快照在聚合仓储上读不回，
+// 走聚合仓储的查阅就会让恰恰最需要交代的那一行消失。
 type ShipmentRequestSummaryRecord struct {
 	CustomerAccountID   domain.CustomerAccountID
 	Source              domain.Source

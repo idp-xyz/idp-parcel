@@ -17,8 +17,8 @@ import (
 
 var _ ports.SubmissionVersionDeclarationView = (*ShipmentRequests)(nil)
 
-// LoadSubmissionVersionDeclaration 走（租户 + 委托标识）唯一键取单行。状态只认`已提交`与`已接受`：重建门只开到这两态，`已拒绝`
-// 与`已撤回`的委托也不再有接受前控制要估，两态与零行同答 false。
+// LoadSubmissionVersionDeclaration 走（租户 + 委托标识）唯一键取单行。状态只认`已提交`与`已接受`：`已拒绝`
+// 与`已撤回`的委托不再有接受前控制要估，两态与零行同答 false。
 func (repository *ShipmentRequests) LoadSubmissionVersionDeclaration(
 	ctx context.Context,
 	tenant domain.TenantID,

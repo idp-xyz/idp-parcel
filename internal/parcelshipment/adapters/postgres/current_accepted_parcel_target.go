@@ -17,7 +17,7 @@ var _ ports.CurrentDeclaredParcelsView = (*ShipmentRequests)(nil)
 
 // FindCurrentAcceptedByParcel 按租户+声明包裹反查当前已接受委托。
 //
-// 只读投影列，不打开 snapshot：重建门仍只开到已提交，已接受行不能经仓储读回。
+// 只读投影列，不打开 snapshot：反查只要三重指名，不必为此重建整份聚合。
 // 多于一行是歧义，具名上抛，不按 saved_at 或行序挑一份（ADR-0060）。
 func (repository *ShipmentRequests) FindCurrentAcceptedByParcel(
 	ctx context.Context,

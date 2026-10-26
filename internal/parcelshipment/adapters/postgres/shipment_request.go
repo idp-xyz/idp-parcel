@@ -20,9 +20,9 @@ import (
 //
 // 快照文档的形状照 RehydrateShipmentRequestSpec 设计，读回时逐字段过领域构造函数再进
 // RehydrateShipmentRequest——库里一行坏数据在这两道门上暴露，不会变成一个看起来合法的
-// 聚合（ADR-0028）。重建门今天开到`已提交`与`已接受`（ADR-0061）：写入不设状态门，读回
-// `已拒绝`/`已撤回`得到 ErrRehydrationStateNotSupported——不带商业依据的拒绝也走得到那扇门，
-// 依据缺席只对拒绝决定放宽；已接受缺产物则是坏快照，走 ErrInvalidRehydratedShipmentRequest。
+// 聚合（ADR-0028）。重建门开到四个状态（ADR-0061、ADR-0188、ADR-0286）：写入不设状态门，读回时状态列与
+// 文档对不上就是坏快照，走 ErrInvalidRehydratedShipmentRequest——已接受缺产物、已拒绝缺决定、已撤回缺撤回决定
+// 都是这一格。依据缺席只对拒绝决定放宽。
 type ShipmentRequests struct {
 	db       *bentopg.DB
 	doorbell *ExternalIdentifierDoorbell
@@ -260,6 +260,17 @@ type requestDocument struct {
 	SourceDataVersions []sourceDataVersionDocument `json:"sourceDataVersions,omitempty"`
 	// CustomerParcelNumbers 是委托上的客户包裹件号（ADR-0184 决定四）。未给号即 omitempty 不写，旧形快照读回为空。
 	CustomerParcelNumbers []customerParcelNumberDocument `json:"customerParcelNumbers,omitempty"`
+	// Withdrawal 是撤回决定（ADR-0286），只有`已撤回`委托写它。没有这一格时撤回决定在落库那一刻就丢了，只剩状态列
+	// 一个数字：重复撤回答不出原撤回，PS CONTEXT 要求保留的撤回决定标识、授权、请求方与原因事后补不回来。
+	Withdrawal *withdrawalDocument `json:"withdrawal,omitempty"`
+}
+
+type withdrawalDocument struct {
+	DecisionID string    `json:"decisionId"`
+	Authority  string    `json:"authority"`
+	Requester  string    `json:"requester"`
+	Reason     string    `json:"reason"`
+	DecidedAt  time.Time `json:"decidedAt"`
 }
 
 type customerParcelNumberDocument struct {
@@ -452,6 +463,18 @@ func documentOf(request domain.ShipmentRequest) requestDocument {
 	}
 	if decision, present := request.AcceptanceDecision(); present {
 		document.Decision = decisionDocumentOf(decision)
+		document.DecisionFormed = true
+	}
+	// 撤回越过的是同一条决定边界，却不写进决定槽位，所以边界标志要在这里单独置上；只看决定在场会把
+	// 已撤回委托写成「决定边界没越过」，读回时被重建门当成半截快照拒掉。
+	if withdrawal, formed := request.Withdrawal(); formed {
+		document.Withdrawal = &withdrawalDocument{
+			DecisionID: withdrawal.DecisionID().String(),
+			Authority:  withdrawal.Authority().String(),
+			Requester:  withdrawal.Requester().String(),
+			Reason:     withdrawal.Reason().String(),
+			DecidedAt:  withdrawal.DecidedAt().UTC(),
+		}
 		document.DecisionFormed = true
 	}
 	if baseline, present := request.AcceptanceBaseline(); present {
@@ -712,7 +735,44 @@ func (document requestDocument) rehydrationSpec(
 		}
 		spec.CustomerParcelNumbers = append(spec.CustomerParcelNumbers, declaration)
 	}
+	if document.Withdrawal != nil {
+		withdrawal, err := document.Withdrawal.spec()
+		if err != nil {
+			// 残缺的撤回决定与缺失的同一格：这一行立不起来，去查库里那一行。裸构造错两个哨兵都不中，运维分不出该等门还是该查数据。
+			return domain.RehydrateShipmentRequestSpec{}, fmt.Errorf(
+				"%w：已撤回委托的撤回决定残缺：%v", domain.ErrInvalidRehydratedShipmentRequest, err)
+		}
+		spec.Withdrawal = withdrawal
+	}
 	return spec, nil
+}
+
+// spec 逐格过领域构造门：任一格为空即这一行立不起来，不折成「没有撤回」——后者会把一次客户撤回读成从未发生，
+// 而状态列还写着已撤回。决定时刻缺席由重建门按「撤回决定不完整」拒绝。
+func (document withdrawalDocument) spec() (domain.RehydrateWithdrawalSpec, error) {
+	decisionID, err := domain.NewAcceptanceDecisionID(document.DecisionID)
+	if err != nil {
+		return domain.RehydrateWithdrawalSpec{}, err
+	}
+	authority, err := domain.NewWithdrawalAuthorityReference(document.Authority)
+	if err != nil {
+		return domain.RehydrateWithdrawalSpec{}, err
+	}
+	requester, err := domain.NewWithdrawalRequesterReference(document.Requester)
+	if err != nil {
+		return domain.RehydrateWithdrawalSpec{}, err
+	}
+	reason, err := domain.NewWithdrawalReasonReference(document.Reason)
+	if err != nil {
+		return domain.RehydrateWithdrawalSpec{}, err
+	}
+	return domain.RehydrateWithdrawalSpec{
+		DecisionID: decisionID,
+		Authority:  authority,
+		Requester:  requester,
+		Reason:     reason,
+		DecidedAt:  document.DecidedAt,
+	}, nil
 }
 
 func (document customerParcelNumberDocument) declaration() (domain.CustomerParcelNumberDeclaration, error) {

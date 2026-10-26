@@ -194,6 +194,16 @@ func (handler *AdvanceAcceptanceChainHandler) Handle(
 			state:   request.State(),
 		}, nil
 	}
+	// 撤回之后链没有可判断的东西了：撤回成立时已按原关联放掉这份委托各版的占用，再走一遍控制就是撤回之后才长出来
+	// 的占用，没有任何路径会再放它；形成决定那一步还会为一份永远不会有决定的委托耗掉一个决定标识。答案与形成决定
+	// 那一步撞上既有终局时的同一格（`已决定`、不带决定），所以消费门不需要另一个落点（ADR-0025）。
+	if err == nil && found && request.State() == domain.ShipmentRequestWithdrawn {
+		return AdvanceAcceptanceChainResult{
+			outcome: AcceptanceChainDecided,
+			stage:   AcceptanceChainDecisionStage,
+			state:   request.State(),
+		}, nil
+	}
 	if err == nil && found {
 		stalled, stopped, err := handler.releaseSuperseded(ctx, command, request)
 		if err != nil {
