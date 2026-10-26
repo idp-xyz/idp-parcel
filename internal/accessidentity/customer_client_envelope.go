@@ -181,7 +181,18 @@ func (minter *CustomerClientMinter) admit(
 type customerAPIRequestKeys struct{}
 
 func (customerAPIRequestKeys) DeriveSubmissionRequestKey(_ context.Context, request ChannelRequest) (string, error) {
-	return accessRequestIdentifierOf(request)
+	identifier, err := accessRequestIdentifierOf(request)
+	if err != nil {
+		return "", err
+	}
+	// 提交的键是裸标识，与五口带前缀的键同在 PS 的一个判重空间：提交若用 `withdrawal:abc` 作标识，键就恰等于标识 `abc` 的撤回键。
+	// 保留前缀因此不许作提交标识的开头（ADR-0310 取舍 A）。送站预报在节点作业自己的册里判重，不与此同空间，不受此限。
+	for _, prefix := range reservedRequestKeyPrefixes {
+		if strings.HasPrefix(identifier, prefix) {
+			return "", fmt.Errorf("%w: %s must not start with the reserved command prefix %q", ErrRequestKeyNotDerived, AccessRequestIdentifier, prefix)
+		}
+	}
+	return identifier, nil
 }
 
 // DeriveWithdrawalRequestKey 取舍 A（ADR-0310）：撤回的来源请求键 = 命令前缀加去两端空白的接入请求标识，即
@@ -210,6 +221,12 @@ const (
 	requestKeyPrefixSupplement         = "supplement:"
 	requestKeyPrefixClaim              = "claim:"
 )
+
+// reservedRequestKeyPrefixes 是五个命令前缀的全集，保留前缀只在这里列一次，推导与提交口的校验共用。
+var reservedRequestKeyPrefixes = []string{
+	requestKeyPrefixWithdrawal, requestKeyPrefixParcelCancellation, requestKeyPrefixSourceDataAmend,
+	requestKeyPrefixSupplement, requestKeyPrefixClaim,
+}
 
 func prefixedRequestKey(prefix string, request ChannelRequest) (string, error) {
 	identifier, err := accessRequestIdentifierOf(request)

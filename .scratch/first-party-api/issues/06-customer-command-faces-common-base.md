@@ -62,3 +62,5 @@ M
 **自验（含 PG）**：`go build ./...`、`go vet`（accessidentity、parcelshipment、visibilityexception/domain、cmd）、`gofmt` 干净；带 DSN `go test -count=1 -p 1 ./internal/accessidentity/... ./internal/parcelshipment/... ./cmd/parcel-api/... ./internal/architecture/... ./migrations/... ./internal/visibilityexception/domain/` 全绿（含 PG 真库）；一次性库 `fpa06_seed` 上 `seed.sh` 退 0，库里十个客户能力授予俱在，用完已 DROP；`tools/at-coverage-counts -check` 与 `tools/adr-index -check` 仅报生成物过期。未跑全量。
 
 **未做 / 留给后续**：五口领域 Intake 与端点换真（07–11）；契约补章（12）；演示租户取消口的授权规则（随 11 登）；`docs/adr/README.md` 与盘点总览计数重跑生成器（协调方进 main 时）。
+
+**评审后补（同分支）**：(1) 提交口 `DeriveSubmissionRequestKey` 对以五个保留前缀之一开头的接入请求标识答推导不出（400）——**这是对已上线提交口的一处收紧**；保留前缀表 `reservedRequestKeyPrefixes` 一处定义、与五口推导共用；送站预报在节点作业自己的册里判重、不同空间，未收紧。用例 `TestSubmissionRequestKeyRejectsReservedCommandPrefixes`。ADR-0310 与契约已补一句。(2) `AT-PS-124` 补 VE 常量断言 `TestCustomerClaimShapeVersionIsNamed`。
