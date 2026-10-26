@@ -179,10 +179,9 @@ type signalEpisodeListResponse struct {
 //
 // triage 三件成对在场（0002 把发作期与结论钉成同笔提交），outcome 是分诊四结果的
 // 封闭词，原样透出不折并——「进入人工复核」与「不建案」都是分诊结论，折成布尔会把
-// 队列该停在哪一步这层真话抹掉。ended 两件缺席表示发作期仍活跃。页面详情区想要的
-// 「事实依据」在发作期行上没有登记格，本体不带那一键（无处可登不代填，票 06
-// Comments 记明）。
-// signalEpisodeBody 的 factBasis 恒为数组：存量行（因果条件 RECORDED_BEFORE_CAUSAL_CONDITION）是空数组，缺键与空数组不混用。
+// 队列该停在哪一步这层真话抹掉。ended 两件缺席表示发作期仍活跃。因果条件与事实依据
+// 照发作期行上登记的原样透出（VE 迁移 0029）；factBasis 恒为数组：存量行（因果条件
+// RECORDED_BEFORE_CAUSAL_CONDITION）是空数组，缺键与空数组不混用。
 type signalEpisodeBody struct {
 	EpisodeID       string                `json:"episodeId"`
 	Parcel          string                `json:"parcel"`
