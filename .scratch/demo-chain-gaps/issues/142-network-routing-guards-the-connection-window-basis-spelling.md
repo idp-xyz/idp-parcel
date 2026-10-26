@@ -1,7 +1,7 @@
 # 142 NR 侧没有用例守住计划段窗口依据的 CONNECTION 拼写
 
 Category: enhancement
-Status: in-progress——2026-10-25 作者完工，待隔离评审与进 main，分支 `claude-dcg142` tip `ff13558ed`（代码末笔；本票与 143 的完成记录随后一笔）。此前 in-progress——2026-10-25 会话 `tops-20`（Claude Code）认领，与 143 同批，分支 `claude-dcg142`（worktree `idp-parcel-dcg142`）。此前 ready-for-agent——2026-10-20 代决复核立（上线后尽快），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: in-progress——2026-10-25 评审阻断已修、修订轮完，待评审复核与进 main，分支 `claude-dcg142` tip `7e78cb155`（修订轮末笔；本票面一笔随后）。此前 in-progress——2026-10-25 作者完工，待隔离评审与进 main，分支 `claude-dcg142` tip `ff13558ed`（代码末笔；本票与 143 的完成记录随后一笔）。此前 in-progress——2026-10-25 会话 `tops-20`（Claude Code）认领，与 143 同批，分支 `claude-dcg142`（worktree `idp-parcel-dcg142`）。此前 ready-for-agent——2026-10-20 代决复核立（上线后尽快），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 R4；ADR-0201 决定二
 
@@ -64,4 +64,52 @@ Blocked by: 无
 
 - `go build ./...`、`go vet ./...` 全仓过；改动的 `.go` 都已 `gofmt -w`，`gofmt -l` 无输出。
 - 带 DSN（`127.0.0.1:55432`，含 PG）`go test -count=1 -p 4`：`./internal/networkrouting/...`、`./internal/parcelshipment/...`、`./cmd/parcel-api/`、`./cmd/parcel-commercial/`、`./cmd/parcel-dispatch/`、`./cmd/parcel-frontline-import/`、`./cmd/parcel-network-register/`、`./cmd/parcel-settlement-register/`、`./internal/architecture/...`、`./migrations/...`，40 个包全 ok、退 0。真库包确实跑了：NR `adapters/postgres` 7.5 秒，PS `adapters/postgres` 15.5 秒，`cmd/parcel-dispatch` 33.5 秒。
+- 全量留给推送方。
+
+## 评审记录
+
+以下照抄协调方转来的 `review-142-143.md`（二级标题降为三级），142、143 两票同一份。
+
+评审 ← tops-20 隔离子代理 · 钉 `6fc41e9ad` · 23:48
+
+结论：有阻断 1 条（Spec 轴，143 新读口）；142 无发现。
+
+### Standards
+阻断：无。
+非阻断：
+1. PS CONTEXT「地址要素」末句：不改也不与 ADR-0301 相抵（按租户+包裹、取基线那一版、同一份投影仍成立），但 AGENTS「改文档」要求「同一笔把 CONTEXT 里被停的句子改成现行规则」；ADR-0301 Consequences 转述成「适配器…取…」，漏了 PS CONTEXT 原有的「反查当前已接受委托」。若改，在本分支落，并同改 Consequences 里「CONTEXT…不改」那句（合入后 ADR 正文冻结）。
+2. ADR-0279 候选「在 PS 委托仓储或 PS 读口上加一法取接受时刻」的否决前提「NR 已有的 PS 读口…就交得出它」已被 ADR-0301 换掉；ADR-0301 正文交代了但不是逐字引。可照 ADR-0008 先例在 ADR-0279 注记挂「理由限定」；不挂不算相抵。
+无发现：红线（NR 只经 `psports.AcceptanceBaselineGeoProjectionView` 读，SQL 在 PS adapters/postgres，architecture 探针绿）；ADR-0215 正文未动、三句引文逐字在决定二；去向/来向分写合 adr/README；adr-index -check 只报生成物；注释中文无行号。
+
+### Spec
+阻断：
+1. `ShipmentRequests.LoadAcceptanceBaselineGeoProjection` 把重建门会拒的委托当好答案交出。下面三形 `FindBySourceIdentity` 都拒：
+   - 基线挂在历史版本：found=true，交出历史版的投影。
+   - 基线时刻 ≠ 决定时刻：found=true，`AcceptedAt` 是错值，ADR-0279 的业务时间下限随之错。
+   - 成员收窄：被剔的成员答 found=false。
+   旧路先撞重建门，落 `ErrAcceptedParcelUnreadable` 重投至放弃，看得见；新路静默作答。PS CONTEXT「已提交 → 已接受」把基线固定在当前提交版本，第一形自相矛盾，UC-NR-003 `AT-NR-067` 要求响亮失败；`TestTheBaselineVersionIsReadEvenWhenItIsNotTheCurrentVersion` 反把这一形钉成正确答案；ADR-0301 越权风险点 1「本口守它读的两段上」的自相矛盾与事实不符。
+   修法：基线版本 ≠ `currentVersion.versionId` 时答 `ErrAcceptanceBaselineInconsistent`，翻转那个用例；时刻、成员两条至少写进越权风险点 1。
+非阻断：无基线、无时刻、版本不在三格，端到端由「重投」变为「响亮失败」，方向合 `AT-NR-067`；但票面代决 4「各格落法与之前相同」只在适配器层成立，宜注一句。
+无发现：判断顺序与旧适配器逐格相同；键名漂移不会静默答错；分格与两路哨兵名单不变；ADR-0301 如实写明初始路由一路仍读整份聚合；142 两条变异（多格连接、`@`→`:`）都让用例变红，代决 1 只守一半不与 R4 相抵；无票面外改动。
+
+修订轮重跑探针：在检出根目录带 DSN 跑
+`go test -count=1 -v -overlay <o.json> -run TestReviewProbeGateVersusView ./internal/parcelshipment/adapters/postgres/`
+探针源：/tmp/claude-1000/-home-tops/916d5bf9-1a44-4ef9-92dc-171db91f1686/scratchpad/probe143/probe_gate_vs_view_test.go；overlay：同目录 o.json（Replace 键写死评审检出路径，换树要改）。
+
+## 修订轮（2026-10-25，同一作者子代理，同分支）
+
+本票评审无发现，无改动。分支上的修订轮各笔（`1a552ad1c`、`7e78cb155`）都属 143，见那张票的「修订轮」。
+
+### 重跑
+
+实测于修订后的 tip `7e78cb155`（含 PG，DSN `127.0.0.1:55432`）：
+
+- **评审探针**：探针源原样不动，另起 overlay `o-dcg142.json`，Replace 键换成本树路径，`-overlay … -run TestReviewProbeGateVersusView ./internal/parcelshipment/adapters/postgres/`，ok。三形 × 两成员共六行，每行都是：`FindBySourceIdentity` 拒（`invalid rehydrated shipment request`），读口 `found=false`，错误包 `ErrAcceptanceBaselineInconsistent`，原因依次为
+  - 基线在历史版本：「baseline is fixed on version "version-1", not on the current submission version」；
+  - 成员收窄：「baseline members differ from the current submission version」；
+  - 时刻不一：「baseline fixed time differs from the acceptance decision time」。
+  
+  没有一行交出投影；修订前三形分别答 found=true、found=true、parcel-2 found=false。
+- `go build ./...` 与 `go vet ./...` 全仓通过；改动的 `.go` 都已 `gofmt -w`，`gofmt -l` 无输出。
+- 带 DSN `go test -count=1 -p 4 ./internal/parcelshipment/... ./internal/networkrouting/... ./cmd/parcel-dispatch/... ./internal/architecture/...`：34 个包全 ok，退 0。真库包确实跑了：PS `adapters/postgres` 16.5 秒，NR `adapters/postgres` 7.9 秒，`cmd/parcel-dispatch` 39.4 秒，`architecture` 8.4 秒。
 - 全量留给推送方。
