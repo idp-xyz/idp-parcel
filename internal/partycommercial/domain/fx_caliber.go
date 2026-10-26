@@ -27,11 +27,14 @@ func NewFxQuoteTypeReference(value string) (FxQuoteTypeReference, error) {
 // 时刻算出两个数——那不是「重放不一致」这种可发现的失败，是重放本身失去意义（parcel-pricing
 // CONTEXT：「同一评价输入……版本清单和版本内容摘要必须产生相同结果」）。
 //
-// **这里没有加点规则那一格，且不是漏掉。** 本上下文按立场不持数值（见 VolumetricFactorReference
-// 的注释），而做成引用则被引处今天不存在——parcel-pricing 没有承载加点正文的工件，那会造出
-// 「引用是强制的、被引的那份是空的」这个形状。裁决与重启条件记在
-// .scratch/party-commercial-context-gaps/issues/02 票面「加点规则的裁决」一节。缺这一格的
-// 含义是「加点未声明」，消费方据以停在未决，不得读成零加点。
+// **这里没有加点规则那一格，且不是漏掉。** 本上下文按立场持引用、不持数值：带单位与精度的数值是
+// 拥有它的那一侧的表达（牌价是 parcel-pricing 汇率序列的内容），此处抄一份数，就多出一处能与它分岔
+// 的副本——牌价类型、税务分类因此都是引用。而加点做成引用，被引处不存在：parcel-pricing 没有承载
+// 加点正文的工件，那会造出「引用是强制的、被引的那份是空的」这个形状。裁决与重启条件记在
+// .scratch/party-commercial-context-gaps/issues/02 票面「加点规则的裁决」一节。
+// 缺这一格的含义是「加点未声明」。评价不读政策正文、不执行政策上的取值时点规则，按卡绑定序列的牌价
+// 换算、不加点（ADR-0260 决定三），所以这一格缺席不让任何评价停在未决；合同约定加点的租户因此表达
+// 不了加点，放在哪份工件另立记录裁（ADR-0260 越权风险点 7），在那之前不得把加点后的数登成一串序列。
 type FxCaliber struct {
 	quoteType         FxQuoteTypeReference
 	asOfSemantics     AsOfSemanticsReference

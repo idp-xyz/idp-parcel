@@ -22,7 +22,9 @@ import (
 const pgForeignKeyViolation = "23503"
 
 // SavePricePolicyCaliber 登记一份价格规则版本声明的计价口径。撞键不覆盖：同内容是重放，异内容
-// （税务、体积、汇率任一格不同，含汇率格从缺席变在场）是需要商业责任方修正的冲突。
+// （税务、汇率任一格不同，含汇率格从缺席变在场）是需要商业责任方修正的冲突。volumetric_factor_ref
+// 一列本构建只写 NULL（0041 迁移对任何方向都只收 NULL）；比对时仍看它——0041 之前登下的销售行带着
+// 系数，同一版本再按不带系数的内容登一次，与那一行就是异内容，答冲突而不是悄悄当作重放。
 func (repository *CommercialPublications) SavePricePolicyCaliber(
 	ctx context.Context,
 	caliber domain.PricePolicyCaliber,
@@ -44,9 +46,9 @@ func (repository *CommercialPublications) SavePricePolicyCaliber(
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO party_commercial.price_policy_caliber
 			(tenant_id, object_kind, object_id, version_label, direction,
-			 tax_disposition, tax_classification_ref, volumetric_factor_ref,
+			 tax_disposition, tax_classification_ref,
 			 fx_quote_type_ref, fx_as_of_semantics_ref, fx_as_of_policy_version)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		 ON CONFLICT DO NOTHING`,
 		version.Tenant().String(),
 		uint8(version.Kind()),
@@ -55,7 +57,6 @@ func (repository *CommercialPublications) SavePricePolicyCaliber(
 		columns.direction,
 		columns.taxDisposition,
 		columns.taxClassification,
-		columns.volumetricFactor,
 		columns.fxQuoteType,
 		columns.fxAsOfSemantics,
 		columns.fxAsOfPolicyVersion,
@@ -64,7 +65,7 @@ func (repository *CommercialPublications) SavePricePolicyCaliber(
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgForeignKeyViolation {
 			return ports.PricePolicyCaliberSaveOutcomeInvalid, fmt.Errorf(
-				"save price policy caliber: 找不到同方向（%s）的价格政策正文行——正文未登记，或口径的体积方向与政策方向不一致：%w",
+				"save price policy caliber: 找不到同方向（%s）的价格政策正文行——正文未登记，或口径自报的方向与政策方向不一致：%w",
 				columns.direction, err)
 		}
 		return ports.PricePolicyCaliberSaveOutcomeInvalid, fmt.Errorf("save price policy caliber: %w", err)
@@ -97,8 +98,10 @@ func (repository *CommercialPublications) SavePricePolicyCaliber(
 	return ports.PricePolicyCaliberContentConflict, nil
 }
 
-// scannedPricePolicyCaliber 是口径行的列形。可缺的几列用指针：分类只在含税/未税时在场，系数只在
-// 销售方向在场，汇率三列全有或全无——三处缺席都是口径说出的真话，与库上 CHECK 同形。
+// scannedPricePolicyCaliber 是口径行的列形。可缺的几列用指针：分类只在含税/未税时在场，汇率三列
+// 全有或全无——两处缺席都是口径说出的真话，与库上 CHECK 同形。volumetricFactor 只在 0041 迁移之前
+// 登下的销售行上非空（0041 对任何方向只收 NULL），读回时不折进领域口径——那一格不参与计价，只在
+// 目录上列时作历史透出（ports.PricePolicyRow.HistoricalVolumetricFactor）。
 type scannedPricePolicyCaliber struct {
 	direction           string
 	taxDisposition      string
@@ -119,11 +122,11 @@ func (row scannedPricePolicyCaliber) sameAs(other scannedPricePolicyCaliber) boo
 		sameOptionalString(row.fxAsOfPolicyVersion, other.fxAsOfPolicyVersion)
 }
 
-// pricePolicyCaliberColumns 把三口径摊成列。第二个返回值为假表示这是一份绕开构造门的零值口径
+// pricePolicyCaliberColumns 把口径摊成列。第二个返回值为假表示这是一份绕开构造门的零值口径
 // ——税务三值或方向落在集合外，任何一列都写不出真话。
 func pricePolicyCaliberColumns(caliber domain.PricePolicyCaliber) (scannedPricePolicyCaliber, bool) {
 	columns := scannedPricePolicyCaliber{
-		direction:      caliber.Volumetric().Direction().String(),
+		direction:      caliber.Direction().String(),
 		taxDisposition: caliber.Tax().Disposition().String(),
 	}
 	if columns.direction == "" || columns.taxDisposition == "" {
@@ -132,10 +135,6 @@ func pricePolicyCaliberColumns(caliber domain.PricePolicyCaliber) (scannedPriceP
 	if classification, ok := caliber.Tax().Classification(); ok {
 		value := classification.String()
 		columns.taxClassification = &value
-	}
-	if factor, ok := caliber.Volumetric().Factor(); ok {
-		value := factor.String()
-		columns.volumetricFactor = &value
 	}
 	if fx, declared := caliber.Fx(); declared {
 		quoteType, semantics, policyVersion := fx.QuoteType().String(), fx.AsOfSemantics().String(), fx.AsOfPolicyVersion().String()
@@ -178,8 +177,9 @@ var _ ports.PricePolicyCaliberView = (*PricePolicyCaliberContents)(nil)
 // LoadPricePolicyCaliber 取回口径正文。
 //
 // found=false = 口径未登记（无行）。显式租户与版本必须同一身份，否则 error 且不交内容
-// （ADR-0003/0040，租户是身份不是过滤器）。读回的每一行都过三道构造门重建，不按列直接拼结构体
-// ——构造门是「什么算合法」的单一权威，绕过它库里一行坏数据就会变成一份合法口径。
+// （ADR-0003/0040，租户是身份不是过滤器）。读回的每一行都过构造门重建，不按列直接拼结构体
+// ——构造门是「什么算合法」的单一权威，绕过它库里一行坏数据就会变成一份合法口径。历史行上的
+// volumetric_factor_ref 不进口径（scannedPricePolicyCaliber 的注释）。
 func (repository *PricePolicyCaliberContents) LoadPricePolicyCaliber(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -244,20 +244,10 @@ func pricePolicyCaliberFrom(version domain.CommercialVersion, row scannedPricePo
 	if err != nil {
 		return domain.PricePolicyCaliber{}, err
 	}
-	factor := domain.VolumetricFactorReference{}
-	if row.volumetricFactor != nil {
-		if factor, err = domain.NewVolumetricFactorReference(*row.volumetricFactor); err != nil {
-			return domain.PricePolicyCaliber{}, err
-		}
-	}
-	volumetric, err := domain.NewVolumetricCaliber(direction, factor)
-	if err != nil {
-		return domain.PricePolicyCaliber{}, err
-	}
 
 	switch {
 	case row.fxQuoteType == nil && row.fxAsOfSemantics == nil && row.fxAsOfPolicyVersion == nil:
-		return domain.NewPricePolicyCaliber(version, tax, volumetric)
+		return domain.NewPricePolicyCaliber(version, direction, tax)
 	case row.fxQuoteType != nil && row.fxAsOfSemantics != nil && row.fxAsOfPolicyVersion != nil:
 		quoteType, err := domain.NewFxQuoteTypeReference(*row.fxQuoteType)
 		if err != nil {
@@ -275,7 +265,7 @@ func pricePolicyCaliberFrom(version domain.CommercialVersion, row scannedPricePo
 		if err != nil {
 			return domain.PricePolicyCaliber{}, err
 		}
-		return domain.NewPricePolicyCaliberWithFx(version, tax, volumetric, fx)
+		return domain.NewPricePolicyCaliberWithFx(version, direction, tax, fx)
 	default:
 		// CHECK 保证三列全有或全无，走到这里说明库与领域已经分叉，报错不吸收。
 		return domain.PricePolicyCaliber{}, fmt.Errorf("fx caliber row is half declared")

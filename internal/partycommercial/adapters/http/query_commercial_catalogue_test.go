@@ -725,7 +725,9 @@ func TestPoliciesEndpointTranscribesCustomerServiceRuleContentOnlyWhenRegistered
 
 // Covers: 价格政策行体的口径转写（票 party-commercial-context-gaps/06）——caliberDeclared 说明有没有
 // 口径（0010 早于 0022，只有正文没有口径的行合法），有则 caliber 节在场：分类只在含税/未税时在场、
-// 系数只在 SELL 时在场、fx 节只在声明了汇率口径时在场——三处缺席都是口径说出的真话，不补空串。
+// fx 节只在声明了汇率口径时在场——两处缺席都是口径说出的真话，不补空串。0041 迁移之前销售行登下的
+// 体积系数以 historicalVolumetricFactor 一键透出、只在历史行上在场，不以现行口径的键名透出（ADR-0260
+// 决定二：它不参与计价）。
 func TestPoliciesEndpointTranscribesPriceCaliberOnlyWhenDeclared(t *testing.T) {
 	query := catalogueQuery(t)
 	reader := &policyReaderDouble{
@@ -735,8 +737,8 @@ func TestPoliciesEndpointTranscribesPriceCaliberOnlyWhenDeclared(t *testing.T) {
 				BindingConversion: "FROZEN_BUY_EVALUATION", PolicyScope: "scope-1",
 				EffectiveStartsAt: catBaseAt, RegisteredAt: catBaseAt,
 				HasCaliber: true, TaxDisposition: "TAX_INCLUSIVE", TaxClassification: "vat-standard",
-				VolumetricFactor: "sell-divisor-5000-cm",
-				HasFx:            true, FxQuoteType: "boc-cash-selling", FxAsOfSemantics: "AT_ORDER_DATE", FxAsOfPolicyVersion: "asof-policy/v3",
+				HistoricalVolumetricFactor: "5000",
+				HasFx:                      true, FxQuoteType: "boc-cash-selling", FxAsOfSemantics: "AT_ORDER_DATE", FxAsOfPolicyVersion: "asof-policy/v3",
 				CaliberRegisteredAt: catBaseAt.Add(time.Minute)},
 			{ObjectID: "price-plain", VersionLabel: "v1", Direction: "BUY", PlanRef: "plan-buy-2", PlanDirection: "BUY",
 				BindingConversion: "NONE", PolicyScope: "scope-1",
@@ -770,8 +772,11 @@ func TestPoliciesEndpointTranscribesPriceCaliberOnlyWhenDeclared(t *testing.T) {
 		t.Fatalf("caliber 节没透出:%v", withFx)
 	}
 	if caliber["taxDisposition"] != "TAX_INCLUSIVE" || caliber["taxClassification"] != "vat-standard" ||
-		caliber["volumetricFactor"] != "sell-divisor-5000-cm" || caliber["registeredAt"] == nil {
+		caliber["historicalVolumetricFactor"] != "5000" || caliber["registeredAt"] == nil {
 		t.Fatalf("口径转写变形:%v", caliber)
+	}
+	if _, has := caliber["volumetricFactor"]; has {
+		t.Fatalf("历史系数不得以现行口径的键名透出:%v", caliber)
 	}
 	fx, ok := caliber["fx"].(map[string]any)
 	if !ok || fx["quoteType"] != "boc-cash-selling" || fx["asOfSemantics"] != "AT_ORDER_DATE" || fx["asOfPolicyVersion"] != "asof-policy/v3" {
@@ -783,7 +788,7 @@ func TestPoliciesEndpointTranscribesPriceCaliberOnlyWhenDeclared(t *testing.T) {
 	if caliber["taxDisposition"] != "TAX_NOT_APPLICABLE" {
 		t.Fatalf("不适用的税务口径没透出:%v", caliber)
 	}
-	for _, key := range []string{"taxClassification", "volumetricFactor", "fx"} {
+	for _, key := range []string{"taxClassification", "historicalVolumetricFactor", "fx"} {
 		if _, has := caliber[key]; has {
 			t.Fatalf("缺席的 %s 长出了键:%v", key, caliber)
 		}

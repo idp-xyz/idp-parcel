@@ -4,22 +4,45 @@ import (
 	"context"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	adapter "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
+	"go.idp.xyz/idp-parcel/migrations"
 )
 
-// 本文件对真实 PostgreSQL 16 证价格政策口径册（票 party-commercial-context-gaps/02、06，0022）：
-// 三口径往返、汇率可缺、缺口径是合法缺席、同内容重放、异内容冲突、租户是身份不是过滤器、
-// 口径离不开同方向的正文行、三处耦合由库上 CHECK 守住、目录上列口径随正文左连接。
+// 本文件对真实 PostgreSQL 16 证价格政策口径册（票 party-commercial-context-gaps/02、06，0022；0041 退掉体积一格）：
+// 两口径往返、汇率可缺、缺口径是合法缺席、同内容重放、异内容冲突、租户是身份不是过滤器、
+// 口径离不开同方向的正文行、耦合由库上 CHECK 守住、体积系数任何方向都登不进而历史行留册、目录上列口径随正文左连接。
 
 func newPricePolicyCaliberContents(t *testing.T) (
 	*adapter.CommercialPublications, *adapter.PricePolicyCaliberContents, *adapter.OperationsCatalogue, bentoapp.Transactor,
 ) {
 	t.Helper()
-	repository, transactor, db := newDeclarationFixture(t)
+	repository, contents, catalogue, transactor, _ := newPricePolicyCaliberFixture(t)
+	return repository, contents, catalogue, transactor
+}
+
+// newPricePolicyCaliberFixture 把裸池一并交出：写口、读口、目录与直插 SQL 必须共用同一个库——pgtest.Pool 每次调用
+// 都建一个全新的库。
+func newPricePolicyCaliberFixture(t *testing.T) (
+	*adapter.CommercialPublications, *adapter.PricePolicyCaliberContents, *adapter.OperationsCatalogue, bentoapp.Transactor, *pgxpool.Pool,
+) {
+	t.Helper()
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	repository, err := adapter.NewCommercialPublications(db)
+	if err != nil {
+		t.Fatalf("构造发布登记册：%v", err)
+	}
 	contents, err := adapter.NewPricePolicyCaliberContents(db)
 	if err != nil {
 		t.Fatalf("构造口径读口：%v", err)
@@ -28,7 +51,7 @@ func newPricePolicyCaliberContents(t *testing.T) (
 	if err != nil {
 		t.Fatalf("构造目录读面：%v", err)
 	}
-	return repository, contents, catalogue, transactor
+	return repository, contents, catalogue, db.Transactor(), pool
 }
 
 func taxCaliberOf(t *testing.T, disposition domain.TaxDisposition, classification string) domain.TaxCaliber {
@@ -40,19 +63,6 @@ func taxCaliberOf(t *testing.T, disposition domain.TaxDisposition, classificatio
 	caliber, err := domain.NewTaxCaliber(disposition, reference)
 	if err != nil {
 		t.Fatalf("税务口径：%v", err)
-	}
-	return caliber
-}
-
-func volumetricCaliberOf(t *testing.T, direction domain.PriceDirection, factor string) domain.VolumetricCaliber {
-	t.Helper()
-	reference := domain.VolumetricFactorReference{}
-	if factor != "" {
-		reference = pcValue(t, domain.NewVolumetricFactorReference, factor)
-	}
-	caliber, err := domain.NewVolumetricCaliber(direction, reference)
-	if err != nil {
-		t.Fatalf("体积口径：%v", err)
 	}
 	return caliber
 }
@@ -75,8 +85,8 @@ func sellCaliberWithFx(t *testing.T, version domain.CommercialVersion, quoteType
 	t.Helper()
 	caliber, err := domain.NewPricePolicyCaliberWithFx(
 		version,
+		domain.SellDirection,
 		taxCaliberOf(t, domain.TaxInclusive, "vat-standard"),
-		volumetricCaliberOf(t, domain.SellDirection, "sell-divisor-5000-cm"),
 		fxCaliberOf(t, quoteType),
 	)
 	if err != nil {
@@ -85,17 +95,13 @@ func sellCaliberWithFx(t *testing.T, version domain.CommercialVersion, quoteType
 	return caliber
 }
 
-// caliberWithoutFx 是一份不含汇率口径的声明，税务按不适用、体积按给定方向。
+// caliberWithoutFx 是一份不含汇率口径的声明，税务按不适用、方向按给定。
 func caliberWithoutFx(t *testing.T, version domain.CommercialVersion, direction domain.PriceDirection) domain.PricePolicyCaliber {
 	t.Helper()
-	factor := ""
-	if direction == domain.SellDirection {
-		factor = "sell-divisor-5000-cm"
-	}
 	caliber, err := domain.NewPricePolicyCaliber(
 		version,
+		direction,
 		taxCaliberOf(t, domain.TaxNotApplicable, ""),
-		volumetricCaliberOf(t, direction, factor),
 	)
 	if err != nil {
 		t.Fatalf("口径声明：%v", err)
@@ -141,9 +147,9 @@ func savedPricePolicy(
 	return version
 }
 
-// Covers: CONTEXT「商业价格政策版本……声明计价所需的商业口径」与「必须声明含税、未税或税务
-// 不适用」——三口径逐格往返；汇率一格可缺，缺席读回来是「没声明」而不是零口径；不适用的税务
-// 口径读回来没有分类，采购方向的体积口径读回来没有系数。
+// Covers: CONTEXT「商业价格政策版本……可以声明汇率口径」与「必须声明含税、未税或税务不适用」
+// ——两口径逐格往返、方向照登；汇率一格可缺，缺席读回来是「没声明」而不是零口径；不适用的税务
+// 口径读回来没有分类。
 func TestPricePolicyCaliberRoundTripsWithAndWithoutFx(t *testing.T) {
 	repository, contents, _, transactor := newPricePolicyCaliberContents(t)
 	ctx := t.Context()
@@ -163,9 +169,8 @@ func TestPricePolicyCaliberRoundTripsWithAndWithoutFx(t *testing.T) {
 		if classification, ok := caliber.Tax().Classification(); !ok || classification.String() != "vat-standard" {
 			t.Fatalf("税务分类 = (%q, %v)", classification, ok)
 		}
-		if factor, ok := caliber.Volumetric().Factor(); !ok || factor.String() != "sell-divisor-5000-cm" ||
-			caliber.Volumetric().Direction() != domain.SellDirection {
-			t.Fatalf("体积口径 = %#v", caliber.Volumetric())
+		if caliber.Direction() != domain.SellDirection {
+			t.Fatalf("方向 = %s", caliber.Direction())
 		}
 		fx, declared := caliber.Fx()
 		if !declared || fx.QuoteType().String() != "boc-cash-selling" ||
@@ -194,8 +199,8 @@ func TestPricePolicyCaliberRoundTripsWithAndWithoutFx(t *testing.T) {
 		if _, ok := caliber.Tax().Classification(); ok {
 			t.Fatal("税务不适用却读回了一份分类")
 		}
-		if _, ok := caliber.Volumetric().Factor(); ok || caliber.Volumetric().Direction() != domain.BuyDirection {
-			t.Fatalf("采购方向读回了体积系数：%#v", caliber.Volumetric())
+		if caliber.Direction() != domain.BuyDirection {
+			t.Fatalf("方向 = %s", caliber.Direction())
 		}
 	})
 }
@@ -281,7 +286,7 @@ func TestPricePolicyCaliberIsBoundToItsTenant(t *testing.T) {
 	}
 }
 
-// Covers: 票 06「口径只能随正文同一次发布登记」与「体积口径的方向必须等于政策自己的方向」——
+// Covers: 票 06「口径只能随正文同一次发布登记」与「口径的方向必须等于政策自己的方向」——
 // 两条都由 0022 的复合外键在库上守住：没有正文行、或方向对不上，口径都进不去，且不留半行。
 func TestAPricePolicyCaliberNeedsABodyRowOfTheSameDirection(t *testing.T) {
 	repository, contents, _, transactor := newPricePolicyCaliberContents(t)
@@ -312,7 +317,7 @@ func TestAPricePolicyCaliberNeedsABodyRowOfTheSameDirection(t *testing.T) {
 			return err
 		})
 		if err == nil {
-			t.Fatal("销售方向的体积口径挂上了采购政策")
+			t.Fatal("销售方向的口径挂上了采购政策")
 		}
 		if _, found, err := contents.LoadPricePolicyCaliber(ctx, tenant, version); err != nil || found {
 			t.Fatalf("被拒的口径留下了行：found=%v err=%v", found, err)
@@ -320,42 +325,123 @@ func TestAPricePolicyCaliberNeedsABodyRowOfTheSameDirection(t *testing.T) {
 	})
 }
 
-// Covers: 三处耦合由库上 CHECK 守住——含税无分类、不适用带分类、采购带系数、销售无系数、汇率
-// 半缺，五种行都进不来。领域构造门拦得住经它进来的，CHECK 拦的是绕开它的那条路。
+// Covers: 耦合由库上 CHECK 守住——含税无分类、不适用带分类、汇率半缺，三种行都进不来；销售方向没有体积系数是合法行
+// （0041 之后那一格任何方向都只收 NULL，见 TestMigration0041KeepsHistoricalFactorsListedAndRefusesNewOnes）。领域构造门拦得住经它进来的，CHECK 拦的是绕开它的那条路。
 func TestPricePolicyCaliberColumnsRejectDecoupledRows(t *testing.T) {
 	repository, transactor, pool := newPublications(t)
 	ctx := t.Context()
 	savedPricePolicy(t, transactor, ctx, repository, "price-sell", domain.SellDirection)
-	savedPricePolicy(t, transactor, ctx, repository, "price-buy", domain.BuyDirection)
 
-	insert := func(objectID, direction, taxDisposition, taxClassification, volumetricFactor, fxQuoteType, fxSemantics, fxPolicy string) error {
+	insert := func(objectID, direction, taxDisposition, taxClassification, fxQuoteType, fxSemantics, fxPolicy string) error {
 		_, err := pool.Exec(ctx,
 			`INSERT INTO party_commercial.price_policy_caliber
 				(tenant_id, object_kind, object_id, version_label, direction,
-				 tax_disposition, tax_classification_ref, volumetric_factor_ref,
+				 tax_disposition, tax_classification_ref,
 				 fx_quote_type_ref, fx_as_of_semantics_ref, fx_as_of_policy_version)
 			 VALUES ('tenant-1', 6, '`+objectID+`', 'v1', '`+direction+`',
-			         '`+taxDisposition+`', `+taxClassification+`, `+volumetricFactor+`,
+			         '`+taxDisposition+`', `+taxClassification+`,
 			         `+fxQuoteType+`, `+fxSemantics+`, `+fxPolicy+`)`)
 		return err
 	}
-	if err := insert("price-sell", "SELL", "TAX_INCLUSIVE", "NULL", "'f'", "NULL", "NULL", "NULL"); err == nil {
+	if err := insert("price-sell", "SELL", "TAX_INCLUSIVE", "NULL", "NULL", "NULL", "NULL"); err == nil {
 		t.Fatal("含税却没有分类的口径进了册")
 	}
-	if err := insert("price-sell", "SELL", "TAX_NOT_APPLICABLE", "'vat'", "'f'", "NULL", "NULL", "NULL"); err == nil {
+	if err := insert("price-sell", "SELL", "TAX_NOT_APPLICABLE", "'vat'", "NULL", "NULL", "NULL"); err == nil {
 		t.Fatal("税务不适用却带着分类的口径进了册")
 	}
-	if err := insert("price-sell", "SELL", "TAX_NOT_APPLICABLE", "NULL", "NULL", "NULL", "NULL", "NULL"); err == nil {
-		t.Fatal("销售方向没有体积系数的口径进了册")
-	}
-	if err := insert("price-buy", "BUY", "TAX_NOT_APPLICABLE", "NULL", "'f'", "NULL", "NULL", "NULL"); err == nil {
-		t.Fatal("采购方向带着体积系数的口径进了册")
-	}
-	if err := insert("price-sell", "SELL", "TAX_NOT_APPLICABLE", "NULL", "'f'", "'quote'", "NULL", "NULL"); err == nil {
+	if err := insert("price-sell", "SELL", "TAX_NOT_APPLICABLE", "NULL", "'quote'", "NULL", "NULL"); err == nil {
 		t.Fatal("只有牌价类型没有时点的汇率口径进了册")
 	}
-	if err := insert("price-sell", "SELL", "TAX_NOT_APPLICABLE", "NULL", "'f'", "NULL", "NULL", "NULL"); err != nil {
+	if err := insert("price-sell", "SELL", "TAX_NOT_APPLICABLE", "NULL", "NULL", "NULL", "NULL"); err != nil {
 		t.Fatalf("一行合法口径被拒：%v", err)
+	}
+}
+
+// Covers: AT-PC-062 在库上的那一半，连同迁移 0041 施加在已有存量的表上。表先退回 0041 之前的样子（撤 0041 的约束、按
+// 0022 原文加回方向耦合），落一行当年合法的销售口径（带系数），再原样施加嵌入的 0041 正文：施加成功，那一行原样留册——
+// 点读照常折回方向与税务（系数不进领域口径），目录上列以历史系数透出（ADR-0260 决定二：体积系数是价卡内容，不参与
+// 计价）；此后 volumetric_factor_ref 对三个方向一律只收 NULL，不带系数的销售行照常进册。干净库上造不出 0041 之前的行，
+// 所以退回那一步只能在测试里做；被施加的是迁移原文，不是它的抄本。
+func TestMigration0041KeepsHistoricalFactorsListedAndRefusesNewOnes(t *testing.T) {
+	repository, contents, catalogue, transactor, pool := newPricePolicyCaliberFixture(t)
+	ctx := t.Context()
+	tenant := pcTenant(t, "tenant-1")
+	historical := savedPricePolicy(t, transactor, ctx, repository, "price-historical", domain.SellDirection)
+	savedPricePolicy(t, transactor, ctx, repository, "price-sell", domain.SellDirection)
+	savedPricePolicy(t, transactor, ctx, repository, "price-buy", domain.BuyDirection)
+	savedPricePolicy(t, transactor, ctx, repository, "price-internal", domain.InternalDirection)
+
+	exec := func(step, statement string) {
+		t.Helper()
+		if _, err := pool.Exec(ctx, statement); err != nil {
+			t.Fatalf("%s：%v", step, err)
+		}
+	}
+	insert := func(objectID, direction, factor string) error {
+		_, err := pool.Exec(ctx,
+			`INSERT INTO party_commercial.price_policy_caliber
+				(tenant_id, object_kind, object_id, version_label, direction, tax_disposition, volumetric_factor_ref)
+			 VALUES ('tenant-1', 6, '`+objectID+`', 'v1', '`+direction+`', 'TAX_NOT_APPLICABLE', `+factor+`)`)
+		return err
+	}
+
+	exec("撤 0041 的约束", `ALTER TABLE party_commercial.price_policy_caliber
+		DROP CONSTRAINT price_policy_caliber_volumetric_factor_retired`)
+	exec("按 0022 原文加回方向耦合", `ALTER TABLE party_commercial.price_policy_caliber
+		ADD CONSTRAINT price_policy_caliber_volumetric_factor_coupled
+		CHECK ((direction = 'SELL') = (volumetric_factor_ref IS NOT NULL))`)
+	if err := insert("price-historical", "SELL", "'5000'"); err != nil {
+		t.Fatalf("落 0041 之前合法的销售口径：%v", err)
+	}
+
+	assets, err := migrations.PartyCommercial()
+	if err != nil {
+		t.Fatalf("读迁移：%v", err)
+	}
+	const target = "0041_price_policy_caliber_volumetric_factor_retired"
+	applied := false
+	for _, asset := range assets {
+		if asset.Name == target {
+			exec("施加 "+target, asset.SQL)
+			applied = true
+		}
+	}
+	if !applied {
+		t.Fatalf("没有找到迁移 %s", target)
+	}
+
+	for _, row := range []struct{ objectID, direction string }{
+		{"price-sell", "SELL"}, {"price-buy", "BUY"}, {"price-internal", "INTERNAL"},
+	} {
+		if err := insert(row.objectID, row.direction, "'5000'"); err == nil {
+			t.Fatalf("%s 方向带着体积系数的口径进了册", row.direction)
+		}
+	}
+	if err := insert("price-sell", "SELL", "NULL"); err != nil {
+		t.Fatalf("不带体积系数的销售口径被拒：%v", err)
+	}
+
+	caliber, found, err := contents.LoadPricePolicyCaliber(ctx, tenant, historical)
+	if err != nil || !found {
+		t.Fatalf("历史行点读：found=%v err=%v", found, err)
+	}
+	if caliber.Direction() != domain.SellDirection || caliber.Tax().Disposition() != domain.TaxNotApplicable {
+		t.Fatalf("历史行折回变形：%#v", caliber)
+	}
+
+	rows, err := catalogue.ListPricePolicies(ctx, tenant, 10)
+	if err != nil {
+		t.Fatalf("上列价格政策：%v", err)
+	}
+	listed := map[string]ports.PricePolicyRow{}
+	for _, row := range rows {
+		listed[row.ObjectID] = row
+	}
+	if row := listed["price-historical"]; !row.HasCaliber || row.HistoricalVolumetricFactor != "5000" {
+		t.Fatalf("历史系数没有如实上列：%#v", row)
+	}
+	if row := listed["price-sell"]; !row.HasCaliber || row.HistoricalVolumetricFactor != "" {
+		t.Fatalf("不带系数的销售口径上列变形：%#v", row)
 	}
 }
 
@@ -392,14 +478,14 @@ func TestPricePolicyCatalogueListsCaliberBesideTheBody(t *testing.T) {
 	}
 	if row := byObject["price-fx"]; !row.HasCaliber || !row.HasFx ||
 		row.TaxDisposition != "TAX_INCLUSIVE" || row.TaxClassification != "vat-standard" ||
-		row.VolumetricFactor != "sell-divisor-5000-cm" ||
+		row.HistoricalVolumetricFactor != "" ||
 		row.FxQuoteType != "boc-cash-selling" || row.FxAsOfSemantics != "AT_ORDER_DATE" ||
 		row.FxAsOfPolicyVersion != "asof-policy/v3" || row.CaliberRegisteredAt.IsZero() {
 		t.Fatalf("含汇率的口径行 = %#v", row)
 	}
 	if row := byObject["price-plain"]; !row.HasCaliber || row.HasFx ||
 		row.TaxDisposition != "TAX_NOT_APPLICABLE" || row.TaxClassification != "" ||
-		row.VolumetricFactor != "" || row.FxQuoteType != "" {
+		row.HistoricalVolumetricFactor != "" || row.FxQuoteType != "" {
 		t.Fatalf("不含汇率的口径行 = %#v", row)
 	}
 	if row := byObject["price-bare"]; row.HasCaliber || row.HasFx || row.TaxDisposition != "" || row.Direction != "SELL" {

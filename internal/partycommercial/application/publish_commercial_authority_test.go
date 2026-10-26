@@ -1253,7 +1253,7 @@ func pricePolicySpec(t *testing.T, objectID, label string, body *application.Pri
 		Effective:     body.Effective,
 	}
 	if body.Caliber != nil {
-		content.Caliber = &domain.PricePolicyCaliberBody{Tax: body.Caliber.Tax, Volumetric: body.Caliber.Volumetric, Fx: body.Caliber.Fx}
+		content.Caliber = &domain.PricePolicyCaliberBody{Tax: body.Caliber.Tax, Fx: body.Caliber.Fx}
 	}
 	canonical, err := domain.CanonicalizePublicationContent(domain.PublicationContent{Kind: domain.PriceRuleObject, PricePolicy: content})
 	if err != nil {
@@ -1263,18 +1263,14 @@ func pricePolicySpec(t *testing.T, objectID, label string, body *application.Pri
 	return spec
 }
 
-func sellCaliber(t *testing.T, withFx bool) *application.PricePolicyCaliberDeclaration {
+// policyCaliber 是一份口径声明：未税带分类，汇率按需。口径不带方向，挂在哪个方向的政策上都同一形状。
+func policyCaliber(t *testing.T, withFx bool) *application.PricePolicyCaliberDeclaration {
 	t.Helper()
 	tax, err := domain.NewTaxCaliber(domain.TaxExclusive, pcValue(t, domain.NewTaxClassificationReference, "vat-standard"))
 	if err != nil {
 		t.Fatalf("税务口径：%v", err)
 	}
-	volumetric, err := domain.NewVolumetricCaliber(domain.SellDirection,
-		pcValue(t, domain.NewVolumetricFactorReference, "sell-divisor-5000-cm"))
-	if err != nil {
-		t.Fatalf("体积口径：%v", err)
-	}
-	declaration := &application.PricePolicyCaliberDeclaration{Tax: tax, Volumetric: volumetric}
+	declaration := &application.PricePolicyCaliberDeclaration{Tax: tax}
 	if withFx {
 		fx, err := domain.NewFxCaliber(
 			pcValue(t, domain.NewFxQuoteTypeReference, "boc-cash-selling"),
@@ -1360,7 +1356,7 @@ func TestAPricePolicyCaliberPublishesAfterItsBody(t *testing.T) {
 	registry := &publicationRegistryDouble{}
 	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 	body := pricePolicyBody(t, domain.SellDirection, domain.SellDirection, domain.PlanBindingConversionNone)
-	body.Caliber = sellCaliber(t, true)
+	body.Caliber = policyCaliber(t, true)
 
 	result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
 		Spec:         pricePolicySpec(t, "price-1", "v1", body),
@@ -1397,7 +1393,7 @@ func TestAPricePolicyCaliberPublishesAfterItsBody(t *testing.T) {
 		registry := &publicationRegistryDouble{}
 		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 		body := pricePolicyBody(t, domain.SellDirection, domain.SellDirection, domain.PlanBindingConversionNone)
-		body.Caliber = sellCaliber(t, false)
+		body.Caliber = policyCaliber(t, false)
 		if _, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
 			Spec:         pricePolicySpec(t, "price-1", "v1", body),
 			Approval:     publishApproval(t, "price-1"),
@@ -1412,29 +1408,29 @@ func TestAPricePolicyCaliberPublishesAfterItsBody(t *testing.T) {
 	})
 }
 
-// Covers: 口径里的体积方向必须与政策方向一致——采购政策带一份销售方向的体积口径，整项拒绝
-// 一行不写（正文也不写：两者是同一份声明的两半）。本册接进服务端规范化后（票 admin-write-faces/14）这一判在
-// 对账门的规范化里先答成`未受理`带成因；用例里那道 ConsistentWithDirection 仍守绕开规范化的调用方。
-func TestAPricePolicyCaliberDisagreeingWithTheBodyDirectionIsRejected(t *testing.T) {
-	registry := &publicationRegistryDouble{}
-	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
-	body := pricePolicyBody(t, domain.BuyDirection, domain.BuyDirection, domain.PlanBindingConversionNone)
-	body.Caliber = sellCaliber(t, false)
+// Covers: 口径的方向就是正文的方向——发布用例把正文方向抄给口径，交到持久化面的口径与正文同向（0022 的复合外键
+// 要求这一点），声明输入面上没有第二个方向可以对不上。销售那一路同是 AT-PC-062 的发布编排半边：只有税务的销售口径
+// 随正文发布成立，口径声明里没有体积系数一格可缺（ADR-0260 决定二）。
+func TestAPricePolicyCaliberTakesTheBodyDirection(t *testing.T) {
+	for _, direction := range []domain.PriceDirection{domain.SellDirection, domain.BuyDirection, domain.InternalDirection} {
+		t.Run(direction.String(), func(t *testing.T) {
+			registry := &publicationRegistryDouble{}
+			handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+			body := pricePolicyBody(t, direction, direction, domain.PlanBindingConversionNone)
+			body.Caliber = policyCaliber(t, false)
 
-	result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
-		Spec:         publishSpec(t, domain.PriceRuleObject, "price-1", "v1"),
-		Approval:     publishApproval(t, "price-1"),
-		RoleStanding: domain.ApprovalRoleConfirmed,
-		Declarations: application.CommercialDeclarations{PricePolicyBody: body},
-	})
-	if err != nil {
-		t.Fatalf("Handle：%v——未受理不是 error", err)
-	}
-	if result.Outcome() != application.CommercialPublicationNotAccepted || !errors.Is(result.RefusalCause(), domain.ErrPricePolicyCaliberDirectionMismatch) {
-		t.Fatalf("outcome = %q, cause = %v; want NOT_ACCEPTED / ErrPricePolicyCaliberDirectionMismatch", result.Outcome(), result.RefusalCause())
-	}
-	if len(registry.savedVersions) != 0 || len(registry.savedPrice) != 0 || len(registry.savedCaliber) != 0 {
-		t.Fatal("方向不一致的口径连同正文写了库")
+			if _, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+				Spec:         pricePolicySpec(t, "price-1", "v1", body),
+				Approval:     publishApproval(t, "price-1"),
+				RoleStanding: domain.ApprovalRoleConfirmed,
+				Declarations: application.CommercialDeclarations{PricePolicyBody: body},
+			}); err != nil {
+				t.Fatalf("Handle：%v", err)
+			}
+			if len(registry.savedCaliber) != 1 || registry.savedCaliber[0].Direction() != direction {
+				t.Fatalf("口径没有带着正文的方向到达持久化面：%#v", registry.savedCaliber)
+			}
+		})
 	}
 }
 

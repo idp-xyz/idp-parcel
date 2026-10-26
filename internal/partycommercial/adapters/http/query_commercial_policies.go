@@ -491,9 +491,13 @@ type pricePolicyListResponse struct {
 // pricePolicyBody 是价格政策正文加它声明的计价口径（0022,票 party-commercial-context-gaps/06）。
 //
 // caliberDeclared 与 caliber 节成对:0010 早于 0022,只有正文没有口径的行是合法状态,布尔让调用方
-// 分得开「没登记口径」与「口径节缺了」。口径节里三处可缺的键(分类、系数、fx)都是口径说出的
-// 真话——不适用因而没有分类、采购方向因而没有系数、不涉外币因而没有汇率——所以用 omitempty 让键
-// 不在场,而不是补空串让人去猜空串是「没有」还是「没填」。
+// 分得开「没登记口径」与「口径节缺了」。口径节里两处可缺的键(分类、fx)都是口径说出的真话——
+// 不适用因而没有分类、不涉外币因而没有汇率——所以用 omitempty 让键不在场,而不是补空串让人去猜
+// 空串是「没有」还是「没填」。
+//
+// historicalVolumetricFactor 只在 0041 迁移之前登下的销售行上在场:那一格原样留册、不参与计价
+// (ports.PricePolicyRow.HistoricalVolumetricFactor 的注释)。键名不沿用 volumetricFactor,是不让
+// 照旧读法的调用方把它当成现行口径的一格,页面据以标「不参与计价」。
 type pricePolicyBody struct {
 	ObjectID          string `json:"objectId"`
 	Version           string `json:"version"`
@@ -511,11 +515,11 @@ type pricePolicyBody struct {
 }
 
 type pricePolicyCaliberBody struct {
-	TaxDisposition    string         `json:"taxDisposition"`
-	TaxClassification string         `json:"taxClassification,omitempty"`
-	VolumetricFactor  string         `json:"volumetricFactor,omitempty"`
-	Fx                *fxCaliberBody `json:"fx,omitempty"`
-	RegisteredAt      string         `json:"registeredAt"`
+	TaxDisposition             string         `json:"taxDisposition"`
+	TaxClassification          string         `json:"taxClassification,omitempty"`
+	HistoricalVolumetricFactor string         `json:"historicalVolumetricFactor,omitempty"`
+	Fx                         *fxCaliberBody `json:"fx,omitempty"`
+	RegisteredAt               string         `json:"registeredAt"`
 }
 
 type fxCaliberBody struct {
@@ -542,10 +546,10 @@ func pricePolicyBodyOf(row ports.PricePolicyRow) pricePolicyBody {
 	}
 	if row.HasCaliber {
 		caliber := &pricePolicyCaliberBody{
-			TaxDisposition:    row.TaxDisposition,
-			TaxClassification: row.TaxClassification,
-			VolumetricFactor:  row.VolumetricFactor,
-			RegisteredAt:      rfc3339(row.CaliberRegisteredAt),
+			TaxDisposition:             row.TaxDisposition,
+			TaxClassification:          row.TaxClassification,
+			HistoricalVolumetricFactor: row.HistoricalVolumetricFactor,
+			RegisteredAt:               rfc3339(row.CaliberRegisteredAt),
 		}
 		if row.HasFx {
 			caliber.Fx = &fxCaliberBody{

@@ -231,12 +231,12 @@ type PricePolicyBodyDeclaration struct {
 	Caliber       *PricePolicyCaliberDeclaration
 }
 
-// PricePolicyCaliberDeclaration 是价格政策声明的计价口径输入。Tax 与 Volumetric 必需（零值由
-// 领域构造门拒），Fx 可缺——不涉及外币的政策没有汇率口径，nil 就是「没声明」而不是零口径。
+// PricePolicyCaliberDeclaration 是价格政策声明的计价口径输入。Tax 必需（零值由领域构造门拒），
+// Fx 可缺——不涉及外币的政策没有汇率口径，nil 就是「没声明」而不是零口径。没有体积系数一格：那是
+// 价卡内容、不分方向，政策上任何方向都不声明（ADR-0260 决定二；理由见 domain.PricePolicyCaliber）。
 type PricePolicyCaliberDeclaration struct {
-	Tax        domain.TaxCaliber
-	Volumetric domain.VolumetricCaliber
-	Fx         *domain.FxCaliber
+	Tax domain.TaxCaliber
+	Fx  *domain.FxCaliber
 }
 
 // CustomerServiceRuleBodyDeclaration 是客户服务规则版本的正文输入（票 party-commercial-context-gaps/05，
@@ -729,9 +729,8 @@ func publicationContentOf(
 		// 口径是同一份正文的一部分（PricePolicyBodyDeclaration.Caliber 嵌在正文里），随正文一起进摘要；缺席不折进文档。
 		if body.Caliber != nil {
 			content.PricePolicy.Caliber = &domain.PricePolicyCaliberBody{
-				Tax:        body.Caliber.Tax,
-				Volumetric: body.Caliber.Volumetric,
-				Fx:         body.Caliber.Fx,
+				Tax: body.Caliber.Tax,
+				Fx:  body.Caliber.Fx,
 			}
 		}
 		return content, true
@@ -1039,12 +1038,10 @@ func declarationWrites(
 		})
 
 		if body.Caliber != nil {
-			caliber, err := pricePolicyCaliberOf(version, *body.Caliber)
+			// 口径与正文是同一份声明的两半：口径的方向就是正文的方向，由本编排抄给它，声明输入面上没有
+			// 第二个方向可以对不上；绕开本编排自己造口径的调用方由 0022 的复合外键在库上拦。
+			caliber, err := pricePolicyCaliberOf(version, body.Direction, *body.Caliber)
 			if err != nil {
-				return nil, fmt.Errorf("price policy caliber: %w", err)
-			}
-			// 口径与正文是同一份声明的两半：方向对不上整项拒绝，正文也不写。
-			if err := caliber.ConsistentWithDirection(body.Direction); err != nil {
 				return nil, fmt.Errorf("price policy caliber: %w", err)
 			}
 			// 紧跟正文之后写：0022 的外键要求正文行先在。
@@ -1213,15 +1210,16 @@ func declarationOutcomeOfCustomerServiceRule(
 }
 
 // pricePolicyCaliberOf 按汇率格在不在场选构造门：nil 是合法缺席，走不带 Fx 的那条；零值 Fx 只会
-// 从带指针的那条进来并被领域拒，缺席与缺件因此在这里就分开。
+// 从带指针的那条进来并被领域拒，缺席与缺件因此在这里就分开。方向取政策正文的方向：口径没有自己的方向声明。
 func pricePolicyCaliberOf(
 	version domain.CommercialVersion,
+	direction domain.PriceDirection,
 	declaration PricePolicyCaliberDeclaration,
 ) (domain.PricePolicyCaliber, error) {
 	if declaration.Fx == nil {
-		return domain.NewPricePolicyCaliber(version, declaration.Tax, declaration.Volumetric)
+		return domain.NewPricePolicyCaliber(version, direction, declaration.Tax)
 	}
-	return domain.NewPricePolicyCaliberWithFx(version, declaration.Tax, declaration.Volumetric, *declaration.Fx)
+	return domain.NewPricePolicyCaliberWithFx(version, direction, declaration.Tax, *declaration.Fx)
 }
 
 // declarationOutcomeOfPricePolicy 与 declarationOutcomeOfPricePolicyCaliber 把两册各自的落点折成

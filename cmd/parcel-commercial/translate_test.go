@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -873,14 +874,13 @@ func controlPolicyBatchJSON(body string) string {
 
 // Covers: 价格政策正文（票 party-commercial-context-gaps/06）：方向、方案绑定、发布当时 parcel-pricing
 // 的答复（planDirection / conversion，ADR-0057，由写批文的人照价卡目录抄）、范围与区间逐项过构造门；
-// 口径嵌在正文里，税务两格与体积一格随方向耦合，汇率一节可缺——缺席翻成 nil 而不是零口径。
+// 口径嵌在正文里，税务两格耦合，汇率一节可缺——缺席翻成 nil 而不是零口径。
 func TestAPricePolicyBodyTranslatesWithItsCaliber(t *testing.T) {
 	t.Run("sell with full caliber", func(t *testing.T) {
 		commands, err := publishCommandsFromJSON([]byte(priceBatchJSON(`"direction": "SELL",
 			"pricingPlan": "plan-buy-1", "planDirection": "BUY", "conversion": "FROZEN_BUY_EVALUATION",
 			"scope": "scope-1", "effectiveStartsAt": "2026-01-01T00:00:00Z", "effectiveEndsAt": "2026-12-31T00:00:00Z",
 			"caliber": {"taxDisposition": "TAX_INCLUSIVE", "taxClassification": "vat-standard",
-				"volumetricFactor": "sell-divisor-5000-cm",
 				"fx": {"quoteType": "boc-cash-selling", "asOfSemantics": "AT_ORDER_DATE", "asOfPolicyVersion": "asof-policy/v3"}}`)))
 		if err != nil {
 			t.Fatalf("翻译价格政策批：%v", err)
@@ -901,10 +901,6 @@ func TestAPricePolicyBodyTranslatesWithItsCaliber(t *testing.T) {
 		classification, ok := body.Caliber.Tax.Classification()
 		if body.Caliber.Tax.Disposition() != pcdomain.TaxInclusive || !ok || classification.String() != "vat-standard" {
 			t.Fatalf("税务口径变形：%+v", body.Caliber.Tax)
-		}
-		factor, ok := body.Caliber.Volumetric.Factor()
-		if body.Caliber.Volumetric.Direction() != pcdomain.SellDirection || !ok || factor.String() != "sell-divisor-5000-cm" {
-			t.Fatalf("体积口径变形：%+v", body.Caliber.Volumetric)
 		}
 		if body.Caliber.Fx == nil || body.Caliber.Fx.QuoteType().String() != "boc-cash-selling" ||
 			body.Caliber.Fx.AsOfSemantics().String() != "AT_ORDER_DATE" ||
@@ -928,9 +924,6 @@ func TestAPricePolicyBodyTranslatesWithItsCaliber(t *testing.T) {
 		if _, ok := caliber.Tax.Classification(); ok || caliber.Tax.Disposition() != pcdomain.TaxNotApplicable {
 			t.Fatalf("税务口径变形：%+v", caliber.Tax)
 		}
-		if _, ok := caliber.Volumetric.Factor(); ok || caliber.Volumetric.Direction() != pcdomain.BuyDirection {
-			t.Fatalf("采购方向的体积口径不该有系数：%+v", caliber.Volumetric)
-		}
 	})
 
 	t.Run("body without caliber", func(t *testing.T) {
@@ -952,12 +945,6 @@ func TestAPricePolicyBodyTranslatesWithItsCaliber(t *testing.T) {
 			"conversion": "GUESS", "scope": "s", "effectiveStartsAt": "2026-01-01T00:00:00Z"`),
 		"缺定价方案": priceBatchJSON(`"direction": "SELL", "planDirection": "SELL",
 			"conversion": "NONE", "scope": "s", "effectiveStartsAt": "2026-01-01T00:00:00Z"`),
-		"销售口径缺体积系数": priceBatchJSON(`"direction": "SELL", "pricingPlan": "p", "planDirection": "SELL",
-			"conversion": "NONE", "scope": "s", "effectiveStartsAt": "2026-01-01T00:00:00Z",
-			"caliber": {"taxDisposition": "TAX_NOT_APPLICABLE"}`),
-		"采购口径带体积系数": priceBatchJSON(`"direction": "BUY", "pricingPlan": "p", "planDirection": "BUY",
-			"conversion": "NONE", "scope": "s", "effectiveStartsAt": "2026-01-01T00:00:00Z",
-			"caliber": {"taxDisposition": "TAX_NOT_APPLICABLE", "volumetricFactor": "f"}`),
 		"含税缺分类": priceBatchJSON(`"direction": "BUY", "pricingPlan": "p", "planDirection": "BUY",
 			"conversion": "NONE", "scope": "s", "effectiveStartsAt": "2026-01-01T00:00:00Z",
 			"caliber": {"taxDisposition": "TAX_INCLUSIVE"}`),
@@ -980,6 +967,35 @@ func TestAPricePolicyBodyTranslatesWithItsCaliber(t *testing.T) {
 				t.Fatal("坏输入被翻译收下了")
 			}
 		})
+	}
+}
+
+// Covers: AT-PC-062 的受控批量口半边——体积系数是价卡内容、不分方向，商业价格政策任何方向都不在口径上声明（ADR-0260
+// 决定二）。批文口径里给了 volumetricFactor，三个方向同一判法：整批在翻译时拒（一行不写，CLI 退出非零），原因点名
+// ErrVolumetricFactorOnPricePolicy；只有税务与可缺汇率的销售口径翻得过去——销售方向不再因为缺系数被拒。
+func TestAPricePolicyCaliberCarryingAVolumetricFactorIsNotAccepted(t *testing.T) {
+	for _, direction := range []string{"SELL", "BUY", "INTERNAL"} {
+		t.Run(direction+" with a factor", func(t *testing.T) {
+			raw := priceBatchJSON(`"direction": "` + direction + `", "pricingPlan": "p", "planDirection": "` + direction + `",
+				"conversion": "NONE", "scope": "s", "effectiveStartsAt": "2026-01-01T00:00:00Z",
+				"caliber": {"taxDisposition": "TAX_NOT_APPLICABLE", "volumetricFactor": "5000"}`)
+			if _, err := publishCommandsFromJSON([]byte(raw)); !errors.Is(err, pcdomain.ErrVolumetricFactorOnPricePolicy) {
+				t.Fatalf("%s 方向的口径带着体积系数：err = %v, want ErrVolumetricFactorOnPricePolicy", direction, err)
+			}
+		})
+	}
+
+	commands, err := publishCommandsFromJSON([]byte(priceBatchJSON(`"direction": "SELL",
+		"pricingPlan": "plan-sell-1", "planDirection": "SELL", "conversion": "NONE",
+		"scope": "scope-1", "effectiveStartsAt": "2026-01-01T00:00:00Z",
+		"caliber": {"taxDisposition": "TAX_EXCLUSIVE", "taxClassification": "vat-standard",
+			"fx": {"quoteType": "boc-cash-selling", "asOfSemantics": "AT_ORDER_DATE", "asOfPolicyVersion": "asof-policy/v3"}}`)))
+	if err != nil {
+		t.Fatalf("只有税务与汇率的销售口径被拒：%v", err)
+	}
+	caliber := commands[0].Declarations.PricePolicyBody.Caliber
+	if caliber == nil || caliber.Fx == nil || caliber.Tax.Disposition() != pcdomain.TaxExclusive {
+		t.Fatalf("销售口径没有原样翻过去：%+v", caliber)
 	}
 }
 

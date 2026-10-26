@@ -256,10 +256,14 @@ type pricePolicyBodyDocument struct {
 	Caliber           *pricePolicyCaliberDocument `json:"caliber,omitempty"`
 }
 
-// pricePolicyCaliberDocument 是价格政策声明的计价口径。没有方向键：体积口径的方向就是政策的
-// 方向，批文里再写一遍只会造出「两个方向对不上」这种本不该存在的输入。taxClassification 只在
-// 含税/未税时给、volumetricFactor 只在 SELL 时给——反过来给了或漏了都由领域构造门拒。fx 一节
-// 可缺：不涉及外币的政策没有汇率口径，缺席是「没声明」而不是零口径。
+// pricePolicyCaliberDocument 是价格政策声明的计价口径。没有方向键：口径的方向就是政策的方向，
+// 批文里再写一遍只会造出「两个方向对不上」这种本不该存在的输入。taxClassification 只在含税/未税
+// 时给——反过来给了或漏了都由领域构造门拒。fx 一节可缺：不涉及外币的政策没有汇率口径，缺席是
+// 「没声明」而不是零口径。
+//
+// volumetricFactor 一键认得而不收：体积系数是价卡内容、不分方向，政策上任何方向都不声明（ADR-0260 决定二，
+// AT-PC-062）。给了就由 pricePolicyCaliberFrom 点名拒（pcdomain.ErrVolumetricFactorOnPricePolicy），三个方向同一判法；
+// 不当未知键拒，是为让照旧批文写来的人看见这一格去了价卡，而不是只看见「不认识这个字段」。
 //
 // 没有加点键，且不是漏掉：票 02 裁 (a) 首发显式未决，批文里出现 markup 之类就是未知字段、拒收。
 type pricePolicyCaliberDocument struct {
@@ -1117,7 +1121,7 @@ func pricePolicyBodyFrom(document pricePolicyBodyDocument) (*pcapplication.Price
 		Effective:     interval,
 	}
 	if document.Caliber != nil {
-		caliber, err := pricePolicyCaliberFrom(direction, *document.Caliber)
+		caliber, err := pricePolicyCaliberFrom(*document.Caliber)
 		if err != nil {
 			return nil, err
 		}
@@ -1126,12 +1130,14 @@ func pricePolicyBodyFrom(document pricePolicyBodyDocument) (*pcapplication.Price
 	return body, nil
 }
 
-// pricePolicyCaliberFrom 按政策方向装体积口径——方向不从批文读，所以批文口造不出方向不一致的口径；
-// 用例里那道 ConsistentWithDirection 守的是绕开本翻译的调用方。
+// pricePolicyCaliberFrom 把口径一节逐格过构造门。方向不从批文读，由发布用例从正文抄给口径，所以批文口
+// 造不出方向不一致的口径。
 func pricePolicyCaliberFrom(
-	direction pcdomain.PriceDirection,
 	document pricePolicyCaliberDocument,
 ) (*pcapplication.PricePolicyCaliberDeclaration, error) {
+	if document.VolumetricFactor != "" {
+		return nil, fmt.Errorf("口径带体积系数 %q：%w", document.VolumetricFactor, pcdomain.ErrVolumetricFactorOnPricePolicy)
+	}
 	disposition, err := taxDispositionFrom(document.TaxDisposition)
 	if err != nil {
 		return nil, err
@@ -1146,17 +1152,7 @@ func pricePolicyCaliberFrom(
 	if err != nil {
 		return nil, fmt.Errorf("税务口径 %q 与分类 %q：%w", document.TaxDisposition, document.TaxClassification, err)
 	}
-	factor := pcdomain.VolumetricFactorReference{}
-	if document.VolumetricFactor != "" {
-		if factor, err = pcdomain.NewVolumetricFactorReference(document.VolumetricFactor); err != nil {
-			return nil, err
-		}
-	}
-	volumetric, err := pcdomain.NewVolumetricCaliber(direction, factor)
-	if err != nil {
-		return nil, fmt.Errorf("方向 %s 的体积口径（系数 %q）：%w", direction, document.VolumetricFactor, err)
-	}
-	caliber := &pcapplication.PricePolicyCaliberDeclaration{Tax: tax, Volumetric: volumetric}
+	caliber := &pcapplication.PricePolicyCaliberDeclaration{Tax: tax}
 	if document.Fx != nil {
 		quoteType, err := pcdomain.NewFxQuoteTypeReference(document.Fx.QuoteType)
 		if err != nil {

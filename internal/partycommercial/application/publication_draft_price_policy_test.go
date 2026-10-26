@@ -14,7 +14,7 @@ import (
 func TestPublishingAPriceRuleDraftRegistersBodyAndCaliberInTheSameStroke(t *testing.T) {
 	drafts := newDraftRegistryDouble()
 	body := pricePolicyBody(t, domain.SellDirection, domain.BuyDirection, domain.PlanBindingFrozenBuyEvaluation)
-	body.Caliber = sellCaliber(t, true)
+	body.Caliber = policyCaliber(t, true)
 	content := domain.PublicationContent{Kind: domain.PriceRuleObject, PricePolicy: &domain.PricePolicyBody{
 		Direction:     body.Direction,
 		PricingPlan:   body.PricingPlan,
@@ -22,7 +22,7 @@ func TestPublishingAPriceRuleDraftRegistersBodyAndCaliberInTheSameStroke(t *test
 		Conversion:    body.Conversion,
 		Scope:         body.Scope,
 		Effective:     body.Effective,
-		Caliber:       &domain.PricePolicyCaliberBody{Tax: body.Caliber.Tax, Volumetric: body.Caliber.Volumetric, Fx: body.Caliber.Fx},
+		Caliber:       &domain.PricePolicyCaliberBody{Tax: body.Caliber.Tax, Fx: body.Caliber.Fx},
 	}}
 	shell := draftShell(t, domain.PriceRuleObject, "price-1", "v1")
 

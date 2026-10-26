@@ -243,9 +243,10 @@ type PreAcceptanceFinancialControlPolicyContentView interface {
 	) (domain.PreAcceptanceFinancialControlPolicy, bool, error)
 }
 
-// PricePolicyCaliberView 取已唯一选出的价格规则版本声明的计价口径：税务口径、体积口径与可缺的
-// 汇率口径。这是 parcel-pricing 在登记参考序列取值时按 quoteBasis 冻结口径正文要走的读口
-// （票 02 裁「登记时冻结，不走端口现取」——冻的是这里读回的正文，读一次、冻进序列，之后不再回来问）。
+// PricePolicyCaliberView 取已唯一选出的价格规则版本声明的计价口径：税务口径与可缺的汇率口径。
+// 这是 parcel-pricing 在登记参考序列取值时按 quoteBasis 冻结口径正文要走的读口（票 02 裁「登记时
+// 冻结，不走端口现取」——冻的是这里读回的正文，读一次、冻进序列，之后不再回来问）；评价本身不读
+// 政策正文（ADR-0260 决定三）。体积系数不在口径里：那是价卡内容（ADR-0260 决定二）。
 //
 // 分界同 CreditPolicyContentView：口径不参与选用，不进整册与 ViewRevision。found=false = 口径
 // 未登记（无行）——按 0022 的外键，那同时意味着政策正文可能也未登记，调用方分不出也不必分：
@@ -728,8 +729,9 @@ func (outcome PreAcceptanceFinancialControlPolicySaveOutcome) String() string {
 }
 
 // PricePolicyCaliberSaveOutcome 是一次价格政策口径登记在持久化面的落点（ADR-0031 同款）：
-// `已登记`是重放，`内容冲突`是同一价格规则版本被登记成另一份口径（税务、体积、汇率任一格
-// 不同，含汇率格从缺席变在场）。两者都不是 error，绝不覆盖。
+// `已登记`是重放，`内容冲突`是同一价格规则版本被登记成另一份口径（税务、汇率任一格不同，含
+// 汇率格从缺席变在场；在册的是 0041 之前带体积系数的销售行时同样算异内容）。两者都不是 error，
+// 绝不覆盖。
 type PricePolicyCaliberSaveOutcome uint8
 
 const (
@@ -852,9 +854,9 @@ type PublicationRegistry interface {
 		ctx context.Context,
 		agreement domain.SupplierAgreement,
 	) (SupplierAgreementSaveOutcome, error)
-	// SavePricePolicyCaliber 登记一份价格规则版本声明的计价口径（税务、体积、可缺的汇率）。
+	// SavePricePolicyCaliber 登记一份价格规则版本声明的计价口径（税务、可缺的汇率）。
 	// 它不代替 SavePricePolicy，且**只能在同一事务里跟在它后面**：0022 以外键把口径钉在
-	// 政策正文行上并连带方向一致——没有正文行、或体积方向与政策方向不符，库上就进不去
+	// 政策正文行上并连带方向一致——没有正文行、或口径的方向与政策方向不符，库上就进不去
 	// （票 party-commercial-context-gaps/06）。口径不进整册，消费方经 PricePolicyCaliberView 点读。
 	SavePricePolicyCaliber(
 		ctx context.Context,
@@ -1450,8 +1452,13 @@ type PreAcceptanceControlRow struct {
 //
 // HasCaliber 不能省:口径随正文同笔登记是发布编排的纪律,但 0010 早于 0022 存在,历史上
 // 只有正文没有口径的行是合法状态。口径各字段只在 HasCaliber 为真时有意义;其中
-// TaxClassification 只在含税/未税时在场、VolumetricFactor 只在销售方向在场、汇率三格只在
-// HasFx 为真时在场——三处缺席都是口径说出的真话,不是缺件,与库上 CHECK 同形。
+// TaxClassification 只在含税/未税时在场、汇率三格只在 HasFx 为真时在场——两处缺席都是口径
+// 说出的真话,不是缺件,与库上 CHECK 同形。
+//
+// HistoricalVolumetricFactor 是 0041 迁移之前销售方向政策登下的体积系数引用,原样留册、读面
+// 透出但**不参与计价**(体积系数是价卡内容,ADR-0260 决定二);0041 之后任何方向都登不进新值,
+// 所以这一格只在历史行上非空。读面照实标出而不是抹掉,是让看册的人知道那一版政策当年声明过
+// 什么、而计价从来没有读它。
 type PricePolicyRow struct {
 	ObjectID          string
 	VersionLabel      string
@@ -1465,15 +1472,15 @@ type PricePolicyRow struct {
 	HasEffectiveEnd   bool
 	RegisteredAt      time.Time
 
-	HasCaliber          bool
-	TaxDisposition      string
-	TaxClassification   string
-	VolumetricFactor    string
-	HasFx               bool
-	FxQuoteType         string
-	FxAsOfSemantics     string
-	FxAsOfPolicyVersion string
-	CaliberRegisteredAt time.Time
+	HasCaliber                 bool
+	TaxDisposition             string
+	TaxClassification          string
+	HistoricalVolumetricFactor string
+	HasFx                      bool
+	FxQuoteType                string
+	FxAsOfSemantics            string
+	FxAsOfPolicyVersion        string
+	CaliberRegisteredAt        time.Time
 }
 
 // SettlementPolicyRow 是结算政策册上列的一行:方式与六维适用范围平铺(ADR-0044)。

@@ -42,27 +42,13 @@ func taxCaliber(t *testing.T, disposition domain.TaxDisposition, classification 
 	return tax
 }
 
-func volumetricCaliber(t *testing.T, direction domain.PriceDirection, factor string) domain.VolumetricCaliber {
-	t.Helper()
-	var reference domain.VolumetricFactorReference
-	if factor != "" {
-		reference = commercialValue(t, domain.NewVolumetricFactorReference, factor)
-	}
-	volumetric, err := domain.NewVolumetricCaliber(direction, reference)
-	if err != nil {
-		t.Fatalf("new volumetric caliber: %v", err)
-	}
-	return volumetric
-}
-
-// sellPolicyWithCaliber 是一份 SELL 政策带完整口径（未税 + 分类、销售系数、汇率三格）；汇率取 price_policy_caliber_test.go
+// sellPolicyWithCaliber 是一份 SELL 政策带完整口径（未税 + 分类、汇率三格）；汇率取 price_policy_caliber_test.go
 // 的 fxCaliber。
 func sellPolicyWithCaliber(t *testing.T, withFx bool) domain.PricePolicyBody {
 	t.Helper()
 	body := pricePolicyBodyFor(t, domain.SellDirection, domain.SellDirection, domain.PlanBindingConversionNone)
 	caliber := &domain.PricePolicyCaliberBody{
-		Tax:        taxCaliber(t, domain.TaxExclusive, "vat-standard"),
-		Volumetric: volumetricCaliber(t, domain.SellDirection, "sell-divisor-5000-cm"),
+		Tax: taxCaliber(t, domain.TaxExclusive, "vat-standard"),
 	}
 	if withFx {
 		fx := fxCaliber(t)
@@ -133,8 +119,9 @@ func commercialInterval(t *testing.T, startsAt, endsAt time.Time) domain.Effecti
 }
 
 // Covers: 票 admin-write-faces/14「canonical 文档键名镜像受控批文」— pricePolicy 节的键与 cmd/parcel-commercial 批文
-// pricePolicyBodyDocument / pricePolicyCaliberDocument / fxCaliberDocument 同名；口径节没有方向键；三处可缺的键缺席即不在场
-// （不适用因而没有分类、采购方向因而没有系数、不涉外币因而没有 fx）；没口径的正文整键缺席。
+// pricePolicyBodyDocument / pricePolicyCaliberDocument / fxCaliberDocument 同名；口径节没有方向键，也没有体积系数键——销售
+// 方向同样没有（ADR-0260 决定二）；两处可缺的键缺席即不在场（不适用因而没有分类、不涉外币因而没有 fx）；没口径的正文
+// 整键缺席。
 func TestPricePolicyDocumentMirrorsTheBatchKeys(t *testing.T) {
 	canonical := canonicalPricePolicy(t, sellPolicyWithCaliber(t, true))
 
@@ -162,12 +149,13 @@ func TestPricePolicyDocumentMirrorsTheBatchKeys(t *testing.T) {
 		body.Scope != "pricing-scope-1" || body.EffectiveStartsAt != "2026-01-03T00:00:00Z" {
 		t.Fatalf("pricePolicy = %#v", body)
 	}
-	if string(body.Caliber["taxDisposition"]) != `"TAX_EXCLUSIVE"` || string(body.Caliber["taxClassification"]) != `"vat-standard"` ||
-		string(body.Caliber["volumetricFactor"]) != `"sell-divisor-5000-cm"` {
+	if string(body.Caliber["taxDisposition"]) != `"TAX_EXCLUSIVE"` || string(body.Caliber["taxClassification"]) != `"vat-standard"` {
 		t.Fatalf("caliber = %s", body.Caliber)
 	}
-	if _, present := body.Caliber["direction"]; present {
-		t.Fatalf("the caliber node must not carry a direction key: %s", body.Caliber)
+	for _, foreign := range []string{"direction", "volumetricFactor"} {
+		if _, present := body.Caliber[foreign]; present {
+			t.Fatalf("the caliber node must not carry a %s key: %s", foreign, body.Caliber)
+		}
 	}
 	var fx map[string]string
 	if err := json.Unmarshal(body.Caliber["fx"], &fx); err != nil {
@@ -182,8 +170,7 @@ func TestPricePolicyDocumentMirrorsTheBatchKeys(t *testing.T) {
 
 	buyNotApplicable := pricePolicyBodyFor(t, domain.BuyDirection, domain.BuyDirection, domain.PlanBindingConversionNone)
 	buyNotApplicable.Caliber = &domain.PricePolicyCaliberBody{
-		Tax:        taxCaliber(t, domain.TaxNotApplicable, ""),
-		Volumetric: volumetricCaliber(t, domain.BuyDirection, ""),
+		Tax: taxCaliber(t, domain.TaxNotApplicable, ""),
 	}
 	sparse := string(canonicalPricePolicy(t, buyNotApplicable).Document())
 	for _, absent := range []string{"taxClassification", "volumetricFactor", `"fx"`} {
@@ -199,8 +186,7 @@ func TestPricePolicyDocumentMirrorsTheBatchKeys(t *testing.T) {
 
 // Covers: 票 admin-write-faces/14「显隐是呈现不是裁门」— 折成文档前过的是与发布时同一套门：逐格非零（ErrInvalidPricePolicy）、
 // 未声明转换的跨向绑定（ErrPriceDirectionBindingConflict，AT-PC-033）、同向却声明转换（ErrInvalidPricePolicy）、口径零格与
-// 指向零值的 fx（ErrInvalidPricePolicyCaliber）、口径方向与政策方向不一致（ErrPricePolicyCaliberDirectionMismatch）；
-// 正文缺席与冒别册的名照旧分开答。
+// 指向零值的 fx（ErrInvalidPricePolicyCaliber）；正文缺席与冒别册的名照旧分开答。
 func TestPricePolicyCanonicalizationRefusesWhatPublicationWouldRefuse(t *testing.T) {
 	_, err := domain.CanonicalizePublicationContent(domain.PublicationContent{Kind: domain.PriceRuleObject})
 	if !errors.Is(err, domain.ErrPublicationContentAbsent) {
@@ -212,15 +198,10 @@ func TestPricePolicyCanonicalizationRefusesWhatPublicationWouldRefuse(t *testing
 		t.Fatalf("price body under credit kind: err = %v, want ErrPublicationContentKindMismatch", err)
 	}
 
-	mismatched := pricePolicyBodyFor(t, domain.BuyDirection, domain.BuyDirection, domain.PlanBindingConversionNone)
-	mismatched.Caliber = &domain.PricePolicyCaliberBody{
-		Tax:        taxCaliber(t, domain.TaxNotApplicable, ""),
-		Volumetric: volumetricCaliber(t, domain.SellDirection, "sell-divisor-5000-cm"),
-	}
 	zeroTax := sellPolicyWithCaliber(t, false)
-	zeroTax.Caliber = &domain.PricePolicyCaliberBody{Volumetric: zeroTax.Caliber.Volumetric}
+	zeroTax.Caliber = &domain.PricePolicyCaliberBody{}
 	zeroFx := sellPolicyWithCaliber(t, false)
-	zeroFx.Caliber = &domain.PricePolicyCaliberBody{Tax: zeroFx.Caliber.Tax, Volumetric: zeroFx.Caliber.Volumetric, Fx: &domain.FxCaliber{}}
+	zeroFx.Caliber = &domain.PricePolicyCaliberBody{Tax: zeroFx.Caliber.Tax, Fx: &domain.FxCaliber{}}
 
 	refusals := map[string]struct {
 		body domain.PricePolicyBody
@@ -230,7 +211,6 @@ func TestPricePolicyCanonicalizationRefusesWhatPublicationWouldRefuse(t *testing
 		"未声明转换的跨向绑定": {body: pricePolicyBodyFor(t, domain.SellDirection, domain.BuyDirection, domain.PlanBindingConversionNone), want: domain.ErrPriceDirectionBindingConflict},
 		"采购政策绑销售方案":  {body: pricePolicyBodyFor(t, domain.BuyDirection, domain.SellDirection, domain.PlanBindingFrozenBuyEvaluation), want: domain.ErrPriceDirectionBindingConflict},
 		"同向却声明转换":    {body: pricePolicyBodyFor(t, domain.SellDirection, domain.SellDirection, domain.PlanBindingFrozenBuyEvaluation), want: domain.ErrInvalidPricePolicy},
-		"口径方向与政策不一致": {body: mismatched, want: domain.ErrPricePolicyCaliberDirectionMismatch},
 		"口径税务格为零":    {body: zeroTax, want: domain.ErrInvalidPricePolicyCaliber},
 		"汇率指向零值":     {body: zeroFx, want: domain.ErrInvalidPricePolicyCaliber},
 	}
@@ -246,8 +226,8 @@ func TestPricePolicyCanonicalizationRefusesWhatPublicationWouldRefuse(t *testing
 }
 
 // Covers: ADR-0126 Decision 三（正文快照）— 价格规则的规范化文档折得回正文：方向、方案引用、发布期邻接答复、范围、区间与
-// 口径（税务分类、销售系数、汇率三格）逐格回到领域值对象，折回去再算一遍与列里的摘要相等；没口径折回 nil、没 fx 折回 nil。
-// 快照里坏一格（SELL 绑 BUY 却把转换改成 NONE；采购方向却带系数）折不回——快照是数据，正文立不立得住仍由构造门说。
+// 口径（税务分类、汇率三格）逐格回到领域值对象，折回去再算一遍与列里的摘要相等；没口径折回 nil、没 fx 折回 nil。
+// 快照里坏一格（SELL 绑 BUY 却把转换改成 NONE）折不回——快照是数据，正文立不立得住仍由构造门说。
 func TestPricePolicyDocumentRehydratesToTheSameBody(t *testing.T) {
 	body := sellPolicyWithCaliber(t, true)
 	canonical := canonicalPricePolicy(t, body)
@@ -268,7 +248,7 @@ func TestPricePolicyDocumentRehydratesToTheSameBody(t *testing.T) {
 	if rehydrated.Caliber == nil {
 		t.Fatal("caliber did not rehydrate")
 	}
-	if rehydrated.Caliber.Tax != body.Caliber.Tax || rehydrated.Caliber.Volumetric != body.Caliber.Volumetric {
+	if rehydrated.Caliber.Tax != body.Caliber.Tax {
 		t.Fatalf("caliber = %#v, want %#v", rehydrated.Caliber, body.Caliber)
 	}
 	if rehydrated.Caliber.Fx == nil || *rehydrated.Caliber.Fx != *body.Caliber.Fx {
@@ -300,10 +280,28 @@ func TestPricePolicyDocumentRehydratesToTheSameBody(t *testing.T) {
 	if _, err := domain.RehydratePublicationContent(bare.Canonicalization(), []byte(corruptedBinding)); !errors.Is(err, domain.ErrPriceDirectionBindingConflict) {
 		t.Fatalf("corrupted binding: err = %v, want ErrPriceDirectionBindingConflict", err)
 	}
-	corruptedCaliber := strings.Replace(string(canonical.Document()), `"direction":"SELL"`, `"direction":"BUY"`, 1)
-	corruptedCaliber = strings.Replace(corruptedCaliber, `"planDirection":"SELL"`, `"planDirection":"BUY"`, 1)
-	if _, err := domain.RehydratePublicationContent(canonical.Canonicalization(), []byte(corruptedCaliber)); !errors.Is(err, domain.ErrInvalidVolumetricCaliber) {
-		t.Fatalf("a BUY policy carrying a volumetric factor: err = %v, want ErrInvalidVolumetricCaliber", err)
+}
+
+// Covers: AT-PC-062 在快照上的那一半——体积系数不在政策上声明（ADR-0260 决定二），带 volumetricFactor 的 PCC-1 文档只可能是
+// 先前按销售方向写下的快照：折回时点名拒（ErrVolumetricFactorOnPricePolicy，它 Is ErrInvalidPricePolicyCaliber），不静默丢键
+// 后算出一个对不上的摘要；同一份文档去掉系数照常折回。文档形状不变（键仍在结构里，只是没有正文能写出它），PCC-1 不换号。
+func TestAStoredPricePolicyDocumentCarryingAVolumetricFactorDoesNotRehydrate(t *testing.T) {
+	historical := `{"canonicalization":"PCC-1","kind":"PRICE_RULE","pricePolicy":{"direction":"SELL","pricingPlan":"plan-1@v1",` +
+		`"planDirection":"SELL","conversion":"NONE","scope":"pricing-scope-1","effectiveStartsAt":"2026-01-03T00:00:00Z",` +
+		`"caliber":{"taxDisposition":"TAX_EXCLUSIVE","taxClassification":"vat-standard","volumetricFactor":"sell-divisor-5000-cm"}}}`
+	_, err := domain.RehydratePublicationContent("PCC-1", []byte(historical))
+	if !errors.Is(err, domain.ErrVolumetricFactorOnPricePolicy) || !errors.Is(err, domain.ErrInvalidPricePolicyCaliber) {
+		t.Fatalf("a historical SELL document carrying a volumetric factor: err = %v, want ErrVolumetricFactorOnPricePolicy", err)
+	}
+	withoutFactor := strings.Replace(historical, `,"volumetricFactor":"sell-divisor-5000-cm"`, ``, 1)
+	content, err := domain.RehydratePublicationContent("PCC-1", []byte(withoutFactor))
+	if err != nil || content.PricePolicy == nil || content.PricePolicy.Caliber == nil {
+		t.Fatalf("the same document without the factor must rehydrate: %#v, %v", content.PricePolicy, err)
+	}
+	// 形状不变的证据：不带系数的那份折回再规范化，逐字节就是原文——键、键序与编码都没有动。
+	again, err := domain.CanonicalizePublicationContent(content)
+	if err != nil || string(again.Document()) != withoutFactor {
+		t.Fatalf("re-canonicalized document drifted:\n got %s\nwant %s (err %v)", again.Document(), withoutFactor, err)
 	}
 }
 

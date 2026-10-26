@@ -491,7 +491,7 @@ func (catalogue *OperationsCatalogue) ListPricePolicies(
 			row.HasCaliber = true
 			row.TaxDisposition = *taxDisposition
 			row.TaxClassification = stringOrEmpty(taxClassification)
-			row.VolumetricFactor = stringOrEmpty(volumetricFactor)
+			row.HistoricalVolumetricFactor = stringOrEmpty(volumetricFactor)
 			if caliberRegisteredAt != nil {
 				row.CaliberRegisteredAt = *caliberRegisteredAt
 			}

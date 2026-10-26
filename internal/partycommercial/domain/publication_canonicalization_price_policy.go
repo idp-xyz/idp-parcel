@@ -7,7 +7,7 @@ import (
 
 // 本文件是价格规则册（PRICE_RULE）接进服务端规范化的那一格（加册不换号，仍是 PCC-1——ADR-0126 Decision 一；票
 // admin-write-faces/14）。正文两层：0010 的政策正文（方向 × 方案绑定 × 政策自己的范围与区间，连同发布当时保全的
-// planDirection 与 conversion，ADR-0057）与 0022 的口径（税务、体积、可缺的汇率）。口径随正文同笔登记是发布编排的
+// planDirection 与 conversion，ADR-0057）与 0022 的口径（税务、可缺的汇率）。口径随正文同笔登记是发布编排的
 // 纪律（ports.PricePolicyRow.HasCaliber 的注释），所以口径嵌在正文一格里、不另开一格：「只给口径不给正文」在结构上
 // 就写不出来，「先发正文、回头补口径」的两步也没有地方落。
 
@@ -27,17 +27,17 @@ type PricePolicyBody struct {
 	Caliber       *PricePolicyCaliberBody
 }
 
-// PricePolicyCaliberBody 是口径那一节的输入面：税务与体积必需，汇率可缺——不涉及外币的政策没有汇率口径，nil 就是
-// 「没声明」而不是零口径（判据同 application.PricePolicyCaliberDeclaration）。
+// PricePolicyCaliberBody 是口径那一节的输入面：税务必需，汇率可缺——不涉及外币的政策没有汇率口径，nil 就是
+// 「没声明」而不是零口径（判据同 application.PricePolicyCaliberDeclaration）。没有方向一格：口径的方向就是政策的方向，
+// 由拥有它的 PricePolicyBody 给。
 type PricePolicyCaliberBody struct {
-	Tax        TaxCaliber
-	Volumetric VolumetricCaliber
-	Fx         *FxCaliber
+	Tax TaxCaliber
+	Fx  *FxCaliber
 }
 
 // validate 在折成文档前过与发布时相同的门：NewCommercialPricePolicy 的逐格非零与 checkPlanBinding，口径走
-// NewPricePolicyCaliber / NewPricePolicyCaliberWithFx 的判据与 ConsistentWithDirection——只少拥有版本那一判。不另造
-// 校验：SELL 政策绑 BUY 方案而未声明转换（AT-PC-033）要在预览上就答给操作者，不能等到发布那一刻。
+// NewPricePolicyCaliber / NewPricePolicyCaliberWithFx 的判据——只少拥有版本那一判。不另造校验：SELL 政策绑 BUY 方案
+// 而未声明转换（AT-PC-033）要在预览上就答给操作者，不能等到发布那一刻。
 func (body PricePolicyBody) validate() error {
 	if !body.Direction.valid() || !body.PricingPlan.valid() || !body.PlanDirection.valid() ||
 		!body.Conversion.valid() || !body.Scope.valid() || !body.Effective.valid() {
@@ -47,19 +47,16 @@ func (body PricePolicyBody) validate() error {
 		return err
 	}
 	if body.Caliber != nil {
-		return body.Caliber.validate(body.Direction)
+		return body.Caliber.validate()
 	}
 	return nil
 }
 
-// validate 与 NewPricePolicyCaliber / NewPricePolicyCaliberWithFx 同判据：税务与体积各自立得住、汇率在场时立得住
-// （指向零值的 Fx 是缺件不是缺席，拒）；体积口径的方向必须与政策方向一致，否则 A 方向的系数会装进 B 方向的政策。
-func (caliber PricePolicyCaliberBody) validate(policyDirection PriceDirection) error {
-	if !caliber.Tax.valid() || !caliber.Volumetric.valid() || (caliber.Fx != nil && !caliber.Fx.valid()) {
+// validate 与 NewPricePolicyCaliber / NewPricePolicyCaliberWithFx 同判据：税务立得住、汇率在场时立得住（指向零值的 Fx
+// 是缺件不是缺席，拒）。
+func (caliber PricePolicyCaliberBody) validate() error {
+	if !caliber.Tax.valid() || (caliber.Fx != nil && !caliber.Fx.valid()) {
 		return ErrInvalidPricePolicyCaliber
-	}
-	if caliber.Volumetric.direction != policyDirection {
-		return ErrPricePolicyCaliberDirectionMismatch
 	}
 	return nil
 }
@@ -93,9 +90,14 @@ type canonicalPricePolicyBody struct {
 	Caliber           *canonicalPricePolicyCaliber `json:"caliber,omitempty"`
 }
 
-// canonicalPricePolicyCaliber 镜像批文 pricePolicyCaliberDocument：没有方向键——体积口径的方向就是政策的方向，文档里再写
-// 一遍只会造出「两个方向对不上」这种本不该存在的输入。三处可缺的键各是口径说出的真话（不适用因而没有分类、采购方向
-// 因而没有系数、不涉外币因而没有汇率），缺席即键不在场，不补空串。
+// canonicalPricePolicyCaliber 镜像批文 pricePolicyCaliberDocument：没有方向键——口径的方向就是政策的方向，文档里再写
+// 一遍只会造出「两个方向对不上」这种本不该存在的输入。两处可缺的键各是口径说出的真话（不适用因而没有分类、不涉外币
+// 因而没有汇率），缺席即键不在场，不补空串。
+//
+// VolumetricFactor 一键留在结构里，而本构建写不出它（PricePolicyCaliberBody 没有这一格）：带它的 PCC-1 文档只可能是先前
+// 按销售方向写下的快照，折回时点名拒（ErrVolumetricFactorOnPricePolicy），不让 json 当未知键静默丢掉、再算出一个与列上
+// 对不上的摘要。键、键序与编码都在，不带系数的文档逐字节同前，所以文档形状不变、PCC-1 不换号——变的是正文的合法集合，
+// 而 ADR-0014 Decision「规范化版本不表达业务规则变化」；ADR-0267 读法里算结构变化的加键、删键、改键这里一样都没有。
 type canonicalPricePolicyCaliber struct {
 	TaxDisposition    string              `json:"taxDisposition"`
 	TaxClassification string              `json:"taxClassification,omitempty"`
@@ -132,9 +134,6 @@ func canonicalPricePolicyCaliberOf(caliber PricePolicyCaliberBody) *canonicalPri
 	document := &canonicalPricePolicyCaliber{TaxDisposition: caliber.Tax.Disposition().String()}
 	if classification, applies := caliber.Tax.Classification(); applies {
 		document.TaxClassification = classification.String()
-	}
-	if factor, declared := caliber.Volumetric.Factor(); declared {
-		document.VolumetricFactor = factor.String()
 	}
 	if caliber.Fx != nil {
 		document.Fx = &canonicalFxCaliber{
@@ -192,7 +191,7 @@ func (document canonicalPricePolicyBody) body() (PricePolicyBody, error) {
 		Effective:     effective,
 	}
 	if document.Caliber != nil {
-		caliber, err := document.Caliber.body(direction)
+		caliber, err := document.Caliber.body()
 		if err != nil {
 			return PricePolicyBody{}, fmt.Errorf("caliber: %w", err)
 		}
@@ -204,9 +203,12 @@ func (document canonicalPricePolicyBody) body() (PricePolicyBody, error) {
 	return body, nil
 }
 
-// body 把口径一节折回领域值对象。体积口径的方向取政策方向——文档里没有方向键，所以从快照折不出方向不一致的口径；
-// 分类与系数两格的在场规则由 NewTaxCaliber / NewVolumetricCaliber 判，与库上 CHECK 同形。
-func (document canonicalPricePolicyCaliber) body(direction PriceDirection) (PricePolicyCaliberBody, error) {
+// body 把口径一节折回领域值对象。分类一格的在场规则由 NewTaxCaliber 判，与库上 CHECK 同形。带体积系数的文档点名拒
+// （见 canonicalPricePolicyCaliber 的注释）。
+func (document canonicalPricePolicyCaliber) body() (PricePolicyCaliberBody, error) {
+	if document.VolumetricFactor != "" {
+		return PricePolicyCaliberBody{}, fmt.Errorf("volumetricFactor %q: %w", document.VolumetricFactor, ErrVolumetricFactorOnPricePolicy)
+	}
 	disposition, known := TaxDispositionNamed(document.TaxDisposition)
 	if !known {
 		return PricePolicyCaliberBody{}, fmt.Errorf("taxDisposition: %w: %q", ErrInvalidTaxCaliber, document.TaxDisposition)
@@ -222,17 +224,7 @@ func (document canonicalPricePolicyCaliber) body(direction PriceDirection) (Pric
 	if err != nil {
 		return PricePolicyCaliberBody{}, fmt.Errorf("taxDisposition %q with classification %q: %w", document.TaxDisposition, document.TaxClassification, err)
 	}
-	var factor VolumetricFactorReference
-	if document.VolumetricFactor != "" {
-		if factor, err = NewVolumetricFactorReference(document.VolumetricFactor); err != nil {
-			return PricePolicyCaliberBody{}, fmt.Errorf("volumetricFactor: %w", err)
-		}
-	}
-	volumetric, err := NewVolumetricCaliber(direction, factor)
-	if err != nil {
-		return PricePolicyCaliberBody{}, fmt.Errorf("volumetricFactor %q under direction %s: %w", document.VolumetricFactor, direction, err)
-	}
-	caliber := PricePolicyCaliberBody{Tax: tax, Volumetric: volumetric}
+	caliber := PricePolicyCaliberBody{Tax: tax}
 	if document.Fx != nil {
 		quoteType, err := NewFxQuoteTypeReference(document.Fx.QuoteType)
 		if err != nil {

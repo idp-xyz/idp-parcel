@@ -472,7 +472,7 @@
       "objectId": "SYN-PRICE-RULE-CN-SG",
       "version": "v1",
       "scope": "SYN-SCOPE-01",
-      "contentDigest": "PCC-1:225bc6b96a4b35606991899fad4462439182b493f5ef86323ee164e2af8b3132",
+      "contentDigest": "PCC-1:8e53f201fee195a08cb11323a88d13d49610b3b7c221b5e3cbb257bf26833204",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "references": {
         "SERVICE_PRODUCT": "SYN-PROD-CN-SG-EXPRESS"
@@ -494,7 +494,6 @@
           "caliber": {
             "taxDisposition": "TAX_EXCLUSIVE",
             "taxClassification": "SYN-TAX-VAT-STANDARD",
-            "volumetricFactor": "5000",
             "fx": {
               "quoteType": "SYN-FX-QUOTE-MID",
               "asOfSemantics": "REFCFG-1:parcel-shipment/as-of-semantics/submission-receipt@1",

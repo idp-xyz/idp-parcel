@@ -25,10 +25,14 @@ type PricePolicyBodyPayload struct {
 	Caliber           *PricePolicyCaliberPayload `json:"caliber,omitempty"`
 }
 
-// PricePolicyCaliberPayload 镜像受控批文 pricePolicyCaliberDocument：没有方向键——体积口径的方向就是政策的方向，载荷里
-// 出现 direction 由严格解码按未知键拒。taxClassification 只在含税 / 未税时在场、volumetricFactor 只在销售方向在场，
-// 反过来给了或漏了都由领域构造门拒并点名那一格（表单按 taxDisposition / direction 显隐的就是这两格；显隐是呈现，
-// 不是裁门）。fx 可缺：不涉及外币的政策没有汇率口径，缺席是「没声明」不是零口径；在场则三格缺一不可。
+// PricePolicyCaliberPayload 镜像受控批文 pricePolicyCaliberDocument：没有方向键——口径的方向就是政策的方向，载荷里
+// 出现 direction 由严格解码按未知键拒。taxClassification 只在含税 / 未税时在场，反过来给了或漏了都由领域构造门拒并
+// 点名那一格（表单按 taxDisposition 显隐的就是这一格；显隐是呈现，不是裁门）。fx 可缺：不涉及外币的政策没有汇率口径，
+// 缺席是「没声明」不是零口径；在场则三格缺一不可。
+//
+// volumetricFactor 一键认得而不收：体积系数是价卡内容、不分方向，政策上任何方向都不声明（ADR-0260 决定二，AT-PC-062）。
+// 给了就答在这一格上（domain.ErrVolumetricFactorOnPricePolicy），预览照常是`未受理`带逐格问题，三个方向同一判法；不与
+// direction、markup 同法当未知键整份拒，是为让照旧载荷写来的调用方看见这一格去了价卡。
 type PricePolicyCaliberPayload struct {
 	TaxDisposition    string            `json:"taxDisposition"`
 	TaxClassification string            `json:"taxClassification,omitempty"`
@@ -57,17 +61,16 @@ func (payload PricePolicyBodyPayload) body(problems *PublicationPayloadProblems)
 			payload.EffectiveStartsAt, payload.EffectiveEndsAt),
 	}
 	if payload.Caliber != nil {
-		caliber := payload.Caliber.body(problems, body.Direction)
+		caliber := payload.Caliber.body(problems)
 		body.Caliber = &caliber
 	}
 	return body
 }
 
-// body 把口径节逐格过门。分类与系数两格的在场规则（含税 / 未税恰要求分类、不适用恰要求没有；销售方向恰要求系数、
-// 采购与法人间恰要求没有）由 NewTaxCaliber / NewVolumetricCaliber 判，与库上 CHECK 同形；问题落在**条件格**上
-// （taxClassification / volumetricFactor）——显了没填与隐了却传了都答在同一格。体积口径的方向取政策方向：载荷里没有
-// 方向键，所以从这里造不出方向不一致的口径；方向自己立不住时这一格不再判，免得把 direction 的问题再记成系数的。
-func (payload PricePolicyCaliberPayload) body(problems *PublicationPayloadProblems, direction domain.PriceDirection) domain.PricePolicyCaliberBody {
+// body 把口径节逐格过门。分类一格的在场规则（含税 / 未税恰要求分类、不适用恰要求没有）由 NewTaxCaliber 判，与库上
+// CHECK 同形；问题落在**条件格**上（taxClassification）——显了没填与隐了却传了都答在同一格。体积系数给了就答在它自己那一格
+// 上，与方向无关。口径的方向取政策方向，由领域从正文给：载荷里没有方向键，所以从这里造不出方向不一致的口径。
+func (payload PricePolicyCaliberPayload) body(problems *PublicationPayloadProblems) domain.PricePolicyCaliberBody {
 	var caliber domain.PricePolicyCaliberBody
 	disposition := namedField(problems, "pricePolicy.caliber.taxDisposition", domain.TaxDispositionNamed, payload.TaxDisposition, "集合外的税务口径")
 	var classification domain.TaxClassificationReference
@@ -82,17 +85,8 @@ func (payload PricePolicyCaliberPayload) body(problems *PublicationPayloadProble
 		}
 		caliber.Tax = tax
 	}
-	var factor domain.VolumetricFactorReference
 	if payload.VolumetricFactor != "" {
-		factor = requireField(problems, "pricePolicy.caliber.volumetricFactor", domain.NewVolumetricFactorReference, payload.VolumetricFactor)
-	}
-	if direction != domain.PriceDirectionInvalid {
-		volumetric, err := domain.NewVolumetricCaliber(direction, factor)
-		if err != nil {
-			problems.add("pricePolicy.caliber.volumetricFactor",
-				fmt.Errorf("销售方向恰要求一份体积系数，采购与法人间方向恰要求没有（政策方向 %s）：%w", direction, err))
-		}
-		caliber.Volumetric = volumetric
+		problems.add("pricePolicy.caliber.volumetricFactor", domain.ErrVolumetricFactorOnPricePolicy)
 	}
 	if payload.Fx != nil {
 		before := len(problems.Problems)

@@ -521,9 +521,8 @@ func declarationsOfContent(content domain.PublicationContent) CommercialDeclarat
 		// 口径随正文同一份声明交回、由发布用例紧跟正文写进 0022：载体上口径缺席就不交，发布用例不替它补一份。
 		if body.Caliber != nil {
 			declarations.PricePolicyBody.Caliber = &PricePolicyCaliberDeclaration{
-				Tax:        body.Caliber.Tax,
-				Volumetric: body.Caliber.Volumetric,
-				Fx:         body.Caliber.Fx,
+				Tax: body.Caliber.Tax,
+				Fx:  body.Caliber.Fx,
 			}
 		}
 	}
