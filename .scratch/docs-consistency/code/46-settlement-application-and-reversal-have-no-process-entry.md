@@ -121,6 +121,11 @@ N1、N3、N4、N5、N8 记在 code/12 同名一节。本票这边：
 
 ### 第三轮测试（含 PG，`TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh`，变基后的 tip）
 
+- `go build ./...`、`go vet ./...` 退 0，`gofmt -l` 无输出。
+- 反向依赖（`go list -test` 以 SA domain 与 `migrations` 为根，66 个包）加 `./cmd/parcel-settlement-register/...`、`./cmd/parcel-api/`、`./cmd/parcel-dispatch/`、`./internal/architecture/...`、`./migrations/...`：退 0（65 个包 ok）。
+- 并发用例 `-count=5`（作用域两条、并发撤销、并发超额、并发同键、金额本体锁）：五次全过。
+- 种子灌一次性库 `c12seed3` 退 0（映射重算这一路改了，冒烟一次）：演示账户入账余额 20000，与那一笔 200.00 的合成收款相符；用后删库。迁移 0046 本轮没改。
+- 管理台三道门（Node 22）：tsc、640 例、vite build 退 0。
 - 变异（改完都跑红、复原后跑绿；复原是把备份拷回）：
   1. N1 锁前取时（留着未推进报错）→ 排队映射那条红，退 3 并报 `posting did not advance`；锁前取时且吞掉未推进（即评审实测的原缺陷）→ 同一条红，入账余额停在 4000；
   2. N2 作用域锁换成不取锁的 SELECT → 作用域两条并发用例红（十秒内没有一路在锁上排队）；
