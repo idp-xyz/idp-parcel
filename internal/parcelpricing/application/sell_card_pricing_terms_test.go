@@ -152,9 +152,10 @@ func assertSellCardTerms(t *testing.T, path string, evaluation domain.PricingEva
 	}
 }
 
-// Covers: AT-PP-013——一张在用 SELL 卡声明了自己的体积系数与金额取整、绑了一串汇率序列：正式评价与试算都按卡上的除数
-// 算体积重、按卡上的策略取整、用卡绑定序列的在用版本按计价基准时点换算；版本清单里没有任何商业依据引用。同范围的销售
-// 方向价格政策另有一份口径时结果不变，在这里以结构成立：两条路的输入面都没有放它的位置（ADR-0260 决定一至三）。
+// Covers: AT-PP-013 的编排半边——一张在用 SELL 卡声明了自己的体积系数与金额取整、绑了一串汇率序列：正式评价与试算都按
+// 卡上的除数算体积重、按卡上的策略取整、用卡绑定序列的在用版本按计价基准时点换算；版本清单里没有任何商业依据引用
+// （ADR-0260 决定一至三）。前提里「同范围的销售方向价格政策另有一份口径」在真库上构造，见 cmd/parcel-api 的
+// TestAnEstimateReadsOnlyTheCardWhileASellPolicyDeclaresOtherwiseAgainstARealDatabase。
 func TestASellCardIsPricedOnlyOnItsOwnTermsOnBothPaths(t *testing.T) {
 	plan := sellCardWithOwnTerms(t)
 	readings := map[string]domain.ResolvedSeriesReading{"v2": fxReading(t, "v2", "7.23456")}
