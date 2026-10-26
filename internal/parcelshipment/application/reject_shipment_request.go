@@ -167,7 +167,7 @@ func (handler *RejectShipmentRequestHandler) Handle(
 	}
 
 	// 保存委托之前先取作用域锁，理由与位置同 WithdrawShipmentRequestHandler.decide：先 S 后 R 与接受链同序，且在领取决定
-	// 标识之前。已决态在上面的前置里就答了，不保存委托，不取锁。取不到锁与保存不了同一格。
+	// 标识之前。已决态在 ActiveRejectionAdmissible 的前置里就答了，不保存委托，不取锁。取不到锁与保存不了同一格。
 	if err := handler.occupation(command).lockScopesBeforeSave(ctx, request); err != nil {
 		return handler.undecided(ctx, command, DecisionNotRecorded, request.State()), nil
 	}

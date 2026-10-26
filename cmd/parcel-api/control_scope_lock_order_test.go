@@ -318,7 +318,7 @@ func TestWithdrawalClassPathsTakeTheScopeLockBeforeSavingTheRequestRow(t *testin
 				holder.release()
 				t.Fatalf("%s没有等在 S 上", tc.name)
 			}
-			// 不在这里停：次序倒挂时接着往下放行，让互等真的发生，由下面的 40P01 断言把死锁本身也认出来。
+			// 不在这里停：次序倒挂时接着往下放行，让互等真的发生，由 isDeadlock 的 40P01 断言把死锁本身也认出来。
 			if race.requestRowLockedByAnother() {
 				t.Errorf("%s等在 S 上时已持着委托行锁——先保存委托、再取 S，与接受链次序相反", tc.name)
 			}

@@ -8,7 +8,10 @@ import (
 )
 
 // ErrControlScopeLockNotAssembled 说明这份委托有要排队的占用作用域，而取锁口没接上。它与取锁失败落同一格（业务事实尚未
-// 形成），但单列一个哨兵：少接一个件等多久都不会长出来，运维读到的该是装配缺口而不是一次偶发的依赖故障。
+// 形成），但单列一个哨兵：少接一个件等多久都不会长出来，与一次偶发的依赖故障不是一回事。
+//
+// 哨兵只在授权处置的错误链里露出：撤回、主动拒绝和接受链形成决定的两处（自动拒绝、停进`等待受控补充`）都把取锁错误折成
+// 未决`DECISION_NOT_RECORDED`，哨兵在它们的结果里读不到，要分辨装配缺口只能回到装配本身。
 var ErrControlScopeLockNotAssembled = errors.New("parcel shipment: control scope lock is not assembled")
 
 // lockScopesBeforeSave 在保存委托之前取齐这份委托各版已成立占用所在作用域的锁（ports.PreAcceptanceControlScopeLock 头注
