@@ -1,7 +1,7 @@
 # 147 已登过关务区域的租户漏登新节点区域时，跨区那一道静默不列
 
 Category: bug
-Status: in-progress——2026-10-25 评审无阻断、修订轮完，待进 main，分支 claude-dcg147 tip `19f3c9b7f`（修订轮代码 `4f827bd7e`、文档 `19f3c9b7f`，票面评审记录那一笔在其上；见文末「评审记录」）。此前 in-progress——2026-10-25 作者完工，待隔离评审与进 main，分支 claude-dcg147 tip `938bdbbdc`（代码 `6814c2677`、文档 `938bdbbdc`，票面完成记录那一笔在其上；见文末「完成记录」）。此前 in-progress——2026-10-25 会话 `tops-20`（Claude Code）认领，分支 `claude-dcg147`（worktree `idp-parcel-dcg147`）；新 ADR 取 0300。此前 ready-for-agent——2026-10-20 代决复核立（上线后尽快），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: resolved——2026-10-25 进 main `5f110a67f`（见文末「进 main 记录」）。此前 in-progress——2026-10-25 评审无阻断、修订轮完，待进 main，分支 claude-dcg147 tip `19f3c9b7f`（修订轮代码 `4f827bd7e`、文档 `19f3c9b7f`，票面评审记录那一笔在其上；见文末「评审记录」）。此前 in-progress——2026-10-25 作者完工，待隔离评审与进 main，分支 claude-dcg147 tip `938bdbbdc`（代码 `6814c2677`、文档 `938bdbbdc`，票面完成记录那一笔在其上；见文末「完成记录」）。此前 in-progress——2026-10-25 会话 `tops-20`（Claude Code）认领，分支 `claude-dcg147`（worktree `idp-parcel-dcg147`）；新 ADR 取 0300。此前 ready-for-agent——2026-10-20 代决复核立（上线后尽快），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 R12；ADR-0206 越权风险点 12（ADR-0213 越权风险点 7 同根）
 
@@ -140,3 +140,13 @@ Blocked by: 无
   - `go test -count=1 -p 4` 跑 `./internal/customscompliance/...`、`./internal/transportfulfillment/adapters/customscompliance/...`、`./cmd/parcel-api/...`、`./cmd/parcel-customs-register/...`、`./internal/architecture/...`：14 包 ok，0 FAIL（`ports` 无测试文件）。
   - 本票的真库用例以 `-v` 逐条确认 PASS：`TestAdmissionOnRealPostgresNamesTheUnregisteredNodeOnlyForAZonedTenant`、`TestAnyNodeCustomsZoneInForceReadsTheTenantsRegisterAtTheInstant`、`TestAnUnregisteredNodeOfAZonedTenantReadsUndecidedNamingTheNode`、`TestAZonedTenantMissingANodeZoneShowsEveryUnbookedObjectAsUndecided`。
   - 没跑全量，没重生成 ADR 索引、AT 计数与机制清点。
+
+## 进 main 记录（2026-10-25，推送方会话 tops-20）
+
+- **main**：`5f110a67f`。出处：分支 `claude-dcg147` tip `73120ae94`。
+- **重放对照**（分支 → main）：`6814c2677` → `a9ccd0f95`；`938bdbbdc` → `dda8643fc`；`c8183fa4e` → `795596aa8`；`4f827bd7e` → `b6810ccff`；`19f3c9b7f` → `5cbeadcef`；`73120ae94` → `3790089be`。
+- **生成物**（推送方在重放后的 tip 上重生成，各成一笔）：ADR 索引 `9e37dd6c0`；AT 盘点总览计数 `d9810b688`；机制清点 `5f110a67f`。三件 `-check` 退 0，机制清点重生成后工作树干净。
+- **评审**：隔离子代理钉 `c8183fa4e`，两轴无阻断，三条非阻断（P1、S1、S2）已在修订轮收掉（见「评审记录」「修订轮」）。修订轮只收非阻断，推送方读了修订 diff，未另派复评。
+- **全量真库测试**：`scripts/test-full.sh` 跑在 `a3b62801f`（同一内容重放在 main `f74b3e8c8` 上）：158 ok / 0 FAIL，退 0。推前 main 又前进两笔（`9487a27dc`、`000f33c5b`，只改 `apps/admin-web/src/pages/party/` 与 `.scratch/party-commercial-uiux/`，与本票无 `.go`/`.sql` 重叠），照 parallel-sessions「别人分支上的活怎么进 main」在新 tip 上直接重放，三件生成物复核不变，推 `5f110a67f`。
+- **种子**：`scripts/demo-seeds/seed.sh` 灌一次性库（`a3b62801f` 上），退 0，用后删库。
+
