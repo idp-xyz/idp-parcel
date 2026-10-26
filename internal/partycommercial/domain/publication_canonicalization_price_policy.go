@@ -94,8 +94,8 @@ type canonicalPricePolicyBody struct {
 // 一遍只会造出「两个方向对不上」这种本不该存在的输入。两处可缺的键各是口径说出的真话（不适用因而没有分类、不涉外币
 // 因而没有汇率），缺席即键不在场，不补空串。
 //
-// VolumetricFactor 一键留在结构里，而本构建写不出它（PricePolicyCaliberBody 没有这一格）：带它的 PCC-1 文档只可能是先前
-// 按销售方向写下的快照，折回时点名拒（ErrVolumetricFactorOnPricePolicy），不让 json 当未知键静默丢掉、再算出一个与列上
+// VolumetricFactor 一键留在结构里，而本构建写不出它（PricePolicyCaliberBody 没有这一格）：带它的 PCC-1 文档只可能是 0041
+// 迁移之前按销售方向写下的快照，折回时点名拒（ErrVolumetricFactorOnPricePolicy），不让 json 当未知键静默丢掉、再算出一个与列上
 // 对不上的摘要。键、键序与编码都在，不带系数的文档逐字节同前，所以文档形状不变、PCC-1 不换号——变的是正文的合法集合，
 // 而 ADR-0014 Decision「规范化版本不表达业务规则变化」；ADR-0267 读法里算结构变化的加键、删键、改键这里一样都没有。
 type canonicalPricePolicyCaliber struct {

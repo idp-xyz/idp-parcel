@@ -283,7 +283,7 @@ func TestPricePolicyDocumentRehydratesToTheSameBody(t *testing.T) {
 }
 
 // Covers: AT-PC-062 在快照上的那一半——体积系数不在政策上声明（ADR-0260 决定二），带 volumetricFactor 的 PCC-1 文档只可能是
-// 先前按销售方向写下的快照：折回时点名拒（ErrVolumetricFactorOnPricePolicy，它 Is ErrInvalidPricePolicyCaliber），不静默丢键
+// 0041 迁移之前按销售方向写下的快照：折回时点名拒（ErrVolumetricFactorOnPricePolicy，它 Is ErrInvalidPricePolicyCaliber），不静默丢键
 // 后算出一个对不上的摘要；同一份文档去掉系数照常折回。文档形状不变（键仍在结构里，只是没有正文能写出它），PCC-1 不换号。
 func TestAStoredPricePolicyDocumentCarryingAVolumetricFactorDoesNotRehydrate(t *testing.T) {
 	historical := `{"canonicalization":"PCC-1","kind":"PRICE_RULE","pricePolicy":{"direction":"SELL","pricingPlan":"plan-1@v1",` +

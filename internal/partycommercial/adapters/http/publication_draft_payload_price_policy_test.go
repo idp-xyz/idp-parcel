@@ -219,8 +219,8 @@ func TestPricePolicyPayloadHasNoCaliberDirectionAndBindingIsJudgedByTheDomain(t 
 
 // Covers: AT-PC-062 的操作者面半边——体积系数是价卡内容，任何方向都不在政策上声明（ADR-0260 决定二）。口径节带
 // volumetricFactor 的载荷，三个方向都只在 pricePolicy.caliber.volumetricFactor 这一格上答问题（预览据此答`未受理`带逐格问题，
-// 不进摘要也不落载体），问题原话就是 ErrVolumetricFactorOnPricePolicy；只有税务与汇率的销售口径逐格立得住，不再因为缺系数
-// 在这一格上点名。
+// 不进摘要也不落载体），问题原话就是 ErrVolumetricFactorOnPricePolicy；只有税务与汇率的销售口径逐格立得住，这一格上没有
+// 问题。
 func TestAVolumetricFactorInAPricePolicyPayloadIsAnsweredOnItsField(t *testing.T) {
 	tenant := pcNew(t, domain.NewTenantID, pcTenant)
 	for _, direction := range []string{"SELL", "BUY", "INTERNAL"} {

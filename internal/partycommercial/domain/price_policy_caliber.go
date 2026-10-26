@@ -9,9 +9,9 @@ import (
 var ErrInvalidPricePolicyCaliber = errors.New("party commercial: invalid price policy caliber")
 
 // ErrVolumetricFactorOnPricePolicy 拒价格政策口径上的体积系数，三个方向同一判法（ADR-0260 决定二）。它 Is
-// ErrInvalidPricePolicyCaliber：带着系数的口径就是一份立不住的口径。受控批文、操作者面载荷与快照折回三处仍各认得
-// volumetricFactor 这个键，只为在那里点名拒它——当未知键整份拒，操作者拿到的是一句「不认识这个字段」，看不出这一格
-// 去了价卡；静默丢键，则批文以为登进去的比实际多。
+// ErrInvalidPricePolicyCaliber：带着系数的口径就是一份立不住的口径。registrationjson.pricePolicyCaliberDocument、
+// http.PricePolicyCaliberPayload 与 canonicalPricePolicyCaliber 认得 volumetricFactor 这个键，只为在那里点名拒它——当
+// 未知键整份拒，操作者拿到的是一句「不认识这个字段」，看不出这一格去了价卡；静默丢键，则批文以为登进去的比实际多。
 var ErrVolumetricFactorOnPricePolicy = fmt.Errorf(
 	"%w: a volumetric factor is a price card term and is not declared on a price policy in any direction (ADR-0260)",
 	ErrInvalidPricePolicyCaliber)
@@ -31,7 +31,7 @@ var ErrVolumetricFactorOnPricePolicy = fmt.Errorf(
 // **没有体积系数一格，且不是漏掉。** 体积系数与金额取整是价卡内容、不分方向（ADR-0260 决定二）：
 // 同一格若在卡与政策上各有一处合法声明，计价只读卡上那一处，政策上那一处静默不起作用——租户按合同
 // 调了政策上的系数而不改卡，计费重量就与预期不符而没有任何地方报错。所以这一格在政策上任何方向都
-// 不收（ErrVolumetricFactorOnPricePolicy）；先前按销售方向登下的系数原样留在册上，读面标「不参与计价」
+// 不收（ErrVolumetricFactorOnPricePolicy）；0041 迁移之前按销售方向登下的系数原样留在册上，读面标「不参与计价」
 // （ports.PricePolicyRow.HistoricalVolumetricFactor）。
 //
 // direction 是拥有本口径的政策的方向，不是口径自己的一条声明：发布编排从政策正文抄给它，输入面上没有第二个

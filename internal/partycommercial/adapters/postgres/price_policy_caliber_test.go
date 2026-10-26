@@ -361,7 +361,8 @@ func TestPricePolicyCaliberColumnsRejectDecoupledRows(t *testing.T) {
 // 0022 原文加回方向耦合），落一行当年合法的销售口径（带系数），再原样施加嵌入的 0041 正文：施加成功，那一行原样留册——
 // 点读照常折回方向与税务（系数不进领域口径），目录上列以历史系数透出（ADR-0260 决定二：体积系数是价卡内容，不参与
 // 计价）；此后 volumetric_factor_ref 对三个方向一律只收 NULL，不带系数的销售行照常进册。干净库上造不出 0041 之前的行，
-// 所以退回那一步只能在测试里做；被施加的是迁移原文，不是它的抄本。
+// 所以退回那一步只能在测试里做；被施加的是迁移原文，不是它的抄本。同一版本按不带系数的同向口径再登一次答内容冲突，
+// 历史行不被改写。
 func TestMigration0041KeepsHistoricalFactorsListedAndRefusesNewOnes(t *testing.T) {
 	repository, contents, catalogue, transactor, pool := newPricePolicyCaliberFixture(t)
 	ctx := t.Context()
@@ -442,6 +443,24 @@ func TestMigration0041KeepsHistoricalFactorsListedAndRefusesNewOnes(t *testing.T
 	}
 	if row := listed["price-sell"]; !row.HasCaliber || row.HistoricalVolumetricFactor != "" {
 		t.Fatalf("不带系数的销售口径上列变形：%#v", row)
+	}
+
+	// 同一版本按不带系数的同向口径再登一次：税务与汇率都与那一行相同，差的只是历史系数，答内容冲突而不是重放，
+	// 那一行的系数原样不动（scannedPricePolicyCaliber.sameAs 照比 volumetric_factor_ref）。
+	var outcome ports.PricePolicyCaliberSaveOutcome
+	mustWithinPublicationTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		var err error
+		outcome, err = repository.SavePricePolicyCaliber(txCtx, caliberWithoutFx(t, historical, domain.SellDirection))
+		return err
+	})
+	if outcome != ports.PricePolicyCaliberContentConflict {
+		t.Fatalf("历史行上按不带系数的口径重登 = %q, want CONTENT_CONFLICT", outcome)
+	}
+	var factor *string
+	if err := pool.QueryRow(ctx, `SELECT volumetric_factor_ref FROM party_commercial.price_policy_caliber
+		WHERE tenant_id = 'tenant-1' AND object_id = 'price-historical' AND version_label = 'v1'`).Scan(&factor); err != nil ||
+		factor == nil || *factor != "5000" {
+		t.Fatalf("冲突之后历史行的系数 = %v, err = %v, want 原样的 5000", factor, err)
 	}
 }
 

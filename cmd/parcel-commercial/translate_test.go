@@ -972,7 +972,7 @@ func TestAPricePolicyBodyTranslatesWithItsCaliber(t *testing.T) {
 
 // Covers: AT-PC-062 的受控批量口半边——体积系数是价卡内容、不分方向，商业价格政策任何方向都不在口径上声明（ADR-0260
 // 决定二）。批文口径里给了 volumetricFactor，三个方向同一判法：整批在翻译时拒（一行不写，CLI 退出非零），原因点名
-// ErrVolumetricFactorOnPricePolicy；只有税务与可缺汇率的销售口径翻得过去——销售方向不再因为缺系数被拒。
+// ErrVolumetricFactorOnPricePolicy；只有税务与可缺汇率的销售口径翻得过去。
 func TestAPricePolicyCaliberCarryingAVolumetricFactorIsNotAccepted(t *testing.T) {
 	for _, direction := range []string{"SELL", "BUY", "INTERNAL"} {
 		t.Run(direction+" with a factor", func(t *testing.T) {

@@ -44,7 +44,7 @@ func fxCaliber(t *testing.T) domain.FxCaliber {
 // Covers: CONTEXT「商业价格政策版本……可以声明汇率口径」与「商业价格规则必须声明含税、未税或税务
 // 不适用」——税务一格必需，汇率一格可缺（不涉及外币的政策没有汇率口径，缺席是合法声明，与忘了填
 // 分开）；方向是拥有口径的政策的方向，三个方向同一形状。AT-PC-062 的领域半边：口径上没有体积系数
-// 可以带——那是价卡内容，任何方向都不在政策上声明（ADR-0260 决定二），所以销售方向不再因为缺它被拒。
+// 可以带——那是价卡内容，任何方向都不在政策上声明（ADR-0260 决定二），只有税务的销售口径立得住。
 func TestPricePolicyCaliberRequiresTaxAndMayOmitFx(t *testing.T) {
 	version := pricePolicyVersion(t, "price-1")
 
