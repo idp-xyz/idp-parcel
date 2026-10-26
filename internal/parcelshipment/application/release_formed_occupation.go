@@ -21,8 +21,8 @@ type occupationRelease struct {
 	// 不记册，遇到它响亮停下（决定三）。
 	refusals ports.ControlReleaseRefusalRegister
 	clock    ports.Clock
-	// scopeLock 只有保存委托的各路用：保存之前先取作用域锁（lockScopesBeforeSave）。接受链开头放被取代各版那一步不用它，
-	// 链里取锁的次序由施加与释放自己的取锁决定。
+	// scopeLock 只有保存委托的各路，与形成决定在已终结的委托上放占用那一步用：先取作用域锁（lockScopesBeforeSave）。接受链
+	// 开头放被取代各版那一步不用它，链里取锁的次序由施加与释放自己的取锁决定。
 	scopeLock ports.PreAcceptanceControlScopeLock
 }
 
@@ -181,6 +181,16 @@ func (scope occupationRelease) settle(
 	ctx context.Context,
 	outcome occupationReleaseOutcome,
 ) (domain.OwnershipContinuationReference, bool) {
+	gap, recorded := scope.settleGap(ctx, outcome)
+	return scope.reference(gap), recorded
+}
+
+// settleGap 是 settle 在派生引用之前的那一步：交回没收口的那一处缺口（没有则零值）与「有一笔落进册里」。需要知道缺口
+// 原因的调用方（形成决定那一步在已终结的委托上放不收口时要回滚，并把缺口的原因当未决原因）直接用它。
+func (scope occupationRelease) settleGap(
+	ctx context.Context,
+	outcome occupationReleaseOutcome,
+) (occupationReleaseGap, bool) {
 	pending := outcome.pending
 	recorded := false
 	for _, refusal := range outcome.refusals {
@@ -193,7 +203,7 @@ func (scope occupationRelease) settle(
 			scope:  []string{refusal.version.String(), refusal.control.ResultID().String()},
 		})
 	}
-	return scope.reference(pending), recorded
+	return pending, recorded
 }
 
 func (scope occupationRelease) record(ctx context.Context, refusal occupationRefusal) bool {

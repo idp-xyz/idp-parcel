@@ -65,6 +65,8 @@ type customerSupplementLoopFixture struct {
 type customerSupplementLoopLegs struct {
 	control psports.PreAcceptanceFinancialController
 	release psports.PreAcceptanceControlRelease
+	// identities 是形成决定那一步领决定标识的口，缺省是合成替身；要让链停在「已读委托、未保存」那一刻时换成带屏障的。
+	identities psports.AcceptanceDecisionIdentity
 }
 
 func newCustomerSupplementLoopFixture(t *testing.T) *customerSupplementLoopFixture {
@@ -79,6 +81,9 @@ func newCustomerSupplementLoopFixtureWith(t *testing.T, legs customerSupplementL
 	}
 	if legs.release == nil {
 		legs.release = &synSControlRelease{}
+	}
+	if legs.identities == nil {
+		legs.identities = &synSDecisionIdentities{}
 	}
 
 	base := newSYNVerticalFixture(t)
@@ -124,7 +129,7 @@ func newCustomerSupplementLoopFixtureWith(t *testing.T, legs customerSupplementL
 		Refusals:     refusals,
 		ScopeLock:    pssettlement.NewControlScopeLocks(scopeLocks),
 		Downstream:   decisionHandoff,
-		Identities:   &synSDecisionIdentities{},
+		Identities:   legs.identities,
 		Clock:        systemClock{},
 	})
 	chain := psapplication.NewAdvanceAcceptanceChainHandler(psapplication.AdvanceAcceptanceChainDeps{

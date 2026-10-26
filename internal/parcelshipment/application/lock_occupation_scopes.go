@@ -23,6 +23,9 @@ var ErrControlScopeLockNotAssembled = errors.New("parcel shipment: control scope
 // 取哪几把由已记录的判断决定：每一版读回控制结果，成立了占用且存下了作用域的才取，与释放那一侧认领的是同一份。读不回某一版
 // 的判断时不取那一版，也不停下——保存之后的释放读同一份判断，同样读不回，会把那一版留成补偿续办；撤回不等财务释放才生效
 // （UC-PS-005）。次序与取锁的去重见 lockControlScopes。
+//
+// 形成决定那一步在已终结的委托上放占用之前也用它：那里不保存委托，取锁是为了释放与撤回类路径同序，单驱那一步时不依赖
+// 上游已取过。
 func (scope occupationRelease) lockScopesBeforeSave(ctx context.Context, request domain.ShipmentRequest) error {
 	controls := make([]domain.FinancialControlResult, 0, len(request.PriorSubmissionVersions())+1)
 	for _, version := range versionsInLockOrder(request) {

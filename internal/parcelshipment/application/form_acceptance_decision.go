@@ -82,7 +82,8 @@ func (result FormAcceptanceDecisionResult) CompensationReference() domain.Owners
 }
 
 // ControlReleaseNotAccepted 报告接受已确定不成立的那一版（拒绝已成立，或已停进`等待受控补充`）随附释放里有一笔提供方
-// 确定不受理，已记进释放未受理册待人处理（ADR-0282 决定二）。决定与暂停都不因它回滚。
+// 确定不受理，已记进释放未受理册待人处理（ADR-0282 决定二）。决定与暂停都不因它回滚。读到已撤回或已拒绝的委托而放它各版
+// 的占用时同此（ADR-0290 决定二）。
 func (result FormAcceptanceDecisionResult) ControlReleaseNotAccepted() bool {
 	return result.releaseRefused
 }
@@ -106,9 +107,9 @@ type FormAcceptanceDecisionDeps struct {
 	Release      ports.PreAcceptanceControlRelease
 	// Refusals 是释放未受理册：拒绝或停进`等待受控补充`之后随附释放被提供方确定不受理时记在这里交人处理。
 	Refusals ports.ControlReleaseRefusalRegister
-	// ScopeLock 在保存会带出释放的决定（拒绝、停进`等待受控补充`）之前取占用所在作用域的锁，锁序见
-	// ports.PreAcceptanceControlScopeLock 头注。接受链里这些锁施加与链开头放被取代各版时已取过，这里是重入；不依赖上游取过，
-	// 单驱形成决定这一步时先 S 后 R 照样成立。
+	// ScopeLock 在保存会带出释放的决定（拒绝、停进`等待受控补充`）之前、以及读到已终结的委托而要放它各版的占用之前，取占用
+	// 所在作用域的锁，锁序见 ports.PreAcceptanceControlScopeLock 头注。接受链里这些锁施加与链开头放被取代各版时已取过，这里
+	// 是重入；不依赖上游取过，单驱形成决定这一步时先 S 后 R 照样成立。
 	ScopeLock  ports.PreAcceptanceControlScopeLock
 	Downstream ports.AcceptanceDecisionHandoff
 	Identities ports.AcceptanceDecisionIdentity
@@ -151,7 +152,10 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 	// 的重校验是提交前窗口（`AT-PC-026`）；提交后再拿退役/替代后的视图去审，会把已冻结的
 	// 快照改写成未决——那正是 `AT-PC-025` 禁止的追溯改写。并发下 Find 仍可能读到尚未
 	// 落库的旧像，那时仍靠下面 Decide 的 `ErrDecisionAlreadyFormed` 交回原决定。
-	if _, formed := request.AcceptanceDecision(); formed {
+	//
+	// 已撤回的委托同走这一支：撤回占着同一个决定边界却不是接受或拒绝决定，`AcceptanceDecision` 对它报告缺席，
+	// 不单独认出来就要先走完依据重校验与签发决定标识，才在 Decide 处撞上边界；那一路上耗掉的标识没有任何决定会用它。
+	if _, formed := request.AcceptanceDecision(); formed || request.State() == domain.ShipmentRequestWithdrawn {
 		return handler.existing(ctx, command, request), nil
 	}
 
@@ -592,19 +596,65 @@ func assembleChecks(
 // 处理返回同一结果或明确冲突；重发是因为本上下文不记意图完没完成——只答`已有结果`就收工，
 // 一份首次投递失败的决定会永远停在「本上下文已提交、下游从不知道」的状态，而这条路上没有
 // 别的东西会去补发（`AT-PS-013`「重试同一发布意图」）。
+//
+// 委托已撤回或已拒绝（不是本轮形成的）时，交回之前先把这份委托各版已成立的占用放掉。接受链读到委托`已提交`之后，
+// 撤回、拒绝可以抢先提交：链在控制作用域锁上排队、排到后照常施加控制；或链已在事务里写下冻结（未提交），撤回在链
+// 读委托之前提交——首版委托没有已提交的占用，撤回类路径不取这把锁，释放也读不到链未提交的冻结。两种时序下撤回、
+// 拒绝那一路的释放都在这一笔冻结形成之前跑完了，链开头的撤回守卫只在读委托那一刻判一次，而委托此刻已经终结，
+// 这一轮新占下的资金没有任何路径再去放它。所以由这里兜底：与撤回类路径同序，先取各版占用所在作用域的锁（链里是重入；
+// 单驱这一步时先 S 后 R 同样成立），再按原关联逐版放，提供方按幂等答原释放，同一份终结委托被重投信封时再放一次无害。
+//
+// 已接受的委托绝不放：接受成立时那笔冻结是合法的，转接受后流程。
+//
+// 放的结果按恢复动作分格（ADR-0282 的三格）：
+//   - 已收口：往下交`已决定`。
+//   - 可重试未形成（含取不到锁、读不回某一版的判断、确定未受理却记不下册）：不往下交`已决定`，交回未决让这一轮回滚。
+//     链是一笔事务，回滚把这一轮刚占下的冻结一起撤回；已撤回的委托重投时链开头的守卫就停下，已拒绝的委托重投会重复
+//     这一轮直到放掉，或耗尽失败预算而不提交——两者都不会留下孤儿占用。
+//   - 确定未受理（含口形不成三格之一）：记进释放未受理册待人处理，不回滚、不留补偿引用。终结委托上重投换不来另一个
+//     答案，回滚只会让这一轮无限重复。这与接受链开头放被取代各版时响亮上抛不同：那里新版本还等着被判，拒收挡着它；
+//     这里委托已经终结，没有东西可挡。
 func (handler *FormAcceptanceDecisionHandler) existing(
 	ctx context.Context,
 	command FormAcceptanceDecisionCommand,
 	request domain.ShipmentRequest,
 ) FormAcceptanceDecisionResult {
+	refused := false
+	if state := request.State(); state == domain.ShipmentRequestWithdrawn || state == domain.ShipmentRequestRejected {
+		gap, recorded := handler.releaseTerminalOccupation(ctx, command, request)
+		if gap.open() {
+			return handler.undecidedAt(ctx, command, gap.reason, state, handler.occupationRelease(command).reference(gap))
+		}
+		refused = recorded
+	}
 	decision, formed := request.AcceptanceDecision()
 	return FormAcceptanceDecisionResult{
-		outcome:     AcceptanceDecided,
-		state:       request.State(),
-		decision:    decision,
-		hasDecision: formed,
-		handoff:     handler.handOffDecision(ctx, command, request),
+		outcome:        AcceptanceDecided,
+		state:          request.State(),
+		decision:       decision,
+		hasDecision:    formed,
+		handoff:        handler.handOffDecision(ctx, command, request),
+		releaseRefused: refused,
 	}
+}
+
+// releaseTerminalOccupation 放一份已撤回或已拒绝的委托各版已成立的占用：命令指名那一版在前，其余各版随后。交回没收口的
+// 那一处缺口（没有则零值）与「有一笔落进释放未受理册」。
+//
+// 取不到锁与放不掉同格：锁序要求先锁后放，取不到锁时退成无锁的释放，就把这一步重新放回会与撤回类路径互等的次序。
+func (handler *FormAcceptanceDecisionHandler) releaseTerminalOccupation(
+	ctx context.Context,
+	command FormAcceptanceDecisionCommand,
+	request domain.ShipmentRequest,
+) (occupationReleaseGap, bool) {
+	scope := handler.occupationRelease(command)
+	if err := scope.lockScopesBeforeSave(ctx, request); err != nil {
+		return occupationReleaseGap{
+			reason: ControlReleasePending,
+			scope:  []string{command.SubmissionVersion.String()},
+		}, false
+	}
+	return scope.settleGap(ctx, scope.releaseEvery(ctx, request, command.SubmissionVersion))
 }
 
 // handOffDecision 把已成立的决定交给适用下游，交不出去时交回发布续办引用。
@@ -661,6 +711,18 @@ func (handler *FormAcceptanceDecisionHandler) undecided(
 		command.ShipmentRequestID.String(),
 		command.SubmissionVersion.String(),
 	)
+	return handler.undecidedAt(ctx, command, reason, state, continuation)
+}
+
+// undecidedAt 是 undecided 在续办引用由调用点给定时的写法：放占用没收口的那一轮，引用要带上没放掉的那一笔（版本与控制
+// 关联），与链开头放被取代各版停下时同一派生。
+func (handler *FormAcceptanceDecisionHandler) undecidedAt(
+	ctx context.Context,
+	command FormAcceptanceDecisionCommand,
+	reason JudgmentPendingReason,
+	state domain.ShipmentRequestState,
+	continuation domain.OwnershipContinuationReference,
+) FormAcceptanceDecisionResult {
 	recordAttempt(ctx, handler.deps.Recorder, handler.deps.Clock,
 		command.Identity.TenantID(), command.ShipmentRequestID, reason, continuation)
 

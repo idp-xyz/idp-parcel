@@ -142,6 +142,17 @@ func (fixture *customerSupplementLoopFixture) withdrawal(
 	release psports.PreAcceptanceControlRelease,
 ) *psapplication.WithdrawShipmentRequestHandler {
 	t.Helper()
+	return fixture.withdrawalWith(t, release, &synSDecisionIdentities{})
+}
+
+// withdrawalWith 是 withdrawal 在决定标识口由用例给定时的写法：要让撤回停在「手里有作用域锁、还没保存委托」那一刻时，
+// 换成在领标识处带屏障的口。
+func (fixture *customerSupplementLoopFixture) withdrawalWith(
+	t *testing.T,
+	release psports.PreAcceptanceControlRelease,
+	identities psports.AcceptanceDecisionIdentity,
+) *psapplication.WithdrawShipmentRequestHandler {
+	t.Helper()
 	sources, err := pspostgres.NewSourceSubmissions(fixture.db)
 	if err != nil {
 		t.Fatalf("构造来源仓储：%v", err)
@@ -163,7 +174,7 @@ func (fixture *customerSupplementLoopFixture) withdrawal(
 		Release:    release,
 		Refusals:   refusals,
 		ScopeLock:  pssettlement.NewControlScopeLocks(scopeLocks),
-		Identities: &synSDecisionIdentities{},
+		Identities: identities,
 		Clock:      systemClock{},
 	})
 }
