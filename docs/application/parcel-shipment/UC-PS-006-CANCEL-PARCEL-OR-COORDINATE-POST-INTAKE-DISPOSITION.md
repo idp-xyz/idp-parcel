@@ -1,6 +1,6 @@
 # UC-PS-006 取消包裹或协调收寄后服务处置
 
-状态：开发基线；逐包裹取消已实现，含提交边界上的终局与面单渠道服务首次有效收寄核验、取消—收寄冲突的判法与留存；收寄后服务处置决定与取消—收寄冲突的解开尚未实现，见「给开发的交接」；真实取消授权、收寄后处置规则、伙伴能力和费用参数待提供
+状态：开发基线；逐包裹取消已实现，含目标委托须已接受且属信封账户的闸门、提交边界上的终局与面单渠道服务首次有效收寄核验、取消—收寄冲突的判法与留存；收寄后服务处置决定与取消—收寄冲突的解开尚未实现，见「给开发的交接」；真实取消授权、收寄后处置规则、伙伴能力和费用参数待提供
 
 ## 目标与边界
 
@@ -51,6 +51,8 @@
 
 | 当前包裹事实 | 本用例可以形成 | 本用例不得形成 |
 |---|---|---|
+| 委托已撤回或已拒绝 | 确定的业务答复：委托已终结，没有服务可取消 | 形成取消决定，或把这一格并进统一不可见、请求未受理、未决 |
+| 委托只是已提交，接受或拒绝决定还没形成 | 确定的业务答复：委托待决定，包裹取消只对已接受的委托开放，要停掉它走撤回（[`UC-PS-005`](./UC-PS-005-WITHDRAW-SUBMITTED-SHIPMENT-REQUEST.md)） | 形成取消决定，或把这一格并进未决 |
 | 已接受，尚无有效网络收寄或其他适用非取消边界 | 授权成立时形成包裹取消决定和取消终局 | 删除身份、接受基线或既有交易 |
 | 收寄事实存在但有效性待确认 | 取消/处置未决，续办事实核对 | 先取消后等事实，或按消息晚到忽略收寄 |
 | 取消已提交（已答`包裹已取消`）之后才到的收寄，发生不晚于取消的业务时间（事实冲突，[ADR-0254](../../adr/0254-cancellation-and-boundary-fact-order-is-judged-by-their-business-times-and-a-late-earlier-boundary-fact-is-a-fact-conflict.md)） | 已提交的取消不被改写；收寄采用停在未决（`CANCELLATION_ORDER_CONFLICT`），面单渠道服务不形成终局；冲突留在册上按包裹查得出；收寄后处置不形成；等一份明确的业务决定 | 自动认取消或自动认收寄，按消息晚到忽略收寄 |
@@ -70,17 +72,19 @@
 | 取消未决 | `CANCELLATION_UNDECIDED` | 依赖读不回、授权规则未登记、面单渠道服务的首次有效收寄判过但待确认，或本方提交没有落成（[ADR-0256](../../adr/0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md)），原因是 `REQUEST_UNAVAILABLE`、`AUTHORITY_UNAVAILABLE`、`AUTHORITY_UNCONFIGURED`、`ADOPTION_STORE_UNAVAILABLE`、`CANCELLATION_STORE_UNAVAILABLE`、`CANCELLATION_IDENTITY_UNAVAILABLE`、`FINAL_OUTCOME_STORE_UNAVAILABLE`、`CARRIER_PICKUP_UNAVAILABLE`、`CARRIER_PICKUP_PENDING` 之一，带续办引用 | 不得默认授权或默认放行取消 |
 | 已有结果 | `EXISTING_RESULT` | 同一请求身份、同一包裹、相同内容的重复请求，返回原逐包裹结果 | 不得重复形成取消 |
 | 请求冲突 | `REQUEST_CONFLICT` | 同一请求身份、同一包裹携带不同内容 | 不得覆盖原请求 |
-| 请求未受理 | `REQUEST_NOT_ACCEPTED` | 包裹、请求方、原因或业务时间缺席，请求立不起来 | 不得与统一不可见并成一格 |
+| 请求未受理 | `REQUEST_NOT_ACCEPTED` | 信封客户账户、包裹、请求方、原因或业务时间缺席，请求立不起来 | 不得与统一不可见并成一格；账户缺席不得跳过账户核放行 |
+| 委托已终结 | `REQUEST_ENDED` | 目标委托已被撤回或已被拒绝，没有服务可取消；客户无事可做 | 不得形成取消，不落取消记录，不并进统一不可见、请求未受理或未决 |
+| 委托待决定 | `REQUEST_AWAITING_DECISION` | 目标委托只是已提交，还没被接受；包裹取消只对已接受的委托开放，客户要停掉它用撤回；委托之后被接受时，同一请求再到按接受后的边界判 | 不得形成取消，不落取消记录，不并进未决 |
 | 既有终局 | `FINAL_OUTCOME_STANDS` | 提交边界上包裹已有当前有效终局（非取消终局，或已成立的取消），返回既有终局并指名那份终局；不形成取消，不落取消记录 | 不得重开原结果或追溯取消 |
 
-委托查无、编号不符、跨租户、跨客户或包裹不是当前提交版本的成员，答统一不可见结果（[ADR-0022](../../adr/0022-http-status-carries-answer-formed-not-business-verdict.md)），不是上表任一格。
+委托查无、编号不符、跨租户、跨客户（目标委托不属请求方信封里的客户账户）或包裹不是当前提交版本的成员，答统一不可见结果（[ADR-0022](../../adr/0022-http-status-carries-answer-formed-not-business-verdict.md)），不是上表任一格。
 
 ## 应用流程
 
 | 步骤 | 责任方 | 应用动作 | 结果与下一步 |
 |---:|---|---|---|
 | 1 | 接入适配器 | 保全批量操作、逐包裹请求、请求方、期望处置和业务时间 | 批量只归组，不拥有共同状态 |
-| 2 | `parcel-shipment` | 校验租户、客户账户、接受基线、身份谱系和请求方授权 | 委托查无、跨租户、跨客户或包裹不是成员，逐件答统一不可见结果；授权规则未登记答未决；请求方无取消授权答取消被拒（`CANCELLATION_REFUSED`，即 CONTEXT「统一不可见结果」词条所说的未获授权那一格） |
+| 2 | `parcel-shipment` | 校验租户、客户账户、委托生命周期、接受基线、身份谱系和请求方授权 | 委托查无、跨租户、跨客户或包裹不是成员，逐件答统一不可见结果；委托已撤回、已拒绝答委托已终结（`REQUEST_ENDED`），只是已提交答委托待决定（`REQUEST_AWAITING_DECISION`），都在授权之前作答、不落记录；授权规则未登记答未决；请求方无取消授权答取消被拒（`CANCELLATION_REFUSED`，即 CONTEXT「统一不可见结果」词条所说的未获授权那一格） |
 | 3 | `parcel-shipment` / 事实源 | 取得当前有效收寄、终局、限制和相关决定，并核对业务顺序 | 事实冲突时保持未决 |
 | 4A | `parcel-shipment` | 在决定提交边界再次确认未越过取消边界并提交取消 | 同一提交保存取消、审计和发布意图 |
 | 4B | `parcel-shipment` | 已越过边界时按当前规则形成处置决定、未决或拒绝 | 不生成取消结果 |
@@ -90,6 +94,7 @@
 
 ## 规则、一致性与并发
 
+- 委托生命周期只会从`已提交`单向转到`已接受`、`已拒绝`或`已撤回`，三者既不回到`已提交`也不互转：撤回只对`已提交`、接受与拒绝由决定一次形成。所以取消读到`已接受`、`已拒绝`或`已撤回`之后，委托状态不会再变，生命周期闸门不需要另加锁；取消读到`已提交`答`REQUEST_AWAITING_DECISION`、随后客户的撤回提交，是合法时序，不需要特殊处理。
 - 取消权按包裹判断。一个委托的部分包裹取消、部分已经收寄或部分已经终局时，各自结果并存；只有全部当前有效包裹均为取消终局且不存在非取消终局时，委托才派生为`已取消`。
 - 取消决定提交前必须重新读取当前有效收寄和终局版本，已在册的收寄或终局使取消不成立。取消提交之后才到的收寄（面单渠道服务是实际承运商首次有效收寄）按两者的业务时间比，不以消息到达或客户端时间最后写入覆盖（[ADR-0254](../../adr/0254-cancellation-and-boundary-fact-order-is-judged-by-their-business-times-and-a-late-earlier-boundary-fact-is-a-fact-conflict.md)）：发生晚于取消的业务时间，取消在先；发生不晚于取消，是事实冲突：网络服务的收寄采用停在未决，面单渠道服务不形成终局、指名冲突（`LABEL_SERVICE_NOT_FINAL` 加一格原因），已提交的取消不被改写，冲突只由一份明确的业务决定解开。
 - 取消提交与同一包裹的收寄采用、面单渠道服务的终局判断、网络服务履约结果的终局采用并发时依次判断：后到的一方读得到先到一方已提交的结果，落进 [ADR-0254](../../adr/0254-cancellation-and-boundary-fact-order-is-judged-by-their-business-times-and-a-late-earlier-boundary-fact-is-a-fact-conflict.md) 决定二的某一格，不会留下同时成立的取消与责任起点或非取消终局（[小包托运上下文：Rules and invariants](../../domain/parcel-shipment/CONTEXT.md#rules-and-invariants) 取消一节）。
@@ -123,6 +128,8 @@
 | `AT-PS-088` | 处置请求已发出但运输方拒绝承接 | 保留处置决定和拒绝结果，当前控制责任不消失 |
 | `AT-PS-089` | 收寄后服务终止执行结果满足合同终局规则 | 由 `UC-PS-004` 形成非取消终局，不倒改收寄或运输 |
 | `AT-PS-090` | 跨客户批量请求 | 严格按客户范围隔离并逐件授权，不泄露或共享结果 |
+| `AT-PS-140` | 取消的目标委托已撤回、已拒绝，或只是已提交 | 前两种答 `REQUEST_ENDED`，后一种答 `REQUEST_AWAITING_DECISION`；授权已登记也不放行，取消记录与发布意图一行都不落；已接受的委托照常取消 |
+| `AT-PS-141` | 取消的目标委托在库里、编号与成员都对，但不属请求方信封里的客户账户；或信封客户账户缺席 | 前者与查无逐字同答统一不可见结果（404），别人的已撤回委托也不露自己的状态，不落取消记录；后者答 `REQUEST_NOT_ACCEPTED`，不跳过账户核 |
 
 ## 给开发的交接
 
@@ -132,5 +139,6 @@
 |---|---|---|
 | 收寄后服务处置决定；`AT-PS-083`、`AT-PS-084`、`AT-PS-088` | 编排越过边界时只记`待处置`，收寄后服务处置决定没有模型、没有决定面，也不向下游提出范围化请求；本行预期结果不变 | [code/37](../../../.scratch/docs-consistency/code/37-post-intake-service-disposition-decision-has-no-model.md) |
 | 面单渠道服务的取消边界；`AT-PS-086` | 已补：提交边界上先读当前有效终局，已有终局答 `FINAL_OUTCOME_STANDS`；再读网络收寄的采用链与面单渠道服务的首次有效收寄，已形成的收寄答 `CANCELLATION_REFUSED` 并指名那一代，待确认答未决 `CARRIER_PICKUP_PENDING` | [code/21](../../../.scratch/docs-consistency/code/21-label-channel-parcel-cancellation-ignores-carrier-pickup-and-finals.md) |
+| 目标委托的生命周期与账户 | 已补：取消只对已接受的委托开放，已撤回、已拒绝答 `REQUEST_ENDED`、已提交答 `REQUEST_AWAITING_DECISION`；取消命令带必填的信封客户账户，目标委托不属该账户与查无同答统一不可见，账户缺席答 `REQUEST_NOT_ACCEPTED`；对应首方取消口接入面须以认证结果填该账户 | [code/101](../../../.scratch/docs-consistency/code/101-parcel-cancellation-and-final-formation-have-no-request-lifecycle-gate-and-cancellation-does-not-check-the-account.md) |
 | 统一不可见 | 已补：委托查无、编号不符、跨租户与成员出界由取消编排认成同一个统一不可见错误，HTTP 答 `404 SHIPMENT_REQUEST_NOT_VISIBLE`；`REQUEST_NOT_ACCEPTED` 只剩字段缺 | [code/22](../../../.scratch/docs-consistency/code/22-customer-face-http-contract-misses-accepted-adrs.md) |
 | 决定矩阵「事实冲突」一行 | 判法与留存已补：两条消费链都把冲突记进冲突册、消费门入账（[code/35](../../../.scratch/docs-consistency/code/35-cancellation-and-boundary-fact-order-conflict-has-no-label-half-and-no-resolution-face.md)）；解开它的业务决定面仍没有 | [code/76](../../../.scratch/docs-consistency/code/76-a-cancellation-order-conflict-has-no-resolution-decision-face.md) |
