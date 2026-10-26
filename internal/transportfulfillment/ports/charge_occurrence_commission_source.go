@@ -24,7 +24,8 @@ type BookingView interface {
 	FindByKey(ctx context.Context, key BookingKey) (BookingRecord, bool, error)
 }
 
-// BookingAnswerView 按订舱键读当前那一份承运答复：有定局交定局，没有定局交候补（BookingAnswerStore.FindByKey 同一读法）。
+// BookingAnswerView 按订舱键读当前那一份承运答复，选法是 domain.CurrentCarrierAcceptance（有定局交定局，没有定局交候补）。
+// 名下答复凑不成一段答复史时答包着 domain.ErrBookingAnswersInconsistent 的错误：那是重试不会变的数据违约，须与读不动分开。
 // 订舱费的依据是已接受的那一份，取消费也只认接受过的订舱。
 type BookingAnswerView interface {
 	FindByKey(ctx context.Context, key BookingKey) (BookingAnswerRecord, bool, error)

@@ -572,7 +572,7 @@ func (catalogue *ReviewCatalogue) ListBookingRequests(
 				RecordedAt: recordedAt[index].UTC(),
 			})
 		}
-		standing, current, err := bookingStanding(row.Quantity, row.Answers)
+		standing, current, err := bookingStanding(tenant, row.Booking, row.Quantity, row.Answers)
 		if err != nil {
 			return nil, fmt.Errorf("list booking requests: booking %q: %w", row.Booking, err)
 		}
@@ -589,50 +589,64 @@ func (catalogue *ReviewCatalogue) ListBookingRequests(
 }
 
 // bookingStanding 是订舱状态词的唯一派生处（读法见 ports 那组状态词的注释）：交回状态词与当前那一份在 answers 里的位置，没有
-// 答复时位置为 -1。当前那一份有定局取定局、否则取候补，与 BookingAnswers.FindByKey 同一条。
+// 答复时位置为 -1。名下答复经重建门读回，当前那一份由 domain.CurrentCarrierAcceptance 选——与收费发生项读订舱当前答复的
+// BookingAnswers.FindByKey 同一处定义，这里不另选。
 //
-// 两份定局、两份候补、集外的答复值、接受量超过申请量都是绕过答复编排才落得进的行（前三种由库上的 booking_answer_one_settling、
-// booking_answer_one_waitlist 与 booking_answer_outcome_closed 钉住），读不出一个状态词，答错误，不挑一份凑一个词。
-func bookingStanding(requested int64, answers []ports.BookingAnswerCatalogueRow) (string, int, error) {
-	settling, waitlist := -1, -1
-	for index, answer := range answers {
-		if answer.Outcome == domain.BookingWaitlisted.String() {
-			if waitlist >= 0 {
-				return "", -1, fmt.Errorf("two waitlisted answers %q and %q", answers[waitlist].Answer, answer.Answer)
-			}
-			waitlist = index
-			continue
-		}
-		if settling >= 0 {
-			return "", -1, fmt.Errorf("two settling answers %q and %q", answers[settling].Answer, answer.Answer)
-		}
-		settling = index
+// 读不出一个状态词就答错误，不挑一份凑一个词：答复凑不成一段答复史（错误包着 domain.ErrBookingAnswersInconsistent）、答复行
+// 过不了重建门、接受量超过申请量，都只可能是绕过答复编排落的行。
+func bookingStanding(
+	tenant domain.TenantID,
+	booking string,
+	requested int64,
+	answers []ports.BookingAnswerCatalogueRow,
+) (string, int, error) {
+	bookingRef, err := domain.NewBookingReference(booking)
+	if err != nil {
+		return "", -1, err
 	}
-	if settling < 0 && waitlist < 0 {
+	key := ports.BookingKey{TenantID: tenant, Booking: bookingRef}
+	acceptances := make([]domain.CarrierAcceptance, 0, len(answers))
+	for _, answer := range answers {
+		var basis *string
+		if answer.Basis != "" {
+			present := answer.Basis
+			basis = &present
+		}
+		acceptance, err := rehydrateCarrierAcceptance(key, answer.Answer, answer.Outcome, answer.Quantity, basis, answer.DecidedAt)
+		if err != nil {
+			return "", -1, fmt.Errorf("answer %q: %w", answer.Answer, err)
+		}
+		acceptances = append(acceptances, acceptance)
+	}
+	current, err := domain.CurrentCarrierAcceptance(acceptances)
+	if err != nil {
+		return "", -1, err
+	}
+	if current < 0 {
 		return ports.BookingStandingPendingConfirmation, -1, nil
 	}
-	if settling < 0 {
-		return ports.BookingStandingWaitlisted, waitlist, nil
+	answer := acceptances[current]
+	if !answer.Settles() {
+		return ports.BookingStandingWaitlisted, current, nil
 	}
-	answer := answers[settling]
-	switch answer.Outcome {
-	case domain.BookingAccepted.String():
-		switch {
-		case answer.Quantity == requested:
-			return ports.BookingStandingConfirmed, settling, nil
-		case answer.Quantity > 0 && answer.Quantity < requested:
-			return ports.BookingStandingPartiallyConfirmed, settling, nil
+	switch answer.Outcome() {
+	case domain.BookingAccepted:
+		switch accepted := answer.AcceptedQuantity(); {
+		case accepted == requested:
+			return ports.BookingStandingConfirmed, current, nil
+		case accepted < requested:
+			return ports.BookingStandingPartiallyConfirmed, current, nil
 		default:
-			return "", -1, fmt.Errorf("answer %q accepts %d of %d requested", answer.Answer, answer.Quantity, requested)
+			return "", -1, fmt.Errorf("answer %q accepts %d of %d requested", answer.Acceptance(), accepted, requested)
 		}
-	case domain.BookingRefused.String():
-		return ports.BookingStandingRefused, settling, nil
-	case domain.BookingExpired.String():
-		return ports.BookingStandingExpired, settling, nil
-	case domain.BookingWithdrawn.String():
-		return ports.BookingStandingWithdrawn, settling, nil
+	case domain.BookingRefused:
+		return ports.BookingStandingRefused, current, nil
+	case domain.BookingExpired:
+		return ports.BookingStandingExpired, current, nil
+	case domain.BookingWithdrawn:
+		return ports.BookingStandingWithdrawn, current, nil
 	default:
-		return "", -1, fmt.Errorf("answer %q carries unknown outcome %q", answer.Answer, answer.Outcome)
+		return "", -1, fmt.Errorf("answer %q settles with outcome %d that has no standing", answer.Acceptance(), answer.Outcome())
 	}
 }
 
