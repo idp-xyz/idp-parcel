@@ -145,6 +145,8 @@ export const registrationRefusalReasonLabels: Record<string, string> = {
   TIMEZONE_MISSING: '缺业务时区——节点、网络连接与适用线路必须明确业务时区',
   ENDPOINT_MISSING: '缺端点节点——网络连接要指出从哪到哪',
   ENDPOINTS_NOT_DISTINCT: '两端节点相同——没有方向可言，不成其为网络连接',
+  CONNECTION_CODE_CARRIES_BASIS_SEPARATOR:
+    '连接代码含 +——+ 是计划段窗口依据里各格之间的分隔符，带它的连接运输准备读不回；换一个不带 + 的代码',
   SEGMENTS_MISSING: '缺组成段——线路由一个或多个网络连接按明确顺序组成',
   SEGMENT_BLANK: '段链里有空身份——序即语义，缺一环链就断',
   APPLICABLE_SCOPE_MISSING: '缺适用范围——这一版没说清自己管哪里',

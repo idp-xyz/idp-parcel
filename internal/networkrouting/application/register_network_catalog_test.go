@@ -246,6 +246,12 @@ func TestCatalogRegistrationRefusesIncompleteRowsBySlot(t *testing.T) {
 			row.BusinessTimezone = " "
 			return s.RegisterConnectionVersion(t.Context(), application.RegisterConnectionVersionCommand{TenantID: tenant(t), Connection: row})
 		}, application.CatalogTimezoneMissing},
+		// AT-NR-094：带 `+` 的代码换的是代码，不是补身份。
+		{"连接代码带窗口依据分隔符", func(t *testing.T, s *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
+			row := validConnection()
+			row.Code = "SYN-CONN-A+B"
+			return s.RegisterConnectionVersion(t.Context(), application.RegisterConnectionVersionCommand{TenantID: tenant(t), Connection: row})
+		}, application.CatalogConnectionCodeCarriesBasisSeparator},
 
 		{"线路零段", func(t *testing.T, s *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
 			row := validLine()

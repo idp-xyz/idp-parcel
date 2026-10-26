@@ -112,12 +112,21 @@ func connectionCells(basis domain.WindowBasisReference) []string {
 // tfReading 按 TF 的读法把一格 `CONNECTION/<代码>@<版本>` 切成代码与版本：版本在最后一个 `@` 之后。
 func tfReading(t *testing.T, cell string) (string, string) {
 	t.Helper()
+	code, version, read := tfRead(cell)
+	if !read {
+		t.Fatalf("%q 不是带版本的连接拼写", cell)
+	}
+	return code, version
+}
+
+// tfRead 是 tfReading 不失败的那一半：读不出带版本的连接就答 false。
+func tfRead(cell string) (string, string, bool) {
 	reference := strings.TrimPrefix(cell, "CONNECTION/")
 	cut := strings.LastIndex(reference, "@")
 	if cut <= 0 {
-		t.Fatalf("%q 不是带版本的连接拼写", cell)
+		return "", "", false
 	}
-	return reference[:cut], reference[cut+1:]
+	return reference[:cut], reference[cut+1:], true
 }
 
 // Covers: R4 第一条——每段节点间段的窗口依据恰有一格 `CONNECTION/<代码>@<版本>`，指名该段走的那一版连接，按 TF 的读法读回
@@ -190,5 +199,67 @@ func TestANewVersionOfAConnectionKeepsItsCodeAndMovesOnlyTheVersionAndEnds(t *te
 	}
 	if from := after.Legs[1].From().String(); from != before.Legs[1].From().String() {
 		t.Fatalf("起点没改却变了：%s → %s", before.Legs[1].From(), from)
+	}
+}
+
+// Covers: AT-NR-094——登记口拒的连接代码，恰是第一条契约读不回的那些（票 demo-chain-gaps/176）。逐个代码先经真证据视图
+// 折成计划段、按 TF 的读法读一遍，再交登记用例：读不回的（带 `+`，不论在头、在尾、在中间，还是后半截拼成另一格
+// `CONNECTION/`）受理门指名拒、写入口零调用；读得回的（带 `@`、`/`，或本身以 `CONNECTION/` 开头）照常登记、原样到达
+// 写入口。两侧对着同一份读法放在一条用例里：受理门多拒一种或少拒一种，这里先红；读法与预期不符（例如 TF 那一侧换了
+// 切法、这里跟着改了读法），同样先红。
+func TestTheRegistrationGateRefusesExactlyTheConnectionCodesTheContractCannotReadBack(t *testing.T) {
+	cases := []struct {
+		code     string
+		readable bool
+	}{
+		{"SYN-CONN-B-C", true},
+		{"SYN@CONN/B-C", true},
+		{"SYN-CONN-B-C@", true},
+		{"CONNECTION/SYN-B-C", true},
+		{"SYN-CONN-B+C", false},
+		{"+SYN-CONN-B-C", false},
+		{"SYN-CONN-B-C+", false},
+		{"SYN-B+CONNECTION/C", false},
+	}
+	for _, test := range cases {
+		t.Run(test.code, func(t *testing.T) {
+			catalog := connectionContractCatalog(t,
+				contractConnection("SYN-CONN-A-B", 1, "SYN-NODE-A", "SYN-NODE-B"),
+				contractConnection(test.code, 1, "SYN-NODE-B", "SYN-NODE-C"),
+			)
+			catalog.snapshot.Lines[0].Segments[1] = test.code
+			leg := pathOverCatalog(t, catalog).Legs[1]
+			cells := connectionCells(leg.Window().Basis())
+			readable := false
+			if len(cells) == 1 {
+				code, version, read := tfRead(cells[0])
+				readable = read && code == test.code && version == "1"
+			}
+			if readable != test.readable {
+				t.Fatalf("窗口依据 %q 按 TF 读法读回原代码 = %v，预期 %v", leg.Window().Basis(), readable, test.readable)
+			}
+
+			double := &catalogRegistryDouble{}
+			row := validConnection()
+			row.Code = test.code
+			result, err := newCatalogRegistration(t, double).RegisterConnectionVersion(t.Context(),
+				application.RegisterConnectionVersionCommand{TenantID: catalogTenant(t), Connection: row})
+			if err != nil {
+				t.Fatalf("受理门的答案不是错误：%v", err)
+			}
+			if test.readable {
+				if result.Outcome() != application.CatalogRegistered || double.calls != 1 || double.connection.Code != test.code {
+					t.Fatalf("读得回的代码 %q：outcome=%s refusal=%s calls=%d 到达=%q，想要原样登记",
+						test.code, result.Outcome(), result.RefusalReason(), double.calls, double.connection.Code)
+				}
+				return
+			}
+			if result.Outcome() != application.CatalogRegistrationRefused ||
+				result.RefusalReason() != application.CatalogConnectionCodeCarriesBasisSeparator || double.calls != 0 {
+				t.Fatalf("读不回的代码 %q：outcome=%s refusal=%s calls=%d，想要 REFUSED(%s) 且写入口零调用",
+					test.code, result.Outcome(), result.RefusalReason(), double.calls,
+					application.CatalogConnectionCodeCarriesBasisSeparator)
+			}
+		})
 	}
 }

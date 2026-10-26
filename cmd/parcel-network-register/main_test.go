@@ -557,6 +557,31 @@ func TestExecuteTranslatesGateRefusals(t *testing.T) {
 	}
 }
 
+// Covers: AT-NR-094 在本口的那一半——连接代码带窗口依据分隔符 `+`，受理门指名拒，退出码 1、写入口零调用；带 `@`、`/`
+// 的代码照常登记。操作员从消息里读到的是分隔符那一格，知道要换代码而不是补身份。
+func TestExecuteRefusesAConnectionCodeCarryingTheWindowBasisSeparator(t *testing.T) {
+	carrying := []byte(`{"tenant_id":"SYN-TENANT-1","code":"SYN-CONN-A+B","version":1,
+		"from_node":"SYN-NODE-A","to_node":"SYN-NODE-B",
+		"business_timezone":"Asia/Shanghai","effective_from":"2026-08-20T12:00:00Z"}`)
+	double := &registryDouble{}
+	message, code := execute(t.Context(), kindConnection, carrying, registrarOver(t, double), passthroughTransactor{})
+	if code != exitUsage || !strings.Contains(message, "CONNECTION_CODE_CARRIES_BASIS_SEPARATOR") || double.calls() != 0 {
+		t.Fatalf("message=%q code=%d calls=%d, 想要 REFUSED(CONNECTION_CODE_CARRIES_BASIS_SEPARATOR)/1 且写入口零调用",
+			message, code, double.calls())
+	}
+
+	readable := []byte(`{"tenant_id":"SYN-TENANT-1","code":"SYN@CONN/A-B","version":1,
+		"from_node":"SYN-NODE-A","to_node":"SYN-NODE-B",
+		"business_timezone":"Asia/Shanghai","effective_from":"2026-08-20T12:00:00Z"}`)
+	double = &registryDouble{}
+	if message, code := execute(t.Context(), kindConnection, readable, registrarOver(t, double), passthroughTransactor{}); code != exitRegistered {
+		t.Fatalf("message=%q code=%d; 带 @、/ 的连接代码应照常登记", message, code)
+	}
+	if double.connection == nil || double.connection.Code != "SYN@CONN/A-B" {
+		t.Fatalf("连接代码没有原样到达写入口：%+v", double.connection)
+	}
+}
+
 // Covers: ADR-0147 决定四在本口的那一半——采用行只给身份、修订号与生效时点，内容取自参考配置，依据格是那一版的
 // 引用串；线路的逐段成本依据随版本行一并登入。
 func TestExecuteAdoptsALineFromTheReferenceAndRegistersItsCostBases(t *testing.T) {
