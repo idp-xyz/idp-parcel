@@ -1,7 +1,7 @@
 # 11 取消口经首方渠道接通
 
 Category: enhancement
-Status: in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 claude-fpa11（代码最后一笔 4e1841b50）。此前 in-progress——2026-10-26 会话 `tops-20` 认领（前置 code/101、code/98 已进 main），分支 `claude-fpa11`；再此前 ready-for-agent——R1（上线前必修，用户 2026-10-26 定首发要这一口）。
+Status: resolved——2026-10-26 进 main `76722262a`（见文末「进 main 记录」）。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 claude-fpa11（代码最后一笔 4e1841b50）。此前 in-progress——2026-10-26 会话 `tops-20` 认领（前置 code/101、code/98 已进 main），分支 `claude-fpa11`；再此前 ready-for-agent——R1（上线前必修，用户 2026-10-26 定首发要这一口）。
 Blocked by: 无（06、docs-consistency/code/101 取消生命周期闸门、code/98 均已进 main）
 出处：用户 2026-10-26「都需要」（首个租户上线时客户经首方 API 要能撤回、取消、修订、补充、索赔）、「每个客户系统只代表它自己的账户（直客），只考虑这个吧」、「首发不要客户状态读口」、「首发不做限流」；技术取舍由会话 `tops-20` 代决（用户「你帮我决定吧」）。 计划见 [spec](../spec.md)「五口上线」与 [摸底报告](../customer-faces-scoping-2026-10-26.md)。
 
@@ -38,3 +38,13 @@ M
 **判据对用例**：成功 / 他账户 404 同字节 / 未授予 403 / 重放同结果 / 自报账户 400 / 改原因冲突 → `TestACustomerClientCancelsThroughTheFirstPartyLineAgainstARealDatabase`（`AT-PS-147`）；已撤回、已拒绝 `REQUEST_ENDED`、已提交 `REQUEST_AWAITING_DECISION` → `TestACustomerCancellationAgainstANonAcceptedRequestIsAnsweredByTheLifecycleGate`（`AT-PS-148`）；没登取消规则答未配置、真拒绝、两版并存 → `TestTheCustomerCancellationIsTheTenantsToConfigureAndSaysSoWhenItIsNot`（`AT-PS-149`）。单元：`AT-PS-144`（Intake）、`145`（`PCN-1`）、`146`（请求方格）。
 
 **自验**（含 PG）：`go build ./...`、`go vet`、`gofmt`；带 DSN `go test -count=1 -p 1` 跑 `./internal/parcelshipment/...`、`./internal/partycommercial/...`、`./internal/accessidentity/...`、`./cmd/parcel-api/...`、`./internal/architecture/...`、`./migrations/...` 全绿；`seed.sh` 在一次性库退 0（种子未改，仅验参考配置）；`go run ./tools/at-coverage-counts -check` 只报生成物过期。未跑全量 `scripts/test-full.sh`（本票单口，按派单只跑受影响上下文）。
+
+## 评审记录
+
+评审 ← tops-20 隔离子代理(sonnet) · 钉 `b3a7df152`：阻断无。非阻断：1. 授权不走接受时闭包——与 UC-PS-006 不相抵（零版未配置、多版不可用、未解析键或未接受 found=false，皆不放行；时点用接受时刻）；两处缝（接受后被收尾的版本被排除而落未配置、回溯登记的版本会被取到）都偏向拒绝，修订轮写进 ADR-0313；PS 适配器引 `pcdomain` 有同目录先例，`internal/architecture` 通过。2. `requestedAt` 不参与判阶段（阶段取边界事实与生命周期闸门），客户报过去时刻绕不开阶段规则；它只是客户自报的审计时间——修订轮写明；幂等键沿用 code/101 取消库键、取消请求自己的标识不参与，偏离 ADR-0310 取舍 A 但合取消语义——修订轮写明。3. PCN-1 摘要只作载荷校验、不入库——修订轮注明。无发现：账户隔离、取消者＝客户本人、他账户 404 同字节、只装首方取消装配处、管理台路径、号与种子。
+
+## 进 main 记录（2026-10-26，推送方会话 tops-20）
+
+- **main**：`76722262a`。出处：分支 `claude-fpa11` tip `6fefbbce9`（作者为 Sonnet 子代理；ADR-0313）。修订轮只改文档与注释，推送方读了修订 diff。
+- **重放**：先在 `29ef8aa1e` 上验过一轮（`8bee9fd45`：158 ok、管理台 730/730、种子退 0）；推前 main 进了 code/99（PS 应用层与 `cmd/parcel-api` 撤回装配，无 `.go` 重叠），按同区域谨慎起见在新 main `8c361529d` 上重放并**重跑**：全量 158 ok / 0 FAIL，管理台三道门 tsc 退 0、node:test 730/730、vite build 退 0，种子退 0，推 `76722262a`。AT 盘点追记与 code/99 的相邻，两边都留。
+- **号**：`AT-PS-144`–`149`。
