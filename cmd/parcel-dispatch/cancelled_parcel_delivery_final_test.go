@@ -34,7 +34,7 @@ func TestAnEffectiveDeliveryOverAStandingCancellationIsConsumedAsARefusal(t *tes
 	}
 	assertOnlyARefusalOnTheCancelledParcel(t, fixture)
 
-	// 重拍：不采用已入账，不再投、不再长出第二行。
+	// 重拍：不采用已入账，不重投、不长出第二行。
 	if _, err := fixture.beat.DispatchOnce(ctx); err != nil {
 		t.Fatalf("重拍：%v", err)
 	}

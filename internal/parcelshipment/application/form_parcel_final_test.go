@@ -427,7 +427,7 @@ func TestADeliveryOverAStandingCancellationIsNotAdopted(t *testing.T) {
 		}
 		summary, present := result.Completion()
 		if !present || summary.Finalized() != 1 {
-			t.Fatalf("completion = %v %v; 取消终局照旧进汇总", present, summary)
+			t.Fatalf("completion = %v %v; 取消在册的包裹以取消终局进汇总", present, summary)
 		}
 	})
 
@@ -461,6 +461,39 @@ func TestADeliveryOverAStandingCancellationIsNotAdopted(t *testing.T) {
 		}
 		if fixture.finals.saved != 1 {
 			t.Fatalf("saved = %d; 重投不得再落一份", fixture.finals.saved)
+		}
+	})
+
+	// 同一包裹上已有同种当前终局、取消又在册，这个组合在真库的包裹边界锁下走不到（取消提交与终局采用按包裹排队，
+	// 先到的一方落下记录后，后到的读到的就是它）；但编排里先读取消、后做既有终局分派是契约：取消在册即不采用，
+	// 不因手里已有同种终局就改走重派生。真库走不到的次序用替身钉住。
+	t.Run("a standing cancellation is judged before the final that already stands", func(t *testing.T) {
+		fixture := newFinalFixture(t)
+		if first, err := fixture.handler.Handle(context.Background(), finalCommand(t, "parcel-1")); err != nil ||
+			first.Outcome() != application.ParcelFinalFormed {
+			t.Fatalf("first = %q err = %v, want FINAL_FORMED", first.Outcome(), err)
+		}
+		fixture.cancellations.cancelled = true
+		fixture.cancellations.cancellation = cancelledAt(t, finalOccurredAt.Add(-2*time.Hour))
+
+		corrected := finalCommand(t, "parcel-1")
+		corrected.Outcome.Version = mustValue(t, domain.NewResponsibilityOutcomeVersion, "delivery-result/v2")
+		result, err := fixture.handler.Handle(context.Background(), corrected)
+		if err != nil {
+			t.Fatalf("corrected handle: %v", err)
+		}
+		if result.Outcome() != application.FinalSourceNotAdopted ||
+			result.Basis().String() != "PARCEL_CANCELLATION/cancel-1" {
+			t.Fatalf("outcome = %q basis = %q, want SOURCE_NOT_ADOPTED 指名 PARCEL_CANCELLATION/cancel-1——取消在册先于既有终局分派",
+				result.Outcome(), result.Basis())
+		}
+		record, held := result.Record()
+		if !held || record.Finalized || record.Key.Version.String() != "delivery-result/v2" {
+			t.Fatalf("record = %+v held = %v; v2 应落一份不采用记录而不是重派生出的终局", record, held)
+		}
+		current, found, _ := fixture.finals.FindCurrentFinal(context.Background(), record.Key.TenantID, record.Key.Parcel)
+		if !found || current.Key.Version.String() != "delivery-result/v1" {
+			t.Fatalf("current = %+v found = %v; 既有终局应原样在库、不被重派生", current, found)
 		}
 	})
 

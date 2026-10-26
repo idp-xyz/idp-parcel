@@ -187,7 +187,7 @@ func (handler *FormParcelFinalHandler) Handle(
 	}
 	digest := finalContentDigest(outcome)
 
-	// 取消已成立的包裹不再形成非取消终局，所以分派要读取消；读它之前与同一包裹上的取消提交排队
+	// 取消已成立的包裹没有非取消终局，所以分派要读取消；读它之前与同一包裹上的取消提交排队
 	// （ports.CancellationBoundaryLock），锁持到本笔提交。锁在幂等读之前：同一份交付并发重投时，
 	// 后手要等先手落下记录再读，读到的才是已有结果。取不到锁归终局读的那一格：锁守的就是这几道读，
 	// 恢复动作同为重试。
