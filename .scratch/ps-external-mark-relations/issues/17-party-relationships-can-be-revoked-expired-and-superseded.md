@@ -1,7 +1,7 @@
 # 17 参与方关系没有撤销、到期、替代的写面：一段关系一旦生效，只能靠再登一版带终点的修订来结束
 
 Category: enhancement
-Status: in-progress——2026-10-25 评审无阻断、修订轮完，待进 main，分支 claude-psxm17 tip 为写修订轮记录的那一笔（代码与文档最后一笔 `1f0fd386e`；见「修订轮」）。此前 in-progress——2026-10-25 作者完工，待隔离评审与进 main（代码最后一笔 `af6187bf2`）。此前 in-progress——2026-10-25 会话 `tops-20`（Claude Code）改认领：原认领会话 `idp-parcel-9b` 已不在，分支 `claude-psxm17` 当时 0 提交，快进到 main `9ea060682` 复用；协调方 tops-26 同意（它在本票期间不开 PS 的 code 票）。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（infra-speed/02 已进 main，Blocked by 解除），分支 `claude-psxm17`。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立并代决；等另一会话的 infra-speed/02（组合根按文件自登记）进 main 再开工——本票要加端点
+Status: resolved——2026-10-25 进 main `9fffecfa9`（见文末「进 main 记录」）。此前 in-progress——2026-10-25 评审无阻断、修订轮完，待进 main，分支 claude-psxm17 tip 为写修订轮记录的那一笔（代码与文档最后一笔 `1f0fd386e`；见「修订轮」）。此前 in-progress——2026-10-25 作者完工，待隔离评审与进 main（代码最后一笔 `af6187bf2`）。此前 in-progress——2026-10-25 会话 `tops-20`（Claude Code）改认领：原认领会话 `idp-parcel-9b` 已不在，分支 `claude-psxm17` 当时 0 提交，快进到 main `9ea060682` 复用；协调方 tops-26 同意（它在本票期间不开 PS 的 code 票）。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（infra-speed/02 已进 main，Blocked by 解除），分支 `claude-psxm17`。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立并代决；等另一会话的 infra-speed/02（组合根按文件自登记）进 main 再开工——本票要加端点
 Blocked by: infra-speed/02 进 main（另一会话的票，加端点的配方随它定）
 父票：[10](./10-authorized-delivery-relationship-in-party-commercial.md)
 出处：票 10 完成记录「没做」：这是各参与方关系角色共有的旧缺口，授权交付关系让它变得要紧——撤掉一个交付方的授权要能即时生效。
@@ -154,3 +154,14 @@ PC 领域的参与方关系有撤销、到期、替代三种结束（`PartyRelat
 - `go build ./...` 退 0；`go vet ./internal/partycommercial/... ./cmd/parcel-api/... ./cmd/parcel-commercial/...` 退 0；改过的两个 `.go` 过 `gofmt -l` 无输出。
 - `go test -p 1 -count=1 ./internal/partycommercial/... ./cmd/parcel-api/... ./cmd/parcel-commercial/... ./internal/architecture/...` 退 0：有测试的 9 个包全 ok（PC 的 `adapters/accessidentity`、`adapters/http`、`adapters/postgres`、`adapters/registrationjson`、`application`、`domain`，`cmd/parcel-api`、`cmd/parcel-commercial`，`internal/architecture`），无 FAIL、无 SKIP 行。
 - 管理台没改，三道门没重跑。
+
+## 进 main 记录（2026-10-25，推送方会话 tops-20）
+
+- **main**：`9fffecfa9`。出处：分支 `claude-psxm17` tip `c197cabfd`。
+- **重放对照**（分支 → main）：`693c66425` → `f585335fe`；`9c5c55bd6` → `d2ed904b9`；`af6187bf2` → `ed5ad1c70`；`8385c8c10` → `21a6877e7`；`e71d774ef` → `5a9c27038`；`1f0fd386e` → `a479d9f4a`；`c197cabfd` → `31a004153`。
+- **生成物**：机制清点 `9fffecfa9`（推送方在重放后的 tip 上重生成）；ADR 索引与 AT 盘点总览计数重生成无变化，`-check` 退 0。
+- **评审**：隔离子代理钉 `8385c8c10`，两轴无阻断，非阻断 S1、S2、S3、P1、P2 已在修订轮收掉，P3 维持为代决（见「评审记录」「修订轮」）。修订轮只收非阻断，推送方读了修订 diff，未另派复评。
+- **全量真库测试**：`scripts/test-full.sh` 跑在 `69bdf00ca`（同一内容重放在 main `137b3b0ac` 上）：158 ok / 0 FAIL，退 0。
+- **管理台三道门**（落地树上，Node 22，`pnpm install --frozen-lockfile` 后）：`69bdf00ca` 上 tsc 退 0、node:test 608/608、vite build 退 0。推前 main 又前进一笔 `598fa16a0`（只改 `apps/admin-web/src/pages/party/` 发布表单与 `.scratch/party-commercial-uiux/`，与本票文件不重叠、无 `.go`/`.sql`），照 parallel-sessions「别人分支上的活怎么进 main」直接重放；因与本票同在 admin-web，在最终 tip 上重跑三道门：tsc 退 0、node:test 619/619、vite build 退 0；三件生成物复核不变，推 `9fffecfa9`。
+- **种子**：`scripts/demo-seeds/seed.sh` 灌一次性库（`69bdf00ca` 上），退 0，用后删库。
+
