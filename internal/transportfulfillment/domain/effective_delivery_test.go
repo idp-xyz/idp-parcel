@@ -201,6 +201,7 @@ func TestDeliveryResultDisciplineMirrorsPickup(t *testing.T) {
 		labels := map[string]struct{}{}
 		for _, outcome := range []domain.DeliveryObjectOutcome{
 			domain.ObjectDelivered, domain.DeliveryRefused, domain.NoOneToReceive, domain.WrongAddress,
+			domain.DeliveryPendingConfirmation,
 		} {
 			label := outcome.String()
 			if label == "" {
@@ -208,11 +209,11 @@ func TestDeliveryResultDisciplineMirrorsPickup(t *testing.T) {
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 4 {
+		if len(labels) != 5 {
 			t.Fatalf("outcome labels collapsed into %d", len(labels))
 		}
 		if domain.DeliveryObjectOutcome(len(labels)+1).String() != "" {
-			t.Fatal("第五个交付取值带了标签——封闭集合被悄悄放开")
+			t.Fatal("封闭集合之外的下一个交付取值带了标签——封闭集合被悄悄放开")
 		}
 	})
 }

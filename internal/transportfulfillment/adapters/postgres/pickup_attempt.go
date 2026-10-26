@@ -17,7 +17,7 @@ import (
 // PickupAttempts 实现 ports.PickupAttemptStore（写入代数同 ADR-0031）。
 //
 // 父行是尝试本身；逐对象结果与场外揽收分表。揽收行通过 outcome='PICKED_UP' 接到
-// 结果行——失败对象在库里接不上揽收，形状上就进不了 Pickups。
+// 结果行——失败、拒收与待确认对象在库里接不上揽收，形状上就进不了 Pickups。
 type PickupAttempts struct {
 	db *bentopg.DB
 }
@@ -151,20 +151,25 @@ func (repository *PickupAttempts) Save(
 	}
 
 	for _, result := range record.Results {
-		var basis *string
+		var basis, source *string
 		if value, present := result.Basis(); present {
 			raw := value.String()
 			basis = &raw
 		}
+		if value, present := result.Source(); present {
+			raw := value.String()
+			source = &raw
+		}
 		if _, err := executor.Exec(ctx,
 			`INSERT INTO transport_fulfillment.pickup_attempt_result
-				(tenant_id, source_id, object_ref, outcome, basis, occurred_at)
-			 VALUES ($1, $2, $3, $4, $5, $6)`,
+				(tenant_id, source_id, object_ref, outcome, basis, source_ref, occurred_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 			record.Key.TenantID.String(),
 			record.Key.SourceID,
 			result.Object().String(),
 			result.Outcome().String(),
 			basis,
+			source,
 			result.OccurredAt().UTC(),
 		); err != nil {
 			return ports.PickupSaveOutcomeInvalid, fmt.Errorf("save pickup attempt: %w", err)
@@ -200,7 +205,7 @@ func (repository *PickupAttempts) loadResults(
 	attempt domain.FulfillmentAttempt,
 ) ([]domain.AttemptObjectResult, error) {
 	rows, err := querier.Query(ctx,
-		`SELECT object_ref, outcome, basis, occurred_at
+		`SELECT object_ref, outcome, basis, source_ref, occurred_at
 		   FROM transport_fulfillment.pickup_attempt_result
 		  WHERE tenant_id = $1 AND source_id = $2
 		  ORDER BY object_ref`,
@@ -215,9 +220,9 @@ func (repository *PickupAttempts) loadResults(
 	var results []domain.AttemptObjectResult
 	for rows.Next() {
 		var objectRef, outcomeName string
-		var basis *string
+		var basis, source *string
 		var occurredAt time.Time
-		if err := rows.Scan(&objectRef, &outcomeName, &basis, &occurredAt); err != nil {
+		if err := rows.Scan(&objectRef, &outcomeName, &basis, &source, &occurredAt); err != nil {
 			return nil, err
 		}
 		object, err := domain.NewCarriedObjectReference(objectRef)
@@ -235,13 +240,39 @@ func (repository *PickupAttempts) loadResults(
 				return nil, err
 			}
 		}
-		result, err := domain.FormAttemptObjectResult(attempt, object, outcome, basisRef, occurredAt)
+		result, err := rebuildPickupResult(attempt, object, outcome, basisRef, source, occurredAt)
 		if err != nil {
 			return nil, err
 		}
 		results = append(results, result)
 	}
 	return results, rows.Err()
+}
+
+// rebuildPickupResult 按结果走领域两条构造器之一复验：待确认要读回来源，确定结果读回来源就是库面不一致——库内 CHECK
+// 守着这一条，绕过它直插的行在这里暴露，而不是让一格确定结果悄悄带着来源出去。
+func rebuildPickupResult(
+	attempt domain.FulfillmentAttempt,
+	object domain.CarriedObjectReference,
+	outcome domain.AttemptObjectOutcome,
+	basis domain.AttemptResultBasisReference,
+	source *string,
+	occurredAt time.Time,
+) (domain.AttemptObjectResult, error) {
+	if !outcome.PendingConfirmation() {
+		if source != nil {
+			return domain.AttemptObjectResult{}, fmt.Errorf("attempt object result %s carries a source but is %s", object, outcome)
+		}
+		return domain.FormAttemptObjectResult(attempt, object, outcome, basis, occurredAt)
+	}
+	var sourceRef domain.AttemptResultSourceReference
+	if source != nil {
+		var err error
+		if sourceRef, err = domain.NewAttemptResultSourceReference(*source); err != nil {
+			return domain.AttemptObjectResult{}, err
+		}
+	}
+	return domain.FormPendingAttemptObjectResult(attempt, object, sourceRef, basis, occurredAt)
 }
 
 func (repository *PickupAttempts) loadPickups(
@@ -414,6 +445,10 @@ func attemptOutcomeFrom(raw string) (domain.AttemptObjectOutcome, error) {
 		return domain.GoodsNotReady, nil
 	case domain.PackagingUnacceptable.String():
 		return domain.PackagingUnacceptable, nil
+	case domain.ExecutorRefused.String():
+		return domain.ExecutorRefused, nil
+	case domain.PickupPendingConfirmation.String():
+		return domain.PickupPendingConfirmation, nil
 	default:
 		return 0, fmt.Errorf("unknown attempt object outcome %q", raw)
 	}

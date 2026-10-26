@@ -33,11 +33,12 @@ type DeliveryAttemptPayload struct {
 }
 
 // DeliveryAttemptObjectPayload 是逐对象的一项。outcome 取 domain.DeliveryObjectOutcome 的封闭词；basis 可缺——
-// 妥投不带，失败与拒收必带，缺了由编排答`未受理`。
+// 妥投不带，失败、拒收与待确认必带，缺了由编排答`未受理`；source 只属待确认。
 type DeliveryAttemptObjectPayload struct {
 	Object     string `json:"object"`
 	Outcome    string `json:"outcome"`
 	Basis      string `json:"basis,omitempty"`
+	Source     string `json:"source,omitempty"`
 	OccurredAt string `json:"occurredAt"`
 }
 
@@ -95,6 +96,11 @@ func (object DeliveryAttemptObjectPayload) submission() (application.ObjectDeliv
 			return submission, err
 		}
 	}
+	if object.Source != "" {
+		if submission.Source, err = domain.NewAttemptResultSourceReference(object.Source); err != nil {
+			return submission, err
+		}
+	}
 	submission.OccurredAt, err = parseOptionalInstant("occurredAt", object.OccurredAt)
 	return submission, err
 }
@@ -104,6 +110,7 @@ func (object DeliveryAttemptObjectPayload) submission() (application.ObjectDeliv
 func deliveryObjectOutcomeFromWord(raw string) (domain.DeliveryObjectOutcome, error) {
 	for _, outcome := range []domain.DeliveryObjectOutcome{
 		domain.ObjectDelivered, domain.DeliveryRefused, domain.NoOneToReceive, domain.WrongAddress,
+		domain.DeliveryPendingConfirmation,
 	} {
 		if outcome.String() == raw {
 			return outcome, nil
@@ -144,10 +151,13 @@ type deliveryAttemptResponse struct {
 	ContinuationReference string                        `json:"continuationReference,omitempty"`
 }
 
+// deliveryAttemptObjectResult 逐对象一项。source 只在待确认时出现，理由同揽收那一侧的 pickupAttemptObjectResult
+// （UC-TF-006「尝试待确认」要保存全部来源）。
 type deliveryAttemptObjectResult struct {
 	Object  string `json:"object"`
 	Outcome string `json:"outcome"`
 	Basis   string `json:"basis,omitempty"`
+	Source  string `json:"source,omitempty"`
 }
 
 func writeDeliveryAttemptOutcome(response http.ResponseWriter, result application.RecordDeliveryAttemptResult) {
@@ -172,6 +182,9 @@ func writeDeliveryAttemptOutcome(response http.ResponseWriter, result applicatio
 			}
 			if basis, present := objectResult.Basis(); present {
 				entry.Basis = basis.String()
+			}
+			if source, present := objectResult.Source(); present {
+				entry.Source = source.String()
 			}
 			body.Objects = append(body.Objects, entry)
 		}

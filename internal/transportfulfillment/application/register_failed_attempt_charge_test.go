@@ -94,8 +94,17 @@ func deliveryAt(t *testing.T, attemptRef string, outcome domain.DeliveryObjectOu
 	if outcome.Failed() {
 		basis = occurrenceValue(t, domain.NewAttemptResultBasisReference, "SYN-REASON-NO-ONE-HOME")
 	}
-	result, err := domain.FormDeliveryAttemptResult(attempt,
-		occurrenceValue(t, domain.NewCarriedObjectReference, trunkParcel), outcome, basis, attemptArrivedAt.Add(15*time.Minute))
+	object := occurrenceValue(t, domain.NewCarriedObjectReference, trunkParcel)
+	var result domain.DeliveryAttemptResult
+	var err error
+	if outcome.PendingConfirmation() {
+		result, err = domain.FormPendingDeliveryAttemptResult(attempt, object,
+			occurrenceValue(t, domain.NewAttemptResultSourceReference, "SYN-SOURCE/signature+address"),
+			occurrenceValue(t, domain.NewAttemptResultBasisReference, "SYN-CONFLICT/signature-vs-address"),
+			attemptArrivedAt.Add(15*time.Minute))
+	} else {
+		result, err = domain.FormDeliveryAttemptResult(attempt, object, outcome, basis, attemptArrivedAt.Add(15*time.Minute))
+	}
 	if err != nil {
 		t.Fatalf("派送结果夹具：%v", err)
 	}

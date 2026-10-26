@@ -70,6 +70,17 @@ func (double *deliveryViewDouble) LoadDeliveryResult(
 			return domain.FulfillmentAttempt{}, domain.DeliveryAttemptResult{}, false, err
 		}
 	}
+	if double.outcome.PendingConfirmation() {
+		source, err := domain.NewAttemptResultSourceReference("source/signature-scan+address-geofence")
+		if err != nil {
+			return domain.FulfillmentAttempt{}, domain.DeliveryAttemptResult{}, false, err
+		}
+		result, err := domain.FormPendingDeliveryAttemptResult(attemptValue, object, source, basis, deliveryArrivedAt.Add(10*time.Minute))
+		if err != nil {
+			return domain.FulfillmentAttempt{}, domain.DeliveryAttemptResult{}, false, err
+		}
+		return attemptValue, result, true, nil
+	}
 	result, err := domain.FormDeliveryAttemptResult(attemptValue, object, double.outcome, basis, deliveryArrivedAt.Add(10*time.Minute))
 	if err != nil {
 		return domain.FulfillmentAttempt{}, domain.DeliveryAttemptResult{}, false, err

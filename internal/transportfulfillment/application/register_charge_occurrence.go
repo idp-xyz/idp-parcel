@@ -119,6 +119,9 @@ const (
 	ChargeRequestMalformed
 	ChargeFactNotFound
 	AttemptDidNotFail
+	// AttemptResultPendingConfirmation 与 AttemptDidNotFail 分格：那一格说这次没有失败、不必再登；这一格说还不知道失败
+	// 没有，等那件对象的结果以更正或新尝试确定之后再登（ADR-0029 按恢复动作分格）。
+	AttemptResultPendingConfirmation
 	ObjectNotParticipating
 	ParticipationNotEnded
 	ProcurementContextMissing
@@ -168,6 +171,8 @@ func (detail ChargeOccurrenceDetail) String() string {
 		return "FACT_NOT_FOUND"
 	case AttemptDidNotFail:
 		return "ATTEMPT_DID_NOT_FAIL"
+	case AttemptResultPendingConfirmation:
+		return "ATTEMPT_RESULT_PENDING_CONFIRMATION"
 	case ObjectNotParticipating:
 		return "OBJECT_NOT_PARTICIPATING"
 	case ParticipationNotEnded:

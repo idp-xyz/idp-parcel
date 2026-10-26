@@ -92,6 +92,10 @@ func attemptObjectOutcomeOf(raw string) domain.AttemptObjectOutcome {
 		return domain.GoodsNotReady
 	case "PACKAGING_UNACCEPTABLE":
 		return domain.PackagingUnacceptable
+	case "EXECUTOR_REFUSED":
+		return domain.ExecutorRefused
+	case "PENDING_CONFIRMATION":
+		return domain.PickupPendingConfirmation
 	default:
 		return domain.AttemptObjectOutcomeInvalid
 	}

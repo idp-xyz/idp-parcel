@@ -273,17 +273,22 @@ func CanonicalizeOffsitePickupRegistrationPayload(task, place, control, executed
 	})
 }
 
-// OffsitePickupObjectContent 是一次场外揽收尝试里单个对象的内容。提交顺序不进摘要。
+// OffsitePickupObjectContent 是一次场外揽收尝试里单个对象的内容。提交顺序不进摘要。Source 只在待确认时有。
 type OffsitePickupObjectContent struct {
 	Object     string
 	Outcome    AttemptObjectOutcome
 	Basis      string
 	Control    string
 	OccurredAt time.Time
+	Source     string
 }
 
 // CanonicalizeOffsitePickupPayload 定形「执行场外揽收」。对象行按对象、结果、依据、
-// 控制与时刻排序，使提交顺序不构成另一份内容。
+// 控制、时刻与来源排序，使提交顺序不构成另一份内容。
+//
+// 来源缺席时这一键不写：没有来源的行与来源进文法之前逐字节同形，已存摘要的重放照旧认得出，不必另立形状版本
+// （ADR-0014 不在原处改写已存摘要）。来源只属待确认，而待确认是同一笔才进的文法，所以不存在按旧形状算出、却
+// 带着来源的已存摘要。
 func CanonicalizeOffsitePickupPayload(attempt, task string, arrivedAt time.Time, objects []OffsitePickupObjectContent) ([]byte, string, error) {
 	type objectDocument struct {
 		Object     string `json:"object"`
@@ -291,6 +296,7 @@ func CanonicalizeOffsitePickupPayload(attempt, task string, arrivedAt time.Time,
 		Basis      string `json:"basis"`
 		Control    string `json:"control"`
 		OccurredAt string `json:"occurred_at"`
+		Source     string `json:"source,omitempty"`
 	}
 	lines := make([]objectDocument, len(objects))
 	for i, object := range objects {
@@ -300,6 +306,7 @@ func CanonicalizeOffsitePickupPayload(attempt, task string, arrivedAt time.Time,
 			Basis:      object.Basis,
 			Control:    object.Control,
 			OccurredAt: canonicalInstant(object.OccurredAt),
+			Source:     object.Source,
 		}
 	}
 	slices.SortFunc(lines, func(left, right objectDocument) int {
@@ -327,10 +334,16 @@ func CanonicalizeOffsitePickupPayload(attempt, task string, arrivedAt time.Time,
 			}
 			return 1
 		}
-		if left.OccurredAt < right.OccurredAt {
+		if left.OccurredAt != right.OccurredAt {
+			if left.OccurredAt < right.OccurredAt {
+				return -1
+			}
+			return 1
+		}
+		if left.Source < right.Source {
 			return -1
 		}
-		if left.OccurredAt > right.OccurredAt {
+		if left.Source > right.Source {
 			return 1
 		}
 		return 0

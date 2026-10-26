@@ -75,11 +75,15 @@ func (reason DeliveryAttemptUndecidedReason) String() string {
 }
 
 // ObjectDeliverySubmission 是执行方对单个载运对象报回的派送结果。失败、拒收必须带原因依据；
-// 妥投不带——妥投的证据走 POD 进有效交付（FormDeliveryAttemptResult 的纪律）。
+// 妥投不带——妥投的证据走 POD 进有效交付（FormDeliveryAttemptResult 的纪律）；待确认带全部
+// 来源与冲突或缺口。
 type ObjectDeliverySubmission struct {
-	Object     domain.CarriedObjectReference
-	Outcome    domain.DeliveryObjectOutcome
-	Basis      domain.AttemptResultBasisReference
+	Object  domain.CarriedObjectReference
+	Outcome domain.DeliveryObjectOutcome
+	// Basis 在失败与拒收时是原因依据，在待确认时是冲突或缺口。
+	Basis domain.AttemptResultBasisReference
+	// Source 只属待确认，理由同揽收那一侧的 ObjectPickupSubmission.Source。
+	Source     domain.AttemptResultSourceReference
 	OccurredAt time.Time
 }
 
@@ -157,8 +161,7 @@ func (handler *RecordDeliveryAttemptHandler) Handle(
 		RecordedAt: handler.deps.Clock.Now(),
 	}
 	for _, submission := range command.Objects {
-		result, err := domain.FormDeliveryAttemptResult(
-			attempt, submission.Object, submission.Outcome, submission.Basis, submission.OccurredAt)
+		result, err := formDeliveryObjectResult(attempt, submission)
 		if err != nil {
 			return RecordDeliveryAttemptResult{outcome: DeliveryAttemptNotAccepted}, nil
 		}
@@ -204,6 +207,22 @@ func (handler *RecordDeliveryAttemptHandler) Handle(
 	default:
 		return RecordDeliveryAttemptResult{}, fmt.Errorf("%w: %d", ErrUnexpectedDeliveryAttemptSave, saved)
 	}
+}
+
+// formDeliveryObjectResult 按结果走领域两条构造器之一，理由同揽收那一侧的 formPickupObjectResult。
+func formDeliveryObjectResult(
+	attempt domain.FulfillmentAttempt,
+	submission ObjectDeliverySubmission,
+) (domain.DeliveryAttemptResult, error) {
+	if submission.Outcome.PendingConfirmation() {
+		return domain.FormPendingDeliveryAttemptResult(
+			attempt, submission.Object, submission.Source, submission.Basis, submission.OccurredAt)
+	}
+	if submission.Source.String() != "" {
+		return domain.DeliveryAttemptResult{}, domain.ErrInvalidDeliveryAttemptResult
+	}
+	return domain.FormDeliveryAttemptResult(
+		attempt, submission.Object, submission.Outcome, submission.Basis, submission.OccurredAt)
 }
 
 func deliveryAttemptUndecided(reason DeliveryAttemptUndecidedReason, key ports.DeliveryAttemptKey) RecordDeliveryAttemptResult {
@@ -263,11 +282,16 @@ func deliveryAttemptContent(record ports.DeliveryAttemptRecord) string {
 		if value, present := result.Basis(); present {
 			basis = value.String()
 		}
+		source := ""
+		if value, present := result.Source(); present {
+			source = value.String()
+		}
 		results = append(results, strings.Join([]string{
 			result.Object().String(),
 			result.Outcome().String(),
 			basis,
 			registryInstantText(result.OccurredAt()),
+			source,
 		}, "\x1f"))
 	}
 	sort.Strings(results)

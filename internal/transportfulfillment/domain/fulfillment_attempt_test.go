@@ -271,6 +271,7 @@ func TestOneFailureEndsNothingAutomatically(t *testing.T) {
 		labels := map[string]struct{}{}
 		for _, outcome := range []domain.AttemptObjectOutcome{
 			domain.ObjectPickedUp, domain.CustomerAbsent, domain.GoodsNotReady, domain.PackagingUnacceptable,
+			domain.ExecutorRefused, domain.PickupPendingConfirmation,
 		} {
 			label := outcome.String()
 			if label == "" {
@@ -278,11 +279,11 @@ func TestOneFailureEndsNothingAutomatically(t *testing.T) {
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 4 {
+		if len(labels) != 6 {
 			t.Fatalf("outcome labels collapsed into %d", len(labels))
 		}
 		if domain.AttemptObjectOutcome(len(labels)+1).String() != "" {
-			t.Fatal("第五个结果取值带了标签——封闭集合被悄悄放开")
+			t.Fatal("封闭集合之外的下一个结果取值带了标签——封闭集合被悄悄放开")
 		}
 	})
 }

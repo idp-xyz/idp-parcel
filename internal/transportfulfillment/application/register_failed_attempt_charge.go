@@ -58,6 +58,9 @@ func (handler *RegisterChargeOccurrenceHandler) failedPickupFact(
 		return chargeOccurrenceFact{}, chargeNotAccepted(ChargeFactNotFound), true
 	}
 	basis, err := domain.FailedPickupAttemptBasis(result)
+	if errors.Is(err, domain.ErrAttemptResultPendingConfirmation) {
+		return chargeOccurrenceFact{}, chargeNotAccepted(AttemptResultPendingConfirmation), true
+	}
 	if errors.Is(err, domain.ErrNotAFailedAttempt) {
 		return chargeOccurrenceFact{}, chargeNotAccepted(AttemptDidNotFail), true
 	}
@@ -97,6 +100,9 @@ func (handler *RegisterChargeOccurrenceHandler) failedDeliveryFact(
 		return chargeOccurrenceFact{}, chargeNotAccepted(ChargeFactNotFound), true
 	}
 	basis, err := domain.FailedDeliveryAttemptBasis(result)
+	if errors.Is(err, domain.ErrAttemptResultPendingConfirmation) {
+		return chargeOccurrenceFact{}, chargeNotAccepted(AttemptResultPendingConfirmation), true
+	}
 	if errors.Is(err, domain.ErrNotAFailedAttempt) {
 		return chargeOccurrenceFact{}, chargeNotAccepted(AttemptDidNotFail), true
 	}

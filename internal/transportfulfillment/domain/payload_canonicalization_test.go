@@ -73,6 +73,18 @@ func TestCommandPayloadsRoundTripAsTFC1(t *testing.T) {
 			},
 		},
 		{
+			// 来源只在待确认那一行出现；没有来源的行与来源进文法之前同形，上一格的摘要因此不变，已存摘要的重放照旧认得出。
+			name:     "pickup with a pending object and an executor refusal",
+			document: `{"canonicalization":"TFC-1","face":"PERFORM_OFFSITE_PICKUP","attempt":"ATT","task":"TASK","arrived_at":"2026-03-05T02:11:12.345678901Z","objects":[{"object":"OBJ-A","outcome":"PENDING_CONFIRMATION","basis":"GAP","control":"","occurred_at":"2026-03-05T02:11:12.345678901Z","source":"SRC"},{"object":"OBJ-B","outcome":"EXECUTOR_REFUSED","basis":"B2","control":"","occurred_at":"2026-03-05T02:11:12.345678901Z"}]}`,
+			digest:   "TFC-1:387d52fedfa502298f948e4811e494471b4f7532c283240f6d455f5eda39f11c",
+			call: func() ([]byte, string, error) {
+				return domain.CanonicalizeOffsitePickupPayload("ATT", "TASK", at, []domain.OffsitePickupObjectContent{
+					{Object: "OBJ-B", Outcome: domain.ExecutorRefused, Basis: "B2", OccurredAt: at},
+					{Object: "OBJ-A", Outcome: domain.PickupPendingConfirmation, Basis: "GAP", Source: "SRC", OccurredAt: at},
+				})
+			},
+		},
+		{
 			name:     "commission",
 			document: `{"canonicalization":"TFC-1","face":"SUBMIT_COMMISSION","provider":"PROV","agreement_object":"AGR","agreement_version":"V1","conditions":"COND","role":"ROLE","responsibility":"RESP","submitted_at":"2026-03-05T02:11:12.345678901Z","members":["M-A","M-B"]}`,
 			digest:   "TFC-1:616bbef68848a87d208a0e8c44e7f21aef9f79b0551ee010c9e63ff05105e701",

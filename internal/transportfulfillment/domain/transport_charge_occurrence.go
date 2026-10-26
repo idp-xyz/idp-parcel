@@ -15,6 +15,10 @@ var (
 	// ErrNotAFailedAttempt：失败尝试费的事实依据只能是失败的对象结果——把揽收到手的
 	// 对象报成失败尝试费，是在给不存在的失败开成本来源。
 	ErrNotAFailedAttempt = errors.New("transport fulfillment: the referenced attempt result did not fail")
+	// ErrAttemptResultPendingConfirmation：指名的对象结果还是待确认。它与 ErrNotAFailedAttempt 分格——那一格说这次
+	// 没有失败，这一格说还不知道失败没有；读成「没有失败」就是替缺口默认了成功，续办也不同：等这一格以更正或新尝试
+	// 确定之后再登，而不是放弃。
+	ErrAttemptResultPendingConfirmation = errors.New("transport fulfillment: the referenced attempt result is pending confirmation")
 	// ErrNotAParticipant：实际履约发生项的成员必须在段里有一条有效参与。不在段里、或段里那条参与已被更正撤回
 	// （失效版本），都没有可计费的履约范围——替它开发生项就是给没发生的运输开成本来源。
 	ErrNotAParticipant = errors.New("transport fulfillment: the object has no valid participation in the segment")
@@ -441,9 +445,13 @@ func SegmentOccurrenceScope(segment FulfillmentSegmentReference) (OccurrenceScop
 	return scope, nil
 }
 
-// FailedPickupAttemptBasis 是失败揽收结果作事实依据时的引用。与派送那一侧分写前缀：两侧的尝试身份各由自己的
-// 登记册签发，同一个串在两侧可以各指一次到场，共用前缀会让两项落到同一个发生项身份上。
+// FailedPickupAttemptBasis 是失败揽收结果（客户不在、货物未备好、包装不合格、执行方拒收）作事实依据时的引用。与
+// 派送那一侧分写前缀：两侧的尝试身份各由自己的登记册签发，同一个串在两侧可以各指一次到场，共用前缀会让两项落到
+// 同一个发生项身份上。待确认不是失败，单独交回 ErrAttemptResultPendingConfirmation。
 func FailedPickupAttemptBasis(result AttemptObjectResult) (OccurrenceBasisReference, error) {
+	if result.Outcome().PendingConfirmation() {
+		return OccurrenceBasisReference{}, ErrAttemptResultPendingConfirmation
+	}
 	if !result.Outcome().Failed() {
 		return OccurrenceBasisReference{}, ErrNotAFailedAttempt
 	}
@@ -455,8 +463,12 @@ func FailedPickupAttemptBasis(result AttemptObjectResult) (OccurrenceBasisRefere
 	return basis, nil
 }
 
-// FailedDeliveryAttemptBasis 是失败派送结果（无人签收、地址错误、拒收）作事实依据时的引用（AT-TF-095）。
+// FailedDeliveryAttemptBasis 是失败派送结果（无人签收、地址错误、拒收）作事实依据时的引用（AT-TF-095）。待确认同
+// 揽收那一侧。
 func FailedDeliveryAttemptBasis(result DeliveryAttemptResult) (OccurrenceBasisReference, error) {
+	if result.Outcome().PendingConfirmation() {
+		return OccurrenceBasisReference{}, ErrAttemptResultPendingConfirmation
+	}
 	if !result.Outcome().Failed() {
 		return OccurrenceBasisReference{}, ErrNotAFailedAttempt
 	}

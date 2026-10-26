@@ -35,12 +35,13 @@ type OffsitePickupAttemptPayload struct {
 	Objects         []OffsitePickupAttemptObjectPayload `json:"objects"`
 }
 
-// OffsitePickupAttemptObjectPayload 是逐对象的一项。outcome 取 domain.AttemptObjectOutcome 的封闭词；basis 与 control 可缺
-// ——失败对象不带控制依据，带了由编排拒。
+// OffsitePickupAttemptObjectPayload 是逐对象的一项。outcome 取 domain.AttemptObjectOutcome 的封闭词；basis、source 与 control
+// 可缺——失败、拒收与待确认对象不带控制依据，source 只属待确认，带错了由编排拒。
 type OffsitePickupAttemptObjectPayload struct {
 	Object         string `json:"object"`
 	Outcome        string `json:"outcome"`
 	Basis          string `json:"basis,omitempty"`
+	Source         string `json:"source,omitempty"`
 	Control        string `json:"control,omitempty"`
 	OccurredAt     string `json:"occurredAt"`
 	PlannedSegment string `json:"plannedSegment,omitempty"`
@@ -102,6 +103,11 @@ func (object OffsitePickupAttemptObjectPayload) submission() (application.Object
 			return submission, err
 		}
 	}
+	if object.Source != "" {
+		if submission.Source, err = domain.NewAttemptResultSourceReference(object.Source); err != nil {
+			return submission, err
+		}
+	}
 	if object.Control != "" {
 		if submission.Control, err = domain.NewTransportControlReference(object.Control); err != nil {
 			return submission, err
@@ -115,6 +121,7 @@ func (object OffsitePickupAttemptObjectPayload) submission() (application.Object
 func attemptObjectOutcomeFromWord(raw string) (domain.AttemptObjectOutcome, error) {
 	for _, outcome := range []domain.AttemptObjectOutcome{
 		domain.ObjectPickedUp, domain.CustomerAbsent, domain.GoodsNotReady, domain.PackagingUnacceptable,
+		domain.ExecutorRefused, domain.PickupPendingConfirmation,
 	} {
 		if outcome.String() == raw {
 			return outcome, nil
@@ -162,10 +169,13 @@ type pickupAttemptResponse struct {
 	SegmentEntryRefusal   string                      `json:"segmentEntryRefusal,omitempty"`
 }
 
+// pickupAttemptObjectResult 逐对象一项。source 只在待确认时出现：复核的人要从答复里认出这一格凭的是哪些来源，
+// basis 那一格同时是缺口——两样合起来就是 UC-TF-002「揽收结果待确认」要保存的已知事实与缺口。
 type pickupAttemptObjectResult struct {
 	Object        string `json:"object"`
 	Outcome       string `json:"outcome"`
 	Basis         string `json:"basis,omitempty"`
+	Source        string `json:"source,omitempty"`
 	PickupVersion string `json:"pickupVersion,omitempty"`
 }
 
@@ -203,6 +213,9 @@ func writePickupAttemptOutcome(response http.ResponseWriter, result application.
 			}
 			if basis, present := objectResult.Basis(); present {
 				entry.Basis = basis.String()
+			}
+			if source, present := objectResult.Source(); present {
+				entry.Source = source.String()
 			}
 			body.Objects = append(body.Objects, entry)
 		}

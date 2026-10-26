@@ -17,8 +17,9 @@ import (
 var ErrUnexpectedDeliverySave = errors.New("transport fulfillment: unexpected effective delivery save outcome")
 
 // DeliveryRegistrationOutcome 是交付生效提交的应用处理结果。`未生效`是业务负向格
-// ——对象本次没有交付成，登不出生效交付（领域硬句，编排不绕），恢复动作是改约再派
-// 而不是改单或重试。
+// ——对象本次没有交付成，或派送结果还是待确认（证据不足不构成有效交付），登不出生效交付
+// （领域硬句，编排不绕），恢复动作是改约再派而不是改单或重试。待确认那一格日后若以更正
+// 确定为妥投，同一份登记才走得过去；那条更正口另票（code/90），落地时再看这一格要不要分开。
 type DeliveryRegistrationOutcome uint8
 
 const (
@@ -237,7 +238,7 @@ func (handler *RegisterEffectiveDeliveryHandler) RegisterWithGateReading(
 
 	delivery, err := domain.FormEffectiveDelivery(attempt, attemptResult, spec)
 	if errors.Is(err, domain.ErrNotAnEffectiveDelivery) {
-		// 无人签收、地址错误、拒收：对象本次没有交付成——业务负向，登不出生效交付。
+		// 无人签收、地址错误、拒收、待确认：对象本次没有形成有效交付——业务负向，登不出生效交付。
 		return RegisterEffectiveDeliveryResult{outcome: DeliveryNotEffective}, nil
 	}
 	if err != nil {

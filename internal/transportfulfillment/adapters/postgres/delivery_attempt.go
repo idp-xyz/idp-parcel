@@ -75,7 +75,7 @@ func (repository *DeliveryAttempts) FindByKey(
 	}
 
 	rows, err := querier.Query(ctx,
-		`SELECT object_ref, outcome, basis, occurred_at
+		`SELECT object_ref, outcome, basis, source_ref, occurred_at
 		   FROM transport_fulfillment.delivery_attempt_result
 		  WHERE tenant_id = $1 AND attempt_ref = $2
 		  ORDER BY object_ref`,
@@ -90,16 +90,16 @@ func (repository *DeliveryAttempts) FindByKey(
 	record := ports.DeliveryAttemptRecord{Key: key, Attempt: attempt, RecordedAt: recordedAt.UTC()}
 	for rows.Next() {
 		var objectRef, outcomeName string
-		var basis *string
+		var basis, source *string
 		var occurredAt time.Time
-		if err := rows.Scan(&objectRef, &outcomeName, &basis, &occurredAt); err != nil {
+		if err := rows.Scan(&objectRef, &outcomeName, &basis, &source, &occurredAt); err != nil {
 			return ports.DeliveryAttemptRecord{}, false, fmt.Errorf("find delivery attempt: %w", err)
 		}
 		object, err := domain.NewCarriedObjectReference(objectRef)
 		if err != nil {
 			return ports.DeliveryAttemptRecord{}, false, fmt.Errorf("find delivery attempt: %w", err)
 		}
-		result, err := rebuildDeliveryResult(attempt, object, outcomeName, basis, occurredAt)
+		result, err := rebuildDeliveryResult(attempt, object, outcomeName, basis, source, occurredAt)
 		if err != nil {
 			return ports.DeliveryAttemptRecord{}, false, fmt.Errorf("find delivery attempt: %w", err)
 		}
@@ -171,20 +171,25 @@ func (repository *DeliveryAttempts) Save(
 	}
 
 	for _, result := range record.Results {
-		var basis *string
+		var basis, source *string
 		if value, present := result.Basis(); present {
 			raw := value.String()
 			basis = &raw
 		}
+		if value, present := result.Source(); present {
+			raw := value.String()
+			source = &raw
+		}
 		if _, err := executor.Exec(ctx,
 			`INSERT INTO transport_fulfillment.delivery_attempt_result
-				(tenant_id, attempt_ref, object_ref, outcome, basis, occurred_at)
-			 VALUES ($1, $2, $3, $4, $5, $6)`,
+				(tenant_id, attempt_ref, object_ref, outcome, basis, source_ref, occurred_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 			record.Key.TenantID.String(),
 			record.Key.Attempt.String(),
 			result.Object().String(),
 			result.Outcome().String(),
 			basis,
+			source,
 			result.OccurredAt().UTC(),
 		); err != nil {
 			return ports.DeliveryAttemptSaveOutcomeInvalid, fmt.Errorf("save delivery attempt: %w", err)
@@ -212,14 +217,14 @@ func (view *DeliveryAttempts) LoadDeliveryResult(
 	}
 
 	var taskRef, executedBy, placeRef, evidence, outcomeName string
-	var rescheduledFrom, basis *string
+	var rescheduledFrom, basis, source *string
 	var objectsJSON []byte
 	var plannedFrom, plannedTo, arrivedAt, occurredAt time.Time
 	err = querier.QueryRow(ctx,
 		`SELECT a.task_ref, a.executed_by, a.place_ref,
 		        a.planned_from, a.planned_to, a.arrived_at, a.evidence_ref,
 		        a.rescheduled_from, a.objects,
-		        r.outcome, r.basis, r.occurred_at
+		        r.outcome, r.basis, r.source_ref, r.occurred_at
 		   FROM transport_fulfillment.delivery_attempt AS a
 		   JOIN transport_fulfillment.delivery_attempt_result AS r
 		     ON r.tenant_id = a.tenant_id
@@ -233,7 +238,7 @@ func (view *DeliveryAttempts) LoadDeliveryResult(
 	).Scan(&taskRef, &executedBy, &placeRef,
 		&plannedFrom, &plannedTo, &arrivedAt, &evidence,
 		&rescheduledFrom, &objectsJSON,
-		&outcomeName, &basis, &occurredAt)
+		&outcomeName, &basis, &source, &occurredAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.FulfillmentAttempt{}, domain.DeliveryAttemptResult{}, false, nil
 	}
@@ -252,7 +257,7 @@ func (view *DeliveryAttempts) LoadDeliveryResult(
 			fmt.Errorf("load delivery result: %w", err)
 	}
 
-	result, err := rebuildDeliveryResult(fulfillmentAttempt, object, outcomeName, basis, occurredAt)
+	result, err := rebuildDeliveryResult(fulfillmentAttempt, object, outcomeName, basis, source, occurredAt)
 	if err != nil {
 		return domain.FulfillmentAttempt{}, domain.DeliveryAttemptResult{}, false,
 			fmt.Errorf("load delivery result: %w", err)
@@ -260,14 +265,15 @@ func (view *DeliveryAttempts) LoadDeliveryResult(
 	return fulfillmentAttempt, result, true, nil
 }
 
-// rebuildDeliveryResult 经 FormDeliveryAttemptResult 复验：对象在尝试范围内、失败带
-// 依据、妥投不带依据、结果不早于到场。库内 CHECK 守得住前后两条，「对象在范围内」与
-// 时序跨表守不了，靠这道门。
+// rebuildDeliveryResult 经领域构造门复验：对象在尝试范围内、失败带依据、妥投不带依据、
+// 待确认带来源与冲突、结果不早于到场。库内 CHECK 守得住依据与来源那几条，「对象在范围内」
+// 与时序跨表守不了，靠这道门。确定结果读回来源的理由同揽收那一侧的 rebuildPickupResult。
 func rebuildDeliveryResult(
 	attempt domain.FulfillmentAttempt,
 	object domain.CarriedObjectReference,
 	outcomeName string,
 	basis *string,
+	source *string,
 	occurredAt time.Time,
 ) (domain.DeliveryAttemptResult, error) {
 	outcome, err := deliveryOutcomeFrom(outcomeName)
@@ -280,7 +286,19 @@ func rebuildDeliveryResult(
 			return domain.DeliveryAttemptResult{}, err
 		}
 	}
-	return domain.FormDeliveryAttemptResult(attempt, object, outcome, basisRef, occurredAt)
+	if !outcome.PendingConfirmation() {
+		if source != nil {
+			return domain.DeliveryAttemptResult{}, fmt.Errorf("delivery attempt result %s carries a source but is %s", object, outcome)
+		}
+		return domain.FormDeliveryAttemptResult(attempt, object, outcome, basisRef, occurredAt)
+	}
+	var sourceRef domain.AttemptResultSourceReference
+	if source != nil {
+		if sourceRef, err = domain.NewAttemptResultSourceReference(*source); err != nil {
+			return domain.DeliveryAttemptResult{}, err
+		}
+	}
+	return domain.FormPendingDeliveryAttemptResult(attempt, object, sourceRef, basisRef, occurredAt)
 }
 
 func deliveryOutcomeFrom(raw string) (domain.DeliveryObjectOutcome, error) {
@@ -293,6 +311,8 @@ func deliveryOutcomeFrom(raw string) (domain.DeliveryObjectOutcome, error) {
 		return domain.NoOneToReceive, nil
 	case domain.WrongAddress.String():
 		return domain.WrongAddress, nil
+	case domain.DeliveryPendingConfirmation.String():
+		return domain.DeliveryPendingConfirmation, nil
 	default:
 		return 0, fmt.Errorf("unknown delivery object outcome %q", raw)
 	}

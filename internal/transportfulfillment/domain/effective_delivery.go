@@ -9,14 +9,14 @@ var (
 	ErrInvalidDeliveryAttemptResult = errors.New("transport fulfillment: invalid delivery attempt result")
 	// ErrNotAnEffectiveDelivery 是 CONTEXT 交付节的硬句本体：「无人签收、地址错误、收件人
 	// 拒收或证据不足不构成有效交付」（UC-TF-006 同句另列「包装不合格」——那是揽收侧失败
-	// 家族的词，本类型的封闭集合不含它）。它与形状错误分格——恢复动作不是补字段，而是
-	// 承认这个对象本次没有交付。
+	// 家族的词，本类型的封闭集合不含它）。待确认落在「证据不足」那一种上。它与形状错误分格
+	// ——恢复动作不是补字段，而是承认这个对象本次没有形成有效交付。
 	ErrNotAnEffectiveDelivery   = errors.New("transport fulfillment: this outcome does not constitute an effective delivery")
 	ErrInvalidEffectiveDelivery = errors.New("transport fulfillment: invalid effective delivery")
 )
 
 // DeliveryObjectOutcome 是一次派送尝试中单个载运对象结果的封闭集合（UC-TF-006：成功、
-// 失败、拒收各自成立，任务汇总只能派生）。
+// 失败、拒收、待确认各自成立，任务汇总只能派生）。新取值只往末尾加，理由同 AttemptObjectOutcome。
 type DeliveryObjectOutcome uint8
 
 const (
@@ -25,10 +25,13 @@ const (
 	DeliveryRefused
 	NoOneToReceive
 	WrongAddress
+	// DeliveryPendingConfirmation 是证据不足或来源冲突（UC-TF-006「尝试待确认」，AT-TF-070）：带全部来源与冲突或
+	// 缺口，登不出有效交付、不转移控制，也不是失败。
+	DeliveryPendingConfirmation
 )
 
 func (outcome DeliveryObjectOutcome) valid() bool {
-	return outcome >= ObjectDelivered && outcome <= WrongAddress
+	return outcome >= ObjectDelivered && outcome <= DeliveryPendingConfirmation
 }
 
 // Succeeded 只在妥投时为真。拒收刻意不带「已退回」语义：拒收只结束本次尝试的相应对象
@@ -37,8 +40,15 @@ func (outcome DeliveryObjectOutcome) Succeeded() bool {
 	return outcome == ObjectDelivered
 }
 
+// Failed 是本次尝试对该对象的确定未成功：无人签收、地址错误、收件人拒收。待确认不在其内，理由同
+// AttemptObjectOutcome.Failed。
 func (outcome DeliveryObjectOutcome) Failed() bool {
-	return outcome.valid() && !outcome.Succeeded()
+	return outcome.valid() && !outcome.Succeeded() && !outcome.PendingConfirmation()
+}
+
+// PendingConfirmation 只在待确认时为真。
+func (outcome DeliveryObjectOutcome) PendingConfirmation() bool {
+	return outcome == DeliveryPendingConfirmation
 }
 
 func (outcome DeliveryObjectOutcome) String() string {
@@ -51,22 +61,28 @@ func (outcome DeliveryObjectOutcome) String() string {
 		return "NO_ONE_TO_RECEIVE"
 	case WrongAddress:
 		return "WRONG_ADDRESS"
+	case DeliveryPendingConfirmation:
+		return "PENDING_CONFIRMATION"
 	default:
 		return ""
 	}
 }
 
 // DeliveryAttemptResult 是一次派送尝试中单个载运对象的结果，纪律与揽收侧的
-// AttemptObjectResult 同一条：逐对象成立、失败必须带原因依据、妥投不得携带失败依据；
-// 结构上没有控制或履约段字段——妥投本身也不转移控制，控制转移只随有效交付成立。
+// AttemptObjectResult 同一条：逐对象成立、失败必须带原因依据、妥投不得携带失败依据、待确认
+// 带来源与冲突或缺口；结构上没有控制或履约段字段——妥投本身也不转移控制，控制转移只随有效
+// 交付成立。
 type DeliveryAttemptResult struct {
 	attempt    AttemptReference
 	object     CarriedObjectReference
 	outcome    DeliveryObjectOutcome
 	basis      AttemptResultBasisReference
+	source     AttemptResultSourceReference
 	occurredAt time.Time
 }
 
+// FormDeliveryAttemptResult 记单个对象的确定结果（妥投、无人签收、地址错误、收件人拒收）。待确认不从这里进，
+// 理由同 FormAttemptObjectResult；它走 FormPendingDeliveryAttemptResult。
 func FormDeliveryAttemptResult(
 	attempt FulfillmentAttempt,
 	object CarriedObjectReference,
@@ -74,14 +90,11 @@ func FormDeliveryAttemptResult(
 	basis AttemptResultBasisReference,
 	occurredAt time.Time,
 ) (DeliveryAttemptResult, error) {
-	if !attempt.attempt.valid() || !object.valid() || !outcome.valid() || AtRegistryPrecision(occurredAt).IsZero() {
+	if !outcome.valid() || outcome.PendingConfirmation() {
 		return DeliveryAttemptResult{}, ErrInvalidDeliveryAttemptResult
 	}
-	if occurredAt.Before(attempt.arrivedAt) {
-		return DeliveryAttemptResult{}, ErrInvalidDeliveryAttemptResult
-	}
-	if !attempt.Covers(object) {
-		return DeliveryAttemptResult{}, ErrObjectOutsideAttempt
+	if err := deliveryAttemptResultInScope(attempt, object, occurredAt); err != nil {
+		return DeliveryAttemptResult{}, err
 	}
 	if outcome.Failed() && !basis.valid() {
 		return DeliveryAttemptResult{}, ErrInvalidDeliveryAttemptResult
@@ -99,6 +112,41 @@ func FormDeliveryAttemptResult(
 	}, nil
 }
 
+// FormPendingDeliveryAttemptResult 记一个对象在这次派送尝试里的待确认：证据不足或来源冲突（UC-TF-006 步骤 4
+// 「证据不足保持待确认」）。全部来源与冲突或缺口都必备；这一格以后不改写，理由同 FormPendingAttemptObjectResult。
+// 冲突时不按外部最后状态码裁决：一份后到的 `DELIVERED` 只是来源之一，不把这一格改成妥投。
+func FormPendingDeliveryAttemptResult(
+	attempt FulfillmentAttempt,
+	object CarriedObjectReference,
+	source AttemptResultSourceReference,
+	conflict AttemptResultBasisReference,
+	occurredAt time.Time,
+) (DeliveryAttemptResult, error) {
+	if err := deliveryAttemptResultInScope(attempt, object, occurredAt); err != nil {
+		return DeliveryAttemptResult{}, err
+	}
+	if !source.valid() || !conflict.valid() {
+		return DeliveryAttemptResult{}, ErrInvalidDeliveryAttemptResult
+	}
+	return DeliveryAttemptResult{
+		attempt:    attempt.attempt,
+		object:     object,
+		outcome:    DeliveryPendingConfirmation,
+		basis:      conflict,
+		source:     source,
+		occurredAt: occurredAt.UTC(),
+	}, nil
+}
+
+// deliveryAttemptResultInScope 走揽收那一侧同一道锚定门，形状错误换成派送一侧的错误值；范围外照旧单独一格。
+func deliveryAttemptResultInScope(attempt FulfillmentAttempt, object CarriedObjectReference, occurredAt time.Time) error {
+	err := attemptObjectResultInScope(attempt, object, occurredAt)
+	if err == nil || errors.Is(err, ErrObjectOutsideAttempt) {
+		return err
+	}
+	return ErrInvalidDeliveryAttemptResult
+}
+
 func (result DeliveryAttemptResult) Attempt() AttemptReference {
 	return result.attempt
 }
@@ -111,12 +159,20 @@ func (result DeliveryAttemptResult) Outcome() DeliveryObjectOutcome {
 	return result.outcome
 }
 
-// Basis 在失败或拒收时交回原因依据；妥投没有它。
+// Basis 在失败或拒收时交回原因依据，在待确认时交回冲突或缺口；妥投没有它。
 func (result DeliveryAttemptResult) Basis() (AttemptResultBasisReference, bool) {
 	if !result.basis.valid() {
 		return AttemptResultBasisReference{}, false
 	}
 	return result.basis, true
+}
+
+// Source 只在待确认时交回全部来源。
+func (result DeliveryAttemptResult) Source() (AttemptResultSourceReference, bool) {
+	if !result.source.valid() {
+		return AttemptResultSourceReference{}, false
+	}
+	return result.source, true
 }
 
 func (result DeliveryAttemptResult) OccurredAt() time.Time {
@@ -191,8 +247,9 @@ type EffectiveDelivery struct {
 	gateReading DeliveryGateReading
 }
 
-// FormEffectiveDelivery 只接受妥投结果：无人签收、地址错误、收件人拒收都进不来——
-// 那三格没有可交付的东西，硬把它们造成交付正是 CONTEXT 明禁的（AT-TF-065/067）。
+// FormEffectiveDelivery 只接受妥投结果：无人签收、地址错误、收件人拒收与待确认都进不来——
+// 前三格没有可交付的东西，待确认是证据不足或来源冲突，硬把它们造成交付正是 CONTEXT 明禁的
+// （「证据不足不构成有效交付」，AT-TF-065/067/070）。
 // 结果必须锚在同一次尝试上：地点、租户从该尝试取，业务时间从对象结果取。
 func FormEffectiveDelivery(
 	attempt FulfillmentAttempt,

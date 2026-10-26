@@ -39,12 +39,24 @@ func NewAttemptEvidenceReference(value string) (AttemptEvidenceReference, error)
 }
 
 // AttemptResultBasisReference 指名一个对象结果的依据——失败原因证据（客户不在、货物
-// 未备好、包装不合格……）由它承载，而不是一段自由文本状态。
+// 未备好、包装不合格……）、拒收的原因与证据、待确认的缺口或冲突由它承载，而不是一段
+// 自由文本状态。
 type AttemptResultBasisReference struct{ requiredValue }
 
 func NewAttemptResultBasisReference(value string) (AttemptResultBasisReference, error) {
 	required, err := newRequiredValue("attempt result basis reference", value)
 	return AttemptResultBasisReference{required}, err
+}
+
+// AttemptResultSourceReference 指名待确认结果所凭的已有来源（车辆到场、司机扫描、签收、地址来源……的集合）。
+// 它与依据分两格：来源说已经知道什么，依据说还差什么或哪里冲突——UC-TF-002「揽收结果待确认」要保存已知事实与
+// 缺口，UC-TF-006「尝试待确认」要保存全部来源；合成一格，复核的人就分不出哪些是证据、哪些是待补的那一块。
+// 只有待确认带它：确定结果的证据在依据、OffsitePickup 或 POD 上，再立一格来源只会两处口径打架。
+type AttemptResultSourceReference struct{ requiredValue }
+
+func NewAttemptResultSourceReference(value string) (AttemptResultSourceReference, error) {
+	required, err := newRequiredValue("attempt result source reference", value)
+	return AttemptResultSourceReference{required}, err
 }
 
 // FulfillmentAttemptSpec 是形成一次履约尝试所需的全部输入。RescheduledFrom 只在改约或
@@ -184,8 +196,11 @@ func (attempt FulfillmentAttempt) RescheduledFrom() (AttemptReference, bool) {
 	return attempt.rescheduledFrom, true
 }
 
-// AttemptObjectOutcome 是一次尝试中单个载运对象结果的封闭集合。取值随实际建模的揽派
-// 场景增长；今天只有场外揽收一个生产者，所以成功一格叫「揽收到手」。
+// AttemptObjectOutcome 是一次尝试中单个载运对象结果的封闭集合（CONTEXT：成功、失败、拒收、待确认逐对象各自
+// 成立）。取值随实际建模的揽派场景增长；今天只有场外揽收一个生产者，所以成功一格叫「揽收到手」。
+//
+// 新取值只往末尾加：取值的整数进了未带版本前缀的旧内容摘要（unversionedPickupContentDigest），挪位会让旧记录
+// 的重放认不出自己。
 type AttemptObjectOutcome uint8
 
 const (
@@ -193,11 +208,21 @@ const (
 	ObjectPickedUp
 	CustomerAbsent
 	GoodsNotReady
+	// PackagingUnacceptable 是包装不合格使这次没有交运、执行方没有作出拒收的那一种（如执行方指出包装不合格、
+	// 客户决定这次不交运），属失败（CONTEXT 把它列在失败结果里）。执行方查验后明确拒收的，不论原因是不是包装，
+	// 记 ExecutorRefused——同一场景只落一格。
 	PackagingUnacceptable
+	// ExecutorRefused 是执行方查验后明确拒收该对象（UC-TF-002「本次对象被拒收」，AT-TF-017）：拒收的原因与证据
+	// 由依据指名，责任方是这次尝试的执行方，此前控制方不变。它与失败分格是因为文档把拒收列为单独一种结果、
+	// 要保存的是一次拒收决定，而不是一种到场状况。
+	ExecutorRefused
+	// PickupPendingConfirmation 是已有来源不足以证明接收、控制或对象范围（UC-TF-002「揽收结果待确认」，
+	// AT-TF-018）：带已有来源与缺口，不转移控制、不形成揽收到手，也不是失败。
+	PickupPendingConfirmation
 )
 
 func (outcome AttemptObjectOutcome) valid() bool {
-	return outcome >= ObjectPickedUp && outcome <= PackagingUnacceptable
+	return outcome >= ObjectPickedUp && outcome <= PickupPendingConfirmation
 }
 
 // Succeeded 只在揽收到手时为真。失败家族刻意不给「哪一种失败」以外的语义：是否重试、
@@ -206,8 +231,15 @@ func (outcome AttemptObjectOutcome) Succeeded() bool {
 	return outcome == ObjectPickedUp
 }
 
+// Failed 是本次尝试对该对象的确定未成功：失败与拒收。待确认不在其内——它还没有确定结果，任务汇总把它读作
+// 未结束；读成失败就是替缺口默认了一个结论，失败尝试费也就有了不存在的事实依据。
 func (outcome AttemptObjectOutcome) Failed() bool {
-	return outcome.valid() && !outcome.Succeeded()
+	return outcome.valid() && !outcome.Succeeded() && !outcome.PendingConfirmation()
+}
+
+// PendingConfirmation 只在待确认时为真。
+func (outcome AttemptObjectOutcome) PendingConfirmation() bool {
+	return outcome == PickupPendingConfirmation
 }
 
 func (outcome AttemptObjectOutcome) String() string {
@@ -220,31 +252,37 @@ func (outcome AttemptObjectOutcome) String() string {
 		return "GOODS_NOT_READY"
 	case PackagingUnacceptable:
 		return "PACKAGING_UNACCEPTABLE"
+	case ExecutorRefused:
+		return "EXECUTOR_REFUSED"
+	case PickupPendingConfirmation:
+		return "PENDING_CONFIRMATION"
 	default:
 		return ""
 	}
 }
 
 // AttemptObjectResult 是一次尝试中单个载运对象的结果。逐对象成立：共享一次到场的对象
-// 分别记成功或失败，任务汇总只能由这些结果派生。
+// 分别记成功、失败、拒收或待确认，任务汇总只能由这些结果派生。
 //
 // 它结构上不携带任何运输控制或履约段引用——「失败结果不制造实际履约段」不靠纪律靠形状：
-// 建立履约参与关系的控制依据只在 OffsitePickup（有效收寄）上，失败结果里没有字段可以
-// 冒充它。一次失败也不自动结束任务、不自动创建退运：这里没有任务终局或退运字段，后续
-// 处置由适用产品、合同和授权规则另行决定。
+// 建立履约参与关系的控制依据只在 OffsitePickup（有效收寄）上，失败、拒收与待确认结果里
+// 没有字段可以冒充它，三者都保持此前已确认的控制关系。一次失败也不自动结束任务、不自动
+// 创建退运：这里没有任务终局或退运字段，后续处置由适用产品、合同和授权规则另行决定。
 type AttemptObjectResult struct {
 	attempt    AttemptReference
 	object     CarriedObjectReference
 	outcome    AttemptObjectOutcome
 	basis      AttemptResultBasisReference
+	source     AttemptResultSourceReference
 	occurredAt time.Time
 }
 
-// FormAttemptObjectResult 依附一次已形成的尝试记录单个对象的结果。
+// FormAttemptObjectResult 依附一次已形成的尝试记录单个对象的确定结果（揽收到手、失败、拒收）。
 //
-// 失败必须带依据——没有失败原因的失败与数据丢失无从分辨；成功不得携带失败依据——揽收
+// 失败与拒收必须带依据——没有原因的失败与数据丢失无从分辨；成功不得携带失败依据——揽收
 // 的证据与控制依据在 OffsitePickup 上，往成功结果里塞一份「依据」只会让两处口径打架。
-// 结果时间不得早于实际到场：到场之前没有可记的执行结果。
+// 结果时间不得早于实际到场：到场之前没有可记的执行结果。待确认不从这里进：这条构造器不收
+// 来源，从这里进来的待确认是一格说不出凭什么待确认的结果——它走 FormPendingAttemptObjectResult。
 func FormAttemptObjectResult(
 	attempt FulfillmentAttempt,
 	object CarriedObjectReference,
@@ -252,14 +290,11 @@ func FormAttemptObjectResult(
 	basis AttemptResultBasisReference,
 	occurredAt time.Time,
 ) (AttemptObjectResult, error) {
-	if !attempt.attempt.valid() || !object.valid() || !outcome.valid() || AtRegistryPrecision(occurredAt).IsZero() {
+	if !outcome.valid() || outcome.PendingConfirmation() {
 		return AttemptObjectResult{}, ErrInvalidAttemptObjectResult
 	}
-	if occurredAt.Before(attempt.arrivedAt) {
-		return AttemptObjectResult{}, ErrInvalidAttemptObjectResult
-	}
-	if !attempt.Covers(object) {
-		return AttemptObjectResult{}, ErrObjectOutsideAttempt
+	if err := attemptObjectResultInScope(attempt, object, occurredAt); err != nil {
+		return AttemptObjectResult{}, err
 	}
 	if outcome.Failed() && !basis.valid() {
 		return AttemptObjectResult{}, ErrInvalidAttemptObjectResult
@@ -276,6 +311,51 @@ func FormAttemptObjectResult(
 	}, nil
 }
 
+// FormPendingAttemptObjectResult 记一个对象在这次尝试里的待确认：已有来源不足以证明接收、控制或对象范围
+// （UC-TF-002 步骤 6C）。来源与缺口都必备——没有来源说不出凭什么待确认，没有缺口说不出还差什么。
+//
+// 它是这次尝试的一格结果，不是读不动：形成之后照常随尝试落册。这一格以后不改写——同一次上门的后补来源以
+// 更正形成新判断版本，新的上门形成新尝试（CONTEXT「揽收、派送与交付」）；同一来源身份换成确定结果再交是冲突，
+// 不按最后消息覆盖。
+func FormPendingAttemptObjectResult(
+	attempt FulfillmentAttempt,
+	object CarriedObjectReference,
+	source AttemptResultSourceReference,
+	gap AttemptResultBasisReference,
+	occurredAt time.Time,
+) (AttemptObjectResult, error) {
+	if err := attemptObjectResultInScope(attempt, object, occurredAt); err != nil {
+		return AttemptObjectResult{}, err
+	}
+	if !source.valid() || !gap.valid() {
+		return AttemptObjectResult{}, ErrInvalidAttemptObjectResult
+	}
+	return AttemptObjectResult{
+		attempt:    attempt.attempt,
+		object:     object,
+		outcome:    PickupPendingConfirmation,
+		basis:      gap,
+		source:     source,
+		occurredAt: occurredAt.UTC(),
+	}, nil
+}
+
+// attemptObjectResultInScope 是揽收与派送两侧逐对象结果共用的锚定门：结果落在一次已形成的尝试上、对象在它的
+// 范围内、时刻不早于实际到场。形状错误与范围外分格（ErrObjectOutsideAttempt 头注）；派送一侧把形状错误换成
+// 自己的错误值。
+func attemptObjectResultInScope(attempt FulfillmentAttempt, object CarriedObjectReference, occurredAt time.Time) error {
+	if !attempt.attempt.valid() || !object.valid() || AtRegistryPrecision(occurredAt).IsZero() {
+		return ErrInvalidAttemptObjectResult
+	}
+	if occurredAt.Before(attempt.arrivedAt) {
+		return ErrInvalidAttemptObjectResult
+	}
+	if !attempt.Covers(object) {
+		return ErrObjectOutsideAttempt
+	}
+	return nil
+}
+
 func (result AttemptObjectResult) Attempt() AttemptReference {
 	return result.attempt
 }
@@ -288,12 +368,20 @@ func (result AttemptObjectResult) Outcome() AttemptObjectOutcome {
 	return result.outcome
 }
 
-// Basis 在失败时交回失败原因依据；成功没有它。
+// Basis 在失败与拒收时交回原因依据，在待确认时交回缺口或冲突；成功没有它。
 func (result AttemptObjectResult) Basis() (AttemptResultBasisReference, bool) {
 	if !result.basis.valid() {
 		return AttemptResultBasisReference{}, false
 	}
 	return result.basis, true
+}
+
+// Source 只在待确认时交回所凭的已有来源。
+func (result AttemptObjectResult) Source() (AttemptResultSourceReference, bool) {
+	if !result.source.valid() {
+		return AttemptResultSourceReference{}, false
+	}
+	return result.source, true
 }
 
 func (result AttemptObjectResult) OccurredAt() time.Time {

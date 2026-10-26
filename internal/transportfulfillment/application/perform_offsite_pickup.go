@@ -74,12 +74,16 @@ func (reason PickupUndecidedReason) String() string {
 }
 
 // ObjectPickupSubmission 是执行方对单个载运对象报回的结果。成功必须带控制依据——
-// 没有它证明不了运输方取得控制；失败必须带原因依据、不得带控制依据——带了就是把
-// 一次失败到场伪装成取得控制（CONTEXT「失败结果不制造实际履约段」）。
+// 没有它证明不了运输方取得控制；失败与拒收必须带原因依据、不得带控制依据——带了就是把
+// 一次失败到场伪装成取得控制（CONTEXT「失败结果不制造实际履约段」）；待确认带来源与缺口、
+// 同样不得带控制依据。
 type ObjectPickupSubmission struct {
-	Object     domain.CarriedObjectReference
-	Outcome    domain.AttemptObjectOutcome
-	Basis      domain.AttemptResultBasisReference
+	Object  domain.CarriedObjectReference
+	Outcome domain.AttemptObjectOutcome
+	// Basis 在失败与拒收时是原因依据，在待确认时是缺口或冲突。
+	Basis domain.AttemptResultBasisReference
+	// Source 只属待确认：所凭的已有来源。确定结果带它是提交自身的矛盾。
+	Source     domain.AttemptResultSourceReference
 	Control    domain.TransportControlReference
 	OccurredAt time.Time
 	// PlannedSegment 是这个对象自己关联的计划履约段，可缺席。**逐对象一个而不是整次到访
@@ -213,6 +217,7 @@ func (handler *PerformOffsitePickupHandler) Handle(
 			Basis:      submission.Basis.String(),
 			Control:    submission.Control.String(),
 			OccurredAt: submission.OccurredAt,
+			Source:     submission.Source.String(),
 		}
 	}
 	_, digest, err := domain.CanonicalizeOffsitePickupPayload(command.Attempt, command.Task, command.ArrivedAt, objects)
@@ -250,16 +255,16 @@ func (handler *PerformOffsitePickupHandler) Handle(
 		RecordedAt:    handler.deps.Clock.Now(),
 	}
 	for _, submission := range command.Objects {
-		result, err := domain.FormAttemptObjectResult(
-			attempt, submission.Object, submission.Outcome, submission.Basis, submission.OccurredAt)
+		result, err := formPickupObjectResult(attempt, submission)
 		if err != nil {
 			return PerformOffsitePickupResult{outcome: PickupNotAccepted}, nil
 		}
 		record.Results = append(record.Results, result)
 
 		if !submission.Outcome.Succeeded() {
-			// 失败或拒收对象到此为止：不形成场外揽收，也没有可交给 parcel-shipment 的
-			// 东西（步骤 6B）。带了控制依据的失败被拒——那是把失败到场伪装成取得控制。
+			// 失败、拒收或待确认对象到此为止：不形成场外揽收，也没有可交给 parcel-shipment
+			// 的东西（步骤 6B、6C）；此前已确认的控制关系不变。带了控制依据的被拒——那是把
+			// 没有接收的到场伪装成取得控制。
 			if submission.Control.String() != "" {
 				return PerformOffsitePickupResult{outcome: PickupNotAccepted}, nil
 			}
@@ -289,6 +294,23 @@ func storeUndecided(sourceID string) PerformOffsitePickupResult {
 		reason:       PickupStoreUnavailable,
 		continuation: pickupContinuation("PICKUP_STORE_UNAVAILABLE", sourceID),
 	}
+}
+
+// formPickupObjectResult 按结果走领域两条构造器之一：待确认要来源，其余不收来源。确定结果带着来源进来是提交自身
+// 的矛盾——那一格只属待确认，收下它就得替调用方决定它算不算数。
+func formPickupObjectResult(
+	attempt domain.FulfillmentAttempt,
+	submission ObjectPickupSubmission,
+) (domain.AttemptObjectResult, error) {
+	if submission.Outcome.PendingConfirmation() {
+		return domain.FormPendingAttemptObjectResult(
+			attempt, submission.Object, submission.Source, submission.Basis, submission.OccurredAt)
+	}
+	if submission.Source.String() != "" {
+		return domain.AttemptObjectResult{}, domain.ErrInvalidAttemptObjectResult
+	}
+	return domain.FormAttemptObjectResult(
+		attempt, submission.Object, submission.Outcome, submission.Basis, submission.OccurredAt)
 }
 
 // formAttempt 把来源字符串折成领域尝试。立不起来的输入由领域构造器拒绝，编排不代答。
