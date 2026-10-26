@@ -1,7 +1,7 @@
 # 133 已完成但合计为零的评价被当成矛盾上抛，请求永远停在已提交
 
 Category: bug
-Status: in-progress——2026-10-26 评审阻断已修、修订轮完，待复评与进 main，分支 claude-dcg133 tip `4c352c49b`（其后一笔只写评审记录与修订轮；已变基到 origin/main `803b97e5f`）。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg133` tip `22849dd6e`（变基前的 SHA）。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领（code/12+46 已进 main），分支 `claude-dcg133`（worktree `idp-parcel-dcg133`）；新 ADR 取 0306。此前 ready-for-agent——2026-10-20 代决复核立（上线后尽快），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: resolved——2026-10-26 进 main `f85ea8449`（见文末「进 main 记录」）。此前 in-progress——2026-10-26 评审阻断已修、修订轮完，待复评与进 main，分支 claude-dcg133 tip `4c352c49b`（其后一笔只写评审记录与修订轮；已变基到 origin/main `803b97e5f`）。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg133` tip `22849dd6e`（变基前的 SHA）。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领（code/12+46 已进 main），分支 `claude-dcg133`（worktree `idp-parcel-dcg133`）；新 ADR 取 0306。此前 ready-for-agent——2026-10-20 代决复核立（上线后尽快），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 M12；ADR-0198 决定四与越权风险点 4（BUY 路 ADR-0200 同形）
 
@@ -119,3 +119,13 @@ Blocked by: 无
 - `go build ./...`、`go vet ./...` 通过，`gofmt -l internal cmd` 为空。
 - 带 DSN `go test -p 1 -count=1`：SA、PP 全部包，反查的 `cmd/parcel-api`、`parcel-dispatch`、`parcel-pricing-feed`、`parcel-pricing-register`、`parcel-pricing-template`、`parcel-settlement-register`，`internal/architecture`、`migrations`——33 个包全 ok；零额的真库用例 `-v` 确认 PASS。
 - `adr-index -check`、`at-coverage-counts -check` 只报生成物过期。
+
+## 进 main 记录（2026-10-26，推送方会话 tops-20）
+
+- **main**：`f85ea8449`。出处：分支 `claude-dcg133` tip `e9ed91790`（作者修订轮时 rebase 到 main `803b97e5f`，推送方重放为快进）。rebase 前出处：`c601eaed6`、`22849dd6e`、`5c7c40f60`。
+- **main 上的提交**：`18a383d6c`（代码）、`71dee17d5`（ADR-0306 等文档）、`64b7602f1`（完成记录）、`16a669166`（修订轮 S1、迁移改号 0047）、`4c352c49b`（修订轮 D1、ADR-0169）、`e9ed91790`（评审记录与修订轮）。
+- **生成物**：ADR 索引 `04ddaf001`；AT 盘点总览计数 `233126429`；机制清点 `f85ea8449`。三件 `-check` 退 0（含票 139 表行守卫）。
+- **评审**：隔离子代理钉 `5c7c40f60`：阻断 2（D1 ADR-0232 决定八被收窄未挂指针；S1 BUY 零额吞掉派生版本已有内容的矛盾）、非阻断 3。修订轮 `16a669166`、`4c352c49b` 全收。复评：推送方在修订后的 tip `e9ed91790` 上自己重跑评审探针 `TestReviewProbeZeroAfterExistingDerivedVersion`（overlay 换成复评检出路径），结果 err 为 `ErrSupplierCostVersionContradiction`（「the derived supplier cost version already carries other content」）、请求册不记零额、只存一次——阻断 S1 清零；D1 核 diff：ADR-0232 只动 Status 注记与 Links、ADR-0306 补停用 ADR-0232 决定八两句、SA CONTEXT 那句已改为现行规则——清零（未另派复评子代理，按用户 2026-10-26 节省 token 的要求由推送方重跑探针代替）。
+- **全量真库测试**：`scripts/test-full.sh` 跑在 `f85ea8449`（即所推 SHA）：158 ok / 0 FAIL，退 0。
+- **种子**：`scripts/demo-seeds/seed.sh` 灌一次性库（`f85ea8449` 上），退 0，用后删库。
+- **号**：SA 迁移 `0047`（另一会话 tops-26 确认 code/94 不用）；ADR-0306；`AT-SA-215`。
