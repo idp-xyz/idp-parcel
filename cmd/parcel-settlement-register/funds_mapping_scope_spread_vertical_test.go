@@ -66,7 +66,7 @@ func TestAReceiptMappedIntoTwoScopesThroughTheCommandsIsPostedOnlyWhereApplied(t
 
 	spread := rig.run(t, commandFundsMapping, claimMappingDocument("SYN-MAPPING-F2-ACCT", "SYN-FACT-F2", "ACCOUNT", spreadAccount),
 		exitRegistered, "FUNDS_MAPPED")
-	if !strings.Contains(spread, "累计未分配 5000（落在 2 个客户应收作用域上，按核销记入：未分配不计入任何作用域）") {
+	if !strings.Contains(spread, "累计未分配 5000（落在 2 个客户应收作用域上，按核销记入：未分配不计入任何作用域，核到哪个作用域那里才记）") {
 		t.Fatalf("落到第二个作用域的映射答复 %q 没说出钱停在哪", spread)
 	}
 	rig.assertPostedOf(t, scopeAccount, 0, 10000)
@@ -149,4 +149,67 @@ func TestCrossMappingsOfTwoFactsTakeTheScopeLocksInKeyOrder(t *testing.T) {
 	}
 	rig.assertPostedOf(t, scopeAccount, 0, 10000)
 	rig.assertPostedOf(t, spreadAccount, 0, 0)
+}
+
+// Covers: 重算只碰改了 P 或 W 的作用域，账不平的答复带作用域身份——A 的已确认应收在核销之后被一笔价格纠错贷记 2000 压到
+// 已核销之下（账不平，贷记登记那一步不重算）。收款 F 落在 A、B 两个作用域上，把 F 的 1000 核到 B 的账户：只改 B 的 P，
+// 照常落下，B 入账 1000；再映一笔收款到 A 的对账单碰到 A，才答账不平退 2，答复点名 A 的法人、账户与币种。
+func TestAnUnbalancedScopeOnlyRefusesTheStepsThatTouchIt(t *testing.T) {
+	rig := newCeilingRig(t)
+	rig.seedSpreadScopes(t)
+	rig.run(t, commandExternalFundsFact, receiptDocument("SYN-FACT-G", "10000"), exitRegistered, "FUNDS_FACT_ADOPTED")
+	rig.run(t, commandFundsMapping, claimMappingDocument("SYN-MAPPING-G", "SYN-FACT-G", "STATEMENT", scopeStatement),
+		exitRegistered, "FUNDS_MAPPED")
+	rig.run(t, commandFundsApplication, statementApplicationDocument("SYN-APPLICATION-G", "SYN-FACT-G", "SYN-MAPPING-G", "10000"),
+		exitRegistered, "SETTLEMENT_APPLIED")
+	rig.run(t, commandExternalFundsFact, receiptDocument("SYN-FACT-F", "5000"), exitRegistered, "FUNDS_FACT_ADOPTED")
+	rig.run(t, commandFundsMapping, claimMappingDocument("SYN-MAPPING-F-STMT", "SYN-FACT-F", "STATEMENT", scopeStatement),
+		exitRegistered, "FUNDS_MAPPED")
+	rig.run(t, commandFundsMapping, claimMappingDocument("SYN-MAPPING-F-ACCT", "SYN-FACT-F", "ACCOUNT", spreadAccount),
+		exitRegistered, "FUNDS_MAPPED")
+	rig.assertPostedOf(t, scopeAccount, 0, 0)
+	if _, err := rig.pool.Exec(t.Context(),
+		`INSERT INTO settlement_accounting.charge_adjustment
+			(tenant_id, adjustment_id, charge_id, kind, direction,
+			 evaluation_ref, authorization_ref, original_currency, original_minor,
+			 settlement_currency, settlement_minor, conversion_ref, formed_at, recorded_at)
+		 VALUES ('SYN-T1', 'SYN-ADJUSTMENT-C-1', 'SYN-CHARGE-C-1', 'PRICING_CORRECTION', 'CREDIT',
+		         'SYN-EVAL-CORRECTION-1', NULL, 'XTS', 2000, 'XTS', 2000, NULL, now(), now())`); err != nil {
+		t.Fatalf("登价格纠错贷记：%v", err)
+	}
+
+	rig.run(t, commandFundsApplication,
+		applicationDocument("SYN-APPLICATION-F-B", "SYN-FACT-F", "SYN-MAPPING-F-ACCT", "ACCOUNT", spreadAccount, "1000"),
+		exitRegistered, "SETTLEMENT_APPLIED")
+	rig.assertPostedOf(t, spreadAccount, 1000, 0)
+
+	rig.run(t, commandExternalFundsFact, receiptDocument("SYN-FACT-H", "100"), exitRegistered, "FUNDS_FACT_ADOPTED")
+	refused := rig.run(t, commandFundsMapping, claimMappingDocument("SYN-MAPPING-H", "SYN-FACT-H", "STATEMENT", scopeStatement),
+		exitConflict, "账不平")
+	if !strings.Contains(refused, "法人 "+scopeLegalEntity) || !strings.Contains(refused, "账户 "+scopeAccount) ||
+		!strings.Contains(refused, "币种 "+scopeCurrency) {
+		t.Fatalf("账不平的答复 %q 没点名是哪个作用域", refused)
+	}
+}
+
+// Covers: 映射答复与核销答复对超核说同一句话——收款 5000 全核到对账单 C，外部更正把它改成 3000（超核 2000），再映到
+// B：映射答复说「累计超核 2000」，不说成负的累计未分配。
+func TestAMappingOfAnOverAppliedFactSaysOverApplied(t *testing.T) {
+	rig := newCeilingRig(t)
+	rig.seedSpreadScopes(t)
+	rig.run(t, commandExternalFundsFact, receiptDocument("SYN-FACT-OVER", "5000"), exitRegistered, "FUNDS_FACT_ADOPTED")
+	rig.run(t, commandFundsMapping, claimMappingDocument("SYN-MAPPING-OVER-STMT", "SYN-FACT-OVER", "STATEMENT", scopeStatement),
+		exitRegistered, "FUNDS_MAPPED")
+	rig.run(t, commandFundsApplication,
+		statementApplicationDocument("SYN-APPLICATION-OVER", "SYN-FACT-OVER", "SYN-MAPPING-OVER-STMT", "5000"),
+		exitRegistered, "SETTLEMENT_APPLIED")
+	rig.run(t, commandExternalFundsFactCorrection,
+		correctionDocumentFor("SYN-FACT-OVER", "SYN-FACT-OVER/v1", "SYN-FACT-OVER/v2", "3000"),
+		exitRegistered, "FUNDS_FACT_ADOPTED")
+
+	spread := rig.run(t, commandFundsMapping,
+		claimMappingDocument("SYN-MAPPING-OVER-ACCT", "SYN-FACT-OVER", "ACCOUNT", spreadAccount), exitRegistered, "FUNDS_MAPPED")
+	if !strings.Contains(spread, "事实 SYN-FACT-OVER 累计超核 2000") || strings.Contains(spread, "累计未分配") {
+		t.Fatalf("超核事实的映射答复 %q 要说累计超核 2000", spread)
+	}
 }

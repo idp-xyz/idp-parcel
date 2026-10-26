@@ -455,7 +455,6 @@ func applicationSubjectOf(result application.FundsResult) string {
 	if !found {
 		return ""
 	}
-	unapplied, known := result.FactUnappliedMinor()
 	subject := "核销 " + record.Key.Application.String()
 	switch result.Outcome() {
 	case application.ApplicationReversedOutcome, application.ApplicationAlreadyReversed:
@@ -463,42 +462,47 @@ func applicationSubjectOf(result application.FundsResult) string {
 	default:
 		subject += fmt.Sprintf("：本笔 %d", record.Application.AppliedMinor())
 	}
-	switch {
-	case !known:
-	case unapplied < 0:
-		// 外部更正把事实金额改到了已核销合计以下：负数是超核的唯一信号，照实说出来，不截成 0。
-		subject += fmt.Sprintf("；事实 %s 累计超核 %d", record.Application.Fact().String(), -unapplied)
-	default:
-		subject += fmt.Sprintf("；事实 %s 累计未分配 %d", record.Application.Fact().String(), unapplied) + scopeNoteOf(result)
-	}
-	return subject
+	return subject + factBalanceOf(record.Application.Fact().String(), result)
 }
 
-// mappingSubjectOf 只在映射让这条事实落到几个客户应收作用域上时开口：那一刻原来那个作用域从全额记改为按核销记，入账
-// 余额会降，操作员要知道余额为什么动了、钱还停在哪（ADR-0283）。落到一个或零个作用域的映射照旧只报结果格。
+// mappingSubjectOf 只在映射让这条事实落到几个客户应收作用域上时开口：一个变两个的那一刻原来那个作用域不再记没核销的
+// 部分，入账余额会降，操作员要知道余额为什么动了、钱停在哪（ADR-0283）。落到一个或零个作用域的映射只报结果格。
 func mappingSubjectOf(result application.FundsResult) string {
 	record, found := result.Mapping()
 	posting, posted := result.FactScopePosting()
-	unapplied, known := result.FactUnappliedMinor()
-	if !found || !posted || !posting.ByApplication() || !known {
+	if !found || !posted || !posting.ByApplication() {
 		return ""
 	}
-	return fmt.Sprintf("映射 %s；事实 %s 累计未分配 %d", record.Key.Mapping.String(), record.Mapping.Fact().String(), unapplied) +
-		scopeNoteOf(result)
+	return "映射 " + record.Key.Mapping.String() + factBalanceOf(record.Mapping.Fact().String(), result)
 }
 
-// scopeNoteOf 说累计未分配在入账余额上怎么算：事实落到几个客户应收作用域时它不在任何一个作用域的全额里——收款的这一截
-// 哪个作用域都不记，退回的这一截每个作用域都先扣，要人把它核到作用域上余额才跟着走（ADR-0283）。只落到一个作用域时
-// 不开口，那一截照旧在那个作用域的全额里。
+// factBalanceOf 报这一步之后该事实的累计未分配；外部更正把事实金额改到了已核销合计以下时报累计超核——负数是超核的唯一
+// 信号，照实说出来，不截成 0，映射与核销两类答复说同一句话。
+func factBalanceOf(fact string, result application.FundsResult) string {
+	unapplied, known := result.FactUnappliedMinor()
+	switch {
+	case !known:
+		return ""
+	case unapplied < 0:
+		return fmt.Sprintf("；事实 %s 累计超核 %d", fact, -unapplied)
+	default:
+		return fmt.Sprintf("；事实 %s 累计未分配 %d", fact, unapplied) + scopeNoteOf(result)
+	}
+}
+
+// scopeNoteOf 说累计未分配在入账余额上怎么算、怎么续办：事实落到几个客户应收作用域时它不在任何一个作用域的入账余额里
+// 当成钱——收款的这一截哪个作用域都不记，退回的这一截每个作用域都先扣；把它核到作用域上余额才各归各位（ADR-0283）。
+// 只落到一个作用域时不开口，那一截在那个作用域的入账余额里。
 func scopeNoteOf(result application.FundsResult) string {
 	posting, posted := result.FactScopePosting()
 	if !posted || !posting.ByApplication() {
 		return ""
 	}
 	if posting.Kind == sadomain.FundsReturned {
-		return fmt.Sprintf("（落在 %d 个客户应收作用域上，按核销记入：未分配的退回在每个作用域都先扣）", posting.Scopes)
+		return fmt.Sprintf("（落在 %d 个客户应收作用域上，按核销记入：未分配的退回在每个作用域都先扣，把它核到钱离开的那个账户上就只扣那一边）",
+			posting.Scopes)
 	}
-	return fmt.Sprintf("（落在 %d 个客户应收作用域上，按核销记入：未分配不计入任何作用域）", posting.Scopes)
+	return fmt.Sprintf("（落在 %d 个客户应收作用域上，按核销记入：未分配不计入任何作用域，核到哪个作用域那里才记）", posting.Scopes)
 }
 
 // fundsAnswer 把 `application.FundsOutcome` 的封闭各格译成退出码，不增不减。一族一张表：采用、映射、核销与撤销几条

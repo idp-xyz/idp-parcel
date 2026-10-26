@@ -173,15 +173,17 @@ func (repository *CustomerReceiptPostings) FactCustomerScopes(
 	return scopes, nil
 }
 
-// CustomerDirectionNets 的 P 按（租户、事实）各算一次，按这条事实落到几个客户应收作用域分两种记法（ADR-0283）：
+// CustomerDirectionNets 的 P 逐条事实记一次：每个作用域取这条事实在它身上可能的最小记入（ADR-0283），唯一的推定是
+// 一条收款只落到一个客户应收作用域时，没核销的部分归它。记作 n 为这条事实落到的客户应收作用域个数、d 为指向本作用域
+// 的未撤销核销分配净额（分配沿的映射落在本作用域上，对账单分配与账户分配都算）、r 为事实金额减它全部未撤销核销的
+// 合计（含核到应付、贷项、金额本体的，不低于 0）：
 //
-//   - 只落到本作用域一个：取链头全额。一笔收款映射到同一作用域下的几张对账单或兼映到账户（一对多核销要先这样映射），
-//     在这里只算一次；按映射行求和会把它记成几笔，可用余额凭空多出来。
-//   - 落到几个作用域：本作用域只记指向它的未撤销核销分配净额（分配沿的映射落在本作用域上，对账单分配与账户分配都算），
-//     收款没核销的那部分不计入任何作用域，退回没核销的那部分在每个作用域都先扣。每个作用域都按全额记，钱只到了一次
-//     却在几处各当一次用；没核销的那部分该归谁要人去分，分之前哪一边都不按它放行。
+//   - 收款记 d，n 为 1 时再加 r。只有客户映射、只落到本作用域时这就是全额；核到别处的那部分离开，没分清归谁的那部分
+//     不计入任何作用域——每个作用域都按全额记，钱只到了一次却在几处各当一次用。
+//   - 退回扣 d + r，不论 n：钱离开了，没分清从谁那里离开之前每个作用域都按可能是自己扣。
+//   - 一个作用域从一条事实上记到或扣掉的都不超过事实金额，超核（外部更正把金额改到已核销合计以下）时也是。
 //
-// 收款进入、退回离开，币种与作用域不同的事实不进。W 照旧只加总指向本作用域对账单、尚未撤销的核销分配。
+// 一条事实映到本作用域几个目标只算一次；币种与作用域不同的事实不进。W 只加总指向本作用域对账单、尚未撤销的核销分配。
 func (repository *CustomerReceiptPostings) CustomerDirectionNets(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -253,12 +255,13 @@ func (repository *CustomerReceiptPostings) CustomerDirectionNets(
 		SELECT
 		    COALESCE((
 		        SELECT SUM(
-		            head.sign * CASE
-		                WHEN spread.scopes = 1 THEN head.amount_minor
-		                WHEN head.sign < 0 THEN COALESCE(directed.net, 0)
-		                    + GREATEST(head.amount_minor - COALESCE(applied.applied_minor, 0), 0)
-		                ELSE COALESCE(directed.net, 0)
-		            END)
+		            head.sign * LEAST(head.amount_minor,
+		                COALESCE(directed.net, 0)
+		                + CASE
+		                      WHEN head.sign < 0 OR spread.scopes = 1
+		                          THEN GREATEST(head.amount_minor - COALESCE(applied.applied_minor, 0), 0)
+		                      ELSE 0
+		                  END))
 		          FROM head
 		          JOIN spread ON spread.fact_id = head.fact_id
 		          LEFT JOIN applied ON applied.fact_id = head.fact_id

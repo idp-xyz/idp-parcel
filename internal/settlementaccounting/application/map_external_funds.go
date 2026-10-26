@@ -205,14 +205,15 @@ type FundsResult struct {
 }
 
 // FactScopePosting 说这一步之后一条资金事实怎样记入客户应收作用域的入账余额（ADR-0283）：Scopes 是它经对账单或账户映射
-// 落到的客户应收作用域个数。只落到一个作用域的全额记入那一个；落到几个作用域的按核销记入——每个作用域只记指向它的
-// 未撤销分配，收款没核销的那部分不计入任何作用域，退回没核销的那部分在每个作用域都先扣。Kind 让读的人分得清是哪一种。
+// 落到的客户应收作用域个数。只落到一个作用域的，除核到应付、贷项或金额本体的部分外都记入那一个；落到几个作用域的按
+// 核销记入——每个作用域只记指向它的未撤销分配，收款没核销的那部分不计入任何作用域，退回没核销的那部分在每个作用域都
+// 先扣。Kind 让读的人分得清是哪一种。
 type FactScopePosting struct {
 	Scopes int
 	Kind   domain.FundsFactKind
 }
 
-// ByApplication 为真即这条事实按核销记入，累计未分配不在任何一个作用域的全额里。
+// ByApplication 为真即这条事实按核销记入，累计未分配不归任何一个作用域。
 func (posting FactScopePosting) ByApplication() bool {
 	return posting.Scopes > 1
 }
@@ -510,7 +511,7 @@ func (handler *MapExternalFundsHandler) handOffFact(
 //
 // 映到对账单或账户的，先锁事实身份行再读事实、插映射行（锁序见 ports.FundsFactApplicationLock 头注）：一条事实落到
 // 几个客户应收作用域决定每个作用域怎么记它（ADR-0283），两笔映射把同一条事实并发映到两个作用域时，不在同一把锁上
-// 排队就各自只看见自己那一条、各按全额记。这把锁与核销、撤销同一把，映射与核销也因此排队。
+// 排队就各自只看见自己那一条、都当自己是唯一的作用域去记没核销的部分。这把锁与核销、撤销同一把，映射与核销也因此排队。
 func (handler *MapExternalFundsHandler) Map(
 	ctx context.Context,
 	command MapFundsCommand,
@@ -583,6 +584,15 @@ func (handler *MapExternalFundsHandler) Map(
 		}
 	}
 
+	// 这条映射之前事实已落到哪几个作用域：一个变两个的那一笔要连原作用域一起重算（advanceCustomerReceipt）。在事实锁下
+	// 读，同一条事实别的映射插不进来。
+	var before []domain.SettlementScope
+	if customerTarget {
+		if before, err = handler.deps.Books.FactCustomerScopes(ctx, command.TenantID, factRef); err != nil {
+			return FundsResult{}, err
+		}
+	}
+
 	record := ports.FundsMappingRecord{Key: key, ContentDigest: digest, Mapping: mapping, RecordedAt: handler.deps.Clock.Now()}
 	saved, err := handler.deps.Mappings.Save(ctx, record)
 	if err != nil {
@@ -590,7 +600,7 @@ func (handler *MapExternalFundsHandler) Map(
 	}
 	switch saved {
 	case ports.FundsMappingSaved:
-		posting, posted, err := handler.advanceCustomerReceipt(ctx, command, factRecord.Fact)
+		posting, posted, err := handler.advanceCustomerReceipt(ctx, command, factRecord.Fact, before)
 		if err != nil {
 			return FundsResult{}, err
 		}
@@ -722,7 +732,7 @@ func (handler *MapExternalFundsHandler) Apply(
 	if stop {
 		return refused, nil
 	}
-	scopes, refused, stop, err := handler.admitApplicationScopes(ctx, command.TenantID, application)
+	scopes, refused, stop, err := handler.admitApplicationScopes(ctx, command.TenantID, factRecord.Fact, application)
 	if err != nil {
 		return FundsResult{}, err
 	}
@@ -829,7 +839,7 @@ func (handler *MapExternalFundsHandler) Reverse(
 	if err != nil {
 		return FundsResult{outcome: FundsNotAccepted}, nil
 	}
-	scopes, err := handler.applicationScopes(ctx, command.TenantID, existing.Application)
+	scopes, err := handler.applicationScopes(ctx, command.TenantID, factRecord.Fact, existing.Application)
 	if err != nil {
 		return FundsResult{}, err
 	}
@@ -881,22 +891,37 @@ type customerScope struct {
 	writeoff  int64
 }
 
-// applicationScopes 交回一次核销或撤销要重算的客户应收作用域，按键序排好（sortScopes）——锁按这个顺序取。是这条事实
-// 落到的全部客户应收作用域，加上分配指向的对账单收成的作用域：W 只在对账单分配指向的作用域上动；P 在单作用域事实上
-// 不随核销动，在多作用域事实上随指向各作用域的分配动，退回没核销的那部分又在每个作用域都扣（ADR-0283）——按事实取
-// 全部作用域就把这几种都盖住。分配都沿这条事实的映射走，对账单收成的作用域本该已在其中，并进来是为了不靠这一点。
-// 对账单收不成应收作用域的那几片不是客户收款这一支，W 也不算它们，不进来。
+// applicationScopes 交回一次核销或撤销改了 P 或 W 的客户应收作用域，按键序排好（sortScopes）——锁按这个顺序取。
+// 改动只来自这一笔的分配与它挪动的「没核销的部分」r（ADR-0283）：
+//
+//   - 分配所指的作用域：对账单分配与账户分配各按目标收成作用域（目标与它沿的映射一致），d 在那里动，对账单分配的
+//     W 也在那里动。
+//   - 事实只落到一个客户应收作用域时，那一个：r 进它的 P，核到应付、贷项或金额本体上的分配也会挪动 r。
+//   - 事实是退回时，它落到的全部作用域：退回没核销的部分在每个作用域都扣。
+//
+// 落到几个作用域的收款，核到别处的分配不改任何作用域的 P，不碰它们——一个作用域账已不平时，别的作用域上的核销
+// 照样落下。statement 为真的那几项另带对账单分配的净额，落行之前按它判已确认未结。
 func (handler *MapExternalFundsHandler) applicationScopes(
 	ctx context.Context,
 	tenant domain.TenantID,
+	fact domain.ExternalFundsFact,
 	application domain.SettlementApplication,
 ) ([]customerScope, error) {
 	byScope := map[domain.SettlementScope]customerScope{}
 	for _, allocation := range application.Allocations() {
-		if allocation.TargetKind != domain.TargetStatement {
+		var (
+			scope domain.SettlementScope
+			found bool
+			err   error
+		)
+		switch allocation.TargetKind {
+		case domain.TargetStatement:
+			scope, found, err = handler.deps.Books.CustomerStatementScope(ctx, tenant, allocation.Target.String())
+		case domain.TargetAccount:
+			scope, found, err = handler.deps.Books.ReceivableAccountScope(ctx, tenant, allocation.Target.String())
+		default:
 			continue
 		}
-		scope, found, err := handler.deps.Books.CustomerStatementScope(ctx, tenant, allocation.Target.String())
 		if err != nil {
 			return nil, err
 		}
@@ -904,21 +929,28 @@ func (handler *MapExternalFundsHandler) applicationScopes(
 			continue
 		}
 		entry := byScope[scope]
-		entry.statement = true
-		if allocation.Direction == domain.AllocationDebit {
-			entry.writeoff += allocation.AmountMinor
-		} else {
-			entry.writeoff -= allocation.AmountMinor
+		if allocation.TargetKind == domain.TargetStatement {
+			entry.statement = true
+			if allocation.Direction == domain.AllocationDebit {
+				entry.writeoff += allocation.AmountMinor
+			} else {
+				entry.writeoff -= allocation.AmountMinor
+			}
 		}
 		byScope[scope] = entry
 	}
-	factScopes, err := handler.deps.Books.FactCustomerScopes(ctx, tenant, application.Fact())
-	if err != nil {
-		return nil, err
-	}
-	keys := append([]domain.SettlementScope(nil), factScopes...)
+	keys := make([]domain.SettlementScope, 0, len(byScope))
 	for scope := range byScope {
 		keys = append(keys, scope)
+	}
+	if fact.Kind() == domain.FundsReceiptConfirmed || fact.Kind() == domain.FundsReturned {
+		factScopes, err := handler.deps.Books.FactCustomerScopes(ctx, tenant, fact.Fact())
+		if err != nil {
+			return nil, err
+		}
+		if fact.Kind() == domain.FundsReturned || len(factScopes) == 1 {
+			keys = append(keys, factScopes...)
+		}
 	}
 	keys = sortScopes(keys)
 	scopes := make([]customerScope, 0, len(keys))
@@ -936,9 +968,10 @@ func (handler *MapExternalFundsHandler) applicationScopes(
 func (handler *MapExternalFundsHandler) admitApplicationScopes(
 	ctx context.Context,
 	tenant domain.TenantID,
+	fact domain.ExternalFundsFact,
 	application domain.SettlementApplication,
 ) ([]customerScope, FundsResult, bool, error) {
-	scopes, err := handler.applicationScopes(ctx, tenant, application)
+	scopes, err := handler.applicationScopes(ctx, tenant, fact, application)
 	if err != nil {
 		return nil, FundsResult{}, false, err
 	}
@@ -1030,7 +1063,9 @@ func (handler *MapExternalFundsHandler) recomputeScope(
 	}
 	posted, unsettled, err := domain.PostedAndUnsettled(postedNet, writeoffNet, confirmed)
 	if err != nil {
-		return time.Time{}, err
+		// 带上是哪个作用域：一笔映射、核销或撤销可能一次重算几个作用域，续办要人去核对的是账不平的那一个。
+		return time.Time{}, fmt.Errorf("%w：作用域 法人 %s、账户 %s、币种 %s", err,
+			scope.LegalEntity().String(), scope.Account().String(), scope.Currency().String())
 	}
 	advanced, err := handler.deps.Balances.AdvanceOperationalBalance(ctx, tenant, scope, posted, unsettled, asOf)
 	if err != nil {
@@ -1186,16 +1221,19 @@ func (handler *MapExternalFundsHandler) handOff(
 	return fundsContinuation("SETTLEMENT_APPLICATION_HANDOFF", record.Key.TenantID.String(), record.Key.Application.String()), nil
 }
 
-// advanceCustomerReceipt 在客户对账单或应收结算账户上的确认到账与资金退回之后，重算这条事实落到的全部客户应收作用域：
-// 它从一个作用域变成几个的那一刻，原来那个作用域从全额记改为按核销记（ADR-0283），入账余额会降，不在这一笔里跟上就
-// 停在多出来的数上。作用域锁按键序取（sortScopes）。供应商应付、贷项、两格金额本体与确认费用都不从这里进；核销与撤销
-// 从 recomputeScopes 进同一个求法。对账单收不成应收作用域时映射照旧成立，余额不动——那不是这一支。账户目标收不成应收
-// 作用域则整笔失败。已确认未结求出为负则整笔失败，调用方的事务一起回滚。信用状况只在账户级映射的那个作用域上重算。
-// 第二值为 false 即这条事实没有落到任何客户应收作用域上，交回的记入方式不作数。
+// advanceCustomerReceipt 在客户对账单或应收结算账户上的确认到账与资金退回之后，重算这一笔映射改了 P 的作用域
+// （ADR-0283）：映射目标所在的作用域；一条收款由这一笔从落到一个作用域变成两个时，原来那个作用域也算——它的 P 从
+// 「d + 没核销的部分」变成只记 d，入账余额会降，不在这一笔里跟上就停在多出来的数上。落到两个以上之后再多一个、或
+// 退回多落一个，既有作用域的 P 不变，不重算。作用域锁按键序取（sortScopes）。供应商应付、贷项、两格金额本体与确认
+// 费用都不从这里进；核销与撤销从 recomputeScopes 进同一个求法。对账单收不成应收作用域时映射成立、余额不动——那不是
+// 这一支。账户目标收不成应收作用域则整笔失败。已确认未结求出为负则整笔失败，调用方的事务一起回滚。信用状况只在
+// 账户级映射的那个作用域上重算。before 是插这一条映射之前事实已落到的作用域。第二值为 false 即这条事实没有落到
+// 任何客户应收作用域上，交回的记入方式不作数。
 func (handler *MapExternalFundsHandler) advanceCustomerReceipt(
 	ctx context.Context,
 	command MapFundsCommand,
 	fact domain.ExternalFundsFact,
+	before []domain.SettlementScope,
 ) (FactScopePosting, bool, error) {
 	switch fact.Kind() {
 	case domain.FundsReceiptConfirmed, domain.FundsReturned:
@@ -1226,29 +1264,31 @@ func (handler *MapExternalFundsHandler) advanceCustomerReceipt(
 		return FactScopePosting{}, false, nil
 	}
 
-	scopes, err := handler.deps.Books.FactCustomerScopes(ctx, command.TenantID, fact.Fact())
-	if err != nil {
-		return FactScopePosting{}, false, err
-	}
+	before = sortScopes(before)
+	after := before
 	if found {
-		scopes = append(scopes, target)
+		after = sortScopes(append(append([]domain.SettlementScope(nil), before...), target))
 	}
-	scopes = sortScopes(scopes)
-	if len(scopes) == 0 {
+	if len(after) == 0 {
 		return FactScopePosting{}, false, nil
 	}
-	posting := FactScopePosting{Scopes: len(scopes), Kind: fact.Kind()}
+	posting := FactScopePosting{Scopes: len(after), Kind: fact.Kind()}
 	if !found {
 		return posting, true, nil
 	}
 
-	for _, scope := range scopes {
+	moved := []domain.SettlementScope{target}
+	if fact.Kind() == domain.FundsReceiptConfirmed && len(before) == 1 && len(after) == 2 {
+		moved = append(moved, before[0])
+	}
+	moved = sortScopes(moved)
+	for _, scope := range moved {
 		if err := handler.deps.Balances.LockOperationalBalanceScope(ctx, command.TenantID, scope); err != nil {
 			return FactScopePosting{}, false, err
 		}
 	}
 	var targetAsOf time.Time
-	for _, scope := range scopes {
+	for _, scope := range moved {
 		asOf, err := handler.recomputeScope(ctx, command.TenantID, scope)
 		if err != nil {
 			return FactScopePosting{}, false, err

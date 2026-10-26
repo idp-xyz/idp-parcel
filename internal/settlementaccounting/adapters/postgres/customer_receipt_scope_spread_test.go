@@ -13,11 +13,11 @@ import (
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 )
 
-// 本文件在真实 PostgreSQL 上证一条资金事实映射到几个客户应收作用域时怎样记入入账余额（ADR-0283，隔离合成 S）：只落到
-// 一个作用域的照旧全额；落到几个作用域的，每个作用域只记指向它的未撤销核销分配（对账单分配与账户分配），收款没核销的
-// 那部分不计入任何作用域，退回没核销的那部分在每个作用域都先扣；映射让事实落进第二个作用域的那一笔事务同时重算它落到
-// 的全部作用域。作用域 A 是 acct-1（对账单 stmt-1），作用域 B 是同法人同币种、另一相对方的应收账户 acct-2——同一付款人
-// 一笔款付两个账户。
+// 本文件在真实 PostgreSQL 上证一条资金事实怎样记入客户应收作用域的入账余额（ADR-0283，隔离合成 S）：每个作用域取这条
+// 事实在它身上可能的最小记入——指向它的未撤销核销分配（对账单分配与账户分配）；收款只落到一个作用域时再加没核销的
+// 部分（只有客户映射时就是全额，核到应付上的那部分离开）；退回没核销的部分在每个作用域都先扣。一条收款从一个作用域
+// 变成两个的那一笔映射同时重算原作用域与新作用域。作用域 A 是 acct-1（对账单 stmt-1），作用域 B 是同法人同币种、
+// 另一相对方的应收账户 acct-2——同一付款人一笔款付两个账户。
 
 func seedSecondReceivableAccount(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
@@ -176,7 +176,7 @@ func TestAReceiptMappedIntoTwoScopesAndAppliedToOneIsNotPostedInTheOther(t *test
 	assertScope(t, rig.pool, "acct-2", 0, 0)
 }
 
-// Covers: 单作用域照旧全额、单作用域变多作用域那一笔事务同时重算两个作用域、尚无核销时各记 0、部分核销按分配（对账单分配
+// Covers: 只有客户映射的单作用域全额、单作用域变多作用域那一笔事务同时重算两个作用域、尚无核销时各记 0、部分核销按分配（对账单分配
 // 与账户分配都算指向该作用域）、撤销把那一截还回未分配；读面与答复带出这条事实落在几个作用域上、累计未分配多少。
 func TestMappingAReceiptIntoASecondScopeRepostsBothByApplication(t *testing.T) {
 	rig := newSpreadRig(t)
@@ -222,7 +222,7 @@ func TestMappingAReceiptIntoASecondScopeRepostsBothByApplication(t *testing.T) {
 
 // Covers: SA CONTEXT「退回与撤销按反向映射离开」在多作用域上的落法（ADR-0283 决定三）——退回 2000 映到 A 与 B：没核销之前
 // 两个作用域都先扣 2000（钱从谁头上走的还没分清，哪一边都不放行）；核到账户 acct-2 之后只有 B 扣；撤销那笔核销又回到
-// 两边都扣。同一条退回只映到一个作用域时照旧全额离开那一个。
+// 两边都扣。同一条退回只映到一个作用域时全额离开那一个。
 func TestAReturnMappedIntoTwoScopesIsDeductedInEachUntilApplied(t *testing.T) {
 	rig := newSpreadRig(t)
 
@@ -250,4 +250,50 @@ func TestAReturnMappedIntoTwoScopesIsDeductedInEachUntilApplied(t *testing.T) {
 	rig.reverse(t, "app-return")
 	assertScope(t, rig.pool, "acct-1", 1_000, 0)
 	assertScope(t, rig.pool, "acct-2", 2_000, 0)
+}
+
+// Covers: ADR-0283「币种与事实不同的作用域也算一个」——CNY 收款 5000 映到 stmt-1（A）又映到 USD 应收账户：A 从全额改为
+// 按核销记（0），USD 账户从这条 CNY 事实上什么都记不到（0）；资金事实册上这条事实落在 2 个作用域上、5000 未计入任何
+// 作用域。只数同币种作用域的话 A 会停在 5000。
+func TestAScopeInAnotherCurrencyStillCountsAsAScope(t *testing.T) {
+	rig := newSpreadRig(t)
+	if _, err := rig.pool.Exec(t.Context(),
+		`INSERT INTO settlement_accounting.settlement_account
+			(tenant_id, account_id, legal_entity_id, counterparty_id, direction, currency,
+			 settlement_policy_id, responsibility_basis, registered_at)
+		 VALUES ('tenant-receipt', 'acct-usd', 'le-1', 'shipper-3', 'RECEIVABLE', 'USD',
+		         'policy-1', 'contract-1', now())`); err != nil {
+		t.Fatalf("USD 应收账户：%v", err)
+	}
+
+	rig.adopt(t, "receipt-cny", domain.FundsReceiptConfirmed, 5_000)
+	rig.mapTo(t, "map-cny-stmt", "receipt-cny", domain.TargetStatement, "stmt-1")
+	assertScope(t, rig.pool, "acct-1", 5_000, 0)
+
+	rig.mapTo(t, "map-cny-usd", "receipt-cny", domain.TargetAccount, "acct-usd")
+	assertScope(t, rig.pool, "acct-1", 0, 0)
+	assertScope(t, rig.pool, "acct-usd", 0, 0)
+	rig.assertCatalogued(t, "receipt-cny", 2, 5_000)
+}
+
+// Covers: ADR-0283 决定二在非客户目标上的落法——收款 5000 映到 stmt-1（A）与审核应付 payable-x：A 是这条事实唯一的客户
+// 应收作用域，没核销的部分推定归它，入账 5000；核 2000 到应付，那一截离开 A（3000）；再核 3000 到应付，A 归 0；撤销
+// 后一笔，那一截回到没核销的部分、回到 A。资金事实册上它只落在 1 个作用域上，没有未计入任何作用域的未分配。
+func TestAReceiptAppliedToANonCustomerTargetLeavesItsOnlyCustomerScope(t *testing.T) {
+	rig := newSpreadRig(t)
+
+	rig.adopt(t, "receipt-x", domain.FundsReceiptConfirmed, 5_000)
+	rig.mapTo(t, "map-x-stmt", "receipt-x", domain.TargetStatement, "stmt-1")
+	rig.mapTo(t, "map-x-payable", "receipt-x", domain.TargetPayable, "payable-x")
+	assertScope(t, rig.pool, "acct-1", 5_000, 0)
+	rig.assertCatalogued(t, "receipt-x", 1, 0)
+
+	rig.apply(t, "app-x-1", "receipt-x", "map-x-payable", domain.TargetPayable, "payable-x", 2_000)
+	assertScope(t, rig.pool, "acct-1", 3_000, 0)
+	rig.apply(t, "app-x-2", "receipt-x", "map-x-payable", domain.TargetPayable, "payable-x", 3_000)
+	assertScope(t, rig.pool, "acct-1", 0, 0)
+
+	rig.reverse(t, "app-x-2")
+	assertScope(t, rig.pool, "acct-1", 3_000, 0)
+	rig.assertCatalogued(t, "receipt-x", 1, 0)
 }
