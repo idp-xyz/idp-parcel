@@ -6,21 +6,21 @@
 
 | 上下文 | 生产 | 测试 | 应用编排 | postgres 适配器 | 其中 Outbox 投递 | http 适配器 |
 |---|---|---|---|---|---|---|
-| accessidentity | 38 | 44 | 0 | 6 | 0 | 2 |
+| accessidentity | 39 | 46 | 0 | 6 | 0 | 2 |
 | architecture（非业务） | 0 | 16 | 0 | 0 | 0 | 0 |
 | collectionremittance | 24 | 12 | 4 | 6 | 0 | 3 |
 | customscompliance | 126 | 130 | 24 | 47 | 10 | 18 |
 | networkrouting | 94 | 107 | 11 | 19 | 2 | 10 |
 | nodeoperations | 111 | 119 | 15 | 29 | 4 | 17 |
 | parcelpricing | 147 | 135 | 20 | 20 | 1 | 25 |
-| parcelshipment | 226 | 225 | 23 | 45 | 10 | 21 |
+| parcelshipment | 227 | 226 | 23 | 45 | 10 | 21 |
 | partycommercial | 173 | 189 | 15 | 43 | 1 | 40 |
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 26 | 24 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 233 | 185 | 38 | 69 | 13 | 10 |
 | transportfulfillment | 289 | 304 | 52 | 61 | 16 | 50 |
-| visibilityexception | 118 | 120 | 12 | 31 | 8 | 12 |
-| **合计** | 1628 | 1629 | 219 | 382 | 66 | 212 |
+| visibilityexception | 119 | 121 | 12 | 31 | 8 | 12 |
+| **合计** | 1631 | 1633 | 219 | 382 | 66 | 212 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 229、测试 368。
 
@@ -79,11 +79,11 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 9 |
 
-## 迁移：12 个模块共 320 份 SQL
+## 迁移：12 个模块共 321 份 SQL
 
 | 模块 | 份数 |
 |---|---|
-| access_identity | 23 |
+| access_identity | 24 |
 | collection_remittance | 2 |
 | customs_compliance | 27 |
 | network_routing | 30 |
