@@ -165,9 +165,9 @@ var _ ports.FundsFactApplicationLock = (*SettlementApplications)(nil)
 // LockFundsFactApplications 先以 FOR UPDATE 锁事实身份行（external_funds_fact），再另起一句求这条事实上未撤销核销的
 // applied 合计。锁身份行而不锁链头版本行：身份行一条事实一行、终身不换，链头随每次更正换一行；更正落版本行时外键
 // 对身份行取 KEY SHARE，与这里的 FOR UPDATE 互斥，于是核销与更正在同一行上排队，核销读到的一定是更正之后的金额。
-// 这只护住核销这一侧：排队不保住「已核销合计不超过事实金额」——更正照采、不读合计。更正侧若要核合计，得自己先对
-// 身份行 FOR UPDATE 再求和；插版本行时那把 KEY SHARE 来在读之后，晚了。不用咨询锁也是这个缘故——咨询锁挡不住
-// 不取它的更正。两句分开的理由同 ClaimSettlementTargets.LockClaimTarget。
+// 更正自己也走本方法：只靠插版本行时的 KEY SHARE 排队，那把锁来在求合计之后，更正读到的合计就是旧账；先取本锁再求和，
+// 更正数得进先到那笔已提交的核销，后到的核销也排在更正之后。不用咨询锁也是这个缘故——咨询锁挡不住不取它的写入方。
+// 两句分开的理由同 ClaimSettlementTargets.LockClaimTarget。
 func (repository *SettlementApplications) LockFundsFactApplications(
 	ctx context.Context,
 	key ports.FundsFactKey,

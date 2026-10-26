@@ -202,6 +202,7 @@ type FundsResult struct {
 	hasUnapplied bool
 	posting      FactScopePosting
 	hasPosting   bool
+	overApplied  int64
 }
 
 // FactScopePosting 说这一步之后一条资金事实怎样记入客户应收作用域的入账余额（ADR-0283）：Scopes 是它经对账单或账户映射
@@ -254,6 +255,13 @@ func (result FundsResult) ContinuationReference() string {
 // 那只扣本笔，同一事实上的别的核销不在里头。
 func (result FundsResult) FactUnappliedMinor() (int64, bool) {
 	return result.unapplied, result.hasUnapplied
+}
+
+// OverAppliedMinor 是更正采用之后这条事实累计超核的金额：新有效版本的金额低于事实上全部未撤销核销的合计时，差额；否则
+// 为 0。更正本身成立——外部系统拥有资金事实，本上下文不拒收它——可已核销的合计从此多于钱，这个数把它说出来，不截成 0，
+// 也不自动撤销任何核销：撤哪一笔是人的判断。只有 CorrectFact 的结果交回非零值。
+func (result FundsResult) OverAppliedMinor() int64 {
+	return result.overApplied
 }
 
 // FundsHandoffReference 非空说明记录已提交但意图还没交出去，重放会重发同一份。
@@ -377,6 +385,13 @@ func (handler *MapExternalFundsHandler) AdoptFact(
 // 复用同一交接口再发一封（信封 ID 带新版本、载荷回指前版——票 sa-cc/02 裁决 2 预告的那一格）。
 // 幂等按（租户+事实+新版本）分重放 / 冲突，照 AdoptFact 四格；回指非链头与更正未采用的事实都是`未受理`。
 //
+// 外部系统拥有资金事实，更正低于事实上未撤销核销的合计（超核）时也照采，不拒、不撤任何核销：撤哪一笔是人的判断。
+// 超核由答复说出来（FundsResult.OverAppliedMinor），入账余额在同一事务里跟着新金额重算（ADR-0285）。
+//
+// 先对事实身份行取锁、再读任何东西：锁与核销、撤销、映射同一把，求合计的那句读在锁后才含先到那笔已提交的核销。落版本行时
+// 外键对身份行取的 KEY SHARE 来在读之后，只靠它排队，合计读的就是旧账。锁序取资金侧全序（ports.FundsFactApplicationLock
+// 头注）的子序列：事实 → 这条事实落到的客户应收作用域（按键序）；先于 Save 取齐，隐式的行锁都落在作用域锁之后。
+//
 // 先按新版本查、再查链头，顺序不能反：重放同一次更正时链头已经是新版本本身，先查链头会把一次正当
 // 的重放判成「回指非链头」。
 func (handler *MapExternalFundsHandler) CorrectFact(
@@ -402,6 +417,15 @@ func (handler *MapExternalFundsHandler) CorrectFact(
 	}
 
 	key := ports.FundsFactKey{TenantID: command.TenantID, Fact: factRef}
+	applied, found, err := handler.deps.FactLocks.LockFundsFactApplications(ctx, key)
+	if err != nil {
+		return fundsUndecided(FundsFactStoreUnavailable, command.Fact), nil
+	}
+	if !found {
+		// 更正一个未采用的事实：提交矛盾，不是库的事。
+		return FundsResult{outcome: FundsNotAccepted}, nil
+	}
+
 	digest := correctDigest(command)
 	existing, found, err := handler.deps.Facts.FindVersion(ctx, key, version)
 	if err != nil {
@@ -415,7 +439,7 @@ func (handler *MapExternalFundsHandler) CorrectFact(
 		case domain.UnknownPayloadShape:
 			return fundsUndecided(FundsFactStoreUnavailable, command.Fact), nil
 		}
-		return handler.existingFact(ctx, existing)
+		return handler.existingCorrection(ctx, key, existing, applied)
 	}
 
 	head, found, err := handler.deps.Facts.FindByKey(ctx, key)
@@ -430,6 +454,13 @@ func (handler *MapExternalFundsHandler) CorrectFact(
 	if err != nil {
 		return FundsResult{outcome: FundsNotAccepted}, nil
 	}
+	scopes, err := handler.factScopes(ctx, command.TenantID, corrected)
+	if err != nil {
+		return FundsResult{}, err
+	}
+	if err := handler.lockScopes(ctx, command.TenantID, scopes); err != nil {
+		return FundsResult{}, err
+	}
 
 	record := ports.FundsFactRecord{Key: key, ContentDigest: digest, Fact: corrected, RecordedAt: handler.deps.Clock.Now(),
 		OperationEvidence: strings.TrimSpace(command.OperationEvidence)}
@@ -439,7 +470,16 @@ func (handler *MapExternalFundsHandler) CorrectFact(
 	}
 	switch saved {
 	case ports.FundsFactSaved:
-		return handler.adoptedFact(ctx, record)
+		// 金额变了，事实落到的每个作用域的 P 都可能随之变（收款的封顶、退回的 −(d+r)），不论升降都重算。
+		if err := handler.recomputeScopes(ctx, command.TenantID, scopes); err != nil {
+			return FundsResult{}, err
+		}
+		result, err := handler.adoptedFact(ctx, record)
+		if err != nil {
+			return FundsResult{}, err
+		}
+		result.overApplied = overAppliedBy(applied, record)
+		return result, nil
 	case ports.FundsFactAlreadyAdopted:
 		// 两步之间另一位写入方赢了：要么同一新版本先落了，要么链头先被别的版本更正了（库上守链形的
 		// 唯一约束把后者也折成`已采用`）。两种都按当前链头作答——它就是此刻被采用的那一版。
@@ -449,10 +489,70 @@ func (handler *MapExternalFundsHandler) CorrectFact(
 		if err != nil || !found {
 			return fundsUndecided(FundsFactStoreUnavailable, command.Fact), nil
 		}
-		return handler.existingFact(ctx, winner)
+		result, err := handler.existingFact(ctx, winner)
+		if err != nil {
+			return FundsResult{}, err
+		}
+		result.overApplied = overAppliedBy(applied, winner)
+		return result, nil
 	default:
 		return FundsResult{}, fmt.Errorf("%w: %d", ErrUnexpectedFundsSave, saved)
 	}
+}
+
+// existingCorrection 按已采用的更正版本作答并带出此刻的超核：响应丢了、操作员重交同一次更正，看到的信号与第一次一致。
+// 只有此刻的链头才有超核可说——被后来的更正取代的版本说的是已经过去的金额。
+func (handler *MapExternalFundsHandler) existingCorrection(
+	ctx context.Context,
+	key ports.FundsFactKey,
+	record ports.FundsFactRecord,
+	applied int64,
+) (FundsResult, error) {
+	head, found, err := handler.deps.Facts.FindByKey(ctx, key)
+	if err != nil || !found {
+		return fundsUndecided(FundsFactStoreUnavailable, key.Fact.String()), nil
+	}
+	result, err := handler.existingFact(ctx, record)
+	if err != nil {
+		return FundsResult{}, err
+	}
+	if head.Fact.Version() == record.Fact.Version() {
+		result.overApplied = overAppliedBy(applied, record)
+	}
+	return result, nil
+}
+
+// overAppliedBy 是事实上未撤销核销的合计超出这一版金额的部分；没超出为 0。
+func overAppliedBy(applied int64, record ports.FundsFactRecord) int64 {
+	_, amount := record.Fact.Amount()
+	if applied > amount {
+		return applied - amount
+	}
+	return 0
+}
+
+// factScopes 交回一条事实经对账单或账户映射落到的全部客户应收作用域，按键序排好（sortScopes）——更正改的是事实金额，
+// 它所及的每个作用域都在重算之列。收付之外的事实不进任何客户应收作用域。
+func (handler *MapExternalFundsHandler) factScopes(
+	ctx context.Context,
+	tenant domain.TenantID,
+	fact domain.ExternalFundsFact,
+) ([]customerScope, error) {
+	switch fact.Kind() {
+	case domain.FundsReceiptConfirmed, domain.FundsReturned:
+	default:
+		return nil, nil
+	}
+	reached, err := handler.deps.Books.FactCustomerScopes(ctx, tenant, fact.Fact())
+	if err != nil {
+		return nil, err
+	}
+	reached = sortScopes(reached)
+	scopes := make([]customerScope, 0, len(reached))
+	for _, scope := range reached {
+		scopes = append(scopes, customerScope{scope: scope})
+	}
+	return scopes, nil
 }
 
 // adoptedFact 按刚落下的那一版作答并交出意图。交接被确定性拒收时不给结果（handOffFact 头注）。

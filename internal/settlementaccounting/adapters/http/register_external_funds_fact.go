@@ -126,9 +126,12 @@ const (
 
 // fundsRegistrationResponse 是采用与更正两口的封闭响应形状。`outcome` 取 application.FundsOutcome 原名；
 // `undecidedReason` 只随业务未决在场，说的是在等谁（形状同 customshttp 的协作 / 核对两口）。
+// `overAppliedMinor` 只随超核的更正在场：更正本身成立（外部系统拥有资金事实，状态码仍是 201 已采用），可新金额低于事实
+// 上未撤销核销的合计，差额在这里——采用方据此知道有核销要人去撤，字段缺席即没有超核（ADR-0285 决定一）。
 type fundsRegistrationResponse struct {
-	Outcome         string `json:"outcome"`
-	UndecidedReason string `json:"undecidedReason,omitempty"`
+	Outcome          string `json:"outcome"`
+	UndecidedReason  string `json:"undecidedReason,omitempty"`
+	OverAppliedMinor int64  `json:"overAppliedMinor,omitempty"`
 }
 
 // writeFundsAnswer 把 application.FundsOutcome 那一族的答案逐名转写。状态码只答「有没有形成答案」（ADR-0022），
@@ -168,7 +171,7 @@ func writeFundsAnswer(response http.ResponseWriter, result application.FundsResu
 	if result.Outcome() == application.FundsFactAdopted {
 		status = http.StatusCreated
 	}
-	body := fundsRegistrationResponse{Outcome: name}
+	body := fundsRegistrationResponse{Outcome: name, OverAppliedMinor: result.OverAppliedMinor()}
 	if reason := result.UndecidedReason().String(); reason != "" {
 		body.UndecidedReason = reason
 	}

@@ -106,7 +106,7 @@ func commandFor(command string, raw []byte) (dispatchFunc, error) {
 				return "", 0, err
 			}
 			message, code := fundsAnswer(commandExternalFundsFactCorrection, result.Outcome(), result.UndecidedReason(),
-				result.FundsHandoffReference(), subjectOf(result))
+				result.FundsHandoffReference(), correctionSubjectOf(result))
 			return message, code, nil
 		}, nil
 	case commandFundsMapping:

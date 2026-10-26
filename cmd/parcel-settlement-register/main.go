@@ -448,6 +448,19 @@ func subjectOf(result application.FundsResult) string {
 	return record.Key.Fact.String() + " 版本 " + record.Fact.Version().String()
 }
 
+// correctionSubjectOf 在 subjectOf 之后补一句：更正把事实金额改到了未撤销核销的合计以下时说「累计超核」——与映射、核销两类
+// 答复同一句话，不截成 0。更正照采（外部系统拥有资金事实），答复仍是已采用、退出码不变；这句话与读面上的负数是操作员
+// 知道有核销要撤的仅有的信号，撤哪一笔是人的判断，本上下文不代撤（ADR-0285）。
+func correctionSubjectOf(result application.FundsResult) string {
+	subject := subjectOf(result)
+	over := result.OverAppliedMinor()
+	record, found := result.Fact()
+	if over <= 0 || !found {
+		return subject
+	}
+	return subject + fmt.Sprintf("；事实 %s 累计超核 %d", record.Key.Fact.String(), over)
+}
+
 // applicationSubjectOf 取核销或撤销落在哪一笔核销上，与这一步之后该事实的累计未分配：同一笔钱上的别的核销也算在里头，
 // 部分核销留下的、撤销还回来的未分配都让操作员看得见。撤销那两格不报原核销的金额——撤销之后它已不在核。
 func applicationSubjectOf(result application.FundsResult) string {
@@ -476,8 +489,8 @@ func mappingSubjectOf(result application.FundsResult) string {
 	return "映射 " + record.Key.Mapping.String() + factBalanceOf(record.Mapping.Fact().String(), result)
 }
 
-// factBalanceOf 报这一步之后该事实的累计未分配；外部更正把事实金额改到了已核销合计以下时报累计超核——负数是超核的唯一
-// 信号，照实说出来，不截成 0，映射与核销两类答复说同一句话。
+// factBalanceOf 报这一步之后该事实的累计未分配；外部更正把事实金额改到了已核销合计以下时报累计超核——负数就是超核，
+// 照实说出来，不截成 0，映射与核销两类答复说同一句话（更正自己的答复也说这一句，见 correctionSubjectOf）。
 func factBalanceOf(fact string, result application.FundsResult) string {
 	unapplied, known := result.FactUnappliedMinor()
 	switch {

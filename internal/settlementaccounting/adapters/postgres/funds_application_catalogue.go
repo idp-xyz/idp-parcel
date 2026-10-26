@@ -170,7 +170,7 @@ func (catalogue *FundsApplicationCatalogue) ListExternalFundsFacts(
 		row.CorrectedAt = catalogueInstant(correctedAt)
 		row.OperationEvidence = catalogueText(evidence)
 		// 未核销余额只扣未撤销那一笔：撤销把金额退回未结，它不该继续算作已分配。外部更正把金额改到已核销合计以下时
-		// 它为负，那是超核唯一可读的信号，不截成 0。
+		// 它为负，读面上超核就是这个负数，不截成 0。
 		row.UnappliedMinor = row.AmountMinor - row.AppliedMinor
 		// 落到几个客户应收作用域的事实按核销记入，没核销的那一截不归任何一个作用域（ADR-0283）；判法与
 		// CustomerReceiptPostings.CustomerDirectionNets 同一个作用域口径。超核时那一截是 0，超核本身已由上一格的负数说出。

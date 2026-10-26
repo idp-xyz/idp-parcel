@@ -370,7 +370,11 @@ func (double *factLockDouble) LockFundsFactApplications(ctx context.Context, key
 		return 0, false, double.err
 	}
 	*double.log = append(*double.log, "fact:"+key.Fact.String())
-	if _, found, _ := double.facts.FindByKey(ctx, key); !found {
+	_, found, err := double.facts.FindByKey(ctx, key)
+	if err != nil {
+		return 0, false, err
+	}
+	if !found {
 		return 0, false, nil
 	}
 	applied := int64(0)

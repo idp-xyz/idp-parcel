@@ -199,8 +199,8 @@ func TestExternalFundsFactRegistrationMapsIntakeFailures(t *testing.T) {
 // 都用真 handler 接存储替身造出来——伪造得出的那份代数与生产的是不是同一份，正是这几条断言要证的东西
 // （判据同 customshttp 的 register_credential_and_duty_test）。只有「零值答案」与「编排返错」两格用替身。
 
-// fundsStoreStub 是采用编排六口一体的替身：资金事实库三口按格给定，映射 / 核销 / 核销交接三口不在采用与更正
-// 路径上、只为过构造门；资金事实交接口默认成功，handoffErr 非空即「行已落、信封未出」那一格。
+// fundsStoreStub 是采用与更正编排用到的几口合在一起的替身：资金事实库与事实锁按格给定，映射 / 核销 / 核销交接几口不在
+// 采用与更正路径上、只为过构造门；资金事实交接口默认成功，handoffErr 非空即「行已落、信封未出」那一格。
 type fundsStoreStub struct {
 	findVersionErr error
 	// head 是链头那一版：FindByKey 找得到时交回它。headFound 为真即事实已有版本链。
@@ -214,6 +214,20 @@ type fundsStoreStub struct {
 	saved         bool
 
 	handoffErr error
+
+	// applied 是事实上未撤销核销的合计，lockErr 非空即事实锁取不到（资金事实库不可用）。事实锁在册与否跟着链头：
+	// headFound 为假即事实没有采用过，锁不到。locks 数取过几次——采用路径不该取。
+	applied int64
+	lockErr error
+	locks   int
+}
+
+func (stub *fundsStoreStub) LockFundsFactApplications(context.Context, ports.FundsFactKey) (int64, bool, error) {
+	stub.locks++
+	if stub.lockErr != nil {
+		return 0, false, stub.lockErr
+	}
+	return stub.applied, stub.headFound, nil
 }
 
 func (stub *fundsStoreStub) FindByKey(context.Context, ports.FundsFactKey) (ports.FundsFactRecord, bool, error) {
@@ -269,11 +283,6 @@ func (stores unreachableFundsSideStores) LockClaimTarget(
 ) (domain.ClaimTargetStanding, bool, error) {
 	stores.fail()
 	return domain.ClaimTargetStanding{}, false, nil
-}
-
-func (stores unreachableFundsSideStores) LockFundsFactApplications(context.Context, ports.FundsFactKey) (int64, bool, error) {
-	stores.fail()
-	return 0, false, nil
 }
 
 type unreachableApplicationStore struct{ t *testing.T }
@@ -383,7 +392,7 @@ func fundsHandlerOver(t *testing.T, stub *fundsStoreStub) *application.MapExtern
 		Balances:     idleBalanceAdvance{},
 		Standings:    idleCreditStanding{},
 		ClaimTargets: unreachableFundsSideStores{t: t},
-		FactLocks:    unreachableFundsSideStores{t: t},
+		FactLocks:    stub,
 	})
 	if err != nil {
 		t.Fatalf("构造编排：%v", err)
@@ -476,6 +485,9 @@ func TestExternalFundsFactRegistrationTranscribesTheAnswerAlgebra(t *testing.T) 
 			endpoint := settlementhttp.NewRegisterExternalFundsFactEndpoint(
 				fundsIntakeDouble{adopt: spec.command}, fundsHandlerOver(t, spec.stub))
 			assertFundsAnswer(t, endpoint, spec.fundsAnswerCase)
+			if spec.stub.locks != 0 {
+				t.Fatalf("采用路径取了 %d 次事实锁——只有更正、核销与撤销排在事实身份行上", spec.stub.locks)
+			}
 		})
 	}
 
@@ -575,7 +587,14 @@ func TestExternalFundsFactCorrectionRegistrationTranscribesTheAnswerAlgebra(t *t
 	t.Run("资金事实库不可用", func(t *testing.T) {
 		endpoint := settlementhttp.NewRegisterExternalFundsFactCorrectionEndpoint(
 			fundsIntakeDouble{correction: command},
-			fundsHandlerOver(t, &fundsStoreStub{findVersionErr: errors.New("funds fact store unavailable")}))
+			fundsHandlerOver(t, &fundsStoreStub{head: headRecord(t), headFound: true,
+				findVersionErr: errors.New("funds fact store unavailable")}))
+		assertNoAnswerFormed(t, endpoint, "NO_ANSWER_FORMED")
+	})
+	t.Run("事实锁取不到（库不可用）", func(t *testing.T) {
+		endpoint := settlementhttp.NewRegisterExternalFundsFactCorrectionEndpoint(
+			fundsIntakeDouble{correction: command},
+			fundsHandlerOver(t, &fundsStoreStub{lockErr: errors.New("funds fact store unavailable")}))
 		assertNoAnswerFormed(t, endpoint, "NO_ANSWER_FORMED")
 	})
 	t.Run("编排返错", func(t *testing.T) {
@@ -583,6 +602,45 @@ func TestExternalFundsFactCorrectionRegistrationTranscribesTheAnswerAlgebra(t *t
 			fundsIntakeDouble{correction: command}, &fundsRegistrarDouble{err: errors.New("事务壳寄了")})
 		assertNoAnswerFormed(t, endpoint, "NO_ANSWER_FORMED")
 	})
+}
+
+// Covers: ADR-0285 决定一与 ADR-0022——更正低于事实上未撤销核销的合计时照采，状态码不变（仍是 201 已采用），超核金额放在响应体
+// 的 overAppliedMinor 上；新金额不低于合计时响应键集仍只有 outcome（响应形封闭，字段只在有话说时在场）。
+func TestACorrectionBelowTheAppliedTotalCarriesTheOverAppliedAmountInTheBodyAndKeepsTheStatus(t *testing.T) {
+	command := correctionCommand(t) // 链头 8000，更正到 9000
+	for _, tc := range []struct {
+		name     string
+		applied  int64
+		wantOver float64
+	}{
+		{"合计高于新金额", 10_000, 1_000},
+		{"合计等于新金额", 9_000, 0},
+		{"没有核销", 0, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			endpoint := settlementhttp.NewRegisterExternalFundsFactCorrectionEndpoint(
+				fundsIntakeDouble{correction: command},
+				fundsHandlerOver(t, &fundsStoreStub{head: headRecord(t), headFound: true,
+					saveOutcome: ports.FundsFactSaved, applied: tc.applied}))
+			recorder := httptest.NewRecorder()
+			endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/probe", nil))
+			if recorder.Code != http.StatusCreated {
+				t.Fatalf("答 %d（%s），要 201——超核不改状态码", recorder.Code, recorder.Body.String())
+			}
+			body := decodeRegistrationBody(t, recorder)
+			if body["outcome"] != "FUNDS_FACT_ADOPTED" {
+				t.Fatalf("outcome = %v，要 FUNDS_FACT_ADOPTED", body["outcome"])
+			}
+			if tc.wantOver == 0 {
+				assertKeys(t, body, "outcome")
+				return
+			}
+			assertKeys(t, body, "outcome", "overAppliedMinor")
+			if body["overAppliedMinor"] != tc.wantOver {
+				t.Fatalf("overAppliedMinor = %v，要 %v", body["overAppliedMinor"], tc.wantOver)
+			}
+		})
+	}
 }
 
 // TestOnlineExternalFundsFactRegistrationTakesTheSameSnapshotShapeAsTheCLI 是一条编译期断言：两个 Intake 契约要

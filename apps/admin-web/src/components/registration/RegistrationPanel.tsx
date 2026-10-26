@@ -3,6 +3,7 @@ import { Button, Card, CardContent, CardHeader, CardTitle, Textarea } from '@idp
 import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../../pages/catalogue-api';
 import { OperatorRefusalNote } from '../states';
+import { overAppliedNote } from './over-applied-note';
 
 /**
  * 登记写面的表单区（ADR-0085，票 admin-write-faces/01 切片 01b 首落于计价页；票 02
@@ -67,6 +68,12 @@ export interface RegistrationResponseBody {
    * 内容再来，业务未决要等前置到了重发同一份——续办动作相反，同名会让两种动作看起来是一回事。
    */
   undecidedReason?: string;
+  /**
+   * 外部资金事实更正的超核金额（settlement-accounting 的更正口是唯一来路，最小货币单位）。它只随超核的更正在场：更正
+   * 本身成立（outcome 仍是已采用，状态码不变），可新金额低于这条事实上未撤销核销的合计，差额在这里；缺席即没有超核。
+   * 不并进 `outcome` 的中文：已采用与「已采用而且有核销要人去撤」续办不同，折进一句会让后者被读成前者。
+   */
+  overAppliedMinor?: number;
   /**
    * 随本次发布一并登记的各声明通道落点。
    *
@@ -234,6 +241,7 @@ export function RegistrationAnswerNote({
       // 往往正是「册上最新为几、收到几」那半句——登记方要改的就是那个数。
       const prose = answer.body.cause ?? answer.body.pendingCause;
       const landings = answer.body.declarations ?? [];
+      const overApplied = overAppliedNote(answer.body.overAppliedMinor);
       return (
         <div className="text-xs text-idpxyz-textMuted">
           <p>
@@ -252,6 +260,7 @@ export function RegistrationAnswerNote({
             ) : null}
           </p>
           {prose ? <p className="mt-1">原因：{prose}</p> : null}
+          {overApplied ? <p className="mt-1 text-idpxyz-danger">{overApplied}</p> : null}
           {landings.length > 0 ? (
             <div className="mt-1">
               {/* 声明落点与版本答案分行列出，不折进上面那句：某通道内容冲突时版本

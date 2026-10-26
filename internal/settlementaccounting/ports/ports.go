@@ -920,14 +920,15 @@ type SettlementApplicationStore interface {
 }
 
 // FundsFactApplicationLock 锁一条资金事实并交回它上面未撤销核销的 applied 合计，核销据此判事实一级的上限
-// （domain.SettlementApplication.AdmitWithinFact）。锁在调用方的事务里取、随事务结束放；锁后另起一句求合计，等锁的
-// 那一路读得到先到那笔已提交的核销。found=false 即本租户没有这条事实。无环境事务即拒。
+// （domain.SettlementApplication.AdmitWithinFact），外部更正据此说出新金额低于合计的超核（FundsResult.OverAppliedMinor）。
+// 锁在调用方的事务里取、随事务结束放；锁后另起一句求合计，等锁的那一路读得到先到那笔已提交的核销。found=false 即
+// 本租户没有这条事实。无环境事务即拒。
 //
 // 资金侧的锁只按一个全序取：事实（本口）→ 金额本体（ClaimSettlementTargets.LockClaimTarget，按格、引用）→ 运营余额
 // 作用域（OperationalBalanceAdvance.LockOperationalBalanceScope，按法人、账户、币种）。哪条路径用不到前面的就从后面接着取，
 // 不倒回去——两笔事务各握一半等另一半就是这样排除的。同一类里要取几把时按同一个键序取：金额本体按（格、引用），作用域
-// 按（法人、账户、币种）。核销与撤销路上随写入隐式取的行锁（核销主键插入时的等待、operational_balance 与
-// credit_standing 的 upsert、Outbox 入队）都落在作用域锁之后。映到对账单或账户的映射先取本口、再插映射行、再取作用域；
+// 按（法人、账户、币种）。核销、撤销与更正路上随写入隐式取的行锁（核销主键与版本行插入时的等待、operational_balance
+// 与 credit_standing 的 upsert、Outbox 入队）都落在作用域锁之后。映到对账单或账户的映射先取本口、再插映射行、再取作用域；
 // 插映射行时的等待只会撞上同一映射键的另一笔映射，那一笔已过了它自己的事实锁、往后只取作用域锁，而握作用域锁的事务
 // 都已过了事实锁、不会回头等哪一条事实或哪一行映射，所以接不成环；映到别的目标的映射不取任何一把。作用域咨询锁的键是
 // 哈希，两个作用域撞上同一把锁时这把锁的先后不再跟着键序，最坏由库的死锁检测拒掉其中一笔、答未决重试。
@@ -935,6 +936,8 @@ type SettlementApplicationStore interface {
 // 取哪几个作用域，就是这一笔改了 P 或 W 的那几个（ADR-0283；P 的记法见 CustomerReceiptBooks.CustomerDirectionNets）：
 //   - 映到对账单或账户：目标所在的作用域；一条收款由这一笔从落到一个作用域变成两个时，连原来那个。
 //   - 核销与撤销：对账单分配与账户分配所指的作用域；事实只落到一个作用域时那一个；事实是退回时它落到的全部作用域。
+//   - 外部更正：事实落到的全部客户应收作用域（ADR-0285）——金额变了，收款的封顶与退回的 −(d+r) 都随之变，不逐个判
+//     哪个作用域的 P 真动了。更正先取本口再读，取在落版本行之前：版本行的外键那把 KEY SHARE 来在读之后，晚了。
 //
 // 别的作用域不碰：一个作用域账已不平，只有碰到它的那一笔答账不平。
 type FundsFactApplicationLock interface {
