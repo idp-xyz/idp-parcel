@@ -64,6 +64,7 @@ M。
 1. **退回没核销那一截在每个作用域都先扣**（协调方的字面是「同一规则」，这一截的方向是作者代决）：作用域可用余额偏小、可能挡冻结。要改成各记 0，只改 `CustomerDirectionNets` 里退回那一项，读面与 CLI 说法随之改。
 2. **币种不同的作用域也算一个**（作者代决）。
 3. **唯一客户作用域的推定**（修订轮由「兼映到非客户目标仍按全额」改：那一缺口按协调方裁定并入本票修了）：只落到一个客户作用域、又兼映到应付、贷项或金额本体的收款，核过去之前没核销的部分按推定记在客户作用域上，那段时间不是严格下界。要严格下界，n 为 1 的推定再加「事实没有非客户映射」即可。
+   读面看不出这一格的单独字段：资金事实册上 `CustomerScopeCount`=1、`UnappliedMinor`>0 且 `Mappings[].TargetKind` 含非客户目标，三者合看才推得出，没有一个字段直接说「偏多」。读面可见：`CustomerScopeCount`、`UnappliedMinor`、`Mappings[].TargetKind`（合看）。
 4. **外部更正不重算**：单作用域全额、多作用域退回没核销那一截都随链头变而更正这一步不推进，归 [code/92](./92-a-funds-fact-correction-below-its-applied-total-is-adopted-silently.md)。
 5. **存量停在旧值**（修订轮改准）：本票之前已落在几个作用域上、或已核到非客户目标的事实，它的作用域要等某一笔改了那个作用域的 P 或 W 才按新口径重算；重算集合收窄之后不再「碰这条事实一下就修好它的全部作用域」。首发前只有演示租户（种子为单作用域、只有客户映射，值不变），可以接受。
 6. ~~重算范围变宽~~：修订轮按 N3 收窄重算集合后消失。
@@ -166,3 +167,8 @@ M。
   14. 映射答复超核说成负的未分配 → `TestAMappingOfAnOverAppliedFactSaysOverApplied` 红。
 - 种子：灌一次性库 `c94seed` 退 0，`SYN-SETTLEMENT-ACCOUNT-01` 入账余额 20000（不变），用后删库。
 - 管理台三道门（Node 22，软链主树 `node_modules`、用后删）：`tsc -b --noEmit`、`scripts/run-tests.mjs`（672 过）、`vite build` 退 0。
+
+### 第二轮评审
+
+- **N1（LEAST 封顶无用例守）**：补 postgres 包 `TestACorrectionBelowTheAppliedTotalCapsTheScopePostingAtTheFactAmount`（收款 5000 核销 5000 后更正为 3000，P 为 3000；退回同形，P 为 -3000）；去掉 `LEAST` 的变异使两格红（5000 / -5000），复原后 `cmp` 一致。
+- **N2（唯一推定偏宽）**：不改公式，写明为已知宽松格：ADR-0283 越权风险点 3 与 SA CONTEXT 运营余额规则句各补一句；读面没有单独字段，见越权风险点 3 末的说明。

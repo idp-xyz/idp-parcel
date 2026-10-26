@@ -297,3 +297,61 @@ func TestAReceiptAppliedToANonCustomerTargetLeavesItsOnlyCustomerScope(t *testin
 	assertScope(t, rig.pool, "acct-1", 3_000, 0)
 	rig.assertCatalogued(t, "receipt-x", 1, 0)
 }
+
+// correctAmount 把一条已采用的事实更正为新金额（回指当前链头 v1）。
+func (rig spreadRig) correctAmount(t *testing.T, fact string, amount int64) {
+	t.Helper()
+	rig.step(t, "更正 "+fact, application.FundsFactAdopted, func(txCtx context.Context) (application.FundsResult, error) {
+		return rig.handler.CorrectFact(txCtx, application.CorrectFundsFactCommand{
+			TenantID: rig.tenant, Fact: fact, Corrects: "v1", Version: "v2",
+			AmountMinor: amount, CorrectedAt: rig.clock.at,
+		})
+	})
+}
+
+// postedNet 直接读 acct-1 作用域的收款 P。
+func (rig spreadRig) postedNet(t *testing.T) int64 {
+	t.Helper()
+	scope, err := domain.NewSettlementScope(
+		saValue(t, domain.NewLegalEntityReference, "le-1"),
+		saValue(t, domain.NewSettlementAccountID, "acct-1"),
+		saValue(t, domain.NewCurrencyCode, "CNY"))
+	if err != nil {
+		t.Fatalf("作用域：%v", err)
+	}
+	var posted int64
+	saWithin(t, rig.db.Transactor(), t.Context(), func(txCtx context.Context) error {
+		var err error
+		posted, _, _, err = mustReceiptPostings(t, rig.db).CustomerDirectionNets(txCtx, rig.tenant, scope)
+		return err
+	})
+	return posted
+}
+
+// Covers: 票 code/92 超核情形——外部更正把事实金额改到已核销合计以下时，单作用域的记入仍封顶到事实金额（LEAST），
+// 防一个作用域记入多于钱：收款 5000 核销 5000 到 stmt-1 后更正为 3000，P 是 3000 而非核销合计 5000；
+// 退回同形，P 是 -3000。
+func TestACorrectionBelowTheAppliedTotalCapsTheScopePostingAtTheFactAmount(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		kind domain.FundsFactKind
+		want int64
+	}{
+		{"receipt", domain.FundsReceiptConfirmed, 3_000},
+		{"return", domain.FundsReturned, -3_000},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rig := newSpreadRig(t)
+			seedConfirmedReceivable(t, t.Context(), rig.pool, 5_000)
+
+			rig.adopt(t, "fact-cap", tc.kind, 5_000)
+			rig.mapTo(t, "map-cap", "fact-cap", domain.TargetStatement, "stmt-1")
+			rig.apply(t, "app-cap", "fact-cap", "map-cap", domain.TargetStatement, "stmt-1", 5_000)
+			rig.correctAmount(t, "fact-cap", 3_000)
+
+			if got := rig.postedNet(t); got != tc.want {
+				t.Fatalf("更正到 3000 后 acct-1 的 P = %d，要 %d", got, tc.want)
+			}
+		})
+	}
+}
