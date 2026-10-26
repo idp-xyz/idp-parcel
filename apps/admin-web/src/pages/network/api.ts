@@ -221,3 +221,85 @@ export function listInitialRoutes(): Promise<ApiResult<InitialRouteListResponseB
 export function listRouteReassessments(): Promise<ApiResult<RouteReassessmentListResponseBody>> {
   return exchangeMasterData<RouteReassessmentListResponseBody>('/route-plans?register=reassessment');
 }
+
+// ——以下为改路建议读面与授权改路决定口（ADR-0284 决定一、六；票 docs-consistency/code/29）。形状以
+// internal/networkrouting/adapters/http 的 query_reroute_suggestions.go 与 decide_reroute.go 为准，此处只做镜像不虚构。
+// 写行走 postMasterData：它挂操作者渠道「运营决定」能力面的授权改路一种，与查阅那一行不是同一个准入。
+
+/** 建议里的一条候选：结局与依据是建议形成那一刻的评估，不是此刻的。 */
+export interface RerouteSuggestionCandidate {
+  id: string;
+  /** 封闭三格原词：QUALIFIED / ELIMINATED / EVIDENCE_UNKNOWN。 */
+  outcome: string;
+  reason?: string;
+}
+
+export interface RerouteSuggestionDecision {
+  candidate: string;
+  newPlanVersion: string;
+  decidedBy: string;
+  basis: string;
+  decidedAt: string;
+}
+
+export interface RerouteSuggestionRecord {
+  correlationId: string;
+  customerAccountId: string;
+  shipmentRequestId: string;
+  acceptanceBaseline: string;
+  declaredParcelId: string;
+  servicePurpose: string;
+  reviewedPlan?: string;
+  lapseBasis?: string;
+  blockers: string[];
+  candidates: RerouteSuggestionCandidate[];
+  suggestedAt: string;
+  triggerOccurredAt?: string;
+  /** 封闭三格原词：PENDING / DECIDED / SUPERSEDED。 */
+  state: string;
+  decision?: RerouteSuggestionDecision;
+}
+
+export interface RerouteSuggestionListResponseBody {
+  outcome: 'REROUTE_SUGGESTIONS_LISTED';
+  suggestions: RerouteSuggestionRecord[];
+}
+
+export function listRerouteSuggestions(): Promise<ApiResult<RerouteSuggestionListResponseBody>> {
+  return exchangeMasterData<RerouteSuggestionListResponseBody>('/route-reroute-suggestions');
+}
+
+/** 一次授权改路决定的载荷。**没有租户、没有决定方**——身份从操作者信封来，服务端对载荷里出现的身份键一律按未知键拒。 */
+export interface RerouteDecisionRequest {
+  declaredParcelId: string;
+  suggestion: string;
+  candidate: string;
+  basis: string;
+}
+
+export interface RerouteDecisionBody {
+  suggestion: string;
+  declaredParcelId: string;
+  candidate: string;
+  originalPlan: string;
+  newPlanVersion: string;
+  effectiveFromNode: string;
+  effectiveFrom: string;
+  mode: string;
+  decidedBy: string;
+  basis: string;
+  decidedAt: string;
+}
+
+/** 决定口的封闭响应形状：decision 随成立与已决定出现；candidateReason 只随此刻重判不成立的三格；undecidedReason 只随未决。 */
+export interface RerouteDecisionResponseBody {
+  outcome: string;
+  candidateReason?: string;
+  undecidedReason?: string;
+  continuationReference?: string;
+  decision?: RerouteDecisionBody;
+}
+
+export function decideReroute(request: RerouteDecisionRequest): Promise<ApiResult<RerouteDecisionResponseBody>> {
+  return postMasterData<RerouteDecisionResponseBody>('/route-reroute-decisions', request);
+}

@@ -1,0 +1,13 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "mappings": [
+    {
+      "mappingId": "SYN-MAP-OD-AUTHORIZED-REROUTE-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "AUTHORIZED_REROUTE",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    }
+  ]
+}

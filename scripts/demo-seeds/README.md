@@ -158,6 +158,11 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
 对采用了这份委托的各段补形成实际履约发生项。采用晚于参与结束的段同样由采用那一笔的门铃补。补不成的那几件（未配置、协议未生效或已终止、缺采购
 上下文）在 `GET /transport-fulfillment-records?registry=actual-fulfillment-unformed`。查阅员没有这一种，换版口答 403 `OPERATOR_NOT_GRANTED`。证据只记 `S`。
 
+配置员另持运营决定「授权改路」（ADR-0284 决定一；票 docs-consistency/code/29）：授予、对照与权威区间另起 `steps/477-access-authorized-reroute.sh`
+一节，数据是 `data/access/15`、`16` 与 `data/governance/51`。谁持有这一种是租户取值，这里登的是演示租户的。种子不作任何改路决定：复核在原计划失效后
+形成的改路建议列在 `GET /route-reroute-suggestions`（管理台路由计划页「改路建议」一册），运营人员择一合格候选经 `POST /route-reroute-decisions` 决定。
+查阅员没有这一种，决定口答 403 `OPERATOR_NOT_GRANTED`。证据只记 `S`。
+
 单要一枚令牌：`scripts/demo-seeds/operator-channel/operator-token.sh <邮箱>` 打印访问令牌，末尾加 `claims` 打印两枚
 令牌的载荷。它与管理台走同一个公共客户端、同一条 authorization_code + PKCE 流，管理台不必在跑。
 

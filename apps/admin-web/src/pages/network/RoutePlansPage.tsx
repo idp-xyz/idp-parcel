@@ -23,6 +23,7 @@ import {
   routePlanRegisters,
   type RoutePlanRegister,
 } from './presentation';
+import { RerouteSuggestionsView } from './RerouteSuggestionsView';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['route-plans'];
@@ -193,6 +194,16 @@ const reassessmentColumns: ListColumn<RouteReassessmentRecord>[] = [
   },
 ];
 
+// 本页的三册：路由判断两册之外，另有复核形成的改路建议一册（ADR-0284 决定六），它走自己的读口与决定口。
+type RoutePlansView = RoutePlanRegister | 'reroute-suggestion';
+
+const routePlansViews: RoutePlansView[] = [...routePlanRegisters, 'reroute-suggestion'];
+
+const routePlansViewLabels: Record<RoutePlansView, string> = {
+  ...routePlanRegisterLabels,
+  'reroute-suggestion': '改路建议',
+};
+
 // 按册装载的答案：register 与答案体绑定成判别联合，切册期间旧册答案不冒充新册。
 type LoadedAnswer =
   | { register: 'initial-route'; answer: ApiResult<InitialRouteListResponseBody> }
@@ -203,7 +214,7 @@ type LoadedAnswer =
  * 计划——这句约束由判断库与适用性登记保证，本页照登转写，不维护执行状态、不选版。
  */
 export function RoutePlansPage() {
-  const [register, setRegister] = useState<RoutePlanRegister>('initial-route');
+  const [register, setRegister] = useState<RoutePlansView>('initial-route');
   const [keyword, setKeyword] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [loaded, setLoaded] = useState<LoadedAnswer | null>(null);
@@ -214,7 +225,7 @@ export function RoutePlansPage() {
       void listInitialRoutes().then((answer) => {
         if (!cancelled) setLoaded({ register: 'initial-route', answer });
       });
-    } else {
+    } else if (register === 'reassessment') {
       void listRouteReassessments().then((answer) => {
         if (!cancelled) setLoaded({ register: 'reassessment', answer });
       });
@@ -228,14 +239,14 @@ export function RoutePlansPage() {
   const needle = keyword.trim().toLowerCase();
   const chips = (
     <>
-      {routePlanRegisters.map((candidate) => (
+      {routePlansViews.map((candidate) => (
         <button
           key={candidate}
           type="button"
           className={chipClass(candidate === register)}
           onClick={() => setRegister(candidate)}
         >
-          {routePlanRegisterLabels[candidate]}
+          {routePlansViewLabels[candidate]}
         </button>
       ))}
     </>
@@ -253,6 +264,10 @@ export function RoutePlansPage() {
   // 空册文案两册同句：写入方是渠道墙后的路由编排，尚未接入任何进程。
   const emptyDescription =
     '读取入口已配置，但登记册为空；两册的写入方是渠道墙后的路由编排，尚未接入任何进程——册空是墙拦不是缺陷，本页不预置数据。';
+
+  if (register === 'reroute-suggestion') {
+    return <RerouteSuggestionsView header={shared} keyword={keyword} />;
+  }
 
   if (register === 'initial-route') {
     const answer = loaded?.register === 'initial-route' ? loaded.answer : null;
