@@ -1,7 +1,7 @@
 # 143 NR 读回整份委托聚合只为取受理基线地理维
 
 Category: enhancement
-Status: in-progress——2026-10-26 复评无阻断，待进 main，分支 `claude-dcg142` tip `4c45d65e2`（复评收尾末笔；本票面一笔随后）。此前 in-progress——2026-10-25 评审阻断已修、修订轮完，待评审复核与进 main，分支 `claude-dcg142` tip `7e78cb155`（修订轮末笔；本票面一笔随后）。此前 in-progress——2026-10-25 作者完工，待隔离评审与进 main，分支 `claude-dcg142` tip `ff13558ed`（代码末笔；本票与 142 的完成记录随后一笔）。此前 in-progress——2026-10-25 会话 `tops-20`（Claude Code）认领，与 142 同批，分支 `claude-dcg142`（worktree `idp-parcel-dcg142`）。此前 ready-for-agent——2026-10-20 代决复核立（上线后尽快），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: resolved——2026-10-26 进 main `1f5e83911`（见文末「进 main 记录」）。此前 in-progress——2026-10-26 复评无阻断，待进 main，分支 `claude-dcg142` tip `4c45d65e2`（复评收尾末笔；本票面一笔随后）。此前 in-progress——2026-10-25 评审阻断已修、修订轮完，待评审复核与进 main，分支 `claude-dcg142` tip `7e78cb155`（修订轮末笔；本票面一笔随后）。此前 in-progress——2026-10-25 作者完工，待隔离评审与进 main，分支 `claude-dcg142` tip `ff13558ed`（代码末笔；本票与 142 的完成记录随后一笔）。此前 in-progress——2026-10-25 会话 `tops-20`（Claude Code）认领，与 142 同批，分支 `claude-dcg142`（worktree `idp-parcel-dcg142`）。此前 ready-for-agent——2026-10-20 代决复核立（上线后尽快），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 R6；ADR-0215 越权风险点 1
 
@@ -152,3 +152,13 @@ Spec：阻断无（判断顺序与 `acceptedProductsValidForRehydration` 基线�
 Standards（只看新增改动）：阻断无。非阻断 1：PS CONTEXT「地址要素」末句括注「（不指当前提交版本，成员或时刻与当前提交版本、接受决定对不上）」只列了 ADR-0301 决定一五格里的三格，缺「没有基线」「基线没有固定时刻」；CONTEXT 是现行规则唯一出处，括注易读成穷举——补上两格或改举例口吻。无发现：ADR-0279「理由限定」注记合 ADR-0008 先例、引文逐字、正文未动；ADR-0301 修订去向写法、决定一二与风险点 1、2 随实现改；PS CONTEXT 末句已改成现行规则；注释中文无行号计数。
 
 复评非阻断 1 的收法：PS CONTEXT「地址要素」末句括注补齐五形（没有接受基线、基线不指当前提交版本、基线没有固定时刻、基线成员与当前提交版本不一致、基线时刻不等于接受决定的时刻），取穷举而不取举例口吻——CONTEXT 是现行规则唯一出处，五形就是读口判的全部，写全比举例准；提交 `4c45d65e2`。ADR-0301 Consequences 那句只说「接受基线自相矛盾答矛盾」、不列格，未改。只改文档，未重跑 go 用例。
+
+## 进 main 记录（2026-10-26，推送方会话 tops-20；142、143 同批）
+
+- **main**：`1f5e83911`。出处：分支 `claude-dcg142` tip `6d1363429`。
+- **重放对照**（分支 → main）：`dfc94ecb5` → `0889aacd4`（142）；`9c2e171df` → `00df2d6e7`；`ff13558ed` → `6877e5fc9`；`6fc41e9ad` → `a2d048da6`；`1a552ad1c` → `9d5df1b12`；`7e78cb155` → `3ca2aace3`；`f4902c73b` → `0d68fee1a`；`4c45d65e2` → `91fdb3f39`；`6d1363429` → `2c55beb33`。
+- **生成物**（推送方在重放后的 tip 上重生成，各成一笔）：ADR 索引 `886242a9c`；机制清点 `1f5e83911`；AT 盘点总览计数无变化。三件 `-check` 退 0。
+- **评审**：隔离子代理钉 `6fc41e9ad`：142 无发现；143 阻断 1 条（读口把重建门会拒的委托当好答案交出）。修订轮 `1a552ad1c`、`7e78cb155` 修掉；同一评审者在 `f4902c73b` 上复评并自己重跑探针（三形 × 两成员都答 `ErrAcceptanceBaselineInconsistent`），阻断清零、无新阻断；复评留下的一条非阻断由 `4c45d65e2` 收（见「评审记录」「修订轮」「复评」）。
+- **全量真库测试**：`scripts/test-full.sh` 跑在 `1f5e83911`（即所推 SHA）：158 ok / 0 FAIL，退 0。
+- **种子**：`scripts/demo-seeds/seed.sh` 灌一次性库（`1f5e83911` 上），退 0，用后删库。
+- **后继**：142 越权风险点 1（连接代码含 `+`）立为 [176](./176-a-connection-code-with-the-window-basis-separator-is-accepted-at-registration.md)。
