@@ -45,7 +45,7 @@ const (
 	// SegmentEntryRefusedServiceActionConflict：加入既有段时给出的声明与段成立时固定的不一致（含段成立时
 	// 未声明而此刻要声明——声明只在成立那一刻开门）。CONTEXT 生命周期①末句；续办是另立新段，不是重试。
 	SegmentEntryRefusedServiceActionConflict
-	// SegmentEntryRefusedLaterControlFacts：前版没转出控制的交接更正成`已交接`，这一版本该带对象进段（ADR-0307 决定一），
+	// SegmentEntryRefusedLaterControlFacts：首登即为`已交接`、或前版没转出控制的交接更正成`已交接`，这一版本该带对象进段（ADR-0307 决定一），
 	// 可对象的参与链上已有晚于这一版业务时间的入场或离场——它此后已凭别的控制事实进了段、交出或交付离场。凭这一版
 	// 结束此刻的参与、进声明的段，会让它在两段同时在场，或在离场之后重新在场；控制来源链的重算不在更正里做。更正在册，
 	// 段那一半一笔不写，后续事实不动；重试不会变，所以不是欠账（决定三）。

@@ -159,7 +159,7 @@ func NewCorrectTransportHandoverEndpoint(intake HandoverCorrectionIntake, handle
 // 调用方要做的事不同——传输层吞掉任何一格，调用方就没法续办那一半。
 //
 // `segmentEntryRefusal` 是第四格（票 03 裁决 3）：段那一半被领域正当拒绝——首登进段答 `SEGMENT_CLOSED`
-// （「去另立新段」），更正口答重派生那一半的各格（ADR-0112：无可替代、起点晚于继承的终点）；前版没转出控制的
+// （「去另立新段」）或 `LATER_CONTROL_FACTS`（首登晚到：对象此后已有更晚的入场或离场，交接照登、不进段，票 183），更正口答重派生那一半的各格（ADR-0112：无可替代、起点晚于继承的终点）；前版没转出控制的
 // 更正成`已交接`改走进段，答进段那几格，或对象此后已有更晚的控制事实（`LATER_CONTROL_FACTS`，ADR-0307）。
 // 与欠账那格恰相反（一个说别重试、一个说等恢复重试）。取值以 application.SegmentEntryRefusal 为准。
 type handoverResponse struct {

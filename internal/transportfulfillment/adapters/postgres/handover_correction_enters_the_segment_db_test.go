@@ -152,3 +152,39 @@ func TestACorrectionIntoTheSegmentAfterAnOnwardHandoverWritesNoSegmentInTheDatab
 		t.Fatalf("在场的段 = %v, want 仍只在 SEG-ONWARD", active)
 	}
 }
+
+// Covers: AT-TF-356 真库半边（票 demo-chain-gaps/183；ADR-0307 越权风险点 2）——对象在 SEG-PREV 的参与起于 rederivationEnteredAt，
+// 首登`已交接`的业务时间早于它（离线补登）：交接照登，答 LATER_CONTROL_FACTS，SEG-NEXT 不立、SEG-PREV 的参与不动，对象只在
+// SEG-PREV；此后下一次交接照常结束 SEG-PREV 的参与、进 SEG-ONWARD，不再撞 ErrObjectActiveInSeveralSegments。
+func TestALateFirstHandoverLeavesTheObjectInOneSegmentInTheDatabase(t *testing.T) {
+	registries := newRederivationRegistries(t)
+	ctx := t.Context()
+	lateAt := rederivationEnteredAt.Add(-time.Hour)
+	onwardAt := rederivationEnteredAt.Add(2 * time.Hour)
+	registries.registerHandoverInto(t, ctx, "parcel-1", "scope-h0", "h0", domain.ObjectHandedOver, rederivationEnteredAt, "SEG-PREV")
+
+	late := registries.registerHandoverInto(t, ctx, "parcel-1", "scope-late", "late", domain.ObjectHandedOver, lateAt, "SEG-NEXT")
+	if late.SegmentEntryRefusal() != application.SegmentEntryRefusedLaterControlFacts ||
+		late.ParticipationEnd() != application.ParticipationEndOutcomeInvalid {
+		t.Fatalf("refusal=%s end=%s, want LATER_CONTROL_FACTS、没结束任何参与", late.SegmentEntryRefusal(), late.ParticipationEnd())
+	}
+	if _, found, err := registries.segments.FindByKey(ctx, segmentKeyFixture(t, "tenant-1", "SEG-NEXT")); err != nil || found {
+		t.Fatalf("SEG-NEXT 被立起来了（%v）", err)
+	}
+	object := segmentRef(t, domain.NewCarriedObjectReference, "parcel-1")
+	previous, _ := registries.readSegment(t, ctx, "SEG-PREV").ParticipationFor(object)
+	if !previous.Active() {
+		t.Fatal("SEG-PREV 的参与被结束了")
+	}
+	if active := registries.activeSegmentsOf(t, ctx, "parcel-1"); len(active) != 1 || active[0] != "SEG-PREV" {
+		t.Fatalf("在场的段 = %v, want 只在 SEG-PREV", active)
+	}
+
+	onward := registries.registerHandoverInto(t, ctx, "parcel-1", "scope-onward", "onward", domain.ObjectHandedOver, onwardAt, "SEG-ONWARD")
+	if onward.ParticipationEnd() != application.ParticipationEndedNow || onward.SegmentEntryRefusal() != application.SegmentEntryRefusalNone {
+		t.Fatalf("此后的交接 end=%s refusal=%s, want PARTICIPATION_ENDED、进段", onward.ParticipationEnd(), onward.SegmentEntryRefusal())
+	}
+	if active := registries.activeSegmentsOf(t, ctx, "parcel-1"); len(active) != 1 || active[0] != "SEG-ONWARD" {
+		t.Fatalf("此后在场的段 = %v, want 只在 SEG-ONWARD", active)
+	}
+}
