@@ -18,7 +18,7 @@ func NewCausalConditionReference(value string) (CausalConditionReference, error)
 	return CausalConditionReference{required}, err
 }
 
-// CausalConditionRecordedBeforeCauses 是因果条件一维立起来之前落库的发作期回填的那一格（VE 迁移 0029）。它们当初按（对象，
+// CausalConditionRecordedBeforeCauses 是因果条件一维立起来之前落库的发作期回填的那一格（VE 迁移 0030）。它们当初按（对象，
 // 类型）定位，记的是哪一次原因已经说不出，事实依据也是空的：回填成这一格如实说「登记于因果条件之前」，而不是替它们猜一个原因。
 // 新命中带的因果条件永远不等于它，所以存量发作期不再认领任何新命中；开期的构造门拒它，只有重建门放它进来。
 const CausalConditionRecordedBeforeCauses = "RECORDED_BEFORE_CAUSAL_CONDITION"
