@@ -68,7 +68,7 @@ type OffsitePickupAdopter interface {
 // 单元，而事件与记录都不带判别位。反查包裹之前先问节点作业的单元册（units）：对象在揽收
 // 发生那一刻是集运单元，这一封收工——单元不是包裹，没有委托，不采用，也不留本上下文的
 // 记录，只有消费门的 inbox 行；成员是否随单元被采用另由单元控制规则定，此刻不投到成员
-// 上。判据只是单元册那一答（同串的包裹号按单元认），不按串形或前缀猜：不在册上的照旧反
+// 上。判据只是单元册那一答（同串的包裹号按单元认），不按串形或前缀猜：不在册上的按包裹反
 // 查，反查不中仍落 ErrParcelTargetNotFound（委托可能还没落到已接受）。单元册读不动落
 // ErrConsolidationUnitNotVisible（续办），答了却译不回落 ErrConsolidationUnitAnswerInconsistent
 // （确定性，不进未决名单）。

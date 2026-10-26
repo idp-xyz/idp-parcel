@@ -406,7 +406,7 @@ func TestAMissingParcelTargetForAPickupIsContinuableUndecided(t *testing.T) {
 	}
 }
 
-// Covers: AT-PS-156 的反面——长得像袋号的对象（bag-1）不在节点作业单元册上：单元册先被问过、答不是，照旧反查委托，反查不中仍落
+// Covers: AT-PS-156 的反面——长得像袋号的对象（bag-1）不在节点作业单元册上：单元册先被问过、答不是，按包裹反查委托，反查不中仍落
 // 与「委托还没到已接受」同一格。是不是单元只看单元册，不按串形猜。
 func TestABagLikeObjectOutsideTheUnitBookFallsIntoTargetNotFound(t *testing.T) {
 	adopter := &pickupAdopterDouble{}
@@ -431,7 +431,7 @@ func TestABagLikeObjectOutsideTheUnitBookFallsIntoTargetNotFound(t *testing.T) {
 		t.Fatalf("单元册的问法 = %+v, want 先被问一次", book.asked)
 	}
 	if targets.parcel != "bag-1" {
-		t.Fatalf("反查包裹 = %q——不在单元册上的照旧反查", targets.parcel)
+		t.Fatalf("反查包裹 = %q——不在单元册上的按包裹反查", targets.parcel)
 	}
 	if adopter.calls != 0 {
 		t.Fatal("反查不中不该走到采用")

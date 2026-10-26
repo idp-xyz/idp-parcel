@@ -12,7 +12,7 @@ import (
 )
 
 // 本文件证场外揽收采用、有效交付采用与面单终局判断（经首次有效收寄）三路在反查包裹之前先问节点作业单元册：对象那一刻是集运单元
-// 就收工——不反查委托、不采用、不判终局；不是单元的照旧反查；问不动是续办，答了却译不回是确定性的。单元册用替身（隔离合成 `S`），
+// 就收工——不反查委托、不采用、不判终局；不是单元的按包裹反查；问不动是续办，答了却译不回是确定性的。单元册用替身（隔离合成 `S`），
 // 真库与派发分区的证见 cmd/parcel-dispatch。
 
 const unitObject = "SYN-BAG-1"
@@ -111,8 +111,8 @@ func TestACarriedConsolidationUnitIsAccountedForWithoutLookingUpAnyShipmentReque
 }
 
 // Covers: AT-PS-156、AT-PS-157、AT-PS-158 的反面——对象串长得像袋号（SYN-BAG-NOT-IN-BOOK）却不在单元册上，或就是个包裹号：
-// 单元册问过了，答不是，照旧反查委托；反查不中仍是各路原来的未决哨兵（委托可能还没落到已接受），反查命中走到采用 / 判断。
-func TestAnObjectThatIsNotInTheUnitBookIsLookedUpAsAParcelAsBefore(t *testing.T) {
+// 单元册问过了，答不是，按包裹反查委托；反查不中仍是各路的未决哨兵（委托可能还没落到已接受），反查命中走到采用 / 判断。
+func TestAnObjectThatIsNotInTheUnitBookIsLookedUpAsAParcel(t *testing.T) {
 	for _, lane := range unitLanes() {
 		for _, object := range []string{"SYN-BAG-NOT-IN-BOOK", "parcel-1"} {
 			t.Run(lane.name+"/"+object, func(t *testing.T) {

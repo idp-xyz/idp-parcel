@@ -7,7 +7,7 @@ import (
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
-// noUnits 是单元册的替身：什么都不是单元。既有用例证的是包裹照旧反查、采用或判终局，单元那一问对它们不该有任何影响。
+// noUnits 是单元册的替身：什么都不是单元。用在只关心包裹反查、采用或判终局的用例里，单元那一问对它们不该有任何影响。
 type noUnits struct{}
 
 func (noUnits) IsConsolidationUnitAt(context.Context, psdomain.TenantID, psdomain.DeclaredParcelID, time.Time) (bool, error) {

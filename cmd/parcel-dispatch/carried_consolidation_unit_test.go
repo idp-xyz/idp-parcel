@@ -17,8 +17,8 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 证场外揽收采用、有效交付采用与面单终局判断（经首次有效收寄）三路经生产消费者构造认集运单元：载运对象是
-// 节点作业册上的一袋，信封入账、不采用、不判终局、不落未决，也不留 PS 的采用或终局记录；对象串长得像袋号却不在册上，照旧反查委托，
-// 反查不中仍是各路原来的未决；单元册读不动落 dispatch.consumer_undecided，答复不一致落 dispatch.publish_failed。测试输入是隔离合成，
+// 节点作业册上的一袋，信封入账、不采用、不判终局、不落未决，也不留 PS 的采用或终局记录；对象串长得像袋号却不在册上，按包裹反查委托，
+// 反查不中仍是各路的未决；单元册读不动落 dispatch.consumer_undecided，答复不一致落 dispatch.publish_failed。测试输入是隔离合成，
 // 只记 `S`。
 
 const (
@@ -152,7 +152,7 @@ func TestAConsolidationUnitCarriedByTheSourceFactIsAccountedForWithoutAdoptionOr
 }
 
 // Covers: AT-PS-156、AT-PS-157、AT-PS-158 反面的真库半边（证据 S）——对象串长得像袋号却不在节点作业单元册上（册上另有一袋）：
-// 照旧反查委托，反查不中仍落各路原来的 ErrParcelTargetNotFound，落在这一路的未决名单里；信封不入账（回滚待重投）。
+// 按包裹反查委托，反查不中仍落各路的 ErrParcelTargetNotFound，落在这一路的未决名单里；信封不入账（回滚待重投）。
 // 是不是单元只看单元册，不按串形或前缀猜。
 func TestABagLikeObjectOutsideTheUnitBookIsStillLookedUpAndStaysUndecided(t *testing.T) {
 	for _, route := range carriedRoutes() {

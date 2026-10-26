@@ -60,8 +60,8 @@ type EffectiveDeliveryAdopter interface {
 // 单元，而事件与记录都不带判别位。反查包裹之前先问节点作业的单元册（units）：对象在交付
 // 发生那一刻是集运单元，这一封收工——单元不是包裹，没有委托，不形成终局，也不留本上下文
 // 的记录，只有消费门的 inbox 行；整袋交付是不是袋里每件包裹的有效交付另由单元控制规则定，
-// 此刻不投到成员上。这一问先于终局编排里的取消边界锁与取消视图，所以不改变它们的锁序。判据
-// 只是单元册那一答（同串的包裹号按单元认），不按串形或前缀猜：不在册上的照旧反查，反查不中
+// 此刻不投到成员上。这一问排在终局编排里的取消边界锁与取消视图之前，不进它们的锁序。判据
+// 只是单元册那一答（同串的包裹号按单元认），不按串形或前缀猜：不在册上的按包裹反查，反查不中
 // 仍落 ErrParcelTargetNotFound。单元册读不动落 ErrConsolidationUnitNotVisible（续办），答了
 // 却译不回落 ErrConsolidationUnitAnswerInconsistent（确定性，不进未决名单）。
 type AdoptOnEffectiveDeliveryAdapter struct {

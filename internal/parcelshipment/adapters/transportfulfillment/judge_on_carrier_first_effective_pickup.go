@@ -67,9 +67,9 @@ type ParcelLabelFinalJudge interface {
 // 载运对象按 transport-fulfillment 的领域定义可能指正式包裹身份，**也可能**指集运单元，事实与信封都不带判别位。
 // 交共用核（里面按包裹反查）之前先问节点作业的单元册（units）：对象在收寄发生那一刻是集运单元，这一封收工——单元不是
 // 包裹，没有委托，不判终局，也不留本上下文的记录，只有消费门的 inbox 行；成员是否随单元被判另由单元控制规则定，此刻不投
-// 到成员上。判据只是单元册那一答（同串的包裹号按单元认），不按串形或前缀猜：不在册上的照旧交核，反查不中仍落
+// 到成员上。判据只是单元册那一答（同串的包裹号按单元认），不按串形或前缀猜：不在册上的交核按包裹反查，反查不中仍落
 // labelfinal.ErrParcelTargetNotFound。单元册读不动落 ErrConsolidationUnitNotVisible（续办），答了却译不回落
-// ErrConsolidationUnitAnswerInconsistent（确定性，不进未决名单）。共用核的另两路（面单交易、关闭 / 重开）带的是本上下文
+// ErrConsolidationUnitAnswerInconsistent（确定性，不进未决名单）。共用核的其余入口（面单交易、关闭 / 重开）带的是本上下文
 // 自己的包裹号，不经此问。
 type JudgeOnCarrierFirstEffectivePickupAdapter struct {
 	pickups CarrierFirstEffectivePickupFinder

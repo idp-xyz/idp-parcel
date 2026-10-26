@@ -454,7 +454,7 @@ var veAcceptanceRederiveUndecidedSentinels = []error{
 // 已收工（单元没有委托），到不了这一格。ErrConsolidationUnitNotVisible：问节点作业载运对象是不是集运单元读不动，
 // 读得动之后重投从头再问。
 //
-// 四个不在名单里，恢复动作各不相同：
+// 不在名单里的几格，恢复动作各不相同：
 //   - ErrPickupRecordInconsistent——按键取回的登记指着另一个键或另一个对象，是仓储/数据
 //     不变量已破（ADR-0029）。重投同一内容不自愈，登记成未决只会一路重试到失败预算耗尽，
 //     而现场要做的是去查那一行为什么长成这样。保持 dispatch.publish_failed 让它响亮。
@@ -521,7 +521,7 @@ var continuedAttemptDecisionJudgmentUndecidedSentinels = labelTransactionJudgmen
 
 // carrierFirstEffectivePickupJudgmentUndecidedSentinels 是 TF 实际承运商首次有效收寄登记 → 面单渠道终局判断
 // 这条链（lc/25，ADR-0135）登记的未决哨兵。核那一段与面单交易 / 关闭重开两路是同一只 labelfinal.ParcelJudgmentCore，
-// 核的几格因此直接取那份名单不抄第二份；本路在核之前多出「按信封所指版本取回 TF 事实」与「问载运对象是不是集运单元」两段，未决面多三格：
+// 核的几格因此直接取那份名单不抄第二份；本路在核之前多出「按信封所指版本取回 TF 事实」与「问载运对象是不是集运单元」两段，未决面因此多出几格：
 //   - pstf.ErrCarrierPickupNotVisible——信封所指那一代在 TF 登记册还读不回，可见性滞后是续办，重投会改变结果。
 //   - pstf.ErrVoidedCarrierPickupRederivationUndecided——TF 交出失效版本（ADR-0135 决定六），已据前版形成的
 //     非取消终局怎么重派生归 PS owner、尚未裁定（票 label-channel/25「要裁的」2）。按「未确认规则保持显式未决」
