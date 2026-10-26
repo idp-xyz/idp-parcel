@@ -128,13 +128,37 @@ func (repository *AuthorityGrants) SaveGrant(
 	if err != nil {
 		return ports.GrantSaveOutcomeInvalid, fmt.Errorf("save authority grant: %w", err)
 	}
+	return insertAuthorityGrant(ctx, executor, grant)
+}
 
+// insertAuthorityGrant 是授予登记的唯一落库处：授权册自己的 SaveGrant 与发布编排里的授予通道
+// （CommercialPublications.SaveAuthorityGrant）共用它，重放与冲突的判据只此一份。
+func insertAuthorityGrant(
+	ctx context.Context,
+	executor bentopg.Executor,
+	grant domain.AuthorityGrant,
+) (ports.GrantSaveOutcome, error) {
 	document := documentOfGrant(grant)
 	raw, err := json.Marshal(document)
 	if err != nil {
 		return ports.GrantSaveOutcomeInvalid, fmt.Errorf("save authority grant: %w", err)
 	}
-	digest := sha256.Sum256(raw)
+	// 摘要只盖授予自己的内容，不盖快照里版本壳的发布时刻、取效时刻与状态：发布重放时这些随时钟变，
+	// 盖进去同一份授予重放就会被读成内容冲突（演示种子整批重放首先撞上）。
+	identity := document
+	identity.Version = versionDocument{
+		TenantID:      document.Version.TenantID,
+		Kind:          document.Version.Kind,
+		ObjectID:      document.Version.ObjectID,
+		Version:       document.Version.Version,
+		Scope:         document.Version.Scope,
+		ContentDigest: document.Version.ContentDigest,
+	}
+	identityRaw, err := json.Marshal(identity)
+	if err != nil {
+		return ports.GrantSaveOutcomeInvalid, fmt.Errorf("save authority grant: %w", err)
+	}
+	digest := sha256.Sum256(identityRaw)
 	contentDigest := hex.EncodeToString(digest[:])
 
 	var endsAt *time.Time
@@ -267,4 +291,30 @@ func authorizedActionFrom(raw string) (domain.AuthorizedAction, error) {
 		}
 	}
 	return domain.AuthorizedActionInvalid, fmt.Errorf("unknown authorized action %q", raw)
+}
+
+// SaveAuthorityGrant 是发布编排里的授予通道（ADR-0312）：授予挂在刚入册的授权规则版本上，与其余声明同一事务。
+// 重放与内容冲突的判据与授权册的 SaveGrant 是同一处（insertAuthorityGrant）。
+func (repository *CommercialPublications) SaveAuthorityGrant(
+	ctx context.Context,
+	grant domain.AuthorityGrant,
+) (ports.DeclarationSaveOutcome, error) {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return ports.DeclarationSaveOutcomeInvalid, fmt.Errorf("save authority grant: %w", err)
+	}
+	outcome, err := insertAuthorityGrant(ctx, executor, grant)
+	if err != nil {
+		return ports.DeclarationSaveOutcomeInvalid, err
+	}
+	switch outcome {
+	case ports.GrantSaved:
+		return ports.DeclarationSaved, nil
+	case ports.GrantAlreadyRegistered:
+		return ports.DeclarationAlreadyRegistered, nil
+	case ports.GrantContentConflict:
+		return ports.DeclarationContentConflict, nil
+	default:
+		return ports.DeclarationSaveOutcomeInvalid, fmt.Errorf("save authority grant: unexpected outcome %v", outcome)
+	}
 }

@@ -920,6 +920,13 @@ type PublicationRegistry interface {
 		ctx context.Context,
 		pack domain.AcceptanceRulePackage,
 	) (DeclarationSaveOutcome, error)
+	// SaveAuthorityGrant 登记一个授权规则版本声明的授予（ADR-0312）。它不代替 SaveVersion，只能跟在它后面；
+	// 一个版本一条授予（授权册主键即版本）。判据同其余声明表：同授予是重放，换法人、等级、范围、动作或区间是
+	// 内容冲突，绝不覆盖。读口是 AuthorityGrantStore，裁定仍只走 Authorize。
+	SaveAuthorityGrant(
+		ctx context.Context,
+		grant domain.AuthorityGrant,
+	) (DeclarationSaveOutcome, error)
 	// SaveContractDelegations 登记一个客户合同版本声明的全部合同委派（ADR-0116 Decision 二，0025）。
 	// 它不代替 SaveVersion，且只能跟在它后面：0025 以外键把委派钉在已入册的合同版本上。判据同其余
 	// 声明表：同拥有版本同一份委派是重放，换委派方、多一条少一条是内容冲突，绝不覆盖也绝不并写

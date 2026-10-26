@@ -92,7 +92,7 @@
       "objectId": "SYN-RULEPKG-01",
       "version": "v1",
       "scope": "SYN-SCOPE-01",
-      "contentDigest": "PCC-1:d6b23fa1505b3d539ed7fff174ac0818dc0854486dfbf805c6c832cd592d740f",
+      "contentDigest": "PCC-1:c5d88b9a6232b9a29a6561bafa4be8f1a9955a26262d7652c8fd0186cc992d14",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "references": {
         "SERVICE_PRODUCT": "SYN-PROD-CN-SG-EXPRESS"
@@ -186,6 +186,36 @@
               "stage": "ACCEPTED_NOT_YET_RECEIVED",
               "intent": "CORRECTION",
               "allowance": "ALLOWED"
+            },
+            {
+              "dataGroup": "SYN-GROUP-CONSIGNEE-ADDRESS",
+              "stage": "ACCEPTED_NOT_YET_RECEIVED",
+              "intent": "SUPPLEMENT",
+              "allowance": "ALLOWED"
+            },
+            {
+              "dataGroup": "SYN-GROUP-CONSIGNEE-ADDRESS",
+              "stage": "ACCEPTED_NOT_YET_RECEIVED",
+              "intent": "EXPLICIT_CLEAR",
+              "allowance": "ALLOWED"
+            },
+            {
+              "dataGroup": "SYN-GROUP-CONSIGNEE-ADDRESS",
+              "stage": "CUSTOMS_SUBMITTED",
+              "intent": "SUPPLEMENT",
+              "allowance": "ALLOWED"
+            },
+            {
+              "dataGroup": "SYN-GROUP-CONSIGNEE-ADDRESS",
+              "stage": "CUSTOMS_SUBMITTED",
+              "intent": "CORRECTION",
+              "allowance": "DISALLOWED"
+            },
+            {
+              "dataGroup": "SYN-GROUP-CONSIGNEE-ADDRESS",
+              "stage": "CUSTOMS_SUBMITTED",
+              "intent": "EXPLICIT_CLEAR",
+              "allowance": "DISALLOWED"
             }
           ]
         }
@@ -662,6 +692,30 @@
             "rule": "SYN-RULE-CANCEL-OPS-01"
           }
         ]
+      }
+    },
+    {
+      "tenantId": "SYN-TENANT-01",
+      "kind": "AUTHORIZATION_RULE",
+      "objectId": "SYN-AUTH-SOURCE-AMEND-01",
+      "version": "v1",
+      "scope": "SYN-SCOPE-01",
+      "contentDigest": "sha256:syn-SYN-AUTH-SOURCE-AMEND-01-v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-022",
+        "source": "SYN-SOURCE-DEMO-BATCH-2026-01",
+        "approvedAt": "2025-12-15T00:00:00Z"
+      },
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {
+        "authorityGrant": {
+          "action": "SOURCE_DATA_AMENDMENT",
+          "legalEntity": "SYN-LE-01",
+          "level": "CUSTOMER_SELF_SERVICE",
+          "scope": "SYN-SCOPE-01",
+          "effectiveStartsAt": "2026-01-01T00:00:00Z"
+        }
       }
     }
   ]

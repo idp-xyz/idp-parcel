@@ -22,9 +22,8 @@ const (
 	AsOfPolicyRegistered
 	// AuthorityGrantRegistered：授权规则（`PAR-COM-14` 的授权半边，AuthorityGrantStore.SaveGrant）
 	// 落库。对应 parcel-shipment 的 RejectionAuthorityRulesNotConfigured / WithdrawalAuthorityRulesNotConfigured /
-	// SourceDataAmendmentAuthorityRulesNotConfigured。**今天没有任何生产编排发这一格**：SaveGrant 只有
-	// 测试调，AuthorizedAction 里也还没有撤回与来源修订这两种动作；格留在封闭集里是为了让消费侧的
-	// 契约一次写全，不是为了现在就有人发。
+	// SourceDataAmendmentAuthorityRulesNotConfigured。生产编排发这一格的是发布里的授予通道
+	// （AuthorityGrantChannel，ADR-0312）；授权册自己的 SaveGrant 不发。
 	AuthorityGrantRegistered
 	// PreAcceptanceControlPolicyRegistered：受理前财务控制策略（`PAR-COM-15`）的两半之一落库——客户合同
 	// 版本上「要不要」的声明，或策略版本上「控制怎么做」的正文。两半都是 settlement-accounting 控制策略

@@ -98,6 +98,18 @@ type CommercialDeclarations struct {
 	// 收件范围规则引用、交付证明规则引用。层由发布的版本类别定，不另给开关；合同层必须指名所收紧的产品版本、产品层
 	// 必须不带，两条与零方式、同方式两行一样由领域构造门拒。是指针不是切片：整节缺席就是这一版没有交付条件声明。
 	DeliveryConditions *DeliveryConditionDeclaration
+	// AuthorityGrant 挂在授权规则版本上（ADR-0312）：这一版授予谁（法人 × 等级）在哪个范围、哪段区间内做哪个动作。
+	// 一个版本一条（授权册主键即版本）。等级是租户登记的串，本上下文不认任何具体值。
+	AuthorityGrant *AuthorityGrantDeclaration
+}
+
+// AuthorityGrantDeclaration 是授予的声明输入：Authorize 逐字匹配的那五格，版本由发布的版本带。
+type AuthorityGrantDeclaration struct {
+	Action      domain.AuthorizedAction
+	LegalEntity domain.LegalEntityReference
+	Level       domain.AuthorityLevel
+	Scope       domain.CommercialScopeReference
+	Effective   domain.EffectiveInterval
 }
 
 func (declarations CommercialDeclarations) empty() bool {
@@ -119,7 +131,8 @@ func (declarations CommercialDeclarations) empty() bool {
 		declarations.PreAcceptanceFinancialControlPolicyBody == nil &&
 		len(declarations.ContractDelegations) == 0 &&
 		declarations.SourceDataAmendment == nil &&
-		declarations.DeliveryConditions == nil
+		declarations.DeliveryConditions == nil &&
+		declarations.AuthorityGrant == nil
 }
 
 // AcceptanceContentDeclaration 是接单规则包的接受内容声明输入（ADR-0042）。
@@ -288,6 +301,7 @@ const (
 	ContractDelegationChannel
 	SourceDataAmendmentChannel
 	DeliveryConditionChannel
+	AuthorityGrantChannel
 )
 
 func (channel DeclarationChannel) String() string {
@@ -330,6 +344,8 @@ func (channel DeclarationChannel) String() string {
 		return "SOURCE_DATA_AMENDMENT"
 	case DeliveryConditionChannel:
 		return "DELIVERY_CONDITION"
+	case AuthorityGrantChannel:
+		return "AUTHORITY_GRANT"
 	default:
 		return ""
 	}
@@ -542,7 +558,7 @@ func (handler *PublishCommercialAuthorityHandler) Handle(
 
 // announceOperatorRegistrations 对本次发布里属于运营登记参数的声明通道，各交一份「参数已登记」
 // 意图（ADR-0094 决定四；票 first-tenant-runway/07 D4）。哪些通道属这一族见 operatorRegistrationKindOf；
-// 授权规则那一半没有生产编排，见 ports.AuthorityGrantRegistered 的注释。
+// 授权规则那一半由授予通道发，见 ports.AuthorityGrantRegistered 的注释。
 //
 // 判据是落点不是通道在不在场：`已保存`与`已登记`都交（重放重发同一份，ADR-0043，认领由适配器按
 // 同一个 ID 去重）；`内容冲突`不交——冲突那一行没写进册，下游重驱只会再次撞见未配置。交接失败
@@ -590,6 +606,8 @@ func operatorRegistrationKindOf(channel DeclarationChannel) (ports.OperatorRegis
 		return ports.PreAcceptanceControlPolicyRegistered, true
 	case CreditPolicyBodyChannel:
 		return ports.CreditPolicyRegistered, true
+	case AuthorityGrantChannel:
+		return ports.AuthorityGrantRegistered, true
 	default:
 		return ports.OperatorRegistrationKindInvalid, false
 	}
@@ -1124,6 +1142,31 @@ func declarationWrites(
 			channel: SourceDataAmendmentChannel,
 			save: func(ctx context.Context, registry ports.PublicationRegistry) (ports.DeclarationSaveOutcome, error) {
 				return registry.SaveSourceDataAmendmentAllowance(ctx, content)
+			},
+		})
+	}
+
+	if declarations.AuthorityGrant != nil {
+		// 授予不进授权规则版本的规范化正文（正文只有取消授权目录），内容摘要盖不住它；同版本再带取消授权目录
+		// 就会出现「摘要对得上、授予未被盖住」的版本，所以整项拒，授予单独占一版（ADR-0312 决定二）。
+		if len(declarations.CancellationAuthority) > 0 {
+			return nil, fmt.Errorf("authority grant: %w", domain.ErrInvalidAuthorityGrant)
+		}
+		grant, err := domain.NewAuthorityGrant(
+			version,
+			declarations.AuthorityGrant.Action,
+			declarations.AuthorityGrant.LegalEntity,
+			declarations.AuthorityGrant.Level,
+			declarations.AuthorityGrant.Scope,
+			declarations.AuthorityGrant.Effective,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("authority grant: %w", err)
+		}
+		writes = append(writes, declarationWrite{
+			channel: AuthorityGrantChannel,
+			save: func(ctx context.Context, registry ports.PublicationRegistry) (ports.DeclarationSaveOutcome, error) {
+				return registry.SaveAuthorityGrant(ctx, grant)
 			},
 		})
 	}
