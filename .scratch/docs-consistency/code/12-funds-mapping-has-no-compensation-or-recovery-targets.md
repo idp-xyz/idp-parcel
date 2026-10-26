@@ -95,7 +95,7 @@ M：映射目标加两格（赔付义务、追偿应收），核销余额按目�
 
 ## 评审记录与修订轮（2026-10-26，协调方隔离评审：不可合入，一条阻断；作者修订轮，分支 claude-code12）
 
-评审结论与各条照协调方回给作者的原文摘要；修订轮在同一分支上加新提交，不改写旧提交，变基到本地 main `061156bcc`（未前移）。
+评审结论与各条照协调方回给作者的原文摘要；修订轮在同一分支上加新提交，不改写旧提交（变基照规矩重放）；收尾时变基到本地 main `fb8ee7096`，修订轮期间 main 前移的那几笔不碰 settlement-accounting，变基无冲突，变基后重跑了测试（见 code/46 修订轮「测试」）。
 
 - **B1 阻断：同一笔资金事实能被多次核销，累计超过事实金额**（评审真库实测：5000 的收款换三个核销引用各交 5000，三笔都退 0）。病因：`Apply` 只靠 `domain.ApplySettlement` 看本笔，库上没有按事实的上限；CLI 答复的「未分配」取 `RemainderMinor()`，不跨核销累计。**修**：`Apply` 落行前先以 `FOR UPDATE` 锁事实身份行（`SettlementApplications.LockFundsFactApplications`，新口 `ports.FundsFactApplicationLock`），锁后另起一句求该事实未撤销核销的 `applied_minor` 合计；`domain.SettlementApplication.AdmitWithinFact` 判本笔加已有是否超过当前有效那一版的金额，超过答 `APPLICATION_IMBALANCE`、什么都不落。CLI 答复改为「本笔 X；事实 F 累计未分配 Y」，Y 是这一步之后该事实的累计未分配（`FundsResult.FactUnappliedMinor`）；撤销答复只说「已撤销」与累计未分配，不再报原核销金额。补真库竖切两条：`TestAFundsFactIsNotAppliedBeyondItsAmountAcrossApplications`（顺序超额）、`TestConcurrentApplicationsOfOneFactStayWithinItsAmount`（并发超额，一条自己的事务先占住身份行，等两路都在锁上排队——由 `pg_stat_activity` 认——再放开）。
   - **锁选身份行不选链头、不选咨询锁的理由**：身份行一条事实一行、终身不换，链头随每次更正换一行；更正落版本行时外键对身份行取 KEY SHARE，与 `FOR UPDATE` 互斥（一次性库 `c12fk` 上实测：父行被 `FOR UPDATE` 占着时，子表插入等了约 2 秒，直到占锁事务提交），所以核销与更正天然在同一行上排队，更正编排不用另取一把锁；咨询锁挡不住不取它的更正。

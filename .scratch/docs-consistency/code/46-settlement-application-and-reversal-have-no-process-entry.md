@@ -89,6 +89,7 @@ M：`parcel-settlement-register` 加 `funds-application` 与 `funds-application-
 - 并发用例 `-count=5`（并发超额、并发同键、金额本体锁）：五次全过。
 - 0046 改了：种子重灌一次性库 `c12seed2` 退 0，库上 CHECK 已是六值、`RECOVERY_ACKNOWLEDGEMENT` 在内，种子那一行 `ACCOUNT` 共存，用后删库。
 - 管理台三道门（Node 22）：tsc、601 例、vite build 退 0。
+- 收尾变基到 main `fb8ee7096` 之后在新 tip 上重跑：`go build`、`go vet` 退 0；反向依赖全量同上一套退 0（65 个包 ok）；并发用例 `-count=5` 五次全过；管理台三道门退 0（main 那边加了用例，631 例全过）。种子重灌是变基前在 `c12seed2` 上做的，main 那几笔迁移只动 `party_commercial`，没有重灌。
 - 新用例：
   - 应用层：`TestApplyAndReverseTakeLocksInOneTotalOrderAndRecomputeTheirScopes`（锁序与两路推进）、`TestApplicationsOfOneFactStayWithinItsAmount`、`TestAFundsReturnedFactNeitherMapsNorAppliesToAClaimAmount`、`TestABrokenClaimTargetStandingIsADeterministicImbalance`。
   - postgres：`TestApplicationsAndReversalsRecomputeThePostedBalanceInTheirOwnTransaction`；`TestTheFactAndBalanceScopeLocksRefuseToRunOutsideATransaction`，即两把新锁的 PBC-08 负面证据。
