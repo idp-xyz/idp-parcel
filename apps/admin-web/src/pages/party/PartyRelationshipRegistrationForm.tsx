@@ -4,7 +4,6 @@ import { moduleInfoById } from '../../navigation';
 import { RegistrationAnswerNote } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
 import {
-  commercialRegistrationEndpoints,
   partyIdentityOutcomeLabels,
   type BusinessPartyListResponseBody,
   type PartyRelationshipRecord,
@@ -56,7 +55,6 @@ export interface PartyRelationshipRegistrationFormProps {
 
 const info = moduleInfoById['business-parties'];
 const kind = 'party-relationship';
-const endpoint = `POST ${commercialRegistrationEndpoints[kind]}`;
 const roleOptions = partyRoleOptions();
 
 export function PartyRelationshipRegistrationForm({
@@ -85,10 +83,9 @@ export function PartyRelationshipRegistrationForm({
           <CardTitle>{registrationTitles[kind]}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          {/* 双方在不在册、角色与双方是否匹配、区间是否合法都由服务端按册面判；租户由操作者身份给出，不在表单上。 */}
           <p className="text-xs text-idpxyz-textMuted">
-            关系记谁对谁持有什么角色、在什么范围、多久。一笔登记一个修订，首笔从 1 起、此后连续；双方必须已在参与方册、
-            角色是否与双方匹配、区间是否合法，都由服务端按册面判。不带批准事实即登为候选关系，批准另行形成新修订。
-            提交打到 <span className="font-mono">{endpoint}</span>；租户不在表单上，由接入渠道的认证结果填入。
+            {'关系记录谁对谁持有什么角色、在什么范围、多长时间。一笔登记形成一个修订，首笔修订号从 1 起，之后必须连续。双方都要已登记为业务参与方；角色与双方是否匹配、区间是否合法，由服务端检查。不填批准信息即登记为候选关系，批准另登一笔新修订。'}
           </p>
 
           <div className="grid grid-cols-2 gap-3">
@@ -103,7 +100,7 @@ export function PartyRelationshipRegistrationForm({
               <span className="block text-[11px] text-idpxyz-textMuted mt-1">
                 {known
                   ? `已取回关系册里有这一关系，最新修订 r${known.revision}；本次登记是它的新修订。`
-                  : '已取回关系册里没有这一标识；本次登记是首笔修订（列表可能已陈旧，连续性仍由服务端判）。'}
+                  : '列表里还没有这个关系标识，这一笔是它的首笔修订；如果别人刚登记过，服务端会拒绝。'}
               </span>
             </Field>
 
@@ -111,7 +108,7 @@ export function PartyRelationshipRegistrationForm({
               path="relationships[0].revision"
               problems={problems}
               {...form.revisionField}
-              note="建议值取已取回关系册里该关系的最新修订 + 1（不在册为 1）；只是省一次翻册，连续性仍由服务端按册面判。"
+              note="建议值是列表里这段关系最新的修订号 + 1（没有则为 1）；如果期间有人登记过，服务端会拒绝。"
             />
 
             <ReferencePickerFor<BusinessPartyListResponseBody>
@@ -123,9 +120,9 @@ export function PartyRelationshipRegistrationForm({
               onChange={(holder) => patch({ holder })}
               answer={parties}
               optionsOf={businessPartyPickerOptions}
-              emptyNote="参与方册今天为空；先在「参与方身份」册登记双方，或手填标识由服务端判。"
+              emptyNote="还没有登记任何业务参与方；先在「参与方身份」里登记双方，或手填标识。"
               readFace="参与方册"
-              optionsNote="持有该角色的一方。候选不按状态过滤：双方届时是否已生效由服务端判。"
+              optionsNote="持有这个角色的一方。候选里也有未生效或已停用的参与方，是否可用由服务端检查。"
             />
 
             <ReferencePickerFor<BusinessPartyListResponseBody>
@@ -137,7 +134,7 @@ export function PartyRelationshipRegistrationForm({
               onChange={(counterparty) => patch({ counterparty })}
               answer={parties}
               optionsOf={businessPartyPickerOptions}
-              emptyNote="参与方册今天为空；先在「参与方身份」册登记双方，或手填标识由服务端判。"
+              emptyNote="还没有登记任何业务参与方；先在「参与方身份」里登记双方，或手填标识。"
               readFace="参与方册"
               optionsNote="被持有该角色的一方。方向由持有方 → 相对方表达，不另设方向格。"
             />
@@ -157,7 +154,7 @@ export function PartyRelationshipRegistrationForm({
                 ))}
               </select>
               <span className="block text-[11px] text-idpxyz-textMuted mt-1">
-                封闭集；未选照送空串，由服务端点名。角色与双方是否匹配不在这里判。
+                角色与双方是否匹配由服务端检查。
               </span>
             </Field>
 

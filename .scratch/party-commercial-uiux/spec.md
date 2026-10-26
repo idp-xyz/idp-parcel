@@ -44,13 +44,13 @@ Status: in-progress——第一段 01–06 与第二段 07–09 resolved，第�
 
 - ~~引用一律显示「名称 + 标识」并可点到对象页~~ → [07](issues/07-references-are-links-with-names.md)。
 - ~~商业版本按对象分组、标出在用版本~~ → [08](issues/08-versions-grouped-with-in-use-filter.md)；合同、协议、产品、映射、政策 5 页行可点开详情与版本历史仍在后续。
-- 发布表单统一时刻控件（照登记表单的 `WallTimeField`，按本地时区填、回显 UTC）；今天三套规则，只填日期按 UTC 零点补，对国内租户差 8 小时。
+- ~~发布表单统一时刻控件~~ → [10](issues/10-publication-moments-in-local-time.md)。
 - 引用他物的格一律用选择器（今天合同的货主客户账户、信用政策的责任法人等要手敲 ID）。
-- 发布前给人读得懂的预览卡与确认框；批准、发布分开按钮区。
+- ~~发布前给人读得懂的预览卡与确认框~~ → [11](issues/11-readable-preview-and-publish-confirmation.md)；正文各册的可读摘要卡、批准与发布分开按钮区仍在后续。
 - ~~切页签不丢草稿~~ → [09](issues/09-drafts-survive-tab-switches.md)；未保存提醒推广到全部写入页仍在后续。
 - 「基于此版本发新版本」预填；标识旁列出在册版本、提示区间重叠。
 - 接入态与拒绝态（共享件 `catalogue-view.ts`、`components/states`、`components/registration` 的「提交打到 …」）把端点、错误码、文档出处收进「技术详情」——碰共享面，要评审。
-- 业务参与方、参与方关系两张登记表单的说明同样是开发话（「修订是否连续由服务端按册面判」「提交打到 …」），照 02 的用词改；参与方关系那张等 ps-external-mark-relations/17 进 main 之后再动。
+- ~~业务参与方、参与方关系两张登记表单的开发话~~ → [12](issues/12-registration-forms-speak-business.md)。
 
 第三段，要后端，走[并行会话](../../docs/agents/parallel-sessions.md)，交协调方排队：
 
@@ -61,7 +61,7 @@ Status: in-progress——第一段 01–06 与第二段 07–09 resolved，第�
 
 ## 子票
 
-01–09 只改 `apps/admin-web` 与本票面，走 [workflow.md「前端切片」](../../docs/agents/workflow.md#前端切片一人在-main-上直接做)。与上一节的差别一处：当时有别的会话在主树上做合入，本批在独立 worktree（第一段 `idp-parcel-pcux`，第二段 `idp-parcel-pcux2`）上做，每笔先 rebase 到 `origin/main` 再推确切 SHA，不碰主树。
+01–12 只改 `apps/admin-web` 与本票面，走 [workflow.md「前端切片」](../../docs/agents/workflow.md#前端切片一人在-main-上直接做)。与上一节的差别一处：当时有别的会话在主树上做合入，本批在独立 worktree（第一段 `idp-parcel-pcux`，第二段 `idp-parcel-pcux2`）上做，每笔先 rebase 到 `origin/main` 再推确切 SHA，不碰主树。
 
 | # | 票 | 阻塞于 | 状态 |
 |---|---|---|---|
@@ -74,6 +74,9 @@ Status: in-progress——第一段 01–06 与第二段 07–09 resolved，第�
 | 07 | [引用可点、显示名称](issues/07-references-are-links-with-names.md) | — | resolved |
 | 08 | [版本按对象排在一起、可只看在用的](issues/08-versions-grouped-with-in-use-filter.md) | — | resolved |
 | 09 | [切页签、换册不丢草稿](issues/09-drafts-survive-tab-switches.md) | — | resolved |
+| 10 | [发布表单的时刻按本地时区填](issues/10-publication-moments-in-local-time.md) | — | in-progress |
+| 11 | [发布前看得懂要发什么，发布前确认](issues/11-readable-preview-and-publish-confirmation.md) | 10 | in-progress |
+| 12 | [两张登记表单说业务话](issues/12-registration-forms-speak-business.md) | — | resolved |
 
 ## 界面用词对照（本批各票共用）
 

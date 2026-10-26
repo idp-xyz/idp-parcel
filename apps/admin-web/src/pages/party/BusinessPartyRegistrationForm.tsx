@@ -2,7 +2,7 @@ import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz
 import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
 import { RegistrationAnswerNote } from '../../components/registration';
-import { commercialRegistrationEndpoints, partyIdentityOutcomeLabels, type BusinessPartyRecord } from './api';
+import { partyIdentityOutcomeLabels, type BusinessPartyRecord } from './api';
 import { problemNote, registrationTitles } from './presentation';
 import { Field } from './PublicationFormFields';
 import { RevisionField, SnapshotJsonDetails, WallTimeField, useRegistrationForm } from './party-registration-fields';
@@ -31,7 +31,6 @@ export interface BusinessPartyRegistrationFormProps {
 
 const info = moduleInfoById['business-parties'];
 const kind = 'business-party';
-const endpoint = `POST ${commercialRegistrationEndpoints[kind]}`;
 
 export function BusinessPartyRegistrationForm({ knownParties, onRegistered }: BusinessPartyRegistrationFormProps) {
   const form = useRegistrationForm<BusinessPartyDraft>({
@@ -56,10 +55,10 @@ export function BusinessPartyRegistrationForm({ knownParties, onRegistered }: Bu
           <CardTitle>{registrationTitles[kind]}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          {/* 修订是否连续由服务端按册面判，表单只把格编对；租户由操作者身份给出，不在表单上。各格首尾空白原样送出——
+              不替人合并两个只差空格的标识，所以要把这一点说给人听。 */}
           <p className="text-xs text-idpxyz-textMuted">
-            一笔登记一个修订。首笔修订从 1 起、此后必须连续；更正占下一个修订号翻旧插新，不覆盖。修订是否连续由服务端
-            按册面判，表单只负责把格编对；各格首尾空白原样送出，不替你合并两个只差空格的标识。提交打到{' '}
-            <span className="font-mono">{endpoint}</span>；租户不在表单上，由接入渠道的认证结果填入。
+            {'一笔登记形成一个修订。首笔修订号从 1 起，之后必须连续；要更正，用下一个修订号再登一笔，原来的不会被覆盖。标识的首尾空格会原样提交：多一个空格就是另一个参与方。'}
           </p>
 
           <div className="grid grid-cols-2 gap-3">
@@ -74,7 +73,7 @@ export function BusinessPartyRegistrationForm({ knownParties, onRegistered }: Bu
               <span className="block text-[11px] text-idpxyz-textMuted mt-1">
                 {known
                   ? `已取回列表里有这一参与方，最新修订 r${known.revision}；本次登记是它的新修订。`
-                  : '已取回列表里没有这一标识；本次登记是首笔修订（列表可能已陈旧，连续性仍由服务端判）。'}
+                  : '列表里还没有这个标识，这一笔是它的首笔修订；如果别人刚登记过，服务端会拒绝。'}
               </span>
             </Field>
 
@@ -82,7 +81,7 @@ export function BusinessPartyRegistrationForm({ knownParties, onRegistered }: Bu
               path="businessParties[0].revision"
               problems={problems}
               {...form.revisionField}
-              note="建议值取已取回列表里该参与方的最新修订 + 1（不在册为 1）；只是省一次翻册，连续性仍由服务端按册面判。"
+              note="建议值是列表里这个参与方最新的修订号 + 1（没有则为 1）；如果期间有人登记过，服务端会拒绝。"
             />
 
             <Field label="名称 *" path="businessParties[0].name" problems={problems}>
@@ -106,7 +105,7 @@ export function BusinessPartyRegistrationForm({ knownParties, onRegistered }: Bu
             </Field>
 
             <WallTimeField
-              label="生效自（留空由服务端点名）"
+              label="生效自 *"
               path="businessParties[0].effectiveFrom"
               problems={problems}
               value={draft.effectiveFrom}
