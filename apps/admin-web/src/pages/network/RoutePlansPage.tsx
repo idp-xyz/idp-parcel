@@ -24,6 +24,7 @@ import {
   type RoutePlanRegister,
 } from './presentation';
 import { RerouteSuggestionsView } from './RerouteSuggestionsView';
+import { InitialRouteTiesView } from './InitialRouteTiesView';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['route-plans'];
@@ -195,13 +196,14 @@ const reassessmentColumns: ListColumn<RouteReassessmentRecord>[] = [
 ];
 
 // 本页的三册：路由判断两册之外，另有复核形成的改路建议一册（ADR-0284 决定六），它走自己的读口与决定口。
-type RoutePlansView = RoutePlanRegister | 'reroute-suggestion';
+type RoutePlansView = RoutePlanRegister | 'reroute-suggestion' | 'initial-route-tie';
 
-const routePlansViews: RoutePlansView[] = [...routePlanRegisters, 'reroute-suggestion'];
+const routePlansViews: RoutePlansView[] = [...routePlanRegisters, 'reroute-suggestion', 'initial-route-tie'];
 
 const routePlansViewLabels: Record<RoutePlansView, string> = {
   ...routePlanRegisterLabels,
   'reroute-suggestion': '改路建议',
+  'initial-route-tie': '最低成本并列',
 };
 
 // 按册装载的答案：register 与答案体绑定成判别联合，切册期间旧册答案不冒充新册。
@@ -267,6 +269,10 @@ export function RoutePlansPage() {
 
   if (register === 'reroute-suggestion') {
     return <RerouteSuggestionsView header={shared} keyword={keyword} />;
+  }
+
+  if (register === 'initial-route-tie') {
+    return <InitialRouteTiesView header={shared} keyword={keyword} />;
   }
 
   if (register === 'initial-route') {

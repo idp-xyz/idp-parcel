@@ -315,3 +315,70 @@ export interface RerouteDecisionResponseBody {
 export function decideReroute(request: RerouteDecisionRequest): Promise<ApiResult<RerouteDecisionResponseBody>> {
   return postMasterData<RerouteDecisionResponseBody>('/route-reroute-decisions', request);
 }
+
+// ——以下为并列读面与并列裁决口（ADR-0309 决定二、六；票 docs-consistency/code/97）。形状以 internal/networkrouting/adapters/http 的
+// decide_initial_route.go 为准，此处只做镜像不虚构。裁决口与授权改路同属操作者渠道「运营决定」能力面的授权改路一种授予。
+
+/** 并列的一家与它打平的金额与币种。 */
+export interface InitialRouteTieCost {
+  candidate: string;
+  amountMinor: number;
+  currency: string;
+}
+
+export interface InitialRouteTieDecision {
+  candidate: string;
+  planVersion: string;
+  decidedBy: string;
+  basis: string;
+  decidedAt: string;
+}
+
+export interface InitialRouteTieRecord {
+  customerAccountId: string;
+  shipmentRequestId: string;
+  acceptanceBaseline: string;
+  declaredParcelId: string;
+  servicePurpose: string;
+  /** 入账那一刻的评估，不是此刻的。 */
+  candidates: RerouteSuggestionCandidate[];
+  tied: InitialRouteTieCost[];
+  acceptedAt: string;
+  settledAt: string;
+  /** 封闭三格原词：PENDING / DECIDED / FORMED_OTHERWISE。 */
+  state: string;
+  decision?: InitialRouteTieDecision;
+}
+
+export interface InitialRouteTieListResponseBody {
+  outcome: 'INITIAL_ROUTE_TIES_LISTED';
+  ties: InitialRouteTieRecord[];
+}
+
+export function listInitialRouteTies(): Promise<ApiResult<InitialRouteTieListResponseBody>> {
+  return exchangeMasterData<InitialRouteTieListResponseBody>('/route-initial-route-ties');
+}
+
+/** 一次并列裁决的载荷。**没有租户、没有决定方**——身份从操作者信封来，服务端对载荷里出现的身份键一律按未知键拒。 */
+export interface InitialRouteTieDecisionRequest {
+  declaredParcelId: string;
+  candidate: string;
+  basis: string;
+}
+
+/** 裁决口的封闭响应形状：plan 只随成立；existing 随已有结果；registeredReason 只随没有并列登记且登记行存在。 */
+export interface InitialRouteTieDecisionResponseBody {
+  outcome: string;
+  registeredReason?: string;
+  candidateReason?: string;
+  undecidedReason?: string;
+  continuationReference?: string;
+  plan?: { version: string; candidate: string; effectiveFrom: string; judgedAt: string };
+  existing?: { conclusion: string; planVersion?: string };
+}
+
+export function decideInitialRouteTie(
+  request: InitialRouteTieDecisionRequest,
+): Promise<ApiResult<InitialRouteTieDecisionResponseBody>> {
+  return postMasterData<InitialRouteTieDecisionResponseBody>('/route-initial-route-decisions', request);
+}
