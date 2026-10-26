@@ -1,7 +1,7 @@
 # 176 连接代码含窗口依据分隔符 `+` 时登记口照收，TF 准备那一路每封初始路由信封都响亮失败
 
 Category: bug
-Status: in-progress——2026-10-26 评审无阻断、修订轮完，待进 main，分支 `claude-dcg176` tip `ed802e3fa`（修订轮末笔；本票面一笔随后）。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg176` tip `08759bf96`（代码末笔；本票完成记录随后一笔）。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，分支 `claude-dcg176`（worktree `idp-parcel-dcg176`）。此前 ready-for-agent——R3（不急）：要租户把连接代码登成带 `+` 才撞，撞了是响亮失败（准备那一路每封信都失败、可见），不静默答错；补法清楚。2026-10-26 会话 `tops-20`（Claude Code）据票 [142](./142-network-routing-guards-the-connection-window-basis-spelling.md) 完成记录越权风险点 1 立（用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」授权）。
+Status: resolved——2026-10-26 进 main `e5dacd074`（见文末「进 main 记录」）。此前 in-progress——2026-10-26 评审无阻断、修订轮完，待进 main，分支 `claude-dcg176` tip `ed802e3fa`（修订轮末笔；本票面一笔随后）。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg176` tip `08759bf96`（代码末笔；本票完成记录随后一笔）。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，分支 `claude-dcg176`（worktree `idp-parcel-dcg176`）。此前 ready-for-agent——R3（不急）：要租户把连接代码登成带 `+` 才撞，撞了是响亮失败（准备那一路每封信都失败、可见），不静默答错；补法清楚。2026-10-26 会话 `tops-20`（Claude Code）据票 [142](./142-network-routing-guards-the-connection-window-basis-spelling.md) 完成记录越权风险点 1 立（用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」授权）。
 Blocked by: 无
 地盘（建议）：NR 连接登记口（`RegisterConnectionVersion` 所在的 `internal/networkrouting` 应用层与领域构造门）及其 HTTP、CLI 拒因标签；admin-web 若有该拒因的中文标签一并补。
 出处：票 142 完成记录「越权风险点」1；[ADR-0201](../../../docs/adr/0201-schedule-templates-materialize-concrete-schedules-by-date-and-preparation-answers-not-configured-on-an-empty-register.md) 决定二与越权风险点 25；代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) R4。
@@ -123,3 +123,14 @@ Blocked by: 无
 - **Spec 1**：门与读法对照用例 `TestTheRegistrationGateRefusesExactlyTheConnectionCodesTheContractCannotReadBack` 加一格 `SYN-CONN-A@1+B`（读成 `SYN-CONN-A`，按 `code == test.code` 判为读不回）。评审变异 M5 复制一份 overlay 改成本树路径重跑（`probe176/ov_m5_dcg176.json`，原件未动）：现在 `SYN-CONN-A@1+B` 那一格红，修订前整包全绿。
 - **Spec 1 后半、Spec 2**：两侧读法同步另立 [181](./181-planned-leg-window-basis-spelling-and-reading-are-written-twice-across-nr-and-tf.md)，admin-web 缺的九格标签另立 [182](./182-admin-web-network-catalog-registration-refusal-labels-miss-nine-reasons.md)；立号前核过 `origin/main` 与各 `claude-*` 分支，`demo-chain-gaps` 票号最大 179，180 已预留，181、182 空着。
 - **重跑（实测于 `e0d4e92a9`）**：`go build ./...` 过，`go vet ./internal/networkrouting/...` 过，`gofmt -l` 无输出；带 DSN（`127.0.0.1:55432`，含 PG）`go test -count=1` 跑 `./internal/networkrouting/application/`、`./internal/networkrouting/adapters/postgres/`、`./migrations/...` 全 ok，两条新真库用例 `-v` 为 PASS；admin-web `tsc -b --noEmit` 退 0、`run-tests` pass 647 fail 0、`vite build` 成功。
+
+## 进 main 记录（2026-10-26，推送方会话 tops-20）
+
+- **main**：`e5dacd074`。出处：分支 `claude-dcg176` tip `9cec16ef1`。
+- **重放对照**（分支 → main）：`08759bf96` → `5f20247e3`；`5116e6b7f` → `cbed79d36`；修订轮 `e0d4e92a9` → `682d01cd7`、`ed802e3fa` → `adede47bc`（立票 181、182）、`9cec16ef1` → `761e70c7d`。
+- **生成物**：AT 盘点总览计数 `733c60ce8`；机制清点 `e5dacd074`；ADR 索引无变化。三件 `-check` 退 0（含票 139 表行守卫）。
+- **评审**：隔离子代理钉 `5116e6b7f`，两轴无阻断、非阻断 4 条：Standards 1、2 与 Spec 1 在修订轮收（失败面改为「读不回，或读成另一条连接」，用例补 `SYN-CONN-A@1+B`，评审变异 M5 由此变红）；Spec 1 后半与 Spec 2 另立 [181](./181-planned-leg-window-basis-spelling-and-reading-are-written-twice-across-nr-and-tf.md)、[182](./182-admin-web-network-catalog-registration-refusal-labels-miss-nine-reasons.md)（见「评审记录」「修订轮」）。修订轮只收非阻断，推送方读了修订 diff，未另派复评。
+- **全量真库测试**：`scripts/test-full.sh` 跑在 `e5dacd074`（即所推 SHA）：158 ok / 0 FAIL，退 0。
+- **管理台三道门**（落地树上，Node 22）：tsc 退 0、node:test 666/666、vite build 退 0。
+- **种子**：`scripts/demo-seeds/seed.sh` 灌一次性库（`e5dacd074` 上），退 0，用后删库。
+- **迁移号**：network_routing `0028`（另一会话 tops-26 的 code/29 用 0029）。
