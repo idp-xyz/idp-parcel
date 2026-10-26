@@ -310,8 +310,8 @@ func TestAdmissionOnRealPostgresAnswersNotConfigured(t *testing.T) {
 }
 
 // 租户登过区域、漏了终点那一个（ADR-0300）：不在册的包裹从深圳口岸往一个没登区域的节点出发，跨区那一道答未配置、
-// 指名那个节点，整次答复未配置，判断册那一行的依据里记着它。同一请求换成一条区域都没登的租户，这一道不列、整次
-// 答复不受门禁——纯境内租户行为不变。
+// 指名那个节点，整次答复未配置，判断册那一行的依据里记着它。起讫两端都没登时，靠区域册里别的节点认出租户登过，
+// 两个节点都指名。同一请求换成一条区域都没登的租户，这一道不列、整次答复不受门禁——纯境内租户行为不变。
 // Covers: AT-CC-426、AT-CC-427。
 func TestAdmissionOnRealPostgresNamesTheUnregisteredNodeOnlyForAZonedTenant(t *testing.T) {
 	zoned := newAdmissionDB(t)
@@ -334,6 +334,13 @@ func TestAdmissionOnRealPostgresNamesTheUnregisteredNodeOnlyForAZonedTenant(t *t
 	}
 	if !strings.Contains(recorded, `"NODE_ZONE_NOT_REGISTERED"`) || !strings.Contains(recorded, `"SYN-NODE-KUL-HUB"`) {
 		t.Fatalf("判断册那一行的依据要记着未登的节点：%s", recorded)
+	}
+
+	_, neither, _ := zoned.judge("SYN-NODE-KUL-HUB", "SYN-NODE-PEN-HUB")
+	both := admissionFinding(t, neither, domain.CrossCustomsMovement)
+	expectAdmission(t, both, domain.AdmissionNotConfigured, domain.CauseNodeZoneNotRegistered)
+	if len(both.Bases[0].Sources) != 2 || both.Bases[0].Sources[0] != "SYN-NODE-KUL-HUB" || both.Bases[0].Sources[1] != "SYN-NODE-PEN-HUB" {
+		t.Fatalf("两端都未登要两个都指名：%v", both.Bases[0].Sources)
 	}
 
 	domestic := newAdmissionDB(t)

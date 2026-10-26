@@ -40,8 +40,8 @@ type NodeCustomsZoneRegistry interface {
 // 在册版本——准入判断把它读作「未登记」，不拿开放版或当前时间兜底。
 //
 // AnyNodeCustomsZoneInForce 答这个租户在评估时点是否至少有一个节点的区域在生效区间内（同一半开区间）：准入判断
-// 跨区待定时据它分开「一条区域都没登的纯境内租户」与「已按节点登区域、漏了这一个的租户」（ADR-0300）。按评估
-// 时点读而不按此刻：离线补登的动作照它那一刻的登记册判，与区域读数同一时点。
+// 在起讫两端都没登时据它分开「一条区域都没登的纯境内租户」与「已按节点登区域、漏了这两个的租户」（ADR-0300）。
+// 按评估时点读而不按此刻：离线补登的动作照它那一刻的登记册判，与区域读数同一时点。
 type NodeCustomsZoneView interface {
 	LoadNodeCustomsZone(
 		ctx context.Context,

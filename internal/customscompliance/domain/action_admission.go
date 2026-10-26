@@ -252,7 +252,8 @@ type ActionAdmissionFinding struct {
 // 本折叠不读任何册子。
 //
 // TenantZonesInForce 说这个租户在动作时点至少有一个节点的关务区域在生效区间内——它已经按节点登区域，跨关务
-// 区域的移动在它那里是真问题（ADR-0300）。只在跨区待定时读；编排在跨区待定时必须读回它，读不到就停在读不动，
+// 区域的移动在它那里是真问题（ADR-0300）。折叠取它与区域读数的并：起讫有一端读数已登，就已说明租户登过区域，
+// 这一位不必另问，零值也不与读数相抵。起讫两端都没登时只有它说得出，编排那时必须读回它，读不到就停在读不动，
 // 不得拿零值顶替：零值把一个跨境租户当成了纯境内租户，正是 ADR-0300 要堵的那一格。
 type ActionAdmissionInput struct {
 	Object             DeclaredParcelReference
@@ -599,6 +600,20 @@ func foldFinding(action GuardedAction, bases []AdmissionBasis) (ActionAdmissionF
 	return ActionAdmissionFinding{Action: action, Answer: answer, Bases: kept}, nil
 }
 
+// tenantZoned 是「租户在动作时点登过区域」：另读的那一位，并上起讫读数里已登的那一端——同一时点读同一本册，
+// 一端已登就不可能「一条都没登」。
+func (input ActionAdmissionInput) tenantZoned() bool {
+	if input.TenantZonesInForce {
+		return true
+	}
+	for _, reading := range input.Zones {
+		if reading.Registered {
+			return true
+		}
+	}
+	return false
+}
+
 // crossZoneMatters 判跨区待定时这一道是否落在对象身上（判据见 JudgeActionAdmission 头注末段）。门禁目录
 // 没登跨区那一道的单元不算——「有跨区目录行」是这一判据的前提，没登就说明这个范围本没有跨区的门。
 //
@@ -606,7 +621,7 @@ func foldFinding(action GuardedAction, bases []AdmissionBasis) (ActionAdmissionF
 // 出，它在这一道上本就答未决（ADR-0206 决定四）。在案而未成单元的对象不走这一支——它的每一道都已答未决，
 // 不会被放过。
 func (input ActionAdmissionInput) crossZoneMatters() (bool, error) {
-	if input.TenantZonesInForce && !input.Scope.inBooks() {
+	if input.tenantZoned() && !input.Scope.inBooks() {
 		return true, nil
 	}
 	restricted, err := input.restrictionBases(CrossCustomsMovement)

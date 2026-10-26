@@ -46,6 +46,13 @@ func (c *admissionCase) unzonedDestination() *admissionCase {
 	return c
 }
 
+// unzonedBothEnds 起讫两端在动作时点都没登区域；租户登没登过别的节点由用例另给（零值即一条都没登）。
+func (c *admissionCase) unzonedBothEnds() *admissionCase {
+	c.input.Intent = departure(c.t, "SYN-NODE-SZX-GATE", "SYN-NODE-SIN-HUB")
+	c.input.Zones = []domain.NodeZoneReading{unzoned(c.t, "SYN-NODE-SZX-GATE"), unzoned(c.t, "SYN-NODE-SIN-HUB")}
+	return c
+}
+
 func (c *admissionCase) inUnit() *admissionCase {
 	c.input.Scope.Units = append(c.input.Scope.Units, domain.UnitScope{
 		Scope:     mustValue(c.t, domain.NewDecisionScopeReference, admissionUnit),
@@ -247,8 +254,8 @@ func TestCaseWithoutUnitIsUndecided(t *testing.T) {
 	assertFinding(t, findingOf(t, c.judge(), domain.LoadingDeparture), domain.AdmissionUndecided, domain.CauseDeclarationUnitNotFormed)
 }
 
-// 租户在动作时点一个节点都没登区域（零值即此）：节点未登记区域时，只有对象带着跨区的门才答未配置；不带跨区门的
-// 对象（含不在任何单元里的）这一道不列。
+// 节点未登记区域时，对象带着跨区的门才答未配置，单元没登跨区目录的不列——这两格租户登没登过区域都一样。租户在
+// 动作时点一个节点都没登（起讫两端都没登、另读的那一位为零值）时，不在任何单元里的对象这一道也不列。
 // Covers: AT-CC-421（领域半边）、AT-CC-422（领域半边）、AT-CC-427（领域半边）——纯境内租户的不在册对象整次答复为不受门禁。
 func TestUnregisteredNodeZoneIsNotConfiguredOnlyWhenTheObjectHasACrossZoneGate(t *testing.T) {
 	guarded := newAdmissionCase(t).unzonedDestination().inUnit().
@@ -270,9 +277,9 @@ func TestUnregisteredNodeZoneIsNotConfiguredOnlyWhenTheObjectHasACrossZoneGate(t
 		t.Fatalf("没登跨区目录：%s %+v", noCrossCatalog.Answer(), noCrossCatalog.Findings())
 	}
 
-	outside := newAdmissionCase(t).unzonedDestination().judge()
-	if len(outside.Findings()) != 1 || outside.Answer() != domain.AdmissionNotGuarded {
-		t.Fatalf("不在册对象：%s %+v", outside.Answer(), outside.Findings())
+	outside := newAdmissionCase(t).unzonedBothEnds().judge()
+	if outside.CrossZone() != domain.CrossZoneUndetermined || len(outside.Findings()) != 1 || outside.Answer() != domain.AdmissionNotGuarded {
+		t.Fatalf("纯境内租户的不在册对象：%s / %s %+v", outside.CrossZone(), outside.Answer(), outside.Findings())
 	}
 
 	restricted := newAdmissionCase(t).unzonedDestination().
@@ -281,7 +288,8 @@ func TestUnregisteredNodeZoneIsNotConfiguredOnlyWhenTheObjectHasACrossZoneGate(t
 }
 
 // 租户在动作时点已有节点登了区域（ADR-0300）：起讫有一端未登、对象不在任何案件与单元里时，跨区那一道答未配置并指名
-// 未登的节点，整次答复未配置；装载出发照旧不受门禁。两端都没登时两个节点都指名；声明了去向的交出同一判法。
+// 未登的节点，整次答复未配置；装载出发照旧不受门禁。起讫另一端已登就说明租户登过，另读的那一位是零值也照此答；两端
+// 都没登时只看那一位，答未配置就两个节点都指名。声明了去向的交出同一判法。
 // Covers: AT-CC-426（领域半边）。
 func TestAZonedTenantsUnbookedObjectAnswersNotConfiguredNamingTheUnregisteredNode(t *testing.T) {
 	zonedTenant := func(c *admissionCase) *admissionCase {
@@ -303,11 +311,9 @@ func TestAZonedTenantsUnbookedObjectAnswersNotConfiguredNamingTheUnregisteredNod
 	departing := zonedTenant(newAdmissionCase(t).unzonedDestination()).judge()
 	expectNamed(t, departing, "SYN-NODE-SIN-HUB")
 	assertFinding(t, findingOf(t, departing, domain.LoadingDeparture), domain.AdmissionNotGuarded, domain.CauseOutsideCustomsBooks)
+	expectNamed(t, newAdmissionCase(t).unzonedDestination().judge(), "SYN-NODE-SIN-HUB")
 
-	bothUnzoned := zonedTenant(newAdmissionCase(t))
-	bothUnzoned.input.Intent = departure(t, "SYN-NODE-SZX-GATE", "SYN-NODE-SIN-HUB")
-	bothUnzoned.input.Zones = []domain.NodeZoneReading{unzoned(t, "SYN-NODE-SZX-GATE"), unzoned(t, "SYN-NODE-SIN-HUB")}
-	expectNamed(t, bothUnzoned.judge(), "SYN-NODE-SIN-HUB", "SYN-NODE-SZX-GATE")
+	expectNamed(t, zonedTenant(newAdmissionCase(t).unzonedBothEnds()).judge(), "SYN-NODE-SIN-HUB", "SYN-NODE-SZX-GATE")
 
 	handingOver := zonedTenant(newAdmissionCase(t))
 	intent, err := domain.NewHandoverIntent(node(t, "SYN-NODE-SZX-GATE"), node(t, "SYN-NODE-SIN-HUB"))
