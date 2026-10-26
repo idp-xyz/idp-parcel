@@ -1,7 +1,7 @@
 # 48 订舱与承运答复没有查阅面：`待确认`、`候补`只能从两口的答复里看
 
 Category: enhancement
-Status: in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg127` tip `cad853912`（其后一笔只改 AT 盘点、票面与一句注释的措辞），见文末「完成记录」。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，与 127、167 同批，分支 `claude-dcg127`（worktree `idp-parcel-dcg127`）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [24](./24-booking-references-a-schedule-and-carrier-answers-via-integration-client.md) 完成记录与 [ADR-0202](../../../docs/adr/0202-transport-commission-booking-and-carrier-answer-entry-families-and-supplier-agreement-check.md) 文末补记风险点 15。
+Status: in-progress——2026-10-26 评审无阻断、修订轮完，待进 main，分支 `claude-dcg127` tip `7e08c3d60`（其后一笔只改票面与一句注释的折行），见文末「评审记录」「修订轮」。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg127` tip `cad853912`（其后一笔只改 AT 盘点、票面与一句注释的措辞），见文末「完成记录」。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，与 127、167 同批，分支 `claude-dcg127`（worktree `idp-parcel-dcg127`）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [24](./24-booking-references-a-schedule-and-carrier-answers-via-integration-client.md) 完成记录与 [ADR-0202](../../../docs/adr/0202-transport-commission-booking-and-carrier-answer-entry-families-and-supplier-agreement-check.md) 文末补记风险点 15。
 Blocked by: 无（文件归 tf-chain-plan「并行车道」车道 A，落地顺序随车道 A 的令牌）
 地盘：TF `ports/catalogue_read.go`、`adapters/postgres/review_catalogue.go`、tfhttp `query_transport_fulfillment_records.go`（+ 各自测试）；不碰订舱与答复的写口。
 
@@ -64,3 +64,40 @@ Blocked by: 无（文件归 tf-chain-plan「并行车道」车道 A，落地顺�
 ### 自验
 
 于 `cad853912`（其后一笔只改盘点、票面与一句注释的措辞，改后 `go build`、`gofmt` 复核过）：`go build ./...`、`go vet ./...` 退 0，`gofmt -l internal cmd migrations tools` 无输出；带 DSN（`127.0.0.1:55432`，pgtest 每例自建自删库）`go test -count=1 -p 1` 跑 `./internal/transportfulfillment/...`、`go list` 反查出依赖 TF 的 `./cmd/parcel-api/...`、`./cmd/parcel-dispatch/...`、`./cmd/parcel-transport-register/...`，加 `./internal/architecture/...`、`./migrations/...`，有用例的 17 个包全绿（含 PG）；本批新真库用例逐个 `-v` 确认 PASS、不是 SKIP。`310154eee` 一笔另在临时 worktree 单独 `go build ./...`、`go vet` 通过。`go run ./tools/adr-index -check` 退 0；`go run ./tools/at-coverage-counts -check` 报总览过期（计数由推送方重算）。未跑全量 `scripts/test-full.sh`，未重生成 ADR 索引、AT 计数与机制清点，未灌种子；`apps/admin-web` 未动，无迁移、无新 ADR。
+
+## 评审记录（2026-10-26，协调方 `tops-20` 隔离子代理，钉 `c428ad2fc`：两轴无阻断，非阻断 6 条；三票同一份，照抄，小节标题降两级挂在本节下）
+
+评审 ← tops-20 隔离子代理 · 钉 `c428ad2fc` · 00:44
+
+结论：两轴无阻断；非阻断 6 条。
+
+#### Spec
+阻断：无。
+非阻断：
+1. 48「当前那一份」选法两处实现：`ReviewCatalogue.bookingStanding`（Go，遇异常行报错）与 `BookingAnswers.FindByKey`（SQL `ORDER BY (outcome <> 'WAITLISTED') DESC, decided_at DESC LIMIT 1`，遇异常行静默取最新；写路径 `register_booking_charge` 用它）。有 0029 两条部分唯一索引兜着，能落库的状态两处答案一样；规则日后变（如 ADR-0202 风险点 13 放宽候补形）才分叉——单一权威残余，非现有错误。另立票：把选法收进领域层（已有 `CarrierAcceptance.Settles`），两处都调它；`bookingStanding` 改用 `Settles()` 不比字符串。
+2. 48/167 管理台页没人接：代决 8 写「去处未立票」，可 UC-TF-004 交接表那一行已整行删掉，ADR-0202 风险点 15 去处仍指票 48；合入后管理台这一半没人追。照票 18→45 先例另立 admin-web 票。
+3. 127 锁的出处写错：复核记录与 AT-TF-331 把装载分配的锁算在决定四名下；实际出处是 0203「补记：票 21 落地时的补充裁定」里分格与次序那一条，措辞应改。
+无发现：127 半截快照论证成立，不会产出错误准备结果（准备只用 `AvailableAt`；容量冻结、释放明细只追加、`released` 与明细同笔换存、重建门判相等；过不了门答 `CAPACITY_POOLS_UNAVAILABLE` 整封重投；带锁各口仍 `FOR UPDATE`）；167 筛选 400 与 `query_external_tracking_facts` 同；码表只在 `bounceBasisCode`；查阅口各项与其它 registry 同形；集成客户端令牌答 401 合族边界；AT-TF-331–334 不撞。
+
+#### Standards
+阻断：无。
+非阻断：
+1. ADR-0203 决定四：同意不算收窄，但复核记录给这句定了读法、只写在正文末节，索引里看不到。作者说「来向方是票、没有先例」不确：ADR-0204 Status 行就有一条不出自新 ADR 的「读法注」。可在 0203 Status 行注记补（可选）：「｜**读法注**（2026-10-26）：决定四「读池在写事务里锁住池那一行（`FOR UPDATE`），判余量与换存同一笔」指换存池的写编排（预占、释放；装载分配的锁见「补记：票 21 落地时的补充裁定」）；只读不换存的准备评估不持池行锁，见文末复核记录（票 demo-chain-gaps/127）；无条款停用，其余各条不变」。
+2. 注释跨文件复述（与作者在 c428ad2fc 删掉那处同类），宜改指符号名：`bookingRequestRowBody` 注释抄列 ports 里七个状态词；`bookingAnswerBounceBody` 注释抄列两个依据词；`bookingStanding` 注释写「迁移 0029 的两条部分唯一索引」。
+3. 合并文本冲突（推送方重放时手合）：`.scratch/at-coverage-inventory.md` 与 main、dcg135、dcg139、dcg147 都有；与 dcg147 另有一处在票 147 票面。
+无发现：上下文边界守住；ADR 正文未改；复核记录格式与 0201、0202、0204、0205 先例同；无新迁移号或 ADR 号。
+
+#### 探针
+overlay 加载、未写检出：4 个新真库用例与 parcel-api 生产装配用例 PASS（含 PG）；TF 全包与 `cmd/parcel-api` go vet 退 0。变异：把 `PrepareOnPlannedLegsDeps.Pools` 换回 `ports.CapacityPoolsOnSchedules` 并改调 `ListPoolsOnSchedules`，`TestPreparationHoldsNoPoolRowLockWhileItsTransactionIsOpen` 变红（55P03）——编排层回退也抓得到。
+
+## 修订轮（2026-10-26，作者子代理，同一分支，`7e08c3d60`）
+
+逐条去向（评审六条里与本票相关的）：
+
+- **Spec 1 当前答复的选法两处实现**：立票 [177](./177-current-booking-answer-is-chosen-twice-on-the-read-and-write-faces.md)（R3，修法照评审：收进领域层，以 `CarrierAcceptance.Settles` 为判据，`BookingAnswers.FindByKey` 与 `bookingStanding` 都调它）。完成记录代决 5 的去处自此是票 177。
+- **Spec 2 管理台页没人接**：立票 [178](./178-admin-web-booking-request-and-answer-bounce-sections.md)（admin-web，R2，照票 18 → 45 先例）。ADR-0202 Status 行注记末尾加「｜**去处注**（2026-10-26）」：越权风险点 15 的查阅口那一半由本票兑现，管理台那一半去处改为票 178；ADR 正文不动。完成记录代决 8「去处未立票」自此读作票 178。
+- **Standards 2 注释跨文件复述**：已改。`bookingRequestRowBody` 注释不再抄列状态词，改指 `ports.BookingStandingPendingConfirmation` 那组常量；`bookingStanding` 注释不再写「迁移 0029 的两条部分唯一索引」，改指库上的 `booking_answer_one_settling`、`booking_answer_one_waitlist`、`booking_answer_outcome_closed`。
+- **Standards 3 合并文本冲突**：推送方重放时手合，作者侧不动。
+- Spec 3、Standards 1 属票 127，见那张票的修订轮。
+
+重跑（于 `7e08c3d60` 的工作树，其后一笔只改票面与 `bookingRequestRowBody` 注释折行，改后 `go build`、`gofmt` 复核过）：`go build ./...`、`go vet`（TF 与 `cmd/...`）退 0，`gofmt -l` 无输出；带 DSN `go test -count=1 -p 1` 跑 `./internal/transportfulfillment/...`、`./cmd/parcel-api/...`、`./cmd/parcel-dispatch/...`、`./internal/architecture/...`，有用例的 15 个包全绿（含 PG）；本批五个新真库用例 `-v` 确认 PASS、不是 SKIP。`go run ./tools/adr-index -check` 只报索引生成物过期（ADR-0202、0203 改了 Status 行，由推送方重生成），没有格式错。AT 盘点：`AT-TF-331`–`334` 在①分桶表里各有一行（`AT-TF-330` 之后、按号排），把这四行与两份 UC 拼进票 139 分支的检出后跑它的 `at-coverage-counts -check`，只报总览计数过期，不报缺行。

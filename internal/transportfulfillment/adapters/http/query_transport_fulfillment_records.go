@@ -605,8 +605,9 @@ type bookingRequestListResponse struct {
 // bookingRequestRowBody 是订舱册上一行（票 demo-chain-gaps/48）。订舱各格与订舱提交口回显的那一份同一形状（bookingRequestBody，
 // 申请量照那一口写成数），答复与承运答复口回显的同一形状（bookingAnswerBody）：同一件东西在命令答复与查阅页上不换写法。
 //
-// standing 是读出的状态词，词与读法见 ports.BookingStandingPendingConfirmation 那组常量；只在读口派生一处，页面照抄、不另算。currentAnswer 是当前那一份答复，没有答复时缺席；answers 是名下全部
-// 答复，按答复时刻先后，候补与它的后继都在，总在场、空数组即还没有答复。cancelledAt 缺席即没有取消——取消不进 standing。
+// standing 是读出的状态词，词与读法见 ports.BookingStandingPendingConfirmation 那组常量；只在读口派生一处，页面照抄、不另算。
+// currentAnswer 是当前那一份答复，没有答复时缺席；answers 是名下全部答复，按答复时刻先后，候补与它的后继都在，总在场、空数组即
+// 还没有答复。cancelledAt 缺席即没有取消——取消不进 standing。
 type bookingRequestRowBody struct {
 	bookingRequestBody
 	Standing      string              `json:"standing"`
