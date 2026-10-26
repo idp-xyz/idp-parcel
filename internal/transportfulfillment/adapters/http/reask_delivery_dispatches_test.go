@@ -39,6 +39,20 @@ func (noMarker) MarkAsked(context.Context, ports.DeliveryDispatchPendingKey, tim
 	return nil
 }
 
+// recordingAsks 是问询册的内存替身：认证方在场就带操作者，按册重问先记一次按下，线格式用例只关心这一口放行。
+type recordingAsks struct {
+	records *[]ports.DeliveryDispatchAskRecord
+}
+
+func (asks recordingAsks) RecordAsk(_ context.Context, record ports.DeliveryDispatchAskRecord) error {
+	*asks.records = append(*asks.records, record)
+	return nil
+}
+
+func (recordingAsks) ListAsks(context.Context, domain.TenantID, int) ([]ports.DeliveryDispatchAskRecord, error) {
+	return nil, nil
+}
+
 type unreachableTrigger struct{ t *testing.T }
 
 func (trigger unreachableTrigger) Trigger(context.Context, application.TriggerDeliveryDispatchCommand) (application.TriggerDeliveryDispatchResult, error) {
@@ -48,9 +62,14 @@ func (trigger unreachableTrigger) Trigger(context.Context, application.TriggerDe
 
 func reaskEndpoint(t *testing.T, intake tfhttp.DeliveryDispatchReaskIntake) http.Handler {
 	t.Helper()
+	return reaskEndpointRecording(t, intake, &[]ports.DeliveryDispatchAskRecord{})
+}
+
+func reaskEndpointRecording(t *testing.T, intake tfhttp.DeliveryDispatchReaskIntake, asks *[]ports.DeliveryDispatchAskRecord) http.Handler {
+	t.Helper()
 	return tfhttp.NewReaskDeliveryDispatchesEndpoint(intake, application.NewReaskPendingDeliveryDispatchesHandler(application.ReaskPendingDeliveryDispatchesDeps{
 		Pending: emptyPendingQueue{}, Cadences: noCadence{}, Trigger: unreachableTrigger{t: t}, Failed: noMarker{},
-		Clock: tfClock{at: time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)},
+		Clock: tfClock{at: time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)}, Asks: recordingAsks{records: asks},
 	}))
 }
 

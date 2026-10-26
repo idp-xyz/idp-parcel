@@ -105,10 +105,12 @@ func (repository *BookingRequests) FindBookingWithProvider(
 	return found, true, nil
 }
 
-const bookingRequestColumns = `commission_id, schedule_id, quantity, unit_ref, requested_at, cancelled_at, content_digest, recorded_at`
+const bookingRequestColumns = `commission_id, schedule_id, quantity, unit_ref, requested_at, cancelled_at, content_digest, recorded_at,
+		        submitted_by, cancelled_by`
 
 const qualifiedBookingRequestColumns = `booking.commission_id, booking.schedule_id, booking.quantity, booking.unit_ref,
-		        booking.requested_at, booking.cancelled_at, booking.content_digest, booking.recorded_at`
+		        booking.requested_at, booking.cancelled_at, booking.content_digest, booking.recorded_at,
+		        booking.submitted_by, booking.cancelled_by`
 
 // bookingRequestRow 是订舱申请一行的列，次序同 bookingRequestColumns。
 type bookingRequestRow struct {
@@ -116,10 +118,11 @@ type bookingRequestRow struct {
 	quantity                               int64
 	requestedAt, recordedAt                time.Time
 	cancelledAt                            *time.Time
+	submittedBy, cancelledBy               *string
 }
 
 func (row *bookingRequestRow) targets() []any {
-	return []any{&row.commissionID, &row.scheduleID, &row.quantity, &row.unit, &row.requestedAt, &row.cancelledAt, &row.digest, &row.recordedAt}
+	return []any{&row.commissionID, &row.scheduleID, &row.quantity, &row.unit, &row.requestedAt, &row.cancelledAt, &row.digest, &row.recordedAt, &row.submittedBy, &row.cancelledBy}
 }
 
 func (row bookingRequestRow) rehydrate(key ports.BookingKey) (ports.BookingRecord, error) {
@@ -152,11 +155,21 @@ func (row bookingRequestRow) rehydrate(key ports.BookingKey) (ports.BookingRecor
 			return ports.BookingRecord{}, err
 		}
 	}
+	submitter, err := registrantFromColumn(row.submittedBy)
+	if err != nil {
+		return ports.BookingRecord{}, err
+	}
+	canceller, err := registrantFromColumn(row.cancelledBy)
+	if err != nil {
+		return ports.BookingRecord{}, err
+	}
 	return ports.BookingRecord{
 		Key:           key,
 		ContentDigest: row.digest,
 		Booking:       booking,
 		RecordedAt:    row.recordedAt.UTC(),
+		SubmittedBy:   submitter,
+		CancelledBy:   canceller,
 	}, nil
 }
 
@@ -180,8 +193,8 @@ func (repository *BookingRequests) Save(
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO transport_fulfillment.booking_request
 			(tenant_id, booking_id, commission_id, schedule_id, quantity, unit_ref,
-			 requested_at, cancelled_at, content_digest, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			 requested_at, cancelled_at, content_digest, recorded_at, submitted_by, cancelled_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Booking.String(),
@@ -193,6 +206,8 @@ func (repository *BookingRequests) Save(
 		cancelledAt,
 		record.ContentDigest,
 		record.RecordedAt.UTC(),
+		optionalRegistrant(record.SubmittedBy),
+		optionalRegistrant(record.CancelledBy),
 	)
 	if err != nil {
 		return ports.BookingSaveOutcomeInvalid, fmt.Errorf("save booking request: %w", err)
@@ -222,13 +237,14 @@ func (repository *BookingRequests) Replace(
 	}
 	tag, err := executor.Exec(ctx,
 		`UPDATE transport_fulfillment.booking_request
-		    SET cancelled_at = $3
+		    SET cancelled_at = $3, cancelled_by = $4
 		  WHERE tenant_id = $1
 		    AND booking_id = $2
 		    AND cancelled_at IS NULL`,
 		record.Key.TenantID.String(),
 		record.Key.Booking.String(),
 		cancelledAt.UTC(),
+		optionalRegistrant(record.CancelledBy),
 	)
 	if err != nil {
 		return false, fmt.Errorf("replace booking request: %w", err)

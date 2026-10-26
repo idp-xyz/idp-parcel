@@ -43,13 +43,13 @@ func (repository *TransportCommissions) FindByKey(
 		membersJSON                                                                []byte
 		submittedAt, recordedAt                                                    time.Time
 		startedAt, cancelledAt                                                     *time.Time
-		startedBasis, submittedBy                                                  *string
+		startedBasis, submittedBy, cancelledBy                                     *string
 		agreementObject, agreementVersion                                          *string
 	)
 	err = querier.QueryRow(ctx,
 		`SELECT provider_ref, agreement_ref, procurement_legal_entity_ref, conditions_ref, role_ref, responsibility_ref,
 		        members, submitted_at, started_at, started_basis, cancelled_at,
-		        content_digest, recorded_at, agreement_object, agreement_version, submitted_by
+		        content_digest, recorded_at, agreement_object, agreement_version, submitted_by, cancelled_by
 		   FROM transport_fulfillment.transport_commission
 		  WHERE tenant_id = $1
 		    AND commission_id = $2`,
@@ -57,7 +57,7 @@ func (repository *TransportCommissions) FindByKey(
 		key.Commission.String(),
 	).Scan(&provider, &agreement, &legalEntity, &conditions, &role, &responsibility,
 		&membersJSON, &submittedAt, &startedAt, &startedBasis, &cancelledAt,
-		&digest, &recordedAt, &agreementObject, &agreementVersion, &submittedBy)
+		&digest, &recordedAt, &agreementObject, &agreementVersion, &submittedBy, &cancelledBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.TransportCommissionRecord{}, false, nil
 	}
@@ -77,12 +77,17 @@ func (repository *TransportCommissions) FindByKey(
 	if err != nil {
 		return ports.TransportCommissionRecord{}, false, fmt.Errorf("find transport commission: %w", err)
 	}
+	canceller, err := registrantFromColumn(cancelledBy)
+	if err != nil {
+		return ports.TransportCommissionRecord{}, false, fmt.Errorf("find transport commission: %w", err)
+	}
 	return ports.TransportCommissionRecord{
 		Key:           key,
 		ContentDigest: digest,
 		Commission:    commission,
 		RecordedAt:    recordedAt.UTC(),
 		SubmittedBy:   submitter,
+		CancelledBy:   canceller,
 	}, true, nil
 }
 
@@ -113,8 +118,8 @@ func (repository *TransportCommissions) Save(
 		`INSERT INTO transport_fulfillment.transport_commission
 			(tenant_id, commission_id, provider_ref, agreement_ref, procurement_legal_entity_ref,
 			 conditions_ref, role_ref, responsibility_ref, members, submitted_at, started_at,
-			 started_basis, cancelled_at, content_digest, recorded_at, agreement_object, agreement_version, submitted_by)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+			 started_basis, cancelled_at, content_digest, recorded_at, agreement_object, agreement_version, submitted_by, cancelled_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Commission.String(),
@@ -134,6 +139,7 @@ func (repository *TransportCommissions) Save(
 		agreementObject,
 		agreementVersion,
 		optionalRegistrant(record.SubmittedBy),
+		optionalRegistrant(record.CancelledBy),
 	)
 	if err != nil {
 		return ports.CommissionSaveOutcomeInvalid, fmt.Errorf("save transport commission: %w", err)
@@ -164,7 +170,7 @@ func (repository *TransportCommissions) Replace(
 	if cancelled {
 		tag, err := executor.Exec(ctx,
 			`UPDATE transport_fulfillment.transport_commission
-			    SET cancelled_at = $3, recorded_at = $4
+			    SET cancelled_at = $3, recorded_at = $4, cancelled_by = $5
 			  WHERE tenant_id = $1
 			    AND commission_id = $2
 			    AND started_at IS NULL
@@ -173,6 +179,7 @@ func (repository *TransportCommissions) Replace(
 			record.Key.Commission.String(),
 			cancelledAt.UTC(),
 			record.RecordedAt.UTC(),
+			optionalRegistrant(record.CancelledBy),
 		)
 		if err != nil {
 			return false, fmt.Errorf("replace transport commission: %w", err)

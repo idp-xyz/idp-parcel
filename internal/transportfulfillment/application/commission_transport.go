@@ -175,6 +175,9 @@ type SubmitCommissionCommand struct {
 }
 
 // SubmitBookingCommand 携带一次订舱申请：在哪一份已提交的委托下、就哪一个具体班次申请多少舱位（ADR-0202 决定五）。
+//
+// SubmittedBy 是作出提交决定的操作者（「发行方#sub」），由运营决定口的 Intake 取自信封（ADR-0303 复核记录），可缺：它不进内容
+// 摘要——另一位操作者原样再交照旧是重放、交回原订舱连同原提交人，异内容照旧是冲突。
 type SubmitBookingCommand struct {
 	TenantID    domain.TenantID
 	Booking     string
@@ -183,6 +186,7 @@ type SubmitBookingCommand struct {
 	Quantity    int64
 	Unit        string
 	RequestedAt time.Time
+	SubmittedBy string
 }
 
 // AnswerBookingCommand 携带承运方对订舱的答复（封闭五值：接受/拒绝/失效/撤回/候补）。Source 是答复方的来源身份，
@@ -198,18 +202,22 @@ type AnswerBookingCommand struct {
 	DecidedAt  time.Time
 }
 
-// CancelCommissionCommand 携带取消请求：只及未开始的运输意图。
+// CancelCommissionCommand 携带取消请求：只及未开始的运输意图。CancelledBy 是作出取消决定的操作者，可缺，只进审计（ADR-0303
+// 复核记录）：已取消的重放答原取消、连同原取消人，不因另一位操作者再取消一次而改。
 type CancelCommissionCommand struct {
 	TenantID    domain.TenantID
 	Commission  string
 	CancelledAt time.Time
+	CancelledBy string
 }
 
 // CancelBookingCommand 携带订舱取消请求：只及尚未随运输开始而消耗的订舱范围。取消时刻照 ADR-0023 由提交方给。
+// CancelledBy 同取消委托：可缺，只进审计。
 type CancelBookingCommand struct {
 	TenantID    domain.TenantID
 	Booking     string
 	CancelledAt time.Time
+	CancelledBy string
 }
 
 type CommissionResult struct {
@@ -405,6 +413,10 @@ func (handler *CommissionTransportHandler) SubmitBooking(
 	if err != nil {
 		return CommissionResult{outcome: CommissionNotAccepted}, nil
 	}
+	submittedBy, err := domain.OptionalRegistrantReference(command.SubmittedBy)
+	if err != nil {
+		return CommissionResult{outcome: CommissionNotAccepted}, nil
+	}
 
 	key := ports.BookingKey{TenantID: command.TenantID, Booking: booking.Booking()}
 	_, digest, err := domain.CanonicalizeBookingPayload(command.Commission, command.Schedule, command.Quantity, command.Unit, command.RequestedAt)
@@ -447,6 +459,7 @@ func (handler *CommissionTransportHandler) SubmitBooking(
 		ContentDigest: digest,
 		Booking:       booking,
 		RecordedAt:    handler.deps.Clock.Now(),
+		SubmittedBy:   submittedBy,
 	}
 	saved, err := handler.deps.Bookings.Save(ctx, record)
 	if err != nil {
@@ -648,6 +661,10 @@ func (handler *CommissionTransportHandler) CancelCommission(
 	if err != nil {
 		return CommissionResult{outcome: CommissionNotAccepted}, nil
 	}
+	cancelledBy, err := domain.OptionalRegistrantReference(command.CancelledBy)
+	if err != nil {
+		return CommissionResult{outcome: CommissionNotAccepted}, nil
+	}
 	key := ports.TransportCommissionKey{TenantID: command.TenantID, Commission: commissionRef}
 
 	existing, found, err := handler.deps.Commissions.FindByKey(ctx, key)
@@ -668,6 +685,7 @@ func (handler *CommissionTransportHandler) CancelCommission(
 
 	replaced := existing
 	replaced.Commission = cancelled
+	replaced.CancelledBy = cancelledBy
 	replaced.RecordedAt = handler.deps.Clock.Now()
 	ok, err := handler.deps.Commissions.Replace(ctx, replaced)
 	if err != nil {
@@ -719,6 +737,10 @@ func (handler *CommissionTransportHandler) CancelBooking(
 	if err != nil {
 		return CommissionResult{outcome: CommissionNotAccepted}, nil
 	}
+	cancelledBy, err := domain.OptionalRegistrantReference(command.CancelledBy)
+	if err != nil {
+		return CommissionResult{outcome: CommissionNotAccepted}, nil
+	}
 	key := ports.BookingKey{TenantID: command.TenantID, Booking: bookingRef}
 
 	existing, found, err := handler.deps.Bookings.FindByKey(ctx, key)
@@ -752,6 +774,7 @@ func (handler *CommissionTransportHandler) CancelBooking(
 	}
 	replaced := existing
 	replaced.Booking = cancelled
+	replaced.CancelledBy = cancelledBy
 	ok, err := handler.deps.BookingCancellations.Replace(ctx, replaced)
 	if err != nil {
 		return commissionUndecided(BookingStoreUnavailable, command.Booking), nil

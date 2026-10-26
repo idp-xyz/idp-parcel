@@ -97,10 +97,14 @@ func (reason ReaskUndecidedReason) String() string {
 }
 
 // ReaskPendingDeliveryDispatchesCommand：租户取认证结果；问法与一次最多问几件由请求给。
+//
+// ReaskedBy 是按下这一次重问的操作者（「发行方#sub」，ADR-0303 决定五与复核记录），可缺：在场时先于逐件去问在问询册记一次按下
+// （一次一行，不是逐件一行），逐件交执行器的命令不带它。它不进任何一格判断，重问的结果与答复形状不变，也不进任务。
 type ReaskPendingDeliveryDispatchesCommand struct {
-	TenantID domain.TenantID
-	Scope    ReaskScope
-	Limit    int
+	TenantID  domain.TenantID
+	Scope     ReaskScope
+	Limit     int
+	ReaskedBy string
 }
 
 // ReaskedDeliveryDispatch 是册上一件与它这一次的答复。
@@ -159,6 +163,9 @@ type ReaskPendingDeliveryDispatchesDeps struct {
 	Trigger  DeliveryDispatchTrigger
 	Failed   ReaskFailureMarker
 	Clock    ports.Clock
+	// Asks 是问询册的写口，只在命令带了 ReaskedBy 时用到，装配点交的那一只每记一次自成一笔事务（先于逐件去问，一件问不动也不让这一次
+	// 按下无处可查）。缺了它而命令带了操作者，不问（ErrDeliveryDispatchAskLedgerNotWired）。
+	Asks ports.DeliveryDispatchAskLedger
 }
 
 // ReaskPendingDeliveryDispatchesHandler 是按册重问（ADR-0230 决定四）：把派送待形成册上的那几件逐件交回派送发起执行器，再问一次
@@ -190,7 +197,22 @@ func (handler *ReaskPendingDeliveryDispatchesHandler) Reask(
 		command.Limit < 1 || command.Limit > MaxReaskBatch {
 		return ReaskPendingDeliveryDispatchesResult{outcome: ReaskNotAccepted}, nil
 	}
+	asker, err := domain.OptionalRegistrantReference(command.ReaskedBy)
+	if err != nil {
+		return ReaskPendingDeliveryDispatchesResult{outcome: ReaskNotAccepted}, nil
+	}
 	result := ReaskPendingDeliveryDispatchesResult{askedAt: handler.deps.Clock.Now()}
+	if asker.Present() {
+		if handler.deps.Asks == nil {
+			return ReaskPendingDeliveryDispatchesResult{}, ErrDeliveryDispatchAskLedgerNotWired
+		}
+		if err := handler.deps.Asks.RecordAsk(ctx, ports.DeliveryDispatchAskRecord{
+			TenantID: command.TenantID, Kind: ports.DeliveryDispatchAskReask, AskedBy: asker,
+			AskedAt: result.askedAt, Scope: command.Scope.String(), Limit: command.Limit,
+		}); err != nil {
+			return ReaskPendingDeliveryDispatchesResult{}, fmt.Errorf("%w: %v", ErrDeliveryDispatchAskUnrecorded, err)
+		}
+	}
 	if command.Scope == ReaskDuePending {
 		cadence, found, err := handler.deps.Cadences.CurrentCadence(ctx, command.TenantID)
 		if err != nil {

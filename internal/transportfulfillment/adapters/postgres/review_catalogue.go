@@ -515,7 +515,7 @@ func (catalogue *ReviewCatalogue) ListBookingRequests(
 
 	rows, err := querier.Query(ctx,
 		`SELECT booking.booking_id, booking.commission_id, booking.schedule_id, booking.quantity, booking.unit_ref,
-		        booking.requested_at, booking.cancelled_at, booking.recorded_at,
+		        booking.requested_at, booking.cancelled_at, booking.recorded_at, booking.submitted_by, booking.cancelled_by,
 		        answers.ids, answers.outcomes, answers.quantities, answers.bases, answers.decided, answers.recorded
 		   FROM (SELECT *
 		           FROM transport_fulfillment.booking_request
@@ -546,13 +546,14 @@ func (catalogue *ReviewCatalogue) ListBookingRequests(
 		var (
 			row                      ports.BookingRequestCatalogueRow
 			cancelledAt              *time.Time
+			submittedBy, cancelledBy *string
 			ids, outcomes, bases     []string
 			quantities               []int64
 			decidedTimes, recordedAt []time.Time
 		)
 		if err := rows.Scan(
 			&row.Booking, &row.Commission, &row.Schedule, &row.Quantity, &row.Unit,
-			&row.RequestedAt, &cancelledAt, &row.RecordedAt,
+			&row.RequestedAt, &cancelledAt, &row.RecordedAt, &submittedBy, &cancelledBy,
 			&ids, &outcomes, &quantities, &bases, &decidedTimes, &recordedAt,
 		); err != nil {
 			return nil, fmt.Errorf("list booking requests: %w", err)
@@ -563,6 +564,15 @@ func (catalogue *ReviewCatalogue) ListBookingRequests(
 		}
 		row.RequestedAt = row.RequestedAt.UTC()
 		row.RecordedAt = row.RecordedAt.UTC()
+		submitter, err := registrantFromColumn(submittedBy)
+		if err != nil {
+			return nil, fmt.Errorf("list booking requests: booking %q: %w", row.Booking, err)
+		}
+		canceller, err := registrantFromColumn(cancelledBy)
+		if err != nil {
+			return nil, fmt.Errorf("list booking requests: booking %q: %w", row.Booking, err)
+		}
+		row.SubmittedBy, row.CancelledBy = submitter.String(), canceller.String()
 		row.Answers = make([]ports.BookingAnswerCatalogueRow, 0, len(ids))
 		for index := range ids {
 			row.Answers = append(row.Answers, ports.BookingAnswerCatalogueRow{

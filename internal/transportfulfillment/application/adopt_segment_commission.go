@@ -113,6 +113,8 @@ type AdoptSegmentCommissionCommand struct {
 	Provider   string
 	// AfterGeneration 是新一代接在哪一代之后，只在这一段的上一代采用已被解除时必填（ADR-0232 决定一）；首次采用为零。
 	AfterGeneration int
+	// AdoptedBy 是作出采用决定的操作者，可缺，只进审计（ADR-0303 复核记录）：不进内容摘要，另一位操作者原样重交仍是已有。
+	AdoptedBy string
 }
 
 type CommissionAdoptionResult struct {
@@ -226,6 +228,10 @@ func (handler *AdoptSegmentCommissionHandler) Adopt(
 	if err != nil {
 		return CommissionAdoptionResult{outcome: CommissionAdoptionNotAccepted}, nil
 	}
+	adoptedBy, err := domain.OptionalRegistrantReference(command.AdoptedBy)
+	if err != nil {
+		return CommissionAdoptionResult{outcome: CommissionAdoptionNotAccepted}, nil
+	}
 	digest, err := domain.CanonicalizeSegmentCommissionAdoptionPayload(command.Commission, command.Provider)
 	if err != nil {
 		return CommissionAdoptionResult{}, err
@@ -272,7 +278,7 @@ func (handler *AdoptSegmentCommissionHandler) Adopt(
 	}
 
 	now := handler.deps.Clock.Now()
-	record := ports.SegmentCommissionAdoptionRecord{Key: key, ContentDigest: digest, Adoption: adoption, RecordedAt: now, Generation: generation}
+	record := ports.SegmentCommissionAdoptionRecord{Key: key, ContentDigest: digest, Adoption: adoption, RecordedAt: now, Generation: generation, AdoptedBy: adoptedBy}
 	saved, err := handler.deps.Adoptions.Save(ctx, record)
 	if err != nil {
 		return commissionAdoptionUndecided(CommissionAdoptionStoreUnavailable, command.Segment), nil

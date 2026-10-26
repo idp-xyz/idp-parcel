@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
-	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
 // 容量释放口（UC-TF-004 步 5；ADR-0203 决定三、五、六）。显式释放一份预占上未消耗的范围，与预占分成两种决定：能占的
@@ -33,9 +32,9 @@ type CapacityReleasePayload struct {
 	ReleasedAt  string                      `json:"releasedAt"`
 }
 
-// Command 把载荷连同信封给的租户翻成释放命令。时刻解不出是坏报文（400）；各格成不成立由编排答。
-func (payload CapacityReleasePayload) Command(tenant domain.TenantID) (application.ReleaseCapacityCommand, error) {
-	if tenant.String() == "" {
+// Command 把载荷连同信封给的身份（租户，与作出决定的操作者，ADR-0303 操作证据，载荷里不收）翻成释放命令。时刻解不出是坏报文（400）；各格成不成立由编排答。
+func (payload CapacityReleasePayload) Command(operator OperatorIdentity) (application.ReleaseCapacityCommand, error) {
+	if operator.Tenant.String() == "" {
 		return application.ReleaseCapacityCommand{}, ErrOperatorIdentityMissing
 	}
 	releasedAt, err := parseOptionalInstant("releasedAt", payload.ReleasedAt)
@@ -43,7 +42,8 @@ func (payload CapacityReleasePayload) Command(tenant domain.TenantID) (applicati
 		return application.ReleaseCapacityCommand{}, err
 	}
 	return application.ReleaseCapacityCommand{
-		TenantID:        tenant,
+		TenantID:        operator.Tenant,
+		ReleasedBy:      operator.Operator,
 		Pool:            payload.Pool,
 		Reservation:     payload.Reservation,
 		Release:         payload.Release,
@@ -57,7 +57,7 @@ func (payload CapacityReleasePayload) Command(tenant domain.TenantID) (applicati
 
 // IntakeCapacityRelease 译容量释放（`/transport-fulfillment-capacity-releases`）。
 func (intake *OperatorDecisionIntake) IntakeCapacityRelease(ctx context.Context, request *http.Request) (application.ReleaseCapacityCommand, error) {
-	tenant, err := intake.tenantFor(ctx, request, OperatorDecisionCapacityRelease)
+	operator, err := intake.identityFor(ctx, request, OperatorDecisionCapacityRelease)
 	if err != nil {
 		return application.ReleaseCapacityCommand{}, err
 	}
@@ -65,7 +65,7 @@ func (intake *OperatorDecisionIntake) IntakeCapacityRelease(ctx context.Context,
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.ReleaseCapacityCommand{}, err
 	}
-	return payload.Command(tenant)
+	return payload.Command(operator)
 }
 
 // NewReleaseCapacityEndpoint 交回容量释放的 HTTP 入口。

@@ -139,6 +139,9 @@ type ReserveCapacityCommand struct {
 	SourceReference string
 	ValidUntil      time.Time
 	At              time.Time
+	// ReservedBy 是作出预占决定的操作者，可缺，只进审计（ADR-0303 复核记录）：预占的重放与冲突只比声明内容，另一位操作者
+	// 原样重交答原预占，在册的不被顶替。
+	ReservedBy string
 }
 
 // ReleaseCapacityCommand 是一次释放决定：释放引用认领这一次释放（重放的键），其余同预占，来源说的是为什么不再需要这些量。
@@ -152,6 +155,8 @@ type ReleaseCapacityCommand struct {
 	SourceKind      string
 	SourceReference string
 	At              time.Time
+	// ReleasedBy 同 ReservedBy：作出这一次释放的操作者，可缺，只进审计。
+	ReleasedBy string
 }
 
 type ConsumeCapacityCommand struct {
@@ -380,6 +385,10 @@ func (handler *PrepareTransportOpportunityHandler) Reserve(
 	if err != nil {
 		return OpportunityResult{outcome: OpportunityNotAccepted}, nil
 	}
+	reservedBy, err := domain.OptionalRegistrantReference(command.ReservedBy)
+	if err != nil {
+		return OpportunityResult{outcome: OpportunityNotAccepted}, nil
+	}
 	demand, err := capacityDemandFrom(command.Quantity, command.Unit, command.SourceKind, command.SourceReference)
 	// 判断与落册用同一份截到登记册精度的时刻：否则首答回显的时刻带亚微秒，重放回显的是库里截过的那一份，两次答复不一样。
 	at, validUntil := domain.AtRegistryPrecision(command.At), domain.AtRegistryPrecision(command.ValidUntil)
@@ -412,6 +421,9 @@ func (handler *PrepareTransportOpportunityHandler) Reserve(
 	case err != nil:
 		return OpportunityResult{outcome: OpportunityNotAccepted}, nil
 	}
+	if reservedBy.Present() {
+		record.ReservedBy = withReservedBy(record.ReservedBy, reservationRef, reservedBy)
+	}
 	out, err := handler.replacePool(ctx, record, reservedPool, CapacityReserved, command.Pool)
 	out.reservation = reservationRef
 	return out, err
@@ -429,6 +441,10 @@ func (handler *PrepareTransportOpportunityHandler) Release(
 		return OpportunityResult{outcome: OpportunityNotAccepted}, nil
 	}
 	releaseRef, err := domain.NewCapacityReleaseReference(command.Release)
+	if err != nil {
+		return OpportunityResult{outcome: OpportunityNotAccepted}, nil
+	}
+	releasedBy, err := domain.OptionalRegistrantReference(command.ReleasedBy)
 	if err != nil {
 		return OpportunityResult{outcome: OpportunityNotAccepted}, nil
 	}
@@ -463,10 +479,40 @@ func (handler *PrepareTransportOpportunityHandler) Release(
 	if err != nil {
 		return OpportunityResult{outcome: OpportunityNotAccepted}, nil
 	}
+	if releasedBy.Present() {
+		record.ReleasedBy = withReleasedBy(record.ReleasedBy, releaseRef, releasedBy)
+	}
 	out, err := handler.replacePool(ctx, record, releasedPool, CapacityReleased, command.Pool)
 	out.reservation = reservationRef
 	out.release = releaseRef
 	return out, err
+}
+
+// withReservedBy 与 withReleasedBy 交回加了一键的新表：读回的表不原地改，已有的键原样带上，只加这一份新的。
+func withReservedBy(
+	existing map[domain.CapacityReservationReference]domain.RegistrantReference,
+	reservation domain.CapacityReservationReference,
+	operator domain.RegistrantReference,
+) map[domain.CapacityReservationReference]domain.RegistrantReference {
+	grown := make(map[domain.CapacityReservationReference]domain.RegistrantReference, len(existing)+1)
+	for key, value := range existing {
+		grown[key] = value
+	}
+	grown[reservation] = operator
+	return grown
+}
+
+func withReleasedBy(
+	existing map[domain.CapacityReleaseReference]domain.RegistrantReference,
+	release domain.CapacityReleaseReference,
+	operator domain.RegistrantReference,
+) map[domain.CapacityReleaseReference]domain.RegistrantReference {
+	grown := make(map[domain.CapacityReleaseReference]domain.RegistrantReference, len(existing)+1)
+	for key, value := range existing {
+		grown[key] = value
+	}
+	grown[release] = operator
+	return grown
 }
 
 // capacityDemandFrom 把命令里的需求量各格过构造门。哪一格不成立都是改载荷，不分格。

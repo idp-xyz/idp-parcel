@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
-	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
 // 取消订舱口（ADR-0204 决定三；ADR-0202 决定一）。运营人员停掉一次尚未消耗的订舱，是管理台上作出的生产决定，挂操作者
@@ -28,16 +27,16 @@ type BookingRequestCancellationPayload struct {
 	CancelledAt string `json:"cancelledAt"`
 }
 
-// Command 把载荷连同信封给的租户翻成取消订舱命令。时刻解不出是坏报文（400）；取不取消得了由编排答。
-func (payload BookingRequestCancellationPayload) Command(tenant domain.TenantID) (application.CancelBookingCommand, error) {
-	if tenant.String() == "" {
+// Command 把载荷连同信封给的身份（租户，与作出决定的操作者，ADR-0303 操作证据，载荷里不收）翻成取消订舱命令。时刻解不出是坏报文（400）；取不取消得了由编排答。
+func (payload BookingRequestCancellationPayload) Command(operator OperatorIdentity) (application.CancelBookingCommand, error) {
+	if operator.Tenant.String() == "" {
 		return application.CancelBookingCommand{}, ErrOperatorIdentityMissing
 	}
 	cancelledAt, err := parseOptionalInstant("cancelledAt", payload.CancelledAt)
 	if err != nil {
 		return application.CancelBookingCommand{}, err
 	}
-	return application.CancelBookingCommand{TenantID: tenant, Booking: payload.Booking, CancelledAt: cancelledAt}, nil
+	return application.CancelBookingCommand{TenantID: operator.Tenant, CancelledBy: operator.Operator, Booking: payload.Booking, CancelledAt: cancelledAt}, nil
 }
 
 // NewCancelBookingRequestEndpoint 交回取消订舱的 HTTP 入口。

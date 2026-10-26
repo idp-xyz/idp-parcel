@@ -49,7 +49,7 @@ func (repository *SegmentCommissionAdoptions) FindBySegment(
 	}
 	row := querier.QueryRow(ctx,
 		`SELECT adoption.segment_ref, adoption.generation, adoption.commission_id, adoption.provider_ref, adoption.start_basis,
-		        adoption.started_at, adoption.content_digest, adoption.recorded_at
+		        adoption.started_at, adoption.content_digest, adoption.recorded_at, adoption.adopted_by
 		   FROM transport_fulfillment.segment_commission_adoption AS adoption
 		  WHERE adoption.tenant_id = $1
 		    AND adoption.segment_ref = $2
@@ -74,7 +74,8 @@ func scanAdoption(tenant domain.TenantID, row pgx.Row) (ports.SegmentCommissionA
 	var segmentRef, commissionID, provider, startBasis, digest string
 	var generation int
 	var startedAt, recordedAt time.Time
-	if err := row.Scan(&segmentRef, &generation, &commissionID, &provider, &startBasis, &startedAt, &digest, &recordedAt); err != nil {
+	var adoptedBy *string
+	if err := row.Scan(&segmentRef, &generation, &commissionID, &provider, &startBasis, &startedAt, &digest, &recordedAt, &adoptedBy); err != nil {
 		return ports.SegmentCommissionAdoptionRecord{}, err
 	}
 	spec := domain.RehydrateSegmentCommissionAdoptionSpec{TenantID: tenant, StartedAt: startedAt}
@@ -95,12 +96,17 @@ func scanAdoption(tenant domain.TenantID, row pgx.Row) (ports.SegmentCommissionA
 	if err != nil {
 		return ports.SegmentCommissionAdoptionRecord{}, err
 	}
+	adopter, err := registrantFromColumn(adoptedBy)
+	if err != nil {
+		return ports.SegmentCommissionAdoptionRecord{}, err
+	}
 	return ports.SegmentCommissionAdoptionRecord{
 		Key:           ports.SegmentCommissionAdoptionKey{TenantID: tenant, Segment: spec.Segment},
 		ContentDigest: digest,
 		Adoption:      adoption,
 		RecordedAt:    recordedAt.UTC(),
 		Generation:    generation,
+		AdoptedBy:     adopter,
 	}, nil
 }
 
@@ -120,9 +126,9 @@ func (repository *SegmentCommissionAdoptions) Save(
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO transport_fulfillment.segment_commission_adoption
 			(tenant_id, segment_ref, generation, previous_generation,
-			 commission_id, provider_ref, start_basis, started_at, content_digest, recorded_at)
+			 commission_id, provider_ref, start_basis, started_at, content_digest, recorded_at, adopted_by)
 		 SELECT $1::text, $2::text, COALESCE(latest.generation, 0) + 1, latest.generation,
-		        $3::text, $4::text, $5::text, $6::timestamptz, $7::text, $8::timestamptz
+		        $3::text, $4::text, $5::text, $6::timestamptz, $7::text, $8::timestamptz, $10::text
 		   FROM (SELECT 1) AS anchor
 		   LEFT JOIN LATERAL (
 		        SELECT adoption.generation, NOT `+currentAdoptionCondition+` AS withdrawn
@@ -143,6 +149,7 @@ func (repository *SegmentCommissionAdoptions) Save(
 		record.ContentDigest,
 		record.RecordedAt.UTC(),
 		record.Generation,
+		optionalRegistrant(record.AdoptedBy),
 	)
 	if err != nil {
 		return ports.AdoptionSaveOutcomeInvalid, fmt.Errorf("save segment commission adoption: %w", err)

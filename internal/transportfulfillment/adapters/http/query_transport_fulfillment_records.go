@@ -537,8 +537,10 @@ func serveBookingRequests(
 				CancelledAt: optionalInstant(row.CancelledAt),
 				RecordedAt:  rfc3339(row.RecordedAt),
 			},
-			Standing: row.Standing,
-			Answers:  answers,
+			Standing:    row.Standing,
+			Answers:     answers,
+			SubmittedBy: row.SubmittedBy,
+			CancelledBy: row.CancelledBy,
 		}
 		if row.Current != nil {
 			current := bookingAnswerRowBody(row.Booking, *row.Current)
@@ -613,6 +615,10 @@ type bookingRequestRowBody struct {
 	Standing      string              `json:"standing"`
 	CurrentAnswer *bookingAnswerBody  `json:"currentAnswer,omitempty"`
 	Answers       []bookingAnswerBody `json:"answers"`
+	// SubmittedBy 与 CancelledBy 是提交、取消这次订舱的操作者（ADR-0303 复核记录），只由订舱册填：提交口与取消口的回执照 ADR-0187
+	// 决定四不回操作证据。没记下时整键缺席。
+	SubmittedBy string `json:"submittedBy,omitempty"`
+	CancelledBy string `json:"cancelledBy,omitempty"`
 }
 
 type bookingAnswerBounceListResponse struct {

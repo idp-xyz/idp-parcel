@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
-	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
 // 按派送待形成册批量重问的运营决定口（ADR-0230 决定四、五）：运营人员在管理台上把册上待形成的那几件交回派送发起执行器再问一次所有者。
@@ -22,14 +21,15 @@ type DeliveryDispatchReaskPayload struct {
 	Limit int    `json:"limit"`
 }
 
-func (payload DeliveryDispatchReaskPayload) Command(tenant domain.TenantID) (application.ReaskPendingDeliveryDispatchesCommand, error) {
-	if tenant.String() == "" {
+func (payload DeliveryDispatchReaskPayload) Command(operator OperatorIdentity) (application.ReaskPendingDeliveryDispatchesCommand, error) {
+	if operator.Tenant.String() == "" {
 		return application.ReaskPendingDeliveryDispatchesCommand{}, ErrOperatorIdentityMissing
 	}
 	return application.ReaskPendingDeliveryDispatchesCommand{
-		TenantID: tenant,
-		Scope:    application.ParseReaskScope(payload.Scope),
-		Limit:    payload.Limit,
+		TenantID:  operator.Tenant,
+		ReaskedBy: operator.Operator,
+		Scope:     application.ParseReaskScope(payload.Scope),
+		Limit:     payload.Limit,
 	}, nil
 }
 

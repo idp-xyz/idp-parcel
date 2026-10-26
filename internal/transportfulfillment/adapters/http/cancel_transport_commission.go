@@ -30,16 +30,16 @@ type TransportCommissionCancellationPayload struct {
 	CancelledAt string `json:"cancelledAt"`
 }
 
-// Command 把载荷连同信封给的租户翻成取消委托命令。时刻解不出是坏报文（400）；取不取消得了由编排答。
-func (payload TransportCommissionCancellationPayload) Command(tenant domain.TenantID) (application.CancelCommissionCommand, error) {
-	if tenant.String() == "" {
+// Command 把载荷连同信封给的身份（租户，与作出决定的操作者，ADR-0303 操作证据，载荷里不收）翻成取消委托命令。时刻解不出是坏报文（400）；取不取消得了由编排答。
+func (payload TransportCommissionCancellationPayload) Command(operator OperatorIdentity) (application.CancelCommissionCommand, error) {
+	if operator.Tenant.String() == "" {
 		return application.CancelCommissionCommand{}, ErrOperatorIdentityMissing
 	}
 	cancelledAt, err := parseOptionalInstant("cancelledAt", payload.CancelledAt)
 	if err != nil {
 		return application.CancelCommissionCommand{}, err
 	}
-	return application.CancelCommissionCommand{TenantID: tenant, Commission: payload.Commission, CancelledAt: cancelledAt}, nil
+	return application.CancelCommissionCommand{TenantID: operator.Tenant, CancelledBy: operator.Operator, Commission: payload.Commission, CancelledAt: cancelledAt}, nil
 }
 
 // NewCancelTransportCommissionEndpoint 交回取消委托的 HTTP 入口。

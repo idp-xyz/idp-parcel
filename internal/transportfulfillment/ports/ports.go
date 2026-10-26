@@ -261,6 +261,9 @@ type TransportCommissionRecord struct {
 	Commission    domain.TransportCommission
 	RecordedAt    time.Time
 	SubmittedBy   domain.RegistrantReference
+	// CancelledBy 是经运营决定口取消这份委托的操作者（ADR-0303 复核记录）：与 SubmittedBy 同一待遇，只进审计。取消那一次
+	// Replace 才写它；开始是段采用带出的转换，不是一位操作者的决定，Replace 开始时不碰它。可缺。
+	CancelledBy domain.RegistrantReference
 }
 
 type CommissionSaveOutcome uint8
@@ -286,11 +289,16 @@ type BookingKey struct {
 }
 
 // BookingRecord 是一次订舱申请越过提交边界留下的东西。
+//
+// SubmittedBy 与 CancelledBy 是经运营决定口提交、取消这次订舱的操作者（ADR-0303 复核记录）：操作证据，与登记时刻同属出处，
+// 不进内容摘要也不进订舱本体——重放与冲突只比 ContentDigest，取消的各道门读不到它们。可缺：规则生效之前落下的订舱没有。
 type BookingRecord struct {
 	Key           BookingKey
 	ContentDigest string
 	Booking       domain.BookingRequest
 	RecordedAt    time.Time
+	SubmittedBy   domain.RegistrantReference
+	CancelledBy   domain.RegistrantReference
 }
 
 type BookingSaveOutcome uint8
@@ -428,11 +436,17 @@ type CapacityPoolKey struct {
 
 // CapacityPoolRecord 是容量池及其全部预占的当前值。预占/释放/消耗以 Replace 换值
 // ——三量守恒在 CapacityPool 本体上。
+//
+// ReservedBy 与 ReleasedBy 是经运营决定口作出各份预占、各次释放的操作者（ADR-0303 复核记录），按引用挂在池旁边而不在池本体
+// 上：池按值换存，明细整组删了再插回，证据要随这条记录来回才不丢；领域的守恒与有效区间判断在结构上读不到它们。读回时池上
+// 有证据的才有键，缺键读作「没记下是谁」；编排新作一份预占或一次释放时只给那一份加键，已有的键原样带回去，不顶替。
 type CapacityPoolRecord struct {
 	Key           CapacityPoolKey
 	ContentDigest string
 	Pool          domain.CapacityPool
 	RecordedAt    time.Time
+	ReservedBy    map[domain.CapacityReservationReference]domain.RegistrantReference
+	ReleasedBy    map[domain.CapacityReleaseReference]domain.RegistrantReference
 }
 
 type PoolSaveOutcome uint8
