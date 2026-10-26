@@ -219,7 +219,8 @@ func TestAuthorizedDeliveryJudgment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
-	expired, err := effectiveDelivery(t, deliverer, deliveryOwner, deliveryAccount, "").Expire(deliveryTo)
+	expired, err := effectiveDelivery(t, deliverer, deliveryOwner, deliveryAccount, "").
+		Expire(commercialValue(t, domain.NewRelationshipBasisReference, "SYN-EXPIRY-01"), deliveryTo)
 	if err != nil {
 		t.Fatalf("expire: %v", err)
 	}

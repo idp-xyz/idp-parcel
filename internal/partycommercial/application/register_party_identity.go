@@ -10,10 +10,13 @@ import (
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 )
 
-// PartyRegistryOutcome 是身份/关系登记用例的结果代数：`已登记`与`已停用`是本次落库；
+// PartyRegistryOutcome 是身份/关系登记用例的结果代数：`已登记`、`已停用`与`已结束`是本次落库；
 // `重复`按同键同内容重放返回原结果；`内容冲突`要操作者对着册面修正、绝不覆盖
 // （ADR-0031）；`未受理`是输入被领域门或引用检查拒绝（含修订错位与悬空参与方），
-// 一个字节没写；`未找到`只出现在停用——要停用的身份从未登记。
+// 一个字节没写；`未找到`只出现在停用与关系结束——要停用的身份、要结束的关系从未登记。
+//
+// `已结束`是关系的撤销、到期或替代落了一笔终止修订（PartyRelationshipEndingHandler）。不借`已停用`：
+// 关系的终止走撤销/到期/替代三格，不叫停用；也不借`已登记`：登记方要分得清这一笔是立起还是结束了一段关系。
 type PartyRegistryOutcome uint8
 
 const (
@@ -24,6 +27,7 @@ const (
 	PartyIdentityContentConflict
 	PartyIdentityNotAccepted
 	PartyIdentityNotFound
+	PartyRelationshipEnded
 )
 
 func (outcome PartyRegistryOutcome) String() string {
@@ -40,6 +44,8 @@ func (outcome PartyRegistryOutcome) String() string {
 		return "NOT_ACCEPTED"
 	case PartyIdentityNotFound:
 		return "NOT_FOUND"
+	case PartyRelationshipEnded:
+		return "ENDED"
 	default:
 		return ""
 	}
@@ -119,7 +125,7 @@ type RegisterPartyRelationshipCommand struct {
 }
 
 // PartyIdentityKind 点名停用命令指向哪本身份册。封闭三值：关系不在内——关系的
-// 终止走撤销/到期/替代三格（domain.PartyRelationship），不叫停用。
+// 终止走撤销/到期/替代三格（PartyRelationshipEndingHandler），不叫停用。
 type PartyIdentityKind uint8
 
 const (
@@ -499,6 +505,15 @@ func (handler *RegisterPartyIdentityHandler) RegisterRelationship(
 	var latestRevision int
 	if found {
 		latestRevision = latest.Revision()
+		// 已撤销、已到期或已替代的关系不再收新修订：再登一笔已生效的修订，等于不经任何门把一次撤销悄悄翻回去，
+		// 而授权交付判断只读最新修订（票 ps-external-mark-relations/10），撤销就不再是即时、确定的了。要重新合作，
+		// 登一段新关系。判据同 checkRevisionSlot 里已停用身份那一格，拒因按关系的说法另写。
+		if _, ended := latest.Relationship().EndedAt(); ended && command.Revision > latestRevision {
+			return notAccepted(fmt.Errorf(
+				"关系 %s 已结束（%s），不再收新修订；要重新建立关系，登记一段新关系",
+				command.ID, latest.Relationship().Status(),
+			)), nil
+		}
 	}
 	if result, rejected := checkRevisionSlot(command.Revision, found, latestRevision, false); rejected {
 		return result, nil

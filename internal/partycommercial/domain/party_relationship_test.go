@@ -143,7 +143,7 @@ func TestEndingARelationshipStopsNewDecisionsButKeepsHistory(t *testing.T) {
 		"expired": {
 			apply: func(t *testing.T, relationship domain.PartyRelationship) (domain.PartyRelationship, error) {
 				t.Helper()
-				return relationship.Expire(relationshipTo)
+				return relationship.Expire(commercialValue(t, domain.NewRelationshipBasisReference, "expiry-1"), relationshipTo)
 			},
 			want: domain.RelationshipExpired,
 		},
