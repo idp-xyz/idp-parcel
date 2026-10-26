@@ -1,7 +1,7 @@
 # 147 已登过关务区域的租户漏登新节点区域时，跨区那一道静默不列
 
 Category: bug
-Status: ready-for-agent——2026-10-20 代决复核立（上线后尽快），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: in-progress——2026-10-25 会话 `tops-20`（Claude Code）认领，分支 `claude-dcg147`（worktree `idp-parcel-dcg147`）；新 ADR 取 0300。此前 ready-for-agent——2026-10-20 代决复核立（上线后尽快），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 R12；ADR-0206 越权风险点 12（ADR-0213 越权风险点 7 同根）
 
