@@ -105,6 +105,7 @@ func TestTheCurrentAnswerIsTheSettlingOneElseTheWaitlist(t *testing.T) {
 	waitlisted := answerOf(t, booking, "answer-waitlist", domain.BookingWaitlisted, at)
 	accepted := answerOf(t, booking, "answer-accepted", domain.BookingAccepted, at.Add(time.Hour))
 	refused := answerOf(t, booking, "answer-refused", domain.BookingRefused, at.Add(time.Hour))
+	sameTime := answerOf(t, booking, "answer-same-time", domain.BookingExpired, at)
 	otherSpec := domain.BookingRequestSpec{
 		TenantID:    booking.TenantID(),
 		Booking:     mustValue(t, domain.NewBookingReference, "booking-2"),
@@ -123,15 +124,16 @@ func TestTheCurrentAnswerIsTheSettlingOneElseTheWaitlist(t *testing.T) {
 		answers []domain.CarrierAcceptance
 		want    string
 	}{
-		"无答复":      {nil, ""},
-		"只有候补":     {[]domain.CarrierAcceptance{waitlisted}, "answer-waitlist"},
-		"候补加定局":    {[]domain.CarrierAcceptance{waitlisted, accepted}, "answer-accepted"},
-		"定局排在候补之前": {[]domain.CarrierAcceptance{refused, waitlisted}, "answer-refused"},
-		"只有定局（接受）": {[]domain.CarrierAcceptance{accepted}, "answer-accepted"},
-		"只有定局（拒绝）": {[]domain.CarrierAcceptance{refused}, "answer-refused"},
-		"与候补同刻的定局": {[]domain.CarrierAcceptance{waitlisted, answerOf(t, booking, "answer-same-time", domain.BookingExpired, at)}, "answer-same-time"},
-		"只有定局（撤回）": {[]domain.CarrierAcceptance{answerOf(t, booking, "answer-withdrawn", domain.BookingWithdrawn, at)}, "answer-withdrawn"},
-		"只有定局（失效）": {[]domain.CarrierAcceptance{answerOf(t, booking, "answer-expired", domain.BookingExpired, at)}, "answer-expired"},
+		"无答复":            {nil, ""},
+		"只有候补":           {[]domain.CarrierAcceptance{waitlisted}, "answer-waitlist"},
+		"候补加定局":          {[]domain.CarrierAcceptance{waitlisted, accepted}, "answer-accepted"},
+		"定局排在候补之前":       {[]domain.CarrierAcceptance{refused, waitlisted}, "answer-refused"},
+		"只有定局（接受）":       {[]domain.CarrierAcceptance{accepted}, "answer-accepted"},
+		"只有定局（拒绝）":       {[]domain.CarrierAcceptance{refused}, "answer-refused"},
+		"与候补同刻的定局":       {[]domain.CarrierAcceptance{waitlisted, sameTime}, "answer-same-time"},
+		"与候补同刻的定局排在候补之前": {[]domain.CarrierAcceptance{sameTime, waitlisted}, "answer-same-time"},
+		"只有定局（撤回）":       {[]domain.CarrierAcceptance{answerOf(t, booking, "answer-withdrawn", domain.BookingWithdrawn, at)}, "answer-withdrawn"},
+		"只有定局（失效）":       {[]domain.CarrierAcceptance{answerOf(t, booking, "answer-expired", domain.BookingExpired, at)}, "answer-expired"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			current, err := domain.CurrentCarrierAcceptance(testCase.answers)

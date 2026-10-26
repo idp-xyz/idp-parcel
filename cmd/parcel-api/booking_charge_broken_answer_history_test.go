@@ -10,7 +10,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
-// Covers: 票 demo-chain-gaps/177 写面的答法，生产装配真库面（S）——干线订舱被承运客户端接受之后，绕过答复编排往答复册直插一份
+// Covers: `AT-TF-207` 答复史那一支的生产装配真库面（S，票 demo-chain-gaps/177）——干线订舱被承运客户端接受之后，绕过答复编排往答复册直插一份
 // 答复时刻在接受之后的候补：定局早于候补，库上的约束拦不住，答复史却凑不成。这时登订舱费答 500 NO_ANSWER_FORMED，不按那份接受
 // 登、也不答未决，发生项与信封都不落；删掉那一行，同一请求照常答 201 REGISTERED——500 出自答复史，不出自别处的接线。
 func TestABookingChargeOnABrokenAnswerHistoryFormsNoAnswer(t *testing.T) {

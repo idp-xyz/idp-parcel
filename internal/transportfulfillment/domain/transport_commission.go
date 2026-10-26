@@ -585,8 +585,8 @@ func (acceptance CarrierAcceptance) AdmitsSuccessor(next CarrierAcceptance) bool
 }
 
 // CurrentCarrierAcceptance 从一次订舱名下的全部答复里选出当前那一份，交回它在 answers 里的位置，没有答复交 -1：有定局取
-// 定局，否则取候补。收费发生项读订舱的当前答复、查阅口读订舱状态词都经它，不各按答复值或排序另选一遍。answers 的次序不影响
-// 选法。
+// 定局，否则取候补。「当前那一份」只在这里定义：答复编排判后继、收费发生项读订舱的当前答复、查阅口读订舱状态词都经它，不各按
+// 答复值或排序另选一遍。answers 的次序不影响选法。
 //
 // 名下答复凑不成 ADR-0202「补记：票 24 落地时的补充裁定」那一种答复史——两份定局、两份候补、定局不是候补的合格后继
 // （AdmitsSuccessor：早于候补、在别的订舱上），或混进一份未成形的答复——答 ErrBookingAnswersInconsistent，不从中挑一份。这些

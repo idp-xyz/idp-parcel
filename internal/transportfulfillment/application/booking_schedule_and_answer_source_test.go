@@ -457,6 +457,51 @@ func TestAWaitlistedBookingSettlesOnce(t *testing.T) {
 	}
 }
 
+// Covers: `AT-TF-154` 坏答复史那一支，票 demo-chain-gaps/177 修订轮——订舱名下已有一份定局，又有一份绕过本编排直落、答复时刻在
+// 它之后的候补，名下答复凑不成一段答复史：新来的另一份答复上抛 domain.ErrBookingAnswersInconsistent（数据违约，500），不答冲突、
+// 不落、不记挡回；判后继之前的重放判照旧，那份定局原样重交仍答 EXISTING_ANSWER。
+func TestAnAnswerOnABrokenAnswerHistoryFormsNoAnswer(t *testing.T) {
+	fixture := newBookedFixture(t)
+	settled := answerBookingCommand(t, domain.BookingAccepted)
+	settled.Acceptance = "answer-settled"
+	if result, err := fixture.handler.AnswerBooking(context.Background(), settled); err != nil || result.Outcome() != application.BookingAnswered {
+		t.Fatalf("定局 = %q %v", result.Outcome(), err)
+	}
+	tenant, _ := domain.NewTenantID("tenant-1")
+	key := ports.BookingKey{TenantID: tenant, Booking: occurrenceValue(t, domain.NewBookingReference, "booking-1")}
+	late, err := domain.RehydrateCarrierAcceptance(domain.RehydrateCarrierAcceptanceSpec{
+		TenantID:   tenant,
+		Acceptance: occurrenceValue(t, domain.NewCarrierAcceptanceReference, "answer-late-waitlist"),
+		Booking:    key.Booking,
+		Outcome:    domain.BookingWaitlisted,
+		Basis:      occurrenceValue(t, domain.NewAcceptanceBasisReference, "basis-direct"),
+		DecidedAt:  settled.DecidedAt.Add(time.Minute),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved, err := fixture.answers.Save(context.Background(), ports.BookingAnswerRecord{Key: key, ContentDigest: "direct", Acceptance: late}); err != nil ||
+		saved != ports.BookingAnswerSaved {
+		t.Fatalf("直落定局之后的候补 = %d %v", saved, err)
+	}
+	saves := fixture.answers.saves
+
+	another := answerBookingCommand(t, domain.BookingRefused)
+	another.Acceptance = "answer-another"
+	another.DecidedAt = settled.DecidedAt.Add(time.Hour)
+	result, err := fixture.handler.AnswerBooking(context.Background(), another)
+	if !errors.Is(err, domain.ErrBookingAnswersInconsistent) {
+		t.Fatalf("坏答复史上的新答复 = %q %v，want 上抛 ErrBookingAnswersInconsistent", result.Outcome(), err)
+	}
+	if fixture.answers.saves != saves || fixture.answers.answersOf("booking-1") != 2 || fixture.bounces.writes != 0 {
+		t.Fatalf("坏答复史上落了答复或记了挡回：落 %d 次、册上 %d 份、挡回 %d 次",
+			fixture.answers.saves-saves, fixture.answers.answersOf("booking-1"), fixture.bounces.writes)
+	}
+	if replay, err := fixture.handler.AnswerBooking(context.Background(), settled); err != nil || replay.Outcome() != application.BookingAnswerExists {
+		t.Fatalf("定局原样重放 = %q %v，want EXISTING_ANSWER", replay.Outcome(), err)
+	}
+}
+
 // Covers: `AT-TF-153` 与恢复面——答复命令缺来源身份是装配违约（error）；订舱指名的委托读不回是数据违约（error），不答
 // 「订舱不存在」；订舱（连服务方）、答复各册读不动答未决、指名等谁。
 func TestAnAnswerRecoveryDiscipline(t *testing.T) {

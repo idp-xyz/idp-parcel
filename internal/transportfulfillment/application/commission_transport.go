@@ -542,7 +542,18 @@ func (handler *CommissionTransportHandler) AnswerBooking(
 	if err != nil {
 		return CommissionResult{outcome: CommissionNotAccepted}, nil
 	}
-	if head, answered := currentAnswer(answers); answered && !head.Acceptance.AdmitsSuccessor(acceptance) {
+	history := make([]domain.CarrierAcceptance, 0, len(answers))
+	for _, answer := range answers {
+		history = append(history, answer.Acceptance)
+	}
+	head, err := domain.CurrentCarrierAcceptance(history)
+	if err != nil {
+		// 名下答复凑不成一段答复史是绕过本编排落的行，同订舱在册而委托读不回，是数据违约：上抛、不落、不记挡回（订舱在册、
+		// 答复方也对）。不答冲突——冲突是承运方据以停止重发的业务结论，修数时若删掉的恰是直插的那一份，承运方的真答复就永远
+		// 丢了；答不成让它退避重发。
+		return CommissionResult{}, fmt.Errorf("answer booking %s: %w", bookingRef, err)
+	}
+	if head >= 0 && !history[head].AdmitsSuccessor(acceptance) {
 		// 已有定局，或这份不是候补的合格后继：应答不可覆盖，改约走撤回与新订舱。
 		return CommissionResult{outcome: BookingAnswerConflict}, nil
 	}
@@ -605,19 +616,6 @@ func answerWithAcceptance(answers []ports.BookingAnswerRecord, acceptance domain
 		}
 	}
 	return ports.BookingAnswerRecord{}, false
-}
-
-// currentAnswer 交这次订舱当前的那一份答复：有定局交定局，没有定局交最后一份候补。
-func currentAnswer(answers []ports.BookingAnswerRecord) (ports.BookingAnswerRecord, bool) {
-	for _, stored := range answers {
-		if stored.Acceptance.Settles() {
-			return stored, true
-		}
-	}
-	if len(answers) == 0 {
-		return ports.BookingAnswerRecord{}, false
-	}
-	return answers[len(answers)-1], true
 }
 
 // answerFromStoredAnswer 按同一答复标识的已存答复作答：同内容是重放，异内容是冲突（不覆盖），认不出形状答未决。

@@ -310,7 +310,7 @@ func TestABookingOccurrenceNeedsASettledAcceptanceOverCommissionMembers(t *testi
 	assertNothingWritten(t, rig)
 }
 
-// Covers: 票 demo-chain-gaps/177 写面的答法——答复读口说订舱名下的答复凑不成一段答复史（包着
+// Covers: `AT-TF-207` 答复史那一支（票 demo-chain-gaps/177）——答复读口说订舱名下的答复凑不成一段答复史（包着
 // domain.ErrBookingAnswersInconsistent），订舱费与取消费都上抛、不形成答案，不答未决（重试不会变，ADR-0029），也不按哪一份
 // 登；不问协议、不写。同一个读口只是读不动时照旧答未决，两格的续办不同。
 func TestABrokenAnswerHistoryFormsNoChargeAnswer(t *testing.T) {
