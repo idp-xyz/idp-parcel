@@ -1,7 +1,7 @@
 # 01 TF 履约尝试的逐对象结果没有「待确认」一格
 
 Category: bug
-Status: in-progress——修订轮完工待第二轮评审与进 main，分支 claude-code01（基于 main `fb8ee7096`）。此前 ready-for-agent——R2（上线后尽快）：场外揽收与派送尝试已在生产命令面上，「只有车辆到场和司机扫描」「签收与地址来源冲突」这类来源第一周就会遇到；后果是执行方只能在四个已定结果里硬选一个，或者不登这次尝试，结果被说成确定，或这次尝试不留痕。可靠绕法：来源不足时先不登尝试，补齐证据后再登。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
+Status: in-progress——收尾轮完工待第三轮评审与进 main，分支 claude-code01（基于 main `4f29f861e`）。此前 ready-for-agent——R2（上线后尽快）：场外揽收与派送尝试已在生产命令面上，「只有车辆到场和司机扫描」「签收与地址来源冲突」这类来源第一周就会遇到；后果是执行方只能在四个已定结果里硬选一个，或者不登这次尝试，结果被说成确定，或这次尝试不留痕。可靠绕法：来源不足时先不登尝试，补齐证据后再登。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
 Blocked by: 无
 出处：[audit/tf.md](../audit/tf.md) M16（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，现象仍在）。
 
@@ -50,7 +50,7 @@ S–M：两个领域枚举、汇总派生、命令面词表、库表 CHECK（若
 3. 揽收另立「执行方拒收」`domain.ExecutorRefused`（`EXECUTOR_REFUSED`），见代决 1。
 - 编排：`formPickupObjectResult`、`formDeliveryObjectResult` 按结果分走两条构造器；确定结果带来源、待确认或拒收带控制依据都答`来源未受理`。
 - 传输面：`/transport-fulfillment/offsite-pickup-attempts` 与 `/transport-fulfillment/delivery-attempts` 逐对象加可缺的 `source`，词表 `attemptObjectOutcomeFromWord`、`deliveryObjectOutcomeFromWord` 各加新词（仍取常量自己的 `String()`），答复逐对象透出 `source`。没给 `source` 的旧载荷与旧答复形状不变。
-- 摘要（修订轮改写，评审 B1）：`CanonicalizeOffsitePickupPayload` 按内容取最低一版——至少一件对象带来源时写新号 `TFC-3`（常量 `pickupAttemptSourceCanonicalizationVersion`），每个对象行都写 `source`、没有的写 `null`；一件都不带时仍写 `TFC-1`、没有 `source` 键，与来源进文法之前逐字节同形。揽收执行口的比对改走新的 `domain.CompareStoredPickupAttemptDigest`：在 `CompareStoredDigest` 之上认 `TFC-3`，仿 `CompareStoredHandoverDigest`。派送尝试的内容比对锚 `deliveryAttemptContent` 加来源一格（两侧现算，无已存摘要）。`unversionedPickupContentDigest` 函数体不动，头注写明来源为什么不在旧形里。
+- 摘要（修订轮改写，评审 B1）：`CanonicalizeOffsitePickupPayload` 按内容取最低一版——至少一件对象带来源时写新号 `TFC-3`（常量 `pickupAttemptSourceCanonicalizationVersion`），每个对象行都写 `source`、没有的写 `null`；一件都不带时仍写 `TFC-1`、没有 `source` 键，与来源进文法之前逐字节同形。揽收执行口的比对改走新的 `domain.CompareStoredPickupAttemptDigest`：在 `CompareStoredDigest` 之上认 `TFC-3`；确定结果带来源的提交在编排入口、内容比对之前就答`来源未受理`（第二轮评审 B2）。派送尝试的内容比对锚 `deliveryAttemptContent` 加来源一格（两侧现算，无已存摘要）。`unversionedPickupContentDigest` 函数体不动，头注写明来源为什么不在旧形里。
 - 库：迁移 `transport_fulfillment/0050_attempt_object_result_pending_confirmation_and_executor_refusal.sql`——两张结果表加 `source_ref`、放开封闭集、加「来源只属待确认」CHECK，揽收 shape CHECK 改写为「揽收到手不带依据，其余必带」，派送的依据 CHECK 本就是这一形、不动。读回 `rebuildPickupResult`、`rebuildDeliveryResult` 按结果走两条构造器，确定结果读回来源即报错（库面不一致暴露，不悄悄带出去）。存量行共存，直接校验、不 `NOT VALID`。
 - 文档：TF CONTEXT「揽收、派送与交付」补两条规则句（待确认的内容、去向与不改写；揽收拒收与包装不合格的分界），「运输收费发生项与成本来源」里失败尝试的尝试费补「（含拒收）」；UC-TF-002、UC-TF-006 状态行与「给开发的交接」改为同一次上门以更正确定那一条指 code/90，UC-TF-002 另加一行「拒收的责任归属不另存」待 TF owner 裁（修订轮 N3），UC-TF-006 结果契约「尝试待确认」写明交付登记单答的那一格（修订轮 N2）。
 - 没动：`cmd/parcel-api` 的 `endpoints.go`、`main.go`、`endpoints_test.go`、`routes.go`、各 `assemble_*.go`，`cmd/parcel-dispatch` 全部（ADR-0222）；admin-web（不读尝试结果）。无新写者（两只写口 `PickupAttempts.Save`、`DeliveryAttempts.Save` 是既有的，事务外拒跑的负面证据照旧在 `TestPickupWritesRefuseToRunOutsideATransaction`、`TestDeliveryAttemptWritesRefuseToRunOutsideATransaction`），无新锁，无新路由，无已接受 ADR 正文或 Status 改动。
@@ -81,13 +81,13 @@ S–M：两个领域枚举、汇总派生、命令面词表、库表 CHECK（若
 5. **失败尝试费对待确认答`未受理`另带细格 `ATTEMPT_RESULT_PENDING_CONFIRMATION`，不并进 `ATTEMPT_DID_NOT_FAIL`。** 后者断言「这次没有失败」，对待确认就是替缺口默认了成功；续办也不同——那一格放弃，这一格等确定之后再登（ADR-0029 按恢复动作分格）。仍是`未受理`（ADR-0207 决定一「不是失败，答未受理」照用），不进任何未决格（ADR-0029：确定性拒绝不是读不动）。
 6. **（修订轮改写，评审 N2，协调方裁）交付登记对待确认单立一格 `DELIVERY_RESULT_PENDING_CONFIRMATION`（200），不并进 `NOT_EFFECTIVE`。** 两格都登不出有效交付（CONTEXT「证据不足……不构成有效交付」），但续办不同：`未生效`说这次没交成、改约再派；待确认说交没交成还不知道——签收与地址冲突时那件对象可能已在收件人手里，改约再派可能是错的动作，续办是先把那一格确定下来（ADR-0029 恢复动作不同必须分）。与失败尝试费单立细格同一把尺。现在就分，是因为 code/90 之后再拆就是改已发布答复的取值。领域 `ErrDeliveryResultPendingConfirmation` 包着 `ErrNotAnEffectiveDelivery`：「不是有效交付」照旧成立，编排先认待确认那一种。初稿并进 `NOT_EFFECTIVE`，理由是今天两者续办相同，评审指出那一读漏了对象可能已交到的情形。
 7. **构造器分两条，不改既有签名。** 待确认的构造器签名就要来源与缺口，没有来源的待确认构造不出来；既有构造器拒待确认。既有签名的调用点（含 PS、VE 的测试夹具）一处不动。
-8. **（修订轮改写，评审 B1）线格式只加可缺键；揽收摘要带来源换号 `TFC-3`，不带来源的照旧 `TFC-1`。** 线格式：`source` 可缺、答复里 omitempty，旧客户端照旧。摘要：揽收执行口存摘要（`pickup_attempt.content_digest`），在已接 `TFC-1` 的这一面加键（可缺键也算）是形状变化，照换号（ADR-0267 决定一）；按内容取最低一版（ADR-0209 决定三）——一件都不带来源的文档仍写 `TFC-1`、逐字节不变，已存摘要照旧对得上；带来源的写 `TFC-3`，不认它的构建对新文档答「认不出的形状」而不是丢掉来源算错摘要。号取 TF 前缀下一个：`TFC-2` 已是交接节点那一形（`handoverNodeCanonicalizationVersion`），各面的比对只认自己那几形，揽收执行口不认 `TFC-2`。比对仿交接：已存 `TFC-3` 与本次逐串比；本次带来源而已存是 `TFC-1` 或无版本那一形答冲突（旧形里来源没有写法，丢掉来源认作重放就是吞掉内容）。初稿同号加键、只在代码头注写理由，违反 ADR-0267 决定三（同号改形要另立记录写明前提）。
+8. **（修订轮改写，评审 B1）线格式只加可缺键；揽收摘要带来源换号 `TFC-3`，不带来源的照旧 `TFC-1`。** 线格式：`source` 可缺、答复里 omitempty，旧客户端照旧。摘要：揽收执行口存摘要（`pickup_attempt.content_digest`），在已接 `TFC-1` 的这一面加键（可缺键也算）是形状变化，照换号（ADR-0267 决定一）；按内容取最低一版（ADR-0209 决定三）——一件都不带来源的文档仍写 `TFC-1`、逐字节不变，已存摘要照旧对得上；带来源的写 `TFC-3`，不认它的构建对新文档答「认不出的形状」而不是丢掉来源算错摘要。号取 TF 前缀下一个：`TFC-2` 已是交接节点那一形（`handoverNodeCanonicalizationVersion`），各面的比对只认自己那几形，揽收执行口不认 `TFC-2`。比对：已存 `TFC-3` 与本次逐串比；本次带来源而已存是 `TFC-1` 或无版本那一形直接答冲突——这与 ADR-0014「按已存摘要的形状重算本次命令再比」同答：带来源的命令到得了比对口就必含待确认（确定结果带来源在编排入口、比对之前已答未受理，第二轮评审 B2），按旧形重算时待确认那一行的结果取值也在里面，而旧形写下的记录里不可能有待确认，重算出的串不可能与已存的相同。TFC-3 的出处写在本条与常量 `pickupAttemptSourceCanonicalizationVersion` 的头注。初稿同号加键、只在代码头注写理由，违反 ADR-0267 决定三（同号改形要另立记录写明前提）。
 9. **（修订轮改准，评审 N5）揽收结果枚举的新值只往末尾加**：取值整数进了揽收的无版本旧摘要（`unversionedPickupContentDigest`），挪位会让旧记录的重放认不出自己。派送结果没有这一层——库与内容比对都按词，整数不出进程，新值放在末尾只为与揽收那一侧同形。
 10. **迁移号 0050**：开工时 `ls migrations/transport_fulfillment/` 最大 0049，在途分支（`git branch -a`，去 `merged/`、`salvage/`）没有占 005x 的 TF 迁移；重放到 `061156bcc` 后仍是 0049 之后的下一个。
 
 三类：机制本票做完（两格结果、来源与缺口、不转移控制、分类判据、库面与线格式）；产品策略无；租户取值无（哪些来源够得上确定结果仍由既有证据规则判，不设默认）。证据层级 `S`。
 
-已接受 ADR：未改任何口径。ADR-0263（交接待确认保持此前控制）与本票同向、管的是交接不是尝试结果；ADR-0264、ADR-0265 与本票无关。揽收摘要照 ADR-0267 决定一换号、照 ADR-0209 决定三按内容取最低一版（修订轮，评审 B1），没有同号改形，不需要另立记录；ADR-0014（已存摘要不改写）由此照用。ADR-0207 决定一照用（见代决 5），ADR-0029（代决 5、6）、ADR-0022（新落一次尝试 201、其余 200；交付登记新格 200）、ADR-0222（未动装配文件）照用。
+已接受 ADR：未改任何口径。ADR-0263（交接待确认保持此前控制）与本票同向、管的是交接不是尝试结果；ADR-0264、ADR-0265 与本票无关。揽收摘要照 ADR-0267 决定一换号、照 ADR-0209 决定三按内容取最低一版（修订轮，评审 B1），没有同号改形，不需要另立记录。ADR-0014 照用、不构成部分停用（第二轮评审 B2 改写本句）：已存摘要不改写；比对口对「本次带来源、已存是旧形」答冲突，与 ADR-0014 决定的「按已存摘要的形状重算本次命令再比」同答，理由见代决 8——带来源必含待确认、旧形记录里不可能有待确认；也不借用 ADR-0213 只为交接首登一口登记的那一次部分停用。初稿（修订轮）的比对口理由写成「同交接」，第二轮评审指出那是借用另一口的停用，且确定结果带来源的畸形命令能走到比对口、被答成冲突——ADR-0014 说版本不同不是冲突；入口前移之后那条路不再存在。ADR-0207 决定一照用（见代决 5），ADR-0029（代决 5、6）、ADR-0022（新落一次尝试 201、其余 200；交付登记新格 200）、ADR-0222（未动装配文件）照用。
 
 ### 越权风险点
 
@@ -98,7 +98,7 @@ S–M：两个领域枚举、汇总派生、命令面词表、库表 CHECK（若
 5. **失败尝试费多一个未受理细格**（TF owner；SA 不消费这一格）。登记方见到 `ATTEMPT_RESULT_PENDING_CONFIRMATION` 要等确定之后再登，而今天同一次上门确定不了（风险点 4）——实际续办是等新尝试，新尝试是另一个依据。
 6. **揽收拒收计入失败尝试费事实依据**（TF owner，结算会签为宜）。协议若只对客户原因的失败计费，拒收原因归谁由结算按依据判（ADR-0098 的边界）；本票不在 TF 侧替它分。
 7. **（修订轮）交付登记答复多一个词 `DELIVERY_RESULT_PENDING_CONFIRMATION`**（TF owner；一线客户端）。不认识它的设备照 ADR-0022 读作已形成的答案、不自动重发，交人；首发前没有真实一线设备。
-8. **（修订轮）拒收的责任归属不另存**（TF owner，评审 N3）。UC-TF-002 结果契约「本次对象被拒收」要保存责任方；今天只存执行方（随尝试）与原因证据，责任归谁没有一格。交接表留一行待 TF owner 裁，不立票。
+8. **（修订轮）拒收的责任归属不另存**（TF owner，评审 N3）。UC-TF-002 结果契约「本次对象被拒收」要保存责任方；今天只存执行方（随尝试）与原因证据，责任归谁没有一格。交接表留一行，去处是票 [code/91](./91-an-executor-refusal-records-no-responsibility-attribution.md)（第二轮评审 N-a：初稿写「待 TF owner 裁、不立票」，全仓独此一处不指票不指 ADR，进 main 之后无人追）。
 
 ### AT
 
@@ -134,3 +134,19 @@ S–M：两个领域枚举、汇总派生、命令面词表、库表 CHECK（若
 - `TMPDIR=… scripts/test-full.sh ./internal/transportfulfillment/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./cmd/parcel-transport-register/... ./internal/architecture/... ./migrations/...` 加 `go list -test` 算出的 TF 反向依赖（任一 `internal/transportfulfillment/` 包或 `migrations` 的反向依赖），对修订轮 tip 跑：重放到 `fb8ee7096` 前后各一次，都是 65 个包 ok、2 个无测试文件，退出码 0。
 - 新改用例（本轮加的比对口表测，与 `TestTheOtherDeliveryNodeStopsAreNamedAndRegister` 一起）共二十二个顶层测试 `-count=3`（真库，`-v` 核过无 SKIP、无 FAIL），重放前后各一次：都是 66 次 PASS，退出码 0。
 - 迁移 0050 本轮未动，未重灌种子。
+
+### 第二轮评审与收尾轮
+
+第二轮评审（协调方转述）：B1、N1–N5 都已落实；余一条阻断 B2、两条 N 与一条可选。收尾轮先 `git fetch -q origin` 再重放到 `origin/main` `4f29f861e`（AT 盘点文末追记与 demo-chain-gaps/134 那段冲突，两段都留、main 那段在前），新提交、不改写旧提交。
+
+- **B2 揽收比对口借了交接那一口的停用（阻断，协调方裁走 (a)、不立记录）。** 评审的探针：同 `sourceId` 先登 `CUSTOMER_ABSENT`（存 TFC-1），再原样重交、只给这一行带 `source`，答 `SOURCE_CONFLICT`；换新 `sourceId` 答 `SOURCE_NOT_ACCEPTED`——同一种畸形命令两种答法，前一种是按版本不同判了冲突，ADR-0014 不许。改法：`PerformOffsitePickupHandler.Handle` 入口先判 `determinateResultCarriesSource`，确定结果带来源在内容比对之前答 `SOURCE_NOT_ACCEPTED`（与新键同答，ADR-0029 恢复动作是改请求）；`formPickupObjectResult` 里那道判挪走，头注写明入口已拒。于是到得了 `CompareStoredPickupAttemptDigest` 的带来源命令必含待确认，它对旧形答冲突与按旧形重算同答，头注改写为这条等价理由，删去「理由同 CompareStoredHandoverDigest」与那句不成立的「同一来源身份换成带来源的待确认就会被认作重放」。派送一侧不用动：`RecordDeliveryAttemptHandler` 本就在读册比对之前形成逐对象结果，确定结果带来源先答未受理。补编排用例 `TestADeterminateResultCarryingASourceIsNotAcceptedBeforeTheContentComparison`（在册 TFC-1、同来源重交确定结果带来源 → 未受理、原记录不动、不签版本不交意图），先跑红（答 `SOURCE_CONFLICT`，即评审探针）后绿；比对口表测「TFC-2」那一格的 current 改成揽收口产得出的 TFC-1。票面代决 8、「做了什么」摘要一条与「已接受 ADR」那句照实改写：ADR-0014 照用、不构成部分停用，也不借 ADR-0213 那一次停用；TFC-3 的出处写在代决 8 与常量头注。
+- **N-a 拒收责任归属的去处不指票。** 立票 [code/91](./91-an-executor-refusal-records-no-responsibility-attribution.md)（needs-triage，立号前 ls 核过 91 空），UC-TF-002 交接表那一行去处改链到它，越权风险点 8 同改。
+- **N-b code/90 两表主键写不准。** 证据里分开写：`pickup_attempt_result` 主键 `(tenant_id, source_id, object_ref)`、`delivery_attempt_result` 主键 `(tenant_id, attempt_ref, object_ref)`；修法第 1 条点出版本链挂哪个键随之定（揽收按来源身份落，同一尝试身份对几份提交今天没有约束）。
+- **可选（做了）** UC-TF-006 结果契约「尝试待确认」：单答一格与续办挪到业务含义一列，禁止行为一列只留「不按外部最后状态码裁决；不形成有效交付，不并进`未生效`」。
+
+收尾轮验证：
+
+- 变异 RB2「拒收挪回比对之后」（入口那道判删去、放回 `formPickupObjectResult`）——新编排用例红；从 `scratchpad/c01/` 备份复原、`cmp` 核过。
+- `go build ./...`、`go vet ./...` 干净，`gofmt -l internal cmd` 无输出。
+- `TMPDIR=… scripts/test-full.sh ./internal/transportfulfillment/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./internal/architecture/...`：15 个包 ok、1 个无测试文件，退出码 0。
+- 新改用例六个顶层测试 `-count=3`（真库，`-v` 核过无 SKIP、无 FAIL）：18 次 PASS，退出码 0。
