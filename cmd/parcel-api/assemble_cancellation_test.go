@@ -38,7 +38,7 @@ func TestTheWiredCancellationAnswersHonestlyAgainstARealDatabase(t *testing.T) {
 		t.Fatalf("指名不存在的委托：err = %v, want ErrShipmentRequestNotVisible——委托查无是调用方的错，不是未决", err)
 	}
 
-	seedSubmittedShipmentRequest(t, db, identity)
+	seedAcceptedShipmentRequest(t, db, identity)
 
 	command := cancelParcelCommand(t, identity)
 	undecided, err := cancellation.Handle(t.Context(), command)
@@ -85,6 +85,7 @@ func cancelParcelCommand(t *testing.T, identity domain.SourceIdentity) shipmenta
 	return shipmentapp.CancelParcelCommand{
 		Identity:          identity,
 		ShipmentRequestID: mustValue(t, domain.NewShipmentRequestID, "SYN-REQUEST-1"),
+		CustomerAccount:   identity.CustomerAccountID(),
 		Parcel:            mustValue(t, domain.NewDeclaredParcelID, "SYN-PARCEL-1"),
 		Requester:         mustValue(t, domain.NewCancellationRequesterReference, "SYN-CUSTOMER-1"),
 		Reason:            mustValue(t, domain.NewCancellationReasonReference, "SYN-CUSTOMER-CHANGED-MIND"),

@@ -28,6 +28,12 @@ const (
 	ParcelFinalExistingResult
 	FinalSourceConflict
 	FinalRequestNotAccepted
+	// FinalRequestEnded：目标委托已被撤回或已被拒绝，它的包裹没有服务，也就没有终局可形成。确定的业务答复，不落采用
+	// 记录、不交发布意图、不进未决。
+	FinalRequestEnded
+	// FinalRequestAwaitingDecision：目标委托只是已提交，还没被接受；终局只对已接受的委托形成。同样不落记录——委托之后被
+	// 接受时，同一来源再到即按接受后的判断走，不被一份早先的不采用记录占住。
+	FinalRequestAwaitingDecision
 )
 
 func (outcome ParcelFinalAdoptionOutcome) String() string {
@@ -46,6 +52,10 @@ func (outcome ParcelFinalAdoptionOutcome) String() string {
 		return "SOURCE_CONFLICT"
 	case FinalRequestNotAccepted:
 		return "REQUEST_NOT_ACCEPTED"
+	case FinalRequestEnded:
+		return "REQUEST_ENDED"
+	case FinalRequestAwaitingDecision:
+		return "REQUEST_AWAITING_DECISION"
 	default:
 		return ""
 	}
@@ -158,9 +168,9 @@ func NewFormParcelFinalHandler(deps FormParcelFinalDeps) *FormParcelFinalHandler
 }
 
 // Handle 把一份责任结果推进到终局采用判断：受理（结果联合构造期拦）→ 委托与成员核验
-// （统一不可见）→ 按包裹排队 → 幂等/冲突 → 既有终局分派（已成立的取消不采用、同源新版本
-// 重派生、异源不采用）→ 规则（未配置即未决，不默认有效交付即终局）→ 提交与发布意图 →
-// 委托完成派生。来源事实全程只读。
+// （统一不可见）→ 按包裹排队 → 委托须已接受（撤回、拒绝、只是已提交各答一个确定格）→ 幂等/冲突 →
+// 既有终局分派（已成立的取消不采用、同源新版本重派生、异源不采用）→ 规则（未配置即未决，
+// 不默认有效交付即终局）→ 提交与发布意图 → 委托完成派生。来源事实全程只读。
 func (handler *FormParcelFinalHandler) Handle(
 	ctx context.Context,
 	command FormParcelFinalCommand,
@@ -194,6 +204,18 @@ func (handler *FormParcelFinalHandler) Handle(
 	if handler.deps.Cancellations != nil &&
 		!lockCancellationBoundary(ctx, handler.deps.BoundaryLock, key.TenantID, key.Parcel) {
 		return handler.undecided(command, outcome, FinalStoreUnavailable), nil
+	}
+
+	// 终局只为已接受的委托形成。闸门只看已取回的委托状态，不依赖取消机制是否装配（锁与取消读才随 Cancellations 装配）。
+	// 委托只会从已提交单向转到已接受、已拒绝、已撤回，后三者是终态，所以判在锁前锁后答案一样，不另加锁。被拦时不落
+	// 采用记录、不交意图：已提交的委托之后会被接受，一份早先的不采用记录会占住同一来源。
+	switch gate, err := gateRequestLifecycle(request.State()); {
+	case err != nil:
+		return FormParcelFinalResult{}, fmt.Errorf("form parcel final: %w", err)
+	case gate == requestLifecycleEnded:
+		return FormParcelFinalResult{outcome: FinalRequestEnded}, nil
+	case gate == requestLifecycleAwaitingDecision:
+		return FormParcelFinalResult{outcome: FinalRequestAwaitingDecision}, nil
 	}
 	existing, found, err := handler.deps.Finals.FindByKey(ctx, key)
 	if err != nil {

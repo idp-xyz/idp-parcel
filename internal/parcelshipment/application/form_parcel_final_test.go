@@ -106,6 +106,7 @@ func (double *finalIdentityDouble) NextFinalOutcomeVersionID(
 type finalFixture struct {
 	handler       *application.FormParcelFinalHandler
 	deps          application.FormParcelFinalDeps
+	requests      *shipmentRequestRepositoryDouble
 	rules         *finalRuleDouble
 	finals        *finalStoreDouble
 	cancellations *cancellationViewDouble
@@ -127,6 +128,7 @@ func newFinalFixture(t *testing.T) *finalFixture {
 	}
 	requests.records[sourceIdentity(t, "tenant-1", "customer-1", "source-a", "key-1")] = acceptedRequest(t)
 	fixture := &finalFixture{
+		requests: requests,
 		rules: &finalRuleDouble{
 			judgment: ports.FinalRuleJudgment{
 				Satisfied:   true,

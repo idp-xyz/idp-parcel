@@ -138,6 +138,7 @@ func (rig *boundaryRig) cancel(t *testing.T, gated bool, into *application.Cance
 	command := application.CancelParcelCommand{
 		Identity:          rig.identity,
 		ShipmentRequestID: mustBuild(t, domain.NewShipmentRequestID, "request-1"),
+		CustomerAccount:   rig.identity.CustomerAccountID(),
 		Parcel:            rig.parcel,
 		Requester:         mustBuild(t, domain.NewCancellationRequesterReference, "SYN-CUSTOMER-01"),
 		Reason:            mustBuild(t, domain.NewCancellationReasonReference, "SYN-CHANGED-MIND"),

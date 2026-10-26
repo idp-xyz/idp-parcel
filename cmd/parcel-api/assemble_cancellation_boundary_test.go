@@ -54,7 +54,7 @@ func newBoundaryCancellation(t *testing.T) (*bentopg.DB, *pgxpool.Pool, shipment
 		t.Fatalf("装配取消编排：%v", err)
 	}
 	identity := cancellationSeedIdentity(t, "SYN-SUBMIT-KEY-1")
-	seedSubmittedShipmentRequest(t, db, identity)
+	seedAcceptedShipmentRequest(t, db, identity)
 	return db, pool, cancellation, identity
 }
 

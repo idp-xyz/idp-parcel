@@ -112,6 +112,7 @@ func (double *carrierPickupBoundaryDouble) FindCurrentCarrierPickup(
 type cancelFixture struct {
 	handler       *application.CancelParcelHandler
 	deps          application.CancelParcelDeps
+	requests      *shipmentRequestRepositoryDouble
 	lock          *boundaryLockDouble
 	authority     *cancellationAuthorityDouble
 	adoptions     *adoptionStoreDouble
@@ -130,6 +131,7 @@ func newCancelFixture(t *testing.T) *cancelFixture {
 	}
 	requests.records[sourceIdentity(t, "tenant-1", "customer-1", "source-a", "key-1")] = acceptedRequest(t)
 	fixture := &cancelFixture{
+		requests: requests,
 		authority: &cancellationAuthorityDouble{
 			judgment:   ports.CancellationAuthorityJudgment{Granted: true, Basis: mustValue(t, domain.NewCheckReason, "CANCEL-RULE/PC-17")},
 			configured: true,
@@ -359,6 +361,9 @@ func TestTheCancellationOutcomeAndReasonSetsAreClosed(t *testing.T) {
 		application.CancellationConflict:           "REQUEST_CONFLICT",
 		application.CancellationNotAccepted:        "REQUEST_NOT_ACCEPTED",
 		application.CancellationFinalOutcomeStands: "FINAL_OUTCOME_STANDS",
+
+		application.CancellationRequestEnded:            "REQUEST_ENDED",
+		application.CancellationRequestAwaitingDecision: "REQUEST_AWAITING_DECISION",
 	}
 	for outcome, want := range outcomes {
 		if outcome.String() != want {
@@ -394,6 +399,7 @@ func cancelCommand(t *testing.T, parcel string) application.CancelParcelCommand 
 	return application.CancelParcelCommand{
 		Identity:          sourceIdentity(t, "tenant-1", "customer-1", "source-a", "key-1"),
 		ShipmentRequestID: mustValue(t, domain.NewShipmentRequestID, "request-1"),
+		CustomerAccount:   mustValue(t, domain.NewCustomerAccountID, "customer-1"),
 		Parcel:            mustValue(t, domain.NewDeclaredParcelID, parcel),
 		Requester:         mustValue(t, domain.NewCancellationRequesterReference, "customer-1"),
 		Reason:            mustValue(t, domain.NewCancellationReasonReference, "CUSTOMER_CHANGED_MIND"),

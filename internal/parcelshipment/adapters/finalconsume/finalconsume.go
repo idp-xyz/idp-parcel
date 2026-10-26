@@ -34,8 +34,10 @@ var (
 // Consumption 把终局编排的封闭结果译成消费门的两格：nil 入账、error 回滚。
 //
 // FINAL_FORMED / FINAL_REDERIVED / EXISTING_RESULT / SOURCE_NOT_ADOPTED /
-// SOURCE_CONFLICT / REQUEST_NOT_ACCEPTED 是业务终局（含负向），重试不会让另一份规则
-// 或另一份委托长出来，入账收工。
+// SOURCE_CONFLICT / REQUEST_NOT_ACCEPTED / REQUEST_ENDED / REQUEST_AWAITING_DECISION
+// 是业务终局（含负向），重试不会让另一份规则或另一份委托长出来，入账收工。后两格是委托
+// 生命周期闸门的确定答复：生产上终局来源只经当前已接受委托的反查到达，闸门是兜底；
+// 已提交的委托之后被接受时，同一来源由上游重新交来，被拦这一次没有留下任何记录。
 //
 // FINAL_UNDECIDED 含规则未配置与规则未满足（FINAL_RULE_NOT_SATISFIED）。后者是「此
 // 产品声明缺这一行」，编排保持未决等其他责任结果，禁止折成 SOURCE_NOT_ADOPTED。
@@ -51,7 +53,9 @@ func Consumption(result psapplication.FormParcelFinalResult) error {
 		psapplication.ParcelFinalExistingResult,
 		psapplication.FinalSourceNotAdopted,
 		psapplication.FinalSourceConflict,
-		psapplication.FinalRequestNotAccepted:
+		psapplication.FinalRequestNotAccepted,
+		psapplication.FinalRequestEnded,
+		psapplication.FinalRequestAwaitingDecision:
 		return nil
 	case psapplication.ParcelFinalUndecided:
 		return fmt.Errorf("%w: %s", ErrFinalUndecided, result.UndecidedReason())

@@ -34,6 +34,12 @@ const (
 	// 说的是包裹本身已经终局，与请求是谁无关。不落记录：它说的是此刻在册的终局；终局失效后重放，
 	// 按失效后的边界重判。
 	CancellationFinalOutcomeStands
+	// CancellationRequestEnded：目标委托已被撤回或已被拒绝，没有服务可取消。它是确定的业务答复，客户无事可做；
+	// 不落记录，不进未决。
+	CancellationRequestEnded
+	// CancellationRequestAwaitingDecision：目标委托只是已提交、还没被接受，包裹取消只对已接受的委托开放；客户要停掉
+	// 它走撤回。不落记录，不进未决——委托之后被接受时重发同一请求即按接受后的边界判。
+	CancellationRequestAwaitingDecision
 )
 
 func (outcome CancelParcelOutcome) String() string {
@@ -54,6 +60,10 @@ func (outcome CancelParcelOutcome) String() string {
 		return "REQUEST_NOT_ACCEPTED"
 	case CancellationFinalOutcomeStands:
 		return "FINAL_OUTCOME_STANDS"
+	case CancellationRequestEnded:
+		return "REQUEST_ENDED"
+	case CancellationRequestAwaitingDecision:
+		return "REQUEST_AWAITING_DECISION"
 	default:
 		return ""
 	}
@@ -112,10 +122,14 @@ type CancellationIdentityFactory interface {
 type CancelParcelCommand struct {
 	Identity          domain.SourceIdentity
 	ShipmentRequestID domain.ShipmentRequestID
-	Parcel            domain.DeclaredParcelID
-	Requester         domain.CancellationRequesterReference
-	Reason            domain.CancellationReasonReference
-	RequestedAt       time.Time
+	// CustomerAccount 是调用方信封里的客户账户，必填：取消只对这个账户名下的委托开放。它与 Identity 里的账户是
+	// 两件事——Identity 指名要找哪份委托，这里是谁在问；两者出自同一份认证结果，但编排不信 Identity 单独把隔离
+	// 守住。缺席答 CancellationNotAccepted，不跳过账户核。
+	CustomerAccount domain.CustomerAccountID
+	Parcel          domain.DeclaredParcelID
+	Requester       domain.CancellationRequesterReference
+	Reason          domain.CancellationReasonReference
+	RequestedAt     time.Time
 }
 
 type CancelParcelResult struct {
@@ -182,7 +196,8 @@ func NewCancelParcelHandler(deps CancelParcelDeps) *CancelParcelHandler {
 	return &CancelParcelHandler{deps: deps}
 }
 
-// Handle 把一件包裹的取消请求推进到判断：受理与委托核验（统一不可见）→ 按包裹排队 → 幂等/冲突 →
+// Handle 把一件包裹的取消请求推进到判断：受理与委托核验（统一不可见，含委托须属信封账户）→ 委托须已接受（撤回、拒绝、
+// 只是已提交各答一个确定格）→ 按包裹排队 → 幂等/冲突 →
 // 授权（未配置即未决，不写默认授权）→ 在决定提交边界重读终局与收寄 → 已有终局交既有终局、
 // 网络收寄已在册登记待处置、面单渠道服务首次有效收寄已在册不可取消（都明确不能回退取消）、
 // 边界前取消成立 → 提交与发布意图。已发生事实全程不删。
@@ -190,23 +205,39 @@ func (handler *CancelParcelHandler) Handle(
 	ctx context.Context,
 	command CancelParcelCommand,
 ) (CancelParcelResult, error) {
-	if strings.TrimSpace(command.Parcel.String()) == "" ||
+	if strings.TrimSpace(command.CustomerAccount.String()) == "" ||
+		strings.TrimSpace(command.Parcel.String()) == "" ||
 		strings.TrimSpace(command.Requester.String()) == "" ||
 		strings.TrimSpace(command.Reason.String()) == "" ||
 		command.RequestedAt.IsZero() {
 		return CancelParcelResult{outcome: CancellationNotAccepted}, nil
 	}
 
-	// 委托按来源身份加编号双重指名。查无、编号不符、成员出界与跨租户同答`统一不可见结果`——可区分即可
-	// 枚举别人的包裹（AT-PS-090 的隔离面）。它不是`请求未受理`：那一格只说字段缺、请求立不起来（UC-PS-006
-	// 结果语义），并进去，客户就分不清该补字段还是该核对自己指名的委托与包裹。
+	// 委托按来源身份加编号双重指名，且须属调用方信封里的客户账户。查无、编号不符、成员出界、跨租户与跨客户同答
+	// `统一不可见结果`——可区分即可枚举别人的包裹（AT-PS-090 的隔离面）。账户核对的是委托自己带的账户，不是
+	// 命令里 Identity 的账户：Identity 是用来找委托的键，由接入面构造，隔离不能只押在它上面。它不是`请求未受理`：
+	// 那一格只说字段缺、请求立不起来（UC-PS-006 结果语义），并进去，客户就分不清该补字段还是该核对自己指名的
+	// 委托与包裹。
 	request, found, err := handler.deps.Requests.FindBySourceIdentity(ctx, command.Identity)
 	if err != nil {
 		return handler.undecided(command, CancelRequestUnavailable), nil
 	}
 	if !found || request.ShipmentRequestID() != command.ShipmentRequestID ||
+		!ownedByCustomerAccount(request, command.CustomerAccount) ||
 		!memberOfCurrentVersion(request, command.Parcel) {
 		return CancelParcelResult{}, fmt.Errorf("cancel parcel: %w", ErrShipmentRequestNotVisible)
+	}
+
+	// 包裹取消只对已接受的委托开放。闸门读的是已取回的委托状态：委托只会从已提交单向转到已接受、已拒绝、已撤回，
+	// 后三者是终态，所以这里判出的答案不会被之后的提交翻回去，不需要为它另加锁；取消读到已提交、随后撤回提交，是合法的
+	// 时序，客户本就在撤回与取消之间选了撤回。闸门在取边界锁与一切读之前，被拦时什么都不落、什么都不交下游。
+	switch gate, err := gateRequestLifecycle(request.State()); {
+	case err != nil:
+		return CancelParcelResult{}, fmt.Errorf("cancel parcel: %w", err)
+	case gate == requestLifecycleEnded:
+		return CancelParcelResult{outcome: CancellationRequestEnded}, nil
+	case gate == requestLifecycleAwaitingDecision:
+		return CancelParcelResult{outcome: CancellationRequestAwaitingDecision}, nil
 	}
 
 	key := ports.CancellationRequestKey{
@@ -394,6 +425,37 @@ func lockCancellationBoundary(
 	parcel domain.DeclaredParcelID,
 ) bool {
 	return lock != nil && lock.LockCancellationBoundary(ctx, tenant, parcel) == nil
+}
+
+// requestLifecycleGate 是取消与终局形成共用的生命周期闸门答案。
+type requestLifecycleGate uint8
+
+const (
+	requestLifecycleOpen requestLifecycleGate = iota
+	// requestLifecycleEnded：已撤回或已拒绝，委托不会再被服务。
+	requestLifecycleEnded
+	// requestLifecycleAwaitingDecision：已提交，接受或拒绝决定还没形成。
+	requestLifecycleAwaitingDecision
+)
+
+// gateRequestLifecycle 只放行已接受的委托。状态集合外的取值是委托读口交回了说不出生命周期的聚合，响亮报错：当成放行
+// 会让一份来路不明的委托长出取消或终局。
+func gateRequestLifecycle(state domain.ShipmentRequestState) (requestLifecycleGate, error) {
+	switch state {
+	case domain.ShipmentRequestAccepted:
+		return requestLifecycleOpen, nil
+	case domain.ShipmentRequestWithdrawn, domain.ShipmentRequestRejected:
+		return requestLifecycleEnded, nil
+	case domain.ShipmentRequestSubmitted:
+		return requestLifecycleAwaitingDecision, nil
+	default:
+		return requestLifecycleOpen, fmt.Errorf("parcel shipment: unhandled request lifecycle state %d", state)
+	}
+}
+
+// ownedByCustomerAccount 问委托是不是这个客户账户名下的：账户取委托当前提交版本的来源身份，与命令的信封账户比。
+func ownedByCustomerAccount(request domain.ShipmentRequest, account domain.CustomerAccountID) bool {
+	return request.CurrentSubmissionVersion().SourceSubmission().Identity().CustomerAccountID() == account
 }
 
 func memberOfCurrentVersion(request domain.ShipmentRequest, parcel domain.DeclaredParcelID) bool {
