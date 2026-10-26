@@ -121,6 +121,7 @@ type submitResponse struct {
 	Outcome             string                `json:"outcome"`
 	PriorOutcome        string                `json:"priorOutcome,omitempty"`
 	ShipmentRequestID   string                `json:"shipmentRequestId,omitempty"`
+	SubmissionVersionID string                `json:"submissionVersionId,omitempty"`
 	Parcels             []submittedParcelView `json:"parcels,omitempty"`
 	ProductionOwnership *ownershipView        `json:"productionOwnership,omitempty"`
 	GateBlockReasons    []string              `json:"gateBlockReasons,omitempty"`
@@ -191,6 +192,9 @@ func writeOutcome(response http.ResponseWriter, problem problemWriter, result ap
 	}
 	if requestID, present := result.ShipmentRequestID(); present {
 		body.ShipmentRequestID = requestID.String()
+	}
+	if versionID, present := result.SubmissionVersionID(); present {
+		body.SubmissionVersionID = versionID.String()
 	}
 	for _, parcel := range result.Parcels() {
 		view := submittedParcelView{ParcelID: parcel.Parcel().String()}

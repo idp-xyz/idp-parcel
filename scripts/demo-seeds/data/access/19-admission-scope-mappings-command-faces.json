@@ -1,0 +1,45 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "mappings": [
+    {
+      "mappingId": "SYN-MAP-CC-WITHDRAWAL-01",
+      "capability": "CUSTOMER_COMMAND",
+      "factKind": "SHIPMENT_REQUEST_WITHDRAWAL",
+      "objectScope": "SYN-PILOT-SCOPE/customer-commands@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-03"
+    },
+    {
+      "mappingId": "SYN-MAP-CC-PARCEL-CANCELLATION-01",
+      "capability": "CUSTOMER_COMMAND",
+      "factKind": "PARCEL_CANCELLATION",
+      "objectScope": "SYN-PILOT-SCOPE/customer-commands@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-03"
+    },
+    {
+      "mappingId": "SYN-MAP-CC-SOURCE-DATA-AMENDMENT-01",
+      "capability": "CUSTOMER_COMMAND",
+      "factKind": "SOURCE_DATA_AMENDMENT",
+      "objectScope": "SYN-PILOT-SCOPE/customer-commands@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-03"
+    },
+    {
+      "mappingId": "SYN-MAP-CC-SUPPLEMENT-01",
+      "capability": "CUSTOMER_COMMAND",
+      "factKind": "SHIPMENT_REQUEST_SUPPLEMENT",
+      "objectScope": "SYN-PILOT-SCOPE/customer-commands@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-03"
+    },
+    {
+      "mappingId": "SYN-MAP-CC-CLAIM-01",
+      "capability": "CUSTOMER_COMMAND",
+      "factKind": "CLAIM_SUBMISSION",
+      "objectScope": "SYN-PILOT-SCOPE/customer-commands@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-03"
+    }
+  ]
+}

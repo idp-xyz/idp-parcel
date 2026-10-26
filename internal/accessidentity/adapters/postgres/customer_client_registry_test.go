@@ -267,7 +267,7 @@ func TestCustomerClientGrantIsEffectiveOnlyInsideItsIntervalAndUntilRevoked(t *t
 	expectSQLState(t, register.pool, "未知能力", checkViolation,
 		`INSERT INTO access_identity.customer_client_grant
 			(tenant_id, grant_id, issuer, subject, capability, effective_starts_at, basis_ref)
-		 VALUES ($1, 'SYN-CUSTOMER-GRANT-Y', $2, $3, 'CLAIM_SUBMISSION', now(), 'SYN-X')`,
+		 VALUES ($1, 'SYN-CUSTOMER-GRANT-Y', $2, $3, 'UNLISTED_COMMAND', now(), 'SYN-X')`,
 		tenantOne, syntheticIssuer, "SYN-CUSTOMER-CLIENT-01")
 	expectSQLState(t, register.pool, "倒置区间", checkViolation,
 		`INSERT INTO access_identity.customer_client_grant

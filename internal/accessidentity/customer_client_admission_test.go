@@ -111,14 +111,15 @@ func TestCustomerClientAdmissionStepAnswersItsOwnGrades(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0139 越权风险点「撤回、取消、补充、资料修订、索赔提交各命令的来源请求键推导」待撤回口那一票裁——首方族的
-// 撤回推导此刻答推导不出，不拿提交那一格顶上；提交那一格照旧取接入请求标识。
-func TestCustomerWithdrawalRequestKeyIsNotDerivedYet(t *testing.T) {
+// Covers: ADR-0310 取舍 A——撤回的来源请求键带命令前缀，提交那一格照旧取裸的接入请求标识；同一标识两命令的键不撞。
+func TestCustomerWithdrawalRequestKeyCarriesTheCommandPrefix(t *testing.T) {
 	request := NewChannelRequest(map[string]string{AccessRequestIdentifier: " SYN-ACCESS-REQUEST-0001 "})
-	if key, err := (customerAPIRequestKeys{}).DeriveSubmissionRequestKey(context.Background(), request); err != nil || key != "SYN-ACCESS-REQUEST-0001" {
-		t.Fatalf("提交：key = %q, err = %v", key, err)
+	submission, err := (customerAPIRequestKeys{}).DeriveSubmissionRequestKey(context.Background(), request)
+	if err != nil || submission != "SYN-ACCESS-REQUEST-0001" {
+		t.Fatalf("提交：key = %q, err = %v", submission, err)
 	}
-	if key, err := (customerAPIRequestKeys{}).DeriveWithdrawalRequestKey(context.Background(), request); !errors.Is(err, ErrRequestKeyNotDerived) || key != "" {
-		t.Fatalf("撤回：key = %q, err = %v, want ErrRequestKeyNotDerived", key, err)
+	withdrawal, err := (customerAPIRequestKeys{}).DeriveWithdrawalRequestKey(context.Background(), request)
+	if err != nil || withdrawal != "withdrawal:SYN-ACCESS-REQUEST-0001" || withdrawal == submission {
+		t.Fatalf("撤回：key = %q, err = %v", withdrawal, err)
 	}
 }

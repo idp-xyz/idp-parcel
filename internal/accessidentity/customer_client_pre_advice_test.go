@@ -234,7 +234,7 @@ func TestCustomerCommandAdmissionWordsAreOnlyThoseMintedLinesAskFor(t *testing.T
 		t.Fatalf("委托提交的词应登得进对照：%v", err)
 	}
 	for name, requirement := range map[string]accessidentity.AdmissionRequirement{
-		"unknown customer word":                  {Capability: accessidentity.CustomerCommandAdmissionCapability, FactKind: "CLAIM_SUBMISSION"},
+		"unknown customer word":                  {Capability: accessidentity.CustomerCommandAdmissionCapability, FactKind: "UNLISTED_COMMAND"},
 		"customer word in the capability column": {Capability: accessidentity.CustomerCapabilityDeliveryPreAdviceSubmission.String(), FactKind: accessidentity.CustomerCapabilityDeliveryPreAdviceSubmission.String()},
 		"lower-cased capability":                 {Capability: "customer_command", FactKind: accessidentity.CustomerCapabilityDeliveryPreAdviceSubmission.String()},
 	} {

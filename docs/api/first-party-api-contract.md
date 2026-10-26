@@ -73,5 +73,6 @@
 | `POST /v1/node-operations/delivery-handover-conclusions` | UC-NO-006 交接单的客户确认或否认 | `DELIVERY_HANDOVER_CONFIRMATION` |
 
 - 提交答复建成委托时带 `parcels`：每件 `parcelId` 加客户为它声明的 `customerParcelReference`。`parcelId` 就是查客户追踪视图用的号（[ADR-0223](../adr/0223-the-first-party-submission-answer-names-each-parcel-and-the-tracking-view-locates-by-it.md)）。
+- 提交答复在指名委托时同带 `submissionVersionId`（该委托此刻的当前提交版本标识，随 `shipmentRequestId` 同在同缺；重放在补充之后读回的是补充形成的当前版本）。客户下一次补充以它为基准载荷带回，基准过期答 `SUPPLEMENT_BASIS_STALE`（[ADR-0310](../adr/0310-first-party-customer-command-five-faces-launch-with-direct-customer-one-to-one-and-command-prefixed-request-keys.md) 取舍 E）。
 - 客户追踪视图的答复带视图版本 `version` 与逐维三态，不带它所依据的内部投影版本；客户采用哪一版只看 `version`。
 - 委托的撤回、资料修订、受控补充与逐包裹取消这几个客户面命令口已经按本文的问题详情作答，但还没挂首方渠道 Intake，今天在无前缀的 `/shipment-requests/...` 下答 `403 ACCESS_CHANNEL_NOT_CONFIGURED`；首方 Intake 逐口换上时迁到 `/v1/shipment-requests/...`。

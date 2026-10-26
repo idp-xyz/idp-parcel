@@ -121,6 +121,19 @@ const (
 	// CustomerCapabilityTrackingViewQuery 是客户追踪视图查阅（`/v1/customer-tracking-view`，UC-VE-008；ADR-0139 决定四）。查阅口不判准入
 	// 范围（ADR-0139 决定八），所以它不进 customerCapabilitiesAdmittedAtMint。
 	CustomerCapabilityTrackingViewQuery CustomerCapability = "CUSTOMER_TRACKING_VIEW_QUERY"
+	// 以下五词是首方客户命令五口（票 first-party-api/06；ADR-0310）。词在此一处定义；迁移 0024 的 CHECK 与
+	// customerCapabilitiesAdmittedAtMint 引同一批，改一处必改三处。五口都是生产写，铸造侧判准入范围。
+	//
+	// CustomerCapabilityShipmentRequestWithdrawal 是委托撤回（`/v1/shipment-requests/withdrawals`，UC-PS-005）。
+	CustomerCapabilityShipmentRequestWithdrawal CustomerCapability = "SHIPMENT_REQUEST_WITHDRAWAL"
+	// CustomerCapabilityParcelCancellation 是取消包裹（`/v1/shipment-requests/parcel-cancellations`，UC-PS-006）。
+	CustomerCapabilityParcelCancellation CustomerCapability = "PARCEL_CANCELLATION"
+	// CustomerCapabilitySourceDataAmendment 是客户资料修订（`/v1/shipment-requests/source-data-amendments`，UC-PS-002）。
+	CustomerCapabilitySourceDataAmendment CustomerCapability = "SOURCE_DATA_AMENDMENT"
+	// CustomerCapabilityShipmentRequestSupplement 是委托补充（`/v1/shipment-requests/supplements`，ADR-0106 决定四）。
+	CustomerCapabilityShipmentRequestSupplement CustomerCapability = "SHIPMENT_REQUEST_SUPPLEMENT"
+	// CustomerCapabilityClaimSubmission 是索赔提交（`/v1/claims`，ADR-0139 适用场景）。
+	CustomerCapabilityClaimSubmission CustomerCapability = "CLAIM_SUBMISSION"
 )
 
 var customerCapabilities = []CustomerCapability{
@@ -129,6 +142,11 @@ var customerCapabilities = []CustomerCapability{
 	CustomerCapabilityDeliveryPreAdviceWithdrawal,
 	CustomerCapabilityDeliveryHandoverConfirmation,
 	CustomerCapabilityTrackingViewQuery,
+	CustomerCapabilityShipmentRequestWithdrawal,
+	CustomerCapabilityParcelCancellation,
+	CustomerCapabilitySourceDataAmendment,
+	CustomerCapabilityShipmentRequestSupplement,
+	CustomerCapabilityClaimSubmission,
 }
 
 // ParseCustomerCapability 按字面取值认能力，大小写不折叠：册里存的就是这些字面量。

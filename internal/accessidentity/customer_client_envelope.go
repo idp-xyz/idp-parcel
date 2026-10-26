@@ -184,12 +184,12 @@ func (customerAPIRequestKeys) DeriveSubmissionRequestKey(_ context.Context, requ
 	return accessRequestIdentifierOf(request)
 }
 
-// DeriveWithdrawalRequestKey 答推导不出：首方族还没有撤回口，撤回的来源请求键怎么推、与提交那一串怎么区分，留给撤回口
-// 换上首方 Intake 的那一票按 ADR-0139 越权风险点「撤回、取消、补充、资料修订、索赔提交各命令的来源请求键推导」的复核
-// 建议裁。先拿提交那一格顶上，等于替它裁了「同一标识先提交后撤回」答什么，而那件事 RequestKeyDerivation 的头注正是
-// 不许含糊的。
-func (customerAPIRequestKeys) DeriveWithdrawalRequestKey(context.Context, ChannelRequest) (string, error) {
-	return "", fmt.Errorf("%w: the first-party customer family has no withdrawal derivation yet", ErrRequestKeyNotDerived)
+// DeriveWithdrawalRequestKey 取舍 A（ADR-0310）：撤回的来源请求键 = 命令前缀加去两端空白的接入请求标识，即
+// `withdrawal:<标识>`。同一标识先提交后撤回，答的是两条不同的来源请求键——提交那一串是裸标识，撤回这一串带前缀，两者在
+// 判重空间里不会互相当成重放；同一标识带着同一命令前缀再发，才是重放。标识缺席或全空白答推导不出。契约写明标识只在命令内
+// 唯一，跨命令复用不撞（前缀保证），命令内复用即重放。
+func (customerAPIRequestKeys) DeriveWithdrawalRequestKey(_ context.Context, request ChannelRequest) (string, error) {
+	return prefixedRequestKey(requestKeyPrefixWithdrawal, request)
 }
 
 func accessRequestIdentifierOf(request ChannelRequest) (string, error) {
@@ -199,4 +199,22 @@ func accessRequestIdentifierOf(request ChannelRequest) (string, error) {
 		return "", fmt.Errorf("%w: %s is absent", ErrRequestKeyNotDerived, AccessRequestIdentifier)
 	}
 	return trimmed, nil
+}
+
+// 五口来源请求键的命令前缀（ADR-0310 取舍 A）。提交与送站预报两口不带前缀，已登的来源请求键不改，所以裸标识与带前缀串在
+// 判重空间里是两把不同的键。
+const (
+	requestKeyPrefixWithdrawal         = "withdrawal:"
+	requestKeyPrefixParcelCancellation = "parcel-cancellation:"
+	requestKeyPrefixSourceDataAmend    = "source-data-amendment:"
+	requestKeyPrefixSupplement         = "supplement:"
+	requestKeyPrefixClaim              = "claim:"
+)
+
+func prefixedRequestKey(prefix string, request ChannelRequest) (string, error) {
+	identifier, err := accessRequestIdentifierOf(request)
+	if err != nil {
+		return "", err
+	}
+	return prefix + identifier, nil
 }
