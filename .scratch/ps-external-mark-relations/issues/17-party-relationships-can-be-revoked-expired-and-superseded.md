@@ -1,7 +1,7 @@
 # 17 参与方关系没有撤销、到期、替代的写面：一段关系一旦生效，只能靠再登一版带终点的修订来结束
 
 Category: enhancement
-Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（infra-speed/02 已进 main，Blocked by 解除），分支 `claude-psxm17`。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立并代决；等另一会话的 infra-speed/02（组合根按文件自登记）进 main 再开工——本票要加端点
+Status: in-progress——2026-10-25 会话 `tops-20`（Claude Code）改认领：原认领会话 `idp-parcel-9b` 已不在，分支 `claude-psxm17` 当时 0 提交，快进到 main `9ea060682` 复用；协调方 tops-26 同意（它在本票期间不开 PS 的 code 票）。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（infra-speed/02 已进 main，Blocked by 解除），分支 `claude-psxm17`。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立并代决；等另一会话的 infra-speed/02（组合根按文件自登记）进 main 再开工——本票要加端点
 Blocked by: infra-speed/02 进 main（另一会话的票，加端点的配方随它定）
 父票：[10](./10-authorized-delivery-relationship-in-party-commercial.md)
 出处：票 10 完成记录「没做」：这是各参与方关系角色共有的旧缺口，授权交付关系让它变得要紧——撤掉一个交付方的授权要能即时生效。
