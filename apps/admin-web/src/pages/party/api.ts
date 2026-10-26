@@ -833,3 +833,36 @@ export const productChannelOutcomeLabels: Record<string, string> = {
   CONTENT_CONFLICT: '内容冲突：这个修订号已登记过不同的内容。要更正，请用下一个修订号登记。',
   NOT_ACCEPTED: '未受理：产品版本不存在或已结束，或修订号对不上。没有写入任何内容。',
 };
+
+// ——参与方关系的结束口（票 ps-external-mark-relations/17）。关系详情抽屉上的「撤销」「到期」两个动作打到这里；替代先只开
+// 写口与受控批量口（end-party-relationships），界面另议，所以这里不列它的路径。
+//
+// 载荷与受控 CLI end-party-relationships 的批文逐字同形（服务端 registrationjson.PartyRelationshipEndingBatchDocument），
+// 去掉整批的 tenantId：租户取操作者认证结果，载荷里带了即拒。
+
+/** 关系详情上开的两种结束。路径名与服务端端点表同一行；不并进 CommercialRegistrationKind——那是登记签各册的封闭集。 */
+export const partyRelationshipEndingEndpoints = {
+  revocation: '/commercial-party-relationship-revocations',
+  expiration: '/commercial-party-relationship-expirations',
+} as const;
+
+export type PartyRelationshipEndingAction = keyof typeof partyRelationshipEndingEndpoints;
+
+export function endPartyRelationship(
+  action: PartyRelationshipEndingAction,
+  payload: unknown,
+): Promise<ApiResult<RegistrationResponseBody>> {
+  return postMasterData<RegistrationResponseBody>(partyRelationshipEndingEndpoints[action], payload);
+}
+
+/**
+ * 结束口的答案代数（`application.PartyRegistryOutcome` 原名，结束口答得出的那几格），逐格中文。`ENDED` 是本次落下终止
+ * 修订；重放与冲突照身份族；`NOT_FOUND` 在这里说的是关系不在册。
+ */
+export const partyRelationshipEndingOutcomeLabels: Record<string, string> = {
+  ENDED: '已结束（终止是修订链上新的一笔，原修订不被改写）',
+  ALREADY_REGISTERED: '同一笔结束重放（册上这段关系就是这样结束的，没有再写）',
+  CONTENT_CONFLICT: '内容冲突（这段关系已在这一修订以别的方式、时刻或依据结束；一段关系只结束一次）',
+  NOT_ACCEPTED: '受理门拒绝（关系不在已生效、修订错位、终点未到或结束时刻晚于此刻等，一个字节没写；原因随答复交回）',
+  NOT_FOUND: '册上没有这一段关系',
+};
