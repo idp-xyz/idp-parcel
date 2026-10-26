@@ -1,7 +1,7 @@
 # 102 索赔提交口还挂字面量未配置，客户系统经首方渠道交不了索赔
 
 Category: enhancement
-Status: needs-triage——2026-10-19 Claude Code 子代理立（票 [96](./96-customer-tracking-view-has-no-first-party-customer-intake.md) 实现时盘点：VE 的两个客户面口，查阅口已换，索赔口没有承接票）。
+Status: in-progress——2026-10-26 随 [first-party-api/09](../../first-party-api/issues/09-customer-claim-face.md) 收（分支 `claude-fpa09`，代码 `507c981b1`，待隔离评审与进 main）；本票不另做。此前 needs-triage——2026-10-19 Claude Code 子代理立（票 [96](./96-customer-tracking-view-has-no-first-party-customer-intake.md) 实现时盘点：VE 的两个客户面口，查阅口已换，索赔口没有承接票）。
 Blocked by: 无
 地盘：`internal/visibilityexception/adapters/http` 的 `ClaimIntake` 首方实现与 `receive_claim.go` 的答复分格；`internal/visibilityexception/adapters/accessidentity` 的认证方；`internal/accessidentity` 首方铸造器加一口与能力词（迁移 `access_identity` 下一号，CHECK 全集取此前各份的并集）；准入范围对照的种子（`data/access/03`、`data/governance/`）；`cmd/parcel-api/endpoints.go` 里 `/claims` 那一行。
 出处：[ADR-0139](../../../docs/adr/0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md) 决定四（覆盖面点名命令面的 `/claims`）、决定五（接入请求标识推导为来源请求键）、决定八（每个客户面写口定一版带形状版本的规范化形状，未定形状的口不开首方渠道；索赔提交在铸造侧判准入）；[UC-VE-007](../../../docs/application/visibility-exception/UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md)。
