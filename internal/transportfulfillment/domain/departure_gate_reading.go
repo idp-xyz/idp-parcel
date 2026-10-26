@@ -60,10 +60,15 @@ const (
 	DepartureScheduleRegistryUnavailable
 	// DepartureHandoverRegistryUnavailable：找段里各件进段那次交接时交接登记册读不动。
 	DepartureHandoverRegistryUnavailable
+	// DepartureSegmentRecordUnreadable、DepartureScheduleRecordUnreadable：段册或班次册那一行读回来了，却过不了重建门——库面被
+	// 绕过构造门写过。与连不上同属读不动（这一问没有答案），停点分开，是因为救法不同：连不上过一会儿可能就好，坏行重问一万次还是
+	// 坏行，补问不为它再问（ADR-0305）。
+	DepartureSegmentRecordUnreadable
+	DepartureScheduleRecordUnreadable
 )
 
 func (stop DepartureGateStop) valid() bool {
-	return stop >= DepartureSegmentNotDeclared && stop <= DepartureHandoverRegistryUnavailable
+	return stop >= DepartureSegmentNotDeclared && stop <= DepartureScheduleRecordUnreadable
 }
 
 // Answer 是这种停点所属的那一格。
@@ -72,10 +77,25 @@ func (stop DepartureGateStop) Answer() DepartureGateAnswer {
 	case DepartureSegmentNotDeclared, DepartureSegmentNotRegistered, DepartureNoObjectUnderControl,
 		DepartureScheduleNotRegistered, DepartureRecordedBeforeGateReading, DepartureScheduleNotServingSegment:
 		return DepartureGateUndecided
-	case DepartureSegmentRegistryUnavailable, DepartureScheduleRegistryUnavailable, DepartureHandoverRegistryUnavailable:
+	case DepartureSegmentRegistryUnavailable, DepartureScheduleRegistryUnavailable, DepartureHandoverRegistryUnavailable,
+		DepartureSegmentRecordUnreadable, DepartureScheduleRecordUnreadable:
 		return DepartureGateUnreadable
 	default:
 		return DepartureGateAnswerInvalid
+	}
+}
+
+// Reaskable 说停在这种停点上的出发，补问时再问一次会不会问出不同的东西（ADR-0305）。缺的东西日后补得齐（段登记了、对象凭控制
+// 事实进了段、班次登了），或那一口此刻连不上，再问就可能问到关务；其余几种再问也是同一个结果：事实没声明段（声明随那一版事实
+// 固定）、存量回填（那时没问过，补问不替它首问）、班次不服务该段（进段交接声明了的节点与班次起讫对不上），以及某一行装不回
+// （坏行不随重问变好）。交接册读不动这一格还没把装不回与连不上分开（票 demo-chain-gaps/114），照可再问算，由补问的次数上限兜住。
+func (stop DepartureGateStop) Reaskable() bool {
+	switch stop {
+	case DepartureSegmentNotRegistered, DepartureNoObjectUnderControl, DepartureScheduleNotRegistered,
+		DepartureSegmentRegistryUnavailable, DepartureScheduleRegistryUnavailable, DepartureHandoverRegistryUnavailable:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -99,6 +119,10 @@ func (stop DepartureGateStop) String() string {
 		return "SCHEDULE_REGISTRY_UNAVAILABLE"
 	case DepartureHandoverRegistryUnavailable:
 		return "HANDOVER_REGISTRY_UNAVAILABLE"
+	case DepartureSegmentRecordUnreadable:
+		return "SEGMENT_RECORD_UNREADABLE"
+	case DepartureScheduleRecordUnreadable:
+		return "SCHEDULE_RECORD_UNREADABLE"
 	default:
 		return ""
 	}

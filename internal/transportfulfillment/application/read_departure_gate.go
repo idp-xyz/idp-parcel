@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -71,7 +72,28 @@ func (reader *DepartureGateReader) Read(ctx context.Context, command RecordMovem
 	if !accepted {
 		return domain.DepartureGateReading{}, nil
 	}
-	return reader.readIntent(ctx, intent)
+	return reader.readIntent(ctx, intent, nil)
+}
+
+// errDepartureGateReaskMisplaced：交来补问的不是一条声明了段的出发。补问只由 ReaskDepartureGatesHandler 按段列出的出发调，
+// 走到这里是接线错了，上抛而不形成一份读数。
+var errDepartureGateReaskMisplaced = errors.New("transport fulfillment: only a departure declaring its segment can be re-asked")
+
+// Reask 按一条在册出发的原出发时点、只替 object 再问一次（ADR-0305）：意图取那一版事实自己的租户、班次、声明的段与业务发生时间，
+// 与登记那一刻同一条读数路径（readIntent），只是在控的对象收到 object 这一件——集运单元照旧按出发那一刻的成员展开，班次与段照旧
+// 核这一件进段的那次交接。段册、班次册、交接册、成员关系与关务都按此刻的册子读：段登记了、对象凭控制事实进了段、某一口读得动了，
+// 补问才问得出登记那一刻问不出的东西。object 此刻在那一刻不在控，停在「出发那一刻段里没有在控对象」。
+func (reader *DepartureGateReader) Reask(
+	ctx context.Context,
+	fact domain.TransportMovementFact,
+	object domain.CarriedObjectReference,
+) (domain.DepartureGateReading, error) {
+	segment, declared := fact.Segment()
+	if fact.Kind() != domain.DepartureFact || !declared {
+		return domain.DepartureGateReading{}, errDepartureGateReaskMisplaced
+	}
+	intent := departureGateIntent{tenant: fact.TenantID(), schedule: fact.Schedule(), segment: segment, at: fact.OccurredAt()}
+	return reader.readIntent(ctx, intent, &object)
 }
 
 // departureGateIntent 是读数从输入里只取的那四样：租户、班次、声明的段（零值即没声明）与出发时点；其余取决于此刻的段册、
@@ -126,7 +148,14 @@ func gateReferencesFrom(
 // 缺哪样就停在哪样、不问关务——没有对象就没有可问的，没有方向就说不出「自哪到哪」，班次对不上这一段就是在替别的一车问。核不上
 // 但也对不出错的（未绑定）照问，读数标上那一位，回给执行方时一件不列。找齐了才逐对象问（集运单元按成员展开，见
 // departureGateExpansion）；某一件读不动不停下，其余照问，每件各记一格。error 只留给读数自己拼不出来（实现坏了）。
-func (reader *DepartureGateReader) readIntent(ctx context.Context, intent departureGateIntent) (domain.DepartureGateReading, error) {
+//
+// only 非空时只问那一件（补问，ADR-0305）：段里在控的对象收到它，核班次与段也只核它进段的那次交接。段册或班次册那一行装不回与
+// 连不上分记两个停点（ports 的两个 RecordUnreadable 哨兵）：同属读不动，救法不同，补问只为后者再问。
+func (reader *DepartureGateReader) readIntent(
+	ctx context.Context,
+	intent departureGateIntent,
+	only *domain.CarriedObjectReference,
+) (domain.DepartureGateReading, error) {
 	var stops []domain.DepartureGateStop
 	var inControl []domain.FulfillmentParticipation
 	if intent.segment == (domain.FulfillmentSegmentReference{}) {
@@ -134,12 +163,20 @@ func (reader *DepartureGateReader) readIntent(ctx context.Context, intent depart
 	} else {
 		record, found, err := reader.deps.Segments.FindByKey(ctx, ports.FulfillmentSegmentKey{TenantID: intent.tenant, Segment: intent.segment})
 		switch {
+		case errors.Is(err, ports.ErrFulfillmentSegmentRecordUnreadable):
+			stops = append(stops, domain.DepartureSegmentRecordUnreadable)
 		case err != nil:
 			stops = append(stops, domain.DepartureSegmentRegistryUnavailable)
 		case !found:
 			stops = append(stops, domain.DepartureSegmentNotRegistered)
 		default:
-			if inControl = record.Segment.ParticipationsUnderControlAt(intent.at); len(inControl) == 0 {
+			inControl = record.Segment.ParticipationsUnderControlAt(intent.at)
+			if only != nil {
+				inControl = slices.DeleteFunc(inControl, func(participation domain.FulfillmentParticipation) bool {
+					return participation.Object() != *only
+				})
+			}
+			if len(inControl) == 0 {
 				stops = append(stops, domain.DepartureNoObjectUnderControl)
 			}
 		}
@@ -149,6 +186,8 @@ func (reader *DepartureGateReader) readIntent(ctx context.Context, intent depart
 	directed := false
 	schedule, found, err := reader.deps.Schedules.FindByKey(ctx, ports.ScheduleKey{TenantID: intent.tenant, Schedule: intent.schedule})
 	switch {
+	case errors.Is(err, ports.ErrTransportScheduleRecordUnreadable):
+		stops = append(stops, domain.DepartureScheduleRecordUnreadable)
 	case err != nil:
 		stops = append(stops, domain.DepartureScheduleRegistryUnavailable)
 	case !found:

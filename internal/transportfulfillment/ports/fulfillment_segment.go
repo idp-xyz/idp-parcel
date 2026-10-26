@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
@@ -31,6 +32,11 @@ type FulfillmentSegmentRecord struct {
 	Segment    domain.ActualFulfillmentSegment
 	RecordedAt time.Time
 }
+
+// ErrFulfillmentSegmentRecordUnreadable：按键读到了那一段，段行或某一条参与行却过不了重建门——库面被绕过构造门写过。
+// FindByKey 把这一类包住它交出，与连不上库分开：坏行重读一万次还是坏行，调用方据此不把它当成过一会儿就好的读不动
+// （ADR-0029；出发门禁读数据它另记一个停点，补问不为它再问，ADR-0305）。
+var ErrFulfillmentSegmentRecordUnreadable = errors.New("transport fulfillment: a stored fulfillment segment cannot be read back")
 
 type SegmentSaveOutcome uint8
 

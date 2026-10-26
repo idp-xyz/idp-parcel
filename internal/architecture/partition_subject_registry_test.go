@@ -189,6 +189,7 @@ var declaredPartitionSubjects = map[string]string{
 	// 委托的几次换版先后到。信封 ID 带委托或号，与分区键不同表达式。
 	"internal/transportfulfillment/adapters/postgres/commission_agreement_revision_handoff.go":   partitionSubjectPrefix + "租户/运输委托（换版门铃，各次换版同区排队；/agreement-revision 段）",
 	"internal/transportfulfillment/adapters/postgres/segment_commission_adoption_handoff.go":     partitionSubjectPrefix + "租户/实际履约段（采用门铃；/segment-commission-adoption 段）",
+	"internal/transportfulfillment/adapters/postgres/departure_gate_reask_handoff.go":            partitionSubjectPrefix + "租户/移动事实（出发门禁补问，同它补的那条出发一区排队，对象与次序只进 ID；/movement-fact/ 段）",
 	"internal/transportfulfillment/adapters/postgres/disposition_execution_handoff.go":           partitionPerEnvelopePrefix + "键即信封 ID（处置执行）",
 	"internal/transportfulfillment/adapters/postgres/effective_delivery_handoff.go":              partitionSubjectPrefix + "租户/载运对象/口名" + partitionRulingMark + "ADR-0074 决定二、五（本口段 /effective-delivery）",
 	"internal/transportfulfillment/adapters/postgres/exception_journey_handoff.go":               partitionPerEnvelopePrefix + "键即信封 ID（与处置执行同键，靠类型段错开）",

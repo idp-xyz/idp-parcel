@@ -137,8 +137,19 @@ func queryTransportSchedules(
 	return records, nil
 }
 
-// scanTransportSchedule 把一行装回一版班次：逐格过构造门，再交重建门核身份与来历——不按列直接拼结构体（ADR-0028）。
+// scanTransportSchedule 把一行装回一版班次：逐格过构造门，再交重建门核身份与来历——不按列直接拼结构体（ADR-0028）。扫描那一步
+// 报的错原样交出（读不动）；扫描之后哪一道门不过，包住 ports.ErrTransportScheduleRecordUnreadable：那是库面被绕过构造门写过，
+// 重读也是同一个结果。
 func scanTransportSchedule(rows pgx.Rows) (ports.ScheduleRecord, error) {
+	record, scanned, err := scanTransportScheduleRow(rows)
+	if err != nil && scanned {
+		return ports.ScheduleRecord{}, fmt.Errorf("%w: %w", ports.ErrTransportScheduleRecordUnreadable, err)
+	}
+	return record, err
+}
+
+// scanTransportScheduleRow 是 scanTransportSchedule 的本体；scanned 说扫描那一步过没过。
+func scanTransportScheduleRow(rows pgx.Rows) (ports.ScheduleRecord, bool, error) {
 	var (
 		tenantID, scheduleID, connection, from, to, serviceScope, originText, digest string
 		version                                                                      int
@@ -152,31 +163,31 @@ func scanTransportSchedule(rows pgx.Rows) (ports.ScheduleRecord, error) {
 		&departsAt, &arrivesAt, &serviceScope, &originText, &templateCode, &templateVersion, &runningDate,
 		&digest, &recordedAt,
 	); err != nil {
-		return ports.ScheduleRecord{}, err
+		return ports.ScheduleRecord{}, false, err
 	}
 
 	spec := domain.RehydrateTransportScheduleSpec{Version: domain.ScheduleVersion(version)}
 	var err error
 	if spec.Schedule.TenantID, err = domain.NewTenantID(tenantID); err != nil {
-		return ports.ScheduleRecord{}, err
+		return ports.ScheduleRecord{}, true, err
 	}
 	if spec.Schedule.Schedule, err = domain.NewScheduleReference(scheduleID); err != nil {
-		return ports.ScheduleRecord{}, err
+		return ports.ScheduleRecord{}, true, err
 	}
 	if spec.Schedule.Direction, err = domain.NewScheduleDirection(connection, from, to); err != nil {
-		return ports.ScheduleRecord{}, err
+		return ports.ScheduleRecord{}, true, err
 	}
 	if spec.Schedule.ServiceScope, err = domain.NewScheduleServiceScopeReference(serviceScope); err != nil {
-		return ports.ScheduleRecord{}, err
+		return ports.ScheduleRecord{}, true, err
 	}
 	spec.Schedule.DepartsAt = departsAt
 	spec.Schedule.ArrivesAt = arrivesAt
 	if spec.OriginKind, err = domain.ParseScheduleOriginKind(originText); err != nil {
-		return ports.ScheduleRecord{}, err
+		return ports.ScheduleRecord{}, true, err
 	}
 	if templateCode != nil {
 		if spec.Template, err = domain.NewScheduleTemplateCode(*templateCode); err != nil {
-			return ports.ScheduleRecord{}, err
+			return ports.ScheduleRecord{}, true, err
 		}
 	}
 	if templateVersion != nil {
@@ -184,18 +195,18 @@ func scanTransportSchedule(rows pgx.Rows) (ports.ScheduleRecord, error) {
 	}
 	if runningDate != nil {
 		if spec.RunningDate, err = domain.ParseRunningDate(runningDate.Format("2006-01-02")); err != nil {
-			return ports.ScheduleRecord{}, err
+			return ports.ScheduleRecord{}, true, err
 		}
 	}
 
 	schedule, err := domain.RehydrateTransportSchedule(spec)
 	if err != nil {
-		return ports.ScheduleRecord{}, err
+		return ports.ScheduleRecord{}, true, err
 	}
 	return ports.ScheduleRecord{
 		Key:           ports.ScheduleKey{TenantID: spec.Schedule.TenantID, Schedule: spec.Schedule.Schedule},
 		ContentDigest: digest,
 		Schedule:      schedule,
 		RecordedAt:    recordedAt.UTC(),
-	}, nil
+	}, true, nil
 }
