@@ -1,7 +1,7 @@
 # 77 PS 取消提交、收寄采用与面单终局形成三处之间不按包裹串行
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code77（见文末「完成记录」）。此前 ready-for-agent——R2（上线后尽快）：两份互斥的终局可能同时落下，且之后没有任何信封会重新比对。read committed 下，取消的提交边界与收寄采用、面单终局形成各在自己的事务里读对方的表；两笔并发时都看不见对方尚未提交的写入，取消与责任起点（或非取消终局）会同时成立。今天取消授权停在未配置，取消形成不了，这一格还到不了；租户一登记取消授权即生效。2026-10-21 协调方据 code/21、35 隔离评审 N4 立，分级 R2。
+Status: resolved——2026-10-26 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code77（见文末「完成记录」）。此前 ready-for-agent——R2（上线后尽快）：两份互斥的终局可能同时落下，且之后没有任何信封会重新比对。read committed 下，取消的提交边界与收寄采用、面单终局形成各在自己的事务里读对方的表；两笔并发时都看不见对方尚未提交的写入，取消与责任起点（或非取消终局）会同时成立。今天取消授权停在未配置，取消形成不了，这一格还到不了；租户一登记取消授权即生效。2026-10-21 协调方据 code/21、35 隔离评审 N4 立，分级 R2。
 Blocked by: 无
 出处：code/21、code/35 隔离评审 N4（协调方转达）；[ADR-0254](../../../docs/adr/0254-cancellation-and-boundary-fact-order-is-judged-by-their-business-times-and-a-late-earlier-boundary-fact-is-a-fact-conflict.md) 决定二「谁先越过提交边界只决定走哪一格」——前提是「先越过」有一个确定的先后。
 
@@ -115,3 +115,12 @@ M：一个按（租户，包裹）取 `pg_advisory_xact_lock` 的端口与适配
 ### 未决
 
 - 网络服务交付终局采用不读已成立的取消：[code/98](./98-a-network-delivery-final-is-formed-over-a-standing-cancellation.md)。
+
+## 进 main 记录（2026-10-26，协调方）
+
+- 分支 `claude-code77` 由协调方 rebase 到 origin/main `51aca18cb`（期间 main 进了另一会话 TF 的 demo-chain-gaps/177，与本票不相交，无冲突）后快进，tip `bab5f6615`。无迁移、无 ADR。
+- 隔离评审（Sonnet）可合入，0 阻断 0 N。评审核实取锁位置在三处编排各自全部边界读之前、生产装配一定接上 `Cancellations`、锁序无反例、并发用例修前全红且有期限；分隔符变异只造成无害的多排队。
+- 评审另确认一处票外问题：撤回、主动拒绝、授权处置先锁委托行再取控制作用域锁，与接受链次序相反，同一委托并发可死锁——协调方立 code/99（R2，needs-triage），本票不改。
+- 协调方单独提交重生成的机制清点；ADR 索引与 AT 计数无变化；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0、158 个包 ok；`go build ./...`、`go vet ./...` 干净。
+- 去向：code/98（网络服务交付终局不读已成立的取消，R2）、code/99（取锁次序相反可死锁，R2）。
