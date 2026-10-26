@@ -11,7 +11,7 @@
 | collectionremittance | 24 | 12 | 4 | 6 | 0 | 3 |
 | customscompliance | 126 | 130 | 24 | 47 | 10 | 18 |
 | networkrouting | 83 | 97 | 9 | 16 | 2 | 7 |
-| nodeoperations | 110 | 117 | 15 | 29 | 4 | 17 |
+| nodeoperations | 111 | 119 | 15 | 29 | 4 | 17 |
 | parcelpricing | 142 | 130 | 19 | 19 | 1 | 24 |
 | parcelshipment | 220 | 218 | 23 | 42 | 10 | 21 |
 | partycommercial | 170 | 184 | 14 | 43 | 1 | 39 |
@@ -20,9 +20,9 @@
 | settlementaccounting | 230 | 173 | 38 | 68 | 13 | 10 |
 | transportfulfillment | 279 | 281 | 50 | 57 | 15 | 50 |
 | visibilityexception | 115 | 116 | 12 | 31 | 8 | 12 |
-| **合计** | 1586 | 1559 | 213 | 370 | 65 | 207 |
+| **合计** | 1587 | 1561 | 213 | 370 | 65 | 207 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 218、测试 336。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 218、测试 337。
 
 ## 跨上下文消费缝：50 组，153 个生产文件
 
@@ -79,7 +79,7 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 8 |
 
-## 迁移：12 个模块共 304 份 SQL
+## 迁移：12 个模块共 305 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -87,7 +87,7 @@
 | collection_remittance | 2 |
 | customs_compliance | 27 |
 | network_routing | 27 |
-| node_operations | 19 |
+| node_operations | 20 |
 | parcel_pricing | 13 |
 | parcel_shipment | 29 |
 | party_commercial | 41 |
