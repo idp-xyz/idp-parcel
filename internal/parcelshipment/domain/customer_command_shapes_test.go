@@ -76,3 +76,46 @@ func mustShipmentRequestID(t *testing.T, value string) ShipmentRequestID {
 	}
 	return id
 }
+
+// Covers: AT-PS-135——撤回口的摘要走 PWD-1：前缀是 PWD-1；原提交标识、委托号（带与不带）、原因任一不同摘要就不同；空白不入摘要；缺原提交标识或原因即拒。
+func TestCustomerWithdrawalDigestIsItsOwnShapeAndCarriesTheNames(t *testing.T) {
+	reason, err := NewWithdrawalReasonReference("SYN-REASON-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherReason, err := NewWithdrawalReasonReference("SYN-REASON-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := CustomerWithdrawalSpec{OriginalAccessRequestID: "SYN-ORIG-1", Reason: reason}
+	digest, err := CanonicalizeCustomerWithdrawal(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(digest.String(), CustomerWithdrawalShapeVersion+":") {
+		t.Fatalf("摘要 %q 不带 %s 前缀", digest, CustomerWithdrawalShapeVersion)
+	}
+	padded := base
+	padded.OriginalAccessRequestID = " SYN-ORIG-1 "
+	if same, _ := CanonicalizeCustomerWithdrawal(padded); same != digest {
+		t.Fatal("两端空白进了摘要")
+	}
+	for name, mutate := range map[string]func(*CustomerWithdrawalSpec){
+		"改指原提交": func(spec *CustomerWithdrawalSpec) { spec.OriginalAccessRequestID = "SYN-ORIG-2" },
+		"带委托号":  func(spec *CustomerWithdrawalSpec) { spec.ShipmentRequestID = "SHR-1" },
+		"改原因":   func(spec *CustomerWithdrawalSpec) { spec.Reason = otherReason },
+	} {
+		spec := base
+		mutate(&spec)
+		changed, err := CanonicalizeCustomerWithdrawal(spec)
+		if err != nil || changed == digest {
+			t.Errorf("%s：摘要未变（err=%v）", name, err)
+		}
+	}
+	if _, err := CanonicalizeCustomerWithdrawal(CustomerWithdrawalSpec{Reason: reason}); !errors.Is(err, ErrInvalidSubmissionPayload) {
+		t.Errorf("缺原提交标识：err = %v", err)
+	}
+	if _, err := CanonicalizeCustomerWithdrawal(CustomerWithdrawalSpec{OriginalAccessRequestID: "X"}); !errors.Is(err, ErrInvalidSubmissionPayload) {
+		t.Errorf("缺原因：err = %v", err)
+	}
+}
