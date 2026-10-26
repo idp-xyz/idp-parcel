@@ -109,18 +109,19 @@ function ServiceProductFields({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* 本册载荷是版本壳加一节可缺的正文；哪几格立不住由预览逐格答，表单不自判。 */}
       <p className="text-xs text-idpxyz-textMuted">
-        本册发布的是<strong>商业版本壳</strong>：给合同、接单规则包、价格政策一个可引用的版本身份。产品属性与渠道
-        映射走「登记服务形态」签与渠道产品目录页，不在这里；壳之外唯一可带的正文是下面那一节产品层交付条件，可缺。
-        哪几格立不住由预览答，答什么显什么。
+        这里发布服务产品的<strong>版本信息</strong>
+        ，供合同、接单规则包、价格政策引用。产品属性在「登记服务形态」签登记，渠道映射在渠道产品目录页登记，都不在这里。除版本信息外，只能另带下面一节产品层交付条件，可不填。
       </p>
 
       <div className="grid grid-cols-2 gap-3">
         {field('objectId', '对象标识 *', '服务产品的对象标识')}
-        {field('version', '版本号 *', '同一对象下唯一；同版本号换内容是冲突，不是覆盖')}
+        {field('version', '版本号 *', '同一产品下不重复；改内容要用新的版本号')}
         {field('scope', '范围引用 *', '商业范围引用')}
-        {field('effectiveStartsAt', '生效起点 *', 'RFC 3339，如 2026-08-01T00:00:00Z')}
-        {field('effectiveEndsAt', '生效止点', '留空即无上界')}
+        {/* 本册时刻原样送、不补零点（serviceProductPayloadOf 不经 normalizeMoment），所以要完整时刻。 */}
+        {field('effectiveStartsAt', '生效起点 *', '请填完整时刻，例如 2026-08-01T00:00:00+08:00')}
+        {field('effectiveEndsAt', '生效止点', '完整时刻；留空即持续有效')}
       </div>
 
       <ReferencesEditor
@@ -157,14 +158,14 @@ function ReferencesEditor({
   return (
     <div>
       <div className="flex items-center justify-between mb-1">
-        <span className={fieldLabel}>指名引用（被引对象类别 → 对象标识；可空）</span>
+        <span className={fieldLabel}>指名引用（被引对象类别 → 对象标识；可不填）</span>
         <Button variant="outline" disabled={locked} onClick={onAdd}>
           加一行
         </Button>
       </div>
+      {/* 类别是不是集合内的词由预览逐格点名；被引对象发布了没有由发布那一步答（发布未决）。 */}
       <p className="text-[11px] text-idpxyz-textMuted mb-2">
-        键填被引对象类别的原词、值填该对象的标识；两格全空的行不进载荷。键是不是集合内的词、被引对象发布了没有，
-        都由服务端答——前者预览时逐格点名，后者发布时答「发布未决」。
+        左格填被引对象的类别（原词），右格填该对象的标识；两格都空的行不会提交。类别填错时预览会指出；被引对象还没发布时，这一版暂时发布不了，先发布被引对象再来。
       </p>
       {rows.length === 0 ? (
         <p className="text-[11px] text-idpxyz-textMuted">暂无引用。服务产品版本可以不指名任何对象。</p>

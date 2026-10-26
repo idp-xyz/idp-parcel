@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
-import { accessRefusalHeadline, isOperatorRefusal, type OperatorRefusal } from '../../auth/access-refusal';
+import { accessRefusalTitle, isOperatorRefusal, type OperatorRefusal } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
 import { listCommercialPolicies, type CommercialPolicyListResponseBody } from './api';
 import { controlRequirementLabels, labelOf } from './presentation';
@@ -102,7 +102,7 @@ function ShellFields({
 }) {
   return (
     <section className="flex flex-col gap-2">
-      <h3 className={sectionTitle}>版本壳</h3>
+      <h3 className={sectionTitle}>版本信息</h3>
       <div className="grid grid-cols-2 gap-3">
         <Field label="合同对象标识 *" path="objectId" problems={form.problems}>
           <Input
@@ -135,22 +135,23 @@ function ShellFields({
             value={draft.effectiveStartsAt}
             readOnly={form.locked}
             className="font-mono text-[13px]"
-            placeholder="RFC 3339，如 2026-10-01T00:00:00Z"
+            // 本册时刻原样送、不补零点（payloadOf 不经 normalizeMoment），所以要完整时刻。
+            placeholder="请填完整时刻，例如 2026-10-01T00:00:00+08:00"
             onChange={(event) => patch({ effectiveStartsAt: event.target.value })}
           />
         </Field>
-        <Field label="生效止点（留空即无上界）" path="effectiveEndsAt" problems={form.problems}>
+        <Field label="生效止点（留空即持续有效）" path="effectiveEndsAt" problems={form.problems}>
           <Input
             value={draft.effectiveEndsAt}
             readOnly={form.locked}
             className="font-mono text-[13px]"
-            placeholder="RFC 3339；留空即无上界"
+            placeholder="完整时刻；留空即持续有效"
             onChange={(event) => patch({ effectiveEndsAt: event.target.value })}
           />
         </Field>
       </div>
       <p className="text-[11px] text-idpxyz-textMuted">
-        起点晚于此刻时载体可存、可批，发布会答「等待生效边界」——到界再来发布，不是失败。
+        起点晚于现在时，发布稿照样可以保存和批准；发布时会提示还没到生效起点，到了起点再来发布即可，这不是失败。
       </p>
     </section>
   );
@@ -182,7 +183,8 @@ function ContractContentFields({
           value={draft.customerAccount}
           disabled={form.locked}
           className="font-mono text-[13px]"
-          placeholder="这份合同属于哪个货主客户账户（账户标识）；闭包只让键上那一户的合同参选"
+          // 解析时只有键上那一个客户账户的合同参选；这是规则依据，不必上屏。
+          placeholder="这份合同属于哪个货主客户账户（填账户标识）"
           onChange={(event) => patch({ customerAccount: event.target.value })}
         />
       </Field>
@@ -202,7 +204,7 @@ function ContractContentFields({
       </Field>
 
       <div className="flex items-center justify-between mt-1">
-        <span className={fieldLabel}>按费用范围的约定（费用范围 × 指名策略 / 显式不适用）</span>
+        <span className={fieldLabel}>按费用范围的约定（每个费用范围指名一份策略，或写明不适用）</span>
         <Button
           variant="outline"
           disabled={form.locked}
@@ -211,10 +213,9 @@ function ContractContentFields({
           加一行
         </Button>
       </div>
+      {/* 两格都空、同一范围写两行、策略填了册上没有的标识，都照样送上去由服务端答，表单不代判。 */}
       <p className="text-[11px] text-idpxyz-textMuted">
-        每行恰一格：指名一份接受前财务控制策略，或显式写下不适用依据。两格都空、同一范围写两行、策略侧填了
-        册上没有的标识——都照样送上去由服务端答，表单不代判。零行也是合法正文（「已登记，未对任何费用范围作约定」），
-        但届时该范围答「不存在」而不是「不适用」。
+        每行只填其中一项：指名一份接受前财务控制策略，或写明不适用的依据；同一费用范围只写一行。一行都不加也可以，表示没有对任何费用范围作约定——这时查这些费用范围得到的是「不存在」，不是「不适用」。
       </p>
       <div className="flex flex-col gap-2">
         {draft.bindings.map((binding, index) => {
@@ -257,7 +258,7 @@ function ContractContentFields({
                     value={binding.inapplicabilityBasis}
                     readOnly={form.locked}
                     className="font-mono text-[12px]"
-                    placeholder="凭什么该范围不带接受前财务控制"
+                    placeholder="为什么这个费用范围不需要接受前财务控制"
                     onChange={(event) => patchBinding(index, { inapplicabilityBasis: event.target.value })}
                   />
                 </Field>
@@ -332,9 +333,9 @@ function PreAcceptanceControlFields({
   return (
     <section className="flex flex-col gap-2">
       <h3 className={sectionTitle}>合同级声明：这份合同要不要接受前财务控制</h3>
+      {/* 「不适用」必带依据：缺依据的不适用与一次默认放行分不开；「要求」不得带依据。两条都由服务端裁。 */}
       <p className="text-[11px] text-idpxyz-textMuted">
-        与上面的约定表是两层：这里答整份合同「要不要」，约定表按范围答「用哪份 / 不适用」。`不适用`必带商业依据
-        ——缺依据的不适用与一次默认放行分不开；`要求`不得带依据。两条都由服务端裁。
+        这里回答整份合同要不要接受前财务控制；上面的约定表按费用范围回答用哪份策略或不适用，两者分开填。选「不适用」必须写明商业依据，选「要求」不填依据。
       </p>
       <div className="grid grid-cols-[auto_1fr] gap-3 items-start">
         {/* 依据格只在「不适用」时显；隐着时它认领的路径由「要求」这格代显（票 22 判据 3），显着时各显各的、不重复。 */}
@@ -455,10 +456,10 @@ function ObjectPicker({
         {candidates.kind === 'loading'
           ? `正在读${registerName}…`
           : candidates.kind === 'unconfigured'
-            ? `${registerName}读口在接入渠道未配置那堵墙前（403），先手填；标识是否在册由服务端发布时判。`
+            ? `暂时读不到${registerName}（接入渠道未配置），先手填标识；标识是否在册由服务端在发布时核对。`
             : candidates.kind === 'unavailable'
-              ? `${registerName}读不到，先手填；标识是否在册由服务端发布时判。`
-              : `${registerName}读口答${accessRefusalHeadline(candidates.kind)}，先手填；标识是否在册由服务端发布时判。`}
+              ? `暂时读不到${registerName}，先手填标识；标识是否在册由服务端在发布时核对。`
+              : `暂时读不到${registerName}（${accessRefusalTitle(candidates.kind)}），先手填标识；标识是否在册由服务端在发布时核对。`}
       </span>
     </>
   );

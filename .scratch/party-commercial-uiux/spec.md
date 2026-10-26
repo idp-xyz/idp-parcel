@@ -49,7 +49,8 @@ Status: in-progress
 - 发布前给人读得懂的预览卡与确认框；批准、发布分开按钮区。
 - 切页签不丢草稿（Tabs 卸载非当前页签），未保存提醒推广到全部写入页。
 - 「基于此版本发新版本」预填；标识旁列出在册版本、提示区间重叠。
-- 接入态与拒绝态（共享件 `catalogue-view.ts`、`components/states`）把端点、错误码、文档出处收进「技术详情」——碰共享面，要评审。
+- 接入态与拒绝态（共享件 `catalogue-view.ts`、`components/states`、`components/registration` 的「提交打到 …」）把端点、错误码、文档出处收进「技术详情」——碰共享面，要评审。
+- 业务参与方、参与方关系两张登记表单的说明同样是开发话（「修订是否连续由服务端按册面判」「提交打到 …」），照 02 的用词改；参与方关系那张等 ps-external-mark-relations/17 进 main 之后再动。
 
 第三段，要后端，走[并行会话](../../docs/agents/parallel-sessions.md)，交协调方排队：
 
@@ -65,7 +66,7 @@ Status: in-progress
 | # | 票 | 阻塞于 | 状态 |
 |---|---|---|---|
 | 01 | [浏览页说业务话](issues/01-browse-pages-speak-business.md) | — | resolved |
-| 02 | [发布流程与发布表单说业务话](issues/02-publication-forms-speak-business.md) | — | in-progress |
+| 02 | [发布流程与发布表单说业务话](issues/02-publication-forms-speak-business.md) | — | resolved |
 | 03 | [逐格问题说中文](issues/03-field-problems-in-chinese.md) | — | ready-for-agent |
 | 04 | [状态一律用徽章](issues/04-status-badges-everywhere.md) | — | ready-for-agent |
 | 05 | [商业规则与策略页布局](issues/05-commercial-policies-layout.md) | 01 | ready-for-agent |

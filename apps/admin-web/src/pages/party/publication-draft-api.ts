@@ -467,8 +467,8 @@ export function publishPublicationDraft(
 
 /** 预览答案代数（`application.PreviewCommercialPublicationOutcome` 原名）。 */
 export const previewOutcomeLabels: Record<string, string> = {
-  PREVIEWED: '已预览（未落库；规范化版本与内容摘要如下，与录入后载体上记下的逐字节相等）',
-  NOT_ACCEPTED: '不受理（壳或正文立不住，什么也没算；哪几格不对见下）',
+  PREVIEWED: '预览通过，还没有保存。下面是按内容算出的内容摘要，之后批准和发布的必须是这同一份内容。',
+  NOT_ACCEPTED: '没有通过：有几格填得不对，见各格下方的红字。没有保存任何内容。',
 };
 
 /**
@@ -481,11 +481,11 @@ export const previewOutcomeLabels: Record<string, string> = {
  * ADR-0126 Decision 三不写死双人也不写死单人；规则真要求换人时，答的是批准口的 `NEEDS_ANOTHER_APPROVER`。
  */
 export const submitOutcomeLabels: Record<string, string> = {
-  DRAFT_SUBMITTED: '已存为待批准（载体本次落册，等批准；能否自批由租户审批职责规则说）',
-  DRAFT_REPLAYED: '同一份重放（载体已在册且内容相同，本次没有造第二份）',
-  DRAFT_REVISED: '待批准期间已修订（载体就地更新为眼前这份，仍待批准）',
-  CONTENT_FIXED: '内容已固定（这一版载体已批准，正文不再收改动；改内容要发新版本号）',
-  NOT_ACCEPTED: '不受理（壳或正文立不住，未到达载体册；原因随答复交回）',
+  DRAFT_SUBMITTED: '已存为待批准，等待批准。录入人能否自己批准，由租户的审批职责规则决定。',
+  DRAFT_REPLAYED: '这份内容已经存过，没有重复保存。',
+  DRAFT_REVISED: '待批准的发布稿已更新为眼前这份，仍待批准。',
+  CONTENT_FIXED: '内容已固定：这一版已经批准，不能再改。要改内容，请用新的版本号。',
+  NOT_ACCEPTED: '没有受理：有几格填得不对，没有保存任何内容。',
 };
 
 /**
@@ -495,14 +495,14 @@ export const submitOutcomeLabels: Record<string, string> = {
  * 重读再来。
  */
 export const approveOutcomeLabels: Record<string, string> = {
-  DRAFT_APPROVED: '已批准（载体推进一格，等发布）',
-  DRAFT_NOT_FOUND: '载体不在册（先存为待批准）',
-  NOT_CONFIGURED: '审批职责规则未登记（PAR-COM-18 实例半边待提供；未登记即不放行，不以任何默认代替）',
-  NEEDS_ANOTHER_APPROVER: '需换人批准（批准者不得是录入者）',
-  APPROVER_NOT_QUALIFIED: '批准者不合格（授予集不满足审批职责规则要求的层级）',
-  DRAFT_ALREADY_APPROVED: '载体已批准（这一格已过，直接发布）',
-  DRAFT_ALREADY_PUBLISHED: '载体已发布（这一版已在册）',
-  DRAFT_CHANGED: '载体在读与写之间被别的操作者动过（重读后再批）',
+  DRAFT_APPROVED: '已批准，可以发布了。',
+  DRAFT_NOT_FOUND: '找不到这份发布稿，请先存为待批准。',
+  NOT_CONFIGURED: '不能批准：租户还没有登记审批职责规则。登记之前不能批准，也不会套用任何默认规则。',
+  NEEDS_ANOTHER_APPROVER: '需要换人批准：批准人不能是录入人。',
+  APPROVER_NOT_QUALIFIED: '你的授权层级不够：审批职责规则要求更高层级的批准人。',
+  DRAFT_ALREADY_APPROVED: '这份发布稿已经批准过，可以直接发布。',
+  DRAFT_ALREADY_PUBLISHED: '这一版已经发布了。',
+  DRAFT_CHANGED: '别的操作者刚改动过这份发布稿，这次没有批准。请核对内容后再批。',
 };
 
 /**
@@ -514,12 +514,12 @@ export const approveOutcomeLabels: Record<string, string> = {
  * 载体留在`已批准`，用例那一份答案随答复嵌回，续办照那一格办。
  */
 export const publishOutcomeLabels: Record<string, string> = {
-  DRAFT_PUBLISHED: '已发布（受控发布落定，载体推进为已发布；结果在对应册立刻可见）',
-  DRAFT_NOT_FOUND: '载体不在册（先存为待批准）',
-  DRAFT_NOT_APPROVED: '载体尚未批准（先批准）',
-  DRAFT_ALREADY_PUBLISHED: '载体已发布（这一版已在册）',
-  DRAFT_AWAITS_EFFECTIVE_START: '等待生效边界（载体区间未开，到界前不交给发布用例；届期再来发布，不是失败）',
-  PUBLICATION_NOT_LANDED: '发布未落定（受控发布用例答了未决 / 冲突 / 不受理之一，载体留在已批准；用例答案见下）',
+  DRAFT_PUBLISHED: '已发布，结果已出现在对应的列表里。',
+  DRAFT_NOT_FOUND: '找不到这份发布稿，请先存为待批准。',
+  DRAFT_NOT_APPROVED: '还没有批准，请先批准。',
+  DRAFT_ALREADY_PUBLISHED: '这一版已经发布了。',
+  DRAFT_AWAITS_EFFECTIVE_START: '还没到生效起点：到生效起点之后再来发布。这不是失败，发布稿保持已批准。',
+  PUBLICATION_NOT_LANDED: '发布没有完成，原因见下。发布稿保持已批准。',
 };
 
 /** 载体状态（`domain.PublicationDraftStatus` 原名），只向前：待批准 → 已批准 → 已发布。 */

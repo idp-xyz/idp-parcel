@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
-import { accessRefusalHeadline, accessRefusalTitle } from '../../auth/access-refusal';
+import { accessRefusalTitle } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
@@ -48,6 +48,10 @@ export interface AcceptanceRulePackagePublicationFormProps {
 const sectionTitle = 'text-[13px] font-medium text-idpxyz-text';
 const hint = 'text-[11px] text-idpxyz-textMuted';
 const root = 'acceptanceRulePackage';
+// 本册 payloadOf 把时刻原样送出、不替只到天的日期补零点，服务端按完整时刻解析，只填日期会被拒——所以占位要求完整时刻，
+// 不用共享层那句「只到天补成当天零点」。
+const momentPlaceholder = '请填完整时刻，例如 2026-10-01T00:00:00+08:00';
+const openEndPlaceholder = '留空即持续有效；要填请填完整时刻';
 
 type Update = (mutate: (current: AcceptanceRulePackageDraft) => AcceptanceRulePackageDraft) => void;
 
@@ -113,22 +117,22 @@ function VocabularyNotice({ vocabulary }: { vocabulary: VocabularyState }) {
   return (
     <p className={hint}>
       {vocabulary.kind === 'loading'
-        ? '各节封闭集的码正在从服务端词表读口读取；读到之前下拉不可选。'
+        ? '正在读取各节的可选项；读到之前下拉暂时选不了。'
         : vocabulary.kind === 'unconfigured'
-          ? '词表读口在接入渠道未配置那堵墙前（403）；表单不内置任何码顶替，发布各口同在墙前，此时本表单也提交不了。'
+          ? '暂时读不到可选项：接入渠道还没有配置。配置好之前这张表单也提交不了。'
           : vocabulary.kind === 'unavailable'
-            ? '词表读口未形成答案；表单不内置任何码顶替，稍后重开本签再试。'
-            : `词表读口答${accessRefusalHeadline(vocabulary.kind)}；表单不内置任何码顶替。`}
+            ? '暂时读不到可选项，请稍后重新打开本页签再试。'
+            : `暂时读不到可选项（${accessRefusalTitle(vocabulary.kind)}）。`}
     </p>
   );
 }
 
 const setPlaceholder: Record<Exclude<SetOptionsState['kind'], 'options'>, string> = {
-  loading: '正在读词表…',
-  unconfigured: '词表未就绪（接入渠道未配置）',
-  loginRequired: `词表未就绪（${accessRefusalTitle('loginRequired')}）`,
-  notGranted: `词表未就绪（${accessRefusalTitle('notGranted')}）`,
-  unavailable: '词表读不到',
+  loading: '正在读取可选项…',
+  unconfigured: '暂时读不到可选项（接入渠道未配置）',
+  loginRequired: `暂时读不到可选项（${accessRefusalTitle('loginRequired')}）`,
+  notGranted: `暂时读不到可选项（${accessRefusalTitle('notGranted')}）`,
+  unavailable: '暂时读不到可选项',
 };
 
 /** 一个封闭集的下拉：选项 = 服务端码 × 本页中文；首项是空的「未选」，不预选任何一格。 */
@@ -215,7 +219,7 @@ function ShellFields({ draft, update, form }: Omit<SectionProps, 'vocabulary'>) 
   const patch = (change: Partial<AcceptanceRulePackageDraft>) => update((current) => ({ ...current, ...change }));
   return (
     <section className="flex flex-col gap-2">
-      <h3 className={sectionTitle}>版本壳</h3>
+      <h3 className={sectionTitle}>版本信息</h3>
       <div className="grid grid-cols-2 gap-3">
         <Field label="规则包对象标识 *" path="objectId" problems={form.problems}>
           <Input
@@ -248,21 +252,21 @@ function ShellFields({ draft, update, form }: Omit<SectionProps, 'vocabulary'>) 
             value={draft.effectiveStartsAt}
             readOnly={form.locked}
             className="font-mono text-[13px]"
-            placeholder="RFC 3339，如 2026-10-01T00:00:00Z"
+            placeholder={momentPlaceholder}
             onChange={(event) => patch({ effectiveStartsAt: event.target.value })}
           />
         </Field>
-        <Field label="生效止点（留空即无上界）" path="effectiveEndsAt" problems={form.problems}>
+        <Field label="生效止点（可空）" path="effectiveEndsAt" problems={form.problems}>
           <Input
             value={draft.effectiveEndsAt}
             readOnly={form.locked}
             className="font-mono text-[13px]"
-            placeholder="RFC 3339；留空即无上界"
+            placeholder={openEndPlaceholder}
             onChange={(event) => patch({ effectiveEndsAt: event.target.value })}
           />
         </Field>
       </div>
-      <p className={hint}>起点晚于此刻时载体可存、可批，发布会答「等待生效边界」——到界再来发布，不是失败。</p>
+      <p className={hint}>起点晚于现在时，发布稿照样可以保存和批准；发布时会提示还没到生效起点，到了起点再来发布即可，这不是失败。</p>
     </section>
   );
 }
@@ -275,7 +279,7 @@ function RulePackageBodyFields({ draft, update, form, vocabulary }: SectionProps
     update((current) => ({ ...current, body: { ...current.body, ...change } }));
   return (
     <section className="flex flex-col gap-2">
-      <h3 className={sectionTitle}>规则包正文：五维适用性与规则引用表</h3>
+      <h3 className={sectionTitle}>规则包正文（这一版的条款内容）：适用条件与规则引用表</h3>
       <Problems lines={form.problems[path]} />
       <div className="grid grid-cols-2 gap-3">
         <Field label="服务产品 *" path={`${path}.serviceProduct`} problems={form.problems}>
@@ -319,28 +323,27 @@ function RulePackageBodyFields({ draft, update, form, vocabulary }: SectionProps
             value={draft.body.effectiveStartsAt}
             readOnly={form.locked}
             className="font-mono text-[13px]"
-            placeholder="RFC 3339"
+            placeholder={momentPlaceholder}
             onChange={(event) => patchBody({ effectiveStartsAt: event.target.value })}
           />
         </Field>
-        <Field label="正文生效止点（留空即无上界）" path={`${path}.effectiveEndsAt`} problems={form.problems}>
+        <Field label="正文生效止点（可空）" path={`${path}.effectiveEndsAt`} problems={form.problems}>
           <Input
             value={draft.body.effectiveEndsAt}
             readOnly={form.locked}
             className="font-mono text-[13px]"
-            placeholder="RFC 3339；留空即无上界"
+            placeholder={openEndPlaceholder}
             onChange={(event) => patchBody({ effectiveEndsAt: event.target.value })}
           />
         </Field>
       </div>
       <RowsHeader
-        title="规则引用表（分类 × 规则引用）"
+        title="规则引用表"
         locked={form.locked}
         onAdd={() => patchBody({ rules: [...draft.body.rules, emptyAssembledRuleDraft()] })}
       />
       <p className={hint}>
-        规则包只装配引用、不选取值：分类是封闭集（服务端词表供），引用属执行它的那个上下文。一行都没有由服务端拒，
-        表单不代判。
+        每行选一个分类，再填一条规则引用；规则包只引用规则，规则本身由执行它的那一方维护。至少要有一行。
       </p>
       <div className="flex flex-col gap-2">
         {draft.body.rules.map((rule, index) => {
@@ -381,7 +384,7 @@ function AsOfPolicyFields({ draft, update, form, vocabulary }: SectionProps) {
   const setRows = (next: typeof rows) => update((current) => ({ ...current, asOfPolicies: next }));
   return (
     <DeclarationSectionFrame
-      title="时点锚声明：判断类型 × 时点语义 × 时点政策版本"
+      title="接受判断时点策略：判断类型、时点语义与时点政策版本"
       section="asOfPolicies"
       draft={draft}
       update={update}
@@ -389,7 +392,7 @@ function AsOfPolicyFields({ draft, update, form, vocabulary }: SectionProps) {
       onAdd={() => setRows([...rows, emptyAsOfPolicyDraft()])}
     >
       <p className={hint}>
-        一项判断至多一条锚；时点语义与政策版本是开放引用，锚从不携带时点值本身。同一判断写两条由服务端在预览上答。
+        接受判断时点选择策略：每类接受判断按哪种时点取依据。每类判断只能写一行；时点语义与时点政策版本照原词填，这里不填具体时刻。
       </p>
       {rows.map((row, index) => {
         const rowPath = `${path}[${index}]`;
@@ -441,8 +444,7 @@ function AcceptanceContentFields({ draft, update, form, vocabulary }: SectionPro
     <DeclarationSectionFrame title="接受内容声明：适用校验组与人工复核" section="acceptanceContent" draft={draft} update={update} locked={form.locked}>
       <Problems lines={form.problems[path]} />
       <p className={hint}>
-        勾选的校验组按服务端顺序上送；一格都不勾而只答了人工复核，空组由服务端在预览上答。人工复核答的是「这类委托要不要
-        人工业务复核」，不是「谁有权复核」——后者归授权规则，不在本表单。
+        至少勾选一个校验组。人工复核说的是「这类委托要不要人工业务复核」，不是「谁有权复核」——后者在授权规则里设。
       </p>
       {/* 多选是一排各带 label 的勾选框，外层用 div：label 套 label 会让点标题变成点第一格。 */}
       <Field
@@ -495,7 +497,7 @@ function IntakeQualificationFields({ draft, update, form, vocabulary }: SectionP
     >
       <Problems lines={form.problems[path]} />
       <p className={hint}>
-        来源一格都不勾由服务端拒；硬资格清单可以显式为空——「真没有硬资格」也要把来源允许声明出来。
+        至少勾选一个允许来源。硬资格清单可以为空；即使没有硬资格，也要勾出允许的来源。
       </p>
       <Field
         label="允许来源"
@@ -554,7 +556,7 @@ function FinalRuleFields({ draft, update, form, vocabulary }: SectionProps) {
     update((current) => ({ ...current, finalRuleValidity: { ...current.finalRuleValidity, ...change } }));
   return (
     <DeclarationSectionFrame
-      title="终局规则声明：责任结果 × 终局种类"
+      title="终局规则声明：责任结果与终局种类"
       section="finalRules"
       draft={draft}
       update={update}
@@ -562,7 +564,7 @@ function FinalRuleFields({ draft, update, form, vocabulary }: SectionProps) {
       onAdd={() => setRows([...rows, emptyFinalRuleDraft()])}
     >
       <p className={hint}>
-        责任结果是封闭集（服务端词表供），终局种类是开放引用——网络服务不统一规定跨产品的终局集合。
+        责任结果从下拉里选；终局种类各产品不统一，照原词填。
       </p>
       {rows.map((row, index) => {
         const rowPath = `${path}[${index}]`;
@@ -591,7 +593,7 @@ function FinalRuleFields({ draft, update, form, vocabulary }: SectionProps) {
       })}
       <div className="rounded border border-dashed border-idpxyz-border p-2 flex flex-col gap-2 mt-1">
         <div className="flex items-center justify-between">
-          <span className={fieldLabel}>面单有效期（同一通道上的一格；整格留空 = 未声明有效期，成功结果不失效）</span>
+          <span className={fieldLabel}>面单有效期（随终局规则一起声明；两格都留空即不设有效期，成功结果不失效）</span>
           <SectionState declared={sectionDeclared(draft, 'finalRuleValidity')} />
         </div>
         <Problems lines={form.problems[validityPath]} />
@@ -605,18 +607,19 @@ function FinalRuleFields({ draft, update, form, vocabulary }: SectionProps) {
               onChange={(anchor) => patchValidity({ anchor })}
             />
           </Field>
-          <Field label="时长（ISO-8601 子集 P[nD][T[nH][nM][nS]]）" path={`${validityPath}.duration`} problems={form.problems}>
+          {/* 时长收 ISO-8601 的一个子集 P[nD][T[nH][nM][nS]]：只有天、时、分、秒，年 / 月 / 周不收。 */}
+          <Field label="时长" path={`${validityPath}.duration`} problems={form.problems}>
             <Input
               value={validity.duration}
               readOnly={form.locked}
               className="font-mono text-[13px]"
-              placeholder="如 P7D 或 P3DT12H；年 / 月 / 周不收"
+              placeholder="如 P7D（7 天）或 P3DT12H（3 天 12 小时）；不收年、月、周"
               onChange={(event) => patchValidity({ duration: event.target.value })}
             />
           </Field>
         </div>
         <p className={hint}>
-          时长由租户登记，表单不给默认；只填有效期不写终局行、时长为零或带年 / 月 / 周都由服务端答。
+          时长没有默认值，不能为零。填了有效期就要有终局规则行。
         </p>
       </div>
     </DeclarationSectionFrame>
@@ -630,13 +633,14 @@ function SourceDataAmendmentFields({ draft, update, form, vocabulary }: SectionP
   const amendment = draft.sourceDataAmendment;
   const patchAmendment = (change: Partial<typeof amendment>) =>
     update((current) => ({ ...current, sourceDataAmendment: { ...current.sourceDataAmendment, ...change } }));
+  // 「缺格」是表里没写到的（资料组 × 阶段 × 意图）那一格；closed = false 读作转复核，true 读作不允许（ADR-0120）。
   const closedChoices: { value: Exclude<ClosedDraft, ''>; label: string }[] = [
-    { value: 'false', label: '缺格转复核（closed = false）' },
-    { value: 'true', label: '缺格即不允许（closed = true）' },
+    { value: 'false', label: '没写到的转复核' },
+    { value: 'true', label: '没写到的一律不允许' },
   ];
   return (
     <DeclarationSectionFrame
-      title="资料修订允许声明：缺格怎么读 + 资料组 × 阶段 × 意图 × 允许性"
+      title="资料修订允许声明：资料组、阶段、意图与允许性"
       section="sourceDataAmendment"
       draft={draft}
       update={update}
@@ -645,11 +649,9 @@ function SourceDataAmendmentFields({ draft, update, form, vocabulary }: SectionP
     >
       <Problems lines={form.problems[path]} />
       <p className={hint}>
-        「缺格怎么读」必答：false 是缺格转复核、true 是缺格即不允许，两句都要登记方自己说，没选就原样送上去让服务端答。
-        closed = true 时表可以留空（这一版什么都不许改）；closed = false 时零行由服务端拒。允许性只有「允许 / 不允许」——
-        「未声明」是缺格的读法，不是一行能选的值。
+        先选表里没写到的修订怎么算：转复核，或一律不允许，没有默认。选「一律不允许」时表可以留空，意思是这一版什么资料都不许改；选「转复核」时至少要写一行。每行的允许性只有「允许 / 不允许」两种。
       </p>
-      <Field label="缺格怎么读 *" path={`${path}.closed`} problems={form.problems} as="div">
+      <Field label="表里没写到的修订怎么算 *" path={`${path}.closed`} problems={form.problems} as="div">
         <div className="flex items-center gap-1">
           {closedChoices.map((choice) => (
             <Button
@@ -767,7 +769,7 @@ function DeclarationSectionFrame({
 
 function SectionState({ declared }: { declared: boolean }) {
   return (
-    <span className={hint}>{declared ? '本节将随发布登记' : '本节留空 → 未声明（载荷不带本节）'}</span>
+    <span className={hint}>{declared ? '本节将随发布登记' : '本节留空，即未声明'}</span>
   );
 }
 

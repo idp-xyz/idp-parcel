@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
-import { accessRefusalHeadline, accessRefusalTitle } from '../../auth/access-refusal';
+import { accessRefusalTitle } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
 import { cancellationPartyLabels } from './presentation';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
@@ -76,7 +76,7 @@ function ShellFields({
 }) {
   return (
     <section className="flex flex-col gap-2">
-      <h3 className={sectionTitle}>版本壳</h3>
+      <h3 className={sectionTitle}>版本信息</h3>
       <div className="grid grid-cols-2 gap-3">
         <Field label="授权规则对象标识 *" path="objectId" problems={form.problems}>
           <Input
@@ -104,27 +104,28 @@ function ShellFields({
           />
         </Field>
         <div />
+        {/* 本册 payloadOf 把时刻原样送出、不替只到天的日期补零点，只填日期会被服务端拒，所以占位要求完整时刻。 */}
         <Field label="生效起点 *" path="effectiveStartsAt" problems={form.problems}>
           <Input
             value={draft.effectiveStartsAt}
             readOnly={form.locked}
             className="font-mono text-[13px]"
-            placeholder="RFC 3339，如 2026-10-01T00:00:00Z"
+            placeholder="请填完整时刻，例如 2026-10-01T00:00:00+08:00"
             onChange={(event) => patch({ effectiveStartsAt: event.target.value })}
           />
         </Field>
-        <Field label="生效止点（留空即无上界）" path="effectiveEndsAt" problems={form.problems}>
+        <Field label="生效止点（可空）" path="effectiveEndsAt" problems={form.problems}>
           <Input
             value={draft.effectiveEndsAt}
             readOnly={form.locked}
             className="font-mono text-[13px]"
-            placeholder="RFC 3339；留空即无上界"
+            placeholder="留空即持续有效；要填请填完整时刻"
             onChange={(event) => patch({ effectiveEndsAt: event.target.value })}
           />
         </Field>
       </div>
       <p className="text-[11px] text-idpxyz-textMuted">
-        起点晚于此刻时载体可存、可批，发布会答「等待生效边界」——到界再来发布，不是失败。
+        起点晚于现在时，发布稿照样可以保存和批准；发布时会提示还没到生效起点，到了起点再来发布即可，这不是失败。
       </p>
     </section>
   );
@@ -149,15 +150,13 @@ function CancellationAuthorityFields({
   return (
     <section className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <h3 className={sectionTitle}>取消授权目录：请求方 × 规则引用</h3>
+        <h3 className={sectionTitle}>取消授权目录：请求方与规则引用</h3>
         <Button variant="outline" disabled={form.locked} onClick={() => patch({ rows: [...draft.rows, emptyCancellationRowDraft()] })}>
           加一行
         </Button>
       </div>
       <p className="text-[11px] text-idpxyz-textMuted">
-        有行即该请求方被允许取消并带规则引用；没写的请求方就是不许取消——那是目录说出的真话。一行都没有是缺件不是
-        「谁都不许」，同一请求方第二行是冲突：两条都由服务端在预览上答，表单不代判。请求方的封闭集由服务端词表供，
-        表单不内置、不预选。
+        每行写一种可以取消的请求方，以及依据哪条规则；没写的请求方不能取消。至少要有一行，同一请求方只能有一行。
       </p>
       {/* 正文根 authorizationRule 认领了就要有处显（票 22 判据 3；票 17 评审点名）：服务端点到正文整体而不是目录时落在这里。 */}
       <Problems lines={form.problems['authorizationRule']} />
@@ -233,20 +232,20 @@ function PartyPicker({
       <select className={selectClass} value="" disabled>
         <option value="">
           {parties.kind === 'loading'
-            ? '正在读词表…'
+            ? '正在读取可选项…'
             : parties.kind === 'unavailable'
-              ? '词表读不到'
-              : `词表未就绪（${accessRefusalTitle(parties.kind)}）`}
+              ? '暂时读不到可选项'
+              : `暂时读不到可选项（${accessRefusalTitle(parties.kind)}）`}
         </option>
       </select>
       <span className="block text-[11px] text-idpxyz-textMuted mt-1">
         {parties.kind === 'loading'
-          ? '请求方的封闭集正在从服务端词表读口读取。'
+          ? '正在读取可选的请求方。'
           : parties.kind === 'unconfigured'
-            ? '词表读口在接入渠道未配置那堵墙前（403）；表单不内置任何码顶替，四口同在墙前，此时本表单也提交不了。'
+            ? '暂时读不到可选的请求方：接入渠道还没有配置。配置好之前这张表单也提交不了。'
             : parties.kind === 'unavailable'
-              ? '词表读口未形成答案；表单不内置任何码顶替，稍后重开本签再试。'
-              : `词表读口答${accessRefusalHeadline(parties.kind)}；表单不内置任何码顶替。`}
+              ? '暂时读不到可选的请求方，请稍后重新打开本页签再试。'
+              : `暂时读不到可选的请求方（${accessRefusalTitle(parties.kind)}）。`}
       </span>
     </>
   );

@@ -70,10 +70,10 @@ export function PreAcceptanceFinancialControlPolicyPublicationForm({
       {({ problems, locked }: PublicationFormContext) => (
         <div className="flex flex-col gap-5">
           <section className="flex flex-col gap-3">
-            <h3 className="text-[13px] font-medium text-idpxyz-text">版本壳</h3>
+            <h3 className="text-[13px] font-medium text-idpxyz-text">版本信息</h3>
             <p className="text-[11px] text-idpxyz-textMuted">
-              壳上的适用范围与区间是<strong>版本</strong>的（登记册逐列比对的项）；区间上界留空即持续有效。策略正文自己没有
-              范围与区间——它只说控制怎么做，适用到哪个费用范围由客户合同按范围绑上来。壳上不带指名引用。
+              版本适用范围与生效区间说的是<strong>这一版</strong>
+              本身；止点留空即持续有效。策略正文没有自己的范围与区间：它只说控制怎么做，用在哪个费用范围由客户合同按范围指定。
             </p>
             <div className="grid grid-cols-2 gap-3">
               <Field label="策略对象标识 *" path="objectId" problems={problems}>
@@ -123,11 +123,10 @@ export function PreAcceptanceFinancialControlPolicyPublicationForm({
           </section>
 
           <section className="flex flex-col gap-3">
-            <h3 className="text-[13px] font-medium text-idpxyz-text">策略正文（0024）</h3>
+            <h3 className="text-[13px] font-medium text-idpxyz-text">策略正文（这一版的条款内容）</h3>
             <p className="text-[11px] text-idpxyz-textMuted">
-              正文是一格共同通过条件加一张控制项表：每行在哪个费用范围上做哪一种控制、判断顺序排第几、失败处置委托去哪、失败或补偿责任归谁。
-              判断顺序从 1 起、版本内唯一；同一范围上同一种控制至多一行；至少一项——三条都由服务端构造门答，这里只提示。
-              <strong>「无控制」不在这里</strong>：那是客户合同按范围的声明（要带不适用依据），控制种类下拉里没有它。
+              先选共同通过条件，再填控制项表：每行说在哪个费用范围上做哪一种控制、判断顺序排第几、失败了怎么处置、失败或补偿的责任归谁。至少要有一项；判断顺序从 1 起，同一版里不能重复；同一范围上同一种控制只能有一行。
+              <strong>「明确不做控制」不在这里设</strong>：那是客户合同按范围的声明（要写明不适用的依据），控制种类里没有这一项。
             </p>
             <div className="grid grid-cols-2 gap-3">
               <VocabularySelect
@@ -153,7 +152,7 @@ export function PreAcceptanceFinancialControlPolicyPublicationForm({
             </div>
             {draft.controls.length === 0 ? (
               <p className="text-[11px] text-idpxyz-textMuted">
-                一行都没有。正文至少要一项控制——「这份策略什么都不控」不是一版策略能说的话，那句由客户合同声明；送预览会由服务端答成因。
+                还没有控制项。一版策略至少要有一项控制；「明确不做控制」由客户合同声明，不在这里。
               </p>
             ) : null}
             {draft.controls.map((row, index) => (
@@ -235,7 +234,7 @@ function ControlRow({
             value={row.chargeScope}
             disabled={locked}
             className="font-mono text-[13px]"
-            placeholder="费用范围引用串（开放引用，不校验存在性）"
+            placeholder="费用范围（系统不核对是否已登记）"
             onChange={(event) => onChange({ chargeScope: event.target.value })}
           />
         </Field>
@@ -244,7 +243,7 @@ function ControlRow({
             value={row.order}
             disabled={locked}
             className="font-mono text-[13px]"
-            placeholder="从 1 起的整数，版本内唯一"
+            placeholder="从 1 起的整数，同一版里不重复"
             onChange={(event) => onChange({ order: event.target.value })}
           />
         </Field>
@@ -266,7 +265,7 @@ function ControlRow({
             value={row.responsibility}
             disabled={locked}
             className="font-mono text-[13px]"
-            placeholder="责任引用串（参与方、条款或角色；开放引用）"
+            placeholder="参与方、条款或角色"
             onChange={(event) => onChange({ responsibility: event.target.value })}
           />
         </Field>

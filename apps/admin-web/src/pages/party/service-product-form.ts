@@ -35,7 +35,7 @@ export interface ServiceProductDraft {
   version: string;
   scope: string;
   effectiveStartsAt: string;
-  /** 留空即无上界（载荷里缺席，不送空串）。 */
+  /** 留空即持续有效（载荷里缺席，不送空串）。 */
   effectiveEndsAt: string;
   references: ReferenceRowDraft[];
   /** 产品层交付条件一节（票 25）；一格都没填即整节不进载荷。 */
@@ -155,7 +155,7 @@ export function serviceProductLocalProblems(draft: ServiceProductDraft): Record<
   const problems: Record<string, string[]> = {};
   for (const [kind, count] of seen) {
     if (count > 1) {
-      problems[`references.${kind}`] = [`同一个被引对象类别填了 ${count} 行，载荷里只能有一格；删掉多出的行`];
+      problems[`references.${kind}`] = [`同一个被引对象类别填了 ${count} 行，只能保留一行；请删掉多出的行`];
     }
   }
   return problems;

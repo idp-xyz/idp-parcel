@@ -76,11 +76,11 @@ export function serviceRuleEmptyTableNote(appliesTo: ServiceRuleAppliesTo, table
   const other = table === 'claimDeadlines' ? '下方最低材料表' : '上方索赔期限表';
   const meaning =
     appliesTo === 'serviceProduct'
-      ? '挂服务产品的这一版无行，索赔时这一维答未登记。'
+      ? '挂服务产品的这一版没有行，索赔时这一项按未登记处理。'
       : appliesTo === 'customerContract'
-        ? '挂客户合同的这一版无行即继承：索赔时取同一范围挂服务产品那一版的同一行，产品版也没有才答未登记。'
-        : '挂服务产品时无行即未登记；挂客户合同时无行即继承同一范围产品版的同一行。';
-  return `零行。${meaning}只要${other}不也是空的，这张表可以空着；两张都空由服务端在预览上答成因。`;
+        ? '挂客户合同的这一版没有行即继承：索赔时取同一范围挂服务产品那一版的同一行，产品版也没有才按未登记处理。'
+        : '挂服务产品时没有行即未登记；挂客户合同时没有行即继承同一范围产品版的同一行。';
+  return `还没有行。${meaning}${other}有内容时，这张表可以空着；两张表不能都空。`;
 }
 
 /**

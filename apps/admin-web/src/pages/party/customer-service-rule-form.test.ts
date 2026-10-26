@@ -273,7 +273,7 @@ test('零行提示随适用对象：挂产品答未登记、挂合同答继承�
   ok(!product.includes('继承'));
   const contract = serviceRuleEmptyTableNote('customerContract', 'minimumMaterials');
   ok(contract.includes('继承'));
-  ok(contract.includes('产品版也没有才答未登记'));
+  ok(contract.includes('产品版也没有才按未登记处理'));
   const unchosen = serviceRuleEmptyTableNote('', 'claimDeadlines');
   ok(unchosen.includes('未登记') && unchosen.includes('继承'));
   ok(serviceRuleEmptyTableNote('serviceProduct', 'claimDeadlines').includes('下方最低材料表'));

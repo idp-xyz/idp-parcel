@@ -90,10 +90,10 @@ export function CustomerServiceRulePublicationForm({ onPublished }: CustomerServ
       {({ problems, locked }: PublicationFormContext) => (
         <div className="flex flex-col gap-5">
           <section className="flex flex-col gap-3">
-            <h3 className="text-[13px] font-medium text-idpxyz-text">版本壳</h3>
+            <h3 className="text-[13px] font-medium text-idpxyz-text">版本信息</h3>
             <p className="text-[11px] text-idpxyz-textMuted">
-              壳上的适用范围与区间是<strong>版本</strong>的（登记册逐列比对的项）；区间上界留空即持续有效。壳上的指名引用
-              不在这里另填：下方适用对象选定的那个服务产品或客户合同就是壳上指名的对象，表单只送一份，服务端核两处一致。
+              版本适用范围与生效区间说的是<strong>这一版</strong>
+              本身；止点留空即持续有效。这一版引用的服务产品或客户合同取自下方「适用对象」，不用在这里另填。
             </p>
             <div className="grid grid-cols-2 gap-3">
               <Field label="规则对象标识 *" path="objectId" problems={problems}>
@@ -143,11 +143,9 @@ export function CustomerServiceRulePublicationForm({ onPublished }: CustomerServ
           </section>
 
           <section className="flex flex-col gap-3">
-            <h3 className="text-[13px] font-medium text-idpxyz-text">规则正文（0023）</h3>
+            <h3 className="text-[13px] font-medium text-idpxyz-text">规则正文（这一版的条款内容）</h3>
             <p className="text-[11px] text-idpxyz-textMuted">
-              正文是「挂在哪个对象上」「责任方」「适用范围」三格加两张表：索赔期限按种类成行，最低材料按索赔类型成行。
-              适用对象恰一、两张表合起来至少一行、每一种期限与每一种索赔类型至多一行——都由服务端答，这里不拦。正文只
-              发布本册这一侧；索赔类型与材料目录、起算事件的解释归可见性与异常那侧，这里按引用原词填。
+              先选这条规则随哪个服务产品或客户合同适用，再填责任方与规则适用范围，然后填两张表：索赔期限每种期限一行，最低材料每种索赔类型一行，两张表合起来至少要有一行。索赔类型、材料与起算事件的解释在可见性与异常那边，这里照原词填。
             </p>
             <div className="grid grid-cols-2 gap-3">
               <Field label="适用对象 *" path={`${bodyPath}.applicability`} problems={problems}>
@@ -175,12 +173,13 @@ export function CustomerServiceRulePublicationForm({ onPublished }: CustomerServ
                     value={draft.appliesToId}
                     disabled={locked}
                     className="font-mono text-[13px]"
-                    placeholder={`${chosen.noun}的对象标识（同一个值进壳上 references.${chosen.shellKey}）`}
+                    placeholder={`${chosen.noun}的对象标识`}
                     onChange={(event) => patch({ appliesToId: event.target.value })}
                   />
+                  {/* 同一个标识也作版本上的指名引用送出；服务端核出两处不一致时点名的是那条引用，问题显在这一格下。 */}
                   {(problems[`references.${chosen.shellKey}`] ?? []).map((line) => (
                     <span key={line} className="block text-[11px] text-idpxyz-danger mt-1">
-                      壳上引用 references.{chosen.shellKey}：{line}
+                      版本信息里的{chosen.noun}引用：{line}
                     </span>
                   ))}
                 </Field>
@@ -190,7 +189,7 @@ export function CustomerServiceRulePublicationForm({ onPublished }: CustomerServ
                   value={draft.responsible}
                   disabled={locked}
                   className="font-mono text-[13px]"
-                  placeholder="参与方标识（开放引用，不校验存在性）"
+                  placeholder="参与方标识（系统不核对是否已登记）"
                   onChange={(event) => patch({ responsible: event.target.value })}
                 />
               </Field>
@@ -199,7 +198,7 @@ export function CustomerServiceRulePublicationForm({ onPublished }: CustomerServ
                   value={draft.ruleScope}
                   disabled={locked}
                   className="font-mono text-[13px]"
-                  placeholder="正文自己的适用范围引用，与壳上的版本范围各是各的格"
+                  placeholder="这条规则的适用范围，与上方版本适用范围分开填"
                   onChange={(event) => patch({ ruleScope: event.target.value })}
                 />
               </Field>
@@ -216,7 +215,7 @@ export function CustomerServiceRulePublicationForm({ onPublished }: CustomerServ
             </div>
             {draft.claimDeadlines.length === 0 ? (
               <p className="text-[11px] text-idpxyz-textMuted">
-                {serviceRuleEmptyTableNote(draft.appliesTo, 'claimDeadlines')}每一种期限至多一行。
+                {serviceRuleEmptyTableNote(draft.appliesTo, 'claimDeadlines')}每一种期限只能有一行。
               </p>
             ) : null}
             {draft.claimDeadlines.map((row, index) => (
@@ -241,7 +240,7 @@ export function CustomerServiceRulePublicationForm({ onPublished }: CustomerServ
             </div>
             {draft.minimumMaterials.length === 0 ? (
               <p className="text-[11px] text-idpxyz-textMuted">
-                {serviceRuleEmptyTableNote(draft.appliesTo, 'minimumMaterials')}每一种索赔类型至多一行，每行至少一项材料且不重复，都由服务端答。
+                {serviceRuleEmptyTableNote(draft.appliesTo, 'minimumMaterials')}每一种索赔类型只能有一行；每行至少一项材料，且不能重复。
               </p>
             ) : null}
             {draft.minimumMaterials.map((row, index) => (
@@ -313,7 +312,7 @@ function ClaimDeadlineRow({
             value={row.startEvent}
             disabled={locked}
             className="font-mono text-[13px]"
-            placeholder="起算事件引用串（开放引用，解释归可见性与异常）"
+            placeholder="起算事件（照可见性与异常那边的原词填）"
             onChange={(event) => onChange({ startEvent: event.target.value })}
           />
         </Field>
@@ -322,7 +321,7 @@ function ClaimDeadlineRow({
             value={row.days}
             disabled={locked}
             className="font-mono text-[13px]"
-            placeholder="正整数天；按哪份日历数由右侧日历引用说"
+            placeholder="正整数天数，按右侧的业务日历计"
             onChange={(event) => onChange({ days: event.target.value })}
           />
         </Field>
@@ -331,7 +330,7 @@ function ClaimDeadlineRow({
             value={row.calendar}
             disabled={locked}
             className="font-mono text-[13px]"
-            placeholder="业务日历或时区引用串（日历内容属实例半边）"
+            placeholder="业务日历或时区的标识"
             onChange={(event) => onChange({ calendar: event.target.value })}
           />
         </Field>
@@ -383,7 +382,7 @@ function MinimumMaterialsRow({
             value={row.claimKind}
             disabled={locked}
             className="font-mono text-[13px]"
-            placeholder="索赔类型引用串（类型目录归可见性与异常）"
+            placeholder="索赔类型（照可见性与异常那边的原词填）"
             onChange={(event) => onChange({ claimKind: event.target.value })}
           />
         </Field>
@@ -392,7 +391,7 @@ function MinimumMaterialsRow({
             className={textareaClass}
             value={row.materials}
             disabled={locked}
-            placeholder={'材料条目引用串（材料目录归可见性与异常），一行一项；空行不算项'}
+            placeholder={'一行一项材料，照可见性与异常那边的原词填；空行不算'}
             onChange={(event) => onChange({ materials: event.target.value })}
           />
           {itemLines.map((line) => (

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
-import { accessRefusalHeadline, isOperatorRefusal } from '../../auth/access-refusal';
+import { accessRefusalTitle, isOperatorRefusal } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
 import {
   listBusinessParties,
@@ -81,10 +81,10 @@ export function SettlementPolicyPublicationForm({ onPublished }: SettlementPolic
       {({ problems, locked }: PublicationFormContext) => (
         <div className="flex flex-col gap-5">
           <section className="flex flex-col gap-3">
-            <h3 className="text-[13px] font-medium text-idpxyz-text">版本壳</h3>
+            <h3 className="text-[13px] font-medium text-idpxyz-text">版本信息</h3>
             <p className="text-[11px] text-idpxyz-textMuted">
-              壳上的适用范围与区间是<strong>版本</strong>的（登记册逐列比对的项），与下面政策正文自己的适用区间是两样；
-              区间上界留空即持续有效。壳上的指名引用不另填——正文六维里选出的合同同时作壳引用交出。
+              版本适用范围与生效区间说的是<strong>这一版</strong>
+              本身，和下方政策正文里的生效区间分开填；止点留空即持续有效。这一版引用的客户合同取自下方正文里选的合同，不用另填。
             </p>
             <div className="grid grid-cols-2 gap-3">
               <Field label="政策对象标识 *" path="objectId" problems={problems}>
@@ -135,15 +135,14 @@ export function SettlementPolicyPublicationForm({ onPublished }: SettlementPolic
 
           <section className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-[13px] font-medium text-idpxyz-text">政策正文（0011）</h3>
+              <h3 className="text-[13px] font-medium text-idpxyz-text">政策正文（这一版的条款内容）</h3>
               <Button variant="outline" disabled={locked} onClick={() => setDraft(withShellIntervalCopiedIntoPolicy)}>
-                区间从版本壳带入
+                区间从版本信息带入
               </Button>
             </div>
             <p className="text-[11px] text-idpxyz-textMuted">
-              结算政策答的是<strong>怎么结</strong>（预付 / 账期）在哪个精确范围适用：责任法人 × 客户相对方 × 合同版本 × 费用范围 ×
-              币种 × 区间，六维一维不少，同一范围两法命中即适用冲突。它不答「要不要接受前控制」——那归客户合同的合同级声明与
-              接受前财务控制策略两册，本表单没有控制字段。
+              结算政策说的是<strong>怎么结</strong>
+              （预付或账期），以及在哪个范围适用：责任法人、客户相对方、合同版本、费用范围、币种、生效区间，六项都要填。同一范围上有两种结法同时命中，就是适用冲突。接受前要不要做财务控制不在这里设，看客户合同与「接受前财务控制策略」。
             </p>
             <div className="grid grid-cols-2 gap-3">
               <VocabularySelect
@@ -158,8 +157,7 @@ export function SettlementPolicyPublicationForm({ onPublished }: SettlementPolic
                 value={draft.method}
                 locked={locked}
                 onChange={(method) => patch({ method })}
-                // 句中「枚举、」后那个半角空格是此前本表单里 JSX 折行留下的渲染结果，照原样保留——本票不改一字显示文案。
-                unavailableNote="方式的码只从服务端词表读口取（GET /commercial-publication-vocabularies?kind=SETTLEMENT_POLICY），表单不内置枚举、 不自造码；词表就绪前这一格选不了，送预览会由服务端点名。"
+                unavailableNote="可选的结算方式由服务端提供，还没读到时这一格暂时选不了。"
               />
               <ReferencePicker
                 label="责任法人（集团法人）*"
@@ -207,7 +205,7 @@ export function SettlementPolicyPublicationForm({ onPublished }: SettlementPolic
                   value={draft.chargeScope}
                   disabled={locked}
                   className="font-mono text-[13px]"
-                  placeholder="服务 / 费用范围引用串"
+                  placeholder="服务或费用范围"
                   onChange={(event) => patch({ chargeScope: event.target.value })}
                 />
               </Field>
@@ -216,7 +214,7 @@ export function SettlementPolicyPublicationForm({ onPublished }: SettlementPolic
                   value={draft.currency}
                   disabled={locked}
                   className="font-mono text-[13px]"
-                  placeholder="如 CNY；存不存在由服务端答"
+                  placeholder="如 CNY"
                   onChange={(event) => patch({ currency: event.target.value })}
                 />
               </Field>
@@ -234,7 +232,7 @@ export function SettlementPolicyPublicationForm({ onPublished }: SettlementPolic
                   value={draft.policyEffectiveEndsAt}
                   disabled={locked}
                   className="font-mono text-[13px]"
-                  placeholder="留空即无上界"
+                  placeholder="留空即持续有效"
                   onChange={(event) => patch({ policyEffectiveEndsAt: event.target.value })}
                 />
               </Field>
@@ -288,9 +286,7 @@ function ContractPicker({
     const known = contracts.some((contract) => contractChoiceKey(contract) === currentKey);
     return (
       <label className="block">
-        <span className={fieldLabel}>
-          客户合同版本（对象 + 版本一起选）* <span className="font-mono text-[10px]">settlementPolicy.contract</span>
-        </span>
+        <span className={fieldLabel}>客户合同版本 *</span>
         <select
           className={selectClass}
           value={currentKey}
@@ -304,7 +300,7 @@ function ContractPicker({
           <option value="">未选</option>
           {!known && currentKey !== '' ? (
             <option value={currentKey}>
-              {objectId} · {version}（手填，不在目录上）
+              {objectId} · {version}（手填，不在合同列表里）
             </option>
           ) : null}
           {answer.body.contracts.map((contract) => (
@@ -330,7 +326,7 @@ function ContractPicker({
           value={objectId}
           disabled={locked}
           className="font-mono text-[13px]"
-          placeholder="合同对象标识（目录不可用时手填）"
+          placeholder="合同对象标识（读不到合同列表时手填）"
           onChange={(event) => onChange({ objectId: event.target.value, version })}
         />
       </Field>
@@ -339,18 +335,18 @@ function ContractPicker({
           value={version}
           disabled={locked}
           className="font-mono text-[13px]"
-          placeholder="版本号（不是「对象/版本」串）"
+          placeholder="只填版本号"
           onChange={(event) => onChange({ objectId, version: event.target.value })}
         />
       </Field>
       <span className="block text-[11px] text-idpxyz-textMuted">
         {answer === null
-          ? '正在读客户与合同目录…'
+          ? '正在读取客户合同列表…'
           : answer.kind === 'unconfigured'
-            ? '客户与合同目录读口在接入渠道未配置那堵墙前（403），先分两格手填；合同在不在册由服务端发布时判。'
+            ? '暂时读不到客户合同列表（接入渠道未配置），请分两格手填；合同是否存在由服务端核对。'
             : isOperatorRefusal(answer)
-              ? `客户与合同目录读口答${accessRefusalHeadline(answer.kind)}，先分两格手填；合同在不在册由服务端发布时判。`
-              : '客户与合同目录读不到，先分两格手填；合同在不在册由服务端发布时判。'}
+              ? `暂时读不到客户合同列表（${accessRefusalTitle(answer.kind)}），请分两格手填；合同是否存在由服务端核对。`
+              : '暂时读不到客户合同列表，请分两格手填；合同是否存在由服务端核对。'}
       </span>
     </div>
   );

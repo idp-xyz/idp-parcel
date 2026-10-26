@@ -92,35 +92,35 @@ function CreditPolicyFields({
   return (
     <div className="flex flex-col gap-4">
       <section className="flex flex-col gap-2">
-        <p className={groupTitle}>
-          版本壳 <span className="font-mono text-idpxyz-textMuted">kind = CREDIT_POLICY</span>
-        </p>
+        <p className={groupTitle}>版本信息</p>
         <Problems lines={problems['kind']} />
         <div className="grid grid-cols-2 gap-3">
           {field('objectId', '政策对象标识 *', 'objectId')}
           {field('version', '版本号 *', 'version')}
           {field('scope', '适用范围 *', 'scope')}
           <div />
-          {field('effectiveStartsAt', '壳有效区间起点 *', 'effectiveStartsAt', 'RFC 3339 或 YYYY-MM-DD（只到天补成当天零点 UTC）')}
-          {field('effectiveEndsAt', '壳有效区间止点', 'effectiveEndsAt', '留空即无上界')}
+          {/* 只填到天的日期由 normalizeMoment 补成当天零点 UTC，占位照这条行为写。 */}
+          {field('effectiveStartsAt', '版本有效区间起点 *', 'effectiveStartsAt', 'YYYY-MM-DD 或完整时刻；只填日期时按当天零点（UTC）')}
+          {field('effectiveEndsAt', '版本有效区间止点', 'effectiveEndsAt', '留空即持续有效')}
         </div>
       </section>
 
       <section className="flex flex-col gap-2">
-        <p className={groupTitle}>正文（信用政策册，0020）</p>
+        <p className={groupTitle}>正文（这一版的条款内容）</p>
         <div className="grid grid-cols-3 gap-3">
           {field('creditPolicy.legalEntity', '责任法人 *', 'legalEntity')}
-          {field('creditPolicy.authorityLevel', '授权层级 *', 'authorityLevel', '开放引用集，按原词填')}
-          {field('creditPolicy.chargeType', '费用类型 *', 'chargeType', '开放引用集，按原词填')}
+          {/* 授权层级与费用类型是开放引用集：没有词表可选，操作者照原词手填。 */}
+          {field('creditPolicy.authorityLevel', '授权层级 *', 'authorityLevel', '按原词填写')}
+          {field('creditPolicy.chargeType', '费用类型 *', 'chargeType', '按原词填写')}
         </div>
 
         <div>
-          <span className={fieldLabel}>额度（金额 / 比例，恰一）*</span>
+          <span className={fieldLabel}>额度（金额或比例，只填一项）*</span>
           <div className="grid grid-cols-3 gap-3">
             {field('creditPolicy.limitMinor', '金额（最小货币单位）', 'limitMinor', '整数；0 是「授予零信用」', 'numeric')}
             {field('creditPolicy.limitRatioBasisPoints', '比例（基点，1% = 100）', 'limitRatioBasisPoints', '整数', 'numeric')}
             <VocabularySelect
-              label="比例的基数（比例在场时必填）"
+              label="比例的基数（填了比例时必填）"
               path="creditPolicy.ratioBase"
               setName="ratioBase"
               kind="CREDIT_POLICY"
@@ -134,15 +134,15 @@ function CreditPolicyFields({
             />
           </div>
           <Problems lines={problems['creditPolicy.limit']} />
+          {/* 只填一项、比例带基数、金额不带基数都由服务端构造门判，表单不替它挑；基数怎么折成额度归结算侧，这里不算。 */}
           <p className="text-[11px] text-idpxyz-textMuted mt-1">
-            金额 / 比例恰一填写。两格都填或都空照样送预览，由服务端构造门裁、答在这一组上；表单不替它挑。比例要带基数
-            （相对于什么的比例），缺了或金额带了基数由服务端点名基数那一格；基数怎么折成额度归结算侧，这里不算。
+            金额与比例只填一项。填比例时要选基数（按什么算比例），填金额时不选基数。是否填对由服务端在预览时检查。
           </p>
         </div>
 
         <div className="grid grid-cols-2 gap-3 items-end">
-          {field('creditPolicy.effectiveStartsAt', '正文有效区间起点 *', 'bodyEffectiveStartsAt', 'RFC 3339 或 YYYY-MM-DD')}
-          {field('creditPolicy.effectiveEndsAt', '正文有效区间止点', 'bodyEffectiveEndsAt', '留空即无上界')}
+          {field('creditPolicy.effectiveStartsAt', '正文有效区间起点 *', 'bodyEffectiveStartsAt', 'YYYY-MM-DD 或完整时刻；只填日期时按当天零点（UTC）')}
+          {field('creditPolicy.effectiveEndsAt', '正文有效区间止点', 'bodyEffectiveEndsAt', '留空即持续有效')}
         </div>
         <div className="flex items-center gap-3">
           <Button
@@ -150,10 +150,11 @@ function CreditPolicyFields({
             disabled={locked}
             onClick={() => patch({ bodyEffectiveStartsAt: draft.effectiveStartsAt, bodyEffectiveEndsAt: draft.effectiveEndsAt })}
           >
-            正文区间抄壳区间
+            有效区间从版本信息带入
           </Button>
+          {/* 正文区间是 0020 正文自己的列，与版本区间各自送；带入只是抄一次文本，不是默认值。 */}
           <span className="text-[11px] text-idpxyz-textMuted">
-            正文区间是信用政策自己的（0020 正文列），与壳区间各自送；抄过来是省一次手填，不是默认。
+            正文的有效区间属于这条信用政策本身，和版本的有效区间分开填；带入只是省一次手填。
           </span>
         </div>
       </section>

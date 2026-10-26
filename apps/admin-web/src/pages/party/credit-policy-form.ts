@@ -18,7 +18,7 @@ export interface CreditPolicyDraft {
   objectId: string;
   version: string;
   scope: string;
-  /** 版本壳的有效区间；上界留空即无上界。 */
+  /** 版本壳的有效区间；上界留空即持续有效。 */
   effectiveStartsAt: string;
   effectiveEndsAt: string;
   legalEntity: string;

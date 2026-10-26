@@ -27,7 +27,7 @@ export type FlowStep = (typeof flowSteps)[number];
 
 export const flowStepLabels: Record<FlowStep, string> = {
   form: '填表',
-  preview: '预览摘要',
+  preview: '预览',
   submit: '存为待批准',
   approve: '批准',
   publish: '发布',

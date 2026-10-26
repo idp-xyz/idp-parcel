@@ -172,10 +172,10 @@ export function controlRowHints(draft: ControlPolicyDraft): string[] {
     }
   });
   for (const [order, rows] of byOrder) {
-    if (rows.length > 1) hints.push(`判断顺序 ${order} 有 ${rows.length} 行在抢（第 ${rows.join('、')} 行）——顺序版本内唯一，拒绝由服务端说`);
+    if (rows.length > 1) hints.push(`判断顺序 ${order} 用在了第 ${rows.join('、')} 行；同一版里每个顺序只能用一次，预览时服务端会拒绝`);
   }
   for (const { control, chargeScope, rows } of byKey.values()) {
-    if (rows.length > 1) hints.push(`范围 ${chargeScope} 上同一种控制 ${control} 出现 ${rows.length} 行（第 ${rows.join('、')} 行）——（种类 × 范围）唯一，拒绝由服务端说`);
+    if (rows.length > 1) hints.push(`费用范围 ${chargeScope} 上的控制 ${control} 写了 ${rows.length} 行（第 ${rows.join('、')} 行）；同一范围上同一种控制只能有一行，预览时服务端会拒绝`);
   }
   return hints;
 }

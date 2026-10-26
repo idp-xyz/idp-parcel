@@ -108,12 +108,12 @@ function PricePolicyFields({
   return (
     <div className="flex flex-col gap-5">
       <section className="flex flex-col gap-3">
-        <h3 className={groupTitle}>
-          版本壳 <span className="font-mono text-idpxyz-textMuted">kind = PRICE_RULE</span>
-        </h3>
+        <h3 className={groupTitle}>版本信息</h3>
+        {/* 版本上的范围与区间是登记册逐列比对的项，与正文自己的范围与区间是两样。册名 PRICE_POLICY 与发布类别 PRICE_RULE
+            是两条分类轴，上屏只说册的中文名。 */}
         <p className={noteClass}>
-          壳上的适用范围与区间是<strong>版本</strong>的（登记册逐列比对的项），与下面政策正文自己的范围与区间是两样；区间上界
-          留空即持续有效。结果显示在政策页的<strong>商业价格政策册</strong>（册名 PRICE_POLICY，发布类别 PRICE_RULE——两条分类轴）。
+          这里的适用范围与有效区间属于<strong>版本</strong>，和下面政策正文自己的范围与区间分开填；止点留空即持续有效。发布后在政策页的
+          <strong>商业价格政策</strong>册查看。
         </p>
         <Problems lines={problems['kind']} />
         <div className="grid grid-cols-2 gap-3">
@@ -128,16 +128,17 @@ function PricePolicyFields({
 
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
-          <h3 className={groupTitle}>政策正文（商业价格政策，0010）</h3>
+          <h3 className={groupTitle}>政策正文（这一版的条款内容）</h3>
           <Button variant="outline" disabled={locked} onClick={() => setDraft(withShellCopiedIntoPolicy)}>
-            范围与区间从版本壳带入
+            范围与区间从版本信息带入
           </Button>
         </div>
+        {/* 方案方向是发布当时价卡上下文的答复，照目录行填、表单不从选中的方案反推（ADR-0057）；方向 × 方案方向 × 转换的
+            组合由服务端判（AT-PC-033），预览时以成因一句回来。 */}
         <p className={noteClass}>
-          方向 × 方案绑定：政策授权哪个价格方向、绑定 parcel-pricing 的哪份可执行定价方案。方案从价卡目录<strong>选</strong>，
-          送上去的只是引用串（planId@planVersion），表单不读方案内容。<strong>方案方向与转换如实填</strong>（ADR-0057）：方案方向是
-          发布当时 parcel-pricing 的答复——照目录行上显示的方向填，表单不从选中的方案反推；转换只在方向不一致时有意义，同向须填
-          NONE、跨向只许 SELL 政策引用一次已冻结的 BUY 评价。没填或填错的组合由服务端答（AT-PC-033），预览时以成因一句回来。
+          政策方向说明这条政策定的是买价、卖价还是内部价；定价方案从价卡目录<strong>选</strong>。
+          <strong>方案方向照目录行上显示的方向填</strong>
+          ，表单不会替你推断。绑定转换：两个方向相同时选「不转换」；方向不同时，只有卖价政策可以引用一次已冻结的采购评价。组合是否成立由服务端在预览时检查，并说明原因。
         </p>
         <div className="grid grid-cols-2 gap-3">
           {closedSet('pricePolicy.direction', '政策方向 *', 'direction', priceDirectionOptions)}
@@ -158,27 +159,27 @@ function PricePolicyFields({
               }))
             }
             emptyNote="价卡目录为空；先登记价卡，再发布价格政策。"
-            optionsNote="目录行上的方向是 parcel-pricing 的答复，照它填「方案方向」；表单不从选中的方案反推。"
+            optionsNote="照所选目录行上的方向填「方案方向」；表单不会替你推断。"
             unknownNote="手填，不在目录上"
-            manualPlaceholder="planId@planVersion（目录不可用时手填）"
+            manualPlaceholder="方案标识@方案版本（目录不可用时手填）"
             readFace="价卡目录"
           />
-          {closedSet('pricePolicy.planDirection', '方案方向（parcel-pricing 发布当时的答复）*', 'planDirection', priceDirectionOptions)}
+          {closedSet('pricePolicy.planDirection', '方案方向（照价卡目录上的方向）*', 'planDirection', priceDirectionOptions)}
           {closedSet('pricePolicy.conversion', '绑定转换 *', 'conversion', planBindingConversionOptions)}
           {text('pricePolicy.scope', '政策适用范围 *', 'policyScope')}
           <div />
           {text('pricePolicy.effectiveStartsAt', '政策生效起点 *', 'policyEffectiveStartsAt', momentPlaceholder)}
-          {text('pricePolicy.effectiveEndsAt', '政策生效止点（可空）', 'policyEffectiveEndsAt', '留空即无上界')}
+          {text('pricePolicy.effectiveEndsAt', '政策生效止点（可空）', 'policyEffectiveEndsAt', '留空即持续有效')}
         </div>
       </section>
 
       <section className="flex flex-col gap-3">
-        <h3 className={groupTitle}>计价口径（0022，随正文同一份载荷登记）</h3>
+        <h3 className={groupTitle}>计价口径（随正文一起登记）</h3>
+        {/* 显隐是呈现不是裁门：显了没填、隐了却传了，都由服务端按库上 CHECK 同形的构造门答在那一格。体积系数与金额取整
+            是价卡内容（ADR-0260），本表单不给这一格。 */}
         <p className={noteClass}>
-          口径随正文<strong>同笔</strong>登记，不给「先发正文、回头补口径」的两步。税务口径三选一；税务分类只在含税 / 未税时
-          显——<strong>显隐是呈现，不是裁门</strong>：显了没填、隐了却传了，都由服务端按库上 CHECK 同形的构造门答在那一格。
-          汇率口径可缺（不涉及外币）：三格全空即不声明；填了任一格整节送，缺的由服务端点名。体积系数与金额取整是价卡内容，
-          在价卡上登，不在价格政策上登（ADR-0260）。
+          口径和正文<strong>一起</strong>
+          登记，不能先发正文、事后补口径。税务口径三选一；选含税或未税时要填税务分类。不涉及外币时汇率口径可以不填：三格全空即不声明，填了任一格就要三格填齐。体积系数与金额取整在价卡上登记，不在价格政策上。
         </p>
         <div className="grid grid-cols-2 gap-3">
           {closedSet('pricePolicy.caliber.taxDisposition', '税务口径 *', 'taxDisposition', taxDispositionOptions)}
@@ -189,7 +190,7 @@ function PricePolicyFields({
             problems={problems}
             value={draft.taxClassification}
             locked={locked}
-            hiddenNote="税务不适用时不显此格"
+            hiddenNote="税务不适用时不需要这一格"
             placeholder="含税 / 未税时必填（税务主数据上的分类引用）"
             onChange={(taxClassification) => patch({ taxClassification })}
           />
@@ -197,8 +198,7 @@ function PricePolicyFields({
 
         <div>
           <span className={fieldLabel}>
-            汇率口径（可缺；{declaresFx(draft) ? '已填，整节随载荷送出' : '三格全空，不声明汇率口径'}）
-            <span className="font-mono text-[10px] ml-1">pricePolicy.caliber.fx</span>
+            汇率口径（可不填；{declaresFx(draft) ? '已填写，三格需填齐' : '三格全空，不声明汇率口径'}）
           </span>
           <div className="grid grid-cols-3 gap-3">
             {text('pricePolicy.caliber.fx.quoteType', '牌价类型引用', 'fxQuoteType', '租户与其银行约定的牌价类型')}
@@ -258,7 +258,7 @@ function ConditionalField({
       ) : (
         <div className="flex items-center gap-2 mt-1">
           <span className={noteClass}>
-            {hiddenNote}，但草稿里仍有值 <span className="font-mono">{value}</span>，会随载荷照送，由服务端答。
+            {hiddenNote}，但这里仍填着 <span className="font-mono">{value}</span>，会照样提交并由服务端检查；不需要就清空。
           </span>
           <Button variant="outline" disabled={locked} onClick={() => onChange('')}>
             清空

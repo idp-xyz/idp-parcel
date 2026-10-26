@@ -35,13 +35,14 @@ export function DeliveryConditionFields({
   return (
     <section className="flex flex-col gap-2">
       <h3 className="text-[13px] font-medium text-idpxyz-text">
-        交付条件（可缺）{layer === 'contract' ? '——合同层只能在所收紧的产品层之内收紧' : '——产品层'}
+        交付条件（选填）{layer === 'contract' ? ' · 合同层' : ' · 产品层'}
       </h3>
+      {/* 交付方式的词表属租户实例登记，表单不给候选；方式是否真在所收紧的那一版产品层之内由服务端在发布那一步核，
+          预览与批准看不出放宽。合同版本信息上的产品引用不带版本号，所以收紧的产品版本要在这里另填。 */}
       <p className="text-[11px] text-idpxyz-textMuted">
-        一格都不填就是这一版不声明交付条件；填了任一格整节都送上去。三格都是引用串、手填：交付方式一行一项（词表属实例登记，
-        表单不给候选），收件范围规则与交付证明规则各填一条引用。零方式、同方式两行由服务端答。
+        {'一格都不填，表示这一版不约定交付条件；填了任何一格，整节都会提交。交付方式每行填一种；收件范围规则与交付证明规则各填一条引用。'}
         {layer === 'contract'
-          ? '合同层必须指名所收紧的服务产品版本（对象标识 + 版本号，手填——壳上的产品引用没有版本号）；方式是否真在那一版产品层之内由服务端在发布那一步核，预览与批准看不出放宽。'
+          ? '合同层要写明所收紧的服务产品版本（产品标识 + 版本号），交付方式只能在那一版产品的范围内收紧，发布时由服务端检查。'
           : ''}
       </p>
       <Problems lines={form.problems[root]} />
@@ -66,7 +67,7 @@ export function DeliveryConditionFields({
               value={draft.tightensVersion}
               readOnly={form.locked}
               className="font-mono text-[13px]"
-              placeholder="那一版产品层声明所在的版本号"
+              placeholder="所收紧的那一版产品的版本号"
               onChange={(event) => onPatch({ tightensVersion: event.target.value })}
             />
           </Field>
@@ -77,7 +78,7 @@ export function DeliveryConditionFields({
           className={`${selectClass} font-mono min-h-[72px]`}
           value={draft.methodsText}
           disabled={form.locked}
-          placeholder={'交付方式引用串，一行一项；空行不算项'}
+          placeholder={'交付方式，每行一种；空行不算'}
           onChange={(event) => onPatch({ methodsText: event.target.value })}
         />
         {methodLines.map((line) => (

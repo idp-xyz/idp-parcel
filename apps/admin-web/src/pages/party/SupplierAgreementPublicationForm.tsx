@@ -54,10 +54,11 @@ export function SupplierAgreementPublicationForm({ onPublished }: SupplierAgreem
       {({ problems, locked }: PublicationFormContext) => (
         <div className="flex flex-col gap-5">
           <section className="flex flex-col gap-3">
-            <h3 className="text-[13px] font-medium text-idpxyz-text">版本壳</h3>
+            <h3 className="text-[13px] font-medium text-idpxyz-text">版本信息</h3>
+            {/* 版本上的范围与区间是登记册逐列比对的项，与正文自己的范围与区间是两样；版本上不带指名引用，引用全在正文里。 */}
             <p className="text-[11px] text-idpxyz-textMuted">
-              壳上的适用范围与区间是<strong>版本</strong>的（登记册逐列比对的项），与下面协议正文自己的范围与区间是两样；
-              区间上界留空即持续有效。壳上不带指名引用——协议引用的供应商、法人与方案都在正文里。
+              这里的适用范围与有效区间属于<strong>版本</strong>
+              ，和下面协议正文自己的范围与区间分开填；止点留空即持续有效。供应商、责任法人与采购方案都在正文里填。
             </p>
             <div className="grid grid-cols-2 gap-3">
               <Field label="协议对象标识 *" path="objectId" problems={problems}>
@@ -108,14 +109,15 @@ export function SupplierAgreementPublicationForm({ onPublished }: SupplierAgreem
 
           <section className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-[13px] font-medium text-idpxyz-text">协议正文（0021）</h3>
+              <h3 className="text-[13px] font-medium text-idpxyz-text">协议正文（这一版的条款内容）</h3>
               <Button variant="outline" disabled={locked} onClick={() => setDraft(withShellCopiedIntoAgreement)}>
-                范围与区间从版本壳带入
+                范围与区间从版本信息带入
               </Button>
             </div>
+            {/* 方向由领域钉死为 BUY，正文没有方向格；采购方案只传方案版本引用串，表单不读方案内容，方向与绑定换算归价格政策那册。 */}
             <p className="text-[11px] text-idpxyz-textMuted">
-              供应商协议约定的是<strong>采购</strong>：方向由领域钉死为 BUY，正文里没有方向格。采购方案只是 parcel-pricing
-              方案版本的引用串，本表单不读方案内容——方案的方向与绑定换算归商业价格政策（PRICE_RULE）那册。
+              供应商协议约定的是<strong>采购</strong>
+              ，方向固定为买价，不用另填。采购方案从价卡目录选；方案的方向与换算在商业价格政策里约定，不在这里。
             </p>
             <div className="grid grid-cols-2 gap-3">
               <ReferencePicker
@@ -191,7 +193,7 @@ export function SupplierAgreementPublicationForm({ onPublished }: SupplierAgreem
                   value={draft.agreementEffectiveEndsAt}
                   disabled={locked}
                   className="font-mono text-[13px]"
-                  placeholder="留空即无上界"
+                  placeholder="留空即持续有效"
                   onChange={(event) => patch({ agreementEffectiveEndsAt: event.target.value })}
                 />
               </Field>

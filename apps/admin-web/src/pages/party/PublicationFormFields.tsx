@@ -35,7 +35,8 @@ export const fieldLabel = 'block text-[12px] text-idpxyz-breadcrumb mb-1';
 export const selectClass =
   'w-full rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 py-1.5 text-[13px] ' +
   'text-idpxyz-text focus:outline-none focus:border-idpxyz-accent disabled:opacity-60';
-export const momentPlaceholder = 'RFC 3339 或 YYYY-MM-DD（只到天补成当天零点 UTC）';
+// 只填日期时由 normalizeMoment 补成当天零点 UTC，占位照实说出来，免得以为是本地零点。
+export const momentPlaceholder = 'YYYY-MM-DD 或完整时刻；只填日期时按当天零点（UTC）';
 
 /** 服务端（或本地编不进类型）点名的那一格的问题，逐条挂在格下；原话原样显示，不改写。没有问题就不占位。 */
 export function Problems({ lines }: { lines?: readonly string[] }) {
@@ -244,9 +245,9 @@ export function ReferencePickerFor<Body>({
         {answer === null
           ? `正在读${readFace}…`
           : answer.kind === 'unconfigured'
-            ? `${readFace}读口在接入渠道未配置那堵墙前（403），先手填；引用在不在册由服务端发布时判。`
+            ? `暂时读不到${readFace}（接入渠道未配置），先手填标识；标识对不对由服务端在发布时检查。`
             : isOperatorRefusal(answer)
-              ? `${readFace}读口答${accessRefusalHeadline(answer.kind)}，先手填；引用在不在册由服务端发布时判。`
+              ? `暂时读不到${readFace}（${accessRefusalTitle(answer.kind)}），先手填标识；标识对不对由服务端在发布时检查。`
               : `${readFace}读不到，先手填；引用在不在册由服务端发布时判。`}
       </span>
     </Field>
@@ -303,7 +304,7 @@ export function VocabularySelect({
           ))}
         </select>
         {options.length === 0 ? (
-          <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">服务端词表 {setName} 一集今天没有码；表单不自造。</span>
+          <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">服务端暂时没有提供这一格的可选项。</span>
         ) : null}
       </Field>
     );
@@ -315,9 +316,8 @@ export function VocabularySelect({
         <option value="">{vocabularyPlaceholder(vocabulary, setName)}</option>
       </select>
       <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">
-        {/* 句中那个半角空格是此前两张表单里 JSX 折行留下的渲染结果，照原样保留——本票不改一字显示文案。 */}
-        {unavailableNote ??
-          `码只从服务端词表读口取（GET /commercial-publication-vocabularies?kind=${kind}）， 表单不内置枚举、不自造码；词表就绪前这一格选不了，送预览会由服务端点名。`}
+        {/* 可选项只从服务端词表读口取，表单不内置枚举、不自造码；读到之前这一格选不了，留空送预览由服务端点名。 */}
+        {unavailableNote ?? '可选项由服务端提供，还没读到时这一格暂时选不了。'}
       </span>
     </Field>
   );
@@ -325,20 +325,20 @@ export function VocabularySelect({
 
 /** 词表就绪前下拉里那一句占位：按五格结果代数各写一句，答了业务答案却没有这一集也算未就绪。 */
 export function vocabularyPlaceholder(answer: ApiResult<PublicationVocabularyResponseBody> | null, setName: string): string {
-  if (answer === null) return '正在读词表…';
+  if (answer === null) return '正在读取可选项…';
   switch (answer.kind) {
     case 'outcome':
-      return `词表未就绪（服务端没有 ${setName} 一集）`;
+      return '暂无可选项';
     case 'unconfigured':
-      return '词表未就绪（接入渠道未配置，403）';
+      return '暂时读不到可选项（接入渠道未配置）';
     case 'loginRequired':
     case 'notGranted':
-      return `词表未就绪（${accessRefusalTitle(answer.kind)}，${accessRefusalStatus(answer.kind)}）`;
+      return `暂时读不到可选项（${accessRefusalTitle(answer.kind)}）`;
     case 'callerProblem':
-      return `词表未就绪（调用方式问题，HTTP ${answer.status}）`;
+      return `暂时读不到可选项（请求有误，HTTP ${answer.status}）`;
     case 'noAnswer':
-      return `词表未就绪（服务端未形成答案，HTTP ${answer.status}）`;
+      return `暂时读不到可选项（服务端出错，HTTP ${answer.status}）`;
     case 'transport':
-      return '词表未就绪（请求未到达 parcel-api）';
+      return '暂时读不到可选项（连不上服务）';
   }
 }

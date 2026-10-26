@@ -3,7 +3,7 @@ import { Button, Card, CardContent, CardHeader, CardTitle } from '@idpxyz/ui-pri
 import { primaryActionClass } from '../../components/primary-action';
 import { OperatorRefusalNote } from '../../components/states';
 import type { ApiResult } from '../catalogue-api';
-import { publicationOutcomeLabels } from './api';
+import { declarationLandingLabels, publicationOutcomeLabels } from './api';
 import { labelOf, problemNote } from './presentation';
 import {
   approveOutcomeLabels,
@@ -87,10 +87,7 @@ export interface PublicationFormContext {
 // 这几口等的是 ADR-0100 那一族**操作者身份**的接入渠道（ADR-0126 Decision 五：Intake 到位那天把操作者信封译成
 // 录入者 / 批准者），不是 `PAR-INT-01` 的客户生产委托渠道——两者是两族，参数登记册今天也没有操作者渠道那一行，
 // 所以这里说「机制半边待接线」而不指某个登记册行。
-const unconfiguredNote =
-  '四口已建立并装配（parcel-api 端点表），但操作者身份的接入渠道（ADR-0100 产品自有的接入渠道族）尚未接线，' +
-  '服务端按 ADR-0055 如实拒绝——这是诚实答案不是尚未实现（ADR-0085 两阶段），改请求或重试都不会改变结果。' +
-  '那是机制半边待接线，登记册今天没有它的行；接线那天由装配侧换上真 Intake 即放行，此前发布仍走受控发布 CLI。';
+const unconfiguredNote = '改内容或重试都不会改变结果，要先由管理员完成操作者接入配置。';
 
 export function PublicationDraftFlow({
   kind,
@@ -162,17 +159,14 @@ export function PublicationDraftFlow({
   return (
     <Card className="m-4">
       <CardHeader>
-        <CardTitle>
-          {title}
-          <span className="ml-2 font-mono text-[12px] text-idpxyz-textMuted">kind = {kind}</span>
-        </CardTitle>
+        <CardTitle>{title}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
+        {/* 预览与录入送同一份载荷、服务端在同一处算内容摘要，所以批准与发布的必是预览过的那一份；表单不算摘要、
+            不收批准人、不替服务端判格，录入者与批准者由操作者身份给出（ADR-0126）。这些是给开发者的，不上屏。 */}
         <p className="text-xs text-idpxyz-textMuted">
-          五步：填表 → 预览摘要 → 存为待批准 → 批准 → 发布。预览与录入送同一份载荷，服务端过同一道构造门、
-          在同一处算摘要，预览页上的规范化版本与内容摘要与载体上记下的逐字节相等。<strong>表单不算摘要、
-          不收也不送批准人、不裁任何门</strong>：租户、录入者、批准者由接入渠道的操作者信封给；哪几格不对由
-          预览答，答什么显什么。载体存为待批准之后表单锁定，改内容走「重新开始」再录。
+          {'发布分五步：填表 → 预览 → 存为待批准 → 批准 → 发布。预览会检查每一格并算出内容摘要；存为待批准之后表单锁定，要改内容请点「重新开始」。谁能批准由租户的审批职责规则决定。'}
+          <strong>发布后这一版不能修改</strong>，要改须用新的版本号再发布。
         </p>
 
         <Stepper step={step} />
@@ -198,7 +192,7 @@ export function PublicationDraftFlow({
               disabled={actionDisabled}
               title={
                 action === 'preview' && hasLocalProblems
-                  ? '有格填的东西编不进载荷类型，先改那几格'
+                  ? '有几格的格式不对，先改正再预览'
                   : undefined
               }
             >
@@ -218,7 +212,7 @@ export function PublicationDraftFlow({
           <p className="text-xs text-idpxyz-textMuted">表单已改动，上一次预览及其后各步作废；请重新预览。</p>
         ) : null}
         {preview ? <PreviewNote answer={preview} /> : null}
-        {submission ? <DraftNote answer={submission} what="录入" labels={submitOutcomeLabels} /> : null}
+        {submission ? <DraftNote answer={submission} what="存为待批准" labels={submitOutcomeLabels} /> : null}
         {approval ? <DraftNote answer={approval} what="批准" labels={approveOutcomeLabels} /> : null}
         {publication ? <PublicationNote answer={publication} /> : null}
       </CardContent>
@@ -274,10 +268,10 @@ function PreviewNote({ answer }: { answer: ApiResult<PublicationPreviewResponseB
       {(body) => (
         <div className="text-xs text-idpxyz-textMuted flex flex-col gap-1">
           <p>
-            预览答复：<span className="font-mono">{body.outcome}</span> —— {labelOf(previewOutcomeLabels, body.outcome)}
+            <OutcomeText labels={previewOutcomeLabels} outcome={body.outcome} />
           </p>
           {body.outcome === 'PREVIEWED' ? <DigestLine canonicalization={body.canonicalization} digest={body.contentDigest} /> : null}
-          {body.cause ? <p>成因：{body.cause}</p> : null}
+          {body.cause ? <p>原因：{body.cause}</p> : null}
         </div>
       )}
     </FlowAnswerNote>
@@ -298,15 +292,15 @@ function DraftNote({
       {(body) => (
         <div className="text-xs text-idpxyz-textMuted flex flex-col gap-1">
           <p>
-            {what}答复：<span className="font-mono">{body.outcome}</span> —— {labelOf(labels, body.outcome)}
+            <OutcomeText labels={labels} outcome={body.outcome} />
           </p>
           {body.status ? (
             <p>
-              载体状态：<span className="font-mono">{body.status}</span> —— {labelOf(draftStatusLabels, body.status)}
+              发布稿状态：<span className="font-mono">{body.status}</span> —— {labelOf(draftStatusLabels, body.status)}
             </p>
           ) : null}
           {body.contentDigest ? <DigestLine canonicalization={body.canonicalization} digest={body.contentDigest} /> : null}
-          {body.cause ? <p>成因：{body.cause}</p> : null}
+          {body.cause ? <p>原因：{body.cause}</p> : null}
         </div>
       )}
     </FlowAnswerNote>
@@ -334,22 +328,21 @@ function EmbeddedPublication({ publication }: { publication: CommercialPublicati
   return (
     <div className="ml-4 flex flex-col gap-1">
       <p>
-        受控发布用例：<span className="font-mono">{publication.outcome}</span> ——{' '}
-        {labelOf(publicationOutcomeLabels, publication.outcome)}
+        <OutcomeText labels={publicationOutcomeLabels} outcome={publication.outcome} />
       </p>
-      {publication.pendingCause ? <p>未决成因：{publication.pendingCause}</p> : null}
-      {publication.cause ? <p>成因：{publication.cause}</p> : null}
+      {publication.pendingCause ? <p>未完成的原因：{publication.pendingCause}</p> : null}
+      {publication.cause ? <p>原因：{publication.cause}</p> : null}
       {publication.declaredDigest || publication.computedDigest ? (
         <p className="font-mono break-all">
-          声明摘要 {publication.declaredDigest ?? '—'} · 算出摘要 {publication.computedDigest ?? '—'}
+          提交的内容摘要 {publication.declaredDigest ?? '—'} · 服务端算出的内容摘要 {publication.computedDigest ?? '—'}
         </p>
       ) : null}
       {publication.declarations && publication.declarations.length > 0 ? (
         <p>
-          声明落点：
+          随版本登记的正文：
           {publication.declarations.map((entry) => (
             <span key={entry.channel} className="font-mono ml-2">
-              {entry.channel}={entry.outcome}
+              {entry.channel}：{labelOf(declarationLandingLabels, entry.outcome)}
             </span>
           ))}
         </p>
@@ -358,11 +351,25 @@ function EmbeddedPublication({ publication }: { publication: CommercialPublicati
   );
 }
 
+/**
+ * 答复一行：先中文结论，原码作次要信息跟在后面，给要对日志的人。未收录的原码照样显出原名——服务端新增一格时
+ * 宁可显示原名，也不把它归进既有中文说法——那时不再重复显一遍。
+ */
+function OutcomeText({ labels, outcome }: { labels: Record<string, string>; outcome: string }) {
+  const label = labelOf(labels, outcome);
+  return (
+    <>
+      {label}
+      {label !== outcome ? <span className="ml-1 font-mono text-idpxyz-breadcrumb">{outcome}</span> : null}
+    </>
+  );
+}
+
 // 摘要整串显示不截断：它就是载体与册上那一格，操作者要拿它去对。
 function DigestLine({ canonicalization, digest }: { canonicalization?: string; digest?: string }) {
   return (
     <p className="font-mono break-all">
-      规范化 {canonicalization ?? '—'} · 内容摘要 {digest ?? '—'}
+      内容摘要 {digest ?? '—'}（算法 {canonicalization ?? '—'}）
     </p>
   );
 }
@@ -386,7 +393,7 @@ function FlowAnswerNote<Body>({
     case 'unconfigured':
       return (
         <p className="text-xs text-idpxyz-textMuted">
-          {what}：接入渠道未配置（403 ACCESS_CHANNEL_NOT_CONFIGURED）。{unconfiguredNote}
+          {what}：暂时不能进行，接入渠道还没有配置。{unconfiguredNote}
         </p>
       );
     case 'loginRequired':
@@ -396,6 +403,7 @@ function FlowAnswerNote<Body>({
       return (
         <p className="text-xs text-idpxyz-danger">
           {what}调用方式问题（HTTP {answer.status}）：{problemNote(answer.code)}
+          {answer.detail ? ` ${answer.detail}` : ''}
         </p>
       );
     case 'noAnswer':
