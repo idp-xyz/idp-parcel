@@ -1,7 +1,7 @@
 # PS 生产归属目录：隔离写开关退场的前件
 
 Category: enhancement
-Status: needs-triage——2026-10-19 票 [00](./00-first-party-customer-intake.md) 立。
+Status: in-progress——2026-10-26 会话 `tops-20`（Claude Code）分诊为 R1（上线前必修：生产形态下真实租户一单也提交不进来，见 [分诊报告](../../needs-triage-sweep-2026-10-26.md)）并认领，分支 `claude-fpa04`；新 ADR 取 0308。此前 needs-triage——2026-10-19 票 [00](./00-first-party-customer-intake.md) 立。
 Blocked by: 无
 出处：[ADR-0180](../../../docs/adr/0180-admission-scope-tenant-mapping-is-an-access-identity-register-and-self-authority-is-a-deployment-parameter.md) 决定三「目录本身归 PS 生产归属那一票」与越权风险点「PS 生产归属的能力与事实类型词不在本记录内」；[ADR-0150](../../../docs/adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md) 决定一、三；[ADR-0141](../../../docs/adr/0141-integrator-sandbox-is-a-deployment-form-of-the-first-party-api-on-synthetic-data.md) 决定四「不许写一个直接返回已确定的假目录」。
 

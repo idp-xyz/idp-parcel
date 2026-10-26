@@ -1,7 +1,7 @@
 # 97 NR 初始路由最低成本并列没有授权裁决口：并列候选落了未形成登记，却读不回、也重判不了
 
 Category: enhancement
-Status: needs-triage——建议 R2（上线后尽快），与 code/29 同级：成本单维择优下并列是常见情形，并列的包裹停在`路由未形成`，原因与候选可查，可没有任何口能裁。绕法：没有——之后每一次复核都落「没有路由历史」入账未判。2026-10-26 票 [code/29](./29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md) 作者子代理立（协调方分诊：demo-chain-gaps/155 之后并列候选读不回就不在 code/29 做，立新票写清依赖），分支 claude-code29。分级由协调方定稿。
+Status: in-progress——2026-10-26 会话 `tops-20`（Claude Code）分诊升 R1（上线前必修：并列的包裹永远没有初始路由、无绕法，见 [分诊报告](../../needs-triage-sweep-2026-10-26.md)；降级条件见报告）并认领（tops-26 的 code/ 队列已停），分支 `claude-code97`；新 ADR 若要取 0309。此前 needs-triage——建议 R2（上线后尽快），与 code/29 同级：成本单维择优下并列是常见情形，并列的包裹停在`路由未形成`，原因与候选可查，可没有任何口能裁。绕法：没有——之后每一次复核都落「没有路由历史」入账未判。2026-10-26 票 [code/29](./29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md) 作者子代理立（协调方分诊：demo-chain-gaps/155 之后并列候选读不回就不在 code/29 做，立新票写清依赖），分支 claude-code29。分级由协调方定稿。
 Blocked by: [code/29](./29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md)（授权决定口的形状，以及它停下等的那份地理投影取法记录）；[demo-chain-gaps/154](../../demo-chain-gaps/issues/154-network-reassessment-not-judged-triggers-resume-after-registration.md)「要裁的」第二条（初始路由重驱的地理投影从哪里来）
 出处：UC-NR-001「给开发的交接」并列一行；code/29「最小的诚实修法」第 3 条与它的「停工记录」。
 
