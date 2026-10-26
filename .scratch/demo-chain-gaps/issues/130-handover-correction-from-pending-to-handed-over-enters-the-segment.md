@@ -1,7 +1,7 @@
 # 130 交接更正由待确认或拒收改为已交接时，对象不结束先前段参与也不进新段
 
 Category: bug
-Status: in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg130` tip 为写完成记录的那一笔（代码与文档最后一笔见文末「完成记录」提交表）。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领（票 126 已进 main），分支 `claude-dcg130`（worktree `idp-parcel-dcg130`）。此前 ready-for-agent——2026-10-20 代决复核立（上线后尽快），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: resolved——2026-10-26 进 main `458140f76`（见文末「进 main 记录」）。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg130` tip 为写完成记录的那一笔（代码与文档最后一笔见文末「完成记录」提交表）。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领（票 126 已进 main），分支 `claude-dcg130`（worktree `idp-parcel-dcg130`）。此前 ready-for-agent——2026-10-20 代决复核立（上线后尽快），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 M7（第二件）；ADR-0216 越权风险点 2
 
@@ -115,3 +115,26 @@ Blocked by: 无
 - 补交互用例 `cmd/parcel-dispatch/departure_gate_reask_handover_correction_test.go`；`movement_fact_backfill_test.go` 把待确认首登与更正两步抽成两个辅助函数，两条用例共用。变异抽验：让更正只走重派生，新用例转红。
 - ADR-0307：越权风险点 2 改为不另立票、写明复用 `laterControlFacts` 的修法；决定五与索引注记补上出发门禁补问一路，Links 加 ADR-0305。AT 盘点 `AT-TF-329` 一行补点名新用例。
 - 自验（含 PG）见本节之后的提交说明与汇报：`go build ./...`、`go vet ./...`、`at-coverage-counts -check`，带 DSN 的 TF 全部包、`cmd/parcel-dispatch`、`migrations`。
+
+## 评审记录
+
+评审 ← tops-20 隔离子代理(sonnet) · 钉 `d645f1add`
+
+- **阻断**：无。
+- **非阻断**：
+  1. 分路条件 `correctionSegmentHalf` 判据认可：重派生按「链尾入场依据 == 被更正的那一版」匹配（`RederiveParticipationWithHandover`/`basisNamesHandover`）；反例「v1 已交接进段 → v2 待确认（长出失效链尾）→ v3 已交接更正 v2」重派生命中、回原段，不误进段；前版已交接时 `predecessor.Handover.TransfersControl()` 直接挡下；登记册缺席时两路都不走（与注释、ADR 一致）。
+  2. 晚到检查 `laterControlFacts`：同一更正重投走 `answerOccupiedKey` 重放提前返回，不被自己刚写的入场误伤；即便再进，自己的入/离场时刻等于 `JudgedAt`、用 `After` 比较不算更晚；正常时序放行；失效链尾也算是已声明的保守取舍（ADR-0307 越权风险点 4）。
+  3. 段声明留存 `segmentDeclarationOf`：带 NUL 的声明首登答未受理（ADR 已写受理面变化）；该检查先于重放比对，故「此前带 NUL 段号已登下的同键重放」现在答未受理而不是重放——极边缘，ADR-0307 Consequences 只写了首登、没提重放这一点（**未改，记在此处**）。迁移 0053 三列可空、CHECK 对 NULL 恒真、存量施加不失败；`optionalDeclared` 与 CHECK 的 `btrim` 判据一致。评审跑 `TestAHandoverSegmentDeclarationRoundTripsThroughEveryReadPath`、`TestABlankSegmentDeclarationIsRefusedByTheDatabase` 通过。
+  4. 与 121、129、136 的交互：`TestAPendingHandoverCorrectedIntoTheSegmentReasksTheStoppedDeparture`（真库）跑通，逐一断言补问与补派生各 1 条 inbox 行、outbox PUBLISHED、补问第 1 次读数阻断、首版不变；129 的 `ENTRY_NOT_THIS_HANDOVER` 逻辑未改。
+  5. 文档：ADR-0307 决定一至五与代码一致；ADR-0112/0216/0230 只追加 Status 注记与 Links；UC-TF-005 `AT-TF-329`、`AT-TF-347` 与 UC-TF-006 `AT-TF-289` 三处一致；新号不撞。
+- **无发现**：误进段、该进不进、更正重放幂等、迁移存量施加、号码冲突。
+
+## 进 main 记录（2026-10-26，推送方会话 tops-20）
+
+- **main**：`458140f76`。出处：分支 `claude-dcg130` tip `d645f1add`（作者应协调方要求 rebase 到含票 121 的 main 并补交互用例）。
+- **main 上的提交**：`5c90d6452`（代码、TF 迁移 0053）、`a48f6e4c7`（与实际履约发生项的真库交互）、`f6c6ac391`（ADR-0307、UC、AT 盘点）、`64ef406bc`（完成记录）、`f3ad0c14c`（与出发门禁补问的真库交互；越权风险点 2 写明修法、不另立票）。
+- **生成物**：ADR 索引 `437e39d4d`；AT 盘点总览计数 `d26fdaccb`；机制清点 `458140f76`。三件 `-check` 退 0（含票 139 表行守卫）。
+- **评审**：见上「评审记录」，无阻断；唯一可改的非阻断 3（ADR-0307 Consequences 补重放一句）按用户 2026-10-26 节省 token 的要求未另开修订轮，记在评审记录。
+- **全量真库测试**：`scripts/test-full.sh` 跑在 `458140f76`（即所推 SHA）：158 ok / 0 FAIL，退 0。
+- **种子**：`scripts/demo-seeds/seed.sh` 灌一次性库（`458140f76` 上），退 0，用后删库。
+- **未立的后继**：首登`已交接`晚到会两段同时在场（下一次交接响亮失败），见 ADR-0307 越权风险点 2 与修法建议；按用户要求收窄范围，不另立票，留 owner 排。
