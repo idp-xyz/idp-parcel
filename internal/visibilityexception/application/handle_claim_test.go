@@ -1281,9 +1281,9 @@ func TestAReceiptLosingTheCreateRaceAnswersWithTheWinner(t *testing.T) {
 		Customer:    mustValue(t, domain.NewCustomerAccountReference, "customer-1"),
 		Applicant:   mustValue(t, domain.NewApplicantReference, "applicant-1"),
 		Contract:    mustValue(t, domain.NewContractScopeReference, "contract-scope/v1"),
-		Target:      mustValue(t, domain.NewRequestScopeReference, "parcel-9/loss"),
+		Target:      mustValue(t, domain.NewRequestScopeReference, "parcel-1/loss"),
 		Kind:        mustValue(t, domain.NewClaimKindReference, "LOSS"),
-		SubmittedAt: claimSubmittedAt,
+		SubmittedAt: claimSubmittedAt.Add(-time.Hour),
 	})
 	if err != nil {
 		t.Fatalf("构造赢家索赔：%v", err)
@@ -1302,8 +1302,8 @@ func TestAReceiptLosingTheCreateRaceAnswersWithTheWinner(t *testing.T) {
 	if !ok {
 		t.Fatal("受理输掉建行竞争后没有交出任何索赔")
 	}
-	if claim.Target().String() != "parcel-9/loss" {
-		t.Fatalf("交出的是本方那份而不是赢家：target = %q", claim.Target().String())
+	if !claim.SubmittedAt().Equal(claimSubmittedAt.Add(-time.Hour)) {
+		t.Fatalf("交出的是本方那份而不是赢家：submittedAt = %v", claim.SubmittedAt())
 	}
 }
 
@@ -1374,5 +1374,51 @@ func TestAClaimKeyHeldByAnotherAccountIsNotAcceptedAndDoesNotLeakTheOriginal(t *
 	owner, err := fixture.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1"))
 	if err != nil || owner.Outcome() != application.ClaimExistingResult {
 		t.Fatalf("原账户重放 = %q, %v, want CLAIM_EXISTING_RESULT", owner.Outcome(), err)
+	}
+}
+
+// Covers: AT-VE-210（同键内容）——同账户同（批次+项）再来：内容相同当重放答原项；申请人、合同、目标或类型任一不同答`未受理`并写明
+// 原因，不带原项、不覆盖原项。
+func TestASameKeyClaimWithDifferentContentIsNotAcceptedAndTheOriginalStands(t *testing.T) {
+	fixture := newClaimFixture(t)
+	ctx := context.Background()
+	if _, err := fixture.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1")); err != nil {
+		t.Fatalf("receive: %v", err)
+	}
+
+	same, err := fixture.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1"))
+	if err != nil || same.Outcome() != application.ClaimExistingResult {
+		t.Fatalf("同内容 = %q, %v, want CLAIM_EXISTING_RESULT", same.Outcome(), err)
+	}
+
+	for name, mutate := range map[string]func(*application.ReceiveClaimCommand){
+		"合同": func(c *application.ReceiveClaimCommand) {
+			c.Contract = mustValue(t, domain.NewContractScopeReference, "contract-scope/v2")
+		},
+		"目标": func(c *application.ReceiveClaimCommand) {
+			c.Target = mustValue(t, domain.NewRequestScopeReference, "parcel-2/loss")
+		},
+		"类型": func(c *application.ReceiveClaimCommand) {
+			c.Kind = mustValue(t, domain.NewClaimKindReference, "DAMAGE")
+		},
+		"申请人": func(c *application.ReceiveClaimCommand) {
+			c.Applicant = mustValue(t, domain.NewApplicantReference, "applicant-2")
+		},
+	} {
+		command := receiveCommand(t, "item-1")
+		mutate(&command)
+		result, err := fixture.handler.ReceiveClaim(ctx, command)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if result.Outcome() != application.HandleClaimNotAccepted || result.NotAcceptedReason() != application.ClaimContentDiffersFromAccepted {
+			t.Fatalf("改%s = %q/%q, want NOT_ACCEPTED/CLAIM_CONTENT_DIFFERS_FROM_ACCEPTED", name, result.Outcome(), result.NotAcceptedReason())
+		}
+		if _, present := result.Claim(); present {
+			t.Fatalf("改%s：答复带了原项", name)
+		}
+	}
+	if fixture.claims.saves != 1 {
+		t.Fatalf("saves = %d, want 1", fixture.claims.saves)
 	}
 }
