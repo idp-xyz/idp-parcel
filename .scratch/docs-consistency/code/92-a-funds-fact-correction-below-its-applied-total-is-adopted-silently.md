@@ -1,7 +1,7 @@
 # 92 SA 外部更正把事实金额改到已核销合计以下：照采，不标超核、不重算
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code92（见文末「完成记录」）。原 ready-for-agent——R2（上线后尽快）：外部更正照采是对的（外部系统拥有资金事实），可采下来之后既不说出这条事实已经超核，也不重算它映射到的客户应收作用域；读面上的累计未分配为负是唯一的信号，入账余额停在更正前的金额上，直到同作用域下一次映射、核销或撤销才跟上。看得见但要人去找，不答错可用余额以外的数。2026-10-26 票 [code/12](./12-funds-mapping-has-no-compensation-or-recovery-targets.md) 第二轮评审 N3 立（协调方裁定本批不改代码、立票），分支 claude-code12。
+Status: resolved——2026-10-26 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code92（见文末「完成记录」）。原 ready-for-agent——R2（上线后尽快）：外部更正照采是对的（外部系统拥有资金事实），可采下来之后既不说出这条事实已经超核，也不重算它映射到的客户应收作用域；读面上的累计未分配为负是唯一的信号，入账余额停在更正前的金额上，直到同作用域下一次映射、核销或撤销才跟上。看得见但要人去找，不答错可用余额以外的数。2026-10-26 票 [code/12](./12-funds-mapping-has-no-compensation-or-recovery-targets.md) 第二轮评审 N3 立（协调方裁定本批不改代码、立票），分支 claude-code12。
 Blocked by: 无
 出处：code/12、code/46 第二轮隔离评审 N3；取证于分支 claude-code12。
 
@@ -121,3 +121,12 @@ S–M。
   3. 不论什么错误都当账不平跳过（去掉 `errors.Is`）→ `TestACorrectionStillFailsOnOtherRecomputeErrors` 红；
   4. 重放的链头条件恒真 → `TestOnlyTheChainHeadsReplayCarriesTheOverApplied` 红；
   5. HTTP 不写 `unreconciledScopes`、CLI 不点名 → 各自一条红。
+
+## 进 main 记录（2026-10-26，协调方）
+
+- 分支 `claude-code92` 由作者 rebase 到 origin/main `e1c0f41c2` 后快进，tip `d9ca7d5ee`。无迁移；新立 ADR-0285（把外部更正扩成 ADR-0181 决定一的重算点，同时扩成 ADR-0283 决定三）。
+- 协调方分诊：超核做成更正结果上的字段，不新建拒绝格，也不建待处理册。
+- 第一轮隔离评审（Sonnet）无阻断，一条行为回退：更正被已账不平的作用域拦住，整笔回滚、HTTP 答 500，而改动前同一更正照采——外部系统拥有资金事实，拦住它就永远进不来，5xx 又会让外部无限重投。协调方采评审的最小补救：更正照采，对账不平的作用域跳过推进、在答复里点名（`FundsResult.UnreconciledScopes`，HTTP 201 加 omitempty 字段，CLI 点名句、退出码 0），其余错误仍整笔回滚。另补重放更正「仍是链头」的用例与注释编号。修订 diff 与评审处方一致，核心函数 `recomputeReachedScopes` 协调方核过，未再起第二轮评审。
+- 协调方单独提交重生成的 ADR 索引与机制清点；AT 计数无变化；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0、158 个包 ok；`go build ./...`、`go vet ./...` 干净；admin-web tsc、全部用例、vite build 通过。无迁移，种子未灌。
+- 去向：无新票。越权风险点：超核没有待处理册，只能靠读面负数、CLI 与 HTTP 答复发现；账不平的作用域留在旧值，读面不单列哪些作用域停在旧值。
