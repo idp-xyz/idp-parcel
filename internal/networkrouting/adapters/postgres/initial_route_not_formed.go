@@ -3,13 +3,20 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 )
 
-var _ ports.InitialRouteNotFormedRegister = (*InitialRoutes)(nil)
+var (
+	_ ports.InitialRouteNotFormedRegister = (*InitialRoutes)(nil)
+	_ ports.InitialRouteNotFormedRead     = (*InitialRoutes)(nil)
+)
 
 // tiedCostRow 是并列那几家候选成本事实的行模型。并列只在已计价候选之间成立，所以只记金额与币种。
 type tiedCostRow struct {
@@ -148,4 +155,98 @@ func rowsOfGaps(gaps []domain.EvidenceGap) []gapRow {
 		})
 	}
 	return rows
+}
+
+// notFormedColumns 是读回登记行时取的列，两条读法共用，顺序与 scanNotFormed 一致。
+const notFormedColumns = `customer_account_id, shipment_request_id, acceptance_baseline, declared_parcel_id, service_purpose,
+	correlation_id, reason, tied, accepted_at, settled_at`
+
+// FindNotFormed 按判断键读回这件包裹最近一次停住的登记行。
+func (repository *InitialRoutes) FindNotFormed(
+	ctx context.Context,
+	key domain.InitialRouteJudgmentKey,
+) (ports.InitialRouteNotFormedRecord, bool, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return ports.InitialRouteNotFormedRecord{}, false, fmt.Errorf("find initial route not formed: %w", err)
+	}
+	row := querier.QueryRow(ctx,
+		`SELECT `+notFormedColumns+`
+		   FROM network_routing.initial_route_not_formed
+		  WHERE tenant_id = $1 AND customer_account_id = $2 AND shipment_request_id = $3
+		    AND acceptance_baseline = $4 AND declared_parcel_id = $5 AND service_purpose = $6`,
+		key.TenantID.String(), key.CustomerAccountID.String(), key.ShipmentRequestID.String(),
+		key.AcceptanceBaseline.String(), key.DeclaredParcelID.String(), key.ServicePurpose.String())
+	return scanNotFormed(key.TenantID, row)
+}
+
+// FindLatestNotFormedOfParcel 按（租户，包裹）读回入账时刻最晚的登记行；同刻按判断键各维收尾，读来可复现。一件包裹通常只有
+// 一条基线，换基线重新受理才会出第二行，那时最近入账的那一行才是在等裁决的。
+func (repository *InitialRoutes) FindLatestNotFormedOfParcel(
+	ctx context.Context,
+	tenant domain.TenantID,
+	parcel domain.DeclaredParcelID,
+) (ports.InitialRouteNotFormedRecord, bool, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return ports.InitialRouteNotFormedRecord{}, false, fmt.Errorf("find latest initial route not formed: %w", err)
+	}
+	row := querier.QueryRow(ctx,
+		`SELECT `+notFormedColumns+`
+		   FROM network_routing.initial_route_not_formed
+		  WHERE tenant_id = $1 AND declared_parcel_id = $2
+		  ORDER BY settled_at DESC, customer_account_id, shipment_request_id, acceptance_baseline, service_purpose
+		  LIMIT 1`,
+		tenant.String(), parcel.String())
+	return scanNotFormed(tenant, row)
+}
+
+func scanNotFormed(tenant domain.TenantID, row pgx.Row) (ports.InitialRouteNotFormedRecord, bool, error) {
+	var (
+		columns               routeKeyColumns
+		correlation, text     string
+		tiedJSON              []byte
+		acceptedAt, settledAt time.Time
+	)
+	err := row.Scan(&columns.customerAccount, &columns.shipmentRequest, &columns.acceptanceBaseline,
+		&columns.declaredParcel, &columns.servicePurpose, &correlation, &text, &tiedJSON, &acceptedAt, &settledAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.InitialRouteNotFormedRecord{}, false, nil
+	}
+	if err != nil {
+		return ports.InitialRouteNotFormedRecord{}, false, fmt.Errorf("read initial route not formed: %w", err)
+	}
+	unreadable := func(cause error) error {
+		return fmt.Errorf("read initial route not formed: %w: %v", ports.ErrStoredRouteRecordUnreadable, cause)
+	}
+	key, err := rebuildRouteKey(tenant, columns)
+	if err != nil {
+		return ports.InitialRouteNotFormedRecord{}, false, unreadable(err)
+	}
+	reason, ok := ports.ParseInitialRouteNotFormedReason(text)
+	if !ok {
+		return ports.InitialRouteNotFormedRecord{}, false, unreadable(fmt.Errorf("unknown reason %q", text))
+	}
+	correlationID, err := domain.NewRequestCorrelationID(correlation)
+	if err != nil {
+		return ports.InitialRouteNotFormedRecord{}, false, unreadable(err)
+	}
+	record := ports.InitialRouteNotFormedRecord{
+		Key: key, Correlation: correlationID, Reason: reason,
+		AcceptedAt: acceptedAt.UTC(), SettledAt: settledAt.UTC(),
+	}
+	if tiedJSON != nil {
+		var ids []string
+		if err := json.Unmarshal(tiedJSON, &ids); err != nil {
+			return ports.InitialRouteNotFormedRecord{}, false, unreadable(err)
+		}
+		for _, id := range ids {
+			candidate, err := domain.NewCandidateID(id)
+			if err != nil {
+				return ports.InitialRouteNotFormedRecord{}, false, unreadable(err)
+			}
+			record.Tied = append(record.Tied, candidate)
+		}
+	}
+	return record, true, nil
 }
