@@ -310,3 +310,18 @@ func TestACommissionSubmissionRecordsItsSubmitterAndAReplayByAnotherKeepsIt(t *t
 		t.Fatalf("不带操作者不应记人：%q", record.SubmittedBy.String())
 	}
 }
+
+// Covers: `AT-TF-341` 执行器半边——派送发起执行器经建任务编排形成的任务不带建任务人：那一拍形成什么出自所有者给的派送要求，
+// 不是哪一位操作者的决定（ADR-0303 决定五）。
+func TestATaskFormedByTheDispatchTriggerRecordsNoOpener(t *testing.T) {
+	fixture := newDispatchTriggerFixture(t)
+	fixture.enterByHandover(t, "parcel-1", "FINAL_DELIVERY", handoverJudgedTime)
+	result, err := fixture.handler().Trigger(t.Context(), triggerCommand(t, "parcel-1"))
+	if err != nil || result.Outcome() != application.DeliveryDispatchTaskFormed {
+		t.Fatalf("触发：outcome=%q err=%v", result.Outcome(), err)
+	}
+	record, recorded := result.Record()
+	if !recorded || record.OpenedBy.Present() {
+		t.Fatalf("执行器形成的任务建任务人 = %q（recorded=%v），want 没记下", record.OpenedBy.String(), recorded)
+	}
+}
