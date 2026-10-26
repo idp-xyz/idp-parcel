@@ -1,7 +1,7 @@
 # 44 PS 撤回与资料修订：保全之后没落成的那一次，重放短路成「已有结果」，这次请求从此不会形成
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code44。此前 needs-triage——建议 R2（客户面撤回口、资料修订口接上首方 Intake 之前必修）：答错且静默。两只编排都先保全来源、再判断与保存；保全落下之后、撤回或版本没落成（保存失败、并发抢先，或业务未决），客户照 [ADR-0256](../../../docs/adr/0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md) 重放同一请求，编排认出来源已保全就走已有结果那条路：撤回对仍为`已提交`的委托答 `DECISION_ALREADY_FORMED` 却不带任何决定；资料修订答 `ALREADY_HANDLED` 却不带版本。这次请求从此不会形成。两口今天在生产装配下仍是 `UnconfiguredIntake`，接口接上即生效。2026-10-21 文档自洽 06 评审轮立（用户「你作为业务和系统专家自决」授权），分支 claude-dc06。分级由协调方定稿。
+Status: resolved——2026-10-26 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code44。此前 needs-triage——建议 R2（客户面撤回口、资料修订口接上首方 Intake 之前必修）：答错且静默。两只编排都先保全来源、再判断与保存；保全落下之后、撤回或版本没落成（保存失败、并发抢先，或业务未决），客户照 [ADR-0256](../../../docs/adr/0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md) 重放同一请求，编排认出来源已保全就走已有结果那条路：撤回对仍为`已提交`的委托答 `DECISION_ALREADY_FORMED` 却不带任何决定；资料修订答 `ALREADY_HANDLED` 却不带版本。这次请求从此不会形成。两口今天在生产装配下仍是 `UnconfiguredIntake`，接口接上即生效。2026-10-21 文档自洽 06 评审轮立（用户「你作为业务和系统专家自决」授权），分支 claude-dc06。分级由协调方定稿。
 Blocked by: 无（撤回在真库上读不回的那一半归 [code/36](./36-withdrawn-shipment-requests-cannot-be-read-back-from-the-store.md)，宜同批）
 出处：文档自洽 06 隔离评审阻断 B2；ADR-0256 决定一第 2 格「重放须接着办」；UC-PS-002、UC-PS-005「给开发的交接」。提交编排的同类问题归 [code/39](./39-a-preserved-submission-whose-build-failed-is-never-built-on-replay.md)，不在本票。
 
@@ -89,3 +89,12 @@ M：两只编排的重放路径分出「保全过、已形成」与「保全过�
 - N1：资料修订重放里「内容与范围不配」那一道受理原先没有用例钉住（评审变异：重放路径只留意图未声明一道，全套用例仍绿，重放改答领域门的服务端类错误）。补 `TestAReplayedAmendmentWhoseContentDoesNotFitIsStillACallerError`，三种不配（收件范围带测量内容、开放范围带要素内容、显式清空带要素内容）首次与重放两轮都答 `ErrAmendmentContentUnfit`，授权 0 次、版本号 0 个、无交接；变异（重放路径只留意图一道）下三格全红，从备份拷回并 `cmp` 一致。
 - 措辞：`admit` 注释点名两道受理；撤回 `resolvePreserved` 注释、相关用例头注与 UC-PS-005 `AT-PS-125` 行改为现行规则句（已决态重放答已有决定，不问授权）。
 - 记录：完成记录的基校正为 rebase 后的 origin/main 提交；越权风险点 1 补评审的客户文档提示。
+
+## 进 main 记录（2026-10-26，协调方）
+
+- 分支 `claude-code44` 由作者 rebase 到 origin/main `be198c8bc`（含 code/98）后快进，tip `c771865b0`。无迁移、无新 ADR（本票是 ADR-0256 决定一第 2 格「重放须接着办」的原句落地，ADR-0256 只在 Status 注记补「缺口已补」，正文未动）。
+- 协调方分诊：R2 升为上线前必修——首方客户 API 的撤回口、资料修订口接上之前（用户定的上线范围），否则客户在一次网络抖动后重发会被答成「已办过」而实际什么都没落成。
+- 隔离评审（Sonnet）无阻断。评审认可作者的取舍：资料修订找不到版本一律接着办，包括上一轮是确定业务拒绝（未获授权、不允许、等复核）的，重放会重新判；不违反 ADR-0022，偏差单向（重新过授权、阶段、矩阵，不可能越权形成），无需拒绝答案册；受控补充编排本就如此。N1 补「内容与范围不配」重放用例（三种不配）、措辞、基校正由 Sonnet 子代理收掉。
+- 协调方单独提交重算的 AT 计数、重生成的 ADR 索引与机制清点；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0、158 个包 ok；`go build ./...`、`go vet ./...` 干净。无迁移，种子未灌。
+- 去向：无新票。评审信息项：受控补充编排重放形成版本记的是重放这次到达的指纹（`form_new_submission_version.go` 的 `SourceSubmission: incoming`），与资料修订记保全指纹不一致——建议 owner 排小票，不挡上线。客户文档提示（first-party-api 07、10）：未获授权、不允许、等复核的请求，条件变了之后原样重放可能形成版本。
