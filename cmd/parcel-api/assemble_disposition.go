@@ -108,6 +108,7 @@ func dispositionOrchestrationWith(
 		Judgments:  judgments,
 		Release:    pspostgres.NewSavepointedControlRelease(db, release),
 		Refusals:   refusals,
+		ScopeLock:  pssettlement.NewControlScopeLocks(scopeLocks),
 		Identities: identities,
 		Clock:      clock,
 	})

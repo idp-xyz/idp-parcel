@@ -95,6 +95,7 @@ func newWithdrawalReplayFixture(t *testing.T) (*withdrawalFixture, *withdrawalRe
 		Recorder:   &judgmentRequestStore{},
 		Release:    fixture.release,
 		Refusals:   fixture.refusals,
+		ScopeLock:  fixture.scopeLocks,
 		Identities: identities,
 		Clock:      fixedClock{at: handlerClockAt},
 	})

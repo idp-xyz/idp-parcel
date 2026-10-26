@@ -13,9 +13,11 @@ import (
 	nrinbox "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/inbox"
 	psinbox "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
+	pssettlement "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/settlementaccounting"
 	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 )
 
 // 本文件对真实 PostgreSQL 16 证 ADR-0106 的整条闭环（票 first-tenant-runway/09）：可达性权威答
@@ -104,6 +106,10 @@ func newCustomerSupplementLoopFixtureWith(t *testing.T, legs customerSupplementL
 	if err != nil {
 		t.Fatalf("构造释放未受理册：%v", err)
 	}
+	scopeLocks, err := sapostgres.NewPreAcceptanceControlScopeLocks(base.db)
+	if err != nil {
+		t.Fatalf("构造控制作用域锁：%v", err)
+	}
 	firstVersion := mustPS(t, psdomain.NewSubmissionVersionID, "SYN-VER-01")
 	// 两版同一时点（见文件头）：时点策略对哪一版都答 synRAsOfAnchor。
 	commercial := &synRSwitchableAsOfCommercialBasis{inner: &synRCommercialBasis{t: t}, t: t, configured: true}
@@ -116,6 +122,7 @@ func newCustomerSupplementLoopFixtureWith(t *testing.T, legs customerSupplementL
 		Recorder:     base.judgments,
 		Release:      legs.release,
 		Refusals:     refusals,
+		ScopeLock:    pssettlement.NewControlScopeLocks(scopeLocks),
 		Downstream:   decisionHandoff,
 		Identities:   &synSDecisionIdentities{},
 		Clock:        systemClock{},

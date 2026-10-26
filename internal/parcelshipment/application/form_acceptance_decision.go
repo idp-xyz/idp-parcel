@@ -105,7 +105,11 @@ type FormAcceptanceDecisionDeps struct {
 	Recorder     ports.AcceptanceJudgmentRecorder
 	Release      ports.PreAcceptanceControlRelease
 	// Refusals 是释放未受理册：拒绝或停进`等待受控补充`之后随附释放被提供方确定不受理时记在这里交人处理。
-	Refusals   ports.ControlReleaseRefusalRegister
+	Refusals ports.ControlReleaseRefusalRegister
+	// ScopeLock 在保存会带出释放的决定（拒绝、停进`等待受控补充`）之前取占用所在作用域的锁，锁序见
+	// ports.PreAcceptanceControlScopeLock 头注。接受链里这些锁施加与链开头放被取代各版时已取过，这里是重入；不依赖上游取过，
+	// 单驱形成决定这一步时先 S 后 R 照样成立。
+	ScopeLock  ports.PreAcceptanceControlScopeLock
 	Downstream ports.AcceptanceDecisionHandoff
 	Identities ports.AcceptanceDecisionIdentity
 	Clock      ports.Clock
@@ -238,6 +242,13 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 		}
 		return handler.undecided(ctx, command, reason, request.State()), nil
 	}
+	// 拒绝之后要放这份委托各版的占用：保存委托（R）之前先取作用域锁（S），与接受链其余各步先 S 后 R 同序。取不到锁与保存不了
+	// 同一格：决定尚未形成。接受与停进别的等待态不释放，不取。
+	if decided.State() == domain.ShipmentRequestRejected {
+		if err := handler.occupationRelease(command).lockScopesBeforeSave(ctx, decided); err != nil {
+			return handler.undecided(ctx, command, DecisionNotRecorded, request.State()), nil
+		}
+	}
 	saved, err := handler.deps.Requests.Save(ctx, command.Identity, decided)
 	if err != nil {
 		// 决定没能越过提交边界就不算形成。交回一个没落库的接受，下游会按一份查不回来的
@@ -310,6 +321,12 @@ func (handler *FormAcceptanceDecisionHandler) pauseForExternalResume(
 	waiting JudgmentPendingReason,
 	control domain.FinancialControlResult,
 ) (FormAcceptanceDecisionResult, error) {
+	// 停进`等待受控补充`要在落库之后放本版的占用：保存之前先取它所在作用域的锁，理由同拒绝那一支。
+	if waiting == CustomerSupplementPending {
+		if err := handler.occupationRelease(command).lockControlScopes(ctx, []domain.FinancialControlResult{control}); err != nil {
+			return handler.undecided(ctx, command, DecisionNotRecorded, request.State()), nil
+		}
+	}
 	saved, err := handler.deps.Requests.Save(ctx, command.Identity, decided)
 	if err != nil {
 		return handler.undecided(ctx, command, DecisionNotRecorded, request.State()), nil
@@ -535,6 +552,7 @@ func (handler *FormAcceptanceDecisionHandler) occupationRelease(command FormAcce
 		request:   command.ShipmentRequestID,
 		refusals:  handler.deps.Refusals,
 		clock:     handler.deps.Clock,
+		scopeLock: handler.deps.ScopeLock,
 	}
 }
 

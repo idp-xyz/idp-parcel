@@ -163,6 +163,9 @@ type CreditExposureLedgerRepository interface {
 //
 // 一把锁管两本账，不是两本账合流——ADR-0047 守的是余额与额度互不借用，锁不承载余额。释放按冻结、暴露的次序碰两本，施加的次序由
 // 策略正文定（ADR-0122），每本一把锁就会有两路按相反次序取锁而互等。
+//
+// 调用方若同一事务里还要写委托行（parcel-shipment 的 shipment_request），必须先取本锁、后写委托行；与委托行、取消边界锁的
+// 全序见 parcel-shipment 的 ports.PreAcceptanceControlScopeLock 头注。
 type PreAcceptanceControlScopeLock interface {
 	LockControlScope(ctx context.Context, tenant domain.TenantID, scope domain.SettlementScope) error
 }

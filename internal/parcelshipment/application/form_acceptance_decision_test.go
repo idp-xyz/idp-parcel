@@ -913,6 +913,7 @@ type decisionFixture struct {
 	requests     *decidableRequestStore
 	release      *controlReleaseDouble
 	refusals     *controlReleaseRefusalDouble
+	scopeLocks   *scopeLockDouble
 	recorder     *judgmentRequestStore
 	downstream   *decisionHandoffDouble
 	identities   *decisionIdentityFactory
@@ -940,6 +941,7 @@ func newDecisionFixture(t *testing.T) *decisionFixture {
 	value.requests = &decidableRequestStore{t: t}
 	value.release = &controlReleaseDouble{}
 	value.refusals = &controlReleaseRefusalDouble{}
+	value.scopeLocks = &scopeLockDouble{}
 	value.recorder = &judgmentRequestStore{}
 	value.downstream = &decisionHandoffDouble{}
 	value.identities = &decisionIdentityFactory{t: t}
@@ -952,6 +954,7 @@ func newDecisionFixture(t *testing.T) *decisionFixture {
 		Recorder:     value.recorder,
 		Release:      value.release,
 		Refusals:     value.refusals,
+		ScopeLock:    value.scopeLocks,
 		Downstream:   value.downstream,
 		Identities:   value.identities,
 		Clock:        fixedClock{at: handlerClockAt},

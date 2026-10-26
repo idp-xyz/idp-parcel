@@ -115,7 +115,9 @@ type WithdrawShipmentRequestDeps struct {
 	Recorder   ports.AcceptanceJudgmentRecorder
 	Release    ports.PreAcceptanceControlRelease
 	// Refusals 是释放未受理册：随附释放被提供方确定不受理时记在这里交人处理。
-	Refusals   ports.ControlReleaseRefusalRegister
+	Refusals ports.ControlReleaseRefusalRegister
+	// ScopeLock 在保存委托之前取这份委托各版占用所在作用域的锁，锁序见 ports.PreAcceptanceControlScopeLock 头注。
+	ScopeLock  ports.PreAcceptanceControlScopeLock
 	Identities ports.AcceptanceDecisionIdentity
 	Clock      ports.Clock
 }
@@ -215,6 +217,13 @@ func (handler *WithdrawShipmentRequestHandler) decide(
 	// 这不替代提交边界上的重查——聚合的 `decisionFormed` 闸门仍然是裁决并发竞争的那一道。
 	if request.State() != domain.ShipmentRequestSubmitted {
 		return handler.existing(ctx, command, request), nil
+	}
+
+	// 保存委托之前先取作用域锁：接受链先取这把锁、再保存委托，本路径若先保存、再在释放里取，同一份委托并发时两边互等。
+	// 放在已决态的短路之后——已决态不保存委托，没有行锁可倒挂，也就不为它白取锁；放在领取决定标识之前——标识是稀缺身份，
+	// 取不到锁的一轮不该耗掉一个。取不到锁与保存不了同一格：撤回尚未形成。
+	if err := handler.occupation(command).lockScopesBeforeSave(ctx, request); err != nil {
+		return handler.undecided(ctx, command, DecisionNotRecorded, request.State()), nil
 	}
 
 	decisionID, err := handler.deps.Identities.NextAcceptanceDecisionID(ctx)
@@ -359,15 +368,20 @@ func (handler *WithdrawShipmentRequestHandler) releaseOccupation(
 	command WithdrawShipmentRequestCommand,
 	request domain.ShipmentRequest,
 ) (domain.OwnershipContinuationReference, bool) {
-	scope := occupationRelease{
+	scope := handler.occupation(command)
+	return scope.settle(ctx, scope.releaseEvery(ctx, request, command.SubmissionVersion))
+}
+
+func (handler *WithdrawShipmentRequestHandler) occupation(command WithdrawShipmentRequestCommand) occupationRelease {
+	return occupationRelease{
 		judgments: handler.deps.Judgments,
 		release:   handler.deps.Release,
 		identity:  command.Identity,
 		request:   command.ShipmentRequestID,
 		refusals:  handler.deps.Refusals,
 		clock:     handler.deps.Clock,
+		scopeLock: handler.deps.ScopeLock,
 	}
-	return scope.settle(ctx, scope.releaseEvery(ctx, request, command.SubmissionVersion))
 }
 
 // undecided 交回本轮的未决结果。state 由调用点给出而不是在这里假定`已提交`：未决要交回的是

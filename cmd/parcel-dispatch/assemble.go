@@ -863,6 +863,13 @@ func acceptanceChainConsumers(
 		return none, fmt.Errorf("parcel-dispatch: control release refusals: %w", err)
 	}
 
+	// 保存委托之前取占用所在作用域的锁：与施加、释放取的是 SA 同一把，锁序见 ports.PreAcceptanceControlScopeLock 头注。接受链里
+	// 施加与链开头放被取代各版已取过，形成决定那一步取的是重入，不依赖上游。
+	scopeLocks, err := sapostgres.NewPreAcceptanceControlScopeLocks(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-dispatch: pre-acceptance control scope locks: %w", err)
+	}
+
 	chain := psapplication.NewAdvanceAcceptanceChainHandler(psapplication.AdvanceAcceptanceChainDeps{
 		Requests: requests,
 		Reachability: psapplication.NewAdvanceAcceptanceJudgmentHandler(
@@ -877,6 +884,7 @@ func acceptanceChainConsumers(
 			Recorder:     judgments,
 			Release:      pspostgres.NewSavepointedControlRelease(db, control),
 			Refusals:     refusals,
+			ScopeLock:    pssettlement.NewControlScopeLocks(scopeLocks),
 			Downstream:   downstream,
 			Identities:   identities,
 			Clock:        clock,

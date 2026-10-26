@@ -434,6 +434,7 @@ type dispositionFixture struct {
 	judgments  *recordedJudgmentsDouble
 	release    *controlReleaseDouble
 	refusals   *controlReleaseRefusalDouble
+	scopeLocks *scopeLockDouble
 	identities *decisionIdentityFactory
 }
 
@@ -449,6 +450,7 @@ func newDispositionFixture(t *testing.T) *dispositionFixture {
 		judgments:  &recordedJudgmentsDouble{t: t, control: &control},
 		release:    &controlReleaseDouble{},
 		refusals:   &controlReleaseRefusalDouble{},
+		scopeLocks: &scopeLockDouble{},
 		identities: &decisionIdentityFactory{t: t},
 	}
 	fixture.handler = application.NewDisposeShipmentRequestHandler(application.DisposeShipmentRequestDeps{
@@ -457,6 +459,7 @@ func newDispositionFixture(t *testing.T) *dispositionFixture {
 		Judgments:  fixture.judgments,
 		Release:    fixture.release,
 		Refusals:   fixture.refusals,
+		ScopeLock:  fixture.scopeLocks,
 		Identities: fixture.identities,
 		Clock:      fixedClock{at: handlerClockAt},
 	})

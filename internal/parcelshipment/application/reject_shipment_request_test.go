@@ -324,6 +324,7 @@ type rejectionFixture struct {
 	judgments  *recordedJudgmentsDouble
 	release    *controlReleaseDouble
 	refusals   *controlReleaseRefusalDouble
+	scopeLocks *scopeLockDouble
 	identities *countingIdentityFactory
 	recorder   *judgmentRequestStore
 }
@@ -336,6 +337,7 @@ func newRejectionFixture(t *testing.T) *rejectionFixture {
 		judgments:  &recordedJudgmentsDouble{t: t, controlOutcome: domain.FinancialControlHeld},
 		release:    &controlReleaseDouble{},
 		refusals:   &controlReleaseRefusalDouble{},
+		scopeLocks: &scopeLockDouble{},
 		identities: &countingIdentityFactory{t: t},
 		recorder:   &judgmentRequestStore{},
 	}
@@ -346,6 +348,7 @@ func newRejectionFixture(t *testing.T) *rejectionFixture {
 		Recorder:   value.recorder,
 		Release:    value.release,
 		Refusals:   value.refusals,
+		ScopeLock:  value.scopeLocks,
 		Identities: value.identities,
 		Clock:      fixedClock{at: handlerClockAt},
 	})

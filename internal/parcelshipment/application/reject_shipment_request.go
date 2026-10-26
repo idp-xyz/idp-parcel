@@ -98,7 +98,9 @@ type RejectShipmentRequestDeps struct {
 	Recorder   ports.AcceptanceJudgmentRecorder
 	Release    ports.PreAcceptanceControlRelease
 	// Refusals 是释放未受理册：随附释放被提供方确定不受理时记在这里交人处理。
-	Refusals   ports.ControlReleaseRefusalRegister
+	Refusals ports.ControlReleaseRefusalRegister
+	// ScopeLock 在保存委托之前取这份委托各版占用所在作用域的锁，锁序见 ports.PreAcceptanceControlScopeLock 头注。
+	ScopeLock  ports.PreAcceptanceControlScopeLock
 	Identities ports.AcceptanceDecisionIdentity
 	Clock      ports.Clock
 }
@@ -162,6 +164,12 @@ func (handler *RejectShipmentRequestHandler) Handle(
 
 	if err := request.ActiveRejectionAdmissible(); err != nil {
 		return handler.inadmissible(request, err)
+	}
+
+	// 保存委托之前先取作用域锁，理由与位置同 WithdrawShipmentRequestHandler.decide：先 S 后 R 与接受链同序，且在领取决定
+	// 标识之前。已决态在上面的前置里就答了，不保存委托，不取锁。取不到锁与保存不了同一格。
+	if err := handler.occupation(command).lockScopesBeforeSave(ctx, request); err != nil {
+		return handler.undecided(ctx, command, DecisionNotRecorded, request.State()), nil
 	}
 
 	decisionID, err := handler.deps.Identities.NextAcceptanceDecisionID(ctx)
@@ -240,15 +248,20 @@ func (handler *RejectShipmentRequestHandler) releaseOccupation(
 	command RejectShipmentRequestCommand,
 	request domain.ShipmentRequest,
 ) (domain.OwnershipContinuationReference, bool) {
-	scope := occupationRelease{
+	scope := handler.occupation(command)
+	return scope.settle(ctx, scope.releaseEvery(ctx, request, command.SubmissionVersion))
+}
+
+func (handler *RejectShipmentRequestHandler) occupation(command RejectShipmentRequestCommand) occupationRelease {
+	return occupationRelease{
 		judgments: handler.deps.Judgments,
 		release:   handler.deps.Release,
 		identity:  command.Identity,
 		request:   command.ShipmentRequestID,
 		refusals:  handler.deps.Refusals,
 		clock:     handler.deps.Clock,
+		scopeLock: handler.deps.ScopeLock,
 	}
-	return scope.settle(ctx, scope.releaseEvery(ctx, request, command.SubmissionVersion))
 }
 
 // undecided 交回本轮的未决结果。state 由调用点给出而不是在这里假定`已提交`：未决要交回的是

@@ -140,6 +140,7 @@ func assembleWithdrawalOrchestration(db *bentopg.DB, authorizer ports.Withdrawal
 		Recorder:   judgments,
 		Release:    pspostgres.NewSavepointedControlRelease(db, release),
 		Refusals:   refusals,
+		ScopeLock:  pssettlement.NewControlScopeLocks(scopeLocks),
 		Identities: identities,
 		Clock:      clock,
 	})

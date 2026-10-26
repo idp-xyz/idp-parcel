@@ -567,6 +567,7 @@ type withdrawalFixture struct {
 	judgments  *recordedJudgmentsDouble
 	release    *controlReleaseDouble
 	refusals   *controlReleaseRefusalDouble
+	scopeLocks *scopeLockDouble
 	identities *countingIdentityFactory
 	steps      []string
 }
@@ -579,6 +580,7 @@ func newWithdrawalFixture(t *testing.T) *withdrawalFixture {
 		judgments:  &recordedJudgmentsDouble{t: t, controlOutcome: domain.FinancialControlHeld},
 		release:    &controlReleaseDouble{},
 		refusals:   &controlReleaseRefusalDouble{},
+		scopeLocks: &scopeLockDouble{},
 		identities: &countingIdentityFactory{t: t},
 	}
 	value.sources = &sourceRepositoryDouble{
@@ -594,6 +596,7 @@ func newWithdrawalFixture(t *testing.T) *withdrawalFixture {
 		Recorder:   &judgmentRequestStore{},
 		Release:    value.release,
 		Refusals:   value.refusals,
+		ScopeLock:  value.scopeLocks,
 		Identities: value.identities,
 		Clock:      fixedClock{at: handlerClockAt},
 	})

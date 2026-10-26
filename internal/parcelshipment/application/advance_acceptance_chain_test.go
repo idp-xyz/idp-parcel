@@ -372,6 +372,7 @@ func newChainFixture(t *testing.T) *chainFixture {
 			Reachability: &reachabilityRevalidatorDouble{outcome: ports.ReachabilityJudgmentStillCurrent},
 			Recorder:     recorder,
 			Release:      value.release,
+			ScopeLock:    &scopeLockDouble{},
 			Downstream:   value.downstream,
 			Identities:   &decisionIdentityFactory{t: t},
 			Clock:        clock,

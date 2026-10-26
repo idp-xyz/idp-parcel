@@ -21,6 +21,9 @@ type occupationRelease struct {
 	// 不记册，遇到它响亮停下（决定三）。
 	refusals ports.ControlReleaseRefusalRegister
 	clock    ports.Clock
+	// scopeLock 只有保存委托的各路用：保存之前先取作用域锁（lockScopesBeforeSave）。接受链开头放被取代各版那一步不用它，
+	// 链里取锁的次序由施加与释放自己的取锁决定。
+	scopeLock ports.PreAcceptanceControlScopeLock
 }
 
 // occupationReleaseGap 是这一轮没能收口、可以续办的那一处：原因，与续办范围里跟在委托之后的那几段（版本；放不掉时再带

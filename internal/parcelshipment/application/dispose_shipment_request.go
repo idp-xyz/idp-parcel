@@ -136,7 +136,9 @@ type DisposeShipmentRequestDeps struct {
 	Judgments  ports.RecordedJudgmentReader
 	Release    ports.PreAcceptanceControlRelease
 	// Refusals 是释放未受理册：随附释放被提供方确定不受理时记在这里交人处理。
-	Refusals   ports.ControlReleaseRefusalRegister
+	Refusals ports.ControlReleaseRefusalRegister
+	// ScopeLock 在保存委托之前取这份委托各版占用所在作用域的锁，锁序见 ports.PreAcceptanceControlScopeLock 头注。
+	ScopeLock  ports.PreAcceptanceControlScopeLock
 	Identities ports.AcceptanceDecisionIdentity
 	Clock      ports.Clock
 }
@@ -235,6 +237,11 @@ func (handler *DisposeShipmentRequestHandler) Handle(
 	if err := request.AuthorizedDispositionAdmissible(); err != nil {
 		return handler.inadmissible(request, current, err)
 	}
+	// 保存委托之前先取作用域锁，理由与位置同 WithdrawShipmentRequestHandler.decide：两个去向都释放占用，都先 S 后 R。取不到
+	// 锁与保存不了同一格：处置尚未形成，上抛。
+	if err := handler.occupation(command).lockScopesBeforeSave(ctx, request); err != nil {
+		return DisposeShipmentRequestResult{}, fmt.Errorf("dispose shipment request: lock control scope: %w", err)
+	}
 	spec := domain.DisposeUnderAuthoritySpec{Disposition: disposition}
 	if command.Choice == domain.DisposeByRejection {
 		// 决定标识只在`拒绝`去向签发，且在授权与处置前置都判过之后：一次未获授权、或撞上前置（重放、
@@ -330,13 +337,18 @@ func (handler *DisposeShipmentRequestHandler) releaseOccupation(
 	command DisposeShipmentRequestCommand,
 	request domain.ShipmentRequest,
 ) (domain.OwnershipContinuationReference, bool) {
-	scope := occupationRelease{
+	scope := handler.occupation(command)
+	return scope.settle(ctx, scope.releaseEvery(ctx, request, command.SubmissionVersion))
+}
+
+func (handler *DisposeShipmentRequestHandler) occupation(command DisposeShipmentRequestCommand) occupationRelease {
+	return occupationRelease{
 		judgments: handler.deps.Judgments,
 		release:   handler.deps.Release,
 		identity:  command.Identity,
 		request:   command.ShipmentRequestID,
 		refusals:  handler.deps.Refusals,
 		clock:     handler.deps.Clock,
+		scopeLock: handler.deps.ScopeLock,
 	}
-	return scope.settle(ctx, scope.releaseEvery(ctx, request, command.SubmissionVersion))
 }

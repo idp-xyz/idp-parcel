@@ -7,9 +7,11 @@ import (
 
 	psinbox "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
+	pssettlement "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/settlementaccounting"
 	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 )
 
 // 本文件对真实 PostgreSQL 16 证两格（票 docs-consistency/code/72、73），夹具同 superseded_version_control_release_test.go：
@@ -148,6 +150,10 @@ func (fixture *customerSupplementLoopFixture) withdrawal(
 	if err != nil {
 		t.Fatalf("构造释放未受理册：%v", err)
 	}
+	scopeLocks, err := sapostgres.NewPreAcceptanceControlScopeLocks(fixture.db)
+	if err != nil {
+		t.Fatalf("构造控制作用域锁：%v", err)
+	}
 	return psapplication.NewWithdrawShipmentRequestHandler(psapplication.WithdrawShipmentRequestDeps{
 		Sources:    sources,
 		Requests:   fixture.requests,
@@ -156,6 +162,7 @@ func (fixture *customerSupplementLoopFixture) withdrawal(
 		Recorder:   fixture.judgments,
 		Release:    release,
 		Refusals:   refusals,
+		ScopeLock:  pssettlement.NewControlScopeLocks(scopeLocks),
 		Identities: &synSDecisionIdentities{},
 		Clock:      systemClock{},
 	})

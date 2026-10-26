@@ -182,3 +182,27 @@ func (double *conflictRegisterDouble) ListByParcel(
 	}
 	return entries, nil
 }
+
+// scopeLockDouble 是控制作用域锁的替身：按调用顺序记下每次取锁指名的（租户，占用作用域）；err 非空时模拟取不到锁；
+// onLock 在取锁那一刻回调，好让用例把「取锁」与「保存委托」「释放」排进同一张步骤表，断言先后。
+type scopeLockDouble struct {
+	tenants []domain.TenantID
+	scopes  []domain.OccupationScope
+	err     error
+	onLock  func(scope domain.OccupationScope)
+}
+
+func (double *scopeLockDouble) LockControlScope(
+	_ context.Context,
+	tenant domain.TenantID,
+	scope domain.OccupationScope,
+) error {
+	double.tenants = append(double.tenants, tenant)
+	double.scopes = append(double.scopes, scope)
+	if double.onLock != nil {
+		double.onLock(scope)
+	}
+	return double.err
+}
+
+var _ ports.PreAcceptanceControlScopeLock = (*scopeLockDouble)(nil)
