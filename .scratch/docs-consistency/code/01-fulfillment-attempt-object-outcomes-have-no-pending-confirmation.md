@@ -1,7 +1,7 @@
 # 01 TF 履约尝试的逐对象结果没有「待确认」一格
 
 Category: bug
-Status: in-progress——收尾轮完工待第三轮评审与进 main，分支 claude-code01（基于 main `4f29f861e`）。此前 ready-for-agent——R2（上线后尽快）：场外揽收与派送尝试已在生产命令面上，「只有车辆到场和司机扫描」「签收与地址来源冲突」这类来源第一周就会遇到；后果是执行方只能在四个已定结果里硬选一个，或者不登这次尝试，结果被说成确定，或这次尝试不留痕。可靠绕法：来源不足时先不登尝试，补齐证据后再登。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
+Status: in-progress——收尾轮完工待第三轮评审与进 main，分支 claude-code01（基于 main `b685046d3`）。此前 ready-for-agent——R2（上线后尽快）：场外揽收与派送尝试已在生产命令面上，「只有车辆到场和司机扫描」「签收与地址来源冲突」这类来源第一周就会遇到；后果是执行方只能在四个已定结果里硬选一个，或者不登这次尝试，结果被说成确定，或这次尝试不留痕。可靠绕法：来源不足时先不登尝试，补齐证据后再登。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
 Blocked by: 无
 出处：[audit/tf.md](../audit/tf.md) M16（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，现象仍在）。
 
@@ -150,3 +150,4 @@ S–M：两个领域枚举、汇总派生、命令面词表、库表 CHECK（若
 - `go build ./...`、`go vet ./...` 干净，`gofmt -l internal cmd` 无输出。
 - `TMPDIR=… scripts/test-full.sh ./internal/transportfulfillment/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./internal/architecture/...`：15 个包 ok、1 个无测试文件，退出码 0。
 - 新改用例六个顶层测试 `-count=3`（真库，`-v` 核过无 SKIP、无 FAIL）：18 次 PASS，退出码 0。
+- 收尾前 `origin/main` 又前移到 `b685046d3`（只有一笔 party-commercial-uiux 的票面），重放无冲突；那一笔不动代码，上面几跑不重跑。
