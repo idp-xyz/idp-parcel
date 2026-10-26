@@ -30,28 +30,42 @@ func NewCapacityPools(db *bentopg.DB) (*CapacityPools, error) {
 // 复验三量守恒，不重放 Reserve/Release/Consume。预占上的分配关系从各装载分配当前那一版派生（loadAllocationRelations），
 // 也在锁住池行之后读：同一个池上的分配与释放因此和预占一样串行判。
 //
-// 读池一律锁住池那一行（FOR UPDATE）：在写事务里锁到事务结束，不在事务里随这一条语句放。池按值换存：两笔预占各自
-// 读到同一个旧池、各算各的余量、先后换存，后到的那一笔会把先到的预占整份删掉——硬上限与先到者的预占一起丢。锁住读，
-// 第二笔就等第一笔落定再读，读到的是含第一笔的池（ADR-0203 决定四）。不按「在不在事务里」分两种读：那要先问一次写
-// 执行器，这一口就被当成了无事务即拒的写口，而它在事务外照样要读得回。
+// 按池身份读池一律锁住池那一行（FOR UPDATE）：在写事务里锁到事务结束，不在事务里随这一条语句放。池按值换存：两笔预占
+// 各自读到同一个旧池、各算各的余量、先后换存，后到的那一笔会把先到的预占整份删掉——硬上限与先到者的预占一起丢。锁住
+// 读，第二笔就等第一笔落定再读，读到的是含第一笔的池（ADR-0203 决定四）。不按「在不在事务里」分两种读：那要先问一次写
+// 执行器，这一口就被当成了无事务即拒的写口，而它在事务外照样要读得回。不锁的读只有准备评估那一口
+// （ListPoolsOnSchedulesUnlocked），由调用方的端口定，不由这里猜。
 func (repository *CapacityPools) FindByKey(
 	ctx context.Context,
 	key ports.CapacityPoolKey,
+) (ports.CapacityPoolRecord, bool, error) {
+	return repository.findPool(ctx, key, true)
+}
+
+// findPool 是按池身份读回的唯一一条读法：行、预占、释放与分配关系怎么读、怎么过重建门、怎么核池身份都在这里，锁不锁
+// 只差池行那一句的 FOR UPDATE。
+func (repository *CapacityPools) findPool(
+	ctx context.Context,
+	key ports.CapacityPoolKey,
+	lock bool,
 ) (ports.CapacityPoolRecord, bool, error) {
 	querier, err := repository.db.ReadExecutor(ctx)
 	if err != nil {
 		return ports.CapacityPoolRecord{}, false, fmt.Errorf("find capacity pool: %w", err)
 	}
 
+	statement := `SELECT schedule_id, dimension, unit_ref, capacity, content_digest, recorded_at
+		   FROM transport_fulfillment.capacity_pool
+		  WHERE tenant_id = $1
+		    AND pool_id = $2`
+	if lock {
+		statement += `
+		    FOR UPDATE`
+	}
 	var scheduleID, dimension, unit, digest string
 	var capacity int64
 	var recordedAt time.Time
-	err = querier.QueryRow(ctx,
-		`SELECT schedule_id, dimension, unit_ref, capacity, content_digest, recorded_at
-		   FROM transport_fulfillment.capacity_pool
-		  WHERE tenant_id = $1
-		    AND pool_id = $2
-		    FOR UPDATE`,
+	err = querier.QueryRow(ctx, statement,
 		key.TenantID.String(),
 		key.Pool.String(),
 	).Scan(&scheduleID, &dimension, &unit, &capacity, &digest, &recordedAt)

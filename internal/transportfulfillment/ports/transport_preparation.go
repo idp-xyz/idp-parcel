@@ -34,10 +34,26 @@ type DeclaredDemandSource interface {
 	) (domain.DemandSnapshot, error)
 }
 
-// CapacityPoolsOnSchedules 按班次交回登记册上的池（含预占）。只在已登记的班次上问：只经评估物化的那一班没有登过的池。
-// 与 CapacityPoolStore 分开：那一口按池身份读写，准备评估只读、按班次成批问。
+// CapacityPoolsOnSchedules 按班次交回登记册上的池（含预占），读一个锁一个池行、锁到事务结束。装载分配用它：判分配量与
+// 预占剩余要和同一池上的预占、释放、别的分配串行（ADR-0203 决定四与「补记：票 21 落地时的补充裁定」）。只在已登记的班次
+// 上问：只经评估物化的那一班没有登过的池。与 CapacityPoolStore 分开：那一口按池身份读写，这一口按班次成批问。
 type CapacityPoolsOnSchedules interface {
 	ListPoolsOnSchedules(
+		ctx context.Context,
+		tenant domain.TenantID,
+		schedules []domain.ScheduleReference,
+	) ([]CapacityPoolRecord, error)
+}
+
+// UnlockedCapacityPoolsOnSchedules 与 CapacityPoolsOnSchedules 交回同样的池，读法与重建门也同一条，只是不锁池行。只给准备
+// 评估（PrepareOnPlannedLegsHandler）：准备只算不换存池，却跑在整封初始路由信封那一笔事务里——锁了，候选班次上的每个池
+// 行就持到整封提交，预占、释放与装载分配都得排在它后面（票 demo-chain-gaps/127，ADR-0203 越权风险点 7）。代价是读到的是
+// 读那一刻已提交的池：并发的预占不等准备、准备也不等它，准备结果记下的可用量本就只是判断时点的依据。
+//
+// 另立一口而不在 CapacityPoolsOnSchedules 上加参数：要不要锁随调用方定死，写编排拿不到这一口，就不会读到一个不锁的池再按它
+// 换存。
+type UnlockedCapacityPoolsOnSchedules interface {
+	ListPoolsOnSchedulesUnlocked(
 		ctx context.Context,
 		tenant domain.TenantID,
 		schedules []domain.ScheduleReference,

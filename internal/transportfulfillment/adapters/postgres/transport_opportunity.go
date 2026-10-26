@@ -14,16 +14,43 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// 本文件是运输准备两口的库面（迁移 0028，ADR-0201 决定六至八）：准备结果库，与准备评估按班次成批读池的那一问。
+// 本文件是运输准备两口的库面（迁移 0028，ADR-0201 决定六至八）：准备结果库，与按班次成批读池的那一问——装载分配锁池行，
+// 准备评估不锁（票 demo-chain-gaps/127）。
 
-var _ ports.CapacityPoolsOnSchedules = (*CapacityPools)(nil)
+var (
+	_ ports.CapacityPoolsOnSchedules         = (*CapacityPools)(nil)
+	_ ports.UnlockedCapacityPoolsOnSchedules = (*CapacityPools)(nil)
+)
 
-// ListPoolsOnSchedules 按班次交回登记册上的池。先取池身份再逐个经 FindByKey 读回：读回要过重建门、核池身份由班次与维度
-// 派生，准备评估判容量用的池与登记口、预占口读到的是同一个，没有第二条读法。
+// ListPoolsOnSchedules 按班次交回登记册上的池，逐个锁住池行（装载分配那一口）。先取池身份再逐个按池身份读回：读回要过
+// 重建门、核池身份由班次与维度派生，按班次读到的池与登记口、预占口读到的是同一个，没有第二条读法。按池身份的次序逐个
+// 加锁，两笔事务锁同一组池时不会互等成环。
 func (repository *CapacityPools) ListPoolsOnSchedules(
 	ctx context.Context,
 	tenant domain.TenantID,
 	schedules []domain.ScheduleReference,
+) ([]ports.CapacityPoolRecord, error) {
+	return repository.listPoolsOnSchedules(ctx, tenant, schedules, true)
+}
+
+// ListPoolsOnSchedulesUnlocked 同 ListPoolsOnSchedules，只是不锁池行（准备评估那一口，见 ports.UnlockedCapacityPoolsOnSchedules）。
+//
+// 一个池分几条语句读（池行、释放、分配关系、预占），读已提交下每条各取各的快照：两条之间恰有一笔释放提交时，释放明细与
+// 预占上的已释放对不上，重建门拒读，准备答池册读不动、整封重投，下一次读到的是那一笔之后的池。不拼一条语句去换一个
+// 一致的快照：那就成了第二条读法，而这一口要的正是与写编排读到同一个池。
+func (repository *CapacityPools) ListPoolsOnSchedulesUnlocked(
+	ctx context.Context,
+	tenant domain.TenantID,
+	schedules []domain.ScheduleReference,
+) ([]ports.CapacityPoolRecord, error) {
+	return repository.listPoolsOnSchedules(ctx, tenant, schedules, false)
+}
+
+func (repository *CapacityPools) listPoolsOnSchedules(
+	ctx context.Context,
+	tenant domain.TenantID,
+	schedules []domain.ScheduleReference,
+	lock bool,
 ) ([]ports.CapacityPoolRecord, error) {
 	if len(schedules) == 0 {
 		return nil, nil
@@ -68,7 +95,7 @@ func (repository *CapacityPools) ListPoolsOnSchedules(
 		if err != nil {
 			return nil, fmt.Errorf("list capacity pools on schedules: %w", err)
 		}
-		record, found, err := repository.FindByKey(ctx, ports.CapacityPoolKey{TenantID: tenant, Pool: reference})
+		record, found, err := repository.findPool(ctx, ports.CapacityPoolKey{TenantID: tenant, Pool: reference}, lock)
 		if err != nil {
 			return nil, fmt.Errorf("list capacity pools on schedules: %w", err)
 		}

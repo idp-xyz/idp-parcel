@@ -144,11 +144,11 @@ func (result PrepareOnPlannedLegsResult) ContinuationReference() string {
 }
 
 // PrepareOnPlannedLegsDeps 是本编排的缝：申报需求量、班次候选口、池册与准备结果库。不接任何 Outbox：准备结果没有消费者，
-// 不入队信封（ADR-0201 决定七、计划 X3）。
+// 不入队信封（ADR-0201 决定七、计划 X3）。池册取不锁池行的那一口：准备只算不换存池，见 ports.UnlockedCapacityPoolsOnSchedules。
 type PrepareOnPlannedLegsDeps struct {
 	Demand       ports.DeclaredDemandSource
 	Schedules    ports.ScheduleCandidateSource
-	Pools        ports.CapacityPoolsOnSchedules
+	Pools        ports.UnlockedCapacityPoolsOnSchedules
 	Preparations ports.TransportPreparationStore
 	Clock        ports.Clock
 }
@@ -339,7 +339,7 @@ func (handler *PrepareOnPlannedLegsHandler) candidateInputs(
 	}
 	poolsBySchedule := map[string][]domain.CapacityPool{}
 	if len(registered) > 0 {
-		records, err := handler.deps.Pools.ListPoolsOnSchedules(ctx, tenant, registered)
+		records, err := handler.deps.Pools.ListPoolsOnSchedulesUnlocked(ctx, tenant, registered)
 		if err != nil {
 			return nil, err
 		}
