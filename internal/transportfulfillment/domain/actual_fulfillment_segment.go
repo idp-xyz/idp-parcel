@@ -125,9 +125,12 @@ type FulfillmentParticipation struct {
 	endKind    ParticipationEndKind
 	endBasis   ParticipationBasisReference
 	endedAt    time.Time
-	supersedes ParticipationBasisReference
-	superseded bool
-	voided     bool
+	// terminatedBy 是作出明确终止的那位操作者（ADR-0303）：终点的操作证据，只在以明确终止结束、且经运营决定口提交时
+	// 带值。它跟着终点走——替代版本承继终点时一并承继，因为那仍是同一次终止决定。
+	terminatedBy RegistrantReference
+	supersedes   ParticipationBasisReference
+	superseded   bool
+	voided       bool
 }
 
 // Supersedes 只在替代参与版本上给出：被替代参与的入场依据。首次入场答 false。
@@ -185,14 +188,25 @@ func (participation FulfillmentParticipation) End() (ParticipationEndKind, Parti
 	return participation.endKind, participation.endBasis, participation.endedAt, true
 }
 
+// TerminatedBy 交回作出明确终止的操作者（ADR-0303），只在以明确终止结束且记下了操作者时给出。它是操作证据，不是终点
+// 的内容：终点三件照旧由 End 交出，任何门都不读这一格。
+func (participation FulfillmentParticipation) TerminatedBy() (RegistrantReference, bool) {
+	if participation.endedAt.IsZero() || !participation.terminatedBy.Present() {
+		return RegistrantReference{}, false
+	}
+	return participation.terminatedBy, true
+}
+
 // ActualFulfillmentSegment 是由有效收寄或权威交接事实形成的共同运输执行与控制责任
 // 范围（CONTEXT「实际履约段」）。值类型：每次转换返回新值——已成立的段不存在「取消回
 // 未开始」，类型上也没有任何取消或回退方法。
 type ActualFulfillmentSegment struct {
-	tenantID       TenantID
-	segment        FulfillmentSegmentReference
-	closed         bool
-	closedAt       time.Time
+	tenantID TenantID
+	segment  FulfillmentSegmentReference
+	closed   bool
+	closedAt time.Time
+	// closedBy 是作出关段决定的那位操作者（ADR-0303）：关段的操作证据，可缺。
+	closedBy       RegistrantReference
 	participations []FulfillmentParticipation
 	// serviceAction 是登记方在段成立时声明的段服务动作（ADR-0114 决定一）；零值即未声明——那是
 	// 一种答案不是缺陷，所以这里没有默认值。声明门与读法在 segment_service_action.go。
@@ -260,6 +274,15 @@ func (segment ActualFulfillmentSegment) ClosedAt() (time.Time, bool) {
 		return time.Time{}, false
 	}
 	return segment.closedAt, true
+}
+
+// ClosedBy 交回作出关段决定的操作者（ADR-0303），只在段已关闭且记下了操作者时给出。关段的业务答案（早已关闭、仍有
+// 在场参与）都不读它。
+func (segment ActualFulfillmentSegment) ClosedBy() (RegistrantReference, bool) {
+	if !segment.closed || !segment.closedBy.Present() {
+		return RegistrantReference{}, false
+	}
+	return segment.closedBy, true
 }
 
 func (segment ActualFulfillmentSegment) Participations() []FulfillmentParticipation {
@@ -546,6 +569,7 @@ func (segment ActualFulfillmentSegment) rederive(
 			return ActualFulfillmentSegment{}, ErrCorrectedStartAfterInheritedEnd
 		}
 		replacement.endKind, replacement.endBasis, replacement.endedAt = endKind, endBasis, endedAt
+		replacement.terminatedBy = current.terminatedBy
 	}
 	rederived := segment
 	rederived.participations = append([]FulfillmentParticipation(nil), segment.participations...)
@@ -582,7 +606,7 @@ func (segment ActualFulfillmentSegment) EndParticipationWithDelivery(
 	if err != nil {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
 	}
-	return segment.end(delivery.Object(), EndedByEffectiveDelivery, basis, delivery.OccurredAt())
+	return segment.end(delivery.Object(), EndedByEffectiveDelivery, basis, delivery.OccurredAt(), RegistrantReference{})
 }
 
 // EndParticipationWithNextHandover 以下一次`已交接`的权威交接结束该对象的参与——控制
@@ -597,21 +621,23 @@ func (segment ActualFulfillmentSegment) EndParticipationWithNextHandover(
 	if !formed {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
 	}
-	return segment.end(handover.Object(), EndedByNextHandover, basis, handover.JudgedAt())
+	return segment.end(handover.Object(), EndedByNextHandover, basis, handover.JudgedAt(), RegistrantReference{})
 }
 
 // EndParticipationWithTermination 以明确控制终止结束参与。依据必备：没有有效控制结束
 // 事实时，停止移动、异常案件或计划取消均不结束控制（CONTEXT）——不带依据的终止在
-// 构造期就进不来。
+// 构造期就进不来。by 是作出这次终止的操作者，可缺（ADR-0303）：它随终点留痕，不参与
+// 这道门的任何判断。
 func (segment ActualFulfillmentSegment) EndParticipationWithTermination(
 	object CarriedObjectReference,
 	basis ParticipationBasisReference,
 	at time.Time,
+	by RegistrantReference,
 ) (ActualFulfillmentSegment, error) {
 	if !basis.valid() {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
 	}
-	return segment.end(object, EndedByControlTermination, basis, at)
+	return segment.end(object, EndedByControlTermination, basis, at, by)
 }
 
 func (segment ActualFulfillmentSegment) end(
@@ -619,6 +645,7 @@ func (segment ActualFulfillmentSegment) end(
 	kind ParticipationEndKind,
 	basis ParticipationBasisReference,
 	at time.Time,
+	by RegistrantReference,
 ) (ActualFulfillmentSegment, error) {
 	if !object.valid() || AtRegistryPrecision(at).IsZero() {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
@@ -641,6 +668,7 @@ func (segment ActualFulfillmentSegment) end(
 		participation.endKind = kind
 		participation.endBasis = basis
 		participation.endedAt = at.UTC()
+		participation.terminatedBy = by
 		return ended, nil
 	}
 	return ActualFulfillmentSegment{}, ErrObjectNotParticipating
@@ -652,7 +680,9 @@ func (segment ActualFulfillmentSegment) end(
 //
 // 同一条规则的时序面：关闭时刻不得早于任何参与的终点。早于它就等于说段在那个对象仍受控时
 // 已经结束——与上一句矛盾。同刻允许：最后一个对象交出去的那一刻关段是正当的。
-func (segment ActualFulfillmentSegment) CloseSegment(at time.Time) (ActualFulfillmentSegment, error) {
+//
+// by 是作出关段决定的操作者，可缺（ADR-0303）：它随关闭留痕，不参与上面任何一道判断。
+func (segment ActualFulfillmentSegment) CloseSegment(at time.Time, by RegistrantReference) (ActualFulfillmentSegment, error) {
 	if !segment.Established() || AtRegistryPrecision(at).IsZero() {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
 	}
@@ -668,6 +698,7 @@ func (segment ActualFulfillmentSegment) CloseSegment(at time.Time) (ActualFulfil
 	closed := segment
 	closed.closed = true
 	closed.closedAt = at.UTC()
+	closed.closedBy = by
 	return closed, nil
 }
 

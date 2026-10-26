@@ -44,14 +44,15 @@ func (repository *FulfillmentSegments) FindByKey(
 
 	var closed bool
 	var closedAt *time.Time
+	var closedBy *string
 	var recordedAt time.Time
 	var serviceAction *string
 	err = querier.QueryRow(ctx,
-		`SELECT closed, closed_at, recorded_at, service_action
+		`SELECT closed, closed_at, closed_by, recorded_at, service_action
 		   FROM transport_fulfillment.actual_fulfillment_segment
 		  WHERE tenant_id = $1 AND segment_ref = $2`,
 		key.TenantID.String(), key.Segment.String(),
-	).Scan(&closed, &closedAt, &recordedAt, &serviceAction)
+	).Scan(&closed, &closedAt, &closedBy, &recordedAt, &serviceAction)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.FulfillmentSegmentRecord{}, false, nil
 	}
@@ -62,7 +63,7 @@ func (repository *FulfillmentSegments) FindByKey(
 	// 成员按入场时刻再按对象、入场依据排序：顺序不进任何判断，但让读回稳定，比对夹具时不必先排一遍。
 	rows, err := querier.Query(ctx,
 		`SELECT object_ref, planned_ref, entry_kind, entry_basis, entered_at,
-		        end_kind, end_basis, ended_at, supersedes_entry_basis, voided
+		        end_kind, end_basis, ended_at, terminated_by, supersedes_entry_basis, voided
 		   FROM transport_fulfillment.fulfillment_participation
 		  WHERE tenant_id = $1 AND segment_ref = $2
 		  ORDER BY entered_at, object_ref, entry_basis`,
@@ -81,6 +82,9 @@ func (repository *FulfillmentSegments) FindByKey(
 	if closedAt != nil {
 		spec.ClosedAt = closedAt.UTC()
 	}
+	if spec.ClosedBy, err = registrantFromColumn(closedBy); err != nil {
+		return ports.FulfillmentSegmentRecord{}, false, fmt.Errorf("find fulfillment segment: %w", err)
+	}
 	// NULL 就是未声明（ADR-0114 决定一）；非空的词经封闭集合认回，词不在集合内是坏行，在这里响亮。
 	if serviceAction != nil {
 		if spec.ServiceAction, err = domain.ParseSegmentServiceAction(*serviceAction); err != nil {
@@ -89,12 +93,12 @@ func (repository *FulfillmentSegments) FindByKey(
 	}
 	for rows.Next() {
 		var objectRef, entryKind, entryBasis string
-		var plannedRef, endKind, endBasis, supersedes *string
+		var plannedRef, endKind, endBasis, terminatedBy, supersedes *string
 		var enteredAt time.Time
 		var endedAt *time.Time
 		var voided bool
 		if err := rows.Scan(&objectRef, &plannedRef, &entryKind, &entryBasis, &enteredAt,
-			&endKind, &endBasis, &endedAt, &supersedes, &voided); err != nil {
+			&endKind, &endBasis, &endedAt, &terminatedBy, &supersedes, &voided); err != nil {
 			return ports.FulfillmentSegmentRecord{}, false, fmt.Errorf("find fulfillment segment: %w", err)
 		}
 		member, err := participationSpecFrom(participationRow{
@@ -103,9 +107,12 @@ func (repository *FulfillmentSegments) FindByKey(
 			entryKind:  entryKind,
 			entryBasis: entryBasis,
 			enteredAt:  enteredAt,
-			endKind:    endKind,
-			endBasis:   endBasis,
-			endedAt:    endedAt,
+			end: participationEndColumns{
+				kind:         endKind,
+				basis:        endBasis,
+				at:           endedAt,
+				terminatedBy: terminatedBy,
+			},
 			supersedes: supersedes,
 			voided:     voided,
 		})
@@ -143,6 +150,7 @@ func (repository *FulfillmentSegments) Save(
 	}
 
 	closedAt, closed := record.Segment.ClosedAt()
+	closedBy, _ := record.Segment.ClosedBy()
 	// 段服务动作只在首登这一行写入（ADR-0114 决定一）：未声明落 NULL，不给默认。
 	var serviceAction *string
 	if action, declared := record.Segment.ServiceAction(); declared {
@@ -151,13 +159,14 @@ func (repository *FulfillmentSegments) Save(
 	}
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO transport_fulfillment.actual_fulfillment_segment
-		     (tenant_id, segment_ref, closed, closed_at, recorded_at, service_action)
-		 VALUES ($1, $2, $3, $4, $5, $6)
+		     (tenant_id, segment_ref, closed, closed_at, closed_by, recorded_at, service_action)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Segment.String(),
 		closed,
 		nullableTime(closedAt, closed),
+		optionalRegistrant(closedBy),
 		record.RecordedAt.UTC(),
 		serviceAction,
 	)
@@ -217,11 +226,11 @@ func (repository *FulfillmentSegments) Join(
 //
 // 不校验段是否已关闭：段已关闭照样长替代版本，那是 CONTEXT 封存例外格，领域门也不拒。
 //
-// **落笔前先锁住被替代的链尾，新版本的离场三件取锁住之后读到的那一份**（票 tf-face-algebra/05）。调用方的派生
+// **落笔前先锁住被替代的链尾，新版本的离场各列取锁住之后读到的那一份**（票 tf-face-algebra/05）。调用方的派生
 // 基于一次不加锁的读：读完到落笔之间，终止的窄口写可能已在被替代链尾上提交，或正挂着未提交——按旧读法落一版
-// 没有终点的新链尾，终点就留在已被替代的版本上，参与重新在场。锁让替代排在那次写之后；离场三件是参与行上唯一会被
-// 改写的列，也是领域重派生从被替代版本继承的全部（ActualFulfillmentSegment.rederive），所以只在这三列上按锁后的
-// 在册值重派生，其余各格仍是调用方交来的。
+// 没有终点的新链尾，终点就留在已被替代的版本上，参与重新在场。锁让替代排在那次写之后；离场各列（终点三件与终止的
+// 操作证据，ADR-0303）是参与行上唯一会被改写的列，也是领域重派生从被替代版本继承的全部（ActualFulfillmentSegment.
+// rederive），所以只在这几列上按锁后的在册值重派生，其余各格仍是调用方交来的。
 func (repository *FulfillmentSegments) Supersede(
 	ctx context.Context,
 	key ports.FulfillmentSegmentKey,
@@ -251,7 +260,7 @@ func (repository *FulfillmentSegments) Supersede(
 	return ports.ParticipationSuperseded, nil
 }
 
-// lockedInheritedEnd 以 FOR UPDATE 锁住被替代的那一行，交回新版本应带的离场三列：被替代版本在册的那一份。
+// lockedInheritedEnd 以 FOR UPDATE 锁住被替代的那一行，交回新版本应带的离场各列：被替代版本在册的那一份。
 //
 // 被替代的行不在册时交回调用方自带的那一份，不在这里报错——自引用外键会在插入时拒它，「回指一个不存在的前版」
 // 的口径留在那一处。
@@ -269,12 +278,12 @@ func lockedInheritedEnd(
 	carried := endColumnsOf(participation)
 	var locked participationEndColumns
 	err := executor.QueryRow(ctx,
-		`SELECT end_kind, end_basis, ended_at
+		`SELECT end_kind, end_basis, ended_at, terminated_by
 		   FROM transport_fulfillment.fulfillment_participation
 		  WHERE tenant_id = $1 AND segment_ref = $2 AND object_ref = $3 AND entry_basis = $4
 		    FOR UPDATE`,
 		key.TenantID.String(), key.Segment.String(), participation.Object().String(), replaced.String(),
-	).Scan(&locked.kind, &locked.basis, &locked.at)
+	).Scan(&locked.kind, &locked.basis, &locked.at, &locked.terminatedBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return carried, nil
 	}
@@ -375,7 +384,7 @@ func (repository *FulfillmentSegments) findSegmentKeys(
 	return keys, nil
 }
 
-// EndParticipation 填离场三列（ADR-0097 第二个窄口）。
+// EndParticipation 填离场各列（ADR-0097 第二个窄口）：终点三件，明确终止时连同作出终止的操作者（ADR-0303）。
 //
 // 「在场」谓词是这个口的全部要害：**它让"改写一条已离场的参与"、"结束一条已被替代的参与"与"结束一条已失效的
 // 参与"都表达不出来**。行按入场依据指名——那是参与在链上的身份，调用方交来的就是领域判定的链尾。
@@ -394,6 +403,7 @@ func (repository *FulfillmentSegments) EndParticipation(
 		return ports.ParticipationEndOutcomeInvalid,
 			errors.New("end participation: the participation carries no end")
 	}
+	terminatedBy, _ := participation.TerminatedBy()
 
 	// 先单独锁住这一行，再用一条新语句判在场并写（票 tf-face-algebra/05）。READ COMMITTED 下 UPDATE 的链尾判据
 	// 按语句开始时的快照求值；它若排在替代口锁住这一行的事务后面，对方提交时这一行本身没改，UPDATE 不重判就照写，
@@ -411,11 +421,11 @@ func (repository *FulfillmentSegments) EndParticipation(
 
 	tag, err := executor.Exec(ctx,
 		`UPDATE transport_fulfillment.fulfillment_participation participation
-		    SET end_kind = $1, end_basis = $2, ended_at = $3
-		  WHERE participation.tenant_id = $4 AND participation.segment_ref = $5
-		    AND participation.object_ref = $6 AND participation.entry_basis = $7
+		    SET end_kind = $1, end_basis = $2, ended_at = $3, terminated_by = $4
+		  WHERE participation.tenant_id = $5 AND participation.segment_ref = $6
+		    AND participation.object_ref = $7 AND participation.entry_basis = $8
 		    AND `+activeParticipationPredicate,
-		kind.String(), basis.String(), endedAt.UTC(),
+		kind.String(), basis.String(), endedAt.UTC(), optionalRegistrant(terminatedBy),
 		key.TenantID.String(), key.Segment.String(), participation.Object().String(),
 		participation.EntryBasis().String(),
 	)
@@ -428,8 +438,9 @@ func (repository *FulfillmentSegments) EndParticipation(
 	return ports.ParticipationEnded, nil
 }
 
-// CloseSegment 填关闭两列（ADR-0097 第三个窄口）。`WHERE closed = false` 让重复关段与
-// 「把已关闭的段改回未关闭」都表达不出来。
+// CloseSegment 填关闭各列（ADR-0097 第三个窄口）：关闭标志与时刻，连同作出关段决定的操作者（ADR-0303，可缺）。
+// `WHERE closed = false` 让重复关段与「把已关闭的段改回未关闭」都表达不出来——另一位操作者再关一次同样写中 0 行，
+// 在册的操作者不被顶替。
 //
 // **它不校验是否仍有在场参与**——那是跨行条件，本口表达不了，留在领域。编排必须先读回整段、
 // 走 `CloseSegment` 转换门再调本口。
@@ -437,6 +448,7 @@ func (repository *FulfillmentSegments) CloseSegment(
 	ctx context.Context,
 	key ports.FulfillmentSegmentKey,
 	closedAt time.Time,
+	closedBy domain.RegistrantReference,
 ) (ports.SegmentCloseOutcome, error) {
 	executor, err := repository.db.RequireExecutor(ctx)
 	if err != nil {
@@ -444,9 +456,9 @@ func (repository *FulfillmentSegments) CloseSegment(
 	}
 	tag, err := executor.Exec(ctx,
 		`UPDATE transport_fulfillment.actual_fulfillment_segment
-		    SET closed = true, closed_at = $1
-		  WHERE tenant_id = $2 AND segment_ref = $3 AND closed = false`,
-		closedAt.UTC(), key.TenantID.String(), key.Segment.String(),
+		    SET closed = true, closed_at = $1, closed_by = $2
+		  WHERE tenant_id = $3 AND segment_ref = $4 AND closed = false`,
+		closedAt.UTC(), optionalRegistrant(closedBy), key.TenantID.String(), key.Segment.String(),
 	)
 	if err != nil {
 		return ports.SegmentCloseOutcomeInvalid, fmt.Errorf("close fulfillment segment: %w", err)
@@ -485,8 +497,8 @@ func insertParticipationRow(
 
 	statement := `INSERT INTO transport_fulfillment.fulfillment_participation
 		     (tenant_id, segment_ref, object_ref, planned_ref, entry_kind, entry_basis,
-		      entered_at, end_kind, end_basis, ended_at, recorded_at, supersedes_entry_basis, voided)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
+		      entered_at, end_kind, end_basis, ended_at, terminated_by, recorded_at, supersedes_entry_basis, voided)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`
 	if ignoreConflict {
 		statement += ` ON CONFLICT DO NOTHING`
 	}
@@ -502,6 +514,7 @@ func insertParticipationRow(
 		end.kind,
 		end.basis,
 		end.at,
+		end.terminatedBy,
 		recordedAt.UTC(),
 		supersedes,
 		participation.Voided(),
@@ -512,12 +525,14 @@ func insertParticipationRow(
 	return tag.RowsAffected(), nil
 }
 
-// participationEndColumns 是离场三列在库面的样子，三者同在或同缺（0006 的 CHECK）。离场三列与参与的其余各格
-// 分开传，是因为替代口要按锁后的在册值落这三列，其余各格仍取调用方交来的参与（lockedInheritedEnd）。
+// participationEndColumns 是离场各列在库面的样子：终点三件同在或同缺（0006 的 CHECK）；terminatedBy 是明确终止的
+// 操作证据（0051），只随明确终止出现、可缺。离场各列与参与的其余各格分开传，是因为替代口要按锁后的在册值落这几列，
+// 其余各格仍取调用方交来的参与（lockedInheritedEnd）。
 type participationEndColumns struct {
-	kind  *string
-	basis *string
-	at    *time.Time
+	kind         *string
+	basis        *string
+	at           *time.Time
+	terminatedBy *string
 }
 
 func endColumnsOf(participation domain.FulfillmentParticipation) participationEndColumns {
@@ -526,7 +541,10 @@ func endColumnsOf(participation domain.FulfillmentParticipation) participationEn
 		return participationEndColumns{}
 	}
 	kindName, basisValue, endMoment := kind.String(), basis.String(), at.UTC()
-	return participationEndColumns{kind: &kindName, basis: &basisValue, at: &endMoment}
+	terminatedBy, _ := participation.TerminatedBy()
+	return participationEndColumns{
+		kind: &kindName, basis: &basisValue, at: &endMoment, terminatedBy: optionalRegistrant(terminatedBy),
+	}
 }
 
 // participationRow 是参与关系在库面的一行。
@@ -536,9 +554,7 @@ type participationRow struct {
 	entryKind  string
 	entryBasis string
 	enteredAt  time.Time
-	endKind    *string
-	endBasis   *string
-	endedAt    *time.Time
+	end        participationEndColumns
 	supersedes *string
 	voided     bool
 }
@@ -564,18 +580,21 @@ func participationSpecFrom(row participationRow) (domain.RehydrateParticipationS
 		return domain.RehydrateParticipationSpec{}, err
 	}
 
-	if row.endedAt != nil {
-		spec.EndedAt = row.endedAt.UTC()
+	if row.end.at != nil {
+		spec.EndedAt = row.end.at.UTC()
 	}
-	if row.endKind != nil {
-		if spec.EndKind, err = participationEndKindFrom(*row.endKind); err != nil {
+	if row.end.kind != nil {
+		if spec.EndKind, err = participationEndKindFrom(*row.end.kind); err != nil {
 			return domain.RehydrateParticipationSpec{}, err
 		}
 	}
-	if row.endBasis != nil {
-		if spec.EndBasis, err = domain.NewParticipationBasisReference(*row.endBasis); err != nil {
+	if row.end.basis != nil {
+		if spec.EndBasis, err = domain.NewParticipationBasisReference(*row.end.basis); err != nil {
 			return domain.RehydrateParticipationSpec{}, err
 		}
+	}
+	if spec.TerminatedBy, err = registrantFromColumn(row.end.terminatedBy); err != nil {
+		return domain.RehydrateParticipationSpec{}, err
 	}
 	if row.supersedes != nil {
 		if spec.Supersedes, err = domain.NewParticipationBasisReference(*row.supersedes); err != nil {

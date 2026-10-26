@@ -21,11 +21,17 @@ var (
 	carrierPickupNow         = time.Date(2026, 9, 10, 9, 30, 0, 0, time.UTC)
 )
 
-// carrierPickupRegistryDouble 是 ports.CarrierFirstEffectivePickupRegistry 的替身：按版本行存、读时走重建门。
+// carrierPickupRegistryDouble 是 ports.CarrierFirstEffectivePickupRegistry 的替身：按版本行存、读时走重建门。判断人与真库
+// 同一种落法——随版本行存、读回时带上（ADR-0303），不进重建规格。
 type carrierPickupRegistryDouble struct {
-	rows    []domain.RehydrateCarrierFirstEffectivePickupSpec
-	findErr error
-	saveErr error
+	rows     []domain.RehydrateCarrierFirstEffectivePickupSpec
+	judgedBy map[string]domain.RegistrantReference
+	findErr  error
+	saveErr  error
+}
+
+func carrierPickupRowKey(fact domain.CarrierFirstEffectivePickupReference, version domain.CarrierFirstEffectivePickupVersion) string {
+	return fact.String() + "|" + version.String()
 }
 
 func (double *carrierPickupRegistryDouble) rehydrate(row domain.RehydrateCarrierFirstEffectivePickupSpec) (ports.CarrierFirstEffectivePickupRecord, error) {
@@ -37,6 +43,7 @@ func (double *carrierPickupRegistryDouble) rehydrate(row domain.RehydrateCarrier
 		Key:        ports.CarrierFirstEffectivePickupKey{TenantID: row.TenantID, Fact: row.Fact, Version: row.Version},
 		Pickup:     pickup,
 		RecordedAt: row.JudgedAt,
+		JudgedBy:   double.judgedBy[carrierPickupRowKey(row.Fact, row.Version)],
 	}, nil
 }
 
@@ -123,6 +130,10 @@ func (double *carrierPickupRegistryDouble) Save(_ context.Context, record ports.
 		}
 	}
 	double.rows = append(double.rows, row)
+	if double.judgedBy == nil {
+		double.judgedBy = map[string]domain.RegistrantReference{}
+	}
+	double.judgedBy[carrierPickupRowKey(row.Fact, row.Version)] = record.JudgedBy
 	return ports.CarrierPickupSaved, nil
 }
 

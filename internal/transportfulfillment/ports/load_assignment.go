@@ -26,10 +26,14 @@ type LoadAssignmentKey struct {
 // 保存；分配量是逐池声明的那几行，随版本存在 Assignment 上（ADR-0203 决定二），其余几个量在容量池
 // 那一侧。本记录若再存一个「分配了几个」，它会与成员行漂移，且漂移时没有任何东西会报。要数就数成员；
 // 件数池取成员数的那一行，数也是按成员数出来的，得法另记。
+//
+// DecidedBy 是经运营决定口作出这一版的操作者（ADR-0303）：操作证据，与登记时刻同属出处，不进聚合——分配的任何一道
+// 门都读不到它。每一版各记各的，不随链承继；可缺：规则生效之前登记的版本没有它。
 type LoadAssignmentRecord struct {
 	Key        LoadAssignmentKey
 	Assignment domain.LoadAssignment
 	RecordedAt time.Time
+	DecidedBy  domain.RegistrantReference
 }
 
 // LoadAssignmentSaveOutcome 是登记一个版本的结果。撞键是业务答案不是错误（ADR-0031）。

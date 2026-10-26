@@ -48,16 +48,16 @@ func (repository *DispatchTasks) FindByKey(
 	var kindText, placeRef, conditionsRef, stateText string
 	var windowFrom, windowTo, openedAt, recordedAt time.Time
 	var reschedules int
-	var closureBasis *string
+	var closureBasis, openedBy *string
 	var closedAt *time.Time
 	err = querier.QueryRow(ctx,
 		`SELECT kind, place_ref, window_from, window_to, conditions_ref, opened_at,
-		        reschedules, state, closure_basis, closed_at, recorded_at
+		        reschedules, state, closure_basis, closed_at, recorded_at, opened_by
 		   FROM transport_fulfillment.dispatch_task
 		  WHERE tenant_id = $1 AND task_ref = $2`,
 		key.TenantID.String(), key.Task.String(),
 	).Scan(&kindText, &placeRef, &windowFrom, &windowTo, &conditionsRef, &openedAt,
-		&reschedules, &stateText, &closureBasis, &closedAt, &recordedAt)
+		&reschedules, &stateText, &closureBasis, &closedAt, &recordedAt, &openedBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.DispatchTaskRecord{}, false, nil
 	}
@@ -128,7 +128,11 @@ func (repository *DispatchTasks) FindByKey(
 	if err != nil {
 		return ports.DispatchTaskRecord{}, false, fmt.Errorf("find dispatch task: %w", err)
 	}
-	return ports.DispatchTaskRecord{Key: key, Task: task, RecordedAt: recordedAt.UTC()}, true, nil
+	opener, err := registrantFromColumn(openedBy)
+	if err != nil {
+		return ports.DispatchTaskRecord{}, false, fmt.Errorf("find dispatch task: %w", err)
+	}
+	return ports.DispatchTaskRecord{Key: key, Task: task, RecordedAt: recordedAt.UTC(), OpenedBy: opener}, true, nil
 }
 
 // Save 首登一项任务连同它全部对象。撞键答`已建立`（ADR-0031），编排据此读回赢家。
@@ -154,8 +158,8 @@ func (repository *DispatchTasks) Save(
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO transport_fulfillment.dispatch_task
 		     (tenant_id, task_ref, kind, place_ref, window_from, window_to, conditions_ref,
-		      opened_at, reschedules, state, closure_basis, closed_at, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		      opened_at, reschedules, state, closure_basis, closed_at, recorded_at, opened_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Task.String(),
@@ -170,6 +174,7 @@ func (repository *DispatchTasks) Save(
 		basisText,
 		nullableTime(closedAt, closed),
 		record.RecordedAt.UTC(),
+		optionalRegistrant(record.OpenedBy),
 	)
 	if err != nil {
 		return ports.DispatchTaskSaveOutcomeInvalid, fmt.Errorf("save dispatch task: %w", err)

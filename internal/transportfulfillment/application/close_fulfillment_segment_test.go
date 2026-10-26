@@ -166,15 +166,21 @@ func TestClosingAnAlreadyClosedSegmentIsItsOwnAnswer(t *testing.T) {
 type racingCloser struct {
 	*segmentRegistryDouble
 	winnerAt    time.Time
+	winnerBy    domain.RegistrantReference
 	readBackErr error
 }
 
-func (double *racingCloser) CloseSegment(ctx context.Context, key ports.FulfillmentSegmentKey, closedAt time.Time) (ports.SegmentCloseOutcome, error) {
-	if _, err := double.segmentRegistryDouble.CloseSegment(ctx, key, double.winnerAt); err != nil {
+func (double *racingCloser) CloseSegment(
+	ctx context.Context,
+	key ports.FulfillmentSegmentKey,
+	closedAt time.Time,
+	closedBy domain.RegistrantReference,
+) (ports.SegmentCloseOutcome, error) {
+	if _, err := double.segmentRegistryDouble.CloseSegment(ctx, key, double.winnerAt, double.winnerBy); err != nil {
 		return ports.SegmentCloseOutcomeInvalid, err
 	}
 	double.findErr = double.readBackErr
-	return double.segmentRegistryDouble.CloseSegment(ctx, key, closedAt)
+	return double.segmentRegistryDouble.CloseSegment(ctx, key, closedAt, closedBy)
 }
 
 // 票 operator-channel/20：并发下窄口答`早已关闭`时照建派送任务口并发输家的先例读回赢家，带回的是赢家的时刻，

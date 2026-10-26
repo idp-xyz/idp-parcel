@@ -137,18 +137,21 @@ type ActualFulfillmentSegmentRegistry interface {
 		recordedAt time.Time,
 	) (ParticipationSupersedeOutcome, error)
 
-	// EndParticipation 只填离场三列，且只作用于仍在场的那一条——在场即 `ended_at` 空且无人回指
-	// （被替代的版本不再是当前控制，不会被结束）。已离场的不被改写。
+	// EndParticipation 只填离场各列（终点三件，明确终止时连同作出终止的操作者，ADR-0303），且只作用于仍在场的
+	// 那一条——在场即 `ended_at` 空且无人回指（被替代的版本不再是当前控制，不会被结束）。已离场的不被改写，在册的
+	// 操作者也就不会被后来者顶替。
 	EndParticipation(
 		ctx context.Context,
 		key FulfillmentSegmentKey,
 		participation domain.FulfillmentParticipation,
 	) (ParticipationEndOutcome, error)
 
-	// CloseSegment 只填关闭两列，且只作用于尚未关闭的段。
+	// CloseSegment 只填关闭各列（关闭标志与时刻，连同作出关段决定的操作者，ADR-0303，可缺），且只作用于尚未
+	// 关闭的段。
 	CloseSegment(
 		ctx context.Context,
 		key FulfillmentSegmentKey,
 		closedAt time.Time,
+		closedBy domain.RegistrantReference,
 	) (SegmentCloseOutcome, error)
 }

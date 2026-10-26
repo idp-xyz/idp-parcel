@@ -25,6 +25,8 @@ type ParticipationTermination struct {
 	// Basis 指向本上下文之外的处置决定，只能由调用方给——这是终止一路与另两路真正的不对称。
 	Basis   string
 	EndedAt time.Time
+	// TerminatedBy 是作出这次终止的操作者，取自信封（ADR-0303），只作操作证据。
+	TerminatedBy string
 }
 
 // ParticipationTerminationIntake 把已认证的运营写请求翻译成一次明确终止。
@@ -56,12 +58,13 @@ func NewTerminateFulfillmentParticipationEndpoint(intake ParticipationTerminatio
 			return participationTerminationAnswer{}, err, false
 		}
 		result, err := ender.End(request.Context(), application.EndFulfillmentParticipationCommand{
-			TenantID: termination.TenantID,
-			Segment:  termination.Segment,
-			Object:   termination.Object,
-			Source:   application.ParticipationEndedByTermination,
-			Basis:    termination.Basis,
-			EndedAt:  termination.EndedAt,
+			TenantID:     termination.TenantID,
+			Segment:      termination.Segment,
+			Object:       termination.Object,
+			Source:       application.ParticipationEndedByTermination,
+			Basis:        termination.Basis,
+			EndedAt:      termination.EndedAt,
+			TerminatedBy: termination.TerminatedBy,
 		})
 		return participationTerminationAnswer{result: result, segment: termination.Segment, object: termination.Object}, err, true
 	}, writeParticipationTerminationOutcome)
@@ -117,14 +120,22 @@ type ParticipationTerminationPayload struct {
 	EndedAt string `json:"endedAt"`
 }
 
-// Termination 把载荷连同信封给的租户翻成一次明确终止。时刻解不出是坏报文（400）。
-func (payload ParticipationTerminationPayload) Termination(tenant domain.TenantID) (ParticipationTermination, error) {
-	if tenant.String() == "" {
+// Termination 把载荷连同信封给的身份翻成一次明确终止：租户，与作出这次终止的操作者（ADR-0303，操作证据，载荷里
+// 不收）。时刻解不出是坏报文（400）。
+func (payload ParticipationTerminationPayload) Termination(operator OperatorIdentity) (ParticipationTermination, error) {
+	if operator.Tenant.String() == "" {
 		return ParticipationTermination{}, ErrOperatorIdentityMissing
 	}
 	endedAt, err := parseOptionalInstant("endedAt", payload.EndedAt)
 	if err != nil {
 		return ParticipationTermination{}, err
 	}
-	return ParticipationTermination{TenantID: tenant, Segment: payload.Segment, Object: payload.Object, Basis: payload.Basis, EndedAt: endedAt}, nil
+	return ParticipationTermination{
+		TenantID:     operator.Tenant,
+		Segment:      payload.Segment,
+		Object:       payload.Object,
+		Basis:        payload.Basis,
+		EndedAt:      endedAt,
+		TerminatedBy: operator.Operator,
+	}, nil
 }

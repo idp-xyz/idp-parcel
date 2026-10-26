@@ -67,10 +67,11 @@ func DecodeCarrierPickupJudgmentPayload(body io.Reader) (CarrierPickupJudgmentPa
 	return payload, nil
 }
 
-// Command 把载荷连同信封给的租户翻成判断命令。来源词与承运主体分支词不在封闭集内、时刻解不出，是坏报文（400）；
-// 其余成形与否留给编排答`未受理`（200，形成了的业务答案）——两者的续办不同，不折成一格。
-func (payload CarrierPickupJudgmentPayload) Command(tenant domain.TenantID) (application.JudgeCarrierFirstEffectivePickupCommand, error) {
-	if tenant.String() == "" {
+// Command 把载荷连同信封给的身份翻成判断命令：租户，与作出这次判断的操作者（ADR-0303，操作证据，载荷里不收）。
+// 来源词与承运主体分支词不在封闭集内、时刻解不出，是坏报文（400）；其余成形与否留给编排答`未受理`（200，形成了的
+// 业务答案）——两者的续办不同，不折成一格。
+func (payload CarrierPickupJudgmentPayload) Command(operator OperatorIdentity) (application.JudgeCarrierFirstEffectivePickupCommand, error) {
+	if operator.Tenant.String() == "" {
 		return application.JudgeCarrierFirstEffectivePickupCommand{}, ErrOperatorIdentityMissing
 	}
 	source, err := domain.ParseCarrierEvidenceSource(strings.TrimSpace(payload.Source))
@@ -78,7 +79,8 @@ func (payload CarrierPickupJudgmentPayload) Command(tenant domain.TenantID) (app
 		return application.JudgeCarrierFirstEffectivePickupCommand{}, fmt.Errorf("%w: source is not a carrier evidence source word: %v", ErrMalformedRequest, err)
 	}
 	command := application.JudgeCarrierFirstEffectivePickupCommand{
-		TenantID:              tenant,
+		TenantID:              operator.Tenant,
+		JudgedBy:              operator.Operator,
 		Object:                payload.Object,
 		Source:                source,
 		EvidenceReference:     payload.EvidenceReference,
@@ -135,6 +137,9 @@ type carrierPickupJudgmentResponse struct {
 
 // carrierPickupBody 逐字段透出一版。已形成带承运主体两键与业务发生时间；待确认带原因与名称素材；失效三者都不带；
 // supersedes 首登缺席。judgedAt 与 recordedAt 是另外两个时间，归属不同（ADR-0135 决定三）。时间一律 RFC 3339 UTC。
+//
+// judgedBy 是作出这一版判断的操作者（ADR-0303），只由查阅面填：判断口的回执照 ADR-0187 决定四不回操作证据，与加这一格
+// 之前逐字节相同。查阅面上它只在记下了时在场，缺席读作「没记下是谁」。
 type carrierPickupBody struct {
 	Fact             string                   `json:"fact"`
 	Version          string                   `json:"version"`
@@ -149,6 +154,7 @@ type carrierPickupBody struct {
 	Supersedes       string                   `json:"supersedes,omitempty"`
 	Bases            []carrierPickupBasisBody `json:"bases"`
 	RecordedAt       string                   `json:"recordedAt"`
+	JudgedBy         string                   `json:"judgedBy,omitempty"`
 }
 
 type carrierPickupBasisBody struct {

@@ -22,10 +22,14 @@ type CarrierFirstEffectivePickupKey struct {
 
 // CarrierFirstEffectivePickupRecord 是一版越过提交边界留下的东西。RecordedAt 是落库时刻，与事实上的业务发生
 // 时间、判断形成时间都不合并——三者三种归属（ADR-0135 决定三）。
+//
+// JudgedBy 是经运营决定口作出这一版判断的操作者（ADR-0303）：操作证据，与落库时刻同属出处，不进判断本体——同一依据上
+// 的重放与内容冲突（TFC-1 形状）、首次判据都读不到它。每一版各记各的，不随链承继；可缺：规则生效之前形成的版本没有它。
 type CarrierFirstEffectivePickupRecord struct {
 	Key        CarrierFirstEffectivePickupKey
 	Pickup     domain.CarrierFirstEffectivePickup
 	RecordedAt time.Time
+	JudgedBy   domain.RegistrantReference
 }
 
 // CarrierPickupSaveOutcome 是追加一版的结果。撞键是业务答案不是错误（ADR-0031）：同一版本重放、同一对象并发

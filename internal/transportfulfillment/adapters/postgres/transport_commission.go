@@ -43,13 +43,13 @@ func (repository *TransportCommissions) FindByKey(
 		membersJSON                                                                []byte
 		submittedAt, recordedAt                                                    time.Time
 		startedAt, cancelledAt                                                     *time.Time
-		startedBasis                                                               *string
+		startedBasis, submittedBy                                                  *string
 		agreementObject, agreementVersion                                          *string
 	)
 	err = querier.QueryRow(ctx,
 		`SELECT provider_ref, agreement_ref, procurement_legal_entity_ref, conditions_ref, role_ref, responsibility_ref,
 		        members, submitted_at, started_at, started_basis, cancelled_at,
-		        content_digest, recorded_at, agreement_object, agreement_version
+		        content_digest, recorded_at, agreement_object, agreement_version, submitted_by
 		   FROM transport_fulfillment.transport_commission
 		  WHERE tenant_id = $1
 		    AND commission_id = $2`,
@@ -57,7 +57,7 @@ func (repository *TransportCommissions) FindByKey(
 		key.Commission.String(),
 	).Scan(&provider, &agreement, &legalEntity, &conditions, &role, &responsibility,
 		&membersJSON, &submittedAt, &startedAt, &startedBasis, &cancelledAt,
-		&digest, &recordedAt, &agreementObject, &agreementVersion)
+		&digest, &recordedAt, &agreementObject, &agreementVersion, &submittedBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.TransportCommissionRecord{}, false, nil
 	}
@@ -73,11 +73,16 @@ func (repository *TransportCommissions) FindByKey(
 	if err != nil {
 		return ports.TransportCommissionRecord{}, false, fmt.Errorf("find transport commission: %w", err)
 	}
+	submitter, err := registrantFromColumn(submittedBy)
+	if err != nil {
+		return ports.TransportCommissionRecord{}, false, fmt.Errorf("find transport commission: %w", err)
+	}
 	return ports.TransportCommissionRecord{
 		Key:           key,
 		ContentDigest: digest,
 		Commission:    commission,
 		RecordedAt:    recordedAt.UTC(),
+		SubmittedBy:   submitter,
 	}, true, nil
 }
 
@@ -108,8 +113,8 @@ func (repository *TransportCommissions) Save(
 		`INSERT INTO transport_fulfillment.transport_commission
 			(tenant_id, commission_id, provider_ref, agreement_ref, procurement_legal_entity_ref,
 			 conditions_ref, role_ref, responsibility_ref, members, submitted_at, started_at,
-			 started_basis, cancelled_at, content_digest, recorded_at, agreement_object, agreement_version)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+			 started_basis, cancelled_at, content_digest, recorded_at, agreement_object, agreement_version, submitted_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Commission.String(),
@@ -128,6 +133,7 @@ func (repository *TransportCommissions) Save(
 		record.RecordedAt.UTC(),
 		agreementObject,
 		agreementVersion,
+		optionalRegistrant(record.SubmittedBy),
 	)
 	if err != nil {
 		return ports.CommissionSaveOutcomeInvalid, fmt.Errorf("save transport commission: %w", err)

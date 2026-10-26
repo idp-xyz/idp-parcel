@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
-	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
 // 票 tf-segment-lifecycle-closure/07 的四个 admin 写面里的第一个：关段声明。
@@ -29,16 +28,22 @@ type SegmentClosurePayload struct {
 	ClosedAt string `json:"closedAt"`
 }
 
-// Command 把载荷连同信封给的租户翻成关段命令。时刻解不出是坏报文（400）；段在不在册、还有没有在场参与由编排答。
-func (payload SegmentClosurePayload) Command(tenant domain.TenantID) (application.CloseFulfillmentSegmentCommand, error) {
-	if tenant.String() == "" {
+// Command 把载荷连同信封给的身份翻成关段命令：租户，与作出这次关段决定的操作者（ADR-0303，操作证据，载荷里不收）。
+// 时刻解不出是坏报文（400）；段在不在册、还有没有在场参与由编排答。
+func (payload SegmentClosurePayload) Command(operator OperatorIdentity) (application.CloseFulfillmentSegmentCommand, error) {
+	if operator.Tenant.String() == "" {
 		return application.CloseFulfillmentSegmentCommand{}, ErrOperatorIdentityMissing
 	}
 	closedAt, err := parseOptionalInstant("closedAt", payload.ClosedAt)
 	if err != nil {
 		return application.CloseFulfillmentSegmentCommand{}, err
 	}
-	return application.CloseFulfillmentSegmentCommand{TenantID: tenant, Segment: payload.Segment, ClosedAt: closedAt}, nil
+	return application.CloseFulfillmentSegmentCommand{
+		TenantID: operator.Tenant,
+		Segment:  payload.Segment,
+		ClosedAt: closedAt,
+		ClosedBy: operator.Operator,
+	}, nil
 }
 
 // SegmentCloser 是本适配器转交的应用编排。

@@ -157,6 +157,9 @@ func (reason CommissionUndecidedReason) String() string {
 // SubmitCommissionCommand 携带一份运输委托提交。协议只由登记方指名（协议对象与版本标签两格），快照引用与采购责任
 // 法人在核过之后从 party-commercial 那一版取，命令里没有这两格（ADR-0202 决定三）。条件、角色、责任仍是登记方声明的
 // 快照引用，不核（ADR-0202 越权风险点）。
+//
+// SubmittedBy 是作出提交决定的操作者（「发行方#sub」），由运营决定口的 Intake 取自信封（ADR-0303），可缺：它不进内容
+// 摘要——另一位操作者原样再交照旧是重放、交回原委托连同原提交人，异内容照旧是冲突。
 type SubmitCommissionCommand struct {
 	TenantID         domain.TenantID
 	Commission       string
@@ -168,6 +171,7 @@ type SubmitCommissionCommand struct {
 	Responsibility   string
 	Members          []string
 	SubmittedAt      time.Time
+	SubmittedBy      string
 }
 
 // SubmitBookingCommand 携带一次订舱申请：在哪一份已提交的委托下、就哪一个具体班次申请多少舱位（ADR-0202 决定五）。
@@ -289,6 +293,10 @@ func (handler *CommissionTransportHandler) SubmitCommission(
 	if err != nil {
 		return CommissionResult{outcome: CommissionNotAccepted}, nil
 	}
+	submittedBy, err := domain.OptionalRegistrantReference(command.SubmittedBy)
+	if err != nil {
+		return CommissionResult{outcome: CommissionNotAccepted}, nil
+	}
 
 	key := ports.TransportCommissionKey{TenantID: command.TenantID, Commission: draft.Commission()}
 	_, digest, err := domain.CanonicalizeCommissionPayload(command.Provider, command.AgreementObject, command.AgreementVersion,
@@ -333,6 +341,7 @@ func (handler *CommissionTransportHandler) SubmitCommission(
 		ContentDigest: digest,
 		Commission:    commission,
 		RecordedAt:    handler.deps.Clock.Now(),
+		SubmittedBy:   submittedBy,
 	}
 	saved, err := handler.deps.Commissions.Save(ctx, record)
 	if err != nil {

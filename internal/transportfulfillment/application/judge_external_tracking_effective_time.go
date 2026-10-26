@@ -36,10 +36,14 @@ func (outcome EffectiveTimeJudgmentOutcome) String() string {
 
 // JudgeEffectiveTimeCommand 指名一条事实并给出所有者的判断。指名到事实而不是版本：判断落在
 // 此刻的当前版之上，回指它。
+//
+// JudgedBy 是作出这次判断的操作者（「发行方#sub」），由运营决定口的 Intake 取自信封（ADR-0303），可缺：它只随新版本
+// 留痕，「已按同值判过」只比依据与时间——另一位操作者按同值再判答那一格、不长新版本，在册的仍是先判的那一位。
 type JudgeEffectiveTimeCommand struct {
 	TenantID    domain.TenantID
 	Fact        string
 	EffectiveAt time.Time
+	JudgedBy    string
 }
 
 type JudgeEffectiveTimeResult struct {
@@ -106,6 +110,10 @@ func (handler *JudgeEffectiveTimeHandler) Judge(
 	if err != nil {
 		return JudgeEffectiveTimeResult{outcome: EffectiveTimeJudgmentNotAccepted}, nil
 	}
+	judgedBy, err := domain.OptionalRegistrantReference(command.JudgedBy)
+	if err != nil {
+		return JudgeEffectiveTimeResult{outcome: EffectiveTimeJudgmentNotAccepted}, nil
+	}
 
 	for range judgmentAttempts {
 		current, found, err := handler.deps.Facts.FindCurrent(ctx, command.TenantID, factRef)
@@ -135,9 +143,10 @@ func (handler *JudgeEffectiveTimeHandler) Judge(
 			return JudgeEffectiveTimeResult{outcome: EffectiveTimeJudgmentNotAccepted}, nil
 		}
 		record := ports.ExternalTrackingFactRecord{
-			Key:        ports.ExternalTrackingFactKey{TenantID: command.TenantID, Fact: factRef, Version: version},
-			Fact:       judged,
-			RecordedAt: handler.deps.Clock.Now(),
+			Key:               ports.ExternalTrackingFactKey{TenantID: command.TenantID, Fact: factRef, Version: version},
+			Fact:              judged,
+			RecordedAt:        handler.deps.Clock.Now(),
+			EffectiveJudgedBy: judgedBy,
 		}
 		saved, err := handler.deps.Facts.Save(ctx, record)
 		if err != nil {

@@ -42,17 +42,17 @@ func (repository *LoadAssignments) FindByKey(
 
 	var scheduleRef string
 	var assignedAt, recordedAt time.Time
-	var correctsVersion *string
+	var correctsVersion, decidedBy *string
 	var revisedAt, withdrawnAt *time.Time
 	var withdrawn bool
 	err = querier.QueryRow(ctx,
 		`SELECT schedule_ref, assigned_at, corrects_version, revised_at,
-		        withdrawn, withdrawn_at, recorded_at
+		        withdrawn, withdrawn_at, recorded_at, decided_by
 		   FROM transport_fulfillment.load_assignment
 		  WHERE tenant_id = $1 AND assignment_ref = $2 AND version = $3`,
 		key.TenantID.String(), key.Assignment.String(), key.Version.String(),
 	).Scan(&scheduleRef, &assignedAt, &correctsVersion, &revisedAt,
-		&withdrawn, &withdrawnAt, &recordedAt)
+		&withdrawn, &withdrawnAt, &recordedAt, &decidedBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.LoadAssignmentRecord{}, false, nil
 	}
@@ -119,7 +119,11 @@ func (repository *LoadAssignments) FindByKey(
 	if err != nil {
 		return ports.LoadAssignmentRecord{}, false, fmt.Errorf("find load assignment: %w", err)
 	}
-	return ports.LoadAssignmentRecord{Key: key, Assignment: assignment, RecordedAt: recordedAt.UTC()}, true, nil
+	decider, err := registrantFromColumn(decidedBy)
+	if err != nil {
+		return ports.LoadAssignmentRecord{}, false, fmt.Errorf("find load assignment: %w", err)
+	}
+	return ports.LoadAssignmentRecord{Key: key, Assignment: assignment, RecordedAt: recordedAt.UTC(), DecidedBy: decider}, true, nil
 }
 
 // FindChainHead 取回该分配此刻未被任何版本回指的那一版。「链头」是派生问答不是可变标记：表上没有 current 列。
@@ -195,8 +199,8 @@ func (repository *LoadAssignments) Save(
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO transport_fulfillment.load_assignment
 		     (tenant_id, assignment_ref, version, schedule_ref, assigned_at,
-		      corrects_version, revised_at, withdrawn, withdrawn_at, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		      corrects_version, revised_at, withdrawn, withdrawn_at, recorded_at, decided_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Assignment.String(),
@@ -208,6 +212,7 @@ func (repository *LoadAssignments) Save(
 		withdrawn,
 		nullableTime(withdrawnAt, withdrawn),
 		record.RecordedAt.UTC(),
+		optionalRegistrant(record.DecidedBy),
 	)
 	if err != nil {
 		return ports.LoadAssignmentSaveOutcomeInvalid, fmt.Errorf("save load assignment: %w", err)

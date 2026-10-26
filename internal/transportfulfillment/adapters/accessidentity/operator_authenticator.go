@@ -33,7 +33,8 @@ func NewOperatorAuthenticator(minter Minter) (*OperatorAuthenticator, error) {
 }
 
 // AuthenticateOperatorDecision 交回信封上的租户与主体。主体取（发行方、sub）这一对，写成「发行方#sub」，与 PS、NO 的
-// 运营决定认证方同一个写法：发生项登记把它记作断言人（ADR-0207 决定三）。
+// 运营决定认证方同一个写法：发生项登记把它记作断言人（ADR-0207 决定三），其余运营决定口把它作为操作证据记在决定上
+// （ADR-0303）。
 func (authenticator *OperatorAuthenticator) AuthenticateOperatorDecision(
 	ctx context.Context,
 	bearerToken string,

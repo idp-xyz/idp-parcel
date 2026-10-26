@@ -37,6 +37,8 @@ type ExternalTrackingFactReviewRow struct {
 	Supersedes           string
 	Origin               string
 	RecordedAt           time.Time
+	// EffectiveJudgedBy 是显式判断这一版有效时间的操作者（ADR-0303），没记下即空。
+	EffectiveJudgedBy string
 }
 
 // EffectiveTimeReviewFilter 说上列哪些当前版。封闭两格而不是一个布尔：读口不接受「没传就当某一格」，

@@ -100,7 +100,7 @@ func TestAClosedSegmentRoundTripsItsClosure(t *testing.T) {
 
 	closedAt := segmentEnteredAtFixture.Add(10 * time.Hour)
 	record := segmentRecord(t, "SEG-0003", deliveredMember(t, "parcel-1"))
-	closed, err := record.Segment.CloseSegment(closedAt)
+	closed, err := record.Segment.CloseSegment(closedAt, domain.RegistrantReference{})
 	if err != nil {
 		t.Fatalf("关段：%v", err)
 	}
@@ -397,10 +397,10 @@ func TestClosingASegmentTwiceIsAlreadyClosed(t *testing.T) {
 	var first, second ports.SegmentCloseOutcome
 	mustWithinSegmentTransaction(t, transactor, ctx, func(txCtx context.Context) error {
 		var err error
-		if first, err = repository.CloseSegment(txCtx, key, closedAt); err != nil {
+		if first, err = repository.CloseSegment(txCtx, key, closedAt, domain.RegistrantReference{}); err != nil {
 			return err
 		}
-		second, err = repository.CloseSegment(txCtx, key, closedAt.Add(time.Hour))
+		second, err = repository.CloseSegment(txCtx, key, closedAt.Add(time.Hour), domain.RegistrantReference{})
 		return err
 	})
 	if first != ports.SegmentClosed {
@@ -433,7 +433,7 @@ func TestNarrowSegmentDoorsRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, err := repository.EndParticipation(ctx, key, member); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("EndParticipation 无事务应返回 ErrTransactionRequired，实得：%v", err)
 	}
-	if _, err := repository.CloseSegment(ctx, key, segmentEnteredAtFixture); !errors.Is(err, bentopg.ErrTransactionRequired) {
+	if _, err := repository.CloseSegment(ctx, key, segmentEnteredAtFixture, domain.RegistrantReference{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("CloseSegment 无事务应返回 ErrTransactionRequired，实得：%v", err)
 	}
 }

@@ -30,6 +30,7 @@ type segmentRowsDouble struct {
 	recordedAt     time.Time
 	closed         bool
 	closedAt       time.Time
+	closedBy       domain.RegistrantReference
 }
 
 func newSegmentRegistry() *segmentRegistryDouble {
@@ -52,6 +53,9 @@ func participationSpecOf(participation domain.FulfillmentParticipation) domain.R
 	}
 	if endKind, endBasis, endedAt, ended := participation.End(); ended {
 		spec.EndKind, spec.EndBasis, spec.EndedAt = endKind, endBasis, endedAt
+	}
+	if terminatedBy, recorded := participation.TerminatedBy(); recorded {
+		spec.TerminatedBy = terminatedBy
 	}
 	if supersedes, chained := participation.Supersedes(); chained {
 		spec.Supersedes = supersedes
@@ -92,6 +96,7 @@ func (double *segmentRegistryDouble) FindByKey(
 		Participations: rows.participations,
 		Closed:         rows.closed,
 		ClosedAt:       rows.closedAt,
+		ClosedBy:       rows.closedBy,
 	})
 	if err != nil {
 		return ports.FulfillmentSegmentRecord{}, false, err
@@ -231,6 +236,9 @@ func (double *segmentRegistryDouble) EndParticipation(
 			return ports.ParticipationEndOutcomeInvalid, nil
 		}
 		row.EndKind, row.EndBasis, row.EndedAt = endKind, endBasis, endedAt
+		if terminatedBy, recorded := participation.TerminatedBy(); recorded {
+			row.TerminatedBy = terminatedBy
+		}
 		return ports.ParticipationEnded, nil
 	}
 	return ports.ParticipationEndOutcomeInvalid, nil
@@ -240,6 +248,7 @@ func (double *segmentRegistryDouble) CloseSegment(
 	_ context.Context,
 	key ports.FulfillmentSegmentKey,
 	closedAt time.Time,
+	closedBy domain.RegistrantReference,
 ) (ports.SegmentCloseOutcome, error) {
 	rows, found := double.rows[segmentRegistryKey(key)]
 	if !found {
@@ -248,7 +257,7 @@ func (double *segmentRegistryDouble) CloseSegment(
 	if rows.closed {
 		return ports.SegmentAlreadyClosed, nil
 	}
-	rows.closed, rows.closedAt = true, closedAt.UTC()
+	rows.closed, rows.closedAt, rows.closedBy = true, closedAt.UTC(), closedBy
 	return ports.SegmentClosed, nil
 }
 

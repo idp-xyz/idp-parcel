@@ -66,7 +66,8 @@ const OperatorDecisionDeliveryDispatchReask OperatorDecision = "DELIVERY_DISPATC
 
 // OperatorIdentity 是一次运营决定出示认证出的身份：租户与做出决定的操作者。操作者写成「发行方#sub」：sub 只在它的
 // 发行方之内唯一，单拿 sub 会让两个发行方的同一个 sub 在留痕里读成一个人（ADR-0100 决定二第三条）；与 PS、NO 的
-// 运营决定认证方同一个写法。多数口只取租户；发生项登记把操作者记作断言人（ADR-0207 决定三）。
+// 运营决定认证方同一个写法。发生项登记把操作者记作断言人（ADR-0207 决定三）；关段、明确终止、建派送任务、装载分配、
+// 两个判断口与运输委托提交把它作为操作证据记在决定上（ADR-0303），只进审计，不进重放比对与任何门。
 type OperatorIdentity struct {
 	Tenant   domain.TenantID
 	Operator string
@@ -118,7 +119,7 @@ func NewOperatorDecisionIntake(authenticator OperatorAuthenticator) (*OperatorDe
 
 // IntakeSegmentClosure 译关段声明（`/transport-fulfillment-segment-closures`）。
 func (intake *OperatorDecisionIntake) IntakeSegmentClosure(ctx context.Context, request *http.Request) (application.CloseFulfillmentSegmentCommand, error) {
-	tenant, err := intake.tenantFor(ctx, request, OperatorDecisionSegmentClosure)
+	operator, err := intake.identityFor(ctx, request, OperatorDecisionSegmentClosure)
 	if err != nil {
 		return application.CloseFulfillmentSegmentCommand{}, err
 	}
@@ -126,12 +127,12 @@ func (intake *OperatorDecisionIntake) IntakeSegmentClosure(ctx context.Context, 
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.CloseFulfillmentSegmentCommand{}, err
 	}
-	return payload.Command(tenant)
+	return payload.Command(operator)
 }
 
 // IntakeDispatchTask 译授权角色建立派送任务（`/transport-fulfillment-dispatch-task-registrations`）。
 func (intake *OperatorDecisionIntake) IntakeDispatchTask(ctx context.Context, request *http.Request) (application.OpenDispatchTaskCommand, error) {
-	tenant, err := intake.tenantFor(ctx, request, OperatorDecisionDispatchTaskRegistration)
+	operator, err := intake.identityFor(ctx, request, OperatorDecisionDispatchTaskRegistration)
 	if err != nil {
 		return application.OpenDispatchTaskCommand{}, err
 	}
@@ -139,12 +140,12 @@ func (intake *OperatorDecisionIntake) IntakeDispatchTask(ctx context.Context, re
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.OpenDispatchTaskCommand{}, err
 	}
-	return payload.Command(tenant)
+	return payload.Command(operator)
 }
 
 // IntakeEffectiveTimeJudgment 译外部承运轨迹事实有效时间的显式判断（`/transport-fulfillment-effective-time-judgments`）。
 func (intake *OperatorDecisionIntake) IntakeEffectiveTimeJudgment(ctx context.Context, request *http.Request) (application.JudgeEffectiveTimeCommand, error) {
-	tenant, err := intake.tenantFor(ctx, request, OperatorDecisionEffectiveTimeJudgment)
+	operator, err := intake.identityFor(ctx, request, OperatorDecisionEffectiveTimeJudgment)
 	if err != nil {
 		return application.JudgeEffectiveTimeCommand{}, err
 	}
@@ -152,12 +153,12 @@ func (intake *OperatorDecisionIntake) IntakeEffectiveTimeJudgment(ctx context.Co
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.JudgeEffectiveTimeCommand{}, err
 	}
-	return payload.Command(tenant)
+	return payload.Command(operator)
 }
 
 // IntakeCarrierPickupJudgment 译实际承运商首次有效收寄的显式判断（`/transport-fulfillment-carrier-first-effective-pickup-judgments`）。
 func (intake *OperatorDecisionIntake) IntakeCarrierPickupJudgment(ctx context.Context, request *http.Request) (application.JudgeCarrierFirstEffectivePickupCommand, error) {
-	tenant, err := intake.tenantFor(ctx, request, OperatorDecisionCarrierFirstEffectivePickupJudgment)
+	operator, err := intake.identityFor(ctx, request, OperatorDecisionCarrierFirstEffectivePickupJudgment)
 	if err != nil {
 		return application.JudgeCarrierFirstEffectivePickupCommand{}, err
 	}
@@ -165,12 +166,12 @@ func (intake *OperatorDecisionIntake) IntakeCarrierPickupJudgment(ctx context.Co
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.JudgeCarrierFirstEffectivePickupCommand{}, err
 	}
-	return payload.Command(tenant)
+	return payload.Command(operator)
 }
 
 // IntakeLoadAssignment 译装载分配登记（`/transport-fulfillment-load-assignment-registrations`）。
 func (intake *OperatorDecisionIntake) IntakeLoadAssignment(ctx context.Context, request *http.Request) (application.FormLoadAssignmentCommand, error) {
-	tenant, err := intake.tenantFor(ctx, request, OperatorDecisionLoadAssignment)
+	operator, err := intake.identityFor(ctx, request, OperatorDecisionLoadAssignment)
 	if err != nil {
 		return application.FormLoadAssignmentCommand{}, err
 	}
@@ -178,12 +179,12 @@ func (intake *OperatorDecisionIntake) IntakeLoadAssignment(ctx context.Context, 
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.FormLoadAssignmentCommand{}, err
 	}
-	return payload.Command(tenant)
+	return payload.Command(operator)
 }
 
 // IntakeParticipationTermination 译一次明确终止（`/transport-fulfillment-participation-terminations`）。
 func (intake *OperatorDecisionIntake) IntakeParticipationTermination(ctx context.Context, request *http.Request) (ParticipationTermination, error) {
-	tenant, err := intake.tenantFor(ctx, request, OperatorDecisionParticipationTermination)
+	operator, err := intake.identityFor(ctx, request, OperatorDecisionParticipationTermination)
 	if err != nil {
 		return ParticipationTermination{}, err
 	}
@@ -191,12 +192,12 @@ func (intake *OperatorDecisionIntake) IntakeParticipationTermination(ctx context
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return ParticipationTermination{}, err
 	}
-	return payload.Termination(tenant)
+	return payload.Termination(operator)
 }
 
 // IntakeTransportCommissionSubmission 译运输委托提交（`/transport-fulfillment-transport-commission-submissions`）。
 func (intake *OperatorDecisionIntake) IntakeTransportCommissionSubmission(ctx context.Context, request *http.Request) (application.SubmitCommissionCommand, error) {
-	tenant, err := intake.tenantFor(ctx, request, OperatorDecisionTransportCommissionSubmission)
+	operator, err := intake.identityFor(ctx, request, OperatorDecisionTransportCommissionSubmission)
 	if err != nil {
 		return application.SubmitCommissionCommand{}, err
 	}
@@ -204,7 +205,7 @@ func (intake *OperatorDecisionIntake) IntakeTransportCommissionSubmission(ctx co
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.SubmitCommissionCommand{}, err
 	}
-	return payload.Command(tenant)
+	return payload.Command(operator)
 }
 
 // IntakeChargeOccurrenceRegistration 译运输收费发生项登记（`/transport-fulfillment-charge-occurrence-registrations`）。
