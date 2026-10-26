@@ -1,7 +1,7 @@
 # 180 TF 其余运营决定口与派送重问、补拍不记提交操作者
 
 Category: bug
-Status: ready-for-agent——2026-10-26 票 126 隔离评审之后立（上线前必修：真实租户上线后，没记下的决定无法补记，理由同复核报告 M1），见票 [126](./126-tf-operation-decisions-record-the-submitting-operator.md)「评审记录」Spec 非阻断 1、2 与「修订轮」
+Status: in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，分支 `claude-dcg180`（worktree `idp-parcel-dcg180`）；TF 迁移取 0054（0053 归票 130），ADR 若要取 0308。此前 ready-for-agent——2026-10-26 票 126 隔离评审之后立（上线前必修：真实租户上线后，没记下的决定无法补记，理由同复核报告 M1），见票 [126](./126-tf-operation-decisions-record-the-submitting-operator.md)「评审记录」Spec 非阻断 1、2 与「修订轮」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；票 126 隔离评审；[ADR-0303](../../../docs/adr/0303-transport-fulfillment-operation-decisions-record-the-submitting-operator-as-operation-evidence.md) 决定五与越权风险点 1、4；代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 M1；[ADR-0230](../../../docs/adr/0230-delivery-dispatch-left-unformed-is-kept-on-a-pending-register-and-reasked-through-the-same-executor.md) 决定七
 
