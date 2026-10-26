@@ -1,7 +1,7 @@
 # 121 先于段登记的出发永不补问门禁——本该阻断也不形成阻断信号
 
 Category: enhancement
-Status: in-progress——2026-10-26 评审无阻断、修订轮完，待进 main，分支 `claude-dcg121` tip `55ceec0c1`（其后一笔只改本票面），见文末「评审记录」「修订轮」。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg121` tip `e3bba49c7`。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领（票 135、136 已进 main），分支 `claude-dcg121`（worktree `idp-parcel-dcg121`）。此前 ready-for-agent——2026-10-20 代决复核撤掉用户决定阻断（M5），见 [owner-review-20261020](../../owner-review-20261020/report.md)。此前 needs-triage——2026-10-20 票 [53](./53-movement-facts-recorded-before-their-segment-never-reach-tracking.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0224](../../../docs/adr/0224-tracking-backfills-movement-facts-recorded-before-their-segment-when-a-control-fact-puts-the-object-in-it.md) 决定五与越权风险点 3。
+Status: resolved——2026-10-26 进 main `f97c265cc`（见文末「进 main 记录」）。此前 in-progress——2026-10-26 评审无阻断、修订轮完，待进 main，分支 `claude-dcg121` tip `55ceec0c1`（其后一笔只改本票面），见文末「评审记录」「修订轮」。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg121` tip `e3bba49c7`。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领（票 135、136 已进 main），分支 `claude-dcg121`（worktree `idp-parcel-dcg121`）。此前 ready-for-agent——2026-10-20 代决复核撤掉用户决定阻断（M5），见 [owner-review-20261020](../../owner-review-20261020/report.md)。此前 needs-triage——2026-10-20 票 [53](./53-movement-facts-recorded-before-their-segment-never-reach-tracking.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0224](../../../docs/adr/0224-tracking-backfills-movement-facts-recorded-before-their-segment-when-a-control-fact-puts-the-object-in-it.md) 决定五与越权风险点 3。
 Blocked by: 无——用户决定一格已于 2026-10-20 代决撤掉（M5）（此前 用户决定（TF、CC owner：补问机制的形状——ADR-0205 越权风险点 2「补问要另立机制」））
 地盘：TF 出发门禁读数（`internal/transportfulfillment/application/record_movement_fact.go`、`domain/departure_gate_reading.go`、移动事实登记册的读数列）；VE 出发门禁阻断信号（`DeriveOnMovementFactAdapter.signalBlocked`）。
 
@@ -147,3 +147,12 @@ Blocked by: 无——用户决定一格已于 2026-10-20 代决撤掉（M5）（
 
 修订后自验（含 PG）：`origin/main` 没有新提交，无需重放；`go build ./...`、`go vet`（TF、`cmd/parcel-dispatch`）通过；`go test -count=1` 带 DSN：`./internal/transportfulfillment/...`、`./internal/visibilityexception/...`、`./cmd/parcel-dispatch/`、`./internal/architecture/...` 全绿；`go run ./tools/at-coverage-counts -check` 只报生成物过期（退 1）。
 
+## 进 main 记录（2026-10-26，推送方会话 tops-20）
+
+- **main**：`f97c265cc`。出处：分支 `claude-dcg121` tip `84d67e54c`。
+- **重放对照**（分支 → main）：`fdae7ccba` → `fb27492f8`（代码、TF 迁移 0052）；`2a95eaa17` → `ce29c0733`（ADR-0305 等文档）；`e3bba49c7` → `e591f2da0`；`e7f9b8235` → `274d0c6e4`（完成记录、票 114 追记）；修订轮 `55ceec0c1` → `2724434f0`、`84d67e54c` → `e64bfd3df`。
+- **生成物**：ADR 索引 `a01001cba`；AT 盘点总览计数 `bbe45e474`；机制清点 `f97c265cc`。三件 `-check` 退 0（含票 139 表行守卫）。
+- **评审**：隔离子代理（Sonnet）钉 `e7f9b8235`，无阻断、非阻断 3 条：撞主键改答未决重投、最近一次补问按次序取，均在修订轮收；`signals.Handle` 对同一（包裹、事实、版本）重复调用在发作期一级幂等（经 `FindLatestForCause` 按不含版本的因果条件找期，已有活跃期走 `RecordHit`），依据写进修订轮（见「评审记录」「修订轮」）。修订轮只收非阻断，推送方读了修订 diff，未另派复评。
+- **全量真库测试**：`scripts/test-full.sh` 跑在 `f97c265cc`（即所推 SHA）：158 ok / 0 FAIL，退 0。
+- **种子**：`scripts/demo-seeds/seed.sh` 灌一次性库（`f97c265cc` 上），退 0，用后删库。
+- **号**：TF 迁移 `0052`；ADR-0305；`AT-TF-342`–`346`、`AT-VE-205`–`207`。
