@@ -32,9 +32,6 @@ func (handler *RegisterTransportHandoverHandler) correctionSegmentHalf(
 		!corrected.TransfersControl() || predecessor.Handover.TransfersControl() {
 		return ParticipationEndOutcomeInvalid, entry, nil
 	}
-	if later := laterControlFacts(ctx, handler.deps.Segments, corrected); later != (segmentEntry{}) {
-		return ParticipationEndOutcomeInvalid, later, nil
-	}
 	return handler.handOverIntoSegment(ctx, predecessor.SegmentDeclaration, corrected)
 }
 

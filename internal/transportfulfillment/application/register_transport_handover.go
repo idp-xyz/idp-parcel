@@ -165,7 +165,7 @@ func (result RegisterTransportHandoverResult) SegmentContinuationReference() str
 	return result.segment
 }
 
-// SegmentEntryRefusal 非空说明交接（或更正）已登记、段那一半被领域正当拒绝——首登进段答`段已关闭`，
+// SegmentEntryRefusal 非空说明交接（或更正）已登记、段那一半被领域正当拒绝——首登进段答`段已关闭`或`对象此后已有更晚的控制事实`，
 // 更正重派生答`无可替代的参与`或`更正后的起点晚于继承的终点`，前版没转出控制的更正成`已交接`改走进段时另答进段那几格
 // 与`对象此后已有更晚的控制事实`。它与 SegmentContinuationReference 不会同时非空：一个说这一半不会因重试而变，一个说
 // 等登记册恢复重试。
@@ -264,6 +264,8 @@ func (handler *RegisterTransportHandoverHandler) RegisterWithGateReading(
 // 段。首登与「前版没转出控制、更正成`已交接`」的更正走的都是它（ADR-0307 决定一）——那一版更正就是对象的这一次交接，
 // 结果与首登即为`已交接`逐格相同，所以两处共用一道，不各写一份。
 //
+// 对象的参与链上已有晚于这一版业务时间的入场或离场时一笔不写，答 LATER_CONTROL_FACTS（见 laterControlFacts）。
+//
 // 先结束、再进段：结束那一半按对象找「此刻在场的段」，若先进了新段，它会找到两条而响亮报错。顺序就是这条规则的一部分。
 // 拒收与待确认什么也不做。
 func (handler *RegisterTransportHandoverHandler) handOverIntoSegment(
@@ -271,6 +273,15 @@ func (handler *RegisterTransportHandoverHandler) handOverIntoSegment(
 	declaration ports.HandoverSegmentDeclaration,
 	handover domain.TransportHandover,
 ) (ParticipationEndOutcome, segmentEntry, error) {
+	// 首登与更正共用这一问（ADR-0307 越权风险点 2、票 183）：首登的业务时间早于对象此刻那条参与的起点时（离线补登、信封晚到），
+	// 结束那一步答未受理、进段照走，对象两段同时在场，此后每次交接都在结束参与那一步响亮失败。交接事实已落库，这里只是
+	// 不动段——不拒登，免得离线补登丢掉一次真实发生过的交接。登记册读不动（欠账）时不在这里替下一步作答：结束参与那一步读同一份册，
+	// 读不动它会响亮失败、整笔不落，与此前一致。拒收与待确认不进段，不问。
+	if handover.TransfersControl() && handler.deps.Segments != nil {
+		if later := laterControlFacts(ctx, handler.deps.Segments, handover); later.refusal != SegmentEntryRefusalNone {
+			return ParticipationEndOutcomeInvalid, later, nil
+		}
+	}
 	ended, err := handler.endPreviousParticipation(ctx, handover)
 	if err != nil {
 		return ParticipationEndOutcomeInvalid, segmentEntry{}, err
