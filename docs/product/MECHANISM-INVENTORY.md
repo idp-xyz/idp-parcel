@@ -18,13 +18,13 @@
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 26 | 24 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 233 | 181 | 38 | 69 | 13 | 10 |
-| transportfulfillment | 281 | 292 | 50 | 58 | 15 | 50 |
-| visibilityexception | 116 | 118 | 12 | 31 | 8 | 12 |
-| **合计** | 1605 | 1599 | 215 | 375 | 65 | 209 |
+| transportfulfillment | 286 | 296 | 51 | 60 | 16 | 50 |
+| visibilityexception | 118 | 120 | 12 | 31 | 8 | 12 |
+| **合计** | 1612 | 1605 | 216 | 377 | 66 | 209 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 223、测试 353。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 225、测试 354。
 
-## 跨上下文消费缝：50 组，153 个生产文件
+## 跨上下文消费缝：50 组，154 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -77,9 +77,9 @@
 | visibilityexception | nodeoperations | 2 |
 | visibilityexception | parcelshipment | 4 |
 | visibilityexception | partycommercial | 1 |
-| visibilityexception | transportfulfillment | 8 |
+| visibilityexception | transportfulfillment | 9 |
 
-## 迁移：12 个模块共 314 份 SQL
+## 迁移：12 个模块共 315 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -93,10 +93,10 @@
 | party_commercial | 42 |
 | pilot_governance | 8 |
 | settlement_accounting | 46 |
-| transport_fulfillment | 46 |
+| transport_fulfillment | 47 |
 | visibility_exception | 29 |
 
-## 接线面：接入面端点 190 个，消费适配器 55 个生产文件，直投路由表 39 条
+## 接线面：接入面端点 190 个，消费适配器 57 个生产文件，直投路由表 40 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -126,9 +126,9 @@
 | parcelpricing | 2 | 0 | 0 | 0 | 2 |
 | parcelshipment | 13 | 1 | 1 | 0 | 15 |
 | settlementaccounting | 8 | 0 | 0 | 0 | 8 |
-| transportfulfillment | 4 | 0 | 0 | 0 | 4 |
-| visibilityexception | 15 | 0 | 0 | 2 | 17 |
-| **合计** | 51 | 1 | 1 | 2 | 55 |
+| transportfulfillment | 5 | 0 | 0 | 0 | 5 |
+| visibilityexception | 16 | 0 | 0 | 2 | 18 |
+| **合计** | 53 | 1 | 1 | 2 | 57 |
 
 直投路由表按 `cmd/` 生产文件里登记的不同事件类型数（`routeLeg` 字面量的 `event` 与 `map[eventing.EventType]dispatch.Consumer` 字面量的键并认，同一事件类型扇出给几路只算一条），按事件类型常量所属的消费门包归属。路由表只随消费者一起长（ADR-0049 第三条），本表只报它此刻多长。
 
@@ -141,11 +141,11 @@
 | parcelshipment | 12 |
 | settlementaccounting | 4 |
 | transportfulfillment | 2 |
-| visibilityexception | 11 |
+| visibilityexception | 12 |
 | （未归类） | 1 |
-| **合计** | 39 |
+| **合计** | 40 |
 
-## 端口：声明 597 个；基线口径缺 39，精确口径缺 2
+## 端口：声明 599 个；基线口径缺 39，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
