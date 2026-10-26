@@ -65,6 +65,8 @@ const (
 	DepartureGateReaskMovementFactRegistryUnavailable
 	DepartureGateReaskRegistryUnavailable
 	DepartureGateReaskHandoffUnavailable
+	// DepartureGateReaskSequenceTaken：两步之间另一方先补了同一次（撞键）。原样重投时 Plan 看得见它那一份，按它重算该不该再问。
+	DepartureGateReaskSequenceTaken
 
 	// 缺陷：重投不会变
 	DepartureGateReaskKeyNotAccepted
@@ -94,6 +96,8 @@ func (stop DepartureGateReaskStop) String() string {
 		return "DEPARTURE_GATE_REASK_REGISTRY_UNAVAILABLE"
 	case DepartureGateReaskHandoffUnavailable:
 		return "DEPARTURE_GATE_REASK_HANDOFF_UNAVAILABLE"
+	case DepartureGateReaskSequenceTaken:
+		return "DEPARTURE_GATE_REASK_SEQUENCE_TAKEN"
 	case DepartureGateReaskKeyNotAccepted:
 		return "CONTROL_FACT_KEY_NOT_ACCEPTED"
 	case DepartureGateReaskControlFactInconsistent:
@@ -416,16 +420,25 @@ func (handler *ReaskDepartureGatesHandler) reaskOne(
 	if err != nil {
 		return departureGateReaskStep{stopped: departureGateReaskStopped(DepartureGateReaskUndecided, DepartureGateReaskRegistryUnavailable)}, nil
 	}
-	var earlier []domain.DepartureGateReading
+	// 这件对象的各次补问按次序排，不按落册时刻：落册时刻取各自那一拍的时钟，时钟回拨或同刻并发时排不出谁最近，次序才是一件
+	// 对象自己那条链上的先后。
+	var mine []ports.DepartureGateReaskRecord
 	for _, reask := range all {
 		if reask.Key.Object == object {
-			earlier = append(earlier, reask.Reading)
+			mine = append(mine, reask)
 		}
+	}
+	slices.SortFunc(mine, func(left, right ports.DepartureGateReaskRecord) int { return left.Key.Sequence - right.Key.Sequence })
+	earlier := make([]domain.DepartureGateReading, 0, len(mine))
+	lastSequence := 0
+	for _, reask := range mine {
+		earlier = append(earlier, reask.Reading)
+		lastSequence = reask.Key.Sequence
 	}
 	if !departureGateReaskDue(first, earlier, object) {
 		return departureGateReaskStep{}, nil
 	}
-	if len(earlier) >= MaxDepartureGateReasks {
+	if lastSequence >= MaxDepartureGateReasks {
 		return departureGateReaskStep{exhausted: true}, nil
 	}
 
@@ -439,7 +452,7 @@ func (handler *ReaskDepartureGatesHandler) reaskOne(
 			Fact:     record.Key.Fact,
 			Version:  record.Key.Version,
 			Object:   object,
-			Sequence: len(earlier) + 1,
+			Sequence: lastSequence + 1,
 		},
 		Reading: reading,
 		Trigger: trigger,
@@ -447,7 +460,9 @@ func (handler *ReaskDepartureGatesHandler) reaskOne(
 }
 
 // Record 在调用方的写事务里把 Plan 问来的各份追加落册，每份同一笔交一封信。撞键是另一方在两步之间先补了同一次：认它在先，
-// 不覆盖、不另交。Plan 没答「扫过了」的那一拍原样交回。
+// 不覆盖、不另交，这一拍答未决、整笔回滚重投——这一份可能比先到那一份问得更晚、更全（先到者问在对象的控制事实可见之前），就此
+// 入账，这件对象可能再没有别的信封来唤醒它；重投时 Plan 读得到先到那一份，按它重算该不该再问，次数上限照旧由次序守住。Plan 没答
+// 「扫过了」的那一拍原样交回。
 func (handler *ReaskDepartureGatesHandler) Record(
 	ctx context.Context,
 	planned DepartureGateReaskResult,
@@ -463,7 +478,7 @@ func (handler *ReaskDepartureGatesHandler) Record(
 			return departureGateReaskStopped(DepartureGateReaskUndecided, DepartureGateReaskRegistryUnavailable), nil
 		}
 		if saved == ports.DepartureGateReaskAlreadyRegistered {
-			continue
+			return departureGateReaskStopped(DepartureGateReaskUndecided, DepartureGateReaskSequenceTaken), nil
 		}
 		if err := handler.deps.Handoff.HandOffDepartureGateReask(ctx, draft); err != nil {
 			return departureGateReaskStopped(DepartureGateReaskUndecided, DepartureGateReaskHandoffUnavailable), nil
@@ -474,7 +489,8 @@ func (handler *ReaskDepartureGatesHandler) Record(
 	return recorded, nil
 }
 
-// departureGateReaskDue 判这条出发此刻该不该替 object 补问：看它最近那一份读数——补问过就看最近一次补问，没补问过就看首版。
+// departureGateReaskDue 判这条出发此刻该不该替 object 补问：看它最近那一份读数——补问过就看次序最大的那一次补问（earlier 按次序
+// 由小到大交进来），没补问过就看首版。
 //
 //   - 那一份里有它的一格：只有那一格是可再问的读不动才补问。放行、不受门禁、阻断与关务答的未决都是关务给过的定论，按原出发时点再问
 //     不会变——阻断已由首版或那一次补问形成过信号；
