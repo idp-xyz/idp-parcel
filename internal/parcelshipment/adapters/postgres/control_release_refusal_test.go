@@ -107,3 +107,57 @@ func TestAControlReleaseRefusalIsRecordedOnceAndListedByShipmentRequest(t *testi
 		t.Fatal("一行没有原因的进了册——交到人手里却说不出为什么")
 	}
 }
+
+// failRefusalWrites 在释放未受理册上挂一个 BEFORE INSERT 触发器让每一次登记报 SQL 错误，像一张写不进的表那样。
+func failRefusalWrites(t *testing.T, ctx context.Context, exec func(context.Context, string, ...any) error) {
+	t.Helper()
+	if err := exec(ctx, `
+CREATE FUNCTION parcel_shipment.refusal_write_fails() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN RAISE EXCEPTION 'control release refusal register is not writable'; END $$;
+CREATE TRIGGER refusal_write_fails BEFORE INSERT ON parcel_shipment.control_release_refusal
+FOR EACH ROW EXECUTE FUNCTION parcel_shipment.refusal_write_fails();`); err != nil {
+		t.Fatalf("挂写入失败触发器：%v", err)
+	}
+}
+
+// Covers: ADR-0282 决定二「记不下册（写不进）时那一笔改留补偿续办、业务事实照常成立」——登记那一句在库里报 SQL 错误时
+// 交回错误，并退回自己的 savepoint：调用方那一笔事务随后照样能写、能提交，不会被打进中止态、整笔回滚。
+func TestARefusalThatCannotBeWrittenLeavesTheCallerTransactionUsable(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	register, err := adapter.NewControlReleaseRefusals(db)
+	if err != nil {
+		t.Fatalf("构造释放未受理册：%v", err)
+	}
+	ctx := t.Context()
+	failRefusalWrites(t, ctx, func(ctx context.Context, sql string, args ...any) error {
+		_, err := pool.Exec(ctx, sql, args...)
+		return err
+	})
+	scope, err := domain.NewOccupationScope("SYN-LEGAL-ENTITY-1", "SYN-ACCOUNT-1", "CNY")
+	if err != nil {
+		t.Fatalf("new occupation scope: %v", err)
+	}
+
+	var recordErr error
+	err = db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
+		_, recordErr = register.Record(txCtx, refusalOf(t, "tenant-1", "version-1", "request-1/version-1", scope))
+		return writeAfterRelease(txCtx, db)
+	})
+	if recordErr == nil {
+		t.Fatal("触发器拒了这一行，登记却答成功")
+	}
+	if err != nil {
+		t.Fatalf("登记写不进连带了调用方事务随后的写：%v", err)
+	}
+	var rows int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM parcel_shipment.control_release_refusal`).Scan(&rows); err != nil {
+		t.Fatalf("数册：%v", err)
+	}
+	if rows != 0 {
+		t.Fatalf("册上 %d 行, want 0", rows)
+	}
+}

@@ -264,11 +264,12 @@ func (fixture *customerSupplementLoopFixture) freeze(t *testing.T, ctx context.C
 	return row
 }
 
-// synRFlakyRelease 把释放转给生产适配器；failuresLeft 大于零时先答那么多次`可重试未形成`、不到提供方。released 只数到达
-// 提供方且收口的那几次。
+// synRFlakyRelease 把释放转给生产适配器；failuresLeft 大于零时先答那么多次`可重试未形成`、refusalsLeft 大于零时先答那么多次
+// `确定未受理`，都不到提供方。released 只数到达提供方且收口的那几次。
 type synRFlakyRelease struct {
 	inner        psports.PreAcceptanceControlRelease
 	failuresLeft int
+	refusalsLeft int
 	released     int
 }
 
@@ -276,6 +277,14 @@ func (release *synRFlakyRelease) ReleasePreAcceptanceControl(
 	ctx context.Context,
 	request psports.ControlReleaseRequest,
 ) (psports.ControlReleaseAnswer, error) {
+	if release.refusalsLeft > 0 {
+		release.refusalsLeft--
+		reason, err := psdomain.NewCheckReason("SA-RELEASE_REQUEST_NOT_ACCEPTED")
+		if err != nil {
+			return psports.ControlReleaseAnswer{}, err
+		}
+		return psports.ControlReleaseAnswer{Outcome: psports.ControlReleaseNotAccepted, Reason: reason}, nil
+	}
 	if release.failuresLeft > 0 {
 		release.failuresLeft--
 		reason, err := psdomain.NewCheckReason("SA-FREEZE_LEDGER_UNAVAILABLE")

@@ -209,3 +209,45 @@ func TestTheWiredDispositionRecordsAndAnswersARefusedRelease(t *testing.T) {
 		t.Fatalf("冻结 status = %d, want 原样占着", got)
 	}
 }
+
+// Covers: AT-PS-035 释放被确定不受理、册又写不进那一格；ADR-0282 决定二「记不下册（写不进）时那一笔改留补偿续办、业务事实
+// 照常成立」——册上那一句在库里报 SQL 错误，经生产授权处置装配答 201 RECORDED、委托已拒绝，那一笔改留补偿引用、不带拒收
+// 这一格，冻结原样占着。
+func TestTheWiredDispositionKeepsTheDecisionWhenTheRegisterCannotBeWritten(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	version := awaitingDispositionOnRealAssembly(t, db)
+	_, settlement := refusalSettlementScope(t)
+	resultID := recordControlOnRealAssembly(t, db, version, domain.OccupationScope{})
+	freezeOnRealAssembly(t, db, resultID, settlement)
+	if _, err := pool.Exec(t.Context(), `
+CREATE FUNCTION parcel_shipment.refusal_write_fails() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN RAISE EXCEPTION 'control release refusal register is not writable'; END $$;
+CREATE TRIGGER refusal_write_fails BEFORE INSERT ON parcel_shipment.control_release_refusal
+FOR EACH ROW EXECUTE FUNCTION parcel_shipment.refusal_write_fails();`); err != nil {
+		t.Fatalf("挂写入失败触发器：%v", err)
+	}
+
+	status, answer := disposeRejectOnRealAssembly(t, db, version)
+	if status != http.StatusCreated || answer.Outcome != "RECORDED" {
+		t.Fatalf("处置答 %d %+v，want 201 RECORDED——册写不进把处置带走了", status, answer)
+	}
+	if answer.ControlReleaseNotAccepted || answer.CompensationReference == "" {
+		t.Fatalf("答复 %+v，want 不带拒收这一格、改留补偿引用", answer)
+	}
+	var state int16
+	if err := pool.QueryRow(t.Context(),
+		`SELECT state FROM parcel_shipment.shipment_request WHERE shipment_request_id = $1`,
+		submissionCommand(t).ShipmentRequestID.String()).Scan(&state); err != nil {
+		t.Fatalf("读状态投影：%v", err)
+	}
+	if state != int16(domain.ShipmentRequestRejected) {
+		t.Fatalf("库里 state = %d, want REJECTED", state)
+	}
+	if got := freezeStatusOnRealAssembly(t, db, resultID); got != int16(sadomain.FreezeHeld) {
+		t.Fatalf("冻结 status = %d, want 原样占着", got)
+	}
+}

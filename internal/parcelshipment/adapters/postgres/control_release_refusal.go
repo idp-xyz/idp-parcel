@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -26,7 +27,16 @@ func NewControlReleaseRefusals(db *bentopg.DB) (*ControlReleaseRefusals, error) 
 
 var _ ports.ControlReleaseRefusalRegister = (*ControlReleaseRefusals)(nil)
 
+// controlReleaseRefusalSavepoint 是登记那一句在调用方事务里开的 savepoint 名，与释放口外那一层的点分开取名：两者不嵌套，
+// 分开取名免得哪天嵌套时退到别人的点上。
+const controlReleaseRefusalSavepoint = "parcel_shipment_control_release_refusal"
+
 // Record 记下一笔释放确定未受理的占用。要环境事务：登记与那件业务事实同笔落地。
+//
+// INSERT 隔在一个 savepoint 里：登记写不进时只能让那一笔改留补偿续办，不能连累调用方事务里已经成立的撤回、拒绝或暂停
+// （ADR-0282 决定二；UC-PS-005「不得把释放失败改写为撤回失败」）。一条 SQL 级错误不退回 savepoint，整笔事务就进了中止态，
+// 编排改留的补偿引用随提交失败一起蒸发、业务事实一并回滚。开、退、收 savepoint 本身失败同样交回错误，由编排落
+// `CONTROL_RELEASE_REFUSAL_NOT_RECORDED`；退不回时事务仍在中止态，提交时整笔回滚，那是库此刻答不出，不是本口能救的。
 func (register *ControlReleaseRefusals) Record(
 	ctx context.Context,
 	refusal ports.ControlReleaseRefusal,
@@ -35,6 +45,28 @@ func (register *ControlReleaseRefusals) Record(
 	if err != nil {
 		return ports.ControlReleaseRefusalSaveOutcomeInvalid, fmt.Errorf("record control release refusal: %w", err)
 	}
+	if _, err := executor.Exec(ctx, "SAVEPOINT "+controlReleaseRefusalSavepoint); err != nil {
+		return ports.ControlReleaseRefusalSaveOutcomeInvalid, fmt.Errorf("record control release refusal: savepoint: %w", err)
+	}
+	outcome, err := register.insert(ctx, executor, refusal)
+	if err != nil {
+		if _, rollbackErr := executor.Exec(ctx, "ROLLBACK TO SAVEPOINT "+controlReleaseRefusalSavepoint); rollbackErr != nil {
+			return ports.ControlReleaseRefusalSaveOutcomeInvalid, errors.Join(err,
+				fmt.Errorf("record control release refusal: savepoint rollback: %w", rollbackErr))
+		}
+		return ports.ControlReleaseRefusalSaveOutcomeInvalid, err
+	}
+	if _, err := executor.Exec(ctx, "RELEASE SAVEPOINT "+controlReleaseRefusalSavepoint); err != nil {
+		return ports.ControlReleaseRefusalSaveOutcomeInvalid, fmt.Errorf("record control release refusal: savepoint release: %w", err)
+	}
+	return outcome, nil
+}
+
+func (register *ControlReleaseRefusals) insert(
+	ctx context.Context,
+	executor bentopg.Executor,
+	refusal ports.ControlReleaseRefusal,
+) (ports.ControlReleaseRefusalSaveOutcome, error) {
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO parcel_shipment.control_release_refusal
 			(tenant_id, shipment_request_id, submission_version, control_result_id,

@@ -155,3 +155,79 @@ func TestASupersededVersionWhoseReleaseIsRefusedFailsTheChainLoudly(t *testing.T
 		t.Fatalf("状态 = %q, want SUBMITTED", after.State())
 	}
 }
+
+// failRefusalWritesInDispatch 在释放未受理册上挂一个 BEFORE INSERT 触发器，让每一次登记在库里报 SQL 错误。
+func (fixture *customerSupplementLoopFixture) failRefusalWrites(t *testing.T, ctx context.Context) {
+	t.Helper()
+	if _, err := fixture.pool.Exec(ctx, `
+CREATE FUNCTION parcel_shipment.refusal_write_fails() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN RAISE EXCEPTION 'control release refusal register is not writable'; END $$;
+CREATE TRIGGER refusal_write_fails BEFORE INSERT ON parcel_shipment.control_release_refusal
+FOR EACH ROW EXECUTE FUNCTION parcel_shipment.refusal_write_fails();`); err != nil {
+		t.Fatalf("挂写入失败触发器：%v", err)
+	}
+}
+
+// Covers: AT-PS-115 记不下册那一格；ADR-0282 决定二「记不下册（写不进）时那一笔改留补偿续办、业务事实照常成立」——册上那一句
+// 在库里报 SQL 错误，撤回照样提交，那一笔改留补偿引用、结果不带拒收这一格，冻结原样占着。
+func TestAWithdrawalWhoseRefusalCannotBeRecordedStillCommits(t *testing.T) {
+	control := &synRLateBoundControl{}
+	release := &synRFlakyRelease{failuresLeft: 1}
+	fixture := newCustomerSupplementLoopFixtureWith(t, customerSupplementLoopLegs{control: control, release: release})
+	ctx := t.Context()
+	adapter := fixture.wireSettlement(t, ctx)
+	control.inner, release.inner = adapter, adapter
+	firstVersion := fixture.requestID.String() + "/SYN-VER-01"
+
+	fixture.pauseFirstVersion(t, ctx)
+	fixture.forgetOccupationScopes(t, ctx)
+	fixture.failRefusalWrites(t, ctx)
+
+	withdrawal := fixture.withdrawal(t, pspostgres.NewSavepointedControlRelease(fixture.db, release))
+	var result psapplication.WithdrawShipmentRequestResult
+	mustWithinTX(t, fixture.transactor, ctx, func(txCtx context.Context) error {
+		var err error
+		result, err = withdrawal.Handle(txCtx, fixture.withdrawCommand(t, "SYN-VER-01"))
+		return err
+	})
+	if result.Outcome() != psapplication.WithdrawalFormed {
+		t.Fatalf("撤回 outcome = %q, want FORMED（未决原因 %q）", result.Outcome(), result.PendingReason())
+	}
+	if result.ControlReleaseNotAccepted() || result.CompensationReference().String() == "" {
+		t.Fatalf("notAccepted = %v compensation = %q, want 不带拒收这一格、改留补偿引用",
+			result.ControlReleaseNotAccepted(), result.CompensationReference())
+	}
+	var state int16
+	if err := fixture.pool.QueryRow(ctx,
+		`SELECT state FROM parcel_shipment.shipment_request WHERE shipment_request_id = $1`,
+		fixture.requestID.String()).Scan(&state); err != nil {
+		t.Fatalf("读状态投影：%v", err)
+	}
+	if state != int16(psdomain.ShipmentRequestWithdrawn) {
+		t.Fatalf("库里 state = %d, want WITHDRAWN——册写不进把撤回带走了", state)
+	}
+	if got := fixture.freeze(t, ctx, firstVersion); got.status != 1 {
+		t.Fatalf("首版冻结 = %+v, want 原样占着", got)
+	}
+}
+
+// Covers: 同上那一格在接受链里——停进`等待受控补充`那一轮释放被拒收、册又写不进时，暂停照样落库、本份投递照样入账，
+// 不随整轮回滚重投（ADR-0282 决定二）。
+func TestAPauseWhoseRefusalCannotBeRecordedStillCommits(t *testing.T) {
+	control := &synRLateBoundControl{}
+	release := &synRFlakyRelease{refusalsLeft: 1}
+	fixture := newCustomerSupplementLoopFixtureWith(t, customerSupplementLoopLegs{control: control, release: release})
+	ctx := t.Context()
+	adapter := fixture.wireSettlement(t, ctx)
+	control.inner, release.inner = adapter, adapter
+	fixture.failRefusalWrites(t, ctx)
+
+	// pauseFirstVersion 断言消费门入账、等待态落库。
+	fixture.pauseFirstVersion(t, ctx)
+	if got := fixture.freeze(t, ctx, fixture.requestID.String()+"/SYN-VER-01"); got.status != 1 {
+		t.Fatalf("首版冻结 = %+v, want 原样占着", got)
+	}
+	if n := fixture.countSQL(t, `SELECT count(*) FROM parcel_shipment.control_release_refusal`); n != 0 {
+		t.Fatalf("册上 %d 笔, want 0", n)
+	}
+}
