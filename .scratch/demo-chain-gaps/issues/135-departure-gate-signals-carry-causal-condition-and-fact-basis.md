@@ -1,7 +1,7 @@
 # 135 出发门禁阻断信号没有因果条件与事实依据，发作期永不结束
 
 Category: bug
-Status: in-progress——2026-10-26 评审无阻断、修订轮完，待进 main，分支 `claude-dcg135` tip 为写评审记录与修订轮的那一笔（已 rebase 到 origin/main，代码与文档最后一笔 `9661b63fa`；见文末「评审记录」「修订轮」）。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg135` tip `340c1581a`（rebase 前）。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，与 136 同批，分支 `claude-dcg135`（worktree `idp-parcel-dcg135`）。此前 ready-for-agent——2026-10-20 代决复核立（上线后尽快），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: resolved——2026-10-26 进 main `edf6fba92`（见文末「进 main 记录」）。此前 in-progress——2026-10-26 评审无阻断、修订轮完，待进 main，分支 `claude-dcg135` tip 为写评审记录与修订轮的那一笔（已 rebase 到 origin/main，代码与文档最后一笔 `9661b63fa`；见文末「评审记录」「修订轮」）。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg135` tip `340c1581a`（rebase 前）。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，与 136 同批，分支 `claude-dcg135`（worktree `idp-parcel-dcg135`）。此前 ready-for-agent——2026-10-20 代决复核立（上线后尽快），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 M18；ADR-0205 越权风险点 22、23
 
@@ -157,3 +157,15 @@ code/09（tops-26，VE 演示冲突信号类型，可能动信号规则登记与
 - 带 DSN `go test -count=1`：`./internal/visibilityexception/...`、`./cmd/parcel-api/...`、`./cmd/parcel-dispatch/...`、`./cmd/parcel-ve-register/...`、`./internal/architecture/...`、`./migrations/...`、`./internal/platform/migrate/...` 全 ok（含 PG）；新用例 `-v` PASS。`go test ./tools/at-coverage-counts/...` ok。
 - `go run ./tools/at-coverage-counts -check` 与 `go run ./tools/adr-index -check` 只报生成物过期，没有缺行或多行。
 - `apps/admin-web`（只改了一行注释）：`tsc -b --noEmit` 过、`scripts/run-tests.mjs` 647 pass、`vite build` 过。
+
+## 进 main 记录（2026-10-26，推送方会话 tops-20；135、136 同批）
+
+- **main**：`edf6fba92`。出处：分支 `claude-dcg135` tip `85466ae34`（作者修订轮后自行 rebase 到 main `f1fece40d`，推送方重放为快进）。rebase 前出处：`1569dcafe`、`24d870d4c`、`53cfbd1cc`、`7fa90b1b6`、`d1f8308da`、`340c1581a`。
+- **main 上的提交**：`c994bd414`（135 代码）、`270afc1ae`（136 代码）、`5ede14fbb`（135 文档）、`d788dc5ad`（136 文档，ADR-0302）、`861093738`（迁移一度改号 0030）、`5fb06c972`（完成记录）、`7866b128b`（修订轮：迁移改号回 VE 0029 等）、`539f0e453`（评审记录与修订轮）。
+- **生成物**：ADR 索引 `66c4e84e0`；AT 盘点总览计数 `59f9216f2`；机制清点 `edf6fba92`。三件 `-check` 退 0（含票 139 的表行守卫）。
+- **评审**：隔离子代理钉 `340c1581a`，两轴无阻断、非阻断 9 条；Spec 5（管理台无 node:test）照 workflow「前端切片」第 5 步不改，其余在修订轮收（见票 135「评审记录」「修订轮」）。修订轮只收非阻断，推送方读了修订 diff，未另派复评。
+- **全量真库测试**：`scripts/test-full.sh` 跑在 `edf6fba92`（即所推 SHA）：158 ok / 0 FAIL，退 0。
+- **管理台三道门**（落地树上，Node 22）：tsc 退 0、node:test 647/647、vite build 退 0。
+- **种子**：`scripts/demo-seeds/seed.sh` 灌一次性库（`edf6fba92` 上），退 0，用后删库。
+- **迁移号**：VE `0029`（另一会话 tops-26 的 code/09 未用此号、同意归本票；其下一个 VE 号从 0030 起）。
+- **后继**：136「另报一格」（TF 段那一半欠账没有续办入口）立为 [179](./179-a-control-fact-segment-half-left-owing-has-no-continuation-entry.md)。
