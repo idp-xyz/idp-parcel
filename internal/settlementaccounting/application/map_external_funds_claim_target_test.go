@@ -586,9 +586,9 @@ func TestAFundsReturnedFactNeitherMapsNorAppliesToAClaimAmount(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0029——被指向那一条的已核销已超过它的金额本体（账不平）是确定性的：重交同一份永远同一个结果，答分配失衡，
-// 不折成金额册不可用的未决。
-func TestABrokenClaimTargetStandingIsADeterministicImbalance(t *testing.T) {
+// Covers: ADR-0029——被指向那一条的已核销已越过它的金额本体（账不平）是确定性的：重交同一份永远同一个结果，续办与作用域
+// 已确认未结为负那一格相同，所以编排交回包着 ErrInvalidClaimTargetStanding 的 error 整笔回滚，不折成金额册不可用的未决。
+func TestABrokenClaimTargetStandingIsADeterministicBooksError(t *testing.T) {
 	fixture := newFundsFixture(t)
 	ctx := context.Background()
 	fixture.claims.register("tenant-1", domain.TargetCustomerCompensation, "compensation-1", "USD", 5000)
@@ -601,9 +601,50 @@ func TestABrokenClaimTargetStandingIsADeterministicImbalance(t *testing.T) {
 	fixture.claims.lockErr = fmt.Errorf("lock claim target: %w", domain.ErrInvalidClaimTargetStanding)
 	result, err := fixture.handler.Apply(ctx, claimApplyCommand(t, "application-c1", "mapping-compensation",
 		domain.TargetCustomerCompensation, "compensation-1", 1000))
-	mustFunds(t, result, err, application.ApplicationImbalanceOutcome, "账不平的赔付")
-	if result.UndecidedReason() != application.FundsUndecidedReasonNone {
-		t.Fatalf("账不平答成了未决：%s", result.UndecidedReason())
+	if !errors.Is(err, domain.ErrInvalidClaimTargetStanding) {
+		t.Fatalf("账不平的赔付：outcome = %s、err = %v，要包着 ErrInvalidClaimTargetStanding 的 error", result.Outcome(), err)
+	}
+	if len(fixture.applications.records) != 0 {
+		t.Fatal("账不平时落了核销")
+	}
+}
+
+// Covers: 锁后查过同键之后、落行之前另一位写入方落了同键（同一核销引用、不同事实的两份并发交，各锁各的事实）——落行答
+// 「已有」时照锁后那段比内容：异内容答冲突，同内容答已存在；赢家可能在另一条事实上，不报累计未分配。
+func TestALostSaveRaceComparesTheWinnerLikeTheLockedCheck(t *testing.T) {
+	ctx := context.Background()
+	for _, scenario := range []struct {
+		name    string
+		winner  func(application.ApplySettlementCommand) application.ApplySettlementCommand
+		outcome application.FundsOutcome
+	}{
+		{"异内容的赢家", func(command application.ApplySettlementCommand) application.ApplySettlementCommand {
+			command.Allocations[0].AmountMinor = 1000
+			return command
+		}, application.ApplicationConflict},
+		{"同内容的赢家", func(command application.ApplySettlementCommand) application.ApplySettlementCommand {
+			return command
+		}, application.ApplicationExisting},
+	} {
+		fixture := newFundsFixture(t)
+		if _, err := fixture.handler.AdoptFact(ctx, adoptCommand(t, domain.FundsReceiptConfirmed)); err != nil {
+			t.Fatalf("adopt: %v", err)
+		}
+		if _, err := fixture.handler.Map(ctx, mapCommand(t)); err != nil {
+			t.Fatalf("map: %v", err)
+		}
+		// 落行前那一刻用同一只编排把赢家先落下：它的内容摘要与这一份同一套算法，比得出同内容还是异内容。
+		planted := scenario.winner(applyCommand(t))
+		fixture.applications.beforeSave = func() {
+			if _, err := fixture.handler.Apply(ctx, planted); err != nil {
+				t.Fatalf("落赢家：%v", err)
+			}
+		}
+		result, err := fixture.handler.Apply(ctx, applyCommand(t))
+		mustFunds(t, result, err, scenario.outcome, scenario.name)
+		if _, reported := result.FactUnappliedMinor(); reported {
+			t.Fatalf("%s：输掉落行竞态的那一份报了累计未分配", scenario.name)
+		}
 	}
 }
 

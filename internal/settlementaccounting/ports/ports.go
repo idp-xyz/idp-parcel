@@ -925,7 +925,9 @@ type SettlementApplicationStore interface {
 //
 // 资金侧的锁只按一个全序取：事实（本口）→ 金额本体（ClaimSettlementTargets.LockClaimTarget，按格、引用）→ 运营余额
 // 作用域（OperationalBalanceAdvance.LockOperationalBalanceScope，按法人、账户、币种）。哪条路径用不到前面的就从后面接着取，
-// 不倒回去——两笔事务各握一半等另一半就是这样排除的。
+// 不倒回去——两笔事务各握一半等另一半就是这样排除的。核销与撤销路上随写入隐式取的行锁（核销主键插入时的等待、
+// operational_balance 与 credit_standing 的 upsert、Outbox 入队）都落在作用域锁之后。映射在取作用域锁之前先插映射行，
+// 那一处等待只会撞上同一映射键的另一笔映射，而映射在插映射行之前不握任何一把，所以也接不成环。
 type FundsFactApplicationLock interface {
 	LockFundsFactApplications(ctx context.Context, key FundsFactKey) (appliedMinor int64, found bool, err error)
 }

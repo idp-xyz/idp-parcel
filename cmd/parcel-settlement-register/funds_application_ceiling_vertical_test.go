@@ -19,6 +19,7 @@ import (
 
 type ceilingRig struct {
 	pool      *pgxpool.Pool
+	db        *bentopg.DB
 	registrar registrar
 }
 
@@ -41,7 +42,7 @@ func newCeilingRig(t *testing.T) ceilingRig {
 	if err != nil {
 		t.Fatalf("装配登记口：%v", err)
 	}
-	return ceilingRig{pool: pool, registrar: registrar}
+	return ceilingRig{pool: pool, db: db, registrar: registrar}
 }
 
 func (rig ceilingRig) run(t *testing.T, command, raw string, wantCode int, wantAnswer string) string {
@@ -114,8 +115,43 @@ type commandAnswer struct {
 	code    int
 }
 
-// raceTwo 先用一条自己的事务锁住事实身份行，再让两路命令并发跑；两路都在锁上排队之后才放开，于是它们一定先后进锁。
+// raceTwo 先用一条自己的事务锁住事实身份行，再让两路核销并发跑；两路都在锁上排队之后才放开，于是它们一定先后进锁。
 func (rig ceilingRig) raceTwo(t *testing.T, first, second string) [2]commandAnswer {
+	t.Helper()
+	return rig.raceUnder(t, lockFactRow("SYN-FACT-CEILING-1"),
+		[2]raceCommand{{commandFundsApplication, first}, {commandFundsApplication, second}})
+}
+
+type raceCommand struct {
+	command string
+	raw     string
+}
+
+// holderLock 是占锁事务里执行的那一句：拿住两路要排队的那把锁。
+type holderLock struct {
+	sql  string
+	args []any
+}
+
+func lockFactRow(fact string) holderLock {
+	return holderLock{
+		sql:  `SELECT 1 FROM settlement_accounting.external_funds_fact WHERE tenant_id = $1 AND fact_id = $2 FOR UPDATE`,
+		args: []any{claimTenant, fact},
+	}
+}
+
+// lockBalanceScope 与 CustomerReceiptPostings.LockOperationalBalanceScope 取同一把作用域咨询锁。
+func lockBalanceScope(legalEntity, account, currency string) holderLock {
+	return holderLock{
+		sql: `SELECT pg_advisory_xact_lock(hashtext('settlement_accounting.operational_balance.scope'),
+		        hashtext($1 || chr(31) || $2 || chr(31) || $3 || chr(31) || $4))`,
+		args: []any{claimTenant, legalEntity, account, currency},
+	}
+}
+
+// raceUnder 用一条自己的事务先拿住 lock，再让两路命令并发跑，等两路都在锁上排队（由 pg_stat_activity 认）才提交放开，
+// 于是两路一定先后进锁。断言失败时占锁事务回滚，排队的两路照样放出来。
+func (rig ceilingRig) raceUnder(t *testing.T, lock holderLock, commands [2]raceCommand) [2]commandAnswer {
 	t.Helper()
 	ctx := t.Context()
 	holder, err := rig.pool.Begin(ctx)
@@ -123,36 +159,18 @@ func (rig ceilingRig) raceTwo(t *testing.T, first, second string) [2]commandAnsw
 		t.Fatalf("开占锁事务：%v", err)
 	}
 	defer func() { _ = holder.Rollback(context.Background()) }()
-	if _, err := holder.Exec(ctx,
-		`SELECT 1 FROM settlement_accounting.external_funds_fact WHERE tenant_id = $1 AND fact_id = $2 FOR UPDATE`,
-		claimTenant, "SYN-FACT-CEILING-1"); err != nil {
-		t.Fatalf("占事实身份行：%v", err)
+	if _, err := holder.Exec(ctx, lock.sql, lock.args...); err != nil {
+		t.Fatalf("占锁：%v", err)
 	}
 
 	answers := make(chan [2]any, 2)
-	for index, raw := range []string{first, second} {
-		go func(index int, raw string) {
-			message, code := execute(ctx, commandFundsApplication, []byte(raw), rig.registrar)
+	for index, command := range commands {
+		go func(index int, command raceCommand) {
+			message, code := execute(ctx, command.command, []byte(command.raw), rig.registrar)
 			answers <- [2]any{index, commandAnswer{message: message, code: code}}
-		}(index, raw)
+		}(index, command)
 	}
-
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		var waiting int
-		if err := rig.pool.QueryRow(ctx,
-			`SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()`,
-		).Scan(&waiting); err != nil {
-			t.Fatalf("看锁：%v", err)
-		}
-		if waiting >= 2 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("十秒内只有 %d 路在事实身份行上排队——核销没有先锁事实", waiting)
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	rig.awaitWaiters(t, 2)
 	if err := holder.Commit(ctx); err != nil {
 		t.Fatalf("放开占锁事务：%v", err)
 	}
@@ -167,6 +185,27 @@ func (rig ceilingRig) raceTwo(t *testing.T, first, second string) [2]commandAnsw
 		}
 	}
 	return got
+}
+
+// awaitWaiters 等到本库至少有 want 路在锁上排队；十秒内等不到就是要证的那把锁没有取。
+func (rig ceilingRig) awaitWaiters(t *testing.T, want int) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var waiting int
+		if err := rig.pool.QueryRow(t.Context(),
+			`SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()`,
+		).Scan(&waiting); err != nil {
+			t.Fatalf("看锁：%v", err)
+		}
+		if waiting >= want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("十秒内只有 %d 路在锁上排队，要 %d 路——要证的那把锁没有取", waiting, want)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 // Covers: 并发超额——同一笔 5000 的收款，两路各交一份 5000 的核销（不同引用）同时到达：后进锁的那一路读到先到那笔的

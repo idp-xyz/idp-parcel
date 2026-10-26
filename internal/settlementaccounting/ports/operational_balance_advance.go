@@ -48,7 +48,8 @@ type CustomerReceiptBooks interface {
 	) (domain.SettlementScope, bool, error)
 
 	// CustomerDirectionNets 交回该作用域的 P、W、已确认应收。
-	// P 加总已映射到本作用域对账单或应收账户上的确认到账与资金退回，取链头金额。
+	// P 加总已映射到本作用域对账单或应收账户上的确认到账与资金退回，取链头金额；一条事实映到本作用域几个目标也只算
+	// 一次——钱只到了一次。
 	// W 只加总尚未撤销、且指向本作用域对账单的核销分配。
 	CustomerDirectionNets(
 		ctx context.Context,

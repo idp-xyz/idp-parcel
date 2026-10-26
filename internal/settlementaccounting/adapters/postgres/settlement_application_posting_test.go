@@ -134,3 +134,71 @@ func TestTheFactAndBalanceScopeLocksRefuseToRunOutsideATransaction(t *testing.T)
 		t.Fatalf("无事务锁余额作用域：err = %v，要 ErrTransactionRequired", err)
 	}
 }
+
+// Covers: `AT-SA-106`「一笔付款覆盖多个费用 → 一对多核销，金额严格守恒」落在入账余额上——一对多核销要先把同一笔收款映射
+// 到同一作用域的几张对账单（兼映到账户），P 按事实只算一次：10000 映到 stmt-1、stmt-2 与账户本身，入账余额是 10000 而
+// 不是三倍；一笔核销分给两张单 6000、4000 之后入账余额 0、已确认未结 0。
+func TestAReceiptMappedToSeveralTargetsInOneScopeIsPostedOnce(t *testing.T) {
+	db, pool := receiptPostingDB(t)
+	ctx := t.Context()
+	seedCustomerReceiptScope(t, pool)
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO settlement_accounting.customer_statement
+			(tenant_id, statement_number, account_id, period_ref, currency, total_minor,
+			 content_digest, lines, adjustment_lines, published_at, recorded_at)
+		 VALUES ('tenant-receipt', 'stmt-2', 'acct-1', 'period-2', 'CNY', 4000,
+		         'digest-2', '[{"charge":"c-2","amount_minor":4000}]'::jsonb, '[]'::jsonb, now(), now())`); err != nil {
+		t.Fatalf("第二张对账单：%v", err)
+	}
+	seedConfirmedReceivable(t, ctx, pool, 10_000)
+
+	clock := &movingClock{at: time.Date(2026, 10, 14, 8, 0, 0, 0, time.UTC)}
+	handler := mustFundsHandler(t, mustFundsFacts(t, db), mustFundsMappings(t, db), mustApplications(t, db),
+		mustReceiptPostings(t, db), clock)
+	tenant := receiptTenant(t)
+	step := func(what string, want application.FundsOutcome, run func(context.Context) (application.FundsResult, error)) {
+		t.Helper()
+		clock.at = clock.at.Add(time.Hour)
+		saWithin(t, db.Transactor(), ctx, func(txCtx context.Context) error {
+			result, err := run(txCtx)
+			if err != nil {
+				return err
+			}
+			if result.Outcome() != want {
+				t.Errorf("%s = %s，要 %s", what, result.Outcome(), want)
+			}
+			return nil
+		})
+	}
+
+	step("采用", application.FundsFactAdopted, func(txCtx context.Context) (application.FundsResult, error) {
+		return handler.AdoptFact(txCtx, receiptFact(tenant, "receipt-1", domain.FundsReceiptConfirmed, 10_000, "v1"))
+	})
+	for _, target := range []struct {
+		mapping string
+		kind    domain.SettlementTargetKind
+		ref     string
+	}{
+		{"map-stmt-1", domain.TargetStatement, "stmt-1"},
+		{"map-stmt-2", domain.TargetStatement, "stmt-2"},
+		{"map-account", domain.TargetAccount, "acct-1"},
+	} {
+		step("映射到 "+target.ref, application.FundsMapped, func(txCtx context.Context) (application.FundsResult, error) {
+			return handler.Map(txCtx, receiptMap(tenant, target.mapping, "receipt-1", target.kind, target.ref))
+		})
+		assertPosted(t, pool, 10_000, 0, 10_000)
+	}
+
+	step("一对多核销", application.SettlementApplied, func(txCtx context.Context) (application.FundsResult, error) {
+		return handler.Apply(txCtx, application.ApplySettlementCommand{
+			TenantID: tenant, Application: "app-split", Fact: "receipt-1", TargetCurrency: "CNY",
+			MappingRefs: []string{"map-stmt-1", "map-stmt-2"},
+			Allocations: []application.AllocationDirective{
+				{Mapping: "map-stmt-1", TargetKind: domain.TargetStatement, Target: "stmt-1", Direction: domain.AllocationDebit, AmountMinor: 6_000},
+				{Mapping: "map-stmt-2", TargetKind: domain.TargetStatement, Target: "stmt-2", Direction: domain.AllocationDebit, AmountMinor: 4_000},
+			},
+			Basis: "instruction-1", AppliedAt: clock.at,
+		})
+	})
+	assertPosted(t, pool, 0, 0, 0)
+}

@@ -424,10 +424,11 @@ func execute(ctx context.Context, command string, raw []byte, registrar registra
 		// 映射目标写成了一个不是应收的结算账户：改目标才行，重交同一份永远同一个结果（ADR-0029），不是未决。
 		return fmt.Sprintf("%s: 未登记——映射目标不是本租户的应收结算账户，改目标再交：%v", command, err), exitUsage
 	}
-	if errors.Is(err, sadomain.ErrNegativeConfirmedUnsettled) {
-		// 作用域按账求出的已确认未结为负：账已经不平（多半是一笔超额的对账单核销，或确认之后的贷记调整），这一笔连同
-		// 重算一起回滚。重交同一份永远同一个结果，要人核对该作用域的核销与调整、撤掉多出的那一笔——归冲突格，不是未决。
-		return fmt.Sprintf("%s: 未登记——该作用域按账求出的已确认未结为负（账不平），先核对它的核销与费用调整再续办：%v", command, err), exitConflict
+	if errors.Is(err, sadomain.ErrNegativeConfirmedUnsettled) || errors.Is(err, sadomain.ErrInvalidClaimTargetStanding) {
+		// 账已经不平：作用域按账求出的已确认未结为负（多半是一笔超额的对账单核销，或确认之后的贷记调整），或一条赔付、
+		// 追偿认可上的已核销越过了它的金额本体。这一笔连同重算一起回滚；重交同一份永远同一个结果，续办两格相同——
+		// 要人核对指向它的核销与调整、撤掉多出的那一笔——归冲突格，不是未决。
+		return fmt.Sprintf("%s: 未登记——账不平（作用域已确认未结为负，或金额本体上的已核销越过了它的金额），先核对指向它的核销与调整再续办：%v", command, err), exitConflict
 	}
 	if errors.Is(err, sadomain.ErrCatalogueTargetMissing) {
 		return fmt.Sprintf("%s: 未登记——指向的结算账户还不在账户册上，先登记账户再交这一行：%v", command, err), exitUsage
@@ -462,7 +463,12 @@ func applicationSubjectOf(result application.FundsResult) string {
 	default:
 		subject += fmt.Sprintf("：本笔 %d", record.Application.AppliedMinor())
 	}
-	if known {
+	switch {
+	case !known:
+	case unapplied < 0:
+		// 外部更正把事实金额改到了已核销合计以下：负数是超核的唯一信号，照实说出来，不截成 0。
+		subject += fmt.Sprintf("；事实 %s 累计超核 %d", record.Application.Fact().String(), -unapplied)
+	default:
 		subject += fmt.Sprintf("；事实 %s 累计未分配 %d", record.Application.Fact().String(), unapplied)
 	}
 	return subject

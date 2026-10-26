@@ -143,6 +143,8 @@ func (double *fundsMappingStoreDouble) Save(
 type applicationStoreDouble struct {
 	records map[string]ports.SettlementApplicationRecord
 	findErr error
+	// beforeSave 在 Save 查重之前跑一次就清掉：在锁后那次查键与落行之间塞进另一位写入方。
+	beforeSave func()
 }
 
 func newApplicationStore() *applicationStoreDouble {
@@ -168,6 +170,11 @@ func (double *applicationStoreDouble) Save(
 	_ context.Context,
 	record ports.SettlementApplicationRecord,
 ) (ports.SettlementApplicationSaveOutcome, error) {
+	if double.beforeSave != nil {
+		hook := double.beforeSave
+		double.beforeSave = nil
+		hook()
+	}
 	if _, exists := double.records[applicationKey(record.Key)]; exists {
 		return ports.SettlementApplicationAlreadyApplied, nil
 	}

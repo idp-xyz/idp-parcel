@@ -104,6 +104,9 @@ func (repository *CustomerReceiptPostings) ReceivableAccountScope(
 	return scope, true, nil
 }
 
+// CustomerDirectionNets 的 P 按（租户、事实）去重：一笔收款映射到同一作用域下的几张对账单或兼映到账户（一对多核销要
+// 先这样映射），钱只到了一次；按映射行求和会把它记成几笔，可用余额凭空多出来。对账单段与账户段先并成一个事实集
+// （UNION 去重）再取链头金额求和。
 func (repository *CustomerReceiptPostings) CustomerDirectionNets(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -123,52 +126,39 @@ func (repository *CustomerReceiptPostings) CustomerDirectionNets(
 		                WHEN 'FUNDS_RETURNED' THEN -v.amount_minor
 		                ELSE 0
 		            END)
-		          FROM settlement_accounting.funds_mapping AS m
-		          JOIN settlement_accounting.customer_statement AS s
-		            ON s.tenant_id = m.tenant_id
-		           AND s.statement_number = m.target_ref
-		          JOIN settlement_accounting.settlement_account AS a
-		            ON a.tenant_id = s.tenant_id
-		           AND a.account_id = s.account_id
+		          FROM (
+		              SELECT m.fact_id
+		                FROM settlement_accounting.funds_mapping AS m
+		                JOIN settlement_accounting.customer_statement AS s
+		                  ON s.tenant_id = m.tenant_id
+		                 AND s.statement_number = m.target_ref
+		                JOIN settlement_accounting.settlement_account AS a
+		                  ON a.tenant_id = s.tenant_id
+		                 AND a.account_id = s.account_id
+		               WHERE m.tenant_id = $1
+		                 AND m.target_kind = 'STATEMENT'
+		                 AND a.direction = 'RECEIVABLE'
+		                 AND a.legal_entity_id = $2
+		                 AND a.account_id = $3
+		                 AND a.currency = $4
+		                 AND s.currency = a.currency
+		              UNION
+		              SELECT m.fact_id
+		                FROM settlement_accounting.funds_mapping AS m
+		                JOIN settlement_accounting.settlement_account AS a
+		                  ON a.tenant_id = m.tenant_id
+		                 AND a.account_id = m.target_ref
+		               WHERE m.tenant_id = $1
+		                 AND m.target_kind = 'ACCOUNT'
+		                 AND a.direction = 'RECEIVABLE'
+		                 AND a.legal_entity_id = $2
+		                 AND a.account_id = $3
+		                 AND a.currency = $4
+		          ) AS mapped
 		          JOIN settlement_accounting.external_funds_fact_version AS v
-		            ON v.tenant_id = m.tenant_id
-		           AND v.fact_id = m.fact_id
-		         WHERE m.tenant_id = $1
-		           AND m.target_kind = 'STATEMENT'
-		           AND a.direction = 'RECEIVABLE'
-		           AND a.legal_entity_id = $2
-		           AND a.account_id = $3
-		           AND a.currency = $4
-		           AND s.currency = a.currency
-		           AND v.currency = a.currency
-		           AND NOT EXISTS (
-		               SELECT 1
-		                 FROM settlement_accounting.external_funds_fact_version AS newer
-		                WHERE newer.tenant_id = v.tenant_id
-		                  AND newer.fact_id = v.fact_id
-		                  AND newer.corrects = v.version)
-		    ), 0)
-		    + COALESCE((
-		        SELECT SUM(
-		            CASE v.kind
-		                WHEN 'RECEIPT_CONFIRMED' THEN v.amount_minor
-		                WHEN 'FUNDS_RETURNED' THEN -v.amount_minor
-		                ELSE 0
-		            END)
-		          FROM settlement_accounting.funds_mapping AS m
-		          JOIN settlement_accounting.settlement_account AS a
-		            ON a.tenant_id = m.tenant_id
-		           AND a.account_id = m.target_ref
-		          JOIN settlement_accounting.external_funds_fact_version AS v
-		            ON v.tenant_id = m.tenant_id
-		           AND v.fact_id = m.fact_id
-		         WHERE m.tenant_id = $1
-		           AND m.target_kind = 'ACCOUNT'
-		           AND a.direction = 'RECEIVABLE'
-		           AND a.legal_entity_id = $2
-		           AND a.account_id = $3
-		           AND a.currency = $4
-		           AND v.currency = a.currency
+		            ON v.tenant_id = $1
+		           AND v.fact_id = mapped.fact_id
+		         WHERE v.currency = $4
 		           AND NOT EXISTS (
 		               SELECT 1
 		                 FROM settlement_accounting.external_funds_fact_version AS newer
