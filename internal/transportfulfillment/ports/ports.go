@@ -324,8 +324,8 @@ const (
 	BookingAlreadyAnswered
 )
 
-// BookingAnswerStore 按订舱键找回并保存承运应答（写入代数同 ADR-0031）。FindByKey 交这次订舱当前的那一份：有定局交定局，
-// 没有定局交候补。
+// BookingAnswerStore 按订舱键找回并保存承运应答（写入代数同 ADR-0031）。FindByKey 交这次订舱当前的那一份，选法见
+// domain.CurrentCarrierAcceptance；名下答复凑不成一段答复史时答包着 domain.ErrBookingAnswersInconsistent 的错误。
 type BookingAnswerStore interface {
 	FindByKey(ctx context.Context, key BookingKey) (BookingAnswerRecord, bool, error)
 	Save(ctx context.Context, record BookingAnswerRecord) (BookingAnswerSaveOutcome, error)
