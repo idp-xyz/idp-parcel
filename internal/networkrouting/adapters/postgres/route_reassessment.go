@@ -389,8 +389,9 @@ func (repository *RouteReassessments) LatestTriggerAt(
 	return latest.UTC(), true, nil
 }
 
-// FormedPlans 交回这一判断键在册复核里形成过的全部新计划。按触发业务时间、处理时刻排，迁移 0022 之前没有业务时间的行
-// 排在前面；先后只为读来可复现，调用方不据它判哪份当前有效。
+// FormedPlans 交回这一判断键在册复核里形成过的全部新计划，并读授权改路决定册的新计划（ADR-0284 决定五）：决定形成的计划同样
+// 在路由历史里，下一次复核要从它起判。按业务时间（复核取触发的业务时间，决定取决定时刻）、处理时刻排，迁移 0022 之前没有业务
+// 时间的行排在前面；先后只为读来可复现，调用方不据它判哪份当前有效。
 func (repository *RouteReassessments) FormedPlans(
 	ctx context.Context,
 	key domain.InitialRouteJudgmentKey,
@@ -401,15 +402,25 @@ func (repository *RouteReassessments) FormedPlans(
 	}
 	rows, err := querier.Query(ctx,
 		`SELECT new_plan
-		   FROM network_routing.route_reassessment
-		  WHERE tenant_id = $1
-		    AND customer_account_id = $2
-		    AND shipment_request_id = $3
-		    AND acceptance_baseline = $4
-		    AND declared_parcel_id = $5
-		    AND service_purpose = $6
-		    AND new_plan IS NOT NULL
-		  ORDER BY trigger_occurred_at NULLS FIRST, reassessed_at, correlation_id`,
+		   FROM (SELECT new_plan, trigger_occurred_at AS business_at, reassessed_at AS processed_at, correlation_id AS ref
+		           FROM network_routing.route_reassessment
+		          WHERE tenant_id = $1
+		            AND customer_account_id = $2
+		            AND shipment_request_id = $3
+		            AND acceptance_baseline = $4
+		            AND declared_parcel_id = $5
+		            AND service_purpose = $6
+		            AND new_plan IS NOT NULL
+		         UNION ALL
+		         SELECT new_plan, decided_at, decided_at, suggestion_correlation_id
+		           FROM network_routing.authorized_reroute_decision
+		          WHERE tenant_id = $1
+		            AND customer_account_id = $2
+		            AND shipment_request_id = $3
+		            AND acceptance_baseline = $4
+		            AND declared_parcel_id = $5
+		            AND service_purpose = $6) formed
+		  ORDER BY business_at NULLS FIRST, processed_at, ref`,
 		key.TenantID.String(),
 		key.CustomerAccountID.String(),
 		key.ShipmentRequestID.String(),

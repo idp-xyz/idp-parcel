@@ -186,6 +186,15 @@ func NewAuthorizedRoleReference(value string) (AuthorizedRoleReference, error) {
 	return AuthorizedRoleReference{required}, err
 }
 
+// RerouteDecisionBasisReference 是授权角色作改路决定所凭的依据引用（审批单、工单、来电记录一类），由决定方给出。产品只持
+// 引用、不解释内容；人工决定要保存原因（UC-NR-003「权限、隔离与审计」），没有依据的人工改路与拍脑袋分不开。
+type RerouteDecisionBasisReference struct{ requiredValue }
+
+func NewRerouteDecisionBasisReference(value string) (RerouteDecisionBasisReference, error) {
+	required, err := newRequiredValue("reroute decision basis reference", value)
+	return RerouteDecisionBasisReference{required}, err
+}
+
 // RerouteSuggestion 是自动条件不成立时的候选处置意见。它是纯记录：建议本身不修改当前
 // 有效路由（CONTEXT 语言），没有任何状态转移长在它身上。
 type RerouteSuggestion struct {

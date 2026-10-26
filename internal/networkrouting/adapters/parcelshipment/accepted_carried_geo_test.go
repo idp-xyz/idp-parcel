@@ -7,6 +7,7 @@ import (
 
 	adapter "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/parcelshipment"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
+	nrports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
@@ -176,5 +177,40 @@ func TestAnUnreadableShipmentAnswerIsRetryableAndAContradictionIsLoud(t *testing
 func TestTheGeoSourceNeedsThePSView(t *testing.T) {
 	if _, err := adapter.NewAcceptedCarriedGeoSource(nil); err == nil {
 		t.Fatal("nil 读口应在构造期被拒")
+	}
+}
+
+// Covers: ADR-0284 决定三——授权改路决定经同一个适配器取受理基线那一版投影：判断键各维与投影与复核那一路逐格相同；读不动答
+// 端口的读不动哨兵（决定编排据它答未决），歧义与自相矛盾照旧响亮，不挂那个哨兵。
+func TestTheRerouteDecisionReadsTheSameBaselineGeoThroughThePort(t *testing.T) {
+	request := acceptedShipmentRequestDeclaring(t, declaredCNToSG(t))
+	source := geoSourceOver(t, &baselineGeoViewDouble{projection: baselineGeoOf(t, request), found: true})
+	tenant, parcel := value(t, nrdomain.NewTenantID, "tenant-1"), value(t, nrdomain.NewDeclaredParcelID, "parcel-1")
+
+	carried, _, _ := source.LoadAcceptedCarriedGeo(context.Background(), tenant, parcel)
+	baseline, found, err := source.LoadAcceptanceBaselineGeo(context.Background(), tenant, parcel)
+	if err != nil || !found {
+		t.Fatalf("found=%v err=%v", found, err)
+	}
+	if baseline.CustomerAccountID != carried.CustomerAccountID || baseline.ShipmentRequestID != carried.ShipmentRequestID ||
+		baseline.AcceptanceBaseline != carried.AcceptanceBaseline || baseline.Geo.ContentDigest() != carried.Geo.ContentDigest() {
+		t.Fatalf("端口交回 %+v，复核那一路交回 %+v", baseline, carried)
+	}
+
+	if _, found, err := geoSourceOver(t, &baselineGeoViewDouble{}).LoadAcceptanceBaselineGeo(context.Background(), tenant, parcel); err != nil || found {
+		t.Fatalf("不是当前已接受包裹：found=%v err=%v", found, err)
+	}
+	for name, tc := range map[string]struct {
+		err        error
+		unreadable bool
+	}{
+		"读口报错":     {errors.New("pool closed"), true},
+		"反查歧义":     {psdomain.ErrAmbiguousParcelTarget, false},
+		"受理基线自相矛盾": {psdomain.ErrAcceptanceBaselineInconsistent, false},
+	} {
+		_, _, err := geoSourceOver(t, &baselineGeoViewDouble{err: tc.err}).LoadAcceptanceBaselineGeo(context.Background(), tenant, parcel)
+		if err == nil || errors.Is(err, nrports.ErrAcceptanceBaselineGeoUnreadable) != tc.unreadable {
+			t.Fatalf("%s：err = %v, want 读不动哨兵 %v", name, err, tc.unreadable)
+		}
 	}
 }

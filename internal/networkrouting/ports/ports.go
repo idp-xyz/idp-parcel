@@ -702,8 +702,8 @@ type ReassessmentStore interface {
 	// 实现须把「读最近一次 → 判 → 落复核」按判断键串行到事务结束（ADR-0235）：两路触发在两笔并发事务里各自读不到
 	// 对方尚未提交的复核，会双双判过，较早的那次照样落在较新的之后。
 	LatestTriggerAt(ctx context.Context, key domain.InitialRouteJudgmentKey) (time.Time, bool, error)
-	// FormedPlans 交回这一判断键在册复核里形成过的全部新计划（`已改路`或`首个计划`那一行），按触发业务时间排，只为读来
-	// 可复现，先后不作判断依据。复核据它与初始路由定判断起点，所以要在 LatestTriggerAt 取的判断键锁里读：锁外读到的起点，
+	// FormedPlans 交回这一判断键在册复核里形成过的全部新计划（`已改路`或`首个计划`那一行），连同授权改路决定形成的新计划
+	// （ADR-0284 决定五），按业务时间排，只为读来可复现，先后不作判断依据。复核据它与初始路由定判断起点，所以要在 LatestTriggerAt 取的判断键锁里读：锁外读到的起点，
 	// 落册之前可能已被另一次复核换掉。在册计划重建不出来时交 ErrStoredRouteRecordUnreadable。
 	FormedPlans(ctx context.Context, key domain.InitialRouteJudgmentKey) ([]domain.InitialRoutePlan, error)
 }

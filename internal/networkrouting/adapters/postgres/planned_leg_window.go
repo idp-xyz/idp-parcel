@@ -15,7 +15,7 @@ import (
 //
 // 它不另存任何东西，读的是两张判断库里已有的计划本体：初始路由判断行的 plan 列，与复核判断行的
 // new_plan 列（改路成的新版本与复核时首次形成的计划都住在那里，见 route_reassessment.go 自注「新计划
-// 归 new_plan 列独家拥有」）。两处都按各判断口现有的装载纪律——rebuildPlan 经 FormInitialRoutePlan
+// 归 new_plan 列独家拥有」）；授权改路决定形成的计划住在决定册的 new_plan 列（ADR-0284 决定五）。各处都按各判断口现有的装载纪律——rebuildPlan 经 FormInitialRoutePlan
 // 重建整份计划——之后再按序位取段：段链连续、被选候选合格在读回处复验，一次坏写入在这里暴露，而不是
 // 变成一个看起来合法的窗口。本口**不从 jsonb 里抠字段冒充窗口**（RoutePlanCatalogueRead 同一句纪律）；
 // 复核行那条语句里的 `new_plan->>'version'` 只用来**定位行**——新计划的版本标识没有平铺列，它是那一
@@ -35,7 +35,7 @@ func NewPlannedLegWindows(db *bentopg.DB) (*PlannedLegWindows, error) {
 var _ ports.PlannedLegWindowRead = (*PlannedLegWindows)(nil)
 
 // LoadPlannedLegWindow 先在本租户的初始路由判断行按 plan_version 找，找不到再在本租户的复核判断行
-// 的 new_plan 列里找同版本的计划；两处都零行、或版本对上而序位越出段链，答 found=false 且 err=nil
+// 的 new_plan 列里找同版本的计划，再找不到去决定册按平铺的计划版本找；都零行、或版本对上而序位越出段链，答 found=false 且 err=nil
 // ——「没找到」是业务答案不是错误。租户条件进每条语句（ADR-0003）：他租户的同名版本对本租户零行，
 // 不区分「不存在」与「属于另一个租户」。取的是引用所钉的那一版，不看适用性（ADR-0131 决定二）。
 func (repository *PlannedLegWindows) LoadPlannedLegWindow(
@@ -59,6 +59,13 @@ func (repository *PlannedLegWindows) LoadPlannedLegWindow(
 		}
 	}
 	if !found {
+		// 授权改路决定形成的计划不住在复核行里（ADR-0284 决定五），段引用同样可能指向它。
+		plan, found, err = planByVersion(ctx, querier, tenant, reference.Version(), decidedPlanByVersionSQL, "authorized reroute decision")
+		if err != nil {
+			return domain.PlannedTimeWindow{}, false, fmt.Errorf("load planned leg window: %w", err)
+		}
+	}
+	if !found {
 		return domain.PlannedTimeWindow{}, false, nil
 	}
 
@@ -69,7 +76,7 @@ func (repository *PlannedLegWindows) LoadPlannedLegWindow(
 	return leg.Window(), true, nil
 }
 
-// 两条语句交回同一列面（判断键五列 + 计划 jsonb），差别只在计划住哪一列、按哪个键定位。
+// 三条语句交回同一列面（判断键五列 + 计划 jsonb），差别只在计划住哪一册哪一列、按哪个键定位。
 const (
 	initialPlanByVersionSQL = `
 		SELECT customer_account_id, shipment_request_id,
@@ -87,6 +94,14 @@ const (
 		 WHERE tenant_id = $1
 		   AND new_plan IS NOT NULL
 		   AND new_plan->>'version' = $2`
+
+	decidedPlanByVersionSQL = `
+		SELECT customer_account_id, shipment_request_id,
+		       acceptance_baseline, declared_parcel_id, service_purpose,
+		       new_plan
+		  FROM network_routing.authorized_reroute_decision
+		 WHERE tenant_id = $1
+		   AND new_plan_version = $2`
 )
 
 // planByVersion 在一张判断库里按版本定位到恰一行，重建判断键与整份计划。多于一行是签发方唯一性

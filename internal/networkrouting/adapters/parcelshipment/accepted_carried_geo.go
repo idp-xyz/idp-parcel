@@ -7,6 +7,7 @@ import (
 	"time"
 
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
+	nrports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
@@ -36,7 +37,8 @@ type AcceptedCarriedGeo struct {
 }
 
 // AcceptedCarriedGeoSource 是受理之后、不由 PS 信封触发的复核取所携地理投影的地方（ADR-0215，部分停用 ADR-0075
-// 决定一）。交接触发的复核没有 PS 的请求可随带投影，所以由本适配器在消费侧按（租户，包裹）去读。
+// 决定一），授权改路决定同此（ADR-0284 决定三）。交接触发的复核与操作者发起的决定都没有 PS 的请求可随带投影，所以由本适配器
+// 在消费侧按（租户，包裹）去读。
 //
 // 读的是 PS 的受理基线地理投影读口（ADR-0301），不是委托聚合：这一路经手的只有判断键要的几格引用、接受时刻与地理维，
 // 聚合的其余部分（申报测量、接受决定与商业依据、接受后的资料修订等）不进来。读的是受理基线那一版提交，不是当前提交
@@ -123,4 +125,28 @@ func geoFromProjection(projection psdomain.CarriedGeoProjection) nrdomain.GeoRes
 		nrdomain.NewGeoResolutionSide(senderCountry, hasSenderCountry, senderPostal, hasSenderPostal),
 		nrdomain.NewGeoResolutionSide(deliveryCountry, hasDeliveryCountry, deliveryPostal, hasDeliveryPostal),
 	)
+}
+
+var _ nrports.AcceptanceBaselineGeoSource = (*AcceptedCarriedGeoSource)(nil)
+
+// LoadAcceptanceBaselineGeo 是授权改路决定取所携地理投影的那一口（ADR-0284 决定三）：与复核那一路同一次读、同一份投影，
+// 只换成端口的形状。读不动挂端口的读不动哨兵，决定编排据它答未决；歧义、自相矛盾与译不出照原样上抛，重发不会变。
+func (source *AcceptedCarriedGeoSource) LoadAcceptanceBaselineGeo(
+	ctx context.Context,
+	tenant nrdomain.TenantID,
+	parcel nrdomain.DeclaredParcelID,
+) (nrports.AcceptanceBaselineGeo, bool, error) {
+	accepted, found, err := source.LoadAcceptedCarriedGeo(ctx, tenant, parcel)
+	if errors.Is(err, ErrAcceptedParcelUnreadable) {
+		return nrports.AcceptanceBaselineGeo{}, false, fmt.Errorf("%w: %w", nrports.ErrAcceptanceBaselineGeoUnreadable, err)
+	}
+	if err != nil || !found {
+		return nrports.AcceptanceBaselineGeo{}, false, err
+	}
+	return nrports.AcceptanceBaselineGeo{
+		CustomerAccountID:  accepted.CustomerAccountID,
+		ShipmentRequestID:  accepted.ShipmentRequestID,
+		AcceptanceBaseline: accepted.AcceptanceBaseline,
+		Geo:                accepted.Geo,
+	}, true, nil
 }

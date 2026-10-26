@@ -940,6 +940,14 @@ func (handler *ReassessRouteHandler) reassessNoRoute(
 func (handler *ReassessRouteHandler) evaluateCandidates(
 	evidence ports.InitialRouteEvidence,
 ) ([]domain.RouteCandidate, bool, error) {
+	return evaluateRouteCandidates(evidence)
+}
+
+// evaluateRouteCandidates 是复核 6B 与授权改路决定重判共用的评估管线：两处判的是同一份证据上的同一个候选空间，层次与先后
+// 不能两处各写一份。
+func evaluateRouteCandidates(
+	evidence ports.InitialRouteEvidence,
+) ([]domain.RouteCandidate, bool, error) {
 	candidates, _, err := domain.EvaluateServiceAreas(evidence.ServiceAreas)
 	if err != nil {
 		return nil, false, fmt.Errorf("evaluate service areas: %w", err)
@@ -1046,13 +1054,25 @@ func (handler *ReassessRouteHandler) candidateCosts(
 	evidence ports.InitialRouteEvidence,
 	carried ports.RequestCarriedContent,
 ) (ports.InitialRouteEvidence, ports.RouteCandidateCosts, bool, error) {
+	return loadRouteCandidateCosts(ctx, handler.deps.Costs, key, evidence, carried)
+}
+
+// loadRouteCandidateCosts 是 candidateCosts 的本体，授权改路决定组计划时同一口取成本（ADR-0284 决定三）：没接取数侧、取数侧
+// 答用不了与读不回三格的处置两处相同。
+func loadRouteCandidateCosts(
+	ctx context.Context,
+	source ports.RouteCandidateCostSource,
+	key domain.InitialRouteJudgmentKey,
+	evidence ports.InitialRouteEvidence,
+	carried ports.RequestCarriedContent,
+) (ports.InitialRouteEvidence, ports.RouteCandidateCosts, bool, error) {
 	if evidence.RankingForm == domain.RankingFormUndeclared {
 		return evidence, ports.RouteCandidateCosts{}, false, nil
 	}
-	if handler.deps.Costs == nil {
+	if source == nil {
 		return evidence, ports.RouteCandidateCosts{}, false, ErrReassessCostSourceNotConfigured
 	}
-	costs, err := handler.deps.Costs.LoadCandidateCosts(ctx, key, evidence, carried)
+	costs, err := source.LoadCandidateCosts(ctx, key, evidence, carried)
 	if errors.Is(err, ports.ErrRouteCostSourceNotConfigured) {
 		return evidence, ports.RouteCandidateCosts{}, false, fmt.Errorf("%w: %w", ErrReassessCostSourceNotConfigured, err)
 	}

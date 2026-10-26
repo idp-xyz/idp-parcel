@@ -121,6 +121,8 @@ type reassessmentStoreDouble struct {
 	// onLatest 在取判断键锁那一刻插进来，演锁前另一笔事务刚提交的东西。
 	onLatest func()
 	saved    int
+	// decided 是授权改路决定册里同判断键的新计划：真库的 FormedPlans 并读那一册（ADR-0284 决定五），替身由决定册替身接上。
+	decided func(domain.InitialRouteJudgmentKey) []domain.InitialRoutePlan
 }
 
 func newReassessmentStore() *reassessmentStoreDouble {
@@ -167,6 +169,9 @@ func (double *reassessmentStoreDouble) FormedPlans(
 	plans := make([]domain.InitialRoutePlan, 0, len(formed))
 	for _, record := range formed {
 		plans = append(plans, record.NewPlan)
+	}
+	if double.decided != nil {
+		plans = append(plans, double.decided(key)...)
 	}
 	return plans, nil
 }

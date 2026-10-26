@@ -1,6 +1,9 @@
 package domain
 
-import "errors"
+import (
+	"errors"
+	"strings"
+)
 
 var ErrInvalidHardConstraintFinding = errors.New("network routing: invalid hard constraint finding")
 
@@ -100,6 +103,16 @@ func (finding HardConstraintFinding) Outcome() HardConstraintOutcome {
 	return finding.outcome
 }
 
+// restrictionReasonPrefix 是硬约束那一层留下的淘汰原因的前缀：原因串的其余部分是限制引用。授权改路决定据它把「被有效硬限制
+// 淘汰」与别的层次的淘汰分开答（ADR-0284 决定二），续办不同：限制只能由来源责任方解除。
+const restrictionReasonPrefix = "HARD_CONSTRAINT_RESTRICTION/"
+
+// EliminatedByRestriction 答这条候选是不是被有效硬限制淘汰的。原因串只由 EvaluateHardConstraints 以本前缀写出，别的层次的原因
+// 不以它起头。
+func (candidate RouteCandidate) EliminatedByRestriction() bool {
+	return candidate.outcome == CandidateEliminated && strings.HasPrefix(candidate.reason.String(), restrictionReasonPrefix)
+}
+
 // EvaluateHardConstraints 执行候选评估层次 5 与 `AT-NR-031`：
 //
 //   - 适用限制确定性淘汰，原因携带限制来源引用——不淘汰整次判断，只淘汰这条候选，
@@ -140,7 +153,7 @@ func EvaluateHardConstraints(
 			if candidate.outcome == CandidateEliminated {
 				continue
 			}
-			reason, err := NewCandidateReason("HARD_CONSTRAINT_RESTRICTION/" + finding.restriction.String())
+			reason, err := NewCandidateReason(restrictionReasonPrefix + finding.restriction.String())
 			if err != nil {
 				return nil, nil, err
 			}
