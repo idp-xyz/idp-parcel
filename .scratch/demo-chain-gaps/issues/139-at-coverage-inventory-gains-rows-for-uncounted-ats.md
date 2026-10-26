@@ -1,7 +1,7 @@
 # 139 AT 盘点约 160 个 AT 没有分桶表行，总览低报
 
 Category: bug
-Status: in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg139` tip `1f22fbb23`（票面那一笔在其上；见文末「完成记录」）。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，分支 `claude-dcg139`（worktree `idp-parcel-dcg139`）。此前 ready-for-agent——2026-10-20 代决复核立（文档与工具），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: in-progress——2026-10-26 评审无阻断、修订轮完，待进 main，分支 `claude-dcg139` tip `b0e523467`（已 rebase 到 origin/main `e4bd1b150`；票面那一笔在其上；见文末「评审记录」「修订轮」）。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg139` tip `1f22fbb23`（rebase 前；票面那一笔在其上；见文末「完成记录」）。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，分支 `claude-dcg139`（worktree `idp-parcel-dcg139`）。此前 ready-for-agent——2026-10-20 代决复核立（文档与工具），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 M23；infra-speed/03 越权风险点 4
 
@@ -59,3 +59,52 @@ Blocked by: 无
 - 带 DSN `go test -count=1 ./tools/... ./internal/architecture/...` 全过（含 PG 环境变量；本票不动任何真库包与 `cmd/`，没有真库用例受影响）。
 - `go run ./tools/adr-index -check` 退 0；`go run ./tools/at-coverage-counts -check` 只报生成物过期（预期，作者不重算）。拿 `claude-dcg127` 远端 tip 的 `docs/application` 与盘点试跑：列出缺行 163 个（本票 159 个加 `AT-TF-331`–`334`）、退出码 2。
 - 在会话 scratchpad 的一份导出副本上试跑生成器（不入库），推送方重算后总览应为：①618→752、②224→249、③④不变、合计 1415→1574；NO 78→106、NR 80→93、PC 46→62、PS 102→114、SA 201→210、TF 227→308。
+
+## 评审记录（2026-10-26，tops-20 隔离子代理，钉 `e18cf2ef1`）
+
+照抄评审原文（原文的二级标题在此降为三级）：
+
+评审 ← tops-20 隔离子代理 · 钉 `e18cf2ef1` · 00:52
+
+结论：两轴无阻断；非阻断 4 条（含两处行注）加两条参考。
+
+### Standards
+阻断：无。
+非阻断：
+- S1 单一权威：「方法与口径」新加「表行即计数」一条里「新行按上面各桶的判据归：…机制在而测试未点名入②…机制未实现入④」改写了同节①–④定义且意思不同——原②只收「机制面较深的上下文（PS/PC/NO/NR/TF/SA）」，原④是「起步期上下文（CC/VE 为主）」；新句按「机制在不在」分。一条机制在、测试没点名的 CC 或 VE AT 按两句会进不同的桶（今天②里 CC、VE 两列都是 0）。同一段改写又抄进 `coverage.go` 的 `CoverageError.Error()` 补法。建议：规则句只写「按上面各桶判据归」；若本意改判据，写明取代哪几句。报文只指向「方法与口径」，不再复述。
+- S2：`ci.yml`「ADR index and AT coverage counts are current」一步注释写「它守的是推送方漏了那一步」，现在不全——缺行也让这一门退 2 变红。该补半句；workflow 第 1 步要不要加「立号同笔补行」由 owner 定（规则现只写在 .scratch 盘点里）。
+无发现：红线；注释中文；计数锚 SHA；无新 AT、ADR、迁移号。
+
+### Spec
+阻断：无。M23 两项修法都落了。
+非阻断：
+- P1 `AT-PC-049` 行注不准：写「没有专门用例」，但 `internal/partycommercial/adapters/postgres/authority_closure_test.go` 的 `TestARetiredAuthorizationRuleVersionLeavesTheGrantBook` 在 Covers 句里明写「退役不追溯已作出的那一次裁定」并有断言（以 042/059 名义、只断言内存值，「判不准」仍成立）。桶不动，行注指向这个用例。
+- P2 `AT-PC-050` 行注漏了现成用例：UC 三格已由 `internal/partycommercial/domain/requested_service_product_resolution_test.go` 的 `TestADeclaredServiceProductNarrowsTwoProductsInOneScopeToTheDeclaredOne`、`TestWithoutADeclaredServiceProductTwoProductsInOneScopeStillConflict`、`TestADeclaredServiceProductWithoutAPublishedVersionIsNoApplicableBasis` 逐格钉住，只差点名。
+- P3 用例两种回退抓不到：把 `declaredRow` 放宽成「首格以 AT 号开头」（去掉尾部 `\s*\|`）或「表格行里第一个 AT 号」，`go test` 仍全绿——夹具里并列首格头一个号 `AT-PS-001` 本来就立过号，也没有「AT 号不在首格、又没在别处立号」的行。另三种回退（短路 Reconcile、不报多出行、缺行错误包成 ErrStale）都会红。
+- P4 首格口径残余：交接表首格单独回引已改掉的旧号会被当立号、要求补行（探针：UC-PC-003 加一行 `` `AT-PC-999` ``，工具退 2 报缺行）。报文只说「补一行」，没提「那一行不是立号就改首格」。是会响的方向；今天 `AT-PC-042`、`AT-PS-108` 回引的都是本号，不误判。
+参考：`AT-TF-098` 是新补 134 行里唯一不在 Covers 句点名的（只在说明句括注），所引用例只钉「登记入队与保序」一半，行里没注半边——与「半边只照点名句注」一致。
+无发现：工具守卫是票面之外的代决，已披露、回退办法写清，站得住。
+
+### 取证（脚本在 scratchpad/rev139/）
+完整性：`e18cf2ef1` 上立号 1574 = 表行 1574（①752、②249、③139、④434），两向差 0，无重复；diff 无 `-` 行；新增 159 行插在按号位置；①里两处乱序（CC-436→156、TF-265→226）是旧有。归桶：① 134 行全脚本核过（319 处 `文件::函数` 都存在、每 AT 至少一函数字面点名）；② 25 行测试无任何点名，抽核 PC-037/039/040/041/043/044/046/047/049/050、PS-099、SA-182–187、TF-101/102/104/144，用例与机制都在。无错归。工具：go test/vet/gofmt 干净；基线盘点+tip UC 写回与 -check 都退 2、文件不变、报文列 159 号与 UC 文件并给补法；tip 盘点写回退 0、合计 1574。在途分支各自立号缺行为 0；与 origin/main 合并时文末两条追记相邻冲突，两条都留即可。
+
+## 修订轮（2026-10-26，作者子代理，同一分支 `claude-dcg139`）
+
+评审无阻断，非阻断 S1、S2、P1–P4 全收，一笔 `b0e523467`（rebase 前 `ad8da9dd3`）：
+
+| 条 | 改了什么 |
+|---|---|
+| S1 | 盘点「方法与口径」的「表行即计数」一条去掉对①–④判据的复述，只写「新行按上面各桶的判据归，判不准的在行内注明」，同节①–④定义一字未动；`CoverageError.Error()` 的补法同样只指向「方法与口径」的分桶判据，不复述。本票 25 条②照原②判据（PS/PC/SA/TF、未被测试引用、行文无实例与闸门关键词）也落在②，归桶不变 |
+| S2 | `.github/workflows/ci.yml`「ADR index and AT coverage counts are current」一步的注释补半句：UC 立了号而盘点分桶表缺行或多行时 `at-coverage-counts` 退 2，这一门同样红，要补表行。`docs/agents/workflow.md` 不动：**是否在「进 main 的步骤」第 1 步加「立号同笔补行」留 owner 定**（规则今天只写在 `.scratch/at-coverage-inventory.md`「方法与口径」） |
+| P1 | `AT-PC-049` 行注改指 postgres `authority_closure_test.go::TestARetiredAuthorizationRuleVersionLeavesTheGrantBook`（Covers 句写「退役不追溯已作出的那一次裁定」并有断言，但以 `AT-PC-042`、`AT-PC-059` 名义、只断言内存值），仍注判不准，桶不动 |
+| P2 | `AT-PC-050` 行注改指 domain `requested_service_product_resolution_test.go` 逐格钉住三格的三条用例，只差点名。核过：三条用例与所在文件都没有 `AT-*` 字样，按①「测试点名」的口径不进①，桶不动 |
+| P3 | `TestDeclaredATsTakesOnlyTheFirstCellOfATableRow` 的夹具：并列首格改为以未立号的 `AT-PS-901` 开头，加「首格号后带字」（`AT-PS-903` 一行）与「首格不是号、后格出现未立号的 `AT-PS-904`」两行。把 `declaredRow` 临时放宽成去掉首格尾部 `\s*\|`、或取表格行里第一个 AT 号，该用例都红（分别多收 901/903 与 901/903/904），复原后全绿 |
+| P4 | 报文补法加一句：UC 里那一行首格只是回引别处的号、不是立号的，改首格写法（例如写成「`AT-X-001` 一行」），不补行；用例断言报文含这一句与「方法与口径」 |
+
+**rebase 到 origin/main `e4bd1b150`**（main 期间进了票 147、17、142/143、文档批、127/48/167 等，28 笔）：只在盘点文末追记处冲突一处——main 一侧新增「票 docs-consistency/code/01」「票 demo-chain-gaps/127、48、167」两条追记，本票一侧新增本票追记；两边都留，main 的两条在前、本票的在后。表行区没有冲突，main 新补的 `AT-TF-331`–`334` 等行与本票插入的 159 行都在。rebase 后本票各笔：`6ceded3ea`→`045cf5cb8`、`1f22fbb23`→`762e37ef4`、`e18cf2ef1`→`8c9c014ea`、修订 `ad8da9dd3`→`b0e523467`；相对 origin/main 的盘点 diff 没有 `-` 行。
+
+**rebase 后的自验**（tip `b0e523467`）：
+
+- `go run ./tools/at-coverage-counts -check` 只报「生成物与文件不一致」（预期，作者不重算），不报缺行或多行；一次性脚本两向复核：立号 1578 = 表行 1578，两向差 0。
+- `go build ./...`、`go vet ./tools/...` 过，`gofmt -l tools/` 空；`go test -count=1 ./tools/...` 全绿。
+- 各桶行序：除 ①里两处旧有乱序（CC-436→156、TF-265→226）外按号排。
