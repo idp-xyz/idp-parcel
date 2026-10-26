@@ -19,7 +19,7 @@ var ErrUnexpectedFundsSave = errors.New("settlement accounting: unexpected funds
 
 // ErrPostingNotAdvanced 说明在作用域锁下按锁后时刻推进运营余额或信用状况，登记却答未推进：登记上已有更晚的截至时点，
 // 只可能是别的进程的时钟在前头。静默当成功会让这次映射或核销答成功而余额停在旧值，所以整笔回滚、交给重试。
-var ErrPostingNotAdvanced = errors.New("settlement accounting: posting did not advance under the scope lock")
+var ErrPostingNotAdvanced = errors.New("settlement accounting: posting did not advance under the scope lock; a later as-of is already registered, check clock skew between processes")
 
 // FundsOutcome 是外部资金映射与核销编排的应用处理结果。四个业务负向格（ADR-0029）：
 // 失败付款不可映射、跨币种无换算不核销、分配失衡（部分/超额各自表达）、核销已撤销
@@ -930,7 +930,8 @@ func (handler *MapExternalFundsHandler) recomputeScope(
 // admitClaimTargets 按目标逐条判本次核销分给客户赔付、追偿认可两格的合计能不能落：在调用方的事务里先锁住那条金额，
 // 再读它的已核销净额——锁与随后的 Save 同一笔，并发核销同一条金额时后到的那笔读到的已核销含前一笔。锁在事实之后、
 // 作用域之前取，次序取 ClaimTargetDemands 给的顺序。金额本体只读不写：核销改的是核销状态与未分配余额，不是金额。
-// 第二值为真即已作答，调用方原样交回、什么都不落；error 是那一条账不平（ErrInvalidClaimTargetStanding），整笔回滚。
+// 交回的 bool 为真即已作答，调用方把交回的 FundsResult 原样交出、什么都不落；交回的 error 是那一条账不平
+// （ErrInvalidClaimTargetStanding），整笔回滚。
 func (handler *MapExternalFundsHandler) admitClaimTargets(
 	ctx context.Context,
 	tenant domain.TenantID,

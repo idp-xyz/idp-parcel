@@ -133,3 +133,7 @@ N1、N3、N4、N5、N8 记在 code/12 同名一节。本票这边：
   3. N4 去重去掉（`UNION ALL`）→ 一对多映射用例红，入账余额 20000；
   4. N7 撤销去掉锁后再读 → 并发撤销用例 `-count=3` 三次全红，后到的那路答`未受理`；
   5. N6 落行竞态不比内容 → 应用层用例红；N5 把账不平改回分配失衡 → 应用层与 CLI 两条红。
+
+## 第三轮轻评审（2026-10-26，协调方：可合入，无阻断）
+
+记录两条，见 code/12 同名一节：跨作用域重复计入 P 立 [code/94](./94-a-funds-fact-mapped-into-several-scopes-is-posted-in-full-in-each.md)（R1）；潜伏卡死那条越权风险点已在 [product-strategy-boundary/22](../../product-strategy-boundary/issues/22-settlement-orchestrations-assembly-and-triggers.md)「要裁的」回指。

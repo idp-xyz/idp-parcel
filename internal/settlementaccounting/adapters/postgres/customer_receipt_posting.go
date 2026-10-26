@@ -105,8 +105,9 @@ func (repository *CustomerReceiptPostings) ReceivableAccountScope(
 }
 
 // CustomerDirectionNets 的 P 按（租户、事实）去重：一笔收款映射到同一作用域下的几张对账单或兼映到账户（一对多核销要
-// 先这样映射），钱只到了一次；按映射行求和会把它记成几笔，可用余额凭空多出来。对账单段与账户段先并成一个事实集
-// （UNION 去重）再取链头金额求和。
+// 先这样映射），在这个作用域里只算一次；按映射行求和会把它记成几笔，可用余额凭空多出来。对账单段与账户段先并成一个
+// 事实集（UNION 去重）再取链头金额求和。去重只在本作用域之内：同一条事实映到别的作用域时，每个作用域都按全额记入，
+// 钱并没有到两次——这一格未修，见票 docs-consistency/code/94。
 func (repository *CustomerReceiptPostings) CustomerDirectionNets(
 	ctx context.Context,
 	tenant domain.TenantID,

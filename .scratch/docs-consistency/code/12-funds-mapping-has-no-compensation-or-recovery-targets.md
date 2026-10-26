@@ -77,6 +77,7 @@ M：映射目标加两格（赔付义务、追偿应收），核销余额按目�
 6. **索赔费用退款也收进 `CUSTOMER_COMPENSATION`**（代决 3）：若它已经对账单贷记给客户，再映射一笔现金付款就付了两遍；映射要显式依据，产品不交叉核对账单纳入。
 7. **未核销面的求和扫该租户全部未撤销核销的 jsonb 分配**，没有索引；与 `CustomerDirectionNets` 同形，量大时要加。
 8. **外部更正把事实金额改到已核销合计以下**（第二轮评审 N3）：更正照采，不读合计、不标超核、不重算它映射到的作用域；只有读面上为负的累计未分配与 CLI 的「累计超核」可见，对同一事实再核一律答分配失衡。核销与更正在事实身份行上排队只保证核销读到更正后的金额。去向 [code/92](./92-a-funds-fact-correction-below-its-applied-total-is-adopted-silently.md)。
+9. **同一条资金事实映射到多个作用域时，每个作用域都按全额记入入账余额**（第三轮轻评审 N-a，既有缺陷，与代决 10 同类）。代决 10 的去重只在一个作用域之内。一笔 5000 的收款映到 acct-1 下的 stmt-1，又映到账户 acct-2，全部核到 stmt-1 之后，acct-2 那个作用域的可用余额仍凭空多 5000，没有提示。碰钱且静默，去向 [code/94](./94-a-funds-fact-mapped-into-several-scopes-is-posted-in-full-in-each.md)（R1）。
 
 ### 新票
 
@@ -139,3 +140,10 @@ M：映射目标加两格（赔付义务、追偿应收），核销余额按目�
 - **N5**：金额本体账不平与作用域账不平续办相同，并成一格。编排对前者返包着 `ErrInvalidClaimTargetStanding` 的 error，`execute` 与 `ErrNegativeConfirmedUnsettled` 同一行归冲突格 2。
 - **N6、N7**：见 code/46 第三轮。
 - **N8**：UC-SA-005 `AT-SA-112` 补半句——原收款核销在两格金额本体上时，退回事实不映射、不核销到这两格，停在未分配，由本用例撤销那一笔原核销。
+
+## 第三轮轻评审（2026-10-26，协调方：可合入，无阻断）
+
+合入前两条记录，只改票面与注释、不改逻辑：
+- **N-a**：跨作用域重复计入 P 立 [code/94](./94-a-funds-fact-mapped-into-several-scopes-is-posted-in-full-in-each.md)（R1），越权风险点补第 9 条。`CustomerDirectionNets` 在端口与适配器上的头注改准：去重只在本作用域之内。
+- **N-b**：[product-strategy-boundary/22](../../product-strategy-boundary/issues/22-settlement-orchestrations-assembly-and-triggers.md)「要裁的」加一行，回指 code/46 越权风险点「潜伏卡死：确认后的贷记调整让作用域账不平之后，撤销也撤不动」。
+- **可选两条也做了**：`admitClaimTargets` 头注改为按返回值指；`ErrPostingNotAdvanced` 的文案补一句与跨进程时钟有关。
