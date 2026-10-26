@@ -119,9 +119,6 @@ const (
 	ChargeRequestMalformed
 	ChargeFactNotFound
 	AttemptDidNotFail
-	// AttemptResultPendingConfirmation 与 AttemptDidNotFail 分格：那一格说这次没有失败、不必再登；这一格说还不知道失败
-	// 没有，等那件对象的结果以更正或新尝试确定之后再登（ADR-0029 按恢复动作分格）。
-	AttemptResultPendingConfirmation
 	ObjectNotParticipating
 	ParticipationNotEnded
 	ProcurementContextMissing
@@ -139,6 +136,9 @@ const (
 	BookingNotCancelled
 	CancelledAfterTransportStart
 	ObjectNotInCommission
+	// 未受理，但续办不是改请求：指名的那件对象在那次尝试里的结果还是待确认，还不知道失败没有。等它以更正或新尝试确定之后
+	// 再登。与 AttemptDidNotFail 分格——那一格说这次没有失败、不必再登（ADR-0029 按恢复动作分格）。
+	AttemptResultPendingConfirmation
 )
 
 func (detail ChargeOccurrenceDetail) String() string {

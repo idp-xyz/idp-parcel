@@ -21,6 +21,12 @@ const payloadCanonicalizationVersion = "TFC-1"
 // 不声明节点的首登与节点进文法之前登下的首登是同一种内容，换号会让同一内容在库里有两种摘要。
 const handoverNodeCanonicalizationVersion = "TFC-2"
 
+// pickupAttemptSourceCanonicalizationVersion 是场外揽收执行加待确认来源那一形：只有至少一件对象带来源的提交写成这一版；
+// 一件都不带来源的仍按 TFC-1 写，字节不变。在已接规范化的一面加键（可缺键也算）是形状变化，照换号（ADR-0267 决定一），
+// 按内容取最低一版（ADR-0209 决定三），与交接那一形同法。号取 TF 前缀的下一个：TFC-2 已是交接节点那一形，各面的比对
+// 只认自己那几形，见 CompareStoredPickupAttemptDigest。
+const pickupAttemptSourceCanonicalizationVersion = "TFC-3"
+
 func canonicalPayloadDigest(document []byte) string {
 	return versionedPayloadDigest(payloadCanonicalizationVersion, document)
 }
@@ -72,6 +78,24 @@ func CompareStoredHandoverDigest(stored, current, unversioned string) StoredDige
 	}
 	comparison := CompareStoredDigest(stored, current, unversioned)
 	if currentShape, _, _ := strings.Cut(current, ":"); comparison == SamePayload && currentShape == handoverNodeCanonicalizationVersion {
+		return DifferentPayload
+	}
+	return comparison
+}
+
+// CompareStoredPickupAttemptDigest 是场外揽收执行口的比对：在 CompareStoredDigest 之上认 TFC-3。
+//
+// 带 TFC-3 前缀的已存摘要与 current 逐串比——本次命令一件都不带来源时 current 是 TFC-1，两串必然不同，答冲突：在册那一版
+// 有待确认的来源而这一份没有。反过来，本次命令带来源（current 是 TFC-3）而已存摘要是 TFC-1 或无版本那一形时也答冲突：
+// 那两形里没有来源一格，丢掉来源再按旧形比，同一来源身份换成带来源的待确认就会被认作重放（理由同 CompareStoredHandoverDigest）。
+// TFC-2 是交接那一面的形状，这一口不认，落 UnknownPayloadShape。
+func CompareStoredPickupAttemptDigest(stored, current, unversioned string) StoredDigestComparison {
+	storedShape, _, storedVersioned := strings.Cut(stored, ":")
+	if storedVersioned && storedShape == pickupAttemptSourceCanonicalizationVersion {
+		return payloadComparison(stored == current)
+	}
+	comparison := CompareStoredDigest(stored, current, unversioned)
+	if currentShape, _, _ := strings.Cut(current, ":"); comparison == SamePayload && currentShape == pickupAttemptSourceCanonicalizationVersion {
 		return DifferentPayload
 	}
 	return comparison
@@ -286,9 +310,9 @@ type OffsitePickupObjectContent struct {
 // CanonicalizeOffsitePickupPayload 定形「执行场外揽收」。对象行按对象、结果、依据、
 // 控制、时刻与来源排序，使提交顺序不构成另一份内容。
 //
-// 来源缺席时这一键不写：没有来源的行与来源进文法之前逐字节同形，已存摘要的重放照旧认得出，不必另立形状版本
-// （ADR-0014 不在原处改写已存摘要）。来源只属待确认，而待确认是同一笔才进的文法，所以不存在按旧形状算出、却
-// 带着来源的已存摘要。
+// 待确认的来源是内容：至少一件对象带来源时文档写成 TFC-3，每个对象行都写 source、没有的写 null——哪一件缺席本身是内容。
+// 一件都不带时写 TFC-1、文档里没有 source 键，与来源进文法之前算出的摘要逐字节相同，存量行照原内容重放仍答重放
+// （ADR-0267 决定一、ADR-0209 决定三）。
 func CanonicalizeOffsitePickupPayload(attempt, task string, arrivedAt time.Time, objects []OffsitePickupObjectContent) ([]byte, string, error) {
 	type objectDocument struct {
 		Object     string `json:"object"`
@@ -296,58 +320,67 @@ func CanonicalizeOffsitePickupPayload(attempt, task string, arrivedAt time.Time,
 		Basis      string `json:"basis"`
 		Control    string `json:"control"`
 		OccurredAt string `json:"occurred_at"`
-		Source     string `json:"source,omitempty"`
 	}
-	lines := make([]objectDocument, len(objects))
+	type sourcedObjectDocument struct {
+		objectDocument
+		Source *string `json:"source"`
+	}
+	lines := make([]sourcedObjectDocument, len(objects))
+	sourced := false
 	for i, object := range objects {
-		lines[i] = objectDocument{
+		lines[i] = sourcedObjectDocument{objectDocument: objectDocument{
 			Object:     object.Object,
 			Outcome:    object.Outcome.String(),
 			Basis:      object.Basis,
 			Control:    object.Control,
 			OccurredAt: canonicalInstant(object.OccurredAt),
-			Source:     object.Source,
+		}}
+		if object.Source != "" {
+			source := object.Source
+			lines[i].Source = &source
+			sourced = true
 		}
 	}
-	slices.SortFunc(lines, func(left, right objectDocument) int {
-		if left.Object != right.Object {
-			if left.Object < right.Object {
-				return -1
+	slices.SortFunc(lines, func(left, right sourcedObjectDocument) int {
+		for _, pair := range [][2]string{
+			{left.Object, right.Object},
+			{left.Outcome, right.Outcome},
+			{left.Basis, right.Basis},
+			{left.Control, right.Control},
+			{left.OccurredAt, right.OccurredAt},
+			{sourceText(left.Source), sourceText(right.Source)},
+		} {
+			if order := strings.Compare(pair[0], pair[1]); order != 0 {
+				return order
 			}
-			return 1
-		}
-		if left.Outcome != right.Outcome {
-			if left.Outcome < right.Outcome {
-				return -1
-			}
-			return 1
-		}
-		if left.Basis != right.Basis {
-			if left.Basis < right.Basis {
-				return -1
-			}
-			return 1
-		}
-		if left.Control != right.Control {
-			if left.Control < right.Control {
-				return -1
-			}
-			return 1
-		}
-		if left.OccurredAt != right.OccurredAt {
-			if left.OccurredAt < right.OccurredAt {
-				return -1
-			}
-			return 1
-		}
-		if left.Source < right.Source {
-			return -1
-		}
-		if left.Source > right.Source {
-			return 1
 		}
 		return 0
 	})
+	if sourced {
+		document, err := json.Marshal(struct {
+			Canonicalization string                  `json:"canonicalization"`
+			Face             string                  `json:"face"`
+			Attempt          string                  `json:"attempt"`
+			Task             string                  `json:"task"`
+			ArrivedAt        string                  `json:"arrived_at"`
+			Objects          []sourcedObjectDocument `json:"objects"`
+		}{
+			Canonicalization: pickupAttemptSourceCanonicalizationVersion,
+			Face:             "PERFORM_OFFSITE_PICKUP",
+			Attempt:          attempt,
+			Task:             task,
+			ArrivedAt:        canonicalInstant(arrivedAt),
+			Objects:          lines,
+		})
+		if err != nil {
+			return nil, "", fmt.Errorf("transport fulfillment: canonicalize command payload: %w", err)
+		}
+		return document, versionedPayloadDigest(pickupAttemptSourceCanonicalizationVersion, document), nil
+	}
+	plain := make([]objectDocument, len(lines))
+	for i, line := range lines {
+		plain[i] = line.objectDocument
+	}
 	return marshalPayload(struct {
 		Canonicalization string           `json:"canonicalization"`
 		Face             string           `json:"face"`
@@ -361,8 +394,15 @@ func CanonicalizeOffsitePickupPayload(attempt, task string, arrivedAt time.Time,
 		Attempt:          attempt,
 		Task:             task,
 		ArrivedAt:        canonicalInstant(arrivedAt),
-		Objects:          lines,
+		Objects:          plain,
 	})
+}
+
+func sourceText(source *string) string {
+	if source == nil {
+		return ""
+	}
+	return *source
 }
 
 // CanonicalizeCommissionPayload 定形「提交运输委托」。成员集合排序后进入摘要。

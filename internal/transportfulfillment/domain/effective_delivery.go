@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -11,12 +12,16 @@ var (
 	// 拒收或证据不足不构成有效交付」（UC-TF-006 同句另列「包装不合格」——那是揽收侧失败
 	// 家族的词，本类型的封闭集合不含它）。待确认落在「证据不足」那一种上。它与形状错误分格
 	// ——恢复动作不是补字段，而是承认这个对象本次没有形成有效交付。
-	ErrNotAnEffectiveDelivery   = errors.New("transport fulfillment: this outcome does not constitute an effective delivery")
-	ErrInvalidEffectiveDelivery = errors.New("transport fulfillment: invalid effective delivery")
+	ErrNotAnEffectiveDelivery = errors.New("transport fulfillment: this outcome does not constitute an effective delivery")
+	// ErrDeliveryResultPendingConfirmation 是 ErrNotAnEffectiveDelivery 里派送结果还是待确认的那一种，单独可认：无人签收、
+	// 地址错误、收件人拒收说这次没交成，续办是改约再派；待确认说交没交成还不知道（签收与地址冲突时对象可能已在收件人
+	// 手里），续办是先把那一格确定下来（ADR-0029 按恢复动作分格）。
+	ErrDeliveryResultPendingConfirmation = fmt.Errorf("%w: the delivery attempt result is pending confirmation", ErrNotAnEffectiveDelivery)
+	ErrInvalidEffectiveDelivery          = errors.New("transport fulfillment: invalid effective delivery")
 )
 
 // DeliveryObjectOutcome 是一次派送尝试中单个载运对象结果的封闭集合（UC-TF-006：成功、
-// 失败、拒收、待确认各自成立，任务汇总只能派生）。新取值只往末尾加，理由同 AttemptObjectOutcome。
+// 失败、拒收、待确认各自成立，任务汇总只能派生）。库与内容比对都按词存、按词比，取值的整数不出本进程。
 type DeliveryObjectOutcome uint8
 
 const (
@@ -261,6 +266,9 @@ func FormEffectiveDelivery(
 	}
 	if !result.outcome.valid() {
 		return EffectiveDelivery{}, ErrInvalidEffectiveDelivery
+	}
+	if result.outcome.PendingConfirmation() {
+		return EffectiveDelivery{}, ErrDeliveryResultPendingConfirmation
 	}
 	if !result.outcome.Succeeded() {
 		return EffectiveDelivery{}, ErrNotAnEffectiveDelivery

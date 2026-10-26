@@ -2,6 +2,7 @@ package application_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -125,6 +126,19 @@ func TestAVisitWithOnlyArrivalAndScanRecordsAPendingResultAndTakesNoControl(t *t
 func TestAPendingResultIsNotRewrittenByALaterMessageAndANewVisitIsANewAttempt(t *testing.T) {
 	fixture := newPendingPickupFixture(t)
 	fixture.handle(t, pickupCommand(t, "source-1", "attempt-1", pendingPickupSubmission(t, "parcel-1")))
+	if stored := fixture.store.records["source-1"].ContentDigest; !strings.HasPrefix(stored, "TFC-3:") {
+		t.Fatalf("带来源的提交存下的摘要 = %q，want TFC-3 那一形", stored)
+	}
+
+	replayed := fixture.handle(t, pickupCommand(t, "source-1", "attempt-1", pendingPickupSubmission(t, "parcel-1")))
+	if replayed.Outcome() != application.PickupExistingResult {
+		t.Fatalf("同内容重投 outcome = %q, want EXISTING_RESULT——比对口要认得 TFC-3", replayed.Outcome())
+	}
+	changedSource := pendingPickupSubmission(t, "parcel-1")
+	changedSource.Source = value(t, domain.NewAttemptResultSourceReference, "source/driver-scan-only")
+	if got := fixture.handle(t, pickupCommand(t, "source-1", "attempt-1", changedSource)).Outcome(); got != application.PickupSourceConflict {
+		t.Fatalf("换了来源再交 outcome = %q, want SOURCE_CONFLICT——来源是内容的一部分", got)
+	}
 
 	flipped := fixture.handle(t, pickupCommand(t, "source-1", "attempt-1",
 		successSubmission(t, "parcel-1", "TRANSPORT-CONTROL/TF-1")))
@@ -341,8 +355,8 @@ func TestAContradictoryPendingDeliverySubmissionIsNotAccepted(t *testing.T) {
 	}
 }
 
-// Covers: `AT-TF-070` 的交付面——待确认的对象登不出有效交付：答`未生效`，不落交付、不交意图，段里的参与照旧在场
-// （控制不转移给收件方）。证据补齐之后同一次上门的确定结果以更正形成，那条口另票（code/90）。
+// Covers: `AT-TF-070` 的交付面——待确认的对象登不出有效交付：单答`派送结果待确认`（与`未生效`分格，ADR-0029），不落
+// 交付、不交意图，段里的参与照旧在场（控制不转移给收件方）。
 func TestAPendingDeliveryResultCannotRegisterAnEffectiveDeliveryOrEndParticipation(t *testing.T) {
 	fixture := newParticipationFixture(t)
 	fixture.twoMemberSegment(t)
@@ -361,8 +375,10 @@ func TestAPendingDeliveryResultCannotRegisterAnEffectiveDeliveryOrEndParticipati
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
-	if result.Outcome() != application.DeliveryNotEffective {
-		t.Fatalf("outcome = %q, want NOT_EFFECTIVE（证据不足不构成有效交付）", result.Outcome())
+	if result.Outcome() != application.DeliveryResultPendingConfirmation ||
+		result.Outcome().String() != "DELIVERY_RESULT_PENDING_CONFIRMATION" {
+		t.Fatalf("outcome = %q, want DELIVERY_RESULT_PENDING_CONFIRMATION——不并进未生效：那件对象可能已在收件人手里，"+
+			"续办是先把那一格确定下来，不是改约再派", result.Outcome())
 	}
 	if len(fixture.deliveries.records) != 0 || len(handoff.intents) != 0 {
 		t.Fatal("待确认落了交付或交了意图")

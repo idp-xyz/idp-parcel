@@ -96,7 +96,7 @@ func TestAPendingPickupAndAnExecutorRefusalRunThroughTheProductionFace(t *testin
 }
 
 // Covers: `AT-TF-070`「本人签收和地址来源冲突 → 形成冲突或待确认，不按最后消息覆盖」的生产装配半边——冲突的对象记待确认
-// 落库；交付口对它答`未生效`（控制不转移）；同一尝试再交一份「妥投」答冲突，交付口仍答`未生效`。
+// 落库；交付口对它答`派送结果待确认`（控制不转移）；同一尝试再交一份「妥投」答冲突，交付口仍答`派送结果待确认`。
 func TestAPendingDeliveryRunsThroughTheProductionFacesAndIsNotOverwritten(t *testing.T) {
 	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
@@ -153,7 +153,8 @@ func TestAPendingDeliveryRunsThroughTheProductionFacesAndIsNotOverwritten(t *tes
 		t.Fatalf("待确认答复 = %v", got)
 	}
 
-	step("待确认之上的交付", post(deliveryEndpoint, "/transport-fulfillment/deliveries", deliveryBody), http.StatusOK, "NOT_EFFECTIVE")
+	step("待确认之上的交付", post(deliveryEndpoint, "/transport-fulfillment/deliveries", deliveryBody),
+		http.StatusOK, "DELIVERY_RESULT_PENDING_CONFIRMATION")
 
 	step("同一尝试改说妥投",
 		post(attemptEndpoint, "/transport-fulfillment/delivery-attempts",
@@ -162,5 +163,6 @@ func TestAPendingDeliveryRunsThroughTheProductionFacesAndIsNotOverwritten(t *tes
 				`"outcome":"DELIVERED"`, 1)),
 		http.StatusOK, "SOURCE_CONFLICT")
 
-	step("冲突之后的交付", post(deliveryEndpoint, "/transport-fulfillment/deliveries", deliveryBody), http.StatusOK, "NOT_EFFECTIVE")
+	step("冲突之后的交付", post(deliveryEndpoint, "/transport-fulfillment/deliveries", deliveryBody),
+		http.StatusOK, "DELIVERY_RESULT_PENDING_CONFIRMATION")
 }

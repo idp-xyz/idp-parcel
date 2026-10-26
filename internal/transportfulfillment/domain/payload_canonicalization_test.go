@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -73,14 +74,27 @@ func TestCommandPayloadsRoundTripAsTFC1(t *testing.T) {
 			},
 		},
 		{
-			// 来源只在待确认那一行出现；没有来源的行与来源进文法之前同形，上一格的摘要因此不变，已存摘要的重放照旧认得出。
-			name:     "pickup with a pending object and an executor refusal",
-			document: `{"canonicalization":"TFC-1","face":"PERFORM_OFFSITE_PICKUP","attempt":"ATT","task":"TASK","arrived_at":"2026-03-05T02:11:12.345678901Z","objects":[{"object":"OBJ-A","outcome":"PENDING_CONFIRMATION","basis":"GAP","control":"","occurred_at":"2026-03-05T02:11:12.345678901Z","source":"SRC"},{"object":"OBJ-B","outcome":"EXECUTOR_REFUSED","basis":"B2","control":"","occurred_at":"2026-03-05T02:11:12.345678901Z"}]}`,
-			digest:   "TFC-1:387d52fedfa502298f948e4811e494471b4f7532c283240f6d455f5eda39f11c",
+			// 带待确认来源的文档写 TFC-3（ADR-0267 决定一：在已接规范化的一面加键是形状变化，换号），每个对象行都写 source、
+			// 没有的写 null；按内容取最低一版（ADR-0209 决定三），一件都不带来源的仍写 TFC-1，见下一格。
+			name:     "pickup with a pending object carrying its source",
+			document: `{"canonicalization":"TFC-3","face":"PERFORM_OFFSITE_PICKUP","attempt":"ATT","task":"TASK","arrived_at":"2026-03-05T02:11:12.345678901Z","objects":[{"object":"OBJ-A","outcome":"PENDING_CONFIRMATION","basis":"GAP","control":"","occurred_at":"2026-03-05T02:11:12.345678901Z","source":"SRC"},{"object":"OBJ-B","outcome":"EXECUTOR_REFUSED","basis":"B2","control":"","occurred_at":"2026-03-05T02:11:12.345678901Z","source":null}]}`,
+			digest:   "TFC-3:84a80660ebb43bc95211465b81c9df2c07a766b0e665c8ad06ab42164732eb7a",
 			call: func() ([]byte, string, error) {
 				return domain.CanonicalizeOffsitePickupPayload("ATT", "TASK", at, []domain.OffsitePickupObjectContent{
 					{Object: "OBJ-B", Outcome: domain.ExecutorRefused, Basis: "B2", OccurredAt: at},
 					{Object: "OBJ-A", Outcome: domain.PickupPendingConfirmation, Basis: "GAP", Source: "SRC", OccurredAt: at},
+				})
+			},
+		},
+		{
+			// 不带来源的文档仍是 TFC-1、没有 source 键，与来源进文法之前逐字节同形（新结果词是取值，不是键）。
+			name:     "pickup without any source stays TFC-1",
+			document: `{"canonicalization":"TFC-1","face":"PERFORM_OFFSITE_PICKUP","attempt":"ATT","task":"TASK","arrived_at":"2026-03-05T02:11:12.345678901Z","objects":[{"object":"OBJ-A","outcome":"CUSTOMER_ABSENT","basis":"B1","control":"","occurred_at":"2026-03-05T02:11:12.345678901Z"},{"object":"OBJ-B","outcome":"EXECUTOR_REFUSED","basis":"B2","control":"","occurred_at":"2026-03-05T02:11:12.345678901Z"}]}`,
+			digest:   "TFC-1:e70eae6f76e201a7e87b5a4e96591e5575c4a845c7119518007607046bf7c4e2",
+			call: func() ([]byte, string, error) {
+				return domain.CanonicalizeOffsitePickupPayload("ATT", "TASK", at, []domain.OffsitePickupObjectContent{
+					{Object: "OBJ-B", Outcome: domain.ExecutorRefused, Basis: "B2", OccurredAt: at},
+					{Object: "OBJ-A", Outcome: domain.CustomerAbsent, Basis: "B1", OccurredAt: at},
 				})
 			},
 		},
@@ -264,8 +278,9 @@ func TestCommandPayloadsRoundTripAsTFC1(t *testing.T) {
 			if err := json.Unmarshal(document, &roundTrip); err != nil {
 				t.Fatalf("round trip: %v", err)
 			}
-			if roundTrip["canonicalization"] != "TFC-1" {
-				t.Fatalf("canonicalization %v", roundTrip["canonicalization"])
+			// 文档自报的版本与摘要前缀同一个号：本表各格是 TFC-1，只有带待确认来源的揽收那一格按内容写 TFC-3。
+			if shape, _, _ := strings.Cut(tc.digest, ":"); roundTrip["canonicalization"] != shape {
+				t.Fatalf("canonicalization %v, want %s", roundTrip["canonicalization"], shape)
 			}
 		})
 	}

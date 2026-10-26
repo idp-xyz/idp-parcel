@@ -491,6 +491,18 @@ func TestTheOtherDeliveryNodeStopsAreNamedAndRegister(t *testing.T) {
 		}
 	})
 
+	// 待确认登不出有效交付（AT-TF-070），没有交付可读：零值读数，关务一次也不问——问了就是替一件还没证实交到的对象在
+	// 关务那里留下一笔判断。
+	t.Run("a pending result gets no reading", func(t *testing.T) {
+		fixture := newDeliveryGateFixture(t)
+		fixture.enteredByHandover(t, "SYN-NODE-SIN-HUB")
+		fixture.view.outcome = domain.DeliveryPendingConfirmation
+		reading, err := fixture.reader.ReadRegistration(context.Background(), registerCommand(t))
+		if err != nil || reading.Answer() != domain.GateAnswerInvalid || len(fixture.customs.queries) != 0 {
+			t.Fatalf("待确认也读了：%s %v queries=%d", reading.Answer(), err, len(fixture.customs.queries))
+		}
+	})
+
 	t.Run("two active segments are a loud error", func(t *testing.T) {
 		fixture := newDeliveryGateFixture(t)
 		fixture.enteredByHandover(t, "SYN-NODE-SIN-HUB")

@@ -229,7 +229,7 @@ func (handler *PerformOffsitePickupHandler) Handle(
 		return storeUndecided(command.SourceID), nil
 	}
 	if found {
-		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedPickupContentDigest(command)) {
+		switch domain.CompareStoredPickupAttemptDigest(existing.ContentDigest, digest, unversionedPickupContentDigest(command)) {
 		case domain.SamePayload:
 			// 同一尝试和内容重复回传：返回原结果，不重复建立控制或履约参与（AT-TF-019）。
 			return handler.existingResult(ctx, existing), nil
@@ -296,8 +296,9 @@ func storeUndecided(sourceID string) PerformOffsitePickupResult {
 	}
 }
 
-// formPickupObjectResult 按结果走领域两条构造器之一：待确认要来源，其余不收来源。确定结果带着来源进来是提交自身
-// 的矛盾——那一格只属待确认，收下它就得替调用方决定它算不算数。
+// formPickupObjectResult 按结果走 domain.FormPendingAttemptObjectResult（待确认，要来源）或
+// domain.FormAttemptObjectResult（其余，不收来源）。确定结果带着来源进来是提交自身的矛盾——那一格只属待确认，
+// 收下它就得替调用方决定它算不算数。
 func formPickupObjectResult(
 	attempt domain.FulfillmentAttempt,
 	submission ObjectPickupSubmission,

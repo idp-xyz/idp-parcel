@@ -17,9 +17,10 @@ import (
 var ErrUnexpectedDeliverySave = errors.New("transport fulfillment: unexpected effective delivery save outcome")
 
 // DeliveryRegistrationOutcome 是交付生效提交的应用处理结果。`未生效`是业务负向格
-// ——对象本次没有交付成，或派送结果还是待确认（证据不足不构成有效交付），登不出生效交付
-// （领域硬句，编排不绕），恢复动作是改约再派而不是改单或重试。待确认那一格日后若以更正
-// 确定为妥投，同一份登记才走得过去；那条更正口另票（code/90），落地时再看这一格要不要分开。
+// ——对象本次没有交付成（无人签收、地址错误、收件人拒收），登不出生效交付（领域硬句，编排不绕），
+// 恢复动作是改约再派而不是改单或重试。`派送结果待确认`与它分格：那件对象这次交没交成还不知道
+// （签收与地址冲突时它可能已在收件人手里），改约再派可能是错的动作；续办是先把那一格确定下来
+// （同一次上门以更正、新的上门以新尝试，TF CONTEXT「揽收、派送与交付」），再登（ADR-0029 按恢复动作分格）。
 type DeliveryRegistrationOutcome uint8
 
 const (
@@ -28,6 +29,7 @@ const (
 	DeliveryExistingVersion
 	DeliveryRegistrationConflict
 	DeliveryNotEffective
+	DeliveryResultPendingConfirmation
 	DeliveryCorrected
 	DeliveryNotAccepted
 	DeliveryUndecided
@@ -43,6 +45,8 @@ func (outcome DeliveryRegistrationOutcome) String() string {
 		return "SOURCE_CONFLICT"
 	case DeliveryNotEffective:
 		return "NOT_EFFECTIVE"
+	case DeliveryResultPendingConfirmation:
+		return "DELIVERY_RESULT_PENDING_CONFIRMATION"
 	case DeliveryCorrected:
 		return "DELIVERY_CORRECTED"
 	case DeliveryNotAccepted:
@@ -237,8 +241,12 @@ func (handler *RegisterEffectiveDeliveryHandler) RegisterWithGateReading(
 	spec.Version = version
 
 	delivery, err := domain.FormEffectiveDelivery(attempt, attemptResult, spec)
+	if errors.Is(err, domain.ErrDeliveryResultPendingConfirmation) {
+		// 待确认：登不出生效交付，但不是没交成——单答一格，续办是先确定那一格。
+		return RegisterEffectiveDeliveryResult{outcome: DeliveryResultPendingConfirmation}, nil
+	}
 	if errors.Is(err, domain.ErrNotAnEffectiveDelivery) {
-		// 无人签收、地址错误、拒收、待确认：对象本次没有形成有效交付——业务负向，登不出生效交付。
+		// 无人签收、地址错误、拒收：对象本次没有交付成——业务负向，登不出生效交付。
 		return RegisterEffectiveDeliveryResult{outcome: DeliveryNotEffective}, nil
 	}
 	if err != nil {

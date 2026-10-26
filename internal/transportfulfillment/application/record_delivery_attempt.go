@@ -209,7 +209,8 @@ func (handler *RecordDeliveryAttemptHandler) Handle(
 	}
 }
 
-// formDeliveryObjectResult 按结果走领域两条构造器之一，理由同揽收那一侧的 formPickupObjectResult。
+// formDeliveryObjectResult 按结果走 domain.FormPendingDeliveryAttemptResult（待确认，要来源）或
+// domain.FormDeliveryAttemptResult（其余，不收来源），理由同揽收那一侧的 formPickupObjectResult。
 func formDeliveryObjectResult(
 	attempt domain.FulfillmentAttempt,
 	submission ObjectDeliverySubmission,

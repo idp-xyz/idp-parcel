@@ -189,8 +189,20 @@ func TestAPendingDeliveryResultIsNeitherADeliveryNorAFailure(t *testing.T) {
 	if !result.Outcome().PendingConfirmation() || result.Outcome().Succeeded() || result.Outcome().Failed() {
 		t.Fatalf("outcome = %q：待确认只能是待确认，不是妥投也不是已结束的失败", result.Outcome())
 	}
-	if _, err := domain.FormEffectiveDelivery(attempt, result, deliverySpec(t, "delivery-result/v1")); !errors.Is(err, domain.ErrNotAnEffectiveDelivery) {
+	_, err := domain.FormEffectiveDelivery(attempt, result, deliverySpec(t, "delivery-result/v1"))
+	if !errors.Is(err, domain.ErrNotAnEffectiveDelivery) {
 		t.Fatalf("effective delivery error = %v, want ErrNotAnEffectiveDelivery——证据不足不构成有效交付，控制不转移", err)
+	}
+	if !errors.Is(err, domain.ErrDeliveryResultPendingConfirmation) {
+		t.Fatalf("effective delivery error = %v, want 可认作 ErrDeliveryResultPendingConfirmation——续办与失败不同，要分得出", err)
+	}
+	failed, formErr := domain.FormDeliveryAttemptResult(attempt, mustValue(t, domain.NewCarriedObjectReference, "parcel-2"),
+		domain.NoOneToReceive, mustValue(t, domain.NewAttemptResultBasisReference, "reason-no-one-1"), attemptArrivedAt.Add(time.Minute))
+	if formErr != nil {
+		t.Fatalf("form failed result: %v", formErr)
+	}
+	if _, err := domain.FormEffectiveDelivery(attempt, failed, deliverySpec(t, "delivery-result/v2")); errors.Is(err, domain.ErrDeliveryResultPendingConfirmation) {
+		t.Fatal("无人签收被认作待确认")
 	}
 	if _, err := domain.FailedDeliveryAttemptBasis(result); !errors.Is(err, domain.ErrAttemptResultPendingConfirmation) {
 		t.Fatalf("failed attempt basis error = %v, want ErrAttemptResultPendingConfirmation", err)
@@ -243,5 +255,34 @@ func TestAnAttemptResultSourceIsARequiredValue(t *testing.T) {
 		if _, err := domain.NewAttemptResultSourceReference(raw); err == nil {
 			t.Fatalf("source %q accepted", raw)
 		}
+	}
+}
+
+// 揽收尝试口的比对在 TFC-1 与无版本两形之上认 TFC-3（带待确认来源那一形，ADR-0267 决定一、ADR-0209 决定三）：同形同串
+// 是重放；在册那一版带来源而这一份没有，或这一份带来源而在册的是没有来源一格的旧形，都是冲突——旧形之下来源没有写法，
+// 不按丢掉来源认作重放。认不出的前缀照旧答认不出。
+func TestStoredPickupAttemptDigestComparesThePendingSourceShape(t *testing.T) {
+	const unversioned = "bb"
+	cases := []struct {
+		name            string
+		stored, current string
+		want            domain.StoredDigestComparison
+	}{
+		{"TFC-3 same content", "TFC-3:aa", "TFC-3:aa", domain.SamePayload},
+		{"TFC-3 different content", "TFC-3:aa", "TFC-3:cc", domain.DifferentPayload},
+		{"stored carries a source, this one none", "TFC-3:aa", "TFC-1:aa", domain.DifferentPayload},
+		{"TFC-1 row, this one carries a source", "TFC-1:aa", "TFC-3:aa", domain.DifferentPayload},
+		{"unversioned row, this one carries a source", "bb", "TFC-3:aa", domain.DifferentPayload},
+		{"TFC-1 row replayed without a source", "TFC-1:aa", "TFC-1:aa", domain.SamePayload},
+		{"unversioned row replayed without a source", "bb", "TFC-1:aa", domain.SamePayload},
+		{"the handover node shape is not a pickup shape", "TFC-2:aa", "TFC-2:aa", domain.UnknownPayloadShape},
+		{"unknown shape stays unknown", "TFC-9:aa", "TFC-3:aa", domain.UnknownPayloadShape},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := domain.CompareStoredPickupAttemptDigest(testCase.stored, testCase.current, unversioned); got != testCase.want {
+				t.Fatalf("CompareStoredPickupAttemptDigest(%q, %q) = %d, want %d", testCase.stored, testCase.current, got, testCase.want)
+			}
+		})
 	}
 }

@@ -43,8 +43,8 @@ func unversionedAnswerDigest(command AnswerBookingCommand) string {
 
 // unversionedPickupContentDigest 是同一来源身份的内容比对锚：尝试身份、任务、到场时间与逐对象
 // 结果（对象、走向、依据、控制、时间）任一不同即是另一份内容。对象行先排序——提交
-// 顺序不构成不同的内容。待确认的来源不在其中：这一形只用来认无版本的旧记录，旧记录里没有
-// 待确认，而待确认的提交带着那一格的走向取值，对不上任何旧摘要。
+// 顺序不构成不同的内容。待确认的来源不在其中：带来源的提交写 TFC-3，CompareStoredPickupAttemptDigest
+// 不拿它与这一形的旧摘要认作重放。
 func unversionedPickupContentDigest(command PerformOffsitePickupCommand) string {
 	lines := make([]string, 0, len(command.Objects))
 	for _, submission := range command.Objects {

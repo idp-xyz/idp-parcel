@@ -252,7 +252,7 @@ func writeOutcome(response http.ResponseWriter, result application.RegisterEffec
 	}
 
 	// ADR-0022：状态码只报有没有新落一版。首登与更正都持久化了新版本用 201；
-	// 未生效（NOT_EFFECTIVE）、冲突、已有结果、未决、未受理都是形成了的答案（200）。交付门禁读数是阻断也照样 201：
+	// 未生效（NOT_EFFECTIVE）、派送结果待确认、冲突、已有结果、未决、未受理都是形成了的答案（200）。交付门禁读数是阻断也照样 201：
 	// 交付落册了，读数是记录里的一格，不是这一次登记的答复（ADR-0213 决定五）。
 	status := http.StatusOK
 	if result.Outcome() == application.DeliveryRegistered ||

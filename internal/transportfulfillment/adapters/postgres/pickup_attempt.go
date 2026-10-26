@@ -249,8 +249,9 @@ func (repository *PickupAttempts) loadResults(
 	return results, rows.Err()
 }
 
-// rebuildPickupResult 按结果走领域两条构造器之一复验：待确认要读回来源，确定结果读回来源就是库面不一致——库内 CHECK
-// 守着这一条，绕过它直插的行在这里暴露，而不是让一格确定结果悄悄带着来源出去。
+// rebuildPickupResult 按结果走 domain.FormPendingAttemptObjectResult（待确认，要读回来源）或
+// domain.FormAttemptObjectResult（其余）复验；确定结果读回来源就是库面不一致——库内 CHECK 守着这一条，绕过它直插的行
+// 在这里暴露，而不是让一格确定结果悄悄带着来源出去。
 func rebuildPickupResult(
 	attempt domain.FulfillmentAttempt,
 	object domain.CarriedObjectReference,
