@@ -129,7 +129,7 @@ M：映射目标加两格（赔付义务、追偿应收），核销余额按目�
 
 ## 第二轮评审与第三轮修订（2026-10-26，协调方隔离评审：B1 已消、无阻断；作者第三轮修订，分支 claude-code12）
 
-变基到 origin/main `0f21df208`（评审时说的 `744a424b7` 之后又前移了几笔，都不碰 settlement-accounting），无冲突；AT 盘点两边的追记都留着。各条：
+先变基到 origin/main `0f21df208`，收尾时再变基到 `24ba2c85c`（评审时说的 `744a424b7` 之后又前移了几笔，都不碰 settlement-accounting），两次都无冲突；AT 盘点两边的追记都留着。各条：
 
 - **N1 锁后取时**：`recomputeScope` 先取作用域锁再取 `Clock.Now()`，`advanceCustomerReceipt` 的信用状况那一步用它交回的同一时刻。锁下推进运营余额或信用状况答未推进就返 `ErrPostingNotAdvanced`、整笔回滚，CLI 落未决 3；只可能是跨进程时钟回拨，不该静默答成功。
 - **N2 作用域锁的守护**：补两条真库并发用例（code/46 第三轮）。
