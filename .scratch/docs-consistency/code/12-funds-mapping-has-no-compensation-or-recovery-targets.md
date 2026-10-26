@@ -1,7 +1,7 @@
 # 12 SA 资金映射没有「客户赔付义务」「追偿应收」两种目标
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code12（见文末「完成记录」，与 [code/46](./46-settlement-application-and-reversal-have-no-process-entry.md) 同批）。原 ready-for-agent——R2（上线后尽快）：资金映射与索赔金额结算都在生产装配上（`cmd/parcel-api`）；首批赔付付款或追偿到账一来，就映射不到它该核销的义务上，只能停在未分配。看得见的卡住，不答错金额；绕法是先留未分配、线下对账。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
+Status: resolved——2026-10-26 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code12（见文末「完成记录」，与 [code/46](./46-settlement-application-and-reversal-have-no-process-entry.md) 同批）。原 ready-for-agent——R2（上线后尽快）：资金映射与索赔金额结算都在生产装配上（`cmd/parcel-api`）；首批赔付付款或追偿到账一来，就映射不到它该核销的义务上，只能停在未分配。看得见的卡住，不答错金额；绕法是先留未分配、线下对账。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
 Blocked by: 无
 出处：[audit/sa-cr.md](../audit/sa-cr.md) M9（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，现象仍在）。
 
@@ -147,3 +147,13 @@ M：映射目标加两格（赔付义务、追偿应收），核销余额按目�
 - **N-a**：跨作用域重复计入 P 立 [code/94](./94-a-funds-fact-mapped-into-several-scopes-is-posted-in-full-in-each.md)（R1），越权风险点补第 9 条。`CustomerDirectionNets` 在端口与适配器上的头注改准：去重只在本作用域之内。
 - **N-b**：[product-strategy-boundary/22](../../product-strategy-boundary/issues/22-settlement-orchestrations-assembly-and-triggers.md)「要裁的」加一行，回指 code/46 越权风险点「潜伏卡死：确认后的贷记调整让作用域账不平之后，撤销也撤不动」。
 - **可选两条也做了**：`admitClaimTargets` 头注改为按返回值指；`ErrPostingNotAdvanced` 的文案补一句与跨进程时钟有关。
+
+## 进 main 记录（2026-10-26，协调方）
+
+- 与 code/46 同批，code/88 并入。分支 `claude-code12` 由作者 rebase 到 origin/main `edf6fba92` 后快进，tip `84893cf99`；迁移 SA 0046（映射目标 CHECK 放成六值，含 `CUSTOMER_COMPENSATION`、`RECOVERY_ACKNOWLEDGEMENT`）。
+- 第一轮隔离评审一条阻断：B1 同一笔资金事实可被多次核销、累计超过事实金额（本批开出的 CLI 入口可达）。协调方裁：事实级上限，锁事实后求未撤销核销合计，锁序先事实后金额本体；N1 改名 `RECOVERY_ACKNOWLEDGEMENT`；N2 code/88 并入（ADR-0181 决定一已把核销、撤销列为重算点；停旧值让比例额度基数答大）；`FUNDS_RETURNED` 对两格金额本体未受理；N3–N7 照改。
+- 第二轮评审无阻断，B1 已消（锁事实身份行，与更正插版本行的外键 KEY SHARE 互斥）。协调方裁：N1 锁后取时、N2 作用域锁并发用例、N4 同作用域一事实多目标 P 去重（既有缺陷，碰钱静默，本批顺修）、N5–N8 照改；N3 外部更正低于已核销合计不在本批改代码，立 code/92（R2）并恢复 UC-SA-005 交接节。
+- 第三轮轻评审无阻断。N-a 跨作用域同一事实各按全额记入 P（既有缺陷）立 code/94（R1）；N-b product-strategy-boundary/22 回指 code/46 记下的潜伏卡死。
+- 协调方单独提交重算的 AT 计数、重生成的 ADR 索引（ADR-0182、ADR-0236 注记）与机制清点；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0、158 个包 ok；`go build ./...`、`go vet ./...` 干净；admin-web tsc、全部用例、vite build 通过；演示种子在一次性库上灌通，用后删库。
+- 去向：code/92（外部更正低于已核销合计，R2）、code/94（跨作用域重复计入入账余额，R1）；code/88 已并入本票。

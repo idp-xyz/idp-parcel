@@ -1,7 +1,7 @@
 # 46 SA 核销与核销撤销没有任何进程入口
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-code12（见文末「完成记录」，与 [code/12](./12-funds-mapping-has-no-compensation-or-recovery-targets.md) 同批）。原 ready-for-agent——R2（上线后尽快）：资金映射已在生产装配上，核销却没有命令、端点或编排调用；首批收款一来只能停在未分配，入账余额「按核销分配净额」那一支走不到，已确认未结也不随核销离开。看得见的卡住、不答错金额；绕法是线下对账、留未分配。2026-10-21 文档自洽 09 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc09。
+Status: resolved——2026-10-26 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code12（见文末「完成记录」，与 [code/12](./12-funds-mapping-has-no-compensation-or-recovery-targets.md) 同批）。原 ready-for-agent——R2（上线后尽快）：资金映射已在生产装配上，核销却没有命令、端点或编排调用；首批收款一来只能停在未分配，入账余额「按核销分配净额」那一支走不到，已确认未结也不随核销离开。看得见的卡住、不答错金额；绕法是线下对账、留未分配。2026-10-21 文档自洽 09 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc09。
 Blocked by: 无（与 [12](./12-funds-mapping-has-no-compensation-or-recovery-targets.md) 改同一只编排，宜同批或排在 12 之后）
 出处：[audit/sa-cr.md](../audit/sa-cr.md) M12 的代码一半（文档一半由文档自洽 09 在 ADR-0236 的 Status 行注记更正）。取证于 main `899a4555`。
 
@@ -137,3 +137,8 @@ N1、N3、N4、N5、N8 记在 code/12 同名一节。本票这边：
 ## 第三轮轻评审（2026-10-26，协调方：可合入，无阻断）
 
 记录两条，见 code/12 同名一节：跨作用域重复计入 P 立 [code/94](./94-a-funds-fact-mapped-into-several-scopes-is-posted-in-full-in-each.md)（R1）；潜伏卡死那条越权风险点已在 [product-strategy-boundary/22](../../product-strategy-boundary/issues/22-settlement-orchestrations-assembly-and-triggers.md)「要裁的」回指。
+
+## 进 main 记录（2026-10-26，协调方）
+
+- 与 code/12 同批进 main，过程与三轮评审记录见 code/12 的「进 main 记录」。受控 CLI `parcel-settlement-register` 的 `funds-application`、`funds-application-reversal` 两命令落地；核销与撤销在各自事务里重算入账余额（code/88 并入）。
+- 去向：潜伏卡死（确认后贷记调整让作用域账不平、撤销也撤不动）记在本票越权风险点，由 product-strategy-boundary/22 开费用调整入口前先裁；在线写口与操作者授予仍不在本票。
