@@ -1,7 +1,7 @@
 # 参与方与商业区 UI/UX 评估与跟进
 
 Category: enhancement
-Status: in-progress——第一段六票 01–06 resolved；第二段 2026-10-26 用户说「继续」，照会话建议先拆 07、08，其余仍在「后续」
+Status: resolved——第一段 01–06 与第二段先拆的 07、08 全部 resolved；第二段其余与第三段仍在「后续」，未拆票
 
 出处：2026-10-25，用户在会话里要求「评估 commercial party 的 UI/UX」，读完评估后说「按你建议的顺序开始」。建议的顺序是：先改文案和组件（成本低），再做要设计的，最后是要后端配合的。本批先落第一段，第二、三段列在「后续」，等第一段收口后再拆票。
 
@@ -72,7 +72,7 @@ Status: in-progress——第一段六票 01–06 resolved；第二段 2026-10-26
 | 05 | [商业规则与策略页布局](issues/05-commercial-policies-layout.md) | 01 | resolved |
 | 06 | [法人停用入口与确认](issues/06-legal-entity-deactivation-entry.md) | — | resolved |
 | 07 | [引用可点、显示名称](issues/07-references-are-links-with-names.md) | — | resolved |
-| 08 | [版本按对象排在一起、可只看在用的](issues/08-versions-grouped-with-in-use-filter.md) | — | in-progress |
+| 08 | [版本按对象排在一起、可只看在用的](issues/08-versions-grouped-with-in-use-filter.md) | — | resolved |
 
 ## 界面用词对照（本批各票共用）
 

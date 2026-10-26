@@ -7,12 +7,15 @@ import { formatInstant, formatRange } from '../catalogue-view';
 import type { SupplierAgreementListResponseBody, SupplierAgreementRecord } from './api';
 import { commercialStatusLabels, labelOf } from './presentation';
 import type { RowRefs } from './ref-links';
+import type { VersionFacts } from './version-groups';
 
 export interface SupplierAgreementRow {
   key: string;
   values: Readonly<Record<string, string>>;
   /** 供应商与责任法人两格的引用原值，页面据它画成带名称的链接（票 party-commercial-uiux/07）。 */
   refs: RowRefs;
+  /** 版本排列与「在用」筛选用的几项（票 party-commercial-uiux/08）。 */
+  version: VersionFacts;
 }
 
 function col(id: string, header: string, mono = false): ListColumn<SupplierAgreementRow> {
@@ -87,6 +90,12 @@ function bodyValues(record: SupplierAgreementRecord): Record<string, string> {
 export function supplierAgreementRowsOf(body: SupplierAgreementListResponseBody): SupplierAgreementRow[] {
   return body.agreements.map((record) => ({
     key: `${record.objectId}@${record.version}`,
+    version: {
+      objectId: record.objectId,
+      version: record.version,
+      status: record.status,
+      effectiveStartsAt: record.effectiveStartsAt,
+    },
     values: {
       identity: `${record.objectId}@${record.version}`,
       scope: record.scope,

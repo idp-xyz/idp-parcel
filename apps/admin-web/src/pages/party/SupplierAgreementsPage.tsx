@@ -6,6 +6,14 @@ import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState } from '../catalogue-view';
 import { useAddressKeyword } from '../../templates/use-address-keyword';
 import { listSupplierAgreements, type SupplierAgreementListResponseBody } from './api';
+import { VersionStatusChips } from './VersionStatusChips';
+import {
+  groupedByObject,
+  matchesVersionStatus,
+  versionCountSummary,
+  versionStatusCounts,
+  type VersionStatusFilter,
+} from './version-groups';
 import { useNameDirectory, withRefLinks } from './RefLink';
 import { withStatusBadge } from './detail-primitives';
 import {
@@ -30,6 +38,7 @@ function SupplierAgreementCatalogue({ reloadToken }: { reloadToken: number }) {
   // 检索词在地址里（`?q=`）：别处的引用链接带着它过来，筛到那一条；刷新与换标签回来也还在。
   const [search, setSearch] = useAddressKeyword();
   const directory = useNameDirectory();
+  const [statusFilter, setStatusFilter] = useState<VersionStatusFilter>('all');
   const [reloadKey, setReloadKey] = useState(0);
   const [answer, setAnswer] = useState<ApiResult<SupplierAgreementListResponseBody> | null>(null);
 
@@ -48,11 +57,16 @@ function SupplierAgreementCatalogue({ reloadToken }: { reloadToken: number }) {
   const needle = search.trim().toLowerCase();
   // 过滤只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约。搜的是转写后的各格，
   // 正文列（供应商、方案引用）因此也搜得到。
-  const visibleRows = needle
+  const searchedRows = needle
     ? rows.filter((row) =>
         Object.values(row.values).some((value) => value.toLowerCase().includes(needle)),
       )
     : rows;
+  // 同一协议的各版排在一起、新版在上；「在用」只看服务端答的状态（票 party-commercial-uiux/08）。
+  const visibleRows = groupedByObject(
+    searchedRows.filter((row) => matchesVersionStatus(row.version, statusFilter)),
+    (row) => row.version,
+  );
   const retry = () => setReloadKey((value) => value + 1);
 
   return (
@@ -67,8 +81,18 @@ function SupplierAgreementCatalogue({ reloadToken }: { reloadToken: number }) {
       filterSummary={
         // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 份」会与状态区
         // 「这不是目录为空」直接矛盾（README 列表页上列通则「计数摘要必须带 outcome 守卫」）。
-        answer?.kind === 'outcome' ? `当前返回 ${rows.length} 份协议版本` : undefined
+        answer?.kind === 'outcome' ? versionCountSummary(rows.length, visibleRows.length, '份', '协议版本') : undefined
       }
+      filters={
+        answer?.kind === 'outcome' && rows.length > 0 ? (
+          <VersionStatusChips
+            counts={versionStatusCounts(rows, (row) => row.version)}
+            value={statusFilter}
+            onChange={setStatusFilter}
+          />
+        ) : undefined
+      }
+      emptyRowsNote="这组条件下没有匹配的协议版本"
       columns={withRefLinks(withStatusBadge(supplierAgreementColumns), directory)}
       rows={visibleRows}
       rowKey={(row) => row.key}

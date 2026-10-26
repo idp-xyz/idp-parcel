@@ -7,6 +7,15 @@ import type { ApiResult } from '../catalogue-api';
 import { catalogueConditionsNarrow } from '../catalogue-query';
 import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { CustomerContractPublicationForm } from './CustomerContractPublicationForm';
+import { VersionStatusChips } from './VersionStatusChips';
+import {
+  groupedByObject,
+  matchesVersionStatus,
+  versionCountSummary,
+  versionStatusCounts,
+  type VersionFacts,
+  type VersionStatusFilter,
+} from './version-groups';
 import { RefLink } from './RefLink';
 import { statusBadge } from './detail-primitives';
 import { DeliveryConditionsCell } from './DeliveryConditionsCell';
@@ -98,6 +107,13 @@ const columns: ListColumn<CustomerContractRecord>[] = [
   },
 ];
 
+const contractFacts = (row: CustomerContractRecord): VersionFacts => ({
+  objectId: row.objectId,
+  version: row.version,
+  status: row.status,
+  effectiveStartsAt: row.effectiveStartsAt,
+});
+
 // 零绑定有两种，说法必须分开：没有正文行是「正文未登记」（去登记正文），有正文行
 // 而零子行是「已登记，未作约定」（无事可做，且该范围答「不存在」而不是「不适用」）。
 // 服务端为此专门给了 contentRegistered，页面照它分，不看数组长度。
@@ -134,6 +150,7 @@ function ControlBindings({ row }: { row: CustomerContractRecord }) {
  */
 function CustomerContractsTable({ publishedKey }: { publishedKey: number }) {
   // 检索词在地址里（`?q=`）：别处的引用链接带着它过来，筛到那一条。与客户账户签共用同一个检索词——它们在一页上。
+  const [statusFilter, setStatusFilter] = useState<VersionStatusFilter>('all');
   const [search, setSearch] = useAddressKeyword();
   const [reloadKey, setReloadKey] = useState(0);
   const [answer, setAnswer] = useState<ApiResult<CustomerContractListResponseBody> | null>(null);
@@ -152,13 +169,18 @@ function CustomerContractsTable({ publishedKey }: { publishedKey: number }) {
   const contracts = answer?.kind === 'outcome' ? answer.body.contracts : [];
   const needle = search.trim().toLowerCase();
   // 过滤只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约。
-  const visibleContracts = needle
+  const searchedContracts = needle
     ? contracts.filter((row) =>
         [row.objectId, row.version, row.scope, row.status, row.rulePackageId ?? ''].some((value) =>
           value.toLowerCase().includes(needle),
         ),
       )
     : contracts;
+  // 同一合同的各版排在一起、新版在上；「在用」只看服务端答的状态（票 party-commercial-uiux/08）。
+  const visibleContracts = groupedByObject(
+    searchedContracts.filter((row) => matchesVersionStatus(contractFacts(row), statusFilter)),
+    contractFacts,
+  );
   const retry = () => setReloadKey((value) => value + 1);
 
   return (
@@ -175,8 +197,20 @@ function CustomerContractsTable({ publishedKey }: { publishedKey: number }) {
       filterSummary={
         // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 份」会与状态区
         // 「这不是目录为空」直接矛盾（README 列表页上列通则第六条）。
-        answer?.kind === 'outcome' ? `当前返回 ${contracts.length} 份合同版本` : undefined
+        answer?.kind === 'outcome'
+          ? versionCountSummary(contracts.length, visibleContracts.length, '份', '合同版本')
+          : undefined
       }
+      filters={
+        answer?.kind === 'outcome' && contracts.length > 0 ? (
+          <VersionStatusChips
+            counts={versionStatusCounts(contracts, contractFacts)}
+            value={statusFilter}
+            onChange={setStatusFilter}
+          />
+        ) : undefined
+      }
+      emptyRowsNote="这组条件下没有匹配的合同版本"
       columns={columns}
       rows={visibleContracts}
       rowKey={(row) => `${row.objectId}@${row.version}`}

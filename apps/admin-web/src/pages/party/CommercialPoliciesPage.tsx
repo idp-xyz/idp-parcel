@@ -16,6 +16,16 @@ import {
   type CommercialPolicyKind,
   type CommercialPolicyListResponseBody,
 } from './api';
+import { VersionStatusChips } from './VersionStatusChips';
+import {
+  groupedByObject,
+  hasVersionStatus,
+  matchesVersionStatus,
+  versionCountSummary,
+  versionStatusCounts,
+  type VersionFacts,
+  type VersionStatusFilter,
+} from './version-groups';
 import { useNameDirectory, withRefLinks } from './RefLink';
 import type { NameDirectory } from './ref-links';
 import {
@@ -86,6 +96,7 @@ function PolicyRegisters({
 }) {
   // 检索词在地址里（`?q=`）：合同上的规则包、控制策略链接带着它过来，筛到那一条。换册时由页面清掉（见 usePoliciesPlace）。
   const [search, setSearch] = useAddressKeyword();
+  const [statusFilter, setStatusFilter] = useState<VersionStatusFilter>('all');
   const [reloadKey, setReloadKey] = useState(0);
   const [loaded, setLoaded] = useState<{
     kind: CommercialPolicyKind;
@@ -105,11 +116,17 @@ function PolicyRegisters({
   const answer = loaded?.kind === kind ? loaded.answer : null;
   const rows = answer?.kind === 'outcome' ? rowsOf(answer.body) : [];
   const needle = search.trim().toLowerCase();
-  const visibleRows = needle
+  const searchedRows = needle
     ? rows.filter((row) =>
         Object.values(row.values).some((value) => value.toLowerCase().includes(needle)),
       )
     : rows;
+  // 同一对象的各版排在一起、新版在上（声明类两册按所属版本）；只有带状态的册才有「在用」筛选（票 party-commercial-uiux/08）。
+  const withStatus = hasVersionStatus(rows, (row) => row.version);
+  const visibleRows = groupedByObject(
+    searchedRows.filter((row) => !withStatus || matchesVersionStatus(policyFacts(row), statusFilter)),
+    policyFacts,
+  );
   const retry = () => setReloadKey((value) => value + 1);
 
   return (
@@ -123,8 +140,18 @@ function PolicyRegisters({
       }}
       filterSummary={
         // 计数只在拿到业务答案后显示，未配置态不报「0 条」（与 pricing 两页同一守卫）。
-        answer?.kind === 'outcome' ? `共 ${rows.length} 条` : undefined
+        answer?.kind === 'outcome' ? versionCountSummary(rows.length, visibleRows.length, '条', '') : undefined
       }
+      filters={
+        answer?.kind === 'outcome' && withStatus ? (
+          <VersionStatusChips
+            counts={versionStatusCounts(rows, policyFacts)}
+            value={statusFilter}
+            onChange={setStatusFilter}
+          />
+        ) : undefined
+      }
+      emptyRowsNote="这组条件下没有匹配的行"
       columns={withRefLinks(withStatusBadge(kindColumns[kind]), directory)}
       rows={visibleRows}
       rowKey={(row) => row.key}
@@ -137,6 +164,9 @@ function PolicyRegisters({
     />
   );
 }
+
+// 声明类两册的行按所属版本给了版本信息；万一没有（行模型新加一册忘了给），按行键单独成组，不报错。
+const policyFacts = (row: PolicyRow): VersionFacts => row.version ?? { objectId: row.key, version: '' };
 
 /** 「发布新版本」签：选中的册有自己的表单就摆那张表单；随所属版本发布的两本说清去哪发。 */
 function PublishPane({

@@ -14,6 +14,15 @@ import {
   type ServiceProductListResponseBody,
   type ServiceProductRecord,
 } from './api';
+import { VersionStatusChips } from './VersionStatusChips';
+import {
+  groupedByObject,
+  matchesVersionStatus,
+  versionCountSummary,
+  versionStatusCounts,
+  type VersionFacts,
+  type VersionStatusFilter,
+} from './version-groups';
 import { statusBadge } from './detail-primitives';
 import {
   commercialStatusLabels,
@@ -31,6 +40,13 @@ const info = moduleInfoById['service-products'];
 // 只列版本壳(MCP-3 裁决⑥)外加一节可缺的产品层交付条件(票 admin-write-faces/25 裁读回折进目录行):那一节照
 // ServiceProductRecord.deliveryConditions 显,键缺席即这一版没有声明、显「未声明」不显默认,页面不拿别的键去推它在不在;
 // 产品—渠道映射归渠道产品目录页上列,渠道账号授权不在读面体内,不以空列伪装已实现。
+const productFacts = (row: ServiceProductRecord): VersionFacts => ({
+  objectId: row.objectId,
+  version: row.version,
+  status: row.status,
+  effectiveStartsAt: row.effectiveStartsAt,
+});
+
 const columns: ListColumn<ServiceProductRecord>[] = [
   {
     id: 'product',
@@ -85,6 +101,7 @@ const columns: ListColumn<ServiceProductRecord>[] = [
 // `refreshKey` 由页面递增：「发布版本」签的载体到达发布那一步时刷本读面，让新版本在同页立刻可见。
 function ServiceProductVersionsTable({ refreshKey }: { refreshKey: number }) {
   // 检索词在地址里（`?q=`）：别处的引用链接带着它过来，筛到那一条；刷新与换标签回来也还在。
+  const [statusFilter, setStatusFilter] = useState<VersionStatusFilter>('all');
   const [search, setSearch] = useAddressKeyword();
   const [reloadKey, setReloadKey] = useState(0);
   const [answer, setAnswer] = useState<ApiResult<ServiceProductListResponseBody> | null>(null);
@@ -102,13 +119,18 @@ function ServiceProductVersionsTable({ refreshKey }: { refreshKey: number }) {
 
   const products = answer?.kind === 'outcome' ? answer.body.products : [];
   const needle = search.trim().toLowerCase();
-  const visibleProducts = needle
+  const searchedProducts = needle
     ? products.filter((row) =>
         [row.objectId, row.version, row.scope, row.status, row.form ?? ''].some((value) =>
           value.toLowerCase().includes(needle),
         ),
       )
     : products;
+  // 同一产品的各版排在一起、新版在上；「在用」只看服务端答的状态（票 party-commercial-uiux/08）。
+  const visibleProducts = groupedByObject(
+    searchedProducts.filter((row) => matchesVersionStatus(productFacts(row), statusFilter)),
+    productFacts,
+  );
   const retry = () => setReloadKey((value) => value + 1);
 
   return (
@@ -123,8 +145,18 @@ function ServiceProductVersionsTable({ refreshKey }: { refreshKey: number }) {
       }}
       filterSummary={
         // 计数只在拿到业务答案后显示,未配置态不报「0 个版本」(与 pricing 两页同一守卫)。
-        answer?.kind === 'outcome' ? `当前返回 ${products.length} 个版本` : undefined
+        answer?.kind === 'outcome' ? versionCountSummary(products.length, visibleProducts.length, '个', '版本') : undefined
       }
+      filters={
+        answer?.kind === 'outcome' && products.length > 0 ? (
+          <VersionStatusChips
+            counts={versionStatusCounts(products, productFacts)}
+            value={statusFilter}
+            onChange={setStatusFilter}
+          />
+        ) : undefined
+      }
+      emptyRowsNote="这组条件下没有匹配的产品版本"
       columns={columns}
       rows={visibleProducts}
       rowKey={(row) => `${row.objectId}@${row.version}`}

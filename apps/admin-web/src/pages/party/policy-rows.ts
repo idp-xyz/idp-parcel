@@ -27,12 +27,15 @@ import {
   taxDispositionLabels,
 } from './presentation';
 import type { RowRefs } from './ref-links';
+import type { VersionFacts } from './version-groups';
 
 export interface PolicyRow {
   key: string;
   values: Readonly<Record<string, string>>;
   /** 引用别的对象的那几格，页面据它画成链接（票 party-commercial-uiux/07）；行模型只交原值，不碰组件库。 */
   refs?: RowRefs;
+  /** 版本排列与「在用」筛选用的几项（票 party-commercial-uiux/08）；声明类两册按所属版本给。 */
+  version?: VersionFacts;
 }
 
 function col(id: string, header: string, mono = false): ListColumn<PolicyRow> {
@@ -296,6 +299,7 @@ export function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
     case 'ACCEPTANCE_RULE_PACKAGE':
       return body.policies.map((record) => ({
         key: `package:${record.objectId}@${record.version}`,
+        version: { objectId: record.objectId, version: record.version, effectiveStartsAt: record.effectiveStartsAt },
         values: {
           identity: `${record.objectId}@${record.version}`,
           serviceProduct: record.serviceProduct,
@@ -334,6 +338,7 @@ export function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
     case 'PRE_ACCEPTANCE_CONTROL':
       return body.policies.map((record) => ({
         key: `control:${record.contractObjectId}@${record.contractVersion}`,
+        version: { objectId: record.contractObjectId, version: record.contractVersion },
         values: {
           contract: `${record.contractObjectId}@${record.contractVersion}`,
           requirement: labelOf(controlRequirementLabels, record.requirement),
@@ -345,6 +350,7 @@ export function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
     case 'PRICE_POLICY':
       return body.policies.map((record) => ({
         key: `price:${record.objectId}@${record.version}`,
+        version: { objectId: record.objectId, version: record.version, effectiveStartsAt: record.effectiveStartsAt },
         values: {
           identity: `${record.objectId}@${record.version}`,
           direction: labelOf(commercialDirectionLabels, record.direction),
@@ -360,6 +366,7 @@ export function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
     case 'SETTLEMENT_POLICY':
       return body.policies.map((record) => ({
         key: `settlement:${record.objectId}@${record.version}`,
+        version: { objectId: record.objectId, version: record.version, effectiveStartsAt: record.effectiveStartsAt },
         values: {
           identity: `${record.objectId}@${record.version}`,
           method: labelOf(settlementMethodLabels, record.method),
@@ -379,6 +386,7 @@ export function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
     case 'AS_OF_POLICY':
       return body.policies.map((record) => ({
         key: `as-of:${record.rulePackageObjectId}@${record.rulePackageVersion}:${record.judgmentType}`,
+        version: { objectId: record.rulePackageObjectId, version: record.rulePackageVersion },
         values: {
           package: `${record.rulePackageObjectId}@${record.rulePackageVersion}`,
           judgmentType: record.judgmentType,
@@ -391,6 +399,12 @@ export function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
     case 'AUTHORIZATION_RULE':
       return body.policies.map((record) => ({
         key: `authz:${record.objectId}@${record.version}`,
+        version: {
+          objectId: record.objectId,
+          version: record.version,
+          status: record.status,
+          effectiveStartsAt: record.effectiveStartsAt,
+        },
         values: {
           identity: `${record.objectId}@${record.version}`,
           scope: record.scope,
@@ -404,6 +418,7 @@ export function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
     case 'CREDIT_POLICY':
       return body.policies.map((record) => ({
         key: `credit:${record.objectId}@${record.version}`,
+        version: { objectId: record.objectId, version: record.version, effectiveStartsAt: record.effectiveStartsAt },
         values: {
           identity: `${record.objectId}@${record.version}`,
           legalEntity: record.legalEntity,
@@ -418,6 +433,12 @@ export function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
     case 'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY':
       return body.policies.map((record) => ({
         key: `control-policy:${record.objectId}@${record.version}`,
+        version: {
+          objectId: record.objectId,
+          version: record.version,
+          status: record.status,
+          effectiveStartsAt: record.effectiveStartsAt,
+        },
         values: {
           identity: `${record.objectId}@${record.version}`,
           scope: record.scope,
@@ -434,6 +455,12 @@ export function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
     case 'CUSTOMER_SERVICE_RULE':
       return body.policies.map((record) => ({
         key: `service-rule:${record.objectId}@${record.version}`,
+        version: {
+          objectId: record.objectId,
+          version: record.version,
+          status: record.status,
+          effectiveStartsAt: record.effectiveStartsAt,
+        },
         values: {
           identity: `${record.objectId}@${record.version}`,
           scope: record.scope,
