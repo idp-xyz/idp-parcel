@@ -1,7 +1,7 @@
 # 126 TF 运营决定各口不记提交操作者
 
 Category: bug
-Status: in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg126` tip `58eec6559`（其后一笔只改本票面），见文末「完成记录」。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领（code/01 已进 main），分支 `claude-dcg126`（worktree `idp-parcel-dcg126`）；新 ADR 取 0303，TF 迁移取 0051。此前 ready-for-agent——2026-10-20 代决复核立（上线前必修），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: in-progress——2026-10-26 评审无阻断、修订轮完，待进 main，分支 `claude-dcg126` tip `560c46c88`（其后一笔只改本票面），见文末「评审记录」「修订轮」。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg126` tip `58eec6559`（其后一笔只改本票面），见文末「完成记录」。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领（code/01 已进 main），分支 `claude-dcg126`（worktree `idp-parcel-dcg126`）；新 ADR 取 0303，TF 迁移取 0051。此前 ready-for-agent——2026-10-20 代决复核立（上线前必修），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 M1；ADR-0151 越权风险点 5
 
@@ -69,3 +69,40 @@ M1 的现象成立：`tfhttp.OperatorDecisionIntake` 对关段、建派送任务
 于 `58eec6559`（其后一笔只改本票面）：`gofmt -l cmd internal migrations tools` 无输出；`go build ./...`、`go vet ./...` 退 0；带 DSN（`127.0.0.1:55432`，pgtest 每例自建自删库）`go test -count=1` 跑 `./internal/transportfulfillment/...`、`./internal/architecture/...`、`./migrations/...`，以及 `go list` 反查（含测试导入）依赖 TF 的 `./cmd/parcel-api/...`、`./cmd/parcel-dispatch/...`、`./cmd/parcel-transport-register/...` 与 NR / NO / PP / PS / SA / VE 六个 `adapters/transportfulfillment` 包，全部 ok。新真库用例 `-v` 核过是 PASS 不是 SKIP（`adapters/postgres` 全包 338 条 PASS、零 SKIP；`cmd/parcel-api` 新用例六个子用例 PASS）。`go run ./tools/adr-index -check`、`go run ./tools/at-coverage-counts -check` 只报生成物过期（ADR 索引、总览计数，归推送方）；票 139 那一版 `at-coverage-counts` 对本树跑，`AT-TF-335`–`341` 不在缺行与多行之列。全量 `scripts/test-full.sh` 未跑（归协调方）。
 
 进 main 时请留意：AT 盘点①本票七行与 `claude-dcg127` 的 `AT-TF-331`–`334` 插在同一处（`AT-TF-330` 之后），重放时两段按号顺接；UC-TF-004 与 127 各改不同的行。
+
+## 评审记录（2026-10-26，协调方 `tops-20` 隔离子代理，钉 `87724244a`：两轴无阻断，非阻断 6 条；照抄，小节标题降一级挂在本节下）
+
+评审 ← tops-20 隔离子代理 · 钉 `87724244a` · 01:38
+
+结论：两轴无阻断；非阻断 6 条。
+
+### Standards
+阻断：无。
+非阻断：
+1. `adapters/accessidentity/operator_authenticator.go` `AuthenticateOperatorDecision` 注释「其余运营决定口把它作为操作证据记在决定上（ADR-0303）」不实——订舱提交与取消、取消委托、段采用、容量预占与释放、派送重问仍走 `tenantFor`，操作者在 Intake 丢了。宜改成「关段等七口」。
+2. ADR-0303 越权风险点 4 说「只能从接入日志里找」，但产品里没有逐请求接入日志（`internal/platform/httpapi` 无日志中间件，`cmd/parcel-api/main.go` 只记启动配置）。改写成「产品内无处可查」；ADR 合入即冻结，宜在本分支改。
+3. 重点 4 不构成单一权威问题（ADR-0187 决定四只管 PS 两口，ADR-0207 决定三只管发生项，ADR-0303 决定三只管七口，各在一处定义）。但越权风险点 2 只点了费用发生登记，漏了同上下文里回执同样回显决定人的两口：委托协议换版（`commissionAgreementRevisionBody.DecidedBy`）与解除采用（`withdrawnBy`），宜补全。
+无发现：红线与边界；ADR-0151 只追加注记与 Links、正文未动；去向/来向合 adr/README；注释无行号位置词。
+
+### Spec
+阻断：无。
+非阻断：
+1. 完成判据不缺格（M1 原文恰是七口）。其余六口在 ADR-0303 决定五与越权风险点 1 披露清楚，但后继票（上线前必修）未立，需协调方立。
+2. 派送补拍与按册重问「不记在任务上」站得住（ADR-0230 决定七）。但「派送重问」这一决定本身至今哪里都没留下是谁，与 M1 同属「无从补记」，宜并进上一条后继票，不只挂在风险点 4。
+3. AT 盘点七行与 main 上 `AT-TF-331`–`334` 插在同一处且未写追记；main 也改过 UC-TF-004。重放时手合。
+无发现：七口 Intake 都走 `identityFor`、载荷自报即 400（`TestEachOperationDecisionFaceCarriesTheEnvelopeOperatorIntoItsCommand`）；各口重放与冲突判据都不读操作者（关段 `ErrSegmentClosed`→`segmentAlreadyClosed`；终止 `!current.Active()`；任务、分配按键答已在册；有效时间只比依据与时间；收寄判断按 TFC-1 形状比；委托只比 `ContentDigest`）；生产装配真库用例两令牌各投两次、库里是首投者、回执无操作者。段上两件只经 `ClosedBy()`/`TerminatedBy()` 与持久化读；`lockedInheritedEnd` 交回含 `terminated_by` 的整行；`Supersede` 是 `ON CONFLICT DO NOTHING` 无内容比对。迁移 0051 三值逻辑无漏洞（`closed`、`effective_basis` NOT NULL，`end_kind` 先判 IS NOT NULL；真库用例对在场行写终止人被 CHECK 拒 23514）。ADR-0151 被停句逐字、适用场景只限七口。新号不撞。
+
+## 修订轮（2026-10-26，作者子代理，同一分支）
+
+逐条处理评审非阻断（都在本分支改）：
+
+- **Standards 1**：`adapters/accessidentity/operator_authenticator.go` `AuthenticateOperatorDecision` 注释改为「关段等七口把它作为操作证据记在决定上（ADR-0303）」。
+- **Standards 2**：ADR-0303 越权风险点 4 改为「在那张票落地之前，按过补拍或重问的人在产品内无处可查——产品没有逐请求的接入日志」。
+- **Standards 3**：ADR-0303 越权风险点 2 补上委托协议换版（回执 `decidedBy`）与解除采用（回执 `withdrawnBy`）两口同样回显决定人。
+- **Spec 1、2**：立后继票 [180](./180-the-remaining-tf-operation-decisions-and-the-delivery-dispatch-reask-record-the-submitting-operator.md)（ready-for-agent，上线前必修，理由同 M1）：订舱提交、取消订舱、取消运输委托、履约段采用运输委托、容量预占、容量释放六口记提交操作者，并收进「派送补拍、按册重问是谁按的」——不记在任务上，另记在重问决定处（ADR-0230 决定七、ADR-0303 决定五）。立票前核过 180 在 main、各在途分支与各 worktree 都空着。ADR-0303 决定五两条、Status 索引注记、越权风险点 1、4 与 Links 改指 180；决定五第一条原写的「访问留痕归 ADR-0100 族另裁」随之改为归 180，Links 里 ADR-0100 一行去掉「访问留痕的归属」半句。
+- **Spec 3**：rebase 时手合，见下。
+- 另：rebase 之后票 127 已在 main，ADR-0303 Context、决定五与候选庚里「正由在途票 127 改动」改为「起草时正由票 127 改动」。
+
+rebase 到 `origin/main` `d80e8d8f8`：唯一冲突在 `.scratch/at-coverage-inventory.md` ①——main 上 127 的 `AT-TF-331`–`334` 与本票 `AT-TF-335`–`341` 插在同一处，按号顺接、两边都留；本票没写文末追记，那里无冲突。UC-TF-004 自动合并，127 的 `AT-TF-332`–`334` 与本票 `AT-TF-335`、`336` 都在。迁移 `0051`、ADR 号 0303、`AT-TF-335`–`341` 在新 main 上仍无人占。重放后的提交：`8b1700131`（原 `5f2d6cd53`）、`389d5053a`（原 `58eec6559`）、`410f4c721`（原 `87724244a`）、`560c46c88`（修订轮）。
+
+修订轮自验，于 `560c46c88`（其后一笔只改本票面）：`go run ./tools/at-coverage-counts -check`（main 上已带票 139 的缺行 / 多行核对）只报总览计数过期，无缺行多行；`go run ./tools/adr-index -check` 只报索引过期；`gofmt -l cmd internal migrations tools` 无输出；`go build ./...`、`go vet ./...` 退 0；带 DSN（`127.0.0.1:55432`）`go test -count=1` 跑 TF 全部包、`internal/architecture`、`migrations`、`cmd/parcel-api`、`cmd/parcel-dispatch`、`cmd/parcel-transport-register` 与六个依赖 TF 的 `adapters/transportfulfillment` 包，全部 ok。
