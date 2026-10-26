@@ -259,6 +259,7 @@
 | `AT-PC-059` | internal/partycommercial/domain/authority_closure_test.go::TestARetiredGrantVersionTakesNoPartInANewAdjudication；internal/partycommercial/adapters/postgres/authority_closure_test.go::TestARetiredAuthorizationRuleVersionLeavesTheGrantBook |
 | `AT-PC-060` | internal/partycommercial/domain/authority_closure_test.go::TestACutGrantVersionNarrowsAtTheCut；internal/partycommercial/adapters/postgres/authority_closure_test.go::TestACutAuthorizationRuleVersionNarrowsItsGrant |
 | `AT-PC-061` | internal/partycommercial/domain/authority_closure_test.go::TestADelegationFollowsTheClosureOfItsContractVersion；internal/partycommercial/adapters/postgres/authority_closure_test.go::TestADelegationLeavesWithTheClosureOfItsContractVersion |
+| `AT-PC-062` | cmd/parcel-commercial/translate_test.go::TestAPricePolicyCaliberCarryingAVolumetricFactorIsNotAccepted；internal/partycommercial/adapters/http/publication_draft_payload_price_policy_test.go::TestAVolumetricFactorInAPricePolicyPayloadIsAnsweredOnItsField；internal/partycommercial/domain/publication_canonicalization_price_policy_test.go::TestAStoredPricePolicyDocumentCarryingAVolumetricFactorDoesNotRehydrate；internal/partycommercial/domain/price_policy_caliber_test.go::TestPricePolicyCaliberRequiresTaxAndMayOmitFx；internal/partycommercial/application/publish_commercial_authority_test.go::TestAPricePolicyCaliberTakesTheBodyDirection；internal/partycommercial/adapters/postgres/price_policy_caliber_test.go::TestMigration0041KeepsHistoricalFactorsListedAndRefusesNewOnes |
 | `AT-PP-001` | cmd/parcel-dispatch/evaluation_resumption_loop_test.go::TestTheResumptionLanesListOnlyDependenciesThatHealOnRetry |
 | `AT-PP-002` | internal/parcelpricing/adapters/settlementaccounting/form_on_evaluation_request_submitted_test.go::TestAnUnformableRequestHandsOffUnformedAndSettles |
 | `AT-PP-003` | internal/parcelpricing/application/register_price_card_test.go::TestARegisteredPriceCardAnnouncesItsScope |
@@ -271,6 +272,7 @@
 | `AT-PP-010` | internal/parcelpricing/domain/price_card_closure_test.go::TestAPriceCardClosureThatDoesNotHoldIsRefused；internal/parcelpricing/adapters/postgres/price_card_closure_test.go::TestAPriceCardClosureThatDoesNotHoldWritesNothing；internal/parcelpricing/adapters/http/register_price_card_closure_test.go::TestPriceCardClosureIntakesTakeTheAuthenticatedTenant；internal/parcelpricing/adapters/http/register_price_card_closure_test.go::TestPriceCardClosureEndpointsRefuseAnOperatorWithoutTheRegistryGrant；cmd/parcel-pricing-register/price_card_closure_test.go::TestExecuteClosureRoutesEachKindToItsOwnFace |
 | `AT-PP-011` | internal/parcelpricing/adapters/postgres/price_card_closure_test.go::TestConcurrentCutsOnOnePredecessorQueueOnItsRow |
 | `AT-PP-012` | cmd/parcel-dispatch/price_card_closure_resumption_test.go::TestARequestStalledOnAMissingWeightBandResumesOnceTheOldCardIsClosed；internal/parcelpricing/application/close_price_card_version_test.go::TestAPriceCardCutAnnouncesTheScopeItHandsToTheSuccessor；internal/parcelpricing/application/close_price_card_version_test.go::TestAPriceCardClosureAnnouncementFollowsTheRegistrationRules；internal/parcelpricing/adapters/postgres/price_card_closure_test.go::TestAClosureIsHandedOffApartFromTheCardRegistrations |
+| `AT-PP-013` | internal/parcelpricing/application/sell_card_pricing_terms_test.go::TestASellCardIsPricedOnlyOnItsOwnTermsOnBothPaths |
 | `AT-PS-001` | internal/parcelshipment/domain/acceptance_decision_test.go::TestAllChecksPassingAcceptsAndFixesBaselineAndCommitment |
 | `AT-PS-002` | internal/parcelshipment/domain/acceptance_decision_test.go::TestOneFailingMemberBlocksTheWholeSubmissionVersion |
 | `AT-PS-003` | internal/parcelshipment/application/submit_shipment_request_test.go::TestSubmitReplayReturnsExistingResultWithoutASecondRequest；cmd/parcel-api/assemble_submission_replay_test.go::TestAReplayOfABuiltRequestNamesItWithTheOwnershipItWasBuiltOn |
@@ -715,7 +717,6 @@
 | `AT-NR-050` | 硬限制已证明原计划失效，但替代候选来源暂时不可用 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-NR-052` | 原计划失效，候选评估确认没有合格候选 | UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md |
 | `AT-PC-016` | 发布提交成功但事件投递失败 | UC-PC-001-MAINTAIN-AND-PUBLISH-COMMERCIAL-AUTHORITY.md |
-| `AT-PP-013` | 在用 `SELL` 卡自带体积系数、金额取整与汇率序列，同范围销售价格政策另有口径；评价只按卡上的条款算（ADR-0260） | UC-PP-001-FORM-ESTIMATE-EVALUATIONS.md |
 | `AT-PP-016` | 免复核来源的代写复核不读参考复核职责规则，规则未登记照常进在用；登记者等于连接器身份答 `NEEDS_ANOTHER_REVIEWER`（ADR-0262；行为已对、缺 Covers 点名） | UC-PP-001-FORM-ESTIMATE-EVALUATIONS.md |
 | `AT-PS-009` | 接受后客户合同或产品发布新版本 | UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md |
 | `AT-PS-011` | 接受成功后检查下游对象 | UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md |
@@ -1333,7 +1334,6 @@
 | `AT-CR-021` | 批次只收归集截点前已处于应付客户的本金（code/15） | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
 | `AT-NO-022` | 包裹无当前有效路由（同 `AT-NO-031`：方向依据随对象下发、带有效区间，作业端判；ADR-0024、ADR-0251） | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
 | `AT-NO-031` | 包裹没有当前有效路由（方向依据随对象下发、带有效区间，作业端判；ADR-0024、ADR-0251） | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
-| `AT-PC-062` | 价格政策口径带体积系数答未受理，只有税务与汇率的销售政策发布成立（ADR-0260 决定二；今天销售方向必填体积系数，code/25） | UC-PC-001-MAINTAIN-AND-PUBLISH-COMMERCIAL-AUTHORITY.md |
 | `AT-PP-014` | 租户没登参考复核职责规则时人工复核答未配置、不落复核行（ADR-0262；今天写死不同主体，code/41） | UC-PP-001-FORM-ESTIMATE-EVALUATIONS.md |
 | `AT-PP-015` | 参考复核按规则判不同主体与要求授予（ADR-0262；code/41） | UC-PP-001-FORM-ESTIMATE-EVALUATIONS.md |
 | `AT-PS-083` | 已收寄且普通退运决定、责任和路径齐备 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
