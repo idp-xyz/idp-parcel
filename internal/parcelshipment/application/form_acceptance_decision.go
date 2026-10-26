@@ -150,8 +150,8 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 
 	// 接受（或拒绝）已经越过提交边界时，本编排只交回那一份历史决定。`UC-PC-002` 步骤 8
 	// 的重校验是提交前窗口（`AT-PC-026`）；提交后再拿退役/替代后的视图去审，会把已冻结的
-	// 快照改写成未决——那正是 `AT-PC-025` 禁止的追溯改写。并发下 Find 仍可能读到尚未
-	// 落库的旧像，那时仍靠下面 Decide 的 `ErrDecisionAlreadyFormed` 交回原决定。
+	// 快照改写成未决——那正是 `AT-PC-025` 禁止的追溯改写。并发下 Find 读到尚未
+	// 落库的旧像时，随后的保存撞仓储的修订闸门，整轮回滚重投，重投读到的就是那一份历史决定。
 	//
 	// 已撤回的委托同走这一支：撤回占着同一个决定边界却不是接受或拒绝决定，`AcceptanceDecision` 对它报告缺席，
 	// 不单独认出来就要先走完依据重校验与签发决定标识，才在 Decide 处撞上边界；那一路上耗掉的标识没有任何决定会用它。
@@ -229,7 +229,8 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 	})
 	if err != nil {
 		// 同一提交版本已经有决定是业务答案而非故障：用例要求并发处理返回同一结果，调用方
-		// 据以读取原决定，而不是当作故障重试。
+		// 据以读取原决定，而不是当作故障重试。这是防御分支：已有接受或拒绝决定与已撤回在入口都已交给 existing，
+		// 内存里的聚合上 Decide 也读不到别处刚落库的决定，正常到不了这里。
 		if errors.Is(err, domain.ErrDecisionAlreadyFormed) {
 			return handler.existing(ctx, command, request), nil
 		}
@@ -660,7 +661,7 @@ func (handler *FormAcceptanceDecisionHandler) releaseTerminalOccupation(
 // handOffDecision 把已成立的决定交给适用下游，交不出去时交回发布续办引用。
 //
 // 决定与状态取自读回的聚合而不取本次命令，理由与资料修订的 handOff 相同：重放路径上交的
-// 该是读回来的那一份。没有决定可交时不发意图（例如已撤回态走到 ErrDecisionAlreadyFormed）
+// 该是读回来的那一份。没有决定可交时不发意图（例如已撤回的委托）
 // ——没有决定就没有可认领的标识。失败不改写业务结果，也不往任务上记处理尝试：决定任务已经
 // 完成，记一条「未推进」会让一份已决的委托看起来还卡着。
 func (handler *FormAcceptanceDecisionHandler) handOffDecision(

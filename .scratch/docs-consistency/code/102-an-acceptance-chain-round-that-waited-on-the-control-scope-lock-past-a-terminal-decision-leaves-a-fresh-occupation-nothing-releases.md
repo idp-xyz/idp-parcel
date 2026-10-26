@@ -75,7 +75,7 @@ S–M：`FormAcceptanceDecisionHandler.Handle` 的 `existing` 路径加一段，
 
 ## 完成记录
 
-分支 `claude-code102`，基于 main `8c361529d`（收尾 rebase 之后以回报里的最终 SHA 为准）。
+分支 `claude-code102`，基于 main `0ac66f1cc`（收尾 rebase 之后以回报里的最终 SHA 为准）。
 
 ### 做了什么
 
@@ -113,7 +113,7 @@ S–M：`FormAcceptanceDecisionHandler.Handle` 的 `existing` 路径加一段，
 2. **拒收记不下册也回滚。** 派单写的是确定未受理记册、不回滚；册写不进时那一笔既没放掉也没交到人手里，提交这一轮就是留下一笔谁也不知道的孤儿，所以这一格并入「放不收口」回滚。重投：已撤回的被守卫挡住，已拒绝的重复这一轮。
 3. **未决原因取缺口自带的**（`ControlReleasePending`、`RecordedJudgmentsUnavailable`、`ControlReleaseRefusalNotRecorded`），取不到锁并入 `ControlReleasePending`。不新增原因取值，消费门、HTTP、cmd、管理台、跨上下文读方没有新落点（ADR-0025）；`ControlReleaseRefusalNotRecorded` 的注释从「只出现在补偿引用里」改准。
 4. **释放先于重发决定意图**；回滚的一轮不发意图。已撤回无决定，本不发；已拒绝回滚时这一轮的意图随事务撤回。
-5. **已撤回在入口认出，而不是留在 `Decide` 的 `ErrDecisionAlreadyFormed` 分支**：那一分支保留（走同一个 `existing`），但对已撤回委托现在够不到。理由见上；ADR-0290 越权风险点 5。
+5. **已撤回在入口认出，而不是留在 `Decide` 的 `ErrDecisionAlreadyFormed` 分支**：那一分支保留（走同一个 `existing`）为防御分支：评审核实 `Decide` 只在决定标识有效或已撤回时交回该错，这几种入口都已走 `existing`，所以它整个够不到，不只是对已撤回委托。理由见上；ADR-0290 越权风险点 5。
 6. 授权处置的`拒绝`去向不单独加窗口用例：`Form` 只认委托状态，已拒绝的委托无论由自动拒绝、主动拒绝还是处置形成，进的是同一支，用主动拒绝代表。
 7. 夹具：`customerSupplementLoopLegs` 加 `identities`（形成决定领标识口，缺省不变），`withdrawal` 拆出 `withdrawalWith(identities)`；既有用例行为不变。
 8. 不做 `cmd/parcel-dispatch` 链装配的行为测试（code/99 越权风险点已记同一类缺口，不在本票边界）。
@@ -130,3 +130,10 @@ S–M：`FormAcceptanceDecisionHandler.Handle` 的 `existing` 路径加一段，
 ### 评审提示
 
 重点看三处：`existing` 的三格落点与「拒收记不下册也回滚」的取舍；ADR-0290 对 ADR-0282 决定二两句的部分停用写法；窗口（a）用例里终局路径停在领决定标识处、链在放被取代版本那一步排在锁上的时序是否就是生产里那一幕。
+
+### 评审记录与修订轮
+
+- 独立评审（Sonnet）可合入，无阻断。评审把 `form_acceptance_decision.go` 换回基线跑同批用例：14 例红、冻结 `status = 1`（孤儿）；修后窗口 (a)(b) 冻结都是 `status = 2` 且有释放时刻；「撤回在 Form 读之后才提交」靠仓储修订闸门（`UPDATE … WHERE revision` 零行）与读已提交隔离，链的保存撞冲突整轮回滚，无孤儿。评审自做变异 M0–M8 全被杀（M3 取锁顺序、M8 只放指名那一版靠应用层兜底，真库因链内重入区分不出）。
+- N1：接受链开头撤回守卫的注释写了两条已不成立的理由（「没有任何路径会再放它」「还会耗一个决定标识」），改写成守卫的真实作用——不对已撤回的委托白占一笔冻结；读完委托之后才撤回的残余由形成决定那一步放掉。与本票的入口认出是重叠不是矛盾，两者都答`已决定`、状态已撤回、不带决定，消费门不需要新落点。
+- N2：`Decide` 的 `ErrDecisionAlreadyFormed` 分支整个够不到（该错只在决定标识有效或已撤回时由聚合交回，这几种入口都已走 `existing`；内存里的聚合上 `Decide` 也读不到别处刚落库的决定）。ADR-0290 的「三处入口」改为两处入口加一个防御分支；`handOffDecision` 的例子与 `Handle` 里「并发下靠 Decide 交回」的说法改写。
+- 评审信息：Form 不核 `command.SubmissionVersion` 是否仍是当前版本（版本换代发生在链开头守卫之后、Form 读之前）——相邻的旧问题，本票范围外；已拒绝也可加链开头守卫省掉空转的控制，非必需。
