@@ -1,7 +1,7 @@
 # 136 段续办补进段之后没有东西唤醒补派生，那次出发丢出追踪
 
 Category: bug
-Status: in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg135` tip 为写本完成记录的那一笔（代码与文档最后一笔 `d1f8308da`，本票自己的最后一笔 `7fa90b1b6`；见文末「完成记录」）。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，与 135 同批，分支 `claude-dcg135`（worktree `idp-parcel-dcg135`）。此前 ready-for-agent——2026-10-20 代决复核立（上线后尽快），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: in-progress——2026-10-26 评审无阻断、修订轮完，待进 main，分支 `claude-dcg135` tip 为写评审记录与修订轮的那一笔（已 rebase 到 origin/main，代码与文档最后一笔 `9661b63fa`；见文末「评审记录」「修订轮」）。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg135` tip `340c1581a`（rebase 前）。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，与 135 同批，分支 `claude-dcg135`（worktree `idp-parcel-dcg135`）。此前 ready-for-agent——2026-10-20 代决复核立（上线后尽快），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 M19；ADR-0224 越权风险点 1
 
@@ -25,11 +25,15 @@ Blocked by: 无
 
 ### 提交
 
+SHA 是修订轮 rebase 到 origin/main 之后的；rebase 前本票两笔是 `24d870d4c`、`7fa90b1b6`。
+
 | SHA | 内容 |
 |---|---|
-| `24d870d4c` | 代码：`BackfillMovementFactsAdapter` 按对象扫它有参与的每一段（`backfillObject`、`segmentOf` 取代按入场依据认段的 `backfillEntered`、`segmentEnteredBy`）；替身用例改写（AT-VE-180 去掉「段不是这一次进的」两个子用例），新立 `TestTheNextControlFactBackfillsASegmentTheObjectEnteredOtherwise`；派发真库用例 `TestTheNextHandoverBackfillsADepartureOnASegmentTheObjectEnteredWithoutAnEnvelope` |
-| `7fa90b1b6` | 文档：ADR-0302（新）；ADR-0224 Status 注记（部分停用决定三一句、越权风险点 1 已答）、Links、文末 10-20 复核记录（M19 → 本票）；VE CONTEXT 两句；UC-VE-002 `AT-VE-180` 改、`AT-VE-204` 新立；AT 盘点；票 53 完成记录越权风险点 1 补票号 |
-| 本笔 | 两票完成记录 |
+| `3524ec970` | 代码：`BackfillMovementFactsAdapter` 按对象扫它有参与的每一段（`backfillObject`、`segmentOf` 取代按入场依据认段的 `backfillEntered`、`segmentEnteredBy`）；替身用例改写（AT-VE-180 去掉「段不是这一次进的」两个子用例），新立 `TestTheNextControlFactBackfillsASegmentTheObjectEnteredOtherwise`；派发真库用例 `TestTheNextHandoverBackfillsADepartureOnASegmentTheObjectEnteredWithoutAnEnvelope` |
+| `a442c093d` | 文档：ADR-0302（新）；ADR-0224 Status 注记（部分停用决定三一句、越权风险点 1 已答）、Links、文末 10-20 复核记录（M19 → 本票）；VE CONTEXT 两句；UC-VE-002 `AT-VE-180` 改、`AT-VE-204` 新立；AT 盘点；票 53 完成记录越权风险点 1 补票号 |
+| `ecb0151e4` | 两票完成记录 |
+| `9661b63fa` | 修订轮（见「修订轮」） |
+| 本笔 | 两票评审记录与修订轮 |
 
 ### 改了什么
 
@@ -57,7 +61,7 @@ Blocked by: 无
 1. 补上要等对象的下一份转出控制的交接或对象级揽收；末段（此后只剩有效交付）照丢（VE、TF owner）。
 2. 读量随对象走过的段数线性增长（运维）。
 3. 坏行波及加宽：进过某段的对象此后每份控制事实都会停在那一段的坏行上（TF、VE owner、运维；去处票 89、114）。
-4. 扫到的早先各段同样按消费那一刻段册算（VE owner）。
+4. 扫到的早先各段同样按消费那一刻的册子算，对象是集运单元时同样按此刻成员册里记着的事实那一刻成员展开（VE owner）。
 5. `EnteredByPickup` 没有生产调用方了（TF owner）。
 6. 选全扫而不是唤醒信封是代决（VE、TF owner）。
 
@@ -69,8 +73,8 @@ Blocked by: 无
 |---|---|
 | 二选一：补派生改按对象全扫 | `AT-VE-204`：`backfill_movement_facts_test.go::TestTheNextControlFactBackfillsASegmentTheObjectEnteredOtherwise`（交接连同这一版进的段、这一版进段欠账、揽收、重扫只答已有结果）；派发真库 `movement_fact_backfill_test.go::TestTheNextHandoverBackfillsADepartureOnASegmentTheObjectEnteredWithoutAnEnvelope`（出发先登、直写段册进段、下一次交接经生产路由补出 DEPARTED） |
 | 既有行为不回退 | `AT-VE-178`、`179`、`181`、`182` 原用例与派发真库用例照绿；`AT-VE-180` 余下各格照绿 |
-| ADR-0224 越权风险点 1 末尾补票号 | ADR-0224 Status 注记与文末复核记录（`7fa90b1b6`） |
-| 票 53 完成记录补票号 | `7fa90b1b6` |
+| ADR-0224 越权风险点 1 末尾补票号 | ADR-0224 Status 注记与文末复核记录（`a442c093d`） |
+| 票 53 完成记录补票号 | `a442c093d` |
 
 提交前变异抽验：让补派生只扫最近那一段（退回只看一段），替身用例与派发真库用例都转红。
 
@@ -79,3 +83,20 @@ Blocked by: 无
 - `go build ./...`、`go vet ./...` 全仓过；`gofmt` 干净。
 - 带 DSN `go test -count=1`：`./internal/visibilityexception/...`、`./cmd/parcel-api/...`、`./cmd/parcel-dispatch/...`、`./cmd/parcel-ve-register/...`、`./internal/architecture/...`、`./migrations/...`、`./internal/platform/migrate/...`，21 个包全 ok（含 PG）；新派发真库用例 `-v` PASS。迁移改号之后另跑 `./migrations/...`、`./internal/platform/migrate/...` 与 VE PG 适配器包，全 ok。
 - `tools/adr-index -check`、`tools/at-coverage-counts -check` 只报生成物过期（预期）。没跑全量。
+
+## 评审记录
+
+与票 135 同一份隔离评审，原文照抄在票 135「评审记录」（钉 `340c1581a`，两轴无阻断、非阻断 9 条）；涉及本票的是 Standards 2（`backfillMovementFacts` 头注）、Standards 3、4（ADR-0302 被停条款过宽、Status 漏挂 TF owner）与 Spec 4（ADR-0302 越权风险点 4 漏集运单元），Spec 附注里「136 理由属实（TF 无续办进段那一路）；末段照丢已披露；VE CONTEXT 两句与 `AT-VE-180`、`AT-VE-204` 一致」。
+
+## 修订轮（2026-10-26，作者子代理）
+
+rebase 与验证见票 135「修订轮」（同一分支同一轮）。本票的处置：
+
+| 评审条目 | 处置 | 落点 |
+|---|---|---|
+| Standards 2：`backfillMovementFacts` 头注 | 改成「在这件对象有参与的每一段上按段列出」，引 ADR-0224、ADR-0302 | `9661b63fa` |
+| Standards 3：被停条款过宽 | ADR-0302「对已接受记录的作用」与 ADR-0224 Status 注记都收窄为决定三那一条的首句「只看这一次控制事实让对象进的那一段：对象一程走几段，只取参与入场依据指的正是这一次的那一段。」与末句「一次控制事实至多让对象进一段，认到就停」（逐字）；中间 `EnteredByHandover`/`EnteredByPickup` 那半句写进适用场景、不停用 | `9661b63fa` |
+| Standards 4：Status 漏挂 TF owner | 「第 1、3、5、6 点同时待 TF owner」 | `9661b63fa` |
+| Spec 4：越权风险点 4 漏集运单元 | 补「对象是集运单元时，早先各段上的事实同样按消费那一刻集运成员册里记着的、事实发生那一刻的成员展开，成员关系日后被更正的已补不撤」 | `9661b63fa` |
+
+VE CONTEXT 修订轮没改。

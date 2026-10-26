@@ -1,7 +1,7 @@
 # 135 出发门禁阻断信号没有因果条件与事实依据，发作期永不结束
 
 Category: bug
-Status: in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg135` tip 为写本完成记录的那一笔（代码与文档最后一笔 `d1f8308da`；见文末「完成记录」）。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，与 136 同批，分支 `claude-dcg135`（worktree `idp-parcel-dcg135`）。此前 ready-for-agent——2026-10-20 代决复核立（上线后尽快），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: in-progress——2026-10-26 评审无阻断、修订轮完，待进 main，分支 `claude-dcg135` tip 为写评审记录与修订轮的那一笔（已 rebase 到 origin/main，代码与文档最后一笔 `9661b63fa`；见文末「评审记录」「修订轮」）。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg135` tip `340c1581a`（rebase 前）。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，与 136 同批，分支 `claude-dcg135`（worktree `idp-parcel-dcg135`）。此前 ready-for-agent——2026-10-20 代决复核立（上线后尽快），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 M18；ADR-0205 越权风险点 22、23
 
@@ -25,19 +25,25 @@ Blocked by: 无
 
 | SHA | 内容 |
 |---|---|
-| `1569dcafe` | 代码：领域、编排、端口、PG 适配器、TF→VE 适配器、发作期册读口与线格式、管理台详情、VE 迁移（这一笔里文件名是 0029，后改号 0030），连同各层用例 |
-| `24d870d4c` | （票 136 的代码，见那一票） |
-| `53cfbd1cc` | 文档：UC-VE-004 新立 `AT-VE-201`–`203`、删暂挂说明；ADR-0205 Status 注记与 Links；AT 盘点；docs-consistency/code/30 追记 |
-| `7fa90b1b6` | （票 136 的文档，见那一票） |
-| `d1f8308da` | VE 迁移改号 0029 → 0030（协调方分派，0029 归 tops-26 的票 code/09），SQL 不改，只改文件名与各处引用 |
-| 本笔 | 两票完成记录 |
+SHA 是修订轮 rebase 到 origin/main 之后的；rebase 前依次是 `1569dcafe`、`24d870d4c`、`53cfbd1cc`、`7fa90b1b6`、`d1f8308da`、`340c1581a`。
+
+| SHA | 内容 |
+|---|---|
+| `1fa05d011` | 代码：领域、编排、端口、PG 适配器、TF→VE 适配器、发作期册读口与线格式、管理台详情、VE 迁移 0029，连同各层用例 |
+| `3524ec970` | （票 136 的代码，见那一票） |
+| `8f2c35b57` | 文档：UC-VE-004 新立 `AT-VE-201`–`203`、删暂挂说明；ADR-0205 Status 注记与 Links；AT 盘点；docs-consistency/code/30 追记 |
+| `a442c093d` | （票 136 的文档，见那一票） |
+| `3ae88a962` | VE 迁移一度改号 0029 → 0030（当时协调方分派，0029 让给 tops-26 的票 code/09） |
+| `ecb0151e4` | 两票完成记录 |
+| `9661b63fa` | 修订轮：迁移改号回 0029 与各处引用、过时头注、ADR-0302 收窄、AT-VE-203 执行迁移原文的真库用例、code/30 两格同步（见「修订轮」） |
+| 本笔 | 两票评审记录与修订轮 |
 
 ### 改了什么
 
 - **领域**（`internal/visibilityexception/domain`）：新文件 `signal_cause.go`——`CausalConditionReference`、两种产品自带写法 `SourceFactCausalCondition`（`source-fact/<源上下文>/<事实引用>`）与 `SupersessionForkCausalCondition`（`supersession-fork/<源上下文>/<事实引用>`）、存量那一格 `CausalConditionRecordedBeforeCauses`、事实依据 `SignalFactBasis`（源上下文、事实引用、版本、可缺的判断标识）、一次命中 `SignalHit`（`Complete` 是受理与开期共用的判据）。`SignalEpisode` 多因果条件与依据两维，`OpenEpisode`、`ReopenAsLinked` 只凭一次完整命中（重开须同一原因，规则版本与依据取再发生那一次的），重建门只放存量那一格没有依据。`ExceptionSignal.Basis` 交回冲突保留各方。
 - **编排**：`RaiseSignalCommand` 加 `Cause`、`Basis`，缺一未受理；头注里「编排不替命中补任何一样」那一句改成与字段相符（除发作期与变化历史外各样都随命令来）。发作期按（租户、对象、类型、因果条件）定位（`FindLatestForCause`）。出发门禁阻断信号命令加 `Fact`、`Version`、`Judgement`，因果条件取那一条移动事实；冲突信号的因果条件取分叉的事实流、依据取保留各方。披露决定仍按对象+类型取最近一期（`FindLatest`，头注说明）。
 - **端口**：`SignalEpisodeStore` 加 `FindLatestForCause`，两种找法各答什么写在端口头注；分诊意图按发作期认领。发作期册行加因果条件与依据（`SignalEpisodeFactBasisRow`）。
-- **PG 适配器与迁移**：VE 迁移 `0030`（协调方分派：0029 归另一会话 tops-26 的票 code/09；`1569dcafe` 里文件名是 0029，改号那一笔见提交表）：`signal_episode` 加 `causal_condition`、`fact_basis`（jsonb 数组），存量回填 `RECORDED_BEFORE_CAUSAL_CONDITION` 与 `[]`，CHECK 只放存量那一格没有依据，加按因果条件定位的索引。`SignalEpisodes` 写读两维；分诊意图信封 ID 加发作期维（`triage_handoff.go`）；发作期册（`case_review.go`）照列两维。
+- **PG 适配器与迁移**：VE 迁移 `0029`（一度让给 code/09 改号 0030，code/09 交工没用 0029，修订轮改回，见提交表）：`signal_episode` 加 `causal_condition`、`fact_basis`（jsonb 数组），存量回填 `RECORDED_BEFORE_CAUSAL_CONDITION` 与 `[]`，CHECK 只放存量那一格没有依据，加按因果条件定位的索引。`SignalEpisodes` 写读两维；分诊意图信封 ID 加发作期维（`triage_handoff.go`）；发作期册（`case_review.go`）照列两维。
 - **TF→VE 适配器**：`signalBlocked` 每件带上这件包裹上的 `movement-fact/<对象>/<事实>` 引用（与投影同一处 `movementFactSourceReference` 铸）、事实版本与读数里那一格的关务判断标识；阻断那一格没有判断标识归不变量已破。
 - **线格式与管理台**：`/exception-triage-records?registry=signal-episode` 每行加 `causalCondition` 与 `factBasis`（恒为数组）；管理台「异常分诊」发作期详情加「因果条件」「事实依据」两格，存量行如实显示「登记于因果条件之前」。
 - **文档**：UC-VE-004 新立 `AT-VE-201`–`203`，段末暂挂说明删去，冲突信号恢复边界一格改记「给开发的交接」；ADR-0205 Status 注记加「越权风险点 22、23 已答」（由本票回答、落地，无条款停用），Links 加本票；AT 盘点①三行与追记（总览计数不动）；docs-consistency/code/30 追记冲突信号恢复边界随那一票落。**VE CONTEXT 未改**（它的规则本来就对，审计 VE-09 同此）。
@@ -53,7 +59,7 @@ code/09（tops-26，VE 演示冲突信号类型，可能动信号规则登记与
 - `internal/visibilityexception/domain/exception_case.go`、新文件 `signal_cause.go` 及用例
 - `internal/visibilityexception/ports/ports.go`（`SignalEpisodeStore`、分诊意图头注）、`ports/case_read.go`
 - `internal/visibilityexception/adapters/postgres/signal_episode.go`、`case_review.go`、`triage_handoff.go` 及用例
-- `migrations/visibility_exception/0030_signal_episode_causal_condition_and_fact_basis.sql`（只动 `signal_episode` 一张表）
+- `migrations/visibility_exception/0029_signal_episode_causal_condition_and_fact_basis.sql`（只动 `signal_episode` 一张表）
 
 ### 冲突信号（另列一格）
 
@@ -76,11 +82,11 @@ code/09（tops-26，VE 演示冲突信号类型，可能动信号规则登记与
 越权风险点：
 
 1. **冲突信号仍无恢复边界**（VE owner）。见上节，去处票 docs-consistency/code/30。
-2. **存量那一格各原因迁移后多分诊一次**（VE owner、运维）。演示库与首发库里存量发作期很少；冲突信号今天的生产源造不出分叉（code/30 票面），出发门禁那一类同一次出发的重投才会撞上。
+2. **存量那一格各原因迁移后多分诊一次**（VE owner、运维）。分诊走向是自动建案时，这一次还会多建一个案件（新开一期走 `establishCaseFor`），与存量那一期关联的案件各是一个。演示库与首发库里存量发作期很少；冲突信号今天的生产源造不出分叉（code/30 票面），出发门禁那一类同一次出发的重投才会撞上。
 3. **同一期依据不追加**（VE owner）。见代决 3。
-4. **披露决定取同对象同类型最近一期**（VE owner）。`DecideDisclosureCommand` 只带对象与类型；一件包裹有几次违规出发时，披露针对的是最近那一期。要按期披露，命令改带发作期，归 UC-VE-006 那一侧。
+4. **披露决定取同对象同类型最近一期**（VE owner）。`DecideDisclosureCommand` 只带对象与类型；一件包裹有几次违规出发时，披露针对的是最近那一期，同一对象两期并存时较早那一期取不到披露。`DecideDisclosureHandler` 今天生产未装配，没有暴露。要按期披露，命令改带发作期，归 UC-VE-006 那一侧。
 5. **出发门禁阻断信号的发作期一直活跃**（VE owner）。发作期册上这一类的活跃行只增不减；「活跃」对这一类只说明没被恢复，不说明还在违规。
-6. **迁移 0030 对存量全表回填一次**（运维）。行数少；表上没有外部写入方，迁移在发版窗口里跑。
+6. **迁移 0029 对存量全表回填一次**（运维）。行数少；表上没有外部写入方，迁移在发版窗口里跑。
 
 ### 修法 → 用例
 
@@ -89,16 +95,65 @@ code/09（tops-26，VE 演示冲突信号类型，可能动信号规则登记与
 | 以那一条移动事实为因果条件，每次违规各开一期、重新分诊 | `AT-VE-201`：`raise_signal_test.go::TestAHitWithAnotherCauseOpensItsOwnEpisodeAndIsTriagedAgain`、`raise_departure_gate_signal_test.go::TestEachBlockedDepartureOfAParcelOpensItsOwnEpisodeWithItsFactBasis`、PG `TestEpisodesOfOneParcelAndKindAreFoundByTheirCause`、`TestTwoEpisodesOfOneParcelAndKindEachHandOffTheirOwnIntent`、派发真库 `TestEachBlockedDepartureOfAParcelIsTriagedOnItsOwnThroughTheProductionRoute` |
 | 命令加事实依据：`movement-fact/<对象>/<事实>` 引用、事实版本、逐对象关务判断标识 | `AT-VE-202`：领域 `TestAHitWithoutItsCauseOrFactBasisOpensNoEpisode`、编排受理 `TestACommandWithoutItsSignalFactsIsNotAccepted`、适配器 `TestADepartureProjectsOntoEveryObjectUnderControlAndSignalsTheBlockedOne`、查阅 `TestCaseReviewListsSignalEpisodesWithConclusions` 与 `TestExceptionTriageRecordsListSignalEpisodesVerbatim`、派发真库同上 |
 | 冲突信号存量问题另列一格 | 上节；冲突信号的因果条件与依据：`derive_projection_test.go::TestAForkedSupersessionKeepsBothSuccessorsInTheProjection`、领域 `TestSourceFactAndForkCausesDifferAndAConflictSignalCarriesItsRetainedFacts` |
-| 存量（迁移落地时已在库的发作期） | `AT-VE-203`：领域 `TestOnlyAnEpisodeRecordedBeforeCausesRehydratesWithoutFactBasis`、PG `TestAnEpisodeRecordedBeforeCausesStaysReadableButClaimsNoNewHit`、线格式同上 |
-| 修正 `RaiseSignalCommand` 头注 | `raise_signal.go`（`1569dcafe`） |
-| UC-VE-004 暂挂说明删去 | `53cfbd1cc` |
+| 存量（迁移落地时已在库的发作期） | `AT-VE-203`：领域 `TestOnlyAnEpisodeRecordedBeforeCausesRehydratesWithoutFactBasis`、PG `TestAnEpisodeRecordedBeforeCausesStaysReadableButClaimsNoNewHit`、修订轮补的 `TestTheMigrationBackfillsEarlierEpisodesAsRecordedBeforeCauses`（执行迁移 0029 原文）、线格式同上 |
+| 修正 `RaiseSignalCommand` 头注 | `raise_signal.go`（`1fa05d011`） |
+| UC-VE-004 暂挂说明删去 | `8f2c35b57` |
 
 提交前变异抽验：把 `FindLatestForCause` 的因果条件条件去掉（退回按对象+类型定位），派发真库用例转红。
 
 ### 自验
 
 - `go build ./...`、`go vet ./...` 全仓过；改过的 `.go` 全部 `gofmt` 干净。
-- 带 DSN（`127.0.0.1:55432`）`go test -count=1`：`./internal/visibilityexception/...`、反查出的 `./cmd/parcel-api/...`、`./cmd/parcel-dispatch/...`、`./cmd/parcel-ve-register/...`，连同 `./internal/architecture/...`、`./migrations/...`、`./internal/platform/migrate/...`，21 个包全 ok（含 PG）。新真库用例 `-v` 逐条 PASS、无 SKIP。迁移改号（`d1f8308da`，SQL 不变）之后另跑 `./migrations/...`、`./internal/platform/migrate/...` 与 VE PG 适配器包，全 ok。
-- 迁移 0030 的存量回填另在一次性库上手验：0002 形状的表里先写一行旧发作期，跑这份迁移后读回 `RECORDED_BEFORE_CAUSAL_CONDITION` 与 `[]`；库已删。
+- 带 DSN（`127.0.0.1:55432`）`go test -count=1`：`./internal/visibilityexception/...`、反查出的 `./cmd/parcel-api/...`、`./cmd/parcel-dispatch/...`、`./cmd/parcel-ve-register/...`，连同 `./internal/architecture/...`、`./migrations/...`、`./internal/platform/migrate/...`，21 个包全 ok（含 PG）。新真库用例 `-v` 逐条 PASS、无 SKIP。迁移改号（SQL 不变）之后另跑 `./migrations/...`、`./internal/platform/migrate/...` 与 VE PG 适配器包，全 ok。
+- 迁移 0029 的存量回填另在一次性库上手验：0002 形状的表里先写一行旧发作期，跑这份迁移后读回 `RECORDED_BEFORE_CAUSAL_CONDITION` 与 `[]`；库已删。
 - `apps/admin-web`：`tsc -b --noEmit` 过、`scripts/run-tests.mjs` 619 pass、`vite build` 过。
 - `tools/adr-index -check`、`tools/at-coverage-counts -check` 只报生成物过期（预期，进 main 时由推送方重生成）。没跑全量。
+
+## 评审记录
+
+评审 ← tops-20 隔离子代理 · 钉 `340c1581a` · 00:58
+
+结论：两轴无阻断；非阻断 9 条。
+
+### Standards
+阻断：无。
+非阻断：
+1. `internal/visibilityexception/adapters/http/query_exception_triage_records.go` `signalEpisodeBody` 头注留着旧句「「事实依据」在发作期行上没有登记格，本体不带那一键」，与紧接的「factBasis 恒为数组」相抵；代决 7 说改了读口注释，实际只改了 `ports/case_read.go`。
+2. 两处头注过时：`cmd/parcel-dispatch/assemble_movement_fact_backfill.go` `backfillMovementFacts` 仍写「在它让对象进的那一段上按段列出」（已被 ADR-0302 停用）；`adapters/postgres/signal_episode.go` `SaveRaised`、`SaveHit` 仍指 `FindLatest`，命中定位现走 `FindLatestForCause`。
+3. ADR-0302「被停条款」整句引决定三，连「交接用 `EnteredByHandover`；揽收由…`EnteredByPickup`…依据的拼写收进同一处，进段、重派生与认都经它」也引进去了，可适用场景又说 `EnteredByPickup` 认法与拼写收口不受影响——被停条款比实际停用范围宽（引文逐字无误）。
+4. ADR-0302 Status 行写「第 1、6 点同时待 TF owner」，但越权风险点 3、5 也挂了 TF owner。
+无发现：上下文边界（VE 只经 TF ports/领域读，适配器在消费侧）；去向/来向分写、Links 两头；ADR-0205 风险点 22、23 引文逐字。
+
+### Spec
+阻断：无。
+非阻断：
+1. `AT-VE-203` 点名的 `TestAnEpisodeRecordedBeforeCausesStaysReadableButClaimsNoNewHit` 是迁移后直接插回填字面量，没执行迁移 0030 的 UPDATE。仓内先例：TF `TestTheMigrationBackfillsEarlierDeparturesAsRecordedBeforeTheGateReading` 抽出迁移原文执行。评审探针（一次性库：按 0002+0003 表形写旧发作期行，跑 0030，读回 `RECORDED_BEFORE_CAUSAL_CONDITION` 与 `[]`；带依据新行也通过）证行为对，只缺自动化用例。
+2. 135 越权风险点 2、4 披露不全：风险点 2 只写「多分诊一次」，没写分诊走向为自动建案时会多建一个案件（`Handle` 新开一期走 `establishCaseFor`）；风险点 4（披露取最近一期）：`DecideDisclosureHandler` 生产未装配故未暴露、与 CONTEXT「信号发作期」不相抵，但同一对象两期并存时较早那一期取不到披露，宜补进风险点。
+3. 「另列一格」满足；但 code/30 追记加了「恢复边界随冲突信号规则那一版」，那张票的「规模」与「要裁的：无」没跟着改，宜同步。
+4. ADR-0302 越权风险点 4 只提段册按消费那一刻算；对象是集运单元时扫早先各段同样按此刻成员册展开，没提。
+5. 管理台没加 node:test（visibility 页本无测试，`episodeDetailFields` 是 TSX 非导出函数）；按 workflow「前端切片」第 5 步业务页自查即可，不挡。文案中文、只读展示。
+无发现（附注摘要）：生产 `RaiseSignalCommand{` 只有两处构造点（`raise_departure_gate_signal.go`、`derive_projection.go` `raiseConflict`），都带 `Cause` 与非空 `Basis`；重放幂等成立；缺关务判断标识不会让正常路径失败（TF `NewGateFinding` 构造门）；存量格三处约束一致（迁移 CHECK、`RehydrateSignalEpisode`、`SignalHit.valid`）；分诊意图确无消费者、分区键未变；136 理由属实（TF 无续办进段那一路）；末段照丢已披露；VE CONTEXT 两句与 `AT-VE-180`、`AT-VE-204` 一致；新号不撞；VE 各包带 DSN 跑 go test 通过。
+
+## 修订轮（2026-10-26，作者子代理）
+
+先 rebase 到 origin/main（main 多出 74 笔，含票 139 的 AT 盘点守卫）：只在 `.scratch/at-coverage-inventory.md` 文末追记处冲突一次，两边都留（票 134、code/01、127/48/167、139 的追记在前，本票与 136 的追记在后）；分桶表行无冲突，`AT-VE-201`–`204` 各有一行。
+
+| 评审条目 | 处置 | 落点 |
+|---|---|---|
+| Standards 1：`signalEpisodeBody` 头注旧句 | 改成「因果条件与事实依据照登记原样透出；factBasis 恒为数组」 | `9661b63fa` |
+| Standards 2：`backfillMovementFacts` 头注、`SaveRaised`/`SaveHit` 指 `FindLatest` | 改成扫每一段；改指 `FindLatestForCause` | `9661b63fa` |
+| Standards 3：ADR-0302 被停条款过宽 | 收窄到实际停用的两处原句（逐字），`EnteredByHandover`/`EnteredByPickup` 那半句写进适用场景、不停用；ADR-0224 注记同改 | 票 136、`9661b63fa` |
+| Standards 4：ADR-0302 Status 漏挂 TF owner | 改为「第 1、3、5、6 点同时待 TF owner」 | `9661b63fa` |
+| Spec 1：`AT-VE-203` 没执行迁移 | 新真库用例 `signal_episode_migration_test.go::TestTheMigrationBackfillsEarlierEpisodesAsRecordedBeforeCauses`：把库退回迁移前表形、写两行存量（活跃、已结束）、执行迁移 0029 原文，读回存量格与空依据、命中与结束原样、不认领带原因的命中、迁移后新发作期写得进；AT 盘点该行补点名 | `9661b63fa` |
+| Spec 2：本票越权风险点 2、4 | 风险点 2 补「自动建案走向会多建一个案件」；风险点 4 补「两期并存时较早那一期取不到披露」 | 本笔 |
+| Spec 3：code/30 「规模」「要裁的」 | 两格随追记同步（只动这两格与追记末句，写明由本票改） | `9661b63fa` |
+| Spec 4：ADR-0302 越权风险点 4 | 补集运单元按消费那一刻成员册展开 | 票 136、`9661b63fa` |
+| Spec 5 | 不改（协调方定） | — |
+| 协调方：迁移改号回 0029 | `0030_*.sql` 改名回 `0029_*.sql`，SQL 不改，代码注释、测试、ADR-0205 注记、code/30 追记、管理台注释、两票面同步 | `9661b63fa`、本笔 |
+
+修订轮验证（rebase 后 tip，代码等于 `9661b63fa`）：
+
+- `go build ./...`、`go vet ./...` 全仓过，`gofmt` 干净。
+- 带 DSN `go test -count=1`：`./internal/visibilityexception/...`、`./cmd/parcel-api/...`、`./cmd/parcel-dispatch/...`、`./cmd/parcel-ve-register/...`、`./internal/architecture/...`、`./migrations/...`、`./internal/platform/migrate/...` 全 ok（含 PG）；新用例 `-v` PASS。`go test ./tools/at-coverage-counts/...` ok。
+- `go run ./tools/at-coverage-counts -check` 与 `go run ./tools/adr-index -check` 只报生成物过期，没有缺行或多行。
+- `apps/admin-web`（只改了一行注释）：`tsc -b --noEmit` 过、`scripts/run-tests.mjs` 647 pass、`vite build` 过。
