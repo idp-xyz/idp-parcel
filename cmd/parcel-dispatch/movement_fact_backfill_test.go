@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"testing"
+	"time"
 
 	"go.idp.xyz/idp-bento-go/eventing"
 	"go.idp.xyz/idp-bento-go/postgres/inbox"
@@ -160,6 +161,88 @@ func TestADepartureRecordedBeforeItsSegmentReachesTrackingOnceAPickupEstablishes
 	if departed != 1 {
 		t.Fatalf("出发条目 %d 个, want 1（条目共 %d 个）", departed, len(entries))
 	}
+}
+
+// Covers: AT-VE-204 真库半边（票 demo-chain-gaps/136，ADR-0302，证据 S）——出发先于段登记；对象随后不经任何一封控制事实信封进了那一段
+// （控制事实进段那一半欠了账、日后续办补进段，或存量迁移、直写段册：这里直写段册），那一刻没有东西唤醒补派生，投影里仍没有这次
+// 出发；这件对象此后的下一次`已交接`经生产登记编排把它交进下一段，生产路由一拍：那一封上的补派生扫对象有参与的每一段，在前一段上
+// 补出这次出发，归 DEPARTED。此前补派生只看这一次交接进的那一段，这次出发就永远丢在追踪外面。
+func TestTheNextHandoverBackfillsADepartureOnASegmentTheObjectEnteredWithoutAnEnvelope(t *testing.T) {
+	fixture := newSYNVerticalFixture(t)
+	registerDemoMilestoneMapping(t, fixture)
+
+	factEvent := recordDepartureThroughProduction(t, fixture, backfillFact)
+	if published, err := fixture.beat.DispatchOnce(t.Context()); err != nil || published != 1 {
+		t.Fatalf("出发那一拍 published = %d err = %v；失败码 = %q", published, err, recordedFailureCode(t, fixture.db, factEvent))
+	}
+	saveDepartureSegment(t, fixture)
+	if entries := projectionEntries(t, fixture, movementParcelOnBoard); len(entries) != 0 {
+		t.Fatalf("对象进段时没有信封，投影里却已有 %d 个条目——前提不成立", len(entries))
+	}
+
+	onward := registerOnwardHandover(t, fixture, movementParcelOnBoard)
+	if _, err := fixture.beat.DispatchOnce(t.Context()); err != nil {
+		t.Fatalf("交接那一拍：%v", err)
+	}
+	if n := fixture.countInbox(t, backfillConsumerName, onward); n != 1 {
+		t.Fatalf("补派生 inbox 行数 = %d, want 1；失败码 = %q", n, recordedFailureCode(t, fixture.db, onward))
+	}
+	var departed int
+	for _, entry := range projectionEntries(t, fixture, movementParcelOnBoard) {
+		if entry.Fact().Fact().String() != "movement-fact/"+movementParcelOnBoard+"/"+backfillFact {
+			continue
+		}
+		departed++
+		if milestone, classified := entry.Milestone(); !classified || milestone.String() != "DEPARTED" {
+			t.Fatalf("补出的出发归类 %q（%v），want DEPARTED", milestone, classified)
+		}
+	}
+	if departed != 1 {
+		t.Fatalf("前一段上的出发条目 %d 个, want 1——下一次交接没有扫到对象先前进的那一段", departed)
+	}
+	if entries := projectionEntries(t, fixture, movementParcelBlocked); len(entries) != 0 {
+		t.Fatalf("没有下一份控制事实的那一件也补出了 %d 个条目——补派生只补这一件", len(entries))
+	}
+}
+
+// registerOnwardHandover 经生产登记编排登 object 出发两小时后的下一次`已交接`：交进下一段（结束它在出发那一段的参与、立起下一段）。
+// 交回交接信封的事件 ID。
+func registerOnwardHandover(t *testing.T, fixture *synVerticalFixture, object string) string {
+	t.Helper()
+	const (
+		onwardScope   = "SYN-SCOPE-SZX-GATE-ONWARD"
+		onwardVersion = "SYN-HANDOVER-RESULT/DEP-ONWARD/v1"
+	)
+	store, err := outbox.NewStore(fixture.db)
+	if err != nil {
+		t.Fatalf("构造 Outbox Store：%v", err)
+	}
+	register := newHandoverRegistration(t, fixture.db, store)
+	tenant := mustTF(t, tfdomain.NewTenantID, fixture.identity.TenantID().String())
+	command := tfapplication.RegisterTransportHandoverCommand{
+		TenantID:          tenant,
+		Object:            object,
+		Scope:             onwardScope,
+		ReleasedBy:        "SYN-OWN-FLEET",
+		ReceivedBy:        "SYN-NODE-SZX-GATE",
+		Verdict:           tfdomain.ObjectHandedOver,
+		ReleasingEvidence: "SYN-EVIDENCE-RELEASE-ONWARD",
+		ReceivingEvidence: "SYN-EVIDENCE-RECEIVE-ONWARD",
+		Rule:              "SYN-HANDOVER-RULE/v1",
+		Version:           onwardVersion,
+		JudgedAt:          movementDepartedAt.Add(2 * time.Hour),
+		Segment:           "SYN-SEG-SZX-ONWARD",
+	}
+	var result tfapplication.RegisterTransportHandoverResult
+	mustWithinTX(t, fixture.transactor, t.Context(), func(txCtx context.Context) error {
+		var registerErr error
+		result, registerErr = register.Register(txCtx, command)
+		return registerErr
+	})
+	if result.Outcome() != tfapplication.HandoverRegistered || result.SegmentContinuationReference() != "" {
+		t.Fatalf("登记下一次交接：outcome=%s debt=%q", result.Outcome(), result.SegmentContinuationReference())
+	}
+	return tenant.String() + "/" + object + "/" + onwardScope + "/" + onwardVersion
 }
 
 // registerHandoverIntoMovementSegment 经生产登记编排（真交接册、真段册、真 outbox 交出、真结束参与）登一次`已交接`：在控那一件

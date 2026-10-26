@@ -13,9 +13,9 @@ import (
 	veapplication "go.idp.xyz/idp-parcel/internal/visibilityexception/application"
 )
 
-// 本文件证控制事实信封上的移动事实补派生（票 demo-chain-gaps/53，ADR-0224）：对象凭这一版`已交接`或场外揽收进段，声明了这一段、
-// 发生那一刻对象在控的在册移动事实就在它身上补派生；与移动事实那一路同一判据、同一幂等键，两路谁先谁后都只留一份。派生一侧用真的派生
-// 编排接替身端口，与移动事实那一份用例共用同包的替身。
+// 本文件证控制事实信封上的移动事实补派生（票 demo-chain-gaps/53、136，ADR-0224、ADR-0302）：对象的一版`已交接`或场外揽收登了，
+// 就扫它有参与的每一段，声明了那一段、发生那一刻对象在控的在册移动事实就在它身上补派生；与移动事实那一路同一判据、同一幂等键，两路
+// 谁先谁后都只留一份。派生一侧用真的派生编排接替身端口，与移动事实那一份用例共用同包的替身。
 
 type objectSegmentsDouble struct {
 	keys    []tfports.FulfillmentSegmentKey
@@ -220,8 +220,8 @@ func TestTheBackfillAndTheNormalPathLeaveOneEntryInEitherOrder(t *testing.T) {
 	}
 }
 
-// Covers: AT-VE-180——这一版交接没让对象在事实那一刻落在声明的段里，就没有可补的：拒收与待确认不转出控制（连段都不读）；对象不在
-// 任何段；有参与的段不是这一版交接进的（不列事实）；进的段上没有声明它的事实；对象进段晚于事实发生。都入账不派生。
+// Covers: AT-VE-180——没有可补的就入账不派生：拒收与待确认不转出控制（连段都不读）；对象不在任何段；它的段上没有声明那一段的事实；
+// 对象进段晚于事实发生。
 func TestAHandoverThatDoesNotPutTheObjectUnderControlAtTheFactBackfillsNothing(t *testing.T) {
 	assertNothing := func(t *testing.T, fixture *backfillFixture) {
 		t.Helper()
@@ -247,27 +247,6 @@ func TestAHandoverThatDoesNotPutTheObjectUnderControlAtTheFactBackfillsNothing(t
 		fixture := newBackfillFixture(t, handoverMappingViewDouble{})
 		fixture.segments.keys = nil
 		assertNothing(t, fixture)
-	})
-	t.Run("有参与的段不是这一版交接进的", func(t *testing.T) {
-		fixture := newBackfillFixture(t, handoverMappingViewDouble{})
-		other := registeredHandover(t, tfdomain.ObjectHandedOver)
-		corrected, err := other.Handover.Correct(tfdomain.HandoverCorrection{
-			Verdict:           tfdomain.ObjectHandedOver,
-			ReleasingEvidence: movementValue(t, tfdomain.NewHandoverEvidenceReference, "seal-out"),
-			ReceivingEvidence: movementValue(t, tfdomain.NewHandoverEvidenceReference, "seal-in"),
-			Rule:              movementValue(t, tfdomain.NewHandoverRuleReference, "rule/v1"),
-			Version:           movementValue(t, tfdomain.NewHandoverResultVersion, "handover-result/v2"),
-			CorrectedAt:       handoverJudgedAt.Add(time.Hour),
-		})
-		if err != nil {
-			t.Fatalf("更正交接：%v", err)
-		}
-		segment := backfillSegment(t, corrected, corrected.JudgedAt())
-		fixture.segments.records[segment.Key] = segment
-		assertNothing(t, fixture)
-		if fixture.facts.calls != 0 {
-			t.Fatalf("段不是这一版进的，却按段列了 %d 次事实", fixture.facts.calls)
-		}
 	})
 	t.Run("进的段上没有声明它的事实", func(t *testing.T) {
 		fixture := newBackfillFixture(t, handoverMappingViewDouble{})
@@ -466,8 +445,7 @@ func TestAPickupIntoTheSegmentBackfillsTheFactRecordedBeforeIt(t *testing.T) {
 	}
 }
 
-// Covers: AT-VE-180、AT-VE-181（揽收）——收寄没带段（对象不在任何段）入账不补；有参与的段是凭交接进的、不是这一次收寄进的，不补；
-// 揽收读不回是续办。
+// Covers: AT-VE-180、AT-VE-181（揽收）——收寄没带段、对象也不在任何段，入账不补；揽收读不回是续办。
 func TestAPickupThatPutsNoObjectIntoTheSegmentBackfillsNothing(t *testing.T) {
 	t.Run("对象不在任何段", func(t *testing.T) {
 		fixture := pickupFixture(t)
@@ -479,21 +457,130 @@ func TestAPickupThatPutsNoObjectIntoTheSegmentBackfillsNothing(t *testing.T) {
 			t.Fatalf("不该补却派生了 %d 份", len(fixture.store.byKey))
 		}
 	})
-	t.Run("段是凭交接进的", func(t *testing.T) {
-		fixture := newBackfillFixture(t, handoverMappingViewDouble{})
-		if err := fixture.subject.HandleRegisteredOffsitePickup(t.Context(), registeredPickupRef()); err != nil {
-			t.Fatalf("handle: %v", err)
-		}
-		if len(fixture.store.byKey) != 0 || fixture.facts.calls != 0 {
-			t.Fatalf("段不是这一次收寄进的，却列了 %d 次事实、派生了 %d 份", fixture.facts.calls, len(fixture.store.byKey))
-		}
-	})
 	t.Run("揽收读不回", func(t *testing.T) {
 		fixture := pickupFixture(t)
 		fixture.pickups.found = false
 		err := fixture.subject.HandleRegisteredOffsitePickup(t.Context(), registeredPickupRef())
 		if !errors.Is(err, adapter.ErrPickupNotVisible) {
 			t.Fatalf("err = %v, want ErrPickupNotVisible", err)
+		}
+	})
+}
+
+// segmentEnteredOtherwise 立 segment-0：parcel-1 凭一条不是任何一封控制事实信封所载的依据（续办补进段、存量迁移、直写段册都是这一形）
+// 在 enteredAt 进段；段上声明着一条先于它登记的到达 move-0。交回段与那条事实。
+func segmentEnteredOtherwise(t *testing.T, enteredAt time.Time) (tfports.FulfillmentSegmentRecord, tfports.MovementFactRecord) {
+	t.Helper()
+	tenant := movementValue(t, tfdomain.NewTenantID, "tenant-1")
+	reference := movementValue(t, tfdomain.NewFulfillmentSegmentReference, "segment-0")
+	segment, err := tfdomain.RehydrateActualFulfillmentSegment(tfdomain.RehydrateActualFulfillmentSegmentSpec{
+		TenantID: tenant,
+		Segment:  reference,
+		Participations: []tfdomain.RehydrateParticipationSpec{{
+			Object:     movementValue(t, tfdomain.NewCarriedObjectReference, "parcel-1"),
+			EntryKind:  tfdomain.EnteredByTransportHandover,
+			EntryBasis: movementValue(t, tfdomain.NewParticipationBasisReference, "CONTINUED/parcel-1"),
+			EnteredAt:  enteredAt,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("重建段：%v", err)
+	}
+	spec := tfdomain.MovementFactSpec{
+		TenantID:   tenant,
+		Fact:       movementValue(t, tfdomain.NewMovementFactReference, "move-0"),
+		Schedule:   movementValue(t, tfdomain.NewScheduleReference, "schedule-0"),
+		Kind:       tfdomain.ArrivalFact,
+		Location:   movementValue(t, tfdomain.NewMovementLocationReference, "NODE-PVG"),
+		Source:     movementValue(t, tfdomain.NewMovementSourceReference, "own-fleet/v1"),
+		Version:    movementValue(t, tfdomain.NewMovementFactVersion, "v1"),
+		OccurredAt: enteredAt.Add(time.Hour),
+		Segment:    reference,
+	}
+	fact, err := tfdomain.RecordMovementFact(spec)
+	if err != nil {
+		t.Fatalf("事实：%v", err)
+	}
+	return tfports.FulfillmentSegmentRecord{Key: tfports.FulfillmentSegmentKey{TenantID: tenant, Segment: reference}, Segment: segment},
+		tfports.MovementFactRecord{
+			Key:        tfports.MovementFactKey{TenantID: tenant, Fact: spec.Fact, Version: spec.Version},
+			Fact:       fact,
+			RecordedAt: movementRecordedAt,
+		}
+}
+
+// withSegmentEnteredOtherwise 给现场加上 segment-0（排在对象段列的最前），交回那条事实的派生引用。
+func withSegmentEnteredOtherwise(t *testing.T, fixture *backfillFixture, keepOthers bool) string {
+	t.Helper()
+	segment, fact := segmentEnteredOtherwise(t, movementDepartedAt.Add(-6*time.Hour))
+	if keepOthers {
+		fixture.segments.keys = append([]tfports.FulfillmentSegmentKey{segment.Key}, fixture.segments.keys...)
+	} else {
+		fixture.segments.keys = []tfports.FulfillmentSegmentKey{segment.Key}
+	}
+	fixture.segments.records[segment.Key] = segment
+	fixture.facts.bySegment[segment.Key] = []tfports.MovementFactRecord{fact}
+	return "movement-fact/parcel-1/move-0"
+}
+
+func (fixture *backfillFixture) derivedFacts() map[string]bool {
+	derived := map[string]bool{}
+	for _, record := range fixture.store.byKey {
+		derived[record.Fact.Fact().String()] = true
+	}
+	return derived
+}
+
+// Covers: AT-VE-204（票 demo-chain-gaps/136，ADR-0302）——对象有参与的段里，有一段不是任何一封控制事实信封让它进的（控制事实登记时进段
+// 那一半欠了账、日后续办补进段；或存量迁移、直写段册）：那一段上先于进段登记、事实那一刻它在控的移动事实，由这件对象此后的下一份
+// `已交接`或对象级场外揽收补出——补派生扫对象有参与的每一段，不再只看这一次控制事实进的那一段。这一次控制事实自己进段欠了账、在段里
+// 没有参与时同样照扫。
+func TestTheNextControlFactBackfillsASegmentTheObjectEnteredOtherwise(t *testing.T) {
+	t.Run("交接：连同这一版进的那一段", func(t *testing.T) {
+		fixture := newBackfillFixture(t, handoverMappingViewDouble{})
+		earlier := withSegmentEnteredOtherwise(t, fixture, true)
+		if err := fixture.subject.HandleRegisteredTransportHandover(t.Context(), registeredHandoverRef()); err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		derived := fixture.derivedFacts()
+		if !derived[earlier] || !derived["movement-fact/parcel-1/move-1"] || len(derived) != 2 {
+			t.Fatalf("补出的 = %v，want 两段上各一份", derived)
+		}
+	})
+	t.Run("交接：这一版进段欠了账", func(t *testing.T) {
+		fixture := newBackfillFixture(t, handoverMappingViewDouble{})
+		earlier := withSegmentEnteredOtherwise(t, fixture, false)
+		if err := fixture.subject.HandleRegisteredTransportHandover(t.Context(), registeredHandoverRef()); err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if derived := fixture.derivedFacts(); !derived[earlier] || len(derived) != 1 {
+			t.Fatalf("补出的 = %v，want 续办补进的那一段上的 move-0", derived)
+		}
+	})
+	t.Run("揽收：连同凭交接进的那一段", func(t *testing.T) {
+		fixture := pickupFixture(t)
+		earlier := withSegmentEnteredOtherwise(t, fixture, true)
+		if err := fixture.subject.HandleRegisteredOffsitePickup(t.Context(), registeredPickupRef()); err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		derived := fixture.derivedFacts()
+		if !derived[earlier] || !derived["movement-fact/parcel-1/move-1"] || len(derived) != 2 {
+			t.Fatalf("补出的 = %v，want 两段上各一份", derived)
+		}
+		if n := fixture.factsOf("parcel-2"); n != 0 {
+			t.Fatalf("同段别的对象也在这一封里补了 %d 份", n)
+		}
+	})
+	t.Run("扫到早已派生过的段只答已有结果", func(t *testing.T) {
+		fixture := newBackfillFixture(t, handoverMappingViewDouble{})
+		withSegmentEnteredOtherwise(t, fixture, true)
+		for range 2 {
+			if err := fixture.subject.HandleRegisteredTransportHandover(t.Context(), registeredHandoverRef()); err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+		}
+		if facts, entries := fixture.factsOf("parcel-1"), fixture.entriesOf(t, "parcel-1"); facts != 2 || entries != 2 {
+			t.Fatalf("parcel-1 事实 %d 份、条目 %d 个，want 各 2——重扫不该多出一份", facts, entries)
 		}
 	})
 }
