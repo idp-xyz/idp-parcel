@@ -198,7 +198,7 @@ func (fixture *decideFixture) decideOK(t *testing.T, command application.DecideR
 	return result
 }
 
-// Covers: ADR-0284 决定一、三、四；CONTEXT「授权角色接受建议 → 形成改路决定」——授权角色据当前的建议择一合格候选：形成
+// Covers: AT-NR-095（ADR-0284 决定一、三、四）；CONTEXT「授权角色接受建议 → 形成改路决定」——授权角色据当前的建议择一合格候选：形成
 // 授权角色方式的改路决定与新计划，决定方是会话里认证出的操作者，原计划是失效的那一份，触发是建议的触发；新计划从决定的
 // 时刻起生效、判断时刻同取，生效节点是新计划首节点；证据与候选成本按受理基线那一版投影取。原计划的失效照留，适用性不再动。
 func TestAnAuthorizedRoleDecidesACurrentSuggestion(t *testing.T) {
@@ -249,7 +249,7 @@ func TestAnAuthorizedRoleDecidesACurrentSuggestion(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0284 决定五——决定形成的计划进路由历史：下一次复核从它起判，在它的计划节点上仍适用、引用它的版本。
+// Covers: AT-NR-095（ADR-0284 决定五）——决定形成的计划进路由历史：下一次复核从它起判，在它的计划节点上仍适用、引用它的版本。
 func TestTheNextReassessmentStartsFromTheDecidedPlan(t *testing.T) {
 	fixture := newDecideFixture(t)
 	decided := fixture.decideOK(t, fixture.command(t, "candidate-2"))
@@ -269,7 +269,7 @@ func TestTheNextReassessmentStartsFromTheDecidedPlan(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0284 决定二「过时」——建议所在那次复核之后，同一判断键上另有一次复核（更晚，或同一时刻）：建议过时，答
+// Covers: AT-NR-096（ADR-0284 决定二「过时」）——建议所在那次复核之后，同一判断键上另有一次复核（更晚，或同一时刻）：建议过时，答
 // SUGGESTION_SUPERSEDED，不形成决定，也不去读证据。
 func TestASuggestionOvertakenByAnotherReassessmentIsSuperseded(t *testing.T) {
 	for name, at := range map[string]time.Time{
@@ -300,7 +300,7 @@ func TestASuggestionOvertakenByAnotherReassessmentIsSuperseded(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0284 决定二「已决定」——同一份建议第二次决定（另一位授权角色，或同一位重放），答已决定并交回原决定，不再落册。
+// Covers: AT-NR-096（ADR-0284 决定二「已决定」）——同一份建议第二次决定（另一位授权角色，或同一位重放），答已决定并交回原决定，不再落册。
 func TestASecondDecisionOnTheSameSuggestionAnswersAlreadyDecided(t *testing.T) {
 	fixture := newDecideFixture(t)
 	first := fixture.decideOK(t, fixture.command(t, "candidate-2"))
@@ -321,7 +321,7 @@ func TestASecondDecisionOnTheSameSuggestionAnswersAlreadyDecided(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0284 决定五「并发」——锁外看着没有决定、落册时另一笔已抢先落了同一份建议：撞键读回赢家，答已决定。
+// Covers: AT-NR-096（ADR-0284 决定五「并发」）——锁外看着没有决定、落册时另一笔已抢先落了同一份建议：撞键读回赢家，答已决定。
 func TestALosingConcurrentDecisionReadsBackTheWinner(t *testing.T) {
 	fixture := newDecideFixture(t)
 	winner := fixture.command(t, "candidate-1")
@@ -341,7 +341,7 @@ func TestALosingConcurrentDecisionReadsBackTheWinner(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0284 决定二「建议不存在」——没有这个关联的复核、那次复核没有建议、建议不是指名的包裹，都答 SUGGESTION_NOT_FOUND。
+// Covers: AT-NR-097（ADR-0284 决定二「建议不存在」）——没有这个关联的复核、那次复核没有建议、建议不是指名的包裹，都答 SUGGESTION_NOT_FOUND。
 func TestASuggestionThatIsNotThereIsNotFound(t *testing.T) {
 	fixture := newDecideFixture(t)
 
@@ -371,7 +371,7 @@ func TestASuggestionThatIsNotThereIsNotFound(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0284 决定二「不在建议之列」——所择候选不在建议的候选里，答 CANDIDATE_NOT_SUGGESTED。
+// Covers: AT-NR-097（ADR-0284 决定二「不在建议之列」）——所择候选不在建议的候选里，答 CANDIDATE_NOT_SUGGESTED。
 func TestACandidateOutsideTheSuggestionIsRefused(t *testing.T) {
 	fixture := newDecideFixture(t)
 	result := fixture.decideOK(t, fixture.command(t, "candidate-9"))
@@ -383,7 +383,7 @@ func TestACandidateOutsideTheSuggestionIsRefused(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0284 决定二「此刻重判」；CONTEXT「人工决定同样不得绕过硬限制」——建议形成之后，所择候选被有效硬限制淘汰：答
+// Covers: AT-NR-097（ADR-0284 决定二「此刻重判」）；CONTEXT「人工决定同样不得绕过硬限制」——建议形成之后，所择候选被有效硬限制淘汰：答
 // CANDIDATE_RESTRICTED、带淘汰依据，不形成决定。
 func TestACandidateRestrictedSinceTheSuggestionIsRefused(t *testing.T) {
 	fixture := newDecideFixture(t)
@@ -403,7 +403,7 @@ func TestACandidateRestrictedSinceTheSuggestionIsRefused(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0284 决定二「此刻重判」其余两格——被其余层次淘汰或已不在候选空间答 CANDIDATE_NOT_QUALIFIED；证据未知答
+// Covers: AT-NR-097（ADR-0284 决定二「此刻重判」其余两格）——被其余层次淘汰或已不在候选空间答 CANDIDATE_NOT_QUALIFIED；证据未知答
 // CANDIDATE_EVIDENCE_UNKNOWN；各带依据。
 func TestACandidateNoLongerQualifiedOrUnknownIsRefused(t *testing.T) {
 	cases := map[string]struct {
@@ -470,7 +470,7 @@ func TestACandidateNoLongerQualifiedOrUnknownIsRefused(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0284 决定二——判断时点没有适用的网络证据，答 REROUTE_EVIDENCE_NOT_CONFIGURED，不是未决。
+// Covers: AT-NR-097（ADR-0284 决定二）——判断时点没有适用的网络证据，答 REROUTE_EVIDENCE_NOT_CONFIGURED，不是未决。
 func TestADecisionWithoutConfiguredEvidenceAnswersNotConfigured(t *testing.T) {
 	fixture := newDecideFixture(t)
 	fixture.evidence.unconfigured = map[string]bool{"parcel-1": true}
@@ -480,7 +480,7 @@ func TestADecisionWithoutConfiguredEvidenceAnswersNotConfigured(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0284 决定二「只有依赖读不动答未决」——各依赖读不动答 UNDECIDED 带原因与续办引用，不落册。
+// Covers: AT-NR-097（ADR-0284 决定二「只有依赖读不动答未决」）——各依赖读不动答 UNDECIDED 带原因与续办引用，不落册。
 func TestDependenciesThatCannotBeReadLeaveTheDecisionUndecided(t *testing.T) {
 	boom := errors.New("boom")
 	cases := map[string]struct {
@@ -516,7 +516,7 @@ func TestDependenciesThatCannotBeReadLeaveTheDecisionUndecided(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0284 决定三——受理基线那一版读回来与建议的判断键对不上，或读成「不是当前已接受包裹」，是不变量破了：响亮报错，
+// Covers: AT-NR-097（ADR-0284 决定三）——受理基线那一版读回来与建议的判断键对不上，或读成「不是当前已接受包裹」，是不变量破了：响亮报错，
 // 不进未决、不落册。
 func TestABaselineThatDisagreesWithTheSuggestionIsLoud(t *testing.T) {
 	for name, breakIt := range map[string]func(*decideFixture){
@@ -538,7 +538,7 @@ func TestABaselineThatDisagreesWithTheSuggestionIsLoud(t *testing.T) {
 	}
 }
 
-// Covers: AT-NR-084 的决定那一半（ADR-0249 决定二、ADR-0284 决定四）——揽收复核形成的建议，授权角色在包裹交进首个节点之前
+// Covers: AT-NR-084 的决定那一半与 AT-NR-095（ADR-0249 决定二、ADR-0284 决定四）——揽收复核形成的建议，授权角色在包裹交进首个节点之前
 // 决定：新计划从决定的时刻起生效，生效节点是包裹将交进的首个节点（新计划首节点）。阈值 0 是本测试交入的租户取值。
 func TestAPickupSuggestionIsDecidedFromTheFirstNode(t *testing.T) {
 	fixture := newReassessFixture(t)

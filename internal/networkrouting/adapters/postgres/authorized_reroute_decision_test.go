@@ -138,7 +138,7 @@ func saveDecision(t *testing.T, stores decisionStores, decision ports.Authorized
 	return outcome
 }
 
-// Covers: ADR-0284 决定五——一份决定整行往返：决定方式、决定方、触发、原计划、新计划、依据与时刻经构造门重建原样；同一份建议
+// Covers: AT-NR-095、AT-NR-096（ADR-0284 决定五）——一份决定整行往返：决定方式、决定方、触发、原计划、新计划、依据与时刻经构造门重建原样；同一份建议
 // 再落一份答已有记录、先到的那一份不被顶替；他租户读不到。决定形成的计划进路由历史，段引用读得到它的窗口。
 func TestAnAuthorizedRerouteDecisionRoundTripsAndJoinsTheRoutingHistory(t *testing.T) {
 	stores := newDecisionStores(t)
@@ -221,7 +221,7 @@ func TestTheDecisionRegisterRefusesADecisionThatDoesNotFitItsSuggestion(t *testi
 	}
 }
 
-// Covers: ADR-0284 决定二「过时」——同一判断键上另有一次触发业务时间不早于建议的复核才算：更早的不算，同一时刻与更晚的算，
+// Covers: AT-NR-096（ADR-0284 决定二「过时」）——同一判断键上另有一次触发业务时间不早于建议的复核才算：更早的不算，同一时刻与更晚的算，
 // 别的判断键的不算。
 func TestASuggestionIsOvertakenOnlyByAnotherReassessmentNotEarlier(t *testing.T) {
 	stores := newDecisionStores(t)
@@ -252,7 +252,7 @@ func TestASuggestionIsOvertakenOnlyByAnotherReassessmentNotEarlier(t *testing.T)
 	}
 }
 
-// Covers: ADR-0284 决定六——建议读面按三格列状态：待决定、已决定（带决定）、已过时；候选与阻塞照建议原样转写。
+// Covers: AT-NR-099（ADR-0284 决定六）——建议读面按三格列状态：待决定、已决定（带决定）、已过时；候选与阻塞照建议原样转写。
 func TestTheSuggestionCatalogueListsPendingDecidedAndSupersededSuggestions(t *testing.T) {
 	stores := newDecisionStores(t)
 	ctx := t.Context()

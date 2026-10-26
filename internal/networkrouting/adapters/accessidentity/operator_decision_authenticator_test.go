@@ -74,7 +74,7 @@ func decisionAuthenticatorOver(t *testing.T, register decisionRegister, scope id
 	return built
 }
 
-// Covers: ADR-0284 决定一——按「授权改路」这一种铸信封并判准入（能力 OPERATION_DECISION、事实类型取决定种类）；只持别的种类答
+// Covers: AT-NR-098（ADR-0284 决定一）——按「授权改路」这一种铸信封并判准入（能力 OPERATION_DECISION、事实类型取决定种类）；只持别的种类答
 // 无此种授予，不默认放行；准入范围没登答不在准入范围；没令牌答令牌不过。交回的操作者是「发行方#sub」。
 func TestTheRerouteDecisionAuthenticatesItsOwnKindAndAsksTheAdmissionScope(t *testing.T) {
 	var asked []identity.AdmissionRequirement

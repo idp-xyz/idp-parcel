@@ -278,6 +278,6 @@
 |---|---|---|
 | 某个包裹未决不回滚其他包裹已形成的计划（应用流程表后一段、`AT-NR-012`） | 依赖类未决的那一件仍让消费门整封回滚重投，同一交接里已判成的计划一起回滚、重投时按判断键再判 | [docs-consistency/code/78](../../../.scratch/docs-consistency/code/78-initial-route-dependency-undecided-drags-formed-siblings.md) |
 | 路由未形成「保持可续办」（结果「路由未形成」、步骤 8C） | 登记补齐、部署接入或授权角色裁决之后没有续办：重驱要随请求携带的地理投影，本上下文不落它，取法待裁 | [demo-chain-gaps/154](../../../.scratch/demo-chain-gaps/issues/154-network-reassessment-not-judged-triggers-resume-after-registration.md) |
-| 并列交授权角色裁决 | 没有决定面 | [docs-consistency/code/29](../../../.scratch/docs-consistency/code/29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md) |
+| 并列交授权角色裁决 | 没有决定面：未形成登记里的并列行读不回，重判要随接受决定信封携带的投影与商业解析标识（复核建议的决定面见 UC-NR-003 `AT-NR-095`） | [docs-consistency/code/97](../../../.scratch/docs-consistency/code/97-initial-route-tie-has-no-authorized-decision-face.md) |
 
 完成本用例不表示运输执行已经完成设计。班次、容量、订舱、装载和实际履约应继续在 `transport-fulfillment` 的后续应用用例中展开。

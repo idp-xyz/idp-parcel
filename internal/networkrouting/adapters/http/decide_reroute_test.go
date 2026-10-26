@@ -90,7 +90,7 @@ func errorCodeOf(t *testing.T, response *httptest.ResponseRecorder) string {
 	return body.Error.Code
 }
 
-// Covers: ADR-0284 决定一——口按「授权改路」那一种认证；命令的租户与决定方取认证结果，决定方记成 OPERATOR/<发行方>#<sub>；其余
+// Covers: AT-NR-098（ADR-0284 决定一）——口按「授权改路」那一种认证；命令的租户与决定方取认证结果，决定方记成 OPERATOR/<发行方>#<sub>；其余
 // 各格取载荷。
 func TestTheRerouteDecisionIntakeTakesTheTenantAndTheDeciderFromTheSession(t *testing.T) {
 	authenticator := &decisionAuthenticator{}
@@ -112,7 +112,7 @@ func TestTheRerouteDecisionIntakeTakesTheTenantAndTheDeciderFromTheSession(t *te
 	}
 }
 
-// Covers: ADR-0284 决定一——载荷封闭：自报租户或决定方、缺格、空白、不是 JSON 都答 400 坏报文，不进编排。
+// Covers: AT-NR-098（ADR-0284 决定一）——载荷封闭：自报租户或决定方、缺格、空白、不是 JSON 都答 400 坏报文，不进编排。
 func TestTheRerouteDecisionPayloadIsClosed(t *testing.T) {
 	for name, body := range map[string]string{
 		"self-reported tenant":  `{"tenantId": "SYN-TENANT-02", "declaredParcelId": "SYN-PARCEL-1", "suggestion": "s", "candidate": "c", "basis": "b"}`,
@@ -133,7 +133,7 @@ func TestTheRerouteDecisionPayloadIsClosed(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0284 决定一——接入各格按恢复动作分码：没令牌 401、没授予 403、准入范围外 403、身份依赖读不动 503，都不进编排。
+// Covers: AT-NR-098（ADR-0284 决定一）——接入各格按恢复动作分码：没令牌 401、没授予 403、准入范围外 403、身份依赖读不动 503，都不进编排。
 func TestTheRerouteDecisionIntakeAnswersEachAccessGrade(t *testing.T) {
 	cases := map[string]struct {
 		token  string
@@ -204,7 +204,7 @@ func (readIntake) IntakeCatalogueQuery(context.Context, *http.Request) (networkh
 	return networkhttp.NetworkCatalogQuery{Scope: scope, Limit: 200}, err
 }
 
-// Covers: ADR-0284 决定六——建议读面逐行透出判断键、触发关联、被复核计划、阻塞、候选与状态，已决定的带决定；空册答空数组；读
+// Covers: AT-NR-099（ADR-0284 决定六）——建议读面逐行透出判断键、触发关联、被复核计划、阻塞、候选与状态，已决定的带决定；空册答空数组；读
 // 不回答 500，不伪装成空册。
 func TestTheRerouteSuggestionReadFaceListsSuggestionsWithTheirState(t *testing.T) {
 	decidedAt := time.Date(2026, 10, 26, 9, 0, 0, 0, time.UTC)

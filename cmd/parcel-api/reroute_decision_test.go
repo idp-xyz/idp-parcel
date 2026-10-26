@@ -374,7 +374,7 @@ func (fixture *rerouteFixture) waitForAdvisoryWaiters(t *testing.T, n int) {
 	}
 }
 
-// Covers: ADR-0284 决定一、二、五——持授权改路授予的操作者经生产装配的口据当前建议择一候选：201 REROUTE_DECIDED，决定方是会话里
+// Covers: AT-NR-095、AT-NR-096、AT-NR-098（ADR-0284 决定一、二、五）——持授权改路授予的操作者经生产装配的口据当前建议择一候选：201 REROUTE_DECIDED，决定方是会话里
 // 认证出的「发行方#sub」，新计划落进决定册并进路由历史；另一位持同种授予的操作者再决定答 200 SUGGESTION_ALREADY_DECIDED、交回
 // 先成的那一份；只持别种授予的答 403 OPERATOR_NOT_GRANTED，不默认放行。
 func TestAnAuthorizedOperatorDecidesARerouteSuggestionOnTheDatabase(t *testing.T) {
@@ -413,7 +413,7 @@ func TestAnAuthorizedOperatorDecidesARerouteSuggestionOnTheDatabase(t *testing.T
 	}
 }
 
-// Covers: ADR-0284 决定五「决定与新一次复核并发」——一笔复核先取到判断键锁、在锁里落下一次业务时间更晚的复核：决定等在锁上，
+// Covers: AT-NR-096（ADR-0284 决定五「决定与新一次复核并发」）——一笔复核先取到判断键锁、在锁里落下一次业务时间更晚的复核：决定等在锁上，
 // 复核提交之后它读到的建议已过时，答 SUGGESTION_SUPERSEDED，不落决定。决定不等锁，就会在那一笔提交之前按一份已过时的建议改路。
 func TestARerouteDecisionWaitsForTheJudgmentKeyAndLosesToAConcurrentReassessment(t *testing.T) {
 	fixture := newRerouteFixture(t)
@@ -453,7 +453,7 @@ func TestARerouteDecisionWaitsForTheJudgmentKeyAndLosesToAConcurrentReassessment
 	}
 }
 
-// Covers: ADR-0284 决定五「两个授权角色同时对同一份建议作决定」——两笔决定都等在判断键锁上，放行后只有一笔成立，另一笔读到先成的
+// Covers: AT-NR-096（ADR-0284 决定五「两个授权角色同时对同一份建议作决定」）——两笔决定都等在判断键锁上，放行后只有一笔成立，另一笔读到先成的
 // 那一份、答 SUGGESTION_ALREADY_DECIDED；决定册只有一行。
 func TestTwoConcurrentRerouteDecisionsFormOnlyOne(t *testing.T) {
 	fixture := newRerouteFixture(t)

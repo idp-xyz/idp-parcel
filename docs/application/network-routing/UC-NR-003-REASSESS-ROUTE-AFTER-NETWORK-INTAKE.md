@@ -126,7 +126,7 @@
 | 6B | `network-routing` | 独立评估替代候选 | 形成有候选、无候选、评估未决或冲突 |
 | 7A | `network-routing` | 当前计划仍适用时形成适用性判断 | 保留原计划，不制造新版本 |
 | 7B | `network-routing` | 满足自动条件时形成改路决定、新计划和新路由指令（路由指令未实现，见「给开发的交接」） | 从明确可控边界和未执行段生效 |
-| 7C | `network-routing` / 授权角色 | 不满足自动条件、或自动条件都满足而最低成本并列时形成建议并等待决定 | 建议不改变当前计划 |
+| 7C | `network-routing` / 授权角色 | 不满足自动条件、或自动条件都满足而最低成本并列时形成建议并等待决定；授权角色经运营决定口据当前的建议择一合格候选，按此刻的证据重判后形成改路决定与新计划（[ADR-0284](../../adr/0284-an-authorized-role-decides-a-current-reroute-suggestion-through-an-operator-decision-face.md)） | 建议不改变当前计划；决定形成的计划从决定的时刻起生效，过时、已决定、不在建议之列与此刻重判不成立各自具名拒 |
 | 7D | `network-routing` | 原计划失效且尚无新计划时形成无当前有效路由，同时保存候选评估状态 | 阻止需要下一跳的动作；候选评估可以继续续办 |
 | 8 | `network-routing` | 原子提交适用性/决定/计划/无路由、审计和对应发布意图 | 投递失败只重试原意图 |
 
@@ -179,7 +179,7 @@
 | `AT-NR-039` | 先前无路由，收寄后出现合格候选 | 形成首个当前有效路由计划，不恢复旧占位（原计划失效之后的那一格已由票 [docs-consistency/code/52](../../../.scratch/docs-consistency/code/52-reassessment-reads-the-initial-route-row-instead-of-the-current-plan-or-no-route.md) 补齐，2026-10-21；复核向候选成本取数侧取成本、计划只带选中候选的逐段出处，已由票 [demo-chain-gaps/115](../../../.scratch/demo-chain-gaps/issues/115-route-reassessment-never-loads-candidate-costs.md) 补齐，2026-10-21） |
 | `AT-NR-040` | 只有普通扫描或卸载，没有控制依据 | 复核编排答`触发未受理`（`TRIGGER_NOT_ACCEPTED`）：不落复核、不入账未判，不建立当前可控节点。收寄采用与交接两路的触发由适配器从权威记录译出，答到这一格即适配器响亮失败、信封回滚 |
 | `AT-NR-041` | 存在更优候选但已过冻结边界且原计划仍可执行 | 保留原计划，不因轻微改善自动切换 |
-| `AT-NR-042` | 候选可行但不满足自动改路条件 | 只形成建议；授权决定前不改变计划（今天只有失效那条线形成建议，仍适用那条线见 [docs-consistency/code/17](../../../.scratch/docs-consistency/code/17-still-applicable-plan-never-forms-a-reroute-suggestion.md)；授权决定面未实现，见 [docs-consistency/code/29](../../../.scratch/docs-consistency/code/29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md)） |
+| `AT-NR-042` | 候选可行但不满足自动改路条件 | 只形成建议；授权决定前不改变计划（今天只有失效那条线形成建议，仍适用那条线见 [docs-consistency/code/17](../../../.scratch/docs-consistency/code/17-still-applicable-plan-never-forms-a-reroute-suggestion.md)；授权决定见 `AT-NR-095`） |
 | `AT-NR-043` | 改路会改变关务区域或报关服务方 | 等待新的关务适用性判断，不沿用原资格 |
 | `AT-NR-044` | 单次班次或装载分配失败但线路仍有可行机会 | 保留逻辑路由，交运输履约重新分配 |
 | `AT-NR-045` | 同一触发重复处理 | 返回原适用性或改路结果，不重复计划和事件 |
@@ -208,10 +208,15 @@
 | `AT-NR-081` | 触发的业务时间晚于当前控制位置，或与当前控制位置同一时刻（含仍`已交接`的交接更正，它承继原交接的判断时刻） | 照判；已判过的触发在被更晚的复核超过之后由另一封信封再带来，读回原结果，不改答早于当前控制位置 |
 | `AT-NR-082` | 同一包裹的收寄采用（较早）与交接（较晚）按两种顺序到达 | 按业务时间到达时两次都判；较早的后到时它入账不判。两种顺序下业务时间最晚的已判复核都是交接那一次，当前控制位置不倒退；后到的那一次由另一封信封再带来，答案不变 |
 | `AT-NR-083` | 同一判断键的两次复核在两笔并发事务里读当前控制位置 | 按判断键串行：后一笔等前一笔提交，读到的是它刚落的那次复核；读当前控制位置不在事务里时拒 |
-| `AT-NR-084` | 场外揽收复核时原计划被有效硬限制淘汰，存在替代候选，策略版本允许自动改路 | 原计划失效、形成无当前有效路由；只形成改路建议，阻塞原因含 `NOT_AT_CONTROLLED_NODE`、不含 `EXECUTED_PREFIX_AFFECTED`（已执行前缀为空）；授权决定从包裹交进的首个节点生效（[ADR-0249](../../adr/0249-offsite-pickup-reassessment-checks-hard-constraints-only-and-does-not-establish-a-controllable-node.md)；复核这一半已由票 [docs-consistency/code/16](../../../.scratch/docs-consistency/code/16-pickup-reassessment-compares-the-pickup-place-with-plan-nodes.md) 补齐，2026-10-21；生产接法上的候选成本已由票 [demo-chain-gaps/115](../../../.scratch/demo-chain-gaps/issues/115-route-reassessment-never-loads-candidate-costs.md) 补齐，2026-10-21；授权决定面未实现，见 [docs-consistency/code/29](../../../.scratch/docs-consistency/code/29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md)） |
+| `AT-NR-084` | 场外揽收复核时原计划被有效硬限制淘汰，存在替代候选，策略版本允许自动改路 | 原计划失效、形成无当前有效路由；只形成改路建议，阻塞原因含 `NOT_AT_CONTROLLED_NODE`、不含 `EXECUTED_PREFIX_AFFECTED`（已执行前缀为空）；授权决定从包裹交进的首个节点生效（[ADR-0249](../../adr/0249-offsite-pickup-reassessment-checks-hard-constraints-only-and-does-not-establish-a-controllable-node.md)；复核这一半已由票 [docs-consistency/code/16](../../../.scratch/docs-consistency/code/16-pickup-reassessment-compares-the-pickup-place-with-plan-nodes.md) 补齐，2026-10-21；生产接法上的候选成本已由票 [demo-chain-gaps/115](../../../.scratch/demo-chain-gaps/issues/115-route-reassessment-never-loads-candidate-costs.md) 补齐，2026-10-21；授权决定那一半见 `AT-NR-095`） |
 | `AT-NR-085` | 包裹在当前可控节点上，原计划仍可执行、未越过冻结边界，策略版本允许自动改路，更便宜候选的差额严格大于阈值 | 形成`已改路`：带改善依据（被替代计划成本、新计划成本、比较所用币种与所用阈值，以及被替代计划所选候选这次取到的逐段成本出处），不带失效依据；原计划在触发的业务时间被替代（[ADR-0173](../../adr/0173-auto-reroute-is-folded-from-the-strategy-version.md) 决定一、决定三，[ADR-0272](../../adr/0272-a-plan-formed-by-route-reassessment-takes-effect-at-the-trigger-business-time.md) 决定二）。差额恰等于阈值时原计划仍适用，不切换（复核册落库已由票 [docs-consistency/code/53](../../../.scratch/docs-consistency/code/53-improvement-reroute-record-violates-the-rerouted-shape-check.md) 补齐，2026-10-21） |
 | `AT-NR-087` | 委托接受之后已形成初始路由，一次业务时间早于委托接受的控制触发（收寄采用或交接；先收后受理、离线补登或来源时间写早）在那之后才处理，复核本会判出失效、改善替代或首个计划 | `触发未判`，原因 `TRIGGER_PRECEDES_SHIPMENT_ACCEPTANCE`，未判登记记下比较所用的委托接受时刻；不读路由历史、不判，原计划不失效也不被替代，原先无当前有效路由时不形成首个计划；信封入账，不回滚重投、不被离场门拒。同时早于当前控制位置时记这一格；与委托接受同一时刻照判（[ADR-0279](../../adr/0279-a-reassessment-trigger-earlier-than-the-shipment-acceptance-is-settled-as-not-judged.md)） |
 | `AT-NR-093` | 复核要排序时候选成本取数侧答用不了（方案方向或用途配错、候选没有线路引用、提供方交回认不出的形状），分无路由、失效、仍适用三条线 | 重投推不动，不答 `REASSESS_COST_SOURCE_UNAVAILABLE`、不进本路未决哨兵：无路由那条线没有已定的结论要落，响亮报错；失效线照落失效、候选评估记未决；仍适用线不试改善、原计划照旧（初始路由一侧见 UC-NR-001 `AT-NR-092`） |
+| `AT-NR-095` | 原计划失效、复核只形成改路建议；持「授权改路」授予的操作者经运营决定口指名包裹、建议所在复核的触发关联、建议里合格的一条候选与决定依据 | 所择候选按此刻的证据重判合格，形成授权角色方式的改路决定与新计划：决定方是会话里认证出的 `OPERATOR/<发行方>#<sub>`，原计划是失效的那一份，触发是建议的触发；新计划从决定的时刻起生效、生效节点是新计划首节点（揽收建议即包裹交进的首个节点），失效到决定之间的无当前有效路由照留；证据与候选成本按经消费侧适配器取的受理基线那一版投影取；下一次复核从这份新计划起判；决定不推当前控制位置（[ADR-0284](../../adr/0284-an-authorized-role-decides-a-current-reroute-suggestion-through-an-operator-decision-face.md) 决定一、三、四、五） |
+| `AT-NR-096` | 建议所在的那次复核之后，同一判断键上另有一次复核（触发业务时间更晚或同一时刻）；或这份建议已有决定；或两个授权角色同时决定同一份建议、决定与新一次复核并发 | 前者答 `SUGGESTION_SUPERSEDED`，后者答 `SUGGESTION_ALREADY_DECIDED` 并交回先成的那一份；决定与复核共用判断键锁，并发时只有一笔成立，另一笔答过时或已决定；一份建议至多一份决定（[ADR-0284](../../adr/0284-an-authorized-role-decides-a-current-reroute-suggestion-through-an-operator-decision-face.md) 决定二、五） |
+| `AT-NR-097` | 所择候选不在建议的候选里或建议时就没合格；或此刻重判时被有效硬限制淘汰、被其余层次淘汰或已不在候选空间、证据未知；或判断时点证据未配置 | 依次答 `CANDIDATE_NOT_SUGGESTED`、`CANDIDATE_RESTRICTED`、`CANDIDATE_NOT_QUALIFIED`、`CANDIDATE_EVIDENCE_UNKNOWN`（后三格带依据）、`REROUTE_EVIDENCE_NOT_CONFIGURED`，都不形成决定；只有依赖读不动答 `UNDECIDED` 带原因与续办引用；受理基线与建议的判断键对不上响亮报错（[ADR-0284](../../adr/0284-an-authorized-role-decides-a-current-reroute-suggestion-through-an-operator-decision-face.md) 决定二、三） |
+| `AT-NR-098` | 操作者没有「授权改路」授予（只持别的运营决定）、没带令牌，或授予齐备而租户的准入对照没登 | 依次答 403 `OPERATOR_NOT_GRANTED`、401 `OPERATOR_CREDENTIAL_REJECTED`、403 `OUTSIDE_ADMISSION_SCOPE`，不进编排、不默认放行；载荷自报租户或决定方答 400 坏报文（[ADR-0284](../../adr/0284-an-authorized-role-decides-a-current-reroute-suggestion-through-an-operator-decision-face.md) 决定一） |
+| `AT-NR-099` | 运营查阅改路建议 | 逐份列出判断键、触发关联、被复核计划、阻塞与候选（建议形成那一刻的结局与依据），状态三格：待决定、已决定（带决定）、已过时；他租户的建议不在列（[ADR-0284](../../adr/0284-an-authorized-role-decides-a-current-reroute-suggestion-through-an-operator-decision-face.md) 决定六） |
 
 ## 给开发的交接
 
@@ -219,13 +224,13 @@
 
 没有 `PAR-NET-14` 时不得启用自动改路或默认阈值。
 
-已实现的是收寄采用与交接两路触发、计划适用性复核（场外揽收只按硬约束判、不比节点、不建可控节点，ADR-0249）、以当前有效计划或无当前有效路由为复核起点（原计划失效之后走「原先无当前有效路由」那条线，复核形成的新计划是下一次复核的起点）、替代候选评估（候选成本与初始路由同一口向取数侧取，[demo-chain-gaps/115](../../../.scratch/demo-chain-gaps/issues/115-route-reassessment-never-loads-candidate-costs.md)；取数侧读失败不连累复核那一笔事务，[docs-consistency/code/67](../../../.scratch/docs-consistency/code/67-a-failed-cost-read-poisons-the-reassessment-transaction.md)）、自动改路与失效线上的改路建议、入账未判（含原计划适用性看不清，未判登记带取数侧交回的缺口与再判条件）与按业务时间比当前控制位置。本用例下列各块尚未实现，验收行里以现行口吻写到它们的，以本表为准：
+已实现的是收寄采用与交接两路触发、计划适用性复核（场外揽收只按硬约束判、不比节点、不建可控节点，ADR-0249）、以当前有效计划或无当前有效路由为复核起点（原计划失效之后走「原先无当前有效路由」那条线，复核形成的新计划是下一次复核的起点）、替代候选评估（候选成本与初始路由同一口向取数侧取，[demo-chain-gaps/115](../../../.scratch/demo-chain-gaps/issues/115-route-reassessment-never-loads-candidate-costs.md)；取数侧读失败不连累复核那一笔事务，[docs-consistency/code/67](../../../.scratch/docs-consistency/code/67-a-failed-cost-read-poisons-the-reassessment-transaction.md)）、自动改路与失效线上的改路建议、授权角色据当前的建议形成改路决定（[ADR-0284](../../adr/0284-an-authorized-role-decides-a-current-reroute-suggestion-through-an-operator-decision-face.md)）、入账未判（含原计划适用性看不清，未判登记带取数侧交回的缺口与再判条件）与按业务时间比当前控制位置。本用例下列各块尚未实现，验收行里以现行口吻写到它们的，以本表为准：
 
 | 能力 | 现状 | 承接 |
 |---|---|---|
 | 复核取物理事实（输入组「节点实测」、CONTEXT「首次收寄复核使用当时已经取得的物理事实，到站复核使用当前有效物理实测」） | 未实现：复核给候选出价的包裹事实取客户声明，是过渡做法 | [docs-consistency/code/66](../../../.scratch/docs-consistency/code/66-reassessment-prices-candidates-on-the-customer-declaration-instead-of-physical-facts.md) |
 | 仍适用线形成改路建议（步骤 7C、`AT-NR-042`） | 只有失效线形成建议 | [docs-consistency/code/17](../../../.scratch/docs-consistency/code/17-still-applicable-plan-never-forms-a-reroute-suggestion.md) |
-| 授权角色据建议或并列作出改路决定（步骤 7C、CONTEXT「授权角色接受建议 → 形成改路决定」） | 没有决定面，建议只能看 | [docs-consistency/code/29](../../../.scratch/docs-consistency/code/29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md) |
+| 决定之后才处理、触发业务时间落在建议与决定之间的控制触发（[ADR-0284](../../adr/0284-an-authorized-role-decides-a-current-reroute-suggestion-through-an-operator-decision-face.md) 越权风险点 6） | 照判，起点是从决定时刻才生效的新计划，判出失效或改善替代时离场早于生效，离场门拒、整封信封响亮失败 | [docs-consistency/code/99](../../../.scratch/docs-consistency/code/99-a-control-trigger-between-a-suggestion-and-its-decision-reviews-a-plan-not-yet-effective.md) |
 | 路由指令（步骤 7B、`AT-NR-037`、「节点安全作业与方向性作业」） | 没有路由指令的模型 | [no-directional-basis/02](../../../.scratch/no-directional-basis/issues/02-network-routing-has-no-routing-instruction-or-consolidation-compatibility-judgment.md) |
 | 集运兼容判断（「节点安全作业与方向性作业」） | 没有成员级集运兼容判断的模型 | [no-directional-basis/02](../../../.scratch/no-directional-basis/issues/02-network-routing-has-no-routing-instruction-or-consolidation-compatibility-judgment.md) |
 | 路由偏离（`AT-NR-035`） | 没有偏离的模型 | [demo-chain-gaps/35](../../../.scratch/demo-chain-gaps/issues/35-network-routing-route-deviation-consumes-movement-facts.md) |
