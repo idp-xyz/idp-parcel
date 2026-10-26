@@ -101,7 +101,7 @@ func TestMigration0028RefusesToApplyOverConnectionCodesCarryingTheSeparator(t *t
 }
 
 // Covers: AT-NR-094 的库面半边——绕过受理门直接交给目录写入口，带 `+` 的连接代码撞 0028 的 CHECK，一行不落；写入口
-// 的错误原样上抛，登记用例那一侧把它当未决（第二道网，不是答案）。
+// 的错误原样上抛，登记用例那一侧原样交回错误（第二道网，不是答案）。
 func TestTheCatalogTableRefusesAConnectionCodeCarryingTheSeparator(t *testing.T) {
 	catalog, transactor, pool := newNetworkCatalog(t)
 	ctx := t.Context()

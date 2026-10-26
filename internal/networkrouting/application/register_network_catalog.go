@@ -101,8 +101,9 @@ const (
 	// 才有卡可依（ADR-0189 决定二）。
 	CatalogLegZoneWithoutCostBasis
 	// CatalogConnectionCodeCarriesBasisSeparator 是连接代码里带了窗口依据的分隔符 `+`：计划段窗口依据写作
-	// `CONNECTION/<代码>@<版本>`，TF 按 `+` 切格认连接（ADR-0201 决定二），带 `+` 的代码读不回，准备那一路每封初始
-	// 路由信封都失败。要换的是代码；身份不缺，所以不并进缺身份码那一格。
+	// `CONNECTION/<代码>@<版本>`，TF 按 `+` 切格认连接（ADR-0201 决定二）。带 `+` 的代码读不回，准备那一路每封初始
+	// 路由信封都失败；或者读成另一条连接——`X@1+Y` 被读成 `X`，准备照 `X` 作答，静默答错。要换的是代码；身份不缺，
+	// 所以不并进缺身份码那一格。
 	CatalogConnectionCodeCarriesBasisSeparator
 )
 
@@ -276,7 +277,7 @@ func (service *NetworkCatalogRegistration) RegisterConnectionVersion(
 		return catalogRefused(reason), nil
 	}
 	switch {
-	// 连接代码原样拼进计划段窗口依据那一格，TF 按 `+` 切格：带它的代码被切成两半，读不回带版本的连接。`@` 与 `/`
+	// 连接代码原样拼进计划段窗口依据那一格，TF 按 `+` 切格：带它的代码被切开，读不回，或读成另一条连接。`@` 与 `/`
 	// 不在此列——TF 在最后一个 `@` 处切版本（版本号只由数字组成）、按前缀认格，带它们的代码照样读回原样。
 	// 与迁移 0028 的 CHECK 同格。
 	case strings.Contains(row.Code, windowBasisSeparator):
