@@ -704,7 +704,8 @@ func (handler *MapExternalFundsHandler) Apply(
 // Reverse 撤销一次核销：原分配不删、撤销一次为限（ErrApplicationReversed 哨兵分格），撤销版随意图重新交下游；同一事务里
 // 重算原分配指向对账单的那几个作用域，已核销分配等额回到已确认未结（ADR-0181 决定一、AT-SA-113）。
 //
-// 锁取全序的子序列：事实 → 运营余额作用域。锁事实之后再读一次核销：并发两份撤销，后到的那份读到的已是撤销版，答已撤销。
+// 锁取全序（ports.FundsFactApplicationLock 头注）的子序列：事实 → 运营余额作用域。锁事实之后再读一次核销：并发两份
+// 撤销，后到的那份读到的已是撤销版，答已撤销。
 func (handler *MapExternalFundsHandler) Reverse(
 	ctx context.Context,
 	command ReverseApplicationCommand,

@@ -42,10 +42,10 @@ M：映射目标加两格（赔付义务、追偿应收），核销余额按目�
 
 ### 落了什么
 
-1. **两格目标**：`domain.SettlementTargetKind` 加 `TargetCustomerCompensation`（`CUSTOMER_COMPENSATION`）与 `TargetRecoveryReceivable`（`RECOVERY_RECEIVABLE`），序号接在 `TargetAccount` 之后，既有映射与核销的载荷摘要不变；`PointsAtClaimAmount` 认这两格。头注把 `AT-SA-116` 读回原意：映射到金额本体、核销它，不改它；`AT-SA-121` 禁的是形成或修改金额。
+1. **两格目标**：`domain.SettlementTargetKind` 加 `TargetCustomerCompensation`（`CUSTOMER_COMPENSATION`）与 `TargetRecoveryAcknowledgement`（`RECOVERY_ACKNOWLEDGEMENT`；修订轮由 `RECOVERY_RECEIVABLE` 改名，见文末「评审记录与修订轮」N1），序号接在 `TargetAccount` 之后，既有映射与核销的载荷摘要不变；`PointsAtClaimAmount` 认这两格。头注把 `AT-SA-116` 读回原意：映射到金额本体、核销它，不改它；`AT-SA-121` 禁的是形成或修改金额。
 2. **映射**：`Map` 在落行之前经新口 `ports.ClaimSettlementTargets.FindClaimTarget` 核那一条在本租户的金额册上；不在答 `SOURCE_NOT_ACCEPTED`，册读不回答未决 `CLAIM_TARGET_STORE_UNAVAILABLE`（`FundsUndecidedReason` 新增一格，封闭集用例改为四格）。
 3. **核销**：`Apply` 过了领域门、落行之前，按 `SettlementApplication.ClaimTargetDemands`（按格、引用排序）逐条 `LockClaimTarget`——先 `FOR UPDATE` 锁金额本体那一行，再另起一句求指向它、未撤销的核销分配净额，交回 `domain.ClaimTargetStanding`；`Admit` 判币种（不同答 `CROSS_CURRENCY`）与未核销（超出答 `APPLICATION_IMBALANCE`），什么都不落。锁与落行同一事务。指向两格的分配只收借向（`claimAllocationDirected`，形成门与读回门都守）。
-4. **金额本体只读**：适配器 `sapostgres.ClaimSettlementTargets` 只有两个读口，不写 `customer_claim_amount`、`recovery_acknowledgement`；映射与核销改的只是 `funds_mapping`、`settlement_application` 两表与事实的未分配余额（`RemainderMinor`）。
+4. **金额本体只读**：适配器 `sapostgres.ClaimSettlementTargets` 只有两个读口，不写 `customer_claim_amount`、`recovery_acknowledgement`；映射与核销改的只是 `funds_mapping`、`settlement_application` 两表与事实的累计未分配（修订轮改准：`RemainderMinor` 只扣本笔，事实的累计未分配是当前有效那一版金额减去该事实全部未撤销核销，见「评审记录与修订轮」B1）。
 5. **库**：迁移 `migrations/settlement_accounting/0046_funds_mapping_claim_amount_targets.sql` 照 0036 同形重建 `funds_mapping_target_kind_closed`，六值；存量行照旧满足（演示种子那一行 `ACCOUNT` 在一次性库上实测共存）。postgres 读回与批文两张词表各补两格。
 6. **装配**：`cmd/parcel-settlement-register/main.go` 的 `buildRegistrar` 与 `cmd/parcel-api/assemble_settlement_registration.go` 各接一只真适配器（`NewMapExternalFundsHandler` 构造门拒 nil，不接就起不来）。未动 `cmd/parcel-api` 的 endpoints.go、main.go、endpoints_test.go、routes.go。
 7. **管理台**：`apps/admin-web` 收付款核销页的目标词表补 `ACCOUNT` 与两格新值，改正同一句「赔付金额与追偿认可本体不在其中」的误读（三道门退 0，601 例全过）。
@@ -56,12 +56,12 @@ M：映射目标加两格（赔付义务、追偿应收），核销余额按目�
 1. **版本：按映射时那一版并回指。** 两本金额册只增不改，映射指名的那一条（赔付 `amount_id`、认可 `acknowledgement_id`）就是映射时那一版，目标引用本身即回指，映射行不另加版本列。责任、金额规则或认可范围更正时追加的调整（`claim_amount_adjustment`）或另立的认可各有身份，不改已有映射，也不并进它的未核销。
 2. **核销余额按目标各自算**：未核销 = 那一条自己的金额（赔付取 `amount_minor`，认可取 `acknowledged_minor`）− 指向它、未撤销的核销分配净额（借加贷减）。不跨目标、不跨同一索赔项或同一应追偿下的别的条目合并，追加调整不算进来。超出即分配失衡、整笔不落，超额保持未分配（`AT-SA-109`）。
 3. **`CUSTOMER_COMPENSATION` 收客户方向索赔金额的两种**（赔付义务、索赔费用退款）：UC-SA-005 目标「运营企业对客户的应付/贷记/退款义务」与输入表「赔付应付/费用贷记或退款义务」都把退款算在内。
-4. **`RECOVERY_RECEIVABLE` 只指追偿认可金额，不指应追偿金额**（票面「指向已认可的追偿金额」）：对方认可之前到账的追偿收款停在未分配，直到 UC-SA-007 凭 VE 判定有效的对方响应形成认可。
+4. **`RECOVERY_ACKNOWLEDGEMENT` 只指追偿认可金额，不指应追偿金额**（票面「指向已认可的追偿金额」）：对方认可之前到账的追偿收款停在未分配，直到 UC-SA-007 凭 VE 判定有效的对方响应形成认可。
 5. **存在性与租户一致性**：按（租户、引用）在那一格对应的册上取；他租户的与不存在的同答 `SOURCE_NOT_ACCEPTED`（ADR-0029：两者恢复动作同是改目标，分开答就是存在性预言机）；格与册对不上（拿认可号当赔付映射）同不存在。这是结果格不是 error，不进 CLI 的未决哨兵表；只有册读不回才是未决。
 6. **结算账户一致性**：资金事实不带责任法人与结算账户维（只有来源、付款人、币种、金额），两格目标的法人与账户一致性由映射依据（付款指示）承担，产品不核——与审核应付、贷项两格同一处境。能核的币种在核销时以那一条金额本体的币种为准，不以命令自报的 `targetCurrency` 为准。
 7. **只收借向**：贷向是拿赔付或认可去抵客户应收、供应商应付，UC-SA-005「默认不做应收应付净额抵销」；本票不做抵销依据的规则，贷向一律未受理。
-8. **不进入账余额**：赔付付款与追偿收款不是客户应收作用域上的收付，`CustomerDirectionNets` 的 P、W 只加总对账单与账户两格，映射与核销这两格不重算运营余额与信用状况。
-9. **锁**：行锁落在金额本体那一行，锁序按（格、引用）；锁与求和分两句——并成一句时等锁的那一路读的是锁前快照（变异实测读到已核销 0，见「测试」）。
+8. **不进入账余额**：赔付付款与追偿收款不是客户应收作用域上的收付，`CustomerDirectionNets` 的 P 只加总映射到对账单与账户两格上的收付、W 只加总指向对账单的分配，映射与核销这两格不重算运营余额与信用状况（修订轮改准）。
+9. **锁**：行锁落在金额本体那一行，锁序按（格、引用），在事实之后、运营余额作用域之前（全序见「评审记录与修订轮」）；锁与求和分两句——并成一句时等锁的那一路读的是锁前快照（变异实测读到已核销 0，见「测试」）。
 
 ### 越权风险点（待 SA owner 复核）
 
@@ -75,7 +75,7 @@ M：映射目标加两格（赔付义务、追偿应收），核销余额按目�
 
 ### 新票
 
-无（核销事务里的入账余额重算缺口立在 [code/88](./88-settlement-application-and-reversal-do-not-recompute-the-posted-balance.md)，见 code/46 完成记录）。
+无（核销事务里的入账余额重算缺口曾立 [code/88](./88-settlement-application-and-reversal-do-not-recompute-the-posted-balance.md)，修订轮并入本票修，见 code/46 修订轮）。
 
 ### 测试（含 PG，`TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh`，变基后的 tip 上跑）
 
@@ -90,6 +90,34 @@ M：映射目标加两格（赔付义务、追偿应收），核销余额按目�
   3. 新目标漏租户一致性（`FindClaimTarget` 去掉 `tenant_id = $1`）→ postgres 存在性用例与 CLI 竖切红；
   4. 去掉 `FOR UPDATE` → 并发用例红（后到的事务十秒内没在锁上等）；锁与求和并成一句 → 并发用例红（后到的锁读到已核销 0）；
   5. 去掉按目标的未核销上限 → 应用层两条用例红；
-  6. postgres 读回词表去掉 `RECOVERY_RECEIVABLE` → 往返用例红。
+  6. postgres 读回词表去掉追偿认可那一格（时名 `RECOVERY_RECEIVABLE`）→ 往返用例红。
 - AT 盘点：`AT-SA-116`、`AT-SA-117` 从③、`AT-SA-108`、`AT-SA-109`、`AT-SA-110`、`AT-SA-154` 从②移进①（各注明半边）；`AT-SA-112`、`AT-SA-113`、`AT-SA-155` 加名字。总览计数没手算，留给推送方重算。
 
+## 评审记录与修订轮（2026-10-26，协调方隔离评审：不可合入，一条阻断；作者修订轮，分支 claude-code12）
+
+评审结论与各条照协调方回给作者的原文摘要；修订轮在同一分支上加新提交，不改写旧提交，变基到本地 main `061156bcc`（未前移）。
+
+- **B1 阻断：同一笔资金事实能被多次核销，累计超过事实金额**（评审真库实测：5000 的收款换三个核销引用各交 5000，三笔都退 0）。病因：`Apply` 只靠 `domain.ApplySettlement` 看本笔，库上没有按事实的上限；CLI 答复的「未分配」取 `RemainderMinor()`，不跨核销累计。**修**：`Apply` 落行前先以 `FOR UPDATE` 锁事实身份行（`SettlementApplications.LockFundsFactApplications`，新口 `ports.FundsFactApplicationLock`），锁后另起一句求该事实未撤销核销的 `applied_minor` 合计；`domain.SettlementApplication.AdmitWithinFact` 判本笔加已有是否超过当前有效那一版的金额，超过答 `APPLICATION_IMBALANCE`、什么都不落。CLI 答复改为「本笔 X；事实 F 累计未分配 Y」，Y 是这一步之后该事实的累计未分配（`FundsResult.FactUnappliedMinor`）；撤销答复只说「已撤销」与累计未分配，不再报原核销金额。补真库竖切两条：`TestAFundsFactIsNotAppliedBeyondItsAmountAcrossApplications`（顺序超额）、`TestConcurrentApplicationsOfOneFactStayWithinItsAmount`（并发超额，一条自己的事务先占住身份行，等两路都在锁上排队——由 `pg_stat_activity` 认——再放开）。
+  - **锁选身份行不选链头、不选咨询锁的理由**：身份行一条事实一行、终身不换，链头随每次更正换一行；更正落版本行时外键对身份行取 KEY SHARE，与 `FOR UPDATE` 互斥（一次性库 `c12fk` 上实测：父行被 `FOR UPDATE` 占着时，子表插入等了约 2 秒，直到占锁事务提交），所以核销与更正天然在同一行上排队，更正编排不用另取一把锁；咨询锁挡不住不取它的更正。
+- **N1 改名**：`RECOVERY_RECEIVABLE` 全链路改为 `RECOVERY_ACKNOWLEDGEMENT`（领域常量 `TargetRecoveryAcknowledgement`、两张词表、迁移 0046 的 CHECK、管理台标签）；`RECOVERY_RECEIVABLE` 改作词表外值的反例——同上下文 `AdjustedAmountKind` 里它指应追偿金额。
+- **N2 并入 code/88**：见 [code/88](./88-settlement-application-and-reversal-do-not-recompute-the-posted-balance.md) 与 code/46 修订轮。`ErrInvalidClaimTargetStanding`（金额本体账不平）不再落进 `CLAIM_TARGET_STORE_UNAVAILABLE` 未决，改答分配失衡（确定性，ADR-0029）。
+- **N3**：UC-SA-005 目标与边界、输入表「未结项」、`AT-SA-117` 对齐到「核销到追偿认可金额，认可之前到账的追偿收款保持未分配」；越权风险点 1 保留。
+- **N4**：`docs/application/README.md` 的 UC-SA-005 一行按新状态行同步。
+- **N7**：`TestAClaimTargetStandingCountsOnlyLiveApplicationsOfItsOwn` 在 tenant-b 的同名 `compensation-1` 上真落一笔核销；去掉求和里 `app.tenant_id = $1` 的变异现在被杀。
+- **协调方另裁**：资金退回事实映射或核销到两格金额本体一律未受理（`returnedFundsKeptOffClaimAmounts`，形成门两处守；既有四格不动），SA CONTEXT 规则句补一句；管理台 `CUSTOMER_COMPENSATION` 标签改「客户赔付或索赔费用退款」；`MapExternalFundsDeps.ClaimTargets` 注释点名 `Books`、`Balances`、`Standings`；代决 8 改准。
+
+### 锁序全序论证
+
+资金侧取的锁只有三类（取证于修订轮提交 `c27f71fad`），全仓只按一个次序取：**事实身份行（`FOR UPDATE`）→ 金额本体行（`FOR UPDATE`，按格、引用）→ 运营余额作用域（事务级咨询锁，按法人、账户、币种）**；次序写在 `ports.FundsFactApplicationLock` 头注，`ClaimSettlementTargets.LockClaimTarget`、`OperationalBalanceAdvance.LockOperationalBalanceScope` 与 `Apply`、`Reverse` 头注都回指它。
+
+- `Apply` 取全序：事实 → `ClaimTargetDemands` 排好序的金额本体 → `statementScopes` 排好序的作用域。
+- `Reverse` 取子序列：事实 → 作用域。
+- `Map` 只取一个作用域。
+- `CorrectFact` 只在落版本行时经外键对事实身份行取 KEY SHARE——它与 `FOR UPDATE` 互斥，算作只取事实这一类。
+- 接受前控制取的是另一个锁空间（`pre_acceptance_control.scope`），那一路不重算、不碰这三类。
+
+每条路径取的都是这条全序的一个前缀或子序列、同类之内按同一键序，没有一条在持有后一类时再去取前一类，所以任意两笔事务不会各握一半互等。同一事务里作用域锁再取一次是重入。
+
+### 修订轮测试（含 PG，变基后的 tip）
+
+见 code/46 修订轮「测试」，两票一并记。
