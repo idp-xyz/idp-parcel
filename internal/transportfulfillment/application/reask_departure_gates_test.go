@@ -586,6 +586,30 @@ func TestReaskingFollowsTheLatestReaskAndStopsAtTheCap(t *testing.T) {
 			}
 		})
 	}
+	t.Run("落册时刻与次序颠倒", func(t *testing.T) {
+		// 第 2 次已有定论、却比第 1 次（读不动）落册得早（时钟回拨）：最近一份按次序取第 2 次，不再补问。
+		fixture := newReaskFixture(t, "parcel-1")
+		departure := fixture.departOn(t, "move-1", "segment-1", stoppedFirstReading(t, domain.DepartureSegmentNotRegistered))
+		for _, reask := range []struct {
+			sequence int
+			reading  domain.DepartureGateReading
+			at       time.Time
+		}{
+			{2, askedFirstReading(t, cell(t, "parcel-1", domain.DepartureGateAdmitted, "RELEASED")), movementRecordedAt},
+			{1, unreadable(t), movementRecordedAt.Add(time.Minute)},
+		} {
+			fixture.reasks.records = append(fixture.reasks.records, ports.DepartureGateReaskRecord{
+				Key: ports.DepartureGateReaskKey{
+					TenantID: departure.Key.TenantID, Fact: departure.Key.Fact, Version: departure.Key.Version,
+					Object: mustRefValue(t, domain.NewCarriedObjectReference, "parcel-1"), Sequence: reask.sequence,
+				},
+				Reading: reask.reading, Trigger: "earlier", RecordedAt: reask.at,
+			})
+		}
+		if drafts := fixture.plan(t, "parcel-1").Drafts(); len(drafts) != 0 || len(fixture.gate.customs.queries) != 0 {
+			t.Fatalf("按落册时刻取了最近一份：补问 %d 份、问关务 %d 次", len(drafts), len(fixture.gate.customs.queries))
+		}
+	})
 }
 
 // Covers: AT-TF-345 编排半边——只补原版出发、只补出发那一刻在控的那一件：移动与到达、更正版、对象那一刻还没进段的出发都不补；交接
@@ -754,7 +778,8 @@ func TestReaskFailuresLandInTheirPartition(t *testing.T) {
 	})
 }
 
-// Covers: AT-TF-345 编排半边——两步之间另一方先补了同一次：撞键认先到者，不另交信封；补问册写不进、补问信封交不出是未决。
+// Covers: AT-TF-345 编排半边——两步之间另一方先补了同一次：撞键认先到者、不覆盖、不另交信封，这一拍答未决、整笔回滚重投（重投时按
+// 先到那一份重算）；补问册写不进、补问信封交不出同样是未决。
 func TestRecordKeepsTheFirstComerAndHandsOffOnlyWhatItAppended(t *testing.T) {
 	cases := map[string]struct {
 		arrange     func(*reaskFixture)
@@ -764,7 +789,7 @@ func TestRecordKeepsTheFirstComerAndHandsOffOnlyWhatItAppended(t *testing.T) {
 	}{
 		"另一方先补了同一次": {func(fixture *reaskFixture) {
 			fixture.reasks.saveOutcome = ports.DepartureGateReaskAlreadyRegistered
-		}, 0, application.DepartureGateReaskStopNone, application.DepartureGateReaskSettled},
+		}, 0, application.DepartureGateReaskSequenceTaken, application.DepartureGateReaskRetry},
 		"补问册写不进": {func(fixture *reaskFixture) {
 			fixture.reasks.saveErr = reaskRegistryDown
 		}, 0, application.DepartureGateReaskRegistryUnavailable, application.DepartureGateReaskRetry},
@@ -791,8 +816,8 @@ func TestRecordKeepsTheFirstComerAndHandsOffOnlyWhatItAppended(t *testing.T) {
 				recorded.Disposition() != testCase.disposition {
 				t.Fatalf("落册 = %d 份 %s %s", recorded.Recorded(), recorded.Stop(), recorded.Disposition())
 			}
-			if testCase.stop == application.DepartureGateReaskStopNone && len(fixture.handoff.handed) != 0 {
-				t.Fatal("撞键那一份还交了信封")
+			if len(fixture.handoff.handed) != 0 {
+				t.Fatal("没落成的那一份还交了信封")
 			}
 		})
 	}
