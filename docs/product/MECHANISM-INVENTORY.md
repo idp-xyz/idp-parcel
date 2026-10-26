@@ -19,12 +19,12 @@
 | platform（非业务） | 26 | 24 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 233 | 185 | 38 | 69 | 13 | 10 |
 | transportfulfillment | 289 | 304 | 52 | 61 | 16 | 50 |
-| visibilityexception | 119 | 121 | 12 | 31 | 8 | 12 |
-| **合计** | 1632 | 1634 | 219 | 382 | 66 | 213 |
+| visibilityexception | 121 | 122 | 12 | 31 | 8 | 13 |
+| **合计** | 1634 | 1635 | 219 | 382 | 66 | 214 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 229、测试 369。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 229、测试 370。
 
-## 跨上下文消费缝：50 组，156 个生产文件
+## 跨上下文消费缝：50 组，157 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -71,7 +71,7 @@
 | transportfulfillment | nodeoperations | 1 |
 | transportfulfillment | parcelshipment | 2 |
 | transportfulfillment | partycommercial | 3 |
-| visibilityexception | accessidentity | 3 |
+| visibilityexception | accessidentity | 4 |
 | visibilityexception | customscompliance | 3 |
 | visibilityexception | networkrouting | 1 |
 | visibilityexception | nodeoperations | 2 |
@@ -79,7 +79,7 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 9 |
 
-## 迁移：12 个模块共 321 份 SQL
+## 迁移：12 个模块共 322 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -94,7 +94,7 @@
 | pilot_governance | 8 |
 | settlement_accounting | 46 |
 | transport_fulfillment | 49 |
-| visibility_exception | 29 |
+| visibility_exception | 30 |
 
 ## 接线面：接入面端点 194 个，消费适配器 57 个生产文件，直投路由表 40 条
 
@@ -145,7 +145,7 @@
 | （未归类） | 1 |
 | **合计** | 40 |
 
-## 端口：声明 607 个；基线口径缺 39，精确口径缺 2
+## 端口：声明 608 个；基线口径缺 39，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
