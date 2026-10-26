@@ -471,33 +471,7 @@ func TestAPendingHandoverCorrectedIntoTheSegmentBackfillsTheDepartureRecordedBef
 		t.Fatalf("出发那一拍 published = %d err = %v；失败码 = %q", published, err, recordedFailureCode(t, fixture.db, factEvent))
 	}
 
-	store, err := outbox.NewStore(fixture.db)
-	if err != nil {
-		t.Fatalf("构造 Outbox Store：%v", err)
-	}
-	register := newHandoverRegistration(t, fixture.db, store)
-	tenant := mustTF(t, tfdomain.NewTenantID, fixture.identity.TenantID().String())
-	var pending tfapplication.RegisterTransportHandoverResult
-	mustWithinTX(t, fixture.transactor, t.Context(), func(txCtx context.Context) error {
-		var registerErr error
-		pending, registerErr = register.Register(txCtx, tfapplication.RegisterTransportHandoverCommand{
-			TenantID:          tenant,
-			Object:            movementParcelOnBoard,
-			Scope:             backfillScope,
-			ReleasedBy:        "SYN-NODE-SHA-HUB",
-			ReceivedBy:        "SYN-OWN-FLEET",
-			Verdict:           tfdomain.HandoverPendingConfirmation,
-			ReleasingEvidence: "SYN-EVIDENCE-RELEASE-DEP-01",
-			Basis:             "SYN-BASIS-COUNT-UNCLEAR",
-			Version:           backfillVersion,
-			JudgedAt:          movementHandedOverAt,
-			Segment:           movementSegment,
-		})
-		return registerErr
-	})
-	if pending.Outcome() != tfapplication.HandoverRegistered {
-		t.Fatalf("登记待确认：%s", pending.Outcome())
-	}
+	register := registerPendingHandoverIntoMovementSegment(t, fixture)
 	if _, err := fixture.beat.DispatchOnce(t.Context()); err != nil {
 		t.Fatalf("待确认那一拍：%v", err)
 	}
@@ -505,29 +479,7 @@ func TestAPendingHandoverCorrectedIntoTheSegmentBackfillsTheDepartureRecordedBef
 		t.Fatalf("待确认之后出发条目 %d 个——对象还没进段，前提不成立", departed)
 	}
 
-	const confirmedVersion = "SYN-HANDOVER-RESULT/DEP-01/v2"
-	var corrected tfapplication.RegisterTransportHandoverResult
-	mustWithinTX(t, fixture.transactor, t.Context(), func(txCtx context.Context) error {
-		var correctErr error
-		corrected, correctErr = register.Correct(txCtx, tfapplication.CorrectTransportHandoverCommand{
-			TenantID:           tenant,
-			Object:             movementParcelOnBoard,
-			Scope:              backfillScope,
-			PredecessorVersion: backfillVersion,
-			Verdict:            tfdomain.ObjectHandedOver,
-			ReleasingEvidence:  "SYN-EVIDENCE-RELEASE-DEP-01",
-			ReceivingEvidence:  "SYN-EVIDENCE-RECEIVE-DEP-01",
-			Rule:               "SYN-HANDOVER-RULE/v1",
-			NewVersion:         confirmedVersion,
-			CorrectedAt:        movementDepartedAt.Add(time.Hour),
-		})
-		return correctErr
-	})
-	if corrected.Outcome() != tfapplication.HandoverCorrected || corrected.SegmentEntryRefusal() != tfapplication.SegmentEntryRefusalNone ||
-		corrected.SegmentContinuationReference() != "" {
-		t.Fatalf("更正成已交接：outcome=%s refusal=%s debt=%q", corrected.Outcome(), corrected.SegmentEntryRefusal(), corrected.SegmentContinuationReference())
-	}
-	confirmedEvent := tenant.String() + "/" + movementParcelOnBoard + "/" + backfillScope + "/" + confirmedVersion
+	confirmedEvent := confirmPendingHandoverIntoMovementSegment(t, fixture, register)
 	if _, err := fixture.beat.DispatchOnce(t.Context()); err != nil {
 		t.Fatalf("更正版那一拍：%v", err)
 	}
@@ -553,4 +505,71 @@ func departureEntries(t *testing.T, fixture *synVerticalFixture) int {
 		}
 	}
 	return departed
+}
+
+// pendingHandoverConfirmedVersion 是 registerPendingHandoverIntoMovementSegment 登下的待确认那一版被更正成`已交接`的新版本。
+const pendingHandoverConfirmedVersion = "SYN-HANDOVER-RESULT/DEP-01/v2"
+
+// registerPendingHandoverIntoMovementSegment 经生产登记编排登在控那一件的交接首登：待确认，声明进出发那一段，业务时间在出发
+// 前一小时。交回登记编排，好让同一份接法再登更正。
+func registerPendingHandoverIntoMovementSegment(t *testing.T, fixture *synVerticalFixture) *tfapplication.RegisterTransportHandoverHandler {
+	t.Helper()
+	store, err := outbox.NewStore(fixture.db)
+	if err != nil {
+		t.Fatalf("构造 Outbox Store：%v", err)
+	}
+	register := newHandoverRegistration(t, fixture.db, store)
+	var pending tfapplication.RegisterTransportHandoverResult
+	mustWithinTX(t, fixture.transactor, t.Context(), func(txCtx context.Context) error {
+		var registerErr error
+		pending, registerErr = register.Register(txCtx, tfapplication.RegisterTransportHandoverCommand{
+			TenantID:          mustTF(t, tfdomain.NewTenantID, fixture.identity.TenantID().String()),
+			Object:            movementParcelOnBoard,
+			Scope:             backfillScope,
+			ReleasedBy:        "SYN-NODE-SHA-HUB",
+			ReceivedBy:        "SYN-OWN-FLEET",
+			Verdict:           tfdomain.HandoverPendingConfirmation,
+			ReleasingEvidence: "SYN-EVIDENCE-RELEASE-DEP-01",
+			Basis:             "SYN-BASIS-COUNT-UNCLEAR",
+			Version:           backfillVersion,
+			JudgedAt:          movementHandedOverAt,
+			Segment:           movementSegment,
+		})
+		return registerErr
+	})
+	if pending.Outcome() != tfapplication.HandoverRegistered {
+		t.Fatalf("登记待确认：%s", pending.Outcome())
+	}
+	return register
+}
+
+// confirmPendingHandoverIntoMovementSegment 把待确认那一版更正成`已交接`：更正带对象进声明的出发那一段、立起段（ADR-0307）。
+// 交回更正版交接信封的事件 ID。
+func confirmPendingHandoverIntoMovementSegment(
+	t *testing.T, fixture *synVerticalFixture, register *tfapplication.RegisterTransportHandoverHandler,
+) string {
+	t.Helper()
+	tenant := mustTF(t, tfdomain.NewTenantID, fixture.identity.TenantID().String())
+	var corrected tfapplication.RegisterTransportHandoverResult
+	mustWithinTX(t, fixture.transactor, t.Context(), func(txCtx context.Context) error {
+		var correctErr error
+		corrected, correctErr = register.Correct(txCtx, tfapplication.CorrectTransportHandoverCommand{
+			TenantID:           tenant,
+			Object:             movementParcelOnBoard,
+			Scope:              backfillScope,
+			PredecessorVersion: backfillVersion,
+			Verdict:            tfdomain.ObjectHandedOver,
+			ReleasingEvidence:  "SYN-EVIDENCE-RELEASE-DEP-01",
+			ReceivingEvidence:  "SYN-EVIDENCE-RECEIVE-DEP-01",
+			Rule:               "SYN-HANDOVER-RULE/v1",
+			NewVersion:         pendingHandoverConfirmedVersion,
+			CorrectedAt:        movementDepartedAt.Add(time.Hour),
+		})
+		return correctErr
+	})
+	if corrected.Outcome() != tfapplication.HandoverCorrected || corrected.SegmentEntryRefusal() != tfapplication.SegmentEntryRefusalNone ||
+		corrected.SegmentContinuationReference() != "" {
+		t.Fatalf("更正成已交接：outcome=%s refusal=%s debt=%q", corrected.Outcome(), corrected.SegmentEntryRefusal(), corrected.SegmentContinuationReference())
+	}
+	return tenant.String() + "/" + movementParcelOnBoard + "/" + backfillScope + "/" + pendingHandoverConfirmedVersion
 }
