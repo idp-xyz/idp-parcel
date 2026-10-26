@@ -18,6 +18,9 @@ import {
 } from './api';
 import { nextRequest, newVersionFrom, type NewVersionRequest, type NewVersionStart } from './new-version';
 import { withNewVersionAction } from './NewVersionAction';
+import { policyKnownVersions } from './known-versions';
+import { closableKeys, closureKeyOf, closureTargetOf, type ClosureTarget } from './version-closure';
+import { VersionClosureDrawer } from './VersionClosureDrawer';
 import { acceptanceRulePackageDraftFromRecord } from './acceptance-rule-package-form';
 import { authorizationRuleDraftFromRecord } from './authorization-rule-form';
 import { creditPolicyDraftFromRecord } from './credit-policy-form';
@@ -111,6 +114,8 @@ function PolicyRegisters({
   const [search, setSearch] = useAddressKeyword();
   const [statusFilter, setStatusFilter] = useState<VersionStatusFilter>('all');
   const [reloadKey, setReloadKey] = useState(0);
+  // 点行上的「收尾…」：记下是哪一版，抽屉据此重读册面（票 party-commercial-uiux/16）。
+  const [closing, setClosing] = useState<ClosureTarget | null>(null);
   const [loaded, setLoaded] = useState<{
     kind: CommercialPolicyKind;
     answer: ApiResult<CommercialPolicyListResponseBody>;
@@ -141,48 +146,73 @@ function PolicyRegisters({
     policyFacts,
   );
   const retry = () => setReloadKey((value) => value + 1);
+  const closable = closableKeys(answer?.kind === 'outcome' ? policyKnownVersions(answer.body) : []);
 
   return (
-    <ListPageTemplate<PolicyRow>
-      title={policyKindLabels[kind]}
-      description={policyKindSources[kind]}
-      search={{
-        value: search,
-        onChange: setSearch,
-        placeholder: '搜索政策对象、范围或引用',
-      }}
-      filterSummary={
-        // 计数只在拿到业务答案后显示，未配置态不报「0 条」（与 pricing 两页同一守卫）。
-        answer?.kind === 'outcome' ? versionCountSummary(rows.length, visibleRows.length, '条', '') : undefined
-      }
-      filters={
-        answer?.kind === 'outcome' && withStatus ? (
-          <VersionStatusChips
-            counts={versionStatusCounts(rows, policyFacts)}
-            value={statusFilter}
-            onChange={setStatusFilter}
-          />
-        ) : undefined
-      }
-      emptyRowsNote="这组条件下没有匹配的行"
-      columns={withNewVersionAction(withRefLinks(withStatusBadge(kindColumns[kind]), directory), {
-        // 随所属版本发布的两本册没有自己的发布表单，行上没有来源记录，也就没有按钮。
-        canStart: (row) => row.source !== undefined,
-        labelOf: (row) => `${policyKindLabels[kind]} ${row.version?.objectId ?? ''} ${row.version?.version ?? ''}`.trim(),
-        onStart: (row) => {
-          if (row.source) onStartNewVersion(row.source);
-        },
-      })}
-      rows={visibleRows}
-      rowKey={(row) => row.key}
-      viewState={catalogueViewState(answer, rows.length, retry, {
-        module: info,
-        endpoint: `GET /commercial-policies?kind=${kind}`,
-        emptyTitle: `当前租户尚无${policyKindLabels[kind]}`,
-        emptyDescription: '这本册还没有任何版本；本页不会替你生成默认政策。',
-      })}
-    />
+    <>
+      <ListPageTemplate<PolicyRow>
+        title={policyKindLabels[kind]}
+        description={policyKindSources[kind]}
+        search={{
+          value: search,
+          onChange: setSearch,
+          placeholder: '搜索政策对象、范围或引用',
+        }}
+        filterSummary={
+          // 计数只在拿到业务答案后显示，未配置态不报「0 条」（与 pricing 两页同一守卫）。
+          answer?.kind === 'outcome' ? versionCountSummary(rows.length, visibleRows.length, '条', '') : undefined
+        }
+        filters={
+          answer?.kind === 'outcome' && withStatus ? (
+            <VersionStatusChips
+              counts={versionStatusCounts(rows, policyFacts)}
+              value={statusFilter}
+              onChange={setStatusFilter}
+            />
+          ) : undefined
+        }
+        emptyRowsNote="这组条件下没有匹配的行"
+        columns={withNewVersionAction(withRefLinks(withStatusBadge(kindColumns[kind]), directory), {
+          // 随所属版本发布的两本册没有自己的发布表单，行上没有来源记录，也就没有按钮。
+          canStart: (row) => row.source !== undefined,
+          labelOf: (row) => `${policyKindLabels[kind]} ${row.version?.objectId ?? ''} ${row.version?.version ?? ''}`.trim(),
+          onStart: (row) => {
+            if (row.source) onStartNewVersion(row.source);
+          },
+          // 只有读面带状态的三本册有可收尾的版本；其余册与声明类两册没有这个动作。
+          closure: {
+            canClose: (row) => {
+              const target = policyClosureTarget(row.source);
+              return target !== null && closable.has(closureKeyOf(target));
+            },
+            onClose: (row) => setClosing(policyClosureTarget(row.source)),
+          },
+        })}
+        rows={visibleRows}
+        rowKey={(row) => row.key}
+        viewState={catalogueViewState(answer, rows.length, retry, {
+          module: info,
+          endpoint: `GET /commercial-policies?kind=${kind}`,
+          emptyTitle: `当前租户尚无${policyKindLabels[kind]}`,
+          emptyDescription: '这本册还没有任何版本；本页不会替你生成默认政策。',
+        })}
+      />
+      <VersionClosureDrawer target={closing} onClose={() => setClosing(null)} onClosed={retry} />
+    </>
   );
+}
+
+/** 行对应的收尾目标：只有读面带状态的三本册有；别的册与声明类两册没有（它们读不出哪一版还在参选）。 */
+function policyClosureTarget(source: PolicySource | undefined): ClosureTarget | null {
+  if (!source) return null;
+  switch (source.kind) {
+    case 'AUTHORIZATION_RULE':
+    case 'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY':
+    case 'CUSTOMER_SERVICE_RULE':
+      return closureTargetOf(source.kind, policyKindLabels[source.kind], source.record);
+    default:
+      return null;
+  }
 }
 
 // 声明类两册的行按所属版本给了版本信息；万一没有（行模型新加一册忘了给），按行键单独成组，不报错。

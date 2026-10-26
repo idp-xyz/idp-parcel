@@ -317,6 +317,11 @@ export interface SupplierAgreementRecord {
   agreementEffectiveStartsAt?: string;
   agreementEffectiveEndsAt?: string;
   registeredAt?: string;
+  /** 收尾回显（ADR-0233）：被截止的版本在此交回最新一条更正的终点；没截止过缺席。 */
+  selectionEndsAt?: string;
+  /** 退役回显：让位给哪一版、何时起不再参选；没退役缺席。 */
+  successorVersion?: string;
+  retiredAt?: string;
 }
 
 export interface SupplierAgreementListResponseBody {
@@ -866,3 +871,32 @@ export const partyRelationshipEndingOutcomeLabels: Record<string, string> = {
   NOT_ACCEPTED: '受理门拒绝（关系不在已生效、修订错位、终点未到或结束时刻晚于此刻等，一个字节没写；原因随答复交回）',
   NOT_FOUND: '册上没有这一段关系',
 };
+
+// ——旧版收尾的两口（票 party-commercial-uiux/16，ADR-0233）。同一对象换版后旧版只经显式收尾离开新的选择：后继晚于旧版起点的
+// 走截止，同起点的走退役。两种各一口，服务端不替登记方挑；界面按两版起点的先后选口，并在确认框里说明落下的是哪一种。
+//
+// 载荷与受控 CLI register-version-closures 的批文逐字同形（registrationjson.VersionClosureBatchDocument），去掉整批的
+// tenantId：租户取操作者认证结果，载荷里带了即拒；在线口各收自己那一节恰一项。
+
+/** 路径名与服务端端点表同一行；键名同批文的节名（cuts / retirements）去掉复数。不并进 CommercialRegistrationKind。 */
+export const versionClosureEndpoints = {
+  cut: '/commercial-version-successor-cuts',
+  retirement: '/commercial-version-retirements',
+} as const;
+
+export type VersionClosureMode = keyof typeof versionClosureEndpoints;
+
+/** 收尾口的答复：登记族共用的几格之外，回显落下（或重放认出）的那一次收尾；未受理时这几格缺席。 */
+export interface VersionClosureResponseBody extends RegistrationResponseBody {
+  correctedStartsAt?: string;
+  correctedEndsAt?: string;
+  successorVersion?: string;
+  retiredAt?: string;
+}
+
+export function closeCommercialVersion(
+  mode: VersionClosureMode,
+  payload: unknown,
+): Promise<ApiResult<VersionClosureResponseBody>> {
+  return postMasterData<VersionClosureResponseBody>(versionClosureEndpoints[mode], payload);
+}

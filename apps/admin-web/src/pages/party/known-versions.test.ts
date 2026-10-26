@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
-import type { CommercialPolicyListResponseBody } from './api';
-import { policyKnownVersions, versionHintLines, versionHintOf, type KnownVersion } from './known-versions';
+import type { CommercialPolicyListResponseBody, SupplierAgreementListResponseBody } from './api';
+import { agreementKnownVersions, policyKnownVersions, versionHintLines, versionHintOf, type KnownVersion } from './known-versions';
 
 // 演示种子里供应商协议：TRUNK 三版（v1、v2 已退役，v3 在用）夹着 LASTMILE 一版。
 const known: KnownVersion[] = [
@@ -114,4 +114,27 @@ test('政策册响应按册判别：带状态的给状态，没有状态的不�
   } satisfies CommercialPolicyListResponseBody;
   equal(policyKnownVersions(authorization)[0].status, 'EFFECTIVE');
   deepEqual(policyKnownVersions({ outcome: 'COMMERCIAL_POLICIES_LISTED', kind: 'AS_OF_POLICY', policies: [] }), []);
+});
+
+test('被截止的协议版本按截止点算区间：截止后不再与之后的新版重叠', () => {
+  const body = {
+    outcome: 'SUPPLIER_AGREEMENTS_LISTED',
+    agreements: [
+      {
+        objectId: 'SA',
+        version: 'v1',
+        scope: 'S',
+        status: 'EFFECTIVE',
+        effectiveStartsAt: '2026-01-01T00:00:00Z',
+        publishedAt: '2026-01-01T00:00:00Z',
+        contentRegistered: false,
+        selectionEndsAt: '2026-06-01T00:00:00Z',
+      },
+    ],
+  } satisfies SupplierAgreementListResponseBody;
+  const known = agreementKnownVersions(body);
+  equal(known[0].effectiveEndsAt, '2026-06-01T00:00:00Z');
+  equal(known[0].scope, 'S');
+  const hint = versionHintOf(known, { objectId: 'SA', version: 'v2', startsAt: '2026-06-01T00:00:00Z', endsAt: null })!;
+  deepEqual(hint.overlaps, []);
 });

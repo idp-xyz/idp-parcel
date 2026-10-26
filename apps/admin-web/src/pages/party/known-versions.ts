@@ -26,6 +26,8 @@ import { commercialStatusLabels, labelOf } from './presentation';
 export interface KnownVersion {
   objectId: string;
   version: string;
+  /** 版本所在的适用范围；读面不带范围的册（信用、结算、价格政策）不给。收尾要求两版同范围，靠它判。 */
+  scope?: string;
   /** 服务端的状态码（`EFFECTIVE` 等）；读面没有状态的册不给。 */
   status?: string;
   effectiveStartsAt: string;
@@ -131,6 +133,7 @@ export function contractKnownVersions(body: CustomerContractListResponseBody): K
   return body.contracts.map((row) => ({
     objectId: row.objectId,
     version: row.version,
+    scope: row.scope,
     status: row.status,
     effectiveStartsAt: row.effectiveStartsAt,
     effectiveEndsAt: row.effectiveEndsAt,
@@ -141,9 +144,11 @@ export function agreementKnownVersions(body: SupplierAgreementListResponseBody):
   return body.agreements.map((row) => ({
     objectId: row.objectId,
     version: row.version,
+    scope: row.scope,
     status: row.status,
     effectiveStartsAt: row.effectiveStartsAt,
-    effectiveEndsAt: row.effectiveEndsAt,
+    // 被截止的协议版本在读面上另回显截止点，壳上的原区间不被覆盖（ADR-0233）；解析选用的是截止后的区间。
+    effectiveEndsAt: row.selectionEndsAt ?? row.effectiveEndsAt,
   }));
 }
 
@@ -151,6 +156,7 @@ export function productKnownVersions(body: ServiceProductListResponseBody): Know
   return body.products.map((row) => ({
     objectId: row.objectId,
     version: row.version,
+    scope: row.scope,
     status: row.status,
     effectiveStartsAt: row.effectiveStartsAt,
     effectiveEndsAt: row.effectiveEndsAt,
@@ -176,6 +182,7 @@ export function policyKnownVersions(body: CommercialPolicyListResponseBody): Kno
       return body.policies.map((row) => ({
         objectId: row.objectId,
         version: row.version,
+        scope: row.scope,
         status: row.status,
         effectiveStartsAt: row.effectiveStartsAt,
         effectiveEndsAt: row.effectiveEndsAt,

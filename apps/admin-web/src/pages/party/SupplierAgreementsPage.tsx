@@ -26,6 +26,9 @@ import {
   type SupplierAgreementRow,
 } from './supplier-agreement-rows';
 import { SupplierAgreementPublicationForm } from './SupplierAgreementPublicationForm';
+import { agreementKnownVersions } from './known-versions';
+import { closableKeys, closureKeyOf, closureTargetOf, type ClosureTarget } from './version-closure';
+import { VersionClosureDrawer } from './VersionClosureDrawer';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['supplier-agreements'];
@@ -52,6 +55,8 @@ function SupplierAgreementCatalogue({
   const [statusFilter, setStatusFilter] = useState<VersionStatusFilter>('all');
   const [reloadKey, setReloadKey] = useState(0);
   const [answer, setAnswer] = useState<ApiResult<SupplierAgreementListResponseBody> | null>(null);
+  // 点行上的「收尾…」：记下是哪一版，抽屉据此重读册面（票 party-commercial-uiux/16）。
+  const [closing, setClosing] = useState<ClosureTarget | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,44 +84,52 @@ function SupplierAgreementCatalogue({
     (row) => row.version,
   );
   const retry = () => setReloadKey((value) => value + 1);
+  const closable = closableKeys(answer?.kind === 'outcome' ? agreementKnownVersions(answer.body) : []);
 
   return (
-    <ListPageTemplate<SupplierAgreementRow>
-      title={info.title}
-      description="供应商协议的各个版本：供应商、责任法人、采购方案、协议范围与有效区间。正文还没随发布登记的版本，「正文」列显示「未登记」。"
-      search={{
-        value: search,
-        onChange: setSearch,
-        placeholder: '搜索协议、版本、范围、供应商或方案引用',
-      }}
-      filterSummary={
-        // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 份」会与状态区
-        // 「这不是目录为空」直接矛盾（README 列表页上列通则「计数摘要必须带 outcome 守卫」）。
-        answer?.kind === 'outcome' ? versionCountSummary(rows.length, visibleRows.length, '份', '协议版本') : undefined
-      }
-      filters={
-        answer?.kind === 'outcome' && rows.length > 0 ? (
-          <VersionStatusChips
-            counts={versionStatusCounts(rows, (row) => row.version)}
-            value={statusFilter}
-            onChange={setStatusFilter}
-          />
-        ) : undefined
-      }
-      emptyRowsNote="这组条件下没有匹配的协议版本"
-      columns={withNewVersionAction(withRefLinks(withStatusBadge(supplierAgreementColumns), directory), {
-        labelOf: (row) => `供应商协议 ${row.version.objectId} ${row.version.version}`,
-        onStart: (row) => onStartNewVersion(row.source),
-      })}
-      rows={visibleRows}
-      rowKey={(row) => row.key}
-      viewState={catalogueViewState(answer, rows.length, retry, {
-        module: info,
-        endpoint: 'GET /commercial-supplier-agreements',
-        emptyTitle: '当前租户尚无供应商协议版本',
-        emptyDescription: '还没有任何供应商协议。在「发布协议版本」签发布第一份；本页不会预置供应商或采购条件。',
-      })}
-    />
+    <>
+      <ListPageTemplate<SupplierAgreementRow>
+        title={info.title}
+        description="供应商协议的各个版本：供应商、责任法人、采购方案、协议范围与有效区间。正文还没随发布登记的版本，「正文」列显示「未登记」。"
+        search={{
+          value: search,
+          onChange: setSearch,
+          placeholder: '搜索协议、版本、范围、供应商或方案引用',
+        }}
+        filterSummary={
+          // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 份」会与状态区
+          // 「这不是目录为空」直接矛盾（README 列表页上列通则「计数摘要必须带 outcome 守卫」）。
+          answer?.kind === 'outcome' ? versionCountSummary(rows.length, visibleRows.length, '份', '协议版本') : undefined
+        }
+        filters={
+          answer?.kind === 'outcome' && rows.length > 0 ? (
+            <VersionStatusChips
+              counts={versionStatusCounts(rows, (row) => row.version)}
+              value={statusFilter}
+              onChange={setStatusFilter}
+            />
+          ) : undefined
+        }
+        emptyRowsNote="这组条件下没有匹配的协议版本"
+        columns={withNewVersionAction(withRefLinks(withStatusBadge(supplierAgreementColumns), directory), {
+          labelOf: (row) => `供应商协议 ${row.version.objectId} ${row.version.version}`,
+          onStart: (row) => onStartNewVersion(row.source),
+          closure: {
+            canClose: (row) => closable.has(closureKeyOf(row.source)),
+            onClose: (row) => setClosing(closureTargetOf('SUPPLIER_AGREEMENT', '供应商协议', row.source)),
+          },
+        })}
+        rows={visibleRows}
+        rowKey={(row) => row.key}
+        viewState={catalogueViewState(answer, rows.length, retry, {
+          module: info,
+          endpoint: 'GET /commercial-supplier-agreements',
+          emptyTitle: '当前租户尚无供应商协议版本',
+          emptyDescription: '还没有任何供应商协议。在「发布协议版本」签发布第一份；本页不会预置供应商或采购条件。',
+        })}
+      />
+      <VersionClosureDrawer target={closing} onClose={() => setClosing(null)} onClosed={retry} />
+    </>
   );
 }
 

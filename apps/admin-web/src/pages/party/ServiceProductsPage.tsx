@@ -16,6 +16,9 @@ import {
 } from './api';
 import { nextRequest, newVersionFrom, type NewVersionRequest } from './new-version';
 import { withNewVersionAction } from './NewVersionAction';
+import { productKnownVersions } from './known-versions';
+import { closableKeys, closureKeyOf, closureTargetOf, type ClosureTarget } from './version-closure';
+import { VersionClosureDrawer } from './VersionClosureDrawer';
 import { serviceProductDraftFromRecord } from './service-product-form';
 import { KeepAliveTabs, KeepAliveTabsContent } from './keep-alive-tabs';
 import { VersionStatusChips } from './VersionStatusChips';
@@ -116,6 +119,8 @@ function ServiceProductVersionsTable({
   const [search, setSearch] = useAddressKeyword();
   const [reloadKey, setReloadKey] = useState(0);
   const [answer, setAnswer] = useState<ApiResult<ServiceProductListResponseBody> | null>(null);
+  // 点行上的「收尾…」：记下是哪一版，抽屉据此重读册面（票 party-commercial-uiux/16）。
+  const [closing, setClosing] = useState<ClosureTarget | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -143,45 +148,53 @@ function ServiceProductVersionsTable({
     productFacts,
   );
   const retry = () => setReloadKey((value) => value + 1);
+  const closable = closableKeys(answer?.kind === 'outcome' ? productKnownVersions(answer.body) : []);
 
   return (
-    <ListPageTemplate<ServiceProductRecord>
-      title={info.title}
-      // 渠道账号的业务使用授权还没有读口，本页不为它留列。
-      description="服务产品的各个版本与交付条件。产品对应哪些渠道，看「渠道产品目录」页。"
-      search={{
-        value: search,
-        onChange: setSearch,
-        placeholder: '搜索服务产品、版本或适用范围',
-      }}
-      filterSummary={
-        // 计数只在拿到业务答案后显示,未配置态不报「0 个版本」(与 pricing 两页同一守卫)。
-        answer?.kind === 'outcome' ? versionCountSummary(products.length, visibleProducts.length, '个', '版本') : undefined
-      }
-      filters={
-        answer?.kind === 'outcome' && products.length > 0 ? (
-          <VersionStatusChips
-            counts={versionStatusCounts(products, productFacts)}
-            value={statusFilter}
-            onChange={setStatusFilter}
-          />
-        ) : undefined
-      }
-      emptyRowsNote="这组条件下没有匹配的产品版本"
-      columns={withNewVersionAction(columns, {
-        labelOf: (row) => `服务产品 ${row.objectId} ${row.version}`,
-        onStart: onStartNewVersion,
-      })}
-      rows={visibleProducts}
-      rowKey={(row) => `${row.objectId}@${row.version}`}
-      viewState={catalogueViewState(answer, products.length, retry, {
-        module: info,
-        endpoint: 'GET /commercial-service-products',
-        emptyTitle: '当前租户尚无服务产品版本',
-        emptyDescription:
-          '还没有发布任何服务产品。在「发布版本」签发布第一个版本；「登记服务形态」签只给已有版本补形态，不产生新版本。',
-      })}
-    />
+    <>
+      <ListPageTemplate<ServiceProductRecord>
+        title={info.title}
+        // 渠道账号的业务使用授权还没有读口，本页不为它留列。
+        description="服务产品的各个版本与交付条件。产品对应哪些渠道，看「渠道产品目录」页。"
+        search={{
+          value: search,
+          onChange: setSearch,
+          placeholder: '搜索服务产品、版本或适用范围',
+        }}
+        filterSummary={
+          // 计数只在拿到业务答案后显示,未配置态不报「0 个版本」(与 pricing 两页同一守卫)。
+          answer?.kind === 'outcome' ? versionCountSummary(products.length, visibleProducts.length, '个', '版本') : undefined
+        }
+        filters={
+          answer?.kind === 'outcome' && products.length > 0 ? (
+            <VersionStatusChips
+              counts={versionStatusCounts(products, productFacts)}
+              value={statusFilter}
+              onChange={setStatusFilter}
+            />
+          ) : undefined
+        }
+        emptyRowsNote="这组条件下没有匹配的产品版本"
+        columns={withNewVersionAction(columns, {
+          labelOf: (row) => `服务产品 ${row.objectId} ${row.version}`,
+          onStart: onStartNewVersion,
+          closure: {
+            canClose: (row) => closable.has(closureKeyOf(row)),
+            onClose: (row) => setClosing(closureTargetOf('SERVICE_PRODUCT', '服务产品', row)),
+          },
+        })}
+        rows={visibleProducts}
+        rowKey={(row) => `${row.objectId}@${row.version}`}
+        viewState={catalogueViewState(answer, products.length, retry, {
+          module: info,
+          endpoint: 'GET /commercial-service-products',
+          emptyTitle: '当前租户尚无服务产品版本',
+          emptyDescription:
+            '还没有发布任何服务产品。在「发布版本」签发布第一个版本；「登记服务形态」签只给已有版本补形态，不产生新版本。',
+        })}
+      />
+      <VersionClosureDrawer target={closing} onClose={() => setClosing(null)} onClosed={retry} />
+    </>
   );
 }
 

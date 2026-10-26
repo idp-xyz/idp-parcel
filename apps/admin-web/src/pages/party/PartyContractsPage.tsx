@@ -9,6 +9,9 @@ import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { CustomerContractPublicationForm } from './CustomerContractPublicationForm';
 import { nextRequest, newVersionFrom, type NewVersionRequest } from './new-version';
 import { withNewVersionAction } from './NewVersionAction';
+import { contractKnownVersions } from './known-versions';
+import { closableKeys, closureKeyOf, closureTargetOf, type ClosureTarget } from './version-closure';
+import { VersionClosureDrawer } from './VersionClosureDrawer';
 import { customerContractDraftFromRecord } from './customer-contract-form';
 import { KeepAliveTabs, KeepAliveTabsContent } from './keep-alive-tabs';
 import { VersionStatusChips } from './VersionStatusChips';
@@ -165,6 +168,8 @@ function CustomerContractsTable({
   const [search, setSearch] = useAddressKeyword();
   const [reloadKey, setReloadKey] = useState(0);
   const [answer, setAnswer] = useState<ApiResult<CustomerContractListResponseBody> | null>(null);
+  // 点行上的「收尾…」：记下是哪一版，抽屉据此重读册面（票 party-commercial-uiux/16）。
+  const [closing, setClosing] = useState<ClosureTarget | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -193,48 +198,56 @@ function CustomerContractsTable({
     contractFacts,
   );
   const retry = () => setReloadKey((value) => value + 1);
+  const closable = closableKeys(answer?.kind === 'outcome' ? contractKnownVersions(answer.body) : []);
 
   return (
-    <ListPageTemplate<CustomerContractRecord>
-      title={info.title}
-      // 客户与责任法人两列不上：合同读口答的是版本壳与正文，壳上没有货主客户账户与责任法人，页面不另行拼接。
-      // 用户会找这两列，所以说明里点一句；读口带出它们之前不留空列、不填假值（README「列表页上列通则」）。
-      description="客户合同的各个版本，以及合同约定的接单规则包与接受前财务控制。客户与责任法人暂不在本列表显示。"
-      search={{
-        value: search,
-        onChange: setSearch,
-        placeholder: '搜索合同、版本、适用范围或规则包',
-      }}
-      filterSummary={
-        // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 份」会与状态区
-        // 「这不是目录为空」直接矛盾（README 列表页上列通则第六条）。
-        answer?.kind === 'outcome'
-          ? versionCountSummary(contracts.length, visibleContracts.length, '份', '合同版本')
-          : undefined
-      }
-      filters={
-        answer?.kind === 'outcome' && contracts.length > 0 ? (
-          <VersionStatusChips
-            counts={versionStatusCounts(contracts, contractFacts)}
-            value={statusFilter}
-            onChange={setStatusFilter}
-          />
-        ) : undefined
-      }
-      emptyRowsNote="这组条件下没有匹配的合同版本"
-      columns={withNewVersionAction(columns, {
-        labelOf: (row) => `客户合同 ${row.objectId} ${row.version}`,
-        onStart: onStartNewVersion,
-      })}
-      rows={visibleContracts}
-      rowKey={(row) => `${row.objectId}@${row.version}`}
-      viewState={catalogueViewState(answer, contracts.length, retry, {
-        module: info,
-        endpoint: 'GET /commercial-customer-contracts',
-        emptyTitle: '当前租户尚无客户合同版本',
-        emptyDescription: '还没有发布任何客户合同。在「发布合同版本」签发布第一份；本页不会预置合同。',
-      })}
-    />
+    <>
+      <ListPageTemplate<CustomerContractRecord>
+        title={info.title}
+        // 客户与责任法人两列不上：合同读口答的是版本壳与正文，壳上没有货主客户账户与责任法人，页面不另行拼接。
+        // 用户会找这两列，所以说明里点一句；读口带出它们之前不留空列、不填假值（README「列表页上列通则」）。
+        description="客户合同的各个版本，以及合同约定的接单规则包与接受前财务控制。客户与责任法人暂不在本列表显示。"
+        search={{
+          value: search,
+          onChange: setSearch,
+          placeholder: '搜索合同、版本、适用范围或规则包',
+        }}
+        filterSummary={
+          // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 份」会与状态区
+          // 「这不是目录为空」直接矛盾（README 列表页上列通则第六条）。
+          answer?.kind === 'outcome'
+            ? versionCountSummary(contracts.length, visibleContracts.length, '份', '合同版本')
+            : undefined
+        }
+        filters={
+          answer?.kind === 'outcome' && contracts.length > 0 ? (
+            <VersionStatusChips
+              counts={versionStatusCounts(contracts, contractFacts)}
+              value={statusFilter}
+              onChange={setStatusFilter}
+            />
+          ) : undefined
+        }
+        emptyRowsNote="这组条件下没有匹配的合同版本"
+        columns={withNewVersionAction(columns, {
+          labelOf: (row) => `客户合同 ${row.objectId} ${row.version}`,
+          onStart: onStartNewVersion,
+          closure: {
+            canClose: (row) => closable.has(closureKeyOf(row)),
+            onClose: (row) => setClosing(closureTargetOf('CUSTOMER_CONTRACT', '客户合同', row)),
+          },
+        })}
+        rows={visibleContracts}
+        rowKey={(row) => `${row.objectId}@${row.version}`}
+        viewState={catalogueViewState(answer, contracts.length, retry, {
+          module: info,
+          endpoint: 'GET /commercial-customer-contracts',
+          emptyTitle: '当前租户尚无客户合同版本',
+          emptyDescription: '还没有发布任何客户合同。在「发布合同版本」签发布第一份；本页不会预置合同。',
+        })}
+      />
+      <VersionClosureDrawer target={closing} onClose={() => setClosing(null)} onClosed={retry} />
+    </>
   );
 }
 
