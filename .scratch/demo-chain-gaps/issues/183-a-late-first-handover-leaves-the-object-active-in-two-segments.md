@@ -1,7 +1,7 @@
 # 183 首登`已交接`晚到时对象落进两段同时在场，此后每次交接都在结束参与那一步响亮失败
 
 Status: resolved——2026-10-26 进 main `bc4f3750e`（见文末「进 main 记录」）。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 claude-dcg183 tip 见分支（代码笔 e2838233a，其上一笔仅补本票完成记录）。此前：（: bug）
-Status: in-progress——2026-10-26 会话 `tops-20`（Claude Code）立并认领（用户 2026-10-26「按你的建议开工吧」），分支 `claude-dcg183`（worktree `idp-parcel-dcg183`）。分级 R2（上线后尽快）：离线补登就会撞上，撞上后该对象此后每次交接都失败、要人工处理。
+认领记录：in-progress——2026-10-26 会话 `tops-20`（Claude Code）立并认领（用户 2026-10-26「按你的建议开工吧」），分支 `claude-dcg183`（worktree `idp-parcel-dcg183`）。分级 R2（上线后尽快）：离线补登就会撞上，撞上后该对象此后每次交接都失败、要人工处理。
 Blocked by: 无
 出处：票 [130](./130-handover-correction-from-pending-to-handed-over-enters-the-segment.md) 作者发现；[ADR-0307](../../../docs/adr/0307-a-handover-corrected-from-pending-or-refused-to-handed-over-enters-the-declared-segment.md) 越权风险点 2（「首登晚到同样落进两段同时在场」）。用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」授权代决。
 

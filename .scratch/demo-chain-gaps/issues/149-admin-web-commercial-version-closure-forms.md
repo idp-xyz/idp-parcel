@@ -21,7 +21,7 @@ Blocked by: 无
 票 50 只把收尾折进了一部分管理台目录（`internal/partycommercial/adapters/postgres/operations_catalogue.go`）：服务产品、客户合同、授权规则、供应商协议四张的状态格认退役；供应商协议另回显 `selectionEndsAt`、`successorVersion`、`retiredAt`。余下：
 
 - 管理台页面还不渲染供应商协议那三格（`apps/admin-web` 的供应商协议页）。
-- 服务产品、客户合同、授权规则三张不回显截止点。
+- 服务产品、客户合同、授权规则三张不回显截止点。连同接受前财务控制策略、客户服务规则，另立票 [184](./184-five-commercial-catalogues-do-not-echo-the-cut-of-a-closed-version.md)。
 - 按正文册驱动的目录（接单规则包、价格政策、结算政策、接受前财务控制）既不认退役也不回显截止点。
 
 ## 三类
