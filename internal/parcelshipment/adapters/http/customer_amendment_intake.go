@@ -238,6 +238,9 @@ func amendmentContent(draft amendmentDraft, group domain.SourceDataGroupReferenc
 
 // NewCustomerAmendmentHandler 在编排前核对载荷的 shipmentRequestId 与按信封账户加原提交标识找到的委托是同一个，不一致按找不到答
 // （ErrShipmentRequestNotVisible，与不存在同字节）。查找与编排用同一个来源身份。
+//
+// 查找出错或查不到时本壳**不自己答，直接放行给 inner**：这依赖编排自己对同一次查找有同样的分流（读不回形成未决
+// `SHIPMENT_REQUEST_UNAVAILABLE`、查不到答统一不可见结果）。若编排将来改了那两格的分流，本壳的隔离只剩「找到了而不符」一格。
 func NewCustomerAmendmentHandler(requests ports.ShipmentRequestRepository, inner AmendmentHandler) AmendmentHandler {
 	return namedAmendmentChecker{requests: requests, inner: inner}
 }

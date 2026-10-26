@@ -151,6 +151,9 @@ func buildCustomerAmendmentOrchestration(db *bentopg.DB) (shipmenthttp.Amendment
 // buildSourceDataAmendmentAuthorizer 装资料修订授权那一口的真适配器：PC 裁定编排接满两个读口（授权治理册 +
 // 合同委派册——运营角色代录那一格没有委派读口答不出实际决定方，旧构造器在那一格报错），套 PS 的
 // SourceDataAmendmentAuthorizationAdapter。RequestSource 是首方直客的坐标映射，理由见 buildCustomerAmendmentOrchestration。
+//
+// **只供首方直客的修订装配**：映射把请求方钉成客户账户本人、等级钉成 CUSTOMER_SELF_SERVICE。运营角色代录修订若将来要接，
+// 须另起一份映射（请求方种类、运营角色引用、受托等级都不同），不能复用本函数。
 func buildSourceDataAmendmentAuthorizer(db *bentopg.DB) (ports.SourceDataAmendmentAuthorizer, error) {
 	grants, err := pcpostgres.NewAuthorityGrants(db)
 	if err != nil {

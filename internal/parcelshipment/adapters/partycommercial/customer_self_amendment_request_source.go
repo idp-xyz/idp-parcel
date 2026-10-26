@@ -22,6 +22,7 @@ const CustomerSelfServiceAuthorityLevel = "CUSTOMER_SELF_SERVICE"
 //   - 原因：询问里的结构化修订原因原样转写。
 //   - 证据：被修订的委托的来源身份加资料范围（`first-party-amendment:<租户>/<账户>/<来源>/<原提交请求键>#<资料组>[/<包裹>]`）。
 //     询问不带修订请求自己的身份，修订请求的留痕在版本上（版本的请求指纹），这里的证据指向它所修订的对象。
+//     因此 PC 侧**不按证据区分同一委托同一资料组上的两次修订**：两次请求给 PC 的是同一份证据，区分靠 PS 的资料版本。
 //   - 时点：注入的时钟，不取载荷。
 //   - 请求方种类：客户账户。
 type CustomerSelfAmendmentRequestSource struct {

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
@@ -177,8 +178,9 @@ func registerSelfServiceKey(t *testing.T, db *bentopg.DB) {
 	}
 }
 
-// seedSelfServiceGrant 在授权册里为 SYN-TENANT-01 登一条 SOURCE_DATA_AMENDMENT × CUSTOMER_SELF_SERVICE 的授予，法人与范围对着解析键。
-// 生产的登记入口由票 first-party-api/13 立；在它进 main 之前用例经 PC 领域重建门加 SaveGrant 登。
+// seedSelfServiceGrant 为 SYN-TENANT-01 登一条与演示种子同形的授予（SYN-AUTH-SOURCE-AMEND-01：SOURCE_DATA_AMENDMENT × CUSTOMER_SELF_SERVICE，
+// 法人与范围对着解析键），走票 first-party-api/13 的发布授予通道（CommercialPublications.SaveAuthorityGrant，ADR-0312）的持久化口，
+// 不再绕过它直写授权册。
 func seedSelfServiceGrant(t *testing.T, db *bentopg.DB) {
 	t.Helper()
 	approvedAt := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
@@ -194,10 +196,10 @@ func seedSelfServiceGrant(t *testing.T, db *bentopg.DB) {
 	}
 	version, err := pcdomain.RehydrateCommercialVersion(pcdomain.RehydrateCommercialVersionSpec{
 		TenantID: mustValue(t, pcdomain.NewTenantID, "SYN-TENANT-01"), Kind: pcdomain.AuthorizationRuleObject,
-		ObjectID:      mustValue(t, pcdomain.NewCommercialObjectID, "SYN-AUTH-SELF-SERVICE-AMENDMENT"),
+		ObjectID:      mustValue(t, pcdomain.NewCommercialObjectID, "SYN-AUTH-SOURCE-AMEND-01"),
 		Version:       mustValue(t, pcdomain.NewCommercialVersionLabel, "v1"),
 		Scope:         mustValue(t, pcdomain.NewCommercialScopeReference, "SYN-SCOPE-01"),
-		ContentDigest: mustValue(t, pcdomain.NewCommercialContentDigest, "sha256:SYN-AUTH-SELF-SERVICE-AMENDMENT"),
+		ContentDigest: mustValue(t, pcdomain.NewCommercialContentDigest, "sha256:SYN-AUTH-SOURCE-AMEND-01"),
 		Effective:     interval, Status: pcdomain.CommercialVersionEffective, Approval: approval,
 		PublishedAt: approvedAt, EffectiveAt: approvedAt.Add(time.Hour),
 	})
@@ -211,13 +213,13 @@ func seedSelfServiceGrant(t *testing.T, db *bentopg.DB) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	grants, err := pcpostgres.NewAuthorityGrants(db)
+	publications, err := pcpostgres.NewCommercialPublications(db)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
-		outcome, err := grants.SaveGrant(txCtx, grant)
-		if err == nil && outcome != pcports.GrantSaved {
+		outcome, err := publications.SaveAuthorityGrant(txCtx, grant)
+		if err == nil && outcome != pcports.DeclarationSaved {
 			err = errors.New("grant: " + outcome.String())
 		}
 		return err
@@ -231,6 +233,7 @@ func seedSelfServiceGrant(t *testing.T, db *bentopg.DB) {
 // 没有 CUSTOMER_SELF_SERVICE 授予答 UNDECIDED 停在授权规则未配置（租户没放行，如实）；登了授予之后**同一修订请求原样重放**形成版本答 201
 // RECORDED（code/44 的接着办），再重放答 200 ALREADY_HANDLED 同一版本；同一请求标识改内容答 SOURCE_CONFLICT；他账户指名这份委托与指名
 // 不存在的委托同答 404 同字节；委托号对不上答 404；只持提交授予的客户端答 403 CUSTOMER_CLIENT_NOT_GRANTED；载荷自报账户 400。
+// 授予经票 13 的发布授予通道落库、矩阵取与演示种子同形的 DELIVERY_PLACE 两格；播下已固定的申报提交版本之后同一资料组的更正答 DISALLOWED。
 func TestACustomerClientAmendsThroughTheFirstPartyLineAgainstARealDatabase(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -322,8 +325,10 @@ func TestACustomerClientAmendsThroughTheFirstPartyLineAgainstARealDatabase(t *te
 	}, stored)
 	rules := rulePackageOf(t, "SYN-TENANT-01")
 	seedClosureFor(t, db, identity, rules)
+	// 与演示种子同形的 DELIVERY_PLACE 两格：收寄前更正允许，提交关务后更正不允许。
 	declareAmendmentAllowance(t, db, rules, false,
-		amendmentCell(t, "DELIVERY_PLACE", pcdomain.DeclaredAcceptedNotYetReceived, pcdomain.DeclaredCorrectionIntent, pcdomain.AmendmentAllowed))
+		amendmentCell(t, "DELIVERY_PLACE", pcdomain.DeclaredAcceptedNotYetReceived, pcdomain.DeclaredCorrectionIntent, pcdomain.AmendmentAllowed),
+		amendmentCell(t, "DELIVERY_PLACE", pcdomain.DeclaredCustomsSubmitted, pcdomain.DeclaredCorrectionIntent, pcdomain.AmendmentDisallowed))
 
 	const amendmentID = "SYN-ACCESS-REQUEST-AM-0002"
 	body := amendmentBody(amendmentID, original, requestID, basis, "SYN-POSTAL-NEW", "")
@@ -401,6 +406,16 @@ func TestACustomerClientAmendsThroughTheFirstPartyLineAgainstARealDatabase(t *te
 	if got := envelopeCountOfType(t, db, sourceDataVersionEnvelopeType); got != 1 {
 		t.Fatalf("失败请求之后意图 = %d 封, want 仍是 1", got)
 	}
+
+	// 阶段推进到已提交关务：同一资料组的更正按矩阵答不允许（业务拒绝，不是未决），版本与意图都不多。
+	seedCustomsSubmittedFor(t, pool, "SYN-TENANT-01", parcelID)
+	submitted := post(amend, amendmentPath, syntheticCustomerSubject, amendmentBody("SYN-ACCESS-REQUEST-AM-0008", original, requestID, basis, "SYN-POSTAL-LATE", ""))
+	if outcomeOf(t, submitted) != "DISALLOWED" {
+		t.Fatalf("已提交关务后更正 = %d %s, want DISALLOWED", submitted.Code, submitted.Body.String())
+	}
+	if got := envelopeCountOfType(t, db, sourceDataVersionEnvelopeType); got != 1 {
+		t.Fatalf("不允许之后意图 = %d 封, want 仍是 1", got)
+	}
 }
 
 func jsonUnmarshal(response *httptest.ResponseRecorder, target any) error {
@@ -416,4 +431,19 @@ func sourceDataVersionOf(t *testing.T, response *httptest.ResponseRecorder) stri
 		t.Fatalf("decode %s: %v", response.Body.Bytes(), err)
 	}
 	return body.SourceDataVersionID
+}
+
+// seedCustomsSubmittedFor 在关务自己的表里落一个已固定提交版本的申报单元，包裹是它的成员：关务读面据此答「在固定提交版本里」，
+// 编排判出已提交关务阶段。
+func seedCustomsSubmittedFor(t *testing.T, pool *pgxpool.Pool, tenant, parcel string) {
+	t.Helper()
+	seedCustomsUnitFor(t, pool, tenant, parcel)
+	if _, err := pool.Exec(t.Context(),
+		`INSERT INTO customs_compliance.declaration_submission
+			(tenant_id, unit_id, procedure_ref, version_id, content_digest, members, dossier_ref, roles_ref, readiness_basis, authority_ref, fixed_at, recorded_at, is_current)
+		 VALUES ($1, 'SYN-UNIT-1', 'SYN-PROC-1', 'SYN-SUBMISSION-V1', 'sha256:syn', jsonb_build_array($2::text),
+		         'SYN-DOSSIER-1', 'SYN-ROLES-1', 'SYN-READINESS-1', 'SYN-AUTH-1', $3, $3, true)`,
+		tenant, parcel, time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatalf("播种申报提交版本：%v", err)
+	}
 }
