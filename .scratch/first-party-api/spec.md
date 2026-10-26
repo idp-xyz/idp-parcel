@@ -51,3 +51,30 @@ ADR-0139 的 `Status` 翻为 Accepted、首方 Intake 实施票立出之后，�
 ## 文档自洽审计复核（2026-10-21）
 
 [docs-consistency/audit/ps.md](../docs-consistency/audit/ps.md) PS-24（取证 [ps-code.md](../docs-consistency/audit/ps-code.md) 第 12 条）点名：ADR-0140 已接受、首方 Intake 已接上提交口，`/v1`、`application/problem+json` 与端点描述符都没落地，也没立实施票。复核于 main `67438a0f`，现象仍在（`cmd/parcel-api/endpoints_submission.go` 仍挂 `"/shipment-requests"`，`adapters/http/submit_shipment_request.go` 仍写自造的 `problemResponse`）。实施票立为 [docs-consistency/code/22](../docs-consistency/code/22-customer-face-http-contract-misses-accepted-adrs.md)（连同 PS-07 的客户面 `!found` 答 404，分级 R1：基线前必须定形），作为 ADR-0140 的实施票挂在本规格「子票」之外的承接处，不改上表。
+
+
+## 五口上线（2026-10-26 定，会话 tops-20）
+
+出处：用户 2026-10-26「都需要」（首个租户上线时客户经首方 API 要能撤回、取消、修订、补充、索赔）、「每个客户系统只代表它自己的账户（直客），只考虑这个吧」、「首发不要客户状态读口」、「首发不做限流」；技术取舍由会话 `tops-20` 代决（用户「你帮我决定吧」）。 摸底报告：[customer-faces-scoping-2026-10-26.md](./customer-faces-scoping-2026-10-26.md)。
+
+**范围**：首方客户 API 在首个租户上线前接通撤回、取消包裹、资料修订、补充、索赔五口（今天 `cmd/parcel-api` 全挂 `UnconfiguredIntake{}`）。**只做直客**：一个客户系统只代表它自己的账户（1:1，ADR-0139 首发口径），册上绑定即授权；代理人/平台 1:N（first-party-api/01）不在本轮。**首发不做**客户委托状态读口（靠写口回执、同请求重放与客户追踪视图）、不做按客户端限流（first-party-api/02）。
+
+**取舍（代决，落在票 06 立的 ADR-0310 里）**：
+- A 请求键空间：撤回、修订、补充、取消、索赔的来源请求键推导时加命令前缀（如 `withdrawal:<接入请求标识>`），同一标识跨命令不撞；契约写明标识在命令内唯一。
+- B 授权：直客 1:1。补充只靠账户绑定 + 授予 + 基准版本核对；修订保留 PC 裁定（UC-PS-002、ADR-0116），请求方即客户本人、不涉委派。
+- C 取消授权规则：租户取值，产品不代拟；演示租户登参考配置「客户系统可在收寄前取消」，首个真实租户上线实施时登记本租户的取值，没登答`未配置`、取消口对该租户不开。
+- D 不做客户状态读口（用户定）。
+- E 补充的基准版本：提交回执返回提交版本标识，补充载荷带回；回执今天若没有就在票 06 补上。
+- F 索赔唯一性：以（账户、批次、项）为自然键，接入请求标识只作传输重放。
+
+**拆票与归属**（tops-20 = 接线与 accessidentity；tops-26 = PS 应用层）：
+| 票 | 内容 | 规模 | 依赖 | 归属 |
+|---|---|---|---|---|
+| [06](./issues/06-customer-command-faces-common-base.md) | 五口共用底座：Mint 骨架、能力词、请求键推导、access_identity 迁移、形状版本、演示授予与准入范围、ADR-0310 | M | — | tops-20 |
+| [07](./issues/07-customer-withdrawal-face.md) | 撤回口 | M | 06；code/36、code/44（tops-26） | tops-20 |
+| [08](./issues/08-customer-supplement-face.md) | 补充口 | M | 06 | tops-20 |
+| [09](./issues/09-customer-claim-face.md) | 索赔口（并 demo-chain-gaps/102） | M | 06 | tops-20 |
+| [10](./issues/10-customer-source-data-amendment-face.md) | 资料修订口 | L | 06；code/44 | tops-20 |
+| [11](./issues/11-customer-parcel-cancellation-face.md) | 取消口 | M | 06；取消生命周期闸门、code/98（tops-26） | tops-20 |
+| [12](./issues/12-customer-command-faces-demo-and-contract.md) | 五口演示种子收尾与客户契约补章 | S | 07–11 | tops-20 |
+| code/36、44、98、99、dc/76、取消生命周期闸门（新立） | PS 应用层前置 | — | — | tops-26 |
