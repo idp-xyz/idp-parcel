@@ -1,7 +1,7 @@
 # 09 索赔口经首方渠道接通（并 demo-chain-gaps/102）
 
 Category: enhancement
-Status: in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-fpa09`（代码最后一笔 `507c981b1`）。此前 in-progress——2026-10-26 会话 `tops-20` 认领（06 已进 main），分支 `claude-fpa09`。此前 ready-for-agent——R1（上线前必修，用户 2026-10-26 定首发要这一口）。
+Status: resolved——2026-10-26 进 main `e9b68c815`（见文末「进 main 记录」）。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-fpa09`（代码最后一笔 `507c981b1`）。此前 in-progress——2026-10-26 会话 `tops-20` 认领（06 已进 main），分支 `claude-fpa09`。此前 ready-for-agent——R1（上线前必修，用户 2026-10-26 定首发要这一口）。
 Blocked by: 06
 出处：用户 2026-10-26「都需要」（首个租户上线时客户经首方 API 要能撤回、取消、修订、补充、索赔）、「每个客户系统只代表它自己的账户（直客），只考虑这个吧」、「首发不要客户状态读口」、「首发不做限流」；技术取舍由会话 `tops-20` 代决（用户「你帮我决定吧」）。 计划见 [spec](../spec.md)「五口上线」与 [摸底报告](../customer-faces-scoping-2026-10-26.md)。
 
@@ -40,3 +40,15 @@ M
 **判据对用例**：首方凭证经 `/v1/claims` 成功、重放答同一项、他账户目标与合同同字节 404、载荷自报账户 400、撤销授予后 403 未授予——`cmd/parcel-api/assemble_customer_claim_test.go::TestACustomerClientSubmitsAClaimThroughTheFirstPartyLineAgainstARealDatabase`（生产 build 与 mount，真库）；未授予 / 别族令牌 / 不在准入范围 / 无令牌——`TestClaimLineRefusesOtherFamiliesAndJudgesAdmission`；首方族未配置字节同——`TestClaimLineAnswersNotConfiguredByteForByteWhenTheCustomerFamilyIsUnset`；他账户撞键——`TestAClaimKeyHeldByAnotherAccountIsNotAcceptedAndDoesNotLeakTheOriginal`；合同归属——`TestAContractScopeBelongsToOneAccountOnly`。AT-VE-208 至 212 在盘点①。
 
 **自验**（含 PG，DSN `127.0.0.1:55432`）：`go build ./...`；`go vet` VE、accessidentity、cmd；`gofmt`；`go test -count=1 -p 1` 跑 `./internal/visibilityexception/...`、`./internal/accessidentity/...`、`./cmd/parcel-api/...`、`./cmd/parcel-ve-register/...`、`./internal/architecture/...`、`./migrations/...`、`./tools/...` 全绿；一次性库 `seed.sh` 退 0 且声明行带 `SYN-ACCOUNT-01`，库已删；`at-coverage-counts -check` 只报生成物过期。没跑全量。演示实走（起 parcel-api 与 Dex）没做。
+
+## 评审记录
+
+评审 ← tops-20 隔离子代理(sonnet) · 钉 `741e2dbfd`：阻断无。非阻断：1. 账户隔离成立（租户、账户只取自信封；目标与合同他账户与不存在同答 404；`sameClaimOwner` 在查到已有项与保存冲突回读两处都生效；第二个账户的提交在落库前被拒、主键未改，Screen/Conclude/Review/证据/结算交接读到的只是第一个账户那一行——将来若放开同键复用要重审这些路径）。2. 迁移 0030 遇存量行拒绝施加：演示库重灌无碍，今天无真实租户，可接受；上线后的租户库要先带 `customer` 重登再迁，迁移注释已写。3. 同账户同键再来答原项、不比内容——**修订轮 `cd3cfdcd1` 收**：内容不同答 `NOT_ACCEPTED`（`CLAIM_CONTENT_DIFFERS_FROM_ACCEPTED`），与补充口口径一致。4. 管理台目录列表没带出 `customer`，作者已列另票。无发现：运营批文必须带 `customer`、种子与 `cmd/parcel-ve-register` 用例已同步；错误体改 problem+json 按恢复动作分格；号不撞。
+
+## 进 main 记录（2026-10-26，推送方会话 tops-20）
+
+- **main**：`e9b68c815`。出处：分支 `claude-fpa09` tip `f6777c019`（作者为 Sonnet 子代理；裁定：合同归属加 `customer_ref`、自然键不改主键、申请人由资格审核判）。
+- **重放冲突**：`docs/api/first-party-api-contract.md` 与票 08 的补充一章、待接口清单相撞——取 main 一侧（补充已接，清单去掉「受控补充」）再接本票「索赔口」一章；AT 盘点文末追记两边都留。推前 main 又进一笔只改 `apps/admin-web/` 的 `590bee265`，无重叠，直接重放。
+- **生成物**：三件推送方重生成，`-check` 退 0。
+- **全量真库测试**：`scripts/test-full.sh` 跑在 `3879ea322`（同一内容重放在 `b21b2f208` 上）：158 ok / 0 FAIL。**种子**：一次性库灌入退 0，用后删库。
+- **号**：VE 迁移 `0030`（另一会话 tops-26 确认未用）；`AT-VE-208`–`212`。demo-chain-gaps/102 随本票收。
