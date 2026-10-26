@@ -13,7 +13,7 @@
 - **`0cddbba` 重盘补充：硬句引用口径已扩展到首盘之后新落的全部编排批**——VE 五个编排（投影派生、客户视图、信号分诊、客户通知、处置请求）、CC 四个编排（申报提交、外部结果接收、处置核验、案件关闭）、PG 阶段评审、PP 计价评价编排、SA 费用确认、TF 交付生效、NO 关务协作领域件的新测试同引硬句不点 AT 号（增量 48 个测试文件仅 2 处新增 `AT-*` 点名，且都点在已在册行上）。①因此低估的范围从 VE/CC 扩大到上述新编排面；对应 ②④ 行的高估同步扩大，逐条领票时仍按 UC 原文比对，不据本表宣称未覆盖。
 - **点名票后修正（第二次重盘）**：VE 五编排与 NO 关务协作的测试已逐条对 UC 验收表补 AT 点名（宁缺勿滥——语义整条对上才点，半边覆盖在点名处注明「××半边」；点不上的继续引硬句），VE ①由 0 升至 16、NO ①由 10 升至 13。**SA 费用确认与 CC 放行门禁两组测试对表后零点名**：其所钉语义（确认条件定格、五值折叠、条件指纹换版、目录未登记未决）落在各自 UC 的结果契约与 CONTEXT 硬句上，验收表无一一对应行——不硬点。VE/CC 其余包的硬句低估口径仍然成立。
 - **第二轮点名票后修正**：CC 六编排（建案/舱单/后续动作/处置核对/案件关闭/内部限制）、TF 三登记编排、NO 合箱也已对表点名，**CC 的①列不再为零**（0→20）；PP 与 PG 在 `docs/application` 无 AT 清单（PP 无 UC 文档、PG 走 PN-08 验收矩阵 GOV-*，两处 GOV 机制半边已在 PG 测试注释点名但不入本表）；PC 声明两测试与 SA 费用确认维持零点（无对应行）。硬句低估口径对其余未点名面继续成立。
-- **表行即计数（2026-10-26 起，票 demo-chain-gaps/139，复核报告 M23）**：`docs/application` 各 UC 验收表立下的每个 AT 号，在下面分桶节里恰有一行；总览两表只由 `tools/at-coverage-counts` 从这些表行重算，不读别处。立号、改号、删号的票在同一笔里补行、改行或删行，新行按上面各桶的判据归：测试已点名入①，机制在而测试未点名入②，实例半边或闸门阻断入③，机制未实现入④，判不准的在行内注明。**文末追记里「①、XX 与合计各加 N」一类加数不再生效**：那是工具接手计数之前的手算口径，生成器不读追记，没补表行的 AT 就不进总览（`9045b6fd` 上实测约 160 个，票 demo-chain-gaps/139 在 `4f29f861e` 上补了 159 行）；追记留作历史，不据以计数。工具在重算与 `-check` 时都把表行与 `docs/application` 立下的 AT 号（表格行首格恰是一个 AT 号的行）逐一对照，缺行或多行即不重算、非零退出，报文列出缺哪几个、多哪几个与补法。
+- **表行即计数（2026-10-26 起，票 demo-chain-gaps/139，复核报告 M23）**：`docs/application` 各 UC 验收表立下的每个 AT 号，在下面分桶节里恰有一行；总览两表只由 `tools/at-coverage-counts` 从这些表行重算，不读别处。立号、改号、删号的票在同一笔里补行、改行或删行；新行按上面各桶的判据归，判不准的在行内注明。**文末追记里「①、XX 与合计各加 N」一类加数不再生效**：那是工具接手计数之前的手算口径，生成器不读追记，没补表行的 AT 就不进总览（`9045b6fd` 上实测约 160 个，票 demo-chain-gaps/139 在 `4f29f861e` 上补了 159 行）；追记留作历史，不据以计数。工具在重算与 `-check` 时都把表行与 `docs/application` 立下的 AT 号（表格行首格恰是一个 AT 号的行）逐一对照，缺行或多行即不重算、非零退出，报文列出缺哪几个、多哪几个与补法。
 
 ## 总览
 
@@ -876,8 +876,8 @@
 | `AT-PC-046` | 询问另一租户的范围，答复与不存在的范围一致（机制在：按租户装载授权；postgres `authorization_grant_test.go::TestAnotherTenantReadsNoneOfTheseGrants` 未点 AT 号） | UC-PC-003-ADJUDICATE-COMMERCIAL-AUTHORIZATION.md |
 | `AT-PC-047` | 授权规则装载超时答`未形成`，不冒充`不允许`或`未配置`（机制在；`adjudicate_commercial_authorization_test.go::TestAdjudicationSurfacesLoaderFailure` 未点 AT 号） | UC-PC-003-ADJUDICATE-COMMERCIAL-AUTHORIZATION.md |
 | `AT-PC-048` | 同一询问的业务时点落在区间内与区间外分别得到`已授权`与`不允许`/`未配置`，不按系统当前时间裁定（机制在：裁定取请求时点；有效期外一格见 `AT-PC-041` 所列用例，未点 AT 号） | UC-PC-003-ADJUDICATE-COMMERCIAL-AUTHORIZATION.md |
-| `AT-PC-049` | 已授权后该授权规则被截止或退役，既有决定继续引用当时采用的那一版（判不准：PS 各授权适配器随决定记下 `GrantVersion`，没有专门用例） | UC-PC-003-ADJUDICATE-COMMERCIAL-AUTHORIZATION.md |
-| `AT-PC-050` | 同一范围两个已发布服务产品，委托声明其中之一、未声明或声明的在该范围无已发布版本（机制在：`ResolutionKey.ServiceProduct` 按身份收窄候选，ADR-0080；postgres `commercial_resolution_test.go::TestResolutionRoundTripsTheDeclaredServiceProduct` 未点 AT 号） | UC-PC-002-RESOLVE-COMMERCIAL-BASIS.md |
+| `AT-PC-049` | 已授权后该授权规则被截止或退役，既有决定继续引用当时采用的那一版（判不准：postgres `authority_closure_test.go::TestARetiredAuthorizationRuleVersionLeavesTheGrantBook` 的 Covers 句写「退役不追溯已作出的那一次裁定」并有断言，但以 `AT-PC-042`、`AT-PC-059` 的名义、只断言内存里那一次裁定的值；PS 各授权适配器随决定记下 `GrantVersion`） | UC-PC-003-ADJUDICATE-COMMERCIAL-AUTHORIZATION.md |
+| `AT-PC-050` | 同一范围两个已发布服务产品，委托声明其中之一、未声明或声明的在该范围无已发布版本（机制在：`ResolutionKey.ServiceProduct` 按身份收窄候选，ADR-0080；三格已由 domain `requested_service_product_resolution_test.go::TestADeclaredServiceProductNarrowsTwoProductsInOneScopeToTheDeclaredOne`、`::TestWithoutADeclaredServiceProductTwoProductsInOneScopeStillConflict`、`::TestADeclaredServiceProductWithoutAPublishedVersionIsNoApplicableBasis` 逐格钉住，只差点名） | UC-PC-002-RESOLVE-COMMERCIAL-BASIS.md |
 | `AT-PS-009` | 接受后客户合同或产品发布新版本 | UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md |
 | `AT-PS-011` | 接受成功后检查下游对象 | UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md |
 | `AT-PS-018` | 无法识别目标委托、包裹或资料范围 | UC-PS-002-AMEND-CUSTOMER-SOURCE-DATA.md |

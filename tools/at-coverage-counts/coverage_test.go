@@ -19,7 +19,9 @@ func TestDeclaredATsTakesOnlyTheFirstCellOfATableRow(t *testing.T) {
 	files := map[string]string{
 		"UC-X-001.md": "| AT | 场景 |\n|---|---|\n| `AT-PS-001` | a |\r\n| AT-PS-002 | 不带反引号也算 |\n" +
 			"正文里替代 `AT-PS-900` 的那一行不是立号。\n" +
-			"| `AT-PS-001`、`AT-PS-901` | 交接表并列几个号的首格不算立号 |\n",
+			"| `AT-PS-901`、`AT-PS-001` | 交接表并列几个号的首格不算立号 |\n" +
+			"| `AT-PS-903` 一行 | 首格里号后还有字，不算立号 |\n" +
+			"| 缺口 | 后格里的 `AT-PS-904` 不算立号 |\n",
 		"UC-X-002.md": "| `AT-PS-001` | 交接表里再引一次，仍记首次立号的文件 |\n| `AT-NO-003` | a |\n",
 		"notes.txt":   "| `AT-PS-902` | 不是 .md |\n",
 	}
@@ -83,7 +85,9 @@ func TestReconcileNamesEveryMissingAndExtraRowAndHowToFixThem(t *testing.T) {
 		"AT-NO-004（② 机制候选）",
 		"已没有这个号的 1 个",
 		inventoryPath,
+		"「方法与口径」",
 		"补一行",
+		"不是立号，改首格写法",
 		"加数不算数",
 	} {
 		if !strings.Contains(message, piece) {

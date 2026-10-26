@@ -68,7 +68,8 @@ jobs:
       # ADR 索引与 AT 盘点计数也是生成物，但约定与上一步相反：票不在自己那笔上重生成，由推送方
       # 在 main 的 tip 上重生成、单独成笔（docs/agents/parallel-sessions.md「生成物不占号」）。
       # 所以这一门只挂在 main 的推送上——挂到 PR 上，每张带新 ADR 或移了 AT 行的票都会按设计
-      # 红，红就不再是信号。它守的是推送方漏了那一步。
+      # 红，红就不再是信号。它守的是推送方漏了那一步；另外 UC 立了号而盘点分桶表里缺行或多行时，
+      # at-coverage-counts 退 2，这一门同样红——那要补表行，重算补不上。
       - name: ADR index and AT coverage counts are current
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
