@@ -1,7 +1,7 @@
 # 97 NR 初始路由最低成本并列没有授权裁决口：并列候选落了未形成登记，却读不回、也重判不了
 
 Category: enhancement
-Status: in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 claude-code97（代码最后一笔 e9285b177）。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）分诊升 R1（上线前必修：并列的包裹永远没有初始路由、无绕法，见 [分诊报告](../../needs-triage-sweep-2026-10-26.md)；降级条件见报告）并认领（tops-26 的 code/ 队列已停），分支 `claude-code97`；新 ADR 若要取 0309。此前 needs-triage——建议 R2（上线后尽快），与 code/29 同级：成本单维择优下并列是常见情形，并列的包裹停在`路由未形成`，原因与候选可查，可没有任何口能裁。绕法：没有——之后每一次复核都落「没有路由历史」入账未判。2026-10-26 票 [code/29](./29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md) 作者子代理立（协调方分诊：demo-chain-gaps/155 之后并列候选读不回就不在 code/29 做，立新票写清依赖），分支 claude-code29。分级由协调方定稿。
+Status: resolved——2026-10-26 进 main `c65798a74`（见文末「进 main 记录」）。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 claude-code97（代码最后一笔 e9285b177）。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）分诊升 R1（上线前必修：并列的包裹永远没有初始路由、无绕法，见 [分诊报告](../../needs-triage-sweep-2026-10-26.md)；降级条件见报告）并认领（tops-26 的 code/ 队列已停），分支 `claude-code97`；新 ADR 若要取 0309。此前 needs-triage——建议 R2（上线后尽快），与 code/29 同级：成本单维择优下并列是常见情形，并列的包裹停在`路由未形成`，原因与候选可查，可没有任何口能裁。绕法：没有——之后每一次复核都落「没有路由历史」入账未判。2026-10-26 票 [code/29](./29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md) 作者子代理立（协调方分诊：demo-chain-gaps/155 之后并列候选读不回就不在 code/29 做，立新票写清依赖），分支 claude-code29。分级由协调方定稿。
 Blocked by: [code/29](./29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md)（授权决定口的形状，以及它停下等的那份地理投影取法记录）；[demo-chain-gaps/154](../../demo-chain-gaps/issues/154-network-reassessment-not-judged-triggers-resume-after-registration.md)「要裁的」第二条（初始路由重驱的地理投影从哪里来）
 出处：UC-NR-001「给开发的交接」并列一行；code/29「最小的诚实修法」第 3 条与它的「停工记录」。
 
@@ -92,3 +92,21 @@ ADR-0309 的越权风险点编号：1 NR 读 PS 多一个调用方（PS 会签�
 - 登记行的 `settled_at` 同刻时按判断键各维收尾取最近一行；一件包裹换基线重新受理才会有第二行。
 - 决定口先由包裹读到判断键、再取锁、锁里重读，不是先锁：包裹到判断键这一步在锁外，读到的键只用来取锁。
 - NR CONTEXT 改了两句：客户地址那一条补「授权角色裁初始路由最低成本并列同样，取法同此」；路由计划适用性首条补「授权角色裁最低成本并列形成的首个计划同样从决定的时刻起生效，委托接受到决定之间的无当前有效路由照留」。
+
+## 评审记录
+
+评审 ← tops-20 隔离子代理(sonnet) · 钉 `1467de13f`
+
+- **阻断**：无。
+- **非阻断**：1. 商业解析标识不取，说法成立（`DecideInitialRouteHandler.Decide` 调的 `LoadInitialRouteEvidence(key, carried)` 与 `loadRouteCandidateCosts` 签名里没有它，`carried` 只含地理维）；入账后商业服务范围若变会按已不适用的范围形成计划——ADR-0309 越权风险点 2 已披露并写补法（加一道适用性重问），接受决定的商业解析一经接受不再改写、重判仍走硬限制与候选资格，判非阻断。2. 并发用例 `TestTwoConcurrentTieDecisionsFormOnlyOneFirstPlan` 先占同一把咨询锁再放行两笔、断言一成立一已有结果；锁内读判断库与登记行已核实，未做变异、未构造「锁外读后登记被改写」。3. 锁外读的是 `FindLatestNotFormedOfParcel`（只取判断键），决定用锁内 `FindNotFormed`。
+- **无发现**：门序逐项具名答复；锁内先 `FindByKey` 再 `FindNotFormed`，`Save` 撞 `AlreadyRecorded` 读回赢家，发布意图与判断库、证据同一事务；application、adapters/http、`cmd/parcel-api`（`-run Tie`，连 PG）通过；授予复用 `OperatorDecisionAuthorizedReroute`、操作者取自会话；CONTEXT 两句与 ADR 决定三一致；迁移 0030 外键与主键合理、不改存量；号不撞；管理台文案中文、不越「表单不裁门」；ADR-0075/0215/0284 只动 Status 注记与 Links；越权风险点 5 归 code/100、写明不吞。
+
+## 进 main 记录（2026-10-26，推送方会话 tops-20）
+
+- **main**：`c65798a74`。出处：分支 `claude-code97` tip `1467de13f`（作者为 Sonnet 子代理）。
+- **重放对照**（分支 → main）：`2b5055592` → `0b2ca3d0e`；`8653f422d` → `6ba52644b`；`931c9162f` → `31773a3ef`；`e9285b177` → `54ff83fd7`；`df001265c` → `f31844053`；`1467de13f` → `390da8646`。
+- **生成物**：ADR 索引 `54a2102fc`；AT 盘点总览计数 `3df58aeb9`；机制清点 `c65798a74`。三件 `-check` 退 0（含票 139 表行守卫）。
+- **全量真库测试**：`scripts/test-full.sh` 跑在 `c65798a74`（即所推 SHA）：158 ok / 0 FAIL，退 0。
+- **管理台三道门**（落地树，Node 22）：tsc 退 0、node:test 713/713、vite build 退 0（评审检出无 node_modules 未跑的那一条由此补上）。
+- **种子**：`scripts/demo-seeds/seed.sh` 灌一次性库（`c65798a74` 上），退 0，用后删库。
+- **号**：NR 迁移 `0030`；ADR-0309；`AT-NR-100`–`103`。
