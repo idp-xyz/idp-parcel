@@ -36,15 +36,29 @@ func TestCountRefusesAnATListedTwice(t *testing.T) {
 	}
 }
 
+// acceptance 是与 inventory 四条表行一一对得上的 UC 验收表。
+const acceptance = "# UC\n\n| AT | 场景 | 结果 |\n|---|---|---|\n" +
+	"| `AT-PS-001` | a | b |\n| `AT-NO-002` | a | b |\n| `AT-PS-003` | a | b |\n| `AT-NO-004` | a | b |\n"
+
+// writeRepo 在 root 下摆出盘点与一份 UC，交回盘点的路径。
+func writeRepo(t *testing.T, root, inventoryContent, ucContent string) string {
+	t.Helper()
+	path := filepath.Join(root, filepath.FromSlash(inventoryPath))
+	uc := filepath.Join(root, filepath.FromSlash(applicationDir), "ctx", "UC-X-001.md")
+	for file, content := range map[string]string{path: inventoryContent, uc: ucContent} {
+		if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(file, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return path
+}
+
 func TestRunRewritesOnlyTheOverviewAndCheckFollows(t *testing.T) {
 	root := t.TempDir()
-	path := filepath.Join(root, filepath.FromSlash(inventoryPath))
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(inventory), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	path := writeRepo(t, root, inventory, acceptance)
 
 	if err := run(root, true); err == nil {
 		t.Fatal("计数还是旧的，-check 却通过了")

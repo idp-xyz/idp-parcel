@@ -18,7 +18,8 @@ type Bucket struct {
 // Census 是一次重算的全部结果，桶按在文件里出现的顺序。
 type Census struct {
 	Buckets  []Bucket
-	Prefixes []string // 出现过的 AT 前缀，按字母序
+	Prefixes []string          // 出现过的 AT 前缀，按字母序
+	Rows     map[string]string // 每个有表行的 AT → 所在桶的 Label，供与 UC 的立号对照
 }
 
 var atRow = regexp.MustCompile("^\\| `AT-([A-Z]+)-(\\d+)`")
@@ -74,6 +75,7 @@ func Count(content string) (Census, error) {
 		census.Prefixes = append(census.Prefixes, prefix)
 	}
 	sort.Strings(census.Prefixes)
+	census.Rows = seen
 	return census, nil
 }
 

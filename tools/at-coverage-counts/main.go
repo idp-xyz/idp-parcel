@@ -6,6 +6,8 @@
 // 计数在进 main 时重算。
 //
 // 它**只数行，不分桶**。一条 AT 该进哪个桶是领票时对照 UC 原文的判断，留在行的位置上。
+// 但它核对行齐不齐：docs/application 立下的 AT 号与分桶表行逐一对照，缺行或多行即不重算、
+// 非零退出并列出是哪几个（Reconcile）。
 package main
 
 import (
@@ -47,6 +49,13 @@ func run(dir string, check bool) error {
 	census, err := Count(string(content))
 	if err != nil {
 		return fmt.Errorf("%s：%w", path, err)
+	}
+	declared, err := DeclaredATs(dir)
+	if err != nil {
+		return err
+	}
+	if err := Reconcile(declared, census); err != nil {
+		return err
 	}
 	out, err := markedregion.Replace(string(content), countsBegin, countsEnd, Render(census))
 	if err != nil {
