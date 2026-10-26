@@ -105,3 +105,20 @@ func buildCustomerSupplementIntake(minter *accessidentity.CustomerClientMinter) 
 	}
 	return intake, nil
 }
+
+// buildCustomerWithdrawalIntake 装配撤回口的首方 Intake（ADR-0139 决定四；ADR-0310 取舍 A、B；票 first-party-api/07）。铸造器与提交口
+// 同一只。准入范围由铸造器判（MintWithdrawal）；撤回无 PC 裁定，不预取归属。
+func buildCustomerWithdrawalIntake(minter *accessidentity.CustomerClientMinter) (*shipmenthttp.CustomerWithdrawalIntake, error) {
+	if minter == nil {
+		return nil, fmt.Errorf("customer withdrawal intake needs a minter")
+	}
+	authenticator, err := psaccess.NewCustomerWithdrawalAuthenticator(minter)
+	if err != nil {
+		return nil, err
+	}
+	intake, err := shipmenthttp.NewCustomerWithdrawalIntake(authenticator, systemClock{})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: customer withdrawal intake: %w", err)
+	}
+	return intake, nil
+}

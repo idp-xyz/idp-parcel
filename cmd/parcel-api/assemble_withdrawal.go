@@ -7,12 +7,14 @@ import (
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	psaccess "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/accessidentity"
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	psidentity "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/identity"
 	psparty "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	pssettlement "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/settlementaccounting"
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	pcapplication "go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
@@ -49,7 +51,8 @@ func (withdrawal transactionalWithdrawal) Handle(
 	return result, nil
 }
 
-// buildWithdrawalOrchestration 装配 `/shipment-requests/withdrawals` 的真编排（UC-PS-005）。
+// buildWithdrawalOrchestration 装配撤回编排（UC-PS-005）的 PC 裁定授权形态——生产的首方撤回口不走它（走
+// buildCustomerWithdrawalOrchestration），它留给代理人 1:N 与运营侧撤回将来挂 PC 授权的那一天，现在只有用例证这条链。
 //
 // 机制半边全部接真：来源保全、委托仓储、判断读写与决定标识走 PS 真库口，撤回授权经
 // partycommercial 适配器接 PC 裁定编排与真授权册，冻结释放经 settlementaccounting 适配器
@@ -62,6 +65,33 @@ func (withdrawal transactionalWithdrawal) Handle(
 //
 // 接线前后的区别不在结果在来源：恢复动作从「写代码」变成「登记参数」（ADR-0063）。
 func buildWithdrawalOrchestration(db *bentopg.DB) (shipmenthttp.WithdrawalHandler, error) {
+	grants, err := pcpostgres.NewAuthorityGrants(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: authority grants: %w", err)
+	}
+	return assembleWithdrawalOrchestration(db, psparty.NewWithdrawalAuthorizationAdapter(
+		pcapplication.NewAdjudicateCommercialAuthorizationHandler(grants),
+		// RequestSource 留空：实例半边，见函数注释。
+		nil,
+	))
+}
+
+// buildCustomerWithdrawalOrchestration 装配首方撤回口（`/v1/shipment-requests/withdrawals`）的编排：与上面同一条链，只把撤回授权
+// 换成直客 1:1 的渠道绑定授权（ADR-0310 取舍 B：撤回无 PC 裁定，授权 = 账户绑定 + 授予 + 准入范围，已在铸造信封时判过），
+// 再在前面套 NewCustomerWithdrawalHandler 补齐并核对委托号与提交版本。
+func buildCustomerWithdrawalOrchestration(db *bentopg.DB) (shipmenthttp.WithdrawalHandler, error) {
+	inner, err := assembleWithdrawalOrchestration(db, psaccess.DirectCustomerWithdrawalAuthorizer{})
+	if err != nil {
+		return nil, err
+	}
+	requests, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: shipment requests: %w", err)
+	}
+	return shipmenthttp.NewCustomerWithdrawalHandler(requests, inner), nil
+}
+
+func assembleWithdrawalOrchestration(db *bentopg.DB, authorizer ports.WithdrawalAuthorizer) (shipmenthttp.WithdrawalHandler, error) {
 	sources, err := pspostgres.NewSourceSubmissions(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: source submissions: %w", err)
@@ -73,10 +103,6 @@ func buildWithdrawalOrchestration(db *bentopg.DB) (shipmenthttp.WithdrawalHandle
 	judgments, err := pspostgres.NewAcceptanceJudgments(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: acceptance judgments: %w", err)
-	}
-	grants, err := pcpostgres.NewAuthorityGrants(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-api: authority grants: %w", err)
 	}
 	freezes, err := sapostgres.NewFreezeLedgers(db)
 	if err != nil {
@@ -100,11 +126,6 @@ func buildWithdrawalOrchestration(db *bentopg.DB) (shipmenthttp.WithdrawalHandle
 	}
 	clock := systemClock{}
 
-	authorizer := psparty.NewWithdrawalAuthorizationAdapter(
-		pcapplication.NewAdjudicateCommercialAuthorizationHandler(grants),
-		// RequestSource 留空：实例半边，见函数注释。
-		nil,
-	)
 	release := pssettlement.NewPreAcceptanceControlAdapter(pssettlement.PreAcceptanceControlAdapterDeps{
 		Release: saapplication.NewReleasePreAcceptanceControlHandler(freezes, exposures, scopeLocks, clock),
 		// Apply 留空：撤回只消费释放半边，本装配不把施加口交给任何人；

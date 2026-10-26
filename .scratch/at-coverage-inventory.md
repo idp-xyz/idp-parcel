@@ -435,6 +435,10 @@
 | `AT-PS-131` | internal/parcelshipment/domain/customer_command_shapes_test.go::TestCustomerSupplementDigestIsItsOwnShapeAndCarriesTheBasis |
 | `AT-PS-132` | cmd/parcel-api/assemble_customer_supplement_face_test.go::TestACustomerClientSupplementsThroughTheFirstPartyLineAgainstARealDatabase |
 | `AT-PS-133` | cmd/parcel-api/assemble_customer_supplement_face_test.go::TestACustomerClientSupplementsThroughTheFirstPartyLineAgainstARealDatabase |
+| `AT-PS-134` | internal/parcelshipment/adapters/http/customer_withdrawal_intake_test.go::TestCustomerWithdrawalIntakeTakesIdentitiesFromAuthentication |
+| `AT-PS-135` | internal/parcelshipment/domain/customer_command_shapes_test.go::TestCustomerWithdrawalDigestIsItsOwnShapeAndCarriesTheNames |
+| `AT-PS-136` | cmd/parcel-api/assemble_customer_withdrawal_face_test.go::TestACustomerClientWithdrawsThroughTheFirstPartyLineAgainstARealDatabase |
+| `AT-PS-137` | cmd/parcel-api/assemble_customer_withdrawal_face_test.go::TestACustomerClientWithdrawsThroughTheFirstPartyLineAgainstARealDatabase |
 | `AT-SA-002` | internal/settlementaccounting/application/assess_advance_recovery_test.go::TestAnAssessmentRegistersOncePerIdentity；internal/settlementaccounting/domain/advance_recovery_test.go::TestAdvanceAssessmentJudgesWithoutRecomputingOrFabricating |
 | `AT-SA-003` | internal/settlementaccounting/domain/advance_recovery_test.go::TestAdvanceAssessmentJudgesWithoutRecomputingOrFabricating |
 | `AT-SA-004` | internal/settlementaccounting/domain/advance_recovery_test.go::TestAdvanceAssessmentJudgesWithoutRecomputingOrFabricating |
@@ -1922,3 +1926,4 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 
 2026-10-26 追记（票 docs-consistency/code/98）：网络服务有效交付的终局采用读已成立的取消，取消在册（含停在取消先后冲突上的）时迟到的有效交付不采用为终局、依据指名那份取消。不立新号：`AT-PS-080` 补有效交付一路的单元、入账、装配与并发点名；`AT-PS-107` 补有效交付不绕过冲突的真库与装配点名；`AT-PS-086` 补有效交付终局先手时取消答既有终局的并发点名；`AT-PS-061` 补同一份有效交付并发重投的并发点名；`AT-PS-053` 补取消视图读过后没有取消照常形成终局的不回归点名。总览计数未动，由推送方重算。
 2026-10-26 追记（票 docs-consistency/code/44）：UC-PS-005 新立 `AT-PS-125`（撤回在授权未决、读不回或并发抢先之后停下，来源已保全而委托仍为`已提交`，客户原样重放：授权恢复后形成撤回且只形成一次，再重放答已有决定并带那份撤回；授权仍答不出仍答未决；委托此间已被接受、拒绝或撤回的答已有决定并带那份决定，ADR-0256 决定一第 2 格），UC-PS-002 新立 `AT-PS-126`（修订在版本落库之前各格停下之后重放：条件恢复后形成版本并交出恰好一份发布意图且只形成一次，再重放答已有结果带版本；条件没变得到同一个答案；别的修订请求的版本不算这次请求的），两行入①——编排用例、真库装配用例（含并发重放只形成一次）点名。`AT-PS-016`、`AT-PS-017`、`AT-PS-031`、`AT-PS-068`、`AT-PS-069` 补点名。总览计数未动，由推送方重算。
+2026-10-26 追记（票 first-party-api/07）：UC-PS-005 新立 `AT-PS-134`（首方撤回 Intake 译命令：身份取信封、撤回者取渠道行客户端、自报字段 400）、`AT-PS-135`（撤回摘要 `PWD-1`）、`AT-PS-136`（生产装配真库：成功、重放答同一决定、来源冲突、他账户 404 不泄露、委托号不符 404、未授予 403、自报 400）、`AT-PS-137`（撤回之后对原提交重放：提交回执不表达状态，仍读回原版本），四行入①。总览计数未动，由推送方重算。

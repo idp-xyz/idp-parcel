@@ -591,7 +591,7 @@ export function submitShipmentRequest(
 export function withdrawShipmentRequest(
   draft: WithdrawalDraft,
 ): Promise<ApiResult<WithdrawalResponseBody>> {
-  return post<WithdrawalResponseBody>('/shipment-requests/withdrawals', draft);
+  return post<WithdrawalResponseBody>('/v1/shipment-requests/withdrawals', draft);
 }
 
 export function cancelParcel(

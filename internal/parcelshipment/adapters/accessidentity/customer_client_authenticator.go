@@ -119,6 +119,50 @@ func (authenticator *CustomerSupplementAuthenticator) AuthenticateSupplement(
 	return sourceIdentityOf(envelope.Envelope())
 }
 
+// CustomerWithdrawalMinter 是撤回口对铸造器的最小依赖，identity.CustomerClientMinter 满足它。
+type CustomerWithdrawalMinter interface {
+	MintWithdrawal(
+		ctx context.Context,
+		credential identity.IntegrationClientCredential,
+		readRequest func() (identity.ChannelRequest, error),
+	) (identity.WithdrawalEnvelope, error)
+}
+
+// CustomerWithdrawalAuthenticator 实现 shipmenthttp.CustomerWithdrawalAuthenticator：铸撤回信封（`SHIPMENT_REQUEST_WITHDRAWAL`
+// 授予；来源请求键带 `withdrawal:` 前缀），译成本上下文的来源身份。
+type CustomerWithdrawalAuthenticator struct {
+	minter CustomerWithdrawalMinter
+}
+
+var _ shipmenthttp.CustomerWithdrawalAuthenticator = (*CustomerWithdrawalAuthenticator)(nil)
+
+func NewCustomerWithdrawalAuthenticator(minter CustomerWithdrawalMinter) (*CustomerWithdrawalAuthenticator, error) {
+	if minter == nil {
+		return nil, errors.New("parcel shipment accessidentity: customer withdrawal authenticator needs a minter")
+	}
+	return &CustomerWithdrawalAuthenticator{minter: minter}, nil
+}
+
+func (authenticator *CustomerWithdrawalAuthenticator) AuthenticateWithdrawal(
+	ctx context.Context,
+	credential shipmenthttp.PresentedClientCredential,
+	accessRequestID func() (string, error),
+) (domain.SourceIdentity, error) {
+	envelope, err := authenticator.minter.MintWithdrawal(ctx,
+		identity.NewIntegrationClientCredential(credential.Token, credential.Certificate),
+		func() (identity.ChannelRequest, error) {
+			id, err := accessRequestID()
+			if err != nil {
+				return identity.ChannelRequest{}, err
+			}
+			return identity.NewChannelRequest(map[string]string{identity.AccessRequestIdentifier: id}), nil
+		})
+	if err != nil {
+		return domain.SourceIdentity{}, answerCustomer(err)
+	}
+	return sourceIdentityOf(envelope.Envelope())
+}
+
 // answerCustomer 把共享接入身份能力的格译成 shipmenthttp 的格，首方族那几格各对其格；读载荷自己的错（已是本包的格）原样
 // 过。推导不出来源请求键是客户系统没给接入请求标识，恢复动作是改请求，答形状错。
 func answerCustomer(err error) error {
