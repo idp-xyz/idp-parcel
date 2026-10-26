@@ -203,6 +203,7 @@ type FundsResult struct {
 	posting      FactScopePosting
 	hasPosting   bool
 	overApplied  int64
+	unreconciled []domain.SettlementScope
 }
 
 // FactScopePosting 说这一步之后一条资金事实怎样记入客户应收作用域的入账余额（ADR-0283）：Scopes 是它经对账单或账户映射
@@ -262,6 +263,14 @@ func (result FundsResult) FactUnappliedMinor() (int64, bool) {
 // 也不自动撤销任何核销：撤哪一笔是人的判断。只有 CorrectFact 的结果交回非零值。
 func (result FundsResult) OverAppliedMinor() int64 {
 	return result.overApplied
+}
+
+// UnreconciledScopes 是更正采用时账已不平、因而没有推进的客户应收作用域（按键序）：这些作用域的已确认未结按账求出为负，
+// 推进不了，入账余额与已确认未结留在原值，没有按新金额重算。更正本身成立，不因为内部账不平而被拦——外部系统拥有资金
+// 事实，拦住它就是外部再重投也进不来；这个字段回答「账已更正、余额还没跟上」是哪几个作用域。要人核对指向它们的核销与
+// 调整，账回平之后，下一次碰到它的映射、核销、撤销或更正会按当时的链头金额重新推进。只有 CorrectFact 的结果交回非空值。
+func (result FundsResult) UnreconciledScopes() []domain.SettlementScope {
+	return append([]domain.SettlementScope(nil), result.unreconciled...)
 }
 
 // FundsHandoffReference 非空说明记录已提交但意图还没交出去，重放会重发同一份。
@@ -386,7 +395,8 @@ func (handler *MapExternalFundsHandler) AdoptFact(
 // 幂等按（租户+事实+新版本）分重放 / 冲突，照 AdoptFact 四格；回指非链头与更正未采用的事实都是`未受理`。
 //
 // 外部系统拥有资金事实，更正低于事实上未撤销核销的合计（超核）时也照采，不拒、不撤任何核销：撤哪一笔是人的判断。
-// 超核由答复说出来（FundsResult.OverAppliedMinor），入账余额在同一事务里跟着新金额重算（ADR-0285）。
+// 超核由答复说出来（FundsResult.OverAppliedMinor），入账余额在同一事务里跟着新金额重算；某个作用域账已不平、推进不了时
+// 更正照采，那个作用域留在原值，答复点名它（FundsResult.UnreconciledScopes，ADR-0285）。
 //
 // 先对事实身份行取锁、再读任何东西：锁与核销、撤销、映射同一把，求合计的那句读在锁后才含先到那笔已提交的核销。落版本行时
 // 外键对身份行取的 KEY SHARE 来在读之后，只靠它排队，合计读的就是旧账。锁序取资金侧全序（ports.FundsFactApplicationLock
@@ -471,7 +481,8 @@ func (handler *MapExternalFundsHandler) CorrectFact(
 	switch saved {
 	case ports.FundsFactSaved:
 		// 金额变了，事实落到的每个作用域的 P 都可能随之变（收款的封顶、退回的 −(d+r)），不论升降都重算。
-		if err := handler.recomputeScopes(ctx, command.TenantID, scopes); err != nil {
+		unreconciled, err := handler.recomputeReachedScopes(ctx, command.TenantID, scopes)
+		if err != nil {
 			return FundsResult{}, err
 		}
 		result, err := handler.adoptedFact(ctx, record)
@@ -479,6 +490,7 @@ func (handler *MapExternalFundsHandler) CorrectFact(
 			return FundsResult{}, err
 		}
 		result.overApplied = overAppliedBy(applied, record)
+		result.unreconciled = unreconciled
 		return result, nil
 	case ports.FundsFactAlreadyAdopted:
 		// 两步之间另一位写入方赢了：要么同一新版本先落了，要么链头先被别的版本更正了（库上守链形的
@@ -500,8 +512,9 @@ func (handler *MapExternalFundsHandler) CorrectFact(
 	}
 }
 
-// existingCorrection 按已采用的更正版本作答并带出此刻的超核：响应丢了、操作员重交同一次更正，看到的信号与第一次一致。
-// 只有此刻的链头才有超核可说——被后来的更正取代的版本说的是已经过去的金额。
+// existingCorrection 按已采用的更正版本作答并带出此刻的超核：响应丢了、操作员重交同一次更正，仍能看到这个信号；两次答复
+// 之间若有核销撤销，数会不同，后一次才是此刻的。只有此刻的链头才有超核可说——被后来的更正取代的版本说的是已经过去的金额。
+// 重放不重算，也就不重新判作用域账平不平。
 func (handler *MapExternalFundsHandler) existingCorrection(
 	ctx context.Context,
 	key ports.FundsFactKey,
@@ -520,6 +533,28 @@ func (handler *MapExternalFundsHandler) existingCorrection(
 		result.overApplied = overAppliedBy(applied, record)
 	}
 	return result, nil
+}
+
+// recomputeReachedScopes 在调用方已锁住的作用域上逐个重算，账已不平（已确认未结按账求出为负）的作用域跳过、留在原值，
+// 交回它们。更正不能因为内部账不平而整笔回滚：外部系统拥有资金事实，拦住更正它就永远进不来，又会按 5xx 无限重投；不平
+// 也不是更正造成的——它不动已核销分配与已确认应收。推进前的读与求值发生在任何写之前，跳过不会把事务打进中止态。别的错误
+// （含推进答未推进）照旧上抛、整笔回滚。
+func (handler *MapExternalFundsHandler) recomputeReachedScopes(
+	ctx context.Context,
+	tenant domain.TenantID,
+	scopes []customerScope,
+) ([]domain.SettlementScope, error) {
+	var unreconciled []domain.SettlementScope
+	for _, scope := range scopes {
+		if _, err := handler.recomputeScope(ctx, tenant, scope.scope); err != nil {
+			if errors.Is(err, domain.ErrNegativeConfirmedUnsettled) {
+				unreconciled = append(unreconciled, scope.scope)
+				continue
+			}
+			return nil, err
+		}
+	}
+	return unreconciled, nil
 }
 
 // overAppliedBy 是事实上未撤销核销的合计超出这一版金额的部分；没超出为 0。

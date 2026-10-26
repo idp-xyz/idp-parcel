@@ -5,6 +5,7 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
@@ -44,6 +45,18 @@ func factKeyOf(t *testing.T, fact string) ports.FundsFactKey {
 // fundsHandlerWithLock 把夹具里的其余各口原样装上，只换事实锁那一口。
 func fundsHandlerWithLock(t *testing.T, fixture *fundsFixture, lock ports.FundsFactApplicationLock) *application.MapExternalFundsHandler {
 	t.Helper()
+	return fundsHandlerWith(t, fixture, lock, fixture.books, fixture.books)
+}
+
+// fundsHandlerWith 把夹具里的其余各口原样装上，换事实锁与账、余额推进两口。
+func fundsHandlerWith(
+	t *testing.T,
+	fixture *fundsFixture,
+	lock ports.FundsFactApplicationLock,
+	books ports.CustomerReceiptBooks,
+	balances ports.OperationalBalanceAdvance,
+) *application.MapExternalFundsHandler {
+	t.Helper()
 	handler, err := application.NewMapExternalFundsHandler(application.MapExternalFundsDeps{
 		Facts:        fixture.facts,
 		Mappings:     fixture.mappings,
@@ -51,8 +64,8 @@ func fundsHandlerWithLock(t *testing.T, fixture *fundsFixture, lock ports.FundsF
 		Downstream:   fixture.handoff,
 		FactHandoff:  fixture.factHandoff,
 		Clock:        fundsClock{at: fundsNowAt},
-		Books:        fixture.books,
-		Balances:     fixture.books,
+		Books:        books,
+		Balances:     balances,
 		Standings:    idleCreditStanding{},
 		ClaimTargets: fixture.claims,
 		FactLocks:    lock,
@@ -118,8 +131,8 @@ func TestACorrectionBelowTheAppliedTotalIsAdoptedAndSaysHowMuchIsOverApplied(t *
 	}
 }
 
-// Covers: ADR-0285 决定一——重放同一次更正答`已存在`时仍带出此刻的超核金额：响应丢了、操作员重交，看到的信号与第一次一致；
-// 重放首版（链头已被更正取代）说的是已经过去的金额，不带。
+// Covers: ADR-0285 决定一——重放同一次更正答`已存在`时带出此刻的超核金额：响应丢了、操作员重交仍能看到信号（两次答复之间
+// 若有核销撤销，数会不同，后一次才是此刻的）；重放首版（链头已被更正取代）说的是已经过去的金额，不带。
 func TestReplayingACorrectionBelowTheAppliedTotalStillSaysHowMuchIsOverApplied(t *testing.T) {
 	fixture := newFundsFixture(t)
 	adoptMapAndApply(t, fixture, 15_000)
@@ -140,7 +153,7 @@ func TestReplayingACorrectionBelowTheAppliedTotalStillSaysHowMuchIsOverApplied(t
 	}
 }
 
-// Covers: ADR-0285 决定三、四——更正先锁事实身份行，再按键序锁事实所及的全部客户应收作用域并各自重算推进（作用域替身故意按键序
+// Covers: ADR-0285 决定二、三——更正先锁事实身份行，再按键序锁事实所及的全部客户应收作用域并各自重算推进（作用域替身故意按键序
 // 倒着交回，编排自己排）。不论新金额比原金额高还是低都重算：金额变，收款单作用域的封顶、退回的 −(d+r) 都随之变。
 func TestACorrectionLocksTheFactFirstThenRecomputesEveryScopeTheFactReaches(t *testing.T) {
 	for _, tc := range []struct {
@@ -183,7 +196,7 @@ func TestACorrectionLocksTheFactFirstThenRecomputesEveryScopeTheFactReaches(t *t
 	}
 }
 
-// Covers: ADR-0285 决定三——事实还没映射到任何客户应收作用域时更正无账可算：只取事实锁，不取任何作用域锁、不推进。
+// Covers: ADR-0285 决定二——事实还没映射到任何客户应收作用域时更正无账可算：只取事实锁，不取任何作用域锁、不推进。
 func TestACorrectionOfAFactMappedToNoCustomerScopeRecomputesNothing(t *testing.T) {
 	fixture := newFundsFixture(t)
 	ctx := context.Background()
@@ -246,4 +259,117 @@ func TestACorrectionStopsOnTheFactLockAccordingToWhyItCouldNotTakeIt(t *testing.
 	unadopted.Version = "bank-receipt-unknown/v2"
 	missing, err := fixture.handler.CorrectFact(context.Background(), unadopted)
 	mustFunds(t, missing, err, application.FundsNotAccepted, "更正没采用的事实")
+}
+
+// unbalancedBooks 在作用域替身之上让指定账户的作用域账不平（已核销 100 而已确认应收 0，已确认未结求出为负），并可让指定账户的
+// 余额推进答未推进（时钟回拨那一类别的错误）。
+type unbalancedBooks struct {
+	*scopeBooksDouble
+	unbalanced  map[string]bool
+	notAdvanced map[string]bool
+}
+
+func (books unbalancedBooks) CustomerDirectionNets(
+	ctx context.Context, tenant domain.TenantID, scope domain.SettlementScope,
+) (int64, int64, int64, error) {
+	if books.unbalanced[scope.Account().String()] {
+		return 0, 100, 0, nil
+	}
+	return books.scopeBooksDouble.CustomerDirectionNets(ctx, tenant, scope)
+}
+
+func (books unbalancedBooks) AdvanceOperationalBalance(
+	ctx context.Context, tenant domain.TenantID, scope domain.SettlementScope, posted, unsettled int64, asOf time.Time,
+) (ports.OperationalBalanceAdvanceOutcome, error) {
+	if books.notAdvanced[scope.Account().String()] {
+		return ports.OperationalBalanceNotAdvanced, nil
+	}
+	return books.scopeBooksDouble.AdvanceOperationalBalance(ctx, tenant, scope, posted, unsettled, asOf)
+}
+
+// twoScopeFact 采用 bank-receipt-1 并映射到 STMT-A（account-a）与 STMT-B（account-b）。
+func twoScopeFact(t *testing.T, fixture *fundsFixture) {
+	t.Helper()
+	ctx := context.Background()
+	fixture.books.registerStatement(t, "STMT-A", "account-a")
+	fixture.books.registerStatement(t, "STMT-B", "account-b")
+	if _, err := fixture.handler.AdoptFact(ctx, adoptCommand(t, domain.FundsReceiptConfirmed)); err != nil {
+		t.Fatalf("adopt: %v", err)
+	}
+	for _, target := range []struct{ mapping, statement string }{{"mapping-a", "STMT-A"}, {"mapping-b", "STMT-B"}} {
+		mapped, err := fixture.handler.Map(ctx, claimMapCommand(t, target.mapping, domain.TargetStatement, target.statement))
+		mustFunds(t, mapped, err, application.FundsMapped, "映射 "+target.statement)
+	}
+	*fixture.locks = (*fixture.locks)[:0]
+}
+
+// Covers: 票 code/92 评审 N1（ADR-0285 决定三）——某个作用域账已不平、推进不了时，更正照采：该作用域跳过、不推进，答复点名它，
+// 其余作用域照推。不平的放在键序第一位，用来钉「跳过继续」而不是「碰到就停」；版本行已落。
+func TestACorrectionSkipsAScopeWhoseBooksAreUnbalancedAndRecomputesTheRest(t *testing.T) {
+	fixture := newFundsFixture(t)
+	twoScopeFact(t, fixture)
+	books := unbalancedBooks{scopeBooksDouble: fixture.books, unbalanced: map[string]bool{"account-a": true}}
+	handler := fundsHandlerWith(t, fixture, &factLockDouble{facts: fixture.facts, applications: fixture.applications, log: fixture.locks},
+		books, books)
+
+	result, err := handler.CorrectFact(context.Background(), correctedTo(t, 18_000))
+	mustFunds(t, result, err, application.FundsFactAdopted, "更正")
+
+	skipped := result.UnreconciledScopes()
+	if len(skipped) != 1 || skipped[0].Account().String() != "account-a" || skipped[0].LegalEntity().String() != "legal-entity-1" ||
+		skipped[0].Currency().String() != "USD" {
+		t.Fatalf("答复点名的没推进的作用域 = %v，要法人 legal-entity-1、账户 account-a、币种 USD 这一个", skipped)
+	}
+	if containsAll(*fixture.locks, "advance:account-a") {
+		t.Fatalf("账不平的作用域还是推进了：%v", *fixture.locks)
+	}
+	if !containsAll(*fixture.locks, "advance:account-b") {
+		t.Fatalf("账平的作用域没推进：%v", *fixture.locks)
+	}
+	if head, _, _ := fixture.facts.FindByKey(context.Background(), factKeyOf(t, "bank-receipt-1")); head.Fact.Version().String() != "bank-receipt-1/v2" {
+		t.Fatalf("链头 = %s，要 v2——账不平不拦更正", head.Fact.Version())
+	}
+}
+
+// Covers: 票 code/92 评审 N1——只有「已确认未结为负」这一类确定性的账不平被跳过；别的错误（这里是余额推进答未推进，时钟回拨那
+// 一类）照旧上抛、整笔回滚，不吞成点名。
+func TestACorrectionStillFailsOnOtherRecomputeErrors(t *testing.T) {
+	fixture := newFundsFixture(t)
+	twoScopeFact(t, fixture)
+	books := unbalancedBooks{scopeBooksDouble: fixture.books, notAdvanced: map[string]bool{"account-b": true}}
+	handler := fundsHandlerWith(t, fixture, &factLockDouble{facts: fixture.facts, applications: fixture.applications, log: fixture.locks},
+		books, books)
+
+	_, err := handler.CorrectFact(context.Background(), correctedTo(t, 18_000))
+	if !errors.Is(err, application.ErrPostingNotAdvanced) {
+		t.Fatalf("err = %v，要包 ErrPostingNotAdvanced——别的错误不被当作账不平跳过", err)
+	}
+}
+
+// Covers: 票 code/92 评审 N2——重放的「仍是链头」条件：核销 15000，更正 v1 → v2（12000）再 v2 → v3（10000）；重放 v2 的命令
+// 答`已存在`、不带超核（它已被 v3 取代，12000 已是过去的金额），重放 v3 的命令带此刻的超核 5000。
+func TestOnlyTheChainHeadsReplayCarriesTheOverApplied(t *testing.T) {
+	fixture := newFundsFixture(t)
+	adoptMapAndApply(t, fixture, 15_000)
+	ctx := context.Background()
+
+	second := correctedTo(t, 12_000)
+	third := correctedTo(t, 10_000)
+	third.Corrects = "bank-receipt-1/v2"
+	third.Version = "bank-receipt-1/v3"
+	for _, command := range []application.CorrectFundsFactCommand{second, third} {
+		result, err := fixture.handler.CorrectFact(ctx, command)
+		mustFunds(t, result, err, application.FundsFactAdopted, "更正到 "+command.Version)
+	}
+
+	replayedSecond, err := fixture.handler.CorrectFact(ctx, second)
+	mustFunds(t, replayedSecond, err, application.FundsFactExisting, "重放 v2")
+	if got := replayedSecond.OverAppliedMinor(); got != 0 {
+		t.Fatalf("重放已被取代的 v2 带出超核 %d，要 0", got)
+	}
+	replayedThird, err := fixture.handler.CorrectFact(ctx, third)
+	mustFunds(t, replayedThird, err, application.FundsFactExisting, "重放 v3")
+	if got := replayedThird.OverAppliedMinor(); got != 5_000 {
+		t.Fatalf("重放链头 v3 的超核 = %d，要 5000", got)
+	}
 }

@@ -128,10 +128,20 @@ const (
 // `undecidedReason` 只随业务未决在场，说的是在等谁（形状同 customshttp 的协作 / 核对两口）。
 // `overAppliedMinor` 只随超核的更正在场：更正本身成立（外部系统拥有资金事实，状态码仍是 201 已采用），可新金额低于事实
 // 上未撤销核销的合计，差额在这里——采用方据此知道有核销要人去撤，字段缺席即没有超核（ADR-0285 决定一）。
+// `unreconciledScopes` 只随账已不平的更正在场：更正照采，但事实落到的这几个客户应收作用域已确认未结按账求出为负、推进不了，
+// 入账余额留在原值——「账已更正、余额还没跟上」是哪几个作用域在这里点名，要人核对指向它们的核销与调整（ADR-0285 决定三）。
 type fundsRegistrationResponse struct {
-	Outcome          string `json:"outcome"`
-	UndecidedReason  string `json:"undecidedReason,omitempty"`
-	OverAppliedMinor int64  `json:"overAppliedMinor,omitempty"`
+	Outcome            string                  `json:"outcome"`
+	UndecidedReason    string                  `json:"undecidedReason,omitempty"`
+	OverAppliedMinor   int64                   `json:"overAppliedMinor,omitempty"`
+	UnreconciledScopes []unreconciledScopeBody `json:"unreconciledScopes,omitempty"`
+}
+
+// unreconciledScopeBody 是一个没推进的客户应收作用域的身份：法人、结算账户、币种。
+type unreconciledScopeBody struct {
+	LegalEntity string `json:"legalEntity"`
+	Account     string `json:"account"`
+	Currency    string `json:"currency"`
 }
 
 // writeFundsAnswer 把 application.FundsOutcome 那一族的答案逐名转写。状态码只答「有没有形成答案」（ADR-0022），
@@ -174,6 +184,11 @@ func writeFundsAnswer(response http.ResponseWriter, result application.FundsResu
 	body := fundsRegistrationResponse{Outcome: name, OverAppliedMinor: result.OverAppliedMinor()}
 	if reason := result.UndecidedReason().String(); reason != "" {
 		body.UndecidedReason = reason
+	}
+	for _, scope := range result.UnreconciledScopes() {
+		body.UnreconciledScopes = append(body.UnreconciledScopes, unreconciledScopeBody{
+			LegalEntity: scope.LegalEntity().String(), Account: scope.Account().String(), Currency: scope.Currency().String(),
+		})
 	}
 	writeJSON(response, status, body)
 }

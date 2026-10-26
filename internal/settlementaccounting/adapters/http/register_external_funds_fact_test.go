@@ -381,6 +381,12 @@ func fundsValue[T any](t *testing.T, construct func(string) (T, error), raw stri
 // fundsHandlerOver 把真编排装在替身上；它本身就满足两个 Registrar 契约（方法名即用例方法名）。
 func fundsHandlerOver(t *testing.T, stub *fundsStoreStub) *application.MapExternalFundsHandler {
 	t.Helper()
+	return fundsHandlerOverBooks(t, stub, idleReceiptBooks{})
+}
+
+// fundsHandlerOverBooks 同上，换客户收款账那一口。
+func fundsHandlerOverBooks(t *testing.T, stub *fundsStoreStub, books ports.CustomerReceiptBooks) *application.MapExternalFundsHandler {
+	t.Helper()
 	handler, err := application.NewMapExternalFundsHandler(application.MapExternalFundsDeps{
 		Facts:        stub,
 		Mappings:     unreachableFundsSideStores{t: t},
@@ -388,7 +394,7 @@ func fundsHandlerOver(t *testing.T, stub *fundsStoreStub) *application.MapExtern
 		Downstream:   unreachableApplicationStore{t: t},
 		FactHandoff:  stub,
 		Clock:        fundsTestClock{},
-		Books:        idleReceiptBooks{},
+		Books:        books,
 		Balances:     idleBalanceAdvance{},
 		Standings:    idleCreditStanding{},
 		ClaimTargets: unreachableFundsSideStores{t: t},
@@ -640,6 +646,58 @@ func TestACorrectionBelowTheAppliedTotalCarriesTheOverAppliedAmountInTheBodyAndK
 				t.Fatalf("overAppliedMinor = %v，要 %v", body["overAppliedMinor"], tc.wantOver)
 			}
 		})
+	}
+}
+
+// unbalancedReceiptBooks 让事实落到一个客户应收作用域，且它的账不平（已核销 100 而已确认应收 0）。
+type unbalancedReceiptBooks struct {
+	idleReceiptBooks
+	scope domain.SettlementScope
+}
+
+func (books unbalancedReceiptBooks) FactCustomerScopes(
+	context.Context, domain.TenantID, domain.FundsFactReference,
+) ([]domain.SettlementScope, error) {
+	return []domain.SettlementScope{books.scope}, nil
+}
+
+func (books unbalancedReceiptBooks) CustomerDirectionNets(
+	context.Context, domain.TenantID, domain.SettlementScope,
+) (int64, int64, int64, error) {
+	return 0, 100, 0, nil
+}
+
+// Covers: 票 code/92 评审 N1——更正落到的作用域账已不平时，更正照采：状态码仍是 201 已采用，响应体的 unreconciledScopes 点名
+// 没推进的作用域（法人、账户、币种）；不是 500——外部系统拥有资金事实，把它拦在内部账不平之外，它会按 5xx 无限重投。
+func TestACorrectionIntoAnUnbalancedScopeIsAdoptedAndNamesTheScopeInTheBody(t *testing.T) {
+	scope, err := domain.NewSettlementScope(
+		fundsValue(t, domain.NewLegalEntityReference, "SYN-LE-1"),
+		fundsValue(t, domain.NewSettlementAccountID, "SYN-ACCT-1"),
+		fundsValue(t, domain.NewCurrencyCode, "XTS"))
+	if err != nil {
+		t.Fatalf("作用域：%v", err)
+	}
+	endpoint := settlementhttp.NewRegisterExternalFundsFactCorrectionEndpoint(
+		fundsIntakeDouble{correction: correctionCommand(t)},
+		fundsHandlerOverBooks(t, &fundsStoreStub{head: headRecord(t), headFound: true, saveOutcome: ports.FundsFactSaved},
+			unbalancedReceiptBooks{scope: scope}))
+	recorder := httptest.NewRecorder()
+	endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/probe", nil))
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("答 %d（%s），要 201——账不平不拦更正", recorder.Code, recorder.Body.String())
+	}
+	body := decodeRegistrationBody(t, recorder)
+	if body["outcome"] != "FUNDS_FACT_ADOPTED" {
+		t.Fatalf("outcome = %v，要 FUNDS_FACT_ADOPTED", body["outcome"])
+	}
+	assertKeys(t, body, "outcome", "unreconciledScopes")
+	scopes, ok := body["unreconciledScopes"].([]any)
+	if !ok || len(scopes) != 1 {
+		t.Fatalf("unreconciledScopes = %v，要一个作用域", body["unreconciledScopes"])
+	}
+	named, _ := scopes[0].(map[string]any)
+	if named["legalEntity"] != "SYN-LE-1" || named["account"] != "SYN-ACCT-1" || named["currency"] != "XTS" || len(named) != 3 {
+		t.Fatalf("点名的作用域 = %v，要 SYN-LE-1 / SYN-ACCT-1 / XTS", named)
 	}
 }
 

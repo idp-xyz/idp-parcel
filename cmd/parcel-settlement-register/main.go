@@ -448,17 +448,21 @@ func subjectOf(result application.FundsResult) string {
 	return record.Key.Fact.String() + " 版本 " + record.Fact.Version().String()
 }
 
-// correctionSubjectOf 在 subjectOf 之后补一句：更正把事实金额改到了未撤销核销的合计以下时说「累计超核」——与映射、核销两类
-// 答复同一句话，不截成 0。更正照采（外部系统拥有资金事实），答复仍是已采用、退出码不变；这句话与读面上的负数是操作员
-// 知道有核销要撤的仅有的信号，撤哪一笔是人的判断，本上下文不代撤（ADR-0285）。
+// correctionSubjectOf 在 subjectOf 之后补两类话。更正把事实金额改到了未撤销核销的合计以下时说「累计超核」——与映射、核销
+// 两类答复同一句话，不截成 0；撤哪一笔是人的判断，本上下文不代撤。事实落到的作用域账已不平、推进不了时点名那个作用域：
+// 更正照采、入账余额留在原值，要人核对指向它的核销与调整。两种情形更正都照采（外部系统拥有资金事实），答复仍是已采用、
+// 退出码不变，这些话与读面上的负数是操作员知道还有事要人做的仅有的信号（ADR-0285）。
 func correctionSubjectOf(result application.FundsResult) string {
 	subject := subjectOf(result)
-	over := result.OverAppliedMinor()
 	record, found := result.Fact()
-	if over <= 0 || !found {
-		return subject
+	if over := result.OverAppliedMinor(); over > 0 && found {
+		subject += fmt.Sprintf("；事实 %s 累计超核 %d", record.Key.Fact.String(), over)
 	}
-	return subject + fmt.Sprintf("；事实 %s 累计超核 %d", record.Key.Fact.String(), over)
+	for _, scope := range result.UnreconciledScopes() {
+		subject += fmt.Sprintf("；作用域 法人 %s、账户 %s、币种 %s 账已不平，入账余额没有跟着新金额推进——先核对指向它的核销与调整，账回平后下一次映射、核销、撤销或更正会推进它",
+			scope.LegalEntity().String(), scope.Account().String(), scope.Currency().String())
+	}
+	return subject
 }
 
 // applicationSubjectOf 取核销或撤销落在哪一笔核销上，与这一步之后该事实的累计未分配：同一笔钱上的别的核销也算在里头，

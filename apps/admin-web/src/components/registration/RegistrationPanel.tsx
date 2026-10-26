@@ -3,7 +3,7 @@ import { Button, Card, CardContent, CardHeader, CardTitle, Textarea } from '@idp
 import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../../pages/catalogue-api';
 import { OperatorRefusalNote } from '../states';
-import { overAppliedNote } from './over-applied-note';
+import { overAppliedNote, unreconciledScopesNote, type UnreconciledScope } from './over-applied-note';
 
 /**
  * 登记写面的表单区（ADR-0085，票 admin-write-faces/01 切片 01b 首落于计价页；票 02
@@ -74,6 +74,11 @@ export interface RegistrationResponseBody {
    * 不并进 `outcome` 的中文：已采用与「已采用而且有核销要人去撤」续办不同，折进一句会让后者被读成前者。
    */
   overAppliedMinor?: number;
+  /**
+   * 外部资金事实更正没推进的客户应收作用域（同一个更正口）。更正照采，可这些作用域账已不平，入账余额留在原值，要人核对
+   * 指向它们的核销与调整；缺席即没有作用域被跳过。
+   */
+  unreconciledScopes?: UnreconciledScope[];
   /**
    * 随本次发布一并登记的各声明通道落点。
    *
@@ -242,6 +247,7 @@ export function RegistrationAnswerNote({
       const prose = answer.body.cause ?? answer.body.pendingCause;
       const landings = answer.body.declarations ?? [];
       const overApplied = overAppliedNote(answer.body.overAppliedMinor);
+      const unreconciled = unreconciledScopesNote(answer.body.unreconciledScopes);
       return (
         <div className="text-xs text-idpxyz-textMuted">
           <p>
@@ -261,6 +267,7 @@ export function RegistrationAnswerNote({
           </p>
           {prose ? <p className="mt-1">原因：{prose}</p> : null}
           {overApplied ? <p className="mt-1 text-idpxyz-danger">{overApplied}</p> : null}
+          {unreconciled ? <p className="mt-1 text-idpxyz-danger">{unreconciled}</p> : null}
           {landings.length > 0 ? (
             <div className="mt-1">
               {/* 声明落点与版本答案分行列出，不折进上面那句：某通道内容冲突时版本

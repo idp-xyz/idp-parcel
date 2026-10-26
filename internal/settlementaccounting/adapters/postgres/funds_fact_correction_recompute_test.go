@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	adapter "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
@@ -337,4 +338,142 @@ func TestACorrectionOutsideATransactionIsRefusedAndWritesNothing(t *testing.T) {
 		t.Fatalf("事务外的更正落了版本行：%d 行，要仍是 1", versions)
 	}
 	assertScope(t, rig.pool, "acct-1", 5_000, 5_000)
+}
+
+// seedCreditAdjustment 给一笔已确认费用插一条确认后的价格纠错贷记：库不拦、UC-SA-002 也不核已核销分配，已确认应收因此可以
+// 降到已核销分配之下，作用域的已确认未结按账求出为负（账不平）。
+func seedCreditAdjustment(t *testing.T, pool *pgxpool.Pool, charge string, amountMinor int64) {
+	t.Helper()
+	if _, err := pool.Exec(t.Context(),
+		`INSERT INTO settlement_accounting.charge_adjustment
+			(tenant_id, adjustment_id, charge_id, kind, direction,
+			 evaluation_ref, authorization_ref, original_currency, original_minor,
+			 settlement_currency, settlement_minor, conversion_ref, formed_at, recorded_at)
+		 VALUES ('tenant-receipt', 'adj-' || $1::text, $1, 'PRICING_CORRECTION', 'CREDIT',
+		         'eval-correction', NULL, 'CNY', $2::bigint, 'CNY', $2::bigint, NULL, now(), now())`,
+		charge, amountMinor); err != nil {
+		t.Fatalf("价格纠错贷记：%v", err)
+	}
+}
+
+// seedSecondScopeReceivable 给第二个应收账户登一张对账单 stmt-2 与一笔已确认应收 charge-2。
+func seedSecondScopeReceivable(t *testing.T, pool *pgxpool.Pool, amountMinor int64) {
+	t.Helper()
+	if _, err := pool.Exec(t.Context(),
+		`INSERT INTO settlement_accounting.customer_statement
+			(tenant_id, statement_number, account_id, period_ref, currency, total_minor,
+			 content_digest, lines, adjustment_lines, published_at, recorded_at)
+		 VALUES ('tenant-receipt', 'stmt-2', 'acct-2', 'period-2', 'CNY', $1::bigint,
+		         'digest-2', jsonb_build_array(jsonb_build_object('charge', 'charge-2', 'amount_minor', $1::bigint)), '[]'::jsonb, now(), now())`, amountMinor); err != nil {
+		t.Fatalf("第二张对账单：%v", err)
+	}
+	if _, err := pool.Exec(t.Context(),
+		`INSERT INTO settlement_accounting.customer_charge
+			(tenant_id, charge_id, fee_item, evaluation_ref, original_currency,
+			 original_minor, settlement_currency, settlement_minor,
+			 stage, confirmation_basis, formed_at, confirmed_at, recorded_at,
+			 responsible_entity, counterparty_ref, charge_direction,
+			 settlement_account_id, contract_basis, primary_charging_scope,
+			 source_fact_ref)
+		 VALUES ('tenant-receipt', 'charge-2', 'BASE_FREIGHT', 'eval-2', 'CNY', $1, 'CNY', $1,
+		         'CONFIRMED', 'basis-2', now(), now(), now(),
+		         'le-1', 'shipper-2', 'RECEIVABLE', 'acct-2', 'contract-1', 'scope-2', 'fact-2')`, amountMinor); err != nil {
+		t.Fatalf("第二笔已确认应收：%v", err)
+	}
+}
+
+func (rig spreadRig) versionRows(t *testing.T, fact string) int {
+	t.Helper()
+	var versions int
+	if err := rig.pool.QueryRow(t.Context(),
+		`SELECT count(*) FROM settlement_accounting.external_funds_fact_version
+		  WHERE tenant_id = 'tenant-receipt' AND fact_id = $1`, fact).Scan(&versions); err != nil {
+		t.Fatalf("数版本行：%v", err)
+	}
+	return versions
+}
+
+func assertUnreconciled(t *testing.T, result application.FundsResult, accounts ...string) {
+	t.Helper()
+	got := result.UnreconciledScopes()
+	if len(got) != len(accounts) {
+		t.Fatalf("更正答复点名的没推进的作用域 = %v，要账户 %v", got, accounts)
+	}
+	for index, account := range accounts {
+		if got[index].LegalEntity().String() != "le-1" || got[index].Account().String() != account || got[index].Currency().String() != "CNY" {
+			t.Fatalf("第 %d 个没推进的作用域 = %v，要 le-1 / %s / CNY", index, got[index], account)
+		}
+	}
+}
+
+// Covers: 票 code/92 评审 N1 真库复现——收款 5000 映 stmt-1 核销 4000，再插一条确认后的价格纠错贷记 2000，已确认应收降到
+// 3000 < 已核销 4000（账已不平）；此时更正 5000 → 4500：更正照采（版本行 2），该作用域没有推进、运营余额留在原值，答复点名
+// 这个作用域；外部系统拥有资金事实，不能因为内部账不平把更正拦在外面。
+func TestACorrectionIntoAnUnbalancedScopeIsAdoptedLeavesItAndNamesIt(t *testing.T) {
+	rig := newSpreadRig(t)
+	seedConfirmedReceivable(t, t.Context(), rig.pool, 5_000)
+	rig.adopt(t, "fact-unb", domain.FundsReceiptConfirmed, 5_000)
+	rig.mapTo(t, "map-unb", "fact-unb", domain.TargetStatement, "stmt-1")
+	rig.apply(t, "app-unb", "fact-unb", "map-unb", domain.TargetStatement, "stmt-1", 4_000)
+	assertScope(t, rig.pool, "acct-1", 1_000, 1_000)
+	seedCreditAdjustment(t, rig.pool, "charge-1", 2_000)
+
+	corrected := rig.correct(t, "fact-unb", "v1", "v2", 4_500)
+
+	if got := rig.versionRows(t, "fact-unb"); got != 2 {
+		t.Fatalf("更正之后版本行 = %d，要 2——账不平不拦更正", got)
+	}
+	assertUnreconciled(t, corrected, "acct-1")
+	if got := corrected.OverAppliedMinor(); got != 0 {
+		t.Fatalf("超核金额 = %d，要 0（已核销 4000，新金额 4500）", got)
+	}
+	assertScope(t, rig.pool, "acct-1", 1_000, 1_000)
+}
+
+// Covers: 票 code/92 评审 N1——事实落到两个作用域，A 账平、B 账不平：A 照新金额推进（更正到 800，封顶 800，减 W 1000，入账 -200），
+// B 跳过、留在原值，答复只点名 B；超核按事实上全部未撤销核销的合计算（4000 − 800）。
+func TestACorrectionRepostsTheBalancedScopeAndOnlySkipsTheUnbalancedOne(t *testing.T) {
+	rig := newSpreadRig(t)
+	seedConfirmedReceivable(t, t.Context(), rig.pool, 5_000)
+	seedSecondScopeReceivable(t, rig.pool, 4_000)
+	rig.adopt(t, "fact-two", domain.FundsReceiptConfirmed, 5_000)
+	rig.mapTo(t, "map-two-a", "fact-two", domain.TargetStatement, "stmt-1")
+	rig.mapTo(t, "map-two-b", "fact-two", domain.TargetStatement, "stmt-2")
+	rig.apply(t, "app-two-a", "fact-two", "map-two-a", domain.TargetStatement, "stmt-1", 1_000)
+	rig.apply(t, "app-two-b", "fact-two", "map-two-b", domain.TargetStatement, "stmt-2", 3_000)
+	assertScope(t, rig.pool, "acct-1", 0, 4_000)
+	assertScope(t, rig.pool, "acct-2", 0, 1_000)
+	seedCreditAdjustment(t, rig.pool, "charge-2", 2_000)
+
+	corrected := rig.correct(t, "fact-two", "v1", "v2", 800)
+
+	assertUnreconciled(t, corrected, "acct-2")
+	if got := corrected.OverAppliedMinor(); got != 3_200 {
+		t.Fatalf("超核金额 = %d，要 3200", got)
+	}
+	assertScope(t, rig.pool, "acct-1", -200, 4_000)
+	assertScope(t, rig.pool, "acct-2", 0, 1_000)
+}
+
+// Covers: 票 code/92 评审 N1——跳过的作用域账回平之后能重新推进：撤销一笔核销使 W 回到已确认应收之内，那一笔撤销按更正后的
+// 链头金额推进（P 封顶 4500，减 W 3000，入账 1500）；其后再来一次更正（改到 4000）照常推进，不再点名。
+func TestAScopeSkippedByACorrectionAdvancesAgainOnceItsBooksBalance(t *testing.T) {
+	rig := newSpreadRig(t)
+	seedConfirmedReceivable(t, t.Context(), rig.pool, 5_000)
+	rig.adopt(t, "fact-heal", domain.FundsReceiptConfirmed, 5_000)
+	rig.mapTo(t, "map-heal", "fact-heal", domain.TargetStatement, "stmt-1")
+	rig.apply(t, "app-heal-1", "fact-heal", "map-heal", domain.TargetStatement, "stmt-1", 3_000)
+	rig.apply(t, "app-heal-2", "fact-heal", "map-heal", domain.TargetStatement, "stmt-1", 1_000)
+	seedCreditAdjustment(t, rig.pool, "charge-1", 2_000)
+
+	skipped := rig.correct(t, "fact-heal", "v1", "v2", 4_500)
+	assertUnreconciled(t, skipped, "acct-1")
+	assertScope(t, rig.pool, "acct-1", 1_000, 1_000)
+
+	rig.reverse(t, "app-heal-2")
+	assertScope(t, rig.pool, "acct-1", 1_500, 0)
+
+	again := rig.correct(t, "fact-heal", "v2", "v3", 4_000)
+	assertUnreconciled(t, again)
+	assertScope(t, rig.pool, "acct-1", 1_000, 0)
 }

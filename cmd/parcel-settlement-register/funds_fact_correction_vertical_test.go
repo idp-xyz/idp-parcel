@@ -105,3 +105,43 @@ func TestAConcurrentCorrectionAndApplicationOfOneFactEndInAConsistentState(t *te
 	}
 	rig.assertPostedOf(t, scopeAccount, 2000-applied, 10000-applied)
 }
+
+// Covers: 票 code/92 评审 N1 经受控登记口——收款 5000 核满 5000 到对账单 C，再插一条确认后的价格纠错贷记 6000（已确认应收降到
+// 4000 < 已核销 5000，作用域账已不平）；此时更正到 4500：更正照采、退出 0，答复点名这个作用域（法人、账户、币种）说入账余额
+// 没有推进，同时说累计超核 500；运营余额留在原值，版本行落了两行。
+func TestACorrectionIntoAnUnbalancedScopeIsAdoptedAndNamesTheScopeThroughTheCommand(t *testing.T) {
+	rig := newCeilingRig(t)
+	rig.seedReceivableScope(t)
+	rig.run(t, commandExternalFundsFact, receiptDocument("SYN-FACT-UNB", "5000"), exitRegistered, "FUNDS_FACT_ADOPTED")
+	rig.run(t, commandFundsMapping, claimMappingDocument("SYN-MAPPING-UNB", "SYN-FACT-UNB", "STATEMENT", scopeStatement),
+		exitRegistered, "FUNDS_MAPPED")
+	rig.run(t, commandFundsApplication,
+		statementApplicationDocument("SYN-APPLICATION-UNB", "SYN-FACT-UNB", "SYN-MAPPING-UNB", "5000"),
+		exitRegistered, "SETTLEMENT_APPLIED")
+	rig.assertPostedOf(t, scopeAccount, 0, 5000)
+	if _, err := rig.pool.Exec(t.Context(),
+		`INSERT INTO settlement_accounting.charge_adjustment
+			(tenant_id, adjustment_id, charge_id, kind, direction,
+			 evaluation_ref, authorization_ref, original_currency, original_minor,
+			 settlement_currency, settlement_minor, conversion_ref, formed_at, recorded_at)
+		 VALUES ('SYN-T1', 'SYN-ADJUSTMENT-UNB', 'SYN-CHARGE-C-1', 'PRICING_CORRECTION', 'CREDIT',
+		         'SYN-EVAL-CORRECTION-UNB', NULL, 'XTS', 6000, 'XTS', 6000, NULL, now(), now())`); err != nil {
+		t.Fatalf("登价格纠错贷记：%v", err)
+	}
+
+	corrected := rig.run(t, commandExternalFundsFactCorrection,
+		correctionDocumentFor("SYN-FACT-UNB", "SYN-FACT-UNB/v1", "SYN-FACT-UNB/v2", "4500"),
+		exitRegistered, "FUNDS_FACT_ADOPTED")
+	if !strings.Contains(corrected, "作用域 法人 "+scopeLegalEntity+"、账户 "+scopeAccount+"、币种 "+scopeCurrency+" 账已不平，入账余额没有跟着新金额推进") {
+		t.Fatalf("更正答复 %q 没点名账不平、没推进的作用域", corrected)
+	}
+	if !strings.Contains(corrected, "累计超核 500") {
+		t.Fatalf("更正答复 %q 要同时说累计超核 500", corrected)
+	}
+	rig.assertPostedOf(t, scopeAccount, 0, 5000)
+	if versions := countRows(t, rig.pool,
+		`SELECT count(*) FROM settlement_accounting.external_funds_fact_version WHERE tenant_id = $1 AND fact_id = $2`,
+		claimTenant, "SYN-FACT-UNB"); versions != 2 {
+		t.Fatalf("更正之后版本行 = %d，要 2", versions)
+	}
+}
