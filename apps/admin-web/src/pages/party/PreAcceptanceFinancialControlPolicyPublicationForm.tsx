@@ -4,7 +4,8 @@ import type { ApiResult } from '../catalogue-api';
 import { controlFailureDispositionLabels, controlKindLabels, jointPassConditionLabels } from './presentation';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
-import { Field, VocabularySelect, momentPlaceholder, useLoaded } from './PublicationFormFields';
+import { Field, ProblemText, VocabularySelect, momentPlaceholder, useLoaded } from './PublicationFormFields';
+import { fieldProblemText } from './field-problem-text';
 import {
   controlPolicyCodesOf,
   controlPolicyFieldPaths,
@@ -272,7 +273,7 @@ function ControlRow({
       </div>
       {rowLines.map((line) => (
         <span key={line} className="block text-[11px] text-idpxyz-danger">
-          {line}
+          <ProblemText problem={fieldProblemText(line)} />
         </span>
       ))}
     </div>

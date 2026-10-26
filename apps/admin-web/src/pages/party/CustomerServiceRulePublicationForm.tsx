@@ -4,7 +4,8 @@ import type { ApiResult } from '../catalogue-api';
 import { claimDeadlineKindLabels } from './presentation';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
-import { Field, VocabularySelect, momentPlaceholder, selectClass, useLoaded } from './PublicationFormFields';
+import { Field, ProblemText, VocabularySelect, momentPlaceholder, selectClass, useLoaded } from './PublicationFormFields';
+import { fieldProblemText, itemProblemText } from './field-problem-text';
 import {
   emptyServiceRuleDraft,
   serviceRuleCodesOf,
@@ -179,7 +180,7 @@ export function CustomerServiceRulePublicationForm({ onPublished }: CustomerServ
                   {/* 同一个标识也作版本上的指名引用送出；服务端核出两处不一致时点名的是那条引用，问题显在这一格下。 */}
                   {(problems[`references.${chosen.shellKey}`] ?? []).map((line) => (
                     <span key={line} className="block text-[11px] text-idpxyz-danger mt-1">
-                      版本信息里的{chosen.noun}引用：{line}
+                      版本信息里的{chosen.noun}引用：<ProblemText problem={fieldProblemText(line)} />
                     </span>
                   ))}
                 </Field>
@@ -337,7 +338,7 @@ function ClaimDeadlineRow({
       </div>
       {rowLines.map((line) => (
         <span key={line} className="block text-[11px] text-idpxyz-danger">
-          {line}
+          <ProblemText problem={fieldProblemText(line)} />
         </span>
       ))}
     </div>
@@ -365,7 +366,7 @@ function MinimumMaterialsRow({
   // 服务端对清单某一项的话落在 materials[j]；清单在这里是一块多行文本，逐项的话汇到文本框下、带上项号。
   const itemLines = Object.entries(problems)
     .filter(([path]) => path.startsWith(`${rowPath}.materials[`))
-    .flatMap(([path, lines]) => lines.map((line) => `${path.slice(rowPath.length + 1)}：${line}`));
+    .flatMap(([path, lines]) => lines.map((line) => ({ key: `${path}:${line}`, problem: itemProblemText(path.slice(rowPath.length + 1), line) })));
   return (
     <div className="rounded border border-idpxyz-border p-3 flex flex-col gap-2">
       <div className="flex items-center justify-between">
@@ -394,16 +395,16 @@ function MinimumMaterialsRow({
             placeholder={'一行一项材料，照可见性与异常那边的原词填；空行不算'}
             onChange={(event) => onChange({ materials: event.target.value })}
           />
-          {itemLines.map((line) => (
-            <span key={line} className="block text-[11px] text-idpxyz-danger mt-1">
-              {line}
+          {itemLines.map((item) => (
+            <span key={item.key} className="block text-[11px] text-idpxyz-danger mt-1">
+              <ProblemText problem={item.problem} />
             </span>
           ))}
         </Field>
       </div>
       {rowLines.map((line) => (
         <span key={line} className="block text-[11px] text-idpxyz-danger">
-          {line}
+          <ProblemText problem={fieldProblemText(line)} />
         </span>
       ))}
     </div>

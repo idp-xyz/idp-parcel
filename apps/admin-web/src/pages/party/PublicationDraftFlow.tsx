@@ -5,6 +5,8 @@ import { OperatorRefusalNote } from '../../components/states';
 import type { ApiResult } from '../catalogue-api';
 import { declarationLandingLabels, publicationOutcomeLabels } from './api';
 import { labelOf, problemNote } from './presentation';
+import { fieldProblemText } from './field-problem-text';
+import { ProblemText } from './PublicationFormFields';
 import {
   approveOutcomeLabels,
   approvePublicationDraft,
@@ -177,7 +179,7 @@ export function PublicationDraftFlow({
           <ul className="text-xs text-idpxyz-danger list-disc ml-4">
             {unclaimed.map((problem) => (
               <li key={`${problem.field}:${problem.problem}`}>
-                <span className="font-mono">{problem.field}</span>：{problem.problem}
+                <span className="font-mono">{problem.field}</span>：<ProblemText problem={fieldProblemText(problem.problem)} />
               </li>
             ))}
           </ul>

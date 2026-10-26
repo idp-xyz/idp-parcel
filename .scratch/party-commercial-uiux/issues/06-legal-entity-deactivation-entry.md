@@ -16,7 +16,7 @@
 
 **Category:** enhancement
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
 - [ ] 法人页菜单项名称点的是法人，点了落在停用表单，种类与标识已预填。
 - [ ] 提交停用前有确认框，复述上面五项；取消不发请求。

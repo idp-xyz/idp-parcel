@@ -7,6 +7,7 @@ import {
   isOperatorRefusal,
 } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
+import { fieldProblemText, type FieldProblemText } from './field-problem-text';
 import {
   vocabularyOptions,
   type CommercialObjectKindName,
@@ -38,21 +39,44 @@ export const selectClass =
 // 只填日期时由 normalizeMoment 补成当天零点 UTC，占位照实说出来，免得以为是本地零点。
 export const momentPlaceholder = 'YYYY-MM-DD 或完整时刻；只填日期时按当天零点（UTC）';
 
-/** 服务端（或本地编不进类型）点名的那一格的问题，逐条挂在格下；原话原样显示，不改写。没有问题就不占位。 */
+/**
+ * 一条问题：先给配置员读得懂的中文，服务端原话收进可展开的「原话」，排查时还对得上日志（译法见 field-problem-text.ts）。
+ * 原话本就是中文白话时不再显第二遍。
+ */
+export function ProblemText({ problem }: { problem: FieldProblemText }) {
+  return (
+    <>
+      {problem.text}
+      {problem.original ? (
+        <details className="inline-block ml-1 align-top text-idpxyz-breadcrumb">
+          <summary className="cursor-pointer select-none">原话</summary>
+          <span className="font-mono break-all">{problem.original}</span>
+        </details>
+      ) : null}
+    </>
+  );
+}
+
+/** 服务端（或本地编不进类型）点名的那一格的问题，逐条挂在格下；没有问题就不占位。 */
 export function Problems({ lines }: { lines?: readonly string[] }) {
   if (!lines || lines.length === 0) return null;
   return (
     <ul className="text-[12px] text-idpxyz-danger list-disc ml-4 mt-1">
       {lines.map((line) => (
-        <li key={line}>{line}</li>
+        <li key={line}>
+          <ProblemText problem={fieldProblemText(line)} />
+        </li>
       ))}
     </ul>
   );
 }
 
-/** 几条路径的问题合到一处显，每条带上它的路径：一个控件对应服务端几个键（对象 + 版本一起选那种）时用。 */
+/**
+ * 几条路径的问题合到一处显：一个控件对应服务端几个键（对象 + 版本一起选那种）时用。不再在每条前挂路径——控件只有
+ * 一个，路径对配置员没有信息；两个键答同一句时只显一条。原话里仍看得到是哪个键。
+ */
 export function PathProblems({ problems, paths }: { problems: Record<string, string[]>; paths: readonly string[] }) {
-  const lines = paths.flatMap((path) => (problems[path] ?? []).map((line) => `${path}：${line}`));
+  const lines = [...new Set(paths.flatMap((path) => problems[path] ?? []))];
   return <Problems lines={lines} />;
 }
 

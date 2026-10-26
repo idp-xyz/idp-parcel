@@ -67,10 +67,10 @@ Status: in-progress
 |---|---|---|---|
 | 01 | [浏览页说业务话](issues/01-browse-pages-speak-business.md) | — | resolved |
 | 02 | [发布流程与发布表单说业务话](issues/02-publication-forms-speak-business.md) | — | resolved |
-| 03 | [逐格问题说中文](issues/03-field-problems-in-chinese.md) | — | ready-for-agent |
+| 03 | [逐格问题说中文](issues/03-field-problems-in-chinese.md) | — | resolved |
 | 04 | [状态一律用徽章](issues/04-status-badges-everywhere.md) | — | resolved |
 | 05 | [商业规则与策略页布局](issues/05-commercial-policies-layout.md) | 01 | ready-for-agent |
-| 06 | [法人停用入口与确认](issues/06-legal-entity-deactivation-entry.md) | — | ready-for-agent |
+| 06 | [法人停用入口与确认](issues/06-legal-entity-deactivation-entry.md) | — | in-progress |
 
 ## 界面用词对照（本批各票共用）
 

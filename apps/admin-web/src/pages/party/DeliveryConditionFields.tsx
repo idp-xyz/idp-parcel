@@ -1,6 +1,7 @@
 import { Input } from '@idpxyz/ui-primitives';
 import type { PublicationFormContext } from './PublicationDraftFlow';
-import { Field, Problems, selectClass } from './PublicationFormFields';
+import { Field, ProblemText, Problems, selectClass } from './PublicationFormFields';
+import { itemProblemText } from './field-problem-text';
 import type { DeliveryConditionDraft, DeliveryConditionLayer } from './delivery-condition-section';
 
 /**
@@ -30,7 +31,7 @@ export function DeliveryConditionFields({
   // 服务端对方式某一项的话落在 methods[i]；方式在这里是一块多行文本，逐项的话汇到文本框下、带上项号（照客户服务规则表单的材料清单）。
   const methodLines = Object.entries(form.problems)
     .filter(([path]) => path.startsWith(`${root}.methods[`))
-    .flatMap(([path, lines]) => lines.map((line) => `${path.slice(root.length + 1)}：${line}`));
+    .flatMap(([path, lines]) => lines.map((line) => ({ key: `${path}:${line}`, problem: itemProblemText(path.slice(root.length + 1), line) })));
 
   return (
     <section className="flex flex-col gap-2">
@@ -81,9 +82,9 @@ export function DeliveryConditionFields({
           placeholder={'交付方式，每行一种；空行不算'}
           onChange={(event) => onPatch({ methodsText: event.target.value })}
         />
-        {methodLines.map((line) => (
-          <span key={line} className="block text-[11px] text-idpxyz-danger mt-1">
-            {line}
+        {methodLines.map((item) => (
+          <span key={item.key} className="block text-[11px] text-idpxyz-danger mt-1">
+            <ProblemText problem={item.problem} />
           </span>
         ))}
       </Field>
