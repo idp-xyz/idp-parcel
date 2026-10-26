@@ -1,7 +1,7 @@
 # PS 生产归属目录：隔离写开关退场的前件
 
 Category: enhancement
-Status: in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 claude-fpa04（代码最后一笔 8e34dff89）。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）分诊为 R1（上线前必修：生产形态下真实租户一单也提交不进来，见 [分诊报告](../../needs-triage-sweep-2026-10-26.md)）并认领，分支 `claude-fpa04`；新 ADR 取 0308。此前 needs-triage——2026-10-19 票 [00](./00-first-party-customer-intake.md) 立。
+Status: resolved——2026-10-26 进 main `7dc590793`（见文末「进 main 记录」；第 4 步写开关退场随 operator-channel/53）。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 claude-fpa04（代码最后一笔 8e34dff89）。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）分诊为 R1（上线前必修：生产形态下真实租户一单也提交不进来，见 [分诊报告](../../needs-triage-sweep-2026-10-26.md)）并认领，分支 `claude-fpa04`；新 ADR 取 0308。此前 needs-triage——2026-10-19 票 [00](./00-first-party-customer-intake.md) 立。
 Blocked by: 无
 出处：[ADR-0180](../../../docs/adr/0180-admission-scope-tenant-mapping-is-an-access-identity-register-and-self-authority-is-a-deployment-parameter.md) 决定三「目录本身归 PS 生产归属那一票」与越权风险点「PS 生产归属的能力与事实类型词不在本记录内」；[ADR-0150](../../../docs/adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md) 决定一、三；[ADR-0141](../../../docs/adr/0141-integrator-sandbox-is-a-deployment-form-of-the-first-party-api-on-synthetic-data.md) 决定四「不许写一个直接返回已确定的假目录」。
 
@@ -56,3 +56,19 @@ Blocked by: 无
 
 含 PG（`IDP_PARCEL_POSTGRES_DSN` 指本机 55432）：`go build ./...`、`go vet`（parcelshipment、accessidentity、cmd）通过，改过的 `.go` 已 `gofmt`；`go test -count=1 -p 1 ./internal/parcelshipment/... ./internal/accessidentity/... ./cmd/parcel-api/... ./internal/architecture/... ./migrations/...` 全绿（架构门禁曾拦下事务回调里的 `t.Fatalf`，已改）。种子灌入一次性库 `fpa04_seed`（`seed.sh` 退出 0，新对照与区间各一行），已 `DROP`。`go run ./tools/at-coverage-counts -check` 只报生成物过期。未跑全量。
 
+## 评审记录
+
+评审 ← tops-20 隔离子代理(sonnet) · 钉 `021618e9d`
+
+- **阻断**：无。
+- **非阻断**：1. 作者手改的 `docs/adr/README.md` 中 ADR-0180 行与生成器输出不一致（推送方重生成时覆盖）；ADR-0180 Status 注记拼出「`SYN-`。；**后续**」多一个标点——推送方在落地树上改成全库通行的「｜」分隔并重生成索引（`7dc590793`）。2. 越权风险点 3（设写开关时开关外租户即便登了对照也答权威未确定）可接受：过渡期保守、随开关退场消失，ADR-0308 决定五与 `assemble_production_ownership_directory_test.go` 已钉。3. ADR-0308 决定三（试点范围版本取对照的对象范围本身）站得住：治理册权威区间的对象范围与暂停决定指同一引用，多设来源只多一处可错开。
+- **无发现**：`ProductionGovernanceScopeDirectory.FindGovernanceScope` 缺席答 `(零值,false,nil)`、读不动与同键重叠答 error，编排不代拟；放 PS accessidentity 适配器合 ADR-0025，`internal/architecture` 通过；装配两形态互不借坐标；能力与事实类型词只在 `ShipmentRequestSubmissionAdmission()` 一处定义、铸造侧不判；种子对照 17 与区间 52 各一条、不多登；`AT-PS-117`–`119` 钉住判据、不撞号。
+
+## 进 main 记录（2026-10-26，推送方会话 tops-20）
+
+- **main**：`7dc590793`。出处：分支 `claude-fpa04` 代码 `8e34dff89`、票面 `021618e9d`（作者为 Sonnet 子代理）；main 未前进，原样快进。
+- **生成物**：ADR 索引 `5991d1493`（并于 `7dc590793` 随 ADR-0180 分隔修正再生成）；AT 盘点总览计数 `665386516`；机制清点 `c73bf0cee`。三件 `-check` 退 0（含票 139 表行守卫）。
+- **全量真库测试**：`scripts/test-full.sh` 跑在 `7dc590793`（即所推 SHA）：158 ok / 0 FAIL，退 0。
+- **种子**：`scripts/demo-seeds/seed.sh` 灌一次性库（`7dc590793` 上），退 0，用后删库。
+- **完成判据**：生产形态（不设写开关）下演示租户经首方口提交答 `SUBMITTED`（`AT-PS-118`）；对照或区间没登答 `OWNERSHIP_UNRESOLVED`（`AT-PS-119`）。证据记 `S`。
+- **「做什么」第 4 步（写开关退场）未在本票做**：照 ADR-0150 决定三，它与读开关在「最后一口」同一笔删，读开关归 operator-channel/53；本票之后写开关只在显式设置的演示形态起作用，生产形态已不依赖它。
