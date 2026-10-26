@@ -20,6 +20,7 @@ Blocked by: 无
 - **NR 逐成员复核**：交接触发的路由复核（票 [63](./63-network-routing-reassesses-on-a-handover-into-a-node.md)）对集运单元今天也不逐成员。
 - 三类：判据与派生是机制；封签核对的严格程度可能是产品策略。
 - **全程追踪那一侧等着本票**：全程追踪今天对单元的交接、揽收、交付、外部承运轨迹入账不派生、不投成员（票 [docs-consistency/code/75](../../docs-consistency/code/75-tracking-projects-control-facts-on-a-consolidation-unit-as-one-parcel.md) (a)）；本票定下成员随单元受控的规则后，由 code/75 (b) 投到成员上并回补已入账的那几份。
+- **小包托运那一侧也等着本票**：PS 采用场外揽收、有效交付、面单终局判断（经首次有效收寄）对单元的信封今天入账收工，不采用、不判终局、不投成员、不留 PS 记录（票 [docs-consistency/code/79](../../docs-consistency/code/79-ps-adoption-retries-a-consolidation-unit-envelope-as-a-missing-parcel-target.md)）；本票定下成员随单元受控的规则后，整袋交付、整袋收寄是不是袋里每件包裹的有效交付、收寄再另裁，回补已入账的单元信封要靠 TF 册（对象是单元的揽收、交付、首次有效收寄登记）加 NO 单元册。
 
 ## 规模
 
