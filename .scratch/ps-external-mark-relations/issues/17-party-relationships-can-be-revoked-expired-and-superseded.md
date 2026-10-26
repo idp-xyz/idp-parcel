@@ -1,7 +1,7 @@
 # 17 参与方关系没有撤销、到期、替代的写面：一段关系一旦生效，只能靠再登一版带终点的修订来结束
 
 Category: enhancement
-Status: in-progress——2026-10-25 作者完工，待隔离评审与进 main，分支 claude-psxm17 tip 为写本完成记录的那一笔（代码最后一笔 `af6187bf2`；见「完成记录」）。此前 in-progress——2026-10-25 会话 `tops-20`（Claude Code）改认领：原认领会话 `idp-parcel-9b` 已不在，分支 `claude-psxm17` 当时 0 提交，快进到 main `9ea060682` 复用；协调方 tops-26 同意（它在本票期间不开 PS 的 code 票）。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（infra-speed/02 已进 main，Blocked by 解除），分支 `claude-psxm17`。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立并代决；等另一会话的 infra-speed/02（组合根按文件自登记）进 main 再开工——本票要加端点
+Status: in-progress——2026-10-25 评审无阻断、修订轮完，待进 main，分支 claude-psxm17 tip 为写修订轮记录的那一笔（代码与文档最后一笔 `1f0fd386e`；见「修订轮」）。此前 in-progress——2026-10-25 作者完工，待隔离评审与进 main（代码最后一笔 `af6187bf2`）。此前 in-progress——2026-10-25 会话 `tops-20`（Claude Code）改认领：原认领会话 `idp-parcel-9b` 已不在，分支 `claude-psxm17` 当时 0 提交，快进到 main `9ea060682` 复用；协调方 tops-26 同意（它在本票期间不开 PS 的 code 票）。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（infra-speed/02 已进 main，Blocked by 解除），分支 `claude-psxm17`。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立并代决；等另一会话的 infra-speed/02（组合根按文件自登记）进 main 再开工——本票要加端点
 Blocked by: infra-speed/02 进 main（另一会话的票，加端点的配方随它定）
 父票：[10](./10-authorized-delivery-relationship-in-party-commercial.md)
 出处：票 10 完成记录「没做」：这是各参与方关系角色共有的旧缺口，授权交付关系让它变得要紧——撤掉一个交付方的授权要能即时生效。
@@ -62,7 +62,7 @@ PC 领域的参与方关系有撤销、到期、替代三种结束（`PartyRelat
   - 新文件 `apps/admin-web/src/pages/party/PartyRelationshipEndActions.tsx` 与 `party-relationship-end-form.ts`（纯逻辑，`.test.ts` 钉着）。
   - `api.ts` 只在末尾追加端点、调用与结束口答案词表；`BusinessPartiesPage.tsx` 只在关系抽屉挂组件、传刷新回调。
   - 形状照协调方转达的 tops-54 建议第 4、6 条：撤销、到期是抽屉头部的次要按钮，撤销用危险样式；关系不在`已生效`时禁用并写明原因（到期另要区间有终点）；时刻用 `WallTimeField` 按本地时区填；确认框复述关系一句话、生效边界（本地时间 + UTC）、依据与落点修订，写明「只影响边界之后的新决定，已作出的决定不变；不可撤回」；答 `ENDED` 时重取关系册，重取保留旧答案，表格不回骨架，抽屉这一行就地换新。第 5 条（范围写成「客户账户 …」）没做。
-- 没动：`ports.go`、`docs/**`（含 PC CONTEXT、GLOSSARY、CONTEXT-MAP、UC、ADR）、`scripts/demo-seeds`、`components/` 下共享件、`PartyRelationshipRegistrationForm`、`IdentityDeactivationForm`、`party-registration-fields.tsx`（只 import）。
+- 没动：`ports.go`、`docs/**`（含 PC CONTEXT、GLOSSARY、CONTEXT-MAP、UC、ADR；修订轮按评审改了 PC CONTEXT 与 UC-PC-001，见「修订轮」）、`scripts/demo-seeds`、`components/` 下共享件、`PartyRelationshipRegistrationForm`、`IdentityDeactivationForm`、`party-registration-fields.tsx`（只 import）。
 
 **代决与越权风险点**（授权依据同 Status 行：用户授权「你作为业务和系统专家你来自决」）
 
@@ -73,6 +73,7 @@ PC 领域的参与方关系有撤销、到期、替代三种结束（`PartyRelat
    - 预定未来终点今天的走法：经既有登记口登一版带区间终点的修订（重述正文并带批准）；到期之后再经到期口登记。
    - CONTEXT 没改：「已生效 → 已到期、已撤销或已替代：自明确生效边界起不再支持新的商业决定」与本取法不冲突。
    - 若 owner 要预定到期：新立领域转换「已生效 → 已生效（区间收短，带依据与批准）」，到期口改收未来终点并落这一笔；判断不必改。
+   - 披露（评审 P1 补）：`AppliesAt` 只按状态答，登记到期之后，区间之内的锚点也由「是」翻「否」，不只终点之后的锚点。例：ADR-0212 的送站交接单在区间终点之前开立、登记到期之后才确认，授权交付判断按开立时刻问也答否，交接确认被拒。撤销同理，见代决 5。若 owner 要终止只影响终止时点之后的锚点，得改 `AppliesAt` 按终止时点答，会改授权交付判断，须另票。
 2. **结束时刻不得晚于登记时刻**（新门，撤销、到期、替代三口共有，取 `ports.Clock`）。理由同 1：终止修订落册即让关系不再支持新决定；写未来时刻，册面会说「到那时才结束」，判断此刻却已不认它。代价是浏览器或批文的钟比服务端快时被拒，拒因带两个时刻。
 3. **替代同笔登记接替关系，正文由领域推出。**
    - 票面「以接替的持有方结束本关系并起一段新关系」，领域 `SupersededBy` 只记接替方。本票让替代口在同一事务里登记接替关系。
@@ -80,7 +81,7 @@ PC 领域的参与方关系有撤销、到期、替代三种结束（`PartyRelat
    - 领域 `SupersededBy` 新加一道门：接替方不能是原持有方或相对方。
    - 这几条是对 CONTEXT「已生效 → 已替代」的细化，CONTEXT 没写。若要写进 CONTEXT，建议在「参与方关系」生命周期一节加一句：「替代只换持有方：接替关系由接替方持有，相对方、角色与适用范围不变，自替代时刻起接住原关系余下的有效区间。」本票没改 CONTEXT，留协调方定。
 4. **已结束的关系不再收新修订**（`RegisterRelationship` 新门）。不加则撤销之后可再登一笔已生效修订，悄悄把撤销翻回；授权交付判断只读最新修订，撤销就不再确定。判据同已停用身份不收新修订。重新合作要登一段新关系。
-5. **撤销时刻可以回溯，且回溯的撤销对任何锚点都答否。** 领域 `Revoke` 只要求时刻非零；`AppliesAt` 按状态答，撤销之后连撤销时刻之前的锚点也答否。这是领域既有语义，票 10 的用例已钉；本票没改。若 owner 要撤销只影响撤销时刻之后的锚点，得改 `AppliesAt`，会改授权交付判断，须另票。
+5. **撤销时刻可以回溯，且回溯的撤销对任何锚点都答否。** 领域 `Revoke` 只要求时刻非零；`AppliesAt` 按状态答，撤销之后连撤销时刻之前的锚点也答否。这是领域既有语义，票 10 的用例已钉；本票没改。到期同此，见代决 1 的披露一条。若 owner 要撤销只影响撤销时刻之后的锚点，得改 `AppliesAt`，会改授权交付判断，须另票。
 6. **新结果格 `ENDED`。** 不借`已登记`或`已停用`：关系的终止不叫停用，登记方也要分得清这一笔是立起还是结束一段关系。`未找到`扩到关系结束口。管理台另立结束口答案词表，没改 `partyIdentityOutcomeLabels`。
 7. **迁移 0042。** 本票之前没有写口落过终止修订，册上没有会被新 CHECK 拒的既有行；用例里那几行都是本票自己写的。号取 0042，0041 留给 tops-26；两份迁移互不相干，进 main 次序不影响施加。
 8. **管理台按行状态禁用按钮。** 照协调方转达的 tops-54 建议，不是表单裁门：按钮禁用只是不开表单，送出去的一律由服务端判。到期按钮在开区间时也禁用，因为到期时刻的预填值就是区间终点。终点到没到不在前端判，那要拿浏览器的钟比。落点修订自动取这一行修订加一、不给改（停用表单给改）：动作挂在这一行上，声明的就是这一行的册面；册面被推进时服务端答修订错位。
@@ -89,6 +90,7 @@ PC 领域的参与方关系有撤销、到期、替代三种结束（`PartyRelat
     - 替代的管理台入口（票面「界面另议」）。
     - 演示种子没加结束样例：灌一段撤销会让票 12 要用的授权交付关系失效。要演示已撤销状态，另加一段专用关系即可。
     - 管理台没有起页面实测（不占 5173），只过了三道门与纯逻辑用例。
+11. **内容变化走哪条路，本票不定**（评审 S2 补）。修订轮把「替代只换持有方」「已结束的关系不再收新修订」写进了 PC CONTEXT。但对未结束的关系，`RegisterRelationship` 今天仍收同一标识上换持有方或换范围的下一修订——既有行为，不是本票引入。它与「替代只换持有方，相对方、角色或范围也要变的走撤销加另登」并存；CONTEXT 既有那句「关系内容、角色或范围变化形成新关系版本」也没说新版本是同一标识的下一修订还是另一段关系。本票没改那条行为，留 owner 定。
 
 **完成判据格 → 用例**
 
@@ -112,3 +114,43 @@ PC 领域的参与方关系有撤销、到期、替代三种结束（`PartyRelat
   - 新用例逐个以 `-v` 核过确实跑了、没有 SKIP。
 - 管理台三道门（Node 22，`pnpm install --frozen-lockfile` 装依赖）：`tsc -b --noEmit` 退 0；`node scripts/run-tests.mjs` 608 条全过（含本票七条）；`pnpm exec vite build` 成（只有既有的 chunk 体积提示）。
 - 全量 `scripts/test-full.sh`、机制清点重生成：没跑，归推送方。
+
+## 评审记录
+
+### 评审 ← tops-20 隔离子代理 · 钉 `8385c8c10` · 23:51
+
+结论：两轴无阻断；非阻断 6 条。取证：带 DSN 跑 `internal/partycommercial/adapters/postgres` 本票三条真库用例，PASS 非 SKIP。
+
+#### Standards
+阻断：无。
+非阻断：
+- S1 `internal/partycommercial/domain/party_relationship.go`：`SupersededBy` 注释仍写「关系内容、角色或范围发生变化时形成新的关系版本」；同文件 `SuccessorSpec` 说替代只换持有方、其余要变就撤销后另登；新加的「接替方≠原持有方」门又拿掉了领域原本允许的同持有方替代。同一文件两段注释读向相反，改掉 `SupersededBy` 那半句。
+- S2 代决 3 与 CONTEXT：不相抵，但是缺——AGENTS.md「改文档」要求生命周期变化写进 CONTEXT，而「替代只换持有方、同笔登接替关系」与「已结束的关系不再收新修订」只写在代码里。建议随合入加作者那句并补后一句；补句时要定内容变化走哪条路：`RegisterRelationship` 今天仍收同一标识上换持有方或换范围的下一修订，与「撤销加另登」并存（既有行为，非本票引入）。
+- S3 `cmd/parcel-api/endpoints_commercial_relationship_ending.go` mount 注释「身份族四类登记加停用」数别的文件里的行，违反 AGENTS.md 计数条。
+无发现：红线；注释中文；重放与冲突照 `deactivationReplay` 加修订错位，接替关系经 `RegisterRelationship`（含 `checkRevisionSlot`）登记，未另抄；三口挂 `registryWriteFace()` 与同族一致；授权交付判断未改。
+
+#### Spec
+阻断：无。
+非阻断：
+- P1 代决 1、5 披露不全：`AppliesAt` 只按状态答，登记到期之后区间内的锚点也由「是」翻「否」——如 ADR-0212 交接单在终点前开立、登记到期之后才确认，会被拒。代决 5 只就撤销说了这一层，代决 1 把到期说成「登记已发生的事」；请把到期的这一层补进越权风险点。
+- P2 UC-PC-001「首发结果码」表与「成功结束」行没收 `PartyRelationshipEndingHandler`（`ENDED`；`NOT_FOUND` 在此指关系不在册）。不相抵，是缺；随本票改或紧跟文档票。
+- P3 代决 1 与票面「到期（指定终点）」字面有出入，预定未来终点仍只能再登一版修订；作者已如实记为代决与越权风险点，待 owner 复核。
+无发现：迁移 0042 对旧行安全（关系表唯一写入点 `SaveRelationship` 的非测试调用方只产出候选或已生效行，终止格皆空；种子同路；执行器按 ID 补施加，0041 暂缺不碍；无 CR/BOM）；替代两笔经 `RequireExecutor(ctx)` 同事务，error 整笔回滚；代决 4 不破坏既有场景；`TestRevokingAnAuthorizedDeliveryRelationshipAnswersNoAtOnce` 断言正确；管理台按状态禁用有先例（`delivery-handover-note.ts` `ConfirmAvailability`），不越「表单不裁门」，确认框文案齐、`WallTimeField`、`ENDED` 后 `retry` 就地刷新；`ENDED` 答 201、其余 200 与 `writePartyRegistryAnswer` 停用口一致。
+
+## 修订轮（2026-10-25，同一作者子代理，同一分支）
+
+评审非阻断六条，按协调方裁定收 S1、S2、S3、P1、P2；P3 已如实记为代决 1 与越权风险点，不动。
+
+| 条 | 怎么收 | 提交 |
+|---|---|---|
+| S1 | `SupersededBy` 注释改成与 `SuccessorSpec`、新门一致：替代只换持有方，相对方、角色或范围也要变的走撤销加另登 | `e71d774ef` |
+| S3 | `cmd/parcel-api/endpoints_commercial_relationship_ending.go` 的 mount 注释不再数别的文件里的行，改称「参与方身份族的登记与停用各口」 | `e71d774ef` |
+| S2 | PC `docs/domain/party-commercial/CONTEXT.md`「参与方关系」生命周期加两句现行规则：「替代只换持有方：接替关系由接替方持有，相对方、角色与适用范围不变，自替代时刻起接住原关系余下的有效区间。」「已到期、已撤销或已替代的关系不再收新修订；要重新建立关系，登记一段新关系。」内容变化走同标识下一修订还是撤销加另登，本票不定，记进代决 11，没改 `RegisterRelationship` 那条行为。没碰 GLOSSARY、CONTEXT-MAP | `1f0fd386e` |
+| P2 | UC-PC-001：「成功结束」一行补关系的撤销、到期、替代已登记；结果语义表加「已结束」一行；首发结果码表补 `PartyRelationshipEndingHandler`（`ENDED`；`NOT_FOUND` 在此指关系不在册） | `1f0fd386e` |
+| P1 | 代决 1 补「登记到期之后区间内的锚点也由是翻否」一条披露，例举 ADR-0212 交接单终点前开立、登记到期后才确认被拒；代决 5 互指 | 本笔 |
+
+**受影响用例重跑**（在 `1f0fd386e` 上，带 PG：`IDP_PARCEL_POSTGRES_DSN` 指共享门禁库 55432）
+
+- `go build ./...` 退 0；`go vet ./internal/partycommercial/... ./cmd/parcel-api/... ./cmd/parcel-commercial/...` 退 0；改过的两个 `.go` 过 `gofmt -l` 无输出。
+- `go test -p 1 -count=1 ./internal/partycommercial/... ./cmd/parcel-api/... ./cmd/parcel-commercial/... ./internal/architecture/...` 退 0：有测试的 9 个包全 ok（PC 的 `adapters/accessidentity`、`adapters/http`、`adapters/postgres`、`adapters/registrationjson`、`application`、`domain`，`cmd/parcel-api`、`cmd/parcel-commercial`，`internal/architecture`），无 FAIL、无 SKIP 行。
+- 管理台没改，三道门没重跑。
