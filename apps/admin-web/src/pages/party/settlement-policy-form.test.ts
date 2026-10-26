@@ -5,12 +5,14 @@ import {
   contractChoiceOf,
   emptySettlementPolicyDraft,
   methodCodesOf,
+  settlementPolicyDraftFromRecord,
   settlementPolicyFieldPaths,
   settlementPolicyLocalProblems,
   settlementPolicyPayloadOf,
   withShellIntervalCopiedIntoPolicy,
   type SettlementPolicyDraft,
 } from './settlement-policy-form';
+import type { SettlementPolicyRecord } from './api';
 
 // 票 admin-write-faces/15：结算政策逐字段表单的纯逻辑。钉的是「草稿 → 载荷」这一步与它对公共半边
 // （publication-draft-flow）的两个承诺：载荷形状逐格镜像 Go 的 CommercialPublicationPayload.settlementPolicy
@@ -196,4 +198,49 @@ test('空草稿十四格全空：方式不预选', () => {
   const draft = emptySettlementPolicyDraft();
   equal(Object.keys(draft).length, 14);
   for (const [key, value] of Object.entries(draft)) equal(value, '', `${key} 不为空`);
+});
+
+function settlementRecord(over: Partial<SettlementPolicyRecord> = {}): SettlementPolicyRecord {
+  return {
+    objectId: 'SYN-SETTLEMENT-PREPAID-01',
+    version: 'v2',
+    method: 'PREPAID',
+    legalEntity: 'SYN-LE-01',
+    counterparty: 'SYN-PARTY-SHIPPER-01',
+    contractLabel: 'SYN-CONTRACT-01/v1',
+    chargeScope: 'SYN-CHARGE-PREPAID',
+    currency: 'CNY',
+    effectiveStartsAt: '2026-10-01T00:00:00Z',
+    effectiveEndsAt: '2027-01-01T00:00:00Z',
+    registeredAt: '2026-09-30T00:00:00Z',
+    ...over,
+  };
+}
+
+// Covers: 票 party-commercial-uiux/14——基于此版本发新版本：对象标识、方式、责任法人、相对方、费用范围、币种照抄；合同两格、
+// 版本号、版本适用范围（读面没有）与两对生效区间留空，不论记录上有没有止点。合同两格留空是因为读面只有一个限定版本标签，
+// 它的拼法归领域一处，前端不再多一处知道分隔符。
+test('基于此版本预填：抄内容，留合同、版本号、适用范围与区间', () => {
+  const expected: SettlementPolicyDraft = {
+    ...emptySettlementPolicyDraft(),
+    objectId: 'SYN-SETTLEMENT-PREPAID-01',
+    method: 'PREPAID',
+    legalEntity: 'SYN-LE-01',
+    counterparty: 'SYN-PARTY-SHIPPER-01',
+    chargeScope: 'SYN-CHARGE-PREPAID',
+    currency: 'CNY',
+  };
+  deepEqual(settlementPolicyDraftFromRecord(settlementRecord()), expected);
+  const open = settlementRecord();
+  delete open.effectiveEndsAt;
+  deepEqual(settlementPolicyDraftFromRecord(open), expected);
+  // 人在选单里选好合同、起好版本号之后，组出的载荷里合同是对象 + 版本两格，并镜像成壳引用。
+  const payload = settlementPolicyPayloadOf({
+    ...settlementPolicyDraftFromRecord(settlementRecord()),
+    version: 'v3',
+    contractObjectId: 'SYN-CONTRACT-01',
+    contractVersion: 'v1',
+  });
+  deepEqual(payload.settlementPolicy?.contract, { objectId: 'SYN-CONTRACT-01', version: 'v1' });
+  deepEqual(payload.references, { CUSTOMER_CONTRACT: 'SYN-CONTRACT-01' });
 });

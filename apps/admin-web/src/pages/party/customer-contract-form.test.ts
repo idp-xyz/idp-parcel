@@ -1,8 +1,10 @@
 import { test } from 'node:test';
 import { deepEqual, equal, notEqual, ok } from 'node:assert/strict';
+import type { CustomerContractRecord } from './api';
 import { emptyDeliveryConditionDraft } from './delivery-condition-section';
 import { payloadKey } from './publication-draft-flow';
 import {
+  customerContractDraftFromRecord,
   customerContractFieldPaths,
   customerContractLocalProblems,
   emptyBindingDraft,
@@ -210,4 +212,135 @@ test('第三层：交付条件一格都没填整节缺席；填了任一格整�
   ]) {
     ok(paths.includes(want), `缺路径 ${want}`);
   }
+});
+
+// 目录里一版客户合同的读面行：必填字段写全，可缺的键由各用例按需加。
+function contractRecord(over: Partial<CustomerContractRecord> = {}): CustomerContractRecord {
+  return {
+    objectId: 'SYN-CONTRACT-02',
+    version: 'v3',
+    scope: 'SYN-SCOPE-01',
+    status: 'PUBLISHED',
+    effectiveStartsAt: '2026-01-01T00:00:00Z',
+    effectiveEndsAt: '2026-12-31T00:00:00Z',
+    publishedAt: '2026-01-01T00:00:00Z',
+    contentRegistered: true,
+    rulePackageId: 'SYN-RULEPKG-01',
+    declaredAt: '2026-01-01T00:00:00Z',
+    bindings: [
+      { chargeScope: 'SYN-CHARGE-PREPAID', policyId: 'SYN-FIN-CONTROL-01' },
+      { chargeScope: 'SYN-CHARGE-COD', inapplicabilityBasis: 'SYN-BASIS-COD-NA-01' },
+    ],
+    deliveryConditions: {
+      tightens: { objectId: 'SYN-PROD-01', version: 'v2' },
+      methods: ['METHOD/in-person', 'METHOD/locker'],
+      recipientScopeRule: 'RULE/recipient-scope-1',
+      proofOfDeliveryRule: 'RULE/proof-contract-1',
+      declaredAt: '2026-01-01T00:00:00Z',
+    },
+    ...over,
+  };
+}
+
+// Covers: 票 party-commercial-uiux/14——基于此版本发新版本：对象标识、版本适用范围、规则包、两种约定行（指名策略 / 显式不适用）、
+// 合同层交付条件（含所收紧的产品版本）照抄；版本号、生效区间、货主客户账户、合同级控制声明读面没有或要人填，留空。
+test('基于此版本预填：抄正文与交付条件，留版本号、区间、客户账户与合同级控制声明', () => {
+  deepEqual(customerContractDraftFromRecord(contractRecord()), {
+    ...emptyCustomerContractDraft(),
+    objectId: 'SYN-CONTRACT-02',
+    scope: 'SYN-SCOPE-01',
+    rulePackage: 'SYN-RULEPKG-01',
+    bindings: [
+      { chargeScope: 'SYN-CHARGE-PREPAID', mode: 'policy', policy: 'SYN-FIN-CONTROL-01', inapplicabilityBasis: '' },
+      { chargeScope: 'SYN-CHARGE-COD', mode: 'inapplicable', policy: '', inapplicabilityBasis: 'SYN-BASIS-COD-NA-01' },
+    ],
+    deliveryConditions: {
+      methodsText: 'METHOD/in-person\nMETHOD/locker',
+      recipientScopeRule: 'RULE/recipient-scope-1',
+      proofOfDeliveryRule: 'RULE/proof-contract-1',
+      tightensObjectId: 'SYN-PROD-01',
+      tightensVersion: 'v2',
+    },
+  });
+});
+
+// Covers: 票 party-commercial-uiux/14——还原是组载荷的反向：人补上版本号、起点与客户账户、选了合同级声明后，载荷里的规则包、
+// 两种约定行与交付条件与记录所读一致，不多一格也不少一格。
+test('基于此版本预填：人补齐留空的格后，载荷里的正文与记录一致', () => {
+  const restored = customerContractDraftFromRecord(contractRecord());
+  const payload = payloadOf(
+    {
+      ...restored,
+      version: 'v4',
+      effectiveStartsAt: '2027-01-01T00:00',
+      customerAccount: 'SYN-ACCOUNT-02',
+      controlRequirement: 'REQUIRED',
+    },
+    'Asia/Shanghai',
+  );
+  deepEqual(payload.references, { ACCEPTANCE_RULE_PACKAGE: 'SYN-RULEPKG-01' });
+  deepEqual(payload.customerContract!.contractContent.bindings, [
+    { chargeScope: 'SYN-CHARGE-PREPAID', policy: 'SYN-FIN-CONTROL-01' },
+    { chargeScope: 'SYN-CHARGE-COD', inapplicabilityBasis: 'SYN-BASIS-COD-NA-01' },
+  ]);
+  deepEqual(payload.customerContract!.deliveryConditions, {
+    methods: ['METHOD/in-person', 'METHOD/locker'],
+    recipientScopeRule: 'RULE/recipient-scope-1',
+    proofOfDeliveryRule: 'RULE/proof-contract-1',
+    tightens: { objectId: 'SYN-PROD-01', version: 'v2' },
+  });
+  // 不预填就发是发不出去的：留空的版本号与起点由服务端点名，本地没有替人抄一份上一版的区间。
+  const bare = payloadOf(restored, 'Asia/Shanghai');
+  equal(bare.version, '');
+  equal('effectiveEndsAt' in bare, false);
+});
+
+// Covers: 票 party-commercial-uiux/14——contentRegistered 为假时正文不在（零约定与未登记在读面上撞成同一个空数组，由布尔分开）：
+// 只还原对象标识、版本适用范围与交付条件；规则包、约定行都按空草稿，不拿记录上残留的键硬塞。
+test('基于此版本预填：未登记正文时只抄对象标识、适用范围与交付条件', () => {
+  const draft = customerContractDraftFromRecord(
+    contractRecord({ contentRegistered: false, rulePackageId: 'SYN-STALE', bindings: [{ chargeScope: 'SYN-STALE', policyId: 'SYN-STALE' }] }),
+  );
+  equal(draft.objectId, 'SYN-CONTRACT-02');
+  equal(draft.scope, 'SYN-SCOPE-01');
+  equal(draft.rulePackage, '');
+  deepEqual(draft.bindings, [emptyBindingDraft()]);
+  equal(draft.deliveryConditions.tightensObjectId, 'SYN-PROD-01');
+  equal(draft.deliveryConditions.methodsText, 'METHOD/in-person\nMETHOD/locker');
+});
+
+// Covers: 票 party-commercial-uiux/14——读面上可缺的键缺席时不崩也不硬塞：没有交付条件即整节空草稿（不由 contentRegistered 推）；
+// 规则包缺席即空；登记了正文但零约定，照空草稿预开一行；约定行两格都缺或都在（不合「恰一」）时不替人选模式，也不抄值。
+test('基于此版本预填：可缺的键缺席时不崩也不硬塞', () => {
+  const bare = customerContractDraftFromRecord(
+    contractRecord({ rulePackageId: undefined, bindings: [], deliveryConditions: undefined, declaredAt: undefined }),
+  );
+  equal(bare.rulePackage, '');
+  deepEqual(bare.bindings, [emptyBindingDraft()], '零约定照空草稿预开一行等人填');
+  deepEqual(bare.deliveryConditions, emptyDeliveryConditionDraft(), '键缺席即这一版没有交付条件');
+  equal('deliveryConditions' in payloadOf(bare).customerContract!, false, '空的一节不进载荷');
+
+  const noTightens = customerContractDraftFromRecord(
+    contractRecord({
+      deliveryConditions: { methods: [], recipientScopeRule: 'RULE/r', proofOfDeliveryRule: 'RULE/p', declaredAt: '2026-01-01T00:00:00Z' },
+    }),
+  );
+  deepEqual(noTightens.deliveryConditions, {
+    ...emptyDeliveryConditionDraft(),
+    recipientScopeRule: 'RULE/r',
+    proofOfDeliveryRule: 'RULE/p',
+  });
+
+  const odd = customerContractDraftFromRecord(
+    contractRecord({
+      bindings: [
+        { chargeScope: 'SYN-CHARGE-NONE' },
+        { chargeScope: 'SYN-CHARGE-BOTH', policyId: 'SYN-FIN-CONTROL-01', inapplicabilityBasis: 'SYN-BASIS-01' },
+      ],
+    }),
+  );
+  deepEqual(odd.bindings, [
+    { ...emptyBindingDraft(), chargeScope: 'SYN-CHARGE-NONE' },
+    { ...emptyBindingDraft(), chargeScope: 'SYN-CHARGE-BOTH' },
+  ]);
 });

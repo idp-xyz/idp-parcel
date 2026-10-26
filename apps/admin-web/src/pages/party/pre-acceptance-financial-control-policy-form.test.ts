@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import { deepEqual, equal, ok } from 'node:assert/strict';
+import type { PreAcceptanceFinancialControlPolicyRecord } from './api';
 import {
   controlPolicyCodesOf,
   controlPolicyFieldPaths,
@@ -8,6 +9,7 @@ import {
   controlRowHints,
   emptyControlItemDraft,
   emptyControlPolicyDraft,
+  preAcceptanceFinancialControlPolicyDraftFromRecord,
   withControlRowAdded,
   withControlRowPatched,
   withControlRowRemoved,
@@ -236,4 +238,79 @@ test('空草稿：壳五格与共同通过条件全空、不预选；带一行�
   equal(draft.controls.length, 1);
   equal(Object.keys(draft.controls[0]).length, 5);
   for (const [key, value] of Object.entries(draft.controls[0])) equal(value, '', `controls[0].${key} 不为空`);
+});
+
+// Covers: 票 party-commercial-uiux/14——基于此版本发新版本：对象标识、版本适用范围、共同通过条件与控制项（按判断顺序一行，
+// 顺序数转文本）照抄；版本号与版本的生效区间留空，哪怕记录上有终止时刻。
+test('基于此版本预填：抄对象、适用范围、共同通过条件与控制项，留版本号与生效区间；顺序 0 不折成缺席', () => {
+  const record: PreAcceptanceFinancialControlPolicyRecord = {
+    objectId: 'SYN-FIN-CONTROL-01',
+    version: 'v2',
+    scope: 'SYN-SCOPE-01',
+    status: 'PUBLISHED',
+    effectiveStartsAt: '2026-01-01T00:00:00Z',
+    effectiveEndsAt: '2026-12-31T00:00:00Z',
+    publishedAt: '2026-01-01T00:00:00Z',
+    contentRegistered: true,
+    content: {
+      jointPassCondition: 'ALL_CONTROLS_PASS',
+      registeredAt: '2026-01-01T00:00:00Z',
+      controls: [
+        { control: 'PREPAID_FREEZE', chargeScope: 'charge-freight', order: 0, onFailure: 'REJECT', responsibility: 'operator-legal-1' },
+        { control: 'CREDIT_CHECK', chargeScope: 'charge-terms', order: 2, onFailure: 'AUTHORIZED_DISPOSITION', responsibility: 'customer-1' },
+      ],
+    },
+  };
+  const draft = preAcceptanceFinancialControlPolicyDraftFromRecord(record);
+  deepEqual(draft, {
+    ...emptyControlPolicyDraft(),
+    objectId: 'SYN-FIN-CONTROL-01',
+    scope: 'SYN-SCOPE-01',
+    jointPassCondition: 'ALL_CONTROLS_PASS',
+    controls: [
+      { control: 'PREPAID_FREEZE', chargeScope: 'charge-freight', order: '0', onFailure: 'REJECT', responsibility: 'operator-legal-1' },
+      { control: 'CREDIT_CHECK', chargeScope: 'charge-terms', order: '2', onFailure: 'AUTHORIZED_DISPOSITION', responsibility: 'customer-1' },
+    ],
+  });
+  equal(draft.version, '');
+  equal(draft.effectiveStartsAt, '');
+  equal(draft.effectiveEndsAt, '');
+
+  // 抄回去的控制项原样出现在载荷里：由草稿组载荷的那条路径能把它们拼回记录上的样子。
+  const payload = controlPolicyPayloadOf({ ...draft, version: 'v3', effectiveStartsAt: '2027-01-01T00:00' }, 'UTC');
+  deepEqual(payload.preAcceptanceFinancialControlPolicy?.controls, record.content?.controls);
+});
+
+// Covers: 票 party-commercial-uiux/14——读面上可缺的正文：contentRegistered 为假时（响应里没有 content 键）只还原壳那几格，
+// 共同通过条件留空、控制项沿用空草稿预开的一行空行；记录给了空数组也不崩、不硬塞，同样是那一行空行。
+test('基于此版本预填：正文未登记只还原壳；控制项为空数组沿用预开的一行空行', () => {
+  const shell: PreAcceptanceFinancialControlPolicyRecord = {
+    objectId: 'SYN-FIN-CONTROL-02',
+    version: 'v1',
+    scope: 'SYN-SCOPE-02',
+    status: 'PUBLISHED',
+    effectiveStartsAt: '2026-01-01T00:00:00Z',
+    publishedAt: '2026-01-01T00:00:00Z',
+    contentRegistered: false,
+  };
+  deepEqual(preAcceptanceFinancialControlPolicyDraftFromRecord(shell), {
+    ...emptyControlPolicyDraft(),
+    objectId: 'SYN-FIN-CONTROL-02',
+    scope: 'SYN-SCOPE-02',
+  });
+
+  // contentRegistered 为假时即便响应带了 content 也不还原：是否在册只认这个布尔。
+  const stray = preAcceptanceFinancialControlPolicyDraftFromRecord({
+    ...shell,
+    content: { jointPassCondition: 'ALL_CONTROLS_PASS', registeredAt: '2026-01-01T00:00:00Z', controls: [] },
+  });
+  equal(stray.jointPassCondition, '');
+
+  const noControls = preAcceptanceFinancialControlPolicyDraftFromRecord({
+    ...shell,
+    contentRegistered: true,
+    content: { jointPassCondition: 'ALL_CONTROLS_PASS', registeredAt: '2026-01-01T00:00:00Z', controls: [] },
+  });
+  equal(noControls.jointPassCondition, 'ALL_CONTROLS_PASS');
+  deepEqual(noControls.controls, [emptyControlItemDraft()]);
 });

@@ -7,6 +7,7 @@
 // 本册特有的一句：结算政策答「怎么结」不答「要不要接受前控制」（那是 0007 / 0024 两层的事），草稿里没有控制字段。
 
 import { currentDisplayTimeZone } from '../moment';
+import type { SettlementPolicyRecord } from './api';
 import { wallMomentOf, wallMomentProblem } from './publication-form-shared';
 import type {
   CommercialPublicationPayload,
@@ -52,6 +53,26 @@ export function emptySettlementPolicyDraft(): SettlementPolicyDraft {
     currency: '',
     policyEffectiveStartsAt: '',
     policyEffectiveEndsAt: '',
+  };
+}
+
+/**
+ * 「基于此版本发新版本」的预填（票 party-commercial-uiux/14）：同一个政策对象，结算方式、责任法人、客户相对方、费用范围、
+ * 币种照抄；版本号、版本的适用范围（读面没有）与两对生效区间（版本的与政策正文的）一律留空。
+ *
+ * **合同两格也留空**：读面上合同只有一个限定版本标签（contractLabel），草稿里是对象、版本两格。标签的拼法归领域一处
+ * （NewQualifiedVersionLabel），那边的注释明确不要前端再多一处知道分隔符；对象标识与版本号本身又都可含分隔符，拆错了会让
+ * 人对着一个不存在的合同点发布，日后分隔符一变还会悄悄拆错。留空的代价只是在「客户合同版本」选单里再选一次。
+ */
+export function settlementPolicyDraftFromRecord(record: SettlementPolicyRecord): SettlementPolicyDraft {
+  return {
+    ...emptySettlementPolicyDraft(),
+    objectId: record.objectId,
+    method: record.method,
+    legalEntity: record.legalEntity,
+    counterparty: record.counterparty,
+    chargeScope: record.chargeScope,
+    currency: record.currency,
   };
 }
 

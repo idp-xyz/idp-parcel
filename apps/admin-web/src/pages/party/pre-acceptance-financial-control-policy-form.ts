@@ -13,6 +13,7 @@
 // 本文件不内置任何一格，自然也长不出它。
 
 import { currentDisplayTimeZone } from '../moment';
+import type { PreAcceptanceFinancialControlPolicyRecord } from './api';
 import { integerOf, integerProblem, wallMomentOf, wallMomentProblem } from './publication-form-shared';
 import type {
   CommercialPublicationPayload,
@@ -60,6 +61,37 @@ export function emptyControlPolicyDraft(): ControlPolicyDraft {
     jointPassCondition: '',
     controls: [emptyControlItemDraft()],
   };
+}
+
+/**
+ * 「基于此版本发新版本」的预填（票 party-commercial-uiux/14）：同一个策略对象，版本适用范围与正文（共同通过条件、控制项
+ * 按判断顺序一行）照抄；版本号与版本的生效区间一律留空——版本号要人起，抄上一版的区间会让新旧两版区间重叠、解析时答
+ * 「适用冲突」。
+ *
+ * 正文是否在册只认 `contentRegistered`：为假时目录行没有正文，只还原壳那几格，共同通过条件与控制项留空白。记录上的控制项
+ * 一律在场且至少一项，但响应若给了空数组，仍按空草稿的做法预开一行空控制项——那是可填的格，不是抄来的值。
+ */
+export function preAcceptanceFinancialControlPolicyDraftFromRecord(
+  record: PreAcceptanceFinancialControlPolicyRecord,
+): ControlPolicyDraft {
+  const draft: ControlPolicyDraft = {
+    ...emptyControlPolicyDraft(),
+    objectId: record.objectId,
+    scope: record.scope,
+  };
+  const content = record.contentRegistered ? record.content : undefined;
+  if (content === undefined) return draft;
+  draft.jointPassCondition = content.jointPassCondition;
+  if (content.controls.length > 0) {
+    draft.controls = content.controls.map((item) => ({
+      control: item.control,
+      chargeScope: item.chargeScope,
+      order: String(item.order),
+      onFailure: item.onFailure,
+      responsibility: item.responsibility,
+    }));
+  }
+  return draft;
 }
 
 const bodyPath = 'preAcceptanceFinancialControlPolicy';

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import { currentDisplayTimeZone } from '../moment';
+import type { NewVersionStart } from './new-version';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
 import { DeliveryConditionFields } from './DeliveryConditionFields';
 import { Field, Problems, fieldLabel } from './PublicationFormFields';
@@ -36,10 +37,12 @@ import {
 export interface ServiceProductPublicationFormProps {
   /** 载体到达「发布」那一步时回调，页面借它刷同页的目录读面。 */
   onPublished?: () => void;
+  /** 基于目录里某一版预填（票 party-commercial-uiux/14）；换一次预填由页面换 key 重建本表单。 */
+  start?: NewVersionStart<ServiceProductDraft>;
 }
 
-export function ServiceProductPublicationForm({ onPublished }: ServiceProductPublicationFormProps) {
-  const [draft, setDraft] = useState<ServiceProductDraft>(emptyServiceProductDraft());
+export function ServiceProductPublicationForm({ onPublished, start }: ServiceProductPublicationFormProps) {
+  const [draft, setDraft] = useState<ServiceProductDraft>(start?.draft ?? emptyServiceProductDraft());
   const patch = (change: Partial<ServiceProductDraft>) => setDraft((current) => ({ ...current, ...change }));
   const patchRow = (index: number, change: Partial<ReferenceRowDraft>) =>
     patch({ references: draft.references.map((row, at) => (at === index ? { ...row, ...change } : row)) });
@@ -55,6 +58,8 @@ export function ServiceProductPublicationForm({ onPublished }: ServiceProductPub
       fieldPaths={serviceProductFieldPaths(draft)}
       localProblems={serviceProductLocalProblems(draft, timeZone)}
       onPublished={onPublished}
+      prefilledFrom={start?.from}
+      prefilledCaution={start?.caution}
     >
       {(form) => (
         <div className="flex flex-col gap-5">

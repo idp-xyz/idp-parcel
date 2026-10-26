@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import { deepEqual, equal, notEqual, ok } from 'node:assert/strict';
 import { payloadKey } from './publication-draft-flow';
 import {
+  authorizationRuleDraftFromRecord,
   authorizationRuleFieldPaths,
   authorizationRuleLocalProblems,
   emptyAuthorizationRuleDraft,
@@ -164,4 +165,61 @@ test('请求方下拉：未读到是 loading，403 是可辨的未配置，别�
 test('请求方下拉：需要登录与没有授予各成一格，不并进未配置，也不折成读不到（票 operator-channel/07）', () => {
   deepEqual(partyOptionsOf({ kind: 'loginRequired' }, {}), { kind: 'loginRequired' });
   deepEqual(partyOptionsOf({ kind: 'notGranted' }, {}), { kind: 'notGranted' });
+});
+
+// Covers: 票 party-commercial-uiux/14——基于此版本发新版本：对象标识、适用范围与取消授权目录的每一行（请求方 × 规则引用，
+// 目录原序）照抄；版本号与两个生效区间留空，已发布时刻等读面独有的格不进草稿。
+test('基于此版本预填：抄对象、范围与目录各行，留版本号与区间', () => {
+  const draft = authorizationRuleDraftFromRecord({
+    objectId: 'SYN-AUTH-CANCEL-02',
+    version: 'v3',
+    scope: 'SYN-SCOPE-01',
+    status: 'EFFECTIVE',
+    effectiveStartsAt: '2026-01-01T00:00:00Z',
+    effectiveEndsAt: '2026-12-31T00:00:00Z',
+    publishedAt: '2026-01-01T00:00:00Z',
+    cancellationAuthorityDeclared: true,
+    declaredAt: '2026-01-01T00:00:00Z',
+    cancellationAuthorities: [
+      { party: 'OPERATIONS', ruleReference: 'SYN-RULE-CANCEL-OPS-01' },
+      { party: 'CUSTOMER', ruleReference: 'SYN-RULE-CANCEL-CUSTOMER-01' },
+    ],
+  });
+  deepEqual(draft, {
+    objectId: 'SYN-AUTH-CANCEL-02',
+    version: '',
+    scope: 'SYN-SCOPE-01',
+    effectiveStartsAt: '',
+    effectiveEndsAt: '',
+    rows: [
+      { party: 'OPERATIONS', rule: 'SYN-RULE-CANCEL-OPS-01' },
+      { party: 'CUSTOMER', rule: 'SYN-RULE-CANCEL-CUSTOMER-01' },
+    ],
+  });
+  // 人补齐版本号与起点后，载荷里的目录与记录一致。
+  const payload = payloadOf({ ...draft, version: 'v4', effectiveStartsAt: '2027-01-01T00:00' }, 'Asia/Shanghai');
+  deepEqual(payload.authorizationRule?.cancellationAuthority, [
+    { party: 'OPERATIONS', rule: 'SYN-RULE-CANCEL-OPS-01' },
+    { party: 'CUSTOMER', rule: 'SYN-RULE-CANCEL-CUSTOMER-01' },
+  ]);
+});
+
+// Covers: 票 party-commercial-uiux/14——读面上目录可缺：没声明目录或一行都没有时不崩，也不凭空造出一个请求方；
+// 退回空草稿那一行空行，其余格照抄；止点缺席与带着止点的记录抄出同样的留空。
+test('基于此版本预填：目录没有行时不崩、不硬塞请求方，止点缺席也不影响', () => {
+  const undeclared = authorizationRuleDraftFromRecord({
+    objectId: 'SYN-AUTH-CANCEL-03',
+    version: 'v1',
+    scope: 'SYN-SCOPE-02',
+    status: 'EFFECTIVE',
+    effectiveStartsAt: '2026-01-01T00:00:00Z',
+    publishedAt: '2026-01-01T00:00:00Z',
+    cancellationAuthorityDeclared: false,
+    cancellationAuthorities: [],
+  });
+  deepEqual(undeclared, {
+    ...emptyAuthorizationRuleDraft(),
+    objectId: 'SYN-AUTH-CANCEL-03',
+    scope: 'SYN-SCOPE-02',
+  });
 });

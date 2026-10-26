@@ -14,6 +14,9 @@ import {
   type ServiceProductListResponseBody,
   type ServiceProductRecord,
 } from './api';
+import { nextRequest, newVersionFrom, type NewVersionRequest } from './new-version';
+import { withNewVersionAction } from './NewVersionAction';
+import { serviceProductDraftFromRecord } from './service-product-form';
 import { KeepAliveTabs, KeepAliveTabsContent } from './keep-alive-tabs';
 import { VersionStatusChips } from './VersionStatusChips';
 import {
@@ -100,7 +103,14 @@ const columns: ListColumn<ServiceProductRecord>[] = [
 // 端点，不并进本页——那边上列登记册信封，这边上列版本壳，行形状与修订轴不同。
 //
 // `refreshKey` 由页面递增：「发布版本」签的载体到达发布那一步时刷本读面，让新版本在同页立刻可见。
-function ServiceProductVersionsTable({ refreshKey }: { refreshKey: number }) {
+function ServiceProductVersionsTable({
+  refreshKey,
+  onStartNewVersion,
+}: {
+  refreshKey: number;
+  /** 点行上的「发新版本」：把这一版带去发布签预填（票 party-commercial-uiux/14）。 */
+  onStartNewVersion: (record: ServiceProductRecord) => void;
+}) {
   // 检索词在地址里（`?q=`）：别处的引用链接带着它过来，筛到那一条；刷新与换标签回来也还在。
   const [statusFilter, setStatusFilter] = useState<VersionStatusFilter>('all');
   const [search, setSearch] = useAddressKeyword();
@@ -158,7 +168,10 @@ function ServiceProductVersionsTable({ refreshKey }: { refreshKey: number }) {
         ) : undefined
       }
       emptyRowsNote="这组条件下没有匹配的产品版本"
-      columns={columns}
+      columns={withNewVersionAction(columns, {
+        labelOf: (row) => `服务产品 ${row.objectId} ${row.version}`,
+        onStart: onStartNewVersion,
+      })}
       rows={visibleProducts}
       rowKey={(row) => `${row.objectId}@${row.version}`}
       viewState={catalogueViewState(answer, products.length, retry, {
@@ -190,9 +203,16 @@ function ServiceProductVersionsTable({ refreshKey }: { refreshKey: number }) {
  */
 export function ServiceProductsPage() {
   const [refreshKey, setRefreshKey] = useState(0);
+  // 点产品行上的「发新版本」：记下是哪一版，切到发布签；发布表单据此预填并重建（票 party-commercial-uiux/14）。
+  const [tab, setTab] = useState('versions');
+  const [request, setRequest] = useState<NewVersionRequest<ServiceProductRecord> | null>(null);
+  const startNewVersion = (record: ServiceProductRecord) => {
+    setRequest((previous) => nextRequest(previous, record));
+    setTab('publish');
+  };
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <KeepAliveTabs defaultValue="versions" className="flex-1 flex flex-col overflow-hidden gap-0">
+      <KeepAliveTabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="versions">服务产品</TabsTrigger>
           <TabsTrigger value="publish">发布版本</TabsTrigger>
@@ -202,13 +222,25 @@ export function ServiceProductsPage() {
           value="versions"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
-          <ServiceProductVersionsTable refreshKey={refreshKey} />
+          <ServiceProductVersionsTable refreshKey={refreshKey} onStartNewVersion={startNewVersion} />
         </KeepAliveTabsContent>
         <KeepAliveTabsContent
           value="publish"
           className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
         >
-          <ServiceProductPublicationForm onPublished={() => setRefreshKey((value) => value + 1)} />
+          <ServiceProductPublicationForm
+            // 同一版再发起一次、或换一版，表单整个重建，不留上一次的预览与草稿。
+            key={request?.token ?? 0}
+            onPublished={() => setRefreshKey((value) => value + 1)}
+            start={
+              request
+                ? {
+                    draft: serviceProductDraftFromRecord(request.source),
+                    from: newVersionFrom('服务产品', request.source.objectId, request.source.version),
+                  }
+                : undefined
+            }
+          />
         </KeepAliveTabsContent>
         <KeepAliveTabsContent
           value="register"

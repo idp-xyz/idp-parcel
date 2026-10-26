@@ -5,6 +5,7 @@ import { currentDisplayTimeZone } from '../moment';
 import { claimDeadlineKindLabels } from './presentation';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
+import type { NewVersionStart } from './new-version';
 import { Field, ProblemText, ReferencePicker, VocabularySelect, selectClass, useLoaded } from './PublicationFormFields';
 import { listCustomerContracts, listServiceProducts } from './api';
 import { customerContractObjectOptions, serviceProductObjectOptions } from './picker-options';
@@ -57,6 +58,8 @@ import {
 export interface CustomerServiceRulePublicationFormProps {
   /** 载体到达「发布」那一步时回调，政策页借它切到客户服务规则册并重读。 */
   onPublished?: () => void;
+  /** 基于目录里某一版预填（票 party-commercial-uiux/14）；换一次预填由页面换 key 重建本表单。 */
+  start?: NewVersionStart<ServiceRuleDraft>;
 }
 
 const textareaClass = `${selectClass} font-mono min-h-[72px]`;
@@ -70,8 +73,8 @@ const appliesToChoices: { value: Exclude<ServiceRuleAppliesTo, ''>; label: strin
   { value: 'customerContract', label: '随某个客户合同适用', noun: '客户合同', shellKey: 'CUSTOMER_CONTRACT' },
 ];
 
-export function CustomerServiceRulePublicationForm({ onPublished }: CustomerServiceRulePublicationFormProps) {
-  const [draft, setDraft] = useState<ServiceRuleDraft>(emptyServiceRuleDraft());
+export function CustomerServiceRulePublicationForm({ onPublished, start }: CustomerServiceRulePublicationFormProps) {
+  const [draft, setDraft] = useState<ServiceRuleDraft>(start?.draft ?? emptyServiceRuleDraft());
   const patch = (change: Partial<ServiceRuleDraft>) => setDraft((current) => ({ ...current, ...change }));
   const patchDeadline = (index: number, change: Partial<ClaimDeadlineDraft>) =>
     setDraft((current) => withClaimDeadlineRowPatched(current, index, change));
@@ -93,6 +96,8 @@ export function CustomerServiceRulePublicationForm({ onPublished }: CustomerServ
       localProblems={serviceRuleLocalProblems(draft, timeZone)}
       fieldPaths={serviceRuleFieldPaths(draft)}
       onPublished={onPublished}
+      prefilledFrom={start?.from}
+      prefilledCaution={start?.caution}
     >
       {({ problems, locked }: PublicationFormContext) => (
         <div className="flex flex-col gap-5">

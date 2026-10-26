@@ -1,11 +1,13 @@
 import { test } from 'node:test';
 import { deepEqual, equal, ok } from 'node:assert/strict';
+import type { ServiceProductRecord } from './api';
 import { emptyDeliveryConditionDraft } from './delivery-condition-section';
 import { payloadKey } from './publication-draft-flow';
 import {
   emptyReferenceRow,
   emptyServiceProductDraft,
   isBlankReferenceRow,
+  serviceProductDraftFromRecord,
   serviceProductFieldPaths,
   serviceProductLocalProblems,
   serviceProductPayloadOf,
@@ -159,4 +161,88 @@ test('载荷键随任一格变：换引用或换上界都是另一份，预览�
   ok(payloadKey(serviceProductPayloadOf(draft({ references: [{ kind: 'CUSTOMER_CONTRACT', objectId: 'c' }] }))) !== base);
   // 加一行全空的引用不改载荷：还没填的「加一行」不是内容。
   equal(payloadKey(serviceProductPayloadOf(draft({ references: [emptyReferenceRow()] }))), base);
+});
+
+// 目录里一版服务产品的读面行：必填字段写全，可缺的键由各用例按需加。
+function productRecord(over: Partial<ServiceProductRecord> = {}): ServiceProductRecord {
+  return {
+    objectId: 'SYN-PROD-CN-SG-EXPRESS',
+    version: 'v2',
+    scope: 'SYN-SCOPE-01',
+    status: 'PUBLISHED',
+    effectiveStartsAt: '2026-01-01T00:00:00Z',
+    effectiveEndsAt: '2026-12-31T00:00:00Z',
+    publishedAt: '2026-01-01T00:00:00Z',
+    form: 'EXPRESS',
+    deliveryConditions: {
+      methods: ['METHOD/safe-drop', 'METHOD/in-person'],
+      recipientScopeRule: 'RULE/recipient-scope-1',
+      proofOfDeliveryRule: 'RULE/proof-1',
+      declaredAt: '2026-01-01T00:00:00Z',
+    },
+    ...over,
+  };
+}
+
+// Covers: 票 party-commercial-uiux/14——基于此版本发新版本：对象标识、版本适用范围与产品层交付条件照抄；版本号与有效区间留空
+// （抄上一版的区间会让新旧两版重叠，解析时答「适用冲突」）；指名引用表读面没有，留空；服务形态不在本册载荷里，不抄。
+test('基于此版本预填：抄对象、适用范围与交付条件，留版本号、区间与引用表', () => {
+  deepEqual(serviceProductDraftFromRecord(productRecord()), {
+    ...emptyServiceProductDraft(),
+    objectId: 'SYN-PROD-CN-SG-EXPRESS',
+    scope: 'SYN-SCOPE-01',
+    deliveryConditions: {
+      methodsText: 'METHOD/safe-drop\nMETHOD/in-person',
+      recipientScopeRule: 'RULE/recipient-scope-1',
+      proofOfDeliveryRule: 'RULE/proof-1',
+      tightensObjectId: '',
+      tightensVersion: '',
+    },
+  });
+});
+
+// Covers: 票 party-commercial-uiux/14——还原是组载荷的反向：人补上版本号与起点后，载荷里的交付条件与记录所读一致，产品层
+// 不带 tightens 键，上一版的止点没有被带过来。
+test('基于此版本预填：人补齐留空的格后，载荷里的交付条件与记录一致', () => {
+  const payload = serviceProductPayloadOf(
+    { ...serviceProductDraftFromRecord(productRecord()), version: 'v3', effectiveStartsAt: '2027-01-01T00:00' },
+    'Asia/Shanghai',
+  );
+  deepEqual(payload, {
+    kind: 'SERVICE_PRODUCT',
+    objectId: 'SYN-PROD-CN-SG-EXPRESS',
+    version: 'v3',
+    scope: 'SYN-SCOPE-01',
+    effectiveStartsAt: '2026-12-31T16:00:00Z',
+    serviceProduct: {
+      deliveryConditions: {
+        methods: ['METHOD/safe-drop', 'METHOD/in-person'],
+        recipientScopeRule: 'RULE/recipient-scope-1',
+        proofOfDeliveryRule: 'RULE/proof-1',
+      },
+    },
+  });
+});
+
+// Covers: 票 party-commercial-uiux/14——读面上可缺的键缺席时不崩也不硬塞：交付条件键缺席即这一版没有，草稿是空的一节、
+// 载荷仍是壳；服务形态与止点缺席同样不影响；声明了但方式为空数组的一节照样还原（空方式集合不折成缺席）。
+test('基于此版本预填：可缺的键缺席时不崩也不硬塞', () => {
+  const bare = serviceProductDraftFromRecord(
+    productRecord({ deliveryConditions: undefined, form: undefined, effectiveEndsAt: undefined }),
+  );
+  deepEqual(bare, { ...emptyServiceProductDraft(), objectId: 'SYN-PROD-CN-SG-EXPRESS', scope: 'SYN-SCOPE-01' });
+  ok(!('serviceProduct' in serviceProductPayloadOf(bare)), '没有交付条件就不带本册正文格');
+
+  const noMethods = serviceProductDraftFromRecord(
+    productRecord({
+      deliveryConditions: { methods: [], recipientScopeRule: 'RULE/r', proofOfDeliveryRule: 'RULE/p', declaredAt: '2026-01-01T00:00:00Z' },
+    }),
+  );
+  equal(noMethods.deliveryConditions.methodsText, '');
+  equal(noMethods.deliveryConditions.recipientScopeRule, 'RULE/r');
+  deepEqual(serviceProductPayloadOf(noMethods).serviceProduct?.deliveryConditions, {
+    methods: [],
+    recipientScopeRule: 'RULE/r',
+    proofOfDeliveryRule: 'RULE/p',
+  });
 });

@@ -17,6 +17,7 @@
 
 import {
   deliveryConditionDeclared,
+  deliveryConditionDraftFromRecord,
   deliveryConditionFieldPaths,
   deliveryConditionPayloadOf,
   deliveryConditionRenderedPaths,
@@ -24,6 +25,7 @@ import {
   type DeliveryConditionDraft,
 } from './delivery-condition-section';
 import { currentDisplayTimeZone } from '../moment';
+import type { ServiceProductRecord } from './api';
 import type { CommercialPublicationPayload } from './publication-draft-api';
 import { wallMomentOf, wallMomentProblem } from './publication-form-shared';
 
@@ -57,6 +59,21 @@ export function emptyServiceProductDraft(): ServiceProductDraft {
     effectiveEndsAt: '',
     references: [],
     deliveryConditions: emptyDeliveryConditionDraft(),
+  };
+}
+
+/**
+ * 「基于此版本发新版本」的预填（票 party-commercial-uiux/14）：同一个产品，对象标识、版本信息里的适用范围（范围引用）与产品层
+ * 交付条件照抄；交付条件键缺席即这一版没有，还原成空的一节。没抄的：版本号与有效区间一律留空（版本号要人起，抄上一版的区间会
+ * 让新旧两版重叠、解析时答「适用冲突」）；指名引用表读面没有，留空由人加行。目录行上的服务形态是「登记服务形态」那条路的事，
+ * 不在本册载荷里。
+ */
+export function serviceProductDraftFromRecord(record: ServiceProductRecord): ServiceProductDraft {
+  return {
+    ...emptyServiceProductDraft(),
+    objectId: record.objectId,
+    scope: record.scope,
+    deliveryConditions: deliveryConditionDraftFromRecord(record.deliveryConditions),
   };
 }
 

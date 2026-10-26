@@ -5,7 +5,10 @@ import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState } from '../catalogue-view';
 import { useAddressKeyword } from '../../templates/use-address-keyword';
-import { listSupplierAgreements, type SupplierAgreementListResponseBody } from './api';
+import { listSupplierAgreements, type SupplierAgreementListResponseBody, type SupplierAgreementRecord } from './api';
+import { nextRequest, newVersionFrom, type NewVersionRequest } from './new-version';
+import { withNewVersionAction } from './NewVersionAction';
+import { supplierAgreementDraftFromRecord } from './supplier-agreement-form';
 import { KeepAliveTabs, KeepAliveTabsContent } from './keep-alive-tabs';
 import { VersionStatusChips } from './VersionStatusChips';
 import {
@@ -35,7 +38,14 @@ const info = moduleInfoById['supplier-agreements'];
 
 // 目录读面。reloadToken 由页面在发布签落定后递增，让同页目录立刻刷新可见（票 admin-write-faces/11 完成判据）；
 // 自己的「重试」另有一把键，两把任一变都重取。
-function SupplierAgreementCatalogue({ reloadToken }: { reloadToken: number }) {
+function SupplierAgreementCatalogue({
+  reloadToken,
+  onStartNewVersion,
+}: {
+  reloadToken: number;
+  /** 点行上的「发新版本」：把这一版带去发布签预填（票 party-commercial-uiux/14）。 */
+  onStartNewVersion: (record: SupplierAgreementRecord) => void;
+}) {
   // 检索词在地址里（`?q=`）：别处的引用链接带着它过来，筛到那一条；刷新与换标签回来也还在。
   const [search, setSearch] = useAddressKeyword();
   const directory = useNameDirectory();
@@ -94,7 +104,10 @@ function SupplierAgreementCatalogue({ reloadToken }: { reloadToken: number }) {
         ) : undefined
       }
       emptyRowsNote="这组条件下没有匹配的协议版本"
-      columns={withRefLinks(withStatusBadge(supplierAgreementColumns), directory)}
+      columns={withNewVersionAction(withRefLinks(withStatusBadge(supplierAgreementColumns), directory), {
+        labelOf: (row) => `供应商协议 ${row.version.objectId} ${row.version.version}`,
+        onStart: (row) => onStartNewVersion(row.source),
+      })}
       rows={visibleRows}
       rowKey={(row) => row.key}
       viewState={catalogueViewState(answer, rows.length, retry, {
@@ -118,9 +131,16 @@ function SupplierAgreementCatalogue({ reloadToken }: { reloadToken: number }) {
  */
 export function SupplierAgreementsPage() {
   const [reloadToken, setReloadToken] = useState(0);
+  // 点协议行上的「发新版本」：记下是哪一版，切到发布签；发布表单据此预填并重建（票 party-commercial-uiux/14）。
+  const [tab, setTab] = useState('catalogue');
+  const [request, setRequest] = useState<NewVersionRequest<SupplierAgreementRecord> | null>(null);
+  const startNewVersion = (record: SupplierAgreementRecord) => {
+    setRequest((previous) => nextRequest(previous, record));
+    setTab('publish');
+  };
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <KeepAliveTabs defaultValue="catalogue" className="flex-1 flex flex-col overflow-hidden gap-0">
+      <KeepAliveTabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="catalogue">协议目录</TabsTrigger>
           <TabsTrigger value="publish">发布协议版本</TabsTrigger>
@@ -129,13 +149,25 @@ export function SupplierAgreementsPage() {
           value="catalogue"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
-          <SupplierAgreementCatalogue reloadToken={reloadToken} />
+          <SupplierAgreementCatalogue reloadToken={reloadToken} onStartNewVersion={startNewVersion} />
         </KeepAliveTabsContent>
         <KeepAliveTabsContent
           value="publish"
           className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
         >
-          <SupplierAgreementPublicationForm onPublished={() => setReloadToken((value) => value + 1)} />
+          <SupplierAgreementPublicationForm
+            // 同一版再发起一次、或换一版，表单整个重建，不留上一次的预览与草稿。
+            key={request?.token ?? 0}
+            onPublished={() => setReloadToken((value) => value + 1)}
+            start={
+              request
+                ? {
+                    draft: supplierAgreementDraftFromRecord(request.source),
+                    from: newVersionFrom('供应商协议', request.source.objectId, request.source.version),
+                  }
+                : undefined
+            }
+          />
         </KeepAliveTabsContent>
       </KeepAliveTabs>
     </div>

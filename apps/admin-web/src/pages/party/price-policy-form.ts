@@ -18,6 +18,7 @@
 // 就整节送、缺的由服务端点名（三格同在同缺）。
 
 import { currentDisplayTimeZone } from '../moment';
+import type { PricePolicyRecord } from './api';
 import { commercialDirectionLabels, planBindingConversionLabels, taxDispositionLabels } from './presentation';
 import { wallMomentOf, wallMomentProblem } from './publication-form-shared';
 import type {
@@ -71,6 +72,33 @@ export function emptyPricePolicyDraft(): PricePolicyDraft {
     fxQuoteType: '',
     fxAsOfSemantics: '',
     fxAsOfPolicyVersion: '',
+  };
+}
+
+/**
+ * 「基于此版本发新版本」的预填（票 party-commercial-uiux/14）：同一个政策对象，政策方向、定价方案引用、方案方向、绑定转换、
+ * 政策适用范围，以及口径节里的税务口径、税务分类与汇率三格照抄；版本号、版本的适用范围（读面没有）与两对生效区间一律留空。
+ *
+ * 定价方案引用读面与草稿是同一个串（`planId@planVersion` 整串存、整串读），原样抄，不拆。口径节只抄记录上在场的：没登记口径的
+ * 历史行（口径节缺席）三类格都留空，由人填——本表单的载荷永远带口径，空着就是让服务端点名；税务分类、汇率缺键是口径说出的
+ * 真话（不适用、不涉外币），留空即「没有」，不凭空塞值。**体积系数不抄**：那是价卡内容，历史行上残留的
+ * historicalVolumetricFactor 原样留册、不参与计价，草稿里本来就没有这一格。
+ */
+export function pricePolicyDraftFromRecord(record: PricePolicyRecord): PricePolicyDraft {
+  const caliber = record.caliber;
+  return {
+    ...emptyPricePolicyDraft(),
+    objectId: record.objectId,
+    direction: record.direction,
+    pricingPlan: record.planRef,
+    planDirection: record.planDirection,
+    conversion: record.bindingConversion,
+    policyScope: record.policyScope,
+    taxDisposition: caliber?.taxDisposition ?? '',
+    taxClassification: caliber?.taxClassification ?? '',
+    fxQuoteType: caliber?.fx?.quoteType ?? '',
+    fxAsOfSemantics: caliber?.fx?.asOfSemantics ?? '',
+    fxAsOfPolicyVersion: caliber?.fx?.asOfPolicyVersion ?? '',
   };
 }
 

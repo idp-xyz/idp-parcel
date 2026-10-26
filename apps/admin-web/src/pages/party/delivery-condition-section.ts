@@ -10,6 +10,7 @@
 // **一节可缺**（照 acceptance-rule-package-form 的 sectionDeclared）：一格都没填即整节缺席——这一版没有交付条件，不声明；
 // 填了任一格整节原样送，空格照送由服务端逐格点名。不预开、不预选、不给任何方式的候选。
 
+import type { DeliveryConditionRecord } from './api';
 import type { DeliveryConditionPayload } from './publication-draft-api';
 
 /** 哪一册的正文格挂这一节：层由册定，合同层多 tightens 两格。 */
@@ -27,6 +28,24 @@ export interface DeliveryConditionDraft {
 
 export function emptyDeliveryConditionDraft(): DeliveryConditionDraft {
   return { methodsText: '', recipientScopeRule: '', proofOfDeliveryRule: '', tightensObjectId: '', tightensVersion: '' };
+}
+
+/**
+ * 「基于此版本发新版本」的预填（票 party-commercial-uiux/14）：把目录行上的交付条件还原成这一节的草稿，合同与产品表单共用
+ * 这一个还原。键缺席即这一版没有交付条件，还原成空草稿——这一节本来就可缺，空草稿组载荷时整节不进。方式集合还原成一行一项
+ * 的文本（组载荷时按行切回，见 methodLinesOf；方式是开放引用，不含换行）；两条规则引用与合同层所收紧的服务产品版本两格照抄。
+ * 声明时刻是登记册记下的，草稿里没有这一格。tightens 只在合同层在场，产品层的记录不带它；万一带了，也只躺在草稿里，
+ * 产品层不渲染、不送。
+ */
+export function deliveryConditionDraftFromRecord(record: DeliveryConditionRecord | undefined): DeliveryConditionDraft {
+  if (record === undefined) return emptyDeliveryConditionDraft();
+  return {
+    methodsText: record.methods.join('\n'),
+    recipientScopeRule: record.recipientScopeRule,
+    proofOfDeliveryRule: record.proofOfDeliveryRule,
+    tightensObjectId: record.tightens?.objectId ?? '',
+    tightensVersion: record.tightens?.version ?? '',
+  };
 }
 
 /** 多行文本 → 一项一串：按行切、去首尾空白、空行不是项。读一种输入格式，不裁门——重复的项与整张空由服务端答。 */

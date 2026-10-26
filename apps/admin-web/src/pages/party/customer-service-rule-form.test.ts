@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import { deepEqual, equal, ok } from 'node:assert/strict';
+import type { CustomerServiceRuleRecord } from './api';
 import {
+  customerServiceRuleDraftFromRecord,
   emptyClaimDeadlineDraft,
   emptyMinimumMaterialsDraft,
   emptyServiceRuleDraft,
@@ -297,4 +299,121 @@ test('只收紧提示只对挂合同的版本显', () => {
   equal(serviceRuleTightenOnlyNote('serviceProduct'), null);
   const note = serviceRuleTightenOnlyNote('customerContract');
   ok(note !== null && note.includes('只收紧') && note.includes('继承') && note.includes('不比对'));
+});
+
+const recordShell = {
+  objectId: 'SYN-CSR-01',
+  version: 'v1',
+  scope: 'SYN-SCOPE-01',
+  status: 'PUBLISHED',
+  effectiveStartsAt: '2026-01-01T00:00:00Z',
+  publishedAt: '2026-01-01T00:00:00Z',
+};
+
+// Covers: 票 party-commercial-uiux/14——基于此版本发新版本：对象标识、版本适用范围、适用对象（随服务产品）、责任方、正文适用范围
+// 与两张子表照抄（时长转文本、材料一行一项）；版本号与版本的生效区间留空，哪怕记录上有终止时刻。
+test('基于此版本预填：抄适用对象、责任方、正文范围与两张子表，留版本号与生效区间', () => {
+  const record: CustomerServiceRuleRecord = {
+    ...recordShell,
+    effectiveEndsAt: '2026-12-31T00:00:00Z',
+    contentRegistered: true,
+    content: {
+      serviceProduct: 'SYN-PRODUCT-01',
+      responsibleParty: 'operator-1',
+      scope: 'SYN-SCOPE-RULE',
+      registeredAt: '2026-01-01T00:00:00Z',
+      claimDeadlines: [
+        { kind: 'FIRST_CLAIM', startEvent: 'event-delivered', durationDays: 30, calendar: 'calendar-cn' },
+        { kind: 'CONCLUSION_REVIEW', startEvent: 'event-conclusion-notified', durationDays: 15, calendar: 'calendar-cn' },
+      ],
+      minimumMaterials: [{ claimKind: 'claim-loss', materials: ['material-photo', 'material-invoice'] }],
+    },
+  };
+  const draft = customerServiceRuleDraftFromRecord(record);
+  deepEqual(draft, {
+    ...emptyServiceRuleDraft(),
+    objectId: 'SYN-CSR-01',
+    scope: 'SYN-SCOPE-01',
+    appliesTo: 'serviceProduct',
+    appliesToId: 'SYN-PRODUCT-01',
+    responsible: 'operator-1',
+    ruleScope: 'SYN-SCOPE-RULE',
+    claimDeadlines: [
+      { kind: 'FIRST_CLAIM', startEvent: 'event-delivered', days: '30', calendar: 'calendar-cn' },
+      { kind: 'CONCLUSION_REVIEW', startEvent: 'event-conclusion-notified', days: '15', calendar: 'calendar-cn' },
+    ],
+    minimumMaterials: [{ claimKind: 'claim-loss', materials: 'material-photo\nmaterial-invoice' }],
+  });
+  equal(draft.version, '');
+  equal(draft.effectiveStartsAt, '');
+  equal(draft.effectiveEndsAt, '');
+
+  // 材料按行拼回的文本，经草稿 → 载荷那一步拆回的正是记录上的那一组。
+  const payload = serviceRulePayloadOf({ ...draft, version: 'v2', effectiveStartsAt: '2027-01-01T00:00' }, 'UTC');
+  deepEqual(payload.customerServiceRule?.minimumMaterials, [
+    { claimKind: 'claim-loss', materials: ['material-photo', 'material-invoice'] },
+  ]);
+  deepEqual(payload.customerServiceRule?.claimDeadlines, [
+    { kind: 'FIRST_CLAIM', startEvent: 'event-delivered', days: 30, calendar: 'calendar-cn' },
+    { kind: 'CONCLUSION_REVIEW', startEvent: 'event-conclusion-notified', days: 15, calendar: 'calendar-cn' },
+  ]);
+});
+
+// Covers: 票 party-commercial-uiux/14——适用对象二选一：记录上客户合同在场就选「随客户合同」；两键皆无或皆有（响应不合契约）
+// 不替人挑，留作未选而其余照抄；无行的子表还原成零行，不预开空行也不折成缺席。
+test('基于此版本预填：适用对象按在场的键定控件，两键皆无或皆有留作未选；空子表还原成零行', () => {
+  const body = {
+    responsibleParty: 'operator-1',
+    scope: 'SYN-SCOPE-RULE',
+    registeredAt: '2026-01-01T00:00:00Z',
+    claimDeadlines: [],
+    minimumMaterials: [{ claimKind: 'claim-loss', materials: ['material-photo'] }],
+  };
+  const contract = customerServiceRuleDraftFromRecord({
+    ...recordShell,
+    contentRegistered: true,
+    content: { ...body, customerContract: 'SYN-CONTRACT-01' },
+  });
+  equal(contract.appliesTo, 'customerContract');
+  equal(contract.appliesToId, 'SYN-CONTRACT-01');
+  deepEqual(contract.claimDeadlines, []);
+  deepEqual(contract.minimumMaterials, [{ claimKind: 'claim-loss', materials: 'material-photo' }]);
+
+  for (const content of [body, { ...body, serviceProduct: 'SYN-PRODUCT-01', customerContract: 'SYN-CONTRACT-01' }]) {
+    const unsure = customerServiceRuleDraftFromRecord({ ...recordShell, contentRegistered: true, content });
+    equal(unsure.appliesTo, '');
+    equal(unsure.appliesToId, '');
+    equal(unsure.responsible, 'operator-1');
+    equal(unsure.ruleScope, 'SYN-SCOPE-RULE');
+  }
+
+  const emptyTables = customerServiceRuleDraftFromRecord({
+    ...recordShell,
+    contentRegistered: true,
+    content: { ...body, serviceProduct: 'SYN-PRODUCT-01', minimumMaterials: [] },
+  });
+  deepEqual(emptyTables.claimDeadlines, []);
+  deepEqual(emptyTables.minimumMaterials, []);
+});
+
+// Covers: 票 party-commercial-uiux/14——读面上可缺的正文：contentRegistered 为假时（响应里没有 content 键）只还原壳那几格，
+// 适用对象未选、两张表零行；即便响应带了 content，是否在册也只认这个布尔。
+test('基于此版本预填：正文未登记只还原对象标识与版本适用范围', () => {
+  const expected = { ...emptyServiceRuleDraft(), objectId: 'SYN-CSR-01', scope: 'SYN-SCOPE-01' };
+  deepEqual(customerServiceRuleDraftFromRecord({ ...recordShell, contentRegistered: false }), expected);
+  deepEqual(
+    customerServiceRuleDraftFromRecord({
+      ...recordShell,
+      contentRegistered: false,
+      content: {
+        serviceProduct: 'SYN-PRODUCT-01',
+        responsibleParty: 'operator-1',
+        scope: 'SYN-SCOPE-RULE',
+        registeredAt: '2026-01-01T00:00:00Z',
+        claimDeadlines: [],
+        minimumMaterials: [],
+      },
+    }),
+    expected,
+  );
 });

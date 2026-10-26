@@ -6,6 +6,7 @@ import { creditRatioBaseLabels } from './presentation';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
 import { listGroupLegalEntities } from './api';
+import type { NewVersionStart } from './new-version';
 import { Field, Problems, ReferencePicker, VocabularySelect, fieldLabel, useLoaded } from './PublicationFormFields';
 import { WallTimeField, legalEntityPickerOptions } from './party-registration-fields';
 import {
@@ -27,8 +28,15 @@ import {
  * 由服务端点名 `creditPolicy.ratioBase`。表单不算摘要、不收也不送批准人、不裁任何门；本表单只管发布，
  * 基数怎么折成额度是 SA 的事，不在这里替它算（票面「硬句」）。
  */
-export function CreditPolicyPublicationForm({ onPublished }: { onPublished?: () => void }) {
-  const [draft, setDraft] = useState<CreditPolicyDraft>(emptyCreditPolicyDraft());
+export function CreditPolicyPublicationForm({
+  onPublished,
+  start,
+}: {
+  onPublished?: () => void;
+  /** 基于目录里某一版预填（票 party-commercial-uiux/14）；换一次预填由页面换 key 重建本表单。 */
+  start?: NewVersionStart<CreditPolicyDraft>;
+}) {
+  const [draft, setDraft] = useState<CreditPolicyDraft>(start?.draft ?? emptyCreditPolicyDraft());
   const patch = (change: Partial<CreditPolicyDraft>) => setDraft((current) => ({ ...current, ...change }));
   // 基数的封闭集只从服务端词表读口取（票 20，`kind=CREDIT_POLICY` 的 `ratioBase` 一集）；本表单不内置 POSTED_BALANCE /
   // PRIOR_PERIOD_CONFIRMED_CHARGES，内置一份就是同一封闭集的第二份写法（票 20 立票理由）。
@@ -45,6 +53,8 @@ export function CreditPolicyPublicationForm({ onPublished }: { onPublished?: () 
       localProblems={creditPolicyLocalProblems(draft, timeZone)}
       fieldPaths={creditPolicyFieldPaths}
       onPublished={onPublished}
+      prefilledFrom={start?.from}
+      prefilledCaution={start?.caution}
     >
       {(form) => (
         <CreditPolicyFields

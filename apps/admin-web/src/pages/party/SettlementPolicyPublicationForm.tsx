@@ -8,6 +8,7 @@ import {
   listCustomerContracts,
   listGroupLegalEntities,
 } from './api';
+import type { NewVersionStart } from './new-version';
 import { settlementMethodLabels } from './presentation';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
@@ -58,12 +59,14 @@ import {
 export interface SettlementPolicyPublicationFormProps {
   /** 载体到达「发布」那一步时回调，政策页借它切到结算政策册并重读。 */
   onPublished?: () => void;
+  /** 基于目录里某一版预填（票 party-commercial-uiux/14）；换一次预填由页面换 key 重建本表单。 */
+  start?: NewVersionStart<SettlementPolicyDraft>;
 }
 
 const kind = 'SETTLEMENT_POLICY';
 
-export function SettlementPolicyPublicationForm({ onPublished }: SettlementPolicyPublicationFormProps) {
-  const [draft, setDraft] = useState<SettlementPolicyDraft>(emptySettlementPolicyDraft());
+export function SettlementPolicyPublicationForm({ onPublished, start }: SettlementPolicyPublicationFormProps) {
+  const [draft, setDraft] = useState<SettlementPolicyDraft>(start?.draft ?? emptySettlementPolicyDraft());
   const patch = (change: Partial<SettlementPolicyDraft>) => setDraft((current) => ({ ...current, ...change }));
   // 结算方式的封闭集只从服务端词表读口取（票 20，`kind=SETTLEMENT_POLICY` 的 `method` 一集）；本表单不内置 PREPAID / TERMS，
   // 内置一份就是同一封闭集的第二份写法（票 20 立票理由）。
@@ -80,6 +83,8 @@ export function SettlementPolicyPublicationForm({ onPublished }: SettlementPolic
       localProblems={settlementPolicyLocalProblems(draft, timeZone)}
       fieldPaths={settlementPolicyFieldPaths}
       onPublished={onPublished}
+      prefilledFrom={start?.from}
+      prefilledCaution={start?.caution}
     >
       {({ problems, locked }: PublicationFormContext) => (
         <div className="flex flex-col gap-5">

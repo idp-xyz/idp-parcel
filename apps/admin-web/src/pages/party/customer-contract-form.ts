@@ -13,6 +13,7 @@
 
 import {
   deliveryConditionDeclared,
+  deliveryConditionDraftFromRecord,
   deliveryConditionFieldPaths,
   deliveryConditionPayloadOf,
   deliveryConditionRenderedPaths,
@@ -20,6 +21,7 @@ import {
   type DeliveryConditionDraft,
 } from './delivery-condition-section';
 import { currentDisplayTimeZone } from '../moment';
+import type { ControlBindingRecord, CustomerContractRecord } from './api';
 import type {
   CommercialPublicationPayload,
   ControlBindingPayload,
@@ -80,6 +82,43 @@ export function emptyCustomerContractDraft(): CustomerContractDraft {
     controlRequirement: '',
     controlNotApplicableBasis: '',
     deliveryConditions: emptyDeliveryConditionDraft(),
+  };
+}
+
+// 约定行还原：模式由记录上在场的是哪一格决定，与 bindingPayloadOf 反着对应。记录上恰在场一格才选模式；两格都缺或
+// 两格都在（响应不合「恰一」）就不替人挑，留「未选」，只抄费用范围——抄了任一格的值而模式未选，那个值在页面上看不见，
+// 人也就看不出它为何没送。
+function bindingDraftFromRecord(binding: ControlBindingRecord): ControlBindingDraft {
+  const row: ControlBindingDraft = { ...emptyBindingDraft(), chargeScope: binding.chargeScope };
+  if (binding.policyId !== undefined && binding.inapplicabilityBasis === undefined) {
+    return { ...row, mode: 'policy', policy: binding.policyId };
+  }
+  if (binding.inapplicabilityBasis !== undefined && binding.policyId === undefined) {
+    return { ...row, mode: 'inapplicable', inapplicabilityBasis: binding.inapplicabilityBasis };
+  }
+  return row;
+}
+
+/**
+ * 「基于此版本发新版本」的预填（票 party-commercial-uiux/14）：同一份合同，对象标识与版本信息里的适用范围照抄；正文只在记录
+ * 登记过正文时才抄——接单规则包与按费用范围的约定行；合同层交付条件与正文各自可缺，不看 `contentRegistered`，键在场就还原。
+ * 没抄的：版本号与生效区间一律留空（版本号要人起，抄上一版的区间会让新旧两版重叠、解析时答「适用冲突」）；货主客户账户
+ * 读面没有，合同级「要不要接受前财务控制」的声明也不在合同目录行上（它在接受前财务控制册，按合同版本另记），都留空由人填。
+ * 约定行为零（含未登记正文）时照空草稿预开一行等人填；那一行不填就送，服务端会点名它，不会悄悄发出去。
+ */
+export function customerContractDraftFromRecord(record: CustomerContractRecord): CustomerContractDraft {
+  const base = emptyCustomerContractDraft();
+  const shell = {
+    ...base,
+    objectId: record.objectId,
+    scope: record.scope,
+    deliveryConditions: deliveryConditionDraftFromRecord(record.deliveryConditions),
+  };
+  if (!record.contentRegistered) return shell;
+  return {
+    ...shell,
+    rulePackage: record.rulePackageId ?? '',
+    bindings: record.bindings.length > 0 ? record.bindings.map(bindingDraftFromRecord) : base.bindings,
   };
 }
 

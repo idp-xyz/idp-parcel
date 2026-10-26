@@ -1,8 +1,10 @@
 import { test } from 'node:test';
 import { deepEqual, equal, ok } from 'node:assert/strict';
+import type { SupplierAgreementRecord } from './api';
 import {
   emptySupplierAgreementDraft,
   planReferenceOf,
+  supplierAgreementDraftFromRecord,
   supplierAgreementFieldPaths,
   supplierAgreementLocalProblems,
   supplierAgreementPayloadOf,
@@ -128,4 +130,96 @@ test('空草稿十一格全空', () => {
   const draft = emptySupplierAgreementDraft();
   equal(Object.keys(draft).length, 11);
   for (const [key, value] of Object.entries(draft)) equal(value, '', `${key} 不为空`);
+});
+
+// 目录里一版供应商协议的读面行：必填字段写全，正文各键由各用例按需加。
+function agreementRecord(over: Partial<SupplierAgreementRecord> = {}): SupplierAgreementRecord {
+  return {
+    objectId: 'SYN-SUPPLIER-TRUNK-CN-SG-01',
+    version: 'v2',
+    scope: 'SYN-SCOPE-01',
+    status: 'PUBLISHED',
+    effectiveStartsAt: '2026-01-01T00:00:00Z',
+    effectiveEndsAt: '2026-12-31T00:00:00Z',
+    publishedAt: '2026-01-01T00:00:00Z',
+    contentRegistered: true,
+    supplier: 'supplier-1',
+    legalEntity: 'legal-1',
+    purchasePlan: 'plan-buy-1@v3',
+    agreementScope: 'scope-procurement',
+    agreementEffectiveStartsAt: '2026-01-01T00:00:00Z',
+    agreementEffectiveEndsAt: '2026-12-31T00:00:00Z',
+    registeredAt: '2026-01-01T00:00:00Z',
+    ...over,
+  };
+}
+
+// Covers: 票 party-commercial-uiux/14——基于此版本发新版本：对象标识、版本适用范围，以及正文里的供应商、责任法人、采购方案、协议
+// 适用范围照抄；版本号、版本区间、协议区间一律留空（抄上一版的区间会让新旧两版重叠，解析时答「适用冲突」）。
+test('基于此版本预填：抄对象、两层适用范围与三个引用，留版本号与两对区间', () => {
+  deepEqual(supplierAgreementDraftFromRecord(agreementRecord()), {
+    ...emptySupplierAgreementDraft(),
+    objectId: 'SYN-SUPPLIER-TRUNK-CN-SG-01',
+    scope: 'SYN-SCOPE-01',
+    supplier: 'supplier-1',
+    legalEntity: 'legal-1',
+    agreementScope: 'scope-procurement',
+    purchasePlan: 'plan-buy-1@v3',
+  });
+});
+
+// Covers: 票 party-commercial-uiux/14——还原是组载荷的反向：人补上版本号与区间后，载荷正文里的供应商、法人、方案与协议范围
+// 与记录所读一致。
+test('基于此版本预填：人补齐留空的格后，载荷正文与记录一致', () => {
+  const payload = supplierAgreementPayloadOf(
+    {
+      ...supplierAgreementDraftFromRecord(agreementRecord()),
+      version: 'v3',
+      effectiveStartsAt: '2027-01-01T00:00',
+      agreementEffectiveStartsAt: '2027-01-01T00:00',
+    },
+    'Asia/Shanghai',
+  );
+  deepEqual(payload.supplierAgreement, {
+    supplier: 'supplier-1',
+    legalEntity: 'legal-1',
+    scope: 'scope-procurement',
+    purchasePlan: 'plan-buy-1@v3',
+    effectiveStartsAt: '2026-12-31T16:00:00Z',
+  });
+  equal(payload.scope, 'SYN-SCOPE-01');
+  ok(!('effectiveEndsAt' in payload), '上一版的止点没有被带过来');
+});
+
+// Covers: 票 party-commercial-uiux/14——contentRegistered 为假时正文各键缺席：只抄对象标识与版本适用范围，正文各格留空，
+// 不拿记录上残留的键硬塞，也不崩。
+test('基于此版本预填：未登记正文时只抄对象标识与版本适用范围', () => {
+  deepEqual(
+    supplierAgreementDraftFromRecord(
+      agreementRecord({
+        contentRegistered: false,
+        supplier: undefined,
+        legalEntity: undefined,
+        purchasePlan: undefined,
+        agreementScope: undefined,
+        agreementEffectiveStartsAt: undefined,
+        agreementEffectiveEndsAt: undefined,
+        registeredAt: undefined,
+      }),
+    ),
+    { ...emptySupplierAgreementDraft(), objectId: 'SYN-SUPPLIER-TRUNK-CN-SG-01', scope: 'SYN-SCOPE-01' },
+  );
+  // 布尔为假时即便记录上带着正文键（响应不合契约）也不抄：先看布尔，不拿键的有无去推。
+  const stale = supplierAgreementDraftFromRecord(agreementRecord({ contentRegistered: false }));
+  equal(stale.supplier, '');
+  equal(stale.purchasePlan, '');
+});
+
+// Covers: 票 party-commercial-uiux/14——登记了正文但某个可缺的键缺席时不崩也不硬塞：缺的那一格空着，其余照抄。
+test('基于此版本预填：正文里个别键缺席时，缺的格留空、其余照抄', () => {
+  const draft = supplierAgreementDraftFromRecord(agreementRecord({ purchasePlan: undefined, agreementScope: undefined }));
+  equal(draft.purchasePlan, '');
+  equal(draft.agreementScope, '');
+  equal(draft.supplier, 'supplier-1');
+  equal(draft.legalEntity, 'legal-1');
 });

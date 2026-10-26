@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
+import type { DeliveryConditionRecord } from './api';
 import {
   deliveryConditionDeclared,
+  deliveryConditionDraftFromRecord,
   deliveryConditionFieldPaths,
   deliveryConditionPayloadOf,
   deliveryConditionRenderedPaths,
@@ -79,4 +81,39 @@ test('认领路径随方式行数与层长；渲染表与认领表一致', () =>
   const sorted = (paths: string[]) => [...paths].sort();
   deepEqual(sorted(deliveryConditionRenderedPaths(root, draft, 'product')), sorted(deliveryConditionFieldPaths(root, draft, 'product')));
   deepEqual(sorted(deliveryConditionRenderedPaths(contractRoot, draft, 'contract')), sorted(deliveryConditionFieldPaths(contractRoot, draft, 'contract')));
+});
+
+// Covers: 票 party-commercial-uiux/14——基于此版本发新版本：目录行上的交付条件还原成这一节的草稿，合同与产品两张表单共用。
+// 方式集合还原成一行一项的文本，两条规则引用与合同层所收紧的产品版本照抄，声明时刻不进草稿；键缺席即空草稿（这一版没有交付条件）。
+test('目录行的交付条件还原成这一节的草稿：方式一行一项、规则引用与 tightens 照抄、键缺席即空草稿', () => {
+  const record: DeliveryConditionRecord = {
+    tightens: { objectId: 'SYN-PROD-01', version: 'v2' },
+    methods: ['METHOD/safe-drop', 'METHOD/in-person'],
+    recipientScopeRule: 'RULE/recipient-scope-1',
+    proofOfDeliveryRule: 'RULE/proof-1',
+    declaredAt: '2026-01-01T00:00:00Z',
+  };
+  const restored = deliveryConditionDraftFromRecord(record);
+  deepEqual(restored, {
+    methodsText: 'METHOD/safe-drop\nMETHOD/in-person',
+    recipientScopeRule: 'RULE/recipient-scope-1',
+    proofOfDeliveryRule: 'RULE/proof-1',
+    tightensObjectId: 'SYN-PROD-01',
+    tightensVersion: 'v2',
+  });
+  // 还原的反向就是组载荷：同一份记录经草稿再组出来，方式的集合与顺序、两条规则引用、tightens 都与记录一致。
+  deepEqual(deliveryConditionPayloadOf(restored, 'contract'), {
+    methods: record.methods,
+    recipientScopeRule: record.recipientScopeRule,
+    proofOfDeliveryRule: record.proofOfDeliveryRule,
+    tightens: record.tightens,
+  });
+
+  // 产品层的记录没有 tightens 键：两格空着；方式为空数组还原成空文本，不凭空造一项。
+  const product = deliveryConditionDraftFromRecord({ ...record, tightens: undefined, methods: [] });
+  deepEqual(product, { ...emptyDeliveryConditionDraft(), recipientScopeRule: 'RULE/recipient-scope-1', proofOfDeliveryRule: 'RULE/proof-1' });
+  deepEqual(deliveryConditionPayloadOf(product, 'product').methods, []);
+
+  deepEqual(deliveryConditionDraftFromRecord(undefined), emptyDeliveryConditionDraft());
+  equal(deliveryConditionDeclared(deliveryConditionDraftFromRecord(undefined), 'contract'), false, '空草稿不声明，整节不进载荷');
 });

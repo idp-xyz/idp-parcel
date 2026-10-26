@@ -7,6 +7,9 @@ import type { ApiResult } from '../catalogue-api';
 import { catalogueConditionsNarrow } from '../catalogue-query';
 import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { CustomerContractPublicationForm } from './CustomerContractPublicationForm';
+import { nextRequest, newVersionFrom, type NewVersionRequest } from './new-version';
+import { withNewVersionAction } from './NewVersionAction';
+import { customerContractDraftFromRecord } from './customer-contract-form';
 import { KeepAliveTabs, KeepAliveTabsContent } from './keep-alive-tabs';
 import { VersionStatusChips } from './VersionStatusChips';
 import {
@@ -149,7 +152,14 @@ function ControlBindings({ row }: { row: CustomerContractRecord }) {
  * 查阅面本身不设动作；发布走本页「发布合同版本」签（票 admin-write-faces/10），那一签的载体到达发布那一步时
  * 由页面把 `publishedKey` 拨一格，本表随之重读——结果在同页目录（含绑定列）立刻可见。
  */
-function CustomerContractsTable({ publishedKey }: { publishedKey: number }) {
+function CustomerContractsTable({
+  publishedKey,
+  onStartNewVersion,
+}: {
+  publishedKey: number;
+  /** 点行上的「发新版本」：把这一版带去发布签预填（票 party-commercial-uiux/14）。 */
+  onStartNewVersion: (record: CustomerContractRecord) => void;
+}) {
   // 检索词在地址里（`?q=`）：别处的引用链接带着它过来，筛到那一条。与客户账户签共用同一个检索词——它们在一页上。
   const [statusFilter, setStatusFilter] = useState<VersionStatusFilter>('all');
   const [search, setSearch] = useAddressKeyword();
@@ -212,7 +222,10 @@ function CustomerContractsTable({ publishedKey }: { publishedKey: number }) {
         ) : undefined
       }
       emptyRowsNote="这组条件下没有匹配的合同版本"
-      columns={columns}
+      columns={withNewVersionAction(columns, {
+        labelOf: (row) => `客户合同 ${row.objectId} ${row.version}`,
+        onStart: onStartNewVersion,
+      })}
       rows={visibleContracts}
       rowKey={(row) => `${row.objectId}@${row.version}`}
       viewState={catalogueViewState(answer, contracts.length, retry, {
@@ -356,9 +369,16 @@ function CustomerAccountsTable() {
 export function PartyContractsPage() {
   // 发布签的载体到达「发布」那一步时拨一格，合同表随之重读（含绑定列）。
   const [publishedKey, setPublishedKey] = useState(0);
+  // 点合同行上的「发新版本」：记下是哪一版，切到发布签；发布表单据此预填并重建（票 party-commercial-uiux/14）。
+  const [tab, setTab] = useState('contracts');
+  const [request, setRequest] = useState<NewVersionRequest<CustomerContractRecord> | null>(null);
+  const startNewVersion = (record: CustomerContractRecord) => {
+    setRequest((previous) => nextRequest(previous, record));
+    setTab('publish-contract');
+  };
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <KeepAliveTabs defaultValue="contracts" className="flex-1 flex flex-col overflow-hidden gap-0">
+      <KeepAliveTabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="contracts">客户合同</TabsTrigger>
           <TabsTrigger value="publish-contract">发布合同版本</TabsTrigger>
@@ -369,13 +389,25 @@ export function PartyContractsPage() {
           value="contracts"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
-          <CustomerContractsTable publishedKey={publishedKey} />
+          <CustomerContractsTable publishedKey={publishedKey} onStartNewVersion={startNewVersion} />
         </KeepAliveTabsContent>
         <KeepAliveTabsContent
           value="publish-contract"
           className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
         >
-          <CustomerContractPublicationForm onPublished={() => setPublishedKey((value) => value + 1)} />
+          <CustomerContractPublicationForm
+            // 同一版再发起一次、或换一版，表单整个重建，不留上一次的预览与草稿。
+            key={request?.token ?? 0}
+            onPublished={() => setPublishedKey((value) => value + 1)}
+            start={
+              request
+                ? {
+                    draft: customerContractDraftFromRecord(request.source),
+                    from: newVersionFrom('客户合同', request.source.objectId, request.source.version),
+                  }
+                : undefined
+            }
+          />
         </KeepAliveTabsContent>
         <KeepAliveTabsContent
           value="accounts"

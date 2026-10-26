@@ -13,6 +13,7 @@
 // 枚举；VE 那侧的两本册（通知义务、索赔类型覆盖）与本册正文归谁未裁（pc-gaps/05），这里只发布 PC 这一侧的正文。
 
 import { currentDisplayTimeZone } from '../moment';
+import type { CustomerServiceRuleRecord } from './api';
 import { integerOf, integerProblem, wallMomentOf, wallMomentProblem } from './publication-form-shared';
 import type {
   ClaimDeadlineRulePayload,
@@ -114,6 +115,48 @@ export function emptyServiceRuleDraft(): ServiceRuleDraft {
     claimDeadlines: [],
     minimumMaterials: [],
   };
+}
+
+/**
+ * 「基于此版本发新版本」的预填（票 party-commercial-uiux/14）：同一个规则对象，版本适用范围，以及正文（适用对象、责任方、
+ * 正文适用范围、两张子表）照抄；版本号与版本的生效区间一律留空——版本号要人起，抄上一版的区间会让新旧两版区间重叠、
+ * 解析时答「适用冲突」。
+ *
+ * 正文是否在册只认 `contentRegistered`：为假时目录行没有正文，只还原壳那几格，适用对象留作未选、两张表零行。适用对象
+ * 只在记录上服务产品与客户合同恰一在场时还原，控件取值只看在场的那一键、不从标识的形状去猜；两键皆无或皆有是响应
+ * 不合契约，不替人挑，留作未选。材料清单草稿是一行一项的多行文本，记录上的材料各是一条引用，按行拼回即可靠地拆回同
+ * 一组。两张表在记录上一律在场，无行（空数组）还原成零行，不预开空行。
+ */
+export function customerServiceRuleDraftFromRecord(record: CustomerServiceRuleRecord): ServiceRuleDraft {
+  const draft: ServiceRuleDraft = {
+    ...emptyServiceRuleDraft(),
+    objectId: record.objectId,
+    scope: record.scope,
+  };
+  const content = record.contentRegistered ? record.content : undefined;
+  if (content === undefined) return draft;
+  const product = content.serviceProduct ?? '';
+  const contract = content.customerContract ?? '';
+  if (product !== '' && contract === '') {
+    draft.appliesTo = 'serviceProduct';
+    draft.appliesToId = product;
+  } else if (contract !== '' && product === '') {
+    draft.appliesTo = 'customerContract';
+    draft.appliesToId = contract;
+  }
+  draft.responsible = content.responsibleParty;
+  draft.ruleScope = content.scope;
+  draft.claimDeadlines = content.claimDeadlines.map((row) => ({
+    kind: row.kind,
+    startEvent: row.startEvent,
+    days: String(row.durationDays),
+    calendar: row.calendar,
+  }));
+  draft.minimumMaterials = content.minimumMaterials.map((row) => ({
+    claimKind: row.claimKind,
+    materials: row.materials.join('\n'),
+  }));
+  return draft;
 }
 
 const bodyPath = 'customerServiceRule';

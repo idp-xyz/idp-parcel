@@ -8,6 +8,7 @@
 // 编不进 JSON 整数的文本——那不是替服务端判断，是根本组不出那份载荷。空字段、区间先后、引用是否在册一律
 // 送上去让服务端逐格点名。
 
+import type { CreditPolicyRecord } from './api';
 import type { CommercialPublicationPayload, CreditPolicyBodyPayload, VocabularySetRecord } from './publication-draft-api';
 import { currentDisplayTimeZone } from '../moment';
 import { integerOf, integerProblem, wallMomentOf, wallMomentProblem } from './publication-form-shared';
@@ -50,6 +51,24 @@ export function emptyCreditPolicyDraft(): CreditPolicyDraft {
     ratioBase: '',
     bodyEffectiveStartsAt: '',
     bodyEffectiveEndsAt: '',
+  };
+}
+
+/**
+ * 「基于此版本发新版本」的预填（票 party-commercial-uiux/14）：同一个政策对象，责任法人、授权层级、费用类型、额度与基数照抄；
+ * 版本号、版本的适用范围（读面没有）、两对生效区间一律留空。额度只抄记录上在场的那一格，两格都缺（响应不合契约）就都空着，
+ * 不替人挑。
+ */
+export function creditPolicyDraftFromRecord(record: CreditPolicyRecord): CreditPolicyDraft {
+  return {
+    ...emptyCreditPolicyDraft(),
+    objectId: record.objectId,
+    legalEntity: record.legalEntity,
+    authorityLevel: record.authorityLevel,
+    chargeType: record.chargeType,
+    limitMinor: record.limitMinor === undefined ? '' : String(record.limitMinor),
+    limitRatioBasisPoints: record.limitRatioBasisPoints === undefined ? '' : String(record.limitRatioBasisPoints),
+    ratioBase: record.ratioBase ?? '',
   };
 }
 

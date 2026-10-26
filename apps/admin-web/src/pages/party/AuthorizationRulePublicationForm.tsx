@@ -5,6 +5,7 @@ import type { ApiResult } from '../catalogue-api';
 import { currentDisplayTimeZone } from '../moment';
 import { cancellationPartyLabels } from './presentation';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
+import type { NewVersionStart } from './new-version';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
 import { Field, Problems, RowFrame, selectClass, useLoaded } from './PublicationFormFields';
 import { WallTimeField } from './party-registration-fields';
@@ -36,12 +37,14 @@ import {
 export interface AuthorizationRulePublicationFormProps {
   /** 载体到达「发布」那一步时回调，页面借它刷同页目录读面（取消授权按请求方逐格上列）。 */
   onPublished?: () => void;
+  /** 基于目录里某一版预填（票 party-commercial-uiux/14）；换一次预填由页面换 key 重建本表单。 */
+  start?: NewVersionStart<AuthorizationRuleDraft>;
 }
 
 const sectionTitle = 'text-[13px] font-medium text-idpxyz-text';
 
-export function AuthorizationRulePublicationForm({ onPublished }: AuthorizationRulePublicationFormProps) {
-  const [draft, setDraft] = useState<AuthorizationRuleDraft>(emptyAuthorizationRuleDraft());
+export function AuthorizationRulePublicationForm({ onPublished, start }: AuthorizationRulePublicationFormProps) {
+  const [draft, setDraft] = useState<AuthorizationRuleDraft>(start?.draft ?? emptyAuthorizationRuleDraft());
   const parties = usePartyOptions();
 
   const patch = (change: Partial<AuthorizationRuleDraft>) => setDraft((current) => ({ ...current, ...change }));
@@ -58,6 +61,8 @@ export function AuthorizationRulePublicationForm({ onPublished }: AuthorizationR
       localProblems={authorizationRuleLocalProblems(draft, timeZone)}
       fieldPaths={authorizationRuleFieldPaths(draft)}
       onPublished={onPublished}
+      prefilledFrom={start?.from}
+      prefilledCaution={start?.caution}
     >
       {(form) => (
         <div className="flex flex-col gap-5">
@@ -223,10 +228,14 @@ function PartyPicker({
   locked: boolean;
   onChange: (party: string) => void;
 }) {
+  // 预填来的请求方原词不一定还在词表上：选单里没有它的项，受控值就被浏览器显成「未选」，草稿里却仍带着它。所以草稿
+  // 持有的值无论读不读得到词表，都在选单里留一项原样示出，不让显示出来的与要送的内容分叉。
   if (parties.kind === 'options') {
+    const known = parties.options.some((option) => option.value === value);
     return (
       <select className={selectClass} value={value} disabled={locked} onChange={(event) => onChange(event.target.value)}>
         <option value="">未选</option>
+        {!known && value !== '' ? <option value={value}>{value}（不在可选项里）</option> : null}
         {parties.options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
@@ -237,7 +246,8 @@ function PartyPicker({
   }
   return (
     <>
-      <select className={selectClass} value="" disabled>
+      <select className={selectClass} value={value} disabled>
+        {value !== '' ? <option value={value}>{value}</option> : null}
         <option value="">
           {parties.kind === 'loading'
             ? '正在读取可选项…'

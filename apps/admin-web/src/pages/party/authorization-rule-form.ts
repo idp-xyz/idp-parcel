@@ -8,6 +8,7 @@
 import { isOperatorRefusal, type OperatorRefusal } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
 import { currentDisplayTimeZone } from '../moment';
+import type { AuthorizationRuleRecord } from './api';
 import {
   vocabularyOptions,
   type CommercialPublicationPayload,
@@ -43,6 +44,25 @@ export function emptyAuthorizationRuleDraft(): AuthorizationRuleDraft {
     effectiveStartsAt: '',
     effectiveEndsAt: '',
     rows: [emptyCancellationRowDraft()],
+  };
+}
+
+/**
+ * 「基于此版本发新版本」的预填（票 party-commercial-uiux/14）：同一个规则对象，适用范围与取消授权目录的每一行
+ * （请求方 × 规则引用）按目录原序照抄；版本号与两个生效区间的格一律留空——版本号要人起，抄上一版的区间会让新旧两版重叠。
+ * 记录上没有目录行（未声明目录，或响应里一行都没有）时不凭空造行，保留空草稿那一行空行让人填：目录至少要有一行，
+ * 填什么不是这里能替人定的。
+ */
+export function authorizationRuleDraftFromRecord(record: AuthorizationRuleRecord): AuthorizationRuleDraft {
+  const rows: CancellationRowDraft[] = record.cancellationAuthorities.map((authority) => ({
+    party: authority.party,
+    rule: authority.ruleReference,
+  }));
+  return {
+    ...emptyAuthorizationRuleDraft(),
+    objectId: record.objectId,
+    scope: record.scope,
+    ...(rows.length > 0 ? { rows } : {}),
   };
 }
 

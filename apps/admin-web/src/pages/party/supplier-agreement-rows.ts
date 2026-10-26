@@ -16,6 +16,8 @@ export interface SupplierAgreementRow {
   refs: RowRefs;
   /** 版本排列与「在用」筛选用的几项（票 party-commercial-uiux/08）。 */
   version: VersionFacts;
+  /** 这一行对应的读口记录；「发新版本」要从它还原发布表单的草稿（票 party-commercial-uiux/14）。 */
+  source: SupplierAgreementRecord;
 }
 
 function col(id: string, header: string, mono = false): ListColumn<SupplierAgreementRow> {
@@ -90,6 +92,7 @@ function bodyValues(record: SupplierAgreementRecord): Record<string, string> {
 export function supplierAgreementRowsOf(body: SupplierAgreementListResponseBody): SupplierAgreementRow[] {
   return body.agreements.map((record) => ({
     key: `${record.objectId}@${record.version}`,
+    source: record,
     version: {
       objectId: record.objectId,
       version: record.version,

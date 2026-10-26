@@ -5,6 +5,7 @@ import { currentDisplayTimeZone } from '../moment';
 import { controlFailureDispositionLabels, controlKindLabels, jointPassConditionLabels } from './presentation';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
+import type { NewVersionStart } from './new-version';
 import { Field, ProblemText, VocabularySelect, useLoaded } from './PublicationFormFields';
 import { WallTimeField } from './party-registration-fields';
 import { fieldProblemText } from './field-problem-text';
@@ -44,6 +45,8 @@ import {
 export interface PreAcceptanceFinancialControlPolicyPublicationFormProps {
   /** 载体到达「发布」那一步时回调，政策页借它切到接受前财务控制策略册并重读。 */
   onPublished?: () => void;
+  /** 基于目录里某一版预填（票 party-commercial-uiux/14）；换一次预填由页面换 key 重建本表单。 */
+  start?: NewVersionStart<ControlPolicyDraft>;
 }
 
 const bodyPath = 'preAcceptanceFinancialControlPolicy';
@@ -51,8 +54,9 @@ const kind = 'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY';
 
 export function PreAcceptanceFinancialControlPolicyPublicationForm({
   onPublished,
+  start,
 }: PreAcceptanceFinancialControlPolicyPublicationFormProps) {
-  const [draft, setDraft] = useState<ControlPolicyDraft>(emptyControlPolicyDraft());
+  const [draft, setDraft] = useState<ControlPolicyDraft>(start?.draft ?? emptyControlPolicyDraft());
   const patch = (change: Partial<ControlPolicyDraft>) => setDraft((current) => ({ ...current, ...change }));
   const patchRow = (index: number, change: Partial<ControlItemDraft>) =>
     setDraft((current) => withControlRowPatched(current, index, change));
@@ -72,6 +76,8 @@ export function PreAcceptanceFinancialControlPolicyPublicationForm({
       localProblems={controlPolicyLocalProblems(draft, timeZone)}
       fieldPaths={controlPolicyFieldPaths(draft)}
       onPublished={onPublished}
+      prefilledFrom={start?.from}
+      prefilledCaution={start?.caution}
     >
       {({ problems, locked }: PublicationFormContext) => (
         <div className="flex flex-col gap-5">

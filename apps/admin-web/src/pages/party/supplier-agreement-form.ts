@@ -6,6 +6,7 @@
 // 让服务端答——预览口逐格 problems 回来挂到对应格旁；这里连「必填」都不拦，免得两处口径。
 
 import { currentDisplayTimeZone } from '../moment';
+import type { SupplierAgreementRecord } from './api';
 import type { CommercialPublicationPayload, SupplierAgreementBodyPayload } from './publication-draft-api';
 import { planReferenceOf, wallMomentOf, wallMomentProblem } from './publication-form-shared';
 
@@ -44,6 +45,24 @@ export function emptySupplierAgreementDraft(): SupplierAgreementDraft {
     purchasePlan: '',
     agreementEffectiveStartsAt: '',
     agreementEffectiveEndsAt: '',
+  };
+}
+
+/**
+ * 「基于此版本发新版本」的预填（票 party-commercial-uiux/14）：同一份协议，对象标识与**版本**的适用范围照抄；正文里的供应商、
+ * 责任法人、采购方案与**协议**的适用范围，在记录登记过正文（`contentRegistered`）时照抄——先看布尔，不拿正文键的有无去推。
+ * 没抄的：版本号、版本的有效区间、协议的有效区间一律留空（版本号要人起，抄上一版的区间会让新旧两版重叠、解析时答
+ * 「适用冲突」）。未登记正文时正文各格缺席，留空由人填。
+ */
+export function supplierAgreementDraftFromRecord(record: SupplierAgreementRecord): SupplierAgreementDraft {
+  const shell = { ...emptySupplierAgreementDraft(), objectId: record.objectId, scope: record.scope };
+  if (!record.contentRegistered) return shell;
+  return {
+    ...shell,
+    supplier: record.supplier ?? '',
+    legalEntity: record.legalEntity ?? '',
+    agreementScope: record.agreementScope ?? '',
+    purchasePlan: record.purchasePlan ?? '',
   };
 }
 

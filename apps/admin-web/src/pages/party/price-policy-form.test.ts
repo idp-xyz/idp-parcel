@@ -5,6 +5,7 @@ import {
   emptyPricePolicyDraft,
   planBindingConversionOptions,
   priceDirectionOptions,
+  pricePolicyDraftFromRecord,
   pricePolicyFieldPaths,
   pricePolicyLocalProblems,
   pricePolicyPayloadOf,
@@ -13,6 +14,7 @@ import {
   withShellCopiedIntoPolicy,
   type PricePolicyDraft,
 } from './price-policy-form';
+import type { PricePolicyRecord } from './api';
 
 // 票 admin-write-faces/14：价格规则逐字段表单的纯逻辑。钉的是「草稿 → 载荷」这一步与它对公共半边（publication-draft-flow）
 // 的两个承诺：载荷形状逐格镜像 Go 的 CommercialPublicationPayload.pricePolicy（含口径节），表单认领的 JSON 路径覆盖它自己
@@ -199,4 +201,108 @@ test('空草稿十七格全空', () => {
   const draft = emptyPricePolicyDraft();
   equal(Object.keys(draft).length, 17);
   for (const [key, value] of Object.entries(draft)) equal(value, '', `${key} 不为空`);
+});
+
+function priceRecord(over: Partial<PricePolicyRecord> = {}): PricePolicyRecord {
+  return {
+    objectId: 'SYN-PRICE-RULE-CN-SG',
+    version: 'v2',
+    direction: 'SELL',
+    planRef: 'PLAN-CN-SG-SELL@v1',
+    planDirection: 'BUY',
+    bindingConversion: 'FROZEN_BUY_EVALUATION',
+    policyScope: 'pricing-scope-1',
+    effectiveStartsAt: '2026-10-01T00:00:00Z',
+    effectiveEndsAt: '2027-01-01T00:00:00Z',
+    registeredAt: '2026-09-30T00:00:00Z',
+    caliberDeclared: true,
+    caliber: {
+      taxDisposition: 'TAX_EXCLUSIVE',
+      taxClassification: 'vat-standard',
+      fx: { quoteType: 'boc-cash-selling', asOfSemantics: 'AT_ORDER_DATE', asOfPolicyVersion: 'asof-policy/v3' },
+      registeredAt: '2026-09-30T00:00:00Z',
+    },
+    ...over,
+  };
+}
+
+// Covers: 票 party-commercial-uiux/14——基于此版本发新版本：对象标识、方向、方案引用（整串原样）、方案方向、转换、政策范围与口径节
+// （税务口径、分类、汇率三格）照抄；版本号、版本适用范围（读面没有）与两对生效区间留空。
+test('基于此版本预填：抄内容与口径，留版本号、适用范围与区间', () => {
+  deepEqual(pricePolicyDraftFromRecord(priceRecord()), {
+    ...emptyPricePolicyDraft(),
+    objectId: 'SYN-PRICE-RULE-CN-SG',
+    direction: 'SELL',
+    pricingPlan: 'PLAN-CN-SG-SELL@v1',
+    planDirection: 'BUY',
+    conversion: 'FROZEN_BUY_EVALUATION',
+    policyScope: 'pricing-scope-1',
+    taxDisposition: 'TAX_EXCLUSIVE',
+    taxClassification: 'vat-standard',
+    fxQuoteType: 'boc-cash-selling',
+    fxAsOfSemantics: 'AT_ORDER_DATE',
+    fxAsOfPolicyVersion: 'asof-policy/v3',
+  });
+  const open = priceRecord();
+  delete open.effectiveEndsAt;
+  equal(pricePolicyDraftFromRecord(open).policyEffectiveEndsAt, '');
+  // 人补齐留空的格后，载荷里的正文与口径和记录一致。
+  const payload = pricePolicyPayloadOf(
+    {
+      ...pricePolicyDraftFromRecord(priceRecord()),
+      version: 'v3',
+      scope: 'SYN-SCOPE-01',
+      effectiveStartsAt: '2027-01-01T00:00',
+      policyEffectiveStartsAt: '2027-01-01T00:00',
+    },
+    'Asia/Shanghai',
+  );
+  deepEqual(payload.pricePolicy, {
+    direction: 'SELL',
+    pricingPlan: 'PLAN-CN-SG-SELL@v1',
+    planDirection: 'BUY',
+    conversion: 'FROZEN_BUY_EVALUATION',
+    scope: 'pricing-scope-1',
+    effectiveStartsAt: '2026-12-31T16:00:00Z',
+    caliber: {
+      taxDisposition: 'TAX_EXCLUSIVE',
+      taxClassification: 'vat-standard',
+      fx: { quoteType: 'boc-cash-selling', asOfSemantics: 'AT_ORDER_DATE', asOfPolicyVersion: 'asof-policy/v3' },
+    },
+  });
+});
+
+// Covers: 票 party-commercial-uiux/14——体积系数是价卡内容（ADR-0260），历史行残留的 historicalVolumetricFactor 不参与计价，
+// 预填既不抄进草稿，也不会借草稿进到载荷。
+test('基于此版本预填：历史行的体积系数引用不抄，载荷里也不带', () => {
+  const draft = pricePolicyDraftFromRecord(
+    priceRecord({
+      caliber: {
+        taxDisposition: 'TAX_EXCLUSIVE',
+        taxClassification: 'vat-standard',
+        historicalVolumetricFactor: 'VF-LEGACY-01',
+        registeredAt: '2026-09-30T00:00:00Z',
+      },
+    }),
+  );
+  ok(!JSON.stringify(draft).includes('VF-LEGACY-01'));
+  ok(!JSON.stringify(pricePolicyPayloadOf({ ...draft, version: 'v3' })).includes('VF-LEGACY-01'));
+  equal(draft.taxDisposition, 'TAX_EXCLUSIVE');
+});
+
+// Covers: 票 party-commercial-uiux/14——读面上可缺的键缺席时不崩也不硬塞：没登记口径的历史行（口径节缺席）口径各格都空；税务不适用
+// 没有分类、不涉外币没有汇率，对应格是空串不是 'undefined'，汇率三格全空即不声明汇率口径。
+test('基于此版本预填：口径节或其中可缺的键缺席时留空，不硬塞', () => {
+  const uncalibrated = pricePolicyDraftFromRecord(priceRecord({ caliberDeclared: false, caliber: undefined }));
+  equal(uncalibrated.direction, 'SELL');
+  equal(uncalibrated.pricingPlan, 'PLAN-CN-SG-SELL@v1');
+  for (const key of ['taxDisposition', 'taxClassification', 'fxQuoteType', 'fxAsOfSemantics', 'fxAsOfPolicyVersion'] as const) {
+    equal(uncalibrated[key], '', key);
+  }
+  const noTaxNoFx = pricePolicyDraftFromRecord(
+    priceRecord({ caliber: { taxDisposition: 'TAX_NOT_APPLICABLE', registeredAt: '2026-09-30T00:00:00Z' } }),
+  );
+  equal(noTaxNoFx.taxDisposition, 'TAX_NOT_APPLICABLE');
+  equal(noTaxNoFx.taxClassification, '');
+  equal(declaresFx(noTaxNoFx), false);
 });

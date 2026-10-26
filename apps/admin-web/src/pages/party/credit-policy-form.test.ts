@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import { deepEqual, equal, ok } from 'node:assert/strict';
 import {
+  creditPolicyDraftFromRecord,
   creditPolicyFieldPaths,
   creditPolicyLocalProblems,
   creditPolicyPayloadOf,
@@ -180,4 +181,44 @@ test('认领路径覆盖载荷全部键与 creditPolicy.limit', () => {
   ]) {
     ok(claimed.has(path), path);
   }
+});
+
+// Covers: 票 party-commercial-uiux/14——基于此版本发新版本：对象、责任法人、授权层级、费用类型、额度与基数照抄；版本号、
+// 版本适用范围（读面没有）、两对生效区间留空；额度只抄在场的那一格，金额 0 照抄成「0」不折成缺席。
+test('基于此版本预填：抄内容、留版本号与区间，金额 0 不折成缺席', () => {
+  const amount = creditPolicyDraftFromRecord({
+    objectId: 'CP-SYN-1',
+    version: 'v1',
+    legalEntity: 'LE-1',
+    authorityLevel: 'L1',
+    chargeType: 'FREIGHT',
+    limitMinor: 0,
+    effectiveStartsAt: '2026-01-01T00:00:00Z',
+    effectiveEndsAt: '2026-12-31T00:00:00Z',
+    registeredAt: '2026-01-01T00:00:00Z',
+  });
+  deepEqual(amount, {
+    ...emptyCreditPolicyDraft(),
+    objectId: 'CP-SYN-1',
+    legalEntity: 'LE-1',
+    authorityLevel: 'L1',
+    chargeType: 'FREIGHT',
+    limitMinor: '0',
+  });
+  const ratio = creditPolicyDraftFromRecord({
+    objectId: 'CP-SYN-2',
+    version: 'v3',
+    legalEntity: 'LE-1',
+    authorityLevel: 'L2',
+    chargeType: 'FREIGHT',
+    limitRatioBasisPoints: 2500,
+    ratioBase: 'POSTED_BALANCE',
+    effectiveStartsAt: '2026-01-01T00:00:00Z',
+    registeredAt: '2026-01-01T00:00:00Z',
+  });
+  equal(ratio.limitMinor, '');
+  equal(ratio.limitRatioBasisPoints, '2500');
+  equal(ratio.ratioBase, 'POSTED_BALANCE');
+  equal(ratio.version, '');
+  equal(ratio.effectiveStartsAt, '');
 });

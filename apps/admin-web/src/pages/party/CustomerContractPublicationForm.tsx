@@ -6,6 +6,7 @@ import { currentDisplayTimeZone } from '../moment';
 import { listCommercialPolicies, type CommercialPolicyListResponseBody } from './api';
 import { controlRequirementLabels, labelOf } from './presentation';
 import { DeliveryConditionFields } from './DeliveryConditionFields';
+import type { NewVersionStart } from './new-version';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
 import { Field, RowFrame, fieldLabel, selectClass, useLoaded } from './PublicationFormFields';
 import type { DeliveryConditionDraft } from './delivery-condition-section';
@@ -45,12 +46,14 @@ import {
 export interface CustomerContractPublicationFormProps {
   /** 载体到达「发布」那一步时回调，页面借它刷同页目录读面（含绑定列）。 */
   onPublished?: () => void;
+  /** 基于目录里某一版预填（票 party-commercial-uiux/14）；换一次预填由页面换 key 重建本表单。 */
+  start?: NewVersionStart<CustomerContractDraft>;
 }
 
 const sectionTitle = 'text-[13px] font-medium text-idpxyz-text';
 
-export function CustomerContractPublicationForm({ onPublished }: CustomerContractPublicationFormProps) {
-  const [draft, setDraft] = useState<CustomerContractDraft>(emptyCustomerContractDraft());
+export function CustomerContractPublicationForm({ onPublished, start }: CustomerContractPublicationFormProps) {
+  const [draft, setDraft] = useState<CustomerContractDraft>(start?.draft ?? emptyCustomerContractDraft());
   const rulePackages = useObjectCandidates(loadRulePackages);
   const controlPolicies = useObjectCandidates(loadControlPolicies);
 
@@ -70,6 +73,8 @@ export function CustomerContractPublicationForm({ onPublished }: CustomerContrac
       localProblems={customerContractLocalProblems(draft, timeZone)}
       fieldPaths={customerContractFieldPaths(draft)}
       onPublished={onPublished}
+      prefilledFrom={start?.from}
+      prefilledCaution={start?.caution}
     >
       {(form) => (
         <div className="flex flex-col gap-5">

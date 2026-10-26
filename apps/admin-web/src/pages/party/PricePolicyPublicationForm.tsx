@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import { currentDisplayTimeZone } from '../moment';
 import { listPriceCards, type PriceCardListResponseBody } from '../pricing/api';
+import type { NewVersionStart } from './new-version';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
 import { Field, Problems, ReferencePicker, fieldLabel, selectClass } from './PublicationFormFields';
 import { WallTimeField } from './party-registration-fields';
@@ -43,13 +44,15 @@ import {
 export interface PricePolicyPublicationFormProps {
   /** 载体到达「发布」那一步时回调，政策页借它切到商业价格政策册并重读。 */
   onPublished?: () => void;
+  /** 基于目录里某一版预填（票 party-commercial-uiux/14）；换一次预填由页面换 key 重建本表单。 */
+  start?: NewVersionStart<PricePolicyDraft>;
 }
 
 const groupTitle = 'text-[13px] font-medium text-idpxyz-text';
 const noteClass = 'text-[11px] text-idpxyz-textMuted';
 
-export function PricePolicyPublicationForm({ onPublished }: PricePolicyPublicationFormProps) {
-  const [draft, setDraft] = useState<PricePolicyDraft>(emptyPricePolicyDraft());
+export function PricePolicyPublicationForm({ onPublished, start }: PricePolicyPublicationFormProps) {
+  const [draft, setDraft] = useState<PricePolicyDraft>(start?.draft ?? emptyPricePolicyDraft());
   const patch = (change: Partial<PricePolicyDraft>) => setDraft((current) => ({ ...current, ...change }));
   // 时刻按操作者的显示时区填、送出 UTC（票 party-commercial-uiux/10），与登记表单同一条换算。
   const timeZone = currentDisplayTimeZone();
@@ -62,6 +65,8 @@ export function PricePolicyPublicationForm({ onPublished }: PricePolicyPublicati
       localProblems={pricePolicyLocalProblems(draft, timeZone)}
       fieldPaths={pricePolicyFieldPaths}
       onPublished={onPublished}
+      prefilledFrom={start?.from}
+      prefilledCaution={start?.caution}
     >
       {(form) => <PricePolicyFields draft={draft} patch={patch} setDraft={setDraft} form={form} timeZone={timeZone} />}
     </PublicationDraftFlow>

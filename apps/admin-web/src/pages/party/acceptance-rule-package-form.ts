@@ -11,6 +11,7 @@
 import { isOperatorRefusal, type OperatorRefusal } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
 import { currentDisplayTimeZone } from '../moment';
+import type { RulePackageRecord } from './api';
 import { finalOutcomeLabels, intakeSourceLabels } from './presentation';
 import {
   vocabularyOptions,
@@ -137,6 +138,48 @@ export function emptyAcceptanceRulePackageDraft(): AcceptanceRulePackageDraft {
     finalRules: [],
     finalRuleValidity: { anchor: '', duration: '' },
     sourceDataAmendment: { closed: '', rules: [] },
+  };
+}
+
+/**
+ * 「基于此版本发新版本」的预填（票 party-commercial-uiux/14）：同一个规则包对象，正文五维（服务产品、客户合同、责任法人、
+ * 正文适用范围、规则引用表）与读面带得出的两节声明（收寄资格、终局规则）照抄；版本号与版本、正文的生效区间一律留空——
+ * 版本号要人起，抄上一版的区间会让新旧两版区间重叠、解析时答「适用冲突」。目录行上的 `scope` 是正文的适用范围，读面没有
+ * 版本壳自己的适用范围，壳上那一格留空由人填。
+ *
+ * 两个 `*Declared` 布尔决定那一节在不在：未声明就整节留空（草稿里「本节留空」即未声明），哪怕数组里有东西也不还原；已声明
+ * 就还原其内容。收寄资格的「已声明但为空」是资格引用为空数组而来源非空——草稿里该节来源有字，所以仍是已声明，资格列表
+ * 为零项；它与「整节留空」分得开。终局规则在领域里有行才算声明，已声明而无行不是合法状态，不还原。
+ *
+ * 读面不带 asOfPolicies、acceptanceContent、finalRuleValidity、sourceDataAmendment 这几节，它们留空，等于新版本没有声明
+ * 这些通道。有这几节的一版发新版本要靠人补，补不补由发布人定；这里不假装抄到了。
+ */
+export function acceptanceRulePackageDraftFromRecord(record: RulePackageRecord): AcceptanceRulePackageDraft {
+  const empty = emptyAcceptanceRulePackageDraft();
+  return {
+    ...empty,
+    objectId: record.objectId,
+    body: {
+      ...empty.body,
+      serviceProduct: record.serviceProduct,
+      contract: record.contract,
+      legalEntity: record.legalEntity,
+      scope: record.scope,
+      // 正文一节永远在场，零行由领域拒；响应若给了空数组，沿用空草稿预开的那一行空规则。
+      rules:
+        record.rules.length > 0
+          ? record.rules.map((rule) => ({ category: rule.category, reference: rule.reference }))
+          : empty.body.rules,
+    },
+    intakeQualification: record.intakeQualificationDeclared
+      ? {
+          sources: [...record.allowedIntakeSources],
+          qualifications: [...record.intakeQualificationRefs],
+        }
+      : empty.intakeQualification,
+    finalRules: record.finalRulesDeclared
+      ? record.finalRules.map((rule) => ({ outcome: rule.outcome, finalKind: rule.finalKind }))
+      : empty.finalRules,
   };
 }
 

@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import { deepEqual, equal, notEqual, ok } from 'node:assert/strict';
 import { payloadKey } from './publication-draft-flow';
+import type { RulePackageRecord } from './api';
 import {
+  acceptanceRulePackageDraftFromRecord,
   acceptanceRulePackageFieldPaths,
   acceptanceRulePackageLocalProblems,
   declarationSections,
@@ -345,4 +347,107 @@ test('词表判读：需要登录与没有授予各成一格，传到每一集�
   deepEqual(vocabularyStateOf({ kind: 'notGranted' }), { kind: 'notGranted' });
   deepEqual(setOptionsOf(vocabularyStateOf({ kind: 'loginRequired' }), 'stage'), { kind: 'loginRequired' });
   deepEqual(setOptionsOf(vocabularyStateOf({ kind: 'notGranted' }), 'stage'), { kind: 'notGranted' });
+});
+
+const rulePackageRecord: RulePackageRecord = {
+  objectId: 'SYN-RULEPKG-02',
+  version: 'v1',
+  serviceProduct: 'SYN-PROD-CN-SG-EXPRESS',
+  contract: 'SYN-CONTRACT-01',
+  legalEntity: 'SYN-LE-CN-01',
+  scope: 'SYN-SCOPE-BODY',
+  effectiveStartsAt: '2026-01-01T00:00:00Z',
+  effectiveEndsAt: '2026-12-31T00:00:00Z',
+  declaredAt: '2026-01-01T00:00:00Z',
+  rules: [
+    { category: 'MINIMUM_INGRESS_IDENTITY', reference: 'RULE/ingress-identity' },
+    { category: 'REGULATORY_SOURCE_DOCUMENT', reference: 'RULE/customs-doc' },
+  ],
+  intakeQualificationDeclared: true,
+  allowedIntakeSources: ['NODE_INTAKE', 'OFFSITE_PICKUP'],
+  intakeQualificationRefs: ['INTAKE-QUAL/realname'],
+  finalRulesDeclared: true,
+  finalRules: [{ outcome: 'EFFECTIVE_DELIVERY', finalKind: 'FINAL/delivery' }],
+};
+
+// Covers: 票 party-commercial-uiux/14——基于此版本发新版本：对象标识、正文五维（服务产品、客户合同、责任法人、正文适用范围、规则引用表）
+// 与已声明的收寄资格、终局规则照抄；版本号、版本适用范围（读面没有）、壳与正文两对生效区间留空；读面不带的四节声明留空。
+test('基于此版本预填：抄正文与已声明的两节，留版本号、版本适用范围与两对生效区间，读面没有的四节不抄', () => {
+  const draft = acceptanceRulePackageDraftFromRecord(rulePackageRecord);
+  deepEqual(draft, {
+    ...emptyAcceptanceRulePackageDraft(),
+    objectId: 'SYN-RULEPKG-02',
+    body: {
+      serviceProduct: 'SYN-PROD-CN-SG-EXPRESS',
+      contract: 'SYN-CONTRACT-01',
+      legalEntity: 'SYN-LE-CN-01',
+      scope: 'SYN-SCOPE-BODY',
+      effectiveStartsAt: '',
+      effectiveEndsAt: '',
+      rules: [
+        { category: 'MINIMUM_INGRESS_IDENTITY', reference: 'RULE/ingress-identity' },
+        { category: 'REGULATORY_SOURCE_DOCUMENT', reference: 'RULE/customs-doc' },
+      ],
+    },
+    intakeQualification: { sources: ['NODE_INTAKE', 'OFFSITE_PICKUP'], qualifications: ['INTAKE-QUAL/realname'] },
+    finalRules: [{ outcome: 'EFFECTIVE_DELIVERY', finalKind: 'FINAL/delivery' }],
+  });
+  equal(draft.version, '');
+  equal(draft.scope, '');
+  equal(draft.effectiveStartsAt, '');
+  equal(draft.effectiveEndsAt, '');
+  for (const section of ['asOfPolicies', 'acceptanceContent', 'finalRuleValidity', 'sourceDataAmendment'] as const) {
+    equal(sectionDeclared(draft, section), false, section);
+  }
+  equal(sectionDeclared(draft, 'intakeQualification'), true);
+  equal(sectionDeclared(draft, 'finalRules'), true);
+
+  // 草稿里的数组是拷贝：改预填出来的草稿不会写回记录。
+  draft.body.rules[0].reference = 'RULE/changed';
+  draft.intakeQualification.sources.push('X');
+  equal(rulePackageRecord.rules[0].reference, 'RULE/ingress-identity');
+  deepEqual(rulePackageRecord.allowedIntakeSources, ['NODE_INTAKE', 'OFFSITE_PICKUP']);
+});
+
+// Covers: 票 party-commercial-uiux/14——两个「已声明」布尔对应草稿里「本节留空即未声明」：未声明就整节留空（读面上未声明时
+// 两个数组都是空的；即便响应不合契约、数组里有东西，也不还原），已声明就还原；收寄资格已声明但资格引用为空数组（来源
+// 非空）仍是已声明、载荷里带这一节，与整节留空（载荷里不带）分得开。
+test('基于此版本预填：未声明整节留空，已声明但资格引用为空仍是已声明', () => {
+  const undeclared = acceptanceRulePackageDraftFromRecord({
+    ...rulePackageRecord,
+    intakeQualificationDeclared: false,
+    allowedIntakeSources: [],
+    intakeQualificationRefs: [],
+    finalRulesDeclared: false,
+    finalRules: [],
+  });
+  deepEqual(undeclared.intakeQualification, { sources: [], qualifications: [] });
+  deepEqual(undeclared.finalRules, []);
+  equal(sectionDeclared(undeclared, 'intakeQualification'), false);
+  equal(sectionDeclared(undeclared, 'finalRules'), false);
+  const undeclaredBody = payloadOf({ ...undeclared, version: 'v2', effectiveStartsAt: '2027-01-01T00:00' }, 'UTC').acceptanceRulePackage;
+  equal('intakeQualification' in (undeclaredBody ?? {}), false);
+  equal('finalRules' in (undeclaredBody ?? {}), false);
+
+  const stray = acceptanceRulePackageDraftFromRecord({
+    ...rulePackageRecord,
+    intakeQualificationDeclared: false,
+    finalRulesDeclared: false,
+  });
+  deepEqual(stray.intakeQualification, { sources: [], qualifications: [] });
+  deepEqual(stray.finalRules, []);
+
+  const declaredEmpty = acceptanceRulePackageDraftFromRecord({ ...rulePackageRecord, intakeQualificationRefs: [] });
+  deepEqual(declaredEmpty.intakeQualification, { sources: ['NODE_INTAKE', 'OFFSITE_PICKUP'], qualifications: [] });
+  equal(sectionDeclared(declaredEmpty, 'intakeQualification'), true);
+  const declaredBody = payloadOf({ ...declaredEmpty, version: 'v2', effectiveStartsAt: '2027-01-01T00:00' }, 'UTC').acceptanceRulePackage;
+  deepEqual(declaredBody?.intakeQualification, { sources: ['NODE_INTAKE', 'OFFSITE_PICKUP'], qualifications: [] });
+});
+
+// Covers: 票 party-commercial-uiux/14——规则引用表在记录上为空数组（响应不合契约，领域不接受零行）时沿用空草稿预开的一行空规则，
+// 不硬塞也不留零行；其余正文照抄。
+test('基于此版本预填：规则引用表为空数组沿用预开的一行空规则', () => {
+  const draft = acceptanceRulePackageDraftFromRecord({ ...rulePackageRecord, rules: [] });
+  deepEqual(draft.body.rules, [emptyAssembledRuleDraft()]);
+  equal(draft.body.serviceProduct, 'SYN-PROD-CN-SG-EXPRESS');
 });

@@ -82,6 +82,10 @@ export interface PublicationDraftFlowProps {
   children: (form: PublicationFormContext) => ReactNode;
   /** 载体到达「发布」那一步（本次发布落定或已在册）时回调，页面借它刷同册读面。 */
   onPublished?: () => void;
+  /** 表单是从目录里的某一版预填起头的（票 party-commercial-uiux/14）：例「信用政策 SYN-CREDIT-01 v1」；给了就在顶上提示。 */
+  prefilledFrom?: string;
+  /** 预填特有的警示（读面还原不了、留空会悄悄丢掉的内容），随提示一起显示，见 NewVersionStart.caution。 */
+  prefilledCaution?: string;
 }
 
 export interface PublicationFormContext {
@@ -102,6 +106,8 @@ export function PublicationDraftFlow({
   fieldPaths,
   children,
   onPublished,
+  prefilledFrom,
+  prefilledCaution,
 }: PublicationDraftFlowProps) {
   const [flow, setFlow] = useState<PublicationFlowState>(emptyFlow());
   const [busy, setBusy] = useState<FlowAction | null>(null);
@@ -177,6 +183,15 @@ export function PublicationDraftFlow({
           {'发布分五步：填表 → 预览 → 存为待批准 → 批准 → 发布。预览会检查每一格并算出内容摘要；存为待批准之后表单锁定，要改内容请点「重新开始」。谁能批准由租户的审批职责规则决定。'}
           <strong>发布后这一版不能修改</strong>，要改须用新的版本号再发布。
         </p>
+
+        {prefilledFrom ? (
+          <div className="flex flex-col gap-1 rounded border border-idpxyz-border px-3 py-2 text-xs text-idpxyz-text">
+            <p>
+              {`已按「${prefilledFrom}」预填。版本号和生效区间要自己填；读面上看不到的格也是空的。发布前请逐格核对，改动的格才是这一版新的内容。`}
+            </p>
+            {prefilledCaution ? <p className="font-medium text-idpxyz-danger">{prefilledCaution}</p> : null}
+          </div>
+        ) : null}
 
         <Stepper step={step} />
 

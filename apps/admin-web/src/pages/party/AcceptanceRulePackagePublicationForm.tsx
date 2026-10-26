@@ -4,6 +4,7 @@ import { accessRefusalTitle } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
 import { currentDisplayTimeZone } from '../moment';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
+import type { NewVersionStart } from './new-version';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
 import { Field, Problems, ReferencePicker, RowFrame, fieldLabel, selectClass, useLoaded } from './PublicationFormFields';
 import { WallTimeField, legalEntityPickerOptions } from './party-registration-fields';
@@ -48,6 +49,8 @@ import {
 export interface AcceptanceRulePackagePublicationFormProps {
   /** 载体到达「发布」那一步时回调，页面借它刷同页目录读面（各节声明在册上各自的列里）。 */
   onPublished?: () => void;
+  /** 基于目录里某一版预填（票 party-commercial-uiux/14）；换一次预填由页面换 key 重建本表单。 */
+  start?: NewVersionStart<AcceptanceRulePackageDraft>;
 }
 
 const sectionTitle = 'text-[13px] font-medium text-idpxyz-text';
@@ -64,8 +67,8 @@ function removeAt<Row>(rows: Row[], index: number): Row[] {
   return rows.filter((_, at) => at !== index);
 }
 
-export function AcceptanceRulePackagePublicationForm({ onPublished }: AcceptanceRulePackagePublicationFormProps) {
-  const [draft, setDraft] = useState<AcceptanceRulePackageDraft>(emptyAcceptanceRulePackageDraft());
+export function AcceptanceRulePackagePublicationForm({ onPublished, start }: AcceptanceRulePackagePublicationFormProps) {
+  const [draft, setDraft] = useState<AcceptanceRulePackageDraft>(start?.draft ?? emptyAcceptanceRulePackageDraft());
   const vocabulary = useVocabulary();
   // 一律函数式更新：几节的行各自 onChange，取闭包里的旧草稿会让紧接的两次改动丢一次。
   const update: Update = (mutate) => setDraft((current) => mutate(current));
@@ -80,6 +83,8 @@ export function AcceptanceRulePackagePublicationForm({ onPublished }: Acceptance
       localProblems={acceptanceRulePackageLocalProblems(draft, timeZone)}
       fieldPaths={acceptanceRulePackageFieldPaths(draft)}
       onPublished={onPublished}
+      prefilledFrom={start?.from}
+      prefilledCaution={start?.caution}
     >
       {(form) => (
         <div className="flex flex-col gap-5">

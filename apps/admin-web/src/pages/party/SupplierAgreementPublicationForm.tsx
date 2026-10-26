@@ -6,6 +6,7 @@ import {
   listBusinessParties,
   listGroupLegalEntities,
 } from './api';
+import type { NewVersionStart } from './new-version';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
 import { Field, ReferencePicker } from './PublicationFormFields';
 import { WallTimeField, businessPartyPickerOptions, legalEntityPickerOptions } from './party-registration-fields';
@@ -38,10 +39,12 @@ import {
 export interface SupplierAgreementPublicationFormProps {
   /** 载体到达「发布」那一步时回调，供应商协议页借它刷同页目录读面。 */
   onPublished?: () => void;
+  /** 基于目录里某一版预填（票 party-commercial-uiux/14）；换一次预填由页面换 key 重建本表单。 */
+  start?: NewVersionStart<SupplierAgreementDraft>;
 }
 
-export function SupplierAgreementPublicationForm({ onPublished }: SupplierAgreementPublicationFormProps) {
-  const [draft, setDraft] = useState<SupplierAgreementDraft>(emptySupplierAgreementDraft());
+export function SupplierAgreementPublicationForm({ onPublished, start }: SupplierAgreementPublicationFormProps) {
+  const [draft, setDraft] = useState<SupplierAgreementDraft>(start?.draft ?? emptySupplierAgreementDraft());
   const patch = (change: Partial<SupplierAgreementDraft>) => setDraft((current) => ({ ...current, ...change }));
   // 时刻按操作者的显示时区填、送出 UTC（票 party-commercial-uiux/10），与登记表单同一条换算。
   const timeZone = currentDisplayTimeZone();
@@ -54,6 +57,8 @@ export function SupplierAgreementPublicationForm({ onPublished }: SupplierAgreem
       localProblems={supplierAgreementLocalProblems(draft, timeZone)}
       fieldPaths={supplierAgreementFieldPaths}
       onPublished={onPublished}
+      prefilledFrom={start?.from}
+      prefilledCaution={start?.caution}
     >
       {({ problems, locked }: PublicationFormContext) => (
         <div className="flex flex-col gap-5">

@@ -16,6 +16,15 @@ import {
   type CommercialPolicyKind,
   type CommercialPolicyListResponseBody,
 } from './api';
+import { nextRequest, newVersionFrom, type NewVersionRequest, type NewVersionStart } from './new-version';
+import { withNewVersionAction } from './NewVersionAction';
+import { acceptanceRulePackageDraftFromRecord } from './acceptance-rule-package-form';
+import { authorizationRuleDraftFromRecord } from './authorization-rule-form';
+import { creditPolicyDraftFromRecord } from './credit-policy-form';
+import { customerServiceRuleDraftFromRecord } from './customer-service-rule-form';
+import { preAcceptanceFinancialControlPolicyDraftFromRecord } from './pre-acceptance-financial-control-policy-form';
+import { pricePolicyDraftFromRecord } from './price-policy-form';
+import { settlementPolicyDraftFromRecord } from './settlement-policy-form';
 import { KeepAliveTabs, KeepAliveTabsContent, useVisited } from './keep-alive-tabs';
 import { VersionStatusChips } from './VersionStatusChips';
 import {
@@ -44,7 +53,7 @@ import { PricePolicyPublicationForm } from './PricePolicyPublicationForm';
 import { AcceptanceRulePackagePublicationForm } from './AcceptanceRulePackagePublicationForm';
 import { PreAcceptanceFinancialControlPolicyPublicationForm } from './PreAcceptanceFinancialControlPolicyPublicationForm';
 import { CustomerServiceRulePublicationForm } from './CustomerServiceRulePublicationForm';
-import { kindColumns, rowsOf, type PolicyRow } from './policy-rows';
+import { kindColumns, rowsOf, type PolicyRow, type PolicySource } from './policy-rows';
 import {
   commercialPolicyKinds,
   policyKindLabels,
@@ -90,10 +99,13 @@ function PolicyRegisters({
   kind,
   reloadKey: externalReloadKey,
   directory,
+  onStartNewVersion,
 }: {
   kind: CommercialPolicyKind;
   reloadKey: number;
   directory: NameDirectory;
+  /** 点行上的「发新版本」：把这一行的记录带去发布签预填（票 party-commercial-uiux/14）。 */
+  onStartNewVersion: (source: PolicySource) => void;
 }) {
   // 检索词在地址里（`?q=`）：合同上的规则包、控制策略链接带着它过来，筛到那一条。换册时由页面清掉（见 usePoliciesPlace）。
   const [search, setSearch] = useAddressKeyword();
@@ -153,7 +165,14 @@ function PolicyRegisters({
         ) : undefined
       }
       emptyRowsNote="这组条件下没有匹配的行"
-      columns={withRefLinks(withStatusBadge(kindColumns[kind]), directory)}
+      columns={withNewVersionAction(withRefLinks(withStatusBadge(kindColumns[kind]), directory), {
+        // 随所属版本发布的两本册没有自己的发布表单，行上没有来源记录，也就没有按钮。
+        canStart: (row) => row.source !== undefined,
+        labelOf: (row) => `${policyKindLabels[kind]} ${row.version?.objectId ?? ''} ${row.version?.version ?? ''}`.trim(),
+        onStart: (row) => {
+          if (row.source) onStartNewVersion(row.source);
+        },
+      })}
       rows={visibleRows}
       rowKey={(row) => row.key}
       viewState={catalogueViewState(answer, rows.length, retry, {
@@ -174,10 +193,13 @@ function PublishPane({
   register,
   onRegisterChange,
   onPublished,
+  request,
 }: {
   register: CommercialPolicyKind;
   onRegisterChange: (kind: CommercialPolicyKind) => void;
   onPublished: (kind: CommercialPolicyKind) => void;
+  /** 最近一次「基于此版本发新版本」的发起；那一册的表单按它预填并重建。 */
+  request: NewVersionRequest<PolicySource> | null;
 }) {
   const target = publishTargetOf(register);
   const seen = useVisited(register);
@@ -209,8 +231,9 @@ function PublishPane({
       {commercialPolicyKinds
         .filter((kind) => seen(kind) && publishTargetOf(kind).kind === 'form')
         .map((kind) => (
-          <div key={kind} className={kind === register ? 'contents' : 'hidden'}>
-            {publicationFormOf(kind, () => onPublished(kind))}
+          // key 带上发起序号：同一册再发起一次基于某版的预填，表单整个重建，不留上一次的预览与草稿。
+          <div key={`${kind}:${request?.source.kind === kind ? request.token : 0}`} className={kind === register ? 'contents' : 'hidden'}>
+            {publicationFormOf(kind, () => onPublished(kind), request)}
           </div>
         ))}
     </div>
@@ -232,26 +255,85 @@ function WhereToPublish({ text, action, onAction }: { text: string; action: stri
  * 册 → 那一册的发布表单。发布落定后读面要切到的册由调用方按册名给：价格政策表单发的是发布类别 PRICE_RULE，结果显示在
  * 册名 PRICE_POLICY 那本册（两条分类轴，票 admin-write-faces/14），这里按册名进、按册名回，不经类别码。
  */
-function publicationFormOf(register: CommercialPolicyKind, onPublished: () => void): ReactNode {
+function publicationFormOf(
+  register: CommercialPolicyKind,
+  onPublished: () => void,
+  request: NewVersionRequest<PolicySource> | null,
+): ReactNode {
   switch (register) {
     case 'CREDIT_POLICY':
-      return <CreditPolicyPublicationForm onPublished={onPublished} />;
+      return <CreditPolicyPublicationForm onPublished={onPublished} start={startFor(request, 'CREDIT_POLICY', creditPolicyDraftFromRecord)} />;
     case 'AUTHORIZATION_RULE':
-      return <AuthorizationRulePublicationForm onPublished={onPublished} />;
+      return (
+        <AuthorizationRulePublicationForm
+          onPublished={onPublished}
+          start={startFor(request, 'AUTHORIZATION_RULE', authorizationRuleDraftFromRecord)}
+        />
+      );
     case 'SETTLEMENT_POLICY':
-      return <SettlementPolicyPublicationForm onPublished={onPublished} />;
+      return (
+        <SettlementPolicyPublicationForm
+          onPublished={onPublished}
+          start={startFor(request, 'SETTLEMENT_POLICY', settlementPolicyDraftFromRecord)}
+        />
+      );
     case 'PRICE_POLICY':
-      return <PricePolicyPublicationForm onPublished={onPublished} />;
+      return <PricePolicyPublicationForm onPublished={onPublished} start={startFor(request, 'PRICE_POLICY', pricePolicyDraftFromRecord)} />;
     case 'ACCEPTANCE_RULE_PACKAGE':
-      return <AcceptanceRulePackagePublicationForm onPublished={onPublished} />;
+      return (
+        <AcceptanceRulePackagePublicationForm
+          onPublished={onPublished}
+          start={startFor(request, 'ACCEPTANCE_RULE_PACKAGE', acceptanceRulePackageDraftFromRecord, rulePackageCaution)}
+        />
+      );
     case 'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY':
-      return <PreAcceptanceFinancialControlPolicyPublicationForm onPublished={onPublished} />;
+      return (
+        <PreAcceptanceFinancialControlPolicyPublicationForm
+          onPublished={onPublished}
+          start={startFor(
+            request,
+            'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY',
+            preAcceptanceFinancialControlPolicyDraftFromRecord,
+          )}
+        />
+      );
     case 'CUSTOMER_SERVICE_RULE':
-      return <CustomerServiceRulePublicationForm onPublished={onPublished} />;
+      return (
+        <CustomerServiceRulePublicationForm
+          onPublished={onPublished}
+          start={startFor(request, 'CUSTOMER_SERVICE_RULE', customerServiceRuleDraftFromRecord)}
+        />
+      );
     case 'PRE_ACCEPTANCE_CONTROL':
     case 'AS_OF_POLICY':
       return null;
   }
+}
+
+// 接单规则包的读口只带正文与收寄资格、终局规则，不带下面四节声明；它们在发布表单里是「本节留空即未声明」，预填后全是空的。
+// 上一版声明过的，新版本不自己补就丢了——读面补不回来（要后端目录行带出），只能提醒。
+const rulePackageCaution =
+  '读面不带这个规则包的「接受判断时点策略」「接受内容」「面单有效期」「资料修订」四节声明，预填后这四节是空的（留空即未声明）。上一版声明过的，请在新版本里自己补上，否则新版本等于没有这些声明。';
+
+/** 册 → 来源记录的类型；按册名索引，泛型里取记录类型比对联合做 Extract 稳。 */
+type PolicyRecordOf = { [S in PolicySource as S['kind']]: S['record'] };
+
+/** 最近一次发起若就是这一册的，还原出该册表单的起点；否则没有（表单从空白起）。 */
+function startFor<K extends keyof PolicyRecordOf, Draft>(
+  request: NewVersionRequest<PolicySource> | null,
+  kind: K,
+  draftOf: (record: PolicyRecordOf[K]) => Draft,
+  caution?: string,
+): NewVersionStart<Draft> | undefined {
+  const source = request?.source;
+  if (!source || source.kind !== kind) return undefined;
+  const record = source.record as PolicyRecordOf[K];
+  const identity = record as { objectId: string; version: string };
+  return {
+    draft: draftOf(record),
+    from: newVersionFrom(policyKindLabels[kind], identity.objectId, identity.version),
+    caution,
+  };
 }
 
 /** 签与册的地址同步：读自 hash、写回 hash（replaceState，不压后退记录、不触发壳层的 hashchange），做法同 useAddressKeyword。 */
@@ -294,6 +376,12 @@ export function CommercialPoliciesPage() {
   const [tab, register, place] = usePoliciesPlace();
   const [reloadKey, setReloadKey] = useState(0);
   const directory = useNameDirectory();
+  // 点目录行上的「发新版本」：记下是哪一版，切到发布签、选中那一册；那一册的表单据此预填重建（票 party-commercial-uiux/14）。
+  const [request, setRequest] = useState<NewVersionRequest<PolicySource> | null>(null);
+  const startNewVersion = (source: PolicySource) => {
+    setRequest((previous) => nextRequest(previous, source));
+    place('publish', source.kind);
+  };
   // 发布落定一版：读面那一册重读，切回政策册签时结果已在；仍停在发布签，让人看完答复。
   const notePublished = (kind: CommercialPolicyKind) => {
     if (kind === register) setReloadKey((value) => value + 1);
@@ -317,13 +405,24 @@ export function CommercialPoliciesPage() {
         >
           <RegisterChooser value={register} onChange={(kind) => place('registers', kind)} />
           {/* 按册重挂：检索词从地址重读（换册时已清掉），不带上一本册的词。 */}
-          <PolicyRegisters key={register} kind={register} reloadKey={reloadKey} directory={directory} />
+          <PolicyRegisters
+            key={register}
+            kind={register}
+            reloadKey={reloadKey}
+            directory={directory}
+            onStartNewVersion={startNewVersion}
+          />
         </KeepAliveTabsContent>
         <KeepAliveTabsContent
           value="publish"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
-          <PublishPane register={register} onRegisterChange={(kind) => place('publish', kind)} onPublished={notePublished} />
+          <PublishPane
+            register={register}
+            onRegisterChange={(kind) => place('publish', kind)}
+            onPublished={notePublished}
+            request={request}
+          />
         </KeepAliveTabsContent>
         <KeepAliveTabsContent
           value="json"
