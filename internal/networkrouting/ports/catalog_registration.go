@@ -196,8 +196,9 @@ type AvailabilityAdjustmentStatement struct {
 
 // RouteStrategyDefinitionVersion 是一个路由策略的适用版本行。RankingForm 是这一版声明的内置
 // 排序形态（ADR-0146），零值即这一版没有声明。冻结形态与剩余段数限额同一版声明，缺一格即未声明。
-// 比较币种与所引价格政策（ADR-0148 决定四）是租户取值，缺一格即未声明——没登比较币种时取数侧
-// 只在同币种下合成，异币种进未决格，不写死任何默认币种。
+// 比较币种（ADR-0148 决定四）是租户取值，缺格即未声明——没登比较币种时取数侧只在同币种下合成，
+// 异币种进未决格，不写死任何默认币种。换到比较币种所用的汇率与口径就是各段价卡绑定的那串汇率序列
+// （ADR-0260 决定三），策略版本上没有「所引价格政策」一格：它在这里只会是一处登了却不起作用的声明。
 type RouteStrategyDefinitionVersion struct {
 	Code            string
 	Version         int32
@@ -209,15 +210,13 @@ type RouteStrategyDefinitionVersion struct {
 	// AutoRerouteForm 零值或阈值为 nil 即这一版没有声明自动改路。阈值是租户取值。
 	AutoRerouteForm                      domain.AutoRerouteForm
 	AutoRerouteImprovementThresholdMinor *int
-	// HasComparisonCurrency / HasComparisonPricePolicy 为假即这一版没登这两格（不是空串）。
-	HasComparisonCurrency    bool
-	ComparisonCurrency       string
-	HasComparisonPricePolicy bool
-	ComparisonPricePolicy    string
-	EffectiveFrom            time.Time
-	EffectiveTo              time.Time
-	HasEffectiveTo           bool
-	Basis                    domain.CatalogBasisReference
+	// HasComparisonCurrency 为假即这一版没登比较币种（不是空串）。
+	HasComparisonCurrency bool
+	ComparisonCurrency    string
+	EffectiveFrom         time.Time
+	EffectiveTo           time.Time
+	HasEffectiveTo        bool
+	Basis                 domain.CatalogBasisReference
 }
 
 // LineCostBasisKind 是线路段成本依据的封闭两类（票 routing-first-cut/10，ADR-0148 决定四）：

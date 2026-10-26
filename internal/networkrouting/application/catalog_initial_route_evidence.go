@@ -97,8 +97,6 @@ func (view *CatalogInitialRouteEvidence) LoadInitialRouteEvidence(
 		AutoRerouteImprovementThresholdMinor: strategy.AutoRerouteImprovementThresholdMinor,
 		HasComparisonCurrency:                strategy.HasComparisonCurrency,
 		ComparisonCurrency:                   strategy.ComparisonCurrency,
-		HasComparisonPricePolicy:             strategy.HasComparisonPricePolicy,
-		ComparisonPricePolicy:                strategy.ComparisonPricePolicy,
 		Paths:                                paths,
 		Strategy:                             strategyRef,
 		ViewRevision:                         snapshot.Revision,

@@ -330,8 +330,8 @@ func newNetworkCatalog(t *testing.T) (*adapter.NetworkCatalog, bentoapp.Transact
 	return catalog, db.Transactor(), pool
 }
 
-// Covers: 迁移 0016 与 ADR-0148 决定四——比较币种与所引价格政策是策略版本上的租户取值，
-// 登了原样折回，没登如实缺格（不是空串）。冻结两列随同路径折回（票 04 的折叠缺口补上）。
+// Covers: 迁移 0016 与 ADR-0148 决定四——比较币种是策略版本上的租户取值，登了原样折回，没登如实缺格
+// （不是空串）。冻结两列随同路径折回（票 04 的折叠缺口补上）。
 func TestStrategyComparisonAndFreezeDeclarationsFoldBack(t *testing.T) {
 	catalog, transactor, _ := newNetworkCatalog(t)
 	ctx := t.Context()
@@ -345,7 +345,6 @@ func TestStrategyComparisonAndFreezeDeclarationsFoldBack(t *testing.T) {
 			RankingForm: domain.CostSingleDimensionRanking,
 			FreezeForm:  domain.RemainingSegmentCountFreeze, FreezeRemainingSegmentLimit: &limit,
 			HasComparisonCurrency: true, ComparisonCurrency: "CNY",
-			HasComparisonPricePolicy: true, ComparisonPricePolicy: "fx-caliber/v1",
 			EffectiveFrom: effective,
 		})
 	})
@@ -360,9 +359,6 @@ func TestStrategyComparisonAndFreezeDeclarationsFoldBack(t *testing.T) {
 	strategy := snapshot.Strategies[0]
 	if !strategy.HasComparisonCurrency || strategy.ComparisonCurrency != "CNY" {
 		t.Fatalf("比较币种没有按声明折回：%+v", strategy)
-	}
-	if !strategy.HasComparisonPricePolicy || strategy.ComparisonPricePolicy != "fx-caliber/v1" {
-		t.Fatalf("所引价格政策没有按声明折回：%+v", strategy)
 	}
 	if strategy.FreezeForm != domain.RemainingSegmentCountFreeze ||
 		strategy.FreezeRemainingSegmentLimit == nil || *strategy.FreezeRemainingSegmentLimit != 2 {
@@ -388,7 +384,7 @@ func TestStrategyWithoutComparisonDeclarationFoldsBackUndeclared(t *testing.T) {
 		t.Fatalf("读目录：%v", err)
 	}
 	strategy := snapshot.Strategies[0]
-	if strategy.HasComparisonCurrency || strategy.HasComparisonPricePolicy {
+	if strategy.HasComparisonCurrency {
 		t.Fatalf("没登的比较声明被折成了已声明：%+v", strategy)
 	}
 }

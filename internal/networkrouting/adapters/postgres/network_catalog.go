@@ -145,8 +145,7 @@ SELECT
             'freeze_remaining_segments', freeze_remaining_segments,
             'auto_reroute_form', auto_reroute_form,
             'auto_reroute_improvement_threshold_minor', auto_reroute_improvement_threshold_minor,
-            'comparison_currency', comparison_currency,
-            'comparison_price_policy', comparison_price_policy
+            'comparison_currency', comparison_currency
         ) ORDER BY strategy_code, version), '[]'::jsonb)
        FROM network_routing.route_strategy_version
       WHERE tenant_id = $1 AND effective_from <= $2
@@ -320,11 +319,9 @@ func rebuildCatalogSnapshot(
 			Code: row.Code, Version: row.Version, ApplicableScope: row.Scope, RankingForm: form,
 			FreezeForm: freezeForm, FreezeRemainingSegmentLimit: freezeLimit,
 			AutoRerouteForm: autoForm, AutoRerouteImprovementThresholdMinor: autoThreshold,
-			HasComparisonCurrency:    row.ComparisonCurrency != nil,
-			ComparisonCurrency:       stringOf(row.ComparisonCurrency),
-			HasComparisonPricePolicy: row.ComparisonPricePolicy != nil,
-			ComparisonPricePolicy:    stringOf(row.ComparisonPricePolicy),
-			EffectiveFrom:            row.EffectiveFrom, EffectiveTo: timeOf(row.EffectiveTo),
+			HasComparisonCurrency: row.ComparisonCurrency != nil,
+			ComparisonCurrency:    stringOf(row.ComparisonCurrency),
+			EffectiveFrom:         row.EffectiveFrom, EffectiveTo: timeOf(row.EffectiveTo),
 			HasEffectiveTo: row.EffectiveTo != nil,
 		})
 	}
@@ -460,7 +457,6 @@ type strategyVersionRow struct {
 	AutoRerouteForm                      *string    `json:"auto_reroute_form"`
 	AutoRerouteImprovementThresholdMinor *int       `json:"auto_reroute_improvement_threshold_minor"`
 	ComparisonCurrency                   *string    `json:"comparison_currency"`
-	ComparisonPricePolicy                *string    `json:"comparison_price_policy"`
 }
 
 // rankingFormColumn 把排序形态写成列值：未声明落 NULL；族外的值在触库前拒——CHECK 也会拒，
@@ -870,13 +866,12 @@ func (catalog *NetworkCatalog) RegisterRouteStrategyVersion(
 		`INSERT INTO network_routing.route_strategy_version
 			(tenant_id, strategy_code, version, applicable_scope, effective_from, effective_to, ranking_form,
 			 freeze_form, freeze_remaining_segments, auto_reroute_form, auto_reroute_improvement_threshold_minor,
-			 comparison_currency, comparison_price_policy, basis_ref)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+			 comparison_currency, basis_ref)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
 		tenant.String(), row.Code, row.Version, row.ApplicableScope,
 		row.EffectiveFrom.UTC(), optionalTime(row.EffectiveTo, row.HasEffectiveTo), form, freezeForm, freezeLimit,
 		autoForm, autoThreshold,
 		optionalString(row.ComparisonCurrency, row.HasComparisonCurrency),
-		optionalString(row.ComparisonPricePolicy, row.HasComparisonPricePolicy),
 		basisColumn(row.Basis),
 	); err != nil {
 		return fmt.Errorf("register route strategy version: %w", err)

@@ -209,12 +209,10 @@ type InitialRouteEvidence struct {
 	// AutoRerouteForm 零值或阈值为 nil 即这一版没有声明自动改路。未声明不是允许，也不是不允许。
 	AutoRerouteForm                      domain.AutoRerouteForm
 	AutoRerouteImprovementThresholdMinor *int
-	// 比较币种与所引价格政策（ADR-0148 决定四）是路由策略版本上的租户取值：缺格如实交回，
-	// 取数侧只在各段同币种时合成，异币种进未决格——不写死任何默认币种。
+	// 比较币种（ADR-0148 决定四）是路由策略版本上的租户取值：缺格如实交回，取数侧只在各段同币种
+	// 时合成，异币种进未决格——不写死任何默认币种。换算用各段价卡绑定的汇率序列（ADR-0260 决定三）。
 	HasComparisonCurrency       bool
 	ComparisonCurrency          string
-	HasComparisonPricePolicy    bool
-	ComparisonPricePolicy       string
 	UnresolvedRestrictions      []domain.RestrictionReference
 	OutstandingResponsibilities []domain.ResponsibilityReference
 	CandidateCosts              []domain.CandidateCostFact
