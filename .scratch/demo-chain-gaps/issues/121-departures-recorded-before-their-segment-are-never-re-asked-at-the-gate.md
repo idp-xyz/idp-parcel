@@ -1,7 +1,7 @@
 # 121 先于段登记的出发永不补问门禁——本该阻断也不形成阻断信号
 
 Category: enhancement
-Status: in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg121` tip `e3bba49c7`（其后一笔只改本票面与票 114 追记），见文末「完成记录」。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领（票 135、136 已进 main），分支 `claude-dcg121`（worktree `idp-parcel-dcg121`）。此前 ready-for-agent——2026-10-20 代决复核撤掉用户决定阻断（M5），见 [owner-review-20261020](../../owner-review-20261020/report.md)。此前 needs-triage——2026-10-20 票 [53](./53-movement-facts-recorded-before-their-segment-never-reach-tracking.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0224](../../../docs/adr/0224-tracking-backfills-movement-facts-recorded-before-their-segment-when-a-control-fact-puts-the-object-in-it.md) 决定五与越权风险点 3。
+Status: in-progress——2026-10-26 评审无阻断、修订轮完，待进 main，分支 `claude-dcg121` tip `55ceec0c1`（其后一笔只改本票面），见文末「评审记录」「修订轮」。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg121` tip `e3bba49c7`。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领（票 135、136 已进 main），分支 `claude-dcg121`（worktree `idp-parcel-dcg121`）。此前 ready-for-agent——2026-10-20 代决复核撤掉用户决定阻断（M5），见 [owner-review-20261020](../../owner-review-20261020/report.md)。此前 needs-triage——2026-10-20 票 [53](./53-movement-facts-recorded-before-their-segment-never-reach-tracking.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0224](../../../docs/adr/0224-tracking-backfills-movement-facts-recorded-before-their-segment-when-a-control-fact-puts-the-object-in-it.md) 决定五与越权风险点 3。
 Blocked by: 无——用户决定一格已于 2026-10-20 代决撤掉（M5）（此前 用户决定（TF、CC owner：补问机制的形状——ADR-0205 越权风险点 2「补问要另立机制」））
 地盘：TF 出发门禁读数（`internal/transportfulfillment/application/record_movement_fact.go`、`domain/departure_gate_reading.go`、移动事实登记册的读数列）；VE 出发门禁阻断信号（`DeriveOnMovementFactAdapter.signalBlocked`）。
 
@@ -119,4 +119,31 @@ Blocked by: 无——用户决定一格已于 2026-10-20 代决撤掉（M5）（
 - `go test -count=1`：`./internal/transportfulfillment/...`、`./internal/visibilityexception/...`、`./internal/customscompliance/...`、`./internal/architecture/...`、`./migrations/...`、`./internal/platform/migrate/...` 全绿；依赖 TF/VE/CC 的 `cmd` 包（`go list` 反查）`./cmd/parcel-api`、`./cmd/parcel-customs-register`、`./cmd/parcel-dispatch`、`./cmd/parcel-transport-register`、`./cmd/parcel-ve-register` 全绿。新真库用例以 `-v` 确认 PASS、无 SKIP。
 - `go run ./tools/adr-index -check`、`go run ./tools/at-coverage-counts -check` 只报生成物过期（退 1，预期；缺行会退 2，没有）。
 - 全量 `scripts/test-full.sh` 未跑（推送方的事）。
+
+## 评审记录
+
+（照抄协调方转来的评审全文。）
+
+评审 ← tops-20 隔离子代理(sonnet) · 钉 `e7f9b8235`
+
+结论：无阻断；非阻断 3 条。只读静态评审，未跑测试。
+
+#### 非阻断
+1. 事务位置 / `ReaskDepartureGatesHandler.Record`（`reask_departure_gates.go`）：Plan 用事务外 ctx、Record 用 txCtx，问关务确在消费门事务外；重投时 inbox 已处理即停、不重复追加。两个并发信封都算出 sequence=k，输家 Save 撞 PK 得 `AlreadyRegistered`、被 `continue` 后整拍记 Settled——输家那份读数可能比赢家更新（如赢家问在对象控制事实可见之前），此后没有别的信号唤醒，对象可能停在陈旧读数上。建议撞键时返回 Retry，让重投重算 `earlier`；上限仍由 PK 加 `len(earlier)+1` 守住。
+2. 乱序 / `FindByDeparture` 的 `ORDER BY recorded_at, object_ref, sequence`：`RecordedAt` 取 Record 时 `Clock.Now()`，时钟回拨或同刻并发时 `earlier[len-1]`（`departureGateReaskDue` 的「最近一份」）可能不是 sequence 最大那份。建议同一对象内按 sequence 取最近。
+3. 信号去重 / `raiseDepartureGateSignals` 与 `blockedObjects`：去重按补问册次序不按处理次序，信封乱序不漏信号；两个事务并发提交时可能对同一件重复调用 `signals.Handle`，键 (parcel, fact, version)——请作者确认 `signals.Handle` 按此键幂等。信号业务时间取出发那条事实，裁定满足。
+
+#### 无发现
+补问判据（`departureGateReaskDue`、`deterministicGateCauses`、`reaskableFinding`：确定性缺陷不补问，`Reaskable()` 只放行未登记、无在控对象、册子连不上；集运单元递归有 `visited` 防环；成员缺格保守不补；至多三次按（出发、对象）计、PK (tenant, fact, version, object, sequence) 保并发）；前置副作用（`scanTransportSchedule` 拆两层只给构造门错误包哨兵，只被 `readIntent` 与补问 `errors.Is` 判读，其余读口行为同前；段册同理）；文档（ADR-0305 所引 ADR-0205 决定二「读不动：段册或班次册读不动。」逐字存在；ADR-0205、0224 只动 Status 注记与 Links；TF CONTEXT 补问规则与代码一致）；新号不撞。
+
+## 修订轮（2026-10-26，作者，`55ceec0c1`）
+
+只动评审三条，不扩范围。
+
+1. **撞键答未决重投**（非阻断 1）：`ReaskDepartureGatesHandler.Record` 撞 PK（`DepartureGateReaskAlreadyRegistered`）时不再 `continue`、整拍入账，改答未决、停点 `DepartureGateReaskSequenceTaken`（`DEPARTURE_GATE_REASK_SEQUENCE_TAKEN`），整笔回滚重投；重投时 Plan 读得到先到那一份，按它重算该不该再问，次数上限照旧由次序守住。用例：`reask_departure_gates_test.go::TestRecordKeepsTheFirstComerAndHandsOffOnlyWhatItAppended`「另一方先补了同一次」改钉未决、不交信封。
+2. **最近一次补问按次序取**（非阻断 2）：`reaskOne` 把这件对象的各次补问按 `Key.Sequence` 排序后交给 `departureGateReaskDue`，下一次的次序与上限都取最大次序，不再依赖 `FindByDeparture` 的落册时刻次序。用例：`TestReaskingFollowsTheLatestReaskAndStopsAtTheCap` 新子用例「落册时刻与次序颠倒」（第 2 次已有定论却比第 1 次落册早，不再补问）。
+3. **`signals.Handle` 对同一（包裹、事实、版本）重复调用**（非阻断 3）：核为发作期一级幂等，不修。依据：`RaiseSignalHandler.Handle` 先经 `SignalEpisodes.FindLatestForCause` 按（租户、包裹、类型、因果条件）找最近一期，因果条件由 `domain.SourceFactCausalCondition(SourceTransportFulfillment, movement-fact/<包裹>/<事实>)` 铸、不含版本；有活跃期就 `RecordHit` 答 `SignalHitRecorded`，不建第二期、不再分诊、不再交分诊意图（`RaiseDepartureGateSignalHandler.Handle` 把它归 `DepartureGateSignalRaised`）。不幂等的只有命中计数（`raise_signal.go` 注明「命中没有自有身份……发作期的幂等在不建第二个发作期，不在命中计数」）；补问信封与那条出发同一分区，VE 按分区顺序处理，同一出发的两次补问不会并发开期。这一格写进 ADR-0305 越权风险点 10。
+4. 文档随之：ADR-0305 决定三（最近一份按次序）、决定六（撞键答未决重投）、越权风险点 10（重复调用只多记命中）；UC-TF-005「一致性、幂等与并发」那一句与 `AT-TF-345` 行同改。
+
+修订后自验（含 PG）：`origin/main` 没有新提交，无需重放；`go build ./...`、`go vet`（TF、`cmd/parcel-dispatch`）通过；`go test -count=1` 带 DSN：`./internal/transportfulfillment/...`、`./internal/visibilityexception/...`、`./cmd/parcel-dispatch/`、`./internal/architecture/...` 全绿；`go run ./tools/at-coverage-counts -check` 只报生成物过期（退 1）。
 
