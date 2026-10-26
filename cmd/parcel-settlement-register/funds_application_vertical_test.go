@@ -34,7 +34,7 @@ func mustBuild[T any](t *testing.T, build func(string) (T, error), raw string) T
 }
 
 // seedClaimAmounts 登一条客户赔付 5000 XTS（SYN-COMP-1，SYN-T1），一条只在 SYN-T2 的赔付（SYN-COMP-T2-ONLY），以及
-// SYN-T1 下一条应追偿 10000 与它的部分认可 6000（SYN-ACK-1）。
+// SYN-T1 名下一条应追偿 10000 与它的部分认可 6000（SYN-ACK-1）。
 func seedClaimAmounts(t *testing.T, db *bentopg.DB) {
 	t.Helper()
 	amounts, err := sapostgres.NewCustomerClaimAmounts(db)

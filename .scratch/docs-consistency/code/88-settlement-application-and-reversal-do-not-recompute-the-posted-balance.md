@@ -2,7 +2,7 @@
 
 Category: bug
 Status: ready-for-agent——R2（上线后尽快）：code/46 起核销与核销撤销经受控 CLI 进得来，指向客户对账单的核销分配却不在自己的事务里重算该作用域的入账余额与已确认未结，要到同作用域下一次映射才进重算；可用余额不受影响（两列等额移动），以入账余额为基数的比例额度与读面上的两列在这期间停在旧值。另有一格超额对账单分配会让此后同作用域的映射重算失败、答未决，续办是撤销那笔核销。看得见的卡住、不答错可用余额。2026-10-25 票 code/46 落地时立（用户「你作为业务和系统专家自决」授权），分支 claude-code12。
-Blocked by: 无（「要裁的」第一条若裁成要新 ADR，先停在那里）
+Blocked by: 无（「要裁的」里决定一与决定六那一问若裁成要新 ADR，先停在那里）
 出处：票 [code/46](./46-settlement-application-and-reversal-have-no-process-entry.md) 落地时读码，取证于分支 claude-code12（基 main `d19eeaafc`）。
 
 ## 现象
