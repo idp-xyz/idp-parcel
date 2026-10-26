@@ -52,6 +52,7 @@ func TestExecuteReviewDutyRuleTranslatesTheDocument(t *testing.T) {
 		"没有租户":               `{"distinctSubjects":true,"requiredGrant":null}`,
 		"未知键":                `{"tenant":"SYN-TENANT-01","distinctSubjects":true,"requiredGrant":null,"appliesTo":"FUEL"}`,
 		"尾随内容":               dutyRuleJSON + ` {}`,
+		"尾随右括号":              dutyRuleJSON + `}`,
 		"坏 JSON":             `not json`,
 	} {
 		if message, code := executeReviewDutyRule(t.Context(), []byte(raw), registrar, passthroughTransactor{}); code != exitUsage {

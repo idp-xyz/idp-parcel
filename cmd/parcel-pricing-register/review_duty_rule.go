@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 
@@ -40,7 +42,8 @@ func parseReviewDutyRuleDocument(raw []byte) (domain.ReferenceReviewDutyRule, er
 	if err := decoder.Decode(&document); err != nil {
 		return domain.ReferenceReviewDutyRule{}, fmt.Errorf("规则文档不是合法 JSON 或带了未知键：%w", err)
 	}
-	if decoder.More() {
+	// 判尾随内容同 decodeReviewDocument：再解一次必须见到文件尾。
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return domain.ReferenceReviewDutyRule{}, fmt.Errorf("规则文档有尾随内容")
 	}
 	tenant, err := domain.NewTenantID(document.Tenant)

@@ -246,8 +246,8 @@ func (fixture *feedFixture) feed(t *testing.T) application.FeedReferenceSeriesRe
 // 走同一登记用例（引用版本 = 公布日期、引用指纹 = 工件摘要、整版 VERIFIABLE）；声明免复核时复核由
 // 连接器身份代写、结论通过、依据指回绑定版本、时刻取时钟当下；全程零可观察记录。
 //
-// Covers: AT-PP-016 的编排半边（前一半）——代写复核不读参考复核职责规则：喂价的依赖里没有规则读口，
-// 规则无从登记也就无从答未配置，复核照常落。
+// Covers: AT-PP-016 的编排半边，规则未登记照常落复核行那一支——代写复核不读参考复核职责规则：喂价的
+// 依赖里没有规则读口，规则无从登记也就无从答未配置，复核照常落。
 func TestFeedRegistersAndWritesTheExemptionReview(t *testing.T) {
 	fixture := newFeedFixture(t, domain.ReviewExemptionGranted)
 
@@ -434,7 +434,7 @@ func TestFeedUnconfiguredStorageStillRegistersVerifiable(t *testing.T) {
 // 责任方填成连接器身份，复核用例拒（NEEDS_ANOTHER_REVIEWER）；版本照登、答案原样交回、一条 REVIEW 站的
 // 可观察记录。
 //
-// Covers: AT-PP-016 的编排半边（后一半）——登记者等于连接器身份的那一份答须换人、不落复核行。
+// Covers: AT-PP-016 的编排半边，登记者等于连接器身份那一支——答须换人、不落复核行。
 func TestFeedReviewRefusalIsObservedButTheRegistrationStands(t *testing.T) {
 	fixture := newFeedFixture(t, domain.ReviewExemptionGranted)
 	fixture.binding = feedBinding(t, domain.ReviewExemptionGranted, "connector:FILE")

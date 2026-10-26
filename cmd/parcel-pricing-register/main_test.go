@@ -130,10 +130,12 @@ func TestReviewDocumentsCannotClaimTheExemptionDelegation(t *testing.T) {
 		kind string
 		raw  string
 	}{
-		"序列复核带代写格": {kindReferenceSeriesReview, strings.Replace(reviewJSON, `"decision"`, `"systemDelegatedUnderExemption":true,"decision"`, 1)},
-		"目录复核带代写格": {kindReferenceCatalogueReview, strings.Replace(catalogueJSON, `"decision"`, `"systemDelegatedUnderExemption":true,"decision"`, 1)},
-		"序列复核带授予集": {kindReferenceSeriesReview, strings.Replace(reviewJSON, `"decision"`, `"reviewerGrants":["SYN-GRANT"],"decision"`, 1)},
-		"序列复核尾随内容": {kindReferenceSeriesReview, reviewJSON + ` {}`},
+		"序列复核带代写格":   {kindReferenceSeriesReview, strings.Replace(reviewJSON, `"decision"`, `"systemDelegatedUnderExemption":true,"decision"`, 1)},
+		"目录复核带代写格":   {kindReferenceCatalogueReview, strings.Replace(catalogueJSON, `"decision"`, `"systemDelegatedUnderExemption":true,"decision"`, 1)},
+		"序列复核带授予集":   {kindReferenceSeriesReview, strings.Replace(reviewJSON, `"decision"`, `"reviewerGrants":["SYN-GRANT"],"decision"`, 1)},
+		"序列复核尾随内容":   {kindReferenceSeriesReview, reviewJSON + ` {}`},
+		"序列复核尾随右括号":  {kindReferenceSeriesReview, reviewJSON + `}`},
+		"目录复核尾随右方括号": {kindReferenceCatalogueReview, catalogueJSON + `]`},
 	} {
 		if message, code := execute(t.Context(), document.kind, []byte(document.raw), &cardRegistrarDouble{}, &seriesRegistrarDouble{}, reviewer, catalogues, passthroughTransactor{}); code != exitUsage {
 			t.Fatalf("%s：message=%q code=%d，want %d", name, message, code, exitUsage)

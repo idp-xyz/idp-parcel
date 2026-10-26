@@ -133,6 +133,7 @@ func TestCatalogueReviewTakesTheReviewerAndGrantsFromTheAuthenticatedOperator(t 
 		"delegation smuggled": `{"catalogueId": "SYN-CAT-ZONE-CN-SG", "systemDelegatedUnderExemption": true}`,
 		"instant garbled":     `{"catalogueId": "SYN-CAT-ZONE-CN-SG", "reviewedAt": "yesterday"}`,
 		"trailing content":    `{"catalogueId": "SYN-CAT-ZONE-CN-SG"} {}`,
+		"trailing brace":      `{"catalogueId": "SYN-CAT-ZONE-CN-SG"}}`,
 	} {
 		if _, err := intake.IntakeReferenceCatalogueReview(context.Background(), request("t", body)); !errors.Is(err, pricinghttp.ErrMalformedRequest) {
 			t.Fatalf("%s: err = %v, want ErrMalformedRequest", name, err)

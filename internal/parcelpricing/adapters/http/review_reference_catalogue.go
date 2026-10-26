@@ -3,6 +3,7 @@ package pricinghttp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -87,7 +88,8 @@ func DecodeReferenceCatalogueReviewPayload(body io.Reader) (ReferenceCatalogueRe
 	if err := decoder.Decode(&payload); err != nil {
 		return ReferenceCatalogueReviewPayload{}, fmt.Errorf("%w: reference catalogue review payload: %v", ErrMalformedRequest, err)
 	}
-	if decoder.More() {
+	// 再解一次必须见到流尾：decoder.More 对尾随的 `}`、`]` 答假，那样的载荷会被当成合法的放过去。
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return ReferenceCatalogueReviewPayload{}, fmt.Errorf("%w: reference catalogue review payload: trailing content", ErrMalformedRequest)
 	}
 	return payload, nil

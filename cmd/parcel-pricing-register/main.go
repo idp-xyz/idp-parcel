@@ -34,8 +34,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -138,7 +140,8 @@ func decodeReviewDocument(raw []byte, document any) error {
 	if err := decoder.Decode(document); err != nil {
 		return fmt.Errorf("复核文档不是合法 JSON 或带了未知键：%w", err)
 	}
-	if decoder.More() {
+	// 再解一次必须见到文件尾：decoder.More 对尾随的 `}`、`]` 答假，那样的文档会被当成合法的放过去。
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return fmt.Errorf("复核文档有尾随内容")
 	}
 	return nil
