@@ -157,9 +157,3 @@
 ## 给开发的交接
 
 实现按业务对象提供语义化命令与 Repository，不建立一个可以修改任意商业表的通用配置接口；不预置真实商业默认值。PC 的发布、收尾与登记各册已有 PostgreSQL 持久化并接进 `cmd/parcel-api` 与 `parcel-commercial`，演示租户 `SYN-TENANT-01` 由种子登 `SYN-` 取值、证据只记 `S`；真实租户的主数据与证据（`PN02-W01/W03`）属租户上线时的实施。
-
-现状缺口（规则见「商业对象发布单位」与「验收示例」两节）：
-
-| AT | 缺口 | 承接 |
-|---|---|---|
-| `AT-PC-062` | 已补：价格政策口径三个方向都不收体积系数，销售方向不再必填——受控批文给了即整批在翻译时拒，操作者面载荷答在 `pricePolicy.caliber.volumetricFactor` 上（预览为`未受理`），两处同一拒因 `domain.ErrVolumetricFactorOnPricePolicy`；迁移 `party_commercial/0041` 之后库上这一格只收空，先前登下的销售行原样留册，价格政策目录以 `historicalVolumetricFactor` 列出并标不参与计价；管理台表单去掉这一格，种子的销售政策口径去掉体积系数 | 票 [docs-consistency/code/25](../../../.scratch/docs-consistency/code/25-sell-volumetric-factor-and-amount-rounding-are-read-from-the-price-card.md) |

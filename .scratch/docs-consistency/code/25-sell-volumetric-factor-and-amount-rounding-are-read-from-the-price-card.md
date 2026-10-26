@@ -1,7 +1,7 @@
 # 25 PP SELL 方向的体积系数与金额取整：文档归商业价格政策，代码与演示种子只读价卡
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code25（基于 main `d19eeaafc`），见文末「完成记录」。此前 ready-for-agent——R2（上线后尽快）：SELL 评价已在生产路径上；PC 价格政策口径对 SELL 必填体积系数，PP 却只读卡上那一份，两处各自合法，合同政策上声明的那个静默不起作用。实施时两处登同值即可绕开（可靠，但全靠人），所以列 R2；租户若按合同政策调系数而不改卡，计费重量与金额就与预期不符。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
+Status: in-progress——完工待评审与进 main，分支 claude-code25（基于 main `9ea060682`），隔离评审无阻断、修订轮 N1–N6 已处置，见文末「完成记录」「评审记录与修订轮」。此前 ready-for-agent——R2（上线后尽快）：SELL 评价已在生产路径上；PC 价格政策口径对 SELL 必填体积系数，PP 却只读卡上那一份，两处各自合法，合同政策上声明的那个静默不起作用。实施时两处登同值即可绕开（可靠，但全靠人），所以列 R2；租户若按合同政策调系数而不改卡，计费重量与金额就与预期不符。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
 Blocked by: 无——2026-10-21 文档自洽 07 已裁（[ADR-0260](../../../docs/adr/0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md)）：**认价卡**。原 Blocked by：docs-consistency/07 先裁「SELL 评价的计价条款（金额取整、体积系数、汇率口径）从哪一份工件读」——即 audit/pc-pp.md H5 的 B 路与 audit/cross.md B2-02、B2-03 同一裁。
 出处：[audit/pc-pp.md](../audit/pc-pp.md) H5（审计归 C，并注明 owner 若认定 SELL 卡自带系数与取整就是首发形态则改归 B）；同根的 [audit/cross.md](../audit/cross.md) B2-02（金额取整，B）、B2-03（汇率口径，B）在本票登记、不另立。审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，PC、PP 代码与种子在此期间未改。
 
@@ -57,11 +57,11 @@ M（裁为价卡：撤掉 PC 的 SELL 体积口径必填，改 PC 校验与登�
 
 ### 做了什么
 
-- **第 1 步（PC，`09006c236`）**：删掉 `domain.VolumetricCaliber` 与 `domain.VolumetricFactorReference`，`PricePolicyCaliber` 只剩税务与可缺的汇率，三个方向同一形状；口径的方向由发布编排从政策正文抄给它。新哨兵 `domain.ErrVolumetricFactorOnPricePolicy`（Is `ErrInvalidPricePolicyCaliber`）是三个方向同一的拒因：受控批文给了 `volumetricFactor` 即整批在翻译时拒、一行不写（CLI 退出非零）；操作者面载荷答在 `pricePolicy.caliber.volumetricFactor` 上，预览为`未受理`带逐格问题；带系数的 `PCC-1` 快照折回时点名拒。迁移 `party_commercial/0041` 撤 0022 的方向耦合、以 `NOT VALID` 加「只收空」：已登的销售行原样留册，`LoadPricePolicyCaliber` 不把那一格折进领域口径，价格政策目录以 `historicalVolumetricFactor` 列出。管理台（`d76b78292`）表单去掉体积一格；政策册口径列只剩税务与汇率两段，历史系数显为「历史体积系数 …（不参与计价）」。
-- **第 2 步（PC，`09006c236`）**：`FxCaliber` 注释改成 ADR-0260 决定三的读法——评价不读政策正文、不执行取值时点规则、按卡绑定序列的牌价换算且不加点，这一格缺席不让任何评价停在未决；原在 `VolumetricFactorReference` 上的「本上下文持引用、不持数值」立场一并落到 `FxCaliber` 注释里（`credit_limit.go` 的指针随之改指）。「销售方向没有承运商卡」那条理由随类型删去，「为何没有体积一格」写在 `PricePolicyCaliber` 的类型注释上。
-- **第 3 步（种子，`09006c236`、`a9d8b13b8`）**：`publish-batch.json` 的 `SYN-PRICE-RULE-CN-SG` 口径去掉 `volumetricFactor`，摘要由 `PCC-1:225bc6b9…` 重算为 `PCC-1:8e53f201fee195a08cb11323a88d13d49610b3b7c221b5e3cbb257bf26833204`（经 `cmd/parcel-commercial` 的摘要对账用例算出）；`price-card-cn-sg.json` 与 `reference-series-fx-cny-sgd.json` 未动。`scripts/demo-seeds/README.md` 记了已灌库重跑答 `CONTENT_CONFLICT`、用 `--reset`，并改了配价一节「口径与卖出价卡同一套」那句。
-- **第 4 步（NR，`074b7a7be`）**：`RouteStrategyDefinitionVersion` 与 `InitialRouteEvidence` 去掉 `HasComparisonPricePolicy`、`ComparisonPricePolicy`，`catalog_initial_route_evidence.go` 与 `adapters/postgres/network_catalog.go`（目录 jsonb、行形、登记 INSERT）同改；迁移 `network_routing/0027` 删 `comparison_price_policy` 列，库里有非空值即拒绝施加。比较币种一格不动。
-- **第 5 步（`1a7d676de`）**：新用例 `internal/parcelpricing/application/sell_card_pricing_terms_test.go::TestASellCardIsPricedOnlyOnItsOwnTermsOnBothPaths` 点名 `AT-PP-013`；UC-PC-001「给开发的交接」`AT-PC-062` 一行改为已补；`.scratch/at-coverage-inventory.md` 把 `AT-PC-062` 由④移入①、`AT-PP-013` 由②移入①，只移行，总览计数未动。PP 产品代码未改。
+- **第 1 步（PC，`5830a819c`）**：删掉 `domain.VolumetricCaliber` 与 `domain.VolumetricFactorReference`，`PricePolicyCaliber` 只剩税务与可缺的汇率，三个方向同一形状；口径的方向由发布编排从政策正文抄给它。新哨兵 `domain.ErrVolumetricFactorOnPricePolicy`（Is `ErrInvalidPricePolicyCaliber`）是三个方向同一的拒因：受控批文给了 `volumetricFactor` 即整批在翻译时拒、一行不写（CLI 退出非零）；操作者面载荷答在 `pricePolicy.caliber.volumetricFactor` 上，预览为`未受理`带逐格问题；带系数的 `PCC-1` 快照折回时点名拒。迁移 `party_commercial/0041` 撤 0022 的方向耦合、以 `NOT VALID` 加「只收空」：已登的销售行原样留册，`LoadPricePolicyCaliber` 不把那一格折进领域口径，价格政策目录以 `historicalVolumetricFactor` 列出。管理台（`5e46177b4`）表单去掉体积一格；政策册口径列只剩税务与汇率两段，历史系数显为「历史体积系数 …（不参与计价）」。
+- **第 2 步（PC，`5830a819c`）**：`FxCaliber` 注释改成 ADR-0260 决定三的读法——评价不读政策正文、不执行取值时点规则、按卡绑定序列的牌价换算且不加点，这一格缺席不让任何评价停在未决；原在 `VolumetricFactorReference` 上的「本上下文持引用、不持数值」立场一并落到 `FxCaliber` 注释里（`credit_limit.go` 的指针随之改指）。「销售方向没有承运商卡」那条理由随类型删去，「为何没有体积一格」写在 `PricePolicyCaliber` 的类型注释上。
+- **第 3 步（种子，`5830a819c`、`66123f9a6`）**：`publish-batch.json` 的 `SYN-PRICE-RULE-CN-SG` 口径去掉 `volumetricFactor`，摘要由 `PCC-1:225bc6b9…` 重算为 `PCC-1:8e53f201fee195a08cb11323a88d13d49610b3b7c221b5e3cbb257bf26833204`（经 `cmd/parcel-commercial` 的摘要对账用例算出）；`price-card-cn-sg.json` 与 `reference-series-fx-cny-sgd.json` 未动。`scripts/demo-seeds/README.md` 记了已灌库重跑答 `CONTENT_CONFLICT`、用 `--reset`，并改了配价一节「口径与卖出价卡同一套」那句。
+- **第 4 步（NR，`012ab0674`）**：`RouteStrategyDefinitionVersion` 与 `InitialRouteEvidence` 去掉 `HasComparisonPricePolicy`、`ComparisonPricePolicy`，`catalog_initial_route_evidence.go` 与 `adapters/postgres/network_catalog.go`（目录 jsonb、行形、登记 INSERT）同改；迁移 `network_routing/0027` 删 `comparison_price_policy` 列，库里有非空值即拒绝施加。比较币种一格不动。
+- **第 5 步（`cf5d212da`）**：新用例 `internal/parcelpricing/application/sell_card_pricing_terms_test.go::TestASellCardIsPricedOnlyOnItsOwnTermsOnBothPaths` 点名 `AT-PP-013`；UC-PC-001「给开发的交接」那一行缺口随之不再成立（修订轮 N3 删去整张空表）；`.scratch/at-coverage-inventory.md` 把 `AT-PC-062` 由④移入①、`AT-PP-013` 由②移入①，只移行，总览计数未动。PP 产品代码未改。
 
 ### 对上一位作者半成品的处置
 
@@ -69,7 +69,7 @@ M（裁为价卡：撤掉 PC 的 SELL 体积口径必填，改 PC 校验与登�
 - **0041 迁移原样留下**：撤耦合、`NOT VALID` 的「只收空」，不删列、不改存量行，存量行点读与上列都读得回——与裁向「已发布的口径行原样留册」相符，未改形。
 - **改掉**：
   1. 受控批文与操作者面载荷原被做成「未知键整份拒」（HTTP 上是 400 畸形）。ADR-0260 决定二写的是「带了即`未受理`，与采购、法人间方向今天的判法相同」，而先前采购方向带系数在载荷上是答在 `volumetricFactor` 那一格上的`未受理`。改回认得键、点名拒，两面共用 `ErrVolumetricFactorOnPricePolicy`；红用例随之改断言。
-  2. 发布编排已不调 `ConsistentWithDirection`，那只方法与 `ErrPricePolicyCaliberDirectionMismatch` 却留着，注释还写「这道核在发布编排里走」——一句不实的代码事实。删掉二者与对应的领域用例；方向不一致由 0022 的复合外键在库上拦，`TestAPricePolicyCaliberNeedsABodyRowOfTheSameDirection` 照旧钉着。
+  2. `ConsistentWithDirection` 与 `ErrPricePolicyCaliberDirectionMismatch`：main 的 `application.declarationWrites` 调 `caliber.ConsistentWithDirection(body.Direction)`，半成品里已删去这一调用、方法与哨兵却留着。编排从正文抄方向给口径之后，这道核恒真，删去；方向不一致由 0022 的复合外键 `price_policy_caliber_policy_fkey` 在库上拦，`TestAPricePolicyCaliberNeedsABodyRowOfTheSameDirection` 钉着。方法、哨兵与对应的领域用例一并删去。
   3. 库上用例原先「撤约束、落行、手写一遍约束加回去」，加回去的是抄本。改成退回 0041 之前的表（撤 0041 约束、按 0022 原文加回耦合）、落一行当年合法的带系数销售行，再**原样施加嵌入的 0041 正文**，证迁移在有存量的表上施加得了、存量行留册可读。
   4. 注释里的「ADR-0260 之前」「今天」等时间锚改成「0041 迁移之前」或删去；`ports.go` 里另三处仍写「体积」的口径注释补改；同文件里的位置词「见下一条」改成用例名；`FxCaliber` 注释原指向「判据同 FxQuoteTypeReference」，那里并没写那条立场，改为在本处写全。
   5. 应用测试的口径夹具 `sellCaliber` 已与方向无关，改名 `policyCaliber`。
@@ -78,22 +78,22 @@ M（裁为价卡：撤掉 PC 的 SELL 体积口径必填，改 PC 校验与登�
 
 1. **删类型而不是留一个永远拒的构造门。** 裁向第 1 步写「`NewVolumetricCaliber` 三个方向一律不收」。一个永远只接受零值的值对象没有内容可携带，留下只是给后来者一个能写进口径的形状；删掉之后「政策上没有这一格」在类型上成立，拒的判法收在一个哨兵上，三处入口共用。
 2. **入口认得键、点名拒，不当未知键。** 理由见上节第 1 条：守 ADR-0260 决定二「`未受理`、判法同采购方向」，也让照旧批文写来的人看见这一格去了价卡，而不是一句「不认识这个字段」。加点键、口径方向键仍按未知键拒——它们从来没有合法过。
-3. **方向并进口径，撤方向核。** 口径行的复合外键要方向列，所以领域口径带方向；方向只来自正文，输入面上没有第二个方向，编排里的方向核恒真，留着是死代码加不实注释。
+3. **方向并进口径，撤方向核。** 口径行的复合外键要方向列，所以领域口径带方向；编排从正文抄方向给口径之后，输入面上没有第二个方向，编排里的方向核恒真，删去。
 4. **ADR-0014：`PCC-1` 不换号。** 规范化结构体、键名、键序与编码都没变，`volumetricFactor` 仍是那个可缺键，本构建只是写不出它；不带系数的文档逐字节同前（`TestAStoredPricePolicyDocumentCarryingAVolumetricFactorDoesNotRehydrate` 断言折回再规范化与原文逐字节相等）。变的是正文的合法集合，ADR-0014 Decision「规范化版本不表达业务规则变化」；ADR-0267 读法里算结构变化的加键、删键、改键这里都没有，不需要写同号改形的前提。后果：已发布版本列上的摘要不动；同一版本号按新内容重发答内容冲突（种子即如此，用 `--reset`）；带系数的旧快照只在发布载体（非权威记录、只有按版本点读）上折不回来，见越权风险点 1。
 5. **读面的标法。** 目录 API 的键改名 `historicalVolumetricFactor`、只在 0041 之前的销售行上在场，不沿用 `volumetricFactor`，免得照旧读法的调用方把它读成现行口径；「不参与计价」由管理台显在那一格旁，API 的含义写在 `ports.PricePolicyRow.HistoricalVolumetricFactor` 与 HTTP 行体注释上。不另加一个恒为假的「参与计价」布尔。
 6. **NR 删列，不留历史列。** 比较价格政策一格从来没有登记口能写：路由策略批文形状（`registrationjson.strategyContent`）没有这一键，严格解码拒未知键，在线口与 CLI 共用这份翻译；也没有任何读方。留作历史列只多一格永远为空、还要另加 CHECK 拦新值的死列。万一有人直接写过 SQL，删列会抹掉一份当真写下的声明，所以 0027 先查非空值，有就拒绝施加，由登记方定去留后置空再重跑。
-7. **`AT-PP-013` 立专门用例，不往零散用例上挂半边。** 盘点时找不到一条同时覆盖 SELL 卡、体积系数、金额取整与汇率序列的既有用例。新用例在正式评价（`EvaluatePricingHandler`）与试算（`FormEstimateEvaluationsHandler`）两条路上用同一张卡：计费重由卡上除数 5000 的体积重 4.8 KG 进位到 5 KG、落 2–10 KG 那一档，按绑定序列在用版本 v2 的牌价换算、在计价基准时点取期次，按卡上的 HALF_UP 0.01 合计，版本清单里只有卡与序列、没有商业政策或商业授权引用。「政策上另有一份口径不改变结果」以结构成立：两条路的输入面都没有放政策的位置。
+7. **`AT-PP-013` 立专门用例，不往零散用例上挂半边。** 盘点时找不到一条同时覆盖 SELL 卡、体积系数、金额取整与汇率序列的既有用例。新用例在正式评价（`EvaluatePricingHandler`）与试算（`FormEstimateEvaluationsHandler`）两条路上用同一张卡：计费重由卡上除数 5000 的体积重 4.8 KG 进位到 5 KG、落 2–10 KG 那一档，按绑定序列在用版本 v2 的牌价换算、在计价基准时点取期次，按卡上的 HALF_UP 0.01 合计，版本清单里只有卡与序列、没有商业政策或商业授权引用。修订轮 N2 另在 `cmd/parcel-api` 补了真库完整版（见「评审记录与修订轮」），应用层这条降为编排半边。
 8. **用例与 AT 的落点。** `AT-PC-062` 由六条用例分面钉住（批文、载荷、快照、领域口径、发布编排、库与迁移），盘点①一行全部列上。
 
 ### 越权风险点
 
-1. **带系数的旧发布载体折不回来**（PC owner）。0041 之前录入、仍`待批准`的价格规则载体若带系数，批准或发布时按版本点读即报重建错误（技术失败，不是`未受理`）；操作者按同一版本重新录入即替换那一行（`SubmitDraft` 对`待批准`的行按新内容替换）。已发布的带系数载体只在重放批准或发布时撞上同一错误。演示种子不经载体发布价格规则，真实租户没登过这一格（ADR-0260 越权风险点 5）。若要让旧载体可读，须在正文输入面上给历史系数留一格并在发布时拒，本票未做。
+1. **带系数的旧发布载体折不回来，答成 5xx**（PC owner）。发布载体（`publication_draft`，非权威记录）里 0041 迁移之前录入、带体积系数的价格规则快照，`domain.RehydratePublicationDraft` 折不回来，`LoadDraft` 上抛，批准、发布与录入读回三口都答 5xx `NO_ANSWER_FORMED`。按状态：`待批准`的可按同一版本重新录入替换那一行（`SubmitDraft` 的 upsert 只替换`待批准`行）；`已批准`未发布的既发布不了、也不能按同一版本重录（upsert 不替换已批准行，零行命中后 `LoadDraft` 读回又撞同一个重建错误），只能换版本号；`已发布`的重放批准或发布不再答已发布一类的格，而答 5xx。这违反 ADR-0022（5xx 是「退避后重发」，这里重发不会好）与 ADR-0029（按恢复动作分格，恢复动作是重录或换版本号）。今天受影响的行为空：没有真实租户，演示种子不经载体发布价格规则。协调方裁本票不改代码，另立 [code/87](./87-a-publication-draft-this-build-cannot-rehydrate-answers-5xx-instead-of-a-business-grade.md)，把「本构建不认得的规范化版本」那一支同病一并归进去。
 2. **目录 API 键名变了**（PC owner）。`caliber.volumetricFactor` 改为 `caliber.historicalVolumetricFactor`；仓内唯一读方管理台同分支已改，外部读方若照旧键读会读不到。
 3. **入口为拒而认得一个已退场的键**（PC owner）。批文与载荷结构上保留 `volumetricFactor`，只为点名拒；日后若删掉它，拒法就退成一般的未知键（载荷上成 400），与 ADR-0260 决定二的「`未受理`」不再一致。
 4. **库外调用方的方向核只剩外键**（PC owner）。绕开发布编排自己造口径的调用方，方向与正文不符时只在 `SavePricePolicyCaliber` 撞复合外键（答 `Invalid` 带外键原因），进程内不再先拒。
 5. **0027 有值即停**（NR owner）。若某库直接写过比较价格政策，迁移拒绝施加、部署停在那一步，要人导出、置空再重跑。
-6. **「政策另有口径不改变结果」是结构证据**（PP owner）。`AT-PP-013` 没有把一份商业价格政策喂进评价再比结果——计价的两条路上根本没有那个入口；日后若有人给评价加了读政策的口，这条用例不会自己变红，要靠版本清单那一断言与评审。
-7. **一处陈旧注释未改**（NR owner）。`cmd/parcel-network-register/main.go` 头注「路由策略的比较币种与所引价格政策两列（0016）本口还没有格」在 0027 之后半句过时；派单禁改 `cmd/*` 的 `main.go`，本票未动，留给下一张碰这个文件的票顺手改成只说比较币种。
+6. **评价读不到政策，靠的是依赖图**（PP owner）。`AT-PP-013` 的真库用例构造了前提——同库同范围的销售价格政策带一个历史体积系数 6000、汇率格选「提交接收」——而结果只跟卡走；但「评价改读政策口径」在生产装配上够不着（PP 没有伸向 PC 的适配器，试算编排的依赖里也没有 PC 的口），所以那一处变异做不出来，由新架构断言 `TestParcelPricingHasNoPartyCommercialAdapter` 兜：谁加了 `internal/parcelpricing/adapters/partycommercial` 或让 parcel-pricing 导入 party-commercial，门禁即红。
+7. **一处陈旧注释**（NR owner）。`cmd/parcel-network-register/main.go` 头注「路由策略的比较币种与所引价格政策两列（0016）本口还没有格」在 0027 之后半句过时；协调方放行只改这一句，修订轮已改为「路由策略的比较币种一列（0016）本口还没有格。」，该文件别处未动。
 
 ### 迁移
 
@@ -105,7 +105,7 @@ M（裁为价卡：撤掉 PC 的 SELL 体积口径必填，改 PC 校验与登�
 
 没有新增写口：改动的写者 `CommercialPublications.SavePricePolicyCaliber` 与 `NetworkCatalog.RegisterRouteStrategyVersion` 照旧经 `RequireExecutor` 取事务内执行器、事务外拒跑，锁与写的形状未变。确定性拒绝（带系数）答`未受理`或翻译拒，不进任何未决哨兵（ADR-0029）。
 
-### 验证（分支 claude-code25，已 rebase 到 main `d19eeaafc`，`git rebase main` 退 0、无冲突）
+### 验证（初版，分支 claude-code25 当时 rebase 到 main `d19eeaafc`，`git rebase main` 退 0、无冲突；修订轮的验证见下节）
 
 - `go build ./...`、`go vet ./...`、`gofmt -l` 干净。
 - 红证：在 `5cc309c5b` 的临时 detached worktree 上放与新用例同输入、断言改用当时已有符号的探针，四面全红——批文上 SELL 带系数被收下、只有税务的 SELL 口径被拒；载荷上 SELL 带系数无问题、SELL 不带系数答在 `volumetricFactor` 上；带系数的快照折得回；库上 SELL 不带系数撞 `price_policy_caliber_volumetric_factor_coupled`。NR 迁移用例在该提交上答「没有找到迁移 0027」。用后删了探针与 worktree。
@@ -118,5 +118,45 @@ M（裁为价卡：撤掉 PC 的 SELL 体积口径必填，改 PC 校验与登�
 
 ### 未决
 
-- 上面越权风险点 7 那句 `main.go` 头注。
+- 越权风险点 1 的答法，归 [code/87](./87-a-publication-draft-this-build-cannot-rehydrate-answers-5xx-instead-of-a-business-grade.md)。
 - 文档自洽 10 负责的旁处旧口径（GLOSSARY、CONTEXT-MAP、参数登记册等）不在本票。
+
+## 评审记录与修订轮（2026-10-25，分支 claude-code25）
+
+隔离评审无阻断，提了六条 N；协调方转来逐条处置要求。修订轮前先 `git rebase main` 到 `9ea060682`（多了 code/31，VE 范围），退 0、无冲突；旧提交未改写，修订落在新提交上。
+
+- **N1 旧载体折不回来答成 5xx**：协调方裁走 (b)，本票不改代码。越权风险点 1 按`待批准`、`已批准`未发布、`已发布`三种状态如实改写，并写明违反 ADR-0022、ADR-0029、今天受影响的行为空。另立 [code/87](./87-a-publication-draft-this-build-cannot-rehydrate-answers-5xx-instead-of-a-business-grade.md)（取号前 ls 过本目录、各 worktree 与在途分支，87 空闲），R3，把「本构建不认得的规范化版本」那一支同病归进去，修法照评审 (a)：`%w` 保链，批准、发布、录入读回三口认出折不回来的哨兵答业务格。
+- **N2 AT-PP-013 前提没构造出来**：
+  - `cmd/parcel-api/assemble_pricing_estimate_test.go::TestAnEstimateReadsOnlyTheCardWhileASellPolicyDeclaresOtherwiseAgainstARealDatabase`，真库，前提三步：
+    - 经运营操作者面的发布编排（录入 → 批准 → 发布）登一份销售价格政策，汇率格选 `REFCFG-1:parcel-shipment/as-of-semantics/submission-receipt@1`；
+    - 照 `TestMigration0041KeepsHistoricalFactorsListedAndRefusesNewOnes` 的退表手法，给它的口径行落历史系数 6000，再原样施加 0041；
+    - 经生产装配的登记编排登除数 5000 的 SELL 卡与两期汇率序列，序列口径引用指名那一版政策，并复核使之在用。
+  - 用生产装配的试算编排声明 1 KG、40×30×20 CM 的包裹，断言：
+    - 体积重按卡上除数 5000 得 4.8 KG（按 6000 会是 4 KG）；
+    - 落 20 CNY 那一档；
+    - 换算取计价基准时点所在的后一期 0.18765；
+    - 合计按卡上的 HALF_UP 0.01 得 3.75 SGD；
+    - 版本清单只有卡与序列，没有商业政策或商业授权引用。
+  - 新架构断言 `internal/architecture/pricing_terms_source_gate_test.go::TestParcelPricingHasNoPartyCommercialAdapter`：`internal/parcelpricing/adapters/partycommercial` 不得存在，parcel-pricing 不得导入 party-commercial，中文头注写了为何（ADR-0260 认价卡）。
+  - 「评价改读政策口径系数」在装配上够不着：PP 没有伸向 PC 的口，试算编排的依赖里也没有。所以做了两处替代变异，都被杀：
+    - 在 PP 的 `deriveVolumetricWeight` 里把除数硬换成 6000，模拟「读到政策上的系数」，新用例红在体积重一格；
+    - 临时建 `internal/parcelpricing/adapters/partycommercial/probe.go` 并导入 PC 端口，新架构断言两格都红。
+  - 应用层用例 `TestASellCardIsPricedOnlyOnItsOwnTermsOnBothPaths` 的 Covers 降为编排半边；盘点①的 `AT-PP-013` 一行补上真库用例。
+- **N3**：UC-PC-001「给开发的交接」删去写着「已补」的 `AT-PC-062` 一行。表空了，「现状缺口（…）：」引句与表头一起删（先例 code/11 的 `2ff8d15b9`）。
+- **N4**：「对上一位作者半成品的处置·改掉 2」与代决 3 改成实情。main 的 `application.declarationWrites` 调着 `caliber.ConsistentWithDirection(body.Direction)`；编排从正文抄方向给口径之后，这道核恒真，删去。方向不一致由 0022 的复合外键 `price_policy_caliber_policy_fkey` 在库上拦，`TestAPricePolicyCaliberNeedsABodyRowOfTheSameDirection` 钉着。初版回报里「编排早已不调」一句不实，以此为准。
+- **N5**：`TestMigration0041KeepsHistoricalFactorsListedAndRefusesNewOnes` 末尾，对 `price-historical` 用只有税务的同向口径调一次 `SavePricePolicyCaliber`，断言答 `PricePolicyCaliberContentConflict`、行上系数仍是 5000。变异：删掉 `scannedPricePolicyCaliber.sameAs` 里的系数比较，用例答 `ALREADY_REGISTERED` 而红；已复原。
+- **N6 注释**：
+  - `domain.ErrVolumetricFactorOnPricePolicy` 去掉计数与「仍」，点名 `registrationjson.pricePolicyCaliberDocument`、`http.PricePolicyCaliberPayload`、`canonicalPricePolicyCaliber`；
+  - 三条测试注释里的「不再」改成现行规则句；
+  - `domain.PricePolicyCaliber`、`canonicalPricePolicyCaliber` 与快照用例注释的「先前」改「0041 迁移之前」；
+  - 迁移 0041 头注「ADR-0260 之前按 0022 登下的销售行」改「按 0022 登下的销售行」，并说明 0022 头注提到的 `ConsistentWithDirection` 已删、方向一致只由 `price_policy_caliber_policy_fkey` 守（0022 不可改）。0041 字节因此变了，尚未进 main，不受校验和约束。
+- **协调方放行的 main.go 注释**：`cmd/parcel-network-register/main.go` 头注那一句改为「路由策略的比较币种一列（0016）本口还没有格。」，该文件别处未动；越权风险点 7 与「未决」随之改。
+
+### 修订轮验证（分支 claude-code25，rebase 到 main `9ea060682`）
+
+- `go build ./...`、`go vet ./...`、`gofmt -l` 干净；0041 与新票面量过无 CR。
+- `TMPDIR=… scripts/test-full.sh ./internal/partycommercial/... ./internal/parcelpricing/... ./internal/networkrouting/... ./cmd/parcel-commercial/... ./cmd/parcel-network-register/... ./cmd/parcel-api/ ./internal/architecture/... ./migrations/...`：退 0，36 个包 ok，3 个无测试文件。
+- 新改用例另跑 `-count=3`：`cmd/parcel-api`、`internal/architecture`、PC 领域、HTTP、postgres，PP 应用，`cmd/parcel-commercial`，全 ok。
+- 变异三处，均被杀，见上（N2 两处、N5 一处）；变异后文件按备份复原。
+- 演示种子：一次性库 `c25seed2` 上按分支首灌退 0，`SYN-PRICE-RULE-CN-SG` 口径行系数为空；用后 `DROP DATABASE … WITH (FORCE)`。
+- 未改 admin-web，三道门不重跑。
