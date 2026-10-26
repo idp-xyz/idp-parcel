@@ -4,13 +4,14 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
 // ReviewCatalogueReader 是本端点消费的读口：班次册、周期安排册、容量池册、权威交接判断册、有效交付结果册、
-// 总单册与运输准备结果册的列表读面（管理台 transport-fulfillment-review 页）。
+// 总单册、运输准备结果册、订舱册与承运答复挡回册等的列表读面（管理台 transport-fulfillment-review 页）。
 type ReviewCatalogueReader interface {
 	ListTransportSchedules(
 		ctx context.Context,
@@ -62,6 +63,17 @@ type ReviewCatalogueReader interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]ports.ActualFulfillmentUnformedRecord, error)
+	ListBookingRequests(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]ports.BookingRequestCatalogueRow, error)
+	ListBookingAnswerBounces(
+		ctx context.Context,
+		tenant domain.TenantID,
+		filter ports.BookingAnswerBounceFilter,
+		limit int,
+	) ([]ports.BookingAnswerBounceCatalogueRow, error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
@@ -78,6 +90,8 @@ const (
 	outcomeDeliveryDispatchPendingsListed  = "DELIVERY_DISPATCH_PENDINGS_LISTED"
 	outcomeReaskCadencesListed             = "REASK_CADENCES_LISTED"
 	outcomeActualFulfillmentUnformedListed = "ACTUAL_FULFILLMENT_UNFORMED_LISTED"
+	outcomeBookingRequestsListed           = "BOOKING_REQUESTS_LISTED"
+	outcomeBookingAnswerBouncesListed      = "BOOKING_ANSWER_BOUNCES_LISTED"
 )
 
 const (
@@ -91,11 +105,14 @@ const (
 	registryDeliveryDispatchPending   = "delivery-dispatch-pending"
 	registryReaskCadence              = "delivery-dispatch-reask-cadence"
 	registryActualFulfillmentUnformed = "actual-fulfillment-unformed"
+	registryBookingRequest            = "booking-request"
+	registryBookingAnswerBounce       = "booking-answer-bounce"
 )
 
 // NewQueryTransportFulfillmentRecordsEndpoint 交回运输履约查阅页各本册子的 HTTP
 // 入口（GET /transport-fulfillment-records，票 admin-skeleton-closure-batch/05；总单一格
-// 由 ADR-0113 决定六补入，周期安排与运输准备结果两格由 ADR-0201 补入）。
+// 由 ADR-0113 决定六补入，周期安排与运输准备结果两格由 ADR-0201 补入，订舱一格由票
+// demo-chain-gaps/48、承运答复挡回一格由票 demo-chain-gaps/167 补入）。
 //
 // 本页是治理查阅面，不是一线作业端（ADR-0021）：实时现场作业走设备渠道的命令端点，
 // 本端点零登记零编辑动作，只上列已登记的履约判断与事实。册名封闭集只有有表的册：
@@ -104,7 +121,11 @@ const (
 // 恒空的册子会把「无处可登」演成「登记册为空」（票 05 Comments 记明）。
 //
 // **不下推交接改判或交付更正参数**：权威交接结果与有效交付的更正各有命令用例，
-// 查阅面收下这些参数就等于让目录读口长出第二种「处置」语义。
+// 查阅面收下这些参数就等于让目录读口长出第二种「处置」语义。挡回册那一格收两个筛选参数
+// （booking、source），只筛不改；别的册子不认它们。
+//
+// 承运答复挡回一格只挂这一口的操作者查阅读：挡回册说得出一个订舱在不在、归不归某个
+// 承运商，开给集成客户端族就把 ADR-0239 决定一合并掉的那一位又交了回去。
 func NewQueryTransportFulfillmentRecordsEndpoint(
 	intake CatalogueQueryIntake,
 	reader ReviewCatalogueReader,
@@ -123,9 +144,20 @@ func NewQueryTransportFulfillmentRecordsEndpoint(
 			registry != registryTransportPreparation &&
 			registry != registryDeliveryDispatchPending &&
 			registry != registryReaskCadence &&
-			registry != registryActualFulfillmentUnformed {
+			registry != registryActualFulfillmentUnformed &&
+			registry != registryBookingRequest &&
+			registry != registryBookingAnswerBounce {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
+		}
+		var bounceFilter ports.BookingAnswerBounceFilter
+		if registry == registryBookingAnswerBounce {
+			filter, ok := bookingAnswerBounceFilter(request)
+			if !ok {
+				writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
+				return
+			}
+			bounceFilter = filter
 		}
 		query, ok := intakeCatalogueQuery(response, request, intake)
 		if !ok {
@@ -154,6 +186,10 @@ func NewQueryTransportFulfillmentRecordsEndpoint(
 			serveReaskCadences(response, request, reader, tenant, query.Limit)
 		case registryActualFulfillmentUnformed:
 			serveActualFulfillmentUnformed(response, request, reader, tenant, query.Limit)
+		case registryBookingRequest:
+			serveBookingRequests(response, request, reader, tenant, query.Limit)
+		case registryBookingAnswerBounce:
+			serveBookingAnswerBounces(response, request, reader, tenant, bounceFilter, query.Limit)
 		}
 	})
 }
@@ -446,6 +482,154 @@ func serveTransportPreparations(
 		Outcome:      outcomeTransportPreparationsListed,
 		Preparations: bodies,
 	})
+}
+
+// bookingAnswerBounceFilter 读挡回册的两个筛选参数。缺席即不筛；给了却立不起来（空白、带 NUL、订舱标识超过字节界）是坏请求，
+// 不当作没给——把一个写坏的筛选静默放宽成全册，读的人会以为那个订舱没有挡回。订舱标识照领域构造门判，答复方是集成客户端绑定
+// 的来源身份、领域里没有它的类型，只判非空白与 NUL。
+func bookingAnswerBounceFilter(request *http.Request) (ports.BookingAnswerBounceFilter, bool) {
+	values := request.URL.Query()
+	var filter ports.BookingAnswerBounceFilter
+	if values.Has("booking") {
+		booking, err := domain.NewBookingReference(values.Get("booking"))
+		if err != nil {
+			return ports.BookingAnswerBounceFilter{}, false
+		}
+		filter.Booking = booking.String()
+	}
+	if values.Has("source") {
+		source := values.Get("source")
+		if strings.TrimSpace(source) == "" || strings.ContainsRune(source, 0) {
+			return ports.BookingAnswerBounceFilter{}, false
+		}
+		filter.Source = source
+	}
+	return filter, true
+}
+
+// serveBookingRequests 上列订舱册（票 demo-chain-gaps/48）：一次订舱一行，带读出的状态词、当前那一份答复与名下全部答复。
+func serveBookingRequests(
+	response http.ResponseWriter,
+	request *http.Request,
+	reader ReviewCatalogueReader,
+	tenant domain.TenantID,
+	limit int,
+) {
+	rows, err := reader.ListBookingRequests(request.Context(), tenant, limit)
+	if err != nil {
+		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+		return
+	}
+	bodies := make([]bookingRequestRowBody, 0, len(rows))
+	for _, row := range rows {
+		answers := make([]bookingAnswerBody, 0, len(row.Answers))
+		for _, answer := range row.Answers {
+			answers = append(answers, bookingAnswerRowBody(row.Booking, answer))
+		}
+		body := bookingRequestRowBody{
+			bookingRequestBody: bookingRequestBody{
+				Booking:     row.Booking,
+				Commission:  row.Commission,
+				Schedule:    row.Schedule,
+				Quantity:    row.Quantity,
+				Unit:        row.Unit,
+				RequestedAt: rfc3339(row.RequestedAt),
+				CancelledAt: optionalInstant(row.CancelledAt),
+				RecordedAt:  rfc3339(row.RecordedAt),
+			},
+			Standing: row.Standing,
+			Answers:  answers,
+		}
+		if row.Current != nil {
+			current := bookingAnswerRowBody(row.Booking, *row.Current)
+			body.CurrentAnswer = &current
+		}
+		bodies = append(bodies, body)
+	}
+	writeJSON(response, http.StatusOK, bookingRequestListResponse{
+		Outcome:  outcomeBookingRequestsListed,
+		Bookings: bodies,
+	})
+}
+
+func bookingAnswerRowBody(booking string, row ports.BookingAnswerCatalogueRow) bookingAnswerBody {
+	return bookingAnswerBody{
+		Booking:    booking,
+		Answer:     row.Answer,
+		Outcome:    row.Outcome,
+		Quantity:   row.Quantity,
+		Basis:      row.Basis,
+		DecidedAt:  rfc3339(row.DecidedAt),
+		RecordedAt: rfc3339(row.RecordedAt),
+	}
+}
+
+// serveBookingAnswerBounces 上列承运答复挡回册（ADR-0239 决定二，票 demo-chain-gaps/167）：哪个答复方、对哪个订舱的哪一份答复、
+// 凭什么挡回、首次与最近一次挡回时刻、次数。空册答 []。
+func serveBookingAnswerBounces(
+	response http.ResponseWriter,
+	request *http.Request,
+	reader ReviewCatalogueReader,
+	tenant domain.TenantID,
+	filter ports.BookingAnswerBounceFilter,
+	limit int,
+) {
+	rows, err := reader.ListBookingAnswerBounces(request.Context(), tenant, filter, limit)
+	if err != nil {
+		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+		return
+	}
+	bodies := make([]bookingAnswerBounceBody, 0, len(rows))
+	for _, row := range rows {
+		bodies = append(bodies, bookingAnswerBounceBody{
+			Source:         row.Source,
+			Booking:        row.Booking,
+			Answer:         row.Answer,
+			Basis:          row.Basis,
+			FirstBouncedAt: rfc3339(row.FirstBouncedAt),
+			LastBouncedAt:  rfc3339(row.LastBouncedAt),
+			Count:          quantity(row.Count),
+		})
+	}
+	writeJSON(response, http.StatusOK, bookingAnswerBounceListResponse{
+		Outcome: outcomeBookingAnswerBouncesListed,
+		Bounces: bodies,
+	})
+}
+
+type bookingRequestListResponse struct {
+	Outcome  string                  `json:"outcome"`
+	Bookings []bookingRequestRowBody `json:"bookings"`
+}
+
+// bookingRequestRowBody 是订舱册上一行（票 demo-chain-gaps/48）。订舱各格与订舱提交口回显的那一份同一形状（bookingRequestBody，
+// 申请量照那一口写成数），答复与承运答复口回显的同一形状（bookingAnswerBody）：同一件东西在命令答复与查阅页上不换写法。
+//
+// standing 是读出的状态词（PENDING_CONFIRMATION、WAITLISTED、CONFIRMED、PARTIALLY_CONFIRMED、REFUSED、EXPIRED、WITHDRAWN，读法见
+// ports 那组状态词），只在读口派生一处，页面照抄、不另算。currentAnswer 是当前那一份答复，没有答复时缺席；answers 是名下全部
+// 答复，按答复时刻先后，候补与它的后继都在，总在场、空数组即还没有答复。cancelledAt 缺席即没有取消——取消不进 standing。
+type bookingRequestRowBody struct {
+	bookingRequestBody
+	Standing      string              `json:"standing"`
+	CurrentAnswer *bookingAnswerBody  `json:"currentAnswer,omitempty"`
+	Answers       []bookingAnswerBody `json:"answers"`
+}
+
+type bookingAnswerBounceListResponse struct {
+	Outcome string                    `json:"outcome"`
+	Bounces []bookingAnswerBounceBody `json:"bounces"`
+}
+
+// bookingAnswerBounceBody 是挡回册上一行。basis 是 BOOKING_NOT_REGISTERED（订舱在本租户下不在册）或 SOURCE_NOT_SERVICE_PROVIDER
+// （订舱在册，答复方不是它所属委托的服务提供方）；两个时刻是本上下文记下挡回的时刻，不是答复方给的答复时刻；count 是十进制计数串。
+type bookingAnswerBounceBody struct {
+	Source         string `json:"source"`
+	Booking        string `json:"booking"`
+	Answer         string `json:"answer"`
+	Basis          string `json:"basis"`
+	FirstBouncedAt string `json:"firstBouncedAt"`
+	LastBouncedAt  string `json:"lastBouncedAt"`
+	Count          string `json:"count"`
 }
 
 // quantity 把容量数量转写成十进制计数串：int64 直投 JSON number 在 2^53 以上的取值
