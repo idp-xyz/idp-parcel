@@ -104,6 +104,10 @@ const (
 	DecisionTransportChargeOccurrenceInvalidation          DecisionKind = "TRANSPORT_CHARGE_OCCURRENCE_INVALIDATION"
 )
 
+// DecisionAuthorizedReroute 是授权改路（ADR-0284 决定一）：授权角色据一份改路建议择一候选、形成改路决定与新计划。它是路由侧
+// 的生产决定，与运输、关务各口的授予互不相通——能提交委托的不因此能改一件包裹的路由。
+const DecisionAuthorizedReroute DecisionKind = "AUTHORIZED_REROUTE"
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -122,6 +126,7 @@ var decisionKinds = []DecisionKind{
 	DecisionExternalFundsFactAdoption, DecisionRegulatoryCredentialRegistration,
 	DecisionTransportCommissionAgreementRevision,
 	DecisionFulfillmentSegmentCommissionAdoptionWithdrawal, DecisionTransportChargeOccurrenceInvalidation,
+	DecisionAuthorizedReroute,
 }
 
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。
