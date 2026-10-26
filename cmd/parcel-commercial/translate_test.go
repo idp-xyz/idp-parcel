@@ -1212,3 +1212,36 @@ func TestASupplierAgreementBodyTranslatesItsChargeConditions(t *testing.T) {
 		})
 	}
 }
+
+// Covers: AT-PC-063 的受控批量口半边——授权规则版本上的 authorityGrant 翻成授予声明：动作取授权动作封闭集的名字，
+// 等级是租户登记的串、原样带过（翻译层不认任何值）；动作集外与缺起点各被拒，不折成某一格。
+func TestAnAuthorityGrantTranslatesItsFiveDimensions(t *testing.T) {
+	batch := func(grant string) []byte {
+		return []byte(`{"items": [{"tenantId": "t", "kind": "AUTHORIZATION_RULE", "objectId": "auth-1",
+			"version": "v1", "scope": "s", "contentDigest": "d",
+			"effectiveStartsAt": "2026-01-01T00:00:00Z",
+			"approval": {"reference": "a", "source": "s", "approvedAt": "2025-12-15T00:00:00Z"},
+			"approvalRoleStanding": "CONFIRMED",
+			"declarations": {"authorityGrant": ` + grant + `}}]}`)
+	}
+	commands, err := publishCommandsFromJSON(batch(`{"action": "SOURCE_DATA_AMENDMENT", "legalEntity": "legal-1",
+		"level": "ANY-LEVEL-THE-TENANT-REGISTERED", "scope": "scope-1", "effectiveStartsAt": "2026-01-01T00:00:00Z"}`))
+	if err != nil {
+		t.Fatalf("翻译授予批：%v", err)
+	}
+	grant := commands[0].Declarations.AuthorityGrant
+	if grant == nil || grant.Action != pcdomain.SourceDataAmendmentAction || grant.LegalEntity.String() != "legal-1" ||
+		grant.Level.String() != "ANY-LEVEL-THE-TENANT-REGISTERED" || grant.Scope.String() != "scope-1" {
+		t.Fatalf("授予变形：%#v", grant)
+	}
+	if _, bounded := grant.Effective.EndsAt(); bounded {
+		t.Fatal("没给终点的区间翻成了有界")
+	}
+	if _, err := publishCommandsFromJSON(batch(`{"action": "WITHDRAWAL", "legalEntity": "legal-1", "level": "l", "scope": "s",
+		"effectiveStartsAt": "2026-01-01T00:00:00Z"}`)); err == nil {
+		t.Fatal("集外动作被收下了")
+	}
+	if _, err := publishCommandsFromJSON(batch(`{"action": "SOURCE_DATA_AMENDMENT", "legalEntity": "legal-1", "level": "l", "scope": "s"}`)); err == nil {
+		t.Fatal("缺起点被收下了")
+	}
+}

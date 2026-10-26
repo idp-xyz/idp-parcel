@@ -72,6 +72,9 @@ type declarationsDocument struct {
 	// sourceDataAmendment 挂在接单规则包版本上（ADR-0120）：接受后客户原始资料按（资料组 × 阶段 × 意图）能不能改，
 	// 外加 closed 说缺格怎么读。缺键 = 整节没声明；键在则 closed 必填不给默认。
 	SourceDataAmendment *sourceDataAmendmentDocument `json:"sourceDataAmendment,omitempty"`
+	// authorityGrant 挂在授权规则版本上（ADR-0312）：这一版授予（法人 × 等级）在哪个范围、哪段区间内做哪个动作。
+	// 缺键 = 这一版不带授予，既有批文一字不改。
+	AuthorityGrant *authorityGrantDocument `json:"authorityGrant,omitempty"`
 	// deliveryConditions 挂在服务产品版本（产品层）或客户合同版本（合同层）上（ADR-0133 决定四，票
 	// party-commercial-context-gaps/11）：允许的交付方式集合 + 收件范围规则引用 + 交付证明规则引用；合同层多一键 tightens
 	// 指名所收紧的产品版本。缺键 = 整节没声明（这一版没有交付条件，不默认「本人签收」）。
@@ -353,6 +356,17 @@ type contractDelegationDocument struct {
 	Action            string     `json:"action"`
 	Scope             string     `json:"scope"`
 	Level             string     `json:"level"`
+	EffectiveStartsAt time.Time  `json:"effectiveStartsAt"`
+	EffectiveEndsAt   *time.Time `json:"effectiveEndsAt,omitempty"`
+}
+
+// authorityGrantDocument 是授权规则版本上的一条授予（ADR-0312）：动作用 pcdomain.AuthorizedAction 的名字，
+// 等级是租户登记的串、翻译层不认任何具体值。effectiveStartsAt 缺席即零时刻，由 NewEffectiveInterval 拒。
+type authorityGrantDocument struct {
+	Action            string     `json:"action"`
+	LegalEntity       string     `json:"legalEntity"`
+	Level             string     `json:"level"`
+	Scope             string     `json:"scope"`
 	EffectiveStartsAt time.Time  `json:"effectiveStartsAt"`
 	EffectiveEndsAt   *time.Time `json:"effectiveEndsAt,omitempty"`
 }
@@ -664,6 +678,14 @@ func declarationsFrom(document *declarationsDocument) (pcapplication.CommercialD
 		declarations.PreAcceptanceFinancialControlPolicyBody = body
 	}
 
+	if document.AuthorityGrant != nil {
+		grant, err := authorityGrantFrom(*document.AuthorityGrant)
+		if err != nil {
+			return declarations, err
+		}
+		declarations.AuthorityGrant = &grant
+	}
+
 	for _, delegation := range document.ContractDelegations {
 		declared, err := contractDelegationFrom(delegation)
 		if err != nil {
@@ -799,6 +821,41 @@ func amendmentAllowanceFrom(name string) (pcdomain.AmendmentAllowance, error) {
 	default:
 		return pcdomain.AmendmentAllowanceNotDeclared, fmt.Errorf("集合外的允许性 %q", name)
 	}
+}
+
+func authorityGrantFrom(document authorityGrantDocument) (pcapplication.AuthorityGrantDeclaration, error) {
+	none := pcapplication.AuthorityGrantDeclaration{}
+	action, err := authorizedActionFrom(document.Action)
+	if err != nil {
+		return none, err
+	}
+	legalEntity, err := pcdomain.NewLegalEntityReference(document.LegalEntity)
+	if err != nil {
+		return none, err
+	}
+	level, err := pcdomain.NewAuthorityLevel(document.Level)
+	if err != nil {
+		return none, err
+	}
+	scope, err := pcdomain.NewCommercialScopeReference(document.Scope)
+	if err != nil {
+		return none, err
+	}
+	endsAt := time.Time{}
+	if document.EffectiveEndsAt != nil {
+		endsAt = *document.EffectiveEndsAt
+	}
+	interval, err := pcdomain.NewEffectiveInterval(document.EffectiveStartsAt, endsAt)
+	if err != nil {
+		return none, fmt.Errorf("授予 %s@%s/%s 的区间：%w", document.Action, document.Scope, document.Level, err)
+	}
+	return pcapplication.AuthorityGrantDeclaration{
+		Action:      action,
+		LegalEntity: legalEntity,
+		Level:       level,
+		Scope:       scope,
+		Effective:   interval,
+	}, nil
 }
 
 func contractDelegationFrom(document contractDelegationDocument) (pcdomain.ContractDelegationDeclaration, error) {

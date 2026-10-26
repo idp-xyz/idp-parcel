@@ -1012,6 +1012,12 @@ func (stub stubPublicationRegistry) SaveAsOfPolicies(
 	return stub.declaration()
 }
 
+func (stub stubPublicationRegistry) SaveAuthorityGrant(
+	context.Context, domain.AuthorityGrant,
+) (ports.DeclarationSaveOutcome, error) {
+	return stub.declaration()
+}
+
 func (stub stubPublicationRegistry) SaveContractDelegations(
 	context.Context, domain.ContractDelegationContent,
 ) (ports.DeclarationSaveOutcome, error) {
