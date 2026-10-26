@@ -405,7 +405,7 @@ const pricePolicies: CommercialPolicyListResponseBody = {
       caliber: {
         taxDisposition: 'TAX_EXCLUSIVE',
         taxClassification: 'vat-standard',
-        volumetricFactor: 'sell-divisor-5000-cm',
+        historicalVolumetricFactor: '5000',
         fx: { quoteType: 'boc-cash-selling', asOfSemantics: 'AT_ORDER_DATE', asOfPolicyVersion: 'asof-policy/v3' },
         registeredAt: '2026-01-01T00:00:00Z',
       },
@@ -438,17 +438,22 @@ const pricePolicies: CommercialPolicyListResponseBody = {
   ],
 };
 
-test('商业价格政策册多一列口径：三段各显自己的真话，没口径的行列为「未登记」而不是空', () => {
+// 体积系数是价卡内容（ADR-0260 决定二），口径列只有税务与汇率两段；0041 之前销售行登下的系数以 historicalVolumetricFactor
+// 透出，页面如实列出并标「不参与计价」，不抹掉也不显成现行口径的一段。
+test('商业价格政策册多一列口径：两段各显自己的真话，历史体积系数标不参与计价，没口径的行列为「未登记」而不是空', () => {
   deepEqual(
     kindColumns.PRICE_POLICY.map((column) => column.header),
-    ['政策对象 / 版本', '政策方向', '定价方案引用', '方案方向', '绑定转换', '适用范围', '计价口径（税务;体积;汇率）', '有效区间', '登记时间'],
+    ['政策对象 / 版本', '政策方向', '定价方案引用', '方案方向', '绑定转换', '适用范围', '计价口径（税务;汇率）', '有效区间', '登记时间'],
   );
   const [withFx, plain, bare] = rowsOf(pricePolicies);
   equal(withFx.key, 'price:price-fx@v1');
   equal(withFx.values.direction, '卖价');
   equal(withFx.values.planDirection, '买价');
-  equal(withFx.values.caliber, '税务 未税@vat-standard;体积 sell-divisor-5000-cm;汇率 boc-cash-selling/AT_ORDER_DATE/asof-policy/v3');
-  equal(plain.values.caliber, '税务 税务不适用;体积 无系数（非销售方向）;汇率 未声明');
+  equal(
+    withFx.values.caliber,
+    '税务 未税@vat-standard;汇率 boc-cash-selling/AT_ORDER_DATE/asof-policy/v3;历史体积系数 5000（不参与计价）',
+  );
+  equal(plain.values.caliber, '税务 税务不适用;汇率 未声明');
   equal(bare.values.caliber, '未登记');
   equal(pricePolicyCaliberCell({ ...pricePolicies.policies[0], caliber: undefined }), '口径缺失（响应不合契约）');
 });

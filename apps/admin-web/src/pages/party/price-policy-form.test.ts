@@ -8,7 +8,6 @@ import {
   pricePolicyFieldPaths,
   pricePolicyPayloadOf,
   showsTaxClassification,
-  showsVolumetricFactor,
   taxDispositionOptions,
   withShellCopiedIntoPolicy,
   type PricePolicyDraft,
@@ -33,7 +32,6 @@ const filled: PricePolicyDraft = {
   policyEffectiveEndsAt: '2026-12-31',
   taxDisposition: 'TAX_EXCLUSIVE',
   taxClassification: 'vat-standard',
-  volumetricFactor: 'sell-divisor-5000-cm',
   fxQuoteType: 'boc-cash-selling',
   fxAsOfSemantics: 'AT_ORDER_DATE',
   fxAsOfPolicyVersion: 'asof-policy/v3',
@@ -57,16 +55,15 @@ test('草稿组成载荷：kind 固定 PRICE_RULE，正文与口径节在同一�
       caliber: {
         taxDisposition: 'TAX_EXCLUSIVE',
         taxClassification: 'vat-standard',
-        volumetricFactor: 'sell-divisor-5000-cm',
         fx: { quoteType: 'boc-cash-selling', asOfSemantics: 'AT_ORDER_DATE', asOfPolicyVersion: 'asof-policy/v3' },
       },
     },
   });
 });
 
-// 服务端按键在场与否分辨「没有」：区间上界、税务分类、体积系数、汇率节都是缺席而不是空串。口径节本身永远在——本表单
-// 不给「先发正文、回头补口径」的两步；口径节里没有方向键。
-test('可缺的键缺席而不是空串；口径节永远随正文同送；口径节里没有方向键', () => {
+// 服务端按键在场与否分辨「没有」：区间上界、税务分类、汇率节都是缺席而不是空串。口径节本身永远在——本表单不给「先发
+// 正文、回头补口径」的两步；口径节里没有方向键，也没有体积系数键（价卡内容，ADR-0260 决定二）。
+test('可缺的键缺席而不是空串；口径节永远随正文同送；口径节里没有方向键与体积系数键', () => {
   const payload = pricePolicyPayloadOf({
     ...filled,
     direction: 'BUY',
@@ -75,7 +72,6 @@ test('可缺的键缺席而不是空串；口径节永远随正文同送；口�
     policyEffectiveEndsAt: '  ',
     taxDisposition: 'TAX_NOT_APPLICABLE',
     taxClassification: '',
-    volumetricFactor: ' ',
     fxQuoteType: '',
     fxAsOfSemantics: '',
     fxAsOfPolicyVersion: '',
@@ -86,6 +82,7 @@ test('可缺的键缺席而不是空串；口径节永远随正文同送；口�
   ok('caliber' in payload.pricePolicy!);
   deepEqual(payload.pricePolicy!.caliber, { taxDisposition: 'TAX_NOT_APPLICABLE' });
   ok(!('direction' in payload.pricePolicy!.caliber!));
+  ok(!('volumetricFactor' in pricePolicyPayloadOf(filled).pricePolicy!.caliber!));
 
   const bounded = pricePolicyPayloadOf({ ...filled, effectiveEndsAt: '2027-01-01' });
   equal(bounded.effectiveEndsAt, '2027-01-01T00:00:00Z');
@@ -108,24 +105,17 @@ test('汇率三格全空即整节缺席；填了任一格就整节送，缺的�
 });
 
 // 显隐是呈现不是裁门：隐掉的条件格若草稿里有值照送，由服务端按 CHECK 同形的构造门答在那一格；表单不静默丢、不代填。
-test('隐掉的条件格有值照送：不适用却填了分类、采购方向却填了系数都原样进载荷', () => {
-  const draft = { ...filled, direction: 'BUY', planDirection: 'BUY', conversion: 'NONE', taxDisposition: 'TAX_NOT_APPLICABLE' };
+test('隐掉的条件格有值照送：不适用却填了分类原样进载荷', () => {
+  const draft = { ...filled, taxDisposition: 'TAX_NOT_APPLICABLE' };
   equal(showsTaxClassification(draft), false);
-  equal(showsVolumetricFactor(draft), false);
-  const caliber = pricePolicyPayloadOf(draft).pricePolicy!.caliber!;
-  equal(caliber.taxClassification, 'vat-standard');
-  equal(caliber.volumetricFactor, 'sell-divisor-5000-cm');
+  equal(pricePolicyPayloadOf(draft).pricePolicy!.caliber!.taxClassification, 'vat-standard');
 });
 
-test('条件格显隐：分类只在含税 / 未税显、系数只在销售方向显；未选时两格都显', () => {
+test('条件格显隐：分类只在含税 / 未税显；未选时也显', () => {
   equal(showsTaxClassification({ taxDisposition: 'TAX_INCLUSIVE' }), true);
   equal(showsTaxClassification({ taxDisposition: 'TAX_EXCLUSIVE' }), true);
   equal(showsTaxClassification({ taxDisposition: 'TAX_NOT_APPLICABLE' }), false);
   equal(showsTaxClassification({ taxDisposition: '' }), true);
-  equal(showsVolumetricFactor({ direction: 'SELL' }), true);
-  equal(showsVolumetricFactor({ direction: 'BUY' }), false);
-  equal(showsVolumetricFactor({ direction: 'INTERNAL' }), false);
-  equal(showsVolumetricFactor({ direction: '' }), true);
 });
 
 // 封闭集四格不预选、不代填：空串照送，服务端按集合外点名；conversion 空串不折成 NONE（ADR-0057：planDirection 与 conversion
@@ -190,8 +180,8 @@ test('「从版本壳带入」只抄范围与区间两样，其余各格不动',
   equal(copied.taxClassification, 'vat-standard');
 });
 
-test('空草稿十八格全空', () => {
+test('空草稿十七格全空', () => {
   const draft = emptyPricePolicyDraft();
-  equal(Object.keys(draft).length, 18);
+  equal(Object.keys(draft).length, 17);
   for (const [key, value] of Object.entries(draft)) equal(value, '', `${key} 不为空`);
 });

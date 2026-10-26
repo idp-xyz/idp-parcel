@@ -3,11 +3,14 @@
 // 组件 PricePolicyPublicationForm.tsx 只负责摆，五步由公共半边 PublicationDraftFlow 走。
 //
 // **本文件不算摘要、不裁任何门、不判领域规则**（伞票 07 硬句）。空字段、区间先后、引用在不在册、方向 × 方案方向 × 转换
-// 的绑定矩阵、口径两条件格的在场规则，一律送上去让服务端答——预览口逐格 problems 回来挂到对应格旁，跨格的绑定矩阵以
+// 的绑定矩阵、口径条件格的在场规则，一律送上去让服务端答——预览口逐格 problems 回来挂到对应格旁，跨格的绑定矩阵以
 // 成因一句回来。连「必填」都不拦，免得两处口径；没有一格编不进载荷类型（全是文本），所以不给 localProblems。
 //
-// **显隐是呈现，不是裁门。** 税务分类只在含税 / 未税时显、体积系数只在销售方向时显；隐掉的格草稿里的值**不清、照送**
-// ——「隐了却传了」由服务端按 CHECK 同形的构造门答在那一格上，组件把隐格上的值与问题如实显出来，不替人静默丢。
+// **显隐是呈现，不是裁门。** 税务分类只在含税 / 未税时显；隐掉的格草稿里的值**不清、照送**——「隐了却传了」由服务端
+// 按 CHECK 同形的构造门答在那一格上，组件把隐格上的值与问题如实显出来，不替人静默丢。
+//
+// **口径节没有体积系数一格。** 体积系数与金额取整是价卡内容、不分方向（ADR-0260 决定二），在价卡上登，不在价格政策上登；
+// 本表单因此不给这一格，载荷里永远不带它。
 //
 // **口径随正文同笔登记。** 本表单送出的载荷永远带口径节（CONTEXT「商业价格规则必须声明含税、未税或税务不适用」），
 // 不给「先发正文、回头补口径」的两步；汇率一节可缺——不涉及外币的政策没有汇率口径，三格全空即不送这一节，填了任一格
@@ -23,7 +26,7 @@ import type {
 } from './publication-draft-api';
 
 /**
- * 草稿：版本壳五格 + 政策正文七格 + 口径节（税务两格、体积一格、汇率三格），全是文本。壳上的范围与区间是**版本**的
+ * 草稿：版本壳五格 + 政策正文七格 + 口径节（税务两格、汇率三格），全是文本。壳上的范围与区间是**版本**的
  * （SaveVersion 逐列比对的项），正文里的是**政策**自己的（0010 的 policy_scope_ref 与区间），两样分开给。
  * 封闭集四格（方向、方案方向、转换、税务口径）空串即「未选」——不预选（伞票硬句），服务端按集合外点名。
  */
@@ -42,7 +45,6 @@ export interface PricePolicyDraft {
   policyEffectiveEndsAt: string;
   taxDisposition: string;
   taxClassification: string;
-  volumetricFactor: string;
   fxQuoteType: string;
   fxAsOfSemantics: string;
   fxAsOfPolicyVersion: string;
@@ -64,7 +66,6 @@ export function emptyPricePolicyDraft(): PricePolicyDraft {
     policyEffectiveEndsAt: '',
     taxDisposition: '',
     taxClassification: '',
-    volumetricFactor: '',
     fxQuoteType: '',
     fxAsOfSemantics: '',
     fxAsOfPolicyVersion: '',
@@ -97,14 +98,6 @@ export function showsTaxClassification(draft: Pick<PricePolicyDraft, 'taxDisposi
 }
 
 /**
- * 体积系数那一格显不显：只在销售方向时显（采购与法人间方向的系数在承运商价卡上，本上下文不得再声明一份）。未选方向时
- * 也显，理由同上。
- */
-export function showsVolumetricFactor(draft: Pick<PricePolicyDraft, 'direction'>): boolean {
-  return draft.direction === '' || draft.direction === 'SELL';
-}
-
-/**
  * 表单渲染的 JSON 路径（载荷键名原词）。公共半边拿它分「本表单的格」与「未认领的路径」：服务端点名的路径不在这张表里
  * 就单列出来，不静默丢。`pricePolicy.caliber.fx` 是汇率整节的路径（三格各自立得住却仍构造不出时服务端记在节上）。
  * 这张表与 pricePolicyPayloadOf 能产出的键一一对应（外加节级那一条），测试钉着。
@@ -125,7 +118,6 @@ export const pricePolicyFieldPaths: readonly string[] = [
   'pricePolicy.effectiveEndsAt',
   'pricePolicy.caliber.taxDisposition',
   'pricePolicy.caliber.taxClassification',
-  'pricePolicy.caliber.volumetricFactor',
   'pricePolicy.caliber.fx',
   'pricePolicy.caliber.fx.quoteType',
   'pricePolicy.caliber.fx.asOfSemantics',
@@ -134,7 +126,7 @@ export const pricePolicyFieldPaths: readonly string[] = [
 
 /**
  * 组件里显 Problems 的路径表（票 22 判据 3），按 PricePolicyPublicationForm 的 JSX 逐处抄：`kind` 一处 Problems 挂在版本壳
- * 标题下；税务分类与体积系数是条件格，隐着时也显自己那条路径的问题（ConditionalField）；汇率节根一处 Problems 挂在三格
+ * 标题下；税务分类是条件格，隐着时也显自己那条路径的问题（ConditionalField）；汇率节根一处 Problems 挂在三格
  * 下；其余各一 Field（定价方案经 ReferencePicker 也是一 Field）。与上面的认领表由 publication-form-rendered-paths.test.ts
  * 比对——改 JSX 里的 path 要同步改这里。
  */
@@ -154,7 +146,6 @@ export const pricePolicyRenderedPaths: readonly string[] = [
   'pricePolicy.effectiveEndsAt',
   'pricePolicy.caliber.taxDisposition',
   'pricePolicy.caliber.taxClassification',
-  'pricePolicy.caliber.volumetricFactor',
   'pricePolicy.caliber.fx.quoteType',
   'pricePolicy.caliber.fx.asOfSemantics',
   'pricePolicy.caliber.fx.asOfPolicyVersion',
@@ -167,7 +158,7 @@ export function declaresFx(draft: Pick<PricePolicyDraft, 'fxQuoteType' | 'fxAsOf
 }
 
 /**
- * 草稿 → 产品定义的载荷。可缺的键缺席而不是空串：两个区间上界、税务分类、体积系数、汇率节——服务端按键在场与否分辨
+ * 草稿 → 产品定义的载荷。可缺的键缺席而不是空串：两个区间上界、税务分类、汇率节——服务端按键在场与否分辨
  * 「没有」，空串会被当成填了空的值送进构造门。封闭集四格照原样送（含空串「未选」，服务端按集合外点名，不代填 NONE）。
  * 隐掉的条件格若草稿里有值**照送**（显隐是呈现不是裁门）。**载荷里没有身份也没有摘要**：租户与录入者由接入渠道的操作者
  * 信封给，摘要只有服务端算。
@@ -175,7 +166,6 @@ export function declaresFx(draft: Pick<PricePolicyDraft, 'fxQuoteType' | 'fxAsOf
 export function pricePolicyPayloadOf(draft: PricePolicyDraft): CommercialPublicationPayload {
   const caliber: PricePolicyCaliberPayload = { taxDisposition: draft.taxDisposition.trim() };
   if (draft.taxClassification.trim() !== '') caliber.taxClassification = draft.taxClassification.trim();
-  if (draft.volumetricFactor.trim() !== '') caliber.volumetricFactor = draft.volumetricFactor.trim();
   if (declaresFx(draft)) {
     const fx: FxCaliberPayload = {
       quoteType: draft.fxQuoteType.trim(),

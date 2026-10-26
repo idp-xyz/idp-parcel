@@ -12,7 +12,6 @@ import {
   pricePolicyFieldPaths,
   pricePolicyPayloadOf,
   showsTaxClassification,
-  showsVolumetricFactor,
   taxDispositionOptions,
   withShellCopiedIntoPolicy,
   type ClosedSetOption,
@@ -30,7 +29,7 @@ import {
  * 用途、范围显给人看，**不按方向过滤、不预选**。`planDirection` 与 `conversion` 是发布当时保全的邻接答复与声明
  * （ADR-0057）：操作者照目录上看到的方案方向如实填，表单不从选中的方案反推、不代填 NONE。
  *
- * **口径作条件节，显隐是呈现不是裁门**：税务分类只在含税 / 未税时显、体积系数只在销售方向时显；隐掉的格草稿里有值照送，
+ * **口径作条件节，显隐是呈现不是裁门**：税务分类只在含税 / 未税时显；隐掉的格草稿里有值照送，
  * 组件把它与服务端答在那一格的问题如实显出来并给「清空」，不静默丢。汇率三格全空即不声明汇率口径，填了任一格整节送。
  * 口径随正文同一份载荷送出，不给「先发正文、回头补口径」的两步。
  *
@@ -177,8 +176,9 @@ function PricePolicyFields({
         <h3 className={groupTitle}>计价口径（0022，随正文同一份载荷登记）</h3>
         <p className={noteClass}>
           口径随正文<strong>同笔</strong>登记，不给「先发正文、回头补口径」的两步。税务口径三选一；税务分类只在含税 / 未税时
-          显、体积系数只在销售方向时显——<strong>显隐是呈现，不是裁门</strong>：显了没填、隐了却传了，都由服务端按库上 CHECK
-          同形的构造门答在那一格。汇率口径可缺（不涉及外币）：三格全空即不声明；填了任一格整节送，缺的由服务端点名。
+          显——<strong>显隐是呈现，不是裁门</strong>：显了没填、隐了却传了，都由服务端按库上 CHECK 同形的构造门答在那一格。
+          汇率口径可缺（不涉及外币）：三格全空即不声明；填了任一格整节送，缺的由服务端点名。体积系数与金额取整是价卡内容，
+          在价卡上登，不在价格政策上登（ADR-0260）。
         </p>
         <div className="grid grid-cols-2 gap-3">
           {closedSet('pricePolicy.caliber.taxDisposition', '税务口径 *', 'taxDisposition', taxDispositionOptions)}
@@ -192,17 +192,6 @@ function PricePolicyFields({
             hiddenNote="税务不适用时不显此格"
             placeholder="含税 / 未税时必填（税务主数据上的分类引用）"
             onChange={(taxClassification) => patch({ taxClassification })}
-          />
-          <ConditionalField
-            shown={showsVolumetricFactor(draft)}
-            label="体积系数引用"
-            path="pricePolicy.caliber.volumetricFactor"
-            problems={problems}
-            value={draft.volumetricFactor}
-            locked={locked}
-            hiddenNote="采购与法人间方向不显此格（系数在承运商价卡上）"
-            placeholder="销售方向必填（版本化声明的体积系数引用）"
-            onChange={(volumetricFactor) => patch({ volumetricFactor })}
           />
         </div>
 

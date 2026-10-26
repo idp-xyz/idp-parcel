@@ -160,7 +160,7 @@ export interface ContractVersionReferencePayload {
  * 价格规则册正文（Go `PricePolicyBodyPayload`，票 admin-write-faces/14）：0010 正文七格加可缺的口径节，键名镜像受控
  * 批文 `pricePolicyBody`。`planDirection` 与 `conversion` 是发布当时 parcel-pricing 对方案方向的答复与当时声明的转换
  * （ADR-0057）——表单如实收、不从方案反推、不预选；`conversion` 空串不会被服务端折成 NONE，SELL 绑 BUY 却没写转换由
- * 领域答`适用冲突`（AT-PC-033）。口径节**没有方向键**：体积口径的方向就是政策方向，载荷里出现按未知键拒。
+ * 领域答`适用冲突`（AT-PC-033）。口径节**没有方向键**：口径的方向就是政策方向，载荷里出现按未知键拒。
  */
 export interface PricePolicyBodyPayload {
   direction: string;
@@ -174,14 +174,14 @@ export interface PricePolicyBodyPayload {
 }
 
 /**
- * 口径节（Go `PricePolicyCaliberPayload`）。`taxClassification` 只在含税 / 未税时在场、`volumetricFactor` 只在销售方向在场
- * ——在场规则由服务端按库上 CHECK 同形的构造门答在这两格上，表单只按 taxDisposition / direction 显隐（显隐是呈现不是
- * 裁门）。`fx` 可缺：不涉及外币的政策没有汇率口径，缺席是「没声明」；在场则三格缺一即点名那一格。
+ * 口径节（Go `PricePolicyCaliberPayload`）。`taxClassification` 只在含税 / 未税时在场——在场规则由服务端按库上 CHECK
+ * 同形的构造门答在这一格上，表单只按 taxDisposition 显隐（显隐是呈现不是裁门）。`fx` 可缺：不涉及外币的政策没有汇率
+ * 口径，缺席是「没声明」；在场则三格缺一即点名那一格。没有体积系数：那是价卡内容（ADR-0260 决定二），服务端收到
+ * `volumetricFactor` 即答在那一格上，本类型因此不给它位置。
  */
 export interface PricePolicyCaliberPayload {
   taxDisposition: string;
   taxClassification?: string;
-  volumetricFactor?: string;
   fx?: FxCaliberPayload;
 }
 

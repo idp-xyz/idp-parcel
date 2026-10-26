@@ -99,8 +99,8 @@ export interface PricePolicyRecord {
   registeredAt: string;
   /**
    * 口径节（0022，Go `pricePolicyBody.caliberDeclared` / `caliber`，票 admin-write-faces/14）。布尔与节成对：0010 早于 0022，
-   * 只有正文没有口径的行是合法状态，布尔让页面分得开「没登记口径」与「口径节缺了」。节里三处可缺的键是口径说出的真话
-   * （不适用因而没有分类、采购方向因而没有系数、不涉外币因而没有汇率），缺键即「没有」，不是空串。
+   * 只有正文没有口径的行是合法状态，布尔让页面分得开「没登记口径」与「口径节缺了」。节里两处可缺的键是口径说出的真话
+   * （不适用因而没有分类、不涉外币因而没有汇率），缺键即「没有」，不是空串。
    */
   caliberDeclared: boolean;
   caliber?: PricePolicyCaliberRecord;
@@ -109,7 +109,11 @@ export interface PricePolicyRecord {
 export interface PricePolicyCaliberRecord {
   taxDisposition: string;
   taxClassification?: string;
-  volumetricFactor?: string;
+  /**
+   * 0041 迁移之前销售方向政策登下的体积系数引用，原样留册、**不参与计价**（体积系数是价卡内容，ADR-0260 决定二）。只在
+   * 那些历史行上在场；键名不叫 volumetricFactor，是不让人把它读成现行口径的一格。
+   */
+  historicalVolumetricFactor?: string;
   fx?: { quoteType: string; asOfSemantics: string; asOfPolicyVersion: string };
   registeredAt: string;
 }
