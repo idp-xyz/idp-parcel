@@ -11,10 +11,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
 
-// customerFaceCommandPatterns 是 PS 的客户面命令口：资料修订、逐包裹取消。它们今天挂未配置即拒、还不属首方族（不带 `/v1`），问题体已经是首方契约
+// customerFaceCommandPatterns 是 PS 的客户面命令口：逐包裹取消。它今天挂未配置即拒、还不属首方族（不带 `/v1`），问题体已经是首方契约
 // 的形状：形状随处理器，前缀随装配族（ADR-0140 决定二、三）。
 var customerFaceCommandPatterns = []string{
-	"/shipment-requests/source-data-amendments",
 	"/shipment-requests/parcel-cancellations",
 }
 
@@ -60,6 +59,7 @@ func TestTheUnversionedFirstPartyPathsAreGone(t *testing.T) {
 		{http.MethodPost, "/node-operations/delivery-handover-conclusions"},
 		{http.MethodPost, "/shipment-requests/supplements"},
 		{http.MethodPost, "/shipment-requests/withdrawals"},
+		{http.MethodPost, "/shipment-requests/source-data-amendments"},
 	} {
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, httptest.NewRequest(old.method, old.target, nil))

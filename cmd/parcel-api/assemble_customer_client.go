@@ -122,3 +122,20 @@ func buildCustomerWithdrawalIntake(minter *accessidentity.CustomerClientMinter) 
 	}
 	return intake, nil
 }
+
+// buildCustomerAmendmentIntake 装配资料修订口的首方 Intake（ADR-0139 决定四；ADR-0310 取舍 B；ADR-0311；票 first-party-api/10）。
+// 铸造器与提交口同一只；准入范围由铸造器判（MintSourceDataAmendment）。
+func buildCustomerAmendmentIntake(minter *accessidentity.CustomerClientMinter) (*shipmenthttp.CustomerAmendmentIntake, error) {
+	if minter == nil {
+		return nil, fmt.Errorf("customer amendment intake needs a minter")
+	}
+	authenticator, err := psaccess.NewCustomerAmendmentAuthenticator(minter)
+	if err != nil {
+		return nil, err
+	}
+	intake, err := shipmenthttp.NewCustomerAmendmentIntake(authenticator, systemClock{})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: customer amendment intake: %w", err)
+	}
+	return intake, nil
+}

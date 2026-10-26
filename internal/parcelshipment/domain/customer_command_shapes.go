@@ -80,3 +80,113 @@ func CanonicalizeCustomerWithdrawal(spec CustomerWithdrawalSpec) (PayloadDigest,
 	sum := sha256.Sum256(encoded)
 	return NewPayloadDigest(CustomerWithdrawalShapeVersion + ":" + hex.EncodeToString(sum[:]))
 }
+
+// SourceDataAmendmentPayloadSpec 是首方资料修订口（形状 PAM-1，票 first-party-api/10）的规范化输入：指名（原提交的接入请求
+// 标识、资料范围）、基准、意图、原因、适用时间与内容。内容有两种形——地址要素条目（沿提交的条目命名，由 AddressElementsOf 挑）
+// 与申报测量；两者最多一种在场，显式清空时都缺席。
+type SourceDataAmendmentPayloadSpec struct {
+	OriginalAccessRequestID string
+	Scope                   SourceDataScope
+	Basis                   SourceDataBasis
+	Intent                  AmendmentIntent
+	Reason                  AmendmentReasonReference
+	EffectiveAt             time.Time
+	// Entries 是落在寄 / 收件范围上的要素条目，名字由 AddressElementEntryName 拼出。
+	Entries     []CanonicalContentEntry
+	Measurement DeclaredMeasurement
+}
+
+// CanonicalSourceDataAmendment 是一次修订规范化的成对产出：摘要与同一份输入挑出的内容，二者出自同一道门。
+type CanonicalSourceDataAmendment struct {
+	digest  PayloadDigest
+	content SourceDataVersionContent
+}
+
+func (canonical CanonicalSourceDataAmendment) Digest() PayloadDigest { return canonical.digest }
+
+func (canonical CanonicalSourceDataAmendment) Content() SourceDataVersionContent {
+	return canonical.content
+}
+
+type canonicalAmendmentDocument struct {
+	Canonicalization string                       `json:"canonicalization"`
+	Original         string                       `json:"original_access_request_id"`
+	ShipmentRequest  string                       `json:"shipment_request_id"`
+	Parcel           string                       `json:"parcel_id"`
+	DataGroup        string                       `json:"data_group"`
+	BasisVersion     string                       `json:"basis_version"`
+	Intent           string                       `json:"intent"`
+	Reason           string                       `json:"reason"`
+	EffectiveAt      canonicalEffectiveAtDocument `json:"effective_at"`
+	Entries          []canonicalEntryDocument     `json:"entries"`
+	Weight           *canonicalWeightDocument     `json:"weight"`
+	Dimensions       *canonicalDimensionsDocument `json:"dimensions"`
+}
+
+// CanonicalizeCustomerSourceDataAmendment 是首方资料修订口的规范化入口（形状 PAM-1）。要素内容复用提交的
+// AddressElementsOf，不另写一套挑法；摘要把指名、范围、基准、意图、原因、适用时间与内容全部纳入，所以同一修订请求标识改指
+// 另一份原提交、另一处范围或改写内容，摘要就变，答来源冲突而不是当重放。内容与范围、意图不配的组合在这里不判（编排的 admit 判），
+// 摘要照常算出。
+func CanonicalizeCustomerSourceDataAmendment(spec SourceDataAmendmentPayloadSpec) (CanonicalSourceDataAmendment, error) {
+	if strings.TrimSpace(spec.OriginalAccessRequestID) == "" || !spec.Scope.valid() ||
+		!spec.Basis.valid() || !spec.Intent.valid() || !spec.Reason.valid() {
+		return CanonicalSourceDataAmendment{}, ErrInvalidSubmissionPayload
+	}
+	entries := append([]CanonicalContentEntry(nil), spec.Entries...)
+	for _, entry := range entries {
+		if !entry.valid() {
+			return CanonicalSourceDataAmendment{}, ErrInvalidSubmissionPayload
+		}
+	}
+	sort.SliceStable(entries, func(i, j int) bool {
+		if entries[i].Name() != entries[j].Name() {
+			return entries[i].Name() < entries[j].Name()
+		}
+		return entries[i].Value() < entries[j].Value()
+	})
+	parcel, _ := spec.Scope.DeclaredParcelID()
+	prior, _ := spec.Basis.PriorVersion()
+	document := canonicalAmendmentDocument{
+		Canonicalization: CustomerSourceDataAmendmentShapeVersion,
+		Original:         strings.TrimSpace(spec.OriginalAccessRequestID),
+		ShipmentRequest:  spec.Scope.ShipmentRequestID().String(),
+		Parcel:           parcel.String(),
+		DataGroup:        spec.Scope.DataGroup().String(),
+		BasisVersion:     prior.String(),
+		Intent:           spec.Intent.String(),
+		Reason:           spec.Reason.String(),
+		EffectiveAt:      canonicalEffectiveAtValue(spec.EffectiveAt),
+		Entries:          make([]canonicalEntryDocument, 0, len(entries)),
+	}
+	for _, entry := range entries {
+		document.Entries = append(document.Entries, canonicalEntryDocument{Name: entry.Name(), Value: entry.Value()})
+	}
+	var content SourceDataVersionContent
+	if spec.Measurement.declared() {
+		weight := spec.Measurement.Weight()
+		document.Weight = &canonicalWeightDocument{Value: weight.Value().String(), Unit: weight.Unit().String()}
+		if dimensions, present := spec.Measurement.Dimensions(); present {
+			document.Dimensions = &canonicalDimensionsDocument{
+				Length: dimensions.Length().String(), Width: dimensions.Width().String(),
+				Height: dimensions.Height().String(), Unit: dimensions.Unit().String(),
+			}
+		}
+		measured, err := NewMeasurementContent(spec.Measurement)
+		if err != nil {
+			return CanonicalSourceDataAmendment{}, err
+		}
+		content = measured
+	} else if group := spec.Scope.DataGroup(); group == SenderPlaceDataGroup() || group == DeliveryPlaceDataGroup() {
+		content = NewAddressElementsContent(AddressElementsOf(group, entries))
+	}
+	encoded, err := json.Marshal(document)
+	if err != nil {
+		return CanonicalSourceDataAmendment{}, fmt.Errorf("canonicalize source data amendment: %w", err)
+	}
+	sum := sha256.Sum256(encoded)
+	digest, err := NewPayloadDigest(CustomerSourceDataAmendmentShapeVersion + ":" + hex.EncodeToString(sum[:]))
+	if err != nil {
+		return CanonicalSourceDataAmendment{}, err
+	}
+	return CanonicalSourceDataAmendment{digest: digest, content: content}, nil
+}

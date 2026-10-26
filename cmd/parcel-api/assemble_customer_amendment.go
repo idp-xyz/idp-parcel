@@ -116,13 +116,11 @@ func (boundary sourceDataHandoffBoundary) HandOffSourceDataVersion(
 //
 // 授权那一口已接真（票 ps-port-remainder/03，ADR-0116）：经 buildSourceDataAmendmentAuthorizer 接 PC 的裁定
 // 编排、真授权册与真合同委派册，实际决定方由 PC 解出（客户自己 / 代录时经委派解出委派方），PS 不自判。
-// 商业坐标映射（法人、等级、范围、原因、证据、时点，与请求方是客户还是代录角色）是实例半边
-// （`BD-PS-009` / `PAR-COM-14`），与撤回那只一样留 nil——适配器答未形成，编排如实停在
-// `SourceDataAmendmentAuthorityUnavailable`，不代拟坐标、不冒充`授权规则未配置`、不默认任何人有修订权。
-// 接线前后的区别不在结果在来源：此前这里摆的是 UnconfiguredSourceDataAmendmentAuthorizer{}，停在
-// 「等 PC 立规则」；接真之后恢复动作从「写代码」变成「登记参数」（ADR-0063）——停点后移一格，
-// 是本票唯一可观察的生产变化。客户渠道的采信身份属 `PAR-INT-01` / `BD-PS-009`：端点表那一行以
-// `UnconfiguredIntake{}` 起步，本函数不带任何默认身份。
+// 商业坐标映射（法人、等级、范围、原因、证据、时点）由首方直客的 CustomerSelfAmendmentRequestSource 给出（ADR-0311，
+// 票 first-party-api/10）：法人与范围读解析键登记行，等级是产品常量 CUSTOMER_SELF_SERVICE，请求方是客户账户本人。
+// 解析键没登记时适配器答未形成，编排如实停在 `SourceDataAmendmentAuthorityUnavailable`，不冒充`授权规则未配置`；
+// 键登记了而授权册没有 CUSTOMER_SELF_SERVICE 的授予，PC 答`未配置`，租户的放行与否就是授权册这一处。
+// 本函数不带任何默认身份：采信身份由端点表那一行的首方 Intake 给。
 //
 // 允许矩阵那一口已接真（票 ps-port-remainder/02 余段，ADR-0120）：经 buildSourceDataAmendmentAllowance
 // 回指接受时固定的接单规则包版本、读 party-commercial 的资料修订允许声明、按（资料组 × 阶段 × 意图）
@@ -152,7 +150,7 @@ func buildCustomerAmendmentOrchestration(db *bentopg.DB) (shipmenthttp.Amendment
 
 // buildSourceDataAmendmentAuthorizer 装资料修订授权那一口的真适配器：PC 裁定编排接满两个读口（授权治理册 +
 // 合同委派册——运营角色代录那一格没有委派读口答不出实际决定方，旧构造器在那一格报错），套 PS 的
-// SourceDataAmendmentAuthorizationAdapter。RequestSource 留 nil：实例半边，理由见 buildCustomerAmendmentOrchestration。
+// SourceDataAmendmentAuthorizationAdapter。RequestSource 是首方直客的坐标映射，理由见 buildCustomerAmendmentOrchestration。
 func buildSourceDataAmendmentAuthorizer(db *bentopg.DB) (ports.SourceDataAmendmentAuthorizer, error) {
 	grants, err := pcpostgres.NewAuthorityGrants(db)
 	if err != nil {
@@ -162,10 +160,17 @@ func buildSourceDataAmendmentAuthorizer(db *bentopg.DB) (ports.SourceDataAmendme
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: contract delegations: %w", err)
 	}
+	keys, err := pspostgres.NewCommercialResolutionKeyStore(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: resolution key store: %w", err)
+	}
+	requests, err := pspartycommercial.NewCustomerSelfAmendmentRequestSource(keys, systemClock{})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: customer self amendment request source: %w", err)
+	}
 	return pspartycommercial.NewSourceDataAmendmentAuthorizationAdapter(
 		pcapplication.NewAdjudicateCommercialAuthorizationHandlerWithDelegations(grants, delegations),
-		// RequestSource 留空：实例半边，见 buildCustomerAmendmentOrchestration 注释。
-		nil,
+		requests,
 	), nil
 }
 

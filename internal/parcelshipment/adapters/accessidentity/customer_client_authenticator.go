@@ -163,6 +163,50 @@ func (authenticator *CustomerWithdrawalAuthenticator) AuthenticateWithdrawal(
 	return sourceIdentityOf(envelope.Envelope())
 }
 
+// CustomerAmendmentMinter 是资料修订口对铸造器的最小依赖，identity.CustomerClientMinter 满足它。
+type CustomerAmendmentMinter interface {
+	MintSourceDataAmendment(
+		ctx context.Context,
+		credential identity.IntegrationClientCredential,
+		readRequest func() (identity.ChannelRequest, error),
+	) (identity.SourceDataAmendmentEnvelope, error)
+}
+
+// CustomerAmendmentAuthenticator 实现 shipmenthttp.CustomerAmendmentAuthenticator：铸资料修订信封（`SOURCE_DATA_AMENDMENT`
+// 授予；来源请求键带 `source-data-amendment:` 前缀），译成本上下文的来源身份。
+type CustomerAmendmentAuthenticator struct {
+	minter CustomerAmendmentMinter
+}
+
+var _ shipmenthttp.CustomerAmendmentAuthenticator = (*CustomerAmendmentAuthenticator)(nil)
+
+func NewCustomerAmendmentAuthenticator(minter CustomerAmendmentMinter) (*CustomerAmendmentAuthenticator, error) {
+	if minter == nil {
+		return nil, errors.New("parcel shipment accessidentity: customer amendment authenticator needs a minter")
+	}
+	return &CustomerAmendmentAuthenticator{minter: minter}, nil
+}
+
+func (authenticator *CustomerAmendmentAuthenticator) AuthenticateAmendment(
+	ctx context.Context,
+	credential shipmenthttp.PresentedClientCredential,
+	accessRequestID func() (string, error),
+) (domain.SourceIdentity, error) {
+	envelope, err := authenticator.minter.MintSourceDataAmendment(ctx,
+		identity.NewIntegrationClientCredential(credential.Token, credential.Certificate),
+		func() (identity.ChannelRequest, error) {
+			id, err := accessRequestID()
+			if err != nil {
+				return identity.ChannelRequest{}, err
+			}
+			return identity.NewChannelRequest(map[string]string{identity.AccessRequestIdentifier: id}), nil
+		})
+	if err != nil {
+		return domain.SourceIdentity{}, answerCustomer(err)
+	}
+	return sourceIdentityOf(envelope.Envelope())
+}
+
 // answerCustomer 把共享接入身份能力的格译成 shipmenthttp 的格，首方族那几格各对其格；读载荷自己的错（已是本包的格）原样
 // 过。推导不出来源请求键是客户系统没给接入请求标识，恢复动作是改请求，答形状错。
 func answerCustomer(err error) error {

@@ -147,7 +147,7 @@ func preservedSourceRows(t *testing.T, db *bentopg.DB, identity domain.SourceIde
 
 // Covers: 票 04 装配用例①（票 03 PS 半边接真后改写）——生产装配下修订请求越过 Intake 后停在**授权未决**，
 // 原因是 `SourceDataAmendmentAuthorityUnavailable`：授权口已接真适配器（PC 裁定编排 + 真授权册 + 真委派册），
-// 而商业坐标映射是实例半边（`BD-PS-009` / `PAR-COM-14`）留 nil，适配器答未形成、编排把它留在 error 格。
+// 而该账户没有登记解析键，直客坐标映射（ADR-0311）折不出法人与范围，适配器答未形成、编排把它留在 error 格。
 // 接真之前这里停在`授权规则未配置`——那是提供方对自己登记册的答案，而今天没人问到登记册，说成未配置就是
 // 假话；停点从「等 PC 立规则」后移到「等消费侧接映射」，是本票唯一可观察的生产变化。带续办引用；不形成
 // 版本、不入队意图；停点之前来源保全已留痕。这一格与「客户越权」（NOT_AUTHORIZED）必须分得开：映射没接

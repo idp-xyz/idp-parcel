@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Covers: AT-PS-124——首方客户命令四口各有自己的形状版本名，名互不相同、也不同于提交口的 PSC-1，带版本号后缀（ADR-0139 决定八）。
@@ -117,5 +118,75 @@ func TestCustomerWithdrawalDigestIsItsOwnShapeAndCarriesTheNames(t *testing.T) {
 	}
 	if _, err := CanonicalizeCustomerWithdrawal(CustomerWithdrawalSpec{OriginalAccessRequestID: "X"}); !errors.Is(err, ErrInvalidSubmissionPayload) {
 		t.Errorf("缺原因：err = %v", err)
+	}
+}
+
+// Covers: AT-PS-140——资料修订口的摘要走 PAM-1：前缀是 PAM-1；指名（原提交标识）、范围、基准、意图、原因、适用时间与内容任一不同摘要就不同；
+// 要素内容由提交口同一个 AddressElementsOf 挑出，显式清空与缺席内容都不带内容。
+func TestCustomerSourceDataAmendmentDigestIsItsOwnShapeAndCarriesEveryNaming(t *testing.T) {
+	request := mustShipmentRequestID(t, "SYN-REQ-1")
+	scope, err := NewShipmentScopedSourceData(request, DeliveryPlaceDataGroup())
+	if err != nil {
+		t.Fatal(err)
+	}
+	reason, err := NewAmendmentReasonReference("SYN-REASON-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	postal, err := NewCanonicalContentEntry(AddressElementEntryName(DeliveryPlaceDataGroup(), PostalCodeElement), "SYN-POSTAL-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := SourceDataAmendmentPayloadSpec{
+		OriginalAccessRequestID: "SYN-ACCESS-1", Scope: scope, Basis: NewSupplementOnAcceptanceBaseline(),
+		Intent: CorrectionIntent, Reason: reason, Entries: []CanonicalContentEntry{postal},
+	}
+	first, err := CanonicalizeCustomerSourceDataAmendment(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(first.Digest().String(), CustomerSourceDataAmendmentShapeVersion+":") {
+		t.Fatalf("摘要 %q 不带 PAM-1 前缀", first.Digest())
+	}
+	if got, ok := first.Content().AddressElements(); !ok {
+		t.Fatal("地址内容缺席")
+	} else if value, declared := got.PostalCode(); !declared || value != "SYN-POSTAL-1" {
+		t.Fatalf("邮编 = %q, %v", value, declared)
+	}
+	variant := func(change func(*SourceDataAmendmentPayloadSpec)) string {
+		spec := base
+		change(&spec)
+		canonical, err := CanonicalizeCustomerSourceDataAmendment(spec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return canonical.Digest().String()
+	}
+	prior, _ := NewSourceDataVersionID("SYN-PRIOR-1")
+	basisOf, _ := NewAmendmentOfVersion(prior)
+	otherReason, _ := NewAmendmentReasonReference("SYN-REASON-2")
+	otherScope, _ := NewShipmentScopedSourceData(request, SenderPlaceDataGroup())
+	otherPostal, _ := NewCanonicalContentEntry(AddressElementEntryName(DeliveryPlaceDataGroup(), PostalCodeElement), "SYN-POSTAL-2")
+	for name, changed := range map[string]string{
+		"原提交标识": variant(func(s *SourceDataAmendmentPayloadSpec) { s.OriginalAccessRequestID = "SYN-ACCESS-2" }),
+		"范围":    variant(func(s *SourceDataAmendmentPayloadSpec) { s.Scope = otherScope }),
+		"基准":    variant(func(s *SourceDataAmendmentPayloadSpec) { s.Basis = basisOf }),
+		"意图":    variant(func(s *SourceDataAmendmentPayloadSpec) { s.Intent = SupplementIntent }),
+		"原因":    variant(func(s *SourceDataAmendmentPayloadSpec) { s.Reason = otherReason }),
+		"适用时间":  variant(func(s *SourceDataAmendmentPayloadSpec) { s.EffectiveAt = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) }),
+		"内容":    variant(func(s *SourceDataAmendmentPayloadSpec) { s.Entries = []CanonicalContentEntry{otherPostal} }),
+	} {
+		if changed == first.Digest().String() {
+			t.Errorf("改%s摘要不变", name)
+		}
+	}
+	clear := base
+	clear.Intent, clear.Entries = ExplicitClearIntent, nil
+	cleared, err := CanonicalizeCustomerSourceDataAmendment(clear)
+	if err != nil || !cleared.Content().Empty() {
+		t.Fatalf("显式清空应不带内容：%v", err)
+	}
+	if _, err := CanonicalizeCustomerSourceDataAmendment(SourceDataAmendmentPayloadSpec{}); !errors.Is(err, ErrInvalidSubmissionPayload) {
+		t.Fatalf("空规格 = %v, want ErrInvalidSubmissionPayload", err)
 	}
 }
