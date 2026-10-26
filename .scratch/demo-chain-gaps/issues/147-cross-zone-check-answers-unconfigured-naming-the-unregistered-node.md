@@ -1,7 +1,7 @@
 # 147 已登过关务区域的租户漏登新节点区域时，跨区那一道静默不列
 
 Category: bug
-Status: in-progress——2026-10-25 作者完工，待隔离评审与进 main，分支 claude-dcg147 tip `938bdbbdc`（代码 `6814c2677`、文档 `938bdbbdc`，票面完成记录那一笔在其上；见文末「完成记录」）。此前 in-progress——2026-10-25 会话 `tops-20`（Claude Code）认领，分支 `claude-dcg147`（worktree `idp-parcel-dcg147`）；新 ADR 取 0300。此前 ready-for-agent——2026-10-20 代决复核立（上线后尽快），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: in-progress——2026-10-25 评审无阻断、修订轮完，待进 main，分支 claude-dcg147 tip `19f3c9b7f`（修订轮代码 `4f827bd7e`、文档 `19f3c9b7f`，票面评审记录那一笔在其上；见文末「评审记录」）。此前 in-progress——2026-10-25 作者完工，待隔离评审与进 main，分支 claude-dcg147 tip `938bdbbdc`（代码 `6814c2677`、文档 `938bdbbdc`，票面完成记录那一笔在其上；见文末「完成记录」）。此前 in-progress——2026-10-25 会话 `tops-20`（Claude Code）认领，分支 `claude-dcg147`（worktree `idp-parcel-dcg147`）；新 ADR 取 0300。此前 ready-for-agent——2026-10-20 代决复核立（上线后尽快），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 R12；ADR-0206 越权风险点 12（ADR-0213 越权风险点 7 同根）
 
@@ -94,3 +94,49 @@ Blocked by: 无
 - **地盘之外的两处小改**：ADR-0213 的 Status 行与 Links（原注记写着「复核记录 R12 未落地」，本票落地后它会说错，故换成「越权风险点 7 一半已答」）；参数登记册 `PAR-CUS-08` 与关务专项基线 AT 区间各一处。协调方只报备过 CC CONTEXT 与 ADR-0206，这几处请协调方知会。
 - **既有测试夹具**：`cmd/parcel-api` 的 `newDepartureLine` 拆出 `newDepartureLineWithZones`（只登点名的节点区域种子）、`newPreviewLine` 拆出 `previewLineOn`；既有调用不变。
 - **待 owner 复核**：上列代决与越权风险点，尤其是代决 2（只落不在册对象）与越权风险点 1（登一个就要登全）。
+
+## 评审记录
+
+以下照抄隔离评审原文（`review-147.md`；只把原文的二级标题降为三级，挂在本节下），修订轮在后。
+
+评审 ← tops-20 隔离子代理 · 钉 `c8183fa4e` · 23:43
+
+结论：无阻断；三条非阻断。
+
+### 阻断
+无。
+
+### 非阻断
+- Spec P1：`domain/action_admission_test.go::TestUnregisteredNodeZoneIsNotConfiguredOnlyWhenTheObjectHasACrossZoneGate` 的 `outside` 一格（AT-CC-427 领域半边）头注写「租户一个节点都没登（零值即此）」，夹具 `unzonedDestination()` 却让 SZX 已登区域，自相矛盾。生产里这一态到不了：`Handle` 同一时点已由 `LoadNodeCustomsZone` 读到 SZX，`AnyNodeCustomsZoneInForce` 必真；AT-CC-427 的 Given 只在编排与真库两条用例上按实成立。另：`Handle` 在一端已登时仍问这一句，与 ADR-0300 决定二「问了只多一次读、多一处读不动」的理由相悖。修法：领域把「任一读数已登」并进这一位（或拒收矛盾输入），编排在一端已登时不问；测试改成两端都没登。
+- Standards S1：ADR-0213 越权风险点 7 原文只有「去向没声明时跨区那一道不列」，没有「声明了去向」那一半；ADR-0300 Status 前段与 ADR-0213 索引注记都写成「7 一半已答」，实际 7 原封未动（ADR-0300 越权风险点 4 自己也承认）。建议改称「7 未答；同根的声明了去向那一格由 ADR-0300 收」。
+- Standards S2：ADR-0300 Consequences「演示租户四个节点都登了区域」带计数，碰 AGENTS.md「计数与行号同构」；论点是「演示动线经过的节点都登了」，去掉数。
+
+### 无发现（摘要）
+红线、注释、ADR-0206 部分停用写法、ADR-0300 所引原句逐字存在；判法与 R12 字面一致；时点与失败代数与读区域那一口同格；依据不回设备有真库断言；重放探针（中间登第一条区域）不会错答已有判断；AT 号不撞；范围无越界。
+
+### 修订轮（2026-10-25，作者子代理，同一分支 `claude-dcg147`，起点 `c8183fa4e`，未变基）
+
+| SHA | 内容 |
+|---|---|
+| `4f827bd7e` | P1 代码与用例 |
+| `19f3c9b7f` | S1、S2 与 P1 的文档半边 |
+| 本笔 | 票面评审记录与 Status |
+
+- **P1**：取「并进」，不取「拒收」。领域加 `tenantZoned`：另读的那一位，并上起讫读数里已登的那一端——同一时点读同一本册，一端已登就不可能「一条都没登」，零值因此不再与读数相抵，编排也不必替领域算这一位。编排 `Handle` 只在跨区待定、且起讫两端都没登时问 `AnyNodeCustomsZoneInForce`。拒收矛盾输入要编排在一端已登时照样传真值，等于把「一端已登即登过」写两处，所以不取。用例：
+  - 领域：`TestUnregisteredNodeZoneIsNotConfiguredOnlyWhenTheObjectHasACrossZoneGate` 的 `outside` 一格改走新夹具 `unzonedBothEnds()`（两端都没登、那一位为零值），头注改成「带跨区门答未配置、没登跨区目录不列，这两格登没登过都一样；一个节点都没登时不在册对象也不列」，与夹具一致。
+  - 领域：`TestAZonedTenantsUnbookedObjectAnswersNotConfiguredNamingTheUnregisteredNode` 补一格，起点已登、那一位为零值也答未配置并指名终点。
+  - 编排：`TestTheTenantsZoneRegisterIsAskedOnlyWhenCrossZoneIsUndetermined` 改写，钉住五件事：一端已登时不问（问的次数为零）、仍答未配置并只指名未登那一端；两端都没登时问一次、答未配置、两个都指名；纯境内租户问一次、不列；判得出跨区时不问；那一口坏着时，两端都没登答读不动，一端已登照常形成判断。
+  - 真库：`TestAdmissionOnRealPostgresNamesTheUnregisteredNodeOnlyForAZonedTenant` 补两端都没登那一格，靠区域册里别的节点认出租户登过。
+  - 文档半边：ADR-0300 索引注记、决定二、Consequences；UC-CC-013 输入契约与应用流程第 2 步；AT 盘点 `AT-CC-426` 编排半边那句。
+  - 变异：去掉读数那一半的并，领域与编排各一条变红；编排改回「跨区待定就问」，编排那条变红。复原后全绿。
+- **S1**：改称「越权风险点 7 未答，同根的『声明了去向而去向未登区域』那一格由 ADR-0300 收」，改了这几处：
+  - ADR-0300：Status 前段、「对已接受记录的作用」那一条、越权风险点 4、Links 里 ADR-0213 那一条。
+  - ADR-0213：Status 索引注记那一段，以及上一笔自己加的 Links 那一条（同一句说法，不改会与注记相抵）；ADR-0213 正文不动。
+  - `adr-index -check` 只报索引过期，格式无错。
+  - 本票上文「完成记录」里「回答 ADR-0213 越权风险点 7 声明了去向的那一半」「越权风险点 4：……另一半照旧」两句是当时的写法，以本节为准，不回改。
+- **S2**：ADR-0300 Consequences 演示一条改为「演示动线经过的节点都登了区域，演示读数不变」，不再计数。
+- **重跑（含 PG，钉 `19f3c9b7f`）**：
+  - `go build ./...`、`go vet ./...` 全仓通过；`gofmt -l internal cmd` 无输出。
+  - `go test -count=1 -p 4` 跑 `./internal/customscompliance/...`、`./internal/transportfulfillment/adapters/customscompliance/...`、`./cmd/parcel-api/...`、`./cmd/parcel-customs-register/...`、`./internal/architecture/...`：14 包 ok，0 FAIL（`ports` 无测试文件）。
+  - 本票的真库用例以 `-v` 逐条确认 PASS：`TestAdmissionOnRealPostgresNamesTheUnregisteredNodeOnlyForAZonedTenant`、`TestAnyNodeCustomsZoneInForceReadsTheTenantsRegisterAtTheInstant`、`TestAnUnregisteredNodeOfAZonedTenantReadsUndecidedNamingTheNode`、`TestAZonedTenantMissingANodeZoneShowsEveryUnbookedObjectAsUndecided`。
+  - 没跑全量，没重生成 ADR 索引、AT 计数与机制清点。
