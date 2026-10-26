@@ -9,7 +9,8 @@ import { DeliveryConditionFields } from './DeliveryConditionFields';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
 import { Field, RowFrame, fieldLabel, selectClass, useLoaded } from './PublicationFormFields';
 import type { DeliveryConditionDraft } from './delivery-condition-section';
-import { WallTimeField } from './party-registration-fields';
+import { WallTimeField, customerAccountPickerOptions } from './party-registration-fields';
+import { SuggestInput, loadCustomerAccountSuggestions } from './reference-inputs';
 import {
   customerContractDeliveryConditionsPath,
   customerContractFieldPaths,
@@ -186,16 +187,20 @@ function ContractContentFields({
   return (
     <section className="flex flex-col gap-2">
       <h3 className={sectionTitle}>合同正文：接单规则包与按费用范围的接受前财务控制约定</h3>
-      <Field label="货主客户账户 *" path="customerContract.contractContent.customerAccount" problems={form.problems}>
-        <Input
-          value={draft.customerAccount}
-          disabled={form.locked}
-          className="font-mono text-[13px]"
-          // 解析时只有键上那一个客户账户的合同参选；这是规则依据，不必上屏。
-          placeholder="这份合同属于哪个货主客户账户（填账户标识）"
-          onChange={(event) => patch({ customerAccount: event.target.value })}
-        />
-      </Field>
+      {/* 解析时只有键上那一个客户账户的合同参选。账户册读口分页，所以是能直接输入的格、带第一页候选作提示，不做成
+          只列得出第一页的选单（票 party-commercial-uiux/13）。 */}
+      <SuggestInput
+        label="货主客户账户 *"
+        path="customerContract.contractContent.customerAccount"
+        problems={form.problems}
+        value={draft.customerAccount}
+        locked={form.locked}
+        onChange={(customerAccount) => patch({ customerAccount })}
+        load={loadCustomerAccountSuggestions}
+        optionsOf={customerAccountPickerOptions}
+        readFace="货主客户账户册"
+        placeholder="这份合同属于哪个货主客户账户"
+      />
       <Field
         label="接单规则包 *"
         path="customerContract.contractContent.rulePackage"

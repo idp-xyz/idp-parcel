@@ -2,6 +2,9 @@ import { Input } from '@idpxyz/ui-primitives';
 import type { PublicationFormContext } from './PublicationDraftFlow';
 import { Field, ProblemText, Problems, selectClass } from './PublicationFormFields';
 import { itemProblemText } from './field-problem-text';
+import { listServiceProducts } from './api';
+import { serviceProductVersionChoices } from './picker-options';
+import { ObjectVersionPicker } from './reference-inputs';
 import type { DeliveryConditionDraft, DeliveryConditionLayer } from './delivery-condition-section';
 
 /**
@@ -49,29 +52,22 @@ export function DeliveryConditionFields({
       <Problems lines={form.problems[root]} />
       {layer === 'contract' ? (
         <div className="grid grid-cols-2 gap-3">
-          <Field
-            label="所收紧的服务产品：对象标识 *"
-            path={`${root}.tightens.objectId`}
+          {/* 对象与版本一起选，两格同时落，不让人手拼版本号（票 party-commercial-uiux/13）。 */}
+          <ObjectVersionPicker
+            label="所收紧的服务产品版本 *"
+            objectPath={`${root}.tightens.objectId`}
+            versionPath={`${root}.tightens.version`}
             alsoPaths={[`${root}.tightens`]}
             problems={form.problems}
-          >
-            <Input
-              value={draft.tightensObjectId}
-              readOnly={form.locked}
-              className="font-mono text-[13px]"
-              placeholder="服务产品的对象标识"
-              onChange={(event) => onPatch({ tightensObjectId: event.target.value })}
-            />
-          </Field>
-          <Field label="所收紧的服务产品：版本号 *" path={`${root}.tightens.version`} problems={form.problems}>
-            <Input
-              value={draft.tightensVersion}
-              readOnly={form.locked}
-              className="font-mono text-[13px]"
-              placeholder="所收紧的那一版产品的版本号"
-              onChange={(event) => onPatch({ tightensVersion: event.target.value })}
-            />
-          </Field>
+            objectId={draft.tightensObjectId}
+            version={draft.tightensVersion}
+            locked={form.locked}
+            onChange={(choice) => onPatch({ tightensObjectId: choice.objectId, tightensVersion: choice.version })}
+            load={listServiceProducts}
+            choicesOf={serviceProductVersionChoices}
+            emptyNote="还没有发布任何服务产品；先发布服务产品，合同层才有可收紧的产品版本。"
+            readFace="服务产品册"
+          />
         </div>
       ) : null}
       <Field label="允许的交付方式 *（一行一项）" path={`${root}.methods[i]`} problems={form.problems} as="div">

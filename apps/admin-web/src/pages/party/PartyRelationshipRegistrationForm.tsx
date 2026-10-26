@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
@@ -8,14 +9,16 @@ import {
   type BusinessPartyListResponseBody,
   type PartyRelationshipRecord,
 } from './api';
+import { loadCustomerAccountSuggestions } from './reference-inputs';
 import { problemNote, registrationTitles } from './presentation';
-import { Field, ReferencePickerFor, fieldLabel, selectClass } from './PublicationFormFields';
+import { Field, ReferencePickerFor, fieldLabel, selectClass, useLoaded } from './PublicationFormFields';
 import { authorizedDeliveringPartyRole } from './authorized-delivery-scope';
 import {
   RevisionField,
   SnapshotJsonDetails,
   WallTimeField,
   businessPartyPickerOptions,
+  customerAccountPickerOptions,
   useRegistrationForm,
 } from './party-registration-fields';
 import {
@@ -75,6 +78,9 @@ export function PartyRelationshipRegistrationForm({
 
   const known = knownRelationships?.find((row) => row.relationshipId === draft.relationshipId);
   const deliveryScope = draft.role === authorizedDeliveringPartyRole ? deliveryScopeSpellingOf(draft) : null;
+  const accounts = useLoaded(loadCustomerAccountSuggestions);
+  const accountOptions = accounts?.kind === 'outcome' ? customerAccountPickerOptions(accounts.body) : [];
+  const accountListId = useId();
 
   return (
     <div className="flex-1 overflow-auto p-4 flex flex-col gap-4">
@@ -163,13 +169,22 @@ export function PartyRelationshipRegistrationForm({
                 <div className="grid grid-cols-2 gap-2">
                   <label className="block">
                     <span className={fieldLabel}>客户账户 *</span>
+                    {/* 账户册读口分页：能直接输入、带第一页候选作提示，不做成只列得出第一页的选单（票 party-commercial-uiux/13）。 */}
                     <Input
                       value={draft.scopeCustomerAccount}
                       readOnly={locked}
+                      list={accountOptions.length > 0 ? accountListId : undefined}
                       className="font-mono text-[13px]"
-                      placeholder="如 SYN-ACCOUNT-01"
+                      placeholder="可从提示里选，也可直接输入账户标识"
                       onChange={(event) => patch({ scopeCustomerAccount: event.target.value })}
                     />
+                    {accountOptions.length > 0 ? (
+                      <datalist id={accountListId}>
+                        {accountOptions.map((option) => (
+                          <option key={option.value} value={option.value} label={option.label} />
+                        ))}
+                      </datalist>
+                    ) : null}
                   </label>
                   <label className="block">
                     <span className={fieldLabel}>节点（可选）</span>

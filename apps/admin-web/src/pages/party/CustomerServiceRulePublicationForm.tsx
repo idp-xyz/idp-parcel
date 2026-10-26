@@ -5,7 +5,9 @@ import { currentDisplayTimeZone } from '../moment';
 import { claimDeadlineKindLabels } from './presentation';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
-import { Field, ProblemText, VocabularySelect, selectClass, useLoaded } from './PublicationFormFields';
+import { Field, ProblemText, ReferencePicker, VocabularySelect, selectClass, useLoaded } from './PublicationFormFields';
+import { listCustomerContracts, listServiceProducts } from './api';
+import { customerContractObjectOptions, serviceProductObjectOptions } from './picker-options';
 import { fieldProblemText, itemProblemText } from './field-problem-text';
 import { WallTimeField } from './party-registration-fields';
 import {
@@ -174,21 +176,42 @@ export function CustomerServiceRulePublicationForm({ onPublished }: CustomerServ
                   <Input value="" disabled className="font-mono text-[13px]" placeholder="先在左侧选定适用对象是产品还是合同" />
                 </Field>
               ) : (
-                <Field label="适用对象标识 *" path={`${bodyPath}.${chosen.value}`} problems={problems}>
-                  <Input
-                    value={draft.appliesToId}
-                    disabled={locked}
-                    className="font-mono text-[13px]"
-                    placeholder={`${chosen.noun}的对象标识`}
-                    onChange={(event) => patch({ appliesToId: event.target.value })}
-                  />
+                <div>
+                  {/* 按左侧选的那一类，从服务产品册或客户合同册里选，不手敲标识（票 party-commercial-uiux/13）；换一类即换一张选单。 */}
+                  {chosen.value === 'serviceProduct' ? (
+                    <ReferencePicker
+                      label="适用的服务产品 *"
+                      path={`${bodyPath}.${chosen.value}`}
+                      problems={problems}
+                      value={draft.appliesToId}
+                      locked={locked}
+                      onChange={(appliesToId) => patch({ appliesToId })}
+                      load={listServiceProducts}
+                      optionsOf={serviceProductObjectOptions}
+                      emptyNote="还没有发布任何服务产品；先发布服务产品。"
+                      readFace="服务产品册"
+                    />
+                  ) : (
+                    <ReferencePicker
+                      label="适用的客户合同 *"
+                      path={`${bodyPath}.${chosen.value}`}
+                      problems={problems}
+                      value={draft.appliesToId}
+                      locked={locked}
+                      onChange={(appliesToId) => patch({ appliesToId })}
+                      load={listCustomerContracts}
+                      optionsOf={customerContractObjectOptions}
+                      emptyNote="还没有发布任何客户合同；先发布客户合同。"
+                      readFace="客户合同册"
+                    />
+                  )}
                   {/* 同一个标识也作版本上的指名引用送出；服务端核出两处不一致时点名的是那条引用，问题显在这一格下。 */}
                   {(problems[`references.${chosen.shellKey}`] ?? []).map((line) => (
                     <span key={line} className="block text-[11px] text-idpxyz-danger mt-1">
                       版本信息里的{chosen.noun}引用：<ProblemText problem={fieldProblemText(line)} />
                     </span>
                   ))}
-                </Field>
+                </div>
               )}
               <Field label="责任方 *" path={`${bodyPath}.responsible`} problems={problems}>
                 <Input

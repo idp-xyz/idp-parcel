@@ -5,8 +5,9 @@ import { currentDisplayTimeZone } from '../moment';
 import { creditRatioBaseLabels } from './presentation';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
-import { Field, Problems, VocabularySelect, fieldLabel, useLoaded } from './PublicationFormFields';
-import { WallTimeField } from './party-registration-fields';
+import { listGroupLegalEntities } from './api';
+import { Field, Problems, ReferencePicker, VocabularySelect, fieldLabel, useLoaded } from './PublicationFormFields';
+import { WallTimeField, legalEntityPickerOptions } from './party-registration-fields';
 import {
   creditPolicyFieldPaths,
   creditPolicyLocalProblems,
@@ -132,7 +133,19 @@ function CreditPolicyFields({
       <section className="flex flex-col gap-2">
         <p className={groupTitle}>正文（这一版的条款内容）</p>
         <div className="grid grid-cols-3 gap-3">
-          {field('creditPolicy.legalEntity', '责任法人 *', 'legalEntity')}
+          {/* 从集团法人册选，不手敲标识（票 party-commercial-uiux/13）；选出来的只是引用，在不在册由服务端判。 */}
+          <ReferencePicker
+            label="责任法人 *"
+            path="creditPolicy.legalEntity"
+            problems={problems}
+            value={draft.legalEntity}
+            locked={locked}
+            onChange={(legalEntity) => patch({ legalEntity })}
+            load={listGroupLegalEntities}
+            optionsOf={legalEntityPickerOptions}
+            emptyNote="还没有登记任何责任法人；先在集团与法人页登记，再发布信用政策。"
+            readFace="集团法人册"
+          />
           {/* 授权层级与费用类型是开放引用集：没有词表可选，操作者照原词手填。 */}
           {field('creditPolicy.authorityLevel', '授权层级 *', 'authorityLevel', '按原词填写')}
           {field('creditPolicy.chargeType', '费用类型 *', 'chargeType', '按原词填写')}

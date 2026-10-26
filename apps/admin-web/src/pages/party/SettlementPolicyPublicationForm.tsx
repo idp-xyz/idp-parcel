@@ -7,8 +7,6 @@ import {
   listBusinessParties,
   listCustomerContracts,
   listGroupLegalEntities,
-  type BusinessPartyListResponseBody,
-  type GroupLegalEntityListResponseBody,
 } from './api';
 import { settlementMethodLabels } from './presentation';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
@@ -22,7 +20,7 @@ import {
   selectClass,
   useLoaded,
 } from './PublicationFormFields';
-import { WallTimeField } from './party-registration-fields';
+import { WallTimeField, businessPartyPickerOptions, legalEntityPickerOptions } from './party-registration-fields';
 import {
   contractChoiceKey,
   contractChoiceOf,
@@ -173,13 +171,9 @@ export function SettlementPolicyPublicationForm({ onPublished }: SettlementPolic
                 locked={locked}
                 onChange={(legalEntity) => patch({ legalEntity })}
                 load={listGroupLegalEntities}
-                optionsOf={(body: GroupLegalEntityListResponseBody) =>
-                  body.entities.map((entity) => ({
-                    value: entity.legalEntityId,
-                    label: `${entity.legalEntityId} · ${entity.partyNameKnown ? entity.partyName : entity.partyId} · ${entity.status}`,
-                  }))
-                }
-                emptyNote="当前租户尚无集团法人；先在集团与法人册登记责任法人。"
+                // 选项文字与全区选单同一种写法：名称 · 标识 · 中文状态（票 party-commercial-uiux/13）。
+                optionsOf={legalEntityPickerOptions}
+                emptyNote="还没有登记任何责任法人；先在集团与法人页登记。"
                 readFace="集团法人册"
               />
               <ReferencePicker
@@ -190,13 +184,8 @@ export function SettlementPolicyPublicationForm({ onPublished }: SettlementPolic
                 locked={locked}
                 onChange={(counterparty) => patch({ counterparty })}
                 load={listBusinessParties}
-                optionsOf={(body: BusinessPartyListResponseBody) =>
-                  body.parties.map((party) => ({
-                    value: party.partyId,
-                    label: `${party.partyId} · ${party.partyName} · ${party.status}`,
-                  }))
-                }
-                emptyNote="当前租户尚无业务参与方；先在业务参与方册登记，再发布结算政策。"
+                optionsOf={businessPartyPickerOptions}
+                emptyNote="还没有登记任何业务参与方；先在业务参与方页登记，再发布结算政策。"
                 readFace="业务参与方册"
               />
               <ContractPicker

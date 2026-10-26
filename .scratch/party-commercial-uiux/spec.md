@@ -1,7 +1,7 @@
 # 参与方与商业区 UI/UX 评估与跟进
 
 Category: enhancement
-Status: resolved——第一段 01–06、第二段 07–12 全部 resolved；第二段其余与第三段仍在「后续」，未拆票；第二段其余与第三段仍在「后续」，未拆票
+Status: resolved——第一段 01–06、第二段 07–13 全部 resolved；第二段其余与第三段仍在「后续」，未拆票；第二段其余与第三段仍在「后续」，未拆票
 
 出处：2026-10-25，用户在会话里要求「评估 commercial party 的 UI/UX」，读完评估后说「按你建议的顺序开始」。建议的顺序是：先改文案和组件（成本低），再做要设计的，最后是要后端配合的。本批先落第一段，第二、三段列在「后续」，等第一段收口后再拆票。
 
@@ -45,7 +45,7 @@ Status: resolved——第一段 01–06、第二段 07–12 全部 resolved；�
 - ~~引用一律显示「名称 + 标识」并可点到对象页~~ → [07](issues/07-references-are-links-with-names.md)。
 - ~~商业版本按对象分组、标出在用版本~~ → [08](issues/08-versions-grouped-with-in-use-filter.md)；合同、协议、产品、映射、政策 5 页行可点开详情与版本历史仍在后续。
 - ~~发布表单统一时刻控件~~ → [10](issues/10-publication-moments-in-local-time.md)。
-- 引用他物的格一律用选择器（今天合同的货主客户账户、信用政策的责任法人等要手敲 ID）。
+- ~~引用他物的格一律用选择器~~ → [13](issues/13-references-picked-not-typed.md)；候选多时的可搜索选单仍在后续。
 - ~~发布前给人读得懂的预览卡与确认框~~ → [11](issues/11-readable-preview-and-publish-confirmation.md)；正文各册的可读摘要卡、批准与发布分开按钮区仍在后续。
 - ~~切页签不丢草稿~~ → [09](issues/09-drafts-survive-tab-switches.md)；未保存提醒推广到全部写入页仍在后续。
 - 「基于此版本发新版本」预填；标识旁列出在册版本、提示区间重叠。
@@ -61,7 +61,7 @@ Status: resolved——第一段 01–06、第二段 07–12 全部 resolved；�
 
 ## 子票
 
-01–12 只改 `apps/admin-web` 与本票面，走 [workflow.md「前端切片」](../../docs/agents/workflow.md#前端切片一人在-main-上直接做)。与上一节的差别一处：当时有别的会话在主树上做合入，本批在独立 worktree（第一段 `idp-parcel-pcux`，第二段 `idp-parcel-pcux2`）上做，每笔先 rebase 到 `origin/main` 再推确切 SHA，不碰主树。
+01–13 只改 `apps/admin-web` 与本票面，走 [workflow.md「前端切片」](../../docs/agents/workflow.md#前端切片一人在-main-上直接做)。与上一节的差别一处：当时有别的会话在主树上做合入，本批在独立 worktree（第一段 `idp-parcel-pcux`，第二段 `idp-parcel-pcux2`、`idp-parcel-pcux3`）上做，每笔先 rebase 到 `origin/main` 再推确切 SHA，不碰主树。
 
 | # | 票 | 阻塞于 | 状态 |
 |---|---|---|---|
@@ -77,6 +77,7 @@ Status: resolved——第一段 01–06、第二段 07–12 全部 resolved；�
 | 10 | [发布表单的时刻按本地时区填](issues/10-publication-moments-in-local-time.md) | — | resolved |
 | 11 | [发布前看得懂要发什么，发布前确认](issues/11-readable-preview-and-publish-confirmation.md) | 10 | resolved |
 | 12 | [两张登记表单说业务话](issues/12-registration-forms-speak-business.md) | — | resolved |
+| 13 | [引用他物的格从册里选，不手敲标识](issues/13-references-picked-not-typed.md) | — | resolved |
 
 ## 界面用词对照（本批各票共用）
 

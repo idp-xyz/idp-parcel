@@ -5,8 +5,10 @@ import type { ApiResult } from '../catalogue-api';
 import { currentDisplayTimeZone } from '../moment';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
-import { Field, Problems, RowFrame, fieldLabel, selectClass, useLoaded } from './PublicationFormFields';
-import { WallTimeField } from './party-registration-fields';
+import { Field, Problems, ReferencePicker, RowFrame, fieldLabel, selectClass, useLoaded } from './PublicationFormFields';
+import { WallTimeField, legalEntityPickerOptions } from './party-registration-fields';
+import { listCustomerContracts, listGroupLegalEntities, listServiceProducts } from './api';
+import { customerContractObjectOptions, serviceProductObjectOptions } from './picker-options';
 import {
   acceptanceRulePackageFieldPaths,
   acceptanceRulePackageLocalProblems,
@@ -285,33 +287,43 @@ function RulePackageBodyFields({ draft, update, form, vocabulary, timeZone }: Se
       <h3 className={sectionTitle}>规则包正文（这一版的条款内容）：适用条件与规则引用表</h3>
       <Problems lines={form.problems[path]} />
       <div className="grid grid-cols-2 gap-3">
-        <Field label="服务产品 *" path={`${path}.serviceProduct`} problems={form.problems}>
-          <Input
-            value={draft.body.serviceProduct}
-            readOnly={form.locked}
-            className="font-mono text-[13px]"
-            placeholder="服务产品对象标识"
-            onChange={(event) => patchBody({ serviceProduct: event.target.value })}
-          />
-        </Field>
-        <Field label="客户合同 *" path={`${path}.contract`} problems={form.problems}>
-          <Input
-            value={draft.body.contract}
-            readOnly={form.locked}
-            className="font-mono text-[13px]"
-            placeholder="客户合同对象标识"
-            onChange={(event) => patchBody({ contract: event.target.value })}
-          />
-        </Field>
-        <Field label="责任法人 *" path={`${path}.legalEntity`} problems={form.problems}>
-          <Input
-            value={draft.body.legalEntity}
-            readOnly={form.locked}
-            className="font-mono text-[13px]"
-            placeholder="责任法人引用"
-            onChange={(event) => patchBody({ legalEntity: event.target.value })}
-          />
-        </Field>
+        {/* 三项都从各自的册里选，不手敲标识（票 party-commercial-uiux/13）；正文引用的是对象本身，候选一对象一项、写出它有哪几版。 */}
+        <ReferencePicker
+          label="服务产品 *"
+          path={`${path}.serviceProduct`}
+          problems={form.problems}
+          value={draft.body.serviceProduct}
+          locked={form.locked}
+          onChange={(serviceProduct) => patchBody({ serviceProduct })}
+          load={listServiceProducts}
+          optionsOf={serviceProductObjectOptions}
+          emptyNote="还没有发布任何服务产品；先发布服务产品，再发布挂在它上面的规则包。"
+          readFace="服务产品册"
+        />
+        <ReferencePicker
+          label="客户合同 *"
+          path={`${path}.contract`}
+          problems={form.problems}
+          value={draft.body.contract}
+          locked={form.locked}
+          onChange={(contract) => patchBody({ contract })}
+          load={listCustomerContracts}
+          optionsOf={customerContractObjectOptions}
+          emptyNote="还没有发布任何客户合同；先发布客户合同，再发布挂在它上面的规则包。"
+          readFace="客户合同册"
+        />
+        <ReferencePicker
+          label="责任法人 *"
+          path={`${path}.legalEntity`}
+          problems={form.problems}
+          value={draft.body.legalEntity}
+          locked={form.locked}
+          onChange={(legalEntity) => patchBody({ legalEntity })}
+          load={listGroupLegalEntities}
+          optionsOf={legalEntityPickerOptions}
+          emptyNote="还没有登记任何责任法人；先在集团与法人页登记。"
+          readFace="集团法人册"
+        />
         <Field label="正文适用范围 *" path={`${path}.scope`} problems={form.problems}>
           <Input
             value={draft.body.scope}
