@@ -123,3 +123,9 @@ Date: 2026-10-19
 17. **存量分配不回补**（TF owner）。0031 之前在挂池班次上形成的分配没有分配行，不占任何预占；不替谁补一个分配量。并发建池会留下同样的状态：分配只锁已在册的池行，另一笔事务同时在这一班上建池时，分配读不到新池，可以不带那一行就形成（幻读窗口，生产上概率低）。要堵须让建池与分配在班次那一行上互斥，本票不做，由 TF owner 定是否另票。
 18. **分配量的来源不回读**（TF owner）。同越权风险点 3：`PREPARATION_DEMAND_SNAPSHOT` 的引用不核准备结果在不在、量对不对；分配量是声明值（越权风险点 2）。
 19. **查阅口看不到分配关系**（前端 owner）。池级查阅册只列预占、释放、实际使用三个和，不列已分配；逐份预占的查阅册（票 [demo-chain-gaps/46](../../.scratch/demo-chain-gaps/issues/46-capacity-reservations-have-no-per-reservation-review-registry.md)）落地时应带已分配与分配关系。
+
+## 复核记录（2026-10-26，Claude Code 会话代决，非 owner 本人复核）
+
+用户 2026-10-20 原话「要我裁定的部分，你作为业务和系统专家，请你自决吧」。正文、Decision 与上文补记不变。
+
+- **越权风险点 7**：照[代决复核报告](../../.scratch/owner-review-20261020/report.md) M3 的修法，由票 [demo-chain-gaps/127](../../.scratch/demo-chain-gaps/issues/127-transport-preparation-reads-capacity-pools-without-row-locks.md) 兑现，不接受串行。准备评估改走另开的不加锁池读口（`ports.UnlockedCapacityPoolsOnSchedules`），只给 `PrepareOnPlannedLegsHandler`；它与按池身份读回同一条读法、同一道重建门，只少池行那一把锁。预占与释放（按池身份读）、装载分配（按班次读）照旧锁池行，决定四「读池在写事务里锁住池那一行」说的就是这几口写编排，不因此收窄。代价：准备读到的是读那一刻已提交的池，不等在途的预占；一个池分几条语句读，两条之间恰有一笔释放提交时重建门拒读，准备答池册读不动、整封重投（`AT-TF-331`）。

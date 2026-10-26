@@ -52,7 +52,7 @@ func newPreparationStores(t *testing.T) preparationStores {
 	if err != nil {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
-	registry := scheduleRegistryStores{transactor: db.Transactor()}
+	registry := scheduleRegistryStores{transactor: db.Transactor(), db: db}
 	if registry.templates, err = adapter.NewScheduleTemplates(db); err != nil {
 		t.Fatalf("构造周期安排册：%v", err)
 	}

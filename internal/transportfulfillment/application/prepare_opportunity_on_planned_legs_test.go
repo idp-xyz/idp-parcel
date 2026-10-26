@@ -28,7 +28,7 @@ func (double demandDouble) LoadDeclaredDemand(context.Context, domain.TenantID, 
 
 type poolsOnSchedulesDouble struct{ err error }
 
-func (double poolsOnSchedulesDouble) ListPoolsOnSchedules(context.Context, domain.TenantID, []domain.ScheduleReference) ([]ports.CapacityPoolRecord, error) {
+func (double poolsOnSchedulesDouble) ListPoolsOnSchedulesUnlocked(context.Context, domain.TenantID, []domain.ScheduleReference) ([]ports.CapacityPoolRecord, error) {
 	return nil, double.err
 }
 
