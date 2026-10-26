@@ -778,7 +778,7 @@ func TestEpisodesOfOneParcelAndKindAreFoundByTheirCause(t *testing.T) {
 	}
 }
 
-// TestAnEpisodeRecordedBeforeCausesStaysReadableButClaimsNoNewHit 证 `AT-VE-203`：迁移 0029 把存量行回填为「登记于因果条件之前」、
+// TestAnEpisodeRecordedBeforeCausesStaysReadableButClaimsNoNewHit 证 `AT-VE-203`：迁移 0030 把存量行回填为「登记于因果条件之前」、
 // 依据为空数组——照旧按对象与类型读得回，但不认领任何带原因的命中；库面 CHECK 只放存量那一格没有依据，存量那一格也不许带依据。
 func TestAnEpisodeRecordedBeforeCausesStaysReadableButClaimsNoNewHit(t *testing.T) {
 	fixture := newFactFixture(t)

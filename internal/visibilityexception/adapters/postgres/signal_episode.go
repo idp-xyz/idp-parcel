@@ -132,7 +132,7 @@ func (repository *SignalEpisodes) findLatest(
 	return episode, true, nil
 }
 
-// signalFactBasisRow 是事实依据一条在 fact_basis 列里的形状（迁移 0029）。判断标识可缺，缺时不写键。
+// signalFactBasisRow 是事实依据一条在 fact_basis 列里的形状（迁移 0030）。判断标识可缺，缺时不写键。
 type signalFactBasisRow struct {
 	Source    string `json:"source"`
 	Fact      string `json:"fact"`

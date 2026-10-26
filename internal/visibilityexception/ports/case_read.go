@@ -31,7 +31,7 @@ import (
 // （ATTACH_TO_EXISTING / AUTO_ESTABLISH / MANUAL_REVIEW / NO_CASE）。Ended 两件
 // 成对缺席表示发作期仍活跃——结束依据与结束时间同在场是 0002 的在场规则。
 //
-// 因果条件与事实依据照发作期行上登记的原样转写（VE 迁移 0029）：依据每条指回已接受事实的源上下文、引用与版本，可带源事实里
+// 因果条件与事实依据照发作期行上登记的原样转写（VE 迁移 0030）：依据每条指回已接受事实的源上下文、引用与版本，可带源事实里
 // 随带的判断标识；因果条件立起来之前落库的存量行，因果条件是 RECORDED_BEFORE_CAUSAL_CONDITION、依据为空——那是如实回填，
 // 读口不代补。
 type SignalEpisodeCatalogueRow struct {
