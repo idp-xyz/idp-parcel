@@ -100,7 +100,7 @@ PN-08 的阶段准入、暂停恢复、生产权威、对象级接管和 `Go/No-
 | `UC-SA-002` | [计算、确认并调整运营费用](./settlement-accounting/UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md) | `settlement-accounting` | 已接入 `parcel-pricing` 纯评价边界，客户/供应商计费重量采用、费用生命周期和接受前财务控制结果已形成；真实价卡、账户和控制策略待提供 |
 | `UC-SA-003` | [截单、发布并处理客户对账单](./settlement-accounting/UC-SA-003-CUT-OFF-PUBLISH-AND-RECONCILE-CUSTOMER-STATEMENT.md) | `settlement-accounting` | 截单快照、对账单、金额争议和既有调整的后续账期纳入边界已形成，按结算归属日纳入与对账安排登记未落；本用例不创建调整，真实账期与争议规则待提供 |
 | `UC-SA-004` | [接收、匹配并审核供应商账单](./settlement-accounting/UC-SA-004-RECEIVE-MATCH-AND-AUDIT-SUPPLIER-BILL.md) | `settlement-accounting` | 预期成本、供应商主张、金额范围匹配和审核应付边界已形成，真实账单入口与账期待提供 |
-| `UC-SA-005` | [映射外部收付款并形成运营核销](./settlement-accounting/UC-SA-005-MAP-EXTERNAL-FUNDS-AND-APPLY-SETTLEMENT.md) | `settlement-accounting` | 产品内唯一真实收付采用、运营映射、未分配、部分/完整核销和撤销边界已形成，映射、核销与核销撤销经受控登记口进入，客户赔付与追偿认可金额可作映射与核销目标；真实财务交换待提供 |
+| `UC-SA-005` | [映射外部收付款并形成运营核销](./settlement-accounting/UC-SA-005-MAP-EXTERNAL-FUNDS-AND-APPLY-SETTLEMENT.md) | `settlement-accounting` | 产品内唯一真实收付采用、运营映射、未分配、部分/完整核销和撤销边界已形成，映射、核销与核销撤销经受控登记口进入，客户赔付与追偿认可金额可作映射与核销目标，外部更正低于已核销合计的那一格未落；真实财务交换待提供 |
 | `UC-SA-006` | [分摊成本并派生经营结果](./settlement-accounting/UC-SA-006-ALLOCATE-COSTS-AND-DERIVE-OPERATING-RESULTS.md) | `settlement-accounting` | 共享成本、未分摊余额、法人间结算和版本化经营结果边界已形成，真实分摊/毛利口径待提供 |
 | `UC-SA-007` | [形成索赔、赔付与追偿金额](./settlement-accounting/UC-SA-007-SETTLE-CLAIMS-AND-RECOVERY-AMOUNTS.md) | `settlement-accounting` | 客户赔付义务、应追偿、对方认可和追加调整已分层；真实到账与核销只由 `UC-SA-005` 形成，真实金额规则待提供 |
 | `UC-CR-001` | [登记代收义务与事实、记代收分户账并形成回汇批次](./collection-remittance/UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md) | `collection-remittance` | 登记与记账编排已实现，经受控 CLI 落库；入账判重、按指令移位、短款溢款来源位置、更正回指与真实到账凭采用引用登记未落；COD 首发不在试点范围 |
