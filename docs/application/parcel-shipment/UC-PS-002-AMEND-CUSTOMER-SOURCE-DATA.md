@@ -114,7 +114,7 @@
 | 等复核 | `AWAITING_REVIEW` | 所采用规则包版本的允许声明在这一格（资料组 × 阶段 × 意图）未声明，不形成版本（`ADR-ALLOW` 决定三） | 请求、资料范围与所判阶段 | 不得推断允许，也不得答成业务拒绝 |
 | 未获授权 | `NOT_AUTHORIZED` | 委托在请求方可见范围内，但请求方对这处资料没有修订授权（`ADR-AUTH`） | 授权判断依据、请求方 | 不得在委托不存在或属别的客户时作答——那是统一不可见 |
 | 不允许 | `DISALLOWED` | 请求越出接受基线成员集合，或允许声明把这一格登记为不允许 | 结构化原因、规则版本、适用时间 | 不得删除原始请求或写成技术失败 |
-| 已有结果 | `ALREADY_HANDLED` | 同一请求身份与相同内容已经形成结果 | 原请求和已有版本/结果关联 | 不得重复形成版本 |
+| 已有结果 | `ALREADY_HANDLED` | 同一请求身份与相同内容已经形成资料版本 | 原请求和已有版本关联 | 不得重复形成版本；不得对没有形成版本的请求答这一格 |
 | 请求冲突 | `SOURCE_CONFLICT` | 同一请求身份携带不同内容、范围、基准或资料适用时间（`requestEffectiveAt`） | 原请求、冲突字段和纠正入口 | 不得把 `occurredAt`/`receivedAt` 的变化当作冲突，也不得按最后到达覆盖 |
 | 未决 | `UNDECIDED` | 授权服务、阶段事实或允许声明读不回，授权规则未登记，资料修订阶段判不出，或本方的版本提交、标识签发、下游交接没有落成（[ADR-0256](../../adr/0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md)） | 续办引用与未决原因，原因是 `SHIPMENT_REQUEST_UNAVAILABLE`、`SOURCE_DATA_AMENDMENT_AUTHORITY_UNAVAILABLE`、`SOURCE_DATA_AMENDMENT_AUTHORITY_RULES_NOT_CONFIGURED`、`SOURCE_DATA_AMENDMENT_STAGE_FACT_UNAVAILABLE`、`SOURCE_DATA_AMENDMENT_STAGE_UNDETERMINED`、`SOURCE_DATA_RULE_UNAVAILABLE`、`SOURCE_DATA_VERSION_IDENTITY_UNAVAILABLE`、`AMENDED_REQUEST_NOT_SAVED`、`STALE_SHIPMENT_REQUEST_REVISION`、`SOURCE_DATA_VERSION_NOT_HANDED_OFF`、`SOURCE_DATA_AMENDMENT_AUTHORITY_APPLICABILITY_CONFLICT` 之一；末一码是授权适用冲突（同一刻多于一条授予允许、或委派方不同的多条委派命中，[ADR-0261](../../adr/0261-authority-grants-and-contract-delegations-follow-the-closure-of-their-version-and-several-hits-are-an-applicability-conflict.md)），与授权规则未登记并列，续办同归运营登记（收尾旧版或撤去重复的那一条） | 不得返回已采用或业务拒绝；依赖答不出不交人工复核，授权规则未登记与授权适用冲突都不答未获授权 |
 
@@ -132,7 +132,7 @@
 | 步骤 | 责任方 | 应用动作 | 结果与下一步 |
 |---|---|---|---|
 | 1 | 接入适配器 | 认证入口并保全请求、原始内容、来源时间和接收时间 | 无法保全时不形成任何结果（没有形成答案），不进入资料版本处理 |
-| 2 | `parcel-shipment` | 识别重复、重试、内容冲突和关联请求 | 相同内容返回已有结果；不同内容进入请求冲突 |
+| 2 | `parcel-shipment` | 识别重复、重试、内容冲突和关联请求 | 相同内容已形成版本的返回已有结果，没形成版本的按首次请求接着办；不同内容进入请求冲突 |
 | 3 | `parcel-shipment` | 解析客户账户、委托、包裹、字段范围和基础版本 | 范围或意图不可解释时输入未受理；委托查无、跨租户或跨客户答统一不可见结果 |
 | 4 | `party-commercial` / `parcel-shipment` | 校验请求方、实际决定方、授权角色、委派和适用时点 | 请求方无修订授权答未获授权；授权服务答不出或授权规则未登记答未决（带原因与续办引用），不交人工复核 |
 | 5 | `parcel-shipment` | 校验接受基线共享约束、成员和包裹身份不变量 | 增删成员、改账户/法人/合同/产品/服务范围答不允许并转关联路径 |
@@ -158,7 +158,7 @@
 
 ## 版本、并发与迟到规则
 
-- 同一请求身份、相同规范化内容摘要、相同目标范围和基础版本的重试返回已有结果；不能创建第二个资料版本。规范化摘要必须包含资料适用时间（`requestEffectiveAt`）的值及缺失/显式存在状态。
+- 同一请求身份、相同规范化内容摘要、相同目标范围和基础版本的重试，已形成版本的返回已有结果；上一轮停在版本落库之前（来源保全了而版本没形成）的，按首次请求接着办（[ADR-0256](../../adr/0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md) 决定一）；不能创建第二个资料版本。规范化摘要必须包含资料适用时间（`requestEffectiveAt`）的值及缺失/显式存在状态。
 - 同一请求身份携带不同内容、范围、基础版本或 `requestEffectiveAt` 形成请求冲突；`occurredAt`/`receivedAt` 变化只追加来源观察，不单独形成冲突，不得按最后到达覆盖。
 - 请求引用过期基础版本且与当前版本存在重叠字段时，形成冲突或待复核；只有登记了明确合并规则的非重叠范围才可合并，首发默认保持待复核。
 - 资料版本提交顺序由明确的领域顺序、基础版本关系和业务有效时间裁决；消息到达、数据库写入或客户端时间不能单独决定当前版本。
@@ -199,6 +199,7 @@
 | `AT-PS-029` | 关务案件已关闭或服务已完成后收到更正 | 保全迟到版本；由 `UC-CC-010` 分类是否后续办，不自动重开 |
 | `AT-PS-030` | 业务有效时间早于系统接收时间的迟到更正 | 按业务时间重派生受影响判断；不倒改接受、正式申报或提交历史 |
 | `AT-PS-031` | 资料版本已形成但下游事件首次发布失败 | 版本只形成一次；仅重试同一发布意图 |
+| `AT-PS-126` | 修订在授权未决、阶段判不出、允许声明未声明答等复核、保存失败或并发抢先之后停下（来源已保全，委托上没有这次请求的版本），客户原样重放 | 条件恢复后重放形成版本并交出恰好一份发布意图，只形成一次，再重放答 `ALREADY_HANDLED` 并带那份版本；条件没变时重放得到同一个答案（未决、等复核、未获授权或不允许），不答不带版本的已有结果；委托上别的修订请求的版本不算这次请求的版本；同身份不同内容仍是请求冲突 |
 | `AT-PS-032` | 跨客户查询、导出和批量更正 | 严格按客户账户、法人、委托、包裹和授权隔离；不得泄露共同集运或合报之外的资料 |
 
 ## 待确认业务决策
@@ -231,5 +232,5 @@
 |---|---|---|
 | 输入语义契约「修订意图」一行的来源更正或撤销关系 | 意图只有补充、更正、显式清空（`domain.AmendmentIntent`），party-commercial 资料修订允许声明的镜像同样只有这几格；来源更正与撤销关系没有意图格，随其机制实现时两边一起加；规则不变 | 未立票：来源更正与撤销关系的机制尚未裁 |
 | `AT-PS-106`，结果语义契约「委托查无、跨租户或跨客户」一行 | 已补：查无的委托答 `404 SHIPMENT_REQUEST_NOT_VISIBLE`（ADR-0022）；受理阶段的另三格是调用方的错、答 4xx：修订意图未声明、内容与范围不配答 `400 MALFORMED_REQUEST` 并在 `detail` 点名那一格，委托未接受答 `400 SHIPMENT_REQUEST_NOT_YET_ACCEPTED`（码与改载荷那一格分开；决定前的纠错走受控补充）。本行预期结果不变 | [code/22](../../../.scratch/docs-consistency/code/22-customer-face-http-contract-misses-accepted-adrs.md) |
-| 「未决」一行，ADR-0256 决定一第 2 格「重放须接着办」 | 来源保全落下之后版本没落成（保存失败、并发抢先或业务未决），重放同一请求只答 `ALREADY_HANDLED`、不带版本，这次修订从此不会形成；本行预期结果不变 | [code/44](../../../.scratch/docs-consistency/code/44-withdrawal-and-amendment-replays-short-circuit-after-an-undecided-round.md) |
+| 「未决」一行，ADR-0256 决定一第 2 格「重放须接着办」 | 已补：来源保全自成一笔事务，版本落库之前停下的各格（授权、阶段、矩阵未决，读不回，允许声明未声明答等复核，保存失败，并发抢先）来源保全都已落下；重放同一请求在委托的资料版本里找这次请求身份的版本，找到答 `ALREADY_HANDLED` 并带版本，找不到按首次请求继续走受理、授权、阶段、矩阵与保存；确定的业务拒绝（未获授权、不允许）条件没变就重新得到同一个答案；停在 `SOURCE_DATA_VERSION_NOT_HANDED_OFF` 的一格版本已落库，重放读回版本并重发交接意图。本行预期结果不变 | [code/44](../../../.scratch/docs-consistency/code/44-withdrawal-and-amendment-replays-short-circuit-after-an-undecided-round.md) |
 | 「未决」一行的授权适用冲突（ADR-0261） | 已补：`party-commercial` 多条命中答适用冲突（UC-PC-003 `AT-PC-042`），资料修订授权适配器译成 `APPLICABILITY_CONFLICT`，编排停在未决、原因 `SOURCE_DATA_AMENDMENT_AUTHORITY_APPLICABILITY_CONFLICT` | [code/24](../../../.scratch/docs-consistency/code/24-closed-authorization-rule-and-contract-versions-keep-granting.md) |

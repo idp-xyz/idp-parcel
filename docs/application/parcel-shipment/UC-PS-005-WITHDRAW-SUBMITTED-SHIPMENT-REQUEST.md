@@ -57,7 +57,7 @@
 | 财务控制引用 | 原估价、逐项控制结果（冻结或信用暴露）、控制策略、业务关联和当前有效性 | 不新建零金额释放或跨账户补偿 |
 | 撤回已成立（`FORMED`） | 撤回决定、决定时间、请求/授权依据、任务停止、发布意图与释放补偿关联；随附释放有一笔被结算确定不受理时带「释放未受理、待人处理」一格（`controlReleaseNotAccepted`） | 不生成拒绝决定 |
 | 未获授权（`NOT_AUTHORIZED`） | 请求方与所查授权依据 | 不形成撤回、不释放；授权规则未登记不答这一格 |
-| 已有决定（`DECISION_ALREADY_FORMED`） | 已先行提交的接受、拒绝或撤回引用；撞上既有撤回时带原补偿关联，或「释放未受理、待人处理」一格（`controlReleaseNotAccepted`） | 后到请求不覆盖原决定 |
+| 已有决定（`DECISION_ALREADY_FORMED`） | 已先行提交的接受、拒绝或撤回引用；撞上既有撤回时带原补偿关联，或「释放未受理、待人处理」一格（`controlReleaseNotAccepted`） | 后到请求不覆盖原决定；委托仍为`已提交`时不得答这一格 |
 | 来源冲突（`SOURCE_CONFLICT`） | 原请求引用 | 同一请求身份携带不同内容；不覆盖原请求，不再撤回一次 |
 | 撤回未决（`UNDECIDED`） | 已知事实、缺口、续办入口与未决原因，原因是 `SHIPMENT_REQUEST_UNAVAILABLE`、`WITHDRAWAL_AUTHORITY_UNAVAILABLE`、`WITHDRAWAL_AUTHORITY_RULES_NOT_CONFIGURED`、`DECISION_IDENTITY_UNAVAILABLE`、`DECISION_NOT_RECORDED`、`STALE_SHIPMENT_REQUEST_REVISION`、`WITHDRAWAL_AUTHORITY_APPLICABILITY_CONFLICT` 之一；末一码是授权适用冲突（同一刻多于一条授予允许、或委派方不同的多条委派命中，[ADR-0261](../../adr/0261-authority-grants-and-contract-delegations-follow-the-closure-of-their-version-and-several-hits-are-an-applicability-conflict.md)），与授权规则未登记并列，续办同归运营登记（收尾旧版或撤去重复的那一条） | 不默认撤回或接受；授权适用冲突不答未获授权 |
 | 统一不可见（不是一格结果） | 委托查无、跨租户或跨客户：`404` 加上下文统一不可见码（[ADR-0022](../../adr/0022-http-status-carries-answer-formed-not-business-verdict.md)） | 不区分不存在与他人的 |
@@ -66,7 +66,7 @@
 
 | 步骤 | 责任方 | 应用动作 | 结果与下一步 |
 |---:|---|---|---|
-| 1 | 接入适配器 | 保全撤回来源、请求身份、对象、请求方和业务时间 | 重复返回原处理；冲突不覆盖 |
+| 1 | 接入适配器 | 保全撤回来源、请求身份、对象、请求方和业务时间 | 重复到达按委托此刻的状态答：已越过提交边界的返回原处理，仍为`已提交`的接着办；冲突不覆盖 |
 | 2 | `parcel-shipment` | 校验租户、客户账户、委托范围和请求方当前授权 | 委托查无、跨租户或跨客户答统一不可见结果；可见范围内无撤回授权答未获授权；授权规则未登记答未决 |
 | 3 | `parcel-shipment` | 读取当前提交版本、接受判断任务和已提交决定 | 非`已提交`委托返回已有结果或正确后续入口 |
 | 4 | `parcel-shipment` | 在决定提交边界重新检查并提交撤回 | 与接受/拒绝竞争，只有一个决定成立 |
@@ -80,7 +80,7 @@
 - 撤回、接受和主动拒绝竞争同一不可覆盖决定边界（人工复核完成本身不形成决定，接受仍由判断任务形成）。首个合法提交结果获胜；事务开始顺序、客户端时间和消息到达顺序都不能单独裁决。
 - 撤回提交成功后不等待财务释放才生效。释放可重试地没完成形成可续办补偿；被结算确定不受理的那一笔不续办，记入释放未受理册交人处理，撤回照样成立（PS CONTEXT 词条「控制项结果」）；不得为了保持表面原子性恢复接受判断或把委托改回`已提交`。
 - 接受已经合法提交但回执或事件失败时，后到的决定前撤回请求不得释放合法占用；应返回接受结果并由客户选择 `UC-PS-006` 的后续路径。
-- 相同来源请求身份与内容重复时返回原撤回或原已有决定；同身份不同内容形成来源冲突，不重复撤回或释放。
+- 相同来源请求身份与内容重复时，委托已越过提交边界就返回原撤回或原已有决定；委托仍为`已提交`（上一轮停在未决，来源保全了而撤回没形成）就按首次请求接着办，不答已有决定（[ADR-0256](../../adr/0256-technical-non-formation-is-a-reason-of-undecided-not-an-outcome-of-its-own.md) 决定一）；同身份不同内容形成来源冲突，不重复撤回或释放。
 - 已撤回委托不能原地恢复。客户重新提出服务需求时建立关联新委托并重新执行生产归属与接受判断。
 
 ## 首发试点叠加条件
@@ -97,6 +97,7 @@
 | `AT-PS-067` | 已提交且尚无决定，客户授权有效 | 形成撤回和任务停止，不形成拒绝 |
 | `AT-PS-068` | 同一撤回请求重复到达 | 返回原撤回及原补偿关联 |
 | `AT-PS-069` | 同一请求身份携带不同内容 | 形成来源冲突，不覆盖原请求 |
+| `AT-PS-125` | 撤回在授权未决、读不回或并发抢先之后停下（来源已保全，委托仍为`已提交`），客户原样重放 | 授权恢复后重放形成撤回，只形成一次，再重放答已有决定并带那份撤回；授权仍答不出时重放仍答未决、带续办引用，不答已有决定；委托此间已被接受、拒绝或撤回的，重放答已有决定并带那份决定、不再问授权；同身份不同内容仍是来源冲突 |
 | `AT-PS-070` | 撤回与自动接受并发，撤回先合法提交 | 接受不得再成立，已成立的占用进入释放补偿 |
 | `AT-PS-071` | 接受先合法提交，决定前撤回请求随后到达 | 返回接受结果，不释放合法占用；转接受后路径 |
 | `AT-PS-072` | 拒绝已经先行提交 | 返回拒绝结果，不追加撤回决定 |
@@ -116,7 +117,7 @@
 |---|---|---|
 | `AT-PS-075`，「统一不可见」一行 | 已补：撤回编排对查无的委托上抛统一不可见错误，HTTP 适配器答 `404 SHIPMENT_REQUEST_NOT_VISIBLE`，不带 `outcome`、不带 `detail`（ADR-0022）；本行预期结果不变 | [code/22](../../../.scratch/docs-consistency/code/22-customer-face-http-contract-misses-accepted-adrs.md) |
 | `AT-PS-068`、`AT-PS-076` 与撤回后关联重提（[ADR-0255](../../adr/0255-a-submitted-request-is-regrouped-only-by-withdrawing-it-and-submitting-linked-new-requests.md)） | 已补：重建门开到`已撤回`，撤回决定（决定标识、授权引用、请求方、结构化原因、决定时刻）进快照（[ADR-0286](../../adr/0286-withdrawn-shipment-request-rehydration-by-snapshot-expressiveness.md)）；真库上重复撤回（同一来源身份重发与换一个来源身份再撤）答原撤回与原补偿关联，以撤回重提方向关联已撤回原委托的新提交成立；已撤回行缺撤回决定按坏数据响亮拒绝，不推回；本行预期结果不变 | [code/36](../../../.scratch/docs-consistency/code/36-withdrawn-shipment-requests-cannot-be-read-back-from-the-store.md) |
-| 「撤回未决」一行，ADR-0256 决定一第 2 格「重放须接着办」 | 撤回停在未决时装配事务照样提交来源保全，重放同一请求对仍为`已提交`的委托答 `DECISION_ALREADY_FORMED`、不带任何决定，这次撤回从此不会形成；本行预期结果不变 | [code/44](../../../.scratch/docs-consistency/code/44-withdrawal-and-amendment-replays-short-circuit-after-an-undecided-round.md) |
+| 「撤回未决」一行，ADR-0256 决定一第 2 格「重放须接着办」 | 已补：撤回停在未决时装配事务照样提交来源保全；重放同一请求按委托此刻的状态判——已撤回、已接受、已拒绝答 `DECISION_ALREADY_FORMED` 并带那份决定（已撤回带原撤回），仍为`已提交`就按首次请求继续走授权与决定提交；撤回自己不带请求身份，不按请求身份找撤回；`DECISION_NOT_RECORDED` 整笔回滚、保全一并回滚，重放从头办，不在其中。本行预期结果不变 | [code/44](../../../.scratch/docs-consistency/code/44-withdrawal-and-amendment-replays-short-circuit-after-an-undecided-round.md) |
 | 「撤回未决」一行的授权适用冲突（ADR-0261） | 已补：`party-commercial` 多条命中答适用冲突（UC-PC-003 `AT-PC-042`），撤回授权适配器译成 `APPLICABILITY_CONFLICT`，编排停在未决、原因 `WITHDRAWAL_AUTHORITY_APPLICABILITY_CONFLICT` | [code/24](../../../.scratch/docs-consistency/code/24-closed-authorization-rule-and-contract-versions-keep-granting.md) |
 | 步骤 6「按原业务关联幂等释放已成立各项的占用」，`AT-PS-073` | 已补：撤回放的是这份委托各版已成立的占用——客户补件之后、新版本那一轮判断提交之前撤回，被取代那一版的占用一并释放；命令指名旧版本时当前版本也放；一版放不掉不挡其余各版，撤回照样成立、续办原补偿。本行预期结果不变 | [code/73](../../../.scratch/docs-consistency/code/73-terminal-paths-release-every-superseded-versions-occupation.md) |
 | 步骤 6 与「规则、补偿与并发」释放失败一条，被结算确定不受理那一格，`AT-PS-115` | 已补：释放答复分已收口、可重试未形成、确定未受理三格；确定未受理（含施加时没存作用域的存量那一笔）撤回照样成立，那一笔记入释放未受理册待人处理，答复带 `controlReleaseNotAccepted`、不留补偿引用；重复撤回答同一格；释放按施加时随控制结果存下的作用域认领（[ADR-0282](../../adr/0282-a-control-release-the-provider-refuses-is-registered-for-handling-instead-of-compensated.md)） | [code/71](../../../.scratch/docs-consistency/code/71-release-and-control-ports-answer-a-closed-set-instead-of-a-bare-error.md) |
