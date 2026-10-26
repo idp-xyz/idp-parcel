@@ -74,6 +74,27 @@ type GovernanceScope struct {
 	PilotScope  pgdomain.ScopeVersionReference
 }
 
+// NewGovernanceScopeOfObjectScope 由对照册换出的对象范围拼治理坐标，试点范围版本取对象范围本身（ADR-0308 决定三）。
+//
+// 治理登记册里权威区间的对象范围与暂停决定指向的试点范围版本是同一个引用（演示种子里两者同值，隔离形态的合成坐标亦然），
+// 所以不另设一个「试点范围版本」输入：多一个来源，就多一处可以与对照错开的地方（ADR-0180 越权风险点 3 的同类）。
+func NewGovernanceScopeOfObjectScope(objectScope, capability, factKind string) (GovernanceScope, error) {
+	pilotScope, err := pgdomain.NewScopeVersionReference(objectScope)
+	if err != nil {
+		return GovernanceScope{}, fmt.Errorf("parcel shipment pilotgovernance adapter: governance scope: %w", err)
+	}
+	governance := GovernanceScope{
+		ObjectScope: objectScope,
+		Capability:  capability,
+		FactKind:    factKind,
+		PilotScope:  pilotScope,
+	}
+	if !governance.complete() {
+		return GovernanceScope{}, fmt.Errorf("parcel shipment pilotgovernance adapter: governance scope is incomplete")
+	}
+	return governance, nil
+}
+
 func (scope GovernanceScope) complete() bool {
 	return scope.ObjectScope != "" &&
 		scope.Capability != "" &&

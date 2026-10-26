@@ -217,7 +217,8 @@ func TestPreAdviceLinesNeedAnAccessRequestIdentifier(t *testing.T) {
 }
 
 // Covers: ADR-0180 决定四末项、ADR-0139 决定八——首方族在铸造侧判准入的两口登得进准入范围对照（能力 CUSTOMER_COMMAND，事实
-// 类型取这一口的能力词）；委托提交不在铸造侧判准入，它的词登不进；词表外的串、拿首方族的能力词顶能力格，也登不进。
+// 类型取这一口的能力词）；委托提交不在铸造侧判准入，但它的词（ShipmentRequestSubmissionAdmission，ADR-0308）单独认下、登得进，
+// 铸造侧却不判它；词表外的串、拿首方族的能力词顶能力格，也登不进。
 func TestCustomerCommandAdmissionWordsAreOnlyThoseMintedLinesAskFor(t *testing.T) {
 	interval := clientIntervalOf(t, customerGrantStartsAt, time.Time{})
 	for _, capability := range []accessidentity.CustomerCapability{
@@ -229,11 +230,13 @@ func TestCustomerCommandAdmissionWordsAreOnlyThoseMintedLinesAskFor(t *testing.T
 			t.Fatalf("%s：%v", capability, err)
 		}
 	}
+	if _, err := accessidentity.NewAdmissionScopeMapping(customerTenant, "SYN-MAP-1", accessidentity.ShipmentRequestSubmissionAdmission(), "SYN-PILOT-SCOPE/shipment-intake@v1", interval, "SYN-BASIS"); err != nil {
+		t.Fatalf("委托提交的词应登得进对照：%v", err)
+	}
 	for name, requirement := range map[string]accessidentity.AdmissionRequirement{
-		"shipment submission is judged by its orchestration": {Capability: accessidentity.CustomerCommandAdmissionCapability, FactKind: accessidentity.CustomerCapabilityShipmentRequestSubmission.String()},
-		"unknown customer word":                              {Capability: accessidentity.CustomerCommandAdmissionCapability, FactKind: "CLAIM_SUBMISSION"},
-		"customer word in the capability column":             {Capability: accessidentity.CustomerCapabilityDeliveryPreAdviceSubmission.String(), FactKind: accessidentity.CustomerCapabilityDeliveryPreAdviceSubmission.String()},
-		"lower-cased capability":                             {Capability: "customer_command", FactKind: accessidentity.CustomerCapabilityDeliveryPreAdviceSubmission.String()},
+		"unknown customer word":                  {Capability: accessidentity.CustomerCommandAdmissionCapability, FactKind: "CLAIM_SUBMISSION"},
+		"customer word in the capability column": {Capability: accessidentity.CustomerCapabilityDeliveryPreAdviceSubmission.String(), FactKind: accessidentity.CustomerCapabilityDeliveryPreAdviceSubmission.String()},
+		"lower-cased capability":                 {Capability: "customer_command", FactKind: accessidentity.CustomerCapabilityDeliveryPreAdviceSubmission.String()},
 	} {
 		if _, err := accessidentity.NewAdmissionScopeMapping(customerTenant, "SYN-MAP-1", requirement, "SYN-PILOT-SCOPE/customer-commands@v1", interval, "SYN-BASIS"); !errors.Is(err, accessidentity.ErrAdmissionRequirementUnknown) {
 			t.Fatalf("%s：err = %v, want ErrAdmissionRequirementUnknown", name, err)

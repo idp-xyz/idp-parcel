@@ -21,6 +21,16 @@ var customerCapabilitiesAdmittedAtMint = []CustomerCapability{
 	CustomerCapabilityDeliveryHandoverConfirmation,
 }
 
+// ShipmentRequestSubmissionAdmission 是委托提交在治理登记册上的词（ADR-0308）：能力 CustomerCommandAdmissionCapability，事实类型取
+// 客户面能力 CustomerCapabilityShipmentRequestSubmission。它不进 customerCapabilitiesAdmittedAtMint——提交口不在铸造侧判准入
+// （ADR-0139 决定八），这个词只给对照册收录与 PS 的生产归属目录读对照用。词在此一处定义，目录与对照登记两边都引它。
+func ShipmentRequestSubmissionAdmission() AdmissionRequirement {
+	return AdmissionRequirement{
+		Capability: CustomerCommandAdmissionCapability,
+		FactKind:   CustomerCapabilityShipmentRequestSubmission.String(),
+	}
+}
+
 // customerCommandAdmission 交回这一口在铸造侧判的准入要求；不在铸造侧判的口交回 nil。
 func customerCommandAdmission(capability CustomerCapability) *AdmissionRequirement {
 	if !slices.Contains(customerCapabilitiesAdmittedAtMint, capability) {

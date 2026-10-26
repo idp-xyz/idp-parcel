@@ -75,8 +75,9 @@ func TestTheWiredSubmissionAnswersHonestlyAgainstARealDatabase(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0180 决定三「PS 跟，只跟参数来源」——生产形态里设了本产品的权威串、登记册里也有一条该串的区间，归属照旧
-// 答`权威未确定`：目录照旧为空，governanceScope 先于读册早退，PS 的答复不因权威串改变。
+// Covers: ADR-0180 决定三「PS 跟，只跟参数来源」——生产形态里设了本产品的权威串、登记册里也有一条该串的区间，而准入范围对照
+// 册上没有这个租户的委托提交对照，归属照旧答`权威未确定`：权威串只回答「本产品是谁」，不替对照开门（ADR-0308；对照登了的
+// 另一头见 assemble_production_ownership_directory_test.go）。
 func TestTheGovernanceSelfAuthorityLeavesProductionOwnershipUnresolved(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -94,7 +95,7 @@ func TestTheGovernanceSelfAuthorityLeavesProductionOwnershipUnresolved(t *testin
 		t.Fatalf("提交：%v", err)
 	}
 	if got := first.Outcome(); got != shipmentapp.OutcomeOwnershipUnresolved {
-		t.Fatalf("outcome = %v, want OWNERSHIP_UNRESOLVED——生产形态没有目录，设了权威串也只能答未确定", got)
+		t.Fatalf("outcome = %v, want OWNERSHIP_UNRESOLVED——对照没登，设了权威串也只能答未确定", got)
 	}
 }
 

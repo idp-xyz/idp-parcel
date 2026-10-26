@@ -25,8 +25,8 @@ var ErrConflictingAdmissionScopeMappings = errors.New("access identity: two admi
 // 决定种类，外部结果与资金事实口取 ExternalFactAdmissionCapability 与外部事实类型（ADR-0180 决定四）。别的能力面
 // 要判准入时，它的词随那一面的票加进来。
 //
-// 首方客户族在铸造侧判准入的口取 CustomerCommandAdmissionCapability 与那一口的客户面能力词；不在铸造侧判的口（委托提交）
-// 的词登不进来。作业事实登记面取能力面 CapabilityWorkFactRegistration 与 WorkFactKind，只收在铸造侧判准入的那几种。
+// 首方客户族在铸造侧判准入的口取 CustomerCommandAdmissionCapability 与那一口的客户面能力词；委托提交不在铸造侧判，它的词
+// （ShipmentRequestSubmissionAdmission，ADR-0308）单独认下，给 PS 生产归属目录读；别的不在铸造侧判的口登不进来。作业事实登记面取能力面 CapabilityWorkFactRegistration 与 WorkFactKind，只收在铸造侧判准入的那几种。
 func checkAdmissionRequirement(requirement AdmissionRequirement) error {
 	switch requirement.Capability {
 	case CapabilityOperationDecision.String():
@@ -39,6 +39,10 @@ func checkAdmissionRequirement(requirement AdmissionRequirement) error {
 		}
 	case CustomerCommandAdmissionCapability:
 		if capability, err := ParseCustomerCapability(requirement.FactKind); err == nil && customerCommandAdmission(capability) != nil {
+			return nil
+		}
+		// 委托提交不在铸造侧判准入，但它的生产归属目录要按这一对词读对照（ADR-0308），所以登得进来。
+		if requirement == ShipmentRequestSubmissionAdmission() {
 			return nil
 		}
 	case CapabilityWorkFactRegistration.String():

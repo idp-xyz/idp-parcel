@@ -10,6 +10,8 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	aipg "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/postgres"
+	psaccess "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/accessidentity"
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	psidentity "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/identity"
 	pspilot "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/pilotgovernance"
@@ -354,8 +356,7 @@ func buildProductionOwnership(
 		Intervals:   intervals,
 		Suspensions: suspensions,
 		Handoffs:    takeovers,
-		// Directory 生产形态留空：实例半边，目录归 PS 生产归属那一票；在那之前适配器对
-		// 缺席的回答就是`权威未确定`，不代拟任何坐标，设没设权威串都一样（ADR-0180 决定三）。
+		// Directory 在下面按形态装：生产形态读接入身份的准入范围对照册（ADR-0308），隔离形态用注入式合成目录。
 		SelfAuthority:  selfAuthority,
 		Clock:          systemClock{},
 		AnswerValidity: submissionOwnershipAnswerValidity,
@@ -363,6 +364,17 @@ func buildProductionOwnership(
 	if isolated != nil {
 		deps.Directory = isolated.governanceDirectory
 		deps.SelfAuthority = isolated.selfAuthority
+	} else {
+		// 对照没登、区间没登都照旧答`权威未确定`，目录不代拟；权威串未设时适配器在读目录之前就早退（ADR-0180 决定三）。
+		mappings, err := aipg.NewAdmissionScopeMappings(db)
+		if err != nil {
+			return nil, fmt.Errorf("parcel-api: admission scope mappings for the ownership directory: %w", err)
+		}
+		directory, err := psaccess.NewProductionGovernanceScopeDirectory(mappings, systemClock{})
+		if err != nil {
+			return nil, fmt.Errorf("parcel-api: production governance scope directory: %w", err)
+		}
+		deps.Directory = directory
 	}
 	adapter, err := pspilot.NewProductionOwnershipAdapter(deps)
 	if err != nil {

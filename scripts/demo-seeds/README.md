@@ -243,8 +243,11 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
 4. 答复按恢复动作分格（ADR-0139 决定四）：令牌不过或证书绑定对不上答 401 `CUSTOMER_CLIENT_CREDENTIAL_REJECTED`；不在册或
    没有提交授予答 403 `CUSTOMER_CLIENT_NOT_GRANTED`；发行方公钥集或册读不动答 503 `IDENTITY_DEPENDENCY_UNAVAILABLE`。
    操作者令牌与集成客户端令牌在提交口一律答 401。
-5. 生产归属：PS 的生产归属目录还没立，演示提交要越过`权威未确定`仍靠隔离写开关那一格合成坐标（`IDP_PARCEL_ISOLATED_WRITE_TENANT`），
-   它不放行任何命令面，只给提交编排读得到委托受理那条合成区间。
+5. 生产归属：PS 的生产归属目录读准入范围对照册（ADR-0308）。起进程设 `IDP_PARCEL_GOVERNANCE_SELF_AUTHORITY=SYN-AUTH/idp-parcel-pilot`、
+   **不设**隔离写开关，演示租户提交即答 201 `SUBMITTED`：靠的是 `steps/478-access-shipment-request-submission.sh` 登的一行对照
+   （`data/access/17`，能力 `CUSTOMER_COMMAND`、事实类型 `SHIPMENT_REQUEST_SUBMISSION`）与一段权威区间（`data/governance/52`）。
+   权威串不设、或对照、区间少一样，答 `OWNERSHIP_UNRESOLVED`（不代拟）。隔离写开关（`IDP_PARCEL_ISOLATED_WRITE_TENANT`）仍在、
+   留到 operator-channel/53 与读开关一起删，它给的合成坐标（`data/governance/07`）随之退场。
 6. 送站预报（票 ps-external-mark-relations/09，ADR-0212 决定二）：`POST /v1/node-operations/delivery-pre-advices` 交预报，
    `POST /v1/node-operations/delivery-pre-advice-withdrawals` 撤回，同一台合成货主系统、同一枚首方令牌，各要自己那一格授予
    （`DELIVERY_PRE_ADVICE_SUBMISSION`、`DELIVERY_PRE_ADVICE_WITHDRAWAL`）。预报是生产写，准入范围在铸造侧判：起进程还要设

@@ -1,0 +1,13 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "mappings": [
+    {
+      "mappingId": "SYN-MAP-CC-SHIPMENT-REQUEST-SUBMISSION-01",
+      "capability": "CUSTOMER_COMMAND",
+      "factKind": "SHIPMENT_REQUEST_SUBMISSION",
+      "objectScope": "SYN-PILOT-SCOPE/shipment-intake@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-03"
+    }
+  ]
+}

@@ -339,7 +339,7 @@ func TestOtherFamiliesTokensAreRefusedAtTheSubmissionLine(t *testing.T) {
 // Covers: 票 first-party-api/00 完成判据「正例铸出首方信封、提交形成 SUBMITTED」——真库上：客户渠道册登一个合成客户端并授提交
 // 能力，发行方替身签首方受众的令牌，经装配点同一组构造函数装出的首方 Intake 与提交编排提交一单，答 201 SUBMITTED；委托的来源
 // 身份是册上的绑定加客户端主体与接入请求标识。同一请求重发答 EXISTING_RESULT；撤销授予之后同一个客户端答未授予。归属坐标取
-// 写开关那一格（墙二）与种子同款的合成区间：生产目录未立，生产形态下归属答`权威未确定`（assemble_submission_test.go）。
+// 写开关那一格（墙二）与种子同款的合成区间；不设写开关的生产形态见 assemble_production_ownership_directory_test.go。
 func TestACustomerClientSubmitsThroughTheFirstPartyLineAgainstARealDatabase(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
