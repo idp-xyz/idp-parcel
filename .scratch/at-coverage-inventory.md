@@ -429,6 +429,10 @@
 | `AT-PS-122` | internal/parcelshipment/adapters/http/submit_shipment_request_test.go::TestSubmitReceiptNamesTheCurrentSubmissionVersion |
 | `AT-PS-123` | internal/accessidentity/adapters/postgres/customer_client_command_faces_grant_test.go::TestCustomerCommandFaceGrantsPassTheCapabilityCheckAndRoundTrip |
 | `AT-PS-124` | internal/parcelshipment/domain/customer_command_shapes_test.go::TestCustomerCommandShapeVersionsAreDistinct；internal/visibilityexception/domain/customer_claim_shape_test.go::TestCustomerClaimShapeVersionIsNamed |
+| `AT-PS-130` | internal/parcelshipment/adapters/http/customer_supplement_intake_test.go::TestCustomerSupplementIntakeTakesIdentitiesFromAuthenticationAndNamesFromTheReceipt |
+| `AT-PS-131` | internal/parcelshipment/domain/customer_command_shapes_test.go::TestCustomerSupplementDigestIsItsOwnShapeAndCarriesTheBasis |
+| `AT-PS-132` | cmd/parcel-api/assemble_customer_supplement_face_test.go::TestACustomerClientSupplementsThroughTheFirstPartyLineAgainstARealDatabase |
+| `AT-PS-133` | cmd/parcel-api/assemble_customer_supplement_face_test.go::TestACustomerClientSupplementsThroughTheFirstPartyLineAgainstARealDatabase |
 | `AT-SA-002` | internal/settlementaccounting/application/assess_advance_recovery_test.go::TestAnAssessmentRegistersOncePerIdentity；internal/settlementaccounting/domain/advance_recovery_test.go::TestAdvanceAssessmentJudgesWithoutRecomputingOrFabricating |
 | `AT-SA-003` | internal/settlementaccounting/domain/advance_recovery_test.go::TestAdvanceAssessmentJudgesWithoutRecomputingOrFabricating |
 | `AT-SA-004` | internal/settlementaccounting/domain/advance_recovery_test.go::TestAdvanceAssessmentJudgesWithoutRecomputingOrFabricating |
@@ -1904,3 +1908,4 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-10-26 追记（票 docs-consistency/code/36）：UC-PS-005 `AT-PS-068`、`AT-PS-076` 补真库用例名——已撤回委托在真库上读得回、撤回决定进快照（ADR-0286）：重复撤回答原撤回与原补偿关联、生产装配的撤回编排读回已撤回委托、以撤回重提方向关联已撤回原委托的新提交成立；`AT-PS-076` 另补重建面用例；`AT-PS-070` 补接受链在已撤回委托上不再占资金的用例（消费门在撤回之后才消费「委托已提交」信封这一格）。
 
 2026-10-26 追记（票 first-party-api/06）：UC-PS-001 新立 `AT-PS-120`（首方客户命令五口铸造：授予、准入范围、信封）、`AT-PS-121`（五口来源请求键命令前缀、缺席、去空白、跨命令不撞）、`AT-PS-122`（提交答复带当前提交版本标识）、`AT-PS-123`（五个新能力词过库上 CHECK）、`AT-PS-124`（五口形状版本名），五行入①。总览计数未动，由推送方重算。
+2026-10-26 追记（票 first-party-api/08）：UC-PS-001 新立 `AT-PS-130`（首方补充 Intake 译命令：身份取信封、指名取回执、自报账户 400）、`AT-PS-131`（补充摘要 `PSU-1`）、`AT-PS-132`（生产装配真库：成功、重放、基准过期、成员对不上、他账户 404 不泄露、未授予 403）、`AT-PS-133`（补充之后对原提交重放读回新版本），四行入①。总览计数未动，由推送方重算。

@@ -70,10 +70,12 @@
 | `GET /v1/customer-tracking-view?parcel=<包裹号>` | [UC-VE-008](../application/visibility-exception/UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md) 客户追踪视图 | `CUSTOMER_TRACKING_VIEW_QUERY` |
 | `POST /v1/node-operations/delivery-pre-advices` | [UC-NO-006](../application/node-operations/UC-NO-006-ESTABLISH-A-VERIFIABLE-DELIVERY-SCOPE.md) 送站预报 | `DELIVERY_PRE_ADVICE_SUBMISSION` |
 | `POST /v1/node-operations/delivery-pre-advice-withdrawals` | UC-NO-006 预报撤回 | `DELIVERY_PRE_ADVICE_WITHDRAWAL` |
+| `POST /v1/shipment-requests/supplements` | [UC-PS-001](../application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md) 委托补充（`AT-PS-036` 第一支） | `SHIPMENT_REQUEST_SUPPLEMENT` |
 | `POST /v1/node-operations/delivery-handover-conclusions` | UC-NO-006 交接单的客户确认或否认 | `DELIVERY_HANDOVER_CONFIRMATION` |
 
 - 提交答复建成委托时带 `parcels`：每件 `parcelId` 加客户为它声明的 `customerParcelReference`。`parcelId` 就是查客户追踪视图用的号（[ADR-0223](../adr/0223-the-first-party-submission-answer-names-each-parcel-and-the-tracking-view-locates-by-it.md)）。
 - 接入请求标识不得以保留命令前缀（`withdrawal:`、`parcel-cancellation:`、`source-data-amendment:`、`supplement:`、`claim:`）开头；提交口收到这样的标识答 400（推导不出）。
 - 提交答复在指名委托时同带 `submissionVersionId`（该委托此刻的当前提交版本标识，随 `shipmentRequestId` 同在同缺；重放在补充之后读回的是补充形成的当前版本）。客户下一次补充以它为基准载荷带回，基准过期答 `SUPPLEMENT_BASIS_STALE`（[ADR-0310](../adr/0310-first-party-customer-command-five-faces-launch-with-direct-customer-one-to-one-and-command-prefixed-request-keys.md) 取舍 E）。
 - 客户追踪视图的答复带视图版本 `version` 与逐维三态，不带它所依据的内部投影版本；客户采用哪一版只看 `version`。
-- 委托的撤回、资料修订、受控补充与逐包裹取消这几个客户面命令口已经按本文的问题详情作答，但还没挂首方渠道 Intake，今天在无前缀的 `/shipment-requests/...` 下答 `403 ACCESS_CHANNEL_NOT_CONFIGURED`；首方 Intake 逐口换上时迁到 `/v1/shipment-requests/...`。
+- **委托补充**（形状 `PSU-1`）：客户在`已提交`委托上重报整份内容，形成同一委托的新提交版本。载荷是提交载荷的内容字段（`customerShipmentReference`、`requestedServiceProduct`、`requestEffectiveAt`、寄收件关系 / 地址 / 邮编 / 国家码、`destinationServiceScope`、`parcels[]`），外加：`accessRequestId`（补充自己的接入请求标识）、`originalAccessRequestId`（原提交的接入请求标识，指名委托）、`shipmentRequestId` 与 `basisSubmissionVersionId`（提交回执里的委托号与 `submissionVersionId`）；`parcels[]` 每件另带回执里的 `parcelId`，成员集合须与委托当前版本一致。租户与账户取自册上绑定：委托只在信封账户名下找，他账户的委托与不存在的委托同答 `404`；载荷里自报账户、租户或操作者答 `400`。答复 `outcome`：`SUPPLEMENT_RECORDED`（`201`，带新版本的 `submissionVersionId`，下一次补充以它为基准）、`SUPPLEMENT_ALREADY_HANDLED`（`200`，重放读回原版本）、`SUPPLEMENT_BASIS_STALE`（基准不是当前版本：先读当前版本，即对原提交重放取回执）、`SUPPLEMENT_SOURCE_CONFLICT`、`SUPPLEMENT_BOUNDARY_CHANGED`（成员集合变了，改走关联新委托）、`SUPPLEMENT_DECISION_ALREADY_FORMED`、`SUPPLEMENT_UNDECIDED`。补充形成新版本之后，对原提交重放，回执读回的是新版本的 `submissionVersionId`。
+- 委托的撤回、资料修订与逐包裹取消这几个客户面命令口已经按本文的问题详情作答，但还没挂首方渠道 Intake，今天在无前缀的 `/shipment-requests/...` 下答 `403 ACCESS_CHANNEL_NOT_CONFIGURED`；首方 Intake 逐口换上时迁到 `/v1/shipment-requests/...`。

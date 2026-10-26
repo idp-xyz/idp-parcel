@@ -358,9 +358,14 @@ func declaredDimensions(parcel declaredParcelDraft) (domain.DeclaredDimensions, 
 // decodeSubmissionDraft 收一份载荷：封闭解码，只许一个 JSON 对象、其后无尾随内容。载荷里出现任何不认识的格即拒——自报的
 // 租户、客户账户或来源都是这一类，它们只取自认证结果。
 func decodeSubmissionDraft(body io.Reader, draft *submissionDraft) error {
+	return decodeJSONPayload(body, draft)
+}
+
+// decodeJSONPayload 是首方各口共用的封闭解码，补充口的载荷类型也走它。
+func decodeJSONPayload(body io.Reader, target any) error {
 	decoder := json.NewDecoder(body)
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(draft); err != nil {
+	if err := decoder.Decode(target); err != nil {
 		return fmt.Errorf("%w: %v", ErrMalformedRequest, err)
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {

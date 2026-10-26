@@ -51,7 +51,11 @@ func (authenticator *CustomerClientAuthenticator) AuthenticateSubmission(
 	if err != nil {
 		return domain.SourceIdentity{}, answerCustomer(err)
 	}
-	minted := envelope.Envelope()
+	return sourceIdentityOf(envelope.Envelope())
+}
+
+// sourceIdentityOf 把铸好的来源信封译成本上下文的来源身份，两口共用。
+func sourceIdentityOf(minted identity.SourceEnvelope) (domain.SourceIdentity, error) {
 	tenant, err := domain.NewTenantID(minted.TenantID())
 	if err != nil {
 		return domain.SourceIdentity{}, fmt.Errorf("parcel shipment accessidentity: tenant: %w", err)
@@ -69,6 +73,50 @@ func (authenticator *CustomerClientAuthenticator) AuthenticateSubmission(
 		return domain.SourceIdentity{}, fmt.Errorf("parcel shipment accessidentity: source request key: %w", err)
 	}
 	return domain.NewSourceIdentity(tenant, account, source, key)
+}
+
+// CustomerSupplementMinter 是补充口对铸造器的最小依赖，identity.CustomerClientMinter 满足它。
+type CustomerSupplementMinter interface {
+	MintSupplement(
+		ctx context.Context,
+		credential identity.IntegrationClientCredential,
+		readRequest func() (identity.ChannelRequest, error),
+	) (identity.SupplementEnvelope, error)
+}
+
+// CustomerSupplementAuthenticator 实现 shipmenthttp.CustomerSupplementAuthenticator：铸补充信封（`SHIPMENT_REQUEST_SUPPLEMENT`
+// 授予；来源请求键带 `supplement:` 前缀），译成本上下文的来源身份。
+type CustomerSupplementAuthenticator struct {
+	minter CustomerSupplementMinter
+}
+
+var _ shipmenthttp.CustomerSupplementAuthenticator = (*CustomerSupplementAuthenticator)(nil)
+
+func NewCustomerSupplementAuthenticator(minter CustomerSupplementMinter) (*CustomerSupplementAuthenticator, error) {
+	if minter == nil {
+		return nil, errors.New("parcel shipment accessidentity: customer supplement authenticator needs a minter")
+	}
+	return &CustomerSupplementAuthenticator{minter: minter}, nil
+}
+
+func (authenticator *CustomerSupplementAuthenticator) AuthenticateSupplement(
+	ctx context.Context,
+	credential shipmenthttp.PresentedClientCredential,
+	accessRequestID func() (string, error),
+) (domain.SourceIdentity, error) {
+	envelope, err := authenticator.minter.MintSupplement(ctx,
+		identity.NewIntegrationClientCredential(credential.Token, credential.Certificate),
+		func() (identity.ChannelRequest, error) {
+			id, err := accessRequestID()
+			if err != nil {
+				return identity.ChannelRequest{}, err
+			}
+			return identity.NewChannelRequest(map[string]string{identity.AccessRequestIdentifier: id}), nil
+		})
+	if err != nil {
+		return domain.SourceIdentity{}, answerCustomer(err)
+	}
+	return sourceIdentityOf(envelope.Envelope())
 }
 
 // answerCustomer 把共享接入身份能力的格译成 shipmenthttp 的格，首方族那几格各对其格；读载荷自己的错（已是本包的格）原样

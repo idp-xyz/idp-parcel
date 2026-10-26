@@ -88,3 +88,20 @@ func buildCustomerSubmissionIntake(
 	}
 	return intake, nil
 }
+
+// buildCustomerSupplementIntake 装配补充口的首方 Intake（ADR-0139 决定四；ADR-0310 取舍 B、E；票 first-party-api/08）。铸造器与提交口
+// 同一只。准入范围由铸造器判（MintSupplement）；补充不预取归属，所以不要 ownership：委托在提交时已过生产归属那一关。
+func buildCustomerSupplementIntake(minter *accessidentity.CustomerClientMinter) (*shipmenthttp.CustomerSupplementIntake, error) {
+	if minter == nil {
+		return nil, fmt.Errorf("customer supplement intake needs a minter")
+	}
+	authenticator, err := psaccess.NewCustomerSupplementAuthenticator(minter)
+	if err != nil {
+		return nil, err
+	}
+	intake, err := shipmenthttp.NewCustomerSupplementIntake(authenticator, systemClock{})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: customer supplement intake: %w", err)
+	}
+	return intake, nil
+}

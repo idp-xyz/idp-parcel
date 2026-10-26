@@ -122,6 +122,12 @@ type SubmissionPayloadSpec struct {
 // 今天没有那道分支，版本已随前缀在摘要串里同行，真渠道 Intake 也不必再单独问一次，所以
 // 这里不留一个只等将来的导出。
 func CanonicalizeSubmissionPayload(spec SubmissionPayloadSpec) (PayloadDigest, error) {
+	return canonicalizeSubmissionPayloadUnder(payloadCanonicalizationVersion, spec)
+}
+
+// canonicalizeSubmissionPayloadUnder 是 PSC-1 与首方补充形状 PSU-1 共用的编码：同一份封闭文档，版本名进文档也进摘要前缀，
+// 所以两个形状对同一内容的摘要必然不同，互不会被当成对方的重放。
+func canonicalizeSubmissionPayloadUnder(version string, spec SubmissionPayloadSpec) (PayloadDigest, error) {
 	if !spec.RequestReference.valid() {
 		return PayloadDigest{}, ErrInvalidSubmissionPayload
 	}
@@ -139,7 +145,7 @@ func CanonicalizeSubmissionPayload(spec SubmissionPayloadSpec) (PayloadDigest, e
 	}
 
 	document := canonicalSubmissionDocument{
-		Canonicalization: payloadCanonicalizationVersion,
+		Canonicalization: version,
 		RequestReference: spec.RequestReference.String(),
 		BasisVersion:     spec.BasisVersion.String(),
 		EffectiveAt:      canonicalEffectiveAtValue(spec.EffectiveAt),
@@ -152,7 +158,7 @@ func CanonicalizeSubmissionPayload(spec SubmissionPayloadSpec) (PayloadDigest, e
 		return PayloadDigest{}, fmt.Errorf("canonicalize submission payload: %w", err)
 	}
 	sum := sha256.Sum256(encoded)
-	return NewPayloadDigest(payloadCanonicalizationVersion + ":" + hex.EncodeToString(sum[:]))
+	return NewPayloadDigest(version + ":" + hex.EncodeToString(sum[:]))
 }
 
 // CanonicalSubmission 是一次规范化的成对产出：摘要与从同一份输入挑出的封闭要素内容（pp-seams/05 裁决 3）。两样
@@ -187,6 +193,11 @@ func CanonicalizeSubmission(spec SubmissionPayloadSpec) (CanonicalSubmission, er
 	if err != nil {
 		return CanonicalSubmission{}, err
 	}
+	return canonicalSubmissionOf(digest, spec), nil
+}
+
+// canonicalSubmissionOf 把摘要与同一份规格挑出的要素配成对，提交（PSC-1）与补充（PSU-1）共用。
+func canonicalSubmissionOf(digest PayloadDigest, spec SubmissionPayloadSpec) CanonicalSubmission {
 	return CanonicalSubmission{
 		digest: digest,
 		elements: NewDeclaredAddressElements(
@@ -194,7 +205,7 @@ func CanonicalizeSubmission(spec SubmissionPayloadSpec) (CanonicalSubmission, er
 			AddressElementsOf(DeliveryPlaceDataGroup(), spec.Scope),
 		),
 		requestedProduct: RequestedServiceProductOf(spec.Service),
-	}, nil
+	}
 }
 
 // canonicalSubmissionDocument 是 PSC-1 的封闭编码形状。所有段常在场、缺席以显式空值
