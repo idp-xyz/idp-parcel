@@ -448,6 +448,12 @@
 | `AT-PS-141` | internal/parcelshipment/adapters/http/customer_amendment_intake_test.go::TestCustomerAmendmentIntakeTakesIdentitiesFromAuthenticationAndContentFromTheScope |
 | `AT-PS-142` | internal/parcelshipment/adapters/partycommercial/customer_self_amendment_request_source_test.go::TestCustomerSelfAmendmentCoordinatesComeFromTheResolutionKeyAndTheProductConstant |
 | `AT-PS-143` | cmd/parcel-api/assemble_customer_amendment_face_test.go::TestACustomerClientAmendsThroughTheFirstPartyLineAgainstARealDatabase |
+| `AT-PS-144` | internal/parcelshipment/adapters/http/customer_cancellation_intake_test.go::TestCustomerCancellationIntakeTakesIdentitiesFromAuthentication |
+| `AT-PS-145` | internal/parcelshipment/domain/customer_command_shapes_test.go::TestCustomerParcelCancellationDigestIsItsOwnShapeAndCarriesNamesAndContent |
+| `AT-PS-146` | internal/parcelshipment/adapters/partycommercial/customer_self_cancellation_party_test.go::TestCustomerSelfCancellationPartyOnlyFormsTheCustomersOwnAccount |
+| `AT-PS-147` | cmd/parcel-api/assemble_customer_cancellation_face_test.go::TestACustomerClientCancelsThroughTheFirstPartyLineAgainstARealDatabase |
+| `AT-PS-148` | cmd/parcel-api/assemble_customer_cancellation_face_test.go::TestACustomerCancellationAgainstANonAcceptedRequestIsAnsweredByTheLifecycleGate |
+| `AT-PS-149` | cmd/parcel-api/assemble_customer_cancellation_face_test.go::TestTheCustomerCancellationIsTheTenantsToConfigureAndSaysSoWhenItIsNot |
 | `AT-PS-150` | internal/parcelshipment/application/request_lifecycle_gate_test.go::TestACancellationIsClosedToRequestsThatAreNotAccepted；cmd/parcel-api/assemble_cancellation_lifecycle_test.go::TestTheWiredCancellationIsGatedByTheRequestLifecycleAgainstARealDatabase |
 | `AT-PS-151` | internal/parcelshipment/application/request_lifecycle_gate_test.go::TestACancellationChecksTheTargetBelongsToTheEnvelopeAccount；cmd/parcel-api/assemble_cancellation_lifecycle_test.go::TestTheWiredCancellationChecksTheTargetBelongsToTheEnvelopeAccountAgainstARealDatabase |
 | `AT-PS-152` | internal/parcelshipment/application/request_lifecycle_gate_test.go::TestAFinalIsNotFormedForRequestsThatAreNotAccepted；cmd/parcel-dispatch/final_lifecycle_gate_test.go::TestTheWiredFinalAdoptionFormsNoFinalForRequestsThatAreNotAccepted |
@@ -1943,3 +1949,6 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-10-26 追记（票 first-party-api/10）：UC-PS-002 新立 `AT-PS-140`（资料修订摘要 `PAM-1`）、`AT-PS-141`（首方修订 Intake 译命令）、`AT-PS-142`（直客商业坐标映射）、`AT-PS-143`（生产装配真库：未登键 / 无授予如实停点、登授予后重放形成版本、重放同结果、他账户 404、未授予 403、自报 400），四行入①。号取 140 起是为避开并行各口票的号段。总览计数未动，由推送方重算。
 2026-10-26 追记（票 docs-consistency/code/101）：包裹取消与终局形成对委托生命周期设闸门，取消另核目标委托属信封账户。UC-PS-006 新立 `AT-PS-150`（取消的目标委托已撤回、已拒绝、只是已提交各答确定格，已接受照常）、`AT-PS-151`（目标委托不属信封账户与查无逐字同答，账户缺席答请求未受理）；UC-PS-004 新立 `AT-PS-152`（履约结果的目标委托已撤回、已拒绝、只是已提交，终局不形成），三行入①；`AT-PS-090` 补应用层账户核与真库装配点名。总览计数未动，由推送方重算。
 2026-10-26 追记（票 docs-consistency/code/99）：UC-PS-005 新立 `AT-PS-127`（接受链续办已取到接受前资金控制所在作用域的锁、尚未保存委托时，同一份委托上的撤回、主动拒绝、授权处置到达：等在作用域锁上、不持委托行锁，不被死锁检测中止；接受先提交时输的一路答未决或保存冲突、不会既已接受又已撤回、接受占下的资金不放，重发读回既有接受决定；真库，含真接受链）、`AT-PS-128`（这几条路径与自动拒绝、停进`等待受控补充`保存委托之前按版本形成顺序取各版占用所在作用域的锁，同作用域取一次、释放认领的都已取过、没占下或没存作用域的不取、已决态重放与来源身份头一次到达一份已决的委托都不取锁；取的与提供方施加释放同一把、按租户与作用域分键）、`AT-PS-129`（取不到锁或取锁口没接上与保存失败同格，不保存、不释放；撤回、主动拒绝、授权处置取锁在领标识之前不耗标识，自动拒绝与暂停先领标识、取锁失败时标识已耗掉；SQL 级失败事务已中止，实际是回滚与 5xx，只有非 SQL 级失败才答 `DECISION_NOT_RECORDED`；读不回判断的一版不取锁也不挡撤回），三行入①。`AT-PS-035` 在 UC-PS-001 交接表补一行承接。总览计数未动，由推送方重算。
+
+
+2026-10-26 追记（票 first-party-api/11）：UC-PS-006 新立 `AT-PS-144`（首方取消 Intake 译命令：身份取信封、命令带信封账户、自报字段 400）、`AT-PS-145`（取消摘要 `PCN-1`）、`AT-PS-146`（直客取消请求方格映射）、`AT-PS-147`（生产装配真库：成功、重放、冲突、他账户、未授予、自报）、`AT-PS-148`（首方取消口经生命周期闸门）、`AT-PS-149`（取消授权是租户取值：未配置、真拒绝、两版并存不择一）。取消授权目录的读法见 ADR-0313。

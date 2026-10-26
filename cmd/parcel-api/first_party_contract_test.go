@@ -11,12 +11,6 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
 
-// customerFaceCommandPatterns 是 PS 的客户面命令口：逐包裹取消。它今天挂未配置即拒、还不属首方族（不带 `/v1`），问题体已经是首方契约
-// 的形状：形状随处理器，前缀随装配族（ADR-0140 决定二、三）。
-var customerFaceCommandPatterns = []string{
-	"/shipment-requests/parcel-cancellations",
-}
-
 // sameReleaseFamilies 是与本产品客户端同版本发布的各族：操作者渠道的各能力面（主数据与运营查阅读、登记册配置写、运营决定）
 // 与作业事实登记（ADR-0021）。
 var sameReleaseFamilies = map[faceFamily]bool{
@@ -60,6 +54,7 @@ func TestTheUnversionedFirstPartyPathsAreGone(t *testing.T) {
 		{http.MethodPost, "/shipment-requests/supplements"},
 		{http.MethodPost, "/shipment-requests/withdrawals"},
 		{http.MethodPost, "/shipment-requests/source-data-amendments"},
+		{http.MethodPost, "/shipment-requests/parcel-cancellations"},
 	} {
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, httptest.NewRequest(old.method, old.target, nil))
@@ -69,12 +64,12 @@ func TestTheUnversionedFirstPartyPathsAreGone(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0140 决定三——首方客户族各口与 PS 客户面命令口（customerFaceCommandPatterns）的 4xx（403 未配置与 405 方法不对两种探针） 是 `application/problem+json`：`type`、`title`、`status`、
+// Covers: ADR-0140 决定三——首方客户族各口的 4xx（403 未配置与 405 方法不对两种探针） 是 `application/problem+json`：`type`、`title`、`status`、
 // `code`、`requestId` 俱在，不带旧形状的 `error` 成员，也不带 `outcome`。在装配后的路由上探：requestId 只有经过路由中间件才有。
 func TestCustomerFacingLinesAnswerProblemDetails(t *testing.T) {
 	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnconfiguredBusinessEndpoints())
 	probes := businessEndpointProbes()
-	patterns := append(declaredPatterns(func(line endpointLine) bool { return line.face.family == faceCustomerClient }), customerFaceCommandPatterns...)
+	patterns := declaredPatterns(func(line endpointLine) bool { return line.face.family == faceCustomerClient })
 	for _, pattern := range patterns {
 		probe, declared := probes[pattern]
 		if !declared {

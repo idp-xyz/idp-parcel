@@ -16,8 +16,8 @@ import (
 // Covers: `/shipment-requests/parcel-cancellations` 的第二参是真编排——委托仓储、
 // 收寄采认读口、取消决定库、PCXL 标识签发与 Outbox 意图交付在真实 PostgreSQL 上装得
 // 起来。三个钉：指名不存在的委托答统一不可见（真仓储查过，查无与编号不符同答，
-// AT-PS-090 的隔离面——不是未决，不造委托，也不是字段缺的未受理）；授权目录未配置（PAR-COM-17 实例半边，
-// 采用版本缺席）时停在 AUTHORITY_UNCONFIGURED 而非 AUTHORITY_UNAVAILABLE——恢复动作
+// AT-PS-090 的隔离面——不是未决，不造委托，也不是字段缺的未受理）；授权目录未配置（账户没登解析键，
+// 或范围里没有登记取消目录的授权规则，ADR-0313）时停在 AUTHORITY_UNCONFIGURED 而非 AUTHORITY_UNAVAILABLE——恢复动作
 // 是登记规则不是修服务，且绝不默认任何角色可/不可取消；未决什么也不落库——重放同一
 // 份输入仍走整套判断，不走已有结果。测试输入是隔离合成，只记 `S`，不进生产装配。
 func TestTheWiredCancellationAnswersHonestlyAgainstARealDatabase(t *testing.T) {

@@ -37,6 +37,20 @@ func NewCancellationRequesterReference(value string) (CancellationRequesterRefer
 	return CancellationRequesterReference{required}, err
 }
 
+// customerAccountRequesterPrefix 标出「请求方是客户账户本人」：首方直客 1:1 的取消请求方引用。
+const customerAccountRequesterPrefix = "CUSTOMER_ACCOUNT:"
+
+// NewCustomerAccountCancellationRequester 造首方直客的取消请求方引用：请求方就是信封里的客户账户本人，不涉委派。
+func NewCustomerAccountCancellationRequester(account CustomerAccountID) (CancellationRequesterReference, error) {
+	return NewCancellationRequesterReference(customerAccountRequesterPrefix + account.String())
+}
+
+// IsCustomerAccount 问这个请求方引用是不是该客户账户本人（上面构造的那一种）。授权映射据此把请求方折成「客户」格，
+// 别的写法一律不认。
+func (requester CancellationRequesterReference) IsCustomerAccount(account CustomerAccountID) bool {
+	return account.valid() && requester.String() == customerAccountRequesterPrefix+account.String()
+}
+
 // CancellationReasonReference 指名取消原因。
 type CancellationReasonReference struct{ requiredValue }
 

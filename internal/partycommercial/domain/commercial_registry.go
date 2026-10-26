@@ -287,6 +287,29 @@ func (registry *CommercialRegistry) ValidityCorrectionOf(
 	return found[len(found)-1], true
 }
 
+// EffectiveVersionsAt 交回本册里指定租户、范围、类别的版本中，在 at 这一刻已生效的全部（状态是已生效，且选用区间含 at；
+// 区间更正照解析选用的折法）。它不选唯一：解析要的唯一性由 Resolve 判，这里给的是「这一刻有哪几版在管事」，供消费方按正文里
+// 某一族声明在不在来收窄（取消授权目录就是这一族，ADR-0313）。顺序按登记顺序无保证，调用方不依赖。
+func (registry *CommercialRegistry) EffectiveVersionsAt(
+	tenant TenantID,
+	scope CommercialScopeReference,
+	kind CommercialObjectKind,
+	at time.Time,
+) []CommercialVersion {
+	if registry == nil || at.IsZero() {
+		return nil
+	}
+	var effective []CommercialVersion
+	for _, version := range registry.versions {
+		if version.tenant != tenant || version.kind != kind || version.scope != scope ||
+			version.status != CommercialVersionEffective || !registry.selectionInterval(version).Contains(at) {
+			continue
+		}
+		effective = append(effective, version)
+	}
+	return effective
+}
+
 // selectionInterval 是解析选用时看到的有效区间：有更正则用登记顺序上最后一条的
 // 更正后区间，否则用版本原区间。
 func (registry *CommercialRegistry) selectionInterval(version CommercialVersion) EffectiveInterval {

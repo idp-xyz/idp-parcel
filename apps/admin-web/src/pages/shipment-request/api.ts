@@ -601,7 +601,7 @@ export function withdrawShipmentRequest(
 export function cancelParcel(
   draft: CancellationDraft,
 ): Promise<ApiResult<CancellationResponseBody>> {
-  return post<CancellationResponseBody>('/shipment-requests/parcel-cancellations', draft);
+  return post<CancellationResponseBody>('/v1/shipment-requests/parcel-cancellations', draft);
 }
 
 export function listShipmentRequestViews(): Promise<ApiResult<ViewsListResponseBody>> {

@@ -139,3 +139,20 @@ func buildCustomerAmendmentIntake(minter *accessidentity.CustomerClientMinter) (
 	}
 	return intake, nil
 }
+
+// buildCustomerCancellationIntake 装配取消口的首方 Intake（ADR-0139 决定四；ADR-0310 取舍 A、C；票 first-party-api/11）。铸造器与提交口
+// 同一只。准入范围由铸造器判（MintParcelCancellation）；取消授权是租户取值，铸造侧只判授予与准入，授权规则由编排的授权缝读。
+func buildCustomerCancellationIntake(minter *accessidentity.CustomerClientMinter) (*shipmenthttp.CustomerCancellationIntake, error) {
+	if minter == nil {
+		return nil, fmt.Errorf("customer cancellation intake needs a minter")
+	}
+	authenticator, err := psaccess.NewCustomerCancellationAuthenticator(minter)
+	if err != nil {
+		return nil, err
+	}
+	intake, err := shipmenthttp.NewCustomerCancellationIntake(authenticator, systemClock{})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: customer cancellation intake: %w", err)
+	}
+	return intake, nil
+}
