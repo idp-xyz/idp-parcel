@@ -1,6 +1,6 @@
 # 08 补充口经首方渠道接通
 
-Status: in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-fpa08`（代码最后一笔 `dcc1c8a86`）。此前 in-progress——2026-10-26 会话 `tops-20` 认领（06 已进 main），分支 `claude-fpa08`；此前 ready-for-agent——R1（上线前必修，用户 2026-10-26 定首发要这一口）。
+Status: resolved——2026-10-26 进 main `97398535c`（见文末「进 main 记录」）。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-fpa08`（代码最后一笔 `dcc1c8a86`）。此前 in-progress——2026-10-26 会话 `tops-20` 认领（06 已进 main），分支 `claude-fpa08`；此前 ready-for-agent——R1（上线前必修，用户 2026-10-26 定首发要这一口）。
 Status: in-progress——2026-10-26 会话 `tops-20` 认领（06 已进 main），分支 `claude-fpa08`。此前 ready-for-agent——R1（上线前必修，用户 2026-10-26 定首发要这一口）。
 Blocked by: 06
 出处：用户 2026-10-26「都需要」（首个租户上线时客户经首方 API 要能撤回、取消、修订、补充、索赔）、「每个客户系统只代表它自己的账户（直客），只考虑这个吧」、「首发不要客户状态读口」、「首发不做限流」；技术取舍由会话 `tops-20` 代决（用户「你帮我决定吧」）。 计划见 [spec](../spec.md)「五口上线」与 [摸底报告](../customer-faces-scoping-2026-10-26.md)。
@@ -37,3 +37,14 @@ M
 **判据对用例**：成功 / 重放 / 他账户 404 同字节 / 未授予 403 / 自报账户 400 / 基准过期 / 成员对不上 / 补充后原提交重放读回新版本 = `TestACustomerClientSupplementsThroughTheFirstPartyLineAgainstARealDatabase`（AT-PS-132、133，生产装配真库）；Intake 译码 = AT-PS-130；PSU-1 摘要 = AT-PS-131。种子未改（五词授予与准入已登），判据「种子 `seed.sh` 退 0」未重跑。全量 `scripts/test-full.sh` 未跑（协调方进 main 时跑）。
 
 **自验（含 PG）**：`go build ./...`、`go vet`（cmd/parcel-api、parcelshipment、accessidentity）、`gofmt` 干净；带 DSN `go test -count=1 -p 1 ./internal/parcelshipment/... ./internal/accessidentity/... ./cmd/parcel-api/... ./internal/architecture/... ./migrations/...` 全绿（含 PG 真库）；`at-coverage-counts -check` 只报生成物过期。
+
+## 评审记录
+
+评审 ← tops-20 隔离子代理(sonnet) · 钉 `92d887f5a`：阻断无。非阻断：1. PSU-1 摘要不含 `originalAccessRequestId`、`shipmentRequestId` 与成员，同一补充标识改指别的原提交会被当重放——修订轮并入摘要，改答 `SUPPLEMENT_SOURCE_CONFLICT`。2. 载荷 `shipmentRequestId` 不核——修订轮在 http 适配层与找到的委托比对，不一致答 404 同字节。3. 成员取自客户带回的 `parcelId`，乱填只落 `SUPPLEMENT_BOUNDARY_CHANGED`，影响不到别人。4. 404 之前已保全来源指纹，填错原提交标识要换新标识重试——契约补句。无发现：租户/账户/来源取自信封、原提交键与提交口推导逐字一致、他账户与不存在同答 404 同字节、基准非当前答 `SUPPLEMENT_BASIS_STALE`、PSU-1 与 PSC-1 判重分开、补充后重放读回新版本（`AT-PS-133`）、路径迁 `/v1`、号不撞。
+
+## 进 main 记录（2026-10-26，推送方会话 tops-20）
+
+- **main**：`97398535c`。出处：分支 `claude-fpa08` tip `8798cd009`（作者为 Sonnet 子代理；修订轮只收非阻断，推送方读了修订 diff，未另派复评）。
+- **生成物**：三件推送方重生成，`-check` 退 0（含票 139 表行守卫）。
+- **全量真库测试**：`scripts/test-full.sh` 跑在 `97398535c`：158 ok / 0 FAIL。**种子**：一次性库灌入退 0，用后删库。
+- **号**：`AT-PS-130`–`133`（作者跳过 125–129 以避开 07、10、11 同取）。
