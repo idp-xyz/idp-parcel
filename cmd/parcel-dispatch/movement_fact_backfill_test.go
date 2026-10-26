@@ -457,3 +457,100 @@ func redeliveryEnvelope(tenant, id string, eventType eventing.EventType, subject
 		Payload:      []byte(payload),
 	}
 }
+
+// Covers: AT-TF-329 与全程追踪补派生的交互真库半边（票 demo-chain-gaps/130，ADR-0307 决定一；ADR-0302，证据 S）——出发先于段登记；
+// 在控那一件的交接首登为待确认、声明进出发那一段：那一封信上补派生连段都不读，投影里没有这次出发。随后经生产登记编排把那一版
+// 更正成`已交接`：更正带对象进声明的段、立起段，更正版那一封交接信封经生产路由一拍，补派生在这一段上补出出发，归 DEPARTED。
+// 票 130 之前更正只走重派生、对象进不了段，这次出发就一直丢在追踪外面。
+func TestAPendingHandoverCorrectedIntoTheSegmentBackfillsTheDepartureRecordedBeforeIt(t *testing.T) {
+	fixture := newSYNVerticalFixture(t)
+	registerDemoMilestoneMapping(t, fixture)
+
+	factEvent := recordDepartureThroughProduction(t, fixture, backfillFact)
+	if published, err := fixture.beat.DispatchOnce(t.Context()); err != nil || published != 1 {
+		t.Fatalf("出发那一拍 published = %d err = %v；失败码 = %q", published, err, recordedFailureCode(t, fixture.db, factEvent))
+	}
+
+	store, err := outbox.NewStore(fixture.db)
+	if err != nil {
+		t.Fatalf("构造 Outbox Store：%v", err)
+	}
+	register := newHandoverRegistration(t, fixture.db, store)
+	tenant := mustTF(t, tfdomain.NewTenantID, fixture.identity.TenantID().String())
+	var pending tfapplication.RegisterTransportHandoverResult
+	mustWithinTX(t, fixture.transactor, t.Context(), func(txCtx context.Context) error {
+		var registerErr error
+		pending, registerErr = register.Register(txCtx, tfapplication.RegisterTransportHandoverCommand{
+			TenantID:          tenant,
+			Object:            movementParcelOnBoard,
+			Scope:             backfillScope,
+			ReleasedBy:        "SYN-NODE-SHA-HUB",
+			ReceivedBy:        "SYN-OWN-FLEET",
+			Verdict:           tfdomain.HandoverPendingConfirmation,
+			ReleasingEvidence: "SYN-EVIDENCE-RELEASE-DEP-01",
+			Basis:             "SYN-BASIS-COUNT-UNCLEAR",
+			Version:           backfillVersion,
+			JudgedAt:          movementHandedOverAt,
+			Segment:           movementSegment,
+		})
+		return registerErr
+	})
+	if pending.Outcome() != tfapplication.HandoverRegistered {
+		t.Fatalf("登记待确认：%s", pending.Outcome())
+	}
+	if _, err := fixture.beat.DispatchOnce(t.Context()); err != nil {
+		t.Fatalf("待确认那一拍：%v", err)
+	}
+	if departed := departureEntries(t, fixture); departed != 0 {
+		t.Fatalf("待确认之后出发条目 %d 个——对象还没进段，前提不成立", departed)
+	}
+
+	const confirmedVersion = "SYN-HANDOVER-RESULT/DEP-01/v2"
+	var corrected tfapplication.RegisterTransportHandoverResult
+	mustWithinTX(t, fixture.transactor, t.Context(), func(txCtx context.Context) error {
+		var correctErr error
+		corrected, correctErr = register.Correct(txCtx, tfapplication.CorrectTransportHandoverCommand{
+			TenantID:           tenant,
+			Object:             movementParcelOnBoard,
+			Scope:              backfillScope,
+			PredecessorVersion: backfillVersion,
+			Verdict:            tfdomain.ObjectHandedOver,
+			ReleasingEvidence:  "SYN-EVIDENCE-RELEASE-DEP-01",
+			ReceivingEvidence:  "SYN-EVIDENCE-RECEIVE-DEP-01",
+			Rule:               "SYN-HANDOVER-RULE/v1",
+			NewVersion:         confirmedVersion,
+			CorrectedAt:        movementDepartedAt.Add(time.Hour),
+		})
+		return correctErr
+	})
+	if corrected.Outcome() != tfapplication.HandoverCorrected || corrected.SegmentEntryRefusal() != tfapplication.SegmentEntryRefusalNone ||
+		corrected.SegmentContinuationReference() != "" {
+		t.Fatalf("更正成已交接：outcome=%s refusal=%s debt=%q", corrected.Outcome(), corrected.SegmentEntryRefusal(), corrected.SegmentContinuationReference())
+	}
+	confirmedEvent := tenant.String() + "/" + movementParcelOnBoard + "/" + backfillScope + "/" + confirmedVersion
+	if _, err := fixture.beat.DispatchOnce(t.Context()); err != nil {
+		t.Fatalf("更正版那一拍：%v", err)
+	}
+	if n := fixture.countInbox(t, backfillConsumerName, confirmedEvent); n != 1 {
+		t.Fatalf("补派生 inbox 行数 = %d, want 1；失败码 = %q", n, recordedFailureCode(t, fixture.db, confirmedEvent))
+	}
+	if departed := departureEntries(t, fixture); departed != 1 {
+		t.Fatalf("更正版那一拍之后出发条目 %d 个, want 1——更正没有带对象进出发那一段", departed)
+	}
+}
+
+// departureEntries 数在控那一件投影里由 backfillFact 那条出发派生、归 DEPARTED 的条目；归错了类当场红。
+func departureEntries(t *testing.T, fixture *synVerticalFixture) int {
+	t.Helper()
+	var departed int
+	for _, entry := range projectionEntries(t, fixture, movementParcelOnBoard) {
+		if entry.Fact().Fact().String() != "movement-fact/"+movementParcelOnBoard+"/"+backfillFact {
+			continue
+		}
+		departed++
+		if milestone, classified := entry.Milestone(); !classified || milestone.String() != "DEPARTED" {
+			t.Fatalf("补出的出发归类 %q（%v），want DEPARTED", milestone, classified)
+		}
+	}
+	return departed
+}

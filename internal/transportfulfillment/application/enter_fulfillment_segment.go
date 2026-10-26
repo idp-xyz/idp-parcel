@@ -21,7 +21,8 @@ import (
 //
 // 封闭集合：进段那一半答段已关闭；重派生那一半答无可替代的参与（ADR-0112 决定二点名），以及更正后的起点晚于
 // 继承的终点（决定三说它是领域正当拒绝，按决定二「正当拒绝单开答格」同一条规则给格，票
-// tf-segment-lifecycle-closure/10 裁决 5）。决定二点名的另一格 CORRECTION_WITHDRAWS_CONTROL 是决定四落地前
+// tf-segment-lifecycle-closure/10 裁决 5）；前版没转出控制的交接更正成`已交接`、改走进段时，答对象此后已有更晚的
+// 控制事实（ADR-0307 决定三）。决定二点名的另一格 CORRECTION_WITHDRAWS_CONTROL 是决定四落地前
 // 「不猜也不静默」的临时答格，票 tf-segment-lifecycle-closure/11 落地失效版本后退场：撤回控制的更正在链上长一版，
 // 成功时两格都空，与替代版本同形。它们共用一个类型，因为答的是同一个问题「段那一半为什么没动」，且都与续办引用
 // 互斥。领域的其余拒绝（对象已在段内、拒收与待确认不转出控制）各有自己的可观察形状，不在这里另开格；要加格是
@@ -44,6 +45,11 @@ const (
 	// SegmentEntryRefusedServiceActionConflict：加入既有段时给出的声明与段成立时固定的不一致（含段成立时
 	// 未声明而此刻要声明——声明只在成立那一刻开门）。CONTEXT 生命周期①末句；续办是另立新段，不是重试。
 	SegmentEntryRefusedServiceActionConflict
+	// SegmentEntryRefusedLaterControlFacts：前版没转出控制的交接更正成`已交接`，这一版本该带对象进段（ADR-0307 决定一），
+	// 可对象的参与链上已有晚于这一版业务时间的入场或离场——它此后已凭别的控制事实进了段、交出或交付离场。凭这一版
+	// 结束此刻的参与、进声明的段，会让它在两段同时在场，或在离场之后重新在场；控制来源链的重算不在更正里做。更正在册，
+	// 段那一半一笔不写，后续事实不动；重试不会变，所以不是欠账（决定三）。
+	SegmentEntryRefusedLaterControlFacts
 )
 
 func (refusal SegmentEntryRefusal) String() string {
@@ -58,6 +64,8 @@ func (refusal SegmentEntryRefusal) String() string {
 		return "NO_PARTICIPATION_TO_REDERIVE"
 	case SegmentEntryRefusedCorrectedStartAfterInheritedEnd:
 		return "CORRECTED_START_AFTER_INHERITED_END"
+	case SegmentEntryRefusedLaterControlFacts:
+		return "LATER_CONTROL_FACTS"
 	default:
 		return ""
 	}

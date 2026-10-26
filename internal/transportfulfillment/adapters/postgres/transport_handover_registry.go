@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -48,6 +49,7 @@ func (repository *TransportHandovers) FindByKey(
 	var releasedBy, receivedBy, verdictName, digest string
 	var releasing, receiving, rule, basis, corrects *string
 	var releasingNode, receivingNode, onwardNode, gateReading *string
+	var declaredSegment, declaredPlanned, declaredAction *string
 	var gateReadingDetail []byte
 	var correctedAt *time.Time
 	var judgedAt, recordedAt time.Time
@@ -55,7 +57,8 @@ func (repository *TransportHandovers) FindByKey(
 		`SELECT released_by, received_by, verdict,
 		        releasing_evidence, receiving_evidence, rule_ref, basis_ref,
 		        corrects_version, corrected_at, judged_at, content_digest, recorded_at,
-		        releasing_node, receiving_node, onward_node, gate_reading, gate_reading_detail
+		        releasing_node, receiving_node, onward_node, gate_reading, gate_reading_detail,
+		        declared_segment, declared_planned_segment, declared_segment_service_action
 		   FROM transport_fulfillment.transport_handover
 		  WHERE tenant_id = $1
 		    AND object_ref = $2
@@ -68,7 +71,8 @@ func (repository *TransportHandovers) FindByKey(
 	).Scan(&releasedBy, &receivedBy, &verdictName,
 		&releasing, &receiving, &rule, &basis,
 		&corrects, &correctedAt, &judgedAt, &digest, &recordedAt,
-		&releasingNode, &receivingNode, &onwardNode, &gateReading, &gateReadingDetail)
+		&releasingNode, &receivingNode, &onwardNode, &gateReading, &gateReadingDetail,
+		&declaredSegment, &declaredPlanned, &declaredAction)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.TransportHandoverRecord{}, false, nil
 	}
@@ -97,10 +101,11 @@ func (repository *TransportHandovers) FindByKey(
 		return ports.TransportHandoverRecord{}, false, fmt.Errorf("find transport handover: %w", err)
 	}
 	return ports.TransportHandoverRecord{
-		Key:           key,
-		ContentDigest: digest,
-		Handover:      handover,
-		RecordedAt:    recordedAt.UTC(),
+		Key:                key,
+		ContentDigest:      digest,
+		Handover:           handover,
+		RecordedAt:         recordedAt.UTC(),
+		SegmentDeclaration: segmentDeclarationFrom(declaredSegment, declaredPlanned, declaredAction),
 	}, true, nil
 }
 
@@ -118,6 +123,7 @@ func (repository *TransportHandovers) FindSuccessor(
 	var versionRaw, releasedBy, receivedBy, verdictName, digest string
 	var releasing, receiving, rule, basis, corrects *string
 	var releasingNode, receivingNode, onwardNode, gateReading *string
+	var declaredSegment, declaredPlanned, declaredAction *string
 	var gateReadingDetail []byte
 	var correctedAt *time.Time
 	var judgedAt, recordedAt time.Time
@@ -125,7 +131,8 @@ func (repository *TransportHandovers) FindSuccessor(
 		`SELECT handover_version, released_by, received_by, verdict,
 		        releasing_evidence, receiving_evidence, rule_ref, basis_ref,
 		        corrects_version, corrected_at, judged_at, content_digest, recorded_at,
-		        releasing_node, receiving_node, onward_node, gate_reading, gate_reading_detail
+		        releasing_node, receiving_node, onward_node, gate_reading, gate_reading_detail,
+		        declared_segment, declared_planned_segment, declared_segment_service_action
 		   FROM transport_fulfillment.transport_handover
 		  WHERE tenant_id = $1
 		    AND object_ref = $2
@@ -138,7 +145,8 @@ func (repository *TransportHandovers) FindSuccessor(
 	).Scan(&versionRaw, &releasedBy, &receivedBy, &verdictName,
 		&releasing, &receiving, &rule, &basis,
 		&corrects, &correctedAt, &judgedAt, &digest, &recordedAt,
-		&releasingNode, &receivingNode, &onwardNode, &gateReading, &gateReadingDetail)
+		&releasingNode, &receivingNode, &onwardNode, &gateReading, &gateReadingDetail,
+		&declaredSegment, &declaredPlanned, &declaredAction)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.TransportHandoverRecord{}, false, nil
 	}
@@ -171,10 +179,11 @@ func (repository *TransportHandovers) FindSuccessor(
 		return ports.TransportHandoverRecord{}, false, fmt.Errorf("find transport handover successor: %w", err)
 	}
 	return ports.TransportHandoverRecord{
-		Key:           key,
-		ContentDigest: digest,
-		Handover:      handover,
-		RecordedAt:    recordedAt.UTC(),
+		Key:                key,
+		ContentDigest:      digest,
+		Handover:           handover,
+		RecordedAt:         recordedAt.UTC(),
+		SegmentDeclaration: segmentDeclarationFrom(declaredSegment, declaredPlanned, declaredAction),
 	}, true, nil
 }
 
@@ -202,7 +211,8 @@ func (repository *TransportHandovers) ListByScope(
 		        released_by, received_by, verdict,
 		        releasing_evidence, receiving_evidence, rule_ref, basis_ref,
 		        corrects_version, corrected_at, judged_at, content_digest, recorded_at,
-		        releasing_node, receiving_node, onward_node, gate_reading, gate_reading_detail
+		        releasing_node, receiving_node, onward_node, gate_reading, gate_reading_detail,
+		        declared_segment, declared_planned_segment, declared_segment_service_action
 		   FROM transport_fulfillment.transport_handover
 		  WHERE tenant_id = $1
 		    AND scope_ref = $2
@@ -220,13 +230,15 @@ func (repository *TransportHandovers) ListByScope(
 		var objectRaw, versionRaw, releasedBy, receivedBy, verdictName, digest string
 		var releasing, receiving, rule, basis, corrects *string
 		var releasingNode, receivingNode, onwardNode, gateReading *string
+		var declaredSegment, declaredPlanned, declaredAction *string
 		var gateReadingDetail []byte
 		var correctedAt *time.Time
 		var judgedAt, recordedAt time.Time
 		if err := rows.Scan(&objectRaw, &versionRaw, &releasedBy, &receivedBy, &verdictName,
 			&releasing, &receiving, &rule, &basis,
 			&corrects, &correctedAt, &judgedAt, &digest, &recordedAt,
-			&releasingNode, &receivingNode, &onwardNode, &gateReading, &gateReadingDetail); err != nil {
+			&releasingNode, &receivingNode, &onwardNode, &gateReading, &gateReadingDetail,
+			&declaredSegment, &declaredPlanned, &declaredAction); err != nil {
 			return nil, fmt.Errorf("list transport handovers by scope: %w", err)
 		}
 
@@ -258,10 +270,11 @@ func (repository *TransportHandovers) ListByScope(
 			return nil, fmt.Errorf("list transport handovers by scope: %w", err)
 		}
 		records = append(records, ports.TransportHandoverRecord{
-			Key:           key,
-			ContentDigest: digest,
-			Handover:      handover,
-			RecordedAt:    recordedAt.UTC(),
+			Key:                key,
+			ContentDigest:      digest,
+			Handover:           handover,
+			RecordedAt:         recordedAt.UTC(),
+			SegmentDeclaration: segmentDeclarationFrom(declaredSegment, declaredPlanned, declaredAction),
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -294,8 +307,9 @@ func (repository *TransportHandovers) Save(
 			 released_by, received_by, verdict,
 			 releasing_evidence, receiving_evidence, rule_ref, basis_ref,
 			 corrects_version, corrected_at, judged_at, content_digest, recorded_at,
-			 releasing_node, receiving_node, onward_node, gate_reading, gate_reading_detail)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+			 releasing_node, receiving_node, onward_node, gate_reading, gate_reading_detail,
+			 declared_segment, declared_planned_segment, declared_segment_service_action)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Object.String(),
@@ -318,6 +332,9 @@ func (repository *TransportHandovers) Save(
 		optionalHandoverText(handover.OnwardNode()),
 		gateReading,
 		gateReadingDetail,
+		optionalDeclared(record.SegmentDeclaration.Segment),
+		optionalDeclared(record.SegmentDeclaration.PlannedSegment),
+		optionalDeclared(record.SegmentDeclaration.ServiceAction),
 	)
 	if err != nil {
 		return ports.HandoverSaveOutcomeInvalid, fmt.Errorf("save transport handover: %w", err)
@@ -440,6 +457,30 @@ func optionalHandoverText[T interface{ String() string }](value T, present bool)
 	}
 	raw := value.String()
 	return &raw
+}
+
+// optionalDeclared 把段声明的一格折成可空列：空白即没有声明，写 NULL，与库面「不得空白」那条 CHECK 同一个判据（迁移 0053）。
+// 非空的原样写，不修剪——进段那道门拿到的要与首登那一刻的命令逐字相同。
+func optionalDeclared(raw string) *string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	return &raw
+}
+
+// segmentDeclarationFrom 把三列读回段声明；NULL 读作没有声明。迁移 0053 之前登下的行三列都是 NULL。
+func segmentDeclarationFrom(segment, planned, action *string) ports.HandoverSegmentDeclaration {
+	declared := func(column *string) string {
+		if column == nil {
+			return ""
+		}
+		return *column
+	}
+	return ports.HandoverSegmentDeclaration{
+		Segment:        declared(segment),
+		PlannedSegment: declared(planned),
+		ServiceAction:  declared(action),
+	}
 }
 
 func optionalHandoverTime(value time.Time, present bool) *time.Time {
