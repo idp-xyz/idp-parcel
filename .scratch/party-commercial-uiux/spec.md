@@ -1,7 +1,7 @@
 # 参与方与商业区 UI/UX 评估与跟进
 
 Category: enhancement
-Status: in-progress——第一段 01–06 与第二段 07–09 resolved，第二段其余继续拆；第二段其余与第三段仍在「后续」，未拆票
+Status: resolved——第一段 01–06、第二段 07–12 全部 resolved；第二段其余与第三段仍在「后续」，未拆票；第二段其余与第三段仍在「后续」，未拆票
 
 出处：2026-10-25，用户在会话里要求「评估 commercial party 的 UI/UX」，读完评估后说「按你建议的顺序开始」。建议的顺序是：先改文案和组件（成本低），再做要设计的，最后是要后端配合的。本批先落第一段，第二、三段列在「后续」，等第一段收口后再拆票。
 
@@ -75,7 +75,7 @@ Status: in-progress——第一段 01–06 与第二段 07–09 resolved，第�
 | 08 | [版本按对象排在一起、可只看在用的](issues/08-versions-grouped-with-in-use-filter.md) | — | resolved |
 | 09 | [切页签、换册不丢草稿](issues/09-drafts-survive-tab-switches.md) | — | resolved |
 | 10 | [发布表单的时刻按本地时区填](issues/10-publication-moments-in-local-time.md) | — | resolved |
-| 11 | [发布前看得懂要发什么，发布前确认](issues/11-readable-preview-and-publish-confirmation.md) | 10 | in-progress |
+| 11 | [发布前看得懂要发什么，发布前确认](issues/11-readable-preview-and-publish-confirmation.md) | 10 | resolved |
 | 12 | [两张登记表单说业务话](issues/12-registration-forms-speak-business.md) | — | resolved |
 
 ## 界面用词对照（本批各票共用）

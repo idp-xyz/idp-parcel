@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Button, Card, CardContent, CardHeader, CardTitle } from '@idpxyz/ui-primitives';
+import { Button, Card, CardContent, CardHeader, CardTitle, ConfirmDialog } from '@idpxyz/ui-primitives';
+import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { primaryActionClass } from '../../components/primary-action';
 import { OperatorRefusalNote } from '../../components/states';
 import type { ApiResult } from '../catalogue-api';
+import { currentDisplayTimeZone } from '../moment';
 import { declarationLandingLabels, publicationOutcomeLabels } from './api';
+import { publicationSummary, type PublicationFact } from './publication-summary';
 import { labelOf, problemNote } from './presentation';
 import { fieldProblemText } from './field-problem-text';
 import { ProblemText } from './PublicationFormFields';
@@ -102,6 +105,7 @@ export function PublicationDraftFlow({
 }: PublicationDraftFlowProps) {
   const [flow, setFlow] = useState<PublicationFlowState>(emptyFlow());
   const [busy, setBusy] = useState<FlowAction | null>(null);
+  const [confirmingPublish, setConfirmingPublish] = useState(false);
 
   const payload = assemblePayload();
   const key = payloadKey(payload);
@@ -156,6 +160,9 @@ export function PublicationDraftFlow({
   };
 
   const started = flow.preview !== null;
+  // 预览通过之后，表单此刻这份载荷就是之后存、批、发的那一份（改一格即作废后面各步），版本信息从它取（票 party-commercial-uiux/11）。
+  const previewed = preview?.kind === 'outcome' && preview.body.outcome === 'PREVIEWED';
+  const summary = previewed && action !== null ? publicationSummary(payload, currentDisplayTimeZone()) : null;
   const actionDisabled = busy !== null || (action === 'preview' && hasLocalProblems);
 
   return (
@@ -185,12 +192,15 @@ export function PublicationDraftFlow({
           </ul>
         ) : null}
 
+        {summary ? <PublicationSummaryCard facts={summary} /> : null}
+
         <div className="flex items-center gap-3 flex-wrap">
           {action !== null ? (
             <Button
               variant="default"
               className={primaryActionClass}
-              onClick={() => run(action)}
+              // 发布不能撤回、改内容要换版本号：按下之前再拦一道，复述要发的是哪一版。
+              onClick={() => (action === 'publish' ? setConfirmingPublish(true) : run(action))}
               disabled={actionDisabled}
               title={
                 action === 'preview' && hasLocalProblems
@@ -218,6 +228,21 @@ export function PublicationDraftFlow({
         {approval ? <DraftNote answer={approval} what="批准" labels={approveOutcomeLabels} /> : null}
         {publication ? <PublicationNote answer={publication} /> : null}
       </CardContent>
+      <ConfirmDialog
+        renderFooter={confirmDialogFooter}
+        open={confirmingPublish}
+        tone="warning"
+        title="发布这一版？"
+        message="发布后这一版不能修改；要改内容，须用新的版本号再发布。"
+        extraContent={summary ? <FactList facts={summary} /> : undefined}
+        confirmLabel="发布"
+        cancelLabel="先不发布"
+        onConfirm={() => {
+          setConfirmingPublish(false);
+          run('publish');
+        }}
+        onCancel={() => setConfirmingPublish(false)}
+      />
     </Card>
   );
 }
@@ -368,6 +393,29 @@ function OutcomeText({ labels, outcome }: { labels: Record<string, string>; outc
 }
 
 // 摘要整串显示不截断：它就是载体与册上那一格，操作者要拿它去对。
+function FactList({ facts }: { facts: readonly PublicationFact[] }) {
+  return (
+    <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[13px]">
+      {facts.map((fact) => (
+        <div key={fact.label} className="contents">
+          <dt className="text-idpxyz-textMuted">{fact.label}</dt>
+          <dd className="font-mono break-all text-idpxyz-text">{fact.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** 预览通过后摆在按钮上方的「将要发布」卡：只复述版本信息，正文各格就在上面的表单里。 */
+function PublicationSummaryCard({ facts }: { facts: readonly PublicationFact[] }) {
+  return (
+    <section className="rounded border border-idpxyz-border p-3 flex flex-col gap-2">
+      <h3 className="text-[12px] font-medium text-idpxyz-text">将要发布</h3>
+      <FactList facts={facts} />
+    </section>
+  );
+}
+
 function DigestLine({ canonicalization, digest }: { canonicalization?: string; digest?: string }) {
   return (
     <p className="font-mono break-all">
