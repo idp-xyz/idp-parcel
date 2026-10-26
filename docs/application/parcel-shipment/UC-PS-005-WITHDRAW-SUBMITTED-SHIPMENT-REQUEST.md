@@ -57,7 +57,7 @@
 | 财务控制引用 | 原估价、逐项控制结果（冻结或信用暴露）、控制策略、业务关联和当前有效性 | 不新建零金额释放或跨账户补偿 |
 | 撤回已成立（`FORMED`） | 撤回决定、决定时间、请求/授权依据、任务停止、发布意图与释放补偿关联；随附释放有一笔被结算确定不受理时带「释放未受理、待人处理」一格（`controlReleaseNotAccepted`） | 不生成拒绝决定 |
 | 未获授权（`NOT_AUTHORIZED`） | 请求方与所查授权依据 | 不形成撤回、不释放；授权规则未登记不答这一格 |
-| 已有决定（`DECISION_ALREADY_FORMED`） | 已先行提交的接受、拒绝或撤回引用；撞上既有撤回时带原补偿关联 | 后到请求不覆盖原决定 |
+| 已有决定（`DECISION_ALREADY_FORMED`） | 已先行提交的接受、拒绝或撤回引用；撞上既有撤回时带原补偿关联，或「释放未受理、待人处理」一格（`controlReleaseNotAccepted`） | 后到请求不覆盖原决定 |
 | 来源冲突（`SOURCE_CONFLICT`） | 原请求引用 | 同一请求身份携带不同内容；不覆盖原请求，不再撤回一次 |
 | 撤回未决（`UNDECIDED`） | 已知事实、缺口、续办入口与未决原因，原因是 `SHIPMENT_REQUEST_UNAVAILABLE`、`WITHDRAWAL_AUTHORITY_UNAVAILABLE`、`WITHDRAWAL_AUTHORITY_RULES_NOT_CONFIGURED`、`DECISION_IDENTITY_UNAVAILABLE`、`DECISION_NOT_RECORDED`、`STALE_SHIPMENT_REQUEST_REVISION`、`WITHDRAWAL_AUTHORITY_APPLICABILITY_CONFLICT` 之一；末一码是授权适用冲突（同一刻多于一条授予允许、或委派方不同的多条委派命中，[ADR-0261](../../adr/0261-authority-grants-and-contract-delegations-follow-the-closure-of-their-version-and-several-hits-are-an-applicability-conflict.md)），与授权规则未登记并列，续办同归运营登记（收尾旧版或撤去重复的那一条） | 不默认撤回或接受；授权适用冲突不答未获授权 |
 | 统一不可见（不是一格结果） | 委托查无、跨租户或跨客户：`404` 加上下文统一不可见码（[ADR-0022](../../adr/0022-http-status-carries-answer-formed-not-business-verdict.md)） | 不区分不存在与他人的 |
