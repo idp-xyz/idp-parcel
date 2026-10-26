@@ -35,7 +35,7 @@ type DeclaredDemandSource interface {
 }
 
 // CapacityPoolsOnSchedules 按班次交回登记册上的池（含预占），读一个锁一个池行、锁到事务结束。装载分配用它：判分配量与
-// 预占剩余要和同一池上的预占、释放、别的分配串行（ADR-0203 决定四与「补记：票 21 落地时的补充裁定」）。只在已登记的班次
+// 预占剩余要和同一池上的预占、释放、别的分配串行（ADR-0203「补记：票 21 落地时的补充裁定」分格与次序一条）。只在已登记的班次
 // 上问：只经评估物化的那一班没有登过的池。与 CapacityPoolStore 分开：那一口按池身份读写，这一口按班次成批问。
 type CapacityPoolsOnSchedules interface {
 	ListPoolsOnSchedules(

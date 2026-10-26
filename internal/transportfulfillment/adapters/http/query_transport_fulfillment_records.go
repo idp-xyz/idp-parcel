@@ -605,8 +605,7 @@ type bookingRequestListResponse struct {
 // bookingRequestRowBody 是订舱册上一行（票 demo-chain-gaps/48）。订舱各格与订舱提交口回显的那一份同一形状（bookingRequestBody，
 // 申请量照那一口写成数），答复与承运答复口回显的同一形状（bookingAnswerBody）：同一件东西在命令答复与查阅页上不换写法。
 //
-// standing 是读出的状态词（PENDING_CONFIRMATION、WAITLISTED、CONFIRMED、PARTIALLY_CONFIRMED、REFUSED、EXPIRED、WITHDRAWN，读法见
-// ports 那组状态词），只在读口派生一处，页面照抄、不另算。currentAnswer 是当前那一份答复，没有答复时缺席；answers 是名下全部
+// standing 是读出的状态词，词与读法见 ports.BookingStandingPendingConfirmation 那组常量；只在读口派生一处，页面照抄、不另算。currentAnswer 是当前那一份答复，没有答复时缺席；answers 是名下全部
 // 答复，按答复时刻先后，候补与它的后继都在，总在场、空数组即还没有答复。cancelledAt 缺席即没有取消——取消不进 standing。
 type bookingRequestRowBody struct {
 	bookingRequestBody
@@ -620,8 +619,8 @@ type bookingAnswerBounceListResponse struct {
 	Bounces []bookingAnswerBounceBody `json:"bounces"`
 }
 
-// bookingAnswerBounceBody 是挡回册上一行。basis 是 BOOKING_NOT_REGISTERED（订舱在本租户下不在册）或 SOURCE_NOT_SERVICE_PROVIDER
-// （订舱在册，答复方不是它所属委托的服务提供方）；两个时刻是本上下文记下挡回的时刻，不是答复方给的答复时刻；count 是十进制计数串。
+// bookingAnswerBounceBody 是挡回册上一行。basis 是 ports.BookingAnswerBounceBasis 的词；两个时刻是本上下文记下挡回的时刻，不是
+// 答复方给的答复时刻；count 是十进制计数串。
 type bookingAnswerBounceBody struct {
 	Source         string `json:"source"`
 	Booking        string `json:"booking"`

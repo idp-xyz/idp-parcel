@@ -591,8 +591,8 @@ func (catalogue *ReviewCatalogue) ListBookingRequests(
 // bookingStanding 是订舱状态词的唯一派生处（读法见 ports 那组状态词的注释）：交回状态词与当前那一份在 answers 里的位置，没有
 // 答复时位置为 -1。当前那一份有定局取定局、否则取候补，与 BookingAnswers.FindByKey 同一条。
 //
-// 两份定局、两份候补、集外的答复值、接受量超过申请量都是绕过答复编排才落得进的行（迁移 0029 的两条部分唯一索引与答复值
-// CHECK 钉住前三种），读不出一个状态词，答错误，不挑一份凑一个词。
+// 两份定局、两份候补、集外的答复值、接受量超过申请量都是绕过答复编排才落得进的行（前三种由库上的 booking_answer_one_settling、
+// booking_answer_one_waitlist 与 booking_answer_outcome_closed 钉住），读不出一个状态词，答错误，不挑一份凑一个词。
 func bookingStanding(requested int64, answers []ports.BookingAnswerCatalogueRow) (string, int, error) {
 	settling, waitlist := -1, -1
 	for index, answer := range answers {
