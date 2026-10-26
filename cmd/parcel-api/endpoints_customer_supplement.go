@@ -5,6 +5,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
+	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
 
@@ -29,6 +30,12 @@ func init() {
 			// 受控补充编排（ADR-0106 Decision 四）：接进装配后「新提交版本已形成」信封才有生产发布方，停在`等待受控补充`
 			// 并已入账的委托才有人续办。
 			supplement, err := buildCustomerSupplementOrchestration(sources.db)
+			if err == nil {
+				var requests *pspostgres.ShipmentRequests
+				if requests, err = pspostgres.NewShipmentRequests(sources.db); err == nil {
+					supplement = shipmenthttp.NewCustomerSupplementHandler(requests, supplement)
+				}
+			}
 			return customerSupplementWiring{customerSupplement: customerSupplement, supplement: supplement}, err
 		},
 		mount: func(_ endpointChannels, wiring customerSupplementWiring) []httpapi.BusinessEndpoint {

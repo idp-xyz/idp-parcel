@@ -167,7 +167,7 @@ func (intake *CustomerSupplementIntake) IntakeSupplement(
 		BasisVersion:      basis,
 		EffectiveAt:       effectiveAt,
 		DeclaredParcelIDs: customerParcels,
-		Scope:             scopeEntries(content),
+		Scope:             append(scopeEntries(content), supplementNamingEntries(draft, shipmentRequestID, members)...),
 		Service:           serviceEntries(content),
 	})
 	if err != nil {
@@ -192,4 +192,40 @@ func (intake *CustomerSupplementIntake) IntakeSupplement(
 		DeclaredElements:        canonical.DeclaredElements(),
 		RequestedServiceProduct: canonical.RequestedServiceProduct(),
 	}, nil
+}
+
+// supplementNamingEntries 把三个指名并进 PSU-1 摘要：原提交标识、回执委托号与成员 parcelId 集合。同一补充请求标识改指另一份
+// 原提交、另一个委托或改写成员，摘要就变，答来源冲突而不是当重放。成员以 parcelId 入名，顺序由规范化统一排序。
+func supplementNamingEntries(draft supplementDraft, request domain.ShipmentRequestID, members []domain.DeclaredParcelID) []domain.CanonicalContentEntry {
+	values := map[string]string{
+		"supplement.originalAccessRequestId": strings.TrimSpace(draft.OriginalAccessRequestID),
+		"supplement.shipmentRequestId":       request.String(),
+	}
+	for _, member := range members {
+		values["supplement.member["+member.String()+"]"] = member.String()
+	}
+	return canonicalEntries(values)
+}
+
+// NewCustomerSupplementHandler 在编排前核对载荷的 shipmentRequestId 与按信封账户加原提交标识找到的委托是同一个：不一致按找不到
+// 答（ErrShipmentRequestNotVisible，与不存在同字节），免得续办引用被客户填成别的委托号。委托的查找与编排同一个来源身份。
+func NewCustomerSupplementHandler(requests ports.ShipmentRequestRepository, inner SupplementHandler) SupplementHandler {
+	return namedRequestChecker{requests: requests, inner: inner}
+}
+
+type namedRequestChecker struct {
+	requests ports.ShipmentRequestRepository
+	inner    SupplementHandler
+}
+
+func (checker namedRequestChecker) Handle(
+	ctx context.Context,
+	command application.FormNewSubmissionVersionCommand,
+) (application.FormNewSubmissionVersionResult, error) {
+	request, found, err := checker.requests.FindBySourceIdentity(ctx, command.Identity)
+	if err == nil && found && request.ShipmentRequestID() != command.ShipmentRequestID {
+		return application.FormNewSubmissionVersionResult{}, fmt.Errorf("form new submission version: %w", application.ErrShipmentRequestNotVisible)
+	}
+	// 查不到或读不动都交给编排自己答（它有同样的分流）。
+	return checker.inner.Handle(ctx, command)
 }

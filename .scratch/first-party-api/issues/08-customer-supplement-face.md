@@ -29,7 +29,7 @@ M
 **代决与越权风险点**
 1. 原提交身份 = 信封的租户 / 账户 / 来源（客户端主体）+ 载荷里原接入请求标识。只能指到同账户、同一客户端提交的委托；同账户不同客户端提交的委托补不了（与提交重放同口径，单客户端直客 1:1 下无影响）。
 2. 成员集合取自载荷逐件带回的回执 `parcelId`（编排比对的是内部成员标识，Intake 不查库、不改应用层）。客户可以乱填，但乱填只会落在 `SUPPLEMENT_BOUNDARY_CHANGED`，不会改到别人的委托（委托先按信封账户找）。
-3. 载荷里的 `shipmentRequestId` 未经核对，只进编排未决时的续办引用；填错只让该客户自己拿到对不上的引用。若要根除，须让编排从找到的委托里取该号（PS 应用层改动，归 tops-26），本票未动。
+3. （评审后改）载荷 `shipmentRequestId` 由 `NewCustomerSupplementHandler` 在编排前与按信封账户加原提交标识找到的委托比对，不一致按找不到答 404 同字节；该比对在 http 适配层，未动 PS 应用层。PSU-1 摘要并入原提交标识、委托号与成员 parcelId 集合，同一补充标识改指他处答 `SUPPLEMENT_SOURCE_CONFLICT`。
 4. 补充在铸造侧判准入范围（`SHIPMENT_REQUEST_SUPPLEMENT` 在 `customerCapabilitiesAdmittedAtMint` 内，种子已登），Intake 不预取归属。
 5. AT 号取 130..133（避开 07/10/11 可能同取 125 起的撞号），协调方进 main 时如需收拢请自行改号。
 6. 旧无前缀路径 `/shipment-requests/supplements` 不并挂，装配后答 404（`first_party_contract_test.go` 的两张表已随改）。

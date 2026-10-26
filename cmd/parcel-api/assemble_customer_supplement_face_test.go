@@ -15,6 +15,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	aipg "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/postgres"
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
+	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	pgpostgres "go.idp.xyz/idp-parcel/internal/pilotgovernance/adapters/postgres"
 	pgdomain "go.idp.xyz/idp-parcel/internal/pilotgovernance/domain"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
@@ -184,7 +185,11 @@ func TestACustomerClientSupplementsThroughTheFirstPartyLineAgainstARealDatabase(
 		t.Fatal(err)
 	}
 	submit := shipmenthttp.NewSubmitShipmentRequestEndpoint(submissionIntake, submissionOrchestration)
-	supplement := shipmenthttp.NewFormNewSubmissionVersionEndpoint(supplementIntake, supplementOrchestration)
+	requests, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	supplement := shipmenthttp.NewFormNewSubmissionVersionEndpoint(supplementIntake, shipmenthttp.NewCustomerSupplementHandler(requests, supplementOrchestration))
 	post := func(endpoint http.Handler, path, subject, body string) *httptest.ResponseRecorder {
 		request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
 		request.Header.Set("Authorization", "Bearer "+issuer.token(t, syntheticCustomerAudience, subject))
@@ -243,6 +248,24 @@ func TestACustomerClientSupplementsThroughTheFirstPartyLineAgainstARealDatabase(
 	// 他账户的失败没有改到委托：账户一的当前版本仍是补充形成的那一版。
 	if replayed := post(submit, "/v1/shipment-requests", syntheticCustomerSubject, customerDraftBody(original)); versionOf(t, replayed) != formed {
 		t.Fatalf("他账户的失败补充之后，原提交的回执版本 = %q, want %q", versionOf(t, replayed), formed)
+	}
+
+	// 委托号与找到的委托不符：按找不到答，与不存在同字节。
+	wrongID := post(supplement, supplementPath, syntheticCustomerSubject,
+		supplementBody("SYN-ACCESS-REQUEST-SU-0009", original, "SHR-SOMEONE-ELSES", formed, parcelID, "合成收件地址", ""))
+	if wrongID.Code != http.StatusNotFound || withoutRequestID(t, wrongID) != withoutRequestID(t, absent) {
+		t.Fatalf("委托号不符 = %d %s, want 404 同字节", wrongID.Code, wrongID.Body.String())
+	}
+
+	// 同一补充请求标识改指另一份原提交 / 改写成员：来源冲突，不当重放。
+	conflictOriginal := post(supplement, supplementPath, syntheticCustomerSubject,
+		supplementBody("SYN-ACCESS-REQUEST-SU-0002", "SYN-ACCESS-REQUEST-OTHER", requestID, basis, parcelID, "合成改后收件地址", ""))
+	conflictMember := post(supplement, supplementPath, syntheticCustomerSubject,
+		supplementBody("SYN-ACCESS-REQUEST-SU-0002", original, requestID, basis, "DPCL-OTHER-MEMBER", "合成改后收件地址", ""))
+	for name, response := range map[string]*httptest.ResponseRecorder{"改指原提交": conflictOriginal, "改写成员": conflictMember} {
+		if outcomeOf(t, response) != "SUPPLEMENT_SOURCE_CONFLICT" {
+			t.Fatalf("%s = %d %s, want SUPPLEMENT_SOURCE_CONFLICT", name, response.Code, response.Body.String())
+		}
 	}
 
 	// 只持提交授予：未授予。
