@@ -109,6 +109,28 @@ func validity(t *testing.T) domain.OwnershipValidityInterval {
 	return interval
 }
 
+// boundaryLockDouble 是取消边界锁的替身：记下每次取锁指名的（租户，包裹）；err 非空时模拟取不到锁；onLock 在取锁那一刻
+// 回调，用例借它看编排在锁之前已经读过什么。
+type boundaryLockDouble struct {
+	locked []string
+	err    error
+	onLock func()
+}
+
+func (double *boundaryLockDouble) LockCancellationBoundary(
+	_ context.Context,
+	tenant domain.TenantID,
+	parcel domain.DeclaredParcelID,
+) error {
+	if double.onLock != nil {
+		double.onLock()
+	}
+	double.locked = append(double.locked, tenant.String()+"/"+parcel.String())
+	return double.err
+}
+
+var _ ports.CancellationBoundaryLock = (*boundaryLockDouble)(nil)
+
 // conflictRegisterDouble 是取消先后冲突册的替身：按（租户，包裹，边界种类，边界引用，取消）去重，
 // 与真册的主键同一组维度。
 type conflictRegisterDouble struct {

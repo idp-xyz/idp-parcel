@@ -169,6 +169,9 @@ type CancelParcelDeps struct {
 	Identities     CancellationIdentityFactory
 	Downstream     ports.ParcelCancellationHandoff
 	Clock          ports.Clock
+	// BoundaryLock 让这一笔与同一包裹上的收寄采用、面单渠道服务的终局判断排队。nil 按取不到锁办：锁外读到的可能正是
+	// 要防的那一份旧状态，不读边界、停在未决。
+	BoundaryLock ports.CancellationBoundaryLock
 }
 
 type CancelParcelHandler struct {
@@ -179,7 +182,7 @@ func NewCancelParcelHandler(deps CancelParcelDeps) *CancelParcelHandler {
 	return &CancelParcelHandler{deps: deps}
 }
 
-// Handle 把一件包裹的取消请求推进到判断：受理与委托核验（统一不可见）→ 幂等/冲突 →
+// Handle 把一件包裹的取消请求推进到判断：受理与委托核验（统一不可见）→ 按包裹排队 → 幂等/冲突 →
 // 授权（未配置即未决，不写默认授权）→ 在决定提交边界重读终局与收寄 → 已有终局交既有终局、
 // 网络收寄已在册登记待处置、面单渠道服务首次有效收寄已在册不可取消（都明确不能回退取消）、
 // 边界前取消成立 → 提交与发布意图。已发生事实全程不删。
@@ -210,6 +213,12 @@ func (handler *CancelParcelHandler) Handle(
 		TenantID:   command.Identity.TenantID(),
 		RequestKey: command.Identity.RequestKey(),
 		Parcel:     command.Parcel,
+	}
+	// 从幂等读起就与同一包裹上的收寄采用、面单渠道服务的终局判断排队（ports.CancellationBoundaryLock），锁持到本笔提交。锁不只
+	// 提到终局读之前，而提到幂等读之前：同一请求并发重发时，后到的那一路要读到先到那一路落下的记录、答已有结果，不能把它当成
+	// 另一份已成立的取消答既有终局。取不到锁归取消库那一格：锁守的第一道读就是取消库，恢复动作同为重试。
+	if !lockCancellationBoundary(ctx, handler.deps.BoundaryLock, key.TenantID, command.Parcel) {
+		return handler.undecided(command, CancelStoreUnavailable), nil
 	}
 	digest := cancellationContentDigest(command)
 	existing, found, err := handler.deps.Store.FindByKey(ctx, key)
@@ -374,6 +383,17 @@ func (handler *CancelParcelHandler) finalStands(
 		return handler.undecided(command, CancelFinalStoreUnavailable), true
 	}
 	return CancelParcelResult{outcome: CancellationFinalOutcomeStands, basis: basis}, true
+}
+
+// lockCancellationBoundary 取这件包裹的取消边界锁（取消、收寄采用、面单渠道服务终局判断三处共用）。没装锁与取不到锁同答
+// false，调用方不读边界、按自己的原因格答未决：没装锁同冲突册未接入，按依赖缺口办，不当作可以不排队。
+func lockCancellationBoundary(
+	ctx context.Context,
+	lock ports.CancellationBoundaryLock,
+	tenant domain.TenantID,
+	parcel domain.DeclaredParcelID,
+) bool {
+	return lock != nil && lock.LockCancellationBoundary(ctx, tenant, parcel) == nil
 }
 
 func memberOfCurrentVersion(request domain.ShipmentRequest, parcel domain.DeclaredParcelID) bool {

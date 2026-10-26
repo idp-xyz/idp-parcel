@@ -32,8 +32,9 @@ func (double *cancellationAuthorityDouble) JudgeCancellationAuthority(
 }
 
 type cancellationStoreDouble struct {
-	byKey map[ports.CancellationRequestKey]ports.CancellationRecord
-	saved int
+	byKey   map[ports.CancellationRequestKey]ports.CancellationRecord
+	saved   int
+	lookups int
 }
 
 func newCancellationStore() *cancellationStoreDouble {
@@ -44,6 +45,7 @@ func (double *cancellationStoreDouble) FindByKey(
 	_ context.Context,
 	key ports.CancellationRequestKey,
 ) (ports.CancellationRecord, bool, error) {
+	double.lookups++
 	record, found := double.byKey[key]
 	return record, found, nil
 }
@@ -109,6 +111,8 @@ func (double *carrierPickupBoundaryDouble) FindCurrentCarrierPickup(
 
 type cancelFixture struct {
 	handler       *application.CancelParcelHandler
+	deps          application.CancelParcelDeps
+	lock          *boundaryLockDouble
 	authority     *cancellationAuthorityDouble
 	adoptions     *adoptionStoreDouble
 	finals        *currentFinalViewDouble
@@ -136,8 +140,9 @@ func newCancelFixture(t *testing.T) *cancelFixture {
 		pickups:       &carrierPickupBoundaryDouble{},
 		store:         newCancellationStore(),
 		downstream:    &cancellationDownstreamDouble{},
+		lock:          &boundaryLockDouble{},
 	}
-	fixture.handler = application.NewCancelParcelHandler(application.CancelParcelDeps{
+	fixture.deps = application.CancelParcelDeps{
 		Requests:       requests,
 		Authority:      fixture.authority,
 		Adoptions:      fixture.adoptions,
@@ -148,7 +153,9 @@ func newCancelFixture(t *testing.T) *cancelFixture {
 		Identities:     &cancellationIdentityDouble{},
 		Downstream:     fixture.downstream,
 		Clock:          fixedClock{at: cancelRequestedAt.Add(time.Minute)},
-	})
+		BoundaryLock:   fixture.lock,
+	}
+	fixture.handler = application.NewCancelParcelHandler(fixture.deps)
 	return fixture
 }
 
@@ -648,4 +655,62 @@ func TestForeignProbesAndFailedIntentsStayDisciplined(t *testing.T) {
 			t.Fatalf("intents = %d saved = %d; 重发的必须是原决定那一份", len(fixture.downstream.intents), fixture.store.saved)
 		}
 	})
+}
+
+// Covers: PS CONTEXT「同一包裹的取消提交、收寄采用与面单渠道服务的终局判断依次越过提交边界」在取消这一侧——锁指名命令的
+// （租户，包裹），取在取消库的幂等读与提交边界上每一道读之前；取不到锁或没装锁就一道都不读、不落记录、不交意图，停在
+// CANCELLATION_STORE_UNAVAILABLE 并带续办引用。
+func TestTheCancellationQueuesOnItsParcelBeforeReadingAnything(t *testing.T) {
+	reads := func(fixture *cancelFixture) int {
+		return fixture.store.lookups + fixture.finals.asked + fixture.cancellations.asked +
+			fixture.adoptions.startsAsked + fixture.pickups.asked
+	}
+
+	t.Run("the lock comes before every read it guards", func(t *testing.T) {
+		fixture := newCancelFixture(t)
+		fixture.lock.onLock = func() {
+			if n := reads(fixture); n != 0 {
+				t.Errorf("取锁之前已读了 %d 道——锁外读到的正是要防的那一份旧状态", n)
+			}
+		}
+		result, err := fixture.handler.Handle(context.Background(), cancelCommand(t, "parcel-1"))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.ParcelCancelled {
+			t.Fatalf("outcome = %q, want PARCEL_CANCELLED", result.Outcome())
+		}
+		if len(fixture.lock.locked) != 1 || fixture.lock.locked[0] != "tenant-1/parcel-1" {
+			t.Fatalf("取锁 = %v, want 恰一次、指名 tenant-1/parcel-1", fixture.lock.locked)
+		}
+	})
+
+	stops := map[string]func(*cancelFixture){
+		"an unavailable lock": func(fixture *cancelFixture) { fixture.lock.err = errors.New("lock wait cancelled") },
+		"an unwired lock": func(fixture *cancelFixture) {
+			fixture.deps.BoundaryLock = nil
+			fixture.handler = application.NewCancelParcelHandler(fixture.deps)
+		},
+	}
+	for name, arrange := range stops {
+		t.Run(name, func(t *testing.T) {
+			fixture := newCancelFixture(t)
+			arrange(fixture)
+			result, err := fixture.handler.Handle(context.Background(), cancelCommand(t, "parcel-1"))
+			if err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+			if result.Outcome() != application.CancellationUndecided ||
+				result.UndecidedReason() != application.CancelStoreUnavailable {
+				t.Fatalf("outcome = %q reason = %q, want CANCELLATION_UNDECIDED/CANCELLATION_STORE_UNAVAILABLE",
+					result.Outcome(), result.UndecidedReason())
+			}
+			if result.ContinuationReference().String() == "" {
+				t.Fatal("未决没带续办引用")
+			}
+			if n := reads(fixture); n != 0 || fixture.store.saved != 0 || len(fixture.downstream.intents) != 0 {
+				t.Fatalf("没排上队却读了 %d 道、落了 %d 份、交了 %d 份意图", n, fixture.store.saved, len(fixture.downstream.intents))
+			}
+		})
+	}
 }

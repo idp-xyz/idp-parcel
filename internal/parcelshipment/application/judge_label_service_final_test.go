@@ -22,6 +22,7 @@ var (
 type labelTransactionsByParcelDouble struct {
 	transactions []domain.LabelTransaction
 	err          error
+	asked        int
 }
 
 func (double *labelTransactionsByParcelDouble) ListByCoveredParcel(
@@ -29,6 +30,7 @@ func (double *labelTransactionsByParcelDouble) ListByCoveredParcel(
 	_ domain.TenantID,
 	_ domain.DeclaredParcelID,
 ) ([]domain.LabelTransaction, error) {
+	double.asked++
 	if double.err != nil {
 		return nil, double.err
 	}
@@ -77,6 +79,7 @@ type labelServiceFinalFixture struct {
 	registers    *continuedAttemptRegisterDouble
 	validity     *labelValidityDouble
 	conflicts    *conflictRegisterDouble
+	lock         *boundaryLockDouble
 	handler      *application.JudgeLabelServiceFinalHandler
 }
 
@@ -88,6 +91,7 @@ func newLabelServiceFinalFixture(t *testing.T) *labelServiceFinalFixture {
 		registers:    &continuedAttemptRegisterDouble{},
 		validity:     &labelValidityDouble{},
 		conflicts:    &conflictRegisterDouble{},
+		lock:         &boundaryLockDouble{},
 	}
 	// 面单渠道服务的终局类型由规则答复给出，这里的取值只是夹具锚点，不是任何产品的声明。
 	fixture.final.rules.judgment.Kind = mustValue(t, domain.NewFinalKindReference, "LABEL_SERVICE_FINAL")
@@ -99,6 +103,7 @@ func newLabelServiceFinalFixture(t *testing.T) *labelServiceFinalFixture {
 		Conflicts:     fixture.conflicts,
 		Adoption:      fixture.final.handler,
 		Clock:         fixedClock{at: labelServiceClosureAt.Add(time.Hour)},
+		BoundaryLock:  fixture.lock,
 	})
 	return fixture
 }
@@ -457,6 +462,7 @@ func TestALateEarlierPickupIsAFactConflictWithTheStandingCancellation(t *testing
 			Validity:      fixture.validity,
 			Adoption:      fixture.final.handler,
 			Clock:         fixedClock{at: labelServiceClosureAt.Add(time.Hour)},
+			BoundaryLock:  fixture.lock,
 		})
 		result, err := fixture.handler.Handle(context.Background(), command)
 		if err != nil {
@@ -570,6 +576,7 @@ func TestTheClosurePathsAnswerTheRecordedConflictToo(t *testing.T) {
 			Validity:      fixture.validity,
 			Adoption:      fixture.final.handler,
 			Clock:         fixedClock{at: labelServiceClosureAt.Add(time.Hour)},
+			BoundaryLock:  fixture.lock,
 		})
 		result, err := fixture.handler.Handle(context.Background(), labelServiceCommand(t))
 		if err != nil {
@@ -679,4 +686,71 @@ func TestLabelServiceFinalRecoveryDiscipline(t *testing.T) {
 			}
 		}
 	})
+}
+
+// Covers: PS CONTEXT「同一包裹的取消提交、收寄采用与面单渠道服务的终局判断依次越过提交边界」在面单渠道终局判断这一侧——锁指名
+// 命令的（租户，包裹），取在读已成立的取消之前；取不到锁或没装锁就不读取消与交易、不交采用、不记冲突，停在
+// CANCELLATION_VIEW_UNAVAILABLE。
+func TestTheLabelServiceJudgmentQueuesOnItsParcelBeforeReadingTheCancellation(t *testing.T) {
+	reads := func(fixture *labelServiceFinalFixture) int {
+		return fixture.final.cancellations.asked + fixture.transactions.asked
+	}
+	command := func(t *testing.T) application.JudgeLabelServiceFinalCommand {
+		command := labelServiceCommand(t)
+		command.FirstEffectivePickup = labelServicePickup(t)
+		return command
+	}
+
+	t.Run("the lock comes before every read it guards", func(t *testing.T) {
+		fixture := newLabelServiceFinalFixture(t)
+		fixture.lock.onLock = func() {
+			if n := reads(fixture); n != 0 {
+				t.Errorf("取锁之前已读了 %d 道——锁外读到的「没有取消」正是要防的那一份旧状态", n)
+			}
+		}
+		result, err := fixture.handler.Handle(context.Background(), command(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.LabelServiceFinalAdopted {
+			t.Fatalf("outcome = %q, want LABEL_SERVICE_FINAL_ADOPTED", result.Outcome())
+		}
+		if len(fixture.lock.locked) != 1 || fixture.lock.locked[0] != "tenant-1/parcel-1" {
+			t.Fatalf("取锁 = %v, want 恰一次、指名 tenant-1/parcel-1", fixture.lock.locked)
+		}
+	})
+
+	stops := map[string]func(*labelServiceFinalFixture){
+		"an unavailable lock": func(fixture *labelServiceFinalFixture) { fixture.lock.err = errors.New("lock wait cancelled") },
+		"an unwired lock": func(fixture *labelServiceFinalFixture) {
+			fixture.handler = application.NewJudgeLabelServiceFinalHandler(application.JudgeLabelServiceFinalDeps{
+				Transactions:  fixture.transactions,
+				Registers:     fixture.registers,
+				Cancellations: fixture.final.cancellations,
+				Validity:      fixture.validity,
+				Conflicts:     fixture.conflicts,
+				Adoption:      fixture.final.handler,
+				Clock:         fixedClock{at: labelServiceClosureAt.Add(time.Hour)},
+			})
+		},
+	}
+	for name, arrange := range stops {
+		t.Run(name, func(t *testing.T) {
+			fixture := newLabelServiceFinalFixture(t)
+			arrange(fixture)
+			result, err := fixture.handler.Handle(context.Background(), command(t))
+			if err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+			if result.Outcome() != application.LabelServiceJudgmentUndecided ||
+				result.UndecidedReason() != application.LabelCancellationViewUnavailable {
+				t.Fatalf("outcome = %q reason = %q, want JUDGMENT_UNDECIDED/CANCELLATION_VIEW_UNAVAILABLE",
+					result.Outcome(), result.UndecidedReason())
+			}
+			if _, delegated := result.Adoption(); delegated || reads(fixture) != 0 || len(fixture.conflicts.records) != 0 {
+				t.Fatalf("没排上队却交了采用（%t）、读了 %d 道、记了 %d 行冲突",
+					delegated, reads(fixture), len(fixture.conflicts.records))
+			}
+		})
+	}
 }

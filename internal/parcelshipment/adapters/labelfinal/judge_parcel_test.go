@@ -201,6 +201,7 @@ func newFixture(t *testing.T) *fixture {
 		Conflicts:     emptyConflictRegister{},
 		Adoption:      adopter,
 		Clock:         fixedClock{at: judgedAt},
+		BoundaryLock:  grantedBoundaryLock{},
 	})}
 	core, err := adapter.NewParcelJudgmentCore(targets, judge)
 	if err != nil {
@@ -419,4 +420,11 @@ func TestTheCoreRefusesNilDependencies(t *testing.T) {
 	if _, err := adapter.NewLabelTransactionJudgmentAdapter(nil); err == nil {
 		t.Fatal("nil 核被接受了")
 	}
+}
+
+// grantedBoundaryLock 答取到取消边界锁：排队本身由编排用例与真库并发用例去证，本文件证的是译法。
+type grantedBoundaryLock struct{}
+
+func (grantedBoundaryLock) LockCancellationBoundary(context.Context, psdomain.TenantID, psdomain.DeclaredParcelID) error {
+	return nil
 }

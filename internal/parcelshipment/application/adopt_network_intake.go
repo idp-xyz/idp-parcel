@@ -168,6 +168,9 @@ type AdoptNetworkIntakeDeps struct {
 	// Conflicts 是取消先后冲突册的写口。nil 时判出的冲突无处可记，按依赖未决交回、不答
 	// CANCELLATION_ORDER_CONFLICT——那一格会被消费门入账，没记下就入账等于把冲突丢了。
 	Conflicts ports.CancellationOrderConflictRegister
+	// BoundaryLock 让取消边界核验与同一包裹上的取消提交排队，只在边界核验做的时候取（Cancellations 非 nil）。nil 按取不到
+	// 锁办，停在 CANCELLATION_VIEW_UNAVAILABLE：锁外读到的「没有取消」可能正是要防的那一份旧状态。
+	BoundaryLock ports.CancellationBoundaryLock
 }
 
 type AdoptNetworkIntakeHandler struct {
@@ -179,7 +182,7 @@ func NewAdoptNetworkIntakeHandler(deps AdoptNetworkIntakeDeps) *AdoptNetworkInta
 }
 
 // Handle 把一份物理来源推进到采用结论：受理（来源五件与委托指名）→ 幂等/冲突按内容
-// 指纹分界 → 取消边界按业务时间裁决 → 资格（未配置即未决，不默认通过）→ 责任起点
+// 指纹分界 → 按包裹排队、取消边界按业务时间裁决 → 资格（未配置即未决，不默认通过）→ 责任起点
 // 唯一，或同来源更正接续链尾 → 采用提交与发布意图。物理事实全程只读——不采用与未决
 // 都不碰来源。更正版本把前面几道门重走一遍，用的是更正后的内容（tf/08 裁决说的「再判
 // 一次」）；被拒时链尾原样站着。
@@ -232,6 +235,11 @@ func (handler *AdoptNetworkIntakeHandler) Handle(
 	// 业务时间——取消形成时包裹其实已越过边界，事实冲突：不形成责任起点、不抹取消，冲突记进册里
 	// 停着等业务决定，不按消息到达顺序选边。
 	if handler.deps.Cancellations != nil {
+		// 读取消之前与同一包裹上的取消提交排队（ports.CancellationBoundaryLock），锁持到本笔提交，后面的责任起点读与采用写入
+		// 都在锁里。取不到锁归取消读口那一格：锁守的就是这一道读，恢复动作同为重试。
+		if !lockCancellationBoundary(ctx, handler.deps.BoundaryLock, key.TenantID, source.Parcel()) {
+			return handler.undecided(command, source, IntakeCancellationViewUnavailable), nil
+		}
 		cancellation, cancelled, err := handler.deps.Cancellations.FindCancellation(
 			ctx, key.TenantID, source.Parcel())
 		if err != nil {

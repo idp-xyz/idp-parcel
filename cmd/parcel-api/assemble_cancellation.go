@@ -53,8 +53,9 @@ func (cancellation transactionalCancellation) Handle(
 //
 // 授权一条缝「诚实未配置」，其余接真：委托仓储、收寄采认读口、当前有效终局读口、取消决定库
 // （写口与按包裹的已成立取消读口同一只）、面单渠道服务的首次有效收寄读口（TF 登记册之上的
-// 消费侧适配器，ADR-0025）、PCXL 取消标识签发、发布意图的 Outbox 交付与生产时钟——提交边界
-// 上的边界事实都读真的，任一样在册都使取消不成立（PS CONTEXT）。
+// 消费侧适配器，ADR-0025）、PCXL 取消标识签发、发布意图的 Outbox 交付、生产时钟与取消边界锁
+// ——提交边界上的边界事实都读真的，任一样在册都使取消不成立（PS CONTEXT）；锁与 parcel-dispatch
+// 那边的收寄采用、面单渠道终局判断是同一把，在同一个库上排队。
 //
 // 授权缝走 ServiceStageRulesAdapter + DeclaredStageContent 整条真翻译链，未配置的
 // 位置在链的最里端：AdoptedStageOwner 缺席（SourceIdentity 尚未固定采用哪个授权规则
@@ -114,6 +115,10 @@ func cancellationOrchestrationWith(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: parcel cancellation handoff: %w", err)
 	}
+	boundaryLocks, err := pspostgres.NewCancellationBoundaryLocks(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: cancellation boundary locks: %w", err)
+	}
 
 	handler := shipmentapp.NewCancelParcelHandler(shipmentapp.CancelParcelDeps{
 		Requests:       requests,
@@ -126,6 +131,7 @@ func cancellationOrchestrationWith(
 		Identities:     identities,
 		Downstream:     downstream,
 		Clock:          clock,
+		BoundaryLock:   boundaryLocks,
 	})
 	return transactionalCancellation{transactor: db.Transactor(), inner: handler}, nil
 }

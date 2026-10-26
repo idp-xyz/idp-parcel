@@ -182,6 +182,7 @@ func newCarrierPickupFixture(t *testing.T) *carrierPickupFixture {
 		Conflicts:     conflicts,
 		Adoption:      adopter,
 		Clock:         fixedClock{at: pickupJudgedAt},
+		BoundaryLock:  grantedBoundaryLock{},
 	})}
 	core, err := labelfinal.NewParcelJudgmentCore(targets, judge)
 	if err != nil {
@@ -670,4 +671,11 @@ func TestTheCarrierPickupAdapterRefusesNilDependencies(t *testing.T) {
 	if _, err := adapter.NewJudgeOnCarrierFirstEffectivePickupAdapter(f.pickups, nil); err == nil {
 		t.Fatal("nil 处理方核被接受了")
 	}
+}
+
+// grantedBoundaryLock 答取到取消边界锁：排队本身由编排用例与真库并发用例去证，本文件证的是译法。
+type grantedBoundaryLock struct{}
+
+func (grantedBoundaryLock) LockCancellationBoundary(context.Context, psdomain.TenantID, psdomain.DeclaredParcelID) error {
+	return nil
 }

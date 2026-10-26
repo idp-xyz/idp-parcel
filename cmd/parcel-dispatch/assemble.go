@@ -2076,6 +2076,11 @@ func labelFinalJudgmentCore(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: cancellation order conflicts: %w", err)
 	}
+	// 与 parcel-api 的取消编排、本进程的收寄采用同一把锁：判断在读取消之前按包裹排队，判出的终局经采用路径落在同一笔里。
+	boundaryLocks, err := pspostgres.NewCancellationBoundaryLocks(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: cancellation boundary locks: %w", err)
+	}
 	judge := psapplication.NewJudgeLabelServiceFinalHandler(psapplication.JudgeLabelServiceFinalDeps{
 		Transactions:  transactions,
 		Registers:     registers,
@@ -2084,6 +2089,7 @@ func labelFinalJudgmentCore(
 		Conflicts:     conflicts,
 		Adoption:      chain.handler,
 		Clock:         clock,
+		BoundaryLock:  boundaryLocks,
 	})
 	core, err := labelfinal.NewParcelJudgmentCore(chain.requests, judge)
 	if err != nil {
@@ -2945,6 +2951,12 @@ func networkIntakeAdoption(
 	if err != nil {
 		return none, fmt.Errorf("parcel-dispatch: cancellation order conflicts: %w", err)
 	}
+	// 与 parcel-api 的取消编排、本进程的面单渠道终局判断同一把锁：采用在读取消之前按包裹排队。装 nil 时边界核验停在
+	// CANCELLATION_VIEW_UNAVAILABLE、回滚重投，采用永远形不成。
+	boundaryLocks, err := pspostgres.NewCancellationBoundaryLocks(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-dispatch: cancellation boundary locks: %w", err)
+	}
 	identities, err := psidentity.NewCommitmentVersions()
 	if err != nil {
 		return none, fmt.Errorf("parcel-dispatch: commitment versions: %w", err)
@@ -2992,6 +3004,7 @@ func networkIntakeAdoption(
 			Clock:         clock,
 			Cancellations: cancellations,
 			Conflicts:     conflicts,
+			BoundaryLock:  boundaryLocks,
 		}),
 	}, nil
 }

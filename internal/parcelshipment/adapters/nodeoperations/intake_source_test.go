@@ -262,6 +262,7 @@ func newAdoptHandler(t *testing.T, config adoptHandlerConfig) *psapplication.Ado
 		Clock:         fixedClock{at: receivedAt.Add(time.Minute)},
 		Cancellations: config.cancellations,
 		Conflicts:     config.conflicts,
+		BoundaryLock:  grantedBoundaryLock{},
 	})
 }
 
@@ -338,4 +339,11 @@ func TestAnUnidentifiedUnitIsRefusedWithItsOwnSentinel(t *testing.T) {
 	if _, err := subject.AdoptFromNodeIntake(context.Background(), pending, target(t)); !errors.Is(err, adapter.ErrUnidentifiedHandlingUnit) {
 		t.Fatalf("err = %v, want ErrUnidentifiedHandlingUnit", err)
 	}
+}
+
+// grantedBoundaryLock 答取到取消边界锁：排队本身由编排用例与真库并发用例去证，本文件证的是译法。
+type grantedBoundaryLock struct{}
+
+func (grantedBoundaryLock) LockCancellationBoundary(context.Context, psdomain.TenantID, psdomain.DeclaredParcelID) error {
+	return nil
 }

@@ -126,6 +126,7 @@ type ParcelFinalAdopter interface {
 // Conflicts——它不形成终局，只把判出的取消先后冲突留在册上（ADR-0254 决定二）。
 // Validity 可为 nil——有效期规则是实例半边，装配没有它时按「未配置」办，不推算失效。
 // Conflicts 为 nil 时判出的冲突无处可记，按依赖未决交回，不答`不形成`。
+// BoundaryLock 让判断与同一包裹上的取消提交排队；nil 按取不到锁办，停在 CANCELLATION_VIEW_UNAVAILABLE。
 type JudgeLabelServiceFinalDeps struct {
 	Transactions  ports.LabelTransactionsByParcelView
 	Registers     ports.ContinuedAttemptRegisterView
@@ -134,6 +135,7 @@ type JudgeLabelServiceFinalDeps struct {
 	Conflicts     ports.CancellationOrderConflictRegister
 	Adoption      ParcelFinalAdopter
 	Clock         ports.Clock
+	BoundaryLock  ports.CancellationBoundaryLock
 }
 
 type JudgeLabelServiceFinalHandler struct {
@@ -144,7 +146,7 @@ func NewJudgeLabelServiceFinalHandler(deps JudgeLabelServiceFinalDeps) *JudgeLab
 	return &JudgeLabelServiceFinalHandler{deps: deps}
 }
 
-// Handle 判一件包裹：取消视图 → 全部相关交易（整册，不筛）→ 登记册（未开册即空册）→ 对仍有效的
+// Handle 判一件包裹：按包裹排队 → 取消视图 → 全部相关交易（整册，不筛）→ 登记册（未开册即空册）→ 对仍有效的
 // 成功结果问有效期规则（未配置不失效）→ JudgeLabelServiceFinal → 形成终局的格译成责任结果交
 // 采用路径；不形成与取消在先不走采用，取消先后冲突先记进冲突册再答`不形成`。
 func (handler *JudgeLabelServiceFinalHandler) Handle(
@@ -166,6 +168,11 @@ func (handler *JudgeLabelServiceFinalHandler) Handle(
 		pickup = referenced
 	}
 
+	// 读取消之前与同一包裹上的取消提交排队（ports.CancellationBoundaryLock），锁持到本笔提交：判出终局的格经采用路径落在同一
+	// 笔里。取不到锁归取消读口那一格：锁守的就是这一道读，恢复动作同为重试。
+	if !lockCancellationBoundary(ctx, handler.deps.BoundaryLock, tenant, command.Parcel) {
+		return undecidedLabelServiceFinal(LabelCancellationViewUnavailable), nil
+	}
 	cancellation, cancelled, err := handler.deps.Cancellations.FindCancellation(ctx, tenant, command.Parcel)
 	if err != nil {
 		return undecidedLabelServiceFinal(LabelCancellationViewUnavailable), nil

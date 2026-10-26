@@ -874,6 +874,7 @@ var _ ports.ContinuedAttemptRegisterView = (*continuedAttemptRegisterViewDouble)
 type currentFinalViewDouble struct {
 	finals   map[domain.DeclaredParcelID]ports.FinalOutcomeRecord
 	failWith error
+	asked    int
 }
 
 func newCurrentFinalViewDouble() *currentFinalViewDouble {
@@ -885,6 +886,7 @@ func (double *currentFinalViewDouble) FindCurrentFinal(
 	_ domain.TenantID,
 	parcel domain.DeclaredParcelID,
 ) (ports.FinalOutcomeRecord, bool, error) {
+	double.asked++
 	if double.failWith != nil {
 		return ports.FinalOutcomeRecord{}, false, double.failWith
 	}

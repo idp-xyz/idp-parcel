@@ -58,8 +58,9 @@ func (double *intakeEligibilityDouble) JudgeIntakeEligibility(
 }
 
 type adoptionStoreDouble struct {
-	byKey map[ports.IntakeAdoptionKey]ports.IntakeAdoptionRecord
-	saved int
+	byKey       map[ports.IntakeAdoptionKey]ports.IntakeAdoptionRecord
+	saved       int
+	startsAsked int
 }
 
 func newAdoptionStore() *adoptionStoreDouble {
@@ -80,6 +81,7 @@ func (double *adoptionStoreDouble) FindResponsibilityStart(
 	tenant domain.TenantID,
 	parcel domain.DeclaredParcelID,
 ) (ports.IntakeAdoptionRecord, bool, error) {
+	double.startsAsked++
 	for _, record := range double.byKey {
 		if record.Key.TenantID != tenant || record.Key.Parcel != parcel || !record.Adopted {
 			continue
@@ -153,6 +155,7 @@ func (double *commitmentIdentityDouble) NextCommitmentVersionID(_ context.Contex
 
 type intakeFixture struct {
 	handler       *application.AdoptNetworkIntakeHandler
+	lock          *boundaryLockDouble
 	requests      *shipmentRequestRepositoryDouble
 	eligibility   *intakeEligibilityDouble
 	adoptions     *adoptionStoreDouble
@@ -176,6 +179,7 @@ func newIntakeFixture(t *testing.T) *intakeFixture {
 		downstream:    &intakeDownstreamDouble{},
 		cancellations: &cancellationViewDouble{},
 		conflicts:     &conflictRegisterDouble{},
+		lock:          &boundaryLockDouble{},
 	}
 	fixture.requests.records[sourceIdentity(t, "tenant-1", "customer-1", "source-a", "key-1")] = acceptedRequest(t)
 	fixture.handler = application.NewAdoptNetworkIntakeHandler(fixture.deps())
@@ -192,6 +196,7 @@ func (fixture *intakeFixture) deps() application.AdoptNetworkIntakeDeps {
 		Clock:         fixedClock{at: intakeHappenedAt.Add(time.Minute)},
 		Cancellations: fixture.cancellations,
 		Conflicts:     fixture.conflicts,
+		BoundaryLock:  fixture.lock,
 	}
 }
 
@@ -686,6 +691,7 @@ type cancellationViewDouble struct {
 	cancellation domain.ParcelCancellation
 	cancelled    bool
 	err          error
+	asked        int
 }
 
 func (double *cancellationViewDouble) FindCancellation(
@@ -693,6 +699,7 @@ func (double *cancellationViewDouble) FindCancellation(
 	_ domain.TenantID,
 	_ domain.DeclaredParcelID,
 ) (domain.ParcelCancellation, bool, error) {
+	double.asked++
 	if double.err != nil {
 		return domain.ParcelCancellation{}, false, double.err
 	}
@@ -844,4 +851,76 @@ func TestAFailedIntakeIntentIsRetriedWithoutASecondCommitment(t *testing.T) {
 	if fixture.adoptions.saved != 1 {
 		t.Fatal("重试形成了第二份承诺")
 	}
+}
+
+// Covers: PS CONTEXT「同一包裹的取消提交、收寄采用与面单渠道服务的终局判断依次越过提交边界」在收寄采用这一侧——锁指名来源
+// 所属的（租户，包裹），取在读已成立的取消与责任起点之前；取不到锁或没装锁就不读边界、不碰资格、不落采用与冲突，停在
+// CANCELLATION_VIEW_UNAVAILABLE 并带续办引用。取消机制未接入时边界核验整段不做，也不取锁。
+func TestTheIntakeAdoptionQueuesOnItsParcelBeforeReadingTheCancellation(t *testing.T) {
+	reads := func(fixture *intakeFixture) int {
+		return fixture.cancellations.asked + fixture.adoptions.startsAsked + fixture.eligibility.asked
+	}
+
+	t.Run("the lock comes before every read it guards", func(t *testing.T) {
+		fixture := newIntakeFixture(t)
+		fixture.lock.onLock = func() {
+			if n := reads(fixture); n != 0 {
+				t.Errorf("取锁之前已读了 %d 道——锁外读到的「没有取消」正是要防的那一份旧状态", n)
+			}
+		}
+		result, err := fixture.handler.Handle(context.Background(), adoptCommand(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.IntakeCommitmentFormed {
+			t.Fatalf("outcome = %q, want COMMITMENT_FORMED", result.Outcome())
+		}
+		if len(fixture.lock.locked) != 1 || fixture.lock.locked[0] != "tenant-1/parcel-1" {
+			t.Fatalf("取锁 = %v, want 恰一次、指名 tenant-1/parcel-1", fixture.lock.locked)
+		}
+	})
+
+	stops := map[string]func(*intakeFixture){
+		"an unavailable lock": func(fixture *intakeFixture) { fixture.lock.err = errors.New("lock wait cancelled") },
+		"an unwired lock": func(fixture *intakeFixture) {
+			deps := fixture.deps()
+			deps.BoundaryLock = nil
+			fixture.handler = application.NewAdoptNetworkIntakeHandler(deps)
+		},
+	}
+	for name, arrange := range stops {
+		t.Run(name, func(t *testing.T) {
+			fixture := newIntakeFixture(t)
+			arrange(fixture)
+			result, err := fixture.handler.Handle(context.Background(), adoptCommand(t))
+			if err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+			if result.Outcome() != application.IntakeEligibilityUndecided ||
+				result.UndecidedReason() != application.IntakeCancellationViewUnavailable {
+				t.Fatalf("outcome = %q reason = %q, want ELIGIBILITY_UNDECIDED/CANCELLATION_VIEW_UNAVAILABLE",
+					result.Outcome(), result.UndecidedReason())
+			}
+			if result.ContinuationReference().String() == "" {
+				t.Fatal("未决没带续办引用")
+			}
+			if n := reads(fixture); n != 0 || fixture.adoptions.saved != 0 || len(fixture.conflicts.records) != 0 {
+				t.Fatalf("没排上队却读了 %d 道、落了 %d 份采用、%d 行冲突", n, fixture.adoptions.saved, len(fixture.conflicts.records))
+			}
+		})
+	}
+
+	t.Run("no cancellation mechanism takes no lock", func(t *testing.T) {
+		fixture := newIntakeFixture(t)
+		deps := fixture.deps()
+		deps.Cancellations = nil
+		fixture.handler = application.NewAdoptNetworkIntakeHandler(deps)
+		result, err := fixture.handler.Handle(context.Background(), adoptCommand(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.IntakeCommitmentFormed || len(fixture.lock.locked) != 0 {
+			t.Fatalf("outcome = %q，取锁 %v；取消机制未接入时边界核验整段不做", result.Outcome(), fixture.lock.locked)
+		}
+	})
 }
