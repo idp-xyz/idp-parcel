@@ -20,7 +20,7 @@ import (
 //
 // 快照文档的形状照 RehydrateShipmentRequestSpec 设计，读回时逐字段过领域构造函数再进
 // RehydrateShipmentRequest——库里一行坏数据在这两道门上暴露，不会变成一个看起来合法的
-// 聚合（ADR-0028）。重建门开到四个状态（ADR-0061、ADR-0188、ADR-0286）：写入不设状态门，读回时状态列与
+// 聚合（ADR-0028）。重建门放行每个有名字的委托状态（ADR-0061、ADR-0188、ADR-0286）：写入不设状态门，读回时状态列与
 // 文档对不上就是坏快照，走 ErrInvalidRehydratedShipmentRequest——已接受缺产物、已拒绝缺决定、已撤回缺撤回决定
 // 都是这一格。依据缺席只对拒绝决定放宽。
 type ShipmentRequests struct {

@@ -83,7 +83,7 @@ M：快照规格加撤回决定一格；重建门照 ADR-0030 → ADR-0061 → A
 1. **缺撤回决定的存量行响亮拒绝。** 若首发前有演示租户之外的已撤回行，读它们的编排都答读不回，只能 `--reset` 或人工补；没有补登路径，因为没有第二个来源可补。
 2. **互斥格（代决 3）。** PS owner 若日后允许别的撤回时机，对账表要改。
 3. **查阅详情不带撤回决定。** `ShipmentRequestDetailRecord` 与 HTTP 详情体只有接受或拒绝决定摘要；快照现在有这一格，补上它是读面与接口契约的改动。
-4. **取消包裹（`CancelParcelHandler`）与终局结果（`FormParcelFinalHandler`）没有委托生命周期闸门。** 只核成员属当前版本，不核委托是否`已接受`。已撤回（同样已拒绝、已提交）委托的包裹走到它们时，先前被读回错误挡着（已撤回），现在由它们自己答。取消的授权角色在生产装配未配置、没有责任结果会为从未接受的包裹送达，所以今天是潜在缺口；不是撤回特有（已拒绝自 ADR-0188 起同样），没有另立票，请协调方定要不要立。
+4. **取消包裹（`CancelParcelHandler`）与终局结果（`FormParcelFinalHandler`）没有委托生命周期闸门。** 只核成员属当前版本，不核委托是否`已接受`。已撤回（同样已拒绝、已提交）委托的包裹走到它们时，先前被读回错误挡着（已撤回），现在由它们自己答。取消的授权角色在生产装配未配置、没有责任结果会为从未接受的包裹送达，所以今天是潜在缺口；不是撤回特有（已拒绝自 ADR-0188 起同样），已立 code/101（R1，首方取消口硬前置，Blocked by 本票）。
 5. **人工复核完成与授权处置先问授权再核状态**（审计 A4）：已撤回委托上`任务已完结`那一格，在授权未配置或不可用时到不了。次序是原有的，与撤回无关。
 6. **`ErrRehydrationStateNotSupported` 无人产出**（代决 5）。
 7. **接受链守卫只看`已撤回`。** 已接受或已拒绝的委托再收到提交信封，仍是三步照走、末了撞上既有决定；这是原有行为，审计没有把它列为问题，本票不动。
@@ -101,3 +101,13 @@ M：快照规格加撤回决定一格；重建门照 ADR-0030 → ADR-0061 → A
 - `go run ./tools/at-coverage-counts -check` 退 0（没有新立 AT 号，总览不过期）；`go run ./tools/adr-index -check` 退 1，只是生成物 `docs/adr/README.md` 过期（协调方进 main 时统一重生成），本地跑过生成器确认 ADR-0286 的 Status 注记能被索引读出，随后原样拷回并核一致，没有提交生成物。
 - 没有改迁移与种子，没有跑种子（种子里没有会撤回委托的步骤）。
 - 没有碰 `cmd/parcel-api/assemble_submission.go` 与 `internal/parcelshipment/adapters/pilotgovernance/production_ownership.go`（另一会话在改）；`cmd/parcel-api` 只新增了一个测试文件。
+
+### 评审记录与修订轮
+
+独立评审通过，合入前要求补下列小项，已在本分支另加提交处理，不改业务逻辑：
+
+- **N1 半截撤回只钉了一格。** `TestRehydrationRefusesAWithdrawalOnAnyOtherState` 的半截样本原来只有原因一格；改为决定标识、授权、请求方、决定时刻、原因各造一个「只剩这一格」的样本，挂在`已提交`、`已接受`、`已拒绝`上。变异核验：`Withdrawal.anyRecorded` 的五格逐个删掉各跑一次，五次全红；每次从备份拷回并 `cmp` 核一致。
+- **N2、N3 注释里的计数与「今天」。** 重建门状态数的写法（「四个状态」「今天四个状态都已开门」「今天只开到`已提交`」）改成现行规则句「每个有名字的委托状态」。范围：`rehydration.go` 的 `ErrRehydrationStateNotSupported`、`RehydrateShipmentRequestSpec`、`admitRehydratedState` 头注，`ShipmentRequests`、`ShipmentRequestSummaryRecord` 头注，`rehydration_gate_test.go` 的哨兵说明串，`revision_test.go` 与 `shipment_request_test.go` 的同类句；`SourceDataVersionRecords` 头注「聚合重建门今天只开到`已提交`」自 ADR-0061 起就不实，改为现行规则（每个有名字的委托状态都经重建门放行，哨兵只给没有快照表达力的新状态）。与重建门状态数无关的「今天」不动。
+- **N4 ADR-0188 Status 注记引文。** 注记里决定一末句的引文带省略号，改成决定一末句的逐字整句，`grep -F` 核过确在原文；只动 Status 注记，正文不动。
+- **守卫说明。** 接受链守卫是未加锁的先读后判：ADR-0286 决定六末尾补一句，窗口内的竞争由 PS 申报视图对已撤回的状态过滤（估价读不到已撤回委托，冻结形不成）和 code/99（撤回、拒绝、处置与接受链取委托行锁与控制作用域锁次序相反）兜住，不为本票补并发用例；`AcceptanceChainOutcome` 类型头注补一句，已撤回的委托也折进`已决定`且不带决定（守卫在 `Handle` 内）。
+- **N5 ADR-0286 章节名与近期先例不同。** 不改：照 ADR-0188 的章节名，按派单。

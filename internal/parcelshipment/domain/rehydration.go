@@ -18,8 +18,8 @@ var ErrInvalidRehydratedShipmentRequest = errors.New("parcel shipment: invalid r
 // 不同——一个是等这扇门开到那个状态，一个是去查库里那一行或写它的适配器。压成同一个取值，
 // 运维会照着一份完好的数据去找一处不存在的损坏。
 //
-// 四个状态都已开门，admitRehydratedState 没有一支产出它；它留着，是因为 ADR-0030 的两步顺序对新增的
-// 委托状态同样成立。
+// 每个有名字的委托状态都经重建门放行，admitRehydratedState 没有一支产出它；它留给没有快照表达力的新状态，
+// 因为 ADR-0030 的两步顺序对新增的委托状态同样成立。
 var ErrRehydrationStateNotSupported = errors.New("parcel shipment: rehydration does not yet cover this shipment request state")
 
 // RehydrateShipmentRequestSpec 携带重建一份委托所需的全部字段。
@@ -27,7 +27,7 @@ var ErrRehydrationStateNotSupported = errors.New("parcel shipment: rehydration d
 // 它是本包唯一一处「相信输入」的地方（ADR-0028）：字段一律当**数据**收下，绝不从中重新
 // 推导 accepted、state、baseline 或任何派生字段。要重算的那扇门是 Decide，不是这里。
 //
-// ADR-0030 的准入判据是快照表达能力。四个状态都开：`已接受`与`已拒绝`可达的决定（含主动拒绝留痕）、
+// ADR-0030 的准入判据是快照表达能力。每个有名字的委托状态都开：`已接受`与`已拒绝`可达的决定（含主动拒绝留痕）、
 // 基线、承诺与客户资料版本，`已撤回`可达的撤回决定，都有字段可填（ADR-0061、ADR-0188、ADR-0286）。
 type RehydrateShipmentRequestSpec struct {
 	// Revision 是这一行在库里的版本。重建的聚合必然已持久化，所以它必须从 1 起。
@@ -279,7 +279,7 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 
 // admitRehydratedState 判这扇门开到哪个状态。
 //
-// 见 ADR-0030：一个状态只有在快照类型能表达它可达的全部字段时才准进来。四个状态都满足这条
+// 见 ADR-0030：一个状态只有在快照类型能表达它可达的全部字段时才准进来。每个有名字的委托状态都满足这条
 // （ADR-0061、ADR-0188、ADR-0286），所以没有状态落在 ErrRehydrationStateNotSupported 那一格；新增委托状态时，
 // 先在这里让它落到那一格，补齐快照表达之后再放行。
 func admitRehydratedState(state ShipmentRequestState) error {

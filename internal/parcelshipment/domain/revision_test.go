@@ -364,7 +364,7 @@ func Unrelated(n int) int { return n }
 //
 // 因此这里要的不是「字段数没变」，而是**每个字段都登记在 carriedByRehydration**，且登记的与字面量真正
 // 写下的键**逐个相等**——只有名单而不比对字面量，一个字段可以登记在册却从没被赋值，而那种漏法正是本条要防的。
-// 四个状态都开门之后没有字段是「某个状态下必然缺席因而可以不带」的：撤回也随快照往返（ADR-0286）。
+// 每个有名字的委托状态都开门之后没有字段是「某个状态下必然缺席因而可以不带」的：撤回也随快照往返（ADR-0286）。
 func TestEveryShipmentRequestFieldIsClassifiedForRehydration(t *testing.T) {
 	t.Parallel()
 

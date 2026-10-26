@@ -1,6 +1,6 @@
 # ADR-0188: 已拒绝委托的重建门按快照表达能力开门
 
-Status: Accepted（2026-10-18，票 [operator-channel/33](../../.scratch/operator-channel/issues/33-rejected-shipment-requests-persist-and-read-back.md)。会话 `idp-parcel-9b` 在用户 2026-10-16「你作为业务和系统专家你来自决」的授权下代 PS owner 裁定。）<!-- 索引注记 -->｜**推进** [ADR-0061](./0061-accepted-shipment-request-rehydration-by-snapshot-expressiveness.md) 决定一里`已拒绝`那一半：快照决定补上主动拒绝留痕、依据对拒绝决定可缺席之后，重建门开到`已拒绝`；正文有三条来路的对账表与坏数据判据（拒绝决定恰带失败校验项与主动拒绝留痕之一，补表达前的旧形状行按坏数据拒绝、不推回）。`已撤回`那一半（决定一末句「`已撤回`仍由入口……拒绝」）又由 [ADR-0286](./0286-withdrawn-shipment-request-rehydration-by-snapshot-expressiveness.md) 推进，快照补上撤回决定之后开到`已撤回`；其余各条不变
+Status: Accepted（2026-10-18，票 [operator-channel/33](../../.scratch/operator-channel/issues/33-rejected-shipment-requests-persist-and-read-back.md)。会话 `idp-parcel-9b` 在用户 2026-10-16「你作为业务和系统专家你来自决」的授权下代 PS owner 裁定。）<!-- 索引注记 -->｜**推进** [ADR-0061](./0061-accepted-shipment-request-rehydration-by-snapshot-expressiveness.md) 决定一里`已拒绝`那一半：快照决定补上主动拒绝留痕、依据对拒绝决定可缺席之后，重建门开到`已拒绝`；正文有三条来路的对账表与坏数据判据（拒绝决定恰带失败校验项与主动拒绝留痕之一，补表达前的旧形状行按坏数据拒绝、不推回）。`已撤回`那一半（决定一末句「`已撤回`仍由入口以 `ErrRehydrationStateNotSupported` 拒绝：撤回在快照里还没有表达，撤回口属客户渠道，另立票。」）又由 [ADR-0286](./0286-withdrawn-shipment-request-rehydration-by-snapshot-expressiveness.md) 推进，快照补上撤回决定之后开到`已撤回`；其余各条不变
 
 Date: 2026-10-18
 

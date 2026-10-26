@@ -20,7 +20,7 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 16 证委托聚合仓储的行为：全聚合快照往返不丢字段、作用域
-// 隔离由 SQL 条件承担、重复建单由主键拦住、并发保存由乐观版本拦住、重建门开到四个状态
+// 隔离由 SQL 条件承担、重复建单由主键拦住、并发保存由乐观版本拦住、重建门放行每个有名字的委托状态
 // （ADR-0061、ADR-0188、ADR-0286）由读回侧如实透出。
 
 func TestASubmittedRequestRoundTripsWholly(t *testing.T) {

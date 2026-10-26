@@ -1009,13 +1009,20 @@ func TestRehydrationRefusesImpossibleWithdrawnShapes(t *testing.T) {
 // 要拒：按「五格齐全」判在场，会把只剩一格的残片当成没有撤回放过去。
 func TestRehydrationRefusesAWithdrawalOnAnyOtherState(t *testing.T) {
 	withdrawal := withdrawnSnapshot(t).Withdrawal
-	partial := domain.RehydrateWithdrawalSpec{Reason: withdrawal.Reason}
 	bases := map[string]func() domain.RehydrateShipmentRequestSpec{
 		"已提交": func() domain.RehydrateShipmentRequestSpec { return submittedSnapshot(t) },
 		"已接受": func() domain.RehydrateShipmentRequestSpec { return acceptedSnapshot(t) },
 		"已拒绝": func() domain.RehydrateShipmentRequestSpec { return activelyRejectedSnapshot(t) },
 	}
-	carried := map[string]domain.RehydrateWithdrawalSpec{"整份撤回决定": withdrawal, "半截撤回决定": partial}
+	// 半截的一份逐格各造一个「只剩这一格」：anyRecorded 少判哪一格，对应的样本就会被当成没有撤回放过去。
+	carried := map[string]domain.RehydrateWithdrawalSpec{
+		"整份撤回决定":      withdrawal,
+		"只剩决定标识的半截撤回": {DecisionID: withdrawal.DecisionID},
+		"只剩授权的半截撤回":   {Authority: withdrawal.Authority},
+		"只剩请求方的半截撤回":  {Requester: withdrawal.Requester},
+		"只剩决定时刻的半截撤回": {DecidedAt: withdrawal.DecidedAt},
+		"只剩原因的半截撤回":   {Reason: withdrawal.Reason},
+	}
 	for stateName, base := range bases {
 		for carriedName, spec := range carried {
 			t.Run(stateName+"带"+carriedName, func(t *testing.T) {

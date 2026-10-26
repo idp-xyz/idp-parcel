@@ -1564,8 +1564,8 @@ func (outcome SourceDataVersionAppendOutcome) String() string {
 
 // SourceDataVersionRecords 以委托的来源身份加版本标识为键登记客户原始资料版本。
 //
-// 它与聚合仓储分立：版本不可覆盖、只追加，而聚合重建门今天只开到`已提交`（ADR-0030），
-// 资料版本却只在`已接受`之后形成——把版本塞进聚合快照，重建门一开就得整层重排。独立
+// 它与聚合仓储分立：版本不可覆盖、只追加，而资料版本只在`已接受`之后形成。聚合重建门对每个有名字的
+// 委托状态放行，domain.ErrRehydrationStateNotSupported 只给没有快照表达力的新状态（ADR-0030、ADR-0061）。独立
 // 登记册按版本链平铺（基准/前版引用可查），聚合侧持有的仍是同一批版本的运行时视图。
 type SourceDataVersionRecords interface {
 	FindVersion(
@@ -1623,7 +1623,7 @@ type AcceptanceDecisionHandoff interface {
 }
 
 // ShipmentRequestSummaryRecord 是委托查阅列表的一行。它是读模型而不是聚合：查阅要跨
-// 生命周期覆盖四个状态，读的是「登记过什么」而不是「聚合此刻能不能重建」：一行坏快照在聚合仓储上读不回，
+// 生命周期覆盖每个有名字的委托状态，读的是「登记过什么」而不是「聚合此刻能不能重建」：一行坏快照在聚合仓储上读不回，
 // 走聚合仓储的查阅就会让恰恰最需要交代的那一行消失。
 type ShipmentRequestSummaryRecord struct {
 	CustomerAccountID   domain.CustomerAccountID
