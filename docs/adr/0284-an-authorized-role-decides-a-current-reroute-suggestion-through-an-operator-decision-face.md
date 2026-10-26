@@ -129,3 +129,4 @@ Date: 2026-10-26
 - [ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)：机制、产品策略与租户取值三分
 - [network-routing CONTEXT](../domain/network-routing/CONTEXT.md)、[UC-NR-003](../application/network-routing/UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md)
 - 票 `.scratch/docs-consistency/code/29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md`；后继票 `.scratch/docs-consistency/code/97-initial-route-tie-has-no-authorized-decision-face.md`、`.scratch/docs-consistency/code/100-a-control-trigger-between-a-suggestion-and-its-decision-reviews-a-plan-not-yet-effective.md`
+- [ADR-0309](./0309-an-authorized-role-decides-an-initial-route-lowest-cost-tie-through-the-operator-decision-face-forming-the-first-plan-from-the-decision-moment.md)：决定七划出去的初始路由最低成本并列在那里落地，授予同一种、投影同一读法
