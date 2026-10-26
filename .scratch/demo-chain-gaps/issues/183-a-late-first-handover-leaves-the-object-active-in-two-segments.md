@@ -1,6 +1,6 @@
 # 183 首登`已交接`晚到时对象落进两段同时在场，此后每次交接都在结束参与那一步响亮失败
 
-Status: in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 claude-dcg183 tip 见分支（代码笔 e2838233a，其上一笔仅补本票完成记录）。此前：（: bug）
+Status: resolved——2026-10-26 进 main `bc4f3750e`（见文末「进 main 记录」）。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 claude-dcg183 tip 见分支（代码笔 e2838233a，其上一笔仅补本票完成记录）。此前：（: bug）
 Status: in-progress——2026-10-26 会话 `tops-20`（Claude Code）立并认领（用户 2026-10-26「按你的建议开工吧」），分支 `claude-dcg183`（worktree `idp-parcel-dcg183`）。分级 R2（上线后尽快）：离线补登就会撞上，撞上后该对象此后每次交接都失败、要人工处理。
 Blocked by: 无
 出处：票 [130](./130-handover-correction-from-pending-to-handed-over-enters-the-segment.md) 作者发现；[ADR-0307](../../../docs/adr/0307-a-handover-corrected-from-pending-or-refused-to-handed-over-enters-the-declared-segment.md) 越权风险点 2（「首登晚到同样落进两段同时在场」）。用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」授权代决。
@@ -31,3 +31,20 @@ Blocked by: 无
 - 文档：UC-TF-005 新立 `AT-TF-356`，`AT-TF-051`、`AT-TF-060` 与「一致性」一节补一句；AT 盘点①表补行并追记；ADR-0307 Status 索引注记与 Links 补票 183（正文未动）。
 - 自验：`go build ./...`、`go vet ./internal/transportfulfillment/...`、gofmt 干净；带 PG DSN 跑 `./internal/transportfulfillment/... ./cmd/parcel-api/... ./cmd/parcel-dispatch/... ./internal/architecture/... ./migrations/...` 全绿；`at-coverage-counts -check` 只报生成物过期（未重生成）。
 
+## 评审记录
+
+评审 ← tops-20 隔离子代理(sonnet) · 钉 `d31099ba4`
+
+- **阻断**：无。
+- **非阻断**：
+  1. 评审读码认为登记册读不动时更正口由「答欠账」变成「响亮失败」，判与 ADR-0029 不相抵（两格恢复动作都是重试），建议补用例并写明。作者核实这一前提不成立：更正口先走重派生，登记册整体读不动时在那里就答欠账返回，走不到晚到检查；改为用 `TestACorrectionIntoTheSegmentWithTheSegmentRegistryDownWritesNothing` 钉住实际行为（更正落下、答欠账、不结束参与、不立声明的段），越权风险点随之更正。
+  2. 守卫 `later.refusal != SegmentEntryRefusalNone` 旁补注释：欠账故意不在这里作答，防后人改回 `!= segmentEntry{}`。已收。
+- **无发现**：更正路径与票 130 落地时逐格相同（`correctionSegmentHalf` 分路条件未动、`LATER_CONTROL_FACTS` 一格不变）；首登正常时序放行、重放走 `answerOccupiedKey` 不进段；拒收、待确认、段登记册缺席不问；`TestALateFirstHandoverLeavesTheObjectInOneSegmentInTheDatabase` 真断言 SEG-NEXT 没立、SEG-PREV 仍在场、此后一次交接后只在 SEG-ONWARD；下游不会误以为已进段；文档与代码一致、`AT-TF-356` 不撞号。
+
+## 进 main 记录（2026-10-26，推送方会话 tops-20）
+
+- **main**：`bc4f3750e`。出处：分支 `claude-dcg183` tip `ade781b54`（作者为 Sonnet 子代理）。
+- **main 上的提交**：`ba06b7265`（代码、用例、文档）、`738c92a7a`（完成记录）、`61aef8963`（评审两条非阻断收口）。
+- **生成物**：ADR 索引 `69353625e`；AT 盘点总览计数 `1b47ac834`；机制清点 `bc4f3750e`。三件 `-check` 退 0（含票 139 表行守卫）。
+- **全量真库测试**：`scripts/test-full.sh` 跑在 `bc4f3750e`（即所推 SHA）：158 ok / 0 FAIL，退 0。
+- **种子**：`scripts/demo-seeds/seed.sh` 灌一次性库（`bc4f3750e` 上），退 0，用后删库。
