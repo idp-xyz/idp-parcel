@@ -1,4 +1,4 @@
-# 99 NR 建议与决定之间的控制触发晚到：复核起点是从决定时刻才生效的新计划，判出失效或改善替代时离场门拒、整封响亮失败
+# 100 NR 建议与决定之间的控制触发晚到：复核起点是从决定时刻才生效的新计划，判出失效或改善替代时离场门拒、整封响亮失败
 
 Category: bug
 Status: needs-triage——建议 R2（上线后尽快）：响亮失败、不静默，但占着交接或收寄采用的分区按派发预算重投到 `ABANDONED`。2026-10-26 票 [code/29](./29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md) 作者子代理立，出处为 [ADR-0284](../../../docs/adr/0284-an-authorized-role-decides-a-current-reroute-suggestion-through-an-operator-decision-face.md) 越权风险点 6，分支 claude-code29。分级由协调方定稿。
@@ -12,6 +12,7 @@ Blocked by: 补法要一份记录：三种取法都会改已接受 ADR 的口径
 - 它不早于当前控制位置（当前控制位置是 T1 那次复核），照判；判断起点是从 T3 才生效的新计划。
 - 判出失效时，离场时刻取触发的业务时间 T2，早于生效 T3。领域离场门（`PlanApplicability.leaveCurrent`）拒，复核编排响亮报错，整封信封响亮失败，按派发预算重投。仍适用线上判出改善替代同此。
 - 判出仍适用（交进的节点就在新计划上、没有改善）不撞。
+- 评审意见：晚到的触发响亮失败不止重投——同一对象的交接信封会占着分区头，推迟追踪投影与派送发起，最长到重投预算耗尽（ADR-0215 越权风险点 10）；修法优先把这一格入账为未判，别让它走重投。
 
 ## 证据
 

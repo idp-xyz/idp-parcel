@@ -124,7 +124,7 @@ NR 不落投影本体（ADR-0075 决定三），能拿到它的只有两处：
   - 没碰 `pages/party/**`。
 - **演示种子**：`steps/477-access-authorized-reroute.sh`，数据是 `data/access/15`、`16` 与 `data/governance/51`；README 加一段。
 - **票与盘点**：
-  - 立 [code/97](./97-initial-route-tie-has-no-authorized-decision-face.md)（初始路由并列）、[code/99](./99-a-control-trigger-between-a-suggestion-and-its-decision-reviews-a-plan-not-yet-effective.md)（ADR-0284 越权风险点 6）。code/98 已被另一会话取用。
+  - 立 [code/97](./97-initial-route-tie-has-no-authorized-decision-face.md)（初始路由并列）、[code/100](./100-a-control-trigger-between-a-suggestion-and-its-decision-reviews-a-plan-not-yet-effective.md)（ADR-0284 越权风险点 6）。code/98 已被另一会话取用。
   - AT 盘点分桶表加五行，`AT-NR-084` 那一行补点名，另写一段追记；总览计数未动。
 
 ### 代决（用户授权协调方「你作为业务和系统专家自决」，协调方接受要点 1–6；以下是落地时作者另定的格）

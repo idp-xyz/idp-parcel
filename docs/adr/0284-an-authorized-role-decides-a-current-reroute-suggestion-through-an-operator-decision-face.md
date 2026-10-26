@@ -84,7 +84,7 @@ Date: 2026-10-26
 ## 对已接受记录的作用
 
 - **部分停用（扩成）** ADR-0075 决定一「`network-routing` 不建立读取 `parcel-shipment` 地址的端口」一句：它被 ADR-0215 决定二停用的适用场景「仅限受理之后、不由小包托运信封触发的路由复核」再加一格——授权角色据复核建议形成改路决定，经同一个消费侧适配器取受理基线那一版提交的地理投影（决定三）。**适用场景**：只限 NR 授权改路决定编排；可达性判断、初始路由与收寄采用触发的复核照旧随请求携带。停用理由与 ADR-0215 同一前提：受理基线一经固定不再改写。决定二、决定三与其余各条不变。
-- ADR-0215：无条款停用。决定二说的是复核取投影的读法，本记录给另一种判断用同一读法，不改它。
+- ADR-0215：适用场景一句被扩，见其 Status。决定二说的是复核取投影的读法，本记录给另一种判断用同一读法，不改它。
 - ADR-0301：无条款停用。决定三「交接与收寄采用两路共用它」说的是读口今天的使用者；本记录让授权改路决定成为第三个使用者，读口、答格与「只交地理维」都不变。
 - ADR-0272：无条款停用，也不是按口解。它的决定一写明「适用于复核编排形成的每一份新计划」，授权改路决定不经复核编排，不在其内；本记录为它另定生效时刻（决定四），不借它的条款。代价是它决定三「复核能判的下一次触发都不早于……这一次形成的计划的生效时刻」那条论证对决定形成的计划不成立，见越权风险点 6。
 - ADR-0235：无条款停用。当前控制位置的定义与判断键锁照旧；决定借同一把锁，不进当前位置。
@@ -113,13 +113,13 @@ Date: 2026-10-26
 3. **授权角色可以选建议里比最低成本贵的合格候选**（NR owner）。CONTEXT「加价改路由授权角色决定」认这一格；并列建议里也可以选并列之外的合格候选，排序只是建议。owner 若要把并列建议限在并列那几家之间，决定口加一道核即可。
 4. **决定不另发信封**（NR、TF owner）。与复评新计划同缺（demo-chain-gaps/34）：决定形成的计划落库，不交给运输准备。
 5. **授予粒度**（PC owner，票 product-strategy-boundary/07）。一种授予覆盖失效线上全部建议，包括加价的与揽收的；职责分离（建议的复核者与决定者）今天无从谈起，复核是机器。
-6. **建议与决定之间的控制触发晚到**（NR owner）。一次控制触发的业务时间落在建议与决定之间、处理却在决定之后（包裹在无当前有效路由期间仍被交进下一个节点，信封又晚到），它不早于当前控制位置，照判，起点却是从决定时刻才生效的新计划：判出失效或改善替代时离场早于生效，离场门拒，整封信封响亮失败、按派发预算重投。今天不吞这一格。补法要另裁，可选的有：这一格入账为未判（扩 ADR-0235 的未判原因）、决定推当前控制位置、或这次触发对着它业务时间那一刻的无路由状态判；归票 [docs-consistency/code/99](../../.scratch/docs-consistency/code/99-a-control-trigger-between-a-suggestion-and-its-decision-reviews-a-plan-not-yet-effective.md)。
+6. **建议与决定之间的控制触发晚到**（NR owner）。一次控制触发的业务时间落在建议与决定之间、处理却在决定之后（包裹在无当前有效路由期间仍被交进下一个节点，信封又晚到），它不早于当前控制位置，照判，起点却是从决定时刻才生效的新计划：判出失效或改善替代时离场早于生效，离场门拒，整封信封响亮失败、按派发预算重投。今天不吞这一格。补法要另裁，可选的有：这一格入账为未判（扩 ADR-0235 的未判原因）、决定推当前控制位置、或这次触发对着它业务时间那一刻的无路由状态判；归票 [docs-consistency/code/100](../../.scratch/docs-consistency/code/100-a-control-trigger-between-a-suggestion-and-its-decision-reviews-a-plan-not-yet-effective.md)。
 7. **仍适用线上的建议**（NR owner）。今天只有失效线形成建议，决定编排只认失效那一线；票 code/17 让仍适用线也形成建议时，决定要替代一份当前有效计划，那时随 code/17 一并定。
 
 ## Links
 
 - [ADR-0075](./0075-customer-address-is-carried-with-the-routing-request.md)：前驱——部分停用（扩成）决定一被 ADR-0215 停用的适用场景，见「对已接受记录的作用」
-- [ADR-0215](./0215-a-handover-into-a-node-triggers-route-reassessment-and-reads-the-baseline-geo-projection.md)、[ADR-0301](./0301-parcel-shipment-offers-an-acceptance-baseline-geo-projection-and-reassessment-no-longer-reads-the-whole-request.md)：受理基线地理投影的读法与读口，无条款停用
+- [ADR-0215](./0215-a-handover-into-a-node-triggers-route-reassessment-and-reads-the-baseline-geo-projection.md)、[ADR-0301](./0301-parcel-shipment-offers-an-acceptance-baseline-geo-projection-and-reassessment-no-longer-reads-the-whole-request.md)：受理基线地理投影的读法与读口；ADR-0215 的适用场景一句被扩，见其 Status，ADR-0301 无条款停用
 - [ADR-0235](./0235-route-reassessment-settles-what-a-retry-cannot-change-and-does-not-judge-triggers-older-than-the-current-position.md)：当前控制位置与判断键锁
 - [ADR-0272](./0272-a-plan-formed-by-route-reassessment-takes-effect-at-the-trigger-business-time.md)：复核形成的计划的生效时刻，不适用于决定形成的计划
 - [ADR-0249](./0249-offsite-pickup-reassessment-checks-hard-constraints-only-and-does-not-establish-a-controllable-node.md)：揽收建议的决定从首个节点生效
@@ -128,4 +128,4 @@ Date: 2026-10-26
 - [ADR-0029](./0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md)、[ADR-0022](./0022-http-status-carries-answer-formed-not-business-verdict.md)：答复按恢复动作分格、HTTP 状态只答有没有形成答案
 - [ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)：机制、产品策略与租户取值三分
 - [network-routing CONTEXT](../domain/network-routing/CONTEXT.md)、[UC-NR-003](../application/network-routing/UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md)
-- 票 `.scratch/docs-consistency/code/29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md`；后继票 `.scratch/docs-consistency/code/97-initial-route-tie-has-no-authorized-decision-face.md`、`.scratch/docs-consistency/code/99-a-control-trigger-between-a-suggestion-and-its-decision-reviews-a-plan-not-yet-effective.md`
+- 票 `.scratch/docs-consistency/code/29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md`；后继票 `.scratch/docs-consistency/code/97-initial-route-tie-has-no-authorized-decision-face.md`、`.scratch/docs-consistency/code/100-a-control-trigger-between-a-suggestion-and-its-decision-reviews-a-plan-not-yet-effective.md`
