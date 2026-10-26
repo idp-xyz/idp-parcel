@@ -130,7 +130,7 @@ func TestASellEvaluationRequestMissingAnyCellIsNotFormed(t *testing.T) {
 }
 
 // Covers: ADR-0190 决定五的状态格——登记时`已提交`，其余各格由形成那一半记；只有`已形成`带费用标识；词表外的拒。
-// `未形成`一格由 ADR-0229 决定三加进来。
+// `未形成`一格由 ADR-0229 决定三加进来，`负向结束（零额）`一格由 ADR-0306 决定二加进来；只有停下的四格带停因。
 func TestTheSellEvaluationRequestStateIsAClosedSetWhereOnlyFormedCarriesACharge(t *testing.T) {
 	for name, want := range map[string]domain.SellEvaluationRequestState{
 		"SUBMITTED":        domain.SellRequestSubmitted,
@@ -139,6 +139,7 @@ func TestTheSellEvaluationRequestStateIsAClosedSetWhereOnlyFormedCarriesACharge(
 		"UNRATABLE":        domain.SellRequestUnratable,
 		"CONFLICT":         domain.SellRequestConflict,
 		"NOT_FORMED":       domain.SellRequestNotFormed,
+		"ZERO_TOTAL":       domain.SellRequestZeroTotal,
 	} {
 		got, err := domain.SellEvaluationRequestStateFromName(name)
 		if err != nil || got != want || got.String() != name {
@@ -146,6 +147,10 @@ func TestTheSellEvaluationRequestStateIsAClosedSetWhereOnlyFormedCarriesACharge(
 		}
 		if got.RecordsFormedCharge() != (want == domain.SellRequestFormed) {
 			t.Fatalf("%s 带费用标识 = %v，只有已形成该带", name, got.RecordsFormedCharge())
+		}
+		stopped := want != domain.SellRequestSubmitted && want != domain.SellRequestFormed && want != domain.SellRequestZeroTotal
+		if got.CarriesStopCause() != stopped {
+			t.Fatalf("%s 带停因 = %v，want %v", name, got.CarriesStopCause(), stopped)
 		}
 	}
 	for _, name := range []string{"", "STALLED", "formed", "COMPLETED"} {
@@ -206,6 +211,21 @@ func TestASellEvaluationRequestConclusionPairsFormedWithItsChargeAndStopsWithThe
 	}
 	if _, err := domain.NewFormedSellEvaluationRequestConclusion(domain.CustomerChargeID{}); !errors.Is(err, domain.ErrInvalidSellEvaluationRequest) {
 		t.Fatalf("已形成却没有费用 err = %v，想要拒", err)
+	}
+	// AT-SA-215：`负向结束（零额）`既不带费用也不带停因，与`已形成`、停下的各格都比不相同。
+	zero := domain.NewZeroTotalSellEvaluationRequestConclusion()
+	if zero.State() != domain.SellRequestZeroTotal || !zero.StoppedAt().IsZero() {
+		t.Fatalf("零额结论 = %s 停于 %v", zero.State(), zero.StoppedAt())
+	}
+	if _, ok := zero.FormedCharge(); ok {
+		t.Fatal("零额结论带了费用标识")
+	}
+	if _, stopped := zero.StopCause(); stopped {
+		t.Fatal("零额结论带了停因")
+	}
+	if !zero.Same(domain.SellRequestZeroTotal, domain.CustomerChargeID{}, domain.EvaluationStopCauseInvalid) ||
+		zero.Same(domain.SellRequestFormed, charge, domain.EvaluationStopCauseInvalid) {
+		t.Fatal("零额结论的 Same 没按状态、费用与停因一起比")
 	}
 	for cause, state := range map[domain.EvaluationStopCause]domain.SellEvaluationRequestState{
 		domain.StopEvaluationPendingJudgment:      domain.SellRequestPendingJudgment,

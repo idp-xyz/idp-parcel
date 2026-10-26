@@ -139,6 +139,27 @@ func TestEvaluatePricingFailsWithoutFormalTotalWhenDeductionExceedsSubtotal(t *t
 	}
 }
 
+// Covers: 计价那一半的边界（ADR-0306 决定一引的事实，复核报告 M12）——扣减恰好扣到零不是负合计：评价落成已完成、合计为零，
+// 不带 NEGATIVE_TOTAL；只有扣过了头才答失败（TestEvaluatePricingFailsWithoutFormalTotalWhenDeductionExceedsSubtotal）。结算据此把零额读成负向结束，不当两侧矛盾。
+func TestEvaluatePricingCompletesWithAZeroTotalWhenADeductionExactlyEqualsTheSubtotal(t *testing.T) {
+	plan := syntheticPlan(t, "zero", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", domain.PricingWeightActualOnly, []domain.FixedChargeRule{
+		fixedRule(t, "whole-discount", domain.ChargeEffectDeduct, "10", 1),
+	})
+	evaluation := evaluate(t, "eval-zero", plan, syntheticInput(t, "1", "Z1"))
+	if evaluation.Status() != domain.EvaluationCompleted {
+		t.Fatalf("evaluation = %s issues = %#v", evaluation.Status(), evaluation.Issues())
+	}
+	for _, issue := range evaluation.Issues() {
+		if issue.Code() == "NEGATIVE_TOTAL" {
+			t.Fatalf("扣到零被当成了负合计：%#v", evaluation.Issues())
+		}
+	}
+	total, ok := evaluation.Total()
+	if !ok || !total.Amount().IsZero() {
+		t.Fatalf("total = %v %v，want 零", total, ok)
+	}
+}
+
 func TestBuyAndSellPlansRemainIndependentAndReplayUsesFrozenManifest(t *testing.T) {
 	sellPlan := syntheticPlan(t, "sell-independent", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "15", domain.PricingWeightActualOnly, nil)
 	buyPlan := syntheticPlan(t, "buy-independent", domain.PricingDirectionBuy, domain.PricingPurposeSupplierCost, "10", domain.PricingWeightActualOnly, nil)

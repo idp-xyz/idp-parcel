@@ -158,8 +158,9 @@ func (request SellEvaluationRequest) ResumeBasis() ResumeBasis { return request.
 
 // SellEvaluationRequestState 是请求册上的状态格（ADR-0190 决定五）。登记时是`已提交`；评价回来之后由形成那一半改记
 // 其余各格之一：形成了预估客户费用是`已形成`，映不全或映到多个费用项目是`待判断`（AT-SA-174），评价不可计价或
-// 适用冲突各记一格；计价没形成评价、或形成的是一份失败的评价，记`未形成`（ADR-0229 决定三）。除`已提交`与`已形成`
-// 外，每一格都带停因，状态是停因的粗分。状态留在册上，入账不重投之后仍可查。
+// 适用冲突各记一格；计价没形成评价、或形成的是一份失败的评价，记`未形成`（ADR-0229 决定三）；评价已完成而合计为零
+// 记`负向结束（零额）`（ADR-0306 决定二）。停下的各格（`待判断`、`不可计价`、`冲突`、`未形成`）都带停因，状态是停因的
+// 粗分；`已提交`、`已形成`与`负向结束（零额）`不带。状态留在册上，入账不重投之后仍可查。
 type SellEvaluationRequestState uint8
 
 const (
@@ -170,6 +171,9 @@ const (
 	SellRequestUnratable
 	SellRequestConflict
 	SellRequestNotFormed
+	// SellRequestZeroTotal：评价已完成而合计为零。是结论不是停下——不带停因、不进续办队列，补登任何参数都不改这张卡对
+	// 这件包裹给出的价格；也不带费用标识，零额不成行。
+	SellRequestZeroTotal
 )
 
 func (state SellEvaluationRequestState) String() string {
@@ -186,8 +190,21 @@ func (state SellEvaluationRequestState) String() string {
 		return "CONFLICT"
 	case SellRequestNotFormed:
 		return "NOT_FORMED"
+	case SellRequestZeroTotal:
+		return "ZERO_TOTAL"
 	default:
 		return ""
+	}
+}
+
+// CarriesStopCause 报告这一格是否必带停因：停下的各格带，`已提交`、`已形成`与`负向结束（零额）`不带。库上的 CHECK 守
+// 同一条，适配器重建行时按它复核。
+func (state SellEvaluationRequestState) CarriesStopCause() bool {
+	switch state {
+	case SellRequestPendingJudgment, SellRequestUnratable, SellRequestConflict, SellRequestNotFormed:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -202,7 +219,7 @@ func (state SellEvaluationRequestState) RecordsFormedCharge() bool {
 func SellEvaluationRequestStateFromName(name string) (SellEvaluationRequestState, error) {
 	for _, candidate := range []SellEvaluationRequestState{
 		SellRequestSubmitted, SellRequestFormed, SellRequestPendingJudgment, SellRequestUnratable, SellRequestConflict,
-		SellRequestNotFormed,
+		SellRequestNotFormed, SellRequestZeroTotal,
 	} {
 		if candidate.String() == name {
 			return candidate, nil
@@ -253,9 +270,9 @@ func SellRequestStateOf(cause EvaluationStopCause) SellEvaluationRequestState {
 	return sellRequestStateOf(cause)
 }
 
-// SellEvaluationRequestConclusion 是给一份请求下的结论：`已形成`连同那笔预估客户费用的标识，或停下连同停因。状态格由
-// 停因推出，不另收——分开收就能写出「不可计价却记着映射不全」。库上的 CHECK 守同一组配对。`已提交`不是结论：那是
-// 登记时的起点，结论不会把请求改回去。
+// SellEvaluationRequestConclusion 是给一份请求下的结论：`已形成`连同那笔预估客户费用的标识，`负向结束（零额）`，或停下
+// 连同停因。停下时状态格由停因推出，不另收——分开收就能写出「不可计价却记着映射不全」。库上的 CHECK 守同一组配对。
+// `已提交`不是结论：那是登记时的起点，结论不会把请求改回去。
 type SellEvaluationRequestConclusion struct {
 	state     SellEvaluationRequestState
 	charge    CustomerChargeID
@@ -269,6 +286,11 @@ func NewFormedSellEvaluationRequestConclusion(charge CustomerChargeID) (SellEval
 		return SellEvaluationRequestConclusion{}, fmt.Errorf("%w: a formed conclusion needs its charge", ErrInvalidSellEvaluationRequest)
 	}
 	return SellEvaluationRequestConclusion{state: SellRequestFormed, charge: charge}, nil
+}
+
+// NewZeroTotalSellEvaluationRequestConclusion 是`负向结束（零额）`那一格（ADR-0306 决定二）：不带费用标识，也不带停因。
+func NewZeroTotalSellEvaluationRequestConclusion() SellEvaluationRequestConclusion {
+	return SellEvaluationRequestConclusion{state: SellRequestZeroTotal}
 }
 
 // NewStoppedSellEvaluationRequestConclusion 是停下的那几格：停因必须是能出现在 SELL 请求册上的计价或采用那两段之一。
@@ -285,7 +307,7 @@ func NewStoppedSellEvaluationRequestConclusion(cause EvaluationStopCause, stoppe
 	return SellEvaluationRequestConclusion{state: state, cause: cause, stoppedAt: stoppedAt.UTC()}, nil
 }
 
-// StoppedAt 是记下停因的时刻；`已形成`为零值。
+// StoppedAt 是记下停因的时刻；`已形成`与`负向结束（零额）`为零值。
 func (conclusion SellEvaluationRequestConclusion) StoppedAt() time.Time { return conclusion.stoppedAt }
 
 func (conclusion SellEvaluationRequestConclusion) State() SellEvaluationRequestState {
@@ -297,7 +319,7 @@ func (conclusion SellEvaluationRequestConclusion) FormedCharge() (CustomerCharge
 	return conclusion.charge, conclusion.state.RecordsFormedCharge()
 }
 
-// StopCause 交回停下时的停因；`已形成`第二个返回值为假。
+// StopCause 交回停下时的停因；`已形成`与`负向结束（零额）`第二个返回值为假。
 func (conclusion SellEvaluationRequestConclusion) StopCause() (EvaluationStopCause, bool) {
 	return conclusion.cause, conclusion.cause != EvaluationStopCauseInvalid
 }

@@ -121,8 +121,8 @@ func sellRequestLineageColumns(request domain.SellEvaluationRequest) (*string, *
 // 改不到就读回比内容，同一份结论答重放，另一份答另有结论，都不覆盖。并发的两拍里后到者在行锁上等先到者提交，
 // 再按提交后的行判，所以不需要先读后写。
 //
-// 状态格与费用标识的配对由 domain.SellEvaluationRequestConclusion 的构造守，库上的 CHECK 守同一条；`已形成`的费用
-// 标识另有外键指向客户费用，费用行没在同一事务里先落，这一笔就报错、整笔回滚。
+// 状态格与费用标识、停因的配对由 domain.SellEvaluationRequestConclusion 的构造守，库上的 CHECK 守同一条；`已形成`的费用
+// 标识另有外键指向客户费用，费用行没在同一事务里先落，这一笔就报错、整笔回滚。`负向结束（零额）`两格都不写。
 func (registry *SellEvaluationRequests) RecordConclusion(
 	ctx context.Context,
 	key ports.SellEvaluationRequestKey,
@@ -390,7 +390,7 @@ func rebuildSellEvaluationRequest(
 		if domain.SellRequestStateOf(cause) != state {
 			return none, fmt.Errorf("%s is %s yet carries stop cause %s", columns.requestID, state, cause)
 		}
-	} else if state != domain.SellRequestSubmitted && state != domain.SellRequestFormed {
+	} else if state.CarriesStopCause() {
 		return none, fmt.Errorf("%s is %s without a stop cause", columns.requestID, state)
 	}
 	return ports.SellEvaluationRequestRecord{

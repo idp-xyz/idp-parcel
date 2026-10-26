@@ -17,7 +17,8 @@ const (
 	EvaluationRequestStopped
 	// EvaluationRequestStopReplayed：册上已是同一个停因，没有再写。
 	EvaluationRequestStopReplayed
-	// EvaluationRequestStoppedOtherwise：册上已是另一个停因，不覆盖——一份请求只停一次，换个停因就是两侧说法矛盾。
+	// EvaluationRequestStoppedOtherwise：册上已是另一个停因或已记`负向结束（零额）`，不覆盖——一份请求只停一次，换个停因
+	// 就是两侧说法矛盾。
 	EvaluationRequestStoppedOtherwise
 )
 

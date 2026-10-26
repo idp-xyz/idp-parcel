@@ -46,6 +46,9 @@ const (
 	// ExpectedCostOccurrenceInvalidated：评价所依的那一版发生项已失效（结算已记下），这份评价不再形成任何成本（ADR-0232 决定七）。是定局：
 	// 失效不会撤回，重投还是这一格。
 	ExpectedCostOccurrenceInvalidated
+	// ExpectedCostZeroTotal：评价已完成而合计为零，首版与纠错版本都不成行（ADR-0306 决定一、三）。是定局：评价不可变，重投
+	// 还是零。判在发生项失效之后——那一版已失效时答失效，不答零额。
+	ExpectedCostZeroTotal
 )
 
 func (outcome ExpectedCostOutcome) String() string {
@@ -68,6 +71,8 @@ func (outcome ExpectedCostOutcome) String() string {
 		return "EXPECTED_COST_UNDECIDED"
 	case ExpectedCostOccurrenceInvalidated:
 		return "OCCURRENCE_INVALIDATED"
+	case ExpectedCostZeroTotal:
+		return "EVALUATION_ZERO_TOTAL"
 	default:
 		return ""
 	}
@@ -297,6 +302,10 @@ func (handler *FormSupplierExpectedCostHandler) Handle(
 		// 原币与合同结算币不同而评价未携带换算步骤：保持待判断并记录缺口，不自行取汇率
 		// 补算，也不以原币金额充当结算币金额（AT-SA-177）。
 		return expectedCostUndecided(ConversionStepMissing, command.Evaluation.String(), err), nil
+	}
+	if errors.Is(err, domain.ErrZeroEvaluationTotal) {
+		return ExpectedCostResult{outcome: ExpectedCostZeroTotal,
+			continuation: costContinuation("EVALUATION_ZERO_TOTAL", command.Evaluation.String())}, nil
 	}
 	if err != nil {
 		return ExpectedCostResult{outcome: ExpectedCostNotAccepted}, nil

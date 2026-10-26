@@ -102,3 +102,28 @@ func TestALateEvaluationOfAnEarlierVersionIsNotAppendedAfterTheSupersedingOne(t 
 		t.Fatalf("重投 = %s err=%v，成本 %d 份", settled.Outcome(), err, len(fixture.registry.costs))
 	}
 }
+
+// Covers: AT-SA-215 落在纠错那一路——失效之后长出的替代版本 v3，评价合计为零：不接纠错版本，链头仍是失效纠错版本（当前有效
+// 预期成本照旧为空），v3 的请求记`负向结束（零额）`（ADR-0306 决定三）。
+func TestASupersedingEvaluationTotallingZeroAppendsNoCorrection(t *testing.T) {
+	fixture := newRequestedCostFixture(t)
+	fixture.requests.register(t, "EVREQ-SYN-3", "occurrence-7/v3")
+	if _, err := fixture.handle(t, "buy-eval-1", "EVREQ-SYN-1"); err != nil {
+		t.Fatalf("首版：%v", err)
+	}
+	withdraw(t, withdrawalHandler(t, fixture), "occurrence-7/v2", "occurrence-7/v1")
+	zero := completedAdoption(t, "buy-eval-3")
+	zero.OriginalMinor, zero.SettlementMinor = 0, 0
+	fixture.evaluations.adoptions["buy-eval-3"] = zero
+
+	result, err := fixture.handle(t, "buy-eval-3", "EVREQ-SYN-3")
+	if err != nil || result.Outcome() != application.RequestedSupplierExpectedCostZeroTotal {
+		t.Fatalf("零额替代评价 = %s err=%v", result.Outcome(), err)
+	}
+	if len(fixture.registry.costs) != 2 {
+		t.Fatalf("零额也接了纠错：首版、失效纠错版本之外共 %d 份", len(fixture.registry.costs))
+	}
+	if record := fixture.requests.records["tenant-1/EVREQ-SYN-3"]; !record.ZeroTotal {
+		t.Fatal("v3 的请求没记零额")
+	}
+}

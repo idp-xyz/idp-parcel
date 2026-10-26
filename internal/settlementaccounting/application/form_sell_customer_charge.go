@@ -24,6 +24,9 @@ const (
 	SellChargeConflict
 	SellChargeNotAccepted
 	SellChargeUndecided
+	// SellChargeZeroTotal：评价已完成而合计为零，形成门不成行（ADR-0306 决定一）。是定局，不是未受理：评价不可变，重投
+	// 还是零；包裹计费时点那一路据此把请求记成`负向结束（零额）`。
+	SellChargeZeroTotal
 )
 
 func (outcome SellChargeOutcome) String() string {
@@ -40,6 +43,8 @@ func (outcome SellChargeOutcome) String() string {
 		return "SOURCE_NOT_ACCEPTED"
 	case SellChargeUndecided:
 		return "SELL_CHARGE_UNDECIDED"
+	case SellChargeZeroTotal:
+		return "EVALUATION_ZERO_TOTAL"
 	default:
 		return ""
 	}
@@ -166,6 +171,9 @@ func (handler *FormSellCustomerChargeHandler) Handle(
 		FormedAt:           command.FormedAt,
 		SourceOccurredAt:   command.SourceOccurredAt,
 	})
+	if errors.Is(err, domain.ErrZeroEvaluationTotal) {
+		return SellChargeResult{outcome: SellChargeZeroTotal}, nil
+	}
 	if err != nil {
 		return SellChargeResult{outcome: SellChargeNotAccepted}, nil
 	}

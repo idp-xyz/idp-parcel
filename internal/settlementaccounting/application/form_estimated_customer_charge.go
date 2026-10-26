@@ -12,8 +12,9 @@ import (
 var (
 	// ErrUnexpectedSellEvaluationOutcome 说明采用快照带来了封闭集合以外的评价结果。
 	ErrUnexpectedSellEvaluationOutcome = errors.New("settlement accounting: unexpected sell evaluation outcome")
-	// ErrUnexpectedSellChargeFormation 说明形成编排对一份刚读到`已完成`的评价答了形成与未决以外的结果：未受理（例如
-	// 合计为零，形成门拒）、不可计价或冲突。评价不可变，重投还是同一个答案，所以不作未决。
+	// ErrUnexpectedSellChargeFormation 说明形成编排对一份刚读到`已完成`的评价答了形成、零额与未决以外的结果：未受理（例如
+	// 同币种两额不等、原币为零而结算币不为零，形成门拒）、不可计价或冲突。评价不可变，重投还是同一个答案，所以不作未决。
+	// 合计为零不在此列，记`负向结束（零额）`（ADR-0306 决定二）。
 	ErrUnexpectedSellChargeFormation = errors.New("settlement accounting: unexpected sell charge formation outcome")
 	// ErrSellEvaluationRequestConcludedOtherwise 说明本编排刚在同一事务里读到`已提交`，记结论时册上却已是另一份结论。
 	// 同一份评价算出的结论是确定的，撞上另一份只可能是映射册在两拍之间变了而两拍又并发；整笔回滚，不覆盖先到者。
@@ -34,8 +35,9 @@ type EstimatedCustomerChargeOutcome uint8
 
 const (
 	EstimatedCustomerChargeOutcomeInvalid EstimatedCustomerChargeOutcome = iota
-	// EstimatedCustomerChargeConcluded：请求册上记下了结论——`已形成`（连同费用），或停下连同停因：`待判断`、`不可计价`、
-	// `冲突`、`未形成`（评价失败）。停下的请求等补登或运营续办另起下一代（ADR-0229 决定二）。
+	// EstimatedCustomerChargeConcluded：请求册上记下了结论——`已形成`（连同费用）、`负向结束（零额）`（不建费用、不续办，
+	// ADR-0306 决定二），或停下连同停因：`待判断`、`不可计价`、`冲突`、`未形成`（评价失败）。停下的请求等补登或运营续办
+	// 另起下一代（ADR-0229 决定二）。
 	EstimatedCustomerChargeConcluded
 	// EstimatedCustomerChargeAlreadyConcluded：请求早已有结论，本次什么都不写（重放）。一份请求只下一次结论；补登之后
 	// 再问是下一代的事，不改这一份。
@@ -163,6 +165,8 @@ func NewFormEstimatedCustomerChargeHandler(deps FormEstimatedCustomerChargeDeps)
 //     `待判断`，各带各的停因，不建占位费用，入账不重投。卡与映射是租户取值，补登之后由「参数已登记」按停因另起下一代。
 //   - 不可计价、冲突——照记那一格（AT-SA-175：不形成任何费用行，不转待判断反复重试）。
 //   - 失败——记`未形成`，停因是评价失败。评价不可变，重投也不会变。
+//   - 已完成而合计为零——形成门不成行，记`负向结束（零额）`，不带停因（ADR-0306 决定二）。判在币种核对与映射之后：币种
+//     对不上仍是矛盾，映射不全仍记`待判断`——零额由形成门一处判，本编排不碰金额。
 //
 // 两侧说法矛盾的格上抛错误、不入账：回指的请求不在册上，结算币种对不上请求快照。
 func (handler *FormEstimatedCustomerChargeHandler) Handle(
@@ -238,6 +242,8 @@ func (handler *FormEstimatedCustomerChargeHandler) Handle(
 			return EstimatedCustomerChargeResult{}, err
 		}
 		return handler.conclude(ctx, key, conclusion)
+	case SellChargeZeroTotal:
+		return handler.conclude(ctx, key, domain.NewZeroTotalSellEvaluationRequestConclusion())
 	case SellChargeUndecided:
 		return undecidedEstimatedCharge(SellChargeFormationUndecided, fmt.Errorf("sell charge formation: %s", formed.UndecidedReason())), nil
 	default:

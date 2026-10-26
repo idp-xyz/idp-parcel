@@ -59,6 +59,12 @@ type formationFixture struct {
 // 评价（USD 12.50），再把真消费门、处理方与两层形成编排接起来。
 func newFormationFixture(t *testing.T, request string) *formationFixture {
 	t.Helper()
+	return newFormationFixtureTotalling(t, request, 1250)
+}
+
+// newFormationFixtureTotalling 同 newFormationFixture，评价合计取 minor 分。
+func newFormationFixtureTotalling(t *testing.T, request string, minor int64) *formationFixture {
+	t.Helper()
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
@@ -120,15 +126,15 @@ func newFormationFixture(t *testing.T, request string) *formationFixture {
 		Request:            formationValue(t, sadomain.NewEvaluationRequestID, request),
 		RuleVersion:        formationValue(t, sadomain.NewPurchaseRuleVersionReference, "SYN-BUY-CARD@v1"),
 		OriginalCurrency:   usd,
-		OriginalMinor:      1250,
+		OriginalMinor:      minor,
 		SettlementCurrency: usd,
-		SettlementMinor:    1250,
+		SettlementMinor:    minor,
 	}}
 	inner := saapplication.NewFormSupplierExpectedCostHandler(saapplication.FormSupplierExpectedCostDeps{
 		Evaluations: view, Costs: costs, Registry: costs, Clock: formationClock{},
 	})
 	outer, err := saapplication.NewFormRequestedSupplierExpectedCostHandler(saapplication.FormRequestedSupplierExpectedCostDeps{
-		Requests: requests, Costs: inner, Stops: requests, Clock: formationClock{},
+		Requests: requests, Costs: inner, Stops: requests, ZeroTotals: requests, Clock: formationClock{},
 	})
 	if err != nil {
 		t.Fatalf("形成编排外层：%v", err)
@@ -209,5 +215,28 @@ func TestABuyEvaluationReferringToAnUnrecordedRequestRollsBackThroughTheGate(t *
 	}
 	if rows := fixture.inboxRows(t); rows != 0 {
 		t.Fatalf("矛盾时 inbox 记了 %d 行账", rows)
+	}
+}
+
+// Covers: AT-SA-215 的 BUY 半边在真库上——合计为零的已完成评价经真消费门入账、inbox 记一笔账，不落预期成本；BUY 请求册
+// 记`负向结束（零额）`、不记停因，所以续办队列（按停因取件）取不到它；同一封重投被 inbox 跳过（ADR-0306 决定三）。
+func TestABuyEvaluationTotallingZeroEndsTheRequestThroughTheGate(t *testing.T) {
+	fixture := newFormationFixtureTotalling(t, "EVREQ-SYN-1", 0)
+
+	for _, eventID := range []string{"SYN-EVAL-01", "SYN-EVAL-01"} {
+		if err := fixture.consumer.Consume(t.Context(), evaluationEnvelope(t, eventID)); err != nil {
+			t.Fatalf("投递 %s：零额被当成了错误：%v", eventID, err)
+		}
+	}
+	if rows := fixture.costRows(t); rows != 0 {
+		t.Fatalf("零额落了 %d 行预期成本", rows)
+	}
+	if rows := fixture.inboxRows(t); rows != 1 {
+		t.Fatalf("inbox 行数 = %d, want 1（入账、重投跳过）", rows)
+	}
+	if rows := fixture.count(t, `SELECT count(*) FROM settlement_accounting.evaluation_request
+		WHERE tenant_id = $1 AND request_id = $2 AND negative_end = 'ZERO_TOTAL' AND stop_cause IS NULL`,
+		"tenant-a", "EVREQ-SYN-1"); rows != 1 {
+		t.Fatalf("请求册上记零额、无停因的行 = %d, want 1", rows)
 	}
 }

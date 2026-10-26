@@ -9,7 +9,23 @@ var (
 	ErrInvalidChargeOccurrence = errors.New("settlement accounting: invalid transport charge occurrence")
 	ErrInvalidSupplierCost     = errors.New("settlement accounting: invalid supplier expected cost")
 	ErrConversionStepMissing   = errors.New("settlement accounting: the evaluation carries no conversion step")
+	// ErrZeroEvaluationTotal 说明采用的评价在合同结算币上合计为零（ADR-0306 决定一）。零是这张卡给出的价格，既不是缺口
+	// 也不是坏输入：形成门不为它建费用行或成本行，另答这一格、不并入未受理，形成编排据此把请求记成负向结束（零额）。
+	ErrZeroEvaluationTotal = errors.New("settlement accounting: the evaluation totals zero in the settlement currency")
 )
+
+// zeroTotalGate 判一组已过币种与换算核对的金额。结算币合计为零答 ErrZeroEvaluationTotal；原币为零而结算币不为零答
+// invalid——换算造不出这种数。调用方把它排在币种与换算核对之后：跨币种缺换算步骤、同币种两额不等都比「合计为零」先说话，
+// 否则一份本该作矛盾上抛的评价会被零额那一格静默吞下。
+func zeroTotalGate(originalMinor, settlementMinor int64, invalid error) error {
+	if settlementMinor == 0 {
+		return ErrZeroEvaluationTotal
+	}
+	if originalMinor == 0 {
+		return invalid
+	}
+	return nil
+}
 
 // ChargeOccurrenceID 指名 transport-fulfillment 拥有的运输收费发生项。发生项不是
 // 金额、账单主张或审核应付——这里只引用。
@@ -175,7 +191,8 @@ type SupplierExpectedCost struct {
 
 // FormSupplierExpectedCost 形成首个预期成本版本。原币与合同结算币不同时换算步骤
 // 必备（AT-SA-177 的构造面）：评价未携带换算步骤就保持待判断，不自行取汇率补算，
-// 也不以原币金额直接充当结算币金额——那两条路在这里都走不通，只能停。
+// 也不以原币金额直接充当结算币金额——那两条路在这里都走不通，只能停。评价合计为零
+// 答 ErrZeroEvaluationTotal、不成行（ADR-0306 决定一）。
 func FormSupplierExpectedCost(spec SupplierExpectedCostSpec) (SupplierExpectedCost, error) {
 	if !spec.Version.valid() ||
 		!spec.Occurrence.id.valid() ||
@@ -184,9 +201,9 @@ func FormSupplierExpectedCost(spec SupplierExpectedCostSpec) (SupplierExpectedCo
 		!spec.Agreement.valid() ||
 		!spec.Evaluation.valid() ||
 		!spec.OriginalCurrency.valid() ||
-		spec.OriginalMinor <= 0 ||
+		spec.OriginalMinor < 0 ||
 		!spec.SettlementCurrency.valid() ||
-		spec.SettlementMinor <= 0 {
+		spec.SettlementMinor < 0 {
 		return SupplierExpectedCost{}, ErrInvalidSupplierCost
 	}
 	if spec.OriginalCurrency != spec.SettlementCurrency && !spec.Conversion.valid() {
@@ -196,6 +213,9 @@ func FormSupplierExpectedCost(spec SupplierExpectedCostSpec) (SupplierExpectedCo
 		spec.OriginalMinor != spec.SettlementMinor {
 		// 同币种两个金额不一致：没有换算却造出了第二个数。
 		return SupplierExpectedCost{}, ErrInvalidSupplierCost
+	}
+	if err := zeroTotalGate(spec.OriginalMinor, spec.SettlementMinor, ErrInvalidSupplierCost); err != nil {
+		return SupplierExpectedCost{}, err
 	}
 	return SupplierExpectedCost{
 		version:            spec.Version,
@@ -291,8 +311,8 @@ func (cost SupplierExpectedCost) AppendCorrection(spec CostCorrectionSpec) (Supp
 		!spec.RuleVersion.valid() ||
 		!spec.Agreement.valid() ||
 		!spec.Evaluation.valid() ||
-		!spec.OriginalCurrency.valid() || spec.OriginalMinor <= 0 ||
-		spec.SettlementMinor <= 0 || !spec.Reason.valid() {
+		!spec.OriginalCurrency.valid() || spec.OriginalMinor < 0 ||
+		spec.SettlementMinor < 0 || !spec.Reason.valid() {
 		return SupplierExpectedCost{}, ErrInvalidSupplierCost
 	}
 	if spec.Occurrence.id != cost.occurrence.id {
@@ -304,6 +324,10 @@ func (cost SupplierExpectedCost) AppendCorrection(spec CostCorrectionSpec) (Supp
 	if spec.OriginalCurrency == cost.settlementCurrency &&
 		spec.OriginalMinor != spec.SettlementMinor {
 		return SupplierExpectedCost{}, ErrInvalidSupplierCost
+	}
+	// 新评价合计为零时不追加纠错版本：零额不成行，链头原样（ADR-0306 决定三）。
+	if err := zeroTotalGate(spec.OriginalMinor, spec.SettlementMinor, ErrInvalidSupplierCost); err != nil {
+		return SupplierExpectedCost{}, err
 	}
 	corrected := cost
 	corrected.version = spec.Version

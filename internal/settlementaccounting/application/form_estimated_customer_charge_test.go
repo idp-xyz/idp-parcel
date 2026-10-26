@@ -375,6 +375,70 @@ func TestPendingUnratableConflictAndFailedEvaluationsAreRecordedWithTheirStopCau
 	}
 }
 
+// Covers: AT-SA-215——评价已完成而合计为零是负向结束，不是两侧矛盾：请求记`负向结束（零额）`，不带停因、不带费用标识，
+// 费用库零写入，入账不重投；同一份再来一次答早有结论。判在映射之后：映射不全时仍记`待判断`（停因映射不全），补登映射续办
+// 出的下一代再答零额（ADR-0306 决定二）。
+func TestACompletedEvaluationTotallingZeroEndsTheRequestWithoutACharge(t *testing.T) {
+	fixture := newEstimatedChargeFixture(t, map[string]string{
+		"BASE_FREIGHT": "SYN-FEE-FREIGHT", "REMOTE_AREA_SURCHARGE": "SYN-FEE-FREIGHT",
+	})
+	fixture.adoption.OriginalMinor, fixture.adoption.SettlementMinor = 0, 0
+
+	result, err := fixture.handle(t)
+	if err != nil || result.Outcome() != application.EstimatedCustomerChargeConcluded || result.State() != domain.SellRequestZeroTotal {
+		t.Fatalf("结果 = %s / %s err = %v，want 记负向结束（零额）", result.Outcome(), result.State(), err)
+	}
+	if _, stopped := result.StopCause(); stopped {
+		t.Fatal("零额带了停因——它会进续办队列")
+	}
+	if _, has := result.Charge(); has {
+		t.Fatal("零额带了费用标识")
+	}
+	stored := fixture.storedState(t)
+	if stored.State != domain.SellRequestZeroTotal || stored.StopCause != domain.EvaluationStopCauseInvalid || stored.FormedCharge.String() != "" {
+		t.Fatalf("请求册 = %s / %s / %q，want ZERO_TOTAL 不带停因与费用", stored.State, stored.StopCause, stored.FormedCharge)
+	}
+	if len(fixture.charges.saved) != 0 {
+		t.Fatalf("零额建了 %d 笔费用", len(fixture.charges.saved))
+	}
+	replay, err := fixture.handle(t)
+	if err != nil || replay.Outcome() != application.EstimatedCustomerChargeAlreadyConcluded || replay.State() != domain.SellRequestZeroTotal {
+		t.Fatalf("重放 = %s / %s err = %v，want 早有结论 ZERO_TOTAL", replay.Outcome(), replay.State(), err)
+	}
+	if len(fixture.requests.concluded) != 1 || len(fixture.charges.saved) != 0 {
+		t.Fatalf("重放又写了：结论 %d 次、费用 %d 笔", len(fixture.requests.concluded), len(fixture.charges.saved))
+	}
+
+	unmapped := newEstimatedChargeFixture(t, map[string]string{"BASE_FREIGHT": "SYN-FEE-FREIGHT"})
+	unmapped.adoption.OriginalMinor, unmapped.adoption.SettlementMinor = 0, 0
+	result, err = unmapped.handle(t)
+	unmapped.assertPendingWithoutCharge(t, result, err, domain.StopFeeItemMappingIncomplete)
+
+	foreign := newEstimatedChargeFixture(t, map[string]string{
+		"BASE_FREIGHT": "SYN-FEE-FREIGHT", "REMOTE_AREA_SURCHARGE": "SYN-FEE-FREIGHT",
+	})
+	usd := mustAccountValue(t, domain.NewCurrencyCode, "USD")
+	foreign.adoption.SettlementCurrency, foreign.adoption.OriginalCurrency = usd, usd
+	foreign.adoption.OriginalMinor, foreign.adoption.SettlementMinor = 0, 0
+	if _, err := foreign.handle(t); !errors.Is(err, application.ErrSellEvaluationCurrencyMismatch) {
+		t.Fatalf("合计为零而币种对不上 err = %v，want 仍是矛盾", err)
+	}
+}
+
+// Covers: 已完成却未受理（合计不为零的坏金额，例如同币种两额不等）仍是两侧矛盾，上抛、零写入（ADR-0198 决定四余下的那一格）。
+func TestACompletedEvaluationTheGateStillRefusesIsAContradiction(t *testing.T) {
+	fixture := newEstimatedChargeFixture(t, map[string]string{
+		"BASE_FREIGHT": "SYN-FEE-FREIGHT", "REMOTE_AREA_SURCHARGE": "SYN-FEE-FREIGHT",
+	})
+	fixture.adoption.OriginalMinor = 11999
+	if _, err := fixture.handle(t); !errors.Is(err, application.ErrUnexpectedSellChargeFormation) {
+		t.Fatalf("同币种两额不等 err = %v，want ErrUnexpectedSellChargeFormation", err)
+	}
+	if stored := fixture.storedState(t); stored.State != domain.SellRequestSubmitted || len(fixture.charges.saved) != 0 {
+		t.Fatalf("矛盾时写了：请求册 = %s，费用 %d 笔", stored.State, len(fixture.charges.saved))
+	}
+}
+
 // Covers: AT-SA-189 的形成半边——`待判断`记读口分出的那一格停因，续办据此只等解得开它的那一类登记；读口没分（零值）或交来
 // 的不是评价待判断的一格，落笼统那一格。
 func TestAPendingEvaluationIsRecordedWithTheCauseTheViewClassified(t *testing.T) {

@@ -194,15 +194,16 @@ type CustomerCharge struct {
 // FormCustomerCharge 形成一笔预估或暂估费用。直接以`已确认`起步不允许——确认条件
 // 的满足是一次显式判断，不是初值。跨币种必备评价内换算步骤、同币种两额必须相等，
 // 理由与供应商侧形成门一字不差：没有换算却造出第二个数，只可能是自行取汇率补算出来
-// 的。客户费用受三件组约束由票 supplier-expected-cost-correction/04 裁定。
+// 的。客户费用受三件组约束由票 supplier-expected-cost-correction/04 裁定。评价合计为零
+// 答 ErrZeroEvaluationTotal、不成行（ADR-0306 决定一）。
 func FormCustomerCharge(spec CustomerChargeSpec) (CustomerCharge, error) {
 	if !spec.ID.valid() ||
 		!spec.FeeItem.valid() ||
 		!spec.Evaluation.valid() ||
 		!spec.OriginalCurrency.valid() ||
-		spec.OriginalMinor <= 0 ||
+		spec.OriginalMinor < 0 ||
 		!spec.SettlementCurrency.valid() ||
-		spec.SettlementMinor <= 0 ||
+		spec.SettlementMinor < 0 ||
 		spec.FormedAt.IsZero() {
 		return CustomerCharge{}, ErrInvalidCustomerCharge
 	}
@@ -216,6 +217,9 @@ func FormCustomerCharge(spec CustomerChargeSpec) (CustomerCharge, error) {
 		spec.OriginalMinor != spec.SettlementMinor {
 		// 同币种两个金额不一致：没有换算却造出了第二个数。
 		return CustomerCharge{}, ErrInvalidCustomerCharge
+	}
+	if err := zeroTotalGate(spec.OriginalMinor, spec.SettlementMinor, ErrInvalidCustomerCharge); err != nil {
+		return CustomerCharge{}, err
 	}
 	return CustomerCharge{
 		id:                 spec.ID,

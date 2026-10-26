@@ -2322,7 +2322,7 @@ func adoptDutyPaymentVerificationConsumer(
 //
 // 消费门与本体读的是同一只 BUY 读口：消费门取回指交外层，本体按评价引用自己再读结果与金额，命令上不带金额
 // （FormSupplierExpectedCostCommand 头注）。请求册与预期成本库都是真册；请求册不记状态，采用不了时在请求册上记停因
-// （ADR-0229）。
+// （ADR-0229），评价已完成而合计为零时记`负向结束（零额）`（ADR-0306）。
 func formSupplierExpectedCostOnBuyEvaluationConsumer(
 	db *bentopg.DB,
 	inboxStore *inbox.Store,
@@ -2352,8 +2352,9 @@ func formSupplierExpectedCostOnBuyEvaluationConsumer(
 			Registry:    costs,
 			Clock:       clock,
 		}),
-		Stops: requests,
-		Clock: clock,
+		Stops:      requests,
+		ZeroTotals: requests,
+		Clock:      clock,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: form requested supplier expected cost: %w", err)

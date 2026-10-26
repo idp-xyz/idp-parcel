@@ -17,8 +17,8 @@ import (
 // ErrEvaluationRequestDigestDrift 说明库里一行的合格来源引用摘要与按行上成分重算出来的不一致。
 var ErrEvaluationRequestDigestDrift = errors.New("settlement accounting postgres: evaluation request source digest drifted")
 
-// EvaluationRequests 实现 ports.EvaluationRequestRegistry（登记面）与 ports.EvaluationRequestView（只读
-// 半边），同一张表、同一份行模型——分开实现就是第二处定义。
+// EvaluationRequests 实现 ports.EvaluationRequestRegistry（登记面）、ports.EvaluationRequestView（只读半边）与停因、
+// 零额两只写口，同一张表、同一份行模型——分开实现就是第二处定义。
 //
 // 幂等由库上的唯一约束守：主键（租户+铸造 ID）拦同一份重放，（自然键、代次）拦另一个 ID 带同一组成分在同一代再来
 // （票 sa-cc/08 裁决 2；自然键是租户+主要范围+计算目的+引用集合摘要），前一代上的唯一约束拦同一份请求的第二个
@@ -35,10 +35,11 @@ func NewEvaluationRequests(db *bentopg.DB) (*EvaluationRequests, error) {
 }
 
 var (
-	_ ports.EvaluationRequestRegistry      = (*EvaluationRequests)(nil)
-	_ ports.EvaluationRequestView          = (*EvaluationRequests)(nil)
-	_ ports.EvaluationRequestStopRecorder  = (*EvaluationRequests)(nil)
-	_ ports.EvaluationRequestSuccessorView = (*EvaluationRequests)(nil)
+	_ ports.EvaluationRequestRegistry          = (*EvaluationRequests)(nil)
+	_ ports.EvaluationRequestView              = (*EvaluationRequests)(nil)
+	_ ports.EvaluationRequestStopRecorder      = (*EvaluationRequests)(nil)
+	_ ports.EvaluationRequestZeroTotalRecorder = (*EvaluationRequests)(nil)
+	_ ports.EvaluationRequestSuccessorView     = (*EvaluationRequests)(nil)
 )
 
 // Save 登记一份评价请求。撞主键或撞自然键唯一约束都交回`已存在`而不是错误：那是业务答案，编排据以按
@@ -61,9 +62,10 @@ func (registry *EvaluationRequests) Save(
 			fmt.Errorf("save evaluation request: key %q disagrees with the request %q it claims to index",
 				record.Key.Request.String(), record.Request.ID().String())
 	}
-	if record.StopCause != domain.EvaluationStopCauseInvalid {
+	if record.StopCause != domain.EvaluationStopCauseInvalid || record.ZeroTotal {
 		return ports.EvaluationRequestSaveOutcomeInvalid,
-			fmt.Errorf("save evaluation request: a registration carries no stop cause, got %q", record.StopCause.String())
+			fmt.Errorf("save evaluation request: a registration carries no stop cause and no zero total, got %q and zero total %v",
+				record.StopCause.String(), record.ZeroTotal)
 	}
 
 	executor, err := registry.db.RequireExecutor(ctx)
@@ -151,8 +153,9 @@ func (registry *EvaluationRequests) FindSuccessor(
 		key.TenantID.String(), key.Request.String())
 }
 
-// RecordStop 给一份请求记停因（ADR-0229 决定三）。UPDATE 只认还没有停因的那一行：改得到就是写下了；改不到就读回比，
-// 同一个停因答重放，另一个答另有停因，都不覆盖。并发的两拍里后到者在行锁上等先到者提交，再按提交后的行判。
+// RecordStop 给一份请求记停因（ADR-0229 决定三）。UPDATE 只认既没有停因、也没记零额的那一行：改得到就是写下了；改不到
+// 就读回比，同一个停因答重放，另一个停因或零额答另有停因，都不覆盖。并发的两拍里后到者在行锁上等先到者提交，再按提交
+// 后的行判。
 func (registry *EvaluationRequests) RecordStop(
 	ctx context.Context,
 	key ports.EvaluationRequestKey,
@@ -173,7 +176,7 @@ func (registry *EvaluationRequests) RecordStop(
 	tag, err := executor.Exec(ctx,
 		`UPDATE settlement_accounting.evaluation_request
 		    SET stop_cause = $3, stopped_at = $4
-		  WHERE tenant_id = $1 AND request_id = $2 AND stop_cause IS NULL`,
+		  WHERE tenant_id = $1 AND request_id = $2 AND stop_cause IS NULL AND negative_end IS NULL`,
 		key.TenantID.String(), key.Request.String(), cause.String(), stoppedAt.UTC())
 	if err != nil {
 		return none, fmt.Errorf("record evaluation request stop: %w", err)
@@ -188,10 +191,51 @@ func (registry *EvaluationRequests) RecordStop(
 	if !found {
 		return none, fmt.Errorf("record evaluation request stop: request %s is not in the register", key.Request)
 	}
-	if stored.StopCause == cause {
+	if !stored.ZeroTotal && stored.StopCause == cause {
 		return ports.EvaluationRequestStopReplayed, nil
 	}
 	return ports.EvaluationRequestStoppedOtherwise, nil
+}
+
+// zeroTotalEnd 是`负向结束（零额）`在 negative_end 一列上的词，库上的 CHECK 只收它。
+const zeroTotalEnd = "ZERO_TOTAL"
+
+// RecordZeroTotal 给一份请求记`负向结束（零额）`（ADR-0306 决定三）。UPDATE 只认既没有停因、也没记零额的那一行：改得到
+// 就是写下了；改不到就读回比，已是零额答重放，已有停因答已停下，都不覆盖。并发与 RecordStop 同一把行锁。
+func (registry *EvaluationRequests) RecordZeroTotal(
+	ctx context.Context,
+	key ports.EvaluationRequestKey,
+) (ports.EvaluationRequestZeroTotalEffect, error) {
+	none := ports.EvaluationRequestZeroTotalEffectInvalid
+	if strings.TrimSpace(key.TenantID.String()) == "" || strings.TrimSpace(key.Request.String()) == "" {
+		return none, fmt.Errorf("record evaluation request zero total: the tenant or the request ID in the key is blank")
+	}
+	executor, err := registry.db.RequireExecutor(ctx)
+	if err != nil {
+		return none, fmt.Errorf("record evaluation request zero total: %w", err)
+	}
+	tag, err := executor.Exec(ctx,
+		`UPDATE settlement_accounting.evaluation_request
+		    SET negative_end = $3
+		  WHERE tenant_id = $1 AND request_id = $2 AND stop_cause IS NULL AND negative_end IS NULL`,
+		key.TenantID.String(), key.Request.String(), zeroTotalEnd)
+	if err != nil {
+		return none, fmt.Errorf("record evaluation request zero total: %w", err)
+	}
+	if tag.RowsAffected() == 1 {
+		return ports.EvaluationRequestZeroTotalRecorded, nil
+	}
+	stored, found, err := registry.FindByID(ctx, key)
+	if err != nil {
+		return none, fmt.Errorf("record evaluation request zero total: %w", err)
+	}
+	if !found {
+		return none, fmt.Errorf("record evaluation request zero total: request %s is not in the register", key.Request)
+	}
+	if stored.ZeroTotal {
+		return ports.EvaluationRequestZeroTotalReplayed, nil
+	}
+	return ports.EvaluationRequestAlreadyStopped, nil
 }
 
 func (registry *EvaluationRequests) findOne(
@@ -211,21 +255,21 @@ func (registry *EvaluationRequests) findOne(
 		occurredAt, requestedAt, recordedAt               time.Time
 		feeItem, agreement, digest, requestedBy           string
 		generation                                        int
-		previous, basis, cause                            *string
+		previous, basis, cause, negativeEnd               *string
 	)
 	err = querier.QueryRow(ctx,
 		`SELECT request_id, scope_ref, purpose,
 		        occurrence_id, occurrence_reason, occurrence_version, occurred_at,
 		        fee_item, agreement_ref, source_digest,
 		        requested_at, requested_by, recorded_at,
-		        generation, previous_request_id, resume_basis, stop_cause
+		        generation, previous_request_id, resume_basis, stop_cause, negative_end
 		   FROM settlement_accounting.evaluation_request `+where,
 		args...,
 	).Scan(&requestID, &scope, &purpose,
 		&occurrenceID, &occurrenceReason, &occurrenceVersion, &occurredAt,
 		&feeItem, &agreement, &digest,
 		&requestedAt, &requestedBy, &recordedAt,
-		&generation, &previous, &basis, &cause)
+		&generation, &previous, &basis, &cause, &negativeEnd)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.EvaluationRequestRecord{}, false, nil
 	}
@@ -259,11 +303,18 @@ func (registry *EvaluationRequests) findOne(
 			return ports.EvaluationRequestRecord{}, false, fmt.Errorf("find evaluation request: %w", err)
 		}
 	}
+	// 库上的 CHECK 只收零额一个词、且与停因互斥；这里再核一次，只为迁移改坏约束时不静默。
+	zeroTotal := negativeEnd != nil
+	if zeroTotal && (*negativeEnd != zeroTotalEnd || cause != nil) {
+		return ports.EvaluationRequestRecord{}, false, fmt.Errorf("find evaluation request: %s carries negative end %q with stop cause %v",
+			requestID, *negativeEnd, cause != nil)
+	}
 	return ports.EvaluationRequestRecord{
 		Key:        ports.EvaluationRequestKey{TenantID: tenant, Request: request.ID()},
 		Request:    request,
 		RecordedAt: recordedAt.UTC(),
 		StopCause:  stopCause,
+		ZeroTotal:  zeroTotal,
 	}, true, nil
 }
 

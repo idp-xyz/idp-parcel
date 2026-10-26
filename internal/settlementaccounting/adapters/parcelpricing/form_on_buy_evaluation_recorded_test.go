@@ -51,6 +51,24 @@ func (requests *buyGateRequests) RecordStop(
 	}
 }
 
+// RecordZeroTotal 把零额写回那一份请求，只从「既无停因也无零额」往外走，与真册同一口径。
+func (requests *buyGateRequests) RecordZeroTotal(
+	_ context.Context, key saports.EvaluationRequestKey,
+) (saports.EvaluationRequestZeroTotalEffect, error) {
+	index := key.TenantID.String() + "/" + key.Request.String()
+	record := requests.records[index]
+	switch {
+	case record.ZeroTotal:
+		return saports.EvaluationRequestZeroTotalReplayed, nil
+	case record.StopCause != sadomain.EvaluationStopCauseInvalid:
+		return saports.EvaluationRequestAlreadyStopped, nil
+	default:
+		record.ZeroTotal = true
+		requests.records[index] = record
+		return saports.EvaluationRequestZeroTotalRecorded, nil
+	}
+}
+
 func (requests *buyGateRequests) FindByID(_ context.Context, key saports.EvaluationRequestKey) (saports.EvaluationRequestRecord, bool, error) {
 	if requests.err != nil {
 		return saports.EvaluationRequestRecord{}, false, requests.err
@@ -174,7 +192,9 @@ func (fixture *buyGateFixture) formation(t *testing.T, view saports.BuyEvaluatio
 		Evaluations: view, Costs: fixture.costs, Registry: fixture.costs, Clock: buyGateClock{},
 	})
 	return must[*saapplication.FormRequestedSupplierExpectedCostHandler](t)(saapplication.NewFormRequestedSupplierExpectedCostHandler(
-		saapplication.FormRequestedSupplierExpectedCostDeps{Requests: fixture.requests, Costs: inner, Stops: fixture.requests, Clock: buyGateClock{}}))
+		saapplication.FormRequestedSupplierExpectedCostDeps{
+			Requests: fixture.requests, Costs: inner, Stops: fixture.requests, ZeroTotals: fixture.requests, Clock: buyGateClock{},
+		}))
 }
 
 func (fixture *buyGateFixture) handle(t *testing.T, evaluation string) error {

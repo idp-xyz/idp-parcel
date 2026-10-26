@@ -68,7 +68,8 @@ var _ sainbox.RecordedBuyEvaluationHandler = (*FormOnBuyEvaluationRecordedAdapte
 //
 // 入账（答 nil）的各格都是这一封信的定局，重投同一封不会变：不是 BUY·供应商成本的评价（提供方对 BUY 与 SELL 发
 // 同一种信封，SELL 那一半由扇出的另一路接）、评价没有回指、预期成本已采用或同三维已有首版、评价采用不了（编排已在请求册上
-// 记停因，补登之后由「参数已登记」另起下一代，ADR-0229）。
+// 记停因，补登之后由「参数已登记」另起下一代，ADR-0229）、评价已完成而合计为零（编排已在请求册上记`负向结束（零额）`，
+// 不续办，ADR-0306）。
 // ErrUntranslatableAnswer 与编排上抛的错误原样交回，落 publish_failed：提供方形状变了，或两侧说法矛盾，重投不自愈。
 func (adapter *FormOnBuyEvaluationRecordedAdapter) HandleRecordedBuyEvaluation(
 	ctx context.Context,
@@ -107,7 +108,8 @@ func (adapter *FormOnBuyEvaluationRecordedAdapter) HandleRecordedBuyEvaluation(
 		saapplication.RequestedSupplierExpectedCostFirstVersionExists,
 		saapplication.RequestedSupplierExpectedCostEvaluationNotAdopted,
 		saapplication.RequestedSupplierExpectedCostNoBuyRequest,
-		saapplication.RequestedSupplierExpectedCostOccurrenceInvalidated:
+		saapplication.RequestedSupplierExpectedCostOccurrenceInvalidated,
+		saapplication.RequestedSupplierExpectedCostZeroTotal:
 		return nil
 	case saapplication.RequestedSupplierExpectedCostUndecided:
 		undecided := fmt.Errorf("%w: evaluation %s: %s", ErrSupplierCostFormationUndecided, reference, result.UndecidedReason())
