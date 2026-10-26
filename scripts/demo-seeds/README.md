@@ -21,6 +21,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 自票 legal-entity-profile/02 起带身份层（注册国家 `CN` 与合成终身注册号，ADR-0145 决定一）；在那之前
 灌过的库上这一笔是没有身份层的旧形状，重跑会答内容冲突（2），同样用 `--reset`。
 里程碑映射 `SYN-VE-MAP-V1` 自票 demo-chain-gaps/11 起关务那一行只登全部放行（`external-result-release-full` → `CUSTOMS_CLEARED`，类型词表见 ADR-0197），自票 demo-chain-gaps/13 起交接那一行只登已交出（`handover-handed-over` → `IN_TRANSIT`），自票 demo-chain-gaps/33 起多一行出发（`movement-departure` → `DEPARTED`，类型词表见 ADR-0205 文末补记；移动与到达不映）；在那之前灌过的库上版本号已占，重跑答 `REFUSED VERSION_NOT_OVERWRITABLE`、退出码 2，`seed.sh` 随之中止，库里仍是旧行；同样用 `--reset`。
+价格规则 `SYN-PRICE-RULE-CN-SG` v1 自票 docs-consistency/code/25 起口径不带体积系数（体积系数是售价卡的内容，ADR-0260 决定二），同一版本号换了内容、摘要随之变了；在那之前灌过的库上重跑，迁移照常施加，发布批那一项答 `CONTENT_CONFLICT`、退出码 2，`seed.sh` 随之中止，库里仍是带系数的旧行（价格政策目录把它列为历史体积系数、不参与计价）；同样用 `--reset`。
 
 ## 加一条种子
 
@@ -286,7 +287,7 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
    Z1/Z2 两区，MAX 计费重体积系数 5000）方向授权引商业授权对象 `SYN-AUTH-PRICE-DIR-01`，
    方案结构绑燃油序列 `SYN-SERIES-FUEL-01` 与分区目录 `SYN-CAT-ZONE-CN-SG`；成本卡 `SYN-PLAN-CN-SG-COST-01`（BUY）引
    `SYN-AUTH-COST-DIR-01`、也绑这本分区目录，两份供应商协议（干线、末端）都采购这一份买入方案；汇率序列 `SYN-SERIES-FX-CNY-SGD` 的口径引价格规则
-   `SYN-PRICE-RULE-CN-SG`（汇率不收裸值）。该价格规则同时带卖出方向的价格政策正文与口径，口径与卖出价卡同一套（未税、材积除数 5000、提交时点汇率）。信用政策挂在同一法人与预付费用上，客户服务规则挂在同一法人与产品 `SYN-PROD-CN-SG-EXPRESS` 上（不引预付费用）。 分区目录 `SYN-CAT-ZONE-CN-SG` 用合成 3 位前缀
+   `SYN-PRICE-RULE-CN-SG`（汇率不收裸值）。该价格规则同时带卖出方向的价格政策正文与口径，口径只声明未税与提交时点汇率；材积除数 5000 与金额取整只在卖出价卡上（ADR-0260），口径不再声明体积系数。信用政策挂在同一法人与预付费用上，客户服务规则挂在同一法人与产品 `SYN-PROD-CN-SG-EXPRESS` 上（不引预付费用）。 分区目录 `SYN-CAT-ZONE-CN-SG` 用合成 3 位前缀
    把 `018`/`238` 映到同名的 Z1/Z2，始发覆盖 `200` 与 `510`；两张卡都绑这本目录，分区由
    委托申报的邮编路线经它解析，不收调用方给的分区——选路比价与按发生项形成的正式 BUY 评价读的是同一条路线。
 3. **一单会走的网**（network-routing）：演示租户采用随产品发布的演示网络
