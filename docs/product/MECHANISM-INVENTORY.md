@@ -13,18 +13,18 @@
 | networkrouting | 94 | 107 | 11 | 19 | 2 | 10 |
 | nodeoperations | 111 | 119 | 15 | 29 | 4 | 17 |
 | parcelpricing | 147 | 135 | 20 | 20 | 1 | 25 |
-| parcelshipment | 232 | 234 | 23 | 45 | 10 | 24 |
+| parcelshipment | 235 | 236 | 24 | 45 | 10 | 24 |
 | partycommercial | 173 | 191 | 15 | 43 | 1 | 40 |
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 26 | 24 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 233 | 185 | 38 | 69 | 13 | 10 |
 | transportfulfillment | 289 | 304 | 52 | 61 | 16 | 50 |
 | visibilityexception | 121 | 122 | 12 | 31 | 8 | 13 |
-| **合计** | 1638 | 1645 | 219 | 382 | 66 | 216 |
+| **合计** | 1641 | 1647 | 220 | 382 | 66 | 216 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 229、测试 377。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 229、测试 379。
 
-## 跨上下文消费缝：50 组，159 个生产文件
+## 跨上下文消费缝：50 组，160 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -55,7 +55,7 @@
 | parcelshipment | parcelpricing | 2 |
 | parcelshipment | partycommercial | 24 |
 | parcelshipment | pilotgovernance | 2 |
-| parcelshipment | settlementaccounting | 3 |
+| parcelshipment | settlementaccounting | 4 |
 | parcelshipment | transportfulfillment | 6 |
 | partycommercial | accessidentity | 2 |
 | pilotgovernance | accessidentity | 1 |
@@ -145,7 +145,7 @@
 | （未归类） | 1 |
 | **合计** | 40 |
 
-## 端口：声明 608 个；基线口径缺 39，精确口径缺 2
+## 端口：声明 609 个；基线口径缺 39，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
