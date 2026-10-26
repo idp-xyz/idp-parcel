@@ -15,6 +15,7 @@ import (
 	pstf "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/transportfulfillment"
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 )
 
@@ -48,27 +49,55 @@ func (cancellation transactionalCancellation) Handle(
 	return result, nil
 }
 
-// buildCancellationOrchestration 装配 `/shipment-requests/parcel-cancellations` 的
-// 真编排（UC-PS-006 接受后取消；传输层随 391f30a 落库，本笔只做组合根挂载）。
+// buildCancellationOrchestration 装配首方取消口（`/v1/shipment-requests/parcel-cancellations`，UC-PS-006 接受后取消）的
+// 真编排（ADR-0310 取舍 C；ADR-0313；票 first-party-api/11）。
 //
-// 授权一条缝「诚实未配置」，其余接真：委托仓储、收寄采认读口、当前有效终局读口、取消决定库
-// （写口与按包裹的已成立取消读口同一只）、面单渠道服务的首次有效收寄读口（TF 登记册之上的
-// 消费侧适配器，ADR-0025）、PCXL 取消标识签发、发布意图的 Outbox 交付、生产时钟与取消边界锁
-// ——提交边界上的边界事实都读真的，任一样在册都使取消不成立（PS CONTEXT）；锁与 parcel-dispatch
-// 那边的收寄采用、面单渠道终局判断是同一把，在同一个库上排队。
+// 授权缝接真，规则仍是租户取值：委托仓储、收寄采认读口、当前有效终局读口、取消决定库（写口与按包裹的已成立取消读口同一只）、
+// 面单渠道服务的首次有效收寄读口（TF 登记册之上的消费侧适配器，ADR-0025）、PCXL 取消标识签发、发布意图的 Outbox 交付、生产时钟
+// 与取消边界锁——提交边界上的边界事实都读真的，任一样在册都使取消不成立（PS CONTEXT）。
 //
-// 授权缝走 ServiceStageRulesAdapter + DeclaredStageContent 整条真翻译链，未配置的
-// 位置在链的最里端：AdoptedStageOwner 缺席（SourceIdentity 尚未固定采用哪个授权规则
-// 版本，PAR-COM-17 实例半边），DeclaredStageContent 据此答「目录未配置」，适配器
-// 原样交出 found=false，编排停在 AUTHORITY_UNCONFIGURED——恢复动作是租户登记授权
-// 规则，不是修授权服务（AUTHORITY_UNAVAILABLE 那格），更不是默认任何角色可取消或
-// 不可取消（UC-PS-006 明禁两个方向的默认）。三个 PC 内容读口与请求方映射一并留空：
-// 采用版本未配置时链在它们之前就停了，填上任何一个都改变不了答案的来源。
+// 授权缝走 ServiceStageRulesAdapter 整条真翻译链：取消授权目录由 ScopedCancellationContent 读（账户的商业范围里、委托接受那一刻
+// 在效的、登记了取消目录的授权规则，ADR-0313），请求方格由 CustomerSelfCancellationParty 给（首方直客 1:1，请求方就是客户账户
+// 本人）。「谁能在哪个阶段取消」不写死：账户没登解析键、该时点没有登记取消目录的授权规则、目录里没有客户这一行，前两处如实停在
+// AUTHORITY_UNCONFIGURED，最后一处是一份真的拒绝——恢复动作是租户登记，不是修授权服务，更不是默认任何角色可取消或不可取消
+// （UC-PS-006 明禁两个方向的默认）。「收寄前」这条边界不在目录里，是提交边界上的收寄 / 终局读口判的。
+// 收寄资格 / 终局两个内容读口不装：本编排用不到，传 nil 即答「未配置」。
 func buildCancellationOrchestration(db *bentopg.DB) (shipmenthttp.CancellationHandler, error) {
-	// 采用版本源传 nil 即 UnconfiguredAdoptedStageOwner：见函数注释「授权缝」段。
-	stageContent := psparty.NewDeclaredStageContent(nil, nil, nil, nil)
-	authority := psparty.NewServiceStageRulesAdapter(stageContent, stageContent, stageContent, nil, nil)
+	authority, err := buildCancellationAuthority(db)
+	if err != nil {
+		return nil, err
+	}
 	return cancellationOrchestrationWith(db, authority)
+}
+
+// buildCancellationAuthority 装取消授权那一口的真翻译链，单独成函数是为了让装配用例拿同一条链对着真库说话。
+func buildCancellationAuthority(db *bentopg.DB) (psports.CancellationAuthorityView, error) {
+	requests, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: shipment requests: %w", err)
+	}
+	keys, err := pspostgres.NewCommercialResolutionKeyStore(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: resolution key store: %w", err)
+	}
+	publications, err := pcpostgres.NewCommercialPublications(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: commercial publications: %w", err)
+	}
+	scopeView, err := pcpostgres.NewCommercialAuthority(publications)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: commercial authority: %w", err)
+	}
+	declarations, err := pcpostgres.NewStageContentDeclarations(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: stage content declarations: %w", err)
+	}
+	content, err := psparty.NewScopedCancellationContent(requests, keys, scopeView, declarations)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: scoped cancellation content: %w", err)
+	}
+	return psparty.NewServiceStageRulesAdapter(
+		nil, nil, content, psparty.CustomerSelfCancellationParty{}, nil), nil
 }
 
 // cancellationOrchestrationWith 是取消编排除授权以外的全部装配。授权单独作参数，是因为它是唯一一条

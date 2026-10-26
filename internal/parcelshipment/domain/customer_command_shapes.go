@@ -18,7 +18,7 @@ import (
 const (
 	// CustomerWithdrawalShapeVersion 是委托撤回的形状（PWD-1，票 first-party-api/07 填字段，见 CanonicalizeCustomerWithdrawal）。
 	CustomerWithdrawalShapeVersion = "PWD-1"
-	// CustomerParcelCancellationShapeVersion 是取消包裹的形状，字段由票 first-party-api/11 填。
+	// CustomerParcelCancellationShapeVersion 是取消包裹的形状（PCN-1，票 first-party-api/11 填字段，见 CanonicalizeCustomerParcelCancellation）。
 	CustomerParcelCancellationShapeVersion = "PCN-1"
 	// CustomerSourceDataAmendmentShapeVersion 是客户资料修订的形状，字段由票 first-party-api/10 填；要素内容复用 PSC-1 的要素构造，
 	// 不重算（pp-seams/05）。
@@ -81,6 +81,51 @@ func CanonicalizeCustomerWithdrawal(spec CustomerWithdrawalSpec) (PayloadDigest,
 	}
 	sum := sha256.Sum256(encoded)
 	return NewPayloadDigest(CustomerWithdrawalShapeVersion + ":" + hex.EncodeToString(sum[:]))
+}
+
+// CustomerParcelCancellationSpec 是首方取消载荷里进摘要的指名与内容（形状 PCN-1）。取消者、租户与账户不在其中：它们取自铸造的
+// 信封，不由载荷自报。
+type CustomerParcelCancellationSpec struct {
+	// OriginalAccessRequestID 是原提交的接入请求标识，指名要取消其包裹的委托。
+	OriginalAccessRequestID string
+	// ShipmentRequestID 是客户带回的回执委托号，必填，与找到的委托核对。
+	ShipmentRequestID ShipmentRequestID
+	Parcel            DeclaredParcelID
+	Reason            CancellationReasonReference
+	// RequestedAt 是客户系统声明的取消请求时刻。它进取消决定库的内容摘要，所以重放必须带同一个值。
+	RequestedAt time.Time
+}
+
+type canonicalCancellationDocument struct {
+	Canonicalization        string `json:"canonicalization"`
+	OriginalAccessRequestID string `json:"originalAccessRequestId"`
+	ShipmentRequestID       string `json:"shipmentRequestId"`
+	Parcel                  string `json:"parcelId"`
+	Reason                  string `json:"reason"`
+	RequestedAt             string `json:"requestedAt"`
+}
+
+// CanonicalizeCustomerParcelCancellation 是首方取消口的规范化入口（形状 PCN-1）。指名（原提交、委托号、包裹）、原因与请求时刻
+// 全部进摘要，所以同一取消请求改指另一份原提交、另一个包裹、另一个原因或另一个时刻，摘要就变。时刻按 UTC 的 RFC3339Nano 写，
+// 同一时刻的不同写法同摘要。
+func CanonicalizeCustomerParcelCancellation(spec CustomerParcelCancellationSpec) (PayloadDigest, error) {
+	original := strings.TrimSpace(spec.OriginalAccessRequestID)
+	if original == "" || !spec.ShipmentRequestID.valid() || !spec.Parcel.valid() || !spec.Reason.valid() || spec.RequestedAt.IsZero() {
+		return PayloadDigest{}, ErrInvalidSubmissionPayload
+	}
+	encoded, err := json.Marshal(canonicalCancellationDocument{
+		Canonicalization:        CustomerParcelCancellationShapeVersion,
+		OriginalAccessRequestID: original,
+		ShipmentRequestID:       spec.ShipmentRequestID.String(),
+		Parcel:                  spec.Parcel.String(),
+		Reason:                  spec.Reason.String(),
+		RequestedAt:             spec.RequestedAt.UTC().Format(time.RFC3339Nano),
+	})
+	if err != nil {
+		return PayloadDigest{}, fmt.Errorf("canonicalize customer parcel cancellation: %w", err)
+	}
+	sum := sha256.Sum256(encoded)
+	return NewPayloadDigest(CustomerParcelCancellationShapeVersion + ":" + hex.EncodeToString(sum[:]))
 }
 
 // SourceDataAmendmentPayloadSpec 是首方资料修订口（形状 PAM-1，票 first-party-api/10）的规范化输入：指名（原提交的接入请求

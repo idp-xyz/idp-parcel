@@ -190,3 +190,63 @@ func TestCustomerSourceDataAmendmentDigestIsItsOwnShapeAndCarriesEveryNaming(t *
 		t.Fatalf("空规格 = %v, want ErrInvalidSubmissionPayload", err)
 	}
 }
+
+// Covers: AT-PS-145——取消口的摘要走 PCN-1：前缀是 PCN-1；原提交、委托号、包裹、原因、请求时刻各自一变摘要就变；同一时刻的不同写法同摘要；
+// 缺任一指名或时刻即拒。
+func TestCustomerParcelCancellationDigestIsItsOwnShapeAndCarriesNamesAndContent(t *testing.T) {
+	spec := func(mutate func(*CustomerParcelCancellationSpec)) CustomerParcelCancellationSpec {
+		reason, err := NewCancellationReasonReference("SYN-REASON-1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		parcel, err := NewDeclaredParcelID("SYN-PARCEL-1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		built := CustomerParcelCancellationSpec{
+			OriginalAccessRequestID: "SYN-ACCESS-REQUEST-1", ShipmentRequestID: mustShipmentRequestID(t, "SHR-1"),
+			Parcel: parcel, Reason: reason, RequestedAt: time.Date(2026, 9, 2, 8, 0, 0, 0, time.UTC),
+		}
+		mutate(&built)
+		return built
+	}
+	digestOf := func(built CustomerParcelCancellationSpec) string {
+		digest, err := CanonicalizeCustomerParcelCancellation(built)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return digest.String()
+	}
+	base := digestOf(spec(func(*CustomerParcelCancellationSpec) {}))
+	if !strings.HasPrefix(base, CustomerParcelCancellationShapeVersion+":") {
+		t.Fatalf("摘要 %q 不带 %s 前缀", base, CustomerParcelCancellationShapeVersion)
+	}
+	other, _ := NewDeclaredParcelID("SYN-PARCEL-2")
+	otherReason, _ := NewCancellationReasonReference("SYN-REASON-2")
+	for name, mutate := range map[string]func(*CustomerParcelCancellationSpec){
+		"原提交": func(s *CustomerParcelCancellationSpec) { s.OriginalAccessRequestID = "SYN-ACCESS-REQUEST-2" },
+		"委托号": func(s *CustomerParcelCancellationSpec) { s.ShipmentRequestID = mustShipmentRequestID(t, "SHR-2") },
+		"包裹":  func(s *CustomerParcelCancellationSpec) { s.Parcel = other },
+		"原因":  func(s *CustomerParcelCancellationSpec) { s.Reason = otherReason },
+		"时刻":  func(s *CustomerParcelCancellationSpec) { s.RequestedAt = s.RequestedAt.Add(time.Second) },
+	} {
+		if digestOf(spec(mutate)) == base {
+			t.Errorf("改%s摘要没变", name)
+		}
+	}
+	zone := time.FixedZone("UTC+8", 8*3600)
+	if got := digestOf(spec(func(s *CustomerParcelCancellationSpec) { s.RequestedAt = s.RequestedAt.In(zone) })); got != base {
+		t.Errorf("同一时刻换时区写法摘要变了")
+	}
+	for name, mutate := range map[string]func(*CustomerParcelCancellationSpec){
+		"缺原提交": func(s *CustomerParcelCancellationSpec) { s.OriginalAccessRequestID = " " },
+		"缺委托号": func(s *CustomerParcelCancellationSpec) { s.ShipmentRequestID = ShipmentRequestID{} },
+		"缺包裹":  func(s *CustomerParcelCancellationSpec) { s.Parcel = DeclaredParcelID{} },
+		"缺原因":  func(s *CustomerParcelCancellationSpec) { s.Reason = CancellationReasonReference{} },
+		"缺时刻":  func(s *CustomerParcelCancellationSpec) { s.RequestedAt = time.Time{} },
+	} {
+		if _, err := CanonicalizeCustomerParcelCancellation(spec(mutate)); !errors.Is(err, ErrInvalidSubmissionPayload) {
+			t.Errorf("%s：err = %v", name, err)
+		}
+	}
+}

@@ -327,3 +327,60 @@ func tenantPricePolicy(t *testing.T, tenant, objectID, scope, plan string) domai
 	}
 	return policy
 }
+
+// Covers: ADR-0313——EffectiveVersionsAt 交回指定租户、范围、类别里在这一刻已生效的全部版本：别的类别、别的范围、别的租户不进；
+// 生效起点之前不进；不挑唯一（同范围两版授权规则并存都交回）。
+func TestEffectiveVersionsAtListsEveryVersionInForceOfThatKindInThatScope(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	inSharedScope := func(kind domain.CommercialObjectKind, objectID string) domain.CommercialVersion {
+		spec := commercialSpec(t, kind, objectID, "v1", "sha256:"+objectID)
+		spec.Scope = commercialValue(t, domain.NewCommercialScopeReference, "scope-shared")
+		draft, err := domain.NewCommercialDraft(spec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		published, err := draft.Publish(approval(t, "approval-"+objectID), domain.ApprovalRoleConfirmed, time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		effective, err := published.TakeEffect(time.Date(2026, 1, 4, 0, 0, 0, 0, time.UTC))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return effective
+	}
+	first := inSharedScope(domain.AuthorizationRuleObject, "auth-1")
+	second := inSharedScope(domain.AuthorizationRuleObject, "auth-2")
+	product := inSharedScope(domain.ServiceProductObject, "product-1")
+	for _, version := range []domain.CommercialVersion{first, second, product} {
+		if _, err := registry.Register(version); err != nil {
+			t.Fatal(err)
+		}
+	}
+	at := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+
+	got := registry.EffectiveVersionsAt(first.Tenant(), first.Scope(), domain.AuthorizationRuleObject, at)
+	if len(got) != 2 {
+		t.Fatalf("在效授权规则 = %d 版, want 2（并存不挑唯一）", len(got))
+	}
+	if got := registry.EffectiveVersionsAt(first.Tenant(), first.Scope(), domain.ServiceProductObject, at); len(got) != 1 {
+		t.Fatalf("在效服务产品 = %d 版, want 1", len(got))
+	}
+	otherScope, err := domain.NewCommercialScopeReference("SCOPE-ELSEWHERE")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := registry.EffectiveVersionsAt(first.Tenant(), otherScope, domain.AuthorizationRuleObject, at); len(got) != 0 {
+		t.Fatalf("别的范围 = %d 版, want 0", len(got))
+	}
+	otherTenant, err := domain.NewTenantID("TENANT-ELSEWHERE")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := registry.EffectiveVersionsAt(otherTenant, first.Scope(), domain.AuthorizationRuleObject, at); len(got) != 0 {
+		t.Fatalf("别的租户 = %d 版, want 0", len(got))
+	}
+	if got := registry.EffectiveVersionsAt(first.Tenant(), first.Scope(), domain.AuthorizationRuleObject, time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)); len(got) != 0 {
+		t.Fatalf("生效起点之前 = %d 版, want 0", len(got))
+	}
+}
