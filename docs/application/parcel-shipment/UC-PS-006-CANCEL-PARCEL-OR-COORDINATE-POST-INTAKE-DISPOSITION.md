@@ -92,7 +92,7 @@
 
 - 取消权按包裹判断。一个委托的部分包裹取消、部分已经收寄或部分已经终局时，各自结果并存；只有全部当前有效包裹均为取消终局且不存在非取消终局时，委托才派生为`已取消`。
 - 取消决定提交前必须重新读取当前有效收寄和终局版本，已在册的收寄或终局使取消不成立。取消提交之后才到的收寄（面单渠道服务是实际承运商首次有效收寄）按两者的业务时间比，不以消息到达或客户端时间最后写入覆盖（[ADR-0254](../../adr/0254-cancellation-and-boundary-fact-order-is-judged-by-their-business-times-and-a-late-earlier-boundary-fact-is-a-fact-conflict.md)）：发生晚于取消的业务时间，取消在先；发生不晚于取消，是事实冲突：网络服务的收寄采用停在未决，面单渠道服务不形成终局、指名冲突（`LABEL_SERVICE_NOT_FINAL` 加一格原因），已提交的取消不被改写，冲突只由一份明确的业务决定解开。
-- 取消提交与同一包裹的收寄采用、面单渠道服务的终局判断并发时依次判断：后到的一方读得到先到一方已提交的结果，落进 [ADR-0254](../../adr/0254-cancellation-and-boundary-fact-order-is-judged-by-their-business-times-and-a-late-earlier-boundary-fact-is-a-fact-conflict.md) 决定二的某一格，不会留下同时成立的取消与责任起点或非取消终局（[小包托运上下文：Rules and invariants](../../domain/parcel-shipment/CONTEXT.md#rules-and-invariants) 取消一节）。
+- 取消提交与同一包裹的收寄采用、面单渠道服务的终局判断、网络服务履约结果的终局采用并发时依次判断：后到的一方读得到先到一方已提交的结果，落进 [ADR-0254](../../adr/0254-cancellation-and-boundary-fact-order-is-judged-by-their-business-times-and-a-late-earlier-boundary-fact-is-a-fact-conflict.md) 决定二的某一格，不会留下同时成立的取消与责任起点或非取消终局（[小包托运上下文：Rules and invariants](../../domain/parcel-shipment/CONTEXT.md#rules-and-invariants) 取消一节）。
 - 收寄后处置决定必须引用当前产品、合同、客户授权、责任法人、限制及可执行性依据。任何必要依据缺失时保持未决，不默认退运、销毁、继续或免除费用。
 - 处置决定只能请求尚未消耗范围释放或未来动作。已经形成的面单交易、节点控制、权威交接、实际移动、申报、监管决定和费用责任分别按其所有者规则保留。
 - 监管、安全或其他硬限制的来源责任方拥有解除和适用动作决定；客户服务处置不能绕过仍有效限制。监管退运使用 `UC-TF-001`，普通/商业退运使用 `UC-TF-007`。

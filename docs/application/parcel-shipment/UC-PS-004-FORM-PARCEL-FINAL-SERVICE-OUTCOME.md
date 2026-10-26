@@ -92,7 +92,7 @@
 |---|---|---|---|---|
 | 包裹终局已形成 | `FINAL_FORMED` | 合格履约责任结果满足适用服务终局规则 | 包裹、委托、终局类型、来源、规则版本、业务/适用时间、决定和证据 | 覆盖承诺、路由或运输事实 |
 | 终局未决 | `FINAL_UNDECIDED` | 来源真实但身份、规则、责任或有效性不足 | 已知来源、缺口、判断版本和续办入口 | 默认完成或业务失败 |
-| 来源不采用 | `SOURCE_NOT_ADOPTED` | 来源不属于当前包裹/服务终局边界 | 来源、身份/谱系/合同依据和业务时间 | 删除来源或回写运输结果 |
+| 来源不采用 | `SOURCE_NOT_ADOPTED` | 来源不属于当前包裹/服务终局边界，或包裹已有取消成立（含停在取消先后冲突上的） | 来源、身份/谱系/合同依据或所依据的取消，和业务时间 | 删除来源或回写运输结果 |
 | 已有结果 | `EXISTING_RESULT` | 同一来源版本已经形成采用判断 | 原终局/未决/不采用结果和当前有效性 | 重复终局或发布意图 |
 | 来源冲突 | `SOURCE_CONFLICT` | 同一终局采用身份携带不同对象、结果或内容 | 全部来源、原判断和纠正入口 | 按最后到达覆盖 |
 | 当前终局重派生 | `FINAL_REDERIVED` | 来源更正/失效导致当前判断变化 | 原终局、原来源、新有效事件、重派生版本和影响范围 | 删除历史或把重派生伪装成业务重开 |
@@ -105,7 +105,7 @@
 |---:|---|---|---|
 | 1 | 权威结果接入 | 保全来源上下文、对象、决定/执行责任、业务时间、版本和当前有效性 | 无法关联时不修改包裹结果 |
 | 2 | `parcel-shipment` | 识别首次、重复、冲突、迟到、更正或失效 | 重复返回原结果；冲突不覆盖 |
-| 3 | `parcel-shipment` | 校验包裹身份、接受基线、服务类型、谱系和既有终局 | 被替代/越权来源不采用 |
+| 3 | `parcel-shipment` | 校验包裹身份、接受基线、服务类型、谱系、已成立的取消和既有终局 | 被替代/越权来源、取消在册的包裹的来源不采用 |
 | 4 | `party-commercial` | 解析适用服务产品、合同和终局规则版本 | 未配置时终局未决 |
 | 5 | `parcel-shipment` | 判断有效交付、退运完成、服务终止、监管处置执行或其他责任结果是否满足终局 | 按包裹分别形成采用/未决/不采用 |
 | 6 | `parcel-shipment` | 同一提交保存终局判断、审计和发布意图 | 不修改来源事实 |
@@ -121,6 +121,7 @@
 - 包裹发生真实拆分/合并后，来源身份继续保留但退出当前有效包裹集合；终局汇总使用当前有效身份和谱系，不能重复计算来源与后继。
 - 一个包裹终局不等待同委托其他包裹；委托部分完成是逐包裹结果的派生摘要。
 - 终局形成后不得回退为取消。后续费用调整、异常、索赔、追偿或客户通知有独立生命周期。
+- 包裹已有取消成立时，此后到达的网络服务履约结果（有效交付等）不采用为终局，依据指名那份取消（`PARCEL_CANCELLATION/<取消标识>`），来源与物理事实保留；这一判断先于终局规则，规则是否配置、是否放行都不改它，更正出的新版本到达同样如此。包裹停在取消先后冲突上（`CANCELLATION_ORDER_CONFLICT`，[ADR-0254](../../adr/0254-cancellation-and-boundary-fact-order-is-judged-by-their-business-times-and-a-late-earlier-boundary-fact-is-a-fact-conflict.md) 决定二第 3 格）时同样不采用：冲突只由明确的业务决定解开，履约结果不得绕过它形成非取消终局。
 - 来源更正或有效性变化保留原事实、原终局判断及当时派生历史，形成新的当前判断版本；这不是删除历史或业务重开。
 
 ### 面单渠道服务的终局形成
@@ -140,6 +141,7 @@
 - 多包裹委托逐包裹提交；一个成员未决、冲突或不采用不回滚其他成员合法终局。
 - 交付、退运、服务终止和来源更正并发时按权威业务时间、适用边界和当前有效事件裁决，不按消息到达顺序。
 - 面单渠道服务的终局判断与同一包裹的取消提交并发时依次判断：后到的一方读得到先到一方已提交的取消或终局，不会两份同时成立（[小包托运上下文：Rules and invariants](../../domain/parcel-shipment/CONTEXT.md#rules-and-invariants) 取消一节）。
+- 网络服务履约结果的终局采用与同一包裹的取消提交并发时同样依次判断：采用在读已成立的取消与既有终局之前按包裹排队，后到的一方读得到先到一方已提交的取消或终局；取不到队时保持终局未决（`FINAL_STORE_UNAVAILABLE`），不在没有排上队的情况下读取消。
 - 当前有效终局只能由规则支持的来源有效性变化重新派生；人工角色不能直接删除或改写终局。
 - 提交结果不确定时查询原判断、委托派生和发布意图，不重复形成终局。
 - 批量查询、导出和完成摘要按租户、客户账户、责任法人、委托和包裹隔离。
@@ -190,6 +192,7 @@
 |---|---|---|
 | `AT-PS-063`，结果表「当前终局重派生」一行 | 责任结果没有有效性一格，重派生沿用原终局种类、不按规则重判，「有效交付失效之后当前无终局」表达不出；本行预期结果不变 | [code/23](../../../.scratch/docs-consistency/code/23-final-outcome-rederivation-cannot-express-a-voided-delivery.md) |
 | `AT-PS-108` | 判法已补：读到有效取消时比首次有效收寄的业务发生时间，不晚于取消答 `LABEL_SERVICE_NOT_FINAL`、原因 `CANCELLATION_ORDER_CONFLICT`，冲突记进冲突册（[code/35](../../../.scratch/docs-consistency/code/35-cancellation-and-boundary-fact-order-conflict-has-no-label-half-and-no-resolution-face.md)）；解开它的业务决定面仍没有，本行预期结果不变 | [code/76](../../../.scratch/docs-consistency/code/76-a-cancellation-order-conflict-has-no-resolution-decision-face.md) |
+| 取消先后冲突解开之后，此前被不采用的履约结果 | 不采用记录按（包裹、结果种类、来源版本）保全，冲突被业务决定解开后不会自动重判；需要重新采用时由来源重投新版本，或随决定面一并承接 | [code/76](../../../.scratch/docs-consistency/code/76-a-cancellation-order-conflict-has-no-resolution-decision-face.md) |
 | 承运商首次有效收寄被作废之后的终局重派生 | 代码显式答未决（`ErrVoidedCarrierPickupRederivationUndecided`），判法等 [ADR-0138](../../adr/0138-voided-carrier-pickup-voids-the-label-service-final-as-a-third-ledger-record-and-rejudges-on-remaining-basis.md)（Proposed）接受 | 票 label-channel-service-first-release/39 |
 
 完成本用例只闭合包裹服务终局及委托完成派生；追踪、异常、索赔、供应商追偿、客户费用和经营结算仍由各自上下文独立形成。
