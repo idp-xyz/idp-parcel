@@ -22,6 +22,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 灌过的库上这一笔是没有身份层的旧形状，重跑会答内容冲突（2），同样用 `--reset`。
 里程碑映射 `SYN-VE-MAP-V1` 自票 demo-chain-gaps/11 起关务那一行只登全部放行（`external-result-release-full` → `CUSTOMS_CLEARED`，类型词表见 ADR-0197），自票 demo-chain-gaps/13 起交接那一行只登已交出（`handover-handed-over` → `IN_TRANSIT`），自票 demo-chain-gaps/33 起多一行出发（`movement-departure` → `DEPARTED`，类型词表见 ADR-0205 文末补记；移动与到达不映）；在那之前灌过的库上版本号已占，重跑答 `REFUSED VERSION_NOT_OVERWRITABLE`、退出码 2，`seed.sh` 随之中止，库里仍是旧行；同样用 `--reset`。
 价格规则 `SYN-PRICE-RULE-CN-SG` v1 自票 docs-consistency/code/25 起口径不带体积系数（体积系数是售价卡的内容，ADR-0260 决定二），同一版本号换了内容、摘要随之变了；在那之前灌过的库上重跑，迁移照常施加，发布批那一项答 `CONTENT_CONFLICT`、退出码 2，`seed.sh` 随之中止，库里仍是带系数的旧行（价格政策目录把它列为历史体积系数、不参与计价）；同样用 `--reset`。
+冲突信号规则 `SYN-VE-CONFLICT-V1` 自票 docs-consistency/code/09 起登 `SOURCE_FACT_CONFLICT`、可信度 `SOURCE_CONFIRMED`（原为 `CUSTOMS_HOLD` / `CARRIER_CONFIRMED`），分诊规则 `SYN-VE-TRIAGE-V1` 与异常披露规则 `SYN-VE-EXC-DISCLOSE-V1` 同号补了这一类的条目。版本号没换：冲突信号规则一租户一条、键只有租户，换哪个号都落不进已灌的库。在那之前灌过的库上三本册各答 `REFUSED VERSION_NOT_OVERWRITABLE`、退出码 2，库里仍是登在 `CUSTOMS_HOLD` 下的旧行；同样用 `--reset`。
 
 ## 加一条种子
 
@@ -315,8 +316,12 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
    单元里（逐件建案等 psb/18），所以同区那一步答不受门禁，跨区那一步答未决。
 5. **对外怎么说、材料收到没有**（visibility-exception）：异常披露规则 `SYN-VE-EXC-DISCLOSE-V1`
    与分诊同一对信号——`SYN-ACCOUNT-01` 的 `CUSTOMS_HOLD`（承运确认）可披露、不自动发布；
-   `SYN-ACCOUNT-02` 的 `ETA_GAP` 明确不披露。冲突信号规则一租户一条，钉在 `CUSTOMS_HOLD` /
-   `SYN-VE-CONFLICT-V1`。索赔批次 `SYN-CLAIM-BATCH-CN-SG-01` 的同一事项收了照片与发票，
+   `SYN-ACCOUNT-02` 的 `ETA_GAP` 明确不披露。演示租户登的信号规则都不形成这两类，这一对只是参考去处。
+   冲突信号规则一租户一条，登在 `SOURCE_FACT_CONFLICT`（来源事实冲突待确认，可信度 `SOURCE_CONFIRMED`）/
+   `SYN-VE-CONFLICT-V1`：投影对已接受来源事实裁决不了（替代链分叉）时形成，来源不限关务，所以不登关务类类型。
+   分诊明登人工复核（哪一支当前有效尚无从确认）；异常披露规则对两户都明登不披露——没有条目时披露决定停在未配置，
+   那不是不披露。关务所有者判出的同层冲突另归「关务进展待确认」一类（票 demo-chain-gaps/124），不用这一格。
+   索赔批次 `SYN-CLAIM-BATCH-CN-SG-01` 的同一事项收了照片与发票，
    发票次日撤销，照片留下。
    出发门禁阻断信号规则一租户一条：出发时关务判阻断的那一件形成 `DEPARTURE_GATE_BLOCKED`
    （`SYN-VE-DEPARTURE-GATE-V1`，可信度 `SOURCE_CONFIRMED`）信号；分诊规则没登这一类，信号进人工复核。

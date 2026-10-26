@@ -7,7 +7,8 @@ echo "== 追踪与异常目录登记（visibility-exception：目录册 + 材料
 "$BIN/parcel-ve-register" claim-authorization -input "$SEEDS/visibility/06-claim-authorization-account-02-empty.json"
 "$BIN/parcel-ve-register" disclosure-policy -input "$SEEDS/visibility/07-disclosure-policy-v1.json"
 # 异常披露规则与分诊用同一对信号（CUSTOMS_HOLD / ETA_GAP）：账户 01 可披露但不自动发布，
-# 账户 02 的 ETA 缺口明确不披露。冲突信号规则一租户一条，钉在 CUSTOMS_HOLD 上。
+# 账户 02 的 ETA 缺口明确不披露。冲突信号规则一租户一条，登在不分来源的 SOURCE_FACT_CONFLICT 上：
+# 分诊明登人工复核，两户都明登不披露。
 "$BIN/parcel-ve-register" exception-disclosure-rules -input "$SEEDS/visibility/08-exception-disclosure-rules-v1.json"
 "$BIN/parcel-ve-register" conflict-signal-rule -input "$SEEDS/visibility/09-conflict-signal-rule-v1.json"
 # 同一索赔批次收两样材料：照片留下，发票收讫后撤销。管理台今天没有这一册的读页。

@@ -14,7 +14,7 @@ Blocked by: 无
 全部 `SYN-` 前缀，只记 S，引用既有 `SYN-TENANT-01`、`SYN-LE-01`、`SYN-BROKER-01`、`SYN-ACCOUNT-01`、`SYN-CASE-CN-SG-01` 这一套，不新开租户。
 
 1. **关务。** `SYN-UNIT-CN-EXPORT-03` 先就绪再按 `SYN-CAUSE-READINESS-WITHDRAWN` 撤销（单元 01 仍有效，单元 02 只撤授权）。报关行两版监管凭证，程序都是 `SYN-PROC-CN-EXPORT`：`SYN-CRED-CN-EXPORT-01` 写明 12 次，`SYN-CRED-CN-EXPORT-02` 不写次数。税费协作两格：出口单元按核定 `SYN-DUTY-CN-SG-01` 形成，进口单元 `SYN-UNIT-SG-IMPORT-01` 明确无需付款。
-2. **可视与异常。** 异常披露规则与分诊同一对信号：账户 01 的 `CUSTOMS_HOLD` 可披露、不自动发布；账户 02 的 `ETA_GAP` 明确不披露。冲突信号规则一租户一条，钉在 `CUSTOMS_HOLD`。索赔批次收照片与发票，发票次日撤销。
+2. **可视与异常。** 异常披露规则与分诊同一对信号：账户 01 的 `CUSTOMS_HOLD` 可披露、不自动发布；账户 02 的 `ETA_GAP` 明确不披露。冲突信号规则一租户一条，钉在 `CUSTOMS_HOLD`（[docs-consistency/code/09](../../docs-consistency/code/09-demo-conflict-signal-rule-is-registered-as-customs-hold.md) 起改登不分来源的 `SOURCE_FACT_CONFLICT`）。索赔批次收照片与发票，发票次日撤销。
 3. **代收。** CNY 分户账两笔回汇批次：`SYN-BATCH-CNY-OPEN` 停在已归集，`SYN-BATCH-CNY-HANDED` 交出汇付主张。SGD 账仍无批次。早先 seed.sh 写「回汇批次一笔不造——批次属实例半边，页面显未配置」：同段指令、事实、记账已经是演示租户的 `SYN-` 实例，这条理由今天不成立。空批次格留给 SGD 账，页面原文仍能显「未配置」。
 
 ## CLI 拒收、不绕过
@@ -39,8 +39,8 @@ Blocked by: 无
 | 关务案件 · 监管凭证 | 两行。`SYN-CRED-CN-EXPORT-01` 的 uses=12；02 的 uses=0，读口把 0 收成缺席，页上计入「来源未提供次数额度」 |
 | 关务限制 · 税费付款协作 | 两行：出口 `ASSESSED_DUTY` / `SYN-DUTY-CN-SG-01`，进口 `EXPLICITLY_NOT_REQUIRED`。页上「明确无需付款」计 1 |
 | 关务限制 · 税费付款核对 | 0 行。CLI 前置未齐，故意不灌。页显空册 |
-| 披露策略 · 异常披露规则 | 两行：账户 01 的 `CUSTOMS_HOLD` 可披露、不自动发布；账户 02 的 `ETA_GAP` 不披露 |
-| 判断规则 · 冲突信号规则 | 一行：`CUSTOMS_HOLD` / `SYN-VE-CONFLICT-V1` |
+| 披露策略 · 异常披露规则 | 两行：账户 01 的 `CUSTOMS_HOLD` 可披露、不自动发布；账户 02 的 `ETA_GAP` 不披露（docs-consistency/code/09 起另有两户各一行 `SOURCE_FACT_CONFLICT` 不披露，共四行） |
+| 判断规则 · 冲突信号规则 | 一行：`CUSTOMS_HOLD` / `SYN-VE-CONFLICT-V1`（docs-consistency/code/09 起为 `SOURCE_FACT_CONFLICT` / `SOURCE_CONFIRMED`，版本号不变） |
 | 代收分户账 | CNY 账 `SYN-BATCH-CNY-OPEN`=`COLLECTED`、`SYN-BATCH-CNY-HANDED`=`HANDED_FOR_PAYMENT`（页词「已归集」「已交付汇付」）。SGD 账 0 笔，页显「未配置」 |
 | 索赔材料收讫 | 收讫两行、撤销一行（发票）。管理台没有这一册的页 |
 

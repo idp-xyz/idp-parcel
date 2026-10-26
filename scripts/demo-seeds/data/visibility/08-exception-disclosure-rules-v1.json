@@ -18,6 +18,20 @@
       "confidence": "MONITOR_DERIVED",
       "disclosable": false,
       "autoRelease": false
+    },
+    {
+      "customer": "SYN-ACCOUNT-01",
+      "signalKind": "SOURCE_FACT_CONFLICT",
+      "confidence": "SOURCE_CONFIRMED",
+      "disclosable": false,
+      "autoRelease": false
+    },
+    {
+      "customer": "SYN-ACCOUNT-02",
+      "signalKind": "SOURCE_FACT_CONFLICT",
+      "confidence": "SOURCE_CONFIRMED",
+      "disclosable": false,
+      "autoRelease": false
     }
   ]
 }
