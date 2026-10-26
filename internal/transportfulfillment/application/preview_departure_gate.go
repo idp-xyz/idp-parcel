@@ -86,7 +86,7 @@ func (handler *PreviewDepartureGateHandler) Preview(
 	if !accepted {
 		return PreviewDepartureGateResult{outcome: DepartureGatePreviewNotAccepted}, nil
 	}
-	reading, err := handler.reader.readIntent(ctx, intent)
+	reading, err := handler.reader.readIntent(ctx, intent, nil)
 	if err != nil {
 		return PreviewDepartureGateResult{}, err
 	}

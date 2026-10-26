@@ -91,6 +91,8 @@ func TestStopsBelongToOneAnswerAndExcludeFindings(t *testing.T) {
 		domain.DepartureSegmentRegistryUnavailable:  domain.DepartureGateUnreadable,
 		domain.DepartureScheduleRegistryUnavailable: domain.DepartureGateUnreadable,
 		domain.DepartureHandoverRegistryUnavailable: domain.DepartureGateUnreadable,
+		domain.DepartureSegmentRecordUnreadable:     domain.DepartureGateUnreadable,
+		domain.DepartureScheduleRecordUnreadable:    domain.DepartureGateUnreadable,
 	} {
 		if got := stoppedReading(t, stop).Answer(); got != want {
 			t.Errorf("%s 答 %s, want %s", stop, got, want)
@@ -126,6 +128,34 @@ func TestStopsBelongToOneAnswerAndExcludeFindings(t *testing.T) {
 		if _, err := domain.FormDepartureGateReading(spec); !errors.Is(err, domain.ErrInvalidDepartureGateReading) {
 			t.Errorf("%s：err = %v, want ErrInvalidDepartureGateReading", name, err)
 		}
+	}
+}
+
+// Covers: AT-TF-342 领域半边（ADR-0305）——停点里哪几种补问时值得再问一次：缺的东西日后补得齐（段不在册、那一刻段里没有在控对象、
+// 班次不在册），或那一口连不上（段册、班次册、交接册读不动）；没声明段、存量回填、班次不服务该段与段册或班次册那一行装不回，再问
+// 也是同一个结果。装不回与连不上同属读不动，只在这一问上分开。
+func TestOnlyStopsThatCanChangeAreReaskable(t *testing.T) {
+	for stop, want := range map[domain.DepartureGateStop]bool{
+		domain.DepartureSegmentNotDeclared:          false,
+		domain.DepartureSegmentNotRegistered:        true,
+		domain.DepartureNoObjectUnderControl:        true,
+		domain.DepartureScheduleNotRegistered:       true,
+		domain.DepartureRecordedBeforeGateReading:   false,
+		domain.DepartureScheduleNotServingSegment:   false,
+		domain.DepartureSegmentRegistryUnavailable:  true,
+		domain.DepartureScheduleRegistryUnavailable: true,
+		domain.DepartureHandoverRegistryUnavailable: true,
+		domain.DepartureSegmentRecordUnreadable:     false,
+		domain.DepartureScheduleRecordUnreadable:    false,
+		domain.DepartureGateStopInvalid:             false,
+	} {
+		if got := stop.Reaskable(); got != want {
+			t.Errorf("%q Reaskable = %v, want %v", stop, got, want)
+		}
+	}
+	if domain.DepartureSegmentRecordUnreadable.String() != "SEGMENT_RECORD_UNREADABLE" ||
+		domain.DepartureScheduleRecordUnreadable.String() != "SCHEDULE_RECORD_UNREADABLE" {
+		t.Fatalf("装不回两个停点的词 = %q / %q", domain.DepartureSegmentRecordUnreadable, domain.DepartureScheduleRecordUnreadable)
 	}
 }
 

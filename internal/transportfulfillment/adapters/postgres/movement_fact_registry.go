@@ -426,6 +426,7 @@ func departureGateStopFrom(raw string) (domain.DepartureGateStop, error) {
 		domain.DepartureScheduleNotServingSegment,
 		domain.DepartureSegmentRegistryUnavailable, domain.DepartureScheduleRegistryUnavailable,
 		domain.DepartureHandoverRegistryUnavailable,
+		domain.DepartureSegmentRecordUnreadable, domain.DepartureScheduleRecordUnreadable,
 	} {
 		if stop.String() == raw {
 			return stop, nil

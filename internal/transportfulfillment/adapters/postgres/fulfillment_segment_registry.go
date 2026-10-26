@@ -88,7 +88,7 @@ func (repository *FulfillmentSegments) FindByKey(
 	// NULL 就是未声明（ADR-0114 决定一）；非空的词经封闭集合认回，词不在集合内是坏行，在这里响亮。
 	if serviceAction != nil {
 		if spec.ServiceAction, err = domain.ParseSegmentServiceAction(*serviceAction); err != nil {
-			return ports.FulfillmentSegmentRecord{}, false, fmt.Errorf("find fulfillment segment: %w", err)
+			return ports.FulfillmentSegmentRecord{}, false, segmentRecordUnreadable(err)
 		}
 	}
 	for rows.Next() {
@@ -117,7 +117,7 @@ func (repository *FulfillmentSegments) FindByKey(
 			voided:     voided,
 		})
 		if err != nil {
-			return ports.FulfillmentSegmentRecord{}, false, fmt.Errorf("find fulfillment segment: %w", err)
+			return ports.FulfillmentSegmentRecord{}, false, segmentRecordUnreadable(err)
 		}
 		spec.Participations = append(spec.Participations, member)
 	}
@@ -127,13 +127,19 @@ func (repository *FulfillmentSegments) FindByKey(
 
 	segment, err := domain.RehydrateActualFulfillmentSegment(spec)
 	if err != nil {
-		return ports.FulfillmentSegmentRecord{}, false, fmt.Errorf("find fulfillment segment: %w", err)
+		return ports.FulfillmentSegmentRecord{}, false, segmentRecordUnreadable(err)
 	}
 	return ports.FulfillmentSegmentRecord{
 		Key:        key,
 		Segment:    segment,
 		RecordedAt: recordedAt.UTC(),
 	}, true, nil
+}
+
+// segmentRecordUnreadable 包住「行读回来了却装不回」那一类：库面被绕过构造门写过，重读也是同一个结果，与连不上库分开报
+// （ports.ErrFulfillmentSegmentRecordUnreadable）。只用在扫描成功之后的各道构造门上——扫描本身报的错仍是读不动。
+func segmentRecordUnreadable(err error) error {
+	return fmt.Errorf("find fulfillment segment: %w: %w", ports.ErrFulfillmentSegmentRecordUnreadable, err)
 }
 
 // Save 首登一个段连同它全部成员。撞键答`已登记`（ADR-0031），编排据此读回赢家。

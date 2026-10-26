@@ -311,6 +311,7 @@ func TestACustomsFailureIsRecordedAsUnreadableForThatObjectOnly(t *testing.T) {
 
 // Covers: AT-TF-114 编排半边——本上下文这一侧找不齐问关务要的东西就停下、不问关务，停点说缺什么或哪一口读不动；
 // 段与班次各停各的，班次读到了就记下方向。
+// Covers: AT-TF-342 编排半边——段册或班次册那一行装不回（端口包住各自的 RecordUnreadable 哨兵）另记一个停点，与连不上分开，同属读不动。
 func TestADepartureStopsBeforeCustomsWhenItCannotSayWhatOrWhere(t *testing.T) {
 	cases := map[string]struct {
 		arrange func(*departureGateFixture, *application.RecordMovementFactCommand)
@@ -345,6 +346,18 @@ func TestADepartureStopsBeforeCustomsWhenItCannotSayWhatOrWhere(t *testing.T) {
 				fixture.schedules.registered = false
 			},
 			stops: []string{"SCHEDULE_NOT_REGISTERED"}, answer: domain.DepartureGateUndecided,
+		},
+		"段那一行装不回": {
+			arrange: func(fixture *departureGateFixture, _ *application.RecordMovementFactCommand) {
+				fixture.segments.findErr = fmt.Errorf("find fulfillment segment: %w: bad row", ports.ErrFulfillmentSegmentRecordUnreadable)
+			},
+			stops: []string{"SEGMENT_RECORD_UNREADABLE"}, answer: domain.DepartureGateUnreadable, direct: true,
+		},
+		"班次那一行装不回": {
+			arrange: func(fixture *departureGateFixture, _ *application.RecordMovementFactCommand) {
+				fixture.schedules.findErr = fmt.Errorf("find transport schedule: %w: bad row", ports.ErrTransportScheduleRecordUnreadable)
+			},
+			stops: []string{"SCHEDULE_RECORD_UNREADABLE"}, answer: domain.DepartureGateUnreadable,
 		},
 		"班次册读不动且段不在册": {
 			arrange: func(fixture *departureGateFixture, command *application.RecordMovementFactCommand) {

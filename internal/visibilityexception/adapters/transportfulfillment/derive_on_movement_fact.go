@@ -206,21 +206,38 @@ func (adapter *DeriveOnMovementFactAdapter) objectsOf(
 	return record.Segment.ObjectsUnderControlAt(fact.OccurredAt()), nil
 }
 
-// signalBlocked 为出发读数里关务判为阻断的每一件形成一次信号（ADR-0205 决定五）。只看逐对象那一格，不看整格：整格是压过的
-// 结论，阻断只可能来自某一件，信号也只该落在那一件上。集运单元那一格同理不形成信号（ADR-0225）：它是由袋里各件推出来的，
-// 阻断的那一件在读数里另有一格、另形成信号；给袋再立一次，同一次违规在分诊里就记成两回，还落在一个不是包裹的引用上。
+// signalBlocked 为出发读数里关务判为阻断的每一件形成一次信号（ADR-0205 决定五），判法在 raiseDepartureGateSignals。
 //
 // 更正版不再形成：领域的更正版沿用原登记那一刻的读数（ADR-0205 越权风险点 8），同一次出发、同一份读数，原版已经命中过一次，
 // 再命中一次只会把同一件事在分诊里记成两回。
-//
-// 每一件带上这一次出发作事实依据与因果条件：这件包裹上的事实引用（与投影同一把键）、事实版本，以及读数里它那一格的关务判断
-// 标识。阻断那一格必有判断标识（只有读不动没有），没有就是登记册里那一格坏了。
 func (adapter *DeriveOnMovementFactAdapter) signalBlocked(ctx context.Context, fact tfdomain.TransportMovementFact) error {
 	reading, read := fact.GateReading()
-	if !read || reading.Answer() != tfdomain.DepartureGateBlocked {
+	if !read {
 		return nil
 	}
 	if _, corrected := fact.Corrects(); corrected {
+		return nil
+	}
+	return raiseDepartureGateSignals(ctx, adapter.signals, fact, reading, nil)
+}
+
+// raiseDepartureGateSignals 为 reading 里关务判为阻断的每一件形成一次信号：出发首版那一份读数（移动事实那一路）与补问追加的
+// 那一份（补问那一路，ADR-0305）都走这一处。只看逐对象那一格，不看整格：整格是压过的结论，阻断只可能来自某一件，信号也只该落在
+// 那一件上。集运单元那一格同理不形成信号（ADR-0225）：它是由袋里各件推出来的，阻断的那一件在读数里另有一格、另形成信号；给袋再立
+// 一次，同一次违规在分诊里就记成两回，还落在一个不是包裹的引用上。already 里的对象在同一条出发更早的一份读数里已判过阻断、已形成
+// 过信号，不再形成——一次违规出发只交分诊一次。
+//
+// 每一件带上这一次出发作事实依据与因果条件：这件包裹上的事实引用（与投影同一把键）、事实版本，以及读数里它那一格的关务判断
+// 标识。补问来的阻断也是这样：违规的是那一次出发，业务时间是出发那一刻，补问只是后来才问清楚；命中时刻照旧取判断那一刻。阻断
+// 那一格必有判断标识（只有读不动没有），没有就是登记册里那一格坏了。
+func raiseDepartureGateSignals(
+	ctx context.Context,
+	signals DepartureGateSignalRaiser,
+	fact tfdomain.TransportMovementFact,
+	reading tfdomain.DepartureGateReading,
+	already map[tfdomain.CarriedObjectReference]bool,
+) error {
+	if reading.Answer() != tfdomain.DepartureGateBlocked {
 		return nil
 	}
 	tenant, err := vedomain.NewTenantID(fact.TenantID().String())
@@ -228,7 +245,7 @@ func (adapter *DeriveOnMovementFactAdapter) signalBlocked(ctx context.Context, f
 		return fmt.Errorf("%w: tenant: %v", ErrMovementFactUntranslatableAnswer, err)
 	}
 	for _, finding := range reading.Findings() {
-		if _, unit := finding.ConsolidationUnit(); unit || finding.Answer() != tfdomain.DepartureGateBlocked {
+		if _, unit := finding.ConsolidationUnit(); unit || finding.Answer() != tfdomain.DepartureGateBlocked || already[finding.Object()] {
 			continue
 		}
 		parcel, err := vedomain.NewTrackedParcelReference(finding.Object().String())
@@ -247,7 +264,7 @@ func (adapter *DeriveOnMovementFactAdapter) signalBlocked(ctx context.Context, f
 		if err != nil {
 			return fmt.Errorf("%w: movement fact version: %v", ErrMovementFactUntranslatableAnswer, err)
 		}
-		result, err := adapter.signals.Handle(ctx, veapplication.RaiseDepartureGateSignalCommand{
+		result, err := signals.Handle(ctx, veapplication.RaiseDepartureGateSignalCommand{
 			TenantID:  tenant,
 			Parcel:    parcel,
 			Fact:      reference,
