@@ -7,6 +7,7 @@ import type { ApiResult } from '../catalogue-api';
 import { catalogueConditionsNarrow } from '../catalogue-query';
 import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { CustomerContractPublicationForm } from './CustomerContractPublicationForm';
+import { statusBadge } from './detail-primitives';
 import { DeliveryConditionsCell } from './DeliveryConditionsCell';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
 import {
@@ -53,8 +54,8 @@ const columns: ListColumn<CustomerContractRecord>[] = [
   },
   {
     id: 'status',
-    header: '生命周期状态',
-    render: (row) => labelOf(commercialStatusLabels, row.status),
+    header: '状态',
+    render: (row) => statusBadge(commercialStatusLabels, row.status),
   },
   {
     id: 'rule-package',
@@ -219,11 +220,11 @@ const accountColumns: ListColumn<CustomerAccountRecord>[] = [
   },
   {
     id: 'status',
-    header: '身份状态',
+    header: '状态',
     align: 'center',
     render: (row) => (
       <div>
-        <p>{labelOf(identityStatusLabels, row.status)}</p>
+        <p>{statusBadge(identityStatusLabels, row.status)}</p>
         {row.deactivatedAt ? (
           <p className="mt-0.5 font-mono text-xs text-idpxyz-textMuted">
             自 {formatInstant(row.deactivatedAt)}

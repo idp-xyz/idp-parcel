@@ -27,7 +27,7 @@ function col(id: string, header: string, mono = false): ListColumn<SupplierAgree
 export const supplierAgreementColumns: ListColumn<SupplierAgreementRow>[] = [
   col('identity', '协议 / 版本', true),
   col('scope', '版本适用范围', true),
-  col('status', '生命周期状态'),
+  col('status', '状态'),
   col('effective', '版本有效区间', true),
   col('publishedAt', '发布时间', true),
   col('contentRegistered', '正文'),

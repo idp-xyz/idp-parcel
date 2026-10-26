@@ -297,7 +297,7 @@ export function PartyOverviewSection({
                 <span className="font-mono">
                   {row.objectId}@{row.version}
                 </span>
-                <span>{labelOf(commercialStatusLabels, row.status)}</span>
+                {statusBadge(commercialStatusLabels, row.status)}
               </div>
               <Line label="责任法人" mono>
                 {row.legalEntity}

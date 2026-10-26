@@ -13,6 +13,7 @@ import {
   type ServiceProductListResponseBody,
   type ServiceProductRecord,
 } from './api';
+import { statusBadge } from './detail-primitives';
 import {
   commercialStatusLabels,
   labelOf,
@@ -53,8 +54,8 @@ const columns: ListColumn<ServiceProductRecord>[] = [
   },
   {
     id: 'status',
-    header: '生命周期状态',
-    render: (row) => labelOf(commercialStatusLabels, row.status),
+    header: '状态',
+    render: (row) => statusBadge(commercialStatusLabels, row.status),
   },
   {
     id: 'delivery-conditions',

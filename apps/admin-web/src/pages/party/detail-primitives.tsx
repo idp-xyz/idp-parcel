@@ -3,6 +3,7 @@ import { Button } from '@idpxyz/ui-primitives';
 import { useToast } from '@idpxyz/ui-theme-runtime';
 import { StatusBadgeFor, domainStatusTones, type DomainStatus } from '../../domain/status';
 import { formatInstant } from '../catalogue-view';
+import type { ListColumn } from '../../templates';
 import { labelOf, partyNameUnknownNote } from './presentation';
 
 // 参与方模块册页共用的呈现件（票 admin-web-group-legal-entities/09 第 2、5 条）。它们先在票 01 的法人页里长出来，
@@ -15,8 +16,29 @@ import { labelOf, partyNameUnknownNote } from './presentation';
  * 色调同源于 domain/status；断言只桥接类型边界，词同源于 CONTEXT 原词。
  */
 export function statusBadge(table: Record<string, string>, code: string): ReactNode {
-  const word = labelOf(table, code);
-  return word in domainStatusTones ? <StatusBadgeFor status={word as DomainStatus} /> : word;
+  return statusWordBadge(labelOf(table, code));
+}
+
+/**
+ * 同上，给已经译成词的格用：行模型（policy-rows、supplier-agreement-rows）为了能在 node:test 里跑，只交字符串、不碰组件库，
+ * 徽章由页面在渲染那一层套上。
+ */
+export function statusWordBadge(word: string): ReactNode {
+  // 不折行：窄列里徽章被挤成「已生 / 效」两行，比没有徽章还难读；列宽由表格按内容让出来。
+  return word in domainStatusTones ? (
+    <span className="whitespace-nowrap">
+      <StatusBadgeFor status={word as DomainStatus} />
+    </span>
+  ) : (
+    word
+  );
+}
+
+/** 行模型列表里 `status` 那一列换成徽章，其余列原样。 */
+export function withStatusBadge<Row extends { values: Record<string, string> }>(columns: ListColumn<Row>[]): ListColumn<Row>[] {
+  return columns.map((column) =>
+    column.id === 'status' ? { ...column, render: (row: Row) => statusWordBadge(row.values.status ?? '—') } : column,
+  );
 }
 
 /** 名称转写不到（悬空引用）时那一格的话，弱化显示；句子只在 presentation.ts 一处。 */

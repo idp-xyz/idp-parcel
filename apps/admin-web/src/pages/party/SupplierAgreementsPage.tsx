@@ -5,6 +5,7 @@ import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState } from '../catalogue-view';
 import { listSupplierAgreements, type SupplierAgreementListResponseBody } from './api';
+import { withStatusBadge } from './detail-primitives';
 import {
   supplierAgreementColumns,
   supplierAgreementRowsOf,
@@ -64,7 +65,7 @@ function SupplierAgreementCatalogue({ reloadToken }: { reloadToken: number }) {
         // 「这不是目录为空」直接矛盾（README 列表页上列通则「计数摘要必须带 outcome 守卫」）。
         answer?.kind === 'outcome' ? `当前返回 ${rows.length} 份协议版本` : undefined
       }
-      columns={supplierAgreementColumns}
+      columns={withStatusBadge(supplierAgreementColumns)}
       rows={visibleRows}
       rowKey={(row) => row.key}
       viewState={catalogueViewState(answer, rows.length, retry, {

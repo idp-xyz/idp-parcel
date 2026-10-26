@@ -98,7 +98,7 @@ export const kindColumns: Record<CommercialPolicyKind, ListColumn<PolicyRow>[]> 
   AUTHORIZATION_RULE: [
     col('identity', '授权规则 / 版本', true),
     col('scope', '适用范围', true),
-    col('status', '生命周期状态'),
+    col('status', '状态'),
     col('customerCancellation', '客户取消授权'),
     col('operationsCancellation', '运营取消授权'),
     col('effective', '有效区间', true),
@@ -121,7 +121,7 @@ export const kindColumns: Record<CommercialPolicyKind, ListColumn<PolicyRow>[]> 
   PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY: [
     col('identity', '策略对象 / 版本', true),
     col('scope', '适用范围', true),
-    col('status', '生命周期状态'),
+    col('status', '状态'),
     col('contentRegistered', '正文'),
     col('jointPassCondition', '共同通过条件'),
     col('controls', '控制项(顺序. 种类@费用范围 → 失败处置;责任)', true),
@@ -136,7 +136,7 @@ export const kindColumns: Record<CommercialPolicyKind, ListColumn<PolicyRow>[]> 
   CUSTOMER_SERVICE_RULE: [
     col('identity', '规则对象 / 版本', true),
     col('scope', '适用范围', true),
-    col('status', '生命周期状态'),
+    col('status', '状态'),
     col('contentRegistered', '正文'),
     col('appliesTo', '适用对象（服务产品或客户合同）', true),
     col('responsibleParty', '责任方', true),

@@ -14,6 +14,7 @@ import {
   type CommercialPolicyKind,
   type CommercialPolicyListResponseBody,
 } from './api';
+import { withStatusBadge } from './detail-primitives';
 import { CreditPolicyPublicationForm } from './CreditPolicyPublicationForm';
 import { AuthorizationRulePublicationForm } from './AuthorizationRulePublicationForm';
 import { SettlementPolicyPublicationForm } from './SettlementPolicyPublicationForm';
@@ -110,7 +111,7 @@ function PolicyRegisters({ published }: { published: PublishedNotice | null }) {
         // 计数只在拿到业务答案后显示,未配置态不报「0 条」(与 pricing 两页同一守卫)。
         answer?.kind === 'outcome' ? `${policyKindLabels[kind]} ${rows.length} 条` : undefined
       }
-      columns={kindColumns[kind]}
+      columns={withStatusBadge(kindColumns[kind])}
       rows={visibleRows}
       rowKey={(row) => row.key}
       viewState={catalogueViewState(answer, rows.length, retry, {
