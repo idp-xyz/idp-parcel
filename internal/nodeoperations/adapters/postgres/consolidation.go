@@ -65,11 +65,11 @@ func (repository *ConsolidationUnits) FindByID(
 	return unit, found, nil
 }
 
-// FindByIDForUpdate 同 FindByID，另在单元行上取 FOR NO KEY UPDATE 行锁到事务结束（为何要锁见端口注释）。取的正是随后
-// 那条 UPDATE 本来就要取的那一把，只是提前到读：读来改之间互斥；别的事务插入引用这只单元的行时做的外键核对
-// （FOR KEY SHARE）不陪着等——FOR UPDATE 会把它们也挡住，换不来什么，单元的键从不改。READ COMMITTED 下，等到
-// 前一笔提交之后这一读拿到的是提交后的那一版，不是开始等时的那一版。走 RequireExecutor：连接池上取的锁随那条
-// 语句自动提交当场放掉。
+// FindByIDForUpdate 同 FindByID，另在单元行上取 FOR NO KEY UPDATE 行锁到事务结束（为何要锁见
+// ports.ConsolidationStore.FindByIDForUpdate）。取的正是随后那条 UPDATE 本来就要取的那一把，只是提前到读：读来改
+// 之间互斥；别的事务插入引用这只单元的行时做的外键核对（FOR KEY SHARE）不陪着等——FOR UPDATE 会把它们也挡住，
+// 换不来什么，单元的键从不改。READ COMMITTED 下，等到前一笔提交之后这一读拿到的是提交后的那一版，不是开始等时的
+// 那一版。走 RequireExecutor：连接池上取的锁随那条语句自动提交当场放掉。
 func (repository *ConsolidationUnits) FindByIDForUpdate(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -169,7 +169,7 @@ func (repository *ConsolidationUnits) Save(
 //
 // 交进来的单元按整行写，它的每个成员都重新插进容纳索引（已在的不动）、不在它身上的本单元容纳行删掉；这里不比
 // 版本，分不出这份单元是什么时候读的。所以它只该收 FindByIDForUpdate 读出来的单元：旧读数会盖掉别的事务提交的
-// 推进，并把别的事务刚删掉的边写回（端口注释）。
+// 推进，并把别的事务刚删掉的边写回（ports.ConsolidationStore.FindByIDForUpdate）。
 func (repository *ConsolidationUnits) Update(
 	ctx context.Context,
 	tenant domain.TenantID,

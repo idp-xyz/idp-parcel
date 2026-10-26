@@ -256,7 +256,7 @@ func (store *stallingUnitStore) FindByIDForUpdate(ctx context.Context, tenant do
 // 的那一笔读完 A 停住；此间导入把 B 从 A 移出，再把 A 装进 B——B 的链路此刻只有它自己，移入照判答`已移入`；封装
 // 续行，按旧读数把 B→A 写回，册上 A 在 B 里、B 也在 A 里，此后这条链上任何移入都只能答`NO_ANSWER_FORMED`。
 //
-// 改单元的各口读单元持单元行锁（ConsolidationStore.FindByIDForUpdate）之后，这一交错走不出来：移出等在 A 的行锁上，
+// 改单元的各口读单元持单元行锁（ConsolidationStore.FindByIDForUpdate），这一交错走不出来：移出等在 A 的行锁上，
 // 封装提交后它读到已封装的 A、答未受理（封装后改成员先开封）；随后的反向移入沿 B 的链路看到 A，答`包含循环`。
 // 封装那一笔若改回不持锁的读，或者移出那一笔改回不持锁的读，本用例都红。
 func TestAStaleUnitReadCannotWriteBackARemovedEdgeIntoACycle(t *testing.T) {

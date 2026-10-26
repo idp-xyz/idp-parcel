@@ -638,7 +638,7 @@ type ConsolidationStore interface {
 	// 新边只由移入加，移入在 ContainmentIndex.LineageForUpdate 的租户锁下判过环。
 	//
 	// 锁随事务释放，所以它只在事务里答、事务外拒（取锁那条语句自动提交当场放锁，什么也挡不住）。单元不在册时交回
-	// false，不取任何锁。
+	// false，不锁任何行。
 	FindByIDForUpdate(ctx context.Context, tenant domain.TenantID, id domain.ConsolidationUnitID) (*domain.ConsolidationUnit, bool, error)
 
 	Save(ctx context.Context, tenant domain.TenantID, unit *domain.ConsolidationUnit) (ConsolidationSaveOutcome, error)
