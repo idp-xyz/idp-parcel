@@ -496,6 +496,15 @@ func TestNetworkCatalogRegistrationTranscribesTheUseCaseAnswersVerbatim(t *testi
 			wantReason: "ENDPOINTS_NOT_DISTINCT",
 		},
 		{
+			// AT-NR-094：要换的是代码，载荷上指名的是分隔符那一格，不是缺身份。
+			name:       "连接代码带窗口依据分隔符",
+			family:     "connection",
+			spoil:      func(intake *recordingRegistrationIntake) { intake.connection.Code = "SYN-CONN-A+B" },
+			wantStatus: http.StatusOK,
+			wantAnswer: "REFUSED",
+			wantReason: "CONNECTION_CODE_CARRIES_BASIS_SEPARATOR",
+		},
+		{
 			name:       "零段的线路不成链",
 			family:     "line",
 			spoil:      func(intake *recordingRegistrationIntake) { intake.line.Segments = nil },

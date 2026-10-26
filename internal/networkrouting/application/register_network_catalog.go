@@ -100,6 +100,10 @@ const (
 	// CatalogLegZoneWithoutCostBasis 是要登区域的段没挂成本依据（或这条线路版本根本不在册）：先给那一段挂依据，区域
 	// 才有卡可依（ADR-0189 决定二）。
 	CatalogLegZoneWithoutCostBasis
+	// CatalogConnectionCodeCarriesBasisSeparator 是连接代码里带了窗口依据的分隔符 `+`：计划段窗口依据写作
+	// `CONNECTION/<代码>@<版本>`，TF 按 `+` 切格认连接（ADR-0201 决定二），带 `+` 的代码读不回，准备那一路每封初始
+	// 路由信封都失败。要换的是代码；身份不缺，所以不并进缺身份码那一格。
+	CatalogConnectionCodeCarriesBasisSeparator
 )
 
 func (reason CatalogRefusalReason) String() string {
@@ -150,6 +154,8 @@ func (reason CatalogRefusalReason) String() string {
 		return "LEG_ZONE_MALFORMED"
 	case CatalogLegZoneWithoutCostBasis:
 		return "LEG_ZONE_WITHOUT_COST_BASIS"
+	case CatalogConnectionCodeCarriesBasisSeparator:
+		return "CONNECTION_CODE_CARRIES_BASIS_SEPARATOR"
 	default:
 		return ""
 	}
@@ -270,6 +276,11 @@ func (service *NetworkCatalogRegistration) RegisterConnectionVersion(
 		return catalogRefused(reason), nil
 	}
 	switch {
+	// 连接代码原样拼进计划段窗口依据那一格，TF 按 `+` 切格：带它的代码被切成两半，读不回带版本的连接。`@` 与 `/`
+	// 不在此列——TF 在最后一个 `@` 处切版本（版本号只由数字组成）、按前缀认格，带它们的代码照样读回原样。
+	// 与迁移 0028 的 CHECK 同格。
+	case strings.Contains(row.Code, windowBasisSeparator):
+		return catalogRefused(CatalogConnectionCodeCarriesBasisSeparator), nil
 	case !catalogPresent(row.FromNode), !catalogPresent(row.ToNode):
 		return catalogRefused(CatalogEndpointMissing), nil
 	// 「网络连接必须表达相邻节点之间的明确方向」——两端相同没有方向可言，
@@ -537,6 +548,10 @@ func checkVersionRow(
 func catalogPresent(value string) bool {
 	return strings.TrimSpace(value) != ""
 }
+
+// windowBasisSeparator 是窗口依据里各格之间的分隔符：候选投影把各格以它连成一串（joinSortedUnique），TF 的
+// connectionOf 按它切格。窗口依据的拼写归 NR（ADR-0201 决定二）；连接代码要进计划段那一格，就不能带它。
+const windowBasisSeparator = "+"
 
 // normalizeServiceAreaCoverage 是服务区域覆盖与节点角色的受理门。覆盖经领域构造门收（形态与规整归
 // domain.ServiceAreaCoverage，本用例不另写一套），前缀按领域规整后的次序落库；节点身份逐个不得空白，同一角色里
