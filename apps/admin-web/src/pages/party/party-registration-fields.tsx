@@ -25,7 +25,14 @@ import {
   registrationTitles,
 } from './presentation';
 import { Field, type PickerOption } from './PublicationFormFields';
-import { effectiveDraftOf, registrationLanded, type RevisionedDraft } from './registration-form';
+import {
+  effectiveDraftOf,
+  registrationContentKey,
+  registrationDraftUnsaved,
+  registrationLanded,
+  type RevisionedDraft,
+} from './registration-form';
+import { registrationGroup, useUnsavedGuard } from './unsaved-guard';
 
 /**
  * 参与方模块各登记表单（票 admin-web-group-legal-entities/02 的法人表单与票 10 的三份）共用的壳与格。各表单各留一份
@@ -54,6 +61,11 @@ export interface RegistrationFormSpec<Draft extends RevisionedDraft> {
    * 壳不解它，分不出送的是什么。
    */
   onLanded: (sent: Draft | null) => void;
+  /**
+   * 有没提交的输入时是否登记进未保存簿、并让浏览器离开前确认；默认是。草稿由深链预填的表单（身份停用）关掉：预填后人什么都没
+   * 填，刷新深链会再预填一次，弹确认只是误报。
+   */
+  guardUnsaved?: boolean;
 }
 
 /**
@@ -67,6 +79,12 @@ export function useRegistrationForm<Draft extends RevisionedDraft>(spec: Registr
   // 修订号建议随标识变；操作者一改过就不再跟着建议走，直到点「用建议值」复位。
   const [revisionEdited, setRevisionEdited] = useState(false);
   const [state, setState] = useState<RegistrationPanelState>({ kind: 'idle' });
+  // 最近一次落册送出的那份草稿的内容键：之后没再动就不算没提交（票 party-commercial-uiux/17）。
+  const [landedKey, setLandedKey] = useState<string | null>(null);
+  useUnsavedGuard(
+    registrationGroup(spec.kind),
+    spec.guardUnsaved !== false && registrationDraftUnsaved(draft, spec.empty(), landedKey),
+  );
 
   const timeZone = currentDisplayTimeZone();
   const suggestion = spec.suggestion(draft);
@@ -78,7 +96,10 @@ export function useRegistrationForm<Draft extends RevisionedDraft>(spec: Registr
 
   const submit = (snapshot: unknown, sent: Draft | null = null) =>
     registerCommercial(spec.kind, snapshot).then((answer) => {
-      if (registrationLanded(answer, spec.landedOutcome)) spec.onLanded(sent);
+      if (registrationLanded(answer, spec.landedOutcome)) {
+        setLandedKey(registrationContentKey(sent ?? draft));
+        spec.onLanded(sent);
+      }
       return answer;
     });
 

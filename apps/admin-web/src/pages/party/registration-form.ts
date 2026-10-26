@@ -46,6 +46,25 @@ export function suggestedNextRevision<Row extends { revision: number }>(
 }
 
 /**
+ * 草稿的内容键，不含修订号：修订号是建议值顶进去的，落册后册一重取建议值就变，比它会把刚登记完的表单误判成没提交。
+ */
+export function registrationContentKey<Draft extends RevisionedDraft>(draft: Draft): string {
+  return JSON.stringify({ ...draft, revision: '' });
+}
+
+/**
+ * 表单里有没提交的输入：内容与空表单不同，且不是最近一次落册送出的那一份。`landedKey` 是落册那刻的内容键，没落过册为 null。
+ */
+export function registrationDraftUnsaved<Draft extends RevisionedDraft>(
+  draft: Draft,
+  empty: Draft,
+  landedKey: string | null,
+): boolean {
+  const key = registrationContentKey(draft);
+  return key !== registrationContentKey(empty) && key !== landedKey;
+}
+
+/**
  * 送出与校验用的草稿：操作者没改过修订号时把建议值顶进去（其余格不动）；改过就用草稿原值，直到点「用建议值」
  * 复位。建议只是省一次翻册，连续性（登记）或错位（停用）仍由服务端按册面判，所以顶进去的也只是个待送的字符串。
  */

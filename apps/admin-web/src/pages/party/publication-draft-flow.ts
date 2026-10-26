@@ -113,6 +113,14 @@ export function reachedStep(flow: PublicationFlowState, key: string): FlowStep {
  * 不会跟着变——锁住是让「眼前这份」与「册上那份」在操作者眼里保持同一份。要改内容走「重新开始」，
  * 再录一次，登记册按`待批准期间修订`就地更新。
  */
+/**
+ * 表单里有没发布的内容：载荷与表单起头那一份不同，且这份载荷没有走到「发布」。起头那份是空表单或「基于此版本」的预填，
+ * 预填本身不算输入，人动过才算。存为待批准与批准都不算落定：待批准稿现在没有读回的列表，离开页面就找不回来。
+ */
+export function publicationDraftUnsaved(initialKey: string, currentKey: string, step: FlowStep): boolean {
+  return currentKey !== initialKey && step !== 'publish';
+}
+
 export function isFormLocked(step: FlowStep): boolean {
   return step === 'submit' || step === 'approve' || step === 'publish';
 }

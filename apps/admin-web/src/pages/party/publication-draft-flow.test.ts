@@ -16,6 +16,7 @@ import {
   nextAction,
   payloadKey,
   problemsByField,
+  publicationDraftUnsaved,
   reachedStep,
   unclaimedProblems,
   withApproval,
@@ -216,4 +217,15 @@ test('逐格问题按路径归组，未认领的单独交回', () => {
     { field: 'references.SERVICE_PRODUCT', problem: '集合外' },
   ]);
   deepEqual(problemsByField(undefined), {});
+});
+
+test('没发布的输入才算未保存：与起头那份相同不算，走到发布不算，存为待批准、批准仍算', () => {
+  equal(publicationDraftUnsaved('空表单', '空表单', 'form'), false);
+  equal(publicationDraftUnsaved('空表单', '填了', 'form'), true);
+  equal(publicationDraftUnsaved('空表单', '填了', 'preview'), true);
+  equal(publicationDraftUnsaved('空表单', '填了', 'submit'), true);
+  equal(publicationDraftUnsaved('空表单', '填了', 'approve'), true);
+  equal(publicationDraftUnsaved('空表单', '填了', 'publish'), false);
+  equal(publicationDraftUnsaved('预填', '预填', 'form'), false);
+  equal(publicationDraftUnsaved('预填', '预填后改了', 'form'), true);
 });

@@ -10,6 +10,7 @@ import { publicationSummary, type PublicationFact } from './publication-summary'
 import { labelOf, problemNote } from './presentation';
 import { fieldProblemText } from './field-problem-text';
 import { ProblemText } from './PublicationFormFields';
+import { publicationGroup, useUnsavedGuard } from './unsaved-guard';
 import {
   approveOutcomeLabels,
   approvePublicationDraft,
@@ -35,6 +36,7 @@ import {
   flowStepLabels,
   flowSteps,
   isFormLocked,
+  publicationDraftUnsaved,
   nextAction,
   payloadKey,
   problemsByField,
@@ -123,6 +125,9 @@ export function PublicationDraftFlow({
   const step = reachedStep(flow, key);
   const action = nextAction(step);
   const locked = isFormLocked(step);
+  // 表单起头那一份（空表单或预填）的键：人动过它、又还没发布，离开前要问（票 party-commercial-uiux/17）。
+  const initialKey = useRef(key);
+  useUnsavedGuard(publicationGroup(kind), publicationDraftUnsaved(initialKey.current, key, step));
 
   const preview = currentAnswer(flow.preview, key);
   const submission = currentAnswer(flow.submission, key);

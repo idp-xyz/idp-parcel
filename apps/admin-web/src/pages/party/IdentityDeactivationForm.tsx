@@ -217,6 +217,8 @@ export function IdentityDeactivationForm({ parties, onDeactivated, preset = null
     // JSON 镜像那条路交回 null（快照是未译的 JSON，壳不解它，分不出种类）——两边都重取：各是一个 GET，为分种类去解一份
     // unknown 不值。
     landedOutcome: 'DEACTIVATED',
+    // 草稿由深链预填，预填后人什么都没填；刷新深链会再预填一次，不弹离开确认。
+    guardUnsaved: false,
     onLanded: (sent) => {
       if (sent === null || sent.kind === 'BUSINESS_PARTY') onDeactivated();
       if (sent === null || sent.kind !== 'BUSINESS_PARTY') setReloadKey((value) => value + 1);

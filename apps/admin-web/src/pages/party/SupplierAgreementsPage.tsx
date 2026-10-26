@@ -8,6 +8,8 @@ import { useAddressKeyword } from '../../templates/use-address-keyword';
 import { listSupplierAgreements, type SupplierAgreementListResponseBody, type SupplierAgreementRecord } from './api';
 import { nextRequest, newVersionFrom, type NewVersionRequest } from './new-version';
 import { withNewVersionAction } from './NewVersionAction';
+import { useReplaceDraftGuard } from './ReplaceDraftGuard';
+import { publicationGroup } from './unsaved-guard';
 import { supplierAgreementDraftFromRecord } from './supplier-agreement-form';
 import { KeepAliveTabs, KeepAliveTabsContent } from './keep-alive-tabs';
 import { VersionStatusChips } from './VersionStatusChips';
@@ -147,12 +149,19 @@ export function SupplierAgreementsPage() {
   // 点协议行上的「发新版本」：记下是哪一版，切到发布签；发布表单据此预填并重建（票 party-commercial-uiux/14）。
   const [tab, setTab] = useState('catalogue');
   const [request, setRequest] = useState<NewVersionRequest<SupplierAgreementRecord> | null>(null);
-  const startNewVersion = (record: SupplierAgreementRecord) => {
+  const beginNewVersion = (record: SupplierAgreementRecord) => {
     setRequest((previous) => nextRequest(previous, record));
     setTab('publish');
   };
+  // 发布签里已填未发布的草稿要被换掉时先问一句（票 party-commercial-uiux/17）。
+  const replaceGuard = useReplaceDraftGuard<SupplierAgreementRecord>(
+    () => publicationGroup('SUPPLIER_AGREEMENT'),
+    beginNewVersion,
+    '发布协议版本',
+  );
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+      {replaceGuard.dialog}
       <KeepAliveTabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="catalogue">协议目录</TabsTrigger>
@@ -162,7 +171,7 @@ export function SupplierAgreementsPage() {
           value="catalogue"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
-          <SupplierAgreementCatalogue reloadToken={reloadToken} onStartNewVersion={startNewVersion} />
+          <SupplierAgreementCatalogue reloadToken={reloadToken} onStartNewVersion={replaceGuard.start} />
         </KeepAliveTabsContent>
         <KeepAliveTabsContent
           value="publish"

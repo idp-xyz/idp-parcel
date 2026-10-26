@@ -2,7 +2,15 @@ import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
 import type { ApiResult } from '../catalogue-api';
 import type { RegistrationResponseBody } from '../../components/registration';
-import { advancedGroupOpen, effectiveDraftOf, registrationLanded, revisionOf, suggestedNextRevision } from './registration-form';
+import {
+  advancedGroupOpen,
+  effectiveDraftOf,
+  registrationContentKey,
+  registrationDraftUnsaved,
+  registrationLanded,
+  revisionOf,
+  suggestedNextRevision,
+} from './registration-form';
 
 // 本文件钉的是参与方模块各登记表单共用的规则（票 admin-web-group-legal-entities/13 第 1 / 3 条抬出）：修订号格的编码
 // 层判据、建议值何时顶进草稿、登记册答什么才算落地。各份表单（法人 / 参与方 / 关系 / 停用……）同一判，不各留一份。
@@ -87,4 +95,15 @@ test('高级组：默认收起，在册下一修订展开，问题压过操作�
   equal(advancedGroupOpen(false, { 'legalEntities[0].revision': ['修订号要是正整数'] }, paths, false), true);
   equal(advancedGroupOpen(null, { 'legalEntities[0].basis': ['依据不能为空'] }, paths, false), false);
   equal(advancedGroupOpen(null, { 'legalEntities[0].revision': [] }, paths, false), false);
+});
+
+test('登记表单的未保存：内容与空表单不同、且不是落册送出的那份；修订号不参与比较', () => {
+  const empty = { name: '', revision: '' };
+  equal(registrationDraftUnsaved(empty, empty, null), false);
+  equal(registrationDraftUnsaved({ name: 'A', revision: '' }, empty, null), true);
+  // 修订号建议值随册变：只动了修订号不算输入。
+  equal(registrationDraftUnsaved({ name: '', revision: '7' }, empty, null), false);
+  const landed = registrationContentKey({ name: 'A', revision: '1' });
+  equal(registrationDraftUnsaved({ name: 'A', revision: '2' }, empty, landed), false);
+  equal(registrationDraftUnsaved({ name: 'AB', revision: '2' }, empty, landed), true);
 });

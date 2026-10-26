@@ -16,6 +16,8 @@ import {
 } from './api';
 import { nextRequest, newVersionFrom, type NewVersionRequest } from './new-version';
 import { withNewVersionAction } from './NewVersionAction';
+import { useReplaceDraftGuard } from './ReplaceDraftGuard';
+import { publicationGroup } from './unsaved-guard';
 import { productKnownVersions } from './known-versions';
 import { closableKeys, closureKeyOf, closureTargetOf, type ClosureTarget } from './version-closure';
 import { VersionClosureDrawer } from './VersionClosureDrawer';
@@ -219,12 +221,19 @@ export function ServiceProductsPage() {
   // 点产品行上的「发新版本」：记下是哪一版，切到发布签；发布表单据此预填并重建（票 party-commercial-uiux/14）。
   const [tab, setTab] = useState('versions');
   const [request, setRequest] = useState<NewVersionRequest<ServiceProductRecord> | null>(null);
-  const startNewVersion = (record: ServiceProductRecord) => {
+  const beginNewVersion = (record: ServiceProductRecord) => {
     setRequest((previous) => nextRequest(previous, record));
     setTab('publish');
   };
+  // 发布签里已填未发布的草稿要被换掉时先问一句（票 party-commercial-uiux/17）。
+  const replaceGuard = useReplaceDraftGuard<ServiceProductRecord>(
+    () => publicationGroup('SERVICE_PRODUCT'),
+    beginNewVersion,
+    '发布版本',
+  );
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+      {replaceGuard.dialog}
       <KeepAliveTabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="versions">服务产品</TabsTrigger>
@@ -235,7 +244,7 @@ export function ServiceProductsPage() {
           value="versions"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
-          <ServiceProductVersionsTable refreshKey={refreshKey} onStartNewVersion={startNewVersion} />
+          <ServiceProductVersionsTable refreshKey={refreshKey} onStartNewVersion={replaceGuard.start} />
         </KeepAliveTabsContent>
         <KeepAliveTabsContent
           value="publish"

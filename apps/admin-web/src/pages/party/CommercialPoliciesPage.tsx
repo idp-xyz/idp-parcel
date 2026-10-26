@@ -18,6 +18,8 @@ import {
 } from './api';
 import { nextRequest, newVersionFrom, type NewVersionRequest, type NewVersionStart } from './new-version';
 import { withNewVersionAction } from './NewVersionAction';
+import { useReplaceDraftGuard } from './ReplaceDraftGuard';
+import { publicationGroup } from './unsaved-guard';
 import { policyKnownVersions } from './known-versions';
 import { closableKeys, closureKeyOf, closureTargetOf, type ClosureTarget } from './version-closure';
 import { VersionClosureDrawer } from './VersionClosureDrawer';
@@ -408,10 +410,16 @@ export function CommercialPoliciesPage() {
   const directory = useNameDirectory();
   // 点目录行上的「发新版本」：记下是哪一版，切到发布签、选中那一册；那一册的表单据此预填重建（票 party-commercial-uiux/14）。
   const [request, setRequest] = useState<NewVersionRequest<PolicySource> | null>(null);
-  const startNewVersion = (source: PolicySource) => {
+  const beginNewVersion = (source: PolicySource) => {
     setRequest((previous) => nextRequest(previous, source));
     place('publish', source.kind);
   };
+  // 目标那一册的发布表单里已填未发布的草稿要被换掉时先问一句（票 party-commercial-uiux/17）。
+  const replaceGuard = useReplaceDraftGuard<PolicySource>(
+    (source) => publicationGroup(source.kind),
+    beginNewVersion,
+    '发布新版本',
+  );
   // 发布落定一版：读面那一册重读，切回政策册签时结果已在；仍停在发布签，让人看完答复。
   const notePublished = (kind: CommercialPolicyKind) => {
     if (kind === register) setReloadKey((value) => value + 1);
@@ -419,6 +427,7 @@ export function CommercialPoliciesPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+      {replaceGuard.dialog}
       <KeepAliveTabs
         value={tab}
         onValueChange={(next) => place(next as PoliciesTab, register)}
@@ -440,7 +449,7 @@ export function CommercialPoliciesPage() {
             kind={register}
             reloadKey={reloadKey}
             directory={directory}
-            onStartNewVersion={startNewVersion}
+            onStartNewVersion={replaceGuard.start}
           />
         </KeepAliveTabsContent>
         <KeepAliveTabsContent
