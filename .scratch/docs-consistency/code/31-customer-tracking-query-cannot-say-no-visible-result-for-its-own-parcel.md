@@ -1,7 +1,7 @@
 # 31 VE 客户追踪查询对本账户已归属、视图未形成的包裹答 `VIEW_NOT_FOUND`，与无权查询分不开
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-code31（基于 main `d19eeaafc`）。此前 ready-for-agent——R2（上线后尽快）：会撞（委托接受后、初始路由投影形成前，客户拿首方提交答复里的包裹号 `parcels[].parcelId` 去查，或 NR 一直形不成投影时），但有可靠绕法：客户系统稍后重查（首方客户今天没有读委托接受状态的口，绕法只有重查或请租户客服核对）。首方 API 兼容性基线发布前落地最省（ADR-0246 越权风险点 5）。2026-10-21 文档自洽 04 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc04。
+Status: resolved——2026-10-25 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code31（基于 main `d19eeaafc`）。此前 ready-for-agent——R2（上线后尽快）：会撞（委托接受后、初始路由投影形成前，客户拿首方提交答复里的包裹号 `parcels[].parcelId` 去查，或 NR 一直形不成投影时），但有可靠绕法：客户系统稍后重查（首方客户今天没有读委托接受状态的口，绕法只有重查或请租户客服核对）。首方 API 兼容性基线发布前落地最省（ADR-0246 越权风险点 5）。2026-10-21 文档自洽 04 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc04。
 Blocked by: 无
 出处：[audit/ve.md](../audit/ve.md) VE-05（归 B）；裁定见 [ADR-0246](../../../docs/adr/0246-the-customer-tracking-query-answers-no-visible-result-for-a-parcel-attributed-to-the-requesting-account-before-its-view-forms.md)。取证于 main `205eb254`。
 
@@ -118,3 +118,12 @@ S–M：端点加一个依赖（归属反查口）与一格 `NO_VISIBLE_RESULT`�
 - `TMPDIR=… scripts/test-full.sh ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./cmd/parcel-ve-register/ ./internal/visibilityexception/... ./internal/architecture/...`：19 个包 ok（`ports` 无测试文件，不计），退出码 0。
 - 改到的用例 `-count=3`（真库）：七条全部三次 PASS，退出码 0。
 - main 仍在 `d19eeaafc`，未前移，未 rebase。
+
+## 进 main 记录（2026-10-25，协调方）
+
+- 原协调会话在作者刚开工时因额度中断，本票由接手的协调方重派作者从头做。分支 `claude-code31` 基于 main `d19eeaafc` 直接快进，tip `56b013b00`。
+- 隔离评审无阻断。N1（歧义哨兵上提到 `ports`，HTTP 适配器不再导入出站译名包）、N2（「账户译不成」答未形成补用例，哨兵同样上提）与「多份已接受委托」措辞在修订轮照改；修订 diff 与评审处方一致，协调方核过后未再起第二轮评审。
+- 评审另记两条不在本票改：首方契约「基线」两处说法不一留给 code/82；反查读不动维持答未形成（ADR-0246 决定二），评审判其作探针的严重度低。
+- 协调方单独提交重算的 AT 计数；ADR 索引与机制清点无变化；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0，158 个包 ok；`go build ./...`、`go vet ./...` 干净；演示种子在一次性库上灌通，用后删库。
+- 去向：无新票。
