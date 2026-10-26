@@ -92,6 +92,12 @@ M：快照规格加撤回决定一格；重建门照 ADR-0030 → ADR-0061 → A
 
 `AT-PS-068`、`AT-PS-076`、`AT-PS-070` 补用例名（`.scratch/at-coverage-inventory.md` 追记）。没有新立 AT 号，`at-coverage-counts -check` 退 0。
 
-### 验证（分支 claude-code36）
+### 验证（分支 claude-code36，已 rebase 到 origin/main `27d77d97f`）
 
-见下方「验证」更新。
+- `go build ./...`、`go vet ./...` 干净，`gofmt -l` 无输出。
+- `TMPDIR=… scripts/test-full.sh`：范围 = 改动包（`internal/parcelshipment/domain`、`adapters/postgres`、`application`、`ports`）+ `go list -test` 算出的反向依赖（共 51 个包，含 `cmd/parcel-api`、`cmd/parcel-dispatch`、`cmd/parcel-commercial`、`cmd/parcel-settlement-register`、`tests/bentocontract` 与各上下文里读 PS 的适配器）+ `./internal/architecture/...` + `./migrations/...`，全绿（退出码 0）。
+- 新用例另跑 `-count=3`（领域、应用、仓储、parcel-api、parcel-dispatch 各自的新用例）全绿。新写者与锁都没有（本票只读写既有快照列与既有链），所以没有并发用例，也没有锁、去重、封顶这类变异。
+- 变异（备份、改、跑、从备份拷回并 `cmp` 核一致，共 12 处，全部被杀）：重建门又不放行`已撤回`（领域、仓储、parcel-api、parcel-dispatch 四处红）；读回丢撤回决定；写入丢决定边界标志；写入丢撤回原因；撤回重提关联不认已撤回（领域、parcel-api 红）；其余三个状态带半截撤回放过（`formed` 代替 `anyRecorded`）；已撤回的任务不必停止；已撤回的撤回决定残缺放过；已撤回带决定放过；已撤回不必越过边界；重复撤回丢原撤回（parcel-dispatch、应用层红）；接受链不拦已撤回（应用、parcel-dispatch 红）。
+- `go run ./tools/at-coverage-counts -check` 退 0（没有新立 AT 号，总览不过期）；`go run ./tools/adr-index -check` 退 1，只是生成物 `docs/adr/README.md` 过期（协调方进 main 时统一重生成），本地跑过生成器确认 ADR-0286 的 Status 注记能被索引读出，随后原样拷回并核一致，没有提交生成物。
+- 没有改迁移与种子，没有跑种子（种子里没有会撤回委托的步骤）。
+- 没有碰 `cmd/parcel-api/assemble_submission.go` 与 `internal/parcelshipment/adapters/pilotgovernance/production_ownership.go`（另一会话在改）；`cmd/parcel-api` 只新增了一个测试文件。
