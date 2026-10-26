@@ -74,9 +74,9 @@ Blocked by: 无
 5. **需要新 ADR**：分路、留存与新答格都是难逆转的取舍，号 0307；对 ADR-0216、0230 是回答、对 ADR-0112 是补一格，都无条款停用，只在 Status 注记与 Links 挂指针。
 6. **TF CONTEXT 不改**（见上）。
 
-越权风险点（详见 ADR-0307「越权风险点」）：晚到的更正不重算；首登晚到同样落进两段同时在场（**另报，见下**）；声明错了改不了；失效链尾也算更晚；前版已交接而没进过段的更正仍不进段（与票 179 欠账续办相连）；结束参与那一口成了更正的硬依赖；存量没有段声明；没读 ADR-0263 正文与 NO 认更正链的代码。
+越权风险点（详见 ADR-0307「越权风险点」）：晚到的更正不重算；首登晚到同样落进两段同时在场（见下）；声明错了改不了；失效链尾也算更晚；前版已交接而没进过段的更正仍不进段（与票 179 欠账续办相连）；结束参与那一口成了更正的硬依赖；存量没有段声明；没读 ADR-0263 正文与 NO 认更正链的代码。
 
-**另报一格（不在本票修）**：首登`已交接`晚到（业务时间早于对象此刻那条参与的起点）时，结束参与那一步答未受理、进段照走，对象两段同时在场，此后它的交接都在结束参与那一步以 `ErrObjectActiveInSeveralSegments` 响亮失败。今天就会发生（离线补登）。建议协调方立票交 TF owner，修法可复用 `laterControlFacts` 那一步（ADR-0307 越权风险点 2）。
+**首登晚到（不在本票修、不另立票）**：首登`已交接`晚到（业务时间早于对象此刻那条参与的起点）时，结束参与那一步答未受理、进段照走，对象两段同时在场，此后它的交接都在结束参与那一步以 `ErrObjectActiveInSeveralSegments` 响亮失败，离线补登就会发生。协调方 2026-10-26 按用户收窄范围的要求定为不立票，留在 ADR-0307 越权风险点 2：修法建议是首登在 `handOverIntoSegment` 之前同样先问 `laterControlFacts`、答同一格。
 
 ### 修法 / 完成判据 → 用例
 
@@ -89,6 +89,7 @@ Blocked by: 无
 | 结束参与口没接线 | `application/...::TestACorrectionIntoTheSegmentWithoutAParticipationEnderFormsNoAnswer` |
 | 与派送触发（票 129）的交互 | `application/trigger_dispatch_supersession_test.go::TestAHandoverCorrectedFromPendingIntoADeliverySegmentTriggersOnTheCorrection`；派发进程真库 `cmd/parcel-dispatch/delivery_dispatch_supersession_test.go::TestAPendingHandoverCorrectedIntoTheDeliverySegmentFormsTheTaskOnTheCorrection`；`AT-TF-289` 用例改为信封晚到 `::TestAHandoverThatDidNotBringTheObjectIntoTheSegmentIsNotItsTrigger` |
 | 与 VE 补派生（票 136）的交互 | 派发进程真库 `cmd/parcel-dispatch/movement_fact_backfill_test.go::TestAPendingHandoverCorrectedIntoTheSegmentBackfillsTheDepartureRecordedBeforeIt` |
+| 与出发门禁补问（票 121，ADR-0305）的交互 | 派发进程真库 `cmd/parcel-dispatch/departure_gate_reask_handover_correction_test.go::TestAPendingHandoverCorrectedIntoTheSegmentReasksTheStoppedDeparture`（待确认那一封入账不补问；更正版那一封补问与补派生两路各入账一次、不报错，补问追加第 1 次、读数阻断，首版不改） |
 | 与实际履约自动形成（ADR-0218）的交互 | 派发进程真库 `cmd/parcel-dispatch/actual_fulfillment_handover_correction_test.go::TestAPendingHandoverCorrectedToHandedOverAtTheEndOfAnAdoptedSegmentFormsTheOccurrence` |
 | 去掉 `AT-TF-329`、`AT-TF-289` 的标注，`AT-TF-329` 补 Covers，盘点改桶 | UC-TF-005、UC-TF-006、AT 盘点（`71818bd69`） |
 
@@ -104,6 +105,13 @@ Blocked by: 无
 
 ### 给评审与进 main 的提示
 
-- **与票 121（`claude-dcg121`）的文本重叠**：UC-TF-005（121 立 `AT-TF-342`–`346`，本票立 `AT-TF-347`、改 `AT-TF-329`、加输入一行与一致性一条）、AT 盘点①里 `AT-TF-341` 之后相邻插行、盘点文末追记。迁移号（121 是 TF `0052`、本票 `0053`）与 ADR 号（121 是 0305、本票 0307）不撞。
-- **与票 121 的行为交互**：121 让对象的控制事实到达时补问出发门禁（ADR-0305），交接信封又多一个消费者。待确认更正成`已交接`后对象才进段，更正版那一封就是它的触发；两票谁后进 main，谁在 tip 上补一条「待确认更正成`已交接`进段后补问」的交互用例或至少跑一遍两边用例。
+- **与票 121 的文本重叠已在变基时合好**：AT 盘点①两边都留、`AT-TF-342`–`347` 按号顺接，文末追记 121 在前、130 在后；UC-TF-005 自动合并，`AT-TF-347` 留在 `AT-TF-329` 下面（它的场景写的是「同上」）。迁移号（121 是 TF `0052`、本票 `0053`）与 ADR 号（121 是 0305、本票 0307）不撞。
+- **与票 121 的行为交互**：121 已先进 main，本票已在其后补了交互用例（见上表）。
 - 评审重点：`correctionSegmentHalf`（`correct_handover_segment_half.go`）的分路条件（先重派生、再三件判据）；`laterControlFacts` 看链尾的口径（含失效、同一刻不算）；首登受理面因 NUL 多出的未受理；`TestAHandoverThatDidNotBringTheObjectIntoTheSegmentIsNotItsTrigger` 改了场景（`AT-TF-289` 的内容未变窄：信封晚到那一种仍钉住）。
+
+### 补记：变基到 121 之后（2026-10-26，协调方派的一小步）
+
+- `git rebase origin/main`（`962c3d8e6`，含票 121）：冲突只在 AT 盘点（①相邻插行、文末追记），两边都留、按号顺接；其余自动合并。变基后本票各笔 SHA 换了，以分支上的为准（代码笔 `baa04b229`、用例笔 `047f17e46`、文档笔 `612081666`、完成记录 `df6129859`）。
+- 补交互用例 `cmd/parcel-dispatch/departure_gate_reask_handover_correction_test.go`；`movement_fact_backfill_test.go` 把待确认首登与更正两步抽成两个辅助函数，两条用例共用。变异抽验：让更正只走重派生，新用例转红。
+- ADR-0307：越权风险点 2 改为不另立票、写明复用 `laterControlFacts` 的修法；决定五与索引注记补上出发门禁补问一路，Links 加 ADR-0305。AT 盘点 `AT-TF-329` 一行补点名新用例。
+- 自验（含 PG）见本节之后的提交说明与汇报：`go build ./...`、`go vet ./...`、`at-coverage-counts -check`，带 DSN 的 TF 全部包、`cmd/parcel-dispatch`、`migrations`。
