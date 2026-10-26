@@ -199,6 +199,22 @@ func TestABlockedAndANotConfiguredAnswerAreTranslatedWithTheirBases(t *testing.T
 	}
 }
 
+// Covers: AT-CC-426 的消费侧半边（ADR-0300 落在 ADR-0205 决定二的译法上，证据 S）——租户登过区域（上海、深圳、新加坡），
+// 吉隆坡没登：不在案的包裹自深圳口岸出发往吉隆坡、或在深圳口岸交出而去向吉隆坡，关务答未配置，译回未决；依据种类仍说缺的是
+// 节点区域配置，来源指名吉隆坡那个节点。依据原文只随事实落册，回给设备的不带它（ADR-0205 决定一，线格式那一半在 cmd/parcel-api）。
+func TestAnUnregisteredNodeOfAZonedTenantReadsUndecidedNamingTheNode(t *testing.T) {
+	fixture := newDepartureGateDB(t)
+	for name, finding := range map[string]tfdomain.GateFinding{
+		"出发": fixture.ask("SYN-NODE-SZX-GATE", "SYN-NODE-KUL-HUB"),
+		"交出": fixture.release("SYN-NODE-SZX-GATE", "SYN-NODE-KUL-HUB"),
+	} {
+		expectFinding(t, finding, tfdomain.GateUndecided, "CROSS_CUSTOMS_MOVEMENT", "NODE_ZONE_NOT_REGISTERED")
+		if sources := finding.Bases()[0].Sources; len(sources) != 1 || sources[0] != "SYN-NODE-KUL-HUB" {
+			t.Fatalf("%s：未配置的依据要指名未登的节点：%v", name, sources)
+		}
+	}
+}
+
 type stubJudge struct {
 	result ccapp.JudgeActionAdmissionResult
 	err    error

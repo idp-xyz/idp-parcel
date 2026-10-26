@@ -162,7 +162,7 @@ func NewJudgeActionAdmissionHandler(deps JudgeActionAdmissionDeps) (*JudgeAction
 	return &JudgeActionAdmissionHandler{deps: deps}, nil
 }
 
-// Handle 读区域 → 定适用动作 → 解析对象范围 → 盘限制、门禁、放行 → 领域折叠 → 按内容派生标识记下。任何一口读不动
+// Handle 读区域 → 定适用动作（跨区待定时另读租户登没登过区域）→ 解析对象范围 → 盘限制、门禁、放行 → 领域折叠 → 按内容派生标识记下。任何一口读不动
 // 都在折叠前停下答`读不动`：半份三源折出的放行是假放行。error 只留给编程错误。
 func (handler *JudgeActionAdmissionHandler) Handle(
 	ctx context.Context,
@@ -193,6 +193,15 @@ func (handler *JudgeActionAdmissionHandler) Handle(
 	applicability, err := domain.DetermineGuardedActions(command.Intent, zones)
 	if err != nil {
 		return JudgeActionAdmissionResult{}, err
+	}
+	// 跨区待定时再问一句租户登没登过区域：不在册的对象这一道答未配置还是不列，取决于它（领域判，ADR-0300）。
+	// 只在待定时问——判得出跨区时这一句进不了答复，问了只多一次读、多一处读不动。
+	tenantZonesInForce := false
+	if applicability.CrossZone() == domain.CrossZoneUndetermined {
+		tenantZonesInForce, err = handler.deps.Zones.AnyNodeCustomsZoneInForce(ctx, command.TenantID, command.At)
+		if err != nil {
+			return admissionUnreadable(NodeZoneViewUnavailable), nil
+		}
 	}
 
 	scope, err := handler.deps.Scopes.LoadObjectCustomsScope(ctx, command.TenantID, command.Object)
@@ -256,15 +265,16 @@ func (handler *JudgeActionAdmissionHandler) Handle(
 	}
 
 	judgement, err := domain.JudgeActionAdmission(domain.ActionAdmissionInput{
-		Object:       command.Object,
-		Intent:       command.Intent,
-		At:           command.At,
-		Zones:        zones,
-		Scope:        scope,
-		Restrictions: restrictions,
-		Gates:        gates,
-		Releases:     releases,
-		JudgedAt:     handler.deps.Clock.Now(),
+		Object:             command.Object,
+		Intent:             command.Intent,
+		At:                 command.At,
+		Zones:              zones,
+		TenantZonesInForce: tenantZonesInForce,
+		Scope:              scope,
+		Restrictions:       restrictions,
+		Gates:              gates,
+		Releases:           releases,
+		JudgedAt:           handler.deps.Clock.Now(),
 	})
 	if err != nil {
 		return JudgeActionAdmissionResult{}, err

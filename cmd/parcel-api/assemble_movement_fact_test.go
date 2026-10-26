@@ -134,9 +134,18 @@ type departureLine struct {
 	handover tfhttp.HandoverHandler
 }
 
+// demoNodeZoneSeeds 是演示种子里登关务节点区域的那几份（customs/27–30）。
+var demoNodeZoneSeeds = []string{"27-node-zone-sha-hub.json", "28-node-zone-szx-gate.json", "29-node-zone-sin-hub.json", "30-node-zone-sin-lm.json"}
+
 // newDepartureLine 按演示种子原样登关务节点区域（customs/27–30）与上海→深圳的周期安排（transport/01），再按运行日期显式登一个
 // 班次——与 seed.sh 和演示脚本走的是同一批登记用例。
 func newDepartureLine(t *testing.T) *departureLine {
+	t.Helper()
+	return newDepartureLineWithZones(t, demoNodeZoneSeeds...)
+}
+
+// newDepartureLineWithZones 同 newDepartureLine，节点区域只登调用方点名的那几份种子；一份都不点即一条区域都没登的租户。
+func newDepartureLineWithZones(t *testing.T, zoneSeeds ...string) *departureLine {
 	t.Helper()
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -149,7 +158,7 @@ func newDepartureLine(t *testing.T) *departureLine {
 	if err != nil {
 		t.Fatalf("装配关务准入：%v", err)
 	}
-	for _, name := range []string{"27-node-zone-sha-hub.json", "28-node-zone-szx-gate.json", "29-node-zone-sin-hub.json", "30-node-zone-sin-lm.json"} {
+	for _, name := range zoneSeeds {
 		command, err := ccregistration.NodeCustomsZoneFromJSON(demoSeed(t, "customs", name))
 		if err != nil {
 			t.Fatalf("译 %s：%v", name, err)

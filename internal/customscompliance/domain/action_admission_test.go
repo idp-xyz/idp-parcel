@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -246,8 +247,9 @@ func TestCaseWithoutUnitIsUndecided(t *testing.T) {
 	assertFinding(t, findingOf(t, c.judge(), domain.LoadingDeparture), domain.AdmissionUndecided, domain.CauseDeclarationUnitNotFormed)
 }
 
-// 节点未登记区域时，只有对象带着跨区的门才答未配置；不带跨区门的对象（含不在任何单元里的）这一道不列。
-// Covers: AT-CC-421（领域半边）、AT-CC-422——不在册对象这一支整次答复为不受门禁。
+// 租户在动作时点一个节点都没登区域（零值即此）：节点未登记区域时，只有对象带着跨区的门才答未配置；不带跨区门的
+// 对象（含不在任何单元里的）这一道不列。
+// Covers: AT-CC-421（领域半边）、AT-CC-422（领域半边）、AT-CC-427（领域半边）——纯境内租户的不在册对象整次答复为不受门禁。
 func TestUnregisteredNodeZoneIsNotConfiguredOnlyWhenTheObjectHasACrossZoneGate(t *testing.T) {
 	guarded := newAdmissionCase(t).unzonedDestination().inUnit().
 		gate(domain.LoadingDeparture, domain.GateReadingFormed, domain.GateNotApplicable).
@@ -276,6 +278,78 @@ func TestUnregisteredNodeZoneIsNotConfiguredOnlyWhenTheObjectHasACrossZoneGate(t
 	restricted := newAdmissionCase(t).unzonedDestination().
 		restrictedOnObject("SYN-RESTRICTION-03", time.Time{}, domain.CrossCustomsMovement).judge()
 	assertFinding(t, findingOf(t, restricted, domain.CrossCustomsMovement), domain.AdmissionNotConfigured, domain.CauseNodeZoneNotRegistered)
+}
+
+// 租户在动作时点已有节点登了区域（ADR-0300）：起讫有一端未登、对象不在任何案件与单元里时，跨区那一道答未配置并指名
+// 未登的节点，整次答复未配置；装载出发照旧不受门禁。两端都没登时两个节点都指名；声明了去向的交出同一判法。
+// Covers: AT-CC-426（领域半边）。
+func TestAZonedTenantsUnbookedObjectAnswersNotConfiguredNamingTheUnregisteredNode(t *testing.T) {
+	zonedTenant := func(c *admissionCase) *admissionCase {
+		c.input.TenantZonesInForce = true
+		return c
+	}
+	expectNamed := func(t *testing.T, judgement domain.ActionAdmissionJudgement, nodes ...string) {
+		t.Helper()
+		if judgement.CrossZone() != domain.CrossZoneUndetermined || judgement.Answer() != domain.AdmissionNotConfigured {
+			t.Fatalf("跨区待定 = %s / %s，要待定 / 未配置", judgement.CrossZone(), judgement.Answer())
+		}
+		cross := findingOf(t, judgement, domain.CrossCustomsMovement)
+		assertFinding(t, cross, domain.AdmissionNotConfigured, domain.CauseNodeZoneNotRegistered)
+		if !slices.Equal(cross.Bases[0].Sources, nodes) {
+			t.Fatalf("未配置要指名未登的节点：%v，要 %v", cross.Bases[0].Sources, nodes)
+		}
+	}
+
+	departing := zonedTenant(newAdmissionCase(t).unzonedDestination()).judge()
+	expectNamed(t, departing, "SYN-NODE-SIN-HUB")
+	assertFinding(t, findingOf(t, departing, domain.LoadingDeparture), domain.AdmissionNotGuarded, domain.CauseOutsideCustomsBooks)
+
+	bothUnzoned := zonedTenant(newAdmissionCase(t))
+	bothUnzoned.input.Intent = departure(t, "SYN-NODE-SZX-GATE", "SYN-NODE-SIN-HUB")
+	bothUnzoned.input.Zones = []domain.NodeZoneReading{unzoned(t, "SYN-NODE-SZX-GATE"), unzoned(t, "SYN-NODE-SIN-HUB")}
+	expectNamed(t, bothUnzoned.judge(), "SYN-NODE-SIN-HUB", "SYN-NODE-SZX-GATE")
+
+	handingOver := zonedTenant(newAdmissionCase(t))
+	intent, err := domain.NewHandoverIntent(node(t, "SYN-NODE-SZX-GATE"), node(t, "SYN-NODE-SIN-HUB"))
+	if err != nil {
+		t.Fatalf("构造交出意图：%v", err)
+	}
+	handingOver.input.Intent = intent
+	handingOver.input.Zones = []domain.NodeZoneReading{zoned(t, "SYN-NODE-SZX-GATE", "SYN-ZONE-CN"), unzoned(t, "SYN-NODE-SIN-HUB")}
+	handedOver := handingOver.judge()
+	expectNamed(t, handedOver, "SYN-NODE-SIN-HUB")
+	assertFinding(t, findingOf(t, handedOver, domain.OutboundRelease), domain.AdmissionNotGuarded, domain.CauseOutsideCustomsBooks)
+}
+
+// 已登区域的租户，ADR-0300 那一支只落在不在册的对象上：对象在册而单元没登跨区目录，这一道照旧不列；在案而未成单元，
+// 这一道照旧不列，整次答复已是未决；两端都登了区域时这一格与它无关——跨区答未决、同区只适用装载出发。
+// Covers: AT-CC-422（领域半边）。
+func TestAZonedTenantStillLeavesTheCrossZoneLineOutForBookedObjects(t *testing.T) {
+	noCrossCatalog := newAdmissionCase(t).unzonedDestination().inUnit().
+		gate(domain.LoadingDeparture, domain.GateReadingFormed, domain.GateNotApplicable).
+		gate(domain.CrossCustomsMovement, domain.GateReadingCatalogNotRegistered, domain.GateConclusionInvalid)
+	noCrossCatalog.input.TenantZonesInForce = true
+	if judgement := noCrossCatalog.judge(); len(judgement.Findings()) != 1 || judgement.Answer() != domain.AdmissionNotGuarded {
+		t.Fatalf("在册、没登跨区目录：%s %+v", judgement.Answer(), judgement.Findings())
+	}
+
+	caseWithoutUnit := newAdmissionCase(t).unzonedDestination()
+	caseWithoutUnit.input.TenantZonesInForce = true
+	caseWithoutUnit.input.Scope.CasesWithoutUnit = []domain.CustomsProcedureReference{mustValue(t, domain.NewCustomsProcedureReference, admissionProcedure)}
+	judgement := caseWithoutUnit.judge()
+	if len(judgement.Findings()) != 1 || judgement.Answer() != domain.AdmissionUndecided {
+		t.Fatalf("在案未成单元：%s %+v", judgement.Answer(), judgement.Findings())
+	}
+	assertFinding(t, findingOf(t, judgement, domain.LoadingDeparture), domain.AdmissionUndecided, domain.CauseDeclarationUnitNotFormed)
+
+	crossing := newAdmissionCase(t).crossBorder()
+	crossing.input.TenantZonesInForce = true
+	assertFinding(t, findingOf(t, crossing.judge(), domain.CrossCustomsMovement), domain.AdmissionUndecided, domain.CauseCustomsScopeUnresolved)
+	domestic := newAdmissionCase(t)
+	domestic.input.TenantZonesInForce = true
+	if judgement := domestic.judge(); len(judgement.Findings()) != 1 || judgement.Answer() != domain.AdmissionNotGuarded {
+		t.Fatalf("同区出发：%s %+v", judgement.Answer(), judgement.Findings())
+	}
 }
 
 // 整次答复按压制次序取各动作里最重的一格。

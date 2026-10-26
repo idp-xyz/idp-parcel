@@ -3,6 +3,7 @@ package postgres_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -305,6 +306,40 @@ func TestAdmissionOnRealPostgresAnswersNotConfigured(t *testing.T) {
 	expectAdmission(t, finding, domain.AdmissionNotConfigured, domain.CauseNodeZoneNotRegistered)
 	if finding.Bases[0].Sources[0] != "SYN-NODE-SIN-HUB" || judgement.Answer() != domain.AdmissionNotConfigured {
 		t.Fatalf("未配置要指名未登记的节点：%+v / %s", finding.Bases, judgement.Answer())
+	}
+}
+
+// 租户登过区域、漏了终点那一个（ADR-0300）：不在册的包裹从深圳口岸往一个没登区域的节点出发，跨区那一道答未配置、
+// 指名那个节点，整次答复未配置，判断册那一行的依据里记着它。同一请求换成一条区域都没登的租户，这一道不列、整次
+// 答复不受门禁——纯境内租户行为不变。
+// Covers: AT-CC-426、AT-CC-427。
+func TestAdmissionOnRealPostgresNamesTheUnregisteredNodeOnlyForAZonedTenant(t *testing.T) {
+	zoned := newAdmissionDB(t)
+	zoned.demoZones()
+	_, judgement, id := zoned.judge("SYN-NODE-SZX-GATE", "SYN-NODE-KUL-HUB")
+	if judgement.CrossZone() != domain.CrossZoneUndetermined || judgement.Answer() != domain.AdmissionNotConfigured {
+		t.Fatalf("登过区域、终点未登 = %s / %s %+v", judgement.CrossZone(), judgement.Answer(), judgement.Findings())
+	}
+	expectAdmission(t, admissionFinding(t, judgement, domain.LoadingDeparture), domain.AdmissionNotGuarded, domain.CauseOutsideCustomsBooks)
+	cross := admissionFinding(t, judgement, domain.CrossCustomsMovement)
+	expectAdmission(t, cross, domain.AdmissionNotConfigured, domain.CauseNodeZoneNotRegistered)
+	if len(cross.Bases[0].Sources) != 1 || cross.Bases[0].Sources[0] != "SYN-NODE-KUL-HUB" {
+		t.Fatalf("未配置要指名未登的节点：%v", cross.Bases[0].Sources)
+	}
+	var recorded string
+	if err := zoned.fixture.pool.QueryRow(t.Context(),
+		`SELECT findings::text FROM customs_compliance.action_admission_judgement WHERE tenant_id = $1 AND judgement_id = $2`,
+		admissionTenant, id).Scan(&recorded); err != nil {
+		t.Fatalf("读判断册：%v", err)
+	}
+	if !strings.Contains(recorded, `"NODE_ZONE_NOT_REGISTERED"`) || !strings.Contains(recorded, `"SYN-NODE-KUL-HUB"`) {
+		t.Fatalf("判断册那一行的依据要记着未登的节点：%s", recorded)
+	}
+
+	domestic := newAdmissionDB(t)
+	_, unzoned, _ := domestic.judge("SYN-NODE-SZX-GATE", "SYN-NODE-KUL-HUB")
+	if unzoned.CrossZone() != domain.CrossZoneUndetermined || unzoned.Answer() != domain.AdmissionNotGuarded || len(unzoned.Findings()) != 1 {
+		t.Fatalf("一条区域都没登的租户 = %s / %s %+v", unzoned.CrossZone(), unzoned.Answer(), unzoned.Findings())
 	}
 }
 
