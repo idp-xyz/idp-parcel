@@ -203,8 +203,8 @@ func TestANewVersionOfAConnectionKeepsItsCodeAndMovesOnlyTheVersionAndEnds(t *te
 }
 
 // Covers: AT-NR-094——登记口拒的连接代码，恰是第一条契约读不回的那些（票 demo-chain-gaps/176）。逐个代码先经真证据视图
-// 折成计划段、按 TF 的读法读一遍，再交登记用例：读不回的（带 `+`，不论在头、在尾、在中间，还是后半截拼成另一格
-// `CONNECTION/`）受理门指名拒、写入口零调用；读得回的（带 `@`、`/`，或本身以 `CONNECTION/` 开头）照常登记、原样到达
+// 折成计划段、按 TF 的读法读一遍，再交登记用例：读不回原代码的（带 `+`，不论在头、在尾、在中间，后半截拼成另一格
+// `CONNECTION/`，还是前半截自带版本、被读成另一条连接）受理门指名拒、写入口零调用；读得回的（带 `@`、`/`，或本身以 `CONNECTION/` 开头）照常登记、原样到达
 // 写入口。两侧对着同一份读法放在一条用例里：受理门多拒一种或少拒一种，这里先红；读法与预期不符（例如 TF 那一侧换了
 // 切法、这里跟着改了读法），同样先红。
 func TestTheRegistrationGateRefusesExactlyTheConnectionCodesTheContractCannotReadBack(t *testing.T) {
@@ -220,6 +220,8 @@ func TestTheRegistrationGateRefusesExactlyTheConnectionCodesTheContractCannotRea
 		{"+SYN-CONN-B-C", false},
 		{"SYN-CONN-B-C+", false},
 		{"SYN-B+CONNECTION/C", false},
+		// 不报错，读成另一条连接 `SYN-CONN-A`：TF 那一侧是静默答错，比读不回更该挡。
+		{"SYN-CONN-A@1+B", false},
 	}
 	for _, test := range cases {
 		t.Run(test.code, func(t *testing.T) {
