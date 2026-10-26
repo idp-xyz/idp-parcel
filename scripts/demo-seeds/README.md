@@ -198,7 +198,7 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
 | `data/transport/05-schedule-template-sha-szx-express-1200.json`、`06-…-2000.json` | `cmd/parcel-transport-register schedule-template` | 上海→深圳快线（票 demo-chain-gaps/18）：`SYN-SCHED-SHA-SZX-EXPRESS-1200` 与 `-2000`，同走 `SYN-CONN-SHA-SZX`，当地 12:00、20:00 出发、历时 240 分钟，各声明重量 3000 KG、件数 600 PCS（合成值）。计划段窗口随提交时刻移动，首段窗口长十二小时；`01` 那一份按日运行的上海→深圳只接得住一小段提交时刻，加上快线后首段窗口不论落在哪一刻都含一班完整的出发与到达，演示提交因此总有一段 `运输机会已准备`。只调演示租户的班期，不改匹配规则（ADR-0201 决定六）。ADR-0201 的票 18 补记、演示脚本与 `seed.sh` 不复述这些取值，都指到这里 |
 | `data/network/24-calendar-node-sin-lm-v2.json` | `cmd/parcel-network-register -kind service-calendar` | 新加坡末端日历修订 2（ADR-0217，票 demo-chain-gaps/64）：采用后的租户修订，处理时长照修订 1 重登 240 分钟，另登派送时长 240 分钟（合成值），2026-06-01 起无终点，登记时接续闭合修订 1。登了派送时长，计划在 `SYN-NODE-SIN-LM` 之后多一段交付段（种类 `DELIVERY`，终点 `SYN-AREA-SG@1`，窗口是离开末端的时刻加派送时长），`GET /route-plans?register=initial-route` 的末段即是它；末端交接声明这一段的引用，派送任务窗口就取它。没登时计划止于末端，与修订 1 相同。ADR-0217 决定六、演示脚本与 `seed.sh` 不复述这些取值，都指到这里 |
 | `data/transport/07-schedule-template-szx-sin-express-0200.json` 至 `13-…-express-1800.json`，`14-schedule-template-sin-lm-shuttle-0030.json` 至 `23-…-shuttle-2300.json` | `cmd/parcel-transport-register schedule-template` | 深圳→新加坡快班与新加坡枢纽→末端穿梭（票 demo-chain-gaps/98）。快班 `SYN-SCHED-SZX-SIN-EXPRESS-<HHMM>` 走 `SYN-CONN-SZX-SIN`，当地（Asia/Shanghai）02:00、04:00、09:00、12:00、14:00、16:00、18:00 出发，历时 240 分钟，各声明重量 2000 KG、件数 400 PCS。穿梭 `SYN-SCHED-SIN-LM-SHUTTLE-<HHMM>` 走 `SYN-CONN-SIN-LM`，当地（Asia/Singapore）00:30、02:00、03:30、05:00、06:30、13:30、15:00、16:30、21:30、23:00 出发，历时 30 分钟，各声明重量 800 KG、件数 160 PCS。都是合成值。后两段的窗口由前一段到达、节点处理时长与截单、连接缓冲推出，长度就是那条连接的缓冲；照本票时演示网络的日历推，深圳口岸开出只落在当地 00:00–04:00 与 08:00–18:00，新加坡枢纽开出只落在当地 12:00–16:00 与 20:00–06:00。一班接得住的窗口起点，落在它出发前「缓冲减历时」那么长的一段里；上面的时刻让这些段首尾相接、铺满两处落点，删去任何一份都会让一段提交时刻重新答 `NO_CURRENT_OPPORTUNITY`。改了演示网络的日历或缓冲要重算；今天没有用例守这一格，守卫用例归票 demo-chain-gaps/110。`02`、`03` 两份按日一班原样保留。只调演示租户的班期，不改匹配规则（ADR-0201 决定六）；演示脚本与 `seed.sh` 不复述这些取值，都指到这里 |
-| `operator-channel/` | — | 演示发行方：Dex 的容器描述（`compose.yaml`，不并进仓库根那份门禁库描述）与配置（`dex.yaml`：管理台公共客户端、两个合成静态用户），取令牌脚本 `operator-token.sh`，操作者渠道取证脚本 `probe-operator-channel.sh`；另有集成客户端族的发行方配置 `integration-dex.yaml` 与取令牌脚本 `integration-token.sh`，首方客户族的受众与合成客户端也登在 `integration-dex.yaml`，取令牌脚本 `customer-token.sh`。用法见上面「操作者渠道」「集成客户端渠道」「首方客户渠道」三节 |
+| `operator-channel/` | — | 演示发行方：Dex 的容器描述（`compose.yaml`，不并进仓库根那份门禁库描述）与配置（`dex.yaml`：管理台公共客户端、两个合成静态用户），取令牌脚本 `operator-token.sh`，操作者渠道取证脚本 `probe-operator-channel.sh`；另有集成客户端族的发行方配置 `integration-dex.yaml` 与取令牌脚本 `integration-token.sh`，首方客户族的受众与合成客户端也登在 `integration-dex.yaml`，取令牌脚本 `customer-token.sh`；客户命令五口的实走脚本 `walk-customer-command-faces.sh` 在 `scripts/demo-seeds/` 下，与 `submit-one-shipment.sh` 并列。用法见上面「操作者渠道」「集成客户端渠道」「首方客户渠道」三节 |
 | `migrate/` | — | 迁移助手（`migrate.Run` 的隔离环境入口；迁移计划刻意没有生产入口） |
 | `seedgen/` | — | 计价快照生成器：价卡、序列与参考目录的登记输入带规范化版本号与内容摘要自校，必须经真领域构造函数折装；PPC/PRS/PRC 规范化版本升级时重跑并提交新产物 |
 
@@ -280,11 +280,26 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
    里取（ADR-0223），`submit-one-shipment.sh` 末行打出它；按客户自己的参考直接定位见票 demo-chain-gaps/119。视图在委托接受、初始路由投影形成
    之后由 dispatch 派生：委托接受之前查它答 `VIEW_NOT_FOUND`；接受之后、视图派生出来之前，本账户查它答 `NO_VISIBLE_RESULT`（稍后再查，
    ADR-0246），别的账户查它仍与不存在同答。证据只记 `S`。
-10. 客户命令五口（票 first-party-api/06，ADR-0310）：撤回 `SHIPMENT_REQUEST_WITHDRAWAL`、取消包裹 `PARCEL_CANCELLATION`、资料修订
-   `SOURCE_DATA_AMENDMENT`、补充 `SHIPMENT_REQUEST_SUPPLEMENT`、索赔 `CLAIM_SUBMISSION` 五词，`steps/479-access-customer-command-faces.sh`
-   对同一台合成货主系统各登一笔授予（`data/access/18`）、各一行准入范围对照（`data/access/19`，能力 `CUSTOMER_COMMAND`）与各一段
-   权威区间（`data/governance/53`–`57`）。这一节只登底座的三样；五口的领域 Intake 随 07–11 换上，在那之前授了也只答未配置。
-   演示租户取消口的授权规则（ADR-0310 取舍 C）不在这里，随取消口那一票登。证据只记 `S`。
+10. 客户命令五口（票 first-party-api/06 立底座，07–11 各换上领域 Intake，12 实走，ADR-0310）：补充 `SHIPMENT_REQUEST_SUPPLEMENT`
+   （`POST /v1/shipment-requests/supplements`）、撤回 `SHIPMENT_REQUEST_WITHDRAWAL`（`…/withdrawals`）、资料修订 `SOURCE_DATA_AMENDMENT`
+   （`…/source-data-amendments`）、取消包裹 `PARCEL_CANCELLATION`（`…/parcel-cancellations`）、索赔 `CLAIM_SUBMISSION`（`POST /v1/claims`），
+   五口都已开。`steps/479-access-customer-command-faces.sh` 对同一台合成货主系统各登一笔授予（`data/access/18`）、各一行准入范围对照
+   （`data/access/19`，能力 `CUSTOMER_COMMAND`）与各一段权威区间（`data/governance/53`–`57`），五口的生产写在铸造侧判准入，所以都要
+   `IDP_PARCEL_GOVERNANCE_SELF_AUTHORITY`（第 5 条），不设答 403 `OUTSIDE_ADMISSION_SCOPE`。这三样是五口共有的底座；各口再靠哪份种子：
+   - 补充、撤回：只要上面的授予与准入，不另要种子。
+   - 修订：授权由商业权威裁定（ADR-0311），靠发布批（`data/commercial/publish-batch.json`）里授权规则 `SYN-AUTH-SOURCE-AMEND-01` 声明的授予
+     （`SOURCE_DATA_AMENDMENT` × `CUSTOMER_SELF_SERVICE`）、同一发布批里 `sourceDataAmendment` 的允许矩阵（四个资料组 `SENDER_PLACE`、
+     `DELIVERY_PLACE`、`DECLARED_MEASUREMENT`、`SYN-GROUP-CONSIGNEE-ADDRESS` 各在`已接受未收寄`与`报关已提交`两阶段登了意图格），以及
+     `data/commercial/resolution-key-syn-account-01.json` 登的账户解析键行；矩阵没登的格答 `AWAITING_REVIEW`。
+   - 取消：靠发布批里带取消目录的授权规则 `SYN-AUTH-CANCEL-01`（目录里有 `CUSTOMER` 一行，ADR-0313）加同一账户解析键行；
+     没有这版规则答 `CANCELLATION_UNDECIDED`、`AUTHORITY_UNCONFIGURED`。
+   - 索赔：合同责任范围登在 `SYN-ACCOUNT-01` 名下（`data/visibility/04`，合同 `SYN-CONTRACT-01`、覆盖 `LOSS`、`DAMAGE`），申请人名单
+     （`data/visibility/05`，`SYN-APPLICANT-01`、`SYN-APPLICANT-02`）；名单外的申请人形成不予受理而不是请求错误。
+
+   `scripts/demo-seeds/walk-customer-command-faces.sh` 把五口各实走一遍（补充、撤回停在`已提交`的委托，修订、索赔、取消落在要`已接受`的另一份委托，
+   外加两条 404 与一条 400 反例），用法与同一 UTC 秒重跑的行为见该脚本头注；委托的接受靠 `cmd/parcel-dispatch`，不起它脚本等到超时并说明该起什么。
+   **撤回口对外开放以 `docs-consistency/code/102` 进 main 为前提**：委托撤回之后，迟到的接受链会在控制作用域锁上新占一笔资金冻结，
+   没有任何路径去放（孤儿冻结）；该票未进 main 之前，演示可以走撤回，但不要把撤回授予发给真租户。证据只记 `S`。
 
 ## 数据故事（同一合成租户 SYN-TENANT-01，范围 SYN-SCOPE-01）
 
