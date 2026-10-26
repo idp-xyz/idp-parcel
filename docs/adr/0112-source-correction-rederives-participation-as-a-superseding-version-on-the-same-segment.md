@@ -1,6 +1,6 @@
 # ADR-0112: 来源更正在同段内以「替代参与版本」重派生履约参与关系——参与关系上长回指前版的链、当前参与按链尾派生、与更正编排同事务作派生一侧、段已关闭仍重派生；撤回控制的更正是失效格，形状随本链、实施另票
 
-Status: Accepted<!-- 索引注记 -->｜**分格判据**：更正改证据或时刻不改变谁在控制——同段替代，不是新段（ADR-0103 主体判据）；替代是链上新版本回指前版，原参与与原段一字不动（只插不改，ADR-0097 没有通用 Update）。**适用场景**：交接与揽收两种来源的更正共用一道重派生门，与更正编排同事务作派生一侧（失败不回滚更正）；已关闭的段照样长替代版本且继承原离场（CONTEXT 封存例外格）；撤回控制转移的更正答失效格，落地另票 tf/11
+Status: Accepted<!-- 索引注记 -->｜**分格判据**：更正改证据或时刻不改变谁在控制——同段替代，不是新段（ADR-0103 主体判据）；替代是链上新版本回指前版，原参与与原段一字不动（只插不改，ADR-0097 没有通用 Update）。**适用场景**：交接与揽收两种来源的更正共用一道重派生门，与更正编排同事务作派生一侧（失败不回滚更正）；已关闭的段照样长替代版本且继承原离场（CONTEXT 封存例外格）；撤回控制转移的更正答失效格，落地另票 tf/11｜**由 ADR-0307 补一格**（2026-10-26）：前版没转出控制（待确认或拒收）、本版`已交接`而无可重派生的交接更正，由 [ADR-0307](./0307-a-handover-corrected-from-pending-or-refused-to-handed-over-enters-the-declared-segment.md) 改走进段——结束对象此刻在场的参与、进首登声明的段（段声明随交接版本留存、更正承继）；重派生门与决定二「更正命令不带段号」照旧，无条款停用
 Date: 2026-09-04
 
 ## Context
@@ -48,6 +48,7 @@ Date: 2026-09-04
 - [ADR-0117](./0117-same-source-correction-forms-a-superseding-adoption-version-chained-to-the-current-responsibility-start.md)：PS 采用账的同形链与选形理由
 - [票 tf-segment-lifecycle-closure/08](../../.scratch/tf-segment-lifecycle-closure/issues/08-offsite-pickup-correction-model.md)：「同段不是新段」的裁决附问
 - [票 tf-segment-lifecycle-closure/10](../../.scratch/tf-segment-lifecycle-closure/issues/10-source-correction-rederives-participation.md)：本记录的实施
+- [ADR-0307](./0307-a-handover-corrected-from-pending-or-refused-to-handed-over-enters-the-declared-segment.md)：后继——前版没转出控制的交接更正成`已交接`改走进段，重派生门照旧、无条款停用
 
 ## owner 复核记录
 
