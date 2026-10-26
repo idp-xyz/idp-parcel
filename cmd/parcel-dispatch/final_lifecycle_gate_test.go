@@ -129,14 +129,17 @@ func TestTheWiredFinalAdoptionFormsNoFinalForRequestsThatAreNotAccepted(t *testi
 			if result.Outcome() != tc.outcome || result.UndecidedReason() != tc.reason {
 				t.Fatalf("outcome = %q/%q, want %q/%q", result.Outcome(), result.UndecidedReason(), tc.outcome, tc.reason)
 			}
-			// 消费门的落点：确定格入账收工（重投换不来另一个答案），规则未配置仍是未决哨兵。
+			// 消费门的落点：已终结是终态，入账收工；规则未配置与只是已提交都是等依赖，走未决哨兵回滚重投。
 			consumed := finalconsume.Consumption(result)
-			if tc.outcome == psapplication.ParcelFinalUndecided {
+			switch tc.outcome {
+			case psapplication.ParcelFinalUndecided, psapplication.FinalRequestAwaitingDecision:
 				if !errors.Is(consumed, finalconsume.ErrFinalUndecided) {
 					t.Fatalf("消费门 = %v, want ErrFinalUndecided", consumed)
 				}
-			} else if consumed != nil {
-				t.Fatalf("消费门 = %v; 被拦的终局是确定答复，应入账收工", consumed)
+			default:
+				if consumed != nil {
+					t.Fatalf("消费门 = %v; 已终结的委托是终态，应入账收工", consumed)
+				}
 			}
 			if n := fixture.countSQL(t, `SELECT count(*) FROM parcel_shipment.final_outcome`); n != 0 {
 				t.Fatalf("final_outcome 行数 = %d, want 0", n)

@@ -14,7 +14,7 @@ Blocked by: [code/36](./36-withdrawn-shipment-requests-cannot-be-read-back-from-
 ## 证据
 
 - `internal/parcelshipment/application/cancel_parcel.go` 的 `Handle`、`CancelParcelCommand`、`memberOfCurrentVersion`；`form_parcel_final.go` 的 `FormParcelFinalHandler`。
-- 文档：UC-PS-006（取消提交）、ADR-0254（取消边界）、ADR-0255 决定一（撤回后以撤回重提方向提交关联新委托——被撤回的委托不再承载包裹的后续动作）、PS CONTEXT 委托生命周期（`已撤回`、`已拒绝`之后原委托不再推进）。
+- 文档：UC-PS-006（取消提交）、ADR-0254（取消边界）、ADR-0255 决定一（撤回后以撤回重提方向提交关联新委托，关联新委托只锚在原委托的终态上）、PS CONTEXT 委托生命周期（`已撤回`、`已拒绝`之后原委托不再推进）。
 - 摸底报告「取消」一行：命令不带账户，须保证目标委托属信封账户；闸门票 G 立即做，是取消口硬前置。
 
 ## 三类
@@ -46,8 +46,8 @@ S–M：两只编排各加一道生命周期闸门（读委托状态，按状态
 - **取消**（`application.CancelParcelHandler`）：命令加必填账户字段；委托查找之后核"委托属信封账户"，不属与查无同答统一不可见；随后生命周期闸门（只放行`已接受`）；闸门在授权、取边界锁、取消库幂等读与边界上每一道读之前，被拦时什么都不落、不交下游。
 - **终局形成**（`application.FormParcelFinalHandler`）：同一个闸门放在这一处（单点），位置在 code/98 加的边界锁之后、幂等读之前，读的是已取回的委托状态，不依赖 `Cancellations` 是否装配。
 - **共用件**：`gateRequestLifecycle`（状态 → 放行/已终结/待决定，状态集合外响亮报错）与 `ownedByCustomerAccount`，都在 `cancel_parcel.go`。
-- **消费方落点（ADR-0025）**：`finalconsume.Consumption` 为两个新终局格加入"入账收工"；取消口 HTTP 译装按 `Outcome().String()` 通用作答，新格答 200 加 `outcome` 名（与 `REQUEST_NOT_ACCEPTED` 等其他非 201 格同形），由真库装配用例钉；`labelfinal.Consumption` 经 `finalconsume` 自动落到。
-- **文档**：UC-PS-006（决定矩阵两行、结果语义表三行、流程步骤 2、并发一条、验收 `AT-PS-140/141`、交接一行）、UC-PS-004（结果表两行、流程步骤 3、终局形成规则一条、验收 `AT-PS-142`）、PS CONTEXT（生命周期一条、取消规则一条）、AT 盘点（三行入①、`AT-PS-090` 补点名、文末追记）。
+- **消费方落点（ADR-0025）**：`finalconsume.Consumption` 为两个新终局格各给落点：`FinalRequestEnded` 入账收工（终态），`FinalRequestAwaitingDecision` 按未决回滚重投（`ErrFinalUndecided`，评审 N1 后）；取消口 HTTP 译装按 `Outcome().String()` 通用作答，新格答 200 加 `outcome` 名（与 `REQUEST_NOT_ACCEPTED` 等其他非 201 格同形），由真库装配用例钉；`labelfinal.Consumption` 经 `finalconsume` 自动落到。
+- **文档**：UC-PS-006（决定矩阵两行、结果语义表三行、流程步骤 2、并发一条、验收 `AT-PS-150/151`、交接一行）、UC-PS-004（结果表两行、流程步骤 3、终局形成规则一条、验收 `AT-PS-152`）、PS CONTEXT（生命周期一条、取消规则一条）、AT 盘点（三行入①、`AT-PS-090` 补点名、文末追记）。
 
 ### 交接给首方取消 Intake（tops-20）
 
@@ -62,11 +62,11 @@ S–M：两只编排各加一道生命周期闸门（读委托状态，按状态
 1. **三态两格而非三格**：已撤回、已拒绝合并为"委托已终结"（客户可行动同为什么都不用做）；已提交单列"委托待决定"（客户可行动是改用撤回）。按恢复动作分格（ADR-0029），不区分撤回与拒绝，因为区分不改变任何人的下一步。
 2. **名字**：`REQUEST_ENDED`、`REQUEST_AWAITING_DECISION`。避开 `REQUEST_NOT_ACCEPTED` 的相近写法（如 `NOT_YET_ACCEPTED`），免得客户端作者读岔；取消与终局两个用例用同一对词。
 3. **次序**：字段缺 → 委托查找 → 账户核（与查无并在同一个条件里，错误值同一个）→ 生命周期闸门 → 取边界锁 → 其余。账户核在闸门之前，别人的已撤回委托不露出自己的状态（有用例钉）。
-4. **账户核对的是委托自己的账户**（当前提交版本来源身份上的客户账户），不是命令里 `Identity` 的账户：`Identity` 由接入面构造、查询键里已含账户，若比 `Identity` 等于没有第二道。该账户在各版本间恒等（提交时的前身核对与新版本形成都拒绝跨账户，见 `submit_shipment_request.go` 与 `form_new_submission_version.go`），所以取当前版本不会误拦。
+4. **账户核对的是委托自己的账户**（当前提交版本来源身份上的客户账户），不是命令里 `Identity` 的账户：`Identity` 由接入面构造、查询键里已含账户，若比 `Identity` 等于没有第二道。该账户在各版本间恒等，所以取当前版本不会误拦；这条恒等的保证来自 HTTP 补充接入面（`customer_supplement_intake.go`）用同一份认证账户构造补充身份与 `Identity`，应用层（`FormNewSubmissionVersionHandler.Handle` 与领域 `FormNewSubmissionVersion`）没有再比较两者的账户。两个身份若不一致，只会让所有者被拦成"不可见"（过拦），不会越权放行。
 5. **被拦不落记录、不交下游**：取消侧不落取消库任何行（含拒绝记录）；终局侧不落采用记录（也不是 `FinalSourceNotAdopted`）。理由：`已提交`委托之后会被接受，一份早先落下的记录会按（包裹、种类、来源版本）占住同一来源，被接受后同一来源再到只答已有结果、包裹永远没有终局（有用例钉"之后被接受即照常"）。
 6. **终局闸门读已取回的委托状态，不再读一次**；位置按派单放在边界锁之后，实际与锁前锁后无关（见下论证）。
 7. **状态集合外**（`ShipmentRequestStateInvalid` 一类）响亮报错，不放行：来路不明的聚合不得长出取消或终局。
-8. **不立 ADR**（预留的 ADR-0289 未用）：闸门是把已接受文本落到代码——UC-PS-006 目标写明"已接受委托中的包裹"、PS CONTEXT 词条"包裹取消决定"为"针对已接受委托中的明确包裹"、ADR-0255 决定一"被撤回的委托不再承载后续动作"；ADR-0254 管的是闸门之后边界事实的先后，不受影响；ADR-0188（已拒绝可读回）只管读，未规定取消。新结果格按 ADR-0025/0029 加落点，不改任何已接受 ADR 的口径。
+8. **不立 ADR**（预留的 ADR-0289 未用）：闸门是把已接受文本落到代码——UC-PS-006 目标写明"已接受委托中的包裹"、PS CONTEXT 词条"包裹取消决定"为"针对已接受委托中的明确包裹"，UC-PS-006 目标与这条词条是闸门的依据，撤回与拒绝后原委托不再推进也由 CONTEXT 委托生命周期一条给出；ADR-0254 管的是闸门之后边界事实的先后，不受影响；ADR-0188（已拒绝可读回）只管读，未规定取消。新结果格按 ADR-0025/0029 加落点，不改任何已接受 ADR 的口径。
 9. **不动装配**：`cmd/parcel-api/assemble_cancellation.go`、`cmd/parcel-dispatch/assemble.go` 都没改——两处已把 `Requests` 装进编排，闸门与账户核只读已取回的聚合，不需要新读口。
 
 ### 并发与不加锁的论证（已核）
@@ -91,7 +91,15 @@ S–M：两只编排各加一道生命周期闸门（读委托状态，按状态
 
 - 动了边界清单之外的 `internal/parcelshipment/adapters/finalconsume/finalconsume.go`：新终局格不加落点会落进 `default` 报 `ErrUnexpectedFinalOutcome`，消费门回滚重投、永远收不了工，所以是必要的（ADR-0025）。
 - 取消口 HTTP 状态：新格答 200（沿用通用译装，未改 HTTP 适配器代码）。若首方取消 Intake 另有口径（如把`REQUEST_AWAITING_DECISION`译成 409），在 Intake/适配器一侧调，不影响应用层格。
-- `FinalRequestAwaitingDecision` 在终局消费门是"入账收工"：若将来出现不经已接受反查就把来源送进本编排的新调用方，早于接受到达的来源会被确认丢掉（不是回滚重投）。今天的两条调用方到不了这一格。
+- `FinalRequestAwaitingDecision` 在终局消费门按未决回滚重投（`ErrFinalUndecided`，已由两条调用方适配器登记进各自的未决名单），不入账：委托之后可能被接受，入账会把交付或面单信封不可逆地丢弃。今天的两条调用方都先走"当前已接受"反查，到不了这一格，它是兜底；若将来有调用方不经反查就送来源，早于接受到达的来源会一直重投到委托被接受或被撤回、拒绝（后者答 `FinalRequestEnded`，入账收工）。
 - 一处不对称不在本票范围：UC-PS-003 的收寄采用（`adoptionRefusal`）对非已接受委托会落持久不采用记录并按 ADR-0279 作答，对`已提交`委托同样会占住来源。那是已接受 ADR 的既有口径，没有改动，也不另立票。
-- AT 号取了 `140–142`，避开 first-party-api 07/10/11 作者跳过的 `125–129` 与 `130–137` 的在途占用；若协调方想收紧号段，改的只是三行盘点与三处文档引用。
-- 取消的账户核依赖"各提交版本的来源身份账户恒等"这条（已核提交与新版本形成都拒绝跨账户）；若将来出现允许改账户的路径，这里要改成读库里的账户列。
+- AT 号取 `150–152`：first-party-api 在途分支已把 `AT-PS-140`–`143` 立给 UC-PS-002 的首方修订，`125–129`、`130–137` 也已有在途占用；取号前核过各在途分支与 main，没人占 `150–152`。
+- 取消的账户核依赖"各提交版本的来源身份账户恒等"这条。这条保证来自 HTTP 补充接入面 `customer_supplement_intake.go` 用同一份认证账户构造补充身份与 `Identity`，应用层没有另核（`FormNewSubmissionVersionHandler.Handle` 与领域 `FormNewSubmissionVersion` 都不比较两者的账户）；不一致只会让所有者被拦成"不可见"（过拦，不会越权放行）。若将来出现允许改账户的路径，或补充身份不再由这个接入面构造，这里要改成读库里的账户列。
+
+### 评审记录与修订轮
+
+- 独立评审结论：合入前修 B1、N1–N3，已在同一分支上以新提交修完。
+- **B1 改号**：`claude-fpa10` 已把 `AT-PS-140`–`143` 立给 UC-PS-002 的首方修订，与本票所取撞号；本票三个号改为 `AT-PS-150`（取消的目标委托不是已接受）、`AT-PS-151`（目标委托不属信封账户与账户缺席）、`AT-PS-152`（终局形成的目标委托不是已接受），对应关系不变；盘点三行、UC-PS-006 与 UC-PS-004 验收行、文末追记与本票引用同步。测试未引这三个号。
+- **N1 终局消费门**：`FinalRequestAwaitingDecision` 单独成一支，返回 `ErrFinalUndecided`（按未决回滚重投，与"反查不到已接受目标"的 `ErrParcelTargetNotFound` 同属等依赖，ADR-0029 按恢复动作分格）；`FinalRequestEnded` 是终态，仍入账收工。`finalconsume_test.go` 补两格用例，`cmd/parcel-dispatch` 的 `TestTheWiredFinalAdoptionFormsNoFinalForRequestsThatAreNotAccepted` 的已提交一格改期望 `ErrFinalUndecided`；UC-PS-004 终局规则一条补消费门两格。UC-PS-004 结果表里"不进未决"说的是应用层结果格，不变。
+- **N2 管理台词表**：`CancellationOutcome` 与 `cancellationOutcomeViews` 补 `REQUEST_ENDED`（委托已终结）、`REQUEST_AWAITING_DECISION`（委托待决定，请改用撤回），并补 `presentation.test.ts`；`REQUEST_NOT_ACCEPTED` 一格的缺失项补上信封客户账户（与 UC-PS-006 结果表一致）。
+- **N3 完成记录**：代决第 4 条与末条越权风险点不再写"新版本形成都拒绝跨账户"（`FormNewSubmissionVersionHandler.Handle` 与领域 `FormNewSubmissionVersion` 都不比较账户），改为保证来自接入面构造、应用层未另核、不一致只过拦；代决第 8 条依据改指 UC-PS-006 目标与 PS CONTEXT「包裹取消决定」词条，不再把转述当 ADR-0255 原文引。

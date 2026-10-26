@@ -32,7 +32,7 @@ const (
 	// 记录、不交发布意图、不进未决。
 	FinalRequestEnded
 	// FinalRequestAwaitingDecision：目标委托只是已提交，还没被接受；终局只对已接受的委托形成。同样不落记录——委托之后被
-	// 接受时，同一来源再到即按接受后的判断走，不被一份早先的不采用记录占住。
+	// 接受时，同一来源再到（消费门按未决回滚重投）即按接受后的判断走，不被一份早先的不采用记录占住。
 	FinalRequestAwaitingDecision
 )
 

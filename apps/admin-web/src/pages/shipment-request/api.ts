@@ -91,6 +91,8 @@ export interface WithdrawalResponseBody {
 // UC-PS-006 接受后取消(POST /shipment-requests/parcel-cancellations)。词取
 // application.CancelParcelOutcome 的原字符串:三种已提交走向(取消成立、待处置、
 // 拒绝)加未决、重复、冲突、不受理,以及包裹已有终局时交回既有终局那一格。
+// 目标委托不是已接受时,已撤回、已拒绝答 REQUEST_ENDED,只是已提交答 REQUEST_AWAITING_DECISION,
+// 都是确定的业务答复(HTTP 200),不落取消记录。
 // REQUEST_NOT_ACCEPTED 只说字段缺、请求立不起来;委托或包裹在当前客户范围内查不到是统一
 // 不可见结果(AT-PS-090),答 404 SHIPMENT_REQUEST_NOT_VISIBLE、不带 outcome(ADR-0022)。
 export type CancellationOutcome =
@@ -101,6 +103,8 @@ export type CancellationOutcome =
   | 'EXISTING_RESULT'
   | 'REQUEST_CONFLICT'
   | 'REQUEST_NOT_ACCEPTED'
+  | 'REQUEST_ENDED'
+  | 'REQUEST_AWAITING_DECISION'
   | 'FINAL_OUTCOME_STANDS';
 
 // 与 adapters/http 的 cancellationResponse 一一对应:三种已提交走向各带自己的凭据

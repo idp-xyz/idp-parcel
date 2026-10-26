@@ -111,7 +111,15 @@ export const cancellationOutcomeViews: Record<CancellationOutcome, OutcomeView> 
   },
   REQUEST_NOT_ACCEPTED: {
     label: '请求未受理',
-    note: '必要内容缺失(包裹、请求方、原因或业务时间),请求立不起来。请补齐后以新的请求身份重新提出。',
+    note: '必要内容缺失(信封客户账户、包裹、请求方、原因或业务时间),请求立不起来。请补齐后以新的请求身份重新提出。',
+  },
+  REQUEST_ENDED: {
+    label: '委托已终结',
+    note: '目标委托已被撤回或已被拒绝,没有服务可取消,无事可做。这是确定的业务答复,不是故障;没有落取消记录,包裹与委托当前状态不变。',
+  },
+  REQUEST_AWAITING_DECISION: {
+    label: '委托待决定',
+    note: '目标委托只是已提交,接受或拒绝决定还没形成;包裹取消只对已接受的委托开放。要停掉它请改用撤回(UC-PS-005)。这是确定的业务答复,不是故障,没有落取消记录;委托之后被接受时,同一请求再提出即按接受后的边界判断。',
   },
   FINAL_OUTCOME_STANDS: {
     label: '已有终局',

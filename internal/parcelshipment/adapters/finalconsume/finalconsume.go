@@ -34,10 +34,14 @@ var (
 // Consumption 把终局编排的封闭结果译成消费门的两格：nil 入账、error 回滚。
 //
 // FINAL_FORMED / FINAL_REDERIVED / EXISTING_RESULT / SOURCE_NOT_ADOPTED /
-// SOURCE_CONFLICT / REQUEST_NOT_ACCEPTED / REQUEST_ENDED / REQUEST_AWAITING_DECISION
-// 是业务终局（含负向），重试不会让另一份规则或另一份委托长出来，入账收工。后两格是委托
-// 生命周期闸门的确定答复：生产上终局来源只经当前已接受委托的反查到达，闸门是兜底；
-// 已提交的委托之后被接受时，同一来源由上游重新交来，被拦这一次没有留下任何记录。
+// SOURCE_CONFLICT / REQUEST_NOT_ACCEPTED / REQUEST_ENDED 是业务终局（含负向），重试不会让
+// 另一份规则或另一份委托长出来，入账收工。REQUEST_ENDED 是已撤回、已拒绝的终态，之后不会再
+// 变成已接受。
+//
+// REQUEST_AWAITING_DECISION 不在入账格：委托只是已提交，之后可能被接受，到那时同一来源
+// 才有终局可形成；现在入账等于把交付或面单信封不可逆地确认丢弃。它与「反查不到已接受目标」
+// 是同一事实从另一个读口看到，同归等依赖、回滚重投（ErrFinalUndecided）。生产上终局来源
+// 只经当前已接受委托的反查到达，这一格是兜底。
 //
 // FINAL_UNDECIDED 含规则未配置与规则未满足（FINAL_RULE_NOT_SATISFIED）。后者是「此
 // 产品声明缺这一行」，编排保持未决等其他责任结果，禁止折成 SOURCE_NOT_ADOPTED。
@@ -54,9 +58,10 @@ func Consumption(result psapplication.FormParcelFinalResult) error {
 		psapplication.FinalSourceNotAdopted,
 		psapplication.FinalSourceConflict,
 		psapplication.FinalRequestNotAccepted,
-		psapplication.FinalRequestEnded,
-		psapplication.FinalRequestAwaitingDecision:
+		psapplication.FinalRequestEnded:
 		return nil
+	case psapplication.FinalRequestAwaitingDecision:
+		return fmt.Errorf("%w: request awaiting decision", ErrFinalUndecided)
 	case psapplication.ParcelFinalUndecided:
 		return fmt.Errorf("%w: %s", ErrFinalUndecided, result.UndecidedReason())
 	default:
