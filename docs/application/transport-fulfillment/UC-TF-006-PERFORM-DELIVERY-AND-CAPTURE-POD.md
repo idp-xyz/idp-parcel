@@ -165,7 +165,7 @@
 | `AT-TF-286` | 到期重问（`DUE`）而本租户没登记重问间隔 | 答`未配置`（`REASK_CADENCE_NOT_CONFIGURED`），一件也不问、所有者一次也不被问（决定五） |
 | `AT-TF-287` | 登记重问间隔（登记册配置写） | 首登 201；每一版带登记依据；同版本同正文重放、异正文（间隔或依据不同）冲突；不是正的整分钟、依据空白不受理；最近登记的那一版生效，查阅页 `registry=delivery-dispatch-reask-cadence` 新登的在前 |
 | `AT-TF-288` | 调度员在管理台上对单个（段，对象）补拍（`/transport-fulfillment-delivery-dispatch-triggers`） | 挂运营决定「派送重问」，不要设备；线格式与答复不变（决定七） |
-| `AT-TF-289` | 随交接信封发起的一拍，对象此刻在场的段里链尾不是凭这一版交接入场（信封晚到；待确认更正为`已交接`而对象仍挂在先前的段里——后一种是票 demo-chain-gaps/130 之前的过渡态，票落地后对象凭更正进段，见 UC-TF-005 `AT-TF-329`） | 答`不是触发事实`（`ENTRY_NOT_THIS_HANDOVER`），不问所有者、不形成任务，信封入账（决定六；票 demo-chain-gaps/129） |
+| `AT-TF-289` | 随交接信封发起的一拍，对象此刻在场的段里链尾不是凭这一版交接入场（信封晚到，对象已被下一次交接带进别的段；或那一版是没能带对象进段的更正，见 UC-TF-005 `AT-TF-347`） | 答`不是触发事实`（`ENTRY_NOT_THIS_HANDOVER`），不问所有者、不形成任务，信封入账（决定六；票 demo-chain-gaps/129） |
 | `AT-TF-290` | 交接更正后仍为`已交接`，同段长出替代参与、入场依据换了 | 查在册沿替代链认出前版已形成的那一项，答`已在册`、不另立第二项；派送待形成册上仍是同一条，入场依据换成链尾那一版 |
 | `AT-TF-291` | 登记了重问间隔之后到期重问 | 只问最近一次问已过间隔的那几件，答复带所凭的那一版与到期时刻 |
 | `AT-TF-292` | 册上排在队头的几件一直答`未决`（或`引用被占`、`不受理`），件数不少于一次的上限 | 它们不改状态，但记下这一次问过、排到队尾；答复带还剩几件；下一次重问先问到后面那几件，不被队头卡住（决定四） |
@@ -188,6 +188,5 @@
 | 规则 | 现状 | 去处 |
 |---|---|---|
 | 待确认之后，凭同一次上门的后补来源以更正形成确定结果（TF CONTEXT「揽收、派送与交付」） | 派送尝试登记口收下待确认并原样保存，同一尝试换说法再报答冲突、不改写；交付登记对待确认答`派送结果待确认`。同一次上门的更正口没有：那件对象要形成有效交付，只能等新的上门登新尝试 | 票 [docs-consistency/code/90](../../../.scratch/docs-consistency/code/90-a-pending-attempt-object-result-has-no-correction-entry.md) |
-| 待确认更正为`已交接`时对象进新段（`AT-TF-289` 括注的后一种） | 对象仍挂在先前的段里，随交接那一拍答`不是触发事实` | 票 [demo-chain-gaps/130](../../../.scratch/demo-chain-gaps/issues/130-handover-correction-from-pending-to-handed-over-enters-the-segment.md)（UC-TF-005 `AT-TF-329`） |
 
 完成本用例只证明运输履约形成了可解释的交付结果和适用运输收费发生项；`parcel-shipment` 是否据此形成终局服务结果由 [`UC-PS-004`](../parcel-shipment/UC-PS-004-FORM-PARCEL-FINAL-SERVICE-OUTCOME.md) 独立判断，供应商成本由 `settlement-accounting` 独立形成。
