@@ -46,6 +46,7 @@ import { useRegisterList } from './register-list';
 import { BusinessPartyRegistrationForm } from './BusinessPartyRegistrationForm';
 import { PartyRelationshipRegistrationForm } from './PartyRelationshipRegistrationForm';
 import { IdentityDeactivationForm } from './IdentityDeactivationForm';
+import { PartyRelationshipEndActions } from './PartyRelationshipEndActions';
 import { PartyOverviewSection } from './PartyOverviewSection';
 import {
   businessPartyCountSummary,
@@ -310,7 +311,16 @@ function BusinessPartyDrawer({
  * 关系行详情抽屉（票 09 第 4 条）：列全字段。撤销 / 到期 / 替代的时点、依据、后继各占一格——它们是「边界之后的新决定
  * 不再依据这段关系」的内容，不折进状态词里。
  */
-function PartyRelationshipDrawer({ row, onClose }: { row: PartyRelationshipRecord | null; onClose: () => void }) {
+function PartyRelationshipDrawer({
+  row,
+  onClose,
+  onEnded,
+}: {
+  row: PartyRelationshipRecord | null;
+  onClose: () => void;
+  /** 撤销 / 到期答 `ENDED` 时重取关系册（票 ps-external-mark-relations/17）；重取保留旧答案，抽屉里这一行就地换新。 */
+  onEnded: () => void;
+}) {
   const copy = useCopyToClipboard();
   return (
     <Drawer open={row !== null} onOpenChange={(open) => (open ? undefined : onClose())} aria-label="参与方关系详情">
@@ -322,6 +332,7 @@ function PartyRelationshipDrawer({ row, onClose }: { row: PartyRelationshipRecor
               <span className="font-mono text-xs text-idpxyz-textMuted">r{row.revision}</span>
               {statusBadge(relationshipStatusLabels, row.status)}
             </div>
+            <PartyRelationshipEndActions key={row.relationshipId} row={row} onEnded={onEnded} />
           </DrawerHeader>
           <DrawerBody>
             <dl>
@@ -574,7 +585,7 @@ function PartyRelationshipsTable({
           emptyDescription: '读取入口已配置，但登记册为空；页面不会预置参与方或关系。在「登记」签登记第一个。',
         })}
       />
-      <PartyRelationshipDrawer row={selected} onClose={() => setSelectedId(null)} />
+      <PartyRelationshipDrawer row={selected} onClose={() => setSelectedId(null)} onEnded={retry} />
     </>
   );
 }
