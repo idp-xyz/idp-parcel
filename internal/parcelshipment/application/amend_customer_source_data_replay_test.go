@@ -272,6 +272,55 @@ func TestAReplayedAmendmentWithoutADeclaredIntentIsStillACallerError(t *testing.
 	}
 }
 
+// Covers: 受理阶段调用方的错重放仍是调用方的错——内容与范围、意图不配的请求，首次答 ErrAmendmentContentUnfit（接
+// HTTP 答 400，改请求才会好），来源已保全；重放同样要在授权之前拒，仍答 ErrAmendmentContentUnfit。
+//
+// 这一格要单独钉住：重放若漏了这道受理，请求会跑完授权、阶段、矩阵与版本号签发，到 FormCustomerSourceDataVersion
+// 的领域门才被拒，调用方的错于是被当成服务端的错（5xx），客户拿同一份请求重试永远得不到「改请求」的提示。两轮
+// 都不许碰授权、不签版本号、不交接下游。
+func TestAReplayedAmendmentWhoseContentDoesNotFitIsStillACallerError(t *testing.T) {
+	cases := map[string]func(*testing.T, *application.AmendCustomerSourceDataCommand){
+		"收件范围带测量内容": func(t *testing.T, command *application.AmendCustomerSourceDataCommand) {
+			command.Scope = deliveryPlaceDataScope(t)
+			command.Content = weightOnlyContent(t, "1.00")
+		},
+		"开放范围带要素内容": func(t *testing.T, command *application.AmendCustomerSourceDataCommand) {
+			command.Content = deliveryPostalCodeContent(t, "SYN-200095")
+		},
+		"显式清空带要素内容": func(t *testing.T, command *application.AmendCustomerSourceDataCommand) {
+			command.Scope = deliveryPlaceDataScope(t)
+			command.Intent = domain.ExplicitClearIntent
+			command.Content = deliveryPostalCodeContent(t, "SYN-200095")
+		},
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			fixture := newAmendmentFixture(t)
+			command := fixture.command(t)
+			mutate(t, &command)
+
+			for _, round := range []string{"first", "replay"} {
+				_, err := fixture.handler.Handle(context.Background(), command)
+				if !errors.Is(err, application.ErrAmendmentContentUnfit) {
+					t.Fatalf("%s: err = %v, want ErrAmendmentContentUnfit", round, err)
+				}
+			}
+			if fixture.authorizer.calls != 0 {
+				t.Fatalf("authorized %d times; a request that cannot stand is refused before asking about authority, replayed or not", fixture.authorizer.calls)
+			}
+			if fixture.identities.issued != 0 {
+				t.Fatalf("issued %d version IDs for a request that cannot stand", fixture.identities.issued)
+			}
+			if fixture.requests.saved != nil || len(fixture.downstream.intents) != 0 {
+				t.Fatal("a request that cannot stand formed a version or was handed off")
+			}
+			if _, preserved := fixture.sources.stored(t, amendmentSourceIdentity(t)); !preserved {
+				t.Fatal("the refused request still arrived; its source fact must be preserved")
+			}
+		})
+	}
+}
+
 // Covers: AT-PS-017「同一请求身份携带不同内容 → 请求冲突，原请求和原版本不被覆盖」——停在未决之后，同身份不同内容
 // 仍答冲突，不被重放逻辑吞成接着办；原请求的内容摘要不变，也不形成版本。
 func TestAnAmendmentWithDifferentContentAfterAStoppedRoundStillConflicts(t *testing.T) {

@@ -184,7 +184,7 @@ func withdrawalReplayDatabase(t *testing.T) (*pgxpool.Pool, *bentopg.DB, domain.
 
 // Covers: ADR-0256 决定一第 2 格、UC-PS-005「撤回未决」一行——授权答不出的那一轮，装配事务提交了来源保全，委托仍是
 // `已提交`；授权恢复后客户重放同一请求，撤回成立（FORMED），委托在真库上读回为`已撤回`并带这一次的撤回决定；再重放
-// 答已有决定、带同一份撤回，委托不再被写（版本号不动）、不再问授权。
+// 答已有决定、带同一份撤回，委托不被写（版本号不动）、不问授权。
 func TestAWithdrawalReplayedAfterAnUndecidedAuthorizationIsFormedOnceOnARealDatabase(t *testing.T) {
 	_, db, identity := withdrawalReplayDatabase(t)
 	authorizer := newScriptedWithdrawalAuthorizer(t)
@@ -358,7 +358,7 @@ func rejectOnRealDatabase(t *testing.T, db *bentopg.DB, identity domain.SourceId
 
 // Covers: AT-PS-071、AT-PS-072、AT-PS-068 与 ADR-0256 决定一第 2 格——上一轮停下之后委托越过了提交边界（接受、拒绝先成立，或
 // 本请求自己的撤回已落）：真库上读回的是已决定的那一份，重放答已有决定并带那份决定——接受与拒绝带接受决定，已撤回带原
-// 撤回；不再问授权、不再写。
+// 撤回；不问授权、不写。
 func TestAWithdrawalReplayedOverADecidedRequestAnswersTheExistingDecisionOnARealDatabase(t *testing.T) {
 	cases := []struct {
 		name    string

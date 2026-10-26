@@ -190,8 +190,9 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 	return handler.decide(ctx, command, incoming, request)
 }
 
-// admit 认出受理阶段调用方的错。请求到达过这件事已由来源保全留痕，所以这两道可以放在保全之后：
-// 它们只依赖命令本身，同一份请求重放时结果不变。
+// admit 认出受理阶段调用方的错：意图未声明、内容与范围不配。请求到达过这件事已由来源保全留痕，所以这两道可以
+// 放在保全之后；它们只依赖命令本身，同一份请求重放时结果不变，首次到达与重放走同一处，调用方的错才不会在重放时
+// 跑完授权与矩阵再被领域门当成服务端的错。
 func (handler *AmendCustomerSourceDataHandler) admit(command AmendCustomerSourceDataCommand) error {
 	// 修订意图是最低业务语义（`UC-PS-002` 输入语义表）：矩阵按它分辨「改成新值」与「清掉」
 	// （AT-PS-020），意图立不起来，授权与规则的答案都无从成立。这是调用方的错，不是业务

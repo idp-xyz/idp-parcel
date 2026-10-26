@@ -292,7 +292,7 @@ func TestAReplayedWithdrawalThatWasRefusedIsAnsweredAgain(t *testing.T) {
 }
 
 // Covers: AT-PS-071、AT-PS-072、AT-PS-068 与 ADR-0256 决定一第 2 格——委托在上一轮之后越过了提交边界（别人先接受、先拒绝，
-// 或本请求自己的撤回已成立）：重放答已有决定并带上那份决定，不再问授权、不耗决定标识、不再写；已撤回的另带原撤回。
+// 或本请求自己的撤回已成立）：重放答已有决定并带上那份决定，不问授权、不耗决定标识、不写；已撤回的另带原撤回。
 // 接受先成立时不释放合法冻结。
 func TestAReplayedWithdrawalOfADecidedRequestAnswersTheExistingDecisionAndCarriesIt(t *testing.T) {
 	cases := []struct {
