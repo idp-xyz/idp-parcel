@@ -259,6 +259,35 @@ func TestAContradictoryPendingOrRefusalSubmissionIsNotAccepted(t *testing.T) {
 	}
 }
 
+// 确定结果带来源是提交自身的矛盾，在内容比对之前就答`来源未受理`：在册的是 TFC-1 那一形时，同一来源身份照原样重交、
+// 只给失败那一行带上来源，也不落到比对口去答冲突——那一格只该由改请求解决（ADR-0029），而比对口只该见到真带待确认的
+// TFC-3 命令。原记录原样，不签版本、不交意图。
+func TestADeterminateResultCarryingASourceIsNotAcceptedBeforeTheContentComparison(t *testing.T) {
+	fixture := newPendingPickupFixture(t)
+	first := fixture.handle(t, pickupCommand(t, "source-1", "attempt-1",
+		failureSubmission(t, "parcel-1", domain.CustomerAbsent, "reason-absent-1")))
+	if first.Outcome() != application.PickupAttemptRecorded {
+		t.Fatalf("seed outcome = %q", first.Outcome())
+	}
+	stored := fixture.store.records["source-1"]
+	if !strings.HasPrefix(stored.ContentDigest, "TFC-1:") {
+		t.Fatalf("seed digest = %q, want TFC-1", stored.ContentDigest)
+	}
+
+	sourced := failureSubmission(t, "parcel-1", domain.CustomerAbsent, "reason-absent-1")
+	sourced.Source = value(t, domain.NewAttemptResultSourceReference, "source/driver-scan")
+	result := fixture.handle(t, pickupCommand(t, "source-1", "attempt-1", sourced))
+	if result.Outcome() != application.PickupNotAccepted {
+		t.Fatalf("outcome = %q, want SOURCE_NOT_ACCEPTED——确定结果带来源是改请求，不是与在册那一版的内容冲突", result.Outcome())
+	}
+	if kept := fixture.store.records["source-1"]; kept.ContentDigest != stored.ContentDigest || fixture.store.saves != 1 {
+		t.Fatalf("在册记录被动了：digest %q → %q，saves = %d", stored.ContentDigest, kept.ContentDigest, fixture.store.saves)
+	}
+	if fixture.versions.minted != 0 || len(fixture.handoff.intents) != 0 {
+		t.Fatal("矛盾的重交签了版本或交了意图")
+	}
+}
+
 func (fixture *deliveryAttemptFixture) pending(object string) application.ObjectDeliverySubmission {
 	fixture.t.Helper()
 	return application.ObjectDeliverySubmission{

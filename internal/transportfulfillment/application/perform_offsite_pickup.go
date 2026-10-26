@@ -207,6 +207,9 @@ func (handler *PerformOffsitePickupHandler) Handle(
 		len(command.Objects) == 0 {
 		return PerformOffsitePickupResult{outcome: PickupNotAccepted}, nil
 	}
+	if determinateResultCarriesSource(command.Objects) {
+		return PerformOffsitePickupResult{outcome: PickupNotAccepted}, nil
+	}
 
 	key := ports.PickupAttemptKey{TenantID: command.TenantID, SourceID: command.SourceID}
 	objects := make([]domain.OffsitePickupObjectContent, len(command.Objects))
@@ -296,9 +299,22 @@ func storeUndecided(sourceID string) PerformOffsitePickupResult {
 	}
 }
 
+// determinateResultCarriesSource 答这份提交里有没有确定结果（非待确认）带着来源。那一格只属待确认，收下它就得替调用方
+// 决定它算不算数，所以是提交自身的矛盾，恢复动作是改请求（ADR-0029）。它在内容比对之前判：这样到得了
+// domain.CompareStoredPickupAttemptDigest 的带来源命令必含待确认，那一口对旧形答冲突才与按旧形重算同答（见它的头注）；
+// 判在比对之后，同一来源身份照原样重交、只给失败那一行带上来源，就会被答成与在册那一版冲突。
+func determinateResultCarriesSource(objects []ObjectPickupSubmission) bool {
+	for _, submission := range objects {
+		if !submission.Outcome.PendingConfirmation() && submission.Source.String() != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // formPickupObjectResult 按结果走 domain.FormPendingAttemptObjectResult（待确认，要来源）或
-// domain.FormAttemptObjectResult（其余，不收来源）。确定结果带着来源进来是提交自身的矛盾——那一格只属待确认，
-// 收下它就得替调用方决定它算不算数。
+// domain.FormAttemptObjectResult（其余，不收来源）。确定结果带来源的提交在 Handle 入口已答未受理
+// （determinateResultCarriesSource），走不到这里。
 func formPickupObjectResult(
 	attempt domain.FulfillmentAttempt,
 	submission ObjectPickupSubmission,
@@ -306,9 +322,6 @@ func formPickupObjectResult(
 	if submission.Outcome.PendingConfirmation() {
 		return domain.FormPendingAttemptObjectResult(
 			attempt, submission.Object, submission.Source, submission.Basis, submission.OccurredAt)
-	}
-	if submission.Source.String() != "" {
-		return domain.AttemptObjectResult{}, domain.ErrInvalidAttemptObjectResult
 	}
 	return domain.FormAttemptObjectResult(
 		attempt, submission.Object, submission.Outcome, submission.Basis, submission.OccurredAt)

@@ -275,7 +275,7 @@ func TestStoredPickupAttemptDigestComparesThePendingSourceShape(t *testing.T) {
 		{"unversioned row, this one carries a source", "bb", "TFC-3:aa", domain.DifferentPayload},
 		{"TFC-1 row replayed without a source", "TFC-1:aa", "TFC-1:aa", domain.SamePayload},
 		{"unversioned row replayed without a source", "bb", "TFC-1:aa", domain.SamePayload},
-		{"the handover node shape is not a pickup shape", "TFC-2:aa", "TFC-2:aa", domain.UnknownPayloadShape},
+		{"the handover node shape is not a pickup shape", "TFC-2:aa", "TFC-1:aa", domain.UnknownPayloadShape},
 		{"unknown shape stays unknown", "TFC-9:aa", "TFC-3:aa", domain.UnknownPayloadShape},
 	}
 	for _, testCase := range cases {

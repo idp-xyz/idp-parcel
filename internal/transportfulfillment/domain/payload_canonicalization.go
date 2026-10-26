@@ -85,10 +85,10 @@ func CompareStoredHandoverDigest(stored, current, unversioned string) StoredDige
 
 // CompareStoredPickupAttemptDigest 是场外揽收执行口的比对：在 CompareStoredDigest 之上认 TFC-3。
 //
-// 带 TFC-3 前缀的已存摘要与 current 逐串比——本次命令一件都不带来源时 current 是 TFC-1，两串必然不同，答冲突：在册那一版
-// 有待确认的来源而这一份没有。反过来，本次命令带来源（current 是 TFC-3）而已存摘要是 TFC-1 或无版本那一形时也答冲突：
-// 那两形里没有来源一格，丢掉来源再按旧形比，同一来源身份换成带来源的待确认就会被认作重放（理由同 CompareStoredHandoverDigest）。
-// TFC-2 是交接那一面的形状，这一口不认，落 UnknownPayloadShape。
+// 带 TFC-3 前缀的已存摘要与 current 逐串比。本次命令带来源（current 是 TFC-3）而已存摘要是 TFC-1 或无版本那一形时答冲突，
+// 这与 ADR-0014「按已存摘要的形状重算本次命令再比」同答，不是另立一条判法：带来源的命令到得了这里就必含待确认（确定结果
+// 带来源在编排入口已答未受理），按旧形重算时待确认那一行的结果取值也在里面，而旧形写下的记录里不可能有待确认——重算出的
+// 串与已存的不可能相同。所以直接答冲突，不在旧形之下再算一遍。TFC-2 是交接那一面的形状，这一口不认，落 UnknownPayloadShape。
 func CompareStoredPickupAttemptDigest(stored, current, unversioned string) StoredDigestComparison {
 	storedShape, _, storedVersioned := strings.Cut(stored, ":")
 	if storedVersioned && storedShape == pickupAttemptSourceCanonicalizationVersion {
