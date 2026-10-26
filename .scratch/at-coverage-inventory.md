@@ -424,6 +424,11 @@
 | `AT-PS-117` | internal/parcelshipment/adapters/accessidentity/production_governance_scope_directory_test.go::TestTheProductionDirectoryResolvesTheMappedObjectScope；internal/parcelshipment/adapters/accessidentity/production_governance_scope_directory_test.go::TestTheProductionDirectoryAnswersAbsenceWithoutInventingACoordinate；internal/parcelshipment/adapters/accessidentity/production_governance_scope_directory_test.go::TestTheProductionDirectoryDoesNotTurnAFailureIntoAbsence |
 | `AT-PS-118` | cmd/parcel-api/assemble_production_ownership_directory_test.go::TestWithoutTheWriteSwitchARegisteredTenantSubmitsThroughTheProductionDirectory；cmd/parcel-api/assemble_customer_client_test.go::TestTheWriteSwitchLendsItsCoordinatesOnlyToItsOwnTenant |
 | `AT-PS-119` | cmd/parcel-api/assemble_production_ownership_directory_test.go::TestWithoutTheWriteSwitchAMissingMappingOrIntervalLeavesOwnershipUnresolved；cmd/parcel-api/assemble_production_ownership_directory_test.go::TestWithoutTheWriteSwitchSyntheticCoordinatesAloneDoNotAdmit |
+| `AT-PS-120` | internal/accessidentity/customer_client_command_faces_test.go::TestCommandFacesMintTheirEnvelopesFromTheBinding；internal/accessidentity/customer_client_command_faces_test.go::TestCommandFacesAnswerTheirOwnGrades |
+| `AT-PS-121` | internal/accessidentity/customer_client_command_faces_test.go::TestCommandFaceRequestKeysCarryThePrefixAndNeedAnIdentifier；internal/accessidentity/customer_client_command_faces_test.go::TestOneAccessRequestIdentifierGivesDistinctKeysAcrossCommands；internal/accessidentity/customer_client_admission_test.go::TestCustomerWithdrawalRequestKeyCarriesTheCommandPrefix |
+| `AT-PS-122` | internal/parcelshipment/adapters/http/submit_shipment_request_test.go::TestSubmitReceiptNamesTheCurrentSubmissionVersion |
+| `AT-PS-123` | internal/accessidentity/adapters/postgres/customer_client_command_faces_grant_test.go::TestCustomerCommandFaceGrantsPassTheCapabilityCheckAndRoundTrip |
+| `AT-PS-124` | internal/parcelshipment/domain/customer_command_shapes_test.go::TestCustomerCommandShapeVersionsAreDistinct |
 | `AT-SA-002` | internal/settlementaccounting/application/assess_advance_recovery_test.go::TestAnAssessmentRegistersOncePerIdentity；internal/settlementaccounting/domain/advance_recovery_test.go::TestAdvanceAssessmentJudgesWithoutRecomputingOrFabricating |
 | `AT-SA-003` | internal/settlementaccounting/domain/advance_recovery_test.go::TestAdvanceAssessmentJudgesWithoutRecomputingOrFabricating |
 | `AT-SA-004` | internal/settlementaccounting/domain/advance_recovery_test.go::TestAdvanceAssessmentJudgesWithoutRecomputingOrFabricating |
@@ -1897,3 +1902,5 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 
 2026-10-26 追记（票 docs-consistency/code/92）：`AT-SA-114` 行补点名另一半——外部更正低于未撤销核销的合计时照采、答复带出超核金额（HTTP 响应体 `overAppliedMinor`、受控 CLI「累计超核」）、同一事务里重算事实落到的全部客户应收作用域（账已不平的作用域跳过并在答复里点名，更正照采）、与核销在事实身份行上排队（ADR-0285）；原「事实是引用」半边不动。分桶不变，总览计数未改，由推送方重算。
 2026-10-26 追记（票 docs-consistency/code/36）：UC-PS-005 `AT-PS-068`、`AT-PS-076` 补真库用例名——已撤回委托在真库上读得回、撤回决定进快照（ADR-0286）：重复撤回答原撤回与原补偿关联、生产装配的撤回编排读回已撤回委托、以撤回重提方向关联已撤回原委托的新提交成立；`AT-PS-076` 另补重建面用例；`AT-PS-070` 补接受链在已撤回委托上不再占资金的用例（消费门在撤回之后才消费「委托已提交」信封这一格）。
+
+2026-10-26 追记（票 first-party-api/06）：UC-PS-001 新立 `AT-PS-120`（首方客户命令五口铸造：授予、准入范围、信封）、`AT-PS-121`（五口来源请求键命令前缀、缺席、去空白、跨命令不撞）、`AT-PS-122`（提交答复带当前提交版本标识）、`AT-PS-123`（五个新能力词过库上 CHECK）、`AT-PS-124`（五口形状版本名），五行入①。总览计数未动，由推送方重算。

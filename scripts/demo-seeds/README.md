@@ -280,6 +280,11 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
    里取（ADR-0223），`submit-one-shipment.sh` 末行打出它；按客户自己的参考直接定位见票 demo-chain-gaps/119。视图在委托接受、初始路由投影形成
    之后由 dispatch 派生：委托接受之前查它答 `VIEW_NOT_FOUND`；接受之后、视图派生出来之前，本账户查它答 `NO_VISIBLE_RESULT`（稍后再查，
    ADR-0246），别的账户查它仍与不存在同答。证据只记 `S`。
+10. 客户命令五口（票 first-party-api/06，ADR-0310）：撤回 `SHIPMENT_REQUEST_WITHDRAWAL`、取消包裹 `PARCEL_CANCELLATION`、资料修订
+   `SOURCE_DATA_AMENDMENT`、补充 `SHIPMENT_REQUEST_SUPPLEMENT`、索赔 `CLAIM_SUBMISSION` 五词，`steps/479-access-customer-command-faces.sh`
+   对同一台合成货主系统各登一笔授予（`data/access/18`）、各一行准入范围对照（`data/access/19`，能力 `CUSTOMER_COMMAND`）与各一段
+   权威区间（`data/governance/53`–`57`）。这一节只登底座的三样；五口的领域 Intake 随 07–11 换上，在那之前授了也只答未配置。
+   演示租户取消口的授权规则（ADR-0310 取舍 C）不在这里，随取消口那一票登。证据只记 `S`。
 
 ## 数据故事（同一合成租户 SYN-TENANT-01，范围 SYN-SCOPE-01）
 

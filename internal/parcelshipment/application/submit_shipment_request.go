@@ -122,10 +122,13 @@ type SubmitShipmentRequestResult struct {
 	priorOutcome      SubmitOutcome
 	shipmentRequestID domain.ShipmentRequestID
 	hasRequest        bool
-	parcels           []SubmittedParcel
-	ownershipDecision domain.ProductionOwnershipDecision
-	hasDecision       bool
-	gateBlockReasons  []domain.FutureSubmissionBlockReason
+	// submissionVersionID 是所指名委托此刻的当前提交版本（票 first-party-api/06 取舍 E）：客户下一次补充要以它为基准
+	// （FormNewSubmissionVersionCommand.BasisVersion），回执带回，客户不必另读。随 hasRequest 同在场。
+	submissionVersionID domain.SubmissionVersionID
+	parcels             []SubmittedParcel
+	ownershipDecision   domain.ProductionOwnershipDecision
+	hasDecision         bool
+	gateBlockReasons    []domain.FutureSubmissionBlockReason
 }
 
 // SubmittedParcel 是结果所指名委托上的一件声明包裹：它的内部标识，配上客户为它声明的包裹件号（ADR-0184 决定四；没声明
@@ -154,6 +157,12 @@ func (result SubmitShipmentRequestResult) ShipmentRequestID() (domain.ShipmentRe
 	return result.shipmentRequestID, result.hasRequest
 }
 
+// SubmissionVersionID 交回所指名委托此刻的当前提交版本标识，与 ShipmentRequestID 同在同缺。首次提交是首个版本；重放在补充
+// 之后读回，是补充形成的当前版本——补充基准要的正是当前版本，不是首个版本。
+func (result SubmitShipmentRequestResult) SubmissionVersionID() (domain.SubmissionVersionID, bool) {
+	return result.submissionVersionID, result.hasRequest
+}
+
 // Parcels 交回所指名委托的逐件包裹（拷贝）；没有指名委托时为空。
 func (result SubmitShipmentRequestResult) Parcels() []SubmittedParcel {
 	return append([]SubmittedParcel(nil), result.parcels...)
@@ -165,6 +174,7 @@ func (result SubmitShipmentRequestResult) Parcels() []SubmittedParcel {
 func (result SubmitShipmentRequestResult) naming(request domain.ShipmentRequest) SubmitShipmentRequestResult {
 	result.shipmentRequestID = request.ShipmentRequestID()
 	result.hasRequest = true
+	result.submissionVersionID = request.CurrentSubmissionVersion().VersionID()
 	result.parcels = submittedParcelsOf(request)
 	return result
 }

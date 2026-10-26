@@ -19,6 +19,11 @@ var customerCapabilitiesAdmittedAtMint = []CustomerCapability{
 	CustomerCapabilityDeliveryPreAdviceSubmission,
 	CustomerCapabilityDeliveryPreAdviceWithdrawal,
 	CustomerCapabilityDeliveryHandoverConfirmation,
+	CustomerCapabilityShipmentRequestWithdrawal,
+	CustomerCapabilityParcelCancellation,
+	CustomerCapabilitySourceDataAmendment,
+	CustomerCapabilityShipmentRequestSupplement,
+	CustomerCapabilityClaimSubmission,
 }
 
 // ShipmentRequestSubmissionAdmission 是委托提交在治理登记册上的词（ADR-0308）：能力 CustomerCommandAdmissionCapability，事实类型取

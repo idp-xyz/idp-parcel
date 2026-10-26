@@ -1,0 +1,45 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "grants": [
+    {
+      "grantId": "SYN-GRANT-CUSTOMER-WITHDRAWAL-01",
+      "issuer": "http://127.0.0.1:5558/dex",
+      "subject": "ChZzeW4tY3VzdG9tZXItY2xpZW50LTAx",
+      "capability": "SHIPMENT_REQUEST_WITHDRAWAL",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-CUSTOMER-GRANT-BASIS-01"
+    },
+    {
+      "grantId": "SYN-GRANT-CUSTOMER-PARCEL-CANCELLATION-01",
+      "issuer": "http://127.0.0.1:5558/dex",
+      "subject": "ChZzeW4tY3VzdG9tZXItY2xpZW50LTAx",
+      "capability": "PARCEL_CANCELLATION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-CUSTOMER-GRANT-BASIS-01"
+    },
+    {
+      "grantId": "SYN-GRANT-CUSTOMER-SOURCE-DATA-AMENDMENT-01",
+      "issuer": "http://127.0.0.1:5558/dex",
+      "subject": "ChZzeW4tY3VzdG9tZXItY2xpZW50LTAx",
+      "capability": "SOURCE_DATA_AMENDMENT",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-CUSTOMER-GRANT-BASIS-01"
+    },
+    {
+      "grantId": "SYN-GRANT-CUSTOMER-SUPPLEMENT-01",
+      "issuer": "http://127.0.0.1:5558/dex",
+      "subject": "ChZzeW4tY3VzdG9tZXItY2xpZW50LTAx",
+      "capability": "SHIPMENT_REQUEST_SUPPLEMENT",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-CUSTOMER-GRANT-BASIS-01"
+    },
+    {
+      "grantId": "SYN-GRANT-CUSTOMER-CLAIM-01",
+      "issuer": "http://127.0.0.1:5558/dex",
+      "subject": "ChZzeW4tY3VzdG9tZXItY2xpZW50LTAx",
+      "capability": "CLAIM_SUBMISSION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-CUSTOMER-GRANT-BASIS-01"
+    }
+  ]
+}

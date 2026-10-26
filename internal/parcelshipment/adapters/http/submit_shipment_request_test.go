@@ -38,6 +38,23 @@ func TestSubmitReportsCreatedWhenAShipmentRequestWasBuilt(t *testing.T) {
 	}
 }
 
+// Covers: AT-PS-122（票 first-party-api/06 取舍 E）——建单答复带当前提交版本标识（补充基准由回执带回）；同一请求重放读回的
+// 是同一个；没建单的答案不带这一格。
+func TestSubmitReceiptNamesTheCurrentSubmissionVersion(t *testing.T) {
+	fixture := newFixture(t)
+	fixture.intake.commands = append(fixture.intake.commands, fixture.intake.commands[0])
+
+	first := decodeBody(t, fixture.post(t))
+	replay := decodeBody(t, fixture.post(t))
+
+	if first.SubmissionVersionID == "" {
+		t.Fatal("建单答复没有带提交版本标识，客户补充无基准可引")
+	}
+	if replay.SubmissionVersionID != first.SubmissionVersionID {
+		t.Fatalf("重放带 %q, want 原版本 %q", replay.SubmissionVersionID, first.SubmissionVersionID)
+	}
+}
+
 // Covers: ADR-0022 「业务判别一律进响应体」 — 六种没有建单的答案都是答案，因此都是 200；
 // 状态码不区分它们，`outcome` 区分。
 func TestSubmitReportsOKForEveryAnswerThatBuiltNoRequest(t *testing.T) {
@@ -319,6 +336,7 @@ type responseBody struct {
 	Outcome             string         `json:"outcome"`
 	PriorOutcome        string         `json:"priorOutcome"`
 	ShipmentRequestID   string         `json:"shipmentRequestId"`
+	SubmissionVersionID string         `json:"submissionVersionId"`
 	GateBlockReasons    []string       `json:"gateBlockReasons"`
 	ProductionOwnership *ownershipBody `json:"productionOwnership"`
 }

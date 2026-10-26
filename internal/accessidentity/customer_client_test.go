@@ -108,14 +108,14 @@ func TestCustomerCapabilityIsAClosedVocabulary(t *testing.T) {
 		capability != accessidentity.CustomerCapabilityShipmentRequestSubmission {
 		t.Fatalf("提交能力：%q, %v", capability, err)
 	}
-	for _, unknown := range []string{"shipment_request_submission", "SHIPMENT_REQUEST_WITHDRAWAL", "", "shipments:submit"} {
+	for _, unknown := range []string{"shipment_request_submission", "shipments:withdraw", "", "shipments:submit"} {
 		if _, err := accessidentity.ParseCustomerCapability(unknown); !errors.Is(err, accessidentity.ErrCustomerCapabilityUnknown) {
 			t.Fatalf("%q：err = %v, want ErrCustomerCapabilityUnknown", unknown, err)
 		}
 	}
 	interval := clientIntervalOf(t, customerGrantStartsAt, time.Time{})
 	_, err := accessidentity.NewCustomerClientGrant(customerTenant, "SYN-CUSTOMER-GRANT-01", customerSubjectOf(t, "SYN-CUSTOMER-CLIENT-01"),
-		accessidentity.CustomerCapability("CLAIM_SUBMISSION"), interval, "b")
+		accessidentity.CustomerCapability("UNLISTED_COMMAND"), interval, "b")
 	if !errors.Is(err, accessidentity.ErrCustomerCapabilityUnknown) {
 		t.Fatalf("转型递进来的能力：err = %v", err)
 	}
