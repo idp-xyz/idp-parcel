@@ -93,13 +93,13 @@ S–M：两只编排各加一道生命周期闸门（读委托状态，按状态
 - 取消口 HTTP 状态：新格答 200（沿用通用译装，未改 HTTP 适配器代码）。若首方取消 Intake 另有口径（如把`REQUEST_AWAITING_DECISION`译成 409），在 Intake/适配器一侧调，不影响应用层格。
 - `FinalRequestAwaitingDecision` 在终局消费门按未决回滚重投（`ErrFinalUndecided`，已由两条调用方适配器登记进各自的未决名单），不入账：委托之后可能被接受，入账会把交付或面单信封不可逆地丢弃。今天的两条调用方都先走"当前已接受"反查，到不了这一格，它是兜底；若将来有调用方不经反查就送来源，早于接受到达的来源会一直重投到委托被接受或被撤回、拒绝（后者答 `FinalRequestEnded`，入账收工）。
 - 一处不对称不在本票范围：UC-PS-003 的收寄采用（`adoptionRefusal`）对非已接受委托会落持久不采用记录并按 ADR-0279 作答，对`已提交`委托同样会占住来源。那是已接受 ADR 的既有口径，没有改动，也不另立票。
-- AT 号取 `150–152`：first-party-api 在途分支已把 `AT-PS-140`–`143` 立给 UC-PS-002 的首方修订，`125–129`、`130–137` 也已有在途占用；取号前核过各在途分支与 main，没人占 `150–152`。
+- AT 号取 `150–152`：first-party-api/10 已把 `AT-PS-140`–`143` 立给 UC-PS-002 的首方修订，`125–129`、`130–137` 也已有在途占用；取号前核过各在途分支与 main，没人占 `150–152`。
 - 取消的账户核依赖"各提交版本的来源身份账户恒等"这条。这条保证来自 HTTP 补充接入面 `customer_supplement_intake.go` 用同一份认证账户构造补充身份与 `Identity`，应用层没有另核（`FormNewSubmissionVersionHandler.Handle` 与领域 `FormNewSubmissionVersion` 都不比较两者的账户）；不一致只会让所有者被拦成"不可见"（过拦，不会越权放行）。若将来出现允许改账户的路径，或补充身份不再由这个接入面构造，这里要改成读库里的账户列。
 
 ### 评审记录与修订轮
 
 - 独立评审结论：合入前修 B1、N1–N3，已在同一分支上以新提交修完。
-- **B1 改号**：`claude-fpa10` 已把 `AT-PS-140`–`143` 立给 UC-PS-002 的首方修订，与本票所取撞号；本票三个号改为 `AT-PS-150`（取消的目标委托不是已接受）、`AT-PS-151`（目标委托不属信封账户与账户缺席）、`AT-PS-152`（终局形成的目标委托不是已接受），对应关系不变；盘点三行、UC-PS-006 与 UC-PS-004 验收行、文末追记与本票引用同步。测试未引这三个号。
+- **B1 改号**：first-party-api/10（分支 `claude-fpa10`）已把 `AT-PS-140`–`143` 立给 UC-PS-002 的首方修订，与本票原取的 140–142 撞号；本票三个号改为 `AT-PS-150`（取消的目标委托不是已接受）、`AT-PS-151`（目标委托不属信封账户与账户缺席）、`AT-PS-152`（终局形成的目标委托不是已接受），对应关系不变；盘点三行、UC-PS-006 与 UC-PS-004 验收行、文末追记与本票引用同步。测试未引这三个号。
 - **N1 终局消费门**：`FinalRequestAwaitingDecision` 单独成一支，返回 `ErrFinalUndecided`（按未决回滚重投，与"反查不到已接受目标"的 `ErrParcelTargetNotFound` 同属等依赖，ADR-0029 按恢复动作分格）；`FinalRequestEnded` 是终态，仍入账收工。`finalconsume_test.go` 补两格用例，`cmd/parcel-dispatch` 的 `TestTheWiredFinalAdoptionFormsNoFinalForRequestsThatAreNotAccepted` 的已提交一格改期望 `ErrFinalUndecided`；UC-PS-004 终局规则一条补消费门两格。UC-PS-004 结果表里"不进未决"说的是应用层结果格，不变。
 - **N2 管理台词表**：`CancellationOutcome` 与 `cancellationOutcomeViews` 补 `REQUEST_ENDED`（委托已终结）、`REQUEST_AWAITING_DECISION`（委托待决定，请改用撤回），并补 `presentation.test.ts`；`REQUEST_NOT_ACCEPTED` 一格的缺失项补上信封客户账户（与 UC-PS-006 结果表一致）。
 - **N3 完成记录**：代决第 4 条与末条越权风险点不再写"新版本形成都拒绝跨账户"（`FormNewSubmissionVersionHandler.Handle` 与领域 `FormNewSubmissionVersion` 都不比较账户），改为保证来自接入面构造、应用层未另核、不一致只过拦；代决第 8 条依据改指 UC-PS-006 目标与 PS CONTEXT「包裹取消决定」词条，不再把转述当 ADR-0255 原文引。
