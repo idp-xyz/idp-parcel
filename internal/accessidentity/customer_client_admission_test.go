@@ -123,3 +123,20 @@ func TestCustomerWithdrawalRequestKeyCarriesTheCommandPrefix(t *testing.T) {
 		t.Fatalf("撤回：key = %q, err = %v", withdrawal, err)
 	}
 }
+
+// Covers: AT-PS-121（ADR-0310 取舍 A）——提交口的接入请求标识不得以五个保留命令前缀之一开头（否则键会等于另一标识的命令键）；
+// 不带保留前缀的照常，含中间带冒号的。
+func TestSubmissionRequestKeyRejectsReservedCommandPrefixes(t *testing.T) {
+	for _, prefix := range reservedRequestKeyPrefixes {
+		request := NewChannelRequest(map[string]string{AccessRequestIdentifier: " " + prefix + "abc "})
+		if key, err := (customerAPIRequestKeys{}).DeriveSubmissionRequestKey(context.Background(), request); !errors.Is(err, ErrRequestKeyNotDerived) || key != "" {
+			t.Fatalf("%s：key = %q, err = %v, want ErrRequestKeyNotDerived", prefix, key, err)
+		}
+	}
+	for _, id := range []string{"abc", "x:withdrawal:abc", "withdrawal"} {
+		request := NewChannelRequest(map[string]string{AccessRequestIdentifier: id})
+		if key, err := (customerAPIRequestKeys{}).DeriveSubmissionRequestKey(context.Background(), request); err != nil || key != id {
+			t.Fatalf("%q：key = %q, err = %v", id, key, err)
+		}
+	}
+}
