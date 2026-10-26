@@ -73,6 +73,7 @@ func eligibilityRegistration(t *testing.T, contract string) ports.ClaimEligibili
 	return ports.ClaimEligibilityRegistration{
 		Header:   ports.CatalogApprovalHeader{Version: "claims/v1", ApprovedBy: "claims-ops"},
 		Contract: build(t, domain.NewContractScopeReference, contract),
+		Customer: build(t, domain.NewCustomerAccountReference, "CUST-01"),
 		CoveredKinds: []domain.ClaimKindReference{
 			build(t, domain.NewClaimKindReference, "LOSS"),
 			build(t, domain.NewClaimKindReference, "DAMAGE"),

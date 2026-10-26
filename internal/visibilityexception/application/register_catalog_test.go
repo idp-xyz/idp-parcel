@@ -439,6 +439,7 @@ func TestClaimEligibilityRegistrationRefusesAnEmptyCoveredKindSet(t *testing.T) 
 		TenantID: registerTenant(t),
 		Header:   ports.CatalogApprovalHeader{Version: "claim/v1", ApprovedBy: "customer-service"},
 		Contract: catalogScalar(t, domain.NewContractScopeReference, "contract/v1"),
+		Customer: catalogScalar(t, domain.NewCustomerAccountReference, "customer-1"),
 	}
 
 	result, err := service.RegisterClaimEligibility(t.Context(), command)

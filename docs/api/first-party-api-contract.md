@@ -72,6 +72,7 @@
 | `POST /v1/node-operations/delivery-pre-advice-withdrawals` | UC-NO-006 预报撤回 | `DELIVERY_PRE_ADVICE_WITHDRAWAL` |
 | `POST /v1/shipment-requests/supplements` | [UC-PS-001](../application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md) 委托补充（`AT-PS-036` 第一支） | `SHIPMENT_REQUEST_SUPPLEMENT` |
 | `POST /v1/node-operations/delivery-handover-conclusions` | UC-NO-006 交接单的客户确认或否认 | `DELIVERY_HANDOVER_CONFIRMATION` |
+| `POST /v1/claims` | [UC-VE-007](../application/visibility-exception/UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md) 索赔提交 | `CLAIM_SUBMISSION` |
 
 - 提交答复建成委托时带 `parcels`：每件 `parcelId` 加客户为它声明的 `customerParcelReference`。`parcelId` 就是查客户追踪视图用的号（[ADR-0223](../adr/0223-the-first-party-submission-answer-names-each-parcel-and-the-tracking-view-locates-by-it.md)）。
 - 接入请求标识不得以保留命令前缀（`withdrawal:`、`parcel-cancellation:`、`source-data-amendment:`、`supplement:`、`claim:`）开头；提交口收到这样的标识答 400（推导不出）。
@@ -79,3 +80,11 @@
 - 客户追踪视图的答复带视图版本 `version` 与逐维三态，不带它所依据的内部投影版本；客户采用哪一版只看 `version`。
 - **委托补充**（形状 `PSU-1`）：客户在`已提交`委托上重报整份内容，形成同一委托的新提交版本。载荷是提交载荷的内容字段（`customerShipmentReference`、`requestedServiceProduct`、`requestEffectiveAt`、寄收件关系 / 地址 / 邮编 / 国家码、`destinationServiceScope`、`parcels[]`），外加：`accessRequestId`（补充自己的接入请求标识）、`originalAccessRequestId`（原提交的接入请求标识，指名委托）、`shipmentRequestId` 与 `basisSubmissionVersionId`（提交回执里的委托号与 `submissionVersionId`）；`parcels[]` 每件另带回执里的 `parcelId`，成员集合须与委托当前版本一致。租户与账户取自册上绑定：委托只在信封账户名下找，他账户的委托与不存在的委托同答 `404`；载荷里自报账户、租户或操作者答 `400`。答复 `outcome`：`SUPPLEMENT_RECORDED`（`201`，带新版本的 `submissionVersionId`，下一次补充以它为基准）、`SUPPLEMENT_ALREADY_HANDLED`（`200`，重放读回原版本）、`SUPPLEMENT_BASIS_STALE`（基准不是当前版本：先读当前版本，即对原提交重放取回执）、`SUPPLEMENT_SOURCE_CONFLICT`、`SUPPLEMENT_BOUNDARY_CHANGED`（成员集合变了，改走关联新委托）、`SUPPLEMENT_DECISION_ALREADY_FORMED`、`SUPPLEMENT_UNDECIDED`。补充形成新版本之后，对原提交重放，回执读回的是新版本的 `submissionVersionId`。`shipmentRequestId` 须与 `originalAccessRequestId` 指到的委托一致，不一致按找不到答 `404`。`originalAccessRequestId` 填错答 `404` 之前，这次补充请求的来源指纹已被保全，同一 `accessRequestId` 就此被占用：改正后要换一个新的接入请求标识重试；同一 `accessRequestId` 携带不同的原提交标识、委托号或成员，答 `SUPPLEMENT_SOURCE_CONFLICT`。
 - 委托的撤回、资料修订与逐包裹取消这几个客户面命令口已经按本文的问题详情作答，但还没挂首方渠道 Intake，今天在无前缀的 `/shipment-requests/...` 下答 `403 ACCESS_CHANNEL_NOT_CONFIGURED`；首方 Intake 逐口换上时迁到 `/v1/shipment-requests/...`。
+
+## 索赔口 `POST /v1/claims`（形状 VCL-1）
+
+- **载荷**（封闭，其外任何一格答 `400 MALFORMED_REQUEST`，自报的租户、账户、操作者与提交时间都在此列）：`accessRequestId`、`batch`（客户侧批次引用）、`item`（项标识，批次内唯一）、`applicant`（申请人引用）、`contract`（合同责任范围引用）、`target`（目标包裹，用提交答复里的 `parcelId`）、`kind`（索赔类型引用）。租户与货主客户账户取自册上绑定。
+- **提交时间**取本系统收到请求的时刻，不收客户自报；首次索赔期限从它起算。
+- **唯一性**以（账户、批次、项）为自然键（ADR-0310 取舍 F）。同一对（批次、项）再次到达答 `200 CLAIM_EXISTING_RESULT` 并回显原项，**不比对内容**，没有「同键换内容」的冲突格；`accessRequestId` 只管传输重放，不进任何判据。已在案的（批次、项）若属于同租户的另一个账户，答 `200 NOT_ACCEPTED`、不带原项。
+- **引用核对**：`target` 须是信封账户当前已接受委托声明的包裹，`contract` 须登记在信封账户名下；不属于、不存在、多份委托同时声明同一包裹都答 `404 CLAIM_REFERENCE_NOT_FOUND`，字节相同，不泄露别的账户的引用存在与否。`applicant` 不在这里核：授权名单按（租户、账户）登记，由资格审核的授权维核，名单外的申请人形成不予受理，不是请求错误。
+- **答复**：受理 `201 CLAIM_RECEIVED`，回执只带 `batch`、`item`、`submittedAt`，资格与责任结论字段结构上不存在。`401 CUSTOMER_CLIENT_CREDENTIAL_REJECTED`、`403 CUSTOMER_CLIENT_NOT_GRANTED`、`403 OUTSIDE_ADMISSION_SCOPE`（索赔提交在铸造侧判准入范围）、`503 IDENTITY_DEPENDENCY_UNAVAILABLE` 都是问题详情，不带 `outcome`。

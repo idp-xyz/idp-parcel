@@ -531,6 +531,7 @@ func TestRegisteredClaimCataloguesBecomeReadable(t *testing.T) {
 		return fixture.registrar.RegisterClaimEligibility(txCtx, tenant, ports.ClaimEligibilityRegistration{
 			Header:   ports.CatalogApprovalHeader{Version: "claim/v1", ApprovedBy: "customer-service"},
 			Contract: query.Contract,
+			Customer: query.Customer,
 			CoveredKinds: []domain.ClaimKindReference{
 				query.Kind,
 				build(t, domain.NewClaimKindReference, "DAMAGE"),
@@ -607,6 +608,7 @@ func TestEmptyApplicantListRegistersAsAnEmptyRoster(t *testing.T) {
 		return fixture.registrar.RegisterClaimEligibility(txCtx, tenant, ports.ClaimEligibilityRegistration{
 			Header:       ports.CatalogApprovalHeader{Version: "claim/v1", ApprovedBy: "customer-service"},
 			Contract:     query.Contract,
+			Customer:     query.Customer,
 			CoveredKinds: []domain.ClaimKindReference{query.Kind},
 		})
 	})

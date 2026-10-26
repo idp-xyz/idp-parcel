@@ -83,7 +83,8 @@ func claimRulesForTenant(
 	tenant domain.TenantID,
 	query ports.EligibilityQuery,
 ) (ports.EligibilityRules, bool, error) {
-	if tenant.String() == "" || query.Contract.String() == "" || query.Kind.String() == "" {
+	// 账户为零值同样答声明不在场：合同声明归属一个账户（0030），不带账户的查询没有可核的归属，不退回「只按租户查」。
+	if tenant.String() == "" || query.Contract.String() == "" || query.Kind.String() == "" || query.Customer.String() == "" {
 		return ports.EligibilityRules{}, false, nil
 	}
 
@@ -104,8 +105,9 @@ func claimRulesForTenant(
 		               AND kind.claim_kind_ref = $3
 		        )
 		   FROM visibility_exception.claim_contract_scope AS scope
-		  WHERE scope.tenant_id = $1 AND scope.contract_scope_ref = $2`,
-		tenant.String(), query.Contract.String(), query.Kind.String(),
+		  WHERE scope.tenant_id = $1 AND scope.contract_scope_ref = $2
+		    AND scope.customer_ref = $4`,
+		tenant.String(), query.Contract.String(), query.Kind.String(), query.Customer.String(),
 	).Scan(&ruleVersion, &covered)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.EligibilityRules{}, false, nil

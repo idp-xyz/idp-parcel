@@ -132,6 +132,7 @@ type RegisterClaimEligibilityCommand struct {
 	TenantID     domain.TenantID
 	Header       ports.CatalogApprovalHeader
 	Contract     domain.ContractScopeReference
+	Customer     domain.CustomerAccountReference
 	CoveredKinds []domain.ClaimKindReference
 }
 
@@ -294,7 +295,12 @@ func (service *CatalogRegistration) RegisterClaimEligibility(
 	ctx context.Context,
 	command RegisterClaimEligibilityCommand,
 ) (RegisterCatalogResult, error) {
-	if reason := checkApprovalHeader(command.TenantID, command.Header, command.Contract.String()); reason != CatalogRefusalReasonNone {
+	// 合同范围与所属账户缺一即范围缺失：声明不指明归属，首方索赔口就核不了合同属不属于信封账户（0030）。
+	scope := command.Contract.String()
+	if command.Customer.String() == "" {
+		scope = ""
+	}
+	if reason := checkApprovalHeader(command.TenantID, command.Header, scope); reason != CatalogRefusalReasonNone {
 		return refused(reason), nil
 	}
 	if reason := checkEntries(command.CoveredKinds, referencePresent, referenceKey); reason != CatalogRefusalReasonNone {
@@ -305,6 +311,7 @@ func (service *CatalogRegistration) RegisterClaimEligibility(
 		ports.ClaimEligibilityRegistration{
 			Header:       command.Header,
 			Contract:     command.Contract,
+			Customer:     command.Customer,
 			CoveredKinds: command.CoveredKinds,
 		})
 	if err != nil {

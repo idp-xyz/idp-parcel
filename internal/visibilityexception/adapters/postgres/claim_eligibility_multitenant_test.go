@@ -87,3 +87,46 @@ func TestTenantGuardsRefuseMiswiredQueries(t *testing.T) {
 		t.Fatalf("不带租户（登记口既有调用面）应照常作答：err=%v declared=%v rules=%+v", err, declared, bare)
 	}
 }
+
+// Covers: AT-VE-212——合同责任范围声明归属一个账户（0030）：归属账户问得到，别的账户的合同与不存在的合同同答 false；资格规则读口
+// 同样按账户过滤，别的账户查同一份合同答声明不在场。
+func TestAContractScopeBelongsToOneAccountOnly(t *testing.T) {
+	fixture := newEligibilityFixture(t)
+	fixture.declare(t, "tenant-a", "contract/v1", "claim-rules/a1", "DAMAGE")
+	view, err := adapter.NewMultiTenantClaimEligibilityRules(fixture.db)
+	if err != nil {
+		t.Fatalf("构造多租户资格视图：%v", err)
+	}
+	owned := func(tenant, customer, contract string) bool {
+		t.Helper()
+		got, err := view.ContractBelongsToCustomer(t.Context(),
+			projectionValue(t, domain.NewTenantID, tenant),
+			projectionValue(t, domain.NewCustomerAccountReference, customer),
+			projectionValue(t, domain.NewContractScopeReference, contract))
+		if err != nil {
+			t.Fatalf("问合同归属：%v", err)
+		}
+		return got
+	}
+	if !owned("tenant-a", "customer-1", "contract/v1") {
+		t.Fatal("归属账户问不到自己的合同")
+	}
+	for name, got := range map[string]bool{
+		"别的账户":   owned("tenant-a", "customer-2", "contract/v1"),
+		"别的租户":   owned("tenant-b", "customer-1", "contract/v1"),
+		"不存在的合同": owned("tenant-a", "customer-1", "contract/v9"),
+	} {
+		if got {
+			t.Fatalf("%s 问到了合同", name)
+		}
+	}
+
+	query := multiTenantQuery(t, "tenant-a", "contract/v1", "DAMAGE")
+	if _, declared, err := view.RulesForClaim(t.Context(), query); err != nil || !declared {
+		t.Fatalf("归属账户读规则：err=%v declared=%v", err, declared)
+	}
+	query.Customer = projectionValue(t, domain.NewCustomerAccountReference, "customer-2")
+	if _, declared, err := view.RulesForClaim(t.Context(), query); err != nil || declared {
+		t.Fatalf("别的账户读规则：err=%v declared=%v, want 声明不在场", err, declared)
+	}
+}

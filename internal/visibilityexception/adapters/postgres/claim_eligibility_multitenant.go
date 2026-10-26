@@ -6,6 +6,7 @@ import (
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
@@ -44,4 +45,32 @@ func (view *MultiTenantClaimEligibilityRules) RulesForClaim(
 			"rules for claim: query carries no tenant")
 	}
 	return claimRulesForTenant(ctx, view.db, query.Tenant, query)
+}
+
+var _ ports.ClaimContractOwnership = (*MultiTenantClaimEligibilityRules)(nil)
+
+// ContractBelongsToCustomer 按（租户、账户、合同范围）问声明册有没有这一行。查不到、归属别的账户同答 false。
+func (view *MultiTenantClaimEligibilityRules) ContractBelongsToCustomer(
+	ctx context.Context,
+	tenant domain.TenantID,
+	customer domain.CustomerAccountReference,
+	contract domain.ContractScopeReference,
+) (bool, error) {
+	querier, err := view.db.ReadExecutor(ctx)
+	if err != nil {
+		return false, fmt.Errorf("contract belongs to customer: %w", err)
+	}
+	var owned bool
+	err = querier.QueryRow(ctx,
+		`SELECT EXISTS (
+		            SELECT 1
+		              FROM visibility_exception.claim_contract_scope
+		             WHERE tenant_id = $1 AND customer_ref = $2 AND contract_scope_ref = $3
+		        )`,
+		tenant.String(), customer.String(), contract.String(),
+	).Scan(&owned)
+	if err != nil {
+		return false, fmt.Errorf("contract belongs to customer: %w", err)
+	}
+	return owned, nil
 }

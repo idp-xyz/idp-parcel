@@ -265,10 +265,10 @@ func (registrar *CatalogRegistrar) RegisterClaimEligibility(
 	}
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO visibility_exception.claim_contract_scope
-			(tenant_id, contract_scope_ref, rule_version, approved_by)
-		 VALUES ($1, $2, $3, $4)
+			(tenant_id, contract_scope_ref, customer_ref, rule_version, approved_by)
+		 VALUES ($1, $2, $3, $4, $5)
 		 ON CONFLICT DO NOTHING`,
-		tenant.String(), registration.Contract.String(),
+		tenant.String(), registration.Contract.String(), registration.Customer.String(),
 		registration.Header.Version, registration.Header.ApprovedBy,
 	)
 	if err != nil {

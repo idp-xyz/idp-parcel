@@ -192,7 +192,7 @@ func serveClaim(t *testing.T, intake visibilityhttp.ClaimIntake, receiver visibi
 	t.Helper()
 	endpoint := visibilityhttp.NewReceiveClaimEndpoint(intake, receiver)
 	recorder := httptest.NewRecorder()
-	endpoint.ServeHTTP(recorder, httptest.NewRequest(method, "/claims", nil))
+	endpoint.ServeHTTP(recorder, httptest.NewRequest(method, "/v1/claims", nil))
 	return recorder
 }
 
@@ -283,14 +283,12 @@ func TestClaimTransportGridsStayClosed(t *testing.T) {
 	}
 	var body struct {
 		Outcome string `json:"outcome"`
-		Error   struct {
-			Code string `json:"code"`
-		} `json:"error"`
+		Code    string `json:"code"`
 	}
 	if err := json.Unmarshal(broken.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if body.Outcome != "" || body.Error.Code != "NO_ANSWER_FORMED" {
+	if body.Outcome != "" || body.Code != "NO_ANSWER_FORMED" {
 		t.Fatalf("body = %+v; 编排错误不得伪装成业务答案", body)
 	}
 

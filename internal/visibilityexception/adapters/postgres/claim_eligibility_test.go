@@ -46,8 +46,8 @@ func (fixture *eligibilityFixture) declare(t *testing.T, tenant, contract, ruleV
 	t.Helper()
 	if _, err := fixture.pool.Exec(t.Context(),
 		`INSERT INTO visibility_exception.claim_contract_scope
-			(tenant_id, contract_scope_ref, rule_version, approved_by)
-		 VALUES ($1, $2, $3, 'customer-service')`,
+			(tenant_id, contract_scope_ref, customer_ref, rule_version, approved_by)
+		 VALUES ($1, $2, 'customer-1', $3, 'customer-service')`,
 		tenant, contract, ruleVersion); err != nil {
 		t.Fatalf("登记索赔声明 %s：%v", contract, err)
 	}
