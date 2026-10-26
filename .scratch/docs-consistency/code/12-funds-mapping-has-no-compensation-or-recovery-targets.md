@@ -108,7 +108,7 @@ M：映射目标加两格（赔付义务、追偿应收），核销余额按目�
 
 ### 锁序全序论证
 
-资金侧取的锁只有三类（取证于修订轮提交 `c27f71fad`），全仓只按一个次序取：**事实身份行（`FOR UPDATE`）→ 金额本体行（`FOR UPDATE`，按格、引用）→ 运营余额作用域（事务级咨询锁，按法人、账户、币种）**；次序写在 `ports.FundsFactApplicationLock` 头注，`ClaimSettlementTargets.LockClaimTarget`、`OperationalBalanceAdvance.LockOperationalBalanceScope` 与 `Apply`、`Reverse` 头注都回指它。
+资金侧取的锁只有三类（取证于修订轮提交 `6c275850d`），全仓只按一个次序取：**事实身份行（`FOR UPDATE`）→ 金额本体行（`FOR UPDATE`，按格、引用）→ 运营余额作用域（事务级咨询锁，按法人、账户、币种）**；次序写在 `ports.FundsFactApplicationLock` 头注，`ClaimSettlementTargets.LockClaimTarget`、`OperationalBalanceAdvance.LockOperationalBalanceScope` 与 `Apply`、`Reverse` 头注都回指它。
 
 - `Apply` 取全序：事实 → `ClaimTargetDemands` 排好序的金额本体 → `statementScopes` 排好序的作用域。
 - `Reverse` 取子序列：事实 → 作用域。
