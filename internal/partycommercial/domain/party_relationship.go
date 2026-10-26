@@ -217,9 +217,10 @@ func (relationship PartyRelationship) Revoke(basis RelationshipBasisReference, a
 	return relationship.end(RelationshipRevoked, at, basis), nil
 }
 
-// SupersededBy 以一个接替的持有方终止本关系。关系内容、角色或范围发生变化时形成
-// 新的关系版本，而不是就地改写这一条。接替方不能是原持有方（那不是接替，是同一方续登），
-// 也不能是相对方（接替之后它要对自己持有这个角色）。
+// SupersededBy 以一个接替的持有方终止本关系。替代只换持有方：接替关系的相对方、角色与范围
+// 照本关系（SuccessorSpec），相对方、角色或范围也要变的，是撤销本关系、另登一段新关系。
+// 接替方不能是原持有方（那不是接替，是同一方续登），也不能是相对方（接替之后它要对自己
+// 持有这个角色）。
 func (relationship PartyRelationship) SupersededBy(successor PartyID, at time.Time) (PartyRelationship, error) {
 	if relationship.status != RelationshipEffective || !successor.valid() || at.IsZero() ||
 		successor == relationship.holder || successor == relationship.counterparty {

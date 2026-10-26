@@ -31,7 +31,7 @@ func init() {
 		},
 		mount: func(channels endpointChannels, wiring commercialRelationshipEndingWiring) []httpapi.BusinessEndpoint {
 			return []httpapi.BusinessEndpoint{
-				// 参与方关系三个结束口（票 ps-external-mark-relations/17）与身份族四类登记加停用同挂操作者渠道的登记册 Intake：
+				// 参与方关系三个结束口（票 ps-external-mark-relations/17）与参与方身份族的登记与停用各口同挂操作者渠道的登记册 Intake：
 				// 改的是同一本参与方册，提交方与授予同一份（ADR-0151 的定族判据）；写开关换不了它们（ADR-0150 决定三）。名字不叫
 				// `-deactivations`：关系的终止走撤销/到期/替代，不叫停用。
 				{Pattern: "/commercial-party-relationship-revocations", Handler: commercialhttp.NewRevokePartyRelationshipEndpoint(channels.operatorRegistries.commercial, wiring.relationshipEnding)},
