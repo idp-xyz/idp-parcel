@@ -1,7 +1,7 @@
 # 01 TF 履约尝试的逐对象结果没有「待确认」一格
 
 Category: bug
-Status: in-progress——修订轮完工待第二轮评审与进 main，分支 claude-code01（基于 main `5759e853a`）。此前 ready-for-agent——R2（上线后尽快）：场外揽收与派送尝试已在生产命令面上，「只有车辆到场和司机扫描」「签收与地址来源冲突」这类来源第一周就会遇到；后果是执行方只能在四个已定结果里硬选一个，或者不登这次尝试，结果被说成确定，或这次尝试不留痕。可靠绕法：来源不足时先不登尝试，补齐证据后再登。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
+Status: in-progress——修订轮完工待第二轮评审与进 main，分支 claude-code01（基于 main `fb8ee7096`）。此前 ready-for-agent——R2（上线后尽快）：场外揽收与派送尝试已在生产命令面上，「只有车辆到场和司机扫描」「签收与地址来源冲突」这类来源第一周就会遇到；后果是执行方只能在四个已定结果里硬选一个，或者不登这次尝试，结果被说成确定，或这次尝试不留痕。可靠绕法：来源不足时先不登尝试，补齐证据后再登。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
 Blocked by: 无
 出处：[audit/tf.md](../audit/tf.md) M16（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，现象仍在）。
 
@@ -116,7 +116,7 @@ S–M：两个领域枚举、汇总派生、命令面词表、库表 CHECK（若
 
 ## 评审记录与修订轮
 
-第一轮隔离评审（协调方转述）：暂不可合入，一条阻断 B1，另 N1–N5 与协调方加的两处。修订轮先重放到 `origin/main` `5759e853a`（本地 `main` 引用落在 `061156bcc`，真 main 以 `origin/main` 为准；AT 盘点文末追记与 demo-chain-gaps/147 那段冲突，两段都留、main 那段在前），再逐条改，新提交、不改写旧提交。
+第一轮隔离评审（协调方转述）：暂不可合入，一条阻断 B1，另 N1–N5 与协调方加的两处。修订轮先重放到 `origin/main` `5759e853a`（本地 `main` 引用那时落在 `061156bcc`，真 main 以 `origin/main` 为准；AT 盘点文末追记与 demo-chain-gaps/147 那段冲突，两段都留、main 那段在前），再逐条改，新提交、不改写旧提交；收尾前 main 又前移到 `fb8ee7096`（demo-chain-gaps/142、143 与两笔 admin-web），重放无冲突。
 
 - **B1 揽收摘要同号加键（阻断，协调方裁走评审的 (a)）。** 照 ADR-0267 决定一换号、ADR-0209 决定三按内容取最低一版：`domain.CanonicalizeOffsitePickupPayload` 至少一件对象带来源时写 `TFC-3`（新常量 `pickupAttemptSourceCanonicalizationVersion`；`TFC-2` 已是交接节点那一形，取下一个号），每个对象行都写 `source`、没有的写 `null`；一件都不带时仍写 `TFC-1`、没有 `source` 键、逐字节不变。比对：新 `domain.CompareStoredPickupAttemptDigest`，仿 `CompareStoredHandoverDigest`——已存 `TFC-3` 与本次逐串比；其余交 `CompareStoredDigest`，本次是 `TFC-3` 而旧形答成同串时改答冲突；`TFC-2` 与认不出的前缀答认不出。`PerformOffsitePickupHandler` 改走它。金样：带来源那一格改钉 `TFC-3`，另加「pickup without any source stays TFC-1」证不带来源的仍是 `TFC-1` 原字节（新结果词 `EXECUTOR_REFUSED` 是取值不是键）；圆转断言改为文档自报版本等于摘要前缀。比对口有九格的表测 `TestStoredPickupAttemptDigestComparesThePendingSourceShape`；编排用例补「存下的是 TFC-3」「同内容重投答已有结果」「换来源答冲突」。头注里「而待确认是同一笔才进的文法」那句变更叙述随改写删去。票面代决 8 与「已接受 ADR」那句改写。
 - **N1 交付读数对待确认无用例。** `read_delivery_gate_test.go` 在「a failed result gets no reading」旁加「a pending result gets no reading」：读数零值、`customs.queries` 为 0。评审的变异「待确认也问关务」（`!Succeeded()` 改 `Failed()`）对新用例跑，红。
@@ -131,6 +131,6 @@ S–M：两个领域枚举、汇总派生、命令面词表、库表 CHECK（若
 - 先红后绿：B1 的金样、比对口表测与编排用例先改先跑——领域编译不过（新符号不在），编排答 `PICKUP_UNDECIDED`（旧比对口不认 `TFC-3`，落认不出的形状）；N2 的领域、编排与生产装配用例先改，领域编译不过（新错误值不在）。实现后转绿。
 - 变异（每条改后跑、跑完从 `scratchpad/c01/` 的备份复原、`cmp` 核过）：RB1 揽收执行口改回 `CompareStoredDigest`——编排红，生产装配真库红（同内容重投不再答 `EXISTING_RESULT`）；RB1b 带来源的文档仍写 `TFC-1`（同号加键）——比对口表测多格红、金样红；RB1c 比对口去掉「本次带来源、旧形同串答冲突」那道门——表测「unversioned row, this one carries a source」红；RN1（评审变异）`ReadRegistration` 的 `!Succeeded()` 改 `Failed()`，待确认也问关务——新用例红；RN2 编排去掉待确认那一格、并回 `NOT_EFFECTIVE`——编排红，生产装配真库红。五处全被杀。
 - `go build ./...`、`go vet ./...` 干净，`gofmt -l internal cmd` 无输出。
-- `TMPDIR=… scripts/test-full.sh ./internal/transportfulfillment/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./cmd/parcel-transport-register/... ./internal/architecture/... ./migrations/...` 加 `go list -test` 算出的 TF 反向依赖（任一 `internal/transportfulfillment/` 包或 `migrations` 的反向依赖），对修订轮 tip 跑：65 个包 ok、2 个无测试文件，退出码 0。
-- 新改用例（本轮加的比对口表测，与 `TestTheOtherDeliveryNodeStopsAreNamedAndRegister` 一起）共二十二个顶层测试 `-count=3`（真库，`-v` 核过无 SKIP、无 FAIL）：66 次 PASS，退出码 0。
+- `TMPDIR=… scripts/test-full.sh ./internal/transportfulfillment/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./cmd/parcel-transport-register/... ./internal/architecture/... ./migrations/...` 加 `go list -test` 算出的 TF 反向依赖（任一 `internal/transportfulfillment/` 包或 `migrations` 的反向依赖），对修订轮 tip 跑：重放到 `fb8ee7096` 前后各一次，都是 65 个包 ok、2 个无测试文件，退出码 0。
+- 新改用例（本轮加的比对口表测，与 `TestTheOtherDeliveryNodeStopsAreNamedAndRegister` 一起）共二十二个顶层测试 `-count=3`（真库，`-v` 核过无 SKIP、无 FAIL），重放前后各一次：都是 66 次 PASS，退出码 0。
 - 迁移 0050 本轮未动，未重灌种子。
