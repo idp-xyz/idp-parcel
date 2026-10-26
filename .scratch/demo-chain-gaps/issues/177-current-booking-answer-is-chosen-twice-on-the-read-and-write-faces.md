@@ -1,7 +1,7 @@
 # 177 订舱当前答复的选法在读面与写面各实现一遍
 
 Category: enhancement
-Status: ready-for-agent——2026-10-26 Claude Code 作者子代理按票 [48](./48-booking-requests-and-carrier-answers-have-no-read-face.md) 隔离评审 Spec 非阻断 1 立（会话 `tops-20` 派单；用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」授权）。分级 R3（不急）：迁移 0029 的两条部分唯一索引兜着，凡能经答复编排落库的答复，两处选出的是同一份，今天没有答错；规则一变（例如 ADR-0202 越权风险点 13 放宽候补的形）两处才会分叉，到那时须与规则改动同笔改，不能先上。
+Status: in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，分支 `claude-dcg177`（worktree `idp-parcel-dcg177`）。此前 ready-for-agent——2026-10-26 Claude Code 作者子代理按票 [48](./48-booking-requests-and-carrier-answers-have-no-read-face.md) 隔离评审 Spec 非阻断 1 立（会话 `tops-20` 派单；用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」授权）。分级 R3（不急）：迁移 0029 的两条部分唯一索引兜着，凡能经答复编排落库的答复，两处选出的是同一份，今天没有答错；规则一变（例如 ADR-0202 越权风险点 13 放宽候补的形）两处才会分叉，到那时须与规则改动同笔改，不能先上。
 Blocked by: 无
 出处：票 48 完成记录「代决与越权风险点」第 5 条；票 48、127、167 隔离评审（钉 `c428ad2fc`）Spec 非阻断 1；[ADR-0202](../../../docs/adr/0202-transport-commission-booking-and-carrier-answer-entry-families-and-supplier-agreement-check.md)「补记：票 24 落地时的补充裁定」里「候补之后可接一份定局」一条的读法。
 地盘：TF 领域 `domain/transport_commission.go`（`CarrierAcceptance` 一组）与它的测试、`adapters/postgres/booking.go` 的 `BookingAnswers.FindByKey`、`adapters/postgres/review_catalogue.go` 的 `bookingStanding`（+ 各自测试）。
