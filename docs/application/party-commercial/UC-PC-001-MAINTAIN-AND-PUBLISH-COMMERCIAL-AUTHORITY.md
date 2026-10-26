@@ -32,7 +32,7 @@
 | 主要参与者 | 商业产品、客户合同、采购、结算政策、渠道运营、授权治理和主数据接入责任方 |
 | 业务决定所有者 | `party-commercial`；批准是与录入分立的操作者动作，录入者与批准者须否为不同主体、批准者须持哪一格授予按租户的商业发布审批职责规则（`PAR-COM-18`，[ADR-0126](../../adr/0126-commercial-publication-digest-is-computed-server-side-per-register-and-approval-comes-through-a-pending-carrier.md)） |
 | 触发 | 建立、发布、截止、退役或更正商业权威依据的请求 |
-| 成功结束 | 独立商业对象形成稳定身份/关系或不可覆盖发布版本；或旧版的收尾已登记 |
+| 成功结束 | 独立商业对象形成稳定身份/关系或不可覆盖发布版本；或旧版的收尾已登记；或参与方关系的撤销、到期、替代已登记 |
 | 冲突结束 | 同一版本身份已登记了不同内容（内容冲突），原行不动 |
 | 未受理结束 | 这一份输入自身不成立：声明摘要与算出的不等、跨向绑定未声明转换、合同缺正文、收尾不成立等，一个字节不写 |
 | 未决结束 | 批准角色未确认、被引对象未发布或发布依据不全，保存缺口和续办入口 |
@@ -68,6 +68,7 @@
 | 已发布 | 不可覆盖版本已经获准供声明范围的新选择使用 | 原地编辑正文或追溯改写历史 |
 | 已计划生效 | 版本已发布但尚未到达明确生效边界 | 提前用于生产解析 |
 | 已收尾 | 旧版已按指名后继截止或同起点退役，对此后的新选择停止使用，历史引用继续有效 | 自动取消委托、交易或结算结果；改指既有委托 |
+| 已结束 | 参与方关系已撤销、到期或被替代，自生效边界起不再支持新的商业决定，历史引用继续有效 | 删除关系或改写既有快照；给已结束的关系再登新修订 |
 | 重复 | 同一版本身份与内容已经形成原结果 | 创建第二版本或第二发布意图 |
 | 内容冲突 | 同一版本身份携带不同内容 | 最后写入覆盖 |
 | 未受理 | 这一份输入自身不成立 | 当作冲突或未决续办 |
@@ -90,6 +91,8 @@
 | 同上 | `NOT_ACCEPTED` | 未受理（收尾不成立，原因随结果交回）；没有内容冲突一格 |
 | 参与方身份与关系登记 `RegisterPartyIdentityHandler` | `REGISTERED`、`DEACTIVATED` | 已建立、已停用 |
 | 同上 | `ALREADY_REGISTERED`、`CONTENT_CONFLICT`、`NOT_ACCEPTED`、`NOT_FOUND` | 重复、内容冲突、未受理、停用的身份从未登记 |
+| 参与方关系结束 `PartyRelationshipEndingHandler`（`/commercial-party-relationship-revocations`、`/commercial-party-relationship-expirations`、`/commercial-party-relationship-supersessions`、`end-party-relationships`） | `ENDED` | 已结束（落下一笔终止修订；替代同笔登记接替关系） |
+| 同上 | `ALREADY_REGISTERED`、`CONTENT_CONFLICT`、`NOT_ACCEPTED`、`NOT_FOUND` | 重复（同一次结束重放）、内容冲突（这段关系已在这一修订以别的方式、时刻或依据结束）、未受理（原因随结果交回）、关系不在册 |
 
 管理台待批准载体那一路（预览、录入、批准、发布载体）另有自己的结果码，批准由审批职责规则判，发布时把已批准的载体交给受控发布（[ADR-0126](../../adr/0126-commercial-publication-digest-is-computed-server-side-per-register-and-approval-comes-through-a-pending-carrier.md)）；产品—渠道映射、渠道账号使用授权、法人资料与注册号类型各有自己的登记编排。本表不列这几只。
 
