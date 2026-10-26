@@ -1,7 +1,7 @@
 # 48 订舱与承运答复没有查阅面：`待确认`、`候补`只能从两口的答复里看
 
 Category: enhancement
-Status: ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [24](./24-booking-references-a-schedule-and-carrier-answers-via-integration-client.md) 完成记录与 [ADR-0202](../../../docs/adr/0202-transport-commission-booking-and-carrier-answer-entry-families-and-supplier-agreement-check.md) 文末补记风险点 15。
+Status: in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，与 127、167 同批，分支 `claude-dcg127`（worktree `idp-parcel-dcg127`）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [24](./24-booking-references-a-schedule-and-carrier-answers-via-integration-client.md) 完成记录与 [ADR-0202](../../../docs/adr/0202-transport-commission-booking-and-carrier-answer-entry-families-and-supplier-agreement-check.md) 文末补记风险点 15。
 Blocked by: 无（文件归 tf-chain-plan「并行车道」车道 A，落地顺序随车道 A 的令牌）
 地盘：TF `ports/catalogue_read.go`、`adapters/postgres/review_catalogue.go`、tfhttp `query_transport_fulfillment_records.go`（+ 各自测试）；不碰订舱与答复的写口。
 

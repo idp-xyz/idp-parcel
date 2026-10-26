@@ -1,7 +1,7 @@
 # 167 承运答复挡回册没有查阅面：运营分不清订舱不在册的那一答是「不归你答」还是「还没录」
 
 Category: enhancement
-Status: ready-for-agent——2026-10-21 票 [145](./145-booking-answers-from-a-non-provider-answer-booking-not-found.md) 的作者子代理立（用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」与常设指令「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0239](../../../docs/adr/0239-a-carrier-answer-from-a-non-provider-is-answered-booking-not-found-and-the-basis-is-kept-on-a-bounce-register.md) 决定二末条与越权风险点 1。
+Status: in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，与 127、48 同批，分支 `claude-dcg127`（worktree `idp-parcel-dcg127`）。此前 ready-for-agent——2026-10-21 票 [145](./145-booking-answers-from-a-non-provider-answer-booking-not-found.md) 的作者子代理立（用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」与常设指令「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0239](../../../docs/adr/0239-a-carrier-answer-from-a-non-provider-is-answered-booking-not-found-and-the-basis-is-kept-on-a-bounce-register.md) 决定二末条与越权风险点 1。
 Blocked by: 无（文件与票 [48](./48-booking-requests-and-carrier-answers-have-no-read-face.md) 同属 tf-chain-plan「并行车道」车道 A，落地顺序随车道 A 的令牌；与 48 同做或先后都可）
 地盘：TF `ports/catalogue_read.go`、`adapters/postgres/review_catalogue.go`、tfhttp `query_transport_fulfillment_records.go`（+ 各自测试）；不碰承运答复口与挡回册的写口。
 
