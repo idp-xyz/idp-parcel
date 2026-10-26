@@ -1,7 +1,7 @@
 # 29 NR 改路建议与最低成本并列没有授权决定面：建议只能看，原计划失效的包裹停在无当前有效路由
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-code29（2026-10-26，见文末「完成记录」；记录前置由协调方裁定接受、给号 [ADR-0284](../../../docs/adr/0284-an-authorized-role-decides-a-current-reroute-suggestion-through-an-operator-decision-face.md)）。此前 needs-info——2026-10-26 协调方分诊 R2（上线后尽快，见「分诊」）；作者开工即停在记录前置：决定面要按受理基线那一版地理投影重判所择候选、组新计划，NR 读这份投影的口今天只开给受理之后、不由小包托运信封触发的复核，扩到授权改路决定要先有一份记录（见「停工记录」），号与裁定归协调方。修法第 3 条另立 [code/97](./97-initial-route-tie-has-no-authorized-decision-face.md)。分支 claude-code29。此前 needs-triage——建议 R2（上线后尽快）：看得见的卡住。复核在原计划失效后形成改路建议（不满足自动条件、改善不过阈值、最低成本并列、揽收时不在可控节点），初始路由遇最低成本并列交授权角色裁决；CONTEXT 写「授权角色接受建议 → 形成改路决定」，可没有任何口能作这个决定，包裹停在无当前有效路由，直到下一次控制触发碰巧判成。绕法：等包裹交进下一个节点。原计划已失效，那时包裹处于无当前有效路由，交接复核走「原先无路由」那条线，候选评估选出唯一合格候选即形成首个当前有效路由计划（不比改善阈值）；这条绕法依赖的「失效之后的复核走无路由那条线」已由 [code/52](./52-reassessment-reads-the-initial-route-row-instead-of-the-current-plan-or-no-route.md) 补齐（2026-10-21）；评估未决或最低成本并列时仍无路由，没有绕法。复核不取候选成本、失效线上的建议在生产上到不了那一格，已由票 [demo-chain-gaps/115](../../demo-chain-gaps/issues/115-route-reassessment-never-loads-candidate-costs.md) 补齐（2026-10-21），本票随之暴露。2026-10-21 文档自洽 05 立（用户「你作为业务和系统专家自决」授权；审计 L3 承接，02 完成记录「交修订票」一表交 05 判要不要立），分支 claude-dc05。分级由协调方定稿。
+Status: resolved——2026-10-26 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code29（2026-10-26，见文末「完成记录」；记录前置由协调方裁定接受、给号 [ADR-0284](../../../docs/adr/0284-an-authorized-role-decides-a-current-reroute-suggestion-through-an-operator-decision-face.md)）。此前 needs-info——2026-10-26 协调方分诊 R2（上线后尽快，见「分诊」）；作者开工即停在记录前置：决定面要按受理基线那一版地理投影重判所择候选、组新计划，NR 读这份投影的口今天只开给受理之后、不由小包托运信封触发的复核，扩到授权改路决定要先有一份记录（见「停工记录」），号与裁定归协调方。修法第 3 条另立 [code/97](./97-initial-route-tie-has-no-authorized-decision-face.md)。分支 claude-code29。此前 needs-triage——建议 R2（上线后尽快）：看得见的卡住。复核在原计划失效后形成改路建议（不满足自动条件、改善不过阈值、最低成本并列、揽收时不在可控节点），初始路由遇最低成本并列交授权角色裁决；CONTEXT 写「授权角色接受建议 → 形成改路决定」，可没有任何口能作这个决定，包裹停在无当前有效路由，直到下一次控制触发碰巧判成。绕法：等包裹交进下一个节点。原计划已失效，那时包裹处于无当前有效路由，交接复核走「原先无路由」那条线，候选评估选出唯一合格候选即形成首个当前有效路由计划（不比改善阈值）；这条绕法依赖的「失效之后的复核走无路由那条线」已由 [code/52](./52-reassessment-reads-the-initial-route-row-instead-of-the-current-plan-or-no-route.md) 补齐（2026-10-21）；评估未决或最低成本并列时仍无路由，没有绕法。复核不取候选成本、失效线上的建议在生产上到不了那一格，已由票 [demo-chain-gaps/115](../../demo-chain-gaps/issues/115-route-reassessment-never-loads-candidate-costs.md) 补齐（2026-10-21），本票随之暴露。2026-10-21 文档自洽 05 立（用户「你作为业务和系统专家自决」授权；审计 L3 承接，02 完成记录「交修订票」一表交 05 判要不要立），分支 claude-dc05。分级由协调方定稿。
 Blocked by: 无（ADR-0284 已接受）。此前：一份待接受的记录：把 ADR-0075 决定一被 ADR-0215 决定二部分停用的适用场景扩到「授权角色据复核建议形成改路决定」（号由协调方给，要点见「停工记录」）。此前：无（排在 demo-chain-gaps/115 之后，115 已补齐）
 出处：[audit/nr-no.md](../audit/nr-no.md) L3「人工改路：NR 生命周期『授权角色接受建议 → 形成改路决定』」；UC-NR-001「给开发的交接」并列一行、UC-NR-003「给开发的交接」授权决定一行。
 
@@ -187,3 +187,12 @@ ADR-0284 文末七条为准，这里不复述正文，只列条目：
 - 证据只记 `S`。
 
 迁移落号 `network_routing/0029`、`access_identity/0023`。
+
+## 进 main 记录（2026-10-26，协调方）
+
+- 分支 `claude-code29` 由作者 rebase 到 origin/main `15944d16d`、协调方再重放到 `64dae1559`（另一会话 TF 的 demo-chain-gaps/130、180 进了 main）后快进；迁移 NR 0029、access_identity 0023；新立 ADR-0284（扩成 ADR-0075 决定一的适用场景，ADR-0215 注记同挂）。
+- 作者开工后停下回报：决定面要在锁里按此刻证据重判所择候选并组新计划，须读受理基线地理投影，越出 ADR-0075 决定一被停用的适用场景。协调方接受要点 1–6，号段给 ADR-0284；修法第 3 条（初始路由并列）另立 code/97。
+- 隔离评审（Sonnet）无阻断。N1 ADR-0215 挂入向指针、N2 作者新立的后继票与 main 上 code/99 撞号改为 code/100、N3 AT 盘点追记冲突两边并存，由 Sonnet 子代理收掉。评审核实门不可绕（去掉重判变异被杀）、决定与复核共用判断键锁、生产上收寄采用信封的投影与受理基线读口同版。
+- 协调方单独提交重算的 AT 计数、重生成的 ADR 索引与机制清点；检查均退 0。
+- 全量 `scripts/test-full.sh` 在重放后的树上退 0、158 个包 ok；`go build ./...`、`go vet ./...` 干净；admin-web tsc、全部用例、vite build 通过；演示种子在一次性库上灌通，用后删库。
+- 去向：code/97（初始路由并列没有授权决定面）、code/100（建议与决定之间到达的控制触发复核一份尚未生效的计划，晚到即响亮失败并占分区头）。
