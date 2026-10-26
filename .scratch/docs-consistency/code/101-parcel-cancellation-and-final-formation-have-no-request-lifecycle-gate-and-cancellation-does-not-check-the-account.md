@@ -1,7 +1,7 @@
 # 101 PS 取消与终局形成不看委托生命周期，取消命令也不核目标委托属信封账户：取消口一接上就可达
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code101
+Status: resolved——2026-10-26 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code101
 Blocked by: [code/36](./36-withdrawn-shipment-requests-cannot-be-read-back-from-the-store.md)（已撤回委托读得回之后，闸门才有状态可看）
 出处：code/36 作者核查；first-party-api 五口摸底。
 
@@ -103,3 +103,12 @@ S–M：两只编排各加一道生命周期闸门（读委托状态，按状态
 - **N1 终局消费门**：`FinalRequestAwaitingDecision` 单独成一支，返回 `ErrFinalUndecided`（按未决回滚重投，与"反查不到已接受目标"的 `ErrParcelTargetNotFound` 同属等依赖，ADR-0029 按恢复动作分格）；`FinalRequestEnded` 是终态，仍入账收工。`finalconsume_test.go` 补两格用例，`cmd/parcel-dispatch` 的 `TestTheWiredFinalAdoptionFormsNoFinalForRequestsThatAreNotAccepted` 的已提交一格改期望 `ErrFinalUndecided`；UC-PS-004 终局规则一条补消费门两格。UC-PS-004 结果表里"不进未决"说的是应用层结果格，不变。
 - **N2 管理台词表**：`CancellationOutcome` 与 `cancellationOutcomeViews` 补 `REQUEST_ENDED`（委托已终结）、`REQUEST_AWAITING_DECISION`（委托待决定，请改用撤回），并补 `presentation.test.ts`；`REQUEST_NOT_ACCEPTED` 一格的缺失项补上信封客户账户（与 UC-PS-006 结果表一致）。
 - **N3 完成记录**：代决第 4 条与末条越权风险点不再写"新版本形成都拒绝跨账户"（`FormNewSubmissionVersionHandler.Handle` 与领域 `FormNewSubmissionVersion` 都不比较账户），改为保证来自接入面构造、应用层未另核、不一致只过拦；代决第 8 条依据改指 UC-PS-006 目标与 PS CONTEXT「包裹取消决定」词条，不再把转述当 ADR-0255 原文引。
+
+## 进 main 记录（2026-10-26，协调方）
+
+- 分支 `claude-code101` 由作者 rebase 到 origin/main `aa65d3ce7` 后快进，tip `31a20265f`。无迁移、无 ADR（依据：闸门是把 UC-PS-006 目标、PS CONTEXT「包裹取消决定」词条与 ADR-0255 决定一已写的「已接受」落到代码，不改任何已接受 ADR 的口径）。
+- 协调方分诊：R1，首方取消口（用户定的上线范围）的硬前置。只有`已接受`的委托才能取消其包裹、才能为其包裹形成终局；已撤回/已拒绝答 `REQUEST_ENDED`、已提交答 `REQUEST_AWAITING_DECISION`，确定性业务格；`CancelParcelCommand.CustomerAccount`（`domain.CustomerAccountID`）必填，零值答 `REQUEST_NOT_ACCEPTED`，不属该账户与查无同答 404 不可见；闸门不依赖取消库是否装配。
+- 隔离评审（Sonnet）一条阻断、三条建议：B1 AT 号 140–142 与在途分支 first-party-api/10 撞号，协调方裁本票改号为 AT-PS-150–152（PS 的 AT 号 144–149 归首方五口、150 起归 PS 应用层票）；N1 终局消费门对「委托只是已提交」从入账收工改成未决重投（今天走不到，但入账收工是不可逆地丢弃信封，与反查不到已接受目标时的既有归类 `ErrParcelTargetNotFound` 不一致）；N2 管理台取消结果词表补两个新词；N3 完成记录一处不实的代码事实（账户恒等的保证来自首方补充接入面构造，应用层未另核，不一致只会过拦）。均由 Sonnet 子代理收掉；评审另核实账户核确有第二道（取委托当前提交版本来源身份上的账户，不取命令里 `Identity` 的账户）、闸门位置在授权与边界锁之前、委托状态单向转移不需要新锁。
+- 协调方单独提交重算的 AT 计数与重生成的机制清点；ADR 索引无变化；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0、158 个包 ok；`go build ./...`、`go vet ./...` 干净；admin-web tsc、730 个用例、vite build 通过。无迁移，种子未灌。
+- 去向：无新票。已把接口（账户字段、两个新 outcome）转给负责首方五口接线的会话。`finalconsume_test.go` 的 `resultOf` 用 `reflect`+`unsafe` 给未导出字段赋值（该结果类型没有导出构造器），仅测试用；若 owner 嫌脆可给结果类型补一个导出的测试构造器。
