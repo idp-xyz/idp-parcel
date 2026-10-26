@@ -141,7 +141,7 @@ func feedExchangeRateSeries(t *testing.T, db *bentopg.DB, version string) {
 	}
 	register := ppapplication.NewRegisterReferenceSeriesHandler(ppapplication.RegisterReferenceSeriesDeps{Register: versions})
 	review := ppapplication.NewReviewReferenceSeriesHandler(ppapplication.ReviewReferenceSeriesDeps{
-		Versions: versions, Reviews: reviews, Clock: systemClock{}, Registered: pricingParameterHandoffForTest(t, db),
+		Versions: versions, Reviews: reviews, DutyRules: demoReviewDutyRules(t, db), Clock: systemClock{}, Registered: pricingParameterHandoffForTest(t, db),
 		PricedScopes: pricedScopesForTest(t, db),
 	})
 	var registered ppapplication.RegisterReferenceSeriesOutcome

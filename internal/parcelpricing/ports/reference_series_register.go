@@ -42,7 +42,7 @@ type ReferenceSeriesRegister interface {
 }
 
 // ReferenceSeriesVersionLoader 按（租户 + 序列版本引用）读回一版已登记序列（整版重验）。
-// 复核用例需要它：四眼门要拿到登记责任方，而 domain.NewSeriesReview 以登记为入参。另立
+// 复核用例需要它：复核门要比登记责任方，而 domain.NewSeriesReview 以登记为入参。另立
 // 接口而不扩 ReferenceSeriesRegister，理由同 catalogue_read.go——扩写侧接口会拆全部写侧
 // 测试替身。
 type ReferenceSeriesVersionLoader interface {

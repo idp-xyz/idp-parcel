@@ -9,7 +9,8 @@ var (
 	// ErrInvalidCatalogueReview 表示目录复核记录立不住：指不到一版已登记目录，或复核责任方、时刻、结论、
 	// 依据四件有缺。
 	ErrInvalidCatalogueReview = errors.New("parcel pricing: invalid reference catalogue review")
-	// ErrCatalogueReviewerIsRegistrant 表示复核责任方就是登记责任方——第二双眼睛的门与序列同一条。
+	// ErrCatalogueReviewerIsRegistrant 表示复核责任方就是登记责任方，而租户的参考复核职责规则要求两者不同——与序列同用
+	// 那一条规则（ADR-0262 决定一）。
 	ErrCatalogueReviewerIsRegistrant = errors.New("parcel pricing: catalogue review needs a reviewer other than the registrant")
 )
 
@@ -25,24 +26,26 @@ type CatalogueReview struct {
 	basis      string
 }
 
-// NewCatalogueReview 以被复核的登记为入参：四眼门要拿到登记责任方，调用方拿不到登记就造不出复核。
+// NewCatalogueReview 立一条人工复核，判法与 NewSeriesReview 同一条规则：以被复核的登记为入参，规则要比的登记责任方从
+// 那里来。目录没有来源喂价，也就没有系统代写那一路。
 func NewCatalogueReview(
 	registration ReferenceCatalogueRegistration,
-	reviewer string,
+	reviewer OperatorSubject,
+	rule ReferenceReviewDutyRule,
 	reviewedAt time.Time,
 	decision SeriesReviewDecision,
 	basis string,
 ) (CatalogueReview, error) {
-	if !registration.valid() || !trimmed(reviewer) || reviewedAt.IsZero() || !decision.valid() || !trimmed(basis) {
+	if !registration.valid() || !reviewer.valid() || reviewedAt.IsZero() || !decision.valid() || !trimmed(basis) {
 		return CatalogueReview{}, ErrInvalidCatalogueReview
 	}
-	if reviewer == registration.registrant {
-		return CatalogueReview{}, ErrCatalogueReviewerIsRegistrant
+	if err := rule.admit(registration.tenant, registration.registrant, reviewer, ErrCatalogueReviewerIsRegistrant); err != nil {
+		return CatalogueReview{}, err
 	}
 	return CatalogueReview{
 		tenant:     registration.tenant,
 		reference:  registration.reference,
-		reviewer:   reviewer,
+		reviewer:   reviewer.reference,
 		reviewedAt: reviewedAt.UTC(),
 		decision:   decision,
 		basis:      basis,

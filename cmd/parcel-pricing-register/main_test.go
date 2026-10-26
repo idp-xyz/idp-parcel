@@ -77,8 +77,8 @@ const reviewJSON = `{"tenant":"tenant-1","seriesId":"SYN-PRC-FUEL-WEEKLY","serie
 	"reviewedAt":"2026-08-20T09:00:00Z"}`
 
 // TestExecuteRoutesReviewDocumentToTheReviewer 证第三种登记：复核文档译成用例命令（时刻按
-// RFC 3339 解、缺时留零给用例取时钟），`已记录`译成 0；治理答案（不在册 / 四眼不满足 / 冲突）
-// 译成 2；坏文档在入库前拒成 1。
+// RFC 3339 解、缺时留零给用例取时钟，授予集恒为空），`已记录`译成 0；治理答案（不在册 / 须换人 /
+// 冲突 / 规则未配置 / 复核者不合格）译成 2；坏文档在入库前拒成 1。
 func TestExecuteRoutesReviewDocumentToTheReviewer(t *testing.T) {
 	reviewer := &reviewerDouble{outcome: application.SeriesReviewRecorded}
 	message, code := execute(t.Context(), kindReferenceSeriesReview, []byte(reviewJSON), &cardRegistrarDouble{}, &seriesRegistrarDouble{}, reviewer, catalogueRegistrars{}, passthroughTransactor{})
@@ -86,7 +86,8 @@ func TestExecuteRoutesReviewDocumentToTheReviewer(t *testing.T) {
 		t.Fatalf("message=%q code=%d, 想要 RECORDED/0", message, code)
 	}
 	if reviewer.calls != 1 || reviewer.last.SeriesID != "SYN-PRC-FUEL-WEEKLY" || reviewer.last.SeriesVersion != "v1" ||
-		reviewer.last.Decision != domain.SeriesReviewApproved || !reviewer.last.ReviewedAt.Equal(time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)) {
+		reviewer.last.Decision != domain.SeriesReviewApproved || !reviewer.last.ReviewedAt.Equal(time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)) ||
+		len(reviewer.last.ReviewerGrants) != 0 {
 		t.Fatalf("命令翻译走样：%+v", reviewer.last)
 	}
 
@@ -97,9 +98,11 @@ func TestExecuteRoutesReviewDocumentToTheReviewer(t *testing.T) {
 	}
 
 	for label, outcome := range map[string]application.ReviewReferenceSeriesOutcome{
-		"版本不在册": application.SeriesReviewVersionUnknown,
-		"四眼不满足": application.SeriesReviewNeedsAnotherReviewer,
-		"同键异内容": application.SeriesReviewConflict,
+		"版本不在册":     application.SeriesReviewVersionUnknown,
+		"须换人":       application.SeriesReviewNeedsAnotherReviewer,
+		"同键异内容":     application.SeriesReviewConflict,
+		"复核职责规则未配置": application.SeriesReviewNotConfigured,
+		"复核者不合格":    application.SeriesReviewReviewerNotQualified,
 	} {
 		_, code := execute(t.Context(), kindReferenceSeriesReview, []byte(reviewJSON), &cardRegistrarDouble{}, &seriesRegistrarDouble{}, &reviewerDouble{outcome: outcome}, catalogueRegistrars{}, passthroughTransactor{})
 		if code != exitGovernance {
@@ -116,10 +119,57 @@ func TestExecuteRoutesReviewDocumentToTheReviewer(t *testing.T) {
 	}
 }
 
+// Covers: AT-PP-016 的受控登记口那一半——「免复核声明下的系统代写」只由来源喂价置位：序列与目录复核文档里写了这一格
+// （或任何未知键、尾随内容），一律在到达用例之前拒成用法错，不是被静默丢掉。
+func TestReviewDocumentsCannotClaimTheExemptionDelegation(t *testing.T) {
+	reviewer := &reviewerDouble{outcome: application.SeriesReviewRecorded}
+	catalogueReviewer := &catalogueReviewerDouble{outcome: application.CatalogueReviewRecorded}
+	catalogues := catalogueRegistrars{review: catalogueReviewer}
+	catalogueJSON := `{"tenant":"tenant-1","catalogueId":"SYN-CAT-ZONE","catalogueVersion":"v1","reviewer":"r","decision":"APPROVED","basis":"b"}`
+	for name, document := range map[string]struct {
+		kind string
+		raw  string
+	}{
+		"序列复核带代写格": {kindReferenceSeriesReview, strings.Replace(reviewJSON, `"decision"`, `"systemDelegatedUnderExemption":true,"decision"`, 1)},
+		"目录复核带代写格": {kindReferenceCatalogueReview, strings.Replace(catalogueJSON, `"decision"`, `"systemDelegatedUnderExemption":true,"decision"`, 1)},
+		"序列复核带授予集": {kindReferenceSeriesReview, strings.Replace(reviewJSON, `"decision"`, `"reviewerGrants":["SYN-GRANT"],"decision"`, 1)},
+		"序列复核尾随内容": {kindReferenceSeriesReview, reviewJSON + ` {}`},
+	} {
+		if message, code := execute(t.Context(), document.kind, []byte(document.raw), &cardRegistrarDouble{}, &seriesRegistrarDouble{}, reviewer, catalogues, passthroughTransactor{}); code != exitUsage {
+			t.Fatalf("%s：message=%q code=%d，want %d", name, message, code, exitUsage)
+		}
+	}
+	if reviewer.calls != 0 || catalogueReviewer.calls != 0 {
+		t.Fatalf("带代写格的文档到达了用例：series=%d catalogue=%d", reviewer.calls, catalogueReviewer.calls)
+	}
+	if _, code := execute(t.Context(), kindReferenceCatalogueReview, []byte(catalogueJSON), &cardRegistrarDouble{}, &seriesRegistrarDouble{}, reviewer, catalogues, passthroughTransactor{}); code != exitRegistered || catalogueReviewer.calls != 1 {
+		t.Fatalf("合法目录复核文档：code=%d calls=%d", code, catalogueReviewer.calls)
+	}
+	for outcome, want := range map[application.ReviewReferenceCatalogueOutcome]int{
+		application.CatalogueReviewNotConfigured:        exitGovernance,
+		application.CatalogueReviewReviewerNotQualified: exitGovernance,
+		application.CatalogueReviewNeedsAnotherReviewer: exitGovernance,
+	} {
+		if code := referenceCatalogueReviewExitCode(outcome); code != want {
+			t.Fatalf("%s：code = %d，want %d", outcome, code, want)
+		}
+	}
+}
+
+type catalogueReviewerDouble struct {
+	outcome application.ReviewReferenceCatalogueOutcome
+	calls   int
+}
+
+func (double *catalogueReviewerDouble) Handle(context.Context, application.ReviewReferenceCatalogueCommand) (application.ReviewReferenceCatalogueOutcome, error) {
+	double.calls++
+	return double.outcome, nil
+}
+
 // TestSeedReviewDocumentsParse 把 seedgen 产出的两份复核种子过一遍本工具的文档翻译：字段名
 // 由两处各写一遍（seedgen 的 map 键与这里的 reviewDocument 标签），没有类型把它们钉在一起，
-// 这条用例就是那根钉。复核责任方 ≠ 登记责任方在这里也顺手核一次——种子若同人登记又复核，
-// 跑 seed.sh 时才会在四眼门上红。
+// 这条用例就是那根钉。演示租户登的规则要求不同主体，复核责任方 ≠ 登记责任方在这里也顺手核
+// 一次——种子若同人登记又复核，跑 seed.sh 时才会在复核门上红。
 func TestSeedReviewDocumentsParse(t *testing.T) {
 	for _, name := range []string{"reference-series-fuel-review.json", "reference-series-fx-cny-sgd-review.json"} {
 		raw, err := os.ReadFile(filepath.Join("..", "..", "scripts", "demo-seeds", "data", "pricing", name))
@@ -135,12 +185,35 @@ func TestSeedReviewDocumentsParse(t *testing.T) {
 			t.Fatalf("种子 %s 字段不齐：%+v", name, command)
 		}
 		if command.Reviewer == "SYN-PRICING-OPS-01" {
-			t.Fatalf("种子 %s 的复核责任方就是登记责任方，四眼门会拒", name)
+			t.Fatalf("种子 %s 的复核责任方就是登记责任方，演示规则要求不同主体，复核门会拒", name)
 		}
+	}
+	catalogue, err := os.ReadFile(filepath.Join("..", "..", "scripts", "demo-seeds", "data", "pricing", "reference-catalogue-zone-cn-sg-review.json"))
+	if err != nil {
+		t.Fatalf("读目录复核种子：%v", err)
+	}
+	if command, err := parseCatalogueReviewDocument(catalogue); err != nil || command.Reviewer == "SYN-PRICING-OPS-01" {
+		t.Fatalf("目录复核种子过不了文档翻译或复核人就是登记人：%+v err=%v", command, err)
+	}
+	rule, err := os.ReadFile(filepath.Join("..", "..", "scripts", "demo-seeds", "data", "pricing", "reference-review-duty-rule.json"))
+	if err != nil {
+		t.Fatalf("读规则种子：%v", err)
+	}
+	parsed, err := parseReviewDutyRuleDocument(rule)
+	if err != nil {
+		t.Fatalf("规则种子过不了文档翻译：%v", err)
+	}
+	if _, required := parsed.RequiredGrant(); parsed.Tenant().String() != "SYN-TENANT-01" || !parsed.RequiresDistinctSubjects() || required {
+		t.Fatalf("演示规则应是 SYN-TENANT-01 要求不同主体、不要求授予：%+v", parsed)
 	}
 }
 
 func seriesSnapshot(t *testing.T) []byte {
+	t.Helper()
+	return seriesSnapshotFor(t, "tenant-1")
+}
+
+func seriesSnapshotFor(t *testing.T, tenantID string) []byte {
 	t.Helper()
 	reference, err := domain.NewVersionReference(
 		domain.ArtifactReferenceSeries, "SYN-PRC-FUEL-WEEKLY", "v1", "sha256:syn-fuel")
@@ -160,7 +233,7 @@ func seriesSnapshot(t *testing.T) []byte {
 	if err != nil {
 		t.Fatalf("构造期次：%v", err)
 	}
-	tenant, err := domain.NewTenantID("tenant-1")
+	tenant, err := domain.NewTenantID(tenantID)
 	if err != nil {
 		t.Fatalf("构造租户：%v", err)
 	}

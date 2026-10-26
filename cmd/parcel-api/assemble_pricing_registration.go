@@ -76,8 +76,8 @@ func (registration transactionalReferenceSeriesRegistration) Handle(
 // transactionalReferenceSeriesReview 为序列版本复核包事务，判据同上两个包装。
 //
 // 它不并进 transactionalReferenceSeriesRegistration：登记与复核是两种命令、两套答案代数，
-// 而**四眼门只在复核那一侧**（领域拒绝复核责任方等于登记责任方）。合成一个类型之后装配点
-// 可以把登记那一格的编排接到复核端点上而编译仍绿，装配测试也盖不住。
+// 而**参考复核职责规则只在复核那一侧**（ADR-0262 决定一）。合成一个类型之后装配点可以把
+// 登记那一格的编排接到复核端点上而编译仍绿，装配测试也盖不住。
 type transactionalReferenceSeriesReview struct {
 	transactor bentoapp.Transactor
 	inner      *pricingapp.ReviewReferenceSeriesHandler
@@ -169,11 +169,11 @@ func buildReferenceSeriesRegistrationOrchestration(db *bentopg.DB) (transactiona
 }
 
 // buildReferenceSeriesReviewOrchestration 装配 `/pricing-reference-series-reviews` 的真编排
-// （ADR-0099 决定二，票 pricing-reference-series-operations/04）。
+// （ADR-0099 决定二、ADR-0262 决定一，票 pricing-reference-series-operations/04）。
 //
-// 版本读口与复核写口是两只适配器：读回一版登记走 ReferenceSeriesVersions（四眼门要拿到登记
-// 责任方，而 domain.NewSeriesReview 以登记为入参），追加复核走 ReferenceSeriesReviews。它们
-// 落在两张表上，分设不是为了对称。
+// 版本读口与复核写口是两只适配器：读回一版登记走 ReferenceSeriesVersions（复核职责规则要比
+// 登记责任方，而 domain.NewSeriesReview 以登记为入参），追加复核走 ReferenceSeriesReviews。它们
+// 落在两张表上，分设不是为了对称。规则读口与目录复核口、受控登记口读的是同一本规则册。
 func buildReferenceSeriesReviewOrchestration(db *bentopg.DB) (transactionalReferenceSeriesReview, error) {
 	versions, err := pppostgres.NewReferenceSeriesVersions(db)
 	if err != nil {
@@ -182,6 +182,10 @@ func buildReferenceSeriesReviewOrchestration(db *bentopg.DB) (transactionalRefer
 	reviews, err := pppostgres.NewReferenceSeriesReviews(db)
 	if err != nil {
 		return transactionalReferenceSeriesReview{}, fmt.Errorf("parcel-api: reference series review register: %w", err)
+	}
+	dutyRules, err := pppostgres.NewReferenceReviewDutyRules(db)
+	if err != nil {
+		return transactionalReferenceSeriesReview{}, fmt.Errorf("parcel-api: reference review duty rule view: %w", err)
 	}
 	registered, err := pricingParameterRegisteredHandoff(db)
 	if err != nil {
@@ -195,6 +199,7 @@ func buildReferenceSeriesReviewOrchestration(db *bentopg.DB) (transactionalRefer
 	handler := pricingapp.NewReviewReferenceSeriesHandler(pricingapp.ReviewReferenceSeriesDeps{
 		Versions:     versions,
 		Reviews:      reviews,
+		DutyRules:    dutyRules,
 		Clock:        systemClock{},
 		Registered:   registered,
 		PricedScopes: cards,

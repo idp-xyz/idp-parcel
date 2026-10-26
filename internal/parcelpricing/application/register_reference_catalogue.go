@@ -101,7 +101,7 @@ func (handler *RegisterReferenceCatalogueHandler) Handle(
 	}
 }
 
-// ReviewReferenceCatalogueOutcome 是目录版本复核请求的应用处理结果，七格与序列复核同义。
+// ReviewReferenceCatalogueOutcome 是目录版本复核请求的应用处理结果，各格与序列复核同义。
 type ReviewReferenceCatalogueOutcome uint8
 
 const (
@@ -110,8 +110,12 @@ const (
 	CatalogueReviewAlreadyOnRegister
 	CatalogueReviewConflict
 	CatalogueReviewVersionUnknown
-	// CatalogueReviewNeedsAnotherReviewer：复核责任方就是登记责任方，四眼门拒——换人，不是改字段。
+	// CatalogueReviewNeedsAnotherReviewer：租户的参考复核职责规则要求不同主体，而复核责任方就是登记责任方——换人，不是改字段。
 	CatalogueReviewNeedsAnotherReviewer
+	// CatalogueReviewNotConfigured：租户没有登记参考复核职责规则，复核不放行——租户先登规则。
+	CatalogueReviewNotConfigured
+	// CatalogueReviewReviewerNotQualified：规则要求复核者持某一格授予而他没有；受控批量口带不出授予集，一律落这一格。
+	CatalogueReviewReviewerNotQualified
 	CatalogueReviewNotAccepted
 	CatalogueReviewUndecided
 )
@@ -128,6 +132,10 @@ func (outcome ReviewReferenceCatalogueOutcome) String() string {
 		return "VERSION_UNKNOWN"
 	case CatalogueReviewNeedsAnotherReviewer:
 		return "NEEDS_ANOTHER_REVIEWER"
+	case CatalogueReviewNotConfigured:
+		return "NOT_CONFIGURED"
+	case CatalogueReviewReviewerNotQualified:
+		return "REVIEWER_NOT_QUALIFIED"
 	case CatalogueReviewNotAccepted:
 		return "NOT_ACCEPTED"
 	case CatalogueReviewUndecided:
@@ -137,22 +145,25 @@ func (outcome ReviewReferenceCatalogueOutcome) String() string {
 	}
 }
 
-// ReviewReferenceCatalogueCommand 按（目录标识、版本号）指名被复核的版本；复核时刻可缺，缺时取时钟当下。
+// ReviewReferenceCatalogueCommand 按（目录标识、版本号）指名被复核的版本；复核时刻可缺，缺时取时钟当下。ReviewerGrants 同序列
+// 复核那一格：操作者面取自信封，受控批量口留空。目录没有来源喂价，也就没有系统代写那一格。
 type ReviewReferenceCatalogueCommand struct {
 	Tenant           domain.TenantID
 	CatalogueID      string
 	CatalogueVersion string
 	Reviewer         string
+	ReviewerGrants   []domain.OperatorGrant
 	Decision         domain.SeriesReviewDecision
 	Basis            string
 	ReviewedAt       time.Time
 }
 
 // ReviewReferenceCatalogueDeps 是目录复核的依赖。Registered 与 PricedScopes 在一版目录通过复核时按绑了它的卡交「参数已登记」，
-// 理由同序列复核。
+// 理由同序列复核；DutyRules 是与序列复核共用的那一本参考复核职责规则。
 type ReviewReferenceCatalogueDeps struct {
 	Versions     ports.ReferenceCatalogueVersionLoader
 	Reviews      ports.ReferenceCatalogueReviewRegister
+	DutyRules    ports.ReferenceReviewDutyRuleView
 	Clock        ports.Clock
 	Registered   ports.PricingParameterRegisteredHandoff
 	PricedScopes ports.PricingParameterBindingView
@@ -169,7 +180,8 @@ func NewReviewReferenceCatalogueHandler(deps ReviewReferenceCatalogueDeps) *Revi
 	return &ReviewReferenceCatalogueHandler{deps: deps}
 }
 
-// Handle 把一次复核请求推进到复核册答案：取登记（四眼门要拿到登记责任方）→ 领域构造 → 追加。
+// Handle 把一次复核请求推进到复核册答案：取登记（规则要比登记责任方）→ 读租户的参考复核职责规则 → 领域构造 → 追加。规则
+// 未登记即`未配置`、不落复核行（ADR-0262 决定一）。
 func (handler *ReviewReferenceCatalogueHandler) Handle(
 	ctx context.Context,
 	command ReviewReferenceCatalogueCommand,
@@ -180,6 +192,9 @@ func (handler *ReviewReferenceCatalogueHandler) Handle(
 	if handler.deps.Registered == nil || handler.deps.PricedScopes == nil {
 		return CatalogueReviewUndecided, ErrCatalogueReviewHandoffMissing
 	}
+	if handler.deps.DutyRules == nil {
+		return CatalogueReviewUndecided, ErrReferenceReviewDutyRuleViewMissing
+	}
 	registration, found, err := handler.deps.Versions.LoadVersion(ctx, command.Tenant, command.CatalogueID, command.CatalogueVersion)
 	if err != nil {
 		return CatalogueReviewUndecided, fmt.Errorf("review reference catalogue: %w", err)
@@ -187,16 +202,32 @@ func (handler *ReviewReferenceCatalogueHandler) Handle(
 	if !found {
 		return CatalogueReviewVersionUnknown, nil
 	}
+	rule, configured, err := handler.deps.DutyRules.LoadReferenceReviewDutyRule(ctx, command.Tenant)
+	if err != nil {
+		return CatalogueReviewUndecided, fmt.Errorf("review reference catalogue: %w", err)
+	}
+	if !configured {
+		return CatalogueReviewNotConfigured, nil
+	}
+	reviewer, err := domain.NewOperatorSubject(command.Reviewer, command.ReviewerGrants)
+	if err != nil {
+		return CatalogueReviewNotAccepted, nil
+	}
 	reviewedAt := command.ReviewedAt
 	if reviewedAt.IsZero() {
 		reviewedAt = handler.deps.Clock.Now()
 	}
-	review, err := domain.NewCatalogueReview(registration, command.Reviewer, reviewedAt, command.Decision, command.Basis)
+	review, err := domain.NewCatalogueReview(registration, reviewer, rule, reviewedAt, command.Decision, command.Basis)
 	switch {
 	case errors.Is(err, domain.ErrCatalogueReviewerIsRegistrant):
 		return CatalogueReviewNeedsAnotherReviewer, nil
-	case err != nil:
+	case errors.Is(err, domain.ErrReferenceReviewerLacksRequiredGrant):
+		return CatalogueReviewReviewerNotQualified, nil
+	case errors.Is(err, domain.ErrInvalidCatalogueReview):
 		return CatalogueReviewNotAccepted, nil
+	case err != nil:
+		// 规则不是本租户的、或读回的规则立不住：读口或装配的错，不是业务答案。
+		return CatalogueReviewUndecided, fmt.Errorf("review reference catalogue: %w", err)
 	}
 	saved, err := handler.deps.Reviews.Record(ctx, review)
 	if err != nil {

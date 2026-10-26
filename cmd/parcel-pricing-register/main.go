@@ -11,8 +11,13 @@
 //
 // 第三种登记 reference-series-review 是序列版本复核（ADR-0099 决定二）：输入不是折装
 // 快照而是一份复核文档（租户、序列标识、版本号、复核责任方、结论、依据、可选的复核
-// 时刻），四眼门与在册与否由复核用例判。种子与补录历史复核走这里；在线口另按 ADR-0085
-// 进端点表。
+// 时刻），在册与否与租户的参考复核职责规则由复核用例判。这一路走的是与操作者面同一道门：
+// 复核者是文档里的 reviewer 串、授予集为空——规则要求不同主体时照比登记者，要求某一格授予时
+// 一律答复核者不合格（ADR-0262 决定一）。种子与补录历史复核走这里；在线口另按 ADR-0085
+// 进端点表。参考目录复核（reference-catalogue-review）同一道门。
+//
+// reference-review-duty-rule 登记那一条规则本身（一租户一条，同内容重放、异内容冲突）：规则
+// 未登记时人工复核一律答未配置，种子在复核之前先登它。
 //
 // 另两种登记 price-card-cut 与 price-card-retirement 是价卡收尾（ADR-0234）：输入是一份收尾文档（租户、定价方案、旧版、
 // 后继、依据），截止点与退役时刻由服务端定；收尾同笔交「参数已登记」。在线口另进端点表。
@@ -20,11 +25,13 @@
 // 本工具假设业务 schema 已由迁移作业施加，不自行迁移。
 //
 // 退出码：0 = 已登记/幂等重放；1 = 用法或输入不合法（含重建门拒绝）；2 = 登记册
-// 治理答案（版本内容冲突/规范化形状不同/复核的版本不在册/复核责任方就是登记责任方/收尾不成立
-// ——原行未被顶替，人工续办）；3 = 未决（依赖故障，登记与否未知）。
+// 治理答案（版本内容冲突/规范化形状不同/复核的版本不在册/须换人复核/复核职责规则未配置/
+// 复核者不合格/规则内容冲突/收尾不成立——原行未被顶替，人工续办）；3 = 未决（依赖故障，
+// 登记与否未知）。
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -95,10 +102,11 @@ type catalogueReviewDocument struct {
 	ReviewedAt       string `json:"reviewedAt,omitempty"`
 }
 
+// parseCatalogueReviewDocument 与 parseReviewDocument 同一判据：封闭解码，只做形状翻译。
 func parseCatalogueReviewDocument(raw []byte) (application.ReviewReferenceCatalogueCommand, error) {
 	var document catalogueReviewDocument
-	if err := json.Unmarshal(raw, &document); err != nil {
-		return application.ReviewReferenceCatalogueCommand{}, fmt.Errorf("复核文档不是合法 JSON：%w", err)
+	if err := decodeReviewDocument(raw, &document); err != nil {
+		return application.ReviewReferenceCatalogueCommand{}, err
 	}
 	tenant, err := domain.NewTenantID(document.Tenant)
 	if err != nil {
@@ -122,6 +130,20 @@ func parseCatalogueReviewDocument(raw []byte) (application.ReviewReferenceCatalo
 	return command, nil
 }
 
+// decodeReviewDocument 封闭解码一份复核文档：未知键与尾随内容答用法错，不是被忽略。「免复核声明下的系统代写」那一格
+// 尤其如此——它只由来源喂价在免复核分支上置位，批文里写了它而被静默丢掉，登记方会以为自己免了复核职责规则。
+func decodeReviewDocument(raw []byte, document any) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(document); err != nil {
+		return fmt.Errorf("复核文档不是合法 JSON 或带了未知键：%w", err)
+	}
+	if decoder.More() {
+		return fmt.Errorf("复核文档有尾随内容")
+	}
+	return nil
+}
+
 type systemClock struct{}
 
 func (systemClock) Now() time.Time { return time.Now() }
@@ -138,11 +160,12 @@ type reviewDocument struct {
 }
 
 // parseReviewDocument 把复核文档译成用例命令。只做形状翻译（时刻按 RFC 3339 解），
-// 四件齐不齐、结论在不在封闭集、四眼门都留给用例与领域判。
+// 四件齐不齐、结论在不在封闭集、复核职责规则都留给用例与领域判。授予集不在文档里：批文
+// 证明不了复核者持有什么，这一路的授予集恒为空。
 func parseReviewDocument(raw []byte) (application.ReviewReferenceSeriesCommand, error) {
 	var document reviewDocument
-	if err := json.Unmarshal(raw, &document); err != nil {
-		return application.ReviewReferenceSeriesCommand{}, fmt.Errorf("复核文档不是合法 JSON：%w", err)
+	if err := decodeReviewDocument(raw, &document); err != nil {
+		return application.ReviewReferenceSeriesCommand{}, err
 	}
 	tenant, err := domain.NewTenantID(document.Tenant)
 	if err != nil {
@@ -167,7 +190,7 @@ func parseReviewDocument(raw []byte) (application.ReviewReferenceSeriesCommand, 
 }
 
 func main() {
-	kind := flag.String("kind", "", "登记种类：price-card、price-card-cut、price-card-retirement、reference-series、reference-series-review、reference-catalogue 或 reference-catalogue-review")
+	kind := flag.String("kind", "", "登记种类：price-card、price-card-cut、price-card-retirement、reference-series、reference-series-review、reference-catalogue、reference-catalogue-review 或 reference-review-duty-rule")
 	file := flag.String("file", "", "登记快照 JSON 路径")
 	flag.Parse()
 
@@ -198,74 +221,98 @@ func main() {
 		fmt.Fprintf(os.Stderr, "构造框架 DB：%v\n", err)
 		os.Exit(exitUndecided)
 	}
+	wired, err := assemble(db)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(exitUndecided)
+	}
+
+	var message string
+	var code int
+	switch {
+	case isClosureKind(*kind):
+		message, code = executeClosure(ctx, *kind, raw, wired.closer, db.Transactor())
+	case *kind == kindReferenceReviewDutyRule:
+		message, code = executeReviewDutyRule(ctx, raw, wired.rules, db.Transactor())
+	default:
+		message, code = execute(ctx, *kind, raw, wired.cards, wired.series, wired.reviewer, wired.catalogues, db.Transactor())
+	}
+	fmt.Println(message)
+	os.Exit(code)
+}
+
+// assembly 是本工具消费的各用例，装配与 main 分开，真库用例拿同一份装配走随产品发出的那条接线。
+type assembly struct {
+	cards      *application.RegisterPriceCardHandler
+	series     *application.RegisterReferenceSeriesHandler
+	reviewer   *application.ReviewReferenceSeriesHandler
+	catalogues catalogueRegistrars
+	closer     *application.ClosePriceCardVersionHandler
+	rules      *application.RegisterReferenceReviewDutyRuleHandler
+}
+
+// assemble 在一只 db 上装各用例。「参数已登记」交接口与登记册同一只 db：价卡登记与序列、目录复核通过的那一行与信封落在
+// execute 给的同一笔事务里，结算那一侧停着的评价请求等的就是这封信（ADR-0229 决定五）。序列与目录两只复核读同一本参考
+// 复核职责规则册，也是规则登记写的那一本。
+func assemble(db *bentopg.DB) (assembly, error) {
 	cards, err := adapter.NewPriceCards(db)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "构造价卡仓储：%v\n", err)
-		os.Exit(exitUndecided)
+		return assembly{}, fmt.Errorf("构造价卡仓储：%w", err)
 	}
 	series, err := adapter.NewReferenceSeriesVersions(db)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "构造序列登记册：%v\n", err)
-		os.Exit(exitUndecided)
+		return assembly{}, fmt.Errorf("构造序列登记册：%w", err)
 	}
 	reviews, err := adapter.NewReferenceSeriesReviews(db)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "构造序列复核册：%v\n", err)
-		os.Exit(exitUndecided)
+		return assembly{}, fmt.Errorf("构造序列复核册：%w", err)
 	}
 	catalogues, err := adapter.NewReferenceCatalogueVersions(db)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "构造目录登记册：%v\n", err)
-		os.Exit(exitUndecided)
+		return assembly{}, fmt.Errorf("构造目录登记册：%w", err)
 	}
 	catalogueReviews, err := adapter.NewReferenceCatalogueReviews(db)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "构造目录复核册：%v\n", err)
-		os.Exit(exitUndecided)
+		return assembly{}, fmt.Errorf("构造目录复核册：%w", err)
 	}
-	// 「参数已登记」交接口与登记册同一只 db：价卡登记与序列、目录复核通过的那一行与信封落在 execute 给的同一笔事务里，
-	// 结算那一侧停着的评价请求等的就是这封信（ADR-0229 决定五）。
+	dutyRules, err := adapter.NewReferenceReviewDutyRules(db)
+	if err != nil {
+		return assembly{}, fmt.Errorf("构造参考复核职责规则册：%w", err)
+	}
 	outboxStore, err := outbox.NewStore(db)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "构造 Outbox Store：%v\n", err)
-		os.Exit(exitUndecided)
+		return assembly{}, fmt.Errorf("构造 Outbox Store：%w", err)
 	}
 	registered, err := adapter.NewOutboxEvaluationResumptionHandoffs(db, outboxStore, systemClock{})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "构造参数已登记交接口：%v\n", err)
-		os.Exit(exitUndecided)
+		return assembly{}, fmt.Errorf("构造参数已登记交接口：%w", err)
 	}
-
-	if isClosureKind(*kind) {
-		closer, err := application.NewClosePriceCardVersionHandler(application.ClosePriceCardVersionDeps{
-			Registry: cards, Registered: registered, Clock: systemClock{},
-		})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "构造价卡收尾用例：%v\n", err)
-			os.Exit(exitUndecided)
-		}
-		message, code := executeClosure(ctx, *kind, raw, closer, db.Transactor())
-		fmt.Println(message)
-		os.Exit(code)
+	closer, err := application.NewClosePriceCardVersionHandler(application.ClosePriceCardVersionDeps{
+		Registry: cards, Registered: registered, Clock: systemClock{},
+	})
+	if err != nil {
+		return assembly{}, fmt.Errorf("构造价卡收尾用例：%w", err)
 	}
-
-	message, code := execute(ctx, *kind, raw,
-		application.NewRegisterPriceCardHandler(application.RegisterPriceCardDeps{Catalog: cards, Registered: registered}),
-		application.NewRegisterReferenceSeriesHandler(application.RegisterReferenceSeriesDeps{Register: series}),
-		application.NewReviewReferenceSeriesHandler(application.ReviewReferenceSeriesDeps{
-			Versions: series, Reviews: reviews, Clock: systemClock{}, Registered: registered, PricedScopes: cards,
+	rules, err := application.NewRegisterReferenceReviewDutyRuleHandler(dutyRules)
+	if err != nil {
+		return assembly{}, fmt.Errorf("构造规则登记用例：%w", err)
+	}
+	return assembly{
+		cards:  application.NewRegisterPriceCardHandler(application.RegisterPriceCardDeps{Catalog: cards, Registered: registered}),
+		series: application.NewRegisterReferenceSeriesHandler(application.RegisterReferenceSeriesDeps{Register: series}),
+		reviewer: application.NewReviewReferenceSeriesHandler(application.ReviewReferenceSeriesDeps{
+			Versions: series, Reviews: reviews, DutyRules: dutyRules, Clock: systemClock{}, Registered: registered, PricedScopes: cards,
 		}),
-		catalogueRegistrars{
+		catalogues: catalogueRegistrars{
 			register: application.NewRegisterReferenceCatalogueHandler(application.RegisterReferenceCatalogueDeps{Register: catalogues}),
 			review: application.NewReviewReferenceCatalogueHandler(application.ReviewReferenceCatalogueDeps{
-				Versions: catalogues, Reviews: catalogueReviews, Clock: systemClock{}, Registered: registered,
+				Versions: catalogues, Reviews: catalogueReviews, DutyRules: dutyRules, Clock: systemClock{}, Registered: registered,
 				PricedScopes: cards,
 			}),
 		},
-		db.Transactor(),
-	)
-	fmt.Println(message)
-	os.Exit(code)
+		closer: closer,
+		rules:  rules,
+	}, nil
 }
 
 // execute 把一份登记快照推进到登记册答案：按种类走重建门，再在事务内交给登记用例，
@@ -358,9 +405,9 @@ func execute(
 		}
 		return "reference-series-review: " + outcome.String(), referenceSeriesReviewExitCode(outcome)
 	default:
-		return fmt.Sprintf("未知登记种类 %q（支持 %s / %s / %s / %s / %s / %s / %s）", kind,
+		return fmt.Sprintf("未知登记种类 %q（支持 %s / %s / %s / %s / %s / %s / %s / %s）", kind,
 			kindPriceCard, kindPriceCardCut, kindPriceCardRetirement, kindReferenceSeries, kindReferenceSeriesReview,
-			kindReferenceCatalogue, kindReferenceCatalogueReview), exitUsage
+			kindReferenceCatalogue, kindReferenceCatalogueReview, kindReferenceReviewDutyRule), exitUsage
 	}
 }
 
@@ -381,7 +428,8 @@ func referenceCatalogueReviewExitCode(outcome application.ReviewReferenceCatalog
 	switch outcome {
 	case application.CatalogueReviewRecorded, application.CatalogueReviewAlreadyOnRegister:
 		return exitRegistered
-	case application.CatalogueReviewConflict, application.CatalogueReviewVersionUnknown, application.CatalogueReviewNeedsAnotherReviewer:
+	case application.CatalogueReviewConflict, application.CatalogueReviewVersionUnknown, application.CatalogueReviewNeedsAnotherReviewer,
+		application.CatalogueReviewNotConfigured, application.CatalogueReviewReviewerNotQualified:
 		return exitGovernance
 	case application.CatalogueReviewNotAccepted:
 		return exitUsage
@@ -390,13 +438,14 @@ func referenceCatalogueReviewExitCode(outcome application.ReviewReferenceCatalog
 	}
 }
 
-// referenceSeriesReviewExitCode：版本不在册与四眼不满足都是复核册的治理答案——什么都没
-// 被写、也不是本工具用错了，操作者拿答案去登记或换人。
+// referenceSeriesReviewExitCode：版本不在册、须换人、复核职责规则未配置与复核者不合格都是治理答案——什么都没被写、
+// 也不是本工具用错了，操作者拿答案去登记、换人、先登规则，或改走操作者面带着授予复核。
 func referenceSeriesReviewExitCode(outcome application.ReviewReferenceSeriesOutcome) int {
 	switch outcome {
 	case application.SeriesReviewRecorded, application.SeriesReviewAlreadyOnRegister:
 		return exitRegistered
-	case application.SeriesReviewConflict, application.SeriesReviewVersionUnknown, application.SeriesReviewNeedsAnotherReviewer:
+	case application.SeriesReviewConflict, application.SeriesReviewVersionUnknown, application.SeriesReviewNeedsAnotherReviewer,
+		application.SeriesReviewNotConfigured, application.SeriesReviewReviewerNotQualified:
 		return exitGovernance
 	case application.SeriesReviewNotAccepted:
 		return exitUsage

@@ -515,6 +515,8 @@ func registerCardTermsPricing(t *testing.T, db *bentopg.DB) {
 	if outcome, err := register.Handle(ctx, pricingapp.RegisterReferenceSeriesCommand{Registration: series}); err != nil || outcome != pricingapp.ReferenceSeriesRecorded {
 		t.Fatalf("序列首登 outcome = %s err = %v", outcome, err)
 	}
+	// 人工复核按租户的参考复核职责规则判（ADR-0262 决定一），没登即未配置：登一条要求不同主体的，与演示租户同形。
+	registerReferenceReviewDutyRule(t, db, cardTermsTenant)
 	review, err := buildReferenceSeriesReviewOrchestration(db)
 	if err != nil {
 		t.Fatalf("装配序列复核编排：%v", err)

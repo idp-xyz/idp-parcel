@@ -29,7 +29,7 @@ const (
 	// 演示动线的统一生效起点：全套种子讲同一段 2026 年的合成故事。
 	registrant = "SYN-PRICING-OPS-01"
 	approver   = "SYN-PRICING-GOVERNOR-01"
-	// 序列版本复核责任方；须与 registrant 不同（四眼门，ADR-0099 决定二）。
+	// 序列与目录版本复核责任方；与 registrant 不同——演示租户登的参考复核职责规则要求不同主体（ADR-0262 决定一）。
 	reviewer = "SYN-PRICING-REVIEW-01"
 )
 
@@ -43,8 +43,10 @@ func main() {
 	write(outDir, "price-card-cn-sg-cost.json", buyCardSnapshot())
 	write(outDir, "reference-series-fuel.json", fuelSeriesSnapshot())
 	write(outDir, "reference-series-fx-cny-sgd.json", fxSeriesSnapshot())
+	// 演示租户的参考复核职责规则：人工复核按它判，没登时一律答未配置，所以它在任何复核之前登。
+	write(outDir, "reference-review-duty-rule.json", reviewDutyRuleDocument())
 	// 两条序列各一份复核：不复核就不在用，demo 评价会如实挂起（ADR-0099 决定二、三）。
-	// 复核责任方与登记责任方不是同一个合成身份——四眼门在种子里也照守。
+	// 复核责任方与登记责任方不是同一个合成身份——演示规则要求不同主体。
 	write(outDir, "reference-series-fuel-review.json", seriesReviewDocument("SYN-SERIES-FUEL-01", "v1"))
 	write(outDir, "reference-series-fx-cny-sgd-review.json", seriesReviewDocument("SYN-SERIES-FX-CNY-SGD", "v1"))
 	// 售价卡绑这本分区目录（见 sellCardSnapshot），分区由委托申报的邮编路线经它解析。
@@ -53,9 +55,23 @@ func main() {
 	write(outDir, "reference-catalogue-zone-cn-sg-review.json", catalogueReviewDocument("SYN-CAT-ZONE-CN-SG", "v1"))
 }
 
+// reviewDutyRuleDocument 产出 parcel-pricing-register -kind reference-review-duty-rule 吃的规则文档：演示租户要求复核者
+// 与登记者为不同主体、不要求授予（ADR-0262 决定一）。这是演示租户的租户取值，证据只记 S；两格都写出来，不要求授予写
+// null——该 CLI 不按缺键猜。
+func reviewDutyRuleDocument() []byte {
+	document := map[string]any{
+		"tenant":           tenantID,
+		"distinctSubjects": true,
+		"requiredGrant":    nil,
+	}
+	raw, err := json.Marshal(document)
+	must("参考复核职责规则文档", err)
+	return raw
+}
+
 // catalogueReviewDocument 产出 parcel-pricing-register -kind reference-catalogue-review
-// 吃的复核文档。键名与该 CLI 的 catalogueReviewDocument 一致；四眼门同样要求复核人
-// 不是登记人。
+// 吃的复核文档。键名与该 CLI 的 catalogueReviewDocument 一致；演示规则要求复核人不是
+// 登记人。
 func catalogueReviewDocument(catalogueID, version string) []byte {
 	document := map[string]string{
 		"tenant":           tenantID,

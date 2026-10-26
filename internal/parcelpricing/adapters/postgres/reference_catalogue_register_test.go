@@ -16,7 +16,7 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 证计价参考目录登记册（ADR-0109 Decision 二）：登记行只增不改、映射更正走新版本
-// 不静默替换、按计价基准时点与邮编路线解析且查不到只答「查过没查到」、复核四眼门与在用派生照序列那一套。
+// 不静默替换、按计价基准时点与邮编路线解析且查不到只答「查过没查到」、复核门与在用派生照序列那一套。
 // 夹具全部为 SYN 合成目录（S 级），邮编与分区取值都是编出来的形状。
 
 var (
@@ -207,7 +207,7 @@ func TestReferenceCatalogueReviewDerivesTheInForceVersion(t *testing.T) {
 	}
 
 	unknownVersion := zoneChartRegistration(t, "tenant-c", "SYN-CAT-ZONE", "v7", map[string]string{"902": "Z4"})
-	orphan, err := domain.NewCatalogueReview(unknownVersion, "SYN-CAT-REVIEWER", at.Add(-time.Hour), domain.SeriesReviewApproved, "SYN-REVIEW/never-registered")
+	orphan, err := domain.NewCatalogueReview(unknownVersion, reviewSubject(t, "SYN-CAT-REVIEWER"), reviewRule(t, "tenant-c"), at.Add(-time.Hour), domain.SeriesReviewApproved, "SYN-REVIEW/never-registered")
 	if err != nil {
 		t.Fatalf("复核：%v", err)
 	}
@@ -215,7 +215,7 @@ func TestReferenceCatalogueReviewDerivesTheInForceVersion(t *testing.T) {
 		t.Fatalf("复核不在册版本 outcome = %d, 想要 VersionUnknown", outcome)
 	}
 
-	approved, err := domain.NewCatalogueReview(registration, "SYN-CAT-REVIEWER", at.Add(-time.Hour), domain.SeriesReviewApproved, "SYN-REVIEW/zone-v1")
+	approved, err := domain.NewCatalogueReview(registration, reviewSubject(t, "SYN-CAT-REVIEWER"), reviewRule(t, registration.Tenant().String()), at.Add(-time.Hour), domain.SeriesReviewApproved, "SYN-REVIEW/zone-v1")
 	if err != nil {
 		t.Fatalf("复核：%v", err)
 	}
@@ -225,7 +225,7 @@ func TestReferenceCatalogueReviewDerivesTheInForceVersion(t *testing.T) {
 	if outcome := recordCatalogueReview(t, reviews, transactor, ctx, approved); outcome != ports.ReferenceCatalogueReviewAlreadyRecorded {
 		t.Fatalf("重放复核 outcome = %d", outcome)
 	}
-	changed, _ := domain.NewCatalogueReview(registration, "SYN-CAT-REVIEWER", at.Add(-time.Hour), domain.SeriesReviewReturned, "SYN-REVIEW/zone-v1")
+	changed, _ := domain.NewCatalogueReview(registration, reviewSubject(t, "SYN-CAT-REVIEWER"), reviewRule(t, registration.Tenant().String()), at.Add(-time.Hour), domain.SeriesReviewReturned, "SYN-REVIEW/zone-v1")
 	if outcome := recordCatalogueReview(t, reviews, transactor, ctx, changed); outcome != ports.ReferenceCatalogueReviewConflict {
 		t.Fatalf("同键不同结论 outcome = %d", outcome)
 	}

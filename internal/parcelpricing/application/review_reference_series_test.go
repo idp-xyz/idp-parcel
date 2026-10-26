@@ -11,9 +11,10 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
 )
 
-// 本文件证复核用例的编排（ADR-0099 决定二）：取登记 → 领域四眼门 → 复核册结果代数 → 答案
-// 翻译。四眼不满足与请求不合法分格（恢复动作不同）；版本不在册是一格答案不是 error；依赖
-// 故障未决不吞。复核时刻缺省取时钟。
+// 本文件证复核用例的编排（ADR-0099 决定二、ADR-0262 决定一）：取登记 → 读租户的参考复核职责
+// 规则 → 领域按规则判 → 复核册结果代数 → 答案翻译。未配置、须换人、复核者不合格与请求不合法
+// 各分一格（恢复动作不同），三格拒下的都不到复核册；版本不在册是一格答案不是 error；依赖故障
+// 未决不吞。复核时刻缺省取时钟。
 
 type versionLoaderDouble struct {
 	registrations map[string]domain.ReferenceSeriesRegistration
@@ -73,26 +74,61 @@ func fuelRegistrationForReview(t *testing.T) domain.ReferenceSeriesRegistration 
 	return registration
 }
 
+// dutyRuleViewDouble 是参考复核职责规则读口的替身：rule 为零值即答未登记。
+type dutyRuleViewDouble struct {
+	rule  domain.ReferenceReviewDutyRule
+	found bool
+	err   error
+	asked int
+}
+
+func (double *dutyRuleViewDouble) LoadReferenceReviewDutyRule(_ context.Context, _ domain.TenantID) (domain.ReferenceReviewDutyRule, bool, error) {
+	double.asked++
+	return double.rule, double.found, double.err
+}
+
+func dutyRuleFor(t *testing.T, tenant string, distinct bool, grant string) *dutyRuleViewDouble {
+	t.Helper()
+	var required domain.OperatorGrant
+	if grant != "" {
+		required = mustValue(t, domain.NewOperatorGrant, grant)
+	}
+	rule, err := domain.NewReferenceReviewDutyRule(mustValue(t, domain.NewTenantID, tenant), distinct, required)
+	if err != nil {
+		t.Fatalf("构造规则：%v", err)
+	}
+	return &dutyRuleViewDouble{rule: rule, found: true}
+}
+
 type reviewFixture struct {
 	handler    *application.ReviewReferenceSeriesHandler
 	loader     *versionLoaderDouble
 	reviews    *reviewRegisterDouble
+	rules      *dutyRuleViewDouble
 	registered *pricingParameterDouble
 	scopes     *pricedScopesDouble
 }
 
+// newReviewFixture 装的是要求不同主体、不要求授予的那一条规则——与演示租户登的同形。
 func newReviewFixture(t *testing.T) *reviewFixture {
+	t.Helper()
+	return newReviewFixtureWith(t, dutyRuleFor(t, "tenant-1", true, ""))
+}
+
+func newReviewFixtureWith(t *testing.T, rules *dutyRuleViewDouble) *reviewFixture {
 	t.Helper()
 	registration := fuelRegistrationForReview(t)
 	fixture := &reviewFixture{
 		loader:     &versionLoaderDouble{registrations: map[string]domain.ReferenceSeriesRegistration{"SYN-FUEL@v1": registration}},
 		reviews:    &reviewRegisterDouble{outcome: ports.ReferenceSeriesReviewRecorded},
+		rules:      rules,
 		registered: &pricingParameterDouble{},
 		scopes:     &pricedScopesDouble{scopes: boundScopes(t)},
 	}
 	fixture.handler = application.NewReviewReferenceSeriesHandler(application.ReviewReferenceSeriesDeps{
 		Versions:     fixture.loader,
 		Reviews:      fixture.reviews,
+		DutyRules:    fixture.rules,
 		Clock:        fixedClock{at: formedAt},
 		Registered:   fixture.registered,
 		PricedScopes: fixture.scopes,
@@ -231,12 +267,91 @@ func TestAnApprovedReviewAnnouncesTheSeriesOnEveryScopeThatBindsIt(t *testing.T)
 	}
 
 	for label, deps := range map[string]application.ReviewReferenceSeriesDeps{
-		"交接口":  {Versions: fixture.loader, Reviews: fixture.reviews, Clock: fixedClock{at: formedAt}, PricedScopes: fixture.scopes},
-		"绑定读口": {Versions: fixture.loader, Reviews: fixture.reviews, Clock: fixedClock{at: formedAt}, Registered: fixture.registered},
+		"交接口":  {Versions: fixture.loader, Reviews: fixture.reviews, DutyRules: fixture.rules, Clock: fixedClock{at: formedAt}, PricedScopes: fixture.scopes},
+		"绑定读口": {Versions: fixture.loader, Reviews: fixture.reviews, DutyRules: fixture.rules, Clock: fixedClock{at: formedAt}, Registered: fixture.registered},
 	} {
 		unwired := application.NewReviewReferenceSeriesHandler(deps)
 		if _, err := unwired.Handle(context.Background(), reviewCommand("SYN-REVIEWER", "v1", domain.SeriesReviewApproved)); !errors.Is(err, application.ErrSeriesReviewHandoffMissing) {
 			t.Fatalf("漏装%s err = %v", label, err)
 		}
+	}
+}
+
+// Covers: AT-PP-014 的编排半边（序列）——租户没登参考复核职责规则时，人工复核答未配置、不到复核册、不交参数已登记；登记者
+// 本人与另一个人答的是同一格，不按默认双人也不按默认单人放行。装配漏了规则读口不是未配置，是未决带错误。
+func TestAManualSeriesReviewWithoutATenantRuleIsNotConfigured(t *testing.T) {
+	fixture := newReviewFixtureWith(t, &dutyRuleViewDouble{})
+	for _, reviewer := range []string{"SYN-REGISTRAR", "SYN-REVIEWER"} {
+		if outcome, err := fixture.handler.Handle(context.Background(), reviewCommand(reviewer, "v1", domain.SeriesReviewApproved)); err != nil || outcome != application.SeriesReviewNotConfigured {
+			t.Fatalf("%s 复核：outcome = %s err = %v，want NOT_CONFIGURED", reviewer, outcome, err)
+		}
+	}
+	if len(fixture.reviews.recorded) != 0 || len(fixture.registered.intents) != 0 {
+		t.Fatalf("未配置到了复核册或交了信封：recorded=%d intents=%d", len(fixture.reviews.recorded), len(fixture.registered.intents))
+	}
+	if application.SeriesReviewNotConfigured.String() != "NOT_CONFIGURED" {
+		t.Fatalf("未配置的名字 = %q", application.SeriesReviewNotConfigured)
+	}
+
+	down := newReviewFixtureWith(t, &dutyRuleViewDouble{err: errors.New("rule register down")})
+	if outcome, err := down.handler.Handle(context.Background(), reviewCommand("SYN-REVIEWER", "v1", domain.SeriesReviewApproved)); err == nil || outcome != application.SeriesReviewUndecided {
+		t.Fatalf("规则读不动：outcome = %s err = %v，want 未决与错误", outcome, err)
+	}
+
+	unwired := application.NewReviewReferenceSeriesHandler(application.ReviewReferenceSeriesDeps{
+		Versions: fixture.loader, Reviews: fixture.reviews, Clock: fixedClock{at: formedAt},
+		Registered: fixture.registered, PricedScopes: fixture.scopes,
+	})
+	if outcome, err := unwired.Handle(context.Background(), reviewCommand("SYN-REVIEWER", "v1", domain.SeriesReviewApproved)); !errors.Is(err, application.ErrReferenceReviewDutyRuleViewMissing) || outcome != application.SeriesReviewUndecided {
+		t.Fatalf("漏装规则读口：outcome = %s err = %v", outcome, err)
+	}
+}
+
+// Covers: AT-PP-015 的编排半边（序列）——规则要求不同主体时登记者本人答须换人、不到复核册；不要求时登记者本人复核照落、
+// 交参数已登记；要求某一格授予时复核者的授予集（随命令从操作者信封来）里没有它答复核者不合格，持有它才落；空授予集（受控
+// 批量口的形状）在要求授予时一律不合格，复核者是不是登记者都一样。
+func TestAManualSeriesReviewFollowsTheTenantRule(t *testing.T) {
+	const grant = "SYN-GRANT-REFERENCE-REVIEW"
+	withGrants := func(reviewer string, grants ...string) application.ReviewReferenceSeriesCommand {
+		command := reviewCommand(reviewer, "v1", domain.SeriesReviewApproved)
+		for _, name := range grants {
+			command.ReviewerGrants = append(command.ReviewerGrants, mustValue(t, domain.NewOperatorGrant, name))
+		}
+		return command
+	}
+	cases := []struct {
+		name     string
+		rules    *dutyRuleViewDouble
+		command  application.ReviewReferenceSeriesCommand
+		want     application.ReviewReferenceSeriesOutcome
+		recorded int
+	}{
+		{"要求不同主体、登记者本人", dutyRuleFor(t, "tenant-1", true, ""), withGrants("SYN-REGISTRAR"), application.SeriesReviewNeedsAnotherReviewer, 0},
+		{"不要求不同主体、登记者本人", dutyRuleFor(t, "tenant-1", false, ""), withGrants("SYN-REGISTRAR"), application.SeriesReviewRecorded, 1},
+		{"要求授予、复核者没有", dutyRuleFor(t, "tenant-1", false, grant), withGrants("SYN-REVIEWER", "SYN-GRANT-OTHER"), application.SeriesReviewReviewerNotQualified, 0},
+		{"要求授予、复核者持有", dutyRuleFor(t, "tenant-1", false, grant), withGrants("SYN-REVIEWER", grant), application.SeriesReviewRecorded, 1},
+		{"两格都要求、登记者本人空授予集", dutyRuleFor(t, "tenant-1", true, grant), withGrants("SYN-REGISTRAR"), application.SeriesReviewReviewerNotQualified, 0},
+		{"两格都要求、另一个人空授予集", dutyRuleFor(t, "tenant-1", true, grant), withGrants("SYN-REVIEWER"), application.SeriesReviewReviewerNotQualified, 0},
+	}
+	for _, testCase := range cases {
+		fixture := newReviewFixtureWith(t, testCase.rules)
+		outcome, err := fixture.handler.Handle(context.Background(), testCase.command)
+		if err != nil || outcome != testCase.want {
+			t.Fatalf("%s：outcome = %s err = %v，want %s", testCase.name, outcome, err, testCase.want)
+		}
+		if len(fixture.reviews.recorded) != testCase.recorded {
+			t.Fatalf("%s：到了复核册 %d 次，want %d", testCase.name, len(fixture.reviews.recorded), testCase.recorded)
+		}
+		if testCase.recorded == 0 && len(fixture.registered.intents) != 0 {
+			t.Fatalf("%s：拒下的复核交了参数已登记", testCase.name)
+		}
+	}
+	if application.SeriesReviewReviewerNotQualified.String() != "REVIEWER_NOT_QUALIFIED" {
+		t.Fatalf("复核者不合格的名字 = %q", application.SeriesReviewReviewerNotQualified)
+	}
+
+	foreign := newReviewFixtureWith(t, dutyRuleFor(t, "tenant-2", false, ""))
+	if outcome, err := foreign.handler.Handle(context.Background(), withGrants("SYN-REVIEWER")); !errors.Is(err, domain.ErrReferenceReviewDutyRuleTenantMismatch) || outcome != application.SeriesReviewUndecided {
+		t.Fatalf("读口交回他租户的规则：outcome = %s err = %v，want 未决与错误", outcome, err)
 	}
 }

@@ -66,7 +66,7 @@ type SourceConnectorBindingSpec struct {
 	// 指纹（ADR-0108 决定二），读回以该常量重建。
 	QuoteBasis VersionReference
 	// Registrant 是登记责任方。连接器是它的转录代理（ADR-0099 决定六），不是第二种登记
-	// 责任方；免复核时系统代写的复核由连接器身份署名，四眼门因此在结构上仍关得住。
+	// 责任方；免复核时系统代写的复核由连接器身份署名，「复核者不得是登记者」那一道因此在结构上仍关得住。
 	Registrant string
 	// Cadence 是抓取节律，只登记、不解释：机制不调度，受控批量口手跑或由外部调度。
 	Cadence         string
@@ -165,8 +165,8 @@ func (binding SourceConnectorBinding) RequiresManualReview() bool {
 
 // ConnectorIdentity 是系统代写复核时的复核责任方。按连接器种类而不按绑定取名：复核的是
 // 「这类连接器的转录」，同一种连接器对不同序列是同一双眼睛；它与登记责任方（绑定声明的
-// Registrant）不同名，四眼门（NewSeriesReview）才过得去——租户若把登记责任方也填成这个名字，
-// 门会如实拒，那正是它该拒的。
+// Registrant）不同名，代写复核写死的那道比较（NewExemptionDelegatedSeriesReview）才过得去——租户
+// 若把登记责任方也填成这个名字，门会如实拒，那正是它该拒的。
 func (binding SourceConnectorBinding) ConnectorIdentity() string {
 	return "connector:" + binding.connectorKind
 }

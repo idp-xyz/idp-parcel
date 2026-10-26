@@ -14,7 +14,10 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/pptest"
 )
 
-type registryAuthenticator struct{ err error }
+type registryAuthenticator struct {
+	err    error
+	grants []string
+}
 
 func (fake registryAuthenticator) AuthenticateRegistryWrite(_ context.Context, token string) (pricinghttp.OperatorIdentity, error) {
 	if token == "" {
@@ -24,7 +27,7 @@ func (fake registryAuthenticator) AuthenticateRegistryWrite(_ context.Context, t
 		return pricinghttp.OperatorIdentity{}, fake.err
 	}
 	tenant, err := domain.NewTenantID("SYN-TENANT-01")
-	return pricinghttp.OperatorIdentity{Tenant: tenant, Operator: "https://id.syn.example/dex#SYN-OPERATOR-02"}, err
+	return pricinghttp.OperatorIdentity{Tenant: tenant, Operator: "https://id.syn.example/dex#SYN-OPERATOR-02", Grants: fake.grants}, err
 }
 
 func reviewRequest(token, body string) *http.Request {
@@ -35,8 +38,10 @@ func reviewRequest(token, body string) *http.Request {
 	return request
 }
 
+// Covers: AT-PP-015 的操作者面那一半（序列）——复核人与他的授予集都取认证出的身份与信封里的授予，载荷里自报复核人、租户、
+// 授予集，或带「免复核声明下的系统代写」那一格，一律按未知键答坏报文：代写只有来源喂价置得上。
 func TestSeriesReviewTakesTheReviewerFromTheAuthenticatedOperator(t *testing.T) {
-	intake, err := pricinghttp.NewOperatorRegistryIntake(registryAuthenticator{})
+	intake, err := pricinghttp.NewOperatorRegistryIntake(registryAuthenticator{grants: []string{"REGISTRY_CONFIGURATION_WRITE"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,10 +54,15 @@ func TestSeriesReviewTakesTheReviewerFromTheAuthenticatedOperator(t *testing.T) 
 		command.SeriesID != "SYN-SERIES-01" || command.ReviewedAt.IsZero() {
 		t.Fatalf("command = %+v", command)
 	}
+	if len(command.ReviewerGrants) != 1 || command.ReviewerGrants[0].String() != "REGISTRY_CONFIGURATION_WRITE" {
+		t.Fatalf("授予集没随信封来：%v", command.ReviewerGrants)
+	}
 	for name, body := range map[string]string{
-		"reviewer smuggled": `{"seriesId": "SYN-SERIES-01", "reviewer": "someone-else"}`,
-		"tenant smuggled":   `{"seriesId": "SYN-SERIES-01", "tenant": "SYN-TENANT-02"}`,
-		"instant garbled":   `{"seriesId": "SYN-SERIES-01", "reviewedAt": "yesterday"}`,
+		"reviewer smuggled":   `{"seriesId": "SYN-SERIES-01", "reviewer": "someone-else"}`,
+		"tenant smuggled":     `{"seriesId": "SYN-SERIES-01", "tenant": "SYN-TENANT-02"}`,
+		"grants smuggled":     `{"seriesId": "SYN-SERIES-01", "reviewerGrants": ["SYN-GRANT-REFERENCE-REVIEW"]}`,
+		"delegation smuggled": `{"seriesId": "SYN-SERIES-01", "systemDelegatedUnderExemption": true}`,
+		"instant garbled":     `{"seriesId": "SYN-SERIES-01", "reviewedAt": "yesterday"}`,
 	} {
 		if _, err := intake.IntakeReferenceSeriesReview(context.Background(), reviewRequest("t", body)); !errors.Is(err, pricinghttp.ErrMalformedRequest) {
 			t.Fatalf("%s: err = %v, want ErrMalformedRequest", name, err)

@@ -80,6 +80,14 @@ func TestPricingWritesRefuseToRunOutsideATransaction(t *testing.T) {
 		t.Errorf("无事务记录目录复核应返回 ErrTransactionRequired，实得：%v", err)
 	}
 
+	dutyRules, err := adapter.NewReferenceReviewDutyRules(db)
+	if err != nil {
+		t.Fatalf("构造参考复核职责规则册：%v", err)
+	}
+	if _, err := dutyRules.SaveReferenceReviewDutyRule(ctx, domain.ReferenceReviewDutyRule{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务登记参考复核职责规则应返回 ErrTransactionRequired，实得：%v", err)
+	}
+
 	drafts, err := adapter.NewPriceCardDrafts(db)
 	if err != nil {
 		t.Fatalf("构造草稿册：%v", err)

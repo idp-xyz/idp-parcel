@@ -67,7 +67,8 @@ func init() {
 				{Pattern: "/pricing-reference-series-registrations", Handler: pricinghttp.NewRegisterReferenceSeriesEndpoint(channels.operatorRegistries.pricing, wiring.referenceSeriesRegistration)},
 				// 序列版本复核（ADR-0099 决定二，票 pricing-reference-series-operations/04）：治理
 				// 动作也是命令行，挂操作者渠道的登记册 Intake。**这一口比两个登记口更不能松**
-				// ——复核责任方是四眼门的一半，任何采信自报身份的 Intake 都等于把那道门拆了。
+				// ——租户的参考复核职责规则比的就是复核责任方与他在信封里的授予（ADR-0262 决定一），
+				// 任何采信自报身份的 Intake 都等于把那道门拆了。
 				{Pattern: "/pricing-reference-series-reviews", Handler: pricinghttp.NewReviewReferenceSeriesEndpoint(channels.operatorRegistries.pricing, wiring.referenceSeriesReview)},
 				// 序列登记前预览（票 pricing-reference-series-operations/08，ADR-0101 决定四）：不写库，
 				// 但拟登本体要信封里的租户与登记责任方才立得住，等的与登记口是同一样东西，所以同挂

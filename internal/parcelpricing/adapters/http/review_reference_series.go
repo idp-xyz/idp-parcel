@@ -15,8 +15,8 @@ import (
 // `PAR-INT-01`。
 //
 // 这一口是接口，是因为**复核责任方的身份来自 ADR-0100 的 `OperatorEnvelope` 而不是载荷**
-// ——后端不采信自报身份。复核尤其松不得：复核责任方是四眼门的一半（领域拒绝复核责任方
-// 等于登记责任方），从请求内容里铸一个出来就等于把那道门拆了。
+// ——后端不采信自报身份。复核尤其松不得：租户的参考复核职责规则比的就是复核责任方与他在信封
+// 里持有的授予（ADR-0262 决定一），从请求内容里铸一个出来就等于把那道门拆了。
 //
 // 两条理由的后果相同（都不从载荷里取身份），但**接手的人据以行动的东西相反**：旧那条说
 // 「等契约」，这条说「去接信封」。载荷形状按 ADR-0101 决定八自裁——复核是低频、结构简单
@@ -34,7 +34,7 @@ type ReferenceSeriesReviewer interface {
 // （POST /pricing-reference-series-reviews；ADR-0085 决定一、ADR-0099 决定二）。
 //
 // 复核不与登记合成一个口：它是往复核册上追加一条治理动作，与登记一版取值是两种命令、
-// 两套答案代数，而**四眼门只在复核那一侧**。合成一口之后装配点可以只配一半而编译仍绿。
+// 两套答案代数，而**复核职责规则只在复核那一侧**。合成一口之后装配点可以只配一半而编译仍绿。
 //
 // 路径不带 `-registrations` 后缀而叫 `-reviews`：本上下文这一格的动词是复核，答案代数说的
 // 也是复核（`已追加`/`需换人复核`/`版本不在册`）；叫成登记会与序列登记那一族的答案混为一谈。
@@ -59,8 +59,8 @@ func NewReviewReferenceSeriesEndpoint(intake ReferenceSeriesReviewIntake, review
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
-		// `已追加`是新增一行，取 201；其余（幂等重放、冲突、版本不在册、需换人复核、
-		// 未受理）都是形成了的答案，取 200——状态码不替 outcome 说话。
+		// `已追加`是新增一行，取 201；其余（幂等重放、冲突、版本不在册、需换人复核、未配置、
+		// 复核者不合格、未受理）都是形成了的答案，取 200——状态码不替 outcome 说话。
 		writeRegistrationAnswer(response, outcome.String(), outcome == application.SeriesReviewRecorded)
 	})
 }

@@ -222,15 +222,16 @@ func TestCatalogueSnapshotRoundTripsAndSelfChecks(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0109 Decision 二「复核与在用的门照 ADR-0099 给序列立的那一套」——复核责任方不得是登记责任方；
-// 在用版本是该时刻之前复核通过的最新版本，退回不进在用，没有候选不给答案。
+// Covers: ADR-0109 Decision 二「复核与在用的门照 ADR-0099 给序列立的那一套」——复核门与序列同用租户的参考复核职责规则
+// （逐格见 reference_review_duty_rule_test.go）；在用版本是该时刻之前复核通过的最新版本，退回不进在用，没有候选不给答案。
 func TestCatalogueReviewAndInForceSelectionFollowTheSeriesRules(t *testing.T) {
 	registration := zoneChart(t)
 	reviewedAt := catalogueYearStart.Add(24 * time.Hour)
-	if _, err := domain.NewCatalogueReview(registration, "SYN-CAT-REGISTRAR", reviewedAt, domain.SeriesReviewApproved, "SYN-REVIEW/self"); !errors.Is(err, domain.ErrCatalogueReviewerIsRegistrant) {
-		t.Fatalf("登记责任方自己复核被接受：%v", err)
+	rule := reviewDutyRule(t, "tenant-1", true, "")
+	if _, err := domain.NewCatalogueReview(registration, reviewerSubject(t, "SYN-CAT-REGISTRAR"), rule, reviewedAt, domain.SeriesReviewApproved, "SYN-REVIEW/self"); !errors.Is(err, domain.ErrCatalogueReviewerIsRegistrant) {
+		t.Fatalf("规则要求不同主体时登记责任方自己复核被接受：%v", err)
 	}
-	review, err := domain.NewCatalogueReview(registration, "SYN-CAT-REVIEWER", reviewedAt, domain.SeriesReviewApproved, "SYN-REVIEW/zone-chart-v1")
+	review, err := domain.NewCatalogueReview(registration, reviewerSubject(t, "SYN-CAT-REVIEWER"), rule, reviewedAt, domain.SeriesReviewApproved, "SYN-REVIEW/zone-chart-v1")
 	if err != nil {
 		t.Fatalf("复核立不住：%v", err)
 	}

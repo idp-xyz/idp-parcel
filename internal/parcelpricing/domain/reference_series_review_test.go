@@ -9,8 +9,9 @@ import (
 )
 
 // 本文件证 ADR-0099 决定二与三的领域半边：序列版本复核是追加在版本之旁的独立事实，复核
-// 责任方不得与登记责任方相同，复核不改证据等级；在用版本按（评价形成时刻）从复核记录派生
-// ——该时刻之前复核通过的最新版本，退回与未来的复核都不算，判定确定不留任选。
+// 不改证据等级；在用版本按（评价形成时刻）从复核记录派生——该时刻之前复核通过的最新版本，
+// 退回与未来的复核都不算，判定确定不留任选。复核者须否不同于登记者由租户的参考复核职责规则
+// 说（ADR-0262 决定一），那一半在 reference_review_duty_rule_test.go。
 
 var (
 	reviewMoment      = time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)
@@ -19,7 +20,8 @@ var (
 
 func approvedReview(t *testing.T, registration domain.ReferenceSeriesRegistration) domain.SeriesReview {
 	t.Helper()
-	review, err := domain.NewSeriesReview(registration, "SYN-PRC-SERIES-REVIEWER", reviewMoment, domain.SeriesReviewApproved, "SYN-REVIEW/勾稽公布记录逐期核对")
+	review, err := domain.NewSeriesReview(registration, reviewerSubject(t, "SYN-PRC-SERIES-REVIEWER"),
+		reviewDutyRule(t, "tenant-1", true, ""), reviewMoment, domain.SeriesReviewApproved, "SYN-REVIEW/勾稽公布记录逐期核对")
 	if err != nil {
 		t.Fatalf("构造复核：%v", err)
 	}
@@ -47,35 +49,27 @@ func TestSeriesReviewCarriesItsOwnFacts(t *testing.T) {
 	}
 }
 
-// TestSeriesReviewNeedsASecondPairOfEyes 证复核责任方 ≠ 登记责任方（PAR-SET-11 分列两种
-// 责任的机制落点）：同一个人登记又复核，转录错误没有第二双眼睛能拦。
-func TestSeriesReviewNeedsASecondPairOfEyes(t *testing.T) {
-	registration := fuelSeries(t)
-	_, err := domain.NewSeriesReview(registration, registration.Registrant(), reviewMoment, domain.SeriesReviewApproved, "自己复核自己")
-	if !errors.Is(err, domain.ErrSeriesReviewerIsRegistrant) {
-		t.Fatalf("err = %v，想要 ErrSeriesReviewerIsRegistrant", err)
-	}
-}
-
 // TestSeriesReviewRefusesIncompleteFacts 证缺任一件的复核立不住：没有依据的通过与没有时刻
 // 的退回都指不出「谁在何时凭什么」。结论必须在封闭集内。
 func TestSeriesReviewRefusesIncompleteFacts(t *testing.T) {
 	registration := fuelSeries(t)
+	rule := reviewDutyRule(t, "tenant-1", true, "")
+	reviewer := reviewerSubject(t, "reviewer")
 	cases := map[string]func() (domain.SeriesReview, error){
 		"空复核人": func() (domain.SeriesReview, error) {
-			return domain.NewSeriesReview(registration, " ", reviewMoment, domain.SeriesReviewApproved, "依据")
+			return domain.NewSeriesReview(registration, domain.OperatorSubject{}, rule, reviewMoment, domain.SeriesReviewApproved, "依据")
 		},
 		"零时刻": func() (domain.SeriesReview, error) {
-			return domain.NewSeriesReview(registration, "reviewer", time.Time{}, domain.SeriesReviewApproved, "依据")
+			return domain.NewSeriesReview(registration, reviewer, rule, time.Time{}, domain.SeriesReviewApproved, "依据")
 		},
 		"空依据": func() (domain.SeriesReview, error) {
-			return domain.NewSeriesReview(registration, "reviewer", reviewMoment, domain.SeriesReviewReturned, "")
+			return domain.NewSeriesReview(registration, reviewer, rule, reviewMoment, domain.SeriesReviewReturned, "")
 		},
 		"未知结论": func() (domain.SeriesReview, error) {
-			return domain.NewSeriesReview(registration, "reviewer", reviewMoment, domain.SeriesReviewDecision("MAYBE"), "依据")
+			return domain.NewSeriesReview(registration, reviewer, rule, reviewMoment, domain.SeriesReviewDecision("MAYBE"), "依据")
 		},
 		"空登记": func() (domain.SeriesReview, error) {
-			return domain.NewSeriesReview(domain.ReferenceSeriesRegistration{}, "reviewer", reviewMoment, domain.SeriesReviewApproved, "依据")
+			return domain.NewSeriesReview(domain.ReferenceSeriesRegistration{}, reviewer, rule, reviewMoment, domain.SeriesReviewApproved, "依据")
 		},
 	}
 	for label, build := range cases {

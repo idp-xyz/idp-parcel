@@ -39,7 +39,7 @@ type ReferenceCatalogueRegister interface {
 }
 
 // ReferenceCatalogueVersionLoader 按（租户 + 目录标识 + 版本号）读回一版已登记目录（整版重验）。复核用例
-// 需要它：四眼门要拿到登记责任方。
+// 需要它：参考复核职责规则要比登记责任方。
 type ReferenceCatalogueVersionLoader interface {
 	LoadVersion(ctx context.Context, tenant domain.TenantID, catalogueID, catalogueVersion string) (domain.ReferenceCatalogueRegistration, bool, error)
 }

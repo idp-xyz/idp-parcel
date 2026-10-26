@@ -40,8 +40,8 @@ const maxRegistrationBytes = 1 << 20
 type OperatorIdentity struct {
 	Tenant   domain.TenantID
 	Operator string
-	// Grants 是铸造那一刻信封里持有的授予名。只有批准口用它——批准门拿它比审批职责规则要求的那一格（票
-	// price-card-import/04）；其余各口只认提交操作者。
+	// Grants 是铸造那一刻信封里持有的授予名。价卡草稿批准口与序列、目录两个复核口用它——批准门拿它比价卡发布审批职责
+	// 规则要求的那一格，复核门拿它比参考复核职责规则要求的那一格（ADR-0262 决定一）；其余各口只认提交操作者。
 	Grants []string
 }
 
@@ -69,6 +69,7 @@ var (
 	_ ReferenceSeriesPreviewIntake         = (*OperatorRegistryIntake)(nil)
 	_ ReferenceSeriesReviewIntake          = (*OperatorRegistryIntake)(nil)
 	_ ReferenceCatalogueRegistrationIntake = (*OperatorRegistryIntake)(nil)
+	_ ReferenceCatalogueReviewIntake       = (*OperatorRegistryIntake)(nil)
 )
 
 func NewOperatorRegistryIntake(authenticator OperatorRegistryAuthenticator) (*OperatorRegistryIntake, error) {
@@ -136,8 +137,8 @@ func (intake *OperatorRegistryIntake) IntakeReferenceCatalogueRegistration(ctx c
 	return payload.RegistrationCommand(operator.Tenant, operator.Operator)
 }
 
-// IntakeReferenceSeriesReview 译序列复核。复核人取认证出的提交操作者：四眼门（复核人不是登记责任方）由用例与领域判，
-// 两边比的都是认证过的身份，不是自报的名字。
+// IntakeReferenceSeriesReview 译序列复核。复核人与他的授予集都取认证出的提交操作者：租户的参考复核职责规则（复核人须否
+// 不是登记责任方、须持哪一格授予）由用例与领域判，比的都是认证过的身份与信封里的授予，不是自报的名字。
 func (intake *OperatorRegistryIntake) IntakeReferenceSeriesReview(ctx context.Context, request *http.Request) (application.ReviewReferenceSeriesCommand, error) {
 	operator, body, err := intake.authenticate(ctx, request)
 	if err != nil {
@@ -147,7 +148,24 @@ func (intake *OperatorRegistryIntake) IntakeReferenceSeriesReview(ctx context.Co
 	if err != nil {
 		return application.ReviewReferenceSeriesCommand{}, err
 	}
-	return payload.Command(operator.Tenant, operator.Operator)
+	grants, err := operatorGrants(operator.Grants)
+	if err != nil {
+		return application.ReviewReferenceSeriesCommand{}, err
+	}
+	return payload.Command(operator.Tenant, operator.Operator, grants)
+}
+
+// operatorGrants 把信封里的授予名译成领域的授予格。空名不是业务答案，是认证适配器交错了——原样报错，不当未持有处理。
+func operatorGrants(names []string) ([]domain.OperatorGrant, error) {
+	grants := make([]domain.OperatorGrant, 0, len(names))
+	for _, name := range names {
+		grant, err := domain.NewOperatorGrant(name)
+		if err != nil {
+			return nil, fmt.Errorf("pricing http: operator grant %q: %w", name, err)
+		}
+		grants = append(grants, grant)
+	}
+	return grants, nil
 }
 
 func (intake *OperatorRegistryIntake) authenticate(ctx context.Context, request *http.Request) (OperatorIdentity, io.Reader, error) {
@@ -162,7 +180,8 @@ func (intake *OperatorRegistryIntake) authenticate(ctx context.Context, request 
 }
 
 // ReferenceSeriesReviewPayload 是序列复核口的在线载荷：受控批量口复核文档去掉租户与复核人两格——两者都从认证结果来，
-// 载荷里出现即按未知键拒。reviewedAt 可缺：缺时由用例取时钟当下（同受控批量口）。
+// 载荷里出现即按未知键拒；授予集与「免复核声明下的系统代写」一格同样不在载荷里，出现即拒。reviewedAt 可缺：缺时由用例
+// 取时钟当下（同受控批量口）。
 type ReferenceSeriesReviewPayload struct {
 	SeriesID      string `json:"seriesId"`
 	SeriesVersion string `json:"seriesVersion"`
@@ -185,18 +204,19 @@ func DecodeReferenceSeriesReviewPayload(body io.Reader) (ReferenceSeriesReviewPa
 	return payload, nil
 }
 
-// Command 只做形状翻译（时刻按 RFC 3339 解）；四件齐不齐、结论在不在封闭集、四眼门都留给用例与领域判，同受控批量口。
-func (payload ReferenceSeriesReviewPayload) Command(tenant domain.TenantID, reviewer string) (application.ReviewReferenceSeriesCommand, error) {
+// Command 只做形状翻译（时刻按 RFC 3339 解）；四件齐不齐、结论在不在封闭集、复核职责规则都留给用例与领域判，同受控批量口。
+func (payload ReferenceSeriesReviewPayload) Command(tenant domain.TenantID, reviewer string, grants []domain.OperatorGrant) (application.ReviewReferenceSeriesCommand, error) {
 	if tenant.String() == "" || reviewer == "" {
 		return application.ReviewReferenceSeriesCommand{}, ErrOperatorIdentityMissing
 	}
 	command := application.ReviewReferenceSeriesCommand{
-		Tenant:        tenant,
-		SeriesID:      payload.SeriesID,
-		SeriesVersion: payload.SeriesVersion,
-		Reviewer:      reviewer,
-		Decision:      domain.SeriesReviewDecision(payload.Decision),
-		Basis:         payload.Basis,
+		Tenant:         tenant,
+		SeriesID:       payload.SeriesID,
+		SeriesVersion:  payload.SeriesVersion,
+		Reviewer:       reviewer,
+		ReviewerGrants: grants,
+		Decision:       domain.SeriesReviewDecision(payload.Decision),
+		Basis:          payload.Basis,
 	}
 	if payload.ReviewedAt != "" {
 		reviewedAt, err := time.Parse(time.RFC3339, payload.ReviewedAt)

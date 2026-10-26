@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -33,10 +34,14 @@ func (clock *steppingClock) Now() time.Time {
 }
 
 func bindingDocumentFor(seriesID, locator string, exemption domain.ReviewExemption) []byte {
+	return bindingDocumentWithRegistrant(seriesID, locator, exemption, "SYN-PRC-SERIES-REGISTRAR")
+}
+
+func bindingDocumentWithRegistrant(seriesID, locator string, exemption domain.ReviewExemption, registrant string) []byte {
 	return []byte(fmt.Sprintf(`{"tenant":"tenant-1","seriesId":"%s","bindingVersion":"b1","connectorKind":"FILE",
 		"sourceIdentifier":"SYN-SOURCE/%s","sourceLocator":"%s","seriesKind":"EXCHANGE_RATE",
 		"quoteBasis":{"policyId":"SYN-PRC-FX-POLICY","policyVersion":"v1","fingerprint":"sha256:syn-fx-policy"},
-		"registrant":"SYN-PRC-SERIES-REGISTRAR","reviewExemption":"%s"}`, seriesID, strings.ToLower(seriesID), locator, exemption))
+		"registrant":"%s","reviewExemption":"%s"}`, seriesID, strings.ToLower(seriesID), locator, registrant, exemption))
 }
 
 func publication(seriesID, publishedOn, value string) string {
@@ -207,5 +212,108 @@ func TestFeedRoundTripsThroughPostgres(t *testing.T) {
 	}
 	if len(observations) != 3 || observations[2].Stage != ports.SourceFeedStageTranscribe || countRows("reference_series_version", "SYN-PRC-USD-CNY") != 2 {
 		t.Fatalf("顺序倒置：observations=%+v", observations)
+	}
+}
+
+// Covers: AT-PP-016 真库——租户对一个来源声明免人工复核，连接器登记一版后代写复核：租户没有登记参考复核职责规则，代写照常
+// 落复核行、那一版自复核时刻起在用；租户随后登一条要求某一格授予的规则，代写仍照落——规则管的是人工复核，不管这一路。
+// 另一个来源的绑定把登记责任方填成了连接器身份，代写答 NEEDS_ANOTHER_REVIEWER、不落复核行、版本照登但不在用。
+func TestTheExemptionReviewIgnoresTheTenantReviewDutyRuleAgainstARealDatabase(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	ctx := t.Context()
+	root := t.TempDir()
+	wired, err := assemble(db, root, &steppingClock{now: roundTripMoment}, nil)
+	if err != nil {
+		t.Fatalf("装配：%v", err)
+	}
+	run := func(input executeInput) (string, int) {
+		return execute(ctx, input, wired.feed, wired.bindings, db.Transactor())
+	}
+	feed := func(seriesID string) (string, int) {
+		return run(executeInput{kind: kindFeed, tenant: "tenant-1", seriesID: seriesID})
+	}
+	countRows := func(query string, args ...any) int {
+		var count int
+		if err := pool.QueryRow(ctx, query, args...).Scan(&count); err != nil {
+			t.Fatalf("数行：%v", err)
+		}
+		return count
+	}
+	reviewRows := func(seriesID string) int {
+		return countRows(`SELECT count(*) FROM parcel_pricing.reference_series_review WHERE tenant_id = 'tenant-1' AND series_id = $1`, seriesID)
+	}
+	tenant, err := domain.NewTenantID("tenant-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reviews, err := adapter.NewReferenceSeriesReviews(db)
+	if err != nil {
+		t.Fatalf("构造复核册：%v", err)
+	}
+	inForce := func(seriesID string) bool {
+		_, outcome, err := reviews.ResolveInForce(ctx, tenant, domain.ReferenceSeriesExchangeRate, seriesID, roundTripMoment.Add(time.Hour))
+		if err != nil {
+			t.Fatalf("在用解析：%v", err)
+		}
+		return outcome == ports.SeriesVersionInForce
+	}
+
+	if n := countRows(`SELECT count(*) FROM parcel_pricing.reference_review_duty_rule`); n != 0 {
+		t.Fatalf("出厂规则册有 %d 行", n)
+	}
+	if _, code := run(executeInput{kind: kindBinding, raw: bindingDocumentFor("SYN-PRC-USD-CNY", "rates/usd-cny/latest.json", domain.ReviewExemptionGranted)}); code != exitRegistered {
+		t.Fatalf("登绑定 code=%d", code)
+	}
+	writeControlled(t, root, "rates/usd-cny/latest.json", publication("SYN-PRC-USD-CNY", "2026-09-04", "7.1234"))
+	if message, code := feed("SYN-PRC-USD-CNY"); code != exitRegistered || !strings.Contains(message, "review=RECORDED") {
+		t.Fatalf("规则未登记时代写复核：%q %d", message, code)
+	}
+	if reviewRows("SYN-PRC-USD-CNY") != 1 || !inForce("SYN-PRC-USD-CNY") {
+		t.Fatal("规则未登记时代写复核没落行或没进在用")
+	}
+
+	rules, err := adapter.NewReferenceReviewDutyRules(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	grant, err := domain.NewOperatorGrant("SYN-GRANT-REFERENCE-REVIEW")
+	if err != nil {
+		t.Fatal(err)
+	}
+	strict, err := domain.NewReferenceReviewDutyRule(tenant, true, grant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
+		_, err := rules.SaveReferenceReviewDutyRule(txCtx, strict)
+		return err
+	}); err != nil {
+		t.Fatalf("登规则：%v", err)
+	}
+	writeControlled(t, root, "rates/usd-cny/latest.json", publication("SYN-PRC-USD-CNY", "2026-09-05", "7.13"))
+	if message, code := feed("SYN-PRC-USD-CNY"); code != exitRegistered || !strings.Contains(message, "review=RECORDED") {
+		t.Fatalf("要求授予的规则在册时代写复核：%q %d", message, code)
+	}
+	if reviewRows("SYN-PRC-USD-CNY") != 2 {
+		t.Fatal("要求授予的规则挡住了代写复核")
+	}
+
+	if _, code := run(executeInput{kind: kindBinding, raw: bindingDocumentWithRegistrant("SYN-PRC-EUR-CNY", "rates/eur-cny/latest.json",
+		domain.ReviewExemptionGranted, "connector:FILE")}); code != exitRegistered {
+		t.Fatalf("登自审绑定 code=%d", code)
+	}
+	writeControlled(t, root, "rates/eur-cny/latest.json", publication("SYN-PRC-EUR-CNY", "2026-09-04", "8.3"))
+	if message, code := feed("SYN-PRC-EUR-CNY"); code != exitGovernance || !strings.Contains(message, "review=NEEDS_ANOTHER_REVIEWER") {
+		t.Fatalf("登记者等于连接器身份：%q %d", message, code)
+	}
+	if reviewRows("SYN-PRC-EUR-CNY") != 0 || inForce("SYN-PRC-EUR-CNY") {
+		t.Fatal("自审的代写复核落了行或进了在用")
+	}
+	if n := countRows(`SELECT count(*) FROM parcel_pricing.reference_series_version WHERE tenant_id = 'tenant-1' AND series_id = 'SYN-PRC-EUR-CNY'`); n != 1 {
+		t.Fatalf("自审那一份的版本该照登：%d", n)
 	}
 }

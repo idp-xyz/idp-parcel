@@ -245,6 +245,9 @@ func (fixture *feedFixture) feed(t *testing.T) application.FeedReferenceSeriesRe
 // TestFeedRegistersAndWritesTheExemptionReview 证绿路径：抓取按绑定定位符、本体交存放端口、登记
 // 走同一登记用例（引用版本 = 公布日期、引用指纹 = 工件摘要、整版 VERIFIABLE）；声明免复核时复核由
 // 连接器身份代写、结论通过、依据指回绑定版本、时刻取时钟当下；全程零可观察记录。
+//
+// Covers: AT-PP-016 的编排半边（前一半）——代写复核不读参考复核职责规则：喂价的依赖里没有规则读口，
+// 规则无从登记也就无从答未配置，复核照常落。
 func TestFeedRegistersAndWritesTheExemptionReview(t *testing.T) {
 	fixture := newFeedFixture(t, domain.ReviewExemptionGranted)
 
@@ -427,9 +430,11 @@ func TestFeedUnconfiguredStorageStillRegistersVerifiable(t *testing.T) {
 	}
 }
 
-// TestFeedReviewRefusalIsObservedButTheRegistrationStands 证四眼门在结构上仍关得住：租户把登记责任方
-// 填成连接器身份，复核用例拒（NEEDS_ANOTHER_REVIEWER）；版本照登、答案原样交回、一条 REVIEW 站的
+// TestFeedReviewRefusalIsObservedButTheRegistrationStands 证代写那一道写死的比较仍关得住：租户把登记
+// 责任方填成连接器身份，复核用例拒（NEEDS_ANOTHER_REVIEWER）；版本照登、答案原样交回、一条 REVIEW 站的
 // 可观察记录。
+//
+// Covers: AT-PP-016 的编排半边（后一半）——登记者等于连接器身份的那一份答须换人、不落复核行。
 func TestFeedReviewRefusalIsObservedButTheRegistrationStands(t *testing.T) {
 	fixture := newFeedFixture(t, domain.ReviewExemptionGranted)
 	fixture.binding = feedBinding(t, domain.ReviewExemptionGranted, "connector:FILE")
@@ -441,7 +446,7 @@ func TestFeedReviewRefusalIsObservedButTheRegistrationStands(t *testing.T) {
 		t.Fatalf("outcome = %s requested=%v review = %s", result.Outcome, result.ReviewRequested, result.Review)
 	}
 	if len(fixture.reviews.recorded) != 0 {
-		t.Fatal("四眼门没关住")
+		t.Fatal("代写复核那道比较没关住")
 	}
 	if len(fixture.observations) != 1 || fixture.observations[0].Stage != ports.SourceFeedStageReview ||
 		fixture.observations[0].Answer != "NEEDS_ANOTHER_REVIEWER" {

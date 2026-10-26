@@ -82,7 +82,7 @@ func TestExecuteTranslatesFeedAnswersIntoExitCodes(t *testing.T) {
 	}{
 		"登了未声明免复核": {result: registered, code: exitRegistered, text: "REGISTERED SYN-PRC-USD-CNY@2026-09-04"},
 		"登了且代写复核":  {result: reviewed, code: exitRegistered, text: "review=RECORDED"},
-		"登了但四眼门拒":  {result: refused, code: exitGovernance, text: "review=NEEDS_ANOTHER_REVIEWER"},
+		"登了但代写被拒":  {result: refused, code: exitGovernance, text: "review=NEEDS_ANOTHER_REVIEWER"},
 		"幂等重放":     {result: application.FeedReferenceSeriesResult{Outcome: application.FeedVersionReplayed, Reference: reference(t)}, code: exitRegistered, text: "REPLAYED"},
 		"无绑定":      {result: application.FeedReferenceSeriesResult{Outcome: application.FeedBindingUnknown}, code: exitGovernance, text: "BINDING_UNKNOWN"},
 		"连接器未装配":   {result: application.FeedReferenceSeriesResult{Outcome: application.FeedConnectorUnavailable}, code: exitGovernance, text: "CONNECTOR_UNAVAILABLE"},

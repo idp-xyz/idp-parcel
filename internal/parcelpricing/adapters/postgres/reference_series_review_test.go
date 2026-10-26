@@ -61,7 +61,8 @@ func newReviewFixture(t *testing.T) reviewFixture {
 
 func seriesReview(t *testing.T, registration domain.ReferenceSeriesRegistration, reviewer string, at time.Time, decision domain.SeriesReviewDecision) domain.SeriesReview {
 	t.Helper()
-	review, err := domain.NewSeriesReview(registration, reviewer, at, decision, "SYN-REVIEW/逐期核对公布记录")
+	review, err := domain.NewSeriesReview(registration, reviewSubject(t, reviewer), reviewRule(t, registration.Tenant().String()),
+		at, decision, "SYN-REVIEW/逐期核对公布记录")
 	if err != nil {
 		t.Fatalf("构造复核：%v", err)
 	}
@@ -207,7 +208,8 @@ func TestReviewRecordAlgebra(t *testing.T) {
 	if outcome := recordReview(t, reviews, transactor, ctx, approved); outcome != ports.ReferenceSeriesReviewAlreadyRecorded {
 		t.Fatalf("重记 outcome = %d，想要 AlreadyRecorded", outcome)
 	}
-	impostor, err := domain.NewSeriesReview(registration, "SYN-PRC-SERIES-REVIEWER", reviewAtOne, domain.SeriesReviewReturned, "同一刻改口")
+	impostor, err := domain.NewSeriesReview(registration, reviewSubject(t, "SYN-PRC-SERIES-REVIEWER"), reviewRule(t, registration.Tenant().String()),
+		reviewAtOne, domain.SeriesReviewReturned, "同一刻改口")
 	if err != nil {
 		t.Fatalf("构造冒名复核：%v", err)
 	}

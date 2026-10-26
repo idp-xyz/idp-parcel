@@ -337,7 +337,7 @@ func describeFeed(result application.FeedReferenceSeriesResult) string {
 }
 
 // feedExitCode：来源失败与治理答案分两个码——调度方对「来源那边坏了」与「要人裁」的处置不同。
-// 登了但免复核代写的复核被拒（四眼门等）归治理：版本在册而没进在用，要人看。
+// 登了但免复核代写的复核被拒（登记责任方就是连接器身份等）归治理：版本在册而没进在用，要人看。
 func feedExitCode(result application.FeedReferenceSeriesResult) int {
 	switch result.Outcome {
 	case application.FeedVersionRegistered:

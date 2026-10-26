@@ -10,8 +10,9 @@ var (
 	// ErrInvalidSeriesReview 表示复核记录立不住：指不到一版已登记序列，或复核责任方、
 	// 时刻、结论、依据四件有缺，或结论不在封闭集内。
 	ErrInvalidSeriesReview = errors.New("parcel pricing: invalid reference series review")
-	// ErrSeriesReviewerIsRegistrant 表示复核责任方就是登记责任方。PAR-SET-11 把两种责任
-	// 分列，机制上的含义就是第二双眼睛：同一个人登记又复核，抄错的数没人能拦。
+	// ErrSeriesReviewerIsRegistrant 表示复核责任方就是登记责任方，而这一次复核要求两者不同：人工复核时是租户的参考复核
+	// 职责规则这样要求（ADR-0262 决定一），免复核声明下的系统代写则一律这样要求——防租户把登记责任方填成连接器身份、
+	// 自审自批。恢复动作是换一个人来，不是改字段。
 	ErrSeriesReviewerIsRegistrant = errors.New("parcel pricing: series review needs a reviewer other than the registrant")
 )
 
@@ -48,21 +49,46 @@ type SeriesReview struct {
 	basis      string
 }
 
-// NewSeriesReview 以被复核的登记为入参而不是以版本引用为入参：四眼门要拿到登记责任方，
-// 做成这样门才在结构上关得住——调用方拿不到登记就造不出复核。
+// NewSeriesReview 立一条人工复核：复核者是操作者主体（引用加授予集），门由租户的参考复核职责规则说（ADR-0262 决定一）。
+// 以被复核的登记为入参而不是以版本引用为入参：规则要比的是登记责任方，调用方拿不到登记就造不出复核。规则缺席不在这里答
+// ——那是`未配置`，由读规则的一方如实交回；这里收到的必须是一条成立的、本租户的规则。
 func NewSeriesReview(
 	registration ReferenceSeriesRegistration,
-	reviewer string,
+	reviewer OperatorSubject,
+	rule ReferenceReviewDutyRule,
 	reviewedAt time.Time,
 	decision SeriesReviewDecision,
 	basis string,
 ) (SeriesReview, error) {
-	if !registration.valid() || !trimmed(reviewer) || reviewedAt.IsZero() || !decision.valid() || !trimmed(basis) {
+	if !registration.valid() || !reviewer.valid() || reviewedAt.IsZero() || !decision.valid() || !trimmed(basis) {
 		return SeriesReview{}, ErrInvalidSeriesReview
 	}
-	if reviewer == registration.registrant {
+	if err := rule.admit(registration.tenant, registration.registrant, reviewer, ErrSeriesReviewerIsRegistrant); err != nil {
+		return SeriesReview{}, err
+	}
+	return newSeriesReview(registration, reviewer.reference, reviewedAt, decision, basis), nil
+}
+
+// NewExemptionDelegatedSeriesReview 立一条免复核声明下的系统代写复核：租户对该来源的免人工复核声明本身就是它对这一来源的
+// 复核决定，所以不收参考复核职责规则；写死的不同主体比较照做，防租户把登记责任方填成连接器身份、自审自批（ADR-0262
+// 决定一，越权风险点 5）。只有来源喂价编排在免复核分支上走这里。
+func NewExemptionDelegatedSeriesReview(
+	registration ReferenceSeriesRegistration,
+	connectorIdentity string,
+	reviewedAt time.Time,
+	decision SeriesReviewDecision,
+	basis string,
+) (SeriesReview, error) {
+	if !registration.valid() || !trimmed(connectorIdentity) || reviewedAt.IsZero() || !decision.valid() || !trimmed(basis) {
+		return SeriesReview{}, ErrInvalidSeriesReview
+	}
+	if connectorIdentity == registration.registrant {
 		return SeriesReview{}, ErrSeriesReviewerIsRegistrant
 	}
+	return newSeriesReview(registration, connectorIdentity, reviewedAt, decision, basis), nil
+}
+
+func newSeriesReview(registration ReferenceSeriesRegistration, reviewer string, reviewedAt time.Time, decision SeriesReviewDecision, basis string) SeriesReview {
 	return SeriesReview{
 		tenant:     registration.tenant,
 		reference:  registration.reference,
@@ -70,7 +96,7 @@ func NewSeriesReview(
 		reviewedAt: reviewedAt.UTC(),
 		decision:   decision,
 		basis:      basis,
-	}, nil
+	}
 }
 
 func (review SeriesReview) Tenant() TenantID               { return review.tenant }

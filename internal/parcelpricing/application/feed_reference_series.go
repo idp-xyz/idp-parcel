@@ -103,8 +103,8 @@ type FeedReferenceSeriesDeps struct {
 }
 
 // FeedReferenceSeriesHandler 编排来源喂价（ADR-0099 决定六）：抓取 → 存放本体 → 转录 → 走同一
-// 登记用例 → 免复核时由系统代写复核。它自己不判任何领域规则：整版重述在领域，四眼门在复核用例，
-// 冲突判定在登记册；这里只做受理、接线与答案翻译。
+// 登记用例 → 免复核时由系统代写复核。它自己不判任何领域规则：整版重述在领域，代写复核的那道比较
+// 在复核用例，冲突判定在登记册；这里只做受理、接线与答案翻译。
 type FeedReferenceSeriesHandler struct {
 	deps      FeedReferenceSeriesDeps
 	registrar *RegisterReferenceSeriesHandler
@@ -112,7 +112,8 @@ type FeedReferenceSeriesHandler struct {
 }
 
 // NewFeedReferenceSeriesHandler 在内部组装登记用例与复核用例——连接器是登记责任方的转录代理，
-// 不是第二种登记，所以它登记与复核走的是同两条路。
+// 不是第二种登记，所以它登记与复核走的是同两条路。复核用例不接参考复核职责规则读口：这里只走
+// 系统代写那一格，规则不在它的判据里。
 func NewFeedReferenceSeriesHandler(deps FeedReferenceSeriesDeps) *FeedReferenceSeriesHandler {
 	return &FeedReferenceSeriesHandler{
 		deps:      deps,
@@ -212,15 +213,18 @@ func (handler *FeedReferenceSeriesHandler) Handle(
 		return result, nil
 	}
 	// 免复核声明：复核由连接器身份代写、依据为该绑定的版本（ADR-0099 决定六）。时刻留零让复核
-	// 用例取时钟当下；四眼门在那里——租户把登记责任方填成连接器身份，这里会如实拿到拒。
+	// 用例取时钟当下。带「免复核声明下的系统代写」一格：租户对这一来源的免人工复核声明本身就是它
+	// 的复核决定，不读参考复核职责规则，规则未登记也不答未配置；写死的不同主体比较照做——租户把
+	// 登记责任方填成连接器身份，这里会如实拿到拒（ADR-0262 决定一）。
 	result.ReviewRequested = true
 	review, err := handler.reviewer.Handle(ctx, ReviewReferenceSeriesCommand{
-		Tenant:        binding.Tenant(),
-		SeriesID:      registration.Reference().ID(),
-		SeriesVersion: registration.Reference().Version(),
-		Reviewer:      binding.ConnectorIdentity(),
-		Decision:      domain.SeriesReviewApproved,
-		Basis:         binding.ExemptionReviewBasis(),
+		Tenant:                  binding.Tenant(),
+		SeriesID:                registration.Reference().ID(),
+		SeriesVersion:           registration.Reference().Version(),
+		Reviewer:                binding.ConnectorIdentity(),
+		Decision:                domain.SeriesReviewApproved,
+		Basis:                   binding.ExemptionReviewBasis(),
+		delegatedUnderExemption: true,
 	})
 	result.Review = review
 	if err != nil {

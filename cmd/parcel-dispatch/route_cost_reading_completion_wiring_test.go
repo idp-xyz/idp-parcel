@@ -17,6 +17,7 @@ import (
 	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	ppapplication "go.idp.xyz/idp-parcel/internal/parcelpricing/application"
 	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+	ppports "go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
 	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
@@ -171,6 +172,38 @@ func readDemoPricingSeed(t *testing.T, name string) []byte {
 	return raw
 }
 
+// demoReviewDutyRules 照演示种子给演示租户登参考复核职责规则并交回规则册：人工复核按它判，没登即未配置（ADR-0262 决定一）。
+// 同一只库上多次调用是重放，答已在册。
+func demoReviewDutyRules(t *testing.T, db *bentopg.DB) *pppostgres.ReferenceReviewDutyRules {
+	t.Helper()
+	rules, err := pppostgres.NewReferenceReviewDutyRules(db)
+	if err != nil {
+		t.Fatalf("构造参考复核职责规则册：%v", err)
+	}
+	var document struct {
+		Tenant           string
+		DistinctSubjects bool
+		RequiredGrant    *string
+	}
+	decodeSeedDocument(t, readDemoPricingSeed(t, "reference-review-duty-rule.json"), &document)
+	var grant ppdomain.OperatorGrant
+	if document.RequiredGrant != nil {
+		grant = ppValue(t, ppdomain.NewOperatorGrant, *document.RequiredGrant)
+	}
+	rule, err := ppdomain.NewReferenceReviewDutyRule(ppValue(t, ppdomain.NewTenantID, document.Tenant), document.DistinctSubjects, grant)
+	if err != nil {
+		t.Fatalf("演示规则：%v", err)
+	}
+	var saved ppports.ReferenceReviewDutyRuleSaveOutcome
+	if err := db.Transactor().WithinTransaction(t.Context(), func(ctx context.Context) (err error) {
+		saved, err = rules.SaveReferenceReviewDutyRule(ctx, rule)
+		return err
+	}); err != nil || (saved != ppports.ReferenceReviewDutyRuleSaved && saved != ppports.ReferenceReviewDutyRuleAlreadyRegistered) {
+		t.Fatalf("登演示规则：%s err=%v", saved, err)
+	}
+	return rules
+}
+
 // registerDemoZoneCatalogue 照演示种子登分区目录 SYN-CAT-ZONE-CN-SG 及其复核：不复核就不在用（ADR-0109）。
 func registerDemoZoneCatalogue(t *testing.T, db *bentopg.DB) {
 	t.Helper()
@@ -192,7 +225,7 @@ func registerDemoZoneCatalogue(t *testing.T, db *bentopg.DB) {
 	}
 	decodeSeedDocument(t, readDemoPricingSeed(t, "reference-catalogue-zone-cn-sg-review.json"), &review)
 	reviewHandler := ppapplication.NewReviewReferenceCatalogueHandler(ppapplication.ReviewReferenceCatalogueDeps{
-		Versions: catalogues, Reviews: reviews, Clock: systemClock{}, Registered: pricingParameterHandoffForTest(t, db),
+		Versions: catalogues, Reviews: reviews, DutyRules: demoReviewDutyRules(t, db), Clock: systemClock{}, Registered: pricingParameterHandoffForTest(t, db),
 		PricedScopes: pricedScopesForTest(t, db),
 	})
 	var registered ppapplication.RegisterReferenceCatalogueOutcome
@@ -239,7 +272,7 @@ func registerDemoExchangeRateSeries(t *testing.T, db *bentopg.DB) {
 	}
 	decodeSeedDocument(t, readDemoPricingSeed(t, "reference-series-fx-cny-sgd-review.json"), &review)
 	reviewHandler := ppapplication.NewReviewReferenceSeriesHandler(ppapplication.ReviewReferenceSeriesDeps{
-		Versions: versions, Reviews: reviews, Clock: systemClock{}, Registered: pricingParameterHandoffForTest(t, db),
+		Versions: versions, Reviews: reviews, DutyRules: demoReviewDutyRules(t, db), Clock: systemClock{}, Registered: pricingParameterHandoffForTest(t, db),
 		PricedScopes: pricedScopesForTest(t, db),
 	})
 	var registered ppapplication.RegisterReferenceSeriesOutcome

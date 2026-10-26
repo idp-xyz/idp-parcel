@@ -13,7 +13,7 @@ import (
 )
 
 // 判据与两个登记端点同族（见 register_price_card_test.go 文件头）。本口多守一件：
-// 复核的七格答案里有三格是**治理答案**（需换人复核、版本不在册、冲突），它们是形成了的
+// 复核答案里的**治理答案**（需换人复核、未配置、复核者不合格、版本不在册、冲突）是形成了的
 // 答案不是失败，传输层不合并、不改名、不借 4xx 说话。
 
 const reviewTarget = "/pricing-reference-series-reviews"
@@ -96,8 +96,9 @@ func TestReviewReferenceSeriesEndpointMapsMalformedIntakeToBadRequest(t *testing
 	}
 }
 
-// 七格逐字透出。**`需换人复核`与`版本不在册`是治理答案不是调用方错误**：前者的恢复动作是
-// 换一个人来，后者是先去登记，两者都不该被折成 4xx——那会让调用方以为自己请求写错了。
+// 各格逐字透出。**`需换人复核`、`未配置`、`复核者不合格`与`版本不在册`是治理答案不是调用方
+// 错误**：恢复动作分别是换一个人来、租户先登参考复核职责规则、换一个持有授予的人、先去登记，
+// 都不该被折成 4xx——那会让调用方以为自己请求写错了。
 func TestReviewReferenceSeriesEndpointTranscribesAnswersVerbatim(t *testing.T) {
 	cases := []struct {
 		outcome    application.ReviewReferenceSeriesOutcome
@@ -109,6 +110,8 @@ func TestReviewReferenceSeriesEndpointTranscribesAnswersVerbatim(t *testing.T) {
 		{application.SeriesReviewConflict, http.StatusOK, "CONFLICT"},
 		{application.SeriesReviewVersionUnknown, http.StatusOK, "VERSION_UNKNOWN"},
 		{application.SeriesReviewNeedsAnotherReviewer, http.StatusOK, "NEEDS_ANOTHER_REVIEWER"},
+		{application.SeriesReviewNotConfigured, http.StatusOK, "NOT_CONFIGURED"},
+		{application.SeriesReviewReviewerNotQualified, http.StatusOK, "REVIEWER_NOT_QUALIFIED"},
 		{application.SeriesReviewNotAccepted, http.StatusOK, "NOT_ACCEPTED"},
 		{application.SeriesReviewUndecided, http.StatusOK, "UNDECIDED"},
 	}

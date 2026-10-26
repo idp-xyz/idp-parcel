@@ -109,8 +109,9 @@ func registerDemoSellPricing(t *testing.T, db *bentopg.DB) {
 		Tenant, SeriesID, SeriesVersion, Reviewer, Decision, Basis, ReviewedAt string
 	}
 	decodeSeedDocument(t, read("reference-series-fuel-review.json"), &seriesReview)
+	dutyRules := demoReviewDutyRules(t, db)
 	reviewSeries := ppapplication.NewReviewReferenceSeriesHandler(ppapplication.ReviewReferenceSeriesDeps{
-		Versions: series, Reviews: seriesReviews, Clock: systemClock{}, Registered: registered, PricedScopes: cards,
+		Versions: series, Reviews: seriesReviews, DutyRules: dutyRules, Clock: systemClock{}, Registered: registered, PricedScopes: cards,
 	})
 	within("燃油序列复核", func(ctx context.Context) (string, error) {
 		outcome, err := reviewSeries.Handle(ctx, ppapplication.ReviewReferenceSeriesCommand{
@@ -140,7 +141,7 @@ func registerDemoSellPricing(t *testing.T, db *bentopg.DB) {
 	}
 	decodeSeedDocument(t, read("reference-catalogue-zone-cn-sg-review.json"), &catalogueReview)
 	reviewCatalogue := ppapplication.NewReviewReferenceCatalogueHandler(ppapplication.ReviewReferenceCatalogueDeps{
-		Versions: catalogues, Reviews: catalogueReviews, Clock: systemClock{}, Registered: registered,
+		Versions: catalogues, Reviews: catalogueReviews, DutyRules: dutyRules, Clock: systemClock{}, Registered: registered,
 		PricedScopes: cards,
 	})
 	within("分区目录复核", func(ctx context.Context) (string, error) {

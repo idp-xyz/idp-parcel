@@ -21,7 +21,7 @@ const (
 	SourceFeedStageTranscribe
 	// SourceFeedStageRegister：登记册给了非入册答案（同版本内容冲突、形状不同）。
 	SourceFeedStageRegister
-	// SourceFeedStageReview：免复核声明下系统代写复核未被记录（四眼门拒、同键冲突）。
+	// SourceFeedStageReview：免复核声明下系统代写复核未被记录（登记责任方就是连接器身份、同键冲突）。
 	SourceFeedStageReview
 )
 

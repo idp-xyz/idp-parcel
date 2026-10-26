@@ -161,13 +161,9 @@ func (intake *OperatorRegistryIntake) IntakePriceCardDraftApproval(ctx context.C
 	if operator.Tenant.String() == "" || operator.Operator == "" {
 		return application.ApprovePriceCardDraftCommand{}, ErrOperatorIdentityMissing
 	}
-	grants := make([]domain.OperatorGrant, 0, len(operator.Grants))
-	for _, name := range operator.Grants {
-		grant, err := domain.NewOperatorGrant(name)
-		if err != nil {
-			return application.ApprovePriceCardDraftCommand{}, fmt.Errorf("pricing http: operator grant %q: %w", name, err)
-		}
-		grants = append(grants, grant)
+	grants, err := operatorGrants(operator.Grants)
+	if err != nil {
+		return application.ApprovePriceCardDraftCommand{}, err
 	}
 	approver, err := domain.NewOperatorSubject(operator.Operator, grants)
 	if err != nil {
