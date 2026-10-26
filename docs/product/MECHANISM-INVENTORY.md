@@ -7,24 +7,24 @@
 | 上下文 | 生产 | 测试 | 应用编排 | postgres 适配器 | 其中 Outbox 投递 | http 适配器 |
 |---|---|---|---|---|---|---|
 | accessidentity | 39 | 46 | 0 | 6 | 0 | 2 |
-| architecture（非业务） | 0 | 16 | 0 | 0 | 0 | 0 |
+| architecture（非业务） | 0 | 17 | 0 | 0 | 0 | 0 |
 | collectionremittance | 24 | 12 | 4 | 6 | 0 | 3 |
 | customscompliance | 126 | 130 | 24 | 47 | 10 | 18 |
 | networkrouting | 94 | 107 | 11 | 19 | 2 | 10 |
 | nodeoperations | 111 | 119 | 15 | 29 | 4 | 17 |
 | parcelpricing | 147 | 135 | 20 | 20 | 1 | 25 |
-| parcelshipment | 228 | 230 | 23 | 45 | 10 | 22 |
+| parcelshipment | 230 | 231 | 23 | 45 | 10 | 23 |
 | partycommercial | 173 | 189 | 15 | 43 | 1 | 40 |
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 26 | 24 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 233 | 185 | 38 | 69 | 13 | 10 |
 | transportfulfillment | 289 | 304 | 52 | 61 | 16 | 50 |
 | visibilityexception | 121 | 122 | 12 | 31 | 8 | 13 |
-| **合计** | 1634 | 1638 | 219 | 382 | 66 | 214 |
+| **合计** | 1636 | 1640 | 219 | 382 | 66 | 215 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 229、测试 373。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 229、测试 374。
 
-## 跨上下文消费缝：50 组，157 个生产文件
+## 跨上下文消费缝：50 组，158 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -48,7 +48,7 @@
 | parcelpricing | parcelshipment | 1 |
 | parcelpricing | settlementaccounting | 4 |
 | parcelpricing | transportfulfillment | 1 |
-| parcelshipment | accessidentity | 4 |
+| parcelshipment | accessidentity | 5 |
 | parcelshipment | customscompliance | 1 |
 | parcelshipment | networkrouting | 1 |
 | parcelshipment | nodeoperations | 4 |
