@@ -103,8 +103,8 @@ export const chargeDirectionLabels: Record<string, string> = {
 };
 
 /**
- * 资金事实在客户应收作用域上怎么记入入账余额（ADR-0283），给收付款核销页一格。落到几个作用域时要说出未分配停在哪：
- * 收款没核销的那一截哪个作用域都不记，退回的那一截每个作用域都先扣——两者续办相同（把钱核到作用域上），对余额的
+ * 资金事实在客户应收作用域上怎么记入入账余额（ADR-0283），给收付款核销页一格。落到几个作用域时要说出未分配停在哪、
+ * 怎么续办：收款没核销的那一截哪个作用域都不记，退回的那一截每个作用域都先扣——续办都是把钱核到作用域上，对余额的
  * 方向相反，不能用一句话带过。没落到客户应收作用域的事实（映到应付、贷项或金额本体，或还没映射）不是这一支。
  */
 export function scopePostingText(fact: {
@@ -113,11 +113,13 @@ export function scopePostingText(fact: {
   unscopedUnappliedAmount: string;
 }): string {
   if (fact.customerScopes <= 0) return '不入客户应收作用域';
-  if (fact.customerScopes === 1) return '全额记入 1 个作用域';
+  if (fact.customerScopes === 1) return '记入 1 个作用域（核到别处的除外）';
   const head = `${fact.customerScopes} 个作用域按核销记入`;
   if (fact.unscopedUnappliedAmount === '0') return head;
-  if (fact.kind === 'FUNDS_RETURNED') return `${head}；未分配 ${fact.unscopedUnappliedAmount} 每个作用域都先扣`;
-  return `${head}；未分配 ${fact.unscopedUnappliedAmount} 未计入任何作用域`;
+  if (fact.kind === 'FUNDS_RETURNED') {
+    return `${head}；未分配 ${fact.unscopedUnappliedAmount} 每个作用域都先扣，核到钱离开的那个账户上就只扣那一边`;
+  }
+  return `${head}；未分配 ${fact.unscopedUnappliedAmount} 未计入任何作用域，核到哪个作用域那里才记`;
 }
 
 export function labelOf(table: Record<string, string>, code: string): string {

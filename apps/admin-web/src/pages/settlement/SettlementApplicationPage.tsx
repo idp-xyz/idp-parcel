@@ -97,7 +97,7 @@ const columns: ListColumn<ExternalFundsFactRecord>[] = [
     header: '入账余额记入',
     className: 'min-w-48 text-xs',
     // 未分配金额一栏说的是钱还没核到哪里；这一栏说它在客户应收作用域的入账余额上怎么算——落到几个作用域时，
-    // 未分配不在任何一个作用域的全额里，要人先把它核到作用域上，余额才跟着放行（ADR-0283）。
+    // 收款的未分配不计进任何一个作用域、退回的未分配每个作用域都先扣，要人先把它核到作用域上，余额才各归各位（ADR-0283）。
     render: (row) => scopePostingText(row),
   },
   {
