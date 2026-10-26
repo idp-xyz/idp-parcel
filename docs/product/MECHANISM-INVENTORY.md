@@ -10,17 +10,17 @@
 | architecture（非业务） | 0 | 15 | 0 | 0 | 0 | 0 |
 | collectionremittance | 24 | 12 | 4 | 6 | 0 | 3 |
 | customscompliance | 126 | 130 | 24 | 47 | 10 | 18 |
-| networkrouting | 83 | 97 | 9 | 16 | 2 | 7 |
+| networkrouting | 83 | 98 | 9 | 16 | 2 | 7 |
 | nodeoperations | 111 | 119 | 15 | 29 | 4 | 17 |
 | parcelpricing | 142 | 130 | 19 | 19 | 1 | 24 |
-| parcelshipment | 220 | 218 | 23 | 42 | 10 | 21 |
+| parcelshipment | 223 | 220 | 23 | 43 | 10 | 21 |
 | partycommercial | 173 | 189 | 15 | 43 | 1 | 40 |
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 26 | 24 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 230 | 173 | 38 | 68 | 13 | 10 |
 | transportfulfillment | 279 | 281 | 50 | 57 | 15 | 50 |
 | visibilityexception | 115 | 116 | 12 | 31 | 8 | 12 |
-| **合计** | 1590 | 1566 | 214 | 370 | 65 | 208 |
+| **合计** | 1593 | 1569 | 214 | 371 | 65 | 208 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 220、测试 340。
 
@@ -145,7 +145,7 @@
 | （未归类） | 1 |
 | **合计** | 39 |
 
-## 端口：声明 589 个；基线口径缺 38，精确口径缺 2
+## 端口：声明 590 个；基线口径缺 38，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
