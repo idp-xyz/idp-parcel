@@ -4,6 +4,7 @@ import { emptyDeliveryConditionDraft } from './delivery-condition-section';
 import { payloadKey } from './publication-draft-flow';
 import {
   customerContractFieldPaths,
+  customerContractLocalProblems,
   emptyBindingDraft,
   emptyCustomerContractDraft,
   payloadOf,
@@ -24,7 +25,7 @@ function filled(over: Partial<CustomerContractDraft> = {}): CustomerContractDraf
     objectId: 'SYN-CONTRACT-02',
     version: 'v1',
     scope: 'SYN-SCOPE-01',
-    effectiveStartsAt: '2026-10-01T00:00:00Z',
+    effectiveStartsAt: '2026-10-01T00:00',
     customerAccount: 'SYN-ACCOUNT-02',
     rulePackage: 'SYN-RULEPKG-01',
     bindings: [
@@ -70,8 +71,26 @@ test('可缺的格留空即不进载荷：区间上界、指名引用、约定�
   for (const forbidden of ['tenantId', 'submitter', 'contentDigest', 'approval']) {
     equal(forbidden in payload, false, `${forbidden} 不该出现在载荷里`);
   }
-  const bounded = payloadOf(filled({ effectiveEndsAt: '2027-01-01T00:00:00Z' }));
+  const bounded = payloadOf(filled({ effectiveEndsAt: '2027-01-01T00:00' }));
   equal(bounded.effectiveEndsAt, '2027-01-01T00:00:00Z');
+});
+
+// Covers: 票 party-commercial-uiux/10——时刻格是日期时间控件交出的本地墙钟，按显示时区换成 UTC；只有空白的止点同空着。
+test('时刻格的本地墙钟按显示时区换成 UTC', () => {
+  const payload = payloadOf(filled({ effectiveStartsAt: ' 2026-10-01T08:00 ', effectiveEndsAt: '2027-01-01T00:00:30' }), 'Asia/Shanghai');
+  equal(payload.effectiveStartsAt, '2026-10-01T00:00:00Z');
+  equal(payload.effectiveEndsAt, '2026-12-31T16:00:30Z');
+  equal('effectiveEndsAt' in payloadOf(filled({ effectiveEndsAt: '  ' }), 'Asia/Shanghai'), false);
+});
+
+// Covers: 票 party-commercial-uiux/10——时刻格换不成时刻是本地问题，落在那一格路径上，挡住预览；空着不是。
+test('时刻格换不成时刻才是本地问题，落在该格路径上', () => {
+  deepEqual(customerContractLocalProblems(filled({ effectiveStartsAt: '2026-10-01', effectiveEndsAt: 'tomorrow' }), 'Asia/Shanghai'), {
+    effectiveStartsAt: ['时间格式不对，请用日期时间选择器重新选'],
+    effectiveEndsAt: ['时间格式不对，请用日期时间选择器重新选'],
+  });
+  deepEqual(customerContractLocalProblems(filled(), 'Asia/Shanghai'), {});
+  deepEqual(customerContractLocalProblems(emptyCustomerContractDraft(), 'Asia/Shanghai'), {});
 });
 
 test('二选一控件只决定送哪一格，不代判：没选模式的行只送范围，选了模式但没填的行同样只送范围', () => {

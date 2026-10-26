@@ -5,7 +5,6 @@ import {
   creditPolicyLocalProblems,
   creditPolicyPayloadOf,
   emptyCreditPolicyDraft,
-  normalizeMoment,
   ratioBaseCodesOf,
   type CreditPolicyDraft,
 } from './credit-policy-form';
@@ -21,7 +20,7 @@ function draft(over: Partial<CreditPolicyDraft> = {}): CreditPolicyDraft {
     objectId: 'CP-SYN-1',
     version: 'v1',
     scope: 'tenant',
-    effectiveStartsAt: '2026-09-01',
+    effectiveStartsAt: '2026-09-01T00:00',
     effectiveEndsAt: '',
     legalEntity: 'LE-1',
     authorityLevel: 'L1',
@@ -29,7 +28,7 @@ function draft(over: Partial<CreditPolicyDraft> = {}): CreditPolicyDraft {
     limitMinor: '',
     limitRatioBasisPoints: '',
     ratioBase: '',
-    bodyEffectiveStartsAt: '2026-09-01',
+    bodyEffectiveStartsAt: '2026-09-01T00:00',
     bodyEffectiveEndsAt: '',
     ...over,
   };
@@ -114,14 +113,16 @@ test('空字段不在本地拦：空草稿零本地问题，载荷照送空串',
   equal(payload.creditPolicy?.effectiveStartsAt, '');
 });
 
-// Covers: 可缺的键缺席而不是空串（壳与正文的区间上界），两端空白去掉，日期只到天补成当天零点 UTC。
-test('草稿到载荷：可缺键缺席、去空白、日期补成零点 UTC', () => {
+// Covers: 可缺的键缺席而不是空串（壳与正文的区间上界），两端空白去掉；时刻格是日期时间控件的本地墙钟，按显示时区
+// 换成 UTC，与登记表单同一条换算（票 party-commercial-uiux/10）。
+test('草稿到载荷：可缺键缺席、去空白、本地墙钟按显示时区换成 UTC', () => {
   const payload = creditPolicyPayloadOf(
     draft({
       objectId: ' CP-SYN-1 ',
-      effectiveStartsAt: ' 2026-09-01 ',
-      bodyEffectiveStartsAt: '2026-09-01T08:00:00+08:00',
+      effectiveStartsAt: ' 2026-09-01T08:00 ',
+      bodyEffectiveStartsAt: '2026-09-01T08:00:30',
     }),
+    'Asia/Shanghai',
   );
   deepEqual(payload, {
     kind: 'CREDIT_POLICY',
@@ -133,16 +134,27 @@ test('草稿到载荷：可缺键缺席、去空白、日期补成零点 UTC', (
       legalEntity: 'LE-1',
       authorityLevel: 'L1',
       chargeType: 'FREIGHT',
-      effectiveStartsAt: '2026-09-01T08:00:00+08:00',
+      effectiveStartsAt: '2026-09-01T00:00:30Z',
     },
   });
   ok(!('effectiveEndsAt' in payload));
   ok(!('references' in payload));
 
-  const bounded = creditPolicyPayloadOf(draft({ effectiveEndsAt: '2026-12-31', bodyEffectiveEndsAt: '2026-12-31' }));
-  equal(bounded.effectiveEndsAt, '2026-12-31T00:00:00Z');
-  equal(bounded.creditPolicy?.effectiveEndsAt, '2026-12-31T00:00:00Z');
-  equal(normalizeMoment(' 2026-08-01 '), '2026-08-01T00:00:00Z');
+  const bounded = creditPolicyPayloadOf(
+    draft({ effectiveEndsAt: '2027-01-01T00:00', bodyEffectiveEndsAt: '2027-01-01T00:00' }),
+    'Asia/Shanghai',
+  );
+  equal(bounded.effectiveEndsAt, '2026-12-31T16:00:00Z');
+  equal(bounded.creditPolicy?.effectiveEndsAt, '2026-12-31T16:00:00Z');
+});
+
+// Covers: 票 party-commercial-uiux/10——时刻格换不成时刻是本地问题，落在那一格路径上，挡住预览；空着不是。
+test('时刻格换不成时刻才是本地问题，落在该格路径上', () => {
+  deepEqual(creditPolicyLocalProblems(draft({ effectiveStartsAt: '2026-09-01', bodyEffectiveEndsAt: 'tomorrow' }), 'Asia/Shanghai'), {
+    effectiveStartsAt: ['时间格式不对，请用日期时间选择器重新选'],
+    'creditPolicy.effectiveEndsAt': ['时间格式不对，请用日期时间选择器重新选'],
+  });
+  deepEqual(creditPolicyLocalProblems(draft(), 'Asia/Shanghai'), {});
 });
 
 // Covers: 表单认领的路径覆盖载荷能发出的每一条键与服务端会点名的 `creditPolicy.limit`——漏一条，那一格的

@@ -2,15 +2,18 @@ import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import { accessRefusalTitle, isOperatorRefusal, type OperatorRefusal } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
+import { currentDisplayTimeZone } from '../moment';
 import { listCommercialPolicies, type CommercialPolicyListResponseBody } from './api';
 import { controlRequirementLabels, labelOf } from './presentation';
 import { DeliveryConditionFields } from './DeliveryConditionFields';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
 import { Field, RowFrame, fieldLabel, selectClass, useLoaded } from './PublicationFormFields';
 import type { DeliveryConditionDraft } from './delivery-condition-section';
+import { WallTimeField } from './party-registration-fields';
 import {
   customerContractDeliveryConditionsPath,
   customerContractFieldPaths,
+  customerContractLocalProblems,
   emptyBindingDraft,
   emptyCustomerContractDraft,
   payloadOf,
@@ -55,18 +58,21 @@ export function CustomerContractPublicationForm({ onPublished }: CustomerContrac
     patch({ bindings: draft.bindings.map((binding, at) => (at === index ? { ...binding, ...change } : binding)) });
   const patchDeliveryConditions = (change: Partial<DeliveryConditionDraft>) =>
     setDraft((current) => ({ ...current, deliveryConditions: { ...current.deliveryConditions, ...change } }));
+  // 时刻按操作者的显示时区填、送出 UTC（票 party-commercial-uiux/10），与登记表单同一条换算。
+  const timeZone = currentDisplayTimeZone();
 
   return (
     <PublicationDraftFlow
       kind="CUSTOMER_CONTRACT"
       title="发布客户合同版本"
-      assemblePayload={() => payloadOf(draft)}
+      assemblePayload={() => payloadOf(draft, timeZone)}
+      localProblems={customerContractLocalProblems(draft, timeZone)}
       fieldPaths={customerContractFieldPaths(draft)}
       onPublished={onPublished}
     >
       {(form) => (
         <div className="flex flex-col gap-5">
-          <ShellFields draft={draft} patch={patch} form={form} />
+          <ShellFields draft={draft} patch={patch} form={form} timeZone={timeZone} />
           <ContractContentFields
             draft={draft}
             patch={patch}
@@ -95,10 +101,12 @@ function ShellFields({
   draft,
   patch,
   form,
+  timeZone,
 }: {
   draft: CustomerContractDraft;
   patch: (change: Partial<CustomerContractDraft>) => void;
   form: PublicationFormContext;
+  timeZone: string;
 }) {
   return (
     <section className="flex flex-col gap-2">
@@ -130,25 +138,25 @@ function ShellFields({
           />
         </Field>
         <div />
-        <Field label="生效起点 *" path="effectiveStartsAt" problems={form.problems}>
-          <Input
-            value={draft.effectiveStartsAt}
-            readOnly={form.locked}
-            className="font-mono text-[13px]"
-            // 本册时刻原样送、不补零点（payloadOf 不经 normalizeMoment），所以要完整时刻。
-            placeholder="请填完整时刻，例如 2026-10-01T00:00:00+08:00"
-            onChange={(event) => patch({ effectiveStartsAt: event.target.value })}
-          />
-        </Field>
-        <Field label="生效止点（留空即持续有效）" path="effectiveEndsAt" problems={form.problems}>
-          <Input
-            value={draft.effectiveEndsAt}
-            readOnly={form.locked}
-            className="font-mono text-[13px]"
-            placeholder="完整时刻；留空即持续有效"
-            onChange={(event) => patch({ effectiveEndsAt: event.target.value })}
-          />
-        </Field>
+        <WallTimeField
+          label="生效起点 *"
+          path="effectiveStartsAt"
+          problems={form.problems}
+          value={draft.effectiveStartsAt}
+          locked={form.locked}
+          timeZone={timeZone}
+          onChange={(value) => patch({ effectiveStartsAt: value })}
+        />
+        <WallTimeField
+          label="生效止点"
+          path="effectiveEndsAt"
+          problems={form.problems}
+          value={draft.effectiveEndsAt}
+          locked={form.locked}
+          timeZone={timeZone}
+          note="留空即持续有效。"
+          onChange={(value) => patch({ effectiveEndsAt: value })}
+        />
       </div>
       <p className="text-[11px] text-idpxyz-textMuted">
         起点晚于现在时，发布稿照样可以保存和批准；发布时会提示还没到生效起点，到了起点再来发布即可，这不是失败。

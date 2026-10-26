@@ -6,6 +6,7 @@ import {
   emptySettlementPolicyDraft,
   methodCodesOf,
   settlementPolicyFieldPaths,
+  settlementPolicyLocalProblems,
   settlementPolicyPayloadOf,
   withShellIntervalCopiedIntoPolicy,
   type SettlementPolicyDraft,
@@ -20,7 +21,7 @@ const filled: SettlementPolicyDraft = {
   objectId: ' SYN-SETTLEMENT-PREPAID-01 ',
   version: 'v2',
   scope: 'SYN-SCOPE-01',
-  effectiveStartsAt: '2026-10-01',
+  effectiveStartsAt: '2026-10-01T08:00',
   effectiveEndsAt: '',
   method: 'PREPAID',
   legalEntity: 'SYN-LE-01 ',
@@ -30,12 +31,13 @@ const filled: SettlementPolicyDraft = {
   contractVersion: ' v1',
   chargeScope: 'SYN-CHARGE-PREPAID',
   currency: ' cny ',
-  policyEffectiveStartsAt: '2026-10-01T00:00:00Z',
-  policyEffectiveEndsAt: '2026-12-31',
+  policyEffectiveStartsAt: '2026-10-01T08:00:00',
+  policyEffectiveEndsAt: '2027-01-01T00:00',
 };
 
-test('草稿组成载荷：kind 固定 SETTLEMENT_POLICY，各格去首尾空白，合同维是对象 + 版本两格并镜像成壳引用，只到天的日期补成当天零点 UTC', () => {
-  deepEqual(settlementPolicyPayloadOf(filled), {
+// 时刻格是日期时间控件的本地墙钟，按显示时区换成 UTC，与登记表单同一条换算（票 party-commercial-uiux/10）。
+test('草稿组成载荷：kind 固定 SETTLEMENT_POLICY，各格去首尾空白，合同维是对象 + 版本两格并镜像成壳引用，本地墙钟按显示时区换成 UTC', () => {
+  deepEqual(settlementPolicyPayloadOf(filled, 'Asia/Shanghai'), {
     kind: 'SETTLEMENT_POLICY',
     objectId: 'SYN-SETTLEMENT-PREPAID-01',
     version: 'v2',
@@ -50,7 +52,7 @@ test('草稿组成载荷：kind 固定 SETTLEMENT_POLICY，各格去首尾空白
       chargeScope: 'SYN-CHARGE-PREPAID',
       currency: 'cny',
       effectiveStartsAt: '2026-10-01T00:00:00Z',
-      effectiveEndsAt: '2026-12-31T00:00:00Z',
+      effectiveEndsAt: '2026-12-31T16:00:00Z',
     },
   });
 });
@@ -69,8 +71,21 @@ test('区间上界留空即键缺席，不送空串', () => {
   ok(!('effectiveEndsAt' in payload));
   ok(!('effectiveEndsAt' in payload.settlementPolicy!));
 
-  const bounded = settlementPolicyPayloadOf({ ...filled, effectiveEndsAt: '2027-01-01' });
-  equal(bounded.effectiveEndsAt, '2027-01-01T00:00:00Z');
+  const bounded = settlementPolicyPayloadOf({ ...filled, effectiveEndsAt: '2027-01-01T00:00' }, 'Asia/Shanghai');
+  equal(bounded.effectiveEndsAt, '2026-12-31T16:00:00Z');
+});
+
+// 票 party-commercial-uiux/10：时刻格换不成时刻是本地问题，落在那一格路径上，挡住预览；空着不是。
+test('时刻格换不成时刻才是本地问题，落在该格路径上', () => {
+  deepEqual(
+    settlementPolicyLocalProblems({ ...filled, effectiveStartsAt: '2026-10-01', policyEffectiveEndsAt: 'tomorrow' }, 'Asia/Shanghai'),
+    {
+      effectiveStartsAt: ['时间格式不对，请用日期时间选择器重新选'],
+      'settlementPolicy.effectiveEndsAt': ['时间格式不对，请用日期时间选择器重新选'],
+    },
+  );
+  deepEqual(settlementPolicyLocalProblems(filled, 'Asia/Shanghai'), {});
+  deepEqual(settlementPolicyLocalProblems(emptySettlementPolicyDraft(), 'Asia/Shanghai'), {});
 });
 
 // CONTEXT 结算方式那条规则末句（票 23 裁决二）：六维里的合同版本同时作版本壳上的指名引用交出，让「被引合同未发布 →
@@ -103,7 +118,7 @@ test('载荷里没有身份、没有摘要，也没有接受前控制的字段',
 // 否则本册自己的格出了问题会被显示成别处的问题。合同维两层要展开到 contract.objectId / contract.version——
 // 服务端逐格问题就落在那两条路径上，不落在 contract 本身。
 test('表单认领的 JSON 路径覆盖载荷能产出的每一条键（合同维展开到两格）', () => {
-  const payload = settlementPolicyPayloadOf({ ...filled, effectiveEndsAt: '2027-01-01' });
+  const payload = settlementPolicyPayloadOf({ ...filled, effectiveEndsAt: '2027-01-01T00:00' });
   const produced: string[] = [];
   const walk = (prefix: string, value: unknown) => {
     if (value !== null && typeof value === 'object') {
@@ -165,13 +180,13 @@ test('从词表答复里取 method 一集的码；缺席交回 null 而不是空
 test('「区间从版本壳带入」只抄区间两格，范围不抄（壳范围是版本的、费用范围是另一种引用），其余各格不动', () => {
   const copied = withShellIntervalCopiedIntoPolicy({
     ...filled,
-    effectiveEndsAt: '2027-01-01',
+    effectiveEndsAt: '2027-01-01T00:00',
     chargeScope: 'SYN-CHARGE-PREPAID',
     policyEffectiveStartsAt: 'stale',
     policyEffectiveEndsAt: 'stale',
   });
-  equal(copied.policyEffectiveStartsAt, '2026-10-01');
-  equal(copied.policyEffectiveEndsAt, '2027-01-01');
+  equal(copied.policyEffectiveStartsAt, '2026-10-01T08:00');
+  equal(copied.policyEffectiveEndsAt, '2027-01-01T00:00');
   equal(copied.chargeScope, 'SYN-CHARGE-PREPAID');
   equal(copied.method, 'PREPAID');
   equal(copied.contractVersion, ' v1');

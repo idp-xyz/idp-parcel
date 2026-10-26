@@ -4,6 +4,7 @@ import {
   emptySupplierAgreementDraft,
   planReferenceOf,
   supplierAgreementFieldPaths,
+  supplierAgreementLocalProblems,
   supplierAgreementPayloadOf,
   withShellCopiedIntoAgreement,
   type SupplierAgreementDraft,
@@ -17,18 +18,19 @@ const filled: SupplierAgreementDraft = {
   objectId: ' SYN-SUPPLIER-TRUNK-CN-SG-01 ',
   version: 'v2',
   scope: 'SYN-SCOPE-01',
-  effectiveStartsAt: '2026-10-01',
+  effectiveStartsAt: '2026-10-01T08:00',
   effectiveEndsAt: '',
   supplier: 'supplier-1',
   legalEntity: 'legal-1 ',
   agreementScope: 'scope-procurement',
   purchasePlan: 'plan-buy-1@v3',
-  agreementEffectiveStartsAt: '2026-10-01T00:00:00Z',
-  agreementEffectiveEndsAt: '2026-12-31',
+  agreementEffectiveStartsAt: '2026-10-01T08:00:00',
+  agreementEffectiveEndsAt: '2027-01-01T00:00',
 };
 
-test('草稿组成载荷：kind 固定 SUPPLIER_AGREEMENT，各格去首尾空白，只到天的日期补成当天零点 UTC', () => {
-  deepEqual(supplierAgreementPayloadOf(filled), {
+// 时刻格是日期时间控件的本地墙钟，按显示时区换成 UTC，与登记表单同一条换算（票 party-commercial-uiux/10）。
+test('草稿组成载荷：kind 固定 SUPPLIER_AGREEMENT，各格去首尾空白，本地墙钟按显示时区换成 UTC', () => {
+  deepEqual(supplierAgreementPayloadOf(filled, 'Asia/Shanghai'), {
     kind: 'SUPPLIER_AGREEMENT',
     objectId: 'SYN-SUPPLIER-TRUNK-CN-SG-01',
     version: 'v2',
@@ -40,7 +42,7 @@ test('草稿组成载荷：kind 固定 SUPPLIER_AGREEMENT，各格去首尾空�
       scope: 'scope-procurement',
       purchasePlan: 'plan-buy-1@v3',
       effectiveStartsAt: '2026-10-01T00:00:00Z',
-      effectiveEndsAt: '2026-12-31T00:00:00Z',
+      effectiveEndsAt: '2026-12-31T16:00:00Z',
     },
   });
 });
@@ -53,8 +55,21 @@ test('区间上界留空即键缺席，不送空串；壳上不带指名引用�
   ok(!('references' in payload));
   ok(!('direction' in payload.supplierAgreement!));
 
-  const bounded = supplierAgreementPayloadOf({ ...filled, effectiveEndsAt: '2027-01-01' });
-  equal(bounded.effectiveEndsAt, '2027-01-01T00:00:00Z');
+  const bounded = supplierAgreementPayloadOf({ ...filled, effectiveEndsAt: '2027-01-01T00:00' }, 'Asia/Shanghai');
+  equal(bounded.effectiveEndsAt, '2026-12-31T16:00:00Z');
+});
+
+// 票 party-commercial-uiux/10：时刻格换不成时刻是本地问题，落在那一格路径上，挡住预览；空着不是。
+test('时刻格换不成时刻才是本地问题，落在该格路径上', () => {
+  deepEqual(
+    supplierAgreementLocalProblems({ ...filled, effectiveStartsAt: '2026-10-01', agreementEffectiveEndsAt: 'tomorrow' }, 'Asia/Shanghai'),
+    {
+      effectiveStartsAt: ['时间格式不对，请用日期时间选择器重新选'],
+      'supplierAgreement.effectiveEndsAt': ['时间格式不对，请用日期时间选择器重新选'],
+    },
+  );
+  deepEqual(supplierAgreementLocalProblems(filled, 'Asia/Shanghai'), {});
+  deepEqual(supplierAgreementLocalProblems(emptySupplierAgreementDraft(), 'Asia/Shanghai'), {});
 });
 
 // 伞票 07 硬句：表单不算摘要、不收也不送批准人；租户与录入者由操作者信封给。载荷里出现这些键会被服务端
@@ -69,7 +84,7 @@ test('载荷里没有身份也没有摘要', () => {
 // 公共半边把服务端点名、表单没认领的路径单列为「未认领」。表单自己能产出的每一条键都必须已认领，
 // 否则本册自己的格出了问题会被显示成别处的问题。
 test('表单认领的 JSON 路径覆盖载荷能产出的每一条键', () => {
-  const payload = supplierAgreementPayloadOf({ ...filled, effectiveEndsAt: '2027-01-01' });
+  const payload = supplierAgreementPayloadOf({ ...filled, effectiveEndsAt: '2027-01-01T00:00' });
   const produced: string[] = [];
   for (const [key, value] of Object.entries(payload)) {
     if (key === 'kind') continue;
@@ -97,14 +112,14 @@ test('价卡目录行 → 方案版本引用串', () => {
 test('「从版本壳带入」只抄范围与区间两样，其余各格不动', () => {
   const copied = withShellCopiedIntoAgreement({
     ...filled,
-    effectiveEndsAt: '2027-01-01',
+    effectiveEndsAt: '2027-01-01T00:00',
     agreementScope: 'stale',
     agreementEffectiveStartsAt: 'stale',
     agreementEffectiveEndsAt: 'stale',
   });
   equal(copied.agreementScope, 'SYN-SCOPE-01');
-  equal(copied.agreementEffectiveStartsAt, '2026-10-01');
-  equal(copied.agreementEffectiveEndsAt, '2027-01-01');
+  equal(copied.agreementEffectiveStartsAt, '2026-10-01T08:00');
+  equal(copied.agreementEffectiveEndsAt, '2027-01-01T00:00');
   equal(copied.supplier, 'supplier-1');
   equal(copied.purchasePlan, 'plan-buy-1@v3');
 });

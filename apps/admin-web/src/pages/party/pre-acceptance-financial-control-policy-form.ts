@@ -5,14 +5,15 @@
 //
 // **本文件不算摘要、不裁任何门、不判领域规则**（伞票 07 硬句）。空字段、条件 / 种类 / 处置在不在集内、范围与责任引用
 // 在不在册一律送上去让服务端答——预览口逐格 problems 回来挂到对应格旁；至少一项、顺序唯一、（种类 × 范围）唯一是
-// 跨行的门，由构造门在预览上答成成因。本地只做两件不算裁的事：整数格填了编不进 JSON 整数的文本（根本组不出载荷，
-// 判据同 credit-policy-form）；重复的行**提示**一句——票面允许「提交前提示重复」，但拒绝的话由服务端说，提示不进
-// problems、不挡预览。
+// 跨行的门，由构造门在预览上答成成因。本地只做两件不算裁的事：整数格填了编不进 JSON 整数的文本、时刻格换不成时刻
+// （根本组不出载荷，判据同 credit-policy-form）；重复的行**提示**一句——票面允许「提交前提示重复」，但拒绝的话由服务端
+// 说，提示不进 problems、不挡预览。
 //
 // 本册特有的一句：「无控制」不在这里——那是客户合同的声明（ADR-0115 Decision 一），控制种类下拉只列服务端词表给的码，
 // 本文件不内置任何一格，自然也长不出它。
 
-import { integerOf, integerProblem, normalizeMoment } from './publication-form-shared';
+import { currentDisplayTimeZone } from '../moment';
+import { integerOf, integerProblem, wallMomentOf, wallMomentProblem } from './publication-form-shared';
 import type {
   CommercialPublicationPayload,
   PreAcceptanceControlItemPayload,
@@ -93,11 +94,23 @@ export function controlPolicyRenderedPaths(draft: ControlPolicyDraft): string[] 
 }
 
 /**
- * 本地编不进 JSON 类型的格，按 JSON 路径归组；空对象即可送预览。**只有各行的判断顺序一格**——这不是校验，是组不出
- * 载荷：零与负数照发，让服务端说「须从 1 起」。整数文本的判据出共享层（integerOf / integerProblem），与载荷那一侧同一条。
+ * 本地编不进 JSON 类型的格，按 JSON 路径归组；空对象即可送预览。**只有壳上的时刻格与各行的判断顺序**——这不是校验，
+ * 是组不出载荷：零与负数照发，让服务端说「须从 1 起」。整数文本的判据出共享层（integerOf / integerProblem），时刻格的
+ * 判据也出共享层（wallMomentOf / wallMomentProblem），各与载荷那一侧同一条。
  */
-export function controlPolicyLocalProblems(draft: ControlPolicyDraft): Record<string, string[]> {
+export function controlPolicyLocalProblems(
+  draft: ControlPolicyDraft,
+  timeZone: string = currentDisplayTimeZone(),
+): Record<string, string[]> {
   const problems: Record<string, string[]> = {};
+  // 时刻格是日期时间控件的墙钟，换不成时刻同样是「组不出载荷」（票 party-commercial-uiux/10）。
+  for (const [path, raw] of [
+    ['effectiveStartsAt', draft.effectiveStartsAt],
+    ['effectiveEndsAt', draft.effectiveEndsAt],
+  ] as const) {
+    const moment = wallMomentProblem(raw, timeZone);
+    if (moment !== null) problems[path] = [moment];
+  }
   draft.controls.forEach((row, index) => {
     const problem = integerProblem(row.order);
     if (problem !== null) problems[`${rowPath(index)}.order`] = [problem];
@@ -111,7 +124,10 @@ export function controlPolicyLocalProblems(draft: ControlPolicyDraft): Record<st
  * 零行仍送 `controls: []`：「至少一项」由构造门答。**载荷里没有身份也没有摘要**：租户与录入者由接入渠道的操作者信封给，
  * 摘要只有服务端算。
  */
-export function controlPolicyPayloadOf(draft: ControlPolicyDraft): CommercialPublicationPayload {
+export function controlPolicyPayloadOf(
+  draft: ControlPolicyDraft,
+  timeZone: string = currentDisplayTimeZone(),
+): CommercialPublicationPayload {
   const body: PreAcceptanceFinancialControlPolicyBodyPayload = {
     jointPassCondition: draft.jointPassCondition.trim(),
     controls: draft.controls.map((row) => {
@@ -131,11 +147,11 @@ export function controlPolicyPayloadOf(draft: ControlPolicyDraft): CommercialPub
     objectId: draft.objectId.trim(),
     version: draft.version.trim(),
     scope: draft.scope.trim(),
-    effectiveStartsAt: normalizeMoment(draft.effectiveStartsAt),
+    effectiveStartsAt: wallMomentOf(draft.effectiveStartsAt, timeZone),
     preAcceptanceFinancialControlPolicy: body,
   };
   if (draft.effectiveEndsAt.trim() !== '') {
-    payload.effectiveEndsAt = normalizeMoment(draft.effectiveEndsAt);
+    payload.effectiveEndsAt = wallMomentOf(draft.effectiveEndsAt, timeZone);
   }
   return payload;
 }

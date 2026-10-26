@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
+import { currentDisplayTimeZone } from '../moment';
 import { listPriceCards, type PriceCardListResponseBody } from '../pricing/api';
 import {
   listBusinessParties,
@@ -8,11 +9,13 @@ import {
   type GroupLegalEntityListResponseBody,
 } from './api';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
-import { Field, ReferencePicker, momentPlaceholder } from './PublicationFormFields';
+import { Field, ReferencePicker } from './PublicationFormFields';
+import { WallTimeField } from './party-registration-fields';
 import { planReferenceOf } from './publication-form-shared';
 import {
   emptySupplierAgreementDraft,
   supplierAgreementFieldPaths,
+  supplierAgreementLocalProblems,
   supplierAgreementPayloadOf,
   withShellCopiedIntoAgreement,
   type SupplierAgreementDraft,
@@ -31,8 +34,8 @@ import {
  * （403）或读不到时退回手填，表单不因此变死（判据同 pricing 的 QuoteBasisField）。
  *
  * **表单不算摘要、不收也不送批准人、不裁任何门**（伞票 07 硬句）：连「必填」都不在本地拦——空字段、区间先后、
- * 引用在不在册一律送上去，预览口逐格 problems 回来挂到对应格旁；本地没有任何一格编不进载荷类型（全是文本），
- * 所以不给 localProblems。
+ * 引用在不在册一律送上去，预览口逐格 problems 回来挂到对应格旁；本地只拦换不成时刻的时刻格
+ * （supplierAgreementLocalProblems），那是组不出载荷，不是校验。
  */
 export interface SupplierAgreementPublicationFormProps {
   /** 载体到达「发布」那一步时回调，供应商协议页借它刷同页目录读面。 */
@@ -42,12 +45,15 @@ export interface SupplierAgreementPublicationFormProps {
 export function SupplierAgreementPublicationForm({ onPublished }: SupplierAgreementPublicationFormProps) {
   const [draft, setDraft] = useState<SupplierAgreementDraft>(emptySupplierAgreementDraft());
   const patch = (change: Partial<SupplierAgreementDraft>) => setDraft((current) => ({ ...current, ...change }));
+  // 时刻按操作者的显示时区填、送出 UTC（票 party-commercial-uiux/10），与登记表单同一条换算。
+  const timeZone = currentDisplayTimeZone();
 
   return (
     <PublicationDraftFlow
       kind="SUPPLIER_AGREEMENT"
       title="发布供应商协议版本"
-      assemblePayload={() => supplierAgreementPayloadOf(draft)}
+      assemblePayload={() => supplierAgreementPayloadOf(draft, timeZone)}
+      localProblems={supplierAgreementLocalProblems(draft, timeZone)}
       fieldPaths={supplierAgreementFieldPaths}
       onPublished={onPublished}
     >
@@ -58,7 +64,7 @@ export function SupplierAgreementPublicationForm({ onPublished }: SupplierAgreem
             {/* 版本上的范围与区间是登记册逐列比对的项，与正文自己的范围与区间是两样；版本上不带指名引用，引用全在正文里。 */}
             <p className="text-[11px] text-idpxyz-textMuted">
               这里的适用范围与有效区间属于<strong>版本</strong>
-              ，和下面协议正文自己的范围与区间分开填；止点留空即持续有效。供应商、责任法人与采购方案都在正文里填。
+              ，和下面协议正文自己的范围与区间分开填。供应商、责任法人与采购方案都在正文里填。
             </p>
             <div className="grid grid-cols-2 gap-3">
               <Field label="协议对象标识 *" path="objectId" problems={problems}>
@@ -86,24 +92,25 @@ export function SupplierAgreementPublicationForm({ onPublished }: SupplierAgreem
                 />
               </Field>
               <div />
-              <Field label="版本生效起点 *" path="effectiveStartsAt" problems={problems}>
-                <Input
-                  value={draft.effectiveStartsAt}
-                  disabled={locked}
-                  className="font-mono text-[13px]"
-                  placeholder={momentPlaceholder}
-                  onChange={(event) => patch({ effectiveStartsAt: event.target.value })}
-                />
-              </Field>
-              <Field label="版本生效止点（可空）" path="effectiveEndsAt" problems={problems}>
-                <Input
-                  value={draft.effectiveEndsAt}
-                  disabled={locked}
-                  className="font-mono text-[13px]"
-                  placeholder="留空即持续有效"
-                  onChange={(event) => patch({ effectiveEndsAt: event.target.value })}
-                />
-              </Field>
+              <WallTimeField
+                label="版本生效起点 *"
+                path="effectiveStartsAt"
+                problems={problems}
+                value={draft.effectiveStartsAt}
+                locked={locked}
+                timeZone={timeZone}
+                onChange={(effectiveStartsAt) => patch({ effectiveStartsAt })}
+              />
+              <WallTimeField
+                label="版本生效止点"
+                path="effectiveEndsAt"
+                problems={problems}
+                value={draft.effectiveEndsAt}
+                locked={locked}
+                timeZone={timeZone}
+                note="留空即持续有效。"
+                onChange={(effectiveEndsAt) => patch({ effectiveEndsAt })}
+              />
             </div>
           </section>
 
@@ -179,24 +186,25 @@ export function SupplierAgreementPublicationForm({ onPublished }: SupplierAgreem
                 emptyNote="价卡目录为空；先登记采购方向的价卡，再发布协议。"
                 readFace="价卡目录"
               />
-              <Field label="协议生效起点 *" path="supplierAgreement.effectiveStartsAt" problems={problems}>
-                <Input
-                  value={draft.agreementEffectiveStartsAt}
-                  disabled={locked}
-                  className="font-mono text-[13px]"
-                  placeholder={momentPlaceholder}
-                  onChange={(event) => patch({ agreementEffectiveStartsAt: event.target.value })}
-                />
-              </Field>
-              <Field label="协议生效止点（可空）" path="supplierAgreement.effectiveEndsAt" problems={problems}>
-                <Input
-                  value={draft.agreementEffectiveEndsAt}
-                  disabled={locked}
-                  className="font-mono text-[13px]"
-                  placeholder="留空即持续有效"
-                  onChange={(event) => patch({ agreementEffectiveEndsAt: event.target.value })}
-                />
-              </Field>
+              <WallTimeField
+                label="协议生效起点 *"
+                path="supplierAgreement.effectiveStartsAt"
+                problems={problems}
+                value={draft.agreementEffectiveStartsAt}
+                locked={locked}
+                timeZone={timeZone}
+                onChange={(agreementEffectiveStartsAt) => patch({ agreementEffectiveStartsAt })}
+              />
+              <WallTimeField
+                label="协议生效止点"
+                path="supplierAgreement.effectiveEndsAt"
+                problems={problems}
+                value={draft.agreementEffectiveEndsAt}
+                locked={locked}
+                timeZone={timeZone}
+                note="留空即持续有效。"
+                onChange={(agreementEffectiveEndsAt) => patch({ agreementEffectiveEndsAt })}
+              />
             </div>
           </section>
         </div>

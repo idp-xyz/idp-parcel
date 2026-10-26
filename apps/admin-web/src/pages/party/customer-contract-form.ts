@@ -5,7 +5,7 @@
 // **本文件不算摘要、不裁任何门、不判领域规则**（伞票 07 硬句；票 10「恰一与『不适用必带依据』由服务端裁」）。
 // 二选一控件（行的「指名策略 / 显式不适用」、合同级的「要求 / 不适用」）只决定把哪一格放进载荷；没选、
 // 选了没填，照样送上去——答回来的是构造门对那一行 / 那一节的拒绝，不是表单替人补的一句。本册的载荷全是
-// 字符串格，没有「编不进 JSON 类型」的格，所以也没有 localProblems。
+// 字符串格，本地问题只有时刻格的墙钟换不成时刻——没有那一格可送（customerContractLocalProblems）。
 //
 // 第三层：合同层交付条件一节（票 admin-write-faces/25，ADR-0133 决定四），纯逻辑在 delivery-condition-section.ts 与产品
 // 版本表单共用；一格都没填即整节缺席（这一版没有合同层声明），填了任一格整节送、tightens 两格空着也送由服务端点名。
@@ -19,11 +19,13 @@ import {
   emptyDeliveryConditionDraft,
   type DeliveryConditionDraft,
 } from './delivery-condition-section';
+import { currentDisplayTimeZone } from '../moment';
 import type {
   CommercialPublicationPayload,
   ControlBindingPayload,
   PreAcceptanceControlPayload,
 } from './publication-draft-api';
+import { wallMomentOf, wallMomentProblem } from './publication-form-shared';
 
 /** 行的二选一：指名一份接受前财务控制策略，或显式不适用并写依据。`''` = 还没选。 */
 export type BindingMode = '' | 'policy' | 'inapplicable';
@@ -103,20 +105,26 @@ function controlPayloadOf(draft: CustomerContractDraft): PreAcceptanceControlPay
   return control;
 }
 
-/** 草稿 → 载荷。可缺的格留空即不进载荷（Go 侧 omitempty 同义）；载荷里没有身份也没有摘要。 */
-export function payloadOf(draft: CustomerContractDraft): CommercialPublicationPayload {
+/**
+ * 草稿 → 载荷。可缺的格留空即不进载荷（Go 侧 omitempty 同义）；时刻格是日期时间控件交出的本地墙钟，按显示时区
+ * 换成 UTC（wallMomentOf）。载荷里没有身份也没有摘要。
+ */
+export function payloadOf(
+  draft: CustomerContractDraft,
+  timeZone: string = currentDisplayTimeZone(),
+): CommercialPublicationPayload {
   const payload: CommercialPublicationPayload = {
     kind: 'CUSTOMER_CONTRACT',
     objectId: draft.objectId,
     version: draft.version,
     scope: draft.scope,
-    effectiveStartsAt: draft.effectiveStartsAt,
+    effectiveStartsAt: wallMomentOf(draft.effectiveStartsAt, timeZone),
     customerContract: {
       contractContent: { customerAccount: draft.customerAccount, rulePackage: draft.rulePackage },
       preAcceptanceControl: controlPayloadOf(draft),
     },
   };
-  if (draft.effectiveEndsAt !== '') payload.effectiveEndsAt = draft.effectiveEndsAt;
+  if (draft.effectiveEndsAt.trim() !== '') payload.effectiveEndsAt = wallMomentOf(draft.effectiveEndsAt, timeZone);
   if (draft.rulePackage !== '') payload.references = { ACCEPTANCE_RULE_PACKAGE: draft.rulePackage };
   if (draft.bindings.length > 0) {
     payload.customerContract!.contractContent.bindings = draft.bindings.map(bindingPayloadOf);
@@ -125,6 +133,25 @@ export function payloadOf(draft: CustomerContractDraft): CommercialPublicationPa
     payload.customerContract!.deliveryConditions = deliveryConditionPayloadOf(draft.deliveryConditions, 'contract');
   }
   return payload;
+}
+
+/**
+ * 本地组不出载荷的格，按 JSON 路径归组；空对象即可送预览。**只有时刻格**：墙钟换不成时刻就没有那一格可送，这不是
+ * 校验——空着照送，由服务端点名。
+ */
+export function customerContractLocalProblems(
+  draft: CustomerContractDraft,
+  timeZone: string = currentDisplayTimeZone(),
+): Record<string, string[]> {
+  const problems: Record<string, string[]> = {};
+  for (const [path, raw] of [
+    ['effectiveStartsAt', draft.effectiveStartsAt],
+    ['effectiveEndsAt', draft.effectiveEndsAt],
+  ] as const) {
+    const moment = wallMomentProblem(raw, timeZone);
+    if (moment !== null) problems[path] = [moment];
+  }
+  return problems;
 }
 
 const shellPaths = ['objectId', 'version', 'scope', 'effectiveStartsAt', 'effectiveEndsAt'] as const;

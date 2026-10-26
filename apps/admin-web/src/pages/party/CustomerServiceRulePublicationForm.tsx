@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import type { ApiResult } from '../catalogue-api';
+import { currentDisplayTimeZone } from '../moment';
 import { claimDeadlineKindLabels } from './presentation';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
-import { Field, ProblemText, VocabularySelect, momentPlaceholder, selectClass, useLoaded } from './PublicationFormFields';
+import { Field, ProblemText, VocabularySelect, selectClass, useLoaded } from './PublicationFormFields';
 import { fieldProblemText, itemProblemText } from './field-problem-text';
+import { WallTimeField } from './party-registration-fields';
 import {
   emptyServiceRuleDraft,
   serviceRuleCodesOf,
@@ -45,7 +47,8 @@ import {
  *
  * **表单不算摘要、不收也不送批准人、不裁任何门**（伞票 07 硬句）：空字段、集外的码、引用在不在册一律送上去，
  * 预览口逐格 problems 回来挂到对应格旁；两项合起来至少一行、每一种期限与每一种索赔类型至多一行是跨行的门，由
- * 构造门在预览上答成成因。本地只拦编不进 JSON 整数的时长文本（localProblems）。两张表起始零行：无行是正文说得出的
+ * 构造门在预览上答成成因。本地只拦组不出载荷的格（localProblems）：编不进 JSON 整数的时长文本、换不成时刻的时刻格；
+ * 时刻按操作者显示时区的本地墙钟填、送出 UTC（票 party-commercial-uiux/10）。两张表起始零行：无行是正文说得出的
  * 真话，预开一行会替操作者预设「这张表有内容」。无行读作什么随适用对象变（ADR-0176 决定二：挂产品即未登记、挂合同即
  * 继承产品版），零行提示照选定的那一种说；挂合同时另显「只收紧」提示（决定三），表单不比对两版孰严。
  */
@@ -78,13 +81,14 @@ export function CustomerServiceRulePublicationForm({ onPublished }: CustomerServ
   const kindCodes = sets === null ? null : serviceRuleCodesOf(sets, 'kind');
   const chosen = appliesToChoices.find((choice) => choice.value === draft.appliesTo) ?? null;
   const tightenOnly = serviceRuleTightenOnlyNote(draft.appliesTo);
+  const timeZone = currentDisplayTimeZone();
 
   return (
     <PublicationDraftFlow
       kind="CUSTOMER_SERVICE_RULE"
       title="发布客户服务规则版本"
-      assemblePayload={() => serviceRulePayloadOf(draft)}
-      localProblems={serviceRuleLocalProblems(draft)}
+      assemblePayload={() => serviceRulePayloadOf(draft, timeZone)}
+      localProblems={serviceRuleLocalProblems(draft, timeZone)}
       fieldPaths={serviceRuleFieldPaths(draft)}
       onPublished={onPublished}
     >
@@ -94,7 +98,7 @@ export function CustomerServiceRulePublicationForm({ onPublished }: CustomerServ
             <h3 className="text-[13px] font-medium text-idpxyz-text">版本信息</h3>
             <p className="text-[11px] text-idpxyz-textMuted">
               版本适用范围与生效区间说的是<strong>这一版</strong>
-              本身；止点留空即持续有效。这一版引用的服务产品或客户合同取自下方「适用对象」，不用在这里另填。
+              本身。这一版引用的服务产品或客户合同取自下方「适用对象」，不用在这里另填。
             </p>
             <div className="grid grid-cols-2 gap-3">
               <Field label="规则对象标识 *" path="objectId" problems={problems}>
@@ -122,24 +126,25 @@ export function CustomerServiceRulePublicationForm({ onPublished }: CustomerServ
                 />
               </Field>
               <div />
-              <Field label="版本生效起点 *" path="effectiveStartsAt" problems={problems}>
-                <Input
-                  value={draft.effectiveStartsAt}
-                  disabled={locked}
-                  className="font-mono text-[13px]"
-                  placeholder={momentPlaceholder}
-                  onChange={(event) => patch({ effectiveStartsAt: event.target.value })}
-                />
-              </Field>
-              <Field label="版本生效止点（可空）" path="effectiveEndsAt" problems={problems}>
-                <Input
-                  value={draft.effectiveEndsAt}
-                  disabled={locked}
-                  className="font-mono text-[13px]"
-                  placeholder="留空即持续有效"
-                  onChange={(event) => patch({ effectiveEndsAt: event.target.value })}
-                />
-              </Field>
+              <WallTimeField
+                label="版本生效起点 *"
+                path="effectiveStartsAt"
+                problems={problems}
+                value={draft.effectiveStartsAt}
+                locked={locked}
+                timeZone={timeZone}
+                onChange={(value) => patch({ effectiveStartsAt: value })}
+              />
+              <WallTimeField
+                label="版本生效止点"
+                path="effectiveEndsAt"
+                problems={problems}
+                value={draft.effectiveEndsAt}
+                locked={locked}
+                timeZone={timeZone}
+                note="留空即持续有效。"
+                onChange={(value) => patch({ effectiveEndsAt: value })}
+              />
             </div>
           </section>
 

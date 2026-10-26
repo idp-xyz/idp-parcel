@@ -5,13 +5,15 @@
 //
 // **本文件不算摘要、不裁任何门、不判领域规则**（伞票 07 硬句）。空字段、种类在不在集内、引用在不在册一律送上去让
 // 服务端答——预览口逐格 problems 回来挂到对应格旁；适用对象恰一、两项合起来至少一行、每一种期限与每一种索赔类型
-// 至多一行都是服务端的门（前者判成 applicability 一格问题，后两条由构造门在预览上答成成因）。本地只做一件不算裁的
-// 事：时长格填了编不进 JSON 整数的文本（根本组不出载荷，判据同 pre-acceptance-financial-control-policy-form 的顺序格）。
+// 至多一行都是服务端的门（前者判成 applicability 一格问题，后两条由构造门在预览上答成成因）。本地只拦根本组不出载荷
+// 的格，不算裁：时长格填了编不进 JSON 整数的文本（判据同 pre-acceptance-financial-control-policy-form 的顺序格），
+// 时刻格的墙钟换不成时刻。
 //
 // 本册特有的两句：起算事件、日历、索赔类型与材料都是开放引用（解释权在 visibility-exception），本文件不替它们造一份
 // 枚举；VE 那侧的两本册（通知义务、索赔类型覆盖）与本册正文归谁未裁（pc-gaps/05），这里只发布 PC 这一侧的正文。
 
-import { integerOf, integerProblem, normalizeMoment } from './publication-form-shared';
+import { currentDisplayTimeZone } from '../moment';
+import { integerOf, integerProblem, wallMomentOf, wallMomentProblem } from './publication-form-shared';
 import type {
   ClaimDeadlineRulePayload,
   CommercialPublicationPayload,
@@ -186,11 +188,21 @@ function materialLinesOf(text: string): string[] {
 }
 
 /**
- * 本地编不进 JSON 类型的格，按 JSON 路径归组；空对象即可送预览。**只有各行的时长一格**——这不是校验，是组不出载荷：
- * 零与负数照发，让服务端说「须为正整数天」。
+ * 本地编不进 JSON 类型的格，按 JSON 路径归组；空对象即可送预览。**只有版本信息的时刻格与各行的时长一格**——这不是
+ * 校验，是组不出载荷：时刻空着照送、时长零与负数照发，让服务端点名、说「须为正整数天」。
  */
-export function serviceRuleLocalProblems(draft: ServiceRuleDraft): Record<string, string[]> {
+export function serviceRuleLocalProblems(
+  draft: ServiceRuleDraft,
+  timeZone: string = currentDisplayTimeZone(),
+): Record<string, string[]> {
   const problems: Record<string, string[]> = {};
+  for (const [path, raw] of [
+    ['effectiveStartsAt', draft.effectiveStartsAt],
+    ['effectiveEndsAt', draft.effectiveEndsAt],
+  ] as const) {
+    const moment = wallMomentProblem(raw, timeZone);
+    if (moment !== null) problems[path] = [moment];
+  }
   draft.claimDeadlines.forEach((row, index) => {
     const problem = integerProblem(row.days);
     if (problem !== null) problems[`${deadlineRowPath(index)}.days`] = [problem];
@@ -199,13 +211,17 @@ export function serviceRuleLocalProblems(draft: ServiceRuleDraft): Record<string
 }
 
 /**
- * 草稿 → 产品定义的载荷。可缺的上界缺席而不是空串：服务端按键在场与否分辨「没有上界」。适用对象按控件取值只送两键
- * 之一（未选两键皆缺席），同一个标识同时进壳上的指名引用——标识留空时壳上不带一个空引用，正文那一键照送空串让服务端
- * 点名。码与引用原样送（只去首尾空白）：集内不集内由服务端答，改大小写或查表就是本地在裁。行序原样送、不按种类重排
- * ——文档按种类序与索赔类型序归一是服务端规范化的事。零行仍送两张 `[]`：「两项合起来至少一行」由构造门答。**载荷里
- * 没有身份也没有摘要**：租户与录入者由接入渠道的操作者信封给，摘要只有服务端算。
+ * 草稿 → 产品定义的载荷。可缺的上界缺席而不是空串：服务端按键在场与否分辨「没有上界」；时刻格是日期时间控件交出的
+ * 本地墙钟，按显示时区换成 UTC（wallMomentOf）。适用对象按控件取值只送两键之一（未选两键皆缺席），同一个标识同时
+ * 进壳上的指名引用——标识留空时壳上不带一个空引用，正文那一键照送空串让服务端点名。码与引用原样送（只去首尾
+ * 空白）：集内不集内由服务端答，改大小写或查表就是本地在裁。行序原样送、不按种类重排——文档按种类序与索赔类型序
+ * 归一是服务端规范化的事。零行仍送两张 `[]`：「两项合起来至少一行」由构造门答。**载荷里没有身份也没有摘要**：
+ * 租户与录入者由接入渠道的操作者信封给，摘要只有服务端算。
  */
-export function serviceRulePayloadOf(draft: ServiceRuleDraft): CommercialPublicationPayload {
+export function serviceRulePayloadOf(
+  draft: ServiceRuleDraft,
+  timeZone: string = currentDisplayTimeZone(),
+): CommercialPublicationPayload {
   const body: CustomerServiceRuleBodyPayload = {
     responsible: draft.responsible.trim(),
     scope: draft.ruleScope.trim(),
@@ -232,10 +248,10 @@ export function serviceRulePayloadOf(draft: ServiceRuleDraft): CommercialPublica
     objectId: draft.objectId.trim(),
     version: draft.version.trim(),
     scope: draft.scope.trim(),
-    effectiveStartsAt: normalizeMoment(draft.effectiveStartsAt),
+    effectiveStartsAt: wallMomentOf(draft.effectiveStartsAt, timeZone),
   };
   if (draft.effectiveEndsAt.trim() !== '') {
-    payload.effectiveEndsAt = normalizeMoment(draft.effectiveEndsAt);
+    payload.effectiveEndsAt = wallMomentOf(draft.effectiveEndsAt, timeZone);
   }
   if (draft.appliesTo !== '') {
     const target = draft.appliesToId.trim();

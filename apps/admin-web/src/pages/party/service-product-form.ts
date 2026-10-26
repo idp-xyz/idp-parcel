@@ -7,9 +7,10 @@
 // 时一样没有正文格；填了才带 `serviceProduct.deliveryConditions`（与 Go 侧 publication_draft_payload.go 对本册
 // 那一格可缺是同一件事）。那一节的纯逻辑在 delivery-condition-section.ts，与客户合同表单共用。
 //
-// **本文件不算摘要、不裁任何门、不判领域规则**（伞票 07 硬句）。空字段、时刻格式、区间先后、引用键是
-// 不是集合内的词，一律原样送上去让服务端逐格答；这里只做两件编码层的事：可缺的键缺席而不是空串，
-// 以及引用表里同一个键填了两行时如实报出来——JSON 对象里放不下两格同名键，静默留一行就是丢输入。
+// **本文件不算摘要、不裁任何门、不判领域规则**（伞票 07 硬句）。空字段、区间先后、引用键是不是集合内的词，
+// 一律原样送上去让服务端逐格答；这里只做编码层的事：时刻格的本地墙钟按显示时区换成 UTC、换不成的如实报出来
+// （没有那一格可送），可缺的键缺席而不是空串，以及引用表里同一个键填了两行时如实报出来——JSON 对象里放不下两格
+// 同名键，静默留一行就是丢输入。
 //
 // **表单不得替操作者拟引用键**（票 09 硬句）：`references` 是开放词汇，键从哪来由发布用例与领域答；
 // 这里的引用表是「加一行」不是「从这几个里挑」，今天服务端没有词表读口，本文件也不内置一份。
@@ -22,7 +23,9 @@ import {
   emptyDeliveryConditionDraft,
   type DeliveryConditionDraft,
 } from './delivery-condition-section';
+import { currentDisplayTimeZone } from '../moment';
 import type { CommercialPublicationPayload } from './publication-draft-api';
+import { wallMomentOf, wallMomentProblem } from './publication-form-shared';
 
 /** 引用表的一行：被引对象类别（原词，操作者自填）→ 对象标识。 */
 export interface ReferenceRowDraft {
@@ -108,21 +111,24 @@ export function serviceProductRenderedPaths(draft: ServiceProductDraft): string[
 }
 
 /**
- * 草稿 → 载荷。壳各格原样带；`effectiveEndsAt` 与 `references` 为空时**缺席**而不是空值——服务端按键
- * 在场与否分辨「没有」，空串与空对象在那边不是同一句话。引用表里两格全空的行跳过；半填的行照送，
- * 由服务端答哪一格立不住。同键两行时后一行覆盖前一行——那是 JSON 对象的形状所致，本模块用
- * `serviceProductLocalProblems` 把它报出来，流程组件在问题清零之前不放预览。交付条件一节一格都没填
- * 即整个 `serviceProduct` 格缺席（这一版没有交付条件，载荷仍是壳）；填了任一格整节原样送。
+ * 草稿 → 载荷。壳各格原样带，时刻格的本地墙钟按显示时区换成 UTC（wallMomentOf）；`effectiveEndsAt` 与
+ * `references` 为空时**缺席**而不是空值——服务端按键在场与否分辨「没有」，空串与空对象在那边不是同一句话。
+ * 引用表里两格全空的行跳过；半填的行照送，由服务端答哪一格立不住。同键两行时后一行覆盖前一行——那是 JSON
+ * 对象的形状所致，本模块用 `serviceProductLocalProblems` 把它报出来，流程组件在问题清零之前不放预览。交付条件
+ * 一节一格都没填即整个 `serviceProduct` 格缺席（这一版没有交付条件，载荷仍是壳）；填了任一格整节原样送。
  */
-export function serviceProductPayloadOf(draft: ServiceProductDraft): CommercialPublicationPayload {
+export function serviceProductPayloadOf(
+  draft: ServiceProductDraft,
+  timeZone: string = currentDisplayTimeZone(),
+): CommercialPublicationPayload {
   const payload: CommercialPublicationPayload = {
     kind: 'SERVICE_PRODUCT',
     objectId: draft.objectId,
     version: draft.version,
     scope: draft.scope,
-    effectiveStartsAt: draft.effectiveStartsAt,
+    effectiveStartsAt: wallMomentOf(draft.effectiveStartsAt, timeZone),
   };
-  if (draft.effectiveEndsAt !== '') payload.effectiveEndsAt = draft.effectiveEndsAt;
+  if (draft.effectiveEndsAt.trim() !== '') payload.effectiveEndsAt = wallMomentOf(draft.effectiveEndsAt, timeZone);
 
   const references: Record<string, string> = {};
   let hasRows = false;
@@ -143,16 +149,26 @@ export function serviceProductPayloadOf(draft: ServiceProductDraft): CommercialP
 }
 
 /**
- * 本地能判的**编码层**问题，按 JSON 路径归组；空对象即可送。只有一种：引用表同一个键填了两行——
- * 载荷里放不下，留一行就是静默丢输入。空键、空值、集合外的键都不在这里判，那是服务端的话。
+ * 本地能判的**编码层**问题，按 JSON 路径归组；空对象即可送。只有这些：时刻格的墙钟换不成时刻——没有那一格可送；
+ * 引用表同一个键填了两行——载荷里放不下，留一行就是静默丢输入。空键、空值、集合外的键都不在这里判，那是服务端的话。
  */
-export function serviceProductLocalProblems(draft: ServiceProductDraft): Record<string, string[]> {
+export function serviceProductLocalProblems(
+  draft: ServiceProductDraft,
+  timeZone: string = currentDisplayTimeZone(),
+): Record<string, string[]> {
+  const problems: Record<string, string[]> = {};
+  for (const [path, raw] of [
+    ['effectiveStartsAt', draft.effectiveStartsAt],
+    ['effectiveEndsAt', draft.effectiveEndsAt],
+  ] as const) {
+    const moment = wallMomentProblem(raw, timeZone);
+    if (moment !== null) problems[path] = [moment];
+  }
   const seen = new Map<string, number>();
   for (const row of draft.references) {
     if (isBlankReferenceRow(row)) continue;
     seen.set(row.kind, (seen.get(row.kind) ?? 0) + 1);
   }
-  const problems: Record<string, string[]> = {};
   for (const [kind, count] of seen) {
     if (count > 1) {
       problems[`references.${kind}`] = [`同一个被引对象类别填了 ${count} 行，只能保留一行；请删掉多出的行`];

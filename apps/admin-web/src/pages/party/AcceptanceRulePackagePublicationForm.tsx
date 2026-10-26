@@ -2,11 +2,14 @@ import { useState, type ReactNode } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import { accessRefusalTitle } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
+import { currentDisplayTimeZone } from '../moment';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
 import { Field, Problems, RowFrame, fieldLabel, selectClass, useLoaded } from './PublicationFormFields';
+import { WallTimeField } from './party-registration-fields';
 import {
   acceptanceRulePackageFieldPaths,
+  acceptanceRulePackageLocalProblems,
   emptyAcceptanceRulePackageDraft,
   emptyAmendmentRuleDraft,
   emptyAsOfPolicyDraft,
@@ -48,10 +51,6 @@ export interface AcceptanceRulePackagePublicationFormProps {
 const sectionTitle = 'text-[13px] font-medium text-idpxyz-text';
 const hint = 'text-[11px] text-idpxyz-textMuted';
 const root = 'acceptanceRulePackage';
-// 本册 payloadOf 把时刻原样送出、不替只到天的日期补零点，服务端按完整时刻解析，只填日期会被拒——所以占位要求完整时刻，
-// 不用共享层那句「只到天补成当天零点」。
-const momentPlaceholder = '请填完整时刻，例如 2026-10-01T00:00:00+08:00';
-const openEndPlaceholder = '留空即持续有效；要填请填完整时刻';
 
 type Update = (mutate: (current: AcceptanceRulePackageDraft) => AcceptanceRulePackageDraft) => void;
 
@@ -68,20 +67,23 @@ export function AcceptanceRulePackagePublicationForm({ onPublished }: Acceptance
   const vocabulary = useVocabulary();
   // 一律函数式更新：几节的行各自 onChange，取闭包里的旧草稿会让紧接的两次改动丢一次。
   const update: Update = (mutate) => setDraft((current) => mutate(current));
+  // 时刻按操作者的显示时区填、送出 UTC（票 party-commercial-uiux/10），与登记表单同一条换算。
+  const timeZone = currentDisplayTimeZone();
 
   return (
     <PublicationDraftFlow
       kind="ACCEPTANCE_RULE_PACKAGE"
       title="发布规则包版本"
-      assemblePayload={() => payloadOf(draft)}
+      assemblePayload={() => payloadOf(draft, timeZone)}
+      localProblems={acceptanceRulePackageLocalProblems(draft, timeZone)}
       fieldPaths={acceptanceRulePackageFieldPaths(draft)}
       onPublished={onPublished}
     >
       {(form) => (
         <div className="flex flex-col gap-5">
           <VocabularyNotice vocabulary={vocabulary} />
-          <ShellFields draft={draft} update={update} form={form} />
-          <RulePackageBodyFields draft={draft} update={update} form={form} vocabulary={vocabulary} />
+          <ShellFields draft={draft} update={update} form={form} timeZone={timeZone} />
+          <RulePackageBodyFields draft={draft} update={update} form={form} vocabulary={vocabulary} timeZone={timeZone} />
           <AsOfPolicyFields draft={draft} update={update} form={form} vocabulary={vocabulary} />
           <AcceptanceContentFields draft={draft} update={update} form={form} vocabulary={vocabulary} />
           <IntakeQualificationFields draft={draft} update={update} form={form} vocabulary={vocabulary} />
@@ -215,7 +217,7 @@ function CodeChecklist({
 
 // ——版本壳：身份三元（对象标识 / 版本号 / 适用范围）与有效区间。租户不在这里：它从操作者信封来。
 
-function ShellFields({ draft, update, form }: Omit<SectionProps, 'vocabulary'>) {
+function ShellFields({ draft, update, form, timeZone }: Omit<SectionProps, 'vocabulary'> & { timeZone: string }) {
   const patch = (change: Partial<AcceptanceRulePackageDraft>) => update((current) => ({ ...current, ...change }));
   return (
     <section className="flex flex-col gap-2">
@@ -247,24 +249,25 @@ function ShellFields({ draft, update, form }: Omit<SectionProps, 'vocabulary'>) 
           />
         </Field>
         <div />
-        <Field label="生效起点 *" path="effectiveStartsAt" problems={form.problems}>
-          <Input
-            value={draft.effectiveStartsAt}
-            readOnly={form.locked}
-            className="font-mono text-[13px]"
-            placeholder={momentPlaceholder}
-            onChange={(event) => patch({ effectiveStartsAt: event.target.value })}
-          />
-        </Field>
-        <Field label="生效止点（可空）" path="effectiveEndsAt" problems={form.problems}>
-          <Input
-            value={draft.effectiveEndsAt}
-            readOnly={form.locked}
-            className="font-mono text-[13px]"
-            placeholder={openEndPlaceholder}
-            onChange={(event) => patch({ effectiveEndsAt: event.target.value })}
-          />
-        </Field>
+        <WallTimeField
+          label="生效起点 *"
+          path="effectiveStartsAt"
+          problems={form.problems}
+          value={draft.effectiveStartsAt}
+          locked={form.locked}
+          timeZone={timeZone}
+          onChange={(value) => patch({ effectiveStartsAt: value })}
+        />
+        <WallTimeField
+          label="生效止点"
+          path="effectiveEndsAt"
+          problems={form.problems}
+          value={draft.effectiveEndsAt}
+          locked={form.locked}
+          timeZone={timeZone}
+          note="留空即持续有效。"
+          onChange={(value) => patch({ effectiveEndsAt: value })}
+        />
       </div>
       <p className={hint}>起点晚于现在时，发布稿照样可以保存和批准；发布时会提示还没到生效起点，到了起点再来发布即可，这不是失败。</p>
     </section>
@@ -273,7 +276,7 @@ function ShellFields({ draft, update, form }: Omit<SectionProps, 'vocabulary'>) 
 
 // ——正文（0014）：五维适用性 + 按分类归档的规则引用表。本节不可缺；零行由领域拒（空规则包等于无条件接受）。
 
-function RulePackageBodyFields({ draft, update, form, vocabulary }: SectionProps) {
+function RulePackageBodyFields({ draft, update, form, vocabulary, timeZone }: SectionProps & { timeZone: string }) {
   const path = `${root}.rulePackageBody`;
   const patchBody = (change: Partial<RulePackageBodyDraft>) =>
     update((current) => ({ ...current, body: { ...current.body, ...change } }));
@@ -318,24 +321,25 @@ function RulePackageBodyFields({ draft, update, form, vocabulary }: SectionProps
             onChange={(event) => patchBody({ scope: event.target.value })}
           />
         </Field>
-        <Field label="正文生效起点 *" path={`${path}.effectiveStartsAt`} problems={form.problems}>
-          <Input
-            value={draft.body.effectiveStartsAt}
-            readOnly={form.locked}
-            className="font-mono text-[13px]"
-            placeholder={momentPlaceholder}
-            onChange={(event) => patchBody({ effectiveStartsAt: event.target.value })}
-          />
-        </Field>
-        <Field label="正文生效止点（可空）" path={`${path}.effectiveEndsAt`} problems={form.problems}>
-          <Input
-            value={draft.body.effectiveEndsAt}
-            readOnly={form.locked}
-            className="font-mono text-[13px]"
-            placeholder={openEndPlaceholder}
-            onChange={(event) => patchBody({ effectiveEndsAt: event.target.value })}
-          />
-        </Field>
+        <WallTimeField
+          label="正文生效起点 *"
+          path={`${path}.effectiveStartsAt`}
+          problems={form.problems}
+          value={draft.body.effectiveStartsAt}
+          locked={form.locked}
+          timeZone={timeZone}
+          onChange={(value) => patchBody({ effectiveStartsAt: value })}
+        />
+        <WallTimeField
+          label="正文生效止点"
+          path={`${path}.effectiveEndsAt`}
+          problems={form.problems}
+          value={draft.body.effectiveEndsAt}
+          locked={form.locked}
+          timeZone={timeZone}
+          note="留空即持续有效。"
+          onChange={(value) => patchBody({ effectiveEndsAt: value })}
+        />
       </div>
       <RowsHeader
         title="规则引用表"

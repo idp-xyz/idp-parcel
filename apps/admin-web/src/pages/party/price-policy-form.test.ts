@@ -6,6 +6,7 @@ import {
   planBindingConversionOptions,
   priceDirectionOptions,
   pricePolicyFieldPaths,
+  pricePolicyLocalProblems,
   pricePolicyPayloadOf,
   showsTaxClassification,
   taxDispositionOptions,
@@ -21,15 +22,15 @@ const filled: PricePolicyDraft = {
   objectId: ' SYN-PRICE-RULE-CN-SG ',
   version: 'v2',
   scope: 'SYN-SCOPE-01',
-  effectiveStartsAt: '2026-10-01',
+  effectiveStartsAt: '2026-10-01T08:00',
   effectiveEndsAt: '',
   direction: 'SELL',
   pricingPlan: 'PLAN-CN-SG-SELL@v1',
   planDirection: 'BUY',
   conversion: 'FROZEN_BUY_EVALUATION',
   policyScope: 'pricing-scope-1 ',
-  policyEffectiveStartsAt: '2026-10-01T00:00:00Z',
-  policyEffectiveEndsAt: '2026-12-31',
+  policyEffectiveStartsAt: '2026-10-01T08:00:00',
+  policyEffectiveEndsAt: '2027-01-01T00:00',
   taxDisposition: 'TAX_EXCLUSIVE',
   taxClassification: 'vat-standard',
   fxQuoteType: 'boc-cash-selling',
@@ -37,8 +38,9 @@ const filled: PricePolicyDraft = {
   fxAsOfPolicyVersion: 'asof-policy/v3',
 };
 
-test('草稿组成载荷：kind 固定 PRICE_RULE，正文与口径节在同一份载荷里，各格去首尾空白，只到天的日期补成当天零点 UTC', () => {
-  deepEqual(pricePolicyPayloadOf(filled), {
+// 时刻格是日期时间控件的本地墙钟，按显示时区换成 UTC，与登记表单同一条换算（票 party-commercial-uiux/10）。
+test('草稿组成载荷：kind 固定 PRICE_RULE，正文与口径节在同一份载荷里，各格去首尾空白，本地墙钟按显示时区换成 UTC', () => {
+  deepEqual(pricePolicyPayloadOf(filled, 'Asia/Shanghai'), {
     kind: 'PRICE_RULE',
     objectId: 'SYN-PRICE-RULE-CN-SG',
     version: 'v2',
@@ -51,7 +53,7 @@ test('草稿组成载荷：kind 固定 PRICE_RULE，正文与口径节在同一�
       conversion: 'FROZEN_BUY_EVALUATION',
       scope: 'pricing-scope-1',
       effectiveStartsAt: '2026-10-01T00:00:00Z',
-      effectiveEndsAt: '2026-12-31T00:00:00Z',
+      effectiveEndsAt: '2026-12-31T16:00:00Z',
       caliber: {
         taxDisposition: 'TAX_EXCLUSIVE',
         taxClassification: 'vat-standard',
@@ -84,8 +86,21 @@ test('可缺的键缺席而不是空串；口径节永远随正文同送；口�
   ok(!('direction' in payload.pricePolicy!.caliber!));
   ok(!('volumetricFactor' in pricePolicyPayloadOf(filled).pricePolicy!.caliber!));
 
-  const bounded = pricePolicyPayloadOf({ ...filled, effectiveEndsAt: '2027-01-01' });
-  equal(bounded.effectiveEndsAt, '2027-01-01T00:00:00Z');
+  const bounded = pricePolicyPayloadOf({ ...filled, effectiveEndsAt: '2027-01-01T00:00' }, 'Asia/Shanghai');
+  equal(bounded.effectiveEndsAt, '2026-12-31T16:00:00Z');
+});
+
+// 票 party-commercial-uiux/10：时刻格换不成时刻是本地问题，落在那一格路径上，挡住预览；空着不是。
+test('时刻格换不成时刻才是本地问题，落在该格路径上', () => {
+  deepEqual(
+    pricePolicyLocalProblems({ ...filled, effectiveStartsAt: '2026-10-01', policyEffectiveEndsAt: 'tomorrow' }, 'Asia/Shanghai'),
+    {
+      effectiveStartsAt: ['时间格式不对，请用日期时间选择器重新选'],
+      'pricePolicy.effectiveEndsAt': ['时间格式不对，请用日期时间选择器重新选'],
+    },
+  );
+  deepEqual(pricePolicyLocalProblems(filled, 'Asia/Shanghai'), {});
+  deepEqual(pricePolicyLocalProblems(emptyPricePolicyDraft(), 'Asia/Shanghai'), {});
 });
 
 // 汇率一节可缺是合法的商业声明（不涉及外币）；填了任一格就整节送，缺的两格以空串到达、由服务端逐格点名（三格同在同缺
@@ -145,7 +160,7 @@ test('载荷里没有身份也没有摘要', () => {
 // 公共半边把服务端点名、表单没认领的路径单列为「未认领」。表单自己能产出的每一条键都必须已认领，否则本册自己的格出了
 // 问题会被显示成别处的问题；反向只许多认领一条节级路径 pricePolicy.caliber.fx（服务端对整节记问题的落点）。
 test('表单认领的 JSON 路径覆盖载荷能产出的每一条键（含口径节与汇率节）', () => {
-  const payload = pricePolicyPayloadOf({ ...filled, effectiveEndsAt: '2027-01-01' });
+  const payload = pricePolicyPayloadOf({ ...filled, effectiveEndsAt: '2027-01-01T00:00' });
   const produced: string[] = [];
   const walk = (value: unknown, prefix: string) => {
     if (value !== null && typeof value === 'object') {
@@ -167,14 +182,14 @@ test('表单认领的 JSON 路径覆盖载荷能产出的每一条键（含口�
 test('「从版本壳带入」只抄范围与区间两样，其余各格不动', () => {
   const copied = withShellCopiedIntoPolicy({
     ...filled,
-    effectiveEndsAt: '2027-01-01',
+    effectiveEndsAt: '2027-01-01T00:00',
     policyScope: 'stale',
     policyEffectiveStartsAt: 'stale',
     policyEffectiveEndsAt: 'stale',
   });
   equal(copied.policyScope, 'SYN-SCOPE-01');
-  equal(copied.policyEffectiveStartsAt, '2026-10-01');
-  equal(copied.policyEffectiveEndsAt, '2027-01-01');
+  equal(copied.policyEffectiveStartsAt, '2026-10-01T08:00');
+  equal(copied.policyEffectiveEndsAt, '2027-01-01T00:00');
   equal(copied.direction, 'SELL');
   equal(copied.pricingPlan, 'PLAN-CN-SG-SELL@v1');
   equal(copied.taxClassification, 'vat-standard');

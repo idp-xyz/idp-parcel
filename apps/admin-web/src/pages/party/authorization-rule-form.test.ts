@@ -3,6 +3,7 @@ import { deepEqual, equal, notEqual, ok } from 'node:assert/strict';
 import { payloadKey } from './publication-draft-flow';
 import {
   authorizationRuleFieldPaths,
+  authorizationRuleLocalProblems,
   emptyAuthorizationRuleDraft,
   emptyCancellationRowDraft,
   partyOptionsOf,
@@ -22,7 +23,7 @@ function filled(over: Partial<AuthorizationRuleDraft> = {}): AuthorizationRuleDr
     objectId: 'SYN-AUTH-CANCEL-02',
     version: 'v1',
     scope: 'SYN-SCOPE-01',
-    effectiveStartsAt: '2026-10-01T00:00:00Z',
+    effectiveStartsAt: '2026-10-01T00:00',
     rows: [
       { party: 'CUSTOMER', rule: 'SYN-RULE-CANCEL-CUSTOMER-01' },
       { party: 'OPERATIONS', rule: 'SYN-RULE-CANCEL-OPS-01' },
@@ -50,10 +51,28 @@ test('齐全的草稿组出的载荷键名镜像 Go 侧 json 标签，目录行�
 test('生效止点留空不进载荷，填了就进；载荷里没有身份也没有摘要', () => {
   const open = payloadOf(filled());
   equal('effectiveEndsAt' in open, false);
-  equal(payloadOf(filled({ effectiveEndsAt: '2027-01-01T00:00:00Z' })).effectiveEndsAt, '2027-01-01T00:00:00Z');
+  equal(payloadOf(filled({ effectiveEndsAt: '2027-01-01T00:00' })).effectiveEndsAt, '2027-01-01T00:00:00Z');
   for (const forbidden of ['tenant', 'submitter', 'contentDigest', 'approval', 'references']) {
     equal(forbidden in open, false, `${forbidden} 不该在载荷里`);
   }
+});
+
+// Covers: 票 party-commercial-uiux/10——时刻格是日期时间控件交出的本地墙钟，按显示时区换成 UTC；只有空白的止点同空着。
+test('时刻格的本地墙钟按显示时区换成 UTC', () => {
+  const payload = payloadOf(filled({ effectiveStartsAt: ' 2026-10-01T08:00 ', effectiveEndsAt: '2027-01-01T00:00:30' }), 'Asia/Shanghai');
+  equal(payload.effectiveStartsAt, '2026-10-01T00:00:00Z');
+  equal(payload.effectiveEndsAt, '2026-12-31T16:00:30Z');
+  equal('effectiveEndsAt' in payloadOf(filled({ effectiveEndsAt: '  ' }), 'Asia/Shanghai'), false);
+});
+
+// Covers: 票 party-commercial-uiux/10——时刻格换不成时刻是本地问题，落在那一格路径上，挡住预览；空着不是。
+test('时刻格换不成时刻才是本地问题，落在该格路径上', () => {
+  deepEqual(authorizationRuleLocalProblems(filled({ effectiveStartsAt: '2026-10-01', effectiveEndsAt: 'tomorrow' }), 'Asia/Shanghai'), {
+    effectiveStartsAt: ['时间格式不对，请用日期时间选择器重新选'],
+    effectiveEndsAt: ['时间格式不对，请用日期时间选择器重新选'],
+  });
+  deepEqual(authorizationRuleLocalProblems(filled(), 'Asia/Shanghai'), {});
+  deepEqual(authorizationRuleLocalProblems(emptyAuthorizationRuleDraft(), 'Asia/Shanghai'), {});
 });
 
 test('没选请求方、空规则、同一请求方两行、零行都原样上送——表单不代判、不补默认', () => {

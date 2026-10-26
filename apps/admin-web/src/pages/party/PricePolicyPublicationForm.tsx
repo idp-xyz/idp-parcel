@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
+import { currentDisplayTimeZone } from '../moment';
 import { listPriceCards, type PriceCardListResponseBody } from '../pricing/api';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
-import { Field, Problems, ReferencePicker, fieldLabel, momentPlaceholder, selectClass } from './PublicationFormFields';
+import { Field, Problems, ReferencePicker, fieldLabel, selectClass } from './PublicationFormFields';
+import { WallTimeField } from './party-registration-fields';
 import { planReferenceOf } from './publication-form-shared';
 import {
   declaresFx,
@@ -10,6 +12,7 @@ import {
   planBindingConversionOptions,
   priceDirectionOptions,
   pricePolicyFieldPaths,
+  pricePolicyLocalProblems,
   pricePolicyPayloadOf,
   showsTaxClassification,
   taxDispositionOptions,
@@ -33,8 +36,9 @@ import {
  * 组件把它与服务端答在那一格的问题如实显出来并给「清空」，不静默丢。汇率三格全空即不声明汇率口径，填了任一格整节送。
  * 口径随正文同一份载荷送出，不给「先发正文、回头补口径」的两步。
  *
- * **表单不算摘要、不收也不送批准人、不裁任何门**（伞票 07 硬句）：连「必填」都不在本地拦；没有一格编不进载荷类型（全是
- * 文本），所以不给 localProblems。读面在接入渠道未配置那堵墙前（403）或读不到时退回手填，表单不因此变死。
+ * **表单不算摘要、不收也不送批准人、不裁任何门**（伞票 07 硬句）：连「必填」都不在本地拦；本地只拦换不成时刻的时刻格
+ * （pricePolicyLocalProblems），那是组不出载荷，不是校验。读面在接入渠道未配置那堵墙前（403）或读不到时退回手填，表单
+ * 不因此变死。
  */
 export interface PricePolicyPublicationFormProps {
   /** 载体到达「发布」那一步时回调，政策页借它切到商业价格政策册并重读。 */
@@ -47,16 +51,19 @@ const noteClass = 'text-[11px] text-idpxyz-textMuted';
 export function PricePolicyPublicationForm({ onPublished }: PricePolicyPublicationFormProps) {
   const [draft, setDraft] = useState<PricePolicyDraft>(emptyPricePolicyDraft());
   const patch = (change: Partial<PricePolicyDraft>) => setDraft((current) => ({ ...current, ...change }));
+  // 时刻按操作者的显示时区填、送出 UTC（票 party-commercial-uiux/10），与登记表单同一条换算。
+  const timeZone = currentDisplayTimeZone();
 
   return (
     <PublicationDraftFlow
       kind="PRICE_RULE"
       title="发布价格政策版本"
-      assemblePayload={() => pricePolicyPayloadOf(draft)}
+      assemblePayload={() => pricePolicyPayloadOf(draft, timeZone)}
+      localProblems={pricePolicyLocalProblems(draft, timeZone)}
       fieldPaths={pricePolicyFieldPaths}
       onPublished={onPublished}
     >
-      {(form) => <PricePolicyFields draft={draft} patch={patch} setDraft={setDraft} form={form} />}
+      {(form) => <PricePolicyFields draft={draft} patch={patch} setDraft={setDraft} form={form} timeZone={timeZone} />}
     </PublicationDraftFlow>
   );
 }
@@ -66,11 +73,13 @@ function PricePolicyFields({
   patch,
   setDraft,
   form,
+  timeZone,
 }: {
   draft: PricePolicyDraft;
   patch: (change: Partial<PricePolicyDraft>) => void;
   setDraft: (update: (current: PricePolicyDraft) => PricePolicyDraft) => void;
   form: PublicationFormContext;
+  timeZone: string;
 }) {
   const { problems, locked } = form;
   const text = (path: string, label: string, key: keyof PricePolicyDraft, placeholder?: string) => (
@@ -104,6 +113,18 @@ function PricePolicyFields({
       </select>
     </Field>
   );
+  const moment = (path: string, label: string, key: keyof PricePolicyDraft, note?: string) => (
+    <WallTimeField
+      label={label}
+      path={path}
+      problems={problems}
+      value={draft[key]}
+      locked={locked}
+      timeZone={timeZone}
+      note={note}
+      onChange={(value) => patch({ [key]: value } as Partial<PricePolicyDraft>)}
+    />
+  );
 
   return (
     <div className="flex flex-col gap-5">
@@ -112,7 +133,7 @@ function PricePolicyFields({
         {/* 版本上的范围与区间是登记册逐列比对的项，与正文自己的范围与区间是两样。册名 PRICE_POLICY 与发布类别 PRICE_RULE
             是两条分类轴，上屏只说册的中文名。 */}
         <p className={noteClass}>
-          这里的适用范围与有效区间属于<strong>版本</strong>，和下面政策正文自己的范围与区间分开填；止点留空即持续有效。发布后在政策页的
+          这里的适用范围与有效区间属于<strong>版本</strong>，和下面政策正文自己的范围与区间分开填。发布后在政策页的
           <strong>商业价格政策</strong>册查看。
         </p>
         <Problems lines={problems['kind']} />
@@ -121,8 +142,8 @@ function PricePolicyFields({
           {text('version', '版本号 *', 'version')}
           {text('scope', '版本适用范围 *', 'scope')}
           <div />
-          {text('effectiveStartsAt', '版本生效起点 *', 'effectiveStartsAt', momentPlaceholder)}
-          {text('effectiveEndsAt', '版本生效止点（可空）', 'effectiveEndsAt', '留空即持续有效')}
+          {moment('effectiveStartsAt', '版本生效起点 *', 'effectiveStartsAt')}
+          {moment('effectiveEndsAt', '版本生效止点', 'effectiveEndsAt', '留空即持续有效。')}
         </div>
       </section>
 
@@ -168,8 +189,8 @@ function PricePolicyFields({
           {closedSet('pricePolicy.conversion', '绑定转换 *', 'conversion', planBindingConversionOptions)}
           {text('pricePolicy.scope', '政策适用范围 *', 'policyScope')}
           <div />
-          {text('pricePolicy.effectiveStartsAt', '政策生效起点 *', 'policyEffectiveStartsAt', momentPlaceholder)}
-          {text('pricePolicy.effectiveEndsAt', '政策生效止点（可空）', 'policyEffectiveEndsAt', '留空即持续有效')}
+          {moment('pricePolicy.effectiveStartsAt', '政策生效起点 *', 'policyEffectiveStartsAt')}
+          {moment('pricePolicy.effectiveEndsAt', '政策生效止点', 'policyEffectiveEndsAt', '留空即持续有效。')}
         </div>
       </section>
 

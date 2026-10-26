@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import { accessRefusalTitle, isOperatorRefusal } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
+import { currentDisplayTimeZone } from '../moment';
 import {
   listBusinessParties,
   listCustomerContracts,
@@ -18,16 +19,17 @@ import {
   ReferencePicker,
   VocabularySelect,
   fieldLabel,
-  momentPlaceholder,
   selectClass,
   useLoaded,
 } from './PublicationFormFields';
+import { WallTimeField } from './party-registration-fields';
 import {
   contractChoiceKey,
   contractChoiceOf,
   emptySettlementPolicyDraft,
   methodCodesOf,
   settlementPolicyFieldPaths,
+  settlementPolicyLocalProblems,
   settlementPolicyPayloadOf,
   withShellIntervalCopiedIntoPolicy,
   type ContractVersionChoice,
@@ -52,8 +54,8 @@ import {
  * 存不存在由服务端构造门答。读面在接入渠道未配置那堵墙前（403）或读不到时退回手填，表单不因此变死。
  *
  * **表单不算摘要、不收也不送批准人、不裁任何门**（伞票 07 硬句）：连「必填」都不在本地拦——空字段、区间先后、方式集外、
- * 引用在不在册一律送上去，预览口逐格 problems 回来挂到对应格旁；本地没有任何一格编不进载荷类型（全是文本），所以
- * 不给 localProblems。**本册硬句**：结算政策答「怎么结」不答「要不要接受前控制」——这里没有、也不会长出控制字段。
+ * 引用在不在册一律送上去，预览口逐格 problems 回来挂到对应格旁；本地只拦换不成时刻的时刻格（settlementPolicyLocalProblems），
+ * 那是组不出载荷，不是校验。**本册硬句**：结算政策答「怎么结」不答「要不要接受前控制」——这里没有、也不会长出控制字段。
  */
 export interface SettlementPolicyPublicationFormProps {
   /** 载体到达「发布」那一步时回调，政策页借它切到结算政策册并重读。 */
@@ -69,12 +71,15 @@ export function SettlementPolicyPublicationForm({ onPublished }: SettlementPolic
   // 内置一份就是同一封闭集的第二份写法（票 20 立票理由）。
   const vocabulary = useLoaded(loadSettlementVocabulary);
   const methodCodes = vocabulary?.kind === 'outcome' ? methodCodesOf(vocabulary.body.sets) : null;
+  // 时刻按操作者的显示时区填、送出 UTC（票 party-commercial-uiux/10），与登记表单同一条换算。
+  const timeZone = currentDisplayTimeZone();
 
   return (
     <PublicationDraftFlow
       kind="SETTLEMENT_POLICY"
       title="发布结算政策版本"
-      assemblePayload={() => settlementPolicyPayloadOf(draft)}
+      assemblePayload={() => settlementPolicyPayloadOf(draft, timeZone)}
+      localProblems={settlementPolicyLocalProblems(draft, timeZone)}
       fieldPaths={settlementPolicyFieldPaths}
       onPublished={onPublished}
     >
@@ -84,7 +89,7 @@ export function SettlementPolicyPublicationForm({ onPublished }: SettlementPolic
             <h3 className="text-[13px] font-medium text-idpxyz-text">版本信息</h3>
             <p className="text-[11px] text-idpxyz-textMuted">
               版本适用范围与生效区间说的是<strong>这一版</strong>
-              本身，和下方政策正文里的生效区间分开填；止点留空即持续有效。这一版引用的客户合同取自下方正文里选的合同，不用另填。
+              本身，和下方政策正文里的生效区间分开填。这一版引用的客户合同取自下方正文里选的合同，不用另填。
             </p>
             <div className="grid grid-cols-2 gap-3">
               <Field label="政策对象标识 *" path="objectId" problems={problems}>
@@ -112,24 +117,25 @@ export function SettlementPolicyPublicationForm({ onPublished }: SettlementPolic
                 />
               </Field>
               <div />
-              <Field label="版本生效起点 *" path="effectiveStartsAt" problems={problems}>
-                <Input
-                  value={draft.effectiveStartsAt}
-                  disabled={locked}
-                  className="font-mono text-[13px]"
-                  placeholder={momentPlaceholder}
-                  onChange={(event) => patch({ effectiveStartsAt: event.target.value })}
-                />
-              </Field>
-              <Field label="版本生效止点（可空）" path="effectiveEndsAt" problems={problems}>
-                <Input
-                  value={draft.effectiveEndsAt}
-                  disabled={locked}
-                  className="font-mono text-[13px]"
-                  placeholder="留空即持续有效"
-                  onChange={(event) => patch({ effectiveEndsAt: event.target.value })}
-                />
-              </Field>
+              <WallTimeField
+                label="版本生效起点 *"
+                path="effectiveStartsAt"
+                problems={problems}
+                value={draft.effectiveStartsAt}
+                locked={locked}
+                timeZone={timeZone}
+                onChange={(effectiveStartsAt) => patch({ effectiveStartsAt })}
+              />
+              <WallTimeField
+                label="版本生效止点"
+                path="effectiveEndsAt"
+                problems={problems}
+                value={draft.effectiveEndsAt}
+                locked={locked}
+                timeZone={timeZone}
+                note="留空即持续有效。"
+                onChange={(effectiveEndsAt) => patch({ effectiveEndsAt })}
+              />
             </div>
           </section>
 
@@ -218,24 +224,25 @@ export function SettlementPolicyPublicationForm({ onPublished }: SettlementPolic
                   onChange={(event) => patch({ currency: event.target.value })}
                 />
               </Field>
-              <Field label="政策生效起点 *" path="settlementPolicy.effectiveStartsAt" problems={problems}>
-                <Input
-                  value={draft.policyEffectiveStartsAt}
-                  disabled={locked}
-                  className="font-mono text-[13px]"
-                  placeholder={momentPlaceholder}
-                  onChange={(event) => patch({ policyEffectiveStartsAt: event.target.value })}
-                />
-              </Field>
-              <Field label="政策生效止点（可空）" path="settlementPolicy.effectiveEndsAt" problems={problems}>
-                <Input
-                  value={draft.policyEffectiveEndsAt}
-                  disabled={locked}
-                  className="font-mono text-[13px]"
-                  placeholder="留空即持续有效"
-                  onChange={(event) => patch({ policyEffectiveEndsAt: event.target.value })}
-                />
-              </Field>
+              <WallTimeField
+                label="政策生效起点 *"
+                path="settlementPolicy.effectiveStartsAt"
+                problems={problems}
+                value={draft.policyEffectiveStartsAt}
+                locked={locked}
+                timeZone={timeZone}
+                onChange={(policyEffectiveStartsAt) => patch({ policyEffectiveStartsAt })}
+              />
+              <WallTimeField
+                label="政策生效止点"
+                path="settlementPolicy.effectiveEndsAt"
+                problems={problems}
+                value={draft.policyEffectiveEndsAt}
+                locked={locked}
+                timeZone={timeZone}
+                note="留空即持续有效。"
+                onChange={(policyEffectiveEndsAt) => patch({ policyEffectiveEndsAt })}
+              />
             </div>
           </section>
         </div>

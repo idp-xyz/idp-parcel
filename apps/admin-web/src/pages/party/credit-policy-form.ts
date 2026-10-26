@@ -9,10 +9,8 @@
 // 送上去让服务端逐格点名。
 
 import type { CommercialPublicationPayload, CreditPolicyBodyPayload, VocabularySetRecord } from './publication-draft-api';
-import { integerOf, integerProblem, normalizeMoment } from './publication-form-shared';
-
-// 时点归一曾定义在本文件、被兄弟表单借用（票 22 抬到共享层）；这里保留导出只为既有调用点与测试不改一字，定义只在共享层。
-export { normalizeMoment };
+import { currentDisplayTimeZone } from '../moment';
+import { integerOf, integerProblem, wallMomentOf, wallMomentProblem } from './publication-form-shared';
 
 export interface CreditPolicyDraft {
   objectId: string;
@@ -110,8 +108,21 @@ export const creditPolicyRenderedPaths: readonly string[] = [
  * 本地编不进 JSON 类型的格，按 JSON 路径归组；空对象即可送预览。**只此两格**——这不是校验，是组不出载荷。整数格的
  * 文本 → 数值与它的本地问题同出共享层一条判据（integerOf / integerProblem），两处不会一处放一处拦。
  */
-export function creditPolicyLocalProblems(draft: CreditPolicyDraft): Record<string, string[]> {
+export function creditPolicyLocalProblems(
+  draft: CreditPolicyDraft,
+  timeZone: string = currentDisplayTimeZone(),
+): Record<string, string[]> {
   const problems: Record<string, string[]> = {};
+  // 四个时刻格是日期时间控件的墙钟，换不成时刻同样是「组不出载荷」（票 party-commercial-uiux/10）。
+  for (const [path, raw] of [
+    ['effectiveStartsAt', draft.effectiveStartsAt],
+    ['effectiveEndsAt', draft.effectiveEndsAt],
+    ['creditPolicy.effectiveStartsAt', draft.bodyEffectiveStartsAt],
+    ['creditPolicy.effectiveEndsAt', draft.bodyEffectiveEndsAt],
+  ] as const) {
+    const moment = wallMomentProblem(raw, timeZone);
+    if (moment !== null) problems[path] = [moment];
+  }
   const minor = integerProblem(draft.limitMinor);
   if (minor !== null) problems['creditPolicy.limitMinor'] = [minor];
   const ratio = integerProblem(draft.limitRatioBasisPoints);
@@ -125,28 +136,31 @@ export function creditPolicyLocalProblems(draft: CreditPolicyDraft): Record<stri
  * 基数是服务端要点名的一格问题，表单静默丢掉它反而把那格问题吞了。必填的键空着也送——预览会逐格点名，
  * 表单据此挂到格旁。**载荷里没有身份、没有摘要**：租户与录入者由接入渠道的操作者信封给。
  */
-export function creditPolicyPayloadOf(draft: CreditPolicyDraft): CommercialPublicationPayload {
+export function creditPolicyPayloadOf(
+  draft: CreditPolicyDraft,
+  timeZone: string = currentDisplayTimeZone(),
+): CommercialPublicationPayload {
   const body: CreditPolicyBodyPayload = {
     legalEntity: draft.legalEntity.trim(),
     authorityLevel: draft.authorityLevel.trim(),
     chargeType: draft.chargeType.trim(),
-    effectiveStartsAt: normalizeMoment(draft.bodyEffectiveStartsAt),
+    effectiveStartsAt: wallMomentOf(draft.bodyEffectiveStartsAt, timeZone),
   };
   const limitMinor = integerOf(draft.limitMinor);
   if (limitMinor !== undefined) body.limitMinor = limitMinor;
   const limitRatioBasisPoints = integerOf(draft.limitRatioBasisPoints);
   if (limitRatioBasisPoints !== undefined) body.limitRatioBasisPoints = limitRatioBasisPoints;
   if (draft.ratioBase.trim() !== '') body.ratioBase = draft.ratioBase.trim();
-  if (draft.bodyEffectiveEndsAt.trim() !== '') body.effectiveEndsAt = normalizeMoment(draft.bodyEffectiveEndsAt);
+  if (draft.bodyEffectiveEndsAt.trim() !== '') body.effectiveEndsAt = wallMomentOf(draft.bodyEffectiveEndsAt, timeZone);
 
   const payload: CommercialPublicationPayload = {
     kind: 'CREDIT_POLICY',
     objectId: draft.objectId.trim(),
     version: draft.version.trim(),
     scope: draft.scope.trim(),
-    effectiveStartsAt: normalizeMoment(draft.effectiveStartsAt),
+    effectiveStartsAt: wallMomentOf(draft.effectiveStartsAt, timeZone),
     creditPolicy: body,
   };
-  if (draft.effectiveEndsAt.trim() !== '') payload.effectiveEndsAt = normalizeMoment(draft.effectiveEndsAt);
+  if (draft.effectiveEndsAt.trim() !== '') payload.effectiveEndsAt = wallMomentOf(draft.effectiveEndsAt, timeZone);
   return payload;
 }

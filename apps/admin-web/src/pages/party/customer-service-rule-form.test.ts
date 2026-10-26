@@ -28,7 +28,7 @@ const filled: ServiceRuleDraft = {
   objectId: ' SYN-CSR-01 ',
   version: 'v2',
   scope: 'SYN-SCOPE-01',
-  effectiveStartsAt: '2026-10-01',
+  effectiveStartsAt: '2026-10-01T00:00',
   effectiveEndsAt: '',
   appliesTo: 'serviceProduct',
   appliesToId: ' SYN-PRODUCT-01 ',
@@ -43,13 +43,14 @@ const filled: ServiceRuleDraft = {
   ],
 };
 
-test('草稿组成载荷：kind 固定 CUSTOMER_SERVICE_RULE，适用对象同一个值送进正文与壳上的指名引用，各格去首尾空白，期限行四键 days 是整数，材料一行一项，只到天的日期补成当天零点 UTC', () => {
-  deepEqual(serviceRulePayloadOf(filled), {
+// 时刻格是日期时间控件交出的本地墙钟，按显示时区换成 UTC（票 party-commercial-uiux/10）：上海当天零点是前一天 16 点 UTC。
+test('草稿组成载荷：kind 固定 CUSTOMER_SERVICE_RULE，适用对象同一个值送进正文与壳上的指名引用，各格去首尾空白，期限行四键 days 是整数，材料一行一项，本地墙钟按显示时区换成 UTC', () => {
+  deepEqual(serviceRulePayloadOf(filled, 'Asia/Shanghai'), {
     kind: 'CUSTOMER_SERVICE_RULE',
     objectId: 'SYN-CSR-01',
     version: 'v2',
     scope: 'SYN-SCOPE-01',
-    effectiveStartsAt: '2026-10-01T00:00:00Z',
+    effectiveStartsAt: '2026-09-30T16:00:00Z',
     references: { SERVICE_PRODUCT: 'SYN-PRODUCT-01' },
     customerServiceRule: {
       serviceProduct: 'SYN-PRODUCT-01',
@@ -93,8 +94,8 @@ test('区间上界留空即键缺席；两张表零行仍送空数组；行序�
   deepEqual(payload.customerServiceRule!.minimumMaterials, []);
   ok('claimDeadlines' in payload.customerServiceRule! && 'minimumMaterials' in payload.customerServiceRule!);
 
-  const bounded = serviceRulePayloadOf({ ...filled, effectiveEndsAt: '2027-01-01' });
-  equal(bounded.effectiveEndsAt, '2027-01-01T00:00:00Z');
+  const bounded = serviceRulePayloadOf({ ...filled, effectiveEndsAt: '2027-01-01T00:00' }, 'Asia/Shanghai');
+  equal(bounded.effectiveEndsAt, '2026-12-31T16:00:00Z');
 
   deepEqual(
     serviceRulePayloadOf(filled).customerServiceRule!.claimDeadlines.map((row) => row.kind),
@@ -141,6 +142,16 @@ test('时长留空即键缺席；非整数文本缺席并记进本地问题；�
   deepEqual(serviceRuleLocalProblems(filled), {});
 });
 
+// 票 party-commercial-uiux/10：时刻格换不成时刻是本地问题，落在那一格路径上，挡住预览；空着不是——空着照送由服务端点名。
+test('时刻格换不成时刻才是本地问题，落在该格路径上', () => {
+  deepEqual(serviceRuleLocalProblems({ ...filled, effectiveStartsAt: '2026-10-01', effectiveEndsAt: 'tomorrow' }, 'Asia/Shanghai'), {
+    effectiveStartsAt: ['时间格式不对，请用日期时间选择器重新选'],
+    effectiveEndsAt: ['时间格式不对，请用日期时间选择器重新选'],
+  });
+  deepEqual(serviceRuleLocalProblems(filled, 'Asia/Shanghai'), {});
+  deepEqual(serviceRuleLocalProblems(emptyServiceRuleDraft(), 'Asia/Shanghai'), {});
+});
+
 // 材料清单是多行文本、一行一项：空行不是项，各项去首尾空白；重复的项照发——「至少一项且不重复」由 NewMinimumMaterialsRule 答。
 test('材料清单一行一项：空行不算项、各项去空白、重复照发；全空即空清单', () => {
   const payload = serviceRulePayloadOf({
@@ -174,7 +185,7 @@ test('载荷里没有身份、没有摘要，正文只有本册一格', () => {
 test('表单认领的 JSON 路径覆盖载荷能产出的每一条键；多认领的只有行本身与 applicability', () => {
   const draft: ServiceRuleDraft = {
     ...filled,
-    effectiveEndsAt: '2027-01-01',
+    effectiveEndsAt: '2027-01-01T00:00',
     minimumMaterials: [...filled.minimumMaterials, { claimKind: 'claim-damage', materials: 'material-photo' }],
   };
   const payload = serviceRulePayloadOf(draft);

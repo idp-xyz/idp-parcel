@@ -3,6 +3,7 @@ import { deepEqual, equal, notEqual, ok } from 'node:assert/strict';
 import { payloadKey } from './publication-draft-flow';
 import {
   acceptanceRulePackageFieldPaths,
+  acceptanceRulePackageLocalProblems,
   declarationSections,
   emptyAcceptanceRulePackageDraft,
   emptyAmendmentRuleDraft,
@@ -31,13 +32,13 @@ function filled(over: Partial<AcceptanceRulePackageDraft> = {}): AcceptanceRuleP
     objectId: 'SYN-RULEPKG-02',
     version: 'v1',
     scope: 'SYN-SCOPE-01',
-    effectiveStartsAt: '2026-10-01T00:00:00Z',
+    effectiveStartsAt: '2026-10-01T00:00',
     body: {
       serviceProduct: 'SYN-PROD-CN-SG-EXPRESS',
       contract: 'SYN-CONTRACT-01',
       legalEntity: 'SYN-LE-CN-01',
       scope: 'SYN-SCOPE-01',
-      effectiveStartsAt: '2026-10-01T00:00:00Z',
+      effectiveStartsAt: '2026-10-01T00:00',
       effectiveEndsAt: '',
       rules: [
         { category: 'MINIMUM_INGRESS_IDENTITY', reference: 'RULE/ingress-identity' },
@@ -99,12 +100,44 @@ test('可缺的格留空即不进载荷：壳与正文各自的区间上界；�
   }
   const bounded = payloadOf(
     filled({
-      effectiveEndsAt: '2027-01-01T00:00:00Z',
-      body: { ...filled().body, effectiveEndsAt: '2026-12-31T00:00:00Z' },
+      effectiveEndsAt: '2027-01-01T00:00',
+      body: { ...filled().body, effectiveEndsAt: '2026-12-31T00:00' },
     }),
   );
   equal(bounded.effectiveEndsAt, '2027-01-01T00:00:00Z');
   equal(bounded.acceptanceRulePackage!.rulePackageBody.effectiveEndsAt, '2026-12-31T00:00:00Z');
+});
+
+// Covers: 票 party-commercial-uiux/10——版本信息与正文各自的一对时刻格都是日期时间控件交出的本地墙钟，按显示时区换成 UTC。
+test('时刻格的本地墙钟按显示时区换成 UTC：版本信息与正文各自的起止', () => {
+  const payload = payloadOf(
+    filled({
+      effectiveStartsAt: ' 2026-10-01T08:00 ',
+      effectiveEndsAt: '2027-01-01T00:00',
+      body: { ...filled().body, effectiveStartsAt: '2026-10-01T09:30:15', effectiveEndsAt: '2026-12-31T23:59:59' },
+    }),
+    'Asia/Shanghai',
+  );
+  equal(payload.effectiveStartsAt, '2026-10-01T00:00:00Z');
+  equal(payload.effectiveEndsAt, '2026-12-31T16:00:00Z');
+  equal(payload.acceptanceRulePackage!.rulePackageBody.effectiveStartsAt, '2026-10-01T01:30:15Z');
+  equal(payload.acceptanceRulePackage!.rulePackageBody.effectiveEndsAt, '2026-12-31T15:59:59Z');
+});
+
+// Covers: 票 party-commercial-uiux/10——时刻格换不成时刻是本地问题，落在那一格路径上，挡住预览；空着不是。
+test('时刻格换不成时刻才是本地问题，落在该格路径上', () => {
+  deepEqual(
+    acceptanceRulePackageLocalProblems(
+      filled({ effectiveEndsAt: 'tomorrow', body: { ...filled().body, effectiveStartsAt: '2026-10-01' } }),
+      'Asia/Shanghai',
+    ),
+    {
+      effectiveEndsAt: ['时间格式不对，请用日期时间选择器重新选'],
+      'acceptanceRulePackage.rulePackageBody.effectiveStartsAt': ['时间格式不对，请用日期时间选择器重新选'],
+    },
+  );
+  deepEqual(acceptanceRulePackageLocalProblems(filled(), 'Asia/Shanghai'), {});
+  deepEqual(acceptanceRulePackageLocalProblems(emptyAcceptanceRulePackageDraft(), 'Asia/Shanghai'), {});
 });
 
 test('空节即未声明：六节全留空时载荷只有正文一节；空草稿的六节都是未声明', () => {

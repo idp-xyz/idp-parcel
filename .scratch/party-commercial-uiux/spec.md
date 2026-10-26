@@ -74,7 +74,7 @@ Status: in-progress——第一段 01–06 与第二段 07–09 resolved，第�
 | 07 | [引用可点、显示名称](issues/07-references-are-links-with-names.md) | — | resolved |
 | 08 | [版本按对象排在一起、可只看在用的](issues/08-versions-grouped-with-in-use-filter.md) | — | resolved |
 | 09 | [切页签、换册不丢草稿](issues/09-drafts-survive-tab-switches.md) | — | resolved |
-| 10 | [发布表单的时刻按本地时区填](issues/10-publication-moments-in-local-time.md) | — | in-progress |
+| 10 | [发布表单的时刻按本地时区填](issues/10-publication-moments-in-local-time.md) | — | resolved |
 | 11 | [发布前看得懂要发什么，发布前确认](issues/11-readable-preview-and-publish-confirmation.md) | 10 | in-progress |
 | 12 | [两张登记表单说业务话](issues/12-registration-forms-speak-business.md) | — | resolved |
 

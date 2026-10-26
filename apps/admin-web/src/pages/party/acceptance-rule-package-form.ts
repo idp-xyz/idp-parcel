@@ -10,6 +10,7 @@
 
 import { isOperatorRefusal, type OperatorRefusal } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
+import { currentDisplayTimeZone } from '../moment';
 import { finalOutcomeLabels, intakeSourceLabels } from './presentation';
 import {
   vocabularyOptions,
@@ -19,6 +20,7 @@ import {
   type SourceDataAmendmentPayload,
   type VocabularyOption,
 } from './publication-draft-api';
+import { wallMomentOf, wallMomentProblem } from './publication-form-shared';
 
 // ——草稿形状。每格都是操作者手里的字：封闭集格存原词（`''` = 还没选），行是几格一组，组是选中的原词列表。
 
@@ -171,20 +173,26 @@ export function sectionDeclared(draft: AcceptanceRulePackageDraft, section: Decl
 /**
  * 草稿 → 载荷。可缺的壳格与正文区间上界留空即不进载荷（Go 侧 omitempty 同义）；正文一节永远在场、行照原样；六节
  * 声明按 sectionDeclared 决定在不在场，在场的节整节原样送——空数组也送，「一行都没有」由服务端答。`closed` 没选就
- * 不送那一格。载荷里没有身份也没有摘要，壳上也没有指名引用（本册的引用都在正文五维里）。
+ * 不送那一格。时刻格是日期时间控件交出的本地墙钟，按显示时区换成 UTC（wallMomentOf）。载荷里没有身份也没有摘要，
+ * 壳上也没有指名引用（本册的引用都在正文五维里）。
  */
-export function payloadOf(draft: AcceptanceRulePackageDraft): CommercialPublicationPayload {
+export function payloadOf(
+  draft: AcceptanceRulePackageDraft,
+  timeZone: string = currentDisplayTimeZone(),
+): CommercialPublicationPayload {
   const body: AcceptanceRulePackageBodyPayload = {
     rulePackageBody: {
       serviceProduct: draft.body.serviceProduct,
       contract: draft.body.contract,
       legalEntity: draft.body.legalEntity,
       scope: draft.body.scope,
-      effectiveStartsAt: draft.body.effectiveStartsAt,
+      effectiveStartsAt: wallMomentOf(draft.body.effectiveStartsAt, timeZone),
       rules: draft.body.rules.map((rule) => ({ category: rule.category, reference: rule.reference })),
     },
   };
-  if (draft.body.effectiveEndsAt !== '') body.rulePackageBody.effectiveEndsAt = draft.body.effectiveEndsAt;
+  if (draft.body.effectiveEndsAt.trim() !== '') {
+    body.rulePackageBody.effectiveEndsAt = wallMomentOf(draft.body.effectiveEndsAt, timeZone);
+  }
   if (sectionDeclared(draft, 'asOfPolicies')) {
     body.asOfPolicies = draft.asOfPolicies.map((row) => ({
       judgment: row.judgment,
@@ -228,15 +236,36 @@ export function payloadOf(draft: AcceptanceRulePackageDraft): CommercialPublicat
     objectId: draft.objectId,
     version: draft.version,
     scope: draft.scope,
-    effectiveStartsAt: draft.effectiveStartsAt,
+    effectiveStartsAt: wallMomentOf(draft.effectiveStartsAt, timeZone),
     acceptanceRulePackage: body,
   };
-  if (draft.effectiveEndsAt !== '') payload.effectiveEndsAt = draft.effectiveEndsAt;
+  if (draft.effectiveEndsAt.trim() !== '') payload.effectiveEndsAt = wallMomentOf(draft.effectiveEndsAt, timeZone);
   return payload;
 }
 
 const shellPaths = ['objectId', 'version', 'scope', 'effectiveStartsAt', 'effectiveEndsAt'] as const;
 const root = 'acceptanceRulePackage';
+
+/**
+ * 本地组不出载荷的格，按 JSON 路径归组；空对象即可送预览。**只有版本信息与正文的时刻格**：墙钟换不成时刻
+ * 就没有那一格可送，这不是校验——空着照送，由服务端点名。
+ */
+export function acceptanceRulePackageLocalProblems(
+  draft: AcceptanceRulePackageDraft,
+  timeZone: string = currentDisplayTimeZone(),
+): Record<string, string[]> {
+  const problems: Record<string, string[]> = {};
+  for (const [path, raw] of [
+    ['effectiveStartsAt', draft.effectiveStartsAt],
+    ['effectiveEndsAt', draft.effectiveEndsAt],
+    [`${root}.rulePackageBody.effectiveStartsAt`, draft.body.effectiveStartsAt],
+    [`${root}.rulePackageBody.effectiveEndsAt`, draft.body.effectiveEndsAt],
+  ] as const) {
+    const moment = wallMomentProblem(raw, timeZone);
+    if (moment !== null) problems[path] = [moment];
+  }
+  return problems;
+}
 
 /**
  * 表单渲染了哪几条 JSON 路径（流程组件把服务端点名的其余路径单独列出）。行按行数长、组按选中数长：服务端对整节、

@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import type { ApiResult } from '../catalogue-api';
+import { currentDisplayTimeZone } from '../moment';
 import { controlFailureDispositionLabels, controlKindLabels, jointPassConditionLabels } from './presentation';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
-import { Field, ProblemText, VocabularySelect, momentPlaceholder, useLoaded } from './PublicationFormFields';
+import { Field, ProblemText, VocabularySelect, useLoaded } from './PublicationFormFields';
+import { WallTimeField } from './party-registration-fields';
 import { fieldProblemText } from './field-problem-text';
 import {
   controlPolicyCodesOf,
@@ -36,7 +38,8 @@ import {
  *
  * **表单不算摘要、不收也不送批准人、不裁任何门**（伞票 07 硬句）：空字段、集外的码、引用在不在册一律送上去，预览口
  * 逐格 problems 回来挂到对应格旁；至少一项、顺序唯一、（种类 × 范围）唯一是跨行的门，由构造门在预览上答成成因。本地
- * 只拦编不进 JSON 整数的顺序文本（localProblems）；重复的行只在表下**提示**一句，不挡预览——票面允许提示，拒绝由服务端说。
+ * 只拦编不进 JSON 整数的顺序文本与换不成时刻的时刻格（localProblems）；重复的行只在表下**提示**一句，不挡预览——票面
+ * 允许提示，拒绝由服务端说。
  */
 export interface PreAcceptanceFinancialControlPolicyPublicationFormProps {
   /** 载体到达「发布」那一步时回调，政策页借它切到接受前财务控制策略册并重读。 */
@@ -58,13 +61,15 @@ export function PreAcceptanceFinancialControlPolicyPublicationForm({
   const sets = vocabulary?.kind === 'outcome' ? vocabulary.body.sets : null;
   const codesOf = (name: string) => (sets === null ? null : controlPolicyCodesOf(sets, name));
   const hints = controlRowHints(draft);
+  // 时刻按操作者的显示时区填、送出 UTC（票 party-commercial-uiux/10），与登记表单同一条换算。
+  const timeZone = currentDisplayTimeZone();
 
   return (
     <PublicationDraftFlow
       kind="PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY"
       title="发布接受前财务控制策略版本"
-      assemblePayload={() => controlPolicyPayloadOf(draft)}
-      localProblems={controlPolicyLocalProblems(draft)}
+      assemblePayload={() => controlPolicyPayloadOf(draft, timeZone)}
+      localProblems={controlPolicyLocalProblems(draft, timeZone)}
       fieldPaths={controlPolicyFieldPaths(draft)}
       onPublished={onPublished}
     >
@@ -74,7 +79,7 @@ export function PreAcceptanceFinancialControlPolicyPublicationForm({
             <h3 className="text-[13px] font-medium text-idpxyz-text">版本信息</h3>
             <p className="text-[11px] text-idpxyz-textMuted">
               版本适用范围与生效区间说的是<strong>这一版</strong>
-              本身；止点留空即持续有效。策略正文没有自己的范围与区间：它只说控制怎么做，用在哪个费用范围由客户合同按范围指定。
+              本身。策略正文没有自己的范围与区间：它只说控制怎么做，用在哪个费用范围由客户合同按范围指定。
             </p>
             <div className="grid grid-cols-2 gap-3">
               <Field label="策略对象标识 *" path="objectId" problems={problems}>
@@ -102,24 +107,25 @@ export function PreAcceptanceFinancialControlPolicyPublicationForm({
                 />
               </Field>
               <div />
-              <Field label="版本生效起点 *" path="effectiveStartsAt" problems={problems}>
-                <Input
-                  value={draft.effectiveStartsAt}
-                  disabled={locked}
-                  className="font-mono text-[13px]"
-                  placeholder={momentPlaceholder}
-                  onChange={(event) => patch({ effectiveStartsAt: event.target.value })}
-                />
-              </Field>
-              <Field label="版本生效止点（可空）" path="effectiveEndsAt" problems={problems}>
-                <Input
-                  value={draft.effectiveEndsAt}
-                  disabled={locked}
-                  className="font-mono text-[13px]"
-                  placeholder="留空即持续有效"
-                  onChange={(event) => patch({ effectiveEndsAt: event.target.value })}
-                />
-              </Field>
+              <WallTimeField
+                label="版本生效起点 *"
+                path="effectiveStartsAt"
+                problems={problems}
+                value={draft.effectiveStartsAt}
+                locked={locked}
+                timeZone={timeZone}
+                onChange={(effectiveStartsAt) => patch({ effectiveStartsAt })}
+              />
+              <WallTimeField
+                label="版本生效止点"
+                path="effectiveEndsAt"
+                problems={problems}
+                value={draft.effectiveEndsAt}
+                locked={locked}
+                timeZone={timeZone}
+                note="留空即持续有效。"
+                onChange={(effectiveEndsAt) => patch({ effectiveEndsAt })}
+              />
             </div>
           </section>
 

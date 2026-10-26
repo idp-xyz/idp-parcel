@@ -6,7 +6,8 @@
 // 币种存不存在一律送上去让服务端答——预览口逐格 problems 回来挂到对应格旁；这里连「必填」都不拦，免得两处口径。
 // 本册特有的一句：结算政策答「怎么结」不答「要不要接受前控制」（那是 0007 / 0024 两层的事），草稿里没有控制字段。
 
-import { normalizeMoment } from './publication-form-shared';
+import { currentDisplayTimeZone } from '../moment';
+import { wallMomentOf, wallMomentProblem } from './publication-form-shared';
 import type {
   CommercialPublicationPayload,
   SettlementPolicyBodyPayload,
@@ -105,6 +106,28 @@ export const settlementPolicyRenderedPaths: readonly string[] = [
 ];
 
 /**
+ * 本地组不出载荷的格，按 JSON 路径归组；空对象即可送预览。本册其余格全是文本、都编得进载荷类型，只有时刻格是日期
+ * 时间控件的墙钟：换不成时刻就组不出那份载荷（票 party-commercial-uiux/10）。这与「必填」「区间先后」不是一回事，
+ * 后两样仍送上去让服务端答。
+ */
+export function settlementPolicyLocalProblems(
+  draft: SettlementPolicyDraft,
+  timeZone: string = currentDisplayTimeZone(),
+): Record<string, string[]> {
+  const problems: Record<string, string[]> = {};
+  for (const [path, raw] of [
+    ['effectiveStartsAt', draft.effectiveStartsAt],
+    ['effectiveEndsAt', draft.effectiveEndsAt],
+    ['settlementPolicy.effectiveStartsAt', draft.policyEffectiveStartsAt],
+    ['settlementPolicy.effectiveEndsAt', draft.policyEffectiveEndsAt],
+  ] as const) {
+    const moment = wallMomentProblem(raw, timeZone);
+    if (moment !== null) problems[path] = [moment];
+  }
+  return problems;
+}
+
+/**
  * 草稿 → 产品定义的载荷。可缺的上界缺席而不是空串：服务端按键在场与否分辨「没有上界」。方式与币种原样送（只去
  * 首尾空白）：集内不集内、存在不存在由服务端答，改大小写或查表就是本地在裁。合同维是对象 + 版本两格——两段式
  * 指称串只许领域 NewQualifiedVersionLabel 一处拼，表单不拼版本号。
@@ -114,7 +137,10 @@ export const settlementPolicyRenderedPaths: readonly string[] = [
  * 输入格，镜像在这里做；没选合同时壳上不长这个键（空串会被服务端当成一个填了空的引用点名，那是第二处报同一件事）。
  * **载荷里没有身份也没有摘要**：租户与录入者由接入渠道的操作者信封给，摘要只有服务端算。
  */
-export function settlementPolicyPayloadOf(draft: SettlementPolicyDraft): CommercialPublicationPayload {
+export function settlementPolicyPayloadOf(
+  draft: SettlementPolicyDraft,
+  timeZone: string = currentDisplayTimeZone(),
+): CommercialPublicationPayload {
   const contractObjectId = draft.contractObjectId.trim();
   const body: SettlementPolicyBodyPayload = {
     method: draft.method.trim(),
@@ -123,21 +149,21 @@ export function settlementPolicyPayloadOf(draft: SettlementPolicyDraft): Commerc
     contract: { objectId: contractObjectId, version: draft.contractVersion.trim() },
     chargeScope: draft.chargeScope.trim(),
     currency: draft.currency.trim(),
-    effectiveStartsAt: normalizeMoment(draft.policyEffectiveStartsAt),
+    effectiveStartsAt: wallMomentOf(draft.policyEffectiveStartsAt, timeZone),
   };
   if (draft.policyEffectiveEndsAt.trim() !== '') {
-    body.effectiveEndsAt = normalizeMoment(draft.policyEffectiveEndsAt);
+    body.effectiveEndsAt = wallMomentOf(draft.policyEffectiveEndsAt, timeZone);
   }
   const payload: CommercialPublicationPayload = {
     kind: 'SETTLEMENT_POLICY',
     objectId: draft.objectId.trim(),
     version: draft.version.trim(),
     scope: draft.scope.trim(),
-    effectiveStartsAt: normalizeMoment(draft.effectiveStartsAt),
+    effectiveStartsAt: wallMomentOf(draft.effectiveStartsAt, timeZone),
     settlementPolicy: body,
   };
   if (draft.effectiveEndsAt.trim() !== '') {
-    payload.effectiveEndsAt = normalizeMoment(draft.effectiveEndsAt);
+    payload.effectiveEndsAt = wallMomentOf(draft.effectiveEndsAt, timeZone);
   }
   if (contractObjectId !== '') {
     payload.references = { CUSTOMER_CONTRACT: contractObjectId };

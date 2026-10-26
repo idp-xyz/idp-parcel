@@ -4,7 +4,8 @@
 //
 // **本文件不算摘要、不裁任何门、不判领域规则**（伞票 07 硬句）。空字段、区间先后、引用在不在册、方向 × 方案方向 × 转换
 // 的绑定矩阵、口径条件格的在场规则，一律送上去让服务端答——预览口逐格 problems 回来挂到对应格旁，跨格的绑定矩阵以
-// 成因一句回来。连「必填」都不拦，免得两处口径；没有一格编不进载荷类型（全是文本），所以不给 localProblems。
+// 成因一句回来。连「必填」都不拦，免得两处口径；本地只拦换不成时刻的时刻格（pricePolicyLocalProblems）——那是组不出
+// 载荷，不是校验。
 //
 // **显隐是呈现，不是裁门。** 税务分类只在含税 / 未税时显；隐掉的格草稿里的值**不清、照送**——「隐了却传了」由服务端
 // 按 CHECK 同形的构造门答在那一格上，组件把隐格上的值与问题如实显出来，不替人静默丢。
@@ -16,8 +17,9 @@
 // 不给「先发正文、回头补口径」的两步；汇率一节可缺——不涉及外币的政策没有汇率口径，三格全空即不送这一节，填了任一格
 // 就整节送、缺的由服务端点名（三格同在同缺）。
 
+import { currentDisplayTimeZone } from '../moment';
 import { commercialDirectionLabels, planBindingConversionLabels, taxDispositionLabels } from './presentation';
-import { normalizeMoment } from './publication-form-shared';
+import { wallMomentOf, wallMomentProblem } from './publication-form-shared';
 import type {
   CommercialPublicationPayload,
   FxCaliberPayload,
@@ -158,12 +160,37 @@ export function declaresFx(draft: Pick<PricePolicyDraft, 'fxQuoteType' | 'fxAsOf
 }
 
 /**
+ * 本地组不出载荷的格，按 JSON 路径归组；空对象即可送预览。本册其余格全是文本、都编得进载荷类型，只有时刻格是日期
+ * 时间控件的墙钟：换不成时刻就组不出那份载荷（票 party-commercial-uiux/10）。这与「必填」「区间先后」不是一回事，
+ * 后两样仍送上去让服务端答。
+ */
+export function pricePolicyLocalProblems(
+  draft: PricePolicyDraft,
+  timeZone: string = currentDisplayTimeZone(),
+): Record<string, string[]> {
+  const problems: Record<string, string[]> = {};
+  for (const [path, raw] of [
+    ['effectiveStartsAt', draft.effectiveStartsAt],
+    ['effectiveEndsAt', draft.effectiveEndsAt],
+    ['pricePolicy.effectiveStartsAt', draft.policyEffectiveStartsAt],
+    ['pricePolicy.effectiveEndsAt', draft.policyEffectiveEndsAt],
+  ] as const) {
+    const moment = wallMomentProblem(raw, timeZone);
+    if (moment !== null) problems[path] = [moment];
+  }
+  return problems;
+}
+
+/**
  * 草稿 → 产品定义的载荷。可缺的键缺席而不是空串：两个区间上界、税务分类、汇率节——服务端按键在场与否分辨
  * 「没有」，空串会被当成填了空的值送进构造门。封闭集四格照原样送（含空串「未选」，服务端按集合外点名，不代填 NONE）。
  * 隐掉的条件格若草稿里有值**照送**（显隐是呈现不是裁门）。**载荷里没有身份也没有摘要**：租户与录入者由接入渠道的操作者
  * 信封给，摘要只有服务端算。
  */
-export function pricePolicyPayloadOf(draft: PricePolicyDraft): CommercialPublicationPayload {
+export function pricePolicyPayloadOf(
+  draft: PricePolicyDraft,
+  timeZone: string = currentDisplayTimeZone(),
+): CommercialPublicationPayload {
   const caliber: PricePolicyCaliberPayload = { taxDisposition: draft.taxDisposition.trim() };
   if (draft.taxClassification.trim() !== '') caliber.taxClassification = draft.taxClassification.trim();
   if (declaresFx(draft)) {
@@ -180,20 +207,20 @@ export function pricePolicyPayloadOf(draft: PricePolicyDraft): CommercialPublica
     planDirection: draft.planDirection.trim(),
     conversion: draft.conversion.trim(),
     scope: draft.policyScope.trim(),
-    effectiveStartsAt: normalizeMoment(draft.policyEffectiveStartsAt),
+    effectiveStartsAt: wallMomentOf(draft.policyEffectiveStartsAt, timeZone),
     caliber,
   };
-  if (draft.policyEffectiveEndsAt.trim() !== '') body.effectiveEndsAt = normalizeMoment(draft.policyEffectiveEndsAt);
+  if (draft.policyEffectiveEndsAt.trim() !== '') body.effectiveEndsAt = wallMomentOf(draft.policyEffectiveEndsAt, timeZone);
 
   const payload: CommercialPublicationPayload = {
     kind: 'PRICE_RULE',
     objectId: draft.objectId.trim(),
     version: draft.version.trim(),
     scope: draft.scope.trim(),
-    effectiveStartsAt: normalizeMoment(draft.effectiveStartsAt),
+    effectiveStartsAt: wallMomentOf(draft.effectiveStartsAt, timeZone),
     pricePolicy: body,
   };
-  if (draft.effectiveEndsAt.trim() !== '') payload.effectiveEndsAt = normalizeMoment(draft.effectiveEndsAt);
+  if (draft.effectiveEndsAt.trim() !== '') payload.effectiveEndsAt = wallMomentOf(draft.effectiveEndsAt, timeZone);
   return payload;
 }
 

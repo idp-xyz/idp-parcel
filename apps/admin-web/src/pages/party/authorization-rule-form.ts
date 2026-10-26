@@ -7,12 +7,14 @@
 
 import { isOperatorRefusal, type OperatorRefusal } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
+import { currentDisplayTimeZone } from '../moment';
 import {
   vocabularyOptions,
   type CommercialPublicationPayload,
   type PublicationVocabularyResponseBody,
   type VocabularyOption,
 } from './publication-draft-api';
+import { wallMomentOf, wallMomentProblem } from './publication-form-shared';
 
 /** 目录的一行草稿：`party` 是请求方原词（`''` = 还没选），`rule` 是规则引用串。 */
 export interface CancellationRowDraft {
@@ -46,21 +48,44 @@ export function emptyAuthorizationRuleDraft(): AuthorizationRuleDraft {
 
 /**
  * 草稿 → 载荷。可缺的壳格留空即不进载荷（Go 侧 omitempty 同义）；目录一节永远在场、行照原样——零行也送空数组，
- * 「一行都没有」由服务端答缺件，不是表单替人决定的事。载荷里没有身份也没有摘要。
+ * 「一行都没有」由服务端答缺件，不是表单替人决定的事。时刻格是日期时间控件交出的本地墙钟，按显示时区换成 UTC
+ * （wallMomentOf）。载荷里没有身份也没有摘要。
  */
-export function payloadOf(draft: AuthorizationRuleDraft): CommercialPublicationPayload {
+export function payloadOf(
+  draft: AuthorizationRuleDraft,
+  timeZone: string = currentDisplayTimeZone(),
+): CommercialPublicationPayload {
   const payload: CommercialPublicationPayload = {
     kind: 'AUTHORIZATION_RULE',
     objectId: draft.objectId,
     version: draft.version,
     scope: draft.scope,
-    effectiveStartsAt: draft.effectiveStartsAt,
+    effectiveStartsAt: wallMomentOf(draft.effectiveStartsAt, timeZone),
     authorizationRule: {
       cancellationAuthority: draft.rows.map((row) => ({ party: row.party, rule: row.rule })),
     },
   };
-  if (draft.effectiveEndsAt !== '') payload.effectiveEndsAt = draft.effectiveEndsAt;
+  if (draft.effectiveEndsAt.trim() !== '') payload.effectiveEndsAt = wallMomentOf(draft.effectiveEndsAt, timeZone);
   return payload;
+}
+
+/**
+ * 本地组不出载荷的格，按 JSON 路径归组；空对象即可送预览。**只有时刻格**：墙钟换不成时刻就没有那一格可送，这不是
+ * 校验——空着照送，由服务端点名。
+ */
+export function authorizationRuleLocalProblems(
+  draft: AuthorizationRuleDraft,
+  timeZone: string = currentDisplayTimeZone(),
+): Record<string, string[]> {
+  const problems: Record<string, string[]> = {};
+  for (const [path, raw] of [
+    ['effectiveStartsAt', draft.effectiveStartsAt],
+    ['effectiveEndsAt', draft.effectiveEndsAt],
+  ] as const) {
+    const moment = wallMomentProblem(raw, timeZone);
+    if (moment !== null) problems[path] = [moment];
+  }
+  return problems;
 }
 
 const shellPaths = ['objectId', 'version', 'scope', 'effectiveStartsAt', 'effectiveEndsAt'] as const;

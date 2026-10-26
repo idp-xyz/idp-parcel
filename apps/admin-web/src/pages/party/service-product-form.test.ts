@@ -15,7 +15,7 @@ import {
 // 本文件钉的是服务产品版本表单纯逻辑的四条边（票 admin-write-faces/09）：
 //   1. 载荷是壳：不声明交付条件时组出来的对象没有任何正文格，kind 钉死 SERVICE_PRODUCT；
 //   2. 可缺的键缺席而不是空值：上界留空、引用表全空时载荷里没有那两个键；
-//   3. 本地只判编码层的问题（同键两行），空字段 / 时刻格式 / 集合外的键一律零命中——那是服务端的话；
+//   3. 本地只判编码层的问题（同键两行、时刻格换不成时刻），空字段 / 集合外的键一律零命中——那是服务端的话；
 //   4. 表单认领的 JSON 路径随引用表的行而变，服务端点名的每一行都有格接住。
 // 第五条自票 admin-write-faces/25 起：产品层交付条件一节填了才带 `serviceProduct.deliveryConditions`，不带 tightens 键。
 
@@ -24,7 +24,7 @@ function draft(over: Partial<ServiceProductDraft> = {}): ServiceProductDraft {
     objectId: 'SYN-PROD-CN-SG-EXPRESS',
     version: 'v2',
     scope: 'SYN-SCOPE-01',
-    effectiveStartsAt: '2026-08-01T00:00:00Z',
+    effectiveStartsAt: '2026-08-01T00:00',
     effectiveEndsAt: '',
     references: [],
     deliveryConditions: emptyDeliveryConditionDraft(),
@@ -73,7 +73,7 @@ test('交付条件填了任一格整节进 serviceProduct.deliveryConditions；�
 test('上界与引用表填了才进载荷；两格全空的行跳过，半填的行照送', () => {
   const payload = serviceProductPayloadOf(
     draft({
-      effectiveEndsAt: '2027-08-01T00:00:00Z',
+      effectiveEndsAt: '2027-08-01T00:00',
       references: [
         { kind: 'CUSTOMER_CONTRACT', objectId: 'SYN-CONTRACT-01' },
         emptyReferenceRow(),
@@ -95,9 +95,27 @@ test('引用键原样送、不代填也不筛：集合外的键与空键都是�
   deepEqual(serviceProductLocalProblems(draft({ references: [{ kind: 'NOT_A_KIND', objectId: 'x' }] })), {});
 });
 
-test('本地只判编码层：空字段与坏时刻零命中，同键两行按路径报出', () => {
+// Covers: 票 party-commercial-uiux/10——时刻格是日期时间控件交出的本地墙钟，按显示时区换成 UTC；只有空白的止点同空着。
+test('时刻格的本地墙钟按显示时区换成 UTC', () => {
+  const payload = serviceProductPayloadOf(draft({ effectiveStartsAt: ' 2026-08-01T08:00 ', effectiveEndsAt: '2027-08-01T00:00:30' }), 'Asia/Shanghai');
+  equal(payload.effectiveStartsAt, '2026-08-01T00:00:00Z');
+  equal(payload.effectiveEndsAt, '2027-07-31T16:00:30Z');
+  ok(!('effectiveEndsAt' in serviceProductPayloadOf(draft({ effectiveEndsAt: '  ' }), 'Asia/Shanghai')));
+});
+
+// Covers: 票 party-commercial-uiux/10——时刻格换不成时刻是本地问题，落在那一格路径上，挡住预览；空着不是。
+test('时刻格换不成时刻才是本地问题，落在该格路径上', () => {
+  deepEqual(serviceProductLocalProblems(draft({ effectiveStartsAt: 'yesterday', effectiveEndsAt: '2027-08-01' }), 'Asia/Shanghai'), {
+    effectiveStartsAt: ['时间格式不对，请用日期时间选择器重新选'],
+    effectiveEndsAt: ['时间格式不对，请用日期时间选择器重新选'],
+  });
+  deepEqual(serviceProductLocalProblems(draft(), 'Asia/Shanghai'), {});
+  deepEqual(serviceProductLocalProblems(emptyServiceProductDraft(), 'Asia/Shanghai'), {});
+});
+
+test('本地只判编码层：空字段零命中，同键两行按路径报出', () => {
   deepEqual(serviceProductLocalProblems(emptyServiceProductDraft()), {});
-  deepEqual(serviceProductLocalProblems(draft({ effectiveStartsAt: 'yesterday', objectId: '' })), {});
+  deepEqual(serviceProductLocalProblems(draft({ objectId: '' })), {});
 
   const duplicated = draft({
     references: [
@@ -137,7 +155,7 @@ test('认领的 JSON 路径 = 壳五格 + 引用表每一非空行 + 交付条�
 test('载荷键随任一格变：换引用或换上界都是另一份，预览过的不再算数', () => {
   const base = payloadKey(serviceProductPayloadOf(draft()));
   equal(payloadKey(serviceProductPayloadOf(draft())), base);
-  ok(payloadKey(serviceProductPayloadOf(draft({ effectiveEndsAt: '2027-01-01T00:00:00Z' }))) !== base);
+  ok(payloadKey(serviceProductPayloadOf(draft({ effectiveEndsAt: '2027-01-01T00:00' }))) !== base);
   ok(payloadKey(serviceProductPayloadOf(draft({ references: [{ kind: 'CUSTOMER_CONTRACT', objectId: 'c' }] }))) !== base);
   // 加一行全空的引用不改载荷：还没填的「加一行」不是内容。
   equal(payloadKey(serviceProductPayloadOf(draft({ references: [emptyReferenceRow()] }))), base);

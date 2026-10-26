@@ -2,12 +2,15 @@ import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import { accessRefusalTitle } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
+import { currentDisplayTimeZone } from '../moment';
 import { cancellationPartyLabels } from './presentation';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
 import { Field, Problems, RowFrame, selectClass, useLoaded } from './PublicationFormFields';
+import { WallTimeField } from './party-registration-fields';
 import {
   authorizationRuleFieldPaths,
+  authorizationRuleLocalProblems,
   emptyAuthorizationRuleDraft,
   emptyCancellationRowDraft,
   partyOptionsOf,
@@ -44,18 +47,21 @@ export function AuthorizationRulePublicationForm({ onPublished }: AuthorizationR
   const patch = (change: Partial<AuthorizationRuleDraft>) => setDraft((current) => ({ ...current, ...change }));
   const patchRow = (index: number, change: Partial<CancellationRowDraft>) =>
     patch({ rows: draft.rows.map((row, at) => (at === index ? { ...row, ...change } : row)) });
+  // 时刻按操作者的显示时区填、送出 UTC（票 party-commercial-uiux/10），与登记表单同一条换算。
+  const timeZone = currentDisplayTimeZone();
 
   return (
     <PublicationDraftFlow
       kind="AUTHORIZATION_RULE"
       title="发布授权规则版本"
-      assemblePayload={() => payloadOf(draft)}
+      assemblePayload={() => payloadOf(draft, timeZone)}
+      localProblems={authorizationRuleLocalProblems(draft, timeZone)}
       fieldPaths={authorizationRuleFieldPaths(draft)}
       onPublished={onPublished}
     >
       {(form) => (
         <div className="flex flex-col gap-5">
-          <ShellFields draft={draft} patch={patch} form={form} />
+          <ShellFields draft={draft} patch={patch} form={form} timeZone={timeZone} />
           <CancellationAuthorityFields draft={draft} patch={patch} patchRow={patchRow} form={form} parties={parties} />
         </div>
       )}
@@ -69,10 +75,12 @@ function ShellFields({
   draft,
   patch,
   form,
+  timeZone,
 }: {
   draft: AuthorizationRuleDraft;
   patch: (change: Partial<AuthorizationRuleDraft>) => void;
   form: PublicationFormContext;
+  timeZone: string;
 }) {
   return (
     <section className="flex flex-col gap-2">
@@ -104,25 +112,25 @@ function ShellFields({
           />
         </Field>
         <div />
-        {/* 本册 payloadOf 把时刻原样送出、不替只到天的日期补零点，只填日期会被服务端拒，所以占位要求完整时刻。 */}
-        <Field label="生效起点 *" path="effectiveStartsAt" problems={form.problems}>
-          <Input
-            value={draft.effectiveStartsAt}
-            readOnly={form.locked}
-            className="font-mono text-[13px]"
-            placeholder="请填完整时刻，例如 2026-10-01T00:00:00+08:00"
-            onChange={(event) => patch({ effectiveStartsAt: event.target.value })}
-          />
-        </Field>
-        <Field label="生效止点（可空）" path="effectiveEndsAt" problems={form.problems}>
-          <Input
-            value={draft.effectiveEndsAt}
-            readOnly={form.locked}
-            className="font-mono text-[13px]"
-            placeholder="留空即持续有效；要填请填完整时刻"
-            onChange={(event) => patch({ effectiveEndsAt: event.target.value })}
-          />
-        </Field>
+        <WallTimeField
+          label="生效起点 *"
+          path="effectiveStartsAt"
+          problems={form.problems}
+          value={draft.effectiveStartsAt}
+          locked={form.locked}
+          timeZone={timeZone}
+          onChange={(value) => patch({ effectiveStartsAt: value })}
+        />
+        <WallTimeField
+          label="生效止点"
+          path="effectiveEndsAt"
+          problems={form.problems}
+          value={draft.effectiveEndsAt}
+          locked={form.locked}
+          timeZone={timeZone}
+          note="留空即持续有效。"
+          onChange={(value) => patch({ effectiveEndsAt: value })}
+        />
       </div>
       <p className="text-[11px] text-idpxyz-textMuted">
         起点晚于现在时，发布稿照样可以保存和批准；发布时会提示还没到生效起点，到了起点再来发布即可，这不是失败。

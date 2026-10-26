@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
+import { currentDisplayTimeZone } from '../moment';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
 import { DeliveryConditionFields } from './DeliveryConditionFields';
 import { Field, Problems, fieldLabel } from './PublicationFormFields';
 import type { DeliveryConditionDraft } from './delivery-condition-section';
+import { WallTimeField } from './party-registration-fields';
 import {
   emptyReferenceRow,
   emptyServiceProductDraft,
@@ -28,8 +30,8 @@ import {
  * **引用表是「加一行」不是「从这几个里挑」**（票 09 硬句）：`references` 是开放词汇，键名从哪来、指向什么由发布
  * 用例与领域答；今天服务端没有词表读口，表单不代填键名、不内置词表，集合外的键由预览在对应行上逐格点名。
  *
- * 时刻按 RFC 3339 原样送、不在本地补零点也不换时区：补哪个时区的零点是一条规则，表单不替操作者定；格式
- * 立不立得住由服务端在那一格上答。
+ * 时刻格按操作者显示时区的本地墙钟填、组载荷时换成 UTC：同叫「生效起点」的格在各张发布表单与登记表单上落在
+ * 同一个时刻（票 party-commercial-uiux/10）。
  */
 export interface ServiceProductPublicationFormProps {
   /** 载体到达「发布」那一步时回调，页面借它刷同页的目录读面。 */
@@ -43,14 +45,15 @@ export function ServiceProductPublicationForm({ onPublished }: ServiceProductPub
     patch({ references: draft.references.map((row, at) => (at === index ? { ...row, ...change } : row)) });
   const patchDeliveryConditions = (change: Partial<DeliveryConditionDraft>) =>
     setDraft((current) => ({ ...current, deliveryConditions: { ...current.deliveryConditions, ...change } }));
+  const timeZone = currentDisplayTimeZone();
 
   return (
     <PublicationDraftFlow
       kind="SERVICE_PRODUCT"
       title="发布服务产品版本"
-      assemblePayload={() => serviceProductPayloadOf(draft)}
+      assemblePayload={() => serviceProductPayloadOf(draft, timeZone)}
       fieldPaths={serviceProductFieldPaths(draft)}
-      localProblems={serviceProductLocalProblems(draft)}
+      localProblems={serviceProductLocalProblems(draft, timeZone)}
       onPublished={onPublished}
     >
       {(form) => (
@@ -58,6 +61,7 @@ export function ServiceProductPublicationForm({ onPublished }: ServiceProductPub
           <ServiceProductFields
             draft={draft}
             form={form}
+            timeZone={timeZone}
             onPatch={patch}
             onPatchRow={patchRow}
             onAddRow={() => patch({ references: [...draft.references, emptyReferenceRow()] })}
@@ -79,6 +83,7 @@ export function ServiceProductPublicationForm({ onPublished }: ServiceProductPub
 function ServiceProductFields({
   draft,
   form,
+  timeZone,
   onPatch,
   onPatchRow,
   onAddRow,
@@ -86,6 +91,7 @@ function ServiceProductFields({
 }: {
   draft: ServiceProductDraft;
   form: PublicationFormContext;
+  timeZone: string;
   onPatch: (change: Partial<ServiceProductDraft>) => void;
   onPatchRow: (index: number, change: Partial<ReferenceRowDraft>) => void;
   onAddRow: () => void;
@@ -106,6 +112,18 @@ function ServiceProductFields({
       />
     </Field>
   );
+  const moment = (path: 'effectiveStartsAt' | 'effectiveEndsAt', label: string, note?: string) => (
+    <WallTimeField
+      label={label}
+      path={path}
+      problems={form.problems}
+      value={draft[path]}
+      locked={form.locked}
+      timeZone={timeZone}
+      note={note}
+      onChange={(value) => onPatch({ [path]: value })}
+    />
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -119,9 +137,8 @@ function ServiceProductFields({
         {field('objectId', '对象标识 *', '服务产品的对象标识')}
         {field('version', '版本号 *', '同一产品下不重复；改内容要用新的版本号')}
         {field('scope', '范围引用 *', '商业范围引用')}
-        {/* 本册时刻原样送、不补零点（serviceProductPayloadOf 不经 normalizeMoment），所以要完整时刻。 */}
-        {field('effectiveStartsAt', '生效起点 *', '请填完整时刻，例如 2026-08-01T00:00:00+08:00')}
-        {field('effectiveEndsAt', '生效止点', '完整时刻；留空即持续有效')}
+        {moment('effectiveStartsAt', '生效起点 *')}
+        {moment('effectiveEndsAt', '生效止点', '留空即持续有效。')}
       </div>
 
       <ReferencesEditor

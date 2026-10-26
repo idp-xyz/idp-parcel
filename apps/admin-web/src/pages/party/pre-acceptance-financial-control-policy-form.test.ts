@@ -23,7 +23,7 @@ const filled: ControlPolicyDraft = {
   objectId: ' SYN-FIN-CONTROL-01 ',
   version: 'v2',
   scope: 'SYN-SCOPE-01',
-  effectiveStartsAt: '2026-10-01',
+  effectiveStartsAt: '2026-10-01T08:00',
   effectiveEndsAt: '',
   jointPassCondition: 'ALL_CONTROLS_PASS',
   controls: [
@@ -32,8 +32,9 @@ const filled: ControlPolicyDraft = {
   ],
 };
 
-test('草稿组成载荷：kind 固定 PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY，各格去首尾空白，控制项逐行五键、顺序是整数，只到天的日期补成当天零点 UTC', () => {
-  deepEqual(controlPolicyPayloadOf(filled), {
+// 时刻格是日期时间控件的本地墙钟，按显示时区换成 UTC，与登记表单同一条换算（票 party-commercial-uiux/10）。
+test('草稿组成载荷：kind 固定 PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY，各格去首尾空白，控制项逐行五键、顺序是整数，本地墙钟按显示时区换成 UTC', () => {
+  deepEqual(controlPolicyPayloadOf(filled, 'Asia/Shanghai'), {
     kind: 'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY',
     objectId: 'SYN-FIN-CONTROL-01',
     version: 'v2',
@@ -66,8 +67,18 @@ test('区间上界留空即键缺席；壳上不带指名引用；零行仍送 c
   deepEqual(payload.preAcceptanceFinancialControlPolicy!.controls, []);
   ok('controls' in payload.preAcceptanceFinancialControlPolicy!);
 
-  const bounded = controlPolicyPayloadOf({ ...filled, effectiveEndsAt: '2027-01-01' });
-  equal(bounded.effectiveEndsAt, '2027-01-01T00:00:00Z');
+  const bounded = controlPolicyPayloadOf({ ...filled, effectiveEndsAt: '2027-01-01T00:00' }, 'Asia/Shanghai');
+  equal(bounded.effectiveEndsAt, '2026-12-31T16:00:00Z');
+});
+
+// 票 party-commercial-uiux/10：时刻格换不成时刻是本地问题，落在那一格路径上，挡住预览；空着不是。
+test('时刻格换不成时刻才是本地问题，落在该格路径上', () => {
+  deepEqual(controlPolicyLocalProblems({ ...filled, effectiveStartsAt: '2026-10-01', effectiveEndsAt: 'tomorrow' }, 'Asia/Shanghai'), {
+    effectiveStartsAt: ['时间格式不对，请用日期时间选择器重新选'],
+    effectiveEndsAt: ['时间格式不对，请用日期时间选择器重新选'],
+  });
+  deepEqual(controlPolicyLocalProblems(filled, 'Asia/Shanghai'), {});
+  deepEqual(controlPolicyLocalProblems(emptyControlPolicyDraft(), 'Asia/Shanghai'), {});
 });
 
 // 三个封闭集的码原样送（只去空白）：未选是空串而不是缺键，服务端点名那一格；表单不改大小写、不查表——改了就是本地在裁。
@@ -126,7 +137,7 @@ test('载荷里没有身份、没有摘要，也没有合同层声明的键', ()
 // 公共半边把服务端点名、表单没认领的路径单列为「未认领」。表单自己能产出的每一条键都必须已认领，子表按行展开到
 // controls[i].<键>；反向只许多认领行本身（controls[i]）——服务端在五格各自立得住而行拼不成时点名整行，载荷产不出它。
 test('表单认领的 JSON 路径覆盖载荷能产出的每一条键（子表按行展开）；多认领的只有行本身', () => {
-  const draft = { ...filled, effectiveEndsAt: '2027-01-01' };
+  const draft = { ...filled, effectiveEndsAt: '2027-01-01T00:00' };
   const payload = controlPolicyPayloadOf(draft);
   const produced: string[] = [];
   const walk = (prefix: string, value: unknown) => {

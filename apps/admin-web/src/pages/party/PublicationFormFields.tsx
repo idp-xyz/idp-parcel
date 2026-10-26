@@ -36,8 +36,6 @@ export const fieldLabel = 'block text-[12px] text-idpxyz-breadcrumb mb-1';
 export const selectClass =
   'w-full rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 py-1.5 text-[13px] ' +
   'text-idpxyz-text focus:outline-none focus:border-idpxyz-accent disabled:opacity-60';
-// 只填日期时由 normalizeMoment 补成当天零点 UTC，占位照实说出来，免得以为是本地零点。
-export const momentPlaceholder = 'YYYY-MM-DD 或完整时刻；只填日期时按当天零点（UTC）';
 
 /**
  * 一条问题：先给配置员读得懂的中文，服务端原话收进可展开的「原话」，排查时还对得上日志（译法见 field-problem-text.ts）。

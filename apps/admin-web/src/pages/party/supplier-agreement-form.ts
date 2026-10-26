@@ -5,8 +5,9 @@
 // **本文件不算摘要、不裁任何门、不判领域规则**（伞票 07 硬句）。空字段、区间先后、引用是否在册一律送上去
 // 让服务端答——预览口逐格 problems 回来挂到对应格旁；这里连「必填」都不拦，免得两处口径。
 
+import { currentDisplayTimeZone } from '../moment';
 import type { CommercialPublicationPayload, SupplierAgreementBodyPayload } from './publication-draft-api';
-import { normalizeMoment, planReferenceOf } from './publication-form-shared';
+import { planReferenceOf, wallMomentOf, wallMomentProblem } from './publication-form-shared';
 
 // 方案版本引用的拼法曾定义在本文件、被兄弟表单借用（票 22 抬到共享层）；这里保留导出只为既有调用点与测试不改一字，定义只在共享层。
 export { planReferenceOf };
@@ -84,31 +85,56 @@ export const supplierAgreementRenderedPaths: readonly string[] = [
 ];
 
 /**
+ * 本地组不出载荷的格，按 JSON 路径归组；空对象即可送预览。本册其余格全是文本、都编得进载荷类型，只有时刻格是日期
+ * 时间控件的墙钟：换不成时刻就组不出那份载荷（票 party-commercial-uiux/10）。这与「必填」「区间先后」不是一回事，
+ * 后两样仍送上去让服务端答。
+ */
+export function supplierAgreementLocalProblems(
+  draft: SupplierAgreementDraft,
+  timeZone: string = currentDisplayTimeZone(),
+): Record<string, string[]> {
+  const problems: Record<string, string[]> = {};
+  for (const [path, raw] of [
+    ['effectiveStartsAt', draft.effectiveStartsAt],
+    ['effectiveEndsAt', draft.effectiveEndsAt],
+    ['supplierAgreement.effectiveStartsAt', draft.agreementEffectiveStartsAt],
+    ['supplierAgreement.effectiveEndsAt', draft.agreementEffectiveEndsAt],
+  ] as const) {
+    const moment = wallMomentProblem(raw, timeZone);
+    if (moment !== null) problems[path] = [moment];
+  }
+  return problems;
+}
+
+/**
  * 草稿 → 产品定义的载荷。可缺的上界缺席而不是空串：服务端按键在场与否分辨「没有上界」。壳上不带指名引用
  * （协议正文里的供应商、法人与方案已经是它的全部引用，0021 正文没有别的），不带方向。**载荷里没有身份也
  * 没有摘要**：租户与录入者由接入渠道的操作者信封给，摘要只有服务端算。
  */
-export function supplierAgreementPayloadOf(draft: SupplierAgreementDraft): CommercialPublicationPayload {
+export function supplierAgreementPayloadOf(
+  draft: SupplierAgreementDraft,
+  timeZone: string = currentDisplayTimeZone(),
+): CommercialPublicationPayload {
   const body: SupplierAgreementBodyPayload = {
     supplier: draft.supplier.trim(),
     legalEntity: draft.legalEntity.trim(),
     scope: draft.agreementScope.trim(),
     purchasePlan: draft.purchasePlan.trim(),
-    effectiveStartsAt: normalizeMoment(draft.agreementEffectiveStartsAt),
+    effectiveStartsAt: wallMomentOf(draft.agreementEffectiveStartsAt, timeZone),
   };
   if (draft.agreementEffectiveEndsAt.trim() !== '') {
-    body.effectiveEndsAt = normalizeMoment(draft.agreementEffectiveEndsAt);
+    body.effectiveEndsAt = wallMomentOf(draft.agreementEffectiveEndsAt, timeZone);
   }
   const payload: CommercialPublicationPayload = {
     kind: 'SUPPLIER_AGREEMENT',
     objectId: draft.objectId.trim(),
     version: draft.version.trim(),
     scope: draft.scope.trim(),
-    effectiveStartsAt: normalizeMoment(draft.effectiveStartsAt),
+    effectiveStartsAt: wallMomentOf(draft.effectiveStartsAt, timeZone),
     supplierAgreement: body,
   };
   if (draft.effectiveEndsAt.trim() !== '') {
-    payload.effectiveEndsAt = normalizeMoment(draft.effectiveEndsAt);
+    payload.effectiveEndsAt = wallMomentOf(draft.effectiveEndsAt, timeZone);
   }
   return payload;
 }

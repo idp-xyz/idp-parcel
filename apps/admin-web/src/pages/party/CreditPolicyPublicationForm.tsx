@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import type { ApiResult } from '../catalogue-api';
+import { currentDisplayTimeZone } from '../moment';
 import { creditRatioBaseLabels } from './presentation';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
 import { Field, Problems, VocabularySelect, fieldLabel, useLoaded } from './PublicationFormFields';
+import { WallTimeField } from './party-registration-fields';
 import {
   creditPolicyFieldPaths,
   creditPolicyLocalProblems,
@@ -31,18 +33,27 @@ export function CreditPolicyPublicationForm({ onPublished }: { onPublished?: () 
   // PRIOR_PERIOD_CONFIRMED_CHARGES，内置一份就是同一封闭集的第二份写法（票 20 立票理由）。
   const vocabulary = useLoaded(loadCreditVocabulary);
   const ratioBaseCodes = vocabulary?.kind === 'outcome' ? ratioBaseCodesOf(vocabulary.body.sets) : null;
+  // 时刻按操作者的显示时区填、送出 UTC（票 party-commercial-uiux/10），与登记表单同一条换算。
+  const timeZone = currentDisplayTimeZone();
 
   return (
     <PublicationDraftFlow
       kind="CREDIT_POLICY"
       title="发布信用政策版本"
-      assemblePayload={() => creditPolicyPayloadOf(draft)}
-      localProblems={creditPolicyLocalProblems(draft)}
+      assemblePayload={() => creditPolicyPayloadOf(draft, timeZone)}
+      localProblems={creditPolicyLocalProblems(draft, timeZone)}
       fieldPaths={creditPolicyFieldPaths}
       onPublished={onPublished}
     >
       {(form) => (
-        <CreditPolicyFields draft={draft} patch={patch} form={form} vocabulary={vocabulary} ratioBaseCodes={ratioBaseCodes} />
+        <CreditPolicyFields
+          draft={draft}
+          patch={patch}
+          form={form}
+          vocabulary={vocabulary}
+          ratioBaseCodes={ratioBaseCodes}
+          timeZone={timeZone}
+        />
       )}
     </PublicationDraftFlow>
   );
@@ -60,12 +71,14 @@ function CreditPolicyFields({
   form,
   vocabulary,
   ratioBaseCodes,
+  timeZone,
 }: {
   draft: CreditPolicyDraft;
   patch: (change: Partial<CreditPolicyDraft>) => void;
   form: PublicationFormContext;
   vocabulary: ApiResult<PublicationVocabularyResponseBody> | null;
   ratioBaseCodes: string[] | null;
+  timeZone: string;
 }) {
   const { problems, locked } = form;
   // 本册的格全是文本框：一格 = 共享 Field + Input。被点名的格连输入框边框一起变红是本册此前就有的提示，抬共享层时照留
@@ -88,6 +101,18 @@ function CreditPolicyFields({
       />
     </Field>
   );
+  const moment = (path: string, label: string, key: keyof CreditPolicyDraft, note?: string) => (
+    <WallTimeField
+      label={label}
+      path={path}
+      problems={problems}
+      value={draft[key]}
+      locked={locked}
+      timeZone={timeZone}
+      note={note}
+      onChange={(value) => patch({ [key]: value } as Partial<CreditPolicyDraft>)}
+    />
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -99,9 +124,8 @@ function CreditPolicyFields({
           {field('version', '版本号 *', 'version')}
           {field('scope', '适用范围 *', 'scope')}
           <div />
-          {/* 只填到天的日期由 normalizeMoment 补成当天零点 UTC，占位照这条行为写。 */}
-          {field('effectiveStartsAt', '版本有效区间起点 *', 'effectiveStartsAt', 'YYYY-MM-DD 或完整时刻；只填日期时按当天零点（UTC）')}
-          {field('effectiveEndsAt', '版本有效区间止点', 'effectiveEndsAt', '留空即持续有效')}
+          {moment('effectiveStartsAt', '版本有效区间起点 *', 'effectiveStartsAt')}
+          {moment('effectiveEndsAt', '版本有效区间止点', 'effectiveEndsAt', '留空即持续有效。')}
         </div>
       </section>
 
@@ -141,8 +165,8 @@ function CreditPolicyFields({
         </div>
 
         <div className="grid grid-cols-2 gap-3 items-end">
-          {field('creditPolicy.effectiveStartsAt', '正文有效区间起点 *', 'bodyEffectiveStartsAt', 'YYYY-MM-DD 或完整时刻；只填日期时按当天零点（UTC）')}
-          {field('creditPolicy.effectiveEndsAt', '正文有效区间止点', 'bodyEffectiveEndsAt', '留空即持续有效')}
+          {moment('creditPolicy.effectiveStartsAt', '正文有效区间起点 *', 'bodyEffectiveStartsAt')}
+          {moment('creditPolicy.effectiveEndsAt', '正文有效区间止点', 'bodyEffectiveEndsAt', '留空即持续有效。')}
         </div>
         <div className="flex items-center gap-3">
           <Button
