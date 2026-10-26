@@ -1,7 +1,7 @@
 # 126 TF 运营决定各口不记提交操作者
 
 Category: bug
-Status: in-progress——2026-10-26 评审无阻断、修订轮完，待进 main，分支 `claude-dcg126` tip `560c46c88`（其后一笔只改本票面），见文末「评审记录」「修订轮」。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg126` tip `58eec6559`（其后一笔只改本票面），见文末「完成记录」。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领（code/01 已进 main），分支 `claude-dcg126`（worktree `idp-parcel-dcg126`）；新 ADR 取 0303，TF 迁移取 0051。此前 ready-for-agent——2026-10-20 代决复核立（上线前必修），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: resolved——2026-10-26 进 main `039abf840`（见文末「进 main 记录」）。此前 in-progress——2026-10-26 评审无阻断、修订轮完，待进 main，分支 `claude-dcg126` tip `560c46c88`（其后一笔只改本票面），见文末「评审记录」「修订轮」。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg126` tip `58eec6559`（其后一笔只改本票面），见文末「完成记录」。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领（code/01 已进 main），分支 `claude-dcg126`（worktree `idp-parcel-dcg126`）；新 ADR 取 0303，TF 迁移取 0051。此前 ready-for-agent——2026-10-20 代决复核立（上线前必修），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 M1；ADR-0151 越权风险点 5
 
@@ -106,3 +106,13 @@ M1 的现象成立：`tfhttp.OperatorDecisionIntake` 对关段、建派送任务
 rebase 到 `origin/main` `d80e8d8f8`：唯一冲突在 `.scratch/at-coverage-inventory.md` ①——main 上 127 的 `AT-TF-331`–`334` 与本票 `AT-TF-335`–`341` 插在同一处，按号顺接、两边都留；本票没写文末追记，那里无冲突。UC-TF-004 自动合并，127 的 `AT-TF-332`–`334` 与本票 `AT-TF-335`、`336` 都在。迁移 `0051`、ADR 号 0303、`AT-TF-335`–`341` 在新 main 上仍无人占。重放后的提交：`8b1700131`（原 `5f2d6cd53`）、`389d5053a`（原 `58eec6559`）、`410f4c721`（原 `87724244a`）、`560c46c88`（修订轮）。
 
 修订轮自验，于 `560c46c88`（其后一笔只改本票面）：`go run ./tools/at-coverage-counts -check`（main 上已带票 139 的缺行 / 多行核对）只报总览计数过期，无缺行多行；`go run ./tools/adr-index -check` 只报索引过期；`gofmt -l cmd internal migrations tools` 无输出；`go build ./...`、`go vet ./...` 退 0；带 DSN（`127.0.0.1:55432`）`go test -count=1` 跑 TF 全部包、`internal/architecture`、`migrations`、`cmd/parcel-api`、`cmd/parcel-dispatch`、`cmd/parcel-transport-register` 与六个依赖 TF 的 `adapters/transportfulfillment` 包，全部 ok。
+
+## 进 main 记录（2026-10-26，推送方会话 tops-20）
+
+- **main**：`039abf840`。出处：分支 `claude-dcg126` tip `099b6d167`（作者修订轮后自行 rebase；推送方在 main `4bb6c2fa0` 上重放）。rebase 前出处：`5f2d6cd53`、`58eec6559`、`87724244a`。
+- **main 上的提交**：`f445c668e`（代码、TF 迁移 0051）、`8d19b6588`（ADR-0303、UC `AT-TF-335`–`341`）、`2ee075747`（完成记录）、`49fde3fa0`（修订轮，立后继票 180）、`d6f902051`（评审记录与修订轮）。
+- **生成物**：ADR 索引 `24f581955`；AT 盘点总览计数 `bf368e651`；机制清点 `039abf840`。三件 `-check` 退 0（含票 139 表行守卫）。
+- **评审**：隔离子代理钉 `87724244a`，两轴无阻断、非阻断 6 条：Standards 1–3 在修订轮收；Spec 1、2 立 [180](./180-the-remaining-tf-operation-decisions-and-the-delivery-dispatch-reask-record-the-submitting-operator.md)（其余六口与派送重问记提交操作者，上线前必修）；Spec 3（盘点相邻行）由作者 rebase 时按号顺接（见「评审记录」「修订轮」）。修订轮只收非阻断，推送方读了修订 diff，未另派复评。
+- **全量真库测试**：`scripts/test-full.sh` 跑在 `039abf840`（即所推 SHA）：158 ok / 0 FAIL，退 0。
+- **种子**：`scripts/demo-seeds/seed.sh` 灌一次性库（`039abf840` 上），退 0，用后删库。
+- **号**：TF 迁移 `0051`；ADR-0303；`AT-TF-335`–`341`。
