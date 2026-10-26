@@ -274,6 +274,16 @@ export interface ExternalFundsFactRecord {
   appliedAmount: string;
   reversedAmount: string;
   unappliedAmount: string;
+  /**
+   * 这条事实经对账单或账户映射落到的客户应收作用域个数（ADR-0283）：1 即全额记入那一个作用域的入账余额，大于 1 即按
+   * 核销记入，每个作用域只记指向它的分配。
+   */
+  customerScopes: number;
+  /**
+   * 落到几个作用域时还没分到任何一个作用域头上的累计未分配：收款的这一截哪个作用域都不记，退回的这一截每个作用域都
+   * 先扣；落到一个或零个作用域时为 "0"。
+   */
+  unscopedUnappliedAmount: string;
   applicationCount: number;
   mappings: FundsMappingRecord[];
   applications: SettlementApplicationRecord[];

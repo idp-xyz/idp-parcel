@@ -20,6 +20,7 @@ import {
   fundsRegistrationTitles,
   labelOf,
   problemNote,
+  scopePostingText,
 } from './presentation';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
@@ -90,6 +91,14 @@ const columns: ListColumn<ExternalFundsFactRecord>[] = [
     className: 'font-mono text-xs',
     // 未分配是第一类结果不是尾差，不得被默认费用吞并。
     render: (row) => row.unappliedAmount,
+  },
+  {
+    id: 'scope-posting',
+    header: '入账余额记入',
+    className: 'min-w-48 text-xs',
+    // 未分配金额一栏说的是钱还没核到哪里；这一栏说它在客户应收作用域的入账余额上怎么算——落到几个作用域时，
+    // 未分配不在任何一个作用域的全额里，要人先把它核到作用域上，余额才跟着放行（ADR-0283）。
+    render: (row) => scopePostingText(row),
   },
   {
     id: 'application-count',
