@@ -50,7 +50,7 @@ M：`parcel-settlement-register` 加 `funds-application` 与 `funds-application-
 
 ### 代决
 
-1. **ADR 注记只写在 0182 一处**（docs/adr/README「一件事只写一处」）：这是代码事实追上了决定二的「仍没有」，不是改口径，所以不是部分停用、不立 ADR。ADR-0236 Status 行的「表述更正」（2026-10-21）写的是「以 ADR-0182 决定二为准」，读的人顺链到 0182 注记就见现状，0236 注记不改、不写第二处；它说的「今天」是 2026-10-21 那一天。本票落地后 0236 决定四、决定七「核销……只有受控 CLI」两句与代码相符。
+1. **ADR 注记只写在 0182 一处**（docs/adr/README「一件事只写一处」）：这是代码事实追上了决定二的「仍没有」，不是改口径，所以不是部分停用、不立 ADR。ADR-0236 Status 行的「表述更正」（2026-10-21）写的是「以 ADR-0182 决定二为准」，读的人顺链到 0182 注记就见现状，0236 注记不改、不写第二处（修订轮按评审 N5 在 0236 注记末尾加了半句指针，现状仍只写在 0182 一处）；它说的「今天」是 2026-10-21 那一天。本票落地后 0236 决定四、决定七「核销……只有受控 CLI」两句与代码相符。
 2. **（修订轮撤回，code/88 并入本票修，见文末）** 核销与撤销的事务里不重算入账余额与已确认未结，原留给新票 [code/88](./88-settlement-application-and-reversal-do-not-recompute-the-posted-balance.md)：SA CONTEXT 与 ADR-0181 决定一要在那次事务里重算，而 ADR-0181 决定六（及 ADR-0182 对它的收窄）把首切钉在映射上；把核销加进调用点是落决定一还是扩成决定六，属已接受 ADR 的口径，作者不自取。本票落地后指向对账单的核销分配在同作用域下一次映射时进重算，可用余额不受影响（两列等额移动）。UC-SA-005 交接表那一行改指 code/88。
 3. **映射清单与分配都由交进来的人写全**：票面「命令只译载荷、不推导分配」；映射清单与分配里的映射重复写，是为了与 `ApplySettlementCommand` 一格对一格、载荷摘要不变形。
 4. **撤销一笔不存在的核销答 `未受理`**（既有 `Reverse` 行为，CLI 退 1）。
@@ -84,6 +84,11 @@ M：`parcel-settlement-register` 加 `funds-application` 与 `funds-application-
 
 ### 修订轮测试（含 PG，`TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh`，变基后的 tip）
 
+- `go build ./...`、`go vet ./...` 退 0，`gofmt -l` 无输出。
+- 改动包的反向依赖（`go list -test` 以 SA domain 与 `migrations` 为根，66 个包）加 `./cmd/parcel-settlement-register/...`、`./cmd/parcel-api/`、`./cmd/parcel-dispatch/`、`./internal/architecture/...`、`./migrations/...`：退 0（65 个包 ok、其余无测试文件；含 PBC-08 门禁）。
+- 并发用例 `-count=5`（并发超额、并发同键、金额本体锁）：五次全过。
+- 0046 改了：种子重灌一次性库 `c12seed2` 退 0，库上 CHECK 已是六值、`RECOVERY_ACKNOWLEDGEMENT` 在内，种子那一行 `ACCOUNT` 共存，用后删库。
+- 管理台三道门（Node 22）：tsc、601 例、vite build 退 0。
 - 新用例：
   - 应用层：`TestApplyAndReverseTakeLocksInOneTotalOrderAndRecomputeTheirScopes`（锁序与两路推进）、`TestApplicationsOfOneFactStayWithinItsAmount`、`TestAFundsReturnedFactNeitherMapsNorAppliesToAClaimAmount`、`TestABrokenClaimTargetStandingIsADeterministicImbalance`。
   - postgres：`TestApplicationsAndReversalsRecomputeThePostedBalanceInTheirOwnTransaction`；`TestTheFactAndBalanceScopeLocksRefuseToRunOutsideATransaction`，即两把新锁的 PBC-08 负面证据。
