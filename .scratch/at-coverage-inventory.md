@@ -829,6 +829,7 @@
 | `AT-SA-173` | 相同输入快照、方向、目的和版本清单重复请求 | UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md |
 | `AT-SA-174` | SELL 评价完成但价格费用代码没有唯一费用项目映射 | UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md |
 | `AT-SA-175` | 节点实测重量超出价卡明确排除范围，`parcel-pricing` 返回不可计价 | UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md |
+| `AT-SA-214` | 包裹计费时点那一路，SELL·客户费用评价待判断、不可计价或冲突，或评价已完成而费用行映不全、映到多个费用项目 | UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md |
 | `AT-TF-001` | 当前有效监管退运决定、明确对象及新路由均有效 | UC-TF-001-ACCEPT-AND-FULFILL-REGULATORY-TRANSPORT-DISPOSITION.md |
 | `AT-TF-005` | 运输协作已承接且完成订舱/承运接受，但尚未交接 | UC-TF-001-ACCEPT-AND-FULFILL-REGULATORY-TRANSPORT-DISPOSITION.md |
 | `AT-TF-007` | 节点已装载并扫描交出，但双方证据尚不足 | UC-TF-001-ACCEPT-AND-FULFILL-REGULATORY-TRANSPORT-DISPOSITION.md |
@@ -1654,3 +1655,5 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-10-25 追记（票 docs-consistency/code/31）：`AT-VE-188` 由④移入①（客户追踪查询读不到视图时问一次归属：归属方答当前无可见结果，别的账户与不存在同答，归属读不动答未形成，ADR-0246）；`AT-VE-151` 行补点名，`AT-VE-168` 行补客户归属读取半边。总览计数未改，由推送方重算。
 
 2026-10-21 追记（票 docs-consistency/code/19）：`AT-NO-039` 由②移入①（移入前沿目标单元的直接父级链路查包含循环，答`包含循环`带那一段链路；并发互装靠租户级事务锁只成立一方；单元装进自己另由迁移 0022 的 CHECK 守）。总览计数未改，由推送方重算。评审修订后 `AT-NO-039` 行再补三条：封装按旧读数把移出删掉的边写回、与随后的反向移入合成环的交错（生产装配真库），改单元的各口读单元走读来改、移入先租户锁后单元行锁（编排），读来改持单元行锁到提交而只读那一问不等（适配器真库）。仍在①，计数不变。
+
+2026-10-25 追记（票 demo-chain-gaps/134）：UC-SA-002 新立 `AT-SA-214`（包裹计费时点那一路，SELL 请求册上缺口、排除依据与冲突只落到停因为止的例外，ADR-0198 越权风险点 2、3），入②——编排已有（`FormEstimatedCustomerChargeHandler`），只差点名。总览计数未改，由推送方重算。
