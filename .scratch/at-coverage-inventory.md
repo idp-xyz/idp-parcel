@@ -452,6 +452,8 @@
 | `AT-TF-013` | internal/transportfulfillment/application/perform_offsite_pickup_test.go::TestAMixedAttemptRecordsPerObjectResults |
 | `AT-TF-015` | internal/transportfulfillment/application/perform_offsite_pickup_test.go::TestAMixedAttemptRecordsPerObjectResults |
 | `AT-TF-016` | internal/transportfulfillment/application/perform_offsite_pickup_test.go::TestAnAllFailedAttemptBuildsNoSegmentAndHandsOffNothing；internal/transportfulfillment/application/register_offsite_pickup_test.go::TestAFailedVisitHasNothingToRegister |
+| `AT-TF-017` | internal/transportfulfillment/domain/attempt_pending_confirmation_test.go::TestAnExecutorRefusalIsItsOwnResultAndCarriesItsReason；internal/transportfulfillment/application/attempt_pending_confirmation_test.go::TestAnExecutorRefusalIsKeptPerObjectAndTakesNoControl；internal/transportfulfillment/adapters/postgres/attempt_pending_confirmation_test.go::TestPendingAndRefusedPickupResultsRoundTripBesideAPickup；internal/transportfulfillment/adapters/http/attempt_pending_confirmation_test.go::TestPendingAndRefusedObjectsPostedToTheEndpointsAreAnsweredPerObject；cmd/parcel-api/attempt_pending_confirmation_test.go::TestAPendingPickupAndAnExecutorRefusalRunThroughTheProductionFace |
+| `AT-TF-018` | internal/transportfulfillment/domain/attempt_pending_confirmation_test.go::TestAPendingPickupResultKeepsItsSourceAndGapAndConcludesNothing；internal/transportfulfillment/application/attempt_pending_confirmation_test.go::TestAVisitWithOnlyArrivalAndScanRecordsAPendingResultAndTakesNoControl；internal/transportfulfillment/application/attempt_pending_confirmation_test.go::TestAPendingResultIsNotRewrittenByALaterMessageAndANewVisitIsANewAttempt；internal/transportfulfillment/adapters/postgres/attempt_pending_confirmation_test.go::TestPendingAndRefusedPickupResultsRoundTripBesideAPickup；internal/transportfulfillment/adapters/http/attempt_pending_confirmation_test.go::TestPendingAndRefusedObjectsPostedToTheEndpointsAreAnsweredPerObject；cmd/parcel-api/attempt_pending_confirmation_test.go::TestAPendingPickupAndAnExecutorRefusalRunThroughTheProductionFace |
 | `AT-TF-019` | internal/transportfulfillment/application/perform_offsite_pickup_test.go::TestAReplayReturnsTheOriginalAndResendsTheSameIntent；internal/transportfulfillment/application/register_offsite_pickup_test.go::TestAPickupRegistrationIsIdempotentPerObjectAttempt |
 | `AT-TF-020` | internal/transportfulfillment/application/perform_offsite_pickup_test.go::TestAConflictingSourceKeepsTheOriginal；internal/transportfulfillment/application/register_offsite_pickup_test.go::TestAPickupRegistrationIsIdempotentPerObjectAttempt |
 | `AT-TF-021` | internal/transportfulfillment/application/perform_offsite_pickup_test.go::TestARescheduledSecondAttemptSucceedsWithoutTouchingTheFirst |
@@ -468,6 +470,7 @@
 | `AT-TF-066` | internal/transportfulfillment/domain/effective_delivery_test.go::TestASecondAttemptDeliversAfterAFirstFailure |
 | `AT-TF-067` | internal/transportfulfillment/domain/effective_delivery_test.go::TestADeliveredObjectFormsAnEffectiveDeliveryWithItsPOD |
 | `AT-TF-069` | internal/transportfulfillment/application/register_effective_delivery_test.go::TestDeliveryRecoveryDiscipline |
+| `AT-TF-070` | internal/transportfulfillment/domain/attempt_pending_confirmation_test.go::TestAPendingDeliveryResultIsNeitherADeliveryNorAFailure；internal/transportfulfillment/application/attempt_pending_confirmation_test.go::TestAConflictingSignatureAndAddressIsRecordedPendingAndNotOverwritten；internal/transportfulfillment/application/attempt_pending_confirmation_test.go::TestAPendingDeliveryResultCannotRegisterAnEffectiveDeliveryOrEndParticipation；internal/transportfulfillment/adapters/postgres/attempt_pending_confirmation_test.go::TestAPendingDeliveryResultRoundTripsThroughBothReads；internal/transportfulfillment/adapters/http/attempt_pending_confirmation_test.go::TestPendingAndRefusedObjectsPostedToTheEndpointsAreAnsweredPerObject；cmd/parcel-api/attempt_pending_confirmation_test.go::TestAPendingDeliveryRunsThroughTheProductionFacesAndIsNotOverwritten |
 | `AT-TF-072` | internal/transportfulfillment/adapters/http/register_effective_delivery_test.go::TestCorrectExposesThePredecessorVersion；internal/transportfulfillment/application/register_effective_delivery_test.go::TestACorrectionSupersedesWithTheVersionChain；internal/transportfulfillment/domain/effective_delivery_test.go::TestAPODCorrectionFormsANewVersionWithoutOverwriting |
 | `AT-TF-073` | internal/transportfulfillment/application/register_effective_delivery_test.go::TestDeliveryRecoveryDiscipline |
 | `AT-TF-078` | internal/transportfulfillment/domain/alternate_journey_test.go::TestRegulatoryReturnIsMarkedByItsBasisKind |
@@ -843,7 +846,6 @@
 | `AT-TF-011` | 运输已到达监管指定地点 | UC-TF-001-ACCEPT-AND-FULFILL-REGULATORY-TRANSPORT-DISPOSITION.md |
 | `AT-TF-012` | 事实已保存但派生或发布技术失败 | UC-TF-001-ACCEPT-AND-FULFILL-REGULATORY-TRANSPORT-DISPOSITION.md |
 | `AT-TF-014` | 外包伙伴提供符合当前规则的对象级接收证据 | UC-TF-002-PERFORM-OFFSITE-PICKUP.md |
-| `AT-TF-017` | 包装不合格且执行方明确拒收 | UC-TF-002-PERFORM-OFFSITE-PICKUP.md |
 | `AT-TF-022` | 一个对象已取消且取消先于实际接收 | UC-TF-002-PERFORM-OFFSITE-PICKUP.md |
 | `AT-TF-023` | 揽收先实际发生，取消消息后到 | UC-TF-002-PERFORM-OFFSITE-PICKUP.md |
 | `AT-TF-025` | 场外揽收成功但尚未到节点 | UC-TF-002-PERFORM-OFFSITE-PICKUP.md |
@@ -1343,9 +1345,7 @@
 | `AT-PS-083` | 已收寄且普通退运决定、责任和路径齐备 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
 | `AT-PS-084` | 监管退运要求到达 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
 | `AT-PS-088` | 处置请求已发出但运输方拒绝承接 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
-| `AT-TF-018` | 只有车辆到场和司机扫描（逐对象结果待确认未实现，code/01） | UC-TF-002-PERFORM-OFFSITE-PICKUP.md |
 | `AT-TF-054` | 封签连续的集运单元整体交接（成员随单元受控的派生规则未立，ADR-0263、票 demo-chain-gaps/80） | UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md |
-| `AT-TF-070` | 本人签收和地址来源冲突（逐对象结果待确认未实现，code/01） | UC-TF-006-PERFORM-DELIVERY-AND-CAPTURE-POD.md |
 | `AT-TF-087` | 预占后节点新测量使体积增加（节点实测后的再准备未实现，票 demo-chain-gaps/44） | UC-TF-003-PREPARE-TRANSPORT-OPPORTUNITY.md |
 | `AT-TF-088` | 集运单元成员在舱单冻结前变化（节点实测后的再准备未实现，票 demo-chain-gaps/44） | UC-TF-003-PREPARE-TRANSPORT-OPPORTUNITY.md |
 | `AT-TF-329` | 交接首登为待确认（或已拒收），之后更正成`已交接`：对象凭这一版进段、结束先前段的参与（未实现，票 demo-chain-gaps/130） | UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md |
@@ -1662,3 +1662,5 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-10-25 追记（票 demo-chain-gaps/147）：UC-CC-013 新立 `AT-CC-426`（已登过节点关务区域的租户，不在册对象起讫有一端未登区域时跨区那一道答未配置并指名未登的节点，ADR-0300）、`AT-CC-427`（一条区域都没登的租户这一道照旧不列、整次不受门禁），`AT-CC-422` 改写为在册不带跨区门或在案未成单元那一格并补点名；UC-TF-005 新立 `AT-TF-330`（租户漏登一个节点时出发前问询与同参出发整格未决、段里每件在列、依据原文不回设备，收窄归票 171）。三条入①。总览计数未改，由推送方重算。
 
 2026-10-25 追记（票 demo-chain-gaps/134）：UC-SA-002 新立 `AT-SA-214`（包裹计费时点那一路，SELL 请求册上缺口与冲突只落到停因为止的例外，缺的具体哪一项留在评价上；排除依据与评价引用照 `AT-SA-175` 留在评价上，ADR-0198 越权风险点 2、3），入②——编排已有（`FormEstimatedCustomerChargeHandler`），只差点名。总览计数未改，由推送方重算。
+
+2026-10-25 追记（票 docs-consistency/code/01）：`AT-TF-018`、`AT-TF-070` 由④移入①（履约尝试逐对象结果「待确认」：带来源与缺口或冲突落册，不转移控制、不形成揽收到手或有效交付、不是失败，同来源换说法答冲突不改写），`AT-TF-017` 由②移入①（揽收「执行方拒收」独立一格，带原因与证据，控制不转移）。同一次上门的待确认以更正确定未实现，另票 code/90，两条 AT 的预期结果不依赖它。总览计数未改，由推送方重算。

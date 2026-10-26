@@ -1,6 +1,6 @@
 # UC-TF-006 执行派送并形成交付证明
 
-状态：已实现（随交接逐对象发起派送任务与派送待形成册、派送尝试、有效交付与 POD 更正、交付门禁读数与派送出发前问询）；逐对象结果的「待确认」一格未实现，见「给开发的交接」；真实尾程履约方、交付方式、POD 规则和失败处置参数待提供
+状态：已实现（随交接逐对象发起派送任务与派送待形成册、派送尝试含逐对象待确认、有效交付与 POD 更正、交付门禁读数与派送出发前问询）；待确认凭同一次上门的后补来源以更正确定那一条未实现，见「给开发的交接」；真实尾程履约方、交付方式、POD 规则和失败处置参数待提供
 
 ## 目标与边界
 
@@ -186,7 +186,7 @@
 
 | 规则 | 现状 | 去处 |
 |---|---|---|
-| 逐对象结果可以是待确认（结果契约「尝试待确认」，`AT-TF-070`） | `domain.DeliveryObjectOutcome` 封闭为妥投、收件人拒收、无人签收、地址错误，没有待确认；来源冲突时执行方只能先不登这次尝试。`AT-TF-070` 的现状缺口由票 code/01 补齐，本行预期结果不变 | 票 [docs-consistency/code/01](../../../.scratch/docs-consistency/code/01-fulfillment-attempt-object-outcomes-have-no-pending-confirmation.md) |
+| 待确认之后，凭同一次上门的后补来源以更正形成确定结果（TF CONTEXT「揽收、派送与交付」） | 派送尝试登记口收下待确认并原样保存，同一尝试换说法再报答冲突、不改写；交付登记对待确认答`未生效`。同一次上门的更正口没有：那件对象要形成有效交付，只能等新的上门登新尝试 | 票 [docs-consistency/code/90](../../../.scratch/docs-consistency/code/90-a-pending-attempt-object-result-has-no-correction-entry.md) |
 | 待确认更正为`已交接`时对象进新段（`AT-TF-289` 括注的后一种） | 对象仍挂在先前的段里，随交接那一拍答`不是触发事实` | 票 [demo-chain-gaps/130](../../../.scratch/demo-chain-gaps/issues/130-handover-correction-from-pending-to-handed-over-enters-the-segment.md)（UC-TF-005 `AT-TF-329`） |
 
 完成本用例只证明运输履约形成了可解释的交付结果和适用运输收费发生项；`parcel-shipment` 是否据此形成终局服务结果由 [`UC-PS-004`](../parcel-shipment/UC-PS-004-FORM-PARCEL-FINAL-SERVICE-OUTCOME.md) 独立判断，供应商成本由 `settlement-accounting` 独立形成。
