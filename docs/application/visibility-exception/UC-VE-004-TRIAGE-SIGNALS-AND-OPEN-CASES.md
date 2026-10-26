@@ -77,8 +77,11 @@
 | `AT-VE-201` | 同一件包裹先后几次出发都被关务判为阻断（同段或另一段、相隔多久都一样）；或同一次出发的信封重投 | 每次违规出发各开一个发作期、各自分诊、各交一份分诊意图，不并进先前那一期；同一次出发重投只给那一期记一次命中，不另开、不再分诊。这一类发作期不按恢复结束——原因是一次已经发生的出发，后续处置归分诊与案件 |
 | `AT-VE-202` | 信号形成 | 发作期保存因果条件与事实依据：出发门禁阻断信号的因果条件是那一条移动事实，依据是这件包裹上的 `movement-fact/<对象>/<事实>` 引用、事实版本与读数里它那一格的关务判断标识；替代链分叉冲突信号的因果条件是分叉的那一条事实流，依据是保留下来的各方；缺因果条件或依据的命中未受理；运营查阅的发作期册照列两者 |
 | `AT-VE-203` | 因果条件一维立起来之前已落库的发作期 | 回填为「登记于因果条件之前」、依据为空，照旧可读回与查阅，不认领任何新命中；同一原因此后再命中另开一期、再分诊一次 |
+| `AT-VE-205` | 运输履约给一条出发追加的补问读数里有一件阻断 | 那一件按租户登记的出发门禁阻断信号规则形成异常信号、交分诊；因果条件是那一条移动事实，事实依据是这件包裹上的 `movement-fact/<对象>/<事实>` 引用与那一版出发的事实版本，判断标识取补问读数里它那一格——业务时间是出发那一刻，命中时刻取判断那一刻；没登记规则如实不形成；集运单元那一格不形成；这一路不派生投影（[ADR-0305](../../adr/0305-a-departure-left-without-a-verdict-for-an-object-is-re-asked-at-its-departure-moment-when-the-object-s-control-fact-arrives.md) 决定八；证据 `S`） |
+| `AT-VE-206` | 同一条出发更早一份读数（首版，或补问册次序在前的那一次补问）已判那一件阻断；或同一封补问信封重投 | 不再形成，一次违规出发只交分诊一次；重投只处理一次（ADR-0305 决定八） |
+| `AT-VE-207` | 补问信号那一路：补问或它的出发读不回、读不动，信号搁置；补问或出发装不回、对不上键、补的不是原版出发、补问没列在它的出发下、阻断那一格没有判断标识；信封缺键维 | 第一类整封回滚、记未决待重投；第二类记发布失败、不进未决名单；缺键维是毒丸入账（ADR-0305 决定九） |
 
-移动事实已形成那一路的信号验收是上表 `AT-VE-193`–`195`（出发门禁阻断信号的形成、搁置与更正版不再命中；[ADR-0205](../../adr/0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md) 文末补记），投影那一半在 [UC-VE-002](./UC-VE-002-BUILD-TRACKING-PROJECTION.md)。信号按因果条件分期、带事实依据的验收是上表 `AT-VE-201`–`203`（票 [demo-chain-gaps/135](../../../.scratch/demo-chain-gaps/issues/135-departure-gate-signals-carry-causal-condition-and-fact-basis.md)，回答同一补记的越权风险点 22、23）。
+移动事实已形成那一路的信号验收是上表 `AT-VE-193`–`195`（出发门禁阻断信号的形成、搁置与更正版不再命中；[ADR-0205](../../adr/0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md) 文末补记），投影那一半在 [UC-VE-002](./UC-VE-002-BUILD-TRACKING-PROJECTION.md)。信号按因果条件分期、带事实依据的验收是上表 `AT-VE-201`–`203`（票 [demo-chain-gaps/135](../../../.scratch/demo-chain-gaps/issues/135-departure-gate-signals-carry-causal-condition-and-fact-basis.md)，回答同一补记的越权风险点 22、23）。补问读数那一路的信号验收是上表 `AT-VE-205`–`207`（[ADR-0305](../../adr/0305-a-departure-left-without-a-verdict-for-an-object-is-re-asked-at-its-departure-moment-when-the-object-s-control-fact-arrives.md)），补问本身在 [UC-TF-005](../transport-fulfillment/UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md) `AT-TF-342`–`346`。
 
 ## 给开发的交接
 
