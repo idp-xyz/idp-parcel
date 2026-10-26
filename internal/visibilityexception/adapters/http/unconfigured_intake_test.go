@@ -34,7 +34,7 @@ func unconfiguredVisibilityEndpoints(t *testing.T) map[string]unconfiguredCase {
 	return map[string]unconfiguredCase{
 		"tracking view": {
 			endpoint: visibilityhttp.NewQueryCustomerTrackingViewEndpoint(
-				unconfigured, unreachableViewReader{t: t},
+				unconfigured, unreachableViewReader{t: t}, unreachableAttributions{t: t},
 			),
 			method: http.MethodGet,
 			path:   "/customer-tracking-view",
@@ -215,6 +215,17 @@ func (reader unreachableViewReader) FindCurrent(
 ) (domain.CustomerTrackingView, bool, error) {
 	reader.t.Fatal("a request passed the unconfigured intake and reached the view store")
 	return domain.CustomerTrackingView{}, false, nil
+}
+
+type unreachableAttributions struct{ t *testing.T }
+
+func (attributions unreachableAttributions) FindCustomerAccount(
+	context.Context,
+	domain.TenantID,
+	domain.TrackedParcelReference,
+) (domain.CustomerAccountReference, bool, error) {
+	attributions.t.Fatal("a request passed the unconfigured intake and reached the customer attribution lookup")
+	return domain.CustomerAccountReference{}, false, nil
 }
 
 type unreachableClaimReceiver struct{ t *testing.T }

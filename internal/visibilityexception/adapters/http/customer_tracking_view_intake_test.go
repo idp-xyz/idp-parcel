@@ -114,7 +114,7 @@ func TestCustomerTrackingViewEndpointAnswersTheCustomerGrades(t *testing.T) {
 		"unexpected":          {errors.New("tenant reference did not translate"), http.StatusInternalServerError, "INTAKE_FAILED"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			endpoint := visibilityhttp.NewQueryCustomerTrackingViewEndpoint(customerIntake(t, viewerDouble{err: testCase.err}), readerDouble{})
+			endpoint := visibilityhttp.NewQueryCustomerTrackingViewEndpoint(customerIntake(t, viewerDouble{err: testCase.err}), readerDouble{}, noAttributions())
 			recorder := httptest.NewRecorder()
 			endpoint.ServeHTTP(recorder, customerQuery("/customer-tracking-view?parcel=parcel-1", "t"))
 			if recorder.Code != testCase.status || problemCode(t, recorder) != testCase.code {
@@ -132,7 +132,8 @@ func TestCustomerTrackingViewThroughTheFirstPartyIntakeCannotProbeOtherAccounts(
 		{value(t, domain.NewTenantID, "tenant-1"), value(t, domain.NewCustomerAccountReference, "customer-1"), value(t, domain.NewTrackedParcelReference, "parcel-1")}: mixedView(t),
 		{value(t, domain.NewTenantID, "tenant-1"), value(t, domain.NewCustomerAccountReference, "customer-2"), value(t, domain.NewTrackedParcelReference, "parcel-2")}: mixedView(t),
 	}}
-	endpoint := visibilityhttp.NewQueryCustomerTrackingViewEndpoint(customerIntake(t, viewerDouble{viewer: viewerOf(t, "customer-1")}), reader)
+	attributions := &attributionDouble{owners: map[string]string{"parcel-1": "customer-1", "parcel-2": "customer-2"}}
+	endpoint := visibilityhttp.NewQueryCustomerTrackingViewEndpoint(customerIntake(t, viewerDouble{viewer: viewerOf(t, "customer-1")}), reader, attributions)
 	get := func(parcel string) *httptest.ResponseRecorder {
 		recorder := httptest.NewRecorder()
 		endpoint.ServeHTTP(recorder, customerQuery("/customer-tracking-view?parcel="+parcel, "t"))

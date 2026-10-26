@@ -26,7 +26,12 @@
 
 - 不收 `Idempotency-Key`（ADR-0022）：重放的识别靠接入请求标识与规范化内容摘要，见下文「重放」。
 - **指名的对象看不见答 `404`**：委托、预报、交接单不存在，或属于别的租户、别的客户账户，同答一格，不分「不存在」与「无权」（ADR-0022）。码按上下文：`SHIPMENT_REQUEST_NOT_VISIBLE`、`DELIVERY_PRE_ADVICE_NOT_VISIBLE`、`DELIVERY_HANDOVER_NOTE_NOT_VISIBLE`。
-- **客户追踪视图是例外**：读不到视图也是业务答案，答 `200`；`outcome` 取 `CURRENT_VIEW`（有当前视图）或 `VIEW_NOT_FOUND`（不存在、属别的账户、归属未定等读不到视图的情形同答一格）。视图尚未形成、包裹唯一归属请求方账户时答 `NO_VISIBLE_RESULT`，由票 [code/31](../../.scratch/docs-consistency/code/31-customer-tracking-query-cannot-say-no-visible-result-for-its-own-parcel.md) 落（[ADR-0246](../adr/0246-the-customer-tracking-query-answers-no-visible-result-for-a-parcel-attributed-to-the-requesting-account-before-its-view-forms.md) 决定一）。查询串只认 `parcel` 一格。
+- **客户追踪视图是例外**：读不到视图也是业务答案，答 `200`。`outcome` 三格（[ADR-0246](../adr/0246-the-customer-tracking-query-answers-no-visible-result-for-a-parcel-attributed-to-the-requesting-account-before-its-view-forms.md) 决定一），按调用方的续办分：
+  - `CURRENT_VIEW`：有当前视图，带 `view`。各维待确认或不展示也是这一格，逐维看。
+  - `NO_VISIBLE_RESULT`：包裹所在委托已`已接受`、唯一归属本账户，视图尚未形成。稍后再查；不表示未收寄、未运输或遗失。
+  - `VIEW_NOT_FOUND`：不存在、属别的账户、归属未定（含委托接受之前）、多份委托同时声明，同答一格、同一份字节。核对你给的号。刚从提交答复拿到、委托还没接受的号也落这一格：稍后再查，或请租户客服核对（决定五）。
+  - 后两格只有 `outcome`。归属读不动答 `500 NO_ANSWER_FORMED`，与视图读不回同一格，照 5xx 退避重发。
+  - 查询串只认 `parcel` 一格。
 
 ## 问题详情
 

@@ -348,14 +348,15 @@ SELECT declared_parcel_id, reason, correlation_id FROM network_routing.initial_r
 
 | 请求 | 答复 |
 |---|---|
-| 首方令牌，本账户的包裹 | `200 CURRENT_VIEW`，带版本、投影锚与四维 |
+| 首方令牌，本账户的包裹，视图已形成 | `200 CURRENT_VIEW`，带版本与四维 |
+| 首方令牌，本账户的包裹所在委托已`已接受`、视图尚未形成 | `200 NO_VISIBLE_RESULT` |
 | 首方令牌，别的账户的包裹，或不存在的包裹 | `200 VIEW_NOT_FOUND`，两种字节相同 |
 | 查询串自报 `customerAccount`、带 `parcel` 以外任何一格，或缺 `parcel` | `400 MALFORMED_REQUEST` |
 | 不带令牌、配置员令牌、集成客户端令牌 | `401 CUSTOMER_CLIENT_CREDENTIAL_REJECTED` |
 | 首方令牌，客户端没有这一格授予或授予已撤 | `403 CUSTOMER_CLIENT_NOT_GRANTED` |
 | 首方族三件不设 | `403 ACCESS_CHANNEL_NOT_CONFIGURED` |
 
-正式包裹号（`DPCL-…`）客户系统从首方提交的答复里取：`201 SUBMITTED` 的 `parcels` 逐件带回 `parcelId`，配草案里的 `customerParcelReference`；原样重发答 `200 EXISTING_RESULT`，带回同一个号（[ADR-0223](../adr/0223-the-first-party-submission-answer-names-each-parcel-and-the-tracking-view-locates-by-it.md)；票 [demo-chain-gaps/101](../../.scratch/demo-chain-gaps/issues/101-customer-tracking-view-locates-by-the-internal-parcel-id-only.md)）。`submit-one-shipment.sh` 末行打出这个号，演示不再经操作者渠道去读。委托接受、视图派生之前查它答 `VIEW_NOT_FOUND`，与不存在同答。按客户自己的包裹参考直接查视图不在首方契约里，见票 [demo-chain-gaps/119](../../.scratch/demo-chain-gaps/issues/119-customer-tracking-view-locates-by-the-customers-own-parcel-reference.md)。
+正式包裹号（`DPCL-…`）客户系统从首方提交的答复里取：`201 SUBMITTED` 的 `parcels` 逐件带回 `parcelId`，配草案里的 `customerParcelReference`；原样重发答 `200 EXISTING_RESULT`，带回同一个号（[ADR-0223](../adr/0223-the-first-party-submission-answer-names-each-parcel-and-the-tracking-view-locates-by-it.md)；票 [demo-chain-gaps/101](../../.scratch/demo-chain-gaps/issues/101-customer-tracking-view-locates-by-the-internal-parcel-id-only.md)）。`submit-one-shipment.sh` 末行打出这个号，演示不再经操作者渠道去读。委托接受之前查它答 `VIEW_NOT_FOUND`，与不存在同答；接受之后、视图派生出来之前，本账户查它答 `NO_VISIBLE_RESULT`（[ADR-0246](../adr/0246-the-customer-tracking-query-answers-no-visible-result-for-a-parcel-attributed-to-the-requesting-account-before-its-view-forms.md)）。按客户自己的包裹参考直接查视图不在首方契约里，见票 [demo-chain-gaps/119](../../.scratch/demo-chain-gaps/issues/119-customer-tracking-view-locates-by-the-customers-own-parcel-reference.md)。
 
 > 2026-10-19 实走（票 demo-chain-gaps/101 作者子代理，`ca329599` 上编出的 `parcel-api` 与 `parcel-dispatch`；实测，只记 `S`）：一次性库 `dcg101_demo`，`seed.sh` 退 0；首方客户发行方另起一只私有 Dex（同一份 `integration-dex.yaml`，宿主端口 5611，`iss` 不变）。`submit-one-shipment.sh` 经首方口提交 `SHR-KRB5CT3RP2KYNJXOC7UF65J5XE`，答 `201 SUBMITTED`，`parcels` 带回 `DPCL-BMPF4LQNQEGK24IQLKSW4L6HHA` 配 `SYN-PCLREF-20261020T033236Z`，与委托详情的声明包裹对上；同一载荷原样重发答 `200 EXISTING_RESULT`，带回同一个号。dispatch 几拍之后委托`已接受`、视图派生；同一枚首方令牌拿答复里的号查 `GET /customer-tracking-view?parcel=DPCL-BMPF4LQNQEGK24IQLKSW4L6HHA`，答 `200 CURRENT_VIEW`，里程碑与 ETA `SHOWN`，终局 `PENDING_CONFIRMATION`，说明 `NOT_DISCLOSED`；拿客户包裹参考查答 `200 VIEW_NOT_FOUND`（票 119）。全程没用操作者渠道读号。走完已停进程、删容器、删库。
 

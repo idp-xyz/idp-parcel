@@ -134,16 +134,25 @@ type ProjectionHandoff interface {
 	HandOffProjection(ctx context.Context, intent ProjectionHandoffIntent) error
 }
 
-// ParcelCustomerAccountView 回答「这件追踪对象当前属于哪个货主客户账户」——客户
-// 视图派生缺的账户维（DeriveCustomerViewCommand.Customer）唯一的自动来处。关系本体
-// 不归本上下文：parcel-shipment 拥有包裹与委托的成员关系，party-commercial 拥有账户
-// 身份（CONTEXT-MAP），这里只消费答复，绝不自行推导或缓存第二份映射。
+// ParcelCustomerAccountView 回答「这件追踪对象当前属于哪个货主客户账户」（CONTEXT「客户
+// 归属」）。它是客户视图派生缺的账户维（DeriveCustomerViewCommand.Customer）唯一的自动
+// 来处，也是客户追踪查询读不到视图时问的那一次归属（ADR-0246 决定二）。关系本体不归本
+// 上下文：parcel-shipment 拥有包裹与委托的成员关系，party-commercial 拥有账户身份
+// （CONTEXT-MAP），这里只消费答复，绝不自行推导或缓存第二份映射。
 //
-// 答案三格与 ADR-0060 的零/一/多对齐。第二个返回值为 false 即「当前没有已接受委托
-// 声明这件对象」——不派生视图、不发明账户，投影照旧存在。false 不分成因：追踪包裹
-// 引用可能装着集运单元号（TF 侧不替对象猜身份种类），反查零行不是缺陷；成因区分留给
-// 接线票。多于一个候选是未决/待确认，不是「无视图」（UC-VE-008 AT-VE-152）——适配器
-// 以具名错误交回，绝不按时间或行序任选。依赖调不通作为错误返回。
+// 答案三格与 ADR-0060 的零/一/多对齐。适配器只交回事实，各格怎么用由消费方各自定；下面
+// 写视图派生（含补派生）与客户追踪查询两侧，披露决定按 UC-VE-006 另判：
+//   - 零：第二个返回值为 false，即「当前没有已接受委托声明这件对象」。false 不分成因：
+//     追踪包裹引用可能装着集运单元号（TF 侧不替对象猜身份种类），反查零行不是缺陷；成因
+//     区分留给接线票。派生一侧不派生视图、不发明账户，投影照旧存在；查询一侧答
+//     `VIEW_NOT_FOUND`。
+//   - 一：交回唯一归属账户。派生一侧按它形成视图；查询一侧只比它是否等于请求方账户，等于
+//     答 `NO_VISIBLE_RESULT`，不等于答 `VIEW_NOT_FOUND`。
+//   - 多：适配器以具名错误交回，绝不按时间或行序任选。派生一侧是未决/待确认，不择一、不
+//     形成视图（UC-VE-008 AT-VE-152）；查询一侧答 `VIEW_NOT_FOUND`，对外不另立冲突一格
+//     （ADR-0246 决定五）。
+//
+// 依赖调不通作为别的错误返回：派生一侧落未决，查询一侧答未形成，两侧都不把它当成零。
 type ParcelCustomerAccountView interface {
 	FindCustomerAccount(
 		ctx context.Context,

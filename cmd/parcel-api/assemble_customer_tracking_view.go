@@ -3,9 +3,13 @@ package main
 import (
 	"fmt"
 
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
+
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
+	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	veaccess "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/accessidentity"
 	visibilityhttp "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/http"
+	veps "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/parcelshipment"
 )
 
 // buildCustomerTrackingViewIntake 装配客户追踪视图查阅口的首方 Intake（ADR-0139 决定四；UC-VE-008；票 demo-chain-gaps/96）。铸造器与
@@ -33,4 +37,19 @@ func customerTrackingViewQueryIntake(intake *visibilityhttp.CustomerTrackingView
 		return visibilityhttp.UnconfiguredIntake{}
 	}
 	return intake
+}
+
+// buildCustomerTrackingViewAttributions 装查阅口读不到视图时问归属的那只反查口（ADR-0246 决定二）：parcel-dispatch 的视图
+// 派生与补派生用的同一个适配器，读的是同一份当前已接受委托。查询与派生对「这件归谁」各问各的、问的是同一份事实，不另造一份
+// 映射；多份委托同时声明时适配器交回同一具名错误，查询这一侧答 VIEW_NOT_FOUND，派生那一侧落未决。只读，不写 PS 的库。
+func buildCustomerTrackingViewAttributions(db *bentopg.DB) (*veps.ParcelCustomerAccountLookup, error) {
+	requests, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: customer tracking view parcel targets: %w", err)
+	}
+	attributions, err := veps.NewParcelCustomerAccountLookup(requests)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: customer tracking view attributions: %w", err)
+	}
+	return attributions, nil
 }

@@ -7,10 +7,13 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	visibilityhttp "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/http"
 	vepostgres "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
+	veports "go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
 type customerTrackingViewWiring struct {
 	trackingViews visibilityhttp.TrackingViewReader
+	// attributions 是读不到视图时问的那一次客户归属（ADR-0246 决定二）。
+	attributions veports.ParcelCustomerAccountView
 	// customerTrackingView 缺席即字面量未配置（customerTrackingViewQueryIntake 判 nil）。
 	customerTrackingView *visibilityhttp.CustomerTrackingViewIntake
 }
@@ -29,11 +32,15 @@ func init() {
 				return customerTrackingViewWiring{}, err
 			}
 			trackingViews, err := vepostgres.NewCustomerViews(sources.db)
-			return customerTrackingViewWiring{trackingViews: trackingViews, customerTrackingView: intake}, err
+			if err != nil {
+				return customerTrackingViewWiring{}, err
+			}
+			attributions, err := buildCustomerTrackingViewAttributions(sources.db)
+			return customerTrackingViewWiring{trackingViews: trackingViews, attributions: attributions, customerTrackingView: intake}, err
 		},
 		mount: func(_ endpointChannels, wiring customerTrackingViewWiring) []httpapi.BusinessEndpoint {
 			return []httpapi.BusinessEndpoint{
-				{Pattern: "/v1/customer-tracking-view", Handler: visibilityhttp.NewQueryCustomerTrackingViewEndpoint(customerTrackingViewQueryIntake(wiring.customerTrackingView), wiring.trackingViews)},
+				{Pattern: "/v1/customer-tracking-view", Handler: visibilityhttp.NewQueryCustomerTrackingViewEndpoint(customerTrackingViewQueryIntake(wiring.customerTrackingView), wiring.trackingViews, wiring.attributions)},
 			}
 		},
 	})

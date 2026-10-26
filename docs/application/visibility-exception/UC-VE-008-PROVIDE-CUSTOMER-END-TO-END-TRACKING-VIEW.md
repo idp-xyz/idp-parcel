@@ -111,7 +111,7 @@
 
 `AT-VE-158` 与结果语义「客户追踪视图」一行的现状缺口由票 [docs-consistency/code/06](../../../.scratch/docs-consistency/code/06-customer-view-shows-dimensions-without-a-visible-judgement.md) 收窄（2026-10-21），未补齐：本上下文还没有 `UC-VE-003` 的 ETA 客户可见性判断，ETA 一维在策略准许展示时答待确认，不再答展示；里程碑一维在投影没有已归类的标准追踪里程碑时答待确认。两处都只收窄、不放宽，策略不展示的照旧不展示。`AT-VE-158` 预期的「不展示 ETA」对的是判断已形成、答未达门槛那一格，随 ETA 客户可见性判断落地（`AT-VE-187`）由票 [docs-consistency/code/51](../../../.scratch/docs-consistency/code/51-eta-customer-visibility-judgement-is-not-modelled-or-read-by-the-customer-view.md) 补齐。本行与那一行的预期结果不变。
 
-结果语义「当前无可见结果」一行与 `AT-VE-188` 的现状缺口：查询端点今天只有当前视图与 `VIEW_NOT_FOUND` 两格，归属方查视图尚未形成的包裹也答 `VIEW_NOT_FOUND`。由票 [docs-consistency/code/31](../../../.scratch/docs-consistency/code/31-customer-tracking-query-cannot-say-no-visible-result-for-its-own-parcel.md) 补齐，本行预期结果不变。
+结果语义「当前无可见结果」一行与 `AT-VE-188` 的现状缺口已由票 [docs-consistency/code/31](../../../.scratch/docs-consistency/code/31-customer-tracking-query-cannot-say-no-visible-result-for-its-own-parcel.md) 补齐（2026-10-25）：查询端点读不到视图时经 `parcel-shipment` 的客户归属反查口问一次归属，唯一归属请求方账户答 `NO_VISIBLE_RESULT`，零份、别的账户与多份委托同时声明都答 `VIEW_NOT_FOUND`，反查读不动答未形成。本行预期结果不变。
 
 ## 给开发的交接
 

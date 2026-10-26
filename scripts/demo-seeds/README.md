@@ -265,10 +265,11 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
    `IDP_PARCEL_GOVERNANCE_SELF_AUTHORITY`，不设答 403 `OUTSIDE_ADMISSION_SCOPE`。载荷与答复见演示文档「送站交接单」一段。证据只记 `S`。
 9. 客户追踪视图（票 demo-chain-gaps/96，ADR-0139 决定四，UC-VE-008）：`GET /v1/customer-tracking-view?parcel=<包裹号>`，同一台合成货主系统、
    同一枚首方令牌，要 `CUSTOMER_TRACKING_VIEW_QUERY` 那一格授予。客户账户只取自客户渠道册上的绑定：查询串只认 `parcel` 一格，带别的
-   （例如自报 `customerAccount`）答 400 `MALFORMED_REQUEST`。本账户的包裹答 200 `CURRENT_VIEW`；别的账户的包裹与不存在的包裹同答 200
+   （例如自报 `customerAccount`）答 400 `MALFORMED_REQUEST`。本账户的包裹视图已形成答 200 `CURRENT_VIEW`；别的账户的包裹与不存在的包裹同答 200
    `VIEW_NOT_FOUND`，字节相同。查阅不判准入范围，不设治理自授权也照答。包裹号是正式包裹号（`DPCL-…`），从首方提交答复的 `parcels`
    里取（ADR-0223），`submit-one-shipment.sh` 末行打出它；按客户自己的参考直接定位见票 demo-chain-gaps/119。视图在委托接受、初始路由投影形成
-   之后由 dispatch 派生，之前查它答 `VIEW_NOT_FOUND`。证据只记 `S`。
+   之后由 dispatch 派生：委托接受之前查它答 `VIEW_NOT_FOUND`；接受之后、视图派生出来之前，本账户查它答 `NO_VISIBLE_RESULT`（稍后再查，
+   ADR-0246），别的账户查它仍与不存在同答。证据只记 `S`。
 
 ## 数据故事（同一合成租户 SYN-TENANT-01，范围 SYN-SCOPE-01）
 

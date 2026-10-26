@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,11 +14,15 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	aipg "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/postgres"
+	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
+	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
+	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	visibilityhttp "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/http"
 	vepostgres "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
 	vedomain "go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
+	veports "go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
 // 本文件证客户追踪视图查阅口在 parcel-api 装配点的几件（票 demo-chain-gaps/96 完成判据）：首方族未配置时答未配置、一个字节不读；
@@ -27,8 +32,12 @@ import (
 const customerTrackingViewPath = "/v1/customer-tracking-view"
 
 // customerTrackingViewEndpoint 按端点表那一行的写法装：Intake 经 customerTrackingViewQueryIntake 取，nil 即字面量未配置。
-func customerTrackingViewEndpoint(intake *visibilityhttp.CustomerTrackingViewIntake, reader visibilityhttp.TrackingViewReader) http.Handler {
-	return visibilityhttp.NewQueryCustomerTrackingViewEndpoint(customerTrackingViewQueryIntake(intake), reader)
+func customerTrackingViewEndpoint(
+	intake *visibilityhttp.CustomerTrackingViewIntake,
+	reader visibilityhttp.TrackingViewReader,
+	attributions veports.ParcelCustomerAccountView,
+) http.Handler {
+	return visibilityhttp.NewQueryCustomerTrackingViewEndpoint(customerTrackingViewQueryIntake(intake), reader, attributions)
 }
 
 func trackingViewIntakeWith(
@@ -66,6 +75,14 @@ func (views untouchedViews) FindCurrent(context.Context, vedomain.TenantID, vedo
 	return vedomain.CustomerTrackingView{}, false, nil
 }
 
+// untouchedAttributions 是归属反查口的替身：被问一次就判失败，理由同 untouchedViews。
+type untouchedAttributions struct{ t *testing.T }
+
+func (attributions untouchedAttributions) FindCustomerAccount(context.Context, vedomain.TenantID, vedomain.TrackedParcelReference) (vedomain.CustomerAccountReference, bool, error) {
+	attributions.t.Error("Intake 没过却问了客户归属")
+	return vedomain.CustomerAccountReference{}, false, nil
+}
+
 // Covers: 票 demo-chain-gaps/96 完成判据「首方族三件不设时仍答 403 ACCESS_CHANNEL_NOT_CONFIGURED」——Intake 缺席（字面量未配置）与
 // 三件都没设时装出的首方 Intake 答同一份字节，视图库一次都没读。
 func TestCustomerTrackingViewLineAnswersNotConfiguredByteForByteWhenTheCustomerFamilyIsUnset(t *testing.T) {
@@ -74,7 +91,7 @@ func TestCustomerTrackingViewLineAnswersNotConfiguredByteForByteWhenTheCustomerF
 		t.Fatalf("unset parameters: configured=%v err=%v", configured, err)
 	}
 	for _, intake := range []*visibilityhttp.CustomerTrackingViewIntake{nil, trackingViewIntakeWith(t, verifier, absentCustomerRegister{})} {
-		response := getTrackingView(customerTrackingViewEndpoint(intake, untouchedViews{t}), "any.presented.token", "?parcel=SYN-PARCEL-01")
+		response := getTrackingView(customerTrackingViewEndpoint(intake, untouchedViews{t}, untouchedAttributions{t}), "any.presented.token", "?parcel=SYN-PARCEL-01")
 		if !answersFirstPartyUnconfigured(t, response) {
 			t.Fatalf("intake %v：%d %q, want 403 %s", intake != nil, response.Code, response.Body.String(), firstPartyUnconfigured)
 		}
@@ -148,7 +165,7 @@ func TestCustomerTrackingViewLineRefusesOtherFamiliesAndClientsWithoutTheGrant(t
 			if testCase.audience != "" {
 				token = issuer.token(t, testCase.audience, syntheticCustomerSubject)
 			}
-			endpoint := customerTrackingViewEndpoint(trackingViewIntakeWith(t, verifier, testCase.registry), untouchedViews{t})
+			endpoint := customerTrackingViewEndpoint(trackingViewIntakeWith(t, verifier, testCase.registry), untouchedViews{t}, untouchedAttributions{t})
 			response := getTrackingView(endpoint, token, "?parcel=SYN-PARCEL-01")
 			if response.Code != testCase.status || problemCode(t, response) != testCase.code {
 				t.Fatalf("answer = %d %s, want %d %s", response.Code, response.Body.String(), testCase.status, testCase.code)
@@ -191,7 +208,11 @@ func TestACustomerClientReadsItsOwnTrackingViewAgainstARealDatabase(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	endpoint := customerTrackingViewEndpoint(trackingViewIntakeWith(t, verifier, registry), views)
+	attributions, err := buildCustomerTrackingViewAttributions(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint := customerTrackingViewEndpoint(trackingViewIntakeWith(t, verifier, registry), views, attributions)
 	token := issuer.token(t, syntheticCustomerAudience, syntheticCustomerSubject)
 
 	own := getTrackingView(endpoint, token, "?parcel=SYN-PARCEL-DCG96-OWN")
@@ -237,15 +258,157 @@ func TestACustomerClientReadsItsOwnTrackingViewAgainstARealDatabase(t *testing.T
 	}
 }
 
+// Covers: UC-VE-008 `AT-VE-188`、`AT-VE-151`——真库上，经登记处里这一特性的生产 build 与 mount（端点表实挂的那一行、生产用的视图读口
+// 与归属反查口），一件包裹沿委托与视图的时间线走过三格（ADR-0246 决定一、二、五）：委托`已提交`、还没接受时，归属方查它与查一件不存在
+// 的包裹同答 VIEW_NOT_FOUND；委托`已接受`、视图未形成时，归属方答 NO_VISIBLE_RESULT；视图形成之后归属方答 CURRENT_VIEW。三个阶段里，
+// 另一个账户的客户端查同一个号，都与它查不存在的号答同一份字节。合成主体、账户与包裹只记 `S`。
+func TestTheProductionTrackingViewLineWalksAParcelThroughItsThreeGradesAgainstARealDatabase(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	registry, err := aipg.NewCustomerClientRegistry(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const otherSubject, otherAccount = "SYN-CUSTOMER-CLIENT-02", "SYN-ACCOUNT-02"
+	for _, client := range []struct{ subject, account, grant string }{
+		{syntheticCustomerSubject, syntheticCustomerAccount, "SYN-CUSTOMER-GRANT-C31-01"},
+		{otherSubject, otherAccount, "SYN-CUSTOMER-GRANT-C31-02"},
+	} {
+		subject, err := accessidentity.NewCustomerClientSubject(syntheticCustomerIssuer, client.subject)
+		if err != nil {
+			t.Fatal(err)
+		}
+		registerTrackingViewClientFor(t, db, registry, subject, client.account, client.grant)
+	}
+
+	issuer := newCustomerIssuerDouble(t)
+	verifier, _, err := buildCustomerClientCredentialVerifier(fakeGetenv(issuer.environment()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	minter, err := buildCustomerClientMinter(verifier, registry, admissionScopeUnset())
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint := productionTrackingViewLine(t, endpointSources{db: db, customerClientMinter: minter})
+	owner := issuer.token(t, syntheticCustomerAudience, syntheticCustomerSubject)
+	other := issuer.token(t, syntheticCustomerAudience, otherSubject)
+
+	const parcel = "SYN-PARCEL-C31-01"
+	command := trackingViewSubmissionCommand(t, parcel)
+	answersOf := func(stage string) (ownerAnswer *httptest.ResponseRecorder) {
+		t.Helper()
+		ownerAnswer = getTrackingView(endpoint, owner, "?parcel="+parcel)
+		probe := getTrackingView(endpoint, other, "?parcel="+parcel)
+		missing := getTrackingView(endpoint, other, "?parcel=SYN-PARCEL-C31-NOWHERE")
+		if missing.Code != http.StatusOK || outcomeOf(t, missing) != "VIEW_NOT_FOUND" {
+			t.Fatalf("%s：另一账户查不存在的号 = %d %s, want 200 VIEW_NOT_FOUND", stage, missing.Code, missing.Body.String())
+		}
+		if probe.Code != missing.Code || probe.Body.String() != missing.Body.String() {
+			t.Fatalf("%s：另一账户查这件 %d %q 与查不存在的号 %d %q 可分辨", stage, probe.Code, probe.Body.String(), missing.Code, missing.Body.String())
+		}
+		return ownerAnswer
+	}
+
+	submitOnRealAssembly(t, db, command)
+	beforeAcceptance := answersOf("委托已提交")
+	ownerMissing := getTrackingView(endpoint, owner, "?parcel=SYN-PARCEL-C31-NOWHERE")
+	if beforeAcceptance.Code != ownerMissing.Code || beforeAcceptance.Body.String() != ownerMissing.Body.String() || outcomeOf(t, beforeAcceptance) != "VIEW_NOT_FOUND" {
+		t.Fatalf("委托接受之前，归属方查它 %d %q，want 与查不存在的号 %d %q 同答 VIEW_NOT_FOUND",
+			beforeAcceptance.Code, beforeAcceptance.Body.String(), ownerMissing.Code, ownerMissing.Body.String())
+	}
+
+	requests, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, found, err := requests.FindBySourceIdentity(t.Context(), command.Identity)
+	if err != nil || !found {
+		t.Fatalf("读回委托：err=%v found=%v", err, found)
+	}
+	acceptAndSave(t, db, requests, command, request)
+	if accepted := answersOf("委托已接受、视图未形成"); accepted.Code != http.StatusOK || strings.TrimSpace(accepted.Body.String()) != `{"outcome":"NO_VISIBLE_RESULT"}` {
+		t.Fatalf("委托已接受、视图未形成，归属方查它 = %d %s, want 200 {\"outcome\":\"NO_VISIBLE_RESULT\"}", accepted.Code, accepted.Body.String())
+	}
+
+	views, err := vepostgres.NewCustomerViews(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saveCustomerView(t, db, views, syntheticCustomerAccount, parcel, "SYN-VIEW-C31-01")
+	formed := answersOf("视图已形成")
+	var body struct {
+		Outcome string `json:"outcome"`
+		View    struct {
+			Version string `json:"version"`
+		} `json:"view"`
+	}
+	if err := json.Unmarshal(formed.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode %s: %v", formed.Body.Bytes(), err)
+	}
+	if formed.Code != http.StatusOK || body.Outcome != "CURRENT_VIEW" || body.View.Version != "SYN-VIEW-C31-01" {
+		t.Fatalf("视图形成之后，归属方查它 = %d %s, want 200 CURRENT_VIEW SYN-VIEW-C31-01", formed.Code, formed.Body.String())
+	}
+}
+
+// productionTrackingViewLine 从端点登记处取客户追踪视图那一特性，经它自己的生产 build 与 mount 装出查阅口那一行。
+func productionTrackingViewLine(t *testing.T, sources endpointSources) http.Handler {
+	t.Helper()
+	for _, feature := range endpointRegistry {
+		if feature.wiringKey != any((*customerTrackingViewWiring)(nil)) {
+			continue
+		}
+		mounted, err := feature.production(sources, endpointChannels{})
+		if err != nil {
+			t.Fatalf("装配：%v", err)
+		}
+		for _, line := range mounted {
+			if line.Pattern == customerTrackingViewPath {
+				return line.Handler
+			}
+		}
+	}
+	t.Fatalf("%s 没按登记处挂上", customerTrackingViewPath)
+	return nil
+}
+
+// trackingViewSubmissionCommand 是 submissionCommand 换到查阅口客户端所绑的（SYN-TENANT-01, SYN-ACCOUNT-01）上、只声明一件包裹的形。
+func trackingViewSubmissionCommand(t *testing.T, parcel string) shipmentapp.SubmitShipmentRequestCommand {
+	t.Helper()
+	command := submissionCommand(t)
+	identity, err := psdomain.NewSourceIdentity(
+		mustValue(t, psdomain.NewTenantID, "SYN-TENANT-01"),
+		mustValue(t, psdomain.NewCustomerAccountID, syntheticCustomerAccount),
+		mustValue(t, psdomain.NewSource, "SYN-SOURCE-C31"),
+		mustValue(t, psdomain.NewSourceRequestKey, "SYN-KEY-C31-01"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	command.Identity = identity
+	command.ShipmentRequestID = mustValue(t, psdomain.NewShipmentRequestID, "SYN-REQUEST-C31-01")
+	command.DeclaredParcelIDs = []psdomain.DeclaredParcelID{mustValue(t, psdomain.NewDeclaredParcelID, parcel)}
+	return command
+}
+
 // registerTrackingViewClient 在真的客户渠道册上登一个绑在（SYN-TENANT-01, SYN-ACCOUNT-01）上的合成客户端，只授查阅那一项。登进去
 // 也就证了迁移里那条 CHECK 放开了这个词。
 func registerTrackingViewClient(t *testing.T, db *bentopg.DB, registry *aipg.CustomerClientRegistry, subject accessidentity.CustomerClientSubject, grantID string) {
 	t.Helper()
-	reference, err := accessidentity.NewCredentialReference("SYN-CREDENTIAL-STORE/customer-01")
+	registerTrackingViewClientFor(t, db, registry, subject, syntheticCustomerAccount, grantID)
+}
+
+// registerTrackingViewClientFor 是 registerTrackingViewClient 指定账户的形：同一租户下另一个货主客户账户的客户端照同一配方登。
+func registerTrackingViewClientFor(t *testing.T, db *bentopg.DB, registry *aipg.CustomerClientRegistry, subject accessidentity.CustomerClientSubject, account, grantID string) {
+	t.Helper()
+	reference, err := accessidentity.NewCredentialReference("SYN-CREDENTIAL-STORE/" + account)
 	if err != nil {
 		t.Fatal(err)
 	}
-	binding, err := accessidentity.NewCustomerClientBinding(subject, "SYN-TENANT-01", syntheticCustomerAccount, reference, false, "SYN-CUSTOMER-CLIENT-BASIS-01")
+	binding, err := accessidentity.NewCustomerClientBinding(subject, "SYN-TENANT-01", account, reference, false, "SYN-CUSTOMER-CLIENT-BASIS-01")
 	if err != nil {
 		t.Fatal(err)
 	}
