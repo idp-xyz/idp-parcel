@@ -1,7 +1,7 @@
 # 41 PP 计价参考序列与目录的人工复核写死复核者不得是登记者，照 ADR-0262 改为读租户的参考复核职责规则
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-code41（2026-10-25）。此前 ready-for-agent——R2（上线后尽快）：单人运营的租户手工登记的序列与目录一版都进不了在用，评价停在待判断；同一租户的价卡批准却可以登成单人可批。绕法：由第二个操作者复核（多人租户照常可用）；单人租户没有绕法，只能改走连接器并声明免人工复核。2026-10-21 文档自洽 07 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc07。
+Status: resolved——2026-10-26 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code41（2026-10-25）。此前 ready-for-agent——R2（上线后尽快）：单人运营的租户手工登记的序列与目录一版都进不了在用，评价停在待判断；同一租户的价卡批准却可以登成单人可批。绕法：由第二个操作者复核（多人租户照常可用）；单人租户没有绕法，只能改走连接器并声明免人工复核。2026-10-21 文档自洽 07 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc07。
 Blocked by: 无
 出处：[audit/cross.md](../audit/cross.md) B2-05（审计归 B，由 docs-consistency/07 立 [ADR-0262](../../../docs/adr/0262-reference-series-and-catalogue-review-duty-separation-is-a-tenant-governance-rule.md) 代决）。
 
@@ -106,3 +106,10 @@ M：领域规则类型、读口与表各一，两只编排各接一次，两格�
 - `scripts/test-full.sh ./internal/parcelpricing/... ./cmd/parcel-api/ ./cmd/parcel-pricing-register/... ./internal/architecture/... ./migrations/...`（含 PG）退 0、零 FAIL。
 - 新改用例 9 个（两条门禁、CLI 三条与真库一条、目录复核 Intake、喂价两条）`-count=3 -v`：27 次 PASS，零 FAIL、零 SKIP。
 
+## 进 main 记录（2026-10-26，协调方）
+
+- 分支 `claude-code41` 由作者 rebase 到 origin/main `fb8ee7096` 后快进，tip `d3c347380`；迁移 PP 0014。
+- 隔离评审无阻断。N1（代写格只由来源喂价置位，加 `internal/architecture/exemption_delegated_review_gate_test.go` 扫源码门禁）、N2（「授予先于主体」代决改准、越权风险点补 PC 商业发布门同为先比主体；两门对齐立 code/93）、N3（UC-PP-001 交接只留指针）、N4（Covers 去位置词）与可选的尾随括号解码修复在修订轮照改；修订 diff 与评审处方一致，协调方核过后未再起第二轮评审。
+- 协调方单独提交重算的 AT 计数与重生成的机制清点；ADR 索引无变化；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0、158 个包 ok；`go build ./...`、`go vet ./...` 干净；admin-web tsc、全部用例、vite build 通过；演示种子在一次性库上灌通（规则 `RECORDED`，序列与目录复核照常进在用），用后删库。
+- 去向：code/93（价卡批准与商业发布批准两门先比主体，与参考复核门顺序相反，R3）。管理台没有目录复核页，要求授予的租户复核目录只能直接调 API——留给产品跟进，不另立票。
