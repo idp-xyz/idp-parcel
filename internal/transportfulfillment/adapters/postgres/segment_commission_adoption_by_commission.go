@@ -23,7 +23,7 @@ func (repository *SegmentCommissionAdoptions) ListByCommission(
 	}
 	rows, err := querier.Query(ctx,
 		`SELECT adoption.segment_ref, adoption.generation, adoption.commission_id, adoption.provider_ref, adoption.start_basis,
-		        adoption.started_at, adoption.content_digest, adoption.recorded_at
+		        adoption.started_at, adoption.content_digest, adoption.recorded_at, adoption.adopted_by
 		   FROM transport_fulfillment.segment_commission_adoption AS adoption
 		  WHERE adoption.tenant_id = $1
 		    AND adoption.commission_id = $2

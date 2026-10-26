@@ -26,6 +26,9 @@ type SegmentCommissionAdoptionRecord struct {
 	RecordedAt    time.Time
 	// Generation 是读回时这一段的第几代采用，由册在 Save 时排定；Save 不读它。解除据它指名解的是哪一代。
 	Generation int
+	// AdoptedBy 是经运营决定口作出这一代采用的操作者（ADR-0303 复核记录），只进审计：重放与冲突只比 ContentDigest，采用的各道门
+	// 读不到它。每一代各记各的；解除另有解除人。可缺。
+	AdoptedBy domain.RegistrantReference
 }
 
 type AdoptionSaveOutcome uint8

@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
-	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
 // 履约段采用运输委托口（ADR-0204；ADR-0202 决定一）。运营人员声明一个在册的实际履约段在一份已提交的委托下、由哪一家
@@ -32,13 +31,14 @@ type SegmentCommissionAdoptionPayload struct {
 	AfterGeneration int `json:"afterGeneration,omitempty"`
 }
 
-// Command 把载荷连同信封给的租户翻成采用命令。各格成不成立、段与委托在不在册由编排答。
-func (payload SegmentCommissionAdoptionPayload) Command(tenant domain.TenantID) (application.AdoptSegmentCommissionCommand, error) {
-	if tenant.String() == "" {
+// Command 把载荷连同信封给的身份（租户，与作出决定的操作者，ADR-0303 操作证据，载荷里不收）翻成采用命令。各格成不成立、段与委托在不在册由编排答。
+func (payload SegmentCommissionAdoptionPayload) Command(operator OperatorIdentity) (application.AdoptSegmentCommissionCommand, error) {
+	if operator.Tenant.String() == "" {
 		return application.AdoptSegmentCommissionCommand{}, ErrOperatorIdentityMissing
 	}
 	return application.AdoptSegmentCommissionCommand{
-		TenantID:        tenant,
+		TenantID:        operator.Tenant,
+		AdoptedBy:       operator.Operator,
 		Segment:         payload.Segment,
 		Commission:      payload.Commission,
 		Provider:        payload.Provider,

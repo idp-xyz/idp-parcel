@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
-	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
 // 订舱提交口（UC-TF-004 步 1、3；ADR-0202 决定一、五）。运营人员在一份已提交的委托下，就一个在册的具体班次向服务提供方
@@ -34,9 +33,9 @@ type BookingRequestSubmissionPayload struct {
 	RequestedAt string `json:"requestedAt"`
 }
 
-// Command 把载荷连同信封给的租户翻成订舱提交命令。时刻解不出是坏报文（400）；各格成不成立、委托与班次在不在册由编排答。
-func (payload BookingRequestSubmissionPayload) Command(tenant domain.TenantID) (application.SubmitBookingCommand, error) {
-	if tenant.String() == "" {
+// Command 把载荷连同信封给的身份（租户，与作出决定的操作者，ADR-0303 操作证据，载荷里不收）翻成订舱提交命令。时刻解不出是坏报文（400）；各格成不成立、委托与班次在不在册由编排答。
+func (payload BookingRequestSubmissionPayload) Command(operator OperatorIdentity) (application.SubmitBookingCommand, error) {
+	if operator.Tenant.String() == "" {
 		return application.SubmitBookingCommand{}, ErrOperatorIdentityMissing
 	}
 	requestedAt, err := parseOptionalInstant("requestedAt", payload.RequestedAt)
@@ -44,7 +43,8 @@ func (payload BookingRequestSubmissionPayload) Command(tenant domain.TenantID) (
 		return application.SubmitBookingCommand{}, err
 	}
 	return application.SubmitBookingCommand{
-		TenantID:    tenant,
+		TenantID:    operator.Tenant,
+		SubmittedBy: operator.Operator,
 		Booking:     payload.Booking,
 		Commission:  payload.Commission,
 		Schedule:    payload.Schedule,

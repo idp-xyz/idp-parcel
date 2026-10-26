@@ -28,6 +28,11 @@ var (
 	// ErrDeliveryDispatchPendingRefused 说明册那一侧确定性地拒了这一笔（取锁或写册时没有环境事务、库上的约束不让写）。整拍同样不答、随事务回滚，
 	// 但它是装配或本上下文自己的缺陷：原样重跑一万次都一样，不能当成等得来的依赖去重投。
 	ErrDeliveryDispatchPendingRefused = errors.New("transport fulfillment: delivery dispatch pending write refused")
+	// ErrDeliveryDispatchAskLedgerNotWired 说明一次有操作者的按下到了没接问询册的装配：不留痕就不答。
+	ErrDeliveryDispatchAskLedgerNotWired = errors.New("transport fulfillment: delivery dispatch ask ledger is not wired")
+	// ErrDeliveryDispatchAskUnrecorded 说明问询册此刻写不下这一次按下。补拍随执行器那一拍同笔，整拍回滚；按册重问在逐件去问之前记，
+	// 记不下就一件也不问。原样重按即可。
+	ErrDeliveryDispatchAskUnrecorded = errors.New("transport fulfillment: delivery dispatch ask could not be recorded")
 )
 
 // DeliveryDispatchTriggerOutcome 是「对象凭`已交接`进入派送段 → 形成末端派送任务」这一拍的结果代数（ADR-0114 决定二）。
@@ -199,6 +204,10 @@ type TriggerDeliveryDispatchCommand struct {
 	Object           string
 	OccurredAt       time.Time
 	ExpectedHandover *domain.TransportHandover
+	// TriggeredBy 是经运营决定口按下补拍的操作者（「发行方#sub」，ADR-0303 决定五与复核记录），可缺：只有它在场时才在问询册记一次
+	// 按下，执行器随交接信封发起的那一路与按册重问逐件交来的都不带。它不进这一拍的任何一格判断，更不进任务——执行器形成的任务
+	// 不记建任务人。
+	TriggeredBy string
 }
 
 type TriggerDeliveryDispatchResult struct {
@@ -262,6 +271,9 @@ type TriggerDeliveryDispatchDeps struct {
 	Conditions ports.DeliveryConditionSource
 	Dispatch   DispatchTaskOpener
 	Pending    ports.DeliveryDispatchPendingRegister
+	// Asks 是问询册的写口，只在命令带了 TriggeredBy 时用到：缺了它而命令带了操作者，宁可这一拍不答（ErrDeliveryDispatchAskLedgerNotWired），
+	// 也不让一次有人按下的补拍不留痕迹。其余调用方可以不接。
+	Asks ports.DeliveryDispatchAskLedger
 }
 
 // TriggerDeliveryDispatchHandler 是末端派送任务的内部触发执行器：以「对象凭`已交接`进入派送段」为输入，按派送要求
@@ -292,11 +304,26 @@ func (handler *TriggerDeliveryDispatchHandler) Trigger(
 	if handler.deps.Pending == nil {
 		return TriggerDeliveryDispatchResult{}, ErrDeliveryDispatchPendingRegisterNotWired
 	}
+	asker, err := domain.OptionalRegistrantReference(command.TriggeredBy)
+	if err != nil {
+		return TriggerDeliveryDispatchResult{outcome: DeliveryDispatchNotAccepted}, nil
+	}
 	// 先占住这一件再读段、查在册：同一件的两拍若并行，各凭替代链上不同的一版去查，都看不见对方还没提交的任务，就会各铸一项。
 	if segment, object, accepted := deliveryTriggerTargetFrom(command); accepted {
 		key := ports.DeliveryDispatchPendingKey{TenantID: command.TenantID, Segment: segment, Object: object}
 		if err := handler.deps.Pending.HoldFormation(ctx, key); err != nil {
 			return TriggerDeliveryDispatchResult{}, pendingRegisterFailure(err)
+		}
+		if asker.Present() {
+			if handler.deps.Asks == nil {
+				return TriggerDeliveryDispatchResult{}, ErrDeliveryDispatchAskLedgerNotWired
+			}
+			if err := handler.deps.Asks.RecordAsk(ctx, ports.DeliveryDispatchAskRecord{
+				TenantID: command.TenantID, Kind: ports.DeliveryDispatchAskTrigger, AskedBy: asker,
+				AskedAt: command.OccurredAt, Segment: segment, Object: object,
+			}); err != nil {
+				return TriggerDeliveryDispatchResult{}, fmt.Errorf("%w: %v", ErrDeliveryDispatchAskUnrecorded, err)
+			}
 		}
 	}
 	result, err := handler.answer(ctx, command)

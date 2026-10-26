@@ -42,9 +42,9 @@ type CapacityReservationPayload struct {
 	ReservedAt  string                      `json:"reservedAt"`
 }
 
-// Command 把载荷连同信封给的租户翻成预占命令。时刻解不出是坏报文（400）；各格成不成立由编排答。
-func (payload CapacityReservationPayload) Command(tenant domain.TenantID) (application.ReserveCapacityCommand, error) {
-	if tenant.String() == "" {
+// Command 把载荷连同信封给的身份（租户，与作出决定的操作者，ADR-0303 操作证据，载荷里不收）翻成预占命令。时刻解不出是坏报文（400）；各格成不成立由编排答。
+func (payload CapacityReservationPayload) Command(operator OperatorIdentity) (application.ReserveCapacityCommand, error) {
+	if operator.Tenant.String() == "" {
 		return application.ReserveCapacityCommand{}, ErrOperatorIdentityMissing
 	}
 	validUntil, err := parseOptionalInstant("validUntil", payload.ValidUntil)
@@ -56,7 +56,8 @@ func (payload CapacityReservationPayload) Command(tenant domain.TenantID) (appli
 		return application.ReserveCapacityCommand{}, err
 	}
 	return application.ReserveCapacityCommand{
-		TenantID:        tenant,
+		TenantID:        operator.Tenant,
+		ReservedBy:      operator.Operator,
 		Pool:            payload.Pool,
 		Reservation:     payload.Reservation,
 		Quantity:        payload.Quantity,
@@ -70,7 +71,7 @@ func (payload CapacityReservationPayload) Command(tenant domain.TenantID) (appli
 
 // IntakeCapacityReservation 译容量预占（`/transport-fulfillment-capacity-reservations`）。
 func (intake *OperatorDecisionIntake) IntakeCapacityReservation(ctx context.Context, request *http.Request) (application.ReserveCapacityCommand, error) {
-	tenant, err := intake.tenantFor(ctx, request, OperatorDecisionCapacityReservation)
+	operator, err := intake.identityFor(ctx, request, OperatorDecisionCapacityReservation)
 	if err != nil {
 		return application.ReserveCapacityCommand{}, err
 	}
@@ -78,7 +79,7 @@ func (intake *OperatorDecisionIntake) IntakeCapacityReservation(ctx context.Cont
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.ReserveCapacityCommand{}, err
 	}
-	return payload.Command(tenant)
+	return payload.Command(operator)
 }
 
 // NewReserveCapacityEndpoint 交回容量预占的 HTTP 入口。

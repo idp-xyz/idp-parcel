@@ -116,6 +116,10 @@ func deliveryDispatchTriggerOver(
 	if err != nil {
 		return transactionalDeliveryDispatchTrigger{}, fmt.Errorf("parcel-api: delivery dispatch pendings: %w", err)
 	}
+	asks, err := tfpostgres.NewDeliveryDispatchAsks(db)
+	if err != nil {
+		return transactionalDeliveryDispatchTrigger{}, fmt.Errorf("parcel-api: delivery dispatch asks: %w", err)
+	}
 	handler := tfapp.NewTriggerDeliveryDispatchHandler(tfapp.TriggerDeliveryDispatchDeps{
 		Segments:   segments,
 		Tasks:      tasks,
@@ -124,6 +128,7 @@ func deliveryDispatchTriggerOver(
 		Conditions: conditions,
 		Dispatch:   tfapp.NewOpenDispatchTaskHandler(tfapp.OpenDispatchTaskDeps{Tasks: tasks, Clock: systemClock{}}),
 		Pending:    pendings,
+		Asks:       asks,
 	})
 	return transactionalDeliveryDispatchTrigger{transactor: db.Transactor(), inner: handler}, nil
 }

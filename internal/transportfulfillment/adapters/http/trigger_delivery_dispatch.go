@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
-	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
 // 末端派送任务**内部触发执行器**的补拍口（ADR-0216 决定四）。进程内的那一拍由派发进程随交接登记信封逐对象发起
@@ -32,9 +31,9 @@ type DeliveryDispatchTriggerPayload struct {
 	OccurredAt string `json:"occurredAt"`
 }
 
-// Command 把载荷连同信封给的租户翻成触发命令。时刻解不出是坏报文（400）；段与对象成不成触发事实由执行器答。
-func (payload DeliveryDispatchTriggerPayload) Command(tenant domain.TenantID) (application.TriggerDeliveryDispatchCommand, error) {
-	if tenant.String() == "" {
+// Command 把载荷连同信封给的身份（租户，与作出决定的操作者，ADR-0303 操作证据，载荷里不收）翻成触发命令。时刻解不出是坏报文（400）；段与对象成不成触发事实由执行器答。
+func (payload DeliveryDispatchTriggerPayload) Command(operator OperatorIdentity) (application.TriggerDeliveryDispatchCommand, error) {
+	if operator.Tenant.String() == "" {
 		return application.TriggerDeliveryDispatchCommand{}, ErrOperatorIdentityMissing
 	}
 	occurredAt, err := parseOptionalInstant("occurredAt", payload.OccurredAt)
@@ -42,10 +41,11 @@ func (payload DeliveryDispatchTriggerPayload) Command(tenant domain.TenantID) (a
 		return application.TriggerDeliveryDispatchCommand{}, err
 	}
 	return application.TriggerDeliveryDispatchCommand{
-		TenantID:   tenant,
-		Segment:    payload.Segment,
-		Object:     payload.Object,
-		OccurredAt: occurredAt,
+		TenantID:    operator.Tenant,
+		TriggeredBy: operator.Operator,
+		Segment:     payload.Segment,
+		Object:      payload.Object,
+		OccurredAt:  occurredAt,
 	}, nil
 }
 

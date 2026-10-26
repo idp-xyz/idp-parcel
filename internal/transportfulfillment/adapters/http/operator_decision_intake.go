@@ -224,7 +224,7 @@ func (intake *OperatorDecisionIntake) IntakeChargeOccurrenceRegistration(ctx con
 
 // IntakeBookingRequestSubmission 译订舱提交（`/transport-fulfillment-booking-request-submissions`）。
 func (intake *OperatorDecisionIntake) IntakeBookingRequestSubmission(ctx context.Context, request *http.Request) (application.SubmitBookingCommand, error) {
-	tenant, err := intake.tenantFor(ctx, request, OperatorDecisionBookingRequestSubmission)
+	operator, err := intake.identityFor(ctx, request, OperatorDecisionBookingRequestSubmission)
 	if err != nil {
 		return application.SubmitBookingCommand{}, err
 	}
@@ -232,12 +232,12 @@ func (intake *OperatorDecisionIntake) IntakeBookingRequestSubmission(ctx context
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.SubmitBookingCommand{}, err
 	}
-	return payload.Command(tenant)
+	return payload.Command(operator)
 }
 
 // IntakeSegmentCommissionAdoption 译履约段采用运输委托（`/transport-fulfillment-segment-commission-adoptions`）。
 func (intake *OperatorDecisionIntake) IntakeSegmentCommissionAdoption(ctx context.Context, request *http.Request) (application.AdoptSegmentCommissionCommand, error) {
-	tenant, err := intake.tenantFor(ctx, request, OperatorDecisionSegmentCommissionAdoption)
+	operator, err := intake.identityFor(ctx, request, OperatorDecisionSegmentCommissionAdoption)
 	if err != nil {
 		return application.AdoptSegmentCommissionCommand{}, err
 	}
@@ -245,12 +245,12 @@ func (intake *OperatorDecisionIntake) IntakeSegmentCommissionAdoption(ctx contex
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.AdoptSegmentCommissionCommand{}, err
 	}
-	return payload.Command(tenant)
+	return payload.Command(operator)
 }
 
 // IntakeTransportCommissionCancellation 译取消运输委托（`/transport-fulfillment-transport-commission-cancellations`）。
 func (intake *OperatorDecisionIntake) IntakeTransportCommissionCancellation(ctx context.Context, request *http.Request) (application.CancelCommissionCommand, error) {
-	tenant, err := intake.tenantFor(ctx, request, OperatorDecisionTransportCommissionCancellation)
+	operator, err := intake.identityFor(ctx, request, OperatorDecisionTransportCommissionCancellation)
 	if err != nil {
 		return application.CancelCommissionCommand{}, err
 	}
@@ -258,12 +258,12 @@ func (intake *OperatorDecisionIntake) IntakeTransportCommissionCancellation(ctx 
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.CancelCommissionCommand{}, err
 	}
-	return payload.Command(tenant)
+	return payload.Command(operator)
 }
 
 // IntakeBookingRequestCancellation 译取消订舱（`/transport-fulfillment-booking-request-cancellations`）。
 func (intake *OperatorDecisionIntake) IntakeBookingRequestCancellation(ctx context.Context, request *http.Request) (application.CancelBookingCommand, error) {
-	tenant, err := intake.tenantFor(ctx, request, OperatorDecisionBookingRequestCancellation)
+	operator, err := intake.identityFor(ctx, request, OperatorDecisionBookingRequestCancellation)
 	if err != nil {
 		return application.CancelBookingCommand{}, err
 	}
@@ -271,13 +271,13 @@ func (intake *OperatorDecisionIntake) IntakeBookingRequestCancellation(ctx conte
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.CancelBookingCommand{}, err
 	}
-	return payload.Command(tenant)
+	return payload.Command(operator)
 }
 
 // IntakeDeliveryDispatchTrigger 译对单个（段，对象）补拍一次派送发起（`/transport-fulfillment-delivery-dispatch-triggers`，
 // ADR-0230 决定七）。线格式不变，仍是段、对象与这一拍的业务时间。
 func (intake *OperatorDecisionIntake) IntakeDeliveryDispatchTrigger(ctx context.Context, request *http.Request) (application.TriggerDeliveryDispatchCommand, error) {
-	tenant, err := intake.tenantFor(ctx, request, OperatorDecisionDeliveryDispatchReask)
+	operator, err := intake.identityFor(ctx, request, OperatorDecisionDeliveryDispatchReask)
 	if err != nil {
 		return application.TriggerDeliveryDispatchCommand{}, err
 	}
@@ -285,12 +285,12 @@ func (intake *OperatorDecisionIntake) IntakeDeliveryDispatchTrigger(ctx context.
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.TriggerDeliveryDispatchCommand{}, err
 	}
-	return payload.Command(tenant)
+	return payload.Command(operator)
 }
 
 // IntakeDeliveryDispatchReask 译按派送待形成册批量重问（`/transport-fulfillment-delivery-dispatch-reasks`，ADR-0230 决定四）。
 func (intake *OperatorDecisionIntake) IntakeDeliveryDispatchReask(ctx context.Context, request *http.Request) (application.ReaskPendingDeliveryDispatchesCommand, error) {
-	tenant, err := intake.tenantFor(ctx, request, OperatorDecisionDeliveryDispatchReask)
+	operator, err := intake.identityFor(ctx, request, OperatorDecisionDeliveryDispatchReask)
 	if err != nil {
 		return application.ReaskPendingDeliveryDispatchesCommand{}, err
 	}
@@ -298,13 +298,7 @@ func (intake *OperatorDecisionIntake) IntakeDeliveryDispatchReask(ctx context.Co
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.ReaskPendingDeliveryDispatchesCommand{}, err
 	}
-	return payload.Command(tenant)
-}
-
-// tenantFor 交回出示者在这一种决定上的租户。租户只取自认证结果（ADR-0003），载荷里不收租户。
-func (intake *OperatorDecisionIntake) tenantFor(ctx context.Context, request *http.Request, decision OperatorDecision) (domain.TenantID, error) {
-	operator, err := intake.identityFor(ctx, request, decision)
-	return operator.Tenant, err
+	return payload.Command(operator)
 }
 
 // identityFor 交回出示者在这一种决定上的整份身份：租户与操作者。

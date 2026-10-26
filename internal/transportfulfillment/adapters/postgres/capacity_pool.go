@@ -88,7 +88,7 @@ func (repository *CapacityPools) findPool(
 	if err != nil {
 		return ports.CapacityPoolRecord{}, false, fmt.Errorf("find capacity pool: %w", err)
 	}
-	snapshots, err := repository.loadReservations(ctx, querier, key)
+	snapshots, reservedBy, releasedBy, err := repository.loadReservations(ctx, querier, key)
 	if err != nil {
 		return ports.CapacityPoolRecord{}, false, fmt.Errorf("find capacity pool: %w", err)
 	}
@@ -112,6 +112,8 @@ func (repository *CapacityPools) findPool(
 		ContentDigest: digest,
 		Pool:          pool,
 		RecordedAt:    recordedAt.UTC(),
+		ReservedBy:    reservedBy,
+		ReleasedBy:    releasedBy,
 	}, true, nil
 }
 
@@ -199,17 +201,17 @@ func (repository *CapacityPools) loadReservations(
 	ctx context.Context,
 	querier bentopg.Querier,
 	key ports.CapacityPoolKey,
-) ([]domain.CapacityReservationSnapshot, error) {
-	releases, err := repository.loadReleases(ctx, querier, key)
+) ([]domain.CapacityReservationSnapshot, map[domain.CapacityReservationReference]domain.RegistrantReference, map[domain.CapacityReleaseReference]domain.RegistrantReference, error) {
+	releases, releasedBy, err := repository.loadReleases(ctx, querier, key)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 	allocations, err := loadAllocationRelations(ctx, querier, key)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 	rows, err := querier.Query(ctx,
-		`SELECT reservation_id, quantity, valid_until, released, consumed, source_kind, source_ref, reserved_at
+		`SELECT reservation_id, quantity, valid_until, released, consumed, source_kind, source_ref, reserved_at, reserved_by
 		   FROM transport_fulfillment.capacity_reservation
 		  WHERE tenant_id = $1 AND pool_id = $2
 		  ORDER BY reservation_id`,
@@ -217,25 +219,34 @@ func (repository *CapacityPools) loadReservations(
 		key.Pool.String(),
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 	defer rows.Close()
 
 	var snapshots []domain.CapacityReservationSnapshot
+	reservedBy := map[domain.CapacityReservationReference]domain.RegistrantReference{}
 	for rows.Next() {
 		var reservationID, sourceKind, sourceRef string
 		var quantity, released, consumed int64
 		var validUntil, reservedAt time.Time
-		if err := rows.Scan(&reservationID, &quantity, &validUntil, &released, &consumed, &sourceKind, &sourceRef, &reservedAt); err != nil {
-			return nil, err
+		var reservedByColumn *string
+		if err := rows.Scan(&reservationID, &quantity, &validUntil, &released, &consumed, &sourceKind, &sourceRef, &reservedAt, &reservedByColumn); err != nil {
+			return nil, nil, nil, err
 		}
 		reference, err := domain.NewCapacityReservationReference(reservationID)
 		if err != nil {
-			return nil, err
+			return nil, nil, nil, err
 		}
 		source, err := demandSourceFrom(sourceKind, sourceRef)
 		if err != nil {
-			return nil, err
+			return nil, nil, nil, err
+		}
+		operator, err := registrantFromColumn(reservedByColumn)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if operator.Present() {
+			reservedBy[reference] = operator
 		}
 		snapshots = append(snapshots, domain.CapacityReservationSnapshot{
 			Reference:   reference,
@@ -249,7 +260,7 @@ func (repository *CapacityPools) loadReservations(
 			Allocations: allocations[reservationID],
 		})
 	}
-	return snapshots, rows.Err()
+	return snapshots, reservedBy, releasedBy, rows.Err()
 }
 
 // loadReleases 按所属预占分组读回本池全部显式释放，组内按释放时点、再按释放引用排，只为读回稳定。次序不带语义：领域里
@@ -258,9 +269,9 @@ func (repository *CapacityPools) loadReleases(
 	ctx context.Context,
 	querier bentopg.Querier,
 	key ports.CapacityPoolKey,
-) (map[string][]domain.CapacityReleaseSnapshot, error) {
+) (map[string][]domain.CapacityReleaseSnapshot, map[domain.CapacityReleaseReference]domain.RegistrantReference, error) {
 	rows, err := querier.Query(ctx,
-		`SELECT reservation_id, release_id, quantity, source_kind, source_ref, released_at
+		`SELECT reservation_id, release_id, quantity, source_kind, source_ref, released_at, released_by
 		   FROM transport_fulfillment.capacity_release
 		  WHERE tenant_id = $1 AND pool_id = $2
 		  ORDER BY reservation_id, released_at, release_id`,
@@ -268,25 +279,34 @@ func (repository *CapacityPools) loadReleases(
 		key.Pool.String(),
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer rows.Close()
 
 	releases := map[string][]domain.CapacityReleaseSnapshot{}
+	releasedBy := map[domain.CapacityReleaseReference]domain.RegistrantReference{}
 	for rows.Next() {
 		var reservationID, releaseID, sourceKind, sourceRef string
 		var quantity int64
 		var releasedAt time.Time
-		if err := rows.Scan(&reservationID, &releaseID, &quantity, &sourceKind, &sourceRef, &releasedAt); err != nil {
-			return nil, err
+		var releasedByColumn *string
+		if err := rows.Scan(&reservationID, &releaseID, &quantity, &sourceKind, &sourceRef, &releasedAt, &releasedByColumn); err != nil {
+			return nil, nil, err
 		}
 		reference, err := domain.NewCapacityReleaseReference(releaseID)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		source, err := demandSourceFrom(sourceKind, sourceRef)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
+		}
+		operator, err := registrantFromColumn(releasedByColumn)
+		if err != nil {
+			return nil, nil, err
+		}
+		if operator.Present() {
+			releasedBy[reference] = operator
 		}
 		releases[reservationID] = append(releases[reservationID], domain.CapacityReleaseSnapshot{
 			Reference:  reference,
@@ -295,7 +315,7 @@ func (repository *CapacityPools) loadReleases(
 			ReleasedAt: releasedAt,
 		})
 	}
-	return releases, rows.Err()
+	return releases, releasedBy, rows.Err()
 }
 
 // loadAllocationRelations 按所属预占分组读回本池上的分配关系：各装载分配当前那一版（没有后继、未撤回）在本池上的那一行
@@ -375,8 +395,8 @@ func insertReservations(
 		if _, err := executor.Exec(ctx,
 			`INSERT INTO transport_fulfillment.capacity_reservation
 				(tenant_id, pool_id, reservation_id, quantity, valid_until, released, consumed,
-				 source_kind, source_ref, reserved_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+				 source_kind, source_ref, reserved_at, reserved_by)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 			record.Key.TenantID.String(),
 			record.Key.Pool.String(),
 			snapshot.Reference.String(),
@@ -387,14 +407,15 @@ func insertReservations(
 			snapshot.Source.Kind().String(),
 			snapshot.Source.Reference().String(),
 			snapshot.ReservedAt.UTC(),
+			optionalRegistrant(record.ReservedBy[snapshot.Reference]),
 		); err != nil {
 			return err
 		}
 		for _, release := range snapshot.Releases {
 			if _, err := executor.Exec(ctx,
 				`INSERT INTO transport_fulfillment.capacity_release
-					(tenant_id, pool_id, release_id, reservation_id, quantity, source_kind, source_ref, released_at)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+					(tenant_id, pool_id, release_id, reservation_id, quantity, source_kind, source_ref, released_at, released_by)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 				record.Key.TenantID.String(),
 				record.Key.Pool.String(),
 				release.Reference.String(),
@@ -403,6 +424,7 @@ func insertReservations(
 				release.Source.Kind().String(),
 				release.Source.Reference().String(),
 				release.ReleasedAt.UTC(),
+				optionalRegistrant(record.ReleasedBy[release.Reference]),
 			); err != nil {
 				return err
 			}
