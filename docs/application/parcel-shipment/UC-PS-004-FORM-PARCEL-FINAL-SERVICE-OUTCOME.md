@@ -192,7 +192,7 @@
 |---|---|---|
 | `AT-PS-063`，结果表「当前终局重派生」一行 | 责任结果没有有效性一格，重派生沿用原终局种类、不按规则重判，「有效交付失效之后当前无终局」表达不出；本行预期结果不变 | [code/23](../../../.scratch/docs-consistency/code/23-final-outcome-rederivation-cannot-express-a-voided-delivery.md) |
 | `AT-PS-108` | 判法已补：读到有效取消时比首次有效收寄的业务发生时间，不晚于取消答 `LABEL_SERVICE_NOT_FINAL`、原因 `CANCELLATION_ORDER_CONFLICT`，冲突记进冲突册（[code/35](../../../.scratch/docs-consistency/code/35-cancellation-and-boundary-fact-order-conflict-has-no-label-half-and-no-resolution-face.md)）；解开它的业务决定面仍没有，本行预期结果不变 | [code/76](../../../.scratch/docs-consistency/code/76-a-cancellation-order-conflict-has-no-resolution-decision-face.md) |
-| 取消先后冲突解开之后，此前被不采用的履约结果 | 不采用记录按（包裹、结果种类、来源版本）保全，冲突被业务决定解开后不会自动重判；需要重新采用时由来源重投新版本，或随决定面一并承接 | [code/76](../../../.scratch/docs-consistency/code/76-a-cancellation-order-conflict-has-no-resolution-decision-face.md) |
+| 取消先后冲突解开之后，此前被不采用的履约结果 | 不采用记录按（包裹、结果种类、来源版本）保全，冲突被业务决定解开后不会自动重判；同一版本重投只答已有结果、原不采用记录原样返回，包裹会一直没有终局，所以决定面把冲突解开（判取消不成立）时，须能把依据该取消（`PARCEL_CANCELLATION/<取消标识>`）的不采用记录作废或重判 | [code/76](../../../.scratch/docs-consistency/code/76-a-cancellation-order-conflict-has-no-resolution-decision-face.md) |
 | 承运商首次有效收寄被作废之后的终局重派生 | 代码显式答未决（`ErrVoidedCarrierPickupRederivationUndecided`），判法等 [ADR-0138](../../adr/0138-voided-carrier-pickup-voids-the-label-service-final-as-a-third-ledger-record-and-rejudges-on-remaining-basis.md)（Proposed）接受 | 票 label-channel-service-first-release/39 |
 
 完成本用例只闭合包裹服务终局及委托完成派生；追踪、异常、索赔、供应商追偿、客户费用和经营结算仍由各自上下文独立形成。

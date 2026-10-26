@@ -64,7 +64,7 @@ S：终局采用编排在既有终局分派处读已成立的取消；交付一�
 
 ### 用例（先红后绿）
 
-- 编排单元（`application/form_parcel_final_test.go`）：`TestADeliveryOverAStandingCancellationIsNotAdopted`（指名取消、来源保全、不留当前有效终局、规则未配置也答不采用、重投答已有结果带原依据、更正版本仍不采用、下游一份不采用意图、完成摘要照旧把取消算进汇总）；`TestADeliveryWithoutACancellationStillFormsTheFinalAfterReadingTheCancellationView`（不回归）；`TestTheFinalAdoptionQueuesOnItsParcelBeforeReadingTheCancellation`（锁指名命令的（租户，包裹）、取锁那一刻取消与终局库都还没读、未受理的探测不取锁、取不到锁与没装锁一道不读不落不交、取消机制未接入不读不锁）；`TestAnUnreadableOrBrokenCancellationViewNeverLetsTheDeliveryThrough`（读不回为未决、指不出是哪一份与别的包裹的取消为报错）；`TestACancelledSiblingCountsTowardCompleteness` 改成取消的是另一个成员（原先取消视图对任何包裹都答同一份，现在会被不采用）。
+- 编排单元（`application/form_parcel_final_test.go`）：`TestADeliveryOverAStandingCancellationIsNotAdopted`（指名取消、来源保全、不留当前有效终局、规则未配置也答不采用、重投答已有结果带原依据、更正版本仍不采用、下游一份不采用意图、完成摘要以取消终局计入汇总）；`TestADeliveryWithoutACancellationStillFormsTheFinalAfterReadingTheCancellationView`（不回归）；`TestTheFinalAdoptionQueuesOnItsParcelBeforeReadingTheCancellation`（锁指名命令的（租户，包裹）、取锁那一刻取消与终局库都还没读、未受理的探测不取锁、取不到锁与没装锁一道不读不落不交、取消机制未接入不读不锁）；`TestAnUnreadableOrBrokenCancellationViewNeverLetsTheDeliveryThrough`（读不回为未决、指不出是哪一份与别的包裹的取消为报错）；`TestACancelledSiblingCountsTowardCompleteness` 改成取消的是另一个成员（原先取消视图对任何包裹都答同一份，现在会被不采用）。
 - 适配器（`adapters/transportfulfillment/adopt_on_effective_delivery_test.go`）：`TestFinalOutcomesMapToConsumptionSlots` 补两格——取消在册的包裹交付信封入账且包裹上没有当前有效终局、只有一份依据指名取消的不采用记录；取不到边界锁回滚（`ErrFinalUndecided`/`FINAL_STORE_UNAVAILABLE`）。
 - 真库（新文件 `adapters/postgres/delivery_cancellation_race_test.go`，夹具沿 `cancellation_boundary_race_test.go` 的 `boundaryRig`，池外连接轮询 `pg_locks`、每步十秒期限）：取消先手/交付后手（`TestACancellationAheadOfAnEffectiveDeliveryIsSeenByTheFinalAdoption`）、交付先手/取消后手（`TestAnEffectiveDeliveryFinalAheadOfACancellationIsReturnedAsTheStandingFinal`，取消答 `FINAL_OUTCOME_STANDS` 指名那份终局）、同一份交付并发重投（`TestAConcurrentReplayOfOneEffectiveDeliveryAnswersTheExistingResult`，钉住锁在幂等读之前）、停在冲突上的包裹交付不绕过冲突（`TestAnEffectiveDeliveryDoesNotGetPastACancellationOrderConflict`，顺序用例，冲突册一行与取消原样不动）、没有取消照常形成终局并在随后的取消上答既有终局（`TestAnEffectiveDeliveryOnAParcelWithoutACancellationFormsTheFinalAsBefore`）。修前三条交叉/冲突用例红（交付径直形成终局，或取消径直成立）。
 - 生产装配（新文件 `cmd/parcel-dispatch/cancelled_parcel_delivery_final_test.go`，经生产 `wireDispatcher` 与 SYN-V0 夹具）：`TestAnEffectiveDeliveryOverAStandingCancellationIsConsumedAsARefusal`、`TestAnEffectiveDeliveryDoesNotGetPastAStandingCancellationOrderConflict`（先让节点收寄停在冲突上，再投交付信封）：信封无失败码、inbox 一行、终局库恰一行不采用且依据指名那份取消、无已采用终局；冲突与取消不动。
@@ -73,7 +73,7 @@ S：终局采用编排在既有终局分派处读已成立的取消；交付一�
 ### 代决（用户授权「你作为业务和系统专家自决」，协调方派单；除派单已裁两条外）
 
 1. **取消在册 / 停在冲突上都答 `SOURCE_NOT_ADOPTED`、依据 `PARCEL_CANCELLATION/<id>`，不新造结果格**（派单已裁）。冲突那一格不另读冲突册：读到取消就够了，冲突册只是同一份取消上多一行待决事项。
-2. **取消判断放在终局规则判断与既有终局分派之前**：「一律不采用」落到最硬的一格——规则未配置时不停在 `FINAL_RULE_UNCONFIGURED` 等一个永远不会开的终局；更正版本不会因为「同源」走重派生而绕过取消。代价：库里若已有取消与非取消终局并存的包裹（今天取消授权未配置，到不了），此后到达的更正会被不采用而不是重派生。
+2. **取消判断放在终局规则判断与既有终局分派之前**：「一律不采用」落到最硬的一格——规则未配置时不停在 `FINAL_RULE_UNCONFIGURED` 等一个永远不会开的终局；更正版本不会因为「同源」走重派生而绕过取消。代价：库里若已有取消与非取消终局并存的包裹（真库锁下走不到、取消授权生产也未配置），此后到达的更正会被不采用而不是重派生；这一次序由编排单元用例 `a standing cancellation is judged before the final that already stands` 用替身钉住。
 3. **锁放在编排里，不放在适配器里**：读与锁同处一处，与 code/77 三只编排同形；面单判断那一路经同一只编排落终局，重入无害，其余将来的调用方也不会漏。锁在**幂等读之前**：同一份交付并发重投时后手要等先手落记录再读，读到已有结果；放在幂等读之后，后手会把先手刚形成的终局当同源新版本去重派生同一版本（变异 M5 实测红）。
 4. **取不到锁、取消读不回都归 `FINAL_STORE_UNAVAILABLE`，不新增原因码**（ADR-0029，恢复动作同为重试；code/77 代决 3 的先例）。终局编排的原因集里没有「取消视图」专格，既有终局分派本来就读终局库，取消库是同一个 `parcel_shipment` 库里的另一张表；这一格的注释写明含三种读不回。
 5. **`Cancellations` 为 nil 时整段不做**（不读、不锁），沿 code/77 代决 6；`Cancellations` 接入而 `BoundaryLock` 为 nil 按取不到锁办，不 panic。
@@ -85,7 +85,7 @@ S：终局采用编排在既有终局分派处读已成立的取消；交付一�
 ### 越权风险点（待 PS owner 复核）
 
 1. **不比业务时间**（派单已裁）：取消在册时到达的交付，不论交付发生在取消的业务时间之前还是之后都不采用。发生早于取消业务时间的交付（取消形成时包裹其实已送达）按 ADR-0254 的比较口径更像第 3 格的事实冲突；但交付以责任起点为前提，责任起点在取消在册时只会是「没有」或「冲突」，这种交付先要有一份被冲突拦下的收寄。若 PS owner 想让它们并入冲突册（停着、等决定），需另立票改成「记冲突、答未决」。
-2. **不采用记录按（包裹，结果种类，来源版本）永久保全**。冲突被 code/76 的决定解开（取消不成立）之后，此前被不采用的交付**不会自动重判**，要由来源重投新版本或决定面一并重判；已写进 UC-PS-004 交接表，承接 code/76。
+2. **不采用记录按（包裹，结果种类，来源版本）永久保全**。冲突被 code/76 的决定解开（取消不成立）之后，此前被不采用的交付**不会自动重判**；同一版本重投只答已有结果、原不采用记录原样返回，所以决定面解开冲突时必须能作废或重判依据该取消的不采用记录（评审 N1 后写进 code/76 的最小修法与 UC-PS-004 交接表）。
 3. **`FINAL_STORE_UNAVAILABLE` 一格含终局库、取消库、锁三种读不回**，运维从原因码分不出是哪一种（同 code/77 越权风险点 2）。
 4. **有效交付采用从幂等读起就取锁**（含重放），锁持到外层事务提交：同一包裹的交付、面单判断、收寄采用、取消排同一个队；锁内包含终局库读写、规则判断（读 PC 声明）、发布意图入队与完成摘要派生。只挡同一件包裹，别的包裹仅在散列撞键时多等一会儿。
 5. **没装锁不响亮**：装配漏接时 parcel-dispatch 的每份有效交付都停在未决（回滚重投），只有装配真库用例（上面两条）拦得住；变异 M7 实测红。
@@ -111,3 +111,10 @@ S：终局采用编排在既有终局分派处读已成立的取消；交付一�
   - M6 取消读不回时放行（当作没有取消）：单元读不回用例红；
   - M7 终局链装配不接锁：`cmd/parcel-dispatch` 两条装配用例红。
 - 修前（先写用例、未改行为时）：单元新用例、真库三条交叉/冲突用例红，不回归一条绿。
+
+### 评审记录与修订轮
+
+独立评审结论：可合入，合入前补三个小项，已在后续提交补完。
+- N1：评审指出 code/76 的重判入口没列网络服务履约结果（有效交付）；已在 code/76「最小的诚实修法」补一条（决定面解开冲突后须能作废或重判依据该取消的不采用记录，只等重投不够），并同步 UC-PS-004 交接表那一行与上文越权风险点 2 的措辞。
+- N2：评审变异「取消判断挪到既有终局分派之后、规则之前」全部测试仍绿，因为已有同种终局与在册取消并存在真库锁下走不到；已在 `form_parcel_final_test.go` 加替身子用例钉住先后次序，同一变异下该子用例红、其余仍绿，从备份拷回并 `cmp` 一致。
+- 措辞：去掉 `Handle` 注释与失败信息、`cmd/parcel-dispatch` 重拍注释里的「不再」「照旧」类变更口吻，改成现行规则句。
