@@ -1,7 +1,7 @@
 # 参与方与商业区 UI/UX 评估与跟进
 
 Category: enhancement
-Status: resolved——本批六票 01–06 全部 resolved；「后续」两段未拆票，等用户定先做哪些
+Status: in-progress——第一段六票 01–06 resolved；第二段 2026-10-26 用户说「继续」，照会话建议先拆 07、08，其余仍在「后续」
 
 出处：2026-10-25，用户在会话里要求「评估 commercial party 的 UI/UX」，读完评估后说「按你建议的顺序开始」。建议的顺序是：先改文案和组件（成本低），再做要设计的，最后是要后端配合的。本批先落第一段，第二、三段列在「后续」，等第一段收口后再拆票。
 
@@ -42,8 +42,8 @@ Status: resolved——本批六票 01–06 全部 resolved；「后续」两段�
 
 第二段，要设计，本批收口后再拆票：
 
-- 引用一律显示「名称 + 标识」并可点到对象页（带 `?q=`）；合同、协议、规则包里的参与方、法人、合同、产品引用。
-- 商业版本按对象分组、标出「当前」版本；合同、协议、产品、映射、政策 5 页行可点开详情与版本历史。
+- ~~引用一律显示「名称 + 标识」并可点到对象页~~ → [07](issues/07-references-are-links-with-names.md)。
+- ~~商业版本按对象分组、标出在用版本~~ → [08](issues/08-versions-grouped-with-in-use-filter.md)；合同、协议、产品、映射、政策 5 页行可点开详情与版本历史仍在后续。
 - 发布表单统一时刻控件（照登记表单的 `WallTimeField`，按本地时区填、回显 UTC）；今天三套规则，只填日期按 UTC 零点补，对国内租户差 8 小时。
 - 引用他物的格一律用选择器（今天合同的货主客户账户、信用政策的责任法人等要手敲 ID）。
 - 发布前给人读得懂的预览卡与确认框；批准、发布分开按钮区。
@@ -61,7 +61,7 @@ Status: resolved——本批六票 01–06 全部 resolved；「后续」两段�
 
 ## 子票
 
-01–06 只改 `apps/admin-web` 与本票面，走 [workflow.md「前端切片」](../../docs/agents/workflow.md#前端切片一人在-main-上直接做)。与上一节的差别一处：当时有别的会话在主树上做合入，本批在独立 worktree `idp-parcel-pcux` 上做，每笔先 rebase 到 `origin/main` 再推确切 SHA，不碰主树。
+01–08 只改 `apps/admin-web` 与本票面，走 [workflow.md「前端切片」](../../docs/agents/workflow.md#前端切片一人在-main-上直接做)。与上一节的差别一处：当时有别的会话在主树上做合入，本批在独立 worktree（第一段 `idp-parcel-pcux`，第二段 `idp-parcel-pcux2`）上做，每笔先 rebase 到 `origin/main` 再推确切 SHA，不碰主树。
 
 | # | 票 | 阻塞于 | 状态 |
 |---|---|---|---|
@@ -71,6 +71,8 @@ Status: resolved——本批六票 01–06 全部 resolved；「后续」两段�
 | 04 | [状态一律用徽章](issues/04-status-badges-everywhere.md) | — | resolved |
 | 05 | [商业规则与策略页布局](issues/05-commercial-policies-layout.md) | 01 | resolved |
 | 06 | [法人停用入口与确认](issues/06-legal-entity-deactivation-entry.md) | — | resolved |
+| 07 | [引用可点、显示名称](issues/07-references-are-links-with-names.md) | — | in-progress |
+| 08 | [版本按对象排在一起、可只看在用的](issues/08-versions-grouped-with-in-use-filter.md) | — | ready-for-agent |
 
 ## 界面用词对照（本批各票共用）
 
