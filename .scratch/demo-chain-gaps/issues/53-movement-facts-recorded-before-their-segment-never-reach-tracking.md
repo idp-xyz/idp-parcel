@@ -70,7 +70,7 @@ none
 
 越权风险点（详见 ADR-0224 文末）：
 
-1. **进段欠账时补不上**（TF、VE owner）。答复带 `SegmentContinuationReference`、信封已消费过之后，续办再把对象补进段，不触发任何东西，那一份出发照丢。
+1. **进段欠账时补不上**（TF、VE owner）。答复带 `SegmentContinuationReference`、信封已消费过之后，续办再把对象补进段，不触发任何东西，那一份出发照丢。（2026-10-26 补：承接票 [136](./136-segment-continuation-wakes-the-movement-fact-backfill.md)，代决取「补派生改按对象全扫」，见 [ADR-0302](../../../docs/adr/0302-the-movement-fact-backfill-scans-every-segment-of-the-object-so-a-later-control-fact-heals-a-segment-entered-without-an-envelope.md)。）
 2. **揽收执行口与承运商段不补**（TF、VE owner）。执行口收寄的对象连投影都没有，票 120。
 3. **补出的出发不带该件的门禁读数**（VE、CC owner）。受限包裹在追踪上显示成普通 `DEPARTED`，不形成阻断信号（ADR-0205 越权风险点 2、17），票 121。
 4. **按消费那一刻段册算**（VE owner）。参与日后被更正、起点晚于事实时，已补的不撤。

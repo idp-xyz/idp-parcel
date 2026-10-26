@@ -81,7 +81,7 @@
 | `AT-VE-176` | 重派生终局指回的前一代找不到，或找回的不是同包裹、同责任结果种类的已采用终局 | 按来源记录不一致拒收，不进未决；不登记无前身的新一代，也不跨事实引用指名前身 |
 | `AT-VE-178` | 运输履约的移动事实先于它声明的段登记（全程追踪收到时段不在册、入账未派生），对象随后凭`已交接`或对象级场外揽收进了那一段，进段不晚于事实发生 | 那一封控制事实信封补出该对象上的移动事实条目：引用、版本与发生/有效/接收时间同移动事实那一路，演示参考映射下出发归 `DEPARTED`；只补这一件，同段别的对象由各自的控制事实补（ADR-0224） |
 | `AT-VE-179` | 补派生之后移动事实信封到达或重投，或正常路径已派生过再补、补派生重投 | 两路交进派生的是同一把键，答已有结果；这一件的这一版只留一份事实、一个条目 |
-| `AT-VE-180` | 交接是拒收或待确认；对象不在任何段；对象有参与的段不是这一次交接或收寄进的；进的段上没有声明它的移动事实；对象进段晚于事实发生 | 入账不补派生；拒收与待确认连段都不读 |
+| `AT-VE-180` | 交接是拒收或待确认；对象不在任何段；它有参与的段上没有声明那一段的移动事实；对象进段晚于事实发生 | 入账不补派生；拒收与待确认连段都不读 |
 | `AT-VE-181` | 补派生时交接或揽收读不回、对象的段列不出或按键读不动、按段列移动事实读不动、派生停在未决 | 整封回滚、记未决待重投；按对象列得出的段按键却答没有、列出的事实没声明这一段或某一行装不回、记录与键不符记发布失败，不当未决；缺键维的信封是毒丸 |
 | `AT-VE-182` | 段上那条事实带更正链 | 逐版按登记先后补，更正版带替代关系回指前版，被替代的前版不参与派生；补派生不形成阻断信号、不重问关务——读数是登记那一刻问的，补问归补问机制 |
 | `AT-VE-186` | 同一关务范围的部分放行与全部放行先后到达，任一到达顺序（关务把两份都当同层后续事件接受，ADR-0226） | 两份各成本层条目：按映射全部放行归入清关、部分放行如实未归类；后到的那份——包括业务时间更早的部分放行——不把已归入的里程碑拉回，两种到达顺序终态相同 |
@@ -94,8 +94,9 @@
 | `AT-VE-198` | 问节点作业成员关系或成员身份读不动；节点作业答了却立不成成员（答复译不回、身份链判不下来、成员种类在封闭集外） | 前者整封回滚、记未决待重投，一份也不派生；后者记发布失败，不当未决 |
 | `AT-VE-199` | 运输交接（已交接、已拒收、待确认任一种）、对象级场外揽收、有效交付或外部承运轨迹的对象在事实发生那一刻是集运单元；或对象是不在集运单元册上的包裹 | 前者入账不派生：单元不立已接受事实、不立追踪投影，也不投到它的成员上，问的只是它是不是单元、不读成员身份，时点取事实的业务发生时间；后者照旧派生到这件包裹上，串长得像单元号也一样——是不是单元只看集运单元册，不按串形或前缀猜 |
 | `AT-VE-200` | `AT-VE-199` 那几类事实问节点作业是不是集运单元读不动；节点作业答了却译不回 | 前者整封回滚、记未决待重投，不派生；后者记发布失败，不当未决 |
+| `AT-VE-204` | 移动事实先于段登记；对象随后不经任何一封控制事实信封进了那一段（控制事实进段那一半欠账、日后续办补进段，或存量迁移、直写段册），进段不晚于事实发生；之后这件对象又有一份转出控制的交接或对象级场外揽收 | 那一封上的补派生扫对象有参与的每一段，补出那一段上事实那一刻它在控的移动事实，与正常路径同一把键；这一次控制事实自己进段欠了账、在段里没有参与时照扫；早已派生过的段只答已有结果；对象此后再没有这类控制事实时不补（[ADR-0302](../../adr/0302-the-movement-fact-backfill-scans-every-segment-of-the-object-so-a-later-control-fact-heals-a-segment-entered-without-an-envelope.md)） |
 
-移动事实已形成那一路的消费验收是上表 `AT-VE-189`–`192`（投影派生、入账不派生、未决分格、更正替代；[ADR-0205](../../adr/0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md) 文末补记），阻断信号那一半在 [UC-VE-004](./UC-VE-004-TRIAGE-SIGNALS-AND-OPEN-CASES.md)；段里在控的集运单元按事实那一刻的成员展开，正常路径与补派生同一处，验收是上表 `AT-VE-196`–`198`。先于段登记的移动事实由交接或对象级揽收那一封补派生，验收是上表 `AT-VE-178`–`182`（[ADR-0224](../../adr/0224-tracking-backfills-movement-facts-recorded-before-their-segment-when-a-control-fact-puts-the-object-in-it.md)）；运输履约一侧的移动事实登记与按段列出事实的读口在 [UC-TF-005](../transport-fulfillment/UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md)。
+移动事实已形成那一路的消费验收是上表 `AT-VE-189`–`192`（投影派生、入账不派生、未决分格、更正替代；[ADR-0205](../../adr/0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md) 文末补记），阻断信号那一半在 [UC-VE-004](./UC-VE-004-TRIAGE-SIGNALS-AND-OPEN-CASES.md)；段里在控的集运单元按事实那一刻的成员展开，正常路径与补派生同一处，验收是上表 `AT-VE-196`–`198`。先于段登记的移动事实由交接或对象级揽收那一封补派生，验收是上表 `AT-VE-178`–`182`（[ADR-0224](../../adr/0224-tracking-backfills-movement-facts-recorded-before-their-segment-when-a-control-fact-puts-the-object-in-it.md)）；补派生按对象扫它有参与的每一段、对象不经信封进段之后由它的下一份控制事实补上，验收是上表 `AT-VE-204`（[ADR-0302](../../adr/0302-the-movement-fact-backfill-scans-every-segment-of-the-object-so-a-later-control-fact-heals-a-segment-entered-without-an-envelope.md)）；运输履约一侧的移动事实登记与按段列出事实的读口在 [UC-TF-005](../transport-fulfillment/UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md)。
 
 `AT-VE-046` 的移动事实那一半已补（票 [demo-chain-gaps/123](../../../.scratch/demo-chain-gaps/issues/123-tracking-projects-a-departing-bag-as-one-parcel-and-its-members-get-no-departure.md)）：移动事实那一路与补派生在段里取到的在控对象是袋或集运单元时，投到它那一刻的成员身上，袋本身不再当一件包裹投，验收见上表 `AT-VE-196`–`198`。交接、对象级场外揽收、有效交付与外部承运轨迹四路也不再把集运单元当一件包裹投（票 [docs-consistency/code/75](../../../.scratch/docs-consistency/code/75-tracking-projects-control-facts-on-a-consolidation-unit-as-one-parcel.md) 前一半），验收见上表 `AT-VE-199`–`200`；交接与交付投到成员上等单元控制规则（票 [demo-chain-gaps/80](../../../.scratch/demo-chain-gaps/issues/80-a-consolidation-unit-handover-does-not-move-member-control.md)）。本行预期结果不变。
 
