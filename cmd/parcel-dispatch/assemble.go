@@ -450,7 +450,11 @@ var veAcceptanceRederiveUndecidedSentinels = []error{
 // offsitePickupUndecidedSentinels 是揽收采用那条链登记的未决哨兵。与上面那份分开列：
 // 两条链的未决面不同，合用一份会把某条链接不住的格子也宣布成「等依赖」。
 //
-// 三个不在名单里，恢复动作各不相同：
+// ErrParcelTargetNotFound 在名单里是因为委托可能还没落到已接受，重投会改变结果；载运对象是集运单元的信封在反查之前就
+// 已收工（单元没有委托），到不了这一格。ErrConsolidationUnitNotVisible：问节点作业载运对象是不是集运单元读不动，
+// 读得动之后重投从头再问。
+//
+// 四个不在名单里，恢复动作各不相同：
 //   - ErrPickupRecordInconsistent——按键取回的登记指着另一个键或另一个对象，是仓储/数据
 //     不变量已破（ADR-0029）。重投同一内容不自愈，登记成未决只会一路重试到失败预算耗尽，
 //     而现场要做的是去查那一行为什么长成这样。保持 dispatch.publish_failed 让它响亮。
@@ -458,8 +462,11 @@ var veAcceptanceRederiveUndecidedSentinels = []error{
 //     下那份意图的原因，不是商业资格目录。
 //   - ErrAmbiguousParcelTarget——两份当前已接受委托声明了同一个包裹。要人去看为什么，
 //     不是等某个依赖到位；机制上也不允许按 latest 挑一份。
+//   - ErrConsolidationUnitAnswerInconsistent——节点作业答了，答复却立不成本口的形状（租户
+//     译不过去、答复自相矛盾），重问同一个结果，要查的是单元册。
 var offsitePickupUndecidedSentinels = []error{
 	pstf.ErrPickupNotVisible,
+	pstf.ErrConsolidationUnitNotVisible,
 	pstf.ErrParcelTargetNotFound,
 	pstf.ErrAdoptionUndecided,
 }
@@ -467,6 +474,10 @@ var offsitePickupUndecidedSentinels = []error{
 // effectiveDeliveryUndecidedSentinels 是终局这条链登记的未决哨兵。与揽收那份分开列：
 // 未决面是交付可见性、目标委托与终局规则三样，合用揽收名单会把资格未决也宣布成「等
 // 依赖」。
+//
+// ErrParcelTargetNotFound 在名单里是因为委托可能还没落到已接受，重投会改变结果；载运对象是集运单元的信封在反查之前就
+// 已收工（单元没有委托），到不了这一格。ErrConsolidationUnitNotVisible：问节点作业载运对象是不是集运单元读不动，
+// 读得动之后重投从头再问。
 //
 // 不在名单里的几格，恢复动作各不相同：
 //   - ErrDeliveryRecordInconsistent——按键取回的登记指着另一个键或另一个对象，是仓储
@@ -476,10 +487,13 @@ var offsitePickupUndecidedSentinels = []error{
 //     不下那份意图的原因，不是终局规则目录。
 //   - ErrAmbiguousParcelTarget——两份当前已接受委托声明了同一个包裹。要人去看为什么，
 //     不是等某个依赖到位；机制上也不允许按 latest 挑一份。
+//   - ErrConsolidationUnitAnswerInconsistent——节点作业答了，答复却立不成本口的形状（租户
+//     译不过去、答复自相矛盾），重问同一个结果，要查的是单元册。
 //   - ErrUntranslatableAnswer——词汇表外，编程错误。
 //   - ErrUnexpectedFinalOutcome——封闭集合外，静默入账等于替编排作判断。
 var effectiveDeliveryUndecidedSentinels = []error{
 	pstf.ErrDeliveryNotVisible,
+	pstf.ErrConsolidationUnitNotVisible,
 	pstf.ErrParcelTargetNotFound,
 	pstf.ErrFinalUndecided,
 }
@@ -507,23 +521,29 @@ var continuedAttemptDecisionJudgmentUndecidedSentinels = labelTransactionJudgmen
 
 // carrierFirstEffectivePickupJudgmentUndecidedSentinels 是 TF 实际承运商首次有效收寄登记 → 面单渠道终局判断
 // 这条链（lc/25，ADR-0135）登记的未决哨兵。核那一段与面单交易 / 关闭重开两路是同一只 labelfinal.ParcelJudgmentCore，
-// 核的几格因此直接取那份名单不抄第二份；本路在核之前多出「按信封所指版本取回 TF 事实」一段，未决面多两格：
+// 核的几格因此直接取那份名单不抄第二份；本路在核之前多出「按信封所指版本取回 TF 事实」与「问载运对象是不是集运单元」两段，未决面多三格：
 //   - pstf.ErrCarrierPickupNotVisible——信封所指那一代在 TF 登记册还读不回，可见性滞后是续办，重投会改变结果。
 //   - pstf.ErrVoidedCarrierPickupRederivationUndecided——TF 交出失效版本（ADR-0135 决定六），已据前版形成的
 //     非取消终局怎么重派生归 PS owner、尚未裁定（票 label-channel/25「要裁的」2）。按「未确认规则保持显式未决」
-//     停在这一格：不吸收、不重派生、零写入；owner 裁定并在适配器接上重派生之后这一格随之消失。
+//     停在这一格：不吸收、不重派生、零写入；owner 裁定并在适配器接上重派生之后这一格随之消失。载运对象是集运单元的
+//     失效版本不停在这一格：单元没有据前版形成的终局，在这一问之前就收工。
+//   - pstf.ErrConsolidationUnitNotVisible——进共用核之前问节点作业载运对象是不是集运单元读不动，读得动之后重投从头
+//     再问。核里的 labelfinal.ErrParcelTargetNotFound 因此只剩「委托可能还没落到已接受」一个意思：单元的信封到不了它。
 //
 // 不在名单里的几格，恢复动作各不相同，保持 publish_failed：
 //   - pstf.ErrCarrierPickupRecordInconsistent——取回的登记指着另一个键 / 另一个对象，或取回的是待确认版本（TF
 //     对待确认版本响亮拒绝入队，ADR-0135 决定七），是提供方交接口或仓储不变量已破，重投不自愈；适配器头注明写
 //     生产装配不得把它进未决。
 //   - pstf.ErrUntranslatableAnswer——信封三维译不成 TF 的键，引用坏了，编程错误。
+//   - pstf.ErrConsolidationUnitAnswerInconsistent——节点作业答了，答复却立不成本口的形状（租户译不过去、答复自相
+//     矛盾），重问同一个结果，要查的是单元册；登成未决，这一封会重投到失败预算耗尽。
 //   - labelfinal.ErrJudgmentNotAccepted / ErrFinalHandoffPending / ErrUntranslatableEnvelope /
 //     ErrUnexpectedJudgmentOutcome 与 psdomain.ErrAmbiguousParcelTarget——与面单交易那一路同一套理由，见
 //     labelTransactionJudgmentUndecidedSentinels 的头注。
 var carrierFirstEffectivePickupJudgmentUndecidedSentinels = append(
 	[]error{
 		pstf.ErrCarrierPickupNotVisible,
+		pstf.ErrConsolidationUnitNotVisible,
 		pstf.ErrVoidedCarrierPickupRederivationUndecided,
 	},
 	labelTransactionJudgmentUndecidedSentinels...,
@@ -1979,6 +1999,8 @@ func (derive *tenantBoundProjectionDerive) Handle(
 // 信封 → 消费门 → 按（租户+对象+尝试）重读登记 → 按包裹反查当前已接受委托（ADR-0060）
 // → 同一个来源采用编排。
 //
+// 反查包裹之前先问节点作业的单元册（carriedObjectUnitView）：载运对象是集运单元的信封收工，不采用。
+//
 // 只接对象级的 `offsite-pickup.registered`，不接尝试级的 `offsite-pickup.formed`：后者
 // 一封信带一批成功对象，而采用判断逐对象成立，两条都登记会让同一份揽收结果被采用两次
 // （第二次落已有结果），把一次事实变成两处消费。
@@ -2000,8 +2022,13 @@ func adoptOffsitePickupConsumer(
 		return nil, err
 	}
 
+	units, err := carriedObjectUnitView(db)
+	if err != nil {
+		return nil, err
+	}
+
 	processing, err := pstf.NewAdoptOnOffsitePickupAdapter(
-		registrations, adoption.requests, pstf.NewOffsitePickupAdapter(adoption.handler))
+		registrations, adoption.requests, pstf.NewOffsitePickupAdapter(adoption.handler), units)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: adopt on offsite pickup: %w", err)
 	}
@@ -2014,6 +2041,8 @@ func adoptOffsitePickupConsumer(
 
 // adoptEffectiveDeliveryConsumer 接 UC-PS-004 那条线：TF 有效交付登记信封 → 消费门 →
 // 按（租户+对象+尝试）重读当前版 → 按包裹反查当前已接受委托（ADR-0060）→ 终局编排。
+//
+// 反查包裹之前先问节点作业的单元册（carriedObjectUnitView）：载运对象是集运单元的信封收工，不形成终局。
 //
 // 只接 `effective-delivery.registered`。信封只带键，交付本体由处理适配器按键重取当前
 // 版——版本进事件 ID 是为了两代入队，不从 ID 回解析去查已翻旧的行。
@@ -2036,8 +2065,13 @@ func adoptEffectiveDeliveryConsumer(
 		return nil, err
 	}
 
+	units, err := carriedObjectUnitView(db)
+	if err != nil {
+		return nil, err
+	}
+
 	processing, err := pstf.NewAdoptOnEffectiveDeliveryAdapter(
-		deliveries, chain.requests, pstf.NewDeliveryOutcomeAdapter(chain.handler))
+		deliveries, chain.requests, pstf.NewDeliveryOutcomeAdapter(chain.handler), units)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: adopt on effective delivery: %w", err)
 	}
@@ -2167,6 +2201,8 @@ func judgeLabelFinalOnLabelTransactionConsumer(
 // CarrierFirstEffectivePickupSpec → 与 lc/26、lc/27 共用的处理方核。它是 PS CONTEXT 生命周期里「`transport-fulfillment`
 // 提供实际承运商首次有效收寄事件 → 面单渠道服务非取消终局结果」那一步在本进程的落点。
 //
+// 取回之后、进核之前先问节点作业的单元册（carriedObjectUnitView）：载运对象是集运单元的信封收工，不判终局。
+//
 // 只接 `carrier-first-effective-pickup.registered`，不接 `external-carrier-tracking.judged`：外部承运轨迹事实按
 // TF CONTEXT 不构成收寄，PS 消费它等于替 TF 判「这条状态词算收寄」（票 label-channel/25 红线）；那封信在本进程
 // 只投 VE 投影（deriveExternalTrackingConsumer）。本路不 FanOut 给 VE：VE 侧今天没有收寄登记的消费者，登记
@@ -2189,7 +2225,11 @@ func judgeLabelFinalOnCarrierFirstEffectivePickupConsumer(
 	if err != nil {
 		return nil, err
 	}
-	processing, err := pstf.NewJudgeOnCarrierFirstEffectivePickupAdapter(pickups, core)
+	units, err := carriedObjectUnitView(db)
+	if err != nil {
+		return nil, err
+	}
+	processing, err := pstf.NewJudgeOnCarrierFirstEffectivePickupAdapter(pickups, core, units)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: judge on carrier first effective pickup: %w", err)
 	}

@@ -169,6 +169,12 @@ type carrierPickupFixture struct {
 
 func newCarrierPickupFixture(t *testing.T) *carrierPickupFixture {
 	t.Helper()
+	return newCarrierPickupFixtureOver(t, noUnits{})
+}
+
+// newCarrierPickupFixtureOver 让单元册由用例给：其余读口与既有用例是同一套。
+func newCarrierPickupFixtureOver(t *testing.T, units psports.ConsolidationUnitView) *carrierPickupFixture {
+	t.Helper()
 	pickups := &carrierPickupFinderDouble{records: map[tfports.CarrierFirstEffectivePickupKey]tfports.CarrierFirstEffectivePickupRecord{}}
 	targets := &labelTargetViewDouble{target: pickupTarget(t), found: true}
 	transactions := &labelTransactionsViewDouble{}
@@ -188,7 +194,7 @@ func newCarrierPickupFixture(t *testing.T) *carrierPickupFixture {
 	if err != nil {
 		t.Fatalf("new core: %v", err)
 	}
-	handler, err := adapter.NewJudgeOnCarrierFirstEffectivePickupAdapter(pickups, core)
+	handler, err := adapter.NewJudgeOnCarrierFirstEffectivePickupAdapter(pickups, core, units)
 	if err != nil {
 		t.Fatalf("new adapter: %v", err)
 	}
@@ -490,7 +496,7 @@ func TestARejectedCommandOnThePickupRouteIsLoud(t *testing.T) {
 	}
 }
 
-// Covers: 反查不中 → labelfinal.ErrParcelTargetNotFound（不猜委托；载运对象可能是集运单元）；歧义原样上抛。
+// Covers: 反查不中 → labelfinal.ErrParcelTargetNotFound（不猜委托；单元已在进核之前收工，到这里的对象不是单元）；歧义原样上抛。
 func TestAMissingParcelTargetForACarrierPickupIsContinuableUndecided(t *testing.T) {
 	f := newCarrierPickupFixture(t)
 	f.put(recordOf(t, formedCarrierPickup(t, "parcel-1")))
@@ -665,11 +671,14 @@ func TestTheCarrierPickupAdapterRefusesNilDependencies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new core: %v", err)
 	}
-	if _, err := adapter.NewJudgeOnCarrierFirstEffectivePickupAdapter(nil, core); err == nil {
+	if _, err := adapter.NewJudgeOnCarrierFirstEffectivePickupAdapter(nil, core, noUnits{}); err == nil {
 		t.Fatal("nil 登记册读口被接受了")
 	}
-	if _, err := adapter.NewJudgeOnCarrierFirstEffectivePickupAdapter(f.pickups, nil); err == nil {
+	if _, err := adapter.NewJudgeOnCarrierFirstEffectivePickupAdapter(f.pickups, nil, noUnits{}); err == nil {
 		t.Fatal("nil 处理方核被接受了")
+	}
+	if _, err := adapter.NewJudgeOnCarrierFirstEffectivePickupAdapter(f.pickups, core, nil); err == nil {
+		t.Fatal("nil 单元册读口被接受了：装配漏接会让每一封单元的收寄信都去反查委托")
 	}
 }
 

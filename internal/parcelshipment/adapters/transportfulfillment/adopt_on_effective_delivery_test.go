@@ -248,7 +248,7 @@ func TestARegisteredDeliveryLooksUpTheUniqueAcceptedTargetAndFormsFinal(t *testi
 	adopting := &recordingFinalAdopter{
 		inner: adapter.NewDeliveryOutcomeAdapter(deliveryFinalHandler(t, finalHandlerConfig{})),
 	}
-	subject, err := adapter.NewAdoptOnEffectiveDeliveryAdapter(store, targets, adopting)
+	subject, err := adapter.NewAdoptOnEffectiveDeliveryAdapter(store, targets, adopting, noUnits{})
 	if err != nil {
 		t.Fatalf("构造处理适配器：%v", err)
 	}
@@ -280,6 +280,7 @@ func TestAMissingEffectiveDeliveryIsContinuableUndecided(t *testing.T) {
 		&deliveryStoreDouble{},
 		&deliveryTargetViewDouble{target: deliveryTarget(t), found: true},
 		adopter,
+		noUnits{},
 	)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
@@ -299,6 +300,7 @@ func TestAnUnreadableDeliveryStoreIsContinuableUndecided(t *testing.T) {
 		&deliveryStoreDouble{err: errors.New("store unavailable")},
 		&deliveryTargetViewDouble{target: deliveryTarget(t), found: true},
 		adopter,
+		noUnits{},
 	)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
@@ -333,6 +335,7 @@ func TestADeliveryRecordThatDisagreesWithItsKeyIsInconsistentNotInvisible(t *tes
 				&deliveryStoreDouble{record: record, found: true},
 				&deliveryTargetViewDouble{target: deliveryTarget(t), found: true},
 				adopter,
+				noUnits{},
 			)
 			if err != nil {
 				t.Fatalf("构造：%v", err)
@@ -362,6 +365,7 @@ func TestAMissingParcelTargetForADeliveryIsContinuableUndecided(t *testing.T) {
 		&deliveryStoreDouble{record: registeredDelivery(t, "parcel-1"), found: true},
 		&deliveryTargetViewDouble{},
 		adopter,
+		noUnits{},
 	)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
@@ -375,15 +379,17 @@ func TestAMissingParcelTargetForADeliveryIsContinuableUndecided(t *testing.T) {
 	}
 }
 
-// Covers: TF 的载运对象引用可能指集运单元而非包裹，而 TF 不带判别位。今天不猜成员
-// 映射：集运单元号反查不到当前已接受委托，落与「委托还没到已接受」同一格。
-func TestAConsolidationUnitLikeDeliveryObjectFallsIntoTargetNotFound(t *testing.T) {
+// Covers: AT-PS-157 的反面——长得像袋号的对象（bag-1）不在节点作业单元册上：单元册先被问过、答不是，照旧反查委托，反查不中仍落
+// 与「委托还没到已接受」同一格。是不是单元只看单元册，不按串形猜。
+func TestABagLikeDeliveryObjectOutsideTheUnitBookFallsIntoTargetNotFound(t *testing.T) {
 	adopter := &deliveryAdopterDouble{}
 	targets := &deliveryTargetViewDouble{}
+	book := &unitBook{}
 	subject, err := adapter.NewAdoptOnEffectiveDeliveryAdapter(
 		&deliveryStoreDouble{record: registeredDelivery(t, "bag-1"), found: true},
 		targets,
 		adopter,
+		book,
 	)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
@@ -394,8 +400,11 @@ func TestAConsolidationUnitLikeDeliveryObjectFallsIntoTargetNotFound(t *testing.
 		t.Context(), reference); !errors.Is(err, adapter.ErrParcelTargetNotFound) {
 		t.Fatalf("err = %v, want ErrParcelTargetNotFound", err)
 	}
+	if len(book.asked) != 1 || book.asked[0].object != "bag-1" {
+		t.Fatalf("单元册的问法 = %+v, want 先被问一次", book.asked)
+	}
 	if targets.parcel != "bag-1" {
-		t.Fatalf("反查包裹 = %q——不得替 TF 猜集运单元的成员", targets.parcel)
+		t.Fatalf("反查包裹 = %q——不在单元册上的照旧反查", targets.parcel)
 	}
 	if adopter.calls != 0 {
 		t.Fatal("反查不中不该走到终局")
@@ -408,6 +417,7 @@ func TestAnAmbiguousParcelTargetForADeliveryStaysIdentifiable(t *testing.T) {
 		&deliveryStoreDouble{record: registeredDelivery(t, "parcel-1"), found: true},
 		&deliveryTargetViewDouble{err: psdomain.ErrAmbiguousParcelTarget},
 		adopter,
+		noUnits{},
 	)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
@@ -427,6 +437,7 @@ func TestAnUntranslatableDeliveryReferenceKeepsItsSentinel(t *testing.T) {
 		&deliveryStoreDouble{record: registeredDelivery(t, "parcel-1"), found: true},
 		&deliveryTargetViewDouble{target: deliveryTarget(t), found: true},
 		adopter,
+		noUnits{},
 	)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
@@ -455,6 +466,7 @@ func TestFinalOutcomesMapToConsumptionSlots(t *testing.T) {
 			&deliveryStoreDouble{record: registeredDelivery(t, "parcel-1"), found: true},
 			&deliveryTargetViewDouble{target: deliveryTarget(t), found: true},
 			adapter.NewDeliveryOutcomeAdapter(handler),
+			noUnits{},
 		)
 		if err != nil {
 			t.Fatalf("构造处理适配器：%v", err)
@@ -599,6 +611,7 @@ func TestAPendingFinalHandoffDoesNotMarkTheInboxProcessed(t *testing.T) {
 		&deliveryStoreDouble{record: registeredDelivery(t, "parcel-1"), found: true},
 		&deliveryTargetViewDouble{target: deliveryTarget(t), found: true},
 		adapter.NewDeliveryOutcomeAdapter(deliveryFinalHandler(t, finalHandlerConfig{downstream: downstream})),
+		noUnits{},
 	)
 	if err != nil {
 		t.Fatalf("构造处理适配器：%v", err)

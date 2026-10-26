@@ -26,8 +26,8 @@ var (
 	ErrPickupRecordInconsistent = errors.New(
 		"parcel shipment transportfulfillment adapter: offsite pickup registration disagrees with its key")
 	// ErrParcelTargetNotFound 表示这个租户下当前没有可采认的已接受委托声明了该包裹。
-	// 委托可能还没落到已接受，重投会改变结果。载运对象是集运单元时也落这一格，见
-	// AdoptOnOffsitePickupAdapter 的说明。
+	// 委托可能还没落到已接受，重投会改变结果。载运对象是集运单元的信封不会走到这一格：
+	// 单元在反查之前就收工了，见 AdoptOnOffsitePickupAdapter 的说明。
 	ErrParcelTargetNotFound = errors.New(
 		"parcel shipment transportfulfillment adapter: current accepted parcel target not found")
 	// ErrAdoptionUndecided 与 ErrAdoptionHandoffPending 是 adoptconsume 同名哨兵的别名：
@@ -65,19 +65,25 @@ type OffsitePickupAdopter interface {
 // 跨上下文翻译留在消费方（ADR-0025）。本层不猜 latest，歧义原样上抛。
 //
 // 载运对象引用按 transport-fulfillment 的领域定义可能指正式包裹身份，**也可能**指集运
-// 单元，而事件与记录都不带判别位。今天不替它猜：集运单元号照原样进包裹反查，反查不中
-// 就落 ErrParcelTargetNotFound。补上这一格需要 node-operations 暴露集运单元成员反查
-// （成员关系属那个上下文），那是另一条票。
+// 单元，而事件与记录都不带判别位。反查包裹之前先问节点作业的单元册（units）：对象在揽收
+// 发生那一刻是集运单元，这一封收工——单元不是包裹，没有委托，不采用，也不留本上下文的
+// 记录，只有消费门的 inbox 行；成员是否随单元被采用另由单元控制规则定，此刻不投到成员
+// 上。判据只是单元册那一答（同串的包裹号按单元认），不按串形或前缀猜：不在册上的照旧反
+// 查，反查不中仍落 ErrParcelTargetNotFound（委托可能还没落到已接受）。单元册读不动落
+// ErrConsolidationUnitNotVisible（续办），答了却译不回落 ErrConsolidationUnitAnswerInconsistent
+// （确定性，不进未决名单）。
 type AdoptOnOffsitePickupAdapter struct {
 	pickups OffsitePickupFinder
 	targets psports.CurrentAcceptedParcelTargetView
 	adopt   OffsitePickupAdopter
+	units   psports.ConsolidationUnitView
 }
 
 func NewAdoptOnOffsitePickupAdapter(
 	pickups OffsitePickupFinder,
 	targets psports.CurrentAcceptedParcelTargetView,
 	adopt OffsitePickupAdopter,
+	units psports.ConsolidationUnitView,
 ) (*AdoptOnOffsitePickupAdapter, error) {
 	if pickups == nil {
 		return nil, fmt.Errorf("parcel shipment transportfulfillment adapter: pickup finder is nil")
@@ -88,7 +94,10 @@ func NewAdoptOnOffsitePickupAdapter(
 	if adopt == nil {
 		return nil, fmt.Errorf("parcel shipment transportfulfillment adapter: offsite pickup adopter is nil")
 	}
-	return &AdoptOnOffsitePickupAdapter{pickups: pickups, targets: targets, adopt: adopt}, nil
+	if units == nil {
+		return nil, fmt.Errorf("parcel shipment transportfulfillment adapter: consolidation unit view is nil")
+	}
+	return &AdoptOnOffsitePickupAdapter{pickups: pickups, targets: targets, adopt: adopt, units: units}, nil
 }
 
 var _ psinbox.RegisteredOffsitePickupHandler = (*AdoptOnOffsitePickupAdapter)(nil)
@@ -129,6 +138,14 @@ func (adapter *AdoptOnOffsitePickupAdapter) HandleRegisteredOffsitePickup(
 	parcel, err := psdomain.NewDeclaredParcelID(record.Pickup.Object().String())
 	if err != nil {
 		return fmt.Errorf("%w: carried object: %v", ErrUntranslatableAnswer, err)
+	}
+
+	unit, err := carriedObjectIsConsolidationUnit(ctx, adapter.units, psTenant, parcel, record.Pickup.OccurredAt())
+	if err != nil {
+		return err
+	}
+	if unit {
+		return nil
 	}
 
 	target, found, err := adapter.targets.FindCurrentAcceptedByParcel(ctx, psTenant, parcel)

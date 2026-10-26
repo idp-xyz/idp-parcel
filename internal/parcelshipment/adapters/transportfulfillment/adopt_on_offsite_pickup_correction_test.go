@@ -69,6 +69,7 @@ func newCorrectionFixture(t *testing.T) *correctionFixture {
 		pickups,
 		&pickupTargetViewDouble{target: pickupTarget(t), found: true},
 		adapter.NewOffsitePickupAdapter(handler),
+		noUnits{},
 	)
 	if err != nil {
 		t.Fatalf("构造处理适配器：%v", err)

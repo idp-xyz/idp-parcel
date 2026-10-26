@@ -55,7 +55,8 @@ type LabelServiceFinalJudge interface {
 // ParcelJudgmentCore 是各路共用的核：按（租户 + 包裹）经当前已接受投影反查目标委托 → 折
 // JudgeLabelServiceFinalCommand → 判断 → 五值译成消费结论。
 //
-// 反查不中不猜委托（照交付适配器那条纪律）：载运对象可能是集运单元，今天不替它判。
+// 反查不中不猜委托（照交付适配器那条纪律）。TF 首次有效收寄那一路的载运对象可能是集运单元，它在进核之前已先问过
+// 节点作业的单元册（adapters/transportfulfillment），单元收工、到不了这里；到这里反查不中的就是委托还没落到已接受。
 type ParcelJudgmentCore struct {
 	targets psports.CurrentAcceptedParcelTargetView
 	judge   LabelServiceFinalJudge

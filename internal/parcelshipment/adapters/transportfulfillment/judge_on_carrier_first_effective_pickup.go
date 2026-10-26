@@ -8,6 +8,7 @@ import (
 
 	psinbox "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	tfports "go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
@@ -64,15 +65,22 @@ type ParcelLabelFinalJudge interface {
 // （ADR-0135 决定三），不是本上下文读到它的时间。
 //
 // 载运对象按 transport-fulfillment 的领域定义可能指正式包裹身份，**也可能**指集运单元，事实与信封都不带判别位。
-// 今天不替它猜：对象串原样进包裹反查（在核里），反查不中落 labelfinal.ErrParcelTargetNotFound。
+// 交共用核（里面按包裹反查）之前先问节点作业的单元册（units）：对象在收寄发生那一刻是集运单元，这一封收工——单元不是
+// 包裹，没有委托，不判终局，也不留本上下文的记录，只有消费门的 inbox 行；成员是否随单元被判另由单元控制规则定，此刻不投
+// 到成员上。判据只是单元册那一答（同串的包裹号按单元认），不按串形或前缀猜：不在册上的照旧交核，反查不中仍落
+// labelfinal.ErrParcelTargetNotFound。单元册读不动落 ErrConsolidationUnitNotVisible（续办），答了却译不回落
+// ErrConsolidationUnitAnswerInconsistent（确定性，不进未决名单）。共用核的另两路（面单交易、关闭 / 重开）带的是本上下文
+// 自己的包裹号，不经此问。
 type JudgeOnCarrierFirstEffectivePickupAdapter struct {
 	pickups CarrierFirstEffectivePickupFinder
 	judge   ParcelLabelFinalJudge
+	units   psports.ConsolidationUnitView
 }
 
 func NewJudgeOnCarrierFirstEffectivePickupAdapter(
 	pickups CarrierFirstEffectivePickupFinder,
 	judge ParcelLabelFinalJudge,
+	units psports.ConsolidationUnitView,
 ) (*JudgeOnCarrierFirstEffectivePickupAdapter, error) {
 	if pickups == nil {
 		return nil, fmt.Errorf("parcel shipment transportfulfillment adapter: carrier pickup finder is nil")
@@ -80,7 +88,10 @@ func NewJudgeOnCarrierFirstEffectivePickupAdapter(
 	if judge == nil {
 		return nil, fmt.Errorf("parcel shipment transportfulfillment adapter: label final judge is nil")
 	}
-	return &JudgeOnCarrierFirstEffectivePickupAdapter{pickups: pickups, judge: judge}, nil
+	if units == nil {
+		return nil, fmt.Errorf("parcel shipment transportfulfillment adapter: consolidation unit view is nil")
+	}
+	return &JudgeOnCarrierFirstEffectivePickupAdapter{pickups: pickups, judge: judge, units: units}, nil
 }
 
 var _ psinbox.RegisteredCarrierFirstEffectivePickupHandler = (*JudgeOnCarrierFirstEffectivePickupAdapter)(nil)
@@ -112,6 +123,15 @@ func (adapter *JudgeOnCarrierFirstEffectivePickupAdapter) HandleRegisteredCarrie
 
 	switch pickup.Result() {
 	case tfdomain.CarrierPickupVoided:
+		// 对象是集运单元时收工：单元没有委托，不会有据前版形成的终局，「重派生归 PS owner、尚未裁定」与它无关，
+		// 让它停在这一格只会把单元的信封重投到失败预算耗尽。失效版本没有业务发生时间，单元那一问取 TF 判出失效的时间。
+		unit, err := adapter.isConsolidationUnit(ctx, registered.TenantID, pickup, pickup.JudgedAt())
+		if err != nil {
+			return err
+		}
+		if unit {
+			return nil
+		}
 		return fmt.Errorf("%w: fact %q version %q", ErrVoidedCarrierPickupRederivationUndecided, registered.Fact, registered.Version)
 	case tfdomain.CarrierPickupFormed:
 		// 已形成的版本必带业务发生时间（TF 构造门守着）；缺了是本体坏了，不是等谁。
@@ -119,6 +139,14 @@ func (adapter *JudgeOnCarrierFirstEffectivePickupAdapter) HandleRegisteredCarrie
 		if !present {
 			return fmt.Errorf("%w: formed pickup %q version %q carries no occurrence time",
 				ErrCarrierPickupRecordInconsistent, registered.Fact, registered.Version)
+		}
+		// 先于折引用与核里的包裹反查：对象是集运单元就收工，不判终局。
+		unit, err := adapter.isConsolidationUnit(ctx, registered.TenantID, pickup, occurredAt)
+		if err != nil {
+			return err
+		}
+		if unit {
+			return nil
 		}
 		spec, err := firstEffectivePickupSpecFor(key, occurredAt)
 		if err != nil {
@@ -130,6 +158,24 @@ func (adapter *JudgeOnCarrierFirstEffectivePickupAdapter) HandleRegisteredCarrie
 		return fmt.Errorf("%w: fact %q version %q is %q, not a formed pickup",
 			ErrCarrierPickupRecordInconsistent, registered.Fact, registered.Version, pickup.Result())
 	}
+}
+
+// isConsolidationUnit 把信封租户与收寄的载运对象译成本上下文的值再问单元册。译不出来是引用坏了，不是等谁。
+func (adapter *JudgeOnCarrierFirstEffectivePickupAdapter) isConsolidationUnit(
+	ctx context.Context,
+	tenantRaw string,
+	pickup tfdomain.CarrierFirstEffectivePickup,
+	at time.Time,
+) (bool, error) {
+	tenant, err := psdomain.NewTenantID(tenantRaw)
+	if err != nil {
+		return false, fmt.Errorf("%w: tenant: %v", ErrUntranslatableAnswer, err)
+	}
+	parcel, err := psdomain.NewDeclaredParcelID(pickup.Object().String())
+	if err != nil {
+		return false, fmt.Errorf("%w: carried object: %v", ErrUntranslatableAnswer, err)
+	}
+	return carriedObjectIsConsolidationUnit(ctx, adapter.units, tenant, parcel, at)
 }
 
 // carrierPickupKeyFor 把信封三维译成 TF 的键。译不出来是引用坏了，不是等谁。

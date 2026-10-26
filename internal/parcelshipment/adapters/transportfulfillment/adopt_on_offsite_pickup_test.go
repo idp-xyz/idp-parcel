@@ -213,7 +213,7 @@ func TestARegisteredPickupLooksUpTheUniqueAcceptedTargetAndAdopts(t *testing.T) 
 	targets := &pickupTargetViewDouble{target: pickupTarget(t), found: true}
 	recorder := &recordingCommandHandler{inner: pickupAdoptHandler(t, pickupHandlerConfig{})}
 	subject, err := adapter.NewAdoptOnOffsitePickupAdapter(
-		registry, targets, adapter.NewOffsitePickupAdapter(recorder))
+		registry, targets, adapter.NewOffsitePickupAdapter(recorder), noUnits{})
 	if err != nil {
 		t.Fatalf("构造处理适配器：%v", err)
 	}
@@ -259,7 +259,7 @@ func TestACorrectedPickupVersionCarriesItsPredecessorIntoTheSource(t *testing.T)
 	registry := &pickupRegistryDouble{record: correctedRegisteredPickup(t, registeredPickup(t, "parcel-1")), found: true}
 	recorder := &recordingCommandHandler{inner: pickupAdoptHandler(t, pickupHandlerConfig{})}
 	subject, err := adapter.NewAdoptOnOffsitePickupAdapter(
-		registry, &pickupTargetViewDouble{target: pickupTarget(t), found: true}, adapter.NewOffsitePickupAdapter(recorder))
+		registry, &pickupTargetViewDouble{target: pickupTarget(t), found: true}, adapter.NewOffsitePickupAdapter(recorder), noUnits{})
 	if err != nil {
 		t.Fatalf("构造处理适配器：%v", err)
 	}
@@ -287,6 +287,7 @@ func TestAPickupRecordOfAnotherVersionIsInconsistentNotInvisible(t *testing.T) {
 		&pickupRegistryDouble{record: registeredPickup(t, "parcel-1"), found: true},
 		&pickupTargetViewDouble{target: pickupTarget(t), found: true},
 		adopter,
+		noUnits{},
 	)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
@@ -307,6 +308,7 @@ func TestAMissingPickupRegistrationIsContinuableUndecided(t *testing.T) {
 		&pickupRegistryDouble{},
 		&pickupTargetViewDouble{target: pickupTarget(t), found: true},
 		adopter,
+		noUnits{},
 	)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
@@ -326,6 +328,7 @@ func TestAnUnreadablePickupRegistryIsContinuableUndecided(t *testing.T) {
 		&pickupRegistryDouble{err: errors.New("registry unavailable")},
 		&pickupTargetViewDouble{target: pickupTarget(t), found: true},
 		adopter,
+		noUnits{},
 	)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
@@ -359,6 +362,7 @@ func TestAPickupRecordThatDisagreesWithItsKeyIsInconsistentNotInvisible(t *testi
 				&pickupRegistryDouble{record: record, found: true},
 				&pickupTargetViewDouble{target: pickupTarget(t), found: true},
 				adopter,
+				noUnits{},
 			)
 			if err != nil {
 				t.Fatalf("构造：%v", err)
@@ -388,6 +392,7 @@ func TestAMissingParcelTargetForAPickupIsContinuableUndecided(t *testing.T) {
 		&pickupRegistryDouble{record: registeredPickup(t, "parcel-1"), found: true},
 		&pickupTargetViewDouble{},
 		adopter,
+		noUnits{},
 	)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
@@ -401,15 +406,17 @@ func TestAMissingParcelTargetForAPickupIsContinuableUndecided(t *testing.T) {
 	}
 }
 
-// Covers: TF 的载运对象引用可能指集运单元而非包裹，而 TF 不带判别位（见适配器注释）。
-// 今天不猜成员映射：集运单元号反查不到当前已接受委托，落与「委托还没到已接受」同一格。
-func TestAConsolidationUnitLikeObjectFallsIntoTargetNotFound(t *testing.T) {
+// Covers: AT-PS-156 的反面——长得像袋号的对象（bag-1）不在节点作业单元册上：单元册先被问过、答不是，照旧反查委托，反查不中仍落
+// 与「委托还没到已接受」同一格。是不是单元只看单元册，不按串形猜。
+func TestABagLikeObjectOutsideTheUnitBookFallsIntoTargetNotFound(t *testing.T) {
 	adopter := &pickupAdopterDouble{}
 	targets := &pickupTargetViewDouble{}
+	book := &unitBook{}
 	subject, err := adapter.NewAdoptOnOffsitePickupAdapter(
 		&pickupRegistryDouble{record: registeredPickup(t, "bag-1"), found: true},
 		targets,
 		adopter,
+		book,
 	)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
@@ -420,8 +427,11 @@ func TestAConsolidationUnitLikeObjectFallsIntoTargetNotFound(t *testing.T) {
 		t.Context(), reference); !errors.Is(err, adapter.ErrParcelTargetNotFound) {
 		t.Fatalf("err = %v, want ErrParcelTargetNotFound", err)
 	}
+	if len(book.asked) != 1 || book.asked[0].object != "bag-1" {
+		t.Fatalf("单元册的问法 = %+v, want 先被问一次", book.asked)
+	}
 	if targets.parcel != "bag-1" {
-		t.Fatalf("反查包裹 = %q——不得替 TF 猜集运单元的成员", targets.parcel)
+		t.Fatalf("反查包裹 = %q——不在单元册上的照旧反查", targets.parcel)
 	}
 	if adopter.calls != 0 {
 		t.Fatal("反查不中不该走到采用")
@@ -434,6 +444,7 @@ func TestAnAmbiguousParcelTargetForAPickupStaysIdentifiable(t *testing.T) {
 		&pickupRegistryDouble{record: registeredPickup(t, "parcel-1"), found: true},
 		&pickupTargetViewDouble{err: psdomain.ErrAmbiguousParcelTarget},
 		adopter,
+		noUnits{},
 	)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
@@ -453,6 +464,7 @@ func TestAnUntranslatableReferenceKeepsItsSentinel(t *testing.T) {
 		&pickupRegistryDouble{record: registeredPickup(t, "parcel-1"), found: true},
 		&pickupTargetViewDouble{target: pickupTarget(t), found: true},
 		adopter,
+		noUnits{},
 	)
 	if err != nil {
 		t.Fatalf("构造：%v", err)
@@ -482,6 +494,7 @@ func TestPickupAdoptionOutcomesMapToConsumptionSlots(t *testing.T) {
 			&pickupRegistryDouble{record: registeredPickup(t, "parcel-1"), found: true},
 			&pickupTargetViewDouble{target: pickupTarget(t), found: true},
 			adapter.NewOffsitePickupAdapter(handler),
+			noUnits{},
 		)
 		if err != nil {
 			t.Fatalf("构造处理适配器：%v", err)
@@ -555,6 +568,7 @@ func TestAPendingPickupHandoffDoesNotMarkTheInboxProcessed(t *testing.T) {
 		&pickupRegistryDouble{record: registeredPickup(t, "parcel-1"), found: true},
 		&pickupTargetViewDouble{target: pickupTarget(t), found: true},
 		adapter.NewOffsitePickupAdapter(pickupAdoptHandler(t, pickupHandlerConfig{downstream: downstream})),
+		noUnits{},
 	)
 	if err != nil {
 		t.Fatalf("构造处理适配器：%v", err)
