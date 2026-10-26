@@ -317,10 +317,11 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
 5. **对外怎么说、材料收到没有**（visibility-exception）：异常披露规则 `SYN-VE-EXC-DISCLOSE-V1`
    与分诊同一对信号——`SYN-ACCOUNT-01` 的 `CUSTOMS_HOLD`（承运确认）可披露、不自动发布；
    `SYN-ACCOUNT-02` 的 `ETA_GAP` 明确不披露。演示租户登的信号规则都不形成这两类，这一对只是参考去处。
-   冲突信号规则一租户一条，登在 `SOURCE_FACT_CONFLICT`（来源事实冲突待确认，可信度 `SOURCE_CONFIRMED`）/
+   冲突信号规则一租户一条，登在 `SOURCE_FACT_CONFLICT`（`PAR-VIS-04` 里「事实冲突待确认」那一类，可信度 `SOURCE_CONFIRMED`）/
    `SYN-VE-CONFLICT-V1`：投影对已接受来源事实裁决不了（替代链分叉）时形成，来源不限关务，所以不登关务类类型。
    分诊明登人工复核（哪一支当前有效尚无从确认）；异常披露规则对两户都明登不披露——没有条目时披露决定停在未配置，
-   那不是不披露。关务所有者判出的同层冲突另归「关务进展待确认」一类（票 demo-chain-gaps/124），不用这一格。
+   那不是不披露。关务同层冲突（连同更正链尾的冲突）的「关务进展待确认」信号另走一条冲突关系与信号，不用这一格
+   （ADR-0281 决定九）；今天关务同层冲突到 visibility-exception 入账不派生，不形成任何信号。
    索赔批次 `SYN-CLAIM-BATCH-CN-SG-01` 的同一事项收了照片与发票，
    发票次日撤销，照片留下。
    出发门禁阻断信号规则一租户一条：出发时关务判阻断的那一件形成 `DEPARTURE_GATE_BLOCKED`
