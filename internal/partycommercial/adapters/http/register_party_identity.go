@@ -173,7 +173,7 @@ func NewDeactivatePartyIdentityEndpoint(
 
 // writePartyRegistryAnswer 把身份登记用例的答案逐名转写。
 //
-// `已登记`与`已停用`取 201，其余取 200：前两格是本次落库，其余是登记册对这次登记作出
+// `已登记`、`已停用`与关系结束口的`已结束`取 201，其余取 200：这三格是本次落库，其余是登记册对这次登记作出
 // 的判断。治理答案走 200 而不是 4xx，判据同关务片——重放、内容冲突与受理门拒绝要登记
 // 方对着册面修正内容，与「请求根本构造不出命令」的恢复动作不同，压成一格登记方就不
 // 知道该改哪一样。
@@ -200,7 +200,7 @@ func writePartyRegistryAnswer(
 	}
 	status := http.StatusOK
 	switch outcome {
-	case application.PartyIdentityRegistered, application.PartyIdentityDeactivated:
+	case application.PartyIdentityRegistered, application.PartyIdentityDeactivated, application.PartyRelationshipEnded:
 		status = http.StatusCreated
 	}
 	writeJSON(response, status, answer)

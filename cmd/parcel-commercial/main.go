@@ -53,7 +53,7 @@ func main() {
 
 func run(ctx context.Context, args []string, getenv func(string) string, out, errOut io.Writer) int {
 	if len(args) < 1 {
-		fmt.Fprintln(errOut, "用法：parcel-commercial <publish|register-resolution-key|register-parties|deactivate-party-identity|register-products|register-registration-number-types|register-legal-entity-profiles|register-version-closures> -input <file>")
+		fmt.Fprintln(errOut, "用法：parcel-commercial <publish|register-resolution-key|register-parties|deactivate-party-identity|end-party-relationships|register-products|register-registration-number-types|register-legal-entity-profiles|register-version-closures> -input <file>")
 		return exitTechnical
 	}
 	switch args[0] {
@@ -65,6 +65,8 @@ func run(ctx context.Context, args []string, getenv func(string) string, out, er
 		return runRegisterParties(ctx, args[1:], getenv, out, errOut)
 	case "deactivate-party-identity":
 		return runDeactivatePartyIdentity(ctx, args[1:], getenv, out, errOut)
+	case "end-party-relationships":
+		return runEndPartyRelationships(ctx, args[1:], getenv, out, errOut)
 	case "register-products":
 		return runRegisterProducts(ctx, args[1:], getenv, out, errOut)
 	case "register-registration-number-types":
@@ -74,7 +76,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, out, er
 	case "register-version-closures":
 		return runRegisterVersionClosures(ctx, args[1:], getenv, out, errOut)
 	default:
-		fmt.Fprintf(errOut, "未知子命令 %q；可用：publish、register-resolution-key、register-parties、deactivate-party-identity、register-products、register-registration-number-types、register-legal-entity-profiles、register-version-closures\n", args[0])
+		fmt.Fprintf(errOut, "未知子命令 %q；可用：publish、register-resolution-key、register-parties、deactivate-party-identity、end-party-relationships、register-products、register-registration-number-types、register-legal-entity-profiles、register-version-closures\n", args[0])
 		return exitTechnical
 	}
 }
