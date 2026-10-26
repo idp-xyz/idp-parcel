@@ -72,6 +72,7 @@
 | `POST /v1/node-operations/delivery-pre-advice-withdrawals` | UC-NO-006 预报撤回 | `DELIVERY_PRE_ADVICE_WITHDRAWAL` |
 | `POST /v1/shipment-requests/supplements` | [UC-PS-001](../application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md) 委托补充（`AT-PS-036` 第一支） | `SHIPMENT_REQUEST_SUPPLEMENT` |
 | `POST /v1/shipment-requests/withdrawals` | [UC-PS-005](../application/parcel-shipment/UC-PS-005-WITHDRAW-SUBMITTED-SHIPMENT-REQUEST.md) 委托撤回（`AT-PS-134` 至 `AT-PS-137`） | `SHIPMENT_REQUEST_WITHDRAWAL` |
+| `POST /v1/shipment-requests/source-data-amendments` | [UC-PS-002](../application/parcel-shipment/UC-PS-002-AMEND-CUSTOMER-SOURCE-DATA.md) 资料修订 | `SOURCE_DATA_AMENDMENT` |
 | `POST /v1/node-operations/delivery-handover-conclusions` | UC-NO-006 交接单的客户确认或否认 | `DELIVERY_HANDOVER_CONFIRMATION` |
 | `POST /v1/claims` | [UC-VE-007](../application/visibility-exception/UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md) 索赔提交 | `CLAIM_SUBMISSION` |
 
@@ -84,7 +85,10 @@
   - **重放语义（客户端必须按此实现）**：撤回的重放是接着办，不是读回上一次的答案。委托仍为`已提交`时，原样重放会重新判断并可能形成撤回。直客撤回的授权是渠道绑定，今天不会出现 `NOT_AUTHORIZED`，但契约保留这一格；未获授权、不允许、等复核一类请求，条件变了之后原样重放可能形成版本或决定，客户端不要假定同一请求永远得到同一个答案。`UNDECIDED` 是可重放的：同一 `accessRequestId` 原样重放，授权恢复后形成撤回。并发重放同时到达时，输的一路答 `UNDECIDED`，`pendingReason` 为 `STALE_SHIPMENT_REQUEST_REVISION`，需再重放一次读到已有决定，客户端要把撤回的未决当作可重放。
   - **重放必须逐字节同载荷**：判重按摘要，原样重放才算重放。例如首次没带 `shipmentRequestId`、重发时补上，会答 `SOURCE_CONFLICT`，不会读回原撤回；想补带委托号，换一个新的撤回 `accessRequestId`。
   - **撤回后读回**：提交回执不表达委托状态，撤回之后对原提交重放仍答 `EXISTING_RESULT` 与原回执同一版本；要读回撤回结果，重放撤回请求（答同一份 `withdrawalId`）。换一个撤回 `accessRequestId` 再撤同一委托也读回原撤回，不形成第二次。
-- 委托的资料修订与逐包裹取消这几个客户面命令口已经按本文的问题详情作答，但还没挂首方渠道 Intake，今天在无前缀的 `/shipment-requests/...` 下答 `403 ACCESS_CHANNEL_NOT_CONFIGURED`；首方 Intake 逐口换上时迁到 `/v1/shipment-requests/...`。
+- **资料修订**（形状 `PAM-1`）：客户本人在`已接受`委托上修订某块客户原始资料，形成资料新版本。载荷：`accessRequestId`（修订自己的接入请求标识）、`originalAccessRequestId`（原提交的接入请求标识，指名委托）、`shipmentRequestId`（提交回执的委托号，必填，与找到的委托不符答 `404`）、`dataGroup`（资料范围：`SENDER_PLACE`、`DELIVERY_PLACE`、`DECLARED_MEASUREMENT` 或租户约定的其他资料组）、可选 `parcelId`（范围作用于某个包裹时）、`intent`（`SUPPLEMENT`、`CORRECTION`、`EXPLICIT_CLEAR`）、`reason`（结构化修订原因引用，必填）、可选 `basisVersionId`（基准：不带即以接受基线为基准，只有 `SUPPLEMENT` 合法；`CORRECTION` 必须带，取提交回执的 `submissionVersionId` 或前一次修订答复的 `sourceDataVersionId`）、可选 `requestEffectiveAt`（资料适用时间，缺失就是缺失，不会被补成别的时间）。内容字段按 `dataGroup` 取用：寄件 / 收件范围取 `postalCode`、`countryCode`（空串即显式清空该要素），申报测量范围取 `declaredWeightValue`、`declaredWeightUnit` 与外廓四格；内容字段落不进该范围、或 `EXPLICIT_CLEAR` 带内容答 `400`。租户与账户取自册上绑定：委托只在信封账户名下找，他账户与不存在同答 `404` 同字节；载荷里自报账户、租户或操作者答 `400`。同一修订 `accessRequestId` 改指另一份原提交、另一处范围或改内容，摘要变，答 `SOURCE_CONFLICT`。答复 `outcome`：`RECORDED`（`201`，带 `sourceDataVersionId` 与采用判断）、`ALREADY_HANDLED`（`200`，读回原版本）、`AWAITING_REVIEW`、`DISALLOWED`、`NOT_AUTHORIZED`、`SOURCE_CONFLICT`、`UNDECIDED`（`200`，带 `pendingReason` 与 `continuationReference`）。
+  - **授权是租户取值。** 修订的授权由商业权威裁定（[ADR-0311](../adr/0311-a-first-party-customers-source-data-amendment-asks-party-commercial-at-the-product-level-customer-self-service-and-the-tenant-controls-it-by-granting-that-level.md)）：租户要在授权册登记 `SOURCE_DATA_AMENDMENT` × `CUSTOMER_SELF_SERVICE` 的授予，并登记账户的解析键行。解析键没登记答 `UNDECIDED`、`SOURCE_DATA_AMENDMENT_AUTHORITY_UNAVAILABLE`；没有授予答 `UNDECIDED`、`SOURCE_DATA_AMENDMENT_AUTHORITY_RULES_NOT_CONFIGURED`；有授予而范围不符答 `NOT_AUTHORIZED`。授权过了之后，资料组 × 阶段 × 意图的允许矩阵也是租户取值，没登记的格答 `AWAITING_REVIEW`。
+  - **重放的语义（必读）。** 同一修订 `accessRequestId` 原样重放是安全的，但它不总是「读回上次的答案」：上一轮若停在**没有形成版本**的结果（`UNDECIDED`、`NOT_AUTHORIZED`、`DISALLOWED`、`AWAITING_REVIEW`），重放会按**当下**的条件重新办理，条件变了（租户登了授予、登了矩阵、阶段推进了）重放可能形成版本；已有决定态（已形成版本，即 `RECORDED` 之后）重放答 `ALREADY_HANDLED`，是同一个版本，不再问授权与矩阵。并发重放时输掉的一路答 `UNDECIDED`、`pendingReason` 为 `STALE_SHIPMENT_REQUEST_REVISION`：这是未决，不是失败，客户需要**再重放一次**，那时会读到赢的一路形成的版本。
+- 委托的逐包裹取消这个客户面命令口已经按本文的问题详情作答，但还没挂首方渠道 Intake，今天在无前缀的 `/shipment-requests/...` 下答 `403 ACCESS_CHANNEL_NOT_CONFIGURED`；首方 Intake 逐口换上时迁到 `/v1/shipment-requests/...`。
 
 ## 索赔口 `POST /v1/claims`（形状 VCL-1）
 

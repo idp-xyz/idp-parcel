@@ -85,3 +85,4 @@ Date: 2026-10-26
 - [ADR-0022](./0022-http-status-carries-answer-formed-not-business-verdict.md)：回执新增字段只加不改，状态码语义不动
 - 计划 [spec「五口上线」](../../.scratch/first-party-api/spec.md)与[摸底报告](../../.scratch/first-party-api/customer-faces-scoping-2026-10-26.md)
 - 票 [first-party-api/06](../../.scratch/first-party-api/issues/06-customer-command-faces-common-base.md)
+- [ADR-0311](./0311-a-first-party-customers-source-data-amendment-asks-party-commercial-at-the-product-level-customer-self-service-and-the-tenant-controls-it-by-granting-that-level.md)：取舍 B 在资料修订口上的授权坐标取法
