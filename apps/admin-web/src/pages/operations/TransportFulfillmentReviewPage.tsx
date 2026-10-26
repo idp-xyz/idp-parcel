@@ -18,6 +18,7 @@ import {
 } from './records-api';
 import { scopeSummaryRowsOf, scopeSummaryViewState } from './handover-scope-summary';
 import { handoverVerdictLabels, labelOf } from './presentation';
+import { bookingRowOf, bounceRowOf, type BounceFilter } from './booking-registers';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['transport-fulfillment-review'];
@@ -83,6 +84,8 @@ type SectionId =
   | 'handover-scope-summary'
   | 'delivery-proofs'
   | 'master-documents'
+  | 'booking-requests'
+  | 'booking-answer-bounces'
   | 'transport-manifests';
 
 interface ReviewSection {
@@ -207,6 +210,43 @@ const sections: ReviewSection[] = [
     ],
   },
   {
+    id: 'booking-requests',
+    word: '订舱',
+    registry: 'booking-request',
+    // 一次订舱一行。状态词由读口按名下当前那一份承运答复读出，页面原词示文、不另算；取消是运营的决定
+    // 不是承运答复，取消时刻与取消人单列，不并进状态（CONTEXT「订舱」）。提交人、取消人没记下时留空。
+    columns: [
+      col('booking', '订舱', { mono: true }),
+      col('commission', '运输委托', { mono: true }),
+      col('schedule', '班次', { mono: true }),
+      col('requested', '申请量', { align: 'right', mono: true }),
+      col('requestedAt', '申请时刻', { mono: true }),
+      col('standing', '状态', { className: 'w-[96px]' }),
+      col('currentAnswer', '当前答复', { className: 'w-[88px]' }),
+      col('acceptedQuantity', '接受量', { align: 'right', mono: true }),
+      col('currentAnsweredAt', '答复时刻', { mono: true }),
+      col('cancelledAt', '取消时刻', { mono: true }),
+      col('submittedBy', '提交人', { mono: true }),
+      col('cancelledBy', '取消人', { mono: true }),
+    ],
+  },
+  {
+    id: 'booking-answer-bounces',
+    word: '承运答复挡回',
+    registry: 'booking-answer-bounce',
+    // 挡回册是台账不是事实来源：挡回不形成承运接受，订舱的状态词不读它。依据两词（订舱不在册 /
+    // 不是服务提供方）对答复方是同一格答复，只有这里分得开（CONTEXT「承运答复挡回」）。
+    columns: [
+      col('source', '答复方', { mono: true }),
+      col('booking', '订舱', { mono: true }),
+      col('answer', '答复标识', { mono: true }),
+      col('basis', '依据'),
+      col('firstBouncedAt', '首次挡回', { mono: true }),
+      col('lastBouncedAt', '最近一次挡回', { mono: true }),
+      col('count', '次数', { align: 'right', mono: true, className: 'w-[72px]' }),
+    ],
+  },
+  {
     id: 'transport-manifests',
     word: '运输舱单',
     // 运输舱单表达某次运输计划或申报的载运内容，与总单具有不同业务身份(CONTEXT)。
@@ -307,6 +347,10 @@ function rowsOf(body: TransportFulfillmentListResponseBody): ReviewRow[] {
           changedAt: record.changedAt ? formatInstant(record.changedAt) : '',
         },
       }));
+    case 'BOOKING_REQUESTS_LISTED':
+      return body.bookings.map(bookingRowOf);
+    case 'BOOKING_ANSWER_BOUNCES_LISTED':
+      return body.bounces.map(bounceRowOf);
   }
 }
 
@@ -316,8 +360,12 @@ export function TransportFulfillmentReviewPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [loaded, setLoaded] = useState<{
     registry: TransportFulfillmentRegistry;
+    filterKey: string;
     answer: ApiResult<TransportFulfillmentListResponseBody>;
   } | null>(null);
+  // 挡回册的两个筛选同样分草稿与已提交两格：每次筛选是一次真请求。
+  const [bounceDraft, setBounceDraft] = useState<BounceFilter>({ booking: '', source: '' });
+  const [bounceFilter, setBounceFilter] = useState<BounceFilter>({});
   // 汇总区的范围入参分两格：输入框里的草稿与已提交的那一个。合成一格就会逐键触发查询,
   // 而这一区每问一次都是一次真请求(册区的检索是本地过滤,不是)。
   const [scopeDraft, setScopeDraft] = useState('');
@@ -329,18 +377,24 @@ export function TransportFulfillmentReviewPage() {
   const section = sections.find((candidate) => candidate.id === sectionId) ?? sections[0];
   const registry = section.registry;
   const isScopeSummary = section.scopeSummary === true;
+  const isBounces = registry === 'booking-answer-bounce';
+  const filterKey = isBounces
+    ? JSON.stringify([bounceFilter.booking ?? '', bounceFilter.source ?? ''])
+    : '';
 
   useEffect(() => {
     // 无册区不发请求：服务端册名封闭集没有那一格，发了只会收 400。
     if (!registry) return undefined;
     let cancelled = false;
-    void listTransportFulfillmentRecords(registry).then((answer) => {
-      if (!cancelled) setLoaded({ registry, answer });
+    void listTransportFulfillmentRecords(registry, bounceFilter).then((answer) => {
+      if (!cancelled) setLoaded({ registry, filterKey, answer });
     });
     return () => {
       cancelled = true;
     };
-  }, [registry, reloadKey]);
+    // bounceFilter 只经 filterKey 起效（非挡回册 filterKey 恒空）。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [registry, filterKey, reloadKey]);
 
   useEffect(() => {
     // 范围空着不发请求：范围是这个读面的必备维，缺席在服务端是 400，而那条 400 说的是
@@ -355,7 +409,10 @@ export function TransportFulfillmentReviewPage() {
     };
   }, [isScopeSummary, scope, reloadKey]);
 
-  const answer = registry && loaded?.registry === registry ? loaded.answer : null;
+  const answer =
+    registry && loaded?.registry === registry && loaded.filterKey === filterKey
+      ? loaded.answer
+      : null;
   const body = answer?.kind === 'outcome' ? answer.body : null;
   const summaryAnswer =
     isScopeSummary && summaryLoaded?.scope === scope ? summaryLoaded.answer : null;
@@ -375,6 +432,49 @@ export function TransportFulfillmentReviewPage() {
       )
     : rows;
   const retry = () => setReloadKey((value) => value + 1);
+  const applyBounceFilter = (next: BounceFilter) => {
+    setBounceDraft({ booking: next.booking ?? '', source: next.source ?? '' });
+    setBounceFilter({ booking: next.booking?.trim() ?? '', source: next.source?.trim() ?? '' });
+  };
+  // 订舱区的一行链到挡回区按那一单筛出的结果；答复方筛选清空，只见这一单。
+  const jumpToBounces = (booking: string) => {
+    applyBounceFilter({ booking, source: '' });
+    setSectionId('booking-answer-bounces');
+  };
+  const columns: ListColumn<ReviewRow>[] =
+    section.id === 'booking-requests'
+      ? [
+          ...section.columns,
+          {
+            id: 'answers',
+            header: '名下全部答复',
+            render: (row) =>
+              row.values.answerCount === '0' ? (
+                '—'
+              ) : (
+                <details>
+                  <summary className="cursor-pointer">{row.values.answerCount} 份</summary>
+                  <div className="whitespace-pre-line font-mono text-[12px]">
+                    {row.values.answers}
+                  </div>
+                </details>
+              ),
+          },
+          {
+            id: 'bounces',
+            header: '挡回',
+            render: (row) => (
+              <button
+                type="button"
+                className="text-[12px] underline"
+                onClick={() => jumpToBounces(row.values.booking)}
+              >
+                查看挡回
+              </button>
+            ),
+          },
+        ]
+      : section.columns;
 
   const viewState: TemplateViewState = section.absence
     ? {
@@ -392,8 +492,9 @@ export function TransportFulfillmentReviewPage() {
           module: info,
           endpoint: `GET /transport-fulfillment-records?registry=${registry ?? ''}`,
           emptyTitle: `当前租户尚无${section.word}登记`,
-          emptyDescription:
-            '读取入口已配置，登记册为空——履约判断与事实的写入方在接入渠道墙后面，空册是预期不是缺陷；页面不含合成数据。',
+          emptyDescription: isBounces
+            ? '读取入口已配置，登记册为空——还没有承运答复被挡回；挡回册是台账，页面不含合成数据。'
+            : '读取入口已配置，登记册为空——履约判断与事实的写入方在接入渠道墙后面，空册是预期不是缺陷；页面不含合成数据。',
         });
 
   return (
@@ -434,6 +535,30 @@ export function TransportFulfillmentReviewPage() {
               查询汇总
             </button>
           )}
+          {isBounces && (
+            <>
+              <input
+                aria-label="按订舱筛"
+                className="h-8 rounded border px-2 text-[13px]"
+                placeholder="按订舱筛"
+                value={bounceDraft.booking ?? ''}
+                onChange={(event) => setBounceDraft({ ...bounceDraft, booking: event.target.value })}
+              />
+              <input
+                aria-label="按答复方筛"
+                className="h-8 rounded border px-2 text-[13px]"
+                placeholder="按答复方筛"
+                value={bounceDraft.source ?? ''}
+                onChange={(event) => setBounceDraft({ ...bounceDraft, source: event.target.value })}
+              />
+              <button type="button" className={chipClass(false)} onClick={() => applyBounceFilter(bounceDraft)}>
+                筛选
+              </button>
+              <button type="button" className={chipClass(false)} onClick={() => applyBounceFilter({})}>
+                清除筛选
+              </button>
+            </>
+          )}
         </>
       }
       filterSummary={
@@ -441,7 +566,7 @@ export function TransportFulfillmentReviewPage() {
         // 汇总不是「1 行数据」,报出来会把派生答案说成一本只有一行的册子。
         !isScopeSummary && body ? `${section.word} ${visibleRows.length} 行` : undefined
       }
-      columns={section.columns}
+      columns={columns}
       rows={visibleRows}
       rowKey={(row) => row.key}
       viewState={viewState}

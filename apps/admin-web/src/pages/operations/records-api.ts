@@ -11,6 +11,7 @@
 // 读法，票 05 Comments），本文件不造会被 400 拒掉的查询。
 
 import { exchangeMasterData, type ApiResult } from '../catalogue-api';
+import { transportRecordsPathOf, type BounceFilter } from './booking-registers';
 
 export type { ApiResult } from '../catalogue-api';
 
@@ -199,7 +200,9 @@ export type TransportFulfillmentRegistry =
   | 'capacity-pool'
   | 'transport-handover'
   | 'effective-delivery'
-  | 'carrier-master-document';
+  | 'carrier-master-document'
+  | 'booking-request'
+  | 'booking-answer-bounce';
 
 /**
  * 一个具体班次。没有执行准备键、也没有实际执行键——那两组在存储上没有登记格
@@ -287,6 +290,48 @@ export interface CarrierMasterDocumentRecord {
   recordedAt: string;
 }
 
+/** 订舱名下的一份承运答复（bookingAnswerBody）。quantity 是接受量，只在接受上在场；basis 可缺。 */
+export interface BookingAnswerRecord {
+  booking: string;
+  answer: string;
+  outcome: string;
+  quantity?: number;
+  basis?: string;
+  decidedAt: string;
+  recordedAt: string;
+}
+
+/**
+ * 一次订舱（bookingRequestRowBody）。standing 是读口派生的状态词，页面原词示文、不另算；取消不进 standing，
+ * cancelledAt 缺席即没有取消。submittedBy / cancelledBy 没记下时整键缺席（票 180）。
+ */
+export interface BookingRequestRecord {
+  booking: string;
+  commission: string;
+  schedule: string;
+  quantity: number;
+  unit: string;
+  requestedAt: string;
+  cancelledAt?: string;
+  recordedAt: string;
+  standing: string;
+  currentAnswer?: BookingAnswerRecord;
+  answers: BookingAnswerRecord[];
+  submittedBy?: string;
+  cancelledBy?: string;
+}
+
+/** 挡回册一行。basis 两格封闭词（BOOKING_NOT_REGISTERED / SOURCE_NOT_SERVICE_PROVIDER）；count 是十进制计数串。 */
+export interface BookingAnswerBounceRecord {
+  source: string;
+  booking: string;
+  answer: string;
+  basis: string;
+  firstBouncedAt: string;
+  lastBouncedAt: string;
+  count: string;
+}
+
 export type TransportFulfillmentListResponseBody =
   | { outcome: 'TRANSPORT_SCHEDULES_LISTED'; schedules: TransportScheduleRecord[] }
   | { outcome: 'CAPACITY_POOLS_LISTED'; pools: CapacityPoolRecord[] }
@@ -295,7 +340,9 @@ export type TransportFulfillmentListResponseBody =
   | {
       outcome: 'CARRIER_MASTER_DOCUMENTS_LISTED';
       masterDocuments: CarrierMasterDocumentRecord[];
-    };
+    }
+  | { outcome: 'BOOKING_REQUESTS_LISTED'; bookings: BookingRequestRecord[] }
+  | { outcome: 'BOOKING_ANSWER_BOUNCES_LISTED'; bounces: BookingAnswerBounceRecord[] };
 
 interface TransportBodyByRegistry {
   'transport-schedule': Extract<
@@ -318,14 +365,25 @@ interface TransportBodyByRegistry {
     TransportFulfillmentListResponseBody,
     { outcome: 'CARRIER_MASTER_DOCUMENTS_LISTED' }
   >;
+  'booking-request': Extract<
+    TransportFulfillmentListResponseBody,
+    { outcome: 'BOOKING_REQUESTS_LISTED' }
+  >;
+  'booking-answer-bounce': Extract<
+    TransportFulfillmentListResponseBody,
+    { outcome: 'BOOKING_ANSWER_BOUNCES_LISTED' }
+  >;
 }
 
-/** 返回类型按请求的 registry 收窄，同 listNodeOperationsRecords。 */
+/** 返回类型按请求的 registry 收窄，同 listNodeOperationsRecords。filter 只对挡回册生效。 */
 export function listTransportFulfillmentRecords<
   Registry extends TransportFulfillmentRegistry,
->(registry: Registry): Promise<ApiResult<TransportBodyByRegistry[Registry]>> {
+>(
+  registry: Registry,
+  filter?: BounceFilter,
+): Promise<ApiResult<TransportBodyByRegistry[Registry]>> {
   return exchangeMasterData<TransportBodyByRegistry[Registry]>(
-    `/transport-fulfillment-records?registry=${encodeURIComponent(registry)}`,
+    transportRecordsPathOf(registry, filter),
   );
 }
 
