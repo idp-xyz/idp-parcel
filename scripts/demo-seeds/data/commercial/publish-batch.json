@@ -92,7 +92,7 @@
       "objectId": "SYN-RULEPKG-01",
       "version": "v1",
       "scope": "SYN-SCOPE-01",
-      "contentDigest": "PCC-1:c5d88b9a6232b9a29a6561bafa4be8f1a9955a26262d7652c8fd0186cc992d14",
+      "contentDigest": "PCC-1:34b0fc2612195cd1307ca4fce535ff38ac4b44930185e8e1af76acd30b9c913f",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "references": {
         "SERVICE_PRODUCT": "SYN-PROD-CN-SG-EXPRESS"
@@ -213,6 +213,114 @@
             },
             {
               "dataGroup": "SYN-GROUP-CONSIGNEE-ADDRESS",
+              "stage": "CUSTOMS_SUBMITTED",
+              "intent": "EXPLICIT_CLEAR",
+              "allowance": "DISALLOWED"
+            },
+            {
+              "dataGroup": "SENDER_PLACE",
+              "stage": "ACCEPTED_NOT_YET_RECEIVED",
+              "intent": "SUPPLEMENT",
+              "allowance": "ALLOWED"
+            },
+            {
+              "dataGroup": "SENDER_PLACE",
+              "stage": "ACCEPTED_NOT_YET_RECEIVED",
+              "intent": "CORRECTION",
+              "allowance": "ALLOWED"
+            },
+            {
+              "dataGroup": "SENDER_PLACE",
+              "stage": "ACCEPTED_NOT_YET_RECEIVED",
+              "intent": "EXPLICIT_CLEAR",
+              "allowance": "ALLOWED"
+            },
+            {
+              "dataGroup": "SENDER_PLACE",
+              "stage": "CUSTOMS_SUBMITTED",
+              "intent": "SUPPLEMENT",
+              "allowance": "ALLOWED"
+            },
+            {
+              "dataGroup": "SENDER_PLACE",
+              "stage": "CUSTOMS_SUBMITTED",
+              "intent": "CORRECTION",
+              "allowance": "DISALLOWED"
+            },
+            {
+              "dataGroup": "SENDER_PLACE",
+              "stage": "CUSTOMS_SUBMITTED",
+              "intent": "EXPLICIT_CLEAR",
+              "allowance": "DISALLOWED"
+            },
+            {
+              "dataGroup": "DELIVERY_PLACE",
+              "stage": "ACCEPTED_NOT_YET_RECEIVED",
+              "intent": "SUPPLEMENT",
+              "allowance": "ALLOWED"
+            },
+            {
+              "dataGroup": "DELIVERY_PLACE",
+              "stage": "ACCEPTED_NOT_YET_RECEIVED",
+              "intent": "CORRECTION",
+              "allowance": "ALLOWED"
+            },
+            {
+              "dataGroup": "DELIVERY_PLACE",
+              "stage": "ACCEPTED_NOT_YET_RECEIVED",
+              "intent": "EXPLICIT_CLEAR",
+              "allowance": "ALLOWED"
+            },
+            {
+              "dataGroup": "DELIVERY_PLACE",
+              "stage": "CUSTOMS_SUBMITTED",
+              "intent": "SUPPLEMENT",
+              "allowance": "ALLOWED"
+            },
+            {
+              "dataGroup": "DELIVERY_PLACE",
+              "stage": "CUSTOMS_SUBMITTED",
+              "intent": "CORRECTION",
+              "allowance": "DISALLOWED"
+            },
+            {
+              "dataGroup": "DELIVERY_PLACE",
+              "stage": "CUSTOMS_SUBMITTED",
+              "intent": "EXPLICIT_CLEAR",
+              "allowance": "DISALLOWED"
+            },
+            {
+              "dataGroup": "DECLARED_MEASUREMENT",
+              "stage": "ACCEPTED_NOT_YET_RECEIVED",
+              "intent": "SUPPLEMENT",
+              "allowance": "ALLOWED"
+            },
+            {
+              "dataGroup": "DECLARED_MEASUREMENT",
+              "stage": "ACCEPTED_NOT_YET_RECEIVED",
+              "intent": "CORRECTION",
+              "allowance": "ALLOWED"
+            },
+            {
+              "dataGroup": "DECLARED_MEASUREMENT",
+              "stage": "ACCEPTED_NOT_YET_RECEIVED",
+              "intent": "EXPLICIT_CLEAR",
+              "allowance": "ALLOWED"
+            },
+            {
+              "dataGroup": "DECLARED_MEASUREMENT",
+              "stage": "CUSTOMS_SUBMITTED",
+              "intent": "SUPPLEMENT",
+              "allowance": "ALLOWED"
+            },
+            {
+              "dataGroup": "DECLARED_MEASUREMENT",
+              "stage": "CUSTOMS_SUBMITTED",
+              "intent": "CORRECTION",
+              "allowance": "DISALLOWED"
+            },
+            {
+              "dataGroup": "DECLARED_MEASUREMENT",
               "stage": "CUSTOMS_SUBMITTED",
               "intent": "EXPLICIT_CLEAR",
               "allowance": "DISALLOWED"
