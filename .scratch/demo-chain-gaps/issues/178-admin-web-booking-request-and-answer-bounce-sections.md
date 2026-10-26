@@ -1,7 +1,7 @@
 # 178 管理台运输履约查阅页：没有订舱区与承运答复挡回区
 
 Category: enhancement
-Status: in-progress——2026-10-26 作者完工，待进 main，分支 claude-dcg178 代码提交 4d527c2b9（其后仅票面提交）。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领（用户 2026-10-26「按你的建议开工吧」），分支 `claude-dcg178`（worktree `idp-parcel-dcg178`；前端切片，多会话下改在 worktree 做、落 main 时重放）。此前 ready-for-agent——2026-10-26 Claude Code 作者子代理按票 [48](./48-booking-requests-and-carrier-answers-have-no-read-face.md)、[167](./167-booking-answer-bounce-register-has-no-read-face.md) 隔离评审 Spec 非阻断 2 立（会话 `tops-20` 派单；用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」授权），照票 [18](./18-transport-preparation-consumes-the-initial-route.md) → [45](./45-admin-web-transport-preparation-section.md) 先例。分级 R2（上线后尽快）：两格读口随票 48、167 进 main，可运营人员只用管理台，今天只能拿操作者令牌直调接口；承运方拿到「订舱不在册」后的续办是找租户核对（ADR-0239 决定一），运营在页上查不到挡回依据，这一答就落空。不挡上线：答复口本身照常工作，挡回也照常记进挡回册。
+Status: resolved——2026-10-26 进 main（见文末「进 main 记录」）。此前 in-progress——2026-10-26 作者完工，待进 main，分支 claude-dcg178 代码提交 4d527c2b9（其后仅票面提交）。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领（用户 2026-10-26「按你的建议开工吧」），分支 `claude-dcg178`（worktree `idp-parcel-dcg178`；前端切片，多会话下改在 worktree 做、落 main 时重放）。此前 ready-for-agent——2026-10-26 Claude Code 作者子代理按票 [48](./48-booking-requests-and-carrier-answers-have-no-read-face.md)、[167](./167-booking-answer-bounce-register-has-no-read-face.md) 隔离评审 Spec 非阻断 2 立（会话 `tops-20` 派单；用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」授权），照票 [18](./18-transport-preparation-consumes-the-initial-route.md) → [45](./45-admin-web-transport-preparation-section.md) 先例。分级 R2（上线后尽快）：两格读口随票 48、167 进 main，可运营人员只用管理台，今天只能拿操作者令牌直调接口；承运方拿到「订舱不在册」后的续办是找租户核对（ADR-0239 决定一），运营在页上查不到挡回依据，这一答就落空。不挡上线：答复口本身照常工作，挡回也照常记进挡回册。
 Blocked by: [48](./48-booking-requests-and-carrier-answers-have-no-read-face.md)、[167](./167-booking-answer-bounce-register-has-no-read-face.md)（查阅口 `booking-request`、`booking-answer-bounce` 两格随它们进 main）
 地盘：`apps/admin-web/**`，照 [workflow.md「前端切片」](../../../docs/agents/workflow.md#前端切片一人在-main-上直接做)在 `main` 上直接做。
 出处：票 48 完成记录「代决与越权风险点」第 8 条、票 167 第 3 条；票 48、127、167 隔离评审（钉 `c428ad2fc`）Spec 非阻断 2；[ADR-0202](../../../docs/adr/0202-transport-commission-booking-and-carrier-answer-entry-families-and-supplier-agreement-check.md) 文末补记越权风险点 15 的管理台那一半（去处见其 Status 行「去处注」）；[ADR-0239](../../../docs/adr/0239-a-carrier-answer-from-a-non-provider-is-answered-booking-not-found-and-the-basis-is-kept-on-a-bounce-register.md) 越权风险点 1。
@@ -42,3 +42,11 @@ Blocked by: [48](./48-booking-requests-and-carrier-answers-have-no-read-face.md)
 门：`tsc -b --noEmit`、`node scripts/run-tests.mjs`（682 项全过）、`pnpm exec vite build` 均通过。
 
 未验：浏览器实看、真实后端联调；状态词中文（待确认/候补/已确认/部分确认/已拒绝/已失效/已撤回）为作者按 CONTEXT「订舱」词条所译，读口词本身未改。
+
+## 进 main 记录（2026-10-26，会话 tops-20，前端切片）
+
+- 出处：分支 `claude-dcg178`（作者为 Sonnet 子代理），代码 `4d527c2b9`；main 没前进，原样快进。diff 只落在 `apps/admin-web/**` 与本票面。
+- 三道门（落地树，Node 22，`pnpm install --frozen-lockfile` 后）：`tsc -b --noEmit` 退 0、node:test 682/682、`vite build` 退 0。
+- 订舱状态词七格中文（待确认、候补、已确认、部分确认、已拒绝、已失效、已撤回）：协调方对过 TF CONTEXT「订舱」词条答复五值（接受、拒绝、失效、撤回、候补），一致。
+- 评审：只改业务页（`pages/**`）与新文件，按 workflow「前端切片」第 5 步自查，未另派评审。演示实看未跑（判据第一条 ◑，见完成记录）。
+
