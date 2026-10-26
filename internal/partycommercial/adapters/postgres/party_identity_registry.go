@@ -706,7 +706,11 @@ func relationshipFromSnapshot(raw []byte) (domain.PartyRelationshipRegistration,
 		if document.EndedAt == nil {
 			return domain.PartyRelationshipRegistration{}, fmt.Errorf("快照状态 EXPIRED 缺终止时点")
 		}
-		relationship, err = relationship.Expire(*document.EndedAt)
+		endBasis, err := domain.NewRelationshipBasisReference(document.EndBasis)
+		if err != nil {
+			return domain.PartyRelationshipRegistration{}, err
+		}
+		relationship, err = relationship.Expire(endBasis, *document.EndedAt)
 		if err != nil {
 			return domain.PartyRelationshipRegistration{}, err
 		}

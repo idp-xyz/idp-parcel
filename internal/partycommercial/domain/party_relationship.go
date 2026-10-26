@@ -198,12 +198,14 @@ func (relationship PartyRelationship) Approve(approval ApprovalReference, approv
 	return relationship, nil
 }
 
-func (relationship PartyRelationship) Expire(at time.Time) (PartyRelationship, error) {
+// Expire 记下一段关系已到期：有效区间要有终点，且到期时刻不早于终点——终点未到的关系没有可到期的东西，开区间的
+// 关系只能撤销或替代。到期同样要依据：登记到期的人凭什么认定它到了期（期满通知、合同终止条款），事后要辩护的是这一笔。
+func (relationship PartyRelationship) Expire(basis RelationshipBasisReference, at time.Time) (PartyRelationship, error) {
 	endsAt, bounded := relationship.effective.EndsAt()
-	if relationship.status != RelationshipEffective || !bounded || at.IsZero() || at.Before(endsAt) {
+	if relationship.status != RelationshipEffective || !bounded || !basis.valid() || at.IsZero() || at.Before(endsAt) {
 		return PartyRelationship{}, ErrInvalidRelationshipTransition
 	}
-	return relationship.end(RelationshipExpired, at, RelationshipBasisReference{}), nil
+	return relationship.end(RelationshipExpired, at, basis), nil
 }
 
 // Revoke 以显式决定终止一段关系，并记录该决定依据什么，因此撤销永远不会与
@@ -216,14 +218,52 @@ func (relationship PartyRelationship) Revoke(basis RelationshipBasisReference, a
 }
 
 // SupersededBy 以一个接替的持有方终止本关系。关系内容、角色或范围发生变化时形成
-// 新的关系版本，而不是就地改写这一条。
+// 新的关系版本，而不是就地改写这一条。接替方不能是原持有方（那不是接替，是同一方续登），
+// 也不能是相对方（接替之后它要对自己持有这个角色）。
 func (relationship PartyRelationship) SupersededBy(successor PartyID, at time.Time) (PartyRelationship, error) {
-	if relationship.status != RelationshipEffective || !successor.valid() || at.IsZero() {
+	if relationship.status != RelationshipEffective || !successor.valid() || at.IsZero() ||
+		successor == relationship.holder || successor == relationship.counterparty {
 		return PartyRelationship{}, ErrInvalidRelationshipTransition
 	}
 	ended := relationship.end(RelationshipSuperseded, at, RelationshipBasisReference{})
 	ended.successor = successor
 	return ended, nil
+}
+
+// SuccessorSpec 交回替代之后的那一段接替关系：持有方换成接替方，相对方、角色与适用范围不变，接住本关系在替代时刻之后
+// 余下的有效区间——起点取替代时刻与本关系起点中较晚的那个，终点同本关系（开区间仍是开区间）；依据是这次替代自己的依据。
+//
+// 替代只换持有方。相对方、角色或范围也要变的，是撤销本关系、另登一段新关系：接替关系若可以随意改内容，「替代」就成了
+// 一次不经撤销的改写，册上读不出旧关系的哪一部分由谁接了过去。余下的区间为空（替代时刻不早于本关系终点）时没有可接替的
+// 东西，拒。
+//
+// 本方法不判状态：重放一次替代时本关系已是`已替代`，仍要从它推出同一段接替关系来核对。状态门在 SupersededBy。
+func (relationship PartyRelationship) SuccessorSpec(
+	successor PartyID,
+	basis RelationshipBasisReference,
+	at time.Time,
+) (PartyRelationshipSpec, error) {
+	if !successor.valid() || successor == relationship.holder || successor == relationship.counterparty ||
+		!basis.valid() || at.IsZero() {
+		return PartyRelationshipSpec{}, ErrInvalidRelationshipTransition
+	}
+	startsAt := at.UTC()
+	if startsAt.Before(relationship.effective.StartsAt()) {
+		startsAt = relationship.effective.StartsAt()
+	}
+	endsAt, _ := relationship.effective.EndsAt()
+	interval, err := NewEffectiveInterval(startsAt, endsAt)
+	if err != nil {
+		return PartyRelationshipSpec{}, fmt.Errorf("%w: 替代时刻之后本关系没有余下的有效区间：%w", ErrInvalidRelationshipTransition, err)
+	}
+	return PartyRelationshipSpec{
+		Holder:       successor,
+		Counterparty: relationship.counterparty,
+		Role:         relationship.role,
+		Scope:        relationship.scope,
+		Basis:        basis,
+		Effective:    interval,
+	}, nil
 }
 
 func (relationship PartyRelationship) end(
