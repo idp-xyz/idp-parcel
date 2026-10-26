@@ -1,7 +1,7 @@
 # 138 ADR-0201 与种子 README 把票 110 写成 108
 
 Category: bug
-Status: in-progress——2026-10-25 作者完工，待隔离评审与进 main，分支 claude-dcgdocs tip `ac6f096b1`（本票内容 `a102d8581`，票面那一笔在其上；见文末「完成记录」）。此前 in-progress——2026-10-25 会话 `tops-20`（Claude Code）认领，文档票同批（128、134、137、138、141、144），分支 `claude-dcgdocs`（worktree `idp-parcel-dcgdocs`）。此前 ready-for-agent——2026-10-20 代决复核立（文档），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
+Status: in-progress——2026-10-26 评审阻断已修、修订轮完，待复评与进 main，分支 claude-dcgdocs tip `867b157d2`（修订轮本票无改动，票面那一笔在其上；见文末「评审记录」「修订轮」）。此前 in-progress——2026-10-25 作者完工，待隔离评审与进 main，分支 claude-dcgdocs tip `ac6f096b1`（本票内容 `a102d8581`，票面那一笔在其上；见文末「完成记录」）。此前 in-progress——2026-10-25 会话 `tops-20`（Claude Code）认领，文档票同批（128、134、137、138、141、144），分支 `claude-dcgdocs`（worktree `idp-parcel-dcgdocs`）。此前 ready-for-agent——2026-10-20 代决复核立（文档），见 [owner-review-20261020](../../owner-review-20261020/report.md)「应修订 → 去向」与「须你裁定 → 已代决」
 Blocked by: 无
 出处：用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」；本会话代决复核报告 [owner-review-20261020](../../owner-review-20261020/report.md) 的 M21；ADR-0201 越权风险点 29
 
@@ -37,3 +37,11 @@ Blocked by: 无
 ### 自验
 
 改动行没有相对链接；没有新引入的行号或计数式引用。`go run ./tools/adr-index -check` 退 0。
+
+## 评审记录（2026-10-26，tops-20 隔离子代理，钉 `472dae3aa`）
+
+本票无发现（评审原文：「128、138 已落地属实」）。全文照抄在票 [134](./134-uc-sa-002-names-the-parcel-moment-path-exceptions.md) 的「评审记录」一节。
+
+## 修订轮（2026-10-26）
+
+本票无改动。同批修订轮的提交见票 134、141、144 的「修订轮」一节。
