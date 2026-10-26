@@ -1,7 +1,7 @@
 # 167 承运答复挡回册没有查阅面：运营分不清订舱不在册的那一答是「不归你答」还是「还没录」
 
 Category: enhancement
-Status: in-progress——2026-10-26 评审无阻断、修订轮完，待进 main，分支 `claude-dcg127` tip `7e08c3d60`（其后一笔只改票面与一句注释的折行），见文末「评审记录」「修订轮」。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg127` tip `cad853912`（其后一笔只改 AT 盘点、票面与一句注释的措辞），见文末「完成记录」。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，与 127、48 同批，分支 `claude-dcg127`（worktree `idp-parcel-dcg127`）。此前 ready-for-agent——2026-10-21 票 [145](./145-booking-answers-from-a-non-provider-answer-booking-not-found.md) 的作者子代理立（用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」与常设指令「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0239](../../../docs/adr/0239-a-carrier-answer-from-a-non-provider-is-answered-booking-not-found-and-the-basis-is-kept-on-a-bounce-register.md) 决定二末条与越权风险点 1。
+Status: resolved——2026-10-26 进 main `34a8f5d41`（见文末「进 main 记录」）。此前 in-progress——2026-10-26 评审无阻断、修订轮完，待进 main，分支 `claude-dcg127` tip `7e08c3d60`（其后一笔只改票面与一句注释的折行），见文末「评审记录」「修订轮」。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 `claude-dcg127` tip `cad853912`（其后一笔只改 AT 盘点、票面与一句注释的措辞），见文末「完成记录」。此前 in-progress——2026-10-26 会话 `tops-20`（Claude Code）认领，与 127、48 同批，分支 `claude-dcg127`（worktree `idp-parcel-dcg127`）。此前 ready-for-agent——2026-10-21 票 [145](./145-booking-answers-from-a-non-provider-answer-booking-not-found.md) 的作者子代理立（用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」与常设指令「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0239](../../../docs/adr/0239-a-carrier-answer-from-a-non-provider-is-answered-booking-not-found-and-the-basis-is-kept-on-a-bounce-register.md) 决定二末条与越权风险点 1。
 Blocked by: 无（文件与票 [48](./48-booking-requests-and-carrier-answers-have-no-read-face.md) 同属 tf-chain-plan「并行车道」车道 A，落地顺序随车道 A 的令牌；与 48 同做或先后都可）
 地盘：TF `ports/catalogue_read.go`、`adapters/postgres/review_catalogue.go`、tfhttp `query_transport_fulfillment_records.go`（+ 各自测试）；不碰承运答复口与挡回册的写口。
 
@@ -96,3 +96,13 @@ overlay 加载、未写检出：4 个新真库用例与 parcel-api 生产装配�
 - 其余各条属票 127、48，见那两张票的修订轮。
 
 重跑（于 `7e08c3d60` 的工作树，其后一笔只改票面与 `bookingRequestRowBody` 注释折行，改后 `go build`、`gofmt` 复核过）：`go build ./...`、`go vet`（TF 与 `cmd/...`）退 0，`gofmt -l` 无输出；带 DSN `go test -count=1 -p 1` 跑 `./internal/transportfulfillment/...`、`./cmd/parcel-api/...`、`./cmd/parcel-dispatch/...`、`./internal/architecture/...`，有用例的 15 个包全绿（含 PG）；本批五个新真库用例 `-v` 确认 PASS、不是 SKIP。`go run ./tools/adr-index -check` 只报索引生成物过期（ADR-0202、0203 改了 Status 行，由推送方重生成），没有格式错。AT 盘点：`AT-TF-331`–`334` 在①分桶表里各有一行（`AT-TF-330` 之后、按号排），把这四行与两份 UC 拼进票 139 分支的检出后跑它的 `at-coverage-counts -check`，只报总览计数过期，不报缺行。
+
+## 进 main 记录（2026-10-26，推送方会话 tops-20；127、48、167 同批）
+
+- **main**：`34a8f5d41`。出处：分支 `claude-dcg127` tip `ec5e907f8`。
+- **重放对照**（分支 → main）：`310154eee` → `2508bed1e`（127）；`cad853912` → `ef6ec63d5`（48、167）；`c428ad2fc` → `8aae93723`；修订轮 `7e08c3d60` → `31f922f29`、`ec5e907f8` → `3ebcb1244`。
+- **重放冲突**：`.scratch/at-coverage-inventory.md` 文末追记与 main 上票 134、docs-consistency/code/01 的追记相邻，两边都留。
+- **生成物**：ADR 索引 `eec2430c0`；AT 盘点总览计数 `eb66fdad4`；机制清点 `34a8f5d41`。三件 `-check` 退 0。
+- **评审**：隔离子代理钉 `c428ad2fc`，两轴无阻断、非阻断 6 条：Spec 3、Standards 1、2 在修订轮收；Spec 1、2 另立 [177](./177-current-booking-answer-is-chosen-twice-on-the-read-and-write-faces.md)、[178](./178-admin-web-booking-request-and-answer-bounce-sections.md)；Standards 3（合并冲突）由推送方重放时手合（见「评审记录」「修订轮」）。修订轮只收非阻断，推送方读了修订 diff，未另派复评。
+- **全量真库测试**：`scripts/test-full.sh` 跑在 `34a8f5d41`（即所推 SHA）：158 ok / 0 FAIL，退 0。
+- **种子**：`scripts/demo-seeds/seed.sh` 灌一次性库（`34a8f5d41` 上），退 0，用后删库。
