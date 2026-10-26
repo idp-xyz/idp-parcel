@@ -65,7 +65,7 @@ func reassessOnHandoverConsumerOver(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: reassess on handover shipment requests: %w", err)
 	}
-	accepted, err := nrparcelshipment.NewAcceptedCarriedGeoSource(requests, requests)
+	accepted, err := nrparcelshipment.NewAcceptedCarriedGeoSource(requests)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: accepted carried geo source: %w", err)
 	}

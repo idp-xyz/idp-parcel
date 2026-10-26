@@ -1437,7 +1437,7 @@ func networkIntakeConsumer(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: network intake shipment requests: %w", err)
 	}
-	accepted, err := nrparcelshipment.NewAcceptedCarriedGeoSource(requests, requests)
+	accepted, err := nrparcelshipment.NewAcceptedCarriedGeoSource(requests)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: network intake accepted parcel source: %w", err)
 	}
