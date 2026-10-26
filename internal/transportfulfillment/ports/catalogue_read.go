@@ -14,7 +14,8 @@ import (
 //
 // 上列的是**检索列面**的照实转写：班次、周期安排、容量池、权威交接判断、有效交付、
 // 总单与运输准备结果各照登记行转写，容量四量按预占子表求和派生、总单的关联数按关联子表计数派生——
-// 派生是求和与计数不是判断（判据同代收分户账六位置余额）。总单一格在 ADR-0113 立册
+// 派生是求和与计数不是判断（判据同代收分户账六位置余额）；订舱一格另带按 ADR-0202 补记读出的状态词，那是读法
+// 不是判断，只在本读口的实现里派生一处（票 demo-chain-gaps/48）。总单一格在 ADR-0113 立册
 // 之前刻意没有——没有表就没有读法，造一个恒空方法会把「无处可登」演成「登记册为空」
 // （票 05 Comments 记明）；立册之后空册从此是「登记册为空」，周期安排一格随 ADR-0201
 // 立册同理。运输舱单仍无册，本端口仍然没有它的方法，理由同上。
@@ -215,6 +216,70 @@ type PreparationPoolRow struct {
 	Verdict   string
 }
 
+// 订舱的状态词（ADR-0202「补记：票 24 落地时的补充裁定」的读法，TF CONTEXT「订舱」词条的生命周期词）：由订舱名下当前那一份
+// 承运答复读出——有定局取定局，否则取候补。没有任何答复读作`待确认`；当前那一份是候补读作`候补`；是接受，接受量等于申请量读作
+// 已确认、小于申请量读作部分确认；拒绝、失效、撤回照答复值。取消不进状态词：取消是运营的决定，不是承运答复，订舱行上另有取消
+// 时刻一格，两者各自照实，不压成一个状态（CONTEXT「任一对象的成功、失败或取消不能被压缩成其他对象的状态」）。`待补充`也不在：
+// 订舱册与答复册里没有哪一格说得出缺的是什么，读不出来就不代填。
+const (
+	BookingStandingPendingConfirmation = "PENDING_CONFIRMATION"
+	BookingStandingWaitlisted          = "WAITLISTED"
+	BookingStandingConfirmed           = "CONFIRMED"
+	BookingStandingPartiallyConfirmed  = "PARTIALLY_CONFIRMED"
+	BookingStandingRefused             = "REFUSED"
+	BookingStandingExpired             = "EXPIRED"
+	BookingStandingWithdrawn           = "WITHDRAWN"
+)
+
+// BookingRequestCatalogueRow 是订舱册上列的一行（票 demo-chain-gaps/48）：一次订舱一行，委托、班次、申请量与单位、申请与取消
+// 时刻照行转写；Standing 是上面那组状态词之一，Current 指向 Answers 里当前那一份（没有答复时为空）。Answers 是这次订舱名下的
+// 全部承运答复，按答复时刻先后、同刻按落库先后——候补与它的后继都在，候补那一份是那段时间里承运方确实说过的话，不因有了定局
+// 而不列。CancelledAt 缺席即没有取消。
+type BookingRequestCatalogueRow struct {
+	Booking     string
+	Commission  string
+	Schedule    string
+	Quantity    int64
+	Unit        string
+	RequestedAt time.Time
+	CancelledAt *time.Time
+	Standing    string
+	Current     *BookingAnswerCatalogueRow
+	Answers     []BookingAnswerCatalogueRow
+	RecordedAt  time.Time
+}
+
+// BookingAnswerCatalogueRow 是一份承运答复照行转写：答复标识、五值之一（domain.CarrierAcceptanceOutcome 的词）、接受量（只在接受时
+// 非零）、依据（只在其余四值上在场，缺席即空串）、答复时刻与落册时刻。
+type BookingAnswerCatalogueRow struct {
+	Answer     string
+	Outcome    string
+	Quantity   int64
+	Basis      string
+	DecidedAt  time.Time
+	RecordedAt time.Time
+}
+
+// BookingAnswerBounceCatalogueRow 是承运答复挡回册上列的一行（ADR-0239 决定二，票 demo-chain-gaps/167）：（答复方、订舱、答复标识、
+// 依据）一行，带首次与最近一次挡回时刻、次数。Basis 是 BookingAnswerBounceBasis 的词；库里存的定宽码由仓储一处译回，读面不另抄
+// 码表。这是运营读面：答复方据此看得出一个订舱在不在、归不归它，只挂操作者渠道，不得开给集成客户端族。
+type BookingAnswerBounceCatalogueRow struct {
+	Source         string
+	Booking        string
+	Answer         string
+	Basis          string
+	FirstBouncedAt time.Time
+	LastBouncedAt  time.Time
+	Count          int64
+}
+
+// BookingAnswerBounceFilter 是挡回册上列的两维筛选，空串即不按那一维筛；两维都给时同时满足。订舱一维让订舱册的一行链得到它名下
+// 的挡回，答复方一维让运营看一个承运商反复在答什么。
+type BookingAnswerBounceFilter struct {
+	Booking string
+	Source  string
+}
+
 // ReviewCatalogueRead 是运输履约查阅页的伴生列表读端口。
 type ReviewCatalogueRead interface {
 	ListTransportSchedules(
@@ -271,4 +336,17 @@ type ReviewCatalogueRead interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]ActualFulfillmentUnformedRecord, error)
+	// ListBookingRequests 上列订舱册，每次订舱一行连同它名下的承运答复与读出的状态词；新申请的在前，同刻按订舱标识稳定排序。
+	ListBookingRequests(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]BookingRequestCatalogueRow, error)
+	// ListBookingAnswerBounces 上列承运答复挡回册，最近一次挡回的在前，同刻按（答复方、订舱、答复标识、依据）稳定排序。
+	ListBookingAnswerBounces(
+		ctx context.Context,
+		tenant domain.TenantID,
+		filter BookingAnswerBounceFilter,
+		limit int,
+	) ([]BookingAnswerBounceCatalogueRow, error)
 }

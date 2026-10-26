@@ -495,6 +495,216 @@ func (catalogue *ReviewCatalogue) ListDeliveryDispatchPendings(
 	return (&DeliveryDispatchPendings{db: catalogue.db}).ListPending(ctx, tenant, time.Time{}, limit)
 }
 
+// ListBookingRequests 上列订舱册（票 demo-chain-gaps/48）：新申请的在前，同刻按订舱标识稳定排序。先按页截出订舱，再把每一次
+// 订舱名下的全部承运答复聚合进同一行，一条语句读出，订舱与答复取自同一个快照。答复按答复时刻、落库先后排，与答复编排判先后
+// （BookingAnswers.FindAnswersForUpdate）同一个次序；排序键末尾的答复标识只为让几列聚合逐位对齐。
+func (catalogue *ReviewCatalogue) ListBookingRequests(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]ports.BookingRequestCatalogueRow, error) {
+	if limit <= 0 {
+		return nil, fmt.Errorf("list booking requests: limit must be positive, got %d", limit)
+	}
+	querier, err := catalogue.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list booking requests: %w", err)
+	}
+
+	rows, err := querier.Query(ctx,
+		`SELECT booking.booking_id, booking.commission_id, booking.schedule_id, booking.quantity, booking.unit_ref,
+		        booking.requested_at, booking.cancelled_at, booking.recorded_at,
+		        answers.ids, answers.outcomes, answers.quantities, answers.bases, answers.decided, answers.recorded
+		   FROM (SELECT *
+		           FROM transport_fulfillment.booking_request
+		          WHERE tenant_id = $1
+		          ORDER BY requested_at DESC, booking_id
+		          LIMIT $2) AS booking
+		   LEFT JOIN LATERAL (
+		        SELECT array_agg(answer.acceptance_id ORDER BY answer.decided_at, answer.inserted_at, answer.acceptance_id) AS ids,
+		               array_agg(answer.outcome ORDER BY answer.decided_at, answer.inserted_at, answer.acceptance_id) AS outcomes,
+		               array_agg(answer.quantity ORDER BY answer.decided_at, answer.inserted_at, answer.acceptance_id) AS quantities,
+		               array_agg(COALESCE(answer.basis, '') ORDER BY answer.decided_at, answer.inserted_at, answer.acceptance_id) AS bases,
+		               array_agg(answer.decided_at ORDER BY answer.decided_at, answer.inserted_at, answer.acceptance_id) AS decided,
+		               array_agg(answer.recorded_at ORDER BY answer.decided_at, answer.inserted_at, answer.acceptance_id) AS recorded
+		          FROM transport_fulfillment.booking_answer AS answer
+		         WHERE answer.tenant_id = booking.tenant_id
+		           AND answer.booking_id = booking.booking_id) AS answers ON true
+		  ORDER BY booking.requested_at DESC, booking.booking_id`,
+		tenant.String(),
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list booking requests: %w", err)
+	}
+	defer rows.Close()
+
+	list := make([]ports.BookingRequestCatalogueRow, 0, limit)
+	for rows.Next() {
+		var (
+			row                      ports.BookingRequestCatalogueRow
+			cancelledAt              *time.Time
+			ids, outcomes, bases     []string
+			quantities               []int64
+			decidedTimes, recordedAt []time.Time
+		)
+		if err := rows.Scan(
+			&row.Booking, &row.Commission, &row.Schedule, &row.Quantity, &row.Unit,
+			&row.RequestedAt, &cancelledAt, &row.RecordedAt,
+			&ids, &outcomes, &quantities, &bases, &decidedTimes, &recordedAt,
+		); err != nil {
+			return nil, fmt.Errorf("list booking requests: %w", err)
+		}
+		if cancelledAt != nil {
+			utc := cancelledAt.UTC()
+			row.CancelledAt = &utc
+		}
+		row.RequestedAt = row.RequestedAt.UTC()
+		row.RecordedAt = row.RecordedAt.UTC()
+		row.Answers = make([]ports.BookingAnswerCatalogueRow, 0, len(ids))
+		for index := range ids {
+			row.Answers = append(row.Answers, ports.BookingAnswerCatalogueRow{
+				Answer:     ids[index],
+				Outcome:    outcomes[index],
+				Quantity:   quantities[index],
+				Basis:      bases[index],
+				DecidedAt:  decidedTimes[index].UTC(),
+				RecordedAt: recordedAt[index].UTC(),
+			})
+		}
+		standing, current, err := bookingStanding(row.Quantity, row.Answers)
+		if err != nil {
+			return nil, fmt.Errorf("list booking requests: booking %q: %w", row.Booking, err)
+		}
+		row.Standing = standing
+		if current >= 0 {
+			row.Current = &row.Answers[current]
+		}
+		list = append(list, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list booking requests: %w", err)
+	}
+	return list, nil
+}
+
+// bookingStanding 是订舱状态词的唯一派生处（读法见 ports 那组状态词的注释）：交回状态词与当前那一份在 answers 里的位置，没有
+// 答复时位置为 -1。当前那一份有定局取定局、否则取候补，与 BookingAnswers.FindByKey 同一条。
+//
+// 两份定局、两份候补、集外的答复值、接受量超过申请量都是绕过答复编排才落得进的行（迁移 0029 的两条部分唯一索引与答复值
+// CHECK 钉住前三种），读不出一个状态词，答错误，不挑一份凑一个词。
+func bookingStanding(requested int64, answers []ports.BookingAnswerCatalogueRow) (string, int, error) {
+	settling, waitlist := -1, -1
+	for index, answer := range answers {
+		if answer.Outcome == domain.BookingWaitlisted.String() {
+			if waitlist >= 0 {
+				return "", -1, fmt.Errorf("two waitlisted answers %q and %q", answers[waitlist].Answer, answer.Answer)
+			}
+			waitlist = index
+			continue
+		}
+		if settling >= 0 {
+			return "", -1, fmt.Errorf("two settling answers %q and %q", answers[settling].Answer, answer.Answer)
+		}
+		settling = index
+	}
+	if settling < 0 && waitlist < 0 {
+		return ports.BookingStandingPendingConfirmation, -1, nil
+	}
+	if settling < 0 {
+		return ports.BookingStandingWaitlisted, waitlist, nil
+	}
+	answer := answers[settling]
+	switch answer.Outcome {
+	case domain.BookingAccepted.String():
+		switch {
+		case answer.Quantity == requested:
+			return ports.BookingStandingConfirmed, settling, nil
+		case answer.Quantity > 0 && answer.Quantity < requested:
+			return ports.BookingStandingPartiallyConfirmed, settling, nil
+		default:
+			return "", -1, fmt.Errorf("answer %q accepts %d of %d requested", answer.Answer, answer.Quantity, requested)
+		}
+	case domain.BookingRefused.String():
+		return ports.BookingStandingRefused, settling, nil
+	case domain.BookingExpired.String():
+		return ports.BookingStandingExpired, settling, nil
+	case domain.BookingWithdrawn.String():
+		return ports.BookingStandingWithdrawn, settling, nil
+	default:
+		return "", -1, fmt.Errorf("answer %q carries unknown outcome %q", answer.Answer, answer.Outcome)
+	}
+}
+
+// ListBookingAnswerBounces 上列承运答复挡回册（ADR-0239 决定二，票 demo-chain-gaps/167）：最近一次挡回的在前，同刻按（答复方、
+// 订舱、答复标识、依据）稳定排序；筛选的两维各自空串即不筛。依据码经 bounceBasisWord 译回词。
+func (catalogue *ReviewCatalogue) ListBookingAnswerBounces(
+	ctx context.Context,
+	tenant domain.TenantID,
+	filter ports.BookingAnswerBounceFilter,
+	limit int,
+) ([]ports.BookingAnswerBounceCatalogueRow, error) {
+	if limit <= 0 {
+		return nil, fmt.Errorf("list booking answer bounces: limit must be positive, got %d", limit)
+	}
+	querier, err := catalogue.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list booking answer bounces: %w", err)
+	}
+
+	rows, err := querier.Query(ctx,
+		`SELECT source_ref, booking_id, acceptance_id, basis, first_bounced_at, last_bounced_at, bounce_count
+		   FROM transport_fulfillment.booking_answer_bounce
+		  WHERE tenant_id = $1
+		    AND ($2 = '' OR booking_id = $2)
+		    AND ($3 = '' OR source_ref = $3)
+		  ORDER BY last_bounced_at DESC, source_ref, booking_id, acceptance_id, basis
+		  LIMIT $4`,
+		tenant.String(),
+		filter.Booking,
+		filter.Source,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list booking answer bounces: %w", err)
+	}
+	defer rows.Close()
+
+	list := make([]ports.BookingAnswerBounceCatalogueRow, 0, limit)
+	for rows.Next() {
+		var row ports.BookingAnswerBounceCatalogueRow
+		var code int16
+		if err := rows.Scan(
+			&row.Source, &row.Booking, &row.Answer, &code, &row.FirstBouncedAt, &row.LastBouncedAt, &row.Count,
+		); err != nil {
+			return nil, fmt.Errorf("list booking answer bounces: %w", err)
+		}
+		word, known := bounceBasisWord(code)
+		if !known {
+			return nil, fmt.Errorf("list booking answer bounces: stored basis code %d is not a basis", code)
+		}
+		row.Basis = word
+		row.FirstBouncedAt = row.FirstBouncedAt.UTC()
+		row.LastBouncedAt = row.LastBouncedAt.UTC()
+		list = append(list, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list booking answer bounces: %w", err)
+	}
+	return list, nil
+}
+
+// bounceBasisWord 是 bounceBasisCode 的逆：逐个依据问它的码，码表只在 bounceBasisCode 一处。依据从 1 起连号，String 答空串
+// 即过了最后一个。
+func bounceBasisWord(code int16) (string, bool) {
+	for basis := ports.BookingAnswerBounceBasisInvalid + 1; basis.String() != ""; basis++ {
+		if stored, known := bounceBasisCode(basis); known && stored == code {
+			return basis.String(), true
+		}
+	}
+	return "", false
+}
+
 func preparationDemandRows(raw []byte) ([]ports.PreparationDemandRow, error) {
 	var stored []storedDemandQuantity
 	if err := json.Unmarshal(raw, &stored); err != nil {

@@ -134,6 +134,20 @@ func (stub unreachableReviewCatalogue) ListActualFulfillmentUnformed(
 	return nil, nil
 }
 
+func (stub unreachableReviewCatalogue) ListBookingRequests(
+	context.Context, domain.TenantID, int,
+) ([]ports.BookingRequestCatalogueRow, error) {
+	stub.refuse("booking request")
+	return nil, nil
+}
+
+func (stub unreachableReviewCatalogue) ListBookingAnswerBounces(
+	context.Context, domain.TenantID, ports.BookingAnswerBounceFilter, int,
+) ([]ports.BookingAnswerBounceCatalogueRow, error) {
+	stub.refuse("booking answer bounce")
+	return nil, nil
+}
+
 // stubReviewCatalogue 是各本册子的读口替身，记下读口收到的键。
 type stubReviewCatalogue struct {
 	schedules       []ports.TransportScheduleCatalogueRow
@@ -146,10 +160,13 @@ type stubReviewCatalogue struct {
 	pendings        []ports.DeliveryDispatchPendingRecord
 	cadences        []ports.DeliveryDispatchReaskCadenceRecord
 	unformed        []ports.ActualFulfillmentUnformedRecord
+	bookings        []ports.BookingRequestCatalogueRow
+	bounces         []ports.BookingAnswerBounceCatalogueRow
 	err             error
 
 	gotTenant string
 	gotLimit  int
+	gotFilter ports.BookingAnswerBounceFilter
 }
 
 func (stub *stubReviewCatalogue) ListTransportSchedules(
@@ -222,6 +239,20 @@ func (stub *stubReviewCatalogue) ListActualFulfillmentUnformed(
 	return stub.unformed, stub.err
 }
 
+func (stub *stubReviewCatalogue) ListBookingRequests(
+	_ context.Context, tenant domain.TenantID, limit int,
+) ([]ports.BookingRequestCatalogueRow, error) {
+	stub.gotTenant, stub.gotLimit = tenant.String(), limit
+	return stub.bookings, stub.err
+}
+
+func (stub *stubReviewCatalogue) ListBookingAnswerBounces(
+	_ context.Context, tenant domain.TenantID, filter ports.BookingAnswerBounceFilter, limit int,
+) ([]ports.BookingAnswerBounceCatalogueRow, error) {
+	stub.gotTenant, stub.gotLimit, stub.gotFilter = tenant.String(), limit, filter
+	return stub.bounces, stub.err
+}
+
 func recordsEndpoint(register *stubReviewCatalogue) http.Handler {
 	return tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(grantedIntake(), register)
 }
@@ -251,6 +282,7 @@ func arrayAt(t *testing.T, response *httptest.ResponseRecorder, key string) stri
 var fulfillmentRegistries = []string{
 	"transport-schedule", "transport-schedule-template", "capacity-pool", "transport-handover", "effective-delivery",
 	"carrier-master-document", "transport-preparation", "delivery-dispatch-pending", "delivery-dispatch-reask-cadence",
+	"booking-request", "booking-answer-bounce",
 }
 
 const fulfillmentTarget = "/transport-fulfillment-records?registry=transport-schedule"
@@ -761,6 +793,8 @@ func TestEmptyFulfillmentRegistersAnswerEmptyArrays(t *testing.T) {
 		"transport-preparation":           "preparations",
 		"delivery-dispatch-pending":       "pendings",
 		"delivery-dispatch-reask-cadence": "cadences",
+		"booking-request":                 "bookings",
+		"booking-answer-bounce":           "bounces",
 	} {
 		t.Run(registry, func(t *testing.T) {
 			register := &stubReviewCatalogue{}
