@@ -126,7 +126,7 @@ func bookingHandler(t *testing.T) *application.CommissionTransportHandler {
 	if err := json.Unmarshal([]byte(trunkCommissionBody), &payload); err != nil {
 		t.Fatal(err)
 	}
-	command, err := payload.Command(tenant)
+	command, err := payload.Command(tfhttp.OperatorIdentity{Tenant: tenant, Operator: "issuer-1#commissioner-1"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -251,11 +251,16 @@ type TransportCommissionKey struct {
 
 // TransportCommissionRecord 是一次委托提交越过提交边界留下的东西。取消与开始改变
 // 状态时以 Replace 换值——历史动作都在本体上（Cancelled/TransportStarted）。
+//
+// SubmittedBy 是经运营决定口提交这份委托的操作者（ADR-0303）：操作证据，与登记时刻同属出处，不进内容摘要也不进委托
+// 本体——重放与冲突只比 ContentDigest，协议核对与取消、开始的门都读不到它。Replace 不改它：取消与开始各是另一种决定。
+// 可缺：规则生效之前提交的委托没有它。
 type TransportCommissionRecord struct {
 	Key           TransportCommissionKey
 	ContentDigest string
 	Commission    domain.TransportCommission
 	RecordedAt    time.Time
+	SubmittedBy   domain.RegistrantReference
 }
 
 type CommissionSaveOutcome uint8

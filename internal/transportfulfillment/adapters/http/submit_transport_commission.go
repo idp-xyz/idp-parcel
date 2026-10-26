@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
-	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
 // 运输委托提交口（UC-TF-004 步 2、3；ADR-0202 决定一、三）。运营人员向外部服务提供方提出明确的运输范围与条件，是管理台
@@ -37,9 +36,10 @@ type TransportCommissionSubmissionPayload struct {
 	SubmittedAt      string   `json:"submittedAt"`
 }
 
-// Command 把载荷连同信封给的租户翻成委托提交命令。时刻解不出是坏报文（400）；各格成不成立、协议核不核得过由编排答。
-func (payload TransportCommissionSubmissionPayload) Command(tenant domain.TenantID) (application.SubmitCommissionCommand, error) {
-	if tenant.String() == "" {
+// Command 把载荷连同信封给的身份翻成委托提交命令：租户，与作出提交决定的操作者（ADR-0303，操作证据，载荷里不收）。
+// 时刻解不出是坏报文（400）；各格成不成立、协议核不核得过由编排答。
+func (payload TransportCommissionSubmissionPayload) Command(operator OperatorIdentity) (application.SubmitCommissionCommand, error) {
+	if operator.Tenant.String() == "" {
 		return application.SubmitCommissionCommand{}, ErrOperatorIdentityMissing
 	}
 	submittedAt, err := parseOptionalInstant("submittedAt", payload.SubmittedAt)
@@ -47,7 +47,7 @@ func (payload TransportCommissionSubmissionPayload) Command(tenant domain.Tenant
 		return application.SubmitCommissionCommand{}, err
 	}
 	return application.SubmitCommissionCommand{
-		TenantID:         tenant,
+		TenantID:         operator.Tenant,
 		Commission:       payload.Commission,
 		Provider:         payload.Provider,
 		AgreementObject:  payload.Agreement,
@@ -57,6 +57,7 @@ func (payload TransportCommissionSubmissionPayload) Command(tenant domain.Tenant
 		Responsibility:   payload.Responsibility,
 		Members:          append([]string(nil), payload.Members...),
 		SubmittedAt:      submittedAt,
+		SubmittedBy:      operator.Operator,
 	}, nil
 }
 

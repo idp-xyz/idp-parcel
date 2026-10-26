@@ -172,9 +172,10 @@ type LoadAssignmentAllocationLine struct {
 	Source              CapacityDemandSourcePayload `json:"source"`
 }
 
-// Command 把载荷连同信封给的租户翻成装载分配命令。时刻解不出是坏报文（400）；分配成不成立由编排答。
-func (payload LoadAssignmentPayload) Command(tenant domain.TenantID) (application.FormLoadAssignmentCommand, error) {
-	if tenant.String() == "" {
+// Command 把载荷连同信封给的身份翻成装载分配命令：租户，与作出这次分配的操作者（ADR-0303，操作证据，载荷里不收）。
+// 时刻解不出是坏报文（400）；分配成不成立由编排答。
+func (payload LoadAssignmentPayload) Command(operator OperatorIdentity) (application.FormLoadAssignmentCommand, error) {
+	if operator.Tenant.String() == "" {
 		return application.FormLoadAssignmentCommand{}, ErrOperatorIdentityMissing
 	}
 	assignedAt, err := parseOptionalInstant("assignedAt", payload.AssignedAt)
@@ -194,12 +195,13 @@ func (payload LoadAssignmentPayload) Command(tenant domain.TenantID) (applicatio
 		})
 	}
 	return application.FormLoadAssignmentCommand{
-		TenantID:    tenant,
+		TenantID:    operator.Tenant,
 		Assignment:  payload.Assignment,
 		Schedule:    payload.Schedule,
 		Members:     append([]string(nil), payload.Members...),
 		Version:     payload.Version,
 		AssignedAt:  assignedAt,
 		Allocations: allocations,
+		DecidedBy:   operator.Operator,
 	}, nil
 }

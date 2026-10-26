@@ -56,10 +56,14 @@ func (outcome SegmentCloseOutcome) String() string {
 //
 // ClosedAt 由调用方给：决定是何时做的不由写库那一刻定，与终止那一路的 EndedAt 同理。**不带依据
 // 字段**——领域与表上都没有它，加它是改模型不是加编排。
+//
+// ClosedBy 是作出关段决定的操作者（「发行方#sub」），由 Intake 取自信封（ADR-0303），可缺：它只随关闭留痕，
+// 本编排的任何一格都不读它——另一位操作者再关一次照旧答`早已关闭`，在册的仍是先关的那一位。
 type CloseFulfillmentSegmentCommand struct {
 	TenantID domain.TenantID
 	Segment  string
 	ClosedAt time.Time
+	ClosedBy string
 }
 
 type CloseFulfillmentSegmentResult struct {
@@ -112,6 +116,10 @@ func (handler *CloseFulfillmentSegmentHandler) Close(
 	if err != nil {
 		return CloseFulfillmentSegmentResult{outcome: SegmentCloseNotAccepted}, nil
 	}
+	closedBy, err := domain.OptionalRegistrantReference(command.ClosedBy)
+	if err != nil {
+		return CloseFulfillmentSegmentResult{outcome: SegmentCloseNotAccepted}, nil
+	}
 
 	key := ports.FulfillmentSegmentKey{TenantID: command.TenantID, Segment: segment}
 	record, found, err := handler.deps.Segments.FindByKey(ctx, key)
@@ -122,7 +130,7 @@ func (handler *CloseFulfillmentSegmentHandler) Close(
 		return CloseFulfillmentSegmentResult{outcome: SegmentToCloseNotFound}, nil
 	}
 
-	closed, err := record.Segment.CloseSegment(command.ClosedAt)
+	closed, err := record.Segment.CloseSegment(command.ClosedAt, closedBy)
 	switch {
 	case errors.Is(err, domain.ErrSegmentClosed):
 		return segmentAlreadyClosed(record.Segment), nil
@@ -134,7 +142,7 @@ func (handler *CloseFulfillmentSegmentHandler) Close(
 	}
 
 	closedAt, _ := closed.ClosedAt()
-	saved, err := handler.deps.Segments.CloseSegment(ctx, key, closedAt)
+	saved, err := handler.deps.Segments.CloseSegment(ctx, key, closedAt, closedBy)
 	if err != nil {
 		return segmentCloseUndecided(command), nil
 	}

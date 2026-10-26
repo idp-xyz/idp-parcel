@@ -34,7 +34,7 @@ func NewCarrierFirstEffectivePickups(db *bentopg.DB) (*CarrierFirstEffectivePick
 var _ ports.CarrierFirstEffectivePickupRegistry = (*CarrierFirstEffectivePickups)(nil)
 
 const selectCarrierPickupColumns = `SELECT tenant_id, fact_ref, version, object_ref, result, carrier_kind, carrier_ref,
-	        occurred_at, pending_reason, claimed_material, judged_at, supersedes_version, recorded_at
+	        occurred_at, pending_reason, claimed_material, judged_at, supersedes_version, recorded_at, judged_by
 	   FROM transport_fulfillment.carrier_first_effective_pickup p`
 
 // carrierPickupNotSuperseded 是「链尾」谓词：同一（租户，事实）下没有别的版本回指它。
@@ -43,16 +43,16 @@ const carrierPickupNotSuperseded = ` AND NOT EXISTS (
 	         WHERE later.tenant_id = p.tenant_id AND later.fact_ref = p.fact_ref AND later.supersedes_version = p.version)`
 
 type carrierPickupRow struct {
-	tenant, fact, version, object, result                 string
-	carrierKind, carrierRef, reason, material, supersedes *string
-	occurredAt                                            *time.Time
-	judgedAt, recordedAt                                  time.Time
+	tenant, fact, version, object, result                           string
+	carrierKind, carrierRef, reason, material, supersedes, judgedBy *string
+	occurredAt                                                      *time.Time
+	judgedAt, recordedAt                                            time.Time
 }
 
 func scanCarrierPickupRow(scanner interface{ Scan(dest ...any) error }) (carrierPickupRow, error) {
 	var row carrierPickupRow
 	err := scanner.Scan(&row.tenant, &row.fact, &row.version, &row.object, &row.result, &row.carrierKind, &row.carrierRef,
-		&row.occurredAt, &row.reason, &row.material, &row.judgedAt, &row.supersedes, &row.recordedAt)
+		&row.occurredAt, &row.reason, &row.material, &row.judgedAt, &row.supersedes, &row.recordedAt, &row.judgedBy)
 	return row, err
 }
 
@@ -181,12 +181,12 @@ func (repository *CarrierFirstEffectivePickups) Save(
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO transport_fulfillment.carrier_first_effective_pickup
 		     (tenant_id, fact_ref, version, object_ref, result, carrier_kind, carrier_ref, occurred_at,
-		      pending_reason, claimed_material, judged_at, supersedes_version, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		      pending_reason, claimed_material, judged_at, supersedes_version, recorded_at, judged_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(), record.Key.Fact.String(), record.Key.Version.String(), pickup.Object().String(),
 		pickup.Result().String(), carrierKind, carrierRef, occurredAt, reason, material,
-		pickup.JudgedAt().UTC(), supersedes, record.RecordedAt.UTC())
+		pickup.JudgedAt().UTC(), supersedes, record.RecordedAt.UTC(), optionalRegistrant(record.JudgedBy))
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -293,9 +293,14 @@ func (repository *CarrierFirstEffectivePickups) rehydrate(
 	if err != nil {
 		return ports.CarrierFirstEffectivePickupRecord{}, err
 	}
+	judgedBy, err := registrantFromColumn(row.judgedBy)
+	if err != nil {
+		return ports.CarrierFirstEffectivePickupRecord{}, err
+	}
 	return ports.CarrierFirstEffectivePickupRecord{
 		Key:        ports.CarrierFirstEffectivePickupKey{TenantID: spec.TenantID, Fact: spec.Fact, Version: spec.Version},
 		Pickup:     pickup,
 		RecordedAt: row.recordedAt,
+		JudgedBy:   judgedBy,
 	}, nil
 }

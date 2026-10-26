@@ -99,6 +99,7 @@ func NewQueryExternalTrackingFactsEndpoint(
 				Supersedes:           row.Supersedes,
 				Origin:               row.Origin,
 				RecordedAt:           rfc3339(row.RecordedAt),
+				EffectiveJudgedBy:    row.EffectiveJudgedBy,
 			})
 		}
 		writeJSON(response, http.StatusOK, externalTrackingFactListResponse{Outcome: outcome, Facts: bodies})
@@ -115,7 +116,8 @@ type externalTrackingFactListResponse struct {
 // 三个时间三键，归属不同（ADR-0102）：occurredAt 源给、receivedAt 本上下文铸、effectiveAt 只在判断过时在场
 // ——待判断整键缺席，缺席就是「还没有人判」，不拿另两个时间顶上。effectiveRule 两键只随按规则判断在场；
 // supersedes 首版缺席；origin 分素材到达（MATERIAL）与判断（JUDGMENT）形成的版本。sourceEvent 源未给即缺席
-// （ADR-0102 决定四：不按内容补一个）。
+// （ADR-0102 决定四：不按内容补一个）。effectiveJudgedBy 是显式判断这一版的操作者（ADR-0303），只在记下了时在场：
+// 规则判断、素材到达与规则生效之前的判断都整键缺席，缺席读作「没记下是谁」，不读作「没有人判过」——那一问看 effectiveBasis。
 type externalTrackingFactBody struct {
 	Fact                 string `json:"fact"`
 	Version              string `json:"version"`
@@ -133,4 +135,5 @@ type externalTrackingFactBody struct {
 	Supersedes           string `json:"supersedes,omitempty"`
 	Origin               string `json:"origin"`
 	RecordedAt           string `json:"recordedAt"`
+	EffectiveJudgedBy    string `json:"effectiveJudgedBy,omitempty"`
 }

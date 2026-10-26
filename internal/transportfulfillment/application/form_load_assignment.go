@@ -85,6 +85,9 @@ func (outcome LoadAssignmentOutcome) String() string {
 //
 // Allocations 是逐池的分配量（ADR-0203 决定一、二）：班次挂了容量池时每个池一行，引用那个池上的一份预占；没挂池的
 // 班次不要求，带了行反倒是指错了池。
+//
+// DecidedBy 是作出这次分配的操作者（「发行方#sub」），由运营决定口的 Intake 取自信封（ADR-0303），可缺：它只随首版
+// 留痕，重放、链头与容量保障各格都不读它——同一版本换一位操作者重投照旧答`已在册`、交回原版本连同原操作者。
 type FormLoadAssignmentCommand struct {
 	TenantID    domain.TenantID
 	Assignment  string
@@ -93,6 +96,7 @@ type FormLoadAssignmentCommand struct {
 	Version     string
 	AssignedAt  time.Time
 	Allocations []LoadAssignmentAllocationLine
+	DecidedBy   string
 }
 
 // LoadAssignmentAllocationLine 是一行分配量：哪个池上的哪一份预占、分多少、什么单位、依据什么来源。FromMembers 说数量取
@@ -191,6 +195,10 @@ func (handler *FormLoadAssignmentHandler) Form(
 	if err != nil {
 		return FormLoadAssignmentResult{outcome: LoadAssignmentNotAccepted}, nil
 	}
+	decidedBy, err := domain.OptionalRegistrantReference(command.DecidedBy)
+	if err != nil {
+		return FormLoadAssignmentResult{outcome: LoadAssignmentNotAccepted}, nil
+	}
 
 	existing, found, err := handler.deps.Assignments.FindByKey(ctx, key)
 	if err != nil {
@@ -237,6 +245,7 @@ func (handler *FormLoadAssignmentHandler) Form(
 		Key:        key,
 		Assignment: assignment,
 		RecordedAt: handler.deps.Clock.Now(),
+		DecidedBy:  decidedBy,
 	}
 	saved, err := handler.deps.Assignments.Save(ctx, record)
 	if err != nil {

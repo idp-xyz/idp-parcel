@@ -124,7 +124,7 @@ func (intake *judgmentIntakeDouble) IntakeEffectiveTimeJudgment(
 	if err != nil {
 		return application.JudgeEffectiveTimeCommand{}, err
 	}
-	return payload.Command(intake.tenant)
+	return payload.Command(tfhttp.OperatorIdentity{Tenant: intake.tenant, Operator: "issuer-1#judge-1"})
 }
 
 var judgmentOccurredAt = time.Date(2026, 9, 4, 6, 0, 0, 0, time.UTC)
@@ -359,14 +359,14 @@ func TestTheJudgmentPayloadDecoderIsStrictAndCarriesNoIdentity(t *testing.T) {
 		}
 	})
 	t.Run("a payload without an operator tenant cannot become a command", func(t *testing.T) {
-		if _, err := defaultJudgmentBody().Command(domain.TenantID{}); !errors.Is(err, tfhttp.ErrOperatorIdentityMissing) {
+		if _, err := defaultJudgmentBody().Command(tfhttp.OperatorIdentity{Operator: "issuer-1#judge-1"}); !errors.Is(err, tfhttp.ErrOperatorIdentityMissing) {
 			t.Fatalf("没有信封给的租户不得铸命令：%v", err)
 		}
 	})
 	t.Run("the effective time is carried as an instant in UTC", func(t *testing.T) {
 		payload := defaultJudgmentBody()
 		payload.EffectiveAt = "2026-09-04T14:05:00+08:00"
-		command, err := payload.Command(httpValue(t, domain.NewTenantID, "tenant-1"))
+		command, err := payload.Command(tfhttp.OperatorIdentity{Tenant: httpValue(t, domain.NewTenantID, "tenant-1"), Operator: "issuer-1#judge-1"})
 		if err != nil || !command.EffectiveAt.Equal(time.Date(2026, 9, 4, 6, 5, 0, 0, time.UTC)) || command.Fact != "EXTF-1" {
 			t.Fatalf("command = %+v err = %v", command, err)
 		}
@@ -374,14 +374,14 @@ func TestTheJudgmentPayloadDecoderIsStrictAndCarriesNoIdentity(t *testing.T) {
 	t.Run("an unparsable instant is a malformed request", func(t *testing.T) {
 		payload := defaultJudgmentBody()
 		payload.EffectiveAt = "yesterday"
-		if _, err := payload.Command(httpValue(t, domain.NewTenantID, "tenant-1")); !errors.Is(err, tfhttp.ErrMalformedRequest) {
+		if _, err := payload.Command(tfhttp.OperatorIdentity{Tenant: httpValue(t, domain.NewTenantID, "tenant-1"), Operator: "issuer-1#judge-1"}); !errors.Is(err, tfhttp.ErrMalformedRequest) {
 			t.Fatalf("解不出的时刻应是坏报文：%v", err)
 		}
 	})
 	t.Run("a blank instant is left to the orchestration", func(t *testing.T) {
 		payload := defaultJudgmentBody()
 		payload.EffectiveAt = ""
-		command, err := payload.Command(httpValue(t, domain.NewTenantID, "tenant-1"))
+		command, err := payload.Command(tfhttp.OperatorIdentity{Tenant: httpValue(t, domain.NewTenantID, "tenant-1"), Operator: "issuer-1#judge-1"})
 		if err != nil || !command.EffectiveAt.IsZero() {
 			t.Fatalf("空时刻应交给编排答未受理，不在传输层 400：%+v %v", command, err)
 		}

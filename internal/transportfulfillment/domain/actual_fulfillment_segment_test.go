@@ -191,7 +191,7 @@ func TestParticipationEndsPerObjectWithItsFact(t *testing.T) {
 		t.Fatalf("end kind = %q, want NEXT_HANDOVER（两对象结果各异并存）", handedKind)
 	}
 
-	closed, err := afterHandover.CloseSegment(handoverJudgedAt.Add(time.Hour))
+	closed, err := afterHandover.CloseSegment(handoverJudgedAt.Add(time.Hour), domain.RegistrantReference{})
 	if err != nil {
 		t.Fatalf("close segment: %v", err)
 	}
@@ -227,10 +227,10 @@ func TestParticipationEndsPerObjectWithItsFact(t *testing.T) {
 	// 关闭时刻意味着段在那个对象仍受控时就结束了——与「一个仍在控制中的对象足以让段继续存在」
 	// 同一条，只是换成时序面。等于允许（同一刻交出最后一个对象并关段）。
 	t.Run("the segment cannot close before its last participation ended", func(t *testing.T) {
-		if _, err := afterHandover.CloseSegment(handoverJudgedAt.Add(-time.Minute)); !errors.Is(err, domain.ErrInvalidFulfillmentSegment) {
+		if _, err := afterHandover.CloseSegment(handoverJudgedAt.Add(-time.Minute), domain.RegistrantReference{}); !errors.Is(err, domain.ErrInvalidFulfillmentSegment) {
 			t.Fatalf("error = %v, want ErrInvalidFulfillmentSegment（关闭早于最后一条参与的终点）", err)
 		}
-		if _, err := afterHandover.CloseSegment(handoverJudgedAt); err != nil {
+		if _, err := afterHandover.CloseSegment(handoverJudgedAt, domain.RegistrantReference{}); err != nil {
 			t.Fatalf("与最后一条参与终点同刻的关闭应当收得下：%v", err)
 		}
 	})
@@ -247,7 +247,7 @@ func TestInterruptionDoesNotEndTheSegment(t *testing.T) {
 		t.Fatalf("establish: %v", err)
 	}
 
-	if _, err := segment.CloseSegment(pickedUpAt.Add(time.Hour)); !errors.Is(err, domain.ErrSegmentStillActive) {
+	if _, err := segment.CloseSegment(pickedUpAt.Add(time.Hour), domain.RegistrantReference{}); !errors.Is(err, domain.ErrSegmentStillActive) {
 		t.Fatalf("error = %v, want ErrSegmentStillActive（中断不是控制结束事实）", err)
 	}
 
@@ -256,6 +256,7 @@ func TestInterruptionDoesNotEndTheSegment(t *testing.T) {
 			mustValue(t, domain.NewCarriedObjectReference, "parcel-1"),
 			domain.ParticipationBasisReference{},
 			pickedUpAt.Add(time.Hour),
+			domain.RegistrantReference{},
 		); !errors.Is(err, domain.ErrInvalidFulfillmentSegment) {
 			t.Fatalf("error = %v; 没有依据的终止让控制责任凭空消失", err)
 		}
@@ -266,6 +267,7 @@ func TestInterruptionDoesNotEndTheSegment(t *testing.T) {
 			mustValue(t, domain.NewCarriedObjectReference, "parcel-1"),
 			mustValue(t, domain.NewParticipationBasisReference, "CONTROL-TERMINATION/case-1"),
 			pickedUpAt.Add(2*time.Hour),
+			domain.RegistrantReference{},
 		)
 		if err != nil {
 			t.Fatalf("terminate: %v", err)
@@ -287,6 +289,7 @@ func TestInterruptionDoesNotEndTheSegment(t *testing.T) {
 			mustValue(t, domain.NewCarriedObjectReference, "parcel-1"),
 			mustValue(t, domain.NewParticipationBasisReference, "CONTROL-TERMINATION/case-2"),
 			pickedUpAt.Add(-time.Hour),
+			domain.RegistrantReference{},
 		); !errors.Is(err, domain.ErrInvalidFulfillmentSegment) {
 			t.Fatalf("error = %v; 控制不可能在进入之前结束", err)
 		}
@@ -357,7 +360,7 @@ func TestASourceCorrectionRederivesTheParticipationOnTheSameSegment(t *testing.T
 	if err != nil {
 		t.Fatalf("end with delivery: %v", err)
 	}
-	closed, err := delivered.CloseSegment(deliveredAt)
+	closed, err := delivered.CloseSegment(deliveredAt, domain.RegistrantReference{})
 	if err != nil {
 		t.Fatalf("close: %v", err)
 	}
@@ -552,10 +555,10 @@ func TestAControlWithdrawingCorrectionVoidsTheParticipation(t *testing.T) {
 				t.Fatalf("在场参与 = %d，失效版本不算在场", voided.ActiveParticipations())
 			}
 			termination := mustValue(t, domain.NewParticipationBasisReference, "CONTROL-TERMINATION/parcel-1")
-			if _, err := voided.EndParticipationWithTermination(object, termination, handoverJudgedAt.Add(2*time.Hour)); !errors.Is(err, domain.ErrObjectNotParticipating) {
+			if _, err := voided.EndParticipationWithTermination(object, termination, handoverJudgedAt.Add(2*time.Hour), domain.RegistrantReference{}); !errors.Is(err, domain.ErrObjectNotParticipating) {
 				t.Fatalf("结束一条已失效的参与：err = %v，want ErrObjectNotParticipating", err)
 			}
-			closed, err := voided.CloseSegment(handoverJudgedAt.Add(2 * time.Hour))
+			closed, err := voided.CloseSegment(handoverJudgedAt.Add(2*time.Hour), domain.RegistrantReference{})
 			if err != nil {
 				t.Fatalf("段里唯一对象已失效，段该关得上：%v", err)
 			}
@@ -620,11 +623,11 @@ func TestAVoidedParticipationInheritsTheEndAndLeavesAClosedSegmentClosed(t *test
 	object := handover.Object()
 	endedAt := handoverJudgedAt.Add(4 * time.Hour)
 	termination := mustValue(t, domain.NewParticipationBasisReference, "CONTROL-TERMINATION/parcel-1")
-	ended, err := segment.EndParticipationWithTermination(object, termination, endedAt)
+	ended, err := segment.EndParticipationWithTermination(object, termination, endedAt, domain.RegistrantReference{})
 	if err != nil {
 		t.Fatalf("end: %v", err)
 	}
-	closed, err := ended.CloseSegment(endedAt)
+	closed, err := ended.CloseSegment(endedAt, domain.RegistrantReference{})
 	if err != nil {
 		t.Fatalf("close: %v", err)
 	}

@@ -503,12 +503,12 @@ func TestAPickupCorrectionRederivesIntoAClosedSegmentInTheDatabaseWithoutReopeni
 	if ended.Outcome() != application.ParticipationEndedNow {
 		t.Fatalf("终止参与：outcome=%s", ended.Outcome())
 	}
-	closing, err := registries.readSegment(t, ctx, "SEG-RD-5").CloseSegment(closedAt)
+	closing, err := registries.readSegment(t, ctx, "SEG-RD-5").CloseSegment(closedAt, domain.RegistrantReference{})
 	if err != nil {
 		t.Fatalf("领域关段：%v", err)
 	}
 	mustWithinSegmentTransaction(t, registries.transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := registries.segments.CloseSegment(txCtx, key, closedAt)
+		outcome, err := registries.segments.CloseSegment(txCtx, key, closedAt, domain.RegistrantReference{})
 		if err == nil && outcome != ports.SegmentClosed {
 			t.Fatalf("关段 outcome = %d", outcome)
 		}

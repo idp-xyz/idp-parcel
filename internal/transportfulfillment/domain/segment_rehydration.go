@@ -27,25 +27,31 @@ import "time"
 // `Voided` 是失效版本那一列（ADR-0112 决定四；迁移 TF 0019）：为真时本版本回指的前版被撤回了控制，
 // 该对象在本段自此无有效参与。它必须回指前版——首登不能失效，对象从未进段就没有东西可失效——且入场
 // 种类为 TRANSPORT_HANDOVER，只有交接更正走得到这一格；两条与库面 CHECK 同形，重建门再守一遍。
+//
+// `TerminatedBy` 是明确终止的操作证据（ADR-0303；迁移 TF 0051），可缺：规则生效之前终止的参与没有这一格，照收。
+// 带了却不是以明确终止结束的，是转换门产不出的形状，拒。
 type RehydrateParticipationSpec struct {
-	Object     CarriedObjectReference
-	Planned    PlannedSegmentReference
-	EntryKind  ParticipationEntryKind
-	EntryBasis ParticipationBasisReference
-	EnteredAt  time.Time
-	EndKind    ParticipationEndKind
-	EndBasis   ParticipationBasisReference
-	EndedAt    time.Time
-	Supersedes ParticipationBasisReference
-	Voided     bool
+	Object       CarriedObjectReference
+	Planned      PlannedSegmentReference
+	EntryKind    ParticipationEntryKind
+	EntryBasis   ParticipationBasisReference
+	EnteredAt    time.Time
+	EndKind      ParticipationEndKind
+	EndBasis     ParticipationBasisReference
+	EndedAt      time.Time
+	TerminatedBy RegistrantReference
+	Supersedes   ParticipationBasisReference
+	Voided       bool
 }
 
-// RehydrateActualFulfillmentSegmentSpec 是一个段连同它全部成员在库面的样子。
+// RehydrateActualFulfillmentSegmentSpec 是一个段连同它全部成员在库面的样子。`ClosedBy` 是关段的操作证据（ADR-0303），
+// 可缺；没关的段带了它是坏行。
 type RehydrateActualFulfillmentSegmentSpec struct {
 	TenantID       TenantID
 	Segment        FulfillmentSegmentReference
 	Closed         bool
 	ClosedAt       time.Time
+	ClosedBy       RegistrantReference
 	Participations []RehydrateParticipationSpec
 	// ServiceAction 零值即库面 NULL（未声明）；非零必须在封闭集合内——词由适配器经 ParseSegmentServiceAction
 	// 认回，这里只挡一个越过它的坏值。
@@ -64,6 +70,9 @@ func RehydrateActualFulfillmentSegment(spec RehydrateActualFulfillmentSegmentSpe
 	if spec.Closed != !spec.ClosedAt.IsZero() {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
 	}
+	if spec.ClosedBy.Present() && !spec.Closed {
+		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
+	}
 	if spec.ServiceAction != SegmentServiceActionUndeclared && !spec.ServiceAction.Declared() {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
 	}
@@ -77,6 +86,7 @@ func RehydrateActualFulfillmentSegment(spec RehydrateActualFulfillmentSegmentSpe
 	}
 	if spec.Closed {
 		segment.closedAt = spec.ClosedAt.UTC()
+		segment.closedBy = spec.ClosedBy
 	}
 
 	for _, row := range spec.Participations {
@@ -116,6 +126,9 @@ func rehydrateParticipation(row RehydrateParticipationSpec) (FulfillmentParticip
 	if ended && row.EndedAt.Before(row.EnteredAt) {
 		return FulfillmentParticipation{}, ErrInvalidFulfillmentSegment
 	}
+	if row.TerminatedBy.Present() && (!ended || row.EndKind != EndedByControlTermination) {
+		return FulfillmentParticipation{}, ErrInvalidFulfillmentSegment
+	}
 
 	// 自指的替代没有前版可接，行上就看得出。
 	if row.Supersedes.valid() && row.Supersedes == row.EntryBasis {
@@ -141,6 +154,7 @@ func rehydrateParticipation(row RehydrateParticipationSpec) (FulfillmentParticip
 		participation.endKind = row.EndKind
 		participation.endBasis = row.EndBasis
 		participation.endedAt = row.EndedAt.UTC()
+		participation.terminatedBy = row.TerminatedBy
 	}
 	return participation, nil
 }

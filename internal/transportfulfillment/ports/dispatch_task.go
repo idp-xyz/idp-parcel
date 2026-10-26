@@ -26,10 +26,15 @@ type DispatchTaskKey struct {
 //
 // 对象成员不单列一个字段：它们在聚合内部，取出来就得有人保证两半一致，而那正是聚合要消灭的
 // 那种可能。适配器按任务写两张表、按任务读回整图（与实际履约段同形）。
+//
+// OpenedBy 是经运营决定口建立这项任务的操作者（ADR-0303）：操作证据，与登记时刻同属越过提交边界留下的出处，不是
+// 任务的内容，所以不进聚合——任务的任何一道门都读不到它。可缺：执行器在派送发起那一拍形成的任务、规则生效之前建立
+// 的任务都没有它。
 type DispatchTaskRecord struct {
 	Key        DispatchTaskKey
 	Task       domain.DispatchTask
 	RecordedAt time.Time
+	OpenedBy   domain.RegistrantReference
 }
 
 // DispatchTaskSaveOutcome 是首登的结果。撞键是业务答案不是错误（ADR-0031）——同一任务被重投

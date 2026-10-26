@@ -432,11 +432,11 @@ func TestARehydratedSegmentStillAcceptsItsTransitionDoors(t *testing.T) {
 
 	object := segmentValue(t, domain.NewCarriedObjectReference, "parcel-1")
 	basis := segmentValue(t, domain.NewParticipationBasisReference, "CONTROL-TERMINATION/case-1")
-	ended, err := rebuilt.EndParticipationWithTermination(object, basis, segmentEndedAt)
+	ended, err := rebuilt.EndParticipationWithTermination(object, basis, segmentEndedAt, domain.RegistrantReference{})
 	if err != nil {
 		t.Fatalf("重建出的段应当还能走转换门：%v", err)
 	}
-	closed, err := ended.CloseSegment(segmentClosedAt)
+	closed, err := ended.CloseSegment(segmentClosedAt, domain.RegistrantReference{})
 	if err != nil {
 		t.Fatalf("全部参与已结束后应当关得上：%v", err)
 	}

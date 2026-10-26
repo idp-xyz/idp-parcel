@@ -44,6 +44,9 @@ func (outcome DispatchTaskOutcome) String() string {
 //
 // 业务发生时间（OpenedAt）由调用方给，登记时刻另取时钟：任务是何时成立的，不由写库那一刻
 // 决定。这两个时间分开是本上下文的通例，不是本用例的特例。
+//
+// OpenedBy 是作出建任务决定的操作者（「发行方#sub」），由运营决定口的 Intake 取自信封（ADR-0303），可缺：派送发起
+// 的执行器经本编排形成任务时不带它。它只随任务记录留痕，重放答`已在册`时交回的原任务连同原操作者都不被顶替。
 type OpenDispatchTaskCommand struct {
 	TenantID   domain.TenantID
 	Task       string
@@ -54,6 +57,7 @@ type OpenDispatchTaskCommand struct {
 	WindowTo   time.Time
 	Conditions string
 	OpenedAt   time.Time
+	OpenedBy   string
 }
 
 type OpenDispatchTaskResult struct {
@@ -107,6 +111,10 @@ func (handler *OpenDispatchTaskHandler) Open(
 	if err != nil {
 		return OpenDispatchTaskResult{outcome: DispatchTaskNotAccepted}, nil
 	}
+	openedBy, err := domain.OptionalRegistrantReference(command.OpenedBy)
+	if err != nil {
+		return OpenDispatchTaskResult{outcome: DispatchTaskNotAccepted}, nil
+	}
 
 	key := ports.DispatchTaskKey{TenantID: command.TenantID, Task: taskRef}
 	existing, found, err := handler.deps.Tasks.FindByKey(ctx, key)
@@ -122,7 +130,7 @@ func (handler *OpenDispatchTaskHandler) Open(
 		}, nil
 	}
 
-	record := ports.DispatchTaskRecord{Key: key, Task: task, RecordedAt: handler.deps.Clock.Now()}
+	record := ports.DispatchTaskRecord{Key: key, Task: task, RecordedAt: handler.deps.Clock.Now(), OpenedBy: openedBy}
 	saved, err := handler.deps.Tasks.Save(ctx, record)
 	if err != nil {
 		return dispatchTaskUndecided(command.Task), nil

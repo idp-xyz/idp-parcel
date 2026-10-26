@@ -79,17 +79,17 @@ func TestFulfillmentSegmentGatesJudgeZeroOnTheRegistry(t *testing.T) {
 
 	t.Run("离场时刻", func(t *testing.T) {
 		pinRegistryZeroGate(t, domain.ErrInvalidFulfillmentSegment, func(at time.Time) error {
-			_, err := segment.EndParticipationWithTermination(pickup.Object(), basis, at)
+			_, err := segment.EndParticipationWithTermination(pickup.Object(), basis, at, domain.RegistrantReference{})
 			return err
 		})
 	})
 	t.Run("关段时刻", func(t *testing.T) {
-		ended, err := segment.EndParticipationWithTermination(pickup.Object(), basis, beforeRegistryZero)
+		ended, err := segment.EndParticipationWithTermination(pickup.Object(), basis, beforeRegistryZero, domain.RegistrantReference{})
 		if err != nil {
 			t.Fatalf("结束参与：%v", err)
 		}
 		pinRegistryZeroGate(t, domain.ErrInvalidFulfillmentSegment, func(at time.Time) error {
-			_, err := ended.CloseSegment(at)
+			_, err := ended.CloseSegment(at, domain.RegistrantReference{})
 			return err
 		})
 	})

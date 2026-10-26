@@ -47,7 +47,11 @@ func NewQueryCarrierFirstEffectivePickupsEndpoint(intake CatalogueQueryIntake, r
 		}
 		bodies := make([]carrierPickupBody, 0, len(records))
 		for _, record := range records {
-			bodies = append(bodies, carrierPickupBodyOf(record))
+			body := carrierPickupBodyOf(record)
+			if record.JudgedBy.Present() {
+				body.JudgedBy = record.JudgedBy.String()
+			}
+			bodies = append(bodies, body)
 		}
 		writeJSON(response, http.StatusOK, carrierPickupChainResponse{Outcome: outcomeCarrierPickupChainListed, Pickups: bodies})
 	})

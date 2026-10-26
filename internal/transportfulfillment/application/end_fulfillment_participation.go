@@ -117,6 +117,10 @@ type EndFulfillmentParticipationCommand struct {
 	// 明确控制终止那一路：依据必备，时刻由调用方给（终止是何时发生的不由写库那一刻决定）。
 	Basis   string
 	EndedAt time.Time
+	// TerminatedBy 是作出明确终止的操作者（「发行方#sub」），由运营决定口的 Intake 取自信封（ADR-0303），可缺：
+	// 它随终点留痕，本编排的任何一格都不读它——同一次终止换一位操作者重投照旧答`已离场`、回显在册那一份。交付与
+	// 交接两路不是运营决定，带了也不落。
+	TerminatedBy string
 
 	// NextSegment 指名控制边界变化后对象进入的下一段（CONTEXT「结束原载运对象的履约参与关系
 	// 并形成下一实际履约段」），NextPlannedSegment 是它在新段里关联的计划段，可缺席。
@@ -288,6 +292,9 @@ func terminationInputFormed(command EndFulfillmentParticipationCommand) bool {
 	if command.Source != ParticipationEndedByTermination {
 		return true
 	}
+	if _, err := domain.OptionalRegistrantReference(command.TerminatedBy); err != nil {
+		return false
+	}
 	_, err := domain.NewParticipationBasisReference(command.Basis)
 	return err == nil && !command.EndedAt.IsZero()
 }
@@ -382,7 +389,11 @@ func (handler *EndFulfillmentParticipationHandler) applyEnd(
 		if err != nil || command.EndedAt.IsZero() {
 			return domain.ActualFulfillmentSegment{}, none, ParticipationEndNotAccepted
 		}
-		ended, err := segment.EndParticipationWithTermination(object, basis, command.EndedAt)
+		terminatedBy, err := domain.OptionalRegistrantReference(command.TerminatedBy)
+		if err != nil {
+			return domain.ActualFulfillmentSegment{}, none, ParticipationEndNotAccepted
+		}
+		ended, err := segment.EndParticipationWithTermination(object, basis, command.EndedAt, terminatedBy)
 		if err != nil {
 			return domain.ActualFulfillmentSegment{}, none, ParticipationEndNotAccepted
 		}

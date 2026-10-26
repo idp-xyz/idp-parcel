@@ -21,10 +21,15 @@ type ExternalTrackingFactKey struct {
 
 // ExternalTrackingFactRecord 是一个版本越过提交边界留下的东西。RecordedAt 是认领落库的时刻，
 // 与事实上的 ReceivedAt（接到素材的时刻）是两个时间，不合并。
+//
+// EffectiveJudgedBy 是经运营决定口显式判断有效时间、形成这一版的操作者（ADR-0303）：操作证据，与登记时刻同属出处，
+// 不进事实本体——「已按同值判过」那一比与收编的幂等锚都读不到它。只在显式判断那一版上可能带值；素材到达与按规则判断
+// 形成的版本、规则生效之前判断的版本都没有它。
 type ExternalTrackingFactRecord struct {
-	Key        ExternalTrackingFactKey
-	Fact       domain.ExternalCarrierTrackingFact
-	RecordedAt time.Time
+	Key               ExternalTrackingFactKey
+	Fact              domain.ExternalCarrierTrackingFact
+	RecordedAt        time.Time
+	EffectiveJudgedBy domain.RegistrantReference
 }
 
 // ExternalTrackingFactSaveOutcome 是登记一个版本的结果。撞键是业务答案不是错误（ADR-0031）。

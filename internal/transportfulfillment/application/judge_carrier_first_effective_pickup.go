@@ -112,6 +112,9 @@ func (reason CarrierPickupUndecidedReason) String() string {
 // 处理——被更正的那一代必须恰是链尾的依据（决定六）。来源是轨迹事实且缺席时，从读回的那一代的回指取。
 //
 // Segment / PlannedSegment / SegmentServiceAction 与收寄、交接登记同形：Segment 缺席不进段也不算失败。
+//
+// JudgedBy 是作出这次判断的操作者（「发行方#sub」），由运营决定口的 Intake 取自信封（ADR-0303），可缺：它只随本次
+// 落下的那一版留痕，任何一路分支都不读它——换一位操作者原样重放照旧答`已在册`、链尾不动。
 type JudgeCarrierFirstEffectivePickupCommand struct {
 	TenantID              domain.TenantID
 	Object                string
@@ -127,6 +130,7 @@ type JudgeCarrierFirstEffectivePickupCommand struct {
 	Segment               string
 	PlannedSegment        string
 	SegmentServiceAction  string
+	JudgedBy              string
 }
 
 type JudgeCarrierFirstEffectivePickupResult struct {
@@ -232,6 +236,9 @@ func (handler *JudgeCarrierFirstEffectivePickupHandler) Judge(
 ) (JudgeCarrierFirstEffectivePickupResult, error) {
 	object, accepted := carrierPickupTargetFrom(command)
 	if !accepted {
+		return JudgeCarrierFirstEffectivePickupResult{outcome: CarrierPickupNotAccepted}, nil
+	}
+	if _, err := domain.OptionalRegistrantReference(command.JudgedBy); err != nil {
 		return JudgeCarrierFirstEffectivePickupResult{outcome: CarrierPickupNotAccepted}, nil
 	}
 	input, outcome, reason := handler.resolveBasis(ctx, command, object)
@@ -492,10 +499,13 @@ func (handler *JudgeCarrierFirstEffectivePickupHandler) persist(
 	now time.Time,
 	chained bool,
 ) (JudgeCarrierFirstEffectivePickupResult, error) {
+	// 受理时已核过它立得起来（Judge 开头），这里只取值。
+	judgedBy, _ := domain.OptionalRegistrantReference(command.JudgedBy)
 	record := ports.CarrierFirstEffectivePickupRecord{
 		Key:        ports.CarrierFirstEffectivePickupKey{TenantID: next.TenantID(), Fact: next.Fact(), Version: next.Version()},
 		Pickup:     next,
 		RecordedAt: now,
+		JudgedBy:   judgedBy,
 	}
 	saved, err := handler.deps.Pickups.Save(ctx, record)
 	if err != nil {

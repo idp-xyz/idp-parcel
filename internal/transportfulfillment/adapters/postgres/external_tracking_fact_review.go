@@ -45,7 +45,7 @@ func (repository *ExternalTrackingFacts) ListCurrentExternalTrackingFacts(
 		`SELECT current.fact_ref, current.version, current.source_ref, current.credential_ref, current.object_ref,
 		        current.source_event, current.status_ref, current.occurred_at, current.received_at,
 		        current.effective_basis, current.effective_at, current.effective_rule, current.effective_rule_version,
-		        current.supersedes_version, current.version_origin, current.recorded_at
+		        current.supersedes_version, current.version_origin, current.recorded_at, current.effective_judged_by
 		   FROM transport_fulfillment.external_carrier_tracking_fact AS current
 		  WHERE current.tenant_id = $1 AND current.source_ref = $2
 		    AND NOT EXISTS (
@@ -65,13 +65,13 @@ func (repository *ExternalTrackingFacts) ListCurrentExternalTrackingFacts(
 	list := make([]ports.ExternalTrackingFactReviewRow, 0, limit)
 	for rows.Next() {
 		var row ports.ExternalTrackingFactReviewRow
-		var sourceEvent, effectiveRule, effectiveRuleVersion, supersedes *string
+		var sourceEvent, effectiveRule, effectiveRuleVersion, supersedes, judgedBy *string
 		var effectiveAt *time.Time
 		if err := rows.Scan(
 			&row.Fact, &row.Version, &row.Source, &row.Credential, &row.Object,
 			&sourceEvent, &row.Status, &row.OccurredAt, &row.ReceivedAt,
 			&row.EffectiveBasis, &effectiveAt, &effectiveRule, &effectiveRuleVersion,
-			&supersedes, &row.Origin, &row.RecordedAt,
+			&supersedes, &row.Origin, &row.RecordedAt, &judgedBy,
 		); err != nil {
 			return nil, fmt.Errorf("list current external tracking facts: %w", err)
 		}
@@ -93,6 +93,9 @@ func (repository *ExternalTrackingFacts) ListCurrentExternalTrackingFacts(
 		}
 		if supersedes != nil {
 			row.Supersedes = *supersedes
+		}
+		if judgedBy != nil {
+			row.EffectiveJudgedBy = *judgedBy
 		}
 		list = append(list, row)
 	}

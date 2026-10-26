@@ -36,7 +36,7 @@ var (
 const externalTrackingFactColumns = `tenant_id, fact_ref, version, source_ref, credential_ref, object_ref,
 		        source_event, status_ref, occurred_at, received_at,
 		        effective_basis, effective_at, effective_rule, effective_rule_version,
-		        correction_of, supersedes_version, version_origin, recorded_at`
+		        correction_of, supersedes_version, version_origin, recorded_at, effective_judged_by`
 
 // FindByKey 按（租户+事实+版本）取回一个版本。否定结果只回 false。
 func (repository *ExternalTrackingFacts) FindByKey(
@@ -98,14 +98,14 @@ func (repository *ExternalTrackingFacts) findOne(
 		return ports.ExternalTrackingFactRecord{}, false, fmt.Errorf("%s: %w", verb, err)
 	}
 	var tenantID, factRef, version, sourceRef, credentialRef, objectRef, statusRef, basisText, originText string
-	var sourceEvent, effectiveRule, effectiveRuleVersion, correctionOf, supersedes *string
+	var sourceEvent, effectiveRule, effectiveRuleVersion, correctionOf, supersedes, judgedBy *string
 	var occurredAt, receivedAt, recordedAt time.Time
 	var effectiveAt *time.Time
 	err = querier.QueryRow(ctx, query, args...).Scan(
 		&tenantID, &factRef, &version, &sourceRef, &credentialRef, &objectRef,
 		&sourceEvent, &statusRef, &occurredAt, &receivedAt,
 		&basisText, &effectiveAt, &effectiveRule, &effectiveRuleVersion,
-		&correctionOf, &supersedes, &originText, &recordedAt)
+		&correctionOf, &supersedes, &originText, &recordedAt, &judgedBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.ExternalTrackingFactRecord{}, false, nil
 	}
@@ -174,10 +174,15 @@ func (repository *ExternalTrackingFacts) findOne(
 	if err != nil {
 		return ports.ExternalTrackingFactRecord{}, false, fmt.Errorf("%s: %w", verb, err)
 	}
+	judge, err := registrantFromColumn(judgedBy)
+	if err != nil {
+		return ports.ExternalTrackingFactRecord{}, false, fmt.Errorf("%s: %w", verb, err)
+	}
 	return ports.ExternalTrackingFactRecord{
-		Key:        ports.ExternalTrackingFactKey{TenantID: spec.TenantID, Fact: spec.Fact, Version: spec.Version},
-		Fact:       fact,
-		RecordedAt: recordedAt.UTC(),
+		Key:               ports.ExternalTrackingFactKey{TenantID: spec.TenantID, Fact: spec.Fact, Version: spec.Version},
+		Fact:              fact,
+		RecordedAt:        recordedAt.UTC(),
+		EffectiveJudgedBy: judge,
 	}, true, nil
 }
 
@@ -218,7 +223,7 @@ func (repository *ExternalTrackingFacts) Save(
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO transport_fulfillment.external_carrier_tracking_fact
 		     (`+externalTrackingFactColumns+`)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Fact.String(),
@@ -238,6 +243,7 @@ func (repository *ExternalTrackingFacts) Save(
 		supersedes,
 		fact.Origin().String(),
 		record.RecordedAt.UTC(),
+		optionalRegistrant(record.EffectiveJudgedBy),
 	)
 	if err != nil {
 		return ports.ExternalTrackingFactSaveOutcomeInvalid, fmt.Errorf("save external tracking fact: %w", err)

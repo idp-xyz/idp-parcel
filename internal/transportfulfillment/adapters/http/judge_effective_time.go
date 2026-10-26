@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
-	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
 // 外部承运轨迹事实有效时间显式判断的在线写面（label-channel/21；写面形状按 ADR-0085 两阶段接线）。
@@ -52,14 +51,14 @@ func DecodeEffectiveTimeJudgmentPayload(body io.Reader) (EffectiveTimeJudgmentPa
 	return payload, nil
 }
 
-// Command 把载荷连同信封给的租户翻成判断命令。时刻按 RFC 3339 解：解不出是坏报文（400，要改的是报文），
-// 空着则交给编排答`未受理`（200，形成了的业务答案）——两者的续办不同，不折成一格。事实引用是否成形同样
-// 留给编排：这里不过领域构造门。
-func (payload EffectiveTimeJudgmentPayload) Command(tenant domain.TenantID) (application.JudgeEffectiveTimeCommand, error) {
-	if tenant.String() == "" {
+// Command 把载荷连同信封给的身份翻成判断命令：租户，与作出这次判断的操作者（ADR-0303，操作证据，载荷里不收）。
+// 时刻按 RFC 3339 解：解不出是坏报文（400，要改的是报文），空着则交给编排答`未受理`（200，形成了的业务答案）——
+// 两者的续办不同，不折成一格。事实引用是否成形同样留给编排：这里不过领域构造门。
+func (payload EffectiveTimeJudgmentPayload) Command(operator OperatorIdentity) (application.JudgeEffectiveTimeCommand, error) {
+	if operator.Tenant.String() == "" {
 		return application.JudgeEffectiveTimeCommand{}, ErrOperatorIdentityMissing
 	}
-	command := application.JudgeEffectiveTimeCommand{TenantID: tenant, Fact: payload.Fact}
+	command := application.JudgeEffectiveTimeCommand{TenantID: operator.Tenant, Fact: payload.Fact, JudgedBy: operator.Operator}
 	if raw := strings.TrimSpace(payload.EffectiveAt); raw != "" {
 		at, err := time.Parse(time.RFC3339, raw)
 		if err != nil {

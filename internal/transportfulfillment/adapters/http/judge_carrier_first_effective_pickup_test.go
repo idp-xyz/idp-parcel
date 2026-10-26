@@ -31,7 +31,7 @@ func (double carrierPickupJudgmentIntakeDouble) IntakeCarrierPickupJudgment(_ co
 	if err != nil {
 		return application.JudgeCarrierFirstEffectivePickupCommand{}, err
 	}
-	return payload.Command(tenant)
+	return payload.Command(tfhttp.OperatorIdentity{Tenant: tenant, Operator: "issuer-1#judge-1"})
 }
 
 type carrierPickupRegistryDouble struct {
