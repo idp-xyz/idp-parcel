@@ -1,7 +1,7 @@
 # 19 NO「集运包含无循环」未落代码，连单元装进自己也不拦
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code19（2026-10-21）。此前 ready-for-agent——R2（上线后尽快）：数据完整性。集运移入已在生产路径上（`cmd/parcel-frontline-import` 的集运导入），袋套袋是常态；成员关系可以成环。下游 TF 出发门禁展开成员时有环检测（`application/read_departure_gate.go` 记 `ConsolidationMembershipCycle`），不会放行或死循环，只会让那一袋停住——看得见的卡住；绕法是移出成环的成员。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
+Status: resolved——2026-10-25 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code19（2026-10-21）。此前 ready-for-agent——R2（上线后尽快）：数据完整性。集运移入已在生产路径上（`cmd/parcel-frontline-import` 的集运导入），袋套袋是常态；成员关系可以成环。下游 TF 出发门禁展开成员时有环检测（`application/read_departure_gate.go` 记 `ConsolidationMembershipCycle`），不会放行或死循环，只会让那一袋停住——看得见的卡住；绕法是移出成环的成员。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
 Blocked by: 无
 出处：[audit/nr-no.md](../audit/nr-no.md) M6（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，现象仍在；下游环检测是复核时新读到的，降低了后果）。
 
@@ -140,3 +140,11 @@ S–M：移入时沿目标单元的父级链上溯（含自身），撞到成员
 - 调用约定提到类型头注：`ConsolidateParcelsHandler` 加头注，写「一笔事务只调一口；要一笔做多步，先经 `LineageForUpdate` 取租户锁再推进，或拆成多笔」与锁序上的理由（两种互等）；`AddMember` 头注那句改为指向它；`consolidationImporter` 头注「一行一笔」的理由补上锁序这一层。越权风险点 6 补第二种互等（两笔都不含移入的多步事务在行锁上交叉），并写明先取租户锁只有每一笔多步事务都先取时才同时救这两种。
 - 小处：适配器 `FindByIDForUpdate` 与 `Update` 头注里的「端口注释」改写成符号名 `ports.ConsolidationStore.FindByIDForUpdate`；回归用例头注改成现在时；端口「单元不在册时……」改为「不锁任何行」。
 - `git rebase main` 到 `9ea060682`：`.scratch/at-coverage-inventory.md` 文末追记区与 main 的 code/31 那段冲突（原作者那笔与修订轮那笔各一次），两段都留、main 那段在前；总览计数不手算，留给进 main 时用工具重算。
+
+## 进 main 记录（2026-10-25，协调方）
+
+- 原协调会话派出的隔离评审在开工时因额度中断；接手的协调方重派评审。分支 `claude-code19` 经两次 rebase（作者到 `9ea060682`，协调方到含 code/25 的 main）后快进，tip `b476b1427`；迁移 NO 0022。
+- 第一轮隔离评审一条阻断：B1 移出、封装、开封按旧读数经 `ConsolidationUnits.Update` 把别的事务刚删的边写回，绕过判环造出互装环（真库复现）。协调方裁定：会改单元的各口在事务内读单元持单元行锁，移入保留租户咨询锁判环。修订轮另派作者（原作者会话不可续）落 `ports.ConsolidationStore.FindByIDForUpdate`（`FOR NO KEY UPDATE`，代决 9）、收评审复现为回归用例，并收 N1–N3。第二轮评审可合入，N1（「一笔事务只调一口」的调用约定提到 `ConsolidateParcelsHandler` 类型头注、补行锁交叉那一种互等）在收尾轮改完。
+- 协调方单独提交重算的 AT 计数与重生成的机制清点；ADR 索引无变化；检查均退 0。
+- 与 code/25 同批验：全量 `scripts/test-full.sh` 退 0、158 个包 ok；`go build ./...`、`go vet ./...` 干净；演示种子在一次性库上灌通，用后删库。
+- 去向：无新票。第二轮评审的真库探针说明票 no-consolidation-fact-provenance/02「可能盖掉赢家」那一半已随本票不成立，另测到同成员异证据并发移入答 `MEMBER_ALREADY_CONTAINED` 一格——协调方同一笔在 02 现象一节末尾追记。

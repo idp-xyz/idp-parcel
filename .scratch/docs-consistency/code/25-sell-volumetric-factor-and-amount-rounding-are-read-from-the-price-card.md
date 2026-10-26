@@ -1,7 +1,7 @@
 # 25 PP SELL 方向的体积系数与金额取整：文档归商业价格政策，代码与演示种子只读价卡
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code25（基于 main `9ea060682`），隔离评审无阻断、修订轮 N1–N6 已处置，见文末「完成记录」「评审记录与修订轮」。此前 ready-for-agent——R2（上线后尽快）：SELL 评价已在生产路径上；PC 价格政策口径对 SELL 必填体积系数，PP 却只读卡上那一份，两处各自合法，合同政策上声明的那个静默不起作用。实施时两处登同值即可绕开（可靠，但全靠人），所以列 R2；租户若按合同政策调系数而不改卡，计费重量与金额就与预期不符。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
+Status: resolved——2026-10-25 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code25（基于 main `9ea060682`），隔离评审无阻断、修订轮 N1–N6 已处置，见文末「完成记录」「评审记录与修订轮」。此前 ready-for-agent——R2（上线后尽快）：SELL 评价已在生产路径上；PC 价格政策口径对 SELL 必填体积系数，PP 却只读卡上那一份，两处各自合法，合同政策上声明的那个静默不起作用。实施时两处登同值即可绕开（可靠，但全靠人），所以列 R2；租户若按合同政策调系数而不改卡，计费重量与金额就与预期不符。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
 Blocked by: 无——2026-10-21 文档自洽 07 已裁（[ADR-0260](../../../docs/adr/0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md)）：**认价卡**。原 Blocked by：docs-consistency/07 先裁「SELL 评价的计价条款（金额取整、体积系数、汇率口径）从哪一份工件读」——即 audit/pc-pp.md H5 的 B 路与 audit/cross.md B2-02、B2-03 同一裁。
 出处：[audit/pc-pp.md](../audit/pc-pp.md) H5（审计归 C，并注明 owner 若认定 SELL 卡自带系数与取整就是首发形态则改归 B）；同根的 [audit/cross.md](../audit/cross.md) B2-02（金额取整，B）、B2-03（汇率口径，B）在本票登记、不另立。审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，PC、PP 代码与种子在此期间未改。
 
@@ -160,3 +160,11 @@ M（裁为价卡：撤掉 PC 的 SELL 体积口径必填，改 PC 校验与登�
 - 变异三处，均被杀，见上（N2 两处、N5 一处）；变异后文件按备份复原。
 - 演示种子：一次性库 `c25seed2` 上按分支首灌退 0，`SYN-PRICE-RULE-CN-SG` 口径行系数为空；用后 `DROP DATABASE … WITH (FORCE)`。
 - 未改 admin-web，三道门不重跑。
+
+## 进 main 记录（2026-10-25，协调方）
+
+- 原协调会话的作者做到一半因额度中断（工作树留有未提交的半成品）；接手的协调方另派作者读懂半成品后续完，处置写在完成记录「对上一位作者半成品的处置」。分支 `claude-code25` rebase 到 main `9ea060682` 后快进，tip `29ca217dc`；迁移 PC 0041、NR 0027。
+- 隔离评审无阻断，N1–N6 由协调方裁定后在修订轮收：N1 本票不改代码，越权风险点 1 按三种载体状态如实改写，「本构建折不回来的载体答 5xx」连同未知规范化版本那一支立 code/87（R3）；N2 补 parcel-api 真库用例（政策另登口径 6000、卡上除数 5000，试算只跟卡走）与 `TestParcelPricingHasNoPartyCommercialAdapter` 架构门禁；N3 删 UC-PC-001 已空的缺口表；N4 改正票面「编排不调 `ConsistentWithDirection`」的不实句；N5 历史行重登答内容冲突补用例；N6 注释改现行写法。协调方放行 `cmd/parcel-network-register/main.go` 头注一句（只改注释）。修订 diff 与评审处方一致，协调方核过后未再起第二轮评审。
+- 协调方单独提交重算的 AT 计数与重生成的机制清点；ADR 索引无变化；检查均退 0。
+- 与 code/19 同批验：全量 `scripts/test-full.sh` 退 0、158 个包 ok；`go build ./...`、`go vet ./...` 干净；admin-web tsc、601 个用例、vite build 通过；演示种子在一次性库上灌通，用后删库。评审与作者另验过「main 灌种子 → 分支不带 `--reset` 答内容冲突 → 带 `--reset` 复灌」。
+- 去向：code/87（本构建折不回来的发布载体答成 5xx）。
