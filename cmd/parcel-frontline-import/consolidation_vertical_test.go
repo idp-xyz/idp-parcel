@@ -245,8 +245,9 @@ func TestFrontlineConsolidationImportRejectsWithoutRecording(t *testing.T) {
 	if !strings.Contains(results[4].Detail, "SYN-CU-7") {
 		t.Fatalf("成员在别处的报文没点名对方单元：%q", results[4].Detail)
 	}
-	if !strings.Contains(results[9].Detail, "SYN-CU-8 ⊂ SYN-CU-7") || !strings.Contains(results[9].Detail, domain.RemoveMemberAction.String()) {
-		t.Fatalf("装反的报文没点名那一段链路与断开它的动作：%q", results[9].Detail)
+	if !strings.Contains(results[9].Detail, "SYN-CU-8 ⊂ SYN-CU-7") || !strings.Contains(results[9].Detail, domain.RemoveMemberAction.String()) ||
+		!strings.Contains(results[9].Detail, domain.UnsealUnitAction.String()) {
+		t.Fatalf("装反的报文没点名那一段链路与断开它的动作（父级已封装时先开封）：%q", results[9].Detail)
 	}
 	if !strings.Contains(results[10].Detail, "装不进自己") {
 		t.Fatalf("装进自己的报文没说清：%q", results[10].Detail)

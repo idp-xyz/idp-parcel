@@ -626,7 +626,21 @@ const (
 // ConsolidationStore 保存集运单元实例。Save 只管开启（同 ID 重复开启交回
 // AlreadyRecorded）；加入/移出/封装/开封/关闭是同一实例的状态推进，走 Update。
 type ConsolidationStore interface {
+	// FindByID 是只读的一问：不取锁，事务内外都答。拿它读回的单元不交给 Update。
 	FindByID(ctx context.Context, tenant domain.TenantID, id domain.ConsolidationUnitID) (*domain.ConsolidationUnit, bool, error)
+
+	// FindByIDForUpdate 是「读来改」：在事务里读回单元，同时持有这只单元的行锁到事务结束；同一只单元上别的读来改
+	// 等本事务提交，再读到提交后的样子。要推进状态、随后交 Update 的单元只从这里读。
+	//
+	// 理由在 Update 的写法：它按交进来的单元整行改写，并把单元的每个成员重新写进容纳索引。不持锁读到的是旧读数：
+	// 别的事务在读与写之间提交的推进会被盖掉，别的事务刚删掉的容纳边会被写回——写回不判环，于是移出之后的反向移入
+	// 与按旧读数写回的那条边合成一个环。单元的容纳边只由持有它行锁的事务改，写回的就一定是当时已提交的那几条；
+	// 新边只由移入加，移入在 ContainmentIndex.LineageForUpdate 的租户锁下判过环。
+	//
+	// 锁随事务释放，所以它只在事务里答、事务外拒（取锁那条语句自动提交当场放锁，什么也挡不住）。单元不在册时交回
+	// false，不取任何锁。
+	FindByIDForUpdate(ctx context.Context, tenant domain.TenantID, id domain.ConsolidationUnitID) (*domain.ConsolidationUnit, bool, error)
+
 	Save(ctx context.Context, tenant domain.TenantID, unit *domain.ConsolidationUnit) (ConsolidationSaveOutcome, error)
 	Update(ctx context.Context, tenant domain.TenantID, unit *domain.ConsolidationUnit) error
 }
@@ -672,10 +686,11 @@ type ContainmentIndex interface {
 		member domain.HandlingUnitID,
 	) (domain.ConsolidationUnitID, bool, error)
 
-	// LineageForUpdate 读目标单元此刻的直接父级链路（自身在先、到根为止），同时把本租户此后的成员关系写入排到本事务
-	// 之后。移入前判「成员是不是目标自身或其祖先」读的是这条链路，而读与随后落下成员关系之间不能插进另一笔移入：两袋
-	// 互装时各自读到对方还是根、双双放行，提交后就是一个环；主键守得住单父级，守不住环。锁随事务释放，所以它只在事务
-	// 里答、事务外拒——取锁那条语句自动提交当场放锁，什么也挡不住，静默放过比报错更糟。
+	// LineageForUpdate 读目标单元此刻的直接父级链路（自身在先、到根为止），同时把本租户此后的移入排到本事务之后。
+	// 移入前判「成员是不是目标自身或其祖先」读的是这条链路，而读与随后落下成员关系之间不能插进另一笔移入：两袋
+	// 互装时各自读到对方还是根、双双放行，提交后就是一个环；主键守得住单父级，守不住环。别的口不取这把锁：它们不加
+	// 新边，只在单元行锁下写回当时已提交的边（ConsolidationStore.FindByIDForUpdate），链路在它们手里只会不变或变短。
+	// 锁随事务释放，所以它只在事务里答、事务外拒——取锁那条语句自动提交当场放锁，什么也挡不住，静默放过比报错更糟。
 	//
 	// 链路上出现回到自身的边是册已经成环，作为 ErrContainmentLineageCyclic 交回、不在它上面再判；读不动作为别的错误
 	// 交回。两者都不是答案（ADR-0022）。目标单元不在册时链路只有它自己，单元在不在册归 ConsolidationStore 答。

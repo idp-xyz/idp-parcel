@@ -14,12 +14,16 @@ import (
 
 var consolidationAt = time.Date(2026, 8, 13, 23, 0, 0, 0, time.UTC)
 
-// 单元库替身的失败注入：三口各一格，非空即在该口交回错误。
+// 单元库替身的失败注入：读、开启、推进各一格，非空即在该口交回错误；findErr 只读与读来改两问都认。
+//
+// reads 按到达次序记下单元的每一读，只读记 "find:<单元>"、读来改记 "for-update:<单元>"；包含索引替身把祖先链那一问
+// 记成 "lineage:<单元>" 也写进这里。替身里没有锁，用例据这份次序看编排走的是哪一问、先后如何——锁本身在真库用例上证。
 type consolidationStoreDouble struct {
 	byID      map[string]*domain.ConsolidationUnit
 	findErr   error
 	saveErr   error
 	updateErr error
+	reads     []string
 }
 
 func (double *consolidationStoreDouble) FindByID(
@@ -27,6 +31,20 @@ func (double *consolidationStoreDouble) FindByID(
 	_ domain.TenantID,
 	id domain.ConsolidationUnitID,
 ) (*domain.ConsolidationUnit, bool, error) {
+	double.reads = append(double.reads, "find:"+id.String())
+	if double.findErr != nil {
+		return nil, false, double.findErr
+	}
+	unit, found := double.byID[id.String()]
+	return unit, found, nil
+}
+
+func (double *consolidationStoreDouble) FindByIDForUpdate(
+	_ context.Context,
+	_ domain.TenantID,
+	id domain.ConsolidationUnitID,
+) (*domain.ConsolidationUnit, bool, error) {
+	double.reads = append(double.reads, "for-update:"+id.String())
 	if double.findErr != nil {
 		return nil, false, double.findErr
 	}
@@ -75,6 +93,7 @@ func (double *containmentIndexDouble) LineageForUpdate(
 	tenant domain.TenantID,
 	unit domain.ConsolidationUnitID,
 ) (domain.ContainmentLineage, error) {
+	double.store.reads = append(double.store.reads, "lineage:"+unit.String())
 	if double.lineageErr != nil {
 		return nil, double.lineageErr
 	}
@@ -670,8 +689,9 @@ func lineageNames(lineage domain.ContainmentLineage) string {
 // Covers: `AT-NO-039`「集运单元嵌套形成循环→拒绝成员关系，原关系不被覆盖」（NO CONTEXT「集运包含关系必须无循环」）——
 // 袋 C 在袋 B 里、B 在 A 里时，把 A 装进 C 答`包含循环`、带从 C 到 A 那一段直接父级链路；把一只袋装进它自己同答，链路只有
 // 它自己——已在别的袋里的 C 装进自己也答环而不是「在别处」：先从 B 移出再装仍成环，恢复动作不是那一个（ADR-0029）；三只袋
-// 的成员与来源事实登记都原样，拒绝不交 error（确定性拒绝不是未决）。跨单元的结构事实先于单元三相：B 封装后把 A 装进 B 仍答
-// `包含循环`而不是未受理——与「已在别处」先于三相同一条次序。
+// 的成员与来源事实登记都原样，拒绝不交 error（确定性拒绝不是未决）。成员是目标的后代不成环：链路只往上走，把 C 装进 A
+// 答 C 在别处（B），不答环。跨单元的结构事实先于单元三相：B 封装后把 A 装进 B 仍答`包含循环`而不是未受理——与「已在
+// 别处」先于三相同一条次序。
 func TestNestingThatWouldCloseACycleIsRefusedAndTheOriginalRelationsStay(t *testing.T) {
 	fixture := newConsolidateFixture(t)
 	tenant := consolidationTenant(t)
@@ -719,6 +739,18 @@ func TestNestingThatWouldCloseACycleIsRefusedAndTheOriginalRelationsStay(t *test
 	if nestedSelf.Outcome() != application.ContainmentCycle || lineageNames(nestedSelf.Lineage()) != "bag-c" {
 		t.Fatalf("outcome = %q lineage = %q；环先于「在别处」", nestedSelf.Outcome(), lineageNames(nestedSelf.Lineage()))
 	}
+	descendant, err := fixture.handler.AddMember(context.Background(), application.AddMemberCommand{
+		TenantID: tenant,
+		Unit:     unitID(t, "bag-a"),
+		Member:   handlingUnit(t, "bag-c"),
+		Source:   workSource(t, "src-descendant", consolidationAt.Add(2*time.Minute+2*time.Second)),
+	}, judgedBasis(t))
+	if err != nil {
+		t.Fatalf("把 A 的后代 C 装进 A：%v", err)
+	}
+	if descendant.Outcome() != application.MemberElsewhereContained || descendant.Elsewhere() != unitID(t, "bag-b") || descendant.Lineage() != nil {
+		t.Fatalf("outcome = %q elsewhere = %v lineage = %q；后代不在链路上，不成环", descendant.Outcome(), descendant.Elsewhere(), lineageNames(descendant.Lineage()))
+	}
 
 	for unit, want := range map[string]string{"bag-a": "bag-b", "bag-b": "bag-c", "bag-c": ""} {
 		if got := memberNames(fixture.store.byID[unit].Members()); got != want {
@@ -749,5 +781,74 @@ func TestNestingThatWouldCloseACycleIsRefusedAndTheOriginalRelationsStay(t *test
 	}
 	if sealed.Outcome() != application.ContainmentCycle || lineageNames(sealed.Lineage()) != "bag-b,bag-a" {
 		t.Fatalf("outcome = %q lineage = %q；结构事实先于三相", sealed.Outcome(), lineageNames(sealed.Lineage()))
+	}
+}
+
+// Covers: 改单元的各口读单元都走「读来改」（ports.ConsolidationStore.FindByIDForUpdate），不拿只读那一问的结果交给
+// Update——Update 按读到的单元整行改写、把成员整份写回容纳索引，不持行锁的旧读数会盖掉别的事务提交的推进，并把别的
+// 事务刚删掉的边写回；写回不判环，移出之后的反向移入与写回的那条边就合成一个环（NO CONTEXT「集运包含关系必须无循环」，
+// `AT-NO-039`）。移入另有次序：先读祖先链（取租户锁）、再读来改（取单元行锁）——在租户队里排着的移入不占单元行，
+// 别的口不陪着等；倒过来，排队的移入就攥着行锁。替身没有锁，这里看的是编排走哪一问、先后如何；锁在真库用例上证。
+func TestUnitChangingStepsReadTheUnitForUpdateAndAddingQueuesOnTheTenantFirst(t *testing.T) {
+	ctx := context.Background()
+	tenant := consolidationTenant(t)
+	opened := func(t *testing.T, fixture *consolidateFixture) { openUnit(t, fixture, "unit-1") }
+	withMember := func(t *testing.T, fixture *consolidateFixture) {
+		opened(t, fixture)
+		addMemberTo(t, fixture, "unit-1", "hu-1", "src-add-prepared")
+	}
+	for _, step := range []struct {
+		name    string
+		prepare func(t *testing.T, fixture *consolidateFixture)
+		run     func(t *testing.T, fixture *consolidateFixture) (application.ConsolidationResult, error)
+		want    application.ConsolidationOutcome
+		reads   string
+	}{
+		{"移入", opened, func(t *testing.T, fixture *consolidateFixture) (application.ConsolidationResult, error) {
+			return fixture.handler.AddMember(ctx, addMemberCommand(t, "src-add"), judgedBasis(t))
+		}, application.MemberAdded, "lineage:unit-1,for-update:unit-1"},
+		{"移出", withMember, func(t *testing.T, fixture *consolidateFixture) (application.ConsolidationResult, error) {
+			return fixture.handler.RemoveMember(ctx, application.RemoveMemberCommand{
+				TenantID: tenant, Unit: unitID(t, "unit-1"), Member: handlingUnit(t, "hu-1"),
+				Source: workSource(t, "src-remove", consolidationAt),
+			})
+		}, application.MemberRemoved, "for-update:unit-1"},
+		{"封装", withMember, func(t *testing.T, fixture *consolidateFixture) (application.ConsolidationResult, error) {
+			return fixture.handler.Seal(ctx, application.SealUnitCommand{
+				TenantID: tenant, Unit: unitID(t, "unit-1"),
+				Seal:   mustValue(t, domain.NewSealReference, "seal-1"),
+				Basis:  mustValue(t, domain.NewWorkBasisReference, "basis-1"),
+				Source: workSource(t, "src-seal", consolidationAt),
+			})
+		}, application.UnitSealedRecorded, "for-update:unit-1"},
+		{"开封", func(t *testing.T, fixture *consolidateFixture) {
+			withMember(t, fixture)
+			sealUnit(t, fixture, "unit-1", "src-seal-prepared")
+		}, func(t *testing.T, fixture *consolidateFixture) (application.ConsolidationResult, error) {
+			return fixture.handler.Unseal(ctx, application.UnsealUnitCommand{
+				TenantID: tenant, Unit: unitID(t, "unit-1"),
+				Basis:  mustValue(t, domain.NewWorkBasisReference, "basis-unseal"),
+				Source: workSource(t, "src-unseal", consolidationAt),
+			})
+		}, application.UnitUnsealed, "for-update:unit-1"},
+		{"关闭", opened, func(t *testing.T, fixture *consolidateFixture) (application.ConsolidationResult, error) {
+			return fixture.handler.Close(ctx, application.CloseUnitCommand{
+				TenantID: tenant, Unit: unitID(t, "unit-1"),
+				Source: workSource(t, "src-close", consolidationAt),
+			})
+		}, application.UnitClosedRecorded, "for-update:unit-1"},
+	} {
+		t.Run(step.name, func(t *testing.T) {
+			fixture := newConsolidateFixture(t)
+			step.prepare(t, fixture)
+			fixture.store.reads = nil
+			result, err := step.run(t, fixture)
+			if err != nil || result.Outcome() != step.want {
+				t.Fatalf("outcome = %q err = %v，要 %q", result.Outcome(), err, step.want)
+			}
+			if got := strings.Join(fixture.store.reads, ","); got != step.reads {
+				t.Fatalf("单元的各读依次为 %q，要 %q", got, step.reads)
+			}
+		})
 	}
 }

@@ -3,6 +3,7 @@ package postgres_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -202,6 +203,120 @@ func TestLineageForUpdateWaitsForTheConcurrentMembershipWrite(t *testing.T) {
 	case got := <-secondDone:
 		if got != "bag-b,bag-a" {
 			t.Fatalf("第一笔提交后第二笔读到的链路 = %q，要已含第一笔落下的那一级", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("第一笔提交后第二笔仍没放行")
+	}
+}
+
+func memberNamesOf(unit *domain.ConsolidationUnit) string {
+	names := make([]string, 0, len(unit.Members()))
+	for _, member := range unit.Members() {
+		names = append(names, member.String())
+	}
+	return strings.Join(names, ",")
+}
+
+// Covers: 读来改持单元行锁到事务结束（ports.ConsolidationStore.FindByIDForUpdate）——同一只单元上第二笔读来改等第一笔
+// 提交，提交后读到的是第一笔推进之后的那一版；只读那一问不取锁、不等，读到的是第一笔提交前的那一版。没有这把锁，
+// 第二笔拿到的是旧读数，交给 Update 就把第一笔的推进盖掉、把第一笔删掉的容纳边写回——写回不判环，环就是这样绕过
+// 祖先链那一问造出来的（`AT-NO-039`「拒绝成员关系，原关系不被覆盖」）。
+func TestFindByIDForUpdateHoldsTheUnitUntilCommitWhilePlainReadsDoNotWait(t *testing.T) {
+	store, transactor, _ := newConsolidationStore(t)
+	ctx := t.Context()
+	tenant := ref(t, domain.NewTenantID, "tenant-a")
+	bagA := openConsolidation(t, "bag-a", "asset-a")
+	saveConsolidation(t, transactor, ctx, store, tenant, bagA)
+	nest(t, transactor, ctx, store, tenant, bagA, "hu-1")
+	hu1 := ref(t, domain.NewHandlingUnitID, "hu-1")
+
+	firstHolds := make(chan struct{})
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	// 用例半途失败时也要放第一笔走、等各笔退出：悬着的事务会拖住本用例库的收尾（DROP DATABASE 等连接释放）。
+	var workers sync.WaitGroup
+	t.Cleanup(func() { unblock(); workers.Wait() })
+
+	firstDone := make(chan error, 1)
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		firstDone <- transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+			unit, found, err := store.FindByIDForUpdate(txCtx, tenant, bagA.ID())
+			if err != nil || !found {
+				return fmt.Errorf("第一笔读来改：found=%v err=%w", found, err)
+			}
+			if err := unit.RemoveMember(hu1); err != nil {
+				return err
+			}
+			if err := store.Update(txCtx, tenant, unit); err != nil {
+				return err
+			}
+			close(firstHolds)
+			<-release
+			return nil
+		})
+	}()
+	select {
+	case <-firstHolds:
+	case err := <-firstDone:
+		t.Fatalf("第一笔没拿住就退出了：%v", err)
+	}
+
+	plainDone := make(chan string, 1)
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		unit, found, err := store.FindByID(ctx, tenant, bagA.ID())
+		if err != nil || !found {
+			plainDone <- fmt.Sprintf("found=%v err=%v", found, err)
+			return
+		}
+		plainDone <- memberNamesOf(unit)
+	}()
+	select {
+	case got := <-plainDone:
+		if got != "hu-1" {
+			t.Fatalf("第一笔未提交时只读那一问读到 %q，要第一笔之前的那一版", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("只读那一问等在了行锁上")
+	}
+
+	secondDone := make(chan string, 1)
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		var members string
+		err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+			unit, found, err := store.FindByIDForUpdate(txCtx, tenant, bagA.ID())
+			if err != nil || !found {
+				return fmt.Errorf("found=%v err=%w", found, err)
+			}
+			members = memberNamesOf(unit)
+			return nil
+		})
+		if err != nil {
+			secondDone <- "error: " + err.Error()
+			return
+		}
+		secondDone <- members
+	}()
+
+	select {
+	case got := <-secondDone:
+		t.Fatalf("第二笔读来改没有等第一笔提交就读到了成员 %q", got)
+	case <-time.After(300 * time.Millisecond):
+	}
+	unblock()
+	if err := <-firstDone; err != nil {
+		t.Fatalf("第一笔提交：%v", err)
+	}
+	select {
+	case got := <-secondDone:
+		if got != "" {
+			t.Fatalf("第一笔提交后第二笔读到的成员 = %q，要第一笔移出之后的那一版", got)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("第一笔提交后第二笔仍没放行")

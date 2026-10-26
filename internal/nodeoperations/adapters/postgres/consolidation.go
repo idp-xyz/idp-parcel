@@ -48,7 +48,7 @@ type snapshotRow struct {
 	SealedAt time.Time         `json:"sealedAt"`
 }
 
-// FindByID 按（租户+实例）取回集运单元。否定结果只回 false。读回经重建门复验。
+// FindByID 按（租户+实例）取回集运单元，只读、不取锁。否定结果只回 false。读回经重建门复验。
 func (repository *ConsolidationUnits) FindByID(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -58,28 +58,61 @@ func (repository *ConsolidationUnits) FindByID(
 	if err != nil {
 		return nil, false, fmt.Errorf("find consolidation: %w", err)
 	}
+	unit, found, err := findConsolidation(ctx, querier, consolidationRowQuery, tenant, id)
+	if err != nil {
+		return nil, false, fmt.Errorf("find consolidation: %w", err)
+	}
+	return unit, found, nil
+}
 
+// FindByIDForUpdate 同 FindByID，另在单元行上取 FOR NO KEY UPDATE 行锁到事务结束（为何要锁见端口注释）。取的正是随后
+// 那条 UPDATE 本来就要取的那一把，只是提前到读：读来改之间互斥；别的事务插入引用这只单元的行时做的外键核对
+// （FOR KEY SHARE）不陪着等——FOR UPDATE 会把它们也挡住，换不来什么，单元的键从不改。READ COMMITTED 下，等到
+// 前一笔提交之后这一读拿到的是提交后的那一版，不是开始等时的那一版。走 RequireExecutor：连接池上取的锁随那条
+// 语句自动提交当场放掉。
+func (repository *ConsolidationUnits) FindByIDForUpdate(
+	ctx context.Context,
+	tenant domain.TenantID,
+	id domain.ConsolidationUnitID,
+) (*domain.ConsolidationUnit, bool, error) {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return nil, false, fmt.Errorf("find consolidation for update: %w", err)
+	}
+	unit, found, err := findConsolidation(ctx, executor, consolidationRowQuery+`
+		    FOR NO KEY UPDATE`, tenant, id)
+	if err != nil {
+		return nil, false, fmt.Errorf("find consolidation for update: %w", err)
+	}
+	return unit, found, nil
+}
+
+const consolidationRowQuery = `SELECT asset_ref, phase, opened_source, members, snapshots, closed_at
+		   FROM node_operations.consolidation_unit
+		  WHERE tenant_id = $1
+		    AND unit_id = $2`
+
+func findConsolidation(
+	ctx context.Context,
+	querier bentopg.Querier,
+	query string,
+	tenant domain.TenantID,
+	id domain.ConsolidationUnitID,
+) (*domain.ConsolidationUnit, bool, error) {
 	var assetRef, phase string
 	var openedSourceJSON, membersJSON, snapshotsJSON []byte
 	var closedAt *time.Time
-	err = querier.QueryRow(ctx,
-		`SELECT asset_ref, phase, opened_source, members, snapshots, closed_at
-		   FROM node_operations.consolidation_unit
-		  WHERE tenant_id = $1
-		    AND unit_id = $2`,
-		tenant.String(),
-		id.String(),
-	).Scan(&assetRef, &phase, &openedSourceJSON, &membersJSON, &snapshotsJSON, &closedAt)
+	err := querier.QueryRow(ctx, query, tenant.String(), id.String()).
+		Scan(&assetRef, &phase, &openedSourceJSON, &membersJSON, &snapshotsJSON, &closedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, false, nil
 	}
 	if err != nil {
-		return nil, false, fmt.Errorf("find consolidation: %w", err)
+		return nil, false, err
 	}
-
 	unit, err := rebuildConsolidation(id, assetRef, phase, openedSourceJSON, membersJSON, snapshotsJSON, closedAt)
 	if err != nil {
-		return nil, false, fmt.Errorf("find consolidation: %w", err)
+		return nil, false, err
 	}
 	return unit, true, nil
 }
@@ -133,6 +166,10 @@ func (repository *ConsolidationUnits) Save(
 // Update 落加入/移出/封装/开封/关闭这一步状态推进：身份、载具与开启来源在开启时固定，
 // 重写等值也不给入口——每一步各自的来源事实归 ConsolidationFacts 登记，不回头改这一行。
 // 行不存在如实报错；租户条件进语句（ADR-0003）。
+//
+// 交进来的单元按整行写，它的每个成员都重新插进容纳索引（已在的不动）、不在它身上的本单元容纳行删掉；这里不比
+// 版本，分不出这份单元是什么时候读的。所以它只该收 FindByIDForUpdate 读出来的单元：旧读数会盖掉别的事务提交的
+// 推进，并把别的事务刚删掉的边写回（端口注释）。
 func (repository *ConsolidationUnits) Update(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -213,9 +250,11 @@ func (repository *ConsolidationUnits) CurrentParent(
 
 // LineageForUpdate 沿当前容纳索引从目标单元逐级上溯到根，自身在先；先取（租户）的事务级咨询锁，再读。
 //
-// 锁按租户而不按链上的行：要锁的那几行在走完链之前不知道是哪几行，边走边锁的次序随链而异、两笔反向走会互等；而
-// 成环只会由移入造出来（移出、关闭只删边），移入按租户串起来就够——CHECK 引用不了别的行，这一半库面守不住，
-// 只能靠这把锁。走 RequireExecutor：连接池上取到的锁随那条语句自动提交当场放掉，读链与落成员之间不再串行。
+// 锁按租户而不按链上的行：要锁的那几行在走完链之前不知道是哪几行，边走边锁的次序随链而异、两笔反向走会互等。
+// 只把移入串起来就够，前提是新边只由移入加：移出、封装、开封、关闭经 Update 把单元的成员整份写回容纳索引，它们
+// 读单元走 FindByIDForUpdate、持着单元行锁，写回的只是当时已提交的那几条边，删边只会让链路变短。哪一口改用
+// 不持锁的旧读数，就能把别的事务刚删掉的边写回，而写回不判环——这把锁挡不住那一种。CHECK 引用不了别的行，
+// 这一半库面守不住。走 RequireExecutor：连接池上取到的锁随那条语句自动提交当场放掉，读链与落成员之间不再串行。
 // 键照本仓其余事务级锁的双 int 形式，撞上只让两个租户多等一会儿。同一事务里再取是重入。
 //
 // 上溯用 path 数组带着走过的各级，再次踏上已走过的一级即停并交回 ErrContainmentLineageCyclic：册已成环时不带 path

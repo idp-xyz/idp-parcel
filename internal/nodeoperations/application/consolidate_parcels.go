@@ -251,10 +251,14 @@ func (handler *ConsolidateParcelsHandler) Open(
 // 一只已在别的袋里的袋被装进自己或装进它装着的袋，答「先从那里移出」会把人引去做一件做完仍成环的事，而恢复动作
 // 正是结果格要分的东西（ADR-0029）。两条都是跨单元的结构事实，排在单元三相之前；封装/关闭态由领域拦。
 //
-// 祖先链在读单元之前取（LineageForUpdate 同时把本租户此后的移入排到本事务之后）：两袋互装各自看到对方还是根时双双
-// 放行，提交后就是一个环，读链与落成员之间不能插进另一笔移入。锁先于单元那一读，同一单元的两笔移入也随之串起来；
-// 移出、封装、开封、关闭五口不取这把锁，它们与移入并发时单元行的覆盖写仍是票 no-consolidation-fact-provenance/02 记
-// 下的那条缺口。
+// 两把锁，次序固定：先 LineageForUpdate 取租户锁读祖先链，再 FindByIDForUpdate 取目标单元的行锁读单元。租户锁让读链
+// 与落成员之间插不进另一笔移入：两袋互装各自看到对方还是根时双双放行，提交后就是一个环。行锁让单元那一读与 Update
+// 之间插不进别的口对这只单元的推进：Update 按读到的单元整行改写，旧读数会盖掉别人的推进、把别人删掉的边写回。
+// 租户锁在前，是为了在租户队里排着的移入不占着单元行：移出、封装、开封、关闭只取单元行锁，不陪着这一队等。
+//
+// 集运各口的锁序只有这一条：别的口只取单元行锁、从不取租户锁，所以没有互等。一笔移入也只锁一只单元的行——
+// 成员本身是单元（袋套袋）时它的单元行不读不写，它那一侧的边在容纳索引里按成员键记。这要求调用方一笔事务只推进
+// 一只单元：把移出与移入别处放进同一笔，就成了先持行锁、再取租户锁，与另一笔移入可能互等。
 //
 // basis 是调用方在写事务之前判好的方向依据记录（DirectionalBasisJudge），只在形成新的移入事实时与事实同一笔
 // 落册。它不挡事实：缺依据、读不动都照常 MEMBER_ADDED——UC-NO-003「已经发生的错误分拣保留为事实并形成偏离，
@@ -285,7 +289,7 @@ func (handler *ConsolidateParcelsHandler) AddMember(
 		return ConsolidationResult{}, fmt.Errorf("look up containment lineage: %w", err)
 	}
 
-	unit, found, err := handler.deps.Store.FindByID(ctx, command.TenantID, command.Unit)
+	unit, found, err := handler.deps.Store.FindByIDForUpdate(ctx, command.TenantID, command.Unit)
 	if err != nil {
 		return ConsolidationResult{}, fmt.Errorf("look up consolidation unit: %w", err)
 	}
@@ -339,7 +343,7 @@ func (handler *ConsolidateParcelsHandler) RemoveMember(
 		return gate.result, nil
 	}
 
-	unit, found, err := handler.deps.Store.FindByID(ctx, command.TenantID, command.Unit)
+	unit, found, err := handler.deps.Store.FindByIDForUpdate(ctx, command.TenantID, command.Unit)
 	if err != nil {
 		return ConsolidationResult{}, fmt.Errorf("look up consolidation unit: %w", err)
 	}
@@ -379,7 +383,7 @@ func (handler *ConsolidateParcelsHandler) Seal(
 		return gate.result, nil
 	}
 
-	unit, found, err := handler.deps.Store.FindByID(ctx, command.TenantID, command.Unit)
+	unit, found, err := handler.deps.Store.FindByIDForUpdate(ctx, command.TenantID, command.Unit)
 	if err != nil {
 		return ConsolidationResult{}, fmt.Errorf("look up consolidation unit: %w", err)
 	}
@@ -421,7 +425,7 @@ func (handler *ConsolidateParcelsHandler) Unseal(
 		return gate.result, nil
 	}
 
-	unit, found, err := handler.deps.Store.FindByID(ctx, command.TenantID, command.Unit)
+	unit, found, err := handler.deps.Store.FindByIDForUpdate(ctx, command.TenantID, command.Unit)
 	if err != nil {
 		return ConsolidationResult{}, fmt.Errorf("look up consolidation unit: %w", err)
 	}
@@ -459,7 +463,7 @@ func (handler *ConsolidateParcelsHandler) Close(
 		return gate.result, nil
 	}
 
-	unit, found, err := handler.deps.Store.FindByID(ctx, command.TenantID, command.Unit)
+	unit, found, err := handler.deps.Store.FindByIDForUpdate(ctx, command.TenantID, command.Unit)
 	if err != nil {
 		return ConsolidationResult{}, fmt.Errorf("look up consolidation unit: %w", err)
 	}
@@ -534,8 +538,8 @@ func (handler *ConsolidateParcelsHandler) admit(
 }
 
 // recorded 在作业真的发生之后留下来源事实。并发下同一来源身份的另一半先提交时，读回它：同一内容按已有结果作答，
-// 另一份内容答来源冲突。本次单元那一步（Store.Update）已在同一事务里写下，并发两份异内容时它不被撤回——这是
-// 单元写口没有版本校验的既有缺口（票 no-consolidation-fact-provenance/02）。
+// 另一份内容答来源冲突。本次单元那一步（Store.Update）已在同一事务里写下，并发两份异内容时它不被撤回（票
+// no-consolidation-fact-provenance/02）：单元行锁让输家那一步落在赢家之后、不盖掉赢家，但输家那一步仍随提交落册。
 func (handler *ConsolidateParcelsHandler) recorded(
 	ctx context.Context,
 	gate admissionGate,

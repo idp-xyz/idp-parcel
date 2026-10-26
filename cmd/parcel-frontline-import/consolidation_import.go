@@ -231,8 +231,9 @@ func consolidationRowDisposition(row consolidationRow, result application.Consol
 }
 
 // describeContainmentCycle 把`包含循环`译给对纸单的人：链路只有目标自身是把袋装进了自己；更长的链路是成员已经（直接
-// 或逐级）装着目标——多半是装反了，要真这么装，先把目标从它的直接父级里移出。链路按 ⊂ 从目标写到成员，与编排交回的
-// 次序一致：目标在先、逐级直接父级、成员那一级在末。
+// 或逐级）装着目标——多半是装反了，要真这么装，先把目标从它的直接父级里移出。那个父级已封装时移出会被拒（封装后改
+// 成员先开封，NO CONTEXT「封装成员快照」），报文这里不读它的三相，所以把开封写成条件句一并交代。链路按 ⊂ 从目标写到
+// 成员，与编排交回的次序一致：目标在先、逐级直接父级、成员那一级在末。
 func describeContainmentCycle(row consolidationRow, lineage domain.ContainmentLineage) string {
 	command, _ := row.Command.(application.AddMemberCommand)
 	if len(lineage) <= 1 {
@@ -244,7 +245,8 @@ func describeContainmentCycle(row consolidationRow, lineage domain.ContainmentLi
 	}
 	return "成员 " + command.Member.String() + " 此刻已经装着单元 " + command.Unit.String() +
 		"（" + strings.Join(chain, " ⊂ ") + " 逐级直接包含）——集运包含不得成环；核对是否装反，要真这么装先把 " +
-		lineage[0].String() + " 从 " + lineage[1].String() + " 移出（" + domain.RemoveMemberAction.String() + "），不是重试"
+		lineage[0].String() + " 从 " + lineage[1].String() + " 移出（" + domain.RemoveMemberAction.String() + "；" +
+		lineage[1].String() + " 若已封装，先开封 " + domain.UnsealUnitAction.String() + "），不是重试"
 }
 
 // describeUnit 给报告一句单元现状：三相、成员数、快照数——运维对纸单时看得出这一行推到了哪。

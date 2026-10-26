@@ -256,6 +256,10 @@ func TestConsolidationWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, err := store.LineageForUpdate(ctx, tenant, unit.ID()); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务 LineageForUpdate 应返回 ErrTransactionRequired，实得：%v", err)
 	}
+	// 读来改取的是单元行锁：事务外取到的锁随语句自动提交当场放掉，读回去改的仍是旧读数，所以同样要拒（PBC-08）。
+	if _, _, err := store.FindByIDForUpdate(ctx, tenant, unit.ID()); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务 FindByIDForUpdate 应返回 ErrTransactionRequired，实得：%v", err)
+	}
 	if _, exists, err := store.FindByID(ctx, tenant, unit.ID()); err != nil || exists {
 		t.Errorf("被拒绝的写入仍然落库：exists=%v err=%v", exists, err)
 	}
