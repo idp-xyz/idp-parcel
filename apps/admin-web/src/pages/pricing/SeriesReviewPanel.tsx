@@ -21,8 +21,8 @@ import { problemNote } from './presentation';
  * 的实施票里写明选了哪一形。复核是**低频、两格、治理性质**的动作，逐字段表单是这三条上的
  * 直接读数——它不像价卡那样是上千格的矩阵（那一册按决定二走模板导入）。
  *
- * **表单上没有「复核责任方」这一格，那不是漏做。** 复核责任方是四眼门的一半（领域拒绝
- * 复核责任方等于登记责任方），从浏览器收一个上去就是自报身份；传输层
+ * **表单上没有「复核责任方」这一格，那不是漏做。** 租户的参考复核职责规则比的就是复核
+ * 责任方与他在信封里持有的授予（ADR-0262 决定一），从浏览器收一个上去就是自报身份；传输层
  * `ReferenceSeriesReviewIntake` 的注释原话是「从请求内容里铸一个出来就等于把那道门拆了」。
  * 正当出处是 ADR-0100 的 `OperatorEnvelope`，由接入渠道给。今天渠道未配置，所以提交必然
  * 答 403——**页面因此要说「接入渠道未配置」而不是「尚未实现」**：机制在，墙也在，两者
@@ -33,7 +33,7 @@ import { problemNote } from './presentation';
 export interface SeriesReviewTarget {
   seriesId: string;
   seriesVersion: string;
-  /** 登记责任方，只用于在面板上提示四眼门——不随请求送出。 */
+  /** 登记责任方，只用于在面板上提示复核职责规则——不随请求送出。 */
   registrant: string;
 }
 
@@ -84,9 +84,10 @@ export function SeriesReviewPanel({
           复核是追加在版本之旁的独立事实，不改原登记一列；结论为通过时，该版本自复核时刻起
           在用（ADR-0099 决定二、三）。
           <br />
-          复核责任方由接入渠道给，本表单不收也不送——它是四眼门的一半，自报即失效。该版本的
-          登记责任方是 <span className="font-mono">{target.registrant}</span>，
-          <strong>同一个人复核会被领域拒绝</strong>。
+          复核责任方与他的授予由接入渠道给，本表单不收也不送——自报即失效。该版本的登记责任方是{' '}
+          <span className="font-mono">{target.registrant}</span>；租户的参考复核职责规则若要求不同主体，
+          <strong>同一个人复核会被拒</strong>；规则若要求某一格授予，没有它的人复核会被拒；租户还没登规则时，
+          谁来复核都答未配置。
         </p>
 
         <div className="flex items-center gap-2">
