@@ -1,7 +1,7 @@
 # 10 资料修订口经首方渠道接通
 
 Category: enhancement
-Status: in-progress——2026-10-26 作者完工（PS/装配侧），待隔离评审与进 main，分支 `claude-fpa10`（代码最后一笔 e15265e10）；演示租户的授予与种子、「演示客户端能对自己的委托做修订」留到票 first-party-api/13 进 main 之后补一笔。此前in-progress——2026-10-26 会话 `tops-20` 认领（前置 code/36、code/44 已进 main），分支 `claude-fpa10`。此前 ready-for-agent——R1（上线前必修，用户 2026-10-26 定首发要这一口）。
+Status: in-progress——2026-10-26 评审无阻断、修订轮完，待进 main，分支 `claude-fpa10`（代码最后一笔 271319f57）。此前in-progress——2026-10-26 会话 `tops-20` 认领（前置 code/36、code/44 已进 main），分支 `claude-fpa10`。此前 ready-for-agent——R1（上线前必修，用户 2026-10-26 定首发要这一口）。
 Blocked by: 06；docs-consistency/code/44（tops-26）
 出处：用户 2026-10-26「都需要」（首个租户上线时客户经首方 API 要能撤回、取消、修订、补充、索赔）、「每个客户系统只代表它自己的账户（直客），只考虑这个吧」、「首发不要客户状态读口」、「首发不做限流」；技术取舍由会话 `tops-20` 代决（用户「你帮我决定吧」）。 计划见 [spec](../spec.md)「五口上线」与 [摸底报告](../customer-faces-scoping-2026-10-26.md)。
 
@@ -37,3 +37,11 @@ L
   5. 授权时点取注入时钟：重放时钟不同，授权可能读出不同答复，契约已写。
 - **判据对用例**：成功、重放同结果、他账户 404 同字节、委托号不符 404、未授予 403、自报 400、同标识改内容冲突、解析键未登记答授权不可用、无授予答授权规则未配置并在登授予后原样重放形成版本 —— `TestACustomerClientAmendsThroughTheFirstPartyLineAgainstARealDatabase`（`AT-PS-143`）。
 - **自验**（含 PG，DSN `postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable`）：`go build ./...`、`go vet` 受影响包、`gofmt`；`go test -count=1 -p 1 ./cmd/parcel-api/... ./internal/parcelshipment/... ./internal/accessidentity/... ./internal/architecture/... ./migrations/... ./tools/...` 全绿。`at-coverage-counts -check` 与 `adr-index -check` 只报生成物过期（未手改 `docs/adr/README.md` 与总览计数）。未跑全量。
+
+### 修订轮（评审无阻断之后，票 13 已进 main）
+
+- 分支 rebase 到 `origin/main`（解了 `assemble_customer_client.go`、认证器、形状文件、契约与盘点的并排冲突，两边都留）。
+- 演示形态闭环：用例的授予改经票 13 的发布授予通道的持久化口（`CommercialPublications.SaveAuthorityGrant`，对象 `SYN-AUTH-SOURCE-AMEND-01` 同形：`SOURCE_DATA_AMENDMENT` × `CUSTOMER_SELF_SERVICE` × `SYN-LE-01` × `SYN-SCOPE-01`），不再直写授权册；矩阵取与种子同形的 `DELIVERY_PLACE` 两格。`ACCEPTED_NOT_YET_RECEIVED` 阶段更正答 201 `RECORDED`，播下已固定的申报提交版本后（`CUSTOMS_SUBMITTED`）同一资料组更正答 `DISALLOWED`，版本与意图都不多。
+- **未走**：一次性库上 `seed.sh` 之后用演示客户端实走——本环境没有 `psql` 建一次性库，且实走要 OIDC 发行方；种子形状由票 13 自己验过，本票用例取同形的授予与矩阵。
+- 三条评审注释：PC 侧不按证据区分两次修订、区分靠 PS 版本（`CustomerSelfAmendmentRequestSource`、ADR-0311 决定四）；`buildSourceDataAmendmentAuthorizer` 只供首方直客修订装配、运营侧须另起映射；`namedAmendmentChecker.Handle` 查找出错 / 查不到放行给 inner 的隐式依赖写明。
+- 自验含 PG：`./cmd/parcel-api/... ./internal/parcelshipment/... ./internal/accessidentity/... ./internal/architecture/... ./internal/partycommercial/... ./migrations/...` 全绿。
