@@ -83,7 +83,7 @@ func (repository *FulfillmentSegments) FindByKey(
 		spec.ClosedAt = closedAt.UTC()
 	}
 	if spec.ClosedBy, err = registrantFromColumn(closedBy); err != nil {
-		return ports.FulfillmentSegmentRecord{}, false, fmt.Errorf("find fulfillment segment: %w", err)
+		return ports.FulfillmentSegmentRecord{}, false, segmentRecordUnreadable(err)
 	}
 	// NULL 就是未声明（ADR-0114 决定一）；非空的词经封闭集合认回，词不在集合内是坏行，在这里响亮。
 	if serviceAction != nil {
