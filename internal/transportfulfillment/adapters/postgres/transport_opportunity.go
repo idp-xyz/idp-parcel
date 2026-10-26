@@ -35,7 +35,7 @@ func (repository *CapacityPools) ListPoolsOnSchedules(
 
 // ListPoolsOnSchedulesUnlocked 同 ListPoolsOnSchedules，只是不锁池行（准备评估那一口，见 ports.UnlockedCapacityPoolsOnSchedules）。
 //
-// 一个池分几条语句读（池行、释放、分配关系、预占），读已提交下每条各取各的快照：两条之间恰有一笔释放提交时，释放明细与
+// 一个池分几条语句读，读已提交下每条各取各的快照：两条之间恰有一笔释放提交时，释放明细与
 // 预占上的已释放对不上，重建门拒读，准备答池册读不动、整封重投，下一次读到的是那一笔之后的池。不拼一条语句去换一个
 // 一致的快照：那就成了第二条读法，而这一口要的正是与写编排读到同一个池。
 func (repository *CapacityPools) ListPoolsOnSchedulesUnlocked(
