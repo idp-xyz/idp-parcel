@@ -105,7 +105,7 @@ type canonicalCancellationDocument struct {
 	RequestedAt             string `json:"requestedAt"`
 }
 
-// CanonicalizeCustomerParcelCancellation 是首方取消口的规范化入口（形状 PCN-1）。指名（原提交、委托号、包裹）、原因与请求时刻
+// CanonicalizeCustomerParcelCancellation 是首方取消口的规范化入口（形状 PCN-1）。摘要目前只用来校验载荷立得住，不入库：取消命令没有摘要槽，判重靠取消库自己的内容摘要。指名（原提交、委托号、包裹）、原因与请求时刻
 // 全部进摘要，所以同一取消请求改指另一份原提交、另一个包裹、另一个原因或另一个时刻，摘要就变。时刻按 UTC 的 RFC3339Nano 写，
 // 同一时刻的不同写法同摘要。
 func CanonicalizeCustomerParcelCancellation(spec CustomerParcelCancellationSpec) (PayloadDigest, error) {
