@@ -50,7 +50,7 @@ S–M：调整一侧的取锁次序，补真库并发用例。
 - 选第 1 条（协调方采纳）：撤回、主动拒绝、授权处置，以及接受链形成决定的自动拒绝、停进`等待受控补充`，保存委托（R）之前先取这份委托各版已成立占用所在作用域的锁（S）。接受链一侧不动。
 - 新端口 `ports.PreAcceptanceControlScopeLock`（PS 自有，坐标是控制结果上存下的 `OccupationScope`），头注写全序；消费侧适配器 `settlementaccounting.ControlScopeLocks` 把坐标译给 SA 的同一把锁（`sapostgres.PreAcceptanceControlScopeLocks`），不另建锁。SA 一侧的端口头注加一段指回 PS 头注。
 - 编排：`lockScopesBeforeSave`（`application/lock_occupation_scopes.go`）读每一版已记录的控制结果，成立了占用且存下作用域的才取，同作用域一次；`WithdrawShipmentRequestHandler.decide` 在已决态短路之后、领取决定标识之前取，`RejectShipmentRequestHandler`、`DisposeShipmentRequestHandler` 在各自的前置判过之后、领标识之前取，`FormAcceptanceDecisionHandler` 在保存拒绝与保存`等待受控补充`暂停之前取。四只 Deps 各加 `ScopeLock`。
-- 装配：`cmd/parcel-api` 的 `assemble_withdrawal.go`、`assemble_review.go`、`assemble_disposition.go` 与 `cmd/parcel-dispatch` 的 `acceptanceChainConsumers` 各接上；`assemble_withdrawal.go` 抽出 `withdrawalOrchestrationWith(db, authorizer)`（同 `rejectionOrchestrationWith`、`dispositionOrchestrationWith` 的授权器入参接缝，生产入口行为不变），好让装配测试在生产装配上证已授权之后那一段。
+- 装配：`cmd/parcel-api` 的 `assemble_withdrawal.go`、`assemble_review.go`、`assemble_disposition.go` 与 `cmd/parcel-dispatch` 的 `acceptanceChainConsumers` 各接上；首方撤回口（`buildCustomerWithdrawalOrchestration`）与代理人形态共用的 `assembleWithdrawalOrchestration(db, authorizer)` 构造点接了 `ScopeLock`，所以首方撤回口随之带上这一把锁，不需要另接；这条授权器入参接缝同 `rejectionOrchestrationWith`、`dispositionOrchestrationWith`，本票的装配用例直接用它。
 - 文档：UC-PS-005「规则、补偿与并发」补一条取锁次序；验收示例新立 `AT-PS-127`、`AT-PS-128`、`AT-PS-129`；UC-PS-001 交接表补一行承接 `AT-PS-035`；盘点三行入①与一段追记（总览计数未动）。
 
 ### 锁序全序（全文在 `ports.PreAcceptanceControlScopeLock` 头注）
@@ -88,5 +88,5 @@ S–M：调整一侧的取锁次序，补真库并发用例。
 3. **反向时序的孤儿占用（范围外）。** 撤回类路径先拿到 S、链此前已读到`已提交`并在 S 上排队时，链排到后照常施加并留下一笔挂在已撤回委托上的冻结，没有路径放它。真库实测复现；改前改后都存在（时间窗是链开头读委托到施加之间），[code/102](./102-an-acceptance-chain-round-that-waited-on-the-control-scope-lock-past-a-terminal-decision-leaves-a-fresh-occupation-nothing-releases.md) 立了票（建议 R2）。**首方撤回口上线前建议先看它。**
 4. **取锁失败是 SQL 级错误时事务进入中止态。** 释放有 `SavepointedControlRelease` 保护，本票的取锁没有：这时撤回的来源保全随事务回滚、HTTP 5xx，客户重发。取锁失败本就多半伴随保存失败，没为它另包 savepoint。
 5. **`cmd/parcel-dispatch` 的 `ScopeLock` 装配没有行为测试。** 链里这把锁是重入，漏接不改任何结果，除非自动拒绝或暂停遇到有占用的委托——那时取锁口缺位按取锁失败答 `DECISION_NOT_RECORDED`，响亮但要到那一刻才露头；生产的商业依据是真 PC 权威，走不到`要求拒绝`，造不出生产装配上的真用例。parcel-api 三处接线有变异证明。
-6. **取锁口缺位在有占用的委托上是失败（fail-closed）。** 日后新装配（首方撤回口若不复用 `withdrawalOrchestrationWith` 而自己构造 `WithdrawShipmentRequestDeps`）必须传 `ScopeLock`，否则带占用的撤回答 `DECISION_NOT_RECORDED`。今天仓里唯一的生产构造点在 `assemble_withdrawal.go`。
+6. **取锁口缺位在有占用的委托上是失败（fail-closed）。** 日后新装配（若不复用 `assembleWithdrawalOrchestration` 而自己构造 `WithdrawShipmentRequestDeps`）必须传 `ScopeLock`，否则带占用的撤回答 `DECISION_NOT_RECORDED`。今天仓里撤回编排唯一的生产构造点在 `assemble_withdrawal.go` 的 `assembleWithdrawalOrchestration`，代理人形态与首方撤回口都经它。
 7. 每条路径多读一轮各版已记录的判断（`LoadRecordedJudgments`，N 版 N 次读，在保存之前）。撤回类是低频人工操作，没有为它另开只读控制结果作用域的读口。
