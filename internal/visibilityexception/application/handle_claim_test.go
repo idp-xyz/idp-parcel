@@ -1345,3 +1345,34 @@ func TestAClaimCommandMissingAnEssentialIsNotAccepted(t *testing.T) {
 		t.Fatal("an unaccepted command still wrote the claim store")
 	}
 }
+
+// Covers: AT-VE-210（自然键）——存储键是（租户+批次+项）、不含账户：同租户另一个账户撞上已被占用的同一对键，答`未受理`、不带原项，
+// 也不覆盖原项；原账户重放仍答已有结果。
+func TestAClaimKeyHeldByAnotherAccountIsNotAcceptedAndDoesNotLeakTheOriginal(t *testing.T) {
+	fixture := newClaimFixture(t)
+	ctx := context.Background()
+	if _, err := fixture.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1")); err != nil {
+		t.Fatalf("receive: %v", err)
+	}
+
+	other := receiveCommand(t, "item-1")
+	other.Customer = mustValue(t, domain.NewCustomerAccountReference, "customer-OTHER")
+	result, err := fixture.handler.ReceiveClaim(ctx, other)
+	if err != nil {
+		t.Fatalf("receive other account: %v", err)
+	}
+	if result.Outcome() != application.HandleClaimNotAccepted {
+		t.Fatalf("outcome = %q, want NOT_ACCEPTED", result.Outcome())
+	}
+	if _, present := result.Claim(); present {
+		t.Fatal("别的账户撞键，答复里带了原项")
+	}
+	if fixture.claims.saves != 1 {
+		t.Fatalf("saves = %d, want 1", fixture.claims.saves)
+	}
+
+	owner, err := fixture.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1"))
+	if err != nil || owner.Outcome() != application.ClaimExistingResult {
+		t.Fatalf("原账户重放 = %q, %v, want CLAIM_EXISTING_RESULT", owner.Outcome(), err)
+	}
+}

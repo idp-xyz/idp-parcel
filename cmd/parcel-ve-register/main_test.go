@@ -149,7 +149,7 @@ func validInputByCommand() map[string]string {
 			"channel":"SYN-CHANNEL","deadlineAfter":"72h","obligation":"SYN-OBLIGATION",
 			"approvedBy":"SYN-approver-1"}`,
 		commandClaimEligibility: `{"tenantId":"SYN-TEN-VE15","version":"SYN-V1",
-			"approvedBy":"SYN-approver-1","contract":"SYN-CONTRACT","coveredKinds":["SYN-KIND-LOSS"]}`,
+			"approvedBy":"SYN-approver-1","contract":"SYN-CONTRACT","customer":"SYN-ACCOUNT-01","coveredKinds":["SYN-KIND-LOSS"]}`,
 		commandClaimAuthorization: `{"tenantId":"SYN-TEN-VE15","version":"SYN-V1",
 			"approvedBy":"SYN-approver-1","customer":"SYN-CUSTOMER","applicants":["SYN-APPLICANT"]}`,
 		commandDisclosurePolicy: `{` + versionHeader + `,"entries":[

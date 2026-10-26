@@ -110,6 +110,7 @@ func TestTheWiredClaimsAnswerHonestlyAgainstARealDatabase(t *testing.T) {
 				veports.ClaimEligibilityRegistration{
 					Header:       veports.CatalogApprovalHeader{Version: "SYN-CLAIM-RULES-1", ApprovedBy: "SYN-OPERATOR-1"},
 					Contract:     command.Contract,
+					Customer:     command.Customer,
 					CoveredKinds: []visibilitydomain.ClaimKindReference{command.Kind},
 				})
 			return registerErr
@@ -235,11 +236,11 @@ func TestTheWiredClaimsReadTheRuleAdoptedAtAcceptanceThroughParcelShipment(t *te
 		t.Fatalf("装配资格规则读面：%v", err)
 	}
 
-	// 两项索赔同租户同合同、各属一个货主客户账户：客户一那项指向随后接受的委托一（登记行含客户合同 + 客户服务
+	// 两项索赔同租户、各属一个货主客户账户：客户一那项指向随后接受的委托一（登记行含客户合同 + 客户服务
 	// 规则），客户二那项指向委托二（登记行只含客户合同）。解析键登记面按（租户，客户账户）一行，两种登记行因此
 	// 要两个客户。目标范围引用原样是 PS 的声明包裹身份。
 	submission, secondSubmission := submissionCommand(t), secondSubmissionCommand(t)
-	receive := func(item, target string, identity psdomain.SourceIdentity) visibilityapp.ReceiveClaimCommand {
+	receive := func(item, contract, target string, identity psdomain.SourceIdentity) visibilityapp.ReceiveClaimCommand {
 		t.Helper()
 		command := visibilityapp.ReceiveClaimCommand{
 			TenantID:    mustValue(t, visibilitydomain.NewTenantID, identity.TenantID().String()),
@@ -247,7 +248,7 @@ func TestTheWiredClaimsReadTheRuleAdoptedAtAcceptanceThroughParcelShipment(t *te
 			Item:        mustValue(t, visibilitydomain.NewClaimItemID, item),
 			Customer:    mustValue(t, visibilitydomain.NewCustomerAccountReference, identity.CustomerAccountID().String()),
 			Applicant:   mustValue(t, visibilitydomain.NewApplicantReference, "SYN-APPLICANT-1"),
-			Contract:    mustValue(t, visibilitydomain.NewContractScopeReference, "SYN-CONTRACT-1"),
+			Contract:    mustValue(t, visibilitydomain.NewContractScopeReference, contract),
 			Target:      mustValue(t, visibilitydomain.NewRequestScopeReference, target),
 			Kind:        mustValue(t, visibilitydomain.NewClaimKindReference, "SYN-KIND-LOSS"),
 			SubmittedAt: time.Date(2026, 8, 22, 10, 0, 0, 0, time.UTC),
@@ -257,28 +258,31 @@ func TestTheWiredClaimsReadTheRuleAdoptedAtAcceptanceThroughParcelShipment(t *te
 		}
 		return command
 	}
-	first := receive("SYN-CLAIM-ITEM-1", submission.DeclaredParcelIDs[0].String(), submission.Identity)
-	second := receive("SYN-CLAIM-ITEM-2", secondSubmission.DeclaredParcelIDs[0].String(), secondSubmission.Identity)
+	first := receive("SYN-CLAIM-ITEM-1", "SYN-CONTRACT-1", submission.DeclaredParcelIDs[0].String(), submission.Identity)
+	second := receive("SYN-CLAIM-ITEM-2", "SYN-CONTRACT-2", secondSubmission.DeclaredParcelIDs[0].String(), secondSubmission.Identity)
 
 	registrar, err := vepostgres.NewCatalogRegistrar(db)
 	if err != nil {
 		t.Fatalf("构造目录写入方：%v", err)
 	}
-	var eligibilityOutcome veports.CatalogRegistrationOutcome
-	if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
-		var registerErr error
-		eligibilityOutcome, registerErr = registrar.RegisterClaimEligibility(txCtx, first.TenantID,
-			veports.ClaimEligibilityRegistration{
-				Header:       veports.CatalogApprovalHeader{Version: "SYN-CLAIM-RULES-1", ApprovedBy: "SYN-OPERATOR-1"},
-				Contract:     first.Contract,
-				CoveredKinds: []visibilitydomain.ClaimKindReference{first.Kind},
-			})
-		return registerErr
-	}); err != nil {
-		t.Fatalf("事务内登记失败：%v", err)
-	}
-	if eligibilityOutcome != veports.CatalogVersionRegistered {
-		t.Fatalf("登记索赔声明应成功，实得 %s", eligibilityOutcome)
+	for _, declared := range []visibilityapp.ReceiveClaimCommand{first, second} {
+		var eligibilityOutcome veports.CatalogRegistrationOutcome
+		if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
+			var registerErr error
+			eligibilityOutcome, registerErr = registrar.RegisterClaimEligibility(txCtx, declared.TenantID,
+				veports.ClaimEligibilityRegistration{
+					Header:       veports.CatalogApprovalHeader{Version: "SYN-CLAIM-RULES-1", ApprovedBy: "SYN-OPERATOR-1"},
+					Contract:     declared.Contract,
+					Customer:     declared.Customer,
+					CoveredKinds: []visibilitydomain.ClaimKindReference{declared.Kind},
+				})
+			return registerErr
+		}); err != nil {
+			t.Fatalf("事务内登记失败：%v", err)
+		}
+		if eligibilityOutcome != veports.CatalogVersionRegistered {
+			t.Fatalf("登记索赔声明应成功，实得 %s", eligibilityOutcome)
+		}
 	}
 
 	queryFor := func(command visibilityapp.ReceiveClaimCommand) veports.EligibilityQuery {

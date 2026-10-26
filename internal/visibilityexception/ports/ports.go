@@ -794,6 +794,18 @@ type EligibilityRuleView interface {
 	RulesForClaim(ctx context.Context, query EligibilityQuery) (EligibilityRules, bool, error)
 }
 
+// ClaimContractOwnership 回答「这份合同责任范围是否登记在这个货主客户账户名下」（0030）。首方索赔口在翻译命令前问一次：
+// 别的账户的合同与不存在同答 false，调用方不据此分出「存在但不是你的」。与 EligibilityRuleView 分列：后者在装配里叠了
+// party-commercial 的两维，只为核归属去走那一趟没有必要，也会让归属核对随那边的依赖一起不可用。
+type ClaimContractOwnership interface {
+	ContractBelongsToCustomer(
+		ctx context.Context,
+		tenant domain.TenantID,
+		customer domain.CustomerAccountReference,
+		contract domain.ContractScopeReference,
+	) (bool, error)
+}
+
 // ClaimEvidenceView 交出一项索赔已经收到的材料。它答「事实是什么」，与目录答的
 // 「规则是什么」分列两个端口——最低材料要求这一维正是靠两边相减才核得出来。
 //
@@ -985,8 +997,10 @@ type NotificationPolicyRegistration struct {
 // 出现一段「声明已在、覆盖类型还没写」的窗口，那期间任一索赔都会被判成`不予受理`——
 // 而那是 ADR-0051 的永久格，审过不再审，没有第二次机会。
 type ClaimEligibilityRegistration struct {
-	Header       CatalogApprovalHeader
-	Contract     domain.ContractScopeReference
+	Header   CatalogApprovalHeader
+	Contract domain.ContractScopeReference
+	// Customer 是这份合同范围所属的货主客户账户（0030）：资格规则读口按它过滤，别的账户的合同答声明不在场。
+	Customer     domain.CustomerAccountReference
 	CoveredKinds []domain.ClaimKindReference
 }
 

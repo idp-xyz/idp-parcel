@@ -860,6 +860,11 @@
 | `AT-VE-205` | internal/visibilityexception/adapters/transportfulfillment/raise_on_departure_gate_reask_test.go::TestABlockedReaskRaisesTheSignalOnTheDeparture（适配器半边）；cmd/parcel-dispatch/departure_gate_reask_test.go::TestABlockedDepartureRecordedBeforeItsSegmentIsReaskedAndSignalledThroughTheProductionRoute（生产路由真库：因果条件与依据是那条出发、判断标识取补问那一格、进人工复核） |
 | `AT-VE-206` | internal/visibilityexception/adapters/transportfulfillment/raise_on_departure_gate_reask_test.go::TestAParcelAlreadyBlockedOnTheDepartureIsNotSignalledAgain（适配器半边）；internal/visibilityexception/adapters/inbox/departure_gate_reask_consumer_test.go::TestADepartureGateReaskEnvelopeIsDecodedOnceAndPoisonIsAccountedFor（重投只处理一次） |
 | `AT-VE-207` | internal/visibilityexception/adapters/transportfulfillment/raise_on_departure_gate_reask_test.go::TestReaskSignalFailuresKeepTheirSentinels（适配器半边）；internal/visibilityexception/adapters/inbox/departure_gate_reask_consumer_test.go::TestADepartureGateReaskEnvelopeIsDecodedOnceAndPoisonIsAccountedFor（消费门半边：缺键维是毒丸）；cmd/parcel-dispatch/departure_gate_reask_test.go::TestDepartureGateReaskFailuresLandInTheRightPartition（派发半边） |
+| `AT-VE-208` | cmd/parcel-api/assemble_customer_claim_test.go::TestACustomerClientSubmitsAClaimThroughTheFirstPartyLineAgainstARealDatabase（真库：账户取自信封、自报账户 400）；internal/visibilityexception/adapters/http/customer_claim_intake_test.go::TestCustomerClaimIntakeTakesIdentityFromTheEnvelopeAndClosesThePayload；internal/visibilityexception/domain/customer_claim_shape_test.go::TestCustomerClaimShapeFieldsAreClosedAndCarryNoIdentity |
+| `AT-VE-209` | cmd/parcel-api/assemble_customer_claim_test.go::TestACustomerClientSubmitsAClaimThroughTheFirstPartyLineAgainstARealDatabase（真库：他账户与不存在的目标、合同同字节）；internal/visibilityexception/adapters/http/customer_claim_intake_test.go::TestCustomerClaimIntakeAnswersNotFoundForForeignReferencesWithoutDistinguishingThem |
+| `AT-VE-210` | internal/visibilityexception/application/handle_claim_test.go::TestAClaimKeyHeldByAnotherAccountIsNotAcceptedAndDoesNotLeakTheOriginal；cmd/parcel-api/assemble_customer_claim_test.go::TestACustomerClientSubmitsAClaimThroughTheFirstPartyLineAgainstARealDatabase（真库：原样重投答同一项） |
+| `AT-VE-211` | cmd/parcel-api/assemble_customer_claim_test.go::TestClaimLineAnswersNotConfiguredByteForByteWhenTheCustomerFamilyIsUnset；cmd/parcel-api/assemble_customer_claim_test.go::TestClaimLineRefusesOtherFamiliesAndJudgesAdmission；internal/visibilityexception/adapters/http/customer_claim_intake_test.go::TestClaimEndpointMapsEachIntakeFailureToItsOwnGrade |
+| `AT-VE-212` | internal/visibilityexception/adapters/postgres/claim_eligibility_multitenant_test.go::TestAContractScopeBelongsToOneAccountOnly |
 
 ## ② 机制候选（补 Covers 或小块测试）
 
@@ -1904,3 +1909,5 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-10-26 追记（票 docs-consistency/code/36）：UC-PS-005 `AT-PS-068`、`AT-PS-076` 补真库用例名——已撤回委托在真库上读得回、撤回决定进快照（ADR-0286）：重复撤回答原撤回与原补偿关联、生产装配的撤回编排读回已撤回委托、以撤回重提方向关联已撤回原委托的新提交成立；`AT-PS-076` 另补重建面用例；`AT-PS-070` 补接受链在已撤回委托上不再占资金的用例（消费门在撤回之后才消费「委托已提交」信封这一格）。
 
 2026-10-26 追记（票 first-party-api/06）：UC-PS-001 新立 `AT-PS-120`（首方客户命令五口铸造：授予、准入范围、信封）、`AT-PS-121`（五口来源请求键命令前缀、缺席、去空白、跨命令不撞）、`AT-PS-122`（提交答复带当前提交版本标识）、`AT-PS-123`（五个新能力词过库上 CHECK）、`AT-PS-124`（五口形状版本名），五行入①。总览计数未动，由推送方重算。
+
+2026-10-26 追记（票 first-party-api/09、demo-chain-gaps/102）：UC-VE-007 新立 `AT-VE-208`（首方索赔口租户与账户取自信封、载荷封闭）、`AT-VE-209`（他账户与不存在的目标、合同同答找不到）、`AT-VE-210`（自然键重放与他账户撞键）、`AT-VE-211`（首方索赔口授予、准入与未配置分格）、`AT-VE-212`（合同声明归属账户、读口按账户过滤），五行入①。总览计数未动，由推送方重算。

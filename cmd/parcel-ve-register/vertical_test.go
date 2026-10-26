@@ -90,7 +90,7 @@ func TestVERegisterVerticalOnRealPostgres(t *testing.T) {
 		{
 			command: commandClaimEligibility,
 			input: `{"tenantId":"SYN-TEN-VE15","version":"SYN-ELIG-V1","approvedBy":"SYN-approver-1",
-				"contract":"SYN-CONTRACT-SCOPE-1","coveredKinds":["SYN-CLAIM-LOSS"]}`,
+				"contract":"SYN-CONTRACT-SCOPE-1","customer":"SYN-ACCOUNT-01","coveredKinds":["SYN-CLAIM-LOSS"]}`,
 			tableCount: func() int {
 				return countRows(
 					`SELECT count(*) FROM visibility_exception.claim_contract_scope WHERE tenant_id = $1`,

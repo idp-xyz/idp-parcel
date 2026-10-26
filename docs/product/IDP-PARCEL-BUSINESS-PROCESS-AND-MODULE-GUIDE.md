@@ -504,7 +504,7 @@ POD 后来被证明无效时，原证据和原判断继续保留，运输控制�
 | `/transport-fulfillment/delivery-proof-corrections` | 命令 | `transport-fulfillment` | POD/交付证明更正 | 操作者渠道「作业事实登记」，场外作业范围（ADR-0149） |
 | `/v1/customer-tracking-view` | 查阅 | `visibility-exception` | 客户授权全程追踪 | 首方客户渠道（ADR-0139）：发行方未配置时拒绝，客户账户只取自客户渠道册 |
 | `/tracking-projections` | 查阅 | `visibility-exception` | 运营追踪投影 | 操作者渠道「主数据与运营查阅读」（ADR-0100） |
-| `/claims` | 命令 | `visibility-exception` | 接收客户索赔 | 未配置即拒（ADR-0055），尚未归族 |
+| `/v1/claims` | 命令 | `visibility-exception` | 接收客户索赔 | 首方客户族（ADR-0139）；首方三件不设时未配置即拒（ADR-0055） |
 | `/customs/external-results` | 命令 | `customs-compliance` | 接收外部监管结果 | 集成客户端族（ADR-0149） |
 | `/pricing-price-cards` | 查阅 | `parcel-pricing` | 价卡目录 | 操作者渠道「主数据与运营查阅读」（ADR-0100） |
 | `/pricing-reference-series` | 查阅 | `parcel-pricing` | 计价参考序列 | 操作者渠道「主数据与运营查阅读」（ADR-0100） |

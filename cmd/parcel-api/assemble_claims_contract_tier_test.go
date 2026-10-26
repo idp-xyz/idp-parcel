@@ -70,6 +70,7 @@ func TestTheWiredClaimsInheritTheRowsAContractTierRuleLeavesToTheProductBase(t *
 			veports.ClaimEligibilityRegistration{
 				Header:       veports.CatalogApprovalHeader{Version: "SYN-CLAIM-RULES-1", ApprovedBy: "SYN-OPERATOR-1"},
 				Contract:     command.Contract,
+				Customer:     command.Customer,
 				CoveredKinds: []visibilitydomain.ClaimKindReference{command.Kind},
 			})
 		if registerErr == nil && outcome != veports.CatalogVersionRegistered {

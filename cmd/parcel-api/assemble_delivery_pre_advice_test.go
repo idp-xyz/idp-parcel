@@ -190,6 +190,14 @@ func TestPreAdviceLinesRefuseOtherFamiliesAndJudgeAdmission(t *testing.T) {
 // 并在对照指向的对象范围上各登一条 authority 的生产权威区间——与演示种子同一种登法。
 func registerCustomerCommandAdmission(t *testing.T, db *bentopg.DB, authority string) {
 	t.Helper()
+	registerCustomerCommandAdmissionFor(t, db, authority,
+		accessidentity.CustomerCapabilityDeliveryPreAdviceSubmission,
+		accessidentity.CustomerCapabilityDeliveryPreAdviceWithdrawal)
+}
+
+// registerCustomerCommandAdmissionFor 是 registerCustomerCommandAdmission 指定能力的形：别的客户面写口（索赔）照同一种登法。
+func registerCustomerCommandAdmissionFor(t *testing.T, db *bentopg.DB, authority string, capabilities ...accessidentity.CustomerCapability) {
+	t.Helper()
 	mappings, err := aipg.NewAdmissionScopeMappings(db)
 	if err != nil {
 		t.Fatal(err)
@@ -203,10 +211,7 @@ func registerCustomerCommandAdmission(t *testing.T, db *bentopg.DB, authority st
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, capability := range []accessidentity.CustomerCapability{
-		accessidentity.CustomerCapabilityDeliveryPreAdviceSubmission,
-		accessidentity.CustomerCapabilityDeliveryPreAdviceWithdrawal,
-	} {
+	for _, capability := range capabilities {
 		requirement := accessidentity.AdmissionRequirement{Capability: accessidentity.CustomerCommandAdmissionCapability, FactKind: capability.String()}
 		mapping, err := accessidentity.NewAdmissionScopeMapping("SYN-TENANT-01", "SYN-MAP-CC-"+capability.String(), requirement, customerCommandScope, validity, "SYN-BASIS-MAPPING")
 		if err != nil {

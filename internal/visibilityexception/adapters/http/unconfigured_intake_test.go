@@ -44,7 +44,7 @@ func unconfiguredVisibilityEndpoints(t *testing.T) map[string]unconfiguredCase {
 				unconfigured, unreachableClaimReceiver{t: t},
 			),
 			method: http.MethodPost,
-			path:   "/claims",
+			path:   "/v1/claims",
 		},
 		"milestone mapping registration": {
 			endpoint: visibilityhttp.NewRegisterMilestoneMappingEndpoint(

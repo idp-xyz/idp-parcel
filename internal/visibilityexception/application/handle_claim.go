@@ -292,6 +292,9 @@ func (handler *HandleClaimHandler) ReceiveClaim(
 		return HandleClaimResult{outcome: HandleClaimUndecided, reason: ClaimStoreUnavailable}, nil
 	}
 	if found {
+		if !sameClaimOwner(existing, command) {
+			return HandleClaimResult{outcome: HandleClaimNotAccepted}, nil
+		}
 		return HandleClaimResult{outcome: ClaimExistingResult, claim: existing}, nil
 	}
 
@@ -324,10 +327,20 @@ func (handler *HandleClaimHandler) ReceiveClaim(
 		if err != nil || !found {
 			return HandleClaimResult{outcome: HandleClaimUndecided, reason: ClaimStoreUnavailable}, nil
 		}
+		if !sameClaimOwner(existing, command) {
+			return HandleClaimResult{outcome: HandleClaimNotAccepted}, nil
+		}
 		return HandleClaimResult{outcome: ClaimExistingResult, claim: existing}, nil
 	default:
 		return HandleClaimResult{}, fmt.Errorf("receive claim: unexpected save outcome %d", saved)
 	}
+}
+
+// sameClaimOwner 核已在案的（批次+项）是不是这个账户的。存储键是（租户+批次+项）、不含账户，同租户另一账户撞上同一对键时，
+// 原项不属于提交者：交回原项就把别人的索赔回执给了不相干的账户，所以答`未受理`、不带原项。残留的信息量是「这对键已被占用」
+// 一比特；键含账户需改主键与全部按（批次+项）取项的路径，另票处理（票 first-party-api/09 越权风险点）。
+func sameClaimOwner(existing *domain.ClaimItem, command ReceiveClaimCommand) bool {
+	return existing.Customer() == command.Customer
 }
 
 // recordClaim 落一步判断转移并把仓储的写入代数译成应答。三个判断入口共用这一段：

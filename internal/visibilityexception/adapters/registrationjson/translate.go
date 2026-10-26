@@ -325,6 +325,7 @@ type claimEligibilityDocument struct {
 	Version      string   `json:"version"`
 	ApprovedBy   string   `json:"approvedBy"`
 	Contract     string   `json:"contract"`
+	Customer     string   `json:"customer"`
 	CoveredKinds []string `json:"coveredKinds"`
 }
 
@@ -354,6 +355,10 @@ func claimEligibilityFromJSON(raw []byte, tenantSource tenantOf) (application.Re
 	if err != nil {
 		return none, err
 	}
+	customer, err := domain.NewCustomerAccountReference(document.Customer)
+	if err != nil {
+		return none, err
+	}
 	kinds := make([]domain.ClaimKindReference, 0, len(document.CoveredKinds))
 	for _, kind := range document.CoveredKinds {
 		reference, err := domain.NewClaimKindReference(kind)
@@ -371,6 +376,7 @@ func claimEligibilityFromJSON(raw []byte, tenantSource tenantOf) (application.Re
 			ApprovedBy: document.ApprovedBy,
 		},
 		Contract:     contract,
+		Customer:     customer,
 		CoveredKinds: kinds,
 	}, nil
 }

@@ -340,7 +340,7 @@ func TestTranslationRejectsWhatIsNotThisEntranceShape(t *testing.T) {
 		{
 			name:      "租户构造门缺件",
 			translate: func(raw []byte) error { _, err := registrationjson.ClaimEligibilityFromJSON(raw); return err },
-			raw:       `{"tenantId":"  ","version":"v1","approvedBy":"a","contract":"c","coveredKinds":["k"]}`,
+			raw:       `{"tenantId":"  ","version":"v1","approvedBy":"a","contract":"c","customer":"u","coveredKinds":["k"]}`,
 			hint:      "tenant",
 		},
 		{
