@@ -1,7 +1,7 @@
 # 94 SA 同一条资金事实映射到多个作用域时，每个作用域都按全额记入入账余额
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code94（见文末「完成记录」）。原 ready-for-agent——R1（上线前必修）：碰钱且静默。同一笔收款映射到两个客户应收作用域，两边的入账余额都按全额算，可用余额凭空多出一笔，没有任何提示。预付冻结读可用余额，以入账余额为基数的比例额度读 `posted_minor`（parcel-dispatch 生产装配），两处都会按多出来的钱放行。2026-10-26 票 [code/12](./12-funds-mapping-has-no-compensation-or-recovery-targets.md)、[code/46](./46-settlement-application-and-reversal-have-no-process-entry.md) 第三轮轻评审 N-a 立（用户「你作为业务和系统专家自决」授权，协调方裁定立票），分支 claude-code12。
+Status: resolved——2026-10-26 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code94（见文末「完成记录」）。原 ready-for-agent——R1（上线前必修）：碰钱且静默。同一笔收款映射到两个客户应收作用域，两边的入账余额都按全额算，可用余额凭空多出一笔，没有任何提示。预付冻结读可用余额，以入账余额为基数的比例额度读 `posted_minor`（parcel-dispatch 生产装配），两处都会按多出来的钱放行。2026-10-26 票 [code/12](./12-funds-mapping-has-no-compensation-or-recovery-targets.md)、[code/46](./46-settlement-application-and-reversal-have-no-process-entry.md) 第三轮轻评审 N-a 立（用户「你作为业务和系统专家自决」授权，协调方裁定立票），分支 claude-code12。
 Blocked by: 无
 出处：code/12、code/46 第三轮隔离轻评审 N-a，评审真库手算；取证于分支 claude-code12。
 
@@ -172,3 +172,11 @@ M。
 
 - **N1（LEAST 封顶无用例守）**：补 postgres 包 `TestACorrectionBelowTheAppliedTotalCapsTheScopePostingAtTheFactAmount`（收款 5000 核销 5000 后更正为 3000，P 为 3000；退回同形，P 为 -3000）；去掉 `LEAST` 的变异使两格红（5000 / -5000），复原后 `cmp` 一致。
 - **N2（唯一推定偏宽）**：不改公式，写明为已知宽松格：ADR-0283 越权风险点 3 与 SA CONTEXT 运营余额规则句各补一句；读面没有单独字段，见越权风险点 3 末的说明。
+
+## 进 main 记录（2026-10-26，协调方）
+
+- 分支 `claude-code94` 由协调方 rebase 到 main `962c3d8e6`（含 code/77）后快进，tip `a11020931`。无迁移；新立 ADR-0283（收窄 ADR-0181 决定二三句）。
+- 协调方裁乙：多作用域事实按指向各作用域的核销分配记入。第一轮隔离评审无阻断；协调方裁 N3 窄化重算范围（宽重算相对 main 是回退，会让别的作用域的账不平连带阻断）、N4 统一公式并入本票（收款同时映到非客户目标、钱核到那里后客户作用域仍全额记入，同类 R1）。第二轮评审（Sonnet）无阻断：N1 `LEAST` 封顶补用例、N2 写明「唯一推定」偏宽，由 Sonnet 子代理收掉。
+- 协调方单独提交重生成的 ADR 索引与机制清点；AT 计数无变化；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0、158 个包 ok；`go build ./...`、`go vet ./...` 干净；admin-web tsc、全部用例、vite build 通过；演示种子在一次性库上灌通，用后删库。
+- 去向：无新票。外部更正不重算作用域仍归 code/92；作用域咨询锁键哈希碰撞破序留作越权风险点。
