@@ -2,9 +2,12 @@ import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import { currentDisplayTimeZone } from '../moment';
 import type { NewVersionStart } from './new-version';
+import { listServiceProducts } from './api';
+import { ExistingVersionsNote } from './ExistingVersionsNote';
+import { productKnownVersions } from './known-versions';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
 import { DeliveryConditionFields } from './DeliveryConditionFields';
-import { Field, Problems, fieldLabel } from './PublicationFormFields';
+import { Field, Problems, fieldLabel, useLoaded } from './PublicationFormFields';
 import type { DeliveryConditionDraft } from './delivery-condition-section';
 import { WallTimeField } from './party-registration-fields';
 import {
@@ -18,6 +21,8 @@ import {
   type ReferenceRowDraft,
   type ServiceProductDraft,
 } from './service-product-form';
+
+const loadKnownVersions = () => listServiceProducts();
 
 /**
  * 服务产品版本的逐字段表单（票 admin-write-faces/09；ADR-0101 决定八）。五步「表单 → 预览摘要 → 存为待批准 →
@@ -49,6 +54,9 @@ export function ServiceProductPublicationForm({ onPublished, start }: ServicePro
   const patchDeliveryConditions = (change: Partial<DeliveryConditionDraft>) =>
     setDraft((current) => ({ ...current, deliveryConditions: { ...current.deliveryConditions, ...change } }));
   const timeZone = currentDisplayTimeZone();
+  // 这个对象已有哪些版本（票 party-commercial-uiux/15）：读不到就不提示，不报错。
+  const knownAnswer = useLoaded(loadKnownVersions);
+  const known = knownAnswer?.kind === 'outcome' ? productKnownVersions(knownAnswer.body) : null;
 
   return (
     <PublicationDraftFlow
@@ -60,6 +68,16 @@ export function ServiceProductPublicationForm({ onPublished, start }: ServicePro
       onPublished={onPublished}
       prefilledFrom={start?.from}
       prefilledCaution={start?.caution}
+      versionNote={
+        <ExistingVersionsNote
+          known={known}
+          objectId={draft.objectId}
+          version={draft.version}
+          startsAt={draft.effectiveStartsAt}
+          endsAt={draft.effectiveEndsAt}
+          timeZone={timeZone}
+        />
+      }
     >
       {(form) => (
         <div className="flex flex-col gap-5">
@@ -145,6 +163,7 @@ function ServiceProductFields({
         {moment('effectiveStartsAt', '生效起点 *')}
         {moment('effectiveEndsAt', '生效止点', '留空即持续有效。')}
       </div>
+      {form.versionNote}
 
       <ReferencesEditor
         rows={draft.references}

@@ -3,11 +3,9 @@ import { Button, Input } from '@idpxyz/ui-primitives';
 import { accessRefusalTitle, isOperatorRefusal } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
 import { currentDisplayTimeZone } from '../moment';
-import {
-  listBusinessParties,
-  listCustomerContracts,
-  listGroupLegalEntities,
-} from './api';
+import { listBusinessParties, listCustomerContracts, listGroupLegalEntities, listCommercialPolicies } from './api';
+import { ExistingVersionsNote } from './ExistingVersionsNote';
+import { policyKnownVersions } from './known-versions';
 import type { NewVersionStart } from './new-version';
 import { settlementMethodLabels } from './presentation';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
@@ -34,6 +32,8 @@ import {
   type ContractVersionChoice,
   type SettlementPolicyDraft,
 } from './settlement-policy-form';
+
+const loadKnownVersions = () => listCommercialPolicies('SETTLEMENT_POLICY');
 
 /**
  * 结算政策版本的逐字段表单（票 admin-write-faces/15；ADR-0101 决定八逐册裁形）。
@@ -74,6 +74,9 @@ export function SettlementPolicyPublicationForm({ onPublished, start }: Settleme
   const methodCodes = vocabulary?.kind === 'outcome' ? methodCodesOf(vocabulary.body.sets) : null;
   // 时刻按操作者的显示时区填、送出 UTC（票 party-commercial-uiux/10），与登记表单同一条换算。
   const timeZone = currentDisplayTimeZone();
+  // 这个对象已有哪些版本（票 party-commercial-uiux/15）：读不到就不提示，不报错。
+  const knownAnswer = useLoaded(loadKnownVersions);
+  const known = knownAnswer?.kind === 'outcome' ? policyKnownVersions(knownAnswer.body) : null;
 
   return (
     <PublicationDraftFlow
@@ -85,8 +88,16 @@ export function SettlementPolicyPublicationForm({ onPublished, start }: Settleme
       onPublished={onPublished}
       prefilledFrom={start?.from}
       prefilledCaution={start?.caution}
+      versionNote={
+        <ExistingVersionsNote
+          known={known}
+          objectId={draft.objectId}
+          version={draft.version}
+          timeZone={timeZone}
+        />
+      }
     >
-      {({ problems, locked }: PublicationFormContext) => (
+      {({ problems, locked, versionNote }: PublicationFormContext) => (
         <div className="flex flex-col gap-5">
           <section className="flex flex-col gap-3">
             <h3 className="text-[13px] font-medium text-idpxyz-text">版本信息</h3>
@@ -140,6 +151,7 @@ export function SettlementPolicyPublicationForm({ onPublished, start }: Settleme
                 onChange={(effectiveEndsAt) => patch({ effectiveEndsAt })}
               />
             </div>
+            {versionNote}
           </section>
 
           <section className="flex flex-col gap-3">

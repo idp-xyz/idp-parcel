@@ -3,7 +3,9 @@ import { Button, Input } from '@idpxyz/ui-primitives';
 import { accessRefusalTitle, isOperatorRefusal, type OperatorRefusal } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
 import { currentDisplayTimeZone } from '../moment';
-import { listCommercialPolicies, type CommercialPolicyListResponseBody } from './api';
+import { listCommercialPolicies, type CommercialPolicyListResponseBody, listCustomerContracts } from './api';
+import { ExistingVersionsNote } from './ExistingVersionsNote';
+import { contractKnownVersions } from './known-versions';
 import { controlRequirementLabels, labelOf } from './presentation';
 import { DeliveryConditionFields } from './DeliveryConditionFields';
 import type { NewVersionStart } from './new-version';
@@ -24,6 +26,8 @@ import {
   type ControlRequirementDraft,
   type CustomerContractDraft,
 } from './customer-contract-form';
+
+const loadKnownVersions = () => listCustomerContracts();
 
 /**
  * 客户合同版本的逐字段发布表单（票 admin-write-faces/10；ADR-0101 决定八自裁为逐字段表单 + 约定表可加行）。
@@ -64,6 +68,9 @@ export function CustomerContractPublicationForm({ onPublished, start }: Customer
     setDraft((current) => ({ ...current, deliveryConditions: { ...current.deliveryConditions, ...change } }));
   // 时刻按操作者的显示时区填、送出 UTC（票 party-commercial-uiux/10），与登记表单同一条换算。
   const timeZone = currentDisplayTimeZone();
+  // 这个对象已有哪些版本（票 party-commercial-uiux/15）：读不到就不提示，不报错。
+  const knownAnswer = useLoaded(loadKnownVersions);
+  const known = knownAnswer?.kind === 'outcome' ? contractKnownVersions(knownAnswer.body) : null;
 
   return (
     <PublicationDraftFlow
@@ -75,6 +82,16 @@ export function CustomerContractPublicationForm({ onPublished, start }: Customer
       onPublished={onPublished}
       prefilledFrom={start?.from}
       prefilledCaution={start?.caution}
+      versionNote={
+        <ExistingVersionsNote
+          known={known}
+          objectId={draft.objectId}
+          version={draft.version}
+          startsAt={draft.effectiveStartsAt}
+          endsAt={draft.effectiveEndsAt}
+          timeZone={timeZone}
+        />
+      }
     >
       {(form) => (
         <div className="flex flex-col gap-5">
@@ -164,6 +181,7 @@ function ShellFields({
           onChange={(value) => patch({ effectiveEndsAt: value })}
         />
       </div>
+      {form.versionNote}
       <p className="text-[11px] text-idpxyz-textMuted">
         起点晚于现在时，发布稿照样可以保存和批准；发布时会提示还没到生效起点，到了起点再来发布即可，这不是失败。
       </p>

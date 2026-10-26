@@ -3,8 +3,11 @@ import { Button, Input } from '@idpxyz/ui-primitives';
 import { currentDisplayTimeZone } from '../moment';
 import { listPriceCards, type PriceCardListResponseBody } from '../pricing/api';
 import type { NewVersionStart } from './new-version';
+import { listCommercialPolicies } from './api';
+import { ExistingVersionsNote } from './ExistingVersionsNote';
+import { policyKnownVersions } from './known-versions';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
-import { Field, Problems, ReferencePicker, fieldLabel, selectClass } from './PublicationFormFields';
+import { Field, Problems, ReferencePicker, fieldLabel, selectClass, useLoaded } from './PublicationFormFields';
 import { WallTimeField } from './party-registration-fields';
 import { planReferenceOf } from './publication-form-shared';
 import {
@@ -21,6 +24,8 @@ import {
   type ClosedSetOption,
   type PricePolicyDraft,
 } from './price-policy-form';
+
+const loadKnownVersions = () => listCommercialPolicies('PRICE_POLICY');
 
 /**
  * 价格规则版本的逐字段表单（票 admin-write-faces/14；ADR-0101 决定八本册选形：逐字段表单，口径作条件节）。
@@ -56,6 +61,9 @@ export function PricePolicyPublicationForm({ onPublished, start }: PricePolicyPu
   const patch = (change: Partial<PricePolicyDraft>) => setDraft((current) => ({ ...current, ...change }));
   // 时刻按操作者的显示时区填、送出 UTC（票 party-commercial-uiux/10），与登记表单同一条换算。
   const timeZone = currentDisplayTimeZone();
+  // 这个对象已有哪些版本（票 party-commercial-uiux/15）：读不到就不提示，不报错。
+  const knownAnswer = useLoaded(loadKnownVersions);
+  const known = knownAnswer?.kind === 'outcome' ? policyKnownVersions(knownAnswer.body) : null;
 
   return (
     <PublicationDraftFlow
@@ -67,6 +75,14 @@ export function PricePolicyPublicationForm({ onPublished, start }: PricePolicyPu
       onPublished={onPublished}
       prefilledFrom={start?.from}
       prefilledCaution={start?.caution}
+      versionNote={
+        <ExistingVersionsNote
+          known={known}
+          objectId={draft.objectId}
+          version={draft.version}
+          timeZone={timeZone}
+        />
+      }
     >
       {(form) => <PricePolicyFields draft={draft} patch={patch} setDraft={setDraft} form={form} timeZone={timeZone} />}
     </PublicationDraftFlow>
@@ -150,6 +166,7 @@ function PricePolicyFields({
           {moment('effectiveStartsAt', '版本生效起点 *', 'effectiveStartsAt')}
           {moment('effectiveEndsAt', '版本生效止点', 'effectiveEndsAt', '留空即持续有效。')}
         </div>
+        {form.versionNote}
       </section>
 
       <section className="flex flex-col gap-3">

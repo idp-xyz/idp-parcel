@@ -3,9 +3,11 @@ import { Button, Input } from '@idpxyz/ui-primitives';
 import type { ApiResult } from '../catalogue-api';
 import { currentDisplayTimeZone } from '../moment';
 import { creditRatioBaseLabels } from './presentation';
+import { ExistingVersionsNote } from './ExistingVersionsNote';
+import { policyKnownVersions } from './known-versions';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
-import { listGroupLegalEntities } from './api';
+import { listGroupLegalEntities, listCommercialPolicies } from './api';
 import type { NewVersionStart } from './new-version';
 import { Field, Problems, ReferencePicker, VocabularySelect, fieldLabel, useLoaded } from './PublicationFormFields';
 import { WallTimeField, legalEntityPickerOptions } from './party-registration-fields';
@@ -17,6 +19,8 @@ import {
   ratioBaseCodesOf,
   type CreditPolicyDraft,
 } from './credit-policy-form';
+
+const loadKnownVersions = () => listCommercialPolicies('CREDIT_POLICY');
 
 /**
  * 信用政策版本的逐字段表单（票 admin-write-faces/16；ADR-0101 决定八本册选形）。五步由 PublicationDraftFlow
@@ -44,6 +48,9 @@ export function CreditPolicyPublicationForm({
   const ratioBaseCodes = vocabulary?.kind === 'outcome' ? ratioBaseCodesOf(vocabulary.body.sets) : null;
   // 时刻按操作者的显示时区填、送出 UTC（票 party-commercial-uiux/10），与登记表单同一条换算。
   const timeZone = currentDisplayTimeZone();
+  // 这个对象已有哪些版本（票 party-commercial-uiux/15）：读不到就不提示，不报错。
+  const knownAnswer = useLoaded(loadKnownVersions);
+  const known = knownAnswer?.kind === 'outcome' ? policyKnownVersions(knownAnswer.body) : null;
 
   return (
     <PublicationDraftFlow
@@ -55,6 +62,14 @@ export function CreditPolicyPublicationForm({
       onPublished={onPublished}
       prefilledFrom={start?.from}
       prefilledCaution={start?.caution}
+      versionNote={
+        <ExistingVersionsNote
+          known={known}
+          objectId={draft.objectId}
+          version={draft.version}
+          timeZone={timeZone}
+        />
+      }
     >
       {(form) => (
         <CreditPolicyFields
@@ -136,8 +151,8 @@ function CreditPolicyFields({
           {field('scope', '适用范围 *', 'scope')}
           <div />
           {moment('effectiveStartsAt', '版本有效区间起点 *', 'effectiveStartsAt')}
-          {moment('effectiveEndsAt', '版本有效区间止点', 'effectiveEndsAt', '留空即持续有效。')}
         </div>
+        {form.versionNote}
       </section>
 
       <section className="flex flex-col gap-2">

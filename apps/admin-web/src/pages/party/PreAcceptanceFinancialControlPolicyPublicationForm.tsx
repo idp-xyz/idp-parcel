@@ -3,6 +3,9 @@ import { Button, Input } from '@idpxyz/ui-primitives';
 import type { ApiResult } from '../catalogue-api';
 import { currentDisplayTimeZone } from '../moment';
 import { controlFailureDispositionLabels, controlKindLabels, jointPassConditionLabels } from './presentation';
+import { listCommercialPolicies } from './api';
+import { ExistingVersionsNote } from './ExistingVersionsNote';
+import { policyKnownVersions } from './known-versions';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
 import type { NewVersionStart } from './new-version';
@@ -22,6 +25,8 @@ import {
   type ControlItemDraft,
   type ControlPolicyDraft,
 } from './pre-acceptance-financial-control-policy-form';
+
+const loadKnownVersions = () => listCommercialPolicies('PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY');
 
 /**
  * 接受前财务控制策略版本的逐字段表单（票 admin-write-faces/13；ADR-0101 决定八逐册裁形）。
@@ -67,6 +72,9 @@ export function PreAcceptanceFinancialControlPolicyPublicationForm({
   const hints = controlRowHints(draft);
   // 时刻按操作者的显示时区填、送出 UTC（票 party-commercial-uiux/10），与登记表单同一条换算。
   const timeZone = currentDisplayTimeZone();
+  // 这个对象已有哪些版本（票 party-commercial-uiux/15）：读不到就不提示，不报错。
+  const knownAnswer = useLoaded(loadKnownVersions);
+  const known = knownAnswer?.kind === 'outcome' ? policyKnownVersions(knownAnswer.body) : null;
 
   return (
     <PublicationDraftFlow
@@ -78,8 +86,18 @@ export function PreAcceptanceFinancialControlPolicyPublicationForm({
       onPublished={onPublished}
       prefilledFrom={start?.from}
       prefilledCaution={start?.caution}
+      versionNote={
+        <ExistingVersionsNote
+          known={known}
+          objectId={draft.objectId}
+          version={draft.version}
+          startsAt={draft.effectiveStartsAt}
+          endsAt={draft.effectiveEndsAt}
+          timeZone={timeZone}
+        />
+      }
     >
-      {({ problems, locked }: PublicationFormContext) => (
+      {({ problems, locked, versionNote }: PublicationFormContext) => (
         <div className="flex flex-col gap-5">
           <section className="flex flex-col gap-3">
             <h3 className="text-[13px] font-medium text-idpxyz-text">版本信息</h3>
@@ -133,6 +151,7 @@ export function PreAcceptanceFinancialControlPolicyPublicationForm({
                 onChange={(effectiveEndsAt) => patch({ effectiveEndsAt })}
               />
             </div>
+            {versionNote}
           </section>
 
           <section className="flex flex-col gap-3">

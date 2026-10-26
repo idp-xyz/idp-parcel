@@ -4,11 +4,13 @@ import { accessRefusalTitle } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
 import { currentDisplayTimeZone } from '../moment';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
+import { ExistingVersionsNote } from './ExistingVersionsNote';
+import { policyKnownVersions } from './known-versions';
 import type { NewVersionStart } from './new-version';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
 import { Field, Problems, ReferencePicker, RowFrame, fieldLabel, selectClass, useLoaded } from './PublicationFormFields';
 import { WallTimeField, legalEntityPickerOptions } from './party-registration-fields';
-import { listCustomerContracts, listGroupLegalEntities, listServiceProducts } from './api';
+import { listCustomerContracts, listGroupLegalEntities, listServiceProducts, listCommercialPolicies } from './api';
 import { customerContractObjectOptions, serviceProductObjectOptions } from './picker-options';
 import {
   acceptanceRulePackageFieldPaths,
@@ -30,6 +32,8 @@ import {
   type VocabularySetName,
   type VocabularyState,
 } from './acceptance-rule-package-form';
+
+const loadKnownVersions = () => listCommercialPolicies('ACCEPTANCE_RULE_PACKAGE');
 
 /**
  * 接单规则包版本的分节发布表单（票 admin-write-faces/12；ADR-0101 决定八自裁为分节的逐字段表单，不走模板导入）。
@@ -74,6 +78,9 @@ export function AcceptanceRulePackagePublicationForm({ onPublished, start }: Acc
   const update: Update = (mutate) => setDraft((current) => mutate(current));
   // 时刻按操作者的显示时区填、送出 UTC（票 party-commercial-uiux/10），与登记表单同一条换算。
   const timeZone = currentDisplayTimeZone();
+  // 这个对象已有哪些版本（票 party-commercial-uiux/15）：读不到就不提示，不报错。
+  const knownAnswer = useLoaded(loadKnownVersions);
+  const known = knownAnswer?.kind === 'outcome' ? policyKnownVersions(knownAnswer.body) : null;
 
   return (
     <PublicationDraftFlow
@@ -85,6 +92,14 @@ export function AcceptanceRulePackagePublicationForm({ onPublished, start }: Acc
       onPublished={onPublished}
       prefilledFrom={start?.from}
       prefilledCaution={start?.caution}
+      versionNote={
+        <ExistingVersionsNote
+          known={known}
+          objectId={draft.objectId}
+          version={draft.version}
+          timeZone={timeZone}
+        />
+      }
     >
       {(form) => (
         <div className="flex flex-col gap-5">
@@ -276,6 +291,7 @@ function ShellFields({ draft, update, form, timeZone }: Omit<SectionProps, 'voca
           onChange={(value) => patch({ effectiveEndsAt: value })}
         />
       </div>
+      {form.versionNote}
       <p className={hint}>起点晚于现在时，发布稿照样可以保存和批准；发布时会提示还没到生效起点，到了起点再来发布即可，这不是失败。</p>
     </section>
   );

@@ -2,13 +2,12 @@ import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import { currentDisplayTimeZone } from '../moment';
 import { listPriceCards, type PriceCardListResponseBody } from '../pricing/api';
-import {
-  listBusinessParties,
-  listGroupLegalEntities,
-} from './api';
+import { listBusinessParties, listGroupLegalEntities, listSupplierAgreements } from './api';
+import { ExistingVersionsNote } from './ExistingVersionsNote';
+import { agreementKnownVersions } from './known-versions';
 import type { NewVersionStart } from './new-version';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
-import { Field, ReferencePicker } from './PublicationFormFields';
+import { Field, ReferencePicker, useLoaded } from './PublicationFormFields';
 import { WallTimeField, businessPartyPickerOptions, legalEntityPickerOptions } from './party-registration-fields';
 import { planReferenceOf } from './publication-form-shared';
 import {
@@ -19,6 +18,8 @@ import {
   withShellCopiedIntoAgreement,
   type SupplierAgreementDraft,
 } from './supplier-agreement-form';
+
+const loadKnownVersions = () => listSupplierAgreements();
 
 /**
  * 供应商协议版本的逐字段表单（票 admin-write-faces/11；ADR-0101 决定八逐册裁形）。
@@ -48,6 +49,9 @@ export function SupplierAgreementPublicationForm({ onPublished, start }: Supplie
   const patch = (change: Partial<SupplierAgreementDraft>) => setDraft((current) => ({ ...current, ...change }));
   // 时刻按操作者的显示时区填、送出 UTC（票 party-commercial-uiux/10），与登记表单同一条换算。
   const timeZone = currentDisplayTimeZone();
+  // 这个对象已有哪些版本（票 party-commercial-uiux/15）：读不到就不提示，不报错。
+  const knownAnswer = useLoaded(loadKnownVersions);
+  const known = knownAnswer?.kind === 'outcome' ? agreementKnownVersions(knownAnswer.body) : null;
 
   return (
     <PublicationDraftFlow
@@ -59,8 +63,18 @@ export function SupplierAgreementPublicationForm({ onPublished, start }: Supplie
       onPublished={onPublished}
       prefilledFrom={start?.from}
       prefilledCaution={start?.caution}
+      versionNote={
+        <ExistingVersionsNote
+          known={known}
+          objectId={draft.objectId}
+          version={draft.version}
+          startsAt={draft.effectiveStartsAt}
+          endsAt={draft.effectiveEndsAt}
+          timeZone={timeZone}
+        />
+      }
     >
-      {({ problems, locked }: PublicationFormContext) => (
+      {({ problems, locked, versionNote }: PublicationFormContext) => (
         <div className="flex flex-col gap-5">
           <section className="flex flex-col gap-3">
             <h3 className="text-[13px] font-medium text-idpxyz-text">版本信息</h3>
@@ -115,6 +129,7 @@ export function SupplierAgreementPublicationForm({ onPublished, start }: Supplie
                 onChange={(effectiveEndsAt) => patch({ effectiveEndsAt })}
               />
             </div>
+            {versionNote}
           </section>
 
           <section className="flex flex-col gap-3">

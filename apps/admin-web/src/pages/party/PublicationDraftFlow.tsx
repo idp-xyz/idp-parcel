@@ -86,11 +86,15 @@ export interface PublicationDraftFlowProps {
   prefilledFrom?: string;
   /** 预填特有的警示（读面还原不了、留空会悄悄丢掉的内容），随提示一起显示，见 NewVersionStart.caution。 */
   prefilledCaution?: string;
+  /** 已有版本提示，原样经 `children` 的 form 上下文交给字段子组件；不给就是 null。 */
+  versionNote?: ReactNode;
 }
 
 export interface PublicationFormContext {
   problems: Record<string, string[]>;
   locked: boolean;
+  /** 「这个对象已有哪些版本」的提示（票 party-commercial-uiux/15），由表单自己组、经这里交给它的字段子组件摆在版本信息一节里。 */
+  versionNote: ReactNode;
 }
 
 // 这几口等的是 ADR-0100 那一族**操作者身份**的接入渠道（ADR-0126 Decision 五：Intake 到位那天把操作者信封译成
@@ -108,6 +112,7 @@ export function PublicationDraftFlow({
   onPublished,
   prefilledFrom,
   prefilledCaution,
+  versionNote = null,
 }: PublicationDraftFlowProps) {
   const [flow, setFlow] = useState<PublicationFlowState>(emptyFlow());
   const [busy, setBusy] = useState<FlowAction | null>(null);
@@ -195,7 +200,7 @@ export function PublicationDraftFlow({
 
         <Stepper step={step} />
 
-        {children({ problems, locked })}
+        {children({ problems, locked, versionNote })}
 
         {unclaimed.length > 0 ? (
           <ul className="text-xs text-idpxyz-danger list-disc ml-4">

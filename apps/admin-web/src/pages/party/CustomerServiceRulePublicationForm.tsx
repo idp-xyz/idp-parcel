@@ -3,11 +3,13 @@ import { Button, Input } from '@idpxyz/ui-primitives';
 import type { ApiResult } from '../catalogue-api';
 import { currentDisplayTimeZone } from '../moment';
 import { claimDeadlineKindLabels } from './presentation';
+import { ExistingVersionsNote } from './ExistingVersionsNote';
+import { policyKnownVersions } from './known-versions';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
 import type { NewVersionStart } from './new-version';
 import { Field, ProblemText, ReferencePicker, VocabularySelect, selectClass, useLoaded } from './PublicationFormFields';
-import { listCustomerContracts, listServiceProducts } from './api';
+import { listCustomerContracts, listServiceProducts, listCommercialPolicies } from './api';
 import { customerContractObjectOptions, serviceProductObjectOptions } from './picker-options';
 import { fieldProblemText, itemProblemText } from './field-problem-text';
 import { WallTimeField } from './party-registration-fields';
@@ -30,6 +32,8 @@ import {
   type ServiceRuleAppliesTo,
   type ServiceRuleDraft,
 } from './customer-service-rule-form';
+
+const loadKnownVersions = () => listCommercialPolicies('CUSTOMER_SERVICE_RULE');
 
 /**
  * 客户服务规则版本的逐字段表单（票 admin-write-faces/18；ADR-0101 决定八逐册裁形）。
@@ -87,6 +91,9 @@ export function CustomerServiceRulePublicationForm({ onPublished, start }: Custo
   const chosen = appliesToChoices.find((choice) => choice.value === draft.appliesTo) ?? null;
   const tightenOnly = serviceRuleTightenOnlyNote(draft.appliesTo);
   const timeZone = currentDisplayTimeZone();
+  // 这个对象已有哪些版本（票 party-commercial-uiux/15）：读不到就不提示，不报错。
+  const knownAnswer = useLoaded(loadKnownVersions);
+  const known = knownAnswer?.kind === 'outcome' ? policyKnownVersions(knownAnswer.body) : null;
 
   return (
     <PublicationDraftFlow
@@ -98,8 +105,18 @@ export function CustomerServiceRulePublicationForm({ onPublished, start }: Custo
       onPublished={onPublished}
       prefilledFrom={start?.from}
       prefilledCaution={start?.caution}
+      versionNote={
+        <ExistingVersionsNote
+          known={known}
+          objectId={draft.objectId}
+          version={draft.version}
+          startsAt={draft.effectiveStartsAt}
+          endsAt={draft.effectiveEndsAt}
+          timeZone={timeZone}
+        />
+      }
     >
-      {({ problems, locked }: PublicationFormContext) => (
+      {({ problems, locked, versionNote }: PublicationFormContext) => (
         <div className="flex flex-col gap-5">
           <section className="flex flex-col gap-3">
             <h3 className="text-[13px] font-medium text-idpxyz-text">版本信息</h3>
@@ -153,6 +170,7 @@ export function CustomerServiceRulePublicationForm({ onPublished, start }: Custo
                 onChange={(value) => patch({ effectiveEndsAt: value })}
               />
             </div>
+            {versionNote}
           </section>
 
           <section className="flex flex-col gap-3">
