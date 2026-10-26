@@ -46,3 +46,8 @@ M
 
 ### 自验
 含 PG：`go build ./...`、`go vet`（cmd/parcel-api、parcelshipment）、`gofmt` 无输出；`go test -count=1 -p 1` 过 `./internal/parcelshipment/...`、`./internal/accessidentity/...`、`./cmd/parcel-api/...`、`./internal/architecture/...`、`./migrations/...`、`./tools/...`。`at-coverage-counts -check` 只报生成物过期。未改种子，未跑 seed.sh；未跑管理台前端测试。
+
+### 评审收尾（tops-20 评审，无阻断）
+- 防误装：`TestTheDirectCustomerWithdrawalAuthorizerIsBuiltOnlyByTheFirstPartyWiring`（internal/architecture）断言 `DirectCustomerWithdrawalAuthorizer{` 在非测试源码里只由 `cmd/parcel-api/assemble_withdrawal.go` 构造；选门禁不选非导出，因为首方装配在 cmd 包、授权器在 PS 适配器包，非导出过不了包界。
+- 契约补一句：重放须逐字节同载荷，补带 `shipmentRequestId` 答 `SOURCE_CONFLICT`。
+- 越权风险点 9：管理台撤回页草案形状与首方载荷不符，本票只改路径，页面接首方载荷归收尾票 12 或运营侧另议。
