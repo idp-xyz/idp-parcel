@@ -119,7 +119,7 @@ export function dispositionCommandNoteOf(
 }
 
 // 每一格 outcome 都是形成了的业务答案,按词表呈现;随附凭据有才显:去向(原词与中文并列)、之后的
-// 委托状态、既有决定、当前版本、补偿续办引用。
+// 委托状态、既有决定、当前版本、补偿续办引用、释放未受理待人处理(ADR-0282 决定二,处置照样成立)。
 function dispositionOutcomeText(label: string, body: AuthorizedDispositionResponseBody): string {
   const view = authorizedDispositionOutcomeViews[body.outcome];
   const parts = [`「${label}」结果:${withCode(view?.label, body.outcome)}`];
@@ -130,6 +130,7 @@ function dispositionOutcomeText(label: string, body: AuthorizedDispositionRespon
   if (body.decisionKind) parts.push(`既有决定 ${body.decisionKind}`);
   if (body.currentVersion) parts.push(`当前版本 ${body.currentVersion}`);
   if (body.compensationReference) parts.push(`补偿续办 ${body.compensationReference}`);
+  if (body.controlReleaseNotAccepted) parts.push('随附释放结算确定不受理,已记入释放未受理册待人处理');
   const head = parts.join(' · ');
   return view ? `${head}——${view.note}` : head;
 }

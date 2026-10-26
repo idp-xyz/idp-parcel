@@ -166,6 +166,24 @@ test('已记录的处置带去向原词与之后的委托状态', () => {
   doesNotMatch(note.text, /补偿/);
 });
 
+// Covers: ADR-0282 决定二——处置成立而随附释放被结算确定不受理时,摘要说已记入释放未受理册待人处理,不出补偿续办。
+test('释放确定未受理时处置照样成立并说已记入释放未受理册', () => {
+  const note = dispositionCommandNoteOf('拒绝', {
+    kind: 'outcome',
+    status: 201,
+    body: {
+      outcome: 'RECORDED',
+      requestState: 'REJECTED',
+      dispositionChoice: 'REJECT',
+      controlReleaseNotAccepted: true,
+    },
+  });
+  equal(note.tone, 'outcome');
+  match(note.text, /已记录\(RECORDED\)/);
+  match(note.text, /释放未受理册待人处理/);
+  doesNotMatch(note.text, /补偿续办/);
+});
+
 // Covers: 未获授权是确定的业务答案(不是未决);授权规则未登记是未配置态,措辞指向登记参数而不是重试。
 test('未获授权与授权规则未登记各说各的恢复动作', () => {
   const refused = dispositionCommandNoteOf('拒绝', {

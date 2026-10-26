@@ -84,6 +84,8 @@ export interface WithdrawalResponseBody {
   pendingReason?: string;
   continuationReference?: string;
   compensationReference?: string;
+  /** 随附释放有一笔结算确定不受理、已记进释放未受理册待人处理(ADR-0282 决定二);与补偿引用分开——那一笔重放推不动。 */
+  controlReleaseNotAccepted?: boolean;
 }
 
 // UC-PS-006 接受后取消(POST /shipment-requests/parcel-cancellations)。词取
@@ -332,7 +334,8 @@ export type AuthorizedDispositionOutcome =
  * 与 adapters/http 的 authorizedDispositionResponse 一一对应:`已记录`带去向与之后的委托状态;
  * 撞上既有处置时带先到那一份的去向;`任务已完结`带既有决定——处置人要知道输给了什么,决定带
  * 主动拒绝留痕时再带实际决定方与结构化原因;`版本已换代`带当前版本供重读队列;处置成立而随附释放
- * 未确定完成时带补偿续办引用。
+ * 未确定完成时带补偿续办引用;随附释放有一笔结算确定不受理、已记进释放未受理册待人处理时带
+ * controlReleaseNotAccepted(ADR-0282 决定二)。
  */
 export interface AuthorizedDispositionResponseBody {
   outcome: AuthorizedDispositionOutcome;
@@ -343,6 +346,7 @@ export interface AuthorizedDispositionResponseBody {
   rejectionReason?: string;
   currentVersion?: string;
   compensationReference?: string;
+  controlReleaseNotAccepted?: boolean;
 }
 
 // ---- 面单交易查阅响应形状(票 admin-skeleton-closure-batch/08,ADR-0084 决定七) ----
@@ -448,6 +452,7 @@ export interface ActiveRejectionResponseBody {
   pendingReason?: string;
   continuationReference?: string;
   compensationReference?: string;
+  controlReleaseNotAccepted?: boolean;
 }
 
 // ---- 请求草案形状 ----

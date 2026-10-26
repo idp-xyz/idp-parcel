@@ -282,6 +282,11 @@ function WithdrawalOutcomeCard({
           补偿续办与判断续办是两条路:此引用用于随附释放等补偿动作的续办,不用于重新判断。
         </p>
       ) : null}
+      {body.controlReleaseNotAccepted ? (
+        <p className="text-[11px] leading-4 text-idpxyz-textMuted mt-2">
+          撤回已成立;随附释放有一笔被结算确定不受理,已记入释放未受理册待人处理,重试不会改变它。
+        </p>
+      ) : null}
     </NoticeCard>
   );
 }
