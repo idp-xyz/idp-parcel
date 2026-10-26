@@ -150,6 +150,7 @@
 - 客户送站与场外揽收都指向同一包裹时不能形成两个责任起点。先合法形成者保留，后续来源作为重复、冲突或后续物理事实处理。
 - 多包裹委托逐包裹提交；一个成员未决或不采用不回滚其他成员已经形成的正式承诺。
 - 取消与收寄的先后按两者的业务时间比，不按消息到达或提交顺序（[ADR-0254](../../adr/0254-cancellation-and-boundary-fact-order-is-judged-by-their-business-times-and-a-late-earlier-boundary-fact-is-a-fact-conflict.md)）：收寄已采用之后到达的取消不成立；取消已提交之后到达的收寄，发生晚于取消的业务时间即不采用（`SOURCE_NOT_ADOPTED`），不晚于取消即停在未决（原因 `CANCELLATION_ORDER_CONFLICT`），不形成责任起点、不抹取消，冲突留在册上、按包裹查得出；这一格重投推不动，消费门入账而不回滚重投，等一份明确的业务决定解开。冲突记不下时答未决 `CONFLICT_REGISTER_UNAVAILABLE`，照常回滚重投。已经发生的物理事实始终保留。
+- 场外揽收的载运对象引用不带种类：对象在来源发生那一刻是节点作业集运单元册上的集运单元（包裹号与某件单元同串也按单元认，[ADR-0214](../../adr/0214-node-control-transfers-out-and-in-on-an-authoritative-transport-handover.md) 决定二、[ADR-0225](../../adr/0225-the-departure-gate-reading-asks-through-consolidation-unit-members-at-the-moment-of-departure.md) 决定四）时，它不是包裹、没有委托：本用例不反查委托、不采用，不留采用记录也不交下游意图，消费门入账收工，来源与物理事实保留（`AT-PS-156`）。是不是单元只由节点作业那一本册说得出，不按串形或前缀猜——长得像袋号却不在册上的对象照旧按包裹反查，反查不中仍是未决（委托可能还没落到已接受）。单元册读不动是续办，整封回滚重投；答了却译不回是确定性的，响亮失败、不当等依赖（`AT-PS-159`）。整袋的场外揽收是不是袋里每件包裹的收寄，随单元控制规则另定（[demo-chain-gaps/80](../../../.scratch/demo-chain-gaps/issues/80-a-consolidation-unit-handover-does-not-move-member-control.md)），本用例此刻不投到成员上。
 - 收寄采用与同一包裹的取消提交并发时依次判断：后到的一方读得到先到一方已提交的取消或责任起点，落进 [ADR-0254](../../adr/0254-cancellation-and-boundary-fact-order-is-judged-by-their-business-times-and-a-late-earlier-boundary-fact-is-a-fact-conflict.md) 决定二的某一格，不会两方各自提交（[小包托运：Rules and invariants](../../domain/parcel-shipment/CONTEXT.md#rules-and-invariants) 取消一节）。
 - 来源更正、撤销或身份关系变化形成新的采用判断版本。原责任判断和承诺历史不能删除；当前承诺影响通过带原因的新版本表达。同来源更正以来源所有者声明的更正关系识别——新版本自报更正的恰是该包裹当前采用的那一版；来源种类相同而无更正声明的新版本按「先合法形成者保留」那一条（`AT-PS-049`）作竞争处理（[ADR-0117](../../adr/0117-same-source-correction-forms-a-superseding-adoption-version-chained-to-the-current-responsibility-start.md)）。
 - 提交结果不确定时按稳定关联查询原采用结果、承诺和发布意图，不盲目重复提交。
@@ -190,6 +191,7 @@
 | `AT-PS-051` | 正式承诺提交成功但事件投递失败 | 不回退承诺，只重试同一发布意图 |
 | `AT-PS-052` | 跨租户或客户提交来源采用请求 | 答请求未受理，与查无同答，不泄露目标来源、包裹或承诺 |
 | `AT-PS-107` | 包裹取消已提交，此后到达的收寄来源发生时间不晚于取消的业务时间 | 已提交的取消不被改写，收寄采用停在未决（`CANCELLATION_ORDER_CONFLICT`），不形成责任起点或正式承诺，收寄后处置不形成；物理事实保留，等一份明确的业务决定解开（[ADR-0254](../../adr/0254-cancellation-and-boundary-fact-order-is-judged-by-their-business-times-and-a-late-earlier-boundary-fact-is-a-fact-conflict.md)） |
+| `AT-PS-156` | 场外揽收登记的载运对象是节点作业集运单元册上的一袋（含与某件已接受委托的包裹同串） | 信封入账收工：不反查委托、不采用、不判终局，不留采用记录、不交下游意图，不落未决；对象串长得像袋号却不在册上时照旧按包裹反查，反查不中仍是未决 |
 
 ## 给开发的交接
 
@@ -200,5 +202,6 @@
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
 | `AT-PS-107` 与「一致性、幂等与并发」取消与收寄一条 | 入账已补：冲突记进冲突册、采用消费门入账不回滚重投（[code/35](../../../.scratch/docs-consistency/code/35-cancellation-and-boundary-fact-order-conflict-has-no-label-half-and-no-resolution-face.md)）；解开它的业务决定面仍没有，冲突包裹没有责任起点、也不触发收寄后的路由复核，本行预期结果不变 | [code/76](../../../.scratch/docs-consistency/code/76-a-cancellation-order-conflict-has-no-resolution-decision-face.md) |
+| `AT-PS-156` | 单元的场外揽收入账收工，成员不随单元被采用：整袋场外揽收之后袋里每件包裹仍没有对应的采用结果，本用例不补 | [demo-chain-gaps/80](../../../.scratch/demo-chain-gaps/issues/80-a-consolidation-unit-handover-does-not-move-member-control.md) |
 
 完成本用例只闭合网络服务责任起点和正式承诺，不证明路由仍适用、节点作业完成、运输已经开始或包裹已经终局。

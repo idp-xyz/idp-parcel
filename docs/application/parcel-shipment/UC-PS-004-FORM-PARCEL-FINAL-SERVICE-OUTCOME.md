@@ -125,6 +125,7 @@
 - 一个包裹终局不等待同委托其他包裹；委托部分完成是逐包裹结果的派生摘要。
 - 终局形成后不得回退为取消。后续费用调整、异常、索赔、追偿或客户通知有独立生命周期。
 - 包裹已有取消成立时，此后到达的网络服务履约结果（有效交付等）不采用为终局，依据指名那份取消（`PARCEL_CANCELLATION/<取消标识>`），来源与物理事实保留；这一判断先于终局规则，规则是否配置、是否放行都不改它，更正出的新版本到达同样如此。包裹停在取消先后冲突上（`CANCELLATION_ORDER_CONFLICT`，[ADR-0254](../../adr/0254-cancellation-and-boundary-fact-order-is-judged-by-their-business-times-and-a-late-earlier-boundary-fact-is-a-fact-conflict.md) 决定二第 3 格）时同样不采用：冲突只由明确的业务决定解开，履约结果不得绕过它形成非取消终局。
+- 有效交付与实际承运商首次有效收寄的载运对象引用不带种类：对象在来源发生那一刻是节点作业集运单元册上的集运单元（包裹号与某件单元同串也按单元认，[ADR-0214](../../adr/0214-node-control-transfers-out-and-in-on-an-authoritative-transport-handover.md) 决定二、[ADR-0225](../../adr/0225-the-departure-gate-reading-asks-through-consolidation-unit-members-at-the-moment-of-departure.md) 决定四）时，它不是包裹、没有委托：本用例不反查委托、不采用、不判终局，不留终局记录也不交下游意图，消费门入账收工，来源与物理事实保留（`AT-PS-157`、`AT-PS-158`）。这一问先于取消边界与委托生命周期的判断，不改变它们的次序。是不是单元只由节点作业那一本册说得出，不按串形或前缀猜——长得像袋号却不在册上的对象照旧按包裹反查，反查不中仍是未决（委托可能还没落到已接受）。首次有效收寄的失效版本落在单元上同样收工：单元没有据前版形成的终局，无事可重派生。单元册读不动是续办，整封回滚重投；答了却译不回是确定性的，响亮失败、不当等依赖（`AT-PS-159`）。整袋交付是不是袋里每件包裹的有效交付，随单元控制规则另定（[demo-chain-gaps/80](../../../.scratch/demo-chain-gaps/issues/80-a-consolidation-unit-handover-does-not-move-member-control.md)），本用例此刻不投到成员上。
 - 来源更正或有效性变化保留原事实、原终局判断及当时派生历史，形成新的当前判断版本；这不是删除历史或业务重开。
 
 ### 面单渠道服务的终局形成
@@ -176,6 +177,9 @@
 | `AT-PS-065` | 终局保存成功但发布失败 | 只重试原发布意图，不重复终局 |
 | `AT-PS-066` | 跨客户查询委托完成摘要 | 严格隔离对象和结果，不泄露其他客户 |
 | `AT-PS-152` | 履约结果的目标委托已撤回、已拒绝，或只是已提交 | 前两种答 `REQUEST_ENDED`，后一种答 `REQUEST_AWAITING_DECISION`；终局库、采用记录与发布意图一行都不落；取消机制未装配时同样拦；已接受的委托照常走规则 |
+| `AT-PS-157` | 有效交付登记的载运对象是节点作业集运单元册上的一袋（含与某件已接受委托的包裹同串） | 信封入账收工：不反查委托、不采用、不形成终局，不留终局记录、不交下游意图，不落未决；对象串长得像袋号却不在册上时照旧按包裹反查，反查不中仍是未决 |
+| `AT-PS-158` | 实际承运商首次有效收寄的载运对象是节点作业集运单元册上的一袋（含失效版本） | 信封入账收工：不反查委托、不判终局、不重派生，不落未决；待确认版本不论对象是什么仍是交接口缺陷，响亮失败；对象串长得像袋号却不在册上时照旧交共用核按包裹反查，反查不中仍是未决 |
+| `AT-PS-159` | 场外揽收、有效交付、首次有效收寄三路问节点作业载运对象是不是集运单元 | 单元册读不动是续办（`dispatch.consumer_undecided`），不收工、不反查，读得动后重投从头再问；答了却译不回（租户译不过去、答复自相矛盾）是确定性的，落 `dispatch.publish_failed`，不进未决名单 |
 | `AT-PS-091` | 关务已接收销毁决定，但节点尚无执行事实 | 保留监管决定，不形成执行完成或包裹终局 |
 | `AT-PS-092` | 节点销毁执行、适用监管决定和合同终局条件均齐备 | 形成对应终局，分别引用决定和执行事实 |
 | `AT-PS-093` | 异常案件认定可能遗失，但权威服务责任结果尚未形成 | 不从案件直接形成终局，保持终局未决并续办责任判断 |
@@ -195,8 +199,9 @@
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
 | `AT-PS-063`，结果表「当前终局重派生」一行 | 责任结果没有有效性一格，重派生沿用原终局种类、不按规则重判，「有效交付失效之后当前无终局」表达不出；本行预期结果不变 | [code/23](../../../.scratch/docs-consistency/code/23-final-outcome-rederivation-cannot-express-a-voided-delivery.md) |
+| `AT-PS-157`、`AT-PS-158` | 单元的有效交付与首次有效收寄入账收工，成员不随单元被采用：整袋交付之后袋里每件包裹仍没有对应的终局，本用例不补 | [demo-chain-gaps/80](../../../.scratch/demo-chain-gaps/issues/80-a-consolidation-unit-handover-does-not-move-member-control.md) |
 | `AT-PS-108` | 判法已补：读到有效取消时比首次有效收寄的业务发生时间，不晚于取消答 `LABEL_SERVICE_NOT_FINAL`、原因 `CANCELLATION_ORDER_CONFLICT`，冲突记进冲突册（[code/35](../../../.scratch/docs-consistency/code/35-cancellation-and-boundary-fact-order-conflict-has-no-label-half-and-no-resolution-face.md)）；解开它的业务决定面仍没有，本行预期结果不变 | [code/76](../../../.scratch/docs-consistency/code/76-a-cancellation-order-conflict-has-no-resolution-decision-face.md) |
 | 取消先后冲突解开之后，此前被不采用的履约结果 | 不采用记录按（包裹、结果种类、来源版本）保全，冲突被业务决定解开后不会自动重判；同一版本重投只答已有结果、原不采用记录原样返回，包裹会一直没有终局，所以决定面把冲突解开（判取消不成立）时，须能把依据该取消（`PARCEL_CANCELLATION/<取消标识>`）的不采用记录作废或重判 | [code/76](../../../.scratch/docs-consistency/code/76-a-cancellation-order-conflict-has-no-resolution-decision-face.md) |
-| 承运商首次有效收寄被作废之后的终局重派生 | 代码显式答未决（`ErrVoidedCarrierPickupRederivationUndecided`），判法等 [ADR-0138](../../adr/0138-voided-carrier-pickup-voids-the-label-service-final-as-a-third-ledger-record-and-rejudges-on-remaining-basis.md)（Proposed）接受 | 票 label-channel-service-first-release/39 |
+| 承运商首次有效收寄被作废之后的终局重派生 | 代码对包裹显式答未决（`ErrVoidedCarrierPickupRederivationUndecided`；对象是集运单元的失效版本不在此列，见「终局形成规则」单元一条），判法等 [ADR-0138](../../adr/0138-voided-carrier-pickup-voids-the-label-service-final-as-a-third-ledger-record-and-rejudges-on-remaining-basis.md)（Proposed）接受 | 票 label-channel-service-first-release/39 |
 
 完成本用例只闭合包裹服务终局及委托完成派生；追踪、异常、索赔、供应商追偿、客户费用和经营结算仍由各自上下文独立形成。
