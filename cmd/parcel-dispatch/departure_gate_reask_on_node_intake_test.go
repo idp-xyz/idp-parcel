@@ -168,7 +168,7 @@ func firstReadingOf(t *testing.T, fixture *synVerticalFixture, fact string) tfdo
 // 它们。之后各件实物识别成功（节点收寄形成信封经生产路由一拍）：出发那一刻正在袋里的两件各得第 1 次补问，键是各自的包裹、读数里只有它自己的一格，
 // 受限的那一件读数阻断、另一件不是；出发前已出袋的、出发后才装进的、从没进过袋的都不补问。再一拍：补问信封上，受限的那一件形成出发门禁阻断信号，
 // 因果条件与依据是那条出发、事实版本 v1、判断标识取补问读数里它那一格，进人工复核；放行的那一件不形成。同一封收寄形成信封以新 ID 重投：已有定论，
-// 不再补问，发作期不多记命中。
+// 不补问，发作期不多记命中。
 func TestAMemberIdentifiedAfterItsBagDepartedIsReaskedAndSignalledThroughTheProductionRoute(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
 	registerDemoMilestoneMapping(t, fixture)
@@ -335,7 +335,7 @@ func TestMemberReaskFailuresLandInTheRightPartition(t *testing.T) {
 
 // Covers: AT-TF-365 并发半边（ADR-0331 决定四，ADR-0305 决定六）——同一件实物的两封收寄形成信封（重核追加的两版，换了事件 ID）在对方落册之前
 // 各自问完了关务：两边读补问册时都还没有这一次，各自去追加同一个次序。先落册的一边追加、交一封信；后到的一边撞键，认先到者、不另交信封，
-// 答未决整笔回滚；重投时它读得到先到那一份、已有定论，不再补问。无论谁先谁后，补问册里这条出发这件成员恰一行、补问信封恰一封、信号恰一期。
+// 答未决整笔回滚；重投时它读得到先到那一份、已有定论，不补问。无论谁先谁后，补问册里这条出发这件成员恰一行、补问信封恰一封、信号恰一期。
 // 两封信交错用确定的次序（一边 Plan、另一边 Plan、两边依次 Record），不起 goroutine：测试库的连接池只有两条，两个消费门同时占着事务连接
 // 再各去事务外读，会把池占满而互相等死。
 func TestTwoIntakeEnvelopesOfOneMemberAskedBeforeEitherRecordedAskOnceAndTheLoserFindsTheFirstComer(t *testing.T) {
@@ -398,7 +398,7 @@ func TestTwoIntakeEnvelopesOfOneMemberAskedBeforeEitherRecordedAskOnceAndTheLose
 	}
 	replanned, err := handler.Plan(t.Context(), command)
 	if err != nil || replanned.Outcome() != tfapp.DepartureGateReaskScanned || len(replanned.Drafts()) != 0 {
-		t.Fatalf("后到的一边重投 = %s %d 份 %v——先到者已落册，应读到它、已有定论不再补问", replanned.Outcome(), len(replanned.Drafts()), err)
+		t.Fatalf("后到的一边重投 = %s %d 份 %v——先到者已落册，应读到它、已有定论不补问", replanned.Outcome(), len(replanned.Drafts()), err)
 	}
 	reasks := departureReasksOf(t, fixture, memberReaskFact)
 	if len(reasks) != 1 || reasks[0].Key.Object.String() != memberReaskHeldParcel || reasks[0].Key.Sequence != 1 {

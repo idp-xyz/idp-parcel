@@ -227,8 +227,8 @@ func TestAMemberThatWasNotInTheBagAtDepartureOrIsAnotherParcelNowIsNotAsked(t *t
 }
 
 // Covers: AT-TF-365 编排半边（ADR-0331 决定三）——同一（成员，出发）只在还没有定论时补问：已有定论（放行、不受门禁、阻断、关务答未决，
-// 或译不回来）不再问；可再问的读不动（关务调用失败）追加下一次，到三次为止；这件成员在袋里的一格已在首版读数里有定论、或在替袋补问
-// 的那条链里已有定论，也不再问——关务不被重复问同一件的同一次出发。
+// 或译不回来）不问；可再问的读不动（关务调用失败）追加下一次，到三次为止；这件成员在袋里的一格已在首版读数里有定论、或在替袋补问
+// 的那条链里已有定论，也不问——关务不被重复问同一件的同一次出发。
 func TestAMemberIsAskedOnlyWhileItsDepartureHasNoVerdictForIt(t *testing.T) {
 	unreadable := func(t *testing.T) domain.DepartureGateReading {
 		return askedFirstReading(t, cell(t, "parcel-1", domain.DepartureGateUnreadable, "CUSTOMS_ADMISSION_UNAVAILABLE"))
@@ -298,7 +298,7 @@ func TestAMemberIsAskedOnlyWhileItsDepartureHasNoVerdictForIt(t *testing.T) {
 	}
 }
 
-// Covers: AT-TF-365 编排半边——首版读数里这件包裹自己已有一格（出发时它的身份已成立，被问过关务）：放行、阻断这类定论不再问；那一格
+// Covers: AT-TF-365 编排半边——首版读数里这件包裹自己已有一格（出发时它的身份已成立，被问过关务）：放行、阻断这类定论不问；那一格
 // 是关务调用失败的读不动，才补。首版停在本侧的，可再问的停点补问、不可再问的不补问（同 ADR-0305 决定三）。
 func TestAMemberAlreadyAnsweredInTheFirstReadingIsNotAskedAgain(t *testing.T) {
 	cases := map[string]struct {
@@ -560,7 +560,7 @@ func TestTheMemberReaskHandlerRefusesMissingDependencies(t *testing.T) {
 	}
 }
 
-// Covers: AT-TF-364 编排半边（ADR-0331 决定二）——读数路径：成员补问的读数只有这一件的一格，班次与段照旧核袋进段的那次交接：交接声明的
+// Covers: AT-TF-364 编排半边（ADR-0331 决定二）——读数路径：成员补问的读数只有这一件的一格，班次与段核袋进段的那次交接：交接声明的
 // 节点与班次起讫对不上时停在「班次不服务该段」，不问关务；袋不在册的段停在「段不在册」。
 func TestTheMemberReadingChecksTheBagsEntryHandoverAndStopsOnTheSameStopsAsADeparture(t *testing.T) {
 	t.Run("袋进段的交接声明对不上班次", func(t *testing.T) {

@@ -179,7 +179,7 @@ func nodeIntakeEnvelope(eventID, payload string) eventing.Envelope {
 const formedNodeIntakePayload = `{"tenantId":"SYN-TENANT-01","sourceId":"SYN-INTAKE-01"}`
 
 // Covers: AT-TF-364 消费门半边（ADR-0331）——问节点作业与验证成员、问关务都在消费门事务之外（关务的判断在它自己的事务里记下），追加读数与交补问
-// 信封在消费门那一笔里，与 inbox 的已处理同笔提交；同一封再到，消费门先认出已处理，不再问关务。
+// 信封在消费门那一笔里，与 inbox 的已处理同笔提交；同一封再到，消费门先认出已处理，不问关务。
 func TestTheMemberReaskGateAsksOutsideTheInboxTransactionAndWritesInsideIt(t *testing.T) {
 	fixture := newMemberReaskGateFixture(t)
 	envelope := nodeIntakeEnvelope("member-reask-settled", formedNodeIntakePayload)
