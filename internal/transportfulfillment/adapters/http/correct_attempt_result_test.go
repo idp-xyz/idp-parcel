@@ -27,7 +27,7 @@ const pickupAttemptResultCorrectionBody = `{"sourceId":"SYN-DEVICE-01/attempt-90
 const deliveryAttemptResultCorrectionBody = `{"attempt":"SYN-DELIVERY-ATTEMPT-90","object":"SYN-PARCEL-90-02","outcome":"DELIVERED",` +
 	`"source":"SYN-SOURCE/address-review-confirmed","occurredAt":"2026-09-25T10:07:00+08:00","correctedAt":"2026-09-25T15:00:00+08:00"}`
 
-// Covers: 同一条命令两个接入面——运营决定面认证用各自那一种决定、操作者随命令带进去；作业事实面租户取认证结果、操作证据留空。
+// Covers: `AT-TF-361`（传输面）——同一条命令两个接入面——运营决定面认证用各自那一种决定、操作者随命令带进去；作业事实面租户取认证结果、操作证据留空。
 func TestTheAttemptResultCorrectionFacesTranslateTheSameCommandUnderTheirOwnFace(t *testing.T) {
 	var asked []tfhttp.OperatorDecision
 	operators := operatorIntake(t, authenticatorFake{asked: &asked})
@@ -70,7 +70,7 @@ func TestTheAttemptResultCorrectionFacesTranslateTheSameCommandUnderTheirOwnFace
 	}
 }
 
-// Covers: 先认证、后解载荷；载荷封闭（夹带租户或操作者一律 400）；词表外的结果词、解不出的时刻是坏报文，更正成待确认的词也是（待确认
+// Covers: `AT-TF-361`（传输面）——先认证、后解载荷；载荷封闭（夹带租户或操作者一律 400）；词表外的结果词、解不出的时刻是坏报文，更正成待确认的词也是（待确认
 // 只在更正之前存在，词表本身收它，由编排答未受理——这里钉的是词表外）。
 func TestTheAttemptResultCorrectionFacesAuthenticateFirstAndDecodeClosed(t *testing.T) {
 	denied := operatorIntake(t, authenticatorFake{err: tfhttp.ErrOperatorNotGranted})
@@ -180,7 +180,7 @@ func answerOf(t *testing.T, recorder *httptest.ResponseRecorder) map[string]any 
 	return answer
 }
 
-// Covers: ADR-0022——只有这次新落了更正才答 201，并回显更正出来的确定结果、所凭来源、更正时刻与被回指的待确认那一版的来源与缺口；
+// Covers: `AT-TF-357`、`AT-TF-358`、`AT-TF-360`、`AT-TF-361`（传输面）——ADR-0022——只有这次新落了更正才答 201，并回显更正出来的确定结果、所凭来源、更正时刻与被回指的待确认那一版的来源与缺口；
 // 重放、冲突、并非待确认都是形成了的答案（200）；回执不回显操作者（ADR-0303 的待遇）。揽收一侧。
 func TestThePickupCorrectionFaceAnswers201OnlyForANewCorrectionAndNeverEchoesTheOperator(t *testing.T) {
 	fixture := newCorrectionAttemptFixture(t, "SYN-ATTEMPT-90", "SYN-PARCEL-90-01", "SYN-PARCEL-90-02")
@@ -249,7 +249,7 @@ func TestThePickupCorrectionFaceAnswers201OnlyForANewCorrectionAndNeverEchoesThe
 	}
 }
 
-// Covers: 派送一侧同上——更正成妥投答 201，重放 200，换说法 SOURCE_CONFLICT；回执不回显操作者。
+// Covers: `AT-TF-359`、`AT-TF-360`（传输面）——派送一侧同上——更正成妥投答 201，重放 200，换说法 SOURCE_CONFLICT；回执不回显操作者。
 func TestTheDeliveryCorrectionFaceAnswers201OnlyForANewCorrection(t *testing.T) {
 	fixture := newCorrectionAttemptFixture(t, "SYN-DELIVERY-ATTEMPT-90", "SYN-PARCEL-90-02")
 	pending, err := domain.FormPendingDeliveryAttemptResult(fixture.attempt, mustTF(t, domain.NewCarriedObjectReference, "SYN-PARCEL-90-02"),
@@ -289,7 +289,7 @@ func TestTheDeliveryCorrectionFaceAnswers201OnlyForANewCorrection(t *testing.T) 
 	}
 }
 
-// Covers: ADR-0055——接入渠道未配置时两口的两个接入面都如实答 403 ACCESS_CHANNEL_NOT_CONFIGURED，不读载荷、不构造命令。
+// Covers: `AT-TF-361`（传输面）——ADR-0055——接入渠道未配置时两口的两个接入面都如实答 403 ACCESS_CHANNEL_NOT_CONFIGURED，不读载荷、不构造命令。
 func TestTheAttemptResultCorrectionFacesAnswerUnconfiguredWhenNoChannelIsWired(t *testing.T) {
 	pickupEndpoint := tfhttp.NewCorrectPickupAttemptResultEndpoint(tfhttp.UnconfiguredIntake{}, unreachablePickupCorrector{})
 	deliveryEndpoint := tfhttp.NewCorrectDeliveryAttemptResultEndpoint(tfhttp.UnconfiguredIntake{}, unreachableDeliveryCorrector{})

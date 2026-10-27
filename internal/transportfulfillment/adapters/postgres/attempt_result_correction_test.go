@@ -111,7 +111,7 @@ func pickupCorrectionOf(
 	return record
 }
 
-// Covers: TF CONTEXT「待确认那一版留在册上不改写」与「同一对象在同一尝试中只能有一个当前有效结果」的持久化半边（揽收）——更正追加
+// Covers: `AT-TF-358`（持久化半边）——TF CONTEXT「待确认那一版留在册上不改写」与「同一对象在同一尝试中只能有一个当前有效结果」的持久化半边（揽收）——更正追加
 // 之后：首次提交的结果行（FindByKey）仍是待确认；当前有效结果（FindEffectiveByKey，失败尝试费读的那一条）是更正出来的确定
 // 结果，未被更正的对象照旧；更正的来源、控制依据与操作证据原样读回；同一格第二条更正答已有记录。
 func TestAPickupCorrectionIsAppendedAndTheCurrentEffectiveResultIsReadWithoutRewritingThePendingRow(t *testing.T) {
@@ -187,7 +187,7 @@ func TestAPickupCorrectionIsAppendedAndTheCurrentEffectiveResultIsReadWithoutRew
 	})
 }
 
-// Covers: 同上——更正成揽收到手的控制依据随更正留下（只为重放比对），读回时回到记录上；没有操作证据的更正（作业事实面提交）
+// Covers: `AT-TF-357`（持久化半边）——同上——更正成揽收到手的控制依据随更正留下（只为重放比对），读回时回到记录上；没有操作证据的更正（作业事实面提交）
 // 读回没有操作者。
 func TestAPickupCorrectionToAPickupKeepsTheControlItReportedAndNoDecider(t *testing.T) {
 	rig := newCorrectionRig(t)
@@ -273,7 +273,7 @@ func TestCorrectionRowsOnlyAttachToAPendingResultAndKeepTheDeterminateShapes(t *
 	}
 }
 
-// Covers: PBC-08 负向证据——更正册的读（带行锁）与写按框架合同无事务即拒，揽收与派送各一。
+// Covers: `AT-TF-360`（持久化半边）——PBC-08 负向证据——更正册的读（带行锁）与写按框架合同无事务即拒，揽收与派送各一。
 func TestResultCorrectionAccessRefusesToRunOutsideATransaction(t *testing.T) {
 	rig := newCorrectionRig(t)
 	ctx := t.Context()
@@ -319,7 +319,7 @@ func TestResultCorrectionAccessRefusesToRunOutsideATransaction(t *testing.T) {
 	}
 }
 
-// Covers: PBC-08 的锁与写同一事务——同一格待确认的两笔并发更正在结果行锁上排队：先到的提交之前，后到的加载一直等着；先到的提交
+// Covers: `AT-TF-360`（持久化半边）——PBC-08 的锁与写同一事务——同一格待确认的两笔并发更正在结果行锁上排队：先到的提交之前，后到的加载一直等着；先到的提交
 // 之后，后到的读到的是先到的更正，而不是各自看见「还没更正」。（-count=5）
 func TestConcurrentCorrectionsOfOnePendingResultQueueOnItsRowLock(t *testing.T) {
 	rig := newCorrectionRig(t)
@@ -415,7 +415,7 @@ func deliveryCorrectionOf(
 	}
 }
 
-// Covers: `AT-TF-070` 之后的确定、UC-TF-006「尝试待确认」的持久化半边——派送结果更正追加之后：首次提交的结果行（FindByKey）仍是
+// Covers: `AT-TF-359`（持久化半边）——`AT-TF-070` 之后的确定、UC-TF-006「尝试待确认」的持久化半边——派送结果更正追加之后：首次提交的结果行（FindByKey）仍是
 // 待确认；交付登记、交付门禁读数与失败尝试费读的 LoadDeliveryResult 读到更正出来的确定结果，而且那一格能直接喂给 FormEffectiveDelivery；
 // 未被更正的对象与没有更正的待确认照旧。
 func TestADeliveryCorrectionMakesTheCurrentResultTheCorrectedOneWithoutRewritingThePendingRow(t *testing.T) {
@@ -531,7 +531,7 @@ func TestDeliveryCorrectionRowsOnlyAttachToAPendingResultAndKeepTheDeterminateSh
 	}
 }
 
-// Covers: 票 docs-consistency/code/90 要裁的「待确认复核清单」的持久化半边——还在待确认的那几格两侧合并、最早的在前、按租户隔离、按上限截断；
+// Covers: `AT-TF-362`（持久化半边）——票 docs-consistency/code/90 要裁的「待确认复核清单」的持久化半边——还在待确认的那几格两侧合并、最早的在前、按租户隔离、按上限截断；
 // 一格凭后补来源更正之后就不在清单上（首次提交的待确认行仍在表里，靠更正册反连接判），而没有更正的照旧在；揽收一侧带更正口要指名的来源身份。
 func TestThePendingResultListHoldsOnlyWhatIsStillPendingAcrossBothSides(t *testing.T) {
 	rig := newCorrectionRig(t)

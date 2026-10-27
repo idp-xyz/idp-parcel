@@ -12,6 +12,7 @@ import (
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	tfapp "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
+	tfports "go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
 // 本文件是尝试结果更正两口的组合根（票 docs-consistency/code/90，ADR-0297）：`/transport-fulfillment/offsite-pickup-attempt-result-corrections`、
@@ -63,6 +64,12 @@ func buildPickupAttemptResultCorrection(db *bentopg.DB) (tfhttp.PickupAttemptRes
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: pickup result corrections: %w", err)
 	}
+	return newPickupAttemptResultCorrection(db, corrections)
+}
+
+// newPickupAttemptResultCorrection 是 buildPickupAttemptResultCorrection 去掉更正册的那一半：更正册由调用方给，其余缝全接真。
+// 另成一个函数，只为让装配测试能换一只写不进的更正册，证对象级揽收登记写在更正追加之前时事务壳真的整笔回滚。
+func newPickupAttemptResultCorrection(db *bentopg.DB, corrections tfports.PickupResultCorrections) (tfhttp.PickupAttemptResultCorrector, error) {
 	pickups, err := tfpostgres.NewOffsitePickupRegistrations(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: offsite pickup registrations: %w", err)

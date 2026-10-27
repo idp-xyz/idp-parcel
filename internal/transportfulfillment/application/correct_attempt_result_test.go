@@ -144,7 +144,7 @@ func (fixture *pickupCorrectionFixture) correct(t *testing.T, command applicatio
 	return result
 }
 
-// Covers: TF CONTEXT「揽收、派送与交付」「之后同一对象的确定结果，凭同一次上门的后补来源以更正形成新判断版本……待确认那一版留在册上
+// Covers: `AT-TF-358`（编排半边）——TF CONTEXT「揽收、派送与交付」「之后同一对象的确定结果，凭同一次上门的后补来源以更正形成新判断版本……待确认那一版留在册上
 // 不改写」（揽收，失败一族）——待确认更正成失败：更正落册、带着所凭来源，首次提交的那一格一个字不动，也不形成场外揽收、不进段。
 func TestAPendingPickupResultIsCorrectedToAFailureWithoutTouchingThePendingVersion(t *testing.T) {
 	fixture := newPickupCorrectionFixture(t)
@@ -175,7 +175,7 @@ func TestAPendingPickupResultIsCorrectedToAFailureWithoutTouchingThePendingVersi
 	}
 }
 
-// Covers: 同上（揽收，揽收到手）与 UC-TF-002 步骤 6A——更正成揽收到手经对象级揽收登记形成场外揽收：控制依据随揽收保全、
+// Covers: `AT-TF-357`（编排半边）——同上（揽收，揽收到手）与 UC-TF-002 步骤 6A——更正成揽收到手经对象级揽收登记形成场外揽收：控制依据随揽收保全、
 // 地点与执行方取自那次尝试、同笔进声明的段、交 parcel-shipment 采认；待确认那一版仍留在册上。
 func TestAPendingPickupResultCorrectedToAPickupFormsTheOffsitePickupAndEntersTheSegment(t *testing.T) {
 	fixture := newPickupCorrectionFixture(t)
@@ -217,7 +217,7 @@ func TestAPendingPickupResultCorrectedToAPickupFormsTheOffsitePickupAndEntersThe
 	}
 }
 
-// Covers: UC-TF-002「同一尝试来源身份和内容返回已有结果；同一身份不同内容形成冲突」与「同一对象在同一尝试中只能有一个当前有效
+// Covers: `AT-TF-360`（编排半边）——UC-TF-002「同一尝试来源身份和内容返回已有结果；同一身份不同内容形成冲突」与「同一对象在同一尝试中只能有一个当前有效
 // 结果」——同一格的同内容重放答已有更正、不再登记、不再进段；换了说法答冲突，在册的更正不被顶替。
 func TestACorrectionReplayAnswersTheExistingOneAndADifferentStatementConflicts(t *testing.T) {
 	fixture := newPickupCorrectionFixture(t)
@@ -266,7 +266,7 @@ func TestACorrectionReplayAnswersTheExistingOneAndADifferentStatementConflicts(t
 	}
 }
 
-// Covers: ADR-0029 按恢复动作分格——更正只回指待确认那一版：已是确定结果的那一格答`并非待确认`（不再更正，也不写任何东西）；
+// Covers: `AT-TF-360`（编排半边）——ADR-0029 按恢复动作分格——更正只回指待确认那一版：已是确定结果的那一格答`并非待确认`（不再更正，也不写任何东西）；
 // 指错尝试或对象、形状不成的提交答`来源未受理`，后者连库都不读。
 func TestOnlyAPendingVersionIsCorrectedAndMalformedCorrectionsAreNotAccepted(t *testing.T) {
 	fixture := newPickupCorrectionFixture(t)
@@ -330,7 +330,7 @@ func TestOnlyAPendingVersionIsCorrectedAndMalformedCorrectionsAreNotAccepted(t *
 	_ = loadsBefore
 }
 
-// Covers: 要裁的「揽收一侧更正成揽收到手，与对象级登记口同（对象，尝试）的那一版谁是当前有效」——同（对象，尝试）已经经对象级登记
+// Covers: `AT-TF-357`（编排半边）——要裁的「揽收一侧更正成揽收到手，与对象级登记口同（对象，尝试）的那一版谁是当前有效」——同（对象，尝试）已经经对象级登记
 // 口登记了同内容的揽收（此前的绕法）：更正收口它，不登记第二份、不再进一次段；登记的是另一回事（控制依据不同）则更正答冲突、
 // 不写更正——要改那份揽收走揽收更正口，更正不顶替它。
 func TestACorrectionToAPickupAdoptsTheObjectLevelRegistrationInsteadOfFormingASecond(t *testing.T) {
@@ -373,7 +373,7 @@ func TestACorrectionToAPickupAdoptsTheObjectLevelRegistrationInsteadOfFormingASe
 	})
 }
 
-// Covers: ADR-0029——读不动才是未决：登记册读不动答`未决`（点名是对象级揽收登记那一条路，等它恢复重试同一份）、更正册读写不动答`未决`
+// Covers: `AT-TF-357`、`AT-TF-359`（编排半边，未决格）——ADR-0029——读不动才是未决：登记册读不动答`未决`（点名是对象级揽收登记那一条路，等它恢复重试同一份）、更正册读写不动答`未决`
 // （点名更正册）；未决不落更正。更正成揽收到手而装配没交入对象级揽收登记，一律不受理，不会悄悄只改结果。
 func TestCorrectionDependenciesThatCannotAnswerAreUndecidedNotRefused(t *testing.T) {
 	t.Run("the registry cannot be read", func(t *testing.T) {
@@ -419,7 +419,7 @@ func TestCorrectionDependenciesThatCannotAnswerAreUndecidedNotRefused(t *testing
 	})
 }
 
-// Covers: ADR-0303 的待遇（沿用于这条更正）——运营决定面提交的操作者作为操作证据记在更正上，只进审计：同一更正换一位操作者重放
+// Covers: `AT-TF-361`（编排半边）——ADR-0303 的待遇（沿用于这条更正）——运营决定面提交的操作者作为操作证据记在更正上，只进审计：同一更正换一位操作者重放
 // 仍答已有、在册的不被顶替。
 func TestTheSubmittingOperatorIsKeptAsEvidenceAndNeverCompared(t *testing.T) {
 	fixture := newPickupCorrectionFixture(t)
@@ -540,7 +540,7 @@ func (fixture *deliveryCorrectionFixture) correct(t *testing.T, command applicat
 	return result
 }
 
-// Covers: `AT-TF-070` 之后的确定（UC-TF-006「尝试待确认」）——待确认的派送结果凭同一次上门的后补来源更正成妥投：更正落册并回指
+// Covers: `AT-TF-359`、`AT-TF-360`（编排半边）——`AT-TF-070` 之后的确定（UC-TF-006「尝试待确认」）——待确认的派送结果凭同一次上门的后补来源更正成妥投：更正落册并回指
 // 待确认那一版；同内容重放答已有，换了说法答冲突；已是确定结果的那一格答`并非待确认`；形状不成与指错答`来源未受理`；
 // 读不动答`未决`；操作证据只进审计。
 func TestAPendingDeliveryResultIsCorrectedByTheSameRulesAsThePickupSide(t *testing.T) {

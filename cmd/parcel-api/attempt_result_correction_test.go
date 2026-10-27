@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -70,7 +71,7 @@ func expectAnswer(t *testing.T, name string, answered *httptest.ResponseRecorder
 	}
 }
 
-// Covers: `AT-TF-070` 之后的确定（UC-TF-006「尝试待确认」）的生产装配半边——一次派送尝试里两件对象都停在待确认，交付登记对它们都答
+// Covers: `AT-TF-359`、`AT-TF-361`（生产装配半边）——`AT-TF-070` 之后的确定（UC-TF-006「尝试待确认」）的生产装配半边——一次派送尝试里两件对象都停在待确认，交付登记对它们都答
 // `派送结果待确认`：parcel-1 由执行方在作业事实面后补成妥投，随后同一份交付登记走得过去（201 DELIVERY_REGISTERED）；parcel-2 由复核人在运营
 // 决定面认定为无人签收，交付登记改答`未生效`（它不再是待确认）。重放答已有更正，换说法答冲突；两件的待确认那一版都留在册上。
 func TestAPendingDeliveryIsCorrectedThroughBothFacesAndTheDeliveryRegistrationFollowsTheCurrentResult(t *testing.T) {
@@ -184,7 +185,7 @@ func TestAPendingDeliveryIsCorrectedThroughBothFacesAndTheDeliveryRegistrationFo
 	}
 }
 
-// Covers: UC-TF-002 步骤 6A 与 6B 在更正之后的生产装配半边——一次到访三件对象都停在待确认：parcel-1 在作业事实面更正成客户不在，当前有效
+// Covers: `AT-TF-357`、`AT-TF-358`、`AT-TF-360`、`AT-TF-361`（生产装配半边）——UC-TF-002 步骤 6A 与 6B 在更正之后的生产装配半边——一次到访三件对象都停在待确认：parcel-1 在作业事实面更正成客户不在，当前有效
 // 结果（失败尝试费读的那条）是更正出来的失败、首次提交的行仍是待确认；parcel-2 在运营决定面认定为揽收到手并点名段，经对象级揽收登记形成场外揽收
 // （同（对象，尝试）一行）、进声明的段、入队一封 `offsite-pickup.registered` 信封交 parcel-shipment；parcel-3 的更正带了控制依据却是失败，
 // 答`来源未受理`。三件之外，更正读不动、未持有授予的调用方都不落任何行。
@@ -312,7 +313,7 @@ func TestAPendingPickupIsCorrectedThroughBothFacesAndTheCorrectedPickupEntersThe
 	}
 }
 
-// Covers: ADR-0297 决定二——运营决定面按决定种类授予：只持有揽收认定的人认定不了派送，反过来也一样，各答 403；没有令牌答 401；这几口都不落任何更正行。
+// Covers: `AT-TF-361`（生产装配半边）——ADR-0297 决定二——运营决定面按决定种类授予：只持有揽收认定的人认定不了派送，反过来也一样，各答 403；没有令牌答 401；这几口都不落任何更正行。
 func TestTheAttemptResultConfirmationDecisionsAreGrantedPerSide(t *testing.T) {
 	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
@@ -352,4 +353,74 @@ func TestTheAttemptResultConfirmationDecisionsAreGrantedPerSide(t *testing.T) {
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("没有令牌 = %d, want 401", recorder.Code)
 	}
+}
+
+// unwritableCorrections 让更正册读得动、写不进：对象级揽收登记已写在更正追加之前，追加失败时事务壳必须把登记一并撤回。
+type unwritableCorrections struct {
+	tfports.PickupResultCorrections
+}
+
+func (unwritableCorrections) Save(context.Context, tfports.PickupResultCorrectionRecord) (tfports.PickupResultCorrectionSaveOutcome, error) {
+	return tfports.PickupResultCorrectionSaveOutcomeInvalid, errors.New("the correction register is down")
+}
+
+// Covers: `AT-TF-357`（生产装配半边）——更正成揽收到手时对象级揽收登记写在更正追加之前：追加不出（更正册写不进）答`未决`，事务壳整笔回滚，
+// 于是没有留下一份没有更正回指的场外揽收、没有进段、没有入队的信封；册恢复之后同一份更正照常成立。
+func TestACorrectionThatCannotBeAppendedLeavesNoPickupBehind(t *testing.T) {
+	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	work := workFactTransportForTest(t)
+	controlFacts, err := buildControlFactOrchestrations(db)
+	if err != nil {
+		t.Fatalf("装配控制事实编排：%v", err)
+	}
+	real, err := tfpostgres.NewPickupResultCorrections(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	broken, err := newPickupAttemptResultCorrection(db, unwritableCorrections{real})
+	if err != nil {
+		t.Fatal(err)
+	}
+	healthy, err := buildPickupAttemptResultCorrection(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const visit = `{"sourceId":"SYN-DEVICE-OFFSITE/attempt-92","task":"SYN-TASK-92","attempt":"SYN-ATTEMPT-92",` +
+		`"executedBy":"SYN-COURIER-92","place":"SYN-PLACE/shipper-dock-92","plannedFrom":"2026-09-24T08:00:00+08:00",` +
+		`"plannedTo":"2026-09-24T10:00:00+08:00","arrivedAt":"2026-09-24T08:40:00+08:00","evidence":"SYN-EVIDENCE/visit-92",` +
+		`"objects":[{"object":"SYN-PARCEL-92-01","outcome":"PENDING_CONFIRMATION","source":"SYN-SOURCE/vehicle-arrival",` +
+		`"basis":"SYN-GAP/no-receipt","occurredAt":"2026-09-24T08:45:00+08:00"}]}`
+	const pickedUp = `{"sourceId":"SYN-DEVICE-OFFSITE/attempt-92","object":"SYN-PARCEL-92-01","outcome":"PICKED_UP",` +
+		`"source":"SYN-SOURCE/partner-late-receipt","control":"SYN-CONTROL/receipt-92","occurredAt":"2026-09-24T08:48:00+08:00",` +
+		`"correctedAt":"2026-09-24T14:05:00+08:00","segment":"SYN-SEGMENT-92"}`
+	expectAnswer(t, "登记待确认", postAs(tfhttp.NewPerformOffsitePickupEndpoint(work, controlFacts.pickupAttempt), "/transport-fulfillment/offsite-pickup-attempts", visit),
+		http.StatusCreated, "ATTEMPT_RECORDED")
+
+	expectAnswer(t, "追加不出", postAs(tfhttp.NewCorrectPickupAttemptResultEndpoint(work, broken), "/x", pickedUp),
+		http.StatusOK, "CORRECTION_UNDECIDED")
+	reader, err := db.ReadExecutor(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pickups, envelopes, segments int
+	if err := reader.QueryRow(t.Context(), `SELECT count(*) FROM transport_fulfillment.offsite_pickup WHERE object_ref = 'SYN-PARCEL-92-01'`).Scan(&pickups); err != nil {
+		t.Fatal(err)
+	}
+	if err := reader.QueryRow(t.Context(),
+		`SELECT count(*) FROM `+migrate.SchemaBento+`.outbox WHERE event_type = 'transport-fulfillment.offsite-pickup.registered' AND subject = $1`,
+		"SYN-PARCEL-92-01/SYN-ATTEMPT-92").Scan(&envelopes); err != nil {
+		t.Fatal(err)
+	}
+	if err := reader.QueryRow(t.Context(), `SELECT count(*) FROM transport_fulfillment.actual_fulfillment_segment WHERE segment_ref = 'SYN-SEGMENT-92'`).Scan(&segments); err != nil {
+		t.Fatal(err)
+	}
+	if pickups != 0 || envelopes != 0 || segments != 0 {
+		t.Fatalf("追加失败之后留下 场外揽收 %d 信封 %d 段 %d；事务壳没有整笔回滚", pickups, envelopes, segments)
+	}
+
+	expectAnswer(t, "册恢复之后", postAs(tfhttp.NewCorrectPickupAttemptResultEndpoint(work, healthy), "/x", pickedUp),
+		http.StatusCreated, "RESULT_CORRECTED")
 }

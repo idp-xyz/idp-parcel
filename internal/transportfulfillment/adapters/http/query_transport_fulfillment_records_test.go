@@ -919,7 +919,7 @@ func TestTransportPreparationRegistryTranscribesRows(t *testing.T) {
 	}
 }
 
-// Covers: 票 docs-consistency/code/90 要裁的「待确认复核清单」——还在待确认的逐对象尝试结果一册：两侧合并，逐格转写待确认那一版的来源与
+// Covers: `AT-TF-362`（传输面）——票 docs-consistency/code/90 要裁的「待确认复核清单」——还在待确认的逐对象尝试结果一册：两侧合并，逐格转写待确认那一版的来源与
 // 缺口，揽收一侧带更正口要指名的 sourceId、派送一侧不带；读口收到的是接入面裁决的租户与上限。
 func TestPendingAttemptResultRegistryTranscribesBothSides(t *testing.T) {
 	register := &stubReviewCatalogue{pendingResults: []ports.PendingAttemptResultRow{
