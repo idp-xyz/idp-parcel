@@ -1,7 +1,7 @@
 # 96 释放口外那层 savepoint 在暴露账本读不回时连已落库的冻结释放一起撤掉
 
 Category: bug
-Status: ready-for-agent——R2（上线后尽快）：组合策略（预付冻结与信用校验同在）下，冻结那本已落库的释放会因为暴露那本读不回被一并撤回，与 ADR-0122 决定三相反；终局各路的补偿引用不持久、没人重放，那一笔冻结就一直占着。只在两本账都有占用、且暴露那本恰好读不回时出现。2026-10-26 协调方据 code/71 隔离评审信息 3 立（用户「你作为业务和系统专家自决」授权）；问题由 code/72 带进来，code/71 未改其行为。
+Status: in-progress——完工待评审与进 main，分支 claude-code96（见文末「完成记录」）。此前 ready-for-agent——R2（上线后尽快）：组合策略（预付冻结与信用校验同在）下，冻结那本已落库的释放会因为暴露那本读不回被一并撤回，与 ADR-0122 决定三相反；终局各路的补偿引用不持久、没人重放，那一笔冻结就一直占着。只在两本账都有占用、且暴露那本恰好读不回时出现。2026-10-26 协调方据 code/71 隔离评审信息 3 立（用户「你作为业务和系统专家自决」授权）；问题由 code/72 带进来，code/71 未改其行为。
 Blocked by: 无
 出处：code/71 隔离评审信息 3；[code/72](./72-a-customer-supplement-pause-releases-the-paused-versions-occupation.md) 评审 N1 引入 `pspostgres.SavepointedControlRelease`。
 
@@ -35,3 +35,61 @@ S–M。
 
 - 选哪一种；倾向 1（只动 PS 装饰器，最小），若 SA owner 愿意改编排则 2 更彻底。
 - 若选 1，SQL 级错误那一格仍会撤掉冻结释放，是否在 ADR-0122 决定三上挂一句读法注说明共享事务下的这一格。
+
+## 完成记录
+
+分支 `claude-code96`，基于 main `c8f0f3522`（收尾 rebase 之后以回报里的最终 SHA 为准）。选候选 1，只改 PS 一侧。
+
+### 做了什么
+
+- `SavepointedControlRelease`（`internal/parcelshipment/adapters/postgres/control_release_savepoint.go`）：内层答`已收口`直接 `RELEASE SAVEPOINT`；答别的或答错误时，先在 savepoint 里执行一条 `SELECT 1` 探事务状态——成功才算没中止，收起 savepoint、保住提供方已落库的那一半；失败（25P02、探测自己出错、ctx 已取消、连接断开）一律按已中止，`ROLLBACK TO SAVEPOINT`。答复原样交回，开、退、收本身失败仍按`可重试未形成`。框架 `bentopg.Executor` 不暴露连接，读不了 `TxStatus`，所以只能经 SQL 探。
+- 文档：新 ADR-0291（部分停用（收窄）ADR-0282 决定一末条前半句；ADR-0122 决定三挂读法注、不停用）；ADR-0282 与 ADR-0122 的 Status 注记与 Links 加前向指针；UC-PS-005 规则一条与 `AT-PS-160` 一行；盘点 `AT-PS-160` 一行入①、一段追记。无迁移，不改 SA、不改端口、不改装配。
+
+### 释放口答非`已收口`的路径，哪些是事务已中止、哪些是正常
+
+| 路径（`ReleasePreAcceptanceControlHandler.Handle` 与适配器） | 事务 |
+|---|---|
+| `LockControlScope` 的 `pg_advisory_xact_lock` 语句报错（锁等超时、死锁受害者、语句超时） | 已中止（SQL） |
+| 冻结或暴露账本 `LoadForScope` 的查询报错，或遍历行时服务端报错 | 已中止（SQL） |
+| 冻结或暴露账本 `Save` 的 UPSERT 报错 | 已中止（SQL） |
+| 暴露行的指纹不是本适配器写下的形状、`freezeSpecOf` 或 `Rehydrate*Ledger` 重建失败、读口交 nil | 正常——语句没出错；这是票面的"读不回"那一格，也是修的对象 |
+| `ReleaseRequestNotAccepted`（身份或作用域立不起来，零值作用域） | 正常——在读任何账本之前短路，没有东西可留可撤 |
+| `ledger.Release` / `exposureLedger.Release` 报错（编程错误、时钟异常）→ 适配器译成`ErrUntranslatableAnswer` | 正常；暴露那本的出在冻结已落库之后 |
+| 冻结 `Save` 里"入册的冻结没有幂等指纹"（领域 bug） | 正常；前面逐行已写的是幂等推进的合法状态 |
+| 适配器译不动的答复（空原因、集合外的值） | 正常，无写 |
+
+探测靠"成功才算没中止"区分：中止态的事务对除退回以外的语句一律答 25P02，所以探测成功不可能是中止；反方向（正常事务上探测因 ctx 取消、连接断开失败）被按已中止处理，多退回一次，回到旧的保守落法。
+
+### 对 code/71、code/102 的核对
+
+- code/71 的三格语义不变：装饰器不改答复，只改 savepoint 收起还是退回；`确定未受理`在读账本之前短路，无写，收起退回无差别，回归例 `TestAReleaseTheProviderRefusesLeavesTheTransactionUsableAndTheLedgersUntouched`。可重试未形成仍走补偿续办或停下。
+- code/102 与 ADR-0290 的"放不收口整轮回滚"是应用层按自己的保证做的决定（`occupationRelease.settleGap` 之后由形成决定那一步交未决、消费门回滚），与本层保不保住那一半无关：整轮回滚时保住的那一半随整轮撤回，行为与之前一致。`cmd/parcel-dispatch` 与应用层的既有用例全绿。
+- ADR-0122 决定三原文「冻结那本已落库的释放在暴露账本读不回时不撤回：续办重放，冻结账本按幂等交回原释放答案，暴露账本再认领一次——两本各自收口，不必同事务」：语句没出错那一格现在与原文一致；SQL 级错误那一格事务已中止，保不住，写进读法注。
+- ADR-0282 决定一末条「释放口外那一层 savepoint 对非`已收口`的答复与错误都退回」与新行为相抵（事务没中止时收起），所以立 ADR-0291 收窄，不是只挂读法注。
+
+### 修前红与修后绿
+
+- 修前（只有测试、装饰器未改）：`TestACombinedPolicyReleaseKeepsTheFreezeReleaseWhenTheExposureLedgerCannotBeReadBack`（读口交错误，冻结行 `status = 1`、无释放时刻）与 `TestACombinedPolicyReleaseKeepsTheFreezeReleaseWhenAnExposureRowCannotBeRebuilt`（暴露行指纹损坏的真数据，同）红；装饰器层 `TestASavepointKeepsWhatAReleaseAlreadyPersistedWhileTheTransactionIsHealthy` 三格（可重试未形成、确定未受理、错误）与 `TestASavepointDecidesEachReleaseByThatMomentsTransactionState` 红。
+- 修后全绿。SQL 级错误那一格（`TestACombinedPolicyReleaseStillUndoesTheFreezeReleaseWhenTheExposureReadFailsInSQL`：暴露表在同事务里被改名，冻结释放随退回撤掉、冻结行仍占着，调用方事务继续读写、提交）、确定未受理、冻结账本读不回（不动账本）、已收口（两本落库、重放答原释放时刻）四格修前后都绿，是回归守卫。续办重放（读口第二次读回）：冻结释放时刻不变，暴露行再认领为已释放。
+
+### 测试与变异
+
+- `scripts/test-full.sh` 范围：`./internal/parcelshipment/...`、`./internal/visibilityexception/adapters/parcelshipment/...`、`./tests/bentocontract/...`、`./cmd/...`、`./internal/architecture/...`、`./migrations/...`，全部 ok、退 0；`go build ./...`、`go vet ./...`、`gofmt -l` 干净；`go run ./tools/adr-index` 能生成（README 不提交）、`go run ./tools/at-coverage-counts -check` 退 1（只是总览过期，新号分桶行已补）。新用例 `-count=3` 稳定。
+- 变异（备份、还原后 `cmp` 一致），全部被杀：①探测恒判没中止（该退回时收起）：装饰器层四例红、`cmd/parcel-dispatch` 的 SQL 级错误例与既有两例中毒释放例红；②探测恒判已中止（回到旧行为）：装饰器层与 `cmd/parcel-dispatch` 保住那一半的例红；③内层答已收口时误退回（`if settled || !usable`）：装饰器层已收口格、`cmd/parcel-dispatch` 已收口例与组合策略例红；④答错误时一律退回（`|| releaseErr != nil`）：装饰器层错误格红；⑤`确定未受理`不探测（中止的事务上收起）：装饰器层"中止时确定未受理"格红。变异①首轮暴露一个测试写法问题：断言写在事务闭包里用 `t.Fatalf`，Goexit 卡住事务收尾、`cmd/parcel-dispatch` 超时；改成闭包交回错误。
+
+### 代决
+
+1. **立 ADR-0291。** ADR-0282 决定一末条是已接受的口径，新行为与之相抵；只挂读法注不够。ADR-0122 决定三不停用，只挂读法注说明共享事务下 SQL 级错误那一格。
+2. **落法只看事务状态，不按答复格分。** 包括形不成三格的错误：事务没中止就收起。依据：`可重试未形成`一格既可能来自 SQL 级错误也可能不是，格分不出事务状态；每本账各自收口，冻结那半本身是完整合法状态。
+3. **探测失败一律按已中止。** 保守方向，代价只是偶尔多退回一次。
+4. **探测语句用 `SELECT 1`，在 savepoint 里执行。** 探测自己失败（如语句超时）也被随后的退回收拾。
+5. 测试放两处：装饰器层用临时表证"留、撤、逐次互不牵连"，`cmd/parcel-dispatch` 用生产的 SA 释放编排与真实两本账证组合策略；不起整条委托闭环，释放口与两本账、作用域锁都是生产实现。
+
+### 越权风险点
+
+1. **SQL 级错误那一格冻结释放仍撤。** 暴露账本因锁等超时、语句超时、权限、表被挪走读不回时，冻结那本的释放照旧随退回撤掉，补偿引用不持久、没人重放，那一笔冻结仍占着。要根治只有候选 2（SA 释放编排两本账各开 savepoint，SA owner）。本票只修了语句没出错的那一格。
+2. **保住的只是冻结那一半。** 暴露账本读不回的那一笔仍占着，终局各路的补偿引用不持久（ADR-0282 越权风险点 5），没有东西替它重放，仍待人处理或碰巧重放。
+3. **形不成三格的错误同按事务状态落法。** `release exposure` 之类编程错误出在冻结已落库之后，事务没中止时冻结释放留着。若 owner 要错误一律整段退回，在探测之前加一个 `releaseErr != nil` 分支。
+4. **探测多一次往返，只在非`已收口`时。** 已收口主路不探。
+5. **保住的那一半在调用方整轮回滚时一并撤回**（接受链放不收口、形成决定处放不收口）：本层不改应用层的回滚决定。
+
