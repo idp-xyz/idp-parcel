@@ -1,7 +1,7 @@
 # 66 NR 复核给候选出价用的是客户声明，不是收寄时已取得的物理事实或当前有效实测
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code66。**NR 侧完工；物理事实的真实来源仍缺**（`node-operations` 没有实际测量登记册，票 pp-pricing-input-seams/04），生产装配里复核恒退回客户声明并如实标明，登记册与只读口立起来后接线这一处，接线前本票不关。此前 ready-for-agent——建议 R2（上线后尽快）：答案不错在结构上，错在依据。复核的排序与改善判断建立在客户声明上，实测与声明不符的包裹，复核比出的成本、选出的候选与按 CONTEXT 应得的不同；没有响亮失败，审计时从计划出处才看得出。2026-10-21 协调方裁定立（票 [demo-chain-gaps/115](../../demo-chain-gaps/issues/115-route-reassessment-never-loads-candidate-costs.md) 隔离评审 B1；用户「你作为业务和系统专家自决……解决所有的问题」授权），115 作者子代理执笔，分支 claude-dcg115。
+Status: resolved——2026-10-26 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code66。**NR 侧完工；物理事实的真实来源仍缺**（`node-operations` 没有实际测量登记册，票 pp-pricing-input-seams/04），生产装配里复核恒退回客户声明并如实标明，登记册与只读口立起来后接线这一处，接线前本票不关。此前 ready-for-agent——建议 R2（上线后尽快）：答案不错在结构上，错在依据。复核的排序与改善判断建立在客户声明上，实测与声明不符的包裹，复核比出的成本、选出的候选与按 CONTEXT 应得的不同；没有响亮失败，审计时从计划出处才看得出。2026-10-21 协调方裁定立（票 [demo-chain-gaps/115](../../demo-chain-gaps/issues/115-route-reassessment-never-loads-candidate-costs.md) 隔离评审 B1；用户「你作为业务和系统专家自决……解决所有的问题」授权），115 作者子代理执笔，分支 claude-dcg115。
 Blocked by: [pp-pricing-input-seams/04](../../pp-pricing-input-seams/issues/04-no-actual-measurement-registry-and-valid-measurements-read-port.md)（`node-operations` 实际测量登记册与「仍有效的实际测量」只读口；没有它，到站复核那一半无从取数）
 出处：demo-chain-gaps/115 隔离评审 B1。
 
@@ -119,3 +119,11 @@ M。NR 侧改取数侧的事实来源选择、复核编排把判断种类交给�
   - N2 「声明读不回上抛」只测了物理事实没取得那一支：`TestAReadFailureIsNeverTurnedIntoAFallback` 加一格，物理事实只有重量、补外廓的声明读不回，断言上抛（ADR-0029：读不动是未决，不静默按「只有实测重量、无外廓」出价）。补外廓那一读的错误吞成声明没有：用例红。
   - N3 savepoint 装饰器的无事务一支没有断言判断点透传：`TestASavepointPassesCostsThroughOutsideATransaction` 断言内层收到的就是调用方指名的判断点（种类与业务时点都核）；事务里的可读一支 `TestASavepointReleasesReadableCostsUnchanged` 同样加了断言。无事务一支与事务里调内层的两处各自换成预路由点：对应用例各自红。
 - 信息项，不另立票：复核册读面（`query_route_plans.go` 的 `reassessmentBody`）不透出 `candidate_facts_basis`，已在越权风险点 4 列明。
+
+## 进 main 记录（2026-10-26，协调方）
+
+- 分支 `claude-code66` 由修订代理 rebase 到 origin/main `6092075c1` 后快进，tip `c07f2a4c0`。迁移 `network_routing/0032_route_reassessment_candidate_facts_basis`（加 `candidate_facts_basis` 列与封闭集 CHECK，不含预路由的 `DECLARATION`）；新立 ADR-0294（接上 ADR-0148 决定四第 7 条一句，入向注记与 Links 已挂 ADR-0148）。AT-NR-106–110。
+- 隔离评审（Sonnet）可合入，无阻断；核实了 ADR-0294 的出向/入向指针与被停原句逐字相同、ADR-0148 正文未改、四种依据值在所有构造与读回处有落点、读不动上抛而没取得才退回声明（ADR-0029 分格对）、迁移与种子、ADR-0222 装配合规、手算两例（称重 12kg 外廓取声明；只量外廓重量取声明 1kg）符合决定五。评审自做 16 处变异，13 处被杀；存活的三处（N1 `rerouteCosts` 生产装配无用例、N2 声明读不回只测了物理没取得一支、N3 savepoint 无事务分支未断言判断点透传）由 Sonnet 修订代理补用例，三处变异均变红。
+- 协调方单独提交重算的 AT 计数、重生成的 ADR 索引与机制清点；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0、158 个包 ok；`go build ./...`、`go vet ./...` 干净；种子灌一次性库退 0，`candidate_facts_basis` 列已落库。无 admin-web 改动。
+- 去向：无新票。读面（`query_route_plans.go` 的 `reassessmentBody`）不透出 `candidate_facts_basis`，运营分不出按声明退回还是按实测判，已列 ADR-0294 越权风险点，随接上真实物理来源的那张票一并做。越权风险点：生产里物理事实来源装 `NoPhysicalParcelFacts`，复核恒退回声明并标 `DECLARATION_FALLBACK`，出价与此前相同；NO 实测登记册（pp-pricing-input-seams/04）立起来后只需换接 `routeCosts` 与 `rerouteCosts` 两处装配；授权改路决定作第四判断点、口径取决于 NO 登记册怎样记「仍有效」。
