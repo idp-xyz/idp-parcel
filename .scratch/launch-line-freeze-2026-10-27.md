@@ -172,4 +172,8 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 
 ### 记录
 
-（暂无）
+- 2026-10-27｜五步发布流程里批准遇到「已变更」后，再点批准仍带旧摘要、继续得「已变更」，只能「重新开始」或去「待批准发布」页处理｜`apps/admin-web/src/pages/party/PublicationDraftFlow.tsx`；[owner 复核清单](./party-commercial-uiux-backend/owner-review.md)｜R3
+- 2026-10-27｜查阅员的登记与发布页签被收起后，空态与说明文字仍写「在「登记」签登记第一个」之类指向被收起页签的话｜[party-commercial-uiux-backend/04](./party-commercial-uiux-backend/issues/04-operator-grants-self-read-and-write-entries-hidden.md)「已知」｜R3
+- 2026-10-27｜授予自查读口只被参与方与商业区用；计价、网络、关务、结算等区的写入口仍对查阅员摆出｜ADR-0315 越权风险点 5｜R3
+- 2026-10-27｜`boundTenantOf`（`apps/admin-web/src/pages/operator-binding.ts`）对 JSON `null` 响应体会抛错，同款的 `heldGrantsOf` 已防｜party-commercial-uiux-backend/04 评审意见｜R3
+- 2026-10-27｜发布载荷的逐格问题多数领域错误仍答兜底码 `INVALID`，受控批文口与各 JSON 镜像登记口的问题不带码｜ADR-0316 越权风险点 2｜R3
