@@ -145,3 +145,207 @@ func TestASavepointPassesTheReleaseThroughOutsideATransaction(t *testing.T) {
 		t.Fatal("少接内层却答成功")
 	}
 }
+
+// halfRelease 先在调用方事务里落一行（提供方已落库的那一半），再按 answer 与 err 答复；abort 为真时落完再执行 `SELECT 1/0`，
+// 把事务打进中止态——像 settlement-accounting 的释放编排在第二本账上遇到 SQL 级错误那样。
+type halfRelease struct {
+	db     *bentopg.DB
+	answer ports.ControlReleaseAnswer
+	err    error
+	abort  bool
+}
+
+func (release halfRelease) ReleasePreAcceptanceControl(
+	ctx context.Context,
+	_ ports.ControlReleaseRequest,
+) (ports.ControlReleaseAnswer, error) {
+	executor, err := release.db.RequireExecutor(ctx)
+	if err != nil {
+		return ports.ControlReleaseAnswer{}, err
+	}
+	if _, err := executor.Exec(ctx, `INSERT INTO persisted_half VALUES (1)`); err != nil {
+		return ports.ControlReleaseAnswer{}, err
+	}
+	if release.abort {
+		_, _ = executor.Exec(ctx, `SELECT 1/0`)
+	}
+	return release.answer, release.err
+}
+
+func notFormedAnswer(t *testing.T) ports.ControlReleaseAnswer {
+	t.Helper()
+	reason, err := domain.NewCheckReason("SA-EXPOSURE_LEDGER_UNAVAILABLE")
+	if err != nil {
+		t.Fatalf("原因：%v", err)
+	}
+	return ports.ControlReleaseAnswer{Outcome: ports.ControlReleaseNotFormed, Reason: reason}
+}
+
+func notAcceptedAnswer(t *testing.T) ports.ControlReleaseAnswer {
+	t.Helper()
+	reason, err := domain.NewCheckReason("SA-RELEASE_REQUEST_NOT_ACCEPTED")
+	if err != nil {
+		t.Fatalf("原因：%v", err)
+	}
+	return ports.ControlReleaseAnswer{Outcome: ports.ControlReleaseNotAccepted, Reason: reason}
+}
+
+// persistedHalfRows 数「提供方已落库的那一半」在调用方事务里还剩几行；事务若已中止，这一句自己就答 25P02。
+func persistedHalfRows(ctx context.Context, db *bentopg.DB) (int, error) {
+	executor, err := db.RequireExecutor(ctx)
+	if err != nil {
+		return 0, err
+	}
+	var rows int
+	err = executor.QueryRow(ctx, `SELECT count(*) FROM persisted_half`).Scan(&rows)
+	return rows, err
+}
+
+func createPersistedHalf(ctx context.Context, db *bentopg.DB) error {
+	executor, err := db.RequireExecutor(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = executor.Exec(ctx, `CREATE TEMP TABLE persisted_half (n int) ON COMMIT DROP`)
+	return err
+}
+
+// Covers: AT-PS-160、ADR-0122 决定三「冻结那本已落库的释放在暴露账本读不回时不撤回」在共享事务里成立——内层落了一半就答非`已收口`，
+// 只要事务没中止，那一半就留着：`可重试未形成`（账本读回不来但语句没出错）、`确定未受理`、形不成三格的错误三种答法同此；
+// 答复原样交回，随后的写照样提交。已收口一格也留着，不因这条改动回归。
+func TestASavepointKeepsWhatAReleaseAlreadyPersistedWhileTheTransactionIsHealthy(t *testing.T) {
+	cases := []struct {
+		name    string
+		answer  func(*testing.T) ports.ControlReleaseAnswer
+		err     error
+		outcome ports.ControlReleaseOutcome
+	}{
+		{name: "可重试未形成", answer: notFormedAnswer, outcome: ports.ControlReleaseNotFormed},
+		{name: "确定未受理", answer: notAcceptedAnswer, outcome: ports.ControlReleaseNotAccepted},
+		{name: "形不成三格之一的错误", answer: func(*testing.T) ports.ControlReleaseAnswer { return ports.ControlReleaseAnswer{} },
+			err: ports.ErrUntranslatableProviderAnswer},
+		{name: "已收口", answer: func(*testing.T) ports.ControlReleaseAnswer {
+			return ports.ControlReleaseAnswer{Outcome: ports.ControlReleaseSettled}
+		}, outcome: ports.ControlReleaseSettled},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db, _, _ := controlReleaseSavepointFixture(t, `SELECT 1`)
+			release := adapter.NewSavepointedControlRelease(db, halfRelease{db: db, answer: tc.answer(t), err: tc.err})
+
+			var answer ports.ControlReleaseAnswer
+			var releaseErr error
+			var kept int
+			err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+				if err := createPersistedHalf(txCtx, db); err != nil {
+					return err
+				}
+				answer, releaseErr = release.ReleasePreAcceptanceControl(txCtx, ports.ControlReleaseRequest{})
+				var rowsErr error
+				if kept, rowsErr = persistedHalfRows(txCtx, db); rowsErr != nil {
+					return rowsErr
+				}
+				return writeAfterRelease(txCtx, db)
+			})
+			if err != nil {
+				t.Fatalf("事务没中止，随后的读写与提交却失败：%v", err)
+			}
+			if tc.err != nil {
+				if !errors.Is(releaseErr, tc.err) {
+					t.Fatalf("释放错误 = %v, want 原样交回 %v", releaseErr, tc.err)
+				}
+			} else if releaseErr != nil || answer.Outcome != tc.outcome {
+				t.Fatalf("答复 = %+v err = %v, want %v 原样交回", answer, releaseErr, tc.outcome)
+			}
+			if kept != 1 {
+				t.Fatalf("内层已落库的那一半剩 %d 行, want 1——事务没中止却被一并撤回", kept)
+			}
+		})
+	}
+}
+
+// Covers: AT-PS-160、SQL 级错误那一格如实记录（ADR-0291）——内层落了一半、随后一条语句出错把事务打进中止态：不论答复落在哪一格（可重试未形成、
+// 确定未受理、形不成三格的错误），落法只看事务状态，一律退回 savepoint，落下的那一半随之撤掉（事务本就保不住它），答复原样交回，
+// 退回之后同一事务照样读写与提交。
+func TestASavepointUndoesTheHalfWhenTheTransactionIsAborted(t *testing.T) {
+	cases := []struct {
+		name   string
+		answer func(*testing.T) ports.ControlReleaseAnswer
+		err    error
+	}{
+		{name: "可重试未形成", answer: notFormedAnswer},
+		{name: "确定未受理", answer: notAcceptedAnswer},
+		{name: "形不成三格之一的错误", answer: func(*testing.T) ports.ControlReleaseAnswer { return ports.ControlReleaseAnswer{} },
+			err: ports.ErrUntranslatableProviderAnswer},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db, _, _ := controlReleaseSavepointFixture(t, `SELECT 1`)
+			want := tc.answer(t)
+			release := adapter.NewSavepointedControlRelease(db, halfRelease{db: db, answer: want, err: tc.err, abort: true})
+
+			var answer ports.ControlReleaseAnswer
+			var releaseErr error
+			var left int
+			err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+				if err := createPersistedHalf(txCtx, db); err != nil {
+					return err
+				}
+				answer, releaseErr = release.ReleasePreAcceptanceControl(txCtx, ports.ControlReleaseRequest{})
+				var rowsErr error
+				if left, rowsErr = persistedHalfRows(txCtx, db); rowsErr != nil {
+					return rowsErr
+				}
+				return writeAfterRelease(txCtx, db)
+			})
+			if err != nil {
+				t.Fatalf("事务已中止，退回 savepoint 之后随后的读写与提交应当照样成功：%v", err)
+			}
+			if tc.err != nil {
+				if !errors.Is(releaseErr, tc.err) {
+					t.Fatalf("释放错误 = %v, want 原样交回 %v", releaseErr, tc.err)
+				}
+			} else if releaseErr != nil || answer != want {
+				t.Fatalf("答复 = %+v err = %v, want %+v 原样交回，不是 savepoint 不可用", answer, releaseErr, want)
+			}
+			if left != 0 {
+				t.Fatalf("内层落下的那一半剩 %d 行, want 0——事务已中止，退回 savepoint 应当把它撤掉", left)
+			}
+		})
+	}
+}
+
+// Covers: AT-PS-160、savepoint 名逐版重用——先中止（退回）、再健康未收口（收起）、再已收口（收起），三次之间互不牵连：每次的落法只看
+// 那一次事务此刻的状态。
+func TestASavepointDecidesEachReleaseByThatMomentsTransactionState(t *testing.T) {
+	db, _, _ := controlReleaseSavepointFixture(t, `SELECT 1`)
+	steps := []halfRelease{
+		{db: db, answer: notFormedAnswer(t), abort: true},
+		{db: db, answer: notFormedAnswer(t)},
+		{db: db, answer: ports.ControlReleaseAnswer{Outcome: ports.ControlReleaseSettled}},
+	}
+	var rows []int
+	err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		if err := createPersistedHalf(txCtx, db); err != nil {
+			return err
+		}
+		for _, step := range steps {
+			if _, err := adapter.NewSavepointedControlRelease(db, step).ReleasePreAcceptanceControl(
+				txCtx, ports.ControlReleaseRequest{}); err != nil {
+				return err
+			}
+			count, err := persistedHalfRows(txCtx, db)
+			if err != nil {
+				return err
+			}
+			rows = append(rows, count)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("三次释放之间互相牵连：%v", err)
+	}
+	if !slices.Equal(rows, []int{0, 1, 2}) {
+		t.Fatalf("每次释放后剩的行数 = %v, want [0 1 2]：中止那次撤掉，健康未收口与已收口两次各留一行", rows)
+	}
+}
