@@ -1,7 +1,7 @@
 # 54 CR 运营企业真实到账的证据引用不指向结算已采用的外部资金事实，同一笔回款可以在两处各铸一次
 
 Category: bug
-Status: ready-for-agent——R3（COD 进入试点之前必修）：COD 首发不在试点范围（`PAR-COM-11`），今天只有演示租户经受控 CLI 登记；但真实到账一旦按今天的形接真渠道，同一笔银行回款会在 settlement-accounting 的采用与 collection-remittance 的真实到账各存一份，两边各自守恒、合起来重记，只能靠线下对账发现。2026-10-21 文档自洽 10（10a 半边）立（用户「你作为业务和系统专家自决」授权），分支 claude-dc10a。
+Status: in-progress——完工待评审与进 main，分支 claude-code54。R3（COD 进入试点之前必修）：COD 首发不在试点范围（`PAR-COM-11`），今天只有演示租户经受控 CLI 登记；但真实到账一旦按今天的形接真渠道，同一笔银行回款会在 settlement-accounting 的采用与 collection-remittance 的真实到账各存一份，两边各自守恒、合起来重记，只能靠线下对账发现。2026-10-21 文档自洽 10（10a 半边）立（用户「你作为业务和系统专家自决」授权），分支 claude-dc10a。
 Blocked by: 无（结算一侧被引用部分怎样映射，见「要裁的」，不挡 CR 一侧的修法）
 出处：[audit/cross.md](../audit/cross.md) CM·M-2；裁定 [ADR-0274](../../../docs/adr/0274-collected-principal-bank-arrival-enters-through-the-settlement-accounting-funds-adoption.md)；用例 [UC-CR-001](../../../docs/application/collection-remittance/UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md) `AT-CR-020`。
 
@@ -32,3 +32,51 @@ S–M：CR 加一个消费侧适配器读 `AdoptedFundsFactView`；`AcceptFact` 
 ## 要裁的
 
 - 结算一侧怎样处置被代收与清分引用为真实到账的那部分（ADR-0274 越权风险点 2）：给 `UC-SA-005` 加一种「代收本金」映射目标（金额与引用它的各条真实到账之和对得上），还是保持未分配并另立对账口径。归 SA owner。
+
+## 裁向（2026-10-27，作者代决，[ADR-0330](../../../docs/adr/0330-a-collected-principal-bank-arrival-is-registered-against-an-adopted-funds-fact-that-settlement-has-set-aside-as-collected-principal.md)）
+
+「要裁的」那一条（结算一侧怎样处置被引用的那部分）裁为第一种的加强版：给 `UC-SA-005` 加映射目标`代收本金`，**整条**认作、与这条事实上任何别的映射互斥、不核销、不进入账余额、不可撤；不取「保持未分配并另立对账口径」，也不取按金额部分核销。理由：保持未分配挡不住同一条事实之后被映射到对账单或账户（只落一个作用域的收款，没核销的部分整条记入入账余额，ADR-0283 决定二），同一笔 1000.00 的回款在运营余额记一次、在`待清分`再记一次；按金额部分核销则结算撤销核销时代收与清分已登记的到账失去依据，而结算看不见那边。代收与清分一侧：到账的证据引用即这条事实的引用，登记与移位都读事实此刻的链头，重放、重登、迟到、被结算更正各有答案（ADR-0330 决定四与手算三例）。
+
+## 完成记录（2026-10-27，分支 claude-code54，基于 main `d497a2fa1`，收尾 rebase 到当时的 origin/main）
+
+### 做了什么
+
+- 结算一侧（`internal/settlementaccounting`）：领域 `TargetCollectedPrincipal`（目标等于事实自己、只认确认到账、`ApplySettlement` 拒分配到它）；映射编排 `Map` 对每种目标都先取事实锁，再经新端口方法 `FundsMappingStore.ListByFact` 读回该事实上已有映射，`collectedPrincipalExcludes` 判互斥，冲突答 `MAPPING_CONFLICT`（结果代数不增格）；新只读口 `ports.CollectedPrincipalFundsView` 与 Postgres 实现 `CollectedPrincipalFundsView`（对事实身份行 `FOR SHARE`，再读链头与认作状态）；Postgres 映射读回词表、受控 CLI 译装词表、CLI 对映射冲突的文案、管理台目标种类词表各补一格。迁移 `settlement_accounting/0048`：词表、认作的目标须等于事实自己、一事实至多一条认作（部分唯一索引）。
+- 代收与清分一侧（`internal/collectionremittance`）：领域 `AdoptedFundsReference`、`AdoptedFundsVersion`、`AdoptedFunds`，`CollectionFact` 的采用版本（只属真实到账，值语义，`PinnedToAdoptedFunds`），`AdmitAdoptedFundsReference`（币种、每指令至多一条、合计，含溢出保护）、`AdoptedFundsCover`（移位前核名下全部到账）；端口 `AdoptedFundsView`、`CollectionRegistry.LockAdoptedFundsReferences`、`CollectionView.LoadAdoptedFundsReferences`；消费侧适配器 `adapters/settlementaccounting`；编排 `acceptArrival`（重放 → 币种门 → 事实锁 → 锁内再判重放 → 读结算 → 读回名下到账判三条 → 钉版本落册）与 `PostSubledger` 的采用事实门（`admitArrivalMove`，在重放判定与取分户账锁之后、按指令上限之前）；Postgres 写口（没钉版本的真实到账写口拒）、读口、按引用的事务级咨询锁。迁移 `collection_remittance/0004`：版本列、`NOT VALID` 的新登记必有版本、版本只属真实到账、（租户、证据引用、指令）唯一索引（建之前预检存量重复并拒绝施加）。受控 CLI 装配结算只读口，`evidenceRef` 即采用事实引用，不另给版本字段。
+- 演示种子：`data/settlement/09`（采用 1400.00 CNY 银行回款）、`10`（整条认作代收本金）、`steps/340-settlement-collected-principal-funds.sh`，`data/collection/06` 的证据引用改引它；README 与 `350-collection.sh` 头注同步。
+- 文档：ADR-0330（部分停用/扩成 ADR-0274 决定一、二的三句原句，回答其越权风险点 2、4；0274 只在 Status 注记之后与 Links 加前向指针）；CR CONTEXT、SA CONTEXT、GLOSSARY、CONTEXT-MAP、UC-CR-001（`AT-CR-020` 改写，新立 `AT-CR-026`、`AT-CR-027`，交接表更新）、UC-SA-005（新立 `AT-SA-216`）；AT 盘点把 `AT-CR-020` 由④移入①并补三行新号。
+
+### 代决与越权风险点
+
+下列为本票代决，待 CR owner、SA owner 复核（完整版在 ADR-0330「越权风险点」）：
+
+1. **结算一侧整条认作代收本金，互斥、不核销、不可撤**（SA owner、CR owner）。代决理由见「裁向」。越权点：UC-SA-005 的映射目标集多一格；SA CONTEXT「COD 代收本金不进」从一句话变成结构。认错的事实没有出口（不可撤）；一条回款混着服务费与本金时要在来源侧拆成两条事实。
+2. **映射到任何目标都先取事实锁**（SA owner）。此前映到审核应付、贷项、金额本体的映射不取；互斥的读回与插入必须在同一把锁下。锁序未变（事实在全序首位），代价是这几类映射与同一条事实上的核销、更正排队；既有锁序用例随之改写（`TestMappingLocksTheFactThenOnlyTheScopesItMovesInKeyOrder`）。
+3. **证据引用就是事实引用，登记读此刻链头并钉版本，不让运营给版本**（CR owner）。少一个会填错的输入；判金额永远读链头，版本只是留痕，不参与重放比对。
+4. **一条已采用事实对一条指令至多一条真实到账**（CR owner）。比 ADR-0274 的「金额之和不超额」多一条收紧：换事实标识重登同一指令，即使合计没超也答内容冲突。真正的第二笔钱来自另一次回款，引用另一条事实。
+5. **登记与移位都读结算，读时对事实身份行取共享锁**（CR、SA owner）。这是跨上下文的锁：代收与清分持自己的锁之后向结算要共享锁，结算从不回头等代收与清分的锁，接不成环；代价是读方事务提交之前结算一侧对这条事实的更正、映射、核销要等。
+6. **移位前再核一次：名下全部到账之和不超过此刻链头，容不下答内容冲突、账面不动；冲正不读结算**（CR owner）。回答 ADR-0274 越权风险点 4。被结算更正得容不下的状态没有出口（要结算再更正回去，或后继记录给到账的更正形），已落的移位不自动冲正。
+7. **重放先于一切按此刻状态作答的门，含取锁与读结算**（CR owner）。重放一条早已登记的到账，即使事实已被更正小、结算读口没装配、取锁失败，也答已在册。
+8. **按旧口径登记的存量真实到账不回填，撑不起移位**（CR owner）。迁移 `NOT VALID` 只管新写入；要为同一笔钱按引用另登一条。演示种子重灌即可。
+9. **认作代收本金的事实若被 customs-compliance 的税费付款核对误引**（CC owner）：CC 读到金额、币种、付款人，不知道它是受托资金。本票不动 CC。
+10. **同一笔银行回款被不同引用各采用一次，代收与清分防不住**（SA owner）。来源身份的去重是采用口的事；唯一的网是按指令的移位上限。
+
+### AT
+
+`AT-CR-020` 由④移入①并改写（币种、拆分、依据不在册）；新立 `AT-CR-026`（重复到达与换标识重登、取锁后读合计、并发）、`AT-CR-027`（被结算更正与迟到：下调后登记与移位、没有版本的存量、读不动答未决）、`AT-SA-216`（整条认作代收本金）。总览计数未动，随进 main 重算（`go run ./tools/at-coverage-counts -check` 退 1，只是总览过期；退 2 的缺行已补）。
+### 验证
+
+- 先写失败用例：结算与代收两侧的领域、编排、真库、受控 CLI 新用例都先于实现写成，实现前编译不过（无 `TargetCollectedPrincipal`、`AdoptedFunds`、`Deps.AdoptedFunds` 等符号），实现后全绿；变异暴露出的两处空白（锁前重放判定、锁内重放判定）和真库并发用例的不确定（见下）补用例后红绿各一次。
+- `go build ./... && go vet ./...`、`gofmt -l`：干净。
+- `TMPDIR=/home/tops/.claude/jobs/1be2e64f/tmp scripts/test-full.sh <结算与代收两侧全部包及其反向依赖：cmd/parcel-api、cmd/parcel-dispatch、cmd/parcel-collection-register、cmd/parcel-settlement-register、customs-compliance / parcel-pricing / parcel-shipment 三个 settlementaccounting 适配器> ./internal/architecture/... ./migrations/... ./internal/platform/... ./tools/...`：全 ok（rebase 到当时的 origin/main 之后跑）。`./internal/architecture/...` 覆盖事务外拒跑门禁（新写口 `LockAdoptedFundsReferences`、`LockCollectedPrincipalFact` 各补负向证据）与生产接线棘轮（新构造器都在 `parcel-collection-register` 装配）。
+- 新用例 `-count=3` ok；并发用例（事实上唯一去处、读口共享锁与更正互斥、事实锁排队、六路与两路并发登记、同一份并发到达）`-count=5` ok。
+- 管理台：`tsc -b --noEmit`、`node scripts/run-tests.mjs`（803 项）、`pnpm exec vite build` 通过，软链与产物已删。
+- 一次性库灌演示种子（含迁移 SA 0048、CR 0004）：全程零报错；库里 `SYN-COD-FACT-02` 的证据引用是 `SYN-COD-FUNDS-BANK-01`、钉的版本 `v1`，结算一侧同引用的映射目标是 `COLLECTED_PRINCIPAL`；账内各位置与原来相同。原样重放 `external-funds-fact`、`funds-mapping`、`fact`、`posting` 全答已存在 / 已在册（退出码 0）；到账证据引用改成任意字符串答 `BASIS_MISSING`（2），同一指令换事实标识再登答 `CONTENT_CONFLICT`（2），认作之后再映到客户账户答 `MAPPING_CONFLICT`（2）；用后已删库。
+- 变异（每次改一处、跑用例、从备份还原并 `cmp` 一致），全部被杀：(1) 去掉每指令至多一条；(2) 合计上限放宽一分（账平衡：多收的一分没有来源）；(3) 去掉移位前的采用事实门（`待清分` 多出银行没交付的本金，账面红）；(4) 去掉锁前重放判定——**先存活**（锁后那次足够答已在册），补 `TestAReplayIsAnsweredFromTheBookEvenWhenTheDependenciesAreDown`（取锁失败、读口未装配时重放仍答已在册）后被杀；(5) 登记不取事实锁——内存用例红，但真库六路并发用例**没红**（连接池只有两条，竞争窗口太窄），补屏障用例 `TestTwoArrivalsThatCannotBothFitAreQueuedOnTheFundsLock`（先占住咨询锁、看两路都等在上面再放）后被杀；(6) 去掉锁内重放判定——**先存活**，补 `TestASameArrivalCommittedWhileWaitingForTheLockIsAnsweredExisting`（等锁期间同一份已登记、事实又被更正小了）后被杀；(7) 结算互斥只拦第二条认作；(8) 结算映射只有映到对账单或账户才取事实锁（真库并发 ×5 红）；(9) 读口不取共享锁（更正落进读方事务之内）；(10) CR 迁移去掉（证据，指令）唯一索引；(11) 登记不钉版本；(12) 去掉到账币种对账币种的门；(13) 结算允许核销到代收本金；(14) 结算资金退回也能认作。
+- 过程记录：读口共享锁的用例一开始因用例池只有两条连接、旁观查询要不到连接而挂住；旁观改用 `pgtest.AdminDSN` 单开的连接，并在断言失败提前退出时释放持锁方（否则收尾关池也挂）。
+
+### 未决
+
+- 认作代收本金没有撤销形；认错的事实在结算一侧没有出口（ADR-0330 越权风险点 1）。
+- 被结算更正得容不下的状态没有出口，等结算再更正或到账的更正形（code/15，ADR-0330 越权风险点 4）。
+- ADR-0298 越权风险点 1（认可抵扣登记时不核结算）不在本票：认可抵扣不是资金事实，没有认作可言，SA 给出认可的只读口之后另立记录。
