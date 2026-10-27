@@ -113,6 +113,11 @@ const DecisionAuthorizedReroute DecisionKind = "AUTHORIZED_REROUTE"
 // 这一种是对已越过业务决定的资金占用的运维处理，职责不同，授予也分开：能处置委托的不因此能替一笔被拒收的释放销账。
 const DecisionControlReleaseRefusalHandling DecisionKind = "CONTROL_RELEASE_REFUSAL_HANDLING"
 
+// DecisionCancellationOrderConflictResolution 是取消先后冲突的解开（ADR-0295 决定二）：有权主体对册上一份冲突决定「认定取消依据不成立」或「认定
+// 边界事实有误、交来源方更正」。它不与授权处置（AUTHORIZED_DISPOSITION）共用——授权处置是对一份受限委托去向的业务处置，这一种是对一件包裹上
+// 取消与边界事实谁在先的裁断，认错了会让一件已取消的包裹长出责任起点，或让一件已在网络手里的包裹挂着取消终局，职责不同，授予也分开。
+const DecisionCancellationOrderConflictResolution DecisionKind = "CANCELLATION_ORDER_CONFLICT_RESOLUTION"
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -133,6 +138,7 @@ var decisionKinds = []DecisionKind{
 	DecisionFulfillmentSegmentCommissionAdoptionWithdrawal, DecisionTransportChargeOccurrenceInvalidation,
 	DecisionAuthorizedReroute,
 	DecisionControlReleaseRefusalHandling,
+	DecisionCancellationOrderConflictResolution,
 }
 
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。

@@ -115,8 +115,9 @@ func (repository *ParcelCancellations) FindByKey(
 	return record, true, nil
 }
 
-// FindCancellation 按包裹读回已成立的取消决定（ParcelCancellationView）。同一包裹
-// 多份成立取消时按业务时间取最早——「先合法形成者赢」用的比对时间正是它。
+// FindCancellation 按包裹读回有效的取消决定（ParcelCancellationView）：已成立、且没有被冲突解开决定认定为依据不成立（ADR-0295 决定三）。
+// 被认定不成立的取消仍在本表里作历史，只是不再被任何判断当作有效取消读到。同一包裹多份有效取消时按业务时间取最早——「先合法形成者赢」
+// 用的比对时间正是它。
 func (repository *ParcelCancellations) FindCancellation(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -132,12 +133,19 @@ func (repository *ParcelCancellations) FindCancellation(
 		requestedAt                                  time.Time
 	)
 	err = querier.QueryRow(ctx,
-		`SELECT cancellation_id, requester_ref, authority_ref, reason_ref, requested_at
-		   FROM parcel_shipment.parcel_cancellation
-		  WHERE tenant_id = $1
-		    AND parcel_id = $2
-		    AND kind = 'PARCEL_CANCELLED'
-		  ORDER BY requested_at
+		`SELECT c.cancellation_id, c.requester_ref, c.authority_ref, c.reason_ref, c.requested_at
+		   FROM parcel_shipment.parcel_cancellation c
+		  WHERE c.tenant_id = $1
+		    AND c.parcel_id = $2
+		    AND c.kind = 'PARCEL_CANCELLED'
+		    AND NOT EXISTS (
+		        SELECT 1
+		          FROM parcel_shipment.cancellation_order_conflict_decision d
+		         WHERE d.tenant_id = c.tenant_id
+		           AND d.parcel_id = c.parcel_id
+		           AND d.cancellation_id = c.cancellation_id
+		           AND d.decision_kind = 'CANCELLATION_NOT_UPHELD')
+		  ORDER BY c.requested_at
 		  LIMIT 1`,
 		tenant.String(),
 		parcel.String(),

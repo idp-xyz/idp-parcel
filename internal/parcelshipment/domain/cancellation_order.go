@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -32,6 +33,16 @@ func (kind CancellationBoundaryKind) String() string {
 	default:
 		return ""
 	}
+}
+
+// ParseCancellationBoundaryKind 按字面认边界种类，词不在封闭集内即拒，不猜。接入面与存储读回都经它认词，冲突册与决定面的种类词因此只有这一张表。
+func ParseCancellationBoundaryKind(raw string) (CancellationBoundaryKind, error) {
+	for _, kind := range []CancellationBoundaryKind{NetworkIntakeBoundary, CarrierFirstEffectivePickupBoundary} {
+		if kind.String() == raw {
+			return kind, nil
+		}
+	}
+	return CancellationBoundaryKindInvalid, fmt.Errorf("cancellation boundary kind %q is not a kind", raw)
 }
 
 func (kind CancellationBoundaryKind) valid() bool {

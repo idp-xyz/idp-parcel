@@ -158,8 +158,10 @@ func (reason LabelServiceNotFinalReason) String() string {
 //   - FirstEffectivePickup 零值即缺席。
 //   - Cancellation 是该包裹当前有效的取消决定，零值即没有。要整份而不只一个「有没有」：收寄路径上
 //     得拿它的业务时间与收寄比先后（ADR-0254）。
-//   - CancellationConflictRecorded 说冲突册上已有一行指向这份取消。不带收寄的两路没有边界事实可比，
+//   - CancellationConflictRecorded 说冲突册上已有一行指向这份取消、且没有被决定。不带收寄的两路没有边界事实可比，
 //     只能靠它知道冲突早已判出——否则同一包裹换一路触发就答成取消在先。
+//   - ReferredBoundaries 是这份取消名下已被决定「认定边界事实有误、交来源方更正」的那几代收寄引用（ADR-0295 决定二）。带着收寄来时，
+//     这一代落在其中，就不再是冲突：边界事实已被认定不可采，取消照旧在先。
 type LabelServiceFinalInput struct {
 	Parcel                       DeclaredParcelID
 	Transactions                 []LabelTransaction
@@ -168,6 +170,7 @@ type LabelServiceFinalInput struct {
 	FirstEffectivePickup         CarrierFirstEffectivePickup
 	Cancellation                 ParcelCancellation
 	CancellationConflictRecorded bool
+	ReferredBoundaries           []CancellationBoundaryReference
 }
 
 // LabelServiceFinalVerdict 是判断的产物：格、原因、所引的证据（收寄事实或生效关闭）与终局
@@ -272,6 +275,11 @@ func JudgeLabelServiceFinal(input LabelServiceFinalInput) (LabelServiceFinalVerd
 		}
 		if !conflicted {
 			return LabelServiceFinalVerdict{judgment: LabelServiceCancellationStands}, nil
+		}
+		for _, referred := range input.ReferredBoundaries {
+			if referred == reference {
+				return LabelServiceFinalVerdict{judgment: LabelServiceCancellationStands}, nil
+			}
 		}
 		return LabelServiceFinalVerdict{
 			judgment:   LabelServiceNotFinal,

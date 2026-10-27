@@ -56,6 +56,18 @@ func (register *CancellationOrderConflicts) Record(
 	if err != nil {
 		return ports.CancellationOrderConflictSaveOutcomeInvalid, fmt.Errorf("record cancellation order conflict: %w", err)
 	}
+	// 回放原料带在同一笔：冲突入了账却没有原料，认定取消不成立之后就没有东西可重驱。冲突行已在（重投）时同样补写——同一来源重投判出的
+	// 是同一份原料，撞主键即已有。
+	if record.Replay != nil {
+		if record.Replay.Cancellation != conflict.Cancellation() {
+			return ports.CancellationOrderConflictSaveOutcomeInvalid, fmt.Errorf(
+				"record cancellation order conflict: the replay belongs to cancellation %s, the conflict to %s",
+				record.Replay.Cancellation, conflict.Cancellation())
+		}
+		if err := insertBlockedReplay(ctx, executor, record.TenantID, *record.Replay, record.DetectedAt); err != nil {
+			return ports.CancellationOrderConflictSaveOutcomeInvalid, fmt.Errorf("record cancellation order conflict: %w", err)
+		}
+	}
 	if tag.RowsAffected() == 0 {
 		return ports.CancellationOrderConflictAlreadyRecorded, nil
 	}
@@ -135,13 +147,5 @@ func conflictEntry(
 
 // cancellationBoundaryKindFrom 把库面的种类词认回封闭集合；词不在集合内即拒，不猜。
 func cancellationBoundaryKindFrom(raw string) (domain.CancellationBoundaryKind, error) {
-	for _, kind := range []domain.CancellationBoundaryKind{
-		domain.NetworkIntakeBoundary,
-		domain.CarrierFirstEffectivePickupBoundary,
-	} {
-		if kind.String() == raw {
-			return kind, nil
-		}
-	}
-	return domain.CancellationBoundaryKindInvalid, fmt.Errorf("unknown cancellation boundary kind %q", raw)
+	return domain.ParseCancellationBoundaryKind(raw)
 }

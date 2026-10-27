@@ -191,7 +191,46 @@ func (repository *FinalOutcomes) Save(
 		}
 		return ports.FinalOutcomeAlreadyRecorded, nil
 	}
+	// 依据一份取消的不采用记录带回放原料，与这一行同笔落地：取消日后被认定不成立时，续办凭它把被挡住的来源重新交给终局采用。终局本身
+	// 不带——形成的终局不是被挡住的东西。
+	if record.CancellationReplay != nil {
+		if record.Finalized || record.CancellationReplay.Final == nil {
+			return ports.FinalOutcomeSaveOutcomeInvalid, errors.New(
+				"save final outcome: a cancellation replay belongs to a refusal and carries the final outcome spec")
+		}
+		if err := insertBlockedReplay(ctx, executor, key.TenantID, *record.CancellationReplay, record.AdoptedAt); err != nil {
+			return ports.FinalOutcomeSaveOutcomeInvalid, fmt.Errorf("save final outcome: %w", err)
+		}
+	}
 	return ports.FinalOutcomeSaved, nil
+}
+
+var _ ports.CancellationRefusedFinalVoider = (*FinalOutcomes)(nil)
+
+// VoidCancellationRefusedFinals 作废终局采用账上依据这份取消的不采用行（ADR-0295 决定三）。只动「未定案且依据恰是 PARCEL_CANCELLATION/<取消>」的行：
+// 已形成的终局、依据别的东西的不采用行（已有终局、委托状态）一概不碰。要环境事务：作废与决定留痕同笔，否则决定落了而被挡住的来源仍被旧记录
+// 占着，或记录没了而决定没落。
+func (repository *FinalOutcomes) VoidCancellationRefusedFinals(
+	ctx context.Context,
+	tenant domain.TenantID,
+	parcel domain.DeclaredParcelID,
+	cancellation domain.ParcelCancellationID,
+) (int, error) {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("void cancellation refused finals: %w", err)
+	}
+	tag, err := executor.Exec(ctx,
+		`DELETE FROM parcel_shipment.final_outcome
+		  WHERE tenant_id = $1
+		    AND parcel_id = $2
+		    AND NOT finalized
+		    AND refusal_basis = $3`,
+		tenant.String(), parcel.String(), "PARCEL_CANCELLATION/"+cancellation.String())
+	if err != nil {
+		return 0, fmt.Errorf("void cancellation refused finals: %w", err)
+	}
+	return int(tag.RowsAffected()), nil
 }
 
 type finalRowColumns struct {

@@ -521,9 +521,10 @@ type CommitmentIdentityFactory interface {
 	NextCommitmentVersionID(ctx context.Context) (domain.CommitmentVersionID, error)
 }
 
-// ParcelCancellationView 按包裹读回已成立的取消决定。采用编排用它核对取消边界：
-// 取消早于收寄发生即不采用，收寄发生早于取消决定即顺序冲突保持未决——按业务时间
-// 裁决，不按消息到达顺序。
+// ParcelCancellationView 按包裹读回有效的取消决定：已成立、且没有被取消先后冲突的解开决定认定依据不成立（ADR-0295）。
+// 被认定不成立的取消记录原样保留，只是这里不再交出它，取消编排、收寄采用、终局采用、面单渠道终局判断与委托完成派生
+// 因此一处排除、各处一致。采用编排用它核对取消边界：取消早于收寄发生即不采用，收寄发生早于取消决定即顺序冲突
+// 保持未决——按业务时间裁决，不按消息到达顺序。
 type ParcelCancellationView interface {
 	FindCancellation(
 		ctx context.Context,
@@ -652,13 +653,17 @@ type FinalAdoptionKey struct {
 
 // FinalOutcomeRecord 是一次终局采用判断留下的东西：终局（首派生或重派生）或不采用
 // 二居其一。
+//
+// CancellationReplay 只在依据一份取消的不采用记录上带：它是该来源的回放原料，与这一行同笔落地——取消被认定不成立之后，续办凭它把被挡住的
+// 来源重新交给终局采用（CancellationRefusedFinalVoider 作废这一行，回放让来源重新进入规则判断）。
 type FinalOutcomeRecord struct {
-	Key           FinalAdoptionKey
-	ContentDigest string
-	Finalized     bool
-	Final         domain.ParcelFinalOutcome
-	RefusalBasis  domain.CheckReason
-	AdoptedAt     time.Time
+	Key                FinalAdoptionKey
+	ContentDigest      string
+	Finalized          bool
+	Final              domain.ParcelFinalOutcome
+	RefusalBasis       domain.CheckReason
+	AdoptedAt          time.Time
+	CancellationReplay *CancellationBlockedReplay
 }
 
 type FinalOutcomeSaveOutcome uint8
