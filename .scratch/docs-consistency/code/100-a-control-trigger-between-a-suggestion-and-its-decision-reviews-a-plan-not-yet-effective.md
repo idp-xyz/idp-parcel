@@ -46,8 +46,8 @@ S–M，取决于取法。
 
 ### 提交
 
-- `e1ba10d2e` fix(network-routing)：领域 `PlanApplicability.NotYetEffectiveAt`、端口新未判原因与 `NotJudgedTrigger.PlanEffectiveAt`、复核编排分流、未判登记适配器核对、迁移 `network_routing/0031_route_reassessment_not_judged_before_plan_effective.sql`、全部用例（含 `cmd/parcel-dispatch` 真库端到端）。
-- `f9fb6b609` docs(adr)：ADR-0292（取预留号），ADR-0235 / 0284 / 0309 的 Status 注记与 Links，NR CONTEXT 一句，UC-NR-003（结果行、一致性一条、AT-NR-104 / 105、「给开发的交接」撤一行），AT 盘点分桶表两行与一段追记。
+- `a171c5017` fix(network-routing)：领域 `PlanApplicability.NotYetEffectiveAt`、端口新未判原因与 `NotJudgedTrigger.PlanEffectiveAt`、复核编排分流、未判登记适配器核对、迁移 `network_routing/0031_route_reassessment_not_judged_before_plan_effective.sql`、全部用例（含 `cmd/parcel-dispatch` 真库端到端）。
+- `774824b4c` docs(adr)：ADR-0292（取预留号），ADR-0235 / 0284 / 0309 的 Status 注记与 Links，NR CONTEXT 一句，UC-NR-003（结果行、一致性一条、AT-NR-104 / 105、「给开发的交接」撤一行），AT 盘点分桶表两行与一段追记。
 
 ### 裁向与新未判原因
 
@@ -131,3 +131,4 @@ S–M，取决于取法。
 - **N3（决定二声明的次序没有用例钉住）**：评审变异（在 `reassessPlan` 的未决分支与冻结形态未配置分支之前各加「计划还没生效就答 `TRIGGER_PRECEDES_PLAN_EFFECTIVE_FROM`」）全绿存活。补应用层用例 `TestUnclearApplicabilityAndAnUnconfiguredFreezeFormAreAnsweredBeforeThePlanEffectiveTime`：起点计划未生效，分别加选中候选限制状态未知与策略版本未声明冻结，断言原因为 `PLAN_APPLICABILITY_UNCLEAR` 与 `FREEZE_FORM_UNCONFIGURED`（这两个原因靠登记补齐、走 154 续办，不能被记成终局原因）。变异核验：把未决分支的分流挪到前面，「适用性看不清」子用例变红；把冻结形态未配置的分流挪到前面，「冻结形态未配置」子用例变红；备份、改、跑、拷回并 `cmp` 一致。AT-NR-104 的盘点行与 UC-NR-003 该行同步点名这条次序。
 - **风格项**：`cmd/parcel-dispatch/reassess_before_plan_effective_test.go` 文件头去掉变更叙述的两句；`plan_applicability_test.go` 里「离场了的计划不再问」改为「不问」。
 - **票面**：票头 `Blocked by:` 改为「无（ADR-0292 已立）」。
+- **提交**：修订轮两笔，`4f2c94fb1` test(network-routing)（N3 用例与风格项）、`199952ec3` docs(adr)（N1、N2、票面）；上文「提交」一节的两个号已随 rebase 订正。
