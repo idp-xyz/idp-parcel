@@ -465,7 +465,7 @@ func TestAPermittedFinalPendsUntilTheProjectionCarriesTheAdoptedFinal(t *testing
 // 形成」与 UC-VE-008 主流程「读取 `UC-VE-003` 的客户可见性判断；只有达到适用质量与合同
 // 门槛的 ETA 才进入视图，不能使用计划时间或内部预测填充」——策略把 ETA 一维登成展示，
 // 这个账户这件包裹还没有任何 ETA 客户可见性判断可依，这一维答待确认、不带内容，不答「ETA：展示」；
-// 策略不展示的照旧不展示。这里钉的是「还没有判断」这一格；判断已形成的各格（客户可见、ETA 不可见、
+// 策略不展示的仍不展示。这里钉的是「还没有判断」这一格；判断已形成的各格（客户可见、ETA 不可见、
 // 待判断）见 derive_customer_view_eta_test.go。
 func TestAPermittedETAPendsWithoutACustomerVisibleETAJudgement(t *testing.T) {
 	for _, tc := range []struct {
