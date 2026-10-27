@@ -323,6 +323,48 @@ func TestTheCatalogueListsTheTenantsUnresolvedConflictsOldestFirst(t *testing.T)
 	}
 }
 
+// Covers: AT-PS-167；ADR-0295 决定一——未解开的读法按冲突行的五维逐维对账：与已决定的那一行只差一维（别的包裹、别的边界种类、别的边界那一代、别的取消、
+// 别的租户）的冲突行仍在清单里。尤其同一包裹同一边界那一代、两份取消：（取消 X，边界 R）被决定之后，同一来源再被另一份取消 Y 挡住产生（Y，R），
+// 不能因 X 已决定就把它当成已解开而藏掉——藏掉它，这件被挡住的来源就没有人再看见。
+func TestTheCatalogueKeepsAConflictThatDiffersFromADecidedOneInASingleDimension(t *testing.T) {
+	rig := newConflictDecisionRig(t)
+	at, before := cancelRequestedAt, cancelRequestedAt.Add(-time.Hour)
+	decidedKey := rig.recordConflict(t, "tenant-1",
+		conflictOf(t, "parcel-1", "PCXL-X", "NODE_INTAKE/v1", domain.NetworkIntakeBoundary, at, before), conflictDetectedAt)
+	variants := map[string]domain.CancellationOrderConflict{
+		"别的包裹":    conflictOf(t, "parcel-2", "PCXL-X", "NODE_INTAKE/v1", domain.NetworkIntakeBoundary, at, before),
+		"别的边界种类":  conflictOf(t, "parcel-1", "PCXL-X", "NODE_INTAKE/v1", domain.CarrierFirstEffectivePickupBoundary, at, before),
+		"别的边界那一代": conflictOf(t, "parcel-1", "PCXL-X", "NODE_INTAKE/v2", domain.NetworkIntakeBoundary, at, before),
+		"别的取消":    conflictOf(t, "parcel-1", "PCXL-Y", "NODE_INTAKE/v1", domain.NetworkIntakeBoundary, at, before),
+	}
+	for _, conflict := range variants {
+		rig.recordConflict(t, "tenant-1", conflict, conflictDetectedAt.Add(time.Minute))
+	}
+	// 别的租户上与已决定那一行五维同形的冲突行：它自己没有被决定。
+	rig.recordConflict(t, "tenant-3",
+		conflictOf(t, "parcel-1", "PCXL-X", "NODE_INTAKE/v1", domain.NetworkIntakeBoundary, at, before), conflictDetectedAt)
+	rig.decide(t, decisionOf(t, decidedKey, domain.CancellationNotUpheld, "https://id.syn.example#alice"))
+
+	listed, err := rig.catalogue.ListUnresolvedCancellationOrderConflicts(t.Context(), psTenant(t, "tenant-1"), 10)
+	if err != nil || listed.Count != len(variants) || len(listed.Conflicts) != len(variants) {
+		t.Fatalf("tenant-1 清单 = %+v err=%v, want 只差一维的 %d 行都在", listed, err, len(variants))
+	}
+	for name, conflict := range variants {
+		found := false
+		for _, entry := range listed.Conflicts {
+			found = found || (entry.Parcel == conflict.Parcel() && entry.Cancellation == conflict.Cancellation() &&
+				entry.Boundary.Kind == conflict.Boundary().Kind && entry.Boundary.Reference == conflict.Boundary().Reference)
+		}
+		if !found {
+			t.Errorf("%s：这一行与已决定的只差一维，却被藏出了清单", name)
+		}
+	}
+	other, err := rig.catalogue.ListUnresolvedCancellationOrderConflicts(t.Context(), psTenant(t, "tenant-3"), 10)
+	if err != nil || other.Count != 1 || len(other.Conflicts) != 1 {
+		t.Fatalf("tenant-3 清单 = %+v err=%v, want 别的租户的决定不藏本租户的冲突行", other, err)
+	}
+}
+
 func (rig *conflictDecisionRig) saveCancellation(t *testing.T, tenant, requestKey, parcel, cancellationID string, requestedAt time.Time) {
 	t.Helper()
 	key := cancellationKey(t, tenant, requestKey, parcel)

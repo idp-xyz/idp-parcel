@@ -67,6 +67,18 @@ type redriveRig struct {
 
 func newRedriveRig(t *testing.T, fixture *synVerticalFixture) *redriveRig {
 	t.Helper()
+	return newRedriveRigWithTargets(t, fixture, func(targets psports.CurrentAcceptedParcelTargetView) psports.CurrentAcceptedParcelTargetView {
+		return targets
+	})
+}
+
+// newRedriveRigWithTargets 在 newRedriveRig 的装配上让用例包一层续办取目标的读口，用来观察续办在什么时刻第一次读库。
+func newRedriveRigWithTargets(
+	t *testing.T,
+	fixture *synVerticalFixture,
+	wrapTargets func(psports.CurrentAcceptedParcelTargetView) psports.CurrentAcceptedParcelTargetView,
+) *redriveRig {
+	t.Helper()
 	db := fixture.db
 	store, err := outbox.NewStore(db)
 	if err != nil {
@@ -159,7 +171,7 @@ func newRedriveRig(t *testing.T, fixture *synVerticalFixture) *redriveRig {
 	if err != nil {
 		t.Fatal(err)
 	}
-	redriver, err := cancellationredrive.NewRedriver(replays, requests, pickups, intake, finalHandler, core, locks)
+	redriver, err := cancellationredrive.NewRedriver(replays, wrapTargets(requests), pickups, intake, finalHandler, core, locks)
 	if err != nil {
 		t.Fatal(err)
 	}

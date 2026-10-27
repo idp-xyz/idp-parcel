@@ -184,6 +184,25 @@ func TestNotUpheldDecisionLocksFirstThenRecordsVoidsAndHandsOffTheResume(t *test
 	}
 }
 
+// Covers: AT-PS-166；ADR-0295 决定一——决定时刻在形成处截到库的精度（微秒）：时钟带纳秒时，首次决定的答复、交给信封的决定与库里读回的是同一个值，
+// 不会 201 答纳秒、之后 200 读回微秒。
+func TestTheDecisionInstantIsTruncatedToTheStoresPrecision(t *testing.T) {
+	fixture := newDecideFixture(t)
+	fixture.deps.Clock = fixedClock{at: decideAt.Add(123456789 * time.Nanosecond)}
+
+	result, err := fixture.handle(t)
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	want := decideAt.Add(123456 * time.Microsecond)
+	if got := result.Decision().DecidedAt; !got.Equal(want) {
+		t.Fatalf("答复里的决定时刻 = %s, want 截到微秒的 %s", got.Format(time.RFC3339Nano), want.Format(time.RFC3339Nano))
+	}
+	if len(fixture.handoff.intents) != 1 || !fixture.handoff.intents[0].Decision.DecidedAt.Equal(want) {
+		t.Fatalf("信封意图里的决定时刻 = %+v, want 与答复同值 %s", fixture.handoff.intents, want.Format(time.RFC3339Nano))
+	}
+}
+
 // Covers: AT-PS-166, AT-PS-171；ADR-0295 决定二——交来源方更正只留痕：取消保持有效、没有被挡住的来源要重驱，所以不作废、不交信封。
 func TestReferredDecisionOnlyRecordsAndNeitherVoidsNorHandsOff(t *testing.T) {
 	fixture := newDecideFixture(t)

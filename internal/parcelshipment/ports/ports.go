@@ -715,8 +715,9 @@ type FinalOutcomeHandoffIntent struct {
 }
 
 // FinalOutcomeHandoff 把已提交的终局判断写入 Outbox（`OutboxFinalOutcomeHandoff`）。
-// 信封 ID 由采用键（含租户）再加类型段认领，入队由 outboxintent.EnqueueOnce 承担；
-// 重放重发同一份（ADR-0043）。
+// 信封 ID 由采用键（含租户）加该包裹的作废代次（成立过的「取消依据不成立」决定个数，没有则不入 ID）再加类型段认领，
+// 入队由 outboxintent.EnqueueOnce 承担；同一代次内重放重发同一份（ADR-0043、ADR-0295 决定三）。实现在调用方事务里读代次，
+// 调用方持包裹取消边界锁，所以代次与同笔能读到的不采用行互相一致。
 type FinalOutcomeHandoff interface {
 	HandOffFinalOutcome(ctx context.Context, intent FinalOutcomeHandoffIntent) error
 }

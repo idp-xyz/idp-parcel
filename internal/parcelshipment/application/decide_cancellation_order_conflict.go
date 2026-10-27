@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
@@ -137,12 +138,13 @@ func (handler *DecideCancellationOrderConflictHandler) Handle(
 		return alreadyDecidedConflict(earlier), nil
 	}
 
+	// 决定时刻截到库的精度（微秒）：首次决定的答复带的是这里的值，之后读回的是库里存的值，两者要是同一个值。
 	saved, winner, err := handler.deps.Decisions.DecideCancellationOrderConflict(ctx, ports.CancellationOrderConflictDecision{
 		Key:       key,
 		Kind:      command.Kind,
 		Decider:   command.Decider,
 		Basis:     command.Basis,
-		DecidedAt: handler.deps.Clock.Now().UTC(),
+		DecidedAt: handler.deps.Clock.Now().UTC().Truncate(time.Microsecond),
 	})
 	if err != nil {
 		return DecideCancellationOrderConflictResult{}, fmt.Errorf("decide cancellation order conflict: %w", err)

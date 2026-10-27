@@ -650,6 +650,9 @@ func TestForeignProbesAndFailedIntentsStayDisciplined(t *testing.T) {
 		}
 
 		fixture.downstream.err = nil
+		// 重发意图以这份取消此刻仍是有效取消为前提（ADR-0295 决定三）。
+		fixture.cancellations.cancellation = cancelledAt(t, cancelRequestedAt)
+		fixture.cancellations.cancelled = true
 		replay, err := fixture.handler.Handle(context.Background(), cancelCommand(t, "parcel-1"))
 		if err != nil {
 			t.Fatalf("replay handle: %v", err)

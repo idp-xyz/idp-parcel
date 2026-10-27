@@ -282,6 +282,18 @@ func (fixture *conflictDecisionE2E) effectiveCancellation(t *testing.T, parcel s
 	return found
 }
 
+// conflictDecidedAtOf 取答复里的决定时刻原串。
+func conflictDecidedAtOf(t *testing.T, raw string) string {
+	t.Helper()
+	var body struct {
+		DecidedAt string `json:"decidedAt"`
+	}
+	if err := json.Unmarshal([]byte(raw), &body); err != nil || body.DecidedAt == "" {
+		t.Fatalf("答复没有决定时刻：%s", raw)
+	}
+	return body.DecidedAt
+}
+
 func conflictFieldsOf(t *testing.T, raw string) (string, string) {
 	t.Helper()
 	var body struct {
@@ -312,6 +324,7 @@ func TestTheWiredDecisionNotUpholdsTheCancellationAndHandsOffOneResume(t *testin
 	if status != http.StatusCreated || outcome != "DECIDED" || kind != "CANCELLATION_NOT_UPHELD" || !strings.Contains(raw, `"voidedRefusals":1`) {
 		t.Fatalf("决定 = %d %s, want 201 DECIDED CANCELLATION_NOT_UPHELD 作废 1 行", status, raw)
 	}
+	decidedAtOnCreate := conflictDecidedAtOf(t, raw)
 	var storedKind, decider, basis string
 	if err := fixture.pool.QueryRow(t.Context(),
 		`SELECT decision_kind, decided_by, decision_basis FROM parcel_shipment.cancellation_order_conflict_decision`).Scan(&storedKind, &decider, &basis); err != nil {
@@ -362,6 +375,10 @@ func TestTheWiredDecisionNotUpholdsTheCancellationAndHandsOffOneResume(t *testin
 	}
 	if strings.Contains(raw, "SYN-DECIDER") || strings.Contains(raw, "id.syn.example") {
 		t.Fatalf("回执带了操作者：%s", raw)
+	}
+	// 201 带的是形成时的时刻，200 读回的是库里存的值（微秒）：同一份决定两次答复的决定时刻要一致。
+	if readBack := conflictDecidedAtOf(t, raw); readBack != decidedAtOnCreate {
+		t.Fatalf("决定时刻 201 答 %s、200 读回 %s, want 一致", decidedAtOnCreate, readBack)
 	}
 	if fixture.decisionRows(t) != 1 || fixture.envelopes(t) != 1 {
 		t.Fatalf("再决定之后留痕 %d 行、信封 %d 封, want 仍各 1", fixture.decisionRows(t), fixture.envelopes(t))

@@ -500,15 +500,45 @@ func (handler *CancelParcelHandler) commit(
 	}
 }
 
-// existingResult 按已有记录作答并重发同一份意图（重复请求返回原逐包裹结果）。
+// existingResult 按已有记录作答并重发同一份意图（重复请求返回原逐包裹结果）。答复永远是历史答复；意图只在这份取消此刻仍是
+// 有效取消时重发：取消已被冲突解开决定认定依据不成立（ADR-0295 决定三）之后再把释放意图交给下游，等于在认定之后才第一次告诉
+// 下游「这件包裹取消了」，下游会释放一件实际上要续办的包裹。读不动有效取消不翻历史答复，但意图交不交说不准，答未决留续办引用，
+// 重放再来（ADR-0029）。
 func (handler *CancelParcelHandler) existingResult(
 	ctx context.Context,
 	record ports.CancellationRecord,
 ) CancelParcelResult {
 	result := resultForCancellation(record)
 	result.outcome = CancellationExistingResult
+	if record.Kind == ports.RecordParcelCancelled {
+		standing, err := handler.cancellationStands(ctx, record)
+		if err != nil {
+			return CancelParcelResult{
+				outcome:      CancellationUndecided,
+				reason:       CancelStoreUnavailable,
+				continuation: cancellationContinuation(record.Key, CancelStoreUnavailable),
+			}
+		}
+		if !standing {
+			return result
+		}
+	}
 	result.handoff = handler.handOff(ctx, record)
 	return result
+}
+
+// cancellationStands 问这份已成立的取消此刻是否仍是包裹上的有效取消（ParcelCancellationView）。有效取消读排除被认定不成立的取消，
+// 读到的是另一份取消或没有，都说明这一份已不是。
+func (handler *CancelParcelHandler) cancellationStands(
+	ctx context.Context,
+	record ports.CancellationRecord,
+) (bool, error) {
+	effective, found, err := handler.deps.Cancellations.FindCancellation(
+		ctx, record.Key.TenantID, record.Key.Parcel)
+	if err != nil {
+		return false, err
+	}
+	return found && effective.ID() == record.Cancellation.ID(), nil
 }
 
 func resultForCancellation(record ports.CancellationRecord) CancelParcelResult {
