@@ -1,7 +1,7 @@
 # 45 SA、CR 代码注释里的计数与实际不符，一处数的是 CONTEXT 的条目
 
 Category: chore
-Status: in-progress——完工待评审与进 main，分支 claude-cmtB
+Status: resolved——2026-10-27 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-cmtB
 Blocked by: 无（`collectionremittance` 那两处与 [14](./14-collection-principal-posts-more-than-once-and-shortfall-moves-received-funds.md) 改同一组文件，可并进 14 一起改）
 出处：[audit/sa-cr.md](../audit/sa-cr.md) L9（归 A，但改的是 Go 注释，修订票不改代码，故立本票）。取证于 main `899a4555`，下列各处原样仍在。
 
@@ -70,3 +70,9 @@ S。
 ### 越权风险点
 
 - `assess_advance_recovery` 一路上「合同责任没登记」的实际答案是 `CONTRACT_UNCONFIGURED` 未决，与 UC-SA-001 现行说法一致；`adopt_duty_payment_verification.go` 那一句里「付款方、外部资金事实、合同责任几格不在本步采用」是我按 `AdoptDutyPaymentVerification` 的实际职责写的，没有去核其它几格现在各由哪个用例采用。
+
+## 进 main 记录（2026-10-27，协调方）
+
+- 分支 `claude-cmtB` 与 code/38、40、45、55 同批，由协调方快进，tip `c6f983ea2`；隔离评审（Sonnet）可合入，无阻断：每个改动的 `.go` 文件在去掉注释后语法树逐个比对（程序放评审私有目录，对有代码变动的老提交试过会报差异），38、40、45 三个提交 0 差异；新增的 38 条带引号或「」的引文机械核了 36 条逐字相同，另 2 条是带省略号的前缀引文与一句假想读者的话；新增的 ADR、UC、AT 指针逐条核过。协调方单独提交重算的 AT 计数、重生成的 ADR 索引与机制清点（本批无变动）；全量 `scripts/test-full.sh` 退 0、159 个包 ok；`go build ./...`、`go vet ./...` 干净；管理台 `tsc -b --noEmit`、`node scripts/run-tests.mjs`（803 过）、`vite build` 与 `./internal/architecture/...` 全过。无迁移、无新 ADR、无 AT 号变化。
+- 本票：`StopPendingJudgmentCauseUnrecorded`、`AuditUndecidedReason`、`receive_supplier_bill.go` 两句按票改了；`cmd/parcel-collection-register/main.go` 的「七个命令、五个词形」改成「各命令所登的对象」；`AT-SA-096` 的旧说法「保持待判断」在 `domain/supplier_bill.go` 与两个 `Covers:` 里改成「答未配置」，评审核实与 UC-SA-004 原文及 `receive_supplier_bill.go` 实际结果（`BILL_UNDECIDED`，原因 `CONVERSION_UNCONFIGURED`）一致。`PostingBasisKind` 注释已不带数字，不用动。
+- 去向：无新票。
