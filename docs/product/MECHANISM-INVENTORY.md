@@ -6,7 +6,7 @@
 
 | 上下文 | 生产 | 测试 | 应用编排 | postgres 适配器 | 其中 Outbox 投递 | http 适配器 |
 |---|---|---|---|---|---|---|
-| accessidentity | 41 | 49 | 0 | 6 | 0 | 3 |
+| accessidentity | 41 | 50 | 0 | 6 | 0 | 3 |
 | architecture（非业务） | 0 | 17 | 0 | 0 | 0 | 0 |
 | collectionremittance | 25 | 17 | 4 | 6 | 0 | 3 |
 | customscompliance | 126 | 130 | 24 | 47 | 10 | 18 |
@@ -18,11 +18,11 @@
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 26 | 24 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 233 | 185 | 38 | 69 | 13 | 10 |
-| transportfulfillment | 289 | 304 | 52 | 61 | 16 | 50 |
+| transportfulfillment | 298 | 310 | 55 | 62 | 16 | 53 |
 | visibilityexception | 128 | 128 | 13 | 33 | 8 | 13 |
-| **合计** | 1682 | 1700 | 223 | 390 | 68 | 225 |
+| **合计** | 1691 | 1707 | 226 | 391 | 68 | 228 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 241、测试 400。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 243、测试 402。
 
 ## 跨上下文消费缝：50 组，166 个生产文件
 
@@ -79,11 +79,11 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 9 |
 
-## 迁移：12 个模块共 330 份 SQL
+## 迁移：12 个模块共 332 份 SQL
 
 | 模块 | 份数 |
 |---|---|
-| access_identity | 26 |
+| access_identity | 27 |
 | collection_remittance | 3 |
 | customs_compliance | 27 |
 | network_routing | 32 |
@@ -93,10 +93,10 @@
 | party_commercial | 42 |
 | pilot_governance | 8 |
 | settlement_accounting | 46 |
-| transport_fulfillment | 49 |
+| transport_fulfillment | 50 |
 | visibility_exception | 31 |
 
-## 接线面：接入面端点 202 个，消费适配器 60 个生产文件，直投路由表 43 条
+## 接线面：接入面端点 206 个，消费适配器 60 个生产文件，直投路由表 43 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -112,9 +112,9 @@
 | partycommercial | 40 |
 | pilotgovernance | 1 |
 | settlementaccounting | 8 |
-| transportfulfillment | 44 |
+| transportfulfillment | 48 |
 | visibilityexception | 15 |
-| **合计** | 202 |
+| **合计** | 206 |
 
 消费适配器按 `internal/<消费方>/adapters/` 下 `inbox`、`adoptconsume`、`finalconsume`、`veconsume` 四类目录的生产文件数。它与上面的「跨上下文消费缝」是两种东西：那一栏数的是消费方为某个提供方写的防腐层，这一栏数的是接进程内直投信封的消费门。
 
@@ -145,7 +145,7 @@
 | （未归类） | 1 |
 | **合计** | 43 |
 
-## 端口：声明 627 个；基线口径缺 43，精确口径缺 2
+## 端口：声明 629 个；基线口径缺 42，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
@@ -184,7 +184,6 @@
 - `transportfulfillment.BookingAnswerView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.BookingAnswers）
 - `transportfulfillment.BookingView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.BookingRequests）
 - `transportfulfillment.DepartureSegmentView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.FulfillmentSegments）
-- `transportfulfillment.FailedAttemptSource` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.PickupAttempts）
 - `transportfulfillment.FulfillmentSegmentView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.FulfillmentSegments）
 - `transportfulfillment.HandoverGatePredecessorView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.TransportHandovers）
 - `transportfulfillment.SegmentCommissionAdoptionView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.SegmentCommissionAdoptions）
