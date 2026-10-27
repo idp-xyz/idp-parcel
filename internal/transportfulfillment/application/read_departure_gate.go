@@ -93,7 +93,64 @@ func (reader *DepartureGateReader) Reask(
 		return domain.DepartureGateReading{}, errDepartureGateReaskMisplaced
 	}
 	intent := departureGateIntent{tenant: fact.TenantID(), schedule: fact.Schedule(), segment: segment, at: fact.OccurredAt()}
-	return reader.readIntent(ctx, intent, &object)
+	return reader.readIntent(ctx, intent, &gateFocus{inControl: object})
+}
+
+// ReaskMember 按一条在册出发的原出发时点，替一件经集运单元随袋走过这条出发的成员再问一次关务（ADR-0331）：段与班次的核对落在出发
+// 那一刻在控的那件单元身上（它进段的那次交接），关务只问 member 这一件包裹，单元与同袋别的成员一概不问，读数里只有这一件的一格。
+// 其余同 Reask：与登记那一刻同一条读数路径，册子按此刻读。member 在那一刻是不是随这件单元走，由 CarriesMember 先答，本方法不重判。
+func (reader *DepartureGateReader) ReaskMember(
+	ctx context.Context,
+	fact domain.TransportMovementFact,
+	unit, member domain.CarriedObjectReference,
+) (domain.DepartureGateReading, error) {
+	segment, declared := fact.Segment()
+	if fact.Kind() != domain.DepartureFact || !declared {
+		return domain.DepartureGateReading{}, errDepartureGateReaskMisplaced
+	}
+	intent := departureGateIntent{tenant: fact.TenantID(), schedule: fact.Schedule(), segment: segment, at: fact.OccurredAt()}
+	return reader.readIntent(ctx, intent, &gateFocus{inControl: unit, member: &member})
+}
+
+// CarriesMember 说集运单元 unit 在 at 那一刻，逐层往下是不是装着 member 这件包裹。成员口径就是出发读数展开用的那一口
+// （ConsolidationMembershipView.MembersAt）：按成员关系事实的业务发生时间取，成员的包裹身份取此刻的当前有效版本——身份不成立或读不动
+// 的成员不是任何一件包裹，不算。嵌套单元逐层往下、每件只问一次，成环的册也走得完。
+//
+// error 是成员关系那一问没有形成答复（包住 ports.ErrConsolidationMembershipUntranslatable 的是译不回来，其余是调用失败）：说不出就
+// 不能答「不在」，那等于放过一件本该问关务的包裹。
+func (reader *DepartureGateReader) CarriesMember(
+	ctx context.Context,
+	tenant domain.TenantID,
+	unit, member domain.CarriedObjectReference,
+	at time.Time,
+) (bool, error) {
+	seen := map[domain.CarriedObjectReference]bool{unit: true}
+	queue := []domain.CarriedObjectReference{unit}
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		membership, err := reader.deps.Members.MembersAt(ctx, ports.ConsolidationMembershipQuery{TenantID: tenant, Object: current, At: at})
+		if err != nil {
+			return false, err
+		}
+		for _, held := range membership.Members {
+			switch held.Kind {
+			case ports.ConsolidationMemberParcel:
+				if held.Object == member {
+					return true, nil
+				}
+			case ports.ConsolidationMemberUnit:
+				if !seen[held.Object] {
+					seen[held.Object] = true
+					queue = append(queue, held.Object)
+				}
+			case ports.ConsolidationMemberIdentityUnresolved, ports.ConsolidationMemberIdentityUnreadable:
+			default:
+				return false, fmt.Errorf("%w: member %q of %q", ports.ErrConsolidationMembershipUntranslatable, held.Handling, current)
+			}
+		}
+	}
+	return false, nil
 }
 
 // departureGateIntent 是读数从输入里只取的那四样：租户、班次、声明的段（零值即没声明）与出发时点；其余取决于此刻的段册、
@@ -144,17 +201,24 @@ func gateReferencesFrom(
 	return scheduleRef, segmentRef, true
 }
 
+// gateFocus 是补问把一次读数收窄到的范围。
+type gateFocus struct {
+	inControl domain.CarriedObjectReference
+	member    *domain.CarriedObjectReference
+}
+
 // readIntent 先在本上下文这一侧找齐问关务要的东西：段里出发那一刻在控的对象、班次的方向，再核这一班与这一段（entryBinding）。
 // 缺哪样就停在哪样、不问关务——没有对象就没有可问的，没有方向就说不出「自哪到哪」，班次对不上这一段就是在替别的一车问。核不上
 // 但也对不出错的（未绑定）照问，读数标上那一位，回给执行方时一件不列。找齐了才逐对象问（集运单元按成员展开，见
 // departureGateExpansion）；某一件读不动不停下，其余照问，每件各记一格。error 只留给读数自己拼不出来（实现坏了）。
 //
-// only 非空时只问那一件（补问，ADR-0305）：段里在控的对象收到它，核班次与段也只核它进段的那次交接。段册或班次册那一行装不回与
-// 连不上分记两个停点（ports 的两个 RecordUnreadable 哨兵）：同属读不动，救法不同，补问只为后者再问。
+// focus 非空时是补问（ADR-0305、ADR-0331）：段里在控的对象只留 focus.inControl 这一件，核班次与段也只核它进段的那次交接；
+// focus.member 非空时关务只问这一件成员，在控的 focus.inControl 是随袋带着它的那件单元，不展开、不问关务。段册或班次册那一行装不回
+// 与连不上分记两个停点（ports 的两个 RecordUnreadable 哨兵）：同属读不动，救法不同，补问只为后者再问。
 func (reader *DepartureGateReader) readIntent(
 	ctx context.Context,
 	intent departureGateIntent,
-	only *domain.CarriedObjectReference,
+	focus *gateFocus,
 ) (domain.DepartureGateReading, error) {
 	var stops []domain.DepartureGateStop
 	var inControl []domain.FulfillmentParticipation
@@ -171,9 +235,9 @@ func (reader *DepartureGateReader) readIntent(
 			stops = append(stops, domain.DepartureSegmentNotRegistered)
 		default:
 			inControl = record.Segment.ParticipationsUnderControlAt(intent.at)
-			if only != nil {
+			if focus != nil {
 				inControl = slices.DeleteFunc(inControl, func(participation domain.FulfillmentParticipation) bool {
-					return participation.Object() != *only
+					return participation.Object() != focus.inControl
 				})
 			}
 			if len(inControl) == 0 {
@@ -230,9 +294,15 @@ func (reader *DepartureGateReader) readIntent(
 		cells:  map[domain.CarriedObjectReference]domain.GateFinding{},
 		onPath: map[domain.CarriedObjectReference]bool{},
 	}
-	for _, participation := range inControl {
-		if _, err := expansion.object(ctx, participation.Object()); err != nil {
+	if focus != nil && focus.member != nil {
+		if _, err := expansion.object(ctx, *focus.member); err != nil {
 			return domain.DepartureGateReading{}, err
+		}
+	} else {
+		for _, participation := range inControl {
+			if _, err := expansion.object(ctx, participation.Object()); err != nil {
+				return domain.DepartureGateReading{}, err
+			}
 		}
 	}
 	for _, cell := range expansion.cells {

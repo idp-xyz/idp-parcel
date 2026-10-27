@@ -29,6 +29,9 @@ const (
 	DepartureGateReaskScanned
 	// DepartureGateReaskNotHandedOver：交接是拒收或待确认，没让对象进段，连段都不读。
 	DepartureGateReaskNotHandedOver
+	// DepartureGateReaskMemberNotIdentified：节点收寄形成信封指的收寄没有认出包裹（待识别、未形成、形成了却没有关联），没有可补问的
+	// 对象，连单元都不找（ADR-0331）。
+	DepartureGateReaskMemberNotIdentified
 	// DepartureGateReaskUndecided：某一口此刻读不动、写不进，原样重投可能就过；停在哪一口在 Stop 里。
 	DepartureGateReaskUndecided
 	// DepartureGateReaskDefect：某一行装不回、记录与键不符，或本上下文自己交出的键立不起来——原样重投一万次都一样。
@@ -41,6 +44,8 @@ func (outcome DepartureGateReaskOutcome) String() string {
 		return "DEPARTURE_GATES_REASKED"
 	case DepartureGateReaskNotHandedOver:
 		return "HANDOVER_NOT_HANDED_OVER"
+	case DepartureGateReaskMemberNotIdentified:
+		return "NODE_INTAKE_NOT_IDENTIFIED"
 	case DepartureGateReaskUndecided:
 		return "DEPARTURE_GATE_REASK_UNDECIDED"
 	case DepartureGateReaskDefect:
@@ -67,6 +72,10 @@ const (
 	DepartureGateReaskHandoffUnavailable
 	// DepartureGateReaskSequenceTaken：两步之间另一方先补了同一次（撞键）。原样重投时 Plan 看得见它那一份，按它重算该不该再问。
 	DepartureGateReaskSequenceTaken
+	// 成员补问（ADR-0331）：收寄读不回、曾装它的单元读不动、成员关系那一问没有形成答复。
+	DepartureGateReaskIntakeNotVisible
+	DepartureGateReaskConsolidationUnitsUnavailable
+	DepartureGateReaskMembershipUnavailable
 
 	// 缺陷：重投不会变
 	DepartureGateReaskKeyNotAccepted
@@ -76,6 +85,9 @@ const (
 	DepartureGateReaskMovementFactRecordUnreadable
 	DepartureGateReaskMovementFactInconsistent
 	DepartureGateReaskRecordUnreadable
+	// 成员补问（ADR-0331）：收寄与键不符或关联立不成载运对象引用；节点作业答的单元标识或成员立不成，或成员落在封闭集外。
+	DepartureGateReaskIntakeInconsistent
+	DepartureGateReaskMembershipUntranslatable
 )
 
 func (stop DepartureGateReaskStop) String() string {
@@ -98,6 +110,16 @@ func (stop DepartureGateReaskStop) String() string {
 		return "DEPARTURE_GATE_REASK_HANDOFF_UNAVAILABLE"
 	case DepartureGateReaskSequenceTaken:
 		return "DEPARTURE_GATE_REASK_SEQUENCE_TAKEN"
+	case DepartureGateReaskIntakeNotVisible:
+		return "NODE_INTAKE_NOT_VISIBLE"
+	case DepartureGateReaskConsolidationUnitsUnavailable:
+		return "CONSOLIDATION_UNITS_REGISTRY_UNAVAILABLE"
+	case DepartureGateReaskMembershipUnavailable:
+		return "CONSOLIDATION_MEMBERSHIP_REGISTRY_UNAVAILABLE"
+	case DepartureGateReaskIntakeInconsistent:
+		return "NODE_INTAKE_INCONSISTENT"
+	case DepartureGateReaskMembershipUntranslatable:
+		return "CONSOLIDATION_ANSWER_UNTRANSLATABLE"
 	case DepartureGateReaskKeyNotAccepted:
 		return "CONTROL_FACT_KEY_NOT_ACCEPTED"
 	case DepartureGateReaskControlFactInconsistent:
@@ -168,7 +190,7 @@ func (result DepartureGateReaskResult) Recorded() int { return result.recorded }
 
 func (result DepartureGateReaskResult) Disposition() DepartureGateReaskDisposition {
 	switch result.outcome {
-	case DepartureGateReaskScanned, DepartureGateReaskNotHandedOver:
+	case DepartureGateReaskScanned, DepartureGateReaskNotHandedOver, DepartureGateReaskMemberNotIdentified:
 		return DepartureGateReaskSettled
 	case DepartureGateReaskUndecided:
 		return DepartureGateReaskRetry
@@ -327,16 +349,13 @@ func (handler *ReaskDepartureGatesHandler) plan(
 	}
 	result := DepartureGateReaskResult{outcome: DepartureGateReaskScanned}
 	for _, key := range keys {
-		segment, stopped := handler.segmentOf(ctx, key, tenant)
+		segment, stopped := segmentOfKey(ctx, handler.deps.Segments, key, tenant)
 		if stopped.outcome != DepartureGateReaskOutcomeInvalid {
 			return stopped, nil
 		}
-		records, err := handler.deps.Facts.FindBySegment(ctx, key)
-		if errors.Is(err, ports.ErrMovementFactRecordUnreadable) {
-			return departureGateReaskStopped(DepartureGateReaskDefect, DepartureGateReaskMovementFactRecordUnreadable), nil
-		}
-		if err != nil {
-			return departureGateReaskStopped(DepartureGateReaskUndecided, DepartureGateReaskMovementFactRegistryUnavailable), nil
+		records, stopped := factsOfSegment(ctx, handler.deps.Facts, key)
+		if stopped.outcome != DepartureGateReaskOutcomeInvalid {
+			return stopped, nil
 		}
 		for _, record := range records {
 			step, err := handler.reaskOne(ctx, key, segment, record, object, trigger)
@@ -364,13 +383,14 @@ type departureGateReaskStep struct {
 	stopped   DepartureGateReaskResult
 }
 
-// segmentOf 按键取回对象有参与的一段。段不能被删除（CONTEXT），按对象列得出的段按键却答没有，是段册自相矛盾。
-func (handler *ReaskDepartureGatesHandler) segmentOf(
+// segmentOfKey 按键取回对象有参与的一段。段不能被删除（CONTEXT），按对象列得出的段按键却答没有，是段册自相矛盾。
+func segmentOfKey(
 	ctx context.Context,
+	segments ObjectSegmentView,
 	key ports.FulfillmentSegmentKey,
 	tenant domain.TenantID,
 ) (domain.ActualFulfillmentSegment, DepartureGateReaskResult) {
-	record, found, err := handler.deps.Segments.FindByKey(ctx, key)
+	record, found, err := segments.FindByKey(ctx, key)
 	switch {
 	case errors.Is(err, ports.ErrFulfillmentSegmentRecordUnreadable):
 		return domain.ActualFulfillmentSegment{}, departureGateReaskStopped(DepartureGateReaskDefect, DepartureGateReaskSegmentRecordUnreadable)
@@ -393,52 +413,25 @@ func (handler *ReaskDepartureGatesHandler) reaskOne(
 	trigger string,
 ) (departureGateReaskStep, error) {
 	fact := record.Fact
-	declared, has := fact.Segment()
-	if record.Key.TenantID != key.TenantID || fact.TenantID() != record.Key.TenantID || fact.Fact() != record.Key.Fact ||
-		fact.Version() != record.Key.Version || !has || declared != key.Segment {
-		return departureGateReaskStep{stopped: departureGateReaskStopped(DepartureGateReaskDefect, DepartureGateReaskMovementFactInconsistent)}, nil
+	first, original, stopped := originalDepartureOf(key, record)
+	if stopped.outcome != DepartureGateReaskOutcomeInvalid {
+		return departureGateReaskStep{stopped: stopped}, nil
 	}
-	if fact.Kind() != domain.DepartureFact {
+	if !original {
 		return departureGateReaskStep{}, nil
-	}
-	if _, corrected := fact.Corrects(); corrected {
-		return departureGateReaskStep{}, nil
-	}
-	first, read := fact.GateReading()
-	if !read {
-		// 出发必带读数（迁移 0026 的 CHECK 与领域构造门）：没有就是记录坏了。
-		return departureGateReaskStep{stopped: departureGateReaskStopped(DepartureGateReaskDefect, DepartureGateReaskMovementFactInconsistent)}, nil
 	}
 	if !slices.Contains(segment.ObjectsUnderControlAt(fact.OccurredAt()), object) {
 		return departureGateReaskStep{}, nil
 	}
 
-	all, err := handler.deps.Reasks.FindByDeparture(ctx, record.Key)
-	if errors.Is(err, ports.ErrDepartureGateReaskRecordUnreadable) {
-		return departureGateReaskStep{stopped: departureGateReaskStopped(DepartureGateReaskDefect, DepartureGateReaskRecordUnreadable)}, nil
+	chain, stopped := reaskChainOf(ctx, handler.deps.Reasks, record.Key, object)
+	if stopped.outcome != DepartureGateReaskOutcomeInvalid {
+		return departureGateReaskStep{stopped: stopped}, nil
 	}
-	if err != nil {
-		return departureGateReaskStep{stopped: departureGateReaskStopped(DepartureGateReaskUndecided, DepartureGateReaskRegistryUnavailable)}, nil
-	}
-	// 这件对象的各次补问按次序排，不按落册时刻：落册时刻取各自那一拍的时钟，时钟回拨或同刻并发时排不出谁最近，次序才是一件
-	// 对象自己那条链上的先后。
-	var mine []ports.DepartureGateReaskRecord
-	for _, reask := range all {
-		if reask.Key.Object == object {
-			mine = append(mine, reask)
-		}
-	}
-	slices.SortFunc(mine, func(left, right ports.DepartureGateReaskRecord) int { return left.Key.Sequence - right.Key.Sequence })
-	earlier := make([]domain.DepartureGateReading, 0, len(mine))
-	lastSequence := 0
-	for _, reask := range mine {
-		earlier = append(earlier, reask.Reading)
-		lastSequence = reask.Key.Sequence
-	}
-	if !departureGateReaskDue(first, earlier, object) {
+	if !departureGateReaskDue(first, chain.earlier, object) {
 		return departureGateReaskStep{}, nil
 	}
-	if lastSequence >= MaxDepartureGateReasks {
+	if chain.last >= MaxDepartureGateReasks {
 		return departureGateReaskStep{exhausted: true}, nil
 	}
 
@@ -447,16 +440,103 @@ func (handler *ReaskDepartureGatesHandler) reaskOne(
 		return departureGateReaskStep{}, err
 	}
 	return departureGateReaskStep{draft: &ports.DepartureGateReaskRecord{
-		Key: ports.DepartureGateReaskKey{
-			TenantID: record.Key.TenantID,
-			Fact:     record.Key.Fact,
-			Version:  record.Key.Version,
-			Object:   object,
-			Sequence: lastSequence + 1,
-		},
+		Key:     reaskKeyAfter(record.Key, object, chain),
 		Reading: reading,
 		Trigger: trigger,
 	}}, nil
+}
+
+// factsOfSegment 按段列出声明了它的在册移动事实。坏行重投一万次还是坏行，与读不动分格（ADR-0029）。
+func factsOfSegment(
+	ctx context.Context,
+	facts ports.MovementFactsOfSegment,
+	key ports.FulfillmentSegmentKey,
+) ([]ports.MovementFactRecord, DepartureGateReaskResult) {
+	records, err := facts.FindBySegment(ctx, key)
+	if errors.Is(err, ports.ErrMovementFactRecordUnreadable) {
+		return nil, departureGateReaskStopped(DepartureGateReaskDefect, DepartureGateReaskMovementFactRecordUnreadable)
+	}
+	if err != nil {
+		return nil, departureGateReaskStopped(DepartureGateReaskUndecided, DepartureGateReaskMovementFactRegistryUnavailable)
+	}
+	return records, DepartureGateReaskResult{}
+}
+
+// originalDepartureOf 认按段列出的一条事实是不是能补问的出发：只补原版出发（更正版沿用原登记那一刻的读数，ADR-0205 越权风险点 8；
+// 移动与到达不带读数）。交回的 first 是这条出发的首版读数。事实与按段列它的键对不上，或出发没有读数，是记录坏了。
+func originalDepartureOf(
+	key ports.FulfillmentSegmentKey,
+	record ports.MovementFactRecord,
+) (first domain.DepartureGateReading, original bool, stopped DepartureGateReaskResult) {
+	fact := record.Fact
+	declared, has := fact.Segment()
+	if record.Key.TenantID != key.TenantID || fact.TenantID() != record.Key.TenantID || fact.Fact() != record.Key.Fact ||
+		fact.Version() != record.Key.Version || !has || declared != key.Segment {
+		return domain.DepartureGateReading{}, false, departureGateReaskStopped(DepartureGateReaskDefect, DepartureGateReaskMovementFactInconsistent)
+	}
+	if fact.Kind() != domain.DepartureFact {
+		return domain.DepartureGateReading{}, false, DepartureGateReaskResult{}
+	}
+	if _, corrected := fact.Corrects(); corrected {
+		return domain.DepartureGateReading{}, false, DepartureGateReaskResult{}
+	}
+	first, read := fact.GateReading()
+	if !read {
+		// 出发必带读数（迁移 0026 的 CHECK 与领域构造门）：没有就是记录坏了。
+		return domain.DepartureGateReading{}, false, departureGateReaskStopped(DepartureGateReaskDefect, DepartureGateReaskMovementFactInconsistent)
+	}
+	return first, true, DepartureGateReaskResult{}
+}
+
+// reaskChain 是一条出发上已有的各次补问：mine 是替某一件对象补的，按次序排；others 是替别的对象补的。
+type reaskChain struct {
+	mine    []ports.DepartureGateReaskRecord
+	others  []ports.DepartureGateReaskRecord
+	earlier []domain.DepartureGateReading
+	last    int
+}
+
+// reaskChainOf 读这条出发上的全部补问，分出替 object 补的那条链。这件对象的各次补问按次序排，不按落册时刻：落册时刻取各自那一拍
+// 的时钟，时钟回拨或同刻并发时排不出谁最近，次序才是一件对象自己那条链上的先后。
+func reaskChainOf(
+	ctx context.Context,
+	reasks ports.DepartureGateReaskRegistry,
+	departure ports.MovementFactKey,
+	object domain.CarriedObjectReference,
+) (reaskChain, DepartureGateReaskResult) {
+	all, err := reasks.FindByDeparture(ctx, departure)
+	if errors.Is(err, ports.ErrDepartureGateReaskRecordUnreadable) {
+		return reaskChain{}, departureGateReaskStopped(DepartureGateReaskDefect, DepartureGateReaskRecordUnreadable)
+	}
+	if err != nil {
+		return reaskChain{}, departureGateReaskStopped(DepartureGateReaskUndecided, DepartureGateReaskRegistryUnavailable)
+	}
+	var chain reaskChain
+	for _, reask := range all {
+		if reask.Key.Object == object {
+			chain.mine = append(chain.mine, reask)
+		} else {
+			chain.others = append(chain.others, reask)
+		}
+	}
+	slices.SortFunc(chain.mine, func(left, right ports.DepartureGateReaskRecord) int { return left.Key.Sequence - right.Key.Sequence })
+	chain.earlier = make([]domain.DepartureGateReading, 0, len(chain.mine))
+	for _, reask := range chain.mine {
+		chain.earlier = append(chain.earlier, reask.Reading)
+		chain.last = reask.Key.Sequence
+	}
+	return chain, DepartureGateReaskResult{}
+}
+
+// reaskKeyAfter 是 object 在 departure 这条出发上的下一次补问的键。
+func reaskKeyAfter(departure ports.MovementFactKey, object domain.CarriedObjectReference, chain reaskChain) ports.DepartureGateReaskKey {
+	return ports.DepartureGateReaskKey{
+		TenantID: departure.TenantID,
+		Fact:     departure.Fact,
+		Version:  departure.Version,
+		Object:   object,
+		Sequence: chain.last + 1,
+	}
 }
 
 // Record 在调用方的写事务里把 Plan 问来的各份追加落册，每份同一笔交一封信。撞键是另一方在两步之间先补了同一次：认它在先，
@@ -467,20 +547,31 @@ func (handler *ReaskDepartureGatesHandler) Record(
 	ctx context.Context,
 	planned DepartureGateReaskResult,
 ) (DepartureGateReaskResult, error) {
+	return recordDepartureGateReasks(ctx, handler.deps.Reasks, handler.deps.Handoff, handler.deps.Clock, planned)
+}
+
+// recordDepartureGateReasks 是两个补问编排共用的落册那一半：按唤醒来源不同，问的范围不同，追加与交信封的纪律相同。
+func recordDepartureGateReasks(
+	ctx context.Context,
+	reasks ports.DepartureGateReaskRegistry,
+	handoff ports.DepartureGateReaskHandoff,
+	clock ports.Clock,
+	planned DepartureGateReaskResult,
+) (DepartureGateReaskResult, error) {
 	if planned.outcome != DepartureGateReaskScanned {
 		return planned, nil
 	}
 	recorded := DepartureGateReaskResult{outcome: DepartureGateReaskScanned, exhausted: planned.exhausted}
 	for _, draft := range planned.drafts {
-		draft.RecordedAt = handler.deps.Clock.Now()
-		saved, err := handler.deps.Reasks.Save(ctx, draft)
+		draft.RecordedAt = clock.Now()
+		saved, err := reasks.Save(ctx, draft)
 		if err != nil {
 			return departureGateReaskStopped(DepartureGateReaskUndecided, DepartureGateReaskRegistryUnavailable), nil
 		}
 		if saved == ports.DepartureGateReaskAlreadyRegistered {
 			return departureGateReaskStopped(DepartureGateReaskUndecided, DepartureGateReaskSequenceTaken), nil
 		}
-		if err := handler.deps.Handoff.HandOffDepartureGateReask(ctx, draft); err != nil {
+		if err := handoff.HandOffDepartureGateReask(ctx, draft); err != nil {
 			return departureGateReaskStopped(DepartureGateReaskUndecided, DepartureGateReaskHandoffUnavailable), nil
 		}
 		recorded.drafts = append(recorded.drafts, draft)

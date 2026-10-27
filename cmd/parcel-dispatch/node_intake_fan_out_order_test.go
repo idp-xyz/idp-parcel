@@ -68,15 +68,16 @@ func registeredLegsOn(t *testing.T, event eventing.EventType) []routeLeg {
 	return legs
 }
 
-// Covers: AT-VE-221 名次半边（ADR-0299 决定一、越权风险点 7）——节点收寄形成信封上，移动事实补派生排在 VE 投影与 PS 来源采用之后：本路读量随候选单元与整袋增长，
-// 排在前面会吃掉主业务的投递时间；排在后面，主业务先落地，本路是尽力而为的自愈。
-func TestTheMovementFactBackfillOnNodeIntakeRunsAfterTheProjectionAndTheSourceAdoption(t *testing.T) {
+// Covers: AT-VE-221 名次半边（ADR-0299 决定一、越权风险点 7）、AT-TF-366 名次半边（ADR-0331 决定四）——节点收寄形成信封上，移动事实补派生与成员
+// 的出发门禁补问都排在 VE 投影与 PS 来源采用之后：两路读量都随候选单元与整袋增长，补问还要问关务，排在前面会吃掉主业务的投递时间；排在后面，
+// 主业务先落地，两路是尽力而为的自愈；补问排在补派生之后，是因为它再多一次问关务。
+func TestTheMovementFactBackfillAndTheMemberReaskOnNodeIntakeRunAfterTheProjectionAndTheSourceAdoption(t *testing.T) {
 	legs := registeredLegsOn(t, veinbox.NodeIntakeFormedEventType)
 	var labels []string
 	for _, leg := range legs {
 		labels = append(labels, leg.label)
 	}
-	want := []string{"projection", "node intake", "movement fact backfill on node intake"}
+	want := []string{"projection", "node intake", "movement fact backfill on node intake", "departure gate reask on node intake"}
 	if len(labels) != len(want) {
 		t.Fatalf("节点收寄形成信封上的各路 = %v, want %v", labels, want)
 	}

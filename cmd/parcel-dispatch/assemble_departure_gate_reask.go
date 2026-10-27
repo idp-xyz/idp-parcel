@@ -130,14 +130,10 @@ func departureGateCustomsView(db *bentopg.DB, clock systemClock) (*tfcustoms.Dep
 	return view, nil
 }
 
-// departureGateReasks 把补问编排接到给定的关务那一口上。这一口之外的接线只有这一处：生产装配交真关务（departureGateCustomsView），
-// 真库用例交按对象答格的替身，两边的段册、事实册、补问册、交出与读数路径是同一份接法。
-func departureGateReasks(
-	db *bentopg.DB,
-	outboxStore *outbox.Store,
-	clock systemClock,
-	customs tfports.DepartureGateView,
-) (*tfapplication.ReaskDepartureGatesHandler, error) {
+// departureGateReader 装补问走的读数路径：段册、班次册、交接册、节点作业的集运成员关系与收寄身份，加给定的关务那一口。交接与揽收上的
+// 补问（departureGateReasks）和节点收寄形成信封上的成员补问（departureGateReaskOnNodeIntakeConsumerOver）都经它问，两条路因此是登记那
+// 一刻同一条读数路径、同一份接法。
+func departureGateReader(db *bentopg.DB, customs tfports.DepartureGateView) (*tfapplication.DepartureGateReader, error) {
 	segments, err := tfpostgres.NewFulfillmentSegments(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: reask segments: %w", err)
@@ -149,22 +145,6 @@ func departureGateReasks(
 	handovers, err := tfpostgres.NewTransportHandovers(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: reask handovers: %w", err)
-	}
-	pickups, err := tfpostgres.NewOffsitePickupRegistrations(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: reask pickups: %w", err)
-	}
-	facts, err := tfpostgres.NewMovementFacts(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: reask movement facts: %w", err)
-	}
-	reasks, err := tfpostgres.NewDepartureGateReasks(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: reask registry: %w", err)
-	}
-	handoff, err := tfpostgres.NewOutboxDepartureGateReaskHandoff(db, outboxStore, clock)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: reask handoff: %w", err)
 	}
 	memberships, err := nopostgres.NewConsolidationMembershipsAt(db)
 	if err != nil {
@@ -187,6 +167,45 @@ func departureGateReasks(
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: reask gate reader: %w", err)
+	}
+	return reader, nil
+}
+
+// departureGateReasks 把补问编排接到给定的关务那一口上。这一口之外的接线只有这一处：生产装配交真关务（departureGateCustomsView），
+// 真库用例交按对象答格的替身，两边的段册、事实册、补问册、交出与读数路径是同一份接法。
+func departureGateReasks(
+	db *bentopg.DB,
+	outboxStore *outbox.Store,
+	clock systemClock,
+	customs tfports.DepartureGateView,
+) (*tfapplication.ReaskDepartureGatesHandler, error) {
+	segments, err := tfpostgres.NewFulfillmentSegments(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: reask segments: %w", err)
+	}
+	handovers, err := tfpostgres.NewTransportHandovers(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: reask handovers: %w", err)
+	}
+	pickups, err := tfpostgres.NewOffsitePickupRegistrations(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: reask pickups: %w", err)
+	}
+	facts, err := tfpostgres.NewMovementFacts(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: reask movement facts: %w", err)
+	}
+	reasks, err := tfpostgres.NewDepartureGateReasks(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: reask registry: %w", err)
+	}
+	handoff, err := tfpostgres.NewOutboxDepartureGateReaskHandoff(db, outboxStore, clock)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: reask handoff: %w", err)
+	}
+	reader, err := departureGateReader(db, customs)
+	if err != nil {
+		return nil, err
 	}
 	handler, err := tfapplication.NewReaskDepartureGatesHandler(tfapplication.ReaskDepartureGatesDeps{
 		Handovers: handovers,

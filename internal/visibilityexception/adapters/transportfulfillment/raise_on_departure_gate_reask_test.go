@@ -232,6 +232,50 @@ func TestAParcelAlreadyBlockedOnTheDepartureIsNotSignalledAgain(t *testing.T) {
 	})
 }
 
+// Covers: AT-VE-222 适配器半边（ADR-0331）——随袋走过出发、当时身份未决的成员后来识别成功，替它补问的读数（键是成员包裹，首版读数里它没有自己
+// 的一格，只有袋那一格答未决）里阻断：为这件成员包裹形成信号，依据与因果条件指那条出发、事实引用是这件包裹上的引用；之后替袋补问的那一份读数
+// 展开整袋、里面同一件成员又判阻断，不再交——一次违规出发只交分诊一次，跨补问的两条链也一样。
+func TestAMemberReaskedAfterItsBagDepartedRaisesItsSignalOnceAcrossBothChains(t *testing.T) {
+	unit, err := tfdomain.FormConsolidationUnitGateFinding(movementValue(t, tfdomain.NewCarriedObjectReference, "bag-1"), nil,
+		[]tfdomain.ConsolidationMemberGap{{Stop: tfdomain.ConsolidationMemberIdentityUnresolved, Sources: []string{"hu-1"}}})
+	if err != nil {
+		t.Fatalf("袋那一格：%v", err)
+	}
+	first, err := tfdomain.FormDepartureGateReading(tfdomain.DepartureGateReadingSpec{
+		From:     movementValue(t, tfdomain.NewNetworkNodeReference, "NODE-SHA"),
+		To:       movementValue(t, tfdomain.NewNetworkNodeReference, "NODE-SZX"),
+		Findings: []tfdomain.DepartureGateFinding{unit},
+	})
+	if err != nil {
+		t.Fatalf("袋出发的首版读数：%v", err)
+	}
+	departure := departureWithReading(t, first)
+	at := movementRecordedAt.Add(time.Hour)
+	member := reaskRecord(t, departure, "parcel-1", 1, at, reaskReading(t,
+		map[string]tfdomain.DepartureGateAnswer{"parcel-1": tfdomain.DepartureGateBlocked}))
+	bag := reaskRecord(t, departure, "bag-1", 1, at.Add(time.Minute), reaskReading(t,
+		map[string]tfdomain.DepartureGateAnswer{"parcel-1": tfdomain.DepartureGateBlocked, "parcel-2": tfdomain.DepartureGateAdmitted}))
+	fixture := newReaskSignalFixture(t, departure, member, bag)
+
+	if err := fixture.subject.HandleRecordedDepartureGateReask(t.Context(), recordedReaskRef("parcel-1", 1)); err != nil {
+		t.Fatalf("handle member: %v", err)
+	}
+	if len(fixture.signals.commands) != 1 {
+		t.Fatalf("成员补问交进信号编排 %d 件, want 1", len(fixture.signals.commands))
+	}
+	command := fixture.signals.commands[0]
+	if command.Parcel.String() != "parcel-1" || command.Fact.String() != "movement-fact/parcel-1/move-1" ||
+		command.Version.String() != "v1" || command.Judgement != "AADJ-REASK-parcel-1" {
+		t.Fatalf("信号命令 = %s %s %s %q", command.Parcel, command.Fact, command.Version, command.Judgement)
+	}
+	if err := fixture.subject.HandleRecordedDepartureGateReask(t.Context(), recordedReaskRef("bag-1", 1)); err != nil {
+		t.Fatalf("handle bag: %v", err)
+	}
+	if len(fixture.signals.commands) != 1 {
+		t.Fatalf("替袋补问的那一份又交了信号：%v", fixture.signals.parcels)
+	}
+}
+
 // Covers: AT-VE-207 适配器半边——补问信号那一路的失败分格：补问读不回或列不出、出发读不动、信号搁置是未决；补问或出发装不回、对不上
 // 键、补的不是原版出发、补问没列在它的出发下、阻断那一格没有判断标识是仓储不变量已破；引用译不出是引用坏了。
 func TestReaskSignalFailuresKeepTheirSentinels(t *testing.T) {
