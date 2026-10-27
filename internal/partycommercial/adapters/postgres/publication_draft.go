@@ -42,9 +42,12 @@ var (
 )
 
 // SubmitDraft 录入一版一行。INSERT … ON CONFLICT DO UPDATE 带 WHERE：库上是`待批准`且这次录入与库上那份不同
-// （摘要或壳任一不同）才替换；RETURNING 用 xmax = 0 分辨插入与更新。零行命中时读回既有行：同一次录入是重放，
-// 否则载体已过了`待批准`、内容固定。读回的既有行本构建折不回正文时，已过`待批准`的它也不可能与这次录入是同一次
-// 录入（同一次录入的摘要本构建就算得出来），答内容固定；仍在`待批准`的它让修订落空，只可能是行坏了，按错误交回。
+// （摘要、壳或快照文档任一不同）才替换；RETURNING 用 xmax = 0 分辨插入与更新。快照文档也在比较之列，是因为摘要是
+// 文档的派生、读得回的行两者必然相配：文档与摘要对不上的坏行，同内容重录据此能被改好，而同一次录入的重放（jsonb 归一化后
+// 相等）仍一字不动。零行命中时读回既有行：同一次录入是重放，否则载体已过了`待批准`、内容固定。读回的既有行本构建折不回
+// 正文时（读不回的两类成因见 domain.ErrPublicationDraftNotReadable），已过`待批准`的它不可能与这次录入是同一次录入
+// （同一次录入的摘要本构建就算得出来），答内容固定；仍在`待批准`的它让修订落空，而修订条件已含文档，只可能是读回之前
+// 行又被别的写者动过，按错误交回让事务重来。行本身坏了（重建门因行数据而拒）同样按错误交回。
 func (repository *PublicationDrafts) SubmitDraft(
 	ctx context.Context,
 	draft domain.PublicationDraft,
@@ -85,7 +88,8 @@ func (repository *PublicationDrafts) SubmitDraft(
 		         OR publication_draft.scope_ref <> EXCLUDED.scope_ref
 		         OR publication_draft.effective_starts_at <> EXCLUDED.effective_starts_at
 		         OR publication_draft.effective_ends_at IS DISTINCT FROM EXCLUDED.effective_ends_at
-		         OR publication_draft.declared_references <> EXCLUDED.declared_references)
+		         OR publication_draft.declared_references <> EXCLUDED.declared_references
+		         OR publication_draft.content_document IS DISTINCT FROM EXCLUDED.content_document)
 		 RETURNING (xmax = 0) AS inserted`,
 		draft.Tenant().String(),
 		uint8(draft.Kind()),

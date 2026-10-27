@@ -407,11 +407,12 @@ type RehydratePublicationDraftSpec struct {
 // ——摘要不是判断，是正文的派生。三格状态各自带该带的痕迹：`待批准`没有批准与发布痕迹；`已批准`带批准者与时刻、
 // 没有发布时刻；`已发布`三样都带且顺序向后。
 //
-// 两种拒绝分格（分格纪律同 ErrInvalidRehydratedPublication）：行本身对不上（痕迹、壳、册与摘要）是
-// ErrInvalidRehydratedPublicationDraft，处置是查库；行没坏而本构建把快照折不回正文（规范化版本不认得、正文过不了本构建的
-// 构造门）是 *UnreadablePublicationDraft，处置在操作者手里。折回之后的再规范化与摘要比对属于前一格：折得回的正文本构建
-// 必能规范化，对不上就是行坏了。痕迹与壳先于正文检查，所以读不回的行交出的事实都是校过的——上层靠状态与摘要答业务格，
-// 不必再碰正文。
+// 两种拒绝分格（分格纪律同 ErrInvalidRehydratedPublication）：行本身对不上是 ErrInvalidRehydratedPublicationDraft，
+// 处置是查库——痕迹、壳、册与摘要对不上，以及折正文时文档自身立不住（非法 JSON、正文缺席、册名不认得、自称的规范化版本与列
+// 不一致、必填格为空、集外词、时刻格式不对），这些在任何构建下都不合法；行没坏而本构建读不了它是 *UnreadablePublicationDraft，
+// 处置在操作者手里，只收两类：列上的规范化版本本构建不认得，或文档带着更早的构建合法、构造门收紧后拒绝的内容
+// （tightenedGateRefusals）。折回之后的再规范化与摘要比对属于前一格：折得回的正文本构建必能规范化，对不上就是行坏了。
+// 痕迹与壳先于正文检查，所以读不回的行交出的事实都是校过的——上层靠状态与摘要答业务格，不必再碰正文。
 func RehydratePublicationDraft(spec RehydratePublicationDraftSpec) (PublicationDraft, error) {
 	if !spec.Submitter.valid() || spec.SubmittedAt.IsZero() {
 		return PublicationDraft{}, rehydratedDraftRefusal("录入者或录入时刻缺失")
@@ -469,8 +470,12 @@ func RehydratePublicationDraft(spec RehydratePublicationDraftSpec) (PublicationD
 		}
 	}
 	content, err := RehydratePublicationContent(spec.Canonicalization, spec.Document)
-	if err != nil {
+	switch {
+	case err == nil:
+	case !supportedPublicationCanonicalization(spec.Canonicalization), refusedByTightenedGate(err):
 		return PublicationDraft{}, unreadable(fmt.Errorf("正文快照折不回来：%w", err))
+	default:
+		return PublicationDraft{}, rehydratedDraftRefusal(fmt.Sprintf("正文快照折不回来：%v", err))
 	}
 	if content.Kind != spec.Shell.Kind {
 		return PublicationDraft{}, rehydratedDraftRefusal("快照里的册与壳声明的类别不是同一个")
