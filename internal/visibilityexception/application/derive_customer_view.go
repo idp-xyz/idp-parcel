@@ -47,6 +47,7 @@ const (
 	DisclosurePolicyUnavailable
 	CustomerViewStoreUnavailable
 	CustomerViewIdentityUnavailable
+	ETAJudgementUnavailable
 )
 
 func (reason CustomerViewUndecidedReason) String() string {
@@ -57,6 +58,8 @@ func (reason CustomerViewUndecidedReason) String() string {
 		return "CUSTOMER_VIEW_STORE_UNAVAILABLE"
 	case CustomerViewIdentityUnavailable:
 		return "CUSTOMER_VIEW_IDENTITY_UNAVAILABLE"
+	case ETAJudgementUnavailable:
+		return "ETA_JUDGEMENT_UNAVAILABLE"
 	default:
 		return ""
 	}
@@ -65,10 +68,15 @@ func (reason CustomerViewUndecidedReason) String() string {
 // DeriveCustomerViewCommand 携带一份新派生的投影与它所属的租户、货主客户账户。账户由
 // 调用方给出而不是从投影推导——投影面向包裹，不认识账户；而「客户视图只包含当前货主
 // 客户账户及其授权对象范围」要求账户隔离从入口就是字段。租户同理（ADR-0003）。
+//
+// ETAJudgementChanged 为真说明这次重派生由 ETA 客户可见性判断换版触发，而不是由一个新投影版本触发：
+// 投影版本没变，「同一投影版本重放」的短路因此不能收下它，否则判断换了版、客户视图的 ETA 一维永远
+// 不跟。其余入口留假。
 type DeriveCustomerViewCommand struct {
-	TenantID   domain.TenantID
-	Customer   domain.CustomerAccountReference
-	Projection domain.TrackingProjection
+	TenantID            domain.TenantID
+	Customer            domain.CustomerAccountReference
+	Projection          domain.TrackingProjection
+	ETAJudgementChanged bool
 }
 
 type DeriveCustomerViewResult struct {
@@ -98,11 +106,12 @@ func (result DeriveCustomerViewResult) HandoffReference() string {
 }
 
 type DeriveCustomerViewDeps struct {
-	Policy     ports.DisclosurePolicyView
-	Views      ports.CustomerViewStore
-	Identities ports.CustomerViewIdentityFactory
-	Downstream ports.CustomerViewHandoff
-	Clock      ports.Clock
+	Policy        ports.DisclosurePolicyView
+	ETAJudgements ports.ETAVisibilityJudgementRead
+	Views         ports.CustomerViewStore
+	Identities    ports.CustomerViewIdentityFactory
+	Downstream    ports.CustomerViewHandoff
+	Clock         ports.Clock
 }
 
 type DeriveCustomerViewHandler struct {
@@ -116,7 +125,7 @@ func NewDeriveCustomerViewHandler(deps DeriveCustomerViewDeps) *DeriveCustomerVi
 // Handle 把一个投影新版本推进到客户视图：受理（账户与投影身份缺一即未受理，不读任何
 // 依赖）→ 幂等按投影版本（同一投影版本不重发视图，只重发同一份意图）→ 披露策略答复译
 // 成四维（未配置即四维全部待确认，如实说等，不虚构可见性；终局一维另看投影里有没有
-// 终局）→ 四维与当前版相同则不换代、只前移确认依据（ConfirmedOn），否则首版发布或替代
+// 终局，ETA 一维另读这个账户这件包裹的当前 ETA 客户可见性判断）→ 四维与当前版相同则不换代、只前移确认依据（ConfirmedOn），否则首版发布或替代
 // 指回前版 → 提交与发布意图。视图只基于当前投影形成，本编排不读内部案件或原始来源
 // 消息——依赖清单里根本没有那些端口。
 //
@@ -140,7 +149,7 @@ func (handler *DeriveCustomerViewHandler) Handle(
 	if err != nil {
 		return DeriveCustomerViewResult{outcome: CustomerViewUndecided, reason: CustomerViewStoreUnavailable}, nil
 	}
-	if found && current.ConfirmedOn() == command.Projection.Version() {
+	if found && current.ConfirmedOn() == command.Projection.Version() && !command.ETAJudgementChanged {
 		// 比的是确认依据（ConfirmedOn），不是形成时依据：当前版已跟上过的那份投影再来一封，
 		// 同样是重放。
 		//
@@ -161,12 +170,36 @@ func (handler *DeriveCustomerViewHandler) Handle(
 		// 空白，混起来会让一次故障被读成租户还没登记披露规则。
 		return DeriveCustomerViewResult{outcome: CustomerViewUndecided, reason: DisclosurePolicyUnavailable}, nil
 	}
-	dimensions, err := dimensionsFrom(answer, configured, command.Projection)
+	// ETA 一维的判断只在策略准许展示时才读：策略不准看的维度，判断说什么都越不过它，读不动判断库
+	// 也不该把这一维拖成未决。
+	var (
+		judgement domain.ETAVisibilityJudgement
+		judged    bool
+	)
+	if configured && answer.ETA.State == domain.DimensionShown {
+		judgement, judged, err = handler.deps.ETAJudgements.FindCurrent(
+			ctx, command.TenantID, command.Customer, command.Projection.Parcel())
+		if err != nil {
+			// 判断库调不通是未决，不是「还没有判断」：后者如实答待确认，前者要重试依赖。
+			return DeriveCustomerViewResult{outcome: CustomerViewUndecided, reason: ETAJudgementUnavailable}, nil
+		}
+	}
+	dimensions, err := dimensionsFrom(answer, configured, command.Projection, judgement, judged)
 	if err != nil {
 		return DeriveCustomerViewResult{}, err
 	}
 
 	if found && current.Dimensions().Equal(dimensions) {
+		if current.ConfirmedOn() == command.Projection.Version() {
+			// 判断变化触发的重派生，投影版本早已确认过而四维没变：客户读到的仍是同一版，没有
+			// 要前移的确认依据，也没有新版本——答已有结果，意图照重放那样再交一次。
+			return DeriveCustomerViewResult{
+				outcome:    CustomerViewExistingResult,
+				view:       current,
+				hasView:    true,
+				handoffRef: handler.handOff(ctx, command.TenantID, current),
+			}, nil
+		}
 		// 四维没变：不签新身份、不形成新版本，当前版只跟上这份投影。答已有结果——客户
 		// 读到的仍是同一版；意图照重放那样再交一次，同一版本认领同一份，不多发。
 		reaffirmed, err := current.Reaffirm(command.Projection.Version(), dimensions)
@@ -244,13 +277,15 @@ func (handler *DeriveCustomerViewHandler) handOff(
 //
 // 策略只说准不准看，说不了背后有没有东西可看，终局、里程碑与 ETA 各再过一道，都只收窄
 // 不放宽：终局一维看投影里有没有 PS 已采用的终局（domain.FinalDimensionOver）；里程碑一维
-// 看投影里有没有已归类的标准追踪里程碑（domain.MilestonesDimensionOver）；ETA 一维要的是
-// `UC-VE-003` 的 ETA 客户可见性判断（`AT-VE-187`），那份判断本上下文还没有，准许展示也只能
-// 答待确认（domain.ETADimensionWithoutVisibilityJudgement）。追踪说明一维照策略。
+// 看投影里有没有已归类的标准追踪里程碑（domain.MilestonesDimensionOver）；ETA 一维看
+// `UC-VE-003` 的 ETA 客户可见性判断（domain.ETADimensionOver，`AT-VE-158`、`AT-VE-187`）——
+// 没有判断或判断待判断答待确认，判断 ETA 不可见答不展示。追踪说明一维照策略。
 func dimensionsFrom(
 	answer ports.DisclosureAnswer,
 	configured bool,
 	projection domain.TrackingProjection,
+	judgement domain.ETAVisibilityJudgement,
+	judged bool,
 ) (domain.CustomerViewDimensions, error) {
 	if !configured {
 		return domain.CustomerViewDimensions{
@@ -279,7 +314,7 @@ func dimensionsFrom(
 	}
 	return domain.CustomerViewDimensions{
 		Milestones: domain.MilestonesDimensionOver(milestones, projection),
-		ETA:        domain.ETADimensionWithoutVisibilityJudgement(eta),
+		ETA:        domain.ETADimensionOver(eta, judgement, judged),
 		Final:      domain.FinalDimensionOver(final, projection),
 		Note:       note,
 	}, nil

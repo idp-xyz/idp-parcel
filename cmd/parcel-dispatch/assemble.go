@@ -1867,7 +1867,8 @@ func deriveCustomerViewOnAcceptanceConsumer(
 // tenantBoundCustomerViewDerive 在每次 Handle 用命令上的租户构造披露策略视图。
 // DisclosurePolicies 在构造期绑租户，AssessDisclosure 签名没有租户；派发进程是多租户。
 // 禁止 NewDisclosurePolicies(db, 空租户)——看起来接了库、永远读不到行。该租户策略
-// 空册 → configured=false → 编排四维全部待确认（实例半边如实说等）。
+// 空册 → configured=false → 编排四维全部待确认（实例半边如实说等）。ETA 客户可见性判断读口
+// 的签名带租户，无需现绑；它只在策略准许展示 ETA 时才被读。
 type tenantBoundCustomerViewDerive struct {
 	db         *bentopg.DB
 	views      *vepostgres.CustomerViews
@@ -1889,12 +1890,17 @@ func (derive *tenantBoundCustomerViewDerive) Handle(
 	if err != nil {
 		return veapplication.DeriveCustomerViewResult{}, err
 	}
+	judgements, err := vepostgres.NewETAVisibilityJudgements(derive.db)
+	if err != nil {
+		return veapplication.DeriveCustomerViewResult{}, err
+	}
 	return veapplication.NewDeriveCustomerViewHandler(veapplication.DeriveCustomerViewDeps{
-		Policy:     policy,
-		Views:      derive.views,
-		Identities: derive.identities,
-		Downstream: derive.downstream,
-		Clock:      derive.clock,
+		Policy:        policy,
+		ETAJudgements: judgements,
+		Views:         derive.views,
+		Identities:    derive.identities,
+		Downstream:    derive.downstream,
+		Clock:         derive.clock,
 	}).Handle(ctx, command)
 }
 

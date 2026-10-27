@@ -69,6 +69,14 @@ func allFactories() []factory {
 			value, err := built.NextETAVersionID(context.Background())
 			return value.String(), err
 		}},
+		{"ETA 可见性判断版本", "EVJ", func(options ...platformidentity.Option) (string, error) {
+			built, err := identity.NewETAVisibilityJudgementVersions(options...)
+			if err != nil {
+				return "", err
+			}
+			value, err := built.NextETAVisibilityJudgementVersionID(context.Background())
+			return value.String(), err
+		}},
 		{"追偿事项", "RCV", func(options ...platformidentity.Option) (string, error) {
 			built, err := identity.NewRecoveryMatters(options...)
 			if err != nil {

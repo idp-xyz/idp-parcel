@@ -274,34 +274,48 @@ func TestTheFinalDimensionShowsOnlyWhenTheProjectionCarriesAnAdoptedFinal(t *tes
 	}
 }
 
-// Covers: VE CONTEXT「客户全程追踪视图只基于当前有效的全程追踪投影、获准对客展示的 ETA……
+// Covers: AT-VE-158、AT-VE-216 与 VE CONTEXT「客户全程追踪视图只基于当前有效的全程追踪投影、获准对客展示的 ETA……
 // 形成」与生命周期「某一维信息待确认或不可披露 → 只对该维返回待确认、暂不可用或不展示，
-// 不虚构里程碑、ETA、终局或异常说明」——策略准许展示 ETA，可本上下文还没有获准对客的
-// ETA 判断，这一维答待确认、不带内容；策略不展示与待确认原样放行，只收窄不放宽。这里钉的
-// 是「还没有判断对象」这一格，不是 UC-VE-008 验收表里场景为「只有内部 ETA 或质量未达对客
-// 门槛」的那一行：那一行要等 ETA 客户可见性判断落地才钉得住（票 docs-consistency/code/51），
-// 故不点它的号。
-func TestTheETADimensionPendsWithoutACustomerVisibleETAJudgement(t *testing.T) {
+// 不虚构里程碑、ETA、终局或异常说明」——策略准许展示 ETA 之后还要看 ETA 客户可见性判断：
+// 没有判断或判断为待判断 → 待确认；判断为 ETA 不可见 → 不展示（AT-VE-158，不用计划或承诺
+// 时间填充）；判断为客户可见 ETA → 展示，内容来处是这一版判断。策略不展示与待确认原样放行，
+// 只收窄不放宽——判断说可见也越不过策略。
+func TestTheETADimensionFollowsTheCustomerVisibilityJudgementUnderThePolicy(t *testing.T) {
 	permitted, err := domain.ShowDimension(mustValue(t, domain.NewViewContentReference, "eta-band/v1"))
 	if err != nil {
 		t.Fatalf("show eta: %v", err)
 	}
+	eta := candidateETA(t, "eta-1/v1")
+	visible := judgementOver(t, "evj-visible", eta,
+		domain.ConfiguredETARule(visibilityRule(t, "DELIVERED", "MEDIUM/history-based")))
+	notVisible := judgementOver(t, "evj-hidden", eta,
+		domain.ConfiguredETARule(visibilityRule(t, "DELIVERED", "HIGH/carrier-confirmed")))
+	pending := judgementOver(t, "evj-pending", eta, domain.UnconfiguredETARule())
+
 	for _, tc := range []struct {
 		name      string
 		permitted domain.ViewDimension
+		judgement domain.ETAVisibilityJudgement
+		judged    bool
 		want      domain.DimensionState
+		content   string
 	}{
-		{"策略准许展示", permitted, domain.DimensionPendingConfirmation},
-		{"策略不展示", domain.WithholdDimension(), domain.DimensionNotDisclosed},
-		{"策略待确认", domain.PendDimension(), domain.DimensionPendingConfirmation},
+		{"没有判断", permitted, domain.ETAVisibilityJudgement{}, false, domain.DimensionPendingConfirmation, ""},
+		{"判断待判断", permitted, pending, true, domain.DimensionPendingConfirmation, ""},
+		{"判断 ETA 不可见", permitted, notVisible, true, domain.DimensionNotDisclosed, ""},
+		{"判断客户可见 ETA", permitted, visible, true, domain.DimensionShown, "evj-visible"},
+		{"策略不展示时判断可见也不放宽", domain.WithholdDimension(), visible, true, domain.DimensionNotDisclosed, ""},
+		{"策略待确认时判断可见也不放宽", domain.PendDimension(), visible, true, domain.DimensionPendingConfirmation, ""},
+		{"策略待确认时判断不可见也不改写", domain.PendDimension(), notVisible, true, domain.DimensionPendingConfirmation, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := domain.ETADimensionWithoutVisibilityJudgement(tc.permitted)
+			got := domain.ETADimensionOver(tc.permitted, tc.judgement, tc.judged)
 			if got.State() != tc.want {
 				t.Fatalf("eta = %q, want %q", got.State(), tc.want)
 			}
-			if _, shown := got.Content(); shown {
-				t.Fatal("没有对客 ETA 判断，ETA 一维却带出了内容")
+			content, shown := got.Content()
+			if shown != (tc.want == domain.DimensionShown) || (shown && content.String() != tc.content) {
+				t.Fatalf("content = %q shown = %v; 展示的内容来处只能是这一版判断", content, shown)
 			}
 		})
 	}

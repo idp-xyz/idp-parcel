@@ -608,12 +608,7 @@ type DispositionHandoff interface {
 // 承担，库只管当前。租户是最高数据隔离边界（ADR-0003）：TrackedParcelReference 只
 // 是字符串引用，缺租户维两个租户的同名包裹就会共用一份预测。
 type ETAStore interface {
-	FindCurrent(
-		ctx context.Context,
-		tenant domain.TenantID,
-		parcel domain.TrackedParcelReference,
-		milestone domain.MilestoneReference,
-	) (domain.ETAPrediction, bool, error)
+	ETACurrentRead
 	Save(ctx context.Context, tenant domain.TenantID, eta domain.ETAPrediction) error
 }
 

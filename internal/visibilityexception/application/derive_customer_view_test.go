@@ -140,6 +140,7 @@ func (double *viewDownstreamDouble) HandOffCustomerView(
 type viewFixture struct {
 	handler    *application.DeriveCustomerViewHandler
 	policy     *disclosureDouble
+	judgements *judgementReadDouble
 	views      *viewStoreDouble
 	identities *viewIdentityDouble
 	downstream *viewDownstreamDouble
@@ -166,16 +167,18 @@ func newViewFixture(t *testing.T) *viewFixture {
 	t.Helper()
 	fixture := &viewFixture{
 		policy:     &disclosureDouble{answer: shownAnswer(t), configured: true},
+		judgements: &judgementReadDouble{},
 		views:      newViewStore(),
 		identities: &viewIdentityDouble{},
 		downstream: &viewDownstreamDouble{},
 	}
 	fixture.handler = application.NewDeriveCustomerViewHandler(application.DeriveCustomerViewDeps{
-		Policy:     fixture.policy,
-		Views:      fixture.views,
-		Identities: fixture.identities,
-		Downstream: fixture.downstream,
-		Clock:      fixedClock{at: factOccurredAt.Add(3 * time.Hour)},
+		Policy:        fixture.policy,
+		ETAJudgements: fixture.judgements,
+		Views:         fixture.views,
+		Identities:    fixture.identities,
+		Downstream:    fixture.downstream,
+		Clock:         fixedClock{at: factOccurredAt.Add(3 * time.Hour)},
 	})
 	return fixture
 }
@@ -461,10 +464,9 @@ func TestAPermittedFinalPendsUntilTheProjectionCarriesTheAdoptedFinal(t *testing
 // Covers: CONTEXT「客户全程追踪视图只基于当前有效的全程追踪投影、获准对客展示的 ETA……
 // 形成」与 UC-VE-008 主流程「读取 `UC-VE-003` 的客户可见性判断；只有达到适用质量与合同
 // 门槛的 ETA 才进入视图，不能使用计划时间或内部预测填充」——策略把 ETA 一维登成展示，
-// 本编排没有任何获准对客的 ETA 判断可依，这一维答待确认、不带内容，不答「ETA：展示」；
-// 策略不展示的照旧不展示。这里钉的是「还没有判断对象」这一格，不是 UC-VE-008 验收表里
-// 场景为「只有内部 ETA 或质量未达对客门槛」的那一行：那一行要等 ETA 客户可见性判断落地
-// 才钉得住（票 docs-consistency/code/51），故不点它的号。
+// 这个账户这件包裹还没有任何 ETA 客户可见性判断可依，这一维答待确认、不带内容，不答「ETA：展示」；
+// 策略不展示的照旧不展示。这里钉的是「还没有判断」这一格；判断已形成的各格（客户可见、ETA 不可见、
+// 待判断）见 derive_customer_view_eta_test.go。
 func TestAPermittedETAPendsWithoutACustomerVisibleETAJudgement(t *testing.T) {
 	for _, tc := range []struct {
 		name string

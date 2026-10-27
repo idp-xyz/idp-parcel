@@ -61,6 +61,14 @@ func TestFactAndProjectionWritesRefuseToRunOutsideATransaction(t *testing.T) {
 		t.Errorf("无事务保存 ETA 应返回 ErrTransactionRequired，实得：%v", err)
 	}
 
+	judgements, err := adapter.NewETAVisibilityJudgements(db)
+	if err != nil {
+		t.Fatalf("构造 ETA 可见性判断库：%v", err)
+	}
+	if err := judgements.Save(ctx, domain.TenantID{}, domain.ETAVisibilityJudgement{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务保存 ETA 可见性判断应返回 ErrTransactionRequired，实得：%v", err)
+	}
+
 	gaps, err := adapter.NewVisibilityGaps(db)
 	if err != nil {
 		t.Fatalf("构造可见性缺口库：%v", err)

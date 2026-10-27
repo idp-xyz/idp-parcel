@@ -30,6 +30,7 @@ const (
 	notificationPrefix = "NTF"
 	dispositionPrefix  = "DRQ"
 	etaPrefix          = "ETA"
+	etaJudgementPrefix = "EVJ"
 	recoveryPrefix     = "RCV"
 	casePrefix         = "XCS"
 	evidencePrefix     = "EVD"
@@ -181,6 +182,31 @@ func (factory *ETAVersions) NextETAVersionID(_ context.Context) (domain.ETAVersi
 		return domain.ETAVersionID{}, err
 	}
 	return domain.NewETAVersionID(value)
+}
+
+// ETAVisibilityJudgementVersions 实现 ports.ETAVisibilityJudgementIdentityFactory。
+type ETAVisibilityJudgementVersions struct {
+	minter platformidentity.Minter
+}
+
+func NewETAVisibilityJudgementVersions(options ...platformidentity.Option) (*ETAVisibilityJudgementVersions, error) {
+	minter, err := platformidentity.NewMinter(etaJudgementPrefix, options...)
+	if err != nil {
+		return nil, err
+	}
+	return &ETAVisibilityJudgementVersions{minter: minter}, nil
+}
+
+var _ ports.ETAVisibilityJudgementIdentityFactory = (*ETAVisibilityJudgementVersions)(nil)
+
+func (factory *ETAVisibilityJudgementVersions) NextETAVisibilityJudgementVersionID(
+	_ context.Context,
+) (domain.ETAVisibilityJudgementVersionID, error) {
+	value, err := factory.minter.Next()
+	if err != nil {
+		return domain.ETAVisibilityJudgementVersionID{}, err
+	}
+	return domain.NewETAVisibilityJudgementVersionID(value)
 }
 
 // ExceptionCases 实现 ports.CaseIdentityFactory。与发作期签发器分开的理由写在端口上：

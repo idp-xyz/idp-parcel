@@ -185,11 +185,12 @@ func realViewDeriveHandler(
 	views *customerViewStoreDouble, policy viewPolicyDouble, downstream viewDownstreamDouble,
 ) *veapplication.DeriveCustomerViewHandler {
 	return veapplication.NewDeriveCustomerViewHandler(veapplication.DeriveCustomerViewDeps{
-		Policy:     &policy,
-		Views:      views,
-		Identities: &viewIdentityDouble{},
-		Downstream: &downstream,
-		Clock:      viewClock{at: viewDerivedAt.Add(time.Minute)},
+		Policy:        &policy,
+		ETAJudgements: emptyJudgementRead{},
+		Views:         views,
+		Identities:    &viewIdentityDouble{},
+		Downstream:    &downstream,
+		Clock:         viewClock{at: viewDerivedAt.Add(time.Minute)},
 	})
 }
 
