@@ -23,15 +23,13 @@ import (
 //
 // 读数那一半与交接、揽收上的补问是同一份接法（departureGateReader），也就是 cmd/parcel-api 的 buildDepartureGateReader 那一份。
 
-// departureGateReaskOnNodeIntakeConsumerOver 装节点收寄形成信封上的成员补问那一扇门，接到给定的关务那一口上。这一口之外的接线只有这一处：
-// 生产装配交真关务，真库用例交按对象答格的替身。
-func departureGateReaskOnNodeIntakeConsumerOver(
+// departureGateMemberReasks 把成员补问编排接到给定的关务那一口上。这一口之外的接线只有这一处：生产装配交真关务，真库用例交按对象答格的替身。
+func departureGateMemberReasks(
 	db *bentopg.DB,
-	inboxStore *inbox.Store,
 	outboxStore *outbox.Store,
 	clock systemClock,
 	customs tfports.DepartureGateView,
-) (dispatch.Consumer, error) {
+) (*tfapplication.ReaskDepartureGatesOnIdentifiedMemberHandler, error) {
 	receptions, err := nopostgres.NewReceptions(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: member reask receptions: %w", err)
@@ -75,6 +73,21 @@ func departureGateReaskOnNodeIntakeConsumerOver(
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: member reask departure gates: %w", err)
+	}
+	return handler, nil
+}
+
+// departureGateReaskOnNodeIntakeConsumerOver 装节点收寄形成信封上的成员补问那一扇门，接到给定的关务那一口上。
+func departureGateReaskOnNodeIntakeConsumerOver(
+	db *bentopg.DB,
+	inboxStore *inbox.Store,
+	outboxStore *outbox.Store,
+	clock systemClock,
+	customs tfports.DepartureGateView,
+) (dispatch.Consumer, error) {
+	handler, err := departureGateMemberReasks(db, outboxStore, clock, customs)
+	if err != nil {
+		return nil, err
 	}
 	consumer, err := tfinbox.NewDepartureGateReaskOnNodeIntakeConsumer(db.Transactor(), inboxStore, handler)
 	if err != nil {

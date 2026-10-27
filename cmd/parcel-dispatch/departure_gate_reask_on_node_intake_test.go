@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -329,5 +330,85 @@ func TestMemberReaskFailuresLandInTheRightPartition(t *testing.T) {
 				t.Fatalf("failure_code = %q, want %q", got, test.wantCode)
 			}
 		})
+	}
+}
+
+// Covers: AT-TF-365 并发半边（ADR-0331 决定四，ADR-0305 决定六）——同一件实物的两封收寄形成信封（重核追加的两版，换了事件 ID）在对方落册之前
+// 各自问完了关务：两边读补问册时都还没有这一次，各自去追加同一个次序。先落册的一边追加、交一封信；后到的一边撞键，认先到者、不另交信封，
+// 答未决整笔回滚；重投时它读得到先到那一份、已有定论，不再补问。无论谁先谁后，补问册里这条出发这件成员恰一行、补问信封恰一封、信号恰一期。
+// 两封信交错用确定的次序（一边 Plan、另一边 Plan、两边依次 Record），不起 goroutine：测试库的连接池只有两条，两个消费门同时占着事务连接
+// 再各去事务外读，会把池占满而互相等死。
+func TestTwoIntakeEnvelopesOfOneMemberAskedBeforeEitherRecordedAskOnceAndTheLoserFindsTheFirstComer(t *testing.T) {
+	fixture := newSYNVerticalFixture(t)
+	registerDemoMilestoneMapping(t, fixture)
+	registerDemoDepartureGateSignalRule(t, fixture)
+	saveReaskSchedule(t, fixture)
+	seedBagAroundTheDeparture(t, fixture)
+	memberFactAt(t, fixture, "ADD_MEMBER", consolidationBag, memberReaskHeld, movementDepartedAt.Add(-2*time.Hour))
+	saveBagSegment(t, fixture)
+	restrictLoadingDepartureOf(t, fixture, memberReaskHeldParcel)
+	factEvent := recordBagDepartureWithProductionReading(t, fixture, memberReaskFact)
+	if published, err := fixture.beat.DispatchOnce(t.Context()); err != nil || published != 1 {
+		t.Fatalf("出发那一拍 published = %d err = %v；失败码 = %q", published, err, recordedFailureCode(t, fixture.db, factEvent))
+	}
+	source := formedReceptionOf(t, fixture, memberReaskHeld, memberReaskHeldParcel)
+
+	customs, err := departureGateCustomsView(fixture.db, systemClock{})
+	if err != nil {
+		t.Fatalf("装配关务那一口：%v", err)
+	}
+	handler, err := departureGateMemberReasks(fixture.db, fixtureOutbox(t, fixture), systemClock{}, customs)
+	if err != nil {
+		t.Fatalf("装配成员补问编排：%v", err)
+	}
+	command := tfapp.ReaskOnNodeIntakeCommand{TenantID: mustTF(t, tfdomain.NewTenantID, fixture.identity.TenantID().String()), Source: source}
+	first, err := handler.Plan(t.Context(), command)
+	if err != nil {
+		t.Fatalf("先到的一边 Plan：%v", err)
+	}
+	second, err := handler.Plan(t.Context(), command)
+	if err != nil {
+		t.Fatalf("后到的一边 Plan：%v", err)
+	}
+	if len(first.Drafts()) != 1 || len(second.Drafts()) != 1 {
+		t.Fatalf("两边都该问到一份：%d、%d", len(first.Drafts()), len(second.Drafts()))
+	}
+
+	record := func(planned tfapp.DepartureGateReaskResult) tfapp.DepartureGateReaskResult {
+		var recorded tfapp.DepartureGateReaskResult
+		// 撞键的一边答未决、让这一笔回滚：错误只为让事务回滚，答复仍交回来。
+		_ = fixture.transactor.WithinTransaction(t.Context(), func(txCtx context.Context) error {
+			var recordErr error
+			recorded, recordErr = handler.Record(txCtx, planned)
+			if recordErr != nil {
+				return recordErr
+			}
+			if recorded.Disposition() != tfapp.DepartureGateReaskSettled {
+				return errors.New("rolled back")
+			}
+			return nil
+		})
+		return recorded
+	}
+	if recorded := record(first); recorded.Disposition() != tfapp.DepartureGateReaskSettled || recorded.Recorded() != 1 {
+		t.Fatalf("先到的一边 = %s %s，追加 %d 份", recorded.Disposition(), recorded.Stop(), recorded.Recorded())
+	}
+	if recorded := record(second); recorded.Stop() != tfapp.DepartureGateReaskSequenceTaken || recorded.Disposition() != tfapp.DepartureGateReaskRetry {
+		t.Fatalf("后到的一边 = %s %s，要撞键、未决重投", recorded.Stop(), recorded.Disposition())
+	}
+	replanned, err := handler.Plan(t.Context(), command)
+	if err != nil || replanned.Outcome() != tfapp.DepartureGateReaskScanned || len(replanned.Drafts()) != 0 {
+		t.Fatalf("后到的一边重投 = %s %d 份 %v——先到者已落册，应读到它、已有定论不再补问", replanned.Outcome(), len(replanned.Drafts()), err)
+	}
+	reasks := departureReasksOf(t, fixture, memberReaskFact)
+	if len(reasks) != 1 || reasks[0].Key.Object.String() != memberReaskHeldParcel || reasks[0].Key.Sequence != 1 {
+		t.Fatalf("补问册 = %+v, want 这件成员恰一行、次序 1", reasks)
+	}
+	if n := len(fixture.outboxIDsOfType(t, tfpostgres.DepartureGateReaskRecordedEventType)); n != 1 {
+		t.Fatalf("补问信封 %d 封, want 1——撞键的一边不另交", n)
+	}
+	drainReaskEnvelopes(t, fixture, 1)
+	if n := signalEpisodes(t, fixture, memberReaskHeldParcel); n != 1 {
+		t.Fatalf("信号 %d 期, want 1", n)
 	}
 }
