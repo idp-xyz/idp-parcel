@@ -82,6 +82,61 @@ func TestARefreshedETAKeepsItsHistory(t *testing.T) {
 	if _, err := first.Refresh(foreign); !errors.Is(err, domain.ErrInvalidETA) {
 		t.Fatalf("err = %v; 跨里程碑的刷新不是同一条预测线", err)
 	}
+
+	otherSource := etaSpec(t, "eta-1/v4")
+	otherSource.Source = domain.CarrierProvidedETA
+	if _, err := first.Refresh(otherSource); !errors.Is(err, domain.ErrInvalidETA) {
+		t.Fatalf("err = %v; 换来源的刷新不是同一条预测线，两路来源各是一条线", err)
+	}
+}
+
+func carrierETASpec(t *testing.T, version string) domain.ETAPredictionSpec {
+	t.Helper()
+	spec := etaSpec(t, version)
+	spec.Source = domain.CarrierProvidedETA
+	spec.Inputs = mustValue(t, domain.NewPredictionInputsReference, "inputs/carrier-feed")
+	spec.Model = mustValue(t, domain.NewPredictionModelReference, "carrier-estimate/v1")
+	spec.Confidence = mustValue(t, domain.NewConfidenceReference, "HIGH/carrier-confirmed")
+	spec.PredictedAt = predictedAt.Add(12 * time.Hour)
+	return spec
+}
+
+func formedETA(t *testing.T, spec domain.ETAPredictionSpec) domain.ETAPrediction {
+	t.Helper()
+	eta, err := domain.FormETAPrediction(spec)
+	if err != nil {
+		t.Fatalf("form ETA prediction: %v", err)
+	}
+	return eta
+}
+
+// Covers: AT-VE-051「两个来源都提供 ETA」的选取半边与 VE CONTEXT「ETA 客户可见性判断……候选内部 ETA」——两路来源各有
+// 当前版时，候选取运营企业派生的那一版；只有承运商提供的一路时才取它。选取只看来源，不看预测时点也不看可信度：
+// 承运商那一版更新、可信度更高也不顶替，与入参次序无关（选取不是「谁后到谁赢」，也不是替门槛挑一个能过门槛的）。
+func TestTheCandidateETAIsTheOperatorDerivedCurrentVersionElseTheCarrierProvidedOne(t *testing.T) {
+	operator := formedETA(t, etaSpec(t, "eta-op/v1"))
+	carrier := formedETA(t, carrierETASpec(t, "eta-carrier/v1"))
+	if !carrier.PredictedAt().After(operator.PredictedAt()) {
+		t.Fatal("夹具应让承运商那一版预测时点更新")
+	}
+
+	for name, currents := range map[string][]domain.ETAPrediction{
+		"运营企业在前": {operator, carrier},
+		"承运商在前":  {carrier, operator},
+	} {
+		chosen, found := domain.CandidateETAFrom(currents)
+		if !found || chosen.Version() != operator.Version() || chosen.Source() != domain.OperatorDerivedETA {
+			t.Fatalf("%s：候选 = %q（%v）found=%v，want 运营企业派生的 %q", name, chosen.Version(), chosen.Source(), found, operator.Version())
+		}
+	}
+
+	only, found := domain.CandidateETAFrom([]domain.ETAPrediction{carrier})
+	if !found || only.Version() != carrier.Version() {
+		t.Fatalf("只有承运商一路时候选 = %q found=%v，want %q", only.Version(), found, carrier.Version())
+	}
+	if _, found := domain.CandidateETAFrom(nil); found {
+		t.Fatal("没有任何当前版却选出了候选")
+	}
 }
 
 // Covers: VE CONTEXT「且版本化观察窗口已经届满时」「不能直接形成延误、停止移动或遗失结论」

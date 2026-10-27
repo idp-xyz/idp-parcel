@@ -75,8 +75,9 @@ func (reason JudgeETAVisibilityUndecidedReason) String() string {
 	}
 }
 
-// JudgeETAVisibilityCommand 指名要判断的那份内部 ETA：（包裹，里程碑）取它的当前版。账户由调用方给出
-// 而不是从 ETA 推导——预测面向包裹，不认识账户；租户同理（ADR-0003）。
+// JudgeETAVisibilityCommand 指名要判断的那份内部 ETA：（包裹，里程碑）下各来源线的当前版里，按候选规则
+// 选出的那一版（domain.CandidateETAFrom）。账户由调用方给出而不是从 ETA 推导——预测面向包裹，不认识账户；
+// 租户同理（ADR-0003）。
 type JudgeETAVisibilityCommand struct {
 	TenantID  domain.TenantID
 	Customer  domain.CustomerAccountReference
@@ -121,7 +122,8 @@ func NewJudgeETAVisibilityHandler(deps JudgeETAVisibilityDeps) *JudgeETAVisibili
 }
 
 // Handle 把一份内部 ETA 推进到 ETA 客户可见性判断（UC-VE-003 主流程第 3、6、8 步）：受理（租户、账户、
-// 包裹、里程碑缺一即未受理，不读任何依赖）→ 取候选 ETA 的当前版（没有就不判，不用计划时间凑）→
+// 包裹、里程碑缺一即未受理，不读任何依赖）→ 一次读出各来源线的当前版并选候选（运营企业派生的优先，没有才取
+// 承运商提供的；没有任何一版就不判，不用计划时间凑）→
 // 固定判断时点并按它取适用规则（缺失与冲突是确定的业务答案，落「待判断」，不是错误）→ 对候选作发现
 // （达标可见、未达不可见、规则缺失或冲突待判断）→ 发现与当前判断相同即重放，答已有判断，否则首版
 // 判断或替代判断指回前版，原判断不覆盖。
@@ -139,10 +141,11 @@ func (handler *JudgeETAVisibilityHandler) Handle(
 		return JudgeETAVisibilityResult{outcome: ETAVisibilityNotAccepted}, nil
 	}
 
-	eta, found, err := handler.deps.Predictions.FindCurrent(ctx, command.TenantID, command.Parcel, command.Milestone)
+	currents, err := handler.deps.Predictions.ListCurrent(ctx, command.TenantID, command.Parcel, command.Milestone)
 	if err != nil {
 		return undecidedJudgement(CandidateETAUnavailable), nil
 	}
+	eta, found := domain.CandidateETAFrom(currents)
 	if !found {
 		return JudgeETAVisibilityResult{outcome: ETAVisibilityNoCandidate}, nil
 	}

@@ -14,8 +14,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
-// ETAs 实现 ports.ETAStore。键是（租户+包裹+里程碑）；Save 整行 UPSERT——库只管
-// 当前版，刷新换版改写同一行，历史由 prior_version 指回承担。
+// ETAs 实现 ports.ETAStore。版本行只增不改写：Save 追加版本行并把 eta_prediction_current 的显式标记指向它，
+// 被接替的预测连同输入与区间留存、按版本读得回；读当前版走标记直取，不扫描历史。标记是唯一的可变处。
+// 预测线的键是（租户+包裹+里程碑+来源），承运商提供的与运营企业派生的预测各是一条线，一路的写不触碰另一路。
 type ETAs struct {
 	db *bentopg.DB
 }
@@ -27,35 +28,174 @@ func NewETAs(db *bentopg.DB) (*ETAs, error) {
 	return &ETAs{db: db}, nil
 }
 
+var _ ports.ETAStore = (*ETAs)(nil)
+
+const etaColumns = `v.version_id, v.source, v.inputs_ref, v.model_ref, v.range_from, v.range_to,
+		        v.confidence_ref, v.predicted_at, v.prior_version`
+
+// etaRowScanner 是 pgx.Row 与 pgx.Rows 共有的那一半。
+type etaRowScanner interface {
+	Scan(dest ...any) error
+}
+
 func (repository *ETAs) FindCurrent(
 	ctx context.Context,
 	tenant domain.TenantID,
 	parcel domain.TrackedParcelReference,
 	milestone domain.MilestoneReference,
+	source domain.ETASourceKind,
 ) (domain.ETAPrediction, bool, error) {
 	querier, err := repository.db.ReadExecutor(ctx)
 	if err != nil {
 		return domain.ETAPrediction{}, false, fmt.Errorf("find current eta: %w", err)
 	}
+	eta, found, err := scanETA(parcel, milestone, querier.QueryRow(ctx,
+		`SELECT `+etaColumns+`
+		   FROM visibility_exception.eta_prediction_current AS c
+		   JOIN visibility_exception.eta_prediction_version AS v
+		     ON v.tenant_id = c.tenant_id
+		    AND v.parcel_ref = c.parcel_ref
+		    AND v.milestone_ref = c.milestone_ref
+		    AND v.source = c.source
+		    AND v.version_id = c.version_id
+		  WHERE c.tenant_id = $1 AND c.parcel_ref = $2 AND c.milestone_ref = $3 AND c.source = $4`,
+		tenant.String(), parcel.String(), milestone.String(), source.String(),
+	))
+	if err != nil {
+		return domain.ETAPrediction{}, false, fmt.Errorf("find current eta: %w", err)
+	}
+	return eta, found, nil
+}
 
+// ListCurrent 用一条语句读出（租户+包裹+里程碑）下各来源线的当前版：两路并存时来自同一份快照。
+func (repository *ETAs) ListCurrent(
+	ctx context.Context,
+	tenant domain.TenantID,
+	parcel domain.TrackedParcelReference,
+	milestone domain.MilestoneReference,
+) ([]domain.ETAPrediction, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list current etas: %w", err)
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT `+etaColumns+`
+		   FROM visibility_exception.eta_prediction_current AS c
+		   JOIN visibility_exception.eta_prediction_version AS v
+		     ON v.tenant_id = c.tenant_id
+		    AND v.parcel_ref = c.parcel_ref
+		    AND v.milestone_ref = c.milestone_ref
+		    AND v.source = c.source
+		    AND v.version_id = c.version_id
+		  WHERE c.tenant_id = $1 AND c.parcel_ref = $2 AND c.milestone_ref = $3
+		  ORDER BY c.source`,
+		tenant.String(), parcel.String(), milestone.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list current etas: %w", err)
+	}
+	defer rows.Close()
+
+	var currents []domain.ETAPrediction
+	for rows.Next() {
+		eta, _, err := scanETA(parcel, milestone, rows)
+		if err != nil {
+			return nil, fmt.Errorf("list current etas: %w", err)
+		}
+		currents = append(currents, eta)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list current etas: %w", err)
+	}
+	return currents, nil
+}
+
+// LockCurrent 对（租户+包裹+里程碑+来源）这条线持事务级咨询锁到环境事务结束，再读回当前版。写者据此
+// 决定重放、刷新还是首版：同一条线上并发的写者在锁上排队，输家醒来读到赢家已提交的当前版。锁与读分两条
+// 语句——读已提交下后一条语句取新快照，才看得见赢家刚提交的版本。首版之前线上没有标记行可锁，所以锁的是线的
+// 键而不是某一行。锁随事务释放，走 RequireExecutor：没有环境事务时锁在取锁那条语句结束就放掉，静默放过
+// 比报错更糟。锁键各维以 chr(31) 分隔后取 hashtext，口径同 TF 的 BookingAnswers.FindAnswersForUpdate，
+// 哈希撞上只多等一会儿，不错判。
+func (repository *ETAs) LockCurrent(
+	ctx context.Context,
+	tenant domain.TenantID,
+	parcel domain.TrackedParcelReference,
+	milestone domain.MilestoneReference,
+	source domain.ETASourceKind,
+) (domain.ETAPrediction, bool, error) {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return domain.ETAPrediction{}, false, fmt.Errorf("lock current eta: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext('visibility_exception.eta_prediction.line'),
+		                              hashtext($1 || chr(31) || $2 || chr(31) || $3 || chr(31) || $4))`,
+		tenant.String(), parcel.String(), milestone.String(), source.String(),
+	); err != nil {
+		return domain.ETAPrediction{}, false, fmt.Errorf("lock current eta: 取预测线锁：%w", err)
+	}
+	eta, found, err := scanETA(parcel, milestone, executor.QueryRow(ctx,
+		`SELECT `+etaColumns+`
+		   FROM visibility_exception.eta_prediction_current AS c
+		   JOIN visibility_exception.eta_prediction_version AS v
+		     ON v.tenant_id = c.tenant_id
+		    AND v.parcel_ref = c.parcel_ref
+		    AND v.milestone_ref = c.milestone_ref
+		    AND v.source = c.source
+		    AND v.version_id = c.version_id
+		  WHERE c.tenant_id = $1 AND c.parcel_ref = $2 AND c.milestone_ref = $3 AND c.source = $4`,
+		tenant.String(), parcel.String(), milestone.String(), source.String(),
+	))
+	if err != nil {
+		return domain.ETAPrediction{}, false, fmt.Errorf("lock current eta: %w", err)
+	}
+	return eta, found, nil
+}
+
+// FindVersion 按版本读回该预测线名下留存的任一版，当前版或已被接替的皆可。否定结果只回 false，不区分
+// 「不存在」「属于另一条线」与「属于另一个租户」（ADR-0029）。
+func (repository *ETAs) FindVersion(
+	ctx context.Context,
+	tenant domain.TenantID,
+	parcel domain.TrackedParcelReference,
+	milestone domain.MilestoneReference,
+	source domain.ETASourceKind,
+	version domain.ETAVersionID,
+) (domain.ETAPrediction, bool, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return domain.ETAPrediction{}, false, fmt.Errorf("find eta by version: %w", err)
+	}
+	eta, found, err := scanETA(parcel, milestone, querier.QueryRow(ctx,
+		`SELECT `+etaColumns+`
+		   FROM visibility_exception.eta_prediction_version AS v
+		  WHERE v.tenant_id = $1 AND v.parcel_ref = $2 AND v.milestone_ref = $3
+		    AND v.source = $4 AND v.version_id = $5`,
+		tenant.String(), parcel.String(), milestone.String(), source.String(), version.String(),
+	))
+	if err != nil {
+		return domain.ETAPrediction{}, false, fmt.Errorf("find eta by version: %w", err)
+	}
+	return eta, found, nil
+}
+
+func scanETA(
+	parcel domain.TrackedParcelReference,
+	milestone domain.MilestoneReference,
+	row etaRowScanner,
+) (domain.ETAPrediction, bool, error) {
 	var (
 		versionID, source, inputs, model, confidence string
 		rangeFrom, rangeTo, predictedAt              time.Time
 		priorVersion                                 *string
 	)
-	err = querier.QueryRow(ctx,
-		`SELECT version_id, source, inputs_ref, model_ref, range_from, range_to,
-		        confidence_ref, predicted_at, prior_version
-		   FROM visibility_exception.eta_prediction
-		  WHERE tenant_id = $1 AND parcel_ref = $2 AND milestone_ref = $3`,
-		tenant.String(), parcel.String(), milestone.String(),
-	).Scan(&versionID, &source, &inputs, &model, &rangeFrom, &rangeTo,
+	err := row.Scan(&versionID, &source, &inputs, &model, &rangeFrom, &rangeTo,
 		&confidence, &predictedAt, &priorVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.ETAPrediction{}, false, nil
 	}
 	if err != nil {
-		return domain.ETAPrediction{}, false, fmt.Errorf("find current eta: %w", err)
+		return domain.ETAPrediction{}, false, err
 	}
 
 	spec := domain.ETAPredictionSpec{
@@ -94,7 +234,11 @@ func (repository *ETAs) FindCurrent(
 	return eta, true, nil
 }
 
-// Save 落当前预测版本。同（租户+包裹+里程碑）整行更新——刷新不是第二行。
+// Save 追加预测版本并移当前标记：首版只在线上无当前标记时立标记（ON CONFLICT DO NOTHING），刷新只在标记恰指
+// 新版本所指前版时移标记（UPDATE ... WHERE version_id = prior 的乐观条件）。零行命中都是
+// ports.ErrETACurrentChanged；已写下的版本行随同一事务回滚，不留一版从未成为当前的预测。
+//
+// 走 RequireExecutor：预测版本与同一步交出的 Outbox 意图必须同生共死。
 func (repository *ETAs) Save(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -106,41 +250,67 @@ func (repository *ETAs) Save(
 	}
 
 	rangeFrom, rangeTo := eta.Range()
-	var prior *string
-	if version, present := eta.PriorVersion(); present {
-		prior = stringPointer(version.String())
+	prior, refreshing := eta.PriorVersion()
+	var priorColumn *string
+	if refreshing {
+		priorColumn = stringPointer(prior.String())
 	}
 
-	_, err = executor.Exec(ctx,
-		`INSERT INTO visibility_exception.eta_prediction
-			(tenant_id, parcel_ref, milestone_ref, version_id, source, inputs_ref,
+	if _, err := executor.Exec(ctx,
+		`INSERT INTO visibility_exception.eta_prediction_version
+			(tenant_id, parcel_ref, milestone_ref, source, version_id, inputs_ref,
 			 model_ref, range_from, range_to, confidence_ref, predicted_at, prior_version)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-		 ON CONFLICT (tenant_id, parcel_ref, milestone_ref) DO UPDATE SET
-			version_id = EXCLUDED.version_id,
-			source = EXCLUDED.source,
-			inputs_ref = EXCLUDED.inputs_ref,
-			model_ref = EXCLUDED.model_ref,
-			range_from = EXCLUDED.range_from,
-			range_to = EXCLUDED.range_to,
-			confidence_ref = EXCLUDED.confidence_ref,
-			predicted_at = EXCLUDED.predicted_at,
-			prior_version = EXCLUDED.prior_version`,
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
 		tenant.String(),
 		eta.Parcel().String(),
 		eta.Milestone().String(),
-		eta.Version().String(),
 		eta.Source().String(),
+		eta.Version().String(),
 		eta.Inputs().String(),
 		eta.Model().String(),
 		rangeFrom,
 		rangeTo,
 		eta.Confidence().String(),
 		eta.PredictedAt(),
-		prior,
+		priorColumn,
+	); err != nil {
+		return fmt.Errorf("save eta version: %w", err)
+	}
+
+	if !refreshing {
+		tag, err := executor.Exec(ctx,
+			`INSERT INTO visibility_exception.eta_prediction_current
+				(tenant_id, parcel_ref, milestone_ref, source, version_id)
+			 VALUES ($1, $2, $3, $4, $5)
+			 ON CONFLICT DO NOTHING`,
+			tenant.String(), eta.Parcel().String(), eta.Milestone().String(),
+			eta.Source().String(), eta.Version().String(),
+		)
+		if err != nil {
+			return fmt.Errorf("save eta current marker: %w", err)
+		}
+		if tag.RowsAffected() == 0 {
+			return fmt.Errorf("save eta: %w", ports.ErrETACurrentChanged)
+		}
+		return nil
+	}
+
+	tag, err := executor.Exec(ctx,
+		`UPDATE visibility_exception.eta_prediction_current
+		    SET version_id = $5
+		  WHERE tenant_id = $1
+		    AND parcel_ref = $2
+		    AND milestone_ref = $3
+		    AND source = $4
+		    AND version_id = $6`,
+		tenant.String(), eta.Parcel().String(), eta.Milestone().String(),
+		eta.Source().String(), eta.Version().String(), prior.String(),
 	)
 	if err != nil {
-		return fmt.Errorf("save eta: %w", err)
+		return fmt.Errorf("save eta current marker: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("save eta: %w", ports.ErrETACurrentChanged)
 	}
 	return nil
 }

@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -17,17 +18,33 @@ type etaKey struct {
 	tenant    domain.TenantID
 	parcel    domain.TrackedParcelReference
 	milestone domain.MilestoneReference
+	source    domain.ETASourceKind
 }
 
+type etaVersionKey struct {
+	line    etaKey
+	version domain.ETAVersionID
+}
+
+// etaStoreDouble 按预测线（租户+包裹+里程碑+来源）存当前版，并像真库那样把每个版本都留着：Save 只增版本、
+// 移当前标记，不改写旧版。
 type etaStoreDouble struct {
-	current map[etaKey]domain.ETAPrediction
-	findErr error
-	saveErr error
-	saves   int
+	current  map[etaKey]domain.ETAPrediction
+	versions map[etaVersionKey]domain.ETAPrediction
+	findErr  error
+	listErr  error
+	lockErr  error
+	saveErr  error
+	saves    int
+	locks    int
+	finds    int
 }
 
 func newETAStore() *etaStoreDouble {
-	return &etaStoreDouble{current: map[etaKey]domain.ETAPrediction{}}
+	return &etaStoreDouble{
+		current:  map[etaKey]domain.ETAPrediction{},
+		versions: map[etaVersionKey]domain.ETAPrediction{},
+	}
 }
 
 func (double *etaStoreDouble) FindCurrent(
@@ -35,11 +52,61 @@ func (double *etaStoreDouble) FindCurrent(
 	tenant domain.TenantID,
 	parcel domain.TrackedParcelReference,
 	milestone domain.MilestoneReference,
+	source domain.ETASourceKind,
 ) (domain.ETAPrediction, bool, error) {
+	double.finds++
 	if double.findErr != nil {
 		return domain.ETAPrediction{}, false, double.findErr
 	}
-	eta, found := double.current[etaKey{tenant: tenant, parcel: parcel, milestone: milestone}]
+	eta, found := double.current[etaKey{tenant: tenant, parcel: parcel, milestone: milestone, source: source}]
+	return eta, found, nil
+}
+
+func (double *etaStoreDouble) ListCurrent(
+	_ context.Context,
+	tenant domain.TenantID,
+	parcel domain.TrackedParcelReference,
+	milestone domain.MilestoneReference,
+) ([]domain.ETAPrediction, error) {
+	if double.listErr != nil {
+		return nil, double.listErr
+	}
+	var currents []domain.ETAPrediction
+	for _, source := range []domain.ETASourceKind{domain.CarrierProvidedETA, domain.OperatorDerivedETA} {
+		if eta, found := double.current[etaKey{tenant: tenant, parcel: parcel, milestone: milestone, source: source}]; found {
+			currents = append(currents, eta)
+		}
+	}
+	return currents, nil
+}
+
+func (double *etaStoreDouble) LockCurrent(
+	_ context.Context,
+	tenant domain.TenantID,
+	parcel domain.TrackedParcelReference,
+	milestone domain.MilestoneReference,
+	source domain.ETASourceKind,
+) (domain.ETAPrediction, bool, error) {
+	double.locks++
+	if double.lockErr != nil {
+		return domain.ETAPrediction{}, false, double.lockErr
+	}
+	eta, found := double.current[etaKey{tenant: tenant, parcel: parcel, milestone: milestone, source: source}]
+	return eta, found, nil
+}
+
+func (double *etaStoreDouble) FindVersion(
+	_ context.Context,
+	tenant domain.TenantID,
+	parcel domain.TrackedParcelReference,
+	milestone domain.MilestoneReference,
+	source domain.ETASourceKind,
+	version domain.ETAVersionID,
+) (domain.ETAPrediction, bool, error) {
+	eta, found := double.versions[etaVersionKey{
+		line:    etaKey{tenant: tenant, parcel: parcel, milestone: milestone, source: source},
+		version: version,
+	}]
 	return eta, found, nil
 }
 
@@ -47,7 +114,9 @@ func (double *etaStoreDouble) Save(_ context.Context, tenant domain.TenantID, et
 	if double.saveErr != nil {
 		return double.saveErr
 	}
-	double.current[etaKey{tenant: tenant, parcel: eta.Parcel(), milestone: eta.Milestone()}] = eta
+	line := etaKey{tenant: tenant, parcel: eta.Parcel(), milestone: eta.Milestone(), source: eta.Source()}
+	double.current[line] = eta
+	double.versions[etaVersionKey{line: line, version: eta.Version()}] = eta
 	double.saves++
 	return nil
 }
@@ -166,11 +235,16 @@ func newETAFixture(t *testing.T) *etaFixture {
 
 func etaCommand(t *testing.T, inputs string) application.FormETACommand {
 	t.Helper()
+	return etaCommandFrom(t, domain.OperatorDerivedETA, inputs)
+}
+
+func etaCommandFrom(t *testing.T, source domain.ETASourceKind, inputs string) application.FormETACommand {
+	t.Helper()
 	return application.FormETACommand{
 		TenantID:   mustValue(t, domain.NewTenantID, "tenant-1"),
 		Parcel:     mustValue(t, domain.NewTrackedParcelReference, "parcel-1"),
 		Milestone:  mustValue(t, domain.NewMilestoneReference, "DELIVERED"),
-		Source:     domain.OperatorDerivedETA,
+		Source:     source,
 		Inputs:     mustValue(t, domain.NewPredictionInputsReference, inputs),
 		Model:      mustValue(t, domain.NewPredictionModelReference, "eta-model/v1"),
 		RangeFrom:  etaClockAt.Add(24 * time.Hour),
@@ -286,6 +360,140 @@ func TestTheSameInputsVersionDoesNotReformButResendsTheSameIntent(t *testing.T) 
 	if len(fixture.viewChain.intents) != 2 ||
 		fixture.viewChain.intents[1].Prediction.Version() != firstETA.Version() {
 		t.Fatal("the replay must resend the same intent claimed by the existing prediction")
+	}
+}
+
+// Covers: AT-VE-051 与 CONTEXT「承运商提供的预测与运营企业派生的预测分别保留来源和口径。新的 ETA 形成新版本，不覆盖历史预测」
+// ——两路来源各是一条预测线：另一路来源带着同名输入版本来也是它自己线上的首版（不是重放），运营企业一路刷新不触碰承运商那一路，
+// 承运商那一路重放只认它自己线上的输入版本。
+func TestTheTwoSourcesKeepSeparateLinesAndNeverOverwriteEachOther(t *testing.T) {
+	fixture := newETAFixture(t)
+	ctx := context.Background()
+
+	operatorFirst, err := fixture.handler.FormETA(ctx, etaCommandFrom(t, domain.OperatorDerivedETA, "inputs/shared"))
+	if err != nil {
+		t.Fatalf("operator first: %v", err)
+	}
+	operatorV1, _ := operatorFirst.ETA()
+
+	carrierFirst, err := fixture.handler.FormETA(ctx, etaCommandFrom(t, domain.CarrierProvidedETA, "inputs/shared"))
+	if err != nil {
+		t.Fatalf("carrier first: %v", err)
+	}
+	if carrierFirst.Outcome() != application.ETAFormed {
+		t.Fatalf("另一路来源的首份 outcome = %q, want ETA_FORMED：同名输入版本在另一条线上不是重放", carrierFirst.Outcome())
+	}
+	carrierV1, _ := carrierFirst.ETA()
+	if _, linked := carrierV1.PriorVersion(); linked || carrierV1.Source() != domain.CarrierProvidedETA {
+		t.Fatalf("承运商首份 = %#v，不该指回运营企业那一路", carrierV1)
+	}
+
+	operatorRefresh, err := fixture.handler.FormETA(ctx, etaCommandFrom(t, domain.OperatorDerivedETA, "inputs/v2"))
+	if err != nil {
+		t.Fatalf("operator refresh: %v", err)
+	}
+	operatorV2, _ := operatorRefresh.ETA()
+	if prior, linked := operatorV2.PriorVersion(); operatorRefresh.Outcome() != application.ETARefreshed || !linked || prior != operatorV1.Version() {
+		t.Fatalf("运营企业刷新 = %q 指回 %q, want REFRESHED 且指回 %q", operatorRefresh.Outcome(), prior, operatorV1.Version())
+	}
+
+	command := etaCommandFrom(t, domain.CarrierProvidedETA, "inputs/shared")
+	tenant, parcel, milestone := command.TenantID, command.Parcel, command.Milestone
+	if current, _, _ := fixture.predictions.LockCurrent(ctx, tenant, parcel, milestone, domain.CarrierProvidedETA); current.Version() != carrierV1.Version() {
+		t.Fatalf("承运商线的当前版 = %q，被运营企业那一路的刷新动了；want %q", current.Version(), carrierV1.Version())
+	}
+	replay, err := fixture.handler.FormETA(ctx, command)
+	if err != nil {
+		t.Fatalf("carrier replay: %v", err)
+	}
+	if again, _ := replay.ETA(); replay.Outcome() != application.ETAExistingResult || again.Version() != carrierV1.Version() {
+		t.Fatalf("承运商重放 = %q 版本 %q, want EXISTING_RESULT 且仍是 %q", replay.Outcome(), again.Version(), carrierV1.Version())
+	}
+	if fixture.predictions.saves != 3 {
+		t.Fatalf("saves = %d, want 3（两路首份 + 运营企业一次刷新），重放不写", fixture.predictions.saves)
+	}
+}
+
+// Covers: CONTEXT「新的 ETA 形成新版本，不覆盖历史预测」与 GLOSSARY「新的 ETA 不覆盖历史」——同一条线上连续三版：
+// 每个被接替的版本都还在库里、按版本读得回，输入与区间原样；指回环环相扣；别的来源线名下查不到它们。
+func TestEveryRefreshedVersionStaysReadableByVersion(t *testing.T) {
+	fixture := newETAFixture(t)
+	ctx := context.Background()
+
+	var versions []domain.ETAPrediction
+	for _, inputs := range []string{"inputs/v1", "inputs/v2", "inputs/v3"} {
+		result, err := fixture.handler.FormETA(ctx, etaCommand(t, inputs))
+		if err != nil {
+			t.Fatalf("form %s: %v", inputs, err)
+		}
+		eta, _ := result.ETA()
+		versions = append(versions, eta)
+	}
+
+	command := etaCommand(t, "inputs/v1")
+	for index, formed := range versions {
+		kept, found, err := fixture.predictions.FindVersion(ctx, command.TenantID, command.Parcel, command.Milestone,
+			domain.OperatorDerivedETA, formed.Version())
+		if err != nil || !found {
+			t.Fatalf("第 %d 版读不回：found=%v err=%v", index+1, found, err)
+		}
+		if kept.Inputs() != formed.Inputs() {
+			t.Fatalf("第 %d 版的输入被改写：%q vs %q", index+1, kept.Inputs(), formed.Inputs())
+		}
+		prior, linked := kept.PriorVersion()
+		if index == 0 && linked {
+			t.Fatal("首版带了指回")
+		}
+		if index > 0 && (!linked || prior != versions[index-1].Version()) {
+			t.Fatalf("第 %d 版指回 %q, want %q", index+1, prior, versions[index-1].Version())
+		}
+		if _, found, _ := fixture.predictions.FindVersion(ctx, command.TenantID, command.Parcel, command.Milestone,
+			domain.CarrierProvidedETA, formed.Version()); found {
+			t.Fatalf("第 %d 版在承运商线名下也读得到：版本不属于别的来源线", index+1)
+		}
+	}
+}
+
+// Covers: 同一预测线的写者串行（ADR-0065 追加版本之上的并发纪律）——写者先 LockCurrent 取线锁再决定，不走不带锁的读：
+// 不带锁的读之后并发的两个首版会双双看到「没有当前版」。
+func TestTheWriterTakesTheLineLockBeforeDecidingAndNeverReadsTheCurrentUnlocked(t *testing.T) {
+	fixture := newETAFixture(t)
+	ctx := context.Background()
+
+	for _, inputs := range []string{"inputs/v1", "inputs/v1", "inputs/v2"} {
+		if _, err := fixture.handler.FormETA(ctx, etaCommand(t, inputs)); err != nil {
+			t.Fatalf("form %s: %v", inputs, err)
+		}
+	}
+	if fixture.predictions.locks != 3 || fixture.predictions.finds != 0 {
+		t.Fatalf("locks = %d finds = %d, want 3 与 0：写路径只经线锁读当前版", fixture.predictions.locks, fixture.predictions.finds)
+	}
+}
+
+// Covers: ADR-0029 按恢复动作分格——线上并发输家（首版被占、前版已变）与预测库读不动是两种恢复：前者重读再走，不是等库；
+// 输家不留意图，也不当成已形成。
+func TestALostRaceOnTheLineIsUndecidedUnderItsOwnReason(t *testing.T) {
+	fixture := newETAFixture(t)
+	fixture.predictions.saveErr = fmt.Errorf("save eta: %w", ports.ErrETACurrentChanged)
+
+	result, err := fixture.handler.FormETA(context.Background(), etaCommand(t, "inputs/v1"))
+	if err != nil {
+		t.Fatalf("form eta: %v", err)
+	}
+	if result.Outcome() != application.FormETAUndecided || result.UndecidedReason() != application.ETACurrentChanged {
+		t.Fatalf("result = %q/%q, want UNDECIDED/ETA_CURRENT_CHANGED", result.Outcome(), result.UndecidedReason())
+	}
+	if _, present := result.ETA(); present || len(fixture.viewChain.intents) != 0 {
+		t.Fatal("并发输家不该带着预测或交出意图")
+	}
+
+	fixture.predictions.saveErr = errors.New("eta store unavailable")
+	unavailable, err := fixture.handler.FormETA(context.Background(), etaCommand(t, "inputs/v1"))
+	if err != nil {
+		t.Fatalf("form eta: %v", err)
+	}
+	if unavailable.UndecidedReason() != application.ETAStoreUnavailable {
+		t.Fatalf("reason = %q, want ETA_STORE_UNAVAILABLE：库写不动与输了并发不是一格", unavailable.UndecidedReason())
 	}
 }
 
@@ -410,7 +618,7 @@ func TestAGapIsIdempotentPerWindowRuleVersion(t *testing.T) {
 // Covers: 未决语义——预测库与缺口库调不通分别停在各自原因，不虚构幂等或未成。
 func TestUnavailableETAStoresAreUndecidedUnderTheirOwnReasons(t *testing.T) {
 	predictions := newETAFixture(t)
-	predictions.predictions.findErr = errors.New("eta store unavailable")
+	predictions.predictions.lockErr = errors.New("eta store unavailable")
 	result, err := predictions.handler.FormETA(context.Background(), etaCommand(t, "inputs/v1"))
 	if err != nil {
 		t.Fatalf("form eta: %v", err)

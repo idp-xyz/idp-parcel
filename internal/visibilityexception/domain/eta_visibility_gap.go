@@ -162,8 +162,8 @@ func (eta ETAPrediction) PriorVersion() (ETAVersionID, bool) {
 	return eta.priorVersion, eta.priorVersion.valid()
 }
 
-// RehydrateETAPrediction 从持久化列重建预测。首版走 FormETAPrediction；带指回的
-// 当前版把 prior 填回——库只管当前行，历史版本由指回关系承担，不是第二行。
+// RehydrateETAPrediction 从持久化列重建预测。首版走 FormETAPrediction；刷新出的版本把 prior 填回，
+// 指向同一条预测线上被它接替的那一版，那一版仍存在库里、读得回。
 func RehydrateETAPrediction(spec ETAPredictionSpec, prior ETAVersionID) (ETAPrediction, error) {
 	eta, err := FormETAPrediction(spec)
 	if err != nil {
@@ -179,9 +179,13 @@ func RehydrateETAPrediction(spec ETAPredictionSpec, prior ETAVersionID) (ETAPred
 }
 
 // Refresh 形成新的预测版本：换版本、换输入与区间、指回原版；CONTEXT「新的 ETA 形成新版本，不覆盖历史预测」，
-// 也不修改客户承诺、路由计划或实际事实——这里根本没有它们。
+// 也不修改客户承诺、路由计划或实际事实——这里根本没有它们。预测线的键是（包裹，里程碑，来源）：承运商提供的
+// 与运营企业派生的预测各是一条线，换来源的不是这条线的下一版，而是另一条线的预测。
 func (eta ETAPrediction) Refresh(spec ETAPredictionSpec) (ETAPrediction, error) {
-	if spec.Version == eta.version || spec.Parcel != eta.parcel || spec.Milestone != eta.milestone {
+	if spec.Version == eta.version ||
+		spec.Parcel != eta.parcel ||
+		spec.Milestone != eta.milestone ||
+		spec.Source != eta.source {
 		return ETAPrediction{}, ErrInvalidETA
 	}
 	refreshed, err := FormETAPrediction(spec)

@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -54,6 +55,9 @@ type FormETAUndecidedReason uint8
 const (
 	FormETAUndecidedReasonNone FormETAUndecidedReason = iota
 	ETAStoreUnavailable
+	// ETACurrentChanged 是预测线上的并发输家：写入口看到这条线的当前版已不是本轮读到的那一版。恢复动作是
+	// 重读再走（同输入则落重放、不同输入则接在赢家后面），与预测库读不动的等库不是一回事。
+	ETACurrentChanged
 	ETAIdentityUnavailable
 	VisibilityGapStoreUnavailable
 )
@@ -62,6 +66,8 @@ func (reason FormETAUndecidedReason) String() string {
 	switch reason {
 	case ETAStoreUnavailable:
 		return "ETA_STORE_UNAVAILABLE"
+	case ETACurrentChanged:
+		return "ETA_CURRENT_CHANGED"
 	case ETAIdentityUnavailable:
 		return "ETA_IDENTITY_UNAVAILABLE"
 	case VisibilityGapStoreUnavailable:
@@ -148,10 +154,13 @@ func NewFormETAHandler(deps FormETADeps) *FormETAHandler {
 	return &FormETAHandler{deps: deps}
 }
 
-// FormETA 把一组预测事实推进到版本化 ETA：受理（各件缺一即未受理）→ 幂等按（包裹+
-// 里程碑+输入版本），同输入不重形成只重发同一份意图 → 输入变化经 Refresh 换版指回
-// 前版，历史预测不覆盖 → 意图交客户视图链（ETA 新版本是视图重派生的触发之一）。
-// 预测不是承诺——领域类型上没有承诺、路由计划或实际时间的字段，这里也不碰它们。
+// FormETA 把一组预测事实推进到版本化 ETA：受理（各件缺一即未受理）→ 取这条预测线（包裹+里程碑+来源）
+// 的线锁并读当前版 → 幂等按（线+输入版本），同输入不重形成只重发同一份意图 → 输入变化经 Refresh 换版指回
+// 前版，被接替的版本留在库里、历史预测不覆盖 → 意图交客户视图链（ETA 新版本是视图重派生的触发之一）。
+// 承运商提供的与运营企业派生的预测各是一条线：一路的形成、刷新与重放不看另一路，两路并存时对客判断取哪一版
+// 由判断编排按候选规则选（domain.CandidateETAFrom），不在这里。
+// 预测不是承诺——领域类型上没有承诺、路由计划或实际时间的字段，这里也不碰它们。必须在环境事务里运行：
+// 线锁与版本写同一事务。
 func (handler *FormETAHandler) FormETA(
 	ctx context.Context,
 	command FormETACommand,
@@ -168,12 +177,13 @@ func (handler *FormETAHandler) FormETA(
 		return FormETAResult{outcome: FormETANotAccepted}, nil
 	}
 
-	current, found, err := handler.deps.Predictions.FindCurrent(ctx, command.TenantID, command.Parcel, command.Milestone)
+	current, found, err := handler.deps.Predictions.LockCurrent(
+		ctx, command.TenantID, command.Parcel, command.Milestone, command.Source)
 	if err != nil {
 		return FormETAResult{outcome: FormETAUndecided, reason: ETAStoreUnavailable}, nil
 	}
 	if found && current.Inputs() == command.Inputs {
-		// 同（包裹+里程碑+输入版本）重放：不重形成，把同一份意图再交一次（ADR-0043）。
+		// 同（包裹+里程碑+来源+输入版本）重放：不重形成，把同一份意图再交一次（ADR-0043）。
 		return FormETAResult{
 			outcome:    ETAExistingResult,
 			eta:        current,
@@ -202,7 +212,7 @@ func (handler *FormETAHandler) FormETA(
 	var prediction domain.ETAPrediction
 	outcome := ETAFormed
 	if found {
-		// 输入版本变了：新预测换版本指回前版，历史预测不覆盖。
+		// 输入版本变了：新预测换版本指回这条线上的前版，历史预测不覆盖。
 		prediction, err = current.Refresh(spec)
 		outcome = ETARefreshed
 	} else {
@@ -212,6 +222,9 @@ func (handler *FormETAHandler) FormETA(
 		return FormETAResult{}, fmt.Errorf("form eta prediction: %w", err)
 	}
 	if err := handler.deps.Predictions.Save(ctx, command.TenantID, prediction); err != nil {
+		if errors.Is(err, ports.ErrETACurrentChanged) {
+			return FormETAResult{outcome: FormETAUndecided, reason: ETACurrentChanged}, nil
+		}
 		return FormETAResult{outcome: FormETAUndecided, reason: ETAStoreUnavailable}, nil
 	}
 	return FormETAResult{

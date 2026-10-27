@@ -43,8 +43,8 @@ func NewOutboxETAHandoff(
 
 var _ ports.ETAHandoff = (*OutboxETAHandoff)(nil)
 
-// etaPayload 是意图载荷的传输形状：只有下游 FindCurrent 所需的租户/包裹/里程碑，
-// 外加版本标识认领，不带区间或模型明细。
+// etaPayload 是意图载荷的传输形状：只有下游读各来源线当前版所需的租户/包裹/里程碑，
+// 外加版本标识认领，不带区间、模型或来源明细；候选取哪一路由下游读库后按候选规则选。
 type etaPayload struct {
 	TenantID  string `json:"tenantId"`
 	Parcel    string `json:"parcel"`

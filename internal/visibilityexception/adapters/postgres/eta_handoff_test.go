@@ -84,7 +84,7 @@ func TestETAIntentCommitsAtomicallyWithThePrediction(t *testing.T) {
 		return fixture.handoff.HandOffETA(txCtx, intent)
 	})
 
-	if _, exists, err := fixture.etas.FindCurrent(ctx, tenant, intent.Prediction.Parcel(), intent.Prediction.Milestone()); err != nil || !exists {
+	if _, exists, err := fixture.etas.FindCurrent(ctx, tenant, intent.Prediction.Parcel(), intent.Prediction.Milestone(), intent.Prediction.Source()); err != nil || !exists {
 		t.Fatalf("业务行不在：err=%v exists=%v", err, exists)
 	}
 	if count := countETAIntents(t, fixture.pool, "eta-1"); count != 1 {
@@ -114,7 +114,7 @@ func TestETAIntentRollbackDropsBoth(t *testing.T) {
 		t.Fatalf("事务应以回滚错误结束，实得：%v", err)
 	}
 
-	if _, exists, err := fixture.etas.FindCurrent(ctx, tenant, intent.Prediction.Parcel(), intent.Prediction.Milestone()); err != nil || exists {
+	if _, exists, err := fixture.etas.FindCurrent(ctx, tenant, intent.Prediction.Parcel(), intent.Prediction.Milestone(), intent.Prediction.Source()); err != nil || exists {
 		t.Fatalf("回滚后业务行仍在：err=%v exists=%v", err, exists)
 	}
 	if count := countETAIntents(t, fixture.pool, "eta-1"); count != 0 {

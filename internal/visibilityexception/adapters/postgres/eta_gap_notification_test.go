@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -153,10 +154,16 @@ func (fixture *etaGapNotificationFixture) saveETA(t *testing.T, ctx context.Cont
 
 func (fixture *etaGapNotificationFixture) loadETA(t *testing.T, ctx context.Context, tenant string) (domain.ETAPrediction, bool) {
 	t.Helper()
+	return fixture.loadETAFrom(t, ctx, tenant, domain.OperatorDerivedETA)
+}
+
+func (fixture *etaGapNotificationFixture) loadETAFrom(t *testing.T, ctx context.Context, tenant string, source domain.ETASourceKind) (domain.ETAPrediction, bool) {
+	t.Helper()
 	eta, found, err := fixture.etas.FindCurrent(ctx,
 		etaGapValue(t, domain.NewTenantID, tenant),
 		etaGapValue(t, domain.NewTrackedParcelReference, "parcel-1"),
-		etaGapValue(t, domain.NewMilestoneReference, "DELIVERED"))
+		etaGapValue(t, domain.NewMilestoneReference, "DELIVERED"),
+		source)
 	if err != nil {
 		t.Fatalf("读 ETA：%v", err)
 	}
@@ -202,9 +209,9 @@ func (fixture *etaGapNotificationFixture) loadNotification(t *testing.T, ctx con
 	return notification, found
 }
 
-// TestCurrentETARoundTripsAndRefreshReplacesTheRow 证当前版往返与刷新换版：同一
-// （包裹+里程碑）只留一行，prior_version 指回前版。
-func TestCurrentETARoundTripsAndRefreshReplacesTheRow(t *testing.T) {
+// Covers: CONTEXT「新的 ETA 形成新版本，不覆盖历史预测」与 ADR-0065 的追加版本原则——当前版往返；刷新追加新版本行并把当前标记移过去，
+// 被接替的版本行还在、输入与区间原样、按版本读得回；一条线上始终只有一个当前标记。
+func TestRefreshAppendsAVersionAndKeepsTheSupersededOneReadable(t *testing.T) {
 	fixture := newETAGapNotificationFixture(t)
 	ctx := t.Context()
 
@@ -223,7 +230,7 @@ func TestCurrentETARoundTripsAndRefreshReplacesTheRow(t *testing.T) {
 		Version:     etaGapValue(t, domain.NewETAVersionID, "eta-1/v2"),
 		Parcel:      first.Parcel(),
 		Milestone:   first.Milestone(),
-		Source:      domain.CarrierProvidedETA,
+		Source:      first.Source(),
 		Inputs:      etaGapValue(t, domain.NewPredictionInputsReference, "inputs/v2"),
 		Model:       first.Model(),
 		RangeFrom:   etaGapBaseAt.Add(30 * time.Hour),
@@ -244,18 +251,32 @@ func TestCurrentETARoundTripsAndRefreshReplacesTheRow(t *testing.T) {
 	if !present || prior.String() != "eta-1/v1" {
 		t.Fatalf("指回 = %s present=%v", prior, present)
 	}
-	if current.Source() != domain.CarrierProvidedETA {
-		t.Fatal("来源口径丢了")
+
+	kept, found, err := fixture.etas.FindVersion(ctx,
+		etaGapValue(t, domain.NewTenantID, "tenant-a"), first.Parcel(), first.Milestone(), first.Source(), first.Version())
+	if err != nil || !found {
+		t.Fatalf("被接替的版本读不回：found=%v err=%v", found, err)
+	}
+	keptFrom, keptTo := kept.Range()
+	firstFrom, firstTo := first.Range()
+	if kept.Inputs() != first.Inputs() || !keptFrom.Equal(firstFrom) || !keptTo.Equal(firstTo) ||
+		!kept.PredictedAt().Equal(first.PredictedAt()) {
+		t.Fatalf("被接替的版本被改写：%+v", kept)
+	}
+	if _, linked := kept.PriorVersion(); linked {
+		t.Fatal("首版读回来带了指回")
 	}
 
-	var rows int
+	var versions, markers int
 	if err := fixture.pool.QueryRow(ctx,
-		`SELECT count(*) FROM visibility_exception.eta_prediction
-		  WHERE tenant_id = 'tenant-a' AND parcel_ref = 'parcel-1'`).Scan(&rows); err != nil {
+		`SELECT (SELECT count(*) FROM visibility_exception.eta_prediction_version
+		          WHERE tenant_id = 'tenant-a' AND parcel_ref = 'parcel-1'),
+		        (SELECT count(*) FROM visibility_exception.eta_prediction_current
+		          WHERE tenant_id = 'tenant-a' AND parcel_ref = 'parcel-1')`).Scan(&versions, &markers); err != nil {
 		t.Fatalf("数行：%v", err)
 	}
-	if rows != 1 {
-		t.Fatalf("刷新后行数 = %d，库应只管当前版", rows)
+	if versions != 2 || markers != 1 {
+		t.Fatalf("版本行 = %d 当前标记 = %d，want 2 与 1：版本只增不改写，一条线一个当前标记", versions, markers)
 	}
 }
 
@@ -379,13 +400,15 @@ func TestETAGapNotificationChecksRejectBadShapes(t *testing.T) {
 	fixture := newETAGapNotificationFixture(t)
 	ctx := t.Context()
 
-	if _, err := fixture.pool.Exec(ctx,
-		`INSERT INTO visibility_exception.eta_prediction
+	_, invertedRange := fixture.pool.Exec(ctx,
+		`INSERT INTO visibility_exception.eta_prediction_version
 			(tenant_id, parcel_ref, milestone_ref, version_id, source, inputs_ref,
 			 model_ref, range_from, range_to, confidence_ref, predicted_at)
 		 VALUES ('tenant-a', 'p', 'm', 'v', 'OPERATOR_DERIVED', 'i', 'm',
-		         now(), now() - interval '1 hour', 'c', now())`); err == nil {
-		t.Fatal("倒置区间的预测被库接受了")
+		         now(), now() - interval '1 hour', 'c', now())`)
+	var pgErr *pgconn.PgError
+	if !errors.As(invertedRange, &pgErr) || pgErr.ConstraintName != "eta_prediction_version_range_order" {
+		t.Fatalf("倒置区间的预测应被区间 CHECK 拒绝，实得：%v", invertedRange)
 	}
 
 	if _, err := fixture.pool.Exec(ctx,

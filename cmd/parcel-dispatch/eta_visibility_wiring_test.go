@@ -55,6 +55,12 @@ func registerETAShownPolicy(t *testing.T, fixture *synVerticalFixture) {
 // registerETARule 给 SYN-CUSTOMER-01 登一条 ETA 对客规则：DELIVERED 的 ETA 是客户要的那一个，可信度依据在 qualifying 里即达标。
 func registerETARule(t *testing.T, fixture *synVerticalFixture, qualifying string) {
 	t.Helper()
+	registerETARuleQualifying(t, fixture, qualifying)
+}
+
+// registerETARuleQualifying 同 registerETARule，但把若干可信度依据都登为达标。
+func registerETARuleQualifying(t *testing.T, fixture *synVerticalFixture, qualifying ...string) {
+	t.Helper()
 	tenant := fixture.identity.TenantID().String()
 	mustWithinTX(t, fixture.transactor, t.Context(), func(txCtx context.Context) error {
 		executor, err := fixture.db.RequireExecutor(txCtx)
@@ -66,14 +72,20 @@ func registerETARule(t *testing.T, fixture *synVerticalFixture, qualifying strin
 				(tenant_id, customer_account_ref, service_rule_version, gate_version, target_milestone_ref,
 				 qualifying_confidences, expression, stop_boundary_ref, effective_from, effective_to, approved_by)
 			 VALUES ($1, 'SYN-CUSTOMER-01', 'SYN-COM-07-V1', 'SYN-VIS-03-V1', 'DELIVERED',
-			         ARRAY[$2]::text[], 'TIME_RANGE', 'STOP-AFTER-DELIVERED', $3, NULL, 'SYN-CS-LEAD')`,
+			         $2::text[], 'TIME_RANGE', 'STOP-AFTER-DELIVERED', $3, NULL, 'SYN-CS-LEAD')`,
 			tenant, qualifying, time.Now().UTC().Add(-24*time.Hour))
 		return err
 	})
 }
 
-// formETA 经真实的 FormETAHandler 形成一份内部 ETA：预测落库与预测版本信封同一事务入队。
+// formETA 经真实的 FormETAHandler 形成一份运营企业派生的内部 ETA：预测落库与预测版本信封同一事务入队。
 func formETA(t *testing.T, fixture *synVerticalFixture, inputs, confidence string) vedomain.ETAVersionID {
+	t.Helper()
+	return formETAFrom(t, fixture, vedomain.OperatorDerivedETA, inputs, confidence)
+}
+
+// formETAFrom 同 formETA，来源由调用方给：承运商提供的与运营企业派生的预测各是一条预测线。
+func formETAFrom(t *testing.T, fixture *synVerticalFixture, source vedomain.ETASourceKind, inputs, confidence string) vedomain.ETAVersionID {
 	t.Helper()
 	outboxStore, err := outbox.NewStore(fixture.db)
 	if err != nil {
@@ -114,7 +126,7 @@ func formETA(t *testing.T, fixture *synVerticalFixture, inputs, confidence strin
 			TenantID:   mustVE(t, vedomain.NewTenantID, fixture.identity.TenantID().String()),
 			Parcel:     mustVE(t, vedomain.NewTrackedParcelReference, transportHandoverObject),
 			Milestone:  mustVE(t, vedomain.NewMilestoneReference, "DELIVERED"),
-			Source:     vedomain.OperatorDerivedETA,
+			Source:     source,
 			Inputs:     mustVE(t, vedomain.NewPredictionInputsReference, inputs),
 			Model:      mustVE(t, vedomain.NewPredictionModelReference, "SYN-ETA-MODEL-V1"),
 			RangeFrom:  now.Add(30 * time.Hour),
@@ -216,6 +228,110 @@ func TestAnETAThatMeetsThenMissesTheGateMovesTheCustomerViewThroughShownToWithhe
 	}
 	if n := fixture.countInbox(t, etaVisibilityConsumerName, string(firstETA.String())); n != 1 {
 		t.Fatalf("判断消费账 = %d, want 1", n)
+	}
+}
+
+// Covers: AT-VE-051、AT-VE-213、AT-VE-215 与 CONTEXT「承运商提供的预测与运营企业派生的预测分别保留来源和口径。新的 ETA 形成新版本，
+// 不覆盖历史预测」的生产链——承运商与运营企业两路预测并存：只有承运商一路时它是候选；运营企业一路到了候选换手，判断替代指回、视图
+// 换代；承运商再出新版本（哪怕质量已不达标）候选没变，判断与视图都不长版本；运营企业出新版本才再换代。四个预测版本、三版判断
+// 都留在库里，判断的候选引用（包裹、里程碑、来源、版本）在预测库里按版本读得回，各线当前版是各自最新的一版。
+func TestTwoETASourcesKeepTheirOwnLinesAndTheJudgementFollowsTheOperatorDerivedOne(t *testing.T) {
+	fixture := newAcceptedCustomerViewFixture(t)
+	registerETAShownPolicy(t, fixture)
+	registerETARuleQualifying(t, fixture, "MEDIUM/history-based", "HIGH/carrier-confirmed")
+	deriveViewFromHandover(t, fixture, transportHandoverScope, transportHandoverVersion)
+
+	carrierV1 := formETAFrom(t, fixture, vedomain.CarrierProvidedETA, "SYN-CARRIER-FEED-1", "HIGH/carrier-confirmed")
+	beat(t, fixture, "承运商第一份")
+	first := currentETAJudgement(t, fixture)
+	if first.Conclusion() != vedomain.CustomerVisibleETA || first.CandidateVersion() != carrierV1 ||
+		first.CandidateSource() != vedomain.CarrierProvidedETA {
+		t.Fatalf("判断 = %q 候选 = %q（%v），want 客户可见且候选是承运商 %q", first.Conclusion(), first.CandidateVersion(),
+			first.CandidateSource(), carrierV1)
+	}
+
+	operatorV1 := formETAFrom(t, fixture, vedomain.OperatorDerivedETA, "SYN-ETA-INPUTS-1", "MEDIUM/history-based")
+	beat(t, fixture, "运营企业第一份")
+	second := currentETAJudgement(t, fixture)
+	if second.CandidateVersion() != operatorV1 || second.CandidateSource() != vedomain.OperatorDerivedETA {
+		t.Fatalf("候选 = %q（%v），want 换手到运营企业 %q", second.CandidateVersion(), second.CandidateSource(), operatorV1)
+	}
+	if prior, superseding := second.PriorVersion(); !superseding || prior != first.Version() {
+		t.Fatalf("判断前版 = %q，want 指回 %q", prior, first.Version())
+	}
+	handedOver := currentCustomerView(t, fixture)
+	if content, shown := handedOver.Dimensions().ETA.Content(); !shown || content.String() != second.Version().String() {
+		t.Fatalf("候选换手后视图 ETA 一维 = %v 内容 %q，want 展示且来处为判断 %q",
+			handedOver.Dimensions().ETA.State(), content, second.Version())
+	}
+	viewsAfterHandover := fixture.countSQL(t, `SELECT count(*) FROM visibility_exception.customer_view_version`)
+
+	// 承运商一路再出新版本，且质量已不达标：候选是运营企业那一版，没变，判断与视图都不动。
+	carrierV2 := formETAFrom(t, fixture, vedomain.CarrierProvidedETA, "SYN-CARRIER-FEED-2", "LOW/stale")
+	beat(t, fixture, "承运商第二份")
+	if again := currentETAJudgement(t, fixture); again.Version() != second.Version() {
+		t.Fatalf("非候选来源出新版本换了判断：%q → %q", second.Version(), again.Version())
+	}
+	if n := fixture.countSQL(t, `SELECT count(*) FROM visibility_exception.eta_visibility_judgement_version`); n != 2 {
+		t.Fatalf("判断版本 = %d, want 2", n)
+	}
+	if n := fixture.countSQL(t, `SELECT count(*) FROM visibility_exception.customer_view_version`); n != viewsAfterHandover {
+		t.Fatalf("视图版本 = %d, want 仍为 %d", n, viewsAfterHandover)
+	}
+
+	// 运营企业一路出新版本且质量不达标：候选版本变了，判断换版为 ETA 不可见，视图随之不展示。
+	operatorV2 := formETAFrom(t, fixture, vedomain.OperatorDerivedETA, "SYN-ETA-INPUTS-2", "LOW/sparse")
+	beat(t, fixture, "运营企业第二份")
+	third := currentETAJudgement(t, fixture)
+	if third.Conclusion() != vedomain.ETANotVisible || third.CandidateVersion() != operatorV2 {
+		t.Fatalf("判断 = %q 候选 = %q，want ETA 不可见且引用运营企业 %q", third.Conclusion(), third.CandidateVersion(), operatorV2)
+	}
+	if view := currentCustomerView(t, fixture); view.Dimensions().ETA.State() != vedomain.DimensionNotDisclosed {
+		t.Fatalf("ETA 一维 = %v, want 不展示", view.Dimensions().ETA.State())
+	}
+
+	// 历史不丢：四个预测版本都在、各线当前版是各自最新的一版，判断留下的候选引用按版本读得回。
+	etas, err := vepostgres.NewETAs(fixture.db)
+	if err != nil {
+		t.Fatalf("构造 ETA 库：%v", err)
+	}
+	tenant := mustVE(t, vedomain.NewTenantID, fixture.identity.TenantID().String())
+	parcel := mustVE(t, vedomain.NewTrackedParcelReference, transportHandoverObject)
+	milestone := mustVE(t, vedomain.NewMilestoneReference, "DELIVERED")
+	if n := fixture.countSQL(t, `SELECT count(*) FROM visibility_exception.eta_prediction_version`); n != 4 {
+		t.Fatalf("预测版本行 = %d, want 4：任何一路的刷新都不该覆盖旧版", n)
+	}
+	for _, kept := range []struct {
+		source  vedomain.ETASourceKind
+		version vedomain.ETAVersionID
+		inputs  string
+	}{
+		{vedomain.CarrierProvidedETA, carrierV1, "SYN-CARRIER-FEED-1"},
+		{vedomain.CarrierProvidedETA, carrierV2, "SYN-CARRIER-FEED-2"},
+		{vedomain.OperatorDerivedETA, operatorV1, "SYN-ETA-INPUTS-1"},
+		{vedomain.OperatorDerivedETA, operatorV2, "SYN-ETA-INPUTS-2"},
+	} {
+		eta, found, err := etas.FindVersion(t.Context(), tenant, parcel, milestone, kept.source, kept.version)
+		if err != nil || !found || eta.Inputs().String() != kept.inputs {
+			t.Fatalf("预测版本 %q（%v）读不回或输入被改写：found=%v err=%v", kept.version, kept.source, found, err)
+		}
+	}
+	currents, err := etas.ListCurrent(t.Context(), tenant, parcel, milestone)
+	if err != nil || len(currents) != 2 || currents[0].Version() != carrierV2 || currents[1].Version() != operatorV2 {
+		t.Fatalf("各线当前版 = %v err=%v，want 承运商 %q 与运营企业 %q", currents, err, carrierV2, operatorV2)
+	}
+	judgements, err := vepostgres.NewETAVisibilityJudgements(fixture.db)
+	if err != nil {
+		t.Fatalf("构造判断库：%v", err)
+	}
+	customer := mustVE(t, vedomain.NewCustomerAccountReference, "SYN-CUSTOMER-01")
+	oldest, found, err := judgements.FindVersion(t.Context(), tenant, customer, parcel, first.Version())
+	if err != nil || !found {
+		t.Fatalf("首版判断读不回：found=%v err=%v", found, err)
+	}
+	candidate, found, err := etas.FindVersion(t.Context(), tenant, parcel, oldest.Milestone(), oldest.CandidateSource(), oldest.CandidateVersion())
+	if err != nil || !found || candidate.Inputs().String() != "SYN-CARRIER-FEED-1" {
+		t.Fatalf("首版判断的候选引用在预测库里读不回：found=%v err=%v", found, err)
 	}
 }
 

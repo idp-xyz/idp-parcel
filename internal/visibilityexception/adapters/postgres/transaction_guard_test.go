@@ -60,6 +60,9 @@ func TestFactAndProjectionWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if err := etas.Save(ctx, domain.TenantID{}, domain.ETAPrediction{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务保存 ETA 应返回 ErrTransactionRequired，实得：%v", err)
 	}
+	if _, _, err := etas.LockCurrent(ctx, domain.TenantID{}, domain.TrackedParcelReference{}, domain.MilestoneReference{}, domain.ETASourceKindInvalid); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务取 ETA 预测线锁应返回 ErrTransactionRequired（锁在取锁语句结束就放掉，等于没锁），实得：%v", err)
+	}
 
 	judgements, err := adapter.NewETAVisibilityJudgements(db)
 	if err != nil {

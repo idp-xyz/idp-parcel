@@ -60,9 +60,22 @@ type etaReadDouble struct {
 }
 
 func (double *etaReadDouble) FindCurrent(
-	context.Context, vedomain.TenantID, vedomain.TrackedParcelReference, vedomain.MilestoneReference,
+	_ context.Context, _ vedomain.TenantID, _ vedomain.TrackedParcelReference, _ vedomain.MilestoneReference,
+	source vedomain.ETASourceKind,
 ) (vedomain.ETAPrediction, bool, error) {
-	return double.eta, double.found, double.err
+	if double.err != nil || !double.found || double.eta.Source() != source {
+		return vedomain.ETAPrediction{}, false, double.err
+	}
+	return double.eta, true, nil
+}
+
+func (double *etaReadDouble) ListCurrent(
+	context.Context, vedomain.TenantID, vedomain.TrackedParcelReference, vedomain.MilestoneReference,
+) ([]vedomain.ETAPrediction, error) {
+	if double.err != nil || !double.found {
+		return nil, double.err
+	}
+	return []vedomain.ETAPrediction{double.eta}, nil
 }
 
 type etaRuleDouble struct {

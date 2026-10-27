@@ -604,11 +604,39 @@ type DispositionHandoff interface {
 	HandOffDispositionRequest(ctx context.Context, intent DispositionHandoffIntent) error
 }
 
-// ETAStore 按（租户+包裹+里程碑）保存当前预测版本。历史版本由 Refresh 的指回关系
-// 承担，库只管当前。租户是最高数据隔离边界（ADR-0003）：TrackedParcelReference 只
-// 是字符串引用，缺租户维两个租户的同名包裹就会共用一份预测。
+// ErrETACurrentChanged 表示预测线的当前版在写入口看来已经不是调用方读到的那一版：首版时已有别人占住这条线，
+// 或刷新时当前版已不是新版本所指的前版。并发输家的恢复动作是重读再走，不是覆盖赢家。
+var ErrETACurrentChanged = errors.New("visibility exception: the current ETA of its line changed")
+
+// ETAStore 按（租户+包裹+里程碑+来源）保存预测线。每个版本一行、只增不改写（ADR-0065 的追加版本原则）：
+// 刷新追加新版本并回指同一条线上的前一版，被接替的版本连同输入与区间一并留存、按版本读得回；各条线的
+// 当前版由显式标记指名。承运商提供的与运营企业派生的预测是两条线，一路的刷新不触碰另一路。租户是最高数据
+// 隔离边界（ADR-0003）：TrackedParcelReference 只是字符串引用，缺租户维两个租户的同名包裹就会共用一份预测。
+//
+// 写者先 LockCurrent 再决定、再 Save：LockCurrent 对这条线持事务级锁到环境事务结束并读回当前版，同一条线上
+// 并发的写者在此排队，输家醒来读到赢家已提交的当前版，走重放或刷新，不分叉线。锁与写同一事务，两者都走
+// RequireExecutor，没有环境事务即拒（锁在取锁语句结束就放掉，等于没锁）。Save 另守乐观条件作最后一道：首版只在线上
+// 尚无当前版时成立，刷新只在当前版恰是它所指的前版时成立，零行命中交回 ErrETACurrentChanged，该事务一并回滚，
+// 不留一版从未成为当前的预测。锁序：预测线锁是写路径上的第一把，其后只有预测版本与 Outbox 意图的写，不与投影、
+// 判断、客户视图的锁序交叉。
 type ETAStore interface {
 	ETACurrentRead
+	LockCurrent(
+		ctx context.Context,
+		tenant domain.TenantID,
+		parcel domain.TrackedParcelReference,
+		milestone domain.MilestoneReference,
+		source domain.ETASourceKind,
+	) (domain.ETAPrediction, bool, error)
+	// FindVersion 按版本读回该预测线名下留存的任一版，当前版或已被接替的皆可。
+	FindVersion(
+		ctx context.Context,
+		tenant domain.TenantID,
+		parcel domain.TrackedParcelReference,
+		milestone domain.MilestoneReference,
+		source domain.ETASourceKind,
+		version domain.ETAVersionID,
+	) (domain.ETAPrediction, bool, error)
 	Save(ctx context.Context, tenant domain.TenantID, eta domain.ETAPrediction) error
 }
 
@@ -619,7 +647,7 @@ type ETAIdentityFactory interface {
 
 // ETAHandoffIntent 把新预测版本交给适用下游（客户视图链的重派生输入——「ETA 新版本
 // ……必须重新派生客户视图」）。意图由预测版本认领，重放重发同一份（ADR-0043）。租户
-// 随意图到达（ADR-0003）：预测对象没有租户维，下游按（租户+包裹+里程碑）查库。
+// 随意图到达（ADR-0003）：预测对象没有租户维，下游按（租户+包裹+里程碑）读各来源线的当前版。
 type ETAHandoffIntent struct {
 	TenantID   domain.TenantID
 	Prediction domain.ETAPrediction

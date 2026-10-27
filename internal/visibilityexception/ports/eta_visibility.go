@@ -7,15 +7,25 @@ import (
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 )
 
-// ETACurrentRead 按（租户+包裹+里程碑）读当前内部预测，是 ETA 客户可见性判断取候选 ETA 的读面。
-// 只读：判断引用候选版本，不改预测。
+// ETACurrentRead 读内部预测各条来源线的当前版，是 ETA 客户可见性判断取候选 ETA 的读面。预测线的键是
+// （租户+包裹+里程碑+来源）：承运商提供的与运营企业派生的预测各是一条线，互不覆盖。只读：判断引用候选版本，不改预测。
 type ETACurrentRead interface {
+	// FindCurrent 读一条来源线的当前版。
 	FindCurrent(
 		ctx context.Context,
 		tenant domain.TenantID,
 		parcel domain.TrackedParcelReference,
 		milestone domain.MilestoneReference,
+		source domain.ETASourceKind,
 	) (domain.ETAPrediction, bool, error)
+	// ListCurrent 一次读出（租户+包裹+里程碑）下每条来源线的当前版，没有预测时交回空表。两路来源并存时
+	// 它们来自同一时点的一份快照，判断据此选候选（domain.CandidateETAFrom），不会读到一路新一路旧的拼接。
+	ListCurrent(
+		ctx context.Context,
+		tenant domain.TenantID,
+		parcel domain.TrackedParcelReference,
+		milestone domain.MilestoneReference,
+	) ([]domain.ETAPrediction, error)
 }
 
 // ETAVisibilityRuleView 回答「这个租户的这个货主客户账户在判断时点适用哪一条 ETA 对客规则」

@@ -19,7 +19,8 @@ const etaPredictionConsumerName = "visibility-exception/judge-eta-visibility-fro
 // ETAPredictionFormedEventType 是本消费者认的事件类型：VE 自己的内部 ETA 预测版本形成。消费方自己写出
 // 这个字符串，不导入提供方 outbox 适配器的未导出常量——同一上下文的两个适配器也不例外。
 //
-// 载荷只有（租户+包裹+里程碑+预测版本）引用，预测本体由处理方按（租户+包裹+里程碑）读回当前版。
+// 载荷只有（租户+包裹+里程碑+预测版本）引用，预测本体由处理方按（租户+包裹+里程碑）读回各来源线的当前版，
+// 再按候选规则选出判断的候选；信封宣告的版本只是认领标识，不决定候选。
 const ETAPredictionFormedEventType eventing.EventType = "visibility-exception.eta-prediction.formed"
 
 // FormedETAPrediction 是译码后的预测版本引用。
@@ -76,7 +77,7 @@ func (consumer *ETAPredictionConsumer) Consume(ctx context.Context, envelope eve
 	return consumer.gate.Consume(ctx, envelope)
 }
 
-// decodeFormedETAPrediction 译载荷。四维缺一即毒丸——处理方按（租户+包裹+里程碑）取回当前预测，缺了永远
+// decodeFormedETAPrediction 译载荷。四维缺一即毒丸——处理方按（租户+包裹+里程碑）取回各来源线的当前预测，缺了永远
 // 取不着，而重投同样内容不会长出字段来。
 func decodeFormedETAPrediction(payload []byte) (FormedETAPrediction, error) {
 	var body struct {
