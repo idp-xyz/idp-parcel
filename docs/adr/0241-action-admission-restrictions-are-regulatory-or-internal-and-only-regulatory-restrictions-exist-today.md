@@ -1,6 +1,6 @@
 # ADR-0241：动作准入的「限制」一源分监管限制与内部合规限制两种，互不改名、互不解除；代码里的限制是监管限制，内部合规限制随 UC-CC-011 另立模型
 
-Status: Accepted（2026-10-21，Claude Code 会话代决：用户原话「需要修改文档，确保自洽，正确」与常设授权「你作为业务和系统专家自决」；票 docs-consistency/03，代 CC owner 裁定审计 cc H3。部分停用 [ADR-0206](./0206-customs-action-admission-judgement-folds-three-sources-and-judges-cross-zone-by-node-customs-zones.md) 决定四、决定五各一句，见「对已接受记录的作用」。越权风险点见文末，待 CC owner 复核。）<!-- 索引注记 -->｜**两种限制**：监管限制由已接受的监管过程决定（扣留等）对明确范围形成，只能凭责任来源接受的监管结果整条解除；内部合规限制是运营企业的内部决定，覆盖项逐项、由限制责任来源部分或全部解除。不互相改名、不互相解除，外部放行不自动解除任一种。**代码对位**：`RegulatoryRestriction` 是监管限制，不在它上面长责任来源解除或部分解除；内部合规限制随 UC-CC-011 另立对象与册。**准入**：任一种在动作时点有效且约束本动作即阻断；内部合规限制的适用性答待确认或冲突时该动作答未决并指名那条限制，技术未形成照读不动办。**实现现状**：准入今天只读监管限制册，内部合规限制尚无模型与写口，这一格不读成「无内部限制」；首发范围仍要求内部合规限制（PILOT-SCOPE、关务专项基线切片 1），缺口随 UC-CC-011 实施补上，接线的同一笔并进准入（code/27）
+Status: Accepted（2026-10-21，Claude Code 会话代决：用户原话「需要修改文档，确保自洽，正确」与常设授权「你作为业务和系统专家自决」；票 docs-consistency/03，代 CC owner 裁定审计 cc H3。部分停用 [ADR-0206](./0206-customs-action-admission-judgement-folds-three-sources-and-judges-cross-zone-by-node-customs-zones.md) 决定四、决定五各一句，见「对已接受记录的作用」。越权风险点见文末，待 CC owner 复核。）<!-- 索引注记 -->｜**两种限制**：监管限制由已接受的监管过程决定（扣留等）对明确范围形成，只能凭责任来源接受的监管结果整条解除；内部合规限制是运营企业的内部决定，覆盖项逐项、由限制责任来源部分或全部解除。不互相改名、不互相解除，外部放行不自动解除任一种。**代码对位**：`RegulatoryRestriction` 是监管限制，不在它上面长责任来源解除或部分解除；内部合规限制随 UC-CC-011 另立对象与册。**准入**：任一种在动作时点有效且约束本动作即阻断；内部合规限制的适用性答待确认或冲突时该动作答未决并指名那条限制，技术未形成照读不动办。**实现现状**：准入今天只读监管限制册，内部合规限制尚无模型与写口，这一格不读成「无内部限制」；首发范围仍要求内部合规限制（PILOT-SCOPE、关务专项基线切片 1），缺口随 UC-CC-011 实施补上，接线的同一笔并进准入（code/27）｜**部分停用**（2026-10-27）：决定四「动作准入的限制一源今天只读监管限制册，而监管限制册也没有生产写入（ADR-0206 越权风险点 1）。」与「这一格不是「当前无内部限制」的结论：产品里还没有这一类事实，准入不读它、也不替它作答。」两句已由 [ADR-0334](./0334-internal-compliance-restrictions-have-their-own-register-with-per-coverage-confirmation-and-release-by-the-responsible-source-and-admission-reads-both-registers.md) 停用——内部合规限制已有对象与册，准入读监管限制与内部合规限制两本册，册上没有记录不产生依据、也不是「无内部限制」的结论；两本册在生产上都还没有写入面，「缺口补上之前，不得对外宣称内部合规限制会挡住动作」一句在写入面接上之前原样成立，越权风险点 3 由它部分回答。**适用场景**：只限准入读哪几本册与空册的读法；决定一至三与五、决定四其余各句与对已接受记录的作用不变
 Date: 2026-10-21
 
 ## Context
@@ -61,6 +61,7 @@ Date: 2026-10-21
 
 ## Links
 
+- [ADR-0334](./0334-internal-compliance-restrictions-have-their-own-register-with-per-coverage-confirmation-and-release-by-the-responsible-source-and-admission-reads-both-registers.md)：本记录部分停用的后继——内部合规限制的对象、册与并进准入；停用决定四两句（见其「对已接受记录的作用」）
 - [ADR-0206](./0206-customs-action-admission-judgement-folds-three-sources-and-judges-cross-zone-by-node-customs-zones.md)：本记录部分停用其决定四、决定五各一句（见「对已接受记录的作用」）
 - [ADR-0029](./0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md)：按恢复动作分格（候选丁的判据）
 - [ADR-0205](./0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md)：动作执行方怎样对待答复
