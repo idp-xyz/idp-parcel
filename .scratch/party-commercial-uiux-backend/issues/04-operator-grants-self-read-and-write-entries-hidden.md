@@ -15,7 +15,7 @@ Blocked by: 无（ADR-0315 由本票会话代决，待访问身份 owner 复核�
 
 - 新读口 `GET /operator-grants`：答本会话操作者此刻持有的能力面与运营决定种类（`{outcome, grants, decisions}`，数组、空数组不缺键）；只答自己，主数据与运营查阅读守口，认证件与操作者绑定同款，端点表 `ownIntake` 一行。信封新增只读访问器 `Grants()`、`Decisions()`。
 - 管理台：只在明确知道没有登记册配置写授予时收起参与方与商业区的登记与发布入口；答不出（未配置、拒绝、依赖故障、形状不对）一律不知道、照摆。一页加载问一次，后挂载的页第一帧就拿到。深链指向被收起的页签或视图时落回读面。
-- 收哪些：各册发布页签与 JSON 发布页签、登记页签（服务形态、映射、客户账户、参与方）、目录行的「发新版本」「收尾…」与详情抽屉同名动作、参与方关系撤销与到期、责任法人登记、资料修订与停用入口。
+- 收哪些：各册发布页签与 JSON 发布页签、登记页签（服务形态、映射、客户账户、参与方）、目录行的「发新版本」「收尾…」与详情抽屉同名动作、参与方关系撤销与到期、责任法人登记、资料修订与停用入口，以及待批准发布抽屉里的批准与发布（该抽屉随票 03 进 main，本票 rebase 后接上）。
 - 不在本票：别的区（计价、网络、关务、追踪、结算……）的写入口与运营决定族；`decisions` 先交出，不用。
 
 ## 完成判据
@@ -38,11 +38,14 @@ M
 
 - 起点：分支 `claude-pcub4` 自 main `7457d23e9` 起。
 - 后端：`accessidentity.OperatorEnvelope.Grants/Decisions`（新文件 `operator_envelope_grants.go`）；`identityhttp.NewQueryOperatorGrantsEndpoint`、`NewOperatorGrantsAuthenticator`、`OperatorGrantsHandler`；`cmd/parcel-api` 的 `buildOperatorGrants` 与端点表一行 `/operator-grants`。用例：处理器四条、装配（真铸造器）一条。
-- 管理台：`pages/operator-grants.ts`（`heldGrantsOf`、`mayWriteRegistry`，3 条用例）、`pages/use-operator-grants.ts`（模块级一页一问）；`withNewVersionAction` 多 `enabled`，`VersionDetailDrawer` 多 `readOnly`；服务产品、客户与合同、供应商协议、商业规则与策略四页收发布 / 登记签与行内动作；渠道产品目录、业务参与方收登记签与关系撤销；集团与法人页收登记入口、资料修订与停用菜单项（登记视图的深链落回列表）；商业规则与策略与业务参与方的地址签落回读签。
+- 管理台：待批准发布抽屉（`PendingDraftDrawer.tsx`）按授予收起批准与发布，没有授予时说明原因；`pages/operator-grants.ts`（`heldGrantsOf`、`mayWriteRegistry`，3 条用例）、`pages/use-operator-grants.ts`（模块级一页一问）；`withNewVersionAction` 多 `enabled`，`VersionDetailDrawer` 多 `readOnly`；服务产品、客户与合同、供应商协议、商业规则与策略四页收发布 / 登记签与行内动作；渠道产品目录、业务参与方收登记签与关系撤销；集团与法人页收登记入口、资料修订与停用菜单项（登记视图的深链落回列表）；商业规则与策略与业务参与方的地址签落回读签。
 - 无 AT：访问身份没有 UC 与验收表，同操作者绑定、作业设备册的先例，用例只挂 ADR。
 - 代决与越权风险点：见 ADR-0315（五点），其中点 1（对任何持查阅读的操作者开放、只答自己）与点 2（读不到当不知道、宁可多摆）需访问身份 owner 复核。
-- 已知：别区的写入口今天仍对查阅员摆出；被收起的入口没有解释文案（空态与页头文字仍提到「登记」入口）；授予中途变化要重新登录才反映。
+- 已知：别区的写入口今天仍对查阅员摆出；被收起的入口没有解释文案（空态与页头文字仍提到「登记」入口，只有待批准发布抽屉说明了原因）；授予中途变化要整页重载才反映。
 
 ## 评审记录
 
-（待填）
+评审 ← 隔离子代理(sonnet) · 钉 `05b9570d2` / `690c0f9b6`（rebase 前）：阻断无；总评可进 main，七条非阻断。
+
+- **已修**：待批准发布抽屉（随票 03 进 main）按授予收起批准与发布，没有授予时说明原因；服务产品、客户与合同、供应商协议、渠道产品目录四页的页签状态在答案到达前可能停在被收起的签上，改为派生值落回读签；`heldGrantsOf` 对 JSON `null` 响应体不再抛错，补用例；「换授予要重新登录」改为「整页重载」（令牌不变，服务端每次都重读操作者册）；`LegalEntityProfileSection` 里被隔开的注释归位。
+- **已知、不改**：被收起页签的文案仍在空态与说明里被提到（票面已自陈）；spec 里的分支名等进 main 后在进 main 记录里一并订正。
