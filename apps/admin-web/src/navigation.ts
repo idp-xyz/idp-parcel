@@ -19,6 +19,7 @@ import {
   Handshake,
   History,
   LayoutDashboard,
+  Landmark,
   Library,
   LineChart,
   Megaphone,
@@ -110,6 +111,8 @@ export const navigationSections: NavigationSection[] = [
       // 授权处置紧挨复核：同是接受判断任务上的等待态与续办角色（ADR-0132 决定二），但决定集不同——复核
       // 完成后决定可以是接受，处置只能选去向；两页分开，不让一项`业务限制`借复核那条路走到接受。
       { id: 'authorized-disposition', label: '授权处置', icon: 'authorized-disposition' },
+      // 释放拒收处理处理的是已越过业务决定的资金占用（ADR-0293），不是对委托的判断，与授权处置分页、授予也分开。
+      { id: 'control-release-refusals', label: '释放拒收处理', icon: 'control-release-refusals' },
       { id: 'label-transactions', label: '面单交易', icon: 'label-transactions' },
       // 择优决定是 parcel-shipment 形成的只追加判断记录（票 label-channel/14），读面随所有权落本区、挨着
       // 消费它的面单交易；对象引用里的映射本体在主数据区的渠道产品目录页，这里只透引用。
@@ -194,6 +197,7 @@ export const sidebarIconMap: Record<string, ElementType> = {
   'shipment-request-inquiry': PackageSearch,
   'acceptance-review': ClipboardCheck,
   'authorized-disposition': Signpost,
+  'control-release-refusals': Landmark,
   'label-transactions': Ticket,
   'channel-selection-decisions': Split,
   'cancel-parcel': PackageX,
@@ -286,6 +290,12 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
     owner: '小包托运（parcel-shipment）',
     source:
       'docs/domain/parcel-shipment/CONTEXT.md「授权处置」与`等待授权处置`；docs/adr/0132-authorized-disposition-decides-the-destination-of-a-restricted-request-as-its-own-wait-state-and-never-passes.md 决定一（去向封闭两值，放行不在集内）',
+  },
+  'control-release-refusals': {
+    title: '释放拒收处理',
+    owner: '小包托运（parcel-shipment）',
+    source:
+      'docs/adr/0282-a-control-release-the-provider-refuses-is-registered-for-handling-instead-of-compensated.md 决定二（释放未受理册）；docs/adr/0293-a-refused-control-release-is-handled-by-releasing-at-settlement-or-marking-handled-and-the-handling-resumes-the-acceptance-chain.md',
   },
   'label-transactions': {
     title: '面单交易',

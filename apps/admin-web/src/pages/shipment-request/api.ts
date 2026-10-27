@@ -353,6 +353,52 @@ export interface AuthorizedDispositionResponseBody {
   controlReleaseNotAccepted?: boolean;
 }
 
+// ---- 释放未受理册查阅与处理响应形状(票 docs-consistency/code/95,ADR-0293) ----
+//
+// 册上是撤回、拒绝、处置、停进等待受控补充各路遇到结算确定不受理的释放时记下的占用(ADR-0282 决定二)。
+// 查阅按租户列还没被处理的行并计数;处理有两种动作:核对后在结算侧释放(提供方答已收口才算处理)与
+// 标记已处理(资金已在本产品之外处置,只留痕)。处理同笔让接受链重驱那份委托的当前版本。
+
+/** 册上一行被拒收的占用。occupationScope 缺席即施加时还不存作用域的存量行(scopeRecorded=false)。 */
+export interface ControlReleaseRefusalRow {
+  shipmentRequestId: string;
+  submissionVersionId: string;
+  controlResultId: string;
+  customerAccountId: string;
+  scopeRecorded: boolean;
+  occupationScope?: { legalEntity: string; settlementAccount: string; currency: string };
+  reason: string;
+  recordedAt: string;
+}
+
+/** unhandledCount 是未处理的全部行数,truncated 说明清单被页大小截断(计数不截断)。 */
+export interface ControlReleaseRefusalListResponseBody {
+  outcome: 'CONTROL_RELEASE_REFUSALS_LISTED';
+  unhandledCount: number;
+  truncated: boolean;
+  refusals: ControlReleaseRefusalRow[];
+}
+
+export type ControlReleaseRefusalAction = 'RELEASE_AT_SETTLEMENT' | 'MARK_HANDLED';
+
+/** 处理命令的封闭结果,词取 application.ControlReleaseRefusalHandlingOutcome 的原字符串。 */
+export type ControlReleaseRefusalHandlingOutcome =
+  | 'HANDLED'
+  | 'ALREADY_HANDLED'
+  | 'RELEASE_NOT_SETTLED'
+  | 'RELEASE_REFUSED_AGAIN';
+
+/**
+ * 已处理(201)与已被处理(200)带做法与处理时刻(后者是先到那一份的);释放再被拒收带原因;
+ * 回执里没有处理人——谁处理的只在留痕里。
+ */
+export interface ControlReleaseRefusalHandlingResponseBody {
+  outcome: ControlReleaseRefusalHandlingOutcome;
+  handlingKind?: 'RELEASED_AT_SETTLEMENT' | 'MARKED_HANDLED';
+  handledAt?: string;
+  reason?: string;
+}
+
 // ---- 面单交易查阅响应形状(票 admin-skeleton-closure-batch/08,ADR-0084 决定七) ----
 //
 // 行粒度是交易 × 包裹:一笔交易覆盖几件包裹就摊几行,摊开在服务端读侧完成,页面不再
@@ -577,6 +623,18 @@ export interface AuthorizedDispositionDraft {
   reason: string;
 }
 
+/**
+ * 释放拒收处理草案:册上哪一笔(委托 + 版本 + 控制关联,取自查阅行)、做哪一种动作、依据是什么。
+ * 处理人不在这里:那是「谁在签」,由服务端从已认证的操作员身份翻译;页面填成任何值都是伪造采信身份。
+ */
+export interface ControlReleaseRefusalHandlingDraft {
+  shipmentRequestId: string;
+  submissionVersionId: string;
+  controlResultId: string;
+  action: ControlReleaseRefusalAction;
+  basis: string;
+}
+
 // ---- 调用结果 ----
 
 export type ApiResult<Body> =
@@ -646,6 +704,16 @@ export function disposeShipmentRequest(
   draft: AuthorizedDispositionDraft,
 ): Promise<ApiResult<AuthorizedDispositionResponseBody>> {
   return post<AuthorizedDispositionResponseBody>('/shipment-requests/authorized-dispositions', draft);
+}
+
+export function listControlReleaseRefusals(): Promise<ApiResult<ControlReleaseRefusalListResponseBody>> {
+  return exchange<ControlReleaseRefusalListResponseBody>('/control-release-refusals', { method: 'GET' });
+}
+
+export function handleControlReleaseRefusal(
+  draft: ControlReleaseRefusalHandlingDraft,
+): Promise<ApiResult<ControlReleaseRefusalHandlingResponseBody>> {
+  return post<ControlReleaseRefusalHandlingResponseBody>('/control-release-refusal-handlings', draft);
 }
 
 export function listLabelTransactions(): Promise<ApiResult<LabelTransactionsListResponseBody>> {

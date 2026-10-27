@@ -18,6 +18,9 @@ export { AcceptanceReviewPage } from './AcceptanceReviewPage';
 // 授权处置工作流(队列读 GET /authorized-disposition-queue,单份复用复核队列分支,两去向打
 // POST /shipment-requests/authorized-dispositions;票 sa-preacceptance-policy-view/05,ADR-0132)。
 export { AuthorizedDispositionPage } from './AuthorizedDispositionPage';
+// 释放拒收处理(未处理的释放未受理册行读 GET /control-release-refusals,核对后在结算侧释放与标记已处理
+// 两个动作打 POST /control-release-refusal-handlings;票 docs-consistency/code/95,ADR-0293)。
+export { ControlReleaseRefusalsPage } from './ControlReleaseRefusalsPage';
 export { configureShipmentRequestApi } from './api';
 export type {
   ApiResult,
@@ -42,4 +45,7 @@ export type {
   ViewDetailResponseBody,
   LabelTransactionRow,
   LabelTransactionsListResponseBody,
+  ControlReleaseRefusalRow,
+  ControlReleaseRefusalListResponseBody,
+  ControlReleaseRefusalHandlingResponseBody,
 } from './api';
