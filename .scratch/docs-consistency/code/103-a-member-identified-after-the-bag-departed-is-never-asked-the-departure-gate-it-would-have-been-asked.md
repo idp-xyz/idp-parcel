@@ -28,7 +28,7 @@ code/74 之后，随集运单元出发时身份未决的成员，在识别成功
 
 ## 完成记录（2026-10-27）
 
-分支 `claude-code103`（收尾 `git rebase origin/main` 退 0）。提交：实现、成员补问两封信交错的真库用例、ADR-0331 与文档、票面完成记录各一笔。ADR 号 0331、AT 号 `AT-TF-364`–`366` 与 `AT-VE-222`；无迁移、无新信封、无 admin-web 改动。
+分支 `claude-code103`（收尾 `git rebase origin/main` 退 0）。提交：实现、成员补问两封信交错的真库用例、ADR-0331 与文档、票面完成记录各一笔。ADR 号 0331、AT 号 `AT-TF-364`–`366` 与 `AT-VE-226`；无迁移、无新信封、无 admin-web 改动。
 
 ### 做法
 
@@ -60,13 +60,13 @@ code/74 之后，随集运单元出发时身份未决的成员，在识别成功
 3. 存量与上线前的出发不回扫（VE owner、TF owner）。
 4. 身份被纠正成另一件包裹后，已补问到旧包裹上的读数与信号不撤，需 NO 交出身份纠正信封（VE owner、NO owner）。
 5. 读量与批量重核，更重一层（逐层往下验证读整袋的成员关系与每件的收寄身份）；优化方向是 NO 加这件实物那一刻随哪些单元走的反向时点读口（运维、NO owner）。
-6. 与同一封信上别的路共用投递超时与失败预算，本路是这封信上最后一路，整封被放弃后无补偿（VE owner、PS owner、运维）。
+6. 与同一封信上别的路共用投递超时与失败预算，本路排在这封信上其余各路之后，整封被放弃后无补偿（VE owner、PS owner、运维）。
 7. 补问信封与出发同分区、分区内一拍一封：n 件成员各自识别要 n 拍才全部到信号那一路，其中一封卡住会挡住同分区后面的信封（运维、VE owner）。
 8. 补问那一拍在消费门事务开着时问关务（运维）；成员按业务发生时间取、受设备时钟偏差影响（NO owner）；NO 读口报错不分确定性与暂时（票 114）；运营查阅看不到补问读数。
 
 ### AT 与用例
 
-- UC-TF-005 `AT-TF-364`（补出：向上找候选、向下验证、只问这一件、首版不改、问在事务之外）、`AT-TF-365`（有无定论、次数上限、替袋补问链上已有定论、一条出发只问一次、撞键认先到者、重投不再补问）、`AT-TF-366`（失败分格、毒丸、节点收寄形成信封上各路的名次）；UC-VE-004 `AT-VE-222`（成员补问读数里阻断形成信号，追加在投影之外，放行的不形成，跨补问两条链只交分诊一次）。证据一律 `S`。
+- UC-TF-005 `AT-TF-364`（补出：向上找候选、向下验证、只问这一件、首版不改、问在事务之外）、`AT-TF-365`（有无定论、次数上限、替袋补问链上已有定论、一条出发只问一次、撞键认先到者、重投不再补问）、`AT-TF-366`（失败分格、毒丸、节点收寄形成信封上各路的名次）；UC-VE-004 `AT-VE-226`（成员补问读数里阻断形成信号，追加在投影之外，放行的不形成，跨补问两条链只交分诊一次）。证据一律 `S`。
 - 用例：`internal/transportfulfillment/application/reask_departure_gates_on_identified_member_test.go`；`internal/transportfulfillment/adapters/{nodeoperations/identified_member_test.go,inbox/departure_gate_reask_on_node_intake_consumer_test.go}`；`internal/visibilityexception/adapters/transportfulfillment/raise_on_departure_gate_reask_test.go`（新增一条）；真库 `cmd/parcel-dispatch/departure_gate_reask_on_node_intake_test.go`（出发首版读数由生产读数路径形成：真成员展开、真关务；袋里两件身份未决的成员与出发前已出袋、出发后才装进、从没进过袋的三件，识别后经生产路由一拍：出发时在袋里的各得第 1 次补问，受限的一件读数阻断、另一件不是，其余不补问，首版不改；再按拍排空补问信封：受限的一件形成一期信号进人工复核、因果条件与依据是那条出发，放行的不形成，投影里 ADR-0299 补出的普通出发并存；换事件 ID 重投不再补问；两封信交错——先到者落册、后到者撞键重投后读到先到者；失败分区；类型串相等）与 `cmd/parcel-dispatch/node_intake_fan_out_order_test.go`（节点收寄形成信封上四路的名次）。
 
 ### 验证
