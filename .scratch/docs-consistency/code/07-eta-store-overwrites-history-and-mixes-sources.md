@@ -121,7 +121,7 @@ M：迁移另取号，ETA 改版本表、键加来源维；`FindCurrent` 按来�
 - **N-a（`FindByInputs` 与 `Save` 的「输入版本已出现」查询缺跨包裹、跨里程碑的测试）：** 补真库用例 `TestTheSameInputVersionOnAnotherParcelOrMilestoneIsAFreshInputVersion`——同租户同来源，P1/DELIVERED 形成 X；P2/DELIVERED 形成 Y 再来 X；P1/PICKED_UP 形成 Z 再来 X；断言后两个 X 都是 `ETARefreshed`（形成新版本，不是已有结果，也不被预检误报成并发输家），版本行 5 条。
 - **N-b（`Save` 自己取线锁、`inputsSeen` 预检没有测试钉住）：** 补并发用例 `TestWritersThatBypassedLockCurrentStillSerializeOnTheLineInsideSave`（8 个绕过 `LockCurrent` 的写者用不同输入在空线上形成首版：恰 1 个 `ETAFormed`、其余 `ETACurrentChanged`、版本行 1 条，`-count=5` 稳定）；补用例 `TestAnAlreadySeenInputVersionFromAWriterThatBypassedTheReplayCheckIsAConflictNotAnOutage`（绕过线锁与重放判断的写者拿着正确的当前版、用线上出现过的旧输入版本刷新，结果是 `Undecided/ETACurrentChanged` 而不是 `ETA_STORE_UNAVAILABLE`，ADR-0029）。`Save` 里「写后两处零行命中」的注释补一句：若命中，版本行已写下且 `FormETA` 不回滚，这是不变量被破坏的告警而非保护。
 - **N-c（文档措辞）：** (1) UC-VE-003 末段与本票风险点 3、「接线还差什么」第 3 项改为：上游不需要单调来防重复；但真正不同的输入集合必须有不同的引用（回到旧输入集合也要新标识）；从未出现过的输入版本按到达序生效，上游若可能乱序送不同输入，接线时仍需顺序守卫（唯一约束只兜曾经出现过的输入版本）。(2) 变更叙述词：`FormETA` 头注与 `TestAnInputVersionThatAppearedBefore…` 的 Covers 注释改成直述（先用 `git diff origin/main...HEAD` 找全，只改本分支新增的代码与文档行；票面里的 Status 前史与评审记录属叙述，保留）。(3) `TestAStaleWriterIsRefusedAndLeavesNoVersionBehind` 的注释改成「输家什么都没写」，并指向绕锁并发用例证提交后也不留版本行。
-- **变异（备份→改→跑→拷回→`cmp`，7 处，均被杀）：** `FindByInputs` 去 `parcel_ref`、去 `milestone_ref`，`Save` 的 `inputsSeen` 去 `parcel_ref`、去 `milestone_ref`（四处都由跨包裹、跨里程碑用例杀）；删 `Save` 里的 `lockLine`（并发绕锁用例 `-count=5` 每轮红）；删 `Save` 里的 `inputsSeen ||`（冲突不是库读不动的用例红）。
+- **变异（备份→改→跑→拷回→`cmp`，6 处，均被杀）：** `FindByInputs` 去 `parcel_ref`、去 `milestone_ref`，`Save` 的 `inputsSeen` 去 `parcel_ref`、去 `milestone_ref`（四处都由跨包裹、跨里程碑用例杀）；删 `Save` 里的 `lockLine`（并发绕锁用例 `-count=5` 每轮红）；删 `Save` 里的 `inputsSeen ||`（冲突不是库读不动的用例红）。
 - **验证：** 见下方「第二轮验证」。
 
 ### 第二轮验证
