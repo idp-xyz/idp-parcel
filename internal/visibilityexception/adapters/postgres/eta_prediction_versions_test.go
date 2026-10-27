@@ -148,8 +148,9 @@ func mustTenant(raw string) domain.TenantID {
 	return tenant
 }
 
-// Covers: AT-VE-223 过期写者被乐观条件拒绝且不留版本——首版撞上线上已有的当前版、刷新所指的前版已不是当前版，都交回
-// ports.ErrETACurrentChanged；输家的版本行随事务回滚，不留一版从未成为当前的预测，也不动赢家。
+// Covers: AT-VE-223 过期写者被拒绝——首版撞上线上已有的当前版、刷新所指的前版已不是当前版，都交回
+// ports.ErrETACurrentChanged，什么都没写，也不动赢家。本用例的事务出错即回滚，区分不了「没写」与「写了又回滚」；
+// 事务提交的情形见 TestALoserThatBypassedTheLineLockLeavesNoVersionBehindEvenWhenTheTransactionCommits。
 func TestAStaleWriterIsRefusedAndLeavesNoVersionBehind(t *testing.T) {
 	fixture := newETAGapNotificationFixture(t)
 	ctx := t.Context()
@@ -169,7 +170,7 @@ func TestAStaleWriterIsRefusedAndLeavesNoVersionBehind(t *testing.T) {
 	}
 
 	if got := fixture.countETARows(t, ctx, "eta_prediction_version", "tenant-a"); got != 2 {
-		t.Fatalf("版本行 = %d，want 2：输家写下的版本行应随事务回滚", got)
+		t.Fatalf("版本行 = %d，want 2：输家什么都不该写", got)
 	}
 	current, found := fixture.loadETA(t, ctx, "tenant-a")
 	if !found || current.Version() != winner.Version() {
@@ -255,14 +256,24 @@ type fixedETAClock struct{ at time.Time }
 
 func (clock fixedETAClock) Now() time.Time { return clock.at }
 
-// formConcurrently 让 workers 个写者各开一个事务、同时放行去 FormETA，返回各自的结果。
+// formConcurrently 让每条命令的写者各开一个事务、同时放行去 FormETA，返回各自的结果。
 func (fixture *etaGapNotificationFixture) formConcurrently(
 	t *testing.T,
 	commands []application.FormETACommand,
 ) []application.FormETAResult {
 	t.Helper()
+	return fixture.formConcurrentlyOn(t, fixture.etas, commands)
+}
+
+// formConcurrentlyOn 同 formConcurrently，预测库由调用方给（例如绕过线锁的写者）。
+func (fixture *etaGapNotificationFixture) formConcurrentlyOn(
+	t *testing.T,
+	predictions ports.ETAStore,
+	commands []application.FormETACommand,
+) []application.FormETAResult {
+	t.Helper()
 	handler := application.NewFormETAHandler(application.FormETADeps{
-		Predictions: fixture.etas,
+		Predictions: predictions,
 		Gaps:        fixture.gaps,
 		Identities:  concurrentETAIdentities{},
 		ViewChain:   discardETAHandoff{},
@@ -297,10 +308,16 @@ func (fixture *etaGapNotificationFixture) formConcurrently(
 
 func concurrentCommand(t *testing.T, source domain.ETASourceKind, inputs string) application.FormETACommand {
 	t.Helper()
+	return commandOn(t, "parcel-1", "DELIVERED", source, inputs)
+}
+
+// commandOn 造一条命令，包裹与里程碑由调用方给。
+func commandOn(t *testing.T, parcel, milestone string, source domain.ETASourceKind, inputs string) application.FormETACommand {
+	t.Helper()
 	return application.FormETACommand{
 		TenantID:   etaGapValue(t, domain.NewTenantID, "tenant-a"),
-		Parcel:     etaGapValue(t, domain.NewTrackedParcelReference, "parcel-1"),
-		Milestone:  etaGapValue(t, domain.NewMilestoneReference, "DELIVERED"),
+		Parcel:     etaGapValue(t, domain.NewTrackedParcelReference, parcel),
+		Milestone:  etaGapValue(t, domain.NewMilestoneReference, milestone),
 		Source:     source,
 		Inputs:     etaGapValue(t, domain.NewPredictionInputsReference, inputs),
 		Model:      etaGapValue(t, domain.NewPredictionModelReference, "eta-model/v1"),
@@ -448,6 +465,22 @@ type unlockedETAStore struct {
 	*adapter.ETAs
 	seen    domain.ETAPrediction
 	hasSeen bool
+	// blindToInputs 让 FindByInputs 答「没出现过」：编排的重放判断被绕过，只剩 Save 自己的核对。
+	blindToInputs bool
+}
+
+func (store unlockedETAStore) FindByInputs(
+	ctx context.Context,
+	tenant domain.TenantID,
+	parcel domain.TrackedParcelReference,
+	milestone domain.MilestoneReference,
+	source domain.ETASourceKind,
+	inputs domain.PredictionInputsReference,
+) (domain.ETAPrediction, bool, error) {
+	if store.blindToInputs {
+		return domain.ETAPrediction{}, false, nil
+	}
+	return store.ETAs.FindByInputs(ctx, tenant, parcel, milestone, source, inputs)
 }
 
 func (store unlockedETAStore) LockCurrent(
@@ -570,5 +603,90 @@ func TestConcurrentFormsRepeatingInputVersionsFormOneVersionPerInputVersion(t *t
 	}
 	if chain := fixture.chainOf(t, ctx, domain.OperatorDerivedETA); len(chain) != distinct {
 		t.Fatalf("指回链长 = %d（%v），want %d", len(chain), chain, distinct)
+	}
+}
+
+// Covers: AT-VE-222 的线内输入版本唯一只在本线内——输入版本引用（承运商批次号、模型批次号一类）本就可能被多个包裹、多个里程碑共用：
+// P1/DELIVERED 形成 X；P2/DELIVERED 先形成 Y 再来 X；P1/PICKED_UP 先形成 Z 再来 X。后两个 X 都是各自线上的新输入版本，
+// 形成新版本（ETARefreshed），不是「已有结果」，也不被预检误报成并发输家。
+func TestTheSameInputVersionOnAnotherParcelOrMilestoneIsAFreshInputVersion(t *testing.T) {
+	fixture := newETAGapNotificationFixture(t)
+	ctx := t.Context()
+	form := func(parcel, milestone, inputs string) application.FormETAResult {
+		return fixture.formConcurrently(t, []application.FormETACommand{
+			commandOn(t, parcel, milestone, domain.OperatorDerivedETA, inputs)})[0]
+	}
+
+	if got := form("parcel-1", "DELIVERED", "inputs/X"); got.Outcome() != application.ETAFormed {
+		t.Fatalf("P1/DELIVERED 的 X = %q（%q），want FORMED", got.Outcome(), got.UndecidedReason())
+	}
+	if got := form("parcel-2", "DELIVERED", "inputs/Y"); got.Outcome() != application.ETAFormed {
+		t.Fatalf("P2/DELIVERED 的 Y = %q（%q），want FORMED", got.Outcome(), got.UndecidedReason())
+	}
+	if got := form("parcel-2", "DELIVERED", "inputs/X"); got.Outcome() != application.ETARefreshed {
+		t.Fatalf("另一件包裹上的 X = %q（%q），want REFRESHED：别的包裹用过同名输入版本不算这件包裹的重放",
+			got.Outcome(), got.UndecidedReason())
+	}
+	if got := form("parcel-1", "PICKED_UP", "inputs/Z"); got.Outcome() != application.ETAFormed {
+		t.Fatalf("P1/PICKED_UP 的 Z = %q（%q），want FORMED", got.Outcome(), got.UndecidedReason())
+	}
+	if got := form("parcel-1", "PICKED_UP", "inputs/X"); got.Outcome() != application.ETARefreshed {
+		t.Fatalf("另一个里程碑上的 X = %q（%q），want REFRESHED：别的里程碑用过同名输入版本不算这个里程碑的重放",
+			got.Outcome(), got.UndecidedReason())
+	}
+	if got := fixture.countETARows(t, ctx, "eta_prediction_version", "tenant-a"); got != 5 {
+		t.Fatalf("版本行 = %d，want 5", got)
+	}
+}
+
+// Covers: AT-VE-223——Save 自己取线锁：8 个绕过 LockCurrent 的写者各用不同输入版本同时在空线上形成首版，恰一个成功，其余落
+// ETACurrentChanged，版本行只有一条。没有 Save 自己的线锁时，输家各自写下版本行、才在标记上输掉，事务照常提交，留下
+// 从未成为当前的版本。
+func TestWritersThatBypassedLockCurrentStillSerializeOnTheLineInsideSave(t *testing.T) {
+	fixture := newETAGapNotificationFixture(t)
+	ctx := t.Context()
+
+	const writers = 8
+	commands := make([]application.FormETACommand, writers)
+	for index := range commands {
+		commands[index] = concurrentCommand(t, domain.OperatorDerivedETA, fmt.Sprintf("inputs/rival-%d", index))
+	}
+	formed, lost := 0, 0
+	for index, result := range fixture.formConcurrentlyOn(t, unlockedETAStore{ETAs: fixture.etas}, commands) {
+		switch {
+		case result.Outcome() == application.ETAFormed:
+			formed++
+		case result.Outcome() == application.FormETAUndecided && result.UndecidedReason() == application.ETACurrentChanged:
+			lost++
+		default:
+			t.Fatalf("写者 %d 的 outcome = %q（%q）", index, result.Outcome(), result.UndecidedReason())
+		}
+	}
+	if formed != 1 || lost != writers-1 {
+		t.Fatalf("形成 %d、输掉 %d，want 恰一个形成、其余 %d 个落 ETA_CURRENT_CHANGED", formed, lost, writers-1)
+	}
+	if got := fixture.countETARows(t, ctx, "eta_prediction_version", "tenant-a"); got != 1 {
+		t.Fatalf("版本行 = %d，want 1：输家不该留下从未成为当前的版本", got)
+	}
+}
+
+// Covers: AT-VE-223 与 ADR-0029——确定性冲突不是「库读不动」：绕过线锁和重放判断的写者拿着正确的当前版刷新，输入版本却是线上
+// 出现过的旧版本，Save 的核对把它认作 ETACurrentChanged（重读再走），而不是撞唯一约束落 ETA_STORE_UNAVAILABLE。
+func TestAnAlreadySeenInputVersionFromAWriterThatBypassedTheReplayCheckIsAConflictNotAnOutage(t *testing.T) {
+	fixture := newETAGapNotificationFixture(t)
+	ctx := t.Context()
+	first := etaOf(t, domain.OperatorDerivedETA, "eta-op/v1", "inputs/A")
+	fixture.saveETA(t, ctx, "tenant-a", first)
+	current := refreshedFrom(t, first, "eta-op/v2", "inputs/B")
+	fixture.saveETA(t, ctx, "tenant-a", current)
+
+	result := fixture.formWithoutTheLock(t,
+		unlockedETAStore{ETAs: fixture.etas, seen: current, hasSeen: true, blindToInputs: true},
+		concurrentCommand(t, domain.OperatorDerivedETA, "inputs/A"))
+	if result.Outcome() != application.FormETAUndecided || result.UndecidedReason() != application.ETACurrentChanged {
+		t.Fatalf("结果 = %q/%q, want UNDECIDED/ETA_CURRENT_CHANGED（确定性冲突，不是库读不动）", result.Outcome(), result.UndecidedReason())
+	}
+	if got := fixture.countETARows(t, ctx, "eta_prediction_version", "tenant-a"); got != 2 {
+		t.Fatalf("版本行 = %d，want 2", got)
 	}
 }

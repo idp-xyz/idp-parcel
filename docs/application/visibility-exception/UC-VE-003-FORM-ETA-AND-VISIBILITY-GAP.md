@@ -76,7 +76,7 @@ ETA 是对未来里程碑的预测；可见性缺口只表示明确预期观察�
 
 `AT-VE-052`、`AT-VE-170`、`AT-VE-187`、`AT-VE-213`、`AT-VE-214` 的判断半边已由票 [docs-consistency/code/51](../../../.scratch/docs-consistency/code/51-eta-customer-visibility-judgement-is-not-modelled-or-read-by-the-customer-view.md) 补齐（2026-10-26）：判断对象与版本表、形成编排、规则册读口，以及内部 ETA 预测新版本到判断到客户视图重派生的派发链都已接上。未补齐的有四处：租户登记 `PAR-VIS-03` 与 `PAR-COM-07` 取值的受控登记口还没有（规则册今天只能写库，空册答未配置、判断落待判断）；判断只在内部 ETA 预测新版本到达时形成，门槛或客户服务规则版本单独生效时不会自动对现存 ETA 重判；判断保存的停止展示边界只是登记册给的引用，到点停止展示还没有执行方；合同与服务产品两维今天并入货主客户账户一维。
 
-`AT-VE-051`、`AT-VE-222`、`AT-VE-223`、`AT-VE-224`、`AT-VE-225` 由票 [docs-consistency/code/07](../../../.scratch/docs-consistency/code/07-eta-store-overwrites-history-and-mixes-sources.md) 补齐：预测按（包裹，里程碑，来源）成线、版本只增不改写，对客可见性判断的候选按来源选。未补齐的有一处：预测的来源接入，即 `FormETAHandler` 的生产调用方，还没有；谁来接线都不会继承覆盖与混淆，但在接线之前生产上没有预测可存，判断链与客户视图的 ETA 一维仍空转在待确认。上游的输入版本引用不需要单调：同一条线上曾经出现过的输入版本，重复或乱序到达都由线内输入版本唯一兜住，答当初形成的那一版。
+`AT-VE-051`、`AT-VE-222`、`AT-VE-223`、`AT-VE-224`、`AT-VE-225` 由票 [docs-consistency/code/07](../../../.scratch/docs-consistency/code/07-eta-store-overwrites-history-and-mixes-sources.md) 补齐：预测按（包裹，里程碑，来源）成线、版本只增不改写，对客可见性判断的候选按来源选。未补齐的有一处：预测的来源接入，即 `FormETAHandler` 的生产调用方，还没有；谁来接线都不会继承覆盖与混淆，但在接线之前生产上没有预测可存，判断链与客户视图的 ETA 一维仍空转在待确认。上游不需要单调来防重复：同一条线上曾经出现过的输入版本再到，答当初形成的那一版。但真正不同的输入集合必须有不同的输入版本引用，回到旧输入集合也要新标识；从未出现过的输入版本按到达序生效，上游若可能乱序送不同的输入，接线时仍需顺序守卫。
 
 ## 给开发的交接
 

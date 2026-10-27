@@ -278,7 +278,7 @@ func scanETA(
 // 首版只在线上尚无当前标记时成立，刷新只在标记恰指新版本所指的前版时成立，这个输入版本在线上没出现过；不成立就什么都不写，
 // 交回 ports.ErrETACurrentChanged——绕过 LockCurrent 的写者输了也不留一版从未成为当前的预测，不靠调用方回滚事务。
 // 核完之后写版本行、再立或移标记（首版 ON CONFLICT DO NOTHING，刷新 UPDATE ... WHERE version_id = 前版），零行命中同样交回
-// ErrETACurrentChanged；持着线锁时这两处不会命中，留作最后一道。
+// ErrETACurrentChanged；持着线锁时这两处不会命中。若命中，版本行已写下且 FormETA 不回滚，这是不变量被破坏的告警而非保护。
 //
 // 走 RequireExecutor：预测版本与同一步交出的 Outbox 意图必须同生共死。
 func (repository *ETAs) Save(

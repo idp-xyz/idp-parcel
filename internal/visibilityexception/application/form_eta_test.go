@@ -476,8 +476,8 @@ func TestEveryRefreshedVersionStaysReadableByVersion(t *testing.T) {
 }
 
 // Covers: AT-VE-222 与 CONTEXT「同一条线上相同输入版本的重复到达，不论先后，不形成新版本」——输入版本依次到 A、B、A：第三个是
-// 这条线上曾经出现过的输入版本，答当初形成的那一版，不形成新版本、不签身份、不移当前版、不再交意图；线上的当前版仍是 B。
-// 重复到达当前版自己的输入版本照旧重发同一份意图。
+// 这条线上曾经出现过的输入版本，答当初形成的那一版，不形成新版本、不签身份、不移当前版、不交意图；线上的当前版仍是 B。
+// 重复到达当前版自己的输入版本时重发同一份意图。
 func TestAnInputVersionThatAppearedBeforeOnTheLineIsAReplayNoMatterWhenItArrives(t *testing.T) {
 	fixture := newETAFixture(t)
 	ctx := context.Background()

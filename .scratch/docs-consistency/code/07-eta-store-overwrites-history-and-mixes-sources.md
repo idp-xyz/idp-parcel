@@ -74,7 +74,7 @@ M：迁移另取号，ETA 改版本表、键加来源维；`FindCurrent` 按来�
 
 1. **候选口径是产品口径，代决（owner 需知情）。** 来源优先序（运营企业在前）、「第一个达标者」与「都不达标取最靠前的一版」都是代决；如果 VE owner 认为承运商预测应优先、或承运商预测不应直接对客，改 `domain.candidateSourcePrecedence` 或 `CandidateETAFrom` 一处；已形成的判断要靠下一份 ETA 触发重判才会变（code/51 风险点 2 的老问题）。CONTEXT 状态是 Confirmed，代决的口径落在其中，不另立 ADR。
 2. **两路都不达标时客户看不到 ETA（答 ETA 不可见）；运营企业一路不达标而承运商一路达标时客户看到承运商那一版。** 后者依赖租户把承运商依据登为达标这一治理动作；若租户不愿对客展示承运商预测，就不要把承运商的依据登进达标集合（今天达标集合不分来源，规则册没有「只收运营企业」的表达，需要时是另一个规则维度，属 owner 裁）。
-3. **乱序、重复到达已由线内输入版本唯一兜住**（评审修订）：同一条线上曾经出现过的输入版本再到，一律答当初形成的那一版。遗留的一点语义：「输入集合真的回到先前某一版」（例如更正撤回了新事实）在同一条线上形成不了新版本——输入版本引用要能区分「回到旧输入集合」与「旧输入集合」，上游若有这种场景应给新的输入版本标识。
+3. **重复到达已由线内输入版本唯一兜住，乱序送不同输入仍不兜**（评审修订）：同一条线上曾经出现过的输入版本再到，一律答当初形成的那一版。兜不住的是从未出现过、但数据更旧的输入版本晚到（X2 之后才到 X1）：它被当成新的一版，会把线推回旧数据，接线时上游若可能乱序送不同的输入，仍需顺序守卫。另一点语义：「输入集合真的回到先前某一版」（例如更正撤回了新事实）在同一条线上形成不了新版本——回到旧输入集合也要给新的输入版本标识。
 4. **存量行的 `prior_version` 指向已被覆盖的前身，读不回。** 迁移如实带过来；「每个 `prior_version` 都读得回」只对迁移之后的链条成立。生产上 `FormETAHandler` 无调用方，存量行预期为零。
 5. **判断读候选不加锁。** 判断与写者并发时可能读到写者提交前的快照，之后写者的信封到达再判一次，这是既有的「判断按当前版、后继信封只是重放」，没有新增窗口；`ListCurrent` 用一条语句，两路并存时不会读到一路新一路旧的拼接。
 6. **`FindCurrent`（带来源）今天只有测试与运营查阅用，没有生产调用方。** 保留是因为按线读当前版是预测线的基本读口。
@@ -86,7 +86,7 @@ M：迁移另取号，ETA 改版本表、键加来源维；`FindCurrent` 按来�
 
 1. **预测来源的生产调用方**：承运商预测的接入（外部承运商预测的受理与翻译为 `FormETACommand`，来源 `CarrierProvidedETA`）和运营企业派生预测的形成方（`PAR-VIS-03` 的形成方法属产品策略，待提供）。两者都经 `FormETAHandler`，每次调用必须在环境事务里，`HandOffETA` 与预测写同一事务。
 2. **结果格的消费方落点（ADR-0025）**：`FormETAUndecided` 的 `ETACurrentChanged`（重读再走）与 `ETAStoreUnavailable`（等库）、`HandoffReference`（发布续办）、`FormETANotAccepted`。
-3. **上游输入版本引用不需要单调**：重复与乱序到达由线内输入版本唯一兜住；上游只需让真正不同的输入集合有不同的输入版本引用（风险点 3）。
+3. **上游不需要单调来防重复，但乱序送不同输入仍要顺序守卫**（风险点 3）：真正不同的输入集合必须有不同的输入版本引用（回到旧输入集合也要新标识）；从未出现过的输入版本按到达序生效，上游若可能乱序送不同输入，接线时仍需顺序守卫。
 4. 事件路由已在位（`routes_eta_visibility.go`）；对客放开 ETA 之前 code/51「上线前必做清单」的其余项仍要做。
 
 ### 验证（分支 claude-code07）
@@ -102,7 +102,7 @@ M：迁移另取号，ETA 改版本表、键加来源维；`FindCurrent` 按来�
 独立评审（2026-10-27）：可合入，无阻断；下列三条建议与一条口径意见，协调方全部采纳，已在本分支修订。
 
 - **N1（并发输家的版本行「随事务回滚」只在适配器层成立）：** `FormETA` 把 `ErrETACurrentChanged` 译成 `Undecided/ETACurrentChanged` 并返回 nil error，调用方事务照常提交，原先 `Save` 先 INSERT 版本行再试移标记，绕过线锁的写者输了会留下一个从未成为当前的版本。修（做法 a）：`Save` 先取线锁，核完条件才写，输了什么都不写。真库用例 `TestALoserThatBypassedTheLineLockLeavesNoVersionBehindEvenWhenTheTransactionCommits`：绕过线锁的写者（以为线上没有当前版 / 拿着已被接替的前版）经 `FormETA` 输了之后，事务照常提交，版本行数不变、当前版仍是赢家。
-- **N2（幂等的文字承诺比实现宽，乱序重放）：** 现在就做线内输入版本唯一。`FormETA` 经新增的 `FindByInputs` 判重放，晚到的旧输入版本答当初形成的那一版；迁移 0032 本身加唯一约束 `eta_prediction_version_inputs_unique`（0032 未进 main，直接改；存量每条线只有一行，不会违反，所以没有新增预检）。用例：应用层 A、B、A（第三个答已有结果、版本数不增、当前版仍是 B、不入队意图），真库同序列，并发重复输入版本（每个输入版本恰形成一版）、唯一约束与 `FindByInputs`（同名输入版本在两条来源线上各是各的）。CONTEXT 规则句、`AT-VE-222` 措辞、`FormETA` 头注、UC-VE-003 末段与「接线还差什么」第 3 项同步改为「上游不需要单调」。
+- **N2（幂等的文字承诺比实现宽，乱序重放）：** 现在就做线内输入版本唯一。`FormETA` 经新增的 `FindByInputs` 判重放（兜住重复到达，不兜从未出现过但数据更旧的输入版本晚到），晚到的旧输入版本答当初形成的那一版；迁移 0032 本身加唯一约束 `eta_prediction_version_inputs_unique`（0032 未进 main，直接改；存量每条线只有一行，不会违反，所以没有新增预检）。用例：应用层 A、B、A（第三个答已有结果、版本数不增、当前版仍是 B、不入队意图），真库同序列，并发重复输入版本（每个输入版本恰形成一版）、唯一约束与 `FindByInputs`（同名输入版本在两条来源线上各是各的）。CONTEXT 规则句、`AT-VE-222` 措辞、`FormETA` 头注、UC-VE-003 末段与「接线还差什么」第 3 项同步。
 - **口径变更（候选 = 达标者中来源优先的那一版）与 N3：** 判断编排改为先取规则再选候选；`domain.CandidateETAFrom` 按来源优先序取第一个满足质量门槛的当前版，都不满足或规则缺失、冲突时取最靠前的一版。CONTEXT 规则句、`AT-VE-224`/`AT-VE-225` 与两个单测、派发真库用例按新口径改写。补用例 (a) 运营企业 `MEDIUM` 达标、承运商更新且 `HIGH` 达标 → 候选运营企业、可见；(b) 运营企业线刷成 `LOW/sparse`、承运商仍 `HIGH` → 候选换手到承运商那一版、仍可见、指回原判断（单测与派发真库各一）；(c) 两路都不达标 → 候选取运营企业、答不可见（派发真库里再接一份 `LOW/stale` 的承运商版）；(d) 只有承运商线 → 候选承运商，按门槛判（达标可见、未达不可见）；另补规则缺失与冲突时候选取最靠前的一版、答待判断。
 - **变异（备份→改→跑→拷回→`cmp`，11 处新增，均被杀）：** 候选忽略规则（回到「只看来源」）→ (b) 与候选来源重判用例红；候选改成「预测时点最晚者」→ (a) 等六例红；先选候选再取规则（顺序对调）→ 单测与派发真库红；`Save` 去掉先核 → N1 用例与晚到旧输入用例红；重放只认当前版 → A、B、A 用例红；被接替版本的重放也交意图 → 该用例红；唯一约束去掉 → 约束用例红；线锁去掉（`lockLine` 改成不阻塞的 `pg_try`，`-count=5`）→ 并发用例红；只去掉 `LockCurrent` 里的取锁（`Save` 仍取）→ 并发用例红（输家落未决而非重放）；`Refresh` 不查来源、刷新时删被接替版本行 → 原用例红。前一轮对「乐观条件 `version_id = 前版`」与「首版标记 `DO UPDATE`」的两处变异不再能被杀：`Save` 持线锁先核后写，这两处只是留作最后一道、持锁时不会命中，属于有意保留的纵深。
 - **验证：** 见下方「修订轮验证」。
@@ -113,3 +113,19 @@ M：迁移另取号，ETA 改版本表、键加来源维；`FindCurrent` 按来�
 - `scripts/test-full.sh`：改动包 + 反向依赖 + `./cmd/parcel-api/` + `./cmd/parcel-dispatch/` + `./internal/architecture/...` + `./migrations/...`，退 0。新用例 `-count=3` 全绿，并发用例 `-count=5` 全绿。
 - 迁移 0032 加了唯一约束：一次性库灌 `scripts/demo-seeds/seed.sh` 成功，用后已删库。
 - `go run ./tools/adr-index -check` 通过；`go run ./tools/at-coverage-counts -check` 退 1（只是总览过期，分桶表无缺行）。
+
+### 评审记录与修订轮（第二轮）
+
+窄复审（2026-10-27）：可合入，无阻断；三条建议为补测试与改措辞，不改业务逻辑，已在本分支合入前补齐。
+
+- **N-a（`FindByInputs` 与 `Save` 的「输入版本已出现」查询缺跨包裹、跨里程碑的测试）：** 补真库用例 `TestTheSameInputVersionOnAnotherParcelOrMilestoneIsAFreshInputVersion`——同租户同来源，P1/DELIVERED 形成 X；P2/DELIVERED 形成 Y 再来 X；P1/PICKED_UP 形成 Z 再来 X；断言后两个 X 都是 `ETARefreshed`（形成新版本，不是已有结果，也不被预检误报成并发输家），版本行 5 条。
+- **N-b（`Save` 自己取线锁、`inputsSeen` 预检没有测试钉住）：** 补并发用例 `TestWritersThatBypassedLockCurrentStillSerializeOnTheLineInsideSave`（8 个绕过 `LockCurrent` 的写者用不同输入在空线上形成首版：恰 1 个 `ETAFormed`、其余 `ETACurrentChanged`、版本行 1 条，`-count=5` 稳定）；补用例 `TestAnAlreadySeenInputVersionFromAWriterThatBypassedTheReplayCheckIsAConflictNotAnOutage`（绕过线锁与重放判断的写者拿着正确的当前版、用线上出现过的旧输入版本刷新，结果是 `Undecided/ETACurrentChanged` 而不是 `ETA_STORE_UNAVAILABLE`，ADR-0029）。`Save` 里「写后两处零行命中」的注释补一句：若命中，版本行已写下且 `FormETA` 不回滚，这是不变量被破坏的告警而非保护。
+- **N-c（文档措辞）：** (1) UC-VE-003 末段与本票风险点 3、「接线还差什么」第 3 项改为：上游不需要单调来防重复；但真正不同的输入集合必须有不同的引用（回到旧输入集合也要新标识）；从未出现过的输入版本按到达序生效，上游若可能乱序送不同输入，接线时仍需顺序守卫（唯一约束只兜曾经出现过的输入版本）。(2) 变更叙述词：`FormETA` 头注与 `TestAnInputVersionThatAppearedBefore…` 的 Covers 注释改成直述（先用 `git diff origin/main...HEAD` 找全，只改本分支新增的代码与文档行；票面里的 Status 前史与评审记录属叙述，保留）。(3) `TestAStaleWriterIsRefusedAndLeavesNoVersionBehind` 的注释改成「输家什么都没写」，并指向绕锁并发用例证提交后也不留版本行。
+- **变异（备份→改→跑→拷回→`cmp`，7 处，均被杀）：** `FindByInputs` 去 `parcel_ref`、去 `milestone_ref`，`Save` 的 `inputsSeen` 去 `parcel_ref`、去 `milestone_ref`（四处都由跨包裹、跨里程碑用例杀）；删 `Save` 里的 `lockLine`（并发绕锁用例 `-count=5` 每轮红）；删 `Save` 里的 `inputsSeen ||`（冲突不是库读不动的用例红）。
+- **验证：** 见下方「第二轮验证」。
+
+### 第二轮验证
+
+- `go build ./...`、`go vet ./...` 干净，`gofmt -l` 无输出。
+- `scripts/test-full.sh`：改动包 + 反向依赖 + `./cmd/parcel-api/` + `./cmd/parcel-dispatch/` + `./internal/architecture/...` + `./migrations/...`，退 0。新用例 `-count=3` 全绿，并发用例 `-count=5` 全绿。
+- 本轮没有动迁移，不另灌种子。`go run ./tools/adr-index -check` 通过；`go run ./tools/at-coverage-counts -check` 退 1（只是总览过期，分桶表无缺行）。
