@@ -25,7 +25,7 @@ export interface HeldGrants {
  * 判成持有的授予。只有业务成格且两个数组都在场才算拿到；其余各态一律 undefined——「不知道」，不折成「什么都没有」。
  */
 export function heldGrantsOf(answer: ApiResult<OperatorGrantsResponseBody> | null): HeldGrants | undefined {
-  if (answer?.kind !== 'outcome' || answer.body.outcome !== 'OPERATOR_GRANTS_RESOLVED') return undefined;
+  if (answer?.kind !== 'outcome' || answer.body?.outcome !== 'OPERATOR_GRANTS_RESOLVED') return undefined;
   const { grants, decisions } = answer.body;
   if (!Array.isArray(grants) || !Array.isArray(decisions)) return undefined;
   return { faces: new Set(grants), decisions: new Set(decisions) };

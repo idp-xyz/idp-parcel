@@ -70,9 +70,9 @@ export function LegalEntityProfileSection({
   formOpenRequest?: number;
 }) {
   // 登记落册一次加一：当前有效区与历史区都按它重取，新登的那笔立刻可见。
+  const [landed, setLanded] = useState(0);
   // 没有登记册配置写授予的操作者不摆登记表与打开它的按钮（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
-  const [landed, setLanded] = useState(0);
   const [formOpen, setFormOpen] = useState(formOpenRequest > 0);
   const formRef = useRef<HTMLElement>(null);
   // 展开与滚动分两拍（票 group-legal-entities-uiux/07）：同一拍里先 setFormOpen 再滚，滚的时候表单还没渲染，内容不够高，

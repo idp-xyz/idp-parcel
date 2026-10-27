@@ -19,6 +19,7 @@ test('成格才答出授予，面与决定种类各一集', () => {
 test('答不出一律是不知道', () => {
   equal(heldGrantsOf({ kind: 'outcome', status: 200, body: { outcome: 'SOMETHING_ELSE', grants: [], decisions: [] } }), undefined);
   equal(heldGrantsOf({ kind: 'outcome', status: 200, body: { outcome: 'OPERATOR_GRANTS_RESOLVED' } as unknown as OperatorGrantsResponseBody }), undefined);
+  equal(heldGrantsOf({ kind: 'outcome', status: 200, body: null as unknown as OperatorGrantsResponseBody }), undefined);
   equal(heldGrantsOf({ kind: 'unconfigured' }), undefined);
   equal(heldGrantsOf({ kind: 'loginRequired' }), undefined);
   equal(heldGrantsOf({ kind: 'notGranted' }), undefined);

@@ -21,6 +21,7 @@ import {
 } from './publication-draft-api';
 import { canonicalDocumentText, decisionsOf, draftFacts } from './pending-publications';
 import { publicationKindLabels } from './publication-summary';
+import { useMayWriteRegistry } from '../use-operator-grants';
 
 export interface PendingDraftIdentity {
   kind: CommercialObjectKindName;
@@ -79,6 +80,8 @@ export function PendingDraftDrawer({
 
   const draft = readback?.kind === 'outcome' ? readback.body.draft : undefined;
   const decisions = draft ? decisionsOf(draft.status) : { approve: false, publish: false };
+  // 没有登记册配置写授予的操作者不摆批准与发布（ADR-0315）；摆不摆只是呈现，两个写口照旧在服务端判授予。
+  const mayWrite = useMayWriteRegistry();
   const timeZone = currentDisplayTimeZone();
 
   // 答复回来时抽屉可能已经换了一份载体：旧答复说的是别的东西，不写进新的抽屉，只让列表与读回照常重取。
@@ -129,7 +132,10 @@ export function PendingDraftDrawer({
               {publicationKindLabels[target.kind] ?? target.kind}
               {draft ? ` · 适用范围 ${draft.scope}` : ''}
             </p>
-            {draft ? (
+            {draft && !mayWrite && (decisions.approve || decisions.publish) ? (
+              <p className="mt-2 text-xs text-idpxyz-textMuted">你没有登记册配置写授予，不能批准或发布这份发布稿。</p>
+            ) : null}
+            {draft && mayWrite ? (
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {decisions.approve ? (
                   <Button

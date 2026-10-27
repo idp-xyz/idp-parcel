@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { exchangeMasterData } from './catalogue-api';
 import { heldGrantsOf, mayWriteRegistry, type HeldGrants, type OperatorGrantsResponseBody } from './operator-grants';
 
-// 一页加载只问一次：各页的写入口都要这同一个答案，而一个会话的操作者换授予要重新登录、整页重载（授予在铸造那一刻取，
+// 一页加载只问一次：各页的写入口都要这同一个答案，而操作者换授予要整页重载才重新问（授予在铸造那一刻取，
 // 令牌之外没有会话态）。在途与答出的都记在模块级，各页同时挂载也只发一次请求；答出的值留着，后挂载的页第一帧就拿到，
 // 不先摆出入口再收回。答不出（依赖故障、拒绝、读不到）不记：那多半是一时的，记住就得整页重载才会再问。
 let pending: Promise<HeldGrants | undefined> | null = null;

@@ -217,9 +217,12 @@ function ProductChannelMappingTable() {
 export function ChannelProductCatalogPage() {
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
+  const [placedTab, setTab] = useState('catalog');
+  // 答案到达之前入口照摆，到达后才知道没有登记写授予：停在被收起的签上的话落回读签，不留一块空白。
+  const tab = !mayWrite && placedTab === 'register' ? 'catalog' : placedTab;
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <KeepAliveTabs defaultValue="catalog" className="flex-1 flex flex-col overflow-hidden gap-0">
+      <KeepAliveTabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="catalog">渠道产品目录</TabsTrigger>
           {mayWrite ? <TabsTrigger value="register">登记映射</TabsTrigger> : null}

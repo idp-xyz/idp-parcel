@@ -206,7 +206,9 @@ export function SupplierAgreementsPage() {
   const mayWrite = useMayWriteRegistry();
   const [reloadToken, setReloadToken] = useState(0);
   // 点协议行上的「发新版本」：记下是哪一版，切到发布签；发布表单据此预填并重建（票 party-commercial-uiux/14）。
-  const [tab, setTab] = useState('catalogue');
+  const [placedTab, setTab] = useState('catalogue');
+  // 答案到达之前入口照摆，到达后才知道没有登记写授予：停在被收起的签上的话落回读签，不留一块空白。
+  const tab = !mayWrite && placedTab === 'publish' ? 'catalogue' : placedTab;
   const [request, setRequest] = useState<NewVersionRequest<SupplierAgreementRecord> | null>(null);
   const beginNewVersion = (record: SupplierAgreementRecord) => {
     setRequest((previous) => nextRequest(previous, record));
