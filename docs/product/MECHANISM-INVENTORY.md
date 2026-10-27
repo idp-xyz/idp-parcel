@@ -10,7 +10,7 @@
 | architecture（非业务） | 0 | 17 | 0 | 0 | 0 | 0 |
 | collectionremittance | 24 | 12 | 4 | 6 | 0 | 3 |
 | customscompliance | 126 | 130 | 24 | 47 | 10 | 18 |
-| networkrouting | 94 | 108 | 11 | 19 | 2 | 10 |
+| networkrouting | 96 | 113 | 11 | 19 | 2 | 10 |
 | nodeoperations | 111 | 119 | 15 | 29 | 4 | 17 |
 | parcelpricing | 147 | 135 | 20 | 20 | 1 | 25 |
 | parcelshipment | 250 | 249 | 25 | 48 | 11 | 27 |
@@ -20,11 +20,11 @@
 | settlementaccounting | 233 | 185 | 38 | 69 | 13 | 10 |
 | transportfulfillment | 289 | 304 | 52 | 61 | 16 | 50 |
 | visibilityexception | 121 | 122 | 12 | 31 | 8 | 13 |
-| **合计** | 1659 | 1667 | 221 | 385 | 67 | 221 |
+| **合计** | 1661 | 1672 | 221 | 385 | 67 | 221 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 233、测试 389。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 233、测试 391。
 
-## 跨上下文消费缝：50 组，164 个生产文件
+## 跨上下文消费缝：50 组，165 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -35,7 +35,7 @@
 | customscompliance | settlementaccounting | 2 |
 | networkrouting | accessidentity | 3 |
 | networkrouting | customscompliance | 1 |
-| networkrouting | parcelpricing | 3 |
+| networkrouting | parcelpricing | 4 |
 | networkrouting | parcelshipment | 4 |
 | networkrouting | partycommercial | 4 |
 | networkrouting | transportfulfillment | 1 |
@@ -79,14 +79,14 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 9 |
 
-## 迁移：12 个模块共 325 份 SQL
+## 迁移：12 个模块共 326 份 SQL
 
 | 模块 | 份数 |
 |---|---|
 | access_identity | 25 |
 | collection_remittance | 2 |
 | customs_compliance | 27 |
-| network_routing | 31 |
+| network_routing | 32 |
 | node_operations | 20 |
 | parcel_pricing | 14 |
 | parcel_shipment | 31 |
