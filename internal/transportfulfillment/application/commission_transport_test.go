@@ -576,8 +576,7 @@ func newBookedFixture(t *testing.T) *commissionFixture {
 	return fixture
 }
 
-// Covers: CONTEXT「首个有效出发或移动事实形成前可以取消……之后只能形成中断、改降、
-// 折返或其他实际结果」与 195「尚未消耗的运输委托或订舱范围可以取消」的编排面——
+// Covers: CONTEXT 生命周期「运输委托、订舱与承运接受」一节「尚未开始的运输委托可以整份取消」的编排面——
 // 未开始取消成功；已开始 → TRANSPORT_ALREADY_STARTED 业务负向（与 ErrTransportAlreadyStarted
 // 同名分格，恢复动作是按事实形成实际结果而非改单，AT-TF-092）；已取消重放返原不二取；委托不在册
 // 答 COMMISSION_NOT_FOUND，不并进未受理（ADR-0204 决定三）。

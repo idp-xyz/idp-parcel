@@ -11,7 +11,7 @@ import (
 // DispatchOnHandoverOutcome 是「一封交接信封到了 → 按对象此刻在场的段发起一拍派送」的结果代数（ADR-0216 决定一）。
 //
 // 只有`已交给执行器`一格要往下看执行器的答复（Trigger）；其余各格在交给执行器之前就答了。交接不是`已交接`、对象此刻
-// 不在任何段里在场，都是这封信不构成触发事实——CONTEXT 把内部触发限定为「凭`已交接`进入派送段」，拒收与待确认没有让
+// 不在任何段里在场，都是这封信不构成触发事实——CONTEXT 把内部触发限定为「载运对象凭`已交接`的权威交接进入派送段」，拒收与待确认没有让
 // 控制移入接收方，对象也就没进新段。两格分开，因为人去查的地方不同：一个看交接裁决，一个看段登记册。
 type DispatchOnHandoverOutcome uint8
 
@@ -74,8 +74,8 @@ type DispatchOnHandoverDisposition uint8
 
 const (
 	DispatchOnHandoverDispositionInvalid DispatchOnHandoverDisposition = iota
-	// DispatchOnHandoverSettled：入账不重投。含`要求缺失`——所有者答「没有」不会因重投而变，任务保持待形成，补齐之后经
-	// 补拍口再发起（ADR-0216 决定三；越权风险点「要求缺失不会自愈」）。
+	// DispatchOnHandoverSettled：入账不重投。含`要求缺失`——所有者答「没有」不会因重投而变，任务保持待形成；那一件由执行器
+	// 同笔留在派送待形成册上，补齐之后由运营按册重问或经补拍口再发起（ADR-0216 决定三；ADR-0230 决定一、四、七）。
 	DispatchOnHandoverSettled
 	// DispatchOnHandoverRetry：等一个读得到的依赖，重投可能就过。
 	DispatchOnHandoverRetry

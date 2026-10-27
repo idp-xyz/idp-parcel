@@ -84,7 +84,7 @@ func unregisteredEvidence(
 	return evidence
 }
 
-// Covers: CONTEXT「实际承运商判断」规则节首条「实际履约段成立时即形成首个判断版本……否则为待确认
+// Covers: CONTEXT「实际承运商判断」一节「实际履约段成立时即形成首个判断版本……否则为待确认
 // （无合格证据）。段没有『尚无判断』的状态——未知也是一个版本，未知期间从这一版起算」；ADR-0103
 // 决定二「待确认是判断值，段成立即有第一版」。
 func TestOpeningAJudgmentWithoutEvidenceFormsAPendingFirstVersion(t *testing.T) {

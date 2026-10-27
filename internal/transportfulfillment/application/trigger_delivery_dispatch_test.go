@@ -270,7 +270,7 @@ func TestEnteringADeliverySegmentByHandoverOpensOneTaskForThatObject(t *testing.
 }
 
 // Covers: ADR-0114 决定二 — 「任务引用由执行器按（段，对象，入场依据）确定性铸出，重跑同一拍撞`已在册`而不重建」；
-// CONTEXT「形成失败重跑本拍」的另一半：重跑成功过的那一拍不得长出第二个任务。
+// CONTEXT「揽收、派送与交付」一节「读不到所有者时重跑本拍」的另一半：重跑成功过的那一拍不得长出第二个任务。
 func TestRerunningTheSameBeatFindsTheTaskAlreadyOpen(t *testing.T) {
 	fixture := newDispatchTriggerFixture(t)
 	fixture.enterByHandover(t, "parcel-1", "FINAL_DELIVERY", handoverJudgedTime)
@@ -537,7 +537,7 @@ func TestASourceFailureIsUndecidedAndTheSameBeatRerunsToSuccess(t *testing.T) {
 	}
 }
 
-// Covers: CONTEXT「控制事实先如实落库，任务在下一拍形成，形成失败重跑本拍，不回滚交接」。任务登记册写不进时执行器答未决，
+// Covers: CONTEXT「揽收、派送与交付」一节「控制事实先如实落库，任务在下一拍形成」与「读不到所有者时重跑本拍」，交接不回滚。任务登记册写不进时执行器答未决，
 // 段与交接那一侧一行不动；恢复后重跑同一拍开出任务。
 func TestADispatchRegistryFailureLeavesTheHandoverUntouchedAndRerunsCleanly(t *testing.T) {
 	fixture := newDispatchTriggerFixture(t)

@@ -53,7 +53,7 @@ func (outcome TrackingAdoptionOutcome) String() string {
 }
 
 // TrackingAdoptionUndecidedReason 指名收编停在哪一步等谁。`凭证登记册未配置`单列：它不是
-// 线路故障，是本上下文自己的实例参数缺席（CONTEXT「实例参数缺席时如实表达未配置」）。
+// 线路故障，是本上下文自己的实例参数缺席（CONTEXT「外部承运轨迹事实」一节：轨迹源的实例参数缺席时，机制如实表达未配置，不填默认值）。
 type TrackingAdoptionUndecidedReason uint8
 
 const (

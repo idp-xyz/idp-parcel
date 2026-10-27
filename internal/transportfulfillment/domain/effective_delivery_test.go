@@ -219,7 +219,7 @@ func TestDeliveryResultDisciplineMirrorsPickup(t *testing.T) {
 }
 
 // Covers: `AT-TF-072`「POD 后来被证明属于错误地址 → 保留原 POD/判断，形成更正版本」与
-// CONTEXT「POD 被更正或失效时保留原证据和判断，形成新版本」——更正回指前身、原值不动；
+// CONTEXT「揽收、派送与交付」一节「交付证明被更正、撤销有效性或证明不足时，保留原证据和原交付判断」——更正回指前身、原值不动；
 // 沿用原版本号就是覆盖，构造期拒绝。
 func TestAPODCorrectionFormsANewVersionWithoutOverwriting(t *testing.T) {
 	attempt := formedAttempt(t, "attempt-1")

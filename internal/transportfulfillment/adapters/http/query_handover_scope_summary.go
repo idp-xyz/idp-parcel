@@ -75,7 +75,7 @@ type handoverScopeSummaryResponse struct {
 // handoverScopeSummaryBody 逐格透出领域的汇总。
 //
 // total 与 allHandedOver 是领域的派生问答，原样透出而不留给读者自己算：CONTEXT 交接硬句
-// 「整批/整车/整袋结论只能由对象级结果派生」，`AllHandedOver` 就是那个派生的唯一出处，
+// 「整批、整车、整袋和整单结论只能由对象级结果派生」，`AllHandedOver` 就是那个派生的唯一出处，
 // 前端自己拿三格相加再比对等于在页面上立第二个口径。
 //
 // 三格计数直投 JSON number 而不像容量四量那样转成串：那条转写纪律针对 int64 量在 2^53

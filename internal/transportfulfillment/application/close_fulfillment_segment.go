@@ -50,7 +50,7 @@ func (outcome SegmentCloseOutcome) String() string {
 
 // CloseFulfillmentSegmentCommand 是「不再接受新对象」那个声明本身。
 //
-// CONTEXT 生命周期④要求「全部有效参与关系已经结束**且不再接受新对象**」才结束段。前半是参与关系
+// CONTEXT 生命周期「实际履约段与履约参与关系」一节要求「全部有效参与关系已经结束且不再接受新对象」才结束段。前半是参与关系
 // 的状态，读回来就知道；后半是一个决定，任何状态都推导不出来——所以它只能作为一条命令由人给，
 // 结束最后一条参与时不顺手做（票 tf-unwired-seven/07 的裁定）。
 //

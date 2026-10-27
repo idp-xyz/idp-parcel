@@ -259,7 +259,7 @@ func (handler *RegisterOffsitePickupHandler) Register(
 	}
 }
 
-// establishSegment 让这次收寄的对象进入实际履约段（CONTEXT 生命周期①②）。
+// establishSegment 让这次收寄的对象进入实际履约段（CONTEXT 生命周期「实际履约段与履约参与关系」一节「有效收寄或权威交接确认首个载运对象进入共同运输控制范围 → 实际履约段成立」与「后续兼容载运对象取得同一运输控制 → 分别加入实际履约段」）。
 //
 // 本编排只提供收寄那一侧的两道领域门；其余判断与交接那一侧逐字相同，收在
 // enterFulfillmentSegment 里。**失败尝试走不到这里**——没有控制证据就形成不了 OffsitePickup，

@@ -92,7 +92,7 @@ func TestRecordsStoredBeforeTFC1AreComparedUnderTheirOwnShape(t *testing.T) {
 	}
 }
 
-// Covers: 新记录写的是 TFC-1 形——无版本那一版只用来比旧记录，误写进新记录时上一例照样绿，
+// Covers: 新记录写的是 TFC-1 形——无版本那一版只用来比旧记录，误写进新记录时 TestRecordsStoredBeforeTFC1AreComparedUnderTheirOwnShape 照样绿，
 // 要在这里断。
 func TestNewRecordsAreStoredUnderTFC1(t *testing.T) {
 	for _, testCase := range unversionedDigestCases(t) {

@@ -47,7 +47,7 @@ const (
 )
 
 // SegmentJoinOutcome 是一个对象加入既有段的结果。`已在段内`是业务答案不是错误——
-// CONTEXT「同一实际控制范围不能因伙伴重投、任务重建或批量重试重复建立履约参与」。
+// UC-TF-002「同一实际控制范围不能因伙伴重投、任务重建或批量重试重复建立履约参与」。
 type SegmentJoinOutcome uint8
 
 const (
@@ -112,7 +112,7 @@ type ActualFulfillmentSegmentRegistry interface {
 	// FindActiveSegments 答「这个对象此刻在哪些段里在场」（票 tf-segment-lifecycle-closure/06 裁决 (a)）。
 	//
 	// 它是唯一一个按对象而不按段问的读口：有效交付与下一次权威交接是关于**对象**的事实，回传方
-	// 不知道段（CONTEXT 生命周期③按对象说），结束参与那一半只能由登记册替它找段。正常答案是零个
+	// 不知道段（CONTEXT 生命周期「实际履约段与履约参与关系」一节「载运对象形成有效交付、下一次权威交接或明确控制终止结果 → 该对象的履约参与关系结束」按对象说），结束参与那一半只能由登记册替它找段。正常答案是零个
 	// 或一个；多于一个是库面不一致（一对象同时只能在一个共同控制范围里），本口如实全交回、不挑一个，
 	// 由编排响亮报错。
 	FindActiveSegments(ctx context.Context, tenant domain.TenantID, object domain.CarriedObjectReference) ([]FulfillmentSegmentKey, error)

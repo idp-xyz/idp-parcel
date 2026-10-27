@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// ErrServiceActionAlreadyDeclared：段服务动作在段成立时固定，之后不改（CONTEXT 生命周期①末句）。再声明
+// ErrServiceActionAlreadyDeclared：段服务动作在段成立时固定，之后不改（CONTEXT 生命周期「实际履约段与履约参与关系」一节「段服务动作在此刻随登记方的声明固定，之后不改」）。再声明
 // 一次不是更正——声明错了是登记方另立新段的事，段登记册没有通用 Update（ADR-0097）。
 var ErrServiceActionAlreadyDeclared = errors.New("transport fulfillment: the segment's service action is already declared")
 

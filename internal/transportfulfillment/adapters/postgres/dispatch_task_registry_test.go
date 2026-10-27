@@ -27,7 +27,7 @@ var (
 
 // TestADispatchTaskRoundTripsWithItsWholeScope 证任务与它的对象范围同笔落、整图读回。
 //
-// 断言对象逐个在场而不是只数个数：CONTEXT 要求「每个对象分别保存……任务汇总只能由对象结果
+// 断言对象逐个在场而不是只数个数：CONTEXT 要求「每个对象必须分别保存……任务汇总只能由对象结果
 // 派生」，数对了个数说不出是不是同一批对象。
 func TestADispatchTaskRoundTripsWithItsWholeScope(t *testing.T) {
 	repository, transactor, _ := newDispatchTasks(t)

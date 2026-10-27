@@ -9,9 +9,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// 票 tf-segment-lifecycle-closure/07 的第三个写面：运输运营形成装载分配（UC-TF-003/004 运输准备）。
+// 票 tf-segment-lifecycle-closure/07 的 admin 写面之一：运输运营形成装载分配（UC-TF-003/004 运输准备）。
 // 它是写面而不是内部触发：`PrepareTransportOpportunity.Consume` 收的是调用方给的分配引用、消耗后才把它交给
-// 装载分配链——分配本体在消耗之前、由人定（票 03 简报第 8 行核过）。
+// 装载分配链——分配本体在消耗之前、由人定（票 tf-segment-lifecycle-closure/03 接入判定表里 `FormLoadAssignment` 那一行核过）。
 
 // LoadAssignmentIntake 把已认证的运营写请求翻译成形成装载分配的命令。版本由调用方指名而不是这里铸。
 type LoadAssignmentIntake interface {

@@ -161,7 +161,7 @@ type RegisterEffectiveDeliveryDeps struct {
 	Downstream ports.EffectiveDeliveryHandoff
 	Clock      ports.Clock
 	// ParticipationEnds 让交付落库后同事务结束该对象的履约参与（票 06 裁决 (i)）。**生产装配必须交入**：
-	// 「有效交付→结束参与」是 CONTEXT 生命周期③。缺席时不 panic、不落地——与 End 失败同格，整笔不落
+	// 「有效交付→结束参与」是CONTEXT 生命周期「实际履约段与履约参与关系」一节「载运对象形成有效交付、下一次权威交接或明确控制终止结果 → 该对象的履约参与关系结束」。缺席时不 panic、不落地——与 End 失败同格，整笔不落
 	// （ErrParticipationEndsNotWired）；装配点有没有交入由真库装配测试钉（它断言的是 ENDED / NO_ACTIVE）。
 	ParticipationEnds ParticipationEnder
 }
@@ -285,7 +285,7 @@ func (handler *RegisterEffectiveDeliveryHandler) RegisterWithGateReading(
 	}
 }
 
-// endParticipation 在交付落库后同事务结束该对象的履约参与（CONTEXT 生命周期③，票 06 裁决 (i)）。
+// endParticipation 在交付落库后同事务结束该对象的履约参与（CONTEXT 生命周期「实际履约段与履约参与关系」一节「载运对象形成有效交付、下一次权威交接或明确控制终止结果 → 该对象的履约参与关系结束」，票 06 裁决 (i)）。
 //
 // 命令不带段：交付是关于对象的事实，段由结束参与那条编排按对象找。**结束失败则整笔不落**——编排返回
 // error，依赖没应上的`未决`，以及装配点根本没交入 ParticipationEnds，都作 error 交回，让事务边界把交付一起

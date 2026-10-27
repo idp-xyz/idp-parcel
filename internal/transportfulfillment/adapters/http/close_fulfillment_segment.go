@@ -7,10 +7,10 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 )
 
-// 票 tf-segment-lifecycle-closure/07 的四个 admin 写面里的第一个：关段声明。
+// 票 tf-segment-lifecycle-closure/07 的 admin 写面之一：关段声明。
 //
-// 它是运营决定不是承运方回传口（票 03 简报第 6 行）：CONTEXT 生命周期④「全部有效参与关系已经结束
-// **且不再接受新对象**」的后半句是一个决定，任何状态都推导不出来，所以只能由人经这个口给。写面沿
+// 它是运营决定不是承运方回传口（票 tf-segment-lifecycle-closure/03 接入判定表里 `CloseFulfillmentSegment` 那一行）：
+// CONTEXT 生命周期「实际履约段与履约参与关系」一节「全部有效参与关系已经结束且不再接受新对象」的后半句是一个决定，任何状态都推导不出来，所以只能由人经这个口给。写面沿
 // ADR-0085：Intake 接口 + 处理器接口 + 封闭响应形状，装配以字面量 UnconfiguredIntake{} 起步。
 //
 // 路径前缀取读面册名 `transport-fulfillment-`（与 /transport-fulfillment-records 同源），不取控制事实

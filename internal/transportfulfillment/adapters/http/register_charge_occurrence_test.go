@@ -17,7 +17,7 @@ import (
 )
 
 // 本文件证运输收费发生项登记口的线格式与响应（票 demo-chain-gaps/27、29）：载荷逐格译成命令、租户与登记者只来自
-// 认证结果、原因词集外是坏报文；断言期的断言、数量与单位三键退场，带来是坏报文；新落一项答 201 并逐字段回显（依据
+// 认证结果、原因词集外是坏报文；载荷没有断言、数量与单位三键，带来是坏报文；新落一项答 201 并逐字段回显（依据
 // 「按协议声明判」与登记者都在），其余各格答 200，未配置与协议不计此原因带回作答的那一版协议；响应里没有任何金额
 // 或币种键。夹具全是合成串，证据只记 S。
 
@@ -45,7 +45,7 @@ func TestChargeOccurrenceRegistrationTranslatesItsPayloadUnderTheAuthenticatedTe
 		"自带业务时间":  `{"occurredAt":"2026-10-19T06:00:00Z",` + strings.TrimPrefix(decisionChargeOccurrenceBody, "{"),
 		"自带发生项引用": `{"occurrence":"OCC-1",` + strings.TrimPrefix(decisionChargeOccurrenceBody, "{"),
 		"自带登记者":   `{"registrant":"SYN-OPERATOR-99",` + strings.TrimPrefix(decisionChargeOccurrenceBody, "{"),
-		// AT-TF-170：断言期的三键退场（ADR-0209 决定四），带来按未知键拒，不静默丢掉。
+		// AT-TF-170：载荷没有断言、数量与单位三键（ADR-0209 决定四），带来按未知键拒，不静默丢掉。
 		"断言期的断言": `{"conditionAssertion":"干线协议段到段计一段",` + strings.TrimPrefix(decisionChargeOccurrenceBody, "{"),
 		"断言期的数量": `{"quantity":1,` + strings.TrimPrefix(decisionChargeOccurrenceBody, "{"),
 		"断言期的单位": `{"unit":"SEGMENT",` + strings.TrimPrefix(decisionChargeOccurrenceBody, "{"),

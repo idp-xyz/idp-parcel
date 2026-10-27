@@ -34,7 +34,7 @@ var (
 	// ErrBookingNotCancelled：取消发生项指名的订舱没有取消。
 	ErrBookingNotCancelled = errors.New("transport fulfillment: the booking is not cancelled")
 	// ErrCancelledAfterTransportStart：按业务时间，这次订舱取消到达时它所属委托下的运输已经开始、这次订舱已在开始之前提出。
-	// 取消停的不是尚未开始的范围（AT-TF-092），不形成「尚未执行服务的取消费」；判法与 ADR-0204 决定三「采用与取消的先后」
+	// 取消停的不是尚未开始的范围（AT-TF-092），不形成「尚未随运输开始而消耗的订舱的取消费」；判法与 ADR-0204 决定三「采用与取消的先后」
 	// 同一边界。
 	ErrCancelledAfterTransportStart = errors.New("transport fulfillment: the booking was cancelled after transport had started")
 	// ErrNotACommissionMember：订舱与取消发生项的成员必须是订舱所属委托的成员。订舱自身不列对象，它申请的是委托范围里的
@@ -126,8 +126,8 @@ func NewOccurrenceValidityVersion(value string) (OccurrenceValidityVersion, erro
 	return OccurrenceValidityVersion{required}, err
 }
 
-// ChargeOccurrenceReason 是发生原因的封闭四值（CONTEXT：「订舱费、尚未执行服务的取消费
-// ……失败揽收/派送尝试费和其他适用运输服务分别形成发生项」）。各自引不同的事实依据：
+// ChargeOccurrenceReason 是发生原因的封闭四值（CONTEXT「运输收费发生项与成本来源」一节：「发生项的原因封闭为订舱、取消、
+// 失败尝试、实际履约四种」，取消费专指「尚未随运输开始而消耗的订舱的取消费」）。各自引不同的事实依据：
 // 订舱引订舱对象、取消引取消结果、失败尝试引失败的对象结果、实际履约引履约段或参与关系。
 type ChargeOccurrenceReason uint8
 
@@ -618,7 +618,7 @@ func BookingOccurrenceGrounds(
 //
 // 「尚未开始」按业务时间判，与 ADR-0204 决定三同一边界：委托没开始，或这次订舱在委托开始之后才提出（为剩余范围订的），
 // 或取消早于委托开始（同一刻算开始在先）。取消订舱口按登记那一刻的委托判过一次，但委托的开始此后可能被更早开始的段前移
-// （ADR-0204 决定二）：前移之后取消落在开始之后的，按业务时间那一程已在用这份舱位，不是尚未执行服务的取消。
+// （ADR-0204 决定二）：前移之后取消落在开始之后的，按业务时间那一程已在用这份舱位，不是尚未随运输开始而消耗的订舱的取消。
 func CancellationOccurrenceGrounds(
 	fact BookingChargeFact,
 	members []CarriedObjectReference,

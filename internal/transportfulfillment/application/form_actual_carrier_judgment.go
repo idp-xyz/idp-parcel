@@ -141,10 +141,10 @@ func NewFormActualCarrierJudgmentHandler(deps FormActualCarrierJudgmentDeps) *Fo
 // 受理 → 段在册且未关闭 → 查承运主体身份 → 读回判断（不在册则补开首版）→ 领域转换门 → 只追加那一版。
 //
 // **同一份证据的两种再来。** 引用已在依据里而身份状态未变，是重放，答`已考虑`不追加；引用已在依据里、
-// 当时只有名称素材而此刻身份已在册，走 RecogniseCarrierIdentity——那正是「PC 登记之后凭同一份证据形成
+// 当时只有名称素材而此刻身份已在册，走 RecogniseCarrierIdentity——那正是 CONTEXT 生命周期「实际承运商判断」一节「凭同一份证据形成
 // 新版本」，业务时间不动、形成时间是现在，未登记期间原样留在上一版里。
 //
-// **封存先于一切读写。** 段已关闭的判断不再收新证据（CONTEXT 生命周期末条），连身份也不去问：问了也不用，
+// **封存先于一切读写。** 段已关闭的判断不再收新证据（CONTEXT 生命周期「实际承运商判断」一节「实际履约段结束 → 判断历史封存」），连身份也不去问：问了也不用，
 // 而一次不该发生的查询日后会被当成「这条证据确实核过身份」的证据。
 func (handler *FormActualCarrierJudgmentHandler) Form(
 	ctx context.Context,

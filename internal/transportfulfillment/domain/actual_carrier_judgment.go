@@ -23,7 +23,7 @@ var (
 	ErrCarrierIdentityAlreadyRecognised = errors.New("transport fulfillment: carrier identity on that evidence is already recognised")
 )
 
-// CarrierEvidenceSource 是合格证据来源的封闭四格（CONTEXT「实际承运商判断」规则节第三条；ADR-0103
+// CarrierEvidenceSource 是合格证据来源的封闭四格（CONTEXT「实际承运商判断」一节「合格证据的来源种类封闭四格」；ADR-0103
 // 决定四）：承运商直接收寄扫描、承运商收货凭证、接收方为承运主体的`已交接`权威运输交接结果、保留
 // 原始承运来源的可信渠道回传（外部承运轨迹事实与之同格）。
 //
@@ -299,7 +299,7 @@ type OpenActualCarrierJudgmentSpec struct {
 }
 
 // OpenActualCarrierJudgment 在实际履约段成立那一刻形成首个判断版本：待确认（无合格证据），业务时间取
-// 段成立时刻——未知期间从这一版起算（CONTEXT 生命周期「实际承运商判断」首条）。
+// 段成立时刻——未知期间从这一版起算（CONTEXT 生命周期「实际承运商判断」一节「实际履约段成立 → 首个判断版本」）。
 func OpenActualCarrierJudgment(spec OpenActualCarrierJudgmentSpec) (ActualCarrierJudgment, error) {
 	if !spec.TenantID.valid() || !spec.Segment.valid() || AtRegistryPrecision(spec.EstablishedAt).IsZero() || AtRegistryPrecision(spec.FormedAt).IsZero() {
 		return ActualCarrierJudgment{}, ErrInvalidActualCarrierJudgment

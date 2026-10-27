@@ -129,7 +129,7 @@ func TestAnAbsentJudgmentRegistryLeavesTheSegmentHalfUntouched(t *testing.T) {
 	}
 }
 
-// 判断登记册写不进是欠账：首版是段成立那一笔的一部分（CONTEXT「段成立即形成首个判断版本」），收寄与段
+// 判断登记册写不进是欠账：首版是段成立那一笔的一部分（CONTEXT「实际承运商判断」一节「实际履约段成立时即形成首个判断版本」），收寄与段
 // 照常登记，续办引用说「回来补这一半」。
 func TestAJudgmentRegistryFailureLeavesADebtOnTheSegmentHalf(t *testing.T) {
 	fixture := newJudgmentOnEstablishmentFixture(t)

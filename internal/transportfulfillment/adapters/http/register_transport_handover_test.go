@@ -462,7 +462,7 @@ func TestRegisterHandoverReportsOKForEveryAnswerThatRegisteredNothing(t *testing
 // Covers: 票 tf-segment-lifecycle-closure/04「端点测试要专钉的」之
 // 「响应透出 `segmentContinuationReference`（两个单对象口）」——段那一半的欠账要透出。段立不起来（写不进）时交接照登
 // （201），响应里 `segmentContinuationReference` 非空；这一格被传输层吞掉，调用方就会以为对象已经进段。
-// 用 saveErr 而不是 findErr：票 06 之后按对象找段那一步读不回是整笔不落（5xx），不再是欠账。
+// 用 saveErr 而不是 findErr：按对象找段那一步读不回是整笔不落（5xx），不是欠账。
 func TestRegisterHandoverExposesTheSegmentDebtWhenTheRegistryIsDown(t *testing.T) {
 	fixture := newHandoverFixture(t)
 	fixture.segments.saveErr = errors.New("segment registry cannot write")

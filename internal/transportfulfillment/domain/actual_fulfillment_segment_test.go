@@ -45,7 +45,7 @@ func formedDelivery(t *testing.T, object string) domain.EffectiveDelivery {
 	return delivery
 }
 
-// Covers: CONTEXT 生命周期①「有效收寄或权威交接确认首个载运对象进入共同运输控制范围
+// Covers: CONTEXT 生命周期「实际履约段与履约参与关系」一节「有效收寄或权威交接确认首个载运对象进入共同运输控制范围
 // → 实际履约段成立…没有该事实时只存在计划、委托、订舱、分配或尝试」——两种控制事实
 // 各可成段；拒收与待确认的交接立不起段（它们不转出控制）。
 func TestASegmentIsEstablishedOnlyByAControlFact(t *testing.T) {
@@ -100,7 +100,7 @@ func TestASegmentIsEstablishedOnlyByAControlFact(t *testing.T) {
 	}
 }
 
-// Covers: CONTEXT 生命周期②「后续兼容载运对象取得同一运输控制 → 分别加入实际履约段
+// Covers: CONTEXT 生命周期「实际履约段与履约参与关系」一节「后续兼容载运对象取得同一运输控制 → 分别加入实际履约段
 // 并形成自己的参与起点，不修改其他对象的起点」——重复加入被拒（同一控制范围不重复
 // 建立参与），关段后不再接新对象。
 func TestLaterObjectsJoinWithTheirOwnEntry(t *testing.T) {
@@ -148,9 +148,8 @@ func TestLaterObjectsJoinWithTheirOwnEntry(t *testing.T) {
 	})
 }
 
-// Covers: CONTEXT 生命周期③「对象形成有效交付、下一次权威交接或明确控制终止 → 该对象
-// 参与结束」与④「全部有效参与关系已经结束且不再接受新对象 → 段结束；各对象可以具有
-// 不同结果」——逐对象结束、结果各异；结束后不重复结束、关段后不再接新。
+// Covers: CONTEXT 生命周期「实际履约段与履约参与关系」一节「载运对象形成有效交付、下一次权威交接或明确控制终止结果 → 该对象的履约参与关系结束」
+// 与「全部有效参与关系已经结束且不再接受新对象 → 实际履约段结束；各对象可以具有不同结果」——逐对象结束、结果各异；结束后不重复结束、关段后不再接新。
 func TestParticipationEndsPerObjectWithItsFact(t *testing.T) {
 	reference := mustValue(t, domain.NewFulfillmentSegmentReference, "segment-1")
 	segment, err := domain.EstablishSegmentWithPickup(reference, formedPickup(t, "parcel-1", "attempt-1"), domain.PlannedSegmentReference{})

@@ -197,8 +197,8 @@ func NewEndFulfillmentParticipationHandler(
 // 窄写口。**没有任何一步按段批量更新成员**，那是本票的头号红线：CONTEXT 要求共享段中每个对象
 // 分别成立、结束和更正，不能由整段结果覆盖成员差异——哪怕当下所有成员结果确实相同。
 //
-// **结束一条参与不顺手关段。** CONTEXT 生命周期④要求「全部有效参与关系已经结束**且不再接受
-// 新对象**」才结束段，后半句是一个决定不是一个可推导的状态；这里自动关段就等于替人做了那个决定。
+// **结束一条参与不顺手关段。** CONTEXT 生命周期「实际履约段与履约参与关系」一节要求「全部有效参与关系已经结束且不再接受
+// 新对象」才结束段，后半句是一个决定不是一个可推导的状态；这里自动关段就等于替人做了那个决定。
 func (handler *EndFulfillmentParticipationHandler) End(
 	ctx context.Context,
 	command EndFulfillmentParticipationCommand,

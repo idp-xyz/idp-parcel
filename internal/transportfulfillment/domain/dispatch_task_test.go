@@ -134,8 +134,8 @@ func TestRescheduleKeepsTheTaskIdentity(t *testing.T) {
 	})
 }
 
-// Covers: CONTEXT「一次失败尝试不自动结束任务……是否再次尝试、改约、终止或交由客户
-// 送站，必须使用适用产品、合同和授权规则」与「任务汇总只能由对象结果派生」——终止与
+// Covers: CONTEXT「一次失败尝试不自动结束任务、实际履约段或客户服务」与「是否重试、改约、终止或
+// 退运由适用产品、合同和授权处置规则决定」与「任务汇总只能由对象结果派生」——终止与
 // 完成都必须显式带依据；没有依据的关闭立不成；关闭一次为限。
 func TestClosureNeedsAnExplicitBasis(t *testing.T) {
 	basis := mustValue(t, domain.NewTaskClosureBasisReference, "per-object-results-1")

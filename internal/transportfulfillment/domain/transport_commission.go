@@ -293,7 +293,8 @@ func (commission TransportCommission) MarkTransportStarted(
 }
 
 // Cancel 取消尚未开始的运输意图。已经形成的承运接受、容量预占、费用责任和履约事实
-// 继续按各自规则保留和处置（CONTEXT 195）——本方法不触碰任何那些对象，它们也不在
+// 继续按各自规则保留和处置（CONTEXT 生命周期「运输委托、订舱与承运接受」一节「已经形成的承运接受、容量预占、费用责任和履约事实继续
+// 按各自规则保留和处置」）——本方法不触碰任何那些对象，它们也不在
 // 本类型上；实际运输已开始后不可取消，只能按事实形成中断或其他实际结果。
 func (commission TransportCommission) Cancel(at time.Time) (TransportCommission, error) {
 	if AtRegistryPrecision(at).IsZero() || at.Before(commission.submittedAt) {
@@ -321,7 +322,8 @@ func NewBookingReference(value string) (BookingReference, error) {
 
 // BookingRequest 是针对具体班次或外部运输服务的舱位/容量申请（CONTEXT「订舱」）。
 // 订舱申请本身不占用容量、不等于承运接受——它与委托、接受、预占分别拥有身份与生命
-// 周期（CONTEXT 119/122）。
+// 周期（CONTEXT「运输委托、订舱、容量与装载」一节「运输委托、订舱、容量预占、承运接受和装载分配分别拥有业务身份、对象范围、数量、
+// 条件和生命周期」）。
 //
 // 订舱必须指名一个具体班次（ADR-0202 决定五）：周期安排不是班次，不能被订舱直接引用（CONTEXT「周期安排」），而不指名
 // 班次的订舱说不清申请的是哪一班的舱位。班次在不在册由编排在提交时核，这里只钉「有这一格」。
@@ -431,8 +433,8 @@ func NewAcceptanceBasisReference(value string) (AcceptanceBasisReference, error)
 }
 
 // CarrierAcceptanceOutcome 是承运方对订舱作答的封闭五值：接受成约；拒绝、失效与撤回
-// 分格（CONTEXT 生命周期「订舱申请 → 待确认、候补、部分确认、已确认、拒绝或失效：每次结果保留数量和来源，后续替代不覆盖
-// 原申请」）。
+// 分格（CONTEXT 生命周期「运输委托、订舱与承运接受」一节「订舱申请（没有答复时读作待确认）→ 候补，或直接定局：接受（带接受量，
+// 少于申请量即部分确认）、拒绝、失效或撤回」）。
 //
 // 候补（ADR-0202 决定五）是承运方答「此刻排进候补、尚未确认」：不成约、没有接受量，带候补的依据。它是五值里唯一不定局的
 // 一值——同一订舱在候补之后还可以有一个定局答复（见 AdmitsSuccessor），其余四值一经答出就是这次订舱的结局。`待确认`
@@ -472,7 +474,8 @@ func (outcome CarrierAcceptanceOutcome) String() string {
 // CarrierAcceptance 是运输服务提供方针对订舱作出的结果（CONTEXT「承运接受」）。只有
 // 接受成约；接受也**不等于**容量已预占、对象已分配或实际承运商已收寄——面单生成、
 // 渠道受理、预报成功、订舱接受、舱单建立、电子数据接收和车辆到场均不构成实际承运商
-// 首次有效收寄（CONTEXT 105），所以本类型上没有任何收寄或控制字段可以冒充那道边界。
+// 首次有效收寄（CONTEXT「履约主体与承运证据」一节「面单生成、渠道受理、预报成功、订舱接受、舱单建立、电子数据接收和车辆到场均不构成
+// 实际承运商首次有效收寄」），所以本类型上没有任何收寄或控制字段可以冒充那道边界。
 type CarrierAcceptance struct {
 	tenantID   TenantID
 	acceptance CarrierAcceptanceReference
@@ -484,7 +487,7 @@ type CarrierAcceptance struct {
 }
 
 // FormCarrierAcceptance 依附订舱申请形成承运结果。接受必须带不超过申请量的接受量
-// （部分接受合法，CONTEXT「承运接受可以部分或附条件成立」）；拒绝/失效/撤回/候补必须带原因来源且没有接受量。
+// （部分接受合法，CONTEXT Language「承运接受」：「承运接受可以只接受一部分」）；拒绝/失效/撤回/候补必须带原因来源且没有接受量。
 func FormCarrierAcceptance(
 	booking BookingRequest,
 	acceptance CarrierAcceptanceReference,
@@ -572,8 +575,9 @@ func (acceptance CarrierAcceptance) Settles() bool {
 // AdmitsSuccessor 答 next 能不能接在本答复之后，成为同一订舱的下一份答复：只有候补可以被后继；后继必须是同一租户同一
 // 订舱上另一份答复，是定局（候补之后再候补，只是把同一件事又说一遍，改的应是原答复），且不早于候补。
 //
-// 后继不覆盖候补：两份答复各自保留，候补那一份仍是那段时间里承运方确实说过的话（CONTEXT「后续替代不覆盖原申请」）。定局
-// 之后不再有后继——已接受的订舱不能再被拒绝，改约走撤回与新订舱。
+// 后继不覆盖候补：两份答复各自保留，候补那一份仍是那段时间里承运方确实说过的话（CONTEXT 生命周期「运输委托、订舱与承运接受」
+// 一节「后继不覆盖候补，也不覆盖原申请」）。定局之后不再有后继——已接受的订舱不能再被拒绝，定局之后连撤回也不接；要变只能由
+// 运营取消订舱再新订。
 func (acceptance CarrierAcceptance) AdmitsSuccessor(next CarrierAcceptance) bool {
 	return acceptance.outcome == BookingWaitlisted &&
 		next.Settles() &&

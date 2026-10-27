@@ -35,8 +35,8 @@ type ChargeOccurrenceRegistrar interface {
 // objects 恰一个；实际履约给 segment 与 objects；订舱与取消给 booking 与 objects。selfOperated 为真是一种声明，此时
 // provider / agreement / agreementVersion 留空；否则三者必给——缺了是未受理，不是不适用。事实带着委托时（订舱与取消，
 // 或段已采用委托）三者可以留空、取委托的，给了而不一致答冲突。依据、范围、业务时间、发生项引用与版本都不收：
-// 它们取自事实或由事实派生。发生条件、数量与单位也不收：由采用协议的声明定（ADR-0209）。断言期的
-// conditionAssertion / quantity / unit 三键随之退场，带来按未知键拒（400）——静默丢掉，登记方会以为自己的断言或
+// 它们取自事实或由事实派生。发生条件、数量与单位也不收：由采用协议的声明定（ADR-0209）。
+// conditionAssertion / quantity / unit 三键不在载荷里，带来按未知键拒（400）——静默丢掉，登记方会以为自己的断言或
 // 数量算了数。
 type ChargeOccurrenceRegistrationPayload struct {
 	Reason              string   `json:"reason"`

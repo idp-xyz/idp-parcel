@@ -173,7 +173,7 @@ func pickupRegistrationCommand(t *testing.T) application.RegisterOffsitePickupCo
 	}
 }
 
-// Covers: CONTEXT「场外揽收只有在明确载运对象……由运输方取得控制时才建立履约参与
+// Covers: CONTEXT「场外揽收只有在明确载运对象……由运输方取得控制时，才建立履约参与
 // 关系」的编排面——控制证据等七件由领域把门首登成功；重放返原版不重签（`AT-TF-019`
 // 「同一尝试和内容重复回传→返回原结果，不重复建立控制或履约参与」的编排面）；异内容
 // 同键冲突不顶替（`AT-TF-020`「同一来源身份回传相反结果→形成冲突……不使用最后消息

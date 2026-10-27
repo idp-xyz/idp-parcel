@@ -344,7 +344,7 @@ func TestRehydrationRefusesAMalformedVoidedVersion(t *testing.T) {
 	})
 }
 
-// Covers: 段由首个对象的控制事实成立（CONTEXT 生命周期①）。一个没有任何参与关系的段
+// Covers: 段由首个对象的控制事实成立（CONTEXT 生命周期「实际履约段与履约参与关系」一节「有效收寄或权威交接确认首个载运对象进入共同运输控制范围 → 实际履约段成立」）。一个没有任何参与关系的段
 // 从来不曾成立过，它不是「空段」而是坏行。
 func TestRehydrationRefusesASegmentWithNoParticipation(t *testing.T) {
 	if _, err := domain.RehydrateActualFulfillmentSegment(segmentSpec(t)); !errors.Is(err, domain.ErrInvalidFulfillmentSegment) {
@@ -379,7 +379,7 @@ func TestRehydrationRequiresClosedAndClosedAtTogether(t *testing.T) {
 	}
 }
 
-// Covers: CONTEXT「一个仍在控制中的对象足以让段继续存在」。
+// Covers: CONTEXT 生命周期「实际履约段与履约参与关系」一节「全部有效参与关系已经结束且不再接受新对象 → 实际履约段结束」：只要还有一个仍在控制中的对象，段就继续存在。
 //
 // 这一条是**行间的一致性核对，不是重放 CloseSegment**：一个「已关闭且仍有在场参与」的段
 // 是领域任何路径都产不出的状态，收下它等于让重建门造出一个构造门造不出的聚合。区别在于

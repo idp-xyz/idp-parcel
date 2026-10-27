@@ -211,7 +211,7 @@ func TestDetentionWithoutMovementAuthorityIsSupplementRequired(t *testing.T) {
 	}
 }
 
-// Covers: 结果契约`已拒绝`行「拒绝范围、依据、决定方和业务时间」与三格形状（领域把门、
+// Covers: UC-TF-001 结果契约`监管运输协作已拒绝`行（`DISPOSITION_DECIDED`，决定 `DECLINED`）「拒绝范围、拒因、决定方和业务时间」与三格形状（领域把门、
 // 编排分格）——拒接必带拒因不带对象；拒接反带对象是形状错答未受理。
 func TestADeclineCarriesItsBasisAndNoObjects(t *testing.T) {
 	fixture := newAcceptDispositionFixture(t)
@@ -248,8 +248,8 @@ func TestADeclineCarriesItsBasisAndNoObjects(t *testing.T) {
 	}
 }
 
-// Covers: 结果契约`部分承接`行「已承接、未承接范围及逐项原因……不得用整批结果扩大
-// 范围」。点名 `AT-TF-006` 的承接半边「逐对象保存……批次不显示整体完成」——部分承接
+// Covers: UC-TF-001 结果契约`监管运输协作部分承接`行（`DISPOSITION_DECIDED`，决定 `PARTIALLY_ACCEPTED`）「已承接对象、未承接范围的原因与
+// 移动授权」与「不得用整批结果扩大范围」。点名 `AT-TF-006` 的承接半边「逐对象保存……批次不显示整体完成」——部分承接
 // 两半都要，缺未承接原因即立不起来。
 func TestAPartialAcceptanceKeepsBothSides(t *testing.T) {
 	fixture := newAcceptDispositionFixture(t)

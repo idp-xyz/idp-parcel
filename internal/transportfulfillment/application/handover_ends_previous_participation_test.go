@@ -21,7 +21,7 @@ func (fixture *participationFixture) handoverHandlerEndingParticipations() *appl
 }
 
 // Covers: 票 tf-segment-lifecycle-closure/06 裁决 (i) 的交接一路——`已交接`落库后**同一编排内**结束该对象在前一段
-// 的参与，再进新段（CONTEXT 生命周期③「下一次权威交接」与①②「形成下一实际履约段」）。邻居不动；拒收不结束
+// 的参与，再进新段（CONTEXT 生命周期「实际履约段与履约参与关系」一节「下一次权威交接」，与「履约主体与承运证据」一节「结束原载运对象的履约参与关系并形成下一实际履约段」）。邻居不动；拒收不结束
 // 任何参与；对象的第一次交接答 NO_ACTIVE_PARTICIPATION 而不静默。
 func TestARegisteredHandoverEndsThePreviousParticipationThenEntersTheNextSegment(t *testing.T) {
 	fixture := newParticipationFixture(t)

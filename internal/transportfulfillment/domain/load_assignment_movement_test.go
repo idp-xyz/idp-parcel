@@ -49,7 +49,7 @@ func movementSpec(t *testing.T, kind domain.MovementFactKind) domain.MovementFac
 	return spec
 }
 
-// Covers: CONTEXT「装载分配」词条与 208「装载分配形成、变化或撤回时保存版本和对象范围；
+// Covers: CONTEXT「装载分配」词条与生命周期「容量预占与装载分配」一节「装载分配形成、变化或撤回时保存版本和对象范围；
 // 物理装载、短装、多装或错装作为独立事实参与比较，不修改分配历史」——分配是执行意图：
 // 类型上没有已装载/控制/交接字段；变化与撤回都走新版本回指前身，原版本不动。
 func TestALoadAssignmentIsIntentNotLoading(t *testing.T) {

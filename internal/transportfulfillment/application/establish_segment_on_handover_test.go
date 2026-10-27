@@ -345,7 +345,7 @@ func newHandoverSegmentFixture(t *testing.T) *handoverSegmentFixture {
 	return fixture
 }
 
-// 首个对象凭`已交接`的权威交接立段：CONTEXT 生命周期①「有效收寄或权威交接确认首个
+// 首个对象凭`已交接`的权威交接立段：CONTEXT 生命周期「实际履约段与履约参与关系」一节「有效收寄或权威交接确认首个
 // 载运对象进入共同运输控制范围 → 实际履约段成立，该对象形成有效履约参与关系」。
 func TestHandedOverFirstObjectEstablishesSegment(t *testing.T) {
 	fixture := newHandoverSegmentFixture(t)
@@ -379,7 +379,7 @@ func TestHandedOverFirstObjectEstablishesSegment(t *testing.T) {
 	}
 }
 
-// 后续对象加入既有段：CONTEXT 生命周期②「后续兼容载运对象取得同一运输控制 → 分别加入
+// 后续对象加入既有段：CONTEXT 生命周期「实际履约段与履约参与关系」一节「后续兼容载运对象取得同一运输控制 → 分别加入
 // 实际履约段并形成自己的参与起点，不修改其他对象的起点」。
 //
 // 「这个段是否已成立」这一判落在段登记册的取回上，不在编排里记——并发两个对象同时到达时，
@@ -422,8 +422,8 @@ func TestSecondHandedOverObjectJoinsTheSameSegment(t *testing.T) {
 	}
 }
 
-// 拒收与待确认立不起段，而登记本身照样成立：CONTEXT「已拒收或待确认不转出控制，此前
-// 控制方在结果成立前继续保持控制」。**不立段不是失败**——那是正当的业务结果，把它做成
+// 拒收与待确认立不起段，而登记本身照样成立：CONTEXT 生命周期「权威运输交接」一节
+// 「已拒收只结束本次交接尝试，不转移控制」与「此前控制方在结果成立前继续保持控制」。**不立段不是失败**——那是正当的业务结果，把它做成
 // 错误会让调用方以为这次交接没登上。
 func TestHandoverWithoutControlTransferEstablishesNoSegment(t *testing.T) {
 	for _, verdict := range []domain.HandoverVerdict{

@@ -397,7 +397,7 @@ func compareCommissionDigest(stored, current string) domain.StoredDigestComparis
 }
 
 // SubmitBooking 提交订舱申请（UC-TF-004 步 1、3；ADR-0202 决定五）：订舱过构造门 → 按（租户+订舱）分重放与冲突 → 核
-// 委托在册且未取消 → 核班次在册 → 落库。订舱不占容量、不等于接受（领域词条）；确认订舱与容量的关系另归一张票，这里不碰
+// 委托在册且未取消 → 核班次在册 → 落库。订舱不占容量、不等于接受（领域词条）；确认订舱不读池、不要预占引用，容量保障只挂在装载分配上（ADR-0264 决定一、二），这里不碰
 // 任何池。
 //
 // 重放判在两项核对之前：那一格答的是「这次订舱是谁」，交回的是在册那一份，与委托、班次此后变成什么样无关——委托事后
@@ -442,7 +442,7 @@ func (handler *CommissionTransportHandler) SubmitBooking(
 		return CommissionResult{outcome: CommissionNotFound}, nil
 	}
 	if _, cancelled := commission.Commission.Cancelled(); cancelled {
-		// 委托取消停止的正是尚未消耗的运输意图（CONTEXT 生命周期「尚未消耗的运输委托或订舱范围可以取消」），在它下面新订舱
+		// 委托取消停止的正是尚未开始的运输意图（CONTEXT 生命周期「运输委托、订舱与承运接受」一节「尚未开始的运输委托可以整份取消」），在它下面新订舱
 		// 等于把停掉的意图又续上。已开始的委托不挡：开始之后仍可能为剩余范围订舱。
 		return CommissionResult{outcome: BookingCommissionNotBookable}, nil
 	}
@@ -567,7 +567,8 @@ func (handler *CommissionTransportHandler) AnswerBooking(
 		return CommissionResult{}, fmt.Errorf("answer booking %s: %w", bookingRef, err)
 	}
 	if head >= 0 && !history[head].AdmitsSuccessor(acceptance) {
-		// 已有定局，或这份不是候补的合格后继：应答不可覆盖，改约走撤回与新订舱。
+		// 已有定局，或这份不是候补的合格后继：应答不可覆盖，定局之后连撤回也不接。已接受的订舱要变，只能由运营经取消订舱口
+		// （CancelBooking）取消再新订。
 		return CommissionResult{outcome: BookingAnswerConflict}, nil
 	}
 
@@ -645,12 +646,12 @@ func answerFromStoredAnswer(stored ports.BookingAnswerRecord, digest string, com
 
 // CancelCommission 取消未开始的运输意图（ADR-0204 决定三）：委托在册 → 已取消即重放 → 领域判开始与时刻 → 落取消。已开始
 // 答`运输已开始`（AT-TF-092）：委托下的运输一经段采用就开始了，取消不了，只能按事实形成中断、改降、折返等实际结果；已经
-// 形成的订舱、承运接受与容量预占各按自己的规则保留，取消不碰它们（CONTEXT 生命周期「尚未消耗的运输委托或订舱范围可以
-// 取消」）。
+// 形成的订舱、承运接受与容量预占各按自己的规则保留，取消不碰它们（CONTEXT 生命周期「运输委托、订舱与承运接受」一节
+// 「尚未开始的运输委托可以整份取消」）。
 //
 // 取消是整份的：委托一旦开始就整份拒，没有「只停尚未开始的成员」这一种部分取消；取消成立时也不向尚未消耗的订舱或预占发
-// 取消、释放请求——CONTEXT「上游运输意图取消只对尚未消耗的下游范围发出取消或释放请求」的下游那一步本编排没做，要运营人员
-// 经取消订舱口、释放口逐个登记（ADR-0204 越权风险点「取消只有整份，也不往下游传」）。
+// 取消、释放请求，这就是现行规则（CONTEXT「运输委托、订舱、容量与装载」一节「取消成立也不向尚未消耗的订舱、容量预占传取消或
+// 释放」，ADR-0204 决定三），要运营人员经取消订舱口、释放口逐个登记（ADR-0204 越权风险点「取消只有整份，也不往下游传」）。
 //
 // 已取消的重放答原取消、不二取，哪怕这次给的取消时刻不同：取消只有一次，第二个时刻没有可落的地方。
 func (handler *CommissionTransportHandler) CancelCommission(

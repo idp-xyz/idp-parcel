@@ -121,7 +121,7 @@ func TestQualifiedEvidenceNamingARegisteredPartyFormsAnIdentifiedVersion(t *test
 }
 
 // Covers: CONTEXT「名称在参与方册上找不到对应身份时，不据名称铸身份，形成待确认（承运主体身份未登记），
-// 名称作为素材随依据保留」与生命周期「待确认（承运主体身份未登记）→ 已识别：PC 登记了对应身份后，凭
+// 名称作为素材随依据保留」与生命周期「待确认（承运主体身份未登记）→ 已识别：`party-commercial` 登记了对应身份后，凭
 // 同一份证据形成新版本」——同一条命令在登记前后各来一次，前一次留素材、后一次补认成新版本。
 func TestAnUnregisteredSubjectStaysPendingUntilTheDirectoryKnowsItThenTheSameEvidenceRecognisesIt(t *testing.T) {
 	fixture := newCarrierJudgmentFixture(t)

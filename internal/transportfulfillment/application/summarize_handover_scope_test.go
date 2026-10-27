@@ -21,7 +21,7 @@ type handoverScopeViewDouble struct {
 	records []ports.TransportHandoverRecord
 	listErr error
 	calls   int
-	// 记下被问到的租户与范围：CONTEXT 要求汇总只含「这一次交接」的成员，
+	// 记下被问到的租户与范围：汇总只含这一次交接范围里的成员，
 	// 而读面若不把租户传下去，隔离就只剩适配器一层。
 	askedTenant domain.TenantID
 	askedScope  domain.HandoverScopeReference

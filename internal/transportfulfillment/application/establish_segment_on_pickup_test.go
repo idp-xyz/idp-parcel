@@ -29,7 +29,7 @@ func newPickupSegmentFixture(t *testing.T) *pickupSegmentFixture {
 	return fixture
 }
 
-// 首个对象凭有效收寄立段：CONTEXT 生命周期①的另一半来源。与交接那一半的分别只在
+// 首个对象凭有效收寄立段：CONTEXT 生命周期「实际履约段与履约参与关系」一节「有效收寄或权威交接确认首个载运对象进入共同运输控制范围 → 实际履约段成立」的另一半来源。与交接那一半的分别只在
 // 参与起点的种类与时刻——收寄取业务发生时间，不取登记时刻。
 func TestPickedUpFirstObjectEstablishesSegment(t *testing.T) {
 	fixture := newPickupSegmentFixture(t)

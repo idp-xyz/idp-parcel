@@ -449,8 +449,8 @@ func (release CapacityRelease) Declares(demand CapacityDemand, at time.Time) boo
 }
 
 // CapacityPool 是班次或运输资源在明确范围与维度上可供预占与分配的运力范围（CONTEXT
-// 「容量池」）。单维度：多维各自建池，不强制换算（AT-TF-030）——CONTEXT 说的多维运力范围，在这里是同一班次上
-// 逐维的一组池。值类型：每次转换返回新值；释放与消耗都没有反向方法——归还与扣减只能沿正向关系再转换。
+// 「容量池」）。单维度：多维各自建池，不强制换算（AT-TF-030）——CONTEXT Language「容量池」：「一班的多维运力是同一班次上
+// 逐维的一组池」。值类型：每次转换返回新值；释放与消耗都没有反向方法——归还与扣减只能沿正向关系再转换。
 type CapacityPool struct {
 	tenantID     TenantID
 	pool         CapacityPoolReference

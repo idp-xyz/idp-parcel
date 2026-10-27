@@ -191,7 +191,7 @@ func (repository *TransportHandovers) FindSuccessor(
 // （ports.HandoverScopeView）。
 //
 // 这里刻意不判「哪一版是当前有效的」——被更正的原版本照样入列。原行不删是 CONTEXT 的话，
-// 而「更正使原结果失效」是领域的判断：SummarizeHandovers 自己按版本链折掉被替代的那一代。
+// 而「后续更正通过新的判断版本使原结果失效或被替代」是领域的判断：SummarizeHandovers 自己按版本链折掉被替代的那一代。
 // 在 SQL 里先筛一遍等于为同一条规则立第二个口径，领域改一次判据、这里那份会悄悄漂移
 // ——与本票不在 SQL 里 COUNT 的理由是同一条。
 //

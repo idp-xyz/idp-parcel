@@ -353,7 +353,7 @@ func decodeOperation(t *testing.T, recorder *httptest.ResponseRecorder) operatio
 	return view
 }
 
-// Covers: CONTEXT 生命周期④在写面上的整条序列——仍有在场参与关不上（SEGMENT_STILL_ACTIVE）；全部参与
+// Covers: CONTEXT 生命周期「实际履约段与履约参与关系」一节「全部有效参与关系已经结束且不再接受新对象 → 实际履约段结束」在写面上的整条序列——仍有在场参与关不上（SEGMENT_STILL_ACTIVE）；全部参与
 // 结束后声明关段 201 SEGMENT_CLOSED；重放是自己的答案 SEGMENT_ALREADY_CLOSED；不在册的段 SEGMENT_NOT_FOUND。
 // 四格各自成格，续办动作两两不同，传输层不合并。**不自动关段**：这个口是让人做那个决定的口。
 func TestSegmentClosureRunsTheLifecycleSequence(t *testing.T) {

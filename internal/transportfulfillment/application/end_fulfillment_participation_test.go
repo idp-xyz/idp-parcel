@@ -335,8 +335,8 @@ func TestAnEffectiveDeliveryEndsTheParticipation(t *testing.T) {
 	}
 }
 
-// **终点早于起点要被拒**，而这一条是写上一条用例时撞出来的：交付夹具的到场时刻比两成员段的
-// 参与起点早几个小时，于是领域当场拒了。它不是夹具凑巧，是 CONTEXT 那条「实际控制起止」的
+// **终点早于起点要被拒**：交付夹具的到场时刻若比两成员段的
+// 参与起点早几个小时，领域当场就拒。它不是夹具凑巧，是 CONTEXT Language「履约参与关系」里「实际控制起止」的
 // 直接后果——一次发生在对象进段之前的交付，结束不了它此后才成立的参与。
 func TestADeliveryEarlierThanTheParticipationStartIsRefused(t *testing.T) {
 	fixture := newParticipationFixture(t)

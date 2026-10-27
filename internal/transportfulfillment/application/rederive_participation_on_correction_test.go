@@ -279,7 +279,7 @@ func TestAHandoverCorrectionThatStillTransfersControlRederivesTheParticipation(t
 
 // Covers: ADR-0112 决定四与票 tf-segment-lifecycle-closure/11 裁决 1、2、5 在编排一侧——`已交接`被更正为拒收/待确认
 // 走的是同一道重派生门：更正照落，段里凭前版入场的参与经 `Supersede` 长出失效版本（回指前版、Voided 为是、不在场），
-// 原参与一字不动；成功时两格都空，与替代版本同形——CORRECTION_WITHDRAWS_CONTROL 那一格已退场，撤回控制不再是段
+// 原参与一字不动；成功时两格都空，与替代版本同形——撤回控制不是段
 // 那一半的拒绝。此后该对象在本段当前无有效参与：在场计数为零，按对象反查在场也找不到它。
 func TestAHandoverCorrectionThatWithdrawsControlVoidsTheParticipation(t *testing.T) {
 	for _, verdict := range []domain.HandoverVerdict{domain.HandoverRefused, domain.HandoverPendingConfirmation} {

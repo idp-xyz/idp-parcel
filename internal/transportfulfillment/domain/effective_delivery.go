@@ -342,8 +342,8 @@ func (delivery EffectiveDelivery) CorrectedAt() (time.Time, bool) {
 }
 
 // CorrectProof 依据新证据形成更正版本：保留原版本与原判断（值语义，接收者不动），
-// 新版本回指被更正版本；沿用原版本号就是覆盖，构造期拒绝（CONTEXT「POD 被更正或失效
-// 时保留原证据和判断，形成新版本」，AT-TF-072）。
+// 新版本回指被更正版本；沿用原版本号就是覆盖，构造期拒绝（CONTEXT「揽收、派送与交付」一节「交付证明被更正、撤销有效性或
+// 证明不足时，保留原证据和原交付判断」，AT-TF-072）。
 func (delivery EffectiveDelivery) CorrectProof(
 	proof DeliveryProofReference,
 	version DeliveryResultVersion,

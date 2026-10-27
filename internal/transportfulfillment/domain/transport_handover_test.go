@@ -121,7 +121,7 @@ func TestRefusedAndUnconfirmedDoNotTransferControlOut(t *testing.T) {
 	}
 }
 
-// Covers: CONTEXT 交接硬句「整批/整车/整袋结论只能由对象级结果派生」与 `AT-TF-052`
+// Covers: CONTEXT 交接硬句「整批、整车、整袋和整单结论只能由对象级结果派生」与 `AT-TF-052`
 // 「一批对象只有部分被接收 → 已接收对象进入履约，拒收对象继续由节点控制」——汇总只有
 // 计数与派生问答，混合结果不塌成一个批次状态；跨范围混入被拒。
 func TestBatchConclusionsDeriveOnlyFromObjectResults(t *testing.T) {
@@ -182,7 +182,7 @@ func TestBatchConclusionsDeriveOnlyFromObjectResults(t *testing.T) {
 		}
 	})
 
-	// Covers: CONTEXT「更正形成新版本使原结果失效或被替代，不删除原交接」——原版本留在
+	// Covers: CONTEXT 生命周期「权威运输交接」一节「后续更正通过新的判断版本使原结果失效或被替代，不删除原交接及其历史派生」——原版本留在
 	// 册上，但它不再是这个对象的结果。汇总收到整条版本链时按对象只计有效那一版；否则一次
 	// 更正会把一个对象数成两个，而且两格裁决各多一。
 	t.Run("a corrected object counts once by its effective verdict", func(t *testing.T) {

@@ -256,7 +256,7 @@ func (handler *JudgeCarrierFirstEffectivePickupHandler) Judge(
 			// （更正要带新的来源版本），所以异内容只能答冲突、链尾不动。
 			return replayOrConflictOnTheSameBasis(command, current, input)
 		}
-		// 链尾待确认、同一依据再来：身份此刻若已在册，就是「PC 登记之后凭同一份证据形成新版本」（CONTEXT 生命周期）；
+		// 链尾待确认、同一依据再来：身份此刻若已在册，就是 CONTEXT 生命周期「实际承运商首次有效收寄」一节「待确认 → 已形成：`party-commercial` 登记了对应身份后凭同一依据形成新版本」；
 		// 仍未在册则链尾不动——同一依据不长第二版待确认。
 		return handler.reconsiderPending(ctx, command, current, input)
 	}

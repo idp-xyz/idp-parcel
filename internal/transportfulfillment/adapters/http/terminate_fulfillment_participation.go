@@ -9,8 +9,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
-// 票 tf-segment-lifecycle-closure/07 的第四个写面：明确控制终止——结束一条履约参与关系的三来源里唯一
-// 走写面的一路（票 03 简报第 5 行）。有效交付与下一次权威交接两路是 TF 自己的派生，内部触发（票 06）。
+// 票 tf-segment-lifecycle-closure/07 的 admin 写面之一：明确控制终止——结束一条履约参与关系的三来源里唯一
+// 走写面的一路（票 tf-segment-lifecycle-closure/03 接入判定表里 `EndFulfillmentParticipation` 那一行）。有效交付与下一次权威交接两路是 TF 自己的派生，内部触发（票 06）。
 
 // ParticipationTermination 是终止口自己的命令形状，**刻意比应用命令窄**：只有段、对象、依据与时刻。
 //

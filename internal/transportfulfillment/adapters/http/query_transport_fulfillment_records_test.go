@@ -797,7 +797,7 @@ func TestCarrierMasterDocumentRegistryTranscribesVersionChain(t *testing.T) {
 
 // Covers: ADR-0077 Decision 四 — 空登记册是内容不是错误：200 + 空数组（不是 null），
 // 各本册子一致。写入方是各命令端点的真渠道，未配置时册子就是空的，读面不代答续办。
-// 总单一格自 ADR-0113 立册起属这一族：空册说的是「登记册为空」，不再是「无处可登」。
+// 总单一格自 ADR-0113 立册起属这一族：空册说的是「登记册为空」，不是「无处可登」。
 func TestEmptyFulfillmentRegistersAnswerEmptyArrays(t *testing.T) {
 	for registry, key := range map[string]string{
 		"transport-schedule":              "schedules",

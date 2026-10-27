@@ -291,7 +291,7 @@ func (handler *RegisterTransportHandoverHandler) handOverIntoSegment(
 	return ended, handler.establishSegment(ctx, declaration, handover), nil
 }
 
-// endPreviousParticipation 在`已交接`落库后同事务结束该对象在前一段的参与（CONTEXT 生命周期③「下一次权威
+// endPreviousParticipation 在`已交接`落库后同事务结束该对象在前一段的参与（CONTEXT 生命周期「实际履约段与履约参与关系」一节「下一次权威
 // 交接」，票 06 裁决 (i)）。
 //
 // 只有转出控制的裁决走到这里：拒收与待确认没有让控制移入接收方，前段的参与照常在场——所以 ParticipationEnds
@@ -324,7 +324,7 @@ func (handler *RegisterTransportHandoverHandler) endPreviousParticipation(
 	return ended.Outcome(), nil
 }
 
-// establishSegment 让这次交接的对象进入实际履约段（CONTEXT 生命周期①②）。
+// establishSegment 让这次交接的对象进入实际履约段（CONTEXT 生命周期「实际履约段与履约参与关系」一节「有效收寄或权威交接确认首个载运对象进入共同运输控制范围 → 实际履约段成立」与「后续兼容载运对象取得同一运输控制 → 分别加入实际履约段」）。
 //
 // 本编排只提供交接那一侧的两道领域门：三裁决里只有`已交接`转出控制，拒收与待确认在
 // ParticipationBasis 上就被挡住，这里不重判一遍。其余判断（要不要进段、段是否已成立、

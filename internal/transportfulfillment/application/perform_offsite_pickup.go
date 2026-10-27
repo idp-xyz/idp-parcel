@@ -433,7 +433,7 @@ func (handler *PerformOffsitePickupHandler) commit(
 	}
 }
 
-// enterSegments 让这次到访取得控制的对象逐个进入同一个实际履约段（CONTEXT 生命周期①②）。
+// enterSegments 让这次到访取得控制的对象逐个进入同一个实际履约段（CONTEXT 生命周期「实际履约段与履约参与关系」一节「有效收寄或权威交接确认首个载运对象进入共同运输控制范围 → 实际履约段成立」与「后续兼容载运对象取得同一运输控制 → 分别加入实际履约段」）。
 //
 // **失败对象走不到这里**：形不成 OffsitePickup 就不在 record.Pickups 里，CONTEXT「客户不在、
 // 货物未备好、包装不合格或其他失败结果不制造实际履约段」由那道构造门守着，本编排不重判一遍。

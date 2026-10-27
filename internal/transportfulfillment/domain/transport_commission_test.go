@@ -67,8 +67,7 @@ func submittedBooking(t *testing.T) domain.BookingRequest {
 }
 
 // Covers: CONTEXT「运输委托引用供应商商业协议和履约条件快照，但不等于订舱、承运接受、
-// 实际履约段或供应商账单」与 243「保存……协议、条件、角色和责任依据快照，不修改商业
-// 版本」——协议快照、采购责任法人与条件、角色、责任三件快照缺一不可（前两格在提交时判，后三格在草稿时判）；
+// 实际履约段或供应商账单」与「Boundaries and ownership」一节「协议、条件、角色和责任依据快照，不修改商业版本」——协议快照、采购责任法人与条件、角色、责任三件快照缺一不可（前两格在提交时判，后三格在草稿时判）；
 // 类型上只有引用，没有任何商业版本本体可改。
 func TestACommissionSnapshotsItsCommercialBasis(t *testing.T) {
 	commission, err := submitCommission(t, commissionSpec(t))
@@ -125,8 +124,8 @@ func TestACommissionSnapshotsItsCommercialBasis(t *testing.T) {
 }
 
 // Covers: CONTEXT「承运接受……不等于容量已经预占、载运对象已经分配或实际承运商已经
-// 收寄」与 105「面单生成、渠道受理、预报成功、订舱接受、舱单建立、电子数据接收和车辆
-// 到场均不构成实际承运商首次有效收寄」——只有接受成约；拒绝/失效/撤回/候补分格带原因；
+// 收寄」与「履约主体与承运证据」一节「面单生成、渠道受理、预报成功、订舱接受、舱单建立、电子数据接收和车辆到场均不构成
+// 实际承运商首次有效收寄」——只有接受成约；拒绝/失效/撤回/候补分格带原因；
 // 接受对象上没有任何收寄或控制字段（结构防线）。
 func TestBookingIsNotAcceptanceAndOnlyAcceptanceBinds(t *testing.T) {
 	for _, subject := range []reflect.Type{
@@ -249,9 +248,8 @@ func TestBookingIsNotAcceptanceAndOnlyAcceptanceBinds(t *testing.T) {
 	})
 }
 
-// Covers: CONTEXT「首个有效出发或移动事实形成前可以取消……之后只能形成中断、改降、
-// 折返或其他实际结果」与 195「尚未消耗的运输委托或订舱范围可以取消；已经形成的承运
-// 接受……继续按各自规则保留」——取消只对未开始的意图；已开始的委托拒绝取消；已取消
+// Covers: CONTEXT 生命周期「运输委托、订舱与承运接受」一节「尚未开始的运输委托可以整份取消」与「已经形成的承运接受、容量预占、
+// 费用责任和履约事实继续按各自规则保留和处置」——取消只对未开始的意图；已开始的委托拒绝取消；已取消
 // 的没有可开始的意图；接受对象上没有取消入口（结果不撤销）。
 func TestCancellationOnlyReachesUnstartedIntents(t *testing.T) {
 	acceptanceType := reflect.TypeOf(domain.CarrierAcceptance{})

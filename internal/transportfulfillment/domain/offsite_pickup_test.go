@@ -112,7 +112,7 @@ func pickupCorrection(t *testing.T, version string, correctedAt time.Time) domai
 	}
 }
 
-// Covers: CONTEXT 生命周期「来源证据被更正 → 保留原段、原参与关系和原判断，形成失效或替代关系」与
+// Covers: CONTEXT 生命周期「实际履约段与履约参与关系」一节「来源证据被更正或事件有效性变化 → 保留原段、原参与关系和原判断，形成失效或替代关系」与
 // 票 tf-segment-lifecycle-closure/08 裁决 A——更正形成新版本回指被更正版本，原版本一字不动；更正只带
 // 「证据说了什么」四格（地点、控制依据、执行方、发生时刻），对象、任务、尝试沿用被更正版本。
 func TestAPickupCorrectionFormsANewVersionWithoutOverwriting(t *testing.T) {

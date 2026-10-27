@@ -331,7 +331,7 @@ type BookingStore interface {
 }
 
 // BookingAnswerRecord 是承运方对订舱的一份答复。一次订舱至多一份定局答复，定局之前可以有一份候补（BookingAnswerLedger）；
-// 答复不可覆盖——已接受的订舱不能再被拒绝，改约走撤回与新订舱。
+// 答复不可覆盖——已接受的订舱不能再被拒绝，定局之后连撤回也不接；要变只能由运营取消订舱再新订。
 type BookingAnswerRecord struct {
 	Key           BookingKey
 	ContentDigest string

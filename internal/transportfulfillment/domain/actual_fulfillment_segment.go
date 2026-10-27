@@ -81,7 +81,7 @@ func (kind ParticipationEntryKind) String() string {
 }
 
 // ParticipationEndKind 是参与终点的封闭三来源：有效交付、下一次权威交接或明确控制
-// 终止（CONTEXT 生命周期节③）。中断、折返、异常案件不在其中——它们不结束控制。
+// 终止（CONTEXT 生命周期「实际履约段与履约参与关系」一节「载运对象形成有效交付、下一次权威交接或明确控制终止结果 → 该对象的履约参与关系结束」）。中断、折返、异常案件不在其中——它们不结束控制。
 type ParticipationEndKind uint8
 
 const (
@@ -213,7 +213,7 @@ type ActualFulfillmentSegment struct {
 	serviceAction SegmentServiceAction
 }
 
-// EstablishSegmentWithPickup 由首个对象的有效收寄成立段（CONTEXT 生命周期①）。
+// EstablishSegmentWithPickup 由首个对象的有效收寄成立段（CONTEXT 生命周期「实际履约段与履约参与关系」一节「有效收寄或权威交接确认首个载运对象进入共同运输控制范围 → 实际履约段成立」）。
 func EstablishSegmentWithPickup(
 	segment FulfillmentSegmentReference,
 	pickup OffsitePickup,
@@ -345,7 +345,7 @@ func (segment ActualFulfillmentSegment) ActiveParticipations() int {
 }
 
 // JoinWithPickup 让对象凭有效收寄加入段并形成自己的参与起点，不修改其他对象的起点
-// （CONTEXT 生命周期②）。
+// （CONTEXT 生命周期「实际履约段与履约参与关系」一节「后续兼容载运对象取得同一运输控制 → 分别加入实际履约段」）。
 func (segment ActualFulfillmentSegment) JoinWithPickup(
 	pickup OffsitePickup,
 	planned PlannedSegmentReference,
@@ -597,7 +597,7 @@ func (segment ActualFulfillmentSegment) currentParticipationEnteredBy(
 	return current, true
 }
 
-// EndParticipationWithDelivery 以有效交付结束该对象的参与（CONTEXT 生命周期③；有效
+// EndParticipationWithDelivery 以有效交付结束该对象的参与（CONTEXT 生命周期「实际履约段与履约参与关系」一节「载运对象形成有效交付、下一次权威交接或明确控制终止结果 → 该对象的履约参与关系结束」；有效
 // 交付同时形成向收件方的控制转移）。
 func (segment ActualFulfillmentSegment) EndParticipationWithDelivery(
 	delivery EffectiveDelivery,
@@ -675,7 +675,7 @@ func (segment ActualFulfillmentSegment) end(
 }
 
 // CloseSegment 声明段不再接受新对象并结束段。只有全部有效参与关系已经结束才关得上
-// ——各对象可以带着不同结果收尾（CONTEXT 生命周期④），但一个仍在控制中的对象足以
+// ——各对象可以带着不同结果收尾（CONTEXT 生命周期「实际履约段与履约参与关系」一节「各对象可以具有不同结果」），但一个仍在控制中的对象足以
 // 让段继续存在。
 //
 // 同一条规则的时序面：关闭时刻不得早于任何参与的终点。早于它就等于说段在那个对象仍受控时

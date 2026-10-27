@@ -17,7 +17,7 @@ func carrierPickupSegmentRef(t *testing.T) domain.FulfillmentSegmentReference {
 	return mustValue(t, domain.NewFulfillmentSegmentReference, "SEG-CARRIER-X")
 }
 
-// Covers: CONTEXT 生命周期①「有效收寄……确认首个载运对象进入共同运输控制范围 → 实际履约段成立」对第三格成立。
+// Covers: CONTEXT 生命周期「实际履约段与履约参与关系」一节「有效收寄……确认首个载运对象进入共同运输控制范围 → 实际履约段成立」对第三格成立。
 func TestAFormedCarrierPickupEstablishesTheSegmentWithTheThirdEntryKind(t *testing.T) {
 	pickup := formedCarrierPickup(t)
 	segment, err := domain.EstablishSegmentWithCarrierPickup(carrierPickupSegmentRef(t), pickup, domain.PlannedSegmentReference{})
