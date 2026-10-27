@@ -354,6 +354,7 @@ func (catalogue *OperationsCatalogue) ListPreAcceptanceFinancialControlPolicies(
 	rows, err := querier.Query(ctx,
 		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
 		        version.effective_starts_at, version.effective_ends_at, version.published_at,
+		        `+catalogueClosureColumns+`,
 		        content.joint_pass_condition, content.registered_at,
 		        (SELECT COALESCE(
 		                    json_agg(
@@ -379,6 +380,7 @@ func (catalogue *OperationsCatalogue) ListPreAcceptanceFinancialControlPolicies(
 		         AND content.object_kind   = version.object_kind
 		         AND content.object_id     = version.object_id
 		         AND content.version_label = version.version_label
+		   `+versionClosureJoins("version")+`
 		  WHERE version.tenant_id   = $1
 		    AND version.object_kind = $2
 		  ORDER BY version.published_at DESC, version.object_id, version.version_label
@@ -399,19 +401,18 @@ func (catalogue *OperationsCatalogue) ListPreAcceptanceFinancialControlPolicies(
 		var endsAt, registeredAt *time.Time
 		var jointPass *string
 		var itemsJSON []byte
-		if err := rows.Scan(
+		var closure catalogueClosureScan
+		targets := append([]any{
 			&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
-			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt,
-			&jointPass, &registeredAt,
-			&itemsJSON,
-		); err != nil {
+			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt}, closure.targets()...)
+		targets = append(targets, &jointPass, &registeredAt, &itemsJSON)
+		if err := rows.Scan(targets...); err != nil {
 			return nil, fmt.Errorf("list pre-acceptance financial control policies: %w", err)
 		}
-		statusWord := domain.CommercialVersionStatus(status).String()
-		if statusWord == "" {
-			return nil, fmt.Errorf("list pre-acceptance financial control policies: 版本状态 %d 不在封闭集内", status)
+		if row.Status, err = catalogueStatusWord("list pre-acceptance financial control policies", status, closure.retiredAt != nil); err != nil {
+			return nil, err
 		}
-		row.Status = statusWord
+		row.SelectionEndsAt, row.HasSelectionCut, row.RetiredAt, row.Successor = closure.echo()
 		if endsAt != nil {
 			row.EffectiveEndsAt = *endsAt
 			row.HasEffectiveEnd = true

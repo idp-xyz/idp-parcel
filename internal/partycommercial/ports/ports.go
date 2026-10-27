@@ -1363,6 +1363,12 @@ type ServiceProductCatalogueRow struct {
 	Form               string
 	HasForm            bool
 	DeliveryConditions *DeliveryConditionCatalogueRow
+
+	// 收尾回显，含义同 SupplierAgreementCatalogueRow 的同名四格（ADR-0233 决定五）：原区间仍在 Effective* 两格，不被覆盖。
+	SelectionEndsAt time.Time
+	HasSelectionCut bool
+	RetiredAt       time.Time
+	Successor       string
 }
 
 // DeliveryConditionCatalogueRow 是目录行上可缺的一节:某一版(服务产品版本的产品层,或客户
@@ -1570,6 +1576,12 @@ type AuthorizationRuleRow struct {
 	HasCancellationAuthority bool
 	DeclaredAt               time.Time
 	CancellationAuthorities  []CancellationAuthorityRow
+
+	// 收尾回显，含义同 SupplierAgreementCatalogueRow 的同名四格（ADR-0233 决定五）：原区间仍在 Effective* 两格，不被覆盖。
+	SelectionEndsAt time.Time
+	HasSelectionCut bool
+	RetiredAt       time.Time
+	Successor       string
 }
 
 // ClaimDeadlineRow 是客户服务规则正文里一条索赔期限的上列转写：种类（封闭三值，0023 库上
@@ -1616,6 +1628,12 @@ type CustomerServiceRuleRow struct {
 	RegisteredAt     time.Time
 	ClaimDeadlines   []ClaimDeadlineRow
 	MinimumMaterials []MinimumMaterialsRow
+
+	// 收尾回显，含义同 SupplierAgreementCatalogueRow 的同名四格（ADR-0233 决定五）：原区间仍在 Effective* 两格，不被覆盖。
+	SelectionEndsAt time.Time
+	HasSelectionCut bool
+	RetiredAt       time.Time
+	Successor       string
 }
 
 // PreAcceptanceControlItemRow 是接受前财务控制策略正文里一项控制的上列转写：种类与失败处置
@@ -1654,6 +1672,12 @@ type PreAcceptanceFinancialControlPolicyRow struct {
 	JointPassCondition string
 	RegisteredAt       time.Time
 	Controls           []PreAcceptanceControlItemRow
+
+	// 收尾回显，含义同 SupplierAgreementCatalogueRow 的同名四格（ADR-0233 决定五）：原区间仍在 Effective* 两格，不被覆盖。
+	SelectionEndsAt time.Time
+	HasSelectionCut bool
+	RetiredAt       time.Time
+	Successor       string
 }
 
 // CommercialPolicyCatalogueRead 是商业策略目录的伴生列表读端口(ADR-0077):管理台
@@ -1752,6 +1776,12 @@ type CustomerContractCatalogueRow struct {
 	HasContent         bool
 	Bindings           []ControlBindingRow
 	DeliveryConditions *DeliveryConditionCatalogueRow
+
+	// 收尾回显，含义同 SupplierAgreementCatalogueRow 的同名四格（ADR-0233 决定五）：原区间仍在 Effective* 两格，不被覆盖。
+	SelectionEndsAt time.Time
+	HasSelectionCut bool
+	RetiredAt       time.Time
+	Successor       string
 }
 
 // SupplierAgreementCatalogueRow 是供应商协议目录上列的一行:一份已入册的供应商

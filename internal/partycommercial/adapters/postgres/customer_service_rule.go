@@ -516,6 +516,7 @@ func (catalogue *OperationsCatalogue) ListCustomerServiceRules(
 	rows, err := querier.Query(ctx,
 		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
 		        version.effective_starts_at, version.effective_ends_at, version.published_at,
+		        `+catalogueClosureColumns+`,
 		        content.service_product_id, content.customer_contract_id,
 		        content.responsible_party_id, content.scope_ref, content.registered_at,
 		        (SELECT COALESCE(
@@ -556,6 +557,7 @@ func (catalogue *OperationsCatalogue) ListCustomerServiceRules(
 		         AND content.object_kind   = version.object_kind
 		         AND content.object_id     = version.object_id
 		         AND content.version_label = version.version_label
+		   `+versionClosureJoins("version")+`
 		  WHERE version.tenant_id   = $1
 		    AND version.object_kind = $2
 		  ORDER BY version.published_at DESC, version.object_id, version.version_label
@@ -576,19 +578,19 @@ func (catalogue *OperationsCatalogue) ListCustomerServiceRules(
 		var endsAt, registeredAt *time.Time
 		var product, contract, responsible, ruleScope *string
 		var deadlinesJSON, materialsJSON []byte
-		if err := rows.Scan(
+		var closure catalogueClosureScan
+		targets := append([]any{
 			&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
-			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt,
-			&product, &contract, &responsible, &ruleScope, &registeredAt,
-			&deadlinesJSON, &materialsJSON,
-		); err != nil {
+			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt}, closure.targets()...)
+		targets = append(targets, &product, &contract, &responsible, &ruleScope, &registeredAt,
+			&deadlinesJSON, &materialsJSON)
+		if err := rows.Scan(targets...); err != nil {
 			return nil, fmt.Errorf("list customer service rules: %w", err)
 		}
-		statusWord := domain.CommercialVersionStatus(status).String()
-		if statusWord == "" {
-			return nil, fmt.Errorf("list customer service rules: 版本状态 %d 不在封闭集内", status)
+		if row.Status, err = catalogueStatusWord("list customer service rules", status, closure.retiredAt != nil); err != nil {
+			return nil, err
 		}
-		row.Status = statusWord
+		row.SelectionEndsAt, row.HasSelectionCut, row.RetiredAt, row.Successor = closure.echo()
 		if endsAt != nil {
 			row.EffectiveEndsAt = *endsAt
 			row.HasEffectiveEnd = true

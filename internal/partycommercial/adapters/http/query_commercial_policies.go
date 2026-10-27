@@ -674,6 +674,8 @@ type authorizationRuleBody struct {
 	CancellationAuthorityDeclared bool                        `json:"cancellationAuthorityDeclared"`
 	DeclaredAt                    string                      `json:"declaredAt,omitempty"`
 	CancellationAuthorities       []cancellationAuthorityBody `json:"cancellationAuthorities"`
+
+	versionClosureBody
 }
 
 func authorizationRuleBodyOf(row ports.AuthorizationRuleRow) authorizationRuleBody {
@@ -688,6 +690,7 @@ func authorizationRuleBodyOf(row ports.AuthorizationRuleRow) authorizationRuleBo
 		CancellationAuthorityDeclared: row.HasCancellationAuthority,
 		CancellationAuthorities:       make([]cancellationAuthorityBody, 0, len(row.CancellationAuthorities)),
 	}
+	body.versionClosureBody = closureBodyOf(row.HasSelectionCut, row.SelectionEndsAt, row.Successor, row.RetiredAt)
 	if row.HasEffectiveEnd {
 		body.EffectiveEndsAt = rfc3339(row.EffectiveEndsAt)
 	}
@@ -727,6 +730,8 @@ type customerServiceRuleBody struct {
 
 	ContentRegistered bool                            `json:"contentRegistered"`
 	Content           *customerServiceRuleContentBody `json:"content,omitempty"`
+
+	versionClosureBody
 }
 
 type customerServiceRuleContentBody struct {
@@ -761,6 +766,7 @@ func customerServiceRuleBodyOf(row ports.CustomerServiceRuleRow) customerService
 		PublishedAt:       rfc3339(row.PublishedAt),
 		ContentRegistered: row.HasContent,
 	}
+	body.versionClosureBody = closureBodyOf(row.HasSelectionCut, row.SelectionEndsAt, row.Successor, row.RetiredAt)
 	if row.HasEffectiveEnd {
 		body.EffectiveEndsAt = rfc3339(row.EffectiveEndsAt)
 	}
@@ -819,6 +825,8 @@ type preAcceptanceFinancialControlPolicyBody struct {
 
 	ContentRegistered bool                                            `json:"contentRegistered"`
 	Content           *preAcceptanceFinancialControlPolicyContentBody `json:"content,omitempty"`
+
+	versionClosureBody
 }
 
 type preAcceptanceFinancialControlPolicyContentBody struct {
@@ -845,6 +853,7 @@ func preAcceptanceFinancialControlPolicyBodyOf(row ports.PreAcceptanceFinancialC
 		PublishedAt:       rfc3339(row.PublishedAt),
 		ContentRegistered: row.HasContent,
 	}
+	body.versionClosureBody = closureBodyOf(row.HasSelectionCut, row.SelectionEndsAt, row.Successor, row.RetiredAt)
 	if row.HasEffectiveEnd {
 		body.EffectiveEndsAt = rfc3339(row.EffectiveEndsAt)
 	}

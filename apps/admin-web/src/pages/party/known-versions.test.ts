@@ -1,7 +1,20 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
-import type { CommercialPolicyListResponseBody, SupplierAgreementListResponseBody } from './api';
-import { agreementKnownVersions, policyKnownVersions, versionHintLines, versionHintOf, type KnownVersion } from './known-versions';
+import type {
+  CommercialPolicyListResponseBody,
+  CustomerContractListResponseBody,
+  ServiceProductListResponseBody,
+  SupplierAgreementListResponseBody,
+} from './api';
+import {
+  agreementKnownVersions,
+  contractKnownVersions,
+  policyKnownVersions,
+  productKnownVersions,
+  versionHintLines,
+  versionHintOf,
+  type KnownVersion,
+} from './known-versions';
 
 // 演示种子里供应商协议：TRUNK 三版（v1、v2 已退役，v3 在用）夹着 LASTMILE 一版。
 const known: KnownVersion[] = [
@@ -138,3 +151,39 @@ test('被截止的协议版本按截止点算区间：截止后不再与之后�
   const hint = versionHintOf(known, { objectId: 'SA', version: 'v2', startsAt: '2026-06-01T00:00:00Z', endsAt: null })!;
   deepEqual(hint.overlaps, []);
 });
+
+// 票 demo-chain-gaps/184：另五本带状态的目录也回显截止点，已知版本取 selectionEndsAt ?? effectiveEndsAt，与协议同口径。
+const closedRow = {
+  objectId: 'OBJ',
+  version: 'v1',
+  scope: 'S',
+  status: 'EFFECTIVE',
+  effectiveStartsAt: '2026-01-01T00:00:00Z',
+  effectiveEndsAt: '2026-12-31T00:00:00Z',
+  publishedAt: '2026-01-01T00:00:00Z',
+  selectionEndsAt: '2026-06-01T00:00:00Z',
+};
+const fiveCatalogues: Array<[string, () => KnownVersion[]]> = [
+  [
+    '服务产品',
+    () => productKnownVersions({ outcome: 'SERVICE_PRODUCTS_LISTED', products: [closedRow] } as unknown as ServiceProductListResponseBody),
+  ],
+  [
+    '客户合同',
+    () => contractKnownVersions({ outcome: 'CUSTOMER_CONTRACTS_LISTED', contracts: [closedRow] } as unknown as CustomerContractListResponseBody),
+  ],
+  ...(['AUTHORIZATION_RULE', 'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY', 'CUSTOMER_SERVICE_RULE'] as const).map(
+    (kind): [string, () => KnownVersion[]] => [
+      kind,
+      () => policyKnownVersions({ outcome: 'COMMERCIAL_POLICIES_LISTED', kind, policies: [closedRow] } as unknown as CommercialPolicyListResponseBody),
+    ],
+  ),
+];
+for (const [name, build] of fiveCatalogues) {
+  test(`被截止的${name}版本按截止点算区间：原区间不被覆盖，截止后不再与新版重叠`, () => {
+    const known = build();
+    equal(known[0].effectiveEndsAt, '2026-06-01T00:00:00Z');
+    const hint = versionHintOf(known, { objectId: 'OBJ', version: 'v2', startsAt: '2026-06-01T00:00:00Z', endsAt: null })!;
+    deepEqual(hint.overlaps, []);
+  });
+}

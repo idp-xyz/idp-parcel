@@ -3,6 +3,7 @@ package commercialhttp
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
@@ -143,6 +144,8 @@ type customerContractBody struct {
 	DeclaredAt         string                 `json:"declaredAt,omitempty"`
 	Bindings           []controlBindingBody   `json:"bindings"`
 	DeliveryConditions *deliveryConditionBody `json:"deliveryConditions,omitempty"`
+
+	versionClosureBody
 }
 
 // controlBindingBody 里 policyId 与 basis 恰有一个在场,与库上 CHECK 同形;装载口
@@ -165,6 +168,7 @@ func customerContractBodyOf(row ports.CustomerContractCatalogueRow) customerCont
 		Bindings:           make([]controlBindingBody, 0, len(row.Bindings)),
 		DeliveryConditions: deliveryConditionBodyOf(row.DeliveryConditions),
 	}
+	body.versionClosureBody = closureBodyOf(row.HasSelectionCut, row.SelectionEndsAt, row.Successor, row.RetiredAt)
 	if row.HasEffectiveEnd {
 		body.EffectiveEndsAt = rfc3339(row.EffectiveEndsAt)
 	}
@@ -214,6 +218,26 @@ type supplierAgreementBody struct {
 	SelectionEndsAt  string `json:"selectionEndsAt,omitempty"`
 	SuccessorVersion string `json:"successorVersion,omitempty"`
 	RetiredAt        string `json:"retiredAt,omitempty"`
+}
+
+// versionClosureBody 是五本目录（服务产品、客户合同、授权规则、接受前财务控制策略、客户服务规则）答复体共用的收尾三键，
+// 内嵌后与供应商协议的三键同名同形；没收尾时三键缺席。
+type versionClosureBody struct {
+	SelectionEndsAt  string `json:"selectionEndsAt,omitempty"`
+	SuccessorVersion string `json:"successorVersion,omitempty"`
+	RetiredAt        string `json:"retiredAt,omitempty"`
+}
+
+func closureBodyOf(hasCut bool, cutAt time.Time, successor string, retiredAt time.Time) versionClosureBody {
+	var body versionClosureBody
+	if hasCut {
+		body.SelectionEndsAt = rfc3339(cutAt)
+	}
+	if successor != "" {
+		body.SuccessorVersion = successor
+		body.RetiredAt = rfc3339(retiredAt)
+	}
+	return body
 }
 
 func supplierAgreementBodyOf(row ports.SupplierAgreementCatalogueRow) supplierAgreementBody {

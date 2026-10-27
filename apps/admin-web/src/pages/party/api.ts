@@ -8,7 +8,16 @@ import type { RegistrationResponseBody } from '../../components/registration';
 
 export type { ApiResult } from '../catalogue-api';
 
-export interface ServiceProductRecord {
+/** 五本商业目录行共用的收尾回显（ADR-0233 决定五），与供应商协议行的同名三格同形：原区间不被覆盖，没收尾的版本三格缺席。 */
+export interface VersionClosureEcho {
+  /** 被截止的版本在此交回最新一条更正的终点。 */
+  selectionEndsAt?: string;
+  /** 退役回显：让位给哪一版、何时起不再参选。 */
+  successorVersion?: string;
+  retiredAt?: string;
+}
+
+export interface ServiceProductRecord extends VersionClosureEcho {
   objectId: string;
   version: string;
   scope: string;
@@ -149,7 +158,7 @@ export interface CancellationAuthorityRecord {
 // cancellationAuthorityDeclared 这个布尔在本族比别处更要紧:数组里少一个请求方**不是**
 // 少一份声明,而是这份目录说出的真话(该请求方不许取消)。三态因此是「未声明 / 已声明
 // 且该方允许 / 已声明但该方不许」,页面必须先看布尔才知道手上这份空缺属于哪一种。
-export interface AuthorizationRuleRecord {
+export interface AuthorizationRuleRecord extends VersionClosureEcho {
   objectId: string;
   version: string;
   scope: string;
@@ -193,7 +202,7 @@ export interface PreAcceptanceControlItemRecord {
   responsibility: string;
 }
 
-export interface PreAcceptanceFinancialControlPolicyRecord {
+export interface PreAcceptanceFinancialControlPolicyRecord extends VersionClosureEcho {
   objectId: string;
   version: string;
   scope: string;
@@ -228,7 +237,7 @@ export interface MinimumMaterialsRecord {
   materials: string[];
 }
 
-export interface CustomerServiceRuleRecord {
+export interface CustomerServiceRuleRecord extends VersionClosureEcho {
   objectId: string;
   version: string;
   scope: string;
@@ -274,7 +283,7 @@ export interface ControlBindingRecord {
 // contentRegistered 是服务端给的显式布尔,页面不拿 bindings.length 去推它:**没登记
 // 正文**与**登记了正文但零约定**都表现为空数组,而两者的恢复动作相反(前者去登记正文,
 // 后者无事可做)。少了这个布尔,两态在页面上只能撞成同一句话。
-export interface CustomerContractRecord {
+export interface CustomerContractRecord extends VersionClosureEcho {
   objectId: string;
   version: string;
   scope: string;

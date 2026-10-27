@@ -129,7 +129,7 @@ func (catalogue *OperationsCatalogue) ListServiceProducts(
 	rows, err := querier.Query(ctx,
 		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
 		        version.effective_starts_at, version.effective_ends_at, version.published_at,
-		        `+retiredColumn("version")+`,
+		        `+catalogueClosureColumns+`,
 		        product.form,`+deliveryConditionColumns+`
 		   FROM party_commercial.commercial_version AS version
 		   LEFT JOIN party_commercial.service_product_form AS product
@@ -137,6 +137,7 @@ func (catalogue *OperationsCatalogue) ListServiceProducts(
 		         AND product.object_kind   = version.object_kind
 		         AND product.object_id     = version.object_id
 		         AND product.version_label = version.version_label`+deliveryConditionJoin+`
+		   `+versionClosureJoins("version")+`
 		  WHERE version.tenant_id   = $1
 		    AND version.object_kind = $2
 		  ORDER BY version.published_at DESC, version.object_id, version.version_label
@@ -154,20 +155,22 @@ func (catalogue *OperationsCatalogue) ListServiceProducts(
 	for rows.Next() {
 		var row ports.ServiceProductCatalogueRow
 		var status int16
-		var retired bool
+		var closure catalogueClosureScan
 		var endsAt *time.Time
 		var form *string
 		var delivery deliveryConditionScan
 		targets := append([]any{
 			&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
-			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt, &retired, &form,
-		}, delivery.targets()...)
+			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt}, closure.targets()...)
+		targets = append(targets, &form)
+		targets = append(targets, delivery.targets()...)
 		if err := rows.Scan(targets...); err != nil {
 			return nil, fmt.Errorf("list service products: %w", err)
 		}
-		if row.Status, err = catalogueStatusWord("list service products", status, retired); err != nil {
+		if row.Status, err = catalogueStatusWord("list service products", status, closure.retiredAt != nil); err != nil {
 			return nil, err
 		}
+		row.SelectionEndsAt, row.HasSelectionCut, row.RetiredAt, row.Successor = closure.echo()
 		if endsAt != nil {
 			row.EffectiveEndsAt = *endsAt
 			row.HasEffectiveEnd = true
@@ -639,7 +642,7 @@ func (catalogue *OperationsCatalogue) ListCustomerContracts(
 	rows, err := querier.Query(ctx,
 		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
 		        version.effective_starts_at, version.effective_ends_at, version.published_at,
-		        `+retiredColumn("version")+`,
+		        `+catalogueClosureColumns+`,
 		        content.rule_package_id, content.declared_at,
 		        COALESCE(
 		            json_agg(
@@ -663,12 +666,14 @@ func (catalogue *OperationsCatalogue) ListCustomerContracts(
 		         AND binding.object_kind   = content.object_kind
 		         AND binding.object_id     = content.object_id
 		         AND binding.version_label = content.version_label`+deliveryConditionJoin+`
+		   `+versionClosureJoins("version")+`
 		  WHERE version.tenant_id   = $1
 		    AND version.object_kind = $2
 		  GROUP BY version.tenant_id, version.object_kind,
 		           version.object_id, version.version_label, version.scope_ref, version.status,
 		           version.effective_starts_at, version.effective_ends_at, version.published_at,
 		           content.rule_package_id, content.declared_at,
+		           latest_correction.corrected_ends_at, retirement.successor_label, retirement.retired_at,
 		           delivery.tenant_id, delivery.object_kind, delivery.object_id, delivery.version_label,
 		           delivery.recipient_scope_rule_ref, delivery.proof_of_delivery_rule_ref,
 		           delivery.tightens_object_id, delivery.tightens_version_label, delivery.declared_at
@@ -687,7 +692,7 @@ func (catalogue *OperationsCatalogue) ListCustomerContracts(
 	for rows.Next() {
 		var row ports.CustomerContractCatalogueRow
 		var status int16
-		var retired bool
+		var closure catalogueClosureScan
 		var endsAt *time.Time
 		var rulePackage *string
 		var declaredAt *time.Time
@@ -695,15 +700,16 @@ func (catalogue *OperationsCatalogue) ListCustomerContracts(
 		var delivery deliveryConditionScan
 		targets := append([]any{
 			&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
-			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt, &retired,
-			&rulePackage, &declaredAt, &bindingsJSON,
-		}, delivery.targets()...)
+			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt}, closure.targets()...)
+		targets = append(targets, &rulePackage, &declaredAt, &bindingsJSON)
+		targets = append(targets, delivery.targets()...)
 		if err := rows.Scan(targets...); err != nil {
 			return nil, fmt.Errorf("list customer contracts: %w", err)
 		}
-		if row.Status, err = catalogueStatusWord("list customer contracts", status, retired); err != nil {
+		if row.Status, err = catalogueStatusWord("list customer contracts", status, closure.retiredAt != nil); err != nil {
 			return nil, err
 		}
+		row.SelectionEndsAt, row.HasSelectionCut, row.RetiredAt, row.Successor = closure.echo()
 		if endsAt != nil {
 			row.EffectiveEndsAt = *endsAt
 			row.HasEffectiveEnd = true
@@ -802,7 +808,7 @@ func (catalogue *OperationsCatalogue) ListAuthorizationRules(
 	rows, err := querier.Query(ctx,
 		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
 		        version.effective_starts_at, version.effective_ends_at, version.published_at,
-		        `+retiredColumn("version")+`,
+		        `+catalogueClosureColumns+`,
 		        content.declared_at,
 		        (SELECT COALESCE(
 		                    json_agg(
@@ -825,6 +831,7 @@ func (catalogue *OperationsCatalogue) ListAuthorizationRules(
 		         AND content.object_kind   = version.object_kind
 		         AND content.object_id     = version.object_id
 		         AND content.version_label = version.version_label
+		   `+versionClosureJoins("version")+`
 		  WHERE version.tenant_id   = $1
 		    AND version.object_kind = $2
 		  ORDER BY version.published_at DESC, version.object_id, version.version_label
@@ -842,20 +849,21 @@ func (catalogue *OperationsCatalogue) ListAuthorizationRules(
 	for rows.Next() {
 		var row ports.AuthorizationRuleRow
 		var status int16
-		var retired bool
+		var closure catalogueClosureScan
 		var endsAt *time.Time
 		var declaredAt *time.Time
 		var authoritiesJSON []byte
-		if err := rows.Scan(
+		targets := append([]any{
 			&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
-			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt, &retired,
-			&declaredAt, &authoritiesJSON,
-		); err != nil {
+			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt}, closure.targets()...)
+		targets = append(targets, &declaredAt, &authoritiesJSON)
+		if err := rows.Scan(targets...); err != nil {
 			return nil, fmt.Errorf("list authorization rules: %w", err)
 		}
-		if row.Status, err = catalogueStatusWord("list authorization rules", status, retired); err != nil {
+		if row.Status, err = catalogueStatusWord("list authorization rules", status, closure.retiredAt != nil); err != nil {
 			return nil, err
 		}
+		row.SelectionEndsAt, row.HasSelectionCut, row.RetiredAt, row.Successor = closure.echo()
 		if endsAt != nil {
 			row.EffectiveEndsAt = *endsAt
 			row.HasEffectiveEnd = true
@@ -901,15 +909,30 @@ func cancellationAuthorityRowsFromJSON(raw []byte) ([]ports.CancellationAuthorit
 	return authorities, nil
 }
 
-// retiredColumn 是目录上列「这一版退役没有」的标量子查询（ADR-0233）。版本行的状态列随发布固定，退役另册保存；不折进来，
-// 管理台就会在退役之后照旧显示`已生效`，与解析和点读答的两样。alias 是外层查询里版本行的别名。
-func retiredColumn(alias string) string {
-	return `EXISTS (SELECT 1
-		          FROM party_commercial.commercial_version_retirement AS retired
-		         WHERE retired.tenant_id     = ` + alias + `.tenant_id
-		           AND retired.object_kind   = ` + alias + `.object_kind
-		           AND retired.object_id     = ` + alias + `.object_id
-		           AND retired.version_label = ` + alias + `.version_label)`
+// catalogueClosureColumns 与 versionClosureJoins("version") 配对：目录只回显截止点（最新一条更正的终点）与退役的后继、时刻，
+// 不回显更正的起点与引用。版本行的状态列随发布固定，退役另册保存；不折进来，管理台就会在退役之后照旧显示`已生效`，
+// 与解析和点读答的两样。
+const catalogueClosureColumns = `latest_correction.corrected_ends_at, retirement.successor_label, retirement.retired_at`
+
+type catalogueClosureScan struct {
+	cutAt     *time.Time
+	successor *string
+	retiredAt *time.Time
+}
+
+func (closure *catalogueClosureScan) targets() []any {
+	return []any{&closure.cutAt, &closure.successor, &closure.retiredAt}
+}
+
+// echo 折出目录行上的四格：截止点及其在场标记，退役的时刻与后继。退役两格同在才填，与 ListSupplierAgreements 同口径。
+func (closure *catalogueClosureScan) echo() (cutAt time.Time, hasCut bool, retiredAt time.Time, successor string) {
+	if closure.cutAt != nil {
+		cutAt, hasCut = *closure.cutAt, true
+	}
+	if closure.retiredAt != nil && closure.successor != nil {
+		retiredAt, successor = *closure.retiredAt, *closure.successor
+	}
+	return cutAt, hasCut, retiredAt, successor
 }
 
 // catalogueStatusWord 把版本行的状态列折成目录上的那一格：退役了就是`已退役`，与整册装载施加退役之后的位置相同。

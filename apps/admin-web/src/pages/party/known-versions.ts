@@ -136,7 +136,8 @@ export function contractKnownVersions(body: CustomerContractListResponseBody): K
     scope: row.scope,
     status: row.status,
     effectiveStartsAt: row.effectiveStartsAt,
-    effectiveEndsAt: row.effectiveEndsAt,
+    // 被截止的版本在读面上另回显截止点，壳上的原区间不被覆盖（ADR-0233）；解析选用的是截止后的区间。
+    effectiveEndsAt: row.selectionEndsAt ?? row.effectiveEndsAt,
   }));
 }
 
@@ -159,7 +160,8 @@ export function productKnownVersions(body: ServiceProductListResponseBody): Know
     scope: row.scope,
     status: row.status,
     effectiveStartsAt: row.effectiveStartsAt,
-    effectiveEndsAt: row.effectiveEndsAt,
+    // 被截止的版本在读面上另回显截止点，壳上的原区间不被覆盖（ADR-0233）；解析选用的是截止后的区间。
+    effectiveEndsAt: row.selectionEndsAt ?? row.effectiveEndsAt,
   }));
 }
 
@@ -185,7 +187,8 @@ export function policyKnownVersions(body: CommercialPolicyListResponseBody): Kno
         scope: row.scope,
         status: row.status,
         effectiveStartsAt: row.effectiveStartsAt,
-        effectiveEndsAt: row.effectiveEndsAt,
+        // 同 agreementKnownVersions：重叠与「收尾…」按截止后的区间判。
+        effectiveEndsAt: row.selectionEndsAt ?? row.effectiveEndsAt,
       }));
     case 'PRE_ACCEPTANCE_CONTROL':
     case 'AS_OF_POLICY':

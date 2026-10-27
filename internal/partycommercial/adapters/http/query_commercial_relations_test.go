@@ -18,12 +18,16 @@ import (
 type relationReaderDouble struct {
 	tenant     domain.TenantID
 	agreements []ports.SupplierAgreementCatalogueRow
+	contracts  []ports.CustomerContractCatalogueRow
 }
 
 func (double *relationReaderDouble) ListCustomerContracts(
-	context.Context, domain.TenantID, int,
+	_ context.Context, tenant domain.TenantID, _ int,
 ) ([]ports.CustomerContractCatalogueRow, error) {
-	return nil, nil
+	if tenant != double.tenant {
+		return nil, nil
+	}
+	return double.contracts, nil
 }
 
 func (double *relationReaderDouble) ListSupplierAgreements(
