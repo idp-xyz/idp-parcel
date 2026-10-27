@@ -39,7 +39,8 @@ export function draftDecisions(record: Pick<PublicationDraftRecord, 'status' | '
 }
 
 /**
- * 读不回的载体按状态各自的恢复动作。`待批准`的行可被同一版本号的重新录入替换；`已批准`的内容已固定，只能换版本号；
+ * 读不回的载体按状态各自的恢复动作。读不回只有两类成因（规范化版本本构建不认得，或含本构建的构造门收紧后拒绝的内容），
+ * 新录入的摘要必与读不回行列上的不同，所以`待批准`的行可被同一版本号的重新录入替换；`已批准`的内容已固定，只能换版本号；
  * `已发布`的版本已在册，不需要动作。陌生状态词不替服务端猜动作，只说读不回。
  */
 export function unreadableRecovery(status: string): string {

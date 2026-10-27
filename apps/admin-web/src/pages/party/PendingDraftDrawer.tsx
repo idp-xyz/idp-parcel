@@ -33,7 +33,7 @@ export interface PendingDraftIdentity {
 type Busy = 'approve' | 'publish' | null;
 
 /**
- * 本构建读不回这份载体的内容：上面的事实取自库上的列，规范化文档不给——折不回的文档不能冒充摘要盖住的那一份。
+ * 本构建读不回这份载体的内容：复述的事实取自库上的列，规范化文档不给——折不回的文档不能冒充摘要盖住的那一份。
  * 说清为什么、该怎么办（随状态），成因原话跟在后面给要查的人。
  */
 function UnreadableNote({ draft }: { draft: PublicationDraftRecord }) {
