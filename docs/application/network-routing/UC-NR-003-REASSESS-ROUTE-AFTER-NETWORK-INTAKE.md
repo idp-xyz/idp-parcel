@@ -219,6 +219,11 @@
 | `AT-NR-099` | 运营查阅改路建议 | 逐份列出判断键、触发关联、被复核计划、阻塞与候选（建议形成那一刻的结局与依据），状态三格：待决定、已决定（带决定）、已过时；他租户的建议不在列（[ADR-0284](../../adr/0284-an-authorized-role-decides-a-current-reroute-suggestion-through-an-operator-decision-face.md) 决定六） |
 | `AT-NR-104` | 起点计划从某一时刻才生效（授权角色据建议形成的决定、授权角色裁初始路由并列，计划都从决定的时刻起生效），一次业务时间早于这一时刻的控制触发（收寄采用或交接；落在原计划失效与这一决定之间，包裹在无当前有效路由期间仍被交进下一个节点）在决定之后才处理，复核判出失效或改善替代 | `触发未判`，原因 `TRIGGER_PRECEDES_PLAN_EFFECTIVE_FROM`，未判登记记下比较所用的计划生效时刻；不调离场门，起点计划的适用性不动，不失效、不替代、不形成新计划，复核册不多一行；信封入账，不回滚重投、不占交接或收寄采用的分区；另一封信封带来同一触发同答。同时早于当前控制位置时记早于当前位置；同时适用性看不清或冻结形态未配置时记那两格原因（`PLAN_APPLICABILITY_UNCLEAR`、`FREEZE_FORM_UNCONFIGURED`），不记早于计划生效；之后一次不早于生效时刻的触发从这份计划的位置照判（[ADR-0292](../../adr/0292-a-reassessment-trigger-earlier-than-the-plan-it-starts-from-takes-effect-is-settled-as-not-judged-when-it-would-lapse-or-supersede-it.md)） |
 | `AT-NR-105` | 同样早于起点计划的生效时刻，但判出仍适用（交进的节点就在计划上，没有够格的改善或改善够不上阈值）；或触发恰在生效的那一刻，或晚于生效 | 不入账为`触发未判`：仍适用照常记并引用起点计划，不离场也不形成新计划；与生效同一刻或晚于生效的触发照判，失效落在触发的业务时间（[ADR-0292](../../adr/0292-a-reassessment-trigger-earlier-than-the-plan-it-starts-from-takes-effect-is-settled-as-not-judged-when-it-would-lapse-or-supersede-it.md)） |
+| `AT-NR-106` | 复核或授权改路决定给候选出价，同一件包裹声明与实测不符：节点收寄、场外揽收触发的是首次收寄复核（物理事实截到收寄的业务时间），权威运输交接进接收节点触发的是到站复核、授权角色据建议形成的改路决定同取判断此刻仍有效的实测；初始路由及其并列裁决是预路由 | 取数侧收到各自的判断点：预路由按客户声明出价，其余三个判断点按实测出价，成本事实、选中的候选随之不同，成本出处标明依据是物理事实；预路由不问物理事实来源（[ADR-0294](../../adr/0294-a-reassessment-prices-candidates-on-the-physical-facts-of-its-judgment-point-and-falls-back-to-the-declaration-only-when-none-was-obtained.md) 决定一、二） |
+| `AT-NR-107` | 复核该取的物理事实一项也没有取得（包括部署没有物理事实来源） | 退回客户声明出价，价与预路由同、排序照常；成本出处与复核记录标 `DECLARATION_FALLBACK`，不标成客户声明；声明也没有则各段待判断。读物理事实读不回是依赖故障，原样上抛，不折成「没取得」而悄悄退回（ADR-0294 决定三） |
+| `AT-NR-108` | 物理事实在而定不下用哪一条（多于一条仍有效的实测且没有已登记的取用规则） | 不退回客户声明：各段待判断、候选缺成本依据、没有成本出处，复核记录标 `PHYSICAL_UNRESOLVED`，声明不顶替实测（ADR-0294 决定四） |
+| `AT-NR-109` | 物理事实只取得一部分（只称了重、没量外廓，或只量了外廓） | 逐项取：有的项取物理事实，其余项取客户声明并标 `PHYSICAL_WITH_DECLARATION`；声明只补缺的项，不顶替任何一项已有的实测；声明也没有外廓则外廓缺席、依据仍是 `PHYSICAL`；只量到外廓而实重哪里都没有则不出价（ADR-0294 决定五） |
+| `AT-NR-110` | 复核给候选出价之后，依据留在哪里 | 逐段成本出处与复核记录各记一格依据，往返不变形；没向取数侧要过成本的复核（场外揽收仍适用线、排序形态没声明）不记依据；复核记录的依据是封闭集且不含预路由的 `DECLARATION`；依据出现之前落库的出处读回为客户声明；取数侧自报依据与有无事实不符是装配写坏了，响亮报错（ADR-0294 决定六） |
 
 ## 给开发的交接
 
@@ -230,7 +235,7 @@
 
 | 能力 | 现状 | 承接 |
 |---|---|---|
-| 复核取物理事实（输入组「节点实测」、CONTEXT「首次收寄复核使用当时已经取得的物理事实，到站复核使用当前有效物理实测」） | 未实现：复核给候选出价的包裹事实取客户声明，是过渡做法 | [docs-consistency/code/66](../../../.scratch/docs-consistency/code/66-reassessment-prices-candidates-on-the-customer-declaration-instead-of-physical-facts.md) |
+| 复核取物理事实（输入组「节点实测」、CONTEXT「首次收寄复核使用当时已经取得的物理事实，到站复核使用当前有效物理实测」） | 本上下文这一侧已实现：判断点由触发的控制依据定，取数侧按判断点选来源，没有物理事实时退回客户声明并在成本出处与复核记录标明（[ADR-0294](../../adr/0294-a-reassessment-prices-candidates-on-the-physical-facts-of-its-judgment-point-and-falls-back-to-the-declaration-only-when-none-was-obtained.md)）。物理事实的来源未接：`node-operations` 没有实际测量登记册，生产装配的物理事实来源恒答一项都没取得，复核恒退回声明；登记册与只读口立起来后换接这一处 | [pp-pricing-input-seams/04](../../../.scratch/pp-pricing-input-seams/issues/04-no-actual-measurement-registry-and-valid-measurements-read-port.md)；接线仍在 [docs-consistency/code/66](../../../.scratch/docs-consistency/code/66-reassessment-prices-candidates-on-the-customer-declaration-instead-of-physical-facts.md) |
 | 仍适用线形成改路建议（步骤 7C、`AT-NR-042`） | 只有失效线形成建议 | [docs-consistency/code/17](../../../.scratch/docs-consistency/code/17-still-applicable-plan-never-forms-a-reroute-suggestion.md) |
 | 路由指令（步骤 7B、`AT-NR-037`、「节点安全作业与方向性作业」） | 没有路由指令的模型 | [no-directional-basis/02](../../../.scratch/no-directional-basis/issues/02-network-routing-has-no-routing-instruction-or-consolidation-compatibility-judgment.md) |
 | 集运兼容判断（「节点安全作业与方向性作业」） | 没有成员级集运兼容判断的模型 | [no-directional-basis/02](../../../.scratch/no-directional-basis/issues/02-network-routing-has-no-routing-instruction-or-consolidation-compatibility-judgment.md) |
