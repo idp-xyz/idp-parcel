@@ -38,11 +38,11 @@ func newExceptionJourneyHandoffFixture(t *testing.T) (*adapter.OutboxExceptionJo
 }
 
 func exceptionJourneyEventID(original string) string {
-	return "tenant-a/" + original + "/RETURN/DISPOSITION/decision-1/exception-journey"
+	return tfEventID("exception-journey", "tenant-a", original, "RETURN", "DISPOSITION/decision-1")
 }
 
 // TestExceptionJourneyFollowsTheTransactionalTemplate 证异常旅程意图复现样板四条：
-// 首发一行、回滚无痕、重发同一份、无事务拒。信封 ID 取替代旅程键再加类型段。
+// 首发一行、回滚无痕、重发同一份、无事务拒。信封 ID 取替代旅程键各维的指纹。
 func TestExceptionJourneyFollowsTheTransactionalTemplate(t *testing.T) {
 	handoff, db, pool := newExceptionJourneyHandoffFixture(t)
 	ctx := t.Context()
@@ -55,6 +55,9 @@ func TestExceptionJourneyFollowsTheTransactionalTemplate(t *testing.T) {
 	}
 	if count := countTFIntents(t, pool, exceptionJourneyEventID("journey-1")); count != 1 {
 		t.Fatalf("journey-1 行数 = %d, want 1", count)
+	}
+	if got := partitionKeyOf(t, pool, exceptionJourneyEventID("journey-1")); got != "tenant-a/journey-1/RETURN/DISPOSITION/decision-1/exception-journey" {
+		t.Fatalf("分区键 = %q", got)
 	}
 
 	rollback := errors.New("回滚")

@@ -9,6 +9,7 @@ import (
 
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	tfports "go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
@@ -208,7 +209,7 @@ func recordRegisteredOffsitePickup(t *testing.T, fixture *synVerticalFixture) st
 	if outcome != tfports.OffsitePickupSaved {
 		t.Fatalf("save outcome = %v, want 已写入", outcome)
 	}
-	return tenant.String() + "/" + offsitePickupObject + "/" + offsitePickupAttempt + "/offsite-pickup-registration"
+	return string(outboxintent.FingerprintEventID("offsite-pickup-registration", tenant.String(), offsitePickupObject, offsitePickupAttempt))
 }
 
 func mustTF[T any](t *testing.T, construct func(string) (T, error), raw string) T {

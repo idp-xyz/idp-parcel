@@ -157,12 +157,10 @@ var allowedSameExpression = map[string]string{
 	"internal/settlementaccounting/adapters/postgres/claim_settlement_handoff.go": annotationDependsOnPrior +
 		"claim-adjustment 引用 claim-amount / receivable / acknowledgement——Adjust 核对目标在场，且不改写原金额（AT-SA-152）",
 
-	"internal/transportfulfillment/adapters/postgres/capacity_consumption_handoff.go": annotationNoRewrite +
-		"（一个池有多个预占，各条是互不相干的消耗事实，累加可交换）",
 	"internal/transportfulfillment/adapters/postgres/disposition_execution_handoff.go": annotationNoOrdering +
 		"同一处置不开两条旅程——StartAlternateJourneyHandler.Handle 幂等按（租户+原旅程+目的+处置依据）",
 	"internal/transportfulfillment/adapters/postgres/exception_journey_handoff.go": annotationNoOrdering +
-		"与 disposition_execution 同键、同一拍入队，两口靠类型段错开；幂等口径同上",
+		"与 disposition_execution 同键、同一拍入队，两口靠口名错开；幂等口径同上",
 	"internal/transportfulfillment/adapters/postgres/offsite_pickup_handoff.go": annotationNoOrdering +
 		"同一揽收尝试键只出一份——PerformOffsitePickupHandler.Handle 幂等/冲突按内容指纹分界",
 	"internal/transportfulfillment/adapters/postgres/regulatory_acceptance_handoff.go": annotationNoOrdering +

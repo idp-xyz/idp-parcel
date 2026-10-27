@@ -50,13 +50,23 @@ type capacityConsumptionPayload struct {
 	Quantity    int64  `json:"quantity"`
 }
 
-func capacityConsumptionEventID(key ports.CapacityPoolKey, reservation string) string {
-	// 类型段把本口与已落地交付生效（同为租户/甲/乙 三元组、同一 source）错开。
-	return key.TenantID.String() + "/" + key.Pool.String() + "/" + reservation + "/capacity-consumption"
+// capacityConsumptionPort 是本口在信封 ID 上的口名前缀，与同一来源名下别的口（如交付生效）的 ID 空间错开（FingerprintEventID 头注）。
+const capacityConsumptionPort = "capacity-consumption"
+
+// capacityConsumptionEventID 按（租户、池、预占）三维铸 ID：意图由它们认领（ADR-0043）。三维逐个分开传、由
+// FingerprintEventID 分隔编码：池身份写作「班次身份/维度词」，自带「/」，班次身份本身也可能带「/」，用「/」拼起来
+// 的两组不同的键会拼成同一个串，被 EnqueueOnce 静默吞掉第二份；分隔编码下维度边界移位算不出同一个 ID。
+func capacityConsumptionEventID(key ports.CapacityPoolKey, reservation string) eventing.EventID {
+	return outboxintent.FingerprintEventID(capacityConsumptionPort, key.TenantID.String(), key.Pool.String(), reservation)
 }
 
-// HandOffCapacityConsumption 把一份意图入队。信封 ID 取容量池/预占键再加类型段——意图
-// 由（租户+池+预占）认领（ADR-0043）。键缺席是装配缺陷，响亮报错不入队。
+// capacityConsumptionPartitionKey 保留可读的「租户/池/预占/口名」：一份预占只消耗一次，分区仍是逐信封，取可读形只为
+// 运维从分区键认得出是哪份预占。
+func capacityConsumptionPartitionKey(key ports.CapacityPoolKey, reservation string) string {
+	return key.TenantID.String() + "/" + key.Pool.String() + "/" + reservation + "/" + capacityConsumptionPort
+}
+
+// HandOffCapacityConsumption 把一份意图入队。信封 ID 由（租户+池+预占）认领（ADR-0043）。键缺席是装配缺陷，响亮报错不入队。
 func (handoff *OutboxCapacityConsumptionHandoff) HandOffCapacityConsumption(
 	ctx context.Context,
 	intent ports.CapacityConsumptionIntent,
@@ -78,16 +88,15 @@ func (handoff *OutboxCapacityConsumptionHandoff) HandOffCapacityConsumption(
 	}
 
 	now := handoff.clock.Now().UTC()
-	eventID := capacityConsumptionEventID(key, intent.Reservation.String())
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(eventID),
+		ID:           capacityConsumptionEventID(key, intent.Reservation.String()),
 		Source:       tfEventSource,
 		Type:         capacityConsumptionEventType,
 		Version:      1,
 		Scope:        key.TenantID.String(),
 		Subject:      key.Pool.String() + "/" + intent.Reservation.String(),
-		PartitionKey: eventID,
+		PartitionKey: capacityConsumptionPartitionKey(key, intent.Reservation.String()),
 		OccurredAt:   intent.Pool.RecordedAt.UTC(),
 		RecordedAt:   now,
 		ContentType:  eventing.JSONContentType,

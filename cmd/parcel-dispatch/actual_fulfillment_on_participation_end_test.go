@@ -16,6 +16,7 @@ import (
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/platform/dispatch"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	tfinbox "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/inbox"
 	tfpartycommercial "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/partycommercial"
@@ -118,7 +119,7 @@ func handOverAtSIN(t *testing.T, register *tfapplication.RegisterTransportHandov
 		Object: parcel, ReleasedBy: "SYN-PARTY-CARRIER-TRUNK-01", ReceivedBy: "SYN-NODE-SIN-HUB",
 		Version: "SIN-" + parcel, JudgedAt: formationAt(3 * time.Hour),
 	})
-	return formationTenant + "/" + parcel + "/" + formationScope + "/SIN-" + parcel
+	return handoverEventID(formationTenant, parcel, formationScope, "SIN-"+parcel)
 }
 
 func registerFormationHandover(
@@ -440,7 +441,7 @@ func deliverAndEndParticipation(t *testing.T, db *bentopg.DB, store *outbox.Stor
 		}
 		return err
 	})
-	return formationTenant + "/" + parcel + "/SYN-ATTEMPT-DCG67/SYN-DRV-DCG67/effective-delivery"
+	return string(outboxintent.FingerprintEventID("effective-delivery", formationTenant, parcel, "SYN-ATTEMPT-DCG67", "SYN-DRV-DCG67"))
 }
 
 // switchableAgreements 是可开关的协议核对口：关着时读不动，开着时转给 PC 真点读口。
@@ -494,7 +495,7 @@ func formationHandoverEnvelope(parcel string) eventing.Envelope {
 	at := beatInstant()
 	return eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(formationTenant + "/" + parcel + "/" + formationScope + "/SIN-" + parcel),
+		ID:           eventing.EventID(handoverEventID(formationTenant, parcel, formationScope, "SIN-"+parcel)),
 		Source:       "idp-parcel/transport-fulfillment",
 		Type:         tfinbox.TransportHandoverRegisteredEventType,
 		Version:      1,

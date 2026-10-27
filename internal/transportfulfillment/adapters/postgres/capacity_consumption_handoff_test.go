@@ -50,11 +50,11 @@ func capacityConsumptionIntent(t *testing.T, schedule, reservation string) ports
 }
 
 func capacityConsumptionEventID(schedule, reservation string) string {
-	return "tenant-a/" + schedule + "/WEIGHT/" + reservation + "/capacity-consumption"
+	return tfEventID("capacity-consumption", "tenant-a", schedule+"/WEIGHT", reservation)
 }
 
 // TestCapacityConsumptionFollowsTheTransactionalTemplate 证容量消耗意图复现样板四条：
-// 首发一行、回滚无痕、重发同一份、无事务拒。信封 ID 取容量池/预占键再加类型段。
+// 首发一行、回滚无痕、重发同一份、无事务拒。信封 ID 取容量池/预占键各维的指纹。
 func TestCapacityConsumptionFollowsTheTransactionalTemplate(t *testing.T) {
 	handoff, db, pool := newCapacityConsumptionHandoffFixture(t)
 	ctx := t.Context()
@@ -67,6 +67,10 @@ func TestCapacityConsumptionFollowsTheTransactionalTemplate(t *testing.T) {
 	}
 	if count := countTFIntents(t, pool, capacityConsumptionEventID("pool-1", "res-1")); count != 1 {
 		t.Fatalf("pool-1 行数 = %d, want 1", count)
+	}
+	// 分区键保留可读形，取值与信封 ID 分开：一份预占自成一区，顺序语义不变。
+	if got := partitionKeyOf(t, pool, capacityConsumptionEventID("pool-1", "res-1")); got != "tenant-a/pool-1/WEIGHT/res-1/capacity-consumption" {
+		t.Fatalf("分区键 = %q", got)
 	}
 
 	rollback := errors.New("回滚")

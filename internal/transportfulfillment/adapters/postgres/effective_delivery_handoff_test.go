@@ -73,8 +73,8 @@ func TestAPODCorrectionEnqueuesItsOwnEnvelopeInTheSamePartition(t *testing.T) {
 		t.Fatalf("首登与更正入队：%v", err)
 	}
 
-	firstID := "tenant-1/parcel-1/attempt-1/delivery/v1/effective-delivery"
-	correctedID := "tenant-1/parcel-1/attempt-1/delivery/v2/effective-delivery"
+	firstID := tfEventID("effective-delivery", "tenant-1", "parcel-1", "attempt-1", "delivery/v1")
+	correctedID := tfEventID("effective-delivery", "tenant-1", "parcel-1", "attempt-1", "delivery/v2")
 	if count := countTFIntents(t, pool, firstID); count != 1 {
 		t.Fatalf("首登行数 = %d, want 1", count)
 	}
@@ -143,7 +143,7 @@ func TestEffectiveDeliveryFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("首发：%v", err)
 	}
-	if count := countTFIntents(t, pool, "tenant-1/parcel-1/attempt-1/delivery/v1/effective-delivery"); count != 1 {
+	if count := countTFIntents(t, pool, tfEventID("effective-delivery", "tenant-1", "parcel-1", "attempt-1", "delivery/v1")); count != 1 {
 		t.Fatalf("交付信封行数 = %d, want 1", count)
 	}
 
@@ -156,7 +156,7 @@ func TestEffectiveDeliveryFollowsTheTransactionalTemplate(t *testing.T) {
 	}); !errors.Is(err, rollback) {
 		t.Fatalf("事务应以回滚错误结束，实得：%v", err)
 	}
-	if count := countTFIntents(t, pool, "tenant-1/parcel-rollback/attempt-1/delivery/v1/effective-delivery"); count != 0 {
+	if count := countTFIntents(t, pool, tfEventID("effective-delivery", "tenant-1", "parcel-rollback", "attempt-1", "delivery/v1")); count != 0 {
 		t.Fatalf("回滚后 parcel-rollback 行数 = %d, want 0", count)
 	}
 
@@ -165,7 +165,7 @@ func TestEffectiveDeliveryFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("重发：%v", err)
 	}
-	if count := countTFIntents(t, pool, "tenant-1/parcel-1/attempt-1/delivery/v1/effective-delivery"); count != 1 {
+	if count := countTFIntents(t, pool, tfEventID("effective-delivery", "tenant-1", "parcel-1", "attempt-1", "delivery/v1")); count != 1 {
 		t.Fatalf("重发后行数 = %d, want 1——重发的必须是同一份", count)
 	}
 

@@ -54,14 +54,17 @@ type effectiveDeliveryPayload struct {
 	Version  string `json:"version"`
 }
 
-// effectiveDeliveryEventID 取交付生效键**再加结果版本**。
+// effectiveDeliveryPort 是本口在信封 ID 与分区键类型段上的口名，与同一来源名下别的口（如容量消耗、揽收登记）的 ID 空间错开（FingerprintEventID 头注）。
+const effectiveDeliveryPort = "effective-delivery"
+
+// effectiveDeliveryEventID 取交付生效键的三维（租户、对象、尝试）**再加结果版本**。
 //
 // 版本必须在里面。ADR-0043 说意图由结果标识认领，而一次交付生效的结果标识是它的版本
-// 不是它的键：POD 更正换出新版本走的是同一个键，ID 少了版本两代就算出同一个字符串，
+// 不是它的键：POD 更正换出新版本走的是同一个键，ID 少了版本两代就算出同一个 ID，
 // 而 outboxintent.EnqueueOnce 先查后插——第二份于是静默不入队，编排却收到「交接成功」。
-func effectiveDeliveryEventID(key ports.EffectiveDeliveryKey, version domain.DeliveryResultVersion) string {
-	return key.TenantID.String() + "/" + key.Object.String() + "/" + key.Attempt.String() +
-		"/" + version.String() + "/effective-delivery"
+func effectiveDeliveryEventID(key ports.EffectiveDeliveryKey, version domain.DeliveryResultVersion) eventing.EventID {
+	return outboxintent.FingerprintEventID(effectiveDeliveryPort,
+		key.TenantID.String(), key.Object.String(), key.Attempt.String(), version.String())
 }
 
 // effectiveDeliveryPartitionKey 取（租户+载运对象+类型段），不取整个键。
@@ -74,7 +77,7 @@ func effectiveDeliveryEventID(key ports.EffectiveDeliveryKey, version domain.Del
 // 与 visibility-exception 的（租户+包裹）分区不共队。口内对象链保序，跨口不保——
 // 下游按引用重读当前版，跨口到达序买不到东西。
 func effectiveDeliveryPartitionKey(key ports.EffectiveDeliveryKey) string {
-	return key.TenantID.String() + "/" + key.Object.String() + "/effective-delivery"
+	return key.TenantID.String() + "/" + key.Object.String() + "/" + effectiveDeliveryPort
 }
 
 // HandOffEffectiveDelivery 把一份意图入队。载荷仍是指针式的——只带引用，交付本体由下游
@@ -107,10 +110,9 @@ func (handoff *OutboxEffectiveDeliveryHandoff) HandOffEffectiveDelivery(
 	}
 
 	now := handoff.clock.Now().UTC()
-	eventID := effectiveDeliveryEventID(key, version)
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(eventID),
+		ID:           effectiveDeliveryEventID(key, version),
 		Source:       tfEventSource,
 		Type:         effectiveDeliveryEventType,
 		Version:      1,

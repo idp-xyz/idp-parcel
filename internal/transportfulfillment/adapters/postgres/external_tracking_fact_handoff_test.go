@@ -64,8 +64,8 @@ func TestAJudgedVersionAndItsSuccessorShareAPartitionButNotAnID(t *testing.T) {
 		t.Fatalf("两代入队：%v", err)
 	}
 
-	firstID := "tenant-1/EXTF-H1/EXTV-H1a/external-carrier-tracking"
-	secondID := "tenant-1/EXTF-H1/EXTV-H1b/external-carrier-tracking"
+	firstID := tfEventID("external-carrier-tracking", "tenant-1", "EXTF-H1", "EXTV-H1a")
+	secondID := tfEventID("external-carrier-tracking", "tenant-1", "EXTF-H1", "EXTV-H1b")
 	if count := countTFIntents(t, pool, firstID); count != 1 {
 		t.Fatalf("首版行数 = %d, want 1", count)
 	}
@@ -121,7 +121,7 @@ func TestAPendingVersionIsRefusedAtTheHandoff(t *testing.T) {
 	if err == nil {
 		t.Fatal("待判断的版本入了队")
 	}
-	if count := countTFIntents(t, pool, "tenant-1/EXTF-H2/EXTV-H2/external-carrier-tracking"); count != 0 {
+	if count := countTFIntents(t, pool, tfEventID("external-carrier-tracking", "tenant-1", "EXTF-H2", "EXTV-H2")); count != 0 {
 		t.Fatalf("待判断版本行数 = %d, want 0", count)
 	}
 }

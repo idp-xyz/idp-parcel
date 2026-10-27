@@ -118,9 +118,9 @@ func registerAt(t *testing.T, db *bentopg.DB, store *outbox.Store, command tfapp
 	}
 }
 
-// nodeControlEventID 与生产交出的信封 ID 同一拼法（四维直拼）：生产路由那一条用例按它去库里找真交出的那一封。
+// nodeControlEventID 与生产交出的信封 ID 同一公式（口名加四维的指纹）：生产路由那一条用例按它去库里找真交出的那一封。
 func nodeControlEventID(parcel, scope, version string) string {
-	return nodeControlTenant + "/" + parcel + "/" + scope + "/" + version
+	return handoverEventID(nodeControlTenant, parcel, scope, version)
 }
 
 // readReception 按键读回那一行收寄，控制经折叠读出。

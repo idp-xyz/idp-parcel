@@ -11,6 +11,7 @@ import (
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	adapter "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
@@ -59,8 +60,11 @@ func TestOffsitePickupFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("首发：%v", err)
 	}
-	if count := countTFIntents(t, pool, "tenant-a/source-1/offsite-pickup"); count != 1 {
+	if count := countTFIntents(t, pool, tfEventID("offsite-pickup", "tenant-a", "source-1")); count != 1 {
 		t.Fatalf("source-1 行数 = %d, want 1", count)
+	}
+	if got := partitionKeyOf(t, pool, tfEventID("offsite-pickup", "tenant-a", "source-1")); got != "tenant-a/source-1/offsite-pickup" {
+		t.Fatalf("分区键 = %q", got)
 	}
 
 	rollback := errors.New("回滚")
@@ -72,7 +76,7 @@ func TestOffsitePickupFollowsTheTransactionalTemplate(t *testing.T) {
 	}); !errors.Is(err, rollback) {
 		t.Fatalf("事务应以回滚错误结束，实得：%v", err)
 	}
-	if count := countTFIntents(t, pool, "tenant-a/source-2/offsite-pickup"); count != 0 {
+	if count := countTFIntents(t, pool, tfEventID("offsite-pickup", "tenant-a", "source-2")); count != 0 {
 		t.Fatalf("回滚后 source-2 行数 = %d, want 0", count)
 	}
 
@@ -81,7 +85,7 @@ func TestOffsitePickupFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("重发：%v", err)
 	}
-	if count := countTFIntents(t, pool, "tenant-a/source-1/offsite-pickup"); count != 1 {
+	if count := countTFIntents(t, pool, tfEventID("offsite-pickup", "tenant-a", "source-1")); count != 1 {
 		t.Fatalf("重发后 source-1 行数 = %d, want 1——重发的必须是同一份", count)
 	}
 
@@ -127,12 +131,17 @@ func TestOffsitePickupDoesNotCollideWithEffectiveDelivery(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("同事务两口：%v", err)
 	}
-	if count := countTFIntents(t, pool, "tenant-a/parcel-1/attempt-1/offsite-pickup"); count != 1 {
+	if count := countTFIntents(t, pool, tfEventID("offsite-pickup", "tenant-a", "parcel-1/attempt-1")); count != 1 {
 		t.Fatalf("揽收尝试行数 = %d, want 1", count)
 	}
-	if count := countTFIntents(t, pool, "tenant-a/parcel-1/attempt-1/delivery/v1/effective-delivery"); count != 1 {
+	if count := countTFIntents(t, pool, tfEventID("effective-delivery", "tenant-a", "parcel-1", "attempt-1", "delivery/v1")); count != 1 {
 		t.Fatalf("交付生效行数 = %d, want 1——应是第二份而不是被揽收尝试吞掉", count)
 	}
+}
+
+// tfEventID 按生产的指纹公式算信封 ID：口名与各维逐个分开传，和 outboxintent.FingerprintEventID 同形。
+func tfEventID(port string, dimensions ...string) string {
+	return string(outboxintent.FingerprintEventID(port, dimensions...))
 }
 
 func countTFIntents(t *testing.T, pool *pgxpool.Pool, eventID string) int {

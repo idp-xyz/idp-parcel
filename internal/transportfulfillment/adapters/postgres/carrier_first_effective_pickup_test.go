@@ -288,9 +288,9 @@ func TestThreeGenerationsShareAPartitionButNotAnIDAndThePayloadNamesItsOwnGenera
 		t.Fatalf("三代入队：%v", err)
 	}
 	ids := []string{
-		"tenant-1/CFEP-H1/CFEV-H1a/carrier-first-effective-pickup",
-		"tenant-1/CFEP-H1/CFEV-H1b/carrier-first-effective-pickup",
-		"tenant-1/CFEP-H1/CFEV-H1c/carrier-first-effective-pickup",
+		tfEventID("carrier-first-effective-pickup", "tenant-1", "CFEP-H1", "CFEV-H1a"),
+		tfEventID("carrier-first-effective-pickup", "tenant-1", "CFEP-H1", "CFEV-H1b"),
+		tfEventID("carrier-first-effective-pickup", "tenant-1", "CFEP-H1", "CFEV-H1c"),
 	}
 	for _, id := range ids {
 		if count := countTFIntents(t, pool, id); count != 1 {
@@ -343,7 +343,7 @@ func TestAPendingPickupVersionIsRefusedAtTheHandoffAndTheHandoffNeedsATransactio
 	}); err == nil {
 		t.Fatal("待确认版本入了队")
 	}
-	if count := countTFIntents(t, pool, "tenant-1/CFEP-H2/CFEV-H2/carrier-first-effective-pickup"); count != 0 {
+	if count := countTFIntents(t, pool, tfEventID("carrier-first-effective-pickup", "tenant-1", "CFEP-H2", "CFEV-H2")); count != 0 {
 		t.Fatalf("待确认版本行数 = %d, want 0", count)
 	}
 	formed := formedCarrierPickupDB(t, "CFEP-H3", "CFEV-H3", "PCL-H3")

@@ -7,6 +7,7 @@ import (
 
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	tfports "go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
@@ -147,7 +148,7 @@ func recordRegisteredTransportHandoverIn(t *testing.T, fixture *synVerticalFixtu
 	if outcome != tfports.HandoverSaved {
 		t.Fatalf("save outcome = %v, want 已写入", outcome)
 	}
-	return tenant.String() + "/" + transportHandoverObject + "/" + scope + "/" + version
+	return handoverEventID(tenant.String(), transportHandoverObject, scope, version)
 }
 
 func assertUnclassifiedHandoverProjection(t *testing.T, fixture *synVerticalFixture) {
@@ -183,4 +184,9 @@ func assertUnclassifiedHandoverProjection(t *testing.T, fixture *synVerticalFixt
 	if entry.Fact().Fact().String() != handoverFactRef {
 		t.Fatalf("fact = %q, want %s", entry.Fact().Fact(), handoverFactRef)
 	}
+}
+
+// handoverEventID 按生产的指纹公式算交接登记信封的 ID：口名加（租户、对象、范围、版本）四维，逐个分开传。
+func handoverEventID(tenant, object, scope, version string) string {
+	return string(outboxintent.FingerprintEventID("transport-handover-registration", tenant, object, scope, version))
 }

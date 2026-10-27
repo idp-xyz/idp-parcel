@@ -193,7 +193,7 @@ func (fixture *handoverDispatchFixture) registerHandover(t *testing.T, command t
 
 // handoverDispatchEventID 与生产交出的信封 ID 同一拼法：生产路由那一条用例按它去库里找真交出的那一封，两边对不上就红。
 func handoverDispatchEventID(object string, ordinal int) string {
-	return handoverDispatchTenant + "/" + object + "/" + handoverDispatchScope + "/" + handoverDispatchVersion(object, ordinal)
+	return handoverEventID(handoverDispatchTenant, object, handoverDispatchScope, handoverDispatchVersion(object, ordinal))
 }
 
 // deliver 把那一版交接的信封交给派送发起这一路，模拟派发进程投递（含重投）。
