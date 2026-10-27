@@ -159,7 +159,7 @@ func TestAControlReleaseRefusalIsHandledOnceAndTheSecondCallReadsTheFirst(t *tes
 		t.Fatalf("没处理过的那一笔读到了处理 found=%v err=%v", found, err)
 	}
 
-	// 册上原行不改：仍能按委托列出，三段作用域与原因照旧。
+	// 册上原行不改：仍能按委托列出，作用域与原因与登记时一致。
 	listed, err := rig.register.ListByShipmentRequest(t.Context(), first.TenantID, first.ShipmentRequestID)
 	if err != nil || len(listed) != 1 || listed[0] != first {
 		t.Fatalf("册上原行 = %+v err=%v, want 不变 %+v", listed, err, first)
@@ -191,6 +191,47 @@ func TestAnotherTenantCannotHandleARefusalAndWritesNothing(t *testing.T) {
 		ports.ControlReleaseRefusalMarkedHandled, "https://id.syn.example#alice")
 	if outcome, _ := rig.handle(t, absent); outcome != ports.ControlReleaseRefusalNotRegistered {
 		t.Fatalf("册上没有的一笔 = %d, want 册上无此笔", outcome)
+	}
+}
+
+// Covers: AT-PS-163；ADR-0293 决定二、ADR-0003——两个租户可以有同样的（委托、版本、控制）三段：租户 1 已处理的留痕，租户 2 读不到；租户 2 的册上没有这一笔时，
+// 处理答`册上无此笔`，而不是读回租户 1 的赢家当成`已处理`；租户 2 自己登记之后处理照样成立，两边各读各的留痕。
+func TestTwoTenantsWithTheSameThreeSegmentsNeverSeeEachOthersHandling(t *testing.T) {
+	rig := newRefusalHandlingRig(t)
+	scope := syntheticScope(t)
+	first := refusalFor(t, "tenant-1", "request-1", "version-1", refusalRecordedAt, scope)
+	second := refusalFor(t, "tenant-2", "request-1", "version-1", refusalRecordedAt, scope)
+	rig.record(t, first)
+
+	firstHandling := handlingOf(t, first, ports.ControlReleaseRefusalReleasedAtSettlement, "https://id.syn.example#alice")
+	if outcome, _ := rig.handle(t, firstHandling); outcome != ports.ControlReleaseRefusalHandlingRecorded {
+		t.Fatalf("租户 1 处理 = %d, want 已记下", outcome)
+	}
+
+	if read, found, err := rig.handlings.FindControlReleaseRefusalHandling(t.Context(), ports.KeyOfRefusal(second)); err != nil || found {
+		t.Fatalf("租户 2 读到了租户 1 的留痕 %+v found=%v err=%v", read, found, err)
+	}
+	secondHandling := handlingOf(t, second, ports.ControlReleaseRefusalMarkedHandled, "https://id.syn.example#bob")
+	outcome, winner := rig.handle(t, secondHandling)
+	if outcome != ports.ControlReleaseRefusalNotRegistered || winner != (ports.ControlReleaseRefusalHandling{}) {
+		t.Fatalf("租户 2 册上没有这一笔却处理 = %d %+v, want 册上无此笔——不能把租户 1 的赢家读回当成已处理", outcome, winner)
+	}
+	if n := rig.queryCount(t, `SELECT count(*) FROM parcel_shipment.control_release_refusal_handling`); n != 1 {
+		t.Fatalf("处理留痕行数 = %d, want 1", n)
+	}
+
+	rig.record(t, second)
+	outcome, winner = rig.handle(t, secondHandling)
+	if outcome != ports.ControlReleaseRefusalHandlingRecorded || winner != secondHandling {
+		t.Fatalf("租户 2 登记后处理 = %d %+v, want 已记下且原样", outcome, winner)
+	}
+	for name, test := range map[string]ports.ControlReleaseRefusalHandling{"租户 1": firstHandling, "租户 2": secondHandling} {
+		if read, found, err := rig.handlings.FindControlReleaseRefusalHandling(t.Context(), test.Key); err != nil || !found || read != test {
+			t.Errorf("%s 读回 %+v found=%v err=%v, want 自己的留痕 %+v", name, read, found, err, test)
+		}
+	}
+	if n := rig.queryCount(t, `SELECT count(*) FROM parcel_shipment.control_release_refusal_handling`); n != 2 {
+		t.Fatalf("处理留痕行数 = %d, want 各一行共 2", n)
 	}
 }
 

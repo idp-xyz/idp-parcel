@@ -121,7 +121,7 @@ func NewHandleControlReleaseRefusalHandler(deps HandleControlReleaseRefusalDeps)
 // 返回错误即整笔回滚。
 //
 // 「在结算侧释放」复用按原关联放占用的那一处定义（occupationRelease），不另立人工释放入口：释放认哪一版、哪一笔、哪一份作用域，
-// 与终局各路、接受链放的是同一笔，幂等归提供方账本（ADR-0122 决定三）。没存作用域的存量行交零值，提供方照旧拒收，处理人只剩
+// 与终局各路、接受链放的是同一笔，幂等归提供方账本（ADR-0122 决定三）。没存作用域的存量行交零值，提供方恒拒收，处理人只剩
 // 「标记已处理」一条路。
 func (handler *HandleControlReleaseRefusalHandler) Handle(
 	ctx context.Context,

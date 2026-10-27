@@ -174,7 +174,7 @@ export function ControlReleaseRefusalsPage() {
         onDecide={onDecide}
         viewState={refusalQueueViewState(answer, retry, info)}
       />
-      {/* 标记已处理只留痕却会让接受链此后不再为这一笔停下，按下之后再拦一道；确认即发命令，进行中由模板禁用按钮、结果由上面的 note 呈现。 */}
+      {/* 标记已处理只留痕却会让接受链此后不再为这一笔停下，按下之后再拦一道；确认即发命令，进行中由模板禁用按钮、结果由 `note` 状态呈现。 */}
       <ConfirmDialog
         renderFooter={confirmDialogFooter}
         open={pendingMark !== null}

@@ -60,7 +60,7 @@ M–L：一个运营查阅读口（按租户列未处理行、计数）、一到
 3. **链开头必须认出人已处理的拒收。** 协调方令里没写，但缺了它「标记已处理」之后的续办仍撞同一个拒收、再落一次 `publish_failed`（没存作用域的存量行提供方每次都拒收）。提供方仍先被问，只在提供方又确定不受理而那一笔逐段对得上处理留痕时放行；没处理过的、别的版本或别的控制关联的拒收照旧响亮失败；留痕读不回按「读不动才是未决」停在本步内部重试（`ControlReleasePending`），不当成处理过也不当成没处理过。
 4. **授权就是这一种授予加准入范围，不另问 `party-commercial`。** 授予名 `CONTROL_RELEASE_REFUSAL_HANDLING`，与授权处置（`AUTHORIZED_DISPOSITION`）分开；缺席 403 `OPERATOR_NOT_GRANTED`，渠道未配置 403 `ACCESS_CHANNEL_NOT_CONFIGURED`。查阅挂主数据与运营查阅读，不要这一种授予。
 5. **依据两种动作都必填。** 核对后释放也要说核对了什么，事后读册的人才分得出例行放掉与出过差错。
-6. **回执不回显处理人**，与别的运营决定口一条纪律；谁处理的只在留痕里（`发行方#sub`）。
+6. **回执不回显处理人**：调用方就是处理人；谁处理的在留痕里（`control_release_refusal_handling` 表，格式 `发行方#sub`）。同族回执并不统一（`reject_shipment_request.go`、`dispose_shipment_request.go` 回显 `decider`，`complete_manual_review.go` 回显 `reviewer`，改路决定带 `decidedBy`），本口取不回显：回执给的是做法与处理时刻。
 7. **册上没有这一笔复用 `SHIPMENT_REQUEST_NOT_VISIBLE`。** 统一不可见在本上下文只有一个传输层写法；别的租户的委托标识在寻址那一步就与越权探针同答 403。
 8. **告警阈值不做**（`grep -rniE 'alert|threshold' internal cmd --include=*.go -l` 命中的是计价、路由、治理里的业务阈值与事件文案，没有告警引擎或可复用的告警模式）：页头与响应只给计数与截断标志。
 9. **补登作用域并重放不做**（协调方裁定）；存量无作用域行的「核对后在结算侧释放」恒再被拒收，页面与文档如实说，只剩先在结算侧手工放掉再标记已处理。
@@ -78,9 +78,18 @@ M–L：一个运营查阅读口（按租户列未处理行、计数）、一到
 7. **并发处理的败者在主键上等先到的事务**；释放跑在提供方账本上持锁久时，后到者跟着等。
 8. **标记已处理之后账本被另行占用、或「在结算侧释放」之后又被改动，链不再核对**（处理的认定只看留痕）。
 9. **管理台页的 Intake 全在服务端把关**，前端不自判谁有权；演示库里只有配置员一位持这一种授予。
+10. **评审补记的四点**见 ADR-0293 越权风险点 9 至 12：标错不可撤销且没有已处理行的读面（留痕可审实际只能走 SQL）；续办信封自身死信时处理口只答已处理、不重发；链开头对「提供方答复译不动」一类拒收也凭留痕放行；并发用例没有覆盖一人标记、一人释放。
 
 ### 测试与变异
 
 - 先红：HTTP 与应用层、消费门用例在实现之前编译不过；授予往返在迁移之前被库内 CHECK 拒（23514）；真链往返的「标记已处理」闭环在过滤去掉时红（见变异）。
 - `scripts/test-full.sh ./...` 全仓 158 个包全绿、退 0；`go build ./...`、`go vet ./...`、`gofmt -l` 干净；管理台 `tsc -b --noEmit`、`node scripts/run-tests.mjs`（rebase 之后 786 过）、`vite build` 都过，`./internal/architecture/...`（含 `TestEveryAdminWebPathIsOnTheParcelAPIEndpointTable`）过；`go run ./tools/adr-index` 能生成（README 不提交）、`go run ./tools/at-coverage-counts -check` 退 1（只是总览过期，新号分桶行已补）；演示种子在一次性库灌入零报错、三笔 `RECORDED`。新用例 `-count=3` 稳定，两条并发用例 `-count=5` 稳定。
-- 变异（备份、还原后 `cmp` 一致），全部被杀：①处理后不交信封（应用层三例红）；②释放未收口也标处理（应用层不收口三格例红）；③并发输家也交信封（`TestASecondHandlerReadsTheFirstAndTriggersNothing` 红）；④不核册上有无（不可见三例红）；⑤已处理的一笔仍去问提供方（同上红）；⑥释放先于取锁（调用序例红）；⑦两人并发都成立（处理留痕 `ON CONFLICT DO NOTHING` 换成 `DO UPDATE`：适配器层「只一笔成立」与「第二次读回第一次」两例红）；⑧不核租户（查阅去掉租户条件：查阅隔离例红；处理的 INSERT…SELECT 去掉租户条件：他租户处理例红；Intake 采信请求里的 `?tenant=`：Intake 例与生产装配例红）；⑨链开头不滤已处理、把读不动当已处理、键里漏租户或漏版本、读口 nil 时也放行（链开头六例与既有响亮失败例分别红）；⑩链开头过滤整个关掉（真链往返「标记已处理」例红，错误正文就是被已处理的拒收挡着的 `ErrControlReleaseNotAccepted`）。
+- 变异（备份、还原后 `cmp` 一致），全部被杀：①处理后不交信封（应用层三例红）；②释放未收口也标处理（应用层不收口三格例红）；③并发输家也交信封（`TestASecondHandlerReadsTheFirstAndTriggersNothing` 红）；④不核册上有无（不可见三例红）；⑤已处理的一笔仍去问提供方（同上红）；⑥释放先于取锁（调用序例红）；⑦两人并发都成立（处理留痕 `ON CONFLICT DO NOTHING` 换成 `DO UPDATE`：适配器层「只一笔成立」与「第二次读回第一次」两例红）；⑧不核租户（查阅去掉租户条件：查阅隔离例红；处理的 INSERT…SELECT 去掉租户条件：他租户处理例红；查阅 Intake 采信请求里的 `?tenant=`：查阅 Intake 例与生产装配例红；处理 Intake 的 `?tenant=` 见评审补记）；⑨链开头不滤已处理、把读不动当已处理、键里漏租户或漏版本、读口 nil 时也放行（链开头六例与既有响亮失败例分别红）；⑩链开头过滤整个关掉（真链往返「标记已处理」例红，错误正文就是被已处理的拒收挡着的 `ErrControlReleaseNotAccepted`）。
+
+### 评审记录与修订轮
+
+- 独立评审结论：可合入；合入前要修的几项（N1 至 N3）与评审信息项在第一轮修订里处理。
+- **第一轮修订（N1）**：两处租户过滤原先没有回归用例，变异存活。补 `TestTheRefusalHandlingIntakeIgnoresATenantTheRequestClaims`（处理 Intake 在请求带 `?tenant=` 别的租户时，委托寻址与命令里的租户仍是信封里的）与生产装配例里「别的租户的操作者带 `?tenant=` 自报本租户仍答 403、什么也不写」；补 `TestTwoTenantsWithTheSameThreeSegmentsNeverSeeEachOthersHandling`（两个租户同样的（委托、版本、控制）三段：租户 2 读不到租户 1 的留痕，册上没有时处理答册上无此笔而不是读回别租户的赢家，租户 2 自己登记后处理照样成立）。变异（备份、还原后 `cmp` 一致）均被杀：处理 Intake 改成采信 `?tenant=`，Intake 新例与生产装配新探针红；`FindControlReleaseRefusalHandling` 的 WHERE 去掉租户条件，新用例红。
+- **第一轮修订（N2）**：响应类型头注、`api.ts` 注释与代决 6 原写「与别的运营决定口同一条纪律」不实（同族回执里 `decider`、`reviewer`、`decidedBy` 都有回显），改为调用方就是处理人、不回显，谁处理的在留痕里。行为不变。
+- **第一轮修订（N3）**：本分支新增行里对着旧行为的叙述（「不再响亮失败」「不再挡着新版本」「照旧上抛」等）改写成现行规则句；位置词（「与上面各路」「上面的 note」）改成符号名；`acceptanceChainGates` 头注去掉数目。
+- **第一轮修订（信息项）**：ADR-0293 越权风险点补 9 至 12，UC-PS-005 规则一节补运维须知。

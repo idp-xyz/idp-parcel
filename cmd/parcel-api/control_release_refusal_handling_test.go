@@ -164,7 +164,12 @@ func (fixture *refusalHandlingE2E) body(t *testing.T, action string) string {
 }
 
 func (fixture *refusalHandlingE2E) post(token, body string) (int, string) {
-	request := httptest.NewRequest(http.MethodPost, handlingPath, strings.NewReader(body))
+	return fixture.postTo(handlingPath, token, body)
+}
+
+// postTo 把请求发到带查询串的地址，路由仍按端点路径取。
+func (fixture *refusalHandlingE2E) postTo(target, token, body string) (int, string) {
+	request := httptest.NewRequest(http.MethodPost, target, strings.NewReader(body))
 	if token != "" {
 		request.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -366,7 +371,7 @@ func TestConcurrentHandlersOfOneWiredRefusalLeaveOneHandlingAndOneEnvelope(t *te
 }
 
 // Covers: AT-PS-164；ADR-0293 决定三、ADR-0151 决定二——授权：只持授权处置授予的操作者进不来（两种授予不通用），别的租户的操作者拿着本租户的委托标识同样
-// 403（越权探针同答），没有令牌 401；册上没有的那一笔 404；以上都什么也没写。
+// 403（越权探针同答；请求上带 `?tenant=` 自报本租户也一样），没有令牌 401；册上没有的那一笔 404；以上都什么也没写。
 func TestTheWiredHandlingIsOpenOnlyToItsOwnGrantWithinTheOwnTenant(t *testing.T) {
 	fixture := newRefusalHandlingE2E(t)
 	recorded, _ := refusalSettlementScope(t)
@@ -388,6 +393,11 @@ func TestTheWiredHandlingIsOpenOnlyToItsOwnGrantWithinTheOwnTenant(t *testing.T)
 		if status != test.status || !strings.Contains(raw, test.code) {
 			t.Errorf("%s = %d %s, want %d %s", name, status, raw, test.status, test.code)
 		}
+	}
+	// 别的租户的操作者在请求上自报本租户：租户只取信封，委托仍落在它自己的租户里查不到，答同一个 403。
+	status, raw := fixture.postTo(handlingPath+"?tenant="+handlingTenant, handlingForeigner, fixture.body(t, "MARK_HANDLED"))
+	if status != http.StatusForbidden || !strings.Contains(raw, "OPERATOR_NOT_GRANTED") {
+		t.Errorf("别的租户自报本租户 = %d %s, want 403 OPERATOR_NOT_GRANTED——请求里自报的租户不采信", status, raw)
 	}
 	if fixture.handlingRows(t) != 0 || fixture.resumeEnvelopes(t) != 0 {
 		t.Fatalf("被拒的请求写了留痕 %d 行、信封 %d 封", fixture.handlingRows(t), fixture.resumeEnvelopes(t))

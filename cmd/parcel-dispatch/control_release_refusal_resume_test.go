@@ -19,7 +19,7 @@ import (
 
 // 本文件对真实 PostgreSQL 16 证释放拒收处理的续办闭环（票 docs-consistency/code/95；ADR-0293 决定二、四）：客户补件之后，接受链开头放被取代那一版时
 // 被提供方确定不受理，消费门响亮失败、新版本判不了；人把册上那一笔处理完，处理动作同笔交一封续办信封，释放拒收处理续办门按这封信把同一条链拿委托的当前版本再驱一拍，
-// 链开头那一步不再被这一笔挡住，新版本能判、接受成立；再驱幂等。夹具同 control_release_refusal_test.go 与 superseded_version_control_release_test.go：控制与
+// 链开头那一步凭留痕认出这一笔已处理并放行，新版本能判、接受成立；再驱幂等。夹具同 control_release_refusal_test.go 与 superseded_version_control_release_test.go：控制与
 // 释放走生产 PS→SA 适配器、SA 释放编排与两本账，释放口外面套一只会按次数拒收的替身来摆出「被拒收」。
 //   - 核对后在结算侧释放：暂停那一次与链开头那一次释放都被拒收（册上一行、新版本被挡），处理人核对后在结算侧释放，提供方这一回受理，旧冻结放掉。
 //   - 标记已处理：控制结果没存作用域的存量行，提供方一律拒收；运维在结算侧手工放掉旧冻结之后标记已处理，链开头那一步认出这一笔人已处理，新版本能判。
@@ -289,7 +289,7 @@ func TestMarkingAnUnscopedRefusalHandledLetsTheChainJudgeTheNewVersion(t *testin
 	}
 }
 
-// Covers: AT-PS-165；ADR-0282 决定三不变——没有人处理的拒收，哪怕册上有这一行，链开头照旧响亮失败：续办信封只在处理之后才有，没有处理就没有信封，也没有别的东西替链放行。
+// Covers: AT-PS-165；ADR-0282 决定三——没有人处理的拒收，哪怕册上有这一行，链开头响亮失败：续办信封只在处理之后才有，没有处理就没有信封，也没有别的东西替链放行。
 func TestAnUnhandledRefusalStillBlocksTheChainOnEveryRedrive(t *testing.T) {
 	control := &synRLateBoundControl{}
 	release := &synRFlakyRelease{refusalsLeft: 1}

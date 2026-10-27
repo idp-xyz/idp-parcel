@@ -769,10 +769,10 @@ func logDeliveryFailure(logger *slog.Logger) dispatch.DeliveryFailureObserver {
 	}
 }
 
-// acceptanceChainGates 是接受判断链的几扇消费门：同一个编排，三个触发时机（ADR-0086
+// acceptanceChainGates 是接受判断链的各扇消费门：同一个编排，各扇门各有各的触发时机（ADR-0086
 // ——「委托已提交」开局，「复核已完成」续办；ADR-0094 Decision 四——「参数已登记」按租户
-// 重驱）。三扇门各占各的 inbox 名与事件类型，但依赖图必须同一份，所以由同一个装配函数
-// 一次建成。
+// 重驱；ADR-0293 决定四——「释放拒收已处理」续办）。各扇门各占各的 inbox 名与事件类型，
+// 但依赖图必须同一份，所以由同一个装配函数一次建成。
 type acceptanceChainGates struct {
 	submitted                     dispatch.Consumer
 	reviewCompleted               dispatch.Consumer
@@ -883,7 +883,7 @@ func acceptanceChainConsumers(
 	if err != nil {
 		return none, fmt.Errorf("parcel-dispatch: control release refusals: %w", err)
 	}
-	// 释放未受理册上的处理留痕：链开头放被取代各版遇确定未受理时，凭它认出「这一笔人已处理」而不再响亮失败（ADR-0293 决定四）。
+	// 释放未受理册上的处理留痕：链开头放被取代各版遇确定未受理时，凭它认出「这一笔人已处理」并放行（ADR-0293 决定四）。
 	refusalHandlings, err := pspostgres.NewControlReleaseRefusalHandlings(db)
 	if err != nil {
 		return none, fmt.Errorf("parcel-dispatch: control release refusal handlings: %w", err)
@@ -914,7 +914,7 @@ func acceptanceChainConsumers(
 			Downstream:   downstream,
 			Identities:   identities,
 			Clock:        clock,
-			// 链开头放被取代各版那一步读：人已处理的拒收不再挡着新版本。
+			// 链开头放被取代各版那一步读：凭留痕认出已处理的拒收并放行。
 			RefusalHandlings: refusalHandlings,
 		}),
 	})

@@ -10,6 +10,8 @@ import (
 
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
 // 本文件证释放拒收处理的传输层（ADR-0293 决定二、三）：Intake 先认证（决定种类是 CONTROL_RELEASE_REFUSAL_HANDLING，与授权处置分开）、后封闭解载荷，
@@ -79,6 +81,31 @@ func TestTheRefusalHandlingIntakeRefusesAMalformedPayloadAndHidesForeignRequests
 	if _, err := notGranted.IntakeControlReleaseRefusalHandling(ctx, decisionRequest("t", `not even json`)); !errors.Is(err, shipmenthttp.ErrOperatorNotGranted) {
 		t.Errorf("没有授予: err = %v, want ErrOperatorNotGranted（先认证、后解载荷）", err)
 	}
+}
+
+// Covers: AT-PS-164；ADR-0151 决定二——租户只取自认证出的信封：租户 B 的操作者在请求上自报 `?tenant=` 别的租户，委托寻址与命令里的租户仍是 B。
+func TestTheRefusalHandlingIntakeIgnoresATenantTheRequestClaims(t *testing.T) {
+	asked := &askedTenants{}
+	intake := decisionIntake(t, decisionAuthenticator{}, asked)
+	request := decisionRequest("t", refusalHandlingBody)
+	request.URL.RawQuery = "tenant=SYN-TENANT-99"
+
+	command, err := intake.IntakeControlReleaseRefusalHandling(context.Background(), request)
+	if err != nil {
+		t.Fatalf("intake: %v", err)
+	}
+	if command.Identity.TenantID().String() != decisionTenant || len(asked.tenants) != 1 || asked.tenants[0] != decisionTenant {
+		t.Fatalf("命令的租户 = %q，委托寻址问的租户 = %v, want 信封里的 %s，请求里自报的一概不采信",
+			command.Identity.TenantID(), asked.tenants, decisionTenant)
+	}
+}
+
+// askedTenants 记下委托寻址被问的租户，其余同 decisionTargets。
+type askedTenants struct{ tenants []string }
+
+func (fake *askedTenants) FindOperatorDecisionTarget(ctx context.Context, tenant domain.TenantID, request domain.ShipmentRequestID) (ports.OperatorDecisionTarget, bool, error) {
+	fake.tenants = append(fake.tenants, tenant.String())
+	return decisionTargets{}.FindOperatorDecisionTarget(ctx, tenant, request)
 }
 
 type refusalHandlingIntakeDouble struct {

@@ -390,7 +390,7 @@ export type ControlReleaseRefusalHandlingOutcome =
 
 /**
  * 已处理(201)与已被处理(200)带做法与处理时刻(后者是先到那一份的);释放再被拒收带原因;
- * 回执里没有处理人——谁处理的只在留痕里。
+ * 回执不回显处理人:调用方就是处理人,谁处理的在留痕里(`control_release_refusal_handling` 表,格式 `发行方#sub`)。
  */
 export interface ControlReleaseRefusalHandlingResponseBody {
   outcome: ControlReleaseRefusalHandlingOutcome;

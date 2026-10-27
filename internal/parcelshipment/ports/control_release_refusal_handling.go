@@ -73,7 +73,7 @@ const (
 )
 
 // ControlReleaseRefusalHandlingView 读一笔占用有没有被处理过。接受链开头放被取代各版遇确定未受理时，凭它认出「这一笔人已处理」
-// 而不再上抛。读不回是错误，调用方不把它当成「没处理过」。
+// 并放行。读不回是错误，调用方不把它当成「没处理过」。
 type ControlReleaseRefusalHandlingView interface {
 	FindControlReleaseRefusalHandling(
 		ctx context.Context,

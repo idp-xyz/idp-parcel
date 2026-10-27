@@ -8,7 +8,7 @@ import (
 )
 
 // Covers: AT-PS-164；ADR-0293 决定三——「释放拒收处理」这一种运营决定的授予登得进操作者册（access_identity 0025 放开决定种类那条 CHECK），读回是它自己，
-// 不与授权处置混读：持授权处置的人不因此持有它，反过来也一样；此前各份放开的种类照旧登得进。
+// 不与授权处置混读：持授权处置的人不因此持有它，反过来也一样；此前各份放开的种类都登得进。
 func TestTheControlReleaseRefusalHandlingDecisionIsGrantedAndReadBackApartFromTheDisposition(t *testing.T) {
 	register := newOperatorRegister(t)
 	subject := subjectOf(t, "https://id.syn.example/dex", "SYN-OPERATOR-CODE95")

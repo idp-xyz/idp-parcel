@@ -27,7 +27,7 @@ const ControlReleaseRefusalHandledEventType eventing.EventType = "parcel-shipmen
 // ControlReleaseRefusalHandledConsumer 把「释放拒收已处理」信封再驱一遍接受判断链（ADR-0293 决定四）。
 //
 // 它与提交门、复核续办门、受控补充续办门转交**同一个**编排、共用同一份译码与同一个折法。信封携带的是委托**此刻的当前版本**：接受链开头放被取代各版
-// 遇拒收响亮失败（ADR-0282 决定三）落 publish_failed 之后，人把被拒收的那一笔处理完，链拿当前版本重驱，开头那一步不再被这一笔挡住，新版本能判。
+// 遇拒收响亮失败（ADR-0282 决定三）落 publish_failed 之后，人把被拒收的那一笔处理完，链拿当前版本重驱，开头那一步凭留痕认出这一笔已处理并放行，新版本能判。
 // 重驱幂等：当前版本已决定的，链的入口守卫与既有决定路径答`已决定`，不再占下任何东西；信封里的版本不是委托当前版本的（处理之后又换了代），链答
 // `版本已换代`按处理完毕入账，新版本由它自己的「新提交版本已形成」信封驱动。
 type ControlReleaseRefusalHandledConsumer struct {

@@ -108,7 +108,7 @@ type FormAcceptanceDecisionDeps struct {
 	// Refusals 是释放未受理册：拒绝或停进`等待受控补充`之后随附释放被提供方确定不受理时记在这里交人处理。
 	Refusals ports.ControlReleaseRefusalRegister
 	// RefusalHandlings 只有接受链开头放被取代各版那一步读：提供方对某一笔确定不受理、而那一笔人已处理（核对后在结算侧放掉，或标记已在别处
-	// 处理）时，链不再为它响亮失败（ADR-0293 决定四）。不接它，被取代版本的拒收照旧一律上抛（ADR-0282 决定三）。
+	// 处理）时，链凭留痕认出这一笔并放行（ADR-0293 决定四）。不接它，被取代版本的拒收一律上抛（ADR-0282 决定三）。
 	RefusalHandlings ports.ControlReleaseRefusalHandlingView
 	// ScopeLock 在保存会带出释放的决定（拒绝、停进`等待受控补充`）之前、以及读到已终结的委托而要放它各版的占用之前，取占用
 	// 所在作用域的锁，锁序见 ports.PreAcceptanceControlScopeLock 头注。接受链里这些锁施加与链开头放被取代各版时已取过，这里

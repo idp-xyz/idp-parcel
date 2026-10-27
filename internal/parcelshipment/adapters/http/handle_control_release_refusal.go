@@ -59,7 +59,7 @@ func NewHandleControlReleaseRefusalEndpoint(
 }
 
 // controlReleaseRefusalHandlingResponse 是本端点的封闭响应形状。`已处理`与`已被处理`带做法与处理时刻（后者是先到那一份的）；`释放再被拒收`
-// 带原因；回执里不带处理人：谁处理的只在留痕里（与别的运营决定口同一条纪律）。
+// 带原因；回执不回显处理人：调用方就是处理人，谁处理的在留痕里（`control_release_refusal_handling` 表，格式 `发行方#sub`）。
 type controlReleaseRefusalHandlingResponse struct {
 	Outcome      string `json:"outcome"`
 	HandlingKind string `json:"handlingKind,omitempty"`
