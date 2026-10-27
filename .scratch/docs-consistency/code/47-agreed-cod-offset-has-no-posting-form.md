@@ -48,9 +48,9 @@ M（定形之后）：新依据种类（指向 settlement-accounting 的认可�
 - 领域（`internal/collectionremittance/domain`）：新增 `AgreedOffset`（`RegisterAgreedOffset`）、`AgreedOffsetID`、`ApprovalReference`；`FundPosition` 加 `PositionOffsetApplied`，`PostingBasisKind` 加 `BasisAgreedOffset`；`RecordSubledgerPosting` 加三道门（进入`已抵扣`必须凭认可抵扣且只自`渠道在途`、认可抵扣依据只支撑这一种形、离开`已抵扣`只有冲正）；`InstructionPrincipal` 带出已抵扣与「认可抵扣已支撑的记账」，抵扣等到账先移位，`ShortfallCeiling` 头注改为准确值。
 - 编排：`RegisterAgreedOffset`（指令在册、币种同账、`(认可引用, 指令)` 撞键折成内容冲突）；`PostSubledger` 加认可抵扣依据（形状、一条认可至多一笔）、冲正判重（`LoadCorrectionOf`，余额守卫之前）、取锁之后再判一次重放、`instructionBehind` 认得抵扣依据。结果代数不增格。
 - 端口与适配器：`CollectionRegistry.RegisterAgreedOffset`、`CollectionView.LoadAgreedOffset`、`SubledgerView.LoadCorrectionOf`；Postgres 写口、读口，`LoadInstructionPostings` 的递归追溯加认可抵扣一支。
-- 迁移 `migrations/collection_remittance/0003_agreed_offset_has_its_own_position_and_basis.sql`：`agreed_offset` 表（外键到指令，`(tenant, approval_ref, instruction_ref)` 唯一）；放开位置与依据词表；三条 CHECK；部分唯一索引「一条认可至多一笔记账」「一笔记账至多被冲正一次」。只放开、加约束，不改已落行。
-- 读面：目录上列、HTTP `/collection-subledgers`、管理台分户账页各带出`已抵扣`。受控 CLI 新增 `agreed-offset` 命令。演示种子补一条认可抵扣（14、15 号文件，6000），短款改为余下的 4000，账内合计仍是入账 150000。
-- 文档：ADR-0298；ADR-0271、ADR-0082 只在 Status 注记与 Links 加前向指针；CR CONTEXT（资金位置、认可的协议抵扣词条、规则、生命周期）、GLOSSARY、CONTEXT-MAP、结算 CONTEXT 的位置清单、UC-CR-001（输入、流程、结果、验收 `AT-CR-024`、`AT-CR-025`、交接）、种子 README 与 `350-collection.sh` 头注；AT 盘点补行。
+- 迁移 `migrations/collection_remittance/0003_agreed_offset_has_its_own_position_and_basis.sql`：`agreed_offset` 表（外键到指令，`(tenant, approval_ref, instruction_ref)` 唯一）；放开位置与依据词表；三条 CHECK；部分唯一索引「一条认可至多一笔记账」「一笔记账至多被冲正一次」，后者建索引之前先预检，存量里有被冲正了不止一次的记账就以列出各笔的错误拒绝施加（照 `transport_fulfillment/0022`）。只放开、加约束，不改已落行。
+- 读面：目录上列、HTTP `/collection-subledgers`、管理台分户账页各带出`已抵扣`。受控 CLI 新增 `agreed-offset` 命令。演示种子补一条认可抵扣（`agreed-offset` 与 `posting` 各一份种子文件，6000），短款改为余下的 4000，账内合计仍是入账 150000。
+- 文档：ADR-0298；ADR-0271、ADR-0082 只在 Status 注记与 Links 加前向指针；CR CONTEXT（资金位置、认可的协议抵扣词条、规则、生命周期）、GLOSSARY、CONTEXT-MAP、结算 CONTEXT 的位置清单与一句 CR 登记对认可抵扣的引用（事实陈述）、UC-CR-001（输入、流程、结果、验收 `AT-CR-024`、`AT-CR-025`、交接）、种子 README 与 `350-collection.sh` 头注；AT 盘点补行。
 
 ### 代决与越权风险点
 
@@ -61,9 +61,9 @@ M（定形之后）：新依据种类（指向 settlement-accounting 的认可�
 3. **登记时 CR 不读 settlement-accounting，认可引用与金额是操作员录入的**（SA、CR owner）。SA 今天没有认可抵扣的只读口。录错金额会让渠道欠款少记；SA 有只读口后照 ADR-0274 办法核，另立记录。
 4. **到账先于抵扣，抵扣先于短款，靠余额不足挡，不给短款加闸**（CR owner）。短款先落会吃掉在途款，抵扣停在余额不足，要先冲正短款。没落账的认可没有撤回形（记录一直在册，引用不再可登给同一指令）。
 5. **抵扣全额一次，不部分落账；大于在途时整笔停住等补报告**（CR owner）。
-6. **一笔记账至多被冲正一次，收紧了全部冲正**（CR owner）。此前同一笔可被重复冲正，同账别的指令在同位置有钱时会被多拿；这是缺口，不是规则，改后重复冲正答内容冲突。迁移 0003 的唯一索引在存量里有重复冲正时施加失败、整笔回滚。
+6. **一笔记账至多被冲正一次，收紧了全部冲正**（CR owner）。此前同一笔可被重复冲正，同账别的指令在同位置有钱时会被多拿；这是缺口，不是规则，改后重复冲正答内容冲突。迁移 0003 在存量里有重复冲正时由预检拒绝施加（列出各笔）、整笔回滚。
 7. **取锁之后再判一次重放，对全部记账生效**（CR owner）。同一命令并发到达时后到的一路答已在册，不再答来源被移空的余额不足；这是改了一处已有的答案。
-8. **SA 一侧怎样消费`已抵扣`（核销 COD 服务费应收？）没有裁**（SA owner）。在 SA 定之前它只是 CR 一侧的事实，对得上靠认可引用逐笔对。
+8. **SA 一侧怎样消费`已抵扣`（核销 COD 服务费应收？）没有裁**（SA owner）。在 SA 定之前它只是 CR 一侧的事实，两边只以认可引用交接。
 9. **已抵扣的钱客户拿不到**（CR owner）。协议归 settlement-accounting，CR 不核协议是否与该客户签过。
 
 ### AT
@@ -85,3 +85,18 @@ M（定形之后）：新依据种类（指向 settlement-accounting 的认可�
 
 - 登记时核 settlement-accounting 的认可（引用在册、币种、同一认可下各指令之和不超认可金额）：等 SA 的只读口，另立记录。
 - SA 一侧对`已抵扣`的消费：SA owner 定。
+
+## 评审记录与修订轮
+
+独立评审判**可合入**，无阻断；建议合入前修 N1–N4，已全部在分支上加提交处理（不改写已有提交）。
+
+- **N1 迁移 0003 先检查再建索引。** `subledger_posting_one_correction_per_original` 之前先 `DO $$ … RAISE EXCEPTION`，列出（租户、被冲正的记账、各冲正记账）后拒绝施加，整笔迁移回滚，不代删任何一笔冲正（照 `transport_fulfillment/0022`）；迁移头注与 ADR-0298 Consequences 的「索引施加失败」说法随之改成预检。新真库用例 `TestMigration0003RefusesToApplyOverAPostingCorrectedMoreThanOnce`（`internal/collectionremittance/adapters/postgres/agreed_offset_migration_test.go`，写法照 `networkrouting` 的 `TestMigration0028…`）：从空库施加到 0003 之前，落被冲正两次的存量（另有冲正那笔冲正与别的租户同名被冲正记账作对照，不得进报文），断言 `P0001`、报文列出被冲正的记账与各冲正记账、`agreed_offset` 表不在（整笔回滚）、行原样；移走多余冲正后照常施加，之后第二笔冲正撞 `subledger_posting_one_correction_per_original`。变异：去掉预检，红（得到不指明冲正记账的 23505）。
+- **N2 三处存活变异补用例。**
+  1. `TestRegisteringAnAgreedOffsetPinsTheApprovalAndRefusesADuplicate` 补三格：同标识换认可引用、换指令、换认可时刻，各答内容冲突。变异（`sameAgreedOffset` 去掉认可引用比对、去掉认可时刻比对、去掉指令比对各一次）各红在对应一格。
+  2. 真库用例 `TestTheDatabaseRefusesAnAgreedOffsetBasisInAnyOtherShape`：凭认可抵扣依据的渠道在途→待清分、渠道在途→应付客户、待清分→应付客户、应付客户→待清分，逐行断言撞的正是 `subledger_posting_agreed_offset_shape`（这几种位置对没有别的约束会拦；既有「错形」用例的两个候选约束会互相遮住）。变异：迁移里去掉该 CHECK，红。
+  3. `TestAPostingCommittedByAnotherWriterWhileWaitingForTheLockIsReplayedOrConflicts`：替身 `LockLedger` 加 `afterLock` 钩子，取到锁后替先到的那一路落一笔（一致 / 金额不同 / 记账时刻不同），造出「锁外读不到、等到锁才读到」；一致答已在册，不同答内容冲突，且只取锁一次、账上只有先到的那一笔。变异：`PostSubledger` 取锁后重放分支改成 `if false && !samePosting(…)`，两格内容冲突红。
+  全部变异都是备份 → 改 → 跑 → 从备份拷回并 `cmp` 一致。
+- **N3 收回结算 CONTEXT 里写 SA 义务的那句（协调方裁定）。** `docs/domain/settlement-accounting/CONTEXT.md` 现在只在位置清单加`已抵扣`、并说 `collection-remittance` 登记对认可抵扣的引用（指 ADR-0298），不再写 SA 的交接义务与「给出新的认可引用」。同步核对并收回同类越过：ADR-0298 决定五「settlement-accounting 给出新的认可、新的引用」改成「更正后的认可带着新的认可引用」；越权风险点 2「两边的对得上要靠认可引用逐笔对」、CR CONTEXT「与结算的分界」同句，改成「两边只以认可引用交接」；越权风险点 5「SA 若撤回后又以同一引用给出更正版，要换新引用」、6「SA 想只抵一部分，要给出较小额的新认可」改成登记侧的说法；UC-CR-001 主流程步 5「`settlement-accounting` 认可协议抵扣后登记」改成「依据 `settlement-accounting` 已认可的协议抵扣登记」。GLOSSARY、CONTEXT-MAP 只陈述 CR 拥有的位置与登记，未越过，不动。
+- **N4 规范小项。** 按派单的 `git diff origin/main...HEAD | grep` 找全本分支新增行后：CR CONTEXT「实收与指令不一致…」规则句的「不再另减」改成现行规则句（认可抵扣落到`已抵扣`的部分计入自`渠道在途`移出的金额）；同一 CONTEXT 里`已抵扣`词条与生命周期的「不再是渠道欠款」「不再落」，以及代码注释里的「不再是渠道还欠的」（领域 `AgreedOffset`、`FundPosition`、领域用例头注、HTTP 目录体、管理台 `api.ts` 注释）改成状态句；`agreed_offset_test.go` 场景十七头注的「照旧」、撤回用例头注的「不再从已抵扣里多拿」；`RecordSubledgerPosting` 头注的「五条依据门」改成「依据门」、迁移的「三条合起来」改成「这几道门合起来」、ADR-0298 决定二的「三条都做进结构」改成「这几道门都做进结构」；`350-collection.sh` 头注的「14 号、15 号」改成 `agreed-offset`、`posting` 命令名。ADR-0298 里对 ADR-0271 公式「不再另减」「此前冲正只核…」等是对被扩成条款的变更说明，属该记录本职，未动；票面与 AT 盘点追记同理。
+- **代决：** 预检的报文格式照 `transport_fulfillment/0022` 的写法，列（租户/被冲正记账（冲正记账 a、b））；真库迁移用例放在 `internal/collectionremittance/adapters/postgres/` 而不是 `./migrations/`（`migrations/` 目录只有 EOL 门禁测试，既有「停在目标迁移之前落存量再施加」的先例在各上下文的 adapters/postgres 测试里）。
+- **越权风险点：** 无新增。

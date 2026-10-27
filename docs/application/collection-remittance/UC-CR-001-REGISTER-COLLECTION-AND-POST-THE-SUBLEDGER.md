@@ -95,7 +95,7 @@
 | 2 | `collection-remittance` | 开立指令所属的分户账（`OpenSubledger`） | 已登记、已在册、内容冲突、未受理或未决 |
 | 3 | `collection-remittance` | 接受代收事实（`AcceptFact`）：指名的指令必须在册；真实到账按采用引用核对（ADR-0274，未实现，见「给开发的交接」） | 已登记、已在册、内容冲突、依据不在册、未受理或未决 |
 | 4 | `collection-remittance` | 记账（`PostSubledger`）：先判重放，再解依据、定分户账与形状，凭代收事实的按依据判重，读回账面按指令判上限、按账判余额，最后落账；同一笔事务内读回与落账看同一份快照 | 已登记、已在册、内容冲突、依据不在册、余额不足、批次已交出、未受理或未决 |
-| 5 | `collection-remittance` | `settlement-accounting` 认可协议抵扣后登记认可的协议抵扣（`RegisterAgreedOffset`），再以它为依据追加抵扣记账（回到步 4）；次序是到账移位、抵扣、短款 | 认可已登记、已在册、内容冲突（含同一份认可换标识再登记）、依据不在册、未受理或未决；抵扣另由记账落到`已抵扣` |
+| 5 | `collection-remittance` | 依据 `settlement-accounting` 已认可的协议抵扣登记认可的协议抵扣（`RegisterAgreedOffset`），再以它为依据追加抵扣记账（回到步 4）；次序是到账移位、抵扣、短款 | 认可已登记、已在册、内容冲突（含同一份认可换标识再登记）、依据不在册、未受理或未决；抵扣另由记账落到`已抵扣` |
 | 6 | `collection-remittance` | 实收与指令不一致时登记差异事项（`RegisterDiscrepancy`），再以事项为依据追加差额记账（回到步 4） | 事项已登记、已在册、内容冲突、依据不在册、未受理或未决；差额另由记账落到`短款`或`溢款` |
 | 7 | `collection-remittance` | 形成回汇批次（`FormBatch`），分户账必须已开立；汇付记账逐笔引用批次（回到步 4） | 已登记、已在册、内容冲突、依据不在册、未受理或未决 |
 | 8 | `collection-remittance` | 交出汇付主张（`HandOverBatch`） | 已交出汇付主张、已交出过、依据不在册、未受理或未决 |
