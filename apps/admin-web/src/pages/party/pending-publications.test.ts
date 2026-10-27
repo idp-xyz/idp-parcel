@@ -4,11 +4,13 @@ import type { PublicationDraftRecord } from './publication-draft-api';
 import {
   canonicalDocumentText,
   decisionsOf,
+  draftDecisions,
   draftFacts,
   draftKeyOf,
   draftSearchText,
   pendingCountSummary,
   pendingRowsOf,
+  unreadableRecovery,
 } from './pending-publications';
 
 // 本文件钉的是「待批准发布」页的纯逻辑（ADR-0314 决定三）：行的身份、按状态摆出的动作、抽屉复述的事实。
@@ -28,6 +30,7 @@ function record(over: Partial<PublicationDraftRecord> = {}): PublicationDraftRec
     submitter: 'dex#op-1',
     submittedAt: '2026-10-26T08:00:00Z',
     status: 'PENDING_APPROVAL',
+    readable: true,
     ...over,
   };
 }
@@ -96,4 +99,30 @@ test('计数摘要分待批准与已批准', () => {
     pendingCountSummary([record(), record({ objectId: 'B' }), record({ objectId: 'C', status: 'APPROVED' })]),
     '当前返回 3 份尚未发布的载体（待批准 2，已批准 1）',
   );
+});
+
+// Covers: AT-PC-071——本构建读不回的载体（readable 为假）照样是列表里的一行，动作一个都不摆：待批准不摆批准、已批准不摆发布；
+// 读得回的照状态。
+test('读不回的载体不摆批准与发布，读得回的照状态', () => {
+  deepEqual(draftDecisions(record({ readable: false })), { approve: false, publish: false });
+  deepEqual(draftDecisions(record({ readable: false, status: 'APPROVED' })), { approve: false, publish: false });
+  deepEqual(draftDecisions(record()), { approve: true, publish: false });
+  deepEqual(draftDecisions(record({ status: 'APPROVED' })), { approve: false, publish: true });
+});
+
+// Covers: AT-PC-071——恢复动作随状态：待批准的按同一版本号重录，已批准的换版本号，已发布的无需处理；陌生状态词不替服务端猜。
+test('读不回的恢复动作按状态说，陌生状态不猜', () => {
+  equal(unreadableRecovery('PENDING_APPROVAL').includes('同一版本号重新录入'), true);
+  equal(unreadableRecovery('APPROVED').includes('换新的版本号'), true);
+  equal(unreadableRecovery('PUBLISHED').includes('不需要处理'), true);
+  equal(unreadableRecovery('SOMETHING_NEW'), '');
+});
+
+// Covers: AT-PC-071——计数摘要把读不回的另报；搜「读不回」能找到它们；没有读不回的行时摘要与从前同形。
+test('计数摘要另报读不回的，检索认得读不回', () => {
+  const records = [record(), record({ objectId: 'CP-2', readable: false, canonicalization: 'PCC-9', contentDigest: 'PCC-9:x' })];
+  equal(pendingCountSummary(records), '当前返回 2 份尚未发布的载体（待批准 2，已批准 0，其中 1 份本构建读不回）');
+  equal(pendingCountSummary([record()]), '当前返回 1 份尚未发布的载体（待批准 1，已批准 0）');
+  equal(draftSearchText(records[1], '信用政策').includes('读不回'), true);
+  equal(draftSearchText(records[0], '信用政策').includes('读不回'), false);
 });

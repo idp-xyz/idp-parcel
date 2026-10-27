@@ -377,6 +377,10 @@ export interface PublicationDraftReferencePayload {
 /**
  * 待批准载体读回的一份（Go `publicationDraftBody`）。列表不带 `content`，单份读回带——规范化文档，正是摘要盖住的那份。
  * 录入者与批准者是操作者主体引用原串，只示出、不解析；`references` 是壳上的指名引用。
+ *
+ * `readable` 为假的是本构建折不回正文的载体：其余各格取自库上的列（`canonicalization` 与 `contentDigest` 是列上的原值，
+ * 规范化版本可以是本构建不认得的那一个），`unreadableCause` 说为什么读不回，没有 `content`；这样的载体批准与发布都会答
+ * `DRAFT_NOT_READABLE`，不摆这两个动作。
  */
 export interface PublicationDraftRecord {
   kind: CommercialObjectKindName;
@@ -395,6 +399,8 @@ export interface PublicationDraftRecord {
   approver?: string;
   approvedAt?: string;
   publishedAt?: string;
+  readable: boolean;
+  unreadableCause?: string;
   content?: unknown;
 }
 
@@ -404,7 +410,10 @@ export interface PublicationDraftListResponseBody {
   drafts: PublicationDraftRecord[];
 }
 
-/** 单份读回答复（Go `publicationDraftReadResponse`）：不在册时 `outcome` 是 `DRAFT_NOT_FOUND`、没有 `draft`。 */
+/**
+ * 单份读回答复（Go `publicationDraftReadResponse`）：不在册时 `outcome` 是 `DRAFT_NOT_FOUND`、没有 `draft`；在册而本构建折不回
+ * 正文时是 `DRAFT_NOT_READABLE`，`draft` 在场但 `readable` 为假、没有 `content`。
+ */
 export interface PublicationDraftReadbackResponseBody {
   outcome: string;
   draft?: PublicationDraftRecord;
@@ -436,8 +445,9 @@ export interface PublicationPreviewResponseBody {
 }
 
 /**
- * 录入口与批准口共用的答复（Go `draftAnswer`）。载体在场时带它的规范化版本、摘要与状态；`cause` 只随
- * 录入的 `NOT_ACCEPTED` 在场。`status` 取 domain.PublicationDraftStatus 原词，见 draftStatusLabels。
+ * 录入口与批准口共用的答复（Go `draftAnswer`）。载体在场时带它的规范化版本、摘要与状态；`cause` 随
+ * 录入的 `NOT_ACCEPTED` 在场，也随批准的 `DRAFT_NOT_READABLE` 在场（那一格只带 `status` 与 `cause`，不带摘要）。
+ * `status` 取 domain.PublicationDraftStatus 原词，见 draftStatusLabels。
  */
 export interface PublicationDraftResponseBody {
   outcome: string;
@@ -469,6 +479,9 @@ export interface CommercialPublicationAnswerBody {
 export interface PublicationDraftPublicationResponseBody {
   outcome: string;
   publication?: CommercialPublicationAnswerBody;
+  /** 只随 `DRAFT_NOT_READABLE` 在场：载体状态与读不回的成因。 */
+  status?: string;
+  cause?: string;
 }
 
 /**
@@ -533,6 +546,13 @@ export function publishPublicationDraft(
 // 并表会让一栏顶着另一栏的中文显示出来（判据同 api.ts 的 publicationOutcomeLabels 与
 // declarationLandingLabels 分表）。未收录的 outcome 由页面原样示出英文原名。
 
+/**
+ * 本构建读不回这份发布稿的内容（批准口与发布口同一句）：它存在，但内容的规范化版本本构建不认得，或含本构建不收的内容
+ * （如价格规则上的体积系数）。重试不会好，恢复动作在操作者手里：待批准的行可被同一版本号的重新录入替换，已批准的内容已固定、
+ * 只能换版本号；答复带载体状态时，抽屉里的具体说法见 pending-publications.ts 的 unreadableRecovery。
+ */
+export const draftNotReadableWords = '这份发布稿的内容本构建读不回，这次没有批准或发布。重试不会改变结果；待批准的可按同一版本号重新录入，已批准的请换新的版本号重新录入。';
+
 /** 预览答案代数（`application.PreviewCommercialPublicationOutcome` 原名）。 */
 export const previewOutcomeLabels: Record<string, string> = {
   PREVIEWED: '预览通过，还没有保存。下面是按内容算出的内容摘要，之后批准和发布的必须是这同一份内容。',
@@ -571,6 +591,7 @@ export const approveOutcomeLabels: Record<string, string> = {
   DRAFT_ALREADY_APPROVED: '这份发布稿已经批准过，可以直接发布。',
   DRAFT_ALREADY_PUBLISHED: '这一版已经发布了。',
   DRAFT_CHANGED: '这份发布稿的内容已经不是你看到的那份（别的操作者改动过），这次没有批准。请核对现在的内容后再批，内容可在「待批准发布」页读回。',
+  DRAFT_NOT_READABLE: draftNotReadableWords,
 };
 
 /**
@@ -589,6 +610,7 @@ export const publishOutcomeLabels: Record<string, string> = {
   DRAFT_AWAITS_EFFECTIVE_START: '还没到生效起点：到生效起点之后再来发布。这不是失败，发布稿保持已批准。',
   PUBLICATION_NOT_LANDED: '发布没有完成，原因见下。发布稿保持已批准。',
   DRAFT_CHANGED: '这份发布稿的内容已经不是你看到的那份，这次没有发布。请核对现在的内容后再发，内容可在「待批准发布」页读回。',
+  DRAFT_NOT_READABLE: draftNotReadableWords,
 };
 
 /** 载体状态（`domain.PublicationDraftStatus` 原名），只向前：待批准 → 已批准 → 已发布。 */
