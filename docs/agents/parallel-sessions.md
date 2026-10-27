@@ -582,7 +582,7 @@ patch-id 与 blob 两级核一遍（慢，几分钟）——09-07 夜里 398 笔
 
 ### 生成物不占号，但只在干净检出上生成
 
-`docs/product/MECHANISM-INVENTORY.md` 由 `tools/mechanism-inventory` 生成，CI 那道「Mechanism inventory is current」在 tip 上重跑生成器、与提交的文件不一致就红。它是全仓派生态命令的产物，但与本文上面禁止单方面跑的 `tidy`/`gofmt -w` 不同属：那些写回源码，这个写回一份谁都不拥有的清点。2026-09-04 一天里撞出三格：
+`docs/product/MECHANISM-INVENTORY.md` 由 `tools/mechanism-inventory` 生成，CI 那道「Mechanism inventory is current」在 main 推送的 tip 上重跑生成器、与提交的文件不一致就红。它是全仓派生态命令的产物，但与本文上面禁止单方面跑的 `tidy`/`gofmt -w` 不同属：那些写回源码，这个写回一份谁都不拥有的清点。2026-09-04 一天里撞出三格：
 
 - **一次推送没带重生成**（`a3adb75`，随后在 `efdbad7` 补）——四笔各自新增了文件或迁移，没有一笔重跑过生成器，CI 那道在那个 SHA 上红。
 - **在共享树上跑生成器，数进去的是别人的在途件。** 生成器数的是文件面、迁移份数、端口与端点声明数，共享树上此刻躺着谁的未提交文件它都算——那份数字对任何一笔提交都不成立，谁都不该提。
@@ -591,6 +591,8 @@ patch-id 与 blob 两级核一遍（慢，几分钟）——09-07 夜里 398 笔
 收成一句：**票不在自己的笔上重生成；推送方在 `main` 的 tip 上重生成、单独成笔**（2026-10-21 会话代决，照各票派单「进 main 时统一做」的实际做法裁，待用户复核；此前这里写的是「各笔在自己那笔的干净检出上重生成、随笔提（或紧随一笔）；推送方在 tip 上重生成兑底。」）。生成器只在干净检出上跑——detached worktree 检出要推的那个 tip（本文「推之前另在临时 worktree 里检出提交状态跑一遍」那套），产物只 `add` 这一件。该文件不占号：它是生成物，同批几张票各自生成只会撞同一段，所以不各自生成。
 
 同属生成物的还有两处，都只重写文件里一对标记之间，`-check` 不一致即非零退出：`docs/adr/README.md` 的两个列表由 `tools/adr-index` 从各 ADR 的 H1 与 `Status` 行生成，`.scratch/at-coverage-inventory.md`「总览」两表由 `tools/at-coverage-counts` 从各分桶节的行数重算。三者同一条规矩：**票不在自己的笔上重生成**——带新 ADR、改 `Status` 行的票只改 ADR 文件，点名 AT 的票只移行，新增文件与迁移的票不碰清点，都由推送方在 tip 上重生成。这两处存在就是为了让同批的票不再撞同一段；票各自重生成，撞的就又是同一段。冲突真落在标记之间时不手合，取任一侧后重生成。
+
+CI 对这三件的分工随之分开：要求新鲜的两道（「Mechanism inventory is current」「ADR index and AT coverage counts are current」）只挂在 `main` 的推送上，守的是推送方漏了重生成；PR 上换成 `scripts/ci/generated-artifacts-pr.sh`，只核生成器跑得动、输入没坏，不要求新鲜——两个 `-check` 工具退 1 是过期，放行；退 2 是生成区标记找不到、ADR 读不进，或 UC 立了号而盘点分桶表缺行或多行，那些重生成救不了，要作者自己补，照红。本机想看 PR 上会得到什么，直接跑这个脚本（不改工作区）。
 
 ## 报什么，不报什么
 

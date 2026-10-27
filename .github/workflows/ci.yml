@@ -57,19 +57,32 @@ jobs:
           go vet ./...
           go test ./...
 
-      # 与 gofmt 那一步同形：重新生成，与提交进来的那份不一致就红。清点报告因此不可能
-      # 落后于代码——手工重盘二十七轮之后每一轮都带假，靠的正是没有这道门。
+      # 三件生成物——机制清点、ADR 索引、AT 盘点计数——同一条规矩：票不在自己的笔上重生成，
+      # 推送方在 main 的 tip 上重生成、单独成笔（docs/agents/parallel-sessions.md「生成物不占号」）。
+      # 所以「要求新鲜」的门（Mechanism inventory is current、ADR index and AT coverage counts are
+      # current）只挂在 main 的推送上；挂到 PR 上，每张新增文件、迁移、
+      # ADR 或移了 AT 行的票都会按设计红，红就不再是信号。PR 上换成这一道：只核生成器跑得动、
+      # 输入没坏——标记找不到、ADR 读不进、UC 立了号而盘点分桶表缺行（at-coverage-counts 退 2），
+      # 清点跑不动或端口清点加载报错，这些重生成救不了，要作者自己修，照红；过期（退 1）放行。
+      # 退出码要分格，所以那段逻辑在脚本里先编二进制再跑，不走 `go run`（它把任何非零退出压成 1）。
+      - name: Generated artifacts are well-formed
+        if: github.event_name == 'pull_request'
+        run: bash scripts/ci/generated-artifacts-pr.sh
+
+      # 与 gofmt 那一步同形：重新生成，与提交进来的那份不一致就红。main 上清点报告因此不可能
+      # 落后于代码——手工重盘二十七轮之后每一轮都带假，靠的正是没有这道门；它守的是推送方漏了
+      # 重生成那一步，所以不挂 PR（PR 上是 Generated artifacts are well-formed）。
       - name: Mechanism inventory is current
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           (cd tools/mechanism-inventory && go run . -dir "$GITHUB_WORKSPACE" -out "$GITHUB_WORKSPACE/docs/product/MECHANISM-INVENTORY.md")
           # 用 status 不用 diff：diff 看不见未跟踪文件，报告一旦被删就会静默通过。
           test -z "$(git status --porcelain -- docs/product/MECHANISM-INVENTORY.md)"
 
-      # ADR 索引与 AT 盘点计数也是生成物，但约定与上一步相反：票不在自己那笔上重生成，由推送方
-      # 在 main 的 tip 上重生成、单独成笔（docs/agents/parallel-sessions.md「生成物不占号」）。
-      # 所以这一门只挂在 main 的推送上——挂到 PR 上，每张带新 ADR 或移了 AT 行的票都会按设计
-      # 红，红就不再是信号。它守的是推送方漏了那一步；另外 UC 立了号而盘点分桶表里缺行或多行时，
-      # at-coverage-counts 退 2，这一门同样红——那要补表行，重算补不上。
+      # ADR 索引与 AT 盘点计数和机制清点同一条规矩，同样只挂在 main 的推送上。它守的是推送方漏了那一步；
+      # 另外 UC 立了号而盘点分桶表里缺行或多行时，at-coverage-counts 退 2，这一门同样红——那要补表行，
+      # 重算补不上。`go run` 在这里只当红绿用：过期与缺行都显示为红，分不分格看日志里的 exit status
+      # 和工具自己的报错；PR 上那一道才靠退出码放行过期。
       - name: ADR index and AT coverage counts are current
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
