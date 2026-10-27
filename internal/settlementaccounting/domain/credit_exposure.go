@@ -154,7 +154,7 @@ func (status ExposureStatus) String() string {
 
 // CreditExposure 是账期方式下一次接受前控制留下的暴露记录。它不是费用也不是应收：
 // 金额责任由费用对象拥有，暴露只回答「这次控制占了多少额度」，以及按哪一版信用政策的
-// 额度判的（policy，CONTEXT「每项信用暴露保存实际采用的政策」的信用政策那一份）。
+// 额度判的（policy；CONTEXT 词条「接受前财务控制结果」写明每项结果保存采用策略，这里存的是其中信用政策那一份）。
 type CreditExposure struct {
 	exposureID  ExposureID
 	requestID   ControlRequestID

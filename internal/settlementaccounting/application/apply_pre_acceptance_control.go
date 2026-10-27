@@ -247,7 +247,7 @@ func (result ApplyPreAcceptanceControlResult) Estimate() (domain.PreAcceptanceEs
 }
 
 // Freeze 只在 PREPAID_FREEZE 那一项实际执行过时给出，`无控制`、冲突、未受理与待判断一律没有。
-// 交回一个零值冻结，正是 CONTEXT 禁止的「用虚假冻结冒充控制」。同一版策略内一种控制至多一项
+// 交回一个零值冻结，就是拿一个不存在的冻结冒充控制成立。同一版策略内一种控制至多一项
 // （领域构造期守住），所以这里至多一个冻结。
 func (result ApplyPreAcceptanceControlResult) Freeze() (domain.FundsFreeze, bool) {
 	return result.freeze, result.hasFreeze

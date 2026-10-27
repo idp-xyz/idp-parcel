@@ -141,7 +141,7 @@ func NewFormRequestedSupplierExpectedCostHandler(deps FormRequestedSupplierExpec
 
 // Handle 读回指 → 读请求 → 组命令 → 形成 → 折结果。
 //
-// 去向按恢复动作分（ADR-0029、ADR-0094「失败预算只花在真会自愈的依赖上」）：只有读口、登记面答不出才是未决、整笔
+// 去向按恢复动作分（ADR-0029、ADR-0094「失败预算从此只花在真会自愈的依赖上」）：只有读口、登记面答不出才是未决、整笔
 // 回滚等重投；评价本身停下的各格记停因后入账——评价不可变，计价按回指对同一份请求也不再形成第二份评价，重投这一封
 // 只会读到同一个答案，要再问是下一代的事。评价已完成而合计为零记`负向结束（零额）`后入账，不记停因（ADR-0306 决定三）。
 func (handler *FormRequestedSupplierExpectedCostHandler) Handle(

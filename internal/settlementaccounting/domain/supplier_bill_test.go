@@ -148,9 +148,10 @@ func TestABillClaimArrivalIsNotAPayable(t *testing.T) {
 	}
 }
 
-// Covers: `AT-SA-082`/`AT-SA-083`「匹配与未匹配金额分开保留」、`AT-SA-086`「账单金额高于
-// 协议/预期成本 → 差异进入争议，不自动接受超额」与 `AT-SA-096`「币种不同且无换算依据
-// → 保持待判断」——五格分类各守完备性，金额与币种只从行与预期成本取。
+// Covers: `AT-SA-082`「对明确金额形成已匹配并可进入审核」、`AT-SA-083`「已匹配与未匹配金额
+// 分开保留」、`AT-SA-086`「差异范围进入争议或待审，不自动接受超额」与 `AT-SA-096`（币种不同
+// 且无换算依据：域内立不成匹配，编排答未配置）——五格分类各守完备性，金额与币种只从行与
+// 预期成本取。
 func TestLineMatchingClassifiesDifferencesPerLine(t *testing.T) {
 	claim := receivedClaim(t)
 	line1 := settlementValue(t, domain.NewBillLineReference, "line-1")

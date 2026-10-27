@@ -54,7 +54,7 @@ func (outcome BillReceptionOutcome) String() string {
 }
 
 // BillUndecidedReason 指名提交停在哪一步等谁。封闭集合：换算依据未配置也是一格——
-// 跨币种匹配保持待判断是等配置，不是改单（AT-SA-096）。
+// 跨币种匹配答未配置（原因 CONVERSION_UNCONFIGURED）是等配置，不是改单（AT-SA-096）。
 type BillUndecidedReason uint8
 
 const (
@@ -237,7 +237,7 @@ func (handler *ReceiveSupplierBillHandler) Handle(
 		}
 		match, err := domain.MatchBillLine(claim, directive.Line, directive.Classification, expected, directive.Basis, record.RecordedAt)
 		if errors.Is(err, domain.ErrCrossCurrencyMatch) {
-			// 币种不同且无换算依据：保持待判断等配置，不用当前汇率猜测（AT-SA-096）。
+			// 币种不同且无换算依据：答未配置（原因 CONVERSION_UNCONFIGURED），不用当前汇率猜测（AT-SA-096）。
 			return ReceiveSupplierBillResult{outcome: BillUndecided, reason: BillConversionUnconfigured,
 				continuation: billContinuation("CONVERSION_UNCONFIGURED", command.Claim.Claim.String(), directive.Line.String())}, nil
 		}

@@ -8,8 +8,8 @@ import (
 var (
 	ErrInvalidBillClaim     = errors.New("settlement accounting: invalid supplier bill claim")
 	ErrInvalidBillLineMatch = errors.New("settlement accounting: invalid bill line match")
-	// ErrCrossCurrencyMatch：账单币种与预期成本结算币不同且无换算依据时保持待判断
-	// （AT-SA-096）——不用当前汇率猜测，域内直接立不成匹配。
+	// ErrCrossCurrencyMatch：账单币种与预期成本结算币不同且无换算依据时，域内直接立不成匹配；
+	// 编排答未配置（AT-SA-096），不用当前汇率猜测。
 	ErrCrossCurrencyMatch = errors.New("settlement accounting: cross-currency match needs a conversion basis")
 	// ErrNotAuditable：只有「已匹配」的无争议金额可通过审核形成应付；量差、价差、无匹配
 	// 发生项与重复计费都要先走争议/复核，不得自动接受（AT-SA-086）。
@@ -256,7 +256,7 @@ type BillLineMatch struct {
 //   - `无匹配发生项`要求预期成本**缺席**（没有可指的东西）且带检索依据；
 //   - `重复计费`要求预期成本在场并以依据指向已计费的原主张/匹配。
 //
-// 币种不一致且无换算依据 → ErrCrossCurrencyMatch，保持待判断（AT-SA-096）。
+// 币种不一致且无换算依据 → ErrCrossCurrencyMatch（AT-SA-096：编排答未配置）。
 func MatchBillLine(
 	claim SupplierBillClaim,
 	line BillLineReference,

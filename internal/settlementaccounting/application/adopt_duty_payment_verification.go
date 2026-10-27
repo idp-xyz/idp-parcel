@@ -13,7 +13,7 @@ import (
 // ErrUnexpectedAdoptionSave 说明采用登记册交回了封闭集合以外的写入结果。
 var ErrUnexpectedAdoptionSave = errors.New("settlement accounting: unexpected duty payment verification adoption save outcome")
 
-// SettlementInputOutcome 是结算输入采用（UC-SA-001 步 2「采用明确版本的……付款核对 → 形成结算输入版本」）
+// SettlementInputOutcome 是结算输入采用（UC-SA-001 步 2「采用明确版本的税费、付款核对、资金事实和合同责任」）
 // 的应用处理结果。它与 AdvanceOutcome 是两套代数，有意不并：采用一版输入是「结算输入已接收」，判断是
 // 「实际代垫成立 / 不成立 / 待判断 / 冲突」——CONTEXT 生命周期把两者写成先后两格，且明写「接收不表示
 // 代垫或回收已经成立」；并进同一枚举，读的人会把「输入已接收」当成判断的一种。
@@ -42,7 +42,7 @@ func (outcome SettlementInputOutcome) String() string {
 	}
 }
 
-// SettlementInputUndecidedReason 指名采用停在哪一步等谁。今天只有一格：登记册不可用。
+// SettlementInputUndecidedReason 指名采用停在哪一步等谁。只有一格：登记册不可用。
 type SettlementInputUndecidedReason uint8
 
 const (
@@ -99,9 +99,9 @@ func (result SettlementInputResult) ContinuationReference() string {
 // 分重放 → 落一行「引用 + 采用时刻」。
 //
 // 它**不形成实际代垫判断**，也不读其余输入到没到。UC-SA-001 步 2 的结果是「形成结算输入版本；缺失保持
-// 待判断」——付款方、外部资金事实的采用、合同责任几格今天没有采用口，判断因此保持待判断；那是本步的
-// 如实答案，不是错误，所以这里没有任何一条路会去调 Assess，也没有任何一条路会因为「别的输入不在」而
-// 报错或停在未决。采用了核对也不等于代垫成立（CONTEXT「不由任一单项输入直接推导」），
+// 待判断」——本步只采用付款核对这一维，付款方、外部资金事实、合同责任几格不在本步采用，
+// 判断因此保持待判断；那是本步的如实答案，不是错误，所以这里没有任何一条路会去调 Assess，
+// 也没有任何一条路会因为「别的输入不在」而报错或停在未决。采用了核对也不等于代垫成立（CONTEXT「不由任一单项输入直接推导」），
 // FormRecovery 更不在本路上。
 func (handler *AssessAdvanceRecoveryHandler) AdoptDutyPaymentVerification(
 	ctx context.Context,

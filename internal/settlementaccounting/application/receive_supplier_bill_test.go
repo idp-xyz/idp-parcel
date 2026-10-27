@@ -429,7 +429,7 @@ func TestUnconfiguredAuditAuthorityLeavesAuditUndecided(t *testing.T) {
 	}
 }
 
-// Covers: `AT-SA-096`「币种不同且无换算依据 → 保持待判断」与提交矛盾/依赖故障分格
+// Covers: `AT-SA-096`「答未配置（`BILL_UNDECIDED`，原因 `CONVERSION_UNCONFIGURED`）」与提交矛盾/依赖故障分格
 // （ADR-0029）：跨币种 → 未决(CONVERSION_UNCONFIGURED)；指错预期成本版本 → 未受理；
 // 预期成本视图故障 → 未决(EXPECTED_COST_UNAVAILABLE)；漏行裁决 → 未受理。都不落库。
 func TestUndecidedAndNotAcceptedSplitByRecovery(t *testing.T) {

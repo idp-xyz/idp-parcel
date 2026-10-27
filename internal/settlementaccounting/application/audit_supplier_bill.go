@@ -59,9 +59,10 @@ func (outcome AuditOutcome) String() string {
 	}
 }
 
-// AuditUndecidedReason 指名审核停在哪一步等谁。两格未配置都是实例半边：审核授权
-// （AT-SA-088「无授权不得人工接受或拒绝」）与供应商应付结算账户（`PAR-SET-01`）未登记时
-// 不默认放行、不虚构授权人、不推导账户。
+// AuditUndecidedReason 指名审核停在哪一步等谁。各 *Unconfigured 格都是实例半边：审核授权
+// （UC-SA-004「无授权不得人工接受或拒绝」，`AT-SA-088`）、供应商应付结算账户（`PAR-SET-01`）
+// 与审核越权升级上限（ADR-0163）未登记时不默认放行、不虚构授权人、不推导账户、不把没有上限
+// 当成不设限。
 type AuditUndecidedReason uint8
 
 const (

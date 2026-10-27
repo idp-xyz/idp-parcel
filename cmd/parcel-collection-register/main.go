@@ -3,9 +3,9 @@
 // ——受托代收资金的登记与记账是运营动作，不是在线请求面，走独立进程而不进 parcel-api
 // 的端点表（先例：parcel-customs-register、parcel-governance-register）。
 //
-// 各命令覆盖 CONTEXT 的词形加分户账两面：instruction（代收指令）、subledger（分户账
-// 开立）、fact（代收事实）、discrepancy（差异事项）、agreed-offset（认可的协议抵扣）、
-// batch（回汇批次形成）、hand-over（交出汇付主张）、posting（分户账记账）。
+// 各命令所登的对象：instruction（代收指令）、subledger（分户账开立）、fact（代收事实）、
+// discrepancy（差异事项）、agreed-offset（认可的协议抵扣）、batch（回汇批次形成）、
+// hand-over（交出汇付主张）、posting（分户账记账）。
 // agreed-offset 只登记 settlement-accounting 认可的抵扣引用，不动账；落账是 posting 凭它
 // 的一笔记账，本进程不读 settlement-accounting。
 //

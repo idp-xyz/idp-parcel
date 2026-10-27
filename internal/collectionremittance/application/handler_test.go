@@ -482,8 +482,8 @@ func seedFact(
 	}
 }
 
-// seedReceived 走一遍渠道报告入`渠道在途`、真实到账移进`待清分`，金额相同——今天唯一
-// 能让本金到`待清分`的路。
+// seedReceived 走一遍渠道报告入`渠道在途`、真实到账移进`待清分`，金额相同——让本金
+// 到`待清分`的路。
 func seedReceived(t *testing.T, store *storeDouble, handler *application.Handler, instruction string, amountMinor int64) {
 	t.Helper()
 	seedFact(t, store, handler, "SYN-FACT-REPORT", instruction, domain.ChannelCollectionReport, amountMinor)

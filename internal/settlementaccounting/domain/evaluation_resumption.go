@@ -101,7 +101,8 @@ const (
 	StopEvaluationRateNotFound
 	StopEvaluationInputIncomplete
 	// StopPendingJudgmentCauseUnrecorded 只出自迁移：停因一列落地之前就已记成`待判断`的 SELL 请求，当时没记是哪一种
-	// 待判断。迁移不猜它是评价待判断、取整未声明还是映射不全，所以三类登记都解得开它。
+	// 待判断。迁移不猜它是评价待判断、取整未声明还是映射不全，所以价卡、参考序列、参考目录、费用项映射这几类登记都解得开它
+	// （成员以 ResumedBy 的该分支为准）。
 	StopPendingJudgmentCauseUnrecorded
 )
 
@@ -243,7 +244,7 @@ func (cause EvaluationStopCause) OccursIn(direction EvaluationDirection) bool {
 // 不同的答案，才算解得开；登了也不会变的不列。
 //
 //   - 结算政策没采用：答案在委托接受时固定的商业闭包上，结算这一侧的任何登记都改不了它，运营续办重跑读到的也是同一份
-//     闭包——今天没有续办路（ADR-0229 越权风险点「结算政策没采用今天没有续办路」）。
+//     闭包——没有续办路（ADR-0229 越权风险点 13「结算政策没采用今天没有续办路」）。
 //   - 包裹没有商业解析、计价输入不可得、包裹事实不全：缺的是小包托运或运输履约那一侧的事实，那一侧补上之后由运营续办
 //     口点名。
 //   - 目录读不出：卡绑了目录却没映到，补一版目录解得开；卡根本没绑目录、请求也没带分区，只有绑了目录的新一版卡解得开。
