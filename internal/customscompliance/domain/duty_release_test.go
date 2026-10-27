@@ -126,7 +126,7 @@ func TestDutyVerificationRecordsWhichFundsFactVersionItJudged(t *testing.T) {
 	}
 }
 
-// Covers: CC CONTEXT「放行结果不能由技术成功、业务受理、税费支付或内部合规解除推导」与「放行可以针对全部、部分或附条件范围形成」——监管来源引用必备（别的东西
+// Covers: CC CONTEXT「放行结果不能由技术成功、业务受理、税费支付或内部合规解除推导」与「放行可以针对全部范围、部分范围或附条件范围形成」——监管来源引用必备（别的东西
 // 换不成它）；附条件必带条件、全部放行不带条件（两向拦）。
 func TestAReleaseOutcomeComesOnlyFromTheAuthority(t *testing.T) {
 	conditional, err := domain.ReceiveReleaseOutcome(

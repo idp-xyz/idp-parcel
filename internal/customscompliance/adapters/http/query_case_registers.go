@@ -9,7 +9,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 )
 
-// CaseRegisterCatalogueReader 是本端点消费的读口：案件配置三本册子（就绪判断、提交
+// CaseRegisterCatalogueReader 是本端点消费的读口：案件配置各册（就绪判断、提交
 // 授权、关闭义务目录）的列表读面。查阅不触发判断、决定或披露——接存储读面，不接应用
 // 编排，与 /customs-compliance-rules 同一条分界（ADR-0077 Decision 一）。
 type CaseRegisterCatalogueReader interface {
@@ -33,7 +33,7 @@ type CaseRegisterCatalogueReader interface {
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
 var _ CaseRegisterCatalogueReader = ports.CaseRegisterCatalogueRead(nil)
 
-// 业务结果的封闭集合：三本册子各占一格。空册如实答空列表走 2xx 成格，不折成未配置
+// 业务结果的封闭集合：各册各占一格。空册如实答空列表走 2xx 成格，不折成未配置
 // （ADR-0077 Decision 四）。
 const (
 	outcomeReadinessJudgmentsListed    = "READINESS_JUDGMENTS_LISTED"
@@ -51,7 +51,7 @@ const (
 // NewQueryCaseRegistersEndpoint 交回案件配置册查阅的 HTTP 入口
 // （GET /customs-case-registers，票 admin-web-page-wiring-frontier/05）。
 //
-// 三本册子是 customs-cases 一张页面的三格查阅面，共用一个端点按 `registry` 分派——
+// 这几册是 customs-cases 一张页面的各格查阅面，共用一个端点按 `registry` 分派——
 // 与 /commercial-customer-contracts 各立入口的先例不冲突，分界照那票的第二层理由：
 // kind/registry 分派的是「一页里的页签」，各立入口对应「各自独立的页」。门禁两表归
 // customs-restrictions 页，不进本分派（票 06 另立）。

@@ -8,7 +8,7 @@ import (
 // 本文件证译装的拒绝面：形状坏、词表外、必填缺——一律在入库前拒并指名差哪格，
 // 用例一步不走。绿路径的字段保真在 main_test 经 execute 对替身册断言。
 
-// TestCommandForRejectsUnknownCommand 证命令集封闭：集合外的命令拒收并列出全部十个。
+// TestCommandForRejectsUnknownCommand 证命令集封闭：集合外的命令拒收并列出全部命令。
 func TestCommandForRejectsUnknownCommand(t *testing.T) {
 	if _, err := commandFor("case-closure", []byte(`{}`)); err == nil {
 		t.Fatalf("集合外命令要拒（案件关闭是判断链动作，不是配置登记）")

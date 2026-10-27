@@ -451,8 +451,8 @@ type CaseRequirementView interface {
 	) (CaseRequirementJudgment, bool, error)
 }
 
-// CaseRequirementRegistry 是 CaseRequirementView 的写口半边（第六本册子，挡的是
-// establish_customs_case 那堵 EstablishCaseUndecided 墙，不在 W13 的两堵之内）。
+// CaseRequirementRegistry 是 CaseRequirementView 的写口半边（建案要求规则册，挡的是
+// establish_customs_case 那堵 EstablishCaseUndecided 墙，不在 W13 要拆的那几堵之内）。
 // 判断内容对两个取值都必须带依据——「答否」与「没答」的续办动作完全不同，写口不得
 // 引入任何把未登记折成「不要求」的路径。写入代数与其余五本同（ADR-0031，不 UPSERT）。
 type CaseRequirementRegistry interface {
@@ -973,7 +973,7 @@ type PortsPathsView interface {
 // 有没有当前已关闭的。三格各答各的，不折成一个「关务阶段」——哪一格压过哪一格是消费方的
 // 判断，本上下文只说自己册子里有什么。
 //
-// 没有`不知道`那一格：三本册子都是本上下文自己的，读回来了就是知道；一个包裹不在任何单元、
+// 没有`不知道`那一格：这几册都是本上下文自己的，读回来了就是知道；一个包裹不在任何单元、
 // 任何版本、任何案件里，三格皆否是如实答案，不是「答不出」。「读面未接」那一格归消费方的
 // 适配器说，本口不替它说。
 //

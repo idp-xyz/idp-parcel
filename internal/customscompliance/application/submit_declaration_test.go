@@ -394,7 +394,7 @@ func TestAReplayReturnsTheOriginalVersionWithoutReforming(t *testing.T) {
 	})
 }
 
-// Covers: CONTEXT「提交授权与就绪判断分别形成和失效。只有两者在逻辑提交首次实际发送时均有效，才形成新的提交版本」——就绪未配置
+// Covers: `AT-CC-448`（UC-CC-005，「unconfigured readiness is undecided」那一格）、CONTEXT「提交授权与就绪判断分别形成和失效。只有两者在固定提交版本时均有效，才形成新的提交版本」——就绪未配置
 // 与授权未配置各占一格未决（互不顶替）；不再就绪是业务负向不是未决。
 func TestReadinessAndAuthorityAreTwoSeparateTracks(t *testing.T) {
 	t.Run("unconfigured readiness is undecided", func(t *testing.T) {

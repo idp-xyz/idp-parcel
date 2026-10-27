@@ -126,7 +126,7 @@ func (target FollowUpTarget) FormedAt() time.Time {
 
 // ReplacementRelation 是重报替代的新旧对象关系。建立时只能是拟替代（CONTEXT「申报替代关系」语言）；只有真实程序要求的提交及外部结果已经成立，才可形成有效替代——
 // 原对象及其全部历史永久保留，拟替代目标不得把原申报改成已撤销、已作废或已被有效
-// 替代（175）。
+// 替代（CONTEXT Rules「申报就绪、授权与提交」一节「拟替代目标、撤销请求或本地处理决定不得把原申报改成已撤销、已作废或已被有效替代」）。
 type ReplacementRelation struct {
 	target          FollowUpTarget
 	replacementUnit DeclarationUnitID

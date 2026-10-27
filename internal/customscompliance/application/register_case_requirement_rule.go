@@ -8,12 +8,12 @@ import (
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 )
 
-// 第六本册子（case_requirement_rule）的登记用例。它挡的是 establish_customs_case 那堵
-// `EstablishCaseUndecided` 墙——建案链的第一步，不在 W13 的两堵之内，因此不并入
-// RegisterCaseConfigurationHandler 那五本（那票按「五类配置」收窄执行完毕，本用例
+// 建案要求规则册（case_requirement_rule）的登记用例。它挡的是 establish_customs_case 那堵
+// `EstablishCaseUndecided` 墙——建案链的第一步，不在 W13 要拆的那几堵之内，因此不并入
+// RegisterCaseConfigurationHandler 管的案件配置各册（那票按案件配置各类收窄执行完毕，本用例
 // 随 cc-case-requirement-rule-registry 01 另立）。
 //
-// 冲突判定同五本：写口一律 ON CONFLICT DO NOTHING，同键已在册只答`已登记`；读回既有
+// 冲突判定同案件配置各册：写口一律 ON CONFLICT DO NOTHING，同键已在册只答`已登记`；读回既有
 // 登记逐字段比，同则`已存在`（重放），异则`内容冲突`（拒绝，绝不顶替）。事务由进程级
 // 入口给出。
 //

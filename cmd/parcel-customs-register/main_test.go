@@ -288,7 +288,7 @@ func (book *fakeGateBook) LoadPreconditionFindings(
 	return findings, true, nil
 }
 
-// fakeRequirementBook 第六本册子的替身，同样一身两半。
+// fakeRequirementBook 建案要求规则册的替身，同样一身两半。
 type fakeRequirementBook struct {
 	byKey map[string]ports.CaseRequirementJudgment
 }
@@ -721,7 +721,7 @@ func TestExecuteTransactorFailureIsUndecided(t *testing.T) {
 }
 
 // TestExecuteTranslationRejectionIsUsageAndTouchesNothing 证译装拒绝在入库前：坏词表
-// 答 1，五本册子一格未动。
+// 答 1，各册一格未动。
 func TestExecuteTranslationRejectionIsUsageAndTouchesNothing(t *testing.T) {
 	fixture := newExecuteFixture()
 

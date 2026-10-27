@@ -9,8 +9,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 )
 
-// 第六本册子（case_requirement_rule）的写口用例。做法同 case_config_registry_test.go
-// 那五本：断言穿只读视图取回、写入放进环境事务。三条要点——不可覆盖、「答否」也带
+// 建案要求规则册（case_requirement_rule）的写口用例。做法同 case_config_registry_test.go
+// 的各册：断言穿只读视图取回、写入放进环境事务。三条要点——不可覆盖、「答否」也带
 // 依据落册（found=false 的分界靠它守住）、无环境事务即拒。
 
 func newCaseRequirementRegistry(t *testing.T) (*adapter.CaseRequirementRegistrations, *adapter.CaseRequirementView, *viewFixture) {
@@ -87,7 +87,7 @@ func TestCaseRequirementRuleIsNotOverwritten(t *testing.T) {
 	}
 }
 
-// 无环境事务时写口拒绝执行，而不是自己开一笔（同五本册子：登记要能与它所属的业务
+// 无环境事务时写口拒绝执行，而不是自己开一笔（同案件配置各册：登记要能与它所属的业务
 // 动作同笔落地或同笔回滚）。
 func TestCaseRequirementRegistryRequiresAmbientTransaction(t *testing.T) {
 	registry, _, _ := newCaseRequirementRegistry(t)

@@ -49,7 +49,7 @@ func TestObligationInventoryIsUnconfiguredWithoutACatalog(t *testing.T) {
 	}
 }
 
-// 目录登记了而本截点无适用项 → configured=true + 空清单。这与上一条是不同的答案，
+// 目录登记了而本截点无适用项 → configured=true + 空清单。这与 TestObligationInventoryIsUnconfiguredWithoutACatalog 是不同的答案，
 // 两者的续办动作也不同；分两张表存正是为了让它们分得开。
 func TestARegisteredCatalogWithNoApplicableItemIsConfiguredAndEmpty(t *testing.T) {
 	view, fixture := newObligationInventoryView(t)

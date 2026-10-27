@@ -54,8 +54,8 @@ func (layer ResultLayer) String() string {
 	}
 }
 
-// SourceAuthorityRole 指名来源在该结果层的权威角色。技术中介或报关服务商的响应只有
-// 在来源语义明确代表监管机构时才能形成监管事实（186）——角色引用正是那个判断的落点。
+// SourceAuthorityRole 指名来源在该结果层的权威角色。CONTEXT Rules「外部结果与规则时效」一节：「技术中介或报关服务商的响应只有
+// 在来源语义明确代表监管机构时，才能形成相应监管事实」——角色引用正是那个判断的落点。
 type SourceAuthorityRole struct{ requiredValue }
 
 func NewSourceAuthorityRole(value string) (SourceAuthorityRole, error) {
@@ -89,9 +89,8 @@ type ExternalResultSpec struct {
 	Corrects string
 }
 
-// ExternalResult 是已接收并解释的一项外部监管事实。八件缺一立不起；查询请求、查询
-// 执行状态与查询技术结果改变不了原提交的业务判断（188）——那些不是外部结果，构造
-// 不出这个类型。
+// ExternalResult 是已接收并解释的一项外部监管事实。各必备件缺一立不起；CONTEXT Rules「外部结果与规则时效」一节：「查询请求、
+// 查询尝试、查询执行状态和查询技术结果不得直接改变原提交的业务判断」——那些不是外部结果，构造不出这个类型。
 type ExternalResult struct {
 	layer        ResultLayer
 	sourceID     string

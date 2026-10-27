@@ -231,7 +231,7 @@ func adoptedEnvelopeRef(version string) ccinbox.AdoptedExternalFundsFact {
 // Covers: sa-cc/03 完成判据 2「一封 → 一条登记；重投 → 已存在；换内容 → 内容冲突」——处理方按信封
 // 引用回查提供方、译成入向登记交 ReceiveFundsFact；三种编排答案都入账（交回 nil），不重投。
 // 消费者不关联不核对：登记里只有引用 + 核对所需维度，来源仍是提供方（票面红线）。「内容冲突」自
-// 票 sa-cc/13 起是同一版本两个来源各说一套；更正版本另见下一条用例。
+// 票 sa-cc/13 起是同一版本两个来源各说一套；更正版本另见 TestACorrectionVersionLandsAsASecondRowPointingBackToTheFirst。
 func TestAnAdoptedFundsFactIsRegisteredOnceAndReplayOrConflictStillSettles(t *testing.T) {
 	fixture := newFixture(t)
 	fixture.source.facts["tenant-a|bank-fact-1|bank-fact/v1"] = adoptedContent("bank-fact/v1", "", "payer-customer-7")

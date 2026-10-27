@@ -106,7 +106,7 @@ func TestAVersionFreezesTheUnitCompositionAtFixTime(t *testing.T) {
 	}
 }
 
-// Covers: CC CONTEXT 生命周期「已就绪 → 不再就绪……原判断保留，但不得继续支持实际提交」与「提交授权与就绪判断分别形成和失效。只有两者在逻辑提交首次实际发送时均有效，才形成新的提交版本」
+// Covers: CC CONTEXT 生命周期「已就绪 → 不再就绪……原判断保留，但不得继续支持实际提交」与「提交授权与就绪判断分别形成和失效。只有两者在固定提交版本时均有效，才形成新的提交版本」
 // ——撤销后的就绪固定不出版本；撤销保留原依据与时间；重复撤销拒；别的单元的就绪
 // 支持不了这个单元。
 func TestRevokedReadinessCannotSupportASubmission(t *testing.T) {
@@ -146,7 +146,7 @@ func TestRevokedReadinessCannotSupportASubmission(t *testing.T) {
 	}
 }
 
-// Covers: CC CONTEXT「提交授权与就绪判断分别形成和失效。只有两者在逻辑提交首次实际发送时均有效，才形成新的提交版本」的授权半边——失效授权固定不出版本（就绪在场也不行）；失效保留原授予；
+// Covers: CC CONTEXT「提交授权与就绪判断分别形成和失效。只有两者在固定提交版本时均有效，才形成新的提交版本」的授权半边——失效授权固定不出版本（就绪在场也不行）；失效保留原授予；
 // 重复失效拒；别的单元的授权支持不了这个单元。
 func TestRevokedAuthorizationCannotSupportASubmission(t *testing.T) {
 	granted := authorization(t)

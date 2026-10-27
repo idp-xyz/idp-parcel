@@ -1,4 +1,4 @@
-// parcel-customs-register 是关务案件配置面五本登记册的受控进程入口（syn-wall-door-audit
+// parcel-customs-register 是关务案件配置面各登记册的受控进程入口（syn-wall-door-audit
 // 票 06 B 半边）：运营方操作员在数据库网络内手跑，不监听任何端口——配置登记是治理动作，
 // 不是在线请求面，走独立进程而不进 parcel-api 的端点表（先例：parcel-pricing-register、
 // parcel-network-register、parcel-governance-register）。
@@ -18,7 +18,7 @@
 // 关联依据由登记方交进来，本口不从金额相等推任何一轴。
 //
 // 输入全部来自 -input 指定的 JSON 文件，未知字段一律拒绝；进程不内置任何生产默认——
-// 配置内容属实例半边（PAR-CUS-01..07 待提供），机制先行，验证用脱敏合成值（S 级只记 S）。
+// 配置内容属实例半边（试点参数与证据登记册「三、关务、渠道与外部集成」一节的关务各项待提供），机制先行，验证用脱敏合成值（S 级只记 S）。
 // 环境事务由本入口给出（写口 RequireExecutor 无环境事务即拒），一次调用一笔事务。
 //
 // 不留 channel_execution 痕：那是票 12 对治理登记面的裁决，其留痕册属 pilot-governance
@@ -151,7 +151,7 @@ func knownCommand(command string) bool {
 	return false
 }
 
-// buildRegistrar 装配真实登记链：八本册子写口加对应只读视图。读口不是可选的便利，
+// buildRegistrar 装配真实登记链：各册写口加对应只读视图。读口不是可选的便利，
 // 冲突判定就靠它——只有写口时「已在册」永远说不出是重放还是改内容。
 func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	none := registrar{}

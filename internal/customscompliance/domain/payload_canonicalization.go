@@ -12,7 +12,7 @@ import (
 
 // payloadCanonicalizationVersion 是关务合规命令口的现行形状。摘要带版本前缀，
 // 已保存的旧摘要不在原处改写（ADR-0014），比对时按它自己的形状重算本次命令，见
-// CompareStoredDigest。哪些字段进摘要，沿用各口原先的内容判据。门禁逐项指纹与
+// CompareStoredDigest。哪些字段进摘要，取各口自己的内容判据。门禁逐项指纹与
 // 凭证门禁指纹的词形被既有注释钉住，不在这一版里改写。
 const payloadCanonicalizationVersion = "CCC-1"
 
@@ -215,7 +215,7 @@ func CanonicalizeDispositionFactSetPayload(facts []string) ([]byte, string, erro
 	})
 }
 
-// CanonicalizeCredentialRegistrationPayload 定形「登记监管凭证」。字段是登记册原先逐字段比的
+// CanonicalizeCredentialRegistrationPayload 定形「登记监管凭证」。字段是登记册逐字段比的
 // 那一组：机构、持有人、程序、期限两端与次数额度；凭证身份是查找键，不进摘要。额度未提供
 // 写 null，与「零次」分开。期限两端按 AtRegistryPrecision 拼串：在册一侧是从登记册读回的，命令一侧是原值，按纳秒拼
 // 会把同一份重放判成冲突。这一形状的摘要从不落库、两侧都现算，所以就地改它没有已存摘要要认；canonicalInstant 本身

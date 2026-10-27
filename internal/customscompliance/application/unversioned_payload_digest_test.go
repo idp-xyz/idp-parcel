@@ -93,7 +93,7 @@ func TestRecordsStoredBeforeCCC1AreComparedUnderTheirOwnShape(t *testing.T) {
 	}
 }
 
-// Covers: 新记录写的是 CCC-1 形——无版本那一版只用来比旧记录、拼旧行的键，误写进新记录时上一例
+// Covers: 新记录写的是 CCC-1 形——无版本那一版只用来比旧记录、拼旧行的键，误写进新记录时 TestRecordsStoredBeforeCCC1AreComparedUnderTheirOwnShape
 // 照样绿，要在这里断。键上带指纹的口断的是键上那枚指纹。
 func TestNewRecordsAreStoredUnderCCC1(t *testing.T) {
 	for _, testCase := range unversionedDigestCases(t) {

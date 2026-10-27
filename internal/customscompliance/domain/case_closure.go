@@ -42,7 +42,7 @@ func (state ObligationItemState) String() string {
 }
 
 // ClosureObligationItem 是一项关闭依据：义务、范围、状态与依据。承接项必须指名接收
-// 责任方——发送交接、技术送达、部分接受或默认超时接受都不能证明责任已经移交（219），
+// 责任方——CONTEXT Rules「税费、放行与案件闭环」一节「发送交接、技术送达、任务创建、计划后续处理、部分接受或默认超时接受都不能证明全部责任已经移交」，
 // 承接引用正是「有权接收方接受决定」的落点。
 type ClosureObligationItem struct {
 	Obligation string
@@ -128,8 +128,8 @@ func (verification ClosureVerification) Closable() bool {
 	return len(verification.UnresolvedItems()) == 0
 }
 
-// CustomsCaseClosure 是关务案件的关闭决定与受控重开记录。单个案件不存在部分关闭
-// （218）——关闭是整案一次决定；重开保留原关闭记录（233）。
+// CustomsCaseClosure 是关务案件的关闭决定与受控重开记录。CONTEXT Rules「税费、放行与案件闭环」一节「单个案件不存在部分关闭」
+// ——关闭是整案一次决定；重开保留原关闭记录（CONTEXT Lifecycles「关务案件」一节「原关闭记录和关闭期间事实继续保留」）。
 type CustomsCaseClosure struct {
 	caseRef      CustomsCaseID
 	verification ClosureVerification

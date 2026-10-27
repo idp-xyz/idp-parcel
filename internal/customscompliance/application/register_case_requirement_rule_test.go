@@ -10,7 +10,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 )
 
-// 第六本册子登记用例的行为面：受理门逐格拒、幂等重放与内容冲突分得开、依赖故障
+// 建案要求规则册登记用例的行为面：受理门逐格拒、幂等重放与内容冲突分得开、依赖故障
 // 折未决。写口替身照真库代数（同键只答`已登记`，绝不顶替）。
 
 type requirementStoreDouble struct {

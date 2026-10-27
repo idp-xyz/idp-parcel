@@ -11,7 +11,7 @@ import (
 )
 
 // ParcelDeclarationFactsView 实现 ports.ParcelDeclarationFactsView：按正式包裹引用反查申报
-// 单元、提交版本与案件关闭三本册子，各答一件事实（票 ps-port-remainder/05 的 CC 半边）。
+// 单元、提交版本与案件关闭各册，各答一件事实（票 ps-port-remainder/05 的 CC 半边）。
 //
 // 三问一条 SQL、三个各自独立的 EXISTS：不在 SQL 里也不在 Go 里把它们折成一个阶段——哪一格
 // 压过哪一格是消费方的判断，本上下文只说册子里有什么。三格的读法都写在端口头注里，这里只

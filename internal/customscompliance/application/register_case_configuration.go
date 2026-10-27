@@ -9,7 +9,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 )
 
-// 案件配置面五本登记册的登记用例。W13 那堵墙的另一半：仓储写口解决「写得进去」，
+// 案件配置面各登记册的登记用例。W13 那堵墙的另一半：仓储写口解决「写得进去」，
 // 这一层解决「谁能说清写进去的是不是同一份」。
 //
 // **本层存在的理由就是冲突判定。** 写口一律 `ON CONFLICT DO NOTHING`，同键已在册只

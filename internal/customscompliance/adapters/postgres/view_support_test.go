@@ -13,11 +13,10 @@ import (
 
 var viewBaseAt = time.Date(2026, 8, 14, 9, 0, 0, 0, time.UTC)
 
-// viewFixture 是九个只读视图共用的夹具。播种走 pool.Exec 的显式 SQL，不借道任何
+// viewFixture 是各只读视图共用的夹具。播种走 pool.Exec 的显式 SQL，不借道任何
 // 写适配器。
 //
-// 这条原先的理由是「视图这一侧根本没有写口」，自 case_config_registry.go 落地后不再
-// 成立：五本案件配置登记册已有生产写口。但做法不变，理由换成两条——读口用例必须能
+// 不借道写适配器的理由有两条（案件配置各登记册在 case_config_registry.go 里已有生产写口）：读口用例必须能
 // 独立于写口播种，否则写口一有 bug 就会同时染红两侧，再也分不出是谁错；而 rejects
 // 那一族要的正是绕开一切 Go 侧校验、直接撞库里的 CHECK 与外键。
 //

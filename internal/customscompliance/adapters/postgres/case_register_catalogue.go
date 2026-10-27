@@ -12,9 +12,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 )
 
-// CaseRegisterCatalogue 实现 ports.CaseRegisterCatalogueRead：案件配置三本册子
+// CaseRegisterCatalogue 实现 ports.CaseRegisterCatalogueRead：案件配置各册
 // （就绪判断、提交授权、关闭义务目录）的列表读面（ADR-0077，票
-// admin-web-page-wiring-frontier/05）。读的就是三本登记册本表；点读视图
+// admin-web-page-wiring-frontier/05）。读的就是这几册登记册本表；点读视图
 // （ReadinessView / SubmissionAuthorityView / ObligationInventoryView）按键单点作答，
 // 这里按租户上列——两种读法各答各的问题，谁也不为对方改形状（判据同 RuleCatalogue）。
 //

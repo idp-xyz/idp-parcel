@@ -552,7 +552,7 @@ func TestRuleSelectionInputsAreResolvedOrUndecided(t *testing.T) {
 
 // Covers: 票 sa-cc/34 裁决 4——交接口把信封被框架确定性校验拒收（ports.ErrHandoffEnvelopeRejected）交出来时，重投同一份
 // 永远同一个结果，折成续办引用只会让通道方重试到死；编排以 ErrExternalResultHandoffRejected 响亮报错、不给结果，
-// 装配处的事务壳随之回滚，结果行与信封同生同灭。依赖不可用那一格照旧折续办（上一条用例守着）。
+// 装配处的事务壳随之回滚，结果行与信封同生同灭。依赖不可用那一格折续办（TestUnconfiguredRulesAndDependencyFailuresStayUndecided 守着）。
 func TestARejectedHandoffEnvelopeFailsTheReceiptLoudlyInsteadOfFoldingIntoAContinuation(t *testing.T) {
 	fixture := newResultFixture(t)
 	fixture.handoff.err = fmt.Errorf("%w: partition key exceeds 512 bytes", ports.ErrHandoffEnvelopeRejected)

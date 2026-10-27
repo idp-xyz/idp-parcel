@@ -446,7 +446,7 @@ func TestReFormingACollaborationSplitsReplayFromConflict(t *testing.T) {
 }
 
 // 步 6 的 CC 半边：外部资金事实按（引用 + 版本）入向登记；同键重放`已存在`，同键换金额是`内容冲突`
-// ——资金事实的更正在来源那头是同一事实的新版本回指前版（见下一条用例），不是同一版本改数。
+// ——资金事实的更正在来源那头是同一事实的新版本回指前版（见 TestACorrectionVersionIsReceivedAsANewRowThatPointsBackToTheVersionItCorrects），不是同一版本改数。
 func TestExternalFundsFactsAreReceivedByReference(t *testing.T) {
 	store := newDutyStore()
 	handler := newDutyHandler(t, store)

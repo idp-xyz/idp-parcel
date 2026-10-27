@@ -10,7 +10,7 @@ import (
 )
 
 // UC-CC-003 步 7「核验监管凭证……→ 记录凭证门禁」的记录半边（票 sa-cc/04）：判断半边
-// JudgeCredentialApplicability 此前只判不记，本编排调它算出四格，再落成凭证门禁判断登记册的一版。
+// JudgeCredentialApplicability 只判不记，本编排调它算出四格，再落成凭证门禁判断登记册的一版。
 // 它是逐门禁判断的第一册（ADR-0137 决定一）：就绪判断按不可变引用绑定它、不内嵌其内部结构，
 // RegisterReadiness 的形因此不动；后面的门照这一册的形各成一册。
 //

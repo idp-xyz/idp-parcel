@@ -178,8 +178,8 @@ func TestReRegisteringACredentialSplitsReplayFromConflict(t *testing.T) {
 	}
 }
 
-// CCC-1 形状覆盖原先逐字段比的每一件：机构、程序、期限两端任一换了都是`内容冲突`（持有人与
-// 额度见上一例）。
+// CCC-1 形状覆盖逐字段比的每一件：机构、程序、期限两端任一换了都是`内容冲突`（持有人与
+// 额度见 TestReRegisteringACredentialSplitsReplayFromConflict）。
 func TestEveryFieldOfTheCredentialShapeSplitsAConflict(t *testing.T) {
 	changes := map[string]func(*testing.T, *application.RegisterCredentialCommand){
 		"机构": func(t *testing.T, command *application.RegisterCredentialCommand) {

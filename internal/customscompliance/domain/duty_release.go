@@ -116,7 +116,7 @@ func NewExternalFundsFactReference(value string) (ExternalFundsFactReference, er
 }
 
 // DutyPaymentVerification 是一次版本化的税费付款核对：覆盖、差额与有效性三轴分别
-// 表达（CONTEXT 明禁「实现为一组互斥总状态」——三个独立枚举正是那半句的类型面）。它不形成
+// 表达（CONTEXT 写「不能实现为一组互斥总状态」——三个独立枚举正是那半句的类型面）。它不形成
 // 实际付款、客户回收或监管放行——类型上没有那些字段。
 //
 // procedure 是核对记录的依据维（票 sa-cc/22 裁决 1）：付款人那一维「要不要求」按哪个真实程序的规则判，

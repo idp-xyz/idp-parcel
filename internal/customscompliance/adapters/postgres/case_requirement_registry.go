@@ -10,7 +10,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 )
 
-// 第六本册子（case_requirement_rule）的写口。纪律同 case_config_registry.go 那五本：
+// 建案要求规则册（case_requirement_rule）的写口。纪律同 case_config_registry.go 的各册：
 // 一律不 UPSERT（ON CONFLICT DO NOTHING，同键已在册答`已登记`，内容比对归编排）、
 // 走 RequireExecutor（无环境事务即拒）。本册没有撤销半边——建案要求规则不是逐单元
 // 的判断，改规则走「先核对既有登记再决定续办」，不走状态推进。

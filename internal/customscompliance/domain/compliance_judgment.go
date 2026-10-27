@@ -69,7 +69,7 @@ type ComplianceJudgmentSpec struct {
 }
 
 // ComplianceJudgment 是版本化合规结论。四件（规则版本/事实依据/决定方式/责任角色）
-// 必备——自动与人工一视同仁（159）；监管机构的外部决定仍是最终监管事实，本判断没有
+// 必备——自动与人工一视同仁（CONTEXT Rules「参与方、资料与合规判断」一节「自动与人工合规判断都必须保存适用规则版本、事实依据、决定方式和责任角色」）；监管机构的外部决定仍是最终监管事实，本判断没有
 // 覆盖外部事实的入口。人工判断不能删除自动判断，后续自动计算也不能覆盖人工判断
 // 历史——Supersede 只追加新版本指回前版。
 type ComplianceJudgment struct {
@@ -134,7 +134,7 @@ func (judgment ComplianceJudgment) PriorJudgment() (JudgmentMode, ComplianceRule
 }
 
 // Supersede 形成新的合规判断版本：同事项同范围、新结论指回前版。人工替自动、自动替
-// 人工都走这里——谁都删不掉谁（159），前版方式与规则随新版可查。
+// 人工都走这里——谁都删不掉谁（CONTEXT Rules「参与方、资料与合规判断」一节「人工判断不能删除自动判断」），前版方式与规则随新版可查。
 func (judgment ComplianceJudgment) Supersede(spec ComplianceJudgmentSpec) (ComplianceJudgment, error) {
 	if spec.Topic != judgment.topic || spec.Scope != judgment.scope {
 		return ComplianceJudgment{}, ErrInvalidComplianceJudgment
@@ -227,8 +227,8 @@ func (credential RegulatoryCredential) Holder() CredentialHolderReference {
 	return credential.holder
 }
 
-// Procedure、ValidFrom、ValidTo 与 Uses 是持久化重建的必需读口——不可变版本七件里这
-// 四件此前没有出口，登记册适配器连原样写回都做不到（判据同 ExternalResult 那三个读口）。
+// Procedure、ValidFrom、ValidTo 与 Uses 是持久化重建的必需读口——不可变版本的各件里这
+// 几件需要出口，没有它登记册适配器连原样写回都做不到（判据同 ExternalResult 那三个读口）。
 func (credential RegulatoryCredential) Procedure() CustomsProcedureReference {
 	return credential.procedure
 }

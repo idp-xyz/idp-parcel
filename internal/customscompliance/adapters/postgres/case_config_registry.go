@@ -11,11 +11,10 @@ import (
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 )
 
-// 案件配置面五本登记册的写口。0006/0007/0008 建的表与 `*_view.go` 的读口此前只有读
-// 没有写：非测试代码里一行 INSERT 都没有，于是「未配置」这句话在生产上说了也没处配。
-// 本文件补的是那半边门。
+// 案件配置面各登记册的写口。0006/0007/0008 建的表由 `*_view.go` 的读口读，本文件是它们的写口：
+// 没有写口，「未配置」这句话在生产上说了也没处配。
 //
-// 三条纪律贯穿全部五本册子：
+// 三条纪律贯穿全部册子：
 //
 //   - **一律不 UPSERT。** 每个登记方法都是 `INSERT ... ON CONFLICT DO NOTHING`，
 //     同键已在册就交回`已登记`。库这一层不判「内容一不一样」——那是编排读回既有登记
@@ -190,7 +189,7 @@ func (registry *SubmissionAuthorityRegistrations) RevokeSubmissionAuthority(
 //
 // 唯一的 UPDATE 是换版给开放前版落终点——与就绪/授权撤销同款的状态推进：rule_ref 与
 // applies_from 没有任何改写路径，终点只从 NULL 走到后继起点、只走一次。撞键或撞重叠
-// 都折成`已登记`交回，内容是否同一份由编排读回自己比（同其余五本册子）。
+// 都折成`已登记`交回，内容是否同一份由编排读回自己比（同其余各册）。
 type InterpretationRuleRegistrations struct {
 	db *bentopg.DB
 }

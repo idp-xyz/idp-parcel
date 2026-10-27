@@ -301,7 +301,7 @@ func FixSubmissionVersion(spec CustomsSubmissionVersionSpec) (CustomsSubmissionV
 	}
 	if !spec.Authorization.Effective() || spec.Authorization.unit != spec.Unit.id {
 		// 授权与就绪同权重：失效授权固定不出版本，别的单元的授权也支持不了这个单元
-		// （CONTEXT「只有两者在逻辑提交首次实际发送时均有效，才形成新的提交版本」）。
+		// （CONTEXT 生命周期「申报单元、就绪与提交」一节「只有两者在固定提交版本时均有效，才形成新的提交版本」）。
 		return CustomsSubmissionVersion{}, ErrInvalidSubmissionVersion
 	}
 	return CustomsSubmissionVersion{
