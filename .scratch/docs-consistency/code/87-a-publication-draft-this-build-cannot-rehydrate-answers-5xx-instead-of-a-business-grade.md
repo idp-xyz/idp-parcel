@@ -51,18 +51,18 @@ S–M：领域一处改 `%w` 保链；三只编排各认一个哨兵；批准口
 - `已发布`的载体重放时答什么：照旧答「已发布」（列上的状态与发布痕迹读得出，不必折回正文）还是答「折不回来」。前者要让重建门在只看状态的路径上不折正文，改动面大一些；后者如实但会让管理台把一版已在册的发布显成「出错」。
 - 是否顺带给 `cmd/parcel-api` 的载体端点加一条真库用例。
 
-## 完成记录（2026-10-27，分支 claude-code87，rebase 于 origin/main `f3724dd01`，下文 SHA 均为 rebase 后的）
+## 完成记录（2026-10-27，分支 claude-code87，rebase 于 origin/main `b6b5e87cc`，下文 SHA 均为 rebase 后的）
 
 ### 做了什么
 
-- `6407dd9e8` 代码与用例：
+- `e6b69bc0a` 代码与用例：
   - **领域**：`RehydratePublicationDraft` 先校痕迹与壳（壳摘要格取列上的摘要）、再折正文。折正文这一步拒（规范化版本不认得、文档过不了本构建的构造门）交回 `*domain.UnreadablePublicationDraft`——同时认 `ErrPublicationDraftNotReadable` 与成因（`%w` 保链：`ErrCanonicalizationUnsupported`、`ErrVolumetricFactorOnPricePolicy`），并带库上剩下的事实（身份、状态与批准 / 发布痕迹、录入者与时刻、列上的规范化版本与内容摘要、壳摘要）；折得回而摘要对不上、痕迹对不上、类别对不上仍是 `ErrInvalidRehydratedPublicationDraft`。壳摘要的算法落到 `CommercialVersion.shellDigest`，读得回的载体与读不回的行共用一份。
   - **端口 / 适配器**：`LoadDraft` 合同补读不回的答法（错误链带该值）；`ListOpenDrafts` 改交 `[]ports.OpenPublicationDraft`（整份载体或读不回的事实，二者互斥）；`SubmitDraft` 零行命中后的读回撞上读不回行：已过`待批准`的答 `CONTENT_FIXED`，仍在`待批准`的按错误交回；列表把读不回的行留在结果里。
   - **用例**：批准结果多 `DRAFT_NOT_READABLE`，发布结果多同名一格，结果各带读不回的事实。判序：摘要绑定（列上摘要与壳摘要）→ `已发布`答 `DRAFT_ALREADY_PUBLISHED` → 其余答 `DRAFT_NOT_READABLE`；不读审批职责规则、不交发布用例、一字节不写。
   - **HTTP**：载体响应多 `readable` 与 `unreadableCause`；批准与发布答复在读不回一格带 `status` 与 `cause`、不带摘要；单份读回答 200 加 `DRAFT_NOT_READABLE`（`draft` 只有库上事实，没有 `content`）；读取失败与行本身坏了仍 5xx。`cmd/parcel-api` 只改读口占位的签名（`unwired_orchestration.go`），未动 endpoints.go、main.go、endpoints_test.go、routes.go 与 `cmd/parcel-dispatch/routes.go`。
   - **用例**：领域 3 条（`publication_draft_unreadable_test.go`）、真库 4 条（列表与点读、体积系数、录入撞读不回行、坏行仍报错）、编排 4 条、传输 3 条、生产装配真库 1 条（`cmd/parcel-api/assemble_publication_unreadable_draft_test.go`：真铸造、真操作者 Intake、真事务编排，行改成 `PCC-9` 后批准与发布答 200 加 `DRAFT_NOT_READABLE`、按同版本重录答 `DRAFT_REVISED`、之后读得回）。
-- `e9d33105e` 管理台（`pages/party/**`，未碰共享件）：类型多 `readable` / `unreadableCause`；批准与发布答复栏补 `DRAFT_NOT_READABLE` 的中文（`draftNotReadableWords`），发布答复栏显示状态与成因；待批准页状态旁标「本构建读不回」、计数摘要另报、检索认得；抽屉（`PendingDraftDrawer.tsx`）不摆批准与发布、不给规范化文档，`UnreadableNote` 按状态说恢复动作（`unreadableRecovery`）。纯逻辑 3 条 node:test。
-- `b51b5c937` 文档：ADR-0333（部分停用（收窄）ADR-0314 越权风险点 5 一句，被停原句逐字相同，ADR-0314 Status 注记与 Links 各加前向指针）；`CONTEXT.md`「待批准发布」词条补读不回一格；UC-PC-001 的 `AT-PC-068` 读失败一句改口径，新立 `AT-PC-071`（读不回的载体在读面与批准、发布上的答案）、`AT-PC-072`（录入撞上读不回行的落点）；AT 盘点两行加文末追记。
+- `5659fb4c0` 管理台（`pages/party/**`，未碰共享件）：类型多 `readable` / `unreadableCause`；批准与发布答复栏补 `DRAFT_NOT_READABLE` 的中文（`draftNotReadableWords`），发布答复栏显示状态与成因；待批准页状态旁标「本构建读不回」、计数摘要另报、检索认得；抽屉（`PendingDraftDrawer.tsx`）不摆批准与发布、不给规范化文档，`UnreadableNote` 按状态说恢复动作（`unreadableRecovery`）。纯逻辑 3 条 node:test。
+- `9c7e946b0` 文档：ADR-0333（部分停用（收窄）ADR-0314 越权风险点 5 一句，被停原句逐字相同，ADR-0314 Status 注记与 Links 各加前向指针）；`CONTEXT.md`「待批准发布」词条补读不回一格；UC-PC-001 的 `AT-PC-068` 读失败一句改口径，新立 `AT-PC-071`（读不回的载体在读面与批准、发布上的答案）、`AT-PC-072`（录入撞上读不回行的落点）；AT 盘点两行加文末追记。
 
 ### 代决（用户授权「你作为业务和系统专家自决」，协调方派单）
 
