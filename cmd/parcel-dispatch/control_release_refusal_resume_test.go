@@ -18,7 +18,7 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 16 证释放拒收处理的续办闭环（票 docs-consistency/code/95；ADR-0293 决定二、四）：客户补件之后，接受链开头放被取代那一版时
-// 被提供方确定不受理，消费门响亮失败、新版本判不了；人把册上那一笔处理完，处理动作同笔交一封续办信封，第五扇门按这封信把同一条链拿委托的当前版本再驱一拍，
+// 被提供方确定不受理，消费门响亮失败、新版本判不了；人把册上那一笔处理完，处理动作同笔交一封续办信封，释放拒收处理续办门按这封信把同一条链拿委托的当前版本再驱一拍，
 // 链开头那一步不再被这一笔挡住，新版本能判、接受成立；再驱幂等。夹具同 control_release_refusal_test.go 与 superseded_version_control_release_test.go：控制与
 // 释放走生产 PS→SA 适配器、SA 释放编排与两本账，释放口外面套一只会按次数拒收的替身来摆出「被拒收」。
 //   - 核对后在结算侧释放：暂停那一次与链开头那一次释放都被拒收（册上一行、新版本被挡），处理人核对后在结算侧释放，提供方这一回受理，旧冻结放掉。
@@ -26,7 +26,7 @@ import (
 
 const refusalHandledResumeConsumerName = "parcel-shipment/advance-acceptance-chain-on-control-release-refusal-handled"
 
-// refusalResumeGate 建第五扇门（释放拒收已处理），与生产装配同一条链。
+// refusalResumeGate 建释放拒收处理续办门，与生产装配同一条链。
 func (fixture *customerSupplementLoopFixture) refusalResumeGate(t *testing.T) *psinbox.ControlReleaseRefusalHandledConsumer {
 	t.Helper()
 	inboxStore, err := inbox.NewStore(fixture.db)
@@ -138,7 +138,7 @@ func (fixture *customerSupplementLoopFixture) stuckAfterSupplement(t *testing.T,
 }
 
 // Covers: ADR-0293 决定二、四；ADR-0282 决定三——核对后在结算侧释放闭环：旧版本那一笔两次被拒收（暂停记册、链开头响亮失败），新版本判不了；册上那一笔经
-// 「在结算侧释放」处理（提供方这一回受理，旧冻结放掉），处理留痕与续办信封同笔落地；第五扇门拿当前版本再驱一拍，新版本照常占下冻结、接受成立；
+// 「在结算侧释放」处理（提供方这一回受理，旧冻结放掉），处理留痕与续办信封同笔落地；续办门拿当前版本再驱一拍，新版本照常占下冻结、接受成立；
 // 同一封重投与绕过 inbox 再驱都幂等。
 func TestHandlingARefusedReleaseAtSettlementResumesTheChainOnTheCurrentVersion(t *testing.T) {
 	control := &synRLateBoundControl{}
@@ -179,7 +179,7 @@ func TestHandlingARefusedReleaseAtSettlementResumesTheChainOnTheCurrentVersion(t
 		t.Fatalf("续办之前新版本冻结 = %+v, want 没有", got)
 	}
 
-	// 第五扇门：续办信封把链拿委托当前版本（新版本）再驱一拍。
+	// 续办门：续办信封把链拿委托当前版本（新版本）再驱一拍。
 	gate := fixture.refusalResumeGate(t)
 	delivery := fixture.claimDeliveryOfType(t, string(psinbox.ControlReleaseRefusalHandledEventType))
 	if err := gate.Consume(ctx, delivery.Envelope); err != nil {
@@ -221,7 +221,7 @@ func TestHandlingARefusedReleaseAtSettlementResumesTheChainOnTheCurrentVersion(t
 }
 
 // Covers: ADR-0293 决定二、四——标记已处理闭环：控制结果没存作用域的存量行，提供方一律拒收，「在结算侧释放」也放不掉（答再被拒收、什么也没写）；运维在结算侧
-// 手工把旧冻结放掉之后标记已处理，处理留痕与续办信封同笔落地；第五扇门再驱时，链开头对旧版本再请求一次释放仍被拒收，但认出这一笔人已处理、接着判新版本，
+// 手工把旧冻结放掉之后标记已处理，处理留痕与续办信封同笔落地；续办门再驱时，链开头对旧版本再请求一次释放仍被拒收，但认出这一笔人已处理、接着判新版本，
 // 新版本能判、接受成立。
 func TestMarkingAnUnscopedRefusalHandledLetsTheChainJudgeTheNewVersion(t *testing.T) {
 	control := &synRLateBoundControl{}

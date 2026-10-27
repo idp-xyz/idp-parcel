@@ -7,7 +7,7 @@ import (
 // 接受判断链的几扇门（acceptanceChainConsumers）：PS 委托已提交 → 接受判断链、PS 复核已完成 → 同一条接受判断
 // 链的续办门（ADR-0086；两扇门同一编排、各记各的 inbox 账）、PC 参数已登记 → 同一条链
 // 的第三扇门（ADR-0094 Decision 四：按信封里的租户取`等待运营登记`队列逐份重驱；本进程
-// 里唯一一封由 party-commercial 发、parcel-shipment 收的信）、PS 释放拒收已处理 → 同一条链的最后一扇续办门（ADR-0293 决定四：
+// 里唯一一封由 party-commercial 发、parcel-shipment 收的信）、PS 释放拒收已处理 → 同一条链的续办门（ADR-0293 决定四：
 // 人处理完释放未受理册上的一笔之后，链拿委托此刻的当前版本再驱一拍）。
 func init() {
 	registerRoutes(func(sources dispatchSources) ([]routeLeg, error) {

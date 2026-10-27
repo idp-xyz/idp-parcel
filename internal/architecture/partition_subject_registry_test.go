@@ -142,7 +142,7 @@ var declaredPartitionSubjects = map[string]string{
 	// 「新提交版本已形成」与上两行同主体同理（ADR-0106 Decision 三）：受控补充的续办信封与同一份
 	// 委托的提交信封排同一条队，续办不越过一封还没投出去的提交。
 	"internal/parcelshipment/adapters/postgres/submission_version_formed_handoff.go": partitionSubjectPrefix + "租户/客户账户/委托",
-	// 「释放拒收已处理」与上三行同主体同理（ADR-0293 决定四）：处理之后的续办信封与同一份委托的提交信封排同一条队，续办不越过一封还没
+	// 「释放拒收已处理」与「委托已提交」「复核已完成」「新提交版本已形成」同主体同理（ADR-0293 决定四）：处理之后的续办信封与同一份委托的提交信封排同一条队，续办不越过一封还没
 	// 投出去的提交。
 	"internal/parcelshipment/adapters/postgres/control_release_refusal_handled_handoff.go": partitionSubjectPrefix + "租户/客户账户/委托",
 	"internal/parcelshipment/adapters/postgres/source_data_handoff.go":                     partitionSubjectPrefix + "租户/来源请求键",

@@ -46,9 +46,9 @@ func NewOutboxControlReleaseRefusalHandledHandoff(
 
 var _ ports.ControlReleaseRefusalHandledHandoff = (*OutboxControlReleaseRefusalHandledHandoff)(nil)
 
-// controlReleaseRefusalHandledPayload 的头七个字段与「复核已完成」「新提交版本已形成」同名同义：消费门要译的是同一个推进命令，几封信
+// controlReleaseRefusalHandledPayload 的来源身份四维、委托、提交版本与成员清单与「复核已完成」「新提交版本已形成」同名同义：消费门要译的是同一个推进命令，几封信
 // 各造一套字段名，消费侧就得维护几份译码而它们必须永远同义。提交版本那一维填委托**此刻的当前版本**——续办要的是链拿当前版本重驱，
-// 被拒收的那一版多半已被取代。后两个字段只说明这一封因哪一笔占用的处理而发，消费门不读；处理人与依据不进信封（留痕在处理表里）。
+// 被拒收的那一版多半已被取代。handled 开头的两个字段只说明这一封因哪一笔占用的处理而发，消费门不读；处理人与依据不进信封（留痕在处理表里）。
 type controlReleaseRefusalHandledPayload struct {
 	TenantID            string   `json:"tenantId"`
 	CustomerAccountID   string   `json:"customerAccountId"`

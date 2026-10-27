@@ -37,8 +37,8 @@ func newRefusalHandledResumeFixture(t *testing.T) (*psinbox.ControlReleaseRefusa
 	return consumer, advancer
 }
 
-// refusalHandledPayload 是发布侧 OutboxControlReleaseRefusalHandledHandoff 实际写出的形状：头七个字段与「复核已完成」同名同义，提交版本那维是委托
-// 此刻的当前版本；后两个字段说明因哪一笔占用的处理而发，本门不读。
+// refusalHandledPayload 是发布侧 OutboxControlReleaseRefusalHandledHandoff 实际写出的形状：来源身份四维、委托、提交版本与成员清单与「复核已完成」同名同义，提交版本那维是委托
+// 此刻的当前版本；handled 开头的两个字段说明因哪一笔占用的处理而发，本门不读。
 const refusalHandledPayload = `{
 	"tenantId": "tenant-a",
 	"customerAccountId": "customer-1",
