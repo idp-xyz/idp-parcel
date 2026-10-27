@@ -18,7 +18,7 @@ import (
 
 const refusalHandlingBody = `{"shipmentRequestId":"SYN-REQ-01","submissionVersionId":"SYN-VERSION-01","controlResultId":"SYN-REQ-01/SYN-VERSION-01","action":"MARK_HANDLED","basis":"SYN-CHECKED"}`
 
-// Covers: ADR-0151 决定二、ADR-0293 决定三——Intake 用「释放拒收处理」这一种决定认证，租户取信封；处理人取认证出的操作者；来源身份按信封租户与
+// Covers: AT-PS-164；ADR-0151 决定二、ADR-0293 决定三——Intake 用「释放拒收处理」这一种决定认证，租户取信封；处理人取认证出的操作者；来源身份按信封租户与
 // 委托标识查出；动作是封闭两值；依据必填。
 func TestTheRefusalHandlingIntakeAuthenticatesItsOwnDecisionAndTakesTheIdentityFromTheEnvelope(t *testing.T) {
 	var asked []shipmenthttp.OperatorDecision
@@ -46,7 +46,7 @@ func TestTheRefusalHandlingIntakeAuthenticatesItsOwnDecisionAndTakesTheIdentityF
 	}
 }
 
-// Covers: ADR-0151 决定二——先认证、后解载荷；载荷里任何身份格（租户、客户账户、处理人）封闭解码即拒；缺字段、动作认不出、依据空白答坏报文；
+// Covers: AT-PS-164；ADR-0151 决定二——先认证、后解载荷；载荷里任何身份格（租户、客户账户、处理人）封闭解码即拒；缺字段、动作认不出、依据空白答坏报文；
 // 委托查不到与没授予同答（越权探针同答）。
 func TestTheRefusalHandlingIntakeRefusesAMalformedPayloadAndHidesForeignRequests(t *testing.T) {
 	intake := decisionIntake(t, decisionAuthenticator{}, decisionTargets{})
@@ -108,7 +108,7 @@ func postRefusalHandling(intake shipmenthttp.ControlReleaseRefusalHandlingIntake
 	return response
 }
 
-// Covers: ADR-0022——失败各归其格：不可见 404；没形成答案 500 不带 outcome；未命名结果 500；Intake 各格先于编排、编排一次不被调；非 POST 405。
+// Covers: AT-PS-164；ADR-0022——失败各归其格：不可见 404；没形成答案 500 不带 outcome；未命名结果 500；Intake 各格先于编排、编排一次不被调；非 POST 405。
 func TestTheRefusalHandlingEndpointMapsFailuresToTheirOwnCells(t *testing.T) {
 	handler := &refusalHandlingHandlerDouble{err: application.ErrShipmentRequestNotVisible}
 	response := postRefusalHandling(refusalHandlingIntakeDouble{}, handler, http.MethodPost)

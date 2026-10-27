@@ -217,7 +217,7 @@ func handlingOutcomeOf(t *testing.T, raw string) string {
 	return body.Outcome
 }
 
-// Covers: ADR-0293 决定二、三、四——核对后在结算侧释放：存下作用域的那一笔提供方现在受理，答 201 HANDLED，冻结放掉，处理留痕（做法、处理人取认证出的
+// Covers: AT-PS-162；ADR-0293 决定二、三、四——核对后在结算侧释放：存下作用域的那一笔提供方现在受理，答 201 HANDLED，冻结放掉，处理留痕（做法、处理人取认证出的
 // 操作者、依据）与续办信封同笔落库，信封带委托的当前版本；查阅里随之消失；另一位操作者再处理答 200 ALREADY_HANDLED、不多一封信封，回执不带操作者。
 func TestTheWiredHandlingReleasesTheRefusedOccupationAndHandsOffOneResume(t *testing.T) {
 	fixture := newRefusalHandlingE2E(t)
@@ -276,7 +276,7 @@ func TestTheWiredHandlingReleasesTheRefusedOccupationAndHandsOffOneResume(t *tes
 	}
 }
 
-// Covers: ADR-0293 决定二——没存作用域的存量那一笔（走生产授权处置装配摆出：处置照样成立，SA 拒收，记进册）：选「在结算侧释放」提供方再次拒收，答 200
+// Covers: AT-PS-163；ADR-0293 决定二——没存作用域的存量那一笔（走生产授权处置装配摆出：处置照样成立，SA 拒收，记进册）：选「在结算侧释放」提供方再次拒收，答 200
 // RELEASE_REFUSED_AGAIN 带原因，冻结原样占着、什么也不写（不留痕、不交信封）；改选「标记已处理」才成立，查阅里消失，信封恰一封。
 func TestTheWiredHandlingKeepsAnUnscopedRefusalUntilTheOperatorMarksIt(t *testing.T) {
 	fixture := newRefusalHandlingE2E(t)
@@ -315,7 +315,7 @@ func TestTheWiredHandlingKeepsAnUnscopedRefusalUntilTheOperatorMarksIt(t *testin
 	}
 }
 
-// Covers: ADR-0293 决定二「并发：两人同时处理同一行，只一笔成立」——多路同时标记同一笔，恰一路答 201，其余答 200 ALREADY_HANDLED；留痕一行、续办信封一封。
+// Covers: AT-PS-163；ADR-0293 决定二「并发：两人同时处理同一行，只一笔成立」——多路同时标记同一笔，恰一路答 201，其余答 200 ALREADY_HANDLED；留痕一行、续办信封一封。
 func TestConcurrentHandlersOfOneWiredRefusalLeaveOneHandlingAndOneEnvelope(t *testing.T) {
 	fixture := newRefusalHandlingE2E(t)
 	recorded, _ := refusalSettlementScope(t)
@@ -365,7 +365,7 @@ func TestConcurrentHandlersOfOneWiredRefusalLeaveOneHandlingAndOneEnvelope(t *te
 	}
 }
 
-// Covers: ADR-0293 决定三、ADR-0151 决定二——授权：只持授权处置授予的操作者进不来（两种授予不通用），别的租户的操作者拿着本租户的委托标识同样
+// Covers: AT-PS-164；ADR-0293 决定三、ADR-0151 决定二——授权：只持授权处置授予的操作者进不来（两种授予不通用），别的租户的操作者拿着本租户的委托标识同样
 // 403（越权探针同答），没有令牌 401；册上没有的那一笔 404；以上都什么也没写。
 func TestTheWiredHandlingIsOpenOnlyToItsOwnGrantWithinTheOwnTenant(t *testing.T) {
 	fixture := newRefusalHandlingE2E(t)
@@ -394,7 +394,7 @@ func TestTheWiredHandlingIsOpenOnlyToItsOwnGrantWithinTheOwnTenant(t *testing.T)
 	}
 }
 
-// Covers: PBC-08 行为面负向证据——处理编排的写在无事务上下文被拒（ErrTransactionRequired），留痕与信封零行；事务壳之内才成立。
+// Covers: AT-PS-164；PBC-08 行为面负向证据——处理编排的写在无事务上下文被拒（ErrTransactionRequired），留痕与信封零行；事务壳之内才成立。
 func TestTheHandlingOrchestrationRefusesToWriteOutsideATransaction(t *testing.T) {
 	fixture := newRefusalHandlingE2E(t)
 	recorded, _ := refusalSettlementScope(t)

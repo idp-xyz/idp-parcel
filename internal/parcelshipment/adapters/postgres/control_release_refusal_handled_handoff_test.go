@@ -140,7 +140,7 @@ func (fixture *refusalHandledFixture) countIntents(t *testing.T, eventID string)
 	return count
 }
 
-// Covers: ADR-0094 决定四、ADR-0293 决定四——处理留痕与续办信封同一事务成立；信封签委托此刻的当前版本与成员清单，不是被拒收的那一版。
+// Covers: AT-PS-165；ADR-0094 决定四、ADR-0293 决定四——处理留痕与续办信封同一事务成立；信封签委托此刻的当前版本与成员清单，不是被拒收的那一版。
 func TestTheResumeEnvelopeCommitsWithTheHandlingAndCarriesTheCurrentVersion(t *testing.T) {
 	fixture := newRefusalHandledFixture(t)
 	identity, loaded, refusal := fixture.refusalOnSeededRequest(t, "req-key-1", "request-1", "version-0")
@@ -187,7 +187,7 @@ func TestTheResumeEnvelopeCommitsWithTheHandlingAndCarriesTheCurrentVersion(t *t
 	}
 }
 
-// Covers: ADR-0094 决定四的另一半——一起消失：回滚之后处理留痕与信封都不在，那一笔仍是未处理，接受链那一路不会被一封空信封惊动。
+// Covers: AT-PS-165；ADR-0094 决定四的另一半——一起消失：回滚之后处理留痕与信封都不在，那一笔仍是未处理，接受链那一路不会被一封空信封惊动。
 func TestARolledBackHandlingLeavesNeitherTheRowNorTheEnvelope(t *testing.T) {
 	fixture := newRefusalHandledFixture(t)
 	identity, loaded, refusal := fixture.refusalOnSeededRequest(t, "req-key-1", "request-1", "version-0")
@@ -214,7 +214,7 @@ func TestARolledBackHandlingLeavesNeitherTheRowNorTheEnvelope(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0043——重放重发同一份；同一委托上另一笔占用的处理是另一封，不被当成重放吞掉。
+// Covers: AT-PS-165；ADR-0043——重放重发同一份；同一委托上另一笔占用的处理是另一封，不被当成重放吞掉。
 func TestTheResumeEnvelopeIsOnePerRefusedOccupation(t *testing.T) {
 	fixture := newRefusalHandledFixture(t)
 	identity, loaded, first := fixture.refusalOnSeededRequest(t, "req-key-1", "request-1", "version-0")
@@ -243,7 +243,7 @@ func TestTheResumeEnvelopeIsOnePerRefusedOccupation(t *testing.T) {
 	}
 }
 
-// Covers: PBC-08 行为面——写口在无事务上下文必须被 RequireExecutor 拒绝，落库行数为零。
+// Covers: AT-PS-164；PBC-08 行为面——写口在无事务上下文必须被 RequireExecutor 拒绝，落库行数为零。
 func TestTheResumeEnvelopeRefusesToRunOutsideATransaction(t *testing.T) {
 	fixture := newRefusalHandledFixture(t)
 	identity, loaded, refusal := fixture.refusalOnSeededRequest(t, "req-key-1", "request-1", "version-0")

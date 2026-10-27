@@ -70,7 +70,7 @@ func refusalHandledEnvelope(t *testing.T, eventID string) eventing.Envelope {
 	}
 }
 
-// Covers: 续办信封译进同一个推进命令，提交版本是委托此刻的当前版本（version-2），不是被拒收的那一版（version-1）——链只判当前版本，拿旧版本
+// Covers: AT-PS-165；续办信封译进同一个推进命令，提交版本是委托此刻的当前版本（version-2），不是被拒收的那一版（version-1）——链只判当前版本，拿旧版本
 // 驱会落到「版本已换代」白烧一拍。
 func TestARefusalHandledEnvelopeTranslatesIntoTheChainCommandOnTheCurrentVersion(t *testing.T) {
 	consumer, advancer := newRefusalHandledResumeFixture(t)

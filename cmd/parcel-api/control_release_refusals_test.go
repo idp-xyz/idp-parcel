@@ -166,7 +166,7 @@ func (fixture *refusalsFixture) get(t *testing.T, target, token string) (int, ma
 	return response.Code, answer
 }
 
-// Covers: ADR-0293 决定一——查阅按租户隔离：租户 A 的操作者只看到 A 的未处理行与计数，B 的行看不见；请求里自报的租户参数不采信；
+// Covers: AT-PS-161；ADR-0293 决定一——查阅按租户隔离：租户 A 的操作者只看到 A 的未处理行与计数，B 的行看不见；请求里自报的租户参数不采信；
 // 没有查阅读授予（只持运营决定授予）答 403 OPERATOR_NOT_GRANTED；没有令牌答 401。
 func TestTheWiredRefusalQueryIsScopedToTheOperatorsTenant(t *testing.T) {
 	fixture := newRefusalsFixture(t)

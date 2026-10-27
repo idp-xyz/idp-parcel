@@ -68,7 +68,7 @@ func withHandlingView(t *testing.T, fixture *chainFixture, view ports.ControlRel
 	fixture.handler = application.NewAdvanceAcceptanceChainHandler(fixture.deps)
 }
 
-// Covers: ADR-0293 决定四——被取代那一版的释放被提供方确定不受理、而那一笔人已处理（留痕在册）：链不再响亮失败，接着判新版本；提供方仍先被问了一次。
+// Covers: AT-PS-165；ADR-0293 决定四——被取代那一版的释放被提供方确定不受理、而那一笔人已处理（留痕在册）：链不再响亮失败，接着判新版本；提供方仍先被问了一次。
 func TestAHandledRefusalOfASupersededVersionNoLongerBlocksTheNewOne(t *testing.T) {
 	fixture, command := supersededChainFixture(t, domain.FinancialControlHeld)
 	fixture.release.outcome = ports.ControlReleaseNotAccepted
@@ -94,7 +94,7 @@ func TestAHandledRefusalOfASupersededVersionNoLongerBlocksTheNewOne(t *testing.T
 	}
 }
 
-// Covers: ADR-0282 决定三不变——没处理过的拒收照旧响亮上抛 ErrControlReleaseNotAccepted、新版本一步不判；留痕读口没接上（nil）同样照旧上抛。
+// Covers: AT-PS-165；ADR-0282 决定三不变——没处理过的拒收照旧响亮上抛 ErrControlReleaseNotAccepted、新版本一步不判；留痕读口没接上（nil）同样照旧上抛。
 func TestAnUnhandledRefusalStillFailsTheChainLoudly(t *testing.T) {
 	for name, view := range map[string]ports.ControlReleaseRefusalHandlingView{
 		"留痕里没有这一笔": &refusalHandlingViewDouble{},
@@ -116,7 +116,7 @@ func TestAnUnhandledRefusalStillFailsTheChainLoudly(t *testing.T) {
 	}
 }
 
-// Covers: 处理只认它处理的那一笔——两版被取代、两笔都被拒收，只有一笔人已处理：另一笔照旧响亮上抛，错误点名没处理的那一版。
+// Covers: AT-PS-165；处理只认它处理的那一笔——两版被取代、两笔都被拒收，只有一笔人已处理：另一笔照旧响亮上抛，错误点名没处理的那一版。
 func TestHandlingOneRefusalDoesNotClearAnotherSupersededVersionsRefusal(t *testing.T) {
 	fixture := newChainFixture(t)
 	twice := twiceSupersededRequest(t)
@@ -140,7 +140,7 @@ func TestHandlingOneRefusalDoesNotClearAnotherSupersededVersionsRefusal(t *testi
 	}
 }
 
-// Covers: ADR-0029——留痕读不动是依赖读不回，不是「没处理过」也不是「处理过」：链停在放被取代各版这一步内部重试（未决 ControlReleasePending），
+// Covers: AT-PS-165；ADR-0029——留痕读不动是依赖读不回，不是「没处理过」也不是「处理过」：链停在放被取代各版这一步内部重试（未决 ControlReleasePending），
 // 新版本一步不判；不上抛成响亮失败，也不放行。
 func TestAnUnreadableHandlingStopsTheChainForRetryInsteadOfSkippingOrFailingLoudly(t *testing.T) {
 	fixture, command := supersededChainFixture(t, domain.FinancialControlHeld)
@@ -163,7 +163,7 @@ func TestAnUnreadableHandlingStopsTheChainForRetryInsteadOfSkippingOrFailingLoud
 	}
 }
 
-// Covers: 处理留痕不遮住「放不掉」：一版人已处理的拒收、另一版可重试未形成——后者照旧停在本步内部重试。
+// Covers: AT-PS-165；处理留痕不遮住「放不掉」：一版人已处理的拒收、另一版可重试未形成——后者照旧停在本步内部重试。
 func TestAHandledRefusalDoesNotHideAPendingReleaseOfAnotherVersion(t *testing.T) {
 	fixture := newChainFixture(t)
 	twice := twiceSupersededRequest(t)
@@ -189,7 +189,7 @@ func TestAHandledRefusalDoesNotHideAPendingReleaseOfAnotherVersion(t *testing.T)
 	}
 }
 
-// Covers: 处理只认逐段对得上的那一笔——同一版本不同控制关联、同一控制关联不同版本的处理留痕，都不放行这一笔拒收。
+// Covers: AT-PS-165；处理只认逐段对得上的那一笔——同一版本不同控制关联、同一控制关联不同版本的处理留痕，都不放行这一笔拒收。
 func TestAHandlingOfAnotherVersionOrControlResultDoesNotClearTheRefusal(t *testing.T) {
 	for name, handled := range map[string][2]string{
 		"同版本另一笔控制": {"version-1", "SAC-another"},

@@ -125,7 +125,7 @@ func syntheticScope(t *testing.T) domain.OccupationScope {
 	return scope
 }
 
-// Covers: ADR-0293 决定二——处理留痕只追加：同一笔占用被处理第二次答`已处理`并读回先到的那一份（不覆盖），册上原行一字不变；另一笔不受影响。
+// Covers: AT-PS-163；ADR-0293 决定二——处理留痕只追加：同一笔占用被处理第二次答`已处理`并读回先到的那一份（不覆盖），册上原行一字不变；另一笔不受影响。
 func TestAControlReleaseRefusalIsHandledOnceAndTheSecondCallReadsTheFirst(t *testing.T) {
 	rig := newRefusalHandlingRig(t)
 	scope := syntheticScope(t)
@@ -166,7 +166,7 @@ func TestAControlReleaseRefusalIsHandledOnceAndTheSecondCallReadsTheFirst(t *tes
 	}
 }
 
-// Covers: ADR-0293 决定二、ADR-0003——处理按租户把关：另一个租户拿着同一笔占用的标识处理，答`册上无此笔`、什么也不写；本租户的这一笔仍未处理。
+// Covers: AT-PS-163；ADR-0293 决定二、ADR-0003——处理按租户把关：另一个租户拿着同一笔占用的标识处理，答`册上无此笔`、什么也不写；本租户的这一笔仍未处理。
 func TestAnotherTenantCannotHandleARefusalAndWritesNothing(t *testing.T) {
 	rig := newRefusalHandlingRig(t)
 	refusal := refusalFor(t, "tenant-1", "request-1", "version-1", refusalRecordedAt, syntheticScope(t))
@@ -194,7 +194,7 @@ func TestAnotherTenantCannotHandleARefusalAndWritesNothing(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0293 决定一——运营查阅按租户列未处理的行并计数：被处理的行从清单消失、他租户的行看不见；清单按登记先后、受页大小截断而计数不截断；
+// Covers: AT-PS-161；ADR-0293 决定一——运营查阅按租户列未处理的行并计数：被处理的行从清单消失、他租户的行看不见；清单按登记先后、受页大小截断而计数不截断；
 // 没存作用域的存量行如实列出（作用域缺席）。
 func TestTheCatalogueListsOnlyThisTenantsUnhandledRefusalsWithTheirCount(t *testing.T) {
 	rig := newRefusalHandlingRig(t)
@@ -251,7 +251,7 @@ func TestTheCatalogueListsOnlyThisTenantsUnhandledRefusalsWithTheirCount(t *test
 	}
 }
 
-// Covers: ADR-0293 决定二「并发：两人同时处理同一行，只一笔成立」——多路同时处理同一笔占用，恰一路答`已记下`，其余读回的赢家是同一份。
+// Covers: AT-PS-163；ADR-0293 决定二「并发：两人同时处理同一行，只一笔成立」——多路同时处理同一笔占用，恰一路答`已记下`，其余读回的赢家是同一份。
 func TestConcurrentHandlersOfOneRefusalLeaveExactlyOneWinner(t *testing.T) {
 	rig := newRefusalHandlingRig(t)
 	refusal := refusalFor(t, "tenant-1", "request-1", "version-1", refusalRecordedAt, syntheticScope(t))
@@ -306,7 +306,7 @@ func TestConcurrentHandlersOfOneRefusalLeaveExactlyOneWinner(t *testing.T) {
 	}
 }
 
-// Covers: PBC-08 行为面负向证据——处理写口在无事务上下文必须被 RequireExecutor 拒绝；拒绝先于任何入参解读，传零值就够。
+// Covers: AT-PS-164；PBC-08 行为面负向证据——处理写口在无事务上下文必须被 RequireExecutor 拒绝；拒绝先于任何入参解读，传零值就够。
 func TestHandlingAControlReleaseRefusalRefusesToRunOutsideATransaction(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -322,7 +322,7 @@ func TestHandlingAControlReleaseRefusalRefusesToRunOutsideATransaction(t *testin
 	}
 }
 
-// Covers: ADR-0293 决定二——库内 CHECK 与外键钉住处理留痕的形状：做法是封闭两值、处理人与依据必填、挂在册上有的占用上。
+// Covers: AT-PS-163；ADR-0293 决定二——库内 CHECK 与外键钉住处理留痕的形状：做法是封闭两值、处理人与依据必填、挂在册上有的占用上。
 func TestTheHandlingTableRefusesAMalformedRow(t *testing.T) {
 	rig := newRefusalHandlingRig(t)
 	refusal := refusalFor(t, "tenant-1", "request-1", "version-1", refusalRecordedAt, syntheticScope(t))

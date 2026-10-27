@@ -1,0 +1,98 @@
+# ADR-0293：释放未受理册有运营查阅与处理——处理人核对后在结算侧释放或标记已处理，只追加留痕，同笔交一封续办信封让接受链重驱当前版本，链开头遇提供方拒收而那一笔人已处理时不再响亮失败
+
+Status: Accepted（2026-10-26，Claude Code 会话代 PS owner 裁定：协调方据用户「你作为业务和系统专家自决」授权，把票 [docs-consistency/code/95](../../.scratch/docs-consistency/code/95-control-release-refusal-register-has-no-handling-face-and-the-chain-has-no-resume.md) 定级 R2（上线后尽快）并裁定范围：查阅、两种处理动作、续办三件要做；「补登作用域并重放」不做（生产上所有新的控制结果都带作用域，无作用域的存量只在演示库、`--reset` 即消）；告警阈值不做（仓内没有告警引擎，只给计数）；「核对后在结算侧释放」复用按原关联的释放编排、不另立 SA 的人工释放入口；授权用「运营决定」族新立一种决定种类、有自己的授予名、不与授权处置共用；续办信封优先复用既有一类，没有合适的再新立。作者核后选新立一类，理由见「候选与反方」；链开头凭处理留痕认出人已处理的拒收由作者代决，不如此，「标记已处理」之后的续办仍会撞同一个拒收、再落一次 `publish_failed`。裁决能力边界：读过票 code/95 全文、[ADR-0282](./0282-a-control-release-the-provider-refuses-is-registered-for-handling-instead-of-compensated.md)、[ADR-0290](./0290-an-acceptance-chain-round-that-finds-the-request-withdrawn-or-rejected-releases-the-occupation-it-formed.md)、[ADR-0291](./0291-the-release-savepoint-keeps-what-a-retryable-not-formed-release-persisted-while-the-transaction-is-alive.md)、[ADR-0094](./0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md) 决定四、`occupationRelease`、`releaseSuperseded`、既有的几扇续办门与授权改路（[ADR-0284](./0284-an-authorized-role-decides-a-current-reroute-suggestion-through-an-operator-decision-face.md)）的决定种类先例；未重读 SA owner 侧对释放编排的任何计划。部分停用（收窄）ADR-0282 决定三一句，被停原句与适用场景见「对已接受记录的作用」；ADR-0282 正文不改，只在其 Status 行与 Links 加前向指针，并回答它的越权风险点 1、2、4。越权风险点见文末，待 PS owner 复核。）<!-- 索引注记 -->｜**查阅**：按租户列释放未受理册上还没有处理留痕的行（委托、被拒收的版本、控制关联、存下的作用域、原因、登记时刻）加全部未处理的计数，页大小封顶并带截断标志；不做告警阈值。**处理动作**两种：核对后在结算侧释放（按原关联与存下的作用域再请求一次释放，提供方答已收口才算处理，可重试未形成与再被拒收都什么也不写、把确定的格答给处理人）与标记已处理（只留痕、不动账本）。处理留痕只追加、一笔占用至多一行、依据必填，并发只一笔成立。**授权**：「运营决定」族新立 `CONTROL_RELEASE_REFUSAL_HANDLING`，与授权处置分开授予。**续办**：处理同笔交一封「释放拒收已处理」信封，接受链拿委托此刻的当前版本再驱；链开头放被取代各版遇提供方又确定不受理、而那一笔人已处理时不再响亮失败、接着判新版本｜**部分停用**（2026-10-26）：其决定三「接受链开头放被取代各版遇`确定未受理`（或形不成三格之一）：响亮上抛，落 `publish_failed`。」一句，已由本记录收窄——那一笔（租户、委托、被拒收的版本、控制关联）在释放拒收处理留痕里有行时，链不再为它响亮失败，接着判新版本。**适用场景**：只限被人处理过的那一笔；没处理过的、别的版本或别的控制关联的拒收，与留痕读不回（停在本步内部重试）照原句或另列的格，决定三其余各句与其余各条不变
+Date: 2026-10-26
+
+## Context
+
+- 释放被结算确定不受理时，撤回、主动拒绝、授权处置、自动拒绝与停进`等待受控补充`各路把那一笔记进释放未受理册（ADR-0282 决定二），业务事实照常成立。之后册上只有按委托的读口：没有人看得见它占着客户的余额或额度，也没有一个动作能把它处理掉。
+- 接受链判新提交版本之前放被取代各版，遇到提供方确定不受理就响亮上抛、落 `publish_failed`（ADR-0282 决定三），这一步不记册，那一轮整笔回滚。信封耗尽失败预算后死信；人把那一笔处理完之后，没有任何东西会再驱一次接受链，新版本一直停在`已提交`、判不了。
+- 接受链这一路要被「再驱一次」，不只需要一封信，还需要链开头那一步放行：被拒收的是被取代版本上一笔控制结果，没存作用域的存量行，提供方每一次都拒收。人在结算侧手工把钱放掉、回来标记已处理之后，链开头再请求一次释放，仍然被拒收——不让链认出「这一笔人已处理」，续办只会再落一次 `publish_failed`。
+- 仓内没有告警引擎（没有可复用的阈值或告警模式），ADR-0282 越权风险点 1 说的「告警」只能落成计数。
+- ADR-0094 决定四：触发与格同笔落地，否则不许落地；续办由信封驱动，不采用定时扫描。ADR-0132 决定四把授权处置的授权放在 `party-commercial` 的规则里，那是业务处置的授权；这里处理的是已越过业务决定的资金占用。
+
+## Decision
+
+**一、释放未受理册有运营查阅：按租户列未处理的行并计数。**（机制）
+
+- 「未处理」是册行没有对应的处理留痕，不是原行上的状态列；册原行不改。清单每行：委托、被拒收的提交版本、控制关联、客户账户、存下的作用域（没存下就缺席并显式说没存下）、原因引用、登记时刻。
+- 清单最早登记的在前，页大小由接入面按渠道产品策略裁决、不采信调用方；计数是该租户未处理的全部行数，不受页大小截断，清单被截断时带截断标志。读不回答 5xx，不伪装成空清单；租户只取自认证出的操作者信封。
+- 不做告警阈值：本产品没有告警引擎，阈值是产品策略；只给计数与截断标志，页上的「没有积压」是答案。
+
+**二、处理动作两种，处理留痕只追加，一笔占用至多处理一次。**（机制）
+
+- **标记已处理**：资金已在本产品之外处置，处理人只留痕（处理人、依据、时刻），本方不问提供方、不动账本，也不替他判这是不是真的。
+- **核对后在结算侧释放**：复用按原关联放占用的那一处定义（`occupationRelease`），不另立 SA 的人工释放入口——释放认哪一版、哪一笔、哪一份存下的作用域，与终局各路和接受链放的是同一笔，幂等归提供方账本。处理前先取这一笔占用所在作用域的锁。提供方答已收口才算处理；答可重试未形成或再被拒收（含本方译不动答复）什么也不写、不交信封，把确定的格连同提供方的原因答给处理人。没存作用域的存量行交零值，提供方照旧拒收，这一格只剩「标记已处理」。
+- 处理留痕是新表 `control_release_refusal_handling`：主键与外键都是册行的主键（租户、委托、被拒收的版本、控制结果），做法封闭两值，处理人（发行方#sub）与依据必填。两人同时处理同一笔，主键相撞只有一笔成立，败者读回先到的那一份，不再放、不留痕、不再交信封；册上没有这一笔（不存在或属于别的租户）一律答统一不可见。
+- 释放口仍是外层带 savepoint 的那一只：答类型化的可重试未形成而事务没中止时，提供方已落库的那一半留着（ADR-0291）；处理动作整体跑在一笔事务里，编排返回错误即整笔回滚。
+- 「补登作用域并重放」不做：生产上所有新的控制结果都带作用域（ADR-0282 决定四），无作用域的存量只在演示库，`--reset` 即消。
+
+**三、授权：「运营决定」族新立一种决定种类 `CONTROL_RELEASE_REFUSAL_HANDLING`，有自己的授予名，不与授权处置共用。**（机制）
+
+- 职责不同：授权处置是对一份受限委托去向的业务处置（ADR-0132），这一种是对已越过业务决定的资金占用的运维处理。授予的粒度等于权力的粒度：能处置委托的不因此能替一笔被拒收的释放销账。
+- 授权就是这一种授予加准入范围，不另问 `party-commercial` 的授权规则。授予缺席答 403 `OPERATOR_NOT_GRANTED`，渠道未配置答 403 `ACCESS_CHANNEL_NOT_CONFIGURED`，不默认放行；租户与处理人只取自信封，载荷里出现任何身份格即拒。
+- 查阅挂「主数据与运营查阅读」，不需要这一种授予。
+
+**四、续办：处理同笔交一封续办信封，接受链重驱委托此刻的当前版本；链开头认出人已处理的拒收。**（机制）
+
+- 处理留痕与信封同一笔事务（ADR-0094 决定四）：留痕落了信封没入队，被拒收的那一笔处理完了、接受链却不会再来。信封 ID 由占用的身份认领，一笔占用至多一封。
+- 信封新立一类「释放拒收已处理」（理由见「候选与反方」），载荷与既有续办信封同名同义的字段（来源身份四维、委托、提交版本、成员清单）取委托**此刻的当前版本**，另带被处理的那一版与控制关联作说明。接受链的又一扇消费门共用同一份译码与折法；分区与委托已提交信封同主体。
+- 重驱幂等：当前版本已决定的，链的入口守卫与既有决定路径答`已决定`，不再占下任何东西；信封里的版本在处理之后又换了代的，链答`版本已换代`、按处理完毕入账，新版本由它自己的「新提交版本已形成」信封驱动。
+- 链开头放被取代各版时，提供方仍先被问；提供方又确定不受理（含形不成三格之一）而那一笔在处理留痕里有行，才不再响亮失败、接着判新版本。留痕按（租户、委托、版本、控制关联）逐段对；没处理过的、别的版本或别的控制关联的拒收照旧上抛（ADR-0282 决定三）；留痕读不回既不当成处理过也不当成没处理过，停在本步内部重试（未决 `ControlReleasePending`）；读口没接上时原样不放行。
+
+**五、锁序。**（机制）
+
+处理动作不保存委托、不持委托行锁，只取一把 S（占用所在作用域的锁，提供方释放里重入），再写处理留痕与续办信封：与撤回类路径和接受链之间不成环。标记已处理不问提供方，不取 S。端口头注 `ports.PreAcceptanceControlScopeLock` 加这一条路径。
+
+## 候选与反方
+
+- **标记已处理时改写册原行（加状态列）。** 否决：册只追加、原行不改；「未处理」靠没有对应留痕表达，处理留痕是新增的事实而不是改写旧事实。
+- **补登作用域并重放。** 不做：存量无作用域行只在演示库；有了就回头走演示库重灌。保留它等于为一个不会在生产出现的形状留一条运维路径。
+- **另立 SA 的人工释放入口。** 否决：释放认哪一笔、哪一份作用域已有唯一定义；另一个入口会让同一笔占用因经哪条路放而得到两种认领法（ADR-0282 决定四否决的「两种认领法」的另一种形态）。
+- **续办信封复用既有一类。** 否决，四类逐一核过：「委托已提交」的信封 ID 由来源身份认领、一份委托至多一封，无法为同一份委托再发；「复核已完成」「新提交版本已形成」的类型名说的是别的事——运维读 outbox 与死信时类型名是唯一线索，借用就是让它说假话，又各有自己的信封 ID 去重；「参数已登记」类的消费门按租户取`等待运营登记`队列重驱，而本场景的委托并不在那个等待态。新立一类，门里的译码与折法共用，增加的只是一个类型串与一个 inbox 名。
+- **续办用定时扫描重驱。** 否决：ADR-0094 决定四已否决，同理。
+- **标记已处理之后链开头仍一律响亮失败。** 否决：存量无作用域行提供方每次都拒收，人手工放掉并标记之后，续办仍落一次 `publish_failed`，「处理」白做。
+- **标记已处理之后链开头不再问提供方。** 否决：人在结算侧放掉的、或之后能放掉的，提供方答已收口，用不着看留痕；先问提供方让留痕只在提供方仍拒收时起作用，范围最小。
+- **与授权处置共用授权。** 否决：职责不同，共用会让持授权处置授予的人顺带能替被拒收的资金销账。
+- **告警阈值。** 不做：没有告警引擎，阈值是产品策略。
+
+## 对已接受记录的作用
+
+- **部分停用（收窄）** [ADR-0282](./0282-a-control-release-the-provider-refuses-is-registered-for-handling-instead-of-compensated.md) 决定三「接受链开头放被取代各版遇`确定未受理`（或形不成三格之一）：响亮上抛，落 `publish_failed`。」一句。**适用场景**：被拒收的那一笔（租户、委托、被拒收的版本、控制关联）在释放拒收处理留痕里有行——链不再为它响亮失败，接着判新版本。没处理过的、别的版本或别的控制关联的拒收，仍响亮上抛、不进未决名单、消费门不入账；留痕读不回停在本步内部重试；决定三「这一步不记册」与其余各句、决定四不变。
+- **回答** ADR-0282 越权风险点 1（册上积压无人看见：运营查阅与计数，无告警）、2（存量无作用域行一律交人：不补登，只剩标记已处理，生产不出现这一形状）、4（接受链响亮失败之后怎么续：处理同笔交续办信封）。越权风险点 3、5、6、7 不变。ADR-0282 「Consequences」里「人怎么处理那一笔不在本记录内」由本记录回答，正文不改。
+- **不停用** [ADR-0094](./0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md) 决定四：本记录的续办信封是「触发与格同笔落地」的又一个实例，只约束接受判断链的写法照旧。**不停用** [ADR-0081](./0081-acceptance-judgment-is-envelope-driven.md) 决定三：保持 `publish_failed` 响亮的格不变。
+- **读法**（不是停用）[ADR-0291](./0291-the-release-savepoint-keeps-what-a-retryable-not-formed-release-persisted-while-the-transaction-is-alive.md)：「在结算侧释放」走同一只带 savepoint 的释放口，答可重试未形成而事务没中止时提供方已落库的那一半留着，处理不留痕；正文不改。**不停用** [ADR-0290](./0290-an-acceptance-chain-round-that-finds-the-request-withdrawn-or-rejected-releases-the-occupation-it-formed.md)：终局委托上形成决定那一步遇确定未受理仍记册（再记答已有记录），已处理的那一笔不因此回到清单。
+
+## Consequences
+
+- 代码随票 code/95：迁移 `parcel_shipment/0031`（处理留痕表与册上（租户，登记时刻）索引）、`access_identity/0025`（决定种类 CHECK 放开 `CONTROL_RELEASE_REFUSAL_HANDLING`，取此前各份并集再加一词）；端口 `ControlReleaseRefusalHandlings`、`ControlReleaseRefusalHandlingView`、`ControlReleaseRefusalCatalogue`、`ControlReleaseRefusalHandledHandoff`；`HandleControlReleaseRefusalHandler`；`GET /control-release-refusals` 与 `POST /control-release-refusal-handlings`；接受链消费门「释放拒收已处理」与 `releaseSuperseded` 的处理留痕过滤；管理台「释放拒收处理」页；演示种子给配置员这一种授予。
+- 未决原因集合不新增取值：留痕读不回落已有的 `ControlReleasePending`，消费门、HTTP 译装、管理台与跨上下文读方没有新落点（ADR-0025）。处理命令的结果格（已处理、已被处理、释放未收口、释放再被拒收）在 HTTP 译装与管理台各有落点。
+- 链开头对「拒收而已处理」的那一笔每一轮仍先问提供方，多出的是一次留痕读；只发生在提供方拒收时。
+- 文档：UC-PS-005「规则、补偿与并发」加一条、验收示例加 `AT-PS-161` 至 `AT-PS-165`、「给开发的交接」加一行；PS CONTEXT 词条「控制项结果」加一句；`.scratch/at-coverage-inventory.md` 补分桶行与追记。ADR-0282 的 Status 注记与 Links 加前向指针。
+
+## 越权风险点
+
+1. **标记已处理是人的断言，本方不核实。** 标记了而钱实际还占着，接受链放行，新版本的控制看到的是被旧占用压着的余额——受限即可能按策略拒单，拒绝不可覆盖（ADR-0282「候选与反方」否决「接受链遇拒收也记册、再按未决入账」的同一理由）。缓解只有依据必填、留痕可审、管理台确认弹层与授予分开；不核实账本。
+2. **补登作用域并重放不做。** 存量无作用域行的「核对后在结算侧释放」恒再被拒收，只能先在结算侧手工放掉再标记已处理；若首发后发现生产出现无作用域的结果（按 ADR-0282 决定四不应出现），要另立运维路径。
+3. **没有告警，只有计数。** 册上积压仍靠人去看页；阈值与告警渠道是产品策略，本产品没有告警引擎。
+4. **链开头的拒收不记册，被取代版本若不是经「停进等待受控补充」换代，册上没有对应的行。** 例如从别的暂停态被取代、从未走过记册的释放那一版，链响亮失败时册上没有这一笔，处理面看不到它；死信本身仍是唯一线索，本记录没有为它立登记动作。
+5. **处理的认定只看留痕。** 「在结算侧释放」答已收口之后账本若被另行改动，或「标记已处理」之后钱又被占用，链不再核对。
+6. **`cmd/parcel-dispatch` 链装配上的处理留痕读口没有行为测试。** 漏接时退回 ADR-0282 决定三的响亮失败，响亮但不在装配处响亮；行为用例用测试夹具同形装配（同 ADR-0290 越权风险点 4 的缺口）。
+7. **并发处理的败者在主键上等先到的事务。** 先到者的释放在提供方账本上持锁久时，后到者跟着等；败者读回先到的那一份，不重复放。
+8. **续办信封重驱已拒绝的委托会让各版释放再被问一遍**（ADR-0290 的既有行为），已处理的一笔提供方仍拒收时再记册答已有记录；无业务影响，多几次账本读写。
+
+## Links
+
+- 票 `.scratch/docs-consistency/code/95-control-release-refusal-register-has-no-handling-face-and-the-chain-has-no-resume.md`；出处票 `.scratch/docs-consistency/code/71-release-and-control-ports-answer-a-closed-set-instead-of-a-bare-error.md`
+- [ADR-0282](./0282-a-control-release-the-provider-refuses-is-registered-for-handling-instead-of-compensated.md)：部分停用（收窄）决定三一句；回答越权风险点 1、2、4
+- [ADR-0290](./0290-an-acceptance-chain-round-that-finds-the-request-withdrawn-or-rejected-releases-the-occupation-it-formed.md)、[ADR-0291](./0291-the-release-savepoint-keeps-what-a-retryable-not-formed-release-persisted-while-the-transaction-is-alive.md)：终局委托上的释放与带 savepoint 的释放口，读法不变
+- [ADR-0094](./0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md)：决定四，续办触发与格同笔落地
+- [ADR-0081](./0081-acceptance-judgment-is-envelope-driven.md)：决定三，`publish_failed` 响亮的格不变
+- [ADR-0132](./0132-authorized-disposition-decides-the-destination-of-a-restricted-request-as-its-own-wait-state-and-never-passes.md)：授权处置的授权在 `party-commercial` 规则里，本记录的授权不共用
+- [ADR-0284](./0284-an-authorized-role-decides-a-current-reroute-suggestion-through-an-operator-decision-face.md)：「运营决定」族新立决定种类的先例
+- [ADR-0151](./0151-unassigned-command-faces-get-their-families.md)：运营决定按租户与决定种类授予
+- [ADR-0029](./0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md)：按恢复动作分格，读不动才是未决
+- [ADR-0025](./0025-cross-context-adapters-live-on-the-consumer-side.md)：新增结果格后每个消费方有落点
+- [ADR-0022](./0022-http-status-carries-answer-formed-not-business-verdict.md)：已形成的业务答案答 2xx，业务判别进响应体
+- [小包托运上下文](../domain/parcel-shipment/CONTEXT.md)：词条「控制项结果」
+- [UC-PS-005](../application/parcel-shipment/UC-PS-005-WITHDRAW-SUBMITTED-SHIPMENT-REQUEST.md)：规则、补偿与并发；`AT-PS-161` 至 `AT-PS-165`

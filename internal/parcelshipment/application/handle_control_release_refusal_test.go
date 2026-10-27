@@ -160,7 +160,7 @@ func (fixture *refusalHandlingFixture) assertNothingWritten(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0293 决定二——标记已处理：不问提供方（释放一次也不发、不取作用域锁），只留痕：处理人、依据与编排时钟的处理时刻；同笔交恰一封续办信封，
+// Covers: AT-PS-163；ADR-0293 决定二——标记已处理：不问提供方（释放一次也不发、不取作用域锁），只留痕：处理人、依据与编排时钟的处理时刻；同笔交恰一封续办信封，
 // 信封带处理后读回的委托与这一次的留痕。
 func TestMarkingARefusalHandledRecordsItAndHandsOffOneResumeWithoutAskingTheProvider(t *testing.T) {
 	fixture := newRefusalHandlingFixture(t)
@@ -200,7 +200,7 @@ func TestMarkingARefusalHandledRecordsItAndHandsOffOneResumeWithoutAskingTheProv
 	}
 }
 
-// Covers: ADR-0293 决定二、四——核对后在结算侧释放：先取作用域锁，再按原关联与存下的作用域请求释放，答已收口才留痕并同笔交信封。
+// Covers: AT-PS-162；ADR-0293 决定二、四——核对后在结算侧释放：先取作用域锁，再按原关联与存下的作用域请求释放，答已收口才留痕并同笔交信封。
 func TestReleasingAtSettlementRecordsAndHandsOffOnlyAfterTheProviderSettlesIt(t *testing.T) {
 	fixture := newRefusalHandlingFixture(t)
 
@@ -234,7 +234,7 @@ func TestReleasingAtSettlementRecordsAndHandsOffOnlyAfterTheProviderSettlesIt(t 
 	}
 }
 
-// Covers: ADR-0293 决定二——释放没收口不算处理：可重试未形成与确定未受理（含形不成三格之一）都不留痕、不交信封，把确定的格答给处理人；
+// Covers: AT-PS-162；ADR-0293 决定二——释放没收口不算处理：可重试未形成与确定未受理（含形不成三格之一）都不留痕、不交信封，把确定的格答给处理人；
 // 确定未受理带提供方的原因，形不成三格之一带本上下文自有的原因。
 func TestAReleaseThatDoesNotSettleLeavesTheRefusalUnhandledAndSaysWhy(t *testing.T) {
 	for name, test := range map[string]struct {
@@ -278,7 +278,7 @@ func TestAReleaseThatDoesNotSettleLeavesTheRefusalUnhandledAndSaysWhy(t *testing
 	}
 }
 
-// Covers: ADR-0293 决定二——先到的处理不被覆盖：已处理的一笔读回先到的那一份，不再问提供方、不再留痕、不交第二封信封；并发里输掉的一方
+// Covers: AT-PS-163；ADR-0293 决定二——先到的处理不被覆盖：已处理的一笔读回先到的那一份，不再问提供方、不再留痕、不交第二封信封；并发里输掉的一方
 // （查时没处理过、写时读回赢家）同答。
 func TestASecondHandlerReadsTheFirstAndTriggersNothing(t *testing.T) {
 	for name, arrange := range map[string]func(*testing.T, *refusalHandlingFixture, ports.ControlReleaseRefusalHandling){
@@ -324,7 +324,7 @@ func TestASecondHandlerReadsTheFirstAndTriggersNothing(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0293 决定二、ADR-0003——册上没有这一笔（不存在，或属于别的租户）答「统一不可见」，什么也不问、不写：释放一次不发、不留痕、不交信封。
+// Covers: AT-PS-163；ADR-0293 决定二、ADR-0003——册上没有这一笔（不存在，或属于别的租户）答「统一不可见」，什么也不问、不写：释放一次不发、不留痕、不交信封。
 // 留痕口说册上无此笔（册读到之后又没了）同答。
 func TestARefusalThatIsNotOnTheTenantsRegisterIsNotVisible(t *testing.T) {
 	for name, arrange := range map[string]func(*refusalHandlingFixture){
@@ -357,7 +357,7 @@ func checkVersion(_ *refusalHandlingFixture, raw string) domain.SubmissionVersio
 	return version
 }
 
-// Covers: ADR-0094 决定四、ADR-0293 决定二——续办信封交不出来整笔失败：错误原样上抛让调用方的事务回滚处理留痕，不答「已处理」。
+// Covers: AT-PS-163；ADR-0094 决定四、ADR-0293 决定二——续办信封交不出来整笔失败：错误原样上抛让调用方的事务回滚处理留痕，不答「已处理」。
 // 读册、读留痕、读判断、取锁、读委托任一步读不动同样上抛，不当成没处理过或没拒收过。
 func TestAFailureAnywhereOnThePathSurfacesAsAnErrorNotAnAnswer(t *testing.T) {
 	boom := errors.New("dependency failed")

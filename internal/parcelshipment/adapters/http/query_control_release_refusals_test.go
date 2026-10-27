@@ -80,7 +80,7 @@ func getRefusals(t *testing.T, intake shipmenthttp.ControlReleaseRefusalQueryInt
 	return response
 }
 
-// Covers: ADR-0293 决定一——清单逐字段透出；租户与页大小取 Intake 交出的、原样递给读口；存下作用域的行带三段，没存的存量行
+// Covers: AT-PS-161；ADR-0293 决定一——清单逐字段透出；租户与页大小取 Intake 交出的、原样递给读口；存下作用域的行带三段，没存的存量行
 // scopeRecorded=false 且没有 occupationScope；清单被页大小截断时 truncated=true 而计数是未处理的全部行数。
 func TestTheRefusalQueryListsUnhandledRowsWithTheirCountAndTruncationFlag(t *testing.T) {
 	reader := &refusalCatalogueDouble{listed: ports.UnhandledControlReleaseRefusals{
@@ -136,7 +136,7 @@ func TestTheRefusalQueryListsUnhandledRowsWithTheirCountAndTruncationFlag(t *tes
 	}
 }
 
-// Covers: ADR-0293 决定一——没有被截断时 truncated=false；空册答空数组而非 null 与零计数（「没有积压」是如实答案）。
+// Covers: AT-PS-161；ADR-0293 决定一——没有被截断时 truncated=false；空册答空数组而非 null 与零计数（「没有积压」是如实答案）。
 func TestTheRefusalQueryAnswersAnEmptyRegisterAsAnEmptyArray(t *testing.T) {
 	reader := &refusalCatalogueDouble{}
 	intake := refusalIntakeDouble{tenant: mustValue(t, domain.NewTenantID, "TENANT-1"), limit: 50}
@@ -147,7 +147,7 @@ func TestTheRefusalQueryAnswersAnEmptyRegisterAsAnEmptyArray(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0029——读不回是答案未形成（500 NO_ANSWER_FORMED），不伪装成空册；Intake 各格原样映射，读口一次也不被调；非 GET 答 405。
+// Covers: AT-PS-161；ADR-0029——读不回是答案未形成（500 NO_ANSWER_FORMED），不伪装成空册；Intake 各格原样映射，读口一次也不被调；非 GET 答 405。
 func TestTheRefusalQueryMapsFailuresToTheirOwnCells(t *testing.T) {
 	tenant := mustValue(t, domain.NewTenantID, "TENANT-1")
 
@@ -204,7 +204,7 @@ func (double *operationsReadAuthenticatorDouble) AuthenticateOperationsRead(_ co
 	return double.tenant, double.err
 }
 
-// Covers: ADR-0100 决定四、ADR-0293 决定一——操作者查阅 Intake 的租户只取自认证结果、页大小是渠道产品策略；认证失败原样交回、不构造查询。
+// Covers: AT-PS-161；ADR-0100 决定四、ADR-0293 决定一——操作者查阅 Intake 的租户只取自认证结果、页大小是渠道产品策略；认证失败原样交回、不构造查询。
 func TestTheOperatorReadIntakeTakesTheRefusalQueryScopeFromTheEnvelopeOnly(t *testing.T) {
 	authenticator := &operationsReadAuthenticatorDouble{tenant: mustValue(t, domain.NewTenantID, "TENANT-9")}
 	intake, err := shipmenthttp.NewOperatorOperationsReadIntake(authenticator)

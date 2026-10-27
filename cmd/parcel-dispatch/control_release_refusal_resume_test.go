@@ -137,7 +137,7 @@ func (fixture *customerSupplementLoopFixture) stuckAfterSupplement(t *testing.T,
 	}
 }
 
-// Covers: ADR-0293 决定二、四；ADR-0282 决定三——核对后在结算侧释放闭环：旧版本那一笔两次被拒收（暂停记册、链开头响亮失败），新版本判不了；册上那一笔经
+// Covers: AT-PS-162、AT-PS-165；ADR-0293 决定二、四；ADR-0282 决定三——核对后在结算侧释放闭环：旧版本那一笔两次被拒收（暂停记册、链开头响亮失败），新版本判不了；册上那一笔经
 // 「在结算侧释放」处理（提供方这一回受理，旧冻结放掉），处理留痕与续办信封同笔落地；续办门拿当前版本再驱一拍，新版本照常占下冻结、接受成立；
 // 同一封重投与绕过 inbox 再驱都幂等。
 func TestHandlingARefusedReleaseAtSettlementResumesTheChainOnTheCurrentVersion(t *testing.T) {
@@ -220,7 +220,7 @@ func TestHandlingARefusedReleaseAtSettlementResumesTheChainOnTheCurrentVersion(t
 	}
 }
 
-// Covers: ADR-0293 决定二、四——标记已处理闭环：控制结果没存作用域的存量行，提供方一律拒收，「在结算侧释放」也放不掉（答再被拒收、什么也没写）；运维在结算侧
+// Covers: AT-PS-165；ADR-0293 决定二、四——标记已处理闭环：控制结果没存作用域的存量行，提供方一律拒收，「在结算侧释放」也放不掉（答再被拒收、什么也没写）；运维在结算侧
 // 手工把旧冻结放掉之后标记已处理，处理留痕与续办信封同笔落地；续办门再驱时，链开头对旧版本再请求一次释放仍被拒收，但认出这一笔人已处理、接着判新版本，
 // 新版本能判、接受成立。
 func TestMarkingAnUnscopedRefusalHandledLetsTheChainJudgeTheNewVersion(t *testing.T) {
@@ -289,7 +289,7 @@ func TestMarkingAnUnscopedRefusalHandledLetsTheChainJudgeTheNewVersion(t *testin
 	}
 }
 
-// Covers: ADR-0282 决定三不变——没有人处理的拒收，哪怕册上有这一行，链开头照旧响亮失败：续办信封只在处理之后才有，没有处理就没有信封，也没有别的东西替链放行。
+// Covers: AT-PS-165；ADR-0282 决定三不变——没有人处理的拒收，哪怕册上有这一行，链开头照旧响亮失败：续办信封只在处理之后才有，没有处理就没有信封，也没有别的东西替链放行。
 func TestAnUnhandledRefusalStillBlocksTheChainOnEveryRedrive(t *testing.T) {
 	control := &synRLateBoundControl{}
 	release := &synRFlakyRelease{refusalsLeft: 1}
