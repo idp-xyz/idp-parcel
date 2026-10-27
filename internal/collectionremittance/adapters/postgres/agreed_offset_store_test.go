@@ -3,6 +3,7 @@ package postgres_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 
@@ -67,21 +68,21 @@ func TestAnAgreedOffsetRoundTripsAndTheDatabaseKeepsOneRowPerApprovalAndInstruct
 		}
 		if outcome, err := collections.RegisterAgreedOffset(ctx, tenant, first); err != nil ||
 			outcome != ports.SaveRegistered {
-			t.Fatalf("登记认可抵扣 = %v（err=%v）", outcome, err)
+			return fmt.Errorf("登记认可抵扣 = %v（err=%v）", outcome, err)
 		}
 		if outcome, err := collections.RegisterAgreedOffset(ctx, tenant, first); err != nil ||
 			outcome != ports.SaveAlreadyRegistered {
-			t.Fatalf("重放登记 = %v（err=%v），要 AlreadyRegistered", outcome, err)
+			return fmt.Errorf("重放登记 = %v（err=%v），要 AlreadyRegistered", outcome, err)
 		}
 		if outcome, err := collections.RegisterAgreedOffset(ctx, tenant,
 			fixtureOffset(t, "SYN-OFFSET-1B", "SYN-INSTR-1", "SYN-SA-APPROVAL-1", 300)); err != nil ||
 			outcome != ports.SaveAlreadyRegistered {
-			t.Fatalf("换标识再登记同一份认可 = %v（err=%v），要 AlreadyRegistered", outcome, err)
+			return fmt.Errorf("换标识再登记同一份认可 = %v（err=%v），要 AlreadyRegistered", outcome, err)
 		}
 		if outcome, err := collections.RegisterAgreedOffset(ctx, tenant,
 			fixtureOffset(t, "SYN-OFFSET-2", "SYN-INSTR-2", "SYN-SA-APPROVAL-1", 300)); err != nil ||
 			outcome != ports.SaveRegistered {
-			t.Fatalf("同认可引用另一条指令 = %v（err=%v），要 Registered", outcome, err)
+			return fmt.Errorf("同认可引用另一条指令 = %v（err=%v），要 Registered", outcome, err)
 		}
 		return nil
 	}); err != nil {
@@ -226,7 +227,7 @@ func TestTheDatabaseKeepsOnePostingPerAgreedOffsetAndOneCorrectionPerOriginal(t 
 				return err
 			}
 			if outcome != step.want {
-				t.Fatalf("%s = %v，要 %v", step.name, outcome, step.want)
+				return fmt.Errorf("%s = %v，要 %v", step.name, outcome, step.want)
 			}
 		}
 		return nil
