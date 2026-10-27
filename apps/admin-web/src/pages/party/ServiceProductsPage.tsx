@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
+import { Button, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { RegistrationPanel } from '../../components/registration';
@@ -21,6 +21,8 @@ import { publicationGroup } from './unsaved-guard';
 import { productKnownVersions } from './known-versions';
 import { closableKeys, closureKeyOf, closureTargetOf, type ClosureTarget } from './version-closure';
 import { VersionClosureDrawer } from './VersionClosureDrawer';
+import { VersionDetailDrawer } from './VersionDetailDrawer';
+import { versionHistoryOf } from './version-history';
 import { serviceProductDraftFromRecord } from './service-product-form';
 import { KeepAliveTabs, KeepAliveTabsContent } from './keep-alive-tabs';
 import { VersionStatusChips } from './VersionStatusChips';
@@ -123,6 +125,8 @@ function ServiceProductVersionsTable({
   const [answer, setAnswer] = useState<ApiResult<ServiceProductListResponseBody> | null>(null);
   // 点行上的「收尾…」：记下是哪一版，抽屉据此重读册面（票 party-commercial-uiux/16）。
   const [closing, setClosing] = useState<ClosureTarget | null>(null);
+  // 点行打开的版本详情：记行键（票 party-commercial-uiux/21）。
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -151,6 +155,8 @@ function ServiceProductVersionsTable({
   );
   const retry = () => setReloadKey((value) => value + 1);
   const closable = closableKeys(answer?.kind === 'outcome' ? productKnownVersions(answer.body) : []);
+  const keyOf = (row: ServiceProductRecord) => `${row.objectId}@${row.version}`;
+  const selected = products.find((row) => keyOf(row) === selectedKey) ?? null;
 
   return (
     <>
@@ -186,7 +192,8 @@ function ServiceProductVersionsTable({
           },
         })}
         rows={visibleProducts}
-        rowKey={(row) => `${row.objectId}@${row.version}`}
+        rowKey={keyOf}
+        onRowClick={(row) => setSelectedKey(keyOf(row))}
         viewState={catalogueViewState(answer, products.length, retry, {
           module: info,
           endpoint: 'GET /commercial-service-products',
@@ -194,6 +201,46 @@ function ServiceProductVersionsTable({
           emptyDescription:
             '还没有发布任何服务产品。在「发布版本」签发布第一个版本；「登记服务形态」签只给已有版本补形态，不产生新版本。',
         })}
+      />
+      <VersionDetailDrawer<ServiceProductRecord>
+        row={selected}
+        columns={columns}
+        title={(row) => ({ objectId: row.objectId, version: row.version })}
+        subtitle={(row) => `服务产品 · 适用范围 ${row.scope}`}
+        status={(row) => row.status}
+        history={(row) => versionHistoryOf(products, row)}
+        currentVersion={(row) => row.version}
+        onSelectVersion={(version) => {
+          const next = products.find((row) => row.objectId === selected?.objectId && row.scope === selected?.scope && row.version === version);
+          if (next) setSelectedKey(keyOf(next));
+        }}
+        actions={(row) => (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setSelectedKey(null);
+                onStartNewVersion(row);
+              }}
+            >
+              发新版本
+            </Button>
+            {closable.has(closureKeyOf(row)) ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSelectedKey(null);
+                  setClosing(closureTargetOf('SERVICE_PRODUCT', '服务产品', row));
+                }}
+              >
+                收尾…
+              </Button>
+            ) : null}
+          </>
+        )}
+        onClose={() => setSelectedKey(null)}
       />
       <VersionClosureDrawer target={closing} onClose={() => setClosing(null)} onClosed={retry} />
     </>

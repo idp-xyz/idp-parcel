@@ -16,6 +16,7 @@ import {
 } from './api';
 import { KeepAliveTabs, KeepAliveTabsContent } from './keep-alive-tabs';
 import { RefLink } from './RefLink';
+import { VersionDetailDrawer } from './VersionDetailDrawer';
 import { problemNote, registrationSnapshotHints, registrationTitles } from './presentation';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
@@ -94,6 +95,8 @@ function ProductChannelMappingTable() {
   // 检索词在地址里（`?q=`）：别处的引用链接带着它过来，筛到那一条；刷新与换标签回来也还在。
   const [search, setSearch] = useAddressKeyword();
   const [reloadKey, setReloadKey] = useState(0);
+  // 点行打开的映射详情：记映射标识（票 party-commercial-uiux/21）。
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [answer, setAnswer] = useState<ApiResult<ProductChannelMappingListResponseBody> | null>(
     null,
   );
@@ -119,33 +122,48 @@ function ProductChannelMappingTable() {
       )
     : mappings;
   const retry = () => setReloadKey((value) => value + 1);
+  const selected = mappings.find((row) => row.mappingId === selectedId) ?? null;
 
   return (
-    <ListPageTemplate<ProductChannelMappingRecord>
-      title={info.title}
-      // 渠道本体还没有读口，渠道只能按标识显示。
-      description="每个服务产品版本可以走哪些渠道；每条映射显示最新一笔登记修订，渠道暂以标识显示。"
-      search={{
-        value: search,
-        onChange: setSearch,
-        placeholder: '搜索映射、服务产品或渠道引用',
-      }}
-      filterSummary={
-        // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 笔」会与状态区
-        // 「这不是目录为空」直接矛盾（README 列表页上列通则第六条）。
-        answer?.kind === 'outcome' ? `当前返回 ${mappings.length} 笔映射` : undefined
-      }
-      columns={columns}
-      rows={visibleMappings}
-      rowKey={(row) => row.mappingId}
-      viewState={catalogueViewState(answer, mappings.length, retry, {
-        module: info,
-        endpoint: 'GET /commercial-product-channel-mappings',
-        emptyTitle: '当前租户尚无产品—渠道映射登记',
-        emptyDescription:
-          '还没有登记任何产品—渠道映射。在「登记映射」签登记第一条；本页不会预置映射或渠道候选。',
-      })}
-    />
+    <>
+      <ListPageTemplate<ProductChannelMappingRecord>
+        title={info.title}
+        // 渠道本体还没有读口，渠道只能按标识显示。
+        description="每个服务产品版本可以走哪些渠道；每条映射显示最新一笔登记修订，渠道暂以标识显示。"
+        search={{
+          value: search,
+          onChange: setSearch,
+          placeholder: '搜索映射、服务产品或渠道引用',
+        }}
+        filterSummary={
+          // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 笔」会与状态区
+          // 「这不是目录为空」直接矛盾（README 列表页上列通则第六条）。
+          answer?.kind === 'outcome' ? `当前返回 ${mappings.length} 笔映射` : undefined
+        }
+        columns={columns}
+        rows={visibleMappings}
+        rowKey={(row) => row.mappingId}
+        onRowClick={(row) => setSelectedId(row.mappingId)}
+        viewState={catalogueViewState(answer, mappings.length, retry, {
+          module: info,
+          endpoint: 'GET /commercial-product-channel-mappings',
+          emptyTitle: '当前租户尚无产品—渠道映射登记',
+          emptyDescription:
+            '还没有登记任何产品—渠道映射。在「登记映射」签登记第一条；本页不会预置映射或渠道候选。',
+        })}
+      />
+      <VersionDetailDrawer<ProductChannelMappingRecord>
+        row={selected}
+        columns={columns}
+        title={(row) => ({ objectId: row.mappingId, version: `第 ${row.revision} 修订` })}
+        subtitle={(row) => `产品—渠道映射 · 服务产品 ${row.productObjectId} ${row.productVersionLabel}`}
+        history={() => []}
+        currentVersion={(row) => String(row.revision)}
+        onSelectVersion={() => {}}
+        emptyHistoryNote="映射按修订推进，目录只给最新一笔修订，之前各笔的读口还没有；要在这里看历史需要后端补读口。"
+        onClose={() => setSelectedId(null)}
+      />
+    </>
   );
 }
 

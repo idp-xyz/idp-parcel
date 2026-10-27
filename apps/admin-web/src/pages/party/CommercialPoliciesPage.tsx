@@ -23,6 +23,8 @@ import { publicationGroup } from './unsaved-guard';
 import { policyKnownVersions } from './known-versions';
 import { closableKeys, closureKeyOf, closureTargetOf, type ClosureTarget } from './version-closure';
 import { VersionClosureDrawer } from './VersionClosureDrawer';
+import { VersionDetailDrawer } from './VersionDetailDrawer';
+import { versionHistoryOf } from './version-history';
 import { acceptanceRulePackageDraftFromRecord } from './acceptance-rule-package-form';
 import { authorizationRuleDraftFromRecord } from './authorization-rule-form';
 import { creditPolicyDraftFromRecord } from './credit-policy-form';
@@ -118,6 +120,8 @@ function PolicyRegisters({
   const [reloadKey, setReloadKey] = useState(0);
   // 点行上的「收尾…」：记下是哪一版，抽屉据此重读册面（票 party-commercial-uiux/16）。
   const [closing, setClosing] = useState<ClosureTarget | null>(null);
+  // 点行打开的版本详情：记行键（票 party-commercial-uiux/21）。
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [loaded, setLoaded] = useState<{
     kind: CommercialPolicyKind;
     answer: ApiResult<CommercialPolicyListResponseBody>;
@@ -149,6 +153,10 @@ function PolicyRegisters({
   );
   const retry = () => setReloadKey((value) => value + 1);
   const closable = closableKeys(answer?.kind === 'outcome' ? policyKnownVersions(answer.body) : []);
+  // 目录表与详情抽屉用同一份列（引用链接与状态徽章已套好）。
+  const detailColumns = withRefLinks(withStatusBadge(kindColumns[kind]), directory);
+  const selected = rows.find((row) => row.key === selectedKey) ?? null;
+  const historyPool = rows.flatMap((row) => (row.source ? [row.source.record] : []));
 
   return (
     <>
@@ -174,7 +182,7 @@ function PolicyRegisters({
           ) : undefined
         }
         emptyRowsNote="这组条件下没有匹配的行"
-        columns={withNewVersionAction(withRefLinks(withStatusBadge(kindColumns[kind]), directory), {
+        columns={withNewVersionAction(detailColumns, {
           // 随所属版本发布的两本册没有自己的发布表单，行上没有来源记录，也就没有按钮。
           canStart: (row) => row.source !== undefined,
           labelOf: (row) => `${policyKindLabels[kind]} ${row.version?.objectId ?? ''} ${row.version?.version ?? ''}`.trim(),
@@ -192,12 +200,58 @@ function PolicyRegisters({
         })}
         rows={visibleRows}
         rowKey={(row) => row.key}
+        onRowClick={(row) => setSelectedKey(row.key)}
         viewState={catalogueViewState(answer, rows.length, retry, {
           module: info,
           endpoint: `GET /commercial-policies?kind=${kind}`,
           emptyTitle: `当前租户尚无${policyKindLabels[kind]}`,
           emptyDescription: '这本册还没有任何版本；本页不会替你生成默认政策。',
         })}
+      />
+      <VersionDetailDrawer<PolicyRow>
+        row={selected}
+        columns={detailColumns}
+        title={(row) => ({ objectId: row.version?.objectId ?? row.key, version: row.version?.version ?? '' })}
+        subtitle={(row) => `${policyKindLabels[kind]}${row.source && 'scope' in row.source.record ? ` · 适用范围 ${row.source.record.scope}` : ''}`}
+        status={(row) => row.version?.status}
+        history={(row) => (row.source ? versionHistoryOf(historyPool, row.source.record) : [])}
+        currentVersion={(row) => row.version?.version ?? ''}
+        onSelectVersion={(version) => {
+          const next = rows.find((row) => row.version?.objectId === selected?.version?.objectId && row.version?.version === version);
+          if (next) setSelectedKey(next.key);
+        }}
+        actions={(row) => {
+          const target = policyClosureTarget(row.source);
+          return (
+            <>
+              {row.source ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedKey(null);
+                    if (row.source) onStartNewVersion(row.source);
+                  }}
+                >
+                  发新版本
+                </Button>
+              ) : null}
+              {target !== null && closable.has(closureKeyOf(target)) ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedKey(null);
+                    setClosing(target);
+                  }}
+                >
+                  收尾…
+                </Button>
+              ) : null}
+            </>
+          );
+        }}
+        onClose={() => setSelectedKey(null)}
       />
       <VersionClosureDrawer target={closing} onClose={() => setClosing(null)} onClosed={retry} />
     </>

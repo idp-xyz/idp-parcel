@@ -1,7 +1,7 @@
 # 参与方与商业区 UI/UX 评估与跟进
 
 Category: enhancement
-Status: resolved——第一段 01–06、第二段 07–20 resolved；第二段其余与第三段仍在「后续」，未拆票
+Status: resolved——第一段 01–06、第二段 07–21 resolved；第三段（要后端）仍在「后续」，未拆票
 
 出处：2026-10-25，用户在会话里要求「评估 commercial party 的 UI/UX」，读完评估后说「按你建议的顺序开始」。建议的顺序是：先改文案和组件（成本低），再做要设计的，最后是要后端配合的。本批先落第一段，第二、三段列在「后续」，等第一段收口后再拆票。
 
@@ -43,7 +43,7 @@ Status: resolved——第一段 01–06、第二段 07–20 resolved；第二段
 第二段，要设计，本批收口后再拆票：
 
 - ~~引用一律显示「名称 + 标识」并可点到对象页~~ → [07](issues/07-references-are-links-with-names.md)。
-- ~~商业版本按对象分组、标出在用版本~~ → [08](issues/08-versions-grouped-with-in-use-filter.md)；合同、协议、产品、映射、政策 5 页行可点开详情与版本历史仍在后续。
+- ~~商业版本按对象分组、标出在用版本~~ → [08](issues/08-versions-grouped-with-in-use-filter.md)；~~合同、协议、产品、映射、政策 5 页行可点开详情与版本历史~~ → [21](issues/21-row-detail-and-version-history.md)，映射的历史修订要后端补读口，仍在后续。
 - ~~发布表单统一时刻控件~~ → [10](issues/10-publication-moments-in-local-time.md)。
 - ~~引用他物的格一律用选择器~~ → [13](issues/13-references-picked-not-typed.md)；~~候选多时的可搜索选单~~ → [20](issues/20-searchable-pickers.md)。
 - ~~发布前给人读得懂的预览卡与确认框~~ → [11](issues/11-readable-preview-and-publish-confirmation.md)；~~正文各册的可读摘要卡、批准与发布分开按钮区~~ → [19](issues/19-decision-area-and-body-summary.md)。
@@ -59,11 +59,12 @@ Status: resolved——第一段 01–06、第二段 07–20 resolved；第二段
 - 客户合同读口带出货主客户账户与责任法人，列表才能有「客户」一列。
 - 待批准发布的列表与读回口，批准人才能接手别人存的稿；批准、发布带期望内容摘要，防并发时批到别人的稿。
 - 管理台按操作者授予隐藏写入口（今天查阅员也看得到全部发布与登记入口，提交才被拒）。
-- 服务产品、客户合同、授权规则、接受前财务控制策略、客户服务规则的目录读面回显截止点（供应商协议已有 `selectionEndsAt`），收尾后目录才不再显原区间、「收尾…」按钮与 15 的重叠提示才会随之消失。 → 另立票 [demo-chain-gaps/184](../demo-chain-gaps/issues/184-five-commercial-catalogues-do-not-echo-the-cut-of-a-closed-version.md)。
+- ~~服务产品、客户合同、授权规则、接受前财务控制策略、客户服务规则的目录读面回显截止点~~ → [demo-chain-gaps/184](../demo-chain-gaps/issues/184-five-commercial-catalogues-do-not-echo-the-cut-of-a-closed-version.md)，已进 main。
+- 产品—渠道映射的历史修订读口（目录只给最新一笔修订）：有了，渠道产品目录页行详情里的历史栏才能列出之前各笔。
 
 ## 子票
 
-01–20 只改 `apps/admin-web` 与本票面，走 [workflow.md「前端切片」](../../docs/agents/workflow.md#前端切片一人在-main-上直接做)。与上一节的差别一处：当时有别的会话在主树上做合入，本批在独立 worktree（第一段 `idp-parcel-pcux`，第二段 `idp-parcel-pcux2`、`idp-parcel-pcux3`、`idp-parcel-pcux4`、`idp-parcel-pcux5`、`idp-parcel-pcux6`、`idp-parcel-pcux7`、`idp-parcel-pcux8`、`idp-parcel-pcux9`）上做，每笔先 rebase 到 `origin/main` 再推确切 SHA，不碰主树。
+01–21 只改 `apps/admin-web` 与本票面，走 [workflow.md「前端切片」](../../docs/agents/workflow.md#前端切片一人在-main-上直接做)。与上一节的差别一处：当时有别的会话在主树上做合入，本批在独立 worktree（第一段 `idp-parcel-pcux`，第二段 `idp-parcel-pcux2`、`idp-parcel-pcux3`、`idp-parcel-pcux4`、`idp-parcel-pcux5`、`idp-parcel-pcux6`、`idp-parcel-pcux7`、`idp-parcel-pcux8`、`idp-parcel-pcux9`）上做，每笔先 rebase 到 `origin/main` 再推确切 SHA，不碰主树。
 
 | # | 票 | 阻塞于 | 状态 |
 |---|---|---|---|
@@ -87,6 +88,7 @@ Status: resolved——第一段 01–06、第二段 07–20 resolved；第二段
 | 18 | [接入态、拒绝态与登记签里的接口路径、错误码、文档出处收进「技术详情」](issues/18-technical-details-folded.md) | — | resolved |
 | 19 | [发布流程：批准与发布分开按钮区，预览卡加各册正文要点](issues/19-decision-area-and-body-summary.md) | — | resolved |
 | 20 | [候选多时，引用选单可以搜索](issues/20-searchable-pickers.md) | — | resolved |
+| 21 | [目录行点开详情，带这个对象的版本历史](issues/21-row-detail-and-version-history.md) | — | resolved |
 
 ## 界面用词对照（本批各票共用）
 

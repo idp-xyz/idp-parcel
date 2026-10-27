@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
+import { Button, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { ListPageTemplate } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../catalogue-api';
@@ -31,6 +31,8 @@ import { SupplierAgreementPublicationForm } from './SupplierAgreementPublication
 import { agreementKnownVersions } from './known-versions';
 import { closableKeys, closureKeyOf, closureTargetOf, type ClosureTarget } from './version-closure';
 import { VersionClosureDrawer } from './VersionClosureDrawer';
+import { VersionDetailDrawer } from './VersionDetailDrawer';
+import { versionHistoryOf } from './version-history';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['supplier-agreements'];
@@ -59,6 +61,8 @@ function SupplierAgreementCatalogue({
   const [answer, setAnswer] = useState<ApiResult<SupplierAgreementListResponseBody> | null>(null);
   // 点行上的「收尾…」：记下是哪一版，抽屉据此重读册面（票 party-commercial-uiux/16）。
   const [closing, setClosing] = useState<ClosureTarget | null>(null);
+  // 点行打开的版本详情：记行键（票 party-commercial-uiux/21）。
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -87,6 +91,9 @@ function SupplierAgreementCatalogue({
   );
   const retry = () => setReloadKey((value) => value + 1);
   const closable = closableKeys(answer?.kind === 'outcome' ? agreementKnownVersions(answer.body) : []);
+  // 目录表与详情抽屉用同一份列（引用链接与状态徽章已套好）。
+  const detailColumns = withRefLinks(withStatusBadge(supplierAgreementColumns), directory);
+  const selected = rows.find((row) => row.key === selectedKey) ?? null;
 
   return (
     <>
@@ -113,7 +120,7 @@ function SupplierAgreementCatalogue({
           ) : undefined
         }
         emptyRowsNote="这组条件下没有匹配的协议版本"
-        columns={withNewVersionAction(withRefLinks(withStatusBadge(supplierAgreementColumns), directory), {
+        columns={withNewVersionAction(detailColumns, {
           labelOf: (row) => `供应商协议 ${row.version.objectId} ${row.version.version}`,
           onStart: (row) => onStartNewVersion(row.source),
           closure: {
@@ -123,12 +130,58 @@ function SupplierAgreementCatalogue({
         })}
         rows={visibleRows}
         rowKey={(row) => row.key}
+        onRowClick={(row) => setSelectedKey(row.key)}
         viewState={catalogueViewState(answer, rows.length, retry, {
           module: info,
           endpoint: 'GET /commercial-supplier-agreements',
           emptyTitle: '当前租户尚无供应商协议版本',
           emptyDescription: '还没有任何供应商协议。在「发布协议版本」签发布第一份；本页不会预置供应商或采购条件。',
         })}
+      />
+      <VersionDetailDrawer<SupplierAgreementRow>
+        row={selected}
+        columns={detailColumns}
+        title={(row) => ({ objectId: row.source.objectId, version: row.source.version })}
+        subtitle={(row) => `供应商协议 · 适用范围 ${row.source.scope}`}
+        status={(row) => row.source.status}
+        history={(row) => versionHistoryOf(rows.map((candidate) => candidate.source), row.source)}
+        currentVersion={(row) => row.source.version}
+        onSelectVersion={(version) => {
+          const next = rows.find(
+            (row) =>
+              row.source.objectId === selected?.source.objectId &&
+              row.source.scope === selected?.source.scope &&
+              row.source.version === version,
+          );
+          if (next) setSelectedKey(next.key);
+        }}
+        actions={(row) => (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setSelectedKey(null);
+                onStartNewVersion(row.source);
+              }}
+            >
+              发新版本
+            </Button>
+            {closable.has(closureKeyOf(row.source)) ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSelectedKey(null);
+                  setClosing(closureTargetOf('SUPPLIER_AGREEMENT', '供应商协议', row.source));
+                }}
+              >
+                收尾…
+              </Button>
+            ) : null}
+          </>
+        )}
+        onClose={() => setSelectedKey(null)}
       />
       <VersionClosureDrawer target={closing} onClose={() => setClosing(null)} onClosed={retry} />
     </>

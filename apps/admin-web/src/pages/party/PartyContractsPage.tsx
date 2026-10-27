@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
+import { Button, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, useAddressKeyword, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { RegistrationPanel } from '../../components/registration';
@@ -14,6 +14,8 @@ import { publicationGroup } from './unsaved-guard';
 import { contractKnownVersions } from './known-versions';
 import { closableKeys, closureKeyOf, closureTargetOf, type ClosureTarget } from './version-closure';
 import { VersionClosureDrawer } from './VersionClosureDrawer';
+import { VersionDetailDrawer } from './VersionDetailDrawer';
+import { versionHistoryOf } from './version-history';
 import { customerContractDraftFromRecord } from './customer-contract-form';
 import { KeepAliveTabs, KeepAliveTabsContent } from './keep-alive-tabs';
 import { VersionStatusChips } from './VersionStatusChips';
@@ -172,6 +174,8 @@ function CustomerContractsTable({
   const [answer, setAnswer] = useState<ApiResult<CustomerContractListResponseBody> | null>(null);
   // 点行上的「收尾…」：记下是哪一版，抽屉据此重读册面（票 party-commercial-uiux/16）。
   const [closing, setClosing] = useState<ClosureTarget | null>(null);
+  // 点行打开的版本详情：记行键（票 party-commercial-uiux/21）。
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -201,6 +205,8 @@ function CustomerContractsTable({
   );
   const retry = () => setReloadKey((value) => value + 1);
   const closable = closableKeys(answer?.kind === 'outcome' ? contractKnownVersions(answer.body) : []);
+  const keyOf = (row: CustomerContractRecord) => `${row.objectId}@${row.version}`;
+  const selected = contracts.find((row) => keyOf(row) === selectedKey) ?? null;
 
   return (
     <>
@@ -240,13 +246,54 @@ function CustomerContractsTable({
           },
         })}
         rows={visibleContracts}
-        rowKey={(row) => `${row.objectId}@${row.version}`}
+        rowKey={keyOf}
+        onRowClick={(row) => setSelectedKey(keyOf(row))}
         viewState={catalogueViewState(answer, contracts.length, retry, {
           module: info,
           endpoint: 'GET /commercial-customer-contracts',
           emptyTitle: '当前租户尚无客户合同版本',
           emptyDescription: '还没有发布任何客户合同。在「发布合同版本」签发布第一份；本页不会预置合同。',
         })}
+      />
+      <VersionDetailDrawer<CustomerContractRecord>
+        row={selected}
+        columns={columns}
+        title={(row) => ({ objectId: row.objectId, version: row.version })}
+        subtitle={(row) => `客户合同 · 适用范围 ${row.scope}`}
+        status={(row) => row.status}
+        history={(row) => versionHistoryOf(contracts, row)}
+        currentVersion={(row) => row.version}
+        onSelectVersion={(version) => {
+          const next = contracts.find((row) => row.objectId === selected?.objectId && row.scope === selected?.scope && row.version === version);
+          if (next) setSelectedKey(keyOf(next));
+        }}
+        actions={(row) => (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setSelectedKey(null);
+                onStartNewVersion(row);
+              }}
+            >
+              发新版本
+            </Button>
+            {closable.has(closureKeyOf(row)) ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSelectedKey(null);
+                  setClosing(closureTargetOf('CUSTOMER_CONTRACT', '客户合同', row));
+                }}
+              >
+                收尾…
+              </Button>
+            ) : null}
+          </>
+        )}
+        onClose={() => setSelectedKey(null)}
       />
       <VersionClosureDrawer target={closing} onClose={() => setClosing(null)} onClosed={retry} />
     </>
