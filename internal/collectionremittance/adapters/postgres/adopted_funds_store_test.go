@@ -3,6 +3,7 @@ package postgres_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -255,6 +256,8 @@ func TestTheFundsReferenceLockQueuesRegistrationsOfOneFactOnly(t *testing.T) {
 
 	holding := make(chan struct{})
 	release := make(chan struct{})
+	releaseHolder := sync.OnceFunc(func() { close(release) })
+	defer releaseHolder() // 断言失败提前退出时也要放持锁方，否则它握着连接，收尾关池就挂住
 	holderDone := make(chan error, 1)
 	go func() {
 		holderDone <- db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
@@ -295,7 +298,7 @@ func TestTheFundsReferenceLockQueuesRegistrationsOfOneFactOnly(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	close(release)
+	releaseHolder()
 	if err := <-holderDone; err != nil {
 		t.Fatalf("持锁方：%v", err)
 	}

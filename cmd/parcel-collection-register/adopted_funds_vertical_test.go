@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // 本文件在真实 PostgreSQL 上证运营企业真实到账凭 settlement-accounting 已采用事实登记的整条链（ADR-0274、ADR-0330，
@@ -247,5 +248,70 @@ func TestTheSameArrivalArrivingTwiceConcurrentlyIsRegisteredOnce(t *testing.T) {
 	scalar(t, rig, `SELECT count(*) FROM collection_remittance.collection_fact WHERE fact_ref = 'SYN-FACT-A'`, &facts)
 	if facts != 1 {
 		t.Fatalf("册上 %d 条，要 1", facts)
+	}
+}
+
+// Covers: AT-CR-026（并发半边）——两路各为不同指令登记 600.00 的到账，引用同一条 1000.00 的已采用事实，容不下两条。屏障连接先占住
+// 这条事实在本上下文的事务锁，等看见两路都等在咨询锁上才放——证的是两路确实被锁挡在读合计之前，而不是碰巧先后跑。放开后先拿到
+// 锁的登记，另一路读到的合计已含它，答内容冲突；册上合计不超过事实金额。
+func TestTwoArrivalsThatCannotBothFitAreQueuedOnTheFundsLock(t *testing.T) {
+	rig := newConcurrencyRig(t)
+	if _, code := execute(t.Context(), commandSubledger, []byte(openLedgerInput()), rig.registrar); code != exitRegistered {
+		t.Fatal("开账失败")
+	}
+	for _, ref := range []string{"SYN-INSTR-A", "SYN-INSTR-B"} {
+		if _, code := execute(t.Context(), commandInstruction, []byte(instructionInput(ref, "60000")), rig.registrar); code != exitRegistered {
+			t.Fatalf("登记指令 %s 失败", ref)
+		}
+	}
+	seedPrincipalFunds(t, rig.pool, "SYN-BANK-RECEIPT-RACE", "EUR", 100000)
+
+	barrier := rig.newConn(t)
+	watcher := rig.newConn(t)
+	tx, err := barrier.Begin(t.Context())
+	if err != nil {
+		t.Fatalf("开屏障事务：%v", err)
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	if _, err := tx.Exec(t.Context(),
+		`SELECT pg_advisory_xact_lock(hashtext('collection_remittance.collection_fact.adopted_funds'),
+		        hashtext('SYN-T1' || chr(31) || 'SYN-BANK-RECEIPT-RACE'))`,
+	); err != nil {
+		t.Fatalf("屏障取锁：%v", err)
+	}
+
+	codes := make([]int, 2)
+	var group sync.WaitGroup
+	for index, ref := range []string{"A", "B"} {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			_, codes[index] = execute(context.Background(), commandFact,
+				[]byte(arrivalInput("SYN-FACT-"+ref, "SYN-INSTR-"+ref, "SYN-BANK-RECEIPT-RACE", "60000")), rig.registrar)
+		}()
+	}
+	sawBoth := waitForLockWaiters(watcher, "advisory", 2, 10*time.Second)
+	if err := tx.Commit(t.Context()); err != nil {
+		t.Fatalf("放屏障：%v", err)
+	}
+	group.Wait()
+	if !sawBoth {
+		t.Fatal("两路登记没有都等在事实锁上：读合计之前没有锁")
+	}
+
+	registered, conflicts := 0, 0
+	for _, code := range codes {
+		switch code {
+		case exitRegistered:
+			registered++
+		case exitNeedsReview:
+			conflicts++
+		}
+	}
+	var total int64
+	scalar(t, rig, `SELECT COALESCE(SUM(amount_minor), 0)::bigint FROM collection_remittance.collection_fact
+	                 WHERE source_layer = 'OPERATOR_BANK_CREDIT'`, &total)
+	if registered != 1 || conflicts != 1 || total != 60000 {
+		t.Fatalf("两路登记退出码 = %v，册上合计 %d；要一路 0、一路 2、合计 60000", codes, total)
 	}
 }

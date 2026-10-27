@@ -229,6 +229,8 @@ func TestTheCollectedPrincipalViewHoldsOffAnExternalCorrectionUntilTheReaderComm
 
 	locked := make(chan struct{})
 	release := make(chan struct{})
+	releaseReader := sync.OnceFunc(func() { close(release) })
+	defer releaseReader() // 断言失败提前退出时也要放读方，否则它握着连接，收尾关池就挂住
 	readerDone := make(chan error, 1)
 	var readAmount int64
 	go func() {
@@ -279,7 +281,7 @@ func TestTheCollectedPrincipalViewHoldsOffAnExternalCorrectionUntilTheReaderComm
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	close(release)
+	releaseReader()
 	if err := <-readerDone; err != nil {
 		t.Fatalf("读方事务：%v", err)
 	}

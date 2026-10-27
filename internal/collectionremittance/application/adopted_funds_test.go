@@ -377,3 +377,48 @@ func wantAwaitingAllocation(t *testing.T, store *storeDouble, want int64) {
 		t.Fatalf("待清分 = %d，要 %d", got, want)
 	}
 }
+
+// Covers: AT-CR-026——重放先于一切要依赖的门：已登记的到账重放时，取锁失败或没装配结算读口也答已在册（答案只由在册记录定），
+// 改了内容答内容冲突；新到账则答未决——没有读结算的口就验不了证据。
+func TestAReplayIsAnsweredFromTheBookEvenWhenTheDependenciesAreDown(t *testing.T) {
+	store, handler := armedWithInstructions(t, "SYN-INSTR-1", "SYN-INSTR-2")
+	store.adoptFunds(t, fundsRef, 100_000)
+	arrival := arrivalOn(t, "SYN-FACT-A", "SYN-INSTR-1", fundsRef, 60_000)
+	wantOutcome(t, acceptArrival(t, handler, arrival), application.OutcomeRegistered, "首次")
+
+	store.writeErr = errors.New("lock unavailable")
+	wantOutcome(t, acceptArrival(t, handler, arrival), application.OutcomeExisting, "取锁不可用时的重放")
+	wantOutcome(t, acceptArrival(t, handler, arrivalOn(t, "SYN-FACT-A", "SYN-INSTR-1", fundsRef, 50_000)),
+		application.OutcomeContentConflict, "取锁不可用时同标识改金额")
+	store.writeErr = nil
+
+	deps := store.deps()
+	deps.AdoptedFunds = nil
+	unwired := application.NewHandler(deps)
+	wantOutcome(t, acceptArrival(t, unwired, arrival), application.OutcomeExisting, "没装配结算读口时的重放")
+	wantOutcome(t, acceptArrival(t, unwired, arrivalOn(t, "SYN-FACT-B", "SYN-INSTR-2", fundsRef, 40_000)),
+		application.OutcomeUndecided, "没装配结算读口时的新到账")
+	if _, found, _ := store.LoadCollectionFact(t.Context(), tenantID(t), mustFactID(t, "SYN-FACT-B")); found {
+		t.Fatal("没装配读口仍落了册")
+	}
+}
+
+// Covers: AT-CR-026——同一份到账并发到达：等锁期间先到的那一路已登记、结算又把事实更正小了，后到的一路在锁后先判重放，
+// 答已在册，而不是把自己当第二条拿去撞更正后的合计答内容冲突。
+func TestASameArrivalCommittedWhileWaitingForTheLockIsAnsweredExisting(t *testing.T) {
+	store, handler := armedWithInstructions(t, "SYN-INSTR-1")
+	store.adoptFunds(t, fundsRef, 100_000)
+	arrival := arrivalOn(t, "SYN-FACT-A", "SYN-INSTR-1", fundsRef, 60_000)
+
+	store.afterFundsLock = func() {
+		pinned, err := arrival.PinnedToAdoptedFunds(mustVersion(t, fundsRef+"/v1"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := store.registerForTest(pinned); err != nil {
+			t.Fatalf("先到的那一路落册：%v", err)
+		}
+		store.adoptFundsVersion(t, fundsRef, fundsRef+"/v2", 50_000)
+	}
+	wantOutcome(t, acceptArrival(t, handler, arrival), application.OutcomeExisting, "等锁期间同一份已由别路登记")
+}
