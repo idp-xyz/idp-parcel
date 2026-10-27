@@ -46,8 +46,8 @@ S–M，取决于取法。
 
 ### 提交
 
-- `29d37ad78` fix(network-routing)：领域 `PlanApplicability.NotYetEffectiveAt`、端口新未判原因与 `NotJudgedTrigger.PlanEffectiveAt`、复核编排分流、未判登记适配器核对、迁移 `network_routing/0031_route_reassessment_not_judged_before_plan_effective.sql`、全部用例（含 `cmd/parcel-dispatch` 真库端到端）。
-- `01aecca6a` docs(adr)：ADR-0292（取预留号），ADR-0235 / 0284 / 0309 的 Status 注记与 Links，NR CONTEXT 一句，UC-NR-003（结果行、一致性一条、AT-NR-104 / 105、「给开发的交接」撤一行），AT 盘点分桶表两行与一段追记。
+- `e1ba10d2e` fix(network-routing)：领域 `PlanApplicability.NotYetEffectiveAt`、端口新未判原因与 `NotJudgedTrigger.PlanEffectiveAt`、复核编排分流、未判登记适配器核对、迁移 `network_routing/0031_route_reassessment_not_judged_before_plan_effective.sql`、全部用例（含 `cmd/parcel-dispatch` 真库端到端）。
+- `f9fb6b609` docs(adr)：ADR-0292（取预留号），ADR-0235 / 0284 / 0309 的 Status 注记与 Links，NR CONTEXT 一句，UC-NR-003（结果行、一致性一条、AT-NR-104 / 105、「给开发的交接」撤一行），AT 盘点分桶表两行与一段追记。
 
 ### 裁向与新未判原因
 
