@@ -1,7 +1,7 @@
 # 55 SA 把评价命中的价卡版本叫「采购规则版本」，注释还说它是 GLOSSARY「价格规则版本」的 PP 半边
 
 Category: chore
-Status: in-progress——完工待评审与进 main，分支 claude-cmtB
+Status: resolved——2026-10-27 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-cmtB
 Blocked by: 无
 出处：[audit/cross.md](../audit/cross.md) GL·G-02（归 A，附带代码命名与注释的跟改；修订票不改代码，故立本票）。
 
@@ -61,3 +61,9 @@ S：类型与构造函数改名为可执行价卡版本一类的词（例如 `Pr
 - 评审可合入：38、40、45 三个提交的每个改动的 `.go` 文件语法树完全相同；55 的 7 个文件差异全是 `ruleVersion` → `priceCardVersion` 的私有标识符重命名；38 条新增引文机械核对 36 条逐字相同，另 2 条是带省略号的前缀引文与假想读者的一句话；新增的 ADR/UC/AT 指针逐条核过。
 - 修了评审点出的两处注释（位置词「下面那个 default」、不支撑断言的 ADR-0026 指针）和一处「所以名字没有单独动」的变更叙述；在 `RuleVersion()` 访问器上补了一行注释指向类型注释；管理台结算费用册的栏头与两处说明由「采购规则版本」改为「价卡版本」（只改展示文字，报文字段 `purchaseRuleVersion` 不动）。
 - 协调方裁定：导出类型 `PurchaseRuleVersionReference`、报文字段 `purchaseRuleVersion`、库列 `purchase_rule_version`、`ports.SupplierExpectedCostCatalogueRow.PurchaseRuleVersion` 保留旧名，不做改名。理由：它们是对外契约与已施加的迁移，改名要一条新迁移、十几个文件与一次报文变更，换来的只是名字一致；误导读码者的根源（注释把它说成 PC 的采购价格政策）已由注释订正，类型注释与访问器注释都直说它是 parcel-pricing 的定价方案版本。以后若有一次因别的原因要动这几处的契约，再顺手改名。
+
+## 进 main 记录（2026-10-27，协调方）
+
+- 分支 `claude-cmtB` 与 code/38、40、45、55 同批，由协调方快进，tip `c6f983ea2`；隔离评审（Sonnet）可合入，无阻断：每个改动的 `.go` 文件在去掉注释后语法树逐个比对（程序放评审私有目录，对有代码变动的老提交试过会报差异），38、40、45 三个提交 0 差异；新增的 38 条带引号或「」的引文机械核了 36 条逐字相同，另 2 条是带省略号的前缀引文与一句假想读者的话；新增的 ADR、UC、AT 指针逐条核过。协调方单独提交重算的 AT 计数、重生成的 ADR 索引与机制清点（本批无变动）；全量 `scripts/test-full.sh` 退 0、159 个包 ok；`go build ./...`、`go vet ./...` 干净；管理台 `tsc -b --noEmit`、`node scripts/run-tests.mjs`（803 过）、`vite build` 与 `./internal/architecture/...` 全过。无迁移、无新 ADR、无 AT 号变化。
+- 本票只改注释与私有名（`ruleVersion` → `priceCardVersion`，评审语法树比对确认差异仅限 7 个文件的私有标识符），导出类型 `PurchaseRuleVersionReference`、报文字段 `purchaseRuleVersion`、库列 `purchase_rule_version`、`ports.SupplierExpectedCostCatalogueRow.PurchaseRuleVersion` 保留旧名——协调方裁定不改名：它们是对外契约与已施加的迁移，改名要一条新迁移、十几个文件与一次报文变更，换来的只是名字一致；误导读码者的根源（注释把它说成 PC 的采购价格政策）已由注释订正，类型注释与访问器注释都直说它是 parcel-pricing 的定价方案版本。协调方另把管理台结算费用册的栏头与两处说明由「采购规则版本」改为「价卡版本」（只改展示文字）。
+- 去向：无新票。
