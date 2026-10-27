@@ -1,7 +1,7 @@
 # 74 身份后来才成立的集运成员，永远拿不到它随袋走过的那条移动事实
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-code74。原状态 needs-triage——R2（上线后尽快）：袋里一件待识别或身份冲突的实物随袋出发，识别成功之后追踪上永远缺这一条出发。2026-10-21 协调方据票 demo-chain-gaps/123 隔离评审立（作者子代理代笔）。
+Status: resolved——2026-10-27 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code74。原状态 needs-triage——R2（上线后尽快）：袋里一件待识别或身份冲突的实物随袋出发，识别成功之后追踪上永远缺这一条出发。2026-10-21 协调方据票 demo-chain-gaps/123 隔离评审立（作者子代理代笔）。
 Blocked by: 无（「要裁的」第一条裁为另立 ADR-0299，已先接受）
 上下文：VE（全程追踪）、NO（集运成员、收寄身份）。
 出处：票 [demo-chain-gaps/123](../../demo-chain-gaps/issues/123-tracking-projects-a-departing-bag-as-one-parcel-and-its-members-get-no-departure.md) 完成记录越权风险点 4。
@@ -90,3 +90,12 @@ Blocked by: 无（「要裁的」第一条裁为另立 ADR-0299，已先接受�
 - **评审信息项摘录**：(1) 身份被纠正成另一件包裹之后，旧包裹上已补的出发不撤，要撤需 NO 交出身份纠正信封，属另立，不在本票（越权风险点 3 同）。(2) 读量最坏量级：袋大小 n=300、声明事实数 F=6 时一封信约 1.8k 次点读（F×n）；批量重核 50 封约 10⁵ 次（越权风险点 2 同，优化方向是 NO 加时点反向读口，本票不取）。
 
 修订轮验证：`gofmt -l` 无输出，`go build ./... && go vet ./...` 干净；前台 `scripts/test-full.sh ./internal/nodeoperations/... ./internal/visibilityexception/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./internal/architecture/... ./migrations/...` 30 个包 ok、0 FAIL；新用例 `-count=3` 绿；`adr-index -check`、`at-coverage-counts -check` 均退 1（只是生成物过期，非缺行的 2）；迁移注释改动后一次性库灌演示种子 `seed.sh` 退 0、索引在册，用后 `DROP DATABASE … WITH (FORCE)`。分支已与 origin/main（`cc6744830`）对齐，rebase 退 0。
+
+## 进 main 记录（2026-10-27，协调方）
+
+- 分支 `claude-code74` 由修订代理 rebase 到 origin/main `cc6744830` 后快进，tip `e9c0adf0f`。迁移 `node_operations/0023_consolidation_fact_by_member`（`consolidation_fact` 按成员的部分索引，非并发建索引，执行器只收事务块内迁移，先例 0021，迁移注释已写明）；新立 ADR-0299（部分停用（扩成）ADR-0224 决定三「唤醒是对象级的控制事实登记信封，各另起一路、另记一本账。」一句，只限成员经集运单元关系随单元进段、补的只是移动事实投影这一类；入向注记与 Links 已挂 ADR-0224，被停原句逐字相同）。AT-VE-218–221、AT-NO-132。
+- 做法：在 `node-operations.node-intake.formed` 的扇出里另起一路 VE 补派生（inbox `visibility-exception/backfill-movement-facts-on-node-intake`），信封与载荷一字不动；NO 只加反向只读口 `ConsolidationUnitsHoldingMemberView`；VE 的 `BackfillIdentifiedMemberAdapter` 先逐层向上列候选单元（每件只问一次、成环走得完），再对每件候选单元用 `trackedParcelsAt` 按事实那一刻展开成员，展开到这封信指的包裹才补，只补投影、不补信号、不重问关务；补出条目的发生时间与有效时间取事实时刻。
+- 隔离评审（Sonnet）可合入，无阻断；核实了三层嵌套手算（成员在出发前被移出又装回的补出，出发时正处于移出期的不补，出发前整袋离笼的不补）、事实时刻端点、信封载荷未动、ADR-0222 装配合规、`movementBackfill` 抽出为纯机械改动、自做 10 处变异被杀。N1（ADR 自称「无条款停用」与 README 规则自相矛盾）取部分停用的写法；N2：作者「补派生停在未决会挡 PS 来源采用」的说法评审查实不成立——各路是独立的 inbox 账、`FanOut` 每路都调，真正的耦合是一次投递共用一个超时与一封信共用一份失败预算（整封被放弃后本路无补偿），协调方裁定把路由名次改到来源采用之后（`positionPrimary+10`，主业务先拿时间，补派生是尽力而为的自愈）并补一条钉住名次的用例（改回采用之前变异变红）；N3 迁移注释去变更叙述并补非并发说明。
+- 协调方单独提交重算的 AT 计数、重生成的 ADR 索引与机制清点；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0、159 个包 ok；`go build ./...`、`go vet ./...` 干净；种子灌一次性库退 0，索引在册。无 admin-web 改动。
+- 去向：无新票，**待用户决定是否立**：作者与票面越权风险点 1 指出，识别成功后「出发门禁」不补问——出发时该件身份未决，运输履约读数里答未决，本路只补投影，受限包裹可能在追踪上显示成普通 DEPARTED 而没有阻断信号（与 ADR-0224 风险点 3 同类）；建议在 `node-intake.formed` 扇出里再起一路由运输履约消费，比照 ADR-0305 按原出发时点补问，R2 候选。其余越权风险点见 ADR-0299 与票面：批量重核的读量随件数、袋大小、段上事实数增长（最坏 n=300、F=6 约 1.8k 次点读，批量重核 50 封约 10⁵ 次）；身份被后来纠正成另一件包裹时已补到旧包裹上的出发不撤，需 NO 交出身份纠正信封；上线前已识别的成员不自愈。
