@@ -55,7 +55,7 @@ func TestTheMovementFactProducerTypeIsTheRoutedConsumerType(t *testing.T) {
 	}
 }
 
-// Covers: AT-VE-189 真库半边、票面演示判据「出发后 /tracking-projections 出现 DEPARTED」（证据 S）——经生产登记编排登一条出发，
+// Covers: AT-VE-189 真库半边、演示判据：出发后 /tracking-projections 出现 DEPARTED（证据 S）——经生产登记编排登一条出发，
 // 生产路由表一拍定稿；段里出发那一刻在控的两件各得一份 movement-departure，按演示种子映射归 DEPARTED。读数阻断的那一件在
 // 演示租户没登信号规则时不形成发作期，投影照派生、消费照入账。
 func TestADepartureClassifiesAsDepartedUnderTheDemoMappingThroughTheProductionRoute(t *testing.T) {

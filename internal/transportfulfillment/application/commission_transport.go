@@ -568,7 +568,7 @@ func (handler *CommissionTransportHandler) AnswerBooking(
 	}
 	if head >= 0 && !history[head].AdmitsSuccessor(acceptance) {
 		// 已有定局，或这份不是候补的合格后继：应答不可覆盖，定局之后连撤回也不接。已接受的订舱要变，只能由运营经取消订舱口
-		// （CancelBooking）取消再新订。
+		// （CancelBooking）取消再新订（订舱已被运输开始消耗的取消不了，ADR-0204 决定三）。
 		return CommissionResult{outcome: BookingAnswerConflict}, nil
 	}
 

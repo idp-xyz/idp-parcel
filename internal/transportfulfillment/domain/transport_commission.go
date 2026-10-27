@@ -577,7 +577,7 @@ func (acceptance CarrierAcceptance) Settles() bool {
 //
 // 后继不覆盖候补：两份答复各自保留，候补那一份仍是那段时间里承运方确实说过的话（CONTEXT 生命周期「运输委托、订舱与承运接受」
 // 一节「后继不覆盖候补，也不覆盖原申请」）。定局之后不再有后继——已接受的订舱不能再被拒绝，定局之后连撤回也不接；要变只能由
-// 运营取消订舱再新订。
+// 运营取消订舱再新订（订舱已被运输开始消耗的取消不了，ADR-0204 决定三）。
 func (acceptance CarrierAcceptance) AdmitsSuccessor(next CarrierAcceptance) bool {
 	return acceptance.outcome == BookingWaitlisted &&
 		next.Settles() &&

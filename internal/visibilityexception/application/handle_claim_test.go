@@ -505,7 +505,7 @@ func TestAScreenRecordsEveryDimensionsBasisAndTerminalIsScreenedOnce(t *testing.
 	}
 }
 
-// Covers: 票面第三节要害与 ADR-0051 第五条——**资料不足不得答不予受理**。这一格写下去
+// Covers: ADR-0051 第五条——**资料不足不得答不予受理**。这一格写下去
 // 就永久拒赔且再也审不了，而 CONTEXT 恰恰要求这种情形进限期补充。把 parcel-shipment
 // 的 IntakeEligibilityView 写法照搬过来正好落进这里，且编译与测试都不会拦，所以单证
 // 一次：材料缺口在场时结果只能是第三态。
@@ -667,7 +667,7 @@ func TestEachUncheckableDimensionStopsOnItsOwnReason(t *testing.T) {
 }
 
 // Covers: 五维全部肯定通过才答`通过`；少核一维就答通过与默认拒赔是同一个
-// 错的两面（票面第三节）。终局一次性：通过之后再审答`已审过`（ADR-0051 只让等待补充重入）。
+// 错的两面。终局一次性：通过之后再审答`已审过`（ADR-0051 只让等待补充重入）。
 func TestAFullyCheckedClaimScreensEligible(t *testing.T) {
 	fixture := newClaimFixture(t)
 	ctx := context.Background()
