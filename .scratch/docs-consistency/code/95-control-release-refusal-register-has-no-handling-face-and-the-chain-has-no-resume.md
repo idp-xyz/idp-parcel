@@ -42,7 +42,7 @@ M–L：一个运营查阅读口（按租户列未处理行、计数）、一到
 
 ## 完成记录
 
-分支 `claude-code95`，基于 main `891a6c349`（收尾 rebase 之后以回报里的最终 SHA 为准）。迁移 `parcel_shipment/0031`、`access_identity/0025`；新 ADR-0293；无新票。
+分支 `claude-code95`，基于 main `5625865e3`（第一轮修订之后的 rebase）。迁移 `parcel_shipment/0031`、`access_identity/0025`；新 ADR-0293；无新票。
 
 ### 做了什么
 
@@ -83,7 +83,7 @@ M–L：一个运营查阅读口（按租户列未处理行、计数）、一到
 ### 测试与变异
 
 - 先红：HTTP 与应用层、消费门用例在实现之前编译不过；授予往返在迁移之前被库内 CHECK 拒（23514）；真链往返的「标记已处理」闭环在过滤去掉时红（见变异）。
-- `scripts/test-full.sh ./...` 全仓 158 个包全绿、退 0；`go build ./...`、`go vet ./...`、`gofmt -l` 干净；管理台 `tsc -b --noEmit`、`node scripts/run-tests.mjs`（rebase 之后 786 过）、`vite build` 都过，`./internal/architecture/...`（含 `TestEveryAdminWebPathIsOnTheParcelAPIEndpointTable`）过；`go run ./tools/adr-index` 能生成（README 不提交）、`go run ./tools/at-coverage-counts -check` 退 1（只是总览过期，新号分桶行已补）；演示种子在一次性库灌入零报错、三笔 `RECORDED`。新用例 `-count=3` 稳定，两条并发用例 `-count=5` 稳定。
+- `scripts/test-full.sh ./...` 全仓 158 个包全绿、退 0；`go build ./...`、`go vet ./...`、`gofmt -l` 干净；管理台 `tsc -b --noEmit`、`node scripts/run-tests.mjs`（第一轮修订 rebase 之后 788 过）、`vite build` 都过，`./internal/architecture/...`（含 `TestEveryAdminWebPathIsOnTheParcelAPIEndpointTable`）过；`go run ./tools/adr-index` 能生成（README 不提交）、`go run ./tools/at-coverage-counts -check` 退 1（只是总览过期，新号分桶行已补）；演示种子在一次性库灌入零报错、三笔 `RECORDED`。新用例 `-count=3` 稳定，两条并发用例 `-count=5` 稳定。
 - 变异（备份、还原后 `cmp` 一致），全部被杀：①处理后不交信封（应用层三例红）；②释放未收口也标处理（应用层不收口三格例红）；③并发输家也交信封（`TestASecondHandlerReadsTheFirstAndTriggersNothing` 红）；④不核册上有无（不可见三例红）；⑤已处理的一笔仍去问提供方（同上红）；⑥释放先于取锁（调用序例红）；⑦两人并发都成立（处理留痕 `ON CONFLICT DO NOTHING` 换成 `DO UPDATE`：适配器层「只一笔成立」与「第二次读回第一次」两例红）；⑧不核租户（查阅去掉租户条件：查阅隔离例红；处理的 INSERT…SELECT 去掉租户条件：他租户处理例红；查阅 Intake 采信请求里的 `?tenant=`：查阅 Intake 例与生产装配例红；处理 Intake 的 `?tenant=` 见评审补记）；⑨链开头不滤已处理、把读不动当已处理、键里漏租户或漏版本、读口 nil 时也放行（链开头六例与既有响亮失败例分别红）；⑩链开头过滤整个关掉（真链往返「标记已处理」例红，错误正文就是被已处理的拒收挡着的 `ErrControlReleaseNotAccepted`）。
 
 ### 评审记录与修订轮
@@ -93,3 +93,4 @@ M–L：一个运营查阅读口（按租户列未处理行、计数）、一到
 - **第一轮修订（N2）**：响应类型头注、`api.ts` 注释与代决 6 原写「与别的运营决定口同一条纪律」不实（同族回执里 `decider`、`reviewer`、`decidedBy` 都有回显），改为调用方就是处理人、不回显，谁处理的在留痕里。行为不变。
 - **第一轮修订（N3）**：本分支新增行里对着旧行为的叙述（「不再响亮失败」「不再挡着新版本」「照旧上抛」等）改写成现行规则句；位置词（「与上面各路」「上面的 note」）改成符号名；`acceptanceChainGates` 头注去掉数目。
 - **第一轮修订（信息项）**：ADR-0293 越权风险点补 9 至 12，UC-PS-005 规则一节补运维须知。
+- **第一轮修订的验证**：rebase 到 `5625865e3` 无冲突；`gofmt -l`、`go build ./...`、`go vet ./...` 干净；`scripts/test-full.sh ./internal/parcelshipment/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./internal/architecture/... ./internal/accessidentity/...` 全绿；新用例 `-count=3` 稳定；管理台 `tsc -b --noEmit`、`node scripts/run-tests.mjs`（788 过）、`vite build` 过；`go run ./tools/at-coverage-counts -check` 与 `go run ./tools/adr-index -check` 退 1（生成物过期，不提交）。
