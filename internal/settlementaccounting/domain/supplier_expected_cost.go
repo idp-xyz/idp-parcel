@@ -108,7 +108,7 @@ func NewFeeItemReference(value string) (FeeItemReference, error) {
 // 之一：UC-SA-002 的「同一发生项、费用项目和规则版本不得重复形成预期成本」里的规则版本就是这一维。
 //
 // 类型名里的「采购规则版本」与 GLOSSARY 不符。它是导出名，与 HTTP 字段 purchaseRuleVersion、
-// 库列 purchase_rule_version 同名，三处要一起改才不留错位，所以名字没有单独动。
+// 库列 purchase_rule_version 同名，三处要一起改才不留错位，所以沿用。
 type PurchaseRuleVersionReference struct{ requiredValue }
 
 func NewPurchaseRuleVersionReference(value string) (PurchaseRuleVersionReference, error) {
@@ -248,6 +248,8 @@ func (cost SupplierExpectedCost) FeeItem() FeeItemReference {
 	return cost.feeItem
 }
 
+// RuleVersion 返回评价命中的可执行价卡版本；类型名与方法名沿用 PurchaseRuleVersionReference，
+// 它不是 party-commercial 的价格规则版本（见类型注释）。
 func (cost SupplierExpectedCost) RuleVersion() PurchaseRuleVersionReference {
 	return cost.priceCardVersion
 }

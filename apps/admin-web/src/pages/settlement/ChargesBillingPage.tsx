@@ -26,7 +26,7 @@ const info = moduleInfoById['charges-billing'];
 // 本页两签，都接 GET /settlement-charges 按 registry 分派。
 //
 // 两册各自成形而不合流成一张「费用明细」表（票 admin-skeleton-closure-batch/04 对栏裁定）：
-// 客户费用有阶段与确认依据、无采购规则版本，供应商预期成本有版本链与纠错原因、无阶段。
+// 客户费用有阶段与确认依据、无价卡版本，供应商预期成本有版本链与纠错原因、无阶段。
 // 合流要现编一个「收付方向」——库上客户费用册不存这一维，而 CONTEXT 明写确认费用必须固定
 // 收付方向且「不能通过当前组织、当前客户属性或报表筛选临时推断」，由读面按行落在哪张表反推
 // 正是这条禁的东西。
@@ -256,7 +256,7 @@ function CustomerChargesTable() {
 
 // 本册不设阶段栏：整册属预估口径（CONTEXT「预期成本属预估口径，从不进对账单」），那是
 // **册级事实**。补一个恒为「预估」的阶段栏，是把册级事实伪装成行级取值，还会让读者以为
-// 它可能变成别的值。该册另有客户册没有的栏（采购规则版本、供应商协议、运输收费发生项与
+// 它可能变成别的值。该册另有客户册没有的栏（价卡版本、供应商协议、运输收费发生项与
 // 版本、前版与纠错原因），按册上原样呈现——这正是两册不合流的用处。
 const supplierExpectedCostColumns: ListColumn<SupplierExpectedCostRecord>[] = [
   { id: 'version', header: '成本版本', className: 'font-mono text-xs', render: (row) => row.version },
@@ -277,7 +277,7 @@ const supplierExpectedCostColumns: ListColumn<SupplierExpectedCostRecord>[] = [
   },
   {
     id: 'purchase-rule-version',
-    header: '采购规则版本',
+    header: '价卡版本',
     className: 'font-mono text-xs',
     render: (row) => row.purchaseRuleVersion,
   },

@@ -215,7 +215,7 @@ func (reason JudgmentPendingReason) resumePath() domain.ResumePath {
 		SourceDataAmendmentAuthorityApplicabilityConflict:
 		// 这一族等的是运营企业做一次登记，不是等某个权威恢复（ADR-0094）。它们与同一支上的
 		// *Unavailable 只差一个词而恢复动作相反：权威答不出会自愈，而一个从未登记过的范围
-		// 重试一万次也长不出一条登记。这几个取值自己的注释写的就是这句话，所以它们不能落在下面那个
+		// 重试一万次也长不出一条登记。这几个取值自己的注释写的就是这句话，所以它们不能落在
 		// default 的内部重试上——判据在、细分在，导出到恢复动作时不能再把它压回去。
 		//
 		// 逐个列举不写成按名字前缀判：命名相近不构成同一个恢复动作，而这份名单正是那条判据

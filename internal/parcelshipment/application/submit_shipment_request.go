@@ -1,5 +1,5 @@
 // Package application 在领域内核与 parcel-shipment 自有端口之上编排本上下文的用例。
-// 持久化、事务与事件机制在 adapters，不进本包（ADR-0026）。
+// 持久化、事务与事件机制在 adapters，不进本包。
 package application
 
 import (

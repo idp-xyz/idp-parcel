@@ -56,3 +56,8 @@ S：类型与构造函数改名为可执行价卡版本一类的词（例如 `Pr
 
 - 私有字段已叫 `priceCardVersion`、导出访问器仍叫 `RuleVersion()`，名字暂时不一致；这是有意的过渡形态，由上面第 1 条的后续改名收掉。
 - 未改动 `apps/admin-web`：`pages/settlement/ChargesBillingPage.tsx` 的栏头仍写"采购规则版本"（同文件两处注释也是），需在 admin-web 的下一轮里随报文字段一并对齐。
+
+### 评审记录与修订轮（协调方）
+- 评审可合入：38、40、45 三个提交的每个改动的 `.go` 文件语法树完全相同；55 的 7 个文件差异全是 `ruleVersion` → `priceCardVersion` 的私有标识符重命名；38 条新增引文机械核对 36 条逐字相同，另 2 条是带省略号的前缀引文与假想读者的一句话；新增的 ADR/UC/AT 指针逐条核过。
+- 修了评审点出的两处注释（位置词「下面那个 default」、不支撑断言的 ADR-0026 指针）和一处「所以名字没有单独动」的变更叙述；在 `RuleVersion()` 访问器上补了一行注释指向类型注释；管理台结算费用册的栏头与两处说明由「采购规则版本」改为「价卡版本」（只改展示文字，报文字段 `purchaseRuleVersion` 不动）。
+- 协调方裁定：导出类型 `PurchaseRuleVersionReference`、报文字段 `purchaseRuleVersion`、库列 `purchase_rule_version`、`ports.SupplierExpectedCostCatalogueRow.PurchaseRuleVersion` 保留旧名，不做改名。理由：它们是对外契约与已施加的迁移，改名要一条新迁移、十几个文件与一次报文变更，换来的只是名字一致；误导读码者的根源（注释把它说成 PC 的采购价格政策）已由注释订正，类型注释与访问器注释都直说它是 parcel-pricing 的定价方案版本。以后若有一次因别的原因要动这几处的契约，再顺手改名。
