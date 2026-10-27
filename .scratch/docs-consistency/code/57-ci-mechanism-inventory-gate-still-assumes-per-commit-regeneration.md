@@ -1,7 +1,7 @@
 # 57 CI 的机制清点门仍按各笔自己重生成的旧规矩挂在 PR 上，与生成物的现行规矩相反
 
 Category: chore
-Status: in-progress——完工待评审与进 main，分支 claude-tool（见文末「完成记录」）。原 ready-for-agent——R3（不急）：今天不经 PR 落 main，这道门只在 main 推送上起作用，结论照旧对；一旦走 parallel-sessions「落 main 的下一形态」开 PR，每张新增文件或迁移的票都会按设计在这一门上红。2026-10-21 文档自洽 10（10b）立（用户「你作为业务和系统专家自决」授权），分支 claude-dc10b。
+Status: resolved——2026-10-27 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-tool（见文末「完成记录」）。原 ready-for-agent——R3（不急）：今天不经 PR 落 main，这道门只在 main 推送上起作用，结论照旧对；一旦走 parallel-sessions「落 main 的下一形态」开 PR，每张新增文件或迁移的票都会按设计在这一门上红。2026-10-21 文档自洽 10（10b）立（用户「你作为业务和系统专家自决」授权），分支 claude-dc10b。
 Blocked by: 无
 出处：[audit/cross.md](../audit/cross.md) AG·M1（归 B，10b 代决）。取证于 main `4e7874ba0`。
 
@@ -95,3 +95,9 @@ main 推送路径上 `go run` 把退出码压成 1，日志里能看到工具自
 ### 剩余项
 
 无阻塞项。上面几条越权风险点留给复核；首个带 PR 的推送要看一次 Actions 里两种事件各自跑的步骤是否如表。
+
+## 进 main 记录（2026-10-27，协调方）
+
+- 分支 `claude-tool` 与 code/57、58 同批，由协调方快进，tip `d07f7b158` 再加一笔可执行位；隔离评审（Sonnet）可合入，无阻断：CI 三道要求新鲜的门（机制清点、ADR 索引、AT 计数）在 main 推送上都在，条件逐个按 Actions 表达式语法核过，新增的 PR 步与 main 推送互斥；PR 脚本退出码在 11 种造出的状态下实测，对 1、2 以外的退出码是失败而不是静默通过；按 `land.sh` 的顺序模拟 main 推送，三道门绿，落地流程不会变红；「包加载报错」字面串确是 `tools/mechanism-inventory` 写进报告的文案。协调方单独提交重算的 AT 计数、重生成的 ADR 索引与机制清点（本批无变动）；全量 `scripts/test-full.sh` 退 0、159 个包 ok；`go build ./...`、`go vet ./...` 干净。无业务代码、无迁移、无 ADR、无 AT 号变化。**首个带 PR 的推送需要看一次 Actions**，确认两种事件各自跑的步骤符合预期，这一点本机无法验证。
+- 本票：`Mechanism inventory is current` 步加与 ADR、AT 步相同的 `if: push && main`；PR 上改为新增一步 `Generated artifacts are well-formed`，调 `scripts/ci/generated-artifacts-pr.sh`（过期放行，标记坏了、分桶表缺行、清点生成器跑不动或报告带包加载报错照红；脚本先编二进制再跑，不走 `go run`，因为后者把子进程退出码 2 压成 1）；`parallel-sessions.md` 补一段 CI 分工。
+- 去向：无新票。越权风险点见票面：PR 上第一次检查 ADR、AT 的退 2 时 main 本身已退 2 会连累无关 PR；「包加载报错」字面串与 `-check` 退出码约定没有测试钉死；`log.Fatal` 退 1 的新工具会被当过期放行。
