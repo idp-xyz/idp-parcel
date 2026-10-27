@@ -1,7 +1,7 @@
 # 90 履约尝试逐对象结果的「待确认」没有更正口：同一次上门的后补来源确定不了它
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code90（基于 main `a5544faff`，收尾前重放到 `06649ed18`）。此前 needs-triage——建议 R2：code/01 落地后，揽收与派送尝试都收得下待确认，可同一次上门的后补来源（伙伴迟到的签收、复核后认定的地址）没有地方落成确定结果；派送一侧那件对象因此登不出有效交付，只能等新的上门。可靠绕法：真的再上门一次，登新尝试。2026-10-25 票 [docs-consistency/code/01](./01-fulfillment-attempt-object-outcomes-have-no-pending-confirmation.md) 作者会话立（用户「你作为业务和系统专家自决」授权），分支 claude-code01。
+Status: in-progress——完工待评审与进 main，分支 claude-code90（基于 main `a5544faff`，评审修订轮后重放到 `ae21dab5c`）。此前 needs-triage——建议 R2：code/01 落地后，揽收与派送尝试都收得下待确认，可同一次上门的后补来源（伙伴迟到的签收、复核后认定的地址）没有地方落成确定结果；派送一侧那件对象因此登不出有效交付，只能等新的上门。可靠绕法：真的再上门一次，登新尝试。2026-10-25 票 [docs-consistency/code/01](./01-fulfillment-attempt-object-outcomes-have-no-pending-confirmation.md) 作者会话立（用户「你作为业务和系统专家自决」授权），分支 claude-code01。
 Blocked by: 无
 上下文：TF（运输履约），揽收与派送两侧的履约尝试。
 出处：code/01 代决（完成记录「代决 2」）。
@@ -132,3 +132,13 @@ TF 迁移 `0055_attempt_result_corrections.sql`；access_identity 迁移 `0027_a
 - 迁移 `0027` 头注改成不带时态的说法（`0026` 的超集，重建 CHECK 的迁移取已有各份的并集），CHECK 内容未动。
 - 本分支新增行里的变更叙述用词（「此前」「照旧」「不再」「改答」「今天」等）改成现行规则句：AT-TF-358、测试注释、ADR-0297 与 CONTEXT 里的相应句子；`git diff origin/main...HEAD` 在非票面文件的新增行里按上列词查无余项。
 - ADR-0297 Status 与「对已接受记录的作用」「Links」统一写「四口」（作业事实面后补两口：`/transport-fulfillment/offsite-pickup-attempt-result-corrections`、`/transport-fulfillment/delivery-attempt-result-corrections`；运营决定面认定两口：`/transport-fulfillment-pickup-attempt-result-confirmations`、`/transport-fulfillment-delivery-attempt-result-confirmations`），与 ADR-0151 注记的「四口」一致（核实：两个更正处理器、两个接入面，端点四行）；「后四种与未决都是 200」改成「只有 `RESULT_CORRECTED` 答 201，其余五格都答 200」。入向指针仍只在 ADR-0151 的 Status 注记与 Links，ADR-0151 正文未动。
+
+**验证（修订轮）**
+- 变异（每条改后跑相关用例、跑完从 `scratchpad/c90b/` 的备份复原、`cmp` 核过；新用例都先对变异看红）：
+  - N1：去掉晚到检查（`laterControlFactsForDeclaredSegment` 恒假）——生产装配复现用例红（答复没有 `LATER_CONTROL_FACTS`）、编排用例红；命中时不清空段声明——复现用例红（对象落进 SEG-A1 与 SEG-A2 两段）、编排用例红；装配不把段登记册交给更正处理器——复现用例红；拒绝格不限于「新登了揽收」（读回在册那份也带）——「读回在册那份不带拒绝格」用例红。
+  - N2：`correctionContent` 去掉 `correctedAt`、去掉 `basis`——两侧重放用例红；派送领域去掉「更正不早于待确认那一版」、去掉「不早于它说的那件事」——领域用例各红，前者应用层用例也红；派送 `LoadForCorrection` 去掉 `FOR UPDATE OF r`——派送并发排队用例红（`-count=5` 逐次红）；运营决定面两口让 `?tenant=` 覆盖信封租户——传输面用例红、生产装配用例红（答 201，自报租户认定成了）；揽收与派送 `LoadForCorrection` 的 `a.tenant_id` 条件换恒真、揽收 `loadPickupCorrection` 与派送更正读取的 `tenant_id` 条件换恒真、`LoadDeliveryResult` 外连 `c.tenant_id = r.tenant_id` 去掉——两租户用例各红。
+- `gofmt -l` 无输出；`go build ./... && go vet ./...` 干净。
+- `TMPDIR=… scripts/test-full.sh ./internal/transportfulfillment/... ./internal/accessidentity/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./internal/architecture/... ./migrations/... ./scripts/demo-seeds/...`（重放到 `ae21dab5c` 之后，前台跑到出结果）：退出码 0，无失败。
+- 新用例 `-count=3`（`-v` 核过 39 次 PASS、无 FAIL 无 SKIP）；并发排队用例（揽收、派送各一）`-count=5` 共 10 次 PASS。
+- `go run ./tools/at-coverage-counts -check` 退 1（只是总览计数过期，未退 2：`AT-TF-363` 在分桶表有行）；`go run ./tools/adr-index -check` 退 1（只是索引生成物过期）。
+- 重放中 `internal/accessidentity/operation_decision.go` 与 `.scratch/at-coverage-inventory.md` 文末追记的冲突按两边并存处理（main 那段在前）。
