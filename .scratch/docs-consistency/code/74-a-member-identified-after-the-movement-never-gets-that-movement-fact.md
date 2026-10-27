@@ -69,7 +69,7 @@ Blocked by: 无（「要裁的」第一条裁为另立 ADR-0299，已先接受�
 ### AT
 
 - UC-VE-002 新立 `AT-VE-218`（识别成功补出随袋出发，只补这一件，与两路先后同键）、`AT-VE-219`（笼套袋逐层向上，出发那一刻不在袋里的不补）、`AT-VE-220`（身份被纠正后旧信不补、已补不撤）、`AT-VE-221`（失败分格与消费门分账，补派生排在投影与来源采用之后）；UC-NO-003 新立 `AT-NO-132`（反向读口）。证据一律 `S`。
-- 用例：`internal/nodeoperations/adapters/postgres/consolidation_units_holding_member_test.go`；`internal/visibilityexception/adapters/{transportfulfillment/backfill_identified_member_movement_facts_test.go,nodeoperations/identified_member_test.go,inbox/movement_fact_backfill_on_node_intake_consumer_test.go}`；真库 `cmd/parcel-dispatch/movement_fact_backfill_on_node_intake_test.go`（经生产路由一拍：笼套袋、出发时身份不成立的成员识别后补出，已移出、出发后才装进、从没进过单元的不补，重投只答已有结果；识别成功已落册而收寄信封未到时移动事实那一路先到、补派生答已有结果；经生产识别链——PS 接受、门铃、NO 重核、收寄意图——补出；派发失败分区）。
+- 用例：`internal/nodeoperations/adapters/postgres/consolidation_units_holding_member_test.go`；`internal/visibilityexception/adapters/{transportfulfillment/backfill_identified_member_movement_facts_test.go,nodeoperations/identified_member_test.go,inbox/movement_fact_backfill_on_node_intake_consumer_test.go}`；真库 `cmd/parcel-dispatch/movement_fact_backfill_on_node_intake_test.go`（经生产路由一拍：笼套袋、出发时身份不成立的成员识别后补出，已移出、出发后才装进、从没进过单元的不补，重投只答已有结果；识别成功已落册而收寄信封未到时移动事实那一路先到、补派生答已有结果；经生产识别链——PS 接受、门铃、NO 重核、收寄意图——补出；派发失败分区）；`cmd/parcel-dispatch/node_intake_fan_out_order_test.go`（按 wireDispatcher 同一份件展开生产登记处，钉住节点收寄形成信封上投影、来源采用、补派生的次序）。
 
 ### 验证
 
@@ -79,3 +79,14 @@ Blocked by: 无（「要裁的」第一条裁为另立 ADR-0299，已先接受�
 - 迁移 0023：一次性库灌演示种子 `seed.sh` 退 0，索引在册，用后 `DROP DATABASE … WITH (FORCE)`。
 - 变异（本地验过，备份再拷回并 `cmp` 一致，均未提交）11 处全杀：路由登到别的事件类型（真库三条红）、去掉只补这一件的过滤（适配器两条红）、向上找只走第一层（适配器与真库各一条红）、补派生共用投影的 inbox 账（重放分账用例红）、展开改取记录时刻（适配器三条红）、反向读口把移出算成曾装入（真库读口红）、未决名单去掉收寄读不回（派发分区红）、确定性哨兵误进未决名单（派发分区红）、收寄待识别当成认出了包裹（翻译用例红）、去掉向上找的环防护（成环用例超时红）、补派生派生出与正常路径不同内容（真库笼套袋用例红，幂等键内容一致）。
 - `go run ./tools/adr-index -check` 与 `go run ./tools/at-coverage-counts -check` 均只报生成物过期（退 1，非缺行的 2），未提交生成物。
+
+### 评审记录与修订轮（2026-10-27）
+
+独立评审判**可合入**，无阻断，建议合入前修 N1–N3；修订轮如下。
+
+- **N1 部分停用定性**：ADR-0299 原写「接上（扩）ADR-0224 决定三的唤醒面，无条款停用」，与 `docs/adr/README.md` 把「改为、接上、扩成、按口解、收窄」定为部分停用的规则自相矛盾。取协调方裁定：改成**部分停用（扩成）**ADR-0224 决定三一句，逐字引被停原句「唤醒是对象级的控制事实登记信封，各另起一路、另记一本账。」（`grep -F` 对 ADR-0224 原文核逐字相同），适用场景只限成员经集运单元关系随单元进段、补的只是移动事实投影这一类，对象有自己的控制事实时仍由那两类信封唤醒。出向指针在 ADR-0299 Status 前段与「对已接受记录的作用」；入向指针只在 ADR-0224 Status 注记与 Links，同样逐字引原句并写适用场景，去掉与「部分停用」并存的「无条款停用」，「其余各条不变」保留。ADR-0224 正文不动（相对 main 只有 Status 行与 Links 一条）。
+- **N2 队内阻塞的机制更正，名次改到采用之后**：原稿说补派生停在未决会挡同一封信上排在它后面的 PS 来源采用，不成立——各路是独立 inbox 账、各自一个事务（`inboxconsume.Gate`），挂在同一个 `FanOut` 里，`FanOut` 每一路都调、前面失败也不停（`internal/platform/dispatch/fanout.go` 头注），信封 `PartitionKey` 取事件标识、每封自成分区。真正耦合是两处：一次投递只有一个 `deliveryCtx`（`DirectPublisher.Publish` 里一个 `context.WithTimeout`，各路共用）；一封信共用一份失败预算（`RecordFailure` 失败数到 `MaxAttempts` 把整封置已放弃，没提交的路一并丢）。本路读量是候选单元数乘袋大小，排在采用之前会吃光超时、让采用拿不到时间；被放弃后本路没有补偿（没有按成员回扫，也没有见到放弃行的运维重放口）。已改：ADR-0299 决定一、越权风险点 7、`routes_movement_fact_backfill_on_node_intake.go` 头注与本票越权风险点 5 都写成共享投递超时、共享失败预算、被放弃无补偿；路由名次改为 `positionPrimary + 10`（投影 100、来源采用 200、补派生 210）。评审变异 M8（名次改到采用之后无用例红）说明名次无用例守：新增 `node_intake_fan_out_order_test.go` 的 `TestTheMovementFactBackfillOnNodeIntakeRunsAfterTheProjectionAndTheSourceAdoption`，按 `wireDispatcher` 同一份件展开 `routeRegistry`，断言该事件类型上次序是 projection、node intake、movement fact backfill on node intake；UC-VE-002 `AT-VE-221` 预期补「补派生排在投影与来源采用之后」。变异：名次改回 `positionProjection + 10` 红、改成 `positionPrimary - 10`（夹在投影与采用之间）红，备份拷回并 `cmp` 一致。改名次没有既有用例预期受影响：`TestMovementFactBackfillOnNodeIntakeFailuresLandInTheRightPartition`、经生产识别链与笼套袋的真库用例都原样绿。
+- **N3 迁移注释**：`migrations/node_operations/0023_consolidation_fact_by_member.sql` 去掉「此前只有按单元的索引」的变更叙述与「第一步」序数，改成现行规则句；补两行非并发建索引的说明（仓内迁移执行器只收事务块内迁移，`migrate.applyStep` 头注写明 `CONCURRENTLY` 显式未决，先例是 0021；建索引期间 `consolidation_fact` 写口被阻，实测 100 万行约 0.5 秒）。
+- **评审信息项摘录**：(1) 身份被纠正成另一件包裹之后，旧包裹上已补的出发不撤，要撤需 NO 交出身份纠正信封，属另立，不在本票（越权风险点 3 同）。(2) 读量最坏量级：袋大小 n=300、声明事实数 F=6 时一封信约 1.8k 次点读（F×n）；批量重核 50 封约 10⁵ 次（越权风险点 2 同，优化方向是 NO 加时点反向读口，本票不取）。
+
+修订轮验证：`gofmt -l` 无输出，`go build ./... && go vet ./...` 干净；前台 `scripts/test-full.sh ./internal/nodeoperations/... ./internal/visibilityexception/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./internal/architecture/... ./migrations/...` 30 个包 ok、0 FAIL；新用例 `-count=3` 绿；`adr-index -check`、`at-coverage-counts -check` 均退 1（只是生成物过期，非缺行的 2）；迁移注释改动后一次性库灌演示种子 `seed.sh` 退 0、索引在册，用后 `DROP DATABASE … WITH (FORCE)`。分支已与 origin/main（`cc6744830`）对齐，rebase 退 0。
