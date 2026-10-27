@@ -1,7 +1,7 @@
 # 01 余下各口的信封 ID 仍原样串接实例引用：标识一长就入不了队，交接只留没人重发的续办引用
 
 Category: bug
-Status: ready-for-agent——2026-10-27 列入上线前必须（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)）：余下运输履约各口，真实租户标识一长，交接就静默断在续办引用上。此前 in-progress——除运输履约外各口已进 main（至 `20a06645`）；余下运输履约各口待做，门禁登着去处。2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决」授权），出自 [routing-first-cut/22](../../routing-first-cut/issues/22-initial-route-envelope-id-exceeds-the-event-id-limit.md) 的取证。
+Status: in-progress——2026-10-27 会话 tops-20 认领运输履约半边（用户 2026-10-27「按你的建议」；列入上线前必须），分支 claude-eib01b。此前 ready-for-agent——2026-10-27 列入上线前必须（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)）：余下运输履约各口，真实租户标识一长，交接就静默断在续办引用上。此前 in-progress——除运输履约外各口已进 main（至 `20a06645`）；余下运输履约各口待做，门禁登着去处。2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决」授权），出自 [routing-first-cut/22](../../routing-first-cut/issues/22-initial-route-envelope-id-exceeds-the-event-id-limit.md) 的取证。
 Blocked by: 无
 出处：`outboxintent.FingerprintEventID` 头注（票 sa-cc/34 裁决 2）：信封 ID 上限是 `eventing.MaxEventIDLength`，租户、委托、包裹这类引用多长归实例半边，本仓给不出上界，原样串接就是把上限押在别人的长度上。
 
