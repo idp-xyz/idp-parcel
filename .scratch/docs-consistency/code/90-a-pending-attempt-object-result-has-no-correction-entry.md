@@ -1,7 +1,7 @@
 # 90 履约尝试逐对象结果的「待确认」没有更正口：同一次上门的后补来源确定不了它
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code90（基于 main `a5544faff`，评审修订轮后重放到 `ae21dab5c`）。此前 needs-triage——建议 R2：code/01 落地后，揽收与派送尝试都收得下待确认，可同一次上门的后补来源（伙伴迟到的签收、复核后认定的地址）没有地方落成确定结果；派送一侧那件对象因此登不出有效交付，只能等新的上门。可靠绕法：真的再上门一次，登新尝试。2026-10-25 票 [docs-consistency/code/01](./01-fulfillment-attempt-object-outcomes-have-no-pending-confirmation.md) 作者会话立（用户「你作为业务和系统专家自决」授权），分支 claude-code01。
+Status: resolved——2026-10-27 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code90（基于 main `a5544faff`，评审修订轮后重放到 `ae21dab5c`）。此前 needs-triage——建议 R2：code/01 落地后，揽收与派送尝试都收得下待确认，可同一次上门的后补来源（伙伴迟到的签收、复核后认定的地址）没有地方落成确定结果；派送一侧那件对象因此登不出有效交付，只能等新的上门。可靠绕法：真的再上门一次，登新尝试。2026-10-25 票 [docs-consistency/code/01](./01-fulfillment-attempt-object-outcomes-have-no-pending-confirmation.md) 作者会话立（用户「你作为业务和系统专家自决」授权），分支 claude-code01。
 Blocked by: 无
 上下文：TF（运输履约），揽收与派送两侧的履约尝试。
 出处：code/01 代决（完成记录「代决 2」）。
@@ -142,3 +142,12 @@ TF 迁移 `0055_attempt_result_corrections.sql`；access_identity 迁移 `0027_a
 - 新用例 `-count=3`（`-v` 核过 39 次 PASS、无 FAIL 无 SKIP）；并发排队用例（揽收、派送各一）`-count=5` 共 10 次 PASS。
 - `go run ./tools/at-coverage-counts -check` 退 1（只是总览计数过期，未退 2：`AT-TF-363` 在分桶表有行）；`go run ./tools/adr-index -check` 退 1（只是索引生成物过期）。
 - 重放中 `internal/accessidentity/operation_decision.go` 与 `.scratch/at-coverage-inventory.md` 文末追记的冲突按两边并存处理（main 那段在前）。
+
+## 进 main 记录（2026-10-27，协调方）
+
+- 分支 `claude-code90` 由修订代理 rebase 到 origin/main `ae21dab5c`（已含 code/76）后快进，tip `6c999a0dc`；重放时 `internal/accessidentity/operation_decision.go` 与 AT 盘点文末追记两处机械冲突按两边并存解决。迁移 `transport_fulfillment/0055_attempt_result_corrections`（揽收、派送两张只追加的更正表，外键 `corrects_outcome` 加 CHECK 守「只回指待确认」）、`access_identity/0027_attempt_result_confirmation_decisions`（CHECK 为 0026 的超集，加揽收、派送两个认定决定种类，各自独立的授予）；新立 ADR-0297（收窄：部分停用 ADR-0151 决定四「更正与首登的提交方是同一方……」一句，只限这四个口，入向注记与 Links 已挂 ADR-0151）。AT-TF-357–363。演示种子 `access/22,23`、`governance/59,60`、`steps/481`。
+- 更正口：两个面、同一份编排——执行方在作业事实面后补，复核人在运营决定面认定（揽收、派送各一种决定种类，操作者只进审计、回执不回显）；只回指待确认那一版、必带所凭后补来源，对已确定判断的再更正答 `RESULT_NOT_PENDING`；当前有效结果读「首次提交，被更正则取更正」，交付登记、交付门禁读数、失败尝试费读它，重放与冲突比对仍读首次提交；更正成揽收到手时转交既有对象级登记编排形成场外揽收，登记写在更正追加之前同一事务、非成立格整笔回滚；复核清单 `GET /transport-fulfillment-records?registry=pending-attempt-result`。
+- 隔离评审（Sonnet）可合入，无阻断；核实读方覆盖（全仓读结果表的 SQL 只有五处，都读对）、锁序（结果行 `FOR UPDATE` 是唯一加锁处）、事务壳对非成立格整笔回滚、ADR-0297 被停原句逐字相同、`0027` 的 CHECK 是 `0026` 的超集、演示种子编号不撞。N1（晚到更正不问「更晚的控制事实」，评审在生产装配里复现：对象凭别的控制事实已在段 S1，晚到更正又让它进声明的段 S0，之后交付登记在结束参与那一步整笔回滚）协调方裁定合入前补：更正成揽收到手、转交登记之前先问 ADR-0307 决定三的那一问（`laterControlFacts` 改为吃租户、对象、发生时刻，交接首登、交接更正与更正三处共用），命中时登记不带命令的段声明，场外揽收照落、信封照交，答 `segmentEntryRefusal: LATER_CONTROL_FACTS`；复现场景成了真库用例，四处变异均红。N2（八处存活变异）补用例，N3（迁移头注时态、变更叙述、「两口/四口」统一）改完。
+- 协调方单独提交重算的 AT 计数、重生成的 ADR 索引与机制清点；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0、159 个包 ok；`go build ./...`、`go vet ./...` 干净；种子灌一次性库退 0，两张更正表落库。无 admin-web 改动。
+- 去向：无新票。越权风险点见 ADR-0297 与票面：段声明由命令带、复核人未必知道；管理台没有认定页；PS 的责任起点取先到的信封而不是业务时间更早的那份（既有规则 `AT-PS-049`），所以晚到的更正揽收可能被 PS 拒为 `SOURCE_NOT_ADOPTED`；拦截只管「此后已有更晚的入场或离场」，对象在更正所说的发生时刻之前已在某段在场且未离场时，更正成揽收到手仍会让它进声明的段，对象级揽收首登对这种对象同样不拦。
