@@ -14,13 +14,13 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
-// 本文件是随袋走过出发的成员后来才识别成功时的出发门禁补问那一扇门（ADR-0331）：节点作业的节点收寄形成信封到了，替那件新认出的包裹把
+// 本文件是随袋走过出发的成员后来才识别成功时的出发门禁补问这道门（ADR-0331）：节点作业的节点收寄形成信封到了，替那件新认出的包裹把
 // 它随袋走过的出发补问一遍。没有跨上下文翻译，处理方直接是应用编排。
 //
-// 门每次现建，理由同交接与揽收那两扇门（departure_gate_reask_consumers.go）：补问那一拍要先在任何写事务之外问关务，处理函数因此要拿到
+// 门每次现建，理由同交接与揽收上的补问门（departure_gate_reask_consumers.go）：补问那一拍要先在任何写事务之外问关务，处理函数因此要拿到
 // 进消费门事务之前的 ctx。
 
-// departureGateReaskOnNodeIntakeConsumerName 是这一扇门在 inbox 键上的稳定名。必须与同一封信上的其余各路（VE 投影、PS 来源采用、VE
+// departureGateReaskOnNodeIntakeConsumerName 是本门在 inbox 键上的稳定名。必须与同一封信上的其余各路（VE 投影、PS 来源采用、VE
 // 移动事实补派生）分家：同一封信扇出给几路，inbox 键只由（消费者名 + 来源 + 事件 ID）认领，共名会让一路把另一路的投递当重复跳过。
 // 改名等于换消费者。
 const departureGateReaskOnNodeIntakeConsumerName = "transport-fulfillment/reask-departure-gates-on-node-intake"
@@ -35,13 +35,13 @@ type FormedNodeIntake struct {
 	SourceID string
 }
 
-// DepartureGateMemberReasker 是这一扇门转交的那一口，真实装配接 application.ReaskDepartureGatesOnIdentifiedMemberHandler。
+// DepartureGateMemberReasker 是本门转交的那一口，真实装配接 application.ReaskDepartureGatesOnIdentifiedMemberHandler。
 type DepartureGateMemberReasker interface {
 	Plan(ctx context.Context, command application.ReaskOnNodeIntakeCommand) (application.DepartureGateReaskResult, error)
 	Record(ctx context.Context, planned application.DepartureGateReaskResult) (application.DepartureGateReaskResult, error)
 }
 
-// DepartureGateReaskOnNodeIntakeConsumer 把节点收寄形成信封推进成员补问那一扇门。
+// DepartureGateReaskOnNodeIntakeConsumer 把节点收寄形成信封推进成员补问这道门。
 type DepartureGateReaskOnNodeIntakeConsumer struct {
 	transactor bentoapp.Transactor
 	store      *inbox.Store

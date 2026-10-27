@@ -25,6 +25,8 @@ type identifiedMemberDouble struct {
 	holdersErr  map[string]error
 	sources     []string
 	holderReads []string
+	// runaway 非零时，反向问到这个次数之后一律报读不动：给成环的册一个出口，去重被拿掉时用例红在断言上而不是挂住。
+	runaway int
 }
 
 func (double *identifiedMemberDouble) FormedIntakeIdentity(
@@ -38,6 +40,9 @@ func (double *identifiedMemberDouble) FormedIntakeIdentity(
 
 func (double *identifiedMemberDouble) UnitsEverHolding(_ context.Context, _ domain.TenantID, member string) ([]string, error) {
 	double.holderReads = append(double.holderReads, member)
+	if double.runaway > 0 && len(double.holderReads) > double.runaway {
+		return nil, errors.New("反向问没有停")
+	}
 	if err := double.holdersErr[member]; err != nil {
 		return nil, err
 	}
@@ -201,14 +206,14 @@ func TestANestedBagIsFoundThroughTheCageAndVerifiedLayerByLayer(t *testing.T) {
 	}
 }
 
-// Covers: AT-TF-364 编排半边（ADR-0331 决定二）——候选只放宽、验证才收紧：这件实物曾被装进 bag-1，但出发那一刻已不在袋里（出袋之后才
-// 识别成功）、或根本没有被验证到是这件包裹（身份此刻是另一件），都不补问、不问关务。
+// Covers: AT-TF-364 编排半边（ADR-0331 决定三）——候选只放宽、验证才收紧：这件实物曾被装进 bag-1，但出发那一刻已不在袋里（出袋之后才
+// 识别成功）、或验证到它的身份此刻确定地不是这件包裹（是另一件、不成立），都不补问、不问关务，这一拍入账收工。目标成员自己的身份读不动
+// 不在此列，见 TestATargetMembersOwnUnreadableIdentityIsUndecidedAndAnotherMembersIsSkipped。
 func TestAMemberThatWasNotInTheBagAtDepartureOrIsAnotherParcelNowIsNotAsked(t *testing.T) {
 	cases := map[string][]ports.ConsolidationMember{
 		"出发那一刻已出袋":   {parcelMember(t, "hu-2", "parcel-2")},
 		"身份此刻是另一件包裹": {parcelMember(t, "hu-1", "parcel-9")},
 		"身份此刻不成立":    {{Kind: ports.ConsolidationMemberIdentityUnresolved, Handling: "hu-1"}},
-		"身份此刻读不动":    {{Kind: ports.ConsolidationMemberIdentityUnreadable, Handling: "hu-1"}},
 		"袋里是别的嵌套单元":  {nestedMember(t, "bag-2")},
 	}
 	for name, members := range cases {
@@ -223,6 +228,92 @@ func TestAMemberThatWasNotInTheBagAtDepartureOrIsAnotherParcelNowIsNotAsked(t *t
 				t.Fatalf("补问 = %s %s，%d 份，问关务 %d 次", planned.Outcome(), planned.Stop(), len(planned.Drafts()), len(fixture.gate.customs.queries))
 			}
 		})
+	}
+}
+
+// Covers: AT-TF-364 编排半边（ADR-0331 决定三，ADR-0029）——目标成员自己的身份此刻读不动，是读不动不是「不在袋里」：这封信是它唯一的唤醒，
+// 答不在就入账收工、受限的出发永远没有信号，所以记未决、整封重投，没有补问、不问关务；读回之后重投照常补问。同袋别的成员身份读不动，都不是
+// 这件包裹，跳过并继续（不拦住目标成员被找到，也不让目标不在袋里时无谓地重投）。
+func TestATargetMembersOwnUnreadableIdentityIsUndecidedAndAnotherMembersIsSkipped(t *testing.T) {
+	unreadable := func(handling string) ports.ConsolidationMember {
+		return ports.ConsolidationMember{Kind: ports.ConsolidationMemberIdentityUnreadable, Handling: handling}
+	}
+	t.Run("目标成员自己读不动：未决重投，读回之后补问", func(t *testing.T) {
+		fixture := newMemberReaskFixture(t, "bag-1")
+		fixture.departedWithUnresolvedMember(t, "move-1")
+		fixture.gate.memberships.units["bag-1"] = []ports.ConsolidationMember{unreadable("hu-1"), parcelMember(t, "hu-2", "parcel-2")}
+
+		planned := fixture.plan(t)
+		if planned.Stop() != application.DepartureGateReaskMembershipUnavailable || planned.Disposition() != application.DepartureGateReaskRetry ||
+			len(planned.Drafts()) != 0 || len(fixture.gate.customs.queries) != 0 {
+			t.Fatalf("补问 = %s %s %s，%d 份，问关务 %d 次，want 成员关系读不动、未决、不问关务", planned.Outcome(), planned.Stop(),
+				planned.Disposition(), len(planned.Drafts()), len(fixture.gate.customs.queries))
+		}
+		fixture.gate.memberships.units["bag-1"] = []ports.ConsolidationMember{parcelMember(t, "hu-1", "parcel-1"), parcelMember(t, "hu-2", "parcel-2")}
+		if drafts := fixture.plan(t).Drafts(); len(drafts) != 1 || drafts[0].Key.Object.String() != "parcel-1" {
+			t.Fatalf("读回之后重投 = %+v", drafts)
+		}
+	})
+	t.Run("嵌套的袋里目标成员自己读不动", func(t *testing.T) {
+		fixture := newMemberReaskFixture(t, "cage-1")
+		fixture.identified.holders["bag-1"] = []string{"cage-1"}
+		fixture.gate.memberships.units["cage-1"] = []ports.ConsolidationMember{nestedMember(t, "bag-1")}
+		fixture.gate.memberships.units["bag-1"] = []ports.ConsolidationMember{unreadable("hu-1")}
+		fixture.departOn(t, "move-1", "segment-1", bagFirstReading(t, "cage-1", nil, "hu-1"))
+		if planned := fixture.plan(t); planned.Stop() != application.DepartureGateReaskMembershipUnavailable ||
+			planned.Disposition() != application.DepartureGateReaskRetry {
+			t.Fatalf("补问 = %s %s %s", planned.Outcome(), planned.Stop(), planned.Disposition())
+		}
+	})
+	t.Run("同袋别的成员读不动：跳过，目标成员照常找到", func(t *testing.T) {
+		fixture := newMemberReaskFixture(t, "bag-1")
+		fixture.departedWithUnresolvedMember(t, "move-1")
+		fixture.gate.memberships.units["bag-1"] = []ports.ConsolidationMember{unreadable("hu-9"), parcelMember(t, "hu-1", "parcel-1")}
+		if drafts := fixture.plan(t).Drafts(); len(drafts) != 1 || drafts[0].Key.Object.String() != "parcel-1" {
+			t.Fatalf("补问 = %+v", drafts)
+		}
+	})
+	t.Run("同袋别的成员读不动、目标成员不在袋里：入账收工", func(t *testing.T) {
+		fixture := newMemberReaskFixture(t, "bag-1")
+		fixture.departedWithUnresolvedMember(t, "move-1")
+		fixture.gate.memberships.units["bag-1"] = []ports.ConsolidationMember{unreadable("hu-9"), parcelMember(t, "hu-2", "parcel-2")}
+		planned := fixture.plan(t)
+		if planned.Outcome() != application.DepartureGateReaskScanned || planned.Disposition() != application.DepartureGateReaskSettled ||
+			len(planned.Drafts()) != 0 || len(fixture.gate.customs.queries) != 0 {
+			t.Fatalf("补问 = %s %s %d 份", planned.Outcome(), planned.Disposition(), len(planned.Drafts()))
+		}
+	})
+	t.Run("目标成员自己身份不成立：确定地不随袋走，入账收工", func(t *testing.T) {
+		fixture := newMemberReaskFixture(t, "bag-1")
+		fixture.departedWithUnresolvedMember(t, "move-1")
+		fixture.gate.memberships.units["bag-1"] = []ports.ConsolidationMember{
+			{Kind: ports.ConsolidationMemberIdentityUnresolved, Handling: "hu-1"}, parcelMember(t, "hu-2", "parcel-2")}
+		planned := fixture.plan(t)
+		if planned.Disposition() != application.DepartureGateReaskSettled || len(planned.Drafts()) != 0 || len(fixture.gate.customs.queries) != 0 {
+			t.Fatalf("补问 = %s %s %d 份", planned.Outcome(), planned.Disposition(), len(planned.Drafts()))
+		}
+	})
+}
+
+// Covers: AT-TF-365 编排半边（ADR-0331 决定三）——向上找候选是宽度优先、每件单元只问一次，成环与菱形的册也走得完：hu-1 曾被装进 bag-1 与
+// bag-2，两者都曾被装进 cage-1，cage-1 又曾被装进 bag-1。曾装它的单元的反向问每件恰一次、能终止，经 cage-1 补问一份。
+func TestUnitsAboveTheMemberAreFoundOnceEachThroughADiamondAndACycle(t *testing.T) {
+	fixture := newMemberReaskFixture(t, "cage-1")
+	fixture.identified.holders = map[string][]string{
+		"hu-1": {"bag-1", "bag-2"}, "bag-1": {"cage-1"}, "bag-2": {"cage-1"}, "cage-1": {"bag-1"},
+	}
+	// 成环的册一旦不去重就会一直问下去：问到这个数还没停，替身报读不动，让用例红在断言上而不是挂住。
+	fixture.identified.runaway = 20
+	fixture.gate.memberships.units["cage-1"] = []ports.ConsolidationMember{nestedMember(t, "bag-1")}
+	fixture.gate.memberships.units["bag-1"] = []ports.ConsolidationMember{parcelMember(t, "hu-1", "parcel-1")}
+	fixture.departOn(t, "move-1", "segment-1", bagFirstReading(t, "cage-1", nil, "hu-1"))
+
+	planned := fixture.plan(t)
+	if want := []string{"hu-1", "bag-1", "bag-2", "cage-1"}; !slices.Equal(fixture.identified.holderReads, want) {
+		t.Fatalf("反向问了 %v, want 每件恰一次 %v", fixture.identified.holderReads, want)
+	}
+	if planned.Outcome() != application.DepartureGateReaskScanned || len(planned.Drafts()) != 1 {
+		t.Fatalf("补问 = %s %s，%d 份, want 经 cage-1 补问一份", planned.Outcome(), planned.Stop(), len(planned.Drafts()))
 	}
 }
 
@@ -453,6 +544,9 @@ func TestMemberReaskFailuresLandInTheirPartition(t *testing.T) {
 			application.DepartureGateReaskMembershipUntranslatable, application.DepartureGateReaskFailed},
 		"成员关系读不动": {func(_ *testing.T, f *memberReaskFixture) { f.gate.memberships.errors["bag-1"] = true },
 			application.DepartureGateReaskMembershipUnavailable, application.DepartureGateReaskRetry},
+		"目标成员自己的身份读不动": {func(_ *testing.T, f *memberReaskFixture) {
+			f.gate.memberships.units["bag-1"] = []ports.ConsolidationMember{{Kind: ports.ConsolidationMemberIdentityUnreadable, Handling: "hu-1"}}
+		}, application.DepartureGateReaskMembershipUnavailable, application.DepartureGateReaskRetry},
 		"成员关系译不回来": {func(_ *testing.T, f *memberReaskFixture) { f.gate.memberships.untranslatable["bag-1"] = true },
 			application.DepartureGateReaskMembershipUntranslatable, application.DepartureGateReaskFailed},
 		"成员落在封闭集外": {func(_ *testing.T, f *memberReaskFixture) {
@@ -601,12 +695,12 @@ func TestCarriesMemberWalksTheBagsLayerByLayerOnceEachAndEndsOnACycle(t *testing
 	tenant := mustRefValue(t, domain.NewTenantID, "tenant-1")
 	cage := mustRefValue(t, domain.NewCarriedObjectReference, "cage-1")
 
-	found, err := reader.CarriesMember(t.Context(), tenant, cage, mustRefValue(t, domain.NewCarriedObjectReference, "parcel-1"), movedAtFixture)
+	found, err := reader.CarriesMember(t.Context(), tenant, cage, mustRefValue(t, domain.NewCarriedObjectReference, "parcel-1"), "hu-1", movedAtFixture)
 	if err != nil || !found {
 		t.Fatalf("成环的册上找 parcel-1 = %v %v", found, err)
 	}
 	memberships.queries = nil
-	missing, err := reader.CarriesMember(t.Context(), tenant, cage, mustRefValue(t, domain.NewCarriedObjectReference, "parcel-absent"), movedAtFixture)
+	missing, err := reader.CarriesMember(t.Context(), tenant, cage, mustRefValue(t, domain.NewCarriedObjectReference, "parcel-absent"), "hu-absent", movedAtFixture)
 	if err != nil || missing {
 		t.Fatalf("成环的册上找不存在的包裹 = %v %v", missing, err)
 	}
@@ -620,5 +714,15 @@ func TestCarriesMemberWalksTheBagsLayerByLayerOnceEachAndEndsOnACycle(t *testing
 	slices.Sort(asked)
 	if !slices.Equal(asked, []string{"bag-1", "bag-2", "cage-1"}) {
 		t.Fatalf("问了 %v，每件单元只问一次", asked)
+	}
+	// 目标成员自己的身份读不动：作为读不动交回（不是译不回来，重投可能就好）；同袋别的成员读不动跳过。
+	memberships.units["bag-2"] = []ports.ConsolidationMember{{Kind: ports.ConsolidationMemberIdentityUnreadable, Handling: "hu-1"}}
+	_, err = reader.CarriesMember(t.Context(), tenant, cage, mustRefValue(t, domain.NewCarriedObjectReference, "parcel-1"), "hu-1", movedAtFixture)
+	if err == nil || errors.Is(err, ports.ErrConsolidationMembershipUntranslatable) {
+		t.Fatalf("目标成员自己读不动 err = %v, want 读不动（非译不回来）", err)
+	}
+	memberships.units["bag-2"] = []ports.ConsolidationMember{{Kind: ports.ConsolidationMemberIdentityUnreadable, Handling: "hu-9"}}
+	if found, err := reader.CarriesMember(t.Context(), tenant, cage, mustRefValue(t, domain.NewCarriedObjectReference, "parcel-1"), "hu-1", movedAtFixture); err != nil || found {
+		t.Fatalf("同袋别的成员读不动 = %v %v, want 跳过、没找到、不是错", found, err)
 	}
 }

@@ -83,7 +83,7 @@ func TestTheMovementFactBackfillOnNodeIntakeRunsAfterTheProjectionAndTheSourceAd
 	}
 }
 
-// Covers: AT-TF-366 名次半边（ADR-0331 决定一）——成员的出发门禁补问排在 VE 投影、PS 来源采用与 VE 移动事实补派生之后、是这封信上的最后一路：它与补派生一样读量随候选单元与
+// Covers: AT-TF-366 名次半边（ADR-0331 决定一）——成员的出发门禁补问排在 VE 投影、PS 来源采用与 VE 移动事实补派生之后、排在这封信上其余各路之后：它与补派生一样读量随候选单元与
 // 整袋增长，还要多问一次关务；排在前面会吃掉前几路的投递时间，排在后面，主业务与补派生先落地，本路是尽力而为的补问。
 func TestTheMemberReaskOnNodeIntakeRunsAfterEveryOtherLegOfTheFanOut(t *testing.T) {
 	labels := legLabelsOn(t, veinbox.NodeIntakeFormedEventType)

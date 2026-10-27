@@ -19,7 +19,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// 本文件对真实 PostgreSQL 证成员补问那一扇门（ADR-0331）：问关务与验证成员在消费门事务之外，追加读数与交补问信封在消费门那一笔里；编排
+// 本文件对真实 PostgreSQL 证成员补问这道门（ADR-0331）：问关务与验证成员在消费门事务之外，追加读数与交补问信封在消费门那一笔里；编排
 // 答出的三种处置各落成 inbox 的一种动作；信封两维缺一是毒丸。处理方是真编排，各口用替身，替身记下自己是在不在事务里被调的。夹具全部合成。
 
 type identifiedViewDouble struct {
@@ -44,16 +44,17 @@ func (double *identifiedViewDouble) UnitsEverHolding(ctx context.Context, _ doma
 type memberGateDouble struct {
 	probe    txProbe
 	carried  bool
+	carryErr error
 	carryTx  []bool
 	reaskTx  []bool
 	reasking []domain.CarriedObjectReference
 }
 
 func (double *memberGateDouble) CarriesMember(
-	ctx context.Context, _ domain.TenantID, _, _ domain.CarriedObjectReference, _ time.Time,
+	ctx context.Context, _ domain.TenantID, _, _ domain.CarriedObjectReference, _ string, _ time.Time,
 ) (bool, error) {
 	double.carryTx = append(double.carryTx, double.probe.inTransaction(ctx))
-	return double.carried, nil
+	return double.carried, double.carryErr
 }
 
 func (double *memberGateDouble) ReaskMember(
@@ -129,7 +130,7 @@ func newMemberReaskGateFixture(t *testing.T) *memberReaskGateFixture {
 		t.Fatalf("装成员补问编排：%v", err)
 	}
 	if fixture.consumer, err = tfinbox.NewDepartureGateReaskOnNodeIntakeConsumer(db.Transactor(), store, handler); err != nil {
-		t.Fatalf("构造节点收寄那一扇门：%v", err)
+		t.Fatalf("构造节点收寄这道门：%v", err)
 	}
 	return fixture
 }
@@ -223,6 +224,22 @@ func TestTheMemberReaskGateRetriesFailsOrSettlesAsTheOrchestrationDisposes(t *te
 			t.Fatalf("收寄读不回 = %v, want 只带未决哨兵", err)
 		}
 		fixture.identified.identityErr = nil
+		if err := fixture.consumer.Consume(t.Context(), envelope); err != nil || len(fixture.reasks.saved) != 1 {
+			t.Fatalf("读回之后重投 = %v，追加 %d 份", err, len(fixture.reasks.saved))
+		}
+	})
+	t.Run("重投：目标成员自己的身份读不动，读回之后补问", func(t *testing.T) {
+		fixture := newMemberReaskGateFixture(t)
+		fixture.gate.carryErr = errors.New("目标成员的身份读不动")
+		envelope := nodeIntakeEnvelope("member-reask-identity-down", formedNodeIntakePayload)
+		err := fixture.consumer.Consume(t.Context(), envelope)
+		if !errors.Is(err, tfinbox.ErrDepartureGateReaskUndecided) || errors.Is(err, tfinbox.ErrDepartureGateReaskDefect) {
+			t.Fatalf("目标成员的身份读不动 = %v, want 只带未决哨兵——这封信是它唯一的唤醒，收工就再没有补问", err)
+		}
+		if len(fixture.reasks.saved) != 0 || len(fixture.gate.reaskTx) != 0 {
+			t.Fatalf("读不动的这一拍追加了 %d 份、问了关务 %d 次", len(fixture.reasks.saved), len(fixture.gate.reaskTx))
+		}
+		fixture.gate.carryErr = nil
 		if err := fixture.consumer.Consume(t.Context(), envelope); err != nil || len(fixture.reasks.saved) != 1 {
 			t.Fatalf("读回之后重投 = %v，追加 %d 份", err, len(fixture.reasks.saved))
 		}

@@ -77,7 +77,7 @@ func departureGateMemberReasks(
 	return handler, nil
 }
 
-// departureGateReaskOnNodeIntakeConsumerOver 装节点收寄形成信封上的成员补问那一扇门，接到给定的关务那一口上。
+// departureGateReaskOnNodeIntakeConsumerOver 装节点收寄形成信封上的成员补问这道门，接到给定的关务那一口上。
 func departureGateReaskOnNodeIntakeConsumerOver(
 	db *bentopg.DB,
 	inboxStore *inbox.Store,

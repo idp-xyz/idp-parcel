@@ -29,9 +29,10 @@ const (
 )
 
 var (
-	errDepartureGateViewMisanswered = errors.New("transport fulfillment: the departure gate view answered for another object")
-	errDepartureEntryBindingUnknown = errors.New("transport fulfillment: the departure entry binding answered outside its closed set")
-	errConsolidationMemberMisshaped = errors.New("transport fulfillment: the consolidation membership view answered a member of no known kind")
+	errDepartureGateViewMisanswered   = errors.New("transport fulfillment: the departure gate view answered for another object")
+	errDepartureEntryBindingUnknown   = errors.New("transport fulfillment: the departure entry binding answered outside its closed set")
+	errConsolidationMemberMisshaped   = errors.New("transport fulfillment: the consolidation membership view answered a member of no known kind")
+	errTargetMemberIdentityUnreadable = errors.New("transport fulfillment: the identity of the member being asked about cannot be read right now")
 )
 
 // DepartureGateReadDeps 是出发门禁读数要问的几口：本上下文自己的段册、班次册与交接册（核班次是不是载着这一段），node-operations
@@ -113,15 +114,21 @@ func (reader *DepartureGateReader) ReaskMember(
 }
 
 // CarriesMember 说集运单元 unit 在 at 那一刻，逐层往下是不是装着 member 这件包裹。成员口径就是出发读数展开用的那一口
-// （ConsolidationMembershipView.MembersAt）：按成员关系事实的业务发生时间取，成员的包裹身份取此刻的当前有效版本——身份不成立或读不动
-// 的成员不是任何一件包裹，不算。嵌套单元逐层往下、每件只问一次，成环的册也走得完。
+// （ConsolidationMembershipView.MembersAt）：按成员关系事实的业务发生时间取，成员的包裹身份取此刻的当前有效版本。memberHandling 是
+// member 在 node-operations 里的作业实物标识，用来认出「目标成员自己」。
 //
-// error 是成员关系那一问没有形成答复（包住 ports.ErrConsolidationMembershipUntranslatable 的是译不回来，其余是调用失败）：说不出就
+// 目标成员自己的身份此刻读不动，是读不动不是「不在袋里」：说不出它是不是这件包裹，就不能答不在，答不在等于让这封信（它是这件
+// 成员唯一的唤醒）收工、受限的出发永远没有信号，所以作为错误交回、原样重投。身份不成立（待识别、身份冲突）是确定的答复，目标
+// 成员那一格是不成立，则答不在；同袋别的成员身份读不动或不成立，都不是 member，跳过。嵌套单元逐层往下、每件只问一次，成环的册
+// 也走得完。
+//
+// error 是成员关系那一问没有形成答复（包住 ports.ErrConsolidationMembershipUntranslatable 的是译不回来，其余是读不动）：说不出就
 // 不能答「不在」，那等于放过一件本该问关务的包裹。
 func (reader *DepartureGateReader) CarriesMember(
 	ctx context.Context,
 	tenant domain.TenantID,
 	unit, member domain.CarriedObjectReference,
+	memberHandling string,
 	at time.Time,
 ) (bool, error) {
 	seen := map[domain.CarriedObjectReference]bool{unit: true}
@@ -144,7 +151,11 @@ func (reader *DepartureGateReader) CarriesMember(
 					seen[held.Object] = true
 					queue = append(queue, held.Object)
 				}
-			case ports.ConsolidationMemberIdentityUnresolved, ports.ConsolidationMemberIdentityUnreadable:
+			case ports.ConsolidationMemberIdentityUnresolved:
+			case ports.ConsolidationMemberIdentityUnreadable:
+				if held.Handling == memberHandling {
+					return false, fmt.Errorf("%w: member %q in %q", errTargetMemberIdentityUnreadable, held.Handling, current)
+				}
 			default:
 				return false, fmt.Errorf("%w: member %q of %q", ports.ErrConsolidationMembershipUntranslatable, held.Handling, current)
 			}

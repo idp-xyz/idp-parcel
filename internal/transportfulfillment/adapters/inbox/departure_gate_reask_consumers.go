@@ -170,8 +170,7 @@ func departureGateReaskParts(transactor bentoapp.Transactor, store *inbox.Store,
 	return nil
 }
 
-// departureGateReaskRecorder 是补问各扇门共用的落册那一口：交接与揽收两扇门（DepartureGateReasker）和节点收寄形成那一扇门
-// （DepartureGateMemberReasker）都满足它。
+// departureGateReaskRecorder 是各个补问门共用的落册那一口：DepartureGateReasker 与 DepartureGateMemberReasker 的处理方都满足它。
 type departureGateReaskRecorder interface {
 	Record(ctx context.Context, planned application.DepartureGateReaskResult) (application.DepartureGateReaskResult, error)
 }

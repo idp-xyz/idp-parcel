@@ -136,6 +136,10 @@ func TestMembersAreTranslatedThroughTheNodeIdentityJudgement(t *testing.T) {
 			t.Fatalf("第 %d 件 = %+v，要 %+v", index, got, expected)
 		}
 	}
+	// 身份读不动的成员带着自己的作业实物标识交回：成员补问靠它认出「读不动的正是目标成员自己」（ADR-0331 决定三）。
+	if answer.Members[4].Handling != "hu-down" || answer.Members[5].Handling != "hu-looped" {
+		t.Fatalf("读不动的成员标识 = %q / %q, want hu-down / hu-looped", answer.Members[4].Handling, answer.Members[5].Handling)
+	}
 	if !memberships.asked[0].Equal(tfdomain.AtRegistryPrecision(at)) {
 		t.Fatalf("时点 = %s，要按登记精度", memberships.asked[0])
 	}

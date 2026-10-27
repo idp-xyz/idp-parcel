@@ -232,7 +232,7 @@ func TestAParcelAlreadyBlockedOnTheDepartureIsNotSignalledAgain(t *testing.T) {
 	})
 }
 
-// Covers: AT-VE-222 适配器半边（ADR-0331）——随袋走过出发、当时身份未决的成员后来识别成功，替它补问的读数（键是成员包裹，首版读数里它没有自己
+// Covers: AT-VE-226 适配器半边（ADR-0331）——随袋走过出发、当时身份未决的成员后来识别成功，替它补问的读数（键是成员包裹，首版读数里它没有自己
 // 的一格，只有袋那一格答未决）里阻断：为这件成员包裹形成信号，依据与因果条件指那条出发、事实引用是这件包裹上的引用；之后替袋补问的那一份读数
 // 展开整袋、里面同一件成员又判阻断，不再交——一次违规出发只交分诊一次，跨补问的两条链也一样。
 func TestAMemberReaskedAfterItsBagDepartedRaisesItsSignalOnceAcrossBothChains(t *testing.T) {

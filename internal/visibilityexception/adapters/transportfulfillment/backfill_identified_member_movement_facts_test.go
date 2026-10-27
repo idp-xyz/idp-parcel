@@ -7,9 +7,12 @@ import (
 	"testing"
 	"time"
 
+	nodomain "go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
+	noports "go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	tfports "go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 	veinbox "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/inbox"
+	venodeops "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/nodeoperations"
 	adapter "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/transportfulfillment"
 	vedomain "go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 	veports "go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
@@ -505,4 +508,86 @@ func TestTheIdentifiedMemberBackfillAdapterRefusesMissingDependencies(t *testing
 			t.Fatalf("%s 构造成功了", name)
 		}
 	}
+}
+
+// nodeMembershipsDouble 与 nodeIdentitiesDouble 是节点作业的两本册：袋 parcel-1 装着 HU-NEW 与 HU-OLD，HU-OLD 已识别成 PCL-OLD，HU-NEW 的
+// 收寄身份由用例决定。用真的成员关系适配器（venodeops）接在补派生下面，钉住「目标成员自己的身份这一刻读不动」从适配器一路到补派生答什么。
+type nodeMembershipsDouble struct{}
+
+func (nodeMembershipsDouble) ReadConsolidationMembershipAt(
+	_ context.Context, _ nodomain.TenantID, object string, _ time.Time,
+) (noports.ConsolidationMembershipAt, error) {
+	if object != "parcel-1" {
+		return noports.ConsolidationMembershipAt{}, nil
+	}
+	member := func(raw string) noports.ConsolidationMemberAt {
+		id, err := nodomain.NewHandlingUnitID(raw)
+		if err != nil {
+			panic(err)
+		}
+		return noports.ConsolidationMemberAt{Member: id}
+	}
+	return noports.ConsolidationMembershipAt{Unit: true, Members: []noports.ConsolidationMemberAt{member("HU-NEW"), member("HU-OLD")}}, nil
+}
+
+type nodeIdentitiesDouble struct {
+	newDown bool
+}
+
+func (double nodeIdentitiesDouble) FindIntakeIdentities(
+	_ context.Context, _ nodomain.TenantID, unit nodomain.HandlingUnitID,
+) ([]nodomain.IntakeIdentityObservation, error) {
+	switch unit.String() {
+	case "HU-NEW":
+		if double.newDown {
+			return nil, errors.New("收寄册读不动")
+		}
+		return nil, nil
+	case "HU-OLD":
+		version, _ := nodomain.NewIntakeResultVersion("v1")
+		association, _ := nodomain.NewParcelAssociationReference("PCL-OLD")
+		return []nodomain.IntakeIdentityObservation{{
+			SourceID: "scan-old", Version: version, Association: association, ReceivedAt: time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC),
+		}}, nil
+	}
+	return nil, nil
+}
+
+// Covers: AT-VE-221 适配器半边（ADR-0299 失败分格，与 ADR-0331 决定三同口径）——目标成员自己的收寄身份这一刻读不动，补派生不能把它读成「展开
+// 不到这封信指的包裹」而入账收工：这封信是它唯一的唤醒，收工就再没有补派生。成员关系适配器把收寄册读不动原样交回为错误，补派生记成
+// 成员关系读不动的未决、整封重投，没有派生任何东西；收寄身份读得回却是不成立（待识别）是确定的答复，展开不到它，入账收工。
+func TestTheTargetMembersOwnUnreadableIdentityKeepsTheBackfillUndecidedNotFinished(t *testing.T) {
+	build := func(t *testing.T, identities nodeIdentitiesDouble) *identifiedMemberFixture {
+		t.Helper()
+		fixture := newIdentifiedMemberFixture(t)
+		view, err := venodeops.NewConsolidationMembershipView(nodeMembershipsDouble{}, identities)
+		if err != nil {
+			t.Fatalf("成员关系适配器：%v", err)
+		}
+		subject, err := adapter.NewBackfillIdentifiedMemberAdapter(fixture.identified, fixture.segments, fixture.facts, view, fixture.derive)
+		if err != nil {
+			t.Fatalf("构造：%v", err)
+		}
+		fixture.subject = subject
+		return fixture
+	}
+	t.Run("目标成员的收寄身份读不动：未决重投，什么也不派生", func(t *testing.T) {
+		fixture := build(t, nodeIdentitiesDouble{newDown: true})
+		err := fixture.subject.HandleFormedNodeIntake(t.Context(), formedNodeIntakeRef())
+		if !errors.Is(err, adapter.ErrConsolidationMembershipNotVisible) || errors.Is(err, adapter.ErrConsolidationMembershipInconsistent) {
+			t.Fatalf("err = %v, want 成员关系读不动的未决", err)
+		}
+		if n := len(fixture.factsOfParcel("PCL-NEW")); n != 0 {
+			t.Fatalf("读不动的这一拍派生了 %d 份", n)
+		}
+	})
+	t.Run("目标成员的收寄身份读得回却不成立：确定的答复，入账收工", func(t *testing.T) {
+		fixture := build(t, nodeIdentitiesDouble{})
+		if err := fixture.subject.HandleFormedNodeIntake(t.Context(), formedNodeIntakeRef()); err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if n := len(fixture.factsOfParcel("PCL-NEW")); n != 0 {
+			t.Fatalf("身份不成立却派生了 %d 份", n)
+		}
+	})
 }

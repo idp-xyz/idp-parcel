@@ -16,7 +16,7 @@ import (
 
 // MemberCarrier 说一件成员在某一时点是不是随某件集运单元走，并按原出发时点只替这一件成员再问一次，真实装配接 DepartureGateReader。
 type MemberCarrier interface {
-	CarriesMember(ctx context.Context, tenant domain.TenantID, unit, member domain.CarriedObjectReference, at time.Time) (bool, error)
+	CarriesMember(ctx context.Context, tenant domain.TenantID, unit, member domain.CarriedObjectReference, memberHandling string, at time.Time) (bool, error)
 	ReaskMember(ctx context.Context, fact domain.TransportMovementFact, unit, member domain.CarriedObjectReference) (domain.DepartureGateReading, error)
 }
 
@@ -104,7 +104,7 @@ func (handler *ReaskDepartureGatesOnIdentifiedMemberHandler) Plan(
 				if settled[record.Key] {
 					continue
 				}
-				step, err := handler.reaskMember(ctx, key, segment, record, unit, identity.Parcel, trigger)
+				step, err := handler.reaskMember(ctx, key, segment, record, unit, identity.Parcel, identity.Handling, trigger)
 				if err != nil {
 					return DepartureGateReaskResult{}, err
 				}
@@ -169,6 +169,7 @@ func (handler *ReaskDepartureGatesOnIdentifiedMemberHandler) reaskMember(
 	segment domain.ActualFulfillmentSegment,
 	record ports.MovementFactRecord,
 	unit, member domain.CarriedObjectReference,
+	handling string,
 	trigger string,
 ) (departureGateReaskStep, error) {
 	fact := record.Fact
@@ -194,7 +195,7 @@ func (handler *ReaskDepartureGatesOnIdentifiedMemberHandler) reaskMember(
 		return departureGateReaskStep{exhausted: true}, nil
 	}
 
-	carried, err := handler.deps.Gate.CarriesMember(ctx, record.Key.TenantID, unit, member, fact.OccurredAt())
+	carried, err := handler.deps.Gate.CarriesMember(ctx, record.Key.TenantID, unit, member, handling, fact.OccurredAt())
 	switch {
 	case errors.Is(err, ports.ErrConsolidationMembershipUntranslatable):
 		return departureGateReaskStep{stopped: departureGateReaskStopped(DepartureGateReaskDefect, DepartureGateReaskMembershipUntranslatable)}, nil

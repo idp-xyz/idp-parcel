@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -162,7 +163,7 @@ func firstReadingOf(t *testing.T, fixture *synVerticalFixture, fact string) tfdo
 	return reading
 }
 
-// Covers: AT-TF-364 真库半边、AT-TF-365 真库半边、AT-VE-222 真库半边、票面判据「识别成功后按原出发时点补问出发门禁，阻断补出与正常出发同形的阻断
+// Covers: AT-TF-364 真库半边、AT-TF-365 真库半边、AT-VE-226 真库半边、票面判据「识别成功后按原出发时点补问出发门禁，阻断补出与正常出发同形的阻断
 // 信号，放行不出信号，重投只答已有结果」（证据 S）——一袋装着已识别的两件与出发时身份未决的两件（其中一件约束装载出发的限制在册），笼之外另有出发前
 // 已出袋、出发后才装进、从没进过袋的三件实物，段里在控的是袋。出发经生产读数路径登记：袋那一格答未决、缘由指名身份未决的那几件实物，关务没有被问过
 // 它们。之后各件实物识别成功（节点收寄形成信封经生产路由一拍）：出发那一刻正在袋里的两件各得第 1 次补问，键是各自的包裹、读数里只有它自己的一格，
@@ -406,6 +407,196 @@ func TestTwoIntakeEnvelopesOfOneMemberAskedBeforeEitherRecordedAskOnceAndTheLose
 	}
 	if n := len(fixture.outboxIDsOfType(t, tfpostgres.DepartureGateReaskRecordedEventType)); n != 1 {
 		t.Fatalf("补问信封 %d 封, want 1——撞键的一边不另交", n)
+	}
+	drainReaskEnvelopes(t, fixture, 1)
+	if n := signalEpisodes(t, fixture, memberReaskHeldParcel); n != 1 {
+		t.Fatalf("信号 %d 期, want 1", n)
+	}
+}
+
+// restrictParcel 在关务限制册上给 parcel 登一条出发前三小时起有效、约束装载出发的监管限制；id 区分同一个库里的几条。
+func restrictParcel(t *testing.T, fixture *synVerticalFixture, id, parcel string) {
+	t.Helper()
+	if _, err := fixture.pool.Exec(t.Context(),
+		`INSERT INTO customs_compliance.regulatory_restriction
+			(tenant_id, restriction_id, decision_id, scope_ref, constrains, effective_at)
+		 VALUES ($1, $3, 'SYN-DECISION-HOLD', $2, jsonb_build_array('LOADING_DEPARTURE'), $4)`,
+		fixture.identity.TenantID().String(), parcel, id, movementDepartedAt.Add(-3*time.Hour)); err != nil {
+		t.Fatalf("登限制：%v", err)
+	}
+}
+
+// memberFactTagged 同 memberFactAt，只是来源标识多带一个标记：同一件成员在同一只袋上先后移入、移出多次时不撞来源标识。
+func memberFactTagged(t *testing.T, fixture *synVerticalFixture, tag, action, unit, member string, at time.Time) {
+	t.Helper()
+	if _, err := fixture.pool.Exec(t.Context(),
+		`INSERT INTO node_operations.consolidation_fact
+			(tenant_id, source_id, content_digest, action, unit_id, member_id, performed_by, evidence, occurred_at, recorded_at)
+		 VALUES ($1, 'SYN-C103-' || $6 || '-' || $2 || '-' || $3 || '-' || $4, 'syn-digest', $2, $3, $4, 'SYN-PACKER', 'SYN-WORK', $5, $5)`,
+		fixture.identity.TenantID().String(), action, unit, member, at, tag); err != nil {
+		t.Fatalf("播种成员事实：%v", err)
+	}
+}
+
+// reaskedObjects 数这条出发上每件对象被补问了几次。
+func reaskedObjects(t *testing.T, fixture *synVerticalFixture) map[string]int {
+	t.Helper()
+	counts := map[string]int{}
+	for _, reask := range departureReasksOf(t, fixture, memberReaskFact) {
+		counts[reask.Key.Object.String()]++
+	}
+	return counts
+}
+
+// Covers: AT-TF-365 真库半边、AT-VE-226 真库半边（ADR-0331 决定五）——同一只袋里两件成员都是出发后才识别成功、都受限：各自一期信号，不被「一次违规出发
+// 只交分诊一次」吞掉——那一条按（出发、包裹）去重，不按出发去重。
+func TestTwoRestrictedMembersOfOneBagEachGetTheirOwnSignal(t *testing.T) {
+	fixture := newSYNVerticalFixture(t)
+	registerDemoMilestoneMapping(t, fixture)
+	registerDemoDepartureGateSignalRule(t, fixture)
+	saveReaskSchedule(t, fixture)
+	seedBagAroundTheDeparture(t, fixture)
+	memberFactAt(t, fixture, "ADD_MEMBER", consolidationBag, memberReaskHeld, movementDepartedAt.Add(-2*time.Hour))
+	memberFactAt(t, fixture, "ADD_MEMBER", consolidationBag, memberReaskFree, movementDepartedAt.Add(-2*time.Hour))
+	saveBagSegment(t, fixture)
+	restrictParcel(t, fixture, "SYN-RESTRICTION-C103-A", memberReaskHeldParcel)
+	restrictParcel(t, fixture, "SYN-RESTRICTION-C103-B", memberReaskFreeParcel)
+	factEvent := recordBagDepartureWithProductionReading(t, fixture, memberReaskFact)
+	if published, err := fixture.beat.DispatchOnce(t.Context()); err != nil || published != 1 {
+		t.Fatalf("出发那一拍 published = %d err = %v；失败码 = %q", published, err, recordedFailureCode(t, fixture.db, factEvent))
+	}
+	for handling, parcel := range map[string]string{memberReaskHeld: memberReaskHeldParcel, memberReaskFree: memberReaskFreeParcel} {
+		enqueueNodeIntakeFormed(t, fixture, formedReceptionOf(t, fixture, handling, parcel))
+	}
+	if _, err := fixture.beat.DispatchOnce(t.Context()); err != nil {
+		t.Fatalf("识别那一拍：%v", err)
+	}
+	if got := reaskedObjects(t, fixture); got[memberReaskHeldParcel] != 1 || got[memberReaskFreeParcel] != 1 || len(got) != 2 {
+		t.Fatalf("补问 = %v, want 两件各一次", got)
+	}
+	drainReaskEnvelopes(t, fixture, 2)
+	for _, parcel := range []string{memberReaskHeldParcel, memberReaskFreeParcel} {
+		if n := signalEpisodes(t, fixture, parcel); n != 1 {
+			t.Fatalf("%s 形成 %d 期, want 1", parcel, n)
+		}
+	}
+}
+
+// Covers: AT-TF-364 真库半边（ADR-0331 决定三）——成员在袋里的时间区间边界走生产成员关系：出发前移出又装回的、出发之后才移出的，出发那一刻在袋里，补问；
+// 出发前移出、出发之后才装回的，出发那一刻不在袋里，不补问。
+func TestAMemberReAddedOrRemovedAroundTheDepartureIsAskedOnlyIfItWasInTheBagAtThatMoment(t *testing.T) {
+	fixture := newSYNVerticalFixture(t)
+	registerDemoMilestoneMapping(t, fixture)
+	registerDemoDepartureGateSignalRule(t, fixture)
+	saveReaskSchedule(t, fixture)
+	seedBagAroundTheDeparture(t, fixture)
+	// held：装 -3h、移出 -2h、装回 -1h，出发时在袋里。
+	memberFactTagged(t, fixture, "1", "ADD_MEMBER", consolidationBag, memberReaskHeld, movementDepartedAt.Add(-3*time.Hour))
+	memberFactTagged(t, fixture, "2", "REMOVE_MEMBER", consolidationBag, memberReaskHeld, movementDepartedAt.Add(-2*time.Hour))
+	memberFactTagged(t, fixture, "3", "ADD_MEMBER", consolidationBag, memberReaskHeld, movementDepartedAt.Add(-1*time.Hour))
+	// free：装 -2h，出发之后两分钟才移出，出发时在袋里。
+	memberFactTagged(t, fixture, "4", "ADD_MEMBER", consolidationBag, memberReaskFree, movementDepartedAt.Add(-2*time.Hour))
+	memberFactTagged(t, fixture, "5", "REMOVE_MEMBER", consolidationBag, memberReaskFree, movementDepartedAt.Add(2*time.Minute))
+	// gone：装 -3h、移出 -2h、出发之后两分钟才装回，出发时不在袋里。
+	memberFactTagged(t, fixture, "6", "ADD_MEMBER", consolidationBag, memberReaskGone, movementDepartedAt.Add(-3*time.Hour))
+	memberFactTagged(t, fixture, "7", "REMOVE_MEMBER", consolidationBag, memberReaskGone, movementDepartedAt.Add(-2*time.Hour))
+	memberFactTagged(t, fixture, "8", "ADD_MEMBER", consolidationBag, memberReaskGone, movementDepartedAt.Add(2*time.Minute))
+	saveBagSegment(t, fixture)
+	factEvent := recordBagDepartureWithProductionReading(t, fixture, memberReaskFact)
+	if published, err := fixture.beat.DispatchOnce(t.Context()); err != nil || published != 1 {
+		t.Fatalf("出发那一拍 published = %d err = %v；失败码 = %q", published, err, recordedFailureCode(t, fixture.db, factEvent))
+	}
+	for handling, parcel := range map[string]string{
+		memberReaskHeld: memberReaskHeldParcel, memberReaskFree: memberReaskFreeParcel, memberReaskGone: memberReaskGoneParcel,
+	} {
+		enqueueNodeIntakeFormed(t, fixture, formedReceptionOf(t, fixture, handling, parcel))
+	}
+	if _, err := fixture.beat.DispatchOnce(t.Context()); err != nil {
+		t.Fatalf("识别那一拍：%v", err)
+	}
+	if got := reaskedObjects(t, fixture); got[memberReaskHeldParcel] != 1 || got[memberReaskFreeParcel] != 1 || got[memberReaskGoneParcel] != 0 || len(got) != 2 {
+		t.Fatalf("补问 = %v, want 出发时在袋里的 held 与 free 各一次、gone 没有", got)
+	}
+}
+
+// Covers: AT-TF-365 并发半边（ADR-0331 决定四，ADR-0305 决定六）——同一件实物的两封收寄形成信封各自问完关务之后，两边同时进写事务落册（各一笔事务，
+// 连接池两条各占一条）：恰一边追加、一边撞键认先到者，补问册恰一行、补问信封恰一封、信号恰一期。与确定交错的那一条互补：那一条钉住次序，这一条
+// 钉住两笔事务真的同时抢同一个次序时数据库层的唯一键把关。
+func TestTwoIntakeEnvelopesOfOneMemberRecordingTogetherLeaveOneReaskAndOneLoser(t *testing.T) {
+	fixture := newSYNVerticalFixture(t)
+	registerDemoMilestoneMapping(t, fixture)
+	registerDemoDepartureGateSignalRule(t, fixture)
+	saveReaskSchedule(t, fixture)
+	seedBagAroundTheDeparture(t, fixture)
+	memberFactAt(t, fixture, "ADD_MEMBER", consolidationBag, memberReaskHeld, movementDepartedAt.Add(-2*time.Hour))
+	saveBagSegment(t, fixture)
+	restrictLoadingDepartureOf(t, fixture, memberReaskHeldParcel)
+	factEvent := recordBagDepartureWithProductionReading(t, fixture, memberReaskFact)
+	if published, err := fixture.beat.DispatchOnce(t.Context()); err != nil || published != 1 {
+		t.Fatalf("出发那一拍 published = %d err = %v；失败码 = %q", published, err, recordedFailureCode(t, fixture.db, factEvent))
+	}
+	source := formedReceptionOf(t, fixture, memberReaskHeld, memberReaskHeldParcel)
+	customs, err := departureGateCustomsView(fixture.db, systemClock{})
+	if err != nil {
+		t.Fatalf("装配关务那一口：%v", err)
+	}
+	handler, err := departureGateMemberReasks(fixture.db, fixtureOutbox(t, fixture), systemClock{}, customs)
+	if err != nil {
+		t.Fatalf("装配成员补问编排：%v", err)
+	}
+	command := tfapp.ReaskOnNodeIntakeCommand{TenantID: mustTF(t, tfdomain.NewTenantID, fixture.identity.TenantID().String()), Source: source}
+	first, err := handler.Plan(t.Context(), command)
+	if err != nil {
+		t.Fatalf("先到的一边 Plan：%v", err)
+	}
+	second, err := handler.Plan(t.Context(), command)
+	if err != nil {
+		t.Fatalf("后到的一边 Plan：%v", err)
+	}
+	if len(first.Drafts()) != 1 || len(second.Drafts()) != 1 {
+		t.Fatalf("两边都该问到一份：%d、%d", len(first.Drafts()), len(second.Drafts()))
+	}
+
+	results := make([]tfapp.DepartureGateReaskResult, 2)
+	var done sync.WaitGroup
+	start := make(chan struct{})
+	for index, planned := range []tfapp.DepartureGateReaskResult{first, second} {
+		done.Add(1)
+		go func() {
+			defer done.Done()
+			<-start
+			_ = fixture.transactor.WithinTransaction(t.Context(), func(txCtx context.Context) error {
+				recorded, recordErr := handler.Record(txCtx, planned)
+				results[index] = recorded
+				if recordErr != nil {
+					return recordErr
+				}
+				if recorded.Disposition() != tfapp.DepartureGateReaskSettled {
+					return errors.New("rolled back")
+				}
+				return nil
+			})
+		}()
+	}
+	close(start)
+	done.Wait()
+	settled, taken := 0, 0
+	for _, recorded := range results {
+		switch {
+		case recorded.Disposition() == tfapp.DepartureGateReaskSettled:
+			settled++
+		case recorded.Stop() == tfapp.DepartureGateReaskSequenceTaken:
+			taken++
+		}
+	}
+	if settled != 1 || taken != 1 {
+		t.Fatalf("追加 %d 边、撞键 %d 边（%s、%s）, want 各一边", settled, taken, results[0].Stop(), results[1].Stop())
+	}
+	if n := len(departureReasksOf(t, fixture, memberReaskFact)); n != 1 {
+		t.Fatalf("补问册 %d 行, want 1", n)
+	}
+	if n := len(fixture.outboxIDsOfType(t, tfpostgres.DepartureGateReaskRecordedEventType)); n != 1 {
+		t.Fatalf("补问信封 %d 封, want 1", n)
 	}
 	drainReaskEnvelopes(t, fixture, 1)
 	if n := signalEpisodes(t, fixture, memberReaskHeldParcel); n != 1 {
