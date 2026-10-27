@@ -116,23 +116,31 @@ func TestTheJudgmentPointDecidesWhetherTheDeclarationOrTheMeasurementPricesTheCa
 		t.Fatalf("预路由问了 %d 次物理事实", len(physical.asOf))
 	}
 
-	for name, point := range map[string]nrdomain.ParcelFactsPoint{
-		"首次收寄": intake, "到站": nrdomain.NewArrivalFactsPoint(), "授权决定": nrdomain.NewDecisionFactsPoint(),
+	for _, test := range []struct {
+		name  string
+		point nrdomain.ParcelFactsPoint
+		// 物理事实截至何时：首次收寄是收寄的业务时间，其余是判断此刻（nil）。
+		asOf *time.Time
+	}{
+		{"首次收寄", intake, &intakeAt},
+		{"到站", nrdomain.NewArrivalFactsPoint(), nil},
+		{"授权决定", nrdomain.NewDecisionFactsPoint(), nil},
 	} {
-		costs := f.load(t, physical, point)
+		costs := f.load(t, physical, test.point)
 		if fact := demoCandidateCost(t, costs); fact.State() != nrdomain.CandidateCostPriced || fact.AmountMinor() != 78000 {
-			t.Fatalf("%s = %s %d minor，want 按实测 7 KG 的 78000", name, fact.State(), fact.AmountMinor())
+			t.Fatalf("%s = %s %d minor，want 按实测 7 KG 的 78000", test.name, fact.State(), fact.AmountMinor())
 		}
 		if len(costs.Citations) != 3 {
-			t.Fatalf("%s：出处 %d 条，want 三段各一条", name, len(costs.Citations))
+			t.Fatalf("%s：出处 %d 条，want 三段各一条", test.name, len(costs.Citations))
 		}
 		assertBasis(t, costs, nrdomain.ParcelFactsPhysical)
-	}
-	if got := physical.asOf[0]; !got.Equal(intakeAt) {
-		t.Fatalf("首次收寄的物理事实截至 %s，want 收寄的业务时间 %s", got, intakeAt)
-	}
-	if got := physical.asOf[1]; got.Equal(intakeAt) || time.Since(got) > time.Minute {
-		t.Fatalf("到站的物理事实截至 %s，want 判断此刻", got)
+		asked := physical.asOf[len(physical.asOf)-1]
+		if test.asOf != nil && !asked.Equal(*test.asOf) {
+			t.Fatalf("%s的物理事实截至 %s，want 收寄的业务时间 %s", test.name, asked, *test.asOf)
+		}
+		if test.asOf == nil && (asked.Equal(intakeAt) || time.Since(asked) > time.Minute) {
+			t.Fatalf("%s的物理事实截至 %s，want 判断此刻", test.name, asked)
+		}
 	}
 }
 
