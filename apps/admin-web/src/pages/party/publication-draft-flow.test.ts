@@ -9,6 +9,7 @@ import type {
 } from './publication-draft-api';
 import {
   currentAnswer,
+  decisionDigestOf,
   decisionPanelOf,
   draftReferenceOf,
   emptyFlow,
@@ -94,9 +95,26 @@ test('载荷键与书写顺序无关、与任何一格内容有关', () => {
   notEqual(payloadKey(a), payloadKey(payload({ creditPolicy: withoutLimit })));
 });
 
-// Covers: 批准口与发布口只收载体引用——身份三元，壳上其余各格与正文一概不带。
-test('载体引用只取身份三元', () => {
-  deepEqual(draftReferenceOf(payload()), { kind: 'CREDIT_POLICY', objectId: 'CP-SYN-1', version: 'v1' });
+// Covers: AT-PC-069——批准口与发布口收载体引用：身份三元加操作者看到的摘要，壳上其余各格与正文一概不带。
+test('载体引用取身份三元加看到的摘要', () => {
+  deepEqual(draftReferenceOf(payload(), 'PCC-1:abc'), {
+    kind: 'CREDIT_POLICY',
+    objectId: 'CP-SYN-1',
+    version: 'v1',
+    expectedDigest: 'PCC-1:abc',
+  });
+});
+
+// Covers: AT-PC-069——批准与发布绑定存为待批准时服务端答的摘要：没有录入答复、录入未放行答复里没有摘要、键不同，都拿不到，
+// 按钮据此收回；预览的摘要不顶替（那一份尚未落库）。
+test('批准与发布的摘要只取同键的录入答复', () => {
+  const previewedFlow = withPreview(emptyFlow(), key, previewed());
+  equal(decisionDigestOf(previewedFlow, key), null);
+  const submitted = withSubmission(previewedFlow, key, drafted('DRAFT_SUBMITTED'));
+  equal(decisionDigestOf(submitted, key), 'PCC-1:abc');
+  equal(decisionDigestOf(submitted, 'another-key'), null);
+  equal(decisionDigestOf(withSubmission(previewedFlow, key, outcome({ outcome: 'DRAFT_SUBMITTED' })), key), null);
+  equal(decisionDigestOf(withSubmission(previewedFlow, key, unconfigured), key), null);
 });
 
 // Covers: 五步的顺序与空流程的起点。

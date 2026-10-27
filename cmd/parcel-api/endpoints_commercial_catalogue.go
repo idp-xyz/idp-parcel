@@ -17,6 +17,7 @@ type commercialCatalogueWiring struct {
 	customerAccounts           commercialhttp.CustomerAccountCatalogueReader
 	productChannelMappings     commercialhttp.ProductChannelCatalogueReader
 	registrationNumberTypes    commercialhttp.RegistrationNumberTypeCatalogueReader
+	publicationDrafts          commercialhttp.PublicationDraftReader
 	legalEntityProfiles        commercialhttp.LegalEntityProfileRevisionHistoryReader
 	legalEntityProfileResolver commercialhttp.LegalEntityProfileResolver
 }
@@ -46,6 +47,10 @@ func init() {
 			"/commercial-party-relationships":      {method: http.MethodGet, face: operationsReadFace()},
 			"/commercial-customer-accounts":        {method: http.MethodGet, face: operationsReadFace()},
 			"/commercial-product-channel-mappings": {method: http.MethodGet, face: operationsReadFace()},
+			"/commercial-open-publication-drafts":  {method: http.MethodGet, face: operationsReadFace()},
+			"/commercial-publication-draft-readbacks/{kind}/{objectId}/{version}": {
+				method: http.MethodGet, face: operationsReadFace(), probe: "/commercial-publication-draft-readbacks/CREDIT_POLICY/SYN-CREDIT-01/v1",
+			},
 			"/commercial-product-channel-mappings/{mappingId}/revisions": {
 				method: http.MethodGet, face: operationsReadFace(), probe: "/commercial-product-channel-mappings/SYN-MAP-01/revisions",
 			},
@@ -69,7 +74,12 @@ func init() {
 			if err != nil {
 				return none, err
 			}
+			publicationDrafts, err := pcpostgres.NewPublicationDrafts(sources.db)
+			if err != nil {
+				return none, err
+			}
 			return commercialCatalogueWiring{
+				publicationDrafts:          publicationDrafts,
 				serviceProducts:            commercialCatalog,
 				commercialPolicies:         commercialCatalog,
 				commercialRelations:        commercialCatalog,
@@ -124,6 +134,10 @@ func init() {
 				// /commercial-service-products：那边上列版本壳，这边上列登记册信封（产品×渠道
 				// ×区间的修订），行形状与修订轴不同（裁决在 ports.ProductChannelMappingCatalogueRead）。
 				{Pattern: "/commercial-product-channel-mappings", Handler: commercialhttp.NewQueryProductChannelMappingsEndpoint(commercialCatalogueIntake, wiring.productChannelMappings)},
+				// 待批准发布载体的读回（票 party-commercial-uiux-backend/03，ADR-0314 决定一）：列表与单份读回各立入口，挂操作者查阅读，
+				// 与批准、发布两个写口各走各的授予面。读的是载体册适配器（同一张表的写口在登记写面上另装配）。
+				{Pattern: "/commercial-open-publication-drafts", Handler: commercialhttp.NewQueryPublicationDraftsEndpoint(commercialCatalogueIntake, wiring.publicationDrafts)},
+				{Pattern: "/commercial-publication-draft-readbacks/{kind}/{objectId}/{version}", Handler: commercialhttp.NewQueryPublicationDraftEndpoint(commercialCatalogueIntake, wiring.publicationDrafts)},
 				// 映射修订历史（票 party-commercial-uiux-backend/02）：渠道产品目录页详情抽屉「历史」栏的供数面，按路径里的映射展开整条修订链。
 				// 同读口参数、同 Intake 变量，裁决与业务参与方修订历史那一行一字不改（在 ports.ProductChannelMappingRevisionHistoryRead）；
 				// {mappingId} 由路由填进 PathValue，端点按同名取。

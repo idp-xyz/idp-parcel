@@ -36,7 +36,10 @@ func NewPublicationDrafts(db *bentopg.DB) (*PublicationDrafts, error) {
 	return &PublicationDrafts{db: db}, nil
 }
 
-var _ ports.PublicationDraftRegistry = (*PublicationDrafts)(nil)
+var (
+	_ ports.PublicationDraftRegistry = (*PublicationDrafts)(nil)
+	_ ports.PublicationDraftRead     = (*PublicationDrafts)(nil)
+)
 
 // SubmitDraft 录入一版一行。INSERT … ON CONFLICT DO UPDATE 带 WHERE：库上是`待批准`且这次录入与库上那份不同
 // （摘要或壳任一不同）才替换；RETURNING 用 xmax = 0 分辨插入与更新。零行命中时读回既有行：同一次录入是重放，
@@ -160,6 +163,72 @@ func (repository *PublicationDrafts) LoadDraft(
 		return none, false, fmt.Errorf("load publication draft: %w", err)
 	}
 	return draft, true, nil
+}
+
+// ListOpenDrafts 交出租户名下还没发布的载体（`待批准`与`已批准`），录入时刻由新到旧，同刻按版本身份定序。
+//
+// 租户条件落在 SQL 上（ADR-0003 隔离边界）；每一行都经重建门读回，读不回的一行让整次答案未形成而不是被悄悄跳过——
+// 跳过会让批准者以为列表就是全部。不分页：未发布的载体是在途工作，量级是人手能批完的那一档，读口答的是 limit 以内。
+func (repository *PublicationDrafts) ListOpenDrafts(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]domain.PublicationDraft, error) {
+	if tenant.String() == "" {
+		return nil, fmt.Errorf("list open publication drafts: tenant is required")
+	}
+	if limit <= 0 {
+		return nil, fmt.Errorf("list open publication drafts: limit must be positive, got %d", limit)
+	}
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list open publication drafts: %w", err)
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT object_kind, object_id, version_label,
+		        scope_ref, effective_starts_at, effective_ends_at, declared_references,
+		        content_canonicalization, content_digest, content_document,
+		        submitter_ref, submitted_at, status, approver_ref, approved_at, published_at
+		   FROM party_commercial.publication_draft
+		  WHERE tenant_id = $1 AND status IN (1, 2)
+		  ORDER BY submitted_at DESC, object_kind, object_id, version_label
+		  LIMIT $2`,
+		tenant.String(), limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list open publication drafts: %w", err)
+	}
+	defer rows.Close()
+
+	drafts := make([]domain.PublicationDraft, 0)
+	for rows.Next() {
+		var kind uint8
+		var objectID, version string
+		var row scannedDraft
+		if err := rows.Scan(&kind, &objectID, &version,
+			&row.scope, &row.startsAt, &row.endsAt, &row.references,
+			&row.canonicalization, &row.digest, &row.document,
+			&row.submitter, &row.submittedAt, &row.status, &row.approver, &row.approvedAt, &row.publishedAt); err != nil {
+			return nil, fmt.Errorf("list open publication drafts: %w", err)
+		}
+		object, err := domain.NewCommercialObjectID(objectID)
+		if err != nil {
+			return nil, fmt.Errorf("list open publication drafts: %w", err)
+		}
+		label, err := domain.NewCommercialVersionLabel(version)
+		if err != nil {
+			return nil, fmt.Errorf("list open publication drafts: %w", err)
+		}
+		draft, err := row.draft(tenant, domain.CommercialObjectKind(kind), object, label)
+		if err != nil {
+			return nil, fmt.Errorf("list open publication drafts: %w", err)
+		}
+		drafts = append(drafts, draft)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list open publication drafts: %w", err)
+	}
+	return drafts, nil
 }
 
 // AdvanceDraft 写回一份已在领域推进过状态的载体。UPDATE 带前态条件——`已批准`要求库上是`待批准`，`已发布`要求库上

@@ -379,7 +379,7 @@ func TestAcceptanceRulePackageWalksTheFiveStepsWithEverySection(t *testing.T) {
 		t.Fatalf("submit = %d %s", response.Code, response.Body.Bytes())
 	}
 
-	reference, err := commercialhttp.DecodePublicationDraftReferencePayload(strings.NewReader(`{"kind":"ACCEPTANCE_RULE_PACKAGE","objectId":"rules-1","version":"v1"}`))
+	reference, err := commercialhttp.DecodePublicationDraftReferencePayload(strings.NewReader(`{"kind":"ACCEPTANCE_RULE_PACKAGE","objectId":"rules-1","version":"v1","expectedDigest":"` + digest + `"}`))
 	if err != nil {
 		t.Fatalf("reference payload: %v", err)
 	}

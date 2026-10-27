@@ -108,11 +108,16 @@ type CreditPolicyBodyPayload struct {
 	EffectiveEndsAt       string `json:"effectiveEndsAt,omitempty"`
 }
 
-// PublicationDraftReferencePayload 是批准口与发布口的载荷：只指名哪一版载体。身份从信封来，载荷不带。
+// PublicationDraftReferencePayload 是批准口与发布口的载荷：指名哪一版载体，加调用方看到的那份内容的摘要。身份从信封来，载荷不带。
+//
+// ExpectedDigest 是前置条件而不是自报摘要：摘要仍只由服务端在预览与录入时算、由服务端答回，调用方只把它看到的那一份原样交回，
+// 服务端拿它对载体此刻的摘要——对不上就答`已变更`（ADR-0314 决定二）。预览与录入的载荷里出现 contentDigest 照旧按未知键拒，
+// 两件事不冲突：那里是「谁来定摘要」，这里是「你批的是不是你看过的那份」。必填：批准与发布是不可逆的推进，不留不带前置条件的路。
 type PublicationDraftReferencePayload struct {
-	Kind     string `json:"kind"`
-	ObjectID string `json:"objectId"`
-	Version  string `json:"version"`
+	Kind           string `json:"kind"`
+	ObjectID       string `json:"objectId"`
+	Version        string `json:"version"`
+	ExpectedDigest string `json:"expectedDigest"`
 }
 
 // DecodeCommercialPublicationPayload 只做结构解码：JSON 合法、键都认识。字段值对不对留给 Publication 那一步的
@@ -264,6 +269,7 @@ func (payload PublicationDraftReferencePayload) ApproveCommand(
 	}
 	return application.ApprovePublicationDraftCommand{
 		Tenant: tenant, Kind: kind, ObjectID: objectID, Version: version, Approver: approver,
+		ExpectedDigest: payload.ExpectedDigest,
 	}, nil
 }
 
@@ -276,7 +282,9 @@ func (payload PublicationDraftReferencePayload) PublishCommand(tenant domain.Ten
 	if err != nil {
 		return application.PublishPublicationDraftCommand{}, err
 	}
-	return application.PublishPublicationDraftCommand{Tenant: tenant, Kind: kind, ObjectID: objectID, Version: version}, nil
+	return application.PublishPublicationDraftCommand{
+		Tenant: tenant, Kind: kind, ObjectID: objectID, Version: version, ExpectedDigest: payload.ExpectedDigest,
+	}, nil
 }
 
 func (payload PublicationDraftReferencePayload) identity() (domain.CommercialObjectKind, domain.CommercialObjectID, domain.CommercialVersionLabel, error) {
@@ -287,6 +295,9 @@ func (payload PublicationDraftReferencePayload) identity() (domain.CommercialObj
 	}
 	objectID := requireField(problems, "objectId", domain.NewCommercialObjectID, payload.ObjectID)
 	version := requireField(problems, "version", domain.NewCommercialVersionLabel, payload.Version)
+	if strings.TrimSpace(payload.ExpectedDigest) == "" {
+		problems.add("expectedDigest", fmt.Errorf("须在场：批准与发布要带上调用方看到的那份内容的摘要"))
+	}
 	if problems.any() {
 		return domain.CommercialObjectKindInvalid, domain.CommercialObjectID{}, domain.CommercialVersionLabel{}, problems
 	}

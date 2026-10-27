@@ -198,11 +198,19 @@ func TestTheOperatorChannelRecordsEnvelopeSubjectsOnThePublicationCarrier(t *tes
 		endpoint.ServeHTTP(response, request)
 		return response
 	}
-	const reference = `{"kind": "CREDIT_POLICY", "objectId": "SYN-OC06-CREDIT-1", "version": "v1"}`
 
-	if response := post(submit, submitter, operatorCreditPolicyPayload); response.Code != http.StatusCreated {
-		t.Fatalf("录入 = %d %s", response.Code, response.Body.Bytes())
+	submitted := post(submit, submitter, operatorCreditPolicyPayload)
+	if submitted.Code != http.StatusCreated {
+		t.Fatalf("录入 = %d %s", submitted.Code, submitted.Body.Bytes())
 	}
+	// 批准要带调用方看到的内容摘要（ADR-0314 决定二）：取录入答复里服务端算出的那一份。
+	var submittedAnswer struct {
+		ContentDigest string `json:"contentDigest"`
+	}
+	if err := json.Unmarshal(submitted.Body.Bytes(), &submittedAnswer); err != nil || submittedAnswer.ContentDigest == "" {
+		t.Fatalf("录入答复没有内容摘要：%s (%v)", submitted.Body.Bytes(), err)
+	}
+	reference := `{"kind": "CREDIT_POLICY", "objectId": "SYN-OC06-CREDIT-1", "version": "v1", "expectedDigest": "` + submittedAnswer.ContentDigest + `"}`
 	if response := post(approve, approver, reference); answeredOutcome(t, response) != "NOT_CONFIGURED" {
 		t.Fatalf("规则未登时批准 = %d %s", response.Code, response.Body.Bytes())
 	}

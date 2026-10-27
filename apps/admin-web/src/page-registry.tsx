@@ -97,6 +97,7 @@ export const pageById: Record<string, ComponentType> = {
   'service-products': page(loadParty, (m) => m.ServiceProductsPage),
   'channel-product-catalog': page(loadParty, (m) => m.ChannelProductCatalogPage),
   'commercial-policies': page(loadParty, (m) => m.CommercialPoliciesPage),
+  'pending-publications': page(loadParty, (m) => m.PendingPublicationsPage),
   'work-devices': page(loadWorkDevices, (m) => m.WorkDeviceCataloguePage),
 };
 
@@ -123,6 +124,7 @@ export const liveIds: ReadonlySet<string> = new Set([
   'customs-ports-paths',
   'service-products',
   'commercial-policies',
+  'pending-publications',
   'party-contracts',
   'supplier-agreements',
   'group-legal-entities',

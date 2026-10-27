@@ -220,6 +220,9 @@ type ApprovePublicationDraftCommand struct {
 	ObjectID domain.CommercialObjectID
 	Version  domain.CommercialVersionLabel
 	Approver domain.OperatorSubject
+	// ExpectedDigest 是调用方看到并要批准的那份内容的摘要（ADR-0314 决定二）：载体此刻的摘要与它不同，就答`已变更`，
+	// 不去批一份调用方没看过的内容。空串即不带前置条件——运营操作者面的 Intake 恒要求它在场，空只留给手上本就握着载体的调用方。
+	ExpectedDigest string
 }
 
 type ApprovePublicationDraftResult struct {
@@ -263,6 +266,10 @@ func (handler *ApprovePublicationDraftHandler) Handle(
 	}
 	if !found {
 		return ApprovePublicationDraftResult{outcome: ApprovalDraftNotFound}, nil
+	}
+	// 内容身份先于状态：调用方看到的不是载体此刻的内容时，「已批准」这类状态答案会让他以为批的是自己看过的那份。
+	if command.ExpectedDigest != "" && command.ExpectedDigest != draft.Canonical().Digest().String() {
+		return ApprovePublicationDraftResult{outcome: ApprovalDraftChanged}, nil
 	}
 	switch draft.Status() {
 	case domain.PublicationDraftApproved:
@@ -320,6 +327,7 @@ const (
 	PublicationDraftAlreadyPublished
 	PublicationDraftAwaitsEffectiveStart
 	PublicationDraftPublicationNotLanded
+	PublicationDraftChanged
 )
 
 func (outcome PublishPublicationDraftOutcome) String() string {
@@ -336,6 +344,8 @@ func (outcome PublishPublicationDraftOutcome) String() string {
 		return "DRAFT_AWAITS_EFFECTIVE_START"
 	case PublicationDraftPublicationNotLanded:
 		return "PUBLICATION_NOT_LANDED"
+	case PublicationDraftChanged:
+		return "DRAFT_CHANGED"
 	default:
 		return ""
 	}
@@ -348,6 +358,9 @@ type PublishPublicationDraftCommand struct {
 	Kind     domain.CommercialObjectKind
 	ObjectID domain.CommercialObjectID
 	Version  domain.CommercialVersionLabel
+	// ExpectedDigest 同 ApprovePublicationDraftCommand.ExpectedDigest：发布的是调用方看到的那份已批准内容，载体此刻的摘要
+	// 与它不同就答`已变更`、不发布（ADR-0314 决定二）。
+	ExpectedDigest string
 }
 
 type PublishPublicationDraftResult struct {
@@ -394,6 +407,9 @@ func (handler *PublishPublicationDraftHandler) Handle(
 	}
 	if !found {
 		return PublishPublicationDraftResult{outcome: PublicationDraftNotFound}, nil
+	}
+	if command.ExpectedDigest != "" && command.ExpectedDigest != draft.Canonical().Digest().String() {
+		return PublishPublicationDraftResult{outcome: PublicationDraftChanged}, nil
 	}
 	switch draft.Status() {
 	case domain.PublicationDraftPendingApproval:

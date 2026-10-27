@@ -361,11 +361,51 @@ export interface PreAcceptanceControlPayload {
   notApplicableBasis?: string;
 }
 
-/** 批准口与发布口的载荷（Go `PublicationDraftReferencePayload`）：只指名哪一版载体，身份从信封来。 */
+/**
+ * 批准口与发布口的载荷（Go `PublicationDraftReferencePayload`）：指名哪一版载体，加调用方看到的那份内容的摘要
+ * （ADR-0314 决定二）。身份从信封来。摘要必带：载体此刻的摘要与它不同，服务端答 `DRAFT_CHANGED`、不批不发。
+ * 摘要只能取自服务端答复（录入答复或读回），表单不算摘要。
+ */
 export interface PublicationDraftReferencePayload {
   kind: CommercialObjectKindName;
   objectId: string;
   version: string;
+  expectedDigest: string;
+}
+
+/**
+ * 待批准载体读回的一份（Go `publicationDraftBody`）。列表不带 `content`，单份读回带——规范化文档，正是摘要盖住的那份。
+ * 录入者与批准者是操作者主体引用原串，只示出、不解析；`references` 是壳上的指名引用。
+ */
+export interface PublicationDraftRecord {
+  kind: CommercialObjectKindName;
+  objectId: string;
+  version: string;
+  scope: string;
+  effectiveStartsAt: string;
+  effectiveEndsAt?: string;
+  references: { kind: CommercialObjectKindName; objectId: string }[];
+  canonicalization: string;
+  contentDigest: string;
+  submitter: string;
+  submittedAt: string;
+  status: string;
+  approver?: string;
+  approvedAt?: string;
+  publishedAt?: string;
+  content?: unknown;
+}
+
+/** 列表答复（Go `publicationDraftListResponse`）：租户名下还没发布的载体，录入时刻由新到旧；空是 200 加空数组。 */
+export interface PublicationDraftListResponseBody {
+  outcome: string;
+  drafts: PublicationDraftRecord[];
+}
+
+/** 单份读回答复（Go `publicationDraftReadResponse`）：不在册时 `outcome` 是 `DRAFT_NOT_FOUND`、没有 `draft`。 */
+export interface PublicationDraftReadbackResponseBody {
+  outcome: string;
+  draft?: PublicationDraftRecord;
 }
 
 /** 一格立不住的记录（Go `payloadProblemAnswer`）：`field` 是载荷里的 JSON 路径，`problem` 是构造门原话。 */
@@ -424,7 +464,7 @@ export interface PublicationDraftPublicationResponseBody {
 
 /**
  * 四口路径。预览与录入送**同一份**载荷、走服务端同一段解码，预览页上的摘要与载体上记下的逐字节相等
- * （ADR-0101 决定四）；批准与发布只送载体引用。
+ * （ADR-0101 决定四）；批准与发布送载体引用加操作者看到的那份内容的摘要（ADR-0314 决定二）。
  */
 export const publicationDraftEndpoints = {
   preview: '/commercial-publication-previews',
@@ -432,6 +472,25 @@ export const publicationDraftEndpoints = {
   approve: '/commercial-publication-draft-approvals',
   publish: '/commercial-publication-draft-publications',
 } as const;
+
+// 待批准载体的两个只读口（ADR-0314 决定一）。路径都不叫 `/commercial-publication-drafts`：那是录入口的路径。
+
+export const openPublicationDraftsEndpoint = '/commercial-open-publication-drafts';
+
+export function listOpenPublicationDrafts(): Promise<ApiResult<PublicationDraftListResponseBody>> {
+  return exchangeMasterData<PublicationDraftListResponseBody>(openPublicationDraftsEndpoint);
+}
+
+// 读回按（类别、对象、版本）三格取，三格都在路径上，与目录口共用同一个 Intake。
+export function readPublicationDraft(
+  kind: CommercialObjectKindName,
+  objectId: string,
+  version: string,
+): Promise<ApiResult<PublicationDraftReadbackResponseBody>> {
+  return exchangeMasterData<PublicationDraftReadbackResponseBody>(
+    `/commercial-publication-draft-readbacks/${encodeURIComponent(kind)}/${encodeURIComponent(objectId)}/${encodeURIComponent(version)}`,
+  );
+}
 
 export function previewCommercialPublication(
   payload: CommercialPublicationPayload,
@@ -502,7 +561,7 @@ export const approveOutcomeLabels: Record<string, string> = {
   APPROVER_NOT_QUALIFIED: '你的授权层级不够：审批职责规则要求更高层级的批准人。',
   DRAFT_ALREADY_APPROVED: '这份发布稿已经批准过，可以直接发布。',
   DRAFT_ALREADY_PUBLISHED: '这一版已经发布了。',
-  DRAFT_CHANGED: '别的操作者刚改动过这份发布稿，这次没有批准。请核对内容后再批。',
+  DRAFT_CHANGED: '这份发布稿的内容已经不是你看到的那份（别的操作者改动过），这次没有批准。请核对现在的内容后再批，内容可在「待批准发布」页读回。',
 };
 
 /**
@@ -520,6 +579,7 @@ export const publishOutcomeLabels: Record<string, string> = {
   DRAFT_ALREADY_PUBLISHED: '这一版已经发布了。',
   DRAFT_AWAITS_EFFECTIVE_START: '还没到生效起点：到生效起点之后再来发布。这不是失败，发布稿保持已批准。',
   PUBLICATION_NOT_LANDED: '发布没有完成，原因见下。发布稿保持已批准。',
+  DRAFT_CHANGED: '这份发布稿的内容已经不是你看到的那份，这次没有发布。请核对现在的内容后再发，内容可在「待批准发布」页读回。',
 };
 
 /** 载体状态（`domain.PublicationDraftStatus` 原名），只向前：待批准 → 已批准 → 已发布。 */

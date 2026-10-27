@@ -473,7 +473,7 @@ func TestDraftCommandEndpointsTranscribeTheUseCaseAnswers(t *testing.T) {
 		t.Fatalf("replay answer = %d %s", response.Code, response.Body.Bytes())
 	}
 
-	reference, err := commercialhttp.DecodePublicationDraftReferencePayload(strings.NewReader(`{"kind":"CREDIT_POLICY","objectId":"credit-1","version":"v1"}`))
+	reference, err := commercialhttp.DecodePublicationDraftReferencePayload(strings.NewReader(`{"kind":"CREDIT_POLICY","objectId":"credit-1","version":"v1","expectedDigest":"` + digest + `"}`))
 	if err != nil {
 		t.Fatalf("reference payload: %v", err)
 	}
@@ -528,10 +528,12 @@ func TestDraftPublicationThatDoesNotLandCarriesThePublicationAnswer(t *testing.T
 	if err != nil {
 		t.Fatalf("submit command: %v", err)
 	}
-	if response := serve(commercialhttp.NewSubmitPublicationDraftEndpoint(draftIntakeDouble{submit: submitCommand}, newDraftOperator(store, rules, pcClock{at: pcNow})), http.MethodPost); response.Code != http.StatusCreated {
-		t.Fatalf("submit = %d %s", response.Code, response.Body.Bytes())
+	submitResponse := serve(commercialhttp.NewSubmitPublicationDraftEndpoint(draftIntakeDouble{submit: submitCommand}, newDraftOperator(store, rules, pcClock{at: pcNow})), http.MethodPost)
+	if submitResponse.Code != http.StatusCreated {
+		t.Fatalf("submit = %d %s", submitResponse.Code, submitResponse.Body.Bytes())
 	}
-	reference, err := commercialhttp.DecodePublicationDraftReferencePayload(strings.NewReader(`{"kind":"CREDIT_POLICY","objectId":"credit-1","version":"v1"}`))
+	digest := decodeDraftAnswer(t, submitResponse).ContentDigest
+	reference, err := commercialhttp.DecodePublicationDraftReferencePayload(strings.NewReader(`{"kind":"CREDIT_POLICY","objectId":"credit-1","version":"v1","expectedDigest":"` + digest + `"}`))
 	if err != nil {
 		t.Fatalf("reference payload: %v", err)
 	}

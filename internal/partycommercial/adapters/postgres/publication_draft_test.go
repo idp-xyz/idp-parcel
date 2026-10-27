@@ -342,6 +342,71 @@ func TestDraftsAreBoundToTheirTenant(t *testing.T) {
 	}
 }
 
+// Covers: AT-PC-068——列出租户名下还没发布的载体（待批准与已批准），录入时刻由新到旧；已发布的、别的租户的不在其中；每一份都经重建门读回；
+// 没有就交空切片；limit 非正拒。
+func TestOpenDraftsListPendingAndApprovedNewestFirstWithinTheTenant(t *testing.T) {
+	drafts, _, transactor, _ := newDraftRegistry(t)
+	ctx := t.Context()
+	at := func(minutes int) time.Time { return draftSubmittedAt.Add(time.Duration(minutes) * time.Minute) }
+	submit := func(tenant, objectID string, minor int64, submittedAt time.Time) domain.PublicationDraft {
+		shell := draftShellIn(t, tenant, "scope-1", objectID, "v1")
+		draft, err := domain.SubmitPublicationDraft(shell, creditDraftContent(t, minor),
+			pcValue(t, domain.NewOperatorSubjectReference, "op-submitter"), submittedAt)
+		if err != nil {
+			t.Fatalf("录入载体：%v", err)
+		}
+		mustSubmitDraft(t, transactor, ctx, drafts, draft)
+		return draft
+	}
+
+	oldest := submit("tenant-1", "credit-old", 100, at(0))
+	middle := submit("tenant-1", "credit-mid", 200, at(1))
+	newest := submit("tenant-1", "credit-new", 300, at(2))
+	published := submit("tenant-1", "credit-done", 400, at(3))
+	submit("tenant-2", "credit-foreign", 500, at(4))
+
+	approvedMiddle := approveDraft(t, middle, "op-approver")
+	mustAdvanceDraft(t, transactor, ctx, drafts, approvedMiddle)
+	approvedDone := approveDraft(t, published, "op-approver")
+	mustAdvanceDraft(t, transactor, ctx, drafts, approvedDone)
+	done, err := approvedDone.MarkPublished(draftPublishedAt)
+	if err != nil {
+		t.Fatalf("发布：%v", err)
+	}
+	mustAdvanceDraft(t, transactor, ctx, drafts, done)
+
+	listed, err := drafts.ListOpenDrafts(ctx, pcTenant(t, "tenant-1"), 10)
+	if err != nil {
+		t.Fatalf("列出未发布载体：%v", err)
+	}
+	names := make([]string, 0, len(listed))
+	for _, draft := range listed {
+		names = append(names, draft.ObjectID().String()+"/"+draft.Status().String())
+	}
+	want := []string{"credit-new/PENDING_APPROVAL", "credit-mid/APPROVED", "credit-old/PENDING_APPROVAL"}
+	if len(names) != len(want) || names[0] != want[0] || names[1] != want[1] || names[2] != want[2] {
+		t.Fatalf("列表 = %v，want %v（已发布与别家租户的不在其中，新的在前）", names, want)
+	}
+	if listed[0].Canonical().Digest() != newest.Canonical().Digest() || listed[2].Canonical().Digest() != oldest.Canonical().Digest() {
+		t.Fatal("读回的载体摘要对不上录入时的")
+	}
+	if approver, approved := listed[1].Approver(); !approved || approver.String() != "op-approver" {
+		t.Fatalf("已批准的一份没带批准者：%q %v", approver, approved)
+	}
+
+	limited, err := drafts.ListOpenDrafts(ctx, pcTenant(t, "tenant-1"), 2)
+	if err != nil || len(limited) != 2 || limited[0].ObjectID().String() != "credit-new" {
+		t.Fatalf("limit=2：%d 份, err = %v", len(limited), err)
+	}
+	none, err := drafts.ListOpenDrafts(ctx, pcTenant(t, "tenant-3"), 10)
+	if err != nil || none == nil || len(none) != 0 {
+		t.Fatalf("没有载体的租户 = (%v, %v)，应是空切片", none, err)
+	}
+	if _, err := drafts.ListOpenDrafts(ctx, pcTenant(t, "tenant-1"), 0); err == nil {
+		t.Fatal("limit=0 未拒")
+	}
+}
+
 // Covers: 库上 CHECK 是重建门不变量的镜像——`待批准`带批准痕迹、摘要串不以规范化版本为前缀、状态集外都进不来。
 // 领域构造门拦经它进来的，CHECK 拦绕开它的那条路。
 func TestDraftTableRejectsRowsTheRehydrationGateWouldRefuse(t *testing.T) {

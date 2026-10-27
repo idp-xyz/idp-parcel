@@ -9,6 +9,7 @@ func init() {
 		customerAccounts:           unwiredCommercialCatalogue{},
 		productChannelMappings:     unwiredCommercialCatalogue{},
 		registrationNumberTypes:    unwiredCommercialCatalogue{},
+		publicationDrafts:          unwiredPublicationDraftRead{},
 		legalEntityProfiles:        unwiredLegalEntityProfileRevisions{},
 		legalEntityProfileResolver: unwiredLegalEntityProfileResolver{},
 	})

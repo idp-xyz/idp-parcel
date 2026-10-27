@@ -12,6 +12,7 @@ import {
   ClipboardCheck,
   Coins,
   Eye,
+  FileClock,
   FileText,
   FlaskConical,
   FolderOpen,
@@ -89,6 +90,7 @@ export const navigationSections: NavigationSection[] = [
       { id: 'service-products', label: '服务产品与渠道', icon: 'service-products' },
       { id: 'channel-product-catalog', label: '渠道产品目录', icon: 'channel-product-catalog' },
       { id: 'commercial-policies', label: '商业规则与策略', icon: 'commercial-policies' },
+      { id: 'pending-publications', label: '待批准发布', icon: 'pending-publications' },
       { id: 'price-card-catalog', label: '价卡目录', icon: 'price-card-catalog' },
       { id: 'reference-series', label: '计价参考序列', icon: 'reference-series' },
       { id: 'network-catalog', label: '网络目录', icon: 'network-catalog' },
@@ -206,6 +208,7 @@ export const sidebarIconMap: Record<string, ElementType> = {
   'channel-product-catalog': PackageOpen,
   'supplier-agreements': FileText,
   'commercial-policies': SlidersHorizontal,
+  'pending-publications': FileClock,
   'price-card-catalog': BadgeDollarSign,
   'reference-series': TrendingUp,
   'pricing-evaluation': Calculator,
@@ -341,6 +344,11 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
     title: '商业规则与策略',
     owner: '参与方与商业（party-commercial）',
     source: 'docs/domain/party-commercial/CONTEXT.md 接单规则包、接受前财务控制策略、商业价格政策、结算政策与信用政策',
+  },
+  'pending-publications': {
+    title: '待批准发布',
+    owner: '参与方与商业（party-commercial）',
+    source: 'docs/domain/party-commercial/CONTEXT.md 待批准发布与商业版本的批准；docs/adr/0314 待批准载体的读回与摘要绑定',
   },
 
   // —— 计价（parcel-pricing）——

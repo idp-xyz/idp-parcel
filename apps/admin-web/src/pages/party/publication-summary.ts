@@ -29,11 +29,17 @@ export interface PublicationFact {
   value: string;
 }
 
-function momentText(value: string, timeZone: string): string {
+export function momentText(value: string, timeZone: string): string {
   return `${formatInstant(value, { timeZone })}（UTC ${value}）`;
 }
 
-export function publicationSummary(payload: CommercialPublicationPayload, timeZone: string): PublicationFact[] {
+/** 版本壳：载荷与读回的载体都有这几格，「将要发布」的复述两处共用。 */
+export type PublicationShell = Pick<
+  CommercialPublicationPayload,
+  'kind' | 'objectId' | 'version' | 'scope' | 'effectiveStartsAt' | 'effectiveEndsAt'
+>;
+
+export function publicationSummary(payload: PublicationShell, timeZone: string): PublicationFact[] {
   return [
     { label: '类别', value: publicationKindLabels[payload.kind] ?? payload.kind },
     { label: '对象', value: payload.objectId },

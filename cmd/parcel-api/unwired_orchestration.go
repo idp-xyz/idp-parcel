@@ -1541,6 +1541,27 @@ func (unwiredDutyReconciliationCatalogue) ListDutyVerifications(
 	return nil, errOrchestrationNotWired
 }
 
+// unwiredPublicationDraftRead 是待批准发布载体读回口的占位：读到的一律是「没接线」，不装成空列表。
+type unwiredPublicationDraftRead struct{}
+
+func (unwiredPublicationDraftRead) LoadDraft(
+	context.Context,
+	commercialdomain.TenantID,
+	commercialdomain.CommercialObjectKind,
+	commercialdomain.CommercialObjectID,
+	commercialdomain.CommercialVersionLabel,
+) (commercialdomain.PublicationDraft, bool, error) {
+	return commercialdomain.PublicationDraft{}, false, errOrchestrationNotWired
+}
+
+func (unwiredPublicationDraftRead) ListOpenDrafts(
+	context.Context,
+	commercialdomain.TenantID,
+	int,
+) ([]commercialdomain.PublicationDraft, error) {
+	return nil, errOrchestrationNotWired
+}
+
 type unwiredCommercialCatalogue struct{}
 
 func (unwiredCommercialCatalogue) ListServiceProducts(

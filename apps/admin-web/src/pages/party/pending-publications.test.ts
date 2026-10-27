@@ -1,0 +1,92 @@
+import { test } from 'node:test';
+import { deepEqual, equal } from 'node:assert/strict';
+import type { PublicationDraftRecord } from './publication-draft-api';
+import {
+  canonicalDocumentText,
+  decisionsOf,
+  draftFacts,
+  draftKeyOf,
+  draftSearchText,
+  pendingCountSummary,
+  pendingRowsOf,
+} from './pending-publications';
+
+// 本文件钉的是「待批准发布」页的纯逻辑（ADR-0314 决定三）：行的身份、按状态摆出的动作、抽屉复述的事实。
+// 不算摘要、不判谁能批准——摘要原样取自读回，批准职责由服务端判。
+
+function record(over: Partial<PublicationDraftRecord> = {}): PublicationDraftRecord {
+  return {
+    kind: 'CREDIT_POLICY',
+    objectId: 'CP-SYN-1',
+    version: 'v2',
+    scope: 'SYN-SCOPE-01',
+    effectiveStartsAt: '2026-11-01T00:00:00Z',
+    references: [],
+    canonicalization: 'PCC-1',
+    contentDigest: 'PCC-1:abc123',
+    submitter: 'dex#op-1',
+    submittedAt: '2026-10-26T08:00:00Z',
+    status: 'PENDING_APPROVAL',
+    ...over,
+  };
+}
+
+// Covers: AT-PC-068——行的身份是（类别 × 对象 × 版本）三元，顺序照服务端给的（录入时刻由新到旧），空列表是空行。
+test('行键取版本身份三元，顺序保服务端给的', () => {
+  const first = record({ objectId: 'CP-B' });
+  const second = record({ objectId: 'CP-A', version: 'v1' });
+  deepEqual(
+    pendingRowsOf({ outcome: 'PUBLICATION_DRAFTS_LISTED', drafts: [first, second] }).map((row) => row.key),
+    ['CREDIT_POLICY|CP-B|v2', 'CREDIT_POLICY|CP-A|v1'],
+  );
+  equal(draftKeyOf(second), 'CREDIT_POLICY|CP-A|v1');
+  deepEqual(pendingRowsOf({ outcome: 'PUBLICATION_DRAFTS_LISTED', drafts: [] }), []);
+});
+
+// Covers: AT-PC-068——待批准才摆批准、已批准才摆发布、已发布两样都不摆；陌生状态词一样都不摆（宁可不亮）。
+test('批准与发布按状态词各亮各的', () => {
+  deepEqual(decisionsOf('PENDING_APPROVAL'), { approve: true, publish: false });
+  deepEqual(decisionsOf('APPROVED'), { approve: false, publish: true });
+  deepEqual(decisionsOf('PUBLISHED'), { approve: false, publish: false });
+  deepEqual(decisionsOf('SOMETHING_NEW'), { approve: false, publish: false });
+});
+
+// Covers: AT-PC-068——抽屉复述版本壳、状态、录入痕迹与完整摘要；批准与发布的痕迹在场才出现。
+test('事实带出版本壳、痕迹与完整摘要', () => {
+  const pending = draftFacts(record(), 'UTC');
+  const labels = pending.map((fact) => fact.label);
+  deepEqual(labels, ['类别', '对象', '版本号', '适用范围', '生效起点', '生效止点', '状态', '录入者', '录入时刻', '内容摘要']);
+  equal(pending.find((fact) => fact.label === '状态')?.value, '待批准');
+  equal(pending.find((fact) => fact.label === '内容摘要')?.value, 'PCC-1:abc123（算法 PCC-1）');
+  equal(pending.find((fact) => fact.label === '生效止点')?.value, '持续有效');
+
+  const approved = draftFacts(
+    record({ status: 'APPROVED', approver: 'dex#op-2', approvedAt: '2026-10-26T09:00:00Z' }),
+    'UTC',
+  );
+  equal(approved.find((fact) => fact.label === '批准者')?.value, 'dex#op-2');
+  equal(approved.some((fact) => fact.label === '批准时刻'), true);
+  equal(approved.some((fact) => fact.label === '发布时刻'), false);
+});
+
+// Covers: AT-PC-068——规范化文档只排版；文档不在场（列表行）是空串，不是 "undefined"。
+test('规范化文档缩进排版，缺席为空串', () => {
+  equal(canonicalDocumentText({ a: 1, b: ['x'] }), '{\n  "a": 1,\n  "b": [\n    "x"\n  ]\n}');
+  equal(canonicalDocumentText(undefined), '');
+});
+
+// Covers: AT-PC-068——检索命中类别中文名、对象、版本、范围、状态词与录入者；大小写不分。
+test('检索串覆盖各列', () => {
+  const text = draftSearchText(record({ approver: 'dex#op-2', status: 'APPROVED' }), '信用政策');
+  for (const needle of ['信用政策', 'cp-syn-1', 'v2', 'syn-scope-01', '已批准', 'dex#op-1', 'dex#op-2']) {
+    equal(text.includes(needle), true, needle);
+  }
+});
+
+// Covers: AT-PC-068——计数摘要分状态数。
+test('计数摘要分待批准与已批准', () => {
+  equal(
+    pendingCountSummary([record(), record({ objectId: 'B' }), record({ objectId: 'C', status: 'APPROVED' })]),
+    '当前返回 3 份尚未发布的载体（待批准 2，已批准 1）',
+  );
+});
