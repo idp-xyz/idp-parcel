@@ -115,6 +115,10 @@ func newCustomerSupplementLoopFixtureWith(t *testing.T, legs customerSupplementL
 	if err != nil {
 		t.Fatalf("构造控制作用域锁：%v", err)
 	}
+	refusalHandlings, err := pspostgres.NewControlReleaseRefusalHandlings(base.db)
+	if err != nil {
+		t.Fatalf("构造释放拒收处理留痕：%v", err)
+	}
 	firstVersion := mustPS(t, psdomain.NewSubmissionVersionID, "SYN-VER-01")
 	// 两版同一时点（见文件头）：时点策略对哪一版都答 synRAsOfAnchor。
 	commercial := &synRSwitchableAsOfCommercialBasis{inner: &synRCommercialBasis{t: t}, t: t, configured: true}
@@ -131,6 +135,8 @@ func newCustomerSupplementLoopFixtureWith(t *testing.T, legs customerSupplementL
 		Downstream:   decisionHandoff,
 		Identities:   legs.identities,
 		Clock:        systemClock{},
+		// 链开头放被取代各版那一步凭它认出「人已处理」的拒收（ADR-0293 决定四），与生产装配同形。
+		RefusalHandlings: refusalHandlings,
 	})
 	chain := psapplication.NewAdvanceAcceptanceChainHandler(psapplication.AdvanceAcceptanceChainDeps{
 		Requests: base.requests,

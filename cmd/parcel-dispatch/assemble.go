@@ -769,7 +769,7 @@ func logDeliveryFailure(logger *slog.Logger) dispatch.DeliveryFailureObserver {
 	}
 }
 
-// acceptanceChainGates 是接受判断链的三扇消费门：同一个编排，三个触发时机（ADR-0086
+// acceptanceChainGates 是接受判断链的几扇消费门：同一个编排，三个触发时机（ADR-0086
 // ——「委托已提交」开局，「复核已完成」续办；ADR-0094 Decision 四——「参数已登记」按租户
 // 重驱）。三扇门各占各的 inbox 名与事件类型，但依赖图必须同一份，所以由同一个装配函数
 // 一次建成。
@@ -780,6 +780,7 @@ type acceptanceChainGates struct {
 	settlementAccountRegistration dispatch.Consumer
 	estimateAdoptionRegistration  dispatch.Consumer
 	submissionVersionFormed       dispatch.Consumer
+	controlReleaseRefusalHandled  dispatch.Consumer
 }
 
 // operatorRegistrationRedrivePageSize 是登记续办门每次向`等待运营登记`队列要多少行。它不是
@@ -882,6 +883,11 @@ func acceptanceChainConsumers(
 	if err != nil {
 		return none, fmt.Errorf("parcel-dispatch: control release refusals: %w", err)
 	}
+	// 释放未受理册上的处理留痕：链开头放被取代各版遇确定未受理时，凭它认出「这一笔人已处理」而不再响亮失败（ADR-0293 决定四）。
+	refusalHandlings, err := pspostgres.NewControlReleaseRefusalHandlings(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-dispatch: control release refusal handlings: %w", err)
+	}
 
 	// 保存委托之前取占用所在作用域的锁：与施加、释放取的是 SA 同一把，锁序见 ports.PreAcceptanceControlScopeLock 头注。接受链里
 	// 施加与链开头放被取代各版已取过，形成决定那一步取的是重入，不依赖上游。
@@ -908,6 +914,8 @@ func acceptanceChainConsumers(
 			Downstream:   downstream,
 			Identities:   identities,
 			Clock:        clock,
+			// 链开头放被取代各版那一步读：人已处理的拒收不再挡着新版本。
+			RefusalHandlings: refusalHandlings,
 		}),
 	})
 
@@ -946,6 +954,13 @@ func acceptanceChainConsumers(
 	if err != nil {
 		return none, fmt.Errorf("parcel-dispatch: submission version formed resume consumer: %w", err)
 	}
+	// ADR-0293 决定四的续办门：PS「释放拒收已处理」信封 → 同一条链拿委托此刻的当前版本再驱一拍。接受链开头放被取代各版遇确定未受理落
+	// publish_failed 之后，人处理完那一笔（核对后在结算侧释放，或标记已处理），处理动作同笔交这封信，新版本由它重新驱动。发布侧是
+	// cmd/parcel-api 释放拒收处理的事务边界壳。
+	controlReleaseRefusalHandled, err := psinbox.NewControlReleaseRefusalHandledConsumer(db.Transactor(), inboxStore, chain)
+	if err != nil {
+		return none, fmt.Errorf("parcel-dispatch: control release refusal handled resume consumer: %w", err)
+	}
 	return acceptanceChainGates{
 		submitted:                     submitted,
 		reviewCompleted:               reviewCompleted,
@@ -953,6 +968,7 @@ func acceptanceChainConsumers(
 		settlementAccountRegistration: settlementAccountRegistration,
 		estimateAdoptionRegistration:  estimateAdoptionRegistration,
 		submissionVersionFormed:       submissionVersionFormed,
+		controlReleaseRefusalHandled:  controlReleaseRefusalHandled,
 	}, nil
 }
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
 // ErrControlReleaseNotAccepted 说明接受链判当前版本之前放被取代各版时，提供方确定不受理其中一笔的释放。它不进未决：
@@ -33,7 +34,8 @@ var ErrControlReleaseNotAccepted = errors.New("parcel shipment: control release 
 // 每一轮都问，不记「放过没有」，只问「有没有成立的项」，不看结论：逐版怎么认、发不发归 occupationRelease。
 //
 // 提供方确定不受理某一笔（或释放口形不成三格之一）时响亮上抛，不停在本步内部重试：重投推不动它，新版本却一直被挡着
-// （ADR-0282 决定三）。可续办的缺口与拒收同时出现时也上抛——拒收不解开，续办成功了也判不了新版本。
+// （ADR-0282 决定三）。可续办的缺口与拒收同时出现时也上抛——拒收不解开，续办成功了也判不了新版本。人已处理的那一笔除外
+// （unhandledRefusals）：处理动作同笔交了续办信封，这一步就是被那封信封再驱时放行的地方（ADR-0293 决定四）。
 //
 // 不论委托此刻是否已形成决定都照放：被取代的版本从来不是接受所在的那一版（决定形成后不再换代），放它碰不到合法
 // 占用。
@@ -58,12 +60,13 @@ func (handler *AdvanceAcceptanceChainHandler) releaseSuperseded(
 		request:   command.ShipmentRequestID,
 	}
 	outcome := scope.releaseRecorded(ctx, priors)
-	if len(outcome.refusals) > 0 {
-		return AdvanceAcceptanceChainResult{}, false, refusedSupersededRelease(outcome.refusals[0])
+	refusals, unreadable := handler.unhandledRefusals(ctx, command.Identity.TenantID(), command.ShipmentRequestID, outcome.refusals)
+	if len(refusals) > 0 {
+		return AdvanceAcceptanceChainResult{}, false, refusedSupersededRelease(refusals[0])
 	}
 	// 读不回某一版的判断也停：不知道旧版本形成过什么就发，settlement-accounting 无从认领；跳过它去判新版本，又会
 	// 让一笔可能还在的占用压着新版本的控制。
-	if gap := outcome.pending; gap.open() {
+	if gap := outcome.pending.or(unreadable); gap.open() {
 		return AdvanceAcceptanceChainResult{
 			outcome:      AcceptanceChainUndecided,
 			stage:        AcceptanceChainSupersededReleaseStage,
@@ -73,6 +76,44 @@ func (handler *AdvanceAcceptanceChainHandler) releaseSuperseded(
 		}, true, nil
 	}
 	return AdvanceAcceptanceChainResult{}, false, nil
+}
+
+// unhandledRefusals 滤掉人已处理的拒收（ADR-0293 决定四）：提供方对某一笔确定不受理、而释放未受理册上那一笔在处理留痕里有行，说明人已经
+// 核对过它——在结算侧放掉了，或标记了资金已在本产品之外处置——链不再为它响亮失败，接着判新版本。提供方仍先被问：人放掉的，提供方答已收口，
+// 走不到这里；走到这里又处理过的，是标记已处理的存量行。
+//
+// 只认处理留痕里（版本、控制关联）逐段对得上的那一笔，别的版本的拒收照旧上抛。留痕读不回既不当成处理过、也不当成没处理过：那一笔记进缺口，
+// 停在本步内部重试（ADR-0029：读不动才是未决）。读口没接上（nil）时一概不滤，退回 ADR-0282 决定三原样。
+func (handler *AdvanceAcceptanceChainHandler) unhandledRefusals(
+	ctx context.Context,
+	tenant domain.TenantID,
+	request domain.ShipmentRequestID,
+	refusals []occupationRefusal,
+) ([]occupationRefusal, occupationReleaseGap) {
+	view := handler.deps.Decision.deps.RefusalHandlings
+	if view == nil {
+		return refusals, occupationReleaseGap{}
+	}
+	var open []occupationRefusal
+	var unreadable occupationReleaseGap
+	for _, refusal := range refusals {
+		_, handled, err := view.FindControlReleaseRefusalHandling(ctx, ports.ControlReleaseRefusalKey{
+			TenantID:          tenant,
+			ShipmentRequestID: request,
+			SubmissionVersion: refusal.version,
+			ControlResultID:   refusal.control.ResultID(),
+		})
+		switch {
+		case err != nil:
+			unreadable = unreadable.or(occupationReleaseGap{
+				reason: ControlReleasePending,
+				scope:  []string{refusal.version.String(), refusal.control.ResultID().String()},
+			})
+		case !handled:
+			open = append(open, refusal)
+		}
+	}
+	return open, unreadable
 }
 
 // refusedSupersededRelease 把第一笔拒收译成上抛的错误。版本、控制关联与原因都写进正文：路由条目把它记成
