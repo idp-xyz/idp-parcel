@@ -75,6 +75,12 @@ export function PublicationNote({ answer }: { answer: ApiResult<PublicationDraft
             发布答复：<span className="font-mono">{body.outcome}</span> —— {labelOf(publishOutcomeLabels, body.outcome)}
           </p>
           {body.publication ? <EmbeddedPublication publication={body.publication} /> : null}
+          {body.status ? (
+            <p>
+              发布稿状态：<span className="font-mono">{body.status}</span> —— {labelOf(draftStatusLabels, body.status)}
+            </p>
+          ) : null}
+          {body.cause ? <p>原因：{body.cause}</p> : null}
         </div>
       )}
     </FlowAnswerNote>

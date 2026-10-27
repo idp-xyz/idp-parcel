@@ -33,6 +33,28 @@ export function decisionsOf(status: string): DraftDecisions {
   return { approve: status === 'PENDING_APPROVAL', publish: status === 'APPROVED' };
 }
 
+/** 读不回的载体（本构建折不回它的正文）没有可批准或发布的内容：两个动作都不摆，其余照状态。 */
+export function draftDecisions(record: Pick<PublicationDraftRecord, 'status' | 'readable'>): DraftDecisions {
+  return record.readable ? decisionsOf(record.status) : { approve: false, publish: false };
+}
+
+/**
+ * 读不回的载体按状态各自的恢复动作。`待批准`的行可被同一版本号的重新录入替换；`已批准`的内容已固定，只能换版本号；
+ * `已发布`的版本已在册，不需要动作。陌生状态词不替服务端猜动作，只说读不回。
+ */
+export function unreadableRecovery(status: string): string {
+  switch (status) {
+    case 'PENDING_APPROVAL':
+      return '待批准的发布稿可以按同一版本号重新录入，新录入的内容会替换这一份，之后照常批准。';
+    case 'APPROVED':
+      return '已批准的发布稿内容已固定，不能按同一版本号重新录入；要发布，请换新的版本号重新录入、批准、发布。';
+    case 'PUBLISHED':
+      return '这一版已经发布，在册的版本不受影响，不需要处理。';
+    default:
+      return '';
+  }
+}
+
 /**
  * 抽屉里复述的事实：版本壳（与发布前的「将要发布」同一份），加录入与批准的痕迹，加完整的内容摘要——批准者拿它去对。
  * 录入者与批准者是操作者主体引用原串，原样示出。
@@ -77,14 +99,17 @@ export function draftSearchText(record: PublicationDraftRecord, kindLabel: strin
     labelOf(draftStatusLabels, record.status),
     record.submitter,
     record.approver ?? '',
+    record.readable ? '' : '读不回',
   ]
     .join(' ')
     .toLowerCase();
 }
 
-/** 计数摘要：只在拿到业务答案后用；分状态数，让批准者一眼看出多少在等。 */
+/** 计数摘要：只在拿到业务答案后用；分状态数，让批准者一眼看出多少在等，读不回的另报，免得它们被当成能批的。 */
 export function pendingCountSummary(records: readonly PublicationDraftRecord[]): string {
   const pending = records.filter((record) => record.status === 'PENDING_APPROVAL').length;
   const approved = records.filter((record) => record.status === 'APPROVED').length;
-  return `当前返回 ${records.length} 份尚未发布的载体（待批准 ${pending}，已批准 ${approved}）`;
+  const unreadable = records.filter((record) => !record.readable).length;
+  const tail = unreadable > 0 ? `，其中 ${unreadable} 份本构建读不回` : '';
+  return `当前返回 ${records.length} 份尚未发布的载体（待批准 ${pending}，已批准 ${approved}${tail}）`;
 }

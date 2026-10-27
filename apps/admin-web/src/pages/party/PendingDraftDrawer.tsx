@@ -17,9 +17,10 @@ import {
   type CommercialObjectKindName,
   type PublicationDraftPublicationResponseBody,
   type PublicationDraftReadbackResponseBody,
+  type PublicationDraftRecord,
   type PublicationDraftResponseBody,
 } from './publication-draft-api';
-import { canonicalDocumentText, decisionsOf, draftFacts } from './pending-publications';
+import { canonicalDocumentText, draftDecisions, draftFacts, unreadableRecovery } from './pending-publications';
 import { publicationKindLabels } from './publication-summary';
 import { useMayWriteRegistry } from '../use-operator-grants';
 
@@ -30,6 +31,23 @@ export interface PendingDraftIdentity {
 }
 
 type Busy = 'approve' | 'publish' | null;
+
+/**
+ * 本构建读不回这份载体的内容：上面的事实取自库上的列，规范化文档不给——折不回的文档不能冒充摘要盖住的那一份。
+ * 说清为什么、该怎么办（随状态），成因原话跟在后面给要查的人。
+ */
+function UnreadableNote({ draft }: { draft: PublicationDraftRecord }) {
+  return (
+    <section className="flex flex-col gap-1 rounded border border-idpxyz-border bg-idpxyz-inputBg p-3 text-xs text-idpxyz-textMuted">
+      <p className="font-medium text-idpxyz-text">本构建读不回这份发布稿的内容</p>
+      <p>
+        它的规范化版本本构建不认得，或含本构建不收的内容，所以看不到文档，也不能批准或发布；重试不会改变结果。
+        {unreadableRecovery(draft.status)}
+      </p>
+      {draft.unreadableCause ? <p className="font-mono break-all">原因：{draft.unreadableCause}</p> : null}
+    </section>
+  );
+}
 
 /**
  * 待批准载体的详情抽屉（ADR-0314 决定三）：打开时按身份读回这份载体——版本壳、录入与批准的痕迹、规范化文档——批准与发布的
@@ -79,7 +97,8 @@ export function PendingDraftDrawer({
   }, [identity, reloadKey]);
 
   const draft = readback?.kind === 'outcome' ? readback.body.draft : undefined;
-  const decisions = draft ? decisionsOf(draft.status) : { approve: false, publish: false };
+  // 读不回的载体没有可批准或发布的内容，动作按钮不摆；按下去服务端本也只会答 DRAFT_NOT_READABLE。
+  const decisions = draft ? draftDecisions(draft) : { approve: false, publish: false };
   // 没有登记册配置写授予的操作者不摆批准与发布（ADR-0315）；摆不摆只是呈现，两个写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
   const timeZone = currentDisplayTimeZone();
@@ -176,19 +195,22 @@ export function PendingDraftDrawer({
                   ) : (
                     <div className="flex flex-col gap-4 py-2">
                       <FactList facts={draftFacts(body.draft, timeZone)} />
+                      {body.draft.readable ? null : <UnreadableNote draft={body.draft} />}
                       {approval ? <DraftNote answer={approval} what="批准" labels={approveOutcomeLabels} /> : null}
                       {publication ? <PublicationNote answer={publication} /> : null}
-                      {body.draft.status === 'PENDING_APPROVAL' ? (
+                      {body.draft.readable && body.draft.status === 'PENDING_APPROVAL' ? (
                         <p className="text-xs text-idpxyz-textMuted">
                           批准的是下面这份内容：按下批准时带着上面的内容摘要，若这之间有人改过内容，服务端不批，并显示现在的内容。
                         </p>
                       ) : null}
-                      <section className="flex flex-col gap-1">
-                        <h3 className="text-[12px] font-medium text-idpxyz-text">规范化文档（内容摘要盖住的那一份）</h3>
-                        <pre className="max-h-[50vh] overflow-auto rounded border border-idpxyz-border bg-idpxyz-inputBg p-3 font-mono text-[12px] text-idpxyz-text whitespace-pre-wrap break-all">
-                          {canonicalDocumentText(body.draft.content)}
-                        </pre>
-                      </section>
+                      {body.draft.readable ? (
+                        <section className="flex flex-col gap-1">
+                          <h3 className="text-[12px] font-medium text-idpxyz-text">规范化文档（内容摘要盖住的那一份）</h3>
+                          <pre className="max-h-[50vh] overflow-auto rounded border border-idpxyz-border bg-idpxyz-inputBg p-3 font-mono text-[12px] text-idpxyz-text whitespace-pre-wrap break-all">
+                            {canonicalDocumentText(body.draft.content)}
+                          </pre>
+                        </section>
+                      ) : null}
                     </div>
                   )
                 }

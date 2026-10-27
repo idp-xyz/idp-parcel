@@ -43,7 +43,17 @@ const columns: ListColumn<PendingDraftRow>[] = [
   {
     id: 'status',
     header: '状态',
-    render: (row) => statusWordBadge(labelOf(draftStatusLabels, row.source.status)),
+    // 读不回的载体（本构建折不回它的正文）照样在列表里，状态之外另标一句，悬停是成因；点开抽屉说恢复动作。
+    render: (row) => (
+      <span className="inline-flex items-center gap-1.5">
+        {statusWordBadge(labelOf(draftStatusLabels, row.source.status))}
+        {row.source.readable ? null : (
+          <span className="whitespace-nowrap text-[12px] text-idpxyz-textMuted" title={row.source.unreadableCause}>
+            本构建读不回
+          </span>
+        )}
+      </span>
+    ),
   },
   {
     id: 'submitter',
