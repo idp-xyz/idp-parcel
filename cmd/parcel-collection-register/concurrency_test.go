@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
@@ -21,6 +22,7 @@ import (
 type concurrencyRig struct {
 	registrar registrar
 	newConn   func(t *testing.T) *pgx.Conn
+	pool      *pgxpool.Pool
 }
 
 func newConcurrencyRig(t *testing.T) concurrencyRig {
@@ -44,7 +46,7 @@ func newConcurrencyRig(t *testing.T) concurrencyRig {
 		t.Cleanup(func() { _ = conn.Close(context.Background()) })
 		return conn
 	}
-	return concurrencyRig{registrar: built, newConn: newConn}
+	return concurrencyRig{registrar: built, newConn: newConn, pool: pool}
 }
 
 func (rig concurrencyRig) must(t *testing.T, command, raw string, wantCode int) {
@@ -117,6 +119,8 @@ func waitForLockWaiters(conn *pgx.Conn, locktype string, want int, limit time.Du
 func TestConcurrentArrivalsOfOneInstructionPostOnlyOne(t *testing.T) {
 	rig := newConcurrencyRig(t)
 	rig.seedOneReport(t)
+	seedPrincipalFunds(t, rig.pool, "SYN-EV-SYN-FACT-CREDIT-A", "EUR", 100)
+	seedPrincipalFunds(t, rig.pool, "SYN-EV-SYN-FACT-CREDIT-B", "EUR", 100)
 	rig.must(t, commandFact, concurrencyFact("SYN-FACT-CREDIT-A", "OPERATOR_BANK_CREDIT", "100"), exitRegistered)
 	rig.must(t, commandFact, concurrencyFact("SYN-FACT-CREDIT-B", "OPERATOR_BANK_CREDIT", "100"), exitRegistered)
 

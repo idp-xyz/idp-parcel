@@ -31,6 +31,13 @@ type storeDouble struct {
 	// 即另一路并发的记账在这一路等锁期间提交了。
 	afterLock func()
 
+	// adopted 是结算一侧「已采用且已整条认作代收本金」的事实（按引用）；没有的引用读不到。fundsLog 按次序记下
+	// 取过的采用事实锁与结算共享锁，afterFundsLock 在登记路径取到本上下文的事实锁之后运行（造出等锁期间另一路提交）。
+	adopted        map[string]domain.AdoptedFunds
+	fundsLog       []string
+	afterFundsLock func()
+	fundsReadErr   error
+
 	writeErr error
 	readErr  error
 }
@@ -44,18 +51,82 @@ func newStore() *storeDouble {
 		subledgers:    map[domain.SubledgerKey]domain.Subledger{},
 		postings:      map[string]domain.SubledgerPosting{},
 		batches:       map[string]domain.RemittanceBatch{},
+		adopted:       map[string]domain.AdoptedFunds{},
 	}
 }
 
 func (store *storeDouble) deps() application.Deps {
 	return application.Deps{
-		Collections: store,
-		Collection:  store,
-		Subledgers:  store,
-		Subledger:   store,
-		Remittances: store,
-		Remittance:  store,
+		Collections:  store,
+		Collection:   store,
+		Subledgers:   store,
+		Subledger:    store,
+		Remittances:  store,
+		Remittance:   store,
+		AdoptedFunds: store,
 	}
+}
+
+// LockAdoptedFundsReferences 在替身上只记一笔并跑钩子：内存替身没有并发，锁的效果由真库用例证。
+func (store *storeDouble) LockAdoptedFundsReferences(
+	_ context.Context, _ domain.TenantID, reference domain.AdoptedFundsReference,
+) error {
+	if store.writeErr != nil {
+		return store.writeErr
+	}
+	store.fundsLog = append(store.fundsLog, "references:"+reference.String())
+	if store.afterFundsLock != nil {
+		hook := store.afterFundsLock
+		store.afterFundsLock = nil
+		hook()
+	}
+	return nil
+}
+
+func (store *storeDouble) LoadAdoptedFundsReferences(
+	_ context.Context, _ domain.TenantID, reference domain.AdoptedFundsReference,
+) ([]domain.CollectionFact, error) {
+	if store.readErr != nil {
+		return nil, store.readErr
+	}
+	referenced := []domain.CollectionFact{}
+	for _, key := range store.factOrder {
+		fact := store.facts[key]
+		if ref, ok := fact.AdoptedFundsReference(); ok && ref == reference {
+			referenced = append(referenced, fact)
+		}
+	}
+	return referenced, nil
+}
+
+func (store *storeDouble) LockAdoptedFunds(
+	_ context.Context, _ domain.TenantID, reference domain.AdoptedFundsReference,
+) (domain.AdoptedFunds, bool, error) {
+	if store.fundsReadErr != nil {
+		return domain.AdoptedFunds{}, false, store.fundsReadErr
+	}
+	store.fundsLog = append(store.fundsLog, "settlement:"+reference.String())
+	funds, found := store.adopted[reference.String()]
+	return funds, found, nil
+}
+
+// adoptFunds 让结算一侧有一条已采用、已整条认作代收本金的事实（链头版本固定为引用加 /v1，币种取替身的币种）。
+func (store *storeDouble) adoptFunds(t *testing.T, reference string, amountMinor int64) {
+	t.Helper()
+	store.adoptFundsVersion(t, reference, reference+"/v1", amountMinor)
+}
+
+func (store *storeDouble) adoptFundsVersion(t *testing.T, reference, version string, amountMinor int64) {
+	t.Helper()
+	parsed, err := domain.NewAdoptedFundsVersion(version)
+	if err != nil {
+		t.Fatalf("构造采用版本：%v", err)
+	}
+	funds, err := domain.NewAdoptedFunds(parsed, testMoney(t, amountMinor))
+	if err != nil {
+		t.Fatalf("构造已采用事实：%v", err)
+	}
+	store.adopted[reference] = funds
 }
 
 func (store *storeDouble) handler() *application.Handler {

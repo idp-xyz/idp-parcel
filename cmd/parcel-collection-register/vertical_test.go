@@ -90,6 +90,7 @@ func TestCollectionRegisterVerticalOnRealPostgres(t *testing.T) {
 	mustExecute(commandFact, fact("SYN-FACT-POD", "RECIPIENT_PAYMENT", "12000"), exitRegistered, "REGISTERED")
 	mustExecute(commandFact, fact("SYN-FACT-POD", "RECIPIENT_PAYMENT", "12000"), exitRegistered, "EXISTING")
 	mustExecute(commandFact, fact("SYN-FACT-POD", "RECIPIENT_PAYMENT", "10000"), exitNeedsReview, "CONTENT_CONFLICT")
+	seedPrincipalFunds(t, pool, "SYN-EV-SYN-FACT-CREDIT", "EUR", 10000)
 	mustExecute(commandFact, fact("SYN-FACT-CREDIT", "OPERATOR_BANK_CREDIT", "10000"), exitRegistered, "REGISTERED")
 
 	posting := func(ref, from, to, amount, basisKind, basis, at string) string {
@@ -157,6 +158,7 @@ func TestCollectionRegisterVerticalOnRealPostgres(t *testing.T) {
 		posting("SYN-POST-Y-1", "EXTERNAL_SOURCE", "IN_TRANSIT_AT_CHANNEL", "5000",
 			"COLLECTION_FACT", "SYN-FACT-Y-REPORT", "2026-08-24T01:10:00Z"),
 		exitRegistered, "REGISTERED")
+	seedPrincipalFunds(t, pool, "SYN-EV-SYN-FACT-LATE", "EUR", 3000)
 	mustExecute(commandFact, fact("SYN-FACT-LATE", "OPERATOR_BANK_CREDIT", "3000"), exitRegistered, "REGISTERED")
 	mustExecute(commandPosting,
 		posting("SYN-POST-LATE-CREDIT", "IN_TRANSIT_AT_CHANNEL", "AWAITING_ALLOCATION", "3000",

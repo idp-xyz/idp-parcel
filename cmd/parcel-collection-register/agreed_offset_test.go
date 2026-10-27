@@ -72,6 +72,7 @@ func TestScenarioSeventeenOffsetOnRealPostgres(t *testing.T) {
 	}
 	rig := concurrencyRig{registrar: registrar}
 	rig.seedOneReport(t)
+	seedPrincipalFunds(t, pool, "SYN-EV-SYN-FACT-CREDIT", "EUR", 96)
 	run(commandFact, concurrencyFact("SYN-FACT-CREDIT", "OPERATOR_BANK_CREDIT", "96"), exitRegistered, "REGISTERED")
 
 	// 登记只钉引用：重放答已在册；改金额与换标识再登记同一份认可都是内容冲突；指令不在册

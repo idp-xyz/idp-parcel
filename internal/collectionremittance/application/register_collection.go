@@ -14,15 +14,17 @@ import (
 // 读回既有登记逐字段比。把比对放在编排而不是 SQL 里，是为了让「重放同一份」与「换了
 // 内容」在用例答案上分得开（ADR-0031 的两格代数换来的就是这个）。
 
-// Deps 是本上下文全部用例的依赖：三对写口读口。它们成对出现不是对称美——只有写口时
-// 「已在册」永远说不出是重放还是改内容。
+// Deps 是本上下文全部用例的依赖：三对写口读口，外加读 settlement-accounting 已采用事实的一口。前三对成对出现不是
+// 对称美——只有写口时「已在册」永远说不出是重放还是改内容。AdoptedFunds 没装配时，登记与移位运营企业真实到账答未决
+// （依赖未提供），不放行也不折成业务答案：真实到账必须有结算已采用的事实作证据，没有读它的口就验不了。
 type Deps struct {
-	Collections ports.CollectionRegistry
-	Collection  ports.CollectionView
-	Subledgers  ports.SubledgerRegistry
-	Subledger   ports.SubledgerView
-	Remittances ports.RemittanceRegistry
-	Remittance  ports.RemittanceView
+	Collections  ports.CollectionRegistry
+	Collection   ports.CollectionView
+	Subledgers   ports.SubledgerRegistry
+	Subledger    ports.SubledgerView
+	Remittances  ports.RemittanceRegistry
+	Remittance   ports.RemittanceView
+	AdoptedFunds ports.AdoptedFundsView
 }
 
 type Handler struct {
@@ -78,18 +80,23 @@ type AcceptFactCommand struct {
 // AcceptFact 接受一条代收事实。指名的代收指令必须已在册——没有指令就没有代收义务，
 // 无来源的本金不许进库。库上那道外键也拦得住它，但撞外键在写口是「依赖故障」那一格，
 // 而这明明是一个说得清的业务答案：先把指令登进来。
+//
+// 运营企业真实到账另走 acceptArrival：它的证据引用必须指向结算已采用的外部资金事实（ADR-0274、ADR-0330）。
 func (handler *Handler) AcceptFact(ctx context.Context, command AcceptFactCommand) (Outcome, error) {
 	if blank(command.Tenant) || strings.TrimSpace(command.Fact.ID().String()) == "" {
 		return OutcomeNotAccepted, nil
 	}
 
-	_, found, err := handler.deps.Collection.LoadInstruction(
+	instruction, found, err := handler.deps.Collection.LoadInstruction(
 		ctx, command.Tenant, command.Fact.Instruction())
 	if err != nil {
 		return OutcomeUndecided, nil
 	}
 	if !found {
 		return OutcomeBasisMissing, nil
+	}
+	if command.Fact.Layer().SettlesToOperator() {
+		return handler.acceptArrival(ctx, command, instruction)
 	}
 
 	saved, err := handler.deps.Collections.AcceptCollectionFact(ctx, command.Tenant, command.Fact)

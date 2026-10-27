@@ -7,7 +7,12 @@
 // discrepancy（差异事项）、agreed-offset（认可的协议抵扣）、batch（回汇批次形成）、
 // hand-over（交出汇付主张）、posting（分户账记账）。
 // agreed-offset 只登记 settlement-accounting 认可的抵扣引用，不动账；落账是 posting 凭它
-// 的一笔记账，本进程不读 settlement-accounting。
+// 的一笔记账。
+//
+// 运营企业真实到账（fact 命令的 OPERATOR_BANK_CREDIT 层）的证据引用是 settlement-accounting 已采用、且已整条认作
+// 代收本金的外部资金事实的引用：登记时按引用读回它此刻的链头，核币种、核各条到账之和不超过它、核同一指令至多一条，
+// 钉下读到的版本；移位记账（posting）前再读一次。读经 settlement-accounting 的只读口，本进程不直读它的表，也不自铸
+// 资金事实（ADR-0274、ADR-0330）。
 //
 // **记账输入里没有分户账键，也没有币种**：键由依据推出，币种取自那本账。这不是省字段
 // ——传键的写法在库里看不出记错账，传币种的写法在库里看不出记错币种。
@@ -48,8 +53,10 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	adapter "go.idp.xyz/idp-parcel/internal/collectionremittance/adapters/postgres"
+	crsettlement "go.idp.xyz/idp-parcel/internal/collectionremittance/adapters/settlementaccounting"
 	"go.idp.xyz/idp-parcel/internal/collectionremittance/application"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 )
 
 const envDatabaseDSN = "IDP_PARCEL_POSTGRES_DSN"
@@ -156,8 +163,9 @@ func knownCommand(command string) bool {
 	return false
 }
 
-// buildRegistrar 装配真实登记链：三对写口读口。读口不是可选的便利，冲突判定与余额守卫
-// 都靠它——只有写口时「已在册」永远说不出是重放还是改内容，账上够不够扣也无从判起。
+// buildRegistrar 装配真实登记链：三对写口读口，外加读 settlement-accounting 已采用事实的一口。读口不是可选的便利，
+// 冲突判定与余额守卫都靠它——只有写口时「已在册」永远说不出是重放还是改内容，账上够不够扣也无从判起；没有结算那一口，
+// 真实到账就验不了证据。
 func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	none := registrar{}
 	collections, err := adapter.NewCollectionRegistrations(db)
@@ -185,13 +193,23 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 		return none, fmt.Errorf("构造回汇读口：%w", err)
 	}
 
+	principalFunds, err := sapostgres.NewCollectedPrincipalFundsView(db)
+	if err != nil {
+		return none, fmt.Errorf("构造结算只读口：%w", err)
+	}
+	adoptedFunds, err := crsettlement.NewAdoptedFundsView(principalFunds)
+	if err != nil {
+		return none, fmt.Errorf("构造已采用事实读口适配器：%w", err)
+	}
+
 	handler := application.NewHandler(application.Deps{
-		Collections: collections,
-		Collection:  collectionView,
-		Subledgers:  subledgers,
-		Subledger:   subledgerView,
-		Remittances: remittances,
-		Remittance:  remittanceView,
+		Collections:  collections,
+		Collection:   collectionView,
+		Subledgers:   subledgers,
+		Subledger:    subledgerView,
+		Remittances:  remittances,
+		Remittance:   remittanceView,
+		AdoptedFunds: adoptedFunds,
 	})
 	return registrar{handler: handler, transactor: db.Transactor()}, nil
 }
@@ -303,7 +321,7 @@ func answer(command string, outcome application.Outcome) (string, int) {
 	case application.OutcomeContentConflict:
 		return message + "（同键已在册且内容不同——绝不覆盖，先核对既有登记）", exitNeedsReview
 	case application.OutcomeBasisMissing:
-		return message + "（依据不在册：先登代收指令/分户账/回汇批次/差异事项/认可抵扣/原记账）", exitNeedsReview
+		return message + "（依据不在册：先登代收指令/分户账/回汇批次/差异事项/认可抵扣/原记账；真实到账还要先在结算采用外部资金事实并整条认作代收本金）", exitNeedsReview
 	case application.OutcomeBatchClosed:
 		return message + "（批次已交出汇付主张，成员只增不改——要继续归集请形成新批次）", exitNeedsReview
 	case application.OutcomeUndecided:

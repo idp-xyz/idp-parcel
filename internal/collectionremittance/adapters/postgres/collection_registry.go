@@ -76,6 +76,18 @@ func (registry *CollectionRegistrations) AcceptCollectionFact(
 		return ports.SaveOutcomeInvalid,
 			fmt.Errorf("accept collection fact: unknown source layer %d", fact.Layer())
 	}
+	// 运营企业真实到账必须已钉上登记时读到的采用事实版本：编排读回结算之后才落册。没钉就来写是调用方编程错误，
+	// 让它撞库上的 CHECK 会被折成「依赖故障」，而两者的处置完全不同。
+	var fundsVersion *string
+	if fact.Layer().SettlesToOperator() {
+		version, pinned := fact.AdoptedFundsVersion()
+		if !pinned {
+			return ports.SaveOutcomeInvalid,
+				fmt.Errorf("accept collection fact: an operator bank credit must pin its adopted funds version")
+		}
+		raw := version.String()
+		fundsVersion = &raw
+	}
 	executor, err := registry.db.RequireExecutor(ctx)
 	if err != nil {
 		return ports.SaveOutcomeInvalid, fmt.Errorf("accept collection fact: %w", err)
@@ -84,12 +96,12 @@ func (registry *CollectionRegistrations) AcceptCollectionFact(
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO collection_remittance.collection_fact
 			(tenant_id, fact_ref, instruction_ref, source_layer,
-			 evidence_ref, currency, amount_minor, occurred_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			 evidence_ref, currency, amount_minor, occurred_at, funds_fact_version)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		 ON CONFLICT DO NOTHING`,
 		tenant.String(), fact.ID().String(), fact.Instruction().String(), layer,
 		fact.Evidence().String(), fact.Amount().Currency().String(),
-		fact.Amount().AmountMinor(), fact.OccurredAt().UTC(),
+		fact.Amount().AmountMinor(), fact.OccurredAt().UTC(), fundsVersion,
 	)
 	if err != nil {
 		return ports.SaveOutcomeInvalid, fmt.Errorf("accept collection fact: %w", err)
@@ -98,6 +110,27 @@ func (registry *CollectionRegistrations) AcceptCollectionFact(
 		return ports.SaveAlreadyRegistered, nil
 	}
 	return ports.SaveRegistered, nil
+}
+
+// LockAdoptedFundsReferences 取（租户，已采用事实引用）的事务级咨询锁，双 int 形式同本仓其余事务级锁；第二键撞上只让
+// 两条不相干的事实多等一下。走 RequireExecutor：锁必须与随后的读回合计和落册在同一笔事务里，无环境事务即拒。
+func (registry *CollectionRegistrations) LockAdoptedFundsReferences(
+	ctx context.Context,
+	tenant domain.TenantID,
+	reference domain.AdoptedFundsReference,
+) error {
+	executor, err := registry.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("lock adopted funds references: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext('collection_remittance.collection_fact.adopted_funds'),
+		                              hashtext($1 || chr(31) || $2))`,
+		tenant.String(), reference.String(),
+	); err != nil {
+		return fmt.Errorf("lock adopted funds references: %w", err)
+	}
+	return nil
 }
 
 func (registry *CollectionRegistrations) RegisterDiscrepancyItem(

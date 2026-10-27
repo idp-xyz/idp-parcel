@@ -37,8 +37,19 @@ const (
 // ——改了上游，账面就凭空指向一份不存在过的依据。
 //
 // RegisterAgreedOffset 的撞键有两种：标识相同，或（认可引用，指令）相同；两者都答
-// `已登记`、不覆盖，由编排按标识读回区分重放与冲突。
+// `已登记`、不覆盖，由编排按标识读回区分重放与冲突。运营企业真实到账同理有两种撞键：标识相同，或（采用事实引用，指令）
+// 相同；一条已采用事实对一条指令至多支撑一条真实到账。
+//
+// LockAdoptedFundsReferences 在环境事务里取（租户，已采用事实引用）的事务级锁，事务结束时自动放。真实到账的登记是
+// 「读回此事实名下已有的到账、判合计、再落册」，两路并发引用同一条事实的到账各自读到同一份已有到账、各自判够，落下去
+// 合计就超过事实金额。锁序：本锁在 AdoptedFundsView.LockAdoptedFunds 之前取，在分户账锁之外——登记路径不取分户账锁；
+// 记账路径不取本锁（移位记账的采用事实门只读此事实名下的到账，写入方的登记已被采用事实的共享锁与更正排开）。
 type CollectionRegistry interface {
+	LockAdoptedFundsReferences(
+		ctx context.Context,
+		tenant domain.TenantID,
+		reference domain.AdoptedFundsReference,
+	) error
 	RegisterInstruction(
 		ctx context.Context,
 		tenant domain.TenantID,
@@ -90,6 +101,28 @@ type CollectionView interface {
 		tenant domain.TenantID,
 		id domain.CollectionInstructionID,
 	) ([]domain.CollectionFact, error)
+	// LoadAdoptedFundsReferences 交回全部引用这条已采用事实的运营企业真实到账（跨指令），按事实标识排序，空切片即
+	// 还没有。已采用事实的合计、每指令至多一条都要读这一组才判得了（domain.AdmitAdoptedFundsReference）。
+	LoadAdoptedFundsReferences(
+		ctx context.Context,
+		tenant domain.TenantID,
+		reference domain.AdoptedFundsReference,
+	) ([]domain.CollectionFact, error)
+}
+
+// AdoptedFundsView 是登记与移位运营企业真实到账时读 settlement-accounting 已采用事实的口（ADR-0330）。代收与清分
+// 不读结算的表：这一口由适配器翻译结算的只读口，只交回「已采用、且在结算一侧已被整条认作代收本金」的事实此刻的链头版本与
+// 金额。没采用、采用了却没认作代收本金、别的租户的同引用，对调用方是同一件事——先去结算把它采用并认作——所以都答
+// found=false（ADR-0029：恢复动作相同则同格）。
+//
+// LockAdoptedFunds 在调用方的事务里先对结算一侧的事实身份行取共享锁再读：读到的金额在调用方事务提交之前不会被结算一侧的
+// 外部更正改掉，调用方据此判的合计到落册那一刻仍成立。无环境事务即拒；读不动答 error（未决），不折成 found=false。
+type AdoptedFundsView interface {
+	LockAdoptedFunds(
+		ctx context.Context,
+		tenant domain.TenantID,
+		reference domain.AdoptedFundsReference,
+	) (domain.AdoptedFunds, bool, error)
 }
 
 // SubledgerRegistry 是分户账面的写口：开立与记账。

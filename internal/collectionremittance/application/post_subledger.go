@@ -85,6 +85,9 @@ type PostCommand struct {
 // 提交，读不到；等到锁、读到的账面已是落过的，这时再答余额不足就是在说一笔已经落账
 // 的记账没落。
 //
+// 凭运营企业真实到账的移位，在重放判定与取锁之后、按指令的上限之前，再读一次它引用的已采用事实（采用事实门，
+// admitArrivalMove）：登记之后结算一侧可能把事实更正小，容不下既有到账时移位答内容冲突，账面不动。
+//
 // 余额守卫必须在同一笔事务内读回账面再判（写口 RequireExecutor 保证有环境事务）：
 // 隔着事务判出来的「够扣」在落账时可能已经不够了，而透支后的账面看上去与正常账面
 // 没有区别。环境事务是 READ COMMITTED，同一份快照挡不住两笔并发的记账各自判够，所以
@@ -157,6 +160,14 @@ func (handler *Handler) PostSubledger(ctx context.Context, command PostCommand) 
 		}
 		if found && reversed.ID() != command.ID {
 			return OutcomeContentConflict, nil
+		}
+	}
+
+	if basis.factKnown && basis.fact.Layer().SettlesToOperator() {
+		// 真实到账的移位：登记时撑得住，此刻仍要被它引用的已采用事实撑住（admitArrivalMove）。在锁内、余额守卫之前：
+		// 事实被更正小了是这条到账的依据变了，不是账上钱不够，答案不该被余额不足盖住。
+		if outcome := handler.admitArrivalMove(ctx, command.Tenant, basis.fact); outcome != OutcomeRegistered {
+			return outcome, nil
 		}
 	}
 

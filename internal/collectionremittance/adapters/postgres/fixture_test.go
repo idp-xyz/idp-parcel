@@ -144,14 +144,23 @@ func fixtureFact(
 	if err != nil {
 		t.Fatalf("构造证据引用：%v", err)
 	}
-	fact, err := domain.AcceptCollectionFact(domain.CollectionFactSpec{
+	spec := domain.CollectionFactSpec{
 		ID:          fixtureFactID(t, id),
 		Instruction: fixtureInstructionID(t, instruction),
 		Layer:       layer,
 		Evidence:    evidence,
 		Amount:      fixtureMoney(t, amountMinor),
 		OccurredAt:  fixtureAt(t, "2026-08-24T01:00:00Z"),
-	})
+	}
+	if layer == domain.OperatorBankCredit {
+		// 写口只收钉了采用事实版本的真实到账；版本由编排读回结算之后钉，夹具直接给。
+		version, err := domain.NewAdoptedFundsVersion("SYN-FUNDS-VERSION-" + id)
+		if err != nil {
+			t.Fatalf("构造采用版本：%v", err)
+		}
+		spec.AdoptedFundsVersion = version
+	}
+	fact, err := domain.AcceptCollectionFact(spec)
 	if err != nil {
 		t.Fatalf("接受代收事实：%v", err)
 	}

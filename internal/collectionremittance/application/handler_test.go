@@ -471,10 +471,14 @@ func seedInstruction(
 }
 
 func seedFact(
-	t *testing.T, _ *storeDouble, handler *application.Handler,
+	t *testing.T, store *storeDouble, handler *application.Handler,
 	id, instruction string, layer domain.CollectionSourceLayer, amountMinor int64,
 ) {
 	t.Helper()
+	if layer == domain.OperatorBankCredit {
+		// 真实到账的证据引用是结算已采用事实的引用：先让结算一侧有一条恰好等于这笔到账的事实。
+		store.adoptFunds(t, "SYN-EVIDENCE-"+id, amountMinor)
+	}
 	if outcome, _ := handler.AcceptFact(t.Context(), application.AcceptFactCommand{
 		Tenant: tenantID(t), Fact: testFact(t, id, instruction, layer, amountMinor),
 	}); outcome != application.OutcomeRegistered {

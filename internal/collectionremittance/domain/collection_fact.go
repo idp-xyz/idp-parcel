@@ -63,24 +63,30 @@ func ParseCollectionSourceLayer(text string) (CollectionSourceLayer, bool) {
 }
 
 // CollectionFactSpec 是接受一条代收事实所需的全部输入。
+//
+// AdoptedFundsVersion 只属于运营企业真实到账：那一层的 Evidence 就是 settlement-accounting 已采用事实的引用
+// （ADR-0274、ADR-0330），版本是登记时按引用读到的链头版本，由编排读回结算之后钉上（PinnedToAdoptedFunds），
+// 接受时可以还没有；别的三层带它不成立。
 type CollectionFactSpec struct {
-	ID          CollectionFactID
-	Instruction CollectionInstructionID
-	Layer       CollectionSourceLayer
-	Evidence    EvidenceReference
-	Amount      Money
-	OccurredAt  time.Time
+	ID                  CollectionFactID
+	Instruction         CollectionInstructionID
+	Layer               CollectionSourceLayer
+	Evidence            EvidenceReference
+	Amount              Money
+	OccurredAt          time.Time
+	AdoptedFundsVersion AdoptedFundsVersion
 }
 
 // CollectionFact 是一次已被本上下文接受的收款主张或资金事实。它追加式登记且不可
 // 覆盖：来源侧更正或撤销时追加新事实并关联原事实，原事实继续留在册上。
 type CollectionFact struct {
-	id          CollectionFactID
-	instruction CollectionInstructionID
-	layer       CollectionSourceLayer
-	evidence    EvidenceReference
-	amount      Money
-	occurredAt  time.Time
+	id           CollectionFactID
+	instruction  CollectionInstructionID
+	layer        CollectionSourceLayer
+	evidence     EvidenceReference
+	amount       Money
+	occurredAt   time.Time
+	fundsVersion AdoptedFundsVersion
 }
 
 // AcceptCollectionFact 接受一条代收事实。来源层级与来源证据引用都必填——不声明层级
@@ -105,14 +111,46 @@ func AcceptCollectionFact(spec CollectionFactSpec) (CollectionFact, error) {
 	if spec.OccurredAt.IsZero() {
 		return CollectionFact{}, fmt.Errorf("%w: occurred at", ErrInvalidCollectionFact)
 	}
+	if spec.AdoptedFundsVersion.valid() && !spec.Layer.SettlesToOperator() {
+		return CollectionFact{}, fmt.Errorf(
+			"%w: only an operator bank credit pins an adopted funds version", ErrInvalidCollectionFact)
+	}
 	return CollectionFact{
-		id:          spec.ID,
-		instruction: spec.Instruction,
-		layer:       spec.Layer,
-		evidence:    spec.Evidence,
-		amount:      spec.Amount,
-		occurredAt:  spec.OccurredAt.UTC(),
+		id:           spec.ID,
+		instruction:  spec.Instruction,
+		layer:        spec.Layer,
+		evidence:     spec.Evidence,
+		amount:       spec.Amount,
+		occurredAt:   spec.OccurredAt.UTC(),
+		fundsVersion: spec.AdoptedFundsVersion,
 	}, nil
+}
+
+// AdoptedFundsReference 交回这条事实引用的 settlement-accounting 已采用外部资金事实；第二值为 false 即这一层不引用
+// 结算的事实。只有运营企业真实到账引用：它是外部资金事实，只经结算的采用进入本产品，证据引用就是那条事实的引用。
+func (fact CollectionFact) AdoptedFundsReference() (AdoptedFundsReference, bool) {
+	if !fact.layer.SettlesToOperator() {
+		return AdoptedFundsReference{}, false
+	}
+	return AdoptedFundsReference{requiredValue{value: fact.evidence.String()}}, true
+}
+
+// AdoptedFundsVersion 交回登记时读到的链头版本；第二值为 false 即还没按引用读过结算（接受门刚构造出来的、或库里按旧口径
+// 登记过的存量）。没有版本的真实到账撑不起任何记账（PostSubledger 的采用事实门）。
+func (fact CollectionFact) AdoptedFundsVersion() (AdoptedFundsVersion, bool) {
+	return fact.fundsVersion, fact.fundsVersion.valid()
+}
+
+// PinnedToAdoptedFunds 交回钉上登记时所读链头版本的同一条事实（值语义，原值不动）。只有真实到账能钉：别的层没有
+// 结算的事实可钉。
+func (fact CollectionFact) PinnedToAdoptedFunds(version AdoptedFundsVersion) (CollectionFact, error) {
+	if !fact.layer.SettlesToOperator() || !version.valid() {
+		return CollectionFact{}, fmt.Errorf(
+			"%w: only an operator bank credit pins a non-blank adopted funds version", ErrInvalidCollectionFact)
+	}
+	pinned := fact
+	pinned.fundsVersion = version
+	return pinned, nil
 }
 
 func (fact CollectionFact) ID() CollectionFactID { return fact.id }

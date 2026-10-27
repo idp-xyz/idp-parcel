@@ -112,15 +112,17 @@ func (view *CollectionPointView) LoadCollectionFact(
 
 	var (
 		instructionRaw, layerRaw, evidenceRaw, currencyRaw string
+		fundsVersion                                       *string
 		amountMinor                                        int64
 		occurredAt                                         time.Time
 	)
 	err = querier.QueryRow(ctx,
-		`SELECT instruction_ref, source_layer, evidence_ref, currency, amount_minor, occurred_at
+		`SELECT instruction_ref, source_layer, evidence_ref, currency, amount_minor, occurred_at,
+		        funds_fact_version
 		   FROM collection_remittance.collection_fact
 		  WHERE tenant_id = $1 AND fact_ref = $2`,
 		tenant.String(), id.String(),
-	).Scan(&instructionRaw, &layerRaw, &evidenceRaw, &currencyRaw, &amountMinor, &occurredAt)
+	).Scan(&instructionRaw, &layerRaw, &evidenceRaw, &currencyRaw, &amountMinor, &occurredAt, &fundsVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return none, false, nil
 	}
@@ -129,7 +131,7 @@ func (view *CollectionPointView) LoadCollectionFact(
 	}
 
 	fact, err := rebuildFact(id.String(), instructionRaw, layerRaw, evidenceRaw,
-		currencyRaw, amountMinor, occurredAt)
+		currencyRaw, amountMinor, occurredAt, fundsVersion)
 	if err != nil {
 		return none, false, err
 	}
@@ -151,7 +153,8 @@ func (view *CollectionPointView) LoadInstructionFacts(
 		return nil, fmt.Errorf("load instruction facts: %w", err)
 	}
 	rows, err := querier.Query(ctx,
-		`SELECT fact_ref, source_layer, evidence_ref, currency, amount_minor, occurred_at
+		`SELECT fact_ref, source_layer, evidence_ref, currency, amount_minor, occurred_at,
+		        funds_fact_version
 		   FROM collection_remittance.collection_fact
 		  WHERE tenant_id = $1 AND instruction_ref = $2
 		  ORDER BY fact_ref`,
@@ -166,15 +169,16 @@ func (view *CollectionPointView) LoadInstructionFacts(
 	for rows.Next() {
 		var (
 			factRaw, layerRaw, evidenceRaw, currencyRaw string
+			fundsVersion                                *string
 			amountMinor                                 int64
 			occurredAt                                  time.Time
 		)
 		if err := rows.Scan(&factRaw, &layerRaw, &evidenceRaw, &currencyRaw,
-			&amountMinor, &occurredAt); err != nil {
+			&amountMinor, &occurredAt, &fundsVersion); err != nil {
 			return nil, fmt.Errorf("load instruction facts: %w", err)
 		}
 		fact, err := rebuildFact(factRaw, id.String(), layerRaw, evidenceRaw,
-			currencyRaw, amountMinor, occurredAt)
+			currencyRaw, amountMinor, occurredAt, fundsVersion)
 		if err != nil {
 			return nil, err
 		}
@@ -186,10 +190,63 @@ func (view *CollectionPointView) LoadInstructionFacts(
 	return facts, nil
 }
 
+// LoadAdoptedFundsReferences 交回全部引用这条已采用事实的运营企业真实到账（跨指令），按事实标识排序。坏行同点读口一样
+// 上抛：漏掉一条到账，合计就少算一笔。库上证据引用是自由字符串、别的三层也可能撞上同一串，所以按来源层级收窄。
+func (view *CollectionPointView) LoadAdoptedFundsReferences(
+	ctx context.Context,
+	tenant domain.TenantID,
+	reference domain.AdoptedFundsReference,
+) ([]domain.CollectionFact, error) {
+	if strings.TrimSpace(reference.String()) == "" {
+		return nil, fmt.Errorf("load adopted funds references: the reference is blank")
+	}
+	querier, err := view.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load adopted funds references: %w", err)
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT fact_ref, instruction_ref, source_layer, evidence_ref, currency, amount_minor, occurred_at,
+		        funds_fact_version
+		   FROM collection_remittance.collection_fact
+		  WHERE tenant_id = $1 AND evidence_ref = $2 AND source_layer = $3
+		  ORDER BY fact_ref`,
+		tenant.String(), reference.String(), domain.OperatorBankCredit.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("load adopted funds references: %w", err)
+	}
+	defer rows.Close()
+
+	facts := make([]domain.CollectionFact, 0)
+	for rows.Next() {
+		var (
+			factRaw, instructionRaw, layerRaw, evidenceRaw, currencyRaw string
+			fundsVersion                                                *string
+			amountMinor                                                 int64
+			occurredAt                                                  time.Time
+		)
+		if err := rows.Scan(&factRaw, &instructionRaw, &layerRaw, &evidenceRaw, &currencyRaw,
+			&amountMinor, &occurredAt, &fundsVersion); err != nil {
+			return nil, fmt.Errorf("load adopted funds references: %w", err)
+		}
+		fact, err := rebuildFact(factRaw, instructionRaw, layerRaw, evidenceRaw,
+			currencyRaw, amountMinor, occurredAt, fundsVersion)
+		if err != nil {
+			return nil, err
+		}
+		facts = append(facts, fact)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("load adopted funds references: %w", err)
+	}
+	return facts, nil
+}
+
 func rebuildFact(
 	factRaw, instructionRaw, layerRaw, evidenceRaw, currencyRaw string,
 	amountMinor int64,
 	occurredAt time.Time,
+	fundsVersionRaw *string,
 ) (domain.CollectionFact, error) {
 	none := domain.CollectionFact{}
 	id, err := domain.NewCollectionFactID(factRaw)
@@ -214,14 +271,22 @@ func rebuildFact(
 	if err != nil {
 		return none, err
 	}
-	fact, err := domain.AcceptCollectionFact(domain.CollectionFactSpec{
+	spec := domain.CollectionFactSpec{
 		ID:          id,
 		Instruction: instruction,
 		Layer:       layer,
 		Evidence:    evidence,
 		Amount:      amount,
 		OccurredAt:  occurredAt,
-	})
+	}
+	// NULL 就是「没按引用读过结算」：按旧口径登记的存量真实到账。不造一个空版本，事实上显式缺席。
+	if fundsVersionRaw != nil {
+		spec.AdoptedFundsVersion, err = domain.NewAdoptedFundsVersion(*fundsVersionRaw)
+		if err != nil {
+			return none, fmt.Errorf("rebuild collection fact: %w", err)
+		}
+	}
+	fact, err := domain.AcceptCollectionFact(spec)
 	if err != nil {
 		return none, fmt.Errorf("rebuild collection fact: %w", err)
 	}
