@@ -855,6 +855,7 @@
 | `AT-VE-044` | internal/visibilityexception/application/derive_projection_test.go::TestFactsDeriveAndRederiveTheProjection；internal/visibilityexception/adapters/customscompliance/derive_on_external_result_correction_test.go::TestAnInForceCorrectionLandsOnItsChainRootAndSupersedesTheCorrectedResult、::TestASecondCorrectionNamesTheFirstCorrectionVersionAsItsPredecessor、::TestACorrectionDeliveredBeforeItsOriginalStillSupersedesIt；cmd/parcel-dispatch/customs_result_correction_projection_test.go::TestAnInForceCustomsCorrectionSupersedesTheCorrectedEntryEndToEnd |
 | `AT-VE-049` | internal/visibilityexception/application/form_eta_test.go::TestSufficientFactsFormAVersionedETA |
 | `AT-VE-050` | internal/visibilityexception/application/form_eta_test.go::TestACommandMissingAnEssentialIsNotAcceptedAsAnETA |
+| `AT-VE-052` | internal/visibilityexception/application/judge_eta_visibility_test.go::TestAGateMissJudgesTheCandidateETANotVisibleAndKeepsTheInternalETA；internal/visibilityexception/domain/eta_visibility_judgement_test.go::TestAGateMissFormsAnETANotVisibleJudgementWithoutAnExpression；cmd/parcel-dispatch/eta_visibility_wiring_test.go::TestAnETAThatMeetsThenMissesTheGateMovesTheCustomerViewThroughShownToWithheld（判断半边；「`UC-VE-008` 不展示」那一半归 `AT-VE-158`） |
 | `AT-VE-053` | internal/visibilityexception/application/form_eta_test.go::TestAGapIsNotFormedBeforeTheWindowElapses |
 | `AT-VE-054` | internal/visibilityexception/application/form_eta_test.go::TestAnElapsedWindowFormsTheGapWithoutConcludingLossOrStall |
 | `AT-VE-057` | internal/visibilityexception/application/form_eta_test.go::TestAGapIsIdempotentPerWindowRuleVersion |
@@ -877,9 +878,11 @@
 | `AT-VE-153` | internal/visibilityexception/adapters/http/customer_tracking_view_intake_test.go::TestCustomerTrackingViewIntakeKeysTheQueryByTheAuthenticatedAccount（HTTP 半边）；cmd/parcel-api/assemble_customer_tracking_view_test.go::TestCustomerTrackingViewLineRefusesOtherFamiliesAndClientsWithoutTheGrant |
 | `AT-VE-156` | internal/visibilityexception/application/derive_customer_view_test.go::TestFirstQualifyingProjectionPublishesAnAccountIsolatedView |
 | `AT-VE-157` | internal/visibilityexception/application/derive_customer_view_test.go::TestANonDisclosableDimensionIsWithheldAloneWithoutHidingTheOthers |
+| `AT-VE-158` | internal/visibilityexception/application/derive_customer_view_eta_test.go::TestTheETADimensionFollowsTheCurrentCustomerVisibilityJudgement（ETA 不可见格）；internal/visibilityexception/domain/customer_view_test.go::TestTheETADimensionFollowsTheCustomerVisibilityJudgementUnderThePolicy；cmd/parcel-dispatch/eta_visibility_wiring_test.go::TestAnETAThatMeetsThenMissesTheGateMovesTheCustomerViewThroughShownToWithheld |
 | `AT-VE-161` | internal/visibilityexception/application/derive_customer_view_test.go::TestANewerProjectionThatChangesTheDimensionsSupersedesTheCurrentViewKeepingHistory；internal/visibilityexception/adapters/postgres/customer_view_test.go::TestASupersededVersionStaysReadableByVersion（持久化半边） |
 | `AT-VE-168` | internal/visibilityexception/adapters/http/query_customer_tracking_view_test.go::TestAnUnreadableStoreIsNoAnswerNotNotFound、::TestAnUnreadableAttributionIsNoAnswerNotABusinessGrade（客户归属读取半边） |
 | `AT-VE-169` | cmd/parcel-dispatch/acceptance_rederive_test.go::TestALateAcceptanceRederivesTheCustomerViewFromTheCurrentProjection；internal/visibilityexception/adapters/parcelshipment/derive_customer_view_on_acceptance_test.go::TestAProjectedParcelRederivesTheCustomerView（消费侧半边） |
+| `AT-VE-170` | internal/visibilityexception/application/judge_eta_visibility_test.go::TestAMissingOrConflictingRuleJudgesPendingWithItsOwnReason；internal/visibilityexception/domain/eta_visibility_judgement_test.go::TestAMissingOrConflictingRuleFormsPendingJudgementNeverVisible；internal/visibilityexception/adapters/postgres/eta_visibility_test.go::TestTheRuleViewAnswersMissingConflictingOrTheOneApplicableRule；cmd/parcel-dispatch/eta_visibility_wiring_test.go::TestAnETAWithoutARegisteredRuleIsJudgedPendingAndTheViewStaysPending |
 | `AT-VE-171` | internal/visibilityexception/adapters/http/customer_tracking_view_intake_test.go::TestCustomerTrackingViewQueryStringIsClosed；cmd/parcel-api/assemble_customer_tracking_view_test.go::TestACustomerClientReadsItsOwnTrackingViewAgainstARealDatabase |
 | `AT-VE-172` | internal/accessidentity/customer_client_query_test.go::TestTrackingViewQueryNeedsItsOwnGrant；internal/visibilityexception/adapters/accessidentity/customer_tracking_view_authenticator_test.go::TestTrackingViewQueryGradesTranslateIntoVisibilityGrades；cmd/parcel-api/assemble_customer_tracking_view_test.go::TestCustomerTrackingViewLineRefusesOtherFamiliesAndClientsWithoutTheGrant |
 | `AT-VE-173` | internal/accessidentity/customer_client_query_test.go::TestTrackingViewQueryDoesNotAskTheAdmissionScope；internal/visibilityexception/adapters/accessidentity/customer_tracking_view_authenticator_test.go::TestTrackingViewQueryAuthenticatesToTheBoundCustomerAccount；cmd/parcel-api/assemble_customer_tracking_view_test.go::TestACustomerClientReadsItsOwnTrackingViewAgainstARealDatabase |
@@ -893,6 +896,7 @@
 | `AT-VE-182` | internal/visibilityexception/adapters/transportfulfillment/backfill_movement_facts_test.go::TestABackfilledCorrectionChainKeepsItsSupersession |
 | `AT-VE-183` | internal/visibilityexception/adapters/transportfulfillment/derive_on_movement_fact_consolidation_test.go::TestABlockedBagSignalsTheBlockedMemberNotTheBag |
 | `AT-VE-186` | cmd/parcel-dispatch/successive_customs_results_projection_test.go::TestAPartialThenFullReleaseReachesCustomsClearedInEitherArrivalOrder |
+| `AT-VE-187` | internal/visibilityexception/application/judge_eta_visibility_test.go::TestAMetGateJudgesTheCandidateETACustomerVisible；internal/visibilityexception/domain/eta_visibility_judgement_test.go::TestAMetQualityGateFormsACustomerVisibleJudgement；internal/visibilityexception/adapters/postgres/eta_visibility_test.go::TestACustomerVisibleJudgementIsReadBackWithItsBasis；cmd/parcel-dispatch/eta_visibility_wiring_test.go::TestAnETAThatMeetsThenMissesTheGateMovesTheCustomerViewThroughShownToWithheld |
 | `AT-VE-188` | internal/visibilityexception/adapters/http/query_customer_tracking_view_test.go::TestTheAttributedAccountGetsNoVisibleResultBeforeItsViewForms（C1 半边）、::TestEveryOtherUnformedViewIsByteForByteAMissingParcel（C2 半边）、::TestAnUnreadableAttributionIsNoAnswerNotABusinessGrade（归属读不动）；cmd/parcel-api/assemble_customer_tracking_view_test.go::TestTheProductionTrackingViewLineWalksAParcelThroughItsThreeGradesAgainstARealDatabase |
 | `AT-VE-189` | internal/visibilityexception/adapters/transportfulfillment/derive_on_movement_fact_test.go::TestADepartureProjectsOntoEveryObjectUnderControlAndSignalsTheBlockedOne、::TestInTransitAndArrivalFactsCarryTheirOwnKindsAndRaiseNoSignal；cmd/parcel-dispatch/movement_fact_projection_test.go::TestADepartureClassifiesAsDepartedUnderTheDemoMappingThroughTheProductionRoute（真库与演示映射半边；Covers 现点 UC-TF-005 `AT-TF-157`，改点名归 docs-consistency/code/32） |
 | `AT-VE-190` | internal/visibilityexception/adapters/transportfulfillment/derive_on_movement_fact_test.go::TestAMovementFactWithNoObjectToProjectIsAccountedForWithoutDeriving（Covers 现点 UC-TF-005 `AT-TF-159`，改点名归 docs-consistency/code/32） |
@@ -918,6 +922,10 @@
 | `AT-VE-210` | internal/visibilityexception/application/handle_claim_test.go::TestAClaimKeyHeldByAnotherAccountIsNotAcceptedAndDoesNotLeakTheOriginal；internal/visibilityexception/application/handle_claim_test.go::TestASameKeyClaimWithDifferentContentIsNotAcceptedAndTheOriginalStands；cmd/parcel-api/assemble_customer_claim_test.go::TestACustomerClientSubmitsAClaimThroughTheFirstPartyLineAgainstARealDatabase（真库：原样重投答同一项） |
 | `AT-VE-211` | cmd/parcel-api/assemble_customer_claim_test.go::TestClaimLineAnswersNotConfiguredByteForByteWhenTheCustomerFamilyIsUnset；cmd/parcel-api/assemble_customer_claim_test.go::TestClaimLineRefusesOtherFamiliesAndJudgesAdmission；internal/visibilityexception/adapters/http/customer_claim_intake_test.go::TestClaimEndpointMapsEachIntakeFailureToItsOwnGrade |
 | `AT-VE-212` | internal/visibilityexception/adapters/postgres/claim_eligibility_multitenant_test.go::TestAContractScopeBelongsToOneAccountOnly |
+| `AT-VE-213` | internal/visibilityexception/application/judge_eta_visibility_test.go::TestANewETAVersionOrANewRuleVersionSupersedesTheJudgementKeepingHistory、::TestTheSameCandidateAndBasisIsAReplay；internal/visibilityexception/domain/eta_visibility_judgement_test.go::TestASupersedingJudgementKeepsTheOriginalIntact、::TestTheSameBasisAssessesToTheSameFinding；internal/visibilityexception/adapters/postgres/eta_visibility_test.go::TestSupersessionAppendsAVersionAndKeepsTheOriginalReadable、::TestAStaleSupersessionAndADuplicateFirstAreRefusedAndRolledBack（真库：版本行只增、乐观锁） |
+| `AT-VE-214` | internal/visibilityexception/application/judge_eta_visibility_test.go::TestAnETAForAnotherMilestoneThanTheRuleTargetIsNotJudged；internal/visibilityexception/domain/eta_visibility_judgement_test.go::TestAnETAForAnotherMilestoneThanTheRuleTargetIsNotJudged；internal/visibilityexception/adapters/parcelshipment/judge_eta_visibility_on_prediction_test.go::TestEachJudgementOutcomeHasItsOwnLanding |
+| `AT-VE-215` | internal/visibilityexception/application/derive_customer_view_eta_test.go::TestAJudgementChangeOnTheSameProjectionSupersedesTheViewKeepingHistory、::TestAJudgementChangeThatLeavesTheDimensionsUnchangedKeepsTheViewVersion、::TestAnUnreadableJudgementStoreIsUndecidedRatherThanPending；internal/visibilityexception/adapters/parcelshipment/judge_eta_visibility_on_prediction_test.go::TestAFormedETAJudgesAndRederivesTheCustomerViewAcrossVersions、::TestAReplayedETAEnvelopeDoesNotChurnTheJudgementOrTheView、::TestTheProjectionRowIsLockedBeforeTheJudgementAndTheViewAreWritten；internal/visibilityexception/adapters/inbox/eta_prediction_consumer_test.go::TestAFormedETAPredictionIsProcessedExactlyOnce（消费门）；cmd/parcel-dispatch/eta_visibility_wiring_test.go::TestAnETAThatMeetsThenMissesTheGateMovesTheCustomerViewThroughShownToWithheld（派发真库：判断与视图同一事务，投影版本不变） |
+| `AT-VE-216` | internal/visibilityexception/application/derive_customer_view_eta_test.go::TestAPolicyThatDoesNotShowETANeverConsultsTheJudgement；internal/visibilityexception/domain/customer_view_test.go::TestTheETADimensionFollowsTheCustomerVisibilityJudgementUnderThePolicy |
 
 ## ② 机制候选（补 Covers 或小块测试）
 
@@ -1659,7 +1667,6 @@
 | `AT-VE-047` | 外部段无内部节点明细 | UC-VE-002-BUILD-TRACKING-PROJECTION.md |
 | `AT-VE-048` | 保存结果不确定 | UC-VE-002-BUILD-TRACKING-PROJECTION.md |
 | `AT-VE-051` | 两个来源都提供 ETA | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
-| `AT-VE-052` | 内部 ETA 已形成，但质量明确未达适用客户门槛 | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
 | `AT-VE-055` | 外部段未承诺内部扫描 | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
 | `AT-VE-056` | 来源整体中断 | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
 | `AT-VE-058` | 缺口恢复后再次发生 | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
@@ -1738,13 +1745,10 @@
 | `AT-VE-152` | 同一外部标识存在多个有效候选 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-154` | 集团用户只获委派 C1、C3 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-155` | C1/C2 包裹处于同一集运单元、班次或共同案件 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
-| `AT-VE-158` | 只有内部 ETA 或质量未达对客门槛 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-159` | `parcel-shipment` 已形成当前有效客户服务终局 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-160` | 只有有效交付扫描但终局尚未形成 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-163` | 一个维度存在无法裁决的事实冲突 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-164` | `UC-VE-006` 已批准当前客户可见异常 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
-| `AT-VE-170` | 内部 ETA 已形成，但适用合同、门槛或客户服务规则缺失或冲突 | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
-| `AT-VE-187` | 内部 ETA 已形成，且适用质量、合同和客户服务规则条件明确满足 | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
 
 ## 重盘变化摘要（0cddbba）
 
@@ -1987,3 +1991,5 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-10-26 追记（票 docs-consistency/code/95）：UC-PS-005 新立 `AT-PS-161`（运营按租户查阅释放未受理册：未处理的行与计数、他租户看不见、存量行如实标出、被截断带标志）、`AT-PS-162`（核对后在结算侧释放：取锁、按原关联与存下的作用域释放，提供方答已收口才留痕并同笔交信封，可重试未形成与再被拒收什么也不写）、`AT-PS-163`（标记已处理只留痕不动账本，一笔占用至多处理一次，重复与并发读回先到的那一份，册上没有答统一不可见）、`AT-PS-164`（「释放拒收处理」授予与授权处置分开、别的租户与无令牌把关、事务外拒写）、`AT-PS-165`（续办：接受链拿当前版本再驱，链开头只放行人已处理的拒收，没处理的照旧响亮失败，重驱幂等）；皆在 ① 桶，ADR-0293。
 
 2026-10-26 追记（票 docs-consistency/code/66）：UC-NR-003 新立 `AT-NR-106`（复核与授权改路决定给候选出价的判断点由触发的控制依据定，声明与实测不符时按实测出价、选中的候选随之不同）、`AT-NR-107`（该取的物理事实一项也没取得：退回客户声明并标明、排序照常，读不回不折成没取得）、`AT-NR-108`（物理事实在而定不下用哪条：不退回、各段待判断）、`AT-NR-109`（只取得一部分：逐项取、声明只补缺的项）、`AT-NR-110`（依据留在成本出处与复核记录上，封闭集、旧出处读回为声明、没出过价不记，ADR-0294），领域、编排、取数侧适配器、复核册真库与生产装配点名，入①。物理事实的真实来源（`node-operations` 实际测量登记册）尚无，`AT-NR-106` 的「按实测出价」在生产装配里由替身来源预置实测证明，生产里复核恒走 `AT-NR-107`。总览计数未动，由推送方重算。
+
+2026-10-26 追记（票 docs-consistency/code/51）：`AT-VE-052`、`AT-VE-170`、`AT-VE-187`（UC-VE-003，ETA 客户可见性判断的形成：达标可见、未达不可见、规则缺失或冲突待判断）与 `AT-VE-158`（UC-VE-008，客户视图 ETA 一维按判断：不可见不展示）由④移入①；UC-VE-003 新立 `AT-VE-213`（新 ETA 版本或规则版本换版形成替代判断、原判断读得回，重放不换代）、`AT-VE-214`（候选 ETA 不是规则指名的客户可见目标里程碑，不判）；UC-VE-008 新立 `AT-VE-215`（判断换版而投影版本不变时视图换代并指回前版，四维没变不换代，判断库读不动返回未形成）、`AT-VE-216`（策略不准展示时判断说可见也不放宽，且不去读判断）。已有领域、编排、真库、消费门、适配器与派发真库用例点名。总览计数未改，由推送方重算。
