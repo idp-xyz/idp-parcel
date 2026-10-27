@@ -44,4 +44,7 @@ M
 
 ## 评审记录
 
-（待填）
+评审 ← 隔离子代理(sonnet) · 钉 `e4af0195d` / `014103b76`（rebase 前）：阻断无，总评可进 main；七条非阻断。
+
+- **已修**：词表读口里漏贴码的「集合外的商业对象类别」改用 `notInSet`，补断言；`timeFormat` 只对空串答 `REQUIRED`，只有空白的时刻格答 `TIME_FORMAT`，补用例；答复处把空码兜成 `INVALID`，让「code 恒在场」不依赖调用方自觉，补录入口 400 体的断言；`field-problem-text.ts` 的注释去掉计数与变更叙事，分隔符的说法改准；`unclaimedProblems` 的注释说明交回的是行；ADR-0316 日期与同晚两份对齐并补「code 恒在场」「时刻格留空」一句。
+- 核对无问题：改前每个格式串在改后逐字相同（用脚本比对整份 diff）；`add` 是问题进入 Problems 的唯一路径；管理台所有渲染问题行的地方都经 `fieldProblemText` / `itemProblemText`。
