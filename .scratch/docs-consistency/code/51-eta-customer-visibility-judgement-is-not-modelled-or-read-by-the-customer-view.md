@@ -1,7 +1,7 @@
 # 51 VE 的 ETA 客户可见性判断（AT-VE-187）没有建模，客户视图的 ETA 一维只能答待确认
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-code51（基 origin/main `57fc82782`）。此前 needs-triage——建议 R2（上线后尽快），分诊后定级 R2 不变。
+Status: resolved——2026-10-26 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code51（基 origin/main `57fc82782`）。此前 needs-triage——建议 R2（上线后尽快），分诊后定级 R2 不变。
 Blocked by: 无——分诊裁定判断引用候选 ETA 的版本号，不依赖 ETA 存储的形状，不等 [docs-consistency/code/07](./07-eta-store-overwrites-history-and-mixes-sources.md)（见完成记录代决 1）；07 仍待做，落地时候选 ETA 的选取要按来源维重定（越权风险点 6）
 出处：code/06 完成记录越权风险点 1；code/06 隔离评审。
 
@@ -113,3 +113,12 @@ L：领域对象与版本表迁移、形成编排（由 ETA 新版本、门槛�
   3. 当前标记的外键：真库 `TestTheCurrentMarkerCanOnlyNameAStoredVersionOfItsOwnJudgementLine`（改指不存在的版本、另一件包裹的标记指本件的版本、没有版本行的新标记，都应被库拒）；删外键后三例红。
 - N4（规则册 CHECK 漏数组元素）：已修。0031 加 IMMUTABLE 函数 `eta_qualifying_confidences_are_present` 逐元挡空白与 NULL（写法沿 `parcel_shipment` 0006 的 `declared_parcel_ids_have_no_blank`），CHECK 调它；真库 `TestTheRuleTableRefusesABlankOrNullQualifyingConfidence`，对未改的 0031 红（空格、空串、制表符、好元素带空白元素四例被放行）。0031 未进 main，直接改本文件。
 - 信息项：`routes_eta_visibility.go` 里「`FormETAHandler` 尚无生产调用方」的现状陈述改为不依赖现状的说法；判断对象与规则册没有运营读面，并入上线前必做清单第 2 项；哨兵名单 `veETAVisibilityUndecidedSentinels` 删一项无用例变红，只影响失败码归类，属信息级，未补。
+
+## 进 main 记录（2026-10-26，协调方）
+
+- 分支 `claude-code51` 由修订代理 rebase 到 origin/main `57fc82782` 后快进，tip `a6125ae98`。迁移 `visibility_exception/0031_eta_visibility_judgement`（判断版本表、当前标记表、规则册）；不立 ADR（0296 未用）。AT-VE-213–217（217 为修订轮拆出）。
+- 隔离评审（Sonnet）可合入，无阻断；核实了判断并入派生短路的锁序（投影行 → 判断 → 视图）、乐观锁、事务外拒跑、ADR-0222 装配合规（新增 `routes_eta_visibility.go` 与 `assemble_eta_visibility.go`）、`contentRef` 在已接受 ADR 里无定义故语义变化不动 ADR。评审自做 7 处变异被杀；存活的三条（门槛集合多成员、同结论换规则版、当前标记外键）与 N4（规则册 CHECK 漏数组元素）由 Sonnet 修订代理补用例与迁移约束，N2（AT-VE-158 同场景两套结果）拆出 AT-VE-217 一行。
+- 协调方裁定评审 N1（规则册 `eta_visibility_rule` 与 ADR-0104 决定一、ADR-0136 的归属可能相冲）：本票不另立 ADR——该表无写者、规则册生产上为空，且整条链因 `FormETAHandler` 无生产调用方而空转，不存在生产暴露；归属裁定列为「上线前必做清单」第 1 项，先于登记口。
+- 协调方单独提交重算的 AT 计数与重生成的机制清点（无新 ADR，索引不动）；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0、158 个包 ok；`go build ./...`、`go vet ./...` 干净；种子灌一次性库退 0，三张新表在。无 admin-web 改动。
+- 去向：无新票。**这条链在生产上空转，ETA 一维对客仍答待确认，直到「上线前必做清单」（票面）逐项做完**：1. 裁清规则册归属（先于登记口）；2. 规则册受控登记口与目录读面/管理台；3. ETA 来源接入（`FormETAHandler` 的生产调用方）；4. 停止展示边界执行方；5. 门槛/规则版本单独变化的重判；6. code/07 落地后重定候选选取；7. 判断事务读到无投影时的残留竞态（窗口小、会自愈）。
