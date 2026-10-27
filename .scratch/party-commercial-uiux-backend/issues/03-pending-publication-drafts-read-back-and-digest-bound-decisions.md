@@ -40,10 +40,10 @@ M
 ## 完成记录
 
 - 起点：分支 `claude-pcub3` 自 main 一笔早于 `7457d23e9` 的 tip 起，进 main 前要 rebase。
-- 新增：`domain.PublicationDraft.ShellDigest`（`PCS-1`，评审阻断后补）；`ports.PublicationDraftRead`（`LoadDraft`、`ListOpenDrafts`），载体册适配器同时满足；`commercialhttp.PublicationDraftReader`、`NewQueryPublicationDraftsEndpoint`、`NewQueryPublicationDraftEndpoint`（新文件 `query_publication_drafts.go`）；`PublicationDraftReferencePayload.ExpectedDigest`；`application.PublicationDraftChanged`（发布结果 `DRAFT_CHANGED`）；`cmd/parcel-api` 端点表两行带探针，占位 `unwiredPublicationDraftRead`。
+- 新增：`domain.PublicationDraft.ShellDigest`（`PCS-1`，评审阻断后补）；`ports.PublicationDraftRead`（`LoadDraft`、`ListOpenDrafts`），载体册适配器同时满足；`commercialhttp.PublicationDraftReader`、`NewQueryPublicationDraftsEndpoint`、`NewQueryPublicationDraftEndpoint`（新文件 `query_publication_drafts.go`）；`PublicationDraftReferencePayload.ExpectedDigest` 与 `ExpectedShellDigest`；`application.PublicationDraftChanged`（发布结果 `DRAFT_CHANGED`）；`cmd/parcel-api` 端点表两行带探针，占位 `unwiredPublicationDraftRead`。
 - AT：`AT-PC-068`（读回）、`AT-PC-069`（摘要绑定），UC-PC-001 与 `.scratch/at-coverage-inventory.md` 已补行；盘点总览计数与机制清点由推送方在 tip 上重算。
 - 既有测试补摘要：批准与发布的载荷现在必带摘要，应用层、HTTP 与装配层共八处旧用例改为从录入答复取摘要再批；这是 ADR-0314 越权风险点 1 点名的收紧。
-- 管理台：`publication-draft-api.ts`（读回类型、两个读函数、批准与发布载荷带 `expectedDigest`、两句 `DRAFT_CHANGED`）；`publication-draft-flow.ts` 的 `draftReferenceOf(payload, digest)` 与 `decisionDigestOf`（只取同键的录入答复，拿不到按钮收回）；新页 `PendingPublicationsPage.tsx`、抽屉 `PendingDraftDrawer.tsx`、纯逻辑 `pending-publications.ts`（6 条用例）；答复呈现件从 `PublicationDraftFlow.tsx` 抽到 `PublicationAnswerNotes.tsx` 两处共用；`publicationSummary` 参数放宽为版本壳；导航、页注册与 `liveIds` 各一行。
+- 管理台：`publication-draft-api.ts`（读回类型、两个读函数、批准与发布载荷带 `expectedDigest`、两句 `DRAFT_CHANGED`）；`publication-draft-flow.ts` 的 `draftReferenceOf(payload, { content, shell })` 与 `decisionDigestOf`（只取同键的录入答复里的那对摘要，缺一个按钮收回）；新页 `PendingPublicationsPage.tsx`、抽屉 `PendingDraftDrawer.tsx`、纯逻辑 `pending-publications.ts`（6 条用例）；答复呈现件从 `PublicationDraftFlow.tsx` 抽到 `PublicationAnswerNotes.tsx` 两处共用；`publicationSummary` 参数放宽为版本壳；导航、页注册与 `liveIds` 各一行。
 - 代决与越权风险点：见 ADR-0314（五点），其中点 1（载荷收紧）与点 2（读口挂查阅读授予、不另立读授予）需 PC owner 与访问身份 owner 复核。
 - 已知：新页的列表不分页，用既有 `limit`；录入者与批准者只示操作者主体引用原串，没有显示名；批准按钮对没有批准职责的操作者照样亮，按下得到服务端的 `NEEDS_ANOTHER_APPROVER` / `NOT_CONFIGURED` 等答案——按授予隐藏写入口是票 04 的事。
 
@@ -53,4 +53,6 @@ M
 
 - **阻断（已修）**：内容摘要只盖正文，不盖版本壳（范围、有效区间、指名引用），而待批准期间壳变了正文没变是合法的就地修订（`SameSubmissionAs`）——批准者看的是范围 S1、批准落在 S2 上，摘要一字不差。修法：载体新增 `ShellDigest()`（`PCS-1`，范围、区间起止、指名引用，时刻取 UTC 微秒），批准与发布命令各多 `ExpectedShellDigest`，运营操作者面载荷两个摘要都必带，列表、读回与录入、批准答复都带 `shellDigest`；管理台抽屉与五步流程带那一对摘要，抽屉里复述指名引用。补用例：域层壳摘要的敏感面与微秒稳定、应用层批准与发布各绑壳、HTTP 载荷两个摘要缺任一个都点名；ADR-0314 补决定与风险点 3。
 - **非阻断（已修）**：抽屉里批准或发布的答复回来时核对抽屉身份，不把 X 的答复写进 Y 的抽屉；「读不到」文案不再说「可能刚被发布」；ADR 与票面改正两处与代码不符的说法（`DRAFT_CHANGED` 本就有写回时的前态比对触发；按钮带的是抽屉读回的摘要）；单份读回用例改为与摘要盖住的文档逐节比较；去掉代码注释里的票号与两处变更叙事；`ListOpenDrafts` 的状态条件改绑参数；ADR 风险点 5 补「超限时藏起来的是等得最久的」与「坏行致整页失败、无撤回口」；CONTEXT 新句加「运营操作者面」限定。
+第二轮 ← 同一评审子代理 · 钉修订笔 `123a08ab4`（rebase 前）：阻断无，总评可进 main。一条非阻断已修：壳摘要取微秒原用四舍五入，而驱动写入 timestamptz 时截断，七位及以上小数的时刻会让录入答复里的壳摘要与读回的不等、五步流程永远答已变更——改为截断，补真库用例（带 600ns 尾巴的起止点，录入与读回的壳摘要相等；换回四舍五入即红）与域层用例的抖动量。另两条文字对齐（ADR 后果节、票面完成记录）已改。
+
 - 未改：`ListOpenDrafts` 整页失败与同刻排序没有专门用例（行为由重建门与排序列定，ADR 已点名）。

@@ -33,7 +33,7 @@ Date: 2026-10-26
 **二、批准与发布都绑定调用方看到的那份内容。**（机制）
 
 - 批准与发布两个命令各多 `ExpectedDigest`（内容摘要）与 `ExpectedShellDigest`（壳摘要）；用例在读到载体之后、判状态之前各自比较：非空且与载体此刻的串不同，批准答 `DRAFT_CHANGED`（沿用既有格），发布答 `DRAFT_CHANGED`（新增一格 `PublicationDraftChanged`）。内容身份先于状态：已批准的载体对着旧摘要批准，答的是「已变更」，不是「已批准」——后一个答案会让调用方以为批的是自己看过的那份。
-- 壳摘要 `PCS-1:<sha256>` 盖适用范围、有效区间起止与指名引用（按载体上记下的顺序），不盖身份四元（它是键）与正文；时刻取 UTC 微秒，载体册以微秒存时刻，录入答复里算出的串与之后读回算出的串必须相等。列表、单份读回与录入、批准两口的答复都带 `shellDigest`。
+- 壳摘要 `PCS-1:<sha256>` 盖适用范围、有效区间起止与指名引用（按载体上记下的顺序），不盖身份四元（它是键）与正文；时刻按 UTC 截到微秒，载体册以微秒存时刻、驱动写入时截断，录入答复里算出的串与之后读回算出的串必须相等。列表、单份读回与录入、批准两口的答复都带 `shellDigest`。
 - 应用层空串即不带那一半前置条件，留给手上本就握着载体的调用方（测试与装配）；**运营操作者面的 HTTP 载荷必须带 `expectedDigest` 与 `expectedShellDigest`**，缺席或只有空白逐格问题点名各自那一格（沿用载荷的逐格问题答法，400）。
 - `DRAFT_CHANGED` 同其它业务结果一样答 200（ADR-0022），不译 409。
 
@@ -49,9 +49,9 @@ Date: 2026-10-26
 - `ports`：新增 `PublicationDraftRead`（`LoadDraft`、`ListOpenDrafts`），载体册适配器同时满足它；`PublicationDraftRegistry` 不动。
 - `domain`：`PublicationDraft.ShellDigest`（`PCS-1`）。
 - `application`：批准与发布命令各多 `ExpectedDigest` 与 `ExpectedShellDigest`；发布结果多一格 `DRAFT_CHANGED`。
-- `adapters/http`：新增两个只读端点；批准 / 发布载荷多必带的 `expectedDigest`；载体发布口按结果名转写答案，新增的 `DRAFT_CHANGED` 随结果名带出，不另开转写分支。
+- `adapters/http`：新增两个只读端点；批准 / 发布载荷多必带的 `expectedDigest` 与 `expectedShellDigest`；载体发布口按结果名转写答案，新增的 `DRAFT_CHANGED` 随结果名带出，不另开转写分支。
 - `cmd/parcel-api`：端点表两行（操作者查阅读面）、探针各一行、装配点接载体册读口。
-- 现存的调用方（管理台、测试）凡批准 / 发布都要带摘要；管理台改读录入答复或列表行里的摘要。
+- 现存的调用方（管理台、测试）凡批准 / 发布都要带摘要；管理台改取录入答复或抽屉读回里的那对摘要。
 - 无迁移：摘要列与状态列早已在 ADR-0126 的表里。
 
 ## 越权风险点
