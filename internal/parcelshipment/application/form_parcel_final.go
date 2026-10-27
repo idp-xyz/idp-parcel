@@ -242,7 +242,9 @@ func (handler *FormParcelFinalHandler) Handle(
 			if err != nil {
 				return FormParcelFinalResult{}, err
 			}
-			return handler.refuse(ctx, command, request, key, digest, reason)
+			// 回放原料与这条不采用记录同笔落地：取消日后被认定不成立时，续办作废这一行并凭原料把来源重新交回本编排（ADR-0295 决定三、四）。
+			return handler.refuseWith(ctx, command, request, key, digest, reason,
+				&ports.CancellationBlockedReplay{Cancellation: cancellation.ID(), Final: &command.Outcome})
 		}
 	}
 
@@ -345,11 +347,25 @@ func (handler *FormParcelFinalHandler) refuse(
 	digest string,
 	reason domain.CheckReason,
 ) (FormParcelFinalResult, error) {
+	return handler.refuseWith(ctx, command, request, key, digest, reason, nil)
+}
+
+// refuseWith 是 refuse 带回放原料的一格：依据一份取消的不采用记录用它，别的依据不带。
+func (handler *FormParcelFinalHandler) refuseWith(
+	ctx context.Context,
+	command FormParcelFinalCommand,
+	request domain.ShipmentRequest,
+	key ports.FinalAdoptionKey,
+	digest string,
+	reason domain.CheckReason,
+	replay *ports.CancellationBlockedReplay,
+) (FormParcelFinalResult, error) {
 	record := ports.FinalOutcomeRecord{
-		Key:           key,
-		ContentDigest: digest,
-		RefusalBasis:  reason,
-		AdoptedAt:     handler.deps.Clock.Now(),
+		Key:                key,
+		ContentDigest:      digest,
+		RefusalBasis:       reason,
+		AdoptedAt:          handler.deps.Clock.Now(),
+		CancellationReplay: replay,
 	}
 	return handler.commit(ctx, command, request, record, FinalSourceNotAdopted)
 }

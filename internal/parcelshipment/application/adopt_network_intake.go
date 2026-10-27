@@ -70,7 +70,7 @@ const (
 	// IntakeCorrectionPredecessorUnjudged：来源自报更正的那一版在采用账上还没有任何记录——
 	// 先后两封乱序，或前版那封还没消费到。重投会改变结果，所以是未决不是拒（ADR-0117 决定五）。
 	IntakeCorrectionPredecessorUnjudged
-	// IntakeConflictRegisterUnavailable：判出了冲突却记不下（冲突册未接入或写不进）。与
+	// IntakeConflictRegisterUnavailable：判出了冲突却记不下，或读不回它的决定（冲突册未接入、写不进、决定留痕读不动）。与
 	// IntakeCancellationOrderConflict 分开是因为恢复动作不同：这格修依赖、重投就会记下，那格重投推不动。
 	IntakeConflictRegisterUnavailable
 )
@@ -171,6 +171,10 @@ type AdoptNetworkIntakeDeps struct {
 	// BoundaryLock 让取消边界核验与同一包裹上的取消提交排队，只在边界核验做的时候取（Cancellations 非 nil）。nil 按取不到
 	// 锁办，停在 CANCELLATION_VIEW_UNAVAILABLE：锁外读到的「没有取消」可能正是要防的那一份旧状态。
 	BoundaryLock ports.CancellationBoundaryLock
+	// Decisions 读冲突的决定（ADR-0295）。冲突那一格先问它：这一代边界事实已被认定有误、交来源方更正的，不采用并指名那份决定，不再停在
+	// 冲突上等。认定取消依据不成立的取消在有效取消读（Cancellations）里已被排除，走不到冲突那一格。nil 与「决定面未接入」同义：冲突照旧入账等候，
+	// 不认任何决定。
+	Decisions ports.CancellationOrderConflictDecisionView
 }
 
 type AdoptNetworkIntakeHandler struct {
@@ -372,10 +376,31 @@ func (handler *AdoptNetworkIntakeHandler) judgeAgainstCancellation(
 	if handler.deps.Conflicts == nil {
 		return handler.undecided(command, source, IntakeConflictRegisterUnavailable), nil
 	}
+	if handler.deps.Decisions != nil {
+		decision, decided, err := handler.deps.Decisions.FindConflictDecision(ctx, ports.KeyOfConflict(key.TenantID, conflict))
+		if err != nil {
+			return handler.undecided(command, source, IntakeConflictRegisterUnavailable), nil
+		}
+		if decided {
+			if decision.Kind != domain.BoundaryFactReferred {
+				// 认定取消不成立的取消已被有效取消读排除，走到这里还读到它，是取消读口没守住那条排除：当成冲突入账会把已解开的包裹再卡住。
+				return AdoptNetworkIntakeResult{}, fmt.Errorf(
+					"adopt network intake: the cancellation view returned cancellation %s that a %s decision has set aside",
+					cancellation.ID(), decision.Kind)
+			}
+			reason, err := domain.NewCheckReason("BOUNDARY_FACT_REFERRED/" + cancellation.ID().String())
+			if err != nil {
+				return AdoptNetworkIntakeResult{}, fmt.Errorf("refusal reason: %w", err)
+			}
+			return handler.refuse(ctx, command, key, digest, reason, request)
+		}
+	}
+	// 回放原料与冲突行同笔入册：取消日后被认定不成立时，续办凭它把本来源重新交回本编排（ADR-0295 决定四）。
 	if _, err := handler.deps.Conflicts.Record(ctx, ports.CancellationOrderConflictRecord{
 		TenantID:   key.TenantID,
 		Conflict:   conflict,
 		DetectedAt: handler.deps.Clock.Now(),
+		Replay:     &ports.CancellationBlockedReplay{Cancellation: cancellation.ID(), Intake: &command.Source},
 	}); err != nil {
 		return handler.undecided(command, source, IntakeConflictRegisterUnavailable), nil
 	}

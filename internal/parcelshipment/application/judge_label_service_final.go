@@ -127,12 +127,15 @@ type ParcelFinalAdopter interface {
 // Validity 可为 nil——有效期规则是实例半边，装配没有它时按「未配置」办，不推算失效。
 // Conflicts 为 nil 时判出的冲突无处可记，按依赖未决交回，不答`不形成`。
 // BoundaryLock 让判断与同一包裹上的取消提交排队；nil 按取不到锁办，停在 CANCELLATION_VIEW_UNAVAILABLE。
+// Decisions 读冲突的决定（ADR-0295）：被认定「边界事实有误、交来源方更正」的那一代收寄不再停在冲突上，取消照旧在先；认定取消依据不成立的取消
+// 在有效取消读（Cancellations）里已被排除，走不到冲突那一格。nil 与「决定面未接入」同义：冲突照旧入账等候，不认任何决定。
 type JudgeLabelServiceFinalDeps struct {
 	Transactions  ports.LabelTransactionsByParcelView
 	Registers     ports.ContinuedAttemptRegisterView
 	Cancellations ports.ParcelCancellationView
 	Validity      ports.LabelValidityRuleView
 	Conflicts     ports.CancellationOrderConflictRegister
+	Decisions     ports.CancellationOrderConflictDecisionView
 	Adoption      ParcelFinalAdopter
 	Clock         ports.Clock
 	BoundaryLock  ports.CancellationBoundaryLock
@@ -202,14 +205,23 @@ func (handler *JudgeLabelServiceFinalHandler) Handle(
 		return undecidedLabelServiceFinal(LabelValidityRuleUnavailable), nil
 	}
 	conflictRecorded := false
-	if cancelled && pickup == (domain.CarrierFirstEffectivePickup{}) {
-		// 不带收寄的两路比不了先后，只能读册：收寄那一路已判出的冲突照答，同一包裹不因触发路不同而
-		// 答成取消在先（ADR-0254 决定二第 3 格）。
-		recorded, err := handler.conflictRecorded(ctx, tenant, command.Parcel, cancellation.ID())
-		if err != nil {
-			return undecidedLabelServiceFinal(LabelConflictRegisterUnavailable), nil
+	var referred []domain.CancellationBoundaryReference
+	if cancelled {
+		// 不带收寄的两路比不了先后，只能读册：收寄那一路已判出且没有被决定的冲突照答，同一包裹不因触发路不同而答成取消在先（ADR-0254 决定二
+		// 第 3 格）。带着收寄的一路只在决定面接入时读册，看这一代是不是已被认定有误、交来源方更正（ADR-0295 决定二）。
+		withPickup := pickup != (domain.CarrierFirstEffectivePickup{})
+		if !withPickup || handler.deps.Decisions != nil {
+			state, err := handler.conflictState(ctx, tenant, command.Parcel, cancellation.ID())
+			if errors.Is(err, errCancellationSetAsideStillRead) {
+				// 取消读口没守住排除：装配缺陷，响亮报错不吸收，也不折成依赖未决让它重投到失败预算耗尽。
+				return LabelServiceFinalResult{}, fmt.Errorf("judge label service final: %w", err)
+			}
+			if err != nil {
+				return undecidedLabelServiceFinal(LabelConflictRegisterUnavailable), nil
+			}
+			conflictRecorded = state.standing
+			referred = state.referred
 		}
-		conflictRecorded = recorded
 	}
 
 	verdict, err := domain.JudgeLabelServiceFinal(domain.LabelServiceFinalInput{
@@ -220,6 +232,7 @@ func (handler *JudgeLabelServiceFinalHandler) Handle(
 		FirstEffectivePickup:         pickup,
 		Cancellation:                 cancellation,
 		CancellationConflictRecorded: conflictRecorded,
+		ReferredBoundaries:           referred,
 	})
 	if err != nil {
 		// 读口交回了别的包裹的东西：装配缺陷，响亮报错不吸收。
@@ -266,26 +279,53 @@ func (handler *JudgeLabelServiceFinalHandler) Handle(
 	return result, nil
 }
 
-// conflictRecorded 问冲突册上有没有一行指向这份取消。册未接入与读不动同答 error：没查过不能当作没有。
-func (handler *JudgeLabelServiceFinalHandler) conflictRecorded(
+// errCancellationSetAsideStillRead 说取消读口交回了一份已被冲突解开决定认定不成立的取消：有效取消读本该排除它。
+var errCancellationSetAsideStillRead = errors.New("the cancellation view returned a cancellation that a decision has set aside")
+
+// conflictsOfCancellation 是册上指向这份取消的冲突按决定分出的两类：standing 说还有没被决定的冲突（不带收寄的两路照答冲突），referred 是已被决定
+// 「交来源方更正」的那几代边界引用。
+type conflictsOfCancellation struct {
+	standing bool
+	referred []domain.CancellationBoundaryReference
+}
+
+// conflictState 问冲突册上指向这份取消的行，并（决定面接入时）逐行问它有没有被决定。册未接入与读不动同答 error：没查过不能当作没有。
+func (handler *JudgeLabelServiceFinalHandler) conflictState(
 	ctx context.Context,
 	tenant domain.TenantID,
 	parcel domain.DeclaredParcelID,
 	cancellation domain.ParcelCancellationID,
-) (bool, error) {
+) (conflictsOfCancellation, error) {
 	if handler.deps.Conflicts == nil {
-		return false, errors.New("conflict register is not wired")
+		return conflictsOfCancellation{}, errors.New("conflict register is not wired")
 	}
 	entries, err := handler.deps.Conflicts.ListByParcel(ctx, tenant, parcel)
 	if err != nil {
-		return false, err
+		return conflictsOfCancellation{}, err
 	}
+	var state conflictsOfCancellation
 	for _, entry := range entries {
-		if entry.Cancellation == cancellation {
-			return true, nil
+		if entry.Cancellation != cancellation {
+			continue
 		}
+		if handler.deps.Decisions != nil {
+			decision, decided, err := handler.deps.Decisions.FindConflictDecision(ctx, ports.KeyOfConflictEntry(entry))
+			if err != nil {
+				return conflictsOfCancellation{}, err
+			}
+			if decided {
+				if decision.Kind != domain.BoundaryFactReferred {
+					// 认定取消不成立的取消已被有效取消读排除，走到这里还读到它，是取消读口没守住那条排除。
+					return conflictsOfCancellation{}, fmt.Errorf(
+						"%w: cancellation %s, decision %s", errCancellationSetAsideStillRead, cancellation, decision.Kind)
+				}
+				state.referred = append(state.referred, entry.Boundary.Reference)
+				continue
+			}
+		}
+		state.standing = true
 	}
-	return false, nil
+	return state, nil
 }
 
 // lapsedTransactions 对每笔上本包裹被受理的交易问一次有效期规则。规则未配置或读口缺席都不失效
