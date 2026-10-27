@@ -37,7 +37,7 @@ go.work.sum
 /output/
 
 # Client apps under apps/ (Node toolchain)
-node_modules/
+node_modules
 apps/*/dist/
 *.tsbuildinfo
 
