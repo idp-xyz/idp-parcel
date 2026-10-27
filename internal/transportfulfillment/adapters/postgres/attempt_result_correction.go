@@ -215,7 +215,7 @@ func (repository *PickupResultCorrections) Save(
 
 // FindEffectiveByKey 实现 ports.FailedAttemptSource：取回一次揽收尝试及其逐对象当前有效的结果——待确认那一格若已更正，
 // 读更正出来的确定结果，其余仍是首次提交的。Pickups 不随更正变：更正成揽收到手的场外揽收在对象级揽收登记册里，不在这里。
-// 返回的记录不再满足「成功结果必有揽收」的接力核对（那条核对只对首次提交的记录成立，FindByKey 照旧做）。
+// 返回的记录不满足「成功结果必有揽收」的接力核对（那条核对只对首次提交的记录成立，FindByKey 照旧做）。
 func (repository *PickupAttempts) FindEffectiveByKey(
 	ctx context.Context,
 	key ports.PickupAttemptKey,

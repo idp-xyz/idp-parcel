@@ -13,7 +13,7 @@ import (
 // CorrectDeliveryAttemptResultCommand 携带一次派送结果更正的全部输入：指名被更正的那一格（尝试身份加对象）、更正成的确定
 // 结果、所凭的后补来源（迟到的签收、复核后认定的地址……）与两个业务时刻。DecidedBy 同揽收一侧。
 //
-// 更正成妥投不带 POD：妥投的证据走交付登记进有效交付，更正只让那一格不再是待确认，交付登记于是走得过去。
+// 更正成妥投不带 POD：妥投的证据走交付登记进有效交付，更正只让那一格离开待确认，交付登记于是走得过去。
 type CorrectDeliveryAttemptResultCommand struct {
 	TenantID    domain.TenantID
 	Attempt     string

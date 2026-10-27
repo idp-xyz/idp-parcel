@@ -143,7 +143,7 @@ func (handler *CorrectPickupAttemptResultHandler) Correct(
 	var registration RegisterOffsitePickupResult
 	if command.Outcome.Succeeded() {
 		// 更正成揽收到手：控制依据在场外揽收上，场外揽收经对象级揽收登记形成——与首登同一条路（进段、交 parcel-shipment 采认），
-		// 同（对象，尝试）已登记的同内容重放读回在册那一份，于是此前经对象级登记口绕过的做法也能收口，且不会有两份揽收。
+		// 同（对象，尝试）已登记的同内容重放读回在册那一份，于是经对象级登记口先登的做法也能收口，且不会有两份揽收。
 		if handler.deps.Pickups == nil {
 			return CorrectPickupAttemptResultResult{outcome: AttemptResultCorrectionNotAccepted, attempt: attemptRef}, nil
 		}

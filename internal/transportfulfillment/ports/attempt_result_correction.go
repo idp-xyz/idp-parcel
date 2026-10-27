@@ -45,7 +45,7 @@ const (
 // PickupResultCorrections 按（尝试提交的来源身份，对象）找回并追加揽收结果更正。
 //
 // 按来源身份而不按尝试身份指名：揽收结果行按尝试提交的来源身份落（pickup_attempt_result 的主键），同一尝试身份是否只对
-// 一份提交今天没有约束，按尝试身份指名会指不准。
+// 一份提交没有约束，按尝试身份指名会指不准。
 //
 // LoadForCorrection 在调用方的事务里锁住这格结果，直到事务结束：同一格的并发更正排队，后到的读到先到的更正，不会各自
 // 看见「还没更正」。更正随后经对象级揽收登记形成场外揽收的那一条路（揽收到手时）也在同一事务里，锁序是：这格结果行 →
@@ -85,7 +85,7 @@ const (
 )
 
 // DeliveryResultCorrections 按（尝试身份，对象）找回并追加派送结果更正；加锁与锁序同 PickupResultCorrections，派送这一侧
-// 更正之后不再触碰别的登记册，锁序只有这一格结果行。
+// 更正不触碰别的登记册，锁序只有这一格结果行。
 type DeliveryResultCorrections interface {
 	LoadForCorrection(
 		ctx context.Context,
@@ -96,7 +96,7 @@ type DeliveryResultCorrections interface {
 }
 
 // 复核查阅「还在待确认的对象」的行（揽收或派送一侧各一种，Side 区分）：待确认那一版的来源与缺口，加上复核的人下一步要指名的键——
-// 揽收一侧按尝试提交的来源身份加对象，派送一侧按尝试身份加对象。已凭后补来源更正成确定结果的不再在册上列出。
+// 揽收一侧按尝试提交的来源身份加对象，派送一侧按尝试身份加对象。已凭后补来源更正成确定结果的不在册上列出。
 const (
 	PendingAttemptSidePickup   = "PICKUP"
 	PendingAttemptSideDelivery = "DELIVERY"

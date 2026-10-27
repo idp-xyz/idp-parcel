@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	// ErrAttemptResultNotPending 说明被更正的那一格不是待确认：本更正只回指待确认那一版。确定结果不再更正成别的
+	// ErrAttemptResultNotPending 说明被更正的那一格不是待确认：本更正只回指待确认那一版。确定结果不被更正成别的
 	// 确定结果——那是另一种更正（对已确定判断的更正），不在这条路上。它与形状错误分格，恢复动作不是补字段，
 	// 而是承认这一格已经是确定结果。
 	ErrAttemptResultNotPending = errors.New("transport fulfillment: the attempt result is not pending confirmation")

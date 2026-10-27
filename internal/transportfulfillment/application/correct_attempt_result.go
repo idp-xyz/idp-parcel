@@ -19,7 +19,7 @@ import (
 // （ADR-0297）。两面交进来的是同一条命令，运营决定面另带提交操作者作为操作证据（DecidedBy）。
 
 // AttemptResultCorrectionOutcome 是一次更正的应用处理结果。各格按恢复动作分（ADR-0029）：`来源未受理`是改请求，`并非待确认`是
-// 承认那一格已是确定结果（不再更正），`冲突`是同一格已被更正成别的说法，`未决`才是等依赖。
+// 承认那一格已是确定结果（不更正），`冲突`是同一格已被更正成别的说法，`未决`才是等依赖。
 type AttemptResultCorrectionOutcome uint8
 
 const (
