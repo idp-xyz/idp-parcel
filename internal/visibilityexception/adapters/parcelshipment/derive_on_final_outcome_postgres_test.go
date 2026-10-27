@@ -370,7 +370,7 @@ func (fixture *finalChainFixture) factsByVersion(t *testing.T) map[string]string
 
 // Covers: AT-VE-174；ADR-0295 决定六——同一采用键的记录因取消被认定不成立而被删后重新形成（不采用 → 删 → 再被另一份取消挡成不采用 → 再删 → 终局），每一代信封带自己的
 // 作废代次，VE 终局投影随之换代：事实库里三代都留档，各带下一代的替代关系，当前投影里这条终局流只剩最后那一代已采用终局；同代次重放答已有结果。
-// 此前（代次不进事实版本）重新形成的终局与被删的不采用行同事实键、内容不同，被判成来源冲突、保留原事实，投影停在「不采用」——下面先钉住这一点。
+// 代次不进事实版本时，重新形成的终局与被删的不采用行同事实键、内容不同，被判成来源冲突、保留原事实，投影停在「不采用」——下面先钉住这一点。
 func TestAReformedFinalOutcomeSupersedesTheRefusalItReplacedInTheProjection(t *testing.T) {
 	fixture := newFinalChainFixture(t)
 	first := refusedByCancellation(t, "PCXL-1", finalAdoptedAt)

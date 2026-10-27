@@ -142,3 +142,7 @@ M：一个授权决定面（命令、授权、只追加的冲突解开决定记�
 - **N-b：存活变异（`existingResult` 里的 `record.Kind == ports.RecordParcelCancelled` 判断）。** 补 `TestAReplayOfARefusalOrAPendingDispositionDoesNotAskForTheEffectiveCancellation`：重放拒绝、待处置记录而有效取消读故障时仍答 `EXISTING_RESULT` 加原记录，不问有效取消读（计数不变）、不交意图；去掉判断，红。
 - **测试。** `gofmt -l` 无输出，`go build ./...`、`go vet ./...` 干净；`scripts/test-full.sh ./internal/parcelshipment/... ./internal/settlementaccounting/... ./internal/visibilityexception/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./internal/architecture/... ./migrations/...` 前台跑，退 0（中途 `internal/architecture` 的事务回调断言门拦过一次：新用例在事务闭包里调了 `t.Fatalf`，已把断言搬到闭包外）；新用例 `-count=3` 稳定；`go run ./tools/at-coverage-counts -check` 退 1（只是总览过期，没有退 2），不提交生成物。无迁移改动。
 
+
+### 第三轮窄复审（协调方）
+- 复审可合入，B2 在真链上闭合（事实库留档各代、已采用事实指名不采用那一版为前身、当前投影恰一条已采用终局）；`Supersedes` 指向不在场的版本时 VE 既不拒收也不卡死（`DeriveProjectionHandler.Handle` 不校验存在性）；载荷兼容、版本字符串约束、幂等均通过；自做 7 处变异全部被杀。
+- 剩一条建议（重派生遇上作废代次）协调方裁定：本票不加列。代次按包裹计，该包裹上存在过任何一份认定取消依据不成立的决定之后，对它做同种更正重派生，前身指名对不上带代次后缀的前一代，投影里暂有两份已采用终局（业务时间不同，不立分叉信号、不卡死）；暴露面限于登记了本决定种类授予的租户。如实写进 ADR-0295 越权风险点 15（2）与 UC-VE-002 的 `AT-VE-174` 行；要闭合需让记录带形成时的代次，归 owner 复核。两处测试注释措辞随手改成现行规则句。

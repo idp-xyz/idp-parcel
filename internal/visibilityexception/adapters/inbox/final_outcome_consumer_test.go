@@ -126,7 +126,7 @@ func TestAFinalOutcomeEnvelopeMissingAnyKeyDimensionIsPoison(t *testing.T) {
 	}
 }
 
-// Covers: AT-VE-174；ADR-0295 决定六——载荷的作废代次可缺省：缺省与零同义（只有四维的存量信封照旧译成代次零），带上就译出来；负数是坏载荷，毒丸入账。
+// Covers: AT-VE-174；ADR-0295 决定六——载荷的作废代次可缺省：缺省与零同义（只有四维的存量信封译成代次零），带上就译出来；负数是坏载荷，毒丸入账。
 func TestAFormedFinalOutcomeCarriesItsOptionalVoidGeneration(t *testing.T) {
 	for name, tc := range map[string]struct {
 		payload string
