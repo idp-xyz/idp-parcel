@@ -142,7 +142,10 @@ var declaredPartitionSubjects = map[string]string{
 	// 「新提交版本已形成」与上两行同主体同理（ADR-0106 Decision 三）：受控补充的续办信封与同一份
 	// 委托的提交信封排同一条队，续办不越过一封还没投出去的提交。
 	"internal/parcelshipment/adapters/postgres/submission_version_formed_handoff.go": partitionSubjectPrefix + "租户/客户账户/委托",
-	"internal/parcelshipment/adapters/postgres/source_data_handoff.go":               partitionSubjectPrefix + "租户/来源请求键",
+	// 「释放拒收已处理」与上三行同主体同理（ADR-0293 决定四）：处理之后的续办信封与同一份委托的提交信封排同一条队，续办不越过一封还没
+	// 投出去的提交。
+	"internal/parcelshipment/adapters/postgres/control_release_refusal_handled_handoff.go": partitionSubjectPrefix + "租户/客户账户/委托",
+	"internal/parcelshipment/adapters/postgres/source_data_handoff.go":                     partitionSubjectPrefix + "租户/来源请求键",
 	// 外部标识关联已形成的门铃（ADR-0199 决定三）按（租户，号码）排队：同一个号的门铃叫 NO 重核的是同一批待识别。键取两维的
 	// 定长指纹，号码没有长度上限；信封 ID 是关联键的指纹，与分区键不同表达式。
 	"internal/parcelshipment/adapters/postgres/external_identifier_formed_handoff.go": partitionSubjectPrefix + "租户/外部标识号码（定长指纹）",

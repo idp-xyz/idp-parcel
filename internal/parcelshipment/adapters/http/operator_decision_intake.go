@@ -46,6 +46,9 @@ const (
 	OperatorDecisionAuthorizedDisposition  OperatorDecision = "AUTHORIZED_DISPOSITION"
 	OperatorDecisionControlledClosure      OperatorDecision = "CONTROLLED_CLOSURE"
 	OperatorDecisionControlledReopening    OperatorDecision = "CONTROLLED_REOPENING"
+	// OperatorDecisionControlReleaseRefusalHandling 与授权处置分开授予（ADR-0293 决定三）：授权处置是对一份受限委托去向的业务处置，
+	// 这一种是对已越过业务决定的资金占用的运维处理。
+	OperatorDecisionControlReleaseRefusalHandling OperatorDecision = "CONTROL_RELEASE_REFUSAL_HANDLING"
 )
 
 // OperatorIdentity 是一次运营决定出示认证出的身份：租户与提交操作者的引用（发行方 + sub）。
@@ -74,10 +77,11 @@ type OperatorDecisionIntake struct {
 }
 
 var (
-	_ ManualReviewCompletionIntake   = (*OperatorDecisionIntake)(nil)
-	_ ActiveRejectionIntake          = (*OperatorDecisionIntake)(nil)
-	_ AuthorizedDispositionIntake    = (*OperatorDecisionIntake)(nil)
-	_ ContinuedAttemptDecisionIntake = (*OperatorDecisionIntake)(nil)
+	_ ManualReviewCompletionIntake        = (*OperatorDecisionIntake)(nil)
+	_ ActiveRejectionIntake               = (*OperatorDecisionIntake)(nil)
+	_ AuthorizedDispositionIntake         = (*OperatorDecisionIntake)(nil)
+	_ ContinuedAttemptDecisionIntake      = (*OperatorDecisionIntake)(nil)
+	_ ControlReleaseRefusalHandlingIntake = (*OperatorDecisionIntake)(nil)
 )
 
 func NewOperatorDecisionIntake(
@@ -330,6 +334,72 @@ func (intake *OperatorDecisionIntake) IntakeManualReviewCompletion(ctx context.C
 		SubmissionVersion: version,
 		Reviewer:          reviewer,
 		Evidence:          evidence,
+	}, nil
+}
+
+type controlReleaseRefusalHandlingPayload struct {
+	ShipmentRequestID   string `json:"shipmentRequestId"`
+	SubmissionVersionID string `json:"submissionVersionId"`
+	ControlResultID     string `json:"controlResultId"`
+	Action              string `json:"action"`
+	Basis               string `json:"basis"`
+}
+
+// 释放拒收处理两种动作在线格式上的词。
+const (
+	controlReleaseRefusalActionRelease = "RELEASE_AT_SETTLEMENT"
+	controlReleaseRefusalActionMark    = "MARK_HANDLED"
+)
+
+// IntakeControlReleaseRefusalHandling 译释放拒收处理（`/control-release-refusal-handlings`）。册上那一笔由（委托、被拒收的版本、控制结果）三段
+// 指名，租户取信封、来源身份按信封租户与委托标识查出；处理人取认证出的操作者，依据必填。动作与三段标识只看载荷，排在委托寻址之前：坏载荷答 400，
+// 不因委托查不到先落进「与越权探针同答」那一格。
+func (intake *OperatorDecisionIntake) IntakeControlReleaseRefusalHandling(ctx context.Context, request *http.Request) (application.HandleControlReleaseRefusalCommand, error) {
+	operator, err := intake.authenticator.AuthenticateOperatorDecision(ctx, httpapi.BearerToken(request), OperatorDecisionControlReleaseRefusalHandling)
+	if err != nil {
+		return application.HandleControlReleaseRefusalCommand{}, err
+	}
+	var payload controlReleaseRefusalHandlingPayload
+	if err := decodeDecisionPayload(request.Body, &payload); err != nil {
+		return application.HandleControlReleaseRefusalCommand{}, err
+	}
+	var action application.ControlReleaseRefusalAction
+	switch payload.Action {
+	case controlReleaseRefusalActionRelease:
+		action = application.ReleaseControlReleaseRefusalAtSettlement
+	case controlReleaseRefusalActionMark:
+		action = application.MarkControlReleaseRefusalHandled
+	default:
+		return application.HandleControlReleaseRefusalCommand{}, fmt.Errorf("%w: action %q is not a handling action", ErrMalformedRequest, payload.Action)
+	}
+	version, err := domain.NewSubmissionVersionID(payload.SubmissionVersionID)
+	if err != nil {
+		return application.HandleControlReleaseRefusalCommand{}, fmt.Errorf("%w: submissionVersionId: %v", ErrMalformedRequest, err)
+	}
+	controlResult, err := domain.NewFinancialControlResultID(payload.ControlResultID)
+	if err != nil {
+		return application.HandleControlReleaseRefusalCommand{}, fmt.Errorf("%w: controlResultId: %v", ErrMalformedRequest, err)
+	}
+	basis, err := domain.NewControlReleaseRefusalHandlingBasis(payload.Basis)
+	if err != nil {
+		return application.HandleControlReleaseRefusalCommand{}, fmt.Errorf("%w: basis: %v", ErrMalformedRequest, err)
+	}
+	requestID, target, err := intake.locate(ctx, operator.Tenant, payload.ShipmentRequestID)
+	if err != nil {
+		return application.HandleControlReleaseRefusalCommand{}, err
+	}
+	handler, err := domain.NewControlReleaseRefusalHandlerReference(operator.Operator)
+	if err != nil {
+		return application.HandleControlReleaseRefusalCommand{}, fmt.Errorf("parcel shipment http: handler: %w", err)
+	}
+	return application.HandleControlReleaseRefusalCommand{
+		Identity:          target.Identity,
+		ShipmentRequestID: requestID,
+		SubmissionVersion: version,
+		ControlResultID:   controlResult,
+		Action:            action,
+		Handler:           handler,
+		Basis:             basis,
 	}, nil
 }
 
