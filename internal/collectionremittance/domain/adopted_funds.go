@@ -18,7 +18,7 @@ var (
 )
 
 // AdoptedFundsReference 指名 settlement-accounting 已采用的一条外部资金事实。事实的来源身份与采用归结算，本上下文
-// 只引用：同一笔银行回款只在结算里铸一次，真实到账以它为证据，不再自铸一份。
+// 只引用：同一笔银行回款只在结算里铸一次，真实到账以它为证据，不自铸一份。
 type AdoptedFundsReference struct{ requiredValue }
 
 func NewAdoptedFundsReference(value string) (AdoptedFundsReference, error) {

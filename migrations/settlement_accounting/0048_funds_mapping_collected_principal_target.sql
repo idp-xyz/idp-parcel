@@ -1,9 +1,10 @@
 -- 资金映射加一格目标：整条认作代收本金（COLLECTED_PRINCIPAL）。认作的是确认到账的外部资金事实自己，目标引用就是这条
 -- 事实的引用；映射只回答「这条回款属于谁」，不是核销对象，所以映射表与核销表的其余列都不加。既有六格原样在集合里，存量行
--- 照旧满足新 CHECK。
+-- 满足新 CHECK。
 --
--- 与别的映射互斥、目标等于事实自己、只认确认到账的事实，这三条要读事实或同事实上的别的映射行，CHECK 看不见，由编排在
--- 事实身份行的锁下判（MapExternalFundsHandler.Map）、领域构造门判（domain.MapFundsToTarget）；库上只封住词表。
+-- 库上封三件：目标种类词表、认作的目标等于事实自己（CHECK）、一条事实至多一条认作（唯一索引）；后两道兜住绕过映射编排与
+-- 事实锁的写入。与别的映射互斥、只认确认到账的事实，这两条要读事实或同事实上的别的映射行，库上看不见，由编排在事实身份行的
+-- 锁下判（MapExternalFundsHandler.Map）、领域构造门判（domain.MapFundsToTarget）。
 
 ALTER TABLE settlement_accounting.funds_mapping
     DROP CONSTRAINT funds_mapping_target_kind_closed;

@@ -2,11 +2,13 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
@@ -303,5 +305,176 @@ func TestTheCollectedPrincipalViewHoldsOffAnExternalCorrectionUntilTheReaderComm
 	})
 	if after != 60_000 {
 		t.Fatalf("更正提交之后读到 %d，要 60000", after)
+	}
+}
+
+// Covers: AT-SA-216——SetAside 只在这条事实上有一条目标为代收本金的映射时为真：事实已映到客户对账单、客户账户（计入运营入账余额）或审核应付，
+// 读口一律答没认作。把「该事实有任何映射」当作认作，已记进运营余额的钱就还能被引作代收与清分的到账证据，同一笔回款重记一次。
+func TestTheCollectedPrincipalViewDoesNotCallAMappedFactSetAside(t *testing.T) {
+	for _, mapped := range []struct {
+		name string
+		kind domain.SettlementTargetKind
+		to   string
+	}{
+		{"statement", domain.TargetStatement, "stmt-1"},
+		{"account", domain.TargetAccount, "acct-1"},
+		{"payable", domain.TargetPayable, "payable-1"},
+	} {
+		t.Run(mapped.name, func(t *testing.T) {
+			db, _, handler, view, tenant, _ := principalFixture(t)
+			ctx := t.Context()
+			factID := "bank-receipt-" + mapped.name
+			fact := mustValue(t, domain.NewFundsFactReference, factID)
+
+			var outcome application.FundsOutcome
+			saWithin(t, db.Transactor(), ctx, func(txCtx context.Context) error {
+				if _, err := handler.AdoptFact(txCtx, receiptFact(tenant, factID, domain.FundsReceiptConfirmed, 100_000, "v1")); err != nil {
+					return err
+				}
+				result, err := handler.Map(txCtx, receiptMap(tenant, "map-"+mapped.name, factID, mapped.kind, mapped.to))
+				outcome = result.Outcome()
+				return err
+			})
+			if outcome != application.FundsMapped {
+				t.Fatalf("映到 %s = %s，要已映射", mapped.name, outcome)
+			}
+
+			var found, setAside bool
+			saWithin(t, db.Transactor(), ctx, func(txCtx context.Context) error {
+				loaded, ok, err := view.LockCollectedPrincipalFact(txCtx, tenant, fact)
+				found, setAside = ok, loaded.SetAside
+				return err
+			})
+			if !found {
+				t.Fatal("已采用的事实读不到")
+			}
+			if setAside {
+				t.Fatalf("事实已映到 %s，读口答它被整条认作代收本金", mapped.name)
+			}
+		})
+	}
+}
+
+// Covers: AT-SA-216（并发半边）——先取共享锁、再读链头：外部更正握着事实身份行、尚未提交，读方的共享锁等它；更正提交之后读方读到的是新链头，
+// 不是等锁之前就看见的旧金额。读口若在取锁之前先读一次链头并用这次的结果，代收与清分会按旧的大金额判到账之和，落册之后超出更正后的链头
+// （与「读方先到、更正等」那一条互补：那一条只证锁互斥，这一条证读发生在锁之后）。
+func TestTheCollectedPrincipalViewReadsTheNewHeadOfACorrectionItWaitedFor(t *testing.T) {
+	db, pool, handler, view, tenant, _ := principalFixture(t)
+	ctx := t.Context()
+	fact := mustValue(t, domain.NewFundsFactReference, "bank-receipt-wait")
+	saWithin(t, db.Transactor(), ctx, func(txCtx context.Context) error {
+		if _, err := handler.AdoptFact(txCtx, receiptFact(tenant, "bank-receipt-wait", domain.FundsReceiptConfirmed, 100_000, "v1")); err != nil {
+			return err
+		}
+		_, err := handler.Map(txCtx, principalMap(tenant, "map-principal-wait", "bank-receipt-wait"))
+		return err
+	})
+	var database string
+	if err := pool.QueryRow(ctx, `SELECT current_database()`).Scan(&database); err != nil {
+		t.Fatal(err)
+	}
+	observer, err := pgx.Connect(ctx, pgtest.AdminDSN(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = observer.Close(context.Background()) })
+
+	corrected := make(chan struct{})
+	commit := make(chan struct{})
+	release := sync.OnceFunc(func() { close(commit) })
+	defer release() // 断言失败提前退出时也要放更正方，否则它握着连接，收尾关池就挂住
+	correctorDone := make(chan error, 1)
+	go func() {
+		correctorDone <- db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
+			if _, err := handler.CorrectFact(txCtx, application.CorrectFundsFactCommand{
+				TenantID: tenant, Fact: "bank-receipt-wait", Corrects: "v1", Version: "v2",
+				AmountMinor: 60_000, CorrectedAt: time.Date(2026, 10, 2, 0, 0, 0, 0, time.UTC),
+			}); err != nil {
+				return err
+			}
+			close(corrected)
+			<-commit
+			return nil
+		})
+	}()
+	<-corrected
+
+	var got int64
+	readerDone := make(chan error, 1)
+	go func() {
+		readerDone <- db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
+			loaded, _, err := view.LockCollectedPrincipalFact(txCtx, tenant, fact)
+			if err != nil {
+				return err
+			}
+			_, got = loaded.Head.Amount()
+			return nil
+		})
+	}()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var waiting int
+		if err := observer.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE datname = $1 AND wait_event_type = 'Lock'`, database).Scan(&waiting); err != nil {
+			t.Fatal(err)
+		}
+		if waiting > 0 {
+			break
+		}
+		select {
+		case err := <-readerDone:
+			t.Fatalf("读方没有等未提交的更正：%v 读到 %d", err, got)
+		default:
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("读方既没返回也没等锁")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	release()
+	if err := <-correctorDone; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-readerDone; err != nil {
+		t.Fatal(err)
+	}
+	if got != 60_000 {
+		t.Fatalf("等过未提交更正的读方读到 %d，要更正后的 60000", got)
+	}
+}
+
+// Covers: AT-SA-216（库约束半边）——迁移 0048 的两道兜底各自守住编排绕不到的写入：认作代收本金的映射，一条事实至多一条
+// （唯一索引 funds_mapping_one_collected_principal_per_fact），目标引用必须等于事实自己（CHECK
+// funds_mapping_collected_principal_names_the_fact）。绕过映射编排与事实锁，直接往映射表插行；每一道只断言它自己那条约束的名字，
+// 去掉任何一道，对应的那次插入就会成功。别的目标种类不受唯一索引约束（它只罩认作）。
+func TestTheMappingTableItselfRefusesASecondRecognitionAndATargetThatIsNotTheFact(t *testing.T) {
+	_, pool, _, _, _, _ := principalFixture(t)
+	ctx := t.Context()
+	insert := func(mapping, fact, kind, target string) error {
+		_, err := pool.Exec(ctx,
+			`INSERT INTO settlement_accounting.funds_mapping
+				(tenant_id, mapping_id, fact_id, target_kind, target_ref, basis, mapped_at, content_digest, recorded_at)
+			 VALUES ('tenant-receipt', $1, $2, $3, $4, 'instruction-1', now(), 'digest', now())`,
+			mapping, fact, kind, target)
+		return err
+	}
+	refusedBy := func(err error, code, constraint string) bool {
+		var pgErr *pgconn.PgError
+		return errors.As(err, &pgErr) && pgErr.Code == code && pgErr.ConstraintName == constraint
+	}
+
+	if err := insert("map-principal-1", "bank-receipt-guard", "COLLECTED_PRINCIPAL", "bank-receipt-guard"); err != nil {
+		t.Fatalf("第一条认作：%v", err)
+	}
+	if err := insert("map-principal-2", "bank-receipt-guard", "COLLECTED_PRINCIPAL", "bank-receipt-guard"); !refusedBy(
+		err, "23505", "funds_mapping_one_collected_principal_per_fact") {
+		t.Fatalf("同一条事实的第二条认作 = %v，要被唯一索引 funds_mapping_one_collected_principal_per_fact 拒", err)
+	}
+	if err := insert("map-principal-3", "bank-receipt-other", "COLLECTED_PRINCIPAL", "somebody-else"); !refusedBy(
+		err, "23514", "funds_mapping_collected_principal_names_the_fact") {
+		t.Fatalf("目标不是事实自己的认作 = %v，要被 CHECK funds_mapping_collected_principal_names_the_fact 拒", err)
+	}
+	// 唯一索引只罩认作：同一条事实上别的目标种类的行库上不拦（互斥靠编排在事实锁下判）。
+	if err := insert("map-statement-1", "bank-receipt-guard", "STATEMENT", "stmt-1"); err != nil {
+		t.Fatalf("唯一索引不该罩住别的目标种类：%v", err)
 	}
 }

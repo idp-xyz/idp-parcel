@@ -16,7 +16,7 @@ func principalMapCommand(t *testing.T, mapping string) application.MapFundsComma
 	return claimMapCommand(t, mapping, domain.TargetCollectedPrincipal, "bank-receipt-1")
 }
 
-// Covers: AT-SA-216——一条银行回款只记一次——整条认作代收本金之后它不再接受任何别的映射：映到对账单、账户、审核应付都答
+// Covers: AT-SA-216——一条银行回款只记一次——整条认作代收本金之后它不接受任何别的映射：映到对账单、账户、审核应付都答
 // 映射冲突，什么都不落，客户应收作用域一个不碰（入账余额因此永远不会多出这笔受托资金）。
 func TestAFactSetAsideAsCollectedPrincipalAcceptsNoOtherMapping(t *testing.T) {
 	fixture := newFundsFixture(t)

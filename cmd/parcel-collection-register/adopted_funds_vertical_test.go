@@ -6,6 +6,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	saapplication "go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
+	sadomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 )
 
 // 本文件在真实 PostgreSQL 上证运营企业真实到账凭 settlement-accounting 已采用事实登记的整条链（ADR-0274、ADR-0330，
@@ -63,7 +66,8 @@ func scalar[T any](t *testing.T, rig concurrencyRig, query string, into *T) {
 
 // Covers: AT-CR-020、AT-CR-026、AT-CR-027（生产装配半边）——一笔 1000.00 的回款拆给两条指令：
 //
-//	先在结算采用 → 还没认作代收本金时到账答依据不在册（迟到的到账等采用与认作，不自铸）→ 认作之后 600.00 + 400.00 登记；
+//	先在结算采用 → 还没认作代收本金时到账答依据不在册（迟到的到账等采用与认作，不自铸）；已映到客户账户的事实同样答依据不在册，
+//	也认作不了代收本金 → 认作之后 600.00 + 400.00 登记；
 //	再多一分、同一指令换事实标识再登都答内容冲突；已登记的重放答已在册；渠道报告入在途后 A 移位，
 //	结算把事实更正到 900.00 之后 B 的移位答内容冲突、待清分仍是 600.00，更正回 1000.00 后 B 可移位。
 //
@@ -86,18 +90,36 @@ func TestAnArrivalIsRegisteredAndMovedOnlyWhileTheAdoptedPrincipalFactCoversIt(t
 	must(commandInstruction, instructionInput("SYN-INSTR-2", "40000"), exitRegistered, "REGISTERED")
 	must(commandInstruction, instructionInput("SYN-INSTR-3", "50"), exitRegistered, "REGISTERED")
 
+	// 结算一侧的事实都经结算真实的采用与映射编排种下，不手写它的表。
+	settlement := newSettlementFunds(t, pool)
+
 	// 结算还没有这条事实：到账答依据不在册，什么都不落。
 	must(commandFact, arrivalInput("SYN-FACT-A", "SYN-INSTR-1", "SYN-BANK-RECEIPT-1", "60000"), exitNeedsReview, "BASIS_MISSING")
 	// 采用了、还没认作代收本金：同一个答案——这条回款可能是运营企业自己的收款。
-	seedAdoptedFunds(t, pool, "SYN-BANK-RECEIPT-1", "EUR", 100000)
+	settlement.adopt(t, "SYN-BANK-RECEIPT-1", "EUR", 100000)
 	must(commandFact, arrivalInput("SYN-FACT-A", "SYN-INSTR-1", "SYN-BANK-RECEIPT-1", "60000"), exitNeedsReview, "BASIS_MISSING")
+	// 已经映到客户账户的事实（它的钱计入运营入账余额）不是代收本金：引作到账同样答依据不在册，
+	// 而且之后它也认作不了代收本金。读口若把「该事实有任何映射」当成认作，这一笔就会登进来，同一笔回款记两处。
+	seedReceivableAccount(t, pool, "SYN-ACCOUNT-1", "EUR")
+	settlement.adopt(t, "SYN-BANK-RECEIPT-ACCOUNT", "EUR", 100000)
+	if outcome := settlement.mapTo(t, sadomain.TargetAccount, "SYN-BANK-RECEIPT-ACCOUNT", "SYN-ACCOUNT-1"); outcome != saapplication.FundsMapped {
+		t.Fatalf("事实映到客户账户 = %s，要已映射", outcome)
+	}
+	must(commandFact, arrivalInput("SYN-FACT-ACCOUNT", "SYN-INSTR-1", "SYN-BANK-RECEIPT-ACCOUNT", "60000"), exitNeedsReview, "BASIS_MISSING")
+	if outcome := settlement.mapTo(t, sadomain.TargetCollectedPrincipal, "SYN-BANK-RECEIPT-ACCOUNT",
+		"SYN-BANK-RECEIPT-ACCOUNT"); outcome != saapplication.FundsMappingConflict {
+		t.Fatalf("已映到客户账户的事实再认作代收本金 = %s，要映射冲突", outcome)
+	}
 	var facts int
 	scalar(t, rig, `SELECT count(*) FROM collection_remittance.collection_fact`, &facts)
 	if facts != 0 {
 		t.Fatalf("依据不在册仍落了 %d 条事实", facts)
 	}
 
-	setAsideAsPrincipal(t, pool, "SYN-BANK-RECEIPT-1")
+	if outcome := settlement.mapTo(t, sadomain.TargetCollectedPrincipal, "SYN-BANK-RECEIPT-1",
+		"SYN-BANK-RECEIPT-1"); outcome != saapplication.FundsMapped {
+		t.Fatalf("整条认作代收本金 = %s，要已映射", outcome)
+	}
 	must(commandFact, arrivalInput("SYN-FACT-A", "SYN-INSTR-1", "SYN-BANK-RECEIPT-1", "60000"), exitRegistered, "REGISTERED")
 	must(commandFact, arrivalInput("SYN-FACT-A", "SYN-INSTR-1", "SYN-BANK-RECEIPT-1", "60000"), exitRegistered, "EXISTING")
 	must(commandFact, arrivalInput("SYN-FACT-A", "SYN-INSTR-1", "SYN-BANK-RECEIPT-1", "59999"), exitNeedsReview, "CONTENT_CONFLICT")
@@ -128,10 +150,13 @@ func TestAnArrivalIsRegisteredAndMovedOnlyWhileTheAdoptedPrincipalFactCoversIt(t
 	must(commandPosting, moveInput("SYN-POST-MOVE-A", "IN_TRANSIT_AT_CHANNEL", "AWAITING_ALLOCATION", "60000",
 		"COLLECTION_FACT", "SYN-FACT-A"), exitRegistered, "REGISTERED")
 
-	// 结算把事实更正到 900.00（照采）：已引用 1000.00 不再被撑住，B 不能移位。
-	correctAdoptedFunds(t, pool, "SYN-BANK-RECEIPT-1", "SYN-BANK-RECEIPT-1/v1", "SYN-BANK-RECEIPT-1/v2", 90000)
+	// 结算把事实更正到 900.00（照采）：已引用的 1000.00 超出了链头，B 不能移位。
+	settlement.correct(t, "SYN-BANK-RECEIPT-1", "SYN-BANK-RECEIPT-1/v1", "SYN-BANK-RECEIPT-1/v2", 90000)
+	// 这里没有同键记录：原因是依据事实被更正小了，文案要这么说，不能只叫操作员去找既有登记。
+	const explainsTheCorrectedFact = "已采用事实被更正得容不下名下到账之和"
 	must(commandPosting, moveInput("SYN-POST-MOVE-B", "IN_TRANSIT_AT_CHANNEL", "AWAITING_ALLOCATION", "40000",
-		"COLLECTION_FACT", "SYN-FACT-B"), exitNeedsReview, "CONTENT_CONFLICT")
+		"COLLECTION_FACT", "SYN-FACT-B"), exitNeedsReview, explainsTheCorrectedFact)
+	must(commandFact, arrivalInput("SYN-FACT-D", "SYN-INSTR-3", "SYN-BANK-RECEIPT-1", "50"), exitNeedsReview, explainsTheCorrectedFact)
 	must(commandPosting, moveInput("SYN-POST-MOVE-A", "IN_TRANSIT_AT_CHANNEL", "AWAITING_ALLOCATION", "60000",
 		"COLLECTION_FACT", "SYN-FACT-A"), exitRegistered, "EXISTING")
 	var awaiting int64
@@ -141,7 +166,7 @@ func TestAnArrivalIsRegisteredAndMovedOnlyWhileTheAdoptedPrincipalFactCoversIt(t
 	}
 
 	// 更正回 1000.00：B 可以移位；账内各位置之和等于入账之和。
-	correctAdoptedFunds(t, pool, "SYN-BANK-RECEIPT-1", "SYN-BANK-RECEIPT-1/v2", "SYN-BANK-RECEIPT-1/v3", 100000)
+	settlement.correct(t, "SYN-BANK-RECEIPT-1", "SYN-BANK-RECEIPT-1/v2", "SYN-BANK-RECEIPT-1/v3", 100000)
 	must(commandPosting, moveInput("SYN-POST-MOVE-B", "IN_TRANSIT_AT_CHANNEL", "AWAITING_ALLOCATION", "40000",
 		"COLLECTION_FACT", "SYN-FACT-B"), exitRegistered, "REGISTERED")
 	scalar(t, rig, awaitingAllocationSQL, &awaiting)

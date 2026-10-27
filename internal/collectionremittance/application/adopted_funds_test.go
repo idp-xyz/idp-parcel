@@ -334,6 +334,32 @@ func TestMovingAnArrivalWithoutAnAdoptedBasisIsRefusedAndOtherPostingsNeverReadS
 	wantAwaitingAllocation(t, store, 60_000)
 }
 
+// Covers: AT-CR-027——没有钉版本的存量到账，哪怕证据引用恰好是一条结算已采用、已认作代收本金、容得下它的事实，移位也答依据不在册：
+// 它没经过登记时的合计与每指令一条两道门，结算此刻容得下不能替它补上；移位不碰结算，账面不动。「没有钉版本」是独立的一格，
+// 不能靠「结算读不到」顺带答对。
+func TestMovingAnUnpinnedArrivalWhoseEvidenceIsAnAdoptedPrincipalFactIsStillBasisMissing(t *testing.T) {
+	store, handler := armedWithInstructions(t, "SYN-INSTR-1")
+	openLedger(t, store, handler)
+	seedFact(t, store, handler, "SYN-FACT-REPORT-1", "SYN-INSTR-1", domain.ChannelCollectionReport, 60_000)
+	mustPost(t, handler, postCommand(t, "SYN-POST-REPORT-1", domain.PositionExternalSource, domain.PositionInTransitAtChannel,
+		60_000, domain.BasisCollectionFact, "SYN-FACT-REPORT-1", "2026-08-24T01:10:00Z"))
+
+	store.adoptFunds(t, "SYN-LEGACY-EVIDENCE", 100_000)
+	legacy := arrivalOn(t, "SYN-FACT-LEGACY", "SYN-INSTR-1", "SYN-LEGACY-EVIDENCE", 60_000)
+	if err := store.registerForTest(legacy); err != nil {
+		t.Fatal(err)
+	}
+	store.fundsLog = nil
+	outcome, _ := handler.PostSubledger(t.Context(), postCommand(t, "SYN-POST-MOVE-LEGACY",
+		domain.PositionInTransitAtChannel, domain.PositionAwaitingAllocation,
+		60_000, domain.BasisCollectionFact, "SYN-FACT-LEGACY", "2026-08-24T02:00:00Z"))
+	wantOutcome(t, outcome, application.OutcomeBasisMissing, "没有钉版本的存量到账，引用的事实结算容得下")
+	wantAwaitingAllocation(t, store, 0)
+	if len(store.fundsLog) != 0 {
+		t.Fatalf("没有钉版本的到账移位碰了结算：%v", store.fundsLog)
+	}
+}
+
 func mustReference(t *testing.T, value string) domain.AdoptedFundsReference {
 	t.Helper()
 	reference, err := domain.NewAdoptedFundsReference(value)

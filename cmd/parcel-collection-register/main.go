@@ -319,7 +319,7 @@ func answer(command string, outcome application.Outcome) (string, int) {
 	case application.OutcomeNotAccepted:
 		return message, exitUsage
 	case application.OutcomeContentConflict:
-		return message + "（同键已在册且内容不同——绝不覆盖，先核对既有登记）", exitNeedsReview
+		return message + "（同键已在册且内容不同——绝不覆盖，先核对既有登记；真实到账还可能是其引用的已采用事实被更正得容不下名下到账之和，或同一指令已有一条引用同一事实的到账——此时没有同键记录，核对事实此刻的链头金额与已引用它的各条到账）", exitNeedsReview
 	case application.OutcomeBasisMissing:
 		return message + "（依据不在册：先登代收指令/分户账/回汇批次/差异事项/认可抵扣/原记账；真实到账还要先在结算采用外部资金事实并整条认作代收本金）", exitNeedsReview
 	case application.OutcomeBatchClosed:

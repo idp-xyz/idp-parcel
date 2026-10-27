@@ -1302,7 +1302,7 @@ func mappingFrom(
 	return domain.MapFundsToTarget(fact, mappingRef, command.TargetKind, target, basis, command.MappedAt)
 }
 
-// collectedPrincipalExcludes 判这一笔映射与这条事实上已有的映射是否互斥：整条认作代收本金的事实不再接受任何别的映射
+// collectedPrincipalExcludes 判这一笔映射与这条事实上已有的映射是否互斥：整条认作代收本金的事实不接受任何别的映射
 // （含第二条代收本金映射——认作是事实一级的状态，不是可叠加的金额），已有别的映射的事实也不能再认作代收本金。
 func collectedPrincipalExcludes(kind domain.SettlementTargetKind, standing []ports.FundsMappingRecord) bool {
 	for _, record := range standing {
