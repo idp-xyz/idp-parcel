@@ -1,7 +1,7 @@
 # 14 复核与改路入口不携关务投影，计划上有位置时改善改路走不到
 
 Category: bug
-Status: needs-triage——2026-10-10 通道 1 立（用户授权自决），出自 [12](12-cc-customs-applicability-judgment-for-route-candidates.md) 阻断修复的非作者补评审：通道 3 的旁注，通道 4 的路径清单可互证，均钉 `18be66e8`。只读取证，未动代码。
+Status: resolved——2026-10-27 会话 tops-20 按[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)清理收口：2026-10-26 分诊定为已失效：复核命令已把关务投影带到证据视图，ADR-0250 改为入账未判。此前 needs-triage——2026-10-10 通道 1 立（用户授权自决），出自 [12](12-cc-customs-applicability-judgment-for-route-candidates.md) 阻断修复的非作者补评审：通道 3 的旁注，通道 4 的路径清单可互证，均钉 `18be66e8`。只读取证，未动代码。
 归档：不属 [psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md) 的子票集；放在本目录是因为出自 12 的评审。
 相关：[auto-reroute-demo-reachability/02](../../auto-reroute-demo-reachability/issues/02-syn-vertical-run-reaches-reroute-after-lapse.md)（失效后改路那一支）；[ADR-0173](../../../docs/adr/0173-auto-reroute-is-folded-from-the-strategy-version.md)（自动改路由策略版本折出）。
 

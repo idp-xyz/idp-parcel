@@ -1,7 +1,7 @@
 # 110 演示班期「任何提交时刻三段都有一班可准备」没有守卫用例，日历或班期一改就无声落空
 
 Category: enhancement
-Status: needs-triage——2026-10-19 Claude Code 子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权），出自 [98](./98-demo-walk-doc-and-seed-corrections-from-the-8197fa2f-walk.md) 的隔离评审。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 Claude Code 子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权），出自 [98](./98-demo-walk-doc-and-seed-corrections-from-the-8197fa2f-walk.md) 的隔离评审。
 Blocked by: [98](./98-demo-walk-doc-and-seed-corrections-from-the-8197fa2f-walk.md)（种子 `data/transport/07`–`23` 进 main 之后才有可守的东西）
 出处：[ADR-0201](../../../docs/adr/0201-schedule-templates-materialize-concrete-schedules-by-date-and-preparation-answers-not-configured-on-an-empty-register.md) 票 98 补记越权风险点「后两段的班期也是凑的，且零余量咬合」；票 98 完成判据「演示提交在一天里任何时刻，三段运输准备都至少有一班 `OPPORTUNITY_PREPARED`」。
 

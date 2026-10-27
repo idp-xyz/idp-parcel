@@ -1,7 +1,7 @@
 # 89 实际履约发生项自动形成停住时，挡同一对象后面的交接与交付信封：计费在分区这一层挡了履约与追踪
 
 Category: enhancement
-Status: needs-triage——2026-10-19 票 [67](./67-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 67 的隔离评审（非阻断项）。号取协调方给票 67 预分配的号段。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R2）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 票 [67](./67-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 67 的隔离评审（非阻断项）。号取协调方给票 67 预分配的号段。
 Blocked by: 无
 出处：[ADR-0218](../../../docs/adr/0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md) 越权风险点 8；[ADR-0074](../../../docs/adr/0074-tf-object-partitions-carry-a-port-segment-apart-from-ve-parcel-partitions.md)（TF 对象链按口名段分区、头端阻塞「只有成本没有收益」的论证）。
 

@@ -1,7 +1,7 @@
 # 07 parcel-pricing CONTEXT 收「价卡发布审批职责规则」与价卡侧操作者主体词条
 
 Category: enhancement
-Status: needs-triage——2026-10-11 通道 1 立（用户授权自决），出自 [04](04-approval-and-publication.md)「评审 ← 通道 2」Spec 非阻断 P3
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-11 通道 1 立（用户授权自决），出自 [04](04-approval-and-publication.md)「评审 ← 通道 2」Spec 非阻断 P3
 父票：[spec](../spec.md)
 地盘：parcel-pricing 的 `CONTEXT.md`（按 [CONTEXT-MAP](../../../docs/domain/CONTEXT-MAP.md) 找）；纯文档。
 出处：04「没做的、留给后续」里 CONTEXT 那条；AGENTS.md「改文档」（改领域语言先改对应 `CONTEXT.md`，再改引用它的 `UC-*`）。

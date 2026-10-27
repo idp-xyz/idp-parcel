@@ -1,7 +1,7 @@
 # 104 没绑分区目录的 BUY 成本卡在正式评价上取不到区：按发生项计价时没有段计价区域可读
 
 Category: enhancement
-Status: needs-triage——2026-10-19 Claude Code 作者子代理立（票 [routing-first-cut/20](../../routing-first-cut/issues/20-bound-cost-cards-fold-zones-through-the-parcel-postal-route.md)、[43](./43-demo-cost-card-binds-the-zone-catalogue.md) 同一分支落地时整理出的余项；用户「你作为业务和系统专家自决……解决所有的问题」授权）。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R2）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 Claude Code 作者子代理立（票 [routing-first-cut/20](../../routing-first-cut/issues/20-bound-cost-cards-fold-zones-through-the-parcel-postal-route.md)、[43](./43-demo-cost-card-binds-the-zone-catalogue.md) 同一分支落地时整理出的余项；用户「你作为业务和系统专家自决……解决所有的问题」授权）。
 Blocked by: 无（要先有一篇新 ADR，见「要裁的」）
 地盘：待裁定后定；可能跨 PP 的发生项计价输入解析（`internal/parcelpricing/adapters/transportfulfillment`）、TF 的实际履约段与计划段的连线、NR 段计价区域读口。
 出处：[ADR-0189](../../../docs/adr/0189-leg-pricing-zones-are-supplied-per-card-and-unbound-cards-take-a-registered-leg-zone.md) Consequences 第二条与越权风险点 3；票 43「不在本票」那一段（乙路）；票 27 完成记录「偏离与待裁」第 2 条。

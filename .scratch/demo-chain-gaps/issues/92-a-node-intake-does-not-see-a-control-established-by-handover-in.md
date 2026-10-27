@@ -1,7 +1,7 @@
 # 92 节点收寄不认交接转入立起的在身控制，同一件实物会有两份控制在身
 
 Category: enhancement
-Status: needs-triage——2026-10-19 票 [62](./62-node-control-is-established-by-handover-in.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0214](../../../docs/adr/0214-node-control-transfers-out-and-in-on-an-authoritative-transport-handover.md) 文末「补记：票 62 落决定七时的补充裁定」越权风险点「收寄不认交接转入立起的控制」，以及正文越权风险点「不止一份在身控制时不推进」。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R2）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 票 [62](./62-node-control-is-established-by-handover-in.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0214](../../../docs/adr/0214-node-control-transfers-out-and-in-on-an-authoritative-transport-handover.md) 文末「补记：票 62 落决定七时的补充裁定」越权风险点「收寄不认交接转入立起的控制」，以及正文越权风险点「不止一份在身控制时不推进」。
 Blocked by: 无（改的是收寄编排，地盘属在途会话 idp-parcel-9b，排期要与它协调）
 
 ## 现象

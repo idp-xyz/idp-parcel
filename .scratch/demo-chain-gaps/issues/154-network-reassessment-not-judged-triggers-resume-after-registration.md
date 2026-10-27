@@ -1,7 +1,7 @@
 # 154 NR 复核入账未判之后，登记补齐或初始路由形成也没有续办
 
 Category: enhancement
-Status: needs-triage——2026-10-21 Claude Code 会话立（票 131 实施时按 ADR-0235 决定六另立；用户「要我裁定的部分，你作为业务和系统专家，请你自决吧」授权）
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R2）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-21 Claude Code 会话立（票 131 实施时按 ADR-0235 决定六另立；用户「要我裁定的部分，你作为业务和系统专家，请你自决吧」授权）
 Blocked by: [demo-chain-gaps/14](./14-buy-request-stuck-after-an-unadoptable-evaluation.md)（同族续办形状先在 SA、PP 落定）
 出处：[ADR-0235](../../../docs/adr/0235-route-reassessment-settles-what-a-retry-cannot-change-and-does-not-judge-triggers-older-than-the-current-position.md) 决定六与越权风险点 1；票 [131](./131-network-reassessment-undecided-is-split-by-reason.md)
 

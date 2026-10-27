@@ -1,7 +1,7 @@
 # 125 同一来源标识、内容不同的两份关务结果并发到达：后到那份答「已有记录」，不答「来源冲突」
 
 Category: bug
-Status: needs-triage——2026-10-21 Claude Code 协调方立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [12](./12-successive-same-layer-customs-results-are-judged-conflicts.md) 的评审修订（作者「顺带核得、未改」那一条）。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-21 Claude Code 协调方立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [12](./12-successive-same-layer-customs-results-are-judged-conflicts.md) 的评审修订（作者「顺带核得、未改」那一条）。
 Blocked by: 无
 出处：[12](./12-successive-same-layer-customs-results-are-judged-conflicts.md) 票面「评审记录」；[ADR-0226](../../../docs/adr/0226-successive-same-layer-customs-results-are-successors-unless-they-contradict.md) 决定二（同层一致性比对按提交版本串行，不覆盖幂等读）。
 

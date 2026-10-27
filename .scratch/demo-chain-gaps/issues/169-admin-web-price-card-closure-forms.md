@@ -1,7 +1,7 @@
 # 169 管理台没有价卡收尾的表单：截止与退役两口只能经受控登记口或直接调 API，价卡目录也不渲染收尾三格
 
 Category: enhancement
-Status: needs-triage——2026-10-21 票 [150](./150-price-card-has-no-controlled-cut-off-for-a-superseded-version.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权；150 的地盘不含 `apps/admin-web`）。是否认领、归哪一位 owner 待分诊。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-21 票 [150](./150-price-card-has-no-controlled-cut-off-for-a-superseded-version.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权；150 的地盘不含 `apps/admin-web`）。是否认领、归哪一位 owner 待分诊。
 Blocked by: 无
 地盘（建议）：`apps/admin-web/**`（前端切片，一人在 `main` 上直接做，见 `docs/agents/workflow.md`「前端切片」）。
 出处：[ADR-0234](../../../docs/adr/0234-an-older-price-card-version-leaves-new-selections-only-through-an-explicit-closure-for-a-named-successor.md) 决定一、五与越权风险点 9。

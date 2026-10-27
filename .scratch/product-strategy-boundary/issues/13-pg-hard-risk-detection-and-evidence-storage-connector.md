@@ -1,7 +1,7 @@
 # 13 pilot-governance：硬风险检测形态与证据存储连接器
 
 Category: enhancement
-Status: needs-triage——2026-09-24 通道 4 随票 02 立（登记册逐行拆分与暂缓重新定性划出的产品策略，PG 一张）；第 1、2 项待核
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-09-24 通道 4 随票 02 立（登记册逐行拆分与暂缓重新定性划出的产品策略，PG 一张）；第 1、2 项待核
 Blocked by: 无
 地盘：pilot-governance 领域与应用层（暂停的检测侧），证据存储连接器适配器。
 出处：[票 02](./02-split-parameter-register-and-retriage-deferrals.md)——[参数登记册](../../../docs/product/PILOT-PARAMETER-REGISTER.md) `PAR-GOV-05`、`PAR-GOV-11` 行内「〔ADR-0146 拆分〕」点名的部分；[ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定二。

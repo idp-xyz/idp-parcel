@@ -1,7 +1,7 @@
 # 161 收尾仍被在途委托指名的协议版本时没有任何提醒，换版全凭运营人员看查阅页
 
 Category: enhancement
-Status: needs-triage——2026-10-21 票 [88](./88-actual-fulfillment-not-formed-when-adoption-or-agreement-arrives-late.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0231](../../../docs/adr/0231-actual-fulfillment-left-unformed-is-caught-up-by-doorbells-and-a-commission-agreement-revision.md) 越权风险点 15。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-21 票 [88](./88-actual-fulfillment-not-formed-when-adoption-or-agreement-arrives-late.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0231](../../../docs/adr/0231-actual-fulfillment-left-unformed-is-caught-up-by-doorbells-and-a-commission-agreement-revision.md) 越权风险点 15。
 Blocked by: 无
 
 ## 现象

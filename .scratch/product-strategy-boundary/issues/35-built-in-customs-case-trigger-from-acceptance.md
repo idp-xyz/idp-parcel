@@ -1,7 +1,7 @@
 # 35 customs-compliance：关务案件的内置触发——按接受决定与已采用路由派生立案
 
 Category: enhancement
-Status: needs-triage——2026-10-20 Claude Code 会话随 [18](./18-customs-case-and-declaration-submission-entry.md) 分诊立（用户「你作为业务和系统专家自决……解决所有的问题」授权）；分诊时先定「要裁的」再转 ready-for-agent
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R2）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-20 Claude Code 会话随 [18](./18-customs-case-and-declaration-submission-entry.md) 分诊立（用户「你作为业务和系统专家自决……解决所有的问题」授权）；分诊时先定「要裁的」再转 ready-for-agent
 Blocked by: 无；要读的已采用路由在演示上才刚通（[routing-first-cut/11](../../routing-first-cut/issues/11-demo-network-adopted-as-reference-configuration.md) 一带），实走要它
 地盘：`internal/customscompliance`（派生判断方法与它的应用编排）、`cmd/parcel-dispatch` 的一路派发路由；CC `CONTEXT.md` 经 CC owner。
 出处：[18](./18-customs-case-and-declaration-submission-entry.md) 分诊裁定「立案」一问；[ADR-0227](../../../docs/adr/0227-customs-case-and-declaration-submission-enter-production-through-operator-decision-faces.md) 决定七与越权风险点 8；[ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定二。

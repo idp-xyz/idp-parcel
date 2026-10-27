@@ -1,7 +1,7 @@
 # 14 parcel-pricing：邮编前缀匹配形态与公开标准的参考配置
 
 Category: enhancement
-Status: needs-triage——2026-09-24 通道 4 随票 02 立（以「实例半边」为由暂缓的重新定性，PP 一张）
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-09-24 通道 4 随票 02 立（以「实例半边」为由暂缓的重新定性，PP 一张）
 Blocked by: 第 2、3 项的参考配置等 03
 地盘：parcel-pricing 计价参考目录（分区 / 偏远档位）的形状与计价输入的单位对表；参考配置存放按 03。
 出处：[票 02](./02-split-parameter-register-and-retriage-deferrals.md) 暂缓清单——[ADR-0109](../../../docs/adr/0109-zip-classification-facts-are-owned-by-parcel-pricing-as-a-versioned-reference-catalogue.md) 决定二「邮编前缀匹配的粒度（3 位 / 5 位 / 区间）随首份真实分区表定，本记录不预拟」；[`pp-pricing-input-seams/03`](../../pp-pricing-input-seams/issues/03-ps-origin-destination-postal-route-read-port.md)「邮编格式校验、前缀粒度属实例半边」；[ADR-0048](../../../docs/adr/0048-declared-measurements-are-verbatim-member-profiles.md)「真实单位目录……属实例半边」。按 [ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定二重新定性：匹配粒度是形态，归产品；公开标准的实例数据归参考配置。

@@ -1,7 +1,7 @@
 # 73 路由复核册上形成了新计划的行列出新计划版本与各段
 
 Category: enhancement
-Status: needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [64](./64-route-plan-carries-a-delivery-leg.md) 的隔离评审。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [64](./64-route-plan-carries-a-delivery-leg.md) 的隔离评审。
 Blocked by: [64](./64-route-plan-carries-a-delivery-leg.md)（段的读法与 `legs` 的行形状随它进 main）
 地盘：NR `ports/route_plan_read.go`（`RouteReassessmentCatalogueRow`）、`adapters/postgres/route_plan_catalogue.go`（`ListRouteReassessments`）、`adapters/http/query_route_plans.go`（`reassessmentBody`）及其测试与契约夹具；管理台 `apps/admin-web/src/pages/network/**` 的复核册类型与契约测试。diff 不全在 `apps/admin-web/**`，照常开分支；与 [72](./72-admin-web-route-plans-shows-planned-legs.md) 动同一批前端文件，宜同一会话先后做。
 出处：[ADR-0217](../../../docs/adr/0217-route-plan-carries-a-delivery-leg-after-the-delivery-node.md) 越权风险点 6。

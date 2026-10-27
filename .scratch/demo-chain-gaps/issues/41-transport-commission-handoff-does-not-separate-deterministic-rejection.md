@@ -1,7 +1,7 @@
 # 41 运输委托交接口不分确定性拒收：分区键越限时委托落册，意图却永远入不了队
 
 Category: enhancement
-Status: needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [23](./23-transport-commission-submission-face.md) 的隔离评审（非阻断项，评审未要求进 main 前修）。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R2）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [23](./23-transport-commission-submission-face.md) 的隔离评审（非阻断项，评审未要求进 main 前修）。
 Blocked by: 无
 出处：envelope-id-bounds/01「残余」那条：「可读的分区键与 Subject 仍随各维长度涨……越过仍会被确定性拒收」，以及同票「运输履约那一半收口时如再碰到，再议」；[ADR-0202](../../../docs/adr/0202-transport-commission-booking-and-carrier-answer-entry-families-and-supplier-agreement-check.md) 决定六「意图与委托同一笔入队」。
 

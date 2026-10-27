@@ -1,7 +1,7 @@
 # 16 机制缺口：重定级表第一项里尚无票的几处
 
 Category: enhancement
-Status: needs-triage——第 1 项 2026-09-30 进 main（`66ea4bd4`），第 4 项同日进 main（`695ac2f8`），第 2 项同日进 main（`7dfe7e2a`），第 3 项同日进 main（`4ee5d338`），各见文末对应「进 main 记录」。2026-09-24 通道 4 经用户授权自决立（票 02 遗留：开发主线写「缺口逐条交票 product-strategy-boundary/02 立工作票」）；各项分属不同上下文，接单时按上下文拆
+Status: resolved——2026-10-27 会话 tops-20 按[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)清理收口：2026-10-26 分诊定为已失效：四项均已进 main，票面逐项记了 commit。此前 needs-triage——第 1 项 2026-09-30 进 main（`66ea4bd4`），第 4 项同日进 main（`695ac2f8`），第 2 项同日进 main（`7dfe7e2a`），第 3 项同日进 main（`4ee5d338`），各见文末对应「进 main 记录」。2026-09-24 通道 4 经用户授权自决立（票 02 遗留：开发主线写「缺口逐条交票 product-strategy-boundary/02 立工作票」）；各项分属不同上下文，接单时按上下文拆
 Blocked by: 无
 地盘：按项各归其上下文（见各项）。
 出处：[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「按四项判据重定级」表第一项各格原话；[票 05](./05-demo-journey-criterion-evidence.md) 盘点格 3、5、21。已有票或已预告的不重立：操作者渠道归[票 15](./15-operator-channel-per-adr-0100.md)；节点收寄的身份核对缝归 `ps-external-mark-relations/01`；BUY 评价的来源引用回指归 `sa-cc-funds-and-credential-seams/11`；NO 实际测量登记册归 `pp-pricing-input-seams/04`；`PricingInputResolver` 的消费侧适配器由 `pp-pricing-input-seams` spec「不在本目录」预告另立、归 PP；网络定义登记册的写入方与定义原语归票 04。

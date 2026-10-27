@@ -1,7 +1,7 @@
 # 168 价卡没有不指名同方案后继的退役：错登到同一范围的另一方案、方案下线，旧卡退不了场
 
 Category: enhancement
-Status: needs-triage——2026-10-21 票 [150](./150-price-card-has-no-controlled-cut-off-for-a-superseded-version.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权；150 只开同一定价方案内的截止与退役）。是否认领、归哪一位 owner 待分诊。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R2）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-21 票 [150](./150-price-card-has-no-controlled-cut-off-for-a-superseded-version.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权；150 只开同一定价方案内的截止与退役）。是否认领、归哪一位 owner 待分诊。
 Blocked by: 无
 地盘（建议）：PP `domain` 收尾一族（`price_card_closure.go`）、`application` 收尾用例、`postgres` 退役册；需要新 ADR 或 supersede ADR-0234 决定七一项。
 出处：[ADR-0234](../../../docs/adr/0234-an-older-price-card-version-leaves-new-selections-only-through-an-explicit-closure-for-a-named-successor.md) 决定七与越权风险点 5。

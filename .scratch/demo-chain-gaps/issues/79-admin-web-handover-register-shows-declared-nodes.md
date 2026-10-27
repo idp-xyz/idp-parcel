@@ -1,7 +1,7 @@
 # 79 管理台交接册显示交出、接收、去向节点
 
 Category: enhancement
-Status: needs-triage——2026-10-19 Claude Code 作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [59](./59-handover-declares-releasing-receiving-and-onward-nodes.md) 的隔离评审（非阻断项，不归 59）。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 Claude Code 作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [59](./59-handover-declares-releasing-receiving-and-onward-nodes.md) 的隔离评审（非阻断项，不归 59）。
 Blocked by: [59](./59-handover-declares-releasing-receiving-and-onward-nodes.md)（三个键随它进 main）
 地盘：`apps/admin-web/src/pages/operations/records-api.ts`、`TransportFulfillmentReviewPage.tsx` 与同目录的呈现与测试。diff 全在 `apps/admin-web/**`，按 [workflow.md「前端切片」](../../../docs/agents/workflow.md#前端切片一人在-main-上直接做) 在 `main` 上直接做。
 出处：[ADR-0213](../../../docs/adr/0213-a-transport-handover-declares-its-releasing-receiving-and-onward-nodes.md) 决定三「回显与查阅」。

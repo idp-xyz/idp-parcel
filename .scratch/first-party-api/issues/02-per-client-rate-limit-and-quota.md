@@ -1,7 +1,7 @@
 # 按 client 的限流与配额：`429` + `Retry-After`，缺省朝拦
 
 Category: enhancement
-Status: needs-triage——00 落地后改 ready-for-agent。两项待裁按复核建议预定：未配置形状——部署参数给每个客户端一道保护上限，首方族配了而上限没设即启动拒，缺省朝拦落在装配层；行上的配额是商业取值、属租户，没登就只受部署上限约束。`429` 已并入 ADR-0140 Decision 三（部分停用 ADR-0022 三类表 4xx 行）（2026-10-19 用户接受 ADR-0139–0142，修订后接受；首方 Intake 实施票为 [00](./00-first-party-customer-intake.md)）。此前 draft
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R2）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——00 落地后改 ready-for-agent。两项待裁按复核建议预定：未配置形状——部署参数给每个客户端一道保护上限，首方族配了而上限没设即启动拒，缺省朝拦落在装配层；行上的配额是商业取值、属租户，没登就只受部署上限约束。`429` 已并入 ADR-0140 Decision 三（部分停用 ADR-0022 三类表 4xx 行）（2026-10-19 用户接受 ADR-0139–0142，修订后接受；首方 Intake 实施票为 [00](./00-first-party-customer-intake.md)）。此前 draft
 Blocked by: [00](./00-first-party-customer-intake.md)
 
 取证基线 `a608536d`。

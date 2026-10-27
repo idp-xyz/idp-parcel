@@ -1,7 +1,7 @@
 # 99 交接范围汇总把同一范围下同一对象的两次首登各算一次
 
 Category: bug
-Status: needs-triage——2026-10-19 票 [95](./95-node-operations-reads-a-new-handover-under-the-same-scope-as-a-correction.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0220](../../../docs/adr/0220-node-control-reads-the-handover-correction-chain-by-the-transport-fulfillment-back-pointer.md) 越权风险点「TF 不拒同一（对象，范围）下另起的首登」。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R2）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 票 [95](./95-node-operations-reads-a-new-handover-under-the-same-scope-as-a-correction.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0220](../../../docs/adr/0220-node-control-reads-the-handover-correction-chain-by-the-transport-fulfillment-back-pointer.md) 越权风险点「TF 不拒同一（对象，范围）下另起的首登」。
 Blocked by: 无
 地盘：TF `domain/transport_handover.go` 的 `SummarizeHandovers`，或 `application/register_transport_handover.go` 首登那一步。
 

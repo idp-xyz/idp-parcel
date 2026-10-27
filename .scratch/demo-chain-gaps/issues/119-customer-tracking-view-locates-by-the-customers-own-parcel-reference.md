@@ -1,7 +1,7 @@
 # 119 客户追踪视图不能按客户自己的包裹参考直接定位：首方契约只承诺包裹内部标识这一种查询标识
 
 Category: enhancement
-Status: needs-triage——2026-10-19 票 [101](./101-customer-tracking-view-locates-by-the-internal-parcel-id-only.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。协调方代决分诊为 C（暂不做：增强，挡不住演示与上线，要 VE、PS owner 裁定），分组以 [triage-2026-10-19](../triage-2026-10-19.md) 为准，票面状态照该表的约定不动。出自 [ADR-0223](../../../docs/adr/0223-the-first-party-submission-answer-names-each-parcel-and-the-tracking-view-locates-by-it.md) 决定四「不按客户包裹参考或版本化外部标识直接定位客户视图」一条。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 票 [101](./101-customer-tracking-view-locates-by-the-internal-parcel-id-only.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。协调方代决分诊为 C（暂不做：增强，挡不住演示与上线，要 VE、PS owner 裁定），分组以 [triage-2026-10-19](../triage-2026-10-19.md) 为准，票面状态照该表的约定不动。出自 [ADR-0223](../../../docs/adr/0223-the-first-party-submission-answer-names-each-parcel-and-the-tracking-view-locates-by-it.md) 决定四「不按客户包裹参考或版本化外部标识直接定位客户视图」一条。
 Blocked by: 用户决定（VE、PS owner：VE 是否随视图存客户参考，或 PS 开一条跨上下文的标识映射读口；客户包裹参考在一个客户账户里是否唯一）
 地盘：VE 查阅口的定位（`internal/visibilityexception/adapters/http` 的 `CustomerTrackingViewIntake` 与查询键、客户视图库）；若走跨上下文读口，另及 PS 外部标识关联册的读面（`internal/parcelshipment/adapters/postgres/external_identifier.go`）。
 

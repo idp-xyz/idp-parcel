@@ -1,7 +1,7 @@
 # 52 出发门禁阻断信号规则只有受控 CLI：没有在线登记口，也不进目录查阅面
 
 Category: enhancement
-Status: needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [33](./33-movement-fact-recorded-envelope-and-tracking-projection.md) 的完成记录（代决与越权风险点）。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [33](./33-movement-fact-recorded-envelope-and-tracking-projection.md) 的完成记录（代决与越权风险点）。
 Blocked by: 无（要碰 `cmd/parcel-api/endpoints.go`、`main.go` 两个装配热点与 `apps/admin-web/**`，按方案「并行车道」的装配令牌与前端切片落法排期）
 出处：[ADR-0205](../../../docs/adr/0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md) 文末补记越权风险点 16；ADR-0085（同一个登记用例同时出 CLI 和端点）。
 

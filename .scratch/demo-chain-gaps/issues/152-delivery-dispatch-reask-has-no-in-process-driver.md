@@ -1,7 +1,7 @@
 # 152 到期重问没有进程内的驱动：登了重问间隔，也要有人去按
 
 Category: enhancement
-Status: needs-triage——2026-10-21 票 [70](./70-delivery-dispatch-left-unformed-has-no-trace.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0230](../../../docs/adr/0230-delivery-dispatch-left-unformed-is-kept-on-a-pending-register-and-reasked-through-the-same-executor.md) 决定五末项与越权风险点 9。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R2）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-21 票 [70](./70-delivery-dispatch-left-unformed-has-no-trace.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0230](../../../docs/adr/0230-delivery-dispatch-left-unformed-is-kept-on-a-pending-register-and-reasked-through-the-same-executor.md) 决定五末项与越权风险点 9。
 Blocked by: 无
 
 ## 现象

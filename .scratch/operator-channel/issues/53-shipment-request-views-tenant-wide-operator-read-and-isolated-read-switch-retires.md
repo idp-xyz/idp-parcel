@@ -1,7 +1,7 @@
 # 53 委托查阅三口要一个运营侧整租户的读面，随后隔离读开关整体退场
 
 Category: enhancement
-Status: needs-triage——2026-10-16 Claude Code 会话立（票 [35](./35-remaining-operations-read-faces-take-operator-intake.md) 受众核对：委托查阅三口受众是运营，但读口作用域按客户账户切，操作者信封给不出，本票接）。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-16 Claude Code 会话立（票 [35](./35-remaining-operations-read-faces-take-operator-intake.md) 受众核对：委托查阅三口受众是运营，但读口作用域按客户账户切，操作者信封给不出，本票接）。
 Blocked by: 无
 父票：无。接 [35](./35-remaining-operations-read-faces-take-operator-intake.md)「受众核对」里 `shipmentViewsIntake` 那一行。
 出处：[ADR-0150](../../../docs/adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md) 决定三（最后一口换完的那一笔删开关）；[ADR-0078](../../../docs/adr/0078-isolated-environment-operations-reads-admit-by-assembly-injection.md)；[ADR-0100](../../../docs/adr/0100-operator-identity-is-a-product-owned-access-channel-family.md) 决定四；PS CONTEXT「授权查询作用域」。

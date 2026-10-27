@@ -1,7 +1,7 @@
 # 90 交接与已接受委托的消费侧适配器把坏行重建失败当成未决重投，烧完预算才停
 
 Category: bug
-Status: needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [63](./63-network-routing-reassesses-on-a-handover-into-a-node.md) 的隔离评审。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R2）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [63](./63-network-routing-reassesses-on-a-handover-into-a-node.md) 的隔离评审。
 Blocked by: 无
 出处：[ADR-0215](../../../docs/adr/0215-a-handover-into-a-node-triggers-route-reassessment-and-reads-the-baseline-geo-projection.md) 决定四「停与走」；票 63「评审记录」。
 

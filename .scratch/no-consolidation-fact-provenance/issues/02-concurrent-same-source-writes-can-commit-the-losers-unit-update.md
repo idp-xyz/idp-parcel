@@ -1,7 +1,7 @@
 # 02 同一来源两份异内容并发写入时，输家那一步单元更新照样提交
 
 Category: bug
-Status: needs-triage——2026-10-18 Claude Code 会话立，出自 [no-directional-basis/01](../../no-directional-basis/issues/01-consolidation-adds-members-without-any-directional-basis.md) 第二轮非作者评审（隔离子代理）的非阻断第 1 条。只读取证，未动代码。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R2）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-18 Claude Code 会话立，出自 [no-directional-basis/01](../../no-directional-basis/issues/01-consolidation-adds-members-without-any-directional-basis.md) 第二轮非作者评审（隔离子代理）的非阻断第 1 条。只读取证，未动代码。
 Blocked by: 无
 出处：`ConsolidateParcelsHandler.recorded` 的撞键分支；`ConsolidationUnits.Update`；票 01 的来源事实代数（AT-NO-043「冲突保留双方并停止自动派生」）。
 

@@ -1,7 +1,7 @@
 # 39 BUY 评价请求交接口不分确定性拒收与暂时故障：发生项已形成那一路会重投到失败预算耗尽
 
 Category: enhancement
-Status: needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [26](./26-settlement-consumes-charge-occurrence-formed-to-request-buy-evaluation.md) 的隔离评审（非阻断项，评审建议留给 SA owner）。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R2）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [26](./26-settlement-consumes-charge-occurrence-formed-to-request-buy-evaluation.md) 的隔离评审（非阻断项，评审建议留给 SA owner）。
 Blocked by: 无
 出处：[ADR-0208](../../../docs/adr/0208-buy-evaluation-is-requested-from-the-charge-occurrence-formed-envelope.md) 越权风险点 6。
 

@@ -1,7 +1,7 @@
 # 160 解除采用之后，实际履约未形成册上那一段的条目不作罢，换版补形成按委托列段也不分仍在采用与已解除
 
 Category: enhancement
-Status: needs-triage——2026-10-21 票 [88](./88-actual-fulfillment-not-formed-when-adoption-or-agreement-arrives-late.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0231](../../../docs/adr/0231-actual-fulfillment-left-unformed-is-caught-up-by-doorbells-and-a-commission-agreement-revision.md) 越权风险点 13。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-21 票 [88](./88-actual-fulfillment-not-formed-when-adoption-or-agreement-arrives-late.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0231](../../../docs/adr/0231-actual-fulfillment-left-unformed-is-caught-up-by-doorbells-and-a-commission-agreement-revision.md) 越权风险点 13。
 Blocked by: 票 [57](./57-segment-commission-adoption-has-no-correction-and-start-does-not-rederive.md)（解除采用）
 
 ## 现象

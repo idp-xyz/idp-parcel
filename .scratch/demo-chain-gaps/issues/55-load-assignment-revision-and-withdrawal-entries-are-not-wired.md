@@ -1,7 +1,7 @@
 # 55 装载分配的变化与撤回没有入口：归还机制已就位，生产上却撤不回、改不了
 
 Category: enhancement
-Status: needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [21](./21-load-assignment-allocates-against-capacity-reservations.md) 的完成记录。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R2）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [21](./21-load-assignment-allocates-against-capacity-reservations.md) 的完成记录。
 Blocked by: [21](./21-load-assignment-allocates-against-capacity-reservations.md)
 出处：[ADR-0203](../../../docs/adr/0203-capacity-assurance-requires-a-reservation-on-every-pool-of-the-schedule-and-reservations-are-operation-decisions.md) 文末补记（票 21）的越权风险点「变化与撤回没有入口」；票 [tf-unwired-seven/05](../../tf-unwired-seven/issues/05-dispatch-task-and-load-assignment-bodies.md) 文末「变化与撤回的入口没有接」。
 

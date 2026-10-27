@@ -1,7 +1,7 @@
 # 58 委托成员与段上参与对象不比：采用不核，取消也只有整份、不往下游传
 
 Category: enhancement
-Status: needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [25](./25-segment-adopts-transport-commission-and-cancellation-faces.md) 完成记录与 [ADR-0204](../../../docs/adr/0204-a-fulfillment-segment-adopts-a-transport-commission-by-declaration-and-a-started-commission-cannot-be-cancelled.md) 越权风险点 4、9（风险点 9 由票 25 隔离评审补入）；与 [49](./49-booking-does-not-check-schedule-against-commission-scope.md)（订舱不核委托的运输范围）同族，订舱一级「哪些已消耗」与 [37](./37-confirmed-booking-capacity-relationship.md) 相邻。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [25](./25-segment-adopts-transport-commission-and-cancellation-faces.md) 完成记录与 [ADR-0204](../../../docs/adr/0204-a-fulfillment-segment-adopts-a-transport-commission-by-declaration-and-a-started-commission-cannot-be-cancelled.md) 越权风险点 4、9（风险点 9 由票 25 隔离评审补入）；与 [49](./49-booking-does-not-check-schedule-against-commission-scope.md)（订舱不核委托的运输范围）同族，订舱一级「哪些已消耗」与 [37](./37-confirmed-booking-capacity-relationship.md) 相邻。
 Blocked by: 用户决定（TF owner 复核 ADR-0204 风险点 4、9：委托成员与段对象要不要相交、在哪一层比；委托取消要不要按成员部分成立、要不要往下游传）
 
 ## 现象

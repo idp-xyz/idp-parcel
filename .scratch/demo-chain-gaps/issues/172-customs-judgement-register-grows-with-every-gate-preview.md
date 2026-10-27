@@ -1,7 +1,7 @@
 # 172 关务判断册随每一次门禁问询长一行，没有限流也没有保留期
 
 Category: enhancement
-Status: needs-triage——2026-10-21 Claude Code 作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权），出自票 [94](./94-a-courier-previews-the-final-delivery-gate-before-dispatching.md) 的隔离评审。分级待分诊。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-21 Claude Code 作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权），出自票 [94](./94-a-courier-previews-the-final-delivery-gate-before-dispatching.md) 的隔离评审。分级待分诊。
 Blocked by: 无
 出处：[ADR-0219](../../../docs/adr/0219-a-device-previews-the-departure-gate-before-departing-and-reads-what-the-departure-will-record.md) 越权风险点 4；[ADR-0238](../../../docs/adr/0238-a-courier-previews-the-delivery-gate-before-dispatching-and-reads-what-the-delivery-will-record.md) 越权风险点 4、5。
 

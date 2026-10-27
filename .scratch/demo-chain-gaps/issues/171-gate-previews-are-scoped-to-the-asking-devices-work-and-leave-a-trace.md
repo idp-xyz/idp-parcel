@@ -1,7 +1,7 @@
 # 171 两种门禁问询不按问的那台设备的活限对象，运输履约这一侧也不留痕
 
 Category: enhancement
-Status: needs-triage——2026-10-21 Claude Code 作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权），出自票 [146](./146-departure-gate-answers-to-devices-list-only-blocked-or-undecided-objects.md)、[94](./94-a-courier-previews-the-final-delivery-gate-before-dispatching.md) 的隔离评审。分级（上线前必修还是上线后尽快）待分诊。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-21 Claude Code 作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权），出自票 [146](./146-departure-gate-answers-to-devices-list-only-blocked-or-undecided-objects.md)、[94](./94-a-courier-previews-the-final-delivery-gate-before-dispatching.md) 的隔离评审。分级（上线前必修还是上线后尽快）待分诊。
 Blocked by: 无（要先定段与派送任务的作业范围归属怎么立，见「三类」，那一步要一份新 ADR）
 出处：[ADR-0219](../../../docs/adr/0219-a-device-previews-the-departure-gate-before-departing-and-reads-what-the-departure-will-record.md) 越权风险点 6；[ADR-0237](../../../docs/adr/0237-gate-readings-show-the-executor-only-the-objects-that-did-not-pass.md) 越权风险点 2；[ADR-0238](../../../docs/adr/0238-a-courier-previews-the-delivery-gate-before-dispatching-and-reads-what-the-delivery-will-record.md) 越权风险点 6、7。
 

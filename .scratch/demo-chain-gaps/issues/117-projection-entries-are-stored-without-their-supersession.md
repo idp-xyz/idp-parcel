@@ -1,7 +1,7 @@
 # 117 投影条目落库不带前身，运营追踪查阅的 `supersedes` 一格永远是空
 
 Category: bug
-Status: needs-triage——2026-10-19 票 [103](./103-a-rederived-final-outcome-enters-the-projection-without-its-predecessor.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。实现 103 时写真库用例撞上（钉 `4cf203fb`，只记 `S`）。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 票 [103](./103-a-rederived-final-outcome-enters-the-projection-without-its-predecessor.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。实现 103 时写真库用例撞上（钉 `4cf203fb`，只记 `S`）。
 Blocked by: 无
 地盘：VE `adapters/postgres/projection.go` 的 `projectionEntryRow` / `marshalProjectionEntries` / `rebuildProjection`；要裁的那一格可能还碰 `application/derive_projection.go` 的 `Handle`。
 出处：VE CONTEXT「被替代的条目继续留在投影版本内并标明替代关系；标准追踪里程碑、各追踪维度和追踪摘要只由当前有效即未被替代的条目派生」；运营追踪查阅「面向投影的全部并行维度、冲突关系与被替代条目」；`adapters/http/query_tracking_projections.go` 的 `projectionEntryBody.Supersedes`（注释「supersedes 缺席即首登事实」）。

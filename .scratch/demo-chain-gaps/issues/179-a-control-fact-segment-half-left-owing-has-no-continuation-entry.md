@@ -1,7 +1,7 @@
 # 179 控制事实进段欠着的那一半没有续办入口，同一份控制事实重放也不重进段
 
 Category: enhancement
-Status: ready-for-agent——R3（不急）；续办入口形状已代决，见文末「代决（2026-10-26）」。此前 needs-triage——建议 R3：欠账只在控制事实登记时段那一半落不下（`SegmentContinuationReference`）才出现；追踪那一面已由票 136 的全扫兜住大半（下一份转出控制的交接或对象级揽收会补上），剩下的是段册本身一直欠着、要等另一份控制事实或人工直写。2026-10-26 会话 `tops-20`（Claude Code）据票 [136](./136-segment-continuation-wakes-the-movement-fact-backfill.md) 完成记录「另报一格」立（用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」授权）。续办入口的形状归 TF owner 裁，故 needs-triage。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 未分级）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 ready-for-agent——R3（不急）；续办入口形状已代决，见文末「代决（2026-10-26）」。此前 needs-triage——建议 R3：欠账只在控制事实登记时段那一半落不下（`SegmentContinuationReference`）才出现；追踪那一面已由票 136 的全扫兜住大半（下一份转出控制的交接或对象级揽收会补上），剩下的是段册本身一直欠着、要等另一份控制事实或人工直写。2026-10-26 会话 `tops-20`（Claude Code）据票 [136](./136-segment-continuation-wakes-the-movement-fact-backfill.md) 完成记录「另报一格」立（用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」授权）。续办入口的形状归 TF owner 裁，故 needs-triage。
 Blocked by: 无
 地盘（建议）：TF 交接、对象级场外揽收登记与揽收执行三口的重放路径（`existingResult` 一支）与段册进段；tfhttp 对应注释。
 出处：票 136 完成记录「另报一格」；[ADR-0302](../../../docs/adr/0302-the-movement-fact-backfill-scans-every-segment-of-the-object-so-a-later-control-fact-heals-a-segment-entered-without-an-envelope.md) 越权风险点 1；ADR-0224 越权风险点 1。

@@ -1,7 +1,7 @@
 # 120 揽收执行口与承运商首次有效收寄立的段上，先于段登记的移动事实仍进不了全程追踪
 
 Category: enhancement
-Status: needs-triage——2026-10-20 票 [53](./53-movement-facts-recorded-before-their-segment-never-reach-tracking.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0224](../../../docs/adr/0224-tracking-backfills-movement-facts-recorded-before-their-segment-when-a-control-fact-puts-the-object-in-it.md) 决定七与越权风险点 2、6。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R2）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-20 票 [53](./53-movement-facts-recorded-before-their-segment-never-reach-tracking.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0224](../../../docs/adr/0224-tracking-backfills-movement-facts-recorded-before-their-segment-when-a-control-fact-puts-the-object-in-it.md) 决定七与越权风险点 2、6。
 Blocked by: 无
 地盘：VE 补派生（`internal/visibilityexception/adapters/transportfulfillment/backfill_movement_facts.go`）、VE 消费门（`internal/visibilityexception/adapters/inbox`）、派发路由（`cmd/parcel-dispatch/routes_*.go`）；若要执行口另交对象级信封，另及 TF 揽收执行编排（`internal/transportfulfillment/application/perform_offsite_pickup.go`）与它的交出口。
 

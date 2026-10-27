@@ -1,7 +1,7 @@
 # 156 管理台手工采用资金事实与登记监管凭证改逐字段表单
 
 Category: enhancement
-Status: needs-triage——2026-10-21 由票 140 立（ADR-0236 决定七、越权风险点 6）
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-21 由票 140 立（ADR-0236 决定七、越权风险点 6）
 Blocked by: 无
 出处：票 [demo-chain-gaps/140](./140-operators-adopt-external-funds-facts-and-regulatory-credentials.md) 完成记录「没做与去向」；[ADR-0236](../../../docs/adr/0236-operators-adopt-external-funds-facts-and-regulatory-credentials-through-operator-decision-faces.md) 越权风险点 6
 

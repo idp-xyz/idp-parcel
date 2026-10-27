@@ -1,7 +1,7 @@
 # 91 交进节点却对不上作业实物的交接没有节点对账
 
 Category: enhancement
-Status: needs-triage——2026-10-19 票 [62](./62-node-control-is-established-by-handover-in.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0214](../../../docs/adr/0214-node-control-transfers-out-and-in-on-an-authoritative-transport-handover.md) 决定七与文末「补记：票 62 落决定七时的补充裁定」越权风险点「对不上作业实物的转入没有节点对账」；方案「后继」一节「HANDOVER_IN 对不上作业实物时的节点对账」那一条（[handover-dispatch-plan](../handover-dispatch-plan.md)）。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 票 [62](./62-node-control-is-established-by-handover-in.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0214](../../../docs/adr/0214-node-control-transfers-out-and-in-on-an-authoritative-transport-handover.md) 决定七与文末「补记：票 62 落决定七时的补充裁定」越权风险点「对不上作业实物的转入没有节点对账」；方案「后继」一节「HANDOVER_IN 对不上作业实物时的节点对账」那一条（[handover-dispatch-plan](../handover-dispatch-plan.md)）。
 Blocked by: 无
 
 ## 现象

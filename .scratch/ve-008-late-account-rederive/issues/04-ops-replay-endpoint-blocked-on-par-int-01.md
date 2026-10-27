@@ -1,7 +1,7 @@
 # 运维重放口：手工触发某（租户 + 包裹）重走派生
 
 Category: enhancement
-Status: needs-triage——2026-09-24 按 [product-strategy-boundary/02](../../product-strategy-boundary/issues/02-split-parameter-register-and-retriage-deferrals.md)「票：未 resolved 的」改判：运营重放端点是操作者面，等的是 ADR-0100 操作者渠道（机制缺口），不是 `PAR-INT-01`；重新分诊时按首个运维面定范围。此前：needs-info
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-09-24 按 [product-strategy-boundary/02](../../product-strategy-boundary/issues/02-split-parameter-register-and-retriage-deferrals.md)「票：未 resolved 的」改判：运营重放端点是操作者面，等的是 ADR-0100 操作者渠道（机制缺口），不是 `PAR-INT-01`；重新分诊时按首个运维面定范围。此前：needs-info
 Blocked by: [operator-channel/03](../../operator-channel/issues/03-operator-envelope-and-answer-algebra.md)（操作者信封与铸造）。此前：PAR-INT-01（实例半边未提供授权依据），按上行改判撤下
 
 用户 2026-08-20 拍板 Q3：**保留为独立后续票，不与 01/02/03 同期。**

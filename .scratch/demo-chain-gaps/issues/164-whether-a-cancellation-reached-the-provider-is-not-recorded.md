@@ -1,7 +1,7 @@
 # 164 「取消送达服务方」没有登记：取消时刻早于段的开始时，结果随采用与取消的登记先后而异
 
 Category: enhancement
-Status: needs-triage——2026-10-21 票 [57](./57-segment-commission-adoption-has-no-correction-and-start-does-not-rederive.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权；代决复核 M9 问题二）。出自 [ADR-0204](../../../docs/adr/0204-a-fulfillment-segment-adopts-a-transport-commission-by-declaration-and-a-started-commission-cannot-be-cancelled.md) 决定三「采用与取消的先后」末条、越权风险点 8 后半与 [ADR-0232](../../../docs/adr/0232-a-segment-commission-adoption-is-withdrawn-by-decision-only-before-occurrences-form-and-occurrence-revision-drives-the-supplier-cost-correction.md) 越权风险点 3。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-21 票 [57](./57-segment-commission-adoption-has-no-correction-and-start-does-not-rederive.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权；代决复核 M9 问题二）。出自 [ADR-0204](../../../docs/adr/0204-a-fulfillment-segment-adopts-a-transport-commission-by-declaration-and-a-started-commission-cannot-be-cancelled.md) 决定三「采用与取消的先后」末条、越权风险点 8 后半与 [ADR-0232](../../../docs/adr/0232-a-segment-commission-adoption-is-withdrawn-by-decision-only-before-occurrences-form-and-occurrence-revision-drives-the-supplier-cost-correction.md) 越权风险点 3。
 Blocked by: 无
 
 ## 现象

@@ -1,7 +1,7 @@
 # 08 node-operations：当前有效实测的派生方法
 
 Category: enhancement
-Status: needs-triage——2026-09-24 通道 4 随票 02 立（登记册逐行拆分划出的产品策略，NO 一张）；以实际测量登记册为前提
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-09-24 通道 4 随票 02 立（登记册逐行拆分划出的产品策略，NO 一张）；以实际测量登记册为前提
 Blocked by: `pp-pricing-input-seams/04`（NO 实际测量登记册与「仍有效的实际测量」只读口，draft）
 地盘：node-operations 领域与应用层「当前有效实测」的派生；消费方 parcel-pricing 的「实测多于一条」处置随之改。
 出处：[票 02](./02-split-parameter-register-and-retriage-deferrals.md)——[参数登记册](../../../docs/product/PILOT-PARAMETER-REGISTER.md) `PAR-NET-06`「当前有效实测规则」；NO `CONTEXT.md`「当前有效实测按明确业务规则从仍有效的实际测量派生」；[ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定二。重新定性的暂缓：[`pp-pricing-input-seams/04`](../../pp-pricing-input-seams/issues/04-no-actual-measurement-registry-and-valid-measurements-read-port.md)「做什么」里「不派生当前有效实测」一条，把「明确业务规则（按来源 / 位置 / 设备定证明力）」判为租户的、属实例半边。

@@ -1,7 +1,7 @@
 # 93 交付门禁读数阻断的那一件派生异常信号
 
 Category: enhancement
-Status: needs-triage——2026-10-19 Claude Code 作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [66](./66-effective-delivery-records-a-final-delivery-gate-reading.md) 的完成记录；方案 [handover-dispatch-plan](../handover-dispatch-plan.md)「后继」一节所列「交接与交付门禁的阻断读数派生 VE 异常信号」中交付那一半（交出那一半是 [86](./86-blocked-handover-gate-readings-raise-exception-signals.md)）。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 Claude Code 作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [66](./66-effective-delivery-records-a-final-delivery-gate-reading.md) 的完成记录；方案 [handover-dispatch-plan](../handover-dispatch-plan.md)「后继」一节所列「交接与交付门禁的阻断读数派生 VE 异常信号」中交付那一半（交出那一半是 [86](./86-blocked-handover-gate-readings-raise-exception-signals.md)）。
 Blocked by: [66](./66-effective-delivery-records-a-final-delivery-gate-reading.md)（读数随它进 main）
 地盘：VE `adapters/transportfulfillment/derive_on_effective_delivery.go` 与同包测试、VE 目录登记（若另立规则册）、迁移 VE（认领时由协调方给号）、`cmd/parcel-dispatch` 相应装配。与 86 同一套规则形状时，两票宜由同一作者先后做，或合成一票。
 出处：[ADR-0213](../../../docs/adr/0213-a-transport-handover-declares-its-releasing-receiving-and-onward-nodes.md) 文末「补记：票 66 落决定五时的补充裁定」越权风险点 21；先例 [ADR-0205](../../../docs/adr/0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md) 文末补记「阻断读数派生信号」一条。

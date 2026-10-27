@@ -1,7 +1,7 @@
 # 118 终局失效与失效后异种改判怎样进追踪投影
 
 Category: enhancement
-Status: needs-triage——2026-10-19 票 [103](./103-a-rederived-final-outcome-enters-the-projection-without-its-predecessor.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。103 票面「要裁的」把这两格留给 ADR-0138 的实现票，而那张票要等 ADR-0138 被接受才立；本票替它把 VE 这一侧的两格先记下，免得实现时只改 PS。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 票 [103](./103-a-rederived-final-outcome-enters-the-projection-without-its-predecessor.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。103 票面「要裁的」把这两格留给 ADR-0138 的实现票，而那张票要等 ADR-0138 被接受才立；本票替它把 VE 这一侧的两格先记下，免得实现时只改 PS。
 Blocked by: [ADR-0138](../../../docs/adr/0138-voided-carrier-pickup-voids-the-label-service-final-as-a-third-ledger-record-and-rejudges-on-remaining-basis.md)（Proposed，待 PS owner 接受）
 地盘：VE `adapters/parcelshipment/derive_on_final_outcome.go`（终局译装器 `predecessorOf` 与 `kindForFinalRecord`）；ADR-0138 的第三种记录若随 `final-outcome.formed` 发出，还碰 VE inbox 的终局信封译码。
 出处：VE CONTEXT「来源事实替代关系只能由源上下文给出，且只在同一源上下文、同一事实引用的版本之间成立……跨源上下文或跨事实引用的分歧仍是冲突」「终局事实有效性变化也不能被伪装为人工重开」；UC-VE-002 `AT-VE-176`。

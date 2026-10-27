@@ -1,7 +1,7 @@
 # 54 发生项登记不分协议核对的确定性失败：词表走岔与坏数据都答成可重试的未决
 
 Category: enhancement
-Status: needs-triage——2026-10-19 Claude Code 作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [29](./29-supplier-agreements-declare-charge-occurrence-conditions.md) 的隔离评审（非阻断项，评审未要求进 main 前修）。号接分支所见最大号 53 之后；同波别的票若也取 54，合批时改号。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R2）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 Claude Code 作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [29](./29-supplier-agreements-declare-charge-occurrence-conditions.md) 的隔离评审（非阻断项，评审未要求进 main 前修）。号接分支所见最大号 53 之后；同波别的票若也取 54，合批时改号。
 Blocked by: 无
 出处：[ADR-0029](../../../docs/adr/0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md)（失败按恢复动作分格）；[ADR-0207](../../../docs/adr/0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md) 与 [ADR-0209](../../../docs/adr/0209-supplier-agreements-declare-charge-occurrence-conditions-and-registration-judges-by-them.md) 的协议核对一步。
 

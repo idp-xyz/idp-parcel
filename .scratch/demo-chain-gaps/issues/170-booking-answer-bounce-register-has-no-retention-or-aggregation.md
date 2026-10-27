@@ -1,7 +1,7 @@
 # 170 承运答复挡回册没有保留期与聚合：每个新订舱标识、每次换答复标识的重试都多一行
 
 Category: enhancement
-Status: needs-triage——2026-10-21 票 [145](./145-booking-answers-from-a-non-provider-answer-booking-not-found.md) 的作者子代理按隔离评审的顺手修第 5 条立（用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」与常设指令「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0239](../../../docs/adr/0239-a-carrier-answer-from-a-non-provider-is-answered-booking-not-found-and-the-basis-is-kept-on-a-bounce-register.md) 越权风险点 4。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-21 票 [145](./145-booking-answers-from-a-non-provider-answer-booking-not-found.md) 的作者子代理按隔离评审的顺手修第 5 条立（用户 2026-10-20「要我裁定的部分，你作为业务和系统专家，请你自决吧」与常设指令「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0239](../../../docs/adr/0239-a-carrier-answer-from-a-non-provider-is-answered-booking-not-found-and-the-basis-is-kept-on-a-bounce-register.md) 越权风险点 4。
 Blocked by: 无
 地盘：TF 挡回册的存取（`adapters/postgres/booking_answer_bounce.go` 与端口 `ports/booking_answer_bounce.go`）、新迁移；若加清扫入口，另加 parcel-api 或受控 CLI 一口。
 

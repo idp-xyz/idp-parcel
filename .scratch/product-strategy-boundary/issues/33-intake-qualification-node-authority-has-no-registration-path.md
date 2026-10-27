@@ -1,7 +1,7 @@
 # 33 收寄硬资格的节点作证认领没有登记口
 
 Category: enhancement
-Status: needs-triage——2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决」授权），出自 [32](./32-demo-rule-package-declares-no-unprovable-intake-qualification.md) 的取证。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决」授权），出自 [32](./32-demo-rule-package-declares-no-unprovable-intake-qualification.md) 的取证。
 Blocked by: 无
 出处：[ADR-0063](../../../docs/adr/0063-intake-qualification-proof-is-a-consumer-side-evidence-port.md)；[syn-wall-door-audit/10](../../syn-wall-door-audit/issues/10-intake-qualification-evidence-source-unimplemented.md)（机制半边已结，实例半边留空）；[ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)。
 

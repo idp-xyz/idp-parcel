@@ -1,7 +1,7 @@
 # 122 交出门禁读数不展开集运单元成员：外包干线交出一袋被扣包裹读成不受门禁
 
 Category: enhancement
-Status: needs-triage——2026-10-20 票 [42](./42-departure-gate-reading-does-not-expand-consolidation-unit-members.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0225](../../../docs/adr/0225-the-departure-gate-reading-asks-through-consolidation-unit-members-at-the-moment-of-departure.md)「不在本记录」第一条与越权风险点 10。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R2）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-20 票 [42](./42-departure-gate-reading-does-not-expand-consolidation-unit-members.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0225](../../../docs/adr/0225-the-departure-gate-reading-asks-through-consolidation-unit-members-at-the-moment-of-departure.md)「不在本记录」第一条与越权风险点 10。
 Blocked by: 无
 地盘：TF 交出门禁读数（`internal/transportfulfillment/application/read_handover_gate.go`、`domain/handover_gate_reading.go`、交接登记册的读数列）；交付门禁读数同形，一并看。
 

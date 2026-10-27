@@ -1,7 +1,7 @@
 # 165 关务文档的请求时机只写了出发前问询，没写派送出发前的交付门禁问询
 
 Category: enhancement
-Status: needs-triage——2026-10-21 Claude Code 作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [94](./94-a-courier-previews-the-final-delivery-gate-before-dispatching.md) 的完成记录。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-21 Claude Code 作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [94](./94-a-courier-previews-the-final-delivery-gate-before-dispatching.md) 的完成记录。
 Blocked by: [94](./94-a-courier-previews-the-final-delivery-gate-before-dispatching.md)（ADR-0238 随它进 main）
 地盘：`docs/domain/customs-compliance/CONTEXT.md`「动作准入判断」词条、`docs/application/customs-compliance/UC-CC-013-JUDGE-ACTION-ADMISSION.md` 的目标与触发一格。只改文档，不改代码。
 出处：[ADR-0238](../../../docs/adr/0238-a-courier-previews-the-delivery-gate-before-dispatching-and-reads-what-the-delivery-will-record.md) 越权风险点 9 与 Consequences「关务」一条。

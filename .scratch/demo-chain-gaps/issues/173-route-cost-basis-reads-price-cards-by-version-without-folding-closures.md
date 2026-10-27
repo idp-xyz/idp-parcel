@@ -1,7 +1,7 @@
 # 173 线路成本依据按版本点读、不折价卡收尾，收尾后择优仍按被收尾的那一版试算，与结算按后继形成的预期成本静默分叉
 
 Category: enhancement
-Status: needs-triage——2026-10-21 票 [150](./150-price-card-has-no-controlled-cut-off-for-a-superseded-version.md) 的作者子代理按协调方转来的隔离评审意见立（用户「你作为业务和系统专家自决……解决所有的问题」授权；评审读码属实，严重度中等，不挡 150）。是否认领、归哪一位 owner 待分诊。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R2）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-21 票 [150](./150-price-card-has-no-controlled-cut-off-for-a-superseded-version.md) 的作者子代理按协调方转来的隔离评审意见立（用户「你作为业务和系统专家自决……解决所有的问题」授权；评审读码属实，严重度中等，不挡 150）。是否认领、归哪一位 owner 待分诊。
 Blocked by: 无
 地盘（建议）：PP 给 network-routing 的点读口（`internal/parcelpricing` 的 ports 与 `adapters/postgres`）；NR `adapters/parcelpricing`（`cost_source.go`）与择优编排；产品策略那一格归 network-routing owner。
 出处：[ADR-0234](../../../docs/adr/0234-an-older-price-card-version-leaves-new-selections-only-through-an-explicit-closure-for-a-named-successor.md) 越权风险点 6。

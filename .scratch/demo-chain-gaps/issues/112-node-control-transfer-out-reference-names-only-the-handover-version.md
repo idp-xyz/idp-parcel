@@ -1,7 +1,7 @@
 # 112 节点控制的转出引用只带交接版本：同一包裹两次交接同用一个版本号时，转移册上的引用指不回是哪一次
 
 Category: enhancement
-Status: needs-triage——2026-10-19 票 [111](./111-actual-fulfillment-formation-matches-participation-ends-by-version-only.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0221](../../../docs/adr/0221-a-handover-participation-basis-is-minted-from-the-handover-key.md) 决定六与越权风险点 3。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 票 [111](./111-actual-fulfillment-formation-matches-participation-ends-by-version-only.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0221](../../../docs/adr/0221-a-handover-participation-basis-is-minted-from-the-handover-key.md) 决定六与越权风险点 3。
 Blocked by: 无（地盘 `internal/nodeoperations/**` 此刻有别的会话在途，领票前先对齐）
 地盘：NO `adapters/transportfulfillment/control_transfer.go`（`FindAuthoritativeHandover` 包装转出引用那一步）、`domain/physical_control.go`（`TransferOutReference`）；若换拼法，另及 TF `domain/transport_handover.go`（`TransferOutBasis`）。
 

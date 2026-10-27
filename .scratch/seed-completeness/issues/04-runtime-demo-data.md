@@ -1,7 +1,7 @@
 # 04 运行时演示数据：一单的一生（方案，确认前不实现）
 
 Category: enhancement
-Status: 步 0 resolved——用户 2026-09-29 裁决只做步 0，步 1/2 不做；步 0 实现随本笔进 main（通道 4 作者，通道 3 非作者评审）。方案文本保留在下面。
+Status: resolved——2026-10-27 会话 tops-20 按[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)清理收口：步 0 已进 main；步 1、2 用户 2026-09-29 裁决不做。此前 步 0 resolved——用户 2026-09-29 裁决只做步 0，步 1/2 不做；步 0 实现随本笔进 main（通道 4 作者，通道 3 非作者评审）。方案文本保留在下面。
 Blocked by: 无
 地盘：本票只写方案。确认前不改种子、不改命令面、不 INSERT。
 出处：派单 `task-b125d095` ← 通道 1。空表范围：`parcel_shipment` 委托侧、`settlement_accounting`、`transport_fulfillment`、`node_operations`、visibility 案件类。

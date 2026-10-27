@@ -1,7 +1,7 @@
 # 87 运营查阅看得到交出门禁读数的依据原文
 
 Category: enhancement
-Status: needs-triage——2026-10-19 Claude Code 作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [65](./65-handover-records-an-outbound-release-gate-reading.md) 的完成记录。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 Claude Code 作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [65](./65-handover-records-an-outbound-release-gate-reading.md) 的完成记录。
 Blocked by: [65](./65-handover-records-an-outbound-release-gate-reading.md)（读数随它进 main）
 地盘：TF `ports/catalogue_read.go`、`adapters/postgres/review_catalogue.go`、tfhttp `query_transport_fulfillment_records.go`（或另开按键的交接详情读口）与各自测试；管理台呈现另立前端切片。
 出处：[ADR-0213](../../../docs/adr/0213-a-transport-handover-declares-its-releasing-receiving-and-onward-nodes.md) 文末补记越权风险点 14。

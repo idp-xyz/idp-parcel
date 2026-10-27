@@ -1,7 +1,7 @@
 # 124 关务同层冲突说不出与谁冲突：CC 不给冲突关系，VE 立不起「关务进展待确认」信号
 
 Category: enhancement
-Status: needs-triage——2026-10-21 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [12](./12-successive-same-layer-customs-results-are-judged-conflicts.md) 的作者裁定（ADR-0226 决定六）。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R2）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-21 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [12](./12-successive-same-layer-customs-results-are-judged-conflicts.md) 的作者裁定（ADR-0226 决定六）。
 Blocked by: 无（[12](./12-successive-same-layer-customs-results-are-judged-conflicts.md) 进 main 之后开工，冲突的判据以它为准）
 出处：[ADR-0197](../../../docs/adr/0197-customs-external-results-enter-tracking-projection-per-layer.md) 越权风险点 5 前半；[ADR-0226](../../../docs/adr/0226-successive-same-layer-customs-results-are-successors-unless-they-contradict.md) 决定六与越权风险点 8。
 

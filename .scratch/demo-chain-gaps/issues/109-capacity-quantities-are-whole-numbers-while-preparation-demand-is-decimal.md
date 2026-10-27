@@ -1,7 +1,7 @@
 # 109 容量需求、预占与装载分配量只收整数，运输准备按申报取的需求量却是小数，两边对不齐
 
 Category: bug
-Status: needs-triage——2026-10-19 Claude Code 子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权），出自 [98](./98-demo-walk-doc-and-seed-corrections-from-the-8197fa2f-walk.md) 的隔离评审。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R2）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 Claude Code 子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权），出自 [98](./98-demo-walk-doc-and-seed-corrections-from-the-8197fa2f-walk.md) 的隔离评审。
 Blocked by: 无
 出处：票 98 评审非阻断项「装载分配的重量行写整数」；演示动线第 5 步票 98 补记同名那一条把它当写法约定来教，这里登记它背后的机制形状。
 

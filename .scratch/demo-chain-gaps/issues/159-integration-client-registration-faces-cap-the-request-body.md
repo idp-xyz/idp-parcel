@@ -1,7 +1,7 @@
 # 159 集成客户端族的资金事实与凭证登记口不设请求体读取上限
 
 Category: bug
-Status: needs-triage——2026-10-21 由票 140 的隔离评审立
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-21 由票 140 的隔离评审立
 Blocked by: 无
 出处：票 [demo-chain-gaps/140](./140-operators-adopt-external-funds-facts-and-regulatory-credentials.md) 「评审记录」第 8 条
 

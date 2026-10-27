@@ -1,7 +1,7 @@
 # 149 管理台没有收尾旧版的表单：截止与同起点退役两口只能经受控 CLI 或直接调 API
 
 Category: enhancement
-Status: needs-triage——2026-10-21 票 [50](./50-commercial-versions-have-no-closing-entry-so-agreement-versions-pile-up.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权；50 的地盘不含 `apps/admin-web`）。是否认领、归哪一位 owner 待分诊。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-21 票 [50](./50-commercial-versions-have-no-closing-entry-so-agreement-versions-pile-up.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权；50 的地盘不含 `apps/admin-web`）。是否认领、归哪一位 owner 待分诊。
 Blocked by: 无
 地盘（建议）：`apps/admin-web/**`（前端切片，一人在 `main` 上直接做，见 `docs/agents/workflow.md`「前端切片」）。
 出处：[ADR-0233](../../../docs/adr/0233-an-older-commercial-version-is-closed-for-a-named-successor-by-a-cut-or-a-same-start-retirement.md) 决定一。

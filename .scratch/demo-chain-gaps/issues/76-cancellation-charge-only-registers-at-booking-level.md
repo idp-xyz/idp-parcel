@@ -1,7 +1,7 @@
 # 76 取消费只认订舱一级：整份委托的取消、未订舱的取消没有登法，部分接受的订舱不核数量
 
 Category: enhancement
-Status: needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [28](./28-booking-and-cancellation-occurrences-and-procurement-context-from-adoption.md) 完成记录与 [ADR-0207](../../../docs/adr/0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md) 文末补记越权风险点 8、9；回答 [ADR-0209](../../../docs/adr/0209-supplier-agreements-declare-charge-occurrence-conditions-and-registration-judges-by-them.md) 越权风险点 2 的那一半在票 28 里定为「不登」，本票是它的去处。与 [58](./58-adoption-does-not-check-commission-members-against-segment-objects.md)（委托取消只有整份、不往下游传）、[37](./37-confirmed-booking-capacity-relationship.md)（确认订舱的容量关系）相邻。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [28](./28-booking-and-cancellation-occurrences-and-procurement-context-from-adoption.md) 完成记录与 [ADR-0207](../../../docs/adr/0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md) 文末补记越权风险点 8、9；回答 [ADR-0209](../../../docs/adr/0209-supplier-agreements-declare-charge-occurrence-conditions-and-registration-judges-by-them.md) 越权风险点 2 的那一半在票 28 里定为「不登」，本票是它的去处。与 [58](./58-adoption-does-not-check-commission-members-against-segment-objects.md)（委托取消只有整份、不往下游传）、[37](./37-confirmed-booking-capacity-relationship.md)（确认订舱的容量关系）相邻。
 Blocked by: 用户决定（TF、PC owner 复核：租户协议对整份委托的取消、对尚未订舱的取消要不要收费；部分接受的订舱按订舱计时数量怎么认）
 
 ## 现象

@@ -1,7 +1,7 @@
 # 40 容量池的容量更正没有入口：登记口只答池冲突，缩容形不成超配缺口
 
 Category: enhancement
-Status: needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [17](./17-capacity-pools-are-registered.md) 的隔离评审。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R2）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [17](./17-capacity-pools-are-registered.md) 的隔离评审。
 Blocked by: [17](./17-capacity-pools-are-registered.md)、[20](./20-capacity-reservation-and-release-decision-faces.md)
 出处：[ADR-0201](../../../docs/adr/0201-schedule-templates-materialize-concrete-schedules-by-date-and-preparation-answers-not-configured-on-an-empty-register.md) 文末补记「登记口不改池」与越权风险点 19。
 

@@ -1,7 +1,7 @@
 # 47 预占声明「需求来自准备结果的需求快照」时，不回读核那份快照
 
 Category: enhancement
-Status: needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [20](./20-capacity-reservation-and-release-decision-faces.md) 的完成记录。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [20](./20-capacity-reservation-and-release-decision-faces.md) 的完成记录。
 Blocked by: [18](./18-transport-preparation-consumes-the-initial-route.md)、[20](./20-capacity-reservation-and-release-decision-faces.md)
 出处：[ADR-0203](../../../docs/adr/0203-capacity-assurance-requires-a-reservation-on-every-pool-of-the-schedule-and-reservations-are-operation-decisions.md) 决定三与越权风险点「需求来源不回读」。
 

@@ -1,7 +1,7 @@
 # 10 customs-compliance：申报发送通道与公开监管标准的参考配置
 
 Category: enhancement
-Status: needs-triage——2026-09-24 通道 4 随票 02 立（登记册逐行拆分划出的产品策略，CC 一张）
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-09-24 通道 4 随票 02 立（登记册逐行拆分划出的产品策略，CC 一张）
 Blocked by: 第 2–4 项的参考配置等 03
 地盘：customs-compliance 的出向连接器适配器与参考配置（存放按 03）。
 出处：[票 02](./02-split-parameter-register-and-retriage-deferrals.md)——[参数登记册](../../../docs/product/PILOT-PARAMETER-REGISTER.md) `PAR-CUS-01`、`PAR-CUS-02`、`PAR-CUS-04`、`PAR-CUS-06` 行内「〔ADR-0146 拆分〕」点名的部分；[ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定二「公开标准的实例数据归参考配置」。已知缺口沿[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「按四项判据重定级」表 PN-05 行。

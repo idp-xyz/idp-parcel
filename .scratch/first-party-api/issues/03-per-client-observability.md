@@ -1,7 +1,7 @@
 # 按 client 的可观测性：`outcome` × client 维、`requestId` 对账、暂停出声
 
 Category: enhancement
-Status: needs-triage——00 落地后第 1–3 项改 ready-for-agent；第 4 项「暂停出声」挂 ADR-0142 的实施票（2026-10-19 用户接受 ADR-0139–0142，修订后接受；首方 Intake 实施票为 [00](./00-first-party-customer-intake.md)）。此前 draft
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——00 落地后第 1–3 项改 ready-for-agent；第 4 项「暂停出声」挂 ADR-0142 的实施票（2026-10-19 用户接受 ADR-0139–0142，修订后接受；首方 Intake 实施票为 [00](./00-first-party-customer-intake.md)）。此前 draft
 Blocked by: [00](./00-first-party-customer-intake.md)；`requestId` 进问题详情随 ADR-0140 的实施票
 
 取证基线 `a608536d`。

@@ -1,7 +1,7 @@
 # 107 演示通知策略登在客户视图披露策略版本下，异常披露决定查不到通知指令
 
 Category: bug
-Status: needs-triage——2026-10-19 Claude Code 作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自票 [97](./97-demo-disclosure-policy-keeps-the-final-dimension-pending.md) 的隔离评审：作者完成记录里顺带记了这条观察，评审按代码核过属实，要求另立票以免丢。号 107 是自取的（协调方没给号段，取号前查过本地各分支本目录最大到 106），进 main 前请协调方对号。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 Claude Code 作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自票 [97](./97-demo-disclosure-policy-keeps-the-final-dimension-pending.md) 的隔离评审：作者完成记录里顺带记了这条观察，评审按代码核过属实，要求另立票以免丢。号 107 是自取的（协调方没给号段，取号前查过本地各分支本目录最大到 106），进 main 前请协调方对号。
 Blocked by: 无
 地盘：种子 `scripts/demo-seeds/data/visibility/03-notification-policy-disclose-v1.json`；种子 README 故事第 5 条若要补一句通知，也在这里。
 出处：VE `NotificationPolicies.DirectNotification` 的头注「按披露决定所依据的那条披露策略查……披露策略引用指名的就是版本化信息披露规则」。

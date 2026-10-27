@@ -1,7 +1,7 @@
 # 148 商业版本的完整替代写口与不指名后继的一般退役：ADR-0233 只开了截止与同起点退役
 
 Category: enhancement
-Status: needs-triage——2026-10-21 票 [50](./50-commercial-versions-have-no-closing-entry-so-agreement-versions-pile-up.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权；上线就绪评估把替代与退役的完整写口归 R2，代决复核 M17 把同起点退役提前进了 50）。是否认领、归哪一位 owner 待分诊。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-21 票 [50](./50-commercial-versions-have-no-closing-entry-so-agreement-versions-pile-up.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权；上线就绪评估把替代与退役的完整写口归 R2，代决复核 M17 把同起点退役提前进了 50）。是否认领、归哪一位 owner 待分诊。
 Blocked by: 无
 地盘（建议）：PC `domain` 收尾一族（`version_closure.go`）、`application` 收尾用例、`postgres` 退役册旁新立替代册；TF `adapters/partycommercial` 对`已替代`的读法要会签。需要新 ADR。
 出处：[ADR-0233](../../../docs/adr/0233-an-older-commercial-version-is-closed-for-a-named-successor-by-a-cut-or-a-same-start-retirement.md) 决定六；上线就绪评估（[triage-2026-10-19](../triage-2026-10-19.md)「上线就绪评估（2026-10-20）」）对 50 的裁定后半句。

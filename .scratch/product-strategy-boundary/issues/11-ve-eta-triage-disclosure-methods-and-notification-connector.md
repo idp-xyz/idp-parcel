@@ -1,7 +1,7 @@
 # 11 visibility-exception：ETA、分诊、异常目录与披露的判断方法和通知出向连接器
 
 Category: enhancement
-Status: needs-triage——2026-09-24 通道 4 随票 02 立（登记册逐行拆分划出的产品策略，VE 一张）；逐项先核执行器有无
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-09-24 通道 4 随票 02 立（登记册逐行拆分划出的产品策略，VE 一张）；逐项先核执行器有无
 Blocked by: 第 4、5 项的参考配置等 03；第 1 项的首方 webhook 形态等 ADR-0142（Proposed，归用户）
 地盘：visibility-exception 领域与应用层、通知出向连接器适配器、参考配置（存放按 03）。
 出处：[票 02](./02-split-parameter-register-and-retriage-deferrals.md)——[参数登记册](../../../docs/product/PILOT-PARAMETER-REGISTER.md) `PAR-VIS-01`、`PAR-VIS-03`、`PAR-VIS-04`、`PAR-VIS-05`、`PAR-VIS-07`、`PAR-VIS-08`、`PAR-VIS-09`、`PAR-INT-06` 行内「〔ADR-0146 拆分〕」点名的部分。已知缺口沿[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「按四项判据重定级」表 PN-06 行。

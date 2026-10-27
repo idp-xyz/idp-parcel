@@ -1,7 +1,7 @@
 # 84 路由复核册列出触发的控制依据、位置与来源版本
 
 Category: enhancement
-Status: needs-triage——2026-10-19 Claude Code 作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [63](./63-network-routing-reassesses-on-a-handover-into-a-node.md)。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 Claude Code 作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [63](./63-network-routing-reassesses-on-a-handover-into-a-node.md)。
 Blocked by: [63](./63-network-routing-reassesses-on-a-handover-into-a-node.md)（交接触发的复核随它进 main）
 地盘：NR 迁移（认领时现取）、`ports/ports.go` 的 `ReassessmentRecord`、`application/reassess_route.go` 的提交那一步、`adapters/postgres` 的复核登记册与 `route_plan_catalogue.go`（`ListRouteReassessments`）、`ports/route_plan_read.go`（`RouteReassessmentCatalogueRow`）、`adapters/http/query_route_plans.go`（`reassessmentBody`）及其测试与契约夹具；管理台复核册类型与契约测试。与 [73](./73-route-reassessments-register-lists-the-new-plan-legs.md) 动同一批文件，宜同一会话先后做。
 出处：[ADR-0215](../../../docs/adr/0215-a-handover-into-a-node-triggers-route-reassessment-and-reads-the-baseline-geo-projection.md) 越权风险点 8；UC-NR-003「权限、隔离与审计」节。

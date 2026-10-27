@@ -1,7 +1,7 @@
 # 44 TF：节点实测之后按实测量再准备（接 NO 实测，ADR-0201 决定八「另立票」）
 
 Category: enhancement
-Status: needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权），出自 [18](./18-transport-preparation-consumes-the-initial-route.md) 的完成记录。后继票，不在演示主链上；地盘与完成判据分诊时定稿。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权），出自 [18](./18-transport-preparation-consumes-the-initial-route.md) 的完成记录。后继票，不在演示主链上；地盘与完成判据分诊时定稿。
 Blocked by: [18](./18-transport-preparation-consumes-the-initial-route.md)；另等 peer 会话 idp-parcel-9b 在 `internal/nodeoperations/**` 的收寄、实测各票收工（方案「等 peer 的」那一行「NO 实测触发的再准备」）
 地盘：TF 新消费者（NO 实测已形成或节点收寄信封 → 准备编排）、TF 消费侧适配器 `adapters/nodeoperations` 的实测读口、`cmd/parcel-dispatch/assemble.go`（派发令牌）。
 出处：[ADR-0201](../../../docs/adr/0201-schedule-templates-materialize-concrete-schedules-by-date-and-preparation-answers-not-configured-on-an-empty-register.md) 决定八「节点实测后的再准备另立票」与越权风险点 3「用申报量做容量判断」；方案「01 运输机会与班次」D01-6。

@@ -1,7 +1,7 @@
 # 51 供应商协议目录读面不带收费发生条件
 
 Category: enhancement
-Status: needs-triage——2026-10-19 Claude Code 作者子代理立（票 [29](./29-supplier-agreements-declare-charge-occurrence-conditions.md) 完成记录「偏离与待裁」，用户「你作为业务和系统专家自决……解决所有的问题」授权）。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-10-19 Claude Code 作者子代理立（票 [29](./29-supplier-agreements-declare-charge-occurrence-conditions.md) 完成记录「偏离与待裁」，用户「你作为业务和系统专家自决……解决所有的问题」授权）。
 Blocked by: 无
 地盘（建议）：PC `adapters/postgres/operations_catalogue.go` 的供应商协议目录行与 `ports.SupplierAgreementCatalogueRow`；PC http 目录读口；管理台供应商协议页（`apps/admin-web`，按前端切片的落法另走）。
 出处：[ADR-0209](../../../docs/adr/0209-supplier-agreements-declare-charge-occurrence-conditions-and-registration-judges-by-them.md) 决定一。
