@@ -1,7 +1,7 @@
 # 03 待批准发布稿的列表与读回口，批准与发布带期望内容摘要
 
 Category: enhancement
-Status: in-progress——作者完工，分支 claude-pcub3，待隔离评审与进 main
+Status: resolved——2026-10-27 进 main `e9742f271`（见文末「进 main 记录」）。此前：作者完工，分支 claude-pcub3
 Blocked by: 无（ADR-0314 由本票会话代决，待 PC owner 复核）
 地盘：`internal/partycommercial` 的载体读口（`ports/publication_draft.go`、`adapters/postgres/publication_draft.go`）、批准与发布用例（`application/publication_draft.go`）、`adapters/http` 的载荷与两个只读端点、`cmd/parcel-api/endpoints_commercial_catalogue.go` 的端点表与装配；管理台新页「待批准发布」（前端跟进，同票）。
 出处：[party-commercial-uiux 票 19](../../party-commercial-uiux/issues/19-decision-area-and-body-summary.md) 与 spec 第三段：待批准载体今天只在录入答复里出现一次，换人批准、刷新页面、隔天再来都找不回；批准口只收（类别、对象、版本）三格，批准者看的内容与批准落下的内容可以不是同一份。
@@ -27,7 +27,7 @@ Blocked by: 无（ADR-0314 由本票会话代决，待 PC owner 复核）
 - [x] HTTP 用例：列表不带正文、空与失败分明；单份读回的文档就是摘要盖住的那份；不在册与跨租户同形；批准与发布缺摘要逐格点名；两个命令端点答 `DRAFT_CHANGED`。
 - [x] 端点表与隔离读用例（`cmd/parcel-api`）通过；`internal/architecture` 通过。
 - [x] 管理台：演示库里录入两份、模拟另一个操作者修订其一，抽屉点批准得到 `DRAFT_CHANGED` 并随即重读显示新内容，再批得「已批准」、发布得到生效起点未到的一格；另一份自批准到发布走完，列表随之少一行。
-- [ ] 全量 `scripts/test-full.sh`、管理台三道门（三道门已过，全量待推送方）。
+- [x] 全量 `scripts/test-full.sh`、管理台三道门。
 
 ## 三类
 
@@ -56,3 +56,10 @@ M
 第二轮 ← 同一评审子代理 · 钉修订笔 `123a08ab4`（rebase 前）：阻断无，总评可进 main。一条非阻断已修：壳摘要取微秒原用四舍五入，而驱动写入 timestamptz 时截断，七位及以上小数的时刻会让录入答复里的壳摘要与读回的不等、五步流程永远答已变更——改为截断，补真库用例（带 600ns 尾巴的起止点，录入与读回的壳摘要相等；换回四舍五入即红）与域层用例的抖动量。另两条文字对齐（ADR 后果节、票面完成记录）已改。
 
 - 未改：`ListOpenDrafts` 整页失败与同刻排序没有专门用例（行为由重建门与排序列定，ADR 已点名）。
+
+## 进 main 记录（2026-10-27，作者兼推送方）
+
+- **main**：`e9742f271`（快进，main 此前未动，起点 `7457d23e9`）。出处：分支 `claude-pcub3` 自 `7457d23e9` 起的代码笔 `020edeebb`、票面笔 `2e1b240d0`、评审修订笔 `3d5c53f1d`、壳摘要取整修订笔 `b45d9217b` 与票面对齐笔 `e9742f271`；推送方在 tip 上另补 AT 盘点总览计数（`f9ecd7ccb`）、ADR 索引（`37b9d0e61`）与机制清点（`d4ad141b0`）三笔生成物。
+- **验**：全量 `scripts/test-full.sh` 退 0（158 ok / 0 FAIL，跑在含最后一笔代码修订的 tip 上）；`go run ./tools/adr-index -check` 与 `at-coverage-counts -check` 退 0；管理台三道门：tsc 退 0、node:test 795/795、vite build 退 0；一次性库灌种子退 0、用后删库；`internal/architecture` 通过。
+- **号**：`AT-PC-068`、`AT-PC-069`（UC-PC-001，紧接 067）；`ADR-0314`。
+- **评审**：见上「评审记录」两轮。
