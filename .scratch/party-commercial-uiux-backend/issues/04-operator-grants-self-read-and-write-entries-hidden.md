@@ -1,7 +1,7 @@
 # 04 授予自查读口，管理台按操作者授予收起登记与发布入口
 
 Category: enhancement
-Status: in-progress——作者完工，分支 claude-pcub4，待隔离评审与进 main
+Status: resolved——2026-10-27 进 main `44b3fbc20`（见文末「进 main 记录」）。此前：作者完工，分支 claude-pcub4
 Blocked by: 无（ADR-0315 由本票会话代决，待访问身份 owner 复核）
 地盘：`internal/accessidentity`（信封访问器、`adapters/http` 新端点）、`cmd/parcel-api` 的操作者身份端点表与装配；管理台参与方与商业区各页（前端跟进，同票）。
 出处：[party-commercial-uiux spec](../../party-commercial-uiux/spec.md) 第三段「管理台按操作者授予隐藏写入口（今天查阅员也看得到全部发布与登记入口，提交才被拒）」；先例：[group-legal-entities-uiux 票 11](../../group-legal-entities-uiux/issues/11-session-tenant-read-face.md) 的操作者绑定读口，那张票把「读口能不能顺带答出授予集」留作另一个判据。
@@ -24,7 +24,7 @@ Blocked by: 无（ADR-0315 由本票会话代决，待访问身份 owner 复核�
 - [x] 装配用例（真铸造器）：查阅员只持读；配置员读写都持、另带决定种类；已过期的写授予不算；只有写授予没有读授予答未授予；没有令牌 401；发行方未配置 403。
 - [x] 端点表与隔离读用例（`cmd/parcel-api`）通过；`internal/architecture` 通过。
 - [x] 管理台：判读与「摆不摆」口径用例；演示库里查阅员登录后各页只剩读面（无写页签、无操作列、无行内动作、无「登记责任法人」），配置员登录后全部入口在。
-- [ ] 全量 `scripts/test-full.sh`（待推送方）、管理台三道门（已过）。
+- [x] 全量 `scripts/test-full.sh`、管理台三道门。
 
 ## 三类
 
@@ -49,3 +49,10 @@ M
 
 - **已修**：待批准发布抽屉（随票 03 进 main）按授予收起批准与发布，没有授予时说明原因；服务产品、客户与合同、供应商协议、渠道产品目录四页的页签状态在答案到达前可能停在被收起的签上，改为派生值落回读签；`heldGrantsOf` 对 JSON `null` 响应体不再抛错，补用例；「换授予要重新登录」改为「整页重载」（令牌不变，服务端每次都重读操作者册）；`LegalEntityProfileSection` 里被隔开的注释归位。
 - **已知、不改**：被收起页签的文案仍在空态与说明里被提到（票面已自陈）；spec 里的分支名等进 main 后在进 main 记录里一并订正。
+
+## 进 main 记录（2026-10-27，作者兼推送方）
+
+- **main**：`44b3fbc20`（快进，起点 `a5544faff`）。出处：分支 `claude-pcub4` 的代码笔 `feat(accessidentity)`、票面笔、评审修订笔（抽屉按授予收起、页签落回读签、null 响应体）与票面订正笔；推送方在 tip 上另补 ADR 索引与机制清点两笔生成物（AT 盘点不变，本票无 AT）。
+- **验**：全量 `scripts/test-full.sh` 退 0（158 ok / 0 FAIL）；`adr-index -check` 与 `at-coverage-counts -check` 退 0；管理台三道门：tsc 退 0、node:test 798/798、vite build 退 0；一次性库灌种子退 0、用后删库；`internal/architecture` 通过。浏览器：演示库里查阅员登录后各页无写页签、无操作列、无「登记责任法人」，待批准发布抽屉只显说明；配置员登录后入口齐全，并在抽屉里带内容摘要与壳摘要批准成功。
+- **号**：`ADR-0315`；无 AT。
+- **评审**：见上「评审记录」。
