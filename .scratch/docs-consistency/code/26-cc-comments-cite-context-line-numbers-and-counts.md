@@ -1,7 +1,7 @@
 # 26 CC 代码注释用行号引 CONTEXT，CLI 包头注带计数与参数区间
 
 Category: chore
-Status: in-progress——完工待评审与进 main，分支 claude-cmtA
+Status: resolved——2026-10-27 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-cmtA
 Blocked by: 无
 出处：[audit/cc.md](../audit/cc.md) M11、L4 的代码一半，与 M5 改 CONTEXT 的连带（审计钉 `6b0074d0`；2026-10-21 按 main `205eb254` 复核，下列各处原样仍在）。
 
@@ -71,3 +71,9 @@ S：只改注释，`go build`、`go vet` 不受影响。
 ### 越权风险点
 
 无。
+
+## 进 main 记录（2026-10-27，协调方）
+
+- 分支 `claude-cmtA` 与 code/02、26、32 同批，rebase 到 origin/main `b8b1ca1e9` 后由协调方快进，tip `08eeddd2d`；隔离评审（Sonnet）可合入，无阻断：三个提交每个改动的 `.go` 文件（61、33、24 个）去掉注释后语法树逐个比对 0 差异（程序放评审私有目录，对有代码变动的老提交试过会报差异）；新写的「」引文去重 82 条逐字核对通过；约 30 个 ADR、AT、UC 指针属实。评审四条措辞建议由协调方当场修了三条（订舱变更路径补不可取消的限定；盘点去掉变更叙述加票号；两处无票号的「票面」位置词），第四条（既有的若干对着旧版本讲的话）不在本批范围。协调方单独提交重算的 AT 计数、ADR 索引与机制清点（本批无变动）；全量 `scripts/test-full.sh` 退 0、159 个包 ok；`go build ./...`、`go vet ./...` 干净。无迁移、无新 ADR、无 AT 号变化，未碰 `apps/admin-web` 与 `internal/partycommercial`。
+- 本票（CC，33 个文件、52 处）：七处行号换成小节名加逐字原句；CLI 包头注去掉「五本」，`PAR-CUS-01..07` 改指参数登记册「三、关务、渠道与外部集成」一节（评审核实该节存在，并发现 `PAR-CUS-08` 也在其中，原来的「01..07」区间本来就过期）；`TestReadinessAndAuthorityAreTwoSeparateTracks` 的 Covers 补点名 `AT-CC-448`。
+- 去向：无新票。
