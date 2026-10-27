@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
@@ -35,21 +36,23 @@ func (handler *RegisterTransportHandoverHandler) correctionSegmentHalf(
 	return handler.handOverIntoSegment(ctx, predecessor.SegmentDeclaration, corrected)
 }
 
-// laterControlFacts 答对象的参与链上有没有晚于这一版业务时间的入场或离场（ADR-0307 决定三）。有，就是对象此后已凭别的
-// 控制事实进了段、交出或交付离场：凭这一版去结束「此刻在场」的参与会结束错一条，进声明的段会让对象两段同时在场、或在
-// 离场之后重新在场——前者让对象此后每一次交接都在结束参与那一步响亮失败。控制来源链的重算不在更正里做（CONTEXT「运输
-// 交接与实物控制」：后续事实不得被删除或倒退），这里只认出来、一笔不写，答单开的那一格。
+// laterControlFacts 答对象的参与链上有没有晚于 occurredAt 的入场或离场（ADR-0307 决定三）。occurredAt 是这一次控制事实的
+// 业务时间：交接版本的判断时刻，或更正成揽收到手的揽收发生时刻。有，就是对象此后已凭别的控制事实进了段、交出或交付离场：
+// 凭这一版去结束「此刻在场」的参与会结束错一条，进声明的段会让对象两段同时在场、或在离场之后重新在场——前者让对象此后
+// 每一次交接都在结束参与那一步响亮失败，后者让按对象找段的交付与结束参与答多段在场、整笔回滚。控制来源链的重算不在这里
+// 做（CONTEXT「运输交接与实物控制」：后续事实不得被删除或倒退），这里只认出来、一笔不写，答单开的那一格。
 //
 // 看每段里该对象的链尾，在场、已离场、失效都看：失效的链尾记着一次此后的入场，它撤回的是控制，不是那次交接发生过；那一版
-// 日后若又被更正回`已交接`，对象会从失效版本回到那一段，这里若放行就又是两段同时在场。与这一版业务时间同一刻的不算更晚：
+// 日后若又被更正回`已交接`，对象会从失效版本回到那一段，这里若放行就又是两段同时在场。与 occurredAt 同一刻的不算更晚：
 // 首登即为`已交接`时同一刻的终点与起点同样立得住（结束那道门只拒终点早于起点）。逐段读，读不动是欠账，判据同重派生。
 func laterControlFacts(
 	ctx context.Context,
 	segments ports.ActualFulfillmentSegmentRegistry,
-	handover domain.TransportHandover,
+	tenant domain.TenantID,
+	object domain.CarriedObjectReference,
+	occurredAt time.Time,
 ) segmentEntry {
-	tenant, object := handover.TenantID(), handover.Object()
-	at := domain.AtRegistryPrecision(handover.JudgedAt())
+	at := domain.AtRegistryPrecision(occurredAt)
 	keys, err := segments.FindSegmentsForObject(ctx, tenant, object)
 	if err != nil {
 		return segmentEntry{continuation: owed("SEGMENT_REGISTRY_UNAVAILABLE", tenant, "", object)}

@@ -83,7 +83,10 @@ type CorrectPickupAttemptResultDeps struct {
 	Corrections ports.PickupResultCorrections
 	// Pickups 缺席时更正成揽收到手一律不受理——不会悄悄只改结果、不形成场外揽收。
 	Pickups PickupRegistrar
-	Clock   ports.Clock
+	// Segments 让更正成揽收到手在转交登记之前先问对象此后有没有更晚的控制事实（ADR-0307 决定三的同一问）。可缺席：缺席时不问，
+	// 判据同对象级揽收登记自己的 Segments——没有段登记册就没有进段这一半可拦。
+	Segments ports.ActualFulfillmentSegmentRegistry
+	Clock    ports.Clock
 }
 
 type CorrectPickupAttemptResultHandler struct {
@@ -147,7 +150,7 @@ func (handler *CorrectPickupAttemptResultHandler) Correct(
 		if handler.deps.Pickups == nil {
 			return CorrectPickupAttemptResultResult{outcome: AttemptResultCorrectionNotAccepted, attempt: attemptRef}, nil
 		}
-		registration, err = handler.deps.Pickups.Register(ctx, RegisterOffsitePickupCommand{
+		registerCommand := RegisterOffsitePickupCommand{
 			TenantID:             command.TenantID,
 			Object:               object.String(),
 			Task:                 target.Attempt.Task().String(),
@@ -159,9 +162,21 @@ func (handler *CorrectPickupAttemptResultHandler) Correct(
 			Segment:              command.Segment,
 			PlannedSegment:       command.PlannedSegment,
 			SegmentServiceAction: command.SegmentServiceAction,
-		})
+		}
+		// 晚到的更正：待确认之后对象已凭别的控制事实在场（别的尝试的登记、交接），这时再进命令声明的段，对象就两段同时在场，
+		// 此后交付与交接按对象找段都答多段在场、整笔回滚。揽收事实本身是真的，所以照登、只是不带段声明——登记那一条路缺席声明
+		// 就不进段，也不算失败；答复里如实带 LATER_CONTROL_FACTS，调用方由此知道声明的段没进、重试不会变。
+		withheld := handler.laterControlFactsForDeclaredSegment(ctx, command, object)
+		if withheld {
+			registerCommand.Segment, registerCommand.PlannedSegment, registerCommand.SegmentServiceAction = "", "", ""
+		}
+		registration, err = handler.deps.Pickups.Register(ctx, registerCommand)
 		if err != nil {
 			return CorrectPickupAttemptResultResult{}, fmt.Errorf("register the corrected pickup: %w", err)
+		}
+		if withheld && registration.Outcome() == PickupRegistered {
+			// 只有这次真新登了揽收才说得上「声明的段没进成」：同（对象，尝试）已登记的重放读回在册那份，这一次没碰段。
+			registration.segmentRefusal = SegmentEntryRefusedLaterControlFacts
 		}
 		switch registration.Outcome() {
 		case PickupRegistered, PickupExistingVersion:
@@ -195,6 +210,20 @@ func (handler *CorrectPickupAttemptResultHandler) Correct(
 	return CorrectPickupAttemptResultResult{
 		outcome: AttemptResultCorrected, record: record, hasRecord: true, attempt: attemptRef, registration: registration,
 	}, nil
+}
+
+// laterControlFactsForDeclaredSegment 答命令声明了段、且对象在这一次揽收发生之后已有更晚的入场或离场。没声明段就没有进段这一半可拦；
+// 没有段登记册同样（判据同对象级揽收登记）。登记册读不动不在这里作答：转交的登记要读同一份册，读不动它自己会留进段的欠账。
+func (handler *CorrectPickupAttemptResultHandler) laterControlFactsForDeclaredSegment(
+	ctx context.Context,
+	command CorrectPickupAttemptResultCommand,
+	object domain.CarriedObjectReference,
+) bool {
+	if handler.deps.Segments == nil || strings.TrimSpace(command.Segment) == "" {
+		return false
+	}
+	later := laterControlFacts(ctx, handler.deps.Segments, command.TenantID, object, command.OccurredAt)
+	return later.refusal == SegmentEntryRefusedLaterControlFacts
 }
 
 // accept 过更正命令自己的形状：租户与来源身份、对象、更正成的结果是个确定结果、后补来源必备、控制依据与段声明只属揽收到手、

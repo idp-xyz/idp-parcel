@@ -58,7 +58,8 @@ func (correction transactionalPickupAttemptResultCorrection) Correct(
 // buildPickupAttemptResultCorrection 装配揽收结果更正：更正册与对象级揽收登记同一个库。更正成揽收到手时转交的登记编排与首登口
 // （buildControlFactOrchestrations 的 pickupRegistration）是同一组缝——揽收登记册、段登记册、实际承运商判断登记册、结果版本签发、
 // 登记意图交付、时钟——于是进段、铸判断首版、交 parcel-shipment 采认与首登逐格同形；Segments 与 Judgments 一并交入，不留缺席：缺席时
-// 编排对进段既不做也不报，答复与成功逐格同形，只有读回段才看得出来。
+// 编排对进段既不做也不报，答复与成功逐格同形，只有读回段才看得出来。更正自己也持同一份段登记册：转交登记之前先问对象此后有没有更晚的
+// 控制事实，有则登记不带段声明、答 LATER_CONTROL_FACTS（ADR-0307 决定三的同一问），缺席时这一问悄悄不做，同样只有读回段才看得出来。
 func buildPickupAttemptResultCorrection(db *bentopg.DB) (tfhttp.PickupAttemptResultCorrector, error) {
 	corrections, err := tfpostgres.NewPickupResultCorrections(db)
 	if err != nil {
@@ -108,6 +109,7 @@ func newPickupAttemptResultCorrection(db *bentopg.DB, corrections tfports.Pickup
 		inner: tfapp.NewCorrectPickupAttemptResultHandler(tfapp.CorrectPickupAttemptResultDeps{
 			Corrections: corrections,
 			Pickups:     registrar,
+			Segments:    segments,
 			Clock:       clock,
 		}),
 	}, nil

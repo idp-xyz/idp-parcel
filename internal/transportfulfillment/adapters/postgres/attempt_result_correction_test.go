@@ -3,6 +3,7 @@ package postgres_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -113,7 +114,7 @@ func pickupCorrectionOf(
 
 // Covers: `AT-TF-358`（持久化半边）——TF CONTEXT「待确认那一版留在册上不改写」与「同一对象在同一尝试中只能有一个当前有效结果」的持久化半边（揽收）——更正追加
 // 之后：首次提交的结果行（FindByKey）仍是待确认；当前有效结果（FindEffectiveByKey，失败尝试费读的那一条）是更正出来的确定
-// 结果，未被更正的对象照旧；更正的来源、控制依据与操作证据原样读回；同一格第二条更正答已有记录。
+// 结果，未被更正的对象读回仍是首次提交；更正的来源、控制依据与操作证据原样读回；同一格第二条更正答已有记录。
 func TestAPickupCorrectionIsAppendedAndTheCurrentEffectiveResultIsReadWithoutRewritingThePendingRow(t *testing.T) {
 	rig := newCorrectionRig(t)
 	ctx := t.Context()
@@ -417,7 +418,7 @@ func deliveryCorrectionOf(
 
 // Covers: `AT-TF-359`（持久化半边）——`AT-TF-070` 之后的确定、UC-TF-006「尝试待确认」的持久化半边——派送结果更正追加之后：首次提交的结果行（FindByKey）仍是
 // 待确认；交付登记、交付门禁读数与失败尝试费读的 LoadDeliveryResult 读到更正出来的确定结果，而且那一格能直接喂给 FormEffectiveDelivery；
-// 未被更正的对象与没有更正的待确认照旧。
+// 未被更正的对象与没有更正的待确认读回仍是首次提交。
 func TestADeliveryCorrectionMakesTheCurrentResultTheCorrectedOneWithoutRewritingThePendingRow(t *testing.T) {
 	rig := newCorrectionRig(t)
 	ctx := t.Context()
@@ -532,7 +533,7 @@ func TestDeliveryCorrectionRowsOnlyAttachToAPendingResultAndKeepTheDeterminateSh
 }
 
 // Covers: `AT-TF-362`（持久化半边）——票 docs-consistency/code/90 要裁的「待确认复核清单」的持久化半边——还在待确认的那几格两侧合并、最早的在前、按租户隔离、按上限截断；
-// 一格凭后补来源更正之后就不在清单上（首次提交的待确认行仍在表里，靠更正册反连接判），而没有更正的照旧在；揽收一侧带更正口要指名的来源身份。
+// 一格凭后补来源更正之后就不在清单上（首次提交的待确认行仍在表里，靠更正册反连接判），而没有更正的仍在；揽收一侧带更正口要指名的来源身份。
 func TestThePendingResultListHoldsOnlyWhatIsStillPendingAcrossBothSides(t *testing.T) {
 	rig := newCorrectionRig(t)
 	ctx := t.Context()
@@ -581,7 +582,7 @@ func TestThePendingResultListHoldsOnlyWhatIsStillPendingAcrossBothSides(t *testi
 	})
 	rows, err = rig.catalogue.ListPendingAttemptResults(ctx, tenantA, 10)
 	if err != nil || len(rows) != 1 || rows[0].Side != ports.PendingAttemptSideDelivery {
-		t.Fatalf("揽收一格更正之后的清单 = %+v err=%v；更正过的不该再列，没更正的派送一格照旧在", rows, err)
+		t.Fatalf("揽收一格更正之后的清单 = %+v err=%v；更正过的不该列，没更正的派送一格应当仍在", rows, err)
 	}
 	mustWithinDeliveryTransaction(t, rig.transactor, ctx, func(txCtx context.Context) error {
 		target, _, err := rig.deliveryCorrections.LoadForCorrection(txCtx, deliveryRecord.Key, object)
@@ -598,4 +599,208 @@ func TestThePendingResultListHoldsOnlyWhatIsStillPendingAcrossBothSides(t *testi
 	if err != nil || len(other) != 1 || other[0].SourceID != "source-other-tenant" {
 		t.Fatalf("他租户的清单 = %+v err=%v；租户 a 的更正动不了它", other, err)
 	}
+}
+
+// Covers: `AT-TF-360`（持久化半边）——PBC-08 的锁与写同一事务，派送一侧——同一格待确认的两笔并发更正在结果行锁上排队：先到的提交之前，后到的加载一直等着；先到的提交
+// 之后，后到的读到的是先到的更正，而不是各自看见「还没更正」。（-count=5）
+func TestConcurrentCorrectionsOfOnePendingDeliveryResultQueueOnItsRowLock(t *testing.T) {
+	rig := newCorrectionRig(t)
+	ctx := t.Context()
+	record := pendingDeliveryRecord(t, "tenant-a", "attempt-pending")
+	mustWithinDeliveryTransaction(t, rig.transactor, ctx, func(txCtx context.Context) error {
+		_, err := rig.deliveries.Save(txCtx, record)
+		return err
+	})
+	object := deliveryValue(t, domain.NewCarriedObjectReference, "parcel-2")
+
+	firstHolds := make(chan struct{})
+	secondRequested := make(chan struct{})
+	var secondSaw bool
+	var secondErr error
+	var group sync.WaitGroup
+	group.Add(1)
+	go func() {
+		defer group.Done()
+		<-firstHolds
+		secondErr = rig.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+			close(secondRequested)
+			target, found, err := rig.deliveryCorrections.LoadForCorrection(txCtx, record.Key, object)
+			if err != nil || !found {
+				return errors.Join(err, errors.New("second load found nothing"))
+			}
+			secondSaw = target.HasCorrection
+			return nil
+		})
+	}()
+
+	mustWithinDeliveryTransaction(t, rig.transactor, ctx, func(txCtx context.Context) error {
+		target, _, err := rig.deliveryCorrections.LoadForCorrection(txCtx, record.Key, object)
+		if err != nil {
+			close(firstHolds)
+			return fmt.Errorf("first load: %w", err)
+		}
+		close(firstHolds)
+		<-secondRequested
+		time.Sleep(150 * time.Millisecond) // 第二笔此刻应当停在行锁上
+		if _, err := rig.deliveryCorrections.Save(txCtx, deliveryCorrectionOf(t, target, domain.ObjectDelivered, "")); err != nil {
+			return fmt.Errorf("first save: %w", err)
+		}
+		return nil
+	})
+	group.Wait()
+	if secondErr != nil {
+		t.Fatalf("second transaction: %v", secondErr)
+	}
+	if !secondSaw {
+		t.Fatal("后到的更正加载没等先到的提交，读到的是「还没更正」——派送结果行没锁住")
+	}
+}
+
+// Covers: `AT-TF-360`（持久化半边）——租户隔离（PBC-08 与 TF 的租户不串）——两个租户各有同来源身份、同对象的待确认到访与同尝试身份、同对象的待确认派送，租户 A 更正了自己的两格：
+// 租户 B 读到的仍是待确认、没有更正（加载、当前有效读、有效交付读数三处）；租户 A 才有的尝试租户 B 指名不到；租户 A 持着结果行锁时租户 B 加载同键的一格不被它堵住——
+// 租户 B 的更正不越权锁租户 A 的行，也不会读到、写到租户 A 的行。
+func TestTwoTenantsWithTheSameAttemptAndObjectNeverSeeOrLockEachOthersCorrections(t *testing.T) {
+	rig := newCorrectionRig(t)
+	ctx := t.Context()
+	parcel2 := deliveryValue(t, domain.NewCarriedObjectReference, "parcel-2")
+
+	// 租户 A 的行先落：同键行里 A 的在前，条件写散了的 SQL 才会先读到它。
+	pickupA := pendingPickupRecord(t, "tenant-a", "source-pending")
+	pickupB := pendingPickupRecord(t, "tenant-b", "source-pending")
+	pickupOnlyA := pendingPickupRecord(t, "tenant-a", "source-only-a")
+	deliveryA := pendingDeliveryRecord(t, "tenant-a", "attempt-pending")
+	deliveryB := pendingDeliveryRecord(t, "tenant-b", "attempt-pending")
+	deliveryOnlyA := pendingDeliveryRecord(t, "tenant-a", "attempt-only-a")
+	for _, record := range []ports.PickupAttemptRecord{pickupA, pickupB, pickupOnlyA} {
+		rig.savePickupAttempt(t, record)
+	}
+	mustWithinDeliveryTransaction(t, rig.transactor, ctx, func(txCtx context.Context) error {
+		for _, record := range []ports.DeliveryAttemptRecord{deliveryA, deliveryB, deliveryOnlyA} {
+			if _, err := rig.deliveries.Save(txCtx, record); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	// 租户 A 更正自己的两格。
+	mustWithinDeliveryTransaction(t, rig.transactor, ctx, func(txCtx context.Context) error {
+		pickupTarget, found, err := rig.pickupCorrections.LoadForCorrection(txCtx, pickupA.Key, parcel2)
+		if err != nil || !found {
+			return fmt.Errorf("A 加载揽收：found=%v err=%v", found, err)
+		}
+		if _, err := rig.pickupCorrections.Save(txCtx, pickupCorrectionOf(t, pickupTarget, domain.CustomerAbsent, "reason/x", "")); err != nil {
+			return fmt.Errorf("A 保存揽收更正：%w", err)
+		}
+		deliveryTarget, found, err := rig.deliveryCorrections.LoadForCorrection(txCtx, deliveryA.Key, parcel2)
+		if err != nil || !found {
+			return fmt.Errorf("A 加载派送：found=%v err=%v", found, err)
+		}
+		if _, err := rig.deliveryCorrections.Save(txCtx, deliveryCorrectionOf(t, deliveryTarget, domain.ObjectDelivered, "")); err != nil {
+			return fmt.Errorf("A 保存派送更正：%w", err)
+		}
+		return nil
+	})
+
+	// 租户 B 看到的：自己的待确认，没有更正。校验写在事务外：事务闭包里失败退出会把连接连同行锁留在池里。
+	var pickupSeenByB ports.PickupResultCorrectionTarget
+	var deliverySeenByB ports.DeliveryResultCorrectionTarget
+	var foundPickupB, foundDeliveryB, foundOnlyAPickup, foundOnlyADelivery bool
+	mustWithinDeliveryTransaction(t, rig.transactor, ctx, func(txCtx context.Context) error {
+		var err error
+		if pickupSeenByB, foundPickupB, err = rig.pickupCorrections.LoadForCorrection(txCtx, pickupB.Key, parcel2); err != nil {
+			return err
+		}
+		if deliverySeenByB, foundDeliveryB, err = rig.deliveryCorrections.LoadForCorrection(txCtx, deliveryB.Key, parcel2); err != nil {
+			return err
+		}
+		// 租户 A 才有的尝试，租户 B 指名不到。
+		onlyAPickup := ports.PickupAttemptKey{TenantID: deliveryValue(t, domain.NewTenantID, "tenant-b"), SourceID: "source-only-a"}
+		if _, foundOnlyAPickup, err = rig.pickupCorrections.LoadForCorrection(txCtx, onlyAPickup, parcel2); err != nil {
+			return err
+		}
+		onlyADelivery := ports.DeliveryAttemptKey{TenantID: deliveryValue(t, domain.NewTenantID, "tenant-b"), Attempt: deliveryOnlyA.Key.Attempt}
+		_, foundOnlyADelivery, err = rig.deliveryCorrections.LoadForCorrection(txCtx, onlyADelivery, parcel2)
+		return err
+	})
+	if !foundPickupB || pickupSeenByB.HasCorrection || pickupSeenByB.Attempt.TenantID().String() != "tenant-b" ||
+		!pickupSeenByB.Result.Outcome().PendingConfirmation() {
+		t.Fatalf("B 加载揽收：found=%v has=%v tenant=%q；读到了租户 A 的更正或行", foundPickupB, pickupSeenByB.HasCorrection, pickupSeenByB.Attempt.TenantID())
+	}
+	if !foundDeliveryB || deliverySeenByB.HasCorrection || deliverySeenByB.Attempt.TenantID().String() != "tenant-b" ||
+		!deliverySeenByB.Result.Outcome().PendingConfirmation() {
+		t.Fatalf("B 加载派送：found=%v has=%v tenant=%q；读到了租户 A 的更正或行", foundDeliveryB, deliverySeenByB.HasCorrection, deliverySeenByB.Attempt.TenantID())
+	}
+	if foundOnlyAPickup || foundOnlyADelivery {
+		t.Fatalf("B 指名到了 A 才有的尝试：揽收 %v 派送 %v", foundOnlyAPickup, foundOnlyADelivery)
+	}
+	effective, found, err := rig.pickups.FindEffectiveByKey(ctx, pickupB.Key)
+	if err != nil || !found {
+		t.Fatalf("B 的当前有效揽收结果：found=%v err=%v", found, err)
+	}
+	for _, result := range effective.Results {
+		if result.Object() == parcel2 && !result.Outcome().PendingConfirmation() {
+			t.Fatalf("B 的当前有效揽收结果被 A 的更正顶替成 %q", result.Outcome())
+		}
+	}
+	_, resultB, present, err := rig.deliveries.LoadDeliveryResult(ctx, deliveryB.Key.TenantID, deliveryB.Key.Attempt, parcel2)
+	if err != nil || !present || !resultB.Outcome().PendingConfirmation() {
+		t.Fatalf("B 的交付读数：present=%v outcome=%q err=%v；被 A 的更正顶替了", present, resultB.Outcome(), err)
+	}
+	_, resultA, present, err := rig.deliveries.LoadDeliveryResult(ctx, deliveryA.Key.TenantID, deliveryA.Key.Attempt, parcel2)
+	if err != nil || !present || resultA.Outcome() != domain.ObjectDelivered {
+		t.Fatalf("A 的交付读数：present=%v outcome=%q err=%v；A 自己的更正读不到", present, resultA.Outcome(), err)
+	}
+	if _, _, present, err := rig.deliveries.LoadDeliveryResult(ctx, deliveryB.Key.TenantID, deliveryOnlyA.Key.Attempt, parcel2); err != nil || present {
+		t.Fatalf("B 读 A 才有的派送尝试：present=%v err=%v", present, err)
+	}
+
+	// 租户 A 持着两格的结果行锁时，租户 B 加载同键的两格不被堵住。
+	aHolds := make(chan struct{})
+	bDone := make(chan error, 1)
+	release := make(chan struct{})
+	holder := make(chan struct{})
+	go func() {
+		defer close(holder)
+		err := rig.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+			if _, _, err := rig.pickupCorrections.LoadForCorrection(txCtx, pickupA.Key, parcel2); err != nil {
+				return err
+			}
+			if _, _, err := rig.deliveryCorrections.LoadForCorrection(txCtx, deliveryA.Key, parcel2); err != nil {
+				return err
+			}
+			close(aHolds)
+			<-release
+			return nil
+		})
+		if err != nil {
+			t.Errorf("A 持锁的事务：%v", err)
+		}
+	}()
+	select {
+	case <-aHolds:
+	case <-holder:
+		t.Fatal("租户 A 没能持上结果行锁")
+	}
+	go func() {
+		bDone <- rig.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+			if _, found, err := rig.pickupCorrections.LoadForCorrection(txCtx, pickupB.Key, parcel2); err != nil || !found {
+				return errors.Join(err, errors.New("B 加载揽收没找到自己的行"))
+			}
+			if _, found, err := rig.deliveryCorrections.LoadForCorrection(txCtx, deliveryB.Key, parcel2); err != nil || !found {
+				return errors.Join(err, errors.New("B 加载派送没找到自己的行"))
+			}
+			return nil
+		})
+	}()
+	select {
+	case err := <-bDone:
+		if err != nil {
+			t.Errorf("B 的事务：%v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Error("租户 B 的加载被租户 A 持着的结果行锁堵住了：条件写散了，B 的更正越权锁了 A 的行")
+	}
+	close(release)
+	<-holder
 }

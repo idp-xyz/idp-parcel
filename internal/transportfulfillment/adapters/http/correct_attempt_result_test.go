@@ -70,6 +70,27 @@ func TestTheAttemptResultCorrectionFacesTranslateTheSameCommandUnderTheirOwnFace
 	}
 }
 
+// Covers: `AT-TF-361`（传输面）——运营决定面的租户只取认证结果（信封），请求上自报的租户不采信：查询串 `?tenant=`、`X-Reported-Tenant` 头带别的租户，两口译出来的命令
+// 仍落在认证结果的租户里。否则别的租户的复核人只要在请求上自报，就能认定本租户的待确认结果。
+func TestTheAttemptResultConfirmationFacesTakeTheTenantOnlyFromTheEnvelope(t *testing.T) {
+	intake := operatorIntake(t, authenticatorFake{})
+	selfReported := func(body string) *http.Request {
+		request := bearerRequest("t", body)
+		request.URL.RawQuery = "tenant=SYN-TENANT-FOREIGN"
+		request.Header.Set("X-Reported-Tenant", "SYN-TENANT-FOREIGN")
+		return request
+	}
+
+	pickup, err := intake.IntakePickupAttemptResultCorrection(context.Background(), selfReported(pickupAttemptResultCorrectionBody))
+	if err != nil || pickup.TenantID.String() != operatorTenant {
+		t.Fatalf("揽收认定：tenant=%q err=%v, want %q——请求里自报的租户不采信", pickup.TenantID, err, operatorTenant)
+	}
+	delivery, err := intake.IntakeDeliveryAttemptResultCorrection(context.Background(), selfReported(deliveryAttemptResultCorrectionBody))
+	if err != nil || delivery.TenantID.String() != operatorTenant {
+		t.Fatalf("派送认定：tenant=%q err=%v, want %q——请求里自报的租户不采信", delivery.TenantID, err, operatorTenant)
+	}
+}
+
 // Covers: `AT-TF-361`（传输面）——先认证、后解载荷；载荷封闭（夹带租户或操作者一律 400）；词表外的结果词、解不出的时刻是坏报文，更正成待确认的词也是（待确认
 // 只在更正之前存在，词表本身收它，由编排答未受理——这里钉的是词表外）。
 func TestTheAttemptResultCorrectionFacesAuthenticateFirstAndDecodeClosed(t *testing.T) {

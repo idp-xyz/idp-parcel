@@ -126,7 +126,7 @@ func TestACorrectionGoesThroughTheDeterminateResultGates(t *testing.T) {
 	})
 }
 
-// Covers: `AT-TF-360`（领域半边）——同上——更正只回指待确认那一版：确定结果不再更正成待确认，也不更正另一版确定结果（那是另一种更正）；更正必带所凭的后补
+// Covers: `AT-TF-360`（领域半边）——同上——更正只回指待确认那一版：确定结果不接更正成待确认，也不接另一版确定结果的更正（那是另一种更正）；更正必带所凭的后补
 // 来源；更正不早于它所更正的待确认、也不早于它说的那件事；待确认属于另一次尝试或另一个对象的不接。
 func TestACorrectionOnlyPointsBackAtAPendingVersion(t *testing.T) {
 	attempt := formedAttempt(t, "attempt-1")
@@ -260,6 +260,27 @@ func TestADeliveryCorrectionGoesThroughTheDeterminateGatesAndPointsBackAtPending
 	if err != nil {
 		t.Fatalf("form determinate delivery result: %v", err)
 	}
+	// 更正这一判断不早于它所更正的待确认那一版（待确认记在到场后 9 分钟）、也不早于它说的那件事；两道各守一格。
+	for name, test := range map[string]struct {
+		occurredAt  time.Time
+		correctedAt time.Time
+	}{
+		"corrected before the pending version": {
+			occurredAt: attemptArrivedAt.Add(8 * time.Minute), correctedAt: attemptArrivedAt.Add(8*time.Minute + 30*time.Second),
+		},
+		"corrected before the thing it says happened": {
+			occurredAt: attemptArrivedAt.Add(2 * time.Hour), correctedAt: attemptArrivedAt.Add(time.Hour),
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := domain.CorrectPendingDeliveryAttemptResult(
+				attempt, pending, domain.ObjectDelivered, domain.AttemptResultBasisReference{}, source, test.occurredAt, test.correctedAt)
+			if !errors.Is(err, domain.ErrInvalidAttemptResultCorrection) {
+				t.Fatalf("error = %v, want ErrInvalidAttemptResultCorrection", err)
+			}
+		})
+	}
+
 	for name, test := range map[string]struct {
 		pending domain.DeliveryAttemptResult
 		outcome domain.DeliveryObjectOutcome

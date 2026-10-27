@@ -8,7 +8,7 @@ import (
 )
 
 // Covers: `AT-TF-361`（授予往返）——ADR-0297 决定二——「揽收尝试结果认定」与「派送尝试结果认定」两种运营决定的授予登得进操作者册（access_identity 0027 放开决定种类那条
-// CHECK），读回各是它自己，两种互不相通，也不与承运商首次有效收寄判断串；此前各份放开的种类照旧登得进。
+// CHECK），读回各是它自己，两种互不相通，也不与承运商首次有效收寄判断串；既有各份放开的种类仍登得进。
 func TestTheAttemptResultConfirmationDecisionsAreGrantedAndReadBackApartFromEachOther(t *testing.T) {
 	register := newOperatorRegister(t)
 	subject := subjectOf(t, "https://id.syn.example/dex", "SYN-OPERATOR-CODE90")

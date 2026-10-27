@@ -278,7 +278,7 @@ func (handler *RegisterTransportHandoverHandler) handOverIntoSegment(
 	// 不动段——不拒登，免得离线补登丢掉一次真实发生过的交接。登记册读不动（欠账）时不在这里替下一步作答：结束参与那一步读同一份册，
 	// 读不动它会响亮失败、整笔不落，与此前一致。拒收与待确认不进段，不问。
 	if handover.TransfersControl() && handler.deps.Segments != nil {
-		if later := laterControlFacts(ctx, handler.deps.Segments, handover); later.refusal != SegmentEntryRefusalNone {
+		if later := laterControlFacts(ctx, handler.deps.Segments, handover.TenantID(), handover.Object(), handover.JudgedAt()); later.refusal != SegmentEntryRefusalNone {
 			// 只认拒绝格：laterControlFacts 读册失败时给的欠账（续办引用）故意不在这里作答，交给下面结束参与那一步响亮失败；
 			// 改回 != segmentEntry{} 就会让登记册整体读不动时首登答欠账、整笔落下半成品。
 			return ParticipationEndOutcomeInvalid, later, nil

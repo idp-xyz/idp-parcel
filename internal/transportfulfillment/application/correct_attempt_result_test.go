@@ -106,6 +106,7 @@ func newPickupCorrectionFixture(t *testing.T) *pickupCorrectionFixture {
 	fixture.handler = application.NewCorrectPickupAttemptResultHandler(application.CorrectPickupAttemptResultDeps{
 		Corrections: fixture.corrections,
 		Pickups:     registrar,
+		Segments:    fixture.segments,
 		Clock:       fixedClock{at: recordedAt.Add(time.Hour)},
 	})
 	return fixture
@@ -218,7 +219,7 @@ func TestAPendingPickupResultCorrectedToAPickupFormsTheOffsitePickupAndEntersThe
 }
 
 // Covers: `AT-TF-360`（编排半边）——UC-TF-002「同一尝试来源身份和内容返回已有结果；同一身份不同内容形成冲突」与「同一对象在同一尝试中只能有一个当前有效
-// 结果」——同一格的同内容重放答已有更正、不再登记、不再进段；换了说法答冲突，在册的更正不被顶替。
+// 结果」——同一格的同内容重放答已有更正、不登记、不进段；换了说法答冲突，在册的更正不被顶替。
 func TestACorrectionReplayAnswersTheExistingOneAndADifferentStatementConflicts(t *testing.T) {
 	fixture := newPickupCorrectionFixture(t)
 	first := fixture.correct(t, fixture.pickedUpCommand(t))
@@ -266,7 +267,7 @@ func TestACorrectionReplayAnswersTheExistingOneAndADifferentStatementConflicts(t
 	}
 }
 
-// Covers: `AT-TF-360`（编排半边）——ADR-0029 按恢复动作分格——更正只回指待确认那一版：已是确定结果的那一格答`并非待确认`（不再更正，也不写任何东西）；
+// Covers: `AT-TF-360`（编排半边）——ADR-0029 按恢复动作分格——更正只回指待确认那一版：已是确定结果的那一格答`并非待确认`（不接更正，也不写任何东西）；
 // 指错尝试或对象、形状不成的提交答`来源未受理`，后者连库都不读。
 func TestOnlyAPendingVersionIsCorrectedAndMalformedCorrectionsAreNotAccepted(t *testing.T) {
 	fixture := newPickupCorrectionFixture(t)
@@ -331,7 +332,7 @@ func TestOnlyAPendingVersionIsCorrectedAndMalformedCorrectionsAreNotAccepted(t *
 }
 
 // Covers: `AT-TF-357`（编排半边）——要裁的「揽收一侧更正成揽收到手，与对象级登记口同（对象，尝试）的那一版谁是当前有效」——同（对象，尝试）已经经对象级登记
-// 口登记了同内容的揽收（此前的绕法）：更正收口它，不登记第二份、不再进一次段；登记的是另一回事（控制依据不同）则更正答冲突、
+// 口登记了同内容的揽收（经对象级登记口先登的做法）：更正收口它，不登记第二份、不进第二次段；登记的是另一回事（控制依据不同）则更正答冲突、
 // 不写更正——要改那份揽收走揽收更正口，更正不顶替它。
 func TestACorrectionToAPickupAdoptsTheObjectLevelRegistrationInsteadOfFormingASecond(t *testing.T) {
 	registeredFirst := func(t *testing.T, fixture *pickupCorrectionFixture, control string) {

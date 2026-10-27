@@ -2,9 +2,9 @@
 -- accessidentity.DecisionPickupAttemptResultConfirmation、DecisionDeliveryAttemptResultConfirmation 同笔放开（0001 头注那条约定）。
 -- 本迁移不种任何行：谁被授予哪一种决定是租户取值。
 --
--- 只重建决定种类这一条 CHECK。全集取此前各份重建的并集（以 0025 那一份为底，再并入另一条在途分支 0026 的 CANCELLATION_ORDER_CONFLICT_RESOLUTION），
--- 再加本份两个词。迁移不按编号先后施加，本份可能晚于编号更大的一份施加，只列本份基线上的全集会把后来的词删掉、让它们的授予登不进；
--- 之后谁再重建这条 CHECK，都取此前各份的并集。
+-- 只重建决定种类这一条 CHECK。全集是 0026 那一份的超集（0026 以 0025 为底并入 CANCELLATION_ORDER_CONFLICT_RESOLUTION），
+-- 再加本份两个词。迁移不按编号先后施加，只列较旧基线上的全集会把更新的词删掉、让它们的授予登不进；
+-- 重建这条 CHECK 的迁移，都取已有各份的并集。
 
 ALTER TABLE access_identity.operator_grant
     DROP CONSTRAINT operator_grant_decision_kind_decided;
