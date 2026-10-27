@@ -1,7 +1,7 @@
 # 184 五本商业目录不回显截止点：被截止的旧版在管理台仍显原区间与「收尾…」
 
 Category: enhancement
-Status: needs-triage——建议 R2（上线后尽快）：首个租户发新版、收尾旧版之后，管理台这五本目录仍把旧版显成「已生效」和原区间，「收尾…」按钮与 [party-commercial-uiux/15](../../party-commercial-uiux/issues/15-existing-versions-note.md) 的重叠提示都不消，运营会以为没收尾、再点一次（服务端按册面答未受理，不写坏数据，故不列上线前必修）。2026-10-26 会话 `tops-20`（Claude Code）立：tops-54 在 [party-commercial-uiux/16](../../party-commercial-uiux/issues/16-close-out-old-versions.md) 实走发现，经 tops-26 转来；用户 2026-10-26「记」。
+Status: in-progress——2026-10-26 会话 tops-20 认领（用户 2026-10-26「你能够来做吗」），分支 claude-dcg184。此前：needs-triage——建议 R2（上线后尽快）：首个租户发新版、收尾旧版之后，管理台这五本目录仍把旧版显成「已生效」和原区间，「收尾…」按钮与 [party-commercial-uiux/15](../../party-commercial-uiux/issues/15-existing-versions-note.md) 的重叠提示都不消，运营会以为没收尾、再点一次（服务端按册面答未受理，不写坏数据，故不列上线前必修）。2026-10-26 会话 `tops-20`（Claude Code）立：tops-54 在 [party-commercial-uiux/16](../../party-commercial-uiux/issues/16-close-out-old-versions.md) 实走发现，经 tops-26 转来；用户 2026-10-26「记」。
 Blocked by: 无
 地盘（建议）：`internal/partycommercial/adapters/postgres` 的五本目录读（`ListServiceProducts`、`ListCustomerContracts`、`ListAuthorizationRules`、`ListPreAcceptanceFinancialControlPolicies`、`ListCustomerServiceRules`）、对应 `ports` 目录行与 `adapters/http` 目录答复；管理台渲染照供应商协议页（前端切片，可同票或另做）。
 出处：party-commercial-uiux/16 完成记录「已知·读面缺口」；[party-commercial-uiux spec](../../party-commercial-uiux/spec.md)「第三段」末条；票 [149](./149-admin-web-commercial-version-closure-forms.md)「目录查阅折入收尾的余项」；[ADR-0233](../../../docs/adr/0233-an-older-commercial-version-is-closed-for-a-named-successor-by-a-cut-or-a-same-start-retirement.md) 决定五。
