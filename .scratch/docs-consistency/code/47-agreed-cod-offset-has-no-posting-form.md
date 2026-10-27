@@ -1,7 +1,7 @@
 # 47 CR 协议抵扣没有记账形：认可的抵扣额只能留在`渠道在途`
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-code47。R2（上线后尽快）：COD 渠道按有效协议从回款里扣下的金额（例如服务费抵扣），经 settlement-accounting 认可后，在代收分户账上没有任何记账能把它了结，只能留在`渠道在途`。2026-10-21 文档自洽 09 评审轮立（用户「你作为业务和系统专家自决」授权），分支 claude-dc09。记账形由作者代决，立 [ADR-0298](../../../docs/adr/0298-an-agreed-offset-approved-by-settlement-accounting-leaves-in-transit-for-an-offset-applied-position.md)。
+Status: resolved——2026-10-27 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code47。R2（上线后尽快）：COD 渠道按有效协议从回款里扣下的金额（例如服务费抵扣），经 settlement-accounting 认可后，在代收分户账上没有任何记账能把它了结，只能留在`渠道在途`。2026-10-21 文档自洽 09 评审轮立（用户「你作为业务和系统专家自决」授权），分支 claude-dc09。记账形由作者代决，立 [ADR-0298](../../../docs/adr/0298-an-agreed-offset-approved-by-settlement-accounting-leaves-in-transit-for-an-offset-applied-position.md)。
 Blocked by: 无——[14](./14-collection-principal-posts-more-than-once-and-shortfall-moves-received-funds.md) 已 resolved（2026-10-21 进 main）；抵扣记账形用户已授权作者代决，裁在 ADR-0298。
 出处：文档自洽 09 第 2 轮评审（协调方裁定：短款公式扣除经 settlement-accounting 认可的协议抵扣，抵扣的记账形未裁、另立本票）；与 [SCENARIOS](../../../docs/domain/SCENARIOS.md) 场景十七（报告 100、到账 96、认可抵扣 3、短款 1）对照。
 
@@ -100,3 +100,12 @@ M（定形之后）：新依据种类（指向 settlement-accounting 的认可�
 - **N4 规范小项。** 按派单的 `git diff origin/main...HEAD | grep` 找全本分支新增行后：CR CONTEXT「实收与指令不一致…」规则句的「不再另减」改成现行规则句（认可抵扣落到`已抵扣`的部分计入自`渠道在途`移出的金额）；同一 CONTEXT 里`已抵扣`词条与生命周期的「不再是渠道欠款」「不再落」，以及代码注释里的「不再是渠道还欠的」（领域 `AgreedOffset`、`FundPosition`、领域用例头注、HTTP 目录体、管理台 `api.ts` 注释）改成状态句；`agreed_offset_test.go` 场景十七头注的「照旧」、撤回用例头注的「不再从已抵扣里多拿」；`RecordSubledgerPosting` 头注的「五条依据门」改成「依据门」、迁移的「三条合起来」改成「这几道门合起来」、ADR-0298 决定二的「三条都做进结构」改成「这几道门都做进结构」；`350-collection.sh` 头注的「14 号、15 号」改成 `agreed-offset`、`posting` 命令名。ADR-0298 里对 ADR-0271 公式「不再另减」「此前冲正只核…」等是对被扩成条款的变更说明，属该记录本职，未动；票面与 AT 盘点追记同理。
 - **代决：** 预检的报文格式照 `transport_fulfillment/0022` 的写法，列（租户/被冲正记账（冲正记账 a、b））；真库迁移用例放在 `internal/collectionremittance/adapters/postgres/` 而不是 `./migrations/`（`migrations/` 目录只有 EOL 门禁测试，既有「停在目标迁移之前落存量再施加」的先例在各上下文的 adapters/postgres 测试里）。
 - **越权风险点：** 无新增。
+
+## 进 main 记录（2026-10-27，协调方）
+
+- 分支 `claude-code47` 由修订代理 rebase 到 origin/main `93055991c` 后快进，tip `999450441`。迁移 `collection_remittance/0003_agreed_offset_has_its_own_position_and_basis`（账内新终局位置`已抵扣`、依据种类 `AGREED_OFFSET`、「认可的协议抵扣」登记表、「一笔记账至多被冲正一次」唯一索引，建索引前先预检并列出重复项）；新立 ADR-0298（扩成：部分停用 ADR-0271 决定二移位上限句与决定四两处、ADR-0082 决定四「资金位置封闭六值」与决定五「四条依据门」，入向注记与 Links 已挂两份被停 ADR）。AT-CR-024、025，AT-CR-017、018 移入①。
+- 记账形（代 CR owner 裁）：抵扣落到账内`已抵扣`，不开出账记账，ADR-0082 决定四「去向侧没有账外位置」不变，账内各位置之和仍等于入账；登记只钉引用不动账，落账是凭它的另一笔记账（金额等于登记额、全额一次）；CR 登记时不读 SA（SA 没有只读口），认可引用由操作员录入，CR 只核账上有没有这么多可扣；短款上限由「不超过」变成落账后在途余额，无抵扣的指令行为与原来相同。场景十七手算：入账 100、到账移走 96、抵扣 3、短款 1，合计恒 100。
+- 隔离评审（Sonnet）可合入，无阻断；评审另做三例手算与一个随机序列测试（2 指令 × 400 种子 × 60 步，每步守恒、至多一次冲正、一认可至多一笔），受控 CLI 逐项实测退出码。N1（迁移预检）、N2（三处存活变异：`sameAgreedOffset` 比对、`agreed_offset_shape` CHECK、取锁后重放内容冲突分支）、N4（措辞与计数）由 Sonnet 修订代理补齐，变异均变红；N3（结算 CONTEXT 里写了 SA 的交接义务，而 ADR 明说 SA 如何消费未裁）协调方裁定收回，仅留 CR 登记对认可抵扣的引用，ADR-0298、CR CONTEXT、UC-CR-001 里同类越过说法一并收回。
+- 协调方单独提交重算的 AT 计数、重生成的 ADR 索引与机制清点；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0、158 个包 ok；`go build ./...`、`go vet ./...` 干净；种子灌一次性库退 0，`agreed_offset` 表落库；管理台 `tsc -b --noEmit`、`node scripts/run-tests.mjs`（803 过）、`vite build` 与 `./internal/architecture/...` 全过（本票只动 `CodLedgerPage.tsx` 与 `collection/api.ts`）。
+- 去向：无新票。越权风险点见 ADR-0298：认可引用和金额登记时不核 SA，录错会让渠道欠款少记，SA 有只读口后另立记录核；SA 一侧怎样消费`已抵扣`未裁，归 SA owner；`已抵扣`的钱客户拿不到，协议归 SA、CR 不核协议是否与该客户签过；「一笔记账至多冲正一次」收紧了全部冲正；取锁后再判重放改了同标识并发到达这一条路径的答案（余额不足 → 已在册）；已灌过旧演示种子的库需要 `--reset`（08 号差异事项金额改了）。
