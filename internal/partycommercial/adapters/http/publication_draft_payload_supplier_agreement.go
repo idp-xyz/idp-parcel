@@ -57,7 +57,7 @@ func chargeConditionsField(problems *PublicationPayloadProblems, payloads []Char
 	for index, payload := range payloads {
 		field := fmt.Sprintf("supplierAgreement.chargeConditions[%d]", index)
 		if payload.Charged == nil {
-			problems.add(field+".charged", errors.New("计不计费要协议自己说，缺键不代说"))
+			problems.add(field+".charged", coded(ProblemCodeChargedUndeclared, nil, errors.New("计不计费要协议自己说，缺键不代说")))
 			clean = false
 			continue
 		}
@@ -74,7 +74,7 @@ func chargeConditionsField(problems *PublicationPayloadProblems, payloads []Char
 	}
 	conditionSet, err := domain.NewChargeOccurrenceConditions(conditions...)
 	if err != nil {
-		problems.add("supplierAgreement.chargeConditions", fmt.Errorf("空清单或同一原因两条：%w", err))
+		problems.add("supplierAgreement.chargeConditions", coded(ProblemCodeListEmptyOrDuplicate, nil, fmt.Errorf("空清单或同一原因两条：%w", err)))
 		return nil
 	}
 	return &conditionSet

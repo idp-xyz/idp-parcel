@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
-import { fieldProblemText, itemProblemText } from './field-problem-text';
+import { codedProblemLine, fieldProblemText, itemProblemText } from './field-problem-text';
 
 // 原话取自 PC publication_draft_payload 与领域错误的现行写法；空表单点预览的那几条是会话在演示环境里实测到的。
 
@@ -79,4 +79,52 @@ test('清单逐项：下标说成第几项，原话连同路径收起', () => {
     original: 'methods[0]：party commercial: blank value: delivery method',
   });
   deepEqual(itemProblemText('materials[2]', '这一项重复了'), { text: '第 3 项：这一项重复了', original: null });
+});
+
+// Covers: AT-PC-070——认得的问题码按码译成中文，原话作原话那一格跟着走；译文与原话相同时不显第二遍。
+test('按问题码译：码与参数给出中文，原话收进原话那一格', () => {
+  const line = codedProblemLine({
+    problem: '集合外的规则分类 "X"',
+    code: 'NOT_IN_SET',
+    params: { what: '规则分类', value: 'X' },
+  });
+  deepEqual(fieldProblemText(line), { text: '规则分类不在可选范围内', original: '集合外的规则分类 "X"' });
+  equal(codedProblemLine({ problem: '必填，不能留空', code: 'REQUIRED' }), '必填，不能留空');
+  equal(fieldProblemText(codedProblemLine({ problem: '必填，不能留空', code: 'REQUIRED' })).original, null);
+});
+
+// Covers: AT-PC-070——每个码的话术：参数缺省时用不带主语的说法；主语来自服务端参数，不再靠原话的形状。
+test('各问题码的话术', () => {
+  const text = (code: string, params?: Record<string, string>) =>
+    fieldProblemText(codedProblemLine({ problem: '原话', code, params })).text;
+  equal(text('REQUIRED'), '必填，不能留空');
+  equal(text('REQUIRED', { subject: '规则包正文' }), '规则包正文必须填写');
+  equal(text('TIME_FORMAT'), '时间格式不对：请填完整时刻，例如 2026-10-01T00:00:00+08:00');
+  equal(text('EXACTLY_ONE', { subject: '额度' }), '额度只能填其中一项');
+  equal(text('EXACTLY_ONE'), '这几格只能填其中一项');
+  equal(text('RATIO_BASE_NOT_ALLOWED'), '按金额设额度时，不要选比例的基数');
+  equal(text('RATIO_BASE_REQUIRED'), '按比例设额度时，必须选比例的基数');
+  equal(text('DAYS_NOT_POSITIVE', { value: '0' }), '天数必须是正整数');
+  equal(text('ORDER_NOT_POSITIVE', { value: '0' }), '判断顺序必须是从 1 开始的正整数');
+  equal(text('CHARGED_UNDECLARED'), '请选择是否计费');
+  equal(text('LIST_EMPTY_OR_DUPLICATE'), '至少填一条，同一原因不能出现两次');
+  equal(text('NOT_IN_SET'), '这一格不在可选范围内');
+});
+
+// Covers: AT-PC-070——没有码、兜底的 INVALID、前端不认得的新码都退回原话，再按原话的形状译；不会因为码不认得而吞掉问题。
+test('码缺席、兜底或不认得时退回原话', () => {
+  const raw = 'party commercial: blank value: commercial object ID';
+  for (const code of [undefined, 'INVALID', 'SOMETHING_NEW']) {
+    equal(codedProblemLine({ problem: raw, code }), raw);
+  }
+  equal(fieldProblemText(codedProblemLine({ problem: raw, code: 'SOMETHING_NEW' })).text, '必填，不能留空');
+});
+
+// Covers: AT-PC-070——itemProblemText 经带码的行照常给「第 n 项」前缀，原话连同路径收进原话那一格。
+test('清单逐项的问题经带码的行仍带第 n 项前缀', () => {
+  const line = codedProblemLine({ problem: '集合外的校验组 "G"', code: 'NOT_IN_SET', params: { what: '校验组', value: 'G' } });
+  deepEqual(itemProblemText('applicableGroups[1]', line), {
+    text: '第 2 项：校验组不在可选范围内',
+    original: 'applicableGroups[1]：集合外的校验组 "G"',
+  });
 });

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import { deepEqual, equal, notEqual, ok } from 'node:assert/strict';
 import type { ApiResult } from '../catalogue-api';
+import { fieldProblemText } from './field-problem-text';
 import type {
   CommercialPublicationPayload,
   PublicationDraftPublicationResponseBody,
@@ -247,6 +248,19 @@ test('逐格问题按路径归组，未认领的单独交回', () => {
     { field: 'references.SERVICE_PRODUCT', problem: '集合外' },
   ]);
   deepEqual(problemsByField(undefined), {});
+});
+
+// Covers: AT-PC-070——带认得的码的问题在归组时就按码译好，原话跟在后面；没有码的原样是原话。
+test('逐格问题归组时按问题码译', () => {
+  const byField = problemsByField([
+    { field: 'creditPolicy.limit', problem: '额度须恰一格在场：limitMinor 或 limitRatioBasisPoints', code: 'EXACTLY_ONE', params: { subject: '额度' } },
+    { field: 'creditPolicy.legalEntity', problem: '不得为空' },
+  ]);
+  deepEqual(fieldProblemText(byField['creditPolicy.limit'][0]), {
+    text: '额度只能填其中一项',
+    original: '额度须恰一格在场：limitMinor 或 limitRatioBasisPoints',
+  });
+  deepEqual(byField['creditPolicy.legalEntity'], ['不得为空']);
 });
 
 test('没发布的输入才算未保存：与起头那份相同不算，走到发布不算，存为待批准、批准仍算', () => {

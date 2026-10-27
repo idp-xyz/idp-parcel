@@ -2,6 +2,7 @@ package commercialhttp
 
 import (
 	"fmt"
+	"strconv"
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 )
@@ -36,7 +37,7 @@ func (payload PreAcceptanceFinancialControlPolicyBodyPayload) body(problems *Pub
 	const field = "preAcceptanceFinancialControlPolicy"
 	jointPass, known := domain.JointPassConditionNamed(payload.JointPassCondition)
 	if !known {
-		problems.add(field+".jointPassCondition", fmt.Errorf("集合外的共同通过条件 %q", payload.JointPassCondition))
+		problems.add(field+".jointPassCondition", notInSet("共同通过条件", payload.JointPassCondition, ""))
 	}
 	body := domain.PreAcceptanceFinancialControlPolicyBody{
 		JointPass: jointPass,
@@ -54,15 +55,15 @@ func (payload PreAcceptanceControlItemPayload) item(problems *PublicationPayload
 	before := len(problems.Problems)
 	kind, known := domain.PreAcceptanceControlKindNamed(payload.Control)
 	if !known {
-		problems.add(field+".control", fmt.Errorf("集合外的控制种类 %q", payload.Control))
+		problems.add(field+".control", notInSet("控制种类", payload.Control, ""))
 	}
 	scope := requireField(problems, field+".chargeScope", domain.NewChargeScopeReference, payload.ChargeScope)
 	if payload.Order <= 0 {
-		problems.add(field+".order", fmt.Errorf("判断顺序须为从 1 起的正整数，收到 %d", payload.Order))
+		problems.add(field+".order", coded(ProblemCodeOrderNotPositive, map[string]string{"value": strconv.Itoa(payload.Order)}, fmt.Errorf("判断顺序须为从 1 起的正整数，收到 %d", payload.Order)))
 	}
 	disposition, known := domain.ControlFailureDispositionNamed(payload.OnFailure)
 	if !known {
-		problems.add(field+".onFailure", fmt.Errorf("集合外的失败处置 %q", payload.OnFailure))
+		problems.add(field+".onFailure", notInSet("失败处置", payload.OnFailure, ""))
 	}
 	responsibility := requireField(problems, field+".responsibility", domain.NewControlResponsibilityReference, payload.Responsibility)
 	if len(problems.Problems) != before {

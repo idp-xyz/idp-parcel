@@ -2,6 +2,7 @@ package commercialhttp
 
 import (
 	"fmt"
+	"strconv"
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 )
@@ -71,7 +72,7 @@ func (payload CustomerServiceRuleBodyPayload) applicability(problems *Publicatio
 		return domain.CustomerServiceRuleAppliesToCustomerContract(
 			requireField(problems, field+".customerContract", domain.NewCommercialObjectID, payload.CustomerContract))
 	default:
-		problems.add(field+".applicability", fmt.Errorf("适用对象须恰一格在场：serviceProduct 或 customerContract"))
+		problems.add(field+".applicability", exactlyOne("适用对象", "适用对象须恰一格在场：serviceProduct 或 customerContract"))
 		return domain.CustomerServiceRuleApplicability{}
 	}
 }
@@ -82,11 +83,11 @@ func (payload ClaimDeadlineRulePayload) rule(problems *PublicationPayloadProblem
 	before := len(problems.Problems)
 	kind, known := domain.ClaimDeadlineKindNamed(payload.Kind)
 	if !known {
-		problems.add(field+".kind", fmt.Errorf("集合外的期限种类 %q", payload.Kind))
+		problems.add(field+".kind", notInSet("期限种类", payload.Kind, ""))
 	}
 	startEvent := requireField(problems, field+".startEvent", domain.NewDeadlineStartEventReference, payload.StartEvent)
 	if payload.Days <= 0 {
-		problems.add(field+".days", fmt.Errorf("时长须为正整数天，收到 %d", payload.Days))
+		problems.add(field+".days", coded(ProblemCodeDaysNotPositive, map[string]string{"value": strconv.Itoa(payload.Days)}, fmt.Errorf("时长须为正整数天，收到 %d", payload.Days)))
 	}
 	calendar := requireField(problems, field+".calendar", domain.NewBusinessCalendarReference, payload.Calendar)
 	if len(problems.Problems) != before {

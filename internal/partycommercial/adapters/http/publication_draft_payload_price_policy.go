@@ -2,6 +2,7 @@ package commercialhttp
 
 import (
 	"fmt"
+	"strings"
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 )
@@ -108,7 +109,7 @@ func (payload PricePolicyCaliberPayload) body(problems *PublicationPayloadProble
 func namedField[T any](problems *PublicationPayloadProblems, field string, lookup func(string) (T, bool), raw string, what string) T {
 	value, known := lookup(raw)
 	if !known {
-		problems.add(field, fmt.Errorf("%s %q", what, raw))
+		problems.add(field, notInSet(strings.TrimPrefix(what, "集合外的"), raw, ""))
 	}
 	return value
 }

@@ -410,10 +410,16 @@ export interface PublicationDraftReadbackResponseBody {
   draft?: PublicationDraftRecord;
 }
 
-/** 一格立不住的记录（Go `payloadProblemAnswer`）：`field` 是载荷里的 JSON 路径，`problem` 是构造门原话。 */
+/**
+ * 一格立不住的记录（Go `payloadProblemAnswer`）：`field` 是载荷里的 JSON 路径，`problem` 是构造门原话，`code` 与 `params` 是稳定的
+ * 问题码与参数（ADR-0316）。原话措辞会随服务端实现改，码是封闭词表、只增不改；码缺席、是 `INVALID` 或前端不认得的新码时，
+ * 页面退回按原话的形状译（field-problem-text.ts）。参数值都是字符串，缺省的键不出现。
+ */
 export interface PayloadProblemRecord {
   field: string;
   problem: string;
+  code?: string;
+  params?: Record<string, string>;
 }
 
 /**

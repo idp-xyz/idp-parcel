@@ -4,8 +4,9 @@
 // `party commercial: blank value: commercial object ID`、`须为 RFC 3339 时刻：parsing time …`。配置员读不懂原话，
 // 照原话也改不对。这里按原话的形状给一句中文，原话不丢，交给页面收进可展开的一格。
 //
-// 这是前端先行的过渡：形状取自 PC 的 publication_draft_payload 与领域错误的现行写法，服务端改写法时这里认不出，
-// 退回通用的那一句，不会显错话。根治是服务端交回问题码加参数，前端按码查表；到那天这张译表退役。
+// 服务端现在同时交回稳定的问题码与参数（ADR-0316）：认得的码直接按码查话术，不再依赖原话的措辞；码缺席、是兜底的 `INVALID`
+// 或前端不认得的新码时，退回按原话的形状译（下面的 `rules`），再认不出就给通用的一句，不会显错话。按原话译的那张表是为兜底码与
+// 旧答复留着的，随服务端把更多格贴上码而逐步用不上。
 
 export interface FieldProblemText {
   /** 给配置员看的一句中文。 */
@@ -45,7 +46,42 @@ const rules: Rule[] = [
   { pattern: /^party commercial: /, text: () => generic },
 ];
 
+// 按码给的话术。每个码的参数键是服务端契约的一部分（Go publication_problem_codes.go 各常量的注释）；缺参数时用不带主语的说法。
+const codeTexts: Record<string, (params: Record<string, string>) => string> = {
+  REQUIRED: (params) => (params.subject ? `${params.subject}必须填写` : '必填，不能留空'),
+  NOT_IN_SET: (params) => `${params.what ?? '这一格'}不在可选范围内`,
+  TIME_FORMAT: () => '时间格式不对：请填完整时刻，例如 2026-10-01T00:00:00+08:00',
+  EXACTLY_ONE: (params) => `${params.subject ?? '这几格'}只能填其中一项`,
+  RATIO_BASE_NOT_ALLOWED: () => '按金额设额度时，不要选比例的基数',
+  RATIO_BASE_REQUIRED: () => '按比例设额度时，必须选比例的基数',
+  DAYS_NOT_POSITIVE: () => '天数必须是正整数',
+  ORDER_NOT_POSITIVE: () => '判断顺序必须是从 1 开始的正整数',
+  CHARGED_UNDECLARED: () => '请选择是否计费',
+  LIST_EMPTY_OR_DUPLICATE: () => '至少填一条，同一原因不能出现两次',
+};
+
+// 问题在页面里以「行」的形式（一个字符串）流过十来个表单组件，那些组件只认字符串。带码的问题在入口处就按码译好，并把原话
+// 用这个分隔符接在后面一起带过去，由 fieldProblemText 在显示那一刻拆开；原话仍收进可展开的一格。分隔符是 Unicode 的
+// 「单元分隔符」符号，不会出现在服务端的原话里。
+const codedLineSeparator = '\u241F';
+
+/**
+ * 一条服务端问题在页面里的「行」。认得的码按码译成中文、原话跟在后面；没有码、是 `INVALID` 或不认得的码时就是原话本身，
+ * 之后由 fieldProblemText 按原话的形状译。
+ */
+export function codedProblemLine(record: { problem: string; code?: string; params?: Record<string, string> }): string {
+  const translate = record.code === undefined ? undefined : codeTexts[record.code];
+  if (translate === undefined) return record.problem;
+  const text = translate(record.params ?? {});
+  return text === record.problem ? text : `${text}${codedLineSeparator}${record.problem}`;
+}
+
 export function fieldProblemText(raw: string): FieldProblemText {
+  const separatorAt = raw.indexOf(codedLineSeparator);
+  if (separatorAt >= 0) {
+    const original = raw.slice(separatorAt + 1);
+    return { text: raw.slice(0, separatorAt), original: original === '' ? null : original };
+  }
   for (const rule of rules) {
     const match = raw.match(rule.pattern);
     if (match) {

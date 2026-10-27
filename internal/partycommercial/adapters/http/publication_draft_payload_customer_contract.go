@@ -48,7 +48,7 @@ type PreAcceptanceControlPayload struct {
 func (payload CustomerContractBodyPayload) body(problems *PublicationPayloadProblems) domain.CustomerContractBody {
 	var body domain.CustomerContractBody
 	if payload.ContractContent == nil {
-		problems.add("customerContract.contractContent", fmt.Errorf("合同正文（规则包与按费用范围的约定）须在场"))
+		problems.add("customerContract.contractContent", requiredCell("合同正文", "合同正文（规则包与按费用范围的约定）须在场"))
 	} else {
 		body.CustomerAccount = requireField(problems, "customerContract.contractContent.customerAccount",
 			domain.NewCustomerAccountID, payload.ContractContent.CustomerAccount)
@@ -97,7 +97,7 @@ func (payload ControlBindingPayload) binding(problems *PublicationPayloadProblem
 		}
 		return binding
 	default:
-		problems.add(field, fmt.Errorf("约定须恰一格在场：policy 或 inapplicabilityBasis"))
+		problems.add(field, exactlyOne("约定", "约定须恰一格在场：policy 或 inapplicabilityBasis"))
 		return domain.FinancialControlBinding{}
 	}
 }
@@ -106,7 +106,7 @@ func (payload ControlBindingPayload) binding(problems *PublicationPayloadProblem
 func (payload PreAcceptanceControlPayload) body(problems *PublicationPayloadProblems) domain.PreAcceptanceControlBody {
 	requirement, known := domain.PreAcceptanceControlRequirementNamed(payload.Requirement)
 	if !known {
-		problems.add("customerContract.preAcceptanceControl.requirement", fmt.Errorf("集合外的控制要求 %q", payload.Requirement))
+		problems.add("customerContract.preAcceptanceControl.requirement", notInSet("控制要求", payload.Requirement, ""))
 	}
 	body := domain.PreAcceptanceControlBody{Requirement: requirement}
 	if payload.NotApplicableBasis != "" {

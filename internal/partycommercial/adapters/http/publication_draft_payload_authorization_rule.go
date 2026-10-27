@@ -33,7 +33,7 @@ func (payload AuthorizationRuleBodyPayload) body(problems *PublicationPayloadPro
 		path := fmt.Sprintf("authorizationRule.cancellationAuthority[%d]", index)
 		party, known := domain.DeclaredCancellationPartyNamed(row.Party)
 		if !known {
-			problems.add(path+".party", fmt.Errorf("集合外的取消请求方 %q", row.Party))
+			problems.add(path+".party", notInSet("取消请求方", row.Party, ""))
 		}
 		body.CancellationAuthority = append(body.CancellationAuthority, domain.CancellationAuthorityDeclaration{
 			Party: party,

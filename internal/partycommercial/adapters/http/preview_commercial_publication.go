@@ -101,14 +101,16 @@ type publicationPreviewAnswer struct {
 }
 
 type payloadProblemAnswer struct {
-	Field   string `json:"field"`
-	Problem string `json:"problem"`
+	Field   string            `json:"field"`
+	Problem string            `json:"problem"`
+	Code    string            `json:"code"`
+	Params  map[string]string `json:"params,omitempty"`
 }
 
 func payloadProblemAnswersOf(problems *PublicationPayloadProblems) []payloadProblemAnswer {
 	answers := make([]payloadProblemAnswer, 0, len(problems.Problems))
 	for _, problem := range problems.Problems {
-		answers = append(answers, payloadProblemAnswer{Field: problem.Field, Problem: problem.Problem})
+		answers = append(answers, payloadProblemAnswer{Field: problem.Field, Problem: problem.Problem, Code: problem.Code, Params: problem.Params})
 	}
 	return answers
 }

@@ -8,6 +8,7 @@
 // Go 那边加一格，这里跟着改这一张表，不在组件里按字符串散拼。
 
 import type { ApiResult } from '../catalogue-api';
+import { codedProblemLine } from './field-problem-text';
 import type {
   CommercialPublicationPayload,
   PayloadProblemRecord,
@@ -244,11 +245,14 @@ function flatten(value: unknown, into: Record<string, true> = {}): Record<string
   return into;
 }
 
-/** 逐格问题按 JSON 路径归组，同格多条保序。表单据此把问题挂到对应格旁。 */
+/**
+ * 逐格问题按 JSON 路径归组，同格多条保序。表单据此把问题挂到对应格旁。每条问题在这里变成一行：带认得的问题码的按码译好
+ * （原话跟在后面），其余就是原话（见 codedProblemLine）。
+ */
 export function problemsByField(problems: PayloadProblemRecord[] | undefined): Record<string, string[]> {
   const byField: Record<string, string[]> = {};
   for (const problem of problems ?? []) {
-    (byField[problem.field] ??= []).push(problem.problem);
+    (byField[problem.field] ??= []).push(codedProblemLine(problem));
   }
   return byField;
 }

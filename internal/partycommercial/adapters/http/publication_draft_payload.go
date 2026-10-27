@@ -28,10 +28,13 @@ import (
 // Intake 没拿到操作者信封就来翻译。与 ErrMalformedRequest 分开：前者改载荷没用。
 var ErrOperatorIdentityMissing = errors.New("party commercial http: operator identity (tenant, subject) is required")
 
-// PayloadProblem 是一格立不住的记录：哪一格（JSON 路径）、为什么（领域构造门的原话）。
+// PayloadProblem 是一格立不住的记录：哪一格（JSON 路径）、为什么（领域构造门的原话），加稳定的问题码与参数（ADR-0316）。
+// 原话措辞会随实现改，客户端据码与参数查自己的话术；码认不出时是 INVALID，客户端退回原话。
 type PayloadProblem struct {
 	Field   string
 	Problem string
+	Code    string
+	Params  map[string]string
 }
 
 // PublicationPayloadProblems 收齐一份载荷里全部立不住的格。它是 error，且 Is ErrMalformedRequest。
@@ -53,7 +56,8 @@ func (problems *PublicationPayloadProblems) Is(target error) bool {
 }
 
 func (problems *PublicationPayloadProblems) add(field string, err error) {
-	problems.Problems = append(problems.Problems, PayloadProblem{Field: field, Problem: err.Error()})
+	code, params := problemCodeOf(err)
+	problems.Problems = append(problems.Problems, PayloadProblem{Field: field, Problem: err.Error(), Code: code, Params: params})
 }
 
 func (problems *PublicationPayloadProblems) any() bool {
@@ -165,7 +169,7 @@ func (payload CommercialPublicationPayload) Publication(tenant domain.TenantID) 
 
 	kind, known := domain.CommercialObjectKindNamed(payload.Kind)
 	if !known {
-		problems.add("kind", fmt.Errorf("集合外的商业对象类别 %q", payload.Kind))
+		problems.add("kind", notInSet("商业对象类别", payload.Kind, ""))
 	}
 	shell.Kind = kind
 	shell.ObjectID = requireField(problems, "objectId", domain.NewCommercialObjectID, payload.ObjectID)
@@ -177,7 +181,7 @@ func (payload CommercialPublicationPayload) Publication(tenant domain.TenantID) 
 		for name, objectID := range payload.References {
 			referencedKind, known := domain.CommercialObjectKindNamed(name)
 			if !known {
-				problems.add("references."+name, fmt.Errorf("集合外的被引对象类别 %q", name))
+				problems.add("references."+name, notInSet("被引对象类别", name, ""))
 				continue
 			}
 			shell.References[referencedKind] = requireField(problems, "references."+name, domain.NewCommercialObjectID, objectID)
@@ -294,15 +298,15 @@ func (payload PublicationDraftReferencePayload) identity() (domain.CommercialObj
 	problems := &PublicationPayloadProblems{}
 	kind, known := domain.CommercialObjectKindNamed(payload.Kind)
 	if !known {
-		problems.add("kind", fmt.Errorf("集合外的商业对象类别 %q", payload.Kind))
+		problems.add("kind", notInSet("商业对象类别", payload.Kind, ""))
 	}
 	objectID := requireField(problems, "objectId", domain.NewCommercialObjectID, payload.ObjectID)
 	version := requireField(problems, "version", domain.NewCommercialVersionLabel, payload.Version)
 	if strings.TrimSpace(payload.ExpectedDigest) == "" {
-		problems.add("expectedDigest", fmt.Errorf("须在场：批准与发布要带上调用方看到的那份内容的摘要"))
+		problems.add("expectedDigest", requiredCell("内容摘要", "须在场：批准与发布要带上调用方看到的那份内容的摘要"))
 	}
 	if strings.TrimSpace(payload.ExpectedShellDigest) == "" {
-		problems.add("expectedShellDigest", fmt.Errorf("须在场：批准与发布要带上调用方看到的那版壳（适用范围、有效区间、指名引用）的摘要"))
+		problems.add("expectedShellDigest", requiredCell("壳摘要", "须在场：批准与发布要带上调用方看到的那版壳（适用范围、有效区间、指名引用）的摘要"))
 	}
 	if problems.any() {
 		return domain.CommercialObjectKindInvalid, domain.CommercialObjectID{}, domain.CommercialVersionLabel{}, problems
@@ -328,16 +332,16 @@ func (payload CreditPolicyBodyPayload) body(problems *PublicationPayloadProblems
 			problems.add("creditPolicy.limitMinor", err)
 		}
 		if payload.RatioBase != "" {
-			problems.add("creditPolicy.ratioBase", fmt.Errorf("金额额度不带基数；ratioBase 只随 limitRatioBasisPoints 在场"))
+			problems.add("creditPolicy.ratioBase", coded(ProblemCodeRatioBaseNotAllowed, nil, fmt.Errorf("金额额度不带基数；ratioBase 只随 limitRatioBasisPoints 在场")))
 		}
 		body.Limit = limit
 	case payload.LimitMinor == nil && payload.LimitRatioBasisPoints != nil:
 		base, known := domain.CreditRatioBaseNamed(payload.RatioBase)
 		switch {
 		case payload.RatioBase == "":
-			problems.add("creditPolicy.ratioBase", fmt.Errorf("比例额度须声明其基数 ratioBase：一个比例没有分母不是业务判断依据"))
+			problems.add("creditPolicy.ratioBase", coded(ProblemCodeRatioBaseRequired, nil, fmt.Errorf("比例额度须声明其基数 ratioBase：一个比例没有分母不是业务判断依据")))
 		case !known:
-			problems.add("creditPolicy.ratioBase", fmt.Errorf("集合外的比例基数 %q", payload.RatioBase))
+			problems.add("creditPolicy.ratioBase", notInSet("比例基数", payload.RatioBase, ""))
 		}
 		limit, err := domain.NewCreditRatioLimit(*payload.LimitRatioBasisPoints, base)
 		if err != nil && *payload.LimitRatioBasisPoints < 0 {
@@ -346,7 +350,7 @@ func (payload CreditPolicyBodyPayload) body(problems *PublicationPayloadProblems
 		}
 		body.Limit = limit
 	default:
-		problems.add("creditPolicy.limit", fmt.Errorf("额度须恰一格在场：limitMinor 或 limitRatioBasisPoints"))
+		problems.add("creditPolicy.limit", exactlyOne("额度", "额度须恰一格在场：limitMinor 或 limitRatioBasisPoints"))
 	}
 	return body
 }
@@ -364,13 +368,13 @@ func requireField[T any](problems *PublicationPayloadProblems, field string, con
 func intervalField(problems *PublicationPayloadProblems, startsField, endsField, startsRaw, endsRaw string) domain.EffectiveInterval {
 	startsAt, err := time.Parse(time.RFC3339Nano, startsRaw)
 	if err != nil {
-		problems.add(startsField, fmt.Errorf("须为 RFC 3339 时刻：%v", err))
+		problems.add(startsField, timeFormat(startsRaw, err))
 		return domain.EffectiveInterval{}
 	}
 	var endsAt time.Time
 	if endsRaw != "" {
 		if endsAt, err = time.Parse(time.RFC3339Nano, endsRaw); err != nil {
-			problems.add(endsField, fmt.Errorf("须为 RFC 3339 时刻：%v", err))
+			problems.add(endsField, timeFormat(endsRaw, err))
 			return domain.EffectiveInterval{}
 		}
 	}

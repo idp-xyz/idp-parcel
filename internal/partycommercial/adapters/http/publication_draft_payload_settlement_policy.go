@@ -42,7 +42,7 @@ func (payload SettlementPolicyBodyPayload) body(problems *PublicationPayloadProb
 	before := len(problems.Problems)
 	method, known := domain.SettlementMethodNamed(payload.Method)
 	if !known {
-		problems.add("settlementPolicy.method", fmt.Errorf("集合外的结算方式 %q", payload.Method))
+		problems.add("settlementPolicy.method", notInSet("结算方式", payload.Method, ""))
 	}
 	legalEntity := requireField(problems, "settlementPolicy.legalEntity", domain.NewLegalEntityReference, payload.LegalEntity)
 	counterparty := requireField(problems, "settlementPolicy.counterparty", domain.NewCounterpartyReference, payload.Counterparty)

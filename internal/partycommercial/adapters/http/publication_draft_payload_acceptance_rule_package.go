@@ -103,7 +103,7 @@ func (payload AcceptanceRulePackageBodyPayload) body(problems *PublicationPayloa
 	const root = "acceptanceRulePackage"
 	var body domain.AcceptanceRulePackageBody
 	if payload.RulePackageBody == nil {
-		problems.add(root+".rulePackageBody", fmt.Errorf("规则包正文（五维适用性与规则表）须在场"))
+		problems.add(root+".rulePackageBody", requiredCell("规则包正文", "规则包正文（五维适用性与规则表）须在场"))
 	} else {
 		body.Applicability, body.Rules = payload.RulePackageBody.body(problems, root+".rulePackageBody")
 	}
@@ -160,7 +160,7 @@ func (payload AssembledRulePayload) rule(problems *PublicationPayloadProblems, f
 	before := len(problems.Problems)
 	category, known := domain.RuleCategoryNamed(payload.Category)
 	if !known {
-		problems.add(field+".category", fmt.Errorf("集合外的规则分类 %q", payload.Category))
+		problems.add(field+".category", notInSet("规则分类", payload.Category, ""))
 	}
 	reference := requireField(problems, field+".reference", domain.NewRuleReference, payload.Reference)
 	if len(problems.Problems) != before {
@@ -177,7 +177,7 @@ func (payload AsOfPolicyPayload) policy(problems *PublicationPayloadProblems, fi
 	before := len(problems.Problems)
 	judgment, known := domain.JudgmentTypeNamed(payload.Judgment)
 	if !known {
-		problems.add(field+".judgment", fmt.Errorf("集合外的判断类型 %q", payload.Judgment))
+		problems.add(field+".judgment", notInSet("判断类型", payload.Judgment, ""))
 	}
 	semantics := requireField(problems, field+".semantics", domain.NewAsOfSemanticsReference, payload.Semantics)
 	version := requireField(problems, field+".policyVersion", domain.NewAsOfPolicyVersion, payload.PolicyVersion)
@@ -198,13 +198,13 @@ func (payload AcceptanceContentPayload) body(problems *PublicationPayloadProblem
 	for index, name := range payload.ApplicableGroups {
 		group, known := domain.AcceptanceCheckGroupTypeNamed(name)
 		if !known {
-			problems.add(fmt.Sprintf("%s.applicableGroups[%d]", field, index), fmt.Errorf("集合外的校验组 %q", name))
+			problems.add(fmt.Sprintf("%s.applicableGroups[%d]", field, index), notInSet("校验组", name, ""))
 		}
 		body.ApplicableGroups = append(body.ApplicableGroups, group)
 	}
 	review, known := domain.ManualReviewDirectiveNamed(payload.ManualReview)
 	if !known {
-		problems.add(field+".manualReview", fmt.Errorf("集合外的人工复核指令 %q（只收 REQUIRED / NOT_REQUIRED）", payload.ManualReview))
+		problems.add(field+".manualReview", notInSet("人工复核指令", payload.ManualReview, "（只收 REQUIRED / NOT_REQUIRED）"))
 	}
 	body.ManualReview = review
 	return body
@@ -215,7 +215,7 @@ func (payload IntakeQualificationPayload) body(problems *PublicationPayloadProbl
 	for index, name := range payload.Sources {
 		source, known := domain.DeclaredIntakeSourceNamed(name)
 		if !known {
-			problems.add(fmt.Sprintf("%s.sources[%d]", field, index), fmt.Errorf("集合外的收寄来源 %q", name))
+			problems.add(fmt.Sprintf("%s.sources[%d]", field, index), notInSet("收寄来源", name, ""))
 		}
 		body.Sources = append(body.Sources, source)
 	}
@@ -229,7 +229,7 @@ func (payload IntakeQualificationPayload) body(problems *PublicationPayloadProbl
 func (payload FinalRulePayload) declaration(problems *PublicationPayloadProblems, field string) domain.FinalizationDeclaration {
 	outcome, known := domain.DeclaredResponsibilityOutcomeNamed(payload.Outcome)
 	if !known {
-		problems.add(field+".outcome", fmt.Errorf("集合外的责任结果 %q", payload.Outcome))
+		problems.add(field+".outcome", notInSet("责任结果", payload.Outcome, ""))
 	}
 	return domain.FinalizationDeclaration{
 		Outcome:   outcome,
@@ -243,7 +243,7 @@ func (payload FinalRuleValidityPayload) declaration(problems *PublicationPayload
 	before := len(problems.Problems)
 	anchor, known := domain.ValidityAnchorKindNamed(payload.Anchor)
 	if !known {
-		problems.add(field+".anchor", fmt.Errorf("集合外的起算时刻种类 %q", payload.Anchor))
+		problems.add(field+".anchor", notInSet("起算时刻种类", payload.Anchor, ""))
 	}
 	duration, err := domain.ParseLabelValidityDuration(payload.Duration)
 	if err != nil {
@@ -265,7 +265,7 @@ func (payload FinalRuleValidityPayload) declaration(problems *PublicationPayload
 func (payload SourceDataAmendmentPayload) body(problems *PublicationPayloadProblems, field string) domain.SourceDataAmendmentBody {
 	body := domain.SourceDataAmendmentBody{}
 	if payload.Closed == nil {
-		problems.add(field+".closed", fmt.Errorf("closed 须在场：缺格读「未声明」（false）还是「不允许」（true）要登记方自己说，不给默认"))
+		problems.add(field+".closed", requiredCell("", "closed 须在场：缺格读「未声明」（false）还是「不允许」（true）要登记方自己说，不给默认"))
 	} else {
 		body.Closed = *payload.Closed
 	}
@@ -281,13 +281,13 @@ func (payload SourceDataAmendmentRulePayload) rule(problems *PublicationPayloadP
 	}
 	var known bool
 	if rule.Stage, known = domain.DeclaredAmendmentStageNamed(payload.Stage); !known {
-		problems.add(field+".stage", fmt.Errorf("集合外的资料修订阶段 %q", payload.Stage))
+		problems.add(field+".stage", notInSet("资料修订阶段", payload.Stage, ""))
 	}
 	if rule.Intent, known = domain.DeclaredAmendmentIntentNamed(payload.Intent); !known {
-		problems.add(field+".intent", fmt.Errorf("集合外的修订意图 %q", payload.Intent))
+		problems.add(field+".intent", notInSet("修订意图", payload.Intent, ""))
 	}
 	if rule.Allowance, known = domain.AmendmentAllowanceNamed(payload.Allowance); !known {
-		problems.add(field+".allowance", fmt.Errorf("集合外的允许性 %q（只收 ALLOWED / DISALLOWED；缺格的读法由 closed 决定，不写进 rules）", payload.Allowance))
+		problems.add(field+".allowance", notInSet("允许性", payload.Allowance, "（只收 ALLOWED / DISALLOWED；缺格的读法由 closed 决定，不写进 rules）"))
 	}
 	return rule
 }
