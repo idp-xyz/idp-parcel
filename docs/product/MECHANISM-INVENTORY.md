@@ -6,7 +6,7 @@
 
 | 上下文 | 生产 | 测试 | 应用编排 | postgres 适配器 | 其中 Outbox 投递 | http 适配器 |
 |---|---|---|---|---|---|---|
-| accessidentity | 39 | 47 | 0 | 6 | 0 | 2 |
+| accessidentity | 41 | 48 | 0 | 6 | 0 | 3 |
 | architecture（非业务） | 0 | 17 | 0 | 0 | 0 | 0 |
 | collectionremittance | 24 | 12 | 4 | 6 | 0 | 3 |
 | customscompliance | 126 | 130 | 24 | 47 | 10 | 18 |
@@ -20,9 +20,9 @@
 | settlementaccounting | 233 | 185 | 38 | 69 | 13 | 10 |
 | transportfulfillment | 289 | 304 | 52 | 61 | 16 | 50 |
 | visibilityexception | 128 | 128 | 13 | 33 | 8 | 13 |
-| **合计** | 1668 | 1678 | 222 | 387 | 67 | 221 |
+| **合计** | 1670 | 1679 | 222 | 387 | 67 | 222 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 235、测试 392。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 236、测试 393。
 
 ## 跨上下文消费缝：50 组，166 个生产文件
 
@@ -96,13 +96,13 @@
 | transport_fulfillment | 49 |
 | visibility_exception | 31 |
 
-## 接线面：接入面端点 199 个，消费适配器 59 个生产文件，直投路由表 42 条
+## 接线面：接入面端点 200 个，消费适配器 59 个生产文件，直投路由表 42 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
 | 上下文 | 端点 |
 |---|---|
-| accessidentity | 2 |
+| accessidentity | 3 |
 | collectionremittance | 1 |
 | customscompliance | 21 |
 | networkrouting | 13 |
@@ -114,7 +114,7 @@
 | settlementaccounting | 8 |
 | transportfulfillment | 44 |
 | visibilityexception | 15 |
-| **合计** | 199 |
+| **合计** | 200 |
 
 消费适配器按 `internal/<消费方>/adapters/` 下 `inbox`、`adoptconsume`、`finalconsume`、`veconsume` 四类目录的生产文件数。它与上面的「跨上下文消费缝」是两种东西：那一栏数的是消费方为某个提供方写的防腐层，这一栏数的是接进程内直投信封的消费门。
 
