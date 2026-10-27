@@ -1,7 +1,7 @@
 # 参与方与商业区 UI/UX 评估与跟进
 
 Category: enhancement
-Status: resolved——第一段 01–06、第二段 07–21 resolved；第三段（要后端）仍在「后续」，未拆票
+Status: resolved——第一段 01–06、第二段 07–21 resolved；第三段（要后端）见 party-commercial-uiux-backend，01–05 均已进 main
 
 出处：2026-10-25，用户在会话里要求「评估 commercial party 的 UI/UX」，读完评估后说「按你建议的顺序开始」。建议的顺序是：先改文案和组件（成本低），再做要设计的，最后是要后端配合的。本批先落第一段，第二、三段列在「后续」，等第一段收口后再拆票。
 
@@ -55,7 +55,7 @@ Status: resolved——第一段 01–06、第二段 07–21 resolved；第三段
 
 第三段，要后端，走[并行会话](../../docs/agents/parallel-sessions.md)，交协调方排队：
 
-- ~~预览与发布的逐格问题改回问题码加参数，前端按码查中文（03 是前端先行的过渡）~~ → [party-commercial-uiux-backend/05](../party-commercial-uiux-backend/issues/05-field-problems-carry-a-stable-code-and-params.md)：逐格问题带稳定的码与参数，管理台按码译、认不出退回原话（进 main 前在分支 claude-pcub5）。
+- ~~预览与发布的逐格问题改回问题码加参数，前端按码查中文（03 是前端先行的过渡）~~ → [party-commercial-uiux-backend/05](../party-commercial-uiux-backend/issues/05-field-problems-carry-a-stable-code-and-params.md)：逐格问题带稳定的码与参数，管理台按码译、认不出退回原话，已进 main。
 - ~~客户合同读口带出货主客户账户与责任法人，列表才能有「客户」一列~~ → [party-commercial-uiux-backend/01](../party-commercial-uiux-backend/issues/01-customer-contract-catalogue-carries-the-customer-account.md)：账户已带出、管理台已有列；责任法人合同自己没有，随接单规则包，不加。
 - ~~待批准发布的列表与读回口，批准人才能接手别人存的稿；批准、发布带期望内容摘要，防并发时批到别人的稿~~ → [party-commercial-uiux-backend/03](../party-commercial-uiux-backend/issues/03-pending-publication-drafts-read-back-and-digest-bound-decisions.md)：两个只读口、批准与发布绑定摘要、管理台「待批准发布」页，已进 main。
 - ~~管理台按操作者授予隐藏写入口（今天查阅员也看得到全部发布与登记入口，提交才被拒）~~ → [party-commercial-uiux-backend/04](../party-commercial-uiux-backend/issues/04-operator-grants-self-read-and-write-entries-hidden.md)：授予自查读口，参与方与商业区各页按它收起登记与发布入口，已进 main。
