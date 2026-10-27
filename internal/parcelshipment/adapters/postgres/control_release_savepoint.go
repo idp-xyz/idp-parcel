@@ -23,11 +23,16 @@ const controlReleaseSavepoint = "parcel_shipment_control_release"
 // 终局决定写不进去。编排写定的落法——释放失败不撤销暂停、不回滚撤回（UC-PS-005「撤回提交成功后不等待财务释放才生效」）——
 // 只有在释放失败不碰事务时才在库里成立。
 //
-// 内层答`已收口`就 RELEASE。答别的（或答错误）时看事务此刻的状态：已中止就退回 savepoint，把答复原样交回，各路据此留补偿、
-// 记册或停下；没中止就 RELEASE，保住内层已经落库的那一半。释放编排在冻结账本落库之后才读暴露账本，暴露账本读不回而语句
-// 没出错（行重建不了账本、读口交了 nil）时，冻结那本的释放不该跟着撤掉：两本账各自收口、不必同事务，续办重放时冻结账本
-// 按幂等交回原释放答案（ADR-0122 决定三）。SQL 级错误那一格事务已中止，保不住那一半，如实撤掉（ADR-0291）。落法只看事务
-// 状态，不看答复落在哪一格：`确定未受理`那一格提供方在读账本之前就短路了，没有东西可留可撤，按格分开只会多一条要守的分支。
+// 内层答`已收口`就 RELEASE。答别的（或答错误）时，只有答的是类型化的`可重试未形成`、且事务此刻没中止，才 RELEASE 保住内层已经
+// 落库的那一半；其余一律退回 savepoint，把答复原样交回，各路据此留补偿、记册或停下。释放编排在冻结账本落库之后才读暴露账本，
+// 暴露账本读不回而语句没出错（行重建不了账本、读口交了 nil）时，冻结那本的释放不该跟着撤掉：提供方答`可重试未形成`，就是明确
+// 承诺重放会补完另一本——两本账各自收口、不必同事务，续办重放时冻结账本按幂等交回原释放答案（ADR-0122 决定三）。SQL 级错误那
+// 一格事务已中止，保不住那一半，如实撤掉（ADR-0291）。
+//
+// 保住只为`可重试未形成`背书。答错误是不知道发生了什么，事务没中止只说明连接可用，不说明提供方的写自洽；答`确定未受理`是
+// 提供方说「我没受理」，后面带着已落库的写自相矛盾。这两种按 ADR-0282 都是重放同一答复也不会变、待人处理，保住一半之后没人补完，
+// 退回就是什么都没发生。这一层是对 ports.PreAcceptanceControlRelease 的通用护栏，不只服务某一个提供方，所以不替提供方没说的话
+// 担保。
 //
 // 事务状态靠在 savepoint 里执行一条无副作用的语句来探：成功即没中止（中止态的事务对退回以外的语句一律答 25P02），失败
 // 一律按已中止处理。误判成已中止的代价是多退回一次、撤掉本可保住的那一半；反方向的误判会在中止的事务上 RELEASE，随后的写
@@ -73,7 +78,9 @@ func (release *SavepointedControlRelease) ReleasePreAcceptanceControl(
 	}
 	answer, releaseErr := release.inner.ReleasePreAcceptanceControl(ctx, request)
 	settled := releaseErr == nil && answer.Outcome == ports.ControlReleaseSettled
-	if !settled && !transactionUsable(ctx, executor) {
+	// 只有`可重试未形成`才值得探事务状态：别的答复不论事务如何都退回，不多发一次往返。
+	keepsPersistedHalf := releaseErr == nil && answer.Outcome == ports.ControlReleaseNotFormed && transactionUsable(ctx, executor)
+	if !settled && !keepsPersistedHalf {
 		if _, err := executor.Exec(ctx, "ROLLBACK TO SAVEPOINT "+controlReleaseSavepoint); err != nil {
 			// 退不回 savepoint，事务就还在中止态，随后的写会自己失败、整笔回滚。
 			return savepointUnavailable()

@@ -210,20 +210,16 @@ func createPersistedHalf(ctx context.Context, db *bentopg.DB) error {
 	return err
 }
 
-// Covers: AT-PS-160、ADR-0122 决定三「冻结那本已落库的释放在暴露账本读不回时不撤回」在共享事务里成立——内层落了一半就答非`已收口`，
-// 只要事务没中止，那一半就留着：`可重试未形成`（账本读回不来但语句没出错）、`确定未受理`、形不成三格的错误三种答法同此；
-// 答复原样交回，随后的写照样提交。已收口一格也留着，不因这条改动回归。
-func TestASavepointKeepsWhatAReleaseAlreadyPersistedWhileTheTransactionIsHealthy(t *testing.T) {
+// Covers: AT-PS-160、ADR-0122 决定三「冻结那本已落库的释放在暴露账本读不回时不撤回」在共享事务里成立——内层落了一半就答类型化的
+// `可重试未形成`（账本读回不来但语句没出错），只要事务没中止，那一半就留着；答复原样交回，随后的写照样提交。已收口一格也留着，
+// 两本账都落库。
+func TestASavepointKeepsWhatARetryableNotFormedReleaseAlreadyPersistedWhileTheTransactionIsHealthy(t *testing.T) {
 	cases := []struct {
 		name    string
 		answer  func(*testing.T) ports.ControlReleaseAnswer
-		err     error
 		outcome ports.ControlReleaseOutcome
 	}{
 		{name: "可重试未形成", answer: notFormedAnswer, outcome: ports.ControlReleaseNotFormed},
-		{name: "确定未受理", answer: notAcceptedAnswer, outcome: ports.ControlReleaseNotAccepted},
-		{name: "形不成三格之一的错误", answer: func(*testing.T) ports.ControlReleaseAnswer { return ports.ControlReleaseAnswer{} },
-			err: ports.ErrUntranslatableProviderAnswer},
 		{name: "已收口", answer: func(*testing.T) ports.ControlReleaseAnswer {
 			return ports.ControlReleaseAnswer{Outcome: ports.ControlReleaseSettled}
 		}, outcome: ports.ControlReleaseSettled},
@@ -231,7 +227,7 @@ func TestASavepointKeepsWhatAReleaseAlreadyPersistedWhileTheTransactionIsHealthy
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			db, _, _ := controlReleaseSavepointFixture(t, `SELECT 1`)
-			release := adapter.NewSavepointedControlRelease(db, halfRelease{db: db, answer: tc.answer(t), err: tc.err})
+			release := adapter.NewSavepointedControlRelease(db, halfRelease{db: db, answer: tc.answer(t)})
 
 			var answer ports.ControlReleaseAnswer
 			var releaseErr error
@@ -250,11 +246,7 @@ func TestASavepointKeepsWhatAReleaseAlreadyPersistedWhileTheTransactionIsHealthy
 			if err != nil {
 				t.Fatalf("事务没中止，随后的读写与提交却失败：%v", err)
 			}
-			if tc.err != nil {
-				if !errors.Is(releaseErr, tc.err) {
-					t.Fatalf("释放错误 = %v, want 原样交回 %v", releaseErr, tc.err)
-				}
-			} else if releaseErr != nil || answer.Outcome != tc.outcome {
+			if releaseErr != nil || answer.Outcome != tc.outcome {
 				t.Fatalf("答复 = %+v err = %v, want %v 原样交回", answer, releaseErr, tc.outcome)
 			}
 			if kept != 1 {
@@ -264,8 +256,59 @@ func TestASavepointKeepsWhatAReleaseAlreadyPersistedWhileTheTransactionIsHealthy
 	}
 }
 
+// Covers: AT-PS-160、ADR-0291 决定一——保住的一半只为类型化的`可重试未形成`背书：内层落了一半就答`确定未受理`或答形不成三格之一的
+// 错误，即使事务没中止也退回 savepoint。`确定未受理`是提供方说「我没受理」，带着已落库的写自相矛盾；错误是不知道发生了什么，事务
+// 没中止只说明连接可用，不说明提供方的写自洽；这两种重放同一答复都不会变、待人处理（ADR-0282），保住一半后没人补完。答复原样交回，
+// 随后的写照样提交。
+func TestASavepointUndoesTheHalfOfAnAnswerOtherThanARetryableNotFormedEvenWhileTheTransactionIsHealthy(t *testing.T) {
+	cases := []struct {
+		name    string
+		answer  func(*testing.T) ports.ControlReleaseAnswer
+		err     error
+		outcome ports.ControlReleaseOutcome
+	}{
+		{name: "确定未受理", answer: notAcceptedAnswer, outcome: ports.ControlReleaseNotAccepted},
+		{name: "形不成三格之一的错误", answer: func(*testing.T) ports.ControlReleaseAnswer { return ports.ControlReleaseAnswer{} },
+			err: ports.ErrUntranslatableProviderAnswer},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db, _, _ := controlReleaseSavepointFixture(t, `SELECT 1`)
+			release := adapter.NewSavepointedControlRelease(db, halfRelease{db: db, answer: tc.answer(t), err: tc.err})
+
+			var answer ports.ControlReleaseAnswer
+			var releaseErr error
+			var left int
+			err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+				if err := createPersistedHalf(txCtx, db); err != nil {
+					return err
+				}
+				answer, releaseErr = release.ReleasePreAcceptanceControl(txCtx, ports.ControlReleaseRequest{})
+				var rowsErr error
+				if left, rowsErr = persistedHalfRows(txCtx, db); rowsErr != nil {
+					return rowsErr
+				}
+				return writeAfterRelease(txCtx, db)
+			})
+			if err != nil {
+				t.Fatalf("事务没中止，退回 savepoint 之后随后的读写与提交应当照样成功：%v", err)
+			}
+			if tc.err != nil {
+				if !errors.Is(releaseErr, tc.err) {
+					t.Fatalf("释放错误 = %v, want 原样交回 %v", releaseErr, tc.err)
+				}
+			} else if releaseErr != nil || answer.Outcome != tc.outcome {
+				t.Fatalf("答复 = %+v err = %v, want %v 原样交回", answer, releaseErr, tc.outcome)
+			}
+			if left != 0 {
+				t.Fatalf("内层落下的那一半剩 %d 行, want 0——不是类型化的可重试未形成，事务没中止也应当退回", left)
+			}
+		})
+	}
+}
+
 // Covers: AT-PS-160、SQL 级错误那一格如实记录（ADR-0291）——内层落了一半、随后一条语句出错把事务打进中止态：不论答复落在哪一格（可重试未形成、
-// 确定未受理、形不成三格的错误），落法只看事务状态，一律退回 savepoint，落下的那一半随之撤掉（事务本就保不住它），答复原样交回，
+// 确定未受理、形不成三格的错误），一律退回 savepoint，落下的那一半随之撤掉（事务本就保不住它），答复原样交回，
 // 退回之后同一事务照样读写与提交。
 func TestASavepointUndoesTheHalfWhenTheTransactionIsAborted(t *testing.T) {
 	cases := []struct {
@@ -315,9 +358,9 @@ func TestASavepointUndoesTheHalfWhenTheTransactionIsAborted(t *testing.T) {
 	}
 }
 
-// Covers: AT-PS-160、savepoint 名逐版重用——先中止（退回）、再健康未收口（收起）、再已收口（收起），三次之间互不牵连：每次的落法只看
-// 那一次事务此刻的状态。
-func TestASavepointDecidesEachReleaseByThatMomentsTransactionState(t *testing.T) {
+// Covers: AT-PS-160、savepoint 名逐版重用——先中止（退回）、再事务健康的可重试未形成（收起）、再已收口（收起），三次之间互不牵连：每次的落法只看
+// 那一次的答复与事务此刻的状态。
+func TestASavepointDecidesEachReleaseByItsOwnAnswerAndTheTransactionState(t *testing.T) {
 	db, _, _ := controlReleaseSavepointFixture(t, `SELECT 1`)
 	steps := []halfRelease{
 		{db: db, answer: notFormedAnswer(t), abort: true},

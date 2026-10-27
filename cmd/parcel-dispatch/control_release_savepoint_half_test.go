@@ -363,7 +363,7 @@ func TestAReleaseTheProviderRefusesLeavesTheTransactionUsableAndTheLedgersUntouc
 	}
 }
 
-// Covers: AT-PS-160、已收口路径不回归——两本账都读得回，释放答已收口，两本都落库，提交之后仍是已释放；重放答原释放。
+// Covers: AT-PS-160、已收口路径两本账都落库——两本账都读得回，释放答已收口，提交之后仍是已释放；重放答原释放。
 func TestACombinedPolicyReleaseSettlesBothLedgers(t *testing.T) {
 	fixture := newSynHFixture(t)
 
