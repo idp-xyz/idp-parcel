@@ -17,4 +17,4 @@ Status: resolved——01、02 已进 main（`51e154be0`）；用户 2026-10-26 �
 | 04 | [授予自查读口，管理台按操作者授予收起登记与发布入口](issues/04-operator-grants-self-read-and-write-entries-hidden.md) | ADR-0315（会话代决） | resolved（`44b3fbc20`） |
 | 05 | [逐格问题改回问题码加参数，管理台按码查中文](issues/05-field-problems-carry-a-stable-code-and-params.md) | ADR-0316（会话代决） | resolved（`914473999`） |
 
-03–05 是用户点了要做的三张 R3 级票，各带一份会话代决的 ADR（0314、0315、0316），待各自 owner 复核。
+03–05 是用户点了要做的三张 R3 级票，各带一份会话代决的 ADR（0314、0315、0316），待各自 owner 复核；要确认什么、不认可时改哪里见 [owner 复核清单](owner-review.md)。
