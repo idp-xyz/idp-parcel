@@ -1,6 +1,6 @@
 # UC-CC-011 管理内部合规限制及解除
 
-状态：开发基线已形成；内部限制的范围化形成、来源解除和下游消费边界已确认，真实限制来源、动作矩阵、解除条件和权限参数待提供；实现缺口：尚无模型与写入口（首发范围仍要求本用例），代码里的限制是监管限制、不是本用例的对象（[ADR-0241](../../adr/0241-action-admission-restrictions-are-regulatory-or-internal-and-only-regulatory-restrictions-exist-today.md)）
+状态：开发基线已形成；内部限制的范围化形成、来源解除和下游消费边界已确认，真实限制来源、动作矩阵、解除条件和权限参数待提供；对象、登记册、确认与解除决定和并进动作准入已交付（[ADR-0334](../../adr/0334-internal-compliance-restrictions-have-their-own-register-with-per-coverage-confirmation-and-release-by-the-responsible-source-and-admission-reads-both-registers.md)）；生产里没有形成与解除的运营入口，也没有向 `party-commercial` 核决定方的当前授权，就绪、门禁核对与案件关闭尚未读本用例的结果；代码里的 `RegulatoryRestriction` 是监管限制、不是本用例的对象（[ADR-0241](../../adr/0241-action-admission-restrictions-are-regulatory-or-internal-and-only-regulatory-restrictions-exist-today.md)）
 
 ## 目标与边界
 
@@ -257,6 +257,7 @@
 | `AT-CC-373` | 限制或解除已提交但首次发布失败 | 限制/解除决定保持，重试同一发布意图；不重复创建决定或下游动作 |
 | `AT-CC-374` | 无权主体跨客户、法人或案件请求形成、解除、查询或导出限制 | 请求未受理并最小披露；不泄露其他客户或限制是否存在 |
 | `AT-CC-375` | 检查本用例直接形成或修改的业务对象 | 只形成内部限制、限制覆盖、解除决定、当前适用性判断和发布关系；不形成监管结果、物理执行、付款、结算、就绪、提交、放行或案件生命周期决定 |
+| `AT-CC-452` | 限制覆盖项开始时为待确认或冲突；限制责任来源对它形成确认决定，另有非责任来源的确认请求 | 确认决定生效前，动作时点上读到待确认或冲突，从生效时刻起读到有效，不回溯；非责任来源的确认不成立；已有效、已解除的覆盖项不再确认；确认不解除任何限制，同一限制的其他覆盖项不动 |
 
 ## 生产参数与待决风险
 
