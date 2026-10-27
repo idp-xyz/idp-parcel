@@ -56,10 +56,7 @@ type SegmentMovementFactLister interface {
 type BackfillMovementFactsAdapter struct {
 	handovers TransportHandoverFinder
 	pickups   OffsitePickupFinder
-	segments  ObjectSegmentFinder
-	facts     SegmentMovementFactLister
-	members   veports.ConsolidationMembershipView
-	derive    MovementProjectionHandler
+	backfill  movementBackfill
 }
 
 func NewBackfillMovementFactsAdapter(
@@ -89,7 +86,8 @@ func NewBackfillMovementFactsAdapter(
 		return nil, fmt.Errorf("visibility exception transportfulfillment adapter: projection handler is nil")
 	}
 	return &BackfillMovementFactsAdapter{
-		handovers: handovers, pickups: pickups, segments: segments, facts: facts, members: members, derive: derive,
+		handovers: handovers, pickups: pickups,
+		backfill: movementBackfill{segments: segments, facts: facts, members: members, derive: derive},
 	}, nil
 }
 
@@ -115,7 +113,7 @@ func (adapter *BackfillMovementFactsAdapter) HandleRegisteredTransportHandover(
 	if !handover.TransfersControl() {
 		return nil
 	}
-	return adapter.backfillObject(ctx, handover.TenantID(), handover.Object())
+	return adapter.backfill.backfillObject(ctx, handover.TenantID(), handover.Object(), "")
 }
 
 // HandleRegisteredOffsitePickup 按信封键取回对象级揽收，扫这件对象有参与的每一段补派生。对象级揽收只为成功收寄形成，没有
@@ -129,26 +127,40 @@ func (adapter *BackfillMovementFactsAdapter) HandleRegisteredOffsitePickup(
 		return err
 	}
 	pickup := record.Pickup
-	return adapter.backfillObject(ctx, pickup.TenantID(), pickup.Object())
+	return adapter.backfill.backfillObject(ctx, pickup.TenantID(), pickup.Object(), "")
+}
+
+// movementBackfill 是移动事实补派生的共用一半：按对象列出它有参与的段，按段列出声明了那一段的在册移动事实，凡事实发生那一刻对象
+// 在控的就在追踪包裹上补派生。控制事实信封上的补派生（BackfillMovementFactsAdapter，ADR-0224、ADR-0302）与实物识别成功信封上的
+// 补派生（BackfillIdentifiedMemberAdapter，ADR-0299）都走它，判据、展开与幂等键因此只有这一处。
+type movementBackfill struct {
+	segments ObjectSegmentFinder
+	facts    SegmentMovementFactLister
+	members  veports.ConsolidationMembershipView
+	derive   MovementProjectionHandler
 }
 
 // backfillObject 按对象扫它有参与的每一段，在每一段上补派生（ADR-0302）。不问对象凭哪一份控制事实进的段：入场依据只回答「凭什么
 // 进」，补不补只看事实发生那一刻它在不在控，与正常路径同一条判据。扫的次序不影响结论——各段各补各的事实，同一把幂等键。
-func (adapter *BackfillMovementFactsAdapter) backfillObject(
+//
+// onlyParcel 非空时只补到这一件追踪包裹上，展开到的别的成员不动：实物识别成功的那一封信只欠这一件，同袋别的成员早已投过或各有
+// 各的信封。为空即对象展开到的每一件都补。
+func (core movementBackfill) backfillObject(
 	ctx context.Context,
 	tenant tfdomain.TenantID,
 	object tfdomain.CarriedObjectReference,
+	onlyParcel string,
 ) error {
-	keys, err := adapter.segments.FindSegmentsForObject(ctx, tenant, object)
+	keys, err := core.segments.FindSegmentsForObject(ctx, tenant, object)
 	if err != nil {
 		return fmt.Errorf("%w: object %q: %v", ErrObjectSegmentsNotVisible, object, err)
 	}
 	for _, key := range keys {
-		segment, err := adapter.segmentOf(ctx, key, tenant)
+		segment, err := core.segmentOf(ctx, key, tenant)
 		if err != nil {
 			return err
 		}
-		if err := adapter.backfill(ctx, key, segment, object); err != nil {
+		if err := core.backfillSegment(ctx, key, segment, object, onlyParcel); err != nil {
 			return err
 		}
 	}
@@ -156,12 +168,12 @@ func (adapter *BackfillMovementFactsAdapter) backfillObject(
 }
 
 // segmentOf 按键取回对象有参与的一段。
-func (adapter *BackfillMovementFactsAdapter) segmentOf(
+func (core movementBackfill) segmentOf(
 	ctx context.Context,
 	key tfports.FulfillmentSegmentKey,
 	tenant tfdomain.TenantID,
 ) (tfdomain.ActualFulfillmentSegment, error) {
-	record, found, err := adapter.segments.FindByKey(ctx, key)
+	record, found, err := core.segments.FindByKey(ctx, key)
 	if err != nil {
 		return tfdomain.ActualFulfillmentSegment{}, fmt.Errorf("%w: segment %q: %v", ErrObjectSegmentsNotVisible, key.Segment, err)
 	}
@@ -173,16 +185,17 @@ func (adapter *BackfillMovementFactsAdapter) segmentOf(
 	return record.Segment, nil
 }
 
-// backfill 按段列出声明了它的在册移动事实，逐版在这件对象上补派生；这件对象是集运单元时，补到它在那一版事实发生那一刻的成员
+// backfillSegment 按段列出声明了它的在册移动事实，逐版在这件对象上补派生；这件对象是集运单元时，补到它在那一版事实发生那一刻的成员
 // 身上，展开与正常路径同一处（trackedParcelsAt）。次序取读口交回的次序——同一条事实按登记先后——因为正常路径当初也是按登记先后
 // 逐封收到各版的：更正版的替代关系因而落在前版之后，中间各版投影与正常路径同形。
-func (adapter *BackfillMovementFactsAdapter) backfill(
+func (core movementBackfill) backfillSegment(
 	ctx context.Context,
 	key tfports.FulfillmentSegmentKey,
 	segment tfdomain.ActualFulfillmentSegment,
 	object tfdomain.CarriedObjectReference,
+	onlyParcel string,
 ) error {
-	records, err := adapter.facts.FindBySegment(ctx, key)
+	records, err := core.facts.FindBySegment(ctx, key)
 	if errors.Is(err, tfports.ErrMovementFactRecordUnreadable) {
 		// 坏行重投一万次还是坏行；记成未决会让它以「等依赖」之名挂在队头烧失败预算，运维从错的入口进。
 		return fmt.Errorf("%w: segment %q: %v", ErrMovementFactRecordInconsistent, key.Segment, err)
@@ -203,13 +216,16 @@ func (adapter *BackfillMovementFactsAdapter) backfill(
 		if err != nil {
 			return err
 		}
-		parcels, err := trackedParcelsAt(ctx, adapter.members, key.TenantID,
+		parcels, err := trackedParcelsAt(ctx, core.members, key.TenantID,
 			[]tfdomain.CarriedObjectReference{object}, record.Fact.OccurredAt())
 		if err != nil {
 			return err
 		}
 		for _, parcel := range parcels {
-			if err := deriveMovementFactOnto(ctx, adapter.derive, record, kind, parcel); err != nil {
+			if onlyParcel != "" && parcel.String() != onlyParcel {
+				continue
+			}
+			if err := deriveMovementFactOnto(ctx, core.derive, record, kind, parcel); err != nil {
 				return err
 			}
 		}

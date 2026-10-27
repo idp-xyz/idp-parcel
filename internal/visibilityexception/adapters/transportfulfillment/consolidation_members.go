@@ -14,12 +14,14 @@ import (
 )
 
 var (
-	// ErrConsolidationMembershipNotVisible 表示问节点作业「这一件那一刻是不是一袋、袋里装着什么、成员是哪件包裹」读不动。说不出
-	// 是不是袋就不能当包裹投，也不能当空袋入账；读得动之后重投，从头再问一遍，已派生过的答已有结果。续办格。
+	// ErrConsolidationMembershipNotVisible 表示问节点作业「这一件那一刻是不是一袋、袋里装着什么、成员是哪件包裹」，或「这件实物曾被
+	// 装进哪几件单元」读不动。说不出是不是袋就不能当包裹投，也不能当空袋入账；说不出曾随过哪几袋就不能认定它没有要补的移动；读得动
+	// 之后重投，从头再问一遍，已派生过的答已有结果。续办格。
 	ErrConsolidationMembershipNotVisible = errors.New(
 		"visibility exception transportfulfillment adapter: the consolidation membership cannot be read")
 	// ErrConsolidationMembershipInconsistent 表示节点作业答了，答复却立不成成员：译不回来、成员的身份链判不下来、成员种类落在
-	// 封闭集合外、成员引用立不成追踪包裹。重问还是同一个结果，要查节点作业的册或两边的口径。禁止进 WithUndecidedSentinels。
+	// 封闭集合外、成员引用立不成追踪包裹、曾装它的单元标识立不成对象引用。重问还是同一个结果，要查节点作业的册或两边的口径。禁止进
+	// WithUndecidedSentinels。
 	ErrConsolidationMembershipInconsistent = errors.New(
 		"visibility exception transportfulfillment adapter: the consolidation membership answer is inconsistent")
 )
