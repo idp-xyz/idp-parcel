@@ -43,7 +43,7 @@ func legacyETAConnection(t *testing.T) (*pgx.Conn, migrations.Asset) {
 	return nil, migrations.Asset{}
 }
 
-// Covers: ETA 预测版本表迁移的存量半边——迁移之前落下的预测行各自成为版本表里一条线的一版并立为当前，来源、输入、模型、区间、
+// Covers: AT-VE-222 的存量半边——ETA 预测版本表迁移——迁移之前落下的预测行各自成为版本表里一条线的一版并立为当前，来源、输入、模型、区间、
 // 可信度、预测时点原样；带前身指回的行把指回原样带过来，不抹成首版；同名包裹在不同租户各是各的线；旧表随之退场，
 // 当前标记只能指它所在那条线名下存下来的版本。
 func TestTheETAVersionMigrationCarriesExistingPredictionsAsTheirCurrentVersions(t *testing.T) {
@@ -118,7 +118,7 @@ func TestTheETAVersionMigrationCarriesExistingPredictionsAsTheirCurrentVersions(
 	}
 }
 
-// Covers: 存量数据迁移的预检——旧表对版本号没有租户内唯一的约束；同租户下两行共用一个版本号时迁移停下，给出指明租户与版本号的
+// Covers: AT-VE-222 的存量半边，存量数据迁移的预检——旧表对版本号没有租户内唯一的约束；同租户下两行共用一个版本号时迁移停下，给出指明租户与版本号的
 // 可读报错，而不是丢出主键冲突的原始报错；停下时什么都没动（旧表原样、新表未建）。
 func TestTheETAVersionMigrationStopsWithAReadableErrorWhenVersionIDsCollide(t *testing.T) {
 	ctx := t.Context()

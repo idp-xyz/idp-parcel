@@ -147,7 +147,7 @@ func mustTenant(raw string) domain.TenantID {
 	return tenant
 }
 
-// Covers: 过期写者被乐观条件拒绝且不留版本——首版撞上线上已有的当前版、刷新所指的前版已不是当前版，都交回
+// Covers: AT-VE-223 过期写者被乐观条件拒绝且不留版本——首版撞上线上已有的当前版、刷新所指的前版已不是当前版，都交回
 // ports.ErrETACurrentChanged；输家的版本行随事务回滚，不留一版从未成为当前的预测，也不动赢家。
 func TestAStaleWriterIsRefusedAndLeavesNoVersionBehind(t *testing.T) {
 	fixture := newETAGapNotificationFixture(t)
@@ -176,7 +176,7 @@ func TestAStaleWriterIsRefusedAndLeavesNoVersionBehind(t *testing.T) {
 	}
 }
 
-// Covers: 当前标记只能指它所在那条线名下存下来的版本——不存在的版本、别的来源线的版本、别的包裹的版本都被外键拒绝，
+// Covers: AT-VE-222 当前标记只能指它所在那条线名下存下来的版本——不存在的版本、别的来源线的版本、别的包裹的版本都被外键拒绝，
 // 当前版因此不会指着读不回的行，也不会指着别条线的行。
 func TestTheCurrentMarkerCanOnlyNameAStoredVersionOfItsOwnLine(t *testing.T) {
 	fixture := newETAGapNotificationFixture(t)
@@ -203,7 +203,7 @@ func TestTheCurrentMarkerCanOnlyNameAStoredVersionOfItsOwnLine(t *testing.T) {
 	}
 }
 
-// Covers: 版本表的形状 CHECK——来源取值封闭，空白键与倒置区间被库拦下；同租户内版本号唯一（预测版本同时是 Outbox 意图的认领标识）。
+// Covers: AT-VE-222 版本表的形状 CHECK——来源取值封闭，空白键与倒置区间被库拦下；同租户内版本号唯一（预测版本同时是 Outbox 意图的认领标识）。
 func TestTheVersionTableRefusesAnOpenSourceABlankKeyAndADuplicateVersion(t *testing.T) {
 	fixture := newETAGapNotificationFixture(t)
 	ctx := t.Context()
@@ -330,7 +330,7 @@ func (fixture *etaGapNotificationFixture) chainOf(t *testing.T, ctx context.Cont
 	}
 }
 
-// Covers: 同一条预测线上并发的相同命令（同来源、同输入版本）收敛成一个版本——线锁让输家醒来读到赢家已提交的当前版，落重放
+// Covers: AT-VE-223 同一条预测线上并发的相同命令（同来源、同输入版本）收敛成一个版本——线锁让输家醒来读到赢家已提交的当前版，落重放
 // （ETAExistingResult）；没有线锁时输家只会撞上乐观条件，落未决。ADR-0043 的「重放重发同一份」在并发下同样成立。
 func TestConcurrentFormsWithTheSameInputsOnOneLineConvergeOnOneVersion(t *testing.T) {
 	fixture := newETAGapNotificationFixture(t)
@@ -358,7 +358,7 @@ func TestConcurrentFormsWithTheSameInputsOnOneLineConvergeOnOneVersion(t *testin
 	}
 }
 
-// Covers: 同一条预测线上并发的不同输入版本排成一条线性的指回链——没有分叉、没有丢失，每个版本都读得回；
+// Covers: AT-VE-223 同一条预测线上并发的不同输入版本排成一条线性的指回链——没有分叉、没有丢失，每个版本都读得回；
 // 两路来源并发时各自成链、互不穿插。
 func TestConcurrentFormsWithDifferentInputsMakeOneLinearChainPerLine(t *testing.T) {
 	fixture := newETAGapNotificationFixture(t)

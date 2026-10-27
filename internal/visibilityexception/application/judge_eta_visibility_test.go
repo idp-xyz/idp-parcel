@@ -356,7 +356,7 @@ func qualifyingRule(t *testing.T, refs ...string) domain.ETAVisibilityRuleBasis 
 	})
 }
 
-// Covers: AT-VE-051 的选取半边与 UC-VE-003 规则「候选取运营企业派生的当前版，没有才取承运商提供的当前版」——两路来源各有当前版时，
+// Covers: AT-VE-224 与 AT-VE-051 的选取半边与 UC-VE-003 规则「候选取运营企业派生的当前版，没有才取承运商提供的当前版」——两路来源各有当前版时，
 // 判断引用运营企业那一版，来源进候选引用；承运商那一版更新、可信度更高、本来能过门槛，也不顶替。
 func TestWhenBothSourcesHaveAnETATheOperatorDerivedOneIsTheJudgementCandidate(t *testing.T) {
 	fixture := newJudgeFixture(t)
@@ -377,7 +377,7 @@ func TestWhenBothSourcesHaveAnETATheOperatorDerivedOneIsTheJudgementCandidate(t 
 	}
 }
 
-// Covers: AT-VE-051 的选取半边与 AT-VE-213——只有承运商一路时它就是候选；运营企业派生的预测到了，候选换手：形成替代判断指回前版，
+// Covers: AT-VE-224 与 AT-VE-213——只有承运商一路时它就是候选；运营企业派生的预测到了，候选换手：形成替代判断指回前版，
 // 前一版判断仍读得回、仍引用承运商那一版（来源随候选引用留存）。
 func TestACarrierETAIsTheCandidateOnlyUntilAnOperatorDerivedOneArrives(t *testing.T) {
 	fixture := newJudgeFixture(t)
@@ -417,7 +417,7 @@ func TestACarrierETAIsTheCandidateOnlyUntilAnOperatorDerivedOneArrives(t *testin
 	}
 }
 
-// Covers: AT-VE-213 的重放半边与 AT-VE-051 的选取半边——候选取决于来源，不取决于谁后到：运营企业一路是候选时，
+// Covers: AT-VE-225 与 AT-VE-213 的重放半边——候选取决于来源，不取决于谁后到：运营企业一路是候选时，
 // 承运商那一路出新版本，候选没变，判断答已有结果、不换代、不签身份；运营企业一路出新版本，候选版本变了，换代。
 func TestANewVersionOfTheNonCandidateSourceLeavesTheJudgementAlone(t *testing.T) {
 	fixture := newJudgeFixture(t)
@@ -455,7 +455,7 @@ func TestANewVersionOfTheNonCandidateSourceLeavesTheJudgementAlone(t *testing.T)
 	}
 }
 
-// Covers: AT-VE-052 与 UC-VE-003 规则「候选取运营企业派生的当前版」——运营企业那一版质量未达门槛、承运商那一版本来能过：
+// Covers: AT-VE-224 与 AT-VE-052 和 UC-VE-003 规则「候选取运营企业派生的当前版」——运营企业那一版质量未达门槛、承运商那一版本来能过：
 // 判断仍落在运营企业那一版上，答 ETA 不可见，不换一个能过门槛的候选。门槛挑的是结论，不是候选。
 func TestTheOperatorDerivedCandidateIsNotSwappedForACarrierETAThatWouldPassTheGate(t *testing.T) {
 	fixture := newJudgeFixture(t)
@@ -473,7 +473,7 @@ func TestTheOperatorDerivedCandidateIsNotSwappedForACarrierETAThatWouldPassTheGa
 	}
 }
 
-// Covers: AT-VE-214 在两路来源并存时仍成立——规则指名的目标里程碑不是这个里程碑：两路来源的 ETA 都不判，
+// Covers: AT-VE-224 与 AT-VE-214 在两路来源并存时仍成立——规则指名的目标里程碑不是这个里程碑：两路来源的 ETA 都不判，
 // 也不借用目标里程碑上别的 ETA；该账户在该包裹上已有的判断不变。
 func TestBothSourcesAtAnotherMilestoneThanTheRuleTargetAreNotJudgedAndTheExistingJudgementStays(t *testing.T) {
 	fixture := newJudgeFixture(t)

@@ -209,7 +209,7 @@ func (fixture *etaGapNotificationFixture) loadNotification(t *testing.T, ctx con
 	return notification, found
 }
 
-// Covers: CONTEXT「新的 ETA 形成新版本，不覆盖历史预测」与 ADR-0065 的追加版本原则——当前版往返；刷新追加新版本行并把当前标记移过去，
+// Covers: AT-VE-222 与 CONTEXT「新的 ETA 形成新版本，不覆盖历史预测」与 ADR-0065 的追加版本原则——当前版往返；刷新追加新版本行并把当前标记移过去，
 // 被接替的版本行还在、输入与区间原样、按版本读得回；一条线上始终只有一个当前标记。
 func TestRefreshAppendsAVersionAndKeepsTheSupersededOneReadable(t *testing.T) {
 	fixture := newETAGapNotificationFixture(t)

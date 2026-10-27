@@ -52,8 +52,8 @@ func TestAnETADemandsItsFullShape(t *testing.T) {
 	}
 }
 
-// Covers: VE CONTEXT「新的 ETA 形成新版本，不覆盖历史预测」——刷新换版本
-// 指回原版、原预测不可变；跨包裹或跨里程碑的刷新不是同一条预测线。
+// Covers: AT-VE-222 与 VE CONTEXT「新的 ETA 形成新版本，不覆盖历史预测」——刷新换版本
+// 指回原版、原预测不可变；跨包裹、跨里程碑或跨来源的刷新不是同一条预测线。
 func TestARefreshedETAKeepsItsHistory(t *testing.T) {
 	first, err := domain.FormETAPrediction(etaSpec(t, "eta-1/v1"))
 	if err != nil {
@@ -110,7 +110,7 @@ func formedETA(t *testing.T, spec domain.ETAPredictionSpec) domain.ETAPrediction
 	return eta
 }
 
-// Covers: AT-VE-051「两个来源都提供 ETA」的选取半边与 VE CONTEXT「ETA 客户可见性判断……候选内部 ETA」——两路来源各有
+// Covers: AT-VE-224 与 AT-VE-051「两个来源都提供 ETA」的选取半边与 VE CONTEXT「ETA 客户可见性判断……候选内部 ETA」——两路来源各有
 // 当前版时，候选取运营企业派生的那一版；只有承运商提供的一路时才取它。选取只看来源，不看预测时点也不看可信度：
 // 承运商那一版更新、可信度更高也不顶替，与入参次序无关（选取不是「谁后到谁赢」，也不是替门槛挑一个能过门槛的）。
 func TestTheCandidateETAIsTheOperatorDerivedCurrentVersionElseTheCarrierProvidedOne(t *testing.T) {

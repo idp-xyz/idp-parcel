@@ -231,7 +231,7 @@ func TestAnETAThatMeetsThenMissesTheGateMovesTheCustomerViewThroughShownToWithhe
 	}
 }
 
-// Covers: AT-VE-051、AT-VE-213、AT-VE-215 与 CONTEXT「承运商提供的预测与运营企业派生的预测分别保留来源和口径。新的 ETA 形成新版本，
+// Covers: AT-VE-051、AT-VE-222、AT-VE-224、AT-VE-225、AT-VE-213、AT-VE-215 与 CONTEXT「承运商提供的预测与运营企业派生的预测分别保留来源和口径。新的 ETA 形成新版本，
 // 不覆盖历史预测」的生产链——承运商与运营企业两路预测并存：只有承运商一路时它是候选；运营企业一路到了候选换手，判断替代指回、视图
 // 换代；承运商再出新版本（哪怕质量已不达标）候选没变，判断与视图都不长版本；运营企业出新版本才再换代。四个预测版本、三版判断
 // 都留在库里，判断的候选引用（包裹、里程碑、来源、版本）在预测库里按版本读得回，各线当前版是各自最新的一版。

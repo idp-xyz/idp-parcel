@@ -299,8 +299,8 @@ func TestSufficientFactsFormAVersionedETA(t *testing.T) {
 	}
 }
 
-// Covers: CONTEXT「新的 ETA 形成新版本，不覆盖历史预测」——输入版本变化经 Refresh
-// 换版并指回前版；幂等键是（包裹+里程碑+输入版本）。
+// Covers: AT-VE-222 与 CONTEXT「新的 ETA 形成新版本，不覆盖历史预测」——输入版本变化经 Refresh
+// 换版并指回前版；幂等键是（包裹+里程碑+来源+输入版本）。
 func TestChangedInputsRefreshTheETAKeepingThePriorVersion(t *testing.T) {
 	fixture := newETAFixture(t)
 	ctx := context.Background()
@@ -329,7 +329,7 @@ func TestChangedInputsRefreshTheETAKeepingThePriorVersion(t *testing.T) {
 	}
 }
 
-// Covers: 幂等半边——同（包裹+里程碑+输入版本）重放不重形成、不签新身份，只把同一份
+// Covers: AT-VE-222 的重放半边——同（包裹+里程碑+来源+输入版本）重放不重形成、不签新身份，只把同一份
 // 意图再交一次（ADR-0043「重放重发同一份」）。
 func TestTheSameInputsVersionDoesNotReformButResendsTheSameIntent(t *testing.T) {
 	fixture := newETAFixture(t)
@@ -414,7 +414,7 @@ func TestTheTwoSourcesKeepSeparateLinesAndNeverOverwriteEachOther(t *testing.T) 
 	}
 }
 
-// Covers: CONTEXT「新的 ETA 形成新版本，不覆盖历史预测」与 GLOSSARY「新的 ETA 不覆盖历史」——同一条线上连续三版：
+// Covers: AT-VE-222 与 CONTEXT「新的 ETA 形成新版本，不覆盖历史预测」与 GLOSSARY「新的 ETA 不覆盖历史」——同一条线上连续三版：
 // 每个被接替的版本都还在库里、按版本读得回，输入与区间原样；指回环环相扣；别的来源线名下查不到它们。
 func TestEveryRefreshedVersionStaysReadableByVersion(t *testing.T) {
 	fixture := newETAFixture(t)
@@ -454,7 +454,7 @@ func TestEveryRefreshedVersionStaysReadableByVersion(t *testing.T) {
 	}
 }
 
-// Covers: 同一预测线的写者串行（ADR-0065 追加版本之上的并发纪律）——写者先 LockCurrent 取线锁再决定，不走不带锁的读：
+// Covers: AT-VE-223 同一预测线的写者串行（ADR-0065 追加版本之上的并发纪律）——写者先 LockCurrent 取线锁再决定，不走不带锁的读：
 // 不带锁的读之后并发的两个首版会双双看到「没有当前版」。
 func TestTheWriterTakesTheLineLockBeforeDecidingAndNeverReadsTheCurrentUnlocked(t *testing.T) {
 	fixture := newETAFixture(t)
@@ -470,7 +470,7 @@ func TestTheWriterTakesTheLineLockBeforeDecidingAndNeverReadsTheCurrentUnlocked(
 	}
 }
 
-// Covers: ADR-0029 按恢复动作分格——线上并发输家（首版被占、前版已变）与预测库读不动是两种恢复：前者重读再走，不是等库；
+// Covers: AT-VE-223 与 ADR-0029 按恢复动作分格——线上并发输家（首版被占、前版已变）与预测库读不动是两种恢复：前者重读再走，不是等库；
 // 输家不留意图，也不当成已形成。
 func TestALostRaceOnTheLineIsUndecidedUnderItsOwnReason(t *testing.T) {
 	fixture := newETAFixture(t)
