@@ -1,7 +1,7 @@
 # 01 余下各口的信封 ID 仍原样串接实例引用：标识一长就入不了队，交接只留没人重发的续办引用
 
 Category: bug
-Status: in-progress——2026-10-27 会话 tops-20 认领运输履约半边（用户 2026-10-27「按你的建议」；列入上线前必须），分支 claude-eib01b。此前 ready-for-agent——2026-10-27 列入上线前必须（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)）：余下运输履约各口，真实租户标识一长，交接就静默断在续办引用上。此前 in-progress——除运输履约外各口已进 main（至 `20a06645`）；余下运输履约各口待做，门禁登着去处。2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决」授权），出自 [routing-first-cut/22](../../routing-first-cut/issues/22-initial-route-envelope-id-exceeds-the-event-id-limit.md) 的取证。
+Status: in-progress——2026-10-27 作者完工，待隔离评审与进 main，分支 claude-eib01b（代码最后一笔 e5d8f971a）。此前 in-progress——2026-10-27 会话 tops-20 认领运输履约半边（用户 2026-10-27「按你的建议」；列入上线前必须）。此前 ready-for-agent——2026-10-27 列入上线前必须（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)）：余下运输履约各口，真实租户标识一长，交接就静默断在续办引用上。此前 in-progress——除运输履约外各口已进 main（至 `20a06645`）；余下运输履约各口待做，门禁登着去处。2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决」授权），出自 [routing-first-cut/22](../../routing-first-cut/issues/22-initial-route-envelope-id-exceeds-the-event-id-limit.md) 的取证。
 Blocked by: 无
 出处：`outboxintent.FingerprintEventID` 头注（票 sa-cc/34 裁决 2）：信封 ID 上限是 `eventing.MaxEventIDLength`，租户、委托、包裹这类引用多长归实例半边，本仓给不出上界，原样串接就是把上限押在别人的长度上。
 
@@ -73,3 +73,36 @@ Blocked by: 无
 2026-10-19 补：运输履约那一半另吸收容量消耗交接的事件 ID 与 `Consume` 重放幂等，裁定见 [demo-chain-gaps/tf-chain-plan](../../demo-chain-gaps/tf-chain-plan.md)「03 装载分配与容量」D03-7。
 
 2026-10-19 补（票 demo-chain-gaps/17 的隔离评审）：容量池身份自票 17 起由（班次、维度）派生，写作 `<班次身份>/<维度词>`，自带 `/`，而班次身份本身也可能带 `/`（物化班次写作 `<周期安排代码>/<运行日期>`）。`capacityConsumptionEventID` 按 `/` 拼租户、池与预占，两组不同的键更容易拼成同一个 ID；运输履约半边改指纹形时一并消掉，不要只加长上限。
+
+## 完成记录（运输履约半边，2026-10-27）
+
+起点 `4b54c730f`，分支 `claude-eib01b`；代码一笔 `e5d8f971a`。十口 `…EventID` 都改走 `outboxintent.FingerprintEventID`，返回 `eventing.EventID`；口名常量 `…Port` 与本口事件类型的口名一致，维度是旧 ID 的全部变量维、逐个分开传，旧 ID 里的类型段由口名承担。分区键一字不变。
+
+| 口 | 口名 | 维度 | 分区键 |
+|---|---|---|---|
+| capacity_consumption | `capacity-consumption` | 租户、池、预占 | 新抽 `capacityConsumptionPartitionKey` |
+| carrier_first_effective_pickup | `carrier-first-effective-pickup` | 租户、事实、版本 | 原有函数，类型段改引常量，字节不变 |
+| disposition_execution | `disposition-execution` | 租户、原旅程、目的、处置依据 | 新抽 `dispositionExecutionPartitionKey` |
+| effective_delivery | `effective-delivery` | 租户、对象、尝试、结果版本 | 原有函数，改引常量 |
+| exception_journey | `exception-journey` | 同 disposition_execution | 新抽 `exceptionJourneyPartitionKey` |
+| external_tracking_fact | `external-carrier-tracking` | 租户、事实、版本 | 原有函数，改引常量 |
+| offsite_pickup | `offsite-pickup` | 租户、来源 | 新抽 `offsitePickupPartitionKey` |
+| offsite_pickup_registration | `offsite-pickup-registration` | 租户、对象、尝试；更正再加版本（首登三维、更正四维） | 原有函数，改引常量 |
+| regulatory_acceptance | `regulatory-acceptance` | 租户、协作事项 | 新抽 `regulatoryAcceptancePartitionKey` |
+| transport_handover_registration | `transport-handover-registration` | 租户、对象、范围、版本 | 原有函数，改引常量 |
+
+- **门禁表**：`allowedRawEnvelopeID` 删十行（全部运输履约）。`allowedSameExpression` 只删 `capacity_consumption`；`disposition_execution`、`exception_journey`、`offsite_pickup`、`regulatory_acceptance` 四行保留（见代决 1）。`partition_subject_registry_test.go` 里这五口的说明由「键即信封 ID」改为「键取（…/口名），含信封 ID 的全部维」，写法照 `transport_commission_handoff.go` 那一行；`exception_journey` 例外说明里的「类型段」改「口名」。
+- **撞键用例**：`TestCapacityConsumptionEventIDKeepsKeysThatConcatenateAlikeApart`（`capacity_consumption_event_id_test.go`，内部包纯函数用例）：（池 `SCHED-1/2026-10-27/WEIGHT`，预占 `res-1`）与（池 `SCHED-1`，预占 `2026-10-27/WEIGHT/res-1`）旧拼法同串，新 ID 不同。另给五个抽出分区键的口的模板用例各加一条分区键字面量断言，证一字不变。
+- **连带改的用例**：运输履约包内十口用例改用 `tfEventID(口名, 维…)`（助手在 `offsite_pickup_handoff_test.go`，与生产同公式）；`cmd/parcel-api` 揽收更正用例；`cmd/parcel-dispatch` 里交付生效、收寄、异常旅程、揽收登记、交接登记各口的 ID 助手与手造信封（交接登记助手 `handoverEventID` 在 `transport_handover_projection_test.go`）。本票没有按 ID 字面量数信封的反向用例需要改。
+- **没改**：PS、VE 两侧 inbox 消费者用例与 `internal/parcelshipment/adapters/transportfulfillment` 里手造信封的 ID 字面量（消费者把 ID 当不透明串，不由 TF 函数算出）；`label_transaction_judgment_handoff.go` 里的 `externalTrackingFactEventID` 只是注释里的符号名，仍成立；`carrier_first_effective_pickup_consumer_test.go` 的 Covers 注释同理。
+
+### 代决与越权风险点
+
+1. **四口保留同源例外。** 门禁按语法比 `ID` 与 `PartitionKey` 的表达式（剥单参调用），`xxxEventID(key)` 与 `xxxPartitionKey(key)` 都剥成 `key`，仍判同源，与先例 `transportCommissionEventID` 同形、同样留在例外里。语义上这四口已不同源（ID 是指纹，分区键是可读串）。要删这四行，得把 ID 先赋给局部变量或改门禁的比较，没做；请裁定要不要做。`transport_handover_registration` 原本就用局部变量 `eventID`，保持，没有新增例外。
+2. **`capacity_consumption` 的维度用 `Pool` 整体。** `ports.CapacityPoolKey` 只有租户与池引用两个字段，池引用是一个不透明串，没有可分的班次与维度分量，所以维度是（租户、池、预占）三维。派单说的「池键各分量」在结构体上没有更细的分量。分隔编码已消掉原拼法的撞键。
+3. **`offsite_pickup_registration` 首登三维、更正四维。** 靠元数不同分开，头注已写；两组维在同一分隔编码下不会撞，除非某一维自带 `\x00`，这与本函数头注对其他口的假设相同。
+4. **换形边界沿用完成记录（首发前没有租户的在途数据）：不迁移、不写 ADR、不加 AT。**
+
+### 自验（含 PG，DSN 55432）
+
+`go build ./...`、`go vet`（`internal/transportfulfillment/...`、`internal/parcelshipment/...`、`cmd/parcel-api`、`cmd/parcel-dispatch`、`tests/bentocontract`）、`gofmt -l` 无输出。`go test -count=1 -p 1` 带 DSN：`./internal/transportfulfillment/... ./internal/parcelshipment/... ./internal/visibilityexception/... ./internal/nodeoperations/... ./internal/architecture/... ./cmd/parcel-dispatch/... ./cmd/parcel-api/... ./tests/bentocontract/...` 全部 ok。`go run ./tools/at-coverage-counts -check` 无报错输出。
