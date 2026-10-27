@@ -148,6 +148,12 @@ func (applicability PlanApplicability) Conclude(
 	return applicability, nil
 }
 
+// NotYetEffectiveAt 答这份当前有效的计划在 at 这一刻是否还没生效。离场门拒的正是离场早于生效这一格，复核编排要在门之前把
+// 这一格分流成入账未判、而不是响亮失败，所以问的是同一条比较，门与分流不会各认各的。同一时刻已生效；离场了的计划不问。
+func (applicability PlanApplicability) NotYetEffectiveAt(at time.Time) bool {
+	return applicability.state == PlanCurrentlyEffective && at.Before(applicability.transitionedAt)
+}
+
 // leaveCurrent 是三条离场转移共用的门：只有当前有效能离场（已失效或已被替代不得原地
 // 恢复，也不得二次离场——那会改写第一次离场的依据），离场必须带依据与不早于生效的时刻。
 func (applicability PlanApplicability) leaveCurrent(
@@ -157,7 +163,7 @@ func (applicability PlanApplicability) leaveCurrent(
 	if applicability.state != PlanCurrentlyEffective {
 		return ErrPlanNoLongerCurrent
 	}
-	if !basis.valid() || at.IsZero() || at.Before(applicability.transitionedAt) {
+	if !basis.valid() || at.IsZero() || applicability.NotYetEffectiveAt(at) {
 		return ErrInvalidPlanApplicability
 	}
 	return nil

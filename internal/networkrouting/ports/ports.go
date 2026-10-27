@@ -642,6 +642,12 @@ const (
 	// 取数侧、都是重投推不动的缺口——等目录登记、等部署接上关务判断口，或受理基线缺的端点国家永远补不上；依赖读不动在
 	// 取数侧交错误，到不了这一格。补法各不相同，所以这一格必带取数侧交回的缺口与再判条件。
 	NotJudgedPlanApplicabilityUnclear
+	// NotJudgedTriggerPrecedesPlanEffectiveFrom 是触发的业务时间早于当前有效计划的生效时刻（ADR-0292）：授权角色的决定形成的计划
+	// 从决定的时刻起生效，触发的业务时间落在原计划失效与这一决定之间、处理却在决定之后；判出失效或改善替代时离场与新计划的生效都
+	// 取触发的业务时间，早于这份计划的生效，据以动计划即被离场门拒。与另两道下限分开：那两格比的是委托与路由历史里的已判复核，这一格
+	// 比的是起点计划本身的生效。判出仍适用不在此格，那一次不动计划。同样是终局的入账：业务时间不变，重投推不动，恢复动作是等下一次
+	// 控制触发从它的位置判。
+	NotJudgedTriggerPrecedesPlanEffectiveFrom
 )
 
 func (reason NotJudgedReason) String() string {
@@ -658,6 +664,8 @@ func (reason NotJudgedReason) String() string {
 		return "TRIGGER_PRECEDES_SHIPMENT_ACCEPTANCE"
 	case NotJudgedPlanApplicabilityUnclear:
 		return "PLAN_APPLICABILITY_UNCLEAR"
+	case NotJudgedTriggerPrecedesPlanEffectiveFrom:
+		return "TRIGGER_PRECEDES_PLAN_EFFECTIVE_FROM"
 	default:
 		return ""
 	}
@@ -675,6 +683,8 @@ type NotJudgedTrigger struct {
 	CurrentPositionAt time.Time
 	// ShipmentAcceptedAt 只在触发早于委托接受时有值：比较所用的委托接受时刻。
 	ShipmentAcceptedAt time.Time
+	// PlanEffectiveAt 只在触发早于计划生效时有值：比较所用的当前有效计划的生效时刻，审计要答得出「早于谁」。
+	PlanEffectiveAt time.Time
 	// Missing 与 Reassess 是取数侧交回的缺口与再判条件，适用性看不清时必带：运维按缺口查哪几件包裹在等哪一项登记，
 	// 续办据此认该重驱哪几行。两件成对，缺口没有出口就是一句续不上的否定（AT-NR-018）。
 	Missing   domain.EvidenceGapReference

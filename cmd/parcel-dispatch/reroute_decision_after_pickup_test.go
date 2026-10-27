@@ -28,40 +28,7 @@ func (clock fixedDecisionClock) Now() time.Time { return clock.at }
 // 包裹随后交进新加坡枢纽，交接复核的起点是决定形成的计划，仍适用、引用它。
 func TestARerouteDecisionOnAPickupSuggestionBecomesTheNextStartingPointOnTheDatabase(t *testing.T) {
 	fixture := newReassessBothLanesFixture(t)
-	evidence := &fixture.evidence.evidence
-	evidence.RankingForm = nrdomain.CostSingleDimensionRanking
-	for _, candidate := range []struct {
-		id     string
-		amount int64
-	}{{"SYN-CANDIDATE-01", 4200}, {"SYN-CANDIDATE-02", 5100}} {
-		area, err := nrdomain.NewServiceAreaResolution(nrdomain.ServiceAreaResolutionSpec{
-			Candidate:   mustNR(t, nrdomain.NewCandidateID, candidate.id),
-			Outcome:     nrdomain.AreaCoversDestination,
-			AreaVersion: mustNR(t, nrdomain.NewServiceAreaVersionReference, "SYN-AREA/v1"),
-		})
-		if err != nil {
-			t.Fatalf("服务区域：%v", err)
-		}
-		cost, err := nrdomain.NewPricedCandidateCost(mustNR(t, nrdomain.NewCandidateID, candidate.id), candidate.amount, "CNY")
-		if err != nil {
-			t.Fatalf("候选成本：%v", err)
-		}
-		evidence.ServiceAreas = append(evidence.ServiceAreas, area)
-		evidence.CandidateCosts = append(evidence.CandidateCosts, cost)
-		evidence.Paths = append(evidence.Paths, nrports.CandidatePath{
-			Candidate: mustNR(t, nrdomain.NewCandidateID, candidate.id),
-			Legs:      legsThrough(t, "SYN-NODE-SHA-HUB", reassessHandoverReceiving, "SYN-NODE-SIN-LM"),
-		})
-	}
-	restriction, err := nrdomain.NewHardConstraintFinding(nrdomain.HardConstraintFindingSpec{
-		Candidate:   mustNR(t, nrdomain.NewCandidateID, "SYN-CANDIDATE-01"),
-		Outcome:     nrdomain.RestrictionApplies,
-		Restriction: mustNR(t, nrdomain.NewRestrictionReference, "CUSTOMS-ELIGIBILITY/SYN-CC-29"),
-	})
-	if err != nil {
-		t.Fatalf("硬限制：%v", err)
-	}
-	evidence.HardConstraints = []nrdomain.HardConstraintFinding{restriction}
+	declareOneRestrictedOfTwoCandidates(t, fixture)
 
 	pickup := fixture.intakeAt(t, psdomain.OffsitePickupSource, pickupReassessVersion, pickupReassessPlace, pickupReassessAt)
 	deliver(t, fixture.syn, fixture.intake, pickup, pickup)
@@ -109,6 +76,46 @@ func TestARerouteDecisionOnAPickupSuggestionBecomesTheNextStartingPointOnTheData
 		t.Fatalf("决定取证据的投影 = %s（带了 %v）, want 与交接复核同一份 %s",
 			decisionGeo.ContentDigest(), decisionGeo.Carried(), handoverGeo.ContentDigest())
 	}
+}
+
+// declareOneRestrictedOfTwoCandidates 让复核夹具的证据有两条都可行的候选（01 比 02 便宜），其中 01 被有效硬限制淘汰：原计划所选
+// 的是 01 时，复核判出失效、只形成建议（策略版本没声明自动改路），建议里只有 02。
+func declareOneRestrictedOfTwoCandidates(t *testing.T, fixture *reassessBothLanesFixture) {
+	t.Helper()
+	evidence := &fixture.evidence.evidence
+	evidence.RankingForm = nrdomain.CostSingleDimensionRanking
+	for _, candidate := range []struct {
+		id     string
+		amount int64
+	}{{"SYN-CANDIDATE-01", 4200}, {"SYN-CANDIDATE-02", 5100}} {
+		area, err := nrdomain.NewServiceAreaResolution(nrdomain.ServiceAreaResolutionSpec{
+			Candidate:   mustNR(t, nrdomain.NewCandidateID, candidate.id),
+			Outcome:     nrdomain.AreaCoversDestination,
+			AreaVersion: mustNR(t, nrdomain.NewServiceAreaVersionReference, "SYN-AREA/v1"),
+		})
+		if err != nil {
+			t.Fatalf("服务区域：%v", err)
+		}
+		cost, err := nrdomain.NewPricedCandidateCost(mustNR(t, nrdomain.NewCandidateID, candidate.id), candidate.amount, "CNY")
+		if err != nil {
+			t.Fatalf("候选成本：%v", err)
+		}
+		evidence.ServiceAreas = append(evidence.ServiceAreas, area)
+		evidence.CandidateCosts = append(evidence.CandidateCosts, cost)
+		evidence.Paths = append(evidence.Paths, nrports.CandidatePath{
+			Candidate: mustNR(t, nrdomain.NewCandidateID, candidate.id),
+			Legs:      legsThrough(t, "SYN-NODE-SHA-HUB", reassessHandoverReceiving, "SYN-NODE-SIN-LM"),
+		})
+	}
+	restriction, err := nrdomain.NewHardConstraintFinding(nrdomain.HardConstraintFindingSpec{
+		Candidate:   mustNR(t, nrdomain.NewCandidateID, "SYN-CANDIDATE-01"),
+		Outcome:     nrdomain.RestrictionApplies,
+		Restriction: mustNR(t, nrdomain.NewRestrictionReference, "CUSTOMS-ELIGIBILITY/SYN-CC-29"),
+	})
+	if err != nil {
+		t.Fatalf("硬限制：%v", err)
+	}
+	evidence.HardConstraints = []nrdomain.HardConstraintFinding{restriction}
 }
 
 // rerouteDecisionHandlerOn 用生产的判断库各册与受理基线地理投影读口装一份决定编排，证据视图与成本取数侧取复核夹具那一份。

@@ -310,6 +310,56 @@ func TestAnIntakeEarlierThanTheAcceptanceSettlesNotJudged(t *testing.T) {
 	}
 }
 
+// Covers: AT-NR-104（收寄采用一路）——原计划从决定的时刻起才生效，一次业务时间早于它的节点收寄在那之后才处理，选中候选被有效硬
+// 限制淘汰、本会失效：复核入账为「触发早于计划生效」，交回 nil，不登本路未决哨兵，原因落未判登记并点名计划生效时刻；适用性不动。
+func TestAnIntakeEarlierThanThePlanTakesEffectSettlesNotJudged(t *testing.T) {
+	store := &reassessStoreDouble{byCorrelation: map[nrdomain.RequestCorrelationID]nrports.ReassessmentRecord{}}
+	evidence := evidenceWithOpenFreeze(t)
+	finding, err := nrdomain.NewHardConstraintFinding(nrdomain.HardConstraintFindingSpec{
+		Candidate:   value(t, nrdomain.NewCandidateID, "candidate-1"),
+		Outcome:     nrdomain.RestrictionApplies,
+		Restriction: value(t, nrdomain.NewRestrictionReference, "CUSTOMS-ELIGIBILITY/CC-REF-9"),
+	})
+	if err != nil {
+		t.Fatalf("new restriction finding: %v", err)
+	}
+	evidence.HardConstraints = []nrdomain.HardConstraintFinding{finding}
+	effectiveAt := intakeAt.Add(2 * time.Hour)
+	planVersion := value(t, nrdomain.NewRoutePlanVersionID, "plan-1/v1")
+	established, err := nrdomain.EstablishPlanApplicability(planVersion, effectiveAt)
+	if err != nil {
+		t.Fatalf("establish: %v", err)
+	}
+	applicabilities := &applicabilityStoreDouble{byPlan: map[nrdomain.RoutePlanVersionID]nrdomain.PlanApplicability{planVersion: established}}
+	handler := nrapplication.NewReassessRouteHandler(nrapplication.ReassessRouteDeps{
+		Routes: &routeStoreDouble{records: map[nrdomain.InitialRouteJudgmentKey]nrports.InitialRouteRecord{
+			reassessKey(t): planOnFile(t),
+		}},
+		Evidence:      evidenceDouble{evidence: evidence},
+		Applicability: applicabilities,
+		Store:         store,
+		Log:           &logDouble{digests: map[nrdomain.RequestCorrelationID]string{}},
+		Identities:    &identityDouble{},
+		Clock:         fixedClock{at: intakeAt.Add(3 * time.Hour)},
+	})
+	subject := subjectAccepting(t, sourceHolding(adoptedRecord(t)), acceptedParcelAt(t, intakeAcceptedAt),
+		adapter.NewReassessOnIntakeAdapter(handler, value(t, nrdomain.NewServicePurpose, "NETWORK_SERVICE")))
+
+	if err := subject.HandleAdoptedNetworkIntake(context.Background(), envelopeFor(t)); err != nil {
+		t.Fatalf("早于计划生效应入账，而不是回滚重投：%v", err)
+	}
+	if len(store.byCorrelation) != 0 || len(store.notJudged) != 1 || applicabilities.byPlan[planVersion].State() != nrdomain.PlanCurrentlyEffective {
+		t.Fatalf("复核 %d 条、未判 %d 行、适用性 %s, want 0、1 与 CURRENTLY_EFFECTIVE",
+			len(store.byCorrelation), len(store.notJudged), applicabilities.byPlan[planVersion].State())
+	}
+	for _, noted := range store.notJudged {
+		if noted.Reason != nrports.NotJudgedTriggerPrecedesPlanEffectiveFrom ||
+			!noted.PlanEffectiveAt.Equal(effectiveAt) || !noted.TriggerOccurredAt.Equal(intakeAt) {
+			t.Fatalf("未判 = %+v, want 早于计划生效 %s", noted, effectiveAt)
+		}
+	}
+}
+
 // Covers: 读已接受委托的三格——读不动交 ErrAcceptedParcelUnreadable（本路未决哨兵，回滚重投）；读不着，或读到的委托、
 // 基线与采用记录对不上，是不变量破了，交 ErrAcceptedRequestInconsistent（不进哨兵）。三格都不走到复核。
 func TestTheAcceptanceReadOfAnAdoptedIntakeIsSplitByRecovery(t *testing.T) {

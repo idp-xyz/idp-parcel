@@ -205,6 +205,88 @@ func TestATriggerBeforeTheAcceptanceCarriesTheAcceptanceItWasComparedWith(t *tes
 	}
 }
 
+// Covers: AT-NR-104（登记册那一半）——「早于计划生效」的未判必带计划生效时刻且不晚于它（舍入到微秒后可以相等），别的原因不带，
+// 也不与委托接受、当前位置时刻混用——适配器与库各拒一次。
+func TestATriggerBeforeThePlanTakesEffectCarriesTheEffectiveTimeItWasComparedWith(t *testing.T) {
+	_, reassessments, transactor, pool := newRouteStores(t)
+	ctx := t.Context()
+	key := routeKey(t, "tenant-1", "parcel-1")
+
+	before := notJudged(t, key, "trigger-e-before", ports.NotJudgedTriggerPrecedesPlanEffectiveFrom)
+	before.PlanEffectiveAt = notJudgedTriggerAt.Add(time.Hour)
+	within(t, transactor, ctx, func(txCtx context.Context) error {
+		return reassessments.RecordNotJudged(txCtx, before)
+	})
+	var reason string
+	var effectiveAt time.Time
+	var positionAt, acceptedAt *time.Time
+	if err := pool.QueryRow(ctx,
+		`SELECT reason, plan_effective_at, current_position_at, shipment_accepted_at
+		   FROM network_routing.route_reassessment_not_judged
+		  WHERE tenant_id = 'tenant-1' AND correlation_id = 'trigger-e-before'`).Scan(&reason, &effectiveAt, &positionAt, &acceptedAt); err != nil ||
+		reason != "TRIGGER_PRECEDES_PLAN_EFFECTIVE_FROM" || !effectiveAt.Equal(before.PlanEffectiveAt) || positionAt != nil || acceptedAt != nil {
+		t.Fatalf("未判行 = %q、生效 %s、当前位置 %v、接受 %v（err %v）, want 早于计划生效 %s、不带另两格时刻",
+			reason, effectiveAt, positionAt, acceptedAt, err, before.PlanEffectiveAt)
+	}
+
+	for name, record := range map[string]ports.NotJudgedTrigger{
+		"早于计划生效却没带时刻": notJudged(t, key, "trigger-e-bare", ports.NotJudgedTriggerPrecedesPlanEffectiveFrom),
+		"别的原因带了计划生效时刻": func() ports.NotJudgedTrigger {
+			record := notJudged(t, key, "trigger-e-extra", ports.NotJudgedNoRoutingHistory)
+			record.PlanEffectiveAt = notJudgedTriggerAt.Add(time.Hour)
+			return record
+		}(),
+		"早于计划生效带的是委托接受时刻": func() ports.NotJudgedTrigger {
+			record := notJudged(t, key, "trigger-e-acceptance", ports.NotJudgedTriggerPrecedesPlanEffectiveFrom)
+			record.ShipmentAcceptedAt = notJudgedTriggerAt.Add(time.Hour)
+			return record
+		}(),
+		"早于计划生效带的是当前位置时刻": func() ports.NotJudgedTrigger {
+			record := notJudged(t, key, "trigger-e-position", ports.NotJudgedTriggerPrecedesPlanEffectiveFrom)
+			record.CurrentPositionAt = notJudgedTriggerAt.Add(time.Hour)
+			return record
+		}(),
+	} {
+		if err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+			return reassessments.RecordNotJudged(txCtx, record)
+		}); err == nil {
+			t.Errorf("%s：写进了未判登记", name)
+		}
+	}
+	// 纳秒上早于生效、舍入到微秒后落在同一刻的那一次照样写得进：编排按纳秒比，库按微秒存。
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO network_routing.route_reassessment_not_judged
+			(tenant_id, correlation_id, customer_account_id, shipment_request_id, acceptance_baseline,
+			 declared_parcel_id, service_purpose, reason, trigger_occurred_at, plan_effective_at, settled_at)
+		 VALUES ('tenant-1', 'trigger-e-same-microsecond', 'customer-a', 'request-1', 'baseline-v1',
+		         'parcel-1', 'LAST_MILE_DELIVERY', 'TRIGGER_PRECEDES_PLAN_EFFECTIVE_FROM', $1, $2, now())`,
+		notJudgedTriggerAt.Add(100*time.Nanosecond), notJudgedTriggerAt.Add(400*time.Nanosecond),
+	); err != nil {
+		t.Fatalf("同一微秒里早于生效的那一次写不进：%v", err)
+	}
+	for name, insert := range map[string]string{
+		"计划生效早于触发": `INSERT INTO network_routing.route_reassessment_not_judged
+			(tenant_id, correlation_id, customer_account_id, shipment_request_id, acceptance_baseline,
+			 declared_parcel_id, service_purpose, reason, trigger_occurred_at, plan_effective_at, settled_at)
+		 VALUES ('tenant-1', 'trigger-e-raw', 'customer-a', 'request-1', 'baseline-v1',
+		         'parcel-1', 'LAST_MILE_DELIVERY', 'TRIGGER_PRECEDES_PLAN_EFFECTIVE_FROM', now(), now() - interval '1 microsecond', now())`,
+		"别的原因带了计划生效时刻": `INSERT INTO network_routing.route_reassessment_not_judged
+			(tenant_id, correlation_id, customer_account_id, shipment_request_id, acceptance_baseline,
+			 declared_parcel_id, service_purpose, reason, trigger_occurred_at, plan_effective_at, settled_at)
+		 VALUES ('tenant-1', 'trigger-e-raw-extra', 'customer-a', 'request-1', 'baseline-v1',
+		         'parcel-1', 'LAST_MILE_DELIVERY', 'NO_ROUTING_HISTORY', now(), now() + interval '1 hour', now())`,
+		"早于计划生效没带时刻": `INSERT INTO network_routing.route_reassessment_not_judged
+			(tenant_id, correlation_id, customer_account_id, shipment_request_id, acceptance_baseline,
+			 declared_parcel_id, service_purpose, reason, trigger_occurred_at, settled_at)
+		 VALUES ('tenant-1', 'trigger-e-raw-bare', 'customer-a', 'request-1', 'baseline-v1',
+		         'parcel-1', 'LAST_MILE_DELIVERY', 'TRIGGER_PRECEDES_PLAN_EFFECTIVE_FROM', now(), now())`,
+	} {
+		if _, err := pool.Exec(ctx, insert); err == nil {
+			t.Errorf("%s：绕过适配器直插进了库", name)
+		}
+	}
+}
+
 // Covers: AT-NR-083——取最近一次控制触发时按判断键串行到事务结束：一笔事务取了之后、提交之前，同一判断键的另一笔等在
 // 锁上；前一笔落了更晚的复核并提交，后一笔读到的正是它。两路触发在两笔并发事务里到达，较早的那次因此不会与较新的
 // 那次双双判过。

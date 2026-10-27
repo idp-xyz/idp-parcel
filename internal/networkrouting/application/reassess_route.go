@@ -168,7 +168,7 @@ func NewReassessRouteHandler(deps ReassessRouteDeps) *ReassessRouteHandler {
 // → 载入历史结果（没有历史不得凭空假定初始计划）→ 定判断起点（当前有效计划，或无当前有效路由）→ 两条独立判断线
 // （6A 计划适用性、6B 替代候选）→ 提交。失效即失效：候选评估未决拦不住失效落库，三件并存（硬句）。
 // 判断前提里重投推不动的那几格不答未决，入账未判、留下原因；早于当前位置的触发同样入账不判（ADR-0235），早于委托接受的
-// 也是（ADR-0279）。
+// 也是（ADR-0279），起点计划在触发的业务时间还没生效而判出失效或改善替代的也是（ADR-0292）。
 func (handler *ReassessRouteHandler) Handle(
 	ctx context.Context,
 	command ReassessRouteCommand,
@@ -402,6 +402,9 @@ func freezeOf(
 // 另存）、看不清入账未判。可控节点上仍适用时先看冻结：未声明停未配置；已越过边界则保留原计划，
 // 轻微改善不改路。场外揽收不建立可控节点，仍适用即保留，不看冻结也不试改善（ADR-0249 决定二）：
 // 冻结与改善问的都是「从这个节点起往后怎么走」，揽收时没有这个节点；改善等包裹交进首个节点后的交接复核。
+//
+// 起点计划在触发的业务时间还没生效时（授权角色的决定形成的计划从决定的时刻起生效），判出失效或改善替代都会让原计划在
+// 那一刻离场，离场门必拒；这两条线在动计划之前入账未判，判出仍适用不动计划、照常记（ADR-0292）。
 func (handler *ReassessRouteHandler) reassessPlan(
 	ctx context.Context,
 	trigger domain.ReassessmentTrigger,
@@ -454,6 +457,9 @@ func (handler *ReassessRouteHandler) reassessPlan(
 			return handler.commit(ctx, trigger, record)
 		}
 		switched, err := handler.tryImprovementReroute(ctx, trigger, start, evidence, carried, record)
+		if errors.Is(err, errTriggerPrecedesPlanEffective) {
+			return handler.notJudgedBeforePlanEffective(ctx, trigger, start)
+		}
 		if err != nil {
 			return ReassessRouteResult{}, err
 		}
@@ -463,6 +469,10 @@ func (handler *ReassessRouteHandler) reassessPlan(
 		return handler.commit(ctx, trigger, record)
 
 	case domain.PlanNoLongerApplicable:
+		// 失效在触发的业务时间离场；起点计划若在那一刻还没生效，离场门必拒，不让它响亮失败占着分区（ADR-0292）。
+		if start.applicability.NotYetEffectiveAt(trigger.OccurredAt()) {
+			return handler.notJudgedBeforePlanEffective(ctx, trigger, start)
+		}
 		basis, _ := review.LapseBasis()
 		// 起点在判断键锁里读、只取当前有效的计划，重复触发也在锁里按关联读回了：答 ErrPlanNoLongerCurrent 是编程
 		// 错误。离场门的其余拒法（如离场早于生效）也不折成未决，照样响亮报错。
@@ -697,6 +707,11 @@ func (handler *ReassessRouteHandler) tryImprovementReroute(
 	if !over {
 		return record, nil
 	}
+	// 改善替代在触发的业务时间换班，原计划在那一刻离场、接班计划也从那一刻生效；原计划在那一刻还没生效时，离场门必拒，接班
+	// 计划又早于它前面的计划生效。只拦这一步：判不出改善的仍适用不动计划，照常记（ADR-0292）。
+	if start.applicability.NotYetEffectiveAt(trigger.OccurredAt()) {
+		return ports.ReassessmentRecord{}, errTriggerPrecedesPlanEffective
+	}
 	triggerRef, err := domain.NewRerouteTriggerReference(trigger.Correlation().String())
 	if err != nil {
 		return ports.ReassessmentRecord{}, fmt.Errorf("reroute trigger reference: %w", err)
@@ -791,6 +806,10 @@ func improvementBasisOf(
 	return domain.JudgeCostImprovement(currentFact, nextFact, evidence.AutoRerouteImprovementThresholdMinor,
 		costs.CitationsOf(current.SelectedCandidate()))
 }
+
+// errTriggerPrecedesPlanEffective 让改善替代那一步把「起点计划在触发的业务时间还没生效」交回调用方，由调用方入账未判；
+// 它不是故障，也不出这个包。
+var errTriggerPrecedesPlanEffective = errors.New("network routing: the trigger precedes the effective time of the plan it reviews")
 
 // errRouteIdentityUnavailable 让调用方把「取号依赖故障」与领域故障分开转成未决续办。
 var errRouteIdentityUnavailable = errors.New("network routing: route identity factory unavailable")
@@ -1121,6 +1140,18 @@ func notJudgedFor(trigger domain.ReassessmentTrigger, reason ports.NotJudgedReas
 		Reason:            reason,
 		TriggerOccurredAt: trigger.OccurredAt(),
 	}
+}
+
+// notJudgedBeforePlanEffective 把触发早于起点计划生效的一次入账为未判，未判登记点名比较所用的生效时刻。生效时刻取适用性
+// 里的当前有效时刻，与离场门比的是同一个值（PlanApplicability.NotYetEffectiveAt）。
+func (handler *ReassessRouteHandler) notJudgedBeforePlanEffective(
+	ctx context.Context,
+	trigger domain.ReassessmentTrigger,
+	start routeStart,
+) (ReassessRouteResult, error) {
+	record := notJudgedFor(trigger, ports.NotJudgedTriggerPrecedesPlanEffectiveFrom)
+	record.PlanEffectiveAt = start.applicability.TransitionedAt()
+	return handler.notJudged(ctx, record)
 }
 
 // notJudged 先把原因落进未判登记，再答`未判`。原因没落库就不得答这一格（护栏同 ADR-0094 决定五）：

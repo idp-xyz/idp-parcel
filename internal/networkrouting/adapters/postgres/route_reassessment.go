@@ -287,6 +287,15 @@ func (repository *RouteReassessments) RecordNotJudged(ctx context.Context, recor
 		return fmt.Errorf("record reassessment not judged: shipment acceptance time must come with %s and only with it",
 			ports.NotJudgedTriggerPrecedesShipmentAcceptance)
 	}
+	var planEffectiveAt *time.Time
+	if !record.PlanEffectiveAt.IsZero() {
+		at := record.PlanEffectiveAt.UTC()
+		planEffectiveAt = &at
+	}
+	if (record.Reason == ports.NotJudgedTriggerPrecedesPlanEffectiveFrom) != (planEffectiveAt != nil) {
+		return fmt.Errorf("record reassessment not judged: plan effective time must come with %s and only with it",
+			ports.NotJudgedTriggerPrecedesPlanEffectiveFrom)
+	}
 	gap, condition, err := notJudgedGap(record)
 	if err != nil {
 		return err
@@ -297,9 +306,9 @@ func (repository *RouteReassessments) RecordNotJudged(ctx context.Context, recor
 			(tenant_id, correlation_id,
 			 customer_account_id, shipment_request_id,
 			 acceptance_baseline, declared_parcel_id, service_purpose,
-			 reason, trigger_occurred_at, current_position_at, shipment_accepted_at,
+			 reason, trigger_occurred_at, current_position_at, shipment_accepted_at, plan_effective_at,
 			 evidence_gap, reassessment_condition, settled_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		 ON CONFLICT DO NOTHING`,
 		key.TenantID.String(),
 		record.Correlation.String(),
@@ -312,6 +321,7 @@ func (repository *RouteReassessments) RecordNotJudged(ctx context.Context, recor
 		record.TriggerOccurredAt.UTC(),
 		positionAt,
 		acceptedAt,
+		planEffectiveAt,
 		gap,
 		condition,
 		record.SettledAt.UTC(),

@@ -104,6 +104,36 @@ func TestApplicabilityTransitionsDemandBasisAndOrderedTime(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0292 决定一——离场门拒的正是离场早于生效这一格，编排要在门之前分流，问的就是这个：只有当前有效的计划才有
+// 「还没生效」，同一时刻已生效；离场了的计划不再问。与离场门同一条比较，两边不会各认各的。
+func TestACurrentPlanIsNotYetEffectiveOnlyBeforeItsEffectiveTime(t *testing.T) {
+	basis := mustValue(t, domain.NewApplicabilityBasisReference, "LINE-CLOSED/NET-ADJ-7")
+	for name, check := range map[string]struct {
+		at   time.Time
+		want bool
+	}{
+		"生效之前":   {planEffectiveAt.Add(-time.Nanosecond), true},
+		"同一时刻":   {planEffectiveAt, false},
+		"生效之后":   {planEffectiveAt.Add(time.Nanosecond), false},
+		"零值不是早于": {time.Time{}, true},
+	} {
+		if got := currentPlan(t).NotYetEffectiveAt(check.at); got != check.want {
+			t.Errorf("%s：NotYetEffectiveAt(%s) = %v, want %v", name, check.at, got, check.want)
+		}
+		_, err := currentPlan(t).Lapse(basis, check.at)
+		if refused := errors.Is(err, domain.ErrInvalidPlanApplicability); refused != check.want {
+			t.Errorf("%s：离场门拒 = %v, want 与 NotYetEffectiveAt 同答 %v", name, refused, check.want)
+		}
+	}
+	lapsed, err := currentPlan(t).Lapse(basis, planEffectiveAt.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("lapse: %v", err)
+	}
+	if lapsed.NotYetEffectiveAt(planEffectiveAt.Add(-time.Hour)) {
+		t.Errorf("已失效的计划被问「还没生效」，want 否——它已经生效过并离场")
+	}
+}
+
 func TestRehydrateApplicabilityDoesNotReplayLeaveCurrent(t *testing.T) {
 	lapsed, err := domain.RehydratePlanApplicability(domain.RehydratePlanApplicabilitySpec{
 		Plan:           mustValue(t, domain.NewRoutePlanVersionID, "plan-1/v1"),

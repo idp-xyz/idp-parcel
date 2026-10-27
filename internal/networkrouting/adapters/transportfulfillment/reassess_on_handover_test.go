@@ -793,3 +793,36 @@ func TestAHandoverEarlierThanTheAcceptanceSettlesNotJudged(t *testing.T) {
 		}
 	}
 }
+
+// Covers: AT-NR-104（交接一路）——原计划从决定的时刻起才生效，一次判断时刻早于它的交接（进吉隆坡枢纽，不在计划上）在那之后才处理：
+// 复核入账为「触发早于计划生效」，交回 nil，不登本路未决哨兵——让它整封信封响亮失败、占着交接分区，只会烧到 ABANDONED；
+// 零复核、适用性不动，原因落未判登记并点名比较所用的计划生效时刻。
+func TestAHandoverEarlierThanThePlanTakesEffectSettlesNotJudged(t *testing.T) {
+	handover := formHandover(t, handoverSpec{
+		object: "parcel-1", version: "handover/v1", verdict: tfdomain.ObjectHandedOver, receiving: "SYN-NODE-KUL-HUB",
+	})
+	built := newSubject(t, newHandoverFinder(handover), acceptedParcel(t), true)
+	effectiveAt := handedOverAt.Add(time.Hour)
+	planVersion := value(t, nrdomain.NewRoutePlanVersionID, "plan-1/v1")
+	established, err := nrdomain.EstablishPlanApplicability(planVersion, effectiveAt)
+	if err != nil {
+		t.Fatalf("establish: %v", err)
+	}
+	built.applicabilities.byPlan[planVersion] = established
+
+	if err := built.deliver(t, handover); err != nil {
+		t.Fatalf("deliver = %v, want 入账", err)
+	}
+	if n := len(built.reassessments.byCorrelation); n != 0 || built.applicabilities.byPlan[planVersion].State() != nrdomain.PlanCurrentlyEffective {
+		t.Fatalf("早于生效却落了 %d 条复核、适用性 %s", n, built.applicabilities.byPlan[planVersion].State())
+	}
+	if len(built.reassessments.notJudged) != 1 {
+		t.Fatalf("未判登记 = %d 行, want 1", len(built.reassessments.notJudged))
+	}
+	for _, noted := range built.reassessments.notJudged {
+		if noted.Reason != nrports.NotJudgedTriggerPrecedesPlanEffectiveFrom ||
+			!noted.TriggerOccurredAt.Equal(handedOverAt) || !noted.PlanEffectiveAt.Equal(effectiveAt) {
+			t.Fatalf("未判登记 = %+v, want 早于计划生效 %s", noted, effectiveAt)
+		}
+	}
+}
