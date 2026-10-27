@@ -61,7 +61,7 @@ M–L：两张结果表各加版本链或另立更正表与迁移；领域更正
 1. **版本链**：另立两张只追加的更正册（TF 迁移 `0055`），不在结果表加版本列。更正行回指首次提交的待确认行：外键带 `corrects_outcome`（CHECK 钉死为 `PENDING_CONFIRMATION`）连主键三列指向结果行的 `（…，outcome）` 唯一键，库面就接不上一格已是确定结果的行；主键同结果行，一格待确认至多一条更正；首次提交的结果行、尝试行、揽收尝试摘要一个字不改。揽收一侧按（租户，来源身份，对象）落，同 `pickup_attempt_result` 的主键；派送一侧按（租户，尝试身份，对象）。
 2. **领域更正只许回指待确认**：`domain.CorrectPendingAttemptObjectResult`、`domain.CorrectPendingDeliveryAttemptResult`。确定结果走既有构造门（失败与拒收必带依据、揽收到手与妥投不带依据、不早于到场、对象在尝试范围内），必带所凭的后补来源，更正成待确认与对已确定判断的更正都不接（后者答`并非待确认`）。业务发生时刻可以早于待确认那一版，更正这一判断不早于它所更正的待确认与它说的那件事。
 3. **各消费方改读当前有效结果**：`DeliveryAttempts.LoadDeliveryResult` 外连更正册读「首次提交，被更正则取更正」，交付登记、交付门禁读数与失败尝试费（派送一侧）三个读方一处改；揽收一侧失败尝试费经 `FailedAttemptSource` 的新读法 `FindEffectiveByKey`（原 `FindByKey` 改名，按当前有效结果答；适配器同一只，两处装配不用动）。尝试登记的重放与冲突比对仍读首次提交（`FindByKey`）——同一次提交的重放不因更正而变成冲突。
-4. **更正成揽收到手**：经对象级揽收登记（首登口那同一条编排，同一组缝）形成场外揽收、进声明的段、铸判断首版、入队 `offsite-pickup.registered` 交 parcel-shipment；同（对象，尝试）已登过同内容的揽收（此前的绕法）收口、不登第二份、不再进一次段，登过的是另一回事则答冲突、不写更正。登记写在更正追加之前、同一笔事务，装配事务壳对「成立」以外的任一格整笔回滚。
+4. **更正成揽收到手**：经对象级揽收登记（首登口那同一条编排，同一组缝）形成场外揽收、进声明的段、铸判断首版、入队 `offsite-pickup.registered` 交 parcel-shipment；同（对象，尝试）已登过同内容的揽收（此前的绕法）收口、不登第二份、不再进一次段，登过的是另一回事则答冲突、不写更正。登记写在更正追加之前、同一笔事务，装配事务壳对「成立」以外的任一格整笔回滚。更正晚到、对象此后已有更晚的控制事实时，登记不带段声明、答 `LATER_CONTROL_FACTS`（评审修订轮，见文末）。
 5. **接入面**：两个面同一份编排——执行方在作业事实面后补（`/transport-fulfillment/offsite-pickup-attempt-result-corrections`、`/transport-fulfillment/delivery-attempt-result-corrections`），复核人在运营决定面认定（`/transport-fulfillment-pickup-attempt-result-confirmations`、`/transport-fulfillment-delivery-attempt-result-confirmations`，决定种类 `PICKUP_ATTEMPT_RESULT_CONFIRMATION`、`DELIVERY_ATTEMPT_RESULT_CONFIRMATION`，access_identity 迁移 `0027`）。照 ADR-0222：新特性文件 `cmd/parcel-api/endpoints_attempt_result_corrections.go` 加 assemble 文件加特性测试里的未接线占位；未动 endpoints.go、main.go、endpoints_test.go、routes.go 与 `cmd/parcel-dispatch/routes.go`。查阅册的未接线占位（`unwired_orchestration.go`）多一个读方法，既有 assemble 文件一个没动。
 6. **待确认那一格的答复语义不变**：交付登记对仍是待确认的那一格照旧答 `DELIVERY_RESULT_PENDING_CONFIRMATION`、失败尝试费照旧答 `ATTEMPT_RESULT_PENDING_CONFIRMATION`，不并回`未生效`、不改词；更正落地只是让「先把那一格确定下来」有了同一次上门的路。
 7. **复核清单**（票面「要裁的」第三条）：运输履约查阅页加 `pending-attempt-result` 册，列还在待确认的对象（两侧合并、最早的先看、带来源与缺口和更正口要指名的键），已更正的靠反连接不再列。
@@ -87,11 +87,11 @@ M–L：两张结果表各加版本链或另立更正表与迁移；领域更正
 2. **复核人能认定的范围**：两种决定只约束谁能认定，不约束认定时要有什么证据；所凭来源是一个引用，产品不核它的内容。若要第二人复核或来源格式门，是产品策略，加在认定口上。
 3. **段声明由命令带，复核人未必知道**：运营决定面认定揽收到手时若不知道当初声明的段，只能留空，对象于是登了揽收而不在任何段里（段那一半另说，归票 demo-chain-gaps/179）。沿用首登声明要改尝试登记口的存储形状，未做。
 4. **管理台没有认定页**：清单与认定口都在后端，`apps/admin-web` 没有这一册的页签和认定动作（共享件与运营页另一会话在改，本票未碰）；上线前认定只能经 API。
-5. **更正成揽收到手晚到时不带「更晚的控制事实」检查**：走首登那条进段路，对象在待确认之后又凭别的控制事实进了别的段时，再更正会让对象两段同时在场（ADR-0307 越权风险点 2 针对交接首登，同形缺口）。
+5. **晚到更正的段那一半不重算；对象第二次揽收的责任起点归采用先后；只拦「更晚」，不拦「已在别的段里在场」**：更正成揽收到手前先问 ADR-0307 决定三的那一问（评审修订轮补的，N1），命中时场外揽收照登、不带段声明、答 `LATER_CONTROL_FACTS`，该对象在声明的段里没有参与（不立段、无实际承运商判断首版）。对象于是可能有两个不同尝试的场外揽收、发两封 `offsite-pickup.registered`：parcel-shipment 的采用按责任起点唯一处理，先到的采用为责任起点，后到的（不声明更正关系的新一次尝试）落一份 `SOURCE_NOT_ADOPTED`、依据 `RESPONSIBILITY_ALREADY_STARTED/OFFSITE_PICKUP/<先到的版本>`，确定性、入账收工，不报错、不写第二份采用（核查记录见文末）；责任起点因此取先到的那封而不是业务时间更早的那份，是 parcel-shipment 既有口径（`AT-PS-049`）。拦截只覆盖「此后已有更晚的入场或离场」：对象在更正所说的发生时刻之前已在别的段里在场、尚未离场时，更正成揽收到手仍会让它进声明的段——对象级揽收首登对这种对象同样不拦，这里不另补。
 6. **更正册里存的控制依据是「更正当时所报」，不是当前控制**：只为重放比对留；对象级登记之后又经揽收更正口改了控制依据，重放更正拿旧控制依据比，可能答冲突。
 7. **尝试级「揽收到手」结果与对象级登记对同（对象，尝试）今天不互斥**（更早就有）：本票只保证更正路径不制造第二份。
 8. **更正成揽收到手的重放不重发登记意图**：重放答已有更正、不再调登记编排，登记时交意图失败留下的续办引用只能经对象级登记口原样重放来重发。
-9. **access_identity 迁移 `0027` 的决定种类 CHECK 取了此前各份的并集**，含在途分支 `claude-code76` 的 `0026` 里的 `CANCELLATION_ORDER_CONFLICT_RESOLUTION`（那一份尚未进 main）。若它被改号或落在本迁移之后施加，要核对并集；之后谁再重建这条 CHECK 都取并集。
+9. **access_identity 迁移 `0027` 的决定种类 CHECK 是 `0026` 那一份的超集**（`0026` 在在途分支 `claude-code76`，含 `CANCELLATION_ORDER_CONFLICT_RESOLUTION`，尚未进 main）。若它被改号或落在本迁移之后施加，要核对并集；重建这条 CHECK 的迁移都取已有各份的并集。
 10. **演示种子编号**：`data/access/22`、`23`、`data/governance/59`、`60`、`steps/481` 取开工时 main 的下一个空号；进 main 时若另有分支占同号，改号即可。
 
 ### 验证
@@ -106,4 +106,29 @@ M–L：两张结果表各加版本链或另立更正表与迁移；领域更正
 
 ### 迁移号 / ADR 号 / AT 号
 
-TF 迁移 `0055_attempt_result_corrections.sql`；access_identity 迁移 `0027_attempt_result_confirmation_decisions.sql`；ADR-0297；AT-TF-357 至 362。
+TF 迁移 `0055_attempt_result_corrections.sql`；access_identity 迁移 `0027_attempt_result_confirmation_decisions.sql`；ADR-0297；AT-TF-357 至 363（`363` 为评审修订轮所立）。
+
+### 评审记录与修订轮（2026-10-27）
+
+独立评审判**可合入**，无阻断；合入前要补的一条（N1）、一批测试缺口（N2）与规范小项（N3），本轮在同一分支上加提交补齐。
+
+**N1 晚到更正不问「更晚的控制事实」（评审实测复现：登记 A1 里对象 X 为待确认，X 凭 A2 经对象级登记口进 SEG-A2，作业事实面把 A1 更正成揽收到手并声明 SEG-A1，更正答 201 且没有拒绝格，`FindActiveSegments(X)` 返回两段，之后交付登记按对象找段答 `ErrObjectActiveInSeveralSegments`、整笔回滚）。**
+- 修法：更正成揽收到手、转交对象级揽收登记之前，`CorrectPickupAttemptResultHandler` 先问 ADR-0307 决定三的同一问。`laterControlFacts` 改成吃（租户、对象、发生时刻），交接首登与更正、揽收更正共用一份，不另写；命中时登记**不带命令的段声明**（场外揽收事实照落、意图照交 parcel-shipment，不立声明的段、对象不加入它），答复带 `segmentEntryRefusal: LATER_CONTROL_FACTS`、不带续办引用。取「不带段声明登记」而不取「拒绝这次更正」：揽收事实本身是真的，只是不该再造第二个段（ADR-0307 对交接首登取的是同一取舍：不拒登）。
+- 答复格：`LATER_CONTROL_FACTS` 是 `SegmentEntryRefusal` 既有的一格，更正的 HTTP 译装沿用对象级揽收登记那个 `segmentEntryRefusal` 字段，没有新增格，无落到 default 的消费方；确定性拒绝，不进未决哨兵（ADR-0029）。命令没声明段、或同（对象，尝试）已登过同内容揽收（读回在册那份、没碰段）时答复不带这一格。登记册读不动不在更正里作答——转交的登记要读同一份册，读不动它自己会留进段的欠账。
+- 装配：`newPickupAttemptResultCorrection` 把同一份段登记册也交给更正处理器（`Segments`，可缺席，缺席时不问）。
+- 文档：ADR-0297 决定四加一条，越权风险点 5 重写；TF CONTEXT 更正规则句补一句；UC-TF-002 立 `AT-TF-363`；盘点追记同步。
+- 测试：生产装配真库复现场景 `TestALateCorrectionToAPickupLeavesTheObjectInItsOneSegmentSoItsDeliveryStillRegisters`（同一次到访两件对象，parcel-1 晚到、parcel-2 没有更晚控制事实：更正后 `FindActiveSegments(parcel-1)` 仍只有 SEG-A2，SEG-A1 里只有 parcel-2，场外揽收一行、信封一封，之后交付登记 201 并结束参与）；编排四条（晚到、同一刻不算更晚照常进段、没声明段不带拒绝格、读回在册那份不带拒绝格）。
+- PS 对同一对象第二封 `registered` 信封的核查（只读，没有改 PS）：`AdoptOnOffsitePickupAdapter` 按信封里的（对象，尝试，版本）取回那一代，转 `AdoptNetworkIntakeHandler`。采用键带来源版本，所以第二个尝试的版本不撞幂等；之后 `FindResponsibilityStart` 命中先到的那一份，第二份来源不声明更正关系，于是 `refuse` 落一份 `SOURCE_NOT_ADOPTED`，依据 `RESPONSIBILITY_ALREADY_STARTED/OFFSITE_PICKUP/<先到的版本>`；`adoptconsume.Consumption` 把 `SOURCE_NOT_ADOPTED` 当已消费入账。即：**确定性拒绝、不报错、不写第二份采用、消费门不重投**，既有用例 `TestACompetingSourceIsStillRefusedAfterACorrection` 钉的就是这一格。PS 侧不会因此坏掉。留意的口径：责任起点取先到的那封，不是业务时间更早的那份（这里 A2 的信封先入队，A1 晚到的更正登记反而被拒），是 PS 的既有规则（`AT-PS-049`），不是本票引入；越权风险点 5 已记。可见性（VE）侧两个消费者按（对象，尝试）各派生各的事实，键不同，不互相覆盖。
+
+**N2 测试没盖住的存活变异（生产代码是对的，补用例，变异已验红）**
+1. 重放比对：`TestAPickupCorrectionReplayWithAnotherBasisOrCorrectionTimeConflicts`、`TestADeliveryCorrectionReplayWithAnotherBasisOrCorrectionTimeConflicts`（换依据、换更正时刻再交答 `SOURCE_CONFLICT`，原样再交答已有更正）。
+2. 派送一侧更正早于待确认那一版：应用层 `TestADeliveryCorrectionEarlierThanThePendingVersionIsNotAccepted`，领域层在 `TestADeliveryCorrectionGoesThroughTheDeterminateGatesAndPointsBackAtPending` 补两格（更正早于待确认那一版、更正早于它说的那件事）。
+3. 派送一侧结果行锁：`TestConcurrentCorrectionsOfOnePendingDeliveryResultQueueOnItsRowLock`（仿揽收一侧，`-count=5`）。
+4. 运营决定面自报租户：传输面 `TestTheAttemptResultConfirmationFacesTakeTheTenantOnlyFromTheEnvelope`，生产装配 `TestAnOperatorOfAnotherTenantCannotConfirmThisTenantsAttemptResultsByNamingItInTheRequest`（租户 B 的复核人持两种认定授予，带 `?tenant=` 与 `X-Reported-Tenant` 认定租户 A 的待确认：答 `来源未受理`、两张更正册零行；载荷夹带租户答 400；租户 A 自己的复核人对照成立）。
+5. 跨租户：`TestTwoTenantsWithTheSameAttemptAndObjectNeverSeeOrLockEachOthersCorrections`（两租户同来源身份/尝试身份、同对象，A 更正后 B 的加载、当前有效读、交付读数仍是待确认；A 才有的尝试 B 指名不到；A 持结果行锁时 B 加载同键的两格不被堵住）。
+- 变异结果见下「验证」。
+
+**N3 规范小项**
+- 迁移 `0027` 头注改成不带时态的说法（`0026` 的超集，重建 CHECK 的迁移取已有各份的并集），CHECK 内容未动。
+- 本分支新增行里的变更叙述用词（「此前」「照旧」「不再」「改答」「今天」等）改成现行规则句：AT-TF-358、测试注释、ADR-0297 与 CONTEXT 里的相应句子；`git diff origin/main...HEAD` 在非票面文件的新增行里按上列词查无余项。
+- ADR-0297 Status 与「对已接受记录的作用」「Links」统一写「四口」（作业事实面后补两口：`/transport-fulfillment/offsite-pickup-attempt-result-corrections`、`/transport-fulfillment/delivery-attempt-result-corrections`；运营决定面认定两口：`/transport-fulfillment-pickup-attempt-result-confirmations`、`/transport-fulfillment-delivery-attempt-result-confirmations`），与 ADR-0151 注记的「四口」一致（核实：两个更正处理器、两个接入面，端点四行）；「后四种与未决都是 200」改成「只有 `RESULT_CORRECTED` 答 201，其余五格都答 200」。入向指针仍只在 ADR-0151 的 Status 注记与 Links，ADR-0151 正文未动。
