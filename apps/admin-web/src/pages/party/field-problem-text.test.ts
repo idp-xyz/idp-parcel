@@ -93,7 +93,7 @@ test('按问题码译：码与参数给出中文，原话收进原话那一格',
   equal(fieldProblemText(codedProblemLine({ problem: '必填，不能留空', code: 'REQUIRED' })).original, null);
 });
 
-// Covers: AT-PC-070——每个码的话术：参数缺省时用不带主语的说法；主语来自服务端参数，不再靠原话的形状。
+// Covers: AT-PC-070——每个码的话术：参数缺省时用不带主语的说法；主语来自服务端参数，不靠原话的形状。
 test('各问题码的话术', () => {
   const text = (code: string, params?: Record<string, string>) =>
     fieldProblemText(codedProblemLine({ problem: '原话', code, params })).text;

@@ -426,7 +426,10 @@ func TestPreviewEndpointAnswersDigestOrFieldProblems(t *testing.T) {
 
 // Covers: 命令口上的逐格问题走 400 + MALFORMED_REQUEST 并把 problems 带在响应体里——改载荷才会好，只是多说哪几格。
 func TestCommandEndpointsCarryFieldProblemsInTheBadRequest(t *testing.T) {
-	problems := &commercialhttp.PublicationPayloadProblems{Problems: []commercialhttp.PayloadProblem{{Field: "creditPolicy.limit", Problem: "恰一格"}}}
+	problems := &commercialhttp.PublicationPayloadProblems{Problems: []commercialhttp.PayloadProblem{
+		{Field: "creditPolicy.limit", Problem: "恰一格", Code: commercialhttp.ProblemCodeExactlyOne, Params: map[string]string{"subject": "额度"}},
+		{Field: "creditPolicy.legalEntity", Problem: "不得为空"},
+	}}
 	response := serve(commercialhttp.NewSubmitPublicationDraftEndpoint(draftIntakeDouble{err: problems}, unreachableOperator(t)), http.MethodPost)
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", response.Code)
@@ -435,12 +438,21 @@ func TestCommandEndpointsCarryFieldProblemsInTheBadRequest(t *testing.T) {
 		Error struct {
 			Code     string `json:"code"`
 			Problems []struct {
-				Field string `json:"field"`
+				Field  string            `json:"field"`
+				Code   string            `json:"code"`
+				Params map[string]string `json:"params"`
 			} `json:"problems"`
 		} `json:"error"`
 	}
-	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || body.Error.Code != "MALFORMED_REQUEST" || len(body.Error.Problems) != 1 || body.Error.Problems[0].Field != "creditPolicy.limit" {
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || body.Error.Code != "MALFORMED_REQUEST" || len(body.Error.Problems) != 2 || body.Error.Problems[0].Field != "creditPolicy.limit" {
 		t.Fatalf("body = %s", response.Body.Bytes())
+	}
+	// 录入口的 400 体带问题码与参数（AT-PC-070）；没经 add 收集、没带码的问题交出兜底码，code 恒在场。
+	if first := body.Error.Problems[0]; first.Code != "EXACTLY_ONE" || first.Params["subject"] != "额度" {
+		t.Fatalf("first problem = %+v", first)
+	}
+	if second := body.Error.Problems[1]; second.Code != "INVALID" || len(second.Params) != 0 {
+		t.Fatalf("second problem = %+v", second)
 	}
 }
 

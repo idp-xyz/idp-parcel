@@ -110,7 +110,12 @@ type payloadProblemAnswer struct {
 func payloadProblemAnswersOf(problems *PublicationPayloadProblems) []payloadProblemAnswer {
 	answers := make([]payloadProblemAnswer, 0, len(problems.Problems))
 	for _, problem := range problems.Problems {
-		answers = append(answers, payloadProblemAnswer{Field: problem.Field, Problem: problem.Problem, Code: problem.Code, Params: problem.Params})
+		// code 恒在场是契约：不经 add 收集的问题（测试替身、将来的构造点）也不交出空码。
+		code := problem.Code
+		if code == "" {
+			code = ProblemCodeInvalid
+		}
+		answers = append(answers, payloadProblemAnswer{Field: problem.Field, Problem: problem.Problem, Code: code, Params: problem.Params})
 	}
 	return answers
 }

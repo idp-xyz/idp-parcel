@@ -3,7 +3,6 @@ package commercialhttp
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 )
@@ -85,10 +84,11 @@ func exactlyOne(subject, message string) error {
 	return coded(ProblemCodeExactlyOne, map[string]string{"subject": subject}, errors.New(message))
 }
 
-// timeFormat 是时刻解析失败：空串是没填，答必填；其余是格式不对。
+// timeFormat 是时刻解析失败：空串是没填，答必填；其余（含只有空白）是格式不对。可选的上界格留空时调用方根本不解析，
+// 不会走到这里，所以这里的空串只可能出自必填的起点格。
 func timeFormat(raw string, cause error) error {
 	original := fmt.Errorf("须为 RFC 3339 时刻：%v", cause)
-	if strings.TrimSpace(raw) == "" {
+	if raw == "" {
 		return coded(ProblemCodeRequired, nil, original)
 	}
 	return coded(ProblemCodeTimeFormat, nil, original)

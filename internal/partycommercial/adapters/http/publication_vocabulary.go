@@ -2,7 +2,6 @@ package commercialhttp
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
@@ -50,7 +49,7 @@ func NewQueryPublicationVocabularyEndpoint(intake PublicationVocabularyIntake) h
 		kind, known := domain.CommercialObjectKindNamed(name)
 		if !known {
 			problems := &PublicationPayloadProblems{}
-			problems.add("kind", fmt.Errorf("集合外的商业对象类别 %q", name))
+			problems.add("kind", notInSet("商业对象类别", name, ""))
 			writeJSON(response, http.StatusBadRequest, problemWithFieldsResponse{Error: problemWithFields{
 				Code:     codeMalformedRequest,
 				Problems: payloadProblemAnswersOf(problems),

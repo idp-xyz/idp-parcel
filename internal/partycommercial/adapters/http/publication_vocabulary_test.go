@@ -112,8 +112,10 @@ func TestVocabularyEndpointRefusesAnUnknownKindWithAFieldProblem(t *testing.T) {
 			Error struct {
 				Code     string `json:"code"`
 				Problems []struct {
-					Field   string `json:"field"`
-					Problem string `json:"problem"`
+					Field   string            `json:"field"`
+					Problem string            `json:"problem"`
+					Code    string            `json:"code"`
+					Params  map[string]string `json:"params"`
 				} `json:"problems"`
 			} `json:"error"`
 		}
@@ -122,6 +124,10 @@ func TestVocabularyEndpointRefusesAnUnknownKindWithAFieldProblem(t *testing.T) {
 		}
 		if body.Error.Code != "MALFORMED_REQUEST" || len(body.Error.Problems) != 1 || body.Error.Problems[0].Field != "kind" || body.Error.Problems[0].Problem == "" {
 			t.Fatalf("%s: body = %s", name, response.Body.Bytes())
+		}
+		// 词表口与预览、录入共用逐格问题的答复形状：集合外的类别答 NOT_IN_SET 并带格名与收到的值。
+		if got := body.Error.Problems[0]; got.Code != "NOT_IN_SET" || got.Params["what"] != "商业对象类别" {
+			t.Fatalf("%s: 问题码 = %q 参数 = %v", name, got.Code, got.Params)
 		}
 		if strings.Contains(response.Body.String(), `"sets"`) || strings.Contains(response.Body.String(), `"outcome"`) {
 			t.Fatalf("%s: a refused kind must not look like an answer: %s", name, response.Body.Bytes())

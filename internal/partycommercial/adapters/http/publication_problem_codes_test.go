@@ -180,3 +180,18 @@ func TestRegisterSpecificProblemCodes(t *testing.T) {
 		t.Errorf("空清单：%+v", got)
 	}
 }
+
+// Covers: AT-PC-070——时刻格只有空白是格式不对，不是没填：空串才答 REQUIRED（可选的上界留空根本不产生问题）。
+func TestBlankTimeCellsAnswerTheFormatCodeNotRequired(t *testing.T) {
+	problems := problemsOfPayload(t, `{
+	  "kind": "CREDIT_POLICY", "objectId": "credit-1", "version": "v1", "scope": "SYN-SCOPE",
+	  "effectiveStartsAt": "2026-10-01T00:00:00Z", "effectiveEndsAt": "  ",
+	  "creditPolicy": {
+	    "legalEntity": "", "authorityLevel": "L1", "chargeType": "freight", "limitMinor": 100,
+	    "effectiveStartsAt": "2026-10-01T00:00:00Z"
+	  }
+	}`)
+	if got := problems["effectiveEndsAt"]; got.Code != commercialhttp.ProblemCodeTimeFormat {
+		t.Fatalf("只有空白的上界：%+v", got)
+	}
+}

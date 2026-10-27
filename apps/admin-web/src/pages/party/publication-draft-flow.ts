@@ -259,7 +259,8 @@ export function problemsByField(problems: PayloadProblemRecord[] | undefined): R
 
 /**
  * 表单没认领的路径上的问题。表单只知道自己渲染了哪几格；服务端点名了别的路径（壳上的引用、还没画出来
- * 的格），这些不能静默丢，由流程组件单独列出。
+ * 的格），这些不能静默丢，由流程组件单独列出。交回记录的 `problem` 是 problemsByField 出的那一行（带码的已按码译好、原话
+ * 跟在后面），显示时经 fieldProblemText 拆开。
  */
 export function unclaimedProblems(
   byField: Record<string, string[]>,
