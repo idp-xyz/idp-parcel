@@ -96,5 +96,5 @@ code/74 之后，随集运单元出发时身份未决的成员，在识别成功
 - 新用例 `-count=3` 绿（application、tfinbox、tfnode、VE 适配器、`cmd/parcel-dispatch`）；真并发 Record 与交错用例 `-count=5` 绿。
 - 变异（备份再拷回并 `cmp` 一致，均未提交）：去掉目标成员读不动的未决判断 → 三条红（目标成员读不动、失败分格、CarriesMember）；任何成员读不动都当未决（不认目标）→ 红；目标成员读不动时仍答不在（旧行为）→ 三条红；去掉向上找的 `seen` 去重 → 菱形成环用例红；VE 成员收寄身份读不动被吞成身份不成立 → 端到端钉子与既有适配器用例各红。
 - `go run ./tools/adr-index -check` 与 `go run ./tools/at-coverage-counts -check` 均退 1（只是生成物过期，不是缺行的 2），未提交生成物。
-- 收尾 `git fetch` 在本机网络上连不上 GitHub（TLS 握手失败），rebase 对象是本修订轮开始时已 fetch 的 origin/main（`4b54c730f`），退 0。
+- 收尾 `git fetch -q origin` 后 `git rebase origin/main` 退 0：`.scratch/at-coverage-inventory.md` 的表行与文末追记冲突，按「main 那段在前、本票随后」两边并存，code/07 的 `AT-VE-222`–`225` 行原样保留；rebase 之后全量范围（52 个包）重跑 ok、0 FAIL。
 
