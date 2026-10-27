@@ -1,7 +1,7 @@
 # 100 NR 建议与决定之间的控制触发晚到：复核起点是从决定时刻才生效的新计划，判出失效或改善替代时离场门拒、整封响亮失败
 
 Category: bug
-Status: in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 claude-code100。此前 needs-triage——建议 R2（上线后尽快）：响亮失败、不静默，但占着交接或收寄采用的分区按派发预算重投到 `ABANDONED`。2026-10-26 票 [code/29](./29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md) 作者子代理立，出处为 [ADR-0284](../../../docs/adr/0284-an-authorized-role-decides-a-current-reroute-suggestion-through-an-operator-decision-face.md) 越权风险点 6，分支 claude-code29。分级由协调方定稿。
+Status: resolved——2026-10-26 进 main（见文末「进 main 记录」）。此前 in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 claude-code100。此前 needs-triage——建议 R2（上线后尽快）：响亮失败、不静默，但占着交接或收寄采用的分区按派发预算重投到 `ABANDONED`。2026-10-26 票 [code/29](./29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md) 作者子代理立，出处为 [ADR-0284](../../../docs/adr/0284-an-authorized-role-decides-a-current-reroute-suggestion-through-an-operator-decision-face.md) 越权风险点 6，分支 claude-code29。分级由协调方定稿。
 Blocked by: 无（ADR-0292 已立）
 出处：ADR-0284 越权风险点 6；UC-NR-003「给开发的交接」那一行。
 
@@ -132,3 +132,12 @@ S–M，取决于取法。
 - **风格项**：`cmd/parcel-dispatch/reassess_before_plan_effective_test.go` 文件头去掉变更叙述的两句；`plan_applicability_test.go` 里「离场了的计划不再问」改为「不问」。
 - **票面**：票头 `Blocked by:` 改为「无（ADR-0292 已立）」。
 - **提交**：修订轮两笔，`4f2c94fb1` test(network-routing)（N3 用例与风格项）、`199952ec3` docs(adr)（N1、N2、票面）；上文「提交」一节的两个号已随 rebase 订正。
+
+## 进 main 记录（2026-10-26，协调方）
+
+- 分支 `claude-code100` 由作者 rebase 到 origin/main `ae370c593`→`891a6c349` 后快进，tip `73a7d05fb`；迁移 NR 0031；新立 ADR-0292（扩成 ADR-0235 决定一的未判原因封闭集，同 ADR-0279 的先例；回答 ADR-0284 越权风险点 6 与 ADR-0309 越权风险点 5）。新未判原因 `TRIGGER_PRECEDES_PLAN_EFFECTIVE_FROM`，AT-NR-104、105。
+- 协调方分诊：R2，采票面倾向的甲——这次触发入账为未判（交进节点那一次不判，等下一次控制触发从它的位置判），不再整封响亮失败、按派发预算重投到 `ABANDONED` 占着交接/收寄采用的分区。「判出仍适用」与「判不出改善」的各格不拦，照常记；不进 demo-chain-gaps/154 的续办触发（它是白名单，恢复动作是等下一次控制触发，不是等某个登记）。
+- 隔离评审（Sonnet）可合入，无阻断；核实不过度拦（失效线分流在 `Lapse` 之前、改善替代线在判出之后 `Supersede` 之前；`NotYetEffectiveAt` 与离场门 `leaveCurrent` 同一个函数；纳秒构造与迁移 `<=` 成立）、两路消费门对未判整格入账不重投。N1 ADR-0292 越权风险点 2 的因果写得不实（窗口里按时处理的交接走 `reassessNoRoute` 自动形成首个计划，真正落进这一格的只有决定落库时仍在派发管道里的触发和离线补登的触发；维持 R2）、N2 括注不实（ADR-0250 停的是另一句）、N3 「看不清与冻结未配置先于本格答」的次序补两个子用例（变异存活）、风格项，由 Sonnet 子代理收掉。
+- 协调方单独提交重算的 AT 计数、重生成的 ADR 索引与机制清点；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0、158 个包 ok；`go build ./...`、`go vet ./...` 干净；演示种子在一次性库上灌通（施加 0031），用后删库。
+- 去向：无新票。越权风险点：未判登记没有读面，只能查库；窗口内晚到的触发恰是最后一次控制触发时包裹会卡在计划外节点（方向性作业暂停和停滞，可见），补救方向是给未判登记补读面或在 demo-chain-gaps/154 增加一类「按决定计划生效时刻的位置补判」；改善替代线被拦的那一次已取过成本、排过候选、取过一个计划版本号。
