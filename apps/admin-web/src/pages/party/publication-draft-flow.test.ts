@@ -9,6 +9,7 @@ import type {
 } from './publication-draft-api';
 import {
   currentAnswer,
+  decisionPanelOf,
   draftReferenceOf,
   emptyFlow,
   flowSteps,
@@ -228,4 +229,20 @@ test('没发布的输入才算未保存：与起头那份相同不算，走到�
   equal(publicationDraftUnsaved('空表单', '填了', 'publish'), false);
   equal(publicationDraftUnsaved('预填', '预填', 'form'), false);
   equal(publicationDraftUnsaved('预填', '预填后改了', 'form'), true);
+});
+
+test('批准与发布区：存为待批准之后才出现；批准做完发布才亮；发布后两个都做完', () => {
+  equal(decisionPanelOf('form').visible, false);
+  equal(decisionPanelOf('preview').visible, false);
+  const submitted = decisionPanelOf('submit');
+  equal(submitted.visible, true);
+  equal(submitted.approve, 'ready');
+  equal(submitted.publish, 'waiting');
+  const approved = decisionPanelOf('approve');
+  equal(approved.approve, 'done');
+  equal(approved.publish, 'ready');
+  const published = decisionPanelOf('publish');
+  equal(published.approve, 'done');
+  equal(published.publish, 'done');
+  equal(published.status.includes('已发布'), true);
 });

@@ -6,6 +6,7 @@ import { OperatorRefusalNote, TechnicalDetails, httpRows } from '../../component
 import type { ApiResult } from '../catalogue-api';
 import { currentDisplayTimeZone } from '../moment';
 import { declarationLandingLabels, publicationOutcomeLabels } from './api';
+import { publicationBodySummary } from './publication-body-summary';
 import { publicationSummary, type PublicationFact } from './publication-summary';
 import { labelOf, problemNote } from './presentation';
 import { fieldProblemText } from './field-problem-text';
@@ -30,6 +31,7 @@ import {
 } from './publication-draft-api';
 import {
   currentAnswer,
+  decisionPanelOf,
   draftReferenceOf,
   emptyFlow,
   flowActionLabels,
@@ -179,7 +181,11 @@ export function PublicationDraftFlow({
   // 预览通过之后，表单此刻这份载荷就是之后存、批、发的那一份（改一格即作废后面各步），版本信息从它取（票 party-commercial-uiux/11）。
   const previewed = preview?.kind === 'outcome' && preview.body.outcome === 'PREVIEWED';
   const summary = previewed && action !== null ? publicationSummary(payload, currentDisplayTimeZone()) : null;
-  const actionDisabled = busy !== null || (action === 'preview' && hasLocalProblems);
+  const bodySummary = previewed && action !== null ? publicationBodySummary(payload, currentDisplayTimeZone()) : [];
+  // 录入区只管预览与存为待批准；批准与发布各有自己的按钮区（票 party-commercial-uiux/19）。
+  const recordAction = action === 'preview' || action === 'submit' ? action : null;
+  const actionDisabled = busy !== null || (recordAction === 'preview' && hasLocalProblems);
+  const decision = decisionPanelOf(step);
 
   return (
     <Card className="m-4">
@@ -217,27 +223,24 @@ export function PublicationDraftFlow({
           </ul>
         ) : null}
 
-        {summary ? <PublicationSummaryCard facts={summary} /> : null}
+        {summary ? <PublicationSummaryCard facts={summary} bodyFacts={bodySummary} /> : null}
 
         <div className="flex items-center gap-3 flex-wrap">
-          {action !== null ? (
+          {recordAction !== null ? (
             <Button
               variant="default"
               className={primaryActionClass}
-              // 发布不能撤回、改内容要换版本号：按下之前再拦一道，复述要发的是哪一版。
-              onClick={() => (action === 'publish' ? setConfirmingPublish(true) : run(action))}
+              onClick={() => run(recordAction)}
               disabled={actionDisabled}
               title={
-                action === 'preview' && hasLocalProblems
+                recordAction === 'preview' && hasLocalProblems
                   ? '有几格的格式不对，先改正再预览'
                   : undefined
               }
             >
-              {busy === action ? `${flowActionLabels[action]}中…` : flowActionLabels[action]}
+              {busy === recordAction ? `${flowActionLabels[recordAction]}中…` : flowActionLabels[recordAction]}
             </Button>
-          ) : (
-            <span className="text-xs text-idpxyz-textMuted">已发布。结果在对应册立刻可见。</span>
-          )}
+          ) : null}
           {started ? (
             <Button variant="outline" disabled={busy !== null} onClick={() => setFlow(emptyFlow())}>
               重新开始
@@ -250,6 +253,37 @@ export function PublicationDraftFlow({
         ) : null}
         {preview ? <PreviewNote answer={preview} /> : null}
         {submission ? <DraftNote answer={submission} what="存为待批准" labels={submitOutcomeLabels} /> : null}
+        {decision.visible ? (
+          <section className="rounded border border-idpxyz-border p-3 flex flex-col gap-2">
+            <h3 className="text-[12px] font-medium text-idpxyz-text">批准与发布</h3>
+            <p className="text-xs text-idpxyz-textMuted">
+              {decision.status}
+              {decision.approve === 'ready'
+                ? '批准由租户的审批职责规则决定谁能做，批准之后才能发布；发布后这一版不能修改。'
+                : ''}
+            </p>
+            <div className="flex items-center gap-3 flex-wrap">
+              <Button
+                variant={decision.approve === 'ready' ? 'default' : 'outline'}
+                className={decision.approve === 'ready' ? primaryActionClass : undefined}
+                disabled={decision.approve !== 'ready' || busy !== null}
+                onClick={() => run('approve')}
+              >
+                {busy === 'approve' ? '批准中…' : decision.approve === 'done' ? '已批准' : '批准'}
+              </Button>
+              <Button
+                variant={decision.publish === 'ready' ? 'default' : 'outline'}
+                className={decision.publish === 'ready' ? primaryActionClass : undefined}
+                disabled={decision.publish !== 'ready' || busy !== null}
+                title={decision.publish === 'waiting' ? '先完成批准' : undefined}
+                // 发布不能撤回、改内容要换版本号：按下之前再拦一道，复述要发的是哪一版。
+                onClick={() => setConfirmingPublish(true)}
+              >
+                {busy === 'publish' ? '发布中…' : decision.publish === 'done' ? '已发布' : '发布'}
+              </Button>
+            </div>
+          </section>
+        ) : null}
         {approval ? <DraftNote answer={approval} what="批准" labels={approveOutcomeLabels} /> : null}
         {publication ? <PublicationNote answer={publication} /> : null}
       </CardContent>
@@ -259,7 +293,14 @@ export function PublicationDraftFlow({
         tone="warning"
         title="发布这一版？"
         message="发布后这一版不能修改；要改内容，须用新的版本号再发布。"
-        extraContent={summary ? <FactList facts={summary} /> : undefined}
+        extraContent={
+          summary ? (
+            <div className="flex max-h-[40vh] flex-col gap-3 overflow-auto">
+              <FactList facts={summary} />
+              {bodySummary.length > 0 ? <FactList facts={bodySummary} /> : null}
+            </div>
+          ) : undefined
+        }
         confirmLabel="发布"
         cancelLabel="先不发布"
         onConfirm={() => {
@@ -431,12 +472,24 @@ function FactList({ facts }: { facts: readonly PublicationFact[] }) {
   );
 }
 
-/** 预览通过后摆在按钮上方的「将要发布」卡：只复述版本信息，正文各格就在上面的表单里。 */
-function PublicationSummaryCard({ facts }: { facts: readonly PublicationFact[] }) {
+/** 预览通过后摆在按钮上方的「将要发布」卡：版本信息，加这一册正文的要点（只是复述，格子仍以上面的表单为准）。 */
+function PublicationSummaryCard({
+  facts,
+  bodyFacts,
+}: {
+  facts: readonly PublicationFact[];
+  bodyFacts: readonly PublicationFact[];
+}) {
   return (
     <section className="rounded border border-idpxyz-border p-3 flex flex-col gap-2">
       <h3 className="text-[12px] font-medium text-idpxyz-text">将要发布</h3>
       <FactList facts={facts} />
+      {bodyFacts.length > 0 ? (
+        <>
+          <h4 className="mt-1 text-[12px] font-medium text-idpxyz-text">正文要点</h4>
+          <FactList facts={bodyFacts} />
+        </>
+      ) : null}
     </section>
   );
 }

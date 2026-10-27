@@ -121,6 +121,35 @@ export function publicationDraftUnsaved(initialKey: string, currentKey: string, 
   return currentKey !== initialKey && step !== 'publish';
 }
 
+/** 批准与发布区里一个动作的状态：可以按、已做完、还轮不到。 */
+export type DecisionState = 'ready' | 'done' | 'waiting';
+
+export interface DecisionPanel {
+  /** 存为待批准之后才摆出这一区；此前表单还在录入，批准与发布与它无关。 */
+  visible: boolean;
+  status: string;
+  approve: DecisionState;
+  publish: DecisionState;
+}
+
+/**
+ * 批准与发布是两个动作、可能是两个人：批准由租户的审批职责规则决定谁能做，发布又不能撤回。此前一颗按钮随步骤换名，
+ * 批准一落发布就顶在同一个位置上，手快的人会一路点到发布；分成各自的按钮，批准做完发布才亮，两件事各是各的。
+ */
+export function decisionPanelOf(step: FlowStep): DecisionPanel {
+  switch (step) {
+    case 'submit':
+      return { visible: true, status: '已存为待批准，等待批准。', approve: 'ready', publish: 'waiting' };
+    case 'approve':
+      return { visible: true, status: '已批准，等待发布。', approve: 'done', publish: 'ready' };
+    case 'publish':
+      return { visible: true, status: '已发布。结果在对应册立刻可见。', approve: 'done', publish: 'done' };
+    case 'form':
+    case 'preview':
+      return { visible: false, status: '', approve: 'waiting', publish: 'waiting' };
+  }
+}
+
 export function isFormLocked(step: FlowStep): boolean {
   return step === 'submit' || step === 'approve' || step === 'publish';
 }
