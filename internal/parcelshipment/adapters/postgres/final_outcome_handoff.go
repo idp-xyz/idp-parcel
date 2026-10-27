@@ -43,11 +43,15 @@ func NewOutboxFinalOutcomeHandoff(
 
 var _ ports.FinalOutcomeHandoff = (*OutboxFinalOutcomeHandoff)(nil)
 
+// finalOutcomePayload 是信封载荷：采用键四维，加作废代次。代次为零（包裹上没有成立过「取消依据不成立」的决定）时不序列化，
+// 载荷与只有四维的载荷逐字相同；代次大于零时下游消费方凭它把同一采用键重新形成的记录与此前那一份分开（ADR-0295 决定六）。
+// 消费方读不认识的字段宽容，所以只认四维的消费方不受影响。
 type finalOutcomePayload struct {
-	TenantID string `json:"tenantId"`
-	Parcel   string `json:"parcel"`
-	Kind     string `json:"kind"`
-	Version  string `json:"version"`
+	TenantID       string `json:"tenantId"`
+	Parcel         string `json:"parcel"`
+	Kind           string `json:"kind"`
+	Version        string `json:"version"`
+	VoidGeneration int    `json:"voidGeneration,omitempty"`
 }
 
 // finalOutcomeEventIDPort 是本口指纹 ID 的口名前缀。
@@ -67,7 +71,7 @@ func finalOutcomeEventID(key ports.FinalAdoptionKey, voidGeneration int) string 
 	return string(outboxintent.FingerprintEventID(finalOutcomeEventIDPort, dimensions...))
 }
 
-// voidGeneration 数该包裹上已成立的「取消依据不成立」决定（ADR-0295 决定三）。决定只追加、不删，所以个数单调不减。
+// voidGeneration 数该包裹上已成立的「取消依据不成立」决定（ADR-0295 决定六）。决定只追加、不删，所以个数单调不减。
 // 读在调用方事务里：形成终局的编排已持包裹取消边界锁，决定同笔作废也持同一把，所以这里读到的个数与此刻能读到的不采用行互相一致。
 func (handoff *OutboxFinalOutcomeHandoff) voidGeneration(
 	ctx context.Context,
@@ -92,7 +96,7 @@ func (handoff *OutboxFinalOutcomeHandoff) voidGeneration(
 }
 
 // HandOffFinalOutcome 把一份意图入队。信封 ID 是采用键加该包裹作废代次的指纹加口名前缀——意图由（租户+包裹+
-// 责任结果种类+版本+作废代次）认领（ADR-0043、ADR-0295 决定三）。键缺席是装配缺陷，响亮报错不入队。
+// 责任结果种类+版本+作废代次）认领（ADR-0043、ADR-0295 决定六）。键缺席是装配缺陷，响亮报错不入队。
 func (handoff *OutboxFinalOutcomeHandoff) HandOffFinalOutcome(
 	ctx context.Context,
 	intent ports.FinalOutcomeHandoffIntent,
@@ -103,19 +107,19 @@ func (handoff *OutboxFinalOutcomeHandoff) HandOffFinalOutcome(
 		return fmt.Errorf("hand off final outcome: adoption key is required")
 	}
 
-	payload, err := json.Marshal(finalOutcomePayload{
-		TenantID: key.TenantID.String(),
-		Parcel:   key.Parcel.String(),
-		Kind:     key.Kind.String(),
-		Version:  key.Version.String(),
-	})
-	if err != nil {
-		return fmt.Errorf("hand off final outcome: %w", err)
-	}
-
 	generation, err := handoff.voidGeneration(ctx, key)
 	if err != nil {
 		return fmt.Errorf("hand off final outcome: read void generation: %w", err)
+	}
+	payload, err := json.Marshal(finalOutcomePayload{
+		TenantID:       key.TenantID.String(),
+		Parcel:         key.Parcel.String(),
+		Kind:           key.Kind.String(),
+		Version:        key.Version.String(),
+		VoidGeneration: generation,
+	})
+	if err != nil {
+		return fmt.Errorf("hand off final outcome: %w", err)
 	}
 
 	now := handoff.clock.Now().UTC()

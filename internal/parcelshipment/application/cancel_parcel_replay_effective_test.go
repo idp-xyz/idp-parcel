@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
@@ -115,4 +116,58 @@ func TestAReplayOfACancellationThatIsNoLongerEffectiveHandsOffNothing(t *testing
 			t.Errorf("读不动有效取消却交了意图 %d 份", len(fixture.downstream.intents))
 		}
 	})
+}
+
+// Covers: AT-PS-168；ADR-0295 决定三——有效取消只管`包裹已取消`的记录：拒绝与待处置的记录没有下游释放意图，重放它们不问有效取消。即便有效取消读此刻读不动，
+// 重放仍答已有结果（历史答复），不被拖进未决。
+func TestAReplayOfARefusalOrAPendingDispositionDoesNotAskForTheEffectiveCancellation(t *testing.T) {
+	for name, arrange := range map[string]struct {
+		prepare func(t *testing.T, fixture *cancelFixture)
+		want    ports.CancellationRecordKind
+	}{
+		"拒绝": {
+			prepare: func(t *testing.T, fixture *cancelFixture) {
+				fixture.authority.judgment = ports.CancellationAuthorityJudgment{
+					Granted: false, Basis: mustValue(t, domain.NewCheckReason, "CANCEL-RULE/DENY"),
+				}
+			},
+			want: ports.RecordCancellationRefused,
+		},
+		"待处置": {
+			prepare: func(t *testing.T, fixture *cancelFixture) {
+				adoptParcel(t, fixture.adoptions, "parcel-1", cancelRequestedAt.Add(-time.Hour))
+			},
+			want: ports.RecordDispositionPending,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fixture := newCancelFixture(t)
+			arrange.prepare(t, fixture)
+			first, err := fixture.handler.Handle(context.Background(), cancelCommand(t, "parcel-1"))
+			if err != nil {
+				t.Fatalf("first handle: %v", err)
+			}
+			if record, has := first.Record(); !has || record.Kind != arrange.want {
+				t.Fatalf("first = %q record-kind = %v, want %v", first.Outcome(), record.Kind, arrange.want)
+			}
+
+			fixture.cancellations.err = errors.New("cancellation view down")
+			asked := fixture.cancellations.asked
+			replay, err := fixture.handler.Handle(context.Background(), cancelCommand(t, "parcel-1"))
+			if err != nil {
+				t.Fatalf("replay handle: %v", err)
+			}
+			record, has := replay.Record()
+			if replay.Outcome() != application.CancellationExistingResult || !has || record.Kind != arrange.want {
+				t.Fatalf("replay = %q record-kind = %v, want EXISTING_RESULT 加原记录 %v——读不动有效取消不该影响不涉及它的记录",
+					replay.Outcome(), record.Kind, arrange.want)
+			}
+			if fixture.cancellations.asked != asked {
+				t.Errorf("重放问了有效取消读 %d 次, want 0", fixture.cancellations.asked-asked)
+			}
+			if len(fixture.downstream.intents) != 0 {
+				t.Errorf("拒绝与待处置没有释放意图，却交了 %d 份", len(fixture.downstream.intents))
+			}
+		})
+	}
 }

@@ -10,6 +10,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
+	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
@@ -309,4 +310,132 @@ func TestARedeliveredRederivedFinalIsTheExistingResult(t *testing.T) {
 		t.Fatal("重投形成了新的投影版本")
 	}
 	fixture.assertOnlyTheCorrectedFinalIsCurrent(t)
+}
+
+// voidThenSave 把 PS 采用账上同一采用键的下一份记录落进去：此前依据某份取消的不采用行已被决定作废（物理删除），续办用同一键重新形成记录（ADR-0295）。
+func (fixture *finalChainFixture) voidThenSave(t *testing.T, voidedCancellation string, next psports.FinalOutcomeRecord) {
+	t.Helper()
+	var cancellation psdomain.ParcelCancellationID
+	if voidedCancellation != "" {
+		cancellation = finalValue(t, psdomain.NewParcelCancellationID, voidedCancellation)
+	}
+	var voided int
+	var saved psports.FinalOutcomeSaveOutcome
+	err := fixture.transactor.WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		if voidedCancellation != "" {
+			var err error
+			if voided, err = fixture.finals.VoidCancellationRefusedFinals(txCtx, next.Key.TenantID, next.Key.Parcel, cancellation); err != nil {
+				return err
+			}
+		}
+		var err error
+		saved, err = fixture.finals.Save(txCtx, next)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("重新形成：%v", err)
+	}
+	if voidedCancellation != "" && voided != 1 {
+		t.Fatalf("作废 %s：voided=%d, want 1", voidedCancellation, voided)
+	}
+	if saved != psports.FinalOutcomeSaved {
+		t.Fatalf("PS 采用账落下一份记录：saved=%d", saved)
+	}
+}
+
+func refusedByCancellation(t *testing.T, cancellation string, adoptedAt time.Time) psports.FinalOutcomeRecord {
+	t.Helper()
+	record := notAdoptedFinalRecord(t)
+	record.RefusalBasis = finalValue(t, psdomain.NewCheckReason, "PARCEL_CANCELLATION/"+cancellation)
+	record.AdoptedAt = adoptedAt
+	return record
+}
+
+// factsByVersion 取事实库里这条终局流的各版本及其前身。
+func (fixture *finalChainFixture) factsByVersion(t *testing.T) map[string]string {
+	t.Helper()
+	records, err := fixture.facts.FindByParcel(t.Context(),
+		finalValue(t, vedomain.NewTenantID, "tenant-1"),
+		finalValue(t, vedomain.NewTrackedParcelReference, "parcel-1"))
+	if err != nil {
+		t.Fatalf("读事实库：%v", err)
+	}
+	versions := map[string]string{}
+	for _, record := range records {
+		predecessor, _ := record.Fact.Supersedes()
+		versions[record.Fact.Version().String()+"/"+record.Fact.Kind().String()] = predecessor.String()
+	}
+	return versions
+}
+
+// Covers: AT-VE-174；ADR-0295 决定六——同一采用键的记录因取消被认定不成立而被删后重新形成（不采用 → 删 → 再被另一份取消挡成不采用 → 再删 → 终局），每一代信封带自己的
+// 作废代次，VE 终局投影随之换代：事实库里三代都留档，各带下一代的替代关系，当前投影里这条终局流只剩最后那一代已采用终局；同代次重放答已有结果。
+// 此前（代次不进事实版本）重新形成的终局与被删的不采用行同事实键、内容不同，被判成来源冲突、保留原事实，投影停在「不采用」——下面先钉住这一点。
+func TestAReformedFinalOutcomeSupersedesTheRefusalItReplacedInTheProjection(t *testing.T) {
+	fixture := newFinalChainFixture(t)
+	first := refusedByCancellation(t, "PCXL-1", finalAdoptedAt)
+	fixture.voidThenSave(t, "", first)
+	fixture.consume(t, formedFinalRef())
+
+	second := refusedByCancellation(t, "PCXL-2", finalAdoptedAt.Add(time.Hour))
+	fixture.voidThenSave(t, "PCXL-1", second)
+	generationOne := formedFinalRef()
+	generationOne.VoidGeneration = 1
+	fixture.consume(t, generationOne)
+
+	final := adoptedFinalRecord(t)
+	final.AdoptedAt = finalAdoptedAt.Add(2 * time.Hour)
+	fixture.voidThenSave(t, "PCXL-2", final)
+
+	// 代次不进事实版本时：同一事实键、不同内容，来源冲突，原事实保留。
+	fixture.consume(t, generationOne)
+	if last := fixture.derive.outcomes[len(fixture.derive.outcomes)-1]; last != veapplication.FactSourceConflict {
+		t.Fatalf("以旧代次消费重新形成的终局 = %s, want SOURCE_CONFLICT（同键不同内容）", last)
+	}
+
+	generationTwo := formedFinalRef()
+	generationTwo.VoidGeneration = 2
+	fixture.consume(t, generationTwo)
+	fixture.consume(t, generationTwo)
+	want := []veapplication.DeriveProjectionOutcome{
+		veapplication.ProjectionDerived, veapplication.ProjectionDerived,
+		veapplication.FactSourceConflict, veapplication.ProjectionDerived, veapplication.FactExistingResult,
+	}
+	if len(fixture.derive.outcomes) != len(want) {
+		t.Fatalf("派生结论 = %v, want %v", fixture.derive.outcomes, want)
+	}
+	for index := range want {
+		if fixture.derive.outcomes[index] != want[index] {
+			t.Fatalf("派生结论 = %v, want %v", fixture.derive.outcomes, want)
+		}
+	}
+
+	versions := fixture.factsByVersion(t)
+	wantVersions := map[string]string{
+		"responsibility-outcome/v1/final-outcome-not-adopted":        "",
+		"responsibility-outcome/v1#void-1/final-outcome-not-adopted": "responsibility-outcome/v1",
+		"responsibility-outcome/v1#void-2/final-outcome-adopted":     "responsibility-outcome/v1#void-1",
+	}
+	if len(versions) != len(wantVersions) {
+		t.Fatalf("事实库 = %v, want %v", versions, wantVersions)
+	}
+	for version, predecessor := range wantVersions {
+		if got, kept := versions[version]; !kept || got != predecessor {
+			t.Fatalf("事实库 = %v, want %v", versions, wantVersions)
+		}
+	}
+
+	projection := fixture.currentProjection(t)
+	if !projection.CarriesCustomerServiceFinal() {
+		t.Fatal("重新形成的终局之后，投影答不出已采用终局——仍停在不采用")
+	}
+	if adopted := adoptedFinalEntries(projection); len(adopted) != 1 ||
+		adopted[0].Fact().Version().String() != "responsibility-outcome/v1#void-2" {
+		t.Fatalf("已采用终局条目 = %d 条, want 恰一条且是代次二的版本", len(adopted))
+	}
+	for _, entry := range projection.Entries() {
+		if entry.Fact().Kind().String() == vedomain.FinalOutcomeNotAdoptedFactKind {
+			t.Fatalf("被取代的不采用事实仍参与派生：%s", entry.Fact().Version().String())
+		}
+	}
 }

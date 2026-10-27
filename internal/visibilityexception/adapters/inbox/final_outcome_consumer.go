@@ -28,11 +28,15 @@ const FinalOutcomeFormedEventType eventing.EventType = "parcel-shipment.final-ou
 // FormedFinalOutcome 是译码后的终局采用键引用。权威事实留在 parcel-shipment；处理方
 // 按这四维 FindByKey。Kind 与 Version 都是键的一维：同一包裹可有不同责任结果种类的
 // 独立终局流，同一种类的来源更正又换版本，缺任何一维都取不回唯一那条登记。
+//
+// VoidGeneration 是信封带的作废代次（ADR-0295 决定六），不是键的一维：载荷缺省即零。同一采用键因取消被认定不成立而重新形成记录时，
+// 代次让译装器给新一代另一个事实版本；缺省的零与只有四维的载荷同义。
 type FormedFinalOutcome struct {
-	TenantID string
-	Parcel   string
-	Kind     string
-	Version  string
+	TenantID       string
+	Parcel         string
+	Kind           string
+	Version        string
+	VoidGeneration int
 }
 
 // FormedFinalOutcomeHandler 是本消费者转交的处理方。真实装配接
@@ -86,10 +90,11 @@ func (consumer *FinalOutcomeConsumer) Consume(ctx context.Context, envelope even
 // 已有的 ErrPoisonEnvelope。
 func decodeFormedFinalOutcome(payload []byte) (FormedFinalOutcome, error) {
 	var body struct {
-		TenantID string `json:"tenantId"`
-		Parcel   string `json:"parcel"`
-		Kind     string `json:"kind"`
-		Version  string `json:"version"`
+		TenantID       string `json:"tenantId"`
+		Parcel         string `json:"parcel"`
+		Kind           string `json:"kind"`
+		Version        string `json:"version"`
+		VoidGeneration int    `json:"voidGeneration"`
 	}
 	if err := json.Unmarshal(payload, &body); err != nil {
 		return FormedFinalOutcome{}, fmt.Errorf("%w: %v", ErrPoisonEnvelope, err)
@@ -97,10 +102,15 @@ func decodeFormedFinalOutcome(payload []byte) (FormedFinalOutcome, error) {
 	if body.TenantID == "" || body.Parcel == "" || body.Kind == "" || body.Version == "" {
 		return FormedFinalOutcome{}, fmt.Errorf("%w: missing final outcome key fields", ErrPoisonEnvelope)
 	}
+	// 代次是个数，不会为负；负数说明载荷坏了，重投同样内容不会变好。
+	if body.VoidGeneration < 0 {
+		return FormedFinalOutcome{}, fmt.Errorf("%w: negative void generation", ErrPoisonEnvelope)
+	}
 	return FormedFinalOutcome{
-		TenantID: body.TenantID,
-		Parcel:   body.Parcel,
-		Kind:     body.Kind,
-		Version:  body.Version,
+		TenantID:       body.TenantID,
+		Parcel:         body.Parcel,
+		Kind:           body.Kind,
+		Version:        body.Version,
+		VoidGeneration: body.VoidGeneration,
 	}, nil
 }

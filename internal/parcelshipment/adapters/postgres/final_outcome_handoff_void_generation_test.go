@@ -2,8 +2,11 @@ package postgres_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
@@ -12,7 +15,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
-// 本文件证终局信封的交接身份折进该包裹的作废代次（ADR-0295 决定三）：包裹上没有成立过「取消依据不成立」的决定时，信封 ID 与只认采用键四维的算法逐字相同；
+// 本文件证终局信封的交接身份折进该包裹的作废代次（ADR-0295 决定六）：包裹上没有成立过「取消依据不成立」的决定时，信封 ID 与只认采用键四维的算法逐字相同；
 // 每多一份这样的决定，同一采用键的终局交出另一封自己的信封。期望的 ID 是独立算出的字面（printf 拼 NUL 分隔的各维后取 sha256），不用生产公式重算。
 
 const (
@@ -24,7 +27,30 @@ const (
 	untouchedParcelEventID = "final-outcome/ab31270c82641514002f5f67f416e87720fcdb6359111d2e44a7b7a9a7a4c7b2"
 )
 
-// Covers: AT-PS-173；ADR-0295 决定三——没有作废决定的包裹，终局信封 ID 与只认采用键四维的算法逐字相同，已入队的信封与它们的重放去重不受影响。
+// payloadKeysOf 读回一封信封载荷的字段名与作废代次（缺席时 present 为假）。
+func payloadKeysOf(t *testing.T, pool interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}, eventID string) (keys []string, generation float64, present bool) {
+	t.Helper()
+	var raw []byte
+	if err := pool.QueryRow(t.Context(), `SELECT payload FROM bento.outbox WHERE event_id = $1`, eventID).Scan(&raw); err != nil {
+		t.Fatalf("读回载荷：%v", err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatalf("载荷不是 JSON：%v", err)
+	}
+	for key := range body {
+		keys = append(keys, key)
+	}
+	value, present := body["voidGeneration"]
+	if present {
+		generation, _ = value.(float64)
+	}
+	return keys, generation, present
+}
+
+// Covers: AT-PS-173；ADR-0295 决定六——没有作废决定的包裹，终局信封 ID 与只认采用键四维的算法逐字相同，已入队的信封与它们的重放去重不受影响。
 func TestAFinalOutcomeOfAParcelWithoutAVoidDecisionKeepsTheIdItAlwaysHad(t *testing.T) {
 	handoff, db, pool := newFinalOutcomeHandoffFixture(t)
 	ctx := t.Context()
@@ -42,9 +68,13 @@ func TestAFinalOutcomeOfAParcelWithoutAVoidDecisionKeepsTheIdItAlwaysHad(t *test
 	if count := countOutboxEventsIn(t, pool, finalOutcomeEventID("parcel-1", "outcome-v1")); count != 1 {
 		t.Fatalf("旧公式 ID 的信封 %d 封, want 1", count)
 	}
+	// 载荷也一样：代次为零时不带 voidGeneration 字段，只有采用键四维。
+	if keys, _, present := payloadKeysOf(t, pool, untouchedParcelEventID); present || len(keys) != 4 {
+		t.Fatalf("代次为零的载荷字段 = %v（带代次 %t）, want 只有采用键四维", keys, present)
+	}
 }
 
-// Covers: AT-PS-173；ADR-0295 决定三——同一采用键的终局，在包裹上每成立一份「取消依据不成立」的决定之后各有各的信封：
+// Covers: AT-PS-173；ADR-0295 决定六——同一采用键的终局，在包裹上每成立一份「取消依据不成立」的决定之后各有各的信封：
 // 代次为零的 ID 不变；交来源方更正的决定、别的包裹与别的租户上的决定都不算；同一代次内重放不翻倍。
 func TestEachVoidDecisionOnTheParcelGivesTheSameAdoptionKeyAnotherEnvelope(t *testing.T) {
 	rig := newConflictDecisionRig(t)
@@ -100,6 +130,10 @@ func TestEachVoidDecisionOnTheParcelGivesTheSameAdoptionKeyAnotherEnvelope(t *te
 	if formedEnvelopes() != 2 || envelopesWith(voidGenerationOneEventID) != 1 || envelopesWith(voidGenerationZeroEventID) != 1 {
 		t.Fatalf("一份作废决定之后：formed %d 封、代次一的字面 ID %d 封、代次零的 %d 封, want 2、1、1——同一采用键另有一封，同代次重放不翻倍",
 			formedEnvelopes(), envelopesWith(voidGenerationOneEventID), envelopesWith(voidGenerationZeroEventID))
+	}
+
+	if _, generation, present := payloadKeysOf(t, rig.pool, voidGenerationOneEventID); !present || generation != 1 {
+		t.Fatalf("代次一的载荷 voidGeneration = %v（在场 %t）, want 1", generation, present)
 	}
 
 	rig.decide(t, decisionOf(t, conflictOn("tenant-1", "parcel-1", "PCXL-5"), domain.CancellationNotUpheld, "https://id.syn.example#bob"))

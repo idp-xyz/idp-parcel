@@ -422,6 +422,70 @@ func TestARederivedFinalOutcomeSupersedesItsPredecessorsAdoptionVersion(t *testi
 	}
 }
 
+// Covers: AT-VE-174；ADR-0295 决定六——同一采用键因取消被认定不成立而重新形成记录时，信封带作废代次，译装器给新一代另一个事实版本并指名上一代次的版本为前身：
+// 代次零的版本就是采用键的责任结果版本（存量事实不动）；代次 n 大于零为「<采用键版本>#void-<n>」，前身是代次 n-1 的版本；重派生沿用 PS 指名的前一代采用版本。
+// 事实引用不变，替代关系才在同一引用下成立。
+func TestAVoidGenerationGivesTheReformedRecordItsOwnFactVersionAndSupersedesTheGenerationBefore(t *testing.T) {
+	for name, tc := range map[string]struct {
+		record         func(*testing.T) psports.FinalOutcomeRecord
+		formed         func() veinbox.FormedFinalOutcome
+		finder         func(*testing.T) *finalFinderDouble
+		generation     int
+		wantKind       string
+		wantVersion    string
+		wantSupersedes string
+	}{
+		"代次零的终局": {
+			record: adoptedFinalRecord, formed: formedFinalRef, generation: 0,
+			wantKind: "final-outcome-adopted", wantVersion: "responsibility-outcome/v1", wantSupersedes: "",
+		},
+		"代次一的终局取代代次零的版本": {
+			record: adoptedFinalRecord, formed: formedFinalRef, generation: 1,
+			wantKind: "final-outcome-adopted", wantVersion: "responsibility-outcome/v1#void-1", wantSupersedes: "responsibility-outcome/v1",
+		},
+		"代次二的终局取代代次一的版本": {
+			record: adoptedFinalRecord, formed: formedFinalRef, generation: 2,
+			wantKind: "final-outcome-adopted", wantVersion: "responsibility-outcome/v1#void-2", wantSupersedes: "responsibility-outcome/v1#void-1",
+		},
+		"代次一的不采用同样换版本": {
+			record: notAdoptedFinalRecord, formed: formedFinalRef, generation: 1,
+			wantKind: "final-outcome-not-adopted", wantVersion: "responsibility-outcome/v1#void-1", wantSupersedes: "responsibility-outcome/v1",
+		},
+		"重派生沿用 PS 指名的前一代采用版本": {
+			record: rederivedFinalRecord, formed: formedRederivedFinalRef, generation: 1,
+			finder: func(t *testing.T) *finalFinderDouble {
+				return &finalFinderDouble{
+					record: rederivedFinalRecord(t), found: true,
+					predecessor: adoptedFinalRecord(t), predecessorFound: true,
+				}
+			},
+			wantKind: "final-outcome-adopted", wantVersion: "responsibility-outcome/v2#void-1", wantSupersedes: "responsibility-outcome/v1",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			finder := &finalFinderDouble{record: tc.record(t), found: true}
+			if tc.finder != nil {
+				finder = tc.finder(t)
+			}
+			subject, derive := newFinalSubject(t, finder)
+			formed := tc.formed()
+			formed.VoidGeneration = tc.generation
+
+			if err := subject.HandleFormedFinalOutcome(t.Context(), formed); !errors.Is(err, errDeriveReached) {
+				t.Fatalf("err = %v, want 派生被调用", err)
+			}
+			fact := derive.command.Fact
+			if fact.Kind.String() != tc.wantKind || fact.Version.String() != tc.wantVersion || fact.Supersedes.String() != tc.wantSupersedes {
+				t.Fatalf("事实 = 类型 %q 版本 %q 前身 %q, want %q %q %q",
+					fact.Kind.String(), fact.Version.String(), fact.Supersedes.String(), tc.wantKind, tc.wantVersion, tc.wantSupersedes)
+			}
+			if fact.Fact.String() != "final-outcome/parcel-1/EFFECTIVE_DELIVERY" {
+				t.Fatalf("事实引用 = %q；代次不进引用，替代只在同一引用下成立", fact.Fact.String())
+			}
+		})
+	}
+}
+
 // Covers: AT-VE-175——前一代读时依赖调不通是续办：不派生，更不把本代当无前身的首登派生
 // （那样两代终局又会同时当前有效，而重投时前身一格还会变，派生编排会把它判成同版本冲突）。
 func TestAnUnreadablePredecessorIsContinuableUndecided(t *testing.T) {

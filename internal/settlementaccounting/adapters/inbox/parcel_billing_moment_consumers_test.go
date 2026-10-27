@@ -165,6 +165,23 @@ func TestAParcelMomentEnvelopeIsProcessedExactlyOnce(t *testing.T) {
 	}
 }
 
+// Covers: AT-PS-173；ADR-0295 决定六——终局信封可带作废代次，结算侧只认采用键四维、不认这一字段：带着它译码照常，结算按键回读，同一采用键重新形成的终局与此前的不采用共用一把键。
+func TestTheFinalOutcomeConsumerToleratesTheVoidGenerationField(t *testing.T) {
+	lane := parcelMomentLanes()["终局"]
+	consumer, calls, _, first := lane.build(t)
+	envelope := parcelMomentEnvelope(t, lane.eventType, "moment-generation")
+	envelope.Payload = json.RawMessage(`{"tenantId":"tenant-a","parcel":"SYN-PARCEL-01","kind":"SYN-KIND","version":"SYN-V1","voidGeneration":2}`)
+	if err := consumer.Consume(t.Context(), envelope); err != nil {
+		t.Fatalf("消费：%v", err)
+	}
+	if calls() != 1 {
+		t.Fatalf("处理次数 = %d, want 1——多出的字段不该让译码出错", calls())
+	}
+	if got := first(); got != [4]string{"tenant-a", "SYN-PARCEL-01", "SYN-KIND", "SYN-V1"} {
+		t.Fatalf("译码结果 = %v", got)
+	}
+}
+
 func TestAParcelMomentEnvelopeMissingAnyKeyDimensionIsPoison(t *testing.T) {
 	payloads := map[string]string{
 		"缺 tenantId": `{"parcel":"P","kind":"K","version":"V"}`,

@@ -126,6 +126,40 @@ func TestAFinalOutcomeEnvelopeMissingAnyKeyDimensionIsPoison(t *testing.T) {
 	}
 }
 
+// Covers: AT-VE-174；ADR-0295 决定六——载荷的作废代次可缺省：缺省与零同义（只有四维的存量信封照旧译成代次零），带上就译出来；负数是坏载荷，毒丸入账。
+func TestAFormedFinalOutcomeCarriesItsOptionalVoidGeneration(t *testing.T) {
+	for name, tc := range map[string]struct {
+		payload string
+		want    int
+		poison  bool
+	}{
+		"缺省":   {payload: `{"tenantId":"tenant-a","parcel":"parcel-1","kind":"EFFECTIVE_DELIVERY","version":"v1"}`, want: 0},
+		"显式零":  {payload: `{"tenantId":"tenant-a","parcel":"parcel-1","kind":"EFFECTIVE_DELIVERY","version":"v1","voidGeneration":0}`, want: 0},
+		"代次二":  {payload: `{"tenantId":"tenant-a","parcel":"parcel-1","kind":"EFFECTIVE_DELIVERY","version":"v1","voidGeneration":2}`, want: 2},
+		"负数":   {payload: `{"tenantId":"tenant-a","parcel":"parcel-1","kind":"EFFECTIVE_DELIVERY","version":"v1","voidGeneration":-1}`, poison: true},
+		"不是数字": {payload: `{"tenantId":"tenant-a","parcel":"parcel-1","kind":"EFFECTIVE_DELIVERY","version":"v1","voidGeneration":"1"}`, poison: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			consumer, handler := newVEFinalOutcomeFixture(t)
+			envelope := veFinalOutcomeEnvelope(t, "generation-"+name)
+			envelope.Payload = json.RawMessage(tc.payload)
+
+			if err := consumer.Consume(t.Context(), envelope); err != nil {
+				t.Fatalf("消费：%v", err)
+			}
+			if tc.poison {
+				if len(handler.calls) != 0 {
+					t.Fatalf("坏载荷被处理了 %d 次, want 毒丸拒收", len(handler.calls))
+				}
+				return
+			}
+			if len(handler.calls) != 1 || handler.calls[0].VoidGeneration != tc.want {
+				t.Fatalf("译码 = %+v, want 作废代次 %d", handler.calls, tc.want)
+			}
+		})
+	}
+}
+
 func TestAFailedFinalOutcomeHandlerRollsBackAndTheRedeliveryRetries(t *testing.T) {
 	consumer, handler := newVEFinalOutcomeFixture(t)
 	envelope := veFinalOutcomeEnvelope(t, "tenant-a/final-outcome/parcel-1/TF-DELIVERY/responsibility-outcome/v1")

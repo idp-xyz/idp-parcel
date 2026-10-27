@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
@@ -119,7 +120,7 @@ func (adapter *DeriveOnFinalOutcomeAdapter) HandleFormedFinalOutcome(
 	if err != nil {
 		return err
 	}
-	command, err := finalProjectionCommand(record, predecessor, superseding)
+	command, err := finalProjectionCommand(record, predecessor, superseding, formed.VoidGeneration)
 	if err != nil {
 		return err
 	}
@@ -209,10 +210,22 @@ func finalKeyFor(formed veinbox.FormedFinalOutcome) (psports.FinalAdoptionKey, e
 	}, nil
 }
 
+// finalFactVersion 是终局事实在投影那一维上的版本：作废代次为零时就是采用键的责任结果版本；代次大于零时在其后追加 `#void-<代次>`。
+// 同一采用键因取消被认定不成立而重新形成记录（不采用行被删、续办重新形成终局，或再被另一份取消挡成不采用）时，事实键
+// （租户、来源、事实引用、版本）若仍是同一把，新记录与此前那一份只在种类和时间上不同，会被判成来源冲突、保留原事实。
+// 带代次的版本是确定性的：同一代次重放得同一个版本，答已有结果。
+func finalFactVersion(adoption psdomain.ResponsibilityOutcomeVersion, voidGeneration int) string {
+	if voidGeneration <= 0 {
+		return adoption.String()
+	}
+	return adoption.String() + "#void-" + strconv.Itoa(voidGeneration)
+}
+
 func finalProjectionCommand(
 	record psports.FinalOutcomeRecord,
 	predecessor psdomain.ResponsibilityOutcomeVersion,
 	superseding bool,
+	voidGeneration int,
 ) (veapplication.DeriveProjectionCommand, error) {
 	none := veapplication.DeriveProjectionCommand{}
 	tenant, err := vedomain.NewTenantID(record.Key.TenantID.String())
@@ -231,7 +244,7 @@ func finalProjectionCommand(
 	if err != nil {
 		return none, fmt.Errorf("%w: source fact: %v", ErrFinalUntranslatableAnswer, err)
 	}
-	version, err := vedomain.NewSourceFactVersion(record.Key.Version.String())
+	version, err := vedomain.NewSourceFactVersion(finalFactVersion(record.Key.Version, voidGeneration))
 	if err != nil {
 		return none, fmt.Errorf("%w: responsibility outcome version: %v", ErrFinalUntranslatableAnswer, err)
 	}
@@ -239,13 +252,18 @@ func finalProjectionCommand(
 	if err != nil {
 		return none, err
 	}
-	// 前身与本代同一事实引用，版本维同译法：首派生与不采用都没有前身，留零值。
+	// 前身与本代同一事实引用，版本维同译法：首派生与不采用都没有前身，留零值。重派生沿用 PS 指名的前一代采用版本；
+	// 不是重派生而作废代次大于零的，本代取代的是同一采用键上上一代次的那一份（代次为一时就是代次为零的原版本）——被删的不采用行
+	// 当初投进来的事实，与重新形成的终局或再次不采用同一事实引用、不同版本，替代关系由此成立，被取代的不参与派生。
 	var supersedes vedomain.SourceFactVersion
-	if superseding {
+	switch {
+	case superseding:
 		supersedes, err = vedomain.NewSourceFactVersion(predecessor.String())
-		if err != nil {
-			return none, fmt.Errorf("%w: superseded responsibility outcome version: %v", ErrFinalUntranslatableAnswer, err)
-		}
+	case voidGeneration > 0:
+		supersedes, err = vedomain.NewSourceFactVersion(finalFactVersion(record.Key.Version, voidGeneration-1))
+	}
+	if err != nil {
+		return none, fmt.Errorf("%w: superseded responsibility outcome version: %v", ErrFinalUntranslatableAnswer, err)
 	}
 
 	// 采认判定本身就是这份事实的业务时刻——同 JudgedAt 之于交接，不是拿处理时间顶替

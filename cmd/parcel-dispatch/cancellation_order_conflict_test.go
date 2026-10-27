@@ -118,8 +118,21 @@ func assertOneConflict(t *testing.T, fixture *synVerticalFixture, boundaryKind s
 // seedStandingCancellation 经生产取消库落一份已成立的取消，请求键取委托的来源请求键（取消编排的键形）。
 func seedStandingCancellation(t *testing.T, fixture *synVerticalFixture, parcel string, requestedAt time.Time) {
 	t.Helper()
+	seedStandingCancellationNamed(t, fixture, parcel, requestedAt, "SYN-PCXL-01", fixture.identity.RequestKey())
+}
+
+// seedStandingCancellationNamed 同 seedStandingCancellation，取消标识与请求键由用例指定：同一件包裹上可以先后落两份取消（前一份被认定不成立之后，后一份才是有效取消）。
+func seedStandingCancellationNamed(
+	t *testing.T,
+	fixture *synVerticalFixture,
+	parcel string,
+	requestedAt time.Time,
+	cancellationID string,
+	requestKey psdomain.SourceRequestKey,
+) {
+	t.Helper()
 	cancellation, err := psdomain.DecideParcelCancellation(psdomain.ParcelCancellationSpec{
-		ID:          mustPS(t, psdomain.NewParcelCancellationID, "SYN-PCXL-01"),
+		ID:          mustPS(t, psdomain.NewParcelCancellationID, cancellationID),
 		Parcel:      mustPS(t, psdomain.NewDeclaredParcelID, parcel),
 		Requester:   mustPS(t, psdomain.NewCancellationRequesterReference, "SYN-CUSTOMER-01"),
 		Authority:   mustPS(t, psdomain.NewCancellationAuthorityReference, "SYN-CANCEL-RULE/1"),
@@ -139,10 +152,10 @@ func seedStandingCancellation(t *testing.T, fixture *synVerticalFixture, parcel 
 		outcome, saveErr = store.Save(txCtx, psports.CancellationRecord{
 			Key: psports.CancellationRequestKey{
 				TenantID:   fixture.identity.TenantID(),
-				RequestKey: fixture.identity.RequestKey(),
+				RequestKey: requestKey,
 				Parcel:     cancellation.Parcel(),
 			},
-			ContentDigest: "SYN-CANCEL-DIGEST-01",
+			ContentDigest: "SYN-CANCEL-DIGEST-" + cancellationID,
 			Kind:          psports.RecordParcelCancelled,
 			Cancellation:  cancellation,
 			DecidedAt:     requestedAt.Add(time.Second),
