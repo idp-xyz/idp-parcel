@@ -8,7 +8,7 @@ import (
 )
 
 // 认可的协议抵扣自`渠道在途`落到`已抵扣`之后，移位上限与短款上限都随之变小：抵扣的
-// 钱不再是渠道还欠的，短款只能落余下的。场景十七：报告 100、到账 96、抵扣 3，余下 1。
+// 钱不是渠道还欠的，短款只能落余下的。场景十七：报告 100、到账 96、抵扣 3，余下 1。
 func TestAnAppliedOffsetLeavesTheShortfallOnlyTheRemainder(t *testing.T) {
 	instruction := principalInstruction(t, "SYN-INSTR-1", 100)
 	postings := []domain.SubledgerPosting{

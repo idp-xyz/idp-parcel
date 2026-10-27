@@ -15,6 +15,13 @@ func testOffset(
 	t *testing.T, id, instruction, approval string, amountMinor int64,
 ) domain.AgreedOffset {
 	t.Helper()
+	return testOffsetApprovedAt(t, id, instruction, approval, amountMinor, "2026-08-25T00:00:00Z")
+}
+
+func testOffsetApprovedAt(
+	t *testing.T, id, instruction, approval string, amountMinor int64, approvedAt string,
+) domain.AgreedOffset {
+	t.Helper()
 	offsetID, err := domain.NewAgreedOffsetID(id)
 	if err != nil {
 		t.Fatalf("构造抵扣标识：%v", err)
@@ -32,7 +39,7 @@ func testOffset(
 		Instruction: instructionID,
 		Amount:      testMoney(t, amountMinor),
 		Approval:    approvalRef,
-		ApprovedAt:  at(t, "2026-08-25T00:00:00Z"),
+		ApprovedAt:  at(t, approvedAt),
 	})
 	if err != nil {
 		t.Fatalf("登记认可抵扣：%v", err)
@@ -70,7 +77,7 @@ func offsetPosting(t *testing.T, id, offset string, amountMinor int64) applicati
 }
 
 // 场景十七（报告 100、到账 96、认可的协议抵扣 3）整条走通：抵扣落`已抵扣`，余下 1 落
-// `短款`，`渠道在途`清零，账内各位置之和仍是入账 100；到账的 96 照旧清分给客户。
+// `短款`，`渠道在途`清零，账内各位置之和仍是入账 100；到账的 96 清分给客户。
 // Covers: AT-CR-017
 func TestScenarioSeventeenSettlesTheAgreedOffsetOutOfTransit(t *testing.T) {
 	store := newStore()
@@ -141,6 +148,20 @@ func TestRegisteringAnAgreedOffsetPinsTheApprovalAndRefusesADuplicate(t *testing
 	if got := registerOffsetOutcome(t, handler,
 		testOffset(t, "SYN-OFFSET-1", "SYN-INSTR-1", "SYN-SA-APPROVAL-1", 4)); got != application.OutcomeContentConflict {
 		t.Fatalf("同标识改金额 = %s，要 CONTENT_CONFLICT", got)
+	}
+	// 同标识的重放要逐格相同：认可引用、指令、认可时刻任一格不同，都是同键异内容。
+	for _, drift := range []struct {
+		name   string
+		offset domain.AgreedOffset
+	}{
+		{"同标识换认可引用", testOffset(t, "SYN-OFFSET-1", "SYN-INSTR-1", "SYN-SA-APPROVAL-9", 3)},
+		{"同标识换指令", testOffset(t, "SYN-OFFSET-1", "SYN-INSTR-2", "SYN-SA-APPROVAL-1", 3)},
+		{"同标识换认可时刻",
+			testOffsetApprovedAt(t, "SYN-OFFSET-1", "SYN-INSTR-1", "SYN-SA-APPROVAL-1", 3, "2026-08-26T00:00:00Z")},
+	} {
+		if got := registerOffsetOutcome(t, handler, drift.offset); got != application.OutcomeContentConflict {
+			t.Fatalf("%s = %s，要 CONTENT_CONFLICT", drift.name, got)
+		}
 	}
 	if got := registerOffsetOutcome(t, handler,
 		testOffset(t, "SYN-OFFSET-1B", "SYN-INSTR-1", "SYN-SA-APPROVAL-1", 3)); got != application.OutcomeContentConflict {
@@ -353,7 +374,7 @@ func TestAnOffsetPostsAtMostOnceAndReplaysAnswerExisting(t *testing.T) {
 }
 
 // 撤回：认可被撤回就冲正已落的那笔，3 回到`渠道在途`、仍是该指令的欠款；一笔至多冲正
-// 一次——重复到达的撤回答冲突，不再从已抵扣里多拿，也不动同账别的指令的抵扣；撤回的
+// 一次——重复到达的撤回答冲突，不会从已抵扣里多拿，也不动同账别的指令的抵扣；撤回的
 // 认可不能再落（要落走新的认可）；更正则是新认可新记录。
 // Covers: AT-CR-025
 func TestAWithdrawnOffsetIsReversedOnceAndCannotApplyAgain(t *testing.T) {

@@ -4,9 +4,9 @@
 -- 规则的两处落点，两处同笔改。
 --
 -- 本迁移只放开词表、加约束与索引，不改任何已落行。旧口径下已落的行都满足新增各条，
--- 唯一的例外是同一笔记账被冲正过两次以上——那样的账 CREATE UNIQUE INDEX 会在施加时
--- 失败、整笔迁移回滚，那正是要人回头看的账：哪一笔冲正是多余的，库自己判不了，不能
--- 替它挑一笔删掉。演示租户的存量没有冲正，满足全部各条。
+-- 唯一的例外是同一笔记账被冲正过两次以上——那正是要人回头看的账：哪一笔冲正是多余
+-- 的，库自己判不了，不能替它挑一笔删掉，所以建索引之前先预检，存量里有就以列出各笔
+-- 的错误拒绝施加、整笔迁移回滚。演示租户的存量没有冲正，满足全部各条。
 
 -- 认可的协议抵扣：settlement-accounting 认可、本上下文只引用的一笔。认可及其金额归
 -- 它，这里保存当时引用的那一份；不据此形成任何运营应收应付。登记只钉引用到一条指令
@@ -88,7 +88,7 @@ ALTER TABLE collection_remittance.subledger_posting
         ));
 
 -- 已抵扣的门：进入它必须凭认可的协议抵扣、且只从渠道在途来；认可的协议抵扣作依据只有
--- 这一种形；离开它只有冲正。三条合起来，已抵扣里的每一分钱都追溯到一份认可，也只能
+-- 这一种形；离开它只有冲正。这几道门合起来，已抵扣里的每一分钱都追溯到一份认可，也只能
 -- 因这份认可被撤回而退回渠道在途。
 ALTER TABLE collection_remittance.subledger_posting
     ADD CONSTRAINT subledger_posting_offset_needs_agreed_offset
@@ -113,6 +113,34 @@ CREATE UNIQUE INDEX subledger_posting_one_per_agreed_offset
 -- 一笔记账至多被冲正一次。冲正的依据是被冲正的记账，两笔冲正指向同一笔，第二笔就是
 -- 从别处多拿：已抵扣、待清分这些位置混着同账别的指令的钱，余额够扣不等于那是这一笔
 -- 该退的。冲正错了走冲正那一笔冲正，是另一笔的依据，不受此限。
+--
+-- 存量里已有被冲正了不止一次的记账就拒绝迁移，不替谁挑留哪一笔：哪一笔冲正是那次
+-- 冲正、多出来的各笔该怎么处置，只有写下它们的一方答得出，静默删掉任何一笔都是改写
+-- 账务的历史，而分户账记账追加式、不删不改。
+DO $$
+DECLARE
+    doubled text;
+BEGIN
+    SELECT string_agg(format('%s/%s（冲正记账 %s）', tenant_id, basis_ref, corrections),
+                      '，' ORDER BY tenant_id, basis_ref)
+      INTO doubled
+      FROM (
+          SELECT tenant_id, basis_ref,
+                 string_agg(posting_ref, '、' ORDER BY posting_ref) AS corrections
+            FROM collection_remittance.subledger_posting
+           WHERE basis_kind = 'CORRECTION'
+           GROUP BY tenant_id, basis_ref
+          HAVING count(*) > 1
+      ) AS doubly_corrected;
+    IF doubled IS NOT NULL THEN
+        RAISE EXCEPTION USING MESSAGE =
+            'subledger_posting 存在被冲正了不止一次的记账，不建「一笔记账至多被冲正一次」索引，也不代删任何一笔冲正：'
+            || doubled
+            || '。请逐笔查明哪一笔冲正是那次冲正，其余各笔导出备查后由写入方处置，再重跑本迁移。';
+    END IF;
+END
+$$;
+
 CREATE UNIQUE INDEX subledger_posting_one_correction_per_original
     ON collection_remittance.subledger_posting (tenant_id, basis_ref)
     WHERE basis_kind = 'CORRECTION';

@@ -26,7 +26,7 @@ export interface SubledgerPositionBalances {
   shortfall: string;
   /** 溢款:实收多于指令的差额。 */
   surplus: string;
-  /** 已抵扣:经 settlement-accounting 认可的协议抵扣自渠道在途落入(账内终局位置),不再是渠道还欠的,也不付给客户。 */
+  /** 已抵扣:经 settlement-accounting 认可的协议抵扣自渠道在途落入(账内终局位置),不是渠道还欠的,也不付给客户。 */
   offsetApplied: string;
 }
 

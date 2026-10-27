@@ -194,7 +194,7 @@ type codSubledgerBody struct {
 
 // positionBalancesBody 各账内位置的派生余额,最小单位十进制计数串(见 minorAmount)。
 // offsetApplied 是经 settlement-accounting 认可的协议抵扣自渠道在途落入的那部分,
-// 不再是渠道还欠的,也不付给客户。
+// 不是渠道还欠的,也不付给客户。
 type positionBalancesBody struct {
 	InTransitAtChannel string `json:"inTransitAtChannel"`
 	AwaitingAllocation string `json:"awaitingAllocation"`

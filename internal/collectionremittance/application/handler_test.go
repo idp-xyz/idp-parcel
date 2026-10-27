@@ -226,6 +226,60 @@ func TestReplayingAPostingWhoseSourceWasSinceDrainedAnswersExisting(t *testing.T
 	}
 }
 
+// 同标识的两路记账并发到达：后到的一路在锁外读不到先到的（它还没提交），等到锁才读到。
+// 读到的与自己一致是重放，答 EXISTING；内容不同是同键异内容，答 CONTENT_CONFLICT，不能折成
+// 「已在册」。两种都不再落第二笔。
+func TestAPostingCommittedByAnotherWriterWhileWaitingForTheLockIsReplayedOrConflicts(t *testing.T) {
+	for _, arrival := range []struct {
+		name        string
+		amountMinor int64
+		postedAt    string
+		want        application.Outcome
+	}{
+		{"先到的与自己一致", 12000, "2026-08-24T01:10:00Z", application.OutcomeExisting},
+		{"先到的金额不同", 11000, "2026-08-24T01:10:00Z", application.OutcomeContentConflict},
+		{"先到的记账时刻不同", 12000, "2026-08-24T01:20:00Z", application.OutcomeContentConflict},
+	} {
+		t.Run(arrival.name, func(t *testing.T) {
+			store := newStore()
+			handler := store.handler()
+			openLedger(t, store, handler)
+			seedInstruction(t, store, handler, "SYN-INSTR-1", 12000)
+			seedFact(t, store, handler, "SYN-FACT-REPORT", "SYN-INSTR-1", domain.ChannelCollectionReport, 12000)
+
+			command := postCommand(t, "SYN-POST-1",
+				domain.PositionExternalSource, domain.PositionInTransitAtChannel,
+				12000, domain.BasisCollectionFact, "SYN-FACT-REPORT", "2026-08-24T01:10:00Z")
+			rival := postCommand(t, "SYN-POST-1",
+				domain.PositionExternalSource, domain.PositionInTransitAtChannel,
+				arrival.amountMinor, domain.BasisCollectionFact, "SYN-FACT-REPORT", arrival.postedAt)
+			store.afterLock = func() {
+				posting, err := domain.RecordSubledgerPosting(domain.SubledgerPostingSpec{
+					ID: rival.ID, Ledger: testLedgerKey(t), From: rival.From, To: rival.To,
+					Amount: testMoney(t, rival.AmountMinor), BasisKind: rival.BasisKind,
+					Basis: rival.Basis, PostedAt: rival.PostedAt,
+				})
+				if err != nil {
+					t.Fatalf("构造先到的那一笔：%v", err)
+				}
+				if _, err := store.AppendPosting(t.Context(), tenantID(t), posting); err != nil {
+					t.Fatalf("先到的那一笔落账：%v", err)
+				}
+			}
+
+			if got := postOutcome(t, handler, command); got != arrival.want {
+				t.Fatalf("%s = %s，要 %s", arrival.name, got, arrival.want)
+			}
+			if len(store.locked) != 1 {
+				t.Fatalf("取锁 %d 次，要 1——用例没走到取锁之后的那一格", len(store.locked))
+			}
+			if len(store.postings) != 1 {
+				t.Fatalf("账上有 %d 笔记账，要只有先到的那一笔", len(store.postings))
+			}
+		})
+	}
+}
+
 // 批次收口同样是按当下状态作答的门，只对新成员生效；已在册成员的重放仍答 EXISTING。
 func TestReplayingABatchMemberPostingAfterHandOverAnswersExisting(t *testing.T) {
 	store := newStore()

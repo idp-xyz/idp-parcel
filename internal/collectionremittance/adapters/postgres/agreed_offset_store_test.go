@@ -164,6 +164,35 @@ func TestTheDatabaseGatesTheAppliedOffsetPositionBothWays(t *testing.T) {
 	}
 }
 
+// 凭认可的协议抵扣的记账只有一种形：渠道在途 → 已抵扣。别的位置对在库里没有别的约束
+// 会拦（待清分、应付客户这些去向并不要求特定依据），只有依据自己的形状门挡得住，所以逐
+// 行断言撞的正是这一道。
+// Covers: AT-CR-024（库约束半边）
+func TestTheDatabaseRefusesAnAgreedOffsetBasisInAnyOtherShape(t *testing.T) {
+	fixture := newCatalogueFixture(t)
+	fixture.seedSubledger(t, "tenant-a", "SYN-CUST-01", "SYN-LE-01", "SYN-CUR-01", "SYN-CHAN-01")
+
+	for name, row := range map[string]struct{ from, to string }{
+		"渠道在途到待清分":  {"IN_TRANSIT_AT_CHANNEL", "AWAITING_ALLOCATION"},
+		"渠道在途到应付客户": {"IN_TRANSIT_AT_CHANNEL", "PAYABLE_TO_CUSTOMER"},
+		"待清分到应付客户":  {"AWAITING_ALLOCATION", "PAYABLE_TO_CUSTOMER"},
+		"应付客户到待清分":  {"PAYABLE_TO_CUSTOMER", "AWAITING_ALLOCATION"},
+	} {
+		_, err := fixture.pool.Exec(t.Context(),
+			`INSERT INTO collection_remittance.subledger_posting
+				(tenant_id, posting_ref, customer_ref, legal_entity_ref, currency, channel_ref,
+				 from_position, to_position, amount_minor, basis_kind, basis_ref, posted_at)
+			 VALUES ('tenant-a', 'SYN-POST-BAD', 'SYN-CUST-01', 'SYN-LE-01', 'SYN-CUR-01', 'SYN-CHAN-01',
+			         $1, $2, 100, 'AGREED_OFFSET', 'SYN-OFFSET-1', $3)`,
+			row.from, row.to, catalogueBaseAt)
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.Code != "23514" ||
+			pgErr.ConstraintName != "subledger_posting_agreed_offset_shape" {
+			t.Fatalf("%s：要撞 subledger_posting_agreed_offset_shape，实得 %v", name, err)
+		}
+	}
+}
+
 // 一条认可的抵扣至多支撑一笔记账、一笔记账至多被冲正一次，都由库上的部分唯一索引兜
 // 住：绕过分户账锁的写入者也落不了第二笔。写口照 DO NOTHING 答`已登记`，编排按记账
 // 标识读不回自己那一笔，答内容冲突。

@@ -27,6 +27,10 @@ type storeDouble struct {
 	batches       map[string]domain.RemittanceBatch
 	locked        []domain.SubledgerKey
 
+	// afterLock 在 LockLedger 取到锁之后运行：造出「锁外读不到、等到锁才读到」的那一格，
+	// 即另一路并发的记账在这一路等锁期间提交了。
+	afterLock func()
+
 	writeErr error
 	readErr  error
 }
@@ -198,6 +202,9 @@ func (store *storeDouble) LockLedger(
 		return store.writeErr
 	}
 	store.locked = append(store.locked, key)
+	if store.afterLock != nil {
+		store.afterLock()
+	}
 	return nil
 }
 

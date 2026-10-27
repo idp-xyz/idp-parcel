@@ -98,7 +98,7 @@ func (ledger Subledger) OpenedAt() time.Time { return ledger.openedAt }
 // 于是全账总额恒等于入账之和，守恒在一条求和上就核得完。
 //
 // `PositionOffsetApplied`（已抵扣）装的是经 settlement-accounting 认可的协议抵扣：
-// 渠道按有效协议从回款里扣下的那部分本金，不再是渠道还欠的，也不会付给客户。它是
+// 渠道按有效协议从回款里扣下的那部分本金，不是渠道还欠的，也不会付给客户。它是
 // 账内位置而不是账外出口，抵扣金额的归属仍在 settlement-accounting。
 type FundPosition uint8
 
@@ -247,7 +247,7 @@ type SubledgerPosting struct {
 	postedAt  time.Time
 }
 
-// RecordSubledgerPosting 形成一笔记账。五条依据门在这里就把住，不留给调用方自觉：
+// RecordSubledgerPosting 形成一笔记账。依据门在这里就把住，不留给调用方自觉：
 //   - 入账（来源是外部来源）必须凭代收事实——账上不许出现无来源的本金；
 //   - 进入`应付客户`**不得**凭代收事实——「未实际收到的代收款不得进入应付客户」的
 //     落点在这一格：归属要另有一笔凭代收指令的清分记账，来源事实推不出可付余额；
