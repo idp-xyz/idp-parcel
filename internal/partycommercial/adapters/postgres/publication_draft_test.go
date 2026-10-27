@@ -512,3 +512,30 @@ func TestApprovalDutyRuleIsRegisteredOncePerTenant(t *testing.T) {
 		t.Fatal("没要求等级的规则读回来带了等级")
 	}
 }
+
+// Covers: AT-PC-069——壳摘要经载体册一个来回不变：录入答复里算出的串（内存里的载体）与之后读回算出的串必须相等，否则五步流程拿录入答复里的壳摘要
+// 去批会永远答已变更。时刻带微秒以下的尾巴，是载体册存时刻的精度会截掉的那一种。
+func TestShellDigestSurvivesTheRegisterRoundTrip(t *testing.T) {
+	drafts, _, transactor, _ := newDraftRegistry(t)
+	ctx := t.Context()
+	shell := draftShellIn(t, "tenant-1", "scope-1", "credit-roundtrip", "v1")
+	interval, err := domain.NewEffectiveInterval(
+		effectiveAtRow.Add(600*time.Nanosecond), effectiveAtRow.Add(90*24*time.Hour+700*time.Nanosecond))
+	if err != nil {
+		t.Fatalf("有效区间：%v", err)
+	}
+	shell.Effective = interval
+	draft, err := domain.SubmitPublicationDraft(shell, creditDraftContent(t, 100),
+		pcValue(t, domain.NewOperatorSubjectReference, "op-submitter"), draftSubmittedAt)
+	if err != nil {
+		t.Fatalf("录入载体：%v", err)
+	}
+	mustSubmitDraft(t, transactor, ctx, drafts, draft)
+	stored, found := loadDraft(t, ctx, drafts, "tenant-1", shell)
+	if !found {
+		t.Fatal("读不回刚录入的载体")
+	}
+	if stored.ShellDigest() != draft.ShellDigest() {
+		t.Fatalf("壳摘要经载体册一个来回变了：录入时 %s，读回 %s", draft.ShellDigest(), stored.ShellDigest())
+	}
+}

@@ -467,7 +467,7 @@ func TestPublicationDraftStatusNames(t *testing.T) {
 }
 
 // Covers: AT-PC-069——壳摘要盖住适用范围、有效区间（起点与止点）与指名引用，不盖正文也不盖身份四元；同一份壳逐次算出同一个串，
-// 毫秒以下的时刻抖动（载体册以微秒存时刻）不改它。
+// 微秒以下的时刻抖动（载体册以微秒存时刻、写入时截断）不改它。
 func TestTheShellDigestCoversScopeIntervalAndReferencesButNotTheContent(t *testing.T) {
 	submit := func(shell domain.PublicationDraftShell, minor int64) domain.PublicationDraft {
 		t.Helper()
@@ -504,9 +504,9 @@ func TestTheShellDigestCoversScopeIntervalAndReferencesButNotTheContent(t *testi
 	}
 
 	jittered := base
-	jittered.Effective = shellInterval(t, time.Date(2026, 10, 1, 0, 0, 0, 400, time.UTC), time.Time{})
+	jittered.Effective = shellInterval(t, time.Date(2026, 10, 1, 0, 0, 0, 600, time.UTC), time.Time{})
 	if submit(jittered, 500_000).ShellDigest() != reference {
-		t.Fatal("纳秒级抖动不该改壳摘要")
+		t.Fatal("微秒以下的抖动不该改壳摘要")
 	}
 }
 

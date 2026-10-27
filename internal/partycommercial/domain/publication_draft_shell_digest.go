@@ -15,7 +15,7 @@ const publicationShellDigestVersion = "PCS-1"
 // CanonicalizePublicationContent），而待批准期间壳变了正文没变也是合法的就地修订（SameSubmissionAs）——批准与发布要绑定
 // 调用方看到的东西，就得连壳一并绑，否则内容不变、范围或区间被换掉的载体会照样批过去。
 //
-// 身份四元不入：它是键，键不同的两份不会撞在一起。时刻取微秒并按 UTC 写：载体册以微秒存时刻，录入答复里算出的串
+// 身份四元不入：它是键，键不同的两份不会撞在一起。时刻按 UTC 截到微秒写：载体册以微秒存时刻、驱动写入时截断而不是四舍五入，录入答复里算出的串
 // 与之后读回算出的串必须相等。引用按载体上记下的顺序写，与 SameSubmissionAs 比对引用的口径一致。
 func (draft PublicationDraft) ShellDigest() string {
 	hasher := sha256.New()
@@ -34,7 +34,7 @@ func (draft PublicationDraft) ShellDigest() string {
 }
 
 func shellInstant(instant time.Time) string {
-	return instant.UTC().Round(time.Microsecond).Format(time.RFC3339Nano)
+	return instant.UTC().Truncate(time.Microsecond).Format(time.RFC3339Nano)
 }
 
 // writeShellField 带长度前缀写一格，两格相邻拼接不会撞出同一串。
