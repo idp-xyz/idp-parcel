@@ -65,7 +65,8 @@ type OffsitePickupHandoff interface {
 	HandOffOffsitePickup(ctx context.Context, intent OffsitePickupHandoffIntent) error
 }
 
-// DeliveryAttemptView 按（尝试、对象）取回派送尝试与该对象的结果供交付生效引用。
+// DeliveryAttemptView 按（尝试、对象）取回派送尝试与该对象**当前有效**的结果供交付生效、交付门禁读数与失败尝试费引用：
+// 待确认那一格若已凭同一次上门的后补来源更正成确定结果，读到的是更正出来的那一格，没更正的仍是首次提交的那一格。
 // found=false 表示指名的尝试/对象结果不存在——指错是提交矛盾，不是等谁。
 type DeliveryAttemptView interface {
 	LoadDeliveryResult(

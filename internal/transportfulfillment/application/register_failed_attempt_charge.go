@@ -41,7 +41,7 @@ func (handler *RegisterChargeOccurrenceHandler) failedPickupFact(
 	command RegisterChargeOccurrenceCommand,
 	object domain.CarriedObjectReference,
 ) (chargeOccurrenceFact, RegisterChargeOccurrenceResult, bool) {
-	record, found, err := handler.deps.PickupAttempts.FindByKey(ctx, ports.PickupAttemptKey{
+	record, found, err := handler.deps.PickupAttempts.FindEffectiveByKey(ctx, ports.PickupAttemptKey{
 		TenantID: command.TenantID,
 		SourceID: command.PickupAttemptSource,
 	})

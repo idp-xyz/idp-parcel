@@ -198,7 +198,9 @@ func (repository *DeliveryAttempts) Save(
 	return ports.DeliveryAttemptSaved, nil
 }
 
-// LoadDeliveryResult 一次连表取回尝试与对象结果。
+// LoadDeliveryResult 一次连表取回尝试与对象**当前有效**的结果：首次提交的那一格若是待确认且已凭同一次上门的后补来源
+// 更正成确定结果，读更正出来的那一格（交付登记、交付门禁读数与失败尝试费读的都是它）；没更正的仍是首次提交的。首次提交的
+// 结果行本身一个字不改，重放与冲突比对读的 FindByKey 照旧答首次提交。
 //
 // 尝试与结果一起取而不分两次：分两次时中间那个瞬间足以让「尝试在、结果不在」变成
 // 「两者都在」，而这个 found 正是编排用来分「指错」与「等谁」的——指名的尝试或对象
@@ -218,17 +220,24 @@ func (view *DeliveryAttempts) LoadDeliveryResult(
 
 	var taskRef, executedBy, placeRef, evidence, outcomeName string
 	var rescheduledFrom, basis, source *string
+	var correctedOutcome, correctedBasis, correctedSource *string
 	var objectsJSON []byte
 	var plannedFrom, plannedTo, arrivedAt, occurredAt time.Time
+	var correctedOccurredAt, correctedAt *time.Time
 	err = querier.QueryRow(ctx,
 		`SELECT a.task_ref, a.executed_by, a.place_ref,
 		        a.planned_from, a.planned_to, a.arrived_at, a.evidence_ref,
 		        a.rescheduled_from, a.objects,
-		        r.outcome, r.basis, r.source_ref, r.occurred_at
+		        r.outcome, r.basis, r.source_ref, r.occurred_at,
+		        c.outcome, c.basis, c.source_ref, c.occurred_at, c.corrected_at
 		   FROM transport_fulfillment.delivery_attempt AS a
 		   JOIN transport_fulfillment.delivery_attempt_result AS r
 		     ON r.tenant_id = a.tenant_id
 		    AND r.attempt_ref = a.attempt_ref
+		   LEFT JOIN transport_fulfillment.delivery_attempt_result_correction AS c
+		     ON c.tenant_id = r.tenant_id
+		    AND c.attempt_ref = r.attempt_ref
+		    AND c.object_ref = r.object_ref
 		  WHERE a.tenant_id = $1
 		    AND a.attempt_ref = $2
 		    AND r.object_ref = $3`,
@@ -238,7 +247,8 @@ func (view *DeliveryAttempts) LoadDeliveryResult(
 	).Scan(&taskRef, &executedBy, &placeRef,
 		&plannedFrom, &plannedTo, &arrivedAt, &evidence,
 		&rescheduledFrom, &objectsJSON,
-		&outcomeName, &basis, &source, &occurredAt)
+		&outcomeName, &basis, &source, &occurredAt,
+		&correctedOutcome, &correctedBasis, &correctedSource, &correctedOccurredAt, &correctedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.FulfillmentAttempt{}, domain.DeliveryAttemptResult{}, false, nil
 	}
@@ -261,6 +271,20 @@ func (view *DeliveryAttempts) LoadDeliveryResult(
 	if err != nil {
 		return domain.FulfillmentAttempt{}, domain.DeliveryAttemptResult{}, false,
 			fmt.Errorf("load delivery result: %w", err)
+	}
+	if correctedOutcome != nil {
+		// 外连接带出的更正列要么全在要么全不在（库内 NOT NULL）；在就经领域更正的构造门回指首次提交的待确认，取它的确定结果。
+		if correctedSource == nil || correctedOccurredAt == nil || correctedAt == nil {
+			return domain.FulfillmentAttempt{}, domain.DeliveryAttemptResult{}, false,
+				fmt.Errorf("load delivery result: the correction row of %s/%s/%s is incomplete", tenant, attempt, object)
+		}
+		correction, err := rebuildDeliveryCorrection(fulfillmentAttempt, result, *correctedOutcome, correctedBasis,
+			*correctedSource, *correctedOccurredAt, *correctedAt)
+		if err != nil {
+			return domain.FulfillmentAttempt{}, domain.DeliveryAttemptResult{}, false,
+				fmt.Errorf("load delivery result: %w", err)
+		}
+		result = correction.Effective()
 	}
 	return fulfillmentAttempt, result, true, nil
 }

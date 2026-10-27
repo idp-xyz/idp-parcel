@@ -36,13 +36,15 @@ const (
 	ChargeOccurrenceAlreadyRegistered
 )
 
-// FailedAttemptSource 按尝试来源键取回一次揽收尝试及其逐对象结果，供失败尝试费登记取用。
+// FailedAttemptSource 按尝试来源键取回一次揽收尝试及其逐对象**当前有效**的结果，供失败尝试费登记取用：待确认那一格
+// 若已凭同一次上门的后补来源更正成确定结果，读到的是更正出来的那一格，没更正的仍是首次提交的那一格。
 //
 // 单开一个只读口而不直接依赖 `PickupAttemptStore`：那个口带 `Save`，而本用例只读——依赖它
 // 等于声明自己可能写揽收尝试，而按 ADR-0098 本用例恰恰**不碰**揽收那一侧的任何东西。契约
-// 窄一格，说的话就准一格。`PickupAttempts` 适配器天然满足它，不需要第二个实现。
+// 窄一格，说的话就准一格。方法名与存取口的 `FindByKey` 分开，是因为两者答的不是同一件事：存取口按首次提交
+// 作答（重放与冲突比的就是首次提交），这里按当前有效结果作答。`PickupAttempts` 适配器两个口都满足，不需要第二个实现。
 type FailedAttemptSource interface {
-	FindByKey(ctx context.Context, key PickupAttemptKey) (PickupAttemptRecord, bool, error)
+	FindEffectiveByKey(ctx context.Context, key PickupAttemptKey) (PickupAttemptRecord, bool, error)
 }
 
 // ChargeOccurrenceRegistry 按幂等键找回并保存发生项版本（写入代数同 ADR-0031）。

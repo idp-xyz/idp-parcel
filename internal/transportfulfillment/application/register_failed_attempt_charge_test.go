@@ -22,7 +22,7 @@ type pickupResultSourceDouble struct {
 	err    error
 }
 
-func (double pickupResultSourceDouble) FindByKey(_ context.Context, _ ports.PickupAttemptKey) (ports.PickupAttemptRecord, bool, error) {
+func (double pickupResultSourceDouble) FindEffectiveByKey(_ context.Context, _ ports.PickupAttemptKey) (ports.PickupAttemptRecord, bool, error) {
 	return double.record, double.found, double.err
 }
 
