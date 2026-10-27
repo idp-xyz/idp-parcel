@@ -57,7 +57,8 @@ export const fundsFactKindLabels: Record<string, string> = {
 };
 
 // 资金可映射目标的封闭集，中文取 SettlementTargetKind 注释原词。费用本体不在其中；映射到客户赔付
-// 或追偿认可、核销它，只改核销状态与未分配余额，不改那条金额。
+// 或追偿认可、核销它，只改核销状态与未分配余额，不改那条金额。整条认作代收本金不是核销对象：那笔钱是
+// 运营企业替客户保管的商品交易资金，不进任何客户应收作用域的入账余额，去向在代收与清分的分户账里。
 export const settlementTargetKindLabels: Record<string, string> = {
   STATEMENT: '客户对账单',
   PAYABLE: '供应商审核应付',
@@ -65,6 +66,7 @@ export const settlementTargetKindLabels: Record<string, string> = {
   ACCOUNT: '应收结算账户',
   CUSTOMER_COMPENSATION: '客户赔付或索赔费用退款',
   RECOVERY_ACKNOWLEDGEMENT: '追偿认可金额',
+  COLLECTED_PRINCIPAL: '代收本金',
 };
 
 // 经营指标口径的封闭三值，中文取 OperatingBasis 注释原词。索赔调整后口径必须声明所依附的

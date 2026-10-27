@@ -24,7 +24,7 @@ func principalMapping(
 	)
 }
 
-// Covers: 把一条已采用的外部资金事实认作代收本金——映射的目标就是这条事实自己，整条认作，不按金额分：
+// Covers: AT-SA-216——把一条已采用的外部资金事实认作代收本金——映射的目标就是这条事实自己，整条认作，不按金额分：
 // 指名别的目标、或指名的目标不是这条事实，都是映射输入不合法。
 func TestACollectedPrincipalMappingNamesTheWholeReceiptFactItself(t *testing.T) {
 	fact := adoptedFact(t, domain.FundsReceiptConfirmed, 100000)
@@ -45,7 +45,7 @@ func TestACollectedPrincipalMappingNamesTheWholeReceiptFactItself(t *testing.T) 
 	}
 }
 
-// Covers: 只有确认到账的事实能认作代收本金：资金退回是钱离开，付款失败不是钱。
+// Covers: AT-SA-216——只有确认到账的事实能认作代收本金：资金退回是钱离开，付款失败不是钱。
 func TestOnlyAConfirmedReceiptCanBeSetAsideAsCollectedPrincipal(t *testing.T) {
 	returned := adoptedFact(t, domain.FundsReturned, 2000)
 	if _, err := principalMapping(returned, "bank-fact-1", t); !errors.Is(err, domain.ErrInvalidFundsMapping) {
@@ -57,7 +57,7 @@ func TestOnlyAConfirmedReceiptCanBeSetAsideAsCollectedPrincipal(t *testing.T) {
 	}
 }
 
-// Covers: 认作代收本金的事实不核销到任何结算目标之上：代收本金不是运营企业的应收应付，它的去向在
+// Covers: AT-SA-216——认作代收本金的事实不核销到任何结算目标之上：代收本金不是运营企业的应收应付，它的去向在
 // collection-remittance 的分户账里，结算一侧没有可核销的对象。
 func TestNoApplicationAllocatesToCollectedPrincipal(t *testing.T) {
 	fact := adoptedFact(t, domain.FundsReceiptConfirmed, 100000)

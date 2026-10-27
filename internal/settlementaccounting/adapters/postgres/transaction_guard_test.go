@@ -35,6 +35,15 @@ func TestRemainingSettlementWritesRefuseToRunOutsideATransaction(t *testing.T) {
 		t.Errorf("无事务登记分摊规则适用应返回 ErrTransactionRequired，实得：%v", err)
 	}
 
+	// 代收与清分读的共享锁同理：离了环境事务它是一把立刻放掉的锁，读到的金额挡不住随后的外部更正。
+	principalView, err := adapter.NewCollectedPrincipalFundsView(db)
+	if err != nil {
+		t.Fatalf("构造代收本金只读口：%v", err)
+	}
+	if _, _, err := principalView.LockCollectedPrincipalFact(ctx, domain.TenantID{}, domain.FundsFactReference{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务对资金事实取共享锁应返回 ErrTransactionRequired，实得：%v", err)
+	}
+
 	conditions, err := adapter.NewChargeConfirmationConditions(db)
 	if err != nil {
 		t.Fatalf("构造确认条件库：%v", err)

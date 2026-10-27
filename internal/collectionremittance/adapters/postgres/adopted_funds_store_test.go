@@ -143,7 +143,7 @@ func TestAnArrivalPinsItsAdoptedFundsVersionAndTheReferenceReadReturnsOnlyArriva
 	}
 }
 
-// Covers: 写口只收钉了采用版本的真实到账——没钉就来写是调用方编程错误，写口拒、什么都不落（不让它撞库上的 CHECK 折成依赖故障）。
+// Covers: AT-CR-020——写口只收钉了采用版本的真实到账——没钉就来写是调用方编程错误，写口拒、什么都不落（不让它撞库上的 CHECK 折成依赖故障）。
 func TestTheWriteSideRefusesAnUnpinnedArrival(t *testing.T) {
 	db, pool, collections, _ := arrivalPoolFixture(t)
 	tenant := fixtureTenant(t)
@@ -169,7 +169,7 @@ func TestTheWriteSideRefusesAnUnpinnedArrival(t *testing.T) {
 	}
 }
 
-// Covers: 一条已采用事实对一条指令至多一条真实到账——换事实标识再登同一指令，写口撞唯一索引答已登记、不落第二行（编排按标识
+// Covers: AT-CR-026（库约束半边）——一条已采用事实对一条指令至多一条真实到账——换事实标识再登同一指令，写口撞唯一索引答已登记、不落第二行（编排按标识
 // 读不回就判内容冲突）；另一条指令、另一条事实、别的租户同引用都不挡。
 func TestOneAdoptedFactBacksAtMostOneArrivalPerInstruction(t *testing.T) {
 	db, pool, collections, view := arrivalPoolFixture(t)
@@ -230,7 +230,7 @@ func TestOneAdoptedFactBacksAtMostOneArrivalPerInstruction(t *testing.T) {
 	}
 }
 
-// Covers: 本上下文的事实锁——登记「读合计、判够、落册」要在一把按（租户，已采用事实引用）的事务锁下：同一引用的第二路等第一路
+// Covers: AT-CR-026（并发半边）——本上下文的事实锁——登记「读合计、判够、落册」要在一把按（租户，已采用事实引用）的事务锁下：同一引用的第二路等第一路
 // 提交；不同引用不互等；无环境事务即拒。
 func TestTheFundsReferenceLockQueuesRegistrationsOfOneFactOnly(t *testing.T) {
 	db, pool, collections, _ := arrivalPoolFixture(t)

@@ -559,7 +559,9 @@ func fundsAnswer(
 	case application.FundsNotAccepted,
 		application.UnfundableFactOutcome, application.ApplicationImbalanceOutcome, application.CrossCurrencyOutcome:
 		return message, exitUsage
-	case application.FundsFactConflict, application.FundsMappingConflict, application.ApplicationConflict:
+	case application.FundsMappingConflict:
+		return message + "（同键已在册且内容不同，或这条事实已整条认作代收本金、已有别的映射——绝不覆盖，先核对既有登记）", exitConflict
+	case application.FundsFactConflict, application.ApplicationConflict:
 		return message + "（同键已在册且内容不同——绝不覆盖，先核对既有登记）", exitConflict
 	case application.FundsUndecided:
 		return message + "（" + reason.String() + "）", exitUndecided

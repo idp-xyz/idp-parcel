@@ -150,7 +150,7 @@ func TestAdoptedFundsBacksArrivalsUpToItsAmountOnce(t *testing.T) {
 	})
 }
 
-// Covers: 被结算更正的事实——此刻的链头金额低于已引用的合计时，已登记的到账不再被事实撑住（AdoptedFundsCover 答超额），
+// Covers: AT-CR-027——被结算更正的事实：此刻的链头金额低于已引用的合计时，已登记的到账不再被事实撑住（AdoptedFundsCover 答超额），
 // 新到账也进不来；链头不低于合计则照旧。
 func TestACorrectedFactStopsBackingArrivalsItNoLongerCovers(t *testing.T) {
 	first := bankCredit(t, "SYN-FACT-A", "SYN-INSTR-1", "BANK-RECEIPT-1", 60_000)

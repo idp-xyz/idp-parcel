@@ -46,6 +46,22 @@ const fundsMappingDocument = `{
 	"mappedAt": "2026-09-02T08:00:00Z"
 }`
 
+// Covers: AT-SA-216——把一条银行回款整条认作代收本金（ADR-0330）的入口面——目标词表收 COLLECTED_PRINCIPAL，与领域 String() 同字；
+// 目标引用、依据照旧必填。
+func TestFundsMappingFromJSONTakesTheCollectedPrincipalTarget(t *testing.T) {
+	raw := strings.Replace(fundsMappingDocument, `"CUSTOMER_COMPENSATION"`, `"COLLECTED_PRINCIPAL"`, 1)
+	command, err := registrationjson.FundsMappingFromJSON([]byte(raw))
+	if err != nil {
+		t.Fatalf("COLLECTED_PRINCIPAL 译装被拒：%v", err)
+	}
+	if command.TargetKind != domain.TargetCollectedPrincipal || command.TargetKind.String() != "COLLECTED_PRINCIPAL" {
+		t.Fatalf("译成 %s", command.TargetKind)
+	}
+	if _, err := registrationjson.FundsMappingFromJSON([]byte(strings.Replace(raw, `"COLLECTED_PRINCIPAL"`, `"COLLECTED_PRINCIPLE"`, 1))); err == nil {
+		t.Fatal("拼错的目标种类被收下了")
+	}
+}
+
 // Covers: `AT-SA-116`、`AT-SA-117` 的入口面——资金映射的目标词表收客户赔付与追偿认可两格，与领域 String() 同字；
 // 词表外的名字照旧拒，含 `RECOVERY_RECEIVABLE`：同上下文里它是应追偿金额（`AdjustedAmountKind`），不是核销目标。
 func TestFundsMappingFromJSONTakesTheClaimAmountTargets(t *testing.T) {

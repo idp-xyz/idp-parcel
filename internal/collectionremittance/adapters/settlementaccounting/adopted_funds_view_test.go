@@ -52,7 +52,7 @@ func must[T any](t *testing.T, construct func(string) (T, error), raw string) T 
 	return value
 }
 
-// Covers: ADR-0330 的消费侧翻译——结算答「已采用且已认作代收本金」才译成可用的事实（版本与带币种的金额）；没有这条事实、
+// Covers: AT-CR-020——ADR-0330 的消费侧翻译——结算答「已采用且已认作代收本金」才译成可用的事实（版本与带币种的金额）；没有这条事实、
 // 或有但没被认作，译成同一个 found=false（恢复动作相同：先去结算采用并认作）；读不动是 error，不折成 found=false。
 func TestTheAdapterTranslatesOnlyASetAsideFactAndNeverFoldsAFailureIntoAbsence(t *testing.T) {
 	tenant := must(t, crdomain.NewTenantID, "SYN-T1")

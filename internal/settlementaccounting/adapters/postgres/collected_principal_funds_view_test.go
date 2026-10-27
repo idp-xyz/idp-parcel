@@ -41,7 +41,7 @@ func principalMap(tenant domain.TenantID, mapping, fact string) application.MapF
 	return receiptMap(tenant, mapping, fact, domain.TargetCollectedPrincipal, fact)
 }
 
-// Covers: ADR-0330 的读口——collection-remittance 按事实引用读到的是链头与认作状态：未采用答 found=false；采用未认作
+// Covers: AT-SA-216——ADR-0330 的读口——collection-remittance 按事实引用读到的是链头与认作状态：未采用答 found=false；采用未认作
 // SetAside 为假；整条认作之后为真；外部更正后读到的是新版本的金额；别的租户同引用读不到；无环境事务即拒。
 func TestTheCollectedPrincipalViewAnswersTheHeadAndWhetherTheFactIsSetAside(t *testing.T) {
 	db, _, handler, view, tenant, _ := principalFixture(t)
@@ -119,7 +119,7 @@ func TestTheCollectedPrincipalViewAnswersTheHeadAndWhetherTheFactIsSetAside(t *t
 	}
 }
 
-// Covers: 同一笔银行回款只有一个去处——并发的两路（一路整条认作代收本金，一路映到客户对账单或审核应付，或另一路也认作
+// Covers: AT-SA-216（并发半边）——同一笔银行回款只有一个去处——并发的两路（一路整条认作代收本金，一路映到客户对账单或审核应付，或另一路也认作
 // 代收本金）在事实锁上排队：恰好一路成功、另一路映射冲突，事实上恰好一条映射；成功的是对账单时入账余额记了这笔钱，
 // 成功的是代收本金时入账余额一个作用域也没碰（受托资金不进运营余额）。
 func TestAReceiptHasExactlyOneDestinationUnderConcurrentMappings(t *testing.T) {
@@ -202,7 +202,7 @@ func TestAReceiptHasExactlyOneDestinationUnderConcurrentMappings(t *testing.T) {
 	}
 }
 
-// Covers: 读口的共享锁与结算一侧的外部更正互斥——代收与清分读到金额、据此判到账之和的那一笔事务提交之前，更正等着；
+// Covers: AT-SA-216（并发半边）——读口的共享锁与结算一侧的外部更正互斥——代收与清分读到金额、据此判到账之和的那一笔事务提交之前，更正等着；
 // 提交之后更正才落，下一次读看见新金额。没有这把锁，读与落册之间插进来的更正会让刚判过的「不超额」当场失效。
 func TestTheCollectedPrincipalViewHoldsOffAnExternalCorrectionUntilTheReaderCommits(t *testing.T) {
 	db, pool, handler, view, tenant, _ := principalFixture(t)

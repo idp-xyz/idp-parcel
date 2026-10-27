@@ -60,7 +60,7 @@ func scalar[T any](t *testing.T, rig concurrencyRig, query string, into *T) {
 	}
 }
 
-// Covers: AT-CR-020、手算一与手算三——一笔 1000.00 的回款拆给两条指令：
+// Covers: AT-CR-020、AT-CR-026、AT-CR-027（生产装配半边）——一笔 1000.00 的回款拆给两条指令：
 //
 //	先在结算采用 → 还没认作代收本金时到账答依据不在册（迟到的到账等采用与认作，不自铸）→ 认作之后 600.00 + 400.00 登记；
 //	再多一分、同一指令换事实标识再登都答内容冲突；已登记的重放答已在册；渠道报告入在途后 A 移位，
@@ -159,7 +159,7 @@ const awaitingAllocationSQL = `SELECT COALESCE(SUM(CASE WHEN to_position = 'AWAI
 	                                  - SUM(CASE WHEN from_position = 'AWAITING_ALLOCATION' THEN amount_minor ELSE 0 END), 0)
 	                              FROM collection_remittance.subledger_posting`
 
-// Covers: AT-CR-020 并发半边——六路并发各为不同指令登记一条 300.00 的到账，都引用同一条 1000.00 的已采用事实：本上下文
+// Covers: AT-CR-026（并发半边）——六路并发各为不同指令登记一条 300.00 的到账，都引用同一条 1000.00 的已采用事实：本上下文
 // 的事实锁把它们排成先后，恰好三路登记（合计 900.00）、三路答内容冲突，册上合计从不超过事实金额。没有这把锁，各路读到同一份
 // 已有合计、各自判够，六条全落，合计 1800.00。
 func TestConcurrentArrivalsOfOneAdoptedFactNeverExceedIt(t *testing.T) {
@@ -210,7 +210,7 @@ func TestConcurrentArrivalsOfOneAdoptedFactNeverExceedIt(t *testing.T) {
 	}
 }
 
-// Covers: AT-CR-020 并发半边——同一份到账并发到达两次：先到的登记，后到的在锁后读到先到那条，答已在册而不是内容冲突
+// Covers: AT-CR-026（并发半边）——同一份到账并发到达两次：先到的登记，后到的在锁后读到先到那条，答已在册而不是内容冲突
 // （同一条到账的重放不能被「同一指令已有到账」的门当成第二条）；册上只有一条。
 func TestTheSameArrivalArrivingTwiceConcurrentlyIsRegisteredOnce(t *testing.T) {
 	rig := newConcurrencyRig(t)

@@ -16,7 +16,7 @@ func principalMapCommand(t *testing.T, mapping string) application.MapFundsComma
 	return claimMapCommand(t, mapping, domain.TargetCollectedPrincipal, "bank-receipt-1")
 }
 
-// Covers: 一条银行回款只记一次——整条认作代收本金之后它不再接受任何别的映射：映到对账单、账户、审核应付都答
+// Covers: AT-SA-216——一条银行回款只记一次——整条认作代收本金之后它不再接受任何别的映射：映到对账单、账户、审核应付都答
 // 映射冲突，什么都不落，客户应收作用域一个不碰（入账余额因此永远不会多出这笔受托资金）。
 func TestAFactSetAsideAsCollectedPrincipalAcceptsNoOtherMapping(t *testing.T) {
 	fixture := newFundsFixture(t)
@@ -58,7 +58,7 @@ func TestAFactSetAsideAsCollectedPrincipalAcceptsNoOtherMapping(t *testing.T) {
 	}
 }
 
-// Covers: 反向同理——事实上已有任何一条别的映射，就不能再整条认作代收本金：已映到对账单的回款可能已经记进某个
+// Covers: AT-SA-216——反向同理——事实上已有任何一条别的映射，就不能再整条认作代收本金：已映到对账单的回款可能已经记进某个
 // 作用域的入账余额，再认作受托资金，同一笔钱就在两处各当一次。
 func TestAFactWithAnyOtherMappingCannotBeSetAsideAsCollectedPrincipal(t *testing.T) {
 	for _, existing := range []struct {
@@ -90,7 +90,7 @@ func TestAFactWithAnyOtherMappingCannotBeSetAsideAsCollectedPrincipal(t *testing
 	}
 }
 
-// Covers: 认作代收本金的重放与重复——同映射标识同内容答已存在，不翻倍；同一条事实换映射标识再认作一次答映射冲突
+// Covers: AT-SA-216——认作代收本金的重放与重复——同映射标识同内容答已存在，不翻倍；同一条事实换映射标识再认作一次答映射冲突
 // （认作是事实一级的一个状态，不是可叠加的金额）；映射标识相同、内容不同同样冲突。
 func TestSettingAFactAsideAsCollectedPrincipalIsIdempotentPerFact(t *testing.T) {
 	fixture := newFundsFixture(t)
@@ -116,7 +116,7 @@ func TestSettingAFactAsideAsCollectedPrincipalIsIdempotentPerFact(t *testing.T) 
 	}
 }
 
-// Covers: 认作代收本金的输入门——事实未采用答未受理；目标不是事实自己、资金退回事实、付款失败事实都不认作。
+// Covers: AT-SA-216——认作代收本金的输入门——事实未采用答未受理；目标不是事实自己、资金退回事实、付款失败事实都不认作。
 func TestOnlyAnAdoptedConfirmedReceiptNamingItselfCanBeSetAside(t *testing.T) {
 	fixture := newFundsFixture(t)
 	ctx := context.Background()
@@ -149,7 +149,7 @@ func TestOnlyAnAdoptedConfirmedReceiptNamingItselfCanBeSetAside(t *testing.T) {
 	mustFunds(t, result, err, application.UnfundableFactOutcome, "付款失败认作代收本金")
 }
 
-// Covers: 认作代收本金的事实不核销：没有结算目标可分配，核销指向它一律未受理，事实上未分配金额不动。
+// Covers: AT-SA-216——认作代收本金的事实不核销：没有结算目标可分配，核销指向它一律未受理，事实上未分配金额不动。
 func TestACollectedPrincipalFactIsNeverApplied(t *testing.T) {
 	fixture := newFundsFixture(t)
 	ctx := context.Background()
@@ -168,7 +168,7 @@ func TestACollectedPrincipalFactIsNeverApplied(t *testing.T) {
 	}
 }
 
-// Covers: 外部更正照采（ADR-0285）对认作代收本金的事实同样成立：金额被银行更正后新版本照落，没有作用域可重算也不
+// Covers: AT-SA-216——外部更正照采（ADR-0285）对认作代收本金的事实同样成立：金额被银行更正后新版本照落，没有作用域可重算也不
 // 报超核——结算一侧对这笔钱没有核销可言；被更正后的金额是代收与清分按引用读回的那一版。
 func TestACorrectionOfACollectedPrincipalFactIsAdoptedWithNothingToRepost(t *testing.T) {
 	fixture := newFundsFixture(t)

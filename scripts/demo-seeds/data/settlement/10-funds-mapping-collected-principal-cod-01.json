@@ -1,0 +1,9 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "mappingRef": "SYN-COD-FUNDS-MAP-01",
+  "factRef": "SYN-COD-FUNDS-BANK-01",
+  "targetKind": "COLLECTED_PRINCIPAL",
+  "targetRef": "SYN-COD-FUNDS-BANK-01",
+  "basis": "SYN-COD-CHANNEL-REMITTANCE-ADVICE-01",
+  "mappedAt": "2026-02-20T00:00:01Z"
+}

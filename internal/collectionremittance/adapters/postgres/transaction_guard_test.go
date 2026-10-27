@@ -47,6 +47,13 @@ func TestCollectionRemittanceWritesRefuseToRunOutsideATransaction(t *testing.T) 
 		t.Errorf("无事务登记认可抵扣应返回 ErrTransactionRequired，实得：%v", err)
 	}
 
+	// 已采用事实的引用锁同理：离了环境事务它是一把立刻放掉的锁，登记「读合计、判够、落册」就没有东西排先后。
+	if err := collections.LockAdoptedFundsReferences(
+		ctx, tenant, fixtureAdoptedFundsReference(t, "SYN-BANK-RECEIPT-1"),
+	); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务取已采用事实的引用锁应返回 ErrTransactionRequired，实得：%v", err)
+	}
+
 	subledgers, err := adapter.NewSubledgerStore(db)
 	if err != nil {
 		t.Fatalf("构造分户账写口：%v", err)
@@ -81,4 +88,13 @@ func TestCollectionRemittanceWritesRefuseToRunOutsideATransaction(t *testing.T) 
 	); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务交出汇付主张应返回 ErrTransactionRequired，实得：%v", err)
 	}
+}
+
+func fixtureAdoptedFundsReference(t *testing.T, value string) domain.AdoptedFundsReference {
+	t.Helper()
+	reference, err := domain.NewAdoptedFundsReference(value)
+	if err != nil {
+		t.Fatalf("构造已采用事实引用 %q：%v", value, err)
+	}
+	return reference
 }

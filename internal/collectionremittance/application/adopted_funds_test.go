@@ -121,7 +121,7 @@ func TestAnArrivalInTheWrongCurrencyIsNotAccepted(t *testing.T) {
 	}
 }
 
-// Covers: AT-CR-020 + 手算一——一笔 1000.00 的回款拆给两条指令（600.00 + 400.00）合计恰好等于事实，照登；
+// Covers: AT-CR-020——一笔 1000.00 的回款拆给两条指令（600.00 + 400.00）合计恰好等于事实，照登；
 // 再多一分的第三条答内容冲突、不落册；已登记的两条与已采用事实的合计始终等于事实金额。
 func TestArrivalsSplitFromOneAdoptedFactNeverExceedItsAmount(t *testing.T) {
 	store, handler := armedWithInstructions(t, "SYN-INSTR-1", "SYN-INSTR-2", "SYN-INSTR-3")
@@ -147,7 +147,7 @@ func TestArrivalsSplitFromOneAdoptedFactNeverExceedItsAmount(t *testing.T) {
 	}
 }
 
-// Covers: AT-CR-020 + 手算二——重复到达：同一份重放答已在册、合计不翻倍；同标识改金额、同一条指令换事实标识再登
+// Covers: AT-CR-026——重复到达与换标识重登：同一份重放答已在册、合计不翻倍；同标识改金额、同一条指令换事实标识再登
 // （含金额更小）都答内容冲突；重放先于一切按此刻状态作答的门——事实之后被结算更正小了，重放仍答已在册。
 func TestARepeatedArrivalIsNotCountedTwiceAndAReLoggedOneIsRefused(t *testing.T) {
 	store, handler := armedWithInstructions(t, "SYN-INSTR-1", "SYN-INSTR-2")
@@ -177,7 +177,7 @@ func TestARepeatedArrivalIsNotCountedTwiceAndAReLoggedOneIsRefused(t *testing.T)
 	}
 }
 
-// Covers: AT-CR-020 + 被结算更正——登记判的是此刻的链头金额：已登记 600.00 + 400.00 之后结算把事实下调到 900.00，
+// Covers: AT-CR-027——被结算更正：登记判的是此刻的链头金额：已登记 600.00 + 400.00 之后结算把事实下调到 900.00，
 // 新的到账（哪怕一分）进不来；上调到 1200.00 则又能登。钉的版本是登记时读到的那一版，不是判金额的依据。
 func TestARegistrationJudgesTheAdoptedFactsCurrentAmount(t *testing.T) {
 	store, handler := armedWithInstructions(t, "SYN-INSTR-1", "SYN-INSTR-2", "SYN-INSTR-3")
@@ -198,7 +198,7 @@ func TestARegistrationJudgesTheAdoptedFactsCurrentAmount(t *testing.T) {
 	}
 }
 
-// Covers: 取锁与读回的次序——先取本上下文的事实锁，再读结算（共享锁）；合计在锁之后读回：等锁期间另一路引用同一条
+// Covers: AT-CR-026——取锁与读回的次序：先取本上下文的事实锁，再读结算（共享锁）；合计在锁之后读回：等锁期间另一路引用同一条
 // 事实的到账提交了，这一路读到它、判超额，而不是拿着锁前的旧合计放行。
 func TestTheTotalIsReadAfterTheFundsLockSoALateCompetitorIsSeen(t *testing.T) {
 	store, handler := armedWithInstructions(t, "SYN-INSTR-1", "SYN-INSTR-2")
@@ -221,7 +221,7 @@ func TestTheTotalIsReadAfterTheFundsLockSoALateCompetitorIsSeen(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0029——结算读不动、本上下文取锁失败都是未决，不折成依据不在册或任何业务答案；别的三层不碰结算。
+// Covers: AT-CR-027（读不动答未决）、ADR-0029——结算读不动、本上下文取锁失败都是未决，不折成依据不在册或任何业务答案；别的三层不碰结算。
 func TestAnUnreadableSettlementIsUndecidedAndOtherLayersNeverReadIt(t *testing.T) {
 	store, handler := armedWithInstructions(t, "SYN-INSTR-1")
 	store.adoptFunds(t, fundsRef, 100_000)
@@ -251,7 +251,7 @@ func TestAnUnreadableSettlementIsUndecidedAndOtherLayersNeverReadIt(t *testing.T
 	}
 }
 
-// Covers: 手算三（被结算更正之后的移位）——一笔 1000.00 的事实拆给两条指令，到账 600.00 已移位；结算把事实更正到
+// Covers: AT-CR-027——被结算更正之后的移位：一笔 1000.00 的事实拆给两条指令，到账 600.00 已移位；结算把事实更正到
 // 900.00 之后，第二条到账 400.00 的移位答内容冲突、账面不动（待清分仍是 600.00）；已落的移位重放仍答已在册；更正回
 // 1000.00 之后移位可落。冲正已落的移位不读结算。
 func TestMovingAnArrivalNeedsTheAdoptedFactToStillCoverAllItsArrivals(t *testing.T) {
@@ -294,7 +294,7 @@ func TestMovingAnArrivalNeedsTheAdoptedFactToStillCoverAllItsArrivals(t *testing
 	wantAwaitingAllocation(t, store, 40_000)
 }
 
-// Covers: 移位的采用事实门其余格——没有版本的到账（按旧口径登记的存量）答依据不在册；事实此刻读不到答依据不在册，
+// Covers: AT-CR-027——移位的采用事实门其余格：没有版本的到账（按旧口径登记的存量）答依据不在册；事实此刻读不到答依据不在册，
 // 读不动答未决；渠道报告入账不碰结算。
 func TestMovingAnArrivalWithoutAnAdoptedBasisIsRefusedAndOtherPostingsNeverReadSettlement(t *testing.T) {
 	store, handler := armedWithInstructions(t, "SYN-INSTR-1")
