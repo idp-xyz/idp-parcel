@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
-import { OperatorRefusalNote, SectionError } from '../../components/states';
+import { OperatorRefusalNote, SectionError, TechnicalDetails, httpRows } from '../../components/states';
 import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../catalogue-api';
 import {
@@ -71,13 +71,23 @@ function SectionBody<Row>({
       return <OperatorRefusalNote kind={state.kind} what={what} className={note} />;
     case 'callerProblem':
       return (
-        <p className={note}>
-          调用方式问题（HTTP {state.status}）：{problemNote(state.code)}
-          {state.detail ? ` ${state.detail}` : ''}
-        </p>
+        <div className={note}>
+          <p>
+            调用方式问题：{problemNote(state.code)}
+            {state.detail ? ` ${state.detail}` : ''}
+          </p>
+          <TechnicalDetails rows={httpRows(state.status, state.code)} />
+        </div>
       );
     case 'noAnswer':
-      return <SectionError title={`服务端未形成答案（HTTP ${state.status}）`} description={problemNote(state.code)} onRetry={retry} />;
+      return (
+        <SectionError
+          title="服务端没有形成答案"
+          description={problemNote(state.code)}
+          technical={httpRows(state.status, state.code)}
+          onRetry={retry}
+        />
+      );
     case 'transport':
       return <SectionError title="无法连接主数据读取服务" description={state.message} onRetry={retry} />;
     case 'mismatch':

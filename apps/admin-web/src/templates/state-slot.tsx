@@ -6,6 +6,7 @@ import {
   ErrorState,
   OperatorRefusalState,
   UnconfiguredState,
+  type TechnicalRow,
   type UnconfiguredFacts,
 } from '../components/states';
 import { skeletonOf, type LoadingShape } from './loading-shape';
@@ -19,7 +20,7 @@ export type TemplateViewState =
   | { kind: 'ready' }
   | { kind: 'loading'; shape?: LoadingShape; cols?: number; rows?: number }
   | { kind: 'empty'; title?: string; description?: string }
-  | { kind: 'error'; title?: string; description?: string; onRetry?: () => void }
+  | { kind: 'error'; title?: string; description?: string; onRetry?: () => void; technical?: readonly TechnicalRow[] }
   | { kind: 'unconfigured'; title?: string; description?: string; facts?: UnconfiguredFacts }
   | { kind: 'loginRequired'; title?: string; description?: string; facts?: UnconfiguredFacts }
   | { kind: 'notGranted'; title?: string; description?: string; facts?: UnconfiguredFacts };
@@ -104,6 +105,7 @@ export function StateSlot({ state, override }: StateSlotProps) {
               title={state.title}
               description={state.description}
               onRetry={state.onRetry}
+              technical={state.technical}
             />
           )}
         </>

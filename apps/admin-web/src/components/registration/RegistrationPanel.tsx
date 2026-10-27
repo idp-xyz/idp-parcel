@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Textarea } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../../pages/catalogue-api';
-import { OperatorRefusalNote } from '../states';
+import { accessRefusalCode, accessRefusalStatus } from '../../auth/access-refusal';
+import { OperatorRefusalNote, TechnicalDetails, httpRows } from '../states';
+import { outcomeTechnicalRows } from './answer-rows';
 import { overAppliedNote, unreconciledScopesNote, type UnreconciledScope } from './over-applied-note';
 
 /**
@@ -167,12 +169,15 @@ export function RegistrationPanel({
           <CardTitle>{title}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <p className="text-xs text-idpxyz-textMuted">
-            {snapshotHint}
-            <br />
-            提交打到 <span className="font-mono">{endpoint}</span>；在线登记口与受控登记 CLI
-            消费同一登记用例，答案代数一致。
-          </p>
+          <div className="text-xs text-idpxyz-textMuted">
+            <p>{snapshotHint}</p>
+            <TechnicalDetails
+              rows={[
+                { label: '提交到', value: endpoint },
+                { label: '说明', value: '在线登记口与受控登记命令行消费同一登记用例，答案代数一致。' },
+              ]}
+            />
+          </div>
           <Textarea
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
@@ -251,20 +256,11 @@ export function RegistrationAnswerNote({
       return (
         <div className="text-xs text-idpxyz-textMuted">
           <p>
-            登记册答复：<span className="font-mono">{outcome}</span> —— {label}
-            {reason ? (
-              <>
-                ；拒绝理由：<span className="font-mono">{reason}</span> ——{' '}
-                {refusalReasonLabels?.[reason] ?? reason}
-              </>
-            ) : null}
-            {undecided ? (
-              <>
-                ；在等：<span className="font-mono">{undecided}</span> ——{' '}
-                {undecidedReasonLabels?.[undecided] ?? undecided}
-              </>
-            ) : null}
+            登记册答复：{label}
+            {reason ? <>；拒绝理由：{refusalReasonLabels?.[reason] ?? reason}</> : null}
+            {undecided ? <>；在等：{undecidedReasonLabels?.[undecided] ?? undecided}</> : null}
           </p>
+          <TechnicalDetails rows={outcomeTechnicalRows(outcome, reason, undecided)} />
           {prose ? <p className="mt-1">原因：{prose}</p> : null}
           {overApplied ? <p className="mt-1 text-idpxyz-danger">{overApplied}</p> : null}
           {unreconciled ? <p className="mt-1 text-idpxyz-danger">{unreconciled}</p> : null}
@@ -289,12 +285,24 @@ export function RegistrationAnswerNote({
     }
     case 'unconfigured':
       return (
-        <p className="text-xs text-idpxyz-textMuted">
-          接入渠道未配置（403 ACCESS_CHANNEL_NOT_CONFIGURED）。登记端点已建立并装配，但
-          {owner}的接入渠道认证方式尚未登记，服务端按 ADR-0055 如实拒绝——这是诚实答案，
-          改请求或重试都不会改变结果；登记参数（PAR-INT-01，实例半边）到位后由装配侧换上
-          真 Intake 即放行。此前登记仍走受控登记 CLI。
-        </p>
+        <div className="text-xs text-idpxyz-textMuted">
+          <p>
+            接入渠道还没有配置，这不是故障：改请求或重试都不会改变结果，要先由配部署的人完成接入配置。配置完成之前，登记仍走受控登记命令行。
+          </p>
+          <TechnicalDetails
+            rows={[
+              { label: 'HTTP 状态', value: String(accessRefusalStatus('unconfigured')) },
+              { label: '错误码', value: accessRefusalCode('unconfigured') },
+              { label: '主责上下文', value: owner },
+              {
+                label: '依据',
+                value:
+                  '登记端点已建立并装配，但操作者接入渠道的认证方式尚未登记，服务端按 ADR-0055 如实拒绝；' +
+                  '登记参数 PAR-INT-01（实例半边）到位后由装配侧换上真 Intake 即放行。',
+              },
+            ]}
+          />
+        </div>
       );
     case 'loginRequired':
     case 'notGranted':
@@ -302,21 +310,20 @@ export function RegistrationAnswerNote({
     case 'callerProblem':
       return (
         <div className="text-xs text-idpxyz-danger">
-          <p>
-            调用方式问题（HTTP {answer.status}）：{problemNote(answer.code)}
-          </p>
+          <p>调用方式问题：{problemNote(answer.code)}</p>
           {/* 服务端随 4xx 交回的理由散文（票 admin-web-group-legal-entities/11）：原样示出、不查表、不截断——
               「tenantId must not be carried…」那半句正是操作者要去掉的那一格。缺席不显：没给就是没给，不
               替服务端补一句。逐字段表单与 JSON 签共用这一处呈现，两边同时得到。 */}
           {answer.detail ? <p className="mt-1">原因：{answer.detail}</p> : null}
+          <TechnicalDetails rows={httpRows(answer.status, answer.code)} />
         </div>
       );
     case 'noAnswer':
       return (
-        <p className="text-xs text-idpxyz-danger">
-          服务端未形成答案（HTTP {answer.status}）：{problemNote(answer.code)}；登记与否未知，
-          可稍后重试。
-        </p>
+        <div className="text-xs text-idpxyz-danger">
+          <p>服务端没有形成答案：{problemNote(answer.code)}；登记与否未知，可稍后重试。</p>
+          <TechnicalDetails rows={httpRows(answer.status, answer.code)} />
+        </div>
       );
     case 'transport':
       return (

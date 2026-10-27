@@ -1,7 +1,7 @@
 # 参与方与商业区 UI/UX 评估与跟进
 
 Category: enhancement
-Status: resolved——第一段 01–06、第二段 07–17 resolved；第二段其余与第三段仍在「后续」，未拆票
+Status: resolved——第一段 01–06、第二段 07–18 resolved；第二段其余与第三段仍在「后续」，未拆票
 
 出处：2026-10-25，用户在会话里要求「评估 commercial party 的 UI/UX」，读完评估后说「按你建议的顺序开始」。建议的顺序是：先改文案和组件（成本低），再做要设计的，最后是要后端配合的。本批先落第一段，第二、三段列在「后续」，等第一段收口后再拆票。
 
@@ -50,7 +50,7 @@ Status: resolved——第一段 01–06、第二段 07–17 resolved；第二段
 - ~~切页签不丢草稿~~ → [09](issues/09-drafts-survive-tab-switches.md)；~~未保存提醒推广到全部写入页~~ → [17](issues/17-unsaved-draft-warnings.md)，应用内换模块、关壳上页签的拦截在壳上，共用登记签几处未接，仍在后续。
 - ~~「基于此版本发新版本」预填~~ → [14](issues/14-new-version-from-existing.md)；~~标识旁列出在册版本、提示区间重叠~~ → [15](issues/15-existing-versions-note.md)。
 - ~~管理台上给旧版收尾（截止在新版生效时点，或同起点退役）的入口~~ → [16](issues/16-close-out-old-versions.md)；服务产品、客户合同、授权规则、接受前财务控制策略、客户服务规则的目录读面不回显截止点（只有供应商协议回显），截止后目录仍显原区间，要后端补读面，归第三段。
-- 接入态与拒绝态（共享件 `catalogue-view.ts`、`components/states`、`components/registration` 的「提交打到 …」）把端点、错误码、文档出处收进「技术详情」——碰共享面，要评审。
+- ~~接入态与拒绝态（共享件 `catalogue-view.ts`、`components/states`、`components/registration` 的「提交打到 …」）把端点、错误码、文档出处收进「技术详情」~~ → [18](issues/18-technical-details-folded.md)；别的模块自拼文字的码句与自写的状态码文字未动。
 - ~~业务参与方、参与方关系两张登记表单的开发话~~ → [12](issues/12-registration-forms-speak-business.md)。
 
 第三段，要后端，走[并行会话](../../docs/agents/parallel-sessions.md)，交协调方排队：
@@ -63,7 +63,7 @@ Status: resolved——第一段 01–06、第二段 07–17 resolved；第二段
 
 ## 子票
 
-01–17 只改 `apps/admin-web` 与本票面，走 [workflow.md「前端切片」](../../docs/agents/workflow.md#前端切片一人在-main-上直接做)。与上一节的差别一处：当时有别的会话在主树上做合入，本批在独立 worktree（第一段 `idp-parcel-pcux`，第二段 `idp-parcel-pcux2`、`idp-parcel-pcux3`、`idp-parcel-pcux4`、`idp-parcel-pcux5`、`idp-parcel-pcux6`、`idp-parcel-pcux7`）上做，每笔先 rebase 到 `origin/main` 再推确切 SHA，不碰主树。
+01–18 只改 `apps/admin-web` 与本票面，走 [workflow.md「前端切片」](../../docs/agents/workflow.md#前端切片一人在-main-上直接做)。与上一节的差别一处：当时有别的会话在主树上做合入，本批在独立 worktree（第一段 `idp-parcel-pcux`，第二段 `idp-parcel-pcux2`、`idp-parcel-pcux3`、`idp-parcel-pcux4`、`idp-parcel-pcux5`、`idp-parcel-pcux6`、`idp-parcel-pcux7`、`idp-parcel-pcux8`）上做，每笔先 rebase 到 `origin/main` 再推确切 SHA，不碰主树。
 
 | # | 票 | 阻塞于 | 状态 |
 |---|---|---|---|
@@ -84,6 +84,7 @@ Status: resolved——第一段 01–06、第二段 07–17 resolved；第二段
 | 15 | [版本信息一节里列出已有版本，提示撞号与区间重叠](issues/15-existing-versions-note.md) | — | resolved |
 | 16 | [目录行上给旧版收尾：截止在后继生效时点，或同起点退役](issues/16-close-out-old-versions.md) | — | resolved |
 | 17 | [写入页的未保存提醒：刷新关页有确认，「发新版本」换草稿前先问](issues/17-unsaved-draft-warnings.md) | — | resolved |
+| 18 | [接入态、拒绝态与登记签里的接口路径、错误码、文档出处收进「技术详情」](issues/18-technical-details-folded.md) | — | resolved |
 
 ## 界面用词对照（本批各票共用）
 

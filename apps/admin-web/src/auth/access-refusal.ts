@@ -74,6 +74,13 @@ export function operatorRefusalSentence(kind: OperatorRefusalKind, what?: string
 }
 
 /**
+ * 同 operatorRefusalSentence，只是句里不带状态码与错误码：页面组件把那两样收进「技术详情」；别的模块拼文字用 operatorRefusalSentence。
+ */
+export function operatorRefusalMessage(kind: OperatorRefusalKind, what?: string): string {
+  return `${what ? `${what}：` : ''}${titles[kind]}。${operatorRefusalRecovery[kind]}`;
+}
+
+/**
  * 两格操作者答复的续办：找谁、做什么、重试会不会好。与哪一页无关——授予与登录都不随页面变——所以各页共用这一句，
  * 不各写一份。未配置的续办随口而异（这一口在等什么），留在各页。
  */

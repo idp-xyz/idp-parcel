@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, ConfirmDialog } from '@idpxyz/ui-primitives';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { primaryActionClass } from '../../components/primary-action';
-import { OperatorRefusalNote } from '../../components/states';
+import { OperatorRefusalNote, TechnicalDetails, httpRows } from '../../components/states';
 import type { ApiResult } from '../catalogue-api';
 import { currentDisplayTimeZone } from '../moment';
 import { declarationLandingLabels, publicationOutcomeLabels } from './api';
@@ -476,16 +476,20 @@ function FlowAnswerNote<Body>({
       return <OperatorRefusalNote kind={answer.kind} what={what} />;
     case 'callerProblem':
       return (
-        <p className="text-xs text-idpxyz-danger">
-          {what}调用方式问题（HTTP {answer.status}）：{problemNote(answer.code)}
-          {answer.detail ? ` ${answer.detail}` : ''}
-        </p>
+        <div className="text-xs text-idpxyz-danger">
+          <p>
+            {what}调用方式问题：{problemNote(answer.code)}
+            {answer.detail ? ` ${answer.detail}` : ''}
+          </p>
+          <TechnicalDetails rows={httpRows(answer.status, answer.code)} />
+        </div>
       );
     case 'noAnswer':
       return (
-        <p className="text-xs text-idpxyz-danger">
-          服务端未形成{what}答案（HTTP {answer.status}）：{problemNote(answer.code)}；可稍后重试。
-        </p>
+        <div className="text-xs text-idpxyz-danger">
+          <p>服务端没有形成{what}答案：{problemNote(answer.code)}；可稍后重试。</p>
+          <TechnicalDetails rows={httpRows(answer.status, answer.code)} />
+        </div>
       );
     case 'transport':
       return <p className="text-xs text-idpxyz-danger">请求未到达 parcel-api：{answer.message}</p>;

@@ -357,9 +357,9 @@ export function vocabularyPlaceholder(answer: ApiResult<PublicationVocabularyRes
     case 'notGranted':
       return `暂时读不到可选项（${accessRefusalTitle(answer.kind)}）`;
     case 'callerProblem':
-      return `暂时读不到可选项（请求有误，HTTP ${answer.status}）`;
+      return `暂时读不到可选项（请求有误）`;
     case 'noAnswer':
-      return `暂时读不到可选项（服务端出错，HTTP ${answer.status}）`;
+      return `暂时读不到可选项（服务端出错）`;
     case 'transport':
       return '暂时读不到可选项（连不上服务）';
   }

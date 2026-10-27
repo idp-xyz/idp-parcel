@@ -4,6 +4,7 @@ import {
   accessRefusalHeadline,
   accessRefusalOf,
   isOperatorRefusal,
+  operatorRefusalMessage,
   operatorRefusalSentence,
 } from './access-refusal';
 import { exchangeMasterData, postMasterData } from '../pages/catalogue-api';
@@ -80,4 +81,12 @@ test('各出口对三格判法相同；别的 401 / 403 照旧是调用方问题
     answerWith(403, 'SOMETHING_ELSE');
     equal((await call()).kind, 'callerProblem', exit);
   }
+});
+
+// Covers: 页面组件用的整句不带状态码与错误码（它们进技术详情）；别的模块拼文字用的那句照旧带。
+test('operatorRefusalMessage 不带状态码与错误码，operatorRefusalSentence 带', () => {
+  match(operatorRefusalMessage('loginRequired', '预览'), /^预览：需要登录。.*重新登录/);
+  equal(/401|OPERATOR_CREDENTIAL_REJECTED/.test(operatorRefusalMessage('loginRequired', '预览')), false);
+  match(operatorRefusalMessage('notGranted'), /^没有授予。.*要管授予的人去登记授予/);
+  match(operatorRefusalSentence('notGranted'), /403 OPERATOR_NOT_GRANTED/);
 });

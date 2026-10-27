@@ -3,6 +3,7 @@ import { Button, ConfirmDialog, Input } from '@idpxyz/ui-primitives';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { primaryActionClass } from '../../components/primary-action';
 import { RegistrationAnswerNote, type RegistrationPanelState } from '../../components/registration';
+import { TechnicalDetails } from '../../components/states';
 import { moduleInfoById } from '../../navigation';
 import { currentDisplayTimeZone } from '../moment';
 import {
@@ -110,12 +111,19 @@ export function PartyRelationshipEndActions({
 
       {open !== null ? (
         <div className="rounded border border-idpxyz-border p-3 flex flex-col gap-3">
-          <p className="text-[12px] text-idpxyz-textMuted">
-            {open === 'revocation'
-              ? '撤销即时结束这段关系：终止修订一落册，它就不再支持新的商业决定。时刻不得晚于此刻。'
-              : '登记这段关系已到期：到期时刻不早于有效区间终点，也不晚于此刻；终点未到的关系由服务端拒。'}
-            提交打到 <span className="font-mono">POST {partyRelationshipEndingEndpoints[open]}</span>；租户不在表单上。
-          </p>
+          <div className="text-[12px] text-idpxyz-textMuted">
+            <p>
+              {open === 'revocation'
+                ? '撤销即时结束这段关系：终止修订一落册，它就不再支持新的商业决定。时刻不得晚于此刻。'
+                : '登记这段关系已到期：到期时刻不早于有效区间终点，也不晚于此刻；终点未到的关系由服务端拒。'}
+            </p>
+            <TechnicalDetails
+              rows={[
+                { label: '提交到', value: `POST ${partyRelationshipEndingEndpoints[open]}` },
+                { label: '说明', value: '租户不在表单上，由操作者认证结果给出。' },
+              ]}
+            />
+          </div>
           <Field label={`${partyRelationshipEndingActionLabels[open]}依据 *`} path="basis" problems={problems}>
             <Input
               value={draft.basis}

@@ -1,4 +1,5 @@
 import { AlertTriangle, RotateCw } from 'lucide-react';
+import { TechnicalDetails, type TechnicalRow } from './technical-details';
 
 // 区块级错误（票 admin-web-ux-alignment/06 第 2 条；手册「Error State」的 section / widget 层）：一段区读失败只红那一段，
 // 页面其余部分照常——与页级 ErrorState（整个内容区换掉）是两层，不混用。供抽屉里一段历史、表单里一册候选这类地方用。
@@ -18,9 +19,11 @@ export interface SectionErrorProps {
   description?: string;
   /** 给了才出重试按钮——重试不会改变结果的（未配置）不要给。 */
   onRetry?: () => void;
+  /** 状态码、问题码这类排查用的字，收进「技术详情」；标题与说明里不放这些字。 */
+  technical?: readonly TechnicalRow[];
 }
 
-export function SectionError({ title, description, onRetry }: SectionErrorProps) {
+export function SectionError({ title, description, onRetry, technical }: SectionErrorProps) {
   return (
     <div
       role="alert"
@@ -31,6 +34,7 @@ export function SectionError({ title, description, onRetry }: SectionErrorProps)
         <span className="font-medium">{title}</span>
       </div>
       {description ? <p className="mt-1 leading-5 text-idpxyz-textMuted">{description}</p> : null}
+      {technical ? <TechnicalDetails rows={technical} className="text-idpxyz-textMuted" /> : null}
       {onRetry ? (
         <button
           type="button"

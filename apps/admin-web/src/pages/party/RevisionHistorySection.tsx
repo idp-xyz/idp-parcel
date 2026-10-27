@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button, Timeline } from '@idpxyz/ui-primitives';
 import { isOperatorRefusal } from '../../auth/access-refusal';
-import { OperatorRefusalNote, SectionError } from '../../components/states';
+import { OperatorRefusalNote, SectionError, TechnicalDetails, httpRows } from '../../components/states';
 import type { ApiResult } from '../catalogue-api';
 import { problemNote } from './presentation';
 import type { RevisionTimelineItem } from './revision-timeline';
@@ -82,9 +82,10 @@ export function RevisionHistorySection<Body>({
   }
   if (answer.kind === 'callerProblem') {
     return (
-      <p className={note}>
-        调用方式问题（HTTP {answer.status}）：{problemNote(answer.code)}
-      </p>
+      <div className={note}>
+        <p>调用方式问题：{problemNote(answer.code)}</p>
+        <TechnicalDetails rows={httpRows(answer.status, answer.code)} />
+      </div>
     );
   }
   // 这两态是「这一段没读到、可重试」——区块级错误（票 admin-web-ux-alignment/06 第 2 条首用）：只红历史区这一段，抽屉
@@ -92,8 +93,9 @@ export function RevisionHistorySection<Body>({
   if (answer.kind === 'noAnswer') {
     return (
       <SectionError
-        title={`服务端未形成答案（HTTP ${answer.status}）`}
+        title="服务端没有形成答案"
         description={problemNote(answer.code)}
+        technical={httpRows(answer.status, answer.code)}
         onRetry={retry}
       />
     );

@@ -3,30 +3,34 @@ import { KeyRound, PlugZap, ShieldX } from 'lucide-react';
 import { ReloginButton } from '../../auth/ReloginButton';
 import {
   accessRefusalCode,
+  accessRefusalStatus,
   accessRefusalTitle,
+  operatorRefusalMessage,
   operatorRefusalRecovery,
-  operatorRefusalSentence,
   type OperatorRefusalKind,
 } from '../../auth/access-refusal';
+import { TechnicalDetails, type TechnicalRow } from './technical-details';
 
 // 接入那一格的呈现（票 operator-channel/07）。原先只有一个「未配置」态，操作者渠道接上之后分成三态：渠道未配置、需要登录、
-// 没有授予（判据与续办在 auth/access-refusal.ts）。三态共用一张卡的形——图标、标题、说明、结构化事实、错误码原名——
+// 没有授予（判据与续办在 auth/access-refusal.ts）。三态共用一张卡的形——图标、标题、说明、放行条件、技术详情——
 // 差的是图标、缺省字与出路：只有「需要登录」带一个按钮，另两态重试与重新登录都不会好，不给假出口。
+// 主责上下文、场景出处、接口路径与错误码原名只有排查与报障才用，收进「技术详情」（票 party-commercial-uiux/18）；放行条件
+// 是读的人拿去行动的，留在明面。
 //
 // 自成一个文件而不并进 index.tsx，理由同 section-error.tsx：index.tsx 引 @idpxyz/ui-primitives，CJS 测试产物 require
 // 不到；放在这里，node:test 才能用 renderToStaticMarkup 钉三态各自的字与按钮。index.tsx 照旧按名导出。
 
 /**
- * 接入态的结构化事实。三个字段都是「读的人拿去行动」的信息，不是装饰：
- * 主责上下文说明找谁、场景出处说明依据哪份文档（写文档名，不写行号）、
- * 放行条件说明什么动作会解除本态。全部可选——只给 description 字符串的
- * 既有调用方不受影响。
+ * 接入态的结构化事实。主责上下文说明找谁、场景出处说明依据哪份文档（写文档名，不写行号）、接口路径说明哪一口不可用，
+ * 三者进「技术详情」；放行条件说明什么动作会解除本态，留在明面。全部可选——只给 description 字符串的既有调用方不受影响。
  */
 export interface UnconfiguredFacts {
   /** 主责上下文（领域语言名 + 目录名），取 navigation 的 moduleInfoById.owner 原文。 */
   owner?: string;
   /** 场景出处：权威文档名与小节说法。 */
   source?: string;
+  /** 哪一口不可用，例 `GET /commercial-service-products`。 */
+  endpoint?: string;
   /** 放行条件：哪个闸门或登记动作会解除本态。 */
   unlock?: string;
 }
@@ -37,10 +41,11 @@ export interface UnconfiguredStateProps {
   facts?: UnconfiguredFacts;
 }
 
-const factLabels: ReadonlyArray<[keyof UnconfiguredFacts, string]> = [
+// 折进「技术详情」的几项事实；明面上只留放行条件，它是读的人要照着做的。
+const technicalLabels: ReadonlyArray<[keyof UnconfiguredFacts, string]> = [
   ['owner', '主责上下文'],
   ['source', '场景出处'],
-  ['unlock', '放行条件'],
+  ['endpoint', '接口'],
 ];
 
 function AccessStateCard({
@@ -58,29 +63,27 @@ function AccessStateCard({
   code: string;
   action?: ReactNode;
 }) {
-  const factRows = factLabels
-    .map(([key, label]) => [label, facts?.[key]] as const)
-    .filter((entry): entry is readonly [string, string] => Boolean(entry[1]));
+  const unlock = facts?.unlock;
+  const technicalRows: TechnicalRow[] = [
+    ...technicalLabels.map(([key, label]) => ({ label, value: facts?.[key] ?? '' })),
+    { label: '错误码', value: code },
+  ];
 
   return (
     <div className="text-center max-w-[460px] px-6">
       {icon}
       <p className="text-[15px] text-idpxyz-textBright mb-1">{title}</p>
       <p className="text-[12px] leading-5 text-idpxyz-textMuted">{description}</p>
-      {factRows.length > 0 ? (
-        <dl className="mt-3 border-t border-idpxyz-border pt-2.5 text-left space-y-1.5">
-          {factRows.map(([label, value]) => (
-            <div key={label} className="flex gap-2">
-              <dt className="shrink-0 w-[64px] text-[11px] leading-4 text-idpxyz-textMuted">
-                {label}
-              </dt>
-              <dd className="text-[11px] leading-4 text-idpxyz-text">{value}</dd>
-            </div>
-          ))}
+      {unlock ? (
+        <dl className="mt-3 border-t border-idpxyz-border pt-2.5 text-left">
+          <div className="flex gap-2">
+            <dt className="shrink-0 w-[64px] text-[11px] leading-4 text-idpxyz-textMuted">放行条件</dt>
+            <dd className="text-[11px] leading-4 text-idpxyz-text">{unlock}</dd>
+          </div>
         </dl>
       ) : null}
       {action ? <div className="mt-4 flex justify-center">{action}</div> : null}
-      <p className="mt-2 text-[11px] font-mono text-idpxyz-textMuted">{code}</p>
+      <TechnicalDetails rows={technicalRows} className="mt-3 text-idpxyz-textMuted" />
     </div>
   );
 }
@@ -135,8 +138,8 @@ export function OperatorRefusalState({ kind, title, description, facts }: Operat
 }
 
 /**
- * 行内一句（动作答案区、表单里一段候选、抽屉里一段区）：「{what}：需要登录（401 …）。续办。」，需要登录时句尾带重新登录。
- * `className` 跟着调用处原来那一段的字色走——各页的未配置句今天各用各的色，这两格与它们并排摆。
+ * 行内一句（动作答案区、表单里一段候选、抽屉里一段区）：「{what}：需要登录。续办。」，需要登录时句尾带重新登录；状态码与
+ * 错误码收进句下的「技术详情」。`className` 跟着调用处那一段的字色走——各页的未配置句各用各的色，这两格与它们并排摆。
  */
 export function OperatorRefusalNote({
   kind,
@@ -149,9 +152,17 @@ export function OperatorRefusalNote({
   className?: string;
 }) {
   return (
-    <p className={className ?? 'text-xs text-idpxyz-textMuted'}>
-      {operatorRefusalSentence(kind, what)}
-      {kind === 'loginRequired' ? <ReloginButton size="inline" /> : null}
-    </p>
+    <div className={className ?? 'text-xs text-idpxyz-textMuted'}>
+      <p>
+        {operatorRefusalMessage(kind, what)}
+        {kind === 'loginRequired' ? <ReloginButton size="inline" /> : null}
+      </p>
+      <TechnicalDetails
+        rows={[
+          { label: 'HTTP 状态', value: String(accessRefusalStatus(kind)) },
+          { label: '错误码', value: accessRefusalCode(kind) },
+        ]}
+      />
+    </div>
   );
 }

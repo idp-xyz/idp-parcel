@@ -1,5 +1,6 @@
 import { isOperatorRefusal } from '../auth/access-refusal';
 import type { ModuleInfo } from '../navigation';
+import { httpRows } from '../components/states/technical-details';
 import type { TemplateViewState } from '../templates/state-slot';
 import type { ApiResult } from './catalogue-api';
 
@@ -39,10 +40,11 @@ export function catalogueViewState<Body>(
     return {
       kind: 'unconfigured',
       title: '访问通道尚未配置',
-      description: `${options.module.owner}的目录读取入口（${options.endpoint}）当前不可用；这不是“目录为空”。`,
+      description: '目录的读取入口当前不可用；这不是“目录为空”。',
       facts: {
         owner: options.module.owner,
         source: options.module.source,
+        endpoint: options.endpoint,
         unlock: '配置该上下文的访问通道后重新查询；页面不会用演示数据代替。',
       },
     };
@@ -54,19 +56,21 @@ export function catalogueViewState<Body>(
   if (answer.kind === 'callerProblem') {
     return {
       kind: 'error',
-      title: `调用方式问题（HTTP ${answer.status}）`,
+      title: '调用方式问题',
       // detail 是服务端随 4xx 交回的理由散文（如目录读口说查询参数为何不成立），原样接在问题码说明之后，不查表、不据此分支；
       // 缺席即服务端没给，说明照旧。
       description:
         answer.detail === undefined ? problemNote(answer.code) : `${problemNote(answer.code)} ${answer.detail}`,
+      technical: httpRows(answer.status, answer.code),
     };
   }
   if (answer.kind === 'noAnswer') {
     return {
       kind: 'error',
-      title: `服务端未形成答案（HTTP ${answer.status}）`,
+      title: '服务端没有形成答案',
       description: problemNote(answer.code),
       onRetry: retry,
+      technical: httpRows(answer.status, answer.code),
     };
   }
   return {

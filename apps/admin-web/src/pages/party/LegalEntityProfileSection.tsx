@@ -4,7 +4,7 @@ import { isOperatorRefusal } from '../../auth/access-refusal';
 import { moduleInfoById } from '../../navigation';
 import { primaryActionClass } from '../../components/primary-action';
 import { RegistrationAnswerNote } from '../../components/registration';
-import { OperatorRefusalNote, SectionError } from '../../components/states';
+import { OperatorRefusalNote, SectionError, TechnicalDetails, httpRows } from '../../components/states';
 import type { ApiResult } from '../catalogue-api';
 import { currentDisplayTimeZone, formatInstant } from '../moment';
 import {
@@ -183,14 +183,20 @@ function ResolutionAnswer({
   }
   if (answer.kind === 'callerProblem') {
     return (
-      <p className={note}>
-        调用方式问题（HTTP {answer.status}）：{problemNote(answer.code)}
-      </p>
+      <div className={note}>
+        <p>调用方式问题：{problemNote(answer.code)}</p>
+        <TechnicalDetails rows={httpRows(answer.status, answer.code)} />
+      </div>
     );
   }
   if (answer.kind === 'noAnswer') {
     return (
-      <SectionError title={`服务端未形成答案（HTTP ${answer.status}）`} description={problemNote(answer.code)} onRetry={retry} />
+      <SectionError
+        title="服务端没有形成答案"
+        description={problemNote(answer.code)}
+        technical={httpRows(answer.status, answer.code)}
+        onRetry={retry}
+      />
     );
   }
   if (answer.kind === 'transport') {

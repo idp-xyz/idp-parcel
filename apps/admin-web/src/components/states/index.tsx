@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
 import { AlertTriangle, RotateCw } from 'lucide-react';
 import { TrulyEmptyState } from '@idpxyz/ui-primitives';
+import { TechnicalDetails, type TechnicalRow } from './technical-details';
 
 export { SectionError, type SectionErrorProps } from './section-error';
+export { TechnicalDetails, httpRows, type TechnicalRow } from './technical-details';
 export {
   OperatorRefusalNote,
   OperatorRefusalState,
@@ -66,8 +68,10 @@ export function EmptyState({ title, description, action }: EmptyStateProps) {
 
 export interface ErrorStateProps {
   title?: string;
-  /** problem+json 的 error.code，原样呈现便于按码检索，不翻译。 */
+  /** problem+json 的 error.code，原样放进「技术详情」便于按码检索，不翻译。 */
   code?: string;
+  /** 状态码这类别的排查用的字，同样收进「技术详情」。 */
+  technical?: readonly TechnicalRow[];
   description?: string;
   onRetry?: () => void;
 }
@@ -79,17 +83,18 @@ export interface ErrorStateProps {
  * 说明与按钮「Retry」全写死、只收 onRetry，包一层就是把英文缺省句摆到页面上，与本仓文案规则相抵；且调用方今天把
  * 传输失败与服务端未形成答案都送到这一态、只靠 title 区分，原语也没有传这句话的口。形先保持今天的，原语开放文案再换。
  */
-export function ErrorState({ title, code, description, onRetry }: ErrorStateProps) {
+export function ErrorState({ title, code, technical, description, onRetry }: ErrorStateProps) {
   return (
     <div className="text-center max-w-[420px] px-6">
       <AlertTriangle className="h-8 w-8 mx-auto mb-3 text-idpxyz-textMuted" aria-hidden />
       <p className="text-[15px] text-idpxyz-textBright mb-1">{title ?? '本次未取得结果'}</p>
       <p className="text-[12px] leading-5 text-idpxyz-textMuted">
-        {description ?? '服务端没有形成答案，稍后可重试；若持续失败请携错误码求助。'}
+        {description ?? '服务端没有形成答案，稍后可重试；若持续失败，请展开「技术详情」，携其中的错误码求助。'}
       </p>
-      {code ? (
-        <p className="mt-2 text-[11px] font-mono text-idpxyz-textMuted">{code}</p>
-      ) : null}
+      <TechnicalDetails
+        rows={[...(technical ?? []), ...(code ? [{ label: '错误码', value: code }] : [])]}
+        className="mt-2 text-idpxyz-textMuted"
+      />
       {onRetry ? (
         <button
           type="button"

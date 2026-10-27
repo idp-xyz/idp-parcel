@@ -12,9 +12,9 @@ const markupOf = (props: SectionErrorProps): string => renderToStaticMarkup(crea
 
 // Covers: 给了 onRetry → 有一个「重试」按钮；标题与说明逐字在。
 test('区块级错误渲染标题、说明与重试按钮', () => {
-  const html = markupOf({ title: '服务端未形成答案（HTTP 500）', description: '目录读取依赖未能形成答案，可稍后重试。', onRetry: () => {} });
+  const html = markupOf({ title: '服务端没有形成答案', description: '目录读取依赖未能形成答案，可稍后重试。', onRetry: () => {} });
   match(html, /role="alert"/);
-  match(html, /服务端未形成答案（HTTP 500）/);
+  match(html, /服务端没有形成答案/);
   match(html, /目录读取依赖未能形成答案，可稍后重试。/);
   equal((html.match(/<button/g) ?? []).length, 1);
   match(html, /重试/);
@@ -26,4 +26,13 @@ test('不给 onRetry 就没有重试按钮', () => {
   equal(/<button/.test(html), false);
   equal(/重试/.test(html), false);
   match(html, /只有标题/);
+});
+
+// Covers: 给了 technical 就带一格技术详情（状态码不写进标题）；不给就没有。
+test('区块级错误：状态码这类排查字收进技术详情', () => {
+  const html = markupOf({ title: '服务端没有形成答案', technical: [{ label: 'HTTP 状态', value: '500' }] });
+  match(html, /服务端没有形成答案/);
+  equal(/HTTP 500/.test(html), false);
+  match(html, /<details[^>]*>.*HTTP 状态.*500/);
+  equal(markupOf({ title: '只有标题' }).includes('技术详情'), false);
 });

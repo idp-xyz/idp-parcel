@@ -88,3 +88,33 @@ test('需要登录与没有授予各成一态，只带主责上下文与出处',
   deepEqual(catalogueViewState({ kind: 'notGranted' }, 0, () => {}, options), { kind: 'notGranted', facts });
   equal(catalogueViewState({ kind: 'unconfigured' }, 0, () => {}, options).kind, 'unconfigured');
 });
+
+// 票 party-commercial-uiux/18：状态码、问题码、接口路径、主责上下文、场景出处不进标题与说明，走卡面或错误态的技术详情。
+// Covers: 未配置 → 说明不带接口与主责上下文名，facts 带上接口；无答案、调用方式问题 → 标题不带 HTTP 状态，technical 带状态码与问题码。
+test('目录页的未配置与两种错误：排查用的字放进 facts 与 technical，不在标题与说明里', () => {
+  const options = {
+    module: moduleInfo,
+    endpoint: 'GET /commercial-customer-accounts',
+    emptyTitle: '暂无',
+    emptyDescription: '无',
+  };
+  const unconfigured = catalogueViewState({ kind: 'unconfigured' }, 0, () => {}, options);
+  ok(unconfigured.kind === 'unconfigured');
+  equal(unconfigured.description?.includes('/commercial-customer-accounts'), false);
+  equal(unconfigured.description?.includes('预览上下文'), false);
+  equal(unconfigured.facts?.endpoint, 'GET /commercial-customer-accounts');
+  equal(unconfigured.facts?.owner, '预览上下文');
+
+  const noAnswer = catalogueViewState({ kind: 'noAnswer', status: 502, code: 'NO_ANSWER_FORMED' }, 0, () => {}, options);
+  ok(noAnswer.kind === 'error');
+  equal(noAnswer.title, '服务端没有形成答案');
+  deepEqual(noAnswer.technical, [
+    { label: 'HTTP 状态', value: '502' },
+    { label: '问题码', value: 'NO_ANSWER_FORMED' },
+  ]);
+
+  const caller = catalogueViewState({ kind: 'callerProblem', status: 400, code: 'MALFORMED_REQUEST' }, 0, () => {}, options);
+  ok(caller.kind === 'error');
+  equal(caller.title, '调用方式问题');
+  equal(caller.technical?.[0].value, '400');
+});
