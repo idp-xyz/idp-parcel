@@ -1974,7 +1974,7 @@ Status: Confirmed
 
 运营企业或其合作渠道依据客户要求向收件人收取、随后应清分并汇付给客户的商品交易资金。
 
-- `parcel-shipment` 拥有客户代收服务要求快照；`transport-fulfillment` 拥有履约侧代收证据、渠道代收报告和渠道回款通知；银行或支付系统拥有运营企业真实到账事实，它经 `settlement-accounting` 的唯一采用口进入本产品，`collection-remittance` 凭采用引用登记真实到账（[ADR-0274](../adr/0274-collected-principal-bank-arrival-enters-through-the-settlement-accounting-funds-adoption.md)）；`collection-remittance` 关联这些事实形成代收分户账结果。
+- `parcel-shipment` 拥有客户代收服务要求快照；`transport-fulfillment` 拥有履约侧代收证据、渠道代收报告和渠道回款通知；银行或支付系统拥有运营企业真实到账事实，它经 `settlement-accounting` 的唯一采用口进入本产品，`collection-remittance` 凭采用引用登记真实到账（[ADR-0274](../adr/0274-collected-principal-bank-arrival-enters-through-the-settlement-accounting-funds-adoption.md)），被引用的事实须先在结算整条认作代收本金，之后它只有代收与清分一个去处、不进运营余额（[ADR-0330](../adr/0330-a-collected-principal-bank-arrival-is-registered-against-an-adopted-funds-fact-that-settlement-has-set-aside-as-collected-principal.md)）；`collection-remittance` 关联这些事实形成代收分户账结果。
 - 收件人付款、渠道报告已代收、渠道通知已回款和运营企业真实到账是四层不同事实，不得互相覆盖或直接推导。POD 本身也不证明 COD 金额已收取。
 - 代收本金不是经营口径物流收入或普通运营结算余额；COD 服务费和有效协议允许的抵扣金额由 `settlement-accounting` 管理。
 - 避免使用：运费收入、客户预付余额、COD 服务费。
@@ -1992,7 +1992,7 @@ Status: Confirmed
 
 一次已被 `collection-remittance` 接受的收款主张或资金事实，携带金额、币种、发生时间、来源层级和来源证据引用。
 
-- 所有者：`collection-remittance` 拥有接受判断；来源证据本身归 `transport-fulfillment` 或外部银行与支付系统。运营企业真实到账那一层的证据引用指向 `settlement-accounting` 已采用的外部资金事实（[ADR-0274](../adr/0274-collected-principal-bank-arrival-enters-through-the-settlement-accounting-funds-adoption.md)）。
+- 所有者：`collection-remittance` 拥有接受判断；来源证据本身归 `transport-fulfillment` 或外部银行与支付系统。运营企业真实到账那一层的证据引用指向 `settlement-accounting` 已采用、且已整条认作代收本金的外部资金事实（[ADR-0274](../adr/0274-collected-principal-bank-arrival-enters-through-the-settlement-accounting-funds-adoption.md)、[ADR-0330](../adr/0330-a-collected-principal-bank-arrival-is-registered-against-an-adopted-funds-fact-that-settlement-has-set-aside-as-collected-principal.md)）。
 - 来源层级是收件人付款、渠道代收报告、渠道回款通知和运营企业真实到账四者之一，分别保存且不得互相推导；有效交付和 POD 都不能替代它。
 - 代收事实追加式登记，更正或撤销通过追加新事实并关联原事实表达。
 - 避免使用：已到账、渠道回款、POD。
