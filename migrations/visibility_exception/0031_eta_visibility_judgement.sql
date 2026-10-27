@@ -107,6 +107,23 @@ CREATE TABLE visibility_exception.eta_visibility_judgement_current (
 -- 上是不透明引用、没有可比大小的数值，所以门槛只能表达为「哪些依据达标」的集合；集合不能为空（空集合意味着
 -- 永远不可见，那是另一个决定）。同一账户同一时点适用两行是规则冲突，读口交回「冲突」，判断落待判断，
 -- 不任选其一；未闭区间至多一行由唯一索引先挡，闭区间重叠由读口兜。
+--
+-- 集合里的每一个依据都要非空白：读口把行重建成领域规则时，空白依据被领域层拒收，会被当作规则读不动、
+-- 判断落未决，消费者永远回滚重投。坏行只能挡在写入口，所以库对元素也设一道。PostgreSQL 的 CHECK 不允许
+-- 子查询，逐元检查只能包进 IMMUTABLE 函数。
+CREATE FUNCTION visibility_exception.eta_qualifying_confidences_are_present(refs text[])
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+AS $$
+    SELECT NOT EXISTS (
+        SELECT 1
+          FROM unnest(refs) AS confidence(ref)
+         WHERE confidence.ref IS NULL OR confidence.ref ~ '^\s*$'
+    );
+$$;
+
 CREATE TABLE visibility_exception.eta_visibility_rule (
     tenant_id                text        NOT NULL,
     customer_account_ref     text        NOT NULL,
@@ -137,7 +154,10 @@ CREATE TABLE visibility_exception.eta_visibility_rule (
             AND btrim(approved_by) <> ''
         ),
     CONSTRAINT eta_visibility_rule_qualifying_present
-        CHECK (cardinality(qualifying_confidences) >= 1 AND array_position(qualifying_confidences, NULL) IS NULL),
+        CHECK (
+            cardinality(qualifying_confidences) >= 1
+            AND visibility_exception.eta_qualifying_confidences_are_present(qualifying_confidences)
+        ),
     CONSTRAINT eta_visibility_rule_expression_closed
         CHECK (expression IN ('POINT_VALUE', 'TIME_RANGE')),
     CONSTRAINT eta_visibility_rule_interval_ordered

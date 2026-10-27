@@ -90,7 +90,7 @@ func viewJudgement(t *testing.T, version string, etaVersion string, qualifying s
 	return judgement
 }
 
-// Covers: AT-VE-158——ETA 客户可见性判断答「ETA 不可见」（质量未达对客门槛）：客户视图 ETA 一维
+// Covers: AT-VE-158、AT-VE-217——ETA 客户可见性判断答「ETA 不可见」（质量未达对客门槛）：客户视图 ETA 一维
 // 不展示，不带内容，也不拿计划或承诺时间填；判断答「客户可见 ETA」：这一维展示，内容来处是这一版判断；
 // 判断答「待判断」：待确认。三格各一用例，策略都准许展示。
 func TestTheETADimensionFollowsTheCurrentCustomerVisibilityJudgement(t *testing.T) {

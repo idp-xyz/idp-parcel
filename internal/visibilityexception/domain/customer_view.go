@@ -109,7 +109,7 @@ func MilestonesDimensionOver(permitted ViewDimension, projection TrackingProject
 //
 // 准许展示时按判断的结论答（CONTEXT「客户全程追踪视图只基于……获准对客展示的 ETA……形成」）：
 // 客户可见 ETA 展示，内容来处是这一版判断；ETA 不可见不展示（`AT-VE-158`，不用计划或承诺时间
-// 填充）；ETA 可见性待判断与还没有判断一样答待确认——前者是规则缺失或冲突如实说等，后者是
+// 填充）；ETA 可见性待判断与还没有判断一样答待确认（`AT-VE-217`）——前者是规则缺失或冲突如实说等，后者是
 // 没人作过判断，答不展示会把没作过的判断说成作过，理由与 FinalDimensionOver 同。
 // 待确认与不展示原样放行，只收窄不放宽：策略不准看的，判断说可见也不给看。
 func ETADimensionOver(

@@ -301,3 +301,33 @@ func TestARuleDemandsItsFullShape(t *testing.T) {
 		})
 	}
 }
+
+// Covers: AT-VE-187、AT-VE-052、UC-VE-003 规则「质量门槛按可信度依据的达标集合表达：候选的依据在集合内为条件明确满足，
+// 不在集合内为明确不满足」——集合里任何一个成员都算达标，不是只认第一个或最后一个；集合外的依据不达标。
+func TestAnyMemberOfTheQualifyingSetMeetsTheGate(t *testing.T) {
+	rule := visibilityRule(t, "DELIVERED", "HIGH/carrier-confirmed", "MEDIUM/history-based")
+	for _, tc := range []struct {
+		confidence string
+		want       domain.ETAVisibilityConclusion
+	}{
+		{"HIGH/carrier-confirmed", domain.CustomerVisibleETA},
+		{"MEDIUM/history-based", domain.CustomerVisibleETA},
+		{"LOW/sparse", domain.ETANotVisible},
+	} {
+		t.Run(tc.confidence, func(t *testing.T) {
+			spec := etaSpec(t, "eta-1/v1")
+			spec.Confidence = mustValue(t, domain.NewConfidenceReference, tc.confidence)
+			eta, err := domain.FormETAPrediction(spec)
+			if err != nil {
+				t.Fatalf("form candidate ETA: %v", err)
+			}
+			finding, err := domain.AssessETAVisibility(eta, domain.ConfiguredETARule(rule))
+			if err != nil {
+				t.Fatalf("assess: %v", err)
+			}
+			if finding.Conclusion != tc.want {
+				t.Fatalf("候选依据 %q 的结论 = %q, want %q", tc.confidence, finding.Conclusion, tc.want)
+			}
+		})
+	}
+}

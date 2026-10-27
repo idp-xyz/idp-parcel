@@ -90,7 +90,7 @@
 | `AT-VE-155` | C1/C2 包裹处于同一集运单元、班次或共同案件 | C1 视图不披露 C2 的存在、数量、路线或异常范围 |
 | `AT-VE-156` | 当前投影包含已批准公开里程碑 | 展示标准语义和公开地点，不复制内部来源状态 |
 | `AT-VE-157` | 投影含内部控制位置、非公开节点和供应商商业信息 | 按规则过滤，不进入客户视图 |
-| `AT-VE-158` | 只有内部 ETA 或质量未达对客门槛 | 不展示 ETA，也不使用计划或承诺时间填充 |
+| `AT-VE-158` | 内部 ETA 已形成，`UC-VE-003` 的 ETA 客户可见性判断答 ETA 不可见（质量未达对客门槛） | 不展示 ETA，也不使用计划或承诺时间填充 |
 | `AT-VE-159` | `parcel-shipment` 已形成当前有效客户服务终局 | 展示终局及其依据版本，不由摘要反推 |
 | `AT-VE-160` | 只有有效交付扫描但终局尚未形成 | 可展示获准交付里程碑，不显示包裹服务终局已完成 |
 | `AT-VE-161` | 来源更正使原里程碑或终局失效 | 形成追加更正/替代视图，原版本保留且不再作为当前结果 |
@@ -108,10 +108,11 @@
 | `AT-VE-188` | C1 的包裹所在委托已`已接受`（客户归属已确立），初始路由投影尚未形成、没有客户视图；C1 查询它，C2 用同一包裹号查询 | C1 得当前无可见结果；C2 得与包裹不存在逐字相同的答复，不泄露存在性；归属读不动时返回未形成（ADR-0246） |
 | `AT-VE-215` | 客户视图所依据的 ETA 客户可见性判断换版，投影版本没有变；或判断库读不动 | 判断换版使 ETA 一维变化时形成追加更正/替代视图并指回前版，原版本保留；四维没变不换代；判断库读不动返回未形成，不按没有判断答待确认 |
 | `AT-VE-216` | 披露策略不准展示 ETA，而 ETA 客户可见性判断为客户可见 ETA | ETA 一维仍按策略不展示或待确认，判断不放宽；策略不展示时不去读判断 |
+| `AT-VE-217` | 内部 ETA 已形成，但这个账户这件包裹还没有 ETA 客户可见性判断，或判断为待判断（规则缺失或冲突） | ETA 一维答待确认，不带内容，不展示内部 ETA，也不使用计划或承诺时间填充；不把没有作过的判断答成不展示 |
 
 `AT-VE-161` 的现状缺口已由票 [docs-consistency/code/05](../../../.scratch/docs-consistency/code/05-customer-tracking-view-overwrites-published-versions.md) 补齐（2026-10-21）：客户视图版本只增不改写，替代追加新版本并回指前一版，已发布的前一版按版本读得回；新投影派生出的四维与当前版相同时不换代，只前移当前版的确认依据（`ConfirmedOn`）；对客响应体不带投影版本，客户的采用版本由视图版本号承担。本行预期结果不变。
 
-`AT-VE-158` 与结果语义「客户追踪视图」一行的现状缺口已由票 [docs-consistency/code/06](../../../.scratch/docs-consistency/code/06-customer-view-shows-dimensions-without-a-visible-judgement.md) 收窄、票 [docs-consistency/code/51](../../../.scratch/docs-consistency/code/51-eta-customer-visibility-judgement-is-not-modelled-or-read-by-the-customer-view.md) 补齐（2026-10-26）：ETA 一维在策略准许展示时读 `UC-VE-003` 的当前 ETA 客户可见性判断——客户可见 ETA 才展示（内容来处是那一版判断）、ETA 不可见不展示、待判断或还没有判断答待确认；策略仍是上限，只收窄不放宽。判断换版触发重派生，投影版本不变也形成追加更正。里程碑维在投影没有已归类的标准追踪里程碑时答待确认，仍由票 06 收窄。本行与那一行的预期结果不变。
+`AT-VE-158` 与结果语义「客户追踪视图」一行的现状缺口已由票 [docs-consistency/code/06](../../../.scratch/docs-consistency/code/06-customer-view-shows-dimensions-without-a-visible-judgement.md) 收窄、票 [docs-consistency/code/51](../../../.scratch/docs-consistency/code/51-eta-customer-visibility-judgement-is-not-modelled-or-read-by-the-customer-view.md) 补齐（2026-10-26）：ETA 一维在策略准许展示时读 `UC-VE-003` 的当前 ETA 客户可见性判断——客户可见 ETA 才展示（内容来处是那一版判断）、ETA 不可见不展示、待判断或还没有判断答待确认；策略仍是上限，只收窄不放宽。判断换版触发重派生，投影版本不变也形成追加更正。里程碑维在投影没有已归类的标准追踪里程碑时答待确认，仍由票 06 收窄。`AT-VE-158` 的条件限定为判断已形成且答 ETA 不可见那一格，结果不变；没有判断或判断待判断那一格答待确认而不是不展示，另立 `AT-VE-217`，同一场景只有一套结果。结果语义「客户追踪视图」一行的预期结果不变。
 
 结果语义「当前无可见结果」一行与 `AT-VE-188` 的现状缺口已由票 [docs-consistency/code/31](../../../.scratch/docs-consistency/code/31-customer-tracking-query-cannot-say-no-visible-result-for-its-own-parcel.md) 补齐（2026-10-25）：查询端点读不到视图时经 `parcel-shipment` 的客户归属反查口问一次归属，唯一归属请求方账户答 `NO_VISIBLE_RESULT`，零份、别的账户与多份已接受委托同时声明都答 `VIEW_NOT_FOUND`，反查读不动答未形成。本行预期结果不变。
 

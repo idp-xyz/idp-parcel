@@ -442,3 +442,106 @@ func TestACommandMissingItsIdentityIsNotAccepted(t *testing.T) {
 }
 
 var _ ports.ETAVisibilityJudgementStore = (*judgementStoreDouble)(nil)
+
+// ruleVariant 造一份规则，baseline 与 viewJudgementRule 一致；change 只改一项，别的项原样。
+func ruleVariant(t *testing.T, qualifying string, change func(*domain.ETAVisibilityRuleSpec)) domain.ETAVisibilityRuleBasis {
+	t.Helper()
+	spec := domain.ETAVisibilityRuleSpec{
+		GateVersion:     mustValue(t, domain.NewETAQualityGateVersion, "gate/v1"),
+		ServiceRule:     mustValue(t, domain.NewCustomerServiceRuleVersion, "contract-c1/v3"),
+		TargetMilestone: mustValue(t, domain.NewMilestoneReference, "DELIVERED"),
+		Qualifying:      []domain.ConfidenceReference{mustValue(t, domain.NewConfidenceReference, qualifying)},
+		Expression:      domain.ETAShownAsTimeRange,
+		StopBoundary:    mustValue(t, domain.NewETAStopShowingBoundary, "stop/after-delivered"),
+	}
+	if change != nil {
+		change(&spec)
+	}
+	rule, err := domain.NewETAVisibilityRule(spec)
+	if err != nil {
+		t.Fatalf("new rule: %v", err)
+	}
+	return domain.ConfiguredETARule(rule)
+}
+
+// Covers: AT-VE-213 与 UC-VE-003 规则「新 ETA、质量门槛、合同或客户服务规则版本生效时必须形成新的 ETA 客户可见性判断
+// 和替代关系，原判断不覆盖」——候选 ETA 版本不变、结论也不变，只要判断带出去的依据（门槛版本、客户服务规则版本、
+// 获准对客表达、停止展示边界）变了就换代；依据没变的重放不换代。不可见的判断本来不带表达与停止边界，
+// 这两项变化不构成另一份发现。
+func TestAChangedRuleBasisSupersedesTheJudgementEvenWhenTheConclusionStaysTheSame(t *testing.T) {
+	type change = func(*domain.ETAVisibilityRuleSpec)
+	for _, tc := range []struct {
+		name       string
+		qualifying string
+		change     change
+		want       application.JudgeETAVisibilityOutcome
+	}{
+		{"可见：门槛版本变", "MEDIUM/history-based", func(s *domain.ETAVisibilityRuleSpec) {
+			s.GateVersion = mustValue(t, domain.NewETAQualityGateVersion, "gate/v2")
+		}, application.ETAVisibilityRejudged},
+		{"可见：客户服务规则版本变", "MEDIUM/history-based", func(s *domain.ETAVisibilityRuleSpec) {
+			s.ServiceRule = mustValue(t, domain.NewCustomerServiceRuleVersion, "contract-c1/v4")
+		}, application.ETAVisibilityRejudged},
+		{"可见：对客表达变", "MEDIUM/history-based", func(s *domain.ETAVisibilityRuleSpec) {
+			s.Expression = domain.ETAShownAsPointValue
+		}, application.ETAVisibilityRejudged},
+		{"可见：停止展示边界变", "MEDIUM/history-based", func(s *domain.ETAVisibilityRuleSpec) {
+			s.StopBoundary = mustValue(t, domain.NewETAStopShowingBoundary, "stop/after-72h")
+		}, application.ETAVisibilityRejudged},
+		{"可见：依据没变", "MEDIUM/history-based", nil, application.ETAVisibilityExistingResult},
+		{"不可见：门槛版本变", "HIGH/carrier-confirmed", func(s *domain.ETAVisibilityRuleSpec) {
+			s.GateVersion = mustValue(t, domain.NewETAQualityGateVersion, "gate/v2")
+		}, application.ETAVisibilityRejudged},
+		{"不可见：客户服务规则版本变", "HIGH/carrier-confirmed", func(s *domain.ETAVisibilityRuleSpec) {
+			s.ServiceRule = mustValue(t, domain.NewCustomerServiceRuleVersion, "contract-c1/v4")
+		}, application.ETAVisibilityRejudged},
+		{"不可见：表达与停止边界变（判断本不带）", "HIGH/carrier-confirmed", func(s *domain.ETAVisibilityRuleSpec) {
+			s.Expression = domain.ETAShownAsPointValue
+			s.StopBoundary = mustValue(t, domain.NewETAStopShowingBoundary, "stop/after-72h")
+		}, application.ETAVisibilityExistingResult},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture := newJudgeFixture(t)
+			ctx := context.Background()
+			fixture.hasETA(t, "eta-1", "MEDIUM/history-based")
+			fixture.rules.basis = ruleVariant(t, tc.qualifying, nil)
+			first, err := fixture.handler.Handle(ctx, judgeCommand(t))
+			if err != nil {
+				t.Fatalf("first: %v", err)
+			}
+			firstJudgement, _ := first.Judgement()
+
+			fixture.rules.basis = ruleVariant(t, tc.qualifying, tc.change)
+			second, err := fixture.handler.Handle(ctx, judgeCommand(t))
+			if err != nil {
+				t.Fatalf("second: %v", err)
+			}
+
+			if second.Outcome() != tc.want {
+				t.Fatalf("outcome = %q, want %q", second.Outcome(), tc.want)
+			}
+			secondJudgement, _ := second.Judgement()
+			if secondJudgement.CandidateVersion() != firstJudgement.CandidateVersion() ||
+				secondJudgement.Conclusion() != firstJudgement.Conclusion() {
+				t.Fatalf("候选版本或结论变了，这一例要的是只变依据：%#v", secondJudgement)
+			}
+			if tc.want == application.ETAVisibilityExistingResult {
+				if secondJudgement.Version() != firstJudgement.Version() || fixture.judgements.saves != 1 {
+					t.Fatalf("重放换了代或写了库：version = %q saves = %d", secondJudgement.Version(), fixture.judgements.saves)
+				}
+				return
+			}
+			if prior, superseding := secondJudgement.PriorVersion(); !superseding || prior != firstJudgement.Version() {
+				t.Fatalf("prior = %q, want %q", prior, firstJudgement.Version())
+			}
+			if secondJudgement.Version() == firstJudgement.Version() || fixture.judgements.saves != 2 {
+				t.Fatalf("换代应签新版本并写库：version = %q saves = %d", secondJudgement.Version(), fixture.judgements.saves)
+			}
+			kept, found, _ := fixture.judgements.FindVersion(ctx, judgeCommand(t).TenantID, judgeCommand(t).Customer,
+				judgeCommand(t).Parcel, firstJudgement.Version())
+			if !found || kept.Finding() != firstJudgement.Finding() {
+				t.Fatal("原判断没有按版本读回，或被改写")
+			}
+		})
+	}
+}

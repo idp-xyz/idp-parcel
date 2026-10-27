@@ -368,3 +368,85 @@ func TestTheRuleTableRefusesWhatTheRuleCannotMean(t *testing.T) {
 		t.Errorf("别的账户的未闭区间版本被误拦：%v", err)
 	}
 }
+
+// TestTheRuleTableRefusesABlankOrNullQualifyingConfidence 证达标集合的每个元素都要非空白：读口把行重建成领域规则时
+// 空白依据会被领域层拒收，那会被译成规则读不动、判断落未决，消费者永远回滚重投；坏行只能挡在写入口。集合里有一个
+// 空白或 NULL 元素就整行拒（check_violation），好元素不抵消坏元素。
+func TestTheRuleTableRefusesABlankOrNullQualifyingConfidence(t *testing.T) {
+	_, _, _, pool := newETAVisibility(t)
+	t0 := etaJudgedAt
+
+	for name, qualifying := range map[string][]string{
+		"只有空格":     {"  "},
+		"空串":       {""},
+		"制表符":      {"\t"},
+		"好元素带空白元素": {"HIGH/carrier-confirmed", "  "},
+	} {
+		var pgErr *pgconn.PgError
+		// 每例用自己的账户：未闭区间唯一索引只拦同账户，不该盖过要看的那道 CHECK。
+		err := insertRule(t, pool, "customer-"+name, "v-1", t0, nil, qualifying...)
+		if !errors.As(err, &pgErr) || pgErr.Code != "23514" {
+			t.Errorf("%s：err = %v，want check_violation 23514", name, err)
+		}
+	}
+
+	_, err := pool.Exec(t.Context(),
+		`INSERT INTO visibility_exception.eta_visibility_rule
+			(tenant_id, customer_account_ref, service_rule_version, gate_version, target_milestone_ref,
+			 qualifying_confidences, expression, stop_boundary_ref, effective_from, approved_by)
+		 VALUES ('tenant-a', 'customer-null', 'v-1', 'gate/v1', 'DELIVERED',
+			 ARRAY['HIGH/carrier-confirmed', NULL]::text[], 'TIME_RANGE', 'stop/after-delivered', $1, 'cs-lead')`, t0)
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "23514" {
+		t.Errorf("含 NULL 元素：err = %v，want check_violation 23514", err)
+	}
+
+	if err := insertRule(t, pool, "customer-fine", "v-1", t0, nil, "HIGH/carrier-confirmed", "MEDIUM/history-based"); err != nil {
+		t.Errorf("元素都非空白的集合被误拦：%v", err)
+	}
+}
+
+// TestTheCurrentMarkerCanOnlyNameAStoredVersionOfItsOwnJudgementLine 证当前标记只能指同一条判断线上存下来的版本行：
+// 标记改指不存在的版本、或指另一件包裹的版本，库都拒（foreign_key_violation）。没有这道外键，写错的标记会让
+// FindCurrent 读不到版本行，判断线断在读口，原判断的前身也读不回。
+func TestTheCurrentMarkerCanOnlyNameAStoredVersionOfItsOwnJudgementLine(t *testing.T) {
+	judgements, _, transactor, pool := newETAVisibility(t)
+	ctx := t.Context()
+	tenant := tenantOf(t, "tenant-a")
+	judgement := firstJudgement(t, "evj-1", "eta-1", etaRuleBasis(t, "MEDIUM/history-based"))
+	within2(t, transactor, ctx, func(txCtx context.Context) error {
+		return judgements.Save(txCtx, tenant, judgement)
+	})
+
+	for name, statement := range map[string]struct {
+		sql  string
+		args []any
+	}{
+		"改指不存在的版本": {
+			`UPDATE visibility_exception.eta_visibility_judgement_current SET version = $1
+			  WHERE tenant_id = 'tenant-a' AND customer_account_id = 'customer-a' AND parcel_id = 'parcel-1'`,
+			[]any{"evj-ghost"},
+		},
+		"另一件包裹的标记指本件包裹的版本": {
+			`INSERT INTO visibility_exception.eta_visibility_judgement_current
+				(tenant_id, customer_account_id, parcel_id, version) VALUES ('tenant-a', 'customer-a', 'parcel-2', $1)`,
+			[]any{"evj-1"},
+		},
+		"没有版本行的新标记": {
+			`INSERT INTO visibility_exception.eta_visibility_judgement_current
+				(tenant_id, customer_account_id, parcel_id, version) VALUES ('tenant-a', 'customer-a', 'parcel-3', $1)`,
+			[]any{"evj-ghost"},
+		},
+	} {
+		_, err := pool.Exec(ctx, statement.sql, statement.args...)
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.Code != "23503" {
+			t.Errorf("%s：err = %v，want foreign_key_violation 23503", name, err)
+		}
+	}
+
+	found, exists, err := judgements.FindCurrent(ctx, tenant, judgement.Customer(), judgement.Parcel())
+	if err != nil || !exists || found.Version() != judgement.Version() {
+		t.Fatalf("被拒的写入动了当前标记：exists = %v err = %v", exists, err)
+	}
+}

@@ -274,10 +274,10 @@ func TestTheFinalDimensionShowsOnlyWhenTheProjectionCarriesAnAdoptedFinal(t *tes
 	}
 }
 
-// Covers: AT-VE-158、AT-VE-216 与 VE CONTEXT「客户全程追踪视图只基于当前有效的全程追踪投影、获准对客展示的 ETA……
+// Covers: AT-VE-158、AT-VE-216、AT-VE-217 与 VE CONTEXT「客户全程追踪视图只基于当前有效的全程追踪投影、获准对客展示的 ETA……
 // 形成」与生命周期「某一维信息待确认或不可披露 → 只对该维返回待确认、暂不可用或不展示，
 // 不虚构里程碑、ETA、终局或异常说明」——策略准许展示 ETA 之后还要看 ETA 客户可见性判断：
-// 没有判断或判断为待判断 → 待确认；判断为 ETA 不可见 → 不展示（AT-VE-158，不用计划或承诺
+// 没有判断或判断为待判断 → 待确认（AT-VE-217）；判断为 ETA 不可见 → 不展示（AT-VE-158，不用计划或承诺
 // 时间填充）；判断为客户可见 ETA → 展示，内容来处是这一版判断。策略不展示与待确认原样放行，
 // 只收窄不放宽——判断说可见也越不过策略。
 func TestTheETADimensionFollowsTheCustomerVisibilityJudgementUnderThePolicy(t *testing.T) {

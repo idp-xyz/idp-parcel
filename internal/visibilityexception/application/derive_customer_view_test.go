@@ -461,7 +461,7 @@ func TestAPermittedFinalPendsUntilTheProjectionCarriesTheAdoptedFinal(t *testing
 	}
 }
 
-// Covers: CONTEXT「客户全程追踪视图只基于当前有效的全程追踪投影、获准对客展示的 ETA……
+// Covers: AT-VE-217 与 CONTEXT「客户全程追踪视图只基于当前有效的全程追踪投影、获准对客展示的 ETA……
 // 形成」与 UC-VE-008 主流程「读取 `UC-VE-003` 的客户可见性判断；只有达到适用质量与合同
 // 门槛的 ETA 才进入视图，不能使用计划时间或内部预测填充」——策略把 ETA 一维登成展示，
 // 这个账户这件包裹还没有任何 ETA 客户可见性判断可依，这一维答待确认、不带内容，不答「ETA：展示」；
