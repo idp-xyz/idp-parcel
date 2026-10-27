@@ -2,7 +2,7 @@ import { useId } from 'react';
 import { Input } from '@idpxyz/ui-primitives';
 import type { ApiResult } from '../catalogue-api';
 import { listCustomerAccounts } from './api';
-import { Field, PathProblems, fieldLabel, selectClass, useLoaded, type PickerOption } from './PublicationFormFields';
+import { Field, PathProblems, SearchableSelect, fieldLabel, useLoaded, type PickerOption } from './PublicationFormFields';
 import { versionChoiceKey, type VersionChoice } from './picker-options';
 
 // 发布与登记表单里「引用他物」的两种格（票 party-commercial-uiux/13），与共享的 ReferencePicker（选一个对象）并列：
@@ -54,31 +54,19 @@ export function ObjectVersionPicker<Body>({
 
   if (answer?.kind === 'outcome') {
     const choices = choicesOf(answer.body);
-    const known = choices.some((choice) => versionChoiceKey(choice) === currentKey);
     return (
       <label className="block">
         <span className={fieldLabel}>{label}</span>
-        <select
-          className={selectClass}
+        <SearchableSelect
+          options={choices.map((choice) => ({ value: versionChoiceKey(choice), label: choice.label }))}
           value={currentKey}
           disabled={locked}
-          onChange={(event) => {
-            const picked = choices.find((choice) => versionChoiceKey(choice) === event.target.value);
+          unknownLabel={`${objectId} · ${version}（手填，不在${readFace}里）`}
+          onChange={(key) => {
+            const picked = choices.find((choice) => versionChoiceKey(choice) === key);
             onChange(picked ? { objectId: picked.objectId, version: picked.version } : { objectId: '', version: '' });
           }}
-        >
-          <option value="">未选</option>
-          {!known && currentKey !== '' ? (
-            <option value={currentKey}>
-              {objectId} · {version}（手填，不在{readFace}里）
-            </option>
-          ) : null}
-          {choices.map((choice) => (
-            <option key={versionChoiceKey(choice)} value={versionChoiceKey(choice)}>
-              {choice.label}
-            </option>
-          ))}
-        </select>
+        />
         {choices.length === 0 ? <span className={note}>{emptyNote}</span> : null}
         <PathProblems problems={problems} paths={paths} />
       </label>

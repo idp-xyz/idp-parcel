@@ -10,7 +10,7 @@ import { controlRequirementLabels, labelOf } from './presentation';
 import { DeliveryConditionFields } from './DeliveryConditionFields';
 import type { NewVersionStart } from './new-version';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
-import { Field, RowFrame, fieldLabel, selectClass, useLoaded } from './PublicationFormFields';
+import { Field, RowFrame, SearchableSelect, fieldLabel, selectClass, useLoaded } from './PublicationFormFields';
 import type { DeliveryConditionDraft } from './delivery-condition-section';
 import { WallTimeField, customerAccountPickerOptions } from './party-registration-fields';
 import { SuggestInput, loadCustomerAccountSuggestions } from './reference-inputs';
@@ -459,18 +459,15 @@ function ObjectPicker({
   onChange: (objectId: string) => void;
 }) {
   if (candidates.kind === 'listed') {
-    // 手填过、册上又没有的标识保留为一项，免得选单把它静默吞掉——它对不对由服务端答。
-    const options = value !== '' && !candidates.objectIds.includes(value) ? [value, ...candidates.objectIds] : candidates.objectIds;
     return (
       <>
-        <select className={selectClass} value={value} disabled={locked} onChange={(event) => onChange(event.target.value)}>
-          <option value="">未选</option>
-          {options.map((objectId) => (
-            <option key={objectId} value={objectId}>
-              {objectId}
-            </option>
-          ))}
-        </select>
+        {/* 手填过、册上又没有的标识由选单保留为一项，免得它被静默吞掉——它对不对由服务端答。 */}
+        <SearchableSelect
+          options={candidates.objectIds.map((objectId) => ({ value: objectId, label: objectId }))}
+          value={value}
+          disabled={locked}
+          onChange={onChange}
+        />
         {candidates.objectIds.length === 0 ? (
           <span className="block text-[11px] text-idpxyz-textMuted mt-1">
             当前租户的{registerName}为空；先发布那一册的版本，再回来指名。

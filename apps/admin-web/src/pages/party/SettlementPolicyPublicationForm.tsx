@@ -14,9 +14,9 @@ import {
   Field,
   PathProblems,
   ReferencePicker,
+  SearchableSelect,
   VocabularySelect,
   fieldLabel,
-  selectClass,
   useLoaded,
 } from './PublicationFormFields';
 import { WallTimeField, businessPartyPickerOptions, legalEntityPickerOptions } from './party-registration-fields';
@@ -296,32 +296,22 @@ function ContractPicker({
       objectId: contract.objectId,
       version: contract.version,
     }));
-    const known = contracts.some((contract) => contractChoiceKey(contract) === currentKey);
     return (
       <label className="block">
         <span className={fieldLabel}>客户合同版本 *</span>
-        <select
-          className={selectClass}
+        <SearchableSelect
+          options={answer.body.contracts.map((contract) => ({
+            value: contractChoiceKey(contract),
+            label: `${contract.objectId} · ${contract.version} · ${contract.status} · ${contract.scope}`,
+          }))}
           value={currentKey}
           disabled={locked}
-          onChange={(event) => {
-            const picked = event.target.value;
+          unknownLabel={`${objectId} · ${version}（手填，不在合同列表里）`}
+          onChange={(picked) => {
             const choice = contractChoiceOf(picked, contracts) ?? (picked === currentKey ? current : null);
             onChange(choice ?? { objectId: '', version: '' });
           }}
-        >
-          <option value="">未选</option>
-          {!known && currentKey !== '' ? (
-            <option value={currentKey}>
-              {objectId} · {version}（手填，不在合同列表里）
-            </option>
-          ) : null}
-          {answer.body.contracts.map((contract) => (
-            <option key={contractChoiceKey(contract)} value={contractChoiceKey(contract)}>
-              {contract.objectId} · {contract.version} · {contract.status} · {contract.scope}
-            </option>
-          ))}
-        </select>
+        />
         {contracts.length === 0 ? (
           <span className="block text-[11px] text-idpxyz-textMuted mt-1">
             当前租户尚无客户合同版本；先发布客户合同，再发布挂在它上面的结算政策。

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Button, Input } from '@idpxyz/ui-primitives';
+import { Button, Combobox, Input } from '@idpxyz/ui-primitives';
 import {
   accessRefusalHeadline,
   accessRefusalStatus,
@@ -13,6 +13,14 @@ import {
   type CommercialObjectKindName,
   type PublicationVocabularyResponseBody,
 } from './publication-draft-api';
+import {
+  currentSearchKey,
+  noneLabel,
+  searchItemsOf,
+  unknownLabelOf,
+  usesSearchList,
+  valueOfSearchKey,
+} from './searchable-options';
 
 /**
  * 发布表单组件件的共享层（票 admin-write-faces/22）：各册逐字段表单此前各自留一份的 Field / Problems / RowFrame /
@@ -172,6 +180,57 @@ export interface PickerOption {
   label: string;
 }
 
+/**
+ * 引用候选的选单（票 party-commercial-uiux/20）：候选不多用原生下拉，多了换成带搜索框的选单，名字和标识都能搜。两种形态
+ * 的行为一致：第一项是「未选」，当前值是手填的、候选里没有时保留为一项，选出来的只是引用串，在不在册仍由服务端判。
+ * 判据（多少算多）与搜索键的拼法在 searchable-options.ts。
+ */
+export function SearchableSelect({
+  options,
+  value,
+  onChange,
+  disabled,
+  unknownNote,
+  unknownLabel,
+}: {
+  options: readonly PickerOption[];
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  /** 当前值不在候选里时那一项的括注，例「手填，不在读面上」；不给就只显值。 */
+  unknownNote?: string;
+  /** 值本身不好读（对象与版本合成的键）时，那一项的整句显示；给了就压过括注。 */
+  unknownLabel?: string;
+}) {
+  if (!usesSearchList(options.length)) {
+    const known = options.some((option) => option.value === value);
+    return (
+      <select className={selectClass} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
+        <option value="">{noneLabel}</option>
+        {!known && value !== '' ? <option value={value}>{unknownLabel ?? unknownLabelOf(value, unknownNote)}</option> : null}
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    );
+  }
+  const items = searchItemsOf(options, value, unknownNote, unknownLabel);
+  return (
+    <Combobox
+      options={items.map((item) => ({ value: item.key, label: item.label }))}
+      value={currentSearchKey(items, value)}
+      onValueChange={(key) => onChange(valueOfSearchKey(items, key))}
+      placeholder={noneLabel}
+      searchPlaceholder="搜索名称或标识"
+      emptyText="没有匹配的候选"
+      disabled={disabled}
+      triggerClassName="text-[13px]"
+    />
+  );
+}
+
 /** ReferencePicker 两种取数方式共有的那半：格、候选转写与各句措辞。 */
 export interface ReferencePickerFaceProps<Body> {
   label: string;
@@ -232,23 +291,10 @@ export function ReferencePickerFor<Body>({
 }: ReferencePickerFaceProps<Body> & { answer: ApiResult<Body> | null }) {
   if (answer?.kind === 'outcome') {
     const options = optionsOf(answer.body);
-    const known = options.some((option) => option.value === value);
     const note = options.length === 0 ? emptyNote : optionsNote;
     return (
       <Field label={label} path={path} problems={problems}>
-        <select className={selectClass} value={value} disabled={locked} onChange={(event) => onChange(event.target.value)}>
-          <option value="">未选</option>
-          {!known && value !== '' ? (
-            <option value={value}>
-              {value}（{unknownNote}）
-            </option>
-          ) : null}
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        <SearchableSelect options={options} value={value} disabled={locked} onChange={onChange} unknownNote={unknownNote} />
         {note !== undefined ? <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">{note}</span> : null}
       </Field>
     );
