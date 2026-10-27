@@ -191,6 +191,8 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 - 2026-10-27｜`scripts/owner-review-queue.ps1` 第二节 47 张里约 30 张的 `Blocked by:` 链接目标已全部 resolved，约三分之二是历史边；Windows PowerShell 5.1 未实跑｜docs-consistency/code/58 评审｜R3
 - 2026-10-27｜首个带 PR 的推送需要看一次 Actions，确认 `generated-artifacts-pr.sh` 与 main 推送两种事件各自跑的步骤符合预期（本机无法验证）｜docs-consistency/code/57｜上线前一次性核对
 - 2026-10-27｜上线清单必须有一条：核对「受理前估价采用」与「SELL 计费时点采用」两本册登了同一个范围，否则冻结额与预估客户费用出自两张卡｜docs-consistency/code/62（已冻结）｜上线前必核（清单项）
+- 2026-10-27｜customs-compliance 的税费付款核对按（引用，版本）读 SA 的外部资金事实、不读事实类型也不看映射状态，认作代收本金或映到客户账户的事实只要付款人与金额对得上都可能被当税费付款证据｜docs-consistency/code/54 评审（ADR-0330 越权风险点）｜R3（既有盲区，建议付款核对排除收入类事实）
+- 2026-10-27｜SA 把同一笔银行回款用不同引用采用两次并各认作代收本金时，代收与清分防不住：同一指令第二条到账能登记但移位撞 `UNDERFUNDED`，两条各有渠道报告的不同指令都能移位、待清分合计 2×；残留是 SA 采用口的来源身份去重｜docs-consistency/code/54 评审（ADR-0330 越权风险点 3）｜R3（不是本票新增，COD 不在试点范围）
 
 ## 六、docs-consistency/code 队列的复核（2026-10-27，tops-26）
 
