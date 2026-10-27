@@ -111,3 +111,11 @@ M。NR 侧改取数侧的事实来源选择、复核编排把判断种类交给�
 
 - 用例写在实现编译之后（取成本口签名一改全仓测试替身随之改，先红的是编译），敏感性靠变异证：下列 17 处变异全部被杀，每处用私有目录备份、改后跑、拷回并 `cmp` 核一致。物理事实读不回折成退回；定不下时退回声明；声明顶替已有重量；并用不标；退回不标；首次收寄截至改成判断此刻；交接触发改成预路由点；授权决定改指预路由；并列裁决改指到站；无路由线丢依据；仍适用线提交原记录；失效线丢依据；删依据自洽核对；成本出处依据写死；保存丢依据；CHECK 放进 `DECLARATION`；旧出处读回成退回。
 - 全量 `scripts/test-full.sh`：改动包 + 反向依赖（`go list -test` 算出，含 `cmd/parcel-api`、`cmd/parcel-dispatch` 与各 `cmd` CLI、`internal/parcelpricing/...`、`internal/settlementaccounting/adapters/...` 等）+ `./internal/architecture/...` + `./migrations/...` + `./scripts/demo-seeds/...` 全绿；新用例 `-count=3`，其中真库判断点用例首跑暴露出自己的 map 遍历次序依赖（原写法取第一次被问的时刻当首次收寄的），已改并 `-count=5` 过；种子在一次性库灌入通过（迁移 0032 随之落库）。`go build ./... && go vet ./...`、`gofmt -l` 无输出；`go run ./tools/adr-index`（生成成功，README 不提交）、`go run ./tools/at-coverage-counts -check` 退 1（只是总览过期，分桶行齐）。
+
+### 评审记录与修订轮
+
+- 独立评审结论：可合入。评审对实现做了三处变异，三处都存活，列为 N1–N3，均是测试缺口，代码无改动，下列用例补上，补后各自对变异变红（备份、改后跑、拷回并 `cmp` 核一致）：
+  - N1 `cmd/parcel-api` 的 `rerouteCosts` 物理事实来源接线没有用例（来源改成空，包内全绿）：补真库用例 `TestTheRerouteDecisionCostSourceFallsBackToTheDeclarationBecauseProductionHasNoPhysicalFactSource`，委托已接受且带客户声明，授权改路决定的判断点经生产装配取成本，断言取数侧不是装配失败的那一份、成本依据标 `DECLARATION_FALLBACK`。来源改成空：装配当场失败，用例红。
+  - N2 「声明读不回上抛」只测了物理事实没取得那一支：`TestAReadFailureIsNeverTurnedIntoAFallback` 加一格，物理事实只有重量、补外廓的声明读不回，断言上抛（ADR-0029：读不动是未决，不静默按「只有实测重量、无外廓」出价）。补外廓那一读的错误吞成声明没有：用例红。
+  - N3 savepoint 装饰器的无事务一支没有断言判断点透传：`TestASavepointPassesCostsThroughOutsideATransaction` 断言内层收到的就是调用方指名的判断点（种类与业务时点都核）；事务里的可读一支 `TestASavepointReleasesReadableCostsUnchanged` 同样加了断言。无事务一支与事务里调内层的两处各自换成预路由点：对应用例各自红。
+- 信息项，不另立票：复核册读面（`query_route_plans.go` 的 `reassessmentBody`）不透出 `candidate_facts_basis`，已在越权风险点 4 列明。

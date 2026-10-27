@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
@@ -25,12 +26,15 @@ type sqlCostSource struct {
 	query    string
 	sequence []string
 	asked    int
+	// points 记下每次调用收到的判断点：装饰器该原样交给内层的就是调用方指名的那一个。
+	points []domain.ParcelFactsPoint
 }
 
 func (source *sqlCostSource) LoadCandidateCosts(
-	ctx context.Context, _ domain.InitialRouteJudgmentKey, _ domain.ParcelFactsPoint, _ ports.InitialRouteEvidence, _ ports.RequestCarriedContent,
+	ctx context.Context, _ domain.InitialRouteJudgmentKey, point domain.ParcelFactsPoint, _ ports.InitialRouteEvidence, _ ports.RequestCarriedContent,
 ) (ports.RouteCandidateCosts, error) {
 	source.asked++
+	source.points = append(source.points, point)
 	query := source.query
 	if len(source.sequence) > 0 {
 		query = source.sequence[source.asked-1]
@@ -94,6 +98,31 @@ func digestLogged(t *testing.T, log *adapter.RouteHandoffLogs, correlation strin
 	return found
 }
 
+// intakePoint 造一个不是预路由的判断点：种类与业务时点都带着，装饰器换成别的判断点（含预路由）都看得出。
+func intakePoint(t *testing.T) domain.ParcelFactsPoint {
+	t.Helper()
+	point, err := domain.NewFirstIntakeFactsPoint(time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("首次收寄判断点：%v", err)
+	}
+	return point
+}
+
+// assertInnerSawOnly 断言内层恰被问了一次、收到的就是调用方指名的判断点：取哪一路包裹事实由判断点定，装饰器换掉它，
+// 价就悄悄按另一路来源出，不报错。
+func assertInnerSawOnly(t *testing.T, inner *sqlCostSource, want domain.ParcelFactsPoint) {
+	t.Helper()
+	if len(inner.points) != 1 {
+		t.Fatalf("内层收到 %d 个判断点, want 恰一个", len(inner.points))
+	}
+	got := inner.points[0]
+	gotAsOf, _ := got.PhysicalFactsAsOf(time.Time{})
+	wantAsOf, _ := want.PhysicalFactsAsOf(time.Time{})
+	if got.Kind() != want.Kind() || !gotAsOf.Equal(wantAsOf) {
+		t.Fatalf("内层收到判断点 %v@%s, want 调用方指名的 %v@%s", got.Kind(), gotAsOf, want.Kind(), wantAsOf)
+	}
+}
+
 // Covers: ports.RouteCandidateCostSource「读失败不得连累调用方的事务」——内层在事务里执行 SELECT 1/0，装饰器把错误原样交回；
 // 同一事务随后的写照样提交、读得回。没有这层隔离，事务被打成中止态，随后的写答 25P02，提交只拿到 rollback。
 func TestASavepointKeepsAFailedCostReadFromAbortingTheJudgment(t *testing.T) {
@@ -148,14 +177,15 @@ func TestSuccessiveCostReadsInOneTransactionEachRecover(t *testing.T) {
 	}
 }
 
-// Covers: 装饰器的可读一支——RELEASE 之后成本事实原样交回，同一事务随后的写照常提交。
+// Covers: 装饰器的可读一支——RELEASE 之后成本事实原样交回，同一事务随后的写照常提交；调用方指名的判断点原样交给内层。
 func TestASavepointReleasesReadableCostsUnchanged(t *testing.T) {
-	db, log, _, costs := candidateCostsSavepointFixture(t, `SELECT 4200::bigint`)
+	db, log, inner, costs := candidateCostsSavepointFixture(t, `SELECT 4200::bigint`)
+	point := intakePoint(t)
 
 	var loaded ports.RouteCandidateCosts
 	var readErr error
 	err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
-		loaded, readErr = costs.LoadCandidateCosts(txCtx, domain.InitialRouteJudgmentKey{}, domain.NewPreRouteFactsPoint(), ports.InitialRouteEvidence{},
+		loaded, readErr = costs.LoadCandidateCosts(txCtx, domain.InitialRouteJudgmentKey{}, point, ports.InitialRouteEvidence{},
 			ports.RequestCarriedContent{})
 		return appendAfterCosts(txCtx, t, log, "corr-after-readable-costs")
 	})
@@ -168,20 +198,23 @@ func TestASavepointReleasesReadableCostsUnchanged(t *testing.T) {
 	if !digestLogged(t, log, "corr-after-readable-costs") {
 		t.Fatal("提交之后读不回随后写的那一行")
 	}
+	assertInnerSawOnly(t, inner, point)
 }
 
 // Covers: 装饰器的无事务一支——ctx 不在事务里时直通内层，不发 SAVEPOINT（事务块外发它本身就报错），成本与错误原样交回；
-// 取数侧答没接时哨兵穿得过这一层，编排照旧认得出。
+// 取数侧答没接时哨兵穿得过这一层，编排照旧认得出；调用方指名的判断点原样交给内层。
 func TestASavepointPassesCostsThroughOutsideATransaction(t *testing.T) {
 	db, _, inner, costs := candidateCostsSavepointFixture(t, `SELECT 3100::bigint`)
 	if _, err := db.RequireExecutor(t.Context()); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("前提不成立：ctx 应在事务外，RequireExecutor 却答 %v", err)
 	}
-	loaded, err := costs.LoadCandidateCosts(t.Context(), domain.InitialRouteJudgmentKey{}, domain.NewPreRouteFactsPoint(), ports.InitialRouteEvidence{},
+	point := intakePoint(t)
+	loaded, err := costs.LoadCandidateCosts(t.Context(), domain.InitialRouteJudgmentKey{}, point, ports.InitialRouteEvidence{},
 		ports.RequestCarriedContent{})
 	if err != nil || len(loaded.Facts) != 1 || loaded.Facts[0].AmountMinor() != 3100 || inner.asked != 1 {
 		t.Fatalf("读回 %+v err=%v 问内层 %d 次, want 直通一次", loaded.Facts, err, inner.asked)
 	}
+	assertInnerSawOnly(t, inner, point)
 
 	unconfigured, err := adapter.NewSavepointedRouteCandidateCosts(db, unconfiguredCosts{})
 	if err != nil {

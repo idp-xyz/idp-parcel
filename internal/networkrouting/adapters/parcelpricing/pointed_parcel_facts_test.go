@@ -274,7 +274,8 @@ func TestUnresolvedPhysicalFactsAreNotReplacedByTheDeclaration(t *testing.T) {
 	}
 }
 
-// Covers: 读口读不回是依赖故障，原样上抛，不折成「没取得」而退回声明——那会在依赖故障时悄悄按声明出价。
+// Covers: 读口读不回是依赖故障，原样上抛，不折成「没取得」而退回声明——那会在依赖故障时悄悄按声明出价；物理事实只取得一部分、
+// 补缺项的声明读不回，同样上抛（ADR-0029：读不动是未决）。
 func TestAReadFailureIsNeverTurnedIntoAFallback(t *testing.T) {
 	broken := errors.New("读库失败")
 	if _, _, err := pointedFacts(t, declaredFacts(t, "2.5", false), &physicalDouble{err: broken}).
@@ -284,6 +285,11 @@ func TestAReadFailureIsNeverTurnedIntoAFallback(t *testing.T) {
 	if _, _, err := pointedFacts(t, &declaredDouble{err: broken}, &physicalDouble{answer: adapter.NoPhysicalFactsObtained()}).
 		ParcelFactsFor(context.Background(), judgmentKey(t), nrdomain.NewArrivalFactsPoint()); !errors.Is(err, broken) {
 		t.Fatalf("声明读不回：err = %v，want 上抛", err)
+	}
+	// 物理事实只有重量、外廓要靠声明补：补外廓的那一读读不回，是未决，不折成「声明没有」而按只有实测重量、无外廓出价。
+	if _, _, err := pointedFacts(t, &declaredDouble{err: broken}, &physicalDouble{answer: obtained(t, "12", nil)}).
+		ParcelFactsFor(context.Background(), judgmentKey(t), nrdomain.NewArrivalFactsPoint()); !errors.Is(err, broken) {
+		t.Fatalf("只有实测重量、补外廓的声明读不回：err = %v，want 上抛", err)
 	}
 }
 
