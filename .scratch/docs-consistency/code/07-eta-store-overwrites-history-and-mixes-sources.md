@@ -1,7 +1,7 @@
 # 07 VE ETA 存储整行覆盖，键里没有来源维，两种来源的预测互相覆盖
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-code07（基 origin/main `efab73e87`）。此前 ready-for-agent——R3（不急）：`FormETAHandler` 在 `cmd/` 下没有调用方，今天不上生产路径；但谁来接线都会继承这个错，接线之前必须先修（接线即升 R1：历史预测丢失、来源混淆）。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
+Status: resolved——2026-10-27 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code07（基 origin/main `efab73e87`）。此前 ready-for-agent——R3（不急）：`FormETAHandler` 在 `cmd/` 下没有调用方，今天不上生产路径；但谁来接线都会继承这个错，接线之前必须先修（接线即升 R1：历史预测丢失、来源混淆）。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
 Blocked by: 无
 出处：[audit/ve.md](../audit/ve.md) VE-11（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，现象仍在）。
 
@@ -129,3 +129,12 @@ M：迁移另取号，ETA 改版本表、键加来源维；`FindCurrent` 按来�
 - `go build ./...`、`go vet ./...` 干净，`gofmt -l` 无输出。
 - `scripts/test-full.sh`：改动包 + 反向依赖 + `./cmd/parcel-api/` + `./cmd/parcel-dispatch/` + `./internal/architecture/...` + `./migrations/...`，退 0。新用例 `-count=3` 全绿，并发用例 `-count=5` 全绿。
 - 本轮没有动迁移，不另灌种子。`go run ./tools/adr-index -check` 通过；`go run ./tools/at-coverage-counts -check` 退 1（只是总览过期，分桶表无缺行）。
+
+## 进 main 记录（2026-10-27，协调方）
+
+- 分支 `claude-code07` 经一轮评审、两轮修订与一轮窄复审，rebase 到 origin/main 后快进，作者 tip `a35a21275`。迁移 `visibility_exception/0032_eta_prediction_versions`（版本表加当前标记表，预测线键为（租户，包裹，里程碑，来源），存量一行映射成一条线的一个首版，迁移前预检；唯一约束 `eta_prediction_version_inputs_unique`（线，输入版本））；不立 ADR（评审核实无已接受 ADR 的口径被改，CONTEXT 状态是 Confirmed，代决的候选规则句落在其中，票面越权风险点写明 owner 需知情）。AT-VE-051 由④移入①，新立 AT-VE-222–225。
+- 做法：每个版本一行，刷新只接替本线前一版并指回它，被接替的版本按版本读得回，`Refresh` 换来源直接拒；`FormETA` 在环境事务内先取线锁再决定重放、刷新或首版，`Save` 自己再取线锁并先核标记条件与输入版本、核完才写版本行（输家什么都不写，返回 `ETACurrentChanged`，与「预测库读不动」分格）；线内输入版本唯一（同一线上曾出现过的输入版本再到达答当初形成的那一版，不形成新版本）；code/51 判断链候选改为先取规则再选候选：各来源线当前版里按来源优先序取第一个满足质量门槛的，都不满足或规则缺失、冲突时取优先序最靠前的一版（运营企业派生的优先）。
+- 评审：第一轮可合入，无阻断；三条建议（并发输家的版本行经 `FormETA` 路径不随事务回滚——评审在临时 worktree 里复现；乱序重放时「相同输入版本不形成新版本」只比当前版；缺转换用例）与一条口径意见（候选只看来源，运营企业版不达标、承运商版达标时客户看不到 ETA，建议改成达标者中来源优先）协调方全部采纳；窄复审可合入，自做 8 处变异被杀，又提三条建议（`FindByInputs` 与 `Save` 的已出现输入版本查询缺跨包裹、跨里程碑用例——当前代码对，但去掉这两个键会静默吞掉另一包裹的预测；`Save` 自己的线锁与已出现输入版本预检的作用没测试钉住；文档说宽了「重复或乱序都由线内唯一兜住」）作者补齐，6 处变异均红。
+- 协调方单独提交重算的 AT 计数与重生成的机制清点（ADR 索引无变动）；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0、159 个包 ok；`go build ./...`、`go vet ./...` 干净；种子灌一次性库退 0，旧表退场、新两表落库、唯一约束在库里。无 admin-web 改动。
+- 去向：无新票。**`FormETAHandler` 仍没有生产调用方**，这条链在生产上空转、ETA 一维对客仍答待确认；接线还差：承运商预测的接入与运营企业派生预测的形成方（形成方法属产品策略）、调用必须在事务里、`FormETAUndecided` 各格与 `HandoffReference`、`FormETANotAccepted` 要有消费方落点（ADR-0025）、上游遇乱序送不同输入时要有顺序守卫——同 code/51 的「上线前必做清单」，已记入冻结文件「记录」。越权风险点：候选来源次序是产品口径代决（改 `domain.candidateSourcePrecedence` 一处）；存量行的 `prior_version` 指向已被覆盖的前身，读不回，如实带过来（生产无调用方、演示种子不写 ETA 行，无影响）。
