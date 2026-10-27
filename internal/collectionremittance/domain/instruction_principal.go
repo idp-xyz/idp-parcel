@@ -3,8 +3,12 @@ package domain
 import "fmt"
 
 // InstructionPrincipal 是一条代收指令名下本金的派生快照：凭它的报告入了多少、凭它的
-// 到账与短款从`渠道在途`移出了多少、移进`待清分`的到账与落进`溢款`的差额各多少，
-// 以及它的每一条代收事实已支撑了哪一笔记账。
+// 到账、认可的协议抵扣与短款从`渠道在途`移出了多少、移进`待清分`的到账、落进`已抵扣`
+// 的抵扣与落进`溢款`的差额各多少，以及它的每一条代收事实、每一条认可的协议抵扣已
+// 支撑了哪一笔记账。
+//
+// 名下恒等式：入账报告 = `渠道在途`余额 + 移进`待清分`的到账 + 落进`已抵扣`的抵扣 +
+// 落进`短款`的差额，各项都已减去冲正回去的。
 //
 // 按指令而不是按分户账判，是因为报告按指令出、差异按指令追责（ADR-0271 决定二）：
 // 按账合用时，一单到账不足会被同账另一单的在途款填上，短款落在哪一单上就说不清了。
@@ -17,7 +21,9 @@ type InstructionPrincipal struct {
 	inTransit     int64
 	arrivalsMoved int64
 	surplusLanded int64
+	offsetApplied int64
 	factPostings  map[CollectionFactID]PostingID
+	offsetPosted  map[AgreedOffsetID]PostingID
 	unmoved       bool
 }
 
@@ -40,6 +46,7 @@ func DeriveInstructionPrincipal(
 	principal := InstructionPrincipal{
 		instruction:  instruction,
 		factPostings: make(map[CollectionFactID]PostingID),
+		offsetPosted: make(map[AgreedOffsetID]PostingID),
 	}
 	for _, posting := range postings {
 		if posting.ledger != instruction.Ledger() {
@@ -62,9 +69,16 @@ func DeriveInstructionPrincipal(
 			principal.surplusLanded += amount
 		case posting.from == PositionSurplus && posting.to == PositionAwaitingAllocation:
 			principal.surplusLanded -= amount
+		case posting.from == PositionInTransitAtChannel && posting.to == PositionOffsetApplied:
+			principal.offsetApplied += amount
+		case posting.from == PositionOffsetApplied && posting.to == PositionInTransitAtChannel:
+			principal.offsetApplied -= amount
 		}
-		if posting.basisKind == BasisCollectionFact {
+		switch posting.basisKind {
+		case BasisCollectionFact:
 			principal.factPostings[CollectionFactID(posting.basis)] = posting.id
+		case BasisAgreedOffset:
+			principal.offsetPosted[AgreedOffsetID(posting.basis)] = posting.id
 		}
 	}
 	for _, fact := range facts {
@@ -84,11 +98,14 @@ func DeriveInstructionPrincipal(
 // 移位与短款落账，减去冲正回`渠道在途`的）。它就是该指令名下的`渠道在途`余额。
 func (principal InstructionPrincipal) TransferCeiling() int64 { return principal.inTransit }
 
-// ShortfallCeiling 是短款金额能到的上限。短款 = 移位上限 − 经 settlement-accounting
-// 认可的协议抵扣；抵扣今天没有记账形（ADR-0271 越权风险点「协议抵扣的记账形未裁」），
-// 认可的抵扣额留在`渠道在途`，账上读不出它有多少。于是这里只得「不超过」：落一笔大于
-// 上限的短款必错，小于上限的那部分差额可能正是认可的抵扣。
+// ShortfallCeiling 是短款金额能到的上限，也就是此刻名下`渠道在途`的余额：认可的协议
+// 抵扣一经落到`已抵扣`就已经从中扣掉（ADR-0298），余下的才是渠道报了、钱没回来、
+// 又没有协议认可的那部分。抵扣还没落账的认可记录在这里读不出，所以短款先于抵扣落账
+// 会吃掉抵扣的额度，此后抵扣答余额不足，要先冲正多落的短款。
 func (principal InstructionPrincipal) ShortfallCeiling() int64 { return principal.TransferCeiling() }
+
+// OffsetApplied 是该指令已落进`已抵扣`的抵扣额，减去冲正回`渠道在途`的。
+func (principal InstructionPrincipal) OffsetApplied() int64 { return principal.offsetApplied }
 
 // SurplusDue 是按指令算的溢款：该指令移入`待清分`的到账 − 指令金额 − 该指令已落入
 // `溢款`的金额。减去已落入的那一项，同一笔多收就只能落一次。
@@ -102,6 +119,13 @@ func (principal InstructionPrincipal) PostingOf(fact CollectionFactID) (PostingI
 	return id, found
 }
 
+// OffsetPostingOf 交回这条认可的协议抵扣已支撑的那一笔记账。一条认可抵扣至多支撑
+// 一笔，冲正回去之后仍记着它——撤回的认可不能再落第二次，要落走新的认可。
+func (principal InstructionPrincipal) OffsetPostingOf(offset AgreedOffsetID) (PostingID, bool) {
+	id, found := principal.offsetPosted[offset]
+	return id, found
+}
+
 // HasUnmovedArrival 答该指令是否有已登记、还没移位的真实到账。
 func (principal InstructionPrincipal) HasUnmovedArrival() bool { return principal.unmoved }
 
@@ -112,9 +136,10 @@ func (principal InstructionPrincipal) HasUnmovedArrival() bool { return principa
 // 渠道报告入账、迟到的到账移位，或短款冲正回`渠道在途`。溢款金额小于按指令算的溢款
 // 答 ErrInvalidPosting：多收的已经全在`待清分`里，事项报少了，等也等不对。
 //
-// 短款另有一格：该指令有已登记而未移位的到账时不落。钱已经回来，只是报告没补上（或
-// 到账还没过账），此刻落短款会把补报告之后就能移位的本金落进`短款`；先落短款再移
-// 到账，与先移到账再判短款，终局不同，而结果不该随到达次序变。这一格也答余额不足：
+// 短款与抵扣另有一格：该指令有已登记而未移位的到账时不落。钱已经回来，只是报告没补上
+// （或到账还没过账），此刻落短款会把补报告之后就能移位的本金落进`短款`，落抵扣会让
+// 抵扣先吃掉在途款、真实到账的钱反而移不动；先落它们再移到账，与先移到账再落它们，
+// 终局不同，而结果不该随到达次序变，实际到账优先于认可的抵扣。这一格也答余额不足：
 // 处置同样是等上游那一笔、再重跑同一命令。
 func (principal InstructionPrincipal) Admit(posting SubledgerPosting) error {
 	if posting.ledger != principal.instruction.Ledger() {
@@ -131,6 +156,10 @@ func (principal InstructionPrincipal) Admit(posting SubledgerPosting) error {
 				ErrPositionUnderfunded, principal.instruction.ID(), ceiling, posting.id, amount)
 		}
 		return nil
+	}
+	if posting.to == PositionOffsetApplied && principal.unmoved {
+		return fmt.Errorf("%w: instruction %s has an arrival not yet moved out of transit",
+			ErrPositionUnderfunded, principal.instruction.ID())
 	}
 	if posting.from == PositionInTransitAtChannel {
 		if ceiling := principal.TransferCeiling(); amount > ceiling {

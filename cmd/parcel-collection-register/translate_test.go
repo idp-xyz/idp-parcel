@@ -7,7 +7,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/collectionremittance/domain"
 )
 
-// 打错字段名不得静默变成「没给」：未知字段一律拒收，七种输入无一例外。
+// 打错字段名不得静默变成「没给」：未知字段一律拒收，每种输入无一例外。
 func TestEveryInputRefusesUnknownFields(t *testing.T) {
 	cases := []struct {
 		what  string
@@ -31,6 +31,10 @@ func TestEveryInputRefusesUnknownFields(t *testing.T) {
 			"kind":"SHORTFALL","currency":"EUR","amountMinor":2000,"basisRef":"SYN-B1",
 			"observedAt":"2026-08-25T00:00:00Z","writeOff":true}`,
 			func(raw []byte) error { _, err := discrepancyCommandFromJSON(raw); return err }},
+		{"认可抵扣", `{"tenantId":"SYN-T1","offsetRef":"SYN-OFFSET-1","instructionRef":"SYN-INSTR-1",
+			"currency":"EUR","amountMinor":300,"approvalRef":"SYN-SA-APPROVAL-1",
+			"approvedAt":"2026-08-25T00:00:00Z","feeCode":"COD_SERVICE_FEE"}`,
+			func(raw []byte) error { _, err := agreedOffsetCommandFromJSON(raw); return err }},
 		{"回汇批次", `{"tenantId":"SYN-T1","batchRef":"SYN-BATCH-1","customerRef":"SYN-C1",
 			"legalEntityRef":"SYN-E1","currency":"EUR","channelRef":"SYN-CH1",
 			"collectedThrough":"2026-08-31T00:00:00Z","formedAt":"2026-08-31T01:00:00Z",
@@ -136,5 +140,31 @@ func TestTranslationFillsNothingIn(t *testing.T) {
 	noRequirement = strings.Replace(noRequirement, `"requirementRef":"SYN-REQ-1"`, `"requirementRef":""`, 1)
 	if _, err := instructionCommandFromJSON([]byte(noRequirement)); err == nil {
 		t.Fatal("无服务要求依据的指令被接受")
+	}
+}
+
+// 认可抵扣的译装不代填：缺认可引用、零金额、缺认可时刻都在译装处就拒；认可引用与金额
+// 是 settlement-accounting 认可的那一份，本口不替它拟。
+func TestAnAgreedOffsetInputFillsNothingIn(t *testing.T) {
+	complete := `{"tenantId":"SYN-T1","offsetRef":"SYN-OFFSET-1","instructionRef":"SYN-INSTR-1",
+		"currency":"EUR","amountMinor":300,"approvalRef":"SYN-SA-APPROVAL-1",
+		"approvedAt":"2026-08-25T00:00:00Z"}`
+	command, err := agreedOffsetCommandFromJSON([]byte(complete))
+	if err != nil {
+		t.Fatalf("译装完整的认可抵扣：%v", err)
+	}
+	if command.Offset.Approval().String() != "SYN-SA-APPROVAL-1" || command.Offset.Amount().AmountMinor() != 300 {
+		t.Fatalf("译装走样：%+v", command.Offset)
+	}
+	for name, broken := range map[string]string{
+		"缺认可引用": strings.Replace(complete, `"approvalRef":"SYN-SA-APPROVAL-1"`, `"approvalRef":""`, 1),
+		"零金额":   strings.Replace(complete, `"amountMinor":300`, `"amountMinor":0`, 1),
+		"缺认可时刻": strings.Replace(complete, `,
+		"approvedAt":"2026-08-25T00:00:00Z"`, "", 1),
+		"空租户": strings.Replace(complete, `"tenantId":"SYN-T1"`, `"tenantId":""`, 1),
+	} {
+		if _, err := agreedOffsetCommandFromJSON([]byte(broken)); err == nil {
+			t.Fatalf("%s 被接受", name)
+		}
 	}
 }

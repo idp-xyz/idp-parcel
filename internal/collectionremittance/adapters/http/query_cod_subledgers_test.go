@@ -156,6 +156,7 @@ func TestCodSubledgerListTranscribesLedgersVerbatim(t *testing.T) {
 				Balances: ports.CodSubledgerPositionBalances{
 					AwaitingAllocationMinor: 50000,
 					PayableToCustomerMinor:  100000,
+					OffsetAppliedMinor:      3000,
 				},
 				PostingCount: 3,
 				Batches: []ports.CodSubledgerRemittanceBatch{
@@ -208,6 +209,7 @@ func TestCodSubledgerListTranscribesLedgersVerbatim(t *testing.T) {
 				Remitted           string `json:"remitted"`
 				Shortfall          string `json:"shortfall"`
 				Surplus            string `json:"surplus"`
+				OffsetApplied      string `json:"offsetApplied"`
 			} `json:"balances"`
 			RemittanceBatches json.RawMessage `json:"remittanceBatches"`
 		} `json:"subledgers"`
@@ -231,7 +233,8 @@ func TestCodSubledgerListTranscribesLedgersVerbatim(t *testing.T) {
 		posted.Balances.InTransitAtChannel != "0" ||
 		posted.Balances.Remitted != "0" ||
 		posted.Balances.Shortfall != "0" ||
-		posted.Balances.Surplus != "0" {
+		posted.Balances.Surplus != "0" ||
+		posted.Balances.OffsetApplied != "3000" {
 		t.Fatalf("余额没有以最小单位计数串在场:%+v", posted.Balances)
 	}
 	var batches []struct {

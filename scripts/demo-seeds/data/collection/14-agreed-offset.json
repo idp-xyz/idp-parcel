@@ -1,0 +1,9 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "offsetRef": "SYN-COD-OFFSET-01",
+  "instructionRef": "SYN-COD-INSTR-01",
+  "currency": "CNY",
+  "amountMinor": 6000,
+  "approvalRef": "SYN-COD-SA-APPROVAL-01",
+  "approvedAt": "2026-02-20T12:00:00Z"
+}

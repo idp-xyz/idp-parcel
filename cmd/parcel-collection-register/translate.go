@@ -10,7 +10,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/collectionremittance/domain"
 )
 
-// 本文件把七种登记输入 JSON 折成用例命令。翻译严格且零默认：未知字段拒收（打错字段名
+// 本文件把各种登记输入 JSON 折成用例命令。翻译严格且零默认：未知字段拒收（打错字段名
 // 不得静默变成「没给」）、有构造门的标识在这里就拒、封闭词表按落库词逐字匹配，其余判据
 // 留给领域与编排——这里绝不代填。
 //
@@ -239,6 +239,58 @@ func discrepancyCommandFromJSON(raw []byte) (application.RegisterDiscrepancyComm
 		return none, err
 	}
 	return application.RegisterDiscrepancyCommand{Tenant: tenant, Item: item}, nil
+}
+
+type agreedOffsetDocument struct {
+	TenantID       string    `json:"tenantId"`
+	OffsetRef      string    `json:"offsetRef"`
+	InstructionRef string    `json:"instructionRef"`
+	Currency       string    `json:"currency"`
+	AmountMinor    int64     `json:"amountMinor"`
+	ApprovalRef    string    `json:"approvalRef"`
+	ApprovedAt     time.Time `json:"approvedAt"`
+}
+
+// agreedOffsetCommandFromJSON 只收 settlement-accounting 认可的那一份引用：认可引用与
+// 当时引用的金额。抵扣怎样落账不是这里的输入，落账另有一笔凭本记录的记账命令。
+func agreedOffsetCommandFromJSON(raw []byte) (application.RegisterAgreedOffsetCommand, error) {
+	none := application.RegisterAgreedOffsetCommand{}
+	var document agreedOffsetDocument
+	if err := decodeStrict(raw, &document, "认可抵扣"); err != nil {
+		return none, err
+	}
+
+	tenant, err := tenantFrom(document.TenantID)
+	if err != nil {
+		return none, err
+	}
+	id, err := domain.NewAgreedOffsetID(document.OffsetRef)
+	if err != nil {
+		return none, err
+	}
+	instruction, err := domain.NewCollectionInstructionID(document.InstructionRef)
+	if err != nil {
+		return none, err
+	}
+	amount, err := moneyFrom(document.Currency, document.AmountMinor)
+	if err != nil {
+		return none, err
+	}
+	approval, err := domain.NewApprovalReference(document.ApprovalRef)
+	if err != nil {
+		return none, err
+	}
+	offset, err := domain.RegisterAgreedOffset(domain.AgreedOffsetSpec{
+		ID:          id,
+		Instruction: instruction,
+		Amount:      amount,
+		Approval:    approval,
+		ApprovedAt:  document.ApprovedAt,
+	})
+	if err != nil {
+		return none, err
+	}
+	return application.RegisterAgreedOffsetCommand{Tenant: tenant, Offset: offset}, nil
 }
 
 type batchDocument struct {

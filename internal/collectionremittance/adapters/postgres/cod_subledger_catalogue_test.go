@@ -105,7 +105,7 @@ func TestEmptyCodSubledgerRegisterAnswersAnEmptyList(t *testing.T) {
 	}
 }
 
-// Covers: 六位置余额按记账派生(去向侧加、来源侧减)、记账笔数照实、批次按标识升序
+// Covers: 各位置余额(含已抵扣)按记账派生(去向侧加、来源侧减)、记账笔数照实、批次按标识升序
 // 附于所属账、开立面字段照登转写;跨租户不可见。
 func TestCodSubledgerCatalogueDerivesBalancesAndAttachesBatches(t *testing.T) {
 	catalogue, fixture := newCodSubledgerCatalogue(t)
@@ -124,6 +124,17 @@ func TestCodSubledgerCatalogueDerivesBalancesAndAttachesBatches(t *testing.T) {
 	fixture.seedPosting(t, "tenant-a", "SYN-POST-03",
 		"SYN-CUST-01", "SYN-LE-01", "SYN-CUR-01", "SYN-CHAN-01",
 		"AWAITING_ALLOCATION", "PAYABLE_TO_CUSTOMER", 100000, "ALLOCATION", "SYN-INSTR-01")
+	// 另一条报告入账 3000,其中 1200 经认可的协议抵扣落进已抵扣、再冲正 200 回渠道在途:
+	// 已抵扣余 1000、渠道在途余 2000。
+	fixture.seedPosting(t, "tenant-a", "SYN-POST-04",
+		"SYN-CUST-01", "SYN-LE-01", "SYN-CUR-01", "SYN-CHAN-01",
+		"EXTERNAL_SOURCE", "IN_TRANSIT_AT_CHANNEL", 3000, "COLLECTION_FACT", "SYN-FACT-03")
+	fixture.seedPosting(t, "tenant-a", "SYN-POST-05",
+		"SYN-CUST-01", "SYN-LE-01", "SYN-CUR-01", "SYN-CHAN-01",
+		"IN_TRANSIT_AT_CHANNEL", "OFFSET_APPLIED", 1200, "AGREED_OFFSET", "SYN-OFFSET-01")
+	fixture.seedPosting(t, "tenant-a", "SYN-POST-06",
+		"SYN-CUST-01", "SYN-LE-01", "SYN-CUR-01", "SYN-CHAN-01",
+		"OFFSET_APPLIED", "IN_TRANSIT_AT_CHANNEL", 200, "CORRECTION", "SYN-POST-05")
 
 	successionAt := catalogueBaseAt.Add(72 * time.Hour)
 	fixture.seed(t,
@@ -152,14 +163,15 @@ func TestCodSubledgerCatalogueDerivesBalancesAndAttachesBatches(t *testing.T) {
 		t.Fatalf("开立面字段转写走样:%+v", row)
 	}
 	balances := row.Balances
-	if balances.InTransitAtChannelMinor != 0 ||
+	if balances.InTransitAtChannelMinor != 2000 ||
 		balances.AwaitingAllocationMinor != 50000 ||
 		balances.PayableToCustomerMinor != 100000 ||
-		balances.RemittedMinor != 0 || balances.ShortfallMinor != 0 || balances.SurplusMinor != 0 {
+		balances.RemittedMinor != 0 || balances.ShortfallMinor != 0 || balances.SurplusMinor != 0 ||
+		balances.OffsetAppliedMinor != 1000 {
 		t.Fatalf("派生余额走样:%+v", balances)
 	}
-	if row.PostingCount != 3 {
-		t.Fatalf("记账笔数 = %d,要 3", row.PostingCount)
+	if row.PostingCount != 6 {
+		t.Fatalf("记账笔数 = %d,要 6", row.PostingCount)
 	}
 	if len(row.Batches) != 2 ||
 		row.Batches[0].Batch != "SYN-BATCH-01" || row.Batches[0].State != "COLLECTED" ||

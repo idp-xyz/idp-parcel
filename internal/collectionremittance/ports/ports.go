@@ -1,7 +1,7 @@
 // Package ports 是代收与清分对外的端口面：写口把登记与记账放进存储，点读口把已在册
 // 的内容交回给编排做冲突判定与余额守卫。
 //
-// 端口按聚合族分三对，不合成一个大接口：代收面（指令、事实、差异事项）、分户账面
+// 端口按聚合族分三对，不合成一个大接口：代收面（指令、事实、差异事项、认可的协议抵扣）、分户账面
 // （开立与记账）、回汇面（批次）。合成之后任何一族换形状都要动另外两族的实现。
 //
 // 本文件只放**点读**口：按键取一行、按分户账键取余额、按代收指令取它名下的事实与记账，
@@ -28,11 +28,16 @@ const (
 	SaveAlreadyRegistered
 )
 
-// CollectionRegistry 是代收面三本册子的写口：代收指令、代收事实与差异事项。
+// CollectionRegistry 是代收面四本册子的写口：代收指令、代收事实、差异事项与认可的
+// 协议抵扣。
 //
-// 三者都只追加，没有更新方法。代收事实的更正走「追加新事实并关联原事实」，差异事项
-// 的更正同理；指令内容变化走登记新指令。写口不提供任何改写既有行的路径，是因为已依
-// 它们落账的记账不会跟着回退——改了上游，账面就凭空指向一份不存在过的依据。
+// 四者都只追加，没有更新方法。代收事实的更正走「追加新事实并关联原事实」，差异事项
+// 的更正同理；指令内容变化走登记新指令；认可的抵扣被更正走新认可新记录，被撤回走冲正
+// 已落的记账。写口不提供任何改写既有行的路径，是因为已依它们落账的记账不会跟着回退
+// ——改了上游，账面就凭空指向一份不存在过的依据。
+//
+// RegisterAgreedOffset 的撞键有两种：标识相同，或（认可引用，指令）相同；两者都答
+// `已登记`、不覆盖，由编排按标识读回区分重放与冲突。
 type CollectionRegistry interface {
 	RegisterInstruction(
 		ctx context.Context,
@@ -49,9 +54,14 @@ type CollectionRegistry interface {
 		tenant domain.TenantID,
 		item domain.DiscrepancyItem,
 	) (SaveOutcome, error)
+	RegisterAgreedOffset(
+		ctx context.Context,
+		tenant domain.TenantID,
+		offset domain.AgreedOffset,
+	) (SaveOutcome, error)
 }
 
-// CollectionView 按键读回代收面三本册子的一行。found=false 即该键未登记——实例半边
+// CollectionView 按键读回代收面四本册子的一行。found=false 即该键未登记——实例半边
 // 未提供时停在未决，不拿零值或空引用兜底。
 type CollectionView interface {
 	LoadInstruction(
@@ -69,6 +79,11 @@ type CollectionView interface {
 		tenant domain.TenantID,
 		id domain.DiscrepancyItemID,
 	) (domain.DiscrepancyItem, bool, error)
+	LoadAgreedOffset(
+		ctx context.Context,
+		tenant domain.TenantID,
+		id domain.AgreedOffsetID,
+	) (domain.AgreedOffset, bool, error)
 	// LoadInstructionFacts 交回该指令名下的全部代收事实，空切片即一条也没登记。
 	LoadInstructionFacts(
 		ctx context.Context,
@@ -128,9 +143,18 @@ type SubledgerView interface {
 		tenant domain.TenantID,
 		id domain.PostingID,
 	) (domain.SubledgerPosting, bool, error)
+	// LoadCorrectionOf 交回冲正了指定记账的那一笔。一笔记账至多被冲正一次，所以至多
+	// 一笔；重复到达的冲正要在余额守卫之前凭它判出冲突，否则同账别的指令的余额够扣
+	// 时，第二笔冲正会多拿别人的钱。
+	LoadCorrectionOf(
+		ctx context.Context,
+		tenant domain.TenantID,
+		original domain.PostingID,
+	) (domain.SubledgerPosting, bool, error)
 	// LoadInstructionPostings 交回依据追溯到该指令的全部记账：凭它的代收事实、凭它的
-	// 差异事项、凭它清分的，以及沿冲正链冲正这些记账的。按指令判上限（ADR-0271）要的
-	// 正是这一组；冲正不跟着追溯，冲正回`渠道在途`的短款就还不回它的指令。
+	// 差异事项、凭它的认可抵扣、凭它清分的，以及沿冲正链冲正这些记账的。按指令判上限
+	// （ADR-0271）要的正是这一组；冲正不跟着追溯，冲正回`渠道在途`的短款就还不回它的
+	// 指令。
 	LoadInstructionPostings(
 		ctx context.Context,
 		tenant domain.TenantID,

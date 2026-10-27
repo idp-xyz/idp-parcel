@@ -3,7 +3,9 @@
 //
 // 本包不依赖 HTTP 与 pgx：判断在这里，落库在 adapters。全部金额都是**客户的钱**——
 // 受托保管口径，不是经营收入；COD 服务费与协议抵扣归 settlement-accounting，本包
-// 不表达它们，也不在账内与本金净额。
+// 不拥有它们，也不在账内与本金净额。有效协议允许的抵扣只以 settlement-accounting
+// 的认可引用进来，本包记的是客户本金因这份认可离开渠道欠款的去向（`已抵扣`），不是
+// 抵扣金额的归属。
 //
 // 汇率、回汇周期、手续费与支付通道不进本包：它们属实例半边，写成常量就是替租户拟
 // 商业口径（判据见 CONTEXT 的「汇率、回汇周期、手续费与支付通道属运营企业的商业与
@@ -24,6 +26,7 @@ var (
 	ErrInvalidPosting        = errors.New("collection remittance: invalid subledger posting")
 	ErrInvalidBatch          = errors.New("collection remittance: invalid remittance batch")
 	ErrInvalidDiscrepancy    = errors.New("collection remittance: invalid discrepancy item")
+	ErrInvalidAgreedOffset   = errors.New("collection remittance: invalid agreed offset")
 
 	// ErrPositionUnderfunded 是「该资金位置余额不够这笔记账扣」。它不是输入不合法：
 	// 输入完全可能是对的，只是此刻账上还没有那么多钱——处置是等实收或先清分，不是
@@ -155,8 +158,8 @@ func NewPostingID(value string) (PostingID, error) {
 	return PostingID{required}, err
 }
 
-// BasisReference 指名一笔记账所依据的那一行：代收事实、回汇批次、差异事项或被冲正
-// 的原记账。依据种类由 PostingBasisKind 声明，两者成对才说得清依据指向哪张册子。
+// BasisReference 指名一笔记账所依据的那一行：代收事实、回汇批次、差异事项、认可的
+// 协议抵扣或被冲正的原记账。依据种类由 PostingBasisKind 声明，两者成对才说得清依据指向哪张册子。
 type BasisReference struct{ requiredValue }
 
 func NewBasisReference(value string) (BasisReference, error) {
@@ -178,6 +181,23 @@ type DiscrepancyItemID struct{ requiredValue }
 func NewDiscrepancyItemID(value string) (DiscrepancyItemID, error) {
 	required, err := newRequiredValue("discrepancy item ID", value)
 	return DiscrepancyItemID{required}, err
+}
+
+// AgreedOffsetID 指名本上下文登记的一条认可的协议抵扣。
+type AgreedOffsetID struct{ requiredValue }
+
+func NewAgreedOffsetID(value string) (AgreedOffsetID, error) {
+	required, err := newRequiredValue("agreed offset ID", value)
+	return AgreedOffsetID{required}, err
+}
+
+// ApprovalReference 指名 settlement-accounting 对一笔协议抵扣的认可。认可及其金额归
+// settlement-accounting，本上下文只引用，不读它、不改它。
+type ApprovalReference struct{ requiredValue }
+
+func NewApprovalReference(value string) (ApprovalReference, error) {
+	required, err := newRequiredValue("approval reference", value)
+	return ApprovalReference{required}, err
 }
 
 // Money 是一笔带币种的正金额。零金额构造不出：本上下文的每一笔登记与记账都表达一次

@@ -13,7 +13,7 @@ import {
 const info = moduleInfoById['cod-ledger'];
 
 // 行对象是一本代收分户账(票 admin-remainder-mechanism-batch/04):四维键、保管依据、
-// 开立时间、六位置派生余额与回汇批次引用,接 GET /collection-subledgers。
+// 开立时间、各位置派生余额与回汇批次引用,接 GET /collection-subledgers。
 //
 // 旧骨架里的「代收资金义务」「已接受实收金额」两列随建模落地撤下——义务归代收指令册、
 // 实收归代收事实册,都不是分户账行的字段(判据同口岸页撤「所属区域/适用性」那笔:
@@ -49,12 +49,13 @@ const columns: ListColumn<CodSubledgerRecord>[] = [
   amountCol('remitted', '已汇付', (row) => row.balances.remitted),
   amountCol('shortfall', '短款', (row) => row.balances.shortfall),
   amountCol('surplus', '溢款', (row) => row.balances.surplus),
+  amountCol('offset-applied', '已抵扣(协议认可)', (row) => row.balances.offsetApplied),
   {
     id: 'posting-count',
     header: '记账笔数',
     align: 'right',
     className: 'font-mono',
-    // 「已开立但从未记账」(0 笔)与「记账相抵为零」在六个零余额上长着同一张脸,
+    // 「已开立但从未记账」(0 笔)与「记账相抵为零」在全零余额上长着同一张脸,
     // 笔数是唯一分得开两态的照实转写。
     render: (row) => String(row.postingCount),
   },

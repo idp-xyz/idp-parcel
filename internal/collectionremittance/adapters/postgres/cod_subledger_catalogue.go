@@ -18,7 +18,7 @@ import (
 //
 // 开立面、余额派生与批次**一条语句取回**:ReadExecutor 不保证两条语句同一快照,分次
 // 取会拼出从未同时存在的账面状态(记账与读并发时尤甚)——判据同 customscompliance
-// CaseRegisterCatalogue 文件头那句。余额走 LATERAL 聚合,一次扫过该账全部记账、六个
+// CaseRegisterCatalogue 文件头那句。余额走 LATERAL 聚合,一次扫过该账全部记账、各个
 // 位置各自「去向侧和−来源侧和」;批次走相关子查询 json_agg,各聚各的,不与余额聚合
 // 做笛卡尔积。
 //
@@ -68,7 +68,7 @@ func (catalogue *CodSubledgerCatalogue) ListCodSubledgers(
 		        s.custody_basis_ref, s.opened_at,
 		        balance.in_transit, balance.awaiting, balance.payable,
 		        balance.remitted, balance.shortfall, balance.surplus,
-		        balance.posting_count,
+		        balance.offset_applied, balance.posting_count,
 		        (SELECT COALESCE(
 		                    json_agg(
 		                        json_build_object(
@@ -108,6 +108,9 @@ func (catalogue *CodSubledgerCatalogue) ListCodSubledgers(
 		            COALESCE(SUM(CASE WHEN p.to_position   = 'SURPLUS' THEN p.amount_minor ELSE 0 END)
 		                   - SUM(CASE WHEN p.from_position = 'SURPLUS' THEN p.amount_minor ELSE 0 END),
 		                     0)::bigint AS surplus,
+		            COALESCE(SUM(CASE WHEN p.to_position   = 'OFFSET_APPLIED' THEN p.amount_minor ELSE 0 END)
+		                   - SUM(CASE WHEN p.from_position = 'OFFSET_APPLIED' THEN p.amount_minor ELSE 0 END),
+		                     0)::bigint AS offset_applied,
 		            COUNT(*)::bigint AS posting_count
 		          FROM collection_remittance.subledger_posting AS p
 		         WHERE p.tenant_id = s.tenant_id
@@ -142,6 +145,7 @@ func (catalogue *CodSubledgerCatalogue) ListCodSubledgers(
 			&row.Balances.RemittedMinor,
 			&row.Balances.ShortfallMinor,
 			&row.Balances.SurplusMinor,
+			&row.Balances.OffsetAppliedMinor,
 			&row.PostingCount,
 			&batchesJSON,
 		); err != nil {

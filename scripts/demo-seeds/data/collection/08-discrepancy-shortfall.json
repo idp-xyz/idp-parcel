@@ -4,7 +4,7 @@
   "instructionRef": "SYN-COD-INSTR-01",
   "kind": "SHORTFALL",
   "currency": "CNY",
-  "amountMinor": 10000,
+  "amountMinor": 4000,
   "basisRef": "SYN-COD-FACT-02",
   "observedAt": "2026-02-21T00:00:00Z"
 }

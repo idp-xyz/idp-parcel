@@ -179,10 +179,10 @@ func TestAnArrivalCannotBorrowAnotherInstructionsInTransit(t *testing.T) {
 	}
 }
 
-// 场景十七在已有记账形的那一半：报告 100 入`渠道在途`，到账 96 移进`待清分`，经结算
-// 认可的协议抵扣 3 没有记账形，留在`渠道在途`；短款事项 1 自在途落入。短款按「报告 −
-// 移出」判上限：事项 5 越过 X 名下的 4，答余额不足。
-// Covers: AT-CR-017（短款半边；抵扣记账形未实现）
+// 认可的协议抵扣还没落账时，短款按「报告 − 移出」判上限：报告 100 入`渠道在途`，到账 96
+// 移进`待清分`，短款事项 5 越过该指令名下的 4，答余额不足，1 落得下。抵扣落账之后的
+// 整条场景见 TestScenarioSeventeenSettlesTheAgreedOffsetOutOfTransit。
+// Covers: AT-CR-017（抵扣未落账的短款上限）
 func TestScenarioSeventeenShortfallStaysWithinTheReportLessWhatMoved(t *testing.T) {
 	store := newStore()
 	handler := store.handler()
@@ -213,7 +213,7 @@ func TestScenarioSeventeenShortfallStaysWithinTheReportLessWhatMoved(t *testing.
 	if balance.At(domain.PositionInTransitAtChannel) != 3 ||
 		balance.At(domain.PositionAwaitingAllocation) != 96 ||
 		balance.At(domain.PositionShortfall) != 1 {
-		t.Fatalf("场景十七账面：渠道在途 %d 待清分 %d 短款 %d，要 3 / 96 / 1",
+		t.Fatalf("抵扣未落账的账面：渠道在途 %d 待清分 %d 短款 %d，要 3 / 96 / 1",
 			balance.At(domain.PositionInTransitAtChannel),
 			balance.At(domain.PositionAwaitingAllocation),
 			balance.At(domain.PositionShortfall))

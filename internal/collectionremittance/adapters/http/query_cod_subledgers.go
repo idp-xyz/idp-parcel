@@ -133,6 +133,7 @@ func subledgerBodyOf(entry ports.CodSubledgerCatalogueRow) codSubledgerBody {
 			Remitted:           minorAmount(entry.Balances.RemittedMinor),
 			Shortfall:          minorAmount(entry.Balances.ShortfallMinor),
 			Surplus:            minorAmount(entry.Balances.SurplusMinor),
+			OffsetApplied:      minorAmount(entry.Balances.OffsetAppliedMinor),
 		},
 		RemittanceBatches: batches,
 	}
@@ -174,7 +175,7 @@ type codSubledgerListResponse struct {
 	Subledgers []codSubledgerBody `json:"subledgers"`
 }
 
-// codSubledgerBody 逐字段透出一本分户账:四维键、保管依据引用、开立时间、六位置
+// codSubledgerBody 逐字段透出一本分户账:四维键、保管依据引用、开立时间、各位置
 // 派生余额、记账笔数与引用本账的回汇批次。custodyBasis 是标识引用——「引用的商业
 // 责任此刻是否在册」是读者拿 party-commercial 册子对照的判断,本行不代答(裁量同
 // 申报路径引用口岸那条)。postingCount 分开「从未记账」与「记账相抵为零」两态——
@@ -191,7 +192,9 @@ type codSubledgerBody struct {
 	RemittanceBatches []remittanceBatchBody `json:"remittanceBatches"`
 }
 
-// positionBalancesBody 六位置派生余额,最小单位十进制计数串(见 minorAmount)。
+// positionBalancesBody 各账内位置的派生余额,最小单位十进制计数串(见 minorAmount)。
+// offsetApplied 是经 settlement-accounting 认可的协议抵扣自渠道在途落入的那部分,
+// 不再是渠道还欠的,也不付给客户。
 type positionBalancesBody struct {
 	InTransitAtChannel string `json:"inTransitAtChannel"`
 	AwaitingAllocation string `json:"awaitingAllocation"`
@@ -199,6 +202,7 @@ type positionBalancesBody struct {
 	Remitted           string `json:"remitted"`
 	Shortfall          string `json:"shortfall"`
 	Surplus            string `json:"surplus"`
+	OffsetApplied      string `json:"offsetApplied"`
 }
 
 // remittanceBatchBody 逐字段透出一个回汇批次:标识、单向状态、归集截点与形成时刻。

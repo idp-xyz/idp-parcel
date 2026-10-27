@@ -3,9 +3,11 @@
 // ——受托代收资金的登记与记账是运营动作，不是在线请求面，走独立进程而不进 parcel-api
 // 的端点表（先例：parcel-customs-register、parcel-governance-register）。
 //
-// 七个命令覆盖 CONTEXT 的五个词形加分户账两面：instruction（代收指令）、subledger
-// （分户账开立）、fact（代收事实）、discrepancy（差异事项）、batch（回汇批次形成）、
-// hand-over（交出汇付主张）、posting（分户账记账）。
+// 各命令覆盖 CONTEXT 的词形加分户账两面：instruction（代收指令）、subledger（分户账
+// 开立）、fact（代收事实）、discrepancy（差异事项）、agreed-offset（认可的协议抵扣）、
+// batch（回汇批次形成）、hand-over（交出汇付主张）、posting（分户账记账）。
+// agreed-offset 只登记 settlement-accounting 认可的抵扣引用，不动账；落账是 posting 凭它
+// 的一笔记账，本进程不读 settlement-accounting。
 //
 // **记账输入里没有分户账键，也没有币种**：键由依据推出，币种取自那本账。这不是省字段
 // ——传键的写法在库里看不出记错账，传币种的写法在库里看不出记错币种。
@@ -26,7 +28,8 @@
 //	    批次已交出（成员只增不改，要继续归集就形成新批次）；
 //	3 = 未决（依赖故障，登记与否未知，重跑同一命令即可续办）；
 //	4 = 账上钱不够（来源位置余额不足，或按指令算的上限不够）。它单独一格：请求本身没错，
-//	    等上游那一笔（该指令的渠道报告入账、到账移位、短款冲正、实收或先清分）之后重跑
+//	    等上游那一笔（该指令的渠道报告入账、到账移位、短款冲正、实收或先清分；落抵扣还要
+//	    等该指令的到账先移位）之后重跑
 //	    同一命令就会成——与 3 的区别是这一格**确定没落账**，而 3 连落没落都不知道。
 package main
 
@@ -60,20 +63,21 @@ const (
 )
 
 const (
-	commandInstruction = "instruction"
-	commandSubledger   = "subledger"
-	commandFact        = "fact"
-	commandDiscrepancy = "discrepancy"
-	commandBatch       = "batch"
-	commandHandOver    = "hand-over"
-	commandPosting     = "posting"
+	commandInstruction  = "instruction"
+	commandSubledger    = "subledger"
+	commandFact         = "fact"
+	commandDiscrepancy  = "discrepancy"
+	commandAgreedOffset = "agreed-offset"
+	commandBatch        = "batch"
+	commandHandOver     = "hand-over"
+	commandPosting      = "posting"
 )
 
 // allCommands 的次序就是登记的依赖次序：指令与分户账先行，事实/批次/差异事项挂在
 // 指令或分户账上，记账最后——外键链与依据门都按这个方向立。
 var allCommands = []string{
 	commandInstruction, commandSubledger, commandFact,
-	commandDiscrepancy, commandBatch, commandHandOver, commandPosting,
+	commandDiscrepancy, commandAgreedOffset, commandBatch, commandHandOver, commandPosting,
 }
 
 // registrar 是本口的全部依赖：一个用例 handler 加环境事务的来源。
@@ -248,6 +252,14 @@ func dispatcherFor(command string, raw []byte) (dispatcher, error) {
 		return func(ctx context.Context, handler *application.Handler) (application.Outcome, error) {
 			return handler.RegisterDiscrepancy(ctx, parsed)
 		}, nil
+	case commandAgreedOffset:
+		parsed, err := agreedOffsetCommandFromJSON(raw)
+		if err != nil {
+			return nil, err
+		}
+		return func(ctx context.Context, handler *application.Handler) (application.Outcome, error) {
+			return handler.RegisterAgreedOffset(ctx, parsed)
+		}, nil
 	case commandBatch:
 		parsed, err := batchCommandFromJSON(raw)
 		if err != nil {
@@ -291,13 +303,13 @@ func answer(command string, outcome application.Outcome) (string, int) {
 	case application.OutcomeContentConflict:
 		return message + "（同键已在册且内容不同——绝不覆盖，先核对既有登记）", exitNeedsReview
 	case application.OutcomeBasisMissing:
-		return message + "（依据不在册：先登代收指令/分户账/回汇批次/差异事项/原记账）", exitNeedsReview
+		return message + "（依据不在册：先登代收指令/分户账/回汇批次/差异事项/认可抵扣/原记账）", exitNeedsReview
 	case application.OutcomeBatchClosed:
 		return message + "（批次已交出汇付主张，成员只增不改——要继续归集请形成新批次）", exitNeedsReview
 	case application.OutcomeUndecided:
 		return message, exitUndecided
 	case application.OutcomeUnderfunded:
-		return message + "（来源位置或该指令名下余额不足——等该指令的报告入账、到账移位、实收或先清分后重跑同一命令）", exitUnderfunded
+		return message + "（来源位置或该指令名下余额不足——等该指令的报告入账、到账移位、实收或先清分后重跑同一命令；抵扣还要等该指令的到账先移位）", exitUnderfunded
 	default:
 		// 用例交回一个它自己都不认识的格是实现坏了，不是业务答案。
 		return fmt.Sprintf("%s: 未知应用结果 %d", command, outcome), exitUndecided

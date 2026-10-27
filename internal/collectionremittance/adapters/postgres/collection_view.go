@@ -289,3 +289,60 @@ func (view *CollectionPointView) LoadDiscrepancyItem(
 	}
 	return item, true, nil
 }
+
+func (view *CollectionPointView) LoadAgreedOffset(
+	ctx context.Context,
+	tenant domain.TenantID,
+	id domain.AgreedOffsetID,
+) (domain.AgreedOffset, bool, error) {
+	none := domain.AgreedOffset{}
+	if strings.TrimSpace(id.String()) == "" {
+		return none, false, fmt.Errorf("load agreed offset: the agreed offset ID is blank")
+	}
+	querier, err := view.db.ReadExecutor(ctx)
+	if err != nil {
+		return none, false, fmt.Errorf("load agreed offset: %w", err)
+	}
+
+	var (
+		instructionRaw, currencyRaw, approvalRaw string
+		amountMinor                              int64
+		approvedAt                               time.Time
+	)
+	err = querier.QueryRow(ctx,
+		`SELECT instruction_ref, currency, amount_minor, approval_ref, approved_at
+		   FROM collection_remittance.agreed_offset
+		  WHERE tenant_id = $1 AND offset_ref = $2`,
+		tenant.String(), id.String(),
+	).Scan(&instructionRaw, &currencyRaw, &amountMinor, &approvalRaw, &approvedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return none, false, nil
+	}
+	if err != nil {
+		return none, false, fmt.Errorf("load agreed offset: %w", err)
+	}
+
+	instruction, err := domain.NewCollectionInstructionID(instructionRaw)
+	if err != nil {
+		return none, false, fmt.Errorf("rebuild agreed offset: %w", err)
+	}
+	amount, err := rebuildMoney(currencyRaw, amountMinor)
+	if err != nil {
+		return none, false, err
+	}
+	approval, err := domain.NewApprovalReference(approvalRaw)
+	if err != nil {
+		return none, false, fmt.Errorf("rebuild agreed offset: %w", err)
+	}
+	offset, err := domain.RegisterAgreedOffset(domain.AgreedOffsetSpec{
+		ID:          id,
+		Instruction: instruction,
+		Amount:      amount,
+		Approval:    approval,
+		ApprovedAt:  approvedAt,
+	})
+	if err != nil {
+		return none, false, fmt.Errorf("rebuild agreed offset: %w", err)
+	}
+	return offset, true, nil
+}

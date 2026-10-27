@@ -10,12 +10,13 @@ import (
 	"go.idp.xyz/idp-parcel/internal/collectionremittance/ports"
 )
 
-// CollectionRegistrations 实现 ports.CollectionRegistry：代收指令、代收事实与差异事项
-// 三本册子的写口（0001 建表）。
+// CollectionRegistrations 实现 ports.CollectionRegistry：代收指令、代收事实、差异事项
+// 与认可的协议抵扣四本册子的写口（0001、0003 建表）。
 //
-// 三个方法都只 INSERT ... ON CONFLICT DO NOTHING，没有一处 UPDATE：代收事实的更正走
-// 追加新事实，指令内容变化走登记新指令。给这三张表任何改写入口，已依它们落账的记账
-// 就会凭空指向一份不存在过的依据，而账面上看不出这件事发生过。
+// 各方法都只 INSERT ... ON CONFLICT DO NOTHING，没有一处 UPDATE：代收事实的更正走
+// 追加新事实，指令内容变化走登记新指令，认可的抵扣被更正走新认可新行。给这些表任何
+// 改写入口，已依它们落账的记账就会凭空指向一份不存在过的依据，而账面上看不出这件事
+// 发生过。
 type CollectionRegistrations struct {
 	db *bentopg.DB
 }
@@ -126,6 +127,35 @@ func (registry *CollectionRegistrations) RegisterDiscrepancyItem(
 	)
 	if err != nil {
 		return ports.SaveOutcomeInvalid, fmt.Errorf("register discrepancy item: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ports.SaveAlreadyRegistered, nil
+	}
+	return ports.SaveRegistered, nil
+}
+
+func (registry *CollectionRegistrations) RegisterAgreedOffset(
+	ctx context.Context,
+	tenant domain.TenantID,
+	offset domain.AgreedOffset,
+) (ports.SaveOutcome, error) {
+	executor, err := registry.db.RequireExecutor(ctx)
+	if err != nil {
+		return ports.SaveOutcomeInvalid, fmt.Errorf("register agreed offset: %w", err)
+	}
+
+	tag, err := executor.Exec(ctx,
+		`INSERT INTO collection_remittance.agreed_offset
+			(tenant_id, offset_ref, instruction_ref, currency, amount_minor,
+			 approval_ref, approved_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		 ON CONFLICT DO NOTHING`,
+		tenant.String(), offset.ID().String(), offset.Instruction().String(),
+		offset.Amount().Currency().String(), offset.Amount().AmountMinor(),
+		offset.Approval().String(), offset.ApprovedAt().UTC(),
+	)
+	if err != nil {
+		return ports.SaveOutcomeInvalid, fmt.Errorf("register agreed offset: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return ports.SaveAlreadyRegistered, nil

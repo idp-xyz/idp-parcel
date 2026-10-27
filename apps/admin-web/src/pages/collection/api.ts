@@ -9,7 +9,7 @@ import { exchangeMasterData, type ApiResult } from '../catalogue-api';
 export type { ApiResult } from '../catalogue-api';
 
 /**
- * 六个资金位置的派生余额,币种最小单位十进制计数串。余额由分户账记账派生——账上
+ * 各账内资金位置的派生余额,币种最小单位十进制计数串。余额由分户账记账派生——账上
  * 没有可改写的余额字段;传输用串不用数,是照实转写不是算术值:小数位属币种语义,
  * 本读面不代判精度,页面也不做换算。
  */
@@ -26,6 +26,8 @@ export interface SubledgerPositionBalances {
   shortfall: string;
   /** 溢款:实收多于指令的差额。 */
   surplus: string;
+  /** 已抵扣:经 settlement-accounting 认可的协议抵扣自渠道在途落入(账内终局位置),不再是渠道还欠的,也不付给客户。 */
+  offsetApplied: string;
 }
 
 /**
@@ -41,7 +43,7 @@ export interface RemittanceBatchRecord {
 
 /**
  * 一本代收分户账:四维键(货主客户、责任法人、币种、代收渠道)、保管依据引用、开立
- * 时间、六位置派生余额与引用本账的回汇批次。四维齐备才构成一本账,币种在键上因此
+ * 时间、各位置派生余额与引用本账的回汇批次。四维齐备才构成一本账,币种在键上因此
  * 账内不发生换算。
  *
  * remittanceBatches 空数组即「尚无批次」——回汇周期与汇付通道属实例半边,未配置时
@@ -56,7 +58,7 @@ export interface CodSubledgerRecord {
   custodyBasis: string;
   openedAt: string;
   /**
-   * 记账笔数,分开「从未记账」与「记账相抵为零」两态——两态在六个零余额上长着同一
+   * 记账笔数,分开「从未记账」与「记账相抵为零」两态——两态在全零余额上长着同一
    * 张脸。它是行数不是金额,故用数不用串。
    */
   postingCount: number;

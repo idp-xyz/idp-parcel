@@ -94,8 +94,12 @@ func (ledger Subledger) OpenedAt() time.Time { return ledger.openedAt }
 // FundPosition 是代收本金在分户账内所处的受托状态，封闭词表。
 //
 // `PositionExternalSource` 不是账内位置：它只作为入账记账的来源侧出现，代表本金自
-// 一笔已接受的代收事实进入本账。去向侧没有账外位置——已汇付是账内终局，于是全账
-// 总额恒等于入账之和，守恒在一条求和上就核得完。
+// 一笔已接受的代收事实进入本账。去向侧没有账外位置——已汇付与已抵扣都是账内终局，
+// 于是全账总额恒等于入账之和，守恒在一条求和上就核得完。
+//
+// `PositionOffsetApplied`（已抵扣）装的是经 settlement-accounting 认可的协议抵扣：
+// 渠道按有效协议从回款里扣下的那部分本金，不再是渠道还欠的，也不会付给客户。它是
+// 账内位置而不是账外出口，抵扣金额的归属仍在 settlement-accounting。
 type FundPosition uint8
 
 const (
@@ -107,6 +111,7 @@ const (
 	PositionRemitted
 	PositionShortfall
 	PositionSurplus
+	PositionOffsetApplied
 )
 
 // String 交回落库词。未知格交回空串而不是占位词：空串在 SQL 上撞 CHECK，占位词会
@@ -127,6 +132,8 @@ func (position FundPosition) String() string {
 		return "SHORTFALL"
 	case PositionSurplus:
 		return "SURPLUS"
+	case PositionOffsetApplied:
+		return "OFFSET_APPLIED"
 	default:
 		return ""
 	}
@@ -150,6 +157,7 @@ func ParseFundPosition(text string) (FundPosition, bool) {
 		PositionRemitted,
 		PositionShortfall,
 		PositionSurplus,
+		PositionOffsetApplied,
 	} {
 		if candidate.String() == text {
 			return candidate, true
@@ -158,7 +166,7 @@ func ParseFundPosition(text string) (FundPosition, bool) {
 	return FundPositionUnknown, false
 }
 
-// PostingBasisKind 声明一笔记账凭什么落账，封闭四值。它与 BasisReference 成对：
+// PostingBasisKind 声明一笔记账凭什么落账，词表封闭。它与 BasisReference 成对：
 // 种类说依据在哪张册子上，引用说是那张册子的哪一行。
 type PostingBasisKind uint8
 
@@ -176,6 +184,9 @@ const (
 	// BasisCorrection 凭被冲正的原记账。冲正是追加一笔反向记账，原记账原样留在账上
 	// ——本包没有修改或删除记账的入口。
 	BasisCorrection
+	// BasisAgreedOffset 凭一条已登记的、经 settlement-accounting 认可的协议抵扣。进入
+	// `已抵扣`只认这一种，它也只支撑这一种形。
+	BasisAgreedOffset
 )
 
 func (kind PostingBasisKind) String() string {
@@ -190,6 +201,8 @@ func (kind PostingBasisKind) String() string {
 		return "DISCREPANCY"
 	case BasisCorrection:
 		return "CORRECTION"
+	case BasisAgreedOffset:
+		return "AGREED_OFFSET"
 	default:
 		return ""
 	}
@@ -200,6 +213,7 @@ func (kind PostingBasisKind) valid() bool { return kind.String() != "" }
 func ParsePostingBasisKind(text string) (PostingBasisKind, bool) {
 	for _, candidate := range []PostingBasisKind{
 		BasisCollectionFact, BasisAllocation, BasisRemittanceBatch, BasisDiscrepancy, BasisCorrection,
+		BasisAgreedOffset,
 	} {
 		if candidate.String() == text {
 			return candidate, true
@@ -233,17 +247,21 @@ type SubledgerPosting struct {
 	postedAt  time.Time
 }
 
-// RecordSubledgerPosting 形成一笔记账。四条依据门在这里就把住，不留给调用方自觉：
+// RecordSubledgerPosting 形成一笔记账。五条依据门在这里就把住，不留给调用方自觉：
 //   - 入账（来源是外部来源）必须凭代收事实——账上不许出现无来源的本金；
 //   - 进入`应付客户`**不得**凭代收事实——「未实际收到的代收款不得进入应付客户」的
 //     落点在这一格：归属要另有一笔凭代收指令的清分记账，来源事实推不出可付余额；
 //   - 进入`已汇付`必须凭回汇批次——没有批次依据的资金不算汇付出去；
-//   - 进入`短款`或`溢款`必须凭差异事项——差额不自动落账，先有事项再有记账。
+//   - 进入`短款`或`溢款`必须凭差异事项——差额不自动落账，先有事项再有记账；
+//   - 进入`已抵扣`必须凭认可的协议抵扣——抵扣的钱离开渠道欠款要有 settlement-accounting
+//     的认可引用背书，不由差额推出来。
 //
-// 另有几格来源位置由去向与依据限死（ADR-0271），本层只看得到位置与依据种类，凭的是
-// 哪一层事实、哪一种事项由编排核：
+// 另有几格来源位置由去向与依据限死（ADR-0271、ADR-0298），本层只看得到位置与依据
+// 种类，凭的是哪一层事实、哪一种事项由编排核：
 //   - 入账只入`渠道在途`；凭代收事实只有入账与`渠道在途` → `待清分`两种形；
-//   - `短款`只从`渠道在途`落入，`溢款`只从`待清分`落入。
+//   - `短款`只从`渠道在途`落入，`溢款`只从`待清分`落入；
+//   - `已抵扣`只从`渠道在途`落入，认可的协议抵扣作依据只有这一种形，离开`已抵扣`
+//     只有冲正。
 //
 // 金额币种必须等于分户账币种：币种在键上，一本账内不发生换算，本包也没有折算入口。
 func RecordSubledgerPosting(spec SubledgerPostingSpec) (SubledgerPosting, error) {
@@ -309,6 +327,20 @@ func RecordSubledgerPosting(spec SubledgerPostingSpec) (SubledgerPosting, error)
 	if spec.To == PositionSurplus && spec.From != PositionAwaitingAllocation {
 		return SubledgerPosting{}, fmt.Errorf(
 			"%w: surplus lands only from awaiting allocation", ErrInvalidPosting)
+	}
+	if spec.To == PositionOffsetApplied && spec.BasisKind != BasisAgreedOffset {
+		return SubledgerPosting{}, fmt.Errorf(
+			"%w: an applied offset must cite an agreed offset", ErrInvalidPosting)
+	}
+	if spec.BasisKind == BasisAgreedOffset &&
+		(spec.From != PositionInTransitAtChannel || spec.To != PositionOffsetApplied) {
+		return SubledgerPosting{}, fmt.Errorf(
+			"%w: an agreed offset supports only the move from in transit to applied offset",
+			ErrInvalidPosting)
+	}
+	if spec.From == PositionOffsetApplied && spec.BasisKind != BasisCorrection {
+		return SubledgerPosting{}, fmt.Errorf(
+			"%w: principal leaves an applied offset only by correction", ErrInvalidPosting)
 	}
 	if spec.PostedAt.IsZero() {
 		return SubledgerPosting{}, fmt.Errorf("%w: posted at", ErrInvalidPosting)

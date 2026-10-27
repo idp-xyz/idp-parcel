@@ -300,8 +300,57 @@ func (view *SubledgerBalanceView) LoadPosting(
 	return posting, true, nil
 }
 
+// LoadCorrectionOf 交回冲正了指定记账的那一笔。一笔记账至多被冲正一次（迁移 0003 的
+// 部分唯一索引），所以至多一行；编排在余额守卫之前凭它判出重复的冲正。
+func (view *SubledgerBalanceView) LoadCorrectionOf(
+	ctx context.Context,
+	tenant domain.TenantID,
+	original domain.PostingID,
+) (domain.SubledgerPosting, bool, error) {
+	none := domain.SubledgerPosting{}
+	if strings.TrimSpace(original.String()) == "" {
+		return none, false, fmt.Errorf("load correction: the original posting ID is blank")
+	}
+	querier, err := view.db.ReadExecutor(ctx)
+	if err != nil {
+		return none, false, fmt.Errorf("load correction: %w", err)
+	}
+
+	var (
+		idRaw, customerRaw, entityRaw, currencyRaw, channelRaw string
+		fromRaw, toRaw, basisKindRaw, basisRaw                 string
+		amountMinor                                            int64
+		postedAt                                               time.Time
+	)
+	err = querier.QueryRow(ctx,
+		`SELECT posting_ref, customer_ref, legal_entity_ref, currency, channel_ref,
+		        from_position, to_position, amount_minor, basis_kind, basis_ref, posted_at
+		   FROM collection_remittance.subledger_posting
+		  WHERE tenant_id = $1 AND basis_kind = 'CORRECTION' AND basis_ref = $2`,
+		tenant.String(), original.String(),
+	).Scan(&idRaw, &customerRaw, &entityRaw, &currencyRaw, &channelRaw,
+		&fromRaw, &toRaw, &amountMinor, &basisKindRaw, &basisRaw, &postedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return none, false, nil
+	}
+	if err != nil {
+		return none, false, fmt.Errorf("load correction: %w", err)
+	}
+
+	key, err := rebuildLedgerKey(customerRaw, entityRaw, currencyRaw, channelRaw)
+	if err != nil {
+		return none, false, err
+	}
+	posting, err := rebuildPosting(key, idRaw, fromRaw, toRaw, amountMinor,
+		basisKindRaw, basisRaw, postedAt)
+	if err != nil {
+		return none, false, err
+	}
+	return posting, true, nil
+}
+
 // LoadInstructionPostings 交回依据追溯到该指令的全部记账：凭它名下代收事实的、凭它
-// 名下差异事项的、凭它清分的，再沿冲正链收冲正这些记账的。
+// 名下差异事项的、凭它名下认可抵扣的、凭它清分的，再沿冲正链收冲正这些记账的。
 //
 // 追溯在 SQL 里一趟递归做完，不在编排里逐笔回读依据：逐笔回读是每笔一个往返，且冲正
 // 链要一层层追。basis_ref 没有外键（0001 那张表的头注），所以这里按 basis_kind 分派
@@ -340,6 +389,12 @@ func (view *SubledgerBalanceView) LoadInstructionPostings(
 		       JOIN collection_remittance.discrepancy_item d
 		         ON d.tenant_id = $1 AND d.discrepancy_ref = p.basis_ref
 		      WHERE p.basis_kind = 'DISCREPANCY' AND d.instruction_ref = $6
+		     UNION
+		     SELECT p.posting_ref
+		       FROM ledger_posting p
+		       JOIN collection_remittance.agreed_offset o
+		         ON o.tenant_id = $1 AND o.offset_ref = p.basis_ref
+		      WHERE p.basis_kind = 'AGREED_OFFSET' AND o.instruction_ref = $6
 		     UNION
 		     SELECT p.posting_ref
 		       FROM ledger_posting p

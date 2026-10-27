@@ -1,0 +1,10 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "postingRef": "SYN-COD-POST-05",
+  "fromPosition": "IN_TRANSIT_AT_CHANNEL",
+  "toPosition": "OFFSET_APPLIED",
+  "amountMinor": 6000,
+  "basisKind": "AGREED_OFFSET",
+  "basisRef": "SYN-COD-OFFSET-01",
+  "postedAt": "2026-02-20T13:00:00Z"
+}

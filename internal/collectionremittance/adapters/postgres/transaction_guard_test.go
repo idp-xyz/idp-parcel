@@ -13,7 +13,7 @@ import (
 // PBC-08 行为面负向证据：本包各写口在无事务上下文必须被 RequireExecutor 拒绝。
 //
 // 入参一律用构造门造出来的有效值而不是零值——AcceptCollectionFact、
-// RegisterDiscrepancyItem、AppendPosting、FormBatch 与 HandOverBatchForPayment 都把
+// RegisterDiscrepancyItem、RegisterAgreedOffset、AppendPosting、FormBatch 与 HandOverBatchForPayment 都把
 // 「封闭词表之外即拒」的入参门放在事务守卫之前，传零值会在守卫之前就被那道门拦下，
 // 于是这条用例会绿得毫无意义：它证到的是入参门，不是事务守卫。
 func TestCollectionRemittanceWritesRefuseToRunOutsideATransaction(t *testing.T) {
@@ -39,6 +39,12 @@ func TestCollectionRemittanceWritesRefuseToRunOutsideATransaction(t *testing.T) 
 		ctx, tenant, fixtureDiscrepancy(t, "SYN-DIFF-1", "SYN-INSTR-1", 2000),
 	); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务登记差异事项应返回 ErrTransactionRequired，实得：%v", err)
+	}
+
+	if _, err := collections.RegisterAgreedOffset(
+		ctx, tenant, fixtureOffset(t, "SYN-OFFSET-1", "SYN-INSTR-1", "SYN-SA-APPROVAL-1", 300),
+	); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务登记认可抵扣应返回 ErrTransactionRequired，实得：%v", err)
 	}
 
 	subledgers, err := adapter.NewSubledgerStore(db)

@@ -20,6 +20,7 @@ type storeDouble struct {
 	facts         map[string]domain.CollectionFact
 	factOrder     []string
 	discrepancies map[string]domain.DiscrepancyItem
+	offsets       map[string]domain.AgreedOffset
 	subledgers    map[domain.SubledgerKey]domain.Subledger
 	postings      map[string]domain.SubledgerPosting
 	postingOrder  []string
@@ -35,6 +36,7 @@ func newStore() *storeDouble {
 		instructions:  map[string]domain.CollectionInstruction{},
 		facts:         map[string]domain.CollectionFact{},
 		discrepancies: map[string]domain.DiscrepancyItem{},
+		offsets:       map[string]domain.AgreedOffset{},
 		subledgers:    map[domain.SubledgerKey]domain.Subledger{},
 		postings:      map[string]domain.SubledgerPosting{},
 		batches:       map[string]domain.RemittanceBatch{},
@@ -99,6 +101,27 @@ func (store *storeDouble) RegisterDiscrepancyItem(
 	return ports.SaveRegistered, nil
 }
 
+// RegisterAgreedOffset 与真库同一口径：标识撞键、或（认可引用，指令）撞键都答已登记
+// 而不覆盖，后一种由编排读不回同一标识而判冲突。
+func (store *storeDouble) RegisterAgreedOffset(
+	_ context.Context, _ domain.TenantID, offset domain.AgreedOffset,
+) (ports.SaveOutcome, error) {
+	if store.writeErr != nil {
+		return ports.SaveOutcomeInvalid, store.writeErr
+	}
+	key := offset.ID().String()
+	if _, exists := store.offsets[key]; exists {
+		return ports.SaveAlreadyRegistered, nil
+	}
+	for _, registered := range store.offsets {
+		if registered.Approval() == offset.Approval() && registered.Instruction() == offset.Instruction() {
+			return ports.SaveAlreadyRegistered, nil
+		}
+	}
+	store.offsets[key] = offset
+	return ports.SaveRegistered, nil
+}
+
 func (store *storeDouble) LoadInstruction(
 	_ context.Context, _ domain.TenantID, id domain.CollectionInstructionID,
 ) (domain.CollectionInstruction, bool, error) {
@@ -127,6 +150,16 @@ func (store *storeDouble) LoadDiscrepancyItem(
 	}
 	item, found := store.discrepancies[id.String()]
 	return item, found, nil
+}
+
+func (store *storeDouble) LoadAgreedOffset(
+	_ context.Context, _ domain.TenantID, id domain.AgreedOffsetID,
+) (domain.AgreedOffset, bool, error) {
+	if store.readErr != nil {
+		return domain.AgreedOffset{}, false, store.readErr
+	}
+	offset, found := store.offsets[id.String()]
+	return offset, found, nil
 }
 
 func (store *storeDouble) LoadInstructionFacts(
@@ -225,7 +258,23 @@ func (store *storeDouble) LoadPosting(
 	return posting, found, nil
 }
 
-// LoadInstructionPostings 与真库读口同一口径：凭该指令的事实、差异事项、清分，以及
+// LoadCorrectionOf 交回冲正了指定记账的那一笔；一笔至多被冲正一次，所以至多一笔。
+func (store *storeDouble) LoadCorrectionOf(
+	_ context.Context, _ domain.TenantID, original domain.PostingID,
+) (domain.SubledgerPosting, bool, error) {
+	if store.readErr != nil {
+		return domain.SubledgerPosting{}, false, store.readErr
+	}
+	for _, key := range store.postingOrder {
+		posting := store.postings[key]
+		if posting.BasisKind() == domain.BasisCorrection && posting.Basis().String() == original.String() {
+			return posting, true, nil
+		}
+	}
+	return domain.SubledgerPosting{}, false, nil
+}
+
+// LoadInstructionPostings 与真库读口同一口径：凭该指令的事实、差异事项、认可抵扣、清分，以及
 // 沿冲正链冲正这些记账的。替身按落账次序扫一遍——冲正总在原记账之后落，一趟就够。
 func (store *storeDouble) LoadInstructionPostings(
 	_ context.Context, _ domain.TenantID, instruction domain.CollectionInstruction,
@@ -244,6 +293,8 @@ func (store *storeDouble) LoadInstructionPostings(
 			mine = store.facts[basis].Instruction() == instruction.ID()
 		case domain.BasisDiscrepancy:
 			mine = store.discrepancies[basis].Instruction() == instruction.ID()
+		case domain.BasisAgreedOffset:
+			mine = store.offsets[basis].Instruction() == instruction.ID()
 		case domain.BasisAllocation:
 			mine = basis == instruction.ID().String()
 		case domain.BasisCorrection:

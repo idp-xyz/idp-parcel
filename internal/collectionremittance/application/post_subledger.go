@@ -13,8 +13,8 @@ import (
 // 分户账的开立与记账用例。
 //
 // 本文件最要紧的一条：**分户账键不是记账的输入，它由依据推出来。** 依据是代收事实、
-// 代收指令、回汇批次、差异事项或原记账，每一条都自带它所属的那本账；记账因此在结构上
-// 不可能记进别人的账。让调用方传键的写法在库里看不出错——一笔记错账的行，与记对的行
+// 代收指令、回汇批次、差异事项、认可的协议抵扣或原记账，每一条都自带它所属的那本账；
+// 记账因此在结构上不可能记进别人的账。让调用方传键的写法在库里看不出错——一笔记错账的行，与记对的行
 // 逐列合法。
 
 // OpenSubledgerCommand 携带一次分户账开立。
@@ -68,7 +68,7 @@ type PostCommand struct {
 }
 
 // PostSubledger 追加一笔记账：重放判定 → 解依据 → 定分户账与形状 → 锁这本账 →
-// 按依据判重 → 读回账面 → 按指令的上限 → 余额守卫 → 落账。
+// 锁内再判重放 → 按依据判重 → 读回账面 → 按指令的上限 → 余额守卫 → 落账。
 //
 // 重放判定必须先于一切按**当下状态**作答的门（余额守卫、批次收口）：那些门回答的是
 // 「这笔新账现在能不能落」，而重放的真相是「这笔账已经落了」，答案只由在册记录定。
@@ -78,6 +78,12 @@ type PostCommand struct {
 // 按依据判重排在余额守卫之前，理由相同：换一个记账标识再凭同一条代收事实记账是同键
 // 异内容（ADR-0271 决定三），它的真相由在册那一笔定，不由此刻账上够不够定。答已有
 // 结果会把一次误操作伪装成成功，所以答冲突。库上同一口径的唯一约束兜住并发的那一格。
+// 认可的协议抵扣一条至多落一笔，一笔记账至多被冲正一次（ADR-0298），都是同一口径：
+// 重复到达的抵扣或撤回，哪怕账上余额恰好够扣，也答冲突而不是再落一笔。
+//
+// 取锁之后再判一次重放：同一条命令并发到达时，后到的那一路在锁外判重放时先到的还没
+// 提交，读不到；等到锁、读到的账面已是落过的，这时再答余额不足就是在说一笔已经落账
+// 的记账没落。
 //
 // 余额守卫必须在同一笔事务内读回账面再判（写口 RequireExecutor 保证有环境事务）：
 // 隔着事务判出来的「够扣」在落账时可能已经不够了，而透支后的账面看上去与正常账面
@@ -133,6 +139,27 @@ func (handler *Handler) PostSubledger(ctx context.Context, command PostCommand) 
 		return OutcomeUndecided, nil
 	}
 
+	settled, found, err := handler.deps.Subledger.LoadPosting(ctx, command.Tenant, command.ID)
+	if err != nil {
+		return OutcomeUndecided, nil
+	}
+	if found {
+		if !samePosting(settled, posting) {
+			return OutcomeContentConflict, nil
+		}
+		return OutcomeExisting, nil
+	}
+
+	if basis.corrects != nil {
+		reversed, found, err := handler.deps.Subledger.LoadCorrectionOf(ctx, command.Tenant, *basis.corrects)
+		if err != nil {
+			return OutcomeUndecided, nil
+		}
+		if found && reversed.ID() != command.ID {
+			return OutcomeContentConflict, nil
+		}
+	}
+
 	var principal *domain.InstructionPrincipal
 	if basis.instructionKnown && gatedByInstruction(posting) {
 		derived, outcome := handler.loadInstructionPrincipal(ctx, command.Tenant, basis.instruction)
@@ -141,6 +168,11 @@ func (handler *Handler) PostSubledger(ctx context.Context, command PostCommand) 
 		}
 		if basis.factKnown {
 			if used, found := derived.PostingOf(basis.fact.ID()); found && used != command.ID {
+				return OutcomeContentConflict, nil
+			}
+		}
+		if basis.offsetKnown {
+			if used, found := derived.OffsetPostingOf(basis.offset.ID()); found && used != command.ID {
 				return OutcomeContentConflict, nil
 			}
 		}
@@ -197,8 +229,9 @@ func admissionOutcome(err error) Outcome {
 }
 
 // gatedByInstruction 答这笔记账要不要过按指令的那一层：凭代收事实的（判重）、落入
-// `短款`或`溢款`的（差额按指令算），以及一切自`渠道在途`移出的（移位上限按指令算）。
-// 清分、汇付与别的冲正不在此列——它们的来源位置不按指令分账，按账的余额守卫就够。
+// `短款`或`溢款`的（差额按指令算），以及一切自`渠道在途`移出的（移位上限按指令算，
+// 认可抵扣落`已抵扣`也在其中）。清分、汇付与别的冲正不在此列——它们的来源位置不按
+// 指令分账，按账的余额守卫就够。
 func gatedByInstruction(posting domain.SubledgerPosting) bool {
 	return posting.BasisKind() == domain.BasisCollectionFact ||
 		posting.To() == domain.PositionShortfall ||
@@ -227,14 +260,18 @@ func (handler *Handler) loadInstructionPrincipal(
 	return principal, OutcomeRegistered
 }
 
-// postingBasis 是解出来的依据：记账所在的分户账，以及它追溯到的代收指令与代收事实
-// （有的话）。批次依据的汇付记账不追溯到单条指令。
+// postingBasis 是解出来的依据：记账所在的分户账，以及它追溯到的代收指令、代收事实或
+// 认可的协议抵扣（有的话），冲正则带着被冲正的那一笔。批次依据的汇付记账不追溯到单条
+// 指令。
 type postingBasis struct {
 	ledger           domain.SubledgerKey
 	instruction      domain.CollectionInstruction
 	instructionKnown bool
 	fact             domain.CollectionFact
 	factKnown        bool
+	offset           domain.AgreedOffset
+	offsetKnown      bool
+	corrects         *domain.PostingID
 }
 
 // resolveBasisForPosting 按依据种类解出分户账，并核这笔记账的形状是不是该依据允许的
@@ -332,6 +369,30 @@ func (handler *Handler) resolveBasisForPosting(
 			ledger: instruction.Ledger(), instruction: instruction, instructionKnown: true,
 		}, OutcomeRegistered, nil
 
+	case domain.BasisAgreedOffset:
+		offsetID, err := domain.NewAgreedOffsetID(command.Basis.String())
+		if err != nil {
+			return none, OutcomeNotAccepted, nil
+		}
+		offset, found, err := handler.deps.Collection.LoadAgreedOffset(ctx, command.Tenant, offsetID)
+		if err != nil {
+			return none, OutcomeUndecided, nil
+		}
+		if !found {
+			return none, OutcomeBasisMissing, nil
+		}
+		instruction, outcome := handler.loadInstruction(ctx, command.Tenant, offset.Instruction())
+		if outcome != OutcomeRegistered {
+			return none, outcome, nil
+		}
+		if !agreedOffsetPostingShapeHolds(command, offset) {
+			return none, OutcomeNotAccepted, nil
+		}
+		return postingBasis{
+			ledger: instruction.Ledger(), instruction: instruction, instructionKnown: true,
+			offset: offset, offsetKnown: true,
+		}, OutcomeRegistered, nil
+
 	case domain.BasisCorrection:
 		originalID, err := domain.NewPostingID(command.Basis.String())
 		if err != nil {
@@ -356,7 +417,7 @@ func (handler *Handler) resolveBasisForPosting(
 		if !original.From().InsideLedger() {
 			return none, OutcomeNotAccepted, nil
 		}
-		resolved := postingBasis{ledger: original.Ledger()}
+		resolved := postingBasis{ledger: original.Ledger(), corrects: &originalID}
 		// 自`渠道在途`移出的冲正（冲正一笔冲正，把移回在途的到账再移出去）同样按指令
 		// 判上限，否则它能把同账别的指令的在途款移走。
 		if command.From == domain.PositionInTransitAtChannel {
@@ -435,6 +496,16 @@ func (handler *Handler) instructionBehind(
 			return none, false, OutcomeUndecided
 		}
 		instructionID = item.Instruction()
+	case domain.BasisAgreedOffset:
+		offsetID, err := domain.NewAgreedOffsetID(posting.Basis().String())
+		if err != nil {
+			return none, false, OutcomeUndecided
+		}
+		offset, found, err := handler.deps.Collection.LoadAgreedOffset(ctx, tenant, offsetID)
+		if err != nil || !found {
+			return none, false, OutcomeUndecided
+		}
+		instructionID = offset.Instruction()
 	case domain.BasisAllocation:
 		id, err := domain.NewCollectionInstructionID(posting.Basis().String())
 		if err != nil {
@@ -485,6 +556,16 @@ func discrepancyPostingShapeHolds(command PostCommand, item domain.DiscrepancyIt
 	return item.Kind() == domain.DiscrepancySurplus &&
 		command.From == domain.PositionSurplus &&
 		command.To == domain.PositionPayableToCustomer
+}
+
+// agreedOffsetPostingShapeHolds 核凭认可的协议抵扣的唯一一种形：`渠道在途` → `已抵扣`，
+// 金额等于登记的认可额、全额一次。部分落账没有可表达的「余下部分」，余下的抵扣额会以
+// 「这条认可已处理」的样子消失；认可额变了走新的认可。抵扣够不够、到账是否已先移位由
+// 按指令的上限判。
+func agreedOffsetPostingShapeHolds(command PostCommand, offset domain.AgreedOffset) bool {
+	return command.From == domain.PositionInTransitAtChannel &&
+		command.To == domain.PositionOffsetApplied &&
+		command.AmountMinor == offset.Amount().AmountMinor()
 }
 
 // postingMatchesCommand 按命令携带的格比对在册记账。分户账与币种不参与比对——它们

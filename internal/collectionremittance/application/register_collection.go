@@ -8,7 +8,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/collectionremittance/ports"
 )
 
-// 代收面三本册子的登记用例：代收指令、代收事实、差异事项。
+// 代收面四本册子的登记用例：代收指令、代收事实、差异事项、认可的协议抵扣。
 //
 // 冲突判定一律靠读回：写口 DO NOTHING 只答`已登记`，同键的内容是不是同一份，由这里
 // 读回既有登记逐字段比。把比对放在编排而不是 SQL 里，是为了让「重放同一份」与「换了
@@ -156,6 +156,63 @@ func (handler *Handler) RegisterDiscrepancy(
 	return OutcomeExisting, nil
 }
 
+// RegisterAgreedOffsetCommand 携带一次认可的协议抵扣登记。
+type RegisterAgreedOffsetCommand struct {
+	Tenant domain.TenantID
+	Offset domain.AgreedOffset
+}
+
+// RegisterAgreedOffset 登记一条 settlement-accounting 认可的协议抵扣。它只登记引用，
+// **不落账**：抵扣怎样离开`渠道在途`是另一笔以本记录为依据的记账（PostSubledger 的
+// 认可抵扣门）。分两步，是为了让分户账键与按指令的上限由依据推出来。
+//
+// 指令必须在册；币种必须是指令所属那本账的币种——金额的币种在键上，不在记录上做第二
+// 本账。同标识同内容是重放，同标识改内容与换标识再登记同一份认可（同认可引用、同指令，
+// 库上唯一约束）都是内容冲突：写口撞键只答`已登记`，按标识读不回同一条就是后者。
+// 本口不读 settlement-accounting：认可及其金额归它，这里保存的是当时引用的那一份。
+func (handler *Handler) RegisterAgreedOffset(
+	ctx context.Context,
+	command RegisterAgreedOffsetCommand,
+) (Outcome, error) {
+	if blank(command.Tenant) ||
+		strings.TrimSpace(command.Offset.ID().String()) == "" ||
+		strings.TrimSpace(command.Offset.Instruction().String()) == "" ||
+		strings.TrimSpace(command.Offset.Approval().String()) == "" ||
+		command.Offset.Amount().AmountMinor() <= 0 {
+		return OutcomeNotAccepted, nil
+	}
+
+	instruction, found, err := handler.deps.Collection.LoadInstruction(
+		ctx, command.Tenant, command.Offset.Instruction())
+	if err != nil {
+		return OutcomeUndecided, nil
+	}
+	if !found {
+		return OutcomeBasisMissing, nil
+	}
+	if command.Offset.Amount().Currency() != instruction.Ledger().Currency() {
+		return OutcomeNotAccepted, nil
+	}
+
+	saved, err := handler.deps.Collections.RegisterAgreedOffset(ctx, command.Tenant, command.Offset)
+	if err != nil {
+		return OutcomeUndecided, nil
+	}
+	if saved == ports.SaveRegistered {
+		return OutcomeRegistered, nil
+	}
+
+	existing, found, err := handler.deps.Collection.LoadAgreedOffset(
+		ctx, command.Tenant, command.Offset.ID())
+	if err != nil {
+		return OutcomeUndecided, nil
+	}
+	if !found || !sameAgreedOffset(existing, command.Offset) {
+		return OutcomeContentConflict, nil
+	}
+	return OutcomeExisting, nil
+}
+
 func blank(tenant domain.TenantID) bool {
 	return strings.TrimSpace(tenant.String()) == ""
 }
@@ -178,6 +235,14 @@ func sameFact(left, right domain.CollectionFact) bool {
 		left.Evidence() == right.Evidence() &&
 		left.Amount() == right.Amount() &&
 		left.OccurredAt().Equal(right.OccurredAt())
+}
+
+func sameAgreedOffset(left, right domain.AgreedOffset) bool {
+	return left.ID() == right.ID() &&
+		left.Instruction() == right.Instruction() &&
+		left.Amount() == right.Amount() &&
+		left.Approval() == right.Approval() &&
+		left.ApprovedAt().Equal(right.ApprovedAt())
 }
 
 func sameDiscrepancy(left, right domain.DiscrepancyItem) bool {

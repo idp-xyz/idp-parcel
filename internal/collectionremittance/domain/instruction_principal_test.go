@@ -77,8 +77,9 @@ func derivePrincipal(
 	return principal
 }
 
-// 场景十七在本上下文那一半：报告 100 入`渠道在途`，到账 96 移出，短款上限是 4；认可的
-// 抵扣 3 没有记账形、留在`渠道在途`，所以短款 1 落得下，5 越过上限答余额不足。
+// 场景十七在本上下文那一半：报告 100 入`渠道在途`，到账 96 移出，抵扣还没落账时短款上限
+// 是 4，短款 1 落得下，5 越过上限答余额不足。抵扣落账之后上限随之变小，见
+// TestAnAppliedOffsetLeavesTheShortfallOnlyTheRemainder。
 func TestTheShortfallCeilingIsTheReportLessWhatLeftInTransit(t *testing.T) {
 	instruction := principalInstruction(t, "SYN-INSTR-1", 100)
 	facts := []domain.CollectionFact{
