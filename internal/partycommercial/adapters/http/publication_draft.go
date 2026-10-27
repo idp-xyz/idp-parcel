@@ -69,7 +69,9 @@ func NewPublishPublicationDraftEndpoint(intake PublicationDraftPublicationIntake
 }
 
 // draftAnswer 是录入口与批准口共用的封闭响应形状：`outcome` 取应用结果枚举原名；载体在场时带它的规范化版本、
-// 内容摘要、壳摘要与状态（表单据此呈现「服务端算出的摘要」，并在批准与发布时原样交回——它不算，只显）；`cause` 只随录入的`未受理`在场。
+// 内容摘要、壳摘要与状态（表单据此呈现「服务端算出的摘要」，并在批准与发布时原样交回——它不算，只显）；`cause` 随录入的`未受理`
+// 在场，也随批准的`DRAFT_NOT_READABLE`在场（成因：本构建折不回这份载体的正文），那一格同时带载体的 `status`，让调用方按状态说恢复动作，
+// 但不带摘要——读不回的载体没有可批准的内容，摘要不能被原样交回去批。
 type draftAnswer struct {
 	Outcome          string `json:"outcome"`
 	Canonicalization string `json:"canonicalization,omitempty"`
@@ -106,7 +108,7 @@ func writeDraftSubmissionAnswer(response http.ResponseWriter, result application
 }
 
 // writeDraftApprovalAnswer：批准是往载体上推进一格，`已批准`取 200 而不是 201——没有新资源形成，改的是载体的
-// 状态。其余各格（未配置、需换人、不合格、已批准、已发布、已被替换、未找到）都是形成了的答案，同取 200。
+// 状态。其余各格（未配置、需换人、不合格、已批准、已发布、已被替换、未找到、读不回）都是形成了的答案，同取 200。
 func writeDraftApprovalAnswer(response http.ResponseWriter, result application.ApprovePublicationDraftResult) {
 	name := result.Outcome().String()
 	if name == "" {
@@ -120,15 +122,22 @@ func writeDraftApprovalAnswer(response http.ResponseWriter, result application.A
 		answer.ShellDigest = draft.ShellDigest()
 		answer.Status = draft.Status().String()
 	}
+	if unreadable, ok := result.Unreadable(); ok {
+		answer.Status = unreadable.Status().String()
+		answer.Cause = unreadable.Cause().Error()
+	}
 	writeJSON(response, http.StatusOK, answer)
 }
 
 // draftPublicationAnswer 是发布口的封闭响应形状：载体侧的 `outcome`，加受控发布用例的整份答案（`publication`）
 // ——它只在载体真交给了发布用例时在场（`已发布`与`发布未落定`两格），形状与 /commercial-publications 的答案
-// 同一个 publicationAnswer：同一个用例的答案在两口不换形。
+// 同一个 publicationAnswer：同一个用例的答案在两口不换形。`DRAFT_NOT_READABLE` 一格没有可交的发布答案，改带载体的 `status` 与
+// 成因 `cause`（本构建折不回这份载体的正文）。
 type draftPublicationAnswer struct {
 	Outcome     string             `json:"outcome"`
 	Publication *publicationAnswer `json:"publication,omitempty"`
+	Status      string             `json:"status,omitempty"`
+	Cause       string             `json:"cause,omitempty"`
 }
 
 // writeDraftPublicationAnswer：`已发布`取 201——受控发布落库形成了版本；其余取 200。
@@ -139,6 +148,10 @@ func writeDraftPublicationAnswer(response http.ResponseWriter, result applicatio
 		return
 	}
 	answer := draftPublicationAnswer{Outcome: name}
+	if unreadable, ok := result.Unreadable(); ok {
+		answer.Status = unreadable.Status().String()
+		answer.Cause = unreadable.Cause().Error()
+	}
 	if publication, ok := result.Publication(); ok {
 		body, err := publicationAnswerOf(publication)
 		if err != nil {

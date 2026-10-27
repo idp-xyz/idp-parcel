@@ -375,10 +375,11 @@ func TestOpenDraftsListPendingAndApprovedNewestFirstWithinTheTenant(t *testing.T
 	}
 	mustAdvanceDraft(t, transactor, ctx, drafts, done)
 
-	listed, err := drafts.ListOpenDrafts(ctx, pcTenant(t, "tenant-1"), 10)
+	openListed, err := drafts.ListOpenDrafts(ctx, pcTenant(t, "tenant-1"), 10)
 	if err != nil {
 		t.Fatalf("列出未发布载体：%v", err)
 	}
+	listed := readableDraftsOf(t, openListed)
 	names := make([]string, 0, len(listed))
 	for _, draft := range listed {
 		names = append(names, draft.ObjectID().String()+"/"+draft.Status().String())
@@ -395,7 +396,7 @@ func TestOpenDraftsListPendingAndApprovedNewestFirstWithinTheTenant(t *testing.T
 	}
 
 	limited, err := drafts.ListOpenDrafts(ctx, pcTenant(t, "tenant-1"), 2)
-	if err != nil || len(limited) != 2 || limited[0].ObjectID().String() != "credit-new" {
+	if err != nil || len(limited) != 2 || readableDraftsOf(t, limited)[0].ObjectID().String() != "credit-new" {
 		t.Fatalf("limit=2：%d 份, err = %v", len(limited), err)
 	}
 	none, err := drafts.ListOpenDrafts(ctx, pcTenant(t, "tenant-3"), 10)

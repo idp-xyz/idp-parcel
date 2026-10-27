@@ -18,15 +18,20 @@ const publicationShellDigestVersion = "PCS-1"
 // 身份四元不入：它是键，键不同的两份不会撞在一起。时刻按 UTC 截到微秒写：载体册以微秒存时刻、驱动写入时截断而不是四舍五入，录入答复里算出的串
 // 与之后读回算出的串必须相等。引用按载体上记下的顺序写，与 SameSubmissionAs 比对引用的口径一致。
 func (draft PublicationDraft) ShellDigest() string {
+	return draft.shell.shellDigest()
+}
+
+// shellDigest 是壳摘要的唯一算法：读得回的载体与读不回的行（UnreadablePublicationDraft）共用，调用方看到的串在两边可比。
+func (version CommercialVersion) shellDigest() string {
 	hasher := sha256.New()
-	writeShellField(hasher, draft.shell.scope.String())
-	writeShellField(hasher, shellInstant(draft.shell.effective.StartsAt()))
-	if end, bounded := draft.shell.effective.EndsAt(); bounded {
+	writeShellField(hasher, version.scope.String())
+	writeShellField(hasher, shellInstant(version.effective.StartsAt()))
+	if end, bounded := version.effective.EndsAt(); bounded {
 		writeShellField(hasher, shellInstant(end))
 	} else {
 		writeShellField(hasher, "")
 	}
-	for _, reference := range draft.shell.references {
+	for _, reference := range version.references {
 		writeShellField(hasher, reference.Kind().String())
 		writeShellField(hasher, reference.ObjectID().String())
 	}

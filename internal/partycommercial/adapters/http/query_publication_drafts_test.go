@@ -13,6 +13,7 @@ import (
 
 	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
+	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 )
 
 // 本文件对待批准发布载体的两个读回端点（ADR-0314 决定一）证传输面：列表不带正文、带摘要与状态与痕迹；单份读回带规范化文档
@@ -25,7 +26,7 @@ type draftReaderDouble struct {
 	store       *draftStore
 	storedUnder domain.TenantID
 	serves      domain.TenantID
-	open        []domain.PublicationDraft
+	open        []ports.OpenPublicationDraft
 	err         error
 }
 
@@ -45,7 +46,7 @@ func (double draftReaderDouble) LoadDraft(
 	return double.store.LoadDraft(ctx, double.storedUnder, kind, objectID, version)
 }
 
-func (double draftReaderDouble) ListOpenDrafts(_ context.Context, _ domain.TenantID, _ int) ([]domain.PublicationDraft, error) {
+func (double draftReaderDouble) ListOpenDrafts(_ context.Context, _ domain.TenantID, _ int) ([]ports.OpenPublicationDraft, error) {
 	return double.open, double.err
 }
 
@@ -104,7 +105,7 @@ func draftReadbackRequest(kind, objectID, version string) *http.Request {
 func TestOpenPublicationDraftsAreListedWithoutTheirContent(t *testing.T) {
 	_, pending, approved := submittedAndApprovedDrafts(t)
 	endpoint := commercialhttp.NewQueryPublicationDraftsEndpoint(
-		intakeDouble{query: catalogueQuery(t)}, draftReaderDouble{open: []domain.PublicationDraft{approved, pending}})
+		intakeDouble{query: catalogueQuery(t)}, draftReaderDouble{open: []ports.OpenPublicationDraft{ports.ReadableOpenDraft(approved), ports.ReadableOpenDraft(pending)}})
 
 	recorder := httptest.NewRecorder()
 	endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/commercial-open-publication-drafts", nil))

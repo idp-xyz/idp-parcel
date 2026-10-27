@@ -3,7 +3,9 @@ package commercialhttp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
@@ -19,7 +21,7 @@ type PublicationDraftReader interface {
 		objectID domain.CommercialObjectID,
 		version domain.CommercialVersionLabel,
 	) (domain.PublicationDraft, bool, error)
-	ListOpenDrafts(ctx context.Context, tenant domain.TenantID, limit int) ([]domain.PublicationDraft, error)
+	ListOpenDrafts(ctx context.Context, tenant domain.TenantID, limit int) ([]ports.OpenPublicationDraft, error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致。
@@ -29,6 +31,8 @@ const (
 	outcomePublicationDraftsListed = "PUBLICATION_DRAFTS_LISTED"
 	outcomePublicationDraftRead    = "PUBLICATION_DRAFT_READ"
 	outcomePublicationDraftAbsent  = "DRAFT_NOT_FOUND"
+	// 载体在册、本构建折不回它的正文：单份读回交这一格加库上剩下的事实（没有 content），不答 5xx。
+	outcomePublicationDraftNotReadable = "DRAFT_NOT_READABLE"
 
 	// 路由模式里的路径参数名；装配点的 Pattern 与这里必须同字，否则 PathValue 恒空、端点恒答 400。
 	draftKindPathValue     = "kind"
@@ -40,7 +44,8 @@ const (
 //
 // 它是管理台「待批准」列表的供数面：交出租户名下还没发布的载体（`待批准`与`已批准`），不带正文，每份带内容摘要、录入者与时刻、
 // 状态与批准痕迹，批准者据此选一份去翻看。挂操作者查阅读——读的是租户自己的在途工作，不是写面；批准与发布仍各走各的登记写口。
-// 空列表答 200 加空数组（空是内容，不是缺席）。
+// 空列表答 200 加空数组（空是内容，不是缺席）。本构建折不回正文的载体照样在列表里，`readable` 为假并带成因 `unreadableCause`，
+// 其余字段取自库上的列（含列上的规范化版本与摘要）：批准者看得见这一份在、动不了它，不会因为一行读不回而整页答不出。
 func NewQueryPublicationDraftsEndpoint(intake CommercialCatalogueIntake, reader PublicationDraftReader) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet {
@@ -60,8 +65,12 @@ func NewQueryPublicationDraftsEndpoint(intake CommercialCatalogueIntake, reader 
 			return
 		}
 		bodies := make([]publicationDraftBody, 0, len(drafts))
-		for _, draft := range drafts {
-			bodies = append(bodies, publicationDraftBodyOf(draft, false))
+		for _, open := range drafts {
+			if draft, readable := open.Draft(); readable {
+				bodies = append(bodies, publicationDraftBodyOf(draft, false))
+			} else if unreadable, ok := open.Unreadable(); ok {
+				bodies = append(bodies, unreadablePublicationDraftBodyOf(unreadable))
+			}
 		}
 		writeJSON(response, http.StatusOK, publicationDraftListResponse{Outcome: outcomePublicationDraftsListed, Drafts: bodies})
 	})
@@ -72,6 +81,8 @@ func NewQueryPublicationDraftsEndpoint(intake CommercialCatalogueIntake, reader 
 //
 // 它交出载体的全部：壳、状态与痕迹，加规范化文档——正是内容摘要盖住的那份内容，批准者看到的就是他批准的东西。载体不在答
 // 200 加 `DRAFT_NOT_FOUND`（ADR-0022：状态码只说答案有没有形成，不在册是业务答案）；跨租户与不在册同形，不泄露存在性。
+// 载体在册而本构建折不回它的正文，答 200 加 `DRAFT_NOT_READABLE`，`draft` 只带库上的事实、不带 `content`（没有正文可给，
+// 也不拿一份折不回的文档冒充摘要盖住的内容）。
 func NewQueryPublicationDraftEndpoint(intake CommercialCatalogueIntake, reader PublicationDraftReader) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet {
@@ -93,6 +104,12 @@ func NewQueryPublicationDraftEndpoint(intake CommercialCatalogueIntake, reader P
 			return
 		}
 		draft, found, err := reader.LoadDraft(request.Context(), query.Scope.Tenant(), kind, objectID, version)
+		var unreadable *domain.UnreadablePublicationDraft
+		if errors.As(err, &unreadable) {
+			body := unreadablePublicationDraftBodyOf(unreadable)
+			writeJSON(response, http.StatusOK, publicationDraftReadResponse{Outcome: outcomePublicationDraftNotReadable, Draft: &body})
+			return
+		}
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
@@ -119,6 +136,8 @@ type publicationDraftReadResponse struct {
 // publicationDraftBody 逐字段透出一份载体。录入者与批准者是操作者主体引用原串（信封里的 issuer#subject），租户内的操作者
 // 本来就互相可见；批准与发布的痕迹只在已到那一格的载体上在场，判据同库上 CHECK（批准者与时刻成对、发布时刻只在已发布）。
 // content 只在单份读回上带（列表不带正文，免得列表随载体数膨胀），是规范化文档的原字节——JSON，键名镜像批文。
+// `readable` 为假的是本构建折不回正文的载体：其余字段取自库上的列，`canonicalization` 与 `contentDigest` 是列上的原值（可以是
+// 本构建不认得的规范化版本），`unreadableCause` 说为什么读不回；这样的载体没有 `content`，批准与发布都会答 `DRAFT_NOT_READABLE`。
 type publicationDraftBody struct {
 	Kind              string                      `json:"kind"`
 	ObjectID          string                      `json:"objectId"`
@@ -136,6 +155,8 @@ type publicationDraftBody struct {
 	Approver          string                      `json:"approver,omitempty"`
 	ApprovedAt        string                      `json:"approvedAt,omitempty"`
 	PublishedAt       string                      `json:"publishedAt,omitempty"`
+	Readable          bool                        `json:"readable"`
+	UnreadableCause   string                      `json:"unreadableCause,omitempty"`
 	Content           json.RawMessage             `json:"content,omitempty"`
 }
 
@@ -146,6 +167,39 @@ type publicationDraftReference struct {
 
 func publicationDraftBodyOf(draft domain.PublicationDraft, withContent bool) publicationDraftBody {
 	canonical := draft.Canonical()
+	body := publicationDraftFactsBody(draft, canonical.Canonicalization(), canonical.Digest().String())
+	body.Readable = true
+	if withContent {
+		body.Content = json.RawMessage(canonical.Document())
+	}
+	return body
+}
+
+func unreadablePublicationDraftBodyOf(unreadable *domain.UnreadablePublicationDraft) publicationDraftBody {
+	body := publicationDraftFactsBody(unreadable, unreadable.Canonicalization(), unreadable.ContentDigest().String())
+	body.UnreadableCause = unreadable.Cause().Error()
+	return body
+}
+
+// publicationDraftFacts 是读得回的载体与读不回的行共有的那一面：壳、状态与各痕迹。两边的字段在响应里不分叉，靠的是
+// 两者走同一个映射而不是各抄一遍。
+type publicationDraftFacts interface {
+	Kind() domain.CommercialObjectKind
+	ObjectID() domain.CommercialObjectID
+	Version() domain.CommercialVersionLabel
+	Scope() domain.CommercialScopeReference
+	Effective() domain.EffectiveInterval
+	DeclaredReferences() []domain.DeclaredReference
+	ShellDigest() string
+	Submitter() domain.OperatorSubjectReference
+	SubmittedAt() time.Time
+	Status() domain.PublicationDraftStatus
+	Approver() (domain.OperatorSubjectReference, bool)
+	ApprovedAt() (time.Time, bool)
+	PublishedAt() (time.Time, bool)
+}
+
+func publicationDraftFactsBody(draft publicationDraftFacts, canonicalization, contentDigest string) publicationDraftBody {
 	references := draft.DeclaredReferences()
 	body := publicationDraftBody{
 		Kind:              draft.Kind().String(),
@@ -154,8 +208,8 @@ func publicationDraftBodyOf(draft domain.PublicationDraft, withContent bool) pub
 		Scope:             draft.Scope().String(),
 		EffectiveStartsAt: rfc3339(draft.Effective().StartsAt()),
 		References:        make([]publicationDraftReference, 0, len(references)),
-		Canonicalization:  canonical.Canonicalization(),
-		ContentDigest:     canonical.Digest().String(),
+		Canonicalization:  canonicalization,
+		ContentDigest:     contentDigest,
 		ShellDigest:       draft.ShellDigest(),
 		Submitter:         draft.Submitter().String(),
 		SubmittedAt:       rfc3339(draft.SubmittedAt()),
@@ -177,9 +231,6 @@ func publicationDraftBodyOf(draft domain.PublicationDraft, withContent bool) pub
 	}
 	if at, published := draft.PublishedAt(); published {
 		body.PublishedAt = rfc3339(at)
-	}
-	if withContent {
-		body.Content = json.RawMessage(canonical.Document())
 	}
 	return body
 }

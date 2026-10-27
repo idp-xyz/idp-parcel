@@ -1566,7 +1566,7 @@ func (unwiredPublicationDraftRead) ListOpenDrafts(
 	context.Context,
 	commercialdomain.TenantID,
 	int,
-) ([]commercialdomain.PublicationDraft, error) {
+) ([]commercialports.OpenPublicationDraft, error) {
 	return nil, errOrchestrationNotWired
 }
 
