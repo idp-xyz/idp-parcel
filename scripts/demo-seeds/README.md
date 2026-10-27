@@ -168,6 +168,13 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
 处理：册上的行由撤回、拒绝、授权处置等路遇到结算确定不受理时自己落，列在 `GET /control-release-refusals`（管理台「释放拒收处理」页），运维经
 `POST /control-release-refusal-handlings` 核对后在结算侧释放或标记已处理。查阅员没有这一种，处理口答 403 `OPERATOR_NOT_GRANTED`。证据只记 `S`。
 
+配置员另持运营决定「揽收尝试结果认定」与「派送尝试结果认定」（ADR-0297 决定二；票 docs-consistency/code/90），各是一种授予，与建派送任务、终止参与、承运商
+首次有效收寄判断都分开：授予、对照与权威区间另起 `steps/481-access-attempt-result-confirmation.sh` 一节，数据是 `data/access/22`、`23` 与
+`data/governance/59`、`60`。种子不记任何待确认、不作任何认定：待确认由一线设备报来的尝试自己落，列在 `GET /transport-fulfillment-records?registry=pending-attempt-result`
+（管理台运输履约查阅页的数据口），复核人经 `POST /transport-fulfillment-pickup-attempt-result-confirmations` 与 `POST /transport-fulfillment-delivery-attempt-result-confirmations`
+认定；执行方在作业事实面的后补（`/transport-fulfillment/offsite-pickup-attempt-result-corrections`、`/transport-fulfillment/delivery-attempt-result-corrections`）
+走作业事实登记授予与在用设备，不需要这一节。查阅员没有这两种，认定口答 403 `OPERATOR_NOT_GRANTED`。证据只记 `S`。
+
 单要一枚令牌：`scripts/demo-seeds/operator-channel/operator-token.sh <邮箱>` 打印访问令牌，末尾加 `claims` 打印两枚
 令牌的载荷。它与管理台走同一个公共客户端、同一条 authorization_code + PKCE 流，管理台不必在跑。
 

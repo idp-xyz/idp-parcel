@@ -1,0 +1,23 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "grants": [
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-PICKUP-ATTEMPT-RESULT-CONFIRMATION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "PICKUP_ATTEMPT_RESULT_CONFIRMATION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-PICKUP-ATTEMPT-RESULT-CONFIRMATION-01"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-DELIVERY-ATTEMPT-RESULT-CONFIRMATION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "DELIVERY_ATTEMPT_RESULT_CONFIRMATION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-DELIVERY-ATTEMPT-RESULT-CONFIRMATION-01"
+    }
+  ]
+}
