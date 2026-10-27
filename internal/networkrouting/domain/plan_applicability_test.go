@@ -105,7 +105,7 @@ func TestApplicabilityTransitionsDemandBasisAndOrderedTime(t *testing.T) {
 }
 
 // Covers: ADR-0292 决定一——离场门拒的正是离场早于生效这一格，编排要在门之前分流，问的就是这个：只有当前有效的计划才有
-// 「还没生效」，同一时刻已生效；离场了的计划不再问。与离场门同一条比较，两边不会各认各的。
+// 「还没生效」，同一时刻已生效；离场了的计划不问。与离场门同一条比较，两边不会各认各的。
 func TestACurrentPlanIsNotYetEffectiveOnlyBeforeItsEffectiveTime(t *testing.T) {
 	basis := mustValue(t, domain.NewApplicabilityBasisReference, "LINE-CLOSED/NET-ADJ-7")
 	for name, check := range map[string]struct {

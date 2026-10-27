@@ -209,6 +209,62 @@ func TestATriggerEarlierThanTheCurrentPositionIsComparedBeforeThePlanEffectiveTi
 	}
 }
 
+// Covers: AT-NR-104（编排半边，次序）——适用性看不清与冻结形态未配置先于「触发早于计划生效」答：起点计划还没生效，选中候选的限制
+// 状态未知（演关务口岸路径目录为空）答 PLAN_APPLICABILITY_UNCLEAR、策略版本没声明冻结形态答 FREEZE_FORM_UNCONFIGURED，各点名自己
+// 的原因，不带计划生效时刻。这两个原因靠登记补齐、走票 demo-chain-gaps/154 续办；计划生效得晚只是另一类终局原因，记成它会让
+// 本该续办的触发永远等不到续办。
+func TestUnclearApplicabilityAndAnUnconfiguredFreezeFormAreAnsweredBeforeThePlanEffectiveTime(t *testing.T) {
+	t.Run("适用性看不清", func(t *testing.T) {
+		unknown, err := domain.NewHardConstraintFinding(domain.HardConstraintFindingSpec{
+			Candidate: value(t, domain.NewCandidateID, "candidate-1"),
+			Outcome:   domain.ConstraintStatusUnknown,
+			Missing:   value(t, domain.NewEvidenceGapReference, "CUSTOMS_PORT_PATH_CATALOG_EMPTY"),
+			Reassess:  value(t, domain.NewReassessmentCondition, "CUSTOMS_PORT_PATH_CATALOG_REGISTERED"),
+		})
+		if err != nil {
+			t.Fatalf("new unknown constraint: %v", err)
+		}
+		fixture := planNotYetEffectiveFixture(t)
+		evidence := evidenceBeforeFreeze(t)
+		evidence.HardConstraints = []domain.HardConstraintFinding{unknown}
+		fixture.evidence.byParcel["parcel-1"] = evidence
+		command := reassessCommandAt(t, "trigger-between", "node-origin", triggerBeforePlanEffective)
+
+		requireNotJudgedAnsweringFirst(t, fixture, command, handleOK(t, fixture, command), ports.NotJudgedPlanApplicabilityUnclear)
+		if noted := fixture.store.notJudged[command.Trigger.Correlation]; noted.Missing.String() != "CUSTOMS_PORT_PATH_CATALOG_EMPTY" ||
+			noted.Reassess.String() != "CUSTOMS_PORT_PATH_CATALOG_REGISTERED" {
+			t.Fatalf("缺口 = %q、再判条件 = %q, want 取数侧交回的那一对", noted.Missing, noted.Reassess)
+		}
+	})
+
+	t.Run("冻结形态未配置", func(t *testing.T) {
+		fixture := planNotYetEffectiveFixture(t)
+		fixture.evidence.byParcel["parcel-1"] = routableEvidence(t)
+		command := reassessCommandAt(t, "trigger-between", "node-origin", triggerBeforePlanEffective)
+
+		requireNotJudgedAnsweringFirst(t, fixture, command, handleOK(t, fixture, command), ports.NotJudgedFreezeFormUnconfigured)
+	})
+}
+
+// requireNotJudgedAnsweringFirst 断言这次触发入账为 want 这一格原因：复核册、适用性册一笔不写，未判登记不带计划生效时刻。
+func requireNotJudgedAnsweringFirst(
+	t *testing.T, fixture *reassessFixture, command application.ReassessRouteCommand, result application.ReassessRouteResult,
+	want ports.NotJudgedReason,
+) {
+	t.Helper()
+	if result.Outcome() != application.ReassessTriggerNotJudged || result.NotJudgedReason() != want {
+		t.Fatalf("复核 = %q/%q（未决 %q）, want TRIGGER_NOT_JUDGED/%s",
+			result.Outcome(), result.NotJudgedReason(), result.UndecidedReason(), want)
+	}
+	if fixture.store.saved != 0 || len(fixture.applicability.saved) != 0 {
+		t.Fatalf("复核 %d 条、适用性写 %d 次, want 0 与 0", fixture.store.saved, len(fixture.applicability.saved))
+	}
+	noted, ok := fixture.store.notJudged[command.Trigger.Correlation]
+	if !ok || noted.Reason != want || !noted.PlanEffectiveAt.IsZero() {
+		t.Fatalf("未判登记 = %+v（在 %v）, want 原因 %s、不带计划生效时刻", noted, ok, want)
+	}
+}
+
 // Covers: AT-NR-104（编排半边，决定形成的计划）——票面时序：原计划在 T1 失效、形成改路建议，授权角色在 T3 据它决定，新计划从 T3
 // 起生效；业务时间 T2（T1 < T2 < T3）的触发在决定之后才处理，起点是从 T3 才生效的新计划，判出失效：入账为「触发早于计划
 // 生效」，生效时刻点名决定的时刻；决定形成的计划仍当前有效，适用性不动。随后一次不早于 T3 的触发从决定形成的计划起照判。
