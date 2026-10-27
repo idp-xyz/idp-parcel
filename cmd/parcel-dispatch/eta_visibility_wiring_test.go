@@ -231,11 +231,12 @@ func TestAnETAThatMeetsThenMissesTheGateMovesTheCustomerViewThroughShownToWithhe
 	}
 }
 
-// Covers: AT-VE-051、AT-VE-222、AT-VE-224、AT-VE-225、AT-VE-213、AT-VE-215 与 CONTEXT「承运商提供的预测与运营企业派生的预测分别保留来源和口径。新的 ETA 形成新版本，
-// 不覆盖历史预测」的生产链——承运商与运营企业两路预测并存：只有承运商一路时它是候选；运营企业一路到了候选换手，判断替代指回、视图
-// 换代；承运商再出新版本（哪怕质量已不达标）候选没变，判断与视图都不长版本；运营企业出新版本才再换代。四个预测版本、三版判断
-// 都留在库里，判断的候选引用（包裹、里程碑、来源、版本）在预测库里按版本读得回，各线当前版是各自最新的一版。
-func TestTwoETASourcesKeepTheirOwnLinesAndTheJudgementFollowsTheOperatorDerivedOne(t *testing.T) {
+// Covers: AT-VE-051、AT-VE-222、AT-VE-224、AT-VE-225、AT-VE-213、AT-VE-215 与 CONTEXT「承运商提供的预测与运营企业派生的预测分别保留来源和口径。
+// 新的 ETA 形成新版本，不覆盖历史预测」的生产链——承运商与运营企业两路预测并存（规则把两路的可信度依据都登为达标）：只有承运商一路时它是
+// 候选；运营企业一路到了且达标，候选换手，判断替代指回、视图换代；承运商再出新版本，候选没变，判断与视图都不长版本；运营企业一路刷成不达标而
+// 承运商仍达标，候选换手到承运商那一版，仍答可见，视图换代；两路都不达标，候选取运营企业那一版，答 ETA 不可见，视图不展示。五个预测版本、
+// 四版判断都留在库里，判断的候选引用（包裹、里程碑、来源、版本）在预测库里按版本读得回，各线当前版是各自最新的一版。
+func TestTwoETASourcesKeepTheirOwnLinesAndTheJudgementFollowsTheFirstQualifyingInSourceOrder(t *testing.T) {
 	fixture := newAcceptedCustomerViewFixture(t)
 	registerETAShownPolicy(t, fixture)
 	registerETARuleQualifying(t, fixture, "MEDIUM/history-based", "HIGH/carrier-confirmed")
@@ -266,8 +267,8 @@ func TestTwoETASourcesKeepTheirOwnLinesAndTheJudgementFollowsTheOperatorDerivedO
 	}
 	viewsAfterHandover := fixture.countSQL(t, `SELECT count(*) FROM visibility_exception.customer_view_version`)
 
-	// 承运商一路再出新版本，且质量已不达标：候选是运营企业那一版，没变，判断与视图都不动。
-	carrierV2 := formETAFrom(t, fixture, vedomain.CarrierProvidedETA, "SYN-CARRIER-FEED-2", "LOW/stale")
+	// 承运商一路再出新版本：候选是运营企业那一版（达标），没变，判断与视图都不动。
+	carrierV2 := formETAFrom(t, fixture, vedomain.CarrierProvidedETA, "SYN-CARRIER-FEED-2", "HIGH/carrier-confirmed")
 	beat(t, fixture, "承运商第二份")
 	if again := currentETAJudgement(t, fixture); again.Version() != second.Version() {
 		t.Fatalf("非候选来源出新版本换了判断：%q → %q", second.Version(), again.Version())
@@ -279,18 +280,38 @@ func TestTwoETASourcesKeepTheirOwnLinesAndTheJudgementFollowsTheOperatorDerivedO
 		t.Fatalf("视图版本 = %d, want 仍为 %d", n, viewsAfterHandover)
 	}
 
-	// 运营企业一路出新版本且质量不达标：候选版本变了，判断换版为 ETA 不可见，视图随之不展示。
+	// 运营企业一路刷成不达标，承运商那一版仍达标：候选换手到承运商那一版，判断仍答可见，视图换代。
 	operatorV2 := formETAFrom(t, fixture, vedomain.OperatorDerivedETA, "SYN-ETA-INPUTS-2", "LOW/sparse")
 	beat(t, fixture, "运营企业第二份")
 	third := currentETAJudgement(t, fixture)
-	if third.Conclusion() != vedomain.ETANotVisible || third.CandidateVersion() != operatorV2 {
-		t.Fatalf("判断 = %q 候选 = %q，want ETA 不可见且引用运营企业 %q", third.Conclusion(), third.CandidateVersion(), operatorV2)
+	if third.Conclusion() != vedomain.CustomerVisibleETA || third.CandidateVersion() != carrierV2 ||
+		third.CandidateSource() != vedomain.CarrierProvidedETA {
+		t.Fatalf("判断 = %q 候选 = %q（%v），want 客户可见且候选换手到承运商 %q", third.Conclusion(), third.CandidateVersion(),
+			third.CandidateSource(), carrierV2)
+	}
+	if prior, superseding := third.PriorVersion(); !superseding || prior != second.Version() {
+		t.Fatalf("判断前版 = %q，want 指回 %q", prior, second.Version())
+	}
+	reshown := currentCustomerView(t, fixture)
+	if content, shown := reshown.Dimensions().ETA.Content(); !shown || content.String() != third.Version().String() {
+		t.Fatalf("候选换手到承运商后视图 ETA 一维 = %v 内容 %q，want 展示且来处为判断 %q",
+			reshown.Dimensions().ETA.State(), content, third.Version())
+	}
+
+	// 承运商一路也刷成不达标：两路都不达标，候选取来源优先序最靠前的运营企业那一版，答 ETA 不可见，视图不展示。
+	carrierV3 := formETAFrom(t, fixture, vedomain.CarrierProvidedETA, "SYN-CARRIER-FEED-3", "LOW/stale")
+	beat(t, fixture, "承运商第三份")
+	fourth := currentETAJudgement(t, fixture)
+	if fourth.Conclusion() != vedomain.ETANotVisible || fourth.CandidateVersion() != operatorV2 ||
+		fourth.CandidateSource() != vedomain.OperatorDerivedETA {
+		t.Fatalf("判断 = %q 候选 = %q（%v），want ETA 不可见且候选取运营企业 %q", fourth.Conclusion(), fourth.CandidateVersion(),
+			fourth.CandidateSource(), operatorV2)
 	}
 	if view := currentCustomerView(t, fixture); view.Dimensions().ETA.State() != vedomain.DimensionNotDisclosed {
 		t.Fatalf("ETA 一维 = %v, want 不展示", view.Dimensions().ETA.State())
 	}
 
-	// 历史不丢：四个预测版本都在、各线当前版是各自最新的一版，判断留下的候选引用按版本读得回。
+	// 历史不丢：五个预测版本都在、各线当前版是各自最新的一版，判断留下的候选引用按版本读得回。
 	etas, err := vepostgres.NewETAs(fixture.db)
 	if err != nil {
 		t.Fatalf("构造 ETA 库：%v", err)
@@ -298,8 +319,11 @@ func TestTwoETASourcesKeepTheirOwnLinesAndTheJudgementFollowsTheOperatorDerivedO
 	tenant := mustVE(t, vedomain.NewTenantID, fixture.identity.TenantID().String())
 	parcel := mustVE(t, vedomain.NewTrackedParcelReference, transportHandoverObject)
 	milestone := mustVE(t, vedomain.NewMilestoneReference, "DELIVERED")
-	if n := fixture.countSQL(t, `SELECT count(*) FROM visibility_exception.eta_prediction_version`); n != 4 {
-		t.Fatalf("预测版本行 = %d, want 4：任何一路的刷新都不该覆盖旧版", n)
+	if n := fixture.countSQL(t, `SELECT count(*) FROM visibility_exception.eta_prediction_version`); n != 5 {
+		t.Fatalf("预测版本行 = %d, want 5：任何一路的刷新都不该覆盖旧版", n)
+	}
+	if n := fixture.countSQL(t, `SELECT count(*) FROM visibility_exception.eta_visibility_judgement_version`); n != 4 {
+		t.Fatalf("判断版本行 = %d, want 4", n)
 	}
 	for _, kept := range []struct {
 		source  vedomain.ETASourceKind
@@ -308,6 +332,7 @@ func TestTwoETASourcesKeepTheirOwnLinesAndTheJudgementFollowsTheOperatorDerivedO
 	}{
 		{vedomain.CarrierProvidedETA, carrierV1, "SYN-CARRIER-FEED-1"},
 		{vedomain.CarrierProvidedETA, carrierV2, "SYN-CARRIER-FEED-2"},
+		{vedomain.CarrierProvidedETA, carrierV3, "SYN-CARRIER-FEED-3"},
 		{vedomain.OperatorDerivedETA, operatorV1, "SYN-ETA-INPUTS-1"},
 		{vedomain.OperatorDerivedETA, operatorV2, "SYN-ETA-INPUTS-2"},
 	} {
@@ -317,8 +342,8 @@ func TestTwoETASourcesKeepTheirOwnLinesAndTheJudgementFollowsTheOperatorDerivedO
 		}
 	}
 	currents, err := etas.ListCurrent(t.Context(), tenant, parcel, milestone)
-	if err != nil || len(currents) != 2 || currents[0].Version() != carrierV2 || currents[1].Version() != operatorV2 {
-		t.Fatalf("各线当前版 = %v err=%v，want 承运商 %q 与运营企业 %q", currents, err, carrierV2, operatorV2)
+	if err != nil || len(currents) != 2 || currents[0].Version() != carrierV3 || currents[1].Version() != operatorV2 {
+		t.Fatalf("各线当前版 = %v err=%v，want 承运商 %q 与运营企业 %q", currents, err, carrierV3, operatorV2)
 	}
 	judgements, err := vepostgres.NewETAVisibilityJudgements(fixture.db)
 	if err != nil {

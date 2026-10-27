@@ -110,12 +110,30 @@ func (repository *ETAs) ListCurrent(
 	return currents, nil
 }
 
-// LockCurrent 对（租户+包裹+里程碑+来源）这条线持事务级咨询锁到环境事务结束，再读回当前版。写者据此
-// 决定重放、刷新还是首版：同一条线上并发的写者在锁上排队，输家醒来读到赢家已提交的当前版。锁与读分两条
-// 语句——读已提交下后一条语句取新快照，才看得见赢家刚提交的版本。首版之前线上没有标记行可锁，所以锁的是线的
-// 键而不是某一行。锁随事务释放，走 RequireExecutor：没有环境事务时锁在取锁那条语句结束就放掉，静默放过
-// 比报错更糟。锁键各维以 chr(31) 分隔后取 hashtext，口径同 TF 的 BookingAnswers.FindAnswersForUpdate，
-// 哈希撞上只多等一会儿，不错判。
+// lockLine 对（租户+包裹+里程碑+来源）这条线持事务级咨询锁到环境事务结束。锁键各维以 chr(31) 分隔后取 hashtext，
+// 口径同 TF 的 BookingAnswers.FindAnswersForUpdate，哈希撞上只多等一会儿，不错判。同一事务内重入不阻塞。
+func lockLine(
+	ctx context.Context,
+	executor bentopg.Executor,
+	tenant domain.TenantID,
+	parcel domain.TrackedParcelReference,
+	milestone domain.MilestoneReference,
+	source domain.ETASourceKind,
+) error {
+	if _, err := executor.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext('visibility_exception.eta_prediction.line'),
+		                              hashtext($1 || chr(31) || $2 || chr(31) || $3 || chr(31) || $4))`,
+		tenant.String(), parcel.String(), milestone.String(), source.String(),
+	); err != nil {
+		return fmt.Errorf("取预测线锁：%w", err)
+	}
+	return nil
+}
+
+// LockCurrent 取这条线的线锁，再读回当前版。写者据此决定重放、刷新还是首版：同一条线上并发的写者在锁上排队，
+// 输家醒来读到赢家已提交的当前版。锁与读分两条语句——读已提交下后一条语句取新快照，才看得见赢家刚提交的版本。
+// 首版之前线上没有标记行可锁，所以锁的是线的键而不是某一行。锁随事务释放，走 RequireExecutor：没有环境事务时锁在
+// 取锁那条语句结束就放掉，静默放过比报错更糟。
 func (repository *ETAs) LockCurrent(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -127,12 +145,8 @@ func (repository *ETAs) LockCurrent(
 	if err != nil {
 		return domain.ETAPrediction{}, false, fmt.Errorf("lock current eta: %w", err)
 	}
-	if _, err := executor.Exec(ctx,
-		`SELECT pg_advisory_xact_lock(hashtext('visibility_exception.eta_prediction.line'),
-		                              hashtext($1 || chr(31) || $2 || chr(31) || $3 || chr(31) || $4))`,
-		tenant.String(), parcel.String(), milestone.String(), source.String(),
-	); err != nil {
-		return domain.ETAPrediction{}, false, fmt.Errorf("lock current eta: 取预测线锁：%w", err)
+	if err := lockLine(ctx, executor, tenant, parcel, milestone, source); err != nil {
+		return domain.ETAPrediction{}, false, fmt.Errorf("lock current eta: %w", err)
 	}
 	eta, found, err := scanETA(parcel, milestone, executor.QueryRow(ctx,
 		`SELECT `+etaColumns+`
@@ -148,6 +162,32 @@ func (repository *ETAs) LockCurrent(
 	))
 	if err != nil {
 		return domain.ETAPrediction{}, false, fmt.Errorf("lock current eta: %w", err)
+	}
+	return eta, found, nil
+}
+
+// FindByInputs 读这条线上用该输入版本形成的那一版，当前版或已被接替的皆可（线内输入版本唯一）。
+func (repository *ETAs) FindByInputs(
+	ctx context.Context,
+	tenant domain.TenantID,
+	parcel domain.TrackedParcelReference,
+	milestone domain.MilestoneReference,
+	source domain.ETASourceKind,
+	inputs domain.PredictionInputsReference,
+) (domain.ETAPrediction, bool, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return domain.ETAPrediction{}, false, fmt.Errorf("find eta by inputs: %w", err)
+	}
+	eta, found, err := scanETA(parcel, milestone, querier.QueryRow(ctx,
+		`SELECT `+etaColumns+`
+		   FROM visibility_exception.eta_prediction_version AS v
+		  WHERE v.tenant_id = $1 AND v.parcel_ref = $2 AND v.milestone_ref = $3
+		    AND v.source = $4 AND v.inputs_ref = $5`,
+		tenant.String(), parcel.String(), milestone.String(), source.String(), inputs.String(),
+	))
+	if err != nil {
+		return domain.ETAPrediction{}, false, fmt.Errorf("find eta by inputs: %w", err)
 	}
 	return eta, found, nil
 }
@@ -234,9 +274,11 @@ func scanETA(
 	return eta, true, nil
 }
 
-// Save 追加预测版本并移当前标记：首版只在线上无当前标记时立标记（ON CONFLICT DO NOTHING），刷新只在标记恰指
-// 新版本所指前版时移标记（UPDATE ... WHERE version_id = prior 的乐观条件）。零行命中都是
-// ports.ErrETACurrentChanged；已写下的版本行随同一事务回滚，不留一版从未成为当前的预测。
+// Save 追加预测版本并移当前标记。先取这条线的线锁（正常路径上 LockCurrent 已取过，同一事务内重入），再核条件、核完才写：
+// 首版只在线上尚无当前标记时成立，刷新只在标记恰指新版本所指的前版时成立，这个输入版本在线上没出现过；不成立就什么都不写，
+// 交回 ports.ErrETACurrentChanged——绕过 LockCurrent 的写者输了也不留一版从未成为当前的预测，不靠调用方回滚事务。
+// 核完之后写版本行、再立或移标记（首版 ON CONFLICT DO NOTHING，刷新 UPDATE ... WHERE version_id = 前版），零行命中同样交回
+// ErrETACurrentChanged；持着线锁时这两处不会命中，留作最后一道。
 //
 // 走 RequireExecutor：预测版本与同一步交出的 Outbox 意图必须同生共死。
 func (repository *ETAs) Save(
@@ -254,6 +296,33 @@ func (repository *ETAs) Save(
 	var priorColumn *string
 	if refreshing {
 		priorColumn = stringPointer(prior.String())
+	}
+
+	if err := lockLine(ctx, executor, tenant, eta.Parcel(), eta.Milestone(), eta.Source()); err != nil {
+		return fmt.Errorf("save eta: %w", err)
+	}
+	var marked *string
+	err = executor.QueryRow(ctx,
+		`SELECT version_id
+		   FROM visibility_exception.eta_prediction_current
+		  WHERE tenant_id = $1 AND parcel_ref = $2 AND milestone_ref = $3 AND source = $4`,
+		tenant.String(), eta.Parcel().String(), eta.Milestone().String(), eta.Source().String(),
+	).Scan(&marked)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("save eta: 核当前标记：%w", err)
+	}
+	var inputsSeen bool
+	if err := executor.QueryRow(ctx,
+		`SELECT EXISTS (
+			SELECT 1 FROM visibility_exception.eta_prediction_version
+			 WHERE tenant_id = $1 AND parcel_ref = $2 AND milestone_ref = $3
+			   AND source = $4 AND inputs_ref = $5)`,
+		tenant.String(), eta.Parcel().String(), eta.Milestone().String(), eta.Source().String(), eta.Inputs().String(),
+	).Scan(&inputsSeen); err != nil {
+		return fmt.Errorf("save eta: 核输入版本：%w", err)
+	}
+	if inputsSeen || (!refreshing && marked != nil) || (refreshing && (marked == nil || *marked != prior.String())) {
+		return fmt.Errorf("save eta: %w", ports.ErrETACurrentChanged)
 	}
 
 	if _, err := executor.Exec(ctx,

@@ -29,15 +29,16 @@ type etaVersionKey struct {
 // etaStoreDouble 按预测线（租户+包裹+里程碑+来源）存当前版，并像真库那样把每个版本都留着：Save 只增版本、
 // 移当前标记，不改写旧版。
 type etaStoreDouble struct {
-	current  map[etaKey]domain.ETAPrediction
-	versions map[etaVersionKey]domain.ETAPrediction
-	findErr  error
-	listErr  error
-	lockErr  error
-	saveErr  error
-	saves    int
-	locks    int
-	finds    int
+	current   map[etaKey]domain.ETAPrediction
+	versions  map[etaVersionKey]domain.ETAPrediction
+	findErr   error
+	listErr   error
+	lockErr   error
+	inputsErr error
+	saveErr   error
+	saves     int
+	locks     int
+	finds     int
 }
 
 func newETAStore() *etaStoreDouble {
@@ -108,6 +109,26 @@ func (double *etaStoreDouble) FindVersion(
 		version: version,
 	}]
 	return eta, found, nil
+}
+
+func (double *etaStoreDouble) FindByInputs(
+	_ context.Context,
+	tenant domain.TenantID,
+	parcel domain.TrackedParcelReference,
+	milestone domain.MilestoneReference,
+	source domain.ETASourceKind,
+	inputs domain.PredictionInputsReference,
+) (domain.ETAPrediction, bool, error) {
+	if double.inputsErr != nil {
+		return domain.ETAPrediction{}, false, double.inputsErr
+	}
+	line := etaKey{tenant: tenant, parcel: parcel, milestone: milestone, source: source}
+	for key, eta := range double.versions {
+		if key.line == line && eta.Inputs() == inputs {
+			return eta, true, nil
+		}
+	}
+	return domain.ETAPrediction{}, false, nil
 }
 
 func (double *etaStoreDouble) Save(_ context.Context, tenant domain.TenantID, eta domain.ETAPrediction) error {
@@ -451,6 +472,55 @@ func TestEveryRefreshedVersionStaysReadableByVersion(t *testing.T) {
 			domain.CarrierProvidedETA, formed.Version()); found {
 			t.Fatalf("第 %d 版在承运商线名下也读得到：版本不属于别的来源线", index+1)
 		}
+	}
+}
+
+// Covers: AT-VE-222 与 CONTEXT「同一条线上相同输入版本的重复到达，不论先后，不形成新版本」——输入版本依次到 A、B、A：第三个是
+// 这条线上曾经出现过的输入版本，答当初形成的那一版，不形成新版本、不签身份、不移当前版、不再交意图；线上的当前版仍是 B。
+// 重复到达当前版自己的输入版本照旧重发同一份意图。
+func TestAnInputVersionThatAppearedBeforeOnTheLineIsAReplayNoMatterWhenItArrives(t *testing.T) {
+	fixture := newETAFixture(t)
+	ctx := context.Background()
+
+	first, err := fixture.handler.FormETA(ctx, etaCommand(t, "inputs/A"))
+	if err != nil {
+		t.Fatalf("form A: %v", err)
+	}
+	second, err := fixture.handler.FormETA(ctx, etaCommand(t, "inputs/B"))
+	if err != nil {
+		t.Fatalf("form B: %v", err)
+	}
+	firstETA, _ := first.ETA()
+	secondETA, _ := second.ETA()
+	issued, saved, intents := fixture.identities.next, fixture.predictions.saves, len(fixture.viewChain.intents)
+
+	late, err := fixture.handler.FormETA(ctx, etaCommand(t, "inputs/A"))
+	if err != nil {
+		t.Fatalf("late A: %v", err)
+	}
+	if lateETA, _ := late.ETA(); late.Outcome() != application.ETAExistingResult || lateETA.Version() != firstETA.Version() {
+		t.Fatalf("晚到的旧输入版本 outcome = %q 版本 %q, want EXISTING_RESULT 且是当初形成的 %q",
+			late.Outcome(), lateETA.Version(), firstETA.Version())
+	}
+	if late.HandoffReference() != "" {
+		t.Fatalf("续办引用 = %q，晚到的旧输入版本不该交意图", late.HandoffReference())
+	}
+	if fixture.identities.next != issued || fixture.predictions.saves != saved || len(fixture.viewChain.intents) != intents {
+		t.Fatal("晚到的旧输入版本签了身份、写了库或交了意图")
+	}
+	command := etaCommand(t, "inputs/A")
+	if current, _, _ := fixture.predictions.LockCurrent(ctx, command.TenantID, command.Parcel, command.Milestone,
+		domain.OperatorDerivedETA); current.Version() != secondETA.Version() {
+		t.Fatalf("线上当前版 = %q，晚到的旧输入把线推回去了；want %q", current.Version(), secondETA.Version())
+	}
+
+	again, err := fixture.handler.FormETA(ctx, etaCommand(t, "inputs/B"))
+	if err != nil {
+		t.Fatalf("repeat B: %v", err)
+	}
+	if againETA, _ := again.ETA(); again.Outcome() != application.ETAExistingResult || againETA.Version() != secondETA.Version() ||
+		len(fixture.viewChain.intents) != intents+1 {
+		t.Fatal("当前版自己的输入版本重复到达应答已有预测并重发同一份意图")
 	}
 }
 

@@ -59,6 +59,11 @@ CREATE TABLE visibility_exception.eta_prediction_version (
     CONSTRAINT eta_prediction_version_line_unique
         UNIQUE (tenant_id, parcel_ref, milestone_ref, source, version_id),
 
+    -- 线内输入版本唯一：同一条线上同一输入版本至多形成一版，晚到或重复到达的同一输入版本是重放，不把线推回旧输入。
+    -- 存量行每条线只有一行，不会违反；两路来源带同名输入版本各是自己线上的首版。
+    CONSTRAINT eta_prediction_version_inputs_unique
+        UNIQUE (tenant_id, parcel_ref, milestone_ref, source, inputs_ref),
+
     CONSTRAINT eta_prediction_version_not_blank
         CHECK (
             btrim(tenant_id) <> ''

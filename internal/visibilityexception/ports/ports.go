@@ -615,10 +615,11 @@ var ErrETACurrentChanged = errors.New("visibility exception: the current ETA of 
 //
 // 写者先 LockCurrent 再决定、再 Save：LockCurrent 对这条线持事务级锁到环境事务结束并读回当前版，同一条线上
 // 并发的写者在此排队，输家醒来读到赢家已提交的当前版，走重放或刷新，不分叉线。锁与写同一事务，两者都走
-// RequireExecutor，没有环境事务即拒（锁在取锁语句结束就放掉，等于没锁）。Save 另守乐观条件作最后一道：首版只在线上
-// 尚无当前版时成立，刷新只在当前版恰是它所指的前版时成立，零行命中交回 ErrETACurrentChanged，该事务一并回滚，
-// 不留一版从未成为当前的预测。锁序：预测线锁是写路径上的第一把，其后只有预测版本与 Outbox 意图的写，不与投影、
-// 判断、客户视图的锁序交叉。
+// RequireExecutor，没有环境事务即拒（锁在取锁语句结束就放掉，等于没锁）。Save 自己也先取同一把锁（同一事务内
+// 重入）再核条件，核完才写：首版只在线上尚无当前版、且这个输入版本在线上没出现过时成立，刷新只在当前版恰是它所指的前版、
+// 且这个输入版本没出现过时成立；不成立就什么都不写，交回 ErrETACurrentChanged。所以绕过 LockCurrent 的写者输了也不留
+// 一版从未成为当前的预测，不靠调用方回滚事务。线内输入版本唯一，库里另有唯一约束兜底。锁序：预测线锁是写路径上的第一把，
+// 其后只有预测版本与 Outbox 意图的写，不与投影、判断、客户视图的锁序交叉。
 type ETAStore interface {
 	ETACurrentRead
 	LockCurrent(
@@ -627,6 +628,17 @@ type ETAStore interface {
 		parcel domain.TrackedParcelReference,
 		milestone domain.MilestoneReference,
 		source domain.ETASourceKind,
+	) (domain.ETAPrediction, bool, error)
+	// FindByInputs 读这条线上用该输入版本形成的那一版，当前版或已被接替的皆可。线内输入版本唯一：同一输入版本在
+	// 这条线上至多形成一版，晚到或重复到达的同一输入版本据此认作重放，不把线推回旧输入。读写者在 LockCurrent
+	// 之后的同一事务里调它。
+	FindByInputs(
+		ctx context.Context,
+		tenant domain.TenantID,
+		parcel domain.TrackedParcelReference,
+		milestone domain.MilestoneReference,
+		source domain.ETASourceKind,
+		inputs domain.PredictionInputsReference,
 	) (domain.ETAPrediction, bool, error)
 	// FindVersion 按版本读回该预测线名下留存的任一版，当前版或已被接替的皆可。
 	FindVersion(

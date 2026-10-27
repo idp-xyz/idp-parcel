@@ -110,31 +110,43 @@ func formedETA(t *testing.T, spec domain.ETAPredictionSpec) domain.ETAPrediction
 	return eta
 }
 
-// Covers: AT-VE-224 与 AT-VE-051「两个来源都提供 ETA」的选取半边与 VE CONTEXT「ETA 客户可见性判断……候选内部 ETA」——两路来源各有
-// 当前版时，候选取运营企业派生的那一版；只有承运商提供的一路时才取它。选取只看来源，不看预测时点也不看可信度：
-// 承运商那一版更新、可信度更高也不顶替，与入参次序无关（选取不是「谁后到谁赢」，也不是替门槛挑一个能过门槛的）。
-func TestTheCandidateETAIsTheOperatorDerivedCurrentVersionElseTheCarrierProvidedOne(t *testing.T) {
+// Covers: AT-VE-224 与 AT-VE-051「两个来源都提供 ETA」的选取半边与 VE CONTEXT「ETA 客户可见性判断……候选内部 ETA」——
+// 候选 = 各来源线当前版里按来源优先序（运营企业派生在前、承运商提供在后）第一个满足规则质量门槛的那一版；
+// 没有一个满足、或规则缺失与冲突时取优先序最靠前的那一版。结果只由各线当前版与规则决定，与入参次序无关，也不看预测时点：
+// 承运商那一版更新也不顶替。
+func TestTheCandidateETAIsTheFirstOneInSourceOrderThatMeetsTheGateElseTheFirstInSourceOrder(t *testing.T) {
 	operator := formedETA(t, etaSpec(t, "eta-op/v1"))
 	carrier := formedETA(t, carrierETASpec(t, "eta-carrier/v1"))
 	if !carrier.PredictedAt().After(operator.PredictedAt()) {
 		t.Fatal("夹具应让承运商那一版预测时点更新")
 	}
+	rule := func(qualifying ...string) domain.ETAVisibilityRuleBasis {
+		return domain.ConfiguredETARule(visibilityRule(t, "DELIVERED", qualifying...))
+	}
 
-	for name, currents := range map[string][]domain.ETAPrediction{
-		"运营企业在前": {operator, carrier},
-		"承运商在前":  {carrier, operator},
+	for _, tc := range []struct {
+		name     string
+		currents []domain.ETAPrediction
+		basis    domain.ETAVisibilityRuleBasis
+		want     domain.ETAPrediction
+	}{
+		{"两路都达标取运营企业", []domain.ETAPrediction{operator, carrier}, rule("MEDIUM/history-based", "HIGH/carrier-confirmed"), operator},
+		{"入参次序不影响", []domain.ETAPrediction{carrier, operator}, rule("MEDIUM/history-based", "HIGH/carrier-confirmed"), operator},
+		{"运营企业达标、承运商不达标取运营企业", []domain.ETAPrediction{carrier, operator}, rule("MEDIUM/history-based"), operator},
+		{"运营企业不达标、承运商达标取承运商", []domain.ETAPrediction{operator, carrier}, rule("HIGH/carrier-confirmed"), carrier},
+		{"两路都不达标取运营企业", []domain.ETAPrediction{carrier, operator}, rule("LOW/sparse"), operator},
+		{"规则缺失取运营企业", []domain.ETAPrediction{carrier, operator}, domain.UnconfiguredETARule(), operator},
+		{"规则冲突取运营企业", []domain.ETAPrediction{operator, carrier}, domain.ConflictingETARules(), operator},
+		{"只有承运商一路", []domain.ETAPrediction{carrier}, rule("LOW/sparse"), carrier},
+		{"只有运营企业一路", []domain.ETAPrediction{operator}, rule("HIGH/carrier-confirmed"), operator},
 	} {
-		chosen, found := domain.CandidateETAFrom(currents)
-		if !found || chosen.Version() != operator.Version() || chosen.Source() != domain.OperatorDerivedETA {
-			t.Fatalf("%s：候选 = %q（%v）found=%v，want 运营企业派生的 %q", name, chosen.Version(), chosen.Source(), found, operator.Version())
+		chosen, found := domain.CandidateETAFrom(tc.currents, tc.basis)
+		if !found || chosen.Version() != tc.want.Version() || chosen.Source() != tc.want.Source() {
+			t.Errorf("%s：候选 = %q（%v）found=%v，want %q（%v）", tc.name, chosen.Version(), chosen.Source(), found,
+				tc.want.Version(), tc.want.Source())
 		}
 	}
-
-	only, found := domain.CandidateETAFrom([]domain.ETAPrediction{carrier})
-	if !found || only.Version() != carrier.Version() {
-		t.Fatalf("只有承运商一路时候选 = %q found=%v，want %q", only.Version(), found, carrier.Version())
-	}
-	if _, found := domain.CandidateETAFrom(nil); found {
+	if _, found := domain.CandidateETAFrom(nil, rule("MEDIUM/history-based")); found {
 		t.Fatal("没有任何当前版却选出了候选")
 	}
 }

@@ -155,8 +155,10 @@ func NewFormETAHandler(deps FormETADeps) *FormETAHandler {
 }
 
 // FormETA 把一组预测事实推进到版本化 ETA：受理（各件缺一即未受理）→ 取这条预测线（包裹+里程碑+来源）
-// 的线锁并读当前版 → 幂等按（线+输入版本），同输入不重形成只重发同一份意图 → 输入变化经 Refresh 换版指回
-// 前版，被接替的版本留在库里、历史预测不覆盖 → 意图交客户视图链（ETA 新版本是视图重派生的触发之一）。
+// 的线锁并读当前版 → 幂等按（线+输入版本）：这条线上曾经出现过的输入版本，不论先后再到，都答当初形成的那一版，
+// 不形成新版本、不移当前版（当前版自己的输入版本重复到达另重发同一份意图，ADR-0043；被接替的旧版本不再交意图，
+// 下游读的是各线当前版）→ 新的输入版本经 Refresh 换版指回本线前一版，被接替的版本留在库里、历史预测不覆盖
+// → 意图交客户视图链（ETA 新版本是视图重派生的触发之一）。
 // 承运商提供的与运营企业派生的预测各是一条线：一路的形成、刷新与重放不看另一路，两路并存时对客判断取哪一版
 // 由判断编排按候选规则选（domain.CandidateETAFrom），不在这里。
 // 预测不是承诺——领域类型上没有承诺、路由计划或实际时间的字段，这里也不碰它们。必须在环境事务里运行：
@@ -182,14 +184,21 @@ func (handler *FormETAHandler) FormETA(
 	if err != nil {
 		return FormETAResult{outcome: FormETAUndecided, reason: ETAStoreUnavailable}, nil
 	}
-	if found && current.Inputs() == command.Inputs {
-		// 同（包裹+里程碑+来源+输入版本）重放：不重形成，把同一份意图再交一次（ADR-0043）。
-		return FormETAResult{
-			outcome:    ETAExistingResult,
-			eta:        current,
-			hasETA:     true,
-			handoffRef: handler.handOffETA(ctx, command.TenantID, current),
-		}, nil
+	if found {
+		// 同（包裹+里程碑+来源+输入版本）重放，含晚到的旧输入版本：不重形成，不把线推回旧输入。
+		formed, seen, err := handler.deps.Predictions.FindByInputs(
+			ctx, command.TenantID, command.Parcel, command.Milestone, command.Source, command.Inputs)
+		if err != nil {
+			return FormETAResult{outcome: FormETAUndecided, reason: ETAStoreUnavailable}, nil
+		}
+		if seen {
+			result := FormETAResult{outcome: ETAExistingResult, eta: formed, hasETA: true}
+			if formed.Version() == current.Version() {
+				// 当前版自己的输入版本重放：把同一份意图再交一次（ADR-0043）。
+				result.handoffRef = handler.handOffETA(ctx, command.TenantID, current)
+			}
+			return result, nil
+		}
 	}
 
 	version, err := handler.deps.Identities.NextETAVersionID(ctx)

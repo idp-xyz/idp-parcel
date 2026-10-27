@@ -122,9 +122,9 @@ func NewJudgeETAVisibilityHandler(deps JudgeETAVisibilityDeps) *JudgeETAVisibili
 }
 
 // Handle 把一份内部 ETA 推进到 ETA 客户可见性判断（UC-VE-003 主流程第 3、6、8 步）：受理（租户、账户、
-// 包裹、里程碑缺一即未受理，不读任何依赖）→ 一次读出各来源线的当前版并选候选（运营企业派生的优先，没有才取
-// 承运商提供的；没有任何一版就不判，不用计划时间凑）→
-// 固定判断时点并按它取适用规则（缺失与冲突是确定的业务答案，落「待判断」，不是错误）→ 对候选作发现
+// 包裹、里程碑缺一即未受理，不读任何依赖）→ 一次读出各来源线的当前版（一版也没有就不判，不用计划时间凑）→
+// 固定判断时点并按它取适用规则（缺失与冲突是确定的业务答案，落「待判断」，不是错误）→ 选候选（按来源优先序取第一个
+// 满足门槛的当前版，都不满足或规则缺失冲突时取优先序最靠前的一版，domain.CandidateETAFrom）→ 对候选作发现
 // （达标可见、未达不可见、规则缺失或冲突待判断）→ 发现与当前判断相同即重放，答已有判断，否则首版
 // 判断或替代判断指回前版，原判断不覆盖。
 //
@@ -145,8 +145,7 @@ func (handler *JudgeETAVisibilityHandler) Handle(
 	if err != nil {
 		return undecidedJudgement(CandidateETAUnavailable), nil
 	}
-	eta, found := domain.CandidateETAFrom(currents)
-	if !found {
+	if len(currents) == 0 {
 		return JudgeETAVisibilityResult{outcome: ETAVisibilityNoCandidate}, nil
 	}
 
@@ -154,6 +153,11 @@ func (handler *JudgeETAVisibilityHandler) Handle(
 	basis, err := handler.deps.Rules.AssessETAVisibilityRule(ctx, command.TenantID, command.Customer, judgedAt)
 	if err != nil {
 		return undecidedJudgement(ETAVisibilityRuleUnavailable), nil
+	}
+	// 候选依赖规则（按来源优先序取第一个满足质量门槛的），所以先取规则再选。
+	eta, found := domain.CandidateETAFrom(currents, basis)
+	if !found {
+		return JudgeETAVisibilityResult{outcome: ETAVisibilityNoCandidate}, nil
 	}
 	finding, err := domain.AssessETAVisibility(eta, basis)
 	if errors.Is(err, domain.ErrETAOutsideRuleTarget) {

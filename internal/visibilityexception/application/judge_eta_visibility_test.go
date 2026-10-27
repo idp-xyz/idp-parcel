@@ -361,30 +361,134 @@ func qualifyingRule(t *testing.T, refs ...string) domain.ETAVisibilityRuleBasis 
 	})
 }
 
-// Covers: AT-VE-224 与 AT-VE-051 的选取半边与 UC-VE-003 规则「候选取运营企业派生的当前版，没有才取承运商提供的当前版」——两路来源各有当前版时，
-// 判断引用运营企业那一版，来源进候选引用；承运商那一版更新、可信度更高、本来能过门槛，也不顶替。
-func TestWhenBothSourcesHaveAnETATheOperatorDerivedOneIsTheJudgementCandidate(t *testing.T) {
+// Covers: AT-VE-224 与 AT-VE-051 的选取半边与 UC-VE-003 规则「候选取来源优先序里第一个满足质量门槛的当前版」——两路来源都有
+// 当前版且都达标时，判断引用运营企业那一版，来源进候选引用；承运商那一版更新、可信度更高也不顶替。
+func TestWhenBothSourcesMeetTheGateTheOperatorDerivedOneIsTheJudgementCandidate(t *testing.T) {
 	fixture := newJudgeFixture(t)
 	fixture.hasETAFrom(t, domain.CarrierProvidedETA, "eta-carrier-1", "HIGH/carrier-confirmed")
 	operator := fixture.hasETAFrom(t, domain.OperatorDerivedETA, "eta-op-1", "MEDIUM/history-based")
-	fixture.rules.basis = viewJudgementRule(t, "MEDIUM/history-based")
+	fixture.rules.basis = qualifyingRule(t, "MEDIUM/history-based", "HIGH/carrier-confirmed")
 
 	result, err := fixture.handler.Handle(context.Background(), judgeCommand(t))
 	if err != nil {
 		t.Fatalf("handle: %v", err)
 	}
 	judgement, present := result.Judgement()
-	if !present || result.Outcome() != application.ETAVisibilityJudged {
-		t.Fatalf("outcome = %q present = %v", result.Outcome(), present)
+	if !present || result.Outcome() != application.ETAVisibilityJudged || judgement.Conclusion() != domain.CustomerVisibleETA {
+		t.Fatalf("outcome = %q present = %v conclusion = %q", result.Outcome(), present, judgement.Conclusion())
 	}
 	if judgement.CandidateVersion() != operator.Version() || judgement.CandidateSource() != domain.OperatorDerivedETA {
 		t.Fatalf("候选 = %q（%v），want 运营企业派生的 %q", judgement.CandidateVersion(), judgement.CandidateSource(), operator.Version())
 	}
 }
 
-// Covers: AT-VE-224 与 AT-VE-213——只有承运商一路时它就是候选；运营企业派生的预测到了，候选换手：形成替代判断指回前版，
+// Covers: AT-VE-224 与 AT-VE-213——运营企业那一线刷成不达标而承运商那一版仍达标：候选换手到承运商那一版，形成替代判断指回
+// 原判断，仍答客户可见；原判断仍读得回、仍引用运营企业那一版。租户把承运商的依据登为达标，就是愿意对客展示它。
+func TestWhenTheOperatorDerivedETAMissesTheGateAndTheCarrierOneMeetsItTheCarrierOneBecomesTheCandidate(t *testing.T) {
+	fixture := newJudgeFixture(t)
+	ctx := context.Background()
+	fixture.rules.basis = qualifyingRule(t, "MEDIUM/history-based", "HIGH/carrier-confirmed")
+	carrier := fixture.hasETAFrom(t, domain.CarrierProvidedETA, "eta-carrier-1", "HIGH/carrier-confirmed")
+	operatorV1 := fixture.hasETAFrom(t, domain.OperatorDerivedETA, "eta-op-1", "MEDIUM/history-based")
+	first, err := fixture.handler.Handle(ctx, judgeCommand(t))
+	if err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	firstJudgement, _ := first.Judgement()
+	if firstJudgement.CandidateVersion() != operatorV1.Version() {
+		t.Fatalf("首个判断候选 = %q，want 运营企业 %q", firstJudgement.CandidateVersion(), operatorV1.Version())
+	}
+
+	fixture.hasETAFrom(t, domain.OperatorDerivedETA, "eta-op-2", "LOW/sparse")
+	second, err := fixture.handler.Handle(ctx, judgeCommand(t))
+	if err != nil {
+		t.Fatalf("second: %v", err)
+	}
+	secondJudgement, _ := second.Judgement()
+	if second.Outcome() != application.ETAVisibilityRejudged ||
+		secondJudgement.CandidateVersion() != carrier.Version() || secondJudgement.CandidateSource() != domain.CarrierProvidedETA ||
+		secondJudgement.Conclusion() != domain.CustomerVisibleETA {
+		t.Fatalf("outcome = %q 候选 = %q（%v）结论 = %q，want REJUDGED、候选换手到承运商 %q、仍客户可见", second.Outcome(),
+			secondJudgement.CandidateVersion(), secondJudgement.CandidateSource(), secondJudgement.Conclusion(), carrier.Version())
+	}
+	if prior, superseding := secondJudgement.PriorVersion(); !superseding || prior != firstJudgement.Version() {
+		t.Fatalf("prior = %q, want %q", prior, firstJudgement.Version())
+	}
+	kept, found, _ := fixture.judgements.FindVersion(ctx, judgeCommand(t).TenantID, judgeCommand(t).Customer,
+		judgeCommand(t).Parcel, firstJudgement.Version())
+	if !found || kept.CandidateVersion() != operatorV1.Version() || kept.CandidateSource() != domain.OperatorDerivedETA {
+		t.Fatal("换手之后前一版判断读不回，或它的候选引用被改写")
+	}
+}
+
+// Covers: AT-VE-224 与 AT-VE-052——两路都未达门槛：候选取来源优先序最靠前的运营企业那一版，答 ETA 不可见（候选照实记下，
+// 质量未达门槛）；只有承运商一路又未达标时，候选就是承运商那一版。
+func TestWhenNeitherSourceMeetsTheGateTheFirstInSourceOrderIsTheCandidateAndNotVisible(t *testing.T) {
+	t.Run("两路都未达标", func(t *testing.T) {
+		fixture := newJudgeFixture(t)
+		fixture.rules.basis = viewJudgementRule(t, "MEDIUM/history-based")
+		fixture.hasETAFrom(t, domain.CarrierProvidedETA, "eta-carrier-1", "LOW/stale")
+		operator := fixture.hasETAFrom(t, domain.OperatorDerivedETA, "eta-op-1", "LOW/sparse")
+
+		result, err := fixture.handler.Handle(context.Background(), judgeCommand(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		judgement, _ := result.Judgement()
+		if judgement.Conclusion() != domain.ETANotVisible || judgement.Reason() != domain.QualityBelowTheGate ||
+			judgement.CandidateVersion() != operator.Version() || judgement.CandidateSource() != domain.OperatorDerivedETA {
+			t.Fatalf("结论 = %q 理由 = %q 候选 = %q（%v），want 不可见/质量未达且候选是运营企业 %q", judgement.Conclusion(),
+				judgement.Reason(), judgement.CandidateVersion(), judgement.CandidateSource(), operator.Version())
+		}
+	})
+	t.Run("只有承运商一路且未达标", func(t *testing.T) {
+		fixture := newJudgeFixture(t)
+		fixture.rules.basis = viewJudgementRule(t, "MEDIUM/history-based")
+		carrier := fixture.hasETAFrom(t, domain.CarrierProvidedETA, "eta-carrier-1", "LOW/stale")
+
+		result, err := fixture.handler.Handle(context.Background(), judgeCommand(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		judgement, _ := result.Judgement()
+		if judgement.Conclusion() != domain.ETANotVisible || judgement.CandidateVersion() != carrier.Version() ||
+			judgement.CandidateSource() != domain.CarrierProvidedETA {
+			t.Fatalf("结论 = %q 候选 = %q（%v），want 不可见且候选是承运商 %q", judgement.Conclusion(),
+				judgement.CandidateVersion(), judgement.CandidateSource(), carrier.Version())
+		}
+	})
+}
+
+// Covers: AT-VE-224 与 AT-VE-170——规则缺失或冲突时无从比对门槛，候选取来源优先序最靠前的运营企业那一版，判断落待判断；
+// 不因为承运商那一版更新而改取它。
+func TestWithoutAnApplicableRuleTheFirstInSourceOrderIsTheCandidateAndTheJudgementIsPending(t *testing.T) {
+	for name, basis := range map[string]domain.ETAVisibilityRuleBasis{
+		"规则缺失": domain.UnconfiguredETARule(),
+		"规则冲突": domain.ConflictingETARules(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			fixture := newJudgeFixture(t)
+			fixture.hasETAFrom(t, domain.CarrierProvidedETA, "eta-carrier-1", "HIGH/carrier-confirmed")
+			operator := fixture.hasETAFrom(t, domain.OperatorDerivedETA, "eta-op-1", "MEDIUM/history-based")
+			fixture.rules.basis = basis
+
+			result, err := fixture.handler.Handle(context.Background(), judgeCommand(t))
+			if err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+			judgement, _ := result.Judgement()
+			if judgement.Conclusion() != domain.ETAVisibilityPendingJudgement ||
+				judgement.CandidateVersion() != operator.Version() || judgement.CandidateSource() != domain.OperatorDerivedETA {
+				t.Fatalf("结论 = %q 候选 = %q（%v），want 待判断且候选是运营企业 %q", judgement.Conclusion(),
+					judgement.CandidateVersion(), judgement.CandidateSource(), operator.Version())
+			}
+		})
+	}
+}
+
+// Covers: AT-VE-224 与 AT-VE-213——只有承运商一路时它按门槛判、是候选；运营企业派生的预测到了且达标，候选换手：形成替代判断指回前版，
 // 前一版判断仍读得回、仍引用承运商那一版（来源随候选引用留存）。
-func TestACarrierETAIsTheCandidateOnlyUntilAnOperatorDerivedOneArrives(t *testing.T) {
+func TestACarrierETAIsTheCandidateOnlyUntilAQualifyingOperatorDerivedOneArrives(t *testing.T) {
 	fixture := newJudgeFixture(t)
 	ctx := context.Background()
 	fixture.rules.basis = qualifyingRule(t, "MEDIUM/history-based", "HIGH/carrier-confirmed")
@@ -395,9 +499,9 @@ func TestACarrierETAIsTheCandidateOnlyUntilAnOperatorDerivedOneArrives(t *testin
 		t.Fatalf("first: %v", err)
 	}
 	firstJudgement, _ := first.Judgement()
-	if first.Outcome() != application.ETAVisibilityJudged ||
+	if first.Outcome() != application.ETAVisibilityJudged || firstJudgement.Conclusion() != domain.CustomerVisibleETA ||
 		firstJudgement.CandidateVersion() != carrier.Version() || firstJudgement.CandidateSource() != domain.CarrierProvidedETA {
-		t.Fatalf("outcome = %q 候选 = %q（%v），want 承运商 %q 的首个判断", first.Outcome(),
+		t.Fatalf("outcome = %q 候选 = %q（%v），want 承运商 %q 的首个客户可见判断", first.Outcome(),
 			firstJudgement.CandidateVersion(), firstJudgement.CandidateSource(), carrier.Version())
 	}
 
@@ -422,8 +526,8 @@ func TestACarrierETAIsTheCandidateOnlyUntilAnOperatorDerivedOneArrives(t *testin
 	}
 }
 
-// Covers: AT-VE-225 与 AT-VE-213 的重放半边——候选取决于来源，不取决于谁后到：运营企业一路是候选时，
-// 承运商那一路出新版本，候选没变，判断答已有结果、不换代、不签身份；运营企业一路出新版本，候选版本变了，换代。
+// Covers: AT-VE-225 与 AT-VE-213 的重放半边——候选没变就不换代：运营企业那一版是候选（达标）时，承运商那一路出新版本，候选没变，
+// 判断答已有结果、不换代、不签身份；运营企业一路出新版本，候选版本变了，换代。
 func TestANewVersionOfTheNonCandidateSourceLeavesTheJudgementAlone(t *testing.T) {
 	fixture := newJudgeFixture(t)
 	ctx := context.Background()
@@ -460,21 +564,30 @@ func TestANewVersionOfTheNonCandidateSourceLeavesTheJudgementAlone(t *testing.T)
 	}
 }
 
-// Covers: AT-VE-224 与 AT-VE-052 和 UC-VE-003 规则「候选取运营企业派生的当前版」——运营企业那一版质量未达门槛、承运商那一版本来能过：
-// 判断仍落在运营企业那一版上，答 ETA 不可见，不换一个能过门槛的候选。门槛挑的是结论，不是候选。
-func TestTheOperatorDerivedCandidateIsNotSwappedForACarrierETAThatWouldPassTheGate(t *testing.T) {
+// Covers: AT-VE-225——候选取决于各线当前版与规则：运营企业那一版不达标、承运商那一版是候选时，承运商再出新版本，
+// 候选版本变了，换代；候选是运营企业的（达标）时承运商出新版本不动。
+func TestANewVersionOfTheCandidateSourceRejudgesEvenWhenItIsTheCarrier(t *testing.T) {
 	fixture := newJudgeFixture(t)
+	ctx := context.Background()
 	fixture.rules.basis = viewJudgementRule(t, "HIGH/carrier-confirmed")
+	fixture.hasETAFrom(t, domain.OperatorDerivedETA, "eta-op-1", "LOW/sparse")
 	fixture.hasETAFrom(t, domain.CarrierProvidedETA, "eta-carrier-1", "HIGH/carrier-confirmed")
-	operator := fixture.hasETAFrom(t, domain.OperatorDerivedETA, "eta-op-1", "LOW/sparse")
-
-	result, err := fixture.handler.Handle(context.Background(), judgeCommand(t))
+	first, err := fixture.handler.Handle(ctx, judgeCommand(t))
 	if err != nil {
-		t.Fatalf("handle: %v", err)
+		t.Fatalf("first: %v", err)
 	}
-	judgement, _ := result.Judgement()
-	if judgement.Conclusion() != domain.ETANotVisible || judgement.CandidateVersion() != operator.Version() {
-		t.Fatalf("结论 = %q 候选 = %q，want ETA 不可见且引用运营企业 %q", judgement.Conclusion(), judgement.CandidateVersion(), operator.Version())
+	if judgement, _ := first.Judgement(); judgement.CandidateVersion().String() != "eta-carrier-1" {
+		t.Fatalf("首个判断候选 = %q，want 承运商 eta-carrier-1", judgement.CandidateVersion())
+	}
+
+	fixture.hasETAFrom(t, domain.CarrierProvidedETA, "eta-carrier-2", "HIGH/carrier-confirmed")
+	second, err := fixture.handler.Handle(ctx, judgeCommand(t))
+	if err != nil {
+		t.Fatalf("second: %v", err)
+	}
+	if judgement, _ := second.Judgement(); second.Outcome() != application.ETAVisibilityRejudged ||
+		judgement.CandidateVersion().String() != "eta-carrier-2" {
+		t.Fatalf("outcome = %q 候选 = %q，want REJUDGED 且候选 eta-carrier-2", second.Outcome(), judgement.CandidateVersion())
 	}
 }
 
