@@ -201,7 +201,7 @@
 
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
-| `AT-PS-107` 与「一致性、幂等与并发」取消与收寄一条 | 入账已补：冲突记进冲突册、采用消费门入账不回滚重投（[code/35](../../../.scratch/docs-consistency/code/35-cancellation-and-boundary-fact-order-conflict-has-no-label-half-and-no-resolution-face.md)）；解开它的业务决定面仍没有，冲突包裹没有责任起点、也不触发收寄后的路由复核，本行预期结果不变 | [code/76](../../../.scratch/docs-consistency/code/76-a-cancellation-order-conflict-has-no-resolution-decision-face.md) |
+| `AT-PS-107` 与「一致性、幂等与并发」取消与收寄一条 | 已补：冲突记进冲突册、采用消费门入账不回滚重投（[code/35](../../../.scratch/docs-consistency/code/35-cancellation-and-boundary-fact-order-conflict-has-no-label-half-and-no-resolution-face.md)）；解开它的业务决定面见 [ADR-0295](../../adr/0295-a-cancellation-order-conflict-is-resolved-by-an-operator-decision-that-either-sets-the-cancellation-aside-or-refers-the-boundary-fact-to-its-source.md)：认定取消依据不成立后续办凭回放原料把收寄来源交回采用，形成责任起点并触发收寄后的路由复核（`AT-PS-173`）；认定边界事实有误交来源方更正则这一代来源不采用（`AT-PS-171`） | [code/76](../../../.scratch/docs-consistency/code/76-a-cancellation-order-conflict-has-no-resolution-decision-face.md) |
 | `AT-PS-156` | 单元的场外揽收入账收工，成员不随单元被采用：整袋场外揽收之后袋里每件包裹仍没有对应的采用结果，本用例不补 | [demo-chain-gaps/80](../../../.scratch/demo-chain-gaps/issues/80-a-consolidation-unit-handover-does-not-move-member-control.md) |
 
 完成本用例只闭合网络服务责任起点和正式承诺，不证明路由仍适用、节点作业完成、运输已经开始或包裹已经终局。
