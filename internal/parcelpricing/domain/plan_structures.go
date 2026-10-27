@@ -104,8 +104,8 @@ func NewSeriesRateSurcharge(kind ReferenceSeriesKind, factor Decimal, basisDepen
 	if !kind.valid() {
 		return SurchargeCalculation{}, ErrInvalidSurchargeRule
 	}
-	// 计算方法仍是`按基数百分比`：不同的是费率从哪来，不是金额怎么产生。CONTEXT 把
-	// 计算方法闭合为四种，而费率的来源与算术是两个不同的轴。
+	// 计算方法仍是`按基数百分比`：不同的是费率从哪来，不是金额怎么产生。取值集合由 CONTEXT
+	// 「计算方法」词条闭合，而费率的来源与算术是两个不同的轴。
 	return validSurcharge(SurchargeCalculation{
 		method:       ChargeMethodPercentOfBasis,
 		seriesKind:   &kind,
@@ -808,7 +808,7 @@ func (structures PricingPlanStructures) WithAmountRounding(policy AmountRounding
 }
 
 // AmountRounding 交回卡声明的金额取整策略；未声明时第二个返回值为假——那不是缺陷，是
-// ADR-0107 Decision 四说的「未声明即不取整并记问题项」那一格的输入。
+// ADR-0107 Decision 四说的未声明即不取整并如实记问题项那一格的输入。
 func (structures PricingPlanStructures) AmountRounding() (AmountRoundingPolicy, bool) {
 	if structures.amountRounding == nil {
 		return AmountRoundingPolicy{}, false

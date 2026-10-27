@@ -535,7 +535,7 @@ func (handler *PublishCommercialAuthorityHandler) Handle(
 		outcome, err := write.save(ctx, handler.registry)
 		if err != nil {
 			// 技术失败上抛，让调用方的事务整项回滚：版本与声明同一事务落库，不留
-			// 半份发布（UC-PC-001 步骤 6「原子保存单一对象版本与发布意图」）。
+			// 半份发布（UC-PC-001 应用流程「原子保存单一对象版本、关系、审计和发布意图」）。
 			return PublishCommercialAuthorityResult{}, fmt.Errorf("publish commercial authority: %w", err)
 		}
 		switch outcome {

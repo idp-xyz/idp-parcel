@@ -261,7 +261,7 @@ type closureDocument struct {
 	Direction        uint8     `json:"priceDirection"`
 	AnchorAt         time.Time `json:"anchorAt"`
 	AnchorPolicy     string    `json:"anchorPolicy"`
-	// Settlement 只在必需依据含结算政策时出现（ADR-0044 的「含则必填、不含则必缺」）。
+	// Settlement 只在必需依据含结算政策时出现（ADR-0044 决定二：请求结算依据必填，其余请求必缺）。
 	// 它必须原样写下来：解析键的最小身份把选择器算在内，落库时丢掉，读回的键就立不起来，
 	// 于是一份写得进去的闭包永远读不回来——写成功、读失败，两侧都不报错。
 	Settlement *settlementSelectorDocument `json:"settlement,omitempty"`
@@ -558,8 +558,8 @@ func (document creditSelectorDocument) selector() (domain.CreditSelector, error)
 }
 
 // policy 把快照里的结算正文译回政策。方式按封闭二值逐格认，未知取值响亮失败：一份读不懂
-// 方式的政策若吸收成预付，一个约定了账期的客户会在这里被冻资金（ADR-0044 只留两格，第三
-// 格「客户级默认」正是本上下文明禁的那个）。
+// 方式的政策若吸收成预付，一个约定了账期的客户会在这里被冻资金（ADR-0044 的方式只有预付与账期，
+// 「客户级默认」正是本上下文明禁的那个）。
 func (document settlementPolicyDocument) policy(
 	version domain.CommercialVersion,
 ) (domain.SettlementPolicy, error) {

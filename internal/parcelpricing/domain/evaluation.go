@@ -13,7 +13,7 @@ const (
 	EvaluationPending   EvaluationStatus = "PENDING"
 	EvaluationConflict  EvaluationStatus = "CONFLICT"
 	EvaluationFailed    EvaluationStatus = "FAILED"
-	// EvaluationUnratable 是卡说不，不是求值器没算出来。CONTEXT 不许四种结果互相顶替：
+	// EvaluationUnratable 是卡说不，不是求值器没算出来。CONTEXT 不许这几类结果互相顶替：
 	// `待判断` 承诺补齐事实就能得出价格，而在这里这个承诺是假的；`未形成` 表示技术或
 	// 结构上算不出来，调用方的应对是重试而不是形成业务决定。
 	EvaluationUnratable EvaluationStatus = "UNRATABLE"

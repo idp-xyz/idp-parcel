@@ -302,7 +302,7 @@ type partyRelationshipListResponse struct {
 }
 
 // partyRelationshipBody 逐字段透出关系最新修订。方向由持有方→相对方的字段次序表达
-// （CONTEXT：方向由「哪一方对哪一方持有该角色」表达，不另设标志位）。终止三件
+// （CONTEXT 规则句「参与方关系必须保存双方、角色、方向、适用范围、依据和有效区间」；方向不另设标志位）。终止三件
 // （endedAt/endBasis/successor）只在相应终止格在场，页面按状态分读。
 type partyRelationshipBody struct {
 	TenantID              string `json:"tenantId"`

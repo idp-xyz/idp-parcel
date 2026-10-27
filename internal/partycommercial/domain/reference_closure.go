@@ -579,11 +579,9 @@ func closurePending(
 
 // ValidateClosureBeforeDecision 在调用方提交决定之前重跑整个引用闭包的第一阶段。
 //
-// 它是 UC-PC-002 步 8「提交前重解」今天唯一的生产形态：按原查询重解，而不是逐个检查已采用对象
-// 自身。同范围新增一个竞争候选时，那些对象一个字节都没变，解析却已经不再唯一。这条规则曾另有一个
-// 单依据形态（ValidateBeforeDecision，作用于一份 Resolution），是它的第一版；闭包形态落地后那一版
-// 再无调用方，2026-09-08 随票 wiring-baseline-remainder/05 删去——单依据**解析**（ResolveCommercialBasis）
-// 仍在，本函数逐项解析时调它。
+// 它是 UC-PC-002 应用流程里「业务决定提交前校验解析和关键结果仍相容」一步的生产形态：按原查询重解，
+// 而不是逐个检查已采用对象自身。同范围新增一个竞争候选时，那些对象一个字节都没变，解析却已经
+// 不再唯一。单依据**解析**（ResolveCommercialBasis）是逐项解析的入口，本函数逐项解析时调它。
 //
 // 原本就不是唯一解析的结果原样返回——不存在「采用依据是否仍有效」这个问题。
 func ValidateClosureBeforeDecision(

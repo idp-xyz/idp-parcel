@@ -452,7 +452,7 @@ func (basis ChargeBasis) valid() bool {
 	return basis == ChargeBasisRateEntry || basis == ChargeBasisFixedAmount
 }
 
-// ChargeMethod 是一条评价费用行的金额如何产生。CONTEXT 把取值集合闭合为四种，且作用于
+// ChargeMethod 是一条评价费用行的金额如何产生。取值集合由 CONTEXT「计算方法」词条闭合，且作用于
 // 任何费用行，因此声明它的规则与它产生的费用行称呼同一个计算方法，而不是各留一套私有
 // 词汇。扩充这个集合属于版本内容变化。
 type ChargeMethod string
