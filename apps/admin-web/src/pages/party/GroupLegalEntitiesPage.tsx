@@ -38,6 +38,7 @@ import {
   sortLegalEntities,
   type LegalEntityStatusFilter,
 } from './legal-entity-list';
+import { useMayWriteRegistry } from '../use-operator-grants';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['group-legal-entities'];
@@ -212,6 +213,8 @@ export function GroupLegalEntitiesPage() {
   // 页名里的「集团」是 ADR-0003 三级边界的第一级，即本会话绑定的租户（票 group-legal-entities-uiux/11）。答不出就不显，
   // 不拿列表行上的 tenantId 顶：空册时那一格根本没有，有时有、有时没有的页头比不显更让人疑惑。
   const boundTenant = useBoundTenant();
+  // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
+  const mayWrite = useMayWriteRegistry();
   const tabReturn = useTabReturn();
   // 渲列表、登记视图还是对象页由地址定：对象地址在壳层是自己的一张标签，本组件在那张标签里渲对象页。
   const [hash, setHash] = useState(() => window.location.hash);
@@ -278,7 +281,8 @@ export function GroupLegalEntitiesPage() {
     );
   }
 
-  if (view.kind === 'register') {
+  // 地址里的登记视图可能是别人发来的链接：没有登记写授予时不进，落回列表。
+  if (view.kind === 'register' && mayWrite) {
     return (
       <div className="flex flex-1 flex-col overflow-hidden bg-idpxyz-editor">
         <div className="flex shrink-0 items-center gap-4 border-b border-idpxyz-border px-6 py-3">
@@ -386,10 +390,12 @@ export function GroupLegalEntitiesPage() {
       onRefresh={retry}
       refreshing={pending}
       primaryAction={
-        <Button variant="default" className={primaryActionClass} onClick={openRegister}>
-          <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-          登记责任法人
-        </Button>
+        mayWrite ? (
+          <Button variant="default" className={primaryActionClass} onClick={openRegister}>
+            <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+            登记责任法人
+          </Button>
+        ) : undefined
       }
       search={{ value: search, onChange: setSearch, placeholder: '搜索法人、参与方身份或名称…' }}
       statusChips={statusChips}

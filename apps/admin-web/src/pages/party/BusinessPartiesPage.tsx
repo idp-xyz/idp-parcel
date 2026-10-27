@@ -63,6 +63,7 @@ import {
   type PartyRelationshipSortKey,
   type PartyRelationshipStatusFilter,
 } from './party-relationship-list';
+import { useMayWriteRegistry } from '../use-operator-grants';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['business-parties'];
@@ -315,6 +316,8 @@ function PartyRelationshipDrawer({
   onEnded: () => void;
 }) {
   const copy = useCopyToClipboard();
+  // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
+  const mayWrite = useMayWriteRegistry();
   return (
     <Drawer open={row !== null} onOpenChange={(open) => (open ? undefined : onClose())} aria-label="参与方关系详情">
       {row ? (
@@ -325,7 +328,7 @@ function PartyRelationshipDrawer({
               <span className="font-mono text-xs text-idpxyz-textMuted">r{row.revision}</span>
               {statusBadge(relationshipStatusLabels, row.status)}
             </div>
-            <PartyRelationshipEndActions key={row.relationshipId} row={row} onEnded={onEnded} />
+            {mayWrite ? <PartyRelationshipEndActions key={row.relationshipId} row={row} onEnded={onEnded} /> : null}
           </DrawerHeader>
           <DrawerBody>
             <dl>
@@ -661,6 +664,8 @@ function RegistrationTab({
  * 触发对应读签重取。两册各自一份重取序号——登一段关系不必重取参与方册，反过来也一样。
  */
 export function BusinessPartiesPage() {
+  // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
+  const mayWrite = useMayWriteRegistry();
   const parties = useRegisterList(listBusinessParties);
   const relationships = useRegisterList(listPartyRelationships);
   // 列表没取到（加载中 / 未配置 / 出错）传 null：表单那边建议修订号一律为 1，不拿空数组冒充「册上没有」。
@@ -671,7 +676,9 @@ export function BusinessPartiesPage() {
   // 深链（法人页「停用此责任法人…」）带来的停用预填：读到就切到登记签、交给停用表单，然后从地址里去掉，免得换标签
   // 回来、页面重新挂载时再预填一次。这一页的标签已开着时地址变了也认：壳层不重挂已开的标签。
   const [preset, setPreset] = useState<DeactivationPreset | null>(() => deactivationPresetOf(window.location.hash));
-  const [tab, setTab] = useState(preset ? 'register' : 'identities');
+  const [placedTab, setTab] = useState(preset ? 'register' : 'identities');
+  // 深链（法人页「停用此责任法人…」）会指向登记签：没有登记写授予时那一签不摆，落回身份册，不留一块空白。
+  const tab = mayWrite || placedTab !== 'register' ? placedTab : 'identities';
   useEffect(() => {
     const take = () => {
       const next = deactivationPresetOf(window.location.hash);
@@ -691,7 +698,7 @@ export function BusinessPartiesPage() {
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="identities">参与方身份</TabsTrigger>
           <TabsTrigger value="relationships">参与方关系</TabsTrigger>
-          <TabsTrigger value="register">登记</TabsTrigger>
+          {mayWrite ? <TabsTrigger value="register">登记</TabsTrigger> : null}
         </TabsList>
         <KeepAliveTabsContent
           value="identities"
@@ -710,19 +717,21 @@ export function BusinessPartiesPage() {
         >
           <PartyRelationshipsTable answer={relationships.answer} retry={relationships.retry} />
         </KeepAliveTabsContent>
-        <KeepAliveTabsContent
-          value="register"
-          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
-        >
-          <RegistrationTab
-            parties={parties.answer}
-            knownParties={knownParties}
-            knownRelationships={knownRelationships}
-            onPartiesChanged={parties.retry}
-            onRelationshipsChanged={relationships.retry}
-            preset={preset}
-          />
-        </KeepAliveTabsContent>
+        {mayWrite ? (
+          <KeepAliveTabsContent
+            value="register"
+            className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+          >
+            <RegistrationTab
+              parties={parties.answer}
+              knownParties={knownParties}
+              knownRelationships={knownRelationships}
+              onPartiesChanged={parties.retry}
+              onRelationshipsChanged={relationships.retry}
+              preset={preset}
+            />
+          </KeepAliveTabsContent>
+        ) : null}
       </KeepAliveTabs>
     </div>
   );

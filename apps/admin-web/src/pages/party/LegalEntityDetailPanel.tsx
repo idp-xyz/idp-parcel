@@ -16,6 +16,7 @@ import { LegalEntityProfileSection } from './LegalEntityProfileSection';
 import { legalEntityRevisionHistory } from './LegalEntityDetailPage';
 import { RevisionHistorySection } from './RevisionHistorySection';
 import { DetailRow, Instant, UnknownPartyName, statusBadge, useCopyToClipboard } from './detail-primitives';
+import { useMayWriteRegistry } from '../use-operator-grants';
 
 type PanelTab = 'overview' | 'profile' | 'history';
 
@@ -77,6 +78,8 @@ export function LegalEntityDetailPanel({
   // 去过的签留着挂载（隐藏而不卸载）：Radix 默认卸掉非活动签，法人资料与修订历史两区每切回来一次就重取一次、闪一次加载态。
   // 只留「去过的」，不一开栏就三签全挂——方向键逐行翻时不为没看的签取数。
   const [visited, setVisited] = useState<ReadonlySet<PanelTab>>(() => new Set<PanelTab>(['overview']));
+  // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
+  const mayWrite = useMayWriteRegistry();
   const [formOpenRequest, setFormOpenRequest] = useState(0);
   const copy = useCopyToClipboard();
   const identity = identityLayerCellsOf(row);
@@ -111,10 +114,12 @@ export function LegalEntityDetailPanel({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            <Button size="sm" variant="default" className={`${primaryActionClass} text-[12px]`} onClick={openProfileForm}>
-              <FileText className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-              登记资料修订
-            </Button>
+            {mayWrite ? (
+              <Button size="sm" variant="default" className={`${primaryActionClass} text-[12px]`} onClick={openProfileForm}>
+                <FileText className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                登记资料修订
+              </Button>
+            ) : null}
             <LegalEntityMoreMenu row={row} onOpenObjectPage={onOpenObjectPage} />
             <Button
               className="text-idpxyz-breadcrumb"

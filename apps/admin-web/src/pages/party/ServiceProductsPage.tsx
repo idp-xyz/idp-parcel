@@ -45,6 +45,7 @@ import {
 } from './presentation';
 import { DeliveryConditionsCell } from './DeliveryConditionsCell';
 import { ServiceProductPublicationForm } from './ServiceProductPublicationForm';
+import { useMayWriteRegistry } from '../use-operator-grants';
 
 const info = moduleInfoById['service-products'];
 
@@ -122,6 +123,8 @@ function ServiceProductVersionsTable({
   const [statusFilter, setStatusFilter] = useState<VersionStatusFilter>('all');
   const [search, setSearch] = useAddressKeyword();
   const [reloadKey, setReloadKey] = useState(0);
+  // 没有登记册配置写授予的操作者不摆发新版本与收尾（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
+  const mayWrite = useMayWriteRegistry();
   const [answer, setAnswer] = useState<ApiResult<ServiceProductListResponseBody> | null>(null);
   // 点行上的「收尾…」：记下是哪一版，抽屉据此重读册面（票 party-commercial-uiux/16）。
   const [closing, setClosing] = useState<ClosureTarget | null>(null);
@@ -184,6 +187,7 @@ function ServiceProductVersionsTable({
         }
         emptyRowsNote="这组条件下没有匹配的产品版本"
         columns={withNewVersionAction(columns, {
+          enabled: mayWrite,
           labelOf: (row) => `服务产品 ${row.objectId} ${row.version}`,
           onStart: onStartNewVersion,
           closure: {
@@ -214,6 +218,7 @@ function ServiceProductVersionsTable({
           const next = products.find((row) => row.objectId === selected?.objectId && row.scope === selected?.scope && row.version === version);
           if (next) setSelectedKey(keyOf(next));
         }}
+        readOnly={!mayWrite}
         actions={(row) => (
           <>
             <Button
@@ -264,6 +269,7 @@ function ServiceProductVersionsTable({
  * 墙降当天在装配点换真 Intake 即点亮，本页一行不用改。
  */
 export function ServiceProductsPage() {
+  const mayWrite = useMayWriteRegistry();
   const [refreshKey, setRefreshKey] = useState(0);
   // 点产品行上的「发新版本」：记下是哪一版，切到发布签；发布表单据此预填并重建（票 party-commercial-uiux/14）。
   const [tab, setTab] = useState('versions');
@@ -284,8 +290,8 @@ export function ServiceProductsPage() {
       <KeepAliveTabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="versions">服务产品</TabsTrigger>
-          <TabsTrigger value="publish">发布版本</TabsTrigger>
-          <TabsTrigger value="register">登记服务形态</TabsTrigger>
+          {mayWrite ? <TabsTrigger value="publish">发布版本</TabsTrigger> : null}
+          {mayWrite ? <TabsTrigger value="register">登记服务形态</TabsTrigger> : null}
         </TabsList>
         <KeepAliveTabsContent
           value="versions"
@@ -293,39 +299,43 @@ export function ServiceProductsPage() {
         >
           <ServiceProductVersionsTable refreshKey={refreshKey} onStartNewVersion={replaceGuard.start} />
         </KeepAliveTabsContent>
-        <KeepAliveTabsContent
-          value="publish"
-          className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
-        >
-          <ServiceProductPublicationForm
-            // 同一版再发起一次、或换一版，表单整个重建，不留上一次的预览与草稿。
-            key={request?.token ?? 0}
-            onPublished={() => setRefreshKey((value) => value + 1)}
-            start={
-              request
-                ? {
-                    draft: serviceProductDraftFromRecord(request.source),
-                    from: newVersionFrom('服务产品', request.source.objectId, request.source.version),
-                  }
-                : undefined
-            }
-          />
-        </KeepAliveTabsContent>
-        <KeepAliveTabsContent
-          value="register"
-          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
-        >
-          <RegistrationPanel
-            moduleId="service-products"
-            title={registrationTitles['service-product-form']}
-            endpoint={`POST ${commercialRegistrationEndpoints['service-product-form']}`}
-            snapshotHint={registrationSnapshotHints['service-product-form']}
-            submit={(snapshot) => registerCommercial('service-product-form', snapshot)}
-            // 形态与产品—渠道映射共用一份答案代数（服务端交回同一个 ProductChannelOutcome）。
-            outcomeLabels={productChannelOutcomeLabels}
-            problemNote={problemNote}
-          />
-        </KeepAliveTabsContent>
+        {mayWrite ? (
+          <KeepAliveTabsContent
+            value="publish"
+            className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
+          >
+            <ServiceProductPublicationForm
+              // 同一版再发起一次、或换一版，表单整个重建，不留上一次的预览与草稿。
+              key={request?.token ?? 0}
+              onPublished={() => setRefreshKey((value) => value + 1)}
+              start={
+                request
+                  ? {
+                      draft: serviceProductDraftFromRecord(request.source),
+                      from: newVersionFrom('服务产品', request.source.objectId, request.source.version),
+                    }
+                  : undefined
+              }
+            />
+          </KeepAliveTabsContent>
+        ) : null}
+        {mayWrite ? (
+          <KeepAliveTabsContent
+            value="register"
+            className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+          >
+            <RegistrationPanel
+              moduleId="service-products"
+              title={registrationTitles['service-product-form']}
+              endpoint={`POST ${commercialRegistrationEndpoints['service-product-form']}`}
+              snapshotHint={registrationSnapshotHints['service-product-form']}
+              submit={(snapshot) => registerCommercial('service-product-form', snapshot)}
+              // 形态与产品—渠道映射共用一份答案代数（服务端交回同一个 ProductChannelOutcome）。
+              outcomeLabels={productChannelOutcomeLabels}
+              problemNote={problemNote}
+            />
+          </KeepAliveTabsContent>
+        ) : null}
       </KeepAliveTabs>
     </div>
   );

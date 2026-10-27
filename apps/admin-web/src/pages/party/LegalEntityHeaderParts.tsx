@@ -11,6 +11,7 @@ import {
   type LifecycleStageState,
 } from './legal-entity-lifecycle';
 import { Instant, useCopyToClipboard } from './detail-primitives';
+import { useMayWriteRegistry } from '../use-operator-grants';
 
 // 责任法人头区的三件：生命周期条、停用与待补横幅、「更多」菜单。工作台详情栏与对象页各摆一份同样的头区
 // （票 group-legal-entities-uiux/09：同一法人两处结构一致），件只在这里写一遍，两处各自排版。
@@ -136,6 +137,8 @@ export function LegalEntityMoreMenu({
   onOpenObjectPage?: () => void;
 }) {
   const copy = useCopyToClipboard();
+  // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
+  const mayWrite = useMayWriteRegistry();
   return (
     <DropdownMenu
       align="right"
@@ -155,17 +158,19 @@ export function LegalEntityMoreMenu({
         <Copy className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
         复制法人标识
       </MenuItem>
-      <MenuSeparator />
+      {mayWrite ? <MenuSeparator /> : null}
       {/* 法人的停用表单在业务参与方页「登记 › 身份停用」（一个命令带种类）；深链预填种类与这个法人的标识，
           菜单上点名的是法人本身，不是它所钉的业务参与方——后者是另一个身份，停错了收不回。 */}
-      <MenuItem
-        onSelect={() => {
-          window.location.hash = deactivationLinkHash({ kind: 'LEGAL_ENTITY', id: row.legalEntityId });
-        }}
-      >
-        <Ban className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
-        停用此责任法人…
-      </MenuItem>
+      {mayWrite ? (
+        <MenuItem
+          onSelect={() => {
+            window.location.hash = deactivationLinkHash({ kind: 'LEGAL_ENTITY', id: row.legalEntityId });
+          }}
+        >
+          <Ban className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+          停用此责任法人…
+        </MenuItem>
+      ) : null}
     </DropdownMenu>
   );
 }

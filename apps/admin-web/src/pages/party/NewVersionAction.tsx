@@ -20,8 +20,11 @@ export function withNewVersionAction<Row>(
       canClose: (row: Row) => boolean;
       onClose: (row: Row) => void;
     };
+    /** 操作者没有登记册配置写授予时传 false：不加这一列（ADR-0315）；缺省加。摆不摆只是呈现，写口照旧在服务端判授予。 */
+    enabled?: boolean;
   },
 ): ListColumn<Row>[] {
+  if (options.enabled === false) return columns;
   return [
     ...columns,
     {

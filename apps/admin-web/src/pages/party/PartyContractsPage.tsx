@@ -51,6 +51,7 @@ import {
   registrationSnapshotHints,
   registrationTitles,
 } from './presentation';
+import { useMayWriteRegistry } from '../use-operator-grants';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['party-contracts'];
@@ -193,6 +194,8 @@ function CustomerContractsTable({
   const [statusFilter, setStatusFilter] = useState<VersionStatusFilter>('all');
   const [search, setSearch] = useAddressKeyword();
   const [reloadKey, setReloadKey] = useState(0);
+  // 没有登记册配置写授予的操作者不摆发新版本与收尾（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
+  const mayWrite = useMayWriteRegistry();
   const [answer, setAnswer] = useState<ApiResult<CustomerContractListResponseBody> | null>(null);
   // 账户标识旁的客户名称：账户册的第一页，读不到就没有名称。
   const accountsAnswer = useLoaded(loadCustomerAccountSuggestions);
@@ -270,6 +273,7 @@ function CustomerContractsTable({
         }
         emptyRowsNote="这组条件下没有匹配的合同版本"
         columns={withNewVersionAction(contractColumns, {
+          enabled: mayWrite,
           labelOf: (row) => `客户合同 ${row.objectId} ${row.version}`,
           onStart: onStartNewVersion,
           closure: {
@@ -299,6 +303,7 @@ function CustomerContractsTable({
           const next = contracts.find((row) => row.objectId === selected?.objectId && row.scope === selected?.scope && row.version === version);
           if (next) setSelectedKey(keyOf(next));
         }}
+        readOnly={!mayWrite}
         actions={(row) => (
           <>
             <Button
@@ -461,6 +466,7 @@ function CustomerAccountsTable() {
  * 即点亮，本页一行不用改。
  */
 export function PartyContractsPage() {
+  const mayWrite = useMayWriteRegistry();
   // 发布签的载体到达「发布」那一步时拨一格，合同表随之重读（含绑定列）。
   const [publishedKey, setPublishedKey] = useState(0);
   // 点合同行上的「发新版本」：记下是哪一版，切到发布签；发布表单据此预填并重建（票 party-commercial-uiux/14）。
@@ -482,9 +488,9 @@ export function PartyContractsPage() {
       <KeepAliveTabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="contracts">客户合同</TabsTrigger>
-          <TabsTrigger value="publish-contract">发布合同版本</TabsTrigger>
+          {mayWrite ? <TabsTrigger value="publish-contract">发布合同版本</TabsTrigger> : null}
           <TabsTrigger value="accounts">客户账户</TabsTrigger>
-          <TabsTrigger value="register">登记账户</TabsTrigger>
+          {mayWrite ? <TabsTrigger value="register">登记账户</TabsTrigger> : null}
         </TabsList>
         <KeepAliveTabsContent
           value="contracts"
@@ -492,44 +498,48 @@ export function PartyContractsPage() {
         >
           <CustomerContractsTable publishedKey={publishedKey} onStartNewVersion={replaceGuard.start} />
         </KeepAliveTabsContent>
-        <KeepAliveTabsContent
-          value="publish-contract"
-          className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
-        >
-          <CustomerContractPublicationForm
-            // 同一版再发起一次、或换一版，表单整个重建，不留上一次的预览与草稿。
-            key={request?.token ?? 0}
-            onPublished={() => setPublishedKey((value) => value + 1)}
-            start={
-              request
-                ? {
-                    draft: customerContractDraftFromRecord(request.source),
-                    from: newVersionFrom('客户合同', request.source.objectId, request.source.version),
-                  }
-                : undefined
-            }
-          />
-        </KeepAliveTabsContent>
+        {mayWrite ? (
+          <KeepAliveTabsContent
+            value="publish-contract"
+            className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
+          >
+            <CustomerContractPublicationForm
+              // 同一版再发起一次、或换一版，表单整个重建，不留上一次的预览与草稿。
+              key={request?.token ?? 0}
+              onPublished={() => setPublishedKey((value) => value + 1)}
+              start={
+                request
+                  ? {
+                      draft: customerContractDraftFromRecord(request.source),
+                      from: newVersionFrom('客户合同', request.source.objectId, request.source.version),
+                    }
+                  : undefined
+              }
+            />
+          </KeepAliveTabsContent>
+        ) : null}
         <KeepAliveTabsContent
           value="accounts"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
           <CustomerAccountsTable />
         </KeepAliveTabsContent>
-        <KeepAliveTabsContent
-          value="register"
-          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
-        >
-          <RegistrationPanel
-            moduleId="party-contracts"
-            title={registrationTitles['customer-account']}
-            endpoint={`POST ${commercialRegistrationEndpoints['customer-account']}`}
-            snapshotHint={registrationSnapshotHints['customer-account']}
-            submit={(snapshot) => registerCommercial('customer-account', snapshot)}
-            outcomeLabels={partyIdentityOutcomeLabels}
-            problemNote={problemNote}
-          />
-        </KeepAliveTabsContent>
+        {mayWrite ? (
+          <KeepAliveTabsContent
+            value="register"
+            className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+          >
+            <RegistrationPanel
+              moduleId="party-contracts"
+              title={registrationTitles['customer-account']}
+              endpoint={`POST ${commercialRegistrationEndpoints['customer-account']}`}
+              snapshotHint={registrationSnapshotHints['customer-account']}
+              submit={(snapshot) => registerCommercial('customer-account', snapshot)}
+              outcomeLabels={partyIdentityOutcomeLabels}
+              problemNote={problemNote}
+            />
+          </KeepAliveTabsContent>
+        ) : null}
       </KeepAliveTabs>
     </div>
   );

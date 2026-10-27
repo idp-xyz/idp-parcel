@@ -39,6 +39,7 @@ import {
   type LegalEntityProfileDraft,
   type TaxNumberDraft,
 } from './legal-entity-profile';
+import { useMayWriteRegistry } from '../use-operator-grants';
 
 // 法人对象页「概要」签里的「法人资料」区（票 legal-entity-profile/04 第 2 项；ADR-0145 决定三、五、六）：当前有效的那一修订、修订历史、
 // 登记新修订的表单。判读与载荷在 legal-entity-profile.ts（纯函数，node:test 钉着），这里只摆。
@@ -69,6 +70,8 @@ export function LegalEntityProfileSection({
   formOpenRequest?: number;
 }) {
   // 登记落册一次加一：当前有效区与历史区都按它重取，新登的那笔立刻可见。
+  // 没有登记册配置写授予的操作者不摆登记表与打开它的按钮（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
+  const mayWrite = useMayWriteRegistry();
   const [landed, setLanded] = useState(0);
   const [formOpen, setFormOpen] = useState(formOpenRequest > 0);
   const formRef = useRef<HTMLElement>(null);
@@ -103,15 +106,17 @@ export function LegalEntityProfileSection({
         </div>
         <RevisionHistorySection register={profileRevisionHistory} subjectId={legalEntityId} revision={landed} />
       </section>
-      <section ref={formRef} className="border-t border-idpxyz-border pt-5">
-        {formOpen ? (
-          <ProfileRegistrationForm legalEntityId={legalEntityId} onLanded={() => setLanded((count) => count + 1)} />
-        ) : (
-          <Button className="text-idpxyz-breadcrumb" variant="outline" onClick={() => setFormOpen(true)}>
-            登记新的资料修订
-          </Button>
-        )}
-      </section>
+      {mayWrite ? (
+        <section ref={formRef} className="border-t border-idpxyz-border pt-5">
+          {formOpen ? (
+            <ProfileRegistrationForm legalEntityId={legalEntityId} onLanded={() => setLanded((count) => count + 1)} />
+          ) : (
+            <Button className="text-idpxyz-breadcrumb" variant="outline" onClick={() => setFormOpen(true)}>
+              登记新的资料修订
+            </Button>
+          )}
+        </section>
+      ) : null}
     </div>
   );
 }

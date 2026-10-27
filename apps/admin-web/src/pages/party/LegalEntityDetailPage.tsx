@@ -36,6 +36,7 @@ import { identityLayerCellsOf } from './legal-entity-identity';
 import { legalEntityRevisionTimeline, revisionHistoryNote } from './legal-entity-revisions';
 import { RevisionHistorySection, type RevisionHistoryRegister } from './RevisionHistorySection';
 import { Instant, statusBadge } from './detail-primitives';
+import { useMayWriteRegistry } from '../use-operator-grants';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['group-legal-entities'];
@@ -149,6 +150,8 @@ export function LegalEntityDetailPage({
 }) {
   const viewState = viewStateOf(listAnswer, row, retry);
   const [tab, setTab] = useState<WorkspaceTabId>('summary');
+  // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
+  const mayWrite = useMayWriteRegistry();
   const [formOpenRequest, setFormOpenRequest] = useState(0);
   const openProfileForm = () => {
     setTab('summary');
@@ -164,15 +167,17 @@ export function LegalEntityDetailPage({
         <>
           {row ? (
             <>
-              <Button
-                size="sm"
-                variant="default"
-                className={`${primaryActionClass} text-[12px]`}
-                onClick={openProfileForm}
-              >
-                <FileText className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                登记资料修订
-              </Button>
+              {mayWrite ? (
+                <Button
+                  size="sm"
+                  variant="default"
+                  className={`${primaryActionClass} text-[12px]`}
+                  onClick={openProfileForm}
+                >
+                  <FileText className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                  登记资料修订
+                </Button>
+              ) : null}
               <LegalEntityMoreMenu row={row} />
             </>
           ) : null}

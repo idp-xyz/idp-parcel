@@ -33,6 +33,7 @@ import { closableKeys, closureKeyOf, closureTargetOf, type ClosureTarget } from 
 import { VersionClosureDrawer } from './VersionClosureDrawer';
 import { VersionDetailDrawer } from './VersionDetailDrawer';
 import { versionHistoryOf } from './version-history';
+import { useMayWriteRegistry } from '../use-operator-grants';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['supplier-agreements'];
@@ -58,6 +59,8 @@ function SupplierAgreementCatalogue({
   const directory = useNameDirectory();
   const [statusFilter, setStatusFilter] = useState<VersionStatusFilter>('all');
   const [reloadKey, setReloadKey] = useState(0);
+  // 没有登记册配置写授予的操作者不摆发新版本与收尾（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
+  const mayWrite = useMayWriteRegistry();
   const [answer, setAnswer] = useState<ApiResult<SupplierAgreementListResponseBody> | null>(null);
   // 点行上的「收尾…」：记下是哪一版，抽屉据此重读册面（票 party-commercial-uiux/16）。
   const [closing, setClosing] = useState<ClosureTarget | null>(null);
@@ -121,6 +124,7 @@ function SupplierAgreementCatalogue({
         }
         emptyRowsNote="这组条件下没有匹配的协议版本"
         columns={withNewVersionAction(detailColumns, {
+          enabled: mayWrite,
           labelOf: (row) => `供应商协议 ${row.version.objectId} ${row.version.version}`,
           onStart: (row) => onStartNewVersion(row.source),
           closure: {
@@ -155,6 +159,7 @@ function SupplierAgreementCatalogue({
           );
           if (next) setSelectedKey(next.key);
         }}
+        readOnly={!mayWrite}
         actions={(row) => (
           <>
             <Button
@@ -198,6 +203,7 @@ function SupplierAgreementCatalogue({
  * 作高级口，本页不重复摆。
  */
 export function SupplierAgreementsPage() {
+  const mayWrite = useMayWriteRegistry();
   const [reloadToken, setReloadToken] = useState(0);
   // 点协议行上的「发新版本」：记下是哪一版，切到发布签；发布表单据此预填并重建（票 party-commercial-uiux/14）。
   const [tab, setTab] = useState('catalogue');
@@ -218,7 +224,7 @@ export function SupplierAgreementsPage() {
       <KeepAliveTabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="catalogue">协议目录</TabsTrigger>
-          <TabsTrigger value="publish">发布协议版本</TabsTrigger>
+          {mayWrite ? <TabsTrigger value="publish">发布协议版本</TabsTrigger> : null}
         </TabsList>
         <KeepAliveTabsContent
           value="catalogue"
@@ -226,24 +232,26 @@ export function SupplierAgreementsPage() {
         >
           <SupplierAgreementCatalogue reloadToken={reloadToken} onStartNewVersion={replaceGuard.start} />
         </KeepAliveTabsContent>
-        <KeepAliveTabsContent
-          value="publish"
-          className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
-        >
-          <SupplierAgreementPublicationForm
-            // 同一版再发起一次、或换一版，表单整个重建，不留上一次的预览与草稿。
-            key={request?.token ?? 0}
-            onPublished={() => setReloadToken((value) => value + 1)}
-            start={
-              request
-                ? {
-                    draft: supplierAgreementDraftFromRecord(request.source),
-                    from: newVersionFrom('供应商协议', request.source.objectId, request.source.version),
-                  }
-                : undefined
-            }
-          />
-        </KeepAliveTabsContent>
+        {mayWrite ? (
+          <KeepAliveTabsContent
+            value="publish"
+            className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
+          >
+            <SupplierAgreementPublicationForm
+              // 同一版再发起一次、或换一版，表单整个重建，不留上一次的预览与草稿。
+              key={request?.token ?? 0}
+              onPublished={() => setReloadToken((value) => value + 1)}
+              start={
+                request
+                  ? {
+                      draft: supplierAgreementDraftFromRecord(request.source),
+                      from: newVersionFrom('供应商协议', request.source.objectId, request.source.version),
+                    }
+                  : undefined
+              }
+            />
+          </KeepAliveTabsContent>
+        ) : null}
       </KeepAliveTabs>
     </div>
   );

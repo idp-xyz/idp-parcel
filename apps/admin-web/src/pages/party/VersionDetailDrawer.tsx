@@ -23,6 +23,7 @@ export function VersionDetailDrawer<Row>({
   currentVersion,
   onSelectVersion,
   actions,
+  readOnly = false,
   emptyHistoryNote,
   onClose,
 }: {
@@ -41,6 +42,8 @@ export function VersionDetailDrawer<Row>({
   onSelectVersion: (version: string) => void;
   /** 头部的动作按钮（发新版本、收尾……），由页面摆。 */
   actions?: (row: Row) => ReactNode;
+  /** 操作者没有登记册配置写授予时传 true：不摆头部动作（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。 */
+  readOnly?: boolean;
   /** 历史栏为空时的说明；缺省说这一行随所属版本发布。读面不给历史的册（产品—渠道映射）另说。 */
   emptyHistoryNote?: string;
   onClose: () => void;
@@ -56,7 +59,7 @@ export function VersionDetailDrawer<Row>({
               {status?.(row) ? statusBadge(commercialStatusLabels, status(row) as string) : null}
             </div>
             <p className="mt-0.5 text-[12px] text-idpxyz-textMuted">{subtitle(row)}</p>
-            {actions ? <div className="mt-2 flex flex-wrap items-center gap-2">{actions(row)}</div> : null}
+            {actions && !readOnly ? <div className="mt-2 flex flex-wrap items-center gap-2">{actions(row)}</div> : null}
           </DrawerHeader>
           <DrawerBody>
             <Tabs key={`${title(row).objectId}@${title(row).version}`} defaultValue="detail" className="gap-0">

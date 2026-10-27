@@ -69,6 +69,7 @@ import {
   registrationSnapshotHints,
   registrationTitles,
 } from './presentation';
+import { useMayWriteRegistry } from '../use-operator-grants';
 
 const info = moduleInfoById['commercial-policies'];
 
@@ -118,6 +119,8 @@ function PolicyRegisters({
   const [search, setSearch] = useAddressKeyword();
   const [statusFilter, setStatusFilter] = useState<VersionStatusFilter>('all');
   const [reloadKey, setReloadKey] = useState(0);
+  // 没有登记册配置写授予的操作者不摆发新版本与收尾（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
+  const mayWrite = useMayWriteRegistry();
   // 点行上的「收尾…」：记下是哪一版，抽屉据此重读册面（票 party-commercial-uiux/16）。
   const [closing, setClosing] = useState<ClosureTarget | null>(null);
   // 点行打开的版本详情：记行键（票 party-commercial-uiux/21）。
@@ -183,6 +186,7 @@ function PolicyRegisters({
         }
         emptyRowsNote="这组条件下没有匹配的行"
         columns={withNewVersionAction(detailColumns, {
+          enabled: mayWrite,
           // 随所属版本发布的两本册没有自己的发布表单，行上没有来源记录，也就没有按钮。
           canStart: (row) => row.source !== undefined,
           labelOf: (row) => `${policyKindLabels[kind]} ${row.version?.objectId ?? ''} ${row.version?.version ?? ''}`.trim(),
@@ -220,6 +224,7 @@ function PolicyRegisters({
           const next = rows.find((row) => row.version?.objectId === selected?.version?.objectId && row.version?.version === version);
           if (next) setSelectedKey(next.key);
         }}
+        readOnly={!mayWrite}
         actions={(row) => {
           const target = policyClosureTarget(row.source);
           return (
@@ -459,7 +464,10 @@ function usePoliciesPlace(): [PoliciesTab, CommercialPolicyKind, (tab: PoliciesT
  * JSON 发布签按 ADR-0101 决定一是受控批量口的在线镜像，不是配置员的主路径，标「高级」列在最后。
  */
 export function CommercialPoliciesPage() {
-  const [tab, register, place] = usePoliciesPlace();
+  const mayWrite = useMayWriteRegistry();
+  const [placedTab, register, place] = usePoliciesPlace();
+  // 地址里的签可能是别人发来的发布签链接：没有登记写授予时发布两签不摆，落回政策册，不留一块空白。
+  const tab = mayWrite || placedTab === 'registers' ? placedTab : 'registers';
   const [reloadKey, setReloadKey] = useState(0);
   const directory = useNameDirectory();
   // 点目录行上的「发新版本」：记下是哪一版，切到发布签、选中那一册；那一册的表单据此预填重建（票 party-commercial-uiux/14）。
@@ -489,8 +497,8 @@ export function CommercialPoliciesPage() {
       >
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="registers">政策册</TabsTrigger>
-          <TabsTrigger value="publish">发布新版本</TabsTrigger>
-          <TabsTrigger value="json">JSON 发布（高级）</TabsTrigger>
+          {mayWrite ? <TabsTrigger value="publish">发布新版本</TabsTrigger> : null}
+          {mayWrite ? <TabsTrigger value="json">JSON 发布（高级）</TabsTrigger> : null}
         </TabsList>
         <KeepAliveTabsContent
           value="registers"
@@ -506,32 +514,36 @@ export function CommercialPoliciesPage() {
             onStartNewVersion={replaceGuard.start}
           />
         </KeepAliveTabsContent>
-        <KeepAliveTabsContent
-          value="publish"
-          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
-        >
-          <PublishPane
-            register={register}
-            onRegisterChange={(kind) => place('publish', kind)}
-            onPublished={notePublished}
-            request={request}
-          />
-        </KeepAliveTabsContent>
-        <KeepAliveTabsContent
-          value="json"
-          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
-        >
-          <RegistrationPanel
-            moduleId="commercial-policies"
-            title={registrationTitles.publication}
-            endpoint={`POST ${commercialRegistrationEndpoints.publication}`}
-            snapshotHint={registrationSnapshotHints.publication}
-            submit={(snapshot) => registerCommercial('publication', snapshot)}
-            outcomeLabels={publicationOutcomeLabels}
-            declarationLandingLabels={declarationLandingLabels}
-            problemNote={problemNote}
-          />
-        </KeepAliveTabsContent>
+        {mayWrite ? (
+          <KeepAliveTabsContent
+            value="publish"
+            className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+          >
+            <PublishPane
+              register={register}
+              onRegisterChange={(kind) => place('publish', kind)}
+              onPublished={notePublished}
+              request={request}
+            />
+          </KeepAliveTabsContent>
+        ) : null}
+        {mayWrite ? (
+          <KeepAliveTabsContent
+            value="json"
+            className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+          >
+            <RegistrationPanel
+              moduleId="commercial-policies"
+              title={registrationTitles.publication}
+              endpoint={`POST ${commercialRegistrationEndpoints.publication}`}
+              snapshotHint={registrationSnapshotHints.publication}
+              submit={(snapshot) => registerCommercial('publication', snapshot)}
+              outcomeLabels={publicationOutcomeLabels}
+              declarationLandingLabels={declarationLandingLabels}
+              problemNote={problemNote}
+            />
+          </KeepAliveTabsContent>
+        ) : null}
       </KeepAliveTabs>
     </div>
   );

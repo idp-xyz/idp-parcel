@@ -21,6 +21,7 @@ import { RefLink } from './RefLink';
 import { VersionDetailDrawer } from './VersionDetailDrawer';
 import { mappingHistoryOf } from './mapping-history';
 import { problemNote, registrationSnapshotHints, registrationTitles } from './presentation';
+import { useMayWriteRegistry } from '../use-operator-grants';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['channel-product-catalog'];
@@ -214,12 +215,14 @@ function ProductChannelMappingTable() {
  * 本页一行不用改。
  */
 export function ChannelProductCatalogPage() {
+  // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
+  const mayWrite = useMayWriteRegistry();
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <KeepAliveTabs defaultValue="catalog" className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="catalog">渠道产品目录</TabsTrigger>
-          <TabsTrigger value="register">登记映射</TabsTrigger>
+          {mayWrite ? <TabsTrigger value="register">登记映射</TabsTrigger> : null}
         </TabsList>
         <KeepAliveTabsContent
           value="catalog"
@@ -227,20 +230,22 @@ export function ChannelProductCatalogPage() {
         >
           <ProductChannelMappingTable />
         </KeepAliveTabsContent>
-        <KeepAliveTabsContent
-          value="register"
-          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
-        >
-          <RegistrationPanel
-            moduleId="channel-product-catalog"
-            title={registrationTitles['product-channel-mapping']}
-            endpoint={`POST ${commercialRegistrationEndpoints['product-channel-mapping']}`}
-            snapshotHint={registrationSnapshotHints['product-channel-mapping']}
-            submit={(snapshot) => registerCommercial('product-channel-mapping', snapshot)}
-            outcomeLabels={productChannelOutcomeLabels}
-            problemNote={problemNote}
-          />
-        </KeepAliveTabsContent>
+        {mayWrite ? (
+          <KeepAliveTabsContent
+            value="register"
+            className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+          >
+            <RegistrationPanel
+              moduleId="channel-product-catalog"
+              title={registrationTitles['product-channel-mapping']}
+              endpoint={`POST ${commercialRegistrationEndpoints['product-channel-mapping']}`}
+              snapshotHint={registrationSnapshotHints['product-channel-mapping']}
+              submit={(snapshot) => registerCommercial('product-channel-mapping', snapshot)}
+              outcomeLabels={productChannelOutcomeLabels}
+              problemNote={problemNote}
+            />
+          </KeepAliveTabsContent>
+        ) : null}
       </KeepAliveTabs>
     </div>
   );
