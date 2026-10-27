@@ -163,6 +163,11 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
 形成的改路建议列在 `GET /route-reroute-suggestions`（管理台路由计划页「改路建议」一册），运营人员择一合格候选经 `POST /route-reroute-decisions` 决定。
 查阅员没有这一种，决定口答 403 `OPERATOR_NOT_GRANTED`。证据只记 `S`。
 
+配置员另持运营决定「释放拒收处理」（ADR-0293 决定三；票 docs-consistency/code/95），与授权处置是两种授予：授予、对照与权威区间另起
+`steps/480-access-control-release-refusal-handling.sh` 一节，数据是 `data/access/20`、`21` 与 `data/governance/58`。种子不记任何释放拒收、不作任何
+处理：册上的行由撤回、拒绝、授权处置等路遇到结算确定不受理时自己落，列在 `GET /control-release-refusals`（管理台「释放拒收处理」页），运维经
+`POST /control-release-refusal-handlings` 核对后在结算侧释放或标记已处理。查阅员没有这一种，处理口答 403 `OPERATOR_NOT_GRANTED`。证据只记 `S`。
+
 单要一枚令牌：`scripts/demo-seeds/operator-channel/operator-token.sh <邮箱>` 打印访问令牌，末尾加 `claims` 打印两枚
 令牌的载荷。它与管理台走同一个公共客户端、同一条 authorization_code + PKCE 流，管理台不必在跑。
 
