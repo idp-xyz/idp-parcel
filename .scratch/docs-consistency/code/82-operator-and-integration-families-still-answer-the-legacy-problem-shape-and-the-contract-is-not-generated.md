@@ -1,7 +1,7 @@
 # 82 操作者族、作业事实族与集成族各口仍写旧问题体，首方契约还没有描述符与生成物
 
 Category: enhancement
-Status: needs-triage——R3：首方族已在首个兼容性基线之前定形（票 [code/22](./22-customer-face-http-contract-misses-accepted-adrs.md)），剩下的两半都不改对外已发布的形状。操作者族与产品自己的客户端同版本发布（ADR-0021），集成族今天没有外部调用方；生成器是首次对外发布前的一道门（ADR-0140 Consequences「首次对外发布前要过三道」）。2026-10-21 协调方据票 code/22 立（作者子代理代笔）。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（线外，复核见 .scratch/launch-line-freeze-2026-10-27.md 第六节）：操作者族、作业事实族与集成族各口仍写旧问题体——首方族已定形，剩下两半都不改对外已发布的形状；解冻条件：首次对外发布前（ADR-0140 Consequences 的第三道门）。此前 needs-triage——R3：首方族已在首个兼容性基线之前定形（票 [code/22](./22-customer-face-http-contract-misses-accepted-adrs.md)），剩下的两半都不改对外已发布的形状。操作者族与产品自己的客户端同版本发布（ADR-0021），集成族今天没有外部调用方；生成器是首次对外发布前的一道门（ADR-0140 Consequences「首次对外发布前要过三道」）。2026-10-21 协调方据票 code/22 立（作者子代理代笔）。
 Blocked by: 无
 上下文：横切（`internal/platform/httpapi` 与各上下文 `adapters/http`、`tools/`、`apps/admin-web`）。
 出处：票 code/22 代决与越权风险点；[ADR-0140](../../../docs/adr/0140-first-party-api-contract-is-generated-from-endpoint-descriptors-with-url-major-version-and-problem-details.md) 决定一、三、七。

@@ -1,7 +1,7 @@
 # 23 PS「POD 错误致有效交付失效」（`AT-PS-063`）在代码里表达不出来：重派生只能产出另一个终局
 
 Category: bug
-Status: ready-for-agent——R3（不急）：TF 今天只有「POD 证据更正」（`EffectiveDelivery.CorrectProof`），没有「有效交付失效」的生产者，这一格走不到；TF 立出失效入口时须同时修本票，否则失效之后包裹仍挂着终局、委托完成摘要跟着错。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（线外，复核见 .scratch/launch-line-freeze-2026-10-27.md 第六节）：PS「POD 错误致有效交付失效」表达不出来——TF 今天没有「有效交付失效」的生产者，这一格走不到；解冻条件：TF 立出失效入口时须同时修。此前 ready-for-agent——R3（不急）：TF 今天只有「POD 证据更正」（`EffectiveDelivery.CorrectProof`），没有「有效交付失效」的生产者，这一格走不到；TF 立出失效入口时须同时修本票，否则失效之后包裹仍挂着终局、委托完成摘要跟着错。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
 Blocked by: 无
 出处：[audit/ps.md](../audit/ps.md) PS-23，取证 [audit/ps-code.md](../audit/ps-code.md) 第 11 条（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，现象仍在）。
 

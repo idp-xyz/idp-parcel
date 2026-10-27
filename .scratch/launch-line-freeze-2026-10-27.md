@@ -177,3 +177,20 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 - 2026-10-27｜授予自查读口只被参与方与商业区用；计价、网络、关务、结算等区的写入口仍对查阅员摆出｜ADR-0315 越权风险点 5｜R3
 - 2026-10-27｜`boundTenantOf`（`apps/admin-web/src/pages/operator-binding.ts`）对 JSON `null` 响应体会抛错，同款的 `heldGrantsOf` 已防｜party-commercial-uiux-backend/04 评审意见｜R3
 - 2026-10-27｜发布载荷的逐格问题多数领域错误仍答兜底码 `INVALID`，受控批文口与各 JSON 镜像登记口的问题不带码｜ADR-0316 越权风险点 2｜R3
+- 2026-10-27｜已接受订舱在订舱已被运输开始消耗（申请不晚于委托开始）时既不能改答也取消不了（`CancelBooking` 答运输已开始）｜docs-consistency/code/02 的注释订正与评审（ADR-0204 决定三）｜R3
+- 2026-10-27｜认定取消依据不成立后，对同一包裹的终局做同种更正重派生，可见性投影里暂有两份已采用终局（业务时间不同，不立分叉信号，不卡死）；要闭合须让终局记录带形成时的代次｜docs-consistency/code/76 的 ADR-0295 越权风险点 15｜R3（只在登记了该决定种类授予的租户上可达）
+- 2026-10-27｜ETA 对客的上线前清单：规则册归属先裁清（可能与 ADR-0104、ADR-0136 冲突）、规则册登记口与读面、`FormETAHandler` 的生产调用方、停止展示边界执行方、门槛或规则版本单独变化的重判；这条链在生产上空转，ETA 一维对客仍答待确认｜docs-consistency/code/51 完成记录「上线前必做清单」｜R2（ETA 对客上线前才挡；code/07 已修存储与候选）
+- 2026-10-27｜身份被后来纠正成另一件包裹后，已补到旧包裹上的出发、补问读数与阻断信号不撤，需 NO 交出身份纠正信封｜docs-consistency/code/74（ADR-0299 越权风险点）、code/103（ADR-0331）｜R3
+- 2026-10-27｜注释里仍有若干对着旧版本讲的「不再是／此前／自票 N 起／今天没有」状态陈述（`receive_external_result_test.go`、`receive_on_adopted_funds_fact.go`、`handover_correction_enters_the_segment_test.go`、`trigger_delivery_dispatch_test.go` 等）｜docs-consistency/code/32 评审 N4｜R3
+- 2026-10-27｜AT 盘点缺「引用行」桶：`AT-TF-157`–`161` 五行全仓零点名却留在 ① 桶，与 `AT-VE-189`–`195` 同一批场景双算（TF 的 ① 虚高 5，总览约 0.55%）｜docs-consistency/code/32 评审｜R3（归 docs-consistency/10）
+- 2026-10-27｜导出类型 `PurchaseRuleVersionReference`、报文字段 `purchaseRuleVersion`、库列 `purchase_rule_version` 仍叫「采购规则版本」，实指评价命中的可执行价卡版本｜docs-consistency/code/55｜R3（下次因别的原因动这几处契约时顺手改名）
+- 2026-10-27｜`scripts/owner-review-queue.ps1` 第二节 47 张里约 30 张的 `Blocked by:` 链接目标已全部 resolved，约三分之二是历史边；Windows PowerShell 5.1 未实跑｜docs-consistency/code/58 评审｜R3
+- 2026-10-27｜首个带 PR 的推送需要看一次 Actions，确认 `generated-artifacts-pr.sh` 与 main 推送两种事件各自跑的步骤符合预期（本机无法验证）｜docs-consistency/code/57｜上线前一次性核对
+- 2026-10-27｜上线清单必须有一条：核对「受理前估价采用」与「SELL 计费时点采用」两本册登了同一个范围，否则冻结额与预估客户费用出自两张卡｜docs-consistency/code/62（已冻结）｜上线前必核（清单项）
+
+## 六、docs-consistency/code 队列的复核（2026-10-27，tops-26）
+
+`.scratch/docs-consistency/code/` 的 24 张未开工票没有出现在上面的 111 张里；用户 2026-10-27 答「你看看哪些是问题必须解决，哪些是复核冻结条件的」，由协调方（tops-26）对照 `PILOT-SCOPE.md` 与本文件「上线线」口径分开：
+
+- **必须解决（6 张，已认领，按成簇派代理）**：`code/27`（CC 内部合规限制没有模型；PILOT-SCOPE 要求验证内部合规限制与外部监管扣留独立存在）、`code/37`（PS 收寄后服务处置决定面；PILOT-SCOPE「首发必须按包裹处理……收寄后服务处置」）、`code/43`（TF 监管运输处置承接与备用伙伴、退运旅程启动的生产入口；PILOT-SCOPE 备用伙伴切换授权确认、退运决定与受控交接要生产化）、`code/18`（NO 监管协作承接决定缺「待补充」，UC-NO-001 承接决定）、`code/03`（CC 关闭依据项缺「冲突」）、`code/34`（CC 放行门禁核对折不出结论时答「未受理」）。后三张是关务专项基线的接线前缺口，改动小，随 CC 簇一起做。
+- **冻结（18 张）**：`code/08`、`10`、`13`、`15`、`17`、`23`、`30`、`33`、`56`（M 半边）、`62`、`75`（b 半边）、`78`、`81`、`82`、`83`、`85`、`91`、`93`；票面 Status 已改为 `ready-for-human——2026-10-27 冻结……` 并写明各自的解冻条件，保留「此前…」链。其中 `code/33`（节点作业模型）上线前要先确认试点的扫描事件来源，`code/62` 的绕法（上线清单核对两本册同范围）已记入上面「记录」，`code/75`(b) 与 `code/78` 分别被冻结清单里的 `demo-chain-gaps/80`、`/154` 挡着，随它们解冻。

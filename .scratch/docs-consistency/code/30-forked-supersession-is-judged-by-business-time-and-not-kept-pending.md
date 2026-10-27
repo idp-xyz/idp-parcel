@@ -1,7 +1,7 @@
 # 30 VE 替代链分叉按业务时间裁决、裁得出就不立信号，两个后继照常派生，分叉也不随投影版本存下
 
 Category: bug
-Status: ready-for-agent——R3（不急）：答错，但今天的生产源造不出分叉——TF 交接的更正链是线性的（`RegisterTransportHandoverHandler.CorrectWithGateReading` 遇前版已有后继即答占用，「一版最多被更正一次」），其余各源未逐一核。在第一个可能分叉的源接上之前修好即可。2026-10-21 文档自洽 04 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc04。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（线外，复核见 .scratch/launch-line-freeze-2026-10-27.md 第六节）：VE 替代链分叉按业务时间裁决——今天的生产源造不出分叉（TF 交接更正链是线性的）；解冻条件：第一个可能分叉的来源接上之前。此前 ready-for-agent——R3（不急）：答错，但今天的生产源造不出分叉——TF 交接的更正链是线性的（`RegisterTransportHandoverHandler.CorrectWithGateReading` 遇前版已有后继即答占用，「一版最多被更正一次」），其余各源未逐一核。在第一个可能分叉的源接上之前修好即可。2026-10-21 文档自洽 04 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc04。
 Blocked by: 无
 出处：[audit/ve.md](../audit/ve.md) VE-04（归 B）；裁定见 [ADR-0245](../../../docs/adr/0245-a-forked-supersession-chain-is-never-ordered-by-business-time-and-stays-pending-in-the-projection-version.md)。取证于 main `205eb254`。
 

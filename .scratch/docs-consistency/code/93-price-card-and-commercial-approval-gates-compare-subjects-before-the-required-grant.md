@@ -1,7 +1,7 @@
 # 93 价卡批准与商业发布批准两门先比主体，与参考复核门先判授予顺序相反
 
 Category: enhancement
-Status: needs-triage——建议 R3（不急）：三道门放行与拒绝的集合相同，差的只是两格都不满足时先报哪一格、给操作者的续办提示不同；没有放错一个人、也没有拦错一个人。2026-10-26 协调方据 [code/41](./41-reference-review-gate-reads-a-tenant-review-duty-rule.md) 隔离评审 N2 立。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（线外，复核见 .scratch/launch-line-freeze-2026-10-27.md 第六节）：价卡批准与商业发布批准两门先比主体——三道门放行与拒绝的集合相同，只差先报哪一格；解冻条件：操作者续办提示被反映有误导时。此前 needs-triage——建议 R3（不急）：三道门放行与拒绝的集合相同，差的只是两格都不满足时先报哪一格、给操作者的续办提示不同；没有放错一个人、也没有拦错一个人。2026-10-26 协调方据 [code/41](./41-reference-review-gate-reads-a-tenant-review-duty-rule.md) 隔离评审 N2 立。
 Blocked by: 无
 上下文：PP（价卡草稿批准）与 PC（商业发布载体批准），领域层批准门。**PC 那边另有会话在改管理台（party-commercial-uiux），动 PC 前须先与协调方对齐。**
 出处：code/41 隔离评审 N2。

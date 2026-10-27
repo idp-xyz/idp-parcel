@@ -1,7 +1,7 @@
 # 78 NR 初始路由的依赖类未决连坐同一交接里判成的包裹
 
 Category: bug
-Status: needs-triage——R3。2026-10-21 协调方据票 demo-chain-gaps/155 隔离评审立（作者子代理代笔）。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（线外，复核见 .scratch/launch-line-freeze-2026-10-27.md 第六节）：NR 初始路由的依赖类未决连坐同一交接里判成的包裹——被 demo-chain-gaps/154 挡，154 在冻结清单里；解冻条件：demo-chain-gaps/154 解冻之后。此前 needs-triage——R3。2026-10-21 协调方据票 demo-chain-gaps/155 隔离评审立（作者子代理代笔）。
 Blocked by: [demo-chain-gaps/154](../../demo-chain-gaps/issues/154-network-reassessment-not-judged-triggers-resume-after-registration.md)（逐包裹重驱的原料与地理投影的取法同一问，先在那里裁）
 上下文：NR（UC-NR-001）。
 出处：票 [demo-chain-gaps/155](../../demo-chain-gaps/issues/155-initial-route-unconfigured-undecided-burns-the-acceptance-partition.md) 完成记录越权风险点 3 与未决事项 2；审计 [audit/nr-no.md](../audit/nr-no.md) H1 第 2 点「兄弟包裹连坐」余下的那一半。

@@ -1,7 +1,7 @@
 # 56 受控关闭与重开的注释与 Covers 仍引已删的合同委派例外句；渠道方叫停形成的关闭今天可以直接重开
 
 Category: chore
-Status: in-progress——S 半边（注释与 Covers）随 code/24 在分支 claude-code24 完工待评审与进 main，见文末完成记录；M 半边（解除门）照旧等来源可读。原状态行：ready-for-agent——R3（不急）：注释一半只是说法，不改行为，但会让读者以为「首发不开、日后改这道拒绝即可开」；解除那一半是已知缺口，今天渠道方叫停靠运营角色转成关闭，重开同样在运营一侧，没有自动化的绕过路。2026-10-21 文档自洽 10（10a 半边）评审轮立（用户「你作为业务和系统专家自决」授权），分支 claude-dc10a。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（线外，复核见 .scratch/launch-line-freeze-2026-10-27.md 第六节）：受控关闭与重开的解除门（M 半边；S 半边已随 code/24 进 main）——渠道方叫停靠运营角色转成关闭，重开同样在运营一侧，没有自动化绕过路；解冻条件：硬限制解除的来源可读之后。此前 in-progress——S 半边（注释与 Covers）随 code/24 在分支 claude-code24 完工待评审与进 main，见文末完成记录；M 半边（解除门）照旧等来源可读。原状态行：ready-for-agent——R3（不急）：注释一半只是说法，不改行为，但会让读者以为「首发不开、日后改这道拒绝即可开」；解除那一半是已知缺口，今天渠道方叫停靠运营角色转成关闭，重开同样在运营一侧，没有自动化的绕过路。2026-10-21 文档自洽 10（10a 半边）评审轮立（用户「你作为业务和系统专家自决」授权），分支 claude-dc10a。
 Blocked by: 无（解除那一半要先有硬限制解除的来源可读，见「要裁的」）
 出处：文档自洽 10a 隔离评审 B3 与建议 1；裁定 [ADR-0275](../../../docs/adr/0275-controlled-closure-and-reopening-are-decided-only-by-operator-roles-and-a-channel-stop-is-an-external-restriction.md)。
 

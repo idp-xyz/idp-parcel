@@ -1,7 +1,7 @@
 # 15 CR 指令、事实、差异事项没有「关联原记录」，差异事项没有结论格，汇付记账不核归集截点
 
 Category: enhancement
-Status: ready-for-agent——R3（不急）：CR 今天只有受控 CLI，没有生产来源；缺的是更正链与结论这几格的结构，CLI 操作员靠记账标识与备注对上。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（线外，复核见 .scratch/launch-line-freeze-2026-10-27.md 第六节）：CR 指令、事实、差异事项缺「关联原记录」——CR 今天只有受控 CLI，COD 不在试点范围；解冻条件：CR 有生产来源（COD 进入试点）之前。此前 ready-for-agent——R3（不急）：CR 今天只有受控 CLI，没有生产来源；缺的是更正链与结论这几格的结构，CLI 操作员靠记账标识与备注对上。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
 Blocked by: 无（与 [14](./14-collection-principal-posts-more-than-once-and-shortfall-moves-received-funds.md) 改同一组文件，宜排在 14 之后）
 出处：[audit/sa-cr.md](../audit/sa-cr.md) L6（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，现象仍在）。
 

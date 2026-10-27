@@ -1,7 +1,7 @@
 # 17 NR 原计划仍适用那条线从不形成改路建议：仅建议权、有阻塞、改善候选并列，都静默只保留原计划
 
 Category: bug
-Status: ready-for-agent——R3（不急）：原计划仍有效，不答错；缺的是「有更优候选、待授权」的提示，是不方便与少省钱。另外在票 [demo-chain-gaps/115](../../demo-chain-gaps/issues/115-route-reassessment-never-loads-candidate-costs.md)（复核不取候选成本）修好之前这一路走不到；那一格已由该票补齐（2026-10-21），本票随之暴露。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（线外，复核见 .scratch/launch-line-freeze-2026-10-27.md 第六节）：NR 原计划仍适用那条线从不形成改路建议——原计划仍有效，不答错，只是少一条提示；解冻条件：真实租户要求「有更优候选、待授权」的提示时。此前 ready-for-agent——R3（不急）：原计划仍有效，不答错；缺的是「有更优候选、待授权」的提示，是不方便与少省钱。另外在票 [demo-chain-gaps/115](../../demo-chain-gaps/issues/115-route-reassessment-never-loads-candidate-costs.md)（复核不取候选成本）修好之前这一路走不到；那一格已由该票补齐（2026-10-21），本票随之暴露。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
 Blocked by: 无（排在 115 之后；见「要裁的」）
 出处：[audit/nr-no.md](../audit/nr-no.md) M4（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，现象仍在）。
 

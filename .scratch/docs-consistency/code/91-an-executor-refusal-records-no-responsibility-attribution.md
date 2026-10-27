@@ -1,7 +1,7 @@
 # 91 揽收的执行方拒收不存责任归属：UC-TF-002 结果契约要保存的「责任方」没有一格
 
 Category: bug
-Status: needs-triage——建议 R3：执行方拒收的原因与证据都已落册，缺的只是「这次拒收该由谁负责」的判断；首发前没有消费方读它（失败尝试费按依据判，结算另判成本责任），读不到它不会算错钱，但复核与申诉时只能翻原因证据自己推。2026-10-26 票 [docs-consistency/code/01](./01-fulfillment-attempt-object-outcomes-have-no-pending-confirmation.md) 第二轮评审立（N-a；用户「你作为业务和系统专家自决」授权），分支 claude-code01。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（线外，复核见 .scratch/launch-line-freeze-2026-10-27.md 第六节）：揽收执行方拒收不存责任归属——原因与证据都已落册，首发前没有消费方读它，读不到不会算错钱；解冻条件：复核与申诉要读拒收责任归属时。此前 needs-triage——建议 R3：执行方拒收的原因与证据都已落册，缺的只是「这次拒收该由谁负责」的判断；首发前没有消费方读它（失败尝试费按依据判，结算另判成本责任），读不到它不会算错钱，但复核与申诉时只能翻原因证据自己推。2026-10-26 票 [docs-consistency/code/01](./01-fulfillment-attempt-object-outcomes-have-no-pending-confirmation.md) 第二轮评审立（N-a；用户「你作为业务和系统专家自决」授权），分支 claude-code01。
 Blocked by: 无
 上下文：TF（运输履约），场外揽收的履约尝试。
 出处：code/01 第一轮评审 N3（删去未申报的代决「责任方是这次尝试的执行方」）、第二轮评审 N-a。

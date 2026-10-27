@@ -1,7 +1,7 @@
 # 10 VE 追偿动作种类是封闭二值，缺「补充主张」
 
 Category: enhancement
-Status: ready-for-agent——R3（不急）：追偿动作经索赔编排（`application/handle_claim.go`，装配在 `cmd/parcel-api/assemble_claims.go`）已有命令面，但首发追偿以受控模拟为主；缺的是一种动作，不是答错，需要补充主张时可先登为又一份正式主张并在依据里写明。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（线外，复核见 .scratch/launch-line-freeze-2026-10-27.md 第六节）：VE 追偿动作种类缺「补充主张」——绕法：登为又一份正式主张并在依据里写明；解冻条件：租户确实需要补充主张动作时。此前 ready-for-agent——R3（不急）：追偿动作经索赔编排（`application/handle_claim.go`，装配在 `cmd/parcel-api/assemble_claims.go`）已有命令面，但首发追偿以受控模拟为主；缺的是一种动作，不是答错，需要补充主张时可先登为又一份正式主张并在依据里写明。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
 Blocked by: 无
 出处：[audit/ve.md](../audit/ve.md) VE-17（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，现象仍在）。
 

@@ -1,7 +1,7 @@
 # 83 多成员的投影派生与归属确立补派生按相反次序锁投影当前标记，会互等成死锁
 
 Category: bug
-Status: needs-triage——建议 R3：PostgreSQL 会中止其中一路、整笔回滚，重投即自愈，不答错；代价是一次回滚与一次重投，失败码看不出是死锁。2026-10-21 协调方据 [code/50](./50-customer-view-derivation-can-be-carried-back-by-a-concurrent-stale-projection-envelope.md) 隔离评审立（作者子代理代笔；用户「你作为业务和系统专家自决……解决所有的问题」授权）。分级由协调方定稿。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（线外，复核见 .scratch/launch-line-freeze-2026-10-27.md 第六节）：多成员的投影派生与归属确立补派生按相反次序锁投影当前标记——PostgreSQL 会中止其中一路、整笔回滚，重投即自愈，不答错；解冻条件：生产上死锁回滚计数异常时。此前 needs-triage——建议 R3：PostgreSQL 会中止其中一路、整笔回滚，重投即自愈，不答错；代价是一次回滚与一次重投，失败码看不出是死锁。2026-10-21 协调方据 [code/50](./50-customer-view-derivation-can-be-carried-back-by-a-concurrent-stale-projection-envelope.md) 隔离评审立（作者子代理代笔；用户「你作为业务和系统专家自决……解决所有的问题」授权）。分级由协调方定稿。
 Blocked by: 无（建在 code/50 的 `LockCurrent` 之上，随 code/50 进 main）
 出处：code/50 隔离评审；code/50 完成记录越权风险点 2。
 

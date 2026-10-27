@@ -1,7 +1,7 @@
 # 75 交接、揽收、交付、外部承运追踪四路仍把集运单元当一件追踪包裹投
 
 Category: enhancement
-Status: in-progress——(a) 已进 main（见文末「(a) 进 main 记录」）；(b) Blocked by demo-chain-gaps/80。此前 in-progress——(a) 完工待评审与进 main，分支 claude-code75（rebase 到 main `4bd28bc11`，见文末「完成记录」与「评审记录」）；(b) Blocked by 80。此前 needs-triage——(a) R2（上线后尽快）：整袋交接是常态，追踪上每交接一袋就多一份不是包裹的追踪投影，违背 VE CONTEXT「集运、装载或同批关系不合并包裹身份和客户轨迹」。(b) 归后续。2026-10-21 协调方据票 demo-chain-gaps/123 隔离评审立（作者子代理代笔）。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（线外，复核见 .scratch/launch-line-freeze-2026-10-27.md 第六节）：(b) 半边——(a) 已进 main；(b) 被 demo-chain-gaps/80 挡，80 在冻结清单里；解冻条件：demo-chain-gaps/80 解冻之后。此前 in-progress——(a) 已进 main（见文末「(a) 进 main 记录」）；(b) Blocked by demo-chain-gaps/80。此前 in-progress——(a) 完工待评审与进 main，分支 claude-code75（rebase 到 main `4bd28bc11`，见文末「完成记录」与「评审记录」）；(b) Blocked by 80。此前 needs-triage——(a) R2（上线后尽快）：整袋交接是常态，追踪上每交接一袋就多一份不是包裹的追踪投影，违背 VE CONTEXT「集运、装载或同批关系不合并包裹身份和客户轨迹」。(b) 归后续。2026-10-21 协调方据票 demo-chain-gaps/123 隔离评审立（作者子代理代笔）。
 Blocked by: (a) 无；(b) [demo-chain-gaps/80](../../demo-chain-gaps/issues/80-a-consolidation-unit-handover-does-not-move-member-control.md)（ADR-0263 决定四）
 上下文：VE（全程追踪）。
 出处：票 [demo-chain-gaps/123](../../demo-chain-gaps/issues/123-tracking-projects-a-departing-bag-as-one-parcel-and-its-members-get-no-departure.md) 完成记录越权风险点 3；其真库补派生用例里，袋经交接进段时交接那一封给袋立了一条交接条目。

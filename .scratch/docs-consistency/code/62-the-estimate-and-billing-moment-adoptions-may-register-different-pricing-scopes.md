@@ -1,7 +1,7 @@
 # 62 同一结算账户在受理前估价采用与 SELL 计费时点采用两本册上可以登不同的计价范围，冻结与预估客户费用会出自两张价卡
 
 Category: bug
-Status: ready-for-agent——建议 R3（不急）：演示租户两本册登同一个范围，撞不上；真实租户上线时登记错一本就会让冻结额与预估客户费用出自两张卡，冻结不足或过多看起来像计量差。绕法：上线清单要求两本同范围，靠人核。2026-10-21 文档自洽 11 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc11。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（线外，复核见 .scratch/launch-line-freeze-2026-10-27.md 第六节）：SA 受理前估价采用与 SELL 计费时点采用两本册可登不同范围——演示租户登同一范围撞不上；绕法：上线清单要求两本同范围、靠人核（已记入冻结文件「记录」，上线清单必须有这一条）；解冻条件：真实租户登记时撞上，或上线清单核对不了。此前 ready-for-agent——建议 R3（不急）：演示租户两本册登同一个范围，撞不上；真实租户上线时登记错一本就会让冻结额与预估客户费用出自两张卡，冻结不足或过多看起来像计量差。绕法：上线清单要求两本同范围，靠人核。2026-10-21 文档自洽 11 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc11。
 Blocked by: 无
 出处：审计 [audit/cross.md](../audit/cross.md) B2·B2-10；裁定 [ADR-0280](../../../docs/adr/0280-a-settlement-account-registers-one-sell-pricing-scope-across-the-estimate-and-billing-moment-adoptions.md)。
 

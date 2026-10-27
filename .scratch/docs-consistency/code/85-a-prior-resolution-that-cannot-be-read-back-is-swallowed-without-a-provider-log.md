@@ -1,7 +1,7 @@
 # 85 第二、三阶段取回原解析读不回时，`loadPrior` 把 error 吞成未决、不记提供方日志，滚动发布时旧构建读不懂新快照无从察觉
 
 Category: enhancement
-Status: needs-triage——建议 R3（可观测性，不改结局代数）。2026-10-21 协调方据票 [docs-consistency/code/80](./80-the-commercial-resolution-snapshot-digest-carries-no-canonicalization-version.md) 隔离评审 N1 立（用户「你作为业务和系统专家自决」授权）。
+Status: ready-for-human——2026-10-27 冻结到首个租户上线之后（线外，复核见 .scratch/launch-line-freeze-2026-10-27.md 第六节）：第二、三阶段取回原解析读不回时 `loadPrior` 吞 error——可观测性，不改结局代数；解冻条件：需要读出这一格时。此前 needs-triage——建议 R3（可观测性，不改结局代数）。2026-10-21 协调方据票 [docs-consistency/code/80](./80-the-commercial-resolution-snapshot-digest-carries-no-canonicalization-version.md) 隔离评审 N1 立（用户「你作为业务和系统专家自决」授权）。
 Blocked by: 无
 上下文：PC（参与方与商业），应用层。
 出处：code/80 隔离评审 N1。
