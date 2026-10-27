@@ -25,24 +25,14 @@ import (
 // 一眼可核。两种情形会让这一行不再成立：工厂改成收外部来的号；或者那只交接口多出一个调用方，交进来的标识不是经
 // 工厂铸的（从派生串或外部串构造的同一种领域标识照样能过类型检查）。
 var allowedRawEnvelopeID = map[string]string{
-	"internal/parcelpricing/adapters/postgres/evaluation_handoff.go":                             "单一产品铸造标识：identity.EvaluationIdentities",
-	"internal/parcelshipment/adapters/postgres/acceptance_decision_handoff.go":                   "单一产品铸造标识：identity.AcceptanceDecisions",
-	"internal/parcelshipment/adapters/postgres/source_data_handoff.go":                           "单一产品铸造标识：identity.SourceDataVersions",
-	"internal/visibilityexception/adapters/postgres/customer_view_handoff.go":                    "单一产品铸造标识：identity.CustomerViewVersions",
-	"internal/visibilityexception/adapters/postgres/disposition_handoff.go":                      "单一产品铸造标识：identity.DispositionRequests",
-	"internal/visibilityexception/adapters/postgres/eta_handoff.go":                              "单一产品铸造标识：identity.ETAVersions",
-	"internal/visibilityexception/adapters/postgres/notification_handoff.go":                     "单一产品铸造标识：identity.Notifications",
-	"internal/visibilityexception/adapters/postgres/projection_handoff.go":                       "单一产品铸造标识：identity.ProjectionVersions",
-	"internal/transportfulfillment/adapters/postgres/capacity_consumption_handoff.go":            "envelope-id-bounds/01",
-	"internal/transportfulfillment/adapters/postgres/carrier_first_effective_pickup_handoff.go":  "envelope-id-bounds/01",
-	"internal/transportfulfillment/adapters/postgres/disposition_execution_handoff.go":           "envelope-id-bounds/01",
-	"internal/transportfulfillment/adapters/postgres/effective_delivery_handoff.go":              "envelope-id-bounds/01",
-	"internal/transportfulfillment/adapters/postgres/exception_journey_handoff.go":               "envelope-id-bounds/01",
-	"internal/transportfulfillment/adapters/postgres/external_tracking_fact_handoff.go":          "envelope-id-bounds/01",
-	"internal/transportfulfillment/adapters/postgres/offsite_pickup_handoff.go":                  "envelope-id-bounds/01",
-	"internal/transportfulfillment/adapters/postgres/offsite_pickup_registration_handoff.go":     "envelope-id-bounds/01",
-	"internal/transportfulfillment/adapters/postgres/regulatory_acceptance_handoff.go":           "envelope-id-bounds/01",
-	"internal/transportfulfillment/adapters/postgres/transport_handover_registration_handoff.go": "envelope-id-bounds/01",
+	"internal/parcelpricing/adapters/postgres/evaluation_handoff.go":           "单一产品铸造标识：identity.EvaluationIdentities",
+	"internal/parcelshipment/adapters/postgres/acceptance_decision_handoff.go": "单一产品铸造标识：identity.AcceptanceDecisions",
+	"internal/parcelshipment/adapters/postgres/source_data_handoff.go":         "单一产品铸造标识：identity.SourceDataVersions",
+	"internal/visibilityexception/adapters/postgres/customer_view_handoff.go":  "单一产品铸造标识：identity.CustomerViewVersions",
+	"internal/visibilityexception/adapters/postgres/disposition_handoff.go":    "单一产品铸造标识：identity.DispositionRequests",
+	"internal/visibilityexception/adapters/postgres/eta_handoff.go":            "单一产品铸造标识：identity.ETAVersions",
+	"internal/visibilityexception/adapters/postgres/notification_handoff.go":   "单一产品铸造标识：identity.Notifications",
+	"internal/visibilityexception/adapters/postgres/projection_handoff.go":     "单一产品铸造标识：identity.ProjectionVersions",
 }
 
 // constructsEnvelopeWithID 报告文件里有没有带 ID 的 eventing.Envelope 字面量。

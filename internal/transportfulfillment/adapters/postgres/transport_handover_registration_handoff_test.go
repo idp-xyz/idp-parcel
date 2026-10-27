@@ -83,7 +83,7 @@ func TestTransportHandoverRegistrationFollowsTheTransactionalTemplate(t *testing
 	}); err != nil {
 		t.Fatalf("首发：%v", err)
 	}
-	if count := countTFIntents(t, pool, "tenant-a/parcel-1/scope-1/hv-1"); count != 1 {
+	if count := countTFIntents(t, pool, tfEventID("transport-handover-registration", "tenant-a", "parcel-1", "scope-1", "hv-1")); count != 1 {
 		t.Fatalf("parcel-1 行数 = %d, want 1", count)
 	}
 
@@ -96,7 +96,7 @@ func TestTransportHandoverRegistrationFollowsTheTransactionalTemplate(t *testing
 	}); !errors.Is(err, rollback) {
 		t.Fatalf("事务应以回滚错误结束，实得：%v", err)
 	}
-	if count := countTFIntents(t, pool, "tenant-a/parcel-rollback/scope-1/hv-rollback"); count != 0 {
+	if count := countTFIntents(t, pool, tfEventID("transport-handover-registration", "tenant-a", "parcel-rollback", "scope-1", "hv-rollback")); count != 0 {
 		t.Fatalf("回滚后 parcel-rollback 行数 = %d, want 0", count)
 	}
 
@@ -105,7 +105,7 @@ func TestTransportHandoverRegistrationFollowsTheTransactionalTemplate(t *testing
 	}); err != nil {
 		t.Fatalf("重发：%v", err)
 	}
-	if count := countTFIntents(t, pool, "tenant-a/parcel-1/scope-1/hv-1"); count != 1 {
+	if count := countTFIntents(t, pool, tfEventID("transport-handover-registration", "tenant-a", "parcel-1", "scope-1", "hv-1")); count != 1 {
 		t.Fatalf("重发后行数 = %d, want 1——重发的必须是同一份", count)
 	}
 
@@ -138,23 +138,23 @@ func TestHandoverVersionsOfOneObjectShareAPartition(t *testing.T) {
 	}
 
 	// 两代都在：ID 带版本，所以更正不会被 EnqueueOnce 当成重复吞掉。
-	if count := countTFIntents(t, pool, "tenant-a/parcel-1/scope-1/hv-1"); count != 1 {
+	if count := countTFIntents(t, pool, tfEventID("transport-handover-registration", "tenant-a", "parcel-1", "scope-1", "hv-1")); count != 1 {
 		t.Fatalf("首版行数 = %d, want 1", count)
 	}
-	if count := countTFIntents(t, pool, "tenant-a/parcel-1/scope-1/hv-2"); count != 1 {
+	if count := countTFIntents(t, pool, tfEventID("transport-handover-registration", "tenant-a", "parcel-1", "scope-1", "hv-2")); count != 1 {
 		t.Fatalf("更正版行数 = %d, want 1——ID 不带版本时它会被当成重复静默丢掉", count)
 	}
 
 	const wantPartition = "tenant-a/parcel-1/transport-handover-registration"
-	if got := partitionKeyOf(t, pool, "tenant-a/parcel-1/scope-1/hv-1"); got != wantPartition {
+	if got := partitionKeyOf(t, pool, tfEventID("transport-handover-registration", "tenant-a", "parcel-1", "scope-1", "hv-1")); got != wantPartition {
 		t.Fatalf("首版分区键 = %q, want %q", got, wantPartition)
 	}
-	if got := partitionKeyOf(t, pool, "tenant-a/parcel-1/scope-1/hv-2"); got != wantPartition {
+	if got := partitionKeyOf(t, pool, tfEventID("transport-handover-registration", "tenant-a", "parcel-1", "scope-1", "hv-2")); got != wantPartition {
 		t.Fatalf("更正版分区键 = %q；两代不同分区就没有先后可言", got)
 	}
 	// 不同对象不共享分区：一个对象卡住不该拖住另一个。
 	const wantOtherPartition = "tenant-a/parcel-2/transport-handover-registration"
-	if got := partitionKeyOf(t, pool, "tenant-a/parcel-2/scope-1/hv-1"); got != wantOtherPartition {
+	if got := partitionKeyOf(t, pool, tfEventID("transport-handover-registration", "tenant-a", "parcel-2", "scope-1", "hv-1")); got != wantOtherPartition {
 		t.Fatalf("他对象分区键 = %q, want %q", got, wantOtherPartition)
 	}
 }

@@ -57,7 +57,7 @@ func registerReusedVersionHandover(
 	if result.Outcome() != tfapplication.HandoverRegistered || result.SegmentContinuationReference() != "" {
 		t.Fatalf("登记交接 %s/%s：outcome=%s debt=%q", scope, version, result.Outcome(), result.SegmentContinuationReference())
 	}
-	return formationTenant + "/" + parcel + "/" + scope + "/" + version
+	return handoverEventID(formationTenant, parcel, scope, version)
 }
 
 // Covers: AT-TF-267（S，票 demo-chain-gaps/111 演示判据的真库半边，ADR-0221）——同一包裹五次`已交接`：SHA/v1 立自营段、SZX/v1

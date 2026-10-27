@@ -81,7 +81,7 @@ func TestOffsitePickupRegistrationFollowsTheTransactionalTemplate(t *testing.T) 
 	}); err != nil {
 		t.Fatalf("首发：%v", err)
 	}
-	if count := countTFIntents(t, pool, "tenant-a/parcel-1/attempt-1/offsite-pickup-registration"); count != 1 {
+	if count := countTFIntents(t, pool, tfEventID("offsite-pickup-registration", "tenant-a", "parcel-1", "attempt-1")); count != 1 {
 		t.Fatalf("parcel-1 行数 = %d, want 1", count)
 	}
 
@@ -94,7 +94,7 @@ func TestOffsitePickupRegistrationFollowsTheTransactionalTemplate(t *testing.T) 
 	}); !errors.Is(err, rollback) {
 		t.Fatalf("事务应以回滚错误结束，实得：%v", err)
 	}
-	if count := countTFIntents(t, pool, "tenant-a/parcel-rollback/attempt-1/offsite-pickup-registration"); count != 0 {
+	if count := countTFIntents(t, pool, tfEventID("offsite-pickup-registration", "tenant-a", "parcel-rollback", "attempt-1")); count != 0 {
 		t.Fatalf("回滚后 parcel-rollback 行数 = %d, want 0", count)
 	}
 
@@ -103,7 +103,7 @@ func TestOffsitePickupRegistrationFollowsTheTransactionalTemplate(t *testing.T) 
 	}); err != nil {
 		t.Fatalf("重发：%v", err)
 	}
-	if count := countTFIntents(t, pool, "tenant-a/parcel-1/attempt-1/offsite-pickup-registration"); count != 1 {
+	if count := countTFIntents(t, pool, tfEventID("offsite-pickup-registration", "tenant-a", "parcel-1", "attempt-1")); count != 1 {
 		t.Fatalf("重发后行数 = %d, want 1——重发的必须是同一份", count)
 	}
 
@@ -135,8 +135,8 @@ func TestTwoSuccessfulPickupsOnOneObjectShareAPartition(t *testing.T) {
 		t.Fatalf("同对象两尝试：%v", err)
 	}
 
-	first := "tenant-a/parcel-1/attempt-1/offsite-pickup-registration"
-	second := "tenant-a/parcel-1/attempt-2/offsite-pickup-registration"
+	first := tfEventID("offsite-pickup-registration", "tenant-a", "parcel-1", "attempt-1")
+	second := tfEventID("offsite-pickup-registration", "tenant-a", "parcel-1", "attempt-2")
 	if count := countTFIntents(t, pool, first); count != 1 {
 		t.Fatalf("首段行数 = %d, want 1", count)
 	}
@@ -188,8 +188,8 @@ func TestACorrectedPickupVersionIsHandedOffAsItsOwnIntent(t *testing.T) {
 		t.Fatalf("首登与更正两份：%v", err)
 	}
 
-	const firstID = "tenant-a/parcel-1/attempt-1/offsite-pickup-registration"
-	const secondID = "tenant-a/parcel-1/attempt-1/pickup-result/v2/offsite-pickup-registration"
+	firstID := tfEventID("offsite-pickup-registration", "tenant-a", "parcel-1", "attempt-1")
+	secondID := tfEventID("offsite-pickup-registration", "tenant-a", "parcel-1", "attempt-1", "pickup-result/v2")
 	if count := countTFIntents(t, pool, firstID); count != 1 {
 		t.Fatalf("首登行数 = %d, want 1", count)
 	}
@@ -273,10 +273,10 @@ func TestOffsitePickupRegistrationDoesNotCollideWithEffectiveDelivery(t *testing
 	}); err != nil {
 		t.Fatalf("同事务两口：%v", err)
 	}
-	if count := countTFIntents(t, pool, "tenant-a/parcel-1/attempt-1/delivery/v1/effective-delivery"); count != 1 {
+	if count := countTFIntents(t, pool, tfEventID("effective-delivery", "tenant-a", "parcel-1", "attempt-1", "delivery/v1")); count != 1 {
 		t.Fatalf("交付生效行数 = %d, want 1", count)
 	}
-	if count := countTFIntents(t, pool, "tenant-a/parcel-1/attempt-1/offsite-pickup-registration"); count != 1 {
+	if count := countTFIntents(t, pool, tfEventID("offsite-pickup-registration", "tenant-a", "parcel-1", "attempt-1")); count != 1 {
 		t.Fatalf("揽收登记行数 = %d, want 1——应是第二份而不是被交付生效吞掉", count)
 	}
 }

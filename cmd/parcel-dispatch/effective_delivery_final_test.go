@@ -11,6 +11,7 @@ import (
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	pcdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	tfports "go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
@@ -253,6 +254,5 @@ func recordRegisteredEffectiveDelivery(t *testing.T, fixture *synVerticalFixture
 	if outcome != tfports.DeliverySaved {
 		t.Fatalf("save outcome = %v, want 已写入", outcome)
 	}
-	return tenant.String() + "/" + effectiveDeliveryObject + "/" + effectiveDeliveryAttempt +
-		"/" + effectiveDeliveryVersion + "/effective-delivery"
+	return string(outboxintent.FingerprintEventID("effective-delivery", tenant.String(), effectiveDeliveryObject, effectiveDeliveryAttempt, effectiveDeliveryVersion))
 }

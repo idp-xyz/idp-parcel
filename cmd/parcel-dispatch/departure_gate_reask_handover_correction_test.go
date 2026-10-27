@@ -24,7 +24,7 @@ func TestAPendingHandoverCorrectedIntoTheSegmentReasksTheStoppedDeparture(t *tes
 	}
 
 	register := registerPendingHandoverIntoMovementSegment(t, fixture)
-	pendingEvent := fixture.identity.TenantID().String() + "/" + movementParcelOnBoard + "/" + backfillScope + "/" + backfillVersion
+	pendingEvent := handoverEventID(fixture.identity.TenantID().String(), movementParcelOnBoard, backfillScope, backfillVersion)
 	if _, err := fixture.beat.DispatchOnce(t.Context()); err != nil {
 		t.Fatalf("待确认那一拍：%v", err)
 	}

@@ -9,6 +9,7 @@ import (
 	"go.idp.xyz/idp-bento-go/postgres/inbox"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	tfapplication "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
@@ -242,7 +243,7 @@ func registerOnwardHandover(t *testing.T, fixture *synVerticalFixture, object st
 	if result.Outcome() != tfapplication.HandoverRegistered || result.SegmentContinuationReference() != "" {
 		t.Fatalf("登记下一次交接：outcome=%s debt=%q", result.Outcome(), result.SegmentContinuationReference())
 	}
-	return tenant.String() + "/" + object + "/" + onwardScope + "/" + onwardVersion
+	return handoverEventID(tenant.String(), object, onwardScope, onwardVersion)
 }
 
 // registerHandoverIntoMovementSegment 经生产登记编排（真交接册、真段册、真 outbox 交出、真结束参与）登一次`已交接`：在控那一件
@@ -284,7 +285,7 @@ func registerHandoverOfObjectIntoMovementSegment(t *testing.T, fixture *synVerti
 	if result.Outcome() != tfapplication.HandoverRegistered || result.SegmentContinuationReference() != "" {
 		t.Fatalf("登记交接：outcome=%s debt=%q", result.Outcome(), result.SegmentContinuationReference())
 	}
-	return tenant.String() + "/" + object + "/" + backfillScope + "/" + backfillVersion
+	return handoverEventID(tenant.String(), object, backfillScope, backfillVersion)
 }
 
 // registerPickupIntoMovementSegment 经生产登记编排（真揽收登记册、真段册、真版本签发、真 outbox 交出）登一次场外揽收：在控那一件
@@ -339,7 +340,7 @@ func registerPickupIntoMovementSegment(t *testing.T, fixture *synVerticalFixture
 	if result.Outcome() != tfapplication.PickupRegistered || result.SegmentContinuationReference() != "" {
 		t.Fatalf("登记揽收：outcome=%s debt=%q", result.Outcome(), result.SegmentContinuationReference())
 	}
-	return tenant.String() + "/" + movementParcelOnBoard + "/" + backfillPickupAttempt + "/offsite-pickup-registration"
+	return string(outboxintent.FingerprintEventID("offsite-pickup-registration", tenant.String(), movementParcelOnBoard, backfillPickupAttempt))
 }
 
 func assertBackfilledDeparture(t *testing.T, fixture *synVerticalFixture) {
@@ -571,5 +572,5 @@ func confirmPendingHandoverIntoMovementSegment(
 		corrected.SegmentContinuationReference() != "" {
 		t.Fatalf("更正成已交接：outcome=%s refusal=%s debt=%q", corrected.Outcome(), corrected.SegmentEntryRefusal(), corrected.SegmentContinuationReference())
 	}
-	return tenant.String() + "/" + movementParcelOnBoard + "/" + backfillScope + "/" + pendingHandoverConfirmedVersion
+	return handoverEventID(tenant.String(), movementParcelOnBoard, backfillScope, pendingHandoverConfirmedVersion)
 }

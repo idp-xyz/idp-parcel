@@ -49,8 +49,13 @@ type transportHandoverRegistrationPayload struct {
 	Version  string `json:"version"`
 }
 
-func transportHandoverRegistrationEventID(key ports.TransportHandoverKey) string {
-	return key.TenantID.String() + "/" + key.Object.String() + "/" + key.Scope.String() + "/" + key.Version.String()
+// transportHandoverRegistrationPort 是本口在信封 ID 与分区键类型段上的口名，与同一来源名下别的口的 ID 空间错开（FingerprintEventID 头注）。
+const transportHandoverRegistrationPort = "transport-handover-registration"
+
+// transportHandoverRegistrationEventID 按交接判断键的四维（租户、对象、范围、版本）铸 ID：意图由它们认领（ADR-0043）。
+func transportHandoverRegistrationEventID(key ports.TransportHandoverKey) eventing.EventID {
+	return outboxintent.FingerprintEventID(transportHandoverRegistrationPort,
+		key.TenantID.String(), key.Object.String(), key.Scope.String(), key.Version.String())
 }
 
 // transportHandoverPartitionKey 取（租户+载运对象+类型段），不取整个判断键。
@@ -68,11 +73,10 @@ func transportHandoverRegistrationEventID(key ports.TransportHandoverKey) string
 // 主体相同——不加类型段，一封停在消费未决的交接信封就把同一包裹已派生的追踪投影堵在
 // 分区头，而跨口保序买不到东西（投影的取代关系由来源给出，ADR-0065）。
 func transportHandoverPartitionKey(key ports.TransportHandoverKey) string {
-	return key.TenantID.String() + "/" + key.Object.String() + "/transport-handover-registration"
+	return key.TenantID.String() + "/" + key.Object.String() + "/" + transportHandoverRegistrationPort
 }
 
-// HandOffTransportHandover 把一份意图入队。信封 ID 取交接判断键——意图由
-// （租户+对象+范围+版本）认领（ADR-0043）。键缺席是装配缺陷，响亮报错不入队。
+// HandOffTransportHandover 把一份意图入队。信封 ID 由交接判断键（租户+对象+范围+版本）认领（ADR-0043）。键缺席是装配缺陷，响亮报错不入队。
 func (handoff *OutboxTransportHandoverRegistrationHandoff) HandOffTransportHandover(
 	ctx context.Context,
 	intent ports.TransportHandoverRegistrationIntent,
@@ -99,7 +103,7 @@ func (handoff *OutboxTransportHandoverRegistrationHandoff) HandOffTransportHando
 	eventID := transportHandoverRegistrationEventID(key)
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(eventID),
+		ID:           eventID,
 		Source:       tfEventSource,
 		Type:         transportHandoverRegistrationEventType,
 		Version:      1,

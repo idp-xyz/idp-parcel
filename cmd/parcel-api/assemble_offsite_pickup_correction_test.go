@@ -9,6 +9,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	tfapp "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
@@ -114,7 +115,7 @@ func TestTheWiredPickupCorrectionLandsANewVersionAgainstARealDatabase(t *testing
 		t.Fatalf("同键行数 = %d, want 2（原行不动，更正是新行）", rows)
 	}
 
-	correctionEventID := tenant.String() + "/SYN-PARCEL-8/SYN-ATTEMPT-8/" + record.Pickup.Version().String() + "/offsite-pickup-registration"
+	correctionEventID := string(outboxintent.FingerprintEventID("offsite-pickup-registration", tenant.String(), "SYN-PARCEL-8", "SYN-ATTEMPT-8", record.Pickup.Version().String()))
 	var enqueued int
 	if err := pool.QueryRow(t.Context(),
 		`SELECT count(*) FROM `+migrate.SchemaBento+`.outbox WHERE event_id = $1`,

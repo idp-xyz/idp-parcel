@@ -50,12 +50,21 @@ type offsitePickupPayload struct {
 	SourceID string `json:"sourceId"`
 }
 
-func offsitePickupEventID(key ports.PickupAttemptKey) string {
-	return key.TenantID.String() + "/" + key.SourceID + "/offsite-pickup"
+// offsitePickupPort 是本口在信封 ID 上的口名前缀，与同一来源名下别的口的 ID 空间错开（FingerprintEventID 头注）。
+const offsitePickupPort = "offsite-pickup"
+
+// offsitePickupEventID 按揽收尝试幂等键的两维（租户、来源）铸 ID：意图由它们认领（ADR-0043）。
+func offsitePickupEventID(key ports.PickupAttemptKey) eventing.EventID {
+	return outboxintent.FingerprintEventID(offsitePickupPort, key.TenantID.String(), key.SourceID)
 }
 
-// HandOffOffsitePickup 把一份意图入队。信封 ID 取揽收尝试幂等键再加类型段——意图由
-// （租户+来源）认领（ADR-0043）。键缺席是装配缺陷，响亮报错不入队。
+// offsitePickupPartitionKey 保留可读的「租户/来源/口名」：一次揽收尝试只走本口一拍，分区仍是逐信封，取可读形只为
+// 运维从分区键认得出是哪次尝试。
+func offsitePickupPartitionKey(key ports.PickupAttemptKey) string {
+	return key.TenantID.String() + "/" + key.SourceID + "/" + offsitePickupPort
+}
+
+// HandOffOffsitePickup 把一份意图入队。信封 ID 由（租户+来源）认领（ADR-0043）。键缺席是装配缺陷，响亮报错不入队。
 func (handoff *OutboxOffsitePickupHandoff) HandOffOffsitePickup(
 	ctx context.Context,
 	intent ports.OffsitePickupHandoffIntent,
@@ -74,16 +83,15 @@ func (handoff *OutboxOffsitePickupHandoff) HandOffOffsitePickup(
 	}
 
 	now := handoff.clock.Now().UTC()
-	eventID := offsitePickupEventID(key)
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(eventID),
+		ID:           offsitePickupEventID(key),
 		Source:       tfEventSource,
 		Type:         offsitePickupEventType,
 		Version:      1,
 		Scope:        key.TenantID.String(),
 		Subject:      key.SourceID,
-		PartitionKey: eventID,
+		PartitionKey: offsitePickupPartitionKey(key),
 		OccurredAt:   intent.Record.RecordedAt.UTC(),
 		RecordedAt:   now,
 		ContentType:  eventing.JSONContentType,

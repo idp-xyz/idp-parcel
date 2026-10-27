@@ -51,11 +51,14 @@ type externalTrackingFactPayload struct {
 	Version  string `json:"version"`
 }
 
-// externalTrackingFactEventID 取键的全部三维。版本必须在里面：ADR-0043 说意图由结果标识认领，
-// 而一条事实的结果标识是它的版本——少了它，判断版本与被更正版本算出同一个字符串，
+// externalTrackingFactPort 是本口在信封 ID 与分区键类型段上的口名，与同一来源名下别的口的 ID 空间错开（FingerprintEventID 头注）。
+const externalTrackingFactPort = "external-carrier-tracking"
+
+// externalTrackingFactEventID 取键的全部三维（租户、事实、版本）。版本必须在里面：ADR-0043 说意图由结果标识认领，
+// 而一条事实的结果标识是它的版本——少了它，判断版本与被更正版本算出同一个 ID，
 // outboxintent.EnqueueOnce 先查后插，第二份静默不入队。
-func externalTrackingFactEventID(key ports.ExternalTrackingFactKey) string {
-	return key.TenantID.String() + "/" + key.Fact.String() + "/" + key.Version.String() + "/external-carrier-tracking"
+func externalTrackingFactEventID(key ports.ExternalTrackingFactKey) eventing.EventID {
+	return outboxintent.FingerprintEventID(externalTrackingFactPort, key.TenantID.String(), key.Fact.String(), key.Version.String())
 }
 
 // externalTrackingFactPartitionKey 取（租户+载运对象+类型段），不取整个键。
@@ -65,7 +68,7 @@ func externalTrackingFactEventID(key ports.ExternalTrackingFactKey) string {
 // （它按在场集合派生），但同一对象的两条事实若分了区，客户可见面上就会先后颠倒地闪一次。
 // 类型段按 ADR-0074：TF 的排队主体是载运对象，与 visibility-exception 的（租户+包裹）分区不共队。
 func externalTrackingFactPartitionKey(record ports.ExternalTrackingFactRecord) string {
-	return record.Key.TenantID.String() + "/" + record.Fact.Object().String() + "/external-carrier-tracking"
+	return record.Key.TenantID.String() + "/" + record.Fact.Object().String() + "/" + externalTrackingFactPort
 }
 
 // HandOffExternalTrackingFact 把一份意图入队。键缺席或版本待判断是装配缺陷，响亮报错不入队。
@@ -97,7 +100,7 @@ func (handoff *OutboxExternalTrackingFactHandoff) HandOffExternalTrackingFact(
 	now := handoff.clock.Now().UTC()
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(externalTrackingFactEventID(key)),
+		ID:           externalTrackingFactEventID(key),
 		Source:       tfEventSource,
 		Type:         externalTrackingFactEventType,
 		Version:      1,

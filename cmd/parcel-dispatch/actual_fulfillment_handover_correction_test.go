@@ -48,7 +48,7 @@ func TestAPendingHandoverCorrectedToHandedOverAtTheEndOfAnAdoptedSegmentFormsThe
 	if pending.Outcome() != tfapplication.HandoverRegistered {
 		t.Fatalf("登记待确认：%s", pending.Outcome())
 	}
-	pendingEvent := formationTenant + "/" + parcel + "/" + formationScope + "/" + pendingVersion
+	pendingEvent := handoverEventID(formationTenant, parcel, formationScope, pendingVersion)
 	dispatchUntilPublished(t, beat, db, pendingEvent)
 	if occurrences := formationOccurrences(t, db); len(occurrences) != 0 {
 		t.Fatalf("待确认那一封形成了 %d 项发生项, want 0", len(occurrences))
@@ -74,7 +74,7 @@ func TestAPendingHandoverCorrectedToHandedOverAtTheEndOfAnAdoptedSegmentFormsThe
 	if corrected.Outcome() != tfapplication.HandoverCorrected || corrected.ParticipationEnd() != tfapplication.ParticipationEndedNow {
 		t.Fatalf("更正成已交接：outcome=%s end=%s", corrected.Outcome(), corrected.ParticipationEnd())
 	}
-	confirmedEvent := formationTenant + "/" + parcel + "/" + formationScope + "/" + confirmedVersion
+	confirmedEvent := handoverEventID(formationTenant, parcel, formationScope, confirmedVersion)
 	dispatchUntilPublished(t, beat, db, confirmedEvent)
 	if n := inboxRowsOf(t, db, actualOnHandoverConsumerName, confirmedEvent); n != 1 {
 		t.Fatalf("本路 inbox 行 = %d, want 1", n)

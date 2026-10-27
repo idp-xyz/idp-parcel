@@ -54,9 +54,20 @@ func alternateJourneyKeyParts(key ports.AlternateJourneyKey) string {
 		key.Purpose.String() + "/" + key.Basis.String()
 }
 
-func dispositionExecutionEventID(key ports.AlternateJourneyKey) string {
-	// 类型段把本口与同键的 ExceptionJourneyHandoff 错开——监管来路两口同事务入队。
-	return alternateJourneyKeyParts(key) + "/disposition-execution"
+// dispositionExecutionPort 是本口在信封 ID 上的口名前缀。监管来路的两口（本口与 ExceptionJourneyHandoff）同键、同事务入队，
+// 口名把两口的 ID 空间错开（FingerprintEventID 头注）。
+const dispositionExecutionPort = "disposition-execution"
+
+// dispositionExecutionEventID 按替代旅程幂等键的四维（租户、原旅程、目的、处置依据）铸 ID：意图由它们认领（ADR-0043）。
+func dispositionExecutionEventID(key ports.AlternateJourneyKey) eventing.EventID {
+	return outboxintent.FingerprintEventID(dispositionExecutionPort,
+		key.TenantID.String(), key.Original.String(), key.Purpose.String(), key.Basis.String())
+}
+
+// dispositionExecutionPartitionKey 保留可读的「键四维/口名」：一份替代旅程只走本口一拍，分区仍是逐信封，取可读形只为
+// 运维从分区键认得出是哪份旅程。
+func dispositionExecutionPartitionKey(key ports.AlternateJourneyKey) string {
+	return alternateJourneyKeyParts(key) + "/" + dispositionExecutionPort
 }
 
 func alternateJourneyKeyMissing(key ports.AlternateJourneyKey) bool {
@@ -66,8 +77,7 @@ func alternateJourneyKeyMissing(key ports.AlternateJourneyKey) bool {
 		key.Basis.String() == ""
 }
 
-// HandOffDispositionExecution 把一份意图入队。信封 ID 取替代旅程幂等键再加类型段——
-// 意图由（租户+原旅程+目的+处置依据）认领（ADR-0043）。键缺席是装配缺陷，响亮报错不入队。
+// HandOffDispositionExecution 把一份意图入队。信封 ID 由（租户+原旅程+目的+处置依据）认领（ADR-0043）。键缺席是装配缺陷，响亮报错不入队。
 func (handoff *OutboxDispositionExecutionHandoff) HandOffDispositionExecution(
 	ctx context.Context,
 	intent ports.AlternateJourneyIntent,
@@ -88,16 +98,15 @@ func (handoff *OutboxDispositionExecutionHandoff) HandOffDispositionExecution(
 	}
 
 	now := handoff.clock.Now().UTC()
-	eventID := dispositionExecutionEventID(key)
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(eventID),
+		ID:           dispositionExecutionEventID(key),
 		Source:       tfEventSource,
 		Type:         dispositionExecutionEventType,
 		Version:      1,
 		Scope:        key.TenantID.String(),
 		Subject:      key.Original.String() + "/" + key.Purpose.String() + "/" + key.Basis.String(),
-		PartitionKey: eventID,
+		PartitionKey: dispositionExecutionPartitionKey(key),
 		OccurredAt:   intent.Record.RecordedAt.UTC(),
 		RecordedAt:   now,
 		ContentType:  eventing.JSONContentType,

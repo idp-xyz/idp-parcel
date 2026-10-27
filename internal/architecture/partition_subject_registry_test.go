@@ -188,7 +188,7 @@ var declaredPartitionSubjects = map[string]string{
 	"internal/settlementaccounting/adapters/postgres/sell_evaluation_request_handoff.go": partitionSubjectPrefix + "租户/包裹" + partitionRulingMark + "ADR-0190 决定一：本口键带 /sell-evaluation-request/ 段，与 PS、VE 的包裹分区不是同一字符串、不同队；同一件包裹在本缝上的各拍同区排队",
 
 	// —— transport-fulfillment ——
-	"internal/transportfulfillment/adapters/postgres/capacity_consumption_handoff.go":           partitionPerEnvelopePrefix + "键即信封 ID（各消耗事实互不相干）",
+	"internal/transportfulfillment/adapters/postgres/capacity_consumption_handoff.go":           partitionPerEnvelopePrefix + "键取（租户/池/预占/口名），含信封 ID 的全部维（各消耗事实互不相干）",
 	"internal/transportfulfillment/adapters/postgres/carrier_first_effective_pickup_handoff.go": partitionSubjectPrefix + "租户/载运对象/口名" + partitionRulingMark + "ADR-0074 决定二、五（本口段 /carrier-first-effective-pickup）",
 	"internal/transportfulfillment/adapters/postgres/charge_occurrence_handoff.go":              partitionSubjectPrefix + "租户/运输收费发生项（有效性版本只进 ID，失效与替代版同首版一区排队；/charge-occurrence/ 段）",
 	// 补形成门铃（ADR-0231 决定一、五）：门铃彼此没有先后，采用那一封按段排队只为不与别的段互相挡；换版那一封按委托排队，同一份
@@ -196,14 +196,14 @@ var declaredPartitionSubjects = map[string]string{
 	"internal/transportfulfillment/adapters/postgres/commission_agreement_revision_handoff.go":   partitionSubjectPrefix + "租户/运输委托（换版门铃，各次换版同区排队；/agreement-revision 段）",
 	"internal/transportfulfillment/adapters/postgres/segment_commission_adoption_handoff.go":     partitionSubjectPrefix + "租户/实际履约段（采用门铃；/segment-commission-adoption 段）",
 	"internal/transportfulfillment/adapters/postgres/departure_gate_reask_handoff.go":            partitionSubjectPrefix + "租户/移动事实（出发门禁补问，同它补的那条出发一区排队，对象与次序只进 ID；/movement-fact/ 段）",
-	"internal/transportfulfillment/adapters/postgres/disposition_execution_handoff.go":           partitionPerEnvelopePrefix + "键即信封 ID（处置执行）",
+	"internal/transportfulfillment/adapters/postgres/disposition_execution_handoff.go":           partitionPerEnvelopePrefix + "键取（租户/原旅程/目的/处置依据/口名），含信封 ID 的全部维（处置执行）",
 	"internal/transportfulfillment/adapters/postgres/effective_delivery_handoff.go":              partitionSubjectPrefix + "租户/载运对象/口名" + partitionRulingMark + "ADR-0074 决定二、五（本口段 /effective-delivery）",
-	"internal/transportfulfillment/adapters/postgres/exception_journey_handoff.go":               partitionPerEnvelopePrefix + "键即信封 ID（与处置执行同键，靠类型段错开）",
+	"internal/transportfulfillment/adapters/postgres/exception_journey_handoff.go":               partitionPerEnvelopePrefix + "键取（租户/原旅程/目的/处置依据/口名），含信封 ID 的全部维（与处置执行同键，靠口名错开）",
 	"internal/transportfulfillment/adapters/postgres/external_tracking_fact_handoff.go":          partitionSubjectPrefix + "租户/载运对象/口名" + partitionRulingMark + "ADR-0074 决定二、五（本口段 /external-carrier-tracking）",
 	"internal/transportfulfillment/adapters/postgres/movement_fact_handoff.go":                   partitionSubjectPrefix + "租户/移动事实（版本只进 ID，更正版同首版一区排队；/movement-fact/ 段）",
-	"internal/transportfulfillment/adapters/postgres/offsite_pickup_handoff.go":                  partitionPerEnvelopePrefix + "键即信封 ID（揽收尝试）",
+	"internal/transportfulfillment/adapters/postgres/offsite_pickup_handoff.go":                  partitionPerEnvelopePrefix + "键取（租户/来源/口名），含信封 ID 的全部维（揽收尝试）",
 	"internal/transportfulfillment/adapters/postgres/offsite_pickup_registration_handoff.go":     partitionSubjectPrefix + "租户/载运对象/口名" + partitionRulingMark + "ADR-0074 决定二、五（本口段 /offsite-pickup-registration）",
-	"internal/transportfulfillment/adapters/postgres/regulatory_acceptance_handoff.go":           partitionPerEnvelopePrefix + "键即信封 ID（监管处置承接）",
+	"internal/transportfulfillment/adapters/postgres/regulatory_acceptance_handoff.go":           partitionPerEnvelopePrefix + "键取（租户/协作事项/口名），含信封 ID 的全部维（监管处置承接）",
 	"internal/transportfulfillment/adapters/postgres/transport_commission_handoff.go":            partitionPerEnvelopePrefix + "键取（租户/委托/口名），含信封 ID 的全部维（运输委托提交一拍）",
 	"internal/transportfulfillment/adapters/postgres/transport_handover_registration_handoff.go": partitionSubjectPrefix + "租户/载运对象/口名" + partitionRulingMark + "ADR-0074 决定二、五（本口段 /transport-handover-registration）",
 

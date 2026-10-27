@@ -10,6 +10,7 @@ import (
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	tfports "go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
@@ -220,5 +221,5 @@ func recordFormedCarrierPickup(t *testing.T, fixture *synVerticalFixture, object
 	if outcome != tfports.CarrierPickupSaved {
 		t.Fatalf("收寄 outcome = %v", outcome)
 	}
-	return pickup.TenantID().String() + "/SYN-CFEP-01/SYN-CFEV-01/carrier-first-effective-pickup"
+	return string(outboxintent.FingerprintEventID("carrier-first-effective-pickup", pickup.TenantID().String(), "SYN-CFEP-01", "SYN-CFEV-01"))
 }

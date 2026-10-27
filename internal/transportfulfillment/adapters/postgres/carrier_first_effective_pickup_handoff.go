@@ -57,17 +57,20 @@ type carrierFirstEffectivePickupPayload struct {
 	Object   string `json:"object"`
 }
 
-// carrierFirstEffectivePickupEventID 取（租户 + 事实 + 版本 + 类型段）。版本必须在 ID 里：一条链的替代与失效版本
-// 走同一个事实身份，少了版本两代算出同一个字符串，第二份被 EnqueueOnce 静默吞掉（effectiveDeliveryEventID 的教训）。
-func carrierFirstEffectivePickupEventID(key ports.CarrierFirstEffectivePickupKey) string {
-	return key.TenantID.String() + "/" + key.Fact.String() + "/" + key.Version.String() + "/carrier-first-effective-pickup"
+// carrierFirstEffectivePickupPort 是本口在信封 ID 与分区键类型段上的口名，与同一来源名下别的口的 ID 空间错开（FingerprintEventID 头注）。
+const carrierFirstEffectivePickupPort = "carrier-first-effective-pickup"
+
+// carrierFirstEffectivePickupEventID 取（租户 + 事实 + 版本）三维。版本必须在 ID 里：一条链的替代与失效版本
+// 走同一个事实身份，少了版本两代算出同一个 ID，第二份被 EnqueueOnce 静默吞掉（effectiveDeliveryEventID 的教训）。
+func carrierFirstEffectivePickupEventID(key ports.CarrierFirstEffectivePickupKey) eventing.EventID {
+	return outboxintent.FingerprintEventID(carrierFirstEffectivePickupPort, key.TenantID.String(), key.Fact.String(), key.Version.String())
 }
 
 // carrierFirstEffectivePickupPartitionKey 取（租户 + 载运对象 + 类型段），不取整个键：ID 管幂等、分区键管顺序。一个
 // 对象的收寄链在口内保序——失效先于首登送达，PS 的终局就会落在已被撤回的那一版上。类型段按 ADR-0074，理由同
 // effectiveDeliveryPartitionKey：TF 的排队主体是载运对象，与 visibility-exception 的（租户+包裹）分区不共队。
 func carrierFirstEffectivePickupPartitionKey(tenant domain.TenantID, object domain.CarriedObjectReference) string {
-	return tenant.String() + "/" + object.String() + "/carrier-first-effective-pickup"
+	return tenant.String() + "/" + object.String() + "/" + carrierFirstEffectivePickupPort
 }
 
 // HandOffCarrierFirstEffectivePickup 把一份意图入队。**待确认版本响亮拒绝**：它不构成收寄、不提供给 parcel-shipment
@@ -97,7 +100,7 @@ func (handoff *OutboxCarrierFirstEffectivePickupHandoff) HandOffCarrierFirstEffe
 	now := handoff.clock.Now().UTC()
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(carrierFirstEffectivePickupEventID(key)),
+		ID:           carrierFirstEffectivePickupEventID(key),
 		Source:       tfEventSource,
 		Type:         CarrierFirstEffectivePickupRegisteredEventType,
 		Version:      1,

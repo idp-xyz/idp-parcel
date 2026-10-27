@@ -7,6 +7,7 @@ import (
 
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	tfports "go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
@@ -112,9 +113,8 @@ func recordRecordedExceptionJourney(t *testing.T, fixture *synVerticalFixture) s
 	if outcome != tfports.AlternateJourneySaved {
 		t.Fatalf("save outcome = %v, want 已写入", outcome)
 	}
-	// 信封 ID 取旅程幂等键加类型段，与 OutboxExceptionJourneyHandoff 的 ADR-0043 认领一致。
-	return tenant.String() + "/" + exceptionJourneyOriginalRef + "/" +
-		tfdomain.AlternateJourneyPurpose.String() + "/" + exceptionJourneyBasisRef + "/exception-journey"
+	// 信封 ID 取旅程幂等键的四维，与 OutboxExceptionJourneyHandoff 的 ADR-0043 认领一致。
+	return string(outboxintent.FingerprintEventID("exception-journey", tenant.String(), exceptionJourneyOriginalRef, tfdomain.AlternateJourneyPurpose.String(), exceptionJourneyBasisRef))
 }
 
 func assertUnclassifiedJourneyProjection(t *testing.T, fixture *synVerticalFixture, member string) {

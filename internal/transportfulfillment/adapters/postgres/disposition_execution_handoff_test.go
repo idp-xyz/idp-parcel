@@ -46,11 +46,11 @@ func alternateJourneyHandoffIntent(t *testing.T, original string) ports.Alternat
 }
 
 func dispositionExecutionEventID(original string) string {
-	return "tenant-a/" + original + "/RETURN/DISPOSITION/decision-1/disposition-execution"
+	return tfEventID("disposition-execution", "tenant-a", original, "RETURN", "DISPOSITION/decision-1")
 }
 
 // TestDispositionExecutionFollowsTheTransactionalTemplate 证监管处置执行意图复现样板
-// 四条：首发一行、回滚无痕、重发同一份、无事务拒。信封 ID 取替代旅程键再加类型段。
+// 四条：首发一行、回滚无痕、重发同一份、无事务拒。信封 ID 取替代旅程键各维的指纹。
 func TestDispositionExecutionFollowsTheTransactionalTemplate(t *testing.T) {
 	handoff, db, pool := newDispositionExecutionHandoffFixture(t)
 	ctx := t.Context()
@@ -63,6 +63,9 @@ func TestDispositionExecutionFollowsTheTransactionalTemplate(t *testing.T) {
 	}
 	if count := countTFIntents(t, pool, dispositionExecutionEventID("journey-1")); count != 1 {
 		t.Fatalf("journey-1 行数 = %d, want 1", count)
+	}
+	if got := partitionKeyOf(t, pool, dispositionExecutionEventID("journey-1")); got != "tenant-a/journey-1/RETURN/DISPOSITION/decision-1/disposition-execution" {
+		t.Fatalf("分区键 = %q", got)
 	}
 
 	rollback := errors.New("回滚")
