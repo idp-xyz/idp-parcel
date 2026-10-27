@@ -8,7 +8,7 @@
 |---|---|---|---|---|---|---|
 | accessidentity | 41 | 50 | 0 | 6 | 0 | 3 |
 | architecture（非业务） | 0 | 17 | 0 | 0 | 0 | 0 |
-| collectionremittance | 25 | 17 | 4 | 6 | 0 | 3 |
+| collectionremittance | 28 | 22 | 5 | 6 | 0 | 3 |
 | customscompliance | 126 | 130 | 24 | 47 | 10 | 18 |
 | networkrouting | 96 | 113 | 11 | 19 | 2 | 10 |
 | nodeoperations | 113 | 120 | 15 | 30 | 4 | 17 |
@@ -17,19 +17,20 @@
 | partycommercial | 177 | 197 | 15 | 43 | 1 | 43 |
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 26 | 24 | 0 | 0 | 0 | 0 |
-| settlementaccounting | 233 | 185 | 38 | 69 | 13 | 10 |
+| settlementaccounting | 234 | 188 | 38 | 70 | 13 | 10 |
 | transportfulfillment | 298 | 310 | 55 | 62 | 16 | 53 |
 | visibilityexception | 133 | 133 | 13 | 33 | 8 | 13 |
-| **合计** | 1698 | 1713 | 226 | 392 | 68 | 228 |
+| **合计** | 1702 | 1721 | 227 | 393 | 68 | 228 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 245、测试 404。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 245、测试 406。
 
-## 跨上下文消费缝：50 组，168 个生产文件
+## 跨上下文消费缝：51 组，169 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
 | accessidentity | pilotgovernance | 1 |
 | collectionremittance | accessidentity | 1 |
+| collectionremittance | settlementaccounting | 1 |
 | customscompliance | accessidentity | 4 |
 | customscompliance | parcelshipment | 1 |
 | customscompliance | settlementaccounting | 2 |
@@ -79,12 +80,12 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 10 |
 
-## 迁移：12 个模块共 334 份 SQL
+## 迁移：12 个模块共 336 份 SQL
 
 | 模块 | 份数 |
 |---|---|
 | access_identity | 27 |
-| collection_remittance | 3 |
+| collection_remittance | 4 |
 | customs_compliance | 27 |
 | network_routing | 32 |
 | node_operations | 21 |
@@ -92,7 +93,7 @@
 | parcel_shipment | 32 |
 | party_commercial | 42 |
 | pilot_governance | 8 |
-| settlement_accounting | 46 |
+| settlement_accounting | 47 |
 | transport_fulfillment | 50 |
 | visibility_exception | 32 |
 
@@ -145,7 +146,7 @@
 | （未归类） | 1 |
 | **合计** | 44 |
 
-## 端口：声明 631 个；基线口径缺 42，精确口径缺 2
+## 端口：声明 633 个；基线口径缺 42，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
