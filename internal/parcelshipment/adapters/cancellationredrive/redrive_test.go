@@ -185,7 +185,7 @@ func notUpheld(kind string) psinbox.NotUpheldCancellation {
 }
 
 // Covers: AT-PS-173；ADR-0295 决定四——先取锁，再读目标与原料；收寄原料交收寄采用（目标取当前已接受委托与当前提交版本，来源规格原样），终局原料交终局采用；
-// 两条链的结果都经各自消费门的译表（替身的零值结果被译表拒绝，错误原样上抛）；网络服务的冲突不读 TF 链尾也不判面单终局。
+// 收寄与终局两处的结果都经各自消费门的译表（替身的零值结果被译表拒绝，错误原样上抛）；网络服务的冲突不读 TF 链尾也不判面单终局。
 func TestTheRedriveLocksFirstAndHandsEachReplayBackToItsOwnChain(t *testing.T) {
 	built := newRig(t)
 

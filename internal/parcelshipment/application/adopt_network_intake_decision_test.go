@@ -13,7 +13,7 @@ import (
 )
 
 // 本文件证收寄采用在冲突那一格对解开决定的落点（ADR-0295 决定二、四）：冲突入册时带上被挡住的来源作回放原料；这一代边界事实已被认定有误、交来源方
-// 更正的，不采用并指名那份决定，不再停在冲突上也不再写第二行冲突；决定读不动按依赖未决回滚重投；读到被认定不成立的取消是取消读口没守住排除，响亮报错。
+// 更正的，不采用并指名那份决定，不停在冲突上也不写第二行冲突；决定读不动按依赖未决回滚重投；读到被认定不成立的取消是取消读口没守住排除，响亮报错。
 
 type decisionViewDouble struct {
 	byKey map[ports.CancellationOrderConflictKey]ports.CancellationOrderConflictDecision
@@ -85,7 +85,7 @@ func TestAnIntakeConflictCarriesItsSourceAsReplayMaterial(t *testing.T) {
 	}
 }
 
-// Covers: AT-PS-171, AT-PS-173；ADR-0295 决定二——这一代边界事实已被认定有误、交来源方更正：不采用并指名那份决定，不形成责任起点，不再写第二行冲突；
+// Covers: AT-PS-171, AT-PS-173；ADR-0295 决定二——这一代边界事实已被认定有误、交来源方更正：不采用并指名那份决定，不形成责任起点，不写第二行冲突；
 // 重放按已有结果作答。
 func TestAnIntakeWhoseConflictWasReferredToTheSourceIsNotAdopted(t *testing.T) {
 	fixture, decisions, key := conflictedIntake(t)
@@ -118,7 +118,7 @@ func TestAnIntakeWhoseConflictWasReferredToTheSourceIsNotAdopted(t *testing.T) {
 	}
 }
 
-// Covers: AT-PS-173；没有决定的冲突照旧停在等决定上：决定视图接入但这份冲突没被决定，不采用、不形成责任起点，冲突不翻倍。
+// Covers: AT-PS-173；没有决定的冲突停在等决定上：决定视图接入但这份冲突没被决定，不采用、不形成责任起点，冲突不翻倍。
 func TestAnUndecidedConflictStillWaitsWhenTheDecisionViewIsWired(t *testing.T) {
 	fixture, decisions, _ := conflictedIntake(t)
 

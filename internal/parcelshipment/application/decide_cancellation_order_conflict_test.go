@@ -13,7 +13,7 @@ import (
 )
 
 // 本文件证取消先后冲突的决定编排（ADR-0295 决定一至四）：先取包裹取消边界锁再读册；认定取消依据不成立时作废依据这份取消的终局不采用行并交续办信封，
-// 交来源方更正只留痕；已决定的与并发里输掉的读回先到的那一份，不再作废、不交第二封信封；册上没有的、别的租户的与几段对不上的一律「统一不可见」；
+// 交来源方更正只留痕；已决定的与并发里输掉的读回先到的那一份，不作废、不交第二封信封；册上没有的、别的租户的与几段对不上的一律「统一不可见」；
 // 少接一个件、去向不在封闭集合内、取不到锁都响亮报错而不是悄悄跳过。
 
 type decisionStoreDouble struct {
@@ -184,7 +184,7 @@ func TestNotUpheldDecisionLocksFirstThenRecordsVoidsAndHandsOffTheResume(t *test
 	}
 }
 
-// Covers: AT-PS-166, AT-PS-171；ADR-0295 决定二——交来源方更正只留痕：取消照旧、没有被挡住的来源要重驱，所以不作废、不交信封。
+// Covers: AT-PS-166, AT-PS-171；ADR-0295 决定二——交来源方更正只留痕：取消保持有效、没有被挡住的来源要重驱，所以不作废、不交信封。
 func TestReferredDecisionOnlyRecordsAndNeitherVoidsNorHandsOff(t *testing.T) {
 	fixture := newDecideFixture(t)
 	fixture.command.Kind = domain.BoundaryFactReferred
@@ -202,7 +202,7 @@ func TestReferredDecisionOnlyRecordsAndNeitherVoidsNorHandsOff(t *testing.T) {
 	}
 }
 
-// Covers: AT-PS-166；ADR-0295 决定一——已决定的冲突读回先到的那一份：不覆盖、不再作废、不交第二封信封，即便这一次说的是另一种去向。
+// Covers: AT-PS-166；ADR-0295 决定一——已决定的冲突读回先到的那一份：不覆盖、不作废、不交第二封信封，即便这一次说的是另一种去向。
 func TestAnAlreadyDecidedConflictReadsTheEarlierDecisionAndDoesNothingElse(t *testing.T) {
 	fixture := newDecideFixture(t)
 	earlier := ports.CancellationOrderConflictDecision{

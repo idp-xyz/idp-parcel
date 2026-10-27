@@ -24,14 +24,14 @@ import (
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 )
 
-// 本文件对真实 PostgreSQL 16 经生产 wireDispatcher 与真库缝证取消先后冲突解开之后的续办（ADR-0295 决定三、四）：三条被取消挡住的链——网络服务的收寄采用、网络服务履约结果
+// 本文件对真实 PostgreSQL 16 经生产 wireDispatcher 与真库缝证取消先后冲突解开之后的续办（ADR-0295 决定三、四）：被取消挡住的各条链——网络服务的收寄采用、网络服务履约结果
 // （有效交付）的终局采用、面单渠道服务的终局判断——在运营认定「取消依据不成立」之后，被它挡住的来源重新进入原来的编排。已接受委托走 SYN-V0 那一套夹具，取消决定与冲突决定都经生产库落册。
 //
-// 两层证明，分开写明：
+// 证明分两层，分开写明：
 //   - 生产路由那一条（TestTheNotUpheldEnvelopeRidesTheProductionRouteAndReentersTheFinalRuleJudgment）：信封经生产路由表投到续办门，作废、回放、未决哨兵登记都是生产装配；
 //     交付一路停在「终局规则未配置」这个诚实停点（PAR-COM-17 实例半边，本包一律不种），证明被挡住的来源确实重新进入了规则判断。
 //   - 形成责任起点与终局的几条（TestARedriven*）：收寄资格（PAR-COM-16 硬资格取证）与终局规则（PAR-COM-17）都是租户实例半边，生产装配在本包里永远停在它们前面，所以这几条用与生产
-//     同一套真库缝装续办适配器，只把这两个实例半边换成「放行」的替身，证明冲突解开之后链确实走到形成。
+//     同一套真库缝装续办适配器，只把这些实例半边换成「放行」的替身，证明冲突解开之后链确实走到形成。
 
 const (
 	notUpheldRedriveConsumerName = "parcel-shipment/redrive-on-cancellation-not-upheld"
@@ -58,7 +58,7 @@ func (rule satisfiedFinalRule) JudgeFinalOutcome(
 	}, true, nil
 }
 
-// redriveRig 是与生产同一套真库缝装出来的续办适配器，只把收寄资格与终局规则两个租户实例半边换成放行的替身。
+// redriveRig 是与生产同一套真库缝装出来的续办适配器，只把收寄资格与终局规则这些租户实例半边换成放行的替身。
 type redriveRig struct {
 	redriver *cancellationredrive.Redriver
 	decide   *psapplication.DecideCancellationOrderConflictHandler
@@ -271,7 +271,7 @@ func TestARedrivenIntakeFormsTheResponsibilityStartOverASetAsideCancellation(t *
 		t.Fatalf("下游采用意图 %d 封, want 1", n)
 	}
 	if n := fixture.countSQL(t, `SELECT count(*) FROM parcel_shipment.parcel_cancellation WHERE kind = 'PARCEL_CANCELLED'`); n != 1 {
-		t.Fatalf("取消记录变成 %d 行——认定不成立只让它不再有效，不删它", n)
+		t.Fatalf("取消记录变成 %d 行——认定不成立只让它无效，不删它", n)
 	}
 
 	if err := rig.redrive(t); err != nil {
@@ -316,7 +316,7 @@ func TestARedrivenCarrierPickupFormsTheLabelServiceFinalOverASetAsideCancellatio
 
 // Covers: AT-PS-169, AT-PS-170；ADR-0295 决定三、四——网络服务履约结果（有效交付）：取消在册时到达的交付经生产路由被不采用，依据指名那份取消；运营认定那份取消依据不成立
 // （要先有一份冲突可决定，这里经生产取消库摆出，冲突是收寄一侧的）：决定同笔作废依据它的不采用行，续办凭回放原料把交付重新交回终局采用，规则放行即形成终局——
-// 同一版本重投只答已有结果的死局（原不采用记录原样返回）不再出现。
+// 同一版本重投只答已有结果的死局（原不采用记录原样返回）不会出现。
 func TestARedrivenDeliveryFormsTheFinalOverTheVoidedRefusal(t *testing.T) {
 	fixture := acceptedSYNFixture(t)
 	ctx := t.Context()
@@ -403,8 +403,8 @@ func TestTheNotUpheldEnvelopeRidesTheProductionRouteAndReentersTheFinalRuleJudgm
 	}
 }
 
-// Covers: AT-PS-171, AT-PS-173；ADR-0295 决定二——交来源方更正：冲突被决定之后，这一代来源在生产装配的收寄采用处不再停在冲突上，而是不采用并指名那份决定（采用账一行不采用记录，
-// 依据 BOUNDARY_FACT_REFERRED/<取消>）；没有续办信封，取消照旧有效，没有责任起点。回放用的是冲突入账时落下的原料，经生产 networkIntakeAdoption 的处理方（决定面已接线）。
+// Covers: AT-PS-171, AT-PS-173；ADR-0295 决定二——交来源方更正：冲突被决定之后，这一代来源在生产装配的收寄采用处不停在冲突上，而是不采用并指名那份决定（采用账一行不采用记录，
+// 依据 BOUNDARY_FACT_REFERRED/<取消>）；没有续办信封，取消保持有效，没有责任起点。回放用的是冲突入账时落下的原料，经生产 networkIntakeAdoption 的处理方（决定面已接线）。
 func TestAReferredIntakeConflictIsNotAdoptedWhenTheSourceArrivesAgain(t *testing.T) {
 	fixture := acceptedSYNFixture(t)
 	ctx := t.Context()

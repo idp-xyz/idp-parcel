@@ -35,7 +35,7 @@ var cancellationNotUpheldRedriveUndecidedSentinels = append(
 // cancellationNotUpheldRedriveConsumer 接 code/76 那条线（ADR-0295 决定四）：运营对一份取消先后冲突决定「认定取消依据不成立」后，同笔交出的
 // `parcel-shipment.parcel-cancellation.not-upheld` 信封 → 消费门 → 把被这份取消挡住的来源重新交回原来的编排。
 //
-// 三条被挡住的链各用自己已装好的那一只处理方，不另装第二份：收寄采用与终局采用用与它们各自消费门同形的真编排；面单终局判断用同一只处理方核；
+// 被挡住的各条链各用自己已装好的那一只处理方，不另装第二份：收寄采用与终局采用用与它们各自消费门同形的真编排；面单终局判断用同一只处理方核；
 // 目标委托用同一张当前已接受投影；首次有效收寄链尾用取消编排边界核验读的同一只 TF 适配器。锁用同一把包裹取消边界锁，进来先取一次，各条链再取是重入。
 func cancellationNotUpheldRedriveConsumer(
 	db *bentopg.DB,

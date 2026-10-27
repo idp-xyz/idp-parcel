@@ -116,7 +116,7 @@ func (repository *ParcelCancellations) FindByKey(
 }
 
 // FindCancellation 按包裹读回有效的取消决定（ParcelCancellationView）：已成立、且没有被冲突解开决定认定为依据不成立（ADR-0295 决定三）。
-// 被认定不成立的取消仍在本表里作历史，只是不再被任何判断当作有效取消读到。同一包裹多份有效取消时按业务时间取最早——「先合法形成者赢」
+// 被认定不成立的取消仍在本表里作历史，只是不被任何判断当作有效取消读到。同一包裹多份有效取消时按业务时间取最早——「先合法形成者赢」
 // 用的比对时间正是它。
 func (repository *ParcelCancellations) FindCancellation(
 	ctx context.Context,

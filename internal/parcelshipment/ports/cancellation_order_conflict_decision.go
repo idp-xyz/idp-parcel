@@ -105,7 +105,7 @@ type CancellationOrderConflictCatalogue interface {
 
 // CancellationRefusedFinalVoider 作废终局采用账上依据一份取消的不采用记录。网络服务履约结果（有效交付）在取消在册时到达，终局采用答
 // `来源不采用`、依据 `PARCEL_CANCELLATION/<取消>`；那条记录按（包裹，结果种类，来源版本）永久保全，同一版本重投只会读回它。取消被认定不成立
-// 之后，依据它的记录不再成立，必须作废，被它挡住的来源才能重新进入终局规则判断。
+// 之后，依据它的记录不成立，必须作废，被它挡住的来源才能重新进入终局规则判断。
 //
 // 只作废依据恰是这份取消的不采用行；已形成的终局、依据别的东西的不采用行一概不碰。返回作废的行数。写口要环境事务，与决定留痕同笔。
 type CancellationRefusedFinalVoider interface {

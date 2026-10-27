@@ -171,8 +171,8 @@ type AdoptNetworkIntakeDeps struct {
 	// BoundaryLock 让取消边界核验与同一包裹上的取消提交排队，只在边界核验做的时候取（Cancellations 非 nil）。nil 按取不到
 	// 锁办，停在 CANCELLATION_VIEW_UNAVAILABLE：锁外读到的「没有取消」可能正是要防的那一份旧状态。
 	BoundaryLock ports.CancellationBoundaryLock
-	// Decisions 读冲突的决定（ADR-0295）。冲突那一格先问它：这一代边界事实已被认定有误、交来源方更正的，不采用并指名那份决定，不再停在
-	// 冲突上等。认定取消依据不成立的取消在有效取消读（Cancellations）里已被排除，走不到冲突那一格。nil 与「决定面未接入」同义：冲突照旧入账等候，
+	// Decisions 读冲突的决定（ADR-0295）。冲突那一格先问它：这一代边界事实已被认定有误、交来源方更正的，不采用并指名那份决定，不停在
+	// 冲突上等。认定取消依据不成立的取消在有效取消读（Cancellations）里已被排除，走不到冲突那一格。nil 与「决定面未接入」同义：冲突入账等候，
 	// 不认任何决定。
 	Decisions ports.CancellationOrderConflictDecisionView
 }

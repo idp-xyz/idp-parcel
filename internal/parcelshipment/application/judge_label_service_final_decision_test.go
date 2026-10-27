@@ -11,8 +11,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
-// 本文件证面单渠道终局判断在冲突那一格对解开决定的落点（ADR-0295 决定二）：这一代收寄已被认定有误、交来源方更正的，取消照旧在先（`CANCELLATION_STANDS`），
-// 不再答`不形成`/冲突，不写第二行冲突；册上另有没被决定的冲突，不带收寄的两路仍答冲突；决定读不动按依赖未决；读到被认定不成立的取消是取消读口没守住排除，
+// 本文件证面单渠道终局判断在冲突那一格对解开决定的落点（ADR-0295 决定二）：这一代收寄已被认定有误、交来源方更正的，取消在先（`CANCELLATION_STANDS`），
+// 不答`不形成`/冲突，不写第二行冲突；册上另有没被决定的冲突，不带收寄的两路仍答冲突；决定读不动按依赖未决；读到被认定不成立的取消是取消读口没守住排除，
 // 响亮报错。
 
 // conflictedPickup 摆一份已入册的冲突：有效取消的业务时间晚于收寄，收寄那一路把冲突记进册、答`不形成`；交回装好决定视图的处理方与那份冲突的身份。
@@ -43,7 +43,7 @@ func conflictedPickup(t *testing.T) (*labelServiceFinalFixture, *decisionViewDou
 	return fixture, decisions, ports.KeyOfConflict(record.TenantID, record.Conflict)
 }
 
-// Covers: AT-PS-171, AT-PS-172；ADR-0295 决定二——收寄这一代已被认定有误、交来源方更正：取消照旧在先，答`取消在先`而不是`不形成`/冲突，不写第二行冲突，不走采用路径。
+// Covers: AT-PS-171, AT-PS-172；ADR-0295 决定二——收寄这一代已被认定有误、交来源方更正：取消在先，答`取消在先`而不是`不形成`/冲突，不写第二行冲突，不走采用路径。
 func TestAPickupReferredToTheSourceLeavesTheCancellationStanding(t *testing.T) {
 	fixture, decisions, key := conflictedPickup(t)
 	decisions.decide(t, key, domain.BoundaryFactReferred)
@@ -62,7 +62,7 @@ func TestAPickupReferredToTheSourceLeavesTheCancellationStanding(t *testing.T) {
 	}
 }
 
-// Covers: AT-PS-172；没有被决定的冲突照旧答冲突（决定视图接入但这份冲突没被决定）。
+// Covers: AT-PS-172；没有被决定的冲突答冲突（决定视图接入但这份冲突没被决定）。
 func TestAnUndecidedPickupConflictStillAnswersTheConflict(t *testing.T) {
 	fixture, _, _ := conflictedPickup(t)
 	command := labelServiceCommand(t)

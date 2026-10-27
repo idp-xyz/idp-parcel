@@ -5,8 +5,8 @@
 -- 边界种类，边界那一代，取消），一份冲突至多被决定一次；两人同时决定，主键相撞，只有一笔成立，败者读回赢家。外键指向冲突行，
 -- 决定不会挂在一份册上没有的冲突上。
 --
--- decision_kind 是封闭两值：CANCELLATION_NOT_UPHELD（认定取消依据不成立，那份取消不再是有效取消）与 BOUNDARY_FACT_REFERRED
--- （认定这一代边界事实有误，交来源方更正，取消照旧）。decided_by 是（发行方，sub）这一对的引用，decision_basis 是决定人核对后
+-- decision_kind 是封闭两值：CANCELLATION_NOT_UPHELD（认定取消依据不成立，那份取消不是有效取消）与 BOUNDARY_FACT_REFERRED
+-- （认定这一代边界事实有误，交来源方更正，取消保持有效）。decided_by 是（发行方，sub）这一对的引用，decision_basis 是决定人核对后
 -- 留下的依据，两样必填。
 --
 -- cancellation_order_conflict_unresolved 服务运营查阅的 ORDER BY detected_at LIMIT：主键前缀按（租户，包裹）排，按租户取最早

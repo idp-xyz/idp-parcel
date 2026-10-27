@@ -15,7 +15,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
-// 本文件证取消先后冲突册的运营查阅端点（ADR-0295 决定一）：租户与页大小只来自 Intake（不采信请求）；清单逐字段透出决定命令要的四段与两边的业务时间；计数不被页大小截断
+// 本文件证取消先后冲突册的运营查阅端点（ADR-0295 决定一）：租户与页大小只来自 Intake（不采信请求）；清单逐字段透出决定命令要的几段与两边的业务时间；计数不被页大小截断
 // 且告诉调用方清单是否被截断；读不回答 500 而不是空册；非 GET 405；Intake 的各格原样映射。
 
 type conflictIntakeDouble struct {
@@ -71,7 +71,7 @@ func getConflicts(t *testing.T, intake shipmenthttp.CancellationOrderConflictQue
 	return response
 }
 
-// Covers: AT-PS-167；ADR-0295 决定一——清单逐字段透出（决定命令要的包裹、边界种类、边界那一代、取消四段原样给出，两边的业务时间与发现时间一并给出）；租户与页大小取 Intake
+// Covers: AT-PS-167；ADR-0295 决定一——清单逐字段透出（决定命令要的包裹、边界种类、边界那一代、取消原样给出，两边的业务时间与发现时间一并给出）；租户与页大小取 Intake
 // 交出的、原样递给读口；清单被页大小截断时 truncated=true 而计数是未解开的全部行数。
 func TestTheConflictQueryListsUnresolvedRowsWithTheirCountAndTruncationFlag(t *testing.T) {
 	reader := &conflictCatalogueDouble{listed: ports.UnresolvedCancellationOrderConflicts{

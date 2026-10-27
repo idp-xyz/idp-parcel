@@ -19,7 +19,7 @@ import (
 
 // 本文件对真实 PostgreSQL 16 证取消先后冲突的决定留痕、运营查阅读口、有效取消读与不采用记录作废（ADR-0295）：决定只追加、一份冲突至多被决定
 // 一次、两人同时决定只一笔成立败者读回赢家；册上没有这份冲突（或属于另一个租户）什么也不写；未解开的冲突按租户列出并计数，被决定的行从清单里消失而
-// 冲突行不变；被认定不成立的取消不再是有效取消而取消记录仍在；作废只动依据这份取消的不采用行；写口无事务拒跑（PBC-08）。
+// 冲突行不变；被认定不成立的取消不是有效取消而取消记录仍在；作废只动依据这份取消的不采用行；写口无事务拒跑（PBC-08）。
 
 var conflictDecidedAt = time.Date(2026, 10, 27, 9, 0, 0, 0, time.UTC)
 
@@ -346,7 +346,7 @@ func (rig *conflictDecisionRig) saveCancellation(t *testing.T, tenant, requestKe
 	})
 }
 
-// Covers: AT-PS-168；ADR-0295 决定三——被认定不成立的取消不再是有效取消（有效取消读排除它，取消记录仍在表里作历史），同包裹后一份有效取消补上；
+// Covers: AT-PS-168；ADR-0295 决定三——被认定不成立的取消不是有效取消（有效取消读排除它，取消记录仍在表里作历史），同包裹后一份有效取消补上；
 // 交来源方更正的决定不动取消；别的租户同一包裹号的取消不受影响。
 func TestACancellationDecidedNotUpheldIsNoLongerTheEffectiveCancellation(t *testing.T) {
 	rig := newConflictDecisionRig(t)
@@ -374,7 +374,7 @@ func TestACancellationDecidedNotUpheldIsNoLongerTheEffectiveCancellation(t *test
 		conflictOf(t, "parcel-1", "PCXL-1", "NODE_INTAKE/v1", domain.NetworkIntakeBoundary, cancelRequestedAt, cancelRequestedAt.Add(-time.Hour)), conflictDetectedAt)
 	rig.decide(t, decisionOf(t, referredKey, domain.BoundaryFactReferred, "https://id.syn.example#alice"))
 	if got := effective(tenant); got != "PCXL-1" {
-		t.Fatalf("交来源方更正之后有效取消 = %q, want 取消照旧 PCXL-1", got)
+		t.Fatalf("交来源方更正之后有效取消 = %q, want 取消保持有效 PCXL-1", got)
 	}
 
 	otherKey := rig.recordConflict(t, "tenant-1",

@@ -50,7 +50,7 @@ func TestTheBoundaryKindWordsAreAClosedPair(t *testing.T) {
 }
 
 // Covers: AT-PS-171；ADR-0295 决定二——这一代收寄已被认定有误、交来源方更正：带着收寄比出冲突的那一代落在 ReferredBoundaries 里，答`取消在先`而不是`不形成`/冲突；
-// 引用的是另一代、或没有这份名单，照旧答冲突。
+// 引用的是另一代、或没有这份名单，答冲突。
 func TestAReferredPickupGenerationNoLongerStandsAsAConflict(t *testing.T) {
 	conflicting := labelServiceInput(t, emptyRegister(t))
 	conflicting.FirstEffectivePickup = firstPickup(t)

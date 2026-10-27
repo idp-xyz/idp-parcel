@@ -161,7 +161,7 @@ func (reason LabelServiceNotFinalReason) String() string {
 //   - CancellationConflictRecorded 说冲突册上已有一行指向这份取消、且没有被决定。不带收寄的两路没有边界事实可比，
 //     只能靠它知道冲突早已判出——否则同一包裹换一路触发就答成取消在先。
 //   - ReferredBoundaries 是这份取消名下已被决定「认定边界事实有误、交来源方更正」的那几代收寄引用（ADR-0295 决定二）。带着收寄来时，
-//     这一代落在其中，就不再是冲突：边界事实已被认定不可采，取消照旧在先。
+//     这一代落在其中，就不是冲突：边界事实已被认定不可采，取消在先。
 type LabelServiceFinalInput struct {
 	Parcel                       DeclaredParcelID
 	Transactions                 []LabelTransaction

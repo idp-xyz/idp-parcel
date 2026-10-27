@@ -26,7 +26,7 @@ var ErrCancellationBoundaryNotLocked = errors.New("parcel shipment: the cancella
 // CancellationOrderConflictDecisionOutcome 是决定命令的封闭结果。
 //
 //   - `已决定`：这一次赢了，决定留痕落下；认定取消不成立时，依据它的不采用记录同笔作废，续办信封同笔交出。
-//   - `已被决定`：这份冲突先被别人决定了（查时已决定，或并发里输了），读回先到的那一份；不再作废、不留痕、不交第二封信封。
+//   - `已被决定`：这份冲突先被别人决定了（查时已决定，或并发里输了），读回先到的那一份；不作废、不留痕、不交第二封信封。
 type CancellationOrderConflictDecisionOutcome uint8
 
 const (
@@ -103,8 +103,8 @@ func NewDecideCancellationOrderConflictHandler(deps DecideCancellationOrderConfl
 // 委托行锁（R），一笔事务至多持一个 P 键，所以与取消、采用、终局判断各路之间、与持 S、R 的各路之间都不成环。调用方把整个 Handle 放进一笔事务：
 // 留痕、作废与信封同生共死，返回错误即整笔回滚。
 //
-// 认定取消依据不成立：取消记录原样保留，从此不再是有效取消（有效取消读排除它）；依据它的终局不采用行作废，被它挡住的来源由续办信封重驱。交来源方
-// 更正：不改取消，也不改任何事实，只留痕——这一代边界事实在收寄采用与面单终局判断处不再停在冲突上，新的一代按 ADR-0254 决定二重判。
+// 认定取消依据不成立：取消记录原样保留，从此不是有效取消（有效取消读排除它）；依据它的终局不采用行作废，被它挡住的来源由续办信封重驱。交来源方
+// 更正：不改取消，也不改任何事实，只留痕——这一代边界事实在收寄采用与面单终局判断处不停在冲突上，新的一代按 ADR-0254 决定二重判。
 func (handler *DecideCancellationOrderConflictHandler) Handle(
 	ctx context.Context,
 	command DecideCancellationOrderConflictCommand,

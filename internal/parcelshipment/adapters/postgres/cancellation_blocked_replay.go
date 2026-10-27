@@ -28,7 +28,7 @@ func NewCancellationBlockedReplays(db *bentopg.DB) (*CancellationBlockedReplays,
 
 var _ ports.CancellationBlockedReplays = (*CancellationBlockedReplays)(nil)
 
-// 回放所属的链，库内 CHECK 钉住这两个词。
+// 回放所属的链，库内 CHECK 钉住这些词。
 const (
 	blockedReplayChainIntake = "NETWORK_INTAKE_ADOPTION"
 	blockedReplayChainFinal  = "PARCEL_FINAL_ADOPTION"

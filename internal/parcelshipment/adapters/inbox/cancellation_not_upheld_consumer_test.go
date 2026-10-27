@@ -16,7 +16,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
-// 本文件对真实 PostgreSQL 16 证「取消被认定不成立」续办门（ADR-0295 决定四）的消费门四条与载荷译码。舞步在 platform/inboxconsume，本包只注入名字、类型与译码。
+// 本文件对真实 PostgreSQL 16 证「取消被认定不成立」续办门（ADR-0295 决定四）的消费门各条与载荷译码。舞步在 platform/inboxconsume，本包只注入名字、类型与译码。
 
 type notUpheldHandlerDouble struct {
 	calls []psinbox.NotUpheldCancellation

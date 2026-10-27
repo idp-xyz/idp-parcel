@@ -27,9 +27,9 @@ import (
 // 本文件对真实 PostgreSQL 证取消先后冲突解开口的生产装配（ADR-0295 决定一至四）：端点行按特性登记处那一份 mount 挂上，Intake 是生产那只操作者铸造器经真操作者册
 // （access_identity 0026 放开的「取消先后冲突解开」一种）铸的信封；编排是 buildCancellationOrderConflictDecision 那一套真库缝（冲突册、决定留痕、终局库、续办信封交接、
 // 包裹取消边界锁与事务壳），只有令牌核验方与准入范围是替身。
-//   - 认定取消依据不成立：答 201，有效取消读不再交出那份取消（取消记录仍在），依据它的终局不采用行作废，续办信封恰一封；查阅里随之消失；另一位再决定答 200
+//   - 认定取消依据不成立：答 201，有效取消读不交出那份取消（取消记录仍在），依据它的终局不采用行作废，续办信封恰一封；查阅里随之消失；另一位再决定答 200
 //     并读回先到的去向、不多一封信封。
-//   - 交来源方更正：答 201，取消照旧有效，不采用行不动，没有续办信封。
+//   - 交来源方更正：答 201，取消保持有效，不采用行不动，没有续办信封。
 //   - 并发：多位同时决定同一份冲突，恰一笔成立、恰一封信封。
 //   - 授权：只持授权处置授予、没有令牌、载荷自报租户都进不来；别的租户的操作者读不到本租户的冲突（统一不可见 404）；以上都什么也没写。
 //   - 事务外拒跑（PBC-08）：编排在无事务上下文拿不到取消边界锁，决定、作废与信封零行。
@@ -295,7 +295,7 @@ func conflictFieldsOf(t *testing.T, raw string) (string, string) {
 }
 
 // Covers: AT-PS-166, AT-PS-168, AT-PS-169, AT-PS-170；ADR-0295 决定一至四——认定取消依据不成立：答 201 DECIDED 带作废行数，决定留痕（去向、决定人取认证出的操作者、依据）、
-// 依据这份取消的终局不采用行作废、续办信封同笔落库；有效取消读不再交出这份取消而取消记录仍在；查阅里随之消失；另一位再决定（即便说的是另一种去向）答 200 ALREADY_DECIDED
+// 依据这份取消的终局不采用行作废、续办信封同笔落库；有效取消读不交出这份取消而取消记录仍在；查阅里随之消失；另一位再决定（即便说的是另一种去向）答 200 ALREADY_DECIDED
 // 读回先到的去向、不多一封信封，回执不带操作者。
 func TestTheWiredDecisionNotUpholdsTheCancellationAndHandsOffOneResume(t *testing.T) {
 	fixture := newConflictDecisionE2E(t)
@@ -368,7 +368,7 @@ func TestTheWiredDecisionNotUpholdsTheCancellationAndHandsOffOneResume(t *testin
 	}
 }
 
-// Covers: AT-PS-166, AT-PS-171；ADR-0295 决定二——交来源方更正：答 201 DECIDED，取消照旧有效，终局不采用行不动，没有续办信封（没有被挡住的来源要重驱）；查阅里随之消失。
+// Covers: AT-PS-166, AT-PS-171；ADR-0295 决定二——交来源方更正：答 201 DECIDED，取消保持有效，终局不采用行不动，没有续办信封（没有被挡住的来源要重驱）；查阅里随之消失。
 func TestTheWiredReferralLeavesTheCancellationStandingAndHandsOffNothing(t *testing.T) {
 	fixture := newConflictDecisionE2E(t)
 	fixture.arrange(t, "SYN-PARCEL-1")

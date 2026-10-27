@@ -127,8 +127,8 @@ type ParcelFinalAdopter interface {
 // Validity 可为 nil——有效期规则是实例半边，装配没有它时按「未配置」办，不推算失效。
 // Conflicts 为 nil 时判出的冲突无处可记，按依赖未决交回，不答`不形成`。
 // BoundaryLock 让判断与同一包裹上的取消提交排队；nil 按取不到锁办，停在 CANCELLATION_VIEW_UNAVAILABLE。
-// Decisions 读冲突的决定（ADR-0295）：被认定「边界事实有误、交来源方更正」的那一代收寄不再停在冲突上，取消照旧在先；认定取消依据不成立的取消
-// 在有效取消读（Cancellations）里已被排除，走不到冲突那一格。nil 与「决定面未接入」同义：冲突照旧入账等候，不认任何决定。
+// Decisions 读冲突的决定（ADR-0295）：被认定「边界事实有误、交来源方更正」的那一代收寄不停在冲突上，取消在先；认定取消依据不成立的取消
+// 在有效取消读（Cancellations）里已被排除，走不到冲突那一格。nil 与「决定面未接入」同义：冲突入账等候，不认任何决定。
 type JudgeLabelServiceFinalDeps struct {
 	Transactions  ports.LabelTransactionsByParcelView
 	Registers     ports.ContinuedAttemptRegisterView

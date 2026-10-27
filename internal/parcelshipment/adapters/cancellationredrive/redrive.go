@@ -1,5 +1,5 @@
-// Package cancellationredrive 拥有「取消被认定不成立 → 被这份取消挡住的来源重新进入原来的编排」这一份续办（ADR-0295 决定四）。三条被取消挡住的链共用它：
-// 网络服务的收寄采用、网络服务履约结果的终局采用、面单渠道服务的终局判断。三条链各抄一份重驱等于对「重驱用什么目标、怎样算入账」立三套口径，而这条续办
+// Package cancellationredrive 拥有「取消被认定不成立 → 被这份取消挡住的来源重新进入原来的编排」这一份续办（ADR-0295 决定四）。被取消挡住的各条链共用它：
+// 网络服务的收寄采用、网络服务履约结果的终局采用、面单渠道服务的终局判断。各条链各抄一份重驱，等于对「重驱用什么目标、怎样算入账」立多套口径，而这条续办
 // 漏重驱一条，就是一件已解开冲突的包裹永远没有责任起点或终局。
 //
 // 它放在 parcel-shipment 的适配器层而不是应用层：它要复用各链消费门已经定下的「应用结果 → 入账或回滚」那两张译表（adoptconsume、finalconsume），那两张表认得
@@ -88,7 +88,7 @@ var _ psinbox.NotUpheldCancellationHandler = (*Redriver)(nil)
 // 然后依回放原料重驱收寄采用与终局采用；冲突若落在面单渠道服务的首次有效收寄上，再按 TF 的首次有效收寄链尾现读，交面单终局判断。每条链的结果经它自己消费门的
 // 译表译成入账或回滚——未决、发布意图没交出都回滚整笔，重投会改变结果。
 //
-// 重驱幂等：来源已形成采用或终局的，编排答已有结果，不再写第二份；取消又被别的取消替代而再挡住来源的，编排照常把它记成新取消名下的冲突或不采用。
+// 重驱幂等：来源已形成采用或终局的，编排答已有结果，不写第二份；取消又被别的取消替代而再挡住来源的，编排照常把它记成新取消名下的冲突或不采用。
 func (redriver *Redriver) HandleNotUpheldCancellation(ctx context.Context, notUpheld psinbox.NotUpheldCancellation) error {
 	tenant, err := psdomain.NewTenantID(notUpheld.TenantID)
 	if err != nil {

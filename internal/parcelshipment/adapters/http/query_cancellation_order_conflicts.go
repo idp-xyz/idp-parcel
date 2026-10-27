@@ -92,7 +92,7 @@ type cancellationOrderConflictsResponse struct {
 	Conflicts       []cancellationOrderConflictBody `json:"conflicts"`
 }
 
-// cancellationOrderConflictBody 逐字段透出册上一行：决定命令要的四段（包裹、边界种类、边界那一代、取消）原样给出，两边的业务时间与发现时间一并给出，让决定人
+// cancellationOrderConflictBody 逐字段透出册上一行：决定命令要的几段（包裹、边界种类、边界那一代、取消）原样给出，两边的业务时间与发现时间一并给出，让决定人
 // 看得到谁在先、差多少。
 type cancellationOrderConflictBody struct {
 	ParcelID     string `json:"parcelId"`
