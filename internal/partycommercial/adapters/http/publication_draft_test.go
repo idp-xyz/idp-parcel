@@ -320,6 +320,7 @@ type draftAnswerBody struct {
 	Outcome          string `json:"outcome"`
 	Canonicalization string `json:"canonicalization"`
 	ContentDigest    string `json:"contentDigest"`
+	ShellDigest      string `json:"shellDigest"`
 	Status           string `json:"status"`
 	Cause            string `json:"cause"`
 	Problems         []struct {
@@ -468,12 +469,15 @@ func TestDraftCommandEndpointsTranscribeTheUseCaseAnswers(t *testing.T) {
 		body.Canonicalization != "PCC-1" || !strings.HasPrefix(body.ContentDigest, "PCC-1:") {
 		t.Fatalf("submit answer = %d %s", response.Code, response.Body.Bytes())
 	}
-	digest := body.ContentDigest
+	digest, shell := body.ContentDigest, body.ShellDigest
+	if !strings.HasPrefix(shell, "PCS-1:") {
+		t.Fatalf("submit answer carries no shell digest: %s", response.Body.Bytes())
+	}
 	if response = serve(submitEndpoint(), http.MethodPost); response.Code != http.StatusOK || decodeDraftAnswer(t, response).Outcome != "DRAFT_REPLAYED" {
 		t.Fatalf("replay answer = %d %s", response.Code, response.Body.Bytes())
 	}
 
-	reference, err := commercialhttp.DecodePublicationDraftReferencePayload(strings.NewReader(`{"kind":"CREDIT_POLICY","objectId":"credit-1","version":"v1","expectedDigest":"` + digest + `"}`))
+	reference, err := commercialhttp.DecodePublicationDraftReferencePayload(strings.NewReader(`{"kind":"CREDIT_POLICY","objectId":"credit-1","version":"v1","expectedDigest":"` + digest + `","expectedShellDigest":"` + shell + `"}`))
 	if err != nil {
 		t.Fatalf("reference payload: %v", err)
 	}
@@ -532,8 +536,8 @@ func TestDraftPublicationThatDoesNotLandCarriesThePublicationAnswer(t *testing.T
 	if submitResponse.Code != http.StatusCreated {
 		t.Fatalf("submit = %d %s", submitResponse.Code, submitResponse.Body.Bytes())
 	}
-	digest := decodeDraftAnswer(t, submitResponse).ContentDigest
-	reference, err := commercialhttp.DecodePublicationDraftReferencePayload(strings.NewReader(`{"kind":"CREDIT_POLICY","objectId":"credit-1","version":"v1","expectedDigest":"` + digest + `"}`))
+	submitted := decodeDraftAnswer(t, submitResponse)
+	reference, err := commercialhttp.DecodePublicationDraftReferencePayload(strings.NewReader(`{"kind":"CREDIT_POLICY","objectId":"credit-1","version":"v1","expectedDigest":"` + submitted.ContentDigest + `","expectedShellDigest":"` + submitted.ShellDigest + `"}`))
 	if err != nil {
 		t.Fatalf("reference payload: %v", err)
 	}

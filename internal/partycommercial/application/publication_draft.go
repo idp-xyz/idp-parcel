@@ -223,6 +223,9 @@ type ApprovePublicationDraftCommand struct {
 	// ExpectedDigest 是调用方看到并要批准的那份内容的摘要（ADR-0314 决定二）：载体此刻的摘要与它不同，就答`已变更`，
 	// 不去批一份调用方没看过的内容。空串即不带前置条件——运营操作者面的 Intake 恒要求它在场，空只留给手上本就握着载体的调用方。
 	ExpectedDigest string
+	// ExpectedShellDigest 是调用方看到的版本壳（适用范围、有效区间、指名引用）的摘要：内容摘要不盖壳，壳在待批准期间可就地
+	// 修订，所以壳要另绑。语义同 ExpectedDigest：空串即不带前置条件，运营操作者面的 Intake 恒要求它在场。
+	ExpectedShellDigest string
 }
 
 type ApprovePublicationDraftResult struct {
@@ -268,7 +271,7 @@ func (handler *ApprovePublicationDraftHandler) Handle(
 		return ApprovePublicationDraftResult{outcome: ApprovalDraftNotFound}, nil
 	}
 	// 内容身份先于状态：调用方看到的不是载体此刻的内容时，「已批准」这类状态答案会让他以为批的是自己看过的那份。
-	if command.ExpectedDigest != "" && command.ExpectedDigest != draft.Canonical().Digest().String() {
+	if draftChangedSince(draft, command.ExpectedDigest, command.ExpectedShellDigest) {
 		return ApprovePublicationDraftResult{outcome: ApprovalDraftChanged}, nil
 	}
 	switch draft.Status() {
@@ -361,6 +364,8 @@ type PublishPublicationDraftCommand struct {
 	// ExpectedDigest 同 ApprovePublicationDraftCommand.ExpectedDigest：发布的是调用方看到的那份已批准内容，载体此刻的摘要
 	// 与它不同就答`已变更`、不发布（ADR-0314 决定二）。
 	ExpectedDigest string
+	// ExpectedShellDigest 同 ApprovePublicationDraftCommand.ExpectedShellDigest。
+	ExpectedShellDigest string
 }
 
 type PublishPublicationDraftResult struct {
@@ -408,7 +413,7 @@ func (handler *PublishPublicationDraftHandler) Handle(
 	if !found {
 		return PublishPublicationDraftResult{outcome: PublicationDraftNotFound}, nil
 	}
-	if command.ExpectedDigest != "" && command.ExpectedDigest != draft.Canonical().Digest().String() {
+	if draftChangedSince(draft, command.ExpectedDigest, command.ExpectedShellDigest) {
 		return PublishPublicationDraftResult{outcome: PublicationDraftChanged}, nil
 	}
 	switch draft.Status() {
@@ -592,4 +597,13 @@ func declarationsOfContent(content domain.PublicationContent) CommercialDeclarat
 // deliveryConditionDeclarationOf 是 deliveryConditionBodyOf 的反向：载体上那一节折回发布用例的声明输入，字段一一对应。
 func deliveryConditionDeclarationOf(body domain.DeliveryConditionBody) *DeliveryConditionDeclaration {
 	return &DeliveryConditionDeclaration{Tightens: body.Tightens, Terms: body.Terms}
+}
+
+// draftChangedSince 答载体此刻是不是已经不是调用方看到的那份：内容摘要与壳摘要各自非空才各自比较，空串即不带那一半
+// 前置条件（ADR-0314 决定二）。
+func draftChangedSince(draft domain.PublicationDraft, expectedDigest, expectedShellDigest string) bool {
+	if expectedDigest != "" && expectedDigest != draft.Canonical().Digest().String() {
+		return true
+	}
+	return expectedShellDigest != "" && expectedShellDigest != draft.ShellDigest()
 }

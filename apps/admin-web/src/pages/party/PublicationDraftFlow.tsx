@@ -159,10 +159,13 @@ export function PublicationDraftFlow({
         return settle(previewCommercialPublication(payload), withPreview);
       case 'submit':
         return settle(submitPublicationDraft(payload), withSubmission);
+      // 批准与发布要带存下那份载体的摘要；没有就不发（按钮此时本来就是收回的）。
       case 'approve':
-        return settle(approvePublicationDraft(draftReferenceOf(payload, digest ?? '')), withApproval);
+        if (digest === null) return setBusy(null);
+        return settle(approvePublicationDraft(draftReferenceOf(payload, digest)), withApproval);
       case 'publish':
-        return settle(publishPublicationDraft(draftReferenceOf(payload, digest ?? '')), withPublication);
+        if (digest === null) return setBusy(null);
+        return settle(publishPublicationDraft(draftReferenceOf(payload, digest)), withPublication);
     }
   };
 

@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -463,4 +464,57 @@ func TestPublicationDraftStatusNames(t *testing.T) {
 	if domain.PublicationDraftStatusInvalid.String() != "" {
 		t.Fatal("the zero status must have no name")
 	}
+}
+
+// Covers: AT-PC-069——壳摘要盖住适用范围、有效区间（起点与止点）与指名引用，不盖正文也不盖身份四元；同一份壳逐次算出同一个串，
+// 毫秒以下的时刻抖动（载体册以微秒存时刻）不改它。
+func TestTheShellDigestCoversScopeIntervalAndReferencesButNotTheContent(t *testing.T) {
+	submit := func(shell domain.PublicationDraftShell, minor int64) domain.PublicationDraft {
+		t.Helper()
+		draft, err := domain.SubmitPublicationDraft(shell, creditContent(t, minor),
+			commercialValue(t, domain.NewOperatorSubjectReference, "op-submitter"), draftSubmittedAt)
+		if err != nil {
+			t.Fatalf("submit publication draft: %v", err)
+		}
+		return draft
+	}
+	base := draftShell(t, domain.CreditPolicyObject, "credit-1", "v1")
+	reference := submit(base, 500_000).ShellDigest()
+	if !strings.HasPrefix(reference, "PCS-1:") || submit(base, 500_000).ShellDigest() != reference {
+		t.Fatalf("壳摘要 = %q，应带版本前缀且逐次相同", reference)
+	}
+	if submit(base, 900_000).ShellDigest() != reference {
+		t.Fatal("正文变了，壳摘要不该变")
+	}
+
+	moved := base
+	moved.Scope = commercialValue(t, domain.NewCommercialScopeReference, "scope-2")
+	later := base
+	later.Effective = shellInterval(t, time.Date(2026, 10, 2, 0, 0, 0, 0, time.UTC), time.Time{})
+	bounded := base
+	bounded.Effective = shellInterval(t, time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), time.Date(2027, 10, 1, 0, 0, 0, 0, time.UTC))
+	referencing := base
+	referencing.References = map[domain.CommercialObjectKind]domain.CommercialObjectID{
+		domain.PriceRuleObject: commercialValue(t, domain.NewCommercialObjectID, "price-1"),
+	}
+	for name, shell := range map[string]domain.PublicationDraftShell{"范围": moved, "起点": later, "止点": bounded, "指名引用": referencing} {
+		if submit(shell, 500_000).ShellDigest() == reference {
+			t.Fatalf("换了%s，壳摘要没变", name)
+		}
+	}
+
+	jittered := base
+	jittered.Effective = shellInterval(t, time.Date(2026, 10, 1, 0, 0, 0, 400, time.UTC), time.Time{})
+	if submit(jittered, 500_000).ShellDigest() != reference {
+		t.Fatal("纳秒级抖动不该改壳摘要")
+	}
+}
+
+func shellInterval(t *testing.T, startsAt, endsAt time.Time) domain.EffectiveInterval {
+	t.Helper()
+	interval, err := domain.NewEffectiveInterval(startsAt, endsAt)
+	if err != nil {
+		t.Fatalf("new effective interval: %v", err)
+	}
+	return interval
 }

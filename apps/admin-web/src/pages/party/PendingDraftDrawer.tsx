@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, ConfirmDialog, Drawer, DrawerBody, DrawerHeader } from '@idpxyz/ui-primitives';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { primaryActionClass } from '../../components/primary-action';
@@ -81,10 +81,16 @@ export function PendingDraftDrawer({
   const decisions = draft ? decisionsOf(draft.status) : { approve: false, publish: false };
   const timeZone = currentDisplayTimeZone();
 
+  // 答复回来时抽屉可能已经换了一份载体：旧答复说的是别的东西，不写进新的抽屉，只让列表与读回照常重取。
+  const currentIdentity = useRef(identity);
+  currentIdentity.current = identity;
+
   const decide = (which: 'approve' | 'publish') => {
     if (draft === undefined) return;
     setBusy(which);
-    const reference = draftReferenceOf(draft, draft.contentDigest);
+    const startedFor = identity;
+    // 带的是抽屉里读回的那一对摘要：内容摘要盖正文，壳摘要盖适用范围、有效区间与指名引用。
+    const reference = draftReferenceOf(draft, { content: draft.contentDigest, shell: draft.shellDigest });
     const finish = () => {
       setBusy(null);
       // 结果出来之后重读：状态变了、或内容被别人改过（已变更），抽屉都要显示现在的样子。
@@ -93,14 +99,18 @@ export function PendingDraftDrawer({
     };
     if (which === 'approve') {
       void approvePublicationDraft(reference).then((answer) => {
-        setApproval(answer);
-        setPublication(null);
-        finish();
+        if (currentIdentity.current === startedFor) {
+          setApproval(answer);
+          setPublication(null);
+          finish();
+        } else onChanged();
       });
     } else {
       void publishPublicationDraft(reference).then((answer) => {
-        setPublication(answer);
-        finish();
+        if (currentIdentity.current === startedFor) {
+          setPublication(answer);
+          finish();
+        } else onChanged();
       });
     }
   };
@@ -155,7 +165,7 @@ export function PendingDraftDrawer({
                 {(body) =>
                   body.draft === undefined ? (
                     <p className="py-3 text-[12px] text-idpxyz-textMuted">
-                      这份发布稿已经不在待批准的列表里：可能刚被别人发布，也可能这一版从未存过。请回到列表核对。
+                      读不到这份发布稿：这一版没有存过，或不在本租户。请回到列表核对。
                     </p>
                   ) : (
                     <div className="flex flex-col gap-4 py-2">

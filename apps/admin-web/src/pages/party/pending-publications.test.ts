@@ -24,6 +24,7 @@ function record(over: Partial<PublicationDraftRecord> = {}): PublicationDraftRec
     references: [],
     canonicalization: 'PCC-1',
     contentDigest: 'PCC-1:abc123',
+    shellDigest: 'PCS-1:def456',
     submitter: 'dex#op-1',
     submittedAt: '2026-10-26T08:00:00Z',
     status: 'PENDING_APPROVAL',
@@ -51,14 +52,20 @@ test('批准与发布按状态词各亮各的', () => {
   deepEqual(decisionsOf('SOMETHING_NEW'), { approve: false, publish: false });
 });
 
-// Covers: AT-PC-068——抽屉复述版本壳、状态、录入痕迹与完整摘要；批准与发布的痕迹在场才出现。
+// Covers: AT-PC-068——抽屉复述版本壳与指名引用、状态、录入痕迹与完整的两个摘要；批准与发布的痕迹在场才出现。
 test('事实带出版本壳、痕迹与完整摘要', () => {
   const pending = draftFacts(record(), 'UTC');
   const labels = pending.map((fact) => fact.label);
-  deepEqual(labels, ['类别', '对象', '版本号', '适用范围', '生效起点', '生效止点', '状态', '录入者', '录入时刻', '内容摘要']);
+  deepEqual(labels, ['类别', '对象', '版本号', '适用范围', '生效起点', '生效止点', '状态', '录入者', '录入时刻', '内容摘要', '壳摘要']);
   equal(pending.find((fact) => fact.label === '状态')?.value, '待批准');
   equal(pending.find((fact) => fact.label === '内容摘要')?.value, 'PCC-1:abc123（算法 PCC-1）');
   equal(pending.find((fact) => fact.label === '生效止点')?.value, '持续有效');
+
+  equal(pending.find((fact) => fact.label === '壳摘要')?.value, 'PCS-1:def456');
+
+  // 指名引用在壳上、不在文档里，抽屉按类别逐条列出。
+  const referencing = draftFacts(record({ references: [{ kind: 'PRICE_RULE', objectId: 'PRICE-1' }] }), 'UTC');
+  equal(referencing.find((fact) => fact.label === '引用商业价格政策')?.value, 'PRICE-1');
 
   const approved = draftFacts(
     record({ status: 'APPROVED', approver: 'dex#op-2', approvedAt: '2026-10-26T09:00:00Z' }),

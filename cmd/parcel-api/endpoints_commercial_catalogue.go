@@ -134,7 +134,7 @@ func init() {
 				// /commercial-service-products：那边上列版本壳，这边上列登记册信封（产品×渠道
 				// ×区间的修订），行形状与修订轴不同（裁决在 ports.ProductChannelMappingCatalogueRead）。
 				{Pattern: "/commercial-product-channel-mappings", Handler: commercialhttp.NewQueryProductChannelMappingsEndpoint(commercialCatalogueIntake, wiring.productChannelMappings)},
-				// 待批准发布载体的读回（票 party-commercial-uiux-backend/03，ADR-0314 决定一）：列表与单份读回各立入口，挂操作者查阅读，
+				// 待批准发布载体的读回（ADR-0314 决定一）：列表与单份读回各立入口，挂操作者查阅读，
 				// 与批准、发布两个写口各走各的授予面。读的是载体册适配器（同一张表的写口在登记写面上另装配）。
 				{Pattern: "/commercial-open-publication-drafts", Handler: commercialhttp.NewQueryPublicationDraftsEndpoint(commercialCatalogueIntake, wiring.publicationDrafts)},
 				{Pattern: "/commercial-publication-draft-readbacks/{kind}/{objectId}/{version}", Handler: commercialhttp.NewQueryPublicationDraftEndpoint(commercialCatalogueIntake, wiring.publicationDrafts)},

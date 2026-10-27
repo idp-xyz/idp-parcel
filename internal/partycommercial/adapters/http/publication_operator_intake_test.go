@@ -73,9 +73,9 @@ func serveOperator(handler http.Handler, method, target, token, body string) *ht
 	return response
 }
 
-// creditDraftReferenceWith 造批准口与发布口的载荷：指名那一版载体，带调用方看到的内容摘要（前置条件，ADR-0314 决定二）。
-func creditDraftReferenceWith(digest string) string {
-	return `{"kind":"CREDIT_POLICY","objectId":"credit-1","version":"v1","expectedDigest":"` + digest + `"}`
+// creditDraftReferenceWith 造批准口与发布口的载荷：指名那一版载体，带调用方看到的内容摘要与壳摘要（前置条件，ADR-0314 决定二）。
+func creditDraftReferenceWith(digest, shell string) string {
+	return `{"kind":"CREDIT_POLICY","objectId":"credit-1","version":"v1","expectedDigest":"` + digest + `","expectedShellDigest":"` + shell + `"}`
 }
 
 // Covers: 票 operator-channel/06 完成判据「发布待批准载体上录入者与批准者都来自信封」——录入者是录入那枚令牌认证出的
@@ -97,7 +97,7 @@ func TestPublicationDraftPathTakesSubmitterAndApproverFromTheEnvelope(t *testing
 	if submitResponse.Code != http.StatusCreated {
 		t.Fatalf("submit = %d %s", submitResponse.Code, submitResponse.Body.Bytes())
 	}
-	digest := decodeDraftAnswer(t, submitResponse).ContentDigest
+	submitted := decodeDraftAnswer(t, submitResponse)
 
 	for _, step := range []struct {
 		rules dutyRuleStore
@@ -110,7 +110,7 @@ func TestPublicationDraftPathTakesSubmitterAndApproverFromTheEnvelope(t *testing
 		{withRule, approver, "DRAFT_APPROVED"},
 	} {
 		approve := commercialhttp.NewApprovePublicationDraftEndpoint(intake, newDraftOperator(store, step.rules, pcClock{at: pcNow.Add(time.Hour)}))
-		response := serveOperator(approve, http.MethodPost, "/", step.token, creditDraftReferenceWith(digest))
+		response := serveOperator(approve, http.MethodPost, "/", step.token, creditDraftReferenceWith(submitted.ContentDigest, submitted.ShellDigest))
 		if got := decodeDraftAnswer(t, response).Outcome; response.Code != http.StatusOK || got != step.want {
 			t.Fatalf("approve by %s = %d %s, want %s", step.token, response.Code, got, step.want)
 		}
@@ -143,18 +143,18 @@ func TestPublicationOperatorIntakeTakesIdentityOnlyFromTheEnvelope(t *testing.T)
 	if err != nil || submission.Shell.TenantID.String() != pcTenant || submission.Submitter.String() != reference {
 		t.Fatalf("submission tenant = %q, submitter = %q, err = %v", submission.Shell.TenantID, submission.Submitter, err)
 	}
-	approval, err := intake.IntakePublicationDraftApproval(ctx, operatorRequest(token, creditDraftReferenceWith("PCC-1:seen")))
+	approval, err := intake.IntakePublicationDraftApproval(ctx, operatorRequest(token, creditDraftReferenceWith("PCC-1:seen", "PCS-1:seen")))
 	if err != nil {
 		t.Fatalf("approval: %v", err)
 	}
-	if approval.ExpectedDigest != "PCC-1:seen" {
-		t.Fatalf("approval expected digest = %q", approval.ExpectedDigest)
+	if approval.ExpectedDigest != "PCC-1:seen" || approval.ExpectedShellDigest != "PCS-1:seen" {
+		t.Fatalf("approval expected digests = %q / %q", approval.ExpectedDigest, approval.ExpectedShellDigest)
 	}
 	if levels := approval.Approver.Levels(); approval.Tenant.String() != pcTenant || approval.Approver.Reference().String() != reference ||
 		len(levels) != 1 || levels[0].String() != "SYN-LEVEL-APPROVER" {
 		t.Fatalf("approval tenant = %q, approver = %q, levels = %v", approval.Tenant, approval.Approver.Reference(), levels)
 	}
-	publication, err := intake.IntakePublicationDraftPublication(ctx, operatorRequest(token, creditDraftReferenceWith("PCC-1:seen")))
+	publication, err := intake.IntakePublicationDraftPublication(ctx, operatorRequest(token, creditDraftReferenceWith("PCC-1:seen", "PCS-1:seen")))
 	if err != nil || publication.Tenant.String() != pcTenant || publication.ObjectID.String() != "credit-1" {
 		t.Fatalf("publication = %+v, err = %v", publication, err)
 	}
@@ -174,15 +174,15 @@ func TestPublicationOperatorIntakeTakesIdentityOnlyFromTheEnvelope(t *testing.T)
 			return err
 		},
 		"approval carrying an approver": func() error {
-			_, err := intake.IntakePublicationDraftApproval(ctx, operatorRequest(token, smuggle(creditDraftReferenceWith("PCC-1:seen"), `"approver": "someone-else"`)))
+			_, err := intake.IntakePublicationDraftApproval(ctx, operatorRequest(token, smuggle(creditDraftReferenceWith("PCC-1:seen", "PCS-1:seen"), `"approver": "someone-else"`)))
 			return err
 		},
 		"approval carrying levels": func() error {
-			_, err := intake.IntakePublicationDraftApproval(ctx, operatorRequest(token, smuggle(creditDraftReferenceWith("PCC-1:seen"), `"levels": ["SYN-LEVEL-APPROVER"]`)))
+			_, err := intake.IntakePublicationDraftApproval(ctx, operatorRequest(token, smuggle(creditDraftReferenceWith("PCC-1:seen", "PCS-1:seen"), `"levels": ["SYN-LEVEL-APPROVER"]`)))
 			return err
 		},
 		"publication carrying tenantId": func() error {
-			_, err := intake.IntakePublicationDraftPublication(ctx, operatorRequest(token, smuggle(creditDraftReferenceWith("PCC-1:seen"), `"tenantId": "SYN-TENANT-02"`)))
+			_, err := intake.IntakePublicationDraftPublication(ctx, operatorRequest(token, smuggle(creditDraftReferenceWith("PCC-1:seen", "PCS-1:seen"), `"tenantId": "SYN-TENANT-02"`)))
 			return err
 		},
 	} {

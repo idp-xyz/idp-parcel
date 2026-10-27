@@ -120,3 +120,72 @@ func TestTheChangedOutcomeOfPublishingIsNamed(t *testing.T) {
 		t.Fatalf("name = %q", application.PublicationDraftChanged.String())
 	}
 }
+
+// Covers: AT-PC-069——内容摘要不盖版本壳，壳另绑：正文不变、适用范围被换掉的就地修订，摘要不变而壳摘要变，批准对着旧壳摘要答已变更；
+// 空的壳摘要不带这一半前置条件。
+func TestApprovalIsBoundToTheShellTheApproverSaw(t *testing.T) {
+	drafts := newDraftRegistryDouble()
+	first := submitCredit(t, drafts, 500_000)
+	seen, _ := first.Draft()
+	seenDigest, seenShell := seen.Canonical().Digest().String(), seen.ShellDigest()
+	rules := approvalDutyRuleDouble{rule: dutyRule(t, true, ""), found: true}
+	approver := operatorSubject(t, "op-approver")
+	tenant, kind, objectID, version := draftIdentity(t)
+
+	// 同一份正文，适用范围换了：待批准期间合法的就地修订，内容摘要不变。
+	moved := draftShell(t, domain.CreditPolicyObject, "credit-1", "v1")
+	moved.Scope = pcValue(t, domain.NewCommercialScopeReference, "scope-2")
+	if revised := submitCreditWithShell(t, drafts, moved, 500_000); revised.Outcome() != application.PublicationDraftRevised {
+		t.Fatalf("换范围重录：outcome = %q, want DRAFT_REVISED", revised.Outcome())
+	}
+	stored, _, _ := drafts.LoadDraft(context.Background(), tenant, kind, objectID, version)
+	if stored.Canonical().Digest().String() != seenDigest {
+		t.Fatal("夹具只换了范围，内容摘要不该变")
+	}
+	if stored.ShellDigest() == seenShell {
+		t.Fatal("换了适用范围，壳摘要没变")
+	}
+
+	approve := func(shell string) application.ApprovePublicationDraftResult {
+		handler := application.NewApprovePublicationDraftHandler(drafts, rules, fixedClock{at: draftApprovedAt})
+		result, err := handler.Handle(context.Background(), application.ApprovePublicationDraftCommand{
+			Tenant: tenant, Kind: kind, ObjectID: objectID, Version: version, Approver: approver,
+			ExpectedDigest: seenDigest, ExpectedShellDigest: shell,
+		})
+		if err != nil {
+			t.Fatalf("批准：%v", err)
+		}
+		return result
+	}
+	if changed := approve(seenShell); changed.Outcome() != application.ApprovalDraftChanged {
+		t.Fatalf("内容摘要对得上但壳摘要是旧的：outcome = %q, want DRAFT_CHANGED", changed.Outcome())
+	}
+	if again, _, _ := drafts.LoadDraft(context.Background(), tenant, kind, objectID, version); again.Status() != domain.PublicationDraftPendingApproval {
+		t.Fatalf("壳已变却放行了批准：status = %s", again.Status())
+	}
+	if approved := approve(stored.ShellDigest()); approved.Outcome() != application.PublicationDraftApproved {
+		t.Fatalf("对着此刻的壳摘要批准：outcome = %q, want DRAFT_APPROVED", approved.Outcome())
+	}
+}
+
+// Covers: AT-PC-069——发布同样绑壳：已批准的载体不可再修订，但对着旧壳摘要发布仍答已变更，不发布。
+func TestPublishingIsBoundToTheShellTheCallerSaw(t *testing.T) {
+	drafts := newDraftRegistryDouble()
+	first := submitCredit(t, drafts, 500_000)
+	seen, _ := first.Draft()
+	rules := approvalDutyRuleDouble{rule: dutyRule(t, true, ""), found: true}
+	approveCredit(t, drafts, rules, operatorSubject(t, "op-approver"))
+	tenant, kind, objectID, version := draftIdentity(t)
+
+	handler := application.NewPublishPublicationDraftHandler(drafts, nil, fixedClock{at: draftApprovedAt})
+	result, err := handler.Handle(context.Background(), application.PublishPublicationDraftCommand{
+		Tenant: tenant, Kind: kind, ObjectID: objectID, Version: version,
+		ExpectedDigest: seen.Canonical().Digest().String(), ExpectedShellDigest: "PCS-1:stale",
+	})
+	if err != nil {
+		t.Fatalf("发布：%v", err)
+	}
+	if result.Outcome() != application.PublicationDraftChanged {
+		t.Fatalf("对着旧壳摘要发布：outcome = %q, want DRAFT_CHANGED", result.Outcome())
+	}
+}

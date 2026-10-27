@@ -5,7 +5,7 @@
 // 亮不亮——状态词是服务端的，亮了按下去服务端仍会答它的结果。
 
 import { labelOf } from './presentation';
-import { momentText, publicationSummary, type PublicationFact } from './publication-summary';
+import { momentText, publicationKindLabels, publicationSummary, type PublicationFact } from './publication-summary';
 import { draftStatusLabels, type PublicationDraftListResponseBody, type PublicationDraftRecord } from './publication-draft-api';
 
 /** 表里的一行：键是（类别 × 对象 × 版本）三元，与读回路径同一个身份。 */
@@ -39,6 +39,13 @@ export function decisionsOf(status: string): DraftDecisions {
  */
 export function draftFacts(record: PublicationDraftRecord, timeZone: string): PublicationFact[] {
   const facts = publicationSummary(record, timeZone);
+  // 指名引用在壳上、不在规范化文档里：批准的是它们连同范围与区间一起，抽屉里要看得见。
+  for (const reference of record.references) {
+    facts.push({
+      label: `引用${publicationKindLabels[reference.kind] ?? reference.kind}`,
+      value: reference.objectId,
+    });
+  }
   facts.push(
     { label: '状态', value: labelOf(draftStatusLabels, record.status) },
     { label: '录入者', value: record.submitter },
@@ -47,7 +54,10 @@ export function draftFacts(record: PublicationDraftRecord, timeZone: string): Pu
   if (record.approver) facts.push({ label: '批准者', value: record.approver });
   if (record.approvedAt) facts.push({ label: '批准时刻', value: momentText(record.approvedAt, timeZone) });
   if (record.publishedAt) facts.push({ label: '发布时刻', value: momentText(record.publishedAt, timeZone) });
-  facts.push({ label: '内容摘要', value: `${record.contentDigest}（算法 ${record.canonicalization}）` });
+  facts.push(
+    { label: '内容摘要', value: `${record.contentDigest}（算法 ${record.canonicalization}）` },
+    { label: '壳摘要', value: record.shellDigest },
+  );
   return facts;
 }
 

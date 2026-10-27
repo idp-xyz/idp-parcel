@@ -190,10 +190,10 @@ func (repository *PublicationDrafts) ListOpenDrafts(
 		        content_canonicalization, content_digest, content_document,
 		        submitter_ref, submitted_at, status, approver_ref, approved_at, published_at
 		   FROM party_commercial.publication_draft
-		  WHERE tenant_id = $1 AND status IN (1, 2)
+		  WHERE tenant_id = $1 AND status IN ($2, $3)
 		  ORDER BY submitted_at DESC, object_kind, object_id, version_label
-		  LIMIT $2`,
-		tenant.String(), limit,
+		  LIMIT $4`,
+		tenant.String(), uint8(domain.PublicationDraftPendingApproval), uint8(domain.PublicationDraftApproved), limit,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list open publication drafts: %w", err)

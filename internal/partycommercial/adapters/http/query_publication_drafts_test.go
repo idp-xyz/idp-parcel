@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -199,17 +200,15 @@ func TestAPublicationDraftIsReadBackWithTheContentItsDigestCovers(t *testing.T) 
 		body.Draft.ContentDigest != pending.Canonical().Digest().String() {
 		t.Fatalf("body = %s", recorder.Body)
 	}
-	var document, want map[string]any
-	if err := json.Unmarshal(body.Draft.Content, &document); err != nil || len(document) == 0 {
-		t.Fatalf("content 不是 JSON 对象：%s (%v)", body.Draft.Content, err)
+	// 文档逐节与摘要盖住的那份相同，不只是外层两个键：处理器丢掉或改写正文节点（如 creditPolicy）必须让这条红。
+	var document, want any
+	if err := json.Unmarshal(body.Draft.Content, &document); err != nil || document == nil {
+		t.Fatalf("content 不是 JSON：%s (%v)", body.Draft.Content, err)
 	}
 	if err := json.Unmarshal(pending.Canonical().Document(), &want); err != nil {
 		t.Fatalf("canonical document: %v", err)
 	}
-	if got, _ := json.Marshal(document); string(got) == "" {
-		t.Fatal("content 为空")
-	}
-	if document["kind"] != want["kind"] || document["canonicalization"] != want["canonicalization"] {
+	if !reflect.DeepEqual(document, want) {
 		t.Fatalf("content = %v, want the canonical document %v", document, want)
 	}
 
@@ -239,40 +238,42 @@ func TestAPublicationDraftIsReadBackWithTheContentItsDigestCovers(t *testing.T) 
 	}
 }
 
-// Covers: AT-PC-069——批准口与发布口的载荷必带期望摘要：缺席（或只有空白）逐格问题点名 expectedDigest；带了的原样进命令。
+// Covers: AT-PC-069——批准口与发布口的载荷必带期望摘要与壳摘要：缺席（或只有空白）逐格问题点名各自那一格；带了的原样进命令。
 func TestApproveAndPublishPayloadsRequireTheExpectedDigest(t *testing.T) {
 	tenant := pcNew(t, domain.NewTenantID, pcTenant)
 	approver, err := domain.NewOperatorSubject(pcNew(t, domain.NewOperatorSubjectReference, "op-approver"), nil)
 	if err != nil {
 		t.Fatalf("approver: %v", err)
 	}
-	for _, raw := range []string{
-		`{"kind":"CREDIT_POLICY","objectId":"credit-1","version":"v1"}`,
-		`{"kind":"CREDIT_POLICY","objectId":"credit-1","version":"v1","expectedDigest":"   "}`,
+	for _, testCase := range []struct{ raw, named string }{
+		{`{"kind":"CREDIT_POLICY","objectId":"credit-1","version":"v1","expectedShellDigest":"PCS-1:seen"}`, "expectedDigest"},
+		{`{"kind":"CREDIT_POLICY","objectId":"credit-1","version":"v1","expectedDigest":"   ","expectedShellDigest":"PCS-1:seen"}`, "expectedDigest"},
+		{`{"kind":"CREDIT_POLICY","objectId":"credit-1","version":"v1","expectedDigest":"PCC-1:seen"}`, "expectedShellDigest"},
+		{`{"kind":"CREDIT_POLICY","objectId":"credit-1","version":"v1","expectedDigest":"PCC-1:seen","expectedShellDigest":" "}`, "expectedShellDigest"},
 	} {
-		reference, err := commercialhttp.DecodePublicationDraftReferencePayload(strings.NewReader(raw))
+		reference, err := commercialhttp.DecodePublicationDraftReferencePayload(strings.NewReader(testCase.raw))
 		if err != nil {
-			t.Fatalf("decode %s: %v", raw, err)
+			t.Fatalf("decode %s: %v", testCase.raw, err)
 		}
-		if _, err := reference.ApproveCommand(tenant, approver); !errors.Is(err, commercialhttp.ErrMalformedRequest) || !strings.Contains(err.Error(), "expectedDigest") {
-			t.Fatalf("批准载荷 %s：err = %v, want 点名 expectedDigest 的畸形请求", raw, err)
+		if _, err := reference.ApproveCommand(tenant, approver); !errors.Is(err, commercialhttp.ErrMalformedRequest) || !strings.Contains(err.Error(), testCase.named) {
+			t.Fatalf("批准载荷 %s：err = %v, want 点名 %s 的畸形请求", testCase.raw, err, testCase.named)
 		}
-		if _, err := reference.PublishCommand(tenant); !errors.Is(err, commercialhttp.ErrMalformedRequest) || !strings.Contains(err.Error(), "expectedDigest") {
-			t.Fatalf("发布载荷 %s：err = %v", raw, err)
+		if _, err := reference.PublishCommand(tenant); !errors.Is(err, commercialhttp.ErrMalformedRequest) || !strings.Contains(err.Error(), testCase.named) {
+			t.Fatalf("发布载荷 %s：err = %v", testCase.raw, err)
 		}
 	}
 
 	reference, err := commercialhttp.DecodePublicationDraftReferencePayload(strings.NewReader(
-		`{"kind":"CREDIT_POLICY","objectId":"credit-1","version":"v1","expectedDigest":"PCC-1:seen"}`))
+		`{"kind":"CREDIT_POLICY","objectId":"credit-1","version":"v1","expectedDigest":"PCC-1:seen","expectedShellDigest":"PCS-1:seen"}`))
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	approve, err := reference.ApproveCommand(tenant, approver)
-	if err != nil || approve.ExpectedDigest != "PCC-1:seen" {
+	if err != nil || approve.ExpectedDigest != "PCC-1:seen" || approve.ExpectedShellDigest != "PCS-1:seen" {
 		t.Fatalf("approve command = %+v, err = %v", approve, err)
 	}
 	publish, err := reference.PublishCommand(tenant)
-	if err != nil || publish.ExpectedDigest != "PCC-1:seen" {
+	if err != nil || publish.ExpectedDigest != "PCC-1:seen" || publish.ExpectedShellDigest != "PCS-1:seen" {
 		t.Fatalf("publish command = %+v, err = %v", publish, err)
 	}
 }
@@ -292,7 +293,7 @@ func TestStaleDigestAnswersDraftChangedOnBothCommandEndpoints(t *testing.T) {
 	}
 	reference := func(digest string) commercialhttp.PublicationDraftReferencePayload {
 		payload, err := commercialhttp.DecodePublicationDraftReferencePayload(strings.NewReader(
-			`{"kind":"CREDIT_POLICY","objectId":"credit-1","version":"v1","expectedDigest":"` + digest + `"}`))
+			`{"kind":"CREDIT_POLICY","objectId":"credit-1","version":"v1","expectedDigest":"` + digest + `","expectedShellDigest":"PCS-1:seen"}`))
 		if err != nil {
 			t.Fatalf("decode: %v", err)
 		}

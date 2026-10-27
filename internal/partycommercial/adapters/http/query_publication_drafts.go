@@ -129,6 +129,7 @@ type publicationDraftBody struct {
 	References        []publicationDraftReference `json:"references"`
 	Canonicalization  string                      `json:"canonicalization"`
 	ContentDigest     string                      `json:"contentDigest"`
+	ShellDigest       string                      `json:"shellDigest"`
 	Submitter         string                      `json:"submitter"`
 	SubmittedAt       string                      `json:"submittedAt"`
 	Status            string                      `json:"status"`
@@ -155,6 +156,7 @@ func publicationDraftBodyOf(draft domain.PublicationDraft, withContent bool) pub
 		References:        make([]publicationDraftReference, 0, len(references)),
 		Canonicalization:  canonical.Canonicalization(),
 		ContentDigest:     canonical.Digest().String(),
+		ShellDigest:       draft.ShellDigest(),
 		Submitter:         draft.Submitter().String(),
 		SubmittedAt:       rfc3339(draft.SubmittedAt()),
 		Status:            draft.Status().String(),

@@ -168,7 +168,7 @@ func TestServiceProductWalksTheFiveStepsWithoutDeclarations(t *testing.T) {
 		t.Fatalf("submit = %d %s", response.Code, response.Body.Bytes())
 	}
 
-	reference, err := commercialhttp.DecodePublicationDraftReferencePayload(strings.NewReader(`{"kind":"SERVICE_PRODUCT","objectId":"product-1","version":"v2","expectedDigest":"` + digest + `"}`))
+	reference, err := commercialhttp.DecodePublicationDraftReferencePayload(strings.NewReader(`{"kind":"SERVICE_PRODUCT","objectId":"product-1","version":"v2","expectedDigest":"` + digest + `","expectedShellDigest":"` + body.ShellDigest + `"}`))
 	if err != nil {
 		t.Fatalf("reference payload: %v", err)
 	}

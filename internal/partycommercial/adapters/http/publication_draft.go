@@ -69,11 +69,12 @@ func NewPublishPublicationDraftEndpoint(intake PublicationDraftPublicationIntake
 }
 
 // draftAnswer 是录入口与批准口共用的封闭响应形状：`outcome` 取应用结果枚举原名；载体在场时带它的规范化版本、
-// 摘要与状态（表单据此呈现「服务端算出的摘要」——它不算，只显）；`cause` 只随录入的`未受理`在场。
+// 内容摘要、壳摘要与状态（表单据此呈现「服务端算出的摘要」，并在批准与发布时原样交回——它不算，只显）；`cause` 只随录入的`未受理`在场。
 type draftAnswer struct {
 	Outcome          string `json:"outcome"`
 	Canonicalization string `json:"canonicalization,omitempty"`
 	ContentDigest    string `json:"contentDigest,omitempty"`
+	ShellDigest      string `json:"shellDigest,omitempty"`
 	Status           string `json:"status,omitempty"`
 	Cause            string `json:"cause,omitempty"`
 }
@@ -93,6 +94,7 @@ func writeDraftSubmissionAnswer(response http.ResponseWriter, result application
 	if draft, ok := result.Draft(); ok {
 		answer.Canonicalization = draft.Canonical().Canonicalization()
 		answer.ContentDigest = draft.Canonical().Digest().String()
+		answer.ShellDigest = draft.ShellDigest()
 		answer.Status = draft.Status().String()
 	}
 	status := http.StatusOK
@@ -115,6 +117,7 @@ func writeDraftApprovalAnswer(response http.ResponseWriter, result application.A
 	if draft, ok := result.Draft(); ok {
 		answer.Canonicalization = draft.Canonical().Canonicalization()
 		answer.ContentDigest = draft.Canonical().Digest().String()
+		answer.ShellDigest = draft.ShellDigest()
 		answer.Status = draft.Status().String()
 	}
 	writeJSON(response, http.StatusOK, answer)

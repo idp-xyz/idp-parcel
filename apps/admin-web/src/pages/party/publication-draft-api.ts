@@ -362,15 +362,16 @@ export interface PreAcceptanceControlPayload {
 }
 
 /**
- * 批准口与发布口的载荷（Go `PublicationDraftReferencePayload`）：指名哪一版载体，加调用方看到的那份内容的摘要
- * （ADR-0314 决定二）。身份从信封来。摘要必带：载体此刻的摘要与它不同，服务端答 `DRAFT_CHANGED`、不批不发。
- * 摘要只能取自服务端答复（录入答复或读回），表单不算摘要。
+ * 批准口与发布口的载荷（Go `PublicationDraftReferencePayload`）：指名哪一版载体，加调用方看到的那份内容与版本壳的摘要
+ * （ADR-0314 决定二）。身份从信封来。两个摘要必带：载体此刻的任一个与它不同，服务端答 `DRAFT_CHANGED`、不批不发。内容摘要
+ * 只盖正文，适用范围、有效区间与指名引用由壳摘要盖住。摘要只能取自服务端答复（录入答复或读回），表单不算摘要。
  */
 export interface PublicationDraftReferencePayload {
   kind: CommercialObjectKindName;
   objectId: string;
   version: string;
   expectedDigest: string;
+  expectedShellDigest: string;
 }
 
 /**
@@ -387,6 +388,7 @@ export interface PublicationDraftRecord {
   references: { kind: CommercialObjectKindName; objectId: string }[];
   canonicalization: string;
   contentDigest: string;
+  shellDigest: string;
   submitter: string;
   submittedAt: string;
   status: string;
@@ -435,6 +437,7 @@ export interface PublicationDraftResponseBody {
   outcome: string;
   canonicalization?: string;
   contentDigest?: string;
+  shellDigest?: string;
   status?: string;
   cause?: string;
 }
@@ -464,7 +467,7 @@ export interface PublicationDraftPublicationResponseBody {
 
 /**
  * 四口路径。预览与录入送**同一份**载荷、走服务端同一段解码，预览页上的摘要与载体上记下的逐字节相等
- * （ADR-0101 决定四）；批准与发布送载体引用加操作者看到的那份内容的摘要（ADR-0314 决定二）。
+ * （ADR-0101 决定四）；批准与发布送载体引用加操作者看到的那份内容与版本壳的摘要（ADR-0314 决定二）。
  */
 export const publicationDraftEndpoints = {
   preview: '/commercial-publication-previews',

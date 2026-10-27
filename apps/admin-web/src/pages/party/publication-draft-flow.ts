@@ -189,26 +189,38 @@ export function withPublication(
   return { ...flow, publication: { key, answer } };
 }
 
-/**
- * 批准口与发布口收载体引用：身份三元加操作者看到的那份内容的摘要，壳上其余各格与正文一概不带。摘要由调用方从服务端答复里
- * 取来（见 decisionDigestOf），表单不算；服务端拿它对载体此刻的摘要，不同即答已变更。
- */
-export function draftReferenceOf(
-  payload: Pick<CommercialPublicationPayload, 'kind' | 'objectId' | 'version'>,
-  expectedDigest: string,
-): PublicationDraftReferencePayload {
-  return { kind: payload.kind, objectId: payload.objectId, version: payload.version, expectedDigest };
+/** 批准与发布绑定的那一对摘要：内容摘要盖正文，壳摘要盖适用范围、有效区间与指名引用。 */
+export interface DecisionDigests {
+  content: string;
+  shell: string;
 }
 
 /**
- * 批准与发布绑定的摘要：存为待批准那一口答的、册上这份载体的摘要，也就是操作者在页面上存下的那份内容。拿不到（录入答复没有
- * 摘要，或还没录入）时是 null，按钮据此收回——不用预览的摘要顶替，那一份是尚未落库的算出值。
+ * 批准口与发布口收载体引用：身份三元加操作者看到的那份内容与版本壳的摘要，壳上其余各格与正文一概不带。摘要由调用方从服务端
+ * 答复里取来（见 decisionDigestOf），表单不算；服务端拿它们对载体此刻的摘要，任一个不同即答已变更。
  */
-export function decisionDigestOf(flow: PublicationFlowState, key: string): string | null {
+export function draftReferenceOf(
+  payload: Pick<CommercialPublicationPayload, 'kind' | 'objectId' | 'version'>,
+  digests: DecisionDigests,
+): PublicationDraftReferencePayload {
+  return {
+    kind: payload.kind,
+    objectId: payload.objectId,
+    version: payload.version,
+    expectedDigest: digests.content,
+    expectedShellDigest: digests.shell,
+  };
+}
+
+/**
+ * 批准与发布绑定的摘要：存为待批准那一口答的、册上这份载体的内容摘要与壳摘要，也就是操作者在页面上存下的那份。两个缺一个
+ * （录入答复没有摘要，或还没录入）时是 null，按钮据此收回——不用预览的摘要顶替，那一份是尚未落库的算出值。
+ */
+export function decisionDigestOf(flow: PublicationFlowState, key: string): DecisionDigests | null {
   const submission = currentAnswer(flow.submission, key);
   if (submission === null || submission.kind !== 'outcome') return null;
-  const digest = submission.body.contentDigest;
-  return digest ? digest : null;
+  const { contentDigest, shellDigest } = submission.body;
+  return contentDigest && shellDigest ? { content: contentDigest, shell: shellDigest } : null;
 }
 
 /**

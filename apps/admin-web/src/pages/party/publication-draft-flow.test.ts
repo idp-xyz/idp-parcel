@@ -64,7 +64,13 @@ function previewed(): ApiResult<PublicationPreviewResponseBody> {
 }
 
 function drafted(name: string): ApiResult<PublicationDraftResponseBody> {
-  return outcome({ outcome: name, canonicalization: 'PCC-1', contentDigest: 'PCC-1:abc', status: 'PENDING_APPROVAL' });
+  return outcome({
+    outcome: name,
+    canonicalization: 'PCC-1',
+    contentDigest: 'PCC-1:abc',
+    shellDigest: 'PCS-1:def',
+    status: 'PENDING_APPROVAL',
+  });
 }
 
 function published(name: string): ApiResult<PublicationDraftPublicationResponseBody> {
@@ -95,25 +101,30 @@ test('载荷键与书写顺序无关、与任何一格内容有关', () => {
   notEqual(payloadKey(a), payloadKey(payload({ creditPolicy: withoutLimit })));
 });
 
-// Covers: AT-PC-069——批准口与发布口收载体引用：身份三元加操作者看到的摘要，壳上其余各格与正文一概不带。
-test('载体引用取身份三元加看到的摘要', () => {
-  deepEqual(draftReferenceOf(payload(), 'PCC-1:abc'), {
+// Covers: AT-PC-069——批准口与发布口收载体引用：身份三元加操作者看到的内容摘要与壳摘要，壳上其余各格与正文一概不带。
+test('载体引用取身份三元加看到的两个摘要', () => {
+  deepEqual(draftReferenceOf(payload(), { content: 'PCC-1:abc', shell: 'PCS-1:def' }), {
     kind: 'CREDIT_POLICY',
     objectId: 'CP-SYN-1',
     version: 'v1',
     expectedDigest: 'PCC-1:abc',
+    expectedShellDigest: 'PCS-1:def',
   });
 });
 
-// Covers: AT-PC-069——批准与发布绑定存为待批准时服务端答的摘要：没有录入答复、录入未放行答复里没有摘要、键不同，都拿不到，
+// Covers: AT-PC-069——批准与发布绑定存为待批准时服务端答的两个摘要：没有录入答复、录入未放行答复里缺任一个、键不同，都拿不到，
 // 按钮据此收回；预览的摘要不顶替（那一份尚未落库）。
-test('批准与发布的摘要只取同键的录入答复', () => {
+test('批准与发布的摘要只取同键的录入答复，两个缺一不可', () => {
   const previewedFlow = withPreview(emptyFlow(), key, previewed());
   equal(decisionDigestOf(previewedFlow, key), null);
   const submitted = withSubmission(previewedFlow, key, drafted('DRAFT_SUBMITTED'));
-  equal(decisionDigestOf(submitted, key), 'PCC-1:abc');
+  deepEqual(decisionDigestOf(submitted, key), { content: 'PCC-1:abc', shell: 'PCS-1:def' });
   equal(decisionDigestOf(submitted, 'another-key'), null);
   equal(decisionDigestOf(withSubmission(previewedFlow, key, outcome({ outcome: 'DRAFT_SUBMITTED' })), key), null);
+  equal(
+    decisionDigestOf(withSubmission(previewedFlow, key, outcome({ outcome: 'DRAFT_SUBMITTED', contentDigest: 'PCC-1:abc' })), key),
+    null,
+  );
   equal(decisionDigestOf(withSubmission(previewedFlow, key, unconfigured), key), null);
 });
 
