@@ -1,6 +1,6 @@
 # UC-TF-005 形成权威运输交接与实际履约
 
-状态：已实现（权威交接与更正、交出门禁读数、实际履约段与参与、实际承运商判断与首次有效收寄、移动事实与出发门禁读数及问询、出发门禁补问、实际履约发生项的自动形成与补形成、发生项失效）；规则与实现的差距见「给开发的交接」；真实节点/运输方交接、实际承运商、移动事实和外部可见范围参数待提供
+状态：已实现（权威交接与更正、交出门禁读数、实际履约段与参与、实际承运商判断与首次有效收寄、移动事实与出发门禁读数及问询、出发门禁补问（含随袋走过出发的成员后来才识别成功的补问）、实际履约发生项的自动形成与补形成、发生项失效）；规则与实现的差距见「给开发的交接」；真实节点/运输方交接、实际承运商、移动事实和外部可见范围参数待提供
 
 ## 目标与边界
 
@@ -105,7 +105,7 @@
 - 班次首个有效出发/移动前可以取消或替代；开始后只能形成中断、折返、改降或后续旅程，不能回写为未开始。
 - 停运、失联、车辆故障或异常案件不自动结束控制；没有下一次交接、有效交付或明确终止依据时当前责任继续存在。
 - 出发一律落册，门禁读数与出发同一笔保存。问门禁的对象取声明的段里出发那一刻在控的参与，起讫取班次方向，时点取出发的业务时间；适用哪些受门禁动作、三源怎么折由 `customs-compliance` 答，本用例只翻译。设备自报的「要不要门禁」不读，出示的放行凭据只作证据（[ADR-0205](../../adr/0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md)）。在控对象是集运单元时，按 `node-operations` 集运成员关系里出发那一刻的直接成员逐件问，单元那一格取成员里最重的一格（[ADR-0225](../../adr/0225-the-departure-gate-reading-asks-through-consolidation-unit-members-at-the-moment-of-departure.md)）。
-- 出发落册那一刻读数里还没有某件对象定论的，由这件对象此后每一份转出控制的`已交接`与对象级场外揽收按原出发时点、只替它补问一次关务，追加一版补问读数、首版不改；何时补问、问什么、至多几次，规则见 TF CONTEXT「实际移动与出发门禁读数」（理由在 [ADR-0305](../../adr/0305-a-departure-left-without-a-verdict-for-an-object-is-re-asked-at-its-departure-moment-when-the-object-s-control-fact-arrives.md)）。补问读数里的阻断由 `visibility-exception` 形成出发门禁阻断信号（[UC-VE-004](../visibility-exception/UC-VE-004-TRIAGE-SIGNALS-AND-OPEN-CASES.md)）。
+- 出发落册那一刻读数里还没有某件对象定论的，由这件对象此后每一份转出控制的`已交接`与对象级场外揽收按原出发时点、只替它补问一次关务，追加一版补问读数、首版不改；何时补问、问什么、至多几次，规则见 TF CONTEXT「实际移动与出发门禁读数」（理由在 [ADR-0305](../../adr/0305-a-departure-left-without-a-verdict-for-an-object-is-re-asked-at-its-departure-moment-when-the-object-s-control-fact-arrives.md)）。补问读数里的阻断由 `visibility-exception` 形成出发门禁阻断信号（[UC-VE-004](../visibility-exception/UC-VE-004-TRIAGE-SIGNALS-AND-OPEN-CASES.md)）。随集运单元走过出发、当时身份未决的成员，日后识别成功时由节点收寄形成信封同样唤醒补问，只替这一件成员包裹问（理由与口径在 [ADR-0331](../../adr/0331-a-consolidation-member-identified-after-its-bag-departed-is-asked-the-departure-gate-at-its-departure-moment-on-the-node-intake-envelope.md)，验收是 `AT-TF-364`–`366`）。
 - `已交接`一律落册，交出门禁读数与那一版同一笔保存；问哪一份意图、何时不问（各停点）、更正怎么读，规则见 TF CONTEXT Language「交出门禁读数」与「运输交接与实物控制」（理由在 [ADR-0213](../../adr/0213-a-transport-handover-declares-its-releasing-receiving-and-onward-nodes.md) 决定四与「补记：票 65 落决定四时的补充裁定」）。
 
 - 出发之前，执行方可以按班次、可缺的段与拟出发时点问一次门禁：交回与随后同参出发同一套读数，本用例不落任何记录，也不据它拒收随后的出发；那条出发照样在它自己那一刻重问、与读数同一笔落册。能报出发的就能问（[ADR-0219](../../adr/0219-a-device-previews-the-departure-gate-before-departing-and-reads-what-the-departure-will-record.md)）。
