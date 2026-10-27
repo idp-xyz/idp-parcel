@@ -439,7 +439,7 @@ func (handler *CreateInitialRouteHandler) judgeParcel(
 		notFormed := handler.notFormedParcel(key, ports.NotFormedCostSourceNotConfigured)
 		return none, &notFormed, nil
 	}
-	costs, err := handler.deps.Costs.LoadCandidateCosts(ctx, key, evidence, carried)
+	costs, err := handler.deps.Costs.LoadCandidateCosts(ctx, key, domain.NewPreRouteFactsPoint(), evidence, carried)
 	if err != nil {
 		switch {
 		case errors.Is(err, ports.ErrRouteCostSourceNotConfigured):

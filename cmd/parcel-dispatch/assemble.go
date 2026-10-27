@@ -1406,7 +1406,15 @@ func (broken brokenCustomsSource) AssessCustomsApplicability(
 // 估价同一种装法（planGivenEstimateEvaluations），绑了分区目录的卡由随请求携带的邮编路线经在用目录解区，要按序列换算的卡按在用
 // 序列取值（ADR-0189 决定一）。卡要的那一格没有（没登区、没有路线、没有在用版本），那一段待判断，候选缺成本依据——不给任何租户
 // 编一个区让候选假出价。计价时点取路由判断的时钟，与证据视图同一个。
+//
+// 包裹事实按判断点选来源（PointedParcelFacts）。node-operations 还没有实际测量登记册，物理事实的来源只能装「一项都没取得」
+// （NoPhysicalParcelFacts）：复核因此恒退回客户声明出价，依据如实标退回，而不是读过一遍又读空。登记册接上之后，换装的是这一处。
 func routeCosts(db *bentopg.DB, clock systemClock) nrports.RouteCandidateCostSource {
+	return routeCostsOver(db, clock, nrpricing.NoPhysicalParcelFacts{})
+}
+
+// routeCostsOver 是 routeCosts 的本体，物理事实来源由调用方交入：真库用例交一份预置了实测的来源，走与生产同一份装配。
+func routeCostsOver(db *bentopg.DB, clock systemClock, physical nrpricing.PhysicalParcelFactsSource) nrports.RouteCandidateCostSource {
 	catalog, err := nrpostgres.NewNetworkCatalog(db)
 	if err != nil {
 		return brokenCostSource{err: fmt.Errorf("parcel-dispatch: network catalog: %w", err)}
@@ -1419,7 +1427,7 @@ func routeCosts(db *bentopg.DB, clock systemClock) nrports.RouteCandidateCostSou
 	if err != nil {
 		return brokenCostSource{err: fmt.Errorf("parcel-dispatch: price cards: %w", err)}
 	}
-	facts, err := routeParcelFacts(db)
+	facts, err := routeParcelFacts(db, clock, physical)
 	if err != nil {
 		return brokenCostSource{err: err}
 	}
@@ -1442,13 +1450,22 @@ func routeCosts(db *bentopg.DB, clock systemClock) nrports.RouteCandidateCostSou
 	})
 }
 
-// routeParcelFacts 装配预路由的包裹事实：parcel-shipment 申报测量读口（委托仓储兼实现）上的客户声明。
-func routeParcelFacts(db *bentopg.DB) (*nrpricing.DeclaredParcelFacts, error) {
+// routeParcelFacts 装配候选出价的包裹事实：客户声明取自 parcel-shipment 申报测量读口（委托仓储兼实现），物理事实取自调用方
+// 交入的来源，两路按判断点合成。
+func routeParcelFacts(
+	db *bentopg.DB,
+	clock systemClock,
+	physical nrpricing.PhysicalParcelFactsSource,
+) (*nrpricing.PointedParcelFacts, error) {
 	requests, err := pspostgres.NewShipmentRequests(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: route parcel facts shipment requests: %w", err)
 	}
-	facts, err := nrpricing.NewDeclaredParcelFacts(requests)
+	declared, err := nrpricing.NewDeclaredParcelFacts(requests)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: route declared parcel facts: %w", err)
+	}
+	facts, err := nrpricing.NewPointedParcelFacts(declared, physical, clock)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: route parcel facts: %w", err)
 	}
@@ -1461,7 +1478,7 @@ type brokenCostSource struct {
 }
 
 func (broken brokenCostSource) LoadCandidateCosts(
-	context.Context, nrdomain.InitialRouteJudgmentKey, nrports.InitialRouteEvidence, nrports.RequestCarriedContent,
+	context.Context, nrdomain.InitialRouteJudgmentKey, nrdomain.ParcelFactsPoint, nrports.InitialRouteEvidence, nrports.RequestCarriedContent,
 ) (nrports.RouteCandidateCosts, error) {
 	return nrports.RouteCandidateCosts{}, broken.err
 }

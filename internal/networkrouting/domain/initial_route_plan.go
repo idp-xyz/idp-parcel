@@ -437,7 +437,8 @@ func (plan InitialRoutePlan) CustomsCitations() []CustomsApplicabilityCitation {
 
 // PlannedLegCostCitation 是选中候选某一段的成本出处（票 routing-first-cut/10，ADR-0148 决定四）：
 // 哪一次评价、按哪份方案出的价、内部段还带政策引用，以及全精度比较金额——取整只发生在合成
-// 那一步（决定四.3），留痕留取整前的值，争议才回得到原币与汇率上。
+// 那一步（决定四.3），留痕留取整前的值，争议才回得到原币与汇率上。包裹事实出自客户声明还是物理事实也在这里标明：
+// 同一段在不同判断点按不同来源出价，出处不标就看不出这笔价是按声明估的还是按实测算的。
 type PlannedLegCostCitation struct {
 	ordinal            int
 	evaluationID       string
@@ -446,6 +447,7 @@ type PlannedLegCostCitation struct {
 	hasPolicy          bool
 	comparisonAmount   string
 	comparisonCurrency string
+	factsBasis         ParcelFactsBasis
 }
 
 // PlannedLegCostCitationSpec 是逐段成本出处的构造输入。Ordinal 与 PlannedLegReference 同一口径：
@@ -458,11 +460,13 @@ type PlannedLegCostCitationSpec struct {
 	HasPolicy          bool
 	ComparisonAmount   string
 	ComparisonCurrency string
+	// FactsBasis 必填，且只能是出了价的几格：没有出价的依据（定不下用哪条实测、一项事实也没有）不会有成本出处。
+	FactsBasis ParcelFactsBasis
 }
 
 func NewPlannedLegCostCitation(spec PlannedLegCostCitationSpec) (PlannedLegCostCitation, error) {
 	if spec.Ordinal < 1 || spec.EvaluationID == "" || spec.PlanReference == "" ||
-		spec.ComparisonAmount == "" || spec.ComparisonCurrency == "" {
+		spec.ComparisonAmount == "" || spec.ComparisonCurrency == "" || !spec.FactsBasis.PricesACandidate() {
 		return PlannedLegCostCitation{}, ErrInvalidRoutePlan
 	}
 	if spec.HasPolicy && spec.PolicyReference == "" {
@@ -476,6 +480,7 @@ func NewPlannedLegCostCitation(spec PlannedLegCostCitationSpec) (PlannedLegCostC
 		hasPolicy:          spec.HasPolicy,
 		comparisonAmount:   spec.ComparisonAmount,
 		comparisonCurrency: spec.ComparisonCurrency,
+		factsBasis:         spec.FactsBasis,
 	}, nil
 }
 
@@ -489,6 +494,9 @@ func (citation PlannedLegCostCitation) ComparisonCurrency() string {
 	return citation.comparisonCurrency
 }
 
+// FactsBasis 报出这一段按哪一种包裹事实出的价。
+func (citation PlannedLegCostCitation) FactsBasis() ParcelFactsBasis { return citation.factsBasis }
+
 // PolicyReference 报出内部段的政策引用；外包段没有政策，第二个返回值为假。
 func (citation PlannedLegCostCitation) PolicyReference() (string, bool) {
 	if !citation.hasPolicy {
@@ -499,7 +507,7 @@ func (citation PlannedLegCostCitation) PolicyReference() (string, bool) {
 
 func (citation PlannedLegCostCitation) valid() bool {
 	if citation.ordinal < 1 || citation.evaluationID == "" || citation.planReference == "" ||
-		citation.comparisonAmount == "" || citation.comparisonCurrency == "" {
+		citation.comparisonAmount == "" || citation.comparisonCurrency == "" || !citation.factsBasis.PricesACandidate() {
 		return false
 	}
 	return !citation.hasPolicy || citation.policyReference != ""

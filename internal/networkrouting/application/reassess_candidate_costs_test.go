@@ -23,15 +23,18 @@ type reassessCosts struct {
 	answer  *ports.RouteCandidateCosts
 	err     error
 	carried []ports.RequestCarriedContent
+	points  []domain.ParcelFactsPoint
 }
 
 func (costs *reassessCosts) LoadCandidateCosts(
 	_ context.Context,
 	_ domain.InitialRouteJudgmentKey,
+	point domain.ParcelFactsPoint,
 	evidence ports.InitialRouteEvidence,
 	carried ports.RequestCarriedContent,
 ) (ports.RouteCandidateCosts, error) {
 	costs.carried = append(costs.carried, carried)
+	costs.points = append(costs.points, point)
 	if costs.err != nil {
 		return ports.RouteCandidateCosts{}, costs.err
 	}

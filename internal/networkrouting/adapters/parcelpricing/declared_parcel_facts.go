@@ -16,8 +16,9 @@ import (
 // 名下，不进依赖读不回的重投。
 var errUntranslatableParcelFacts = fmt.Errorf("%w: untranslatable parcel facts", nrports.ErrRouteCostAnswerUnusable)
 
-// DeclaredParcelFacts 是预路由的包裹事实取数侧：按判断键里的声明包裹问 parcel-shipment 的客户声明，译成计价输入要的
-// 实重与外廓（network-routing CONTEXT「预路由使用客户声明快照」，ADR-0148 决定四第 7 条）。来源标在事实引用的版本串
+// DeclaredParcelFacts 是客户声明那一路的包裹事实取数侧：按判断键里的声明包裹问 parcel-shipment 的客户声明，译成计价输入
+// 要的实重与外廓（network-routing CONTEXT「预路由使用客户声明快照」，ADR-0148 决定四第 7 条）。复核在物理事实缺席时退回
+// 的也是它，哪个判断点用它由 PointedParcelFacts 定。来源标在事实引用的版本串
 // 里，标法与 ADR-0171 同形；单位只认计价封闭集，也同那一份（决定三）。
 //
 // 它落在本包而不在 adapters/parcelshipment：读的是 parcel-shipment，交出的是计价输入的原料，与 ADR-0171 越权风险点 1
@@ -33,11 +34,17 @@ func NewDeclaredParcelFacts(declared psports.DeclaredMeasurementView) (*Declared
 	return &DeclaredParcelFacts{declared: declared}, nil
 }
 
-var _ ParcelFactsSource = (*DeclaredParcelFacts)(nil)
+var _ DeclaredFactsSource = (*DeclaredParcelFacts)(nil)
 
-// ParcelFactsFor 交出这件声明包裹的客户声明。没有可用的声明（不属已接受委托、待复核、未申报、已采用那一版没带测量、
+// DeclaredFactsSource 交出一件包裹的客户声明，不问判断点：声明是所有判断点共有的底，预路由只取它，复核在物理事实缺席
+// 时退回它。
+type DeclaredFactsSource interface {
+	DeclaredFactsFor(ctx context.Context, key nrdomain.InitialRouteJudgmentKey) (ParcelFacts, bool, error)
+}
+
+// DeclaredFactsFor 交出这件声明包裹的客户声明。没有可用的声明（不属已接受委托、待复核、未申报、已采用那一版没带测量、
 // 单位不在计价封闭集）一律答 found=false：各段照旧待判断，不代拟一份重量。读口答不出才是错误。
-func (source *DeclaredParcelFacts) ParcelFactsFor(
+func (source *DeclaredParcelFacts) DeclaredFactsFor(
 	ctx context.Context,
 	key nrdomain.InitialRouteJudgmentKey,
 ) (ParcelFacts, bool, error) {
@@ -75,7 +82,12 @@ func (source *DeclaredParcelFacts) ParcelFactsFor(
 	if err != nil {
 		return ParcelFacts{}, false, err
 	}
-	return ParcelFacts{Weight: weight, Dimensions: dimensions, Facts: []ppdomain.VersionedFactReference{fact}}, true, nil
+	return ParcelFacts{
+		Weight:     weight,
+		Dimensions: dimensions,
+		Facts:      []ppdomain.VersionedFactReference{fact},
+		Basis:      nrdomain.ParcelFactsDeclaration,
+	}, true, nil
 }
 
 // declarationFact 记这份包裹事实出自客户声明，以及哪一版：基线上的、某一已采用版本的，或锚缺席时只记来源。

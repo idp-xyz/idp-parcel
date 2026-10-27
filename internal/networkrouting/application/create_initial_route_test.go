@@ -353,6 +353,7 @@ type passthroughCosts struct{}
 func (passthroughCosts) LoadCandidateCosts(
 	_ context.Context,
 	_ domain.InitialRouteJudgmentKey,
+	_ domain.ParcelFactsPoint,
 	evidence ports.InitialRouteEvidence,
 	_ ports.RequestCarriedContent,
 ) (ports.RouteCandidateCosts, error) {
@@ -363,7 +364,7 @@ func (passthroughCosts) LoadCandidateCosts(
 type unconfiguredCosts struct{}
 
 func (unconfiguredCosts) LoadCandidateCosts(
-	context.Context, domain.InitialRouteJudgmentKey, ports.InitialRouteEvidence, ports.RequestCarriedContent,
+	context.Context, domain.InitialRouteJudgmentKey, domain.ParcelFactsPoint, ports.InitialRouteEvidence, ports.RequestCarriedContent,
 ) (ports.RouteCandidateCosts, error) {
 	return ports.RouteCandidateCosts{}, ports.ErrRouteCostSourceNotConfigured
 }
@@ -406,15 +407,18 @@ func TestAnUnconfiguredCostSourceSettlesTheParcelAsNotFormed(t *testing.T) {
 // carriedRecordingCosts 照 passthroughCosts 交回证据里的事实，另记下每次交进来的携带内容。
 type carriedRecordingCosts struct {
 	carried []ports.RequestCarriedContent
+	points  []domain.ParcelFactsPoint
 }
 
 func (costs *carriedRecordingCosts) LoadCandidateCosts(
 	_ context.Context,
 	_ domain.InitialRouteJudgmentKey,
+	point domain.ParcelFactsPoint,
 	evidence ports.InitialRouteEvidence,
 	carried ports.RequestCarriedContent,
 ) (ports.RouteCandidateCosts, error) {
 	costs.carried = append(costs.carried, carried)
+	costs.points = append(costs.points, point)
 	return ports.RouteCandidateCosts{Facts: evidence.CandidateCosts}, nil
 }
 
@@ -452,6 +456,12 @@ func TestTheCarriedProjectionReachesTheCostSource(t *testing.T) {
 			t.Fatalf("取数侧收到的投影 %s，想要与请求、证据视图同一份 %s", carried.Geo.ContentDigest(), command.Carried.Geo.ContentDigest())
 		}
 	}
+	// 初始路由判断取客户声明快照：判断点是预路由。
+	for _, point := range costs.points {
+		if point.Kind() != domain.PreRouteFactsPoint {
+			t.Fatalf("取成本的判断点 = %v，want 预路由", point.Kind())
+		}
+	}
 }
 
 // citingCosts 照 passthroughCosts 交回证据里的事实，另按候选交回各自逐段的出处：几条候选都出价时取数侧就这样交。
@@ -462,6 +472,7 @@ type citingCosts struct {
 func (costs citingCosts) LoadCandidateCosts(
 	_ context.Context,
 	_ domain.InitialRouteJudgmentKey,
+	_ domain.ParcelFactsPoint,
 	evidence ports.InitialRouteEvidence,
 	_ ports.RequestCarriedContent,
 ) (ports.RouteCandidateCosts, error) {
@@ -479,6 +490,7 @@ func legCostCitations(t *testing.T, candidate string, legs int) []ports.Candidat
 			PlanReference:      "plan-" + candidate + "/v1",
 			ComparisonAmount:   "5",
 			ComparisonCurrency: "CNY",
+			FactsBasis:         domain.ParcelFactsDeclaration,
 		})
 		if err != nil {
 			t.Fatalf("new leg cost citation: %v", err)

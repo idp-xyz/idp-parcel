@@ -519,6 +519,8 @@ const (
 	ArtifactNumericProfile          ArtifactKind = "numeric-profile"
 	// 客户申报测量进入计价输入快照时的事实种类。版本串以 declaration 开头，标明来源是申报不是实测。
 	ArtifactDeclaredMeasurement ArtifactKind = "declared-measurement"
+	// 节点实际测量进入计价输入快照时的事实种类，与客户申报测量成对：同一件包裹的实测在，申报不得顶替它。
+	ArtifactActualMeasurement ArtifactKind = "actual-measurement"
 	// 地址要素进入计价输入快照时的事实种类。版本串以 address 开头。
 	ArtifactAddressElements ArtifactKind = "address-elements"
 )

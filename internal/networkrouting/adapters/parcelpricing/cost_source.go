@@ -61,21 +61,25 @@ type InternalPlanResolver interface {
 	) (string, bool, error)
 }
 
-// ParcelFactsSource 交出一次路由判断的包裹事实。预路由取客户声明快照（network-routing CONTEXT，ADR-0148 决定四
-// 第 7 条），来源随事实引用标明。第二个返回值为假即这件包裹此刻没有可用的事实：各段待判断，不代拟一份重量。
+// ParcelFactsSource 交出一次路由判断的包裹事实。取哪一种来源由判断点定：预路由取客户声明快照，首次收寄复核取当时已经
+// 取得的物理事实，到站复核取当前有效物理实测（network-routing CONTEXT，ADR-0148 决定四第 7 条）；来源随事实引用标明。
+// 第二个返回值为假即这件包裹此刻没有可用的事实：各段待判断，不代拟一份重量；此时 Basis 仍说明为什么没有（该取的物理
+// 事实在而定不下用哪条，或一项都没有）。
 type ParcelFactsSource interface {
 	ParcelFactsFor(
 		ctx context.Context,
 		key nrdomain.InitialRouteJudgmentKey,
+		point nrdomain.ParcelFactsPoint,
 	) (ParcelFacts, bool, error)
 }
 
 // ParcelFacts 是包裹事实：实重、可缺的外廓，以及它们出自哪一份事实。本上下文只转交，计价重量由 parcel-pricing 在
-// 评价里按每张卡自己的体积系数派生。
+// 评价里按每张卡自己的体积系数派生。Basis 是整件包裹的事实依据，随成本出处留痕。
 type ParcelFacts struct {
 	Weight     ppdomain.Weight
 	Dimensions *ppdomain.Dimensions
 	Facts      []ppdomain.VersionedFactReference
+	Basis      nrdomain.ParcelFactsBasis
 }
 
 // LegZoneSource 交出一个计划段登的段计价区域（ADR-0189 决定二）。区域按卡给（决定一）：未绑分区目录的卡取这一格，
@@ -164,6 +168,7 @@ type legEvaluation struct {
 func (adapter *RouteCandidateCostAdapter) LoadCandidateCosts(
 	ctx context.Context,
 	key nrdomain.InitialRouteJudgmentKey,
+	point nrdomain.ParcelFactsPoint,
 	evidence nrports.InitialRouteEvidence,
 	carried nrports.RequestCarriedContent,
 ) (nrports.RouteCandidateCosts, error) {
@@ -182,9 +187,14 @@ func (adapter *RouteCandidateCostAdapter) LoadCandidateCosts(
 	if err != nil {
 		return none, err
 	}
-	facts, found, err := adapter.deps.Facts.ParcelFactsFor(ctx, key)
+	facts, found, err := adapter.deps.Facts.ParcelFactsFor(ctx, key, point)
 	if err != nil {
 		return none, fmt.Errorf("read parcel facts: %w", err)
+	}
+	// 事实依据是取数侧自己的约定：有事实必须说是哪一格出价的依据，没有事实必须说为什么没有。认不出的答案是装配写坏了。
+	if found != facts.Basis.PricesACandidate() ||
+		(!found && facts.Basis != nrdomain.ParcelFactsNone && facts.Basis != nrdomain.ParcelFactsPhysicalUnresolved) {
+		return none, fmt.Errorf("%w: parcel facts found=%v carry basis %q", errUntranslatableEvaluation, found, facts.Basis)
 	}
 	// 没有包裹事实时一段都不评价，全部留作待判断：缺的是输入，不是整条取数路径没接。
 	if found {
@@ -194,14 +204,14 @@ func (adapter *RouteCandidateCostAdapter) LoadCandidateCosts(
 	}
 
 	// 合成：逐候选把各段折成三态之一，并记逐段出处。
-	out := nrports.RouteCandidateCosts{}
+	out := nrports.RouteCandidateCosts{FactsBasis: facts.Basis}
 	offset := 0
 	for _, path := range evidence.Paths {
 		count := len(path.Legs)
 		legSlice := legs[offset : offset+count]
 		offset += count
 
-		citations, amountMinor, currency, pending, err := adapter.compose(legSlice, evidence.HasComparisonCurrency)
+		citations, amountMinor, currency, pending, err := adapter.compose(legSlice, evidence.HasComparisonCurrency, facts.Basis)
 		if err != nil {
 			return none, err
 		}
@@ -428,6 +438,7 @@ func estimateReference(key nrdomain.InitialRouteJudgmentKey) string {
 func (adapter *RouteCandidateCostAdapter) compose(
 	legs []legEvaluation,
 	hasComparison bool,
+	basis nrdomain.ParcelFactsBasis,
 ) ([]nrdomain.PlannedLegCostCitation, *int64, string, bool, error) {
 	var citations []nrdomain.PlannedLegCostCitation
 	var sum ppdomain.Money
@@ -462,7 +473,7 @@ func (adapter *RouteCandidateCostAdapter) compose(
 			} else {
 				sum, sumStarted = amount, true
 			}
-			citation, err := citationOf(leg, amount)
+			citation, err := citationOf(leg, amount, basis)
 			if err != nil {
 				return nil, nil, "", false, err
 			}
@@ -493,7 +504,7 @@ func comparisonAmountOf(evaluation ppdomain.PricingEvaluation) (ppdomain.Money, 
 
 // citationOf 记一段已计价段落的出处：评价标识、按之计价的方案引用、（内部段的）政策引用，
 // 以及全精度比较金额。
-func citationOf(leg legEvaluation, amount ppdomain.Money) (nrdomain.PlannedLegCostCitation, error) {
+func citationOf(leg legEvaluation, amount ppdomain.Money, basis nrdomain.ParcelFactsBasis) (nrdomain.PlannedLegCostCitation, error) {
 	plan := leg.evaluation.PlanReference()
 	return nrdomain.NewPlannedLegCostCitation(nrdomain.PlannedLegCostCitationSpec{
 		Ordinal:            leg.ordinal,
@@ -503,6 +514,7 @@ func citationOf(leg legEvaluation, amount ppdomain.Money) (nrdomain.PlannedLegCo
 		HasPolicy:          leg.hasPolicy,
 		ComparisonAmount:   amount.Amount().String(),
 		ComparisonCurrency: amount.Currency().String(),
+		FactsBasis:         basis,
 	})
 }
 

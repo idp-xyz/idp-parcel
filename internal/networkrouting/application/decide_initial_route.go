@@ -255,7 +255,7 @@ func (handler *DecideInitialRouteHandler) Decide(
 		return refused, nil
 	}
 
-	evidence, costs, unavailable, err := loadRouteCandidateCosts(ctx, handler.deps.Costs, key, evidence, carried)
+	evidence, costs, unavailable, err := loadRouteCandidateCosts(ctx, handler.deps.Costs, key, domain.NewPreRouteFactsPoint(), evidence, carried)
 	if err != nil {
 		return DecideInitialRouteResult{}, err
 	}

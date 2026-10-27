@@ -244,9 +244,13 @@ var ErrRouteCostSourceNotConfigured = errors.New("network routing: route cost so
 var ErrRouteCostAnswerUnusable = errors.New("network routing: route cost answer is unusable")
 
 // RouteCandidateCosts 是取数侧为一次判断交回的成本族：逐候选三态事实 + 逐候选逐段评价出处。
+//
+// FactsBasis 说这一族成本的包裹事实出自哪里，整次判断一份：包裹事实是整件包裹的、不随候选与段变。取数侧一律填它，零值是
+// 取数侧没填，不是某一格。
 type RouteCandidateCosts struct {
-	Facts     []domain.CandidateCostFact
-	Citations []CandidateLegCostCitation
+	Facts      []domain.CandidateCostFact
+	Citations  []CandidateLegCostCitation
+	FactsBasis domain.ParcelFactsBasis
 }
 
 // CandidateLegCostCitation 是一条候选某一段的成本出处。出处本身只带段号，候选要在这里另带：取数侧交回时还不知道哪一条
@@ -277,6 +281,9 @@ func (costs RouteCandidateCosts) CitationsOf(candidate domain.CandidateID) []dom
 // carried 是随这次判断请求携带的内容，与证据视图收到的是同一份：绑了分区目录的卡要包裹的邮编
 // 路线才解得出区域（ADR-0189 决定一），路线只在请求里，本上下文不另开读地址的口（ADR-0075）。
 //
+// point 指名这次出价所处的判断点，包裹事实取哪一种来源由它定（CONTEXT「预路由使用客户声明快照；首次收寄复核使用当时已经
+// 取得的物理事实，到站复核使用当前有效物理实测」）。判断点由调用方指名、不设默认：取数侧认不出的判断点即编程错误。
+//
 // 读失败不得连累调用方的事务：编排在判断那一笔事务里调它，读失败之后还要照常落别的册——复核失效线上的失效与复核记录、
 // 仍适用线上的仍适用，初始路由那一件的提交前重校也还要读证据。取数侧的仓储读口在事务里走同一笔事务，所以生产装配给它
 // 包一层 savepoint（postgres.SavepointedRouteCandidateCosts）；编排只据错误落格，不碰事务。
@@ -284,6 +291,7 @@ type RouteCandidateCostSource interface {
 	LoadCandidateCosts(
 		ctx context.Context,
 		key domain.InitialRouteJudgmentKey,
+		point domain.ParcelFactsPoint,
 		evidence InitialRouteEvidence,
 		carried RequestCarriedContent,
 	) (RouteCandidateCosts, error)
@@ -596,6 +604,9 @@ type ReassessmentRecord struct {
 	CandidateState      CandidateReviewState
 	NewPlan             domain.InitialRoutePlan
 	HasNewPlan          bool
+	// CandidateFactsBasis 说这次复核给候选出价用的包裹事实出自哪里；零值即这次复核没有向取数侧要过成本。不形成计划的复核
+	// 不留成本，没有这一格就查不出候选评估是按声明还是按实测判的。
+	CandidateFactsBasis domain.ParcelFactsBasis
 	RerouteState        domain.RerouteAuthority
 	RerouteBlockers     []string
 	Suggestion          domain.RerouteSuggestion

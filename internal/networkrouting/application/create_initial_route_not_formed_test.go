@@ -21,7 +21,7 @@ type costsAnswering struct {
 }
 
 func (costs costsAnswering) LoadCandidateCosts(
-	context.Context, domain.InitialRouteJudgmentKey, ports.InitialRouteEvidence, ports.RequestCarriedContent,
+	context.Context, domain.InitialRouteJudgmentKey, domain.ParcelFactsPoint, ports.InitialRouteEvidence, ports.RequestCarriedContent,
 ) (ports.RouteCandidateCosts, error) {
 	return ports.RouteCandidateCosts{Facts: costs.facts}, costs.err
 }

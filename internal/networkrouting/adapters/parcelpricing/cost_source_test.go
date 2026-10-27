@@ -324,6 +324,7 @@ func TestWithoutParcelFactsEveryLegStaysPending(t *testing.T) {
 		map[string]ppdomain.PricingPlanVersion{"plan-x/v1": syntheticBuyPlan(t, "plan-x", "v1", "5")},
 	)
 	source.hasFacts = false
+	source.facts.Basis = nrdomain.ParcelFactsNone
 
 	costs, err := source.LoadCandidateCosts(context.Background(), judgmentKey(t), evidenceWithComparison(t, "USD",
 		pathOf(t, "line-x", 1)))
@@ -537,6 +538,9 @@ type testSource struct {
 	internal        map[string]string
 	facts           adapter.ParcelFacts
 	hasFacts        bool
+	askedPoint      nrdomain.ParcelFactsPoint
+	seenPoints      []nrdomain.ParcelFactsPoint
+	pointed         adapter.ParcelFactsSource
 	zonesConfigured bool
 	zoneByOrdinal   map[int]string
 	unzonedOrdinals map[int]bool
@@ -553,7 +557,7 @@ func newAdapter(t *testing.T, bases map[string][]nrports.LineSegmentCostBasis, p
 		bases:           bases,
 		plans:           plans,
 		internal:        map[string]string{},
-		facts:           adapter.ParcelFacts{Weight: weightOf(t, "1")},
+		facts:           adapter.ParcelFacts{Weight: weightOf(t, "1"), Basis: nrdomain.ParcelFactsDeclaration},
 		hasFacts:        true,
 		zonesConfigured: true,
 		series:          &seriesBook{inForce: map[string]ppdomain.ReferenceSeriesRegistration{}},
@@ -586,12 +590,24 @@ func newAdapter(t *testing.T, bases map[string][]nrports.LineSegmentCostBasis, p
 func (source *testSource) LoadCandidateCosts(
 	ctx context.Context, key nrdomain.InitialRouteJudgmentKey, evidence nrports.InitialRouteEvidence,
 ) (nrports.RouteCandidateCosts, error) {
-	return source.RouteCandidateCostAdapter.LoadCandidateCosts(ctx, key, evidence, source.carried)
+	return source.RouteCandidateCostAdapter.LoadCandidateCosts(ctx, key, source.point(), evidence, source.carried)
+}
+
+// point 是本替身代取成本的判断点：多数用例不关心判断点，按预路由取；要验判断点的用例自己设。
+func (source *testSource) point() nrdomain.ParcelFactsPoint {
+	if source.askedPoint.Valid() {
+		return source.askedPoint
+	}
+	return nrdomain.NewPreRouteFactsPoint()
 }
 
 func (source *testSource) ParcelFactsFor(
-	_ context.Context, _ nrdomain.InitialRouteJudgmentKey,
+	ctx context.Context, key nrdomain.InitialRouteJudgmentKey, point nrdomain.ParcelFactsPoint,
 ) (adapter.ParcelFacts, bool, error) {
+	source.seenPoints = append(source.seenPoints, point)
+	if source.pointed != nil {
+		return source.pointed.ParcelFactsFor(ctx, key, point)
+	}
 	return source.facts, source.hasFacts, nil
 }
 

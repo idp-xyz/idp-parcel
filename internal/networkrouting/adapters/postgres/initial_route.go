@@ -54,6 +54,8 @@ type planRow struct {
 
 // costCitationRow 是逐段成本出处留痕的行模型（票 routing-first-cut/10）：旧计划没有
 // 这一格，读回空列表照常成立——出处是取数侧合成时才有的内容。
+//
+// FactsBasis 缺席即客户声明：包裹事实依据出现之前落库的出处，包裹事实一律取客户声明，读回不必回填，也不另造一格「未知」。
 type costCitationRow struct {
 	Ordinal            int    `json:"ordinal"`
 	EvaluationID       string `json:"evaluation_id"`
@@ -61,6 +63,7 @@ type costCitationRow struct {
 	PolicyReference    string `json:"policy_reference,omitempty"`
 	ComparisonAmount   string `json:"comparison_amount"`
 	ComparisonCurrency string `json:"comparison_currency"`
+	FactsBasis         string `json:"facts_basis,omitempty"`
 }
 
 // legRow 的 Kind 缺席即节点间段：种类出现之前落库的计划只有这一种段，读回不必回填（ADR-0217）。交付段
@@ -280,6 +283,7 @@ func rowsOfCostCitations(citations []domain.PlannedLegCostCitation) []costCitati
 			PlanReference:      citation.PlanReference(),
 			ComparisonAmount:   citation.ComparisonAmount(),
 			ComparisonCurrency: citation.ComparisonCurrency(),
+			FactsBasis:         citation.FactsBasis().String(),
 		}
 		if policy, stated := citation.PolicyReference(); stated {
 			row.PolicyReference = policy
@@ -292,6 +296,14 @@ func rowsOfCostCitations(citations []domain.PlannedLegCostCitation) []costCitati
 func costCitationsOfRows(rows []costCitationRow) ([]domain.PlannedLegCostCitation, error) {
 	citations := make([]domain.PlannedLegCostCitation, 0, len(rows))
 	for _, stored := range rows {
+		basis := domain.ParcelFactsDeclaration
+		if stored.FactsBasis != "" {
+			parsed, err := domain.ParseParcelFactsBasis(stored.FactsBasis)
+			if err != nil {
+				return nil, err
+			}
+			basis = parsed
+		}
 		citation, err := domain.NewPlannedLegCostCitation(domain.PlannedLegCostCitationSpec{
 			Ordinal:            stored.Ordinal,
 			EvaluationID:       stored.EvaluationID,
@@ -300,6 +312,7 @@ func costCitationsOfRows(rows []costCitationRow) ([]domain.PlannedLegCostCitatio
 			HasPolicy:          stored.PolicyReference != "",
 			ComparisonAmount:   stored.ComparisonAmount,
 			ComparisonCurrency: stored.ComparisonCurrency,
+			FactsBasis:         basis,
 		})
 		if err != nil {
 			return nil, err

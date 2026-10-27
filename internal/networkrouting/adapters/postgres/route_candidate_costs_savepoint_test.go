@@ -28,7 +28,7 @@ type sqlCostSource struct {
 }
 
 func (source *sqlCostSource) LoadCandidateCosts(
-	ctx context.Context, _ domain.InitialRouteJudgmentKey, _ ports.InitialRouteEvidence, _ ports.RequestCarriedContent,
+	ctx context.Context, _ domain.InitialRouteJudgmentKey, _ domain.ParcelFactsPoint, _ ports.InitialRouteEvidence, _ ports.RequestCarriedContent,
 ) (ports.RouteCandidateCosts, error) {
 	source.asked++
 	query := source.query
@@ -101,7 +101,7 @@ func TestASavepointKeepsAFailedCostReadFromAbortingTheJudgment(t *testing.T) {
 
 	var readErr error
 	err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
-		_, readErr = costs.LoadCandidateCosts(txCtx, domain.InitialRouteJudgmentKey{}, ports.InitialRouteEvidence{},
+		_, readErr = costs.LoadCandidateCosts(txCtx, domain.InitialRouteJudgmentKey{}, domain.NewPreRouteFactsPoint(), ports.InitialRouteEvidence{},
 			ports.RequestCarriedContent{})
 		return appendAfterCosts(txCtx, t, log, "corr-after-failed-costs")
 	})
@@ -128,7 +128,7 @@ func TestSuccessiveCostReadsInOneTransactionEachRecover(t *testing.T) {
 	err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
 		for range inner.sequence {
 			var readErr error
-			loaded, readErr = costs.LoadCandidateCosts(txCtx, domain.InitialRouteJudgmentKey{}, ports.InitialRouteEvidence{},
+			loaded, readErr = costs.LoadCandidateCosts(txCtx, domain.InitialRouteJudgmentKey{}, domain.NewPreRouteFactsPoint(), ports.InitialRouteEvidence{},
 				ports.RequestCarriedContent{})
 			errs = append(errs, readErr)
 		}
@@ -155,7 +155,7 @@ func TestASavepointReleasesReadableCostsUnchanged(t *testing.T) {
 	var loaded ports.RouteCandidateCosts
 	var readErr error
 	err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
-		loaded, readErr = costs.LoadCandidateCosts(txCtx, domain.InitialRouteJudgmentKey{}, ports.InitialRouteEvidence{},
+		loaded, readErr = costs.LoadCandidateCosts(txCtx, domain.InitialRouteJudgmentKey{}, domain.NewPreRouteFactsPoint(), ports.InitialRouteEvidence{},
 			ports.RequestCarriedContent{})
 		return appendAfterCosts(txCtx, t, log, "corr-after-readable-costs")
 	})
@@ -177,7 +177,7 @@ func TestASavepointPassesCostsThroughOutsideATransaction(t *testing.T) {
 	if _, err := db.RequireExecutor(t.Context()); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("前提不成立：ctx 应在事务外，RequireExecutor 却答 %v", err)
 	}
-	loaded, err := costs.LoadCandidateCosts(t.Context(), domain.InitialRouteJudgmentKey{}, ports.InitialRouteEvidence{},
+	loaded, err := costs.LoadCandidateCosts(t.Context(), domain.InitialRouteJudgmentKey{}, domain.NewPreRouteFactsPoint(), ports.InitialRouteEvidence{},
 		ports.RequestCarriedContent{})
 	if err != nil || len(loaded.Facts) != 1 || loaded.Facts[0].AmountMinor() != 3100 || inner.asked != 1 {
 		t.Fatalf("读回 %+v err=%v 问内层 %d 次, want 直通一次", loaded.Facts, err, inner.asked)
@@ -188,7 +188,7 @@ func TestASavepointPassesCostsThroughOutsideATransaction(t *testing.T) {
 		t.Fatalf("构造装饰器：%v", err)
 	}
 	err = db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
-		_, err := unconfigured.LoadCandidateCosts(txCtx, domain.InitialRouteJudgmentKey{}, ports.InitialRouteEvidence{},
+		_, err := unconfigured.LoadCandidateCosts(txCtx, domain.InitialRouteJudgmentKey{}, domain.NewPreRouteFactsPoint(), ports.InitialRouteEvidence{},
 			ports.RequestCarriedContent{})
 		if !errors.Is(err, ports.ErrRouteCostSourceNotConfigured) {
 			t.Errorf("事务里 err = %v, want 没接的哨兵原样交回", err)
@@ -203,7 +203,7 @@ func TestASavepointPassesCostsThroughOutsideATransaction(t *testing.T) {
 type unconfiguredCosts struct{}
 
 func (unconfiguredCosts) LoadCandidateCosts(
-	context.Context, domain.InitialRouteJudgmentKey, ports.InitialRouteEvidence, ports.RequestCarriedContent,
+	context.Context, domain.InitialRouteJudgmentKey, domain.ParcelFactsPoint, ports.InitialRouteEvidence, ports.RequestCarriedContent,
 ) (ports.RouteCandidateCosts, error) {
 	return ports.RouteCandidateCosts{}, ports.ErrRouteCostSourceNotConfigured
 }

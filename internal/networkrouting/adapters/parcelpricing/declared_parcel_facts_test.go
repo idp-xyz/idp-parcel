@@ -20,7 +20,7 @@ func TestTheDeclaredMeasurementBecomesTheParcelFactsTaggedAsADeclaration(t *test
 	declared := &declaredView{resolution: baselineDeclaration(t, "2.5", "KG", &dimensionsSpec{"30", "20", "10", "CM"})}
 	facts := mustDeclaredFacts(t, declared)
 
-	got, found, err := facts.ParcelFactsFor(context.Background(), declaredKey(t))
+	got, found, err := facts.DeclaredFactsFor(context.Background(), declaredKey(t))
 	if err != nil || !found {
 		t.Fatalf("found=%v err=%v, want 基线声明可用", found, err)
 	}
@@ -48,7 +48,7 @@ func TestTheDeclaredMeasurementBecomesTheParcelFactsTaggedAsADeclaration(t *test
 func TestAWeightOnlyDeclarationLeavesTheDimensionsAbsent(t *testing.T) {
 	facts := mustDeclaredFacts(t, &declaredView{resolution: baselineDeclaration(t, "1", "KG", nil)})
 
-	got, found, err := facts.ParcelFactsFor(context.Background(), declaredKey(t))
+	got, found, err := facts.DeclaredFactsFor(context.Background(), declaredKey(t))
 	if err != nil || !found {
 		t.Fatalf("found=%v err=%v", found, err)
 	}
@@ -67,7 +67,7 @@ func TestAnUnusableDeclarationAnswersNoParcelFacts(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			facts := mustDeclaredFacts(t, &declaredView{resolution: resolution})
-			if _, found, err := facts.ParcelFactsFor(context.Background(), declaredKey(t)); err != nil || found {
+			if _, found, err := facts.DeclaredFactsFor(context.Background(), declaredKey(t)); err != nil || found {
 				t.Fatalf("found=%v err=%v, want 没有包裹事实", found, err)
 			}
 		})
@@ -79,7 +79,7 @@ func TestADeclaredMeasurementReadFailureSurfaces(t *testing.T) {
 	broken := errors.New("读库失败")
 	facts := mustDeclaredFacts(t, &declaredView{err: broken})
 
-	if _, _, err := facts.ParcelFactsFor(context.Background(), declaredKey(t)); !errors.Is(err, broken) {
+	if _, _, err := facts.DeclaredFactsFor(context.Background(), declaredKey(t)); !errors.Is(err, broken) {
 		t.Fatalf("err = %v, want 上抛读口故障", err)
 	}
 }

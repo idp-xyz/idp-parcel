@@ -20,7 +20,7 @@ func legCitation(t *testing.T, ordinal int) domain.PlannedLegCostCitation {
 	t.Helper()
 	citation, err := domain.NewPlannedLegCostCitation(domain.PlannedLegCostCitationSpec{
 		Ordinal: ordinal, EvaluationID: "EST-current", PlanReference: "PLAN-COST/v1",
-		ComparisonAmount: "21", ComparisonCurrency: "CNY",
+		ComparisonAmount: "21", ComparisonCurrency: "CNY", FactsBasis: domain.ParcelFactsDeclaration,
 	})
 	if err != nil {
 		t.Fatalf("leg citation: %v", err)

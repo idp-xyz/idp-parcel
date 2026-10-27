@@ -68,12 +68,14 @@ type reassessCostsDouble struct {
 	answer *nrports.RouteCandidateCosts
 	read   func(ctx context.Context) error
 	asked  int
+	points []nrdomain.ParcelFactsPoint
 }
 
 func (double *reassessCostsDouble) LoadCandidateCosts(
-	ctx context.Context, _ nrdomain.InitialRouteJudgmentKey, evidence nrports.InitialRouteEvidence, _ nrports.RequestCarriedContent,
+	ctx context.Context, _ nrdomain.InitialRouteJudgmentKey, point nrdomain.ParcelFactsPoint, evidence nrports.InitialRouteEvidence, _ nrports.RequestCarriedContent,
 ) (nrports.RouteCandidateCosts, error) {
 	double.asked++
+	double.points = append(double.points, point)
 	if double.read != nil {
 		if err := double.read(ctx); err != nil {
 			return nrports.RouteCandidateCosts{}, err

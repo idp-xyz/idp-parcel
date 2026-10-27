@@ -267,7 +267,7 @@ func (double *rerouteBaselines) LoadAcceptanceBaselineGeo(
 type rerouteNoCosts struct{}
 
 func (rerouteNoCosts) LoadCandidateCosts(
-	context.Context, nrdomain.InitialRouteJudgmentKey, nrports.InitialRouteEvidence, nrports.RequestCarriedContent,
+	context.Context, nrdomain.InitialRouteJudgmentKey, nrdomain.ParcelFactsPoint, nrports.InitialRouteEvidence, nrports.RequestCarriedContent,
 ) (nrports.RouteCandidateCosts, error) {
 	return nrports.RouteCandidateCosts{}, errors.New("排序形态未声明，决定口不该来要价")
 }

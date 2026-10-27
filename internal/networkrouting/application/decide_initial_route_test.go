@@ -187,6 +187,10 @@ func TestAnAuthorizedRoleDecidesALowestCostTie(t *testing.T) {
 	if last := fixture.costs.carried[len(fixture.costs.carried)-1]; last.Geo.ContentDigest() != baselineGeo.ContentDigest() {
 		t.Fatalf("取成本时的投影 = %q，want 受理基线那一版", last.Geo.ContentDigest())
 	}
+	// 并列裁决是初始路由的延续，包裹事实仍取客户声明，不因裁决发生在接受之后而改取物理事实。
+	if last := fixture.costs.points[len(fixture.costs.points)-1]; last.Kind() != domain.PreRouteFactsPoint {
+		t.Fatalf("取成本的判断点 = %v，want 预路由", last.Kind())
+	}
 }
 
 // Covers: AT-NR-101（ADR-0309 决定二「已有结果」）——这件包裹的判断库已有行（先成的裁决、并列之后重判选出了唯一一条，或无路由）：答

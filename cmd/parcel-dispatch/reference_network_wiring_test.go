@@ -211,7 +211,7 @@ func TestTheAdoptedDemoNetworkGetsPastRouteEvidenceThroughProductionWiring(t *te
 		t.Fatalf("合格候选 %d 个，想要 1：%+v", qualified, candidates)
 	}
 
-	costs, err := routeCosts(db, systemClock{}).LoadCandidateCosts(t.Context(), wiringRouteKey(t, demoTenant), evidence, wiringCarried())
+	costs, err := routeCosts(db, systemClock{}).LoadCandidateCosts(t.Context(), wiringRouteKey(t, demoTenant), nrdomain.NewPreRouteFactsPoint(), evidence, wiringCarried())
 	if err != nil {
 		t.Fatalf("候选成本取数侧：err = %v，want 交回成本事实", err)
 	}
@@ -251,11 +251,11 @@ func TestADeclaredParcelOnZonedLegsIsPricedThroughProductionWiring(t *testing.T)
 		t.Fatalf("候选路径 = %+v，want 带交付段——这条用例证的是交付段不进比价", evidence.Paths)
 	}
 
-	facts, err := routeParcelFacts(fixture.db)
+	facts, err := routeParcelFacts(fixture.db, systemClock{}, nrpricing.NoPhysicalParcelFacts{})
 	if err != nil {
 		t.Fatalf("装配包裹事实取数侧：%v", err)
 	}
-	got, found, err := facts.ParcelFactsFor(ctx, key)
+	got, found, err := facts.ParcelFactsFor(ctx, key, nrdomain.NewPreRouteFactsPoint())
 	if err != nil || !found {
 		t.Fatalf("包裹事实 found=%v err=%v，want 读到客户声明", found, err)
 	}
@@ -267,7 +267,7 @@ func TestADeclaredParcelOnZonedLegsIsPricedThroughProductionWiring(t *testing.T)
 		t.Fatalf("事实引用 = %+v，want 一条标明来源是基线上的客户声明", got.Facts)
 	}
 
-	costs, err := routeCosts(fixture.db, systemClock{}).LoadCandidateCosts(ctx, key, evidence, carriedPostalRoute())
+	costs, err := routeCosts(fixture.db, systemClock{}).LoadCandidateCosts(ctx, key, nrdomain.NewPreRouteFactsPoint(), evidence, carriedPostalRoute())
 	if err != nil {
 		t.Fatalf("候选成本取数侧：err = %v，want 交回成本事实", err)
 	}
@@ -360,7 +360,7 @@ func TestTheCostSideResolvesTheLineOfACandidateMintedByCatalogFolding(t *testing
 	costs := nrpricing.NewRouteCandidateCostAdapter(nrpricing.RouteCandidateCostDeps{
 		Bases: bases,
 	})
-	_, err := costs.LoadCandidateCosts(t.Context(), wiringRouteKey(t, demoTenant), evidence, wiringCarried())
+	_, err := costs.LoadCandidateCosts(t.Context(), wiringRouteKey(t, demoTenant), nrdomain.NewPreRouteFactsPoint(), evidence, wiringCarried())
 	if !errors.Is(err, errStopAtLineBases) {
 		t.Fatalf("候选成本取数侧没走到读逐段依据：err = %v", err)
 	}

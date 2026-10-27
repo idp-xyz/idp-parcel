@@ -31,6 +31,7 @@ func costCitationsFor(t *testing.T, candidate string, legs int) []nrports.Candid
 			PlanReference:      "SYN-PLAN-" + candidate + "/v1",
 			ComparisonAmount:   "10",
 			ComparisonCurrency: "CNY",
+			FactsBasis:         nrdomain.ParcelFactsDeclarationFallback,
 		})
 		if err != nil {
 			t.Fatalf("段出处：%v", err)
@@ -81,8 +82,9 @@ func TestAfterALapseTheCheaperCandidateFormsTheFirstPlanOnTheDatabase(t *testing
 		return fact
 	}
 	fixture.costs.answer = &nrports.RouteCandidateCosts{
-		Facts:     []nrdomain.CandidateCostFact{priced("SYN-CANDIDATE-01", 4200), priced("SYN-CANDIDATE-02", 3100)},
-		Citations: append(costCitationsFor(t, "SYN-CANDIDATE-01", 2), costCitationsFor(t, "SYN-CANDIDATE-02", 3)...),
+		Facts:      []nrdomain.CandidateCostFact{priced("SYN-CANDIDATE-01", 4200), priced("SYN-CANDIDATE-02", 3100)},
+		Citations:  append(costCitationsFor(t, "SYN-CANDIDATE-01", 2), costCitationsFor(t, "SYN-CANDIDATE-02", 3)...),
+		FactsBasis: nrdomain.ParcelFactsDeclarationFallback,
 	}
 
 	astray := fixture.handoverInto(t, "astray", "SYN-NODE-KUL-HUB", reassessHandoverAt.Add(-time.Hour))
@@ -94,6 +96,19 @@ func TestAfterALapseTheCheaperCandidateFormsTheFirstPlanOnTheDatabase(t *testing
 			lapsed.Conclusion, lapsed.CandidateState, lapsed.HasSuggestion)
 	}
 
+	// 权威运输交接进接收节点是到站复核；候选评估按什么包裹事实出的价，随复核册往返。
+	if lapsed.CandidateFactsBasis != nrdomain.ParcelFactsDeclarationFallback {
+		t.Fatalf("失效线复核册读回的包裹事实依据 = %s, want DECLARATION_FALLBACK", lapsed.CandidateFactsBasis)
+	}
+	if len(fixture.costs.points) == 0 {
+		t.Fatal("交接触发的复核没向取数侧要过成本")
+	}
+	for _, point := range fixture.costs.points {
+		if point.Kind() != nrdomain.ArrivalFactsPoint {
+			t.Fatalf("交接触发的复核向取数侧指名的判断点 = %v, want 到站复核", point.Kind())
+		}
+	}
+
 	back := fixture.handoverInto(t, "back", reassessHandoverReceiving, reassessHandoverAt)
 	deliver(t, fixture.syn, fixture.handover, back, back)
 	formed := reassessmentOf(t, fixture.syn, handoverCorrelation("back"))
@@ -102,6 +117,9 @@ func TestAfterALapseTheCheaperCandidateFormsTheFirstPlanOnTheDatabase(t *testing
 		t.Fatalf("交进新加坡 = %s、选中 %s, want FIRST_PLAN_FORMED、便宜的 SYN-CANDIDATE-02",
 			formed.Conclusion, formed.NewPlan.SelectedCandidate())
 	}
+	if formed.CandidateFactsBasis != nrdomain.ParcelFactsDeclarationFallback {
+		t.Fatalf("无路由线复核册读回的包裹事实依据 = %s, want DECLARATION_FALLBACK", formed.CandidateFactsBasis)
+	}
 	citations := formed.NewPlan.CostCitations()
 	if len(citations) != 3 {
 		t.Fatalf("计划出处 %d 条, want 选中候选三段各一条：%+v", len(citations), citations)
@@ -109,6 +127,9 @@ func TestAfterALapseTheCheaperCandidateFormsTheFirstPlanOnTheDatabase(t *testing
 	for _, citation := range citations {
 		if !strings.HasPrefix(citation.EvaluationID(), "EST-SYN-CANDIDATE-02-") {
 			t.Fatalf("计划出处 = %+v, want 只有 SYN-CANDIDATE-02 的", citation)
+		}
+		if citation.FactsBasis() != nrdomain.ParcelFactsDeclarationFallback {
+			t.Fatalf("计划出处的包裹事实依据 = %s, want DECLARATION_FALLBACK 随计划往返", citation.FactsBasis())
 		}
 	}
 
@@ -149,8 +170,8 @@ func acceptDemoParcelWithGeoAndWeight(t *testing.T, syn *synVerticalFixture) {
 //     parcel-pricing 的试算入口。
 //
 // 成本卡没照抄演示种子那张（种子卡绑了分区目录）：复核交给取数侧的输入与初始路由的相同，绑目录的卡怎么经邮编路线解区已由
-// route_cost_reading_completion_wiring_test.go 钉住，这里只证复核接上了取数侧。包裹事实取客户声明是过渡做法，见
-// reassessRouteHandler 的注释。
+// route_cost_reading_completion_wiring_test.go 钉住，这里只证复核接上了取数侧。生产装配没有物理事实来源，到站复核因此退回
+// 客户声明出价，复核记录与计划出处都如实标 DECLARATION_FALLBACK（route_cost_facts_point_wiring_test.go 另证有实测时按实测）。
 func TestAfterALapseTheDemoNetworkFormsTheFirstPlanThroughTheProductionRoute(t *testing.T) {
 	syn := newSYNVerticalFixture(t)
 	acceptDemoParcelWithGeoAndWeight(t, syn)
@@ -184,6 +205,9 @@ func TestAfterALapseTheDemoNetworkFormsTheFirstPlanThroughTheProductionRoute(t *
 		t.Fatalf("交进吉隆坡 = %s、候选评估 %s、建议 %v, want PLAN_LAPSED、CANDIDATES_AVAILABLE、形成建议",
 			lapsed.Conclusion, lapsed.CandidateState, lapsed.HasSuggestion)
 	}
+	if lapsed.CandidateFactsBasis != nrdomain.ParcelFactsDeclarationFallback {
+		t.Fatalf("失效线复核册读回的包裹事实依据 = %s, want DECLARATION_FALLBACK", lapsed.CandidateFactsBasis)
+	}
 
 	handover("back", reassessHandoverReceiving, reassessHandoverAt)
 	formed := reassessmentOf(t, syn, handoverCorrelation("back"))
@@ -195,9 +219,15 @@ func TestAfterALapseTheDemoNetworkFormsTheFirstPlanThroughTheProductionRoute(t *
 	if len(citations) != 3 {
 		t.Fatalf("计划出处 %d 条, want 三段各一条：%+v", len(citations), citations)
 	}
+	if formed.CandidateFactsBasis != nrdomain.ParcelFactsDeclarationFallback {
+		t.Fatalf("无路由线复核册读回的包裹事实依据 = %s, want DECLARATION_FALLBACK", formed.CandidateFactsBasis)
+	}
 	for _, citation := range citations {
 		if citation.PlanReference() != "SYN-PLAN-CN-SG-COST-01/v1" || !strings.HasPrefix(citation.EvaluationID(), "EST-") {
 			t.Fatalf("计划出处 = %+v, want 指那张成本卡、评价标识出自 PP 的试算入口", citation)
+		}
+		if citation.FactsBasis() != nrdomain.ParcelFactsDeclarationFallback {
+			t.Fatalf("计划出处的包裹事实依据 = %s, want 生产装配没有物理事实来源、退回声明并标明", citation.FactsBasis())
 		}
 	}
 }

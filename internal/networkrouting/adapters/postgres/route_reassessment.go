@@ -79,6 +79,7 @@ func (repository *RouteReassessments) FindByCorrelation(
 		candidateState, rerouteState                  *string
 		blockersJSON, planJSON, suggJSON, decisionRaw []byte
 		improvementJSON                               []byte
+		candidateFactsBasis                           *string
 		triggerOccurredAt                             *time.Time
 		reassessedAt                                  time.Time
 	)
@@ -87,7 +88,7 @@ func (repository *RouteReassessments) FindByCorrelation(
 		        acceptance_baseline, declared_parcel_id, service_purpose,
 		        conclusion, reviewed_plan, lapse_basis,
 		        candidate_state, reroute_state, reroute_blockers,
-		        new_plan, suggestion, decision, improvement_basis, trigger_occurred_at, reassessed_at
+		        new_plan, suggestion, decision, improvement_basis, candidate_facts_basis, trigger_occurred_at, reassessed_at
 		   FROM network_routing.route_reassessment
 		  WHERE tenant_id = $1
 		    AND correlation_id = $2`,
@@ -97,7 +98,7 @@ func (repository *RouteReassessments) FindByCorrelation(
 		&acceptanceBaseline, &declaredParcel, &purpose,
 		&conclusion, &reviewedPlan, &lapseBasis,
 		&candidateState, &rerouteState, &blockersJSON,
-		&planJSON, &suggJSON, &decisionRaw, &improvementJSON, &triggerOccurredAt, &reassessedAt)
+		&planJSON, &suggJSON, &decisionRaw, &improvementJSON, &candidateFactsBasis, &triggerOccurredAt, &reassessedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.ReassessmentRecord{}, false, nil
 	}
@@ -147,6 +148,12 @@ func (repository *RouteReassessments) FindByCorrelation(
 			return ports.ReassessmentRecord{}, false, fmt.Errorf("find reassessment: %w", err)
 		}
 		record.HasImprovementBasis = true
+	}
+	if candidateFactsBasis != nil {
+		record.CandidateFactsBasis, err = domain.ParseParcelFactsBasis(*candidateFactsBasis)
+		if err != nil {
+			return ports.ReassessmentRecord{}, false, fmt.Errorf("find reassessment: %w", err)
+		}
 	}
 	if candidateState != nil {
 		record.CandidateState, err = candidateStateFrom(*candidateState)
@@ -222,8 +229,8 @@ func (repository *RouteReassessments) Save(
 			 acceptance_baseline, declared_parcel_id, service_purpose,
 			 conclusion, reviewed_plan, lapse_basis,
 			 candidate_state, reroute_state, reroute_blockers,
-			 new_plan, suggestion, decision, improvement_basis, trigger_occurred_at, reassessed_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+			 new_plan, suggestion, decision, improvement_basis, candidate_facts_basis, trigger_occurred_at, reassessed_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 		 ON CONFLICT DO NOTHING`,
 		key.TenantID.String(),
 		correlation.String(),
@@ -242,6 +249,7 @@ func (repository *RouteReassessments) Save(
 		columns.suggestionJSON,
 		columns.decisionJSON,
 		columns.improvementJSON,
+		columns.candidateFactsBasis,
 		record.TriggerOccurredAt.UTC(),
 		record.ReassessedAt.UTC(),
 	)
@@ -471,6 +479,8 @@ type reassessmentRowColumns struct {
 	suggestionJSON  []byte
 	decisionJSON    []byte
 	improvementJSON []byte
+	// candidateFactsBasis 为空即这次复核没向取数侧要过成本。
+	candidateFactsBasis *string
 }
 
 func reassessmentColumns(record ports.ReassessmentRecord) (reassessmentRowColumns, error) {
@@ -483,6 +493,7 @@ func reassessmentColumns(record ports.ReassessmentRecord) (reassessmentRowColumn
 	columns.lapseBasis = optionalColumn(record.LapseBasis.String())
 	columns.candidateState = optionalColumn(record.CandidateState.String())
 	columns.rerouteState = optionalColumn(record.RerouteState.String())
+	columns.candidateFactsBasis = optionalColumn(record.CandidateFactsBasis.String())
 
 	var err error
 	if len(record.RerouteBlockers) > 0 {

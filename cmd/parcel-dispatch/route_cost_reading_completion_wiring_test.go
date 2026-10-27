@@ -349,7 +349,7 @@ func TestABoundCostCardIsPricedThroughThePostalRouteInProductionWiring(t *testin
 	evidence := loadWiringEvidence(t, fixture.db, demoTenant)
 	key := wiringRouteKey(t, demoTenant)
 
-	costs, err := routeCosts(fixture.db, systemClock{}).LoadCandidateCosts(t.Context(), key, evidence, carriedPostalRoute())
+	costs, err := routeCosts(fixture.db, systemClock{}).LoadCandidateCosts(t.Context(), key, nrdomain.NewPreRouteFactsPoint(), evidence, carriedPostalRoute())
 	if err != nil {
 		t.Fatalf("候选成本取数侧：err = %v，want 交回成本事实", err)
 	}
@@ -365,7 +365,7 @@ func TestABoundCostCardIsPricedThroughThePostalRouteInProductionWiring(t *testin
 		}
 	}
 
-	costs, err = routeCosts(fixture.db, systemClock{}).LoadCandidateCosts(t.Context(), key, evidence, wiringCarried())
+	costs, err = routeCosts(fixture.db, systemClock{}).LoadCandidateCosts(t.Context(), key, nrdomain.NewPreRouteFactsPoint(), evidence, wiringCarried())
 	if err != nil {
 		t.Fatalf("候选成本取数侧（不带收件邮编）：%v", err)
 	}
@@ -388,7 +388,7 @@ func TestAnUnboundCostCardWithoutALegZoneStaysPendingInProductionWiring(t *testi
 	evidence := loadWiringEvidence(t, fixture.db, demoTenant)
 
 	costs, err := routeCosts(fixture.db, systemClock{}).LoadCandidateCosts(
-		t.Context(), wiringRouteKey(t, demoTenant), evidence, carriedPostalRoute())
+		t.Context(), wiringRouteKey(t, demoTenant), nrdomain.NewPreRouteFactsPoint(), evidence, carriedPostalRoute())
 	if err != nil {
 		t.Fatalf("候选成本取数侧：err = %v，want 交回成本事实", err)
 	}
@@ -414,7 +414,7 @@ func TestAnUnboundCostCardIsPricedThroughItsRegisteredLegZonesInProductionWiring
 		"带邮编路线":  carriedPostalRoute(),
 		"不带收件邮编": wiringCarried(),
 	} {
-		costs, err := routeCosts(fixture.db, systemClock{}).LoadCandidateCosts(t.Context(), key, evidence, carried)
+		costs, err := routeCosts(fixture.db, systemClock{}).LoadCandidateCosts(t.Context(), key, nrdomain.NewPreRouteFactsPoint(), evidence, carried)
 		if err != nil {
 			t.Fatalf("%s：候选成本取数侧 err = %v，want 交回成本事实", name, err)
 		}
@@ -458,7 +458,7 @@ func TestAnExchangeRateBoundCostCardIsPricedWhenTheSeriesIsInForce(t *testing.T)
 			evidence.HasComparisonCurrency, evidence.ComparisonCurrency = true, "CNY"
 
 			costs, err := routeCosts(fixture.db, systemClock{}).LoadCandidateCosts(
-				t.Context(), wiringRouteKey(t, demoTenant), evidence, carriedPostalRoute())
+				t.Context(), wiringRouteKey(t, demoTenant), nrdomain.NewPreRouteFactsPoint(), evidence, carriedPostalRoute())
 			if err != nil {
 				t.Fatalf("候选成本取数侧：err = %v，want 交回成本事实", err)
 			}

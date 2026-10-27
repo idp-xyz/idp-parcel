@@ -244,6 +244,10 @@ func TestAnAuthorizedRoleDecidesACurrentSuggestion(t *testing.T) {
 	if last := fixture.costs.carried[len(fixture.costs.carried)-1]; last.Geo.ContentDigest() != baselineGeo.ContentDigest() {
 		t.Fatalf("取成本时的投影 = %q，want 受理基线那一版", last.Geo.ContentDigest())
 	}
+	// 授权角色此刻发起的决定不是复核触发，按当前有效物理实测出价，不取预路由那一份客户声明。
+	if last := fixture.costs.points[len(fixture.costs.points)-1]; last.Kind() != domain.DecisionFactsPoint {
+		t.Fatalf("取成本的判断点 = %v，want 授权改路决定", last.Kind())
+	}
 	if len(fixture.applicability.saved) != appliedBefore {
 		t.Fatalf("适用性多写了 %d 次; 原计划已失效，新计划没有登记行即当前有效", len(fixture.applicability.saved)-appliedBefore)
 	}

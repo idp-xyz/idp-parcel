@@ -23,7 +23,7 @@ func improvementReroutedRecord(
 	record.LapseBasis = domain.ApplicabilityBasisReference{}
 	citation, err := domain.NewPlannedLegCostCitation(domain.PlannedLegCostCitationSpec{
 		Ordinal: 1, EvaluationID: "EST-RPV-0001-1", PlanReference: "PLAN-COST/v1",
-		PolicyReference: "POLICY-1", HasPolicy: true, ComparisonAmount: "42.00", ComparisonCurrency: "CNY",
+		PolicyReference: "POLICY-1", HasPolicy: true, ComparisonAmount: "42.00", ComparisonCurrency: "CNY", FactsBasis: domain.ParcelFactsDeclarationFallback,
 	})
 	if err != nil {
 		t.Fatalf("段出处：%v", err)

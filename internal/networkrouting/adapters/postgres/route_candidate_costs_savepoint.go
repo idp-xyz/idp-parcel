@@ -52,12 +52,13 @@ func NewSavepointedRouteCandidateCosts(
 func (costs *SavepointedRouteCandidateCosts) LoadCandidateCosts(
 	ctx context.Context,
 	key domain.InitialRouteJudgmentKey,
+	point domain.ParcelFactsPoint,
 	evidence ports.InitialRouteEvidence,
 	carried ports.RequestCarriedContent,
 ) (ports.RouteCandidateCosts, error) {
 	executor, err := costs.db.RequireExecutor(ctx)
 	if errors.Is(err, bentopg.ErrTransactionRequired) {
-		return costs.inner.LoadCandidateCosts(ctx, key, evidence, carried)
+		return costs.inner.LoadCandidateCosts(ctx, key, point, evidence, carried)
 	}
 	if err != nil {
 		return ports.RouteCandidateCosts{}, fmt.Errorf("candidate costs savepoint: %w", err)
@@ -65,7 +66,7 @@ func (costs *SavepointedRouteCandidateCosts) LoadCandidateCosts(
 	if _, err := executor.Exec(ctx, "SAVEPOINT "+candidateCostsSavepoint); err != nil {
 		return ports.RouteCandidateCosts{}, fmt.Errorf("candidate costs savepoint: %w", err)
 	}
-	loaded, loadErr := costs.inner.LoadCandidateCosts(ctx, key, evidence, carried)
+	loaded, loadErr := costs.inner.LoadCandidateCosts(ctx, key, point, evidence, carried)
 	if loadErr != nil {
 		if _, err := executor.Exec(ctx, "ROLLBACK TO SAVEPOINT "+candidateCostsSavepoint); err != nil {
 			// 退不回 savepoint，事务就还在中止态，随后的写会自己失败、整笔回滚；两条错误都交回，免得只剩一半原因。
