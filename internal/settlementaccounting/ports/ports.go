@@ -866,6 +866,29 @@ type AdoptedFundsFactView interface {
 	) (domain.ExternalFundsFact, bool, error)
 }
 
+// CollectedPrincipalFundsFact 是 collection-remittance 按事实引用读到的一条资金事实：Head 是当前链头那一版的本体
+// （外部更正照采，后到的版本才是此刻的金额），SetAside 说它在结算一侧是否已被整条认作代收本金（TargetCollectedPrincipal
+// 映射在册）。两者一起答「这条回款此刻是多少钱、是不是运营企业替客户保管的那一种」。
+type CollectedPrincipalFundsFact struct {
+	Head     domain.ExternalFundsFact
+	SetAside bool
+}
+
+// CollectedPrincipalFundsView 是 collection-remittance 登记与移位运营企业真实到账时读结算已采用事实的口（ADR-0330）。
+// 代收与清分不读结算的表，只经这一口读：事实归结算采用，认作代收本金也在结算一侧判，那边才看得见这条事实上有没有别的映射。
+//
+// LockCollectedPrincipalFact 在调用方的事务里先对事实身份行取共享锁、再另起一句读链头与认作状态，找不到事实答 found=false。
+// 共享锁与结算一侧外部更正、映射、核销取的 FOR UPDATE 互斥（FundsFactApplicationLock 头注）：读到的金额在读方事务提交
+// 之前不会被更正改掉，读方据此判的「引用同一条事实的到账之和不超过它」到落册那一刻仍然成立；更正排在读方事务之后，读方下一次
+// 再读才看见新金额。无环境事务即拒。读方先取自己的锁、再取这一把，结算一侧从不回头等读方的锁，两边接不成环。
+type CollectedPrincipalFundsView interface {
+	LockCollectedPrincipalFact(
+		ctx context.Context,
+		tenant domain.TenantID,
+		fact domain.FundsFactReference,
+	) (CollectedPrincipalFundsFact, bool, error)
+}
+
 // FundsMappingKey 是资金映射的幂等键。
 type FundsMappingKey struct {
 	TenantID domain.TenantID
@@ -889,8 +912,12 @@ const (
 )
 
 // FundsMappingStore 按幂等键找回并保存资金映射（写入代数同 ADR-0031）。
+//
+// ListByFact 交回一条事实上全部已登记的映射（任何目标种类），按映射标识排序。整条认作代收本金与别的映射互斥，
+// 编排要在事实锁下读回它们才判得了（MapExternalFundsHandler.Map）；没有映射即空切片。
 type FundsMappingStore interface {
 	FindByKey(ctx context.Context, key FundsMappingKey) (FundsMappingRecord, bool, error)
+	ListByFact(ctx context.Context, tenant domain.TenantID, fact domain.FundsFactReference) ([]FundsMappingRecord, error)
 	Save(ctx context.Context, record FundsMappingRecord) (FundsMappingSaveOutcome, error)
 }
 
@@ -932,9 +959,10 @@ type SettlementApplicationStore interface {
 // 作用域（OperationalBalanceAdvance.LockOperationalBalanceScope，按法人、账户、币种）。哪条路径用不到前面的就从后面接着取，
 // 不倒回去——两笔事务各握一半等另一半就是这样排除的。同一类里要取几把时按同一个键序取：金额本体按（格、引用），作用域
 // 按（法人、账户、币种）。核销、撤销与更正路上随写入隐式取的行锁（核销主键与版本行插入时的等待、operational_balance
-// 与 credit_standing 的 upsert、Outbox 入队）都落在作用域锁之后。映到对账单或账户的映射先取本口、再插映射行、再取作用域；
-// 插映射行时的等待只会撞上同一映射键的另一笔映射，那一笔已过了它自己的事实锁、往后只取作用域锁，而握作用域锁的事务
-// 都已过了事实锁、不会回头等哪一条事实或哪一行映射，所以接不成环；映到别的目标的映射不取任何一把。作用域咨询锁的键是
+// 与 credit_standing 的 upsert、Outbox 入队）都落在作用域锁之后。任何一种目标的映射都先取本口、再读这条事实上已有的映射、再插映射行（整条认作代收本金与别的映射互斥，
+// 要在同一把锁下读回再判）；映到对账单或账户的，之后再取作用域，映到别的目标的不取作用域。插映射行时的等待只会撞上同一
+// 映射键的另一笔映射，那一笔已过了它自己的事实锁、往后只取作用域锁，而握作用域锁的事务都已过了事实锁、不会回头等哪一条
+// 事实或哪一行映射，所以接不成环。作用域咨询锁的键是
 // 哈希，两个作用域撞上同一把锁时这把锁的先后不再跟着键序，最坏由库的死锁检测拒掉其中一笔、答未决重试。
 //
 // 取哪几个作用域，就是这一笔改了 P 或 W 的那几个（ADR-0283；P 的记法见 CustomerReceiptBooks.CustomerDirectionNets）：

@@ -129,6 +129,23 @@ func (double *fundsMappingStoreDouble) FindByKey(
 	return record, found, nil
 }
 
+func (double *fundsMappingStoreDouble) ListByFact(
+	_ context.Context,
+	tenant domain.TenantID,
+	fact domain.FundsFactReference,
+) ([]ports.FundsMappingRecord, error) {
+	if double.findErr != nil {
+		return nil, double.findErr
+	}
+	var found []ports.FundsMappingRecord
+	for _, record := range double.records {
+		if record.Key.TenantID == tenant && record.Mapping.Fact() == fact {
+			found = append(found, record)
+		}
+	}
+	return found, nil
+}
+
 func (double *fundsMappingStoreDouble) Save(
 	_ context.Context,
 	record ports.FundsMappingRecord,

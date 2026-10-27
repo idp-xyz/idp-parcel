@@ -238,10 +238,21 @@ const (
 	// 对方没认可就付了款，这笔钱停在未分配，直到 UC-SA-007 凭 visibility-exception 判定有效的对方响应形成认可金额；
 	// 本格不替它推定认可。
 	TargetRecoveryAcknowledgement
+	// TargetCollectedPrincipal 把一条确认到账的外部资金事实整条认作代收本金：这笔钱是运营企业替客户保管的商品交易资金，
+	// 不是运营企业的收款，不进任何客户应收作用域的入账余额（CONTEXT「COD 代收本金不进」）。目标就是这条事实自己，
+	// 不按金额分——一条银行回款要么整条是代收本金，要么整条不是；一条回款混着服务费与本金时，要先在来源侧拆成两条事实。
+	// 它只回答「这条事实属于谁」，不是核销的对象：代收本金的去向在 collection-remittance 的分户账里，结算一侧没有可核销
+	// 的应收应付（ApplySettlement 拒分配到它）。与别的目标互斥由映射编排在事实锁下判（MapExternalFundsHandler.Map）。
+	TargetCollectedPrincipal
 )
 
 func (kind SettlementTargetKind) valid() bool {
-	return kind >= TargetStatement && kind <= TargetRecoveryAcknowledgement
+	return kind >= TargetStatement && kind <= TargetCollectedPrincipal
+}
+
+// IsCollectedPrincipal 说这一格是把整条事实认作代收本金，不是任何一种结算目标。
+func (kind SettlementTargetKind) IsCollectedPrincipal() bool {
+	return kind == TargetCollectedPrincipal
 }
 
 // PointsAtClaimAmount 说这一格指向 UC-SA-007 形成的一条金额本体。那几本册只增不改，映射指名的那一条就是
@@ -265,6 +276,8 @@ func (kind SettlementTargetKind) String() string {
 		return "CUSTOMER_COMPENSATION"
 	case TargetRecoveryAcknowledgement:
 		return "RECOVERY_ACKNOWLEDGEMENT"
+	case TargetCollectedPrincipal:
+		return "COLLECTED_PRINCIPAL"
 	default:
 		return ""
 	}
@@ -326,6 +339,9 @@ func MapFundsToTarget(
 	if !basis.valid() || !returnedFundsKeptOffClaimAmounts(fact.kind, targetKind) {
 		return FundsMapping{}, ErrInvalidFundsMapping
 	}
+	if targetKind.IsCollectedPrincipal() && !wholeReceiptSetAsidePrincipal(fact, target) {
+		return FundsMapping{}, ErrInvalidFundsMapping
+	}
 	return FundsMapping{
 		mapping:    mapping,
 		fact:       fact.fact,
@@ -358,6 +374,12 @@ func (mapping FundsMapping) Basis() MappingBasisReference {
 
 func (mapping FundsMapping) MappedAt() time.Time {
 	return mapping.mappedAt
+}
+
+// wholeReceiptSetAsidePrincipal 守认作代收本金的形：确认到账的事实，目标就是它自己。资金退回是钱离开，认作代收本金
+// 就把一笔退回记成又一笔本金；目标指向别处，则这条映射说的是另一条事实的事。
+func wholeReceiptSetAsidePrincipal(fact ExternalFundsFact, target SettlementTargetReference) bool {
+	return fact.kind == FundsReceiptConfirmed && target.String() == fact.fact.String()
 }
 
 // AllocationDirection 是核销分配的借贷方向：指向应付/对账单的正向消耗付款，指向贷项
@@ -466,6 +488,10 @@ func ApplySettlement(
 			return SettlementApplication{}, ErrInvalidApplication
 		}
 		if !claimAllocationDirected(allocation) || !returnedFundsKeptOffClaimAmounts(fact.kind, allocation.TargetKind) {
+			return SettlementApplication{}, ErrInvalidApplication
+		}
+		if allocation.TargetKind.IsCollectedPrincipal() {
+			// 认作代收本金的事实没有可核销的结算目标：它是受托资金，不是运营企业的应收应付。
 			return SettlementApplication{}, ErrInvalidApplication
 		}
 		if allocation.Direction == AllocationDebit {

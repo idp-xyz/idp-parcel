@@ -31,12 +31,13 @@ func TestClaimAmountTargetsAreMappableKinds(t *testing.T) {
 	}
 	for _, kind := range []domain.SettlementTargetKind{
 		domain.TargetStatement, domain.TargetPayable, domain.TargetCreditNote, domain.TargetAccount,
+		domain.TargetCollectedPrincipal,
 	} {
 		if kind.PointsAtClaimAmount() {
 			t.Fatalf("%s 被认成了金额本体", kind)
 		}
 	}
-	if domain.SettlementTargetKind(domain.TargetRecoveryAcknowledgement+1).String() != "" {
+	if domain.SettlementTargetKind(domain.TargetCollectedPrincipal+1).String() != "" {
 		t.Fatal("封闭集合外多出一格带名字的目标")
 	}
 }

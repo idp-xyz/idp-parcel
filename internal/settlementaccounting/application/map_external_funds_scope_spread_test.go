@@ -12,7 +12,7 @@ import (
 // Covers: 映射的重算集合与锁序（ADR-0283）——映到对账单或账户的映射先锁事实，再按（法人、账户、币种）键序锁这一笔改了
 // P 的作用域：一条收款由这一笔从一个作用域变成两个时，目标与原作用域都锁、都推进，次序与谁是目标无关（目标排在键序
 // 之后，先锁目标就红；替身倒序交回作用域，漏了排序也红）；两个以上再多一个时只碰目标。映到审核应付的映射不碰客户
-// 应收作用域，一把锁也不取。
+// 应收作用域，作用域锁一把也不取，只取事实锁（整条认作代收本金与别的映射互斥，要在事实锁下读回再判）。
 func TestMappingLocksTheFactThenOnlyTheScopesItMovesInKeyOrder(t *testing.T) {
 	fixture := newFundsFixture(t)
 	ctx := context.Background()
@@ -26,8 +26,8 @@ func TestMappingLocksTheFactThenOnlyTheScopesItMovesInKeyOrder(t *testing.T) {
 	*fixture.locks = (*fixture.locks)[:0]
 	result, err := fixture.handler.Map(ctx, claimMapCommand(t, "mapping-payable", domain.TargetPayable, "PAYABLE-1"))
 	mustFunds(t, result, err, application.FundsMapped, "映到审核应付")
-	if len(*fixture.locks) != 0 {
-		t.Fatalf("映到审核应付取了锁：%v", *fixture.locks)
+	if want := []string{"fact:bank-receipt-1"}; !reflect.DeepEqual(*fixture.locks, want) {
+		t.Fatalf("映到审核应付取锁 = %v，要只取事实锁 %v（客户应收作用域一把也不取）", *fixture.locks, want)
 	}
 	if _, posted := result.FactScopePosting(); posted {
 		t.Fatal("映到审核应付的答复带了客户应收作用域的记入方式")

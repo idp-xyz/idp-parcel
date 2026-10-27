@@ -266,6 +266,13 @@ func (stores unreachableFundsSideStores) FindByKey(
 	return ports.FundsMappingRecord{}, false, nil
 }
 
+func (stores unreachableFundsSideStores) ListByFact(
+	context.Context, domain.TenantID, domain.FundsFactReference,
+) ([]ports.FundsMappingRecord, error) {
+	stores.fail()
+	return nil, nil
+}
+
 func (stores unreachableFundsSideStores) Save(
 	context.Context, ports.FundsMappingRecord,
 ) (ports.FundsMappingSaveOutcome, error) {

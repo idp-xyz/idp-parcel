@@ -644,9 +644,11 @@ func (handler *MapExternalFundsHandler) handOffFact(
 // Map 建立一条资金映射：显式依据由 MapFundsToTarget 把门（巧合不证明映射）；失败
 // 付款 → UNFUNDABLE_FACT 业务负向（ErrUnfundableFact 哨兵分格）。
 //
-// 映到对账单或账户的，先锁事实身份行再读事实、插映射行（锁序见 ports.FundsFactApplicationLock 头注）：一条事实落到
-// 几个客户应收作用域决定每个作用域怎么记它（ADR-0283），两笔映射把同一条事实并发映到两个作用域时，不在同一把锁上
-// 排队就各自只看见自己那一条、都当自己是唯一的作用域去记没核销的部分。这把锁与核销、撤销同一把，映射与核销也因此排队。
+// 无论映到哪一种目标，都先锁事实身份行再读事实、插映射行（锁序见 ports.FundsFactApplicationLock 头注）。两个理由：
+// 一条事实落到几个客户应收作用域决定每个作用域怎么记它（ADR-0283），两笔映射把同一条事实并发映到两个作用域时，不在同一把锁上
+// 排队就各自只看见自己那一条、都当自己是唯一的作用域去记没核销的部分；整条认作代收本金与这条事实上任何别的映射互斥，
+// 「已有别的映射」与「已被认作」要在同一把锁下读回再判，否则一笔映到审核应付、一笔认作代收本金并发时各自看不见对方，
+// 同一笔银行回款就既是受托资金又被结算当作可核销的钱。这把锁与核销、撤销同一把，映射与核销也因此排队。
 func (handler *MapExternalFundsHandler) Map(
 	ctx context.Context,
 	command MapFundsCommand,
@@ -662,16 +664,12 @@ func (handler *MapExternalFundsHandler) Map(
 
 	factKey := ports.FundsFactKey{TenantID: command.TenantID, Fact: factRef}
 	customerTarget := command.TargetKind == domain.TargetStatement || command.TargetKind == domain.TargetAccount
-	alreadyApplied := int64(0)
-	if customerTarget {
-		applied, found, err := handler.deps.FactLocks.LockFundsFactApplications(ctx, factKey)
-		if err != nil {
-			return fundsUndecided(FundsFactStoreUnavailable, command.Fact), nil
-		}
-		if !found {
-			return FundsResult{outcome: FundsNotAccepted}, nil
-		}
-		alreadyApplied = applied
+	alreadyApplied, lockedFound, err := handler.deps.FactLocks.LockFundsFactApplications(ctx, factKey)
+	if err != nil {
+		return fundsUndecided(FundsFactStoreUnavailable, command.Fact), nil
+	}
+	if !lockedFound {
+		return FundsResult{outcome: FundsNotAccepted}, nil
 	}
 	factRecord, found, err := handler.deps.Facts.FindByKey(ctx, factKey)
 	if err != nil {
@@ -706,6 +704,15 @@ func (handler *MapExternalFundsHandler) Map(
 			return fundsUndecided(FundsMappingStoreUnavailable, command.Mapping), nil
 		}
 		return FundsResult{outcome: FundsMappingExisting, mapping: existing, hasRecord: true}, nil
+	}
+	standing, err := handler.deps.Mappings.ListByFact(ctx, command.TenantID, factRef)
+	if err != nil {
+		return fundsUndecided(FundsMappingStoreUnavailable, command.Mapping), nil
+	}
+	if collectedPrincipalExcludes(mapping.TargetKind(), standing) {
+		// 整条认作代收本金与这条事实上任何别的映射互斥：同一笔银行回款只能有一个去处，要么是运营企业可核销的钱，
+		// 要么是替客户保管的本金。冲突的恢复动作是人去核对这条事实到底是什么钱，重放同一份没有意义。
+		return FundsResult{outcome: FundsMappingConflict}, nil
 	}
 	if mapping.TargetKind().PointsAtClaimAmount() {
 		exists, err := handler.deps.ClaimTargets.FindClaimTarget(ctx, command.TenantID,
@@ -1293,6 +1300,17 @@ func mappingFrom(
 		}
 	}
 	return domain.MapFundsToTarget(fact, mappingRef, command.TargetKind, target, basis, command.MappedAt)
+}
+
+// collectedPrincipalExcludes 判这一笔映射与这条事实上已有的映射是否互斥：整条认作代收本金的事实不再接受任何别的映射
+// （含第二条代收本金映射——认作是事实一级的状态，不是可叠加的金额），已有别的映射的事实也不能再认作代收本金。
+func collectedPrincipalExcludes(kind domain.SettlementTargetKind, standing []ports.FundsMappingRecord) bool {
+	for _, record := range standing {
+		if kind.IsCollectedPrincipal() || record.Mapping.TargetKind().IsCollectedPrincipal() {
+			return true
+		}
+	}
+	return false
 }
 
 func allocationsFrom(directives []AllocationDirective) ([]domain.SettlementAllocation, bool) {

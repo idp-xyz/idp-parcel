@@ -72,8 +72,10 @@ func settlementTargetKindFrom(raw string) (domain.SettlementTargetKind, error) {
 		return domain.TargetCustomerCompensation, nil
 	case "RECOVERY_ACKNOWLEDGEMENT":
 		return domain.TargetRecoveryAcknowledgement, nil
+	case "COLLECTED_PRINCIPAL":
+		return domain.TargetCollectedPrincipal, nil
 	default:
 		return domain.SettlementTargetKindInvalid, fmt.Errorf(
-			"targetKind=%q 不在封闭集（STATEMENT / PAYABLE / CREDIT_NOTE / ACCOUNT / CUSTOMER_COMPENSATION / RECOVERY_ACKNOWLEDGEMENT），缺席同样拒", raw)
+			"targetKind=%q 不在封闭集（STATEMENT / PAYABLE / CREDIT_NOTE / ACCOUNT / CUSTOMER_COMPENSATION / RECOVERY_ACKNOWLEDGEMENT / COLLECTED_PRINCIPAL），缺席同样拒", raw)
 	}
 }

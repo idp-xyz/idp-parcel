@@ -88,6 +88,78 @@ func (repository *FundsMappings) FindByKey(
 	}, true, nil
 }
 
+// ListByFact 交回一条事实上全部已登记的映射，按映射标识排序。读回经重建门，与 FindByKey 同一份行翻译。
+// 整条认作代收本金与别的映射互斥，编排在事实锁下读它判（MapExternalFundsHandler.Map）。
+func (repository *FundsMappings) ListByFact(
+	ctx context.Context,
+	tenant domain.TenantID,
+	fact domain.FundsFactReference,
+) ([]ports.FundsMappingRecord, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list funds mappings by fact: %w", err)
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT mapping_id, target_kind, target_ref, basis, mapped_at, content_digest, recorded_at
+		   FROM settlement_accounting.funds_mapping
+		  WHERE tenant_id = $1
+		    AND fact_id = $2
+		  ORDER BY mapping_id`,
+		tenant.String(),
+		fact.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list funds mappings by fact: %w", err)
+	}
+	defer rows.Close()
+
+	records := make([]ports.FundsMappingRecord, 0)
+	for rows.Next() {
+		var mappingID, targetKindName, target, basis, digest string
+		var mappedAt, recordedAt time.Time
+		if err := rows.Scan(&mappingID, &targetKindName, &target, &basis, &mappedAt, &digest, &recordedAt); err != nil {
+			return nil, fmt.Errorf("list funds mappings by fact: %w", err)
+		}
+		mappingRef, err := domain.NewMappingReference(mappingID)
+		if err != nil {
+			return nil, fmt.Errorf("list funds mappings by fact: %w", err)
+		}
+		targetKind, err := settlementTargetKindFrom(targetKindName)
+		if err != nil {
+			return nil, fmt.Errorf("list funds mappings by fact: %w", err)
+		}
+		targetRef, err := domain.NewSettlementTargetReference(target)
+		if err != nil {
+			return nil, fmt.Errorf("list funds mappings by fact: %w", err)
+		}
+		basisRef, err := domain.NewMappingBasisReference(basis)
+		if err != nil {
+			return nil, fmt.Errorf("list funds mappings by fact: %w", err)
+		}
+		mapping, err := domain.RehydrateFundsMapping(domain.RehydrateFundsMappingSpec{
+			Mapping:    mappingRef,
+			Fact:       fact,
+			TargetKind: targetKind,
+			Target:     targetRef,
+			Basis:      basisRef,
+			MappedAt:   mappedAt,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list funds mappings by fact: %w", err)
+		}
+		records = append(records, ports.FundsMappingRecord{
+			Key:           ports.FundsMappingKey{TenantID: tenant, Mapping: mappingRef},
+			ContentDigest: digest,
+			Mapping:       mapping,
+			RecordedAt:    recordedAt.UTC(),
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list funds mappings by fact: %w", err)
+	}
+	return records, nil
+}
+
 // Save 写下一次资金映射。同标识已有记录时答`已有记录`，不覆盖先到者。
 func (repository *FundsMappings) Save(
 	ctx context.Context,
@@ -137,6 +209,8 @@ func settlementTargetKindFrom(raw string) (domain.SettlementTargetKind, error) {
 		return domain.TargetCustomerCompensation, nil
 	case domain.TargetRecoveryAcknowledgement.String():
 		return domain.TargetRecoveryAcknowledgement, nil
+	case domain.TargetCollectedPrincipal.String():
+		return domain.TargetCollectedPrincipal, nil
 	default:
 		return 0, fmt.Errorf("unknown settlement target kind %q", raw)
 	}
