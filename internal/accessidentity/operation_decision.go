@@ -108,6 +108,11 @@ const (
 // 的生产决定，与运输、关务各口的授予互不相通——能提交委托的不因此能改一件包裹的路由。
 const DecisionAuthorizedReroute DecisionKind = "AUTHORIZED_REROUTE"
 
+// DecisionControlReleaseRefusalHandling 是释放拒收处理（ADR-0293 决定三）：运维核对后在结算侧释放一笔被提供方确定不受理的占用，或把它
+// 标记为已在别处处理，并让接受链重驱那份委托。它不与授权处置（AUTHORIZED_DISPOSITION）共用——授权处置是对一份受限委托去向的业务处置，
+// 这一种是对已越过业务决定的资金占用的运维处理，职责不同，授予也分开：能处置委托的不因此能替一笔被拒收的释放销账。
+const DecisionControlReleaseRefusalHandling DecisionKind = "CONTROL_RELEASE_REFUSAL_HANDLING"
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -127,6 +132,7 @@ var decisionKinds = []DecisionKind{
 	DecisionTransportCommissionAgreementRevision,
 	DecisionFulfillmentSegmentCommissionAdoptionWithdrawal, DecisionTransportChargeOccurrenceInvalidation,
 	DecisionAuthorizedReroute,
+	DecisionControlReleaseRefusalHandling,
 }
 
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。
