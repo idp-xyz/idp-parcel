@@ -144,6 +144,20 @@ var workFactLines = map[string]workFactLine{
 		},
 		valid: workFactDeliveryAttemptBody,
 	},
+	"/transport-fulfillment/offsite-pickup-attempt-result-corrections": {
+		intake: func(intake *tfhttp.WorkFactCommandIntake, request *http.Request) error {
+			_, err := intake.IntakePickupAttemptResultCorrection(context.Background(), request)
+			return err
+		},
+		valid: pickupAttemptResultCorrectionBody,
+	},
+	"/transport-fulfillment/delivery-attempt-result-corrections": {
+		intake: func(intake *tfhttp.WorkFactCommandIntake, request *http.Request) error {
+			_, err := intake.IntakeDeliveryAttemptResultCorrection(context.Background(), request)
+			return err
+		},
+		valid: deliveryAttemptResultCorrectionBody,
+	},
 	"/transport-fulfillment/departure-gate-previews": {
 		intake: func(intake *tfhttp.WorkFactCommandIntake, request *http.Request) error {
 			_, err := intake.IntakeDepartureGatePreview(context.Background(), request)
@@ -506,16 +520,18 @@ func TestWorkFactCommandIntakeRefusesAnUnparsablePickupInstant(t *testing.T) {
 func TestWorkFactCommandIntakeServesOnlyWorkFactLines(t *testing.T) {
 	var intake any = workFactIntakeForTest(t)
 	for name, served := range map[string]bool{
-		"场外揽收登记口": isA[tfhttp.PickupRegistrationIntake](intake),
-		"场外揽收尝试口": isA[tfhttp.PickupAttemptIntake](intake),
-		"揽收更正口":   isA[tfhttp.PickupCorrectionIntake](intake),
-		"交接首登口":   isA[tfhttp.HandoverRegistrationIntake](intake),
-		"交接更正口":   isA[tfhttp.HandoverCorrectionIntake](intake),
-		"移动事实口":   isA[tfhttp.MovementFactIntake](intake),
-		"交付生效首登口": isA[tfhttp.DeliveryRegistrationIntake](intake),
-		"交付更正口":   isA[tfhttp.DeliveryProofCorrectionIntake](intake),
-		"派送尝试登记口": isA[tfhttp.DeliveryAttemptIntake](intake),
-		"出发前问询口":  isA[tfhttp.DepartureGatePreviewIntake](intake),
+		"场外揽收登记口":   isA[tfhttp.PickupRegistrationIntake](intake),
+		"场外揽收尝试口":   isA[tfhttp.PickupAttemptIntake](intake),
+		"揽收更正口":     isA[tfhttp.PickupCorrectionIntake](intake),
+		"交接首登口":     isA[tfhttp.HandoverRegistrationIntake](intake),
+		"交接更正口":     isA[tfhttp.HandoverCorrectionIntake](intake),
+		"移动事实口":     isA[tfhttp.MovementFactIntake](intake),
+		"交付生效首登口":   isA[tfhttp.DeliveryRegistrationIntake](intake),
+		"交付更正口":     isA[tfhttp.DeliveryProofCorrectionIntake](intake),
+		"派送尝试登记口":   isA[tfhttp.DeliveryAttemptIntake](intake),
+		"揽收尝试结果更正口": isA[tfhttp.PickupAttemptResultCorrectionIntake](intake),
+		"派送尝试结果更正口": isA[tfhttp.DeliveryAttemptResultCorrectionIntake](intake),
+		"出发前问询口":    isA[tfhttp.DepartureGatePreviewIntake](intake),
 	} {
 		if !served {
 			t.Fatalf("%s 是作业事实，这一面该实现它", name)

@@ -118,6 +118,14 @@ const DecisionControlReleaseRefusalHandling DecisionKind = "CONTROL_RELEASE_REFU
 // 取消与边界事实谁在先的裁断，认错了会让一件已取消的包裹长出责任起点，或让一件已在网络手里的包裹挂着取消终局，职责不同，授予也分开。
 const DecisionCancellationOrderConflictResolution DecisionKind = "CANCELLATION_ORDER_CONFLICT_RESOLUTION"
 
+// 履约尝试待确认结果的认定（ADR-0297 决定二）：复核人核对来源之后，把一件对象在一次上门里还停在待确认的结果定成确定结果。揽收与
+// 派送各成一种——能认定揽收的不因此能认定派送，两侧通常不是同一批人；也不与承运商首次有效收寄判断（CARRIER_FIRST_EFFECTIVE_PICKUP_JUDGMENT）
+// 共用，那一种判的是承运主体首次接触，这一种认定的是这一次上门里某件对象的结果。
+const (
+	DecisionPickupAttemptResultConfirmation   DecisionKind = "PICKUP_ATTEMPT_RESULT_CONFIRMATION"
+	DecisionDeliveryAttemptResultConfirmation DecisionKind = "DELIVERY_ATTEMPT_RESULT_CONFIRMATION"
+)
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -139,6 +147,7 @@ var decisionKinds = []DecisionKind{
 	DecisionAuthorizedReroute,
 	DecisionControlReleaseRefusalHandling,
 	DecisionCancellationOrderConflictResolution,
+	DecisionPickupAttemptResultConfirmation, DecisionDeliveryAttemptResultConfirmation,
 }
 
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。

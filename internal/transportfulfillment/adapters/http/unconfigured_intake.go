@@ -182,3 +182,19 @@ func (UnconfiguredIntake) IntakeTransportScheduleRegistration(context.Context, *
 func (UnconfiguredIntake) IntakeCapacityPoolRegistration(context.Context, *http.Request) (application.EstablishPoolCommand, error) {
 	return application.EstablishPoolCommand{}, ErrAccessChannelNotConfigured
 }
+
+var (
+	_ PickupAttemptResultCorrectionIntake   = UnconfiguredIntake{}
+	_ DeliveryAttemptResultCorrectionIntake = UnconfiguredIntake{}
+)
+
+// IntakePickupAttemptResultCorrection 与 IntakeDeliveryAttemptResultCorrection 堵住尝试结果更正两口（票 docs-consistency/code/90）：
+// 一份穿过去的更正会把一格待确认定成确定结果——揽收一侧还会形成场外揽收、进段、交 parcel-shipment 采认。两个接入面
+// （作业事实、运营决定）未配置时都落在这一格。
+func (UnconfiguredIntake) IntakePickupAttemptResultCorrection(context.Context, *http.Request) (application.CorrectPickupAttemptResultCommand, error) {
+	return application.CorrectPickupAttemptResultCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeDeliveryAttemptResultCorrection(context.Context, *http.Request) (application.CorrectDeliveryAttemptResultCommand, error) {
+	return application.CorrectDeliveryAttemptResultCommand{}, ErrAccessChannelNotConfigured
+}
