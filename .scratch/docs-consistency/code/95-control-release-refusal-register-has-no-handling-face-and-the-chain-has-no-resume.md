@@ -1,7 +1,7 @@
 # 95 释放未受理册没有查阅与处理面，接受链为拒收响亮失败之后没有续办触发
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-code95（见文末「完成记录」）。此前 ready-for-agent——R2（上线后尽快）：今天走得到这两格的只剩施加时没存作用域的存量行与编程错误（提供方答复译不动），首发前只有演示租户、存量随 `--reset` 即消；但真实租户一旦遇到，被拒收的那一笔会一直占着客户的余额或额度、没有人看得见，接受链那一路的新版本也一直判不了。2026-10-26 协调方据 code/71 隔离评审立（用户「你作为业务和系统专家自决」授权）。
+Status: resolved——2026-10-26 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code95（见文末「完成记录」）。此前 ready-for-agent——R2（上线后尽快）：今天走得到这两格的只剩施加时没存作用域的存量行与编程错误（提供方答复译不动），首发前只有演示租户、存量随 `--reset` 即消；但真实租户一旦遇到，被拒收的那一笔会一直占着客户的余额或额度、没有人看得见，接受链那一路的新版本也一直判不了。2026-10-26 协调方据 code/71 隔离评审立（用户「你作为业务和系统专家自决」授权）。
 Blocked by: 无
 出处：code/71 完成记录越权风险点 1、2；[ADR-0282](../../../docs/adr/0282-a-control-release-the-provider-refuses-is-registered-for-handling-instead-of-compensated.md) 越权风险点 1、2、4。
 
@@ -94,3 +94,12 @@ M–L：一个运营查阅读口（按租户列未处理行、计数）、一到
 - **第一轮修订（N3）**：本分支新增行里对着旧行为的叙述（「不再响亮失败」「不再挡着新版本」「照旧上抛」等）改写成现行规则句；位置词（「与上面各路」「上面的 note」）改成符号名；`acceptanceChainGates` 头注去掉数目。
 - **第一轮修订（信息项）**：ADR-0293 越权风险点补 9 至 12，UC-PS-005 规则一节补运维须知。
 - **第一轮修订的验证**：rebase 到 `5625865e3` 无冲突；`gofmt -l`、`go build ./...`、`go vet ./...` 干净；`scripts/test-full.sh ./internal/parcelshipment/... ./cmd/parcel-api/ ./cmd/parcel-dispatch/ ./internal/architecture/... ./internal/accessidentity/...` 全绿；新用例 `-count=3` 稳定；管理台 `tsc -b --noEmit`、`node scripts/run-tests.mjs`（788 过）、`vite build` 过；`go run ./tools/at-coverage-counts -check` 与 `go run ./tools/adr-index -check` 退 1（生成物过期，不提交）。
+
+## 进 main 记录（2026-10-26，协调方）
+
+- 分支 `claude-code95` 由修订代理 rebase 到 origin/main `5625865e3`，协调方再 rebase 到 `ae60a965d` 后快进。迁移：PS `0031_control_release_refusal_handling`、access_identity `0025`（决定种类 `CONTROL_RELEASE_REFUSAL_HANDLING` 与自己的授予）；新立 ADR-0293（收窄 ADR-0282 决定三，入向注记已挂 ADR-0282）。AT-PS-161–165。
+- 隔离评审（Sonnet）可合入，无阻断；核实了租户隔离、授予面、链头认出已处理拒收只在留痕对得上时放行、ADR-0222 装配合规（`routes_acceptance_chain.go` 与 `assemble.go` 的改动有先例提交）。N1（处理口 `locate` 不采信 `?tenant=` 与 `FindControlReleaseRefusalHandling` 的租户条件各缺回归用例）、N2（回执"不带处理人"的说法与同族回执不符）、N3（变更叙述与位置词）合入前由 Sonnet 修订代理改完；两处租户变异均已杀。评审的信息项写进 ADR-0293 越权风险点 9–12 与 UC-PS-005 运维须知。
+- 协调方单独提交重算的 AT 计数、重生成的 ADR 索引与机制清点；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0、158 个包 ok；`go build ./...`、`go vet ./...` 干净；种子灌一次性库退 0（含 PS 0031 与 access_identity 0025）；管理台 `tsc -b --noEmit`、`node scripts/run-tests.mjs`、`vite build` 与 `./internal/architecture/...` 全过。
+- 去向：无新票。越权风险点见 ADR-0293：标记处理不可撤销且无已处理行的只读面（留痕可审实际只能走 SQL，后续可加只读审计面或"重开"）；续办信封死信后再点只答 `ALREADY_HANDLED`、不重发；标记与释放不互斥，败者的释放可能已落账而留痕记的是赢家做法（修订代理读代码推断，无用例证实）。
+- 顺带：tops-54 的评审修订笔误带 `apps/admin-web/node_modules` 符号链接进 main，主树真实依赖目录被文本文件顶掉；协调方把忽略规则 `node_modules/` 改为 `node_modules`（目录与符号链接都盖住），主树依赖目录已用 `pnpm install --frozen-lockfile --offline` 复原。
