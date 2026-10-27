@@ -76,7 +76,7 @@ type AmendCustomerSourceDataCommand struct {
 	// EffectiveAt 是客户声明的资料适用时间，可以缺失。缺失时保持零值，绝不用 occurredAt
 	// 或 receivedAt 顶替——`UC-PS-002` 明禁那种补齐。
 	EffectiveAt time.Time
-	// Content 是这一版在 Scope 那个资料范围上留下的封闭要素内容（pp-seams/05 裁决 3）：按范围只有一种形——申报测量范围
+	// Content 是这一版在 Scope 那个资料范围上留下的封闭要素内容（pp-seams/05 裁决 3）：按范围只有一种形——声明测量范围
 	// 一份 DeclaredMeasurement、寄 / 收范围一份 AddressElements——可缺席；Intent 为显式清空时必须缺席。它与 PayloadDigest
 	// 出自接单入口对同一份规范化输入的同一次调用，本编排不重算、不核对、不改值，原样进版本。
 	Content domain.SourceDataVersionContent
@@ -242,9 +242,9 @@ func (handler *AmendCustomerSourceDataHandler) decide(
 		// 它与「授权服务答不出」分属两回事，后者在上面那一格作为错误交回。
 		return AmendCustomerSourceDataResult{outcome: AmendmentNotAuthorized}, nil
 	case ports.AuthorizationRulesNotConfigured:
-		// 与往下二十行矩阵那一格同一条理由：没登记就是没登记，不是客户违规。那里写的是
-		// 「未登记时只能形成未决或业务拒绝，不能以系统便利推断允许」——反过来也一样，
-		// 不能以系统便利推断这个人越权。
+		// 与矩阵那一格同一条理由：没登记就是没登记，不是客户违规。UC-PS-002 对矩阵那一格的
+		// 规则是未声明答等复核、不能以系统便利推断允许——反过来也一样，不能以系统便利推断
+		// 这个人越权。
 		return handler.undecided(command, SourceDataAmendmentAuthorityRulesNotConfigured), nil
 	case ports.AuthorizationApplicabilityConflict:
 		// 权威允许了，却答不出凭哪一版规则、或谁是实际决定方——两项都要随版本保存，不能替商业责任方挑。
@@ -292,8 +292,8 @@ func (handler *AmendCustomerSourceDataHandler) decide(
 		return handler.undecided(command, SourceDataRuleUnavailable), nil
 	}
 	if allowance != ports.SourceDataAmendmentAllowed {
-		// 闸门对齐到`允许`这一格：`UC-PS-002`「未登记时只能形成未决或业务拒绝，不能以系统
-		// 便利推断允许」，所以只有明确登记为允许才继续，其余一律不形成版本也不签发标识。
+		// 闸门对齐到`允许`这一格：`UC-PS-002` 规定不能以系统便利推断允许，所以只有明确登记为
+		// 允许才继续，其余一律不形成版本也不签发标识。
 		//
 		// 停下之后两种答案要分开。已登记为不允许是确定的业务拒绝，复核也翻不了案；未登记是
 		// 「还没人说这处资料能不能改」，停在`待复核`等矩阵登记——判成拒绝会让客户以为自己

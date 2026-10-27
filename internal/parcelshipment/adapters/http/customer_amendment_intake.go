@@ -44,7 +44,7 @@ func NewCustomerAmendmentIntake(authenticator CustomerAmendmentAuthenticator, cl
 }
 
 // amendmentDraft 是首方资料修订口的载荷形状（PAM-1；以 docs/api 为准）。内容字段按资料范围取用：寄件 / 收件范围
-// 取 postalCode、countryCode（空串即显式清空该要素），申报测量范围取重量与外廓；其余范围与显式清空不带内容字段。
+// 取 postalCode、countryCode（空串即显式清空该要素），声明测量范围取重量与外廓；其余范围与显式清空不带内容字段。
 type amendmentDraft struct {
 	AccessRequestID         string `json:"accessRequestId"`
 	OriginalAccessRequestID string `json:"originalAccessRequestId"`

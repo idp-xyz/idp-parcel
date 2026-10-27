@@ -8,7 +8,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
-// 本文件让 ShipmentRequests 同时实现 ports.DeclaredMeasurementView（pp-seams/02 裁决 5）：写侧仓储与「申报测量」读口是
+// 本文件让 ShipmentRequests 同时实现 ports.DeclaredMeasurementView（pp-seams/02 裁决 5）：写侧仓储与「声明测量」读口是
 // 同一只适配器，读的是同一张表的同一份快照——画像随委托 `snapshot` 列的 versionDocument.Profiles 落库、读回过重建门，
 // 本读口从重建后的聚合上取，**不加列不加迁移**。
 //
@@ -18,7 +18,7 @@ import (
 
 var _ ports.DeclaredMeasurementView = (*ShipmentRequests)(nil)
 
-// LoadDeclaredMeasurement 按（租户，声明包裹身份）答申报测量的封闭五格。
+// LoadDeclaredMeasurement 按（租户，声明包裹身份）答声明测量的封闭五格。
 //
 // 零行命中直接答「无」——按统一不可见结果，不区分不存在、他租户与未授权；仅`已提交`的委托不在部分索引里，其成员同样
 // 落这一格：责任起点在接受之后。多于一行是读面坏了（ADR-0060 的歧义），上抛而不挑一份。

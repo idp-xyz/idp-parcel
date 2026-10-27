@@ -20,7 +20,7 @@ var (
 // AcceptanceBaselineGeoProjection 是一件当前已接受包裹的受理基线地理投影（network-routing 那一侧称接受基线为受理基线）：
 // 声明它的委托与客户账户的引用、接受基线所指的那一版提交与基线固定的时刻，以及那一版提交上的地理解析投影。
 //
-// 只有这些（ADR-0301）。收件人身份、地址文本、申报测量、接受决定与商业依据都不在其中——这份值就是给不该经手它们的
+// 只有这些（ADR-0301）。收件人身份、地址文本、声明测量、接受决定与商业依据都不在其中——这份值就是给不该经手它们的
 // 消费方用的；要加一格，先问那个消费方凭什么需要它。
 type AcceptanceBaselineGeoProjection struct {
 	shipmentRequestID ShipmentRequestID

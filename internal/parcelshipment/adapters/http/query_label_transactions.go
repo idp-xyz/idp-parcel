@@ -62,8 +62,8 @@ const outcomeLabelTransactionsListed = "LABEL_TRANSACTIONS_LISTED"
 // 它随每次答复交出，为的是让页头能如实说明这一列是**派生**的：按 CONTEXT「只由有效的关闭、
 // 重开决定及当前有效终局结果派生」，由该包裹的`面单继续尝试决定`登记册与当前有效终局现算，
 // 不是存下来的状态。同一格「开放」有两种来源——没有人作过决定、关过又重开——判断值本身
-// 分不开（CONTEXT 只有两格，加第三格就是新造领域语言），区别由每行的 continuedAttemptDecided
-// 另外交代。
+// 分不开（取值沿用 CONTEXT「面单继续尝试」生命周期的词，另加一格就是新造领域语言），区别由每行的
+// continuedAttemptDecided 另外交代。
 const continuedAttemptBasisRegisterAndCurrentFinal = "DERIVED_FROM_DECISION_REGISTER_AND_CURRENT_FINAL"
 
 // NewQueryLabelTransactionsEndpoint 交回面单交易查阅的 HTTP 入口（GET /label-transactions）。

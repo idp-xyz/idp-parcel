@@ -80,7 +80,7 @@ func refuseNUL(value string) error {
 // ExternalIdentifierKind 是标识类型的封闭集合。类型决定被标识对象的种类与分配方的种类（ADR-0184 决定二）：
 // 「号码挂错对象」在形状上立不起来，CONTEXT「外部标识必须关联其真实标识对象」因此不靠调用方自觉。
 //
-// 今天只有有来源的类型进来。客户参考号（委托）与渠道订单号或主号（面单交易）等各自的来源与消费方。
+// 只有有来源的类型进来。客户参考号（委托）与渠道订单号或主号（面单交易）等类型随各自的来源与消费方进来。
 type ExternalIdentifierKind uint8
 
 const (
@@ -192,7 +192,7 @@ func customerParcelNumbersFor(
 // ExternalIdentifierRelation 是一条外部标识关联（PS CONTEXT「外部标识关联」）。它是产物：只由形成它的
 // 来源事实交出，没有公开构造器；登记册只插不改，适用状态的变化另起一行挂在它上面。
 //
-// 被标识对象今天只有包裹一种——有来源的两类号码都标识包裹。委托与面单交易两种对象随各自的类型进来。
+// 被标识对象只有包裹一种——有来源的两类号码都标识包裹。委托与面单交易两种对象随各自的类型进来。
 type ExternalIdentifierRelation struct {
 	tenant    TenantID
 	kind      ExternalIdentifierKind
@@ -303,8 +303,8 @@ func (transaction LabelTransaction) channelRelationOf(result LabelTransactionPar
 	}
 }
 
-// ExternalIdentifierChangeKind 是外部标识关联适用状态的终态。已失效不在其中：有效期规则今天没有登记处，没有
-// 执行器会形成它（ADR-0184 决定七）。
+// ExternalIdentifierChangeKind 是外部标识关联适用状态的终态，只有作废与替代两种。面单有效期届满只进面单服务
+// 终局判断，不改号码关联的适用状态（ADR-0257）。
 type ExternalIdentifierChangeKind uint8
 
 const (

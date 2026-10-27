@@ -6,7 +6,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
-// SubmissionVersionDeclarationView 按（租户、委托、提交版本）逐件答申报测量与寄、收两段邮编（ADR-0179 决定四）。消费方是
+// SubmissionVersionDeclarationView 按（租户、委托、提交版本）逐件答声明测量与寄、收两段邮编（ADR-0179 决定四）。消费方是
 // `parcel-pricing` 受理前试算的消费侧适配器：试算按委托当前提交版本逐件造输入，受理前没有接受基线可走。
 //
 // 另开一口而不拓宽 DeclaredMeasurementView / AddressElementsView：那两口按（租户，包裹身份）问、只经接受基线的声明成员走，受理前

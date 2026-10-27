@@ -29,9 +29,7 @@ type ParcelDeclarationFactsLookup interface {
 	) (ccports.ParcelDeclarationFacts, error)
 }
 
-// CustomsStageView 读关务按包裹键交出的三件事实，译成 ports.CustomsStageFacts 的三格三态
-// （票 ps-port-remainder/05 接线的那一只；它替下的 UnconnectedCustomsStageView 已随读面立起
-// 退场）。
+// CustomsStageView 读关务按包裹键交出的三件事实，译成 ports.CustomsStageFacts 的三格三态。
 //
 // 翻译是逐格的布尔到三态：关务说「有」译`在`、说「没有」译`不在`。`不知道`在这里没有出口
 // ——关务三本册子都是它自己的，读回来了就是知道；读面调不通是错误，上抛让编排落在

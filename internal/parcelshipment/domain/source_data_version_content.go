@@ -1,7 +1,7 @@
 package domain
 
 // 本文件是 PS CONTEXT「客户原始资料版本」词条「版本另保留该资料范围上由本上下文定名的封闭要素内容」那一句的机制半边
-// （pp-seams/05 裁决 1 / 2 / 3）：一份客户原始资料版本在它的资料范围上留下的内容，按范围只有一种形——申报测量范围留
+// （pp-seams/05 裁决 1 / 2 / 3）：一份客户原始资料版本在它的资料范围上留下的内容，按范围只有一种形——声明测量范围留
 // 一份 DeclaredMeasurement，寄件 / 收件两个地址范围各留一份 AddressElements。其余 name/value 条目照旧只进 PayloadDigest，
 // 版本上不留原文。
 //
@@ -16,7 +16,7 @@ type SourceDataVersionContent struct {
 	elements    AddressElements
 }
 
-// NewMeasurementContent 把一份有重量的申报测量包成测量范围的内容；没有重量的测量不是内容，拒。
+// NewMeasurementContent 把一份有重量的声明测量包成测量范围的内容；没有重量的测量不是内容，拒。
 func NewMeasurementContent(measurement DeclaredMeasurement) (SourceDataVersionContent, error) {
 	if !measurement.declared() {
 		return SourceDataVersionContent{}, ErrInvalidDeclaredMeasurement
@@ -48,7 +48,7 @@ func (content SourceDataVersionContent) Empty() bool {
 	return !content.measurement.declared() && content.elements.Empty()
 }
 
-// FitsAmendment 回答这份内容能不能落在某个资料范围、某种意图的版本上（裁决 3 的构造门）：测量内容只落申报测量范围，
+// FitsAmendment 回答这份内容能不能落在某个资料范围、某种意图的版本上（裁决 3 的构造门）：测量内容只落声明测量范围，
 // 要素内容只落寄件 / 收件两个地址范围，缺席落任何范围；显式清空的版本只许缺席。
 //
 // 它单独暴露而不只藏在 FormCustomerSourceDataVersion 里，判据同 SourceDataScopeOutsideAcceptanceBaseline：编排要在

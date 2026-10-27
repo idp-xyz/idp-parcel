@@ -222,7 +222,7 @@ func TestAnAdoptedExplicitClearAnswersTheAdoptedAnchorWithoutAValueFromTheSnapsh
 	}
 }
 
-// 判据 (2)：申报测量范围上带内容的修订被采用后，DeclaredMeasurementView 已采用格 Measurement() 第二返回值为真且值是那一版的。
+// 判据 (2)：声明测量范围上带内容的修订被采用后，DeclaredMeasurementView 已采用格 Measurement() 第二返回值为真且值是那一版的。
 func TestAnAdoptedMeasurementCorrectionAnswersItsOwnMeasurementFromTheSnapshot(t *testing.T) {
 	repository, transactor, _ := newShipmentRequests(t)
 	ctx := t.Context()

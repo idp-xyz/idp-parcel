@@ -68,7 +68,7 @@ type ChannelCostAmount struct {
 
 func NewChannelCostAmount(raw string) (ChannelCostAmount, error) {
 	trimmed := strings.TrimSpace(raw)
-	// 形状校验与申报测量共用 decimalShape：负号、指数、多点一律不是金额。负成本没有
+	// 形状校验与声明测量共用 decimalShape：负号、指数、多点一律不是金额。负成本没有
 	// 业务读法，而它在比较里会赢。
 	if !decimalShape(trimmed) {
 		return ChannelCostAmount{}, ErrInvalidChannelCandidateCost

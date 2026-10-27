@@ -22,7 +22,7 @@ import (
 
 var _ ports.DeclaredMeasurementView = (*adapter.ShipmentRequests)(nil)
 
-// acceptedRequestWithMeasurementChain 插入并真接受夹具委托，再按给定链在 **parcel-1 的申报测量范围**（按包裹指名、
+// acceptedRequestWithMeasurementChain 插入并真接受夹具委托，再按给定链在 **parcel-1 的声明测量范围**（按包裹指名、
 // DeclaredMeasurementDataGroup）上逐份追加版本并保存：每项 [版本, 前版]，前版为空即以接受基线为基准的补充。
 func acceptedRequestWithMeasurementChain(
 	t *testing.T,
@@ -203,7 +203,7 @@ func TestAnObjectOutsideEveryAcceptedBaselineHasNoDeclaredMeasurementInTheStore(
 	}
 }
 
-// 责任起点在接受之后：仅`已提交`的委托没有基线，它的成员今天没有可交出的申报测量——即便画像已在快照里。
+// 责任起点在接受之后：仅`已提交`的委托没有基线，它的成员没有可交出的声明测量——即便画像已在快照里。
 func TestAMemberOfAMerelySubmittedRequestHasNoDeclaredMeasurement(t *testing.T) {
 	repository, transactor, _ := newShipmentRequests(t)
 	mustInsert(t, transactor, t.Context(), repository, submittedShipmentRequest(t, "req-key-1", "request-1"))

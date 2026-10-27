@@ -13,7 +13,7 @@ import (
 // 本文件让 ShipmentRequests 同时实现 ports.AcceptanceBaselineGeoProjectionView（ADR-0301，票 demo-chain-gaps/143）。
 //
 // **不走 findAcceptedRequestCoveringParcel**：那条路把整份快照读回、过重建门，其余按（租户，包裹）答问的读口用它是因为
-// 它们要在聚合上问问题。本口存在的理由恰恰是让消费方不经手整份委托——申报测量、接受决定与商业依据、接受后的资料修订
+// 它们要在聚合上问问题。本口存在的理由恰恰是让消费方不经手整份委托——声明测量、接受决定与商业依据、接受后的资料修订
 // 都不该为了取两端的国家与邮编被读进来——所以 SQL 只从快照里取这几格：接受基线（`baseline`），当前提交版本的标识、
 // 成员与地址要素子段（`currentVersion` 下的 `versionId`、`declaredParcelIds`、`elements`），与接受决定的时刻
 // （`decision.decidedAt`）。按段取快照有先例（ShipmentRequestViews.ListAwaitingManualReview 只取 `acceptanceTask`）；

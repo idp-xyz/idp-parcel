@@ -99,7 +99,7 @@ func (version SubmissionVersion) RequestedServiceProduct() DeclaredServiceProduc
 	return version.requestedProduct
 }
 
-// ProfileFor 按成员取声明画像。缺席是真话：这个成员没申报测量，读取方（估价装配等）
+// ProfileFor 按成员取声明画像。缺席是真话：这个成员没声明测量，读取方（估价装配等）
 // 自己决定缺席的后果。
 func (version SubmissionVersion) ProfileFor(parcel DeclaredParcelID) (DeclaredParcelProfile, bool) {
 	for _, profile := range version.profiles {

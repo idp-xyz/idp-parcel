@@ -6,7 +6,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
-// measurementScope 是读口要查的那一个范围：按包裹指名的申报测量资料组（测量逐成员申报，ADR-0048 画像按成员）。
+// measurementScope 是读口要查的那一个范围：按包裹指名的声明测量资料组（测量逐成员申报，ADR-0048 画像按成员）。
 func measurementScope(t *testing.T, requestID, parcel string) domain.SourceDataScope {
 	t.Helper()
 	scope, err := domain.NewParcelScopedSourceData(
@@ -21,7 +21,7 @@ func measurementScope(t *testing.T, requestID, parcel string) domain.SourceDataS
 }
 
 // acceptedWithMeasurementVersions 提交一份两成员委托（parcel-1 带重量 2.50 KG、无外廓的画像；parcel-2 无画像），
-// 真接受，再按给定链在 **parcel-1 的申报测量范围**上追加版本：每项 [版本, 前版]，前版为空即以接受基线为基准
+// 真接受，再按给定链在 **parcel-1 的声明测量范围**上追加版本：每项 [版本, 前版]，前版为空即以接受基线为基准
 // 的补充。与 acceptedWithDeliveryPlaceVersions 同一配方，只是范围换成本读口要查的那一个。
 func acceptedWithMeasurementVersions(t *testing.T, chain ...[2]string) domain.ShipmentRequest {
 	t.Helper()
@@ -179,7 +179,7 @@ func TestAnObjectOutsideEveryAcceptedBaselineHasNoDeclaredMeasurement(t *testing
 	}
 }
 
-// Covers: 读口按本上下文的原词查申报测量范围——收件范围上的修订不动测量的锚（两口各查各的范围，互不知对方）。
+// Covers: 读口按本上下文的原词查声明测量范围——收件范围上的修订不动测量的锚（两口各查各的范围，互不知对方）。
 func TestAmendmentsOnTheDeliveryPlaceGroupDoNotMoveTheMeasurementAnchor(t *testing.T) {
 	spec := submitSpec(t, "parcel-1", "parcel-2")
 	spec.Profiles = []domain.DeclaredParcelProfile{profileOf(t, "parcel-1", "2.50")}

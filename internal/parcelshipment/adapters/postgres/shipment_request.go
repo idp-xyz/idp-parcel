@@ -213,7 +213,7 @@ func (repository *ShipmentRequests) Save(
 	}
 	// 委托由`已提交`转为`已拒绝`或`已撤回`，它声明的号从此不再算歧义信号；与状态变化同一笔交声明撤除门铃，叫节点作业按号重核
 	// 只因歧义信号落下的身份冲突（ADR-0211 决定三）。委托离开`已提交`都经这里落库——规则形成的拒绝、主动拒绝、授权处置的拒绝、
-	// 客户撤回；补充期满的确定性拒绝今天没有单独的编排，落地时同样只能经这里——门铃因此只挂这一处。
+	// 客户撤回；补充期满的确定性拒绝若有单独的编排，同样只能经这里——门铃因此只挂这一处。
 	retired := declarationsRetiredBy(domain.ShipmentRequestState(prior), request)
 	if err := repository.doorbell.RingDeclarationsRetired(ctx, identity.TenantID(), request, retired, savedAt); err != nil {
 		return ports.ShipmentRequestSaveOutcomeInvalid, fmt.Errorf("save shipment request: %w", err)
@@ -871,7 +871,7 @@ func (document profileDocument) profile() (domain.DeclaredParcelProfile, error) 
 	return domain.NewDeclaredParcelProfile(parcel, measurement)
 }
 
-// measurementDocumentsOf 把一份申报测量摊成重量与外廓两段文档——画像与资料版本内容共用这一形（pp-seams/05 裁决 2
+// measurementDocumentsOf 把一份声明测量摊成重量与外廓两段文档——画像与资料版本内容共用这一形（pp-seams/05 裁决 2
 // 「测量范围带 profileDocument 同形的测量」），外廓缺席交回 nil。
 func measurementDocumentsOf(measurement domain.DeclaredMeasurement) (measurementDocument, *dimensionsDocument) {
 	weight := measurementDocument{
@@ -889,7 +889,7 @@ func measurementDocumentsOf(measurement domain.DeclaredMeasurement) (measurement
 	return weight, nil
 }
 
-// declaredMeasurementFrom 从重量与外廓两段文档重建申报测量，逐字段过领域构造函数；外廓文档缺席即测量无外廓。
+// declaredMeasurementFrom 从重量与外廓两段文档重建声明测量，逐字段过领域构造函数；外廓文档缺席即测量无外廓。
 func declaredMeasurementFrom(weightDoc measurementDocument, dimensionsDoc *dimensionsDocument) (domain.DeclaredMeasurement, error) {
 	weightValue, err := domain.NewMeasurementValue(weightDoc.Value)
 	if err != nil {

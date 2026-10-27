@@ -766,8 +766,7 @@ func (double *stageFactsDouble) LoadCustomsStageFacts(
 	}, nil
 }
 
-// unconnectedCustoms 是关务读面未接时的答复：三格`不知道`（与 adapters/customscompliance 的
-// UnconnectedCustomsStageView 同值，这里不引它——本包用例不依赖适配器包）。
+// unconnectedCustoms 是关务对这个包裹答不出时的答复：三格`不知道`（本包用例不依赖适配器包，在这里直接造）。
 func unconnectedCustoms() ports.CustomsStageFacts {
 	return ports.CustomsStageFacts{
 		DataForming: domain.StageFactUnknown,
@@ -993,9 +992,9 @@ func acceptedRequest(t *testing.T) domain.ShipmentRequest {
 // Covers: AGENTS.md 红线「实例半边留空并拒绝默认值」——修订授权入口是 `BD-PS-009` 待确认的
 // 实例参数。规则一条都没登记时，客户得到的不能是「你无权改这处资料」。
 //
-// 这一支尤其刺眼：同一个 Handle 里往下二十行，矩阵那一格已经把「未登记」与「明确不允许」
-// 分开了（`SourceDataAmendmentNotDeclared` → `待复核`，注释写着「那是『还没人说这能不能改』，
-// 不是『客户违规』」）。同一句理由在同一个函数里成立两次，此前只做了一次。
+// 这一支尤其刺眼：同一个 Handle 里的矩阵那一格已经把「未登记」与「明确不允许」分开了
+// （`SourceDataAmendmentNotDeclared` → `待复核`：没人说过这处资料能不能改，不是客户违规）。
+// 同一句理由在同一个函数里成立两次，授权这一格也要照做。
 func TestUnconfiguredAmendmentRulesStallRatherThanRefuseTheCustomer(t *testing.T) {
 	fixture := newAmendmentFixture(t)
 	fixture.authorizer.rulesNotConfigured = true

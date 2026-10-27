@@ -36,8 +36,8 @@ type CurrentFinalView interface {
 // 阶段」：哪一格压过哪一格是本上下文的判断（domain.JudgeAmendmentStage），关务只说自己
 // 有没有形成、有没有提交、有没有关闭。
 //
-// 每格三态。`不知道`是读面没接上或关务对这个包裹答不出时的如实值，判断据以停在未决；把它
-// 折成`不在`会让一个没接读面的关务把每个包裹都判成「尚未申报」。
+// 每格三态。`不知道`是关务对这个包裹答不出时的如实值，判断据以停在未决；把它折成`不在`会让
+// 一个答不出的关务把每个包裹都判成「尚未申报」。
 type CustomsStageFacts struct {
 	DataForming domain.StageFact
 	Submitted   domain.StageFact
@@ -47,11 +47,9 @@ type CustomsStageFacts struct {
 // CustomsStageView 读关务为一个包裹出的阶段事实（customs-compliance → parcel-shipment 的
 // 消费缝，ADR-0118）。
 //
-// 依赖调不通作为错误返回；读面存在而关务对该包裹没有任何案件或单元，三格都是`不在`；读面
-// 不存在或尚未接上，三格都是`不知道`——那不是错误，是一个如实的「答不出」，重试改不了它。
-// 今天 customs-compliance 没有按包裹键的读面（案件键是管辖 × 方向 × 程序 × 义务范围，申报
-// 单元虽记成员却没有反查口），本口的生产实现因此只能答`不知道`；缺口归 CC 立票，本上下文
-// 不替它加。
+// 依赖调不通作为错误返回；关务对该包裹没有任何案件或单元，三格都是`不在`；关务对这个包裹
+// 答不出，三格都是`不知道`——那不是错误，是一个如实的「答不出」，重试改不了它。生产适配器
+// 读 customs-compliance 按包裹键交出的申报事实，逐格译三态（adapters/customscompliance）。
 type CustomsStageView interface {
 	LoadCustomsStageFacts(
 		ctx context.Context,
@@ -64,9 +62,9 @@ type CustomsStageView interface {
 // 的消费缝，ADR-0118）：该包裹此刻有没有装入集运单元。它与本上下文自有的面单交易结果并成
 // 「已制签或已装袋」那一格。
 //
-// 三态语义同 CustomsStageView。今天 node-operations 的 ContainmentIndex 按作业实物
-// （HandlingUnitID）答直接父级，而正式包裹与作业实物的关联属版本化关联、不由本上下文推断，
-// 所以生产实现同样只能答`不知道`；缺口归 NO 立票。
+// 三态语义同 CustomsStageView。正式包裹与作业实物的关联属版本化关联、不由本上下文推断；
+// 生产适配器读 node-operations 按包裹键交出的容纳三值，节点作业说不可归属的那一格译`不知道`
+// （adapters/nodeoperations）。
 type ConsolidationStageView interface {
 	LoadBaggingFact(
 		ctx context.Context,

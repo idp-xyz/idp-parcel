@@ -130,7 +130,7 @@ func CanonicalizeCustomerParcelCancellation(spec CustomerParcelCancellationSpec)
 
 // SourceDataAmendmentPayloadSpec 是首方资料修订口（形状 PAM-1，票 first-party-api/10）的规范化输入：指名（原提交的接入请求
 // 标识、资料范围）、基准、意图、原因、适用时间与内容。内容有两种形——地址要素条目（沿提交的条目命名，由 AddressElementsOf 挑）
-// 与申报测量；两者最多一种在场，显式清空时都缺席。
+// 与声明测量；两者最多一种在场，显式清空时都缺席。
 type SourceDataAmendmentPayloadSpec struct {
 	OriginalAccessRequestID string
 	Scope                   SourceDataScope

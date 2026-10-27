@@ -16,8 +16,8 @@ import (
 // ErrUnexpectedCancellationSave 说明取消库交回了封闭集合以外的写入结果。
 var ErrUnexpectedCancellationSave = errors.New("parcel shipment: unexpected cancellation save outcome")
 
-// CancelParcelOutcome 是取消请求的应用处理结果，对应 UC-PS-006 元数据的四种结束加
-// 重复/冲突/不受理三格，以及决定矩阵「已有终局服务结果 → 返回既有终局」那一格。
+// CancelParcelOutcome 是取消请求的应用处理结果，对应 UC-PS-006 元数据的各结束，加重复、
+// 冲突、不受理，以及决定矩阵「已有终局服务结果」一行的「返回既有终局」。
 type CancelParcelOutcome uint8
 
 const (
@@ -351,7 +351,7 @@ func (handler *CancelParcelHandler) Handle(
 		RequestedAt: command.RequestedAt,
 	}, intake)
 	if errors.Is(err, domain.ErrIntakeBoundaryCrossed) {
-		// 已收寄后只发「取消」消息：明确不能回退取消；没有授权处置决定时保持待处置
+		// 已收寄后只发「取消」消息：明确不能回退取消；没有收寄后服务处置决定时保持待处置
 		// （AT-PS-082）。越过的收寄版本随记录保全，处置判断由后续独立请求形成。
 		record := ports.CancellationRecord{
 			Key:           key,

@@ -20,9 +20,7 @@ type ParcelContainmentLookup interface {
 	) (noports.ParcelContainment, error)
 }
 
-// ConsolidationStageView 读节点作业按包裹键交出的容纳三值，译成装袋一格的三态（票
-// ps-port-remainder/05 接线的那一只；它替下的 UnconnectedConsolidationStageView 已随读面立起
-// 退场）。
+// ConsolidationStageView 读节点作业按包裹键交出的容纳三值，译成装袋一格的三态。
 //
 // 翻译是全函数：节点作业的封闭三值每个都有落点——`在`译`在`、`不在`译`不在`、`不可归属`译
 // `不知道`。最后那一格是节点作业自己的解释（候选不是归属，它说不出袋里那件是不是这个包裹），

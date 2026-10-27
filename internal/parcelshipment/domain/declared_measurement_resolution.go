@@ -7,17 +7,17 @@ import (
 
 var ErrInvalidDeclaredMeasurementResolution = errors.New("parcel shipment: invalid declared measurement resolution")
 
-// declaredMeasurementDataGroupWord 是本上下文对「申报测量」资料组的自有原词，与 deliveryPlaceDataGroupWord 同款：
+// declaredMeasurementDataGroupWord 是本上下文对「声明测量」资料组的自有原词，与 deliveryPlaceDataGroupWord 同款：
 // SourceDataGroupReference 是开放引用，矩阵登记侧用什么词是实例半边；读口按这个词查该包裹上的修订版本，查不到就答
 // 基线锚——那是如实答案（本上下文没见过那个范围上的修订），不是默认。
 const declaredMeasurementDataGroupWord = "DECLARED_MEASUREMENT"
 
-// DeclaredMeasurementDataGroup 交回申报测量资料组的原词引用。
+// DeclaredMeasurementDataGroup 交回声明测量资料组的原词引用。
 func DeclaredMeasurementDataGroup() SourceDataGroupReference {
 	return SourceDataGroupReference{requiredValue{value: declaredMeasurementDataGroupWord}}
 }
 
-// DeclaredMeasurementOutcome 是「申报测量」读口的封闭五格（pp-seams/02 裁决 3 / 5 / 6）。它照 DeliveryPlaceOutcome 的
+// DeclaredMeasurementOutcome 是「声明测量」读口的封闭五格（pp-seams/02 裁决 3 / 5 / 6）。它照 DeliveryPlaceOutcome 的
 // 四格再加「未申报」一格：那四格答的是引用，引用总能派生；本口答的是内容，而内容可以如实缺席（测量必填与否由真实产品
 // 定，ADR-0048 允许成员无画像）——缺席不是「无」（对象不是委托成员）也不是「未定」（两条修订分叉），得自己占一格。
 //
@@ -26,8 +26,8 @@ type DeclaredMeasurementOutcome uint8
 
 const (
 	DeclaredMeasurementOutcomeInvalid DeclaredMeasurementOutcome = iota
-	// DeclaredMeasurementAnchoredOnBaseline：该包裹的申报测量范围上尚无修订版本，答接受基线那一版提交版本上的成员画像，
-	// 带接受基线锚。这是今天唯一带测量的一格。
+	// DeclaredMeasurementAnchoredOnBaseline：该包裹的声明测量范围上尚无修订版本，答接受基线那一版提交版本上的成员画像，
+	// 带接受基线锚，测量取自基线版本上的画像。
 	DeclaredMeasurementAnchoredOnBaseline
 	// DeclaredMeasurementAnchoredOnAdoptedVersion：该范围上的当前采用判断为`已采用`，答那一版的锚与**那一版自己的测量**
 	// （pp-seams/05：客户原始资料版本携带封闭要素内容）。那一版上测量缺席（显式清空）时只交锚不交值——绝不回退到基线值：
@@ -120,12 +120,12 @@ func (resolution DeclaredMeasurementResolution) Anchor() (SourceDataVersionAncho
 	return resolution.anchor, resolution.anchor.valid()
 }
 
-// DeclaredMeasurementFor 按包裹身份答申报测量（pp-seams/02 裁决 3 / 4 / 5）。委托与接受基线是本上下文内部走到答案
-// 的路，不是键：先经接受基线成员集合确认这件包裹属于本委托，再取该包裹申报测量范围上查询时刻的资料版本锚，锚在
+// DeclaredMeasurementFor 按包裹身份答声明测量（pp-seams/02 裁决 3 / 4 / 5）。委托与接受基线是本上下文内部走到答案
+// 的路，不是键：先经接受基线成员集合确认这件包裹属于本委托，再取该包裹声明测量范围上查询时刻的资料版本锚，锚在
 // 基线上才去接受基线所指那一版提交版本上取画像。
 //
-// 范围按包裹指名：测量是逐成员申报的（ADR-0048 画像按成员），作用于整份委托的「测量」修订今天没有产生规则，词表
-// 落地那天再多问一条范围。包裹 → 委托只按声明成员走，谱系包裹落「无」，与 DeliveryPlaceReferenceFor 同一今日形状。
+// 范围按包裹指名：测量是逐成员申报的（ADR-0048 画像按成员），作用于整份委托的「测量」修订没有产生规则，词表
+// 有了它的那一条再多问一条范围。包裹 → 委托只按声明成员走，谱系包裹落「无」，与 DeliveryPlaceReferenceFor 同一形状。
 //
 // 先看锚再看画像：基线上没画像而后来的补充被采用，答的是已采用版本格（客户补报了，内容在那一版上），不是「未申报」。
 func (request ShipmentRequest) DeclaredMeasurementFor(parcel DeclaredParcelID) (DeclaredMeasurementResolution, error) {

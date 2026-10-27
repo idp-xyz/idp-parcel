@@ -132,7 +132,7 @@ func deliveryElementsContent(t *testing.T, postal string) domain.SourceDataVersi
 		[]domain.CanonicalContentEntry{addressEntry(t, domain.DeliveryPlaceDataGroup(), domain.PostalCodeElement, postal)}))
 }
 
-// measurementContent 造一份申报测量范围上的内容（只报重量，KG）。
+// measurementContent 造一份声明测量范围上的内容（只报重量，KG）。
 func measurementContent(t *testing.T, weight string) domain.SourceDataVersionContent {
 	t.Helper()
 	content, err := domain.NewMeasurementContent(measurementOf(t, weight, "KG"))

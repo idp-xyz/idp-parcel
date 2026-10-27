@@ -1,7 +1,7 @@
 # 38 PS 代码注释随文档自洽 06 改口
 
 Category: chore
-Status: needs-triage——建议 R3（不急）：只改注释，不改行为；注释今天指向已改写或被裁过的口径，读码的人会照着写错。2026-10-21 文档自洽 06 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc06。分级由协调方定稿。
+Status: in-progress——完工待评审与进 main，分支 claude-cmtB
 Blocked by: 无
 出处：[audit/ps.md](../audit/ps.md) PS-04、PS-09、PS-16、PS-17、PS-49 的「代码注释随票改」半边，与 [ADR-0255](../../../docs/adr/0255-a-submitted-request-is-regrouped-only-by-withdrawing-it-and-submitting-linked-new-requests.md)、[ADR-0257](../../../docs/adr/0257-a-lapsed-label-success-only-feeds-the-label-service-final-and-leaves-the-channel-parcel-number-relation-applicable.md) 后果节点名的两处。
 
@@ -26,3 +26,42 @@ Blocked by: 无
 ## 规模
 
 S。
+
+## 完成记录（2026-10-27，作者会话，分支 claude-cmtB，基 origin/main `f6a4a5298`）
+
+只改注释，`git diff -U0` 去掉注释行后无变动；测试字符串（`t.Fatalf` 里的「申报测量」）属代码，没动。
+
+### 逐处结果
+
+| 表中位置 | 结果 |
+|---|---|
+| `submit_shipment_request.go` 包头注 | 已改：持久化、事务与事件机制在 `adapters`，不进本包（ADR-0026） |
+| `OutcomeLinkIneligible` 头注 | 已改：关联方向锚在原委托终态；普通纠错走同一委托的新提交版本，重组先撤回再以撤回重提方向关联（ADR-0255） |
+| `releaseOccupation` 头注 | 已改：「没有任何控制项成立时」；同函数头注里「步骤 6」改引 UC-PS-005 释放一步的原文 |
+| `SourceDataAdoptionOutcome` 头注 | 已改：取值集合指向 CONTEXT 词条「当前客户资料版本采用判断」，`待复核`与`待补充`分开写（续办方不同）；原文的「待下游判断」已不是取值，删去；「本仓『枚举取值……』」不是任何文件的原文，去掉引号改成转述 |
+| `cancel_parcel.go` `ErrIntakeBoundaryCrossed` 分支 | 已改：「没有收寄后服务处置决定时保持待处置」 |
+| `ExternalIdentifierChangeKind` 头注 | 已改：只有作废与替代两种，面单有效期届满只进面单服务终局判断（ADR-0257） |
+| `SourceDataAmendmentStageUndetermined` 一段 | 已改：两只读面接提供方真读面，判不出是六格事实里有答`不知道`的（ADR-0118）；同一过时说法还在 `ports/amendment_stage.go` 的 `CustomsStageFacts`、`CustomsStageView`、`ConsolidationStageView` 注释，两个适配器注释里的票号与已退场的 `Unconnected…View`，以及 `amend_customer_source_data_test.go` 的 `unconnectedCustoms` 注释（指向已不存在的符号），一并改 |
+| 「申报测量」 | 已改：PS 包内 32 处注释行改「声明测量」（CONTEXT 词条「声明测量」的 Avoid 栏列了它）；字符串字面量不动 |
+| `adapters/http/*` 三处头注 | 按表不动（随 code/22） |
+
+票里列的位置没有一处已漂移或不存在。
+
+### 同类残留（PS 包内）
+
+- 不是原文的引文，改成转述或换成原文：`withdraw_shipment_request.go` 的「按原业务关联幂等形成适用冻结释放」「读取已提交决定并返回既有结果」；`amend_customer_source_data.go` 的「未登记时只能形成未决或业务拒绝，不能以系统便利推断允许」（UC-PS-002 实际写的是「未声明答等复核……不能以系统便利推断允许」）及测试里转引它的注释；`ports.go` `CommercialBasisResolver` 注释里 UC-PC-002 的两句引文（「必须在类型和测试中可见」「两阶段端口」在原文里不存在）。
+- 行位置词：`amend_customer_source_data.go`、`_test.go` 的「往下二十行」。
+- 跨文件计数：`CancelParcelOutcome`（UC-PS-006 的「四种结束」「三格」）、`query_label_transactions.go`（CONTEXT「只有两格」）、`form_acceptance_decision.go`（ADR-0282 的「三格」）、`CommercialBasisResolver`（UC-PC-002 的「三个阶段」，原文其实写两阶段）、`labelfinal` 测试（CONTEXT「分四格」）。
+- 变更叙述与「今天」：`AmendmentIntent`、`ExternalIdentifierKind`、`ExternalIdentifierRelation`、`judgment_continuation.go` 三处（「此前」「不再」「上一条」）、`declared_measurement_resolution.go`（「这是今天唯一带测量的一格」已经不实：已采用版本格也带测量）、`declared_measurement_view_test.go`、`shipment_request.go` 一处。
+- 核了 PS、PC、PP、SA、CR 五个包注释里所有 `ADR-NNNN`、`AT-XX-NNN` 引用，编号都存在；「指错了号」这一类无法机器核，没有再发现。
+
+### 代决
+
+1. 只扫了五个包里票点名的几类：行位置词、跨文件计数、非原文引文、过时的「今天」叙述与已退场符号。`今天`、`不再`、`照旧`在 PS 包注释里各有一百来处，大半是在讲代码逻辑本身，逐一改写不是这张票的范围，没有动。
+2. 票号（如 `pp-seams/05`、`ps-port-remainder/05`）：被我改写的几处去掉了，其余没碰。
+3. UC 的「步骤 N」标号当作 UC 自己的名字，只在顺手改的两三处换成了原文；没有全包清理。
+
+### 越权风险点
+
+- `SourceDataAdoptionOutcome` 删去了「待下游判断」：依据是 CONTEXT 词条明说「下游要不要据新版本重新判断不是一个取值」。PS owner 若认为那一格仍要保留，需要先改 CONTEXT。
+- `待补充`写成「本层没有判据」：代码里确实没有产生它的规则，但它是否该由本层产生，没有裁。

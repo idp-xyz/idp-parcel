@@ -1,5 +1,5 @@
 // Package application 在领域内核与 parcel-shipment 自有端口之上编排本上下文的用例。
-// 它不含任何持久化、事务或事件机制，那些仍阻断在 Bento 闸门之后（ADR-0017）。
+// 持久化、事务与事件机制在 adapters，不进本包（ADR-0026）。
 package application
 
 import (
@@ -33,8 +33,9 @@ const (
 	// 同款纪律在关联指名上一字不差地成立）。
 	OutcomePriorRequestNotFound
 	// OutcomeLinkIneligible 说原委托找到了、也确属这个客户，只是它的状态不承认这个
-	// 关联方向——客户该走的是资料修订（待决）或等决定，不是关联新委托。与「查无」分格：
-	// 两者的续办动作不同。
+	// 关联方向（关联方向锚在原委托的终态上，`已提交`的原委托没有关联方向）。续办动作：
+	// 普通资料纠错走同一委托的新提交版本；重组先撤回原委托，再以撤回重提方向关联
+	// （ADR-0255）。与「查无」分格：两者的续办动作不同。
 	OutcomeLinkIneligible
 )
 

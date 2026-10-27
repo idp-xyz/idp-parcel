@@ -124,8 +124,9 @@ const (
 
 	// 资料修订问矩阵之前先判「资料修订阶段」（PS CONTEXT 词条；ADR-0118），那一步的两格。
 	//
-	// `判不出`是六格事实里有`不知道`——今天是关务与装袋的读面未接（消费侧适配器如实答不知道），
-	// 等的是读面接上，不是等某个权威恢复，也不是等租户登记；`事实读不回`是某个口调不通，等它恢复。
+	// `判不出`是六格事实里有答`不知道`的：关务与装袋两只读面接的是提供方的真读面，提供方对这个包裹
+	// 答不出的那一格如实答不知道（ADR-0118），重试改不了它，不是等某个权威恢复，也不是等租户登记；
+	// `事实读不回`是某个口调不通，等它恢复。
 	// 两格分开的理由与矩阵那两格（SourceDataRuleUnavailable 对 NotDeclared）一字不差：合成一格，
 	// 续办方就不知道该重试还是该去接线。两格都只有本方推得动，落在下面 resumePath 的 default 上。
 	SourceDataAmendmentStageUndetermined
@@ -214,8 +215,8 @@ func (reason JudgmentPendingReason) resumePath() domain.ResumePath {
 		SourceDataAmendmentAuthorityApplicabilityConflict:
 		// 这一族等的是运营企业做一次登记，不是等某个权威恢复（ADR-0094）。它们与同一支上的
 		// *Unavailable 只差一个词而恢复动作相反：权威答不出会自愈，而一个从未登记过的范围
-		// 重试一万次也长不出一条登记。这几个取值自己的注释早写过这句话，此前却落在下面那个
-		// default 的内部重试上——判据在、细分在，只是导出到恢复动作时又被压回去了。
+		// 重试一万次也长不出一条登记。这几个取值自己的注释写的就是这句话，所以它们不能落在下面那个
+		// default 的内部重试上——判据在、细分在，导出到恢复动作时不能再把它压回去。
 		//
 		// 逐个列举不写成按名字前缀判：命名相近不构成同一个恢复动作，而这份名单正是那条判据
 		// 的落地——新增一个原因时要回答的是它等谁，不是它叫什么。
@@ -386,8 +387,8 @@ func (reason JudgmentPendingReason) String() string {
 // 的分界）。
 var ErrUnexpectedAsOfOutcome = errors.New("parcel shipment: unexpected judgment as-of outcome")
 
-// ErrUnexpectedAssessmentOutcome 说明权威判断端口交回了封闭集合以外的答复。与上一条同一
-// 分界：那不是「权威答不出」，是端口本身坏了。
+// ErrUnexpectedAssessmentOutcome 说明权威判断端口交回了封闭集合以外的答复。与
+// ErrUnexpectedAsOfOutcome 同一分界：那不是「权威答不出」，是端口本身坏了。
 var ErrUnexpectedAssessmentOutcome = errors.New("parcel shipment: unexpected authority assessment outcome")
 
 // ErrUnexpectedRevalidationOutcome 同上，说的是提交前重校验那一支。
@@ -465,8 +466,8 @@ func (reasons asOfPendingReasons) forOutcome(outcome ports.JudgmentAsOfOutcome) 
 		// 提供方在任何查询发生之前就短路拒绝了：身份或解析标识立不起来。这是本上下文自己
 		// 的缺陷，不是权威答不出，因此它与`未决`分开——重试改不了一份立不起来的入参。
 		//
-		// 它不再包括「指名了一份不属于自己的解析」：越权那一支按 ADR-0029 改落`依据未解析`，
-		// 与「查无此解析」同格。本落点仍有来源（短路支），因此保留。
+		// 它不包括「指名了一份不属于自己的解析」：越权那一支按 ADR-0029 落`依据未解析`，
+		// 与「查无此解析」同格。本落点的来源是短路支。
 		return reasons.inputNotAccepted, nil
 	default:
 		return PendingReasonNone, ErrUnexpectedAsOfOutcome

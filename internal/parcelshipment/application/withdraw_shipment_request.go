@@ -141,8 +141,9 @@ func (handler *WithdrawShipmentRequestHandler) Handle(
 	ctx context.Context,
 	command WithdrawShipmentRequestCommand,
 ) (WithdrawShipmentRequestResult, error) {
-	// 步骤 1 先于一切业务判断：一次没能形成撤回的请求，也必须留下它到达过的事实，否则事后
-	// 连「客户到底提没提过」都无从追溯。
+	// UC-PS-005 首步「保全撤回来源、请求身份、对象、请求方和业务时间」先于一切业务判断：
+	// 一次没能形成撤回的请求，也必须留下它到达过的事实，否则事后连「客户到底提没提过」
+	// 都无从追溯。
 	incoming, err := domain.NewSourceSubmissionFingerprint(
 		command.WithdrawalIdentity,
 		command.PayloadDigest,
@@ -212,7 +213,7 @@ func (handler *WithdrawShipmentRequestHandler) decide(
 		return WithdrawShipmentRequestResult{}, ErrUnexpectedAuthorizationOutcome
 	}
 
-	// 用例把「读取已提交决定并返回既有结果」放在提交撤回之前（步骤 3 先于步骤 4），所以这里
+	// 用例先读已提交决定、非`已提交`的委托返回已有结果，之后才提交撤回，所以这里
 	// 先短路：一份已经决定的委托不该再消耗一个决定标识，而标识是本上下文签发的稀缺身份。
 	// 这不替代提交边界上的重查——聚合的 `decisionFormed` 闸门仍然是裁决并发竞争的那一道。
 	if request.State() != domain.ShipmentRequestSubmitted {
@@ -321,7 +322,7 @@ func (handler *WithdrawShipmentRequestHandler) resolvePreserved(
 // `AT-PS-071`/`AT-PS-072` 要求返回既有接受或拒绝，`AT-PS-068` 要求重复撤回返回原撤回及原补偿
 // 关联。已撤回委托也不在这里原地恢复：`AT-PS-076` 要求客户重新提出需求时建立关联新委托。
 //
-// 撞上的是既有撤回时才重跑释放。步骤 6 本就要求「按原业务关联幂等形成适用冻结释放」，所以
+// 撞上的是既有撤回时才重跑释放。UC-PS-005 的释放一步本就要求按原业务关联幂等释放已成立各项的占用，所以
 // 重跑是它的语义而不是副作用；补偿引用由原因与范围派生，因此重复请求拿到的就是原补偿关联，
 // 不必为此在聚合上再存一份待补偿状态。
 //
@@ -360,8 +361,8 @@ func (handler *WithdrawShipmentRequestHandler) existing(
 // 表面原子性把委托改回`已提交`。放不掉的交回补偿续办引用，由续办去补；提供方确定不受理的记进释放未受理册
 // 交人处理（ADR-0282 决定二），撤回照样成立。
 //
-// 放的是这份委托已成立的占用（步骤 6），不只是命令指名那一版：撤回是终局，被取代那一版若在新版本那一轮链提交之前
-// 还占着，之后再没有轮次去放它。从未形成过冻结时既不发释放也不留补偿引用——`AT-PS-074` 要的是撤回成立并保存
+// 放的是这份委托已成立的占用（UC-PS-005「按原业务关联幂等释放已成立各项的占用」），不只是命令指名那一版：撤回是终局，被取代那一版若在新版本那一轮链提交之前
+// 还占着，之后再没有轮次去放它。没有任何控制项成立时既不发释放也不留补偿引用——`AT-PS-074` 要的是撤回成立并保存
 // 财务补偿不适用依据，凭空造一个待续补偿会让对账去追一笔不存在的释放。
 func (handler *WithdrawShipmentRequestHandler) releaseOccupation(
 	ctx context.Context,
