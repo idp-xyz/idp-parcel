@@ -87,6 +87,10 @@ type CustomerChargeCatalogueRow struct {
 // 列上没有账单主张、审核应付或付款字段，与 0008 的表面一致：那道分界在表上与在
 // 类型上同样是结构性的。PriorVersion 与 CorrectionReason 成对为空表示这是首版——
 // 计价纠错换版本、原版本保留，一份成本的历史因此是多行而不是一行被改写。
+//
+// PurchaseRuleVersion 是评价命中的可执行价卡版本（GLOSSARY「可执行价卡版本」），不是 party-commercial
+// 的价格规则版本；它随库列 purchase_rule_version 与报文字段 purchaseRuleVersion 同名，列名与字段名
+// 是库表与管理台已读的契约，改名要一并迁移，所以沿用。
 type SupplierExpectedCostCatalogueRow struct {
 	Version             string
 	Occurrence          string

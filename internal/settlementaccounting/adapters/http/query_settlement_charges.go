@@ -44,7 +44,7 @@ const (
 // （GET /settlement-charges，票 admin-skeleton-closure-batch/04）。
 //
 // 两册共用一个端点按 `registry` 分派，各自成形：客户费用与供应商预期成本的行形状
-// 互不相同（前者有阶段与确认依据、无采购规则版本，后者有版本链与纠错原因、无阶段），
+// 互不相同（前者有阶段与确认依据、无价卡版本，后者有版本链与纠错原因、无阶段），
 // 共享壳要么空出半数字段、要么把强类型折成 any（判据逐字同 visibilityhttp 的六种
 // 目录行）。CONTEXT 另把两者立为两个词条并明禁「内部预期伪装成供应商主张」——合成
 // 一张表，栏目里就再没有东西说得出这一行是内部预期。
@@ -237,6 +237,9 @@ type supplierExpectedCostListResponse struct {
 // 那道分界在表上与在报文上同样是结构性的。priorVersion 与 correctionReason 成对
 // 缺席表示这是首版——计价纠错换版本、原版本保留，一份成本的历史因此是多行而不是
 // 一行被改写。
+//
+// purchaseRuleVersion 是评价命中的可执行价卡版本（GLOSSARY「可执行价卡版本」），不是
+// party-commercial 的价格规则版本；字段名是管理台已读的报文契约，改名属契约变更，所以沿用。
 type supplierExpectedCostBody struct {
 	Version             string `json:"version"`
 	Occurrence          string `json:"occurrence"`

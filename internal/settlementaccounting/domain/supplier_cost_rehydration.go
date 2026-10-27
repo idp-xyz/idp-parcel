@@ -63,7 +63,7 @@ func RehydrateSupplierExpectedCost(spec RehydrateSupplierExpectedCostSpec) (Supp
 		version:            spec.Version,
 		occurrence:         spec.Occurrence,
 		feeItem:            spec.FeeItem,
-		ruleVersion:        spec.RuleVersion,
+		priceCardVersion:   spec.RuleVersion,
 		agreement:          spec.Agreement,
 		evaluation:         spec.Evaluation,
 		originalCurrency:   spec.OriginalCurrency,

@@ -1,7 +1,7 @@
 # 55 SA 把评价命中的价卡版本叫「采购规则版本」，注释还说它是 GLOSSARY「价格规则版本」的 PP 半边
 
 Category: chore
-Status: ready-for-agent——R3（不急）：只是命名与注释，不改行为；读供应商预期成本的作者会把这一格当成 party-commercial 的采购价格政策版本去溯源，实际存的是 parcel-pricing 的定价方案版本。2026-10-21 文档自洽 10（10a 半边）立（用户「你作为业务和系统专家自决」授权），分支 claude-dc10a。
+Status: in-progress——完工待评审与进 main，分支 claude-cmtB
 Blocked by: 无
 出处：[audit/cross.md](../audit/cross.md) GL·G-02（归 A，附带代码命名与注释的跟改；修订票不改代码，故立本票）。
 
@@ -27,3 +27,32 @@ S：类型与构造函数改名为可执行价卡版本一类的词（例如 `Pr
 ## 最小的诚实修法
 
 只改 Go 标识符与注释，行为与库表不动；幂等三维的注释照改，把规则版本那一维写成价卡版本。
+
+## 完成记录（2026-10-27，作者会话，分支 claude-cmtB，基 origin/main `f6a4a5298`）
+
+先通读了这张票要改到哪：把 `PurchaseRuleVersionReference` 及构造函数改名，会牵动导出符号、HTTP 报文字段、库列。按"会改对外契约就只改注释与内部私有名"的口径，**本票只改了注释与私有名，对外名字一个都没动**；行为与对外契约零变动。
+
+### 改了什么
+
+- 注释：`domain/supplier_expected_cost.go` 的 `PurchaseRuleVersionReference`（改为"指名评价命中的可执行价卡版本"，写明存的是 parcel-pricing 的定价方案版本、不是 party-commercial 的价格规则版本，并写明类型名为何没动）、`CostCorrectionSpec`；`ports/ports.go` 的 `BuyEvaluationAdoption`（原"GLOSSARY「价格规则版本」的 PP 半边"改指 GLOSSARY「可执行价卡版本」）、`ExpectedCostSaveOutcome`、`ExpectedCostRegistry.LoadFirstVersion`（幂等三维写成发生项、费用项目、价卡版本；UC-SA-002 的原句"……和规则版本不得重复形成预期成本"仍逐字保留为引文，并注明那个"规则版本"就是这一维）；`ports/supplier_cost_occurrence_state.go`、`ports/catalogue_read.go`（`SupplierExpectedCostCatalogueRow`）、`application/form_supplier_expected_cost.go`、`application/form_requested_supplier_expected_cost.go`、`adapters/inbox/buy_evaluation_recorded_consumer.go`、`adapters/parcelpricing/form_on_buy_evaluation_recorded.go`、`adapters/http/query_settlement_charges.go`（`supplierExpectedCostBody` 与"无采购规则版本"）、`adapters/postgres/supplier_expected_cost.go`，以及六个测试文件里同一维的叫法。
+- 内部私有名：`SupplierExpectedCost` 的私有字段 `ruleVersion` → `priceCardVersion`（含 `FormSupplierExpectedCost`、`AppendCorrection`、`supplier_cost_rehydration.go` 里的赋值），postgres 适配器里的 `ruleVersion` 局部变量、`expectedCostColumns.ruleVersion` 与 `LoadFirstVersion`/`ExpectedCostRegistry.LoadFirstVersion` 的形参，`adapters/parcelpricing/buy_evaluation.go` 的局部变量，两处测试夹具形参。
+
+### 没动的对外名字与原因（剩余项）
+
+1. 导出类型 `domain.PurchaseRuleVersionReference`、构造函数 `NewPurchaseRuleVersionReference`、导出字段与访问器 `SupplierExpectedCostSpec.RuleVersion`、`CostCorrectionSpec.RuleVersion`、`BuyEvaluationAdoption.RuleVersion`、`SupplierExpectedCost.RuleVersion()`，以及构造函数里的错误文本 `"purchase rule version reference"`。这些是导出符号，`cmd/parcel-dispatch/supplier_cost_on_occurrence_invalidated_test.go` 与 SA 的十几个文件引用它们；它们又与下面两条同名，单独改会留下错位。
+2. HTTP 报文字段 `purchaseRuleVersion`（`adapters/http/query_settlement_charges.go` 的 `supplierExpectedCostBody`，`apps/admin-web/src/pages/settlement/api.ts` 正在读它）及 `ports.SupplierExpectedCostCatalogueRow.PurchaseRuleVersion`。字段名是管理台已读的契约，且本任务禁碰 `apps/admin-web`。
+3. 库列 `purchase_rule_version`（迁移 0008，已施加、受 checksum 固定，票面也明说列名不改）。
+
+三处写进了各自的注释（`PurchaseRuleVersionReference`、`SupplierExpectedCostCatalogueRow`、`supplierExpectedCostBody`），读码的人不会再把这一格当 party-commercial 的价格规则版本去溯源。
+
+后续如要把名字改干净，一次性处理需要覆盖：类型与构造函数改名（机械替换，十几个文件，含上面那份 `cmd/parcel-dispatch` 测试）、`RuleVersion` 字段与访问器改名、`purchaseRuleVersion` 报文字段改名（管理台 `api.ts` 与显示处同批）、库列改名（需新迁移）。这是对外契约变更，应由 SA owner 裁；我没有立后继票。
+
+### 代决
+
+1. 私有名只改与这一格直接对应的 `ruleVersion`，没有碰分摊规则版本（`AllocationRuleVersionReference`）、金额规则版本（`AmountRuleVersionReference`）那两族——它们叫"规则版本"是对的。
+2. UC-SA-002 原文"同一发生项、费用项目和规则版本不得重复形成预期成本"里的"规则版本"仍是文档的叫法，文档不在本票范围，注释里用引文原样保留并点明它指这一维。
+
+### 越权风险点
+
+- 私有字段已叫 `priceCardVersion`、导出访问器仍叫 `RuleVersion()`，名字暂时不一致；这是有意的过渡形态，由上面第 1 条的后续改名收掉。
+- 未改动 `apps/admin-web`：`pages/settlement/ChargesBillingPage.tsx` 的栏头仍写"采购规则版本"（同文件两处注释也是），需在 admin-web 的下一轮里随报文字段一并对齐。

@@ -42,7 +42,7 @@ type RequestedSupplierExpectedCostFormation interface {
 // FormOnBuyEvaluationRecordedAdapter 是 sainbox.BuyEvaluationRecordedConsumer 的真实处理方：按信封引用向提供方
 // 取评价，分辨是不是本消费者的评价，是的就把采用快照交给形成编排外层，再把它的答案折成入账、未决或错误。
 //
-// 只译不判（票 sa-cc/01 红线）：金额、币种、换算步骤与规则版本整组出自评价，这里一个数字都不碰（ADR-0107）；
+// 只译不判（票 sa-cc/01 红线）：金额、币种、换算步骤与价卡版本整组出自评价，这里一个数字都不碰（ADR-0107）；
 // 评价的每一种结果怎么分格是形成编排的事，这里只按编排的答案决定消费门入不入账。
 type FormOnBuyEvaluationRecordedAdapter struct {
 	evaluations saports.BuyEvaluationView

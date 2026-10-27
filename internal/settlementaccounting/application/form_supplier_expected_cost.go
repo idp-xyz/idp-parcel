@@ -29,7 +29,7 @@ var ErrCostChainAdvancedUnderLock = errors.New("settlement accounting: the suppl
 
 // ExpectedCostOutcome 是一次预期成本形成的应用处理结果。提供方的四种非完成结果各有去处
 // （ADR-0029 按恢复动作分格）：不可计价是终局（不重试、不落零额，AT-SA-175），冲突等裁决，
-// 待判断与未形成归未决并指名等谁。`已形成过首版`是专格：同一发生项、费用项目和规则版本的
+// 待判断与未形成归未决并指名等谁。`已形成过首版`是专格：同一发生项、费用项目和价卡版本的
 // 第二个版本身份不是重放也不是冲突——恢复动作是走纠错（AppendCorrection），不是改单。
 type ExpectedCostOutcome uint8
 
@@ -127,7 +127,7 @@ func (reason ExpectedCostUndecidedReason) String() string {
 
 // FormSupplierExpectedCostCommand 携带形成一份预期成本首版所需、而评价里没有的那几件：
 // 发生项（TF 拥有的只读引用）、费用项目、供应商协议快照引用，加上要采用的评价引用与本版
-// 身份。金额、币种、换算步骤与规则版本不在命令上——它们整组出自评价（CONTEXT「一份预期成本
+// 身份。金额、币种、换算步骤与价卡版本不在命令上——它们整组出自评价（CONTEXT「一份预期成本
 // 版本的全部计价结果，整组出自它引用的那一个 BUY PricingEvaluation」），命令带得了它们就有了
 // 第二套数字。
 type FormSupplierExpectedCostCommand struct {

@@ -103,8 +103,12 @@ func NewFeeItemReference(value string) (FeeItemReference, error) {
 	return FeeItemReference{required}, err
 }
 
-// PurchaseRuleVersionReference 指名采购规则版本——幂等三维之一：「同一发生项、费用
-// 项目和规则版本不得重复形成预期成本」。
+// PurchaseRuleVersionReference 指名评价命中的可执行价卡版本（GLOSSARY「可执行价卡版本」）——
+// 存的是 parcel-pricing 的定价方案版本，不是 party-commercial 的价格规则版本。它是幂等三维
+// 之一：UC-SA-002 的「同一发生项、费用项目和规则版本不得重复形成预期成本」里的规则版本就是这一维。
+//
+// 类型名里的「采购规则版本」与 GLOSSARY 不符。它是导出名，与 HTTP 字段 purchaseRuleVersion、
+// 库列 purchase_rule_version 同名，三处要一起改才不留错位，所以名字没有单独动。
 type PurchaseRuleVersionReference struct{ requiredValue }
 
 func NewPurchaseRuleVersionReference(value string) (PurchaseRuleVersionReference, error) {
@@ -175,7 +179,7 @@ type SupplierExpectedCost struct {
 	version            SupplierCostVersionID
 	occurrence         TransportChargeOccurrence
 	feeItem            FeeItemReference
-	ruleVersion        PurchaseRuleVersionReference
+	priceCardVersion   PurchaseRuleVersionReference
 	agreement          SupplierAgreementReference
 	evaluation         BuyEvaluationReference
 	originalCurrency   CurrencyCode
@@ -221,7 +225,7 @@ func FormSupplierExpectedCost(spec SupplierExpectedCostSpec) (SupplierExpectedCo
 		version:            spec.Version,
 		occurrence:         spec.Occurrence,
 		feeItem:            spec.FeeItem,
-		ruleVersion:        spec.RuleVersion,
+		priceCardVersion:   spec.RuleVersion,
 		agreement:          spec.Agreement,
 		evaluation:         spec.Evaluation,
 		originalCurrency:   spec.OriginalCurrency,
@@ -245,7 +249,7 @@ func (cost SupplierExpectedCost) FeeItem() FeeItemReference {
 }
 
 func (cost SupplierExpectedCost) RuleVersion() PurchaseRuleVersionReference {
-	return cost.ruleVersion
+	return cost.priceCardVersion
 }
 
 func (cost SupplierExpectedCost) Agreement() SupplierAgreementReference {
@@ -279,7 +283,7 @@ func (cost SupplierExpectedCost) CorrectionReason() (CostCorrectionReason, bool)
 	return cost.correctionReason, cost.correctionReason.valid()
 }
 
-// CostCorrectionSpec 是追加一次计价纠错所需的全部输入：评价引用、采购规则版本、
+// CostCorrectionSpec 是追加一次计价纠错所需的全部输入：评价引用、评价命中的价卡版本、
 // 协议引用、发生项版本与业务时点、金额币种与换算步骤整组取自新评价（ADR-0067
 // 决定二），不从被纠正版本继承。合同结算币不在此列——它是合同交给评价的输入而
 // 不是评价的产物，计价纠错不改合同。
@@ -332,7 +336,7 @@ func (cost SupplierExpectedCost) AppendCorrection(spec CostCorrectionSpec) (Supp
 	corrected := cost
 	corrected.version = spec.Version
 	corrected.occurrence = spec.Occurrence
-	corrected.ruleVersion = spec.RuleVersion
+	corrected.priceCardVersion = spec.RuleVersion
 	corrected.agreement = spec.Agreement
 	corrected.evaluation = spec.Evaluation
 	corrected.originalCurrency = spec.OriginalCurrency

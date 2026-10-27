@@ -11,7 +11,7 @@ import (
 // 本文件补发生项修订驱动纠错的几格边界（票 demo-chain-gaps/15，ADR-0232 决定八）：同一版发生项上的第二份请求、替代评价换结算币、
 // 撤下那一路还没把失效记到结算时的两种乱序。替身同形成编排那一套，夹具全是合成串。
 
-// Covers: ADR-0200 决定三仍成立的那一格——同一版发生项、另一份请求，评价命中同一规则版本：答已有首版、交回先到者，零新增。
+// Covers: ADR-0200 决定三仍成立的那一格——同一版发生项、另一份请求，评价命中同一价卡版本：答已有首版、交回先到者，零新增。
 func TestAnotherRequestOnTheSameOccurrenceVersionFindsTheFirstVersion(t *testing.T) {
 	fixture := newRequestedCostFixture(t)
 	fixture.requests.register(t, "EVREQ-SYN-2", "occurrence-7/v1")

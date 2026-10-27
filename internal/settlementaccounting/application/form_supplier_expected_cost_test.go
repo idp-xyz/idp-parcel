@@ -40,7 +40,7 @@ func (double *buyEvaluationViewDouble) LoadBuyEvaluation(
 }
 
 // expectedCostRegistryDouble 同时演读口与登记面（生产里也是同一个适配器）：主键按版本，
-// 首版唯一按（发生项+费用项目+规则版本）三维。
+// 首版唯一按（发生项+费用项目+价卡版本）三维。
 type expectedCostRegistryDouble struct {
 	costs   map[string]domain.SupplierExpectedCost
 	loadErr error
@@ -117,7 +117,7 @@ func (double *expectedCostRegistryDouble) LoadFirstVersion(
 	_ domain.TenantID,
 	occurrence domain.ChargeOccurrenceID,
 	feeItem domain.FeeItemReference,
-	ruleVersion domain.PurchaseRuleVersionReference,
+	priceCardVersion domain.PurchaseRuleVersionReference,
 ) (domain.SupplierExpectedCost, bool, error) {
 	if double.loadErr != nil {
 		return domain.SupplierExpectedCost{}, false, double.loadErr
@@ -126,7 +126,7 @@ func (double *expectedCostRegistryDouble) LoadFirstVersion(
 		if _, corrected := cost.PriorVersion(); corrected {
 			continue
 		}
-		if cost.Occurrence().ID() == occurrence && cost.FeeItem() == feeItem && cost.RuleVersion() == ruleVersion {
+		if cost.Occurrence().ID() == occurrence && cost.FeeItem() == feeItem && cost.RuleVersion() == priceCardVersion {
 			return cost, true, nil
 		}
 	}
@@ -258,7 +258,7 @@ func expectedCostCommand(t *testing.T, version, evaluation string) application.F
 // Covers: `AT-SA-161`「外部订舱发生项及采购价格规则有效 → 形成可解释的订舱预期成本，不把
 // 订舱确认直接写成账单主张或审核应付」与 `AT-SA-176`「BUY 价卡为美元、合同结算币为人民币，
 // 评价已在内部完成换算 → 采用评价内的原币金额、汇率序列版本和换算步骤，不重算」的编排面
-// （UC-SA-002 步 5 的 BUY 方向）：首版按版本幂等、同一发生项/费用项目/规则版本只形成一次
+// （UC-SA-002 步 5 的 BUY 方向）：首版按版本幂等、同一发生项/费用项目/价卡版本只形成一次
 // 首版（第二个版本身份交回先到的首版——纠错走 AppendCorrection，不在形成口）。
 func TestACompletedBuyEvaluationFormsTheFirstExpectedCostVersion(t *testing.T) {
 	fixture := newExpectedCostFixture(t)

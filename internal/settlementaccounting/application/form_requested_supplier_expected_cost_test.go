@@ -158,7 +158,7 @@ func (fixture *requestedCostFixture) handle(t *testing.T, evaluation, request st
 }
 
 // Covers: UC-SA-002 步 5 BUY 方向经回指接上——请求上的发生项、费用项目、供应商协议与评价一起形成首版，版本标识由
-// 请求派生，金额、换算与规则版本出自评价（AT-SA-176 形状）。同一份再来一次是重放，不多形成。
+// 请求派生，金额、换算与价卡版本出自评价（AT-SA-176 形状）。同一份再来一次是重放，不多形成。
 func TestARequestedBuyEvaluationFormsTheFirstVersionUnderTheDerivedIdentity(t *testing.T) {
 	fixture := newRequestedCostFixture(t)
 
@@ -192,7 +192,7 @@ func TestARequestedBuyEvaluationFormsTheFirstVersionUnderTheDerivedIdentity(t *t
 	}
 }
 
-// Covers: AT-SA-207——发生项 v1 失效（v2）之后长出替代版本 v3，另一份请求点名 v3、同一费用项目，评价命中同一规则版本：不再答`已有首版`
+// Covers: AT-SA-207——发生项 v1 失效（v2）之后长出替代版本 v3，另一份请求点名 v3、同一费用项目，评价命中同一价卡版本：不再答`已有首版`
 // 即止（ADR-0200 越权风险点 4、票 demo-chain-gaps/15），而是按新评价重述全额、接在失效纠错版本后面追加一个纠错版本：回指它、原因是
 // 发生项替代、发生项版本随评价换成 v3，版本标识由这份请求派生；首版一字不动。金额与首版相同也追加——纠错由发生项新版本触发，不由评价
 // 结果不同触发。重放不多一份。

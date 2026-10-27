@@ -26,7 +26,7 @@ const buyEvaluationRecordedConsumerName = "settlement-accounting/form-supplier-e
 const BuyEvaluationRecordedEventType eventing.EventType = "parcel-pricing.evaluation.recorded"
 
 // RecordedBuyEvaluation 是译码后的引用——只有引用。载荷恰是提供方 FindByID 所需的两维（租户、评价标识），
-// 金额、币种、规则版本一律不在信封里：它们整组出自评价，处理方按引用向提供方读口取回（ADR-0107），
+// 金额、币种、价卡版本一律不在信封里：它们整组出自评价，处理方按引用向提供方读口取回（ADR-0107），
 // 消费者不复制第二份。
 type RecordedBuyEvaluation struct {
 	TenantID     string

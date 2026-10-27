@@ -69,7 +69,7 @@ func (adapter *BuyEvaluationAdapter) LoadBuyEvaluation(
 		return saports.BuyEvaluationAdoption{}, false, fmt.Errorf("%w: %s / %s", ErrNotABuyEvaluation, evaluation.Direction(), evaluation.Purpose())
 	}
 
-	ruleVersion, err := sadomain.NewPurchaseRuleVersionReference(
+	priceCardVersion, err := sadomain.NewPurchaseRuleVersionReference(
 		evaluation.PlanReference().ID() + "@" + evaluation.PlanReference().Version())
 	if err != nil {
 		return saports.BuyEvaluationAdoption{}, false, fmt.Errorf("%w: plan reference: %v", ErrUntranslatableAnswer, err)
@@ -77,7 +77,7 @@ func (adapter *BuyEvaluationAdapter) LoadBuyEvaluation(
 	adoption := saports.BuyEvaluationAdoption{
 		Evaluation:  reference,
 		Outcome:     outcomeOf(evaluation.Status()),
-		RuleVersion: ruleVersion,
+		RuleVersion: priceCardVersion,
 	}
 	if requested, ok := evaluation.RequestReference(); ok {
 		request, err := sadomain.NewEvaluationRequestID(requested.String())

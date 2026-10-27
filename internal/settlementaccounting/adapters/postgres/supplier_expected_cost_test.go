@@ -174,10 +174,10 @@ func TestAnUnknownExpectedCostVersionIsNotFound(t *testing.T) {
 }
 
 // TestACorrectionCarryingNewReferencesEscapesTheFirstVersionIndex 证两件事在库里同时
-// 成立：纠错版本整组重述引用（规则版本、协议、发生项版本随新评价，ADR-0067 决定二）
-// 后照常落库读回；且它携带的新规则版本不撞幂等三维的部分唯一索引——`WHERE
+// 成立：纠错版本整组重述引用（价卡版本、协议、发生项版本随新评价，ADR-0067 决定二）
+// 后照常落库读回；且它携带的新价卡版本不撞幂等三维的部分唯一索引——`WHERE
 // prior_version IS NULL` 已把纠错版本放在三维之外。这条要有测试守住，否则下次有人
-// 看到「纠错版本的规则版本和首版不同」会以为是 bug 再改回去。
+// 看到「纠错版本的价卡版本和首版不同」会以为是 bug 再改回去。
 func TestACorrectionCarryingNewReferencesEscapesTheFirstVersionIndex(t *testing.T) {
 	repository, transactor := newExpectedCosts(t)
 	ctx := t.Context()
@@ -226,7 +226,7 @@ func TestACorrectionCarryingNewReferencesEscapesTheFirstVersionIndex(t *testing.
 }
 
 // TestTheSameCostTripletFormsOnlyOneFirstVersion 证幂等三维落在库里：同一发生项、费用
-// 项目与规则版本只许有一份首版，第二份换个版本号也进不来——答`已登记`而不是报错，
+// 项目与价卡版本只许有一份首版，第二份换个版本号也进不来——答`已登记`而不是报错，
 // 调用方据以读回赢家（ADR-0031）。
 func TestTheSameCostTripletFormsOnlyOneFirstVersion(t *testing.T) {
 	repository, transactor := newExpectedCosts(t)

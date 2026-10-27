@@ -59,12 +59,12 @@ func (repository *SupplierExpectedCosts) LoadFirstVersion(
 	tenant domain.TenantID,
 	occurrence domain.ChargeOccurrenceID,
 	feeItem domain.FeeItemReference,
-	ruleVersion domain.PurchaseRuleVersionReference,
+	priceCardVersion domain.PurchaseRuleVersionReference,
 ) (domain.SupplierExpectedCost, bool, error) {
 	return repository.loadOne(ctx,
 		`WHERE tenant_id = $1 AND occurrence_id = $2 AND fee_item = $3 AND purchase_rule_version = $4
 		   AND prior_version IS NULL`,
-		tenant.String(), occurrence.String(), feeItem.String(), ruleVersion.String())
+		tenant.String(), occurrence.String(), feeItem.String(), priceCardVersion.String())
 }
 
 func (repository *SupplierExpectedCosts) loadOne(
@@ -81,7 +81,7 @@ func (repository *SupplierExpectedCosts) loadOne(
 		versionValue                                      string
 		occurrenceID, occurrenceReason, occurrenceVersion string
 		occurredAt                                        time.Time
-		feeItem, ruleVersion, agreement, evaluation       string
+		feeItem, priceCardVersion, agreement, evaluation  string
 		originalCurrency, settlementCurrency              string
 		originalMinor, settlementMinor                    int64
 		conversion, priorVersion, correctionReason        *string
@@ -95,7 +95,7 @@ func (repository *SupplierExpectedCosts) loadOne(
 		   FROM settlement_accounting.supplier_expected_cost `+where,
 		args...,
 	).Scan(&versionValue, &occurrenceID, &occurrenceReason, &occurrenceVersion, &occurredAt,
-		&feeItem, &ruleVersion, &agreement, &evaluation,
+		&feeItem, &priceCardVersion, &agreement, &evaluation,
 		&originalCurrency, &originalMinor, &settlementCurrency, &settlementMinor,
 		&conversion, &priorVersion, &correctionReason, &withdrawn)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -116,7 +116,7 @@ func (repository *SupplierExpectedCosts) loadOne(
 		occurrenceVersion:  occurrenceVersion,
 		occurredAt:         occurredAt,
 		feeItem:            feeItem,
-		ruleVersion:        ruleVersion,
+		priceCardVersion:   priceCardVersion,
 		agreement:          agreement,
 		evaluation:         evaluation,
 		originalCurrency:   originalCurrency,
@@ -142,7 +142,7 @@ func (repository *SupplierExpectedCosts) loadOne(
 // Save 登记一份预期成本版本（首版或纠错版本同一入口，靠回指分辨）。同（租户+版本）
 // 已有行时交回`已登记`而不是错误：那是业务答案，调用方据以读回赢家（ADR-0031）。
 //
-// 首版撞幂等三维时交回的也是`已登记`：那三维上的部分唯一索引拦的正是「同一发生项、
+// 首版撞幂等三维时交回的也是`已登记`：那三维上的部分唯一索引拦的正是 UC-SA-002 的「同一发生项、
 // 费用项目和规则版本重复形成预期成本」，冲突在这里是重复形成，不是技术故障。纠错版本撞「一版
 // 至多被纠正一次」（迁移 0044）同样交回`已登记`。
 func (repository *SupplierExpectedCosts) Save(
@@ -224,7 +224,7 @@ type expectedCostColumns struct {
 	occurrenceVersion  string
 	occurredAt         time.Time
 	feeItem            string
-	ruleVersion        string
+	priceCardVersion   string
 	agreement          string
 	evaluation         string
 	originalCurrency   string
@@ -256,7 +256,7 @@ func expectedCostSpecOf(columns expectedCostColumns) (domain.RehydrateSupplierEx
 	if spec.FeeItem, err = domain.NewFeeItemReference(columns.feeItem); err != nil {
 		return domain.RehydrateSupplierExpectedCostSpec{}, err
 	}
-	if spec.RuleVersion, err = domain.NewPurchaseRuleVersionReference(columns.ruleVersion); err != nil {
+	if spec.RuleVersion, err = domain.NewPurchaseRuleVersionReference(columns.priceCardVersion); err != nil {
 		return domain.RehydrateSupplierExpectedCostSpec{}, err
 	}
 	if spec.Agreement, err = domain.NewSupplierAgreementReference(columns.agreement); err != nil {

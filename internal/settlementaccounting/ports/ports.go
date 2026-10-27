@@ -266,7 +266,8 @@ func (outcome BuyEvaluationOutcome) String() string {
 //
 // 计价基准时点（asOf）不在这里：它由评价固定在评价内，SA 以 Evaluation 引用回指，不复制
 // 第二份；发生项、费用项目与供应商协议也不在这里——它们归 TF/PC，随命令进入，与评价一起
-// 形成预期成本。RuleVersion 是评价命中的可执行价卡版本（GLOSSARY「价格规则版本」的 PP 半边）。
+// 形成预期成本。RuleVersion 是评价命中的可执行价卡版本（GLOSSARY「可执行价卡版本」），
+// 不是 party-commercial 的价格规则版本。
 //
 // Request 是评价回指的 BUY 评价请求标识，各格都带；评价没有回指（计价内部或测试路径形成）时是零值。它是不是真
 // 的一份 BUY 请求，由 BUY 评价请求册按标识回答，读口不认前缀、不猜。形成命令缺的发生项、费用项目与供应商协议
@@ -311,7 +312,7 @@ type BuyEvaluationView interface {
 }
 
 // ExpectedCostSaveOutcome 是一份预期成本版本在持久化面的落点封闭代数（ADR-0031）：同
-// （租户+版本）已有行、或同（发生项+费用项目+规则版本）已有首版，都是`已登记`——绝不覆盖，
+// （租户+版本）已有行、或同（发生项+费用项目+价卡版本）已有首版，都是`已登记`——绝不覆盖，
 // 纠错是新版本不是改写。
 type ExpectedCostSaveOutcome uint8
 
@@ -334,7 +335,7 @@ func (outcome ExpectedCostSaveOutcome) String() string {
 
 // ExpectedCostRegistry 是供应商预期成本的登记面（UC-SA-002 步 5 BUY 侧形成、步 8 纠错追加）。
 // 与读取面 ExpectedCostView 分两个接口、同一个适配器实现：读方（UC-SA-004 逐行匹配）不该拿到
-// 写口。LoadFirstVersion 按幂等三维取首版——「同一发生项、费用项目和规则版本不得重复形成预期
+// 写口。LoadFirstVersion 按幂等三维（发生项、费用项目、价卡版本）取首版——UC-SA-002 的「同一发生项、费用项目和规则版本不得重复形成预期
 // 成本」撞上时，编排要读回先到的首版作答，而它的版本身份调用方不知道。
 type ExpectedCostRegistry interface {
 	Save(
@@ -348,7 +349,7 @@ type ExpectedCostRegistry interface {
 		tenant domain.TenantID,
 		occurrence domain.ChargeOccurrenceID,
 		feeItem domain.FeeItemReference,
-		ruleVersion domain.PurchaseRuleVersionReference,
+		priceCardVersion domain.PurchaseRuleVersionReference,
 	) (domain.SupplierExpectedCost, bool, error)
 	// LoadOccurrenceCostState 先取这一项发生项的事务级串行锁，再交它各条版本链的链头与已失效的那几版（ADR-0232 决定七、八）。形成、
 	// 纠错与撤下都经它读：评价晚到的形成与失效信封并发时，两边各凭对方还没提交的样子判，就会在已失效的那一版上形成一份没人撤的成本。

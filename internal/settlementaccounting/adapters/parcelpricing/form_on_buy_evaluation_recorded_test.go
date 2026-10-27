@@ -77,7 +77,7 @@ func (requests *buyGateRequests) FindByID(_ context.Context, key saports.Evaluat
 	return record, found, nil
 }
 
-// buyGateCosts 同时演预期成本读口与登记面：主键按版本，首版唯一按（发生项、费用项目、规则版本）。
+// buyGateCosts 同时演预期成本读口与登记面：主键按版本，首版唯一按（发生项、费用项目、价卡版本）。
 type buyGateCosts struct {
 	byVersion map[string]sadomain.SupplierExpectedCost
 	saveErr   error
@@ -90,10 +90,10 @@ func (costs *buyGateCosts) LoadExpectedCost(_ context.Context, _ sadomain.Tenant
 
 func (costs *buyGateCosts) LoadFirstVersion(
 	_ context.Context, _ sadomain.TenantID, occurrence sadomain.ChargeOccurrenceID, feeItem sadomain.FeeItemReference,
-	ruleVersion sadomain.PurchaseRuleVersionReference,
+	priceCardVersion sadomain.PurchaseRuleVersionReference,
 ) (sadomain.SupplierExpectedCost, bool, error) {
 	for _, cost := range costs.byVersion {
-		if cost.Occurrence().ID() == occurrence && cost.FeeItem() == feeItem && cost.RuleVersion() == ruleVersion {
+		if cost.Occurrence().ID() == occurrence && cost.FeeItem() == feeItem && cost.RuleVersion() == priceCardVersion {
 			return cost, true, nil
 		}
 	}
@@ -209,7 +209,7 @@ func roundedBuyCard(t *testing.T) ppdomain.PricingPlanVersion {
 }
 
 // Covers: 回指在册的已完成 BUY 评价经门形成一份供应商预期成本首版：版本标识由请求派生，合格来源引用取自请求，金额与
-// 规则版本出自评价（12.5 USD → 1250 分）。同一封再投一次入账，仍只有一份。
+// 价卡版本出自评价（12.5 USD → 1250 分）。同一封再投一次入账，仍只有一份。
 func TestTheBuyGateFormsTheSupplierExpectedCostFromTheRequestedEvaluation(t *testing.T) {
 	fixture := newBuyGateFixture(t, requestedEvaluation(t, "eval-buy-1", "EVREQ-SYN-1", roundedBuyCard(t), "Z1"))
 

@@ -241,7 +241,7 @@ func TestASameCurrencyCorrectionRestatesBothAmounts(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0067 决定二/三与 `AT-SA-164`——纠错换评价，采购规则版本、协议引用与
+// Covers: ADR-0067 决定二/三与 `AT-SA-164`——纠错换评价，价卡版本、协议引用与
 // 发生项版本、业务时点随评价整组重述（`OccurrenceVersion` 自注「发生项有效性更正换
 // 版本，预期成本据以追加计价纠错」正是这条路径）；发生项 ID 是身份，与被纠正版本
 // 不一致时拒——换 ID 就是另一份成本，只能另行形成。
