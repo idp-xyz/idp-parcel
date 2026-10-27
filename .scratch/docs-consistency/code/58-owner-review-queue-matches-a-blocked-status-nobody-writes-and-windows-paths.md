@@ -1,7 +1,7 @@
 # 58 `owner-review-queue.ps1` 只认没人写的 `Status: blocked`，路径匹配又只认 Windows 分隔符
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-tool（见文末「完成记录」）。原 ready-for-agent——R3（不急）：复核队列是给 owner 看的汇总页，不挡任何业务路径；但在 WSL 里跑它，第二节永远是空的。2026-10-21 文档自洽 10（10b）立（用户「你作为业务和系统专家自决」授权），分支 claude-dc10b。
+Status: resolved——2026-10-27 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-tool（见文末「完成记录」）。原 ready-for-agent——R3（不急）：复核队列是给 owner 看的汇总页，不挡任何业务路径；但在 WSL 里跑它，第二节永远是空的。2026-10-21 文档自洽 10（10b）立（用户「你作为业务和系统专家自决」授权），分支 claude-dc10b。
 Blocked by: 无
 出处：[audit/cross.md](../audit/cross.md) AG·L6（归 B，10b 代决）。取证于 main `4e7874ba0`。
 
@@ -82,3 +82,10 @@ S。
 - 评审可合入：CI 门没放松（三道要求新鲜的门在 main 推送上都在，条件逐个按 Actions 表达式语法核过，新增 PR 步与 main 推送互斥）；PR 脚本退出码在 11 种造出的状态下实测（对 1、2 以外的退出码是失败而不是静默通过）；按 `land.sh` 的顺序模拟 main 推送，三道门绿；ps1 在 pwsh 7.6.6 下第二节 47 张，与评审用 python 独立复算的文件集合逐一相等，抽样 10 张符合口径，未了结票里没有漏收。
 - 修订：`scripts/ci/generated-artifacts-pr.sh` 补可执行位（`parallel-sessions.md` 说"直接跑这个脚本"）。
 - 代决 2 的实数订正：第二节 47 张里，`Blocked by:` 链接的目标票 `Status:` 全是 resolved 的有 30 张（`demo-chain-gaps` 的 34–47 等与 `first-party-api` 01–03 等），另 13 张没有票链接，真正"等别处"的只有少数；原记录写的"今天只有一张"指的是行内字面写着"已 resolved"的那一张，没有计这 30 张链接目标已了结的。第二节因此约三分之二是历史边，owner 读这一节时要带着这个比例看。协调方裁定不在本票里加"链接目标均已 resolved 则折叠"的机器判断（要写 PowerShell 5.1 兼容的链接解析与目标票查找，复杂度高于这张"让第二节不再为空"的票），记作已知噪声。
+
+## 进 main 记录（2026-10-27，协调方）
+
+- 分支 `claude-tool` 与 code/57、58 同批，由协调方快进，tip `d07f7b158` 再加一笔可执行位；隔离评审（Sonnet）可合入，无阻断：CI 三道要求新鲜的门（机制清点、ADR 索引、AT 计数）在 main 推送上都在，条件逐个按 Actions 表达式语法核过，新增的 PR 步与 main 推送互斥；PR 脚本退出码在 11 种造出的状态下实测，对 1、2 以外的退出码是失败而不是静默通过；按 `land.sh` 的顺序模拟 main 推送，三道门绿，落地流程不会变红；「包加载报错」字面串确是 `tools/mechanism-inventory` 写进报告的文案。协调方单独提交重算的 AT 计数、重生成的 ADR 索引与机制清点（本批无变动）；全量 `scripts/test-full.sh` 退 0、159 个包 ok；`go build ./...`、`go vet ./...` 干净。无业务代码、无迁移、无 ADR、无 AT 号变化。**首个带 PR 的推送需要看一次 Actions**，确认两种事件各自跑的步骤符合预期，这一点本机无法验证。
+- 本票：第二节改认 needs-info 与带 `Blocked by:` 的未了结票，路径同认 `/` 与 `\`，`$repo` 不再被换成反斜杠（原来让 WSL 里 `git -C` fatal、页头 SHA 为空）；第三节共用同一票清单，票目录加上 `code/`。pwsh 7.6.6 实跑第二节 0→47 张，评审用 python 独立复算两节的文件集合逐一相等；未了结票里没有漏收。
+- 协调方订正：第二节 47 张里 30 张的 `Blocked by:` 链接目标已全部 resolved，约三分之二是历史边，已记入票面；不加"链接目标均已 resolved 则折叠"的机器判断。Windows PowerShell 5.1 没有实跑（只读代码判断兼容）。
+- 去向：无新票。
