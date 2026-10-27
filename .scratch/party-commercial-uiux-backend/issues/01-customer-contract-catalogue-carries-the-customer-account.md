@@ -41,3 +41,7 @@ S
 - 用例：真库 `TestCustomerContractCatalogueEchoesTheCustomerAccount`；HTTP `TestCustomerContractsEndpointEchoesTheCustomerAccountOnlyWhenContentIsRegistered`。
 - 管理台：`api.ts` 的 `CustomerContractRecord` 补 `customerAccountId`；`PartyContractsPage.tsx` 加「货主客户账户」列，客户名称取 `loadCustomerAccountSuggestions` 读回的账户册第一页，取不到不显名称；检索也认账户标识。演示库里 `SYN-CONTRACT-01`、`02` 分别显示 `SYN-ACCOUNT-01 合成货主一号（演示）`、`SYN-ACCOUNT-02 合成货主二号（演示）`。
 - 代决与越权风险点：无新决定。
+
+## 评审记录
+
+评审 ← 隔离子代理(sonnet) · 钉 `2e13d629d`（两票同审）：阻断无；总评可进 main。门：`go test ./internal/partycommercial/... ./cmd/parcel-api/... ./internal/architecture/...` 全绿，管理台 tsc 退 0、node:test 780 过。非阻断已处理：AT-PC-066 行去掉夹带消费方的「管理台据此…」半句；账户列插入改按列标识定位，不按下标数；旧 `party-commercial-uiux` spec 第三段两条标注指向本批。

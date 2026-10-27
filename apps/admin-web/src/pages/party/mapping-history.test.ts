@@ -30,4 +30,5 @@ test('映射历史：显式未配置的一笔如实写出，不留空；有终�
   const [entry] = mappingHistoryOf([revision(1, [], { effectiveEndsAt: '2027-01-01T00:00:00Z' })]);
   equal(entry.note?.includes('渠道：未配置（显式登记）'), true);
   equal(entry.interval.endsWith('持续有效'), false);
+  equal(entry.interval.includes('2027-01-01'), true);
 });

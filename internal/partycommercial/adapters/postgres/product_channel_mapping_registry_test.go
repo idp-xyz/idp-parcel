@@ -100,6 +100,35 @@ func mustSaveMapping(
 	})
 }
 
+// mappingRegistrationWithEnd 把一笔登记换成带区间终点的同内容一笔：修订历史要证每一笔各读各的区间终点。
+func mappingRegistrationWithEnd(
+	t *testing.T,
+	base domain.ProductChannelMappingRegistration,
+	endsAt time.Time,
+) domain.ProductChannelMappingRegistration {
+	t.Helper()
+	interval, err := domain.NewEffectiveInterval(mappingStartsAt, endsAt)
+	if err != nil {
+		t.Fatalf("new interval: %v", err)
+	}
+	registration, err := domain.NewProductChannelMappingRegistration(
+		base.Tenant(),
+		base.ID(),
+		base.Revision(),
+		domain.ProductChannelMappingSpec{
+			Product:        base.Product(),
+			ProductVersion: base.ProductVersion(),
+			Binding:        base.Binding(),
+			Effective:      interval,
+			Basis:          base.Basis(),
+		},
+	)
+	if err != nil {
+		t.Fatalf("new mapping registration: %v", err)
+	}
+	return registration
+}
+
 // Covers: 票 02 完成判据「渠道产品目录页非空册、渠道绑定格如实显示未配置」的库上
 // 半边——已配置与显式未配置两种绑定落册往返、目录上列最新修订、空数组原样转写。
 func TestProductChannelMappingRoundTripAndCatalogue(t *testing.T) {
@@ -174,9 +203,12 @@ func TestProductChannelMappingRevisionsExpandOneMappingAscending(t *testing.T) {
 	mappings, catalogue, transactor := newProductChannelMappings(t)
 	ctx := t.Context()
 
-	mustSaveMapping(t, transactor, mappings, mappingRegistrationFixture(t, "tenant-1", "map-1", 1, "CH-A"))
+	// 落库次序故意是 2、1、3：序按修订号而不按 recorded_at，到达次序不是修订号的次序（登记不要求连续到达）。
 	mustSaveMapping(t, transactor, mappings, mappingRegistrationFixture(t, "tenant-1", "map-1", 2))
-	mustSaveMapping(t, transactor, mappings, mappingRegistrationFixture(t, "tenant-1", "map-1", 3, "CH-B", "CH-C"))
+	mustSaveMapping(t, transactor, mappings, mappingRegistrationFixture(t, "tenant-1", "map-1", 1, "CH-A"))
+	closing := mappingRegistrationFixture(t, "tenant-1", "map-1", 3, "CH-B", "CH-C")
+	closing = mappingRegistrationWithEnd(t, closing, mappingStartsAt.Add(30*24*time.Hour))
+	mustSaveMapping(t, transactor, mappings, closing)
 	mustSaveMapping(t, transactor, mappings, mappingRegistrationFixture(t, "tenant-1", "map-2", 1, "CH-Z"))
 	mustSaveMapping(t, transactor, mappings, mappingRegistrationFixture(t, "tenant-b", "map-1", 1, "CH-FOREIGN"))
 
@@ -196,6 +228,9 @@ func TestProductChannelMappingRevisionsExpandOneMappingAscending(t *testing.T) {
 	}
 	if len(chain[2].Channels) != 2 || chain[2].Channels[1] != "CH-C" {
 		t.Fatalf("第 3 笔绑定 = %+v", chain[2].Channels)
+	}
+	if chain[0].HasEffectiveEnd || !chain[2].HasEffectiveEnd || !chain[2].EffectiveEndsAt.Equal(mappingStartsAt.Add(30*24*time.Hour)) {
+		t.Fatalf("区间终点没有逐笔读回：第 1 笔 %+v，第 3 笔 %+v", chain[0].HasEffectiveEnd, chain[2])
 	}
 	for _, row := range chain {
 		if row.MappingID != "map-1" || row.TenantID != "tenant-1" {

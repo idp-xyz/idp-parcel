@@ -125,7 +125,7 @@ func init() {
 				// ×区间的修订），行形状与修订轴不同（裁决在 ports.ProductChannelMappingCatalogueRead）。
 				{Pattern: "/commercial-product-channel-mappings", Handler: commercialhttp.NewQueryProductChannelMappingsEndpoint(commercialCatalogueIntake, wiring.productChannelMappings)},
 				// 映射修订历史（票 party-commercial-uiux-backend/02）：渠道产品目录页详情抽屉「历史」栏的供数面，按路径里的映射展开整条修订链。
-				// 同读口参数、同 Intake 变量，裁决与上面参与方那一行一字不改（在 ports.ProductChannelMappingRevisionHistoryRead）；
+				// 同读口参数、同 Intake 变量，裁决与业务参与方修订历史那一行一字不改（在 ports.ProductChannelMappingRevisionHistoryRead）；
 				// {mappingId} 由路由填进 PathValue，端点按同名取。
 				{Pattern: "/commercial-product-channel-mappings/{mappingId}/revisions", Handler: commercialhttp.NewQueryProductChannelMappingRevisionsEndpoint(commercialCatalogueIntake, wiring.productChannelMappings)},
 				// 注册号类型目录（ADR-0145 决定一，票 legal-entity-profile/01）：按注册国家 / 地区登记的

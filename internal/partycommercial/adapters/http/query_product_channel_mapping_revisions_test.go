@@ -73,20 +73,28 @@ func TestProductChannelMappingRevisionsEndpointTranscribesTheWholeChain(t *testi
 
 // Covers: 不在册的映射与跨租户都答 200 加空数组，不答 404、不泄露存在性。
 func TestProductChannelMappingRevisionsEndpointAnswersAnUnknownMappingWithAnEmptyChain(t *testing.T) {
-	reader := &productChannelMappingReaderDouble{tenant: catValue(t, domain.NewTenantID, "tenant-1")}
+	// 读口这一侧登的是 tenant-2 的映射，请求的 Intake 认出的租户是 tenant-1：同名映射跨租户读不到，与不在册同形。
+	reader := &productChannelMappingReaderDouble{
+		tenant: catValue(t, domain.NewTenantID, "tenant-2"),
+		revisions: map[string][]ports.ProductChannelMappingRow{
+			"map-1": {{TenantID: "tenant-2", MappingID: "map-1", Revision: 1, Basis: "basis-1", EffectiveStartsAt: mappingListedAt, RegisteredAt: mappingListedAt}},
+		},
+	}
 	endpoint := commercialhttp.NewQueryProductChannelMappingRevisionsEndpoint(intakeDouble{query: catalogueQuery(t)}, reader)
 
-	recorder := httptest.NewRecorder()
-	endpoint.ServeHTTP(recorder, mappingRevisionsRequest("map-nobody"))
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body)
-	}
-	var body map[string]json.RawMessage
-	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if string(body["revisions"]) != "[]" || string(body["mappingId"]) != `"map-nobody"` {
-		t.Fatalf("不在册的映射 = %s", recorder.Body)
+	for _, mapping := range []string{"map-nobody", "map-1"} {
+		recorder := httptest.NewRecorder()
+		endpoint.ServeHTTP(recorder, mappingRevisionsRequest(mapping))
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("%s status = %d, body = %s", mapping, recorder.Code, recorder.Body)
+		}
+		var body map[string]json.RawMessage
+		if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if string(body["revisions"]) != "[]" || string(body["mappingId"]) != `"`+mapping+`"` {
+			t.Fatalf("%s = %s", mapping, recorder.Body)
+		}
 	}
 }
 

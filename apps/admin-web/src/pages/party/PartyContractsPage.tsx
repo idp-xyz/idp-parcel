@@ -203,7 +203,9 @@ function CustomerContractsTable({
         )
       : [],
   );
-  const contractColumns = [...columns.slice(0, 3), customerAccountColumn(accountNames), ...columns.slice(3)];
+  // 账户列紧跟状态列；按列标识找位置，不按下标数。
+  const afterStatus = columns.findIndex((column) => column.id === 'status') + 1;
+  const contractColumns = [...columns.slice(0, afterStatus), customerAccountColumn(accountNames), ...columns.slice(afterStatus)];
   // 点行上的「收尾…」：记下是哪一版，抽屉据此重读册面（票 party-commercial-uiux/16）。
   const [closing, setClosing] = useState<ClosureTarget | null>(null);
   // 点行打开的版本详情：记行键（票 party-commercial-uiux/21）。
