@@ -72,10 +72,10 @@ func (outcome PublicationDraftAdvanceOutcome) String() string {
 // 即拒（RequireExecutor），录入 / 批准 / 发布三口各自一笔事务，发布那一笔与受控发布用例同事务。
 //
 // LoadDraft 遇到本构建折不回正文的行，交回的错误链里带 *domain.UnreadablePublicationDraft（也认
-// domain.ErrPublicationDraftNotReadable）：那一行存在、只是读不回，用例据它的状态与摘要答业务格，不当技术失败。
-// 行本身坏了（domain.ErrInvalidRehydratedPublicationDraft）仍是普通错误。SubmitDraft 撞键后的读回遇到读不回的行：
-// 已不在`待批准`的答`内容已固定`（读不回的行不可能与这次录入是同一次录入）；仍在`待批准`的行不可能让修订落空，
-// 那是行坏了，按错误交回。
+// domain.ErrPublicationDraftNotReadable）：那一行存在、只是读不回，用例据它的状态与摘要答业务格，不当技术失败。读不回只收
+// 两类成因（列上的规范化版本不认得，或文档带着构造门收紧后拒绝的内容）；行本身坏了（domain.ErrInvalidRehydratedPublicationDraft，
+// 含文档自身立不住）是普通错误。SubmitDraft 撞键后的读回遇到读不回的行：已不在`待批准`的答`内容已固定`（读不回的行不可能
+// 与这次录入是同一次录入）；仍在`待批准`的行不会让修订落空（修订条件含快照文档），那只可能是行又被别的写者动过，按错误交回。
 type PublicationDraftRegistry interface {
 	SubmitDraft(ctx context.Context, draft domain.PublicationDraft) (PublicationDraftSubmitOutcome, error)
 	LoadDraft(
@@ -133,7 +133,7 @@ type ApprovalDutyRuleRegistry interface {
 //
 // 载体读回来都经重建门（domain.RehydratePublicationDraft）：快照折回正文再算一遍与列上摘要比。本构建折不回正文的行不让
 // 整页答不出，也不被悄悄跳过——列表里它作为 OpenPublicationDraft 的读不回一格带着库上剩下的事实在场，批准者看得见这一份在、
-// 为何动不了；行本身坏了（重建门因行数据而拒）仍让整次答案未形成，不交一份缺了行的列表。只列还没发布的（`待批准`与`已批准`）：
+// 为何动不了；行本身坏了（重建门因行数据而拒）让整次答案未形成，不交一份缺了行的列表。只列还没发布的（`待批准`与`已批准`）：
 // 发布后载体只是历史痕迹，权威记录是那一册里的商业版本，目录读口已经交出。
 //
 // LoadDraft 对读不回的行的答法同 PublicationDraftRegistry。

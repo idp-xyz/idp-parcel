@@ -17,9 +17,9 @@ import (
 )
 
 // 本文件证本构建折不回正文的载体行在四个口上的传输面（AT-PC-071）：列表照样列出它并标出读不回，单份读回答 200 加
-// DRAFT_NOT_READABLE（带库上的事实、没有 content），批准口与发布口答同名一格——都不是 5xx；行本身坏了与读取失败仍答 5xx。
+// DRAFT_NOT_READABLE（带库上的事实、没有 content），批准口与发布口答同名一格——都不是 5xx；行本身坏了与读取失败答 5xx。
 
-// unreadableFrom 把一份读得回的载体造成「本构建读不回」的同一行：规范化版本换成本构建不认得的 PCC-9，状态与痕迹照旧。
+// unreadableFrom 把一份读得回的载体造成「本构建读不回」的同一行：规范化版本换成本构建不认得的 PCC-9，状态与痕迹相同。
 func unreadableFrom(t *testing.T, draft domain.PublicationDraft) *domain.UnreadablePublicationDraft {
 	t.Helper()
 	approver, _ := draft.Approver()
@@ -45,6 +45,18 @@ func unreadableFrom(t *testing.T, draft domain.PublicationDraft) *domain.Unreada
 		t.Fatalf("夹具应读不回：err = %v", err)
 	}
 	return unreadable
+}
+
+// assertCauseIsTheDomainCause 钉成因的文字来源：答复里的成因正是领域折不回的成因，不是整个错误值的文字——后者在成因前拼着
+// 哨兵那句英文，管理台会原样显示成「原因：party commercial: publication draft cannot be read back…」。
+func assertCauseIsTheDomainCause(t *testing.T, where, got string, unreadable *domain.UnreadablePublicationDraft) {
+	t.Helper()
+	if got == "" || got != unreadable.Cause().Error() || strings.Contains(got, "cannot be read back by this build") {
+		t.Fatalf("%s的成因 = %q, want the domain cause %q", where, got, unreadable.Cause().Error())
+	}
+	if !strings.Contains(got, "PCC-9") {
+		t.Fatalf("%s的成因没说清是哪个规范化版本读不回：%q", where, got)
+	}
 }
 
 func referenceMapOf(draft domain.PublicationDraft) map[domain.CommercialObjectKind]domain.CommercialObjectID {
@@ -90,9 +102,7 @@ func TestAnUnreadableDraftIsListedBesideTheReadableOnes(t *testing.T) {
 		str(first, "shellDigest") != approved.ShellDigest() || str(first, "submitter") != "op-submitter" || str(first, "approver") != "op-approver" {
 		t.Fatalf("读不回的一行 = %v", first)
 	}
-	if !strings.Contains(str(first, "unreadableCause"), "PCC-9") {
-		t.Fatalf("成因没说清是哪个规范化版本读不回：%q", str(first, "unreadableCause"))
-	}
+	assertCauseIsTheDomainCause(t, "列表", str(first, "unreadableCause"), unreadable)
 	if _, has := first["content"]; has {
 		t.Fatal("读不回的一行带了 content")
 	}
@@ -105,7 +115,7 @@ func TestAnUnreadableDraftIsListedBesideTheReadableOnes(t *testing.T) {
 }
 
 // Covers: AT-PC-071——单份读回遇到读不回的载体：200 加 DRAFT_NOT_READABLE，draft 带库上的事实与成因、没有 content；
-// 行本身坏了与读取失败仍答 5xx（列表同），不被收进这一格。
+// 行本身坏了与读取失败答 5xx（列表同），不被收进这一格。
 func TestAnUnreadableDraftReadsBackAsNotReadableAndABrokenOneStillAnswers5xx(t *testing.T) {
 	_, _, approved := submittedAndApprovedDrafts(t)
 	unreadable := unreadableFrom(t, approved)
@@ -124,9 +134,12 @@ func TestAnUnreadableDraftReadsBackAsNotReadableAndABrokenOneStillAnswers5xx(t *
 	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil || recorder.Code != http.StatusOK || body.Outcome != "DRAFT_NOT_READABLE" {
 		t.Fatalf("读不回 = %d %s (%v)", recorder.Code, recorder.Body, err)
 	}
-	if string(body.Draft["readable"]) != "false" || string(body.Draft["status"]) != `"APPROVED"` || len(body.Draft["unreadableCause"]) == 0 {
+	if string(body.Draft["readable"]) != "false" || string(body.Draft["status"]) != `"APPROVED"` {
 		t.Fatalf("draft = %v", body.Draft)
 	}
+	var cause string
+	_ = json.Unmarshal(body.Draft["unreadableCause"], &cause)
+	assertCauseIsTheDomainCause(t, "单份读回", cause, unreadable)
 	if _, has := body.Draft["content"]; has {
 		t.Fatal("读不回的载体带了 content：折不回的文档不能冒充摘要盖住的内容")
 	}
@@ -165,7 +178,7 @@ func operatorOver(store failingLoadStore, rules dutyRuleStore, clock pcClock) dr
 }
 
 // Covers: AT-PC-071——批准口与发布口遇到读不回的载体：200 加 DRAFT_NOT_READABLE，带载体状态与成因、不带任何摘要（读不回的载体没有可批准的
-// 内容，摘要不能被原样交回去批），发布口也没有发布用例的答案；已发布的读不回行答 DRAFT_ALREADY_PUBLISHED；读取失败仍答 5xx。
+// 内容，摘要不能被原样交回去批），发布口也没有发布用例的答案；已发布的读不回行答 DRAFT_ALREADY_PUBLISHED；读取失败答 5xx。
 func TestCommandEndpointsAnswerAnUnreadableDraftAsABusinessGradeNot5xx(t *testing.T) {
 	tenant := pcNew(t, domain.NewTenantID, pcTenant)
 	_, pending, approved := submittedAndApprovedDrafts(t)
@@ -208,8 +221,11 @@ func TestCommandEndpointsAnswerAnUnreadableDraftAsABusinessGradeNot5xx(t *testin
 		if response.Code != http.StatusOK || got.Outcome != testCase.want {
 			t.Fatalf("%s 批准口 = %d %s, want 200 %s", testCase.status, response.Code, response.Body.Bytes(), testCase.want)
 		}
-		if testCase.want == "DRAFT_NOT_READABLE" && (got.Status != testCase.status || got.Cause == "" || got.ContentDigest != "" || got.ShellDigest != "") {
-			t.Fatalf("%s 批准口的读不回一格 = %s", testCase.status, response.Body.Bytes())
+		if testCase.want == "DRAFT_NOT_READABLE" {
+			if got.Status != testCase.status || got.ContentDigest != "" || got.ShellDigest != "" {
+				t.Fatalf("%s 批准口的读不回一格 = %s", testCase.status, response.Body.Bytes())
+			}
+			assertCauseIsTheDomainCause(t, testCase.status+" 批准口", got.Cause, unreadableFrom(t, testCase.draft))
 		}
 
 		response = serve(commercialhttp.NewPublishPublicationDraftEndpoint(draftIntakeDouble{publish: publishCommand}, operator), http.MethodPost)
@@ -217,8 +233,11 @@ func TestCommandEndpointsAnswerAnUnreadableDraftAsABusinessGradeNot5xx(t *testin
 		if response.Code != http.StatusOK || got.Outcome != testCase.want || got.Publication != nil {
 			t.Fatalf("%s 发布口 = %d %s, want 200 %s 且无发布答案", testCase.status, response.Code, response.Body.Bytes(), testCase.want)
 		}
-		if testCase.want == "DRAFT_NOT_READABLE" && (got.Status != testCase.status || got.Cause == "") {
-			t.Fatalf("%s 发布口的读不回一格 = %s", testCase.status, response.Body.Bytes())
+		if testCase.want == "DRAFT_NOT_READABLE" {
+			if got.Status != testCase.status {
+				t.Fatalf("%s 发布口的读不回一格 = %s", testCase.status, response.Body.Bytes())
+			}
+			assertCauseIsTheDomainCause(t, testCase.status+" 发布口", got.Cause, unreadableFrom(t, testCase.draft))
 		}
 	}
 

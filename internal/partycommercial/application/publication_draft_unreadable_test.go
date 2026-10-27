@@ -11,7 +11,7 @@ import (
 
 // 本文件证批准与发布遇到本构建折不回正文的载体行（AT-PC-071 的编排那一半）：那是一格业务结论，不是 error——重发不会好，
 // 恢复动作在操作者手里（ADR-0022、ADR-0029）。判法只凭库上剩下的事实：内容身份先于状态，`已发布`如实答已发布，
-// 其余答`读不回`；行本身坏了仍是 error。
+// 其余答`读不回`；行本身坏了是 error。
 
 // unreadableRow 造一行读不回的载体：规范化版本是本构建不认得的 PCC-9，摘要串随之换前缀，状态与痕迹照 status 配齐。
 func unreadableRow(t *testing.T, status domain.PublicationDraftStatus) *domain.UnreadablePublicationDraft {
@@ -113,7 +113,7 @@ func TestTheDigestBindingStillHoldsOnAnUnreadableDraft(t *testing.T) {
 	}
 }
 
-// Covers: AT-PC-071 的反面——行本身坏了（重建门因行数据而拒）与读取失败仍是 error，不被收进「读不回」：批准口与发布口都一样。
+// Covers: AT-PC-071 的反面——行本身坏了（重建门因行数据而拒）与读取失败是 error，不被收进「读不回」：批准口与发布口都一样。
 func TestABrokenRowAndAFailedReadStayErrorsOnBothCommandPaths(t *testing.T) {
 	for name, loadErr := range map[string]error{
 		"行坏了":  errors.Join(errors.New("load publication draft"), domain.ErrInvalidRehydratedPublicationDraft),
@@ -153,7 +153,7 @@ func TestPublishingAnUnreadableDraftIsAnAnswerAndNeverReachesThePublisher(t *tes
 			t.Fatalf("读不回的载体不是 error：%v", err)
 		}
 		if len(registry.savedVersions) != 0 {
-			t.Fatalf("读不回的载体仍写了 %d 个版本", len(registry.savedVersions))
+			t.Fatalf("读不回的载体写了 %d 个版本", len(registry.savedVersions))
 		}
 		return result
 	}
