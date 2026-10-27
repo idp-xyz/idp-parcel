@@ -44,22 +44,22 @@ S–M：CR 加一个消费侧适配器读 `AdoptedFundsFactView`；`AcceptFact` 
 - 结算一侧（`internal/settlementaccounting`）：领域 `TargetCollectedPrincipal`（目标等于事实自己、只认确认到账、`ApplySettlement` 拒分配到它）；映射编排 `Map` 对每种目标都先取事实锁，再经新端口方法 `FundsMappingStore.ListByFact` 读回该事实上已有映射，`collectedPrincipalExcludes` 判互斥，冲突答 `MAPPING_CONFLICT`（结果代数不增格）；新只读口 `ports.CollectedPrincipalFundsView` 与 Postgres 实现 `CollectedPrincipalFundsView`（对事实身份行 `FOR SHARE`，再读链头与认作状态）；Postgres 映射读回词表、受控 CLI 译装词表、CLI 对映射冲突的文案、管理台目标种类词表各补一格。迁移 `settlement_accounting/0048`：词表、认作的目标须等于事实自己、一事实至多一条认作（部分唯一索引）。
 - 代收与清分一侧（`internal/collectionremittance`）：领域 `AdoptedFundsReference`、`AdoptedFundsVersion`、`AdoptedFunds`，`CollectionFact` 的采用版本（只属真实到账，值语义，`PinnedToAdoptedFunds`），`AdmitAdoptedFundsReference`（币种、每指令至多一条、合计，含溢出保护）、`AdoptedFundsCover`（移位前核名下全部到账）；端口 `AdoptedFundsView`、`CollectionRegistry.LockAdoptedFundsReferences`、`CollectionView.LoadAdoptedFundsReferences`；消费侧适配器 `adapters/settlementaccounting`；编排 `acceptArrival`（重放 → 币种门 → 事实锁 → 锁内再判重放 → 读结算 → 读回名下到账判三条 → 钉版本落册）与 `PostSubledger` 的采用事实门（`admitArrivalMove`，在重放判定与取分户账锁之后、按指令上限之前）；Postgres 写口（没钉版本的真实到账写口拒）、读口、按引用的事务级咨询锁。迁移 `collection_remittance/0004`：版本列、`NOT VALID` 的新登记必有版本、版本只属真实到账、（租户、证据引用、指令）唯一索引（建之前预检存量重复并拒绝施加）。受控 CLI 装配结算只读口，`evidenceRef` 即采用事实引用，不另给版本字段。
 - 演示种子：`data/settlement/09`（采用 1400.00 CNY 银行回款）、`10`（整条认作代收本金）、`steps/340-settlement-collected-principal-funds.sh`，`data/collection/06` 的证据引用改引它；README 与 `350-collection.sh` 头注同步。
-- 文档：ADR-0330（部分停用/扩成 ADR-0274 决定一、二的三句原句，回答其越权风险点 2、4；0274 只在 Status 注记之后与 Links 加前向指针）；CR CONTEXT、SA CONTEXT、GLOSSARY、CONTEXT-MAP、UC-CR-001（`AT-CR-020` 改写，新立 `AT-CR-026`、`AT-CR-027`，交接表更新）、UC-SA-005（新立 `AT-SA-216`）；AT 盘点把 `AT-CR-020` 由④移入①并补三行新号。
+- 文档：ADR-0330（部分停用/扩成 ADR-0274 决定一、二的三句原句，回答其越权风险点 2、4；另部分停用（改为）ADR-0283 决定四「映到别的目标的映射不取任何一把锁。」一句；0274、0283 只在 Status 注记之后与 Links 加前向指针）；CR CONTEXT、SA CONTEXT、GLOSSARY、CONTEXT-MAP、UC-CR-001（`AT-CR-020` 改写，新立 `AT-CR-026`、`AT-CR-027`，交接表更新）、UC-SA-005（新立 `AT-SA-216`）；AT 盘点把 `AT-CR-020` 由④移入①并补三行新号。
 
 ### 代决与越权风险点
 
 下列为本票代决，待 CR owner、SA owner 复核（完整版在 ADR-0330「越权风险点」）：
 
-1. **结算一侧整条认作代收本金，互斥、不核销、不可撤**（SA owner、CR owner）。代决理由见「裁向」。越权点：UC-SA-005 的映射目标集多一格；SA CONTEXT「COD 代收本金不进」从一句话变成结构。认错的事实没有出口（不可撤）；一条回款混着服务费与本金时要在来源侧拆成两条事实。
-2. **映射到任何目标都先取事实锁**（SA owner）。此前映到审核应付、贷项、金额本体的映射不取；互斥的读回与插入必须在同一把锁下。锁序未变（事实在全序首位），代价是这几类映射与同一条事实上的核销、更正排队；既有锁序用例随之改写（`TestMappingLocksTheFactThenOnlyTheScopesItMovesInKeyOrder`）。
+1. **结算一侧整条认作代收本金，互斥、不核销、不可撤**（SA owner、CR owner）。代决理由见「裁向」。越权点：UC-SA-005 的映射目标集多一格；SA CONTEXT「COD 代收本金不进」从一句话变成结构。认错的事实没有出口（不可撤）；反方向同样——事实被映到了错的目标之后就再也不能认作代收本金，认作了也不能再映别处，两个方向都不可撤；一条回款混着服务费与本金时要在来源侧拆成两条事实。
+2. **映射到任何目标都先取事实锁**（SA owner）。此前映到审核应付、贷项、金额本体的映射不取；互斥的读回与插入必须在同一把锁下。锁序未变（事实在全序首位），代价是这几类映射与同一条事实上的核销、更正排队；既有锁序用例随之改写（`TestMappingLocksTheFactThenOnlyTheScopesItMovesInKeyOrder`）。这一条同时部分停用 ADR-0283 决定四的末句，ADR-0330 与 ADR-0283 各加了前向、入向指针。绕过事实锁的第二条认作被库上唯一索引拒，但映射写口 `FundsMappings.Save` 的无目标 `ON CONFLICT DO NOTHING` 会把它吞成「已有记录」，编排读不回赢家，答「映射库不可用」未决：停是对的，文案与原因不符，只在直接写库绕锁时出现，不改行为。
 3. **证据引用就是事实引用，登记读此刻链头并钉版本，不让运营给版本**（CR owner）。少一个会填错的输入；判金额永远读链头，版本只是留痕，不参与重放比对。
 4. **一条已采用事实对一条指令至多一条真实到账**（CR owner）。比 ADR-0274 的「金额之和不超额」多一条收紧：换事实标识重登同一指令，即使合计没超也答内容冲突。真正的第二笔钱来自另一次回款，引用另一条事实。
 5. **登记与移位都读结算，读时对事实身份行取共享锁**（CR、SA owner）。这是跨上下文的锁：代收与清分持自己的锁之后向结算要共享锁，结算从不回头等代收与清分的锁，接不成环；代价是读方事务提交之前结算一侧对这条事实的更正、映射、核销要等。
 6. **移位前再核一次：名下全部到账之和不超过此刻链头，容不下答内容冲突、账面不动；冲正不读结算**（CR owner）。回答 ADR-0274 越权风险点 4。被结算更正得容不下的状态没有出口（要结算再更正回去，或后继记录给到账的更正形），已落的移位不自动冲正。
 7. **重放先于一切按此刻状态作答的门，含取锁与读结算**（CR owner）。重放一条早已登记的到账，即使事实已被更正小、结算读口没装配、取锁失败，也答已在册。
 8. **按旧口径登记的存量真实到账不回填，撑不起移位**（CR owner）。迁移 `NOT VALID` 只管新写入；要为同一笔钱按引用另登一条。演示种子重灌即可。
-9. **认作代收本金的事实若被 customs-compliance 的税费付款核对误引**（CC owner）：CC 读到金额、币种、付款人，不知道它是受托资金。本票不动 CC。
-10. **同一笔银行回款被不同引用各采用一次，代收与清分防不住**（SA owner）。来源身份的去重是采用口的事；唯一的网是按指令的移位上限。
+9. **认作代收本金的事实若被 customs-compliance 的税费付款核对误引**（CC owner）：CC 读到金额、币种、付款人，不知道它是受托资金。评审核实：CC 的适配器 `adopted_funds_fact_source` 按（引用，版本）读事实、不看结算的映射状态，认作代收本金的事实仍可能被 CC 当税费付款证据；这是既有盲区（映到客户账户的事实今天同样可被引用），本票没有制造新的双记口子，也不更易误引。结论：不立票，本票不动 CC。
+10. **同一笔银行回款被不同引用各采用一次，代收与清分防不住**（SA owner）。来源身份的去重是采用口的事；唯一的网是按指令的移位上限，而它只拦同一条指令：两条事实的到账指向同一条指令时，第二条能登记、移位撞 `UNDERFUNDED`；指向两条各有渠道报告的不同指令时，两条都能登记、都能移位，`待清分`合计是真实回款的两倍。原始缺陷「代收与清分自铸、结算也采用」已实质关闭，残留的是结算采用口的来源身份去重，不是本票新增。
 
 ### AT
 
@@ -80,3 +80,16 @@ S–M：CR 加一个消费侧适配器读 `AdoptedFundsFactView`；`AcceptFact` 
 - 认作代收本金没有撤销形；认错的事实在结算一侧没有出口（ADR-0330 越权风险点 1）。
 - 被结算更正得容不下的状态没有出口，等结算再更正或到账的更正形（code/15，ADR-0330 越权风险点 4）。
 - ADR-0298 越权风险点 1（认可抵扣登记时不核结算）不在本票：认可抵扣不是资金事实，没有认作可言，SA 给出认可的只读口之后另立记录。
+
+### 评审记录与修订轮
+
+独立评审判**不可合入**：一条阻断 B，另有六条 N。评审核实无误、本轮不重做的部分：四个攻击序列、锁序、手算、迁移、CC 盲区判定。
+
+- **B（阻断）ADR-0283 决定四原句被实质改写，缺部分停用指针。**ADR-0330 决定一与越权风险点 9 都承认映射到任何目标现在先取事实锁，代码 `MapExternalFundsHandler.Map` 也确实一律先取，而 ADR-0283 决定四写的是「映到别的目标的映射不取任何一把锁。」。补三处，写法照 ADR-0298 停 ADR-0082：ADR-0330 Status 前段加「部分停用（改为）」及被停原句；ADR-0330「对已接受记录的作用」同样列这一句并写适用场景，去掉与之矛盾的「ADR-0283 照采」，改成「除决定四那一句外的各条照采」；ADR-0283 的 Status 注记（`<!-- 索引注记 -->` 之后）加「部分停用（2026-10-27）」与适用场景，Links 加 ADR-0330，正文不动。核对：被停原句与 ADR-0283 原文 `grep -F` 逐字相同、决定号属实；ADR-0274 的三句原句仍与其原文逐字相同；ADR-0330 里其余指针都在；`git diff origin/main...HEAD -- docs/adr/0283-*` 只有 Status 注记与 Links。
+- **N1 `CollectedPrincipalFundsView` 把 SetAside 判成「该事实有任何映射」无用例红。**加 SA 真库用例 `TestTheCollectedPrincipalViewDoesNotCallAMappedFactSetAside`（事实映到对账单、账户、审核应付后 SetAside 为假）；CR 受控 CLI 纵向用例 `TestAnArrivalIsRegisteredAndMovedOnlyWhileTheAdoptedPrincipalFactCoversIt` 的结算一侧事实改为经真 SA 的采用、更正与映射编排种下（`settlementFunds`，装配同 `parcel-settlement-register` 的 `buildRegistrar`），并加「到账引用一条已映到账户的事实 → `BASIS_MISSING`、之后它也认作不了代收本金 → 映射冲突」。变异：SA 查认作状态的 SQL 里 `target_kind = $3` 换成恒真——SA 用例三格全红，CR 纵向用例红（该到账答 REGISTERED，要 BASIS_MISSING）。
+- **N2 读口先读链头、后取共享锁的变异存活。**评审写的用例放进 SA `adapters/postgres` 包，改名 `TestTheCollectedPrincipalViewReadsTheNewHeadOfACorrectionItWaitedFor` 并补 `Covers:` 与失败时放更正方的 `defer`：更正握着未提交、读方在共享锁上等、更正提交之后读方必须读到新链头。变异：读口在取共享锁之前先读链头并用这次的结果——该用例红（读到 100000，要 60000）；`-count=5` 稳定。
+- **N3 SA 迁移 0048 的两道库面兜底都没有用例。**加真库用例 `TestTheMappingTableItselfRefusesASecondRecognitionAndATargetThatIsNotTheFact`：绕过编排直接 INSERT，第二条认作被唯一索引 `funds_mapping_one_collected_principal_per_fact` 拒（23505），目标不是事实自己被 CHECK `funds_mapping_collected_principal_names_the_fact` 拒（23514），各断言约束名；唯一索引不罩别的目标种类。变异：去掉唯一索引——红；去掉 CHECK——红。0048 头注原写「库上只封住词表」与后面的 CHECK、唯一索引矛盾，改为库上封三件。`FundsMappings.Save` 的无目标 `ON CONFLICT DO NOTHING` 吞掉绕锁的第二条认作、答「映射库不可用」未决，已在 ADR-0330 越权风险点 9 与本票越权风险点 2 各补一句，不改行为。
+- **N4 移位门里「没有钉版本」那一分支没被单独证明。**加 `TestMovingAnUnpinnedArrivalWhoseEvidenceIsAnAdoptedPrincipalFactIsStillBasisMissing`：存量未钉版本的到账，证据引用恰好是一条已采用、已认作、容得下它的事实，移位答依据不在册、账面不动、不碰结算。变异：`!pinned` 恒假——新用例红（答 REGISTERED），原有用例仍绿，证明这一格先前确实无人守。
+- **N5 操作员看到的文案不实。**事实被更正得容不下既有到账后，移位和登记答的 `CONTENT_CONFLICT` 并没有同键记录。受控 CLI 对内容冲突的文案补一句：真实到账还可能是其引用的已采用事实被更正得容不下名下到账之和，或同一指令已有一条引用同一事实的到账，此时没有同键记录，核对事实此刻的链头金额与已引用它的各条到账；纵向用例对移位与登记各断言这句文案。变异：去掉这句——纵向用例红。
+- **N6 规范小项。**改掉本分支新增行里的变更叙述与位置词：UC-SA-005「下面的外部更正」、`funds_application_test.go` 的「依据照旧必填」「词表外的名字照旧拒」、`domain/adopted_funds_test.go` 的「链头不低于合计则照旧」「不再被事实撑住」、迁移 0004 的「照旧存引用本身」「下面的「新登记必有版本」」（改为 CHECK 名 `collection_fact_arrival_pins_funds_version`）、迁移 0048 的「照旧满足」、`register_arrival.go`「不再能移位」、`domain/adopted_funds.go`「不再自铸」、几处「不再接受」、演示种子两步注释里的「下一节」「前一节」、`Deps` 头注的「前三对」；代码、测试、SQL、脚本与 UC、CONTEXT 的新增行再 grep 无剩余；ADR-0330 里讲决策来由的「此前」「今天」属决策记录的叙述，保留。
+- **信息项。**ADR-0330 越权风险点 1 补另一个方向（事实被映到错的目标之后再也不能认作代收本金，认作了也不能再映别处，两个方向都不可撤）；风险点 3 补明具体后果（同一指令：第二条到账能登记、移位撞 `UNDERFUNDED`；两条各有渠道报告的不同指令：两条都能移位，待清分合计 2×；原始缺陷已实质关闭，残留是结算采用口的来源身份去重）；风险点 10 写明 CC 结论（`adopted_funds_fact_source` 不看映射状态，既有盲区，本记录没制造新口子，不立票）。
