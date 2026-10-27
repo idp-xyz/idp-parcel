@@ -1,7 +1,7 @@
 # 01 客户合同目录行带出货主客户账户
 
 Category: enhancement
-Status: resolved——2026-10-26 作者完工，待隔离评审与进 main，分支 claude-pcub1（见文末「完成记录」）
+Status: resolved——2026-10-26 进 main `51e154be0`（见文末「进 main 记录」）。此前：作者完工，分支 claude-pcub1
 Blocked by: 无
 地盘：`internal/partycommercial` 的客户合同目录读（`ports.CustomerContractCatalogueRow`、`adapters/postgres` 的 `ListCustomerContracts`、`adapters/http` 的合同目录答复）；管理台 `pages/party` 的客户合同页（前端跟进，同票）。
 出处：[party-commercial-uiux spec](../../party-commercial-uiux/spec.md)「后续」第三段首条「客户合同读口带出货主客户账户与责任法人，列表才能有『客户』一列」；评估时管理台合同页的说明「客户与责任法人暂不在本列表显示」。
@@ -23,7 +23,7 @@ Blocked by: 无
 - [x] 真库用例：三份合同（正文未登记、账户 A、账户 B），目录各读各的账户，壳行为空。
 - [x] HTTP 用例：带正文的行有 `customerAccountId`，壳行无此键。
 - [x] 管理台：合同表多一列，演示库里两份合同分别显示账户标识与客户名称。
-- [ ] 全量 `scripts/test-full.sh`、管理台三道门与 `internal/architecture`。
+- [x] 全量 `scripts/test-full.sh`、管理台三道门与 `internal/architecture`。
 
 ## 三类
 
@@ -45,3 +45,10 @@ S
 ## 评审记录
 
 评审 ← 隔离子代理(sonnet) · 钉 `2e13d629d`（两票同审）：阻断无；总评可进 main。门：`go test ./internal/partycommercial/... ./cmd/parcel-api/... ./internal/architecture/...` 全绿，管理台 tsc 退 0、node:test 780 过。非阻断已处理：AT-PC-066 行去掉夹带消费方的「管理台据此…」半句；账户列插入改按列标识定位，不按下标数；旧 `party-commercial-uiux` spec 第三段两条标注指向本批。
+
+## 进 main 记录（2026-10-26，推送方会话 tops-54）
+
+- **main**：`51e154be0`（快进，main 此前未动，起点 `cbaa256d7`）。出处：分支 `claude-pcub1` 自 `cbaa256d7` 起的代码笔 `f0a2cf881`、票面笔 `2e13d629d`、评审修订笔 `f79a0eab6`；推送方在 tip 上另补 AT 盘点总览计数（`b856eeccd`）与机制清点（`51e154be0`）两笔生成物。
+- **验**：全量 `scripts/test-full.sh` 退 0（158 ok / 0 FAIL）；`go run ./tools/adr-index -check` 与 `at-coverage-counts -check` 退 0；管理台三道门：tsc 退 0、node:test 780/780、vite build 退 0；一次性库灌种子退 0、用后删库。
+- **号**：`AT-PC-066`、`AT-PC-067`（UC-PC-001）。
+- **评审**：见上「评审记录」。

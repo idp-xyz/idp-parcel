@@ -1,7 +1,7 @@
 # 02 产品—渠道映射的历史修订读口
 
 Category: enhancement
-Status: resolved——2026-10-26 作者完工，待隔离评审与进 main，分支 claude-pcub1（见文末「完成记录」）
+Status: resolved——2026-10-26 进 main `51e154be0`（见文末「进 main 记录」）。此前：作者完工，分支 claude-pcub1
 Blocked by: 无
 地盘：`internal/partycommercial` 的映射目录读（`ports.ProductChannelMappingCatalogueRead` 及新读口、`adapters/postgres/product_channel_mapping_catalogue.go`、`adapters/http` 新端点）、`cmd/parcel-api/endpoints_commercial_catalogue.go` 的端点表与装配；管理台渠道产品目录页（前端跟进，同票）。
 出处：[party-commercial-uiux 票 21](../../party-commercial-uiux/issues/21-row-detail-and-version-history.md)「已知」：渠道映射的历史修订要后端补读口；spec 第三段新增一条。先例：业务参与方与责任法人的修订历史读口（`/commercial-business-parties/{partyId}/revisions`）。
@@ -24,7 +24,7 @@ Blocked by: 无
 - [x] HTTP 用例：整条链逐笔转写、顶层回显映射标识、不在册答 200 加空数组、方法门、路径参数缺失、读失败答 5xx。
 - [x] 端点表与隔离读用例（`cmd/parcel-api`）通过；`internal/architecture` 通过。
 - [x] 管理台：演示库里有三笔修订的映射（种子只有第 1 修订，另用 `parcel-commercial register-products` 登记了第 2、3 修订），抽屉历史栏按新到旧列出，点第 1 笔详情切到它。
-- [ ] 全量 `scripts/test-full.sh`、管理台三道门。
+- [x] 全量 `scripts/test-full.sh`、管理台三道门。
 
 ## 三类
 
@@ -46,3 +46,10 @@ S–M
 ## 评审记录
 
 评审 ← 隔离子代理(sonnet) · 钉 `2e13d629d`（两票同审）：阻断无；总评可进 main；逐点核对参与方修订历史先例（方法门、Intake 之后读路径、400/500 取舍、顶层标识回显、租户条件落在 SQL、非 nil 空切片、无 LIMIT）相符，`lines` 与 `mount` 同模式字、探针合法并自动入隔离读，新路径过 `TestEveryAdminWebPathIsOnTheParcelAPIEndpointTable`。非阻断已处理：真库用例改为先落第 2 修订再落第 1 再落第 3，钉住「序按修订号不按落库次序」，并让第 3 笔带区间终点、逐笔读回；HTTP 用例补真正的跨租户（读口登 tenant-2 的映射、请求租户 tenant-1，同名与不存在同形答空链）；`mapping-history` 用例补钉终点；`ports.go` 与端点表两处注释的变更叙述、位置词改写；种子只有第 1 修订的复现说明写进判据与完成记录。
+
+## 进 main 记录（2026-10-26，推送方会话 tops-54）
+
+- **main**：`51e154be0`（快进，main 此前未动，起点 `cbaa256d7`）。出处：分支 `claude-pcub1` 自 `cbaa256d7` 起的代码笔 `f0a2cf881`、票面笔 `2e13d629d`、评审修订笔 `f79a0eab6`；推送方在 tip 上另补 AT 盘点总览计数（`b856eeccd`）与机制清点（`51e154be0`）两笔生成物。
+- **验**：全量 `scripts/test-full.sh` 退 0（158 ok / 0 FAIL）；`go run ./tools/adr-index -check` 与 `at-coverage-counts -check` 退 0；管理台三道门：tsc 退 0、node:test 780/780、vite build 退 0；一次性库灌种子退 0、用后删库。
+- **号**：`AT-PC-066`、`AT-PC-067`（UC-PC-001）。
+- **评审**：见上「评审记录」。
