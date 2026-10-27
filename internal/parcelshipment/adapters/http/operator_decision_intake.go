@@ -49,6 +49,8 @@ const (
 	// OperatorDecisionControlReleaseRefusalHandling 与授权处置分开授予（ADR-0293 决定三）：授权处置是对一份受限委托去向的业务处置，
 	// 这一种是对已越过业务决定的资金占用的运维处理。
 	OperatorDecisionControlReleaseRefusalHandling OperatorDecision = "CONTROL_RELEASE_REFUSAL_HANDLING"
+	// OperatorDecisionCancellationOrderConflictResolution 也与授权处置分开授予（ADR-0295 决定二）：这一种是对一件包裹上取消与边界事实谁在先的裁断。
+	OperatorDecisionCancellationOrderConflictResolution OperatorDecision = "CANCELLATION_ORDER_CONFLICT_RESOLUTION"
 )
 
 // OperatorIdentity 是一次运营决定出示认证出的身份：租户与提交操作者的引用（发行方 + sub）。
@@ -77,11 +79,12 @@ type OperatorDecisionIntake struct {
 }
 
 var (
-	_ ManualReviewCompletionIntake        = (*OperatorDecisionIntake)(nil)
-	_ ActiveRejectionIntake               = (*OperatorDecisionIntake)(nil)
-	_ AuthorizedDispositionIntake         = (*OperatorDecisionIntake)(nil)
-	_ ContinuedAttemptDecisionIntake      = (*OperatorDecisionIntake)(nil)
-	_ ControlReleaseRefusalHandlingIntake = (*OperatorDecisionIntake)(nil)
+	_ ManualReviewCompletionIntake            = (*OperatorDecisionIntake)(nil)
+	_ ActiveRejectionIntake                   = (*OperatorDecisionIntake)(nil)
+	_ AuthorizedDispositionIntake             = (*OperatorDecisionIntake)(nil)
+	_ ContinuedAttemptDecisionIntake          = (*OperatorDecisionIntake)(nil)
+	_ ControlReleaseRefusalHandlingIntake     = (*OperatorDecisionIntake)(nil)
+	_ CancellationOrderConflictDecisionIntake = (*OperatorDecisionIntake)(nil)
 )
 
 func NewOperatorDecisionIntake(
@@ -400,6 +403,67 @@ func (intake *OperatorDecisionIntake) IntakeControlReleaseRefusalHandling(ctx co
 		Action:            action,
 		Handler:           handler,
 		Basis:             basis,
+	}, nil
+}
+
+type cancellationOrderConflictDecisionPayload struct {
+	Parcel       string `json:"parcel"`
+	BoundaryKind string `json:"boundaryKind"`
+	BoundaryRef  string `json:"boundaryRef"`
+	Cancellation string `json:"cancellation"`
+	Decision     string `json:"decision"`
+	Basis        string `json:"basis"`
+}
+
+// IntakeCancellationOrderConflictDecision 译取消先后冲突的解开决定（`/cancellation-order-conflict-decisions`）。册上那一份冲突由（包裹、边界种类、边界那一代、取消）四段指名，
+// 与查阅端点逐段给出的字段同名同义；租户取信封，决定人取认证出的操作者，去向取封闭两词（认定取消依据不成立 CANCELLATION_NOT_UPHELD、认定边界事实有误交来源方更正
+// BOUNDARY_FACT_REFERRED），依据必填。先认证后封闭解码；册上有没有这份冲突是应用编排的事，坏载荷在这里就答 400。
+func (intake *OperatorDecisionIntake) IntakeCancellationOrderConflictDecision(ctx context.Context, request *http.Request) (application.DecideCancellationOrderConflictCommand, error) {
+	operator, err := intake.authenticator.AuthenticateOperatorDecision(ctx, httpapi.BearerToken(request), OperatorDecisionCancellationOrderConflictResolution)
+	if err != nil {
+		return application.DecideCancellationOrderConflictCommand{}, err
+	}
+	var payload cancellationOrderConflictDecisionPayload
+	if err := decodeDecisionPayload(request.Body, &payload); err != nil {
+		return application.DecideCancellationOrderConflictCommand{}, err
+	}
+	parcel, err := domain.NewDeclaredParcelID(payload.Parcel)
+	if err != nil {
+		return application.DecideCancellationOrderConflictCommand{}, fmt.Errorf("%w: parcel: %v", ErrMalformedRequest, err)
+	}
+	boundaryKind, err := domain.ParseCancellationBoundaryKind(payload.BoundaryKind)
+	if err != nil {
+		return application.DecideCancellationOrderConflictCommand{}, fmt.Errorf("%w: boundaryKind: %v", ErrMalformedRequest, err)
+	}
+	boundaryRef, err := domain.NewCancellationBoundaryReference(payload.BoundaryRef)
+	if err != nil {
+		return application.DecideCancellationOrderConflictCommand{}, fmt.Errorf("%w: boundaryRef: %v", ErrMalformedRequest, err)
+	}
+	cancellation, err := domain.NewParcelCancellationID(payload.Cancellation)
+	if err != nil {
+		return application.DecideCancellationOrderConflictCommand{}, fmt.Errorf("%w: cancellation: %v", ErrMalformedRequest, err)
+	}
+	kind, err := domain.ParseCancellationOrderConflictDecisionKind(payload.Decision)
+	if err != nil {
+		return application.DecideCancellationOrderConflictCommand{}, fmt.Errorf("%w: decision: %v", ErrMalformedRequest, err)
+	}
+	basis, err := domain.NewCancellationOrderConflictDecisionBasis(payload.Basis)
+	if err != nil {
+		return application.DecideCancellationOrderConflictCommand{}, fmt.Errorf("%w: basis: %v", ErrMalformedRequest, err)
+	}
+	decider, err := domain.NewCancellationOrderConflictDeciderReference(operator.Operator)
+	if err != nil {
+		return application.DecideCancellationOrderConflictCommand{}, fmt.Errorf("parcel shipment http: decider: %w", err)
+	}
+	return application.DecideCancellationOrderConflictCommand{
+		Tenant:       operator.Tenant,
+		Parcel:       parcel,
+		BoundaryKind: boundaryKind,
+		BoundaryRef:  boundaryRef,
+		Cancellation: cancellation,
+		Kind:         kind,
+		Decider:      decider,
+		Basis:        basis,
 	}, nil
 }
 

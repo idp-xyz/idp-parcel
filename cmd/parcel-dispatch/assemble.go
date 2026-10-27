@@ -2162,12 +2162,19 @@ func labelFinalJudgmentCore(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: cancellation boundary locks: %w", err)
 	}
+	// 冲突的解开决定（ADR-0295）：被认定「边界事实有误、交来源方更正」的那一代收寄不再停在冲突上。装 nil 时决定面等于没接入，决定了的冲突仍照旧
+	// 答冲突。
+	conflictDecisions, err := pspostgres.NewCancellationOrderConflictDecisions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: cancellation order conflict decisions: %w", err)
+	}
 	judge := psapplication.NewJudgeLabelServiceFinalHandler(psapplication.JudgeLabelServiceFinalDeps{
 		Transactions:  transactions,
 		Registers:     registers,
 		Cancellations: chain.cancellations,
 		Validity:      validity,
 		Conflicts:     conflicts,
+		Decisions:     conflictDecisions,
 		Adoption:      chain.handler,
 		Clock:         clock,
 		BoundaryLock:  boundaryLocks,
@@ -3046,6 +3053,12 @@ func networkIntakeAdoption(
 	if err != nil {
 		return none, fmt.Errorf("parcel-dispatch: cancellation order conflicts: %w", err)
 	}
+	// 冲突的解开决定（ADR-0295）：被认定「边界事实有误、交来源方更正」的那一代来源不再停在冲突上。装 nil 时决定面等于没接入，决定了的冲突仍照旧
+	// 入账等候。
+	conflictDecisions, err := pspostgres.NewCancellationOrderConflictDecisions(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-dispatch: cancellation order conflict decisions: %w", err)
+	}
 	// 与 parcel-api 的取消编排、本进程的面单渠道终局判断同一把锁：采用在读取消之前按包裹排队。装 nil 时边界核验停在
 	// CANCELLATION_VIEW_UNAVAILABLE、回滚重投，采用永远形不成。
 	boundaryLocks, err := pspostgres.NewCancellationBoundaryLocks(db)
@@ -3100,6 +3113,7 @@ func networkIntakeAdoption(
 			Cancellations: cancellations,
 			Conflicts:     conflicts,
 			BoundaryLock:  boundaryLocks,
+			Decisions:     conflictDecisions,
 		}),
 	}, nil
 }

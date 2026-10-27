@@ -15,17 +15,18 @@ type OperatorOperationsReadAuthenticator interface {
 	AuthenticateOperationsRead(ctx context.Context, bearerToken string) (domain.TenantID, error)
 }
 
-// OperatorOperationsReadIntake 是操作者渠道在面单交易、渠道择优决定与释放未受理册三口的 Intake（ADR-0100 决定四）。三口的作用域
-// 只有租户一维（ADR-0084 决定七；释放未受理册按租户切，ADR-0293 决定一），信封给得出。委托查阅及其子集视图刻意不实现：它们的读口按可见客户账户切，操作者信封只有
+// OperatorOperationsReadIntake 是操作者渠道在面单交易、渠道择优决定、释放未受理册与取消先后冲突册四口的 Intake（ADR-0100 决定四）。四口的作用域
+// 只有租户一维（ADR-0084 决定七；释放未受理册按租户切，ADR-0293 决定一；冲突册同，ADR-0295 决定一），信封给得出。委托查阅及其子集视图刻意不实现：它们的读口按可见客户账户切，操作者信封只有
 // 租户，拿一组账户去凑等于造一个作用域（票 operator-channel/53）。
 type OperatorOperationsReadIntake struct {
 	authenticator OperatorOperationsReadAuthenticator
 }
 
 var (
-	_ LabelTransactionQueryIntake         = (*OperatorOperationsReadIntake)(nil)
-	_ ChannelSelectionDecisionQueryIntake = (*OperatorOperationsReadIntake)(nil)
-	_ ControlReleaseRefusalQueryIntake    = (*OperatorOperationsReadIntake)(nil)
+	_ LabelTransactionQueryIntake          = (*OperatorOperationsReadIntake)(nil)
+	_ ChannelSelectionDecisionQueryIntake  = (*OperatorOperationsReadIntake)(nil)
+	_ ControlReleaseRefusalQueryIntake     = (*OperatorOperationsReadIntake)(nil)
+	_ CancellationOrderConflictQueryIntake = (*OperatorOperationsReadIntake)(nil)
 )
 
 func NewOperatorOperationsReadIntake(authenticator OperatorOperationsReadAuthenticator) (*OperatorOperationsReadIntake, error) {
@@ -63,4 +64,13 @@ func (intake *OperatorOperationsReadIntake) IntakeControlReleaseRefusalQuery(ctx
 		return ControlReleaseRefusalQuery{}, err
 	}
 	return ControlReleaseRefusalQuery{Tenant: tenant, Limit: operatorOperationsReadLimit}, nil
+}
+
+// IntakeCancellationOrderConflictQuery 同上：租户只取自信封，页大小是这一渠道的产品策略。
+func (intake *OperatorOperationsReadIntake) IntakeCancellationOrderConflictQuery(ctx context.Context, request *http.Request) (CancellationOrderConflictQuery, error) {
+	tenant, err := intake.authenticator.AuthenticateOperationsRead(ctx, httpapi.BearerToken(request))
+	if err != nil {
+		return CancellationOrderConflictQuery{}, err
+	}
+	return CancellationOrderConflictQuery{Tenant: tenant, Limit: operatorOperationsReadLimit}, nil
 }
