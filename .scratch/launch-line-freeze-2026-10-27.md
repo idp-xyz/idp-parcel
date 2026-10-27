@@ -24,7 +24,7 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 
 | 票 | 为什么挡 |
 |---|---|
-| [envelope-id-bounds/issues/01-remaining-envelope-ids-still-concatenate-instance-references.md](./envelope-id-bounds/issues/01-remaining-envelope-ids-still-concatenate-instance-references.md) | 运输履约各口的信封 ID 仍原样串接租户、委托、包裹等引用；真实租户的标识一长就入不了队，交接只留一条没人重发的续办引用，主链静默断开。其余各口已改指纹，门禁 `TestEveryEnvelopeIDIsMintedAsAFingerprint` 的例外清单登着去处，余下是照做的活。 |
+| [envelope-id-bounds/issues/01-remaining-envelope-ids-still-concatenate-instance-references.md](./envelope-id-bounds/issues/01-remaining-envelope-ids-still-concatenate-instance-references.md) | 运输履约各口的信封 ID 仍原样串接租户、委托、包裹等引用；真实租户的标识一长就入不了队，交接只留一条没人重发的续办引用，主链静默断开。其余各口已改指纹，门禁 `TestEveryEnvelopeIDIsMintedAsAFingerprint` 的例外清单登着去处，余下是照做的活。 **2026-10-27 已进 main（`c66b9f672`），resolved。** |
 | [product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md](./product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) | 收口那一步：首个租户上线前的演练里把合成演示动线重走一遍，逐格确认不停在「未配置」。不是写代码，是演练。 |
 
 ## 二、冻结（101 张）
@@ -193,6 +193,8 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 - 2026-10-27｜上线清单必须有一条：核对「受理前估价采用」与「SELL 计费时点采用」两本册登了同一个范围，否则冻结额与预估客户费用出自两张卡｜docs-consistency/code/62（已冻结）｜上线前必核（清单项）
 - 2026-10-27｜customs-compliance 的税费付款核对按（引用，版本）读 SA 的外部资金事实、不读事实类型也不看映射状态，认作代收本金或映到客户账户的事实只要付款人与金额对得上都可能被当税费付款证据｜docs-consistency/code/54 评审（ADR-0330 越权风险点）｜R3（既有盲区，建议付款核对排除收入类事实）
 - 2026-10-27｜SA 把同一笔银行回款用不同引用采用两次并各认作代收本金时，代收与清分防不住：同一指令第二条到账能登记但移位撞 `UNDERFUNDED`，两条各有渠道报告的不同指令都能移位、待清分合计 2×；残留是 SA 采用口的来源身份去重｜docs-consistency/code/54 评审（ADR-0330 越权风险点 3）｜R3（不是本票新增，COD 不在试点范围）
+- 2026-10-27｜`internal/architecture/partition_subject_registry_test.go` 文件头说「ID 与分区键同表达式的那些口，分区空间就是信封 ID 空间」，对运输履约 disposition_execution、exception_journey、offsite_pickup、regulatory_acceptance 与 transport_commission 已不严格成立（ID 是指纹，分区键是可读串）；同源门禁按语法剥单参调用，仍判同源，例外照留｜envelope-id-bounds/01 运输履约半边评审｜R3
+- 2026-10-27｜disposition_execution 与 exception_journey 同键同事务入队，没有同事务不相撞用例（靠口名不同，代码上已成立）｜同上｜R3
 
 ## 六、docs-consistency/code 队列的复核（2026-10-27，tops-26）
 

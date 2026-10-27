@@ -1,7 +1,7 @@
 # 01 余下各口的信封 ID 仍原样串接实例引用：标识一长就入不了队，交接只留没人重发的续办引用
 
 Category: bug
-Status: in-progress——2026-10-27 作者完工，待隔离评审与进 main，分支 claude-eib01b（代码最后一笔 e5d8f971a）。此前 in-progress——2026-10-27 会话 tops-20 认领运输履约半边（用户 2026-10-27「按你的建议」；列入上线前必须）。此前 ready-for-agent——2026-10-27 列入上线前必须（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)）：余下运输履约各口，真实租户标识一长，交接就静默断在续办引用上。此前 in-progress——除运输履约外各口已进 main（至 `20a06645`）；余下运输履约各口待做，门禁登着去处。2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决」授权），出自 [routing-first-cut/22](../../routing-first-cut/issues/22-initial-route-envelope-id-exceeds-the-event-id-limit.md) 的取证。
+Status: resolved——2026-10-27 运输履约半边进 main（`c66b9f672`，全量 160 包 ok / 0 FAIL，种子灌一次性库通过）；两半都已进 main。此前 in-progress——2026-10-27 作者完工，待隔离评审与进 main，分支 claude-eib01b（代码最后一笔 e5d8f971a）。此前 in-progress——2026-10-27 会话 tops-20 认领运输履约半边（用户 2026-10-27「按你的建议」；列入上线前必须）。此前 ready-for-agent——2026-10-27 列入上线前必须（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)）：余下运输履约各口，真实租户标识一长，交接就静默断在续办引用上。此前 in-progress——除运输履约外各口已进 main（至 `20a06645`）；余下运输履约各口待做，门禁登着去处。2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决」授权），出自 [routing-first-cut/22](../../routing-first-cut/issues/22-initial-route-envelope-id-exceeds-the-event-id-limit.md) 的取证。
 Blocked by: 无
 出处：`outboxintent.FingerprintEventID` 头注（票 sa-cc/34 裁决 2）：信封 ID 上限是 `eventing.MaxEventIDLength`，租户、委托、包裹这类引用多长归实例半边，本仓给不出上界，原样串接就是把上限押在别人的长度上。
 
@@ -106,3 +106,20 @@ Blocked by: 无
 ### 自验（含 PG，DSN 55432）
 
 `go build ./...`、`go vet`（`internal/transportfulfillment/...`、`internal/parcelshipment/...`、`cmd/parcel-api`、`cmd/parcel-dispatch`、`tests/bentocontract`）、`gofmt -l` 无输出。`go test -count=1 -p 1` 带 DSN：`./internal/transportfulfillment/... ./internal/parcelshipment/... ./internal/visibilityexception/... ./internal/nodeoperations/... ./internal/architecture/... ./cmd/parcel-dispatch/... ./cmd/parcel-api/... ./tests/bentocontract/...` 全部 ok。`go run ./tools/at-coverage-counts -check` 无报错输出。
+
+## 评审记录（运输履约半边，2026-10-27）
+
+隔离子代理（Sonnet，非作者）一次过两轴评审，钉 `a6ce8ced9`：两轴均无阻断。
+
+- Spec 逐条核过：十口维度恰为旧 ID 的全部变量维（含各版本维；揽收登记首登三维、更正四维）；口名互不相同，disposition_execution 与 exception_journey 同键同拍入队不会撞；五个抽出的分区键与旧 `eventID` 串逐字相同，另五口分区键字节不变；`allowedRawEnvelopeID` 删的 10 行恰为运输履约十口；`allowedSameExpression` 四行必须留——门禁的 `unwrapConversions` 会剥掉单参调用，`…EventID(key)` 与 `…PartitionKey(key)` 都剥成 `key`，仍判同源，与 transport_commission 先例同形；capacity_consumption 的 ID 函数是双参，删那一行是对的。撞键用例在旧公式下两组输入逐字相同，新公式下不同。
+- 非阻断，协调方处置：
+  1. `partition_subject_registry_test.go` 文件头「ID 与分区键同表达式的那些口，分区空间就是信封 ID 空间」对保留同源例外的几口已不严格成立。按[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)不立票，记入该文件「记录」。
+  2. disposition_execution 与 exception_journey 没有同事务不相撞用例。口名不同在代码上已成立，同样只记入「记录」。
+  3. 上面完成记录「连带改的用例」一条没写清：`countTFIntents` 按 ID 数信封的用例确实改了，改用同一个助手，`count == 0` 与 `count == 1` 两条用例都不空转。以本句为准。
+  4. `HandOffOffsitePickupRegistration` 头注首行偏长，不改。
+
+## 进 main 记录（运输履约半边，2026-10-27）
+
+- 协调方 tops-20 在隔离 worktree 把 `claude-eib01b`（`a6ce8ced9`）重放到 main `c0b66cf49` 上，无冲突；ADR 索引与 AT 计数无变化，机制清点重生成另起一笔。
+- 全量 `scripts/test-full.sh`（带 55432 DSN）钉 `c66b9f672`：160 包 ok，0 FAIL。演示种子灌进一次性库，退 0，用后删库。
+- 推 main：`c0b66cf49..c66b9f672`。
