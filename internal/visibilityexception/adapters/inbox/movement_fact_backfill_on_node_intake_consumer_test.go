@@ -16,7 +16,7 @@ import (
 // 本文件对真实 PostgreSQL 证节点收寄形成信封上移动事实补派生的消费门（ADR-0299）：与同一封信上的投影、parcel-shipment 的来源采用各记各的
 // 账，恰一次，毒丸照拒。信封与译码同投影那一路，载荷没有为补派生加任何字段。
 
-// Covers: AT-VE-218 消费门半边——同一封节点收寄形成信封，VE 投影、补派生与 PS 来源采用三路各处理一次，补派生那一路重投按 inbox 跳过；
+// Covers: AT-VE-221 消费门半边——同一封节点收寄形成信封，VE 投影、补派生与 PS 来源采用三路各处理一次，补派生那一路重投按 inbox 跳过；
 // 共一本账时先到的一路会把另一路当重复跳过，补派生就永远不跑。三路认的是同一份载荷（租户、来源标识）。
 func TestTheBackfillLaneKeepsItsOwnLedgerOnTheNodeIntakeEnvelope(t *testing.T) {
 	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
@@ -64,7 +64,7 @@ func TestTheBackfillLaneKeepsItsOwnLedgerOnTheNodeIntakeEnvelope(t *testing.T) {
 	}
 }
 
-// Covers: AT-VE-218 消费门半边——缺键维的节点收寄信封在补派生那一路同样是毒丸：拒收入账、交回 nil、不调处理方；认不得的类型响亮报错。
+// Covers: AT-VE-221 消费门半边——缺键维的节点收寄信封在补派生那一路同样是毒丸：拒收入账、交回 nil、不调处理方；认不得的类型响亮报错。
 func TestAPoisonOrForeignEnvelopeIsRejectedOnTheNodeIntakeBackfillLane(t *testing.T) {
 	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
