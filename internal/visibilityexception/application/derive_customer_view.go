@@ -278,7 +278,7 @@ func (handler *DeriveCustomerViewHandler) handOff(
 // 策略只说准不准看，说不了背后有没有东西可看，终局、里程碑与 ETA 各再过一道，都只收窄
 // 不放宽：终局一维看投影里有没有 PS 已采用的终局（domain.FinalDimensionOver）；里程碑一维
 // 看投影里有没有已归类的标准追踪里程碑（domain.MilestonesDimensionOver）；ETA 一维看
-// `UC-VE-003` 的 ETA 客户可见性判断（domain.ETADimensionOver，`AT-VE-158`、`AT-VE-187`）——
+// `UC-VE-003` 的 ETA 客户可见性判断（domain.ETADimensionOver，UC-VE-003 `AT-VE-187`、UC-VE-008 `AT-VE-158`）——
 // 没有判断或判断待判断答待确认，判断 ETA 不可见答不展示。追踪说明一维照策略。
 func dimensionsFrom(
 	answer ports.DisclosureAnswer,

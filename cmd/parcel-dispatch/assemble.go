@@ -1904,9 +1904,8 @@ func (derive *tenantBoundCustomerViewDerive) Handle(
 	}).Handle(ctx, command)
 }
 
-// newTenantBoundProjectionDerive 九路投影共用一份事实/投影/交接仓储。映射仍按每次
-// Handle 的租户现绑，不要为揽收、交付、交接、终局、初始路由、异常旅程、关务案件、
-// 申报提交再复制八份包装。
+// newTenantBoundProjectionDerive 让 routes_*.go 里经 sources.projectionDerive 取用的各投影路
+// 共用一份事实/投影/交接仓储。映射仍按每次 Handle 的租户现绑，不要为每一路再各复制一份包装。
 func newTenantBoundProjectionDerive(
 	db *bentopg.DB,
 	outboxStore *outbox.Store,

@@ -40,7 +40,7 @@ func publishedView(t *testing.T) domain.CustomerTrackingView {
 	return view
 }
 
-// Covers: VE CONTEXT「某一维信息待确认或不可披露——只对该维返回待确认、暂不可用或
+// Covers: VE CONTEXT「某一维信息待确认或不可披露 → 只对该维返回待确认、暂不可用或
 // 不展示，不虚构里程碑、ETA、终局或异常说明」——单维三态可并存于一个视图；展示无
 // 内容与待确认带内容两个方向的虚构都在构造期拦下。
 func TestDimensionsStayHonestPerAxis(t *testing.T) {
@@ -88,7 +88,7 @@ func TestAViewDemandsItsProjectionAnchorAndAccountIsolation(t *testing.T) {
 	}
 }
 
-// Covers: VE CONTEXT「来源更正、有效性变化、身份谱系变化、ETA 新版本或终局更正——
+// Covers: VE CONTEXT「来源更正、有效性变化、身份谱系变化、ETA 新版本或终局更正 →
 // 形成新的客户视图版本并标明更正或替代关系；原发布历史保留」——替代换版本换投影锚
 // 指回原版；原视图不可变；重号替代拒。
 func TestSupersessionKeepsThePublishedHistory(t *testing.T) {

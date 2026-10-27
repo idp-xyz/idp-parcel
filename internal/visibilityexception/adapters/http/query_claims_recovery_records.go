@@ -42,16 +42,16 @@ const (
 	registryRecoveryMatter       = "recovery-matter"
 )
 
-// NewQueryClaimsRecoveryRecordsEndpoint 交回理赔与追偿页三本册子的 HTTP 入口
+// NewQueryClaimsRecoveryRecordsEndpoint 交回理赔与追偿页各册子的 HTTP 入口
 // （GET /claims-recovery-records，票 admin-skeleton-closure-batch/06）。
 //
 // 查阅不受理索赔、不作资格审核、不定责、不发通知——受理走 /claims（客户提交面，
-// 本文件不触碰），资格与结论是内部授权角色的另两个判断（CONTEXT「三判分步」）。
+// 本文件不触碰），资格与结论是内部授权角色的另两个判断（CONTEXT「证据、客户索赔与追偿」一节「收到客户索赔、通过资格审核和确认赔偿责任是不同判断」）。
 // 本端点只消费存储读面（ADR-0077 Decision 一），准入复用运营追踪查阅的
 // OperationsTrackingIntake，判据同 /exception-triage-records。
 //
-// **金额零字段**：赔付金额、追回金额属结算与财务上下文（CONTEXT 边界「赔付金额的
-// 计算」），三本册子的行上连键都不存在，前端模板的金额列由它们的读面回答。
+// **金额零字段**：赔付金额、追回金额属结算与财务上下文（CONTEXT「证据、客户索赔与追偿」一节：「`UC-SA-007` 唯一形成赔付和追偿金额」），
+// 各册子的行上连键都不存在，前端模板的金额列由它们的读面回答。
 func NewQueryClaimsRecoveryRecordsEndpoint(
 	intake OperationsTrackingIntake,
 	reader ClaimsRecoveryReviewReader,

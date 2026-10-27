@@ -65,7 +65,7 @@ func departureGateSignalCommandFor(t *testing.T, fact string) application.RaiseD
 	}
 }
 
-// Covers: AT-TF-158 的信号半边——登记了规则：形成一个发作期，类型、规则版本、可信度取登记那一份，开启时刻是判断时刻；分诊结论
+// Covers: AT-VE-193 的信号半边——登记了规则：形成一个发作期，类型、规则版本、可信度取登记那一份，开启时刻是判断时刻；分诊结论
 // 随它落库、意图交出。
 func TestABlockedDepartureRaisesTheRegisteredSignal(t *testing.T) {
 	handler, _, raise := newDepartureGateSignalFixture(t)
@@ -140,7 +140,7 @@ func TestEachBlockedDepartureOfAParcelOpensItsOwnEpisodeWithItsFactBasis(t *test
 	}
 }
 
-// Covers: AT-TF-158 的未配置格——没登记规则：不形成信号、不问分诊，答规则未配置（入账，不重投）。
+// Covers: AT-VE-193 的未配置格——没登记规则：不形成信号、不问分诊，答规则未配置（入账，不重投）。
 func TestAnUnregisteredDepartureGateRuleRaisesNothing(t *testing.T) {
 	handler, rules, raise := newDepartureGateSignalFixture(t)
 	rules.configured = false

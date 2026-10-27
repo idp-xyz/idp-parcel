@@ -101,7 +101,7 @@ func crServe(
 }
 
 // Covers: registry 是传输形状——缺席或集外按坏请求拒；方法检查同级先行；未配置
-// Intake 对三本册子同答 403，读口不被触到。
+// Intake 对各册子同答 403，读口不被触到。
 func TestClaimsRecoveryRecordsRefuseWrongMethodForeignRegistryAndUnconfigured(t *testing.T) {
 	intake := operationsIntakeDouble{query: operationsScope(t)}
 

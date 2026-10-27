@@ -374,7 +374,7 @@ func TestAMatchingRevisionStillCannotTruncateHistory(t *testing.T) {
 	}
 }
 
-// TestCompetingClaimWritersSerializeOnTheClaimRow 证并发保护的另一半。上一条治的是
+// TestCompetingClaimWritersSerializeOnTheClaimRow 证并发保护的另一半。TestAStaleClaimSnapshotCannotEraseAnApprovedExtension 治的是
 // 先后到达的落后快照；本条治两个写入方**同时在场**：赢家事务未提交时输家必须停在
 // 索赔行锁上（appendSupplementDeadlines 的注释所倚仗的就是这次排队——没有它，两个
 // append 会各自读到同一份历史再交错追加），赢家提交后输家按已提交的那一版被判冲突，
@@ -499,7 +499,7 @@ func TestConcurrentClaimTransitionsLetOnlyOneWin(t *testing.T) {
 	}
 }
 
-// TestResavingTheSameClaimKeepsOneHistoryPerVersion 证上一条的拒绝没有把重放一并拒掉：
+// TestResavingTheSameClaimKeepsOneHistoryPerVersion 证修订守卫的拒绝（TestConcurrentClaimTransitionsLetOnlyOneWin 钉过）没有把重放一并拒掉：
 // 同一份快照再落一次是重放，历史不重复也不报错。
 //
 // 重放必须从读回的那一版出发。拿着已落过库的旧对象再落一次，修订守卫会先答`版本冲突`
@@ -547,7 +547,7 @@ func TestClaimsOfAnotherTenantAreInvisible(t *testing.T) {
 
 // TestALegacyClaimRowWithoutApplicantStillLoads 证存量行（0018 之前受理、无申请人）
 // 照常读回：重建门容缺，Applicant() 如实报缺席——授权维据此停在「申请人缺席」，而
-// 不是整行读不回来。行用裸 SQL 摆出：受理口如今必带申请人，造不出这种行。
+// 不是整行读不回来。行用裸 SQL 摆出：受理口必带申请人，造不出这种行。
 func TestALegacyClaimRowWithoutApplicantStillLoads(t *testing.T) {
 	fixture := newClaimRecoveryFixture(t)
 	ctx := t.Context()

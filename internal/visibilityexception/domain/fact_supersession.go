@@ -45,7 +45,7 @@ func CurrentlyEffective(facts []AcceptedSourceFact) []AcceptedSourceFact {
 // 事实指名时，那些后继成一组。每组保持输入顺序，组序按各组首个后继在输入中的位置。
 //
 // 分叉是 CurrentlyEffective 那句「不择一」的另半边：留在场只解决了投影怎么摆，冲突怎么
-// 裁与要不要立信号（CONTEXT「分叉按冲突处理：保留各项事实及其关系，投影保持信息待确认
+// 裁与要不要立信号（CONTEXT「分叉一律按无法裁决的冲突处理」，且「那一条事实流在投影上保持信息待确认，
 // 并形成适用异常信号」）要先把分叉的各方指出来。这里只指出、不裁——裁决归 fact_conflict.go
 // 的各裁决函数，替代问答不进 ConflictResolutionBasis 的理由同上。
 //

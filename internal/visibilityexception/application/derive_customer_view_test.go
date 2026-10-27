@@ -535,7 +535,7 @@ func TestPermittedMilestonesPendUntilTheProjectionCarriesAClassifiedMilestone(t 
 	}
 }
 
-// Covers: CONTEXT「客户服务终局只能来自 `parcel-shipment`」——不采用判断同样来自 PS，说的
+// Covers: CONTEXT「客户可见性与通知」一节「`parcel-shipment` 提供的客户服务终局」——不采用判断同样来自 PS，说的
 // 却是那份来源没有成为终局；投影里只有它时，策略准许也不展示终局。
 func TestANotAdoptedFinalJudgmentDoesNotShowTheFinal(t *testing.T) {
 	fixture := newViewFixture(t)

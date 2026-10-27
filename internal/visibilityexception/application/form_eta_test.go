@@ -190,8 +190,8 @@ func gapCommand(t *testing.T, windowRule string, windowEnd time.Time) applicatio
 	}
 }
 
-// Covers: CONTEXT「预测必须保存来源口径、输入事实、规则或模型版本、时间范围、可信度
-// 与判断时间」——足够事实形成版本化内部 ETA，不修改承诺（类型上没有承诺字段）。点名
+// Covers: CONTEXT「ETA 与可见性缺口」一节「每次 ETA 必须明确预测对象、目标里程碑、预测时点、输入事实、规则或模型版本、
+// 预计时间范围和可信程度」——足够事实形成版本化内部 ETA，不修改承诺（类型上没有承诺字段）。点名
 // `AT-VE-049`「有足够事实形成内部 ETA→保存输入、版本、范围和可信度，不修改承诺」。
 func TestSufficientFactsFormAVersionedETA(t *testing.T) {
 	fixture := newETAFixture(t)

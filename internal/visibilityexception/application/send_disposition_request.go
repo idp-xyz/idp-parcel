@@ -174,8 +174,9 @@ func (handler *SendDispositionRequestHandler) Handle(
 		return DispositionResult{outcome: DispositionUndecided, reason: DispositionCaseViewUnavailable}, nil
 	}
 	if !found || !active {
-		// 挂不上活案件：案件不存在与已关闭同答未受理——关闭前的未完成请求盘点
-		// （CONTEXT）已经把「关闭后还要动作」引去关联新案件，这里不开旁门。
+		// 挂不上活案件：案件不存在与已关闭同答未受理——CONTEXT「原因、责任与处置协调」一节要求
+		// 「案件范围缩小、改派、归并或关闭前必须盘点全部未完成处置请求」，「案件责任、响应与闭环」一节让「独立的新原因、新责任范围或
+		// 新的异常事件建立关联新案件」，关闭后还要的动作因此走新案件，这里不开旁门。
 		return DispositionResult{outcome: DispositionNotAccepted}, nil
 	}
 

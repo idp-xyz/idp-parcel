@@ -121,8 +121,8 @@ func TestUnclassifiableFactsStayHonestlyUnclassified(t *testing.T) {
 	}
 }
 
-// Covers: VE CONTEXT 全程追踪投影生命周期「迟到事实、来源更正或映射版本适用性变化→
-// 形成新的当前投影；原投影版本继续保留」与「面向明确包裹」——重派生换版本指回原版、
+// Covers: VE CONTEXT 全程追踪投影生命周期「迟到事实、来源更正或映射版本适用性变化 →
+// 形成新的当前投影」与「原投影版本继续可按版本读回」与「面向明确包裹」——重派生换版本指回原版、
 // 原投影不可变；混入别的包裹的事实拼不成一条旅程。
 func TestAProjectionRederivesWithoutRewritingItsHistory(t *testing.T) {
 	first, err := domain.DeriveTrackingProjection(

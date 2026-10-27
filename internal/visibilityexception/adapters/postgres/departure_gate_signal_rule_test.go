@@ -31,7 +31,7 @@ func departureGateRuleRegistration(t *testing.T, kind, rule, confidence string) 
 	}
 }
 
-// Covers: AT-TF-158 的规则册半边——登记之前未配置（阻断那一件不形成信号），登记之后类型、规则版本与可信度原样读回；再登交回
+// Covers: AT-VE-193 的规则册半边——登记之前未配置（阻断那一件不形成信号），登记之后类型、规则版本与可信度原样读回；再登交回
 // AlreadyRegistered 且原行不动；别的租户与空租户都看不见。
 func TestRegisteredDepartureGateSignalRuleBecomesReadableAndIsNotOverwritten(t *testing.T) {
 	fixture := newRegistrarFixture(t)

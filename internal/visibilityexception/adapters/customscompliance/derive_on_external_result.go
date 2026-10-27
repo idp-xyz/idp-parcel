@@ -120,8 +120,8 @@ func (adapter *DeriveOnExternalResultAdapter) HandleReceivedExternalResult(
 	if record.Unattributable {
 		return fmt.Errorf("%w: source %q is an unattributable retention", ErrExternalResultRecordInconsistent, received.SourceID)
 	}
-	// 同层冲突的那一份留在 CC、双方事实都在册，而 CC 的当前判断不因它改变（CONTEXT「不得
-	// 按最后到达直接改变当前判断」）。投影若收下它，映射目录一行就能让后到的一方改掉包裹
+	// 同层冲突的那一份留在 CC、双方事实都在册，而 CC 的当前判断不因它改变（CC CONTEXT「外部结果与规则时效」一节
+	// 「不得据此猜测提交、补造缺失层次或按最后到达直接改变当前判断」）。投影若收下它，映射目录一行就能让后到的一方改掉包裹
 	// 当前的关务进展——正是那句话禁的事。冲突关系今天只有一个标记、指不出与谁冲突，投影
 	// 立不起冲突关系，所以入账不派生。
 	if record.LayerConflict {

@@ -20,7 +20,7 @@ import (
 // 编排停在未决等租户登记——不造占位渠道。门户展示能否满足通知义务同样由它背后的
 // 合同判断，本适配器只把答复搬过来，不自行推导。
 //
-// 租户在装配期固定，理由同本包另外三个视图：DirectNotification 的签名里没有租户，
+// 租户在装配期固定，理由同本包其余在装配期固定租户的视图：DirectNotification 的签名里没有租户，
 // 而客户账户引用只在租户内唯一（ADR-0003）。
 type NotificationPolicies struct {
 	db     *bentopg.DB

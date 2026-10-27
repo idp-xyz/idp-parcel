@@ -55,7 +55,7 @@ func TestTheMovementFactProducerTypeIsTheRoutedConsumerType(t *testing.T) {
 	}
 }
 
-// Covers: AT-TF-157 真库半边、票面演示判据「出发后 /tracking-projections 出现 DEPARTED」（证据 S）——经生产登记编排登一条出发，
+// Covers: AT-VE-189 真库半边、票面演示判据「出发后 /tracking-projections 出现 DEPARTED」（证据 S）——经生产登记编排登一条出发，
 // 生产路由表一拍定稿；段里出发那一刻在控的两件各得一份 movement-departure，按演示种子映射归 DEPARTED。读数阻断的那一件在
 // 演示租户没登信号规则时不形成发作期，投影照派生、消费照入账。
 func TestADepartureClassifiesAsDepartedUnderTheDemoMappingThroughTheProductionRoute(t *testing.T) {
@@ -90,7 +90,7 @@ func TestADepartureClassifiesAsDepartedUnderTheDemoMappingThroughTheProductionRo
 	}
 }
 
-// Covers: AT-TF-158 真库半边——演示租户按种子采用出发门禁阻断信号规则之后，阻断的那一件形成一个发作期，类型、规则版本与可信度
+// Covers: AT-VE-193 真库半边——演示租户按种子采用出发门禁阻断信号规则之后，阻断的那一件形成一个发作期，类型、规则版本与可信度
 // 取种子那一份；不受门禁的那一件没有。分诊规则里没有这一类，信号如实进人工复核格。
 func TestABlockedDepartureRaisesTheAdoptedSignalThroughTheProductionRoute(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
@@ -214,7 +214,7 @@ func TestAnUnboundBlockedDepartureStillRaisesTheSignal(t *testing.T) {
 	}
 }
 
-// Covers: AT-TF-160 派发半边——移动事实这一路的失败分格：读不回事实、段册读不动、信号搁置、派生编排未决落 dispatch.consumer_undecided，其余保持
+// Covers: AT-VE-191、AT-VE-194 派发半边——移动事实这一路的失败分格：读不回事实、段册读不动、信号搁置、派生编排未决落 dispatch.consumer_undecided，其余保持
 // dispatch.publish_failed。名单取 veMovementFactUndecidedSentinels 本身：测试里重列一份会让漏登记的哨兵在测试里绿、在生产里塌成
 // publish_failed。
 // Covers: AT-VE-198 派发半边（移动事实那一路）——集运成员读不动落未决，答复不一致保持发布失败。

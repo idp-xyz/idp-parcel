@@ -3,7 +3,7 @@
 // 派生由 DeriveProjectionHandler 回答；包裹反查答复译成货主客户账户引用，采认与
 // 委托归属由 PS 回答。
 //
-// 终局投影是四路投影里唯一一条来源为 parcel-shipment 的：终局是 PS 拥有的事实，
+// 终局投影是各投影路里唯一一条来源为 parcel-shipment 的：终局是 PS 拥有的事实，
 // 不是履约侧事实。有效交付登记是它的**上游来源**，已有自己的投影账，两者各记各的。
 package parcelshipment
 

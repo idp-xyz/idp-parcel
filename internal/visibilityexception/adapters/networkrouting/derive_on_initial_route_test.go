@@ -311,7 +311,7 @@ func TestAnUnreadableInitialRouteIsContinuableUndecided(t *testing.T) {
 }
 
 // NR 库里那一行经领域构造门重建不出来是坏数据，重投推不动：响亮上抛、保住 NR 哨兵的错误链，不包成`判断还看不见`
-// 进未决名单重投到耗尽。读不回（依赖故障）仍是未决，见上一条用例。
+// 进未决名单重投到耗尽。读不回（依赖故障）仍是未决，见 TestAnUnreadableInitialRouteIsContinuableUndecided。
 func TestAnUnrebuildableInitialRouteRowIsLoudNotUndecided(t *testing.T) {
 	derive := &routeCountingHandler{}
 	subject, err := adapter.NewDeriveOnInitialRouteAdapter(

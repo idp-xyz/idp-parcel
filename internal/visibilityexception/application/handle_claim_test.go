@@ -319,8 +319,8 @@ func newClaimFixture(t *testing.T) *claimFixture {
 	return fixture
 }
 
-// seedUnscreenedLegacyClaim 摆出一项申请人维接通（切块 (c)）之前受理的存量索赔：
-// 没有申请人、未审。它只能从重建口来——受理口如今必带申请人。
+// seedUnscreenedLegacyClaim 摆出一项受理时没有申请人维的存量索赔：
+// 没有申请人、未审。它只能从重建口来——受理口必带申请人。
 func seedUnscreenedLegacyClaim(t *testing.T, fixture *claimFixture, item string) {
 	t.Helper()
 	tenant := mustValue(t, domain.NewTenantID, "tenant-1")
@@ -344,7 +344,7 @@ func seedUnscreenedLegacyClaim(t *testing.T, fixture *claimFixture, item string)
 
 // seedEligibleClaim 直接把一项已过审的索赔放进库，供责任结论与复核那几个用例作前置。
 //
-// 过审如今经 ScreenClaim 也到得了（切块 (c) 接通了申请人授权维），但那几个用例证的
+// 过审经 ScreenClaim 也到得了，但那几个用例证的
 // 是结论与复核，不是资格审核——前置用重建口摆出来，读用例的人不必先追一遍五维核对。
 func seedEligibleClaim(t *testing.T, fixture *claimFixture, item string) {
 	t.Helper()
@@ -666,9 +666,8 @@ func TestEachUncheckableDimensionStopsOnItsOwnReason(t *testing.T) {
 	}
 }
 
-// Covers: 五维全部肯定通过才答`通过`，且这一格自切块 (c) 接通申请人授权维后第一次
-// 可达（此前恒有一维核不了，票面第三节把「少核一维就答通过」与默认拒赔并列为同一个
-// 错的两面）。终局一次性：通过之后再审答`已审过`（ADR-0051 只让等待补充重入）。
+// Covers: 五维全部肯定通过才答`通过`；少核一维就答通过与默认拒赔是同一个
+// 错的两面（票面第三节）。终局一次性：通过之后再审答`已审过`（ADR-0051 只让等待补充重入）。
 func TestAFullyCheckedClaimScreensEligible(t *testing.T) {
 	fixture := newClaimFixture(t)
 	ctx := context.Background()

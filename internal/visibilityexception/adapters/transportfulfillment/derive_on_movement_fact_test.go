@@ -231,7 +231,7 @@ func (fixture *movementFixture) factsOf(parcel string) []veports.FactRecord {
 	return found
 }
 
-// Covers: AT-TF-157——出发在段里那一刻在控的每件对象上各派生一份事实：类型词 movement-departure，引用带对象维，三个时间各取其主，
+// Covers: AT-VE-189——出发在段里那一刻在控的每件对象上各派生一份事实：类型词 movement-departure，引用带对象维，三个时间各取其主，
 // 出发后才入段的那件不投；读数不进投影。阻断的那一件（且只有它）交进信号编排。
 func TestADepartureProjectsOntoEveryObjectUnderControlAndSignalsTheBlockedOne(t *testing.T) {
 	fixture := newMovementFixture(t, movementRecord(t, tfdomain.DepartureFact))
@@ -269,7 +269,7 @@ func TestADepartureProjectsOntoEveryObjectUnderControlAndSignalsTheBlockedOne(t 
 	}
 }
 
-// Covers: AT-TF-157 的类型词——移动与到达各用自己的词，没有读数也就没有信号。
+// Covers: AT-VE-189 的类型词——移动与到达各用自己的词，没有读数也就没有信号。
 func TestInTransitAndArrivalFactsCarryTheirOwnKindsAndRaiseNoSignal(t *testing.T) {
 	for kind, want := range map[tfdomain.MovementFactKind]string{
 		tfdomain.InTransitFact: "movement-in-transit",
@@ -291,7 +291,7 @@ func TestInTransitAndArrivalFactsCarryTheirOwnKindsAndRaiseNoSignal(t *testing.T
 	}
 }
 
-// Covers: AT-TF-159——没有可投的对象就入账：没声明段（不读段册）、段不在册、那一刻段里没有在控对象，都不派生、不报错。
+// Covers: AT-VE-190——没有可投的对象就入账：没声明段（不读段册）、段不在册、那一刻段里没有在控对象，都不派生、不报错。
 func TestAMovementFactWithNoObjectToProjectIsAccountedForWithoutDeriving(t *testing.T) {
 	undeclared := movementRecord(t, tfdomain.ArrivalFact)
 	spec := tfdomain.MovementFactSpec{
@@ -343,7 +343,7 @@ func TestAMovementFactWithNoObjectToProjectIsAccountedForWithoutDeriving(t *test
 	})
 }
 
-// Covers: AT-TF-160——各格失败落进各自的哨兵：读不回事实与段册读不动是续办（未决），信号搁置是续办；键不符、引用译不出是不变量
+// Covers: AT-VE-191（投影半边）、AT-VE-194（信号规则半边）——各格失败落进各自的哨兵：读不回事实与段册读不动是续办（未决），信号搁置是续办；键不符、引用译不出是不变量
 // 或引用坏了；分诊意图未交另成一格。
 func TestMovementFactFailuresKeepTheirSentinels(t *testing.T) {
 	t.Run("读不回事实", func(t *testing.T) {
@@ -425,7 +425,7 @@ func TestMovementFactFailuresKeepTheirSentinels(t *testing.T) {
 	})
 }
 
-// Covers: AT-TF-161——更正版沿用原读数（ADR-0205 越权风险点 8）：投影照派生、带替代关系，信号不再交——同一次出发原版已经命中过。
+// Covers: AT-VE-192（投影半边）、AT-VE-195（信号半边）——更正版沿用原读数（ADR-0205 越权风险点 8）：投影照派生、带替代关系，信号不再交——同一次出发原版已经命中过。
 func TestACorrectedDepartureProjectsWithItsSupersessionButRaisesNoSecondSignal(t *testing.T) {
 	original := movementRecord(t, tfdomain.DepartureFact)
 	corrected, err := original.Fact.Correct(original.Fact.Location(), movementDepartedAt.Add(time.Minute), original.Fact.Source(),

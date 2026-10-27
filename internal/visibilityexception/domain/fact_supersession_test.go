@@ -89,7 +89,7 @@ func TestSupersededFactsLeaveTheEffectiveSet(t *testing.T) {
 	}
 }
 
-// Covers: VE CONTEXT「关系只在同一源上下文、同一事实引用的版本之间成立……跨源上下文
+// Covers: VE CONTEXT「且只在同一源上下文、同一事实引用的版本之间成立……跨源上下文
 // 或跨事实引用的分歧仍是冲突，按冲突裁决处理，不得借替代关系代为裁决」——跨引用与
 // 跨源的指名不构成替代，被指名者留在当前有效集。
 func TestSupersessionDoesNotCrossFactReferenceOrSource(t *testing.T) {
