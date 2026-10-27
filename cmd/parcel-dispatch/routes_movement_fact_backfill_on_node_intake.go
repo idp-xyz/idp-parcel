@@ -20,8 +20,11 @@ var veMovementFactBackfillOnNodeIntakeUndecidedSentinels = []error{
 	vetf.ErrProjectionUndecided,
 }
 
-// NO 节点收寄形成 → VE 移动事实补派生（票 docs-consistency/code/74，ADR-0299）。排在同一封信上的 VE 投影之后、PS 来源采用之前：补派生
-// 与投影同属追踪，不挡在来源采用后面；投影先落，补派生停在未决重投时，投影那一路按 inbox 跳过。信封与投影、采用共用，载荷不加字段。
+// NO 节点收寄形成 → VE 移动事实补派生（票 docs-consistency/code/74，ADR-0299）。排在同一封信上的 VE 投影与 PS 来源采用之后：本路每个候选
+// 单元要读段、事实与整袋展开（每个成员读一次身份），读量随候选单元数与袋大小增长，一次做不完时会吃光这次投递共用的那一个超时；
+// 主业务先落地，本路是尽力而为的自愈。各路是独立的 inbox 账、各自一个事务，本路停在未决不挡同一封信上的别的路（FanOut 每一路都调）；
+// 耦合只有两处：一次投递共用一个超时，一封信共用一份失败预算，预算耗尽整封被放弃时已提交的各路不受影响，本路没有补偿。信封与投影、
+// 采用共用，载荷不加字段。
 func init() {
 	registerRoutes(func(sources dispatchSources) ([]routeLeg, error) {
 		onNodeIntake, err := backfillMovementFactsOnNodeIntakeConsumer(sources.db, sources.inbox, sources.projectionDerive)
@@ -29,7 +32,7 @@ func init() {
 			return nil, err
 		}
 		return []routeLeg{{
-			event: veinbox.NodeIntakeFormedEventType, position: positionProjection + 10, consumer: onNodeIntake,
+			event: veinbox.NodeIntakeFormedEventType, position: positionPrimary + 10, consumer: onNodeIntake,
 			sentinels: veMovementFactBackfillOnNodeIntakeUndecidedSentinels, label: "movement fact backfill on node intake",
 		}}, nil
 	})

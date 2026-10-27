@@ -36,17 +36,17 @@ Blocked by: 无（「要裁的」第一条裁为另立 ADR-0299，已先接受�
 
 ### 做了什么
 
-- **ADR-0299**（接上 ADR-0224 决定三的唤醒面，无条款停用）：节点收寄形成信封上另起一路移动事实补派生。ADR-0224 的 Status 行与 Links 加前向指针，正文不动。
+- **ADR-0299**（部分停用（扩成）ADR-0224 决定三「唤醒是对象级的控制事实登记信封，各另起一路、另记一本账。」一句，适用场景只限成员经集运单元关系随单元进段、补的只是移动事实投影这一类）：节点收寄形成信封上另起一路移动事实补派生。ADR-0224 的 Status 行与 Links 加前向指针，正文不动。
 - **节点作业一侧只加读，不动写与已发布读口**：端口 `ConsolidationUnitsHoldingMemberView.ReadUnitsEverHoldingMember`（`internal/nodeoperations/ports/consolidation_units_holding_member.go`），postgres 实现 `ConsolidationUnitsHoldingMember`，取自集运作业来源事实层（不取单元行成员列与容纳索引：那两样是此刻的派生状态，看不到已出袋或已关闭的单元）；**迁移 `node_operations/0023_consolidation_fact_by_member.sql`** 加 `(tenant_id, member_id, unit_id) WHERE member_id IS NOT NULL` 索引。
 - **VE 消费侧端口**（新文件）`internal/visibilityexception/ports/identified_consolidation_member.go` 的 `IdentifiedMemberView`：信封键回读收寄是否认出了包裹、成员曾装进哪几件单元；确定性问题包 `ErrFormedIntakeUntranslatable` / 既有 `ErrConsolidationMembershipUntranslatable`。适配器 `adapters/nodeoperations/identified_member.go`。
 - **补派生处理方** `adapters/transportfulfillment/backfill_identified_member_movement_facts.go` 的 `BackfillIdentifiedMemberAdapter`：先逐层向上列候选单元（宽度优先、每件一次、成环走得完），再对每件候选单元走与控制事实信封上补派生**共用**的 `movementBackfill`（`backfill_movement_facts.go` 里把原来 `BackfillMovementFactsAdapter` 的段扫描与按段补抽出，行为不变）；`onlyParcel` 过滤让展开到的别的成员不被碰。
 - **inbox 消费门** `adapters/inbox/movement_fact_backfill_on_node_intake_consumer.go`（名 `visibility-exception/backfill-movement-facts-on-node-intake`，与投影、PS 来源采用分账，译码复用 `decodeFormedNodeIntake`，信封与载荷一字不动）。
-- **装配**（ADR-0222，只加特性文件）：`cmd/parcel-dispatch/assemble_movement_fact_backfill_on_node_intake.go`、`routes_movement_fact_backfill_on_node_intake.go`（名次 `positionProjection + 10`，排在投影之后、来源采用之前）。未动 endpoints / main / routes / `cmd/parcel-api`。
+- **装配**（ADR-0222，只加特性文件）：`cmd/parcel-dispatch/assemble_movement_fact_backfill_on_node_intake.go`、`routes_movement_fact_backfill_on_node_intake.go`（名次 `positionPrimary + 10`，排在投影与来源采用之后；`cmd/parcel-dispatch/node_intake_fan_out_order_test.go` 读生产登记处钉住次序）。未动 endpoints / main / routes / `cmd/parcel-api`。
 - **文档**：VE CONTEXT 三处规则句；UC-VE-002 立 `AT-VE-218`–`221`；UC-NO-003 立 `AT-NO-132`；AT 盘点入①五行与一条追记（总览计数未改）。
 
 ### 代决（用户原话「你作为业务和系统专家自决……解决所有的问题」）
 
-1. **扩 ADR-0224 还是另立**：另立 ADR-0299。ADR-0224 的触发方与判据都在运输履约，本路触发方是节点作业的身份事实、判据要沿成员关系向上找袋；引它的决定四（同一判据同一幂等键）、决定五（只补投影）、决定六（失败分格），接上唤醒面、无条款停用。
+1. **扩 ADR-0224 还是另立**：另立 ADR-0299。ADR-0224 的触发方与判据都在运输履约，本路触发方是节点作业的身份事实、判据要沿成员关系向上找袋；引它的决定四（同一判据同一幂等键）、决定五（只补投影）、决定六（失败分格），部分停用（扩成）决定三的唤醒面一句。
 2. **向上找的口径**：逐层到段里在控的单元，不止直接那一层；实现为「候选放宽、展开收紧」而非另算向上的时间区间——候选取节点作业来源事实层里曾装过它的单元（不问哪一刻），再对候选单元用 `trackedParcelsAt` 按事实那一刻展开，展开到这件包裹才补。这是票 123 向下展开口径的逆向，且保证正反向永远用同一条成员口径（同刻按记录时刻、单元关闭、嵌套、成环、身份取此刻），不在反向再实现一遍。备选「另算两个时间区间求交」否：两处各自演化迟早分叉。
 3. **触发信封**：识别成功（收寄首次形成、待识别经重核形成）与身份冲突处置成立是**同一个信封类型**（`node-operations.node-intake.formed`，三处都经同一个 `handOffIntake`），共用一路，不各挂一路。**不新造信封**，载荷不加字段，NO 生产方与别的订阅方（VE 投影、PS 来源采用）合同一字不动。没认出包裹的信封（待识别、未形成、形成了却没有关联）入账收工，不等识别（投影那一路才等）。
 4. **身份后来又被纠正成另一件包裹**：展开取此刻的收寄身份（ADR-0225 决定二），旧信指的包裹此刻已不是这件实物时什么也不补，也不替新认出的那件补（它有自己的信封）；先前已补到旧包裹上的**不撤**（VE 不自行使源事实失效；移动事实在运输履约仍成立）。撤销需要 NO 把身份纠正交出，见越权风险点 3。
@@ -61,14 +61,14 @@ Blocked by: 无（「要裁的」第一条裁为另立 ADR-0299，已先接受�
 2. **读量与批量重核**（运维、NO owner）：每封节点收寄形成信封多一次收寄读与一次按成员反查（走新索引）；被装进过袋的实物，每件候选单元多读段、事实与整袋展开（整袋每个成员各读一次收寄身份）。批量重核（按号码、按送站交接单）时读量随件数×袋大小×段上事实数增长。优化方向需 NO 加「这件实物那一刻随哪些单元走」的时点反向读口，本票不取。
 3. **身份被纠正后旧包裹上已补的不撤**（VE owner、NO owner）：需要 NO 把身份纠正交出、VE 据此撤销旧包裹上的条目——投影今天不使任何源事实失效，这是它的第一个这类动作。
 4. **上线前已识别的成员不自愈**（VE owner）：已定稿的信封不会再投给新 inbox；存量回扫可复用反向读口，本票不做。
-5. **补派生停在未决时挡同一封信上排在它后面的 PS 来源采用**（VE owner、PS owner、运维）：节点作业成员关系或收寄册读不动时，新收寄的来源采用一并等；与投影那一路排在来源采用之前同一取舍。信封按收寄键分区，各封互不阻塞。
+5. **本路与同一封信上的别的路共用一次投递的超时和一份失败预算，被放弃后无补偿**（VE owner、PS owner、运维）：各路是独立的 inbox 账、各自一个事务，挂在同一个 FanOut 里，每一路都调、前面失败也不停，信封按事件标识分区、每封自成分区，所以本路停在未决不挡同一封信上的 PS 来源采用，也不挡别的信封。真正耦合的是一次投递只有一个带超时的上下文、一封信共用一份失败预算（失败数到上限整封置已放弃）。本路每个候选单元读段、事实与整袋展开，量级候选单元数乘袋大小，慢时会吃光那一次投递的时间，所以名次排在投影与来源采用之后，主业务先拿时间；本路反复未决耗尽预算、整封被放弃时，本路没有补偿（没有按成员回扫，也没有见到放弃行的运维重放口）。
 6. **NO 读口报错不分确定性与暂时**（NO owner，票 114）：反向读口同其余成员读口，一律记未决；能分出的（空白单元标识、收寄与键不符）已记发布失败。
 7. **成员按业务发生时间取，受设备时钟偏差影响；段按消费那一刻的段册算**（同 ADR-0225 越权风险点 3、ADR-0205 越权风险点 15）；**更正版改了发生时间时两个时点的成员集合不同**（同票 123 越权风险点 10）；**成环跳过不报错**（同票 123 越权风险点 8）。
-8. **新迁移 0023 是非并发建索引**（运维）：`consolidation_fact` 行数大的环境上线时建索引会短暂阻写；此表只在集运作业事实落库时写，演示与起步规模无影响。
+8. **新迁移 0023 是非并发建索引**（运维）：`consolidation_fact` 行数大的环境上线时建索引会短暂阻写（评审实测 100 万行约 0.5 秒）；仓内迁移执行器只收事务块内迁移（`migrate.applyStep` 头注，`CONCURRENTLY` 显式未决），先例是 0021，迁移头注已写明；此表只在集运作业事实落库时写，演示与起步规模无影响。
 
 ### AT
 
-- UC-VE-002 新立 `AT-VE-218`（识别成功补出随袋出发，只补这一件，与两路先后同键）、`AT-VE-219`（笼套袋逐层向上，出发那一刻不在袋里的不补）、`AT-VE-220`（身份被纠正后旧信不补、已补不撤）、`AT-VE-221`（失败分格与消费门分账）；UC-NO-003 新立 `AT-NO-132`（反向读口）。证据一律 `S`。
+- UC-VE-002 新立 `AT-VE-218`（识别成功补出随袋出发，只补这一件，与两路先后同键）、`AT-VE-219`（笼套袋逐层向上，出发那一刻不在袋里的不补）、`AT-VE-220`（身份被纠正后旧信不补、已补不撤）、`AT-VE-221`（失败分格与消费门分账，补派生排在投影与来源采用之后）；UC-NO-003 新立 `AT-NO-132`（反向读口）。证据一律 `S`。
 - 用例：`internal/nodeoperations/adapters/postgres/consolidation_units_holding_member_test.go`；`internal/visibilityexception/adapters/{transportfulfillment/backfill_identified_member_movement_facts_test.go,nodeoperations/identified_member_test.go,inbox/movement_fact_backfill_on_node_intake_consumer_test.go}`；真库 `cmd/parcel-dispatch/movement_fact_backfill_on_node_intake_test.go`（经生产路由一拍：笼套袋、出发时身份不成立的成员识别后补出，已移出、出发后才装进、从没进过单元的不补，重投只答已有结果；识别成功已落册而收寄信封未到时移动事实那一路先到、补派生答已有结果；经生产识别链——PS 接受、门铃、NO 重核、收寄意图——补出；派发失败分区）。
 
 ### 验证
