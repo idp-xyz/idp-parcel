@@ -2,7 +2,7 @@
 
 Category: bug
 Status: in-progress——2026-10-26 作者完工，待隔离评审与进 main，分支 claude-code100。此前 needs-triage——建议 R2（上线后尽快）：响亮失败、不静默，但占着交接或收寄采用的分区按派发预算重投到 `ABANDONED`。2026-10-26 票 [code/29](./29-reroute-suggestions-and-ties-have-no-authorized-decision-face.md) 作者子代理立，出处为 [ADR-0284](../../../docs/adr/0284-an-authorized-role-decides-a-current-reroute-suggestion-through-an-operator-decision-face.md) 越权风险点 6，分支 claude-code29。分级由协调方定稿。
-Blocked by: 补法要一份记录：三种取法都会改已接受 ADR 的口径（见「要裁的」），号与裁定归协调方。
+Blocked by: 无（ADR-0292 已立）
 出处：ADR-0284 越权风险点 6；UC-NR-003「给开发的交接」那一行。
 
 ## 现象
@@ -79,7 +79,7 @@ S–M，取决于取法。
 ### 越权风险点（详见 ADR-0292 文末）
 
 1. 交进节点的那一次不判，等下一次控制触发再判；之后若再没有控制触发，这次失效不会被判出（与 ADR-0279 风险点 1 同形，补法是「从生效时刻的位置补判一次」那种续办，另议）。
-2. 窗口长度取决于授权角色多久决定；若某租户常态是先交接、后决定，升 R1。
+2. 真正落进这一格的，是决定落库时仍在派发管道里的触发，和离线补登、业务时间远早于处理时间的触发；窗口里按时处理的触发走无路由那条线、自动形成首个计划，建议随之过时，形不成决定，不落进这一格（并列那一路同理：按时处理的触发本是 `NO_ROUTING_HISTORY` 未判，晚到的入账为新原因，结局相同）。升 R1 的条件是派发积压或离线补登的常态时延长于授权角色的决定时延。缓解如实说：未判登记今天没有读面，只能查库，没有按包裹列出的入口。评审的严重度判断（维持 R2）与补救方向（给未判登记补读面，或在 154 里增加一类「按决定计划生效时刻的位置补判」，当前行没存触发的位置和控制种类，补判要回原信封取原料）见 ADR-0292 越权风险点 2。
 3. 改善替代线上被拦的那一次照取了成本、照排了候选、照取了号（先判出改善才知道这是换班）。
 4. 触发业务时间取自来源、决定时刻取 NR 时钟，时钟偏差挪动边界。
 5. 决定编排的「过时」仍只看在册复核，未改。
@@ -95,6 +95,7 @@ S–M，取决于取法。
 | 判出仍适用 / 改善不够阈值 → 不撞，照常记 | 应用 `TestATriggerEarlierThanThePlansEffectiveTimeThatKeepsThePlanIsStillJudged` |
 | 同一刻与晚于生效照判 | 应用 `TestATriggerNotEarlierThanThePlansEffectiveTimeIsJudgedAsUsual` |
 | 先比当前位置 | 应用 `TestATriggerEarlierThanTheCurrentPositionIsComparedBeforeThePlanEffectiveTime` |
+| 适用性看不清、冻结形态未配置先于本格答，各点名自己的原因、不带计划生效时刻 | 应用 `TestUnclearApplicabilityAndAnUnconfiguredFreezeFormAreAnsweredBeforeThePlanEffectiveTime` |
 | 消费门收工、不重投、不登未决哨兵 | 交接适配器 `TestAHandoverEarlierThanThePlanTakesEffectSettlesNotJudged`、收寄采用适配器 `TestAnIntakeEarlierThanThePlanTakesEffectSettlesNotJudged` |
 | 未判登记：时刻与原因同来同去，纳秒 / 微秒舍入 | postgres `TestATriggerBeforeThePlanTakesEffectCarriesTheEffectiveTimeItWasComparedWith`（适配器与库各拒一次） |
 | 真库端到端（票面时序，交接一路）：修前整封响亮失败 `lapse plan applicability: network routing: invalid plan applicability`，修后入账 `PROCESSED`、复核册只有揽收一行、决定形成的计划适用性没有登记行；之后一次不早于生效的交接判出失效、引用决定形成的计划 | `cmd/parcel-dispatch` `TestAHandoverBetweenASuggestionAndItsDecisionIsNotJudgedOnTheDatabase` |
@@ -120,3 +121,13 @@ S–M，取决于取法。
 
 - 改善线的哨兵放在 `tryImprovementReroute` 里 `improvementBasisOf` 判出「够格」之后、形成决定与写适用性之前；这一步之前没有写。拦下时已经取过成本、取过一个计划版本号（仍适用线判不出改善时同样会取）。
 - ADR-0309 不在派单点名的注记范围，但它的越权风险点 5 与本票同一类，按「回答」约定只在 Status 与 Links 加了前向指针。
+
+### 评审记录与修订轮
+
+独立评审结论：可合入，下列各项合入前修。
+
+- **N1（越权风险点 2 的因果与缓解不实）**：原文「建议放几天，这几天里到的每一次交接都落进窗口」不成立——建议形成后原计划已失效，窗口里按时处理的交接走 `reassessNoRoute`、自动形成首个计划，建议按「另有业务时间不早于建议的复核」过时，决定编排答已过时，形不成决定；并列一路按时处理的触发本是 `NO_ROUTING_HISTORY` 未判。真正落进这一格的只有决定落库时仍在派发管道里的触发，和离线补登、业务时间远早于处理时间的触发。已改写 ADR-0292 越权风险点 2 与本票相应一条：升 R1 的条件改为派发积压或离线补登的常态时延长于授权角色的决定时延；缓解如实写明未判登记没有读面、只能查库；写入评审的严重度判断（维持 R2；位置类失效下一次交接自愈，限制类失效决定编排已按此刻证据重判；窗口内晚到的触发恰是最后一次控制触发时包裹卡在计划外节点，作业暂停和停滞可见）与补救方向（票 demo-chain-gaps/154 后续项）。
+- **N2（ADR-0292「对已接受记录的作用」引文）**：ADR-0235 的 Status 里 ADR-0250 停的是决定一「重投推得动的照旧是未决……」那一句，只有 ADR-0279 停了本句，括注改为「该句已被 ADR-0279 扩过一格」；引 ADR-0272 决定三时补全原文的「（ADR-0235 决定四）」。
+- **N3（决定二声明的次序没有用例钉住）**：评审变异（在 `reassessPlan` 的未决分支与冻结形态未配置分支之前各加「计划还没生效就答 `TRIGGER_PRECEDES_PLAN_EFFECTIVE_FROM`」）全绿存活。补应用层用例 `TestUnclearApplicabilityAndAnUnconfiguredFreezeFormAreAnsweredBeforeThePlanEffectiveTime`：起点计划未生效，分别加选中候选限制状态未知与策略版本未声明冻结，断言原因为 `PLAN_APPLICABILITY_UNCLEAR` 与 `FREEZE_FORM_UNCONFIGURED`（这两个原因靠登记补齐、走 154 续办，不能被记成终局原因）。变异核验：把未决分支的分流挪到前面，「适用性看不清」子用例变红；把冻结形态未配置的分流挪到前面，「冻结形态未配置」子用例变红；备份、改、跑、拷回并 `cmp` 一致。AT-NR-104 的盘点行与 UC-NR-003 该行同步点名这条次序。
+- **风格项**：`cmd/parcel-dispatch/reassess_before_plan_effective_test.go` 文件头去掉变更叙述的两句；`plan_applicability_test.go` 里「离场了的计划不再问」改为「不问」。
+- **票面**：票头 `Blocked by:` 改为「无（ADR-0292 已立）」。
