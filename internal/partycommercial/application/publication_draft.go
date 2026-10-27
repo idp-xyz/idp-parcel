@@ -175,7 +175,8 @@ func (handler *SubmitPublicationDraftHandler) Handle(
 
 // ApprovePublicationDraftOutcome 是批准的结果代数。拒绝按恢复动作分格（ADR-0029）：`未配置`要租户登规则；
 // `需换人批准`与`批准者不合格`要换人；`已批准`/`已发布`是载体已过了这一格；`已被替换`是两个操作者先后动手，
-// 后到的重读再来。
+// 后到的重读再来；`读不回`是本构建折不回这份载体的正文，重发不会好，恢复动作落在操作者手里——`待批准`的按同一版本重新录入，
+// `已批准`的换版本号（内容已固定）。
 type ApprovePublicationDraftOutcome uint8
 
 const (
@@ -188,6 +189,7 @@ const (
 	PublicationDraftAlreadyApproved
 	ApprovalDraftAlreadyPublished
 	ApprovalDraftChanged
+	ApprovalDraftNotReadable
 )
 
 func (outcome ApprovePublicationDraftOutcome) String() string {
@@ -208,6 +210,8 @@ func (outcome ApprovePublicationDraftOutcome) String() string {
 		return "DRAFT_ALREADY_PUBLISHED"
 	case ApprovalDraftChanged:
 		return "DRAFT_CHANGED"
+	case ApprovalDraftNotReadable:
+		return "DRAFT_NOT_READABLE"
 	default:
 		return ""
 	}
@@ -229,9 +233,10 @@ type ApprovePublicationDraftCommand struct {
 }
 
 type ApprovePublicationDraftResult struct {
-	outcome  ApprovePublicationDraftOutcome
-	draft    domain.PublicationDraft
-	hasDraft bool
+	outcome    ApprovePublicationDraftOutcome
+	draft      domain.PublicationDraft
+	hasDraft   bool
+	unreadable *domain.UnreadablePublicationDraft
 }
 
 func (result ApprovePublicationDraftResult) Outcome() ApprovePublicationDraftOutcome {
@@ -241,6 +246,11 @@ func (result ApprovePublicationDraftResult) Outcome() ApprovePublicationDraftOut
 // Draft 交回推进后的载体；只在`已批准`时在场。
 func (result ApprovePublicationDraftResult) Draft() (domain.PublicationDraft, bool) {
 	return result.draft, result.hasDraft
+}
+
+// Unreadable 交回读不回的那一行在库上剩下的事实（状态、成因），只在`读不回`时在场。
+func (result ApprovePublicationDraftResult) Unreadable() (*domain.UnreadablePublicationDraft, bool) {
+	return result.unreadable, result.unreadable != nil
 }
 
 type ApprovePublicationDraftHandler struct {
@@ -264,6 +274,9 @@ func (handler *ApprovePublicationDraftHandler) Handle(
 	command ApprovePublicationDraftCommand,
 ) (ApprovePublicationDraftResult, error) {
 	draft, found, err := handler.drafts.LoadDraft(ctx, command.Tenant, command.Kind, command.ObjectID, command.Version)
+	if unreadable, ok := unreadableDraftOf(err); ok {
+		return approvalOfUnreadable(unreadable, command), nil
+	}
 	if err != nil {
 		return ApprovePublicationDraftResult{}, fmt.Errorf("approve publication draft: %w", err)
 	}
@@ -271,7 +284,7 @@ func (handler *ApprovePublicationDraftHandler) Handle(
 		return ApprovePublicationDraftResult{outcome: ApprovalDraftNotFound}, nil
 	}
 	// 内容身份先于状态：调用方看到的不是载体此刻的内容时，「已批准」这类状态答案会让他以为批的是自己看过的那份。
-	if draftChangedSince(draft, command.ExpectedDigest, command.ExpectedShellDigest) {
+	if draftChangedSince(draft.Canonical().Digest().String(), draft.ShellDigest(), command.ExpectedDigest, command.ExpectedShellDigest) {
 		return ApprovePublicationDraftResult{outcome: ApprovalDraftChanged}, nil
 	}
 	switch draft.Status() {
@@ -316,10 +329,32 @@ func (handler *ApprovePublicationDraftHandler) Handle(
 	}
 }
 
+// approvalOfUnreadable 答批准遇到本构建折不回正文的载体行：只凭库上剩下的事实，不碰正文。内容身份先于状态（与读得回的
+// 载体同序）；`已发布`是终点，不需要正文就能如实答，答`读不回`反而会叫操作者去重录一个已在册的版本；`待批准`与`已批准`的
+// 载体批不了也发不了，答`读不回`——`已批准`不答「已批准、可以发布」，那会把操作者引向一次必败的发布。
+func approvalOfUnreadable(unreadable *domain.UnreadablePublicationDraft, command ApprovePublicationDraftCommand) ApprovePublicationDraftResult {
+	switch {
+	case draftChangedSince(unreadable.ContentDigest().String(), unreadable.ShellDigest(), command.ExpectedDigest, command.ExpectedShellDigest):
+		return ApprovePublicationDraftResult{outcome: ApprovalDraftChanged}
+	case unreadable.Status() == domain.PublicationDraftPublished:
+		return ApprovePublicationDraftResult{outcome: ApprovalDraftAlreadyPublished}
+	default:
+		return ApprovePublicationDraftResult{outcome: ApprovalDraftNotReadable, unreadable: unreadable}
+	}
+}
+
+// unreadableDraftOf 认出载体册读回时交回的「本构建折不回正文」一格（ports.PublicationDraftRegistry 的 LoadDraft 合同）。
+func unreadableDraftOf(err error) (*domain.UnreadablePublicationDraft, bool) {
+	var unreadable *domain.UnreadablePublicationDraft
+	return unreadable, errors.As(err, &unreadable)
+}
+
 // PublishPublicationDraftOutcome 是发布载体的结果代数。`已发布`说的是受控发布落定且载体推进；`发布未落定`说的是
 // 发布用例答了`未决`/`冲突`/`未受理`之一——载体留在`已批准`，发布用例的答案随结果交回，续办照那一格办；
 // `等待生效边界`是载体区间未开：发布用例对挂在`已计划生效`版本上的声明整项拒绝、只增仓储没有日后补声明的口
 // （PublishCommercialAuthorityHandler 的既有语义），而载体永远带正文，所以到界前不交给它，届期再发布。
+// `读不回`是本构建折不回这份载体的正文，没有东西可交给发布用例：它与`发布未落定`分格，因为恢复动作不同——那一格照发布
+// 用例的答案续办，这一格要操作者重新录入（`待批准`）或换版本号（`已批准`）。
 type PublishPublicationDraftOutcome uint8
 
 const (
@@ -331,6 +366,7 @@ const (
 	PublicationDraftAwaitsEffectiveStart
 	PublicationDraftPublicationNotLanded
 	PublicationDraftChanged
+	PublicationDraftNotReadable
 )
 
 func (outcome PublishPublicationDraftOutcome) String() string {
@@ -349,6 +385,8 @@ func (outcome PublishPublicationDraftOutcome) String() string {
 		return "PUBLICATION_NOT_LANDED"
 	case PublicationDraftChanged:
 		return "DRAFT_CHANGED"
+	case PublicationDraftNotReadable:
+		return "DRAFT_NOT_READABLE"
 	default:
 		return ""
 	}
@@ -372,6 +410,7 @@ type PublishPublicationDraftResult struct {
 	outcome        PublishPublicationDraftOutcome
 	publication    PublishCommercialAuthorityResult
 	hasPublication bool
+	unreadable     *domain.UnreadablePublicationDraft
 }
 
 func (result PublishPublicationDraftResult) Outcome() PublishPublicationDraftOutcome {
@@ -381,6 +420,11 @@ func (result PublishPublicationDraftResult) Outcome() PublishPublicationDraftOut
 // Publication 交回受控发布用例的答案，只在真交给了它时在场（`已发布`与`发布未落定`两格）。
 func (result PublishPublicationDraftResult) Publication() (PublishCommercialAuthorityResult, bool) {
 	return result.publication, result.hasPublication
+}
+
+// Unreadable 交回读不回的那一行在库上剩下的事实（状态、成因），只在`读不回`时在场。
+func (result PublishPublicationDraftResult) Unreadable() (*domain.UnreadablePublicationDraft, bool) {
+	return result.unreadable, result.unreadable != nil
 }
 
 // PublishPublicationDraftHandler 收的是具体的 *PublishCommercialAuthorityHandler 而不是接口：发布 = 交既有用例
@@ -407,13 +451,16 @@ func (handler *PublishPublicationDraftHandler) Handle(
 	command PublishPublicationDraftCommand,
 ) (PublishPublicationDraftResult, error) {
 	draft, found, err := handler.drafts.LoadDraft(ctx, command.Tenant, command.Kind, command.ObjectID, command.Version)
+	if unreadable, ok := unreadableDraftOf(err); ok {
+		return publicationOfUnreadable(unreadable, command), nil
+	}
 	if err != nil {
 		return PublishPublicationDraftResult{}, fmt.Errorf("publish publication draft: %w", err)
 	}
 	if !found {
 		return PublishPublicationDraftResult{outcome: PublicationDraftNotFound}, nil
 	}
-	if draftChangedSince(draft, command.ExpectedDigest, command.ExpectedShellDigest) {
+	if draftChangedSince(draft.Canonical().Digest().String(), draft.ShellDigest(), command.ExpectedDigest, command.ExpectedShellDigest) {
 		return PublishPublicationDraftResult{outcome: PublicationDraftChanged}, nil
 	}
 	switch draft.Status() {
@@ -472,6 +519,19 @@ func (handler *PublishPublicationDraftHandler) Handle(
 		return PublishPublicationDraftResult{}, fmt.Errorf("publish publication draft: unexpected register outcome %q", outcome)
 	}
 	return result, nil
+}
+
+// publicationOfUnreadable 答发布遇到本构建折不回正文的载体行，判法同 approvalOfUnreadable：内容身份先于状态，`已发布`如实答
+// 已发布，其余两格（`待批准`也在内：批准它同样要正文）答`读不回`而不是「还没批准」。
+func publicationOfUnreadable(unreadable *domain.UnreadablePublicationDraft, command PublishPublicationDraftCommand) PublishPublicationDraftResult {
+	switch {
+	case draftChangedSince(unreadable.ContentDigest().String(), unreadable.ShellDigest(), command.ExpectedDigest, command.ExpectedShellDigest):
+		return PublishPublicationDraftResult{outcome: PublicationDraftChanged}
+	case unreadable.Status() == domain.PublicationDraftPublished:
+		return PublishPublicationDraftResult{outcome: PublicationDraftAlreadyPublished}
+	default:
+		return PublishPublicationDraftResult{outcome: PublicationDraftNotReadable, unreadable: unreadable}
+	}
 }
 
 // declarationsOfContent 把载体上的正文折成发布用例的声明输入面——publicationContentOf 的反向。首例是信用
@@ -600,10 +660,10 @@ func deliveryConditionDeclarationOf(body domain.DeliveryConditionBody) *Delivery
 }
 
 // draftChangedSince 答载体此刻是不是已经不是调用方看到的那份：内容摘要与壳摘要各自非空才各自比较，空串即不带那一半
-// 前置条件（ADR-0314 决定二）。
-func draftChangedSince(draft domain.PublicationDraft, expectedDigest, expectedShellDigest string) bool {
-	if expectedDigest != "" && expectedDigest != draft.Canonical().Digest().String() {
+// 前置条件（ADR-0314 决定二）。比的两串是载体此刻的摘要，读得回的载体与读不回的行各自交出，口径是同一个。
+func draftChangedSince(contentDigest, shellDigest, expectedDigest, expectedShellDigest string) bool {
+	if expectedDigest != "" && expectedDigest != contentDigest {
 		return true
 	}
-	return expectedShellDigest != "" && expectedShellDigest != draft.ShellDigest()
+	return expectedShellDigest != "" && expectedShellDigest != shellDigest
 }

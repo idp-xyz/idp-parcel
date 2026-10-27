@@ -43,7 +43,8 @@ var (
 
 // SubmitDraft 录入一版一行。INSERT … ON CONFLICT DO UPDATE 带 WHERE：库上是`待批准`且这次录入与库上那份不同
 // （摘要或壳任一不同）才替换；RETURNING 用 xmax = 0 分辨插入与更新。零行命中时读回既有行：同一次录入是重放，
-// 否则载体已过了`待批准`、内容固定。
+// 否则载体已过了`待批准`、内容固定。读回的既有行本构建折不回正文时，已过`待批准`的它也不可能与这次录入是同一次
+// 录入（同一次录入的摘要本构建就算得出来），答内容固定；仍在`待批准`的它让修订落空，只可能是行坏了，按错误交回。
 func (repository *PublicationDrafts) SubmitDraft(
 	ctx context.Context,
 	draft domain.PublicationDraft,
@@ -112,6 +113,10 @@ func (repository *PublicationDrafts) SubmitDraft(
 
 	// 零行命中：库上有这一版、且要么同一次录入要么已不在`待批准`。读回判哪一格。
 	existing, found, err := repository.LoadDraft(ctx, draft.Tenant(), draft.Kind(), draft.ObjectID(), draft.Version())
+	var unreadable *domain.UnreadablePublicationDraft
+	if errors.As(err, &unreadable) && unreadable.Status() != domain.PublicationDraftPendingApproval {
+		return ports.PublicationDraftContentFixed, nil
+	}
 	if err != nil {
 		return ports.PublicationDraftSubmitOutcomeInvalid, fmt.Errorf("submit publication draft: %w", err)
 	}
@@ -167,13 +172,14 @@ func (repository *PublicationDrafts) LoadDraft(
 
 // ListOpenDrafts 交出租户名下还没发布的载体（`待批准`与`已批准`），录入时刻由新到旧，同刻按版本身份定序。
 //
-// 租户条件落在 SQL 上（ADR-0003 隔离边界）；每一行都经重建门读回，读不回的一行让整次答案未形成而不是被悄悄跳过——
-// 跳过会让批准者以为列表就是全部。不分页：未发布的载体是在途工作，量级是人手能批完的那一档，读口答的是 limit 以内。
+// 租户条件落在 SQL 上（ADR-0003 隔离边界）；每一行都经重建门读回。本构建折不回正文的行作为读不回一格带着库上的事实
+// 留在列表里：跳过它会让批准者以为列表就是全部，让整页答不出又会叫一行读不回的载体挡住租户全部在途工作。行本身坏了
+// （重建门因行数据而拒）才让整次答案未形成。不分页：未发布的载体是在途工作，量级是人手能批完的那一档，读口答的是 limit 以内。
 func (repository *PublicationDrafts) ListOpenDrafts(
 	ctx context.Context,
 	tenant domain.TenantID,
 	limit int,
-) ([]domain.PublicationDraft, error) {
+) ([]ports.OpenPublicationDraft, error) {
 	if tenant.String() == "" {
 		return nil, fmt.Errorf("list open publication drafts: tenant is required")
 	}
@@ -200,7 +206,7 @@ func (repository *PublicationDrafts) ListOpenDrafts(
 	}
 	defer rows.Close()
 
-	drafts := make([]domain.PublicationDraft, 0)
+	drafts := make([]ports.OpenPublicationDraft, 0)
 	for rows.Next() {
 		var kind uint8
 		var objectID, version string
@@ -220,10 +226,15 @@ func (repository *PublicationDrafts) ListOpenDrafts(
 			return nil, fmt.Errorf("list open publication drafts: %w", err)
 		}
 		draft, err := row.draft(tenant, domain.CommercialObjectKind(kind), object, label)
-		if err != nil {
+		var unreadable *domain.UnreadablePublicationDraft
+		switch {
+		case errors.As(err, &unreadable):
+			drafts = append(drafts, ports.UnreadableOpenDraft(unreadable))
+		case err != nil:
 			return nil, fmt.Errorf("list open publication drafts: %w", err)
+		default:
+			drafts = append(drafts, ports.ReadableOpenDraft(draft))
 		}
-		drafts = append(drafts, draft)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("list open publication drafts: %w", err)

@@ -404,9 +404,14 @@ type RehydratePublicationDraftSpec struct {
 // RehydratePublicationDraft 从库里读到的行重建一份载体。
 //
 // 快照折回正文再规范化一遍、与列上的摘要比：快照与摘要是一样东西的两面，对不上就是行坏了。这不是重算判断
-// ——摘要不是判断，是正文的派生；本构建不认识的规范化版本折不回来，那一行如实拒（操作者重新录入即可，
-// 载体不是权威记录）。三格状态各自带该带的痕迹：`待批准`没有批准与发布痕迹；`已批准`带批准者与时刻、没有
-// 发布时刻；`已发布`三样都带且顺序向后。
+// ——摘要不是判断，是正文的派生。三格状态各自带该带的痕迹：`待批准`没有批准与发布痕迹；`已批准`带批准者与时刻、
+// 没有发布时刻；`已发布`三样都带且顺序向后。
+//
+// 两种拒绝分格（分格纪律同 ErrInvalidRehydratedPublication）：行本身对不上（痕迹、壳、册与摘要）是
+// ErrInvalidRehydratedPublicationDraft，处置是查库；行没坏而本构建把快照折不回正文（规范化版本不认得、正文过不了本构建的
+// 构造门）是 *UnreadablePublicationDraft，处置在操作者手里。折回之后的再规范化与摘要比对属于前一格：折得回的正文本构建
+// 必能规范化，对不上就是行坏了。痕迹与壳先于正文检查，所以读不回的行交出的事实都是校过的——上层靠状态与摘要答业务格，
+// 不必再碰正文。
 func RehydratePublicationDraft(spec RehydratePublicationDraftSpec) (PublicationDraft, error) {
 	if !spec.Submitter.valid() || spec.SubmittedAt.IsZero() {
 		return PublicationDraft{}, rehydratedDraftRefusal("录入者或录入时刻缺失")
@@ -414,27 +419,13 @@ func RehydratePublicationDraft(spec RehydratePublicationDraftSpec) (PublicationD
 	if !spec.Status.valid() {
 		return PublicationDraft{}, rehydratedDraftRefusal(fmt.Sprintf("状态不是本上下文的取值：%d", uint8(spec.Status)))
 	}
-	content, err := RehydratePublicationContent(spec.Canonicalization, spec.Document)
-	if err != nil {
-		return PublicationDraft{}, rehydratedDraftRefusal(fmt.Sprintf("正文快照折不回来：%v", err))
-	}
-	if content.Kind != spec.Shell.Kind {
-		return PublicationDraft{}, rehydratedDraftRefusal("快照里的册与壳声明的类别不是同一个")
-	}
-	canonical, err := CanonicalizePublicationContent(content)
-	if err != nil {
-		return PublicationDraft{}, rehydratedDraftRefusal(fmt.Sprintf("快照折回的正文规范化不了：%v", err))
-	}
-	if canonical.digest != spec.Digest {
-		return PublicationDraft{}, rehydratedDraftRefusal("列上的摘要与快照算出的不一致")
-	}
 	version, err := NewCommercialDraft(CommercialVersionSpec{
 		TenantID:      spec.Shell.TenantID,
 		Kind:          spec.Shell.Kind,
 		ObjectID:      spec.Shell.ObjectID,
 		Version:       spec.Shell.Version,
 		Scope:         spec.Shell.Scope,
-		ContentDigest: canonical.digest,
+		ContentDigest: spec.Digest,
 		Effective:     spec.Shell.Effective,
 		References:    spec.Shell.References,
 	})
@@ -462,6 +453,34 @@ func RehydratePublicationDraft(spec RehydratePublicationDraftSpec) (PublicationD
 		if spec.PublishedAt.IsZero() || spec.PublishedAt.Before(spec.ApprovedAt) {
 			return PublicationDraft{}, rehydratedDraftRefusal("已发布的载体缺发布时刻，或发布早于批准")
 		}
+	}
+
+	unreadable := func(cause error) error {
+		return &UnreadablePublicationDraft{
+			shell:            version,
+			canonicalization: spec.Canonicalization,
+			submitter:        spec.Submitter,
+			submittedAt:      spec.SubmittedAt.UTC(),
+			status:           spec.Status,
+			approver:         spec.Approver,
+			approvedAt:       spec.ApprovedAt.UTC(),
+			publishedAt:      spec.PublishedAt.UTC(),
+			cause:            cause,
+		}
+	}
+	content, err := RehydratePublicationContent(spec.Canonicalization, spec.Document)
+	if err != nil {
+		return PublicationDraft{}, unreadable(fmt.Errorf("正文快照折不回来：%w", err))
+	}
+	if content.Kind != spec.Shell.Kind {
+		return PublicationDraft{}, rehydratedDraftRefusal("快照里的册与壳声明的类别不是同一个")
+	}
+	canonical, err := CanonicalizePublicationContent(content)
+	if err != nil {
+		return PublicationDraft{}, rehydratedDraftRefusal(fmt.Sprintf("快照折回的正文规范化不了：%v", err))
+	}
+	if canonical.digest != spec.Digest {
+		return PublicationDraft{}, rehydratedDraftRefusal("列上的摘要与快照算出的不一致")
 	}
 
 	return PublicationDraft{
