@@ -168,6 +168,53 @@ func TestProductChannelMappingRoundTripAndCatalogue(t *testing.T) {
 	}
 }
 
+// Covers: AT-PC-067——一个映射的整条修订链按修订号升序交出（旧笔不被顶掉），别的映射、别的租户读不到；不在册答空切片；
+// 显式“未配置”的那一笔仍是空数组。
+func TestProductChannelMappingRevisionsExpandOneMappingAscending(t *testing.T) {
+	mappings, catalogue, transactor := newProductChannelMappings(t)
+	ctx := t.Context()
+
+	mustSaveMapping(t, transactor, mappings, mappingRegistrationFixture(t, "tenant-1", "map-1", 1, "CH-A"))
+	mustSaveMapping(t, transactor, mappings, mappingRegistrationFixture(t, "tenant-1", "map-1", 2))
+	mustSaveMapping(t, transactor, mappings, mappingRegistrationFixture(t, "tenant-1", "map-1", 3, "CH-B", "CH-C"))
+	mustSaveMapping(t, transactor, mappings, mappingRegistrationFixture(t, "tenant-1", "map-2", 1, "CH-Z"))
+	mustSaveMapping(t, transactor, mappings, mappingRegistrationFixture(t, "tenant-b", "map-1", 1, "CH-FOREIGN"))
+
+	chain, err := catalogue.ListProductChannelMappingRevisions(
+		ctx, pcTenant(t, "tenant-1"), pcValue(t, domain.NewProductChannelMappingID, "map-1"))
+	if err != nil {
+		t.Fatalf("list revisions: %v", err)
+	}
+	if len(chain) != 3 || chain[0].Revision != 1 || chain[1].Revision != 2 || chain[2].Revision != 3 {
+		t.Fatalf("修订链次序 = %+v", chain)
+	}
+	if len(chain[0].Channels) != 1 || chain[0].Channels[0] != "CH-A" {
+		t.Fatalf("第 1 笔绑定 = %+v", chain[0].Channels)
+	}
+	if chain[1].Channels == nil || len(chain[1].Channels) != 0 {
+		t.Fatalf("第 2 笔是显式未配置，绑定应是空切片：%+v", chain[1].Channels)
+	}
+	if len(chain[2].Channels) != 2 || chain[2].Channels[1] != "CH-C" {
+		t.Fatalf("第 3 笔绑定 = %+v", chain[2].Channels)
+	}
+	for _, row := range chain {
+		if row.MappingID != "map-1" || row.TenantID != "tenant-1" {
+			t.Fatalf("链里混进了别的映射或租户：%+v", row)
+		}
+	}
+
+	unknown, err := catalogue.ListProductChannelMappingRevisions(
+		ctx, pcTenant(t, "tenant-1"), pcValue(t, domain.NewProductChannelMappingID, "map-nobody"))
+	if err != nil || unknown == nil || len(unknown) != 0 {
+		t.Fatalf("不在册 = (%v, %v)，应是空切片而不是 nil", unknown, err)
+	}
+	foreign, err := catalogue.ListProductChannelMappingRevisions(
+		ctx, pcTenant(t, "tenant-b"), pcValue(t, domain.NewProductChannelMappingID, "map-2"))
+	if err != nil || len(foreign) != 0 {
+		t.Fatalf("跨租户读到了别家的映射：(%d, %v)", len(foreign), err)
+	}
+}
+
 // Covers: ADR-0031 登记面代数在映射册上的镜像——同键同内容重放，同键异内容冲突。
 func TestProductChannelMappingSavesReplayAndConflict(t *testing.T) {
 	mappings, _, transactor := newProductChannelMappings(t)

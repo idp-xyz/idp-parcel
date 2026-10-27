@@ -8,15 +8,18 @@ import { catalogueViewState, formatInstant, formatRange } from '../catalogue-vie
 import { useAddressKeyword } from '../../templates/use-address-keyword';
 import {
   commercialRegistrationEndpoints,
+  listProductChannelMappingRevisions,
   listProductChannelMappings,
   productChannelOutcomeLabels,
   registerCommercial,
   type ProductChannelMappingListResponseBody,
   type ProductChannelMappingRecord,
+  type ProductChannelMappingRevisionListResponseBody,
 } from './api';
 import { KeepAliveTabs, KeepAliveTabsContent } from './keep-alive-tabs';
 import { RefLink } from './RefLink';
 import { VersionDetailDrawer } from './VersionDetailDrawer';
+import { mappingHistoryOf } from './mapping-history';
 import { problemNote, registrationSnapshotHints, registrationTitles } from './presentation';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
@@ -122,7 +125,36 @@ function ProductChannelMappingTable() {
       )
     : mappings;
   const retry = () => setReloadKey((value) => value + 1);
-  const selected = mappings.find((row) => row.mappingId === selectedId) ?? null;
+
+  // 点开一行时读这个映射的整条修订链；答复带映射标识，切换行时上一问的答案后到也不会错位。
+  const [revisions, setRevisions] = useState<{
+    mappingId: string;
+    answer: ApiResult<ProductChannelMappingRevisionListResponseBody>;
+  } | null>(null);
+  // 历史里点的是哪一笔修订；没点就看最新一笔（目录行本身）。
+  const [revisionNo, setRevisionNo] = useState<number | null>(null);
+  useEffect(() => {
+    if (selectedId === null) return;
+    let cancelled = false;
+    void listProductChannelMappingRevisions(selectedId).then((next) => {
+      if (!cancelled) setRevisions({ mappingId: selectedId, answer: next });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId]);
+  const latest = mappings.find((row) => row.mappingId === selectedId) ?? null;
+  const chain =
+    revisions?.mappingId === selectedId && revisions.answer.kind === 'outcome' && revisions.answer.body.mappingId === selectedId
+      ? revisions.answer.body.revisions
+      : null;
+  const selected = (revisionNo !== null ? chain?.find((row) => row.revision === revisionNo) : null) ?? latest;
+  const historyNote =
+    revisions?.mappingId !== selectedId
+      ? '正在读取历史修订…'
+      : chain === null
+        ? '没能读到历史修订，稍后重新打开这条映射再看。'
+        : '这个映射还没有历史修订。';
 
   return (
     <>
@@ -143,7 +175,10 @@ function ProductChannelMappingTable() {
         columns={columns}
         rows={visibleMappings}
         rowKey={(row) => row.mappingId}
-        onRowClick={(row) => setSelectedId(row.mappingId)}
+        onRowClick={(row) => {
+          setSelectedId(row.mappingId);
+          setRevisionNo(null);
+        }}
         viewState={catalogueViewState(answer, mappings.length, retry, {
           module: info,
           endpoint: 'GET /commercial-product-channel-mappings',
@@ -157,11 +192,14 @@ function ProductChannelMappingTable() {
         columns={columns}
         title={(row) => ({ objectId: row.mappingId, version: `第 ${row.revision} 修订` })}
         subtitle={(row) => `产品—渠道映射 · 服务产品 ${row.productObjectId} ${row.productVersionLabel}`}
-        history={() => []}
+        history={() => (chain ? mappingHistoryOf(chain) : [])}
         currentVersion={(row) => String(row.revision)}
-        onSelectVersion={() => {}}
-        emptyHistoryNote="映射按修订推进，目录只给最新一笔修订，之前各笔的读口还没有；要在这里看历史需要后端补读口。"
-        onClose={() => setSelectedId(null)}
+        onSelectVersion={(version) => setRevisionNo(Number(version))}
+        emptyHistoryNote={historyNote}
+        onClose={() => {
+          setSelectedId(null);
+          setRevisionNo(null);
+        }}
       />
     </>
   );

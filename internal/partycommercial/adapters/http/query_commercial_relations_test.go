@@ -97,6 +97,38 @@ func TestSupplierAgreementsEndpointTranscribesContentOnlyWhenRegistered(t *testi
 	}
 }
 
+// Covers: AT-PC-066——客户合同目录答复在正文登记之后带出货主客户账户；正文未登记的壳行不长这一键。
+func TestCustomerContractsEndpointEchoesTheCustomerAccountOnlyWhenContentIsRegistered(t *testing.T) {
+	query := catalogueQuery(t)
+	reader := &relationReaderDouble{
+		tenant: query.Scope.Tenant(),
+		contracts: []ports.CustomerContractCatalogueRow{
+			{ObjectID: "contract-1", VersionLabel: "v1", Scope: "scope-1", Status: "EFFECTIVE",
+				EffectiveStartsAt: catBaseAt, PublishedAt: catBaseAt,
+				HasContent: true, RulePackageID: "rules-1", CustomerAccountID: "account-1", DeclaredAt: catBaseAt},
+			{ObjectID: "contract-2", VersionLabel: "v1", Scope: "scope-1", Status: "EFFECTIVE",
+				EffectiveStartsAt: catBaseAt, PublishedAt: catBaseAt},
+		},
+	}
+	endpoint := commercialhttp.NewQueryCustomerContractsEndpoint(intakeDouble{query: query}, reader)
+	recorder := httptest.NewRecorder()
+	endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/commercial-customer-contracts", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	rows, _ := decodeBody(t, recorder)["contracts"].([]any)
+	if len(rows) != 2 {
+		t.Fatalf("contracts = %v", rows)
+	}
+	full, shell := rows[0].(map[string]any), rows[1].(map[string]any)
+	if full["customerAccountId"] != "account-1" || full["rulePackageId"] != "rules-1" {
+		t.Fatalf("带正文的行没有透出账户:%v", full)
+	}
+	if _, has := shell["customerAccountId"]; has {
+		t.Fatalf("正文未登记的壳行长出了账户键:%v", shell)
+	}
+}
+
 // Covers: 评审 3——供应商协议目录回显收尾（ADR-0233 决定五）：截止回显 selectionEndsAt，退役回显后继与退役时刻；没收尾的行
 // 三键一个不长。
 func TestSupplierAgreementsEndpointEchoesTheVersionClosure(t *testing.T) {

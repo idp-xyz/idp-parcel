@@ -643,7 +643,7 @@ func (catalogue *OperationsCatalogue) ListCustomerContracts(
 		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
 		        version.effective_starts_at, version.effective_ends_at, version.published_at,
 		        `+catalogueClosureColumns+`,
-		        content.rule_package_id, content.declared_at,
+		        content.rule_package_id, content.customer_account_id, content.declared_at,
 		        COALESCE(
 		            json_agg(
 		                json_build_object(
@@ -672,7 +672,7 @@ func (catalogue *OperationsCatalogue) ListCustomerContracts(
 		  GROUP BY version.tenant_id, version.object_kind,
 		           version.object_id, version.version_label, version.scope_ref, version.status,
 		           version.effective_starts_at, version.effective_ends_at, version.published_at,
-		           content.rule_package_id, content.declared_at,
+		           content.rule_package_id, content.customer_account_id, content.declared_at,
 		           latest_correction.corrected_ends_at, retirement.successor_label, retirement.retired_at,
 		           delivery.tenant_id, delivery.object_kind, delivery.object_id, delivery.version_label,
 		           delivery.recipient_scope_rule_ref, delivery.proof_of_delivery_rule_ref,
@@ -695,13 +695,14 @@ func (catalogue *OperationsCatalogue) ListCustomerContracts(
 		var closure catalogueClosureScan
 		var endsAt *time.Time
 		var rulePackage *string
+		var customerAccount *string
 		var declaredAt *time.Time
 		var bindingsJSON []byte
 		var delivery deliveryConditionScan
 		targets := append([]any{
 			&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
 			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt}, closure.targets()...)
-		targets = append(targets, &rulePackage, &declaredAt, &bindingsJSON)
+		targets = append(targets, &rulePackage, &customerAccount, &declaredAt, &bindingsJSON)
 		targets = append(targets, delivery.targets()...)
 		if err := rows.Scan(targets...); err != nil {
 			return nil, fmt.Errorf("list customer contracts: %w", err)
@@ -719,6 +720,10 @@ func (catalogue *OperationsCatalogue) ListCustomerContracts(
 		if rulePackage != nil {
 			row.RulePackageID = *rulePackage
 			row.HasContent = true
+		}
+		// customer_account_id 在 0037 之前写下的旧行上是 NULL(没有这一格可补),如实交回空串。
+		if customerAccount != nil {
+			row.CustomerAccountID = *customerAccount
 		}
 		if declaredAt != nil {
 			row.DeclaredAt = *declaredAt

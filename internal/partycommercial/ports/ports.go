@@ -1245,11 +1245,31 @@ type ProductChannelMappingRow struct {
 // PartyIdentityCatalogueRead 的分立那条）。
 //
 // 租户在签名上、Limit 非正拒、空册答空列表，判据同 ServiceProductCatalogueRead。
+//
+// 目录行只交最新一笔修订；同一张登记册上的整条修订链由嵌入的 ProductChannelMappingRevisionHistoryRead 按单个映射展开，
+// 供同一页的详情抽屉——读的是同一张表、同一租户作用域、供的是同一页（读口参数跟着页走），所以嵌在这里，判据同
+// PartyIdentityCatalogueRead 对两册修订历史的安排。
 type ProductChannelMappingCatalogueRead interface {
+	ProductChannelMappingRevisionHistoryRead
 	ListProductChannelMappings(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
+	) ([]ProductChannelMappingRow, error)
+}
+
+// ProductChannelMappingRevisionHistoryRead 是渠道产品目录详情抽屉的修订历史读口：按一个映射标识交回登记册上的全部修订，
+// 行形状与目录行同一个 ProductChannelMappingRow（每一笔都是一份完整的登记信封：产品版本、渠道绑定、依据、区间）。
+//
+// 映射按修订推进，调整绑定或区间是翻旧插新而不是覆盖（CONTEXT 生命周期节），历史本来就在库里；目录只交最新一笔，
+// 之前各笔此前没有读口，页面没法回答「这条映射改过什么」。本口按修订号升序交出整条链，不带 LIMIT（修订链是要全部交出的
+// 证据面）、不导出状态（映射没有独立状态代数，每一笔各有自己的区间，给历史上每一笔算「此刻的状态」会让被顶替的旧笔
+// 各自显出一格状态）。租户在签名上；不在册的映射也答空列表，不答不存在，不泄露存在性（判据同两册身份修订历史）。
+type ProductChannelMappingRevisionHistoryRead interface {
+	ListProductChannelMappingRevisions(
+		ctx context.Context,
+		tenant domain.TenantID,
+		mapping domain.ProductChannelMappingID,
 	) ([]ProductChannelMappingRow, error)
 }
 
@@ -1763,15 +1783,18 @@ type ControlBindingRow struct {
 // DeliveryConditions 是这一版的合同层交付条件(0030,票 admin-write-faces/25),nil 即这一版
 // 没有合同层声明;它与 0012 正文是两层、各自可缺,不拿一层的在场推另一层。
 type CustomerContractCatalogueRow struct {
-	ObjectID           string
-	VersionLabel       string
-	Scope              string
-	Status             string
-	EffectiveStartsAt  time.Time
-	EffectiveEndsAt    time.Time
-	HasEffectiveEnd    bool
-	PublishedAt        time.Time
-	RulePackageID      string
+	ObjectID          string
+	VersionLabel      string
+	Scope             string
+	Status            string
+	EffectiveStartsAt time.Time
+	EffectiveEndsAt   time.Time
+	HasEffectiveEnd   bool
+	PublishedAt       time.Time
+	RulePackageID     string
+	// CustomerAccountID 是这份合同指名的货主客户账户(正文一格,0037;ADR-0177 决定一)。空串即这一版没有这一格——
+	// 要么正文未登记,要么是 0037 之前写下、没法补的旧行;目录如实交回空,不猜一个账户。
+	CustomerAccountID  string
 	DeclaredAt         time.Time
 	HasContent         bool
 	Bindings           []ControlBindingRow

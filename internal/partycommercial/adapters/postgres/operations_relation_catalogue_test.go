@@ -94,6 +94,50 @@ func TestCustomerContractCatalogueSeparatesMissingContentFromEmptyBindings(t *te
 	}
 }
 
+// Covers: AT-PC-066——客户合同目录行带出这份合同指名的货主客户账户（正文一格，ADR-0177 决定一）：不同合同各读各的账户，
+// 正文未登记的壳行没有这一格、交回空串。
+func TestCustomerContractCatalogueEchoesTheCustomerAccount(t *testing.T) {
+	catalogue, repository, transactor := newCatalogue(t)
+	ctx := t.Context()
+
+	bare := effectiveContract(t, "contract-1", "v1", "digest-bare")
+	first := effectiveContract(t, "contract-2", "v1", "digest-first")
+	second := effectiveContract(t, "contract-3", "v1", "digest-second")
+	mustSaveVersion(t, transactor, ctx, repository, bare)
+	mustSaveVersion(t, transactor, ctx, repository, first)
+	mustSaveVersion(t, transactor, ctx, repository, second)
+
+	mustSaveDeclaration(t, transactor, func(txCtx context.Context) (ports.DeclarationSaveOutcome, error) {
+		return repository.SaveCustomerContractContent(txCtx, emptyContractContentOf(t, first))
+	}, ports.DeclarationSaved)
+	otherAccount, err := domain.NewCustomerContract(second, pcValue(t, domain.NewCustomerAccountID, "customer-2"),
+		pcValue(t, domain.NewCommercialObjectID, "rules-1"), nil)
+	if err != nil {
+		t.Fatalf("组另一户的合同正文:%v", err)
+	}
+	mustSaveDeclaration(t, transactor, func(txCtx context.Context) (ports.DeclarationSaveOutcome, error) {
+		return repository.SaveCustomerContractContent(txCtx, otherAccount)
+	}, ports.DeclarationSaved)
+
+	rows, err := catalogue.ListCustomerContracts(ctx, pcTenant(t, "tenant-1"), 10)
+	if err != nil {
+		t.Fatalf("上列客户合同:%v", err)
+	}
+	if len(rows) != 3 {
+		t.Fatalf("上列 %d 行,want 3", len(rows))
+	}
+	got := map[string]string{}
+	for _, row := range rows {
+		got[row.ObjectID] = row.CustomerAccountID
+	}
+	if got["contract-1"] != "" {
+		t.Fatalf("正文未登记的壳行长出了账户 %q", got["contract-1"])
+	}
+	if got["contract-2"] != "customer-1" || got["contract-3"] != "customer-2" {
+		t.Fatalf("合同没有各读各的账户:%v", got)
+	}
+}
+
 // Covers: 两类目录各读各的封闭集,不串 object_kind——供应商协议不进合同目录,
 // 合同也不进供应商协议目录。
 func TestRelationCataloguesDoNotBleedAcrossObjectKinds(t *testing.T) {

@@ -28,6 +28,8 @@ import {
   type VersionStatusFilter,
 } from './version-groups';
 import { RefLink } from './RefLink';
+import { loadCustomerAccountSuggestions } from './reference-inputs';
+import { useLoaded } from './PublicationFormFields';
 import { statusBadge } from './detail-primitives';
 import { DeliveryConditionsCell } from './DeliveryConditionsCell';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
@@ -53,9 +55,8 @@ import {
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['party-contracts'];
 
-// 骨架期这里列过货主客户账户与责任法人两列。合同读面里没有它们：0012 的正文表只有
-// rule_package_id 与 declared_at，版本壳上也不带客户或法人坐标，所以两列不上——
-// 缺的是合同正文的登记面，不是转写。货主客户账户自己的册在本页「客户账户」签。
+// 合同读面带出正文里指名的货主客户账户（customerAccountId）；责任法人合同自己没有，随接单规则包（规则包行上有）。账户的客户
+// 名称取自客户账户册的第一页，读不到就只显账户标识，不猜名字。账户册自己在本页「客户账户」签。
 const columns: ListColumn<CustomerContractRecord>[] = [
   {
     id: 'contract',
@@ -154,6 +155,27 @@ function ControlBindings({ row }: { row: CustomerContractRecord }) {
   );
 }
 
+/** 「货主客户账户」一列：账户标识为主，客户名称取自账户册已取回的那一页（取不到不显名称，不猜）。 */
+function customerAccountColumn(names: ReadonlyMap<string, string>): ListColumn<CustomerContractRecord> {
+  return {
+    id: 'customer-account',
+    header: '货主客户账户',
+    className: 'font-mono text-xs',
+    render: (row) => {
+      if (row.customerAccountId) {
+        const name = names.get(row.customerAccountId);
+        return (
+          <div className="min-w-40">
+            <p>{row.customerAccountId}</p>
+            {name ? <p className="mt-0.5 font-sans text-idpxyz-textMuted">{name}</p> : null}
+          </div>
+        );
+      }
+      return <span className="font-sans text-idpxyz-textMuted">{row.contentRegistered ? '—' : '正文未登记'}</span>;
+    },
+  };
+}
+
 /**
  * 客户合同版本册：合同版本到期或被后续版本替代，不改变已经接受委托所保存的合同依据。
  * 查阅面本身不设动作；发布走本页「发布合同版本」签（票 admin-write-faces/10），那一签的载体到达发布那一步时
@@ -172,6 +194,16 @@ function CustomerContractsTable({
   const [search, setSearch] = useAddressKeyword();
   const [reloadKey, setReloadKey] = useState(0);
   const [answer, setAnswer] = useState<ApiResult<CustomerContractListResponseBody> | null>(null);
+  // 账户标识旁的客户名称：账户册的第一页，读不到就没有名称。
+  const accountsAnswer = useLoaded(loadCustomerAccountSuggestions);
+  const accountNames = new Map(
+    accountsAnswer?.kind === 'outcome'
+      ? accountsAnswer.body.accounts.flatMap((account) =>
+          account.customerPartyNameKnown && account.customerPartyName ? [[account.accountId, account.customerPartyName] as const] : [],
+        )
+      : [],
+  );
+  const contractColumns = [...columns.slice(0, 3), customerAccountColumn(accountNames), ...columns.slice(3)];
   // 点行上的「收尾…」：记下是哪一版，抽屉据此重读册面（票 party-commercial-uiux/16）。
   const [closing, setClosing] = useState<ClosureTarget | null>(null);
   // 点行打开的版本详情：记行键（票 party-commercial-uiux/21）。
@@ -193,7 +225,7 @@ function CustomerContractsTable({
   // 过滤只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约。
   const searchedContracts = needle
     ? contracts.filter((row) =>
-        [row.objectId, row.version, row.scope, row.status, row.rulePackageId ?? ''].some((value) =>
+        [row.objectId, row.version, row.scope, row.status, row.rulePackageId ?? '', row.customerAccountId ?? ''].some((value) =>
           value.toLowerCase().includes(needle),
         ),
       )
@@ -212,13 +244,11 @@ function CustomerContractsTable({
     <>
       <ListPageTemplate<CustomerContractRecord>
         title={info.title}
-        // 客户与责任法人两列不上：合同读口答的是版本壳与正文，壳上没有货主客户账户与责任法人，页面不另行拼接。
-        // 用户会找这两列，所以说明里点一句；读口带出它们之前不留空列、不填假值（README「列表页上列通则」）。
-        description="客户合同的各个版本，以及合同约定的接单规则包与接受前财务控制。客户与责任法人暂不在本列表显示。"
+        description="客户合同的各个版本：货主客户账户、合同约定的接单规则包与接受前财务控制、交付条件与有效区间。"
         search={{
           value: search,
           onChange: setSearch,
-          placeholder: '搜索合同、版本、适用范围或规则包',
+          placeholder: '搜索合同、版本、适用范围、客户账户或规则包',
         }}
         filterSummary={
           // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 份」会与状态区
@@ -237,7 +267,7 @@ function CustomerContractsTable({
           ) : undefined
         }
         emptyRowsNote="这组条件下没有匹配的合同版本"
-        columns={withNewVersionAction(columns, {
+        columns={withNewVersionAction(contractColumns, {
           labelOf: (row) => `客户合同 ${row.objectId} ${row.version}`,
           onStart: onStartNewVersion,
           closure: {
@@ -257,7 +287,7 @@ function CustomerContractsTable({
       />
       <VersionDetailDrawer<CustomerContractRecord>
         row={selected}
-        columns={columns}
+        columns={contractColumns}
         title={(row) => ({ objectId: row.objectId, version: row.version })}
         subtitle={(row) => `客户合同 · 适用范围 ${row.scope}`}
         status={(row) => row.status}

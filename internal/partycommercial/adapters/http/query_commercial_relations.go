@@ -141,6 +141,7 @@ type customerContractBody struct {
 	PublishedAt        string                 `json:"publishedAt"`
 	ContentRegistered  bool                   `json:"contentRegistered"`
 	RulePackageID      string                 `json:"rulePackageId,omitempty"`
+	CustomerAccountID  string                 `json:"customerAccountId,omitempty"`
 	DeclaredAt         string                 `json:"declaredAt,omitempty"`
 	Bindings           []controlBindingBody   `json:"bindings"`
 	DeliveryConditions *deliveryConditionBody `json:"deliveryConditions,omitempty"`
@@ -174,6 +175,7 @@ func customerContractBodyOf(row ports.CustomerContractCatalogueRow) customerCont
 	}
 	if row.HasContent {
 		body.RulePackageID = row.RulePackageID
+		body.CustomerAccountID = row.CustomerAccountID
 		body.DeclaredAt = rfc3339(row.DeclaredAt)
 	}
 	for _, binding := range row.Bindings {

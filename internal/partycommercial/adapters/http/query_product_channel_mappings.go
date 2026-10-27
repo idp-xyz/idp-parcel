@@ -8,8 +8,10 @@ import (
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 )
 
-// ProductChannelCatalogueReader 是渠道产品目录端点消费的读口。
+// ProductChannelCatalogueReader 是渠道产品目录端点消费的读口，嵌入详情抽屉的修订历史读口：两个端点在装配点共用同一个读口
+// 参数，判据在 ports.ProductChannelMappingCatalogueRead。
 type ProductChannelCatalogueReader interface {
+	ProductChannelMappingRevisionHistoryReader
 	ListProductChannelMappings(
 		ctx context.Context,
 		tenant domain.TenantID,

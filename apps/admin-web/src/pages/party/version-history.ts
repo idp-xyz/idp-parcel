@@ -26,11 +26,15 @@ export interface HistoryFacts {
 export interface HistoryEntry {
   /** 对象内的版本号，页面据它找回那一行。 */
   version: string;
+  /** 列表上显示的名字；不给就显示版本号（映射没有版本号，显示「第 n 修订」）。 */
+  label?: string;
   status?: string;
   /** 原有效区间的文字。 */
   interval: string;
   /** 被收尾时怎么收的；没收尾为空。 */
   closure?: string;
+  /** 这一笔另外要说的话（映射修订的渠道与依据）；没有为空。 */
+  note?: string;
 }
 
 const versionOrder = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });

@@ -85,3 +85,67 @@ func (catalogue *OperationsCatalogue) ListProductChannelMappings(
 	}
 	return catalogueRows, nil
 }
+
+// ListProductChannelMappingRevisions 交回一个映射在登记册上的全部修订，按修订号升序。
+//
+// 与 ListProductChannelMappings 读同一张表、守同一条租户作用域纪律（ADR-0003 隔离边界落在 SQL 条件上），差别只在少了
+// DISTINCT ON——目录取每个映射最新一笔，历史取一个映射全部。序按 revision 不按 recorded_at：修订号是登记方声明的
+// 次序，落库时刻只是它到达的次序（理由同 ListBusinessPartyRevisions）。不带 LIMIT，不在册也交回空切片而不是 nil，
+// 传输层据此编成 []。
+func (catalogue *OperationsCatalogue) ListProductChannelMappingRevisions(
+	ctx context.Context,
+	tenant domain.TenantID,
+	mapping domain.ProductChannelMappingID,
+) ([]ports.ProductChannelMappingRow, error) {
+	querier, err := catalogue.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list product channel mapping revisions: %w", err)
+	}
+
+	rows, err := querier.Query(ctx,
+		`SELECT tenant_id, mapping_id, revision,
+		        product_object_id, product_version_label,
+		        channel_refs, basis_ref,
+		        effective_starts_at, effective_ends_at,
+		        recorded_at
+		   FROM party_commercial.product_channel_mapping_registration
+		  WHERE tenant_id = $1 AND mapping_id = $2
+		  ORDER BY revision ASC`,
+		tenant.String(),
+		mapping.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list product channel mapping revisions: %w", err)
+	}
+	defer rows.Close()
+
+	revisions := make([]ports.ProductChannelMappingRow, 0)
+	for rows.Next() {
+		var row ports.ProductChannelMappingRow
+		var channelRefs []byte
+		var endsAt *time.Time
+		if err := rows.Scan(
+			&row.TenantID, &row.MappingID, &row.Revision,
+			&row.ProductObjectID, &row.ProductVersionLabel,
+			&channelRefs, &row.Basis,
+			&row.EffectiveStartsAt, &endsAt,
+			&row.RegisteredAt,
+		); err != nil {
+			return nil, fmt.Errorf("list product channel mapping revisions: %w", err)
+		}
+		channels := make([]string, 0, 2)
+		if err := json.Unmarshal(channelRefs, &channels); err != nil {
+			return nil, fmt.Errorf("list product channel mapping revisions: 渠道绑定格不是数组：%w", err)
+		}
+		row.Channels = channels
+		if endsAt != nil {
+			row.EffectiveEndsAt = *endsAt
+			row.HasEffectiveEnd = true
+		}
+		revisions = append(revisions, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list product channel mapping revisions: %w", err)
+	}
+	return revisions, nil
+}

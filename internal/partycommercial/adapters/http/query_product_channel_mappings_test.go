@@ -21,6 +21,20 @@ type productChannelMappingReaderDouble struct {
 	tenant  domain.TenantID
 	rows    []ports.ProductChannelMappingRow
 	loadErr error
+	// revisions 是按映射标识给的整条修订链（修订历史端点用）。
+	revisions map[string][]ports.ProductChannelMappingRow
+}
+
+func (double *productChannelMappingReaderDouble) ListProductChannelMappingRevisions(
+	_ context.Context, tenant domain.TenantID, mapping domain.ProductChannelMappingID,
+) ([]ports.ProductChannelMappingRow, error) {
+	if double.loadErr != nil {
+		return nil, double.loadErr
+	}
+	if tenant != double.tenant {
+		return []ports.ProductChannelMappingRow{}, nil
+	}
+	return double.revisions[mapping.String()], nil
 }
 
 func (double *productChannelMappingReaderDouble) ListProductChannelMappings(

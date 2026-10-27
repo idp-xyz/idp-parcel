@@ -1692,6 +1692,14 @@ func (unwiredCommercialCatalogue) ListPartyRelationships(
 	return nil, errOrchestrationNotWired
 }
 
+func (unwiredCommercialCatalogue) ListProductChannelMappingRevisions(
+	context.Context,
+	commercialdomain.TenantID,
+	commercialdomain.ProductChannelMappingID,
+) ([]commercialports.ProductChannelMappingRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
 func (unwiredCommercialCatalogue) ListProductChannelMappings(
 	context.Context,
 	commercialdomain.TenantID,

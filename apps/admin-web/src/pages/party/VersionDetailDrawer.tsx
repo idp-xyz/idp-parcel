@@ -118,12 +118,13 @@ function HistoryList({
             onClick={() => onSelect(entry.version)}
           >
             <span className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-[13px] font-medium text-idpxyz-text">{entry.version}</span>
+              <span className="font-mono text-[13px] font-medium text-idpxyz-text">{entry.label ?? entry.version}</span>
               {entry.status ? statusBadge(commercialStatusLabels, entry.status) : null}
               {entry.version === current ? <span className="text-[11px] text-idpxyz-accent">正在查看</span> : null}
             </span>
             <span className="mt-1 block font-mono text-[12px] text-idpxyz-textMuted">{entry.interval}</span>
             {entry.closure ? <span className="mt-0.5 block text-[12px] text-idpxyz-text">{entry.closure}</span> : null}
+            {entry.note ? <span className="mt-0.5 block text-[12px] text-idpxyz-text">{entry.note}</span> : null}
           </button>
         </li>
       ))}

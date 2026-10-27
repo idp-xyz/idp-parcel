@@ -293,6 +293,8 @@ export interface CustomerContractRecord extends VersionClosureEcho {
   publishedAt: string;
   contentRegistered: boolean;
   rulePackageId?: string;
+  /** 合同指名的货主客户账户（正文一格）；正文未登记或 0037 之前写下的旧行缺席。 */
+  customerAccountId?: string;
   declaredAt?: string;
   bindings: ControlBindingRecord[];
   /** 合同层交付条件（第三层，票 25），与 0012 正文各自可缺：键缺席即这一版没有合同层声明，不由 contentRegistered 推。 */
@@ -607,6 +609,22 @@ export interface ProductChannelMappingRecord {
 export interface ProductChannelMappingListResponseBody {
   outcome: 'PRODUCT_CHANNEL_MAPPINGS_LISTED';
   mappings: ProductChannelMappingRecord[];
+}
+
+/** 一个映射的整条修订链，按修订号升序；顶层回显映射标识，供抽屉核对答的是不是此刻问的那个映射。 */
+export interface ProductChannelMappingRevisionListResponseBody {
+  outcome: 'PRODUCT_CHANNEL_MAPPING_REVISIONS_LISTED';
+  mappingId: string;
+  revisions: ProductChannelMappingRecord[];
+}
+
+// 修订历史按映射取，映射标识在路径上而不在查询串，与目录口共用同一个 Intake——判据同 listBusinessPartyRevisions。
+export function listProductChannelMappingRevisions(
+  mappingId: string,
+): Promise<ApiResult<ProductChannelMappingRevisionListResponseBody>> {
+  return exchangeMasterData<ProductChannelMappingRevisionListResponseBody>(
+    `/commercial-product-channel-mappings/${encodeURIComponent(mappingId)}/revisions`,
+  );
 }
 
 export function listServiceProducts(): Promise<ApiResult<ServiceProductListResponseBody>> {
