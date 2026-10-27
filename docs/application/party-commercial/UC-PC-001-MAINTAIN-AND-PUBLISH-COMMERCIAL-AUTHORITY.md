@@ -94,7 +94,7 @@
 | 参与方关系结束 `PartyRelationshipEndingHandler`（`/commercial-party-relationship-revocations`、`/commercial-party-relationship-expirations`、`/commercial-party-relationship-supersessions`、`end-party-relationships`） | `ENDED` | 已结束（落下一笔终止修订；替代同笔登记接替关系） |
 | 同上 | `ALREADY_REGISTERED`、`CONTENT_CONFLICT`、`NOT_ACCEPTED`、`NOT_FOUND` | 重复（同一次结束重放）、内容冲突（这段关系已在这一修订以别的方式、时刻或依据结束）、未受理（原因随结果交回）、关系不在册 |
 
-管理台待批准载体那一路（预览、录入、批准、发布载体）另有自己的结果码，批准由审批职责规则判，发布时把已批准的载体交给受控发布（[ADR-0126](../../adr/0126-commercial-publication-digest-is-computed-server-side-per-register-and-approval-comes-through-a-pending-carrier.md)）；产品—渠道映射、渠道账号使用授权、法人资料与注册号类型各有自己的登记编排。本表不列这几只。
+管理台待批准载体那一路（预览、录入、读回、批准、发布载体）另有自己的结果码，批准由审批职责规则判，发布时把已批准的载体交给受控发布（[ADR-0126](../../adr/0126-commercial-publication-digest-is-computed-server-side-per-register-and-approval-comes-through-a-pending-carrier.md)）；批准与发布都带调用方看到的那份内容的摘要，与载体此刻的不同答`已变更`，载体的列表与单份读回另有只读口（[ADR-0314](../../adr/0314-pending-publication-drafts-are-readable-back-by-the-operator-and-approval-and-publication-are-bound-to-the-content-digest-the-caller-saw.md)）；产品—渠道映射、渠道账号使用授权、法人资料与注册号类型各有自己的登记编排。本表不列这几只。
 
 ## 应用流程
 
@@ -161,6 +161,8 @@
 | `AT-PC-065` | 服务产品、客户合同、授权规则、接受前财务控制策略、客户服务规则的旧版被按后继截止，或同起点退役之后，运营查阅这五本商业目录 | 与供应商协议目录同口径（决定五）：截止的旧版仍是`已生效`并回显截止点，退役的旧版状态为`已退役`并回显后继与退役时刻，原区间都不被覆盖；没收尾的版本三项缺席；没登正文的壳行同样回显 |
 | `AT-PC-066` | 客户合同的正文已登记，运营查阅客户合同目录 | 每一行带出这份合同指名的货主客户账户（正文一格，决定一）；正文未登记的壳行没有这一格，目录如实不给，不猜一个账户 |
 | `AT-PC-067` | 一条产品—渠道映射已经调整过绑定或区间（登记册上有不止一笔修订），运营在渠道产品目录页打开这条映射的详情 | 查阅口按映射标识交出整条修订链，按修订号升序，每一笔是一份完整的登记信封（产品版本、渠道绑定、依据、区间），旧笔不被顶掉；显式“未配置”的那一笔绑定为空数组；不在册的映射与别的租户的映射答空链、不答不存在 |
+| `AT-PC-068` | 录入过若干份待批准的发布载体（含已批准而未发布的），运营打开管理台的待批准列表，再翻看其中一份 | 列表交出租户名下还没发布的载体（待批准与已批准），录入时刻由新到旧，每份带版本壳、摘要、录入者与时刻、状态与批准痕迹，不带正文；空时答 200 加空数组、读失败答 5xx 不装成空；单份读回另带规范化文档，且文档正是摘要盖住的那份；不在册与别的租户的载体答 `DRAFT_NOT_FOUND` |
+| `AT-PC-069` | 批准者看的是 A 内容，批准请求到达时录入者已把同一版本换成 B 内容 | 批准与发布的载荷必带期望摘要，缺席逐格问题点名；摘要与载体此刻的不同答 `DRAFT_CHANGED`、不批不发，且该判断先于“已批准”这类状态答案；摘要相同才推进 |
 
 ## 给开发的交接
 

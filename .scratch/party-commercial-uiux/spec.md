@@ -57,7 +57,7 @@ Status: resolved——第一段 01–06、第二段 07–21 resolved；第三段
 
 - 预览与发布的逐格问题改回问题码加参数，前端按码查中文（03 是前端先行的过渡）。
 - ~~客户合同读口带出货主客户账户与责任法人，列表才能有「客户」一列~~ → [party-commercial-uiux-backend/01](../party-commercial-uiux-backend/issues/01-customer-contract-catalogue-carries-the-customer-account.md)：账户已带出、管理台已有列；责任法人合同自己没有，随接单规则包，不加。
-- 待批准发布的列表与读回口，批准人才能接手别人存的稿；批准、发布带期望内容摘要，防并发时批到别人的稿。
+- ~~待批准发布的列表与读回口，批准人才能接手别人存的稿；批准、发布带期望内容摘要，防并发时批到别人的稿~~ → [party-commercial-uiux-backend/03](../party-commercial-uiux-backend/issues/03-pending-publication-drafts-read-back-and-digest-bound-decisions.md)：两个只读口、批准与发布绑定摘要、管理台「待批准发布」页（进 main 前在分支 claude-pcub3）。
 - 管理台按操作者授予隐藏写入口（今天查阅员也看得到全部发布与登记入口，提交才被拒）。
 - ~~服务产品、客户合同、授权规则、接受前财务控制策略、客户服务规则的目录读面回显截止点~~ → [demo-chain-gaps/184](../demo-chain-gaps/issues/184-five-commercial-catalogues-do-not-echo-the-cut-of-a-closed-version.md)，已进 main。
 - ~~产品—渠道映射的历史修订读口~~ → [party-commercial-uiux-backend/02](../party-commercial-uiux-backend/issues/02-product-channel-mapping-revision-history-read.md)。
