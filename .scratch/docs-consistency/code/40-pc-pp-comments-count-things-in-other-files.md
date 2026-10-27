@@ -1,7 +1,7 @@
 # 40 PC、PP 三处 Go 注释用计数引别处的文档，其中一处已经数错
 
 Category: chore
-Status: in-progress——完工待评审与进 main，分支 claude-cmtB
+Status: resolved——2026-10-27 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-cmtB
 Blocked by: 无
 出处：[audit/pc-pp.md](../audit/pc-pp.md) L6（审计钉 `6b0074d0`；2026-10-21 按 main `73a2c4a79` 复核，三处注释原样在）。
 
@@ -59,3 +59,9 @@ S：三处注释。
 
 - 测试文件里仍有一批引文与原文不逐字相同（未逐个核）；不影响行为，下一轮文档自洽可顺手清。
 - `partycommercial/adapters/http/publication_vocabulary.go` 里「那是另一张票（票 20 完成记录列为判断点）」是指向票面的流水指针，没动。
+
+## 进 main 记录（2026-10-27，协调方）
+
+- 分支 `claude-cmtB` 与 code/38、40、45、55 同批，由协调方快进，tip `c6f983ea2`；隔离评审（Sonnet）可合入，无阻断：每个改动的 `.go` 文件在去掉注释后语法树逐个比对（程序放评审私有目录，对有代码变动的老提交试过会报差异），38、40、45 三个提交 0 差异；新增的 38 条带引号或「」的引文机械核了 36 条逐字相同，另 2 条是带省略号的前缀引文与一句假想读者的话；新增的 ADR、UC、AT 指针逐条核过。协调方单独提交重算的 AT 计数、重生成的 ADR 索引与机制清点（本批无变动）；全量 `scripts/test-full.sh` 退 0、159 个包 ok；`go build ./...`、`go vet ./...` 干净；管理台 `tsc -b --noEmit`、`node scripts/run-tests.mjs`（803 过）、`vite build` 与 `./internal/architecture/...` 全过。无迁移、无新 ADR、无 AT 号变化。
+- 本票：三处计数引文都改了，同一个错数（「四种」）在 `parcelpricing/domain/plan_structures.go` 与 `domain/evaluation.go` 还有，一并改；`ports/operator_registration_handoff.go` 里错指的决定号（决定四应为决定一）订正；对不上原文的 ADR、UC、CONTEXT 引文几处订正。`internal/partycommercial` 一处注释改动已向另一会话（tops-54）确认没有在飞改动。
+- 去向：无新票。测试文件里仍有十来处引文与原文不完全相同，只做了机器核对，已记在票面越权风险点。
