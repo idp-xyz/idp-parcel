@@ -1,7 +1,7 @@
 # 38 PS 代码注释随文档自洽 06 改口
 
 Category: chore
-Status: in-progress——完工待评审与进 main，分支 claude-cmtB
+Status: resolved——2026-10-27 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-cmtB
 Blocked by: 无
 出处：[audit/ps.md](../audit/ps.md) PS-04、PS-09、PS-16、PS-17、PS-49 的「代码注释随票改」半边，与 [ADR-0255](../../../docs/adr/0255-a-submitted-request-is-regrouped-only-by-withdrawing-it-and-submitting-linked-new-requests.md)、[ADR-0257](../../../docs/adr/0257-a-lapsed-label-success-only-feeds-the-label-service-final-and-leaves-the-channel-parcel-number-relation-applicable.md) 后果节点名的两处。
 
@@ -65,3 +65,9 @@ S。
 
 - `SourceDataAdoptionOutcome` 删去了「待下游判断」：依据是 CONTEXT 词条明说「下游要不要据新版本重新判断不是一个取值」。PS owner 若认为那一格仍要保留，需要先改 CONTEXT。
 - `待补充`写成「本层没有判据」：代码里确实没有产生它的规则，但它是否该由本层产生，没有裁。
+
+## 进 main 记录（2026-10-27，协调方）
+
+- 分支 `claude-cmtB` 与 code/38、40、45、55 同批，由协调方快进，tip `c6f983ea2`；隔离评审（Sonnet）可合入，无阻断：每个改动的 `.go` 文件在去掉注释后语法树逐个比对（程序放评审私有目录，对有代码变动的老提交试过会报差异），38、40、45 三个提交 0 差异；新增的 38 条带引号或「」的引文机械核了 36 条逐字相同，另 2 条是带省略号的前缀引文与一句假想读者的话；新增的 ADR、UC、AT 指针逐条核过。协调方单独提交重算的 AT 计数、重生成的 ADR 索引与机制清点（本批无变动）；全量 `scripts/test-full.sh` 退 0、159 个包 ok；`go build ./...`、`go vet ./...` 干净；管理台 `tsc -b --noEmit`、`node scripts/run-tests.mjs`（803 过）、`vite build` 与 `./internal/architecture/...` 全过。无迁移、无新 ADR、无 AT 号变化。
+- 本票：PS 注释表里七处按期望改了，`adapters/http` 三处按表不动（随 code/22）；「申报测量」改「声明测量」；`SourceDataAdoptionOutcome` 里不是 CONTEXT 词条取值的「待下游判断」删掉；`ports/amendment_stage.go` 与两个适配器注释里过期的「今天是关务与装袋的读面未接」一并改了。评审核实 `ports/operator_registration_handoff.go` 原先引的「不在消费门认原因名字」在 ADR-0094 里并不存在，改成转述是对的。
+- 去向：无新票。
