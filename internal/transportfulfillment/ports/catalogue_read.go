@@ -352,4 +352,10 @@ type ReviewCatalogueRead interface {
 		filter BookingAnswerBounceFilter,
 		limit int,
 	) ([]BookingAnswerBounceCatalogueRow, error)
+	// ListPendingAttemptResults 上列还在待确认的逐对象尝试结果（揽收与派送两侧合并，最早的先看），已更正的不在内。
+	ListPendingAttemptResults(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]PendingAttemptResultRow, error)
 }

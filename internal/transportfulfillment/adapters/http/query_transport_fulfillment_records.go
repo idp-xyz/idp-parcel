@@ -74,6 +74,11 @@ type ReviewCatalogueReader interface {
 		filter ports.BookingAnswerBounceFilter,
 		limit int,
 	) ([]ports.BookingAnswerBounceCatalogueRow, error)
+	ListPendingAttemptResults(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]ports.PendingAttemptResultRow, error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
@@ -92,6 +97,7 @@ const (
 	outcomeActualFulfillmentUnformedListed = "ACTUAL_FULFILLMENT_UNFORMED_LISTED"
 	outcomeBookingRequestsListed           = "BOOKING_REQUESTS_LISTED"
 	outcomeBookingAnswerBouncesListed      = "BOOKING_ANSWER_BOUNCES_LISTED"
+	outcomePendingAttemptResultsListed     = "PENDING_ATTEMPT_RESULTS_LISTED"
 )
 
 const (
@@ -107,6 +113,7 @@ const (
 	registryActualFulfillmentUnformed = "actual-fulfillment-unformed"
 	registryBookingRequest            = "booking-request"
 	registryBookingAnswerBounce       = "booking-answer-bounce"
+	registryPendingAttemptResult      = "pending-attempt-result"
 )
 
 // NewQueryTransportFulfillmentRecordsEndpoint 交回运输履约查阅页各本册子的 HTTP
@@ -146,7 +153,8 @@ func NewQueryTransportFulfillmentRecordsEndpoint(
 			registry != registryReaskCadence &&
 			registry != registryActualFulfillmentUnformed &&
 			registry != registryBookingRequest &&
-			registry != registryBookingAnswerBounce {
+			registry != registryBookingAnswerBounce &&
+			registry != registryPendingAttemptResult {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
@@ -190,6 +198,8 @@ func NewQueryTransportFulfillmentRecordsEndpoint(
 			serveBookingRequests(response, request, reader, tenant, query.Limit)
 		case registryBookingAnswerBounce:
 			serveBookingAnswerBounces(response, request, reader, tenant, bounceFilter, query.Limit)
+		case registryPendingAttemptResult:
+			servePendingAttemptResults(response, request, reader, tenant, query.Limit)
 		}
 	})
 }
@@ -1008,4 +1018,50 @@ type preparationPoolBody struct {
 	Available string `json:"available"`
 	Requested string `json:"requested,omitempty"`
 	Verdict   string `json:"verdict"`
+}
+
+// pendingAttemptResultBody 是待确认复核清单的一行：待确认那一版的来源与缺口（UC-TF-002「揽收结果待确认」、UC-TF-006「尝试待确认」要保存的
+// 已知事实与缺口），以及复核的人下一步要指名的键——揽收一侧的 sourceId、两侧的尝试与对象。
+type pendingAttemptResultBody struct {
+	Side       string `json:"side"`
+	SourceID   string `json:"sourceId,omitempty"`
+	Attempt    string `json:"attempt"`
+	Object     string `json:"object"`
+	Task       string `json:"task"`
+	ExecutedBy string `json:"executedBy"`
+	Place      string `json:"place"`
+	Source     string `json:"source"`
+	Gap        string `json:"gap"`
+	OccurredAt string `json:"occurredAt"`
+}
+
+type pendingAttemptResultListResponse struct {
+	Outcome string                     `json:"outcome"`
+	Results []pendingAttemptResultBody `json:"results"`
+}
+
+// servePendingAttemptResults 上列还在待确认的逐对象尝试结果（票 docs-consistency/code/90）：复核清单，已更正的不在内。
+func servePendingAttemptResults(
+	response http.ResponseWriter,
+	request *http.Request,
+	reader ReviewCatalogueReader,
+	tenant domain.TenantID,
+	limit int,
+) {
+	rows, err := reader.ListPendingAttemptResults(request.Context(), tenant, limit)
+	if err != nil {
+		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+		return
+	}
+	bodies := make([]pendingAttemptResultBody, 0, len(rows))
+	for _, row := range rows {
+		bodies = append(bodies, pendingAttemptResultBody{
+			Side: row.Side, SourceID: row.SourceID, Attempt: row.Attempt, Object: row.Object, Task: row.Task,
+			ExecutedBy: row.ExecutedBy, Place: row.Place, Source: row.Source, Gap: row.Gap, OccurredAt: rfc3339(row.OccurredAt),
+		})
+	}
+	writeJSON(response, http.StatusOK, pendingAttemptResultListResponse{
+		Outcome: outcomePendingAttemptResultsListed,
+		Results: bodies,
+	})
 }

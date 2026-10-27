@@ -95,36 +95,24 @@ type DeliveryResultCorrections interface {
 	Save(ctx context.Context, record DeliveryResultCorrectionRecord) (DeliveryResultCorrectionSaveOutcome, error)
 }
 
-// PendingAttemptResultRow 是一格还在待确认的逐对象结果（揽收或派送一侧），供运营复核查阅。
-type PendingAttemptResultRow struct {
-	Side       PendingAttemptSide
-	Attempt    domain.AttemptReference
-	SourceID   string // 只在揽收一侧：更正口按它指名
-	Object     domain.CarriedObjectReference
-	Task       domain.DispatchTaskReference
-	ExecutedBy domain.ExecutingPartyReference
-	Place      domain.AttemptPlaceReference
-	// Source 是待确认所凭的已有来源，Gap 是缺口或冲突（UC-TF-002「揽收结果待确认」、UC-TF-006「尝试待确认」要保存的两样）。
-	Source     domain.AttemptResultSourceReference
-	Gap        domain.AttemptResultBasisReference
-	OccurredAt time.Time
-}
-
-type PendingAttemptSide uint8
-
+// 复核查阅「还在待确认的对象」的行（揽收或派送一侧各一种，Side 区分）：待确认那一版的来源与缺口，加上复核的人下一步要指名的键——
+// 揽收一侧按尝试提交的来源身份加对象，派送一侧按尝试身份加对象。已凭后补来源更正成确定结果的不再在册上列出。
 const (
-	PendingAttemptSideInvalid PendingAttemptSide = iota
-	PendingPickupAttempt
-	PendingDeliveryAttempt
+	PendingAttemptSidePickup   = "PICKUP"
+	PendingAttemptSideDelivery = "DELIVERY"
 )
 
-func (side PendingAttemptSide) String() string {
-	switch side {
-	case PendingPickupAttempt:
-		return "PICKUP"
-	case PendingDeliveryAttempt:
-		return "DELIVERY"
-	default:
-		return ""
-	}
+type PendingAttemptResultRow struct {
+	Side string
+	// SourceID 只在揽收一侧：更正口按它指名被更正的那一格（尝试登记口里的 sourceId）。
+	SourceID   string
+	Attempt    string
+	Object     string
+	Task       string
+	ExecutedBy string
+	Place      string
+	// Source 是待确认所凭的已有来源，Gap 是缺口或冲突（UC-TF-002「揽收结果待确认」、UC-TF-006「尝试待确认」要保存的两样）。
+	Source     string
+	Gap        string
+	OccurredAt time.Time
 }

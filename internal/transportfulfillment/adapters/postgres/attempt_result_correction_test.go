@@ -27,6 +27,7 @@ type correctionRig struct {
 	deliveries          *adapter.DeliveryAttempts
 	pickupCorrections   *adapter.PickupResultCorrections
 	deliveryCorrections *adapter.DeliveryResultCorrections
+	catalogue           *adapter.ReviewCatalogue
 	transactor          bentoapp.Transactor
 	pool                *pgxpool.Pool
 }
@@ -50,6 +51,9 @@ func newCorrectionRig(t *testing.T) correctionRig {
 	}
 	if rig.deliveryCorrections, err = adapter.NewDeliveryResultCorrections(db); err != nil {
 		t.Fatalf("派送更正册：%v", err)
+	}
+	if rig.catalogue, err = adapter.NewReviewCatalogue(db); err != nil {
+		t.Fatalf("查阅册：%v", err)
 	}
 	return rig
 }
@@ -524,5 +528,74 @@ func TestDeliveryCorrectionRowsOnlyAttachToAPendingResultAndKeepTheDeterminateSh
 	}
 	if _, err := rig.pool.Exec(ctx, insert, "parcel-2", "PENDING_CONFIRMATION", "REFUSED", "y", "src2", at, later, nil); err == nil {
 		t.Fatal("同一格待确认被更正了两次")
+	}
+}
+
+// Covers: 票 docs-consistency/code/90 要裁的「待确认复核清单」的持久化半边——还在待确认的那几格两侧合并、最早的在前、按租户隔离、按上限截断；
+// 一格凭后补来源更正之后就不在清单上（首次提交的待确认行仍在表里，靠更正册反连接判），而没有更正的照旧在；揽收一侧带更正口要指名的来源身份。
+func TestThePendingResultListHoldsOnlyWhatIsStillPendingAcrossBothSides(t *testing.T) {
+	rig := newCorrectionRig(t)
+	ctx := t.Context()
+	tenantA := deliveryValue(t, domain.NewTenantID, "tenant-a")
+
+	rig.savePickupAttempt(t, pendingPickupRecord(t, "tenant-a", "source-pending"))
+	rig.savePickupAttempt(t, pendingPickupRecord(t, "tenant-b", "source-other-tenant"))
+	deliveryRecord := pendingDeliveryRecord(t, "tenant-a", "attempt-pending")
+	mustWithinDeliveryTransaction(t, rig.transactor, ctx, func(txCtx context.Context) error {
+		_, err := rig.deliveries.Save(txCtx, deliveryRecord)
+		return err
+	})
+
+	rows, err := rig.catalogue.ListPendingAttemptResults(ctx, tenantA, 10)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("rows = %+v；租户 a 有一格待确认揽收与一格待确认派送，别的租户的不该在", rows)
+	}
+	if rows[0].Side != ports.PendingAttemptSidePickup || rows[0].SourceID != "source-pending" || rows[0].Attempt != "attempt-1" ||
+		rows[0].Object != "parcel-2" || rows[0].Source != "source/vehicle-arrival+driver-scan" || rows[0].Gap != "gap/no-receipt" ||
+		rows[0].Task != "pickup-task-1" || rows[0].ExecutedBy != "courier-1" || rows[0].Place != "customer-warehouse-1" {
+		t.Fatalf("揽收行 = %+v", rows[0])
+	}
+	if rows[1].Side != ports.PendingAttemptSideDelivery || rows[1].SourceID != "" || rows[1].Attempt != "attempt-pending" ||
+		rows[1].Object != "parcel-2" || rows[1].Gap != "conflict/signature-vs-address" {
+		t.Fatalf("派送行 = %+v", rows[1])
+	}
+	if limited, err := rig.catalogue.ListPendingAttemptResults(ctx, tenantA, 1); err != nil || len(limited) != 1 || limited[0].Side != ports.PendingAttemptSidePickup {
+		t.Fatalf("limit 1 = %+v err=%v；最早的先看", limited, err)
+	}
+	if _, err := rig.catalogue.ListPendingAttemptResults(ctx, tenantA, 0); err == nil {
+		t.Fatal("上限为 0 被收下")
+	}
+
+	object := deliveryValue(t, domain.NewCarriedObjectReference, "parcel-2")
+	mustWithinDeliveryTransaction(t, rig.transactor, ctx, func(txCtx context.Context) error {
+		target, _, err := rig.pickupCorrections.LoadForCorrection(txCtx, ports.PickupAttemptKey{TenantID: tenantA, SourceID: "source-pending"}, object)
+		if err != nil {
+			return err
+		}
+		correction := pickupCorrectionOf(t, target, domain.CustomerAbsent, "reason/x", "")
+		_, err = rig.pickupCorrections.Save(txCtx, correction)
+		return err
+	})
+	rows, err = rig.catalogue.ListPendingAttemptResults(ctx, tenantA, 10)
+	if err != nil || len(rows) != 1 || rows[0].Side != ports.PendingAttemptSideDelivery {
+		t.Fatalf("揽收一格更正之后的清单 = %+v err=%v；更正过的不该再列，没更正的派送一格照旧在", rows, err)
+	}
+	mustWithinDeliveryTransaction(t, rig.transactor, ctx, func(txCtx context.Context) error {
+		target, _, err := rig.deliveryCorrections.LoadForCorrection(txCtx, deliveryRecord.Key, object)
+		if err != nil {
+			return err
+		}
+		_, err = rig.deliveryCorrections.Save(txCtx, deliveryCorrectionOf(t, target, domain.ObjectDelivered, ""))
+		return err
+	})
+	if rows, err = rig.catalogue.ListPendingAttemptResults(ctx, tenantA, 10); err != nil || len(rows) != 0 {
+		t.Fatalf("两侧都更正之后的清单 = %+v err=%v, want 空", rows, err)
+	}
+	other, err := rig.catalogue.ListPendingAttemptResults(ctx, deliveryValue(t, domain.NewTenantID, "tenant-b"), 10)
+	if err != nil || len(other) != 1 || other[0].SourceID != "source-other-tenant" {
+		t.Fatalf("他租户的清单 = %+v err=%v；租户 a 的更正动不了它", other, err)
 	}
 }

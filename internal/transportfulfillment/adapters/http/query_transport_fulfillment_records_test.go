@@ -148,6 +148,13 @@ func (stub unreachableReviewCatalogue) ListBookingAnswerBounces(
 	return nil, nil
 }
 
+func (stub unreachableReviewCatalogue) ListPendingAttemptResults(
+	context.Context, domain.TenantID, int,
+) ([]ports.PendingAttemptResultRow, error) {
+	stub.refuse("pending attempt result")
+	return nil, nil
+}
+
 // stubReviewCatalogue 是各本册子的读口替身，记下读口收到的键。
 type stubReviewCatalogue struct {
 	schedules       []ports.TransportScheduleCatalogueRow
@@ -162,6 +169,7 @@ type stubReviewCatalogue struct {
 	unformed        []ports.ActualFulfillmentUnformedRecord
 	bookings        []ports.BookingRequestCatalogueRow
 	bounces         []ports.BookingAnswerBounceCatalogueRow
+	pendingResults  []ports.PendingAttemptResultRow
 	err             error
 
 	gotTenant string
@@ -253,6 +261,13 @@ func (stub *stubReviewCatalogue) ListBookingAnswerBounces(
 	return stub.bounces, stub.err
 }
 
+func (stub *stubReviewCatalogue) ListPendingAttemptResults(
+	_ context.Context, tenant domain.TenantID, limit int,
+) ([]ports.PendingAttemptResultRow, error) {
+	stub.gotTenant, stub.gotLimit = tenant.String(), limit
+	return stub.pendingResults, stub.err
+}
+
 func recordsEndpoint(register *stubReviewCatalogue) http.Handler {
 	return tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(grantedIntake(), register)
 }
@@ -282,7 +297,7 @@ func arrayAt(t *testing.T, response *httptest.ResponseRecorder, key string) stri
 var fulfillmentRegistries = []string{
 	"transport-schedule", "transport-schedule-template", "capacity-pool", "transport-handover", "effective-delivery",
 	"carrier-master-document", "transport-preparation", "delivery-dispatch-pending", "delivery-dispatch-reask-cadence",
-	"booking-request", "booking-answer-bounce",
+	"booking-request", "booking-answer-bounce", "pending-attempt-result",
 }
 
 const fulfillmentTarget = "/transport-fulfillment-records?registry=transport-schedule"
@@ -795,6 +810,7 @@ func TestEmptyFulfillmentRegistersAnswerEmptyArrays(t *testing.T) {
 		"delivery-dispatch-reask-cadence": "cadences",
 		"booking-request":                 "bookings",
 		"booking-answer-bounce":           "bounces",
+		"pending-attempt-result":          "results",
 	} {
 		t.Run(registry, func(t *testing.T) {
 			register := &stubReviewCatalogue{}
@@ -900,5 +916,49 @@ func TestTransportPreparationRegistryTranscribesRows(t *testing.T) {
 			`"verdict":"CAPACITY_UNCONFIRMED","pools":[{"pool":"SYN-ADHOC-1/WEIGHT","dimension":"WEIGHT",`+
 			`"unit":"kg","available":"10","verdict":"UNIT_NOT_CONVERTIBLE"}]}]` {
 		t.Fatalf("待确认一行转写走样：%s", response.Body.String())
+	}
+}
+
+// Covers: 票 docs-consistency/code/90 要裁的「待确认复核清单」——还在待确认的逐对象尝试结果一册：两侧合并，逐格转写待确认那一版的来源与
+// 缺口，揽收一侧带更正口要指名的 sourceId、派送一侧不带；读口收到的是接入面裁决的租户与上限。
+func TestPendingAttemptResultRegistryTranscribesBothSides(t *testing.T) {
+	register := &stubReviewCatalogue{pendingResults: []ports.PendingAttemptResultRow{
+		{
+			Side: ports.PendingAttemptSidePickup, SourceID: "SYN-DEVICE-01/attempt-90", Attempt: "SYN-ATTEMPT-90", Object: "SYN-PARCEL-90-01",
+			Task: "SYN-TASK-90", ExecutedBy: "SYN-COURIER-90", Place: "SYN-PLACE-90", Source: "SYN-SOURCE/vehicle-arrival",
+			Gap: "SYN-GAP/no-receipt", OccurredAt: time.Date(2026, 9, 24, 0, 45, 0, 0, time.UTC),
+		},
+		{
+			Side: ports.PendingAttemptSideDelivery, Attempt: "SYN-DELIVERY-ATTEMPT-90", Object: "SYN-PARCEL-90-02",
+			Task: "SYN-DISPATCH-90", ExecutedBy: "SYN-COURIER-91", Place: "SYN-PLACE-91", Source: "SYN-SOURCE/signature-scan",
+			Gap: "SYN-CONFLICT/signature-vs-address", OccurredAt: time.Date(2026, 9, 25, 2, 5, 0, 0, time.UTC),
+		},
+	}}
+	response := serveGet(recordsEndpoint(register), "/transport-fulfillment-records?registry=pending-attempt-result")
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+	}
+	var answer struct {
+		Outcome string           `json:"outcome"`
+		Results []map[string]any `json:"results"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &answer); err != nil {
+		t.Fatal(err)
+	}
+	if answer.Outcome != "PENDING_ATTEMPT_RESULTS_LISTED" || len(answer.Results) != 2 {
+		t.Fatalf("answer = %s", response.Body.String())
+	}
+	pickup, delivery := answer.Results[0], answer.Results[1]
+	if pickup["side"] != "PICKUP" || pickup["sourceId"] != "SYN-DEVICE-01/attempt-90" || pickup["attempt"] != "SYN-ATTEMPT-90" ||
+		pickup["object"] != "SYN-PARCEL-90-01" || pickup["source"] != "SYN-SOURCE/vehicle-arrival" || pickup["gap"] != "SYN-GAP/no-receipt" ||
+		pickup["occurredAt"] != "2026-09-24T00:45:00Z" {
+		t.Fatalf("pickup row = %v", pickup)
+	}
+	if _, present := delivery["sourceId"]; present || delivery["side"] != "DELIVERY" || delivery["gap"] != "SYN-CONFLICT/signature-vs-address" {
+		t.Fatalf("delivery row = %v", delivery)
+	}
+	if register.gotTenant == "" || register.gotLimit == 0 {
+		t.Fatalf("the register was asked tenant %q limit %d", register.gotTenant, register.gotLimit)
 	}
 }

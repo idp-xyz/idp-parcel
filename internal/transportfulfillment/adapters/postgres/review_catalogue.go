@@ -776,3 +776,68 @@ func preparationCandidateRows(raw []byte) ([]ports.PreparationCandidateRow, erro
 	}
 	return rows, nil
 }
+
+// ListPendingAttemptResults 上列还在待确认的逐对象尝试结果（票 docs-consistency/code/90）：揽收与派送两侧合并，待确认登记得最早的在前，
+// 同刻按（一侧、尝试、对象）稳定排序。**还在待确认**的才列——已凭后补来源更正成确定结果的那一格，靠更正册里有没有行判（反连接），
+// 首次提交的待确认行本身永不改写。揽收一侧带尝试提交的来源身份：更正口按它指名被更正的那一格。
+func (catalogue *ReviewCatalogue) ListPendingAttemptResults(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]ports.PendingAttemptResultRow, error) {
+	if limit <= 0 {
+		return nil, fmt.Errorf("list pending attempt results: limit must be positive, got %d", limit)
+	}
+	querier, err := catalogue.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list pending attempt results: %w", err)
+	}
+
+	rows, err := querier.Query(ctx,
+		`SELECT side, source_id, attempt_ref, object_ref, task_ref, executed_by, place_ref, source_ref, basis, occurred_at
+		   FROM (
+		        SELECT 'PICKUP' AS side, r.source_id, a.attempt_ref, r.object_ref, a.task_ref, a.executed_by, a.place_ref,
+		               r.source_ref, r.basis, r.occurred_at
+		          FROM transport_fulfillment.pickup_attempt_result AS r
+		          JOIN transport_fulfillment.pickup_attempt AS a
+		            ON a.tenant_id = r.tenant_id AND a.source_id = r.source_id
+		         WHERE r.tenant_id = $1
+		           AND r.outcome = 'PENDING_CONFIRMATION'
+		           AND NOT EXISTS (SELECT 1 FROM transport_fulfillment.pickup_attempt_result_correction AS c
+		                            WHERE c.tenant_id = r.tenant_id AND c.source_id = r.source_id AND c.object_ref = r.object_ref)
+		        UNION ALL
+		        SELECT 'DELIVERY' AS side, '' AS source_id, a.attempt_ref, r.object_ref, a.task_ref, a.executed_by, a.place_ref,
+		               r.source_ref, r.basis, r.occurred_at
+		          FROM transport_fulfillment.delivery_attempt_result AS r
+		          JOIN transport_fulfillment.delivery_attempt AS a
+		            ON a.tenant_id = r.tenant_id AND a.attempt_ref = r.attempt_ref
+		         WHERE r.tenant_id = $1
+		           AND r.outcome = 'PENDING_CONFIRMATION'
+		           AND NOT EXISTS (SELECT 1 FROM transport_fulfillment.delivery_attempt_result_correction AS c
+		                            WHERE c.tenant_id = r.tenant_id AND c.attempt_ref = r.attempt_ref AND c.object_ref = r.object_ref)
+		        ) AS pending
+		  ORDER BY occurred_at, side, attempt_ref, object_ref
+		  LIMIT $2`,
+		tenant.String(),
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list pending attempt results: %w", err)
+	}
+	defer rows.Close()
+
+	list := make([]ports.PendingAttemptResultRow, 0, limit)
+	for rows.Next() {
+		var row ports.PendingAttemptResultRow
+		if err := rows.Scan(&row.Side, &row.SourceID, &row.Attempt, &row.Object, &row.Task, &row.ExecutedBy, &row.Place,
+			&row.Source, &row.Gap, &row.OccurredAt); err != nil {
+			return nil, fmt.Errorf("list pending attempt results: %w", err)
+		}
+		row.OccurredAt = row.OccurredAt.UTC()
+		list = append(list, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list pending attempt results: %w", err)
+	}
+	return list, nil
+}
