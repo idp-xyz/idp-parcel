@@ -12,7 +12,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
-// 本文件对真实 PostgreSQL 证 buildRegistrar 装配的整条链（隔离合成 S）：七个命令各自
+// 本文件对真实 PostgreSQL 证 buildRegistrar 装配的整条链（隔离合成 S）：各命令各自
 // 贯通「译装 → 用例 → 真库」，重放与内容冲突在真库上分得开，只有渠道报告入账、同一条
 // 事实不记两笔，余额守卫按账、移位与短款按指令、批次封口按当刻账面生效，冲正是追加
 // 而不是删除。

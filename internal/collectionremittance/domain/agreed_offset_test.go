@@ -133,6 +133,7 @@ func TestTheOffsetPositionAndItsBasisAreGatedBothWays(t *testing.T) {
 
 // 场景十七在账上的恒等式：报告 100 入`渠道在途`，到账移走 96，认可的抵扣 3 落`已抵扣`，
 // 余下 1 落`短款`；`渠道在途`清零，各账内位置之和仍等于入账 100。
+// Covers: AT-CR-017（领域半边）
 func TestScenarioSeventeenBalancesWithTheOffsetInTheLedger(t *testing.T) {
 	key := ledgerKey(t, "EUR")
 	postings := []domain.SubledgerPosting{

@@ -323,6 +323,7 @@ func TestAShortfallLandsFromInTransitAndLeavesReceivedFundsAlone(t *testing.T) {
 }
 
 // 冲正就是原记账的反向同额，形状固定死；放开成自由移动之后，账上看不出干了什么。
+// Covers: AT-CR-018
 func TestACorrectionIsExactlyTheReverseOfItsOriginal(t *testing.T) {
 	store := newStore()
 	handler := store.handler()

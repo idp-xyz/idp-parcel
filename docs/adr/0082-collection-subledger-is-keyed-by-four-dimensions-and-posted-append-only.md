@@ -1,6 +1,6 @@
 # ADR-0082: 代收分户账按四维立键、余额只由追加式记账派生，回汇批次形成即冻结
 
-Status: Accepted
+Status: Accepted<!-- 索引注记 -->｜**部分停用**（2026-10-26）：其决定四「资金位置封闭六值」与决定五「四条依据门做进结构（迁移 CHECK 与领域构造门各一份）」两处已由 [ADR-0298](./0298-an-agreed-offset-approved-by-settlement-accounting-leaves-in-transit-for-an-offset-applied-position.md) 扩成——认可的协议抵扣单独登记，凭它自`渠道在途`落入新的账内终局位置`已抵扣`，资金位置多一格、依据门多一条「进入`已抵扣`必须凭认可的协议抵扣」。**适用场景**：全部分户账；外部来源只在来源侧、去向侧没有账外位置、守恒、追加式、键由依据推出与原有四条依据门的原句不变
 Date: 2026-08-28
 
 ## Context
@@ -64,3 +64,4 @@ Date: 2026-08-28
 - [ADR-0031：自有仓储写入结果是封闭代数而不是 error](./0031-owned-repository-write-outcome-is-a-closed-algebra-not-an-error.md)：不 UPSERT、冲突判定靠编排读回，本上下文全部登记册沿用
 - [ADR-0078：隔离环境运营读面按装配注入准入](./0078-isolated-environment-operations-reads-admit-by-assembly-injection.md)：`SYN-` 合成实例的准入门禁，本上下文的验证值一律走它
 - [ADR-0271](./0271-collection-principal-enters-the-ledger-only-on-the-channel-collection-report-and-shortfall-comes-only-from-in-transit.md)：在本记录的依据门上另加门——入账只凭渠道代收报告、真实到账按指令只做移位记账、短款与溢款的来源位置；本记录各条不变
+- [ADR-0298](./0298-an-agreed-offset-approved-by-settlement-accounting-leaves-in-transit-for-an-offset-applied-position.md)：把决定四的资金位置词表与决定五的依据门扩成多一格`已抵扣`、多一条认可的协议抵扣依据门
