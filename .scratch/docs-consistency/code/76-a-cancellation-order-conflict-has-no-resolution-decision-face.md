@@ -1,7 +1,7 @@
 # 76 PS 取消先后冲突留在册上，却没有解开它的业务决定面
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-code76（见文末「完成记录」）。此前 needs-triage——建议 R2（上线后尽快）：看得见的卡住。冲突已经记进 `parcel_shipment.cancellation_order_conflict`、消费门入账，按包裹查得出；但没有任何口能解开它：网络服务的冲突包裹没有责任起点，也不触发收寄后的路由复核，实物照旧在节点手里；面单渠道服务的冲突包裹没有终局，客户手里是`包裹已取消`，承运商却已收走。取消授权在生产未配置，取消形成不了，冲突还到不了；租户一登记取消授权即生效。2026-10-21 自 [code/35](./35-cancellation-and-boundary-fact-order-conflict-has-no-label-half-and-no-resolution-face.md) 拆出（用户「你作为业务和系统专家自决」授权），分支 claude-code21。分级由协调方定稿。
+Status: resolved——2026-10-27 进 main（见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-code76（见文末「完成记录」）。此前 needs-triage——建议 R2（上线后尽快）：看得见的卡住。冲突已经记进 `parcel_shipment.cancellation_order_conflict`、消费门入账，按包裹查得出；但没有任何口能解开它：网络服务的冲突包裹没有责任起点，也不触发收寄后的路由复核，实物照旧在节点手里；面单渠道服务的冲突包裹没有终局，客户手里是`包裹已取消`，承运商却已收走。取消授权在生产未配置，取消形成不了，冲突还到不了；租户一登记取消授权即生效。2026-10-21 自 [code/35](./35-cancellation-and-boundary-fact-order-conflict-has-no-label-half-and-no-resolution-face.md) 拆出（用户「你作为业务和系统专家自决」授权），分支 claude-code21。分级由协调方定稿。
 Blocked by: 无（判法与冲突册已随 code/35 落地；决定的去向集合与授权形状要 PS owner 认可，见「要裁的」）
 出处：[ADR-0254](../../../docs/adr/0254-cancellation-and-boundary-fact-order-is-judged-by-their-business-times-and-a-late-earlier-boundary-fact-is-a-fact-conflict.md) 决定三与越权风险点 2；code/35「最小的诚实修法」第 2 条。
 
@@ -146,3 +146,13 @@ M：一个授权决定面（命令、授权、只追加的冲突解开决定记�
 ### 第三轮窄复审（协调方）
 - 复审可合入，B2 在真链上闭合（事实库留档各代、已采用事实指名不采用那一版为前身、当前投影恰一条已采用终局）；`Supersedes` 指向不在场的版本时 VE 既不拒收也不卡死（`DeriveProjectionHandler.Handle` 不校验存在性）；载荷兼容、版本字符串约束、幂等均通过；自做 7 处变异全部被杀。
 - 剩一条建议（重派生遇上作废代次）协调方裁定：本票不加列。代次按包裹计，该包裹上存在过任何一份认定取消依据不成立的决定之后，对它做同种更正重派生，前身指名对不上带代次后缀的前一代，投影里暂有两份已采用终局（业务时间不同，不立分叉信号、不卡死）；暴露面限于登记了本决定种类授予的租户。如实写进 ADR-0295 越权风险点 15（2）与 UC-VE-002 的 `AT-VE-174` 行；要闭合需让记录带形成时的代次，归 owner 复核。两处测试注释措辞随手改成现行规则句。
+
+## 进 main 记录（2026-10-27，协调方）
+
+- 分支 `claude-code76` 经三轮评审与两轮修订，由协调方 rebase 到 origin/main `f2bb4ec8d` 后快进，tip `b3f434f0a`。迁移 `parcel_shipment/0032_cancellation_order_conflict_decision`（决定留痕、有效取消读用的排除、回放原料表 `cancellation_blocked_replay`）、`access_identity/0026_cancellation_order_conflict_resolution_decision`（决定种类 `CANCELLATION_ORDER_CONFLICT_RESOLUTION` 与自己的授予）；新立 ADR-0295（接上：部分停用 ADR-0254 决定三「形状本记录不定」「今天没有这个决定面」两句，入向注记与 Links 已挂 ADR-0254）。AT-PS-166–173。
+- 决定面：去向封闭两个——`CANCELLATION_NOT_UPHELD`（认定取消依据不成立：那份取消不是有效取消，同笔作废依据它的终局不采用行、同笔交一封续办信封，被挡住的来源交回原编排）与 `BOUNDARY_FACT_REFERRED`（认定边界事实有误、交来源方更正：取消仍有效，这一代边界事实不采用）；决定只追加，一份冲突至多一个决定、并发恰一笔成立；决定与续办都只取包裹取消边界锁；`ParcelCancellationView` 改读「有效取消」，全仓读取消表的非测试代码只有 `FindByKey` 与 `FindCancellation` 两处。
+- 评审三轮：第一轮判不可合入——阻断 B1：作废依据取消的终局不采用行后，续办用同一采用键重新形成终局，终局信封因 ID 相同被去重吞掉，结算与可见性两个下游永远不知道有效交付已形成（评审在真库复现）；协调方裁定折「作废代次」（该包裹上已成立的认定不成立决定个数）进终局信封身份，代次 0 时信封 ID 与载荷逐字不变。第二轮（窄复审）判不可合入——阻断 B2：折代次只闭合了结算，VE 事实键相同内容不同被判来源冲突，终局投影停在「不采用」（第一轮「下游按键回读幂等」对 VE 是未经核实的采信，被复审的真链探针推翻）；协调方裁定修 VE：载荷带可缺省的代次，VE 对代次大于 0 的终局用「采用键版本#void-代次」作事实版本并取代上一代次。第三轮窄复审可合入，自做 7 处变异全被杀，载荷兼容、版本字符串约束、幂等、`Supersedes` 指向不在场版本时不拒收不卡死均核实。另有 N1（ADR 补写物理 DELETE 例外及理由）、N2（取消重放先读有效取消，认定不成立后不再重发释放意图）、N3–N5 与信息项均已处理。
+- 第三轮剩一条建议协调方裁定本票不加列、如实写进 ADR-0295 越权风险点 15（2）与 UC-VE-002 的 `AT-VE-174` 行：该包裹上存在过作废决定之后，对它做同种更正重派生，前身指名对不上带代次后缀的前一代，投影里暂有两份已采用终局（业务时间不同，不立分叉信号、不卡死）；暴露面限于登记了本决定种类授予的租户。要闭合需让终局记录带形成时的代次，归 PS/VE owner 复核。
+- 协调方单独提交重算的 AT 计数、重生成的 ADR 索引与机制清点；检查均退 0。
+- 全量 `scripts/test-full.sh` 退 0、159 个包 ok；`go build ./...`、`go vet ./...` 干净；种子灌一次性库退 0，决定表与回放表落库、授予种类 CHECK 含新词。无 admin-web 改动。
+- 去向：无新票。管理台没有认定页与清单页（`GET /cancellation-order-conflicts` 只有 HTTP 读面），要做另立；越权风险点见 ADR-0295（去向集合由本票定、一人决定即生效无二人复核、客户侧已收到的「包裹已取消」不自动改口属 code/37、同请求键重放取消仍读到历史答复、终局不采用行的物理 DELETE 是只追加纪律的明写例外、回放原料缺失的历史数据无人重驱、认定不成立是整取消级等）。
