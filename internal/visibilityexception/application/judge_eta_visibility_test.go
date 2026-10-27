@@ -139,9 +139,14 @@ func (fixture *judgeFixture) hasETA(t *testing.T, version, confidence string) do
 	return fixture.hasETAFrom(t, domain.OperatorDerivedETA, version, confidence)
 }
 
-// hasETAFrom 把一个来源的当前版直接放进预测库：两路来源并存时，判断读到的就是这样的库。
+// hasETAFrom 把一个来源的当前版直接放进预测库：两路来源并存时，判断读到的就是这样的库。承运商那一版的
+// 预测时点总比运营企业的晚，免得「谁新谁赢」的选法碰巧也过了用例。
 func (fixture *judgeFixture) hasETAFrom(t *testing.T, source domain.ETASourceKind, version, confidence string) domain.ETAPrediction {
 	t.Helper()
+	predictedAt := etaClockAt
+	if source == domain.CarrierProvidedETA {
+		predictedAt = etaClockAt.Add(time.Hour)
+	}
 	eta, err := domain.FormETAPrediction(domain.ETAPredictionSpec{
 		Version:     mustValue(t, domain.NewETAVersionID, version),
 		Parcel:      mustValue(t, domain.NewTrackedParcelReference, "parcel-1"),
@@ -152,7 +157,7 @@ func (fixture *judgeFixture) hasETAFrom(t *testing.T, source domain.ETASourceKin
 		RangeFrom:   etaClockAt.Add(30 * time.Hour),
 		RangeTo:     etaClockAt.Add(42 * time.Hour),
 		Confidence:  mustValue(t, domain.NewConfidenceReference, confidence),
-		PredictedAt: etaClockAt,
+		PredictedAt: predictedAt,
 	})
 	if err != nil {
 		t.Fatalf("form eta: %v", err)
