@@ -1,7 +1,7 @@
 # 06 「税费付款」门禁规则行没有生产登记面
 
 Category: enhancement
-Status: in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-lw-duty（代码最后一笔 a0bbe2be9）；此前：ready-for-agent——2026-10-28 会话 tops-20（idp-parcel-91）立：launch-wiring/03 作者报告；等 01–03 进 main 后开工（同在 customs-compliance）
+Status: resolved——2026-10-28 进 main（`7f2256f90`；全量 160 ok / 0 FAIL，种子退 0），见文末「进 main 记录」。此前 in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-lw-duty（代码最后一笔 a0bbe2be9）；此前：ready-for-agent——2026-10-28 会话 tops-20（idp-parcel-91）立：launch-wiring/03 作者报告；等 01–03 进 main 后开工（同在 customs-compliance）
 Blocked by: [01–03](./03-release-gate-verification-production-face.md)（同地盘，先进 main）
 
 ## 现象
@@ -26,3 +26,13 @@ Blocked by: [01–03](./03-release-gate-verification-production-face.md)（同�
 - 判据对用例：登前答 DUTY_PAYMENT_GATE_RULE_NOT_CONFIGURED、登后 RECORDED + MET 落册、重放 EXISTING、换规则 CONTENT_CONFLICT、两形混写不登——均由 cmd/parcel-customs-register 的 TestDemoDutyPaymentGateRuleSeedLetsTheReleaseGateBeVerified 读种子文件本身在真库证明（用真 VerifyReleaseGateHandler 与真适配器，下游交接用丢弃替身；未经 HTTP 口，HTTP 层已由 launch-wiring/03 的 parcel-api 真库用例覆盖）。
 - 自验（含 PG 55432）：go build ./...、go vet、gofmt 无输出；go test -p 1 ./cmd/parcel-customs-register ./internal/customscompliance/... ./internal/architecture/... ./migrations/... 全绿；一次性库 seed.sh 全程零报错（duty-payment-gate-rule: REGISTERED），库已删。
 - 留给协调方：无阻上线的新发现。AT 盘点/机制清点/ADR 索引生成物进 main 时重生成（本票未加 AT、未动 ADR）。
+
+## 评审记录（2026-10-28，隔离子代理，钉 `bd43637a4`）
+
+两轴无阻断。载荷与 `RegisterDutyPaymentGateRuleCommand` 一一对上，两形互斥由应用层与领域把门；`decodeStrict` 拒未知字段；CLI 分支与 `gate-finding` 同形；种子只给演示租户并写明演示采用；真库用例读种子文件本身，未登答未配置、登后 `MET` 落册、重放、冲突、两形混写被拒。只走受控批量口、不开 HTTP 登记口：与税费付款核对等只走批量口的册同类，规则取值属租户上线时的实施，批量口足够。非阻断：测试里手写后缀比对可换 `strings.HasSuffix`。
+
+## 进 main 记录（2026-10-28，推送方 tops-20 / idp-parcel-91）
+
+- 分支 `claude-lw-duty` tip `bd43637a4` 作出处；第一次在 main `df7ecc710` 上验过后 main 进了 psb/22 第 2 笔（含代码），改在 main `463d3af1d` 上重放重验。
+- 重生成生成物、两项 `-check` 退 0；全量 160 ok / 0 FAIL；种子一次性库退 0；推确切 SHA `7f2256f90`。
+
