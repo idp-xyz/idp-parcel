@@ -69,6 +69,10 @@ type SubmissionSendFact struct {
 	response       string
 }
 
+// maxChannelMessageBytes 是消息号的上限。消息号进同租户唯一索引，btree 一行有长度上限，超了插入直接报错；由对端给的值不能
+// 让这一笔写不进库——写不进就回滚成「没发」、重投再发一遍。超长的拒在这里，编排改为不带它记。
+const maxChannelMessageBytes = 256
+
 // RecordSubmissionSend 立一笔发送事实。结果只收越过边界之后的三种；通道没给消息号就留空，异步回执那时就关联不上，答待关联。
 func RecordSubmissionSend(
 	version SubmissionVersionID,
@@ -79,7 +83,8 @@ func RecordSubmissionSend(
 	response string,
 ) (SubmissionSendFact, error) {
 	if !version.valid() || sequence < 1 || sentAt.IsZero() ||
-		!outcome.valid() || outcome == AttemptRegisteredPendingSend || strings.IndexByte(channelMessage, 0) >= 0 {
+		!outcome.valid() || outcome == AttemptRegisteredPendingSend || strings.IndexByte(channelMessage, 0) >= 0 ||
+		len(strings.TrimSpace(channelMessage)) > maxChannelMessageBytes {
 		return SubmissionSendFact{}, ErrInvalidSendFact
 	}
 	return SubmissionSendFact{

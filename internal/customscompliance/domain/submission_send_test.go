@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,6 +38,9 @@ func TestTheCurrentTechnicalJudgmentFoldsTheSendFactAndTheReceipts(t *testing.T)
 	}
 	if _, err := domain.ReceiveTechnicalReceipt("MSG-1", version, 1, domain.AttemptPendingConfirmation, sentAt, sentAt, "d"); !errors.Is(err, domain.ErrInvalidTechnicalReceipt) {
 		t.Fatalf("回执记成待确认 err = %v", err)
+	}
+	if _, err := domain.RecordSubmissionSend(version, 1, sentAt, domain.AttemptAcknowledged, strings.Repeat("M", 257), ""); !errors.Is(err, domain.ErrInvalidSendFact) {
+		t.Fatalf("超长消息号 err = %v", err)
 	}
 	send, err := domain.RecordSubmissionSend(version, 1, sentAt, domain.AttemptPendingConfirmation, "", "timeout")
 	if err != nil {

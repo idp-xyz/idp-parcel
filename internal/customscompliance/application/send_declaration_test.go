@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -249,6 +250,15 @@ func TestOnlyACertainNonSendIsRetried(t *testing.T) {
 	if err != nil || result.Outcome() != application.DeclarationSent || result.Fact().ChannelMessage() != "" ||
 		result.Fact().Outcome() != domain.AttemptAcknowledged {
 		t.Fatalf("消息号已被占 = %v %+v err = %v", result.Outcome(), result.Fact(), err)
+	}
+
+	// 对端给了超长的消息号：同样不带它记，不让这一笔写不进库而回滚重发。
+	oversized := newSendFixture(t)
+	oversized.registerChannel(t)
+	oversized.sender.answer = application.ChannelAnswer{Answered: true, Accepted: true, Message: strings.Repeat("M", 4096)}
+	result, err = oversized.send.Send(ctx, oversized.tenant, oversized.version)
+	if err != nil || result.Outcome() != application.DeclarationSent || result.Fact().ChannelMessage() != "" {
+		t.Fatalf("超长消息号 = %v %+v err = %v", result.Outcome(), result.Fact(), err)
 	}
 
 	unreadable := newSendFixture(t)
