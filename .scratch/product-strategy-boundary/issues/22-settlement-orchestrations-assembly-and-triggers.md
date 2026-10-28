@@ -1,7 +1,7 @@
 # 22 结算其余编排的装配、入口与触发面
 
 Category: enhancement
-Status: in-progress——第 1 笔（确认）2026-10-28 进 main（`53c514602`，见文末「第 1 笔进 main 记录」）；第 2 笔（运营决定口与到点截单）2026-10-28 进 main（`383c1dad5`，见文末「第 2 笔进 main 记录」）；第 3 笔（供应商账单）2026-10-28 进 main（`7405eb6c3`，见文末「第 3 笔进 main 记录」）；第 4 笔待做。此前 ready-for-agent——2026-10-27 用户同意由冻结 R3 上调为「限量生产前必须」（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)「一之二」，理由引 PILOT-SCOPE）：费用确认、截单发布、供应商账单接收与审核及确认与截单的触发上调；费用调整、成本分摊、赔付金额仍冻结；排在 tops-26 名下 6 张 code 票进 main 之后，先 10 后 22。此前 ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-09-24 通道 2 立票（用户令通道 2 独立承接）；接单时按编排拆笔
+Status: in-progress——第 1 笔（确认）2026-10-28 进 main（`53c514602`，见文末「第 1 笔进 main 记录」）；第 2 笔（运营决定口与到点截单）2026-10-28 进 main（`383c1dad5`，见文末「第 2 笔进 main 记录」）；第 3 笔（供应商账单）2026-10-28 进 main（`7405eb6c3`，见文末「第 3 笔进 main 记录」）；第 4 笔（演示种子与重走）完工待评审，分支 claude-psb22（见文末「第 4 笔完成记录」）。此前 ready-for-agent——2026-10-27 用户同意由冻结 R3 上调为「限量生产前必须」（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)「一之二」，理由引 PILOT-SCOPE）：费用确认、截单发布、供应商账单接收与审核及确认与截单的触发上调；费用调整、成本分摊、赔付金额仍冻结；排在 tops-26 名下 6 张 code 票进 main 之后，先 10 后 22。此前 ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-09-24 通道 2 立票（用户令通道 2 独立承接）；接单时按编排拆笔
 Blocked by: 无；赔付金额文法与分摊形态归[票 12](./12-sa-amount-grammars-allocation-forms-and-accounting-connectors.md) 第 1、2 项，结算四口的登记册与读口归[票 16](./16-mechanism-gaps-without-a-ticket.md) 第 3 项
 地盘：`internal/settlementaccounting` 的入口与触发、`cmd/` 装配。
 出处：[票 05](./05-demo-journey-criterion-evidence.md) 格 20 的装配与触发面那一半。
@@ -23,7 +23,7 @@ Blocked by: 无；赔付金额文法与分摊形态归[票 12](./12-sa-amount-gr
 
 ## 完成判据
 
-- 每份编排在生产进程里有入口；触发策略有内置执行器；票 05 格 20 的装配与触发面那一半越过（隔离形态实测只记 `S`）。
+- 每份编排在生产进程里有入口；触发策略有内置执行器——确认由确认依据到达触发（ADR-0336），截单由登了对账周期的账户到点触发、其余由运营发布口发起（ADR-0339）；票 05 格 20 的装配与触发面那一半越过（隔离形态实测只记 `S`）。
 
 ## 拆笔（2026-10-28，Claude Code 会话；用户 2026-10-27「按你的建议开始吧」）
 
@@ -159,3 +159,16 @@ Blocked by: 无；赔付金额文法与分摊形态归[票 12](./12-sa-amount-gr
 - **全量真库**：`scripts/test-full.sh` 退 0，160 个包 ok、0 FAIL。
 - **种子**：灌一次性库 `psb22_seed3` 退 0，用完已删。
 - **推送**：`git push origin 7405eb6c3:main`，`origin/main` 等于该 SHA。
+
+## 第 4 笔完成记录（分支 claude-psb22，基于 main `24213a96d`）
+
+- **种子**：新增步骤 `scripts/demo-seeds/steps/510-settlement-confirmation-and-statement.sh`，排在 `500-settlement` 之后，依赖那里登的结算账户与费用项目映射。数据见 `data/settlement/11`–`20`、`data/access/24`、`25`、`data/governance/69`–`72`；README 组成表 `data/settlement/` 一行同步。这些都是演示租户经参考配置采用的取值，只记 `S`。
+- **重走**（一次性库 `psb22_seed4`，`seed.sh` 原样灌入退 0；分支上编出的 `parcel-api` 与 `parcel-dispatch` 照动线「前置」起；实测只记 `S`；走完已停进程、删库）：
+  1. 首方提交成`已接受`；收寄之后 SELL 形成预估客户费用 CNY 9600，七项确认事实同笔登上（账户 `SYN-SETTLEMENT-ACCOUNT-01`、合同依据 `SYN-CONTRACT-01`、计费范围 `SYN-SCOPE-01`、来源事实为收寄采用键）。
+  2. 自营段、干线（先提交委托再交给承运商，段采用答 201）、尾程交接、派送任务、派送尝试、有效交付都答 201；BUY 形成供应商预期成本 CNY 8500。
+  3. 终局 `EFFECTIVE_DELIVERY` 形成后，客户费用自动转`已确认`，确认依据 `final-outcome/<包裹>/EFFECTIVE_DELIVERY/DRV-000000000001`，归属日 2026-10-28（上海 18:00 截单前确认）。
+  4. 运营发布口列这一笔、报合计 9600，答 `201 STATEMENT_PUBLISHED`；客户费用读口随之透出 `attributionDate` 与 `billedOn`。到点截单要等这一天在上海 18:00 关上之后，本轮没等，由 dispatch 真库用例证过。
+  5. 供应商账单接收口照 BUY 那一版预期成本录一份账单，答 `201 BILL_RECEIVED`；审核口答 `201 PAYABLE_FORMED`，金额 8500，`auditor_ref` 为 `SYN-AUDITOR-SETTLEMENT-01`，操作证据是配置员。
+- **如实记下的几处**：
+  - 费用确认信封 `settlement-accounting.charge-confirmation.formed` 落 `ABANDONED` / `dispatch.no_subscriber`：产品里还没有消费方订阅它，与动线上那几封已知无订阅者的信封同类。
+  - 派送尝试的计划窗口要照派送任务的窗口写，写成别的答不带原因的 `SOURCE_NOT_ACCEPTED`，属冻结清单「记录」里已有的同类。

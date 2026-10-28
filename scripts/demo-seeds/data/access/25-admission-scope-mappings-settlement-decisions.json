@@ -1,0 +1,37 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "mappings": [
+    {
+      "mappingId": "SYN-MAP-OD-CHARGE-CONFIRMATION-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "CHARGE_CONFIRMATION",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    },
+    {
+      "mappingId": "SYN-MAP-OD-STATEMENT-PUBLICATION-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "STATEMENT_PUBLICATION",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    },
+    {
+      "mappingId": "SYN-MAP-OD-SUPPLIER-BILL-RECEPTION-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "SUPPLIER_BILL_RECEPTION",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    },
+    {
+      "mappingId": "SYN-MAP-OD-SUPPLIER-BILL-AUDIT-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "SUPPLIER_BILL_AUDIT",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    }
+  ]
+}

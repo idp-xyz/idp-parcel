@@ -513,6 +513,8 @@ Claude Code 子代理做，只读代码、不改代码。worktree 分支 `claude
 1. 结算确认与截单：`buildSettlementOrchestrations` 在 `cmd/parcel-api` 里构造完就丢弃，没有入口、没有驱动。客户费用停在 `ESTIMATED`，对账单与经营结果两册空。去处：[22](./22-settlement-orchestrations-assembly-and-triggers.md)。
 2. 申报发送：尝试停在 `REGISTERED_PENDING_SEND`，没有发送通道。去处：[10](./10-cc-declaration-channel-and-public-regulatory-reference-configuration.md) 第 1 项。
 
+> 2026-10-28 补记：停点 1（结算确认与截单）已由 [22](./22-settlement-orchestrations-assembly-and-triggers.md) 收口。演示租户在终局之后自动把客户费用转为`已确认`，运营发布口与到点截单都能发单，供应商账单能接收并审核成应付；取证见 22 票面「第 4 笔完成记录」。
+
 **没走到、收口时要走的一格**：放行之后交出与出发门禁能不能从 `UNDECIDED` 变成放行，这一轮没取到。本轮先交接后立案，放行回来时包裹已交付，事后再问答 `NO_OBJECT_UNDER_CONTROL`。收口重走时顺序要改成：收寄 → 立案、授权、提交、放行 → 再交给干线；要用的放行门禁核对正是在途的 code/34。
 
 **走法上的三处**（不挡上线，已记入[冻结清单「记录」](../../launch-line-freeze-2026-10-27.md)）：

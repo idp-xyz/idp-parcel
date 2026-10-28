@@ -1,0 +1,6 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "accountId": "SYN-SETTLEMENT-ACCOUNT-01",
+  "timeZone": "Asia/Shanghai",
+  "cutoffMinute": 1080
+}

@@ -1,0 +1,41 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "grants": [
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-CHARGE-CONFIRMATION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "CHARGE_CONFIRMATION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-CHARGE-CONFIRMATION-01"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-STATEMENT-PUBLICATION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "STATEMENT_PUBLICATION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-STATEMENT-PUBLICATION-01"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-SUPPLIER-BILL-RECEPTION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "SUPPLIER_BILL_RECEPTION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-SUPPLIER-BILL-RECEPTION-01"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-SUPPLIER-BILL-AUDIT-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "SUPPLIER_BILL_AUDIT",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-SUPPLIER-BILL-AUDIT-01"
+    }
+  ]
+}

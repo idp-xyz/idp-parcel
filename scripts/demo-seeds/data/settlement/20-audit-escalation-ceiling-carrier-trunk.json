@@ -1,0 +1,7 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "supplierId": "SYN-PARTY-CARRIER-TRUNK-01",
+  "legalEntityId": "SYN-LE-01",
+  "currency": "CNY",
+  "ceilingMinor": 1000000
+}
