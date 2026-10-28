@@ -2053,3 +2053,11 @@ func (unwiredSupplierBill) Audit(
 ) (settlementapp.AuditResult, error) {
 	return settlementapp.AuditResult{}, errOrchestrationNotWired
 }
+
+type unwiredTechnicalReceipts struct{}
+
+func (unwiredTechnicalReceipts) Handle(
+	context.Context, customsapp.ReceiveTechnicalReceiptCommand,
+) (customsapp.TechnicalReceiptResult, error) {
+	return customsapp.TechnicalReceiptResult{}, errOrchestrationNotWired
+}

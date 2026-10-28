@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # 关务三口走一遍（票 product-strategy-boundary/18，ADR-0227）：对已经在跑、设了操作者族三件参数的 parcel-api，拿配置员的 Dex
 # 令牌，为一件已接受的包裹依次建出口案件、确认演示单元的提交授权、发起申报提交，逐步断言答复，末行打出提交版本号与首次尝试的
-# 结果。首次尝试恒为 REGISTERED_PENDING_SEND：本产品还没有把申报交给海关或报关服务商的连接器（票 10「申报发送通道」一项），提交执行口不发送
-# 任何东西，也不报发送时间。
+# 结果。首次尝试在这里恒为 REGISTERED_PENDING_SEND：提交执行口不发送任何东西，也不报发送时间；发送由 dispatch 经申报通道做
+# （ADR-0342），接着走 send-one-declaration.sh。
 #
 # 用法：
 #   IDP_PARCEL_API_BASE=http://127.0.0.1:19080 scripts/demo-seeds/declare-one-parcel.sh <包裹号>

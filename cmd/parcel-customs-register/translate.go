@@ -47,6 +47,7 @@ const (
 	commandDutyCollaboration       = "duty-collaboration"
 	commandDutyPaymentVerification = "duty-payment-verification"
 	commandNodeZone                = "node-zone"
+	commandDeclarationChannel      = "declaration-channel"
 )
 
 var allCommands = []string{
@@ -59,6 +60,7 @@ var allCommands = []string{
 	commandCandidatePort, commandDeclarationPath,
 	commandRegulatoryCredential, commandDutyCollaboration, commandDutyPaymentVerification,
 	commandNodeZone,
+	commandDeclarationChannel,
 }
 
 // answer 是一个登记用例交回的封闭结果在本入口的译法。两族用例各有自己的结果代数
@@ -235,6 +237,14 @@ func commandFor(command string, raw []byte) (dispatchFunc, error) {
 		}
 		return configured(func(ctx context.Context, registrar registrar) (application.CaseConfigurationOutcome, error) {
 			return registrar.nodeZones.Handle(ctx, translated)
+		}), nil
+	case commandDeclarationChannel:
+		translated, err := registrationjson.DeclarationChannelFromJSON(raw)
+		if err != nil {
+			return nil, err
+		}
+		return configured(func(ctx context.Context, registrar registrar) (application.CaseConfigurationOutcome, error) {
+			return registrar.channels.Handle(ctx, translated)
 		}), nil
 	default:
 		return nil, fmt.Errorf("未知登记命令 %q（支持 %s）", command, strings.Join(allCommands, " / "))

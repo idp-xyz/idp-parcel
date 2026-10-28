@@ -1,0 +1,5 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "target": "SYN-CHANNEL-CN-EXPORT",
+  "endpoint": "http://127.0.0.1:19180/declarations"
+}
