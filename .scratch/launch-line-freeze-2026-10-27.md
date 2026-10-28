@@ -20,7 +20,7 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 
 挡上线的口径（照 [demo-chain-gaps 分诊](./demo-chain-gaps/triage-2026-10-19.md) A 组）：真实租户上线当天就撞且无绕法，或会丢数据、答错而没人看得见。
 
-> 上线线达成（2026-10-28）：三条同时成立——合成演示动线在 main `da577c6db` 上零绕法走通（[psb/05](./product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)「收口重走」「补走」两节，证据记 `S`；申报发送为已知冻结格）；首方五个客户口可用；挡上线的票清零（本节各票、「六」docs-consistency/code 六张、[launch-wiring](./launch-wiring/README.md) 01–08 均已 resolved）。此后新发现照「五」记。
+> 上线线达成（2026-10-28）：三条同时成立——合成演示动线在 main `da577c6db` 上零绕法走通（[psb/05](./product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)「收口重走」「补走」两节，证据记 `S`；申报发送由 PSB/10 第 1 项接上，证据见同票「发送追记」）；首方五个客户口可用；挡上线的票清零（本节各票、「六」docs-consistency/code 六张、[launch-wiring](./launch-wiring/README.md) 01–08 均已 resolved）。此后新发现照「五」记。
 
 ## 一、上线前必须（2 张）
 
