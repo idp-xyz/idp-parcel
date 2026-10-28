@@ -48,8 +48,10 @@ S：加一格「待补充」，必须带缺口（缺哪几件）与补充入口�
 5. 补充入口 = 同一协作事项再交一次承接（同 ADR-0265 的 TF 口径），非另造入口字段。
 6. 待补充上的 `Basis` 可有可无（不强制）。
 
-判据对用例：`AT-NO-003`（缺对象、动作、节点或授权依据→待补充，不创建执行事实）与 `AT-NO-002` 的 P2 待补充半边，由领域与编排测试覆盖。
+判据对用例：`AT-NO-003`（缺对象、动作、节点或授权依据→待补充，不创建执行事实）由领域与编排测试覆盖。`AT-NO-002`「P1 已承接、P2 待补充」一轮里表达不了：待补充整件待补、不带承接范围，见 ADR-0333 越权风险点 1，本票不覆盖该条。
 
 自验（含 PG 55432）：`go build ./...`；`go vet` nodeoperations 与 cmd；`gofmt -l` 无输出；`go test -count=1 -p 1` 通过 `./internal/nodeoperations/...`、`./cmd/...`、`./internal/architecture/...`、`./migrations/...`；`at-coverage-counts -check` 无报。
 
 留给协调方：CC 侧消费 `node-operations.collaboration-acceptance.decided` 的一方（若有，在 customscompliance 地盘，我未碰）今后会收到待补充意图，载荷新增 `round`，读当前轮次决定即可。
+
+评审修订（隔离评审钉 `088d9fec2`）：轮次链是难逆转取舍，补 ADR-0333（会话代 NO owner 接受，待 owner 复核）；`internal/architecture/envelope_partition_gate_test.go` 对承接意图的例外理由改成轮次链下的现行理由，全仓「只决定一次」注释对上（`ports.go`、应用测试、迁移 0002 头注）。`AT-NO-002` 措辞按上改为整件待补充，不再称覆盖其 P2 半边。ADR 索引未重生成。

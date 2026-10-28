@@ -144,7 +144,7 @@ var allowedSameExpression = map[string]string{
 		"判断键含接受基线，重判走新基线即新键；同键由 CreateInitialRouteHandler.Handle 判重放返原",
 
 	"internal/nodeoperations/adapters/postgres/collaboration_acceptance_handoff.go": annotationNoOrdering +
-		"同一事项只决定一次——AcceptCollaborationHandler.Accept 幂等按（租户+事项），异内容答冲突不顶替",
+		"事件 ID 取（租户+事项+轮次），每轮分区键即该轮事件 ID、跨轮不保序；载荷只是门铃，下游按（租户+事项）读最新一轮，先到后到都读到同一结果",
 	"internal/nodeoperations/adapters/postgres/execution_fact_handoff.go": annotationNoRewrite +
 		"（键取到动作，同一事项的各动作各是一条独立事实；消费侧 CC 的 CanonicalizeDispositionFactSetPayload 先把事实引用排序，装载顺序不构成不同内容）",
 	"internal/nodeoperations/adapters/postgres/node_intake_handoff.go": annotationNoOrdering +
