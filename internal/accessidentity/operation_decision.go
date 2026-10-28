@@ -169,6 +169,13 @@ const (
 	DecisionStatementPublication DecisionKind = "STATEMENT_PUBLICATION"
 )
 
+// 供应商账单的两种运营决定（ADR-0340 决定一、二）：接收一份账单并裁决逐行匹配，与对一行形成审核应付。UC-SA-004 要求账单接收与
+// 审核应付分别授权——能录账单的人不因此能放行应付，审核的人也不因此能改供应商的主张。
+const (
+	DecisionSupplierBillReception DecisionKind = "SUPPLIER_BILL_RECEPTION"
+	DecisionSupplierBillAudit     DecisionKind = "SUPPLIER_BILL_AUDIT"
+)
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -198,6 +205,7 @@ var decisionKinds = []DecisionKind{
 	DecisionReleaseGateVerification,
 	DecisionNodeCollaborationAcceptance,
 	DecisionChargeConfirmation, DecisionStatementPublication,
+	DecisionSupplierBillReception, DecisionSupplierBillAudit,
 }
 
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。

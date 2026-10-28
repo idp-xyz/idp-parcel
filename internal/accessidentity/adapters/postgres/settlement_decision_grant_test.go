@@ -7,8 +7,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 )
 
-// Covers: AT-SA-221、AT-SA-222（接入身份半边）——客户费用确认与客户对账单发布两种运营决定的授予登得进操作者册（access_identity
-// 0034 放开决定种类那条 CHECK），读回各是各的一种：持确认的不因此能发布。
+// Covers: AT-SA-221、AT-SA-222、AT-SA-225、AT-SA-226（接入身份半边）——客户费用确认、客户对账单发布、供应商账单接收与审核应付四种运营
+// 决定的授予登得进操作者册（access_identity 0034、0035 放开决定种类那条 CHECK），读回各是各的一种：持确认的不因此能发布。
 func TestTheSettlementDecisionKindsAreGrantedAndReadBackSeparately(t *testing.T) {
 	register := newOperatorRegister(t)
 	interval, err := accessidentity.NewEffectiveInterval(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{})
@@ -42,5 +42,19 @@ func TestTheSettlementDecisionKindsAreGrantedAndReadBackSeparately(t *testing.T)
 	if registered := register.standing(t, publisher); !registered.HoldsDecisionAt(accessidentity.DecisionStatementPublication, at) ||
 		registered.HoldsDecisionAt(accessidentity.DecisionChargeConfirmation, at) {
 		t.Fatalf("发布的授予没有原样读回：%+v", registered.Grants())
+	}
+
+	for index, kind := range []accessidentity.DecisionKind{accessidentity.DecisionSupplierBillReception, accessidentity.DecisionSupplierBillAudit} {
+		holder := subjectOf(t, "https://id.syn.example/dex", "SYN-OPERATOR-PSB22-BILL-"+string(rune('A'+index)))
+		expectOutcome(t, "bind bill", register.bind(t, bindingOf(t, holder, "SYN-TENANT-01", "SYN-BIND-BASIS")), accessidentity.OperatorRegistrationRecorded)
+		grant, err := accessidentity.NewOperationDecisionGrant("SYN-TENANT-01", "SYN-DECISION-PSB22-BILL-"+string(rune('A'+index)), holder,
+			kind, interval, "SYN-GRANT-BASIS")
+		if err != nil {
+			t.Fatal(err)
+		}
+		expectOutcome(t, kind.String(), register.grant(t, grant), accessidentity.OperatorRegistrationRecorded)
+		if !register.standing(t, holder).HoldsDecisionAt(kind, at) {
+			t.Fatalf("%s 没有原样读回", kind)
+		}
 	}
 }

@@ -173,8 +173,8 @@ func (repository *BillReceptions) Save(
 		`INSERT INTO settlement_accounting.supplier_bill_reception
 			(tenant_id, claim_id, claim_version,
 			 supplier_ref, legal_entity, period_ref, currency,
-			 content_digest, claim, matches, audit_authority_configured, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			 content_digest, claim, matches, audit_authority_configured, recorded_at, operation_evidence)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Claim.String(),
@@ -188,6 +188,7 @@ func (repository *BillReceptions) Save(
 		matchesJSON,
 		record.AuditAuthorityConfigured,
 		record.RecordedAt.UTC(),
+		optionalText(record.OperationEvidence),
 	)
 	if err != nil {
 		return ports.BillSaveOutcomeInvalid, fmt.Errorf("save bill reception: %w", err)

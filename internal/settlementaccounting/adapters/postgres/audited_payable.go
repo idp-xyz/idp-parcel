@@ -108,8 +108,8 @@ func (repository *AuditedPayables) Save(
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO settlement_accounting.audited_payable
 			(tenant_id, payable_id, claim_id, line_ref, expected_version, legal_entity,
-			 account_id, currency, amount_minor, auditor_ref, audited_at, content_digest, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+			 account_id, currency, amount_minor, auditor_ref, audited_at, content_digest, recorded_at, operation_evidence)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		payable.Payable().String(),
@@ -124,6 +124,7 @@ func (repository *AuditedPayables) Save(
 		payable.AuditedAt().UTC(),
 		record.ContentDigest,
 		record.RecordedAt.UTC(),
+		optionalText(record.OperationEvidence),
 	)
 	if err != nil {
 		return ports.AuditedPayableSaveOutcomeInvalid, fmt.Errorf("save audited payable: %w", err)

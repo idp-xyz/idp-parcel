@@ -91,6 +91,8 @@ type ReceiveSupplierBillCommand struct {
 	TenantID   domain.TenantID
 	Claim      domain.SupplierBillClaimSpec
 	Directives []LineMatchDirective
+	// OperationEvidence 只进审计，见 ports.BillReceptionRecord 的同名格。
+	OperationEvidence string
 }
 
 type ReceiveSupplierBillResult struct {
@@ -213,10 +215,11 @@ func (handler *ReceiveSupplierBillHandler) Handle(
 	}
 
 	record := ports.BillReceptionRecord{
-		Key:           key,
-		ContentDigest: digest,
-		Claim:         claim,
-		RecordedAt:    handler.deps.Clock.Now(),
+		Key:               key,
+		ContentDigest:     digest,
+		Claim:             claim,
+		RecordedAt:        handler.deps.Clock.Now(),
+		OperationEvidence: command.OperationEvidence,
 	}
 	for _, directive := range command.Directives {
 		expected := domain.SupplierExpectedCost{}

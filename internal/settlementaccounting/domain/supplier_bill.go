@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -204,6 +205,16 @@ const (
 	NoMatchingOccurrence
 	DuplicateBilling
 )
+
+// MatchClassificationFromName 按字面取值认匹配分类，给受控登记口与运营决定口的载荷用。
+func MatchClassificationFromName(name string) (MatchClassification, error) {
+	for classification := LineMatched; classification <= DuplicateBilling; classification++ {
+		if classification.String() == name {
+			return classification, nil
+		}
+	}
+	return MatchClassificationInvalid, fmt.Errorf("%w: match classification %q", ErrBlankValue, name)
+}
 
 func (classification MatchClassification) valid() bool {
 	return classification >= LineMatched && classification <= DuplicateBilling

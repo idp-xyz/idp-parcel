@@ -109,6 +109,8 @@ type AuditBillLineCommand struct {
 	Version  domain.BillClaimVersion
 	Line     domain.BillLineReference
 	Payable  domain.PayableID
+	// OperationEvidence 只进审计，见 ports.AuditedPayableRecord 的同名格。
+	OperationEvidence string
 }
 
 type AuditResult struct {
@@ -231,10 +233,11 @@ func (handler *ReceiveSupplierBillHandler) Audit(
 	}
 
 	record := ports.AuditedPayableRecord{
-		Key:           payableKey,
-		ContentDigest: digest,
-		Payable:       payable,
-		RecordedAt:    handler.deps.Clock.Now(),
+		Key:               payableKey,
+		ContentDigest:     digest,
+		Payable:           payable,
+		RecordedAt:        handler.deps.Clock.Now(),
+		OperationEvidence: command.OperationEvidence,
 	}
 	saved, err := handler.deps.Payables.Save(ctx, record)
 	if err != nil {

@@ -192,6 +192,9 @@ type BillReceptionRecord struct {
 	Matches                  []domain.BillLineMatch
 	AuditAuthorityConfigured bool
 	RecordedAt               time.Time
+	// OperationEvidence 记经哪个渠道、由谁接收并裁决匹配（运营决定口是 `OPERATOR/<发行方>#<sub>`，ADR-0340 决定三）。只作审计：
+	// 不进摘要、不进重放比对；受控登记口与存量行为空，读作「这一份不记提交方」。
+	OperationEvidence string
 }
 
 type BillSaveOutcome uint8
@@ -403,6 +406,8 @@ type AuditedPayableRecord struct {
 	ContentDigest string
 	Payable       domain.AuditedPayable
 	RecordedAt    time.Time
+	// OperationEvidence 记由谁点下这一次审核，判据同 BillReceptionRecord 的同名格。auditor_ref 是审核授权册上登的那一方，不是它。
+	OperationEvidence string
 }
 
 type AuditedPayableSaveOutcome uint8

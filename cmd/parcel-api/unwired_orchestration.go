@@ -2037,3 +2037,19 @@ func (unwiredStatementPublication) CutOff(
 ) (settlementapp.SettlementMomentOutcome, settlementapp.StatementResult, error) {
 	return 0, settlementapp.StatementResult{}, errOrchestrationNotWired
 }
+
+type unwiredSupplierBill struct{}
+
+func (unwiredSupplierBill) Handle(
+	context.Context,
+	settlementapp.ReceiveSupplierBillCommand,
+) (settlementapp.ReceiveSupplierBillResult, error) {
+	return settlementapp.ReceiveSupplierBillResult{}, errOrchestrationNotWired
+}
+
+func (unwiredSupplierBill) Audit(
+	context.Context,
+	settlementapp.AuditBillLineCommand,
+) (settlementapp.AuditResult, error) {
+	return settlementapp.AuditResult{}, errOrchestrationNotWired
+}

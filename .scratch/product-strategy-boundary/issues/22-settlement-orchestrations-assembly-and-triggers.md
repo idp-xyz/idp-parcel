@@ -1,7 +1,7 @@
 # 22 结算其余编排的装配、入口与触发面
 
 Category: enhancement
-Status: in-progress——第 1 笔（确认）2026-10-28 进 main（`53c514602`，见文末「第 1 笔进 main 记录」）；第 2 笔（运营决定口与到点截单）2026-10-28 进 main（`383c1dad5`，见文末「第 2 笔进 main 记录」）；第 3、4 笔待做。此前 ready-for-agent——2026-10-27 用户同意由冻结 R3 上调为「限量生产前必须」（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)「一之二」，理由引 PILOT-SCOPE）：费用确认、截单发布、供应商账单接收与审核及确认与截单的触发上调；费用调整、成本分摊、赔付金额仍冻结；排在 tops-26 名下 6 张 code 票进 main 之后，先 10 后 22。此前 ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-09-24 通道 2 立票（用户令通道 2 独立承接）；接单时按编排拆笔
+Status: in-progress——第 1 笔（确认）2026-10-28 进 main（`53c514602`，见文末「第 1 笔进 main 记录」）；第 2 笔（运营决定口与到点截单）2026-10-28 进 main（`383c1dad5`，见文末「第 2 笔进 main 记录」）；第 3 笔（供应商账单）完工待评审，分支 claude-psb22（见文末「第 3 笔完成记录」）；第 4 笔待做。此前 ready-for-agent——2026-10-27 用户同意由冻结 R3 上调为「限量生产前必须」（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)「一之二」，理由引 PILOT-SCOPE）：费用确认、截单发布、供应商账单接收与审核及确认与截单的触发上调；费用调整、成本分摊、赔付金额仍冻结；排在 tops-26 名下 6 张 code 票进 main 之后，先 10 后 22。此前 ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-09-24 通道 2 立票（用户令通道 2 独立承接）；接单时按编排拆笔
 Blocked by: 无；赔付金额文法与分摊形态归[票 12](./12-sa-amount-grammars-allocation-forms-and-accounting-connectors.md) 第 1、2 项，结算四口的登记册与读口归[票 16](./16-mechanism-gaps-without-a-ticket.md) 第 3 项
 地盘：`internal/settlementaccounting` 的入口与触发、`cmd/` 装配。
 出处：[票 05](./05-demo-journey-criterion-evidence.md) 格 20 的装配与触发面那一半。
@@ -121,3 +121,23 @@ Blocked by: 无；赔付金额文法与分摊形态归[票 12](./12-sa-amount-gr
 - **全量真库**：`scripts/test-full.sh` 退 0，160 个包 ok、0 FAIL。
 - **种子**：`seed.sh` 灌一次性库 `psb22_seed2` 退 0，用完已删。
 - **推送**：`git push origin 383c1dad5:main`，`origin/main` 等于该 SHA。
+
+## 第 3 笔完成记录（分支 claude-psb22，基于 main `463d3af1d`）
+
+- **做了什么**：
+  - 两种运营决定 `SUPPLIER_BILL_RECEPTION`、`SUPPLIER_BILL_AUDIT`（迁移 `access_identity/0035`，CHECK 以 0034 为底）。
+  - SA 两口 `NewReceiveSupplierBillEndpoint`、`NewAuditSupplierBillEndpoint`，以及 `OperatorDecisionIntake` 上的两个 Intake。
+  - `registrationjson` 两份载荷；领域 `MatchClassificationFromName`。
+  - 两份命令与记录带 `OperationEvidence`，落在接收行与应付行新加的列上（迁移 `settlement_accounting/0050`）。
+  - parcel-api 的 `endpoints_settlement_decisions.go` 多挂两口；`settlementOrchestrations` 加 `ReceiveSupplierBill`、`AuditSupplierBill`，各包一笔事务。
+- **裁决**：ADR-0340。
+- **文档**：UC-SA-004 加 `AT-SA-225`、`AT-SA-226`。
+- **自验**（真库）：parcel-api 纵向用例三条，走到了以下几格：
+  - 接收：答 201，重放答已存在，接收行记下录入人；
+  - 审核：答 201 带金额，重放答已存在，应付行记下审核人，`auditor_ref` 仍是审核授权册上那一方；
+  - 审核授权没登：接收照样成立并点明审核会停，审核答未配置；
+  - 两种授予互不通用，打错口答 403。
+  SA HTTP 包的 Intake 单元用例与授予的真库用例也已补上。
+- **走的时候碰到两处**：
+  - 完全匹配不能带匹配依据。载荷译装起初把依据写成必填，接收答了不带原因的 `SOURCE_NOT_ACCEPTED`，已改成可缺。
+  - 接收编排的写口要环境事务，parcel-api 起初直接调它，答了 500，已补包事务的方法。

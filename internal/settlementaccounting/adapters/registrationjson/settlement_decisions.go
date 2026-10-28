@@ -55,7 +55,7 @@ func StatementPublicationFromJSONForTenant(
 	}
 	declared, err := plainMinor(document.DeclaredTotal)
 	if err != nil {
-		return application.PublishStatementCommand{}, err
+		return application.PublishStatementCommand{}, fmt.Errorf("declaredTotal：%w", err)
 	}
 	// 各格的构造门在这里先过一遍：形状写坏的答坏报文，不落进编排去答一个不带原因的未受理。
 	for name, check := range map[string]error{
@@ -100,11 +100,11 @@ func StatementPublicationFromJSONForTenant(
 // plainMinor 只收不带符号、不带前导零的十进制整数串：「+9600」「09600」与「9600」在勾稽里是同一个数，在审计里却是三种写法。
 func plainMinor(value string) (int64, error) {
 	if value == "" || (len(value) > 1 && value[0] == '0') || strings.TrimLeft(value, "0123456789") != "" {
-		return 0, fmt.Errorf("declaredTotal：要按最小币单位写不带符号与前导零的整数串")
+		return 0, fmt.Errorf("金额要按最小币单位写不带符号与前导零的整数串")
 	}
 	parsed, err := strconv.ParseInt(value, 10, 64)
 	if err != nil {
-		return 0, fmt.Errorf("declaredTotal：%w", err)
+		return 0, fmt.Errorf("金额：%w", err)
 	}
 	return parsed, nil
 }

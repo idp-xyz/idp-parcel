@@ -254,3 +254,37 @@ func (orchestrations settlementOrchestrations) CutOff(
 	}
 	return outcome, result, nil
 }
+
+// ReceiveSupplierBill 在一笔事务里接收一份供应商账单：接收行、逐行匹配与发布意图同生同灭。
+func (orchestrations settlementOrchestrations) ReceiveSupplierBill(
+	ctx context.Context,
+	command saapplication.ReceiveSupplierBillCommand,
+) (saapplication.ReceiveSupplierBillResult, error) {
+	var result saapplication.ReceiveSupplierBillResult
+	err := orchestrations.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		received, handleErr := orchestrations.supplier.Handle(txCtx, command)
+		result = received
+		return handleErr
+	})
+	if err != nil {
+		return saapplication.ReceiveSupplierBillResult{}, err
+	}
+	return result, nil
+}
+
+// AuditSupplierBill 在一笔事务里审核一行：应付行与发布意图同生同灭。
+func (orchestrations settlementOrchestrations) AuditSupplierBill(
+	ctx context.Context,
+	command saapplication.AuditBillLineCommand,
+) (saapplication.AuditResult, error) {
+	var result saapplication.AuditResult
+	err := orchestrations.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		audited, auditErr := orchestrations.supplier.Audit(txCtx, command)
+		result = audited
+		return auditErr
+	})
+	if err != nil {
+		return saapplication.AuditResult{}, err
+	}
+	return result, nil
+}
