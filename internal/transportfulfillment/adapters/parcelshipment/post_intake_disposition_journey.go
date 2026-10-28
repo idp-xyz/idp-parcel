@@ -14,6 +14,9 @@ import (
 var (
 	// ErrPostIntakeJourneyUndecided：旅程册或意图交付停在自己的未决上。重投会改变结果（册子恢复后落旅程），是等依赖，不是坏信封。
 	ErrPostIntakeJourneyUndecided = errors.New("transport fulfillment: post-intake disposition journey start is undecided")
+	// ErrPostIntakeRequestUnhandledOwner：信封里有请求今天没有任何消费者承接（运输履约的扣住、节点运营、网络路由的各项）。整封答未决，不静默入账：
+	// 入账即标已发布，之后补上消费者也不会重放，操作者决定了拦截而包裹照走，没人看得见。落 dispatch.consumer_undecided，信封留在可见的失败状态。
+	ErrPostIntakeRequestUnhandledOwner = errors.New("transport fulfillment: post-intake disposition carries requests no consumer handles yet")
 	// ErrPostIntakeUntranslatable：信封的依据种类不是服务处置决定，或译出的命令被编排拒收（未受理、来源冲突）。重投不会变，响亮报出，不入未决名单。
 	ErrPostIntakeUntranslatable = errors.New("transport fulfillment: post-intake disposition cannot be translated into a journey start")
 )
@@ -26,8 +29,9 @@ type PostIntakeJourneyStarter interface {
 // StartJourneyOnPostIntakeDisposition 实现 tfinbox.PostIntakeDispositionHandler：PS 的处置决定向运输履约请求另起备用旅程（改送）或退运旅程（退运）时，
 // 以链上这一版作处置依据启动旅程（ADR-0332 请求表，UC-TF-007）。
 //
-// 只承接「另起旅程」这两个动作。拦截与服务终止对运输履约的请求是「不再安排向前移动」，运输履约今天没有对应的扣住模型，不在这里自造；那两个去向的信封
-// 到了这里原样入账，运输侧没有可做的动作。
+// 只承接「另起旅程」这两个动作。拦截与服务终止对运输履约的请求是「不再安排向前移动」，运输履约今天没有对应的扣住模型，不在这里自造；节点运营与网络路由
+// 也没有消费者。信封里只要有本适配器之外没人承接的请求项，整封答 ErrPostIntakeRequestUnhandledOwner，不开旅程——旅程与未决同在一笔事务，开了旅程再
+// 失败会回滚重投，先开后失败没有"只开一半"的状态可留。代价是改送与退运在 NO、NR 消费者到位前也开不了 TF 旅程；`继续` 不请求任何所有者，照常入账。
 type StartJourneyOnPostIntakeDisposition struct {
 	starter  PostIntakeJourneyStarter
 	existing ports.AlternateJourneyMemberView
@@ -62,15 +66,17 @@ func (processing *StartJourneyOnPostIntakeDisposition) HandleDecidedPostIntakeDi
 ) error {
 	purpose := domain.JourneyPurposeInvalid
 	for _, request := range decided.Requests {
-		if request.Owner != postIntakeOwnerTransportFulfillment {
-			continue
+		if request.Owner == postIntakeOwnerTransportFulfillment {
+			switch request.Action {
+			case postIntakeActionStartAlternate:
+				purpose = domain.AlternateJourneyPurpose
+				continue
+			case postIntakeActionStartReturn:
+				purpose = domain.ReturnJourneyPurpose
+				continue
+			}
 		}
-		switch request.Action {
-		case postIntakeActionStartAlternate:
-			purpose = domain.AlternateJourneyPurpose
-		case postIntakeActionStartReturn:
-			purpose = domain.ReturnJourneyPurpose
-		}
+		return fmt.Errorf("%w: %s %s of decision %s", ErrPostIntakeRequestUnhandledOwner, request.Owner, request.Action, decided.BasisReference)
 	}
 	if purpose == domain.JourneyPurposeInvalid {
 		return nil
