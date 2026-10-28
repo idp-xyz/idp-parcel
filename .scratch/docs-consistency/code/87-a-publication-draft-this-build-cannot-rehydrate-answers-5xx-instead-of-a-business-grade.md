@@ -1,7 +1,7 @@
 # 87 本构建折不回来的发布载体答成 5xx，而不是业务格
 
 Category: bug
-Status: in-progress——2026-10-28 作者完工待复核与进 main：已变基到 origin/main `0e8813657` 并改号 ADR-0333→ADR-0344，分支 claude-code87（代码最后一笔 `495d28687`，见文末「变基改号」）。此前：tops-20（idp-parcel-91）接手 tops-26 断在进 main 前的一张，作者与修订轮已完、评审无阻断。
+Status: resolved——2026-10-28 进 main（`529560fb6`；全量 162 ok / 0 FAIL，种子退 0），见文末「复核记录」「进 main 记录」。此前 in-progress——2026-10-28 作者完工待复核与进 main：已变基到 origin/main `0e8813657` 并改号 ADR-0333→ADR-0344，分支 claude-code87（代码最后一笔 `495d28687`，见文末「变基改号」）。此前：tops-20（idp-parcel-91）接手 tops-26 断在进 main 前的一张，作者与修订轮已完、评审无阻断。
 Blocked by: 无
 上下文：PC（参与方与商业），领域层载体重建与应用层载体编排，连带 PC 的 HTTP 载体端点与管理台载体流程。
 出处：code/25 隔离评审 N1。
@@ -120,3 +120,13 @@ S–M：领域一处改 `%w` 保链；三只编排各认一个哨兵；批准口
 - 冲突与解法：`.scratch/at-coverage-inventory.md`（两侧追记并存，main 现行内容保留再叠本票两行与追记）；ADR-0314 头部 Status（保留 main 上 idp-parcel-97 的 PC owner 复核结论，叠本票「部分停用」段，取修订轮后的适用场景措辞）与 Links 一条；本票 Status 行（取接手版再改写）。管理台 `PendingPublicationsPage.tsx` 等无冲突。
 - 自验（含 PG）：`go build ./...`、`go vet`（partycommercial、cmd/parcel-api）、`gofmt -l` 无输出；`go test -count=1 -p 1 ./internal/partycommercial/... ./cmd/parcel-api/... ./internal/architecture/... ./migrations/...` 全绿；`apps/admin-web` `tsc -b` 无错、`npm test` 809 通过。
 - 留给协调方：进 main 时重生成 `docs/adr/README.md`、AT 盘点计数与机制清点。
+
+## 复核记录（2026-10-28，隔离子代理，钉 `a39ecdc78`）
+
+「进 main 的步骤」第 3 步：在修订轮且变基改号后的 tip 上重跑探针（原评审对修订 tip 的复跑断在额度上、未留结论）。阻断清零。N1 分格边界在真库逐种坏文档上成立（只有列版本不认得与 `tightenedGateRefusals` 两类读不回，其余答 5xx；同内容重录改好坏行）；N2–N4 抽查通过；ADR 0333→0344 改号未误伤 code/18 的 ADR-0333；ADR-0314 Status 冲突解法保留 PC owner 复核结论、部分停用写法合规、被停原句逐字一致；管理台与 idp-parcel-97 的改动叠加无冲；admin-web 809 项单测与类型检查通过。非阻断：生成物由推送方重生成（已做）。
+
+## 进 main 记录（2026-10-28，推送方 tops-20 / idp-parcel-91）
+
+- tops-26 断在进 main 前，tops-20 接手；分支 `claude-code87` 变基后 tip `a39ecdc78` 作出处；隔离树 cherry-pick 到 main `0e8813657` 之后，无冲突。
+- 重生成 ADR 索引、AT 盘点计数与机制清点；两项 `-check` 退 0；全量 `scripts/test-full.sh` 162 ok / 0 FAIL；种子一次性库退 0；推确切 SHA `529560fb6`。
+
