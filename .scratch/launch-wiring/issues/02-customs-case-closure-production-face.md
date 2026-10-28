@@ -1,7 +1,7 @@
 # 02 CC 关案编排无装配
 
 Category: enhancement
-Status: in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-lw-cc（代码最后一笔 d7ebe073a）。此前：in-progress——2026-10-28 会话 tops-20（idp-parcel-91）立并认领（用户「现在就接线」），分支 claude-lw-cc
+Status: in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-lw-cc（代码最后一笔 1017dc84d）。此前：in-progress——2026-10-28 会话 tops-20（idp-parcel-91）立并认领（用户「现在就接线」），分支 claude-lw-cc
 Blocked by: 无
 
 ## 做什么
@@ -15,7 +15,7 @@ Blocked by: 无
 
 ## 完成记录（2026-10-28，作者子代理，分支 claude-lw-cc）
 
-起点 origin/main `2d0193336`（本票叠在 01 之后）；代码一笔 `d7ebe073a`。
+起点 origin/main `2d0193336`（本票叠在 01 之后）；代码两笔 `d7ebe073a`、改号 `1017dc84d`。
 
 ### 改了什么
 - 触发方照 UC-CC-010「关闭触发：有权角色请求关闭」选**运营命令口**，不是派发消费者（`cmd/parcel-dispatch` 不动）。
