@@ -36,6 +36,33 @@ const (
 	AcceptDispositionUndecided
 )
 
+// SupplementReason 指名待补充缺的是协作事项的哪一项（ADR-0265 决定四）。续办都是协作事项再交，
+// 但关务要知道去补哪一样；答复只带一个原因，按 itemSupplementReason 与领域门的顺序报第一项缺口。
+type SupplementReason uint8
+
+const (
+	SupplementReasonNone SupplementReason = iota
+	SupplementMovementAuthorityMissing
+	SupplementObjectMissing
+	SupplementMovementActionMissing
+	SupplementResponsibilityMissing
+)
+
+func (reason SupplementReason) String() string {
+	switch reason {
+	case SupplementMovementAuthorityMissing:
+		return "MOVEMENT_AUTHORITY_MISSING"
+	case SupplementObjectMissing:
+		return "OBJECT_MISSING"
+	case SupplementMovementActionMissing:
+		return "MOVEMENT_ACTION_MISSING"
+	case SupplementResponsibilityMissing:
+		return "RESPONSIBILITY_MISSING"
+	default:
+		return ""
+	}
+}
+
 func (outcome AcceptDispositionOutcome) String() string {
 	switch outcome {
 	case DispositionDecided:
@@ -75,23 +102,33 @@ func (reason AcceptDispositionUndecidedReason) String() string {
 }
 
 // AcceptRegulatoryDispositionCommand 携带一次承接决定的全部输入。MovementAction 取自
-// 协作事项声明的移动动作——为空即纯节点动作，本用例不承接（UC-TF-001：「原地查验、
+// 协作事项声明的移动动作；动作与起止都为空即纯节点动作，本用例不承接（UC-TF-001：「原地查验、
 // 原地扣留、节点开封……由 UC-NO-001 承接，不建立运输履约」）。
+//
+// ItemObjects、Origin、Destination 是协作事项本体里承接要核的几格（载运对象、起止责任），由提交
+// 的运营人员据关务协作事项抄录：关务一侧今天没有按事项引用读回本体的提供方，读口另议。它们
+// 只是承接的前提，不进决定记录与内容摘要。DecidedBy 是作出承接决定的操作者，只进审计
+// （ADR-0303 的待遇）：不进重放比对，也不进任何门。
 type AcceptRegulatoryDispositionCommand struct {
 	TenantID          domain.TenantID
 	Item              domain.CollaborationItemReference
 	Basis             domain.DispositionBasisReference
 	MovementAction    string
+	ItemObjects       []string
+	Origin            string
+	Destination       string
 	Decision          domain.DispositionAcceptanceKind
 	AcceptedObjects   []string
 	DeclineBasis      string
 	MovementAuthority string
 	DecidedAt         time.Time
+	DecidedBy         string
 }
 
 type AcceptDispositionResult struct {
 	outcome    AcceptDispositionOutcome
 	reason     AcceptDispositionUndecidedReason
+	supplement SupplementReason
 	record     ports.DispositionAcceptanceRecord
 	hasRecord  bool
 	handoffRef string
@@ -103,6 +140,11 @@ func (result AcceptDispositionResult) Outcome() AcceptDispositionOutcome {
 
 func (result AcceptDispositionResult) UndecidedReason() AcceptDispositionUndecidedReason {
 	return result.reason
+}
+
+// SupplementReason 只在`待补充`时非零。
+func (result AcceptDispositionResult) SupplementReason() SupplementReason {
+	return result.supplement
 }
 
 // Acceptance 只在决定成立（本轮或此前）时给出。
@@ -147,10 +189,17 @@ func (handler *AcceptRegulatoryDispositionHandler) Handle(
 		command.DecidedAt.IsZero() {
 		return AcceptDispositionResult{outcome: AcceptDispositionNotAccepted}, nil
 	}
-	if strings.TrimSpace(command.MovementAction) == "" {
-		// 事项没有真实移动动作：原地查验、原地扣留与节点处置归 UC-NO-001，这里连
-		// 运输对象都不建。
+	if strings.TrimSpace(command.MovementAction) == "" &&
+		strings.TrimSpace(command.Origin) == "" &&
+		strings.TrimSpace(command.Destination) == "" {
+		// 事项没有真实移动动作、也没有起止：原地查验、原地扣留与节点处置归 UC-NO-001，这里连
+		// 运输对象都不建。只有起止而没有动作的事项不在此列——它声称要移动，缺的是动作，
+		// 走待补充。
 		return AcceptDispositionResult{outcome: DispositionNodeOnly}, nil
+	}
+	decidedBy, err := domain.OptionalRegistrantReference(command.DecidedBy)
+	if err != nil {
+		return AcceptDispositionResult{outcome: AcceptDispositionNotAccepted}, nil
 	}
 
 	key := ports.DispositionAcceptanceKey{Tenant: command.TenantID, Item: command.Item}
@@ -187,12 +236,17 @@ func (handler *AcceptRegulatoryDispositionHandler) Handle(
 		}, nil
 	}
 
+	// 协作事项本体的核对排在重放判定之后：同一事项已有决定时，事项后来怎么变不改变它已落的决定
+	// （改决定走事项方的更正或替代）。
+	if reason := itemSupplementReason(command); reason != SupplementReasonNone {
+		return AcceptDispositionResult{outcome: DispositionSupplementRequired, supplement: reason}, nil
+	}
 	decision, result, formed := handler.form(command)
 	if !formed {
 		return result, nil
 	}
 
-	record := ports.DispositionAcceptanceRecord{Key: key, ContentDigest: digest, Decision: decision}
+	record := ports.DispositionAcceptanceRecord{Key: key, ContentDigest: digest, Decision: decision, DecidedBy: decidedBy}
 	saved, err := handler.deps.Acceptances.Save(ctx, record)
 	if err != nil {
 		return AcceptDispositionResult{outcome: AcceptDispositionUndecided, reason: DispositionAcceptanceStoreUnavailable}, nil
@@ -229,13 +283,45 @@ func (handler *AcceptRegulatoryDispositionHandler) Handle(
 	}
 }
 
+// itemSupplementReason 核协作事项本体够不够承接（UC-TF-001 步骤 3、ADR-0265 决定四）：缺动作、
+// 缺对象、缺起止责任，按此序报第一项；缺移动授权由领域门在 form 里答。拒绝一样要事项立得住——
+// 一件缺对象的事项连拒绝的范围都指不出来。
+func itemSupplementReason(command AcceptRegulatoryDispositionCommand) SupplementReason {
+	if strings.TrimSpace(command.MovementAction) == "" {
+		return SupplementMovementActionMissing
+	}
+	hasObject := false
+	for _, object := range command.ItemObjects {
+		if strings.TrimSpace(object) != "" {
+			hasObject = true
+		}
+	}
+	if !hasObject {
+		return SupplementObjectMissing
+	}
+	if strings.TrimSpace(command.Origin) == "" || strings.TrimSpace(command.Destination) == "" {
+		return SupplementResponsibilityMissing
+	}
+	return SupplementReasonNone
+}
+
 // form 把命令译成领域承接决定。缺移动授权落待补充格（续办是补授权，恢复引用即事项
 // 本身）；其余领域拒绝是形状错，答未受理。
 func (handler *AcceptRegulatoryDispositionHandler) form(
 	command AcceptRegulatoryDispositionCommand,
 ) (domain.RegulatoryTransportDisposition, AcceptDispositionResult, bool) {
+	inItem := make(map[string]struct{}, len(command.ItemObjects))
+	for _, raw := range command.ItemObjects {
+		inItem[strings.TrimSpace(raw)] = struct{}{}
+	}
 	objects := make([]domain.CarriedObjectReference, 0, len(command.AcceptedObjects))
 	for _, raw := range command.AcceptedObjects {
+		// 承接的对象不得超出事项指名的范围：事项说了算，运输方不扩大移动范围（UC-TF-001
+		// 「不重新解释监管原文或扩大移动范围」）。
+		if _, within := inItem[strings.TrimSpace(raw)]; !within {
+			return domain.RegulatoryTransportDisposition{},
+				AcceptDispositionResult{outcome: AcceptDispositionNotAccepted}, false
+		}
 		object, err := domain.NewCarriedObjectReference(raw)
 		if err != nil {
 			return domain.RegulatoryTransportDisposition{},
@@ -268,7 +354,7 @@ func (handler *AcceptRegulatoryDispositionHandler) form(
 		return decision, AcceptDispositionResult{}, true
 	case errors.Is(err, domain.ErrMovementAuthorityMissing):
 		return domain.RegulatoryTransportDisposition{},
-			AcceptDispositionResult{outcome: DispositionSupplementRequired}, false
+			AcceptDispositionResult{outcome: DispositionSupplementRequired, supplement: SupplementMovementAuthorityMissing}, false
 	default:
 		return domain.RegulatoryTransportDisposition{},
 			AcceptDispositionResult{outcome: AcceptDispositionNotAccepted}, false

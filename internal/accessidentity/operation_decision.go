@@ -131,6 +131,14 @@ const (
 // 的实物去向与后续服务，认错了会让包裹被扣、被退或被终止服务；也不与取消先后冲突的解开共用，那一种裁断的是取消与边界事实谁在先。谁持有是租户取值，未登记时没有人能决定。
 const DecisionPostIntakeServiceDisposition DecisionKind = "POST_INTAKE_SERVICE_DISPOSITION"
 
+// 监管运输处置承接与替代/退运旅程启动（ADR-0337 决定一）：运输运营对关务协作事项形成承接决定，与授权业务角色启动独立的备用或退运
+// 旅程，各成一种。不与运输委托提交（TRANSPORT_COMMISSION_SUBMISSION）共用——那一种是向服务提供方提出运输范围，这两种是接受
+// 监管移动责任与开一条新旅程；能承接的不因此能开旅程，开旅程的也不因此能替运输方接受监管责任。
+const (
+	DecisionRegulatoryDispositionAcceptance DecisionKind = "REGULATORY_DISPOSITION_ACCEPTANCE"
+	DecisionAlternateJourneyStart           DecisionKind = "ALTERNATE_JOURNEY_START"
+)
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -154,6 +162,7 @@ var decisionKinds = []DecisionKind{
 	DecisionCancellationOrderConflictResolution,
 	DecisionPickupAttemptResultConfirmation, DecisionDeliveryAttemptResultConfirmation,
 	DecisionPostIntakeServiceDisposition,
+	DecisionRegulatoryDispositionAcceptance, DecisionAlternateJourneyStart,
 }
 
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。
