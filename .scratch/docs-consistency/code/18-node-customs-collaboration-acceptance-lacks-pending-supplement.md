@@ -1,7 +1,7 @@
 # 18 NO 节点监管协作承接决定缺「待补充」一格
 
 Category: bug
-Status: in-progress——2026-10-27 作者完工，待隔离评审与进 main，分支 claude-code18（代码最后一笔 见完成记录）。此前 in-progress——2026-10-27 会话 tops-20（idp-parcel-91）接手 tops-26 断在中途的「上线前必须」一组（冻结清单「六」），分支 claude-code18。此前 ready-for-agent——R3（不急）：承接编排 `application/accept_collaboration.go` 在 `cmd/` 下没有装配，今天无生产路径；接线之前必须先修，否则资料不足只能被说成拒接或部分承接。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
+Status: in-progress——2026-10-27 作者完工，待隔离评审与进 main，分支 claude-code18（代码最后一笔 4afedd064）。此前 in-progress——2026-10-27 会话 tops-20（idp-parcel-91）接手 tops-26 断在中途的「上线前必须」一组（冻结清单「六」），分支 claude-code18。此前 ready-for-agent——R3（不急）：承接编排 `application/accept_collaboration.go` 在 `cmd/` 下没有装配，今天无生产路径；接线之前必须先修，否则资料不足只能被说成拒接或部分承接。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
 Blocked by: 无
 出处：[audit/nr-no.md](../audit/nr-no.md) M5（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，现象仍在）。
 
