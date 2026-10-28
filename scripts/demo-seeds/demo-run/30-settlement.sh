@@ -3,7 +3,8 @@
 # ALREADY_CONFIRMED）→ 对账单发布 → 供应商账单接收（逐行裁决 MATCHED）→ 审核成应付。
 #
 # 前置：先跑过 10-main-chain.sh（要它写下的 MAIN_CHARGE、MAIN_COST）。本段不另起包裹、不占余额。
-# 对账单发布的 lastAttributionDate 取客户费用的归属日；cutOffAt 取此刻（自动截单要等上海 18:00，演示不等，走运营发布口）。
+# 对账单发布的 lastAttributionDate 取费用行上服务端定的归属日（按结算账户截单时刻折，上海 18:00 之后确认的归下一日），
+# 不拿 confirmedAt 的 UTC 日期自己算——那样在上海傍晚以后答 NO_CHARGE_IN_PERIOD；cutOffAt 取此刻（自动截单要等上海 18:00，演示不等，走运营发布口）。
 # 同一笔费用发布过对账单后不能再列进第二张（billedOn 已回指），所以本段对同一件主链只能走一次；再演示换一件新主链再走。
 # 证据只记 S。
 set -euo pipefail
@@ -31,7 +32,11 @@ else:
     sys.exit("[失败] 客户费用册里没有 " + sys.argv[2])
 PY
 amount="$(jsel "$LAST" charges charge "$MAIN_CHARGE" settlementAmount)"
-attrdate="$(jsel "$LAST" charges charge "$MAIN_CHARGE" confirmedAt | cut -c1-10)"
+attrdate="$(jsel "$LAST" charges charge "$MAIN_CHARGE" attributionDate)"
+if [[ -z "$attrdate" ]]; then
+  printf '[失败] 费用 %s 读不到归属日 attributionDate\n' "$MAIN_CHARGE" >&2
+  exit 1
+fi
 
 step "费用确认补拍（运营确认口）" "$OP" POST /settlement-charge-confirmations "$(pj charge="$MAIN_CHARGE")" "200:ALREADY_CONFIRMED" charge
 
