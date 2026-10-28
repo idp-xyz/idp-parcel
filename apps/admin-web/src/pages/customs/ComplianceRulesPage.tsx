@@ -13,15 +13,8 @@ import {
   type ComplianceRegistry,
   type ComplianceRulesListResponseBody,
 } from './api';
-import {
-  directionLabels,
-  labelOf,
-  problemNote,
-  registrationSnapshotHints,
-  registrationTitles,
-  registryLabels,
-  resultLayerLabels,
-} from './presentation';
+import { problemNote, registrationSnapshotHints, registrationTitles, registryLabels } from './presentation';
+import { labelFor } from '../../vocabulary/status';
 
 const info = moduleInfoById['compliance-rules'];
 
@@ -48,20 +41,20 @@ const registries: ReadonlyArray<{
   {
     id: 'case-requirement',
     columns: [
-      col('jurisdiction', '适用辖区', true),
-      col('direction', '申报方向'),
-      col('procedure', '关务程序', true),
-      col('required', '是否要求案件'),
-      col('basis', '依据引用', true),
+      col('jurisdiction', '辖区', true),
+      col('direction', '方向'),
+      col('procedure', '监管程序', true),
+      col('required', '要不要立清关单'),
+      col('basis', '依据', true),
     ],
   },
   {
     id: 'interpretation',
     columns: [
-      col('layer', '外部结果层'),
-      col('jurisdiction', '适用辖区', true),
-      col('rule', '解释规则引用', true),
-      col('applies', '法定适用区间', true),
+      col('layer', '海关结果层'),
+      col('jurisdiction', '辖区', true),
+      col('rule', '读法', true),
+      col('applies', '适用期间', true),
     ],
   },
 ];
@@ -73,9 +66,9 @@ function rowsOf(body: ComplianceRulesListResponseBody): RuleRow[] {
         key: `case:${record.jurisdiction}:${record.direction}:${record.procedure}`,
         values: {
           jurisdiction: record.jurisdiction,
-          direction: labelOf(directionLabels, record.direction),
+          direction: labelFor(record.direction),
           procedure: record.procedure,
-          required: record.required ? '要求' : '不要求',
+          required: record.required ? '要立' : '不用立',
           basis: record.basis,
         },
       }));
@@ -83,7 +76,7 @@ function rowsOf(body: ComplianceRulesListResponseBody): RuleRow[] {
       return body.rules.map((record) => ({
         key: `interpretation:${record.layer}:${record.jurisdiction}:${record.rule}:${record.appliesFrom}`,
         values: {
-          layer: labelOf(resultLayerLabels, record.layer),
+          layer: labelFor(record.layer),
           jurisdiction: record.jurisdiction,
           rule: record.rule,
           applies: formatRange(record.appliesFrom, record.appliesUntil),
@@ -125,13 +118,9 @@ function ComplianceRulesTable() {
 
   return (
     <ListPageTemplate<RuleRow>
-      title={info.title}
-      description={`只读展示登记规则,新规则不默认追溯既有判断`}
-      search={{
-        value: search,
-        onChange: setSearch,
-        placeholder: '搜索辖区、程序或规则引用',
-      }}
+      title="合规规则"
+      description="按辖区和程序定下的两类规则：什么情况要立清关单、海关回执怎么读；新规则只管以后的判断"
+      search={{ value: search, onChange: setSearch, placeholder: '搜辖区、程序、规则' }}
       filters={
         <>
           {registries.map((candidate) => (
@@ -158,8 +147,8 @@ function ComplianceRulesTable() {
       viewState={catalogueViewState(answer, rows.length, retry, {
         module: info,
         endpoint: `GET /customs-compliance-rules?registry=${registry}`,
-        emptyTitle: `当前租户尚无${registryLabels[registry]}`,
-        emptyDescription: '读取入口已配置,但该登记册为空;页面不会预置关务规则。',
+        emptyTitle: `还没有登记「${registryLabels[registry]}」的规则`,
+        emptyDescription: '在「登记合规规则」里新增后在这里出现；页面不会预置规则。',
       })}
     />
   );
@@ -208,7 +197,7 @@ export function ComplianceRulesPage() {
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <Tabs defaultValue="rules" className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
-          <TabsTrigger value="rules">合规规则库</TabsTrigger>
+          <TabsTrigger value="rules">合规规则</TabsTrigger>
           <TabsTrigger value="register">登记合规规则</TabsTrigger>
         </TabsList>
         <TabsContent

@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import { equal, ok } from 'node:assert/strict';
 import type { ExternalResultBody, SubmissionVersionBody } from './api';
-import { externalResultRows, judgementRows, submissionRows } from './record-rows';
+import { caseProgress, externalResultRows, judgementRows, submissionRows } from './record-rows';
+import type { CustomsCaseBody } from './api';
 
 // 钉的是哪一格不得被译顺：分层外部结果各占各的列、缺层写「尚无结果」、归属不上的响应不被猜版本。
 // 夹具全是合成串。
@@ -47,7 +48,7 @@ test('提交尝试：待发送尝试写尚无发送事实，技术回执单独�
     [],
   );
   const lines = row.values.attempts.split('\n');
-  ok(lines[0].includes('已登记待发送') && lines[0].includes('尚无发送事实'));
+  ok(lines[0].includes('待发送') && lines[0].includes('尚无发送事实'));
   ok(lines[1].includes('发送事实 已确认'));
   ok(row.values.receipts.split('\n')[1].includes('技术成功'));
 });
@@ -74,7 +75,32 @@ test('判断册行：整次答复与逐动作答复分列', () => {
     crossZone: 'CROSSING', answer: 'ADMITTED', zones: [], judgedAt: at,
     findings: [{ action: 'CROSS_CUSTOMS_MOVEMENT', answer: 'ADMITTED', bases: [{ cause: 'RELEASE_OUTCOME', sources: ['RES-REL'] }] }],
   }]);
-  equal(row.values.answer, '准入');
+  equal(row.values.answer, '可放行');
   equal(row.values.route, 'A → B');
-  ok(row.values.findings.includes('跨关务区域移动：准入') && row.values.findings.includes('RES-REL'));
+  ok(row.values.findings.includes('跨关区移动：可放行') && row.values.findings.includes('RES-REL'));
+});
+
+// Covers: 清关单的「最新进展」取已有事实里最靠后的一层；没有批次就是待申报，只有发送就是已发送，有放行就是已放行，关案盖过一切。
+test('清关单最新进展：按已有事实取最靠后的一层', () => {
+  const base: CustomsCaseBody = {
+    case: 'CASE-1', jurisdiction: 'J', direction: 'EXPORT', procedure: 'proc-1', obligation: 'obl', establishedAt: at,
+    parcels: [], roles: [], units: [{ unit: 'UNIT-1', procedure: 'proc-1', members: ['PCL-1'], formedAt: at }],
+  };
+  equal(caseProgress({ ...base, units: [] }, [], []), 'CUSTOMS_PENDING_DECLARATION');
+  equal(caseProgress(base, [version({ attempts: [{ sequence: 1, target: 't', result: 'REGISTERED_PENDING_SEND', receipts: [] }] })], []), 'DECLARATION_PENDING_SEND');
+  const sent = version({ attempts: [{ sequence: 1, target: 't', result: 'ACKNOWLEDGED', sendFact: { sentAt: at, outcome: 'ACKNOWLEDGED' }, receipts: [] }] });
+  equal(caseProgress(base, [sent], []), 'DECLARATION_SENT');
+  equal(caseProgress(base, [sent], [result({ layer: 'REGULATORY_RECEIPT', submissionVersion: 'SUBV-1' })]), 'REGULATORY_RECEIPT');
+  equal(
+    caseProgress(base, [sent], [result({ layer: 'RELEASE_RESULT', submissionVersion: 'SUBV-1', release: { kind: 'FULL', authority: 'a', scope: 'UNIT-1' } })]),
+    'CUSTOMS_RELEASED',
+  );
+  equal(
+    caseProgress(base, [sent], [result({ layer: 'RELEASE_RESULT', scope: 'UNIT-1', release: { kind: 'PARTIAL', authority: 'a', scope: 'UNIT-1' } })]),
+    'PARTIAL',
+  );
+  equal(
+    caseProgress({ ...base, closure: { decidedBy: 'x', cutoffAt: at, verifiedAt: at, closedAt: at, itemCount: 1, reopenCount: 0 } }, [sent], []),
+    'CUSTOMS_CASE_CLOSED',
+  );
 });

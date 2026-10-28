@@ -14,14 +14,8 @@ import {
   type DeclarationPathListResponseBody,
   type PortsPathsRegistry,
 } from './api';
-import {
-  directionLabels,
-  labelOf,
-  portsPathsRegistryLabels,
-  problemNote,
-  registrationSnapshotHints,
-  registrationTitles,
-} from './presentation';
+import { portsPathsRegistryLabels, problemNote, registrationSnapshotHints, registrationTitles } from './presentation';
+import { labelFor } from '../../vocabulary/status';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['customs-ports-paths'];
@@ -58,8 +52,8 @@ function col(id: string, header: string, mono = false): ListColumn<CatalogueRow>
 // 口岸册一行两件事实：哪个口岸、哪个生效区间。同口岸多版本逐行在列（当前版终点
 // 显示「持续有效」），版本序由服务端定（键升序、版本新在前），页面不重排。
 const portColumns: ListColumn<CatalogueRow>[] = [
-  col('port', '口岸标识', true),
-  col('applies', '生效区间', true),
+  col('port', '口岸', true),
+  col('applies', '可用期间', true),
 ];
 
 function portRows(body: CandidatePortListResponseBody): CatalogueRow[] {
@@ -99,9 +93,9 @@ function CandidatePortsTable() {
 
   return (
     <ListPageTemplate<CatalogueRow>
-      title="合规候选口岸"
-      description={`一行即「该口岸在该生效区间内是本租户的合规候选」；所属区域与关务适用性判断不在册`}
-      search={{ value: search, onChange: setSearch, placeholder: '搜索口岸标识' }}
+      title="可用口岸"
+      description="公司可以走的口岸和各自从何时起可用；路线规划只在这些口岸里选"
+      search={{ value: search, onChange: setSearch, placeholder: '搜口岸' }}
       filterSummary={
         answer?.kind === 'outcome'
           ? `${portsPathsRegistryLabels['candidate-port']} ${rows.length} 版`
@@ -113,9 +107,8 @@ function CandidatePortsTable() {
       viewState={catalogueViewState(answer, rows.length, retry, {
         module: info,
         endpoint: 'GET /customs-ports-paths?registry=candidate-port',
-        emptyTitle: '当前租户尚无已登记的合规候选口岸',
-        emptyDescription:
-          '读取入口已配置,但口岸目录为空;真实口岸参数属实例半边,页面不会预置口岸。登记走受控 CLI(parcel-customs-register candidate-port)。',
+        emptyTitle: '还没有登记可用口岸',
+        emptyDescription: '在「登记」里新增口岸后在这里出现；没登记口岸之前路线规划选不出口岸。',
       })}
     />
   );
@@ -127,11 +120,11 @@ function CandidatePortsTable() {
 // 区间。口岸列是标识引用——「引用的口岸此刻是否在册」是读者拿两签对照的判断，本列
 // 不代答。
 const pathColumns: ListColumn<CatalogueRow>[] = [
-  col('path', '申报路径标识', true),
-  col('port', '经由口岸', true),
-  col('direction', '进出口方向'),
+  col('path', '路径', true),
+  col('port', '经哪个口岸', true),
+  col('direction', '方向'),
   col('mode', '申报模式', true),
-  col('applies', '生效区间', true),
+  col('applies', '适用期间', true),
 ];
 
 function pathRows(body: DeclarationPathListResponseBody): CatalogueRow[] {
@@ -140,7 +133,7 @@ function pathRows(body: DeclarationPathListResponseBody): CatalogueRow[] {
     values: {
       path: record.path,
       port: record.port,
-      direction: labelOf(directionLabels, record.direction),
+      direction: labelFor(record.direction),
       mode: record.declarationMode,
       applies: formatRange(record.appliesFrom, record.appliesUntil),
     },
@@ -174,8 +167,8 @@ function DeclarationPathsTable() {
   return (
     <ListPageTemplate<CatalogueRow>
       title="申报路径"
-      description={`目录只登路径三维事实，不做路由选择；路由在合格候选中选择是 network-routing 的事`}
-      search={{ value: search, onChange: setSearch, placeholder: '搜索申报路径 / 口岸 / 申报模式' }}
+      description="从哪个口岸、按哪个方向、用哪种申报模式报关的组合；路线规划只在这些路径里选"
+      search={{ value: search, onChange: setSearch, placeholder: '搜路径、口岸、申报模式' }}
       filterSummary={
         answer?.kind === 'outcome'
           ? `${portsPathsRegistryLabels['declaration-path']} ${rows.length} 版`
@@ -187,9 +180,8 @@ function DeclarationPathsTable() {
       viewState={catalogueViewState(answer, rows.length, retry, {
         module: info,
         endpoint: 'GET /customs-ports-paths?registry=declaration-path',
-        emptyTitle: '当前租户尚无已登记的申报路径',
-        emptyDescription:
-          '读取入口已配置,但申报路径目录为空;真实路径参数属实例半边,页面不会预置路径。登记走受控 CLI(parcel-customs-register declaration-path)。',
+        emptyTitle: '还没有登记申报路径',
+        emptyDescription: '在「登记」里新增申报路径后在这里出现；没登记路径之前路线规划选不出申报路径。',
       })}
     />
   );
@@ -202,9 +194,9 @@ function DeclarationPathsTable() {
  * 区域维未建模，栏目只取那句出现过的词，不虚构字段；建模落地时以真实定义为准重谈。
  */
 const regionColumns: ListColumn<CatalogueRow>[] = [
-  col('code', '区域标识', true),
-  col('applicability', '关务适用性判断'),
-  col('restrictions', '限制及解除结果（引用）', true),
+  col('code', '区域', true),
+  col('applicability', '能不能走'),
+  col('restrictions', '限制与解除', true),
 ];
 
 function CandidateRegionsTable() {
@@ -212,17 +204,16 @@ function CandidateRegionsTable() {
 
   return (
     <ListPageTemplate<CatalogueRow>
-      title="合规候选区域"
-      description={`关务提供合规候选区域，路由只在合格候选中选择`}
-      search={{ value: search, onChange: setSearch, placeholder: '按区域标识检索' }}
+      title="可用区域"
+      description="公司可以发往或经过的区域；路线规划只在这些区域里选"
+      search={{ value: search, onChange: setSearch, placeholder: '搜区域' }}
       columns={regionColumns}
       rows={[]}
       rowKey={(row) => row.key}
       viewState={{
         kind: 'unconfigured',
-        title: '合规候选区域维尚未建模',
-        description:
-          '口岸与申报路径两册已建模接线（左侧两签）；区域维的域模型与持久化未建，本签不发请求、不含未确认参数的默认值。',
+        title: '这一签的数据还没有接通',
+        description: '可用区域的登记与查询还在建设中；口岸与申报路径两签已经可用。本签不发请求，也不显示任何示意数据。',
         facts: {
           owner: info.owner,
           source: info.source,
@@ -268,10 +259,10 @@ export function CustomsPortsPathsPage() {
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <Tabs defaultValue="ports" className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
-          <TabsTrigger value="ports">合规候选口岸</TabsTrigger>
+          <TabsTrigger value="ports">可用口岸</TabsTrigger>
           <TabsTrigger value="paths">申报路径</TabsTrigger>
-          <TabsTrigger value="regions">合规候选区域</TabsTrigger>
-          <TabsTrigger value="register">登记口岸与路径</TabsTrigger>
+          <TabsTrigger value="regions">可用区域</TabsTrigger>
+          <TabsTrigger value="register">登记</TabsTrigger>
         </TabsList>
         <TabsContent value="ports" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <CandidatePortsTable />

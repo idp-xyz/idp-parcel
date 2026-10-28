@@ -1,5 +1,6 @@
-// 关务目录查阅词表(合规规则库 + 案件配置册 + 门禁条件册 + 口岸/申报路径册)。册子名
-// 与查询参数 registry 同词;中文取 customs-compliance CONTEXT。
+// 清关区（customs-compliance 的合规规则库、案件配置册、门禁条件册、口岸与申报路径册）页面口径：册名、登记面的标题与
+// 填写提示、错误码的人话。状态与枚举码的中文与色调一律在 src/vocabulary/status.ts（界面用语词典，一处定义），页面经
+// labelFor / StatusPill 取，本文件不再另存一份。
 
 import type {
   CaseRegisterRegistry,
@@ -10,278 +11,99 @@ import type {
 } from './api';
 
 export const registryLabels: Record<ComplianceRegistry, string> = {
-  'case-requirement': '案件要求规则',
-  interpretation: '解释规则',
+  'case-requirement': '何时要立清关单',
+  interpretation: '海关回执怎么读',
 };
 
 export const caseRegisterLabels: Record<CaseRegisterRegistry, string> = {
   readiness: '申报就绪判断',
   'submission-authority': '提交授权',
-  'closure-obligation': '关闭义务目录',
+  'closure-obligation': '关闭核对清单',
 };
 
-// 口岸/申报路径两册,中文取 CONTEXT 所有权句原词(合规候选口岸、申报路径)。
 export const portsPathsRegistryLabels: Record<PortsPathsRegistry, string> = {
-  'candidate-port': '合规候选口岸',
+  'candidate-port': '可用口岸',
   'declaration-path': '申报路径',
-};
-
-// 关闭依据项封闭三值的中文取 domain ObligationItemState 的注释原词:已终结、已被
-// 有权接收方有效承接(短写「已承接」,承接方另列一栏指名)、未解决。
-export const obligationStateLabels: Record<string, string> = {
-  CONCLUDED: '已终结',
-  HANDED_OVER: '已承接',
-  UNRESOLVED: '未解决',
-};
-
-// 受门禁约束的方向性动作封闭四值(domain GuardedAction),中文取 CONTEXT 硬句逐词。
-// 接收、隔离、测量、查验协作与已授权的处置执行刻意不在此集——「不因此阻止」在领域
-// 枚举上就没有格,词表跟着没有,不为它们造一个「不受约束」的假条目。
-export const guardedActionLabels: Record<string, string> = {
-  OUTBOUND_RELEASE: '出库',
-  LOADING_DEPARTURE: '装载出发',
-  CROSS_CUSTOMS_MOVEMENT: '跨关务区域移动',
-  FINAL_DELIVERY: '交付',
-};
-
-// 前置条件认定封闭三值(domain PreconditionState),中文取其注释原词。没有「未知」格,
-// 词表也不补一个:集外取值由 labelOf 原样回显,坏数据该露出来,不该被译成一句像样的话。
-export const preconditionStateLabels: Record<string, string> = {
-  MET: '满足',
-  UNMET: '未满足',
-  CONFLICTING: '事实冲突',
-};
-
-export const directionLabels: Record<string, string> = {
-  IMPORT: '进口',
-  EXPORT: '出口',
-};
-
-// 税费付款协作事项的义务依据封闭二值(domain DutyObligationKind),中文取 CONTEXT「税费付款协作事项」词条原词。刻意没有第三格:「缺少税费结果不能被解释为无需付款」,领域枚举上就
-// 没有「没有结果所以不用付」,词表跟着没有。
-export const dutyObligationKindLabels: Record<string, string> = {
-  ASSESSED_DUTY: '已接受监管核定税费',
-  EXPLICITLY_NOT_REQUIRED: '明确无需付款依据',
-};
-
-// 税费付款核对三轴各自的封闭集(domain DutyCoverage / DutyDelta / DutyFactValidity),中文取
-// 其注释原词。三张表分开、不合成一张「付款状态」词表——合成的那张就是 CONTEXT 明禁的互斥
-// 总状态(ADR-0137 决定三)。集外取值由 labelOf 原样回显,坏数据该露出来。
-export const dutyCoverageLabels: Record<string, string> = {
-  NONE: '无覆盖',
-  PARTIAL: '部分覆盖',
-  COVERED: '已覆盖',
-};
-
-export const dutyDeltaLabels: Record<string, string> = {
-  NO_DELTA: '无差额',
-  SHORT: '不足',
-  EXCESS: '超额',
-  PENDING: '待确认',
-};
-
-export const dutyFactValidityLabels: Record<string, string> = {
-  VALID: '有效',
-  INVALIDATED: '失效',
-  CONFLICTING: '冲突',
-  PENDING: '待确认',
-};
-
-// 外部结果六层的中文取 GLOSSARY 与关务用例的领域原词(监管接收、业务受理、
-// 监管过程决定、监管核定税费、放行结果、监管处置决定),不自造译法。
-export const resultLayerLabels: Record<string, string> = {
-  REGULATORY_RECEIPT: '监管接收',
-  BUSINESS_ACCEPTANCE: '业务受理',
-  PROCESS_DECISION: '监管过程决定',
-  ASSESSED_DUTY: '监管核定税费',
-  RELEASE_RESULT: '放行结果',
-  DISPOSITION_DECISION: '监管处置决定',
 };
 
 export function labelOf(table: Record<string, string>, code: string): string {
   return table[code] ?? code;
 }
 
+// 错误码说人话：说哪里错、怎么改，不说实现细节。
 export const problemCodeNotes: Record<string, string> = {
-  METHOD_NOT_ALLOWED: '请求方法不被该端点允许。这是调用方式问题,不是业务答案。',
-  MALFORMED_REQUEST:
-    '请求构造不出查询(registry 缺席或不在封闭集),重发同样的内容不会改变结果。',
-  INTAKE_FAILED: '接入解析未能完成,本次没有形成任何业务答案,可稍后重试。',
-  NO_ANSWER_FORMED: '服务端处理未能完成,本次没有形成任何业务答案,可稍后重试。',
-  OUTSIDE_ADMISSION_SCOPE: '这笔生产写不在治理登记的生产权威区间内,要阶段治理去登记区间;什么都没登记,重试不会好。',
-  IDENTITY_DEPENDENCY_UNAVAILABLE: '接入身份依赖读不动(发行方公钥集、操作者册或准入范围),可稍后重试。',
+  METHOD_NOT_ALLOWED: '这个入口不接受这种提交方式，请刷新页面后重试；仍然不行请联系系统管理员。',
+  MALFORMED_REQUEST: '填写的内容格式不对，系统读不出一笔完整的登记；请按提示检查各项后再提交。',
+  INTAKE_FAILED: '登录信息没能核对通过，这次没有登记任何内容；请稍后重试。',
+  NO_ANSWER_FORMED: '系统暂时没能处理这笔登记，是否登记成功还不确定；请稍后刷新查看，必要时重新提交同一份。',
+  OUTSIDE_ADMISSION_SCOPE: '当前阶段还没有放开这项登记；什么都没有保存，请联系负责阶段管理的同事。',
+  IDENTITY_DEPENDENCY_UNAVAILABLE: '暂时无法核对登录身份，请稍后重试。',
 };
 
 export function problemNote(code: string): string {
-  return problemCodeNotes[code] ?? '未知错误码。请携带关联标识查询服务端记录。';
+  return problemCodeNotes[code] ?? `这次提交没有成功（错误码 ${code}）；请记下关联标识联系系统管理员。`;
 }
 
-// ——以下为登记签的页面口径(ADR-0085,票 admin-write-faces/02 切片 02b)。
+// ——以下为登记签的页面口径（ADR-0085）。标题说这个任务做什么，不叫「登记 ×× 版本」。
 
-/**
- * 配置族登记签的标题。册名与本文件上方的查阅词表同词——同一本册不因换到写签而换名;
- * 门禁目录登的是目录本身而不是目录里的条件项,标题因此说「目录」不说「条件」。
- *
- * 只有建案要求规则的标题不带「版本」二字:它没有版本维,是键上的当前判断(换判断走同键
- * 重登,由登记册答冲突)。标题跟着册的形状走,不为整齐划一而给它一个不存在的版本维。
- * 监管凭证的标题也不带「版本」:一身份一版、不可变,换期限或额度是另一张凭证,没有「下一版」
- * 可登(0014 自注)。
- */
 export const registrationTitles: Record<CustomsRegistrationKind, string> = {
-  'interpretation-rule': '登记解释规则版本',
-  'case-requirement': '登记建案要求规则',
-  'gate-catalog': '登记门禁前置条件目录',
-  'candidate-port': '登记合规候选口岸版本',
-  'declaration-path': '登记申报路径版本',
+  'interpretation-rule': '新增海关回执读法',
+  'case-requirement': '设定何时要立清关单',
+  'gate-catalog': '新增放行检查项目',
+  'candidate-port': '新增可用口岸',
+  'declaration-path': '新增申报路径',
   'regulatory-credential': '登记监管凭证',
 };
 
-// 协作 / 核对两口的标题。动词取用例原词(形成 / 核对)而不叫「登记」:协作事项与核对是编排在
-// 环境事务里**形成**的判断,形成时间取服务端时钟、不是登记输入——这与目录登记「把一份既有
-// 事实登进册」不是同一个动作,标题照实说。
 export const dutyRegistrationTitles: Record<DutyRegistrationKind, string> = {
-  'duty-collaboration': '形成税费付款协作事项',
+  'duty-collaboration': '登记税费付款事项',
   'duty-payment-verification': '登记税费付款核对',
 };
 
-// 登记快照形状的提示句。各类只差子命令一词(与端点路径、CLI 子命令同字),所以由一处
-// 拼出:逐类抄一遍会让「不逐字段建表单」这条理由在其中一遍被改动时悄悄分叉。
-function snapshotHint(kind: CustomsRegistrationKind | DutyRegistrationKind, fields: string): string {
-  return (
-    `登记快照 JSON 的形状与受控登记口 parcel-customs-register ${kind} -input 吃的同一份;` +
-    '本页不逐字段建表单,因为「渠道原始载荷 → 登记快照」的翻译属渠道接入契约,随 PAR-INT-01 提供。' +
-    fields
-  );
+// 填写提示：只说填什么、填错了会怎样。形状与接口、受控 CLI 吃的同一份，这一句留给对接的人。
+function hint(kind: string, fields: string): string {
+  return `${fields} 内容与接口、命令行工具（${kind}）吃的同一份；所属公司由系统记下，不用填。`;
 }
 
-// 凭证一类单拼提示句:它经手工口由关务人员照原件录入(ADR-0236),中间没有「渠道原始载荷 → 登记快照」那一步要等接入
-// 契约,snapshotHint 那条不建表单的理由对它不成立。暂以 JSON 录入只是表单还没做(票 demo-chain-gaps/156),提示句照实说。
-function manualEntryHint(kind: CustomsRegistrationKind, fields: string): string {
-  return (
-    `登记快照 JSON 的形状与受控登记口 parcel-customs-register ${kind} -input 吃的同一份,也与外部系统经集成客户端送来的相同;` +
-    '本页暂以 JSON 录入,逐字段表单尚未提供。' +
-    fields
-  );
-}
-
-/**
- * 各类登记快照的形状提示。逐类把键名与封闭集词列出来:未知键一律被译装拒绝(打错的键
- * 静默丢弃会让操作员以为登进去的比实际多),而封闭集里的词打错在族名上看不出来。
- *
- * 三本版本册都不收终点:换版是登记一个更晚生效起点的新版,前版终点随之落定,历史区间
- * 不接受追改(ADR-0070)。这句写进提示是因为读面上「持续有效」那一格最容易被读成「可以
- * 回头补个终点」。**建案要求规则不在这三本之列**,它连生效起点都没有,提示句因此不许
- * 照抄那半句——照抄会让登记方去找一个本册没有的字段。
- */
 export const registrationSnapshotHints: Record<CustomsRegistrationKind, string> = {
-  'interpretation-rule': snapshotHint(
+  'interpretation-rule': hint(
     'interpretation-rule',
-    '键为 tenantId / resultLayer / jurisdictionRef / ruleRef / appliesFrom;' +
-      '外部结果层取封闭六词 REGULATORY_RECEIPT / BUSINESS_ACCEPTANCE / PROCESS_DECISION / ' +
-      'ASSESSED_DUTY / RELEASE_RESULT / DISPOSITION_DECISION。终点不是输入——换版登新起点。',
+    '请填 tenantId、resultLayer（海关结果层：REGULATORY_RECEIPT 海关已接收 / BUSINESS_ACCEPTANCE 海关已受理 / PROCESS_DECISION 过程决定 / ' +
+      'ASSESSED_DUTY 核定税费 / RELEASE_RESULT 放行结果 / DISPOSITION_DECISION 处置决定）、jurisdictionRef（辖区）、ruleRef（读法引用）、appliesFrom（从何时起用）。' +
+      '不填截止时间：要换读法就登一条更晚起用的，旧的自动到那时为止。',
   ),
-  'case-requirement': snapshotHint(
+  'case-requirement': hint(
     'case-requirement',
-    '键为 tenantId / jurisdictionRef / direction / procedureRef / required / basis;' +
-      '申报方向取封闭两词 IMPORT / EXPORT。' +
-      'required 必须显式给出:它是布尔而非可省字段,缺席不会被当成「不要求」而是直接被拒——' +
-      '「不要求建案」与「规则没登记」在库上分不开,而两者续办动作相反(前者照常推进,后者等实例参数)。' +
-      'basis 对「要求」与「不要求」同样必填,理由同上。' +
-      '本册没有版本维,不收生效起点:换判断是同键重登,登记册会答内容冲突而不是接受覆盖。',
+    '请填 tenantId、jurisdictionRef（辖区）、direction（IMPORT 进口 / EXPORT 出口）、procedureRef（监管程序）、required（true 要立 / false 不用立，必填）、basis（依据，必填）。' +
+      '同一个辖区、方向、程序只能有一条；要改就先核对已有的那条。',
   ),
-  'gate-catalog': snapshotHint(
+  'gate-catalog': hint(
     'gate-catalog',
-    '键为 tenantId / scopeRef / action / boundaryRef / registeredAt;' +
-      '拟执行动作取封闭四词 OUTBOUND_RELEASE / LOADING_DEPARTURE / CROSS_CUSTOMS_MOVEMENT / ' +
-      'FINAL_DELIVERY。本口登的是目录在场本身,目录里的逐项认定是另一个命令,不在本签。',
+    '请填 tenantId、scopeRef（申报范围）、action（检查哪一步：OUTBOUND_RELEASE 出库 / LOADING_DEPARTURE 装载出发 / CROSS_CUSTOMS_MOVEMENT 跨关区移动 / FINAL_DELIVERY 交付）、' +
+      'boundaryRef（监管边界）、registeredAt。这里登的是「这一步要做放行检查」；每项检查的结论另行登记。',
   ),
-  'candidate-port': snapshotHint(
-    'candidate-port',
-    '键为 tenantId / portRef / appliesFrom。终点不是输入——换版登新起点。',
-  ),
-  'declaration-path': snapshotHint(
+  'candidate-port': hint('candidate-port', '请填 tenantId、portRef（口岸）、appliesFrom（从何时起可用）。不填截止时间：要停用就登一条更晚起用的新版本。'),
+  'declaration-path': hint(
     'declaration-path',
-    '键为 tenantId / pathRef / portRef / direction / declarationMode / appliesFrom;' +
-      '进出口方向取封闭两词 IMPORT / EXPORT,申报模式是引用不是封闭词表(真实模式集属实例半边)。' +
-      '终点不是输入——换版登新起点。',
+    '请填 tenantId、pathRef（路径）、portRef（经哪个口岸）、direction（IMPORT 进口 / EXPORT 出口）、declarationMode（申报模式）、appliesFrom（从何时起用）。',
   ),
-  // 凭证的两端有效期都是输入——它不是版本册,没有「换版落定终点」那回事;uses 缺席与 0 同义
-  // (来源未提供次数额度),不是「额度已用尽」,提示句把这一格点出来,免得登记方为「没有额度」
-  // 特意填 0 还是空。
-  'regulatory-credential': manualEntryHint(
-    'regulatory-credential',
-    '键为 credentialId / issuerRef / holderRef / procedureRef / validFrom / validTo / uses(租户取登录账号的绑定、登记人由服务端记下,' +
-      '载荷带 tenantId 即拒;登记要持「监管凭证登记」这一种授予);' +
-      'validFrom 与 validTo 两端都是输入(一身份一版、不可变,换期限是另一张凭证);' +
-      'uses 缺席与 0 同义——来源未提供次数额度,不是已用尽。同身份换任何一项都答内容冲突,不覆盖。',
-  ),
+  'regulatory-credential':
+    '请照凭证原件填 credentialId（凭证号）、issuerRef（签发机构）、holderRef（持有人）、procedureRef（适用程序）、validFrom / validTo（有效期两端）、uses（次数额度，原件没写就不填）。' +
+    '一张凭证一条记录；换期限或额度就是另一张凭证，请另行登记。登记人由系统记下。',
 };
 
-/**
- * 协作 / 核对两口的快照形状提示。三轴与关联依据由登记方交进来——真实程序的关联规则属实例
- * 半边,入口不从金额相等推任何一轴,提示句因此明说「不代判」;kind 缺席刻意放行到编排答业务
- * 未决(缺少税费结果不能被解释为无需付款),提示句把这一格说成「等」而不是「填错」。
- */
 export const dutyRegistrationSnapshotHints: Record<DutyRegistrationKind, string> = {
-  'duty-collaboration': snapshotHint(
+  'duty-collaboration': hint(
     'duty-collaboration',
-    '键为 tenantId / kind / dutyRef / noPayBasis / scopeRef / obligorRef / requirementRef / targetRef;' +
-      '义务依据 kind 取封闭两词 ASSESSED_DUTY(带 dutyRef、不带 noPayBasis)/ EXPLICITLY_NOT_REQUIRED(反之)。' +
-      'kind 缺席不是填错:既无核定税费也无明确无需付款依据时编排答业务未决 DUTY_OBLIGATION_BASIS_ABSENT,' +
-      '等税费结果到了重发同一份。形成时间取服务端时钟,不是输入。',
+    '请填 tenantId、kind（ASSESSED_DUTY 按海关核定税费付，带 dutyRef；或 EXPLICITLY_NOT_REQUIRED 明确无需付款，带 noPayBasis）、scopeRef（申报范围）、' +
+      'obligorRef（法定义务人）、requirementRef（付款要求来源）、targetRef（交接给谁）。' +
+      '海关还没核定、也没有无需付款依据时，系统会答「还在等税费结果」，等结果到了重新提交同一份即可。',
   ),
-  'duty-payment-verification': snapshotHint(
+  'duty-payment-verification': hint(
     'duty-payment-verification',
-    '键为 tenantId / dutyRef / fundsRef / fundsVersion / scopeRef / procedureRef / coverage / delta / validity / basis;' +
-      '三轴各取封闭词:coverage NONE / PARTIAL / COVERED,delta NO_DELTA / SHORT / EXCESS / PENDING,' +
-      'validity VALID / INVALIDATED / CONFLICTING / PENDING——三轴分别给出,本口不从金额相等推任何一轴。' +
-      'fundsVersion 必填,是这次核对比的是资金事实的哪一版(那一版须已接收),本口不取「最近接收」顶替;' +
-      'procedureRef 必填,是付款人那一维「要不要求」按哪个真实程序的规则判,随核对记下、不从范围推;' +
-      'basis 是「凭什么把这笔资金关联到这版税费」的权威依据引用,空白答待关联、不关联。' +
-      '同三维换内容(含换程序、换资金版本)是新版本追加,不是冲突;资金事实与协作事项两道前置未齐时原名答回,等前置落册后重发同一份。',
+    '请填 tenantId、dutyRef（税费版本）、fundsRef 与 fundsVersion（对的是哪一笔收付款的哪一版）、scopeRef（申报范围）、procedureRef（按哪个程序的规则判）、' +
+      'coverage（NONE 无覆盖 / PARTIAL 部分 / COVERED 已覆盖）、delta（NO_DELTA 无差额 / SHORT 不足 / EXCESS 超额 / PENDING 待确认）、' +
+      'validity（VALID 有效 / INVALIDATED 失效 / CONFLICTING 冲突 / PENDING 待确认）、basis（凭什么把这笔钱对到这笔税费）。' +
+      '三项结论请分别填，系统不会按金额相等替你判；收付款或付款事项还没登记时系统会说明，登好后重新提交同一份。',
   ),
-};
-
-// —— 关务记录四口的词表(票 demo-2026-10-30/01)。集外取值由 labelOf 原样回显,坏数据该露出来。
-
-// 提交尝试结果(迁移 0002/0025 的封闭四值):待发送一格是「已登记、外部发送还没开始」,不是已发送。
-export const attemptResultLabels: Record<string, string> = {
-  REGISTERED_PENDING_SEND: '已登记待发送',
-  ACKNOWLEDGED: '已确认',
-  FAILED: '失败',
-  PENDING_CONFIRMATION: '待确认',
-};
-
-// 技术回执只收明确的两种(迁移 0030)。技术成功只说明技术层结果。
-export const technicalReceiptLabels: Record<string, string> = {
-  ACKNOWLEDGED: '技术成功',
-  FAILED: '技术失败',
-};
-
-export const releaseKindLabels: Record<string, string> = {
-  FULL: '全部放行',
-  PARTIAL: '部分放行',
-  CONDITIONAL: '附条件放行',
-};
-
-// 动作准入判断的整次答复封闭五值(迁移 0024)。
-export const admissionAnswerLabels: Record<string, string> = {
-  NOT_GUARDED: '不受守护',
-  ADMITTED: '准入',
-  UNDECIDED: '未决',
-  NOT_CONFIGURED: '未配置',
-  BLOCKED: '拦截',
-};
-
-export const admissionIntentLabels: Record<string, string> = {
-  DEPARTURE: '出发',
-  HANDOVER: '交出',
-  DELIVERY: '交付',
-};
-
-export const crossZoneLabels: Record<string, string> = {
-  NOT_ASKED: '未问',
-  SAME_ZONE: '同区域',
-  CROSSING: '跨区域',
-  UNDETERMINED: '未能判定',
 };

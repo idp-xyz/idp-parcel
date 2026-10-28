@@ -74,9 +74,9 @@ test('协作事项两格义务依据各显各的字段', () => {
     collaboration({}),
     collaboration({ kind: 'EXPLICITLY_NOT_REQUIRED', duty: undefined, noPayBasis: 'SYN-PROGRAM-01: no duty' }),
   ]);
-  equal(rows[0].values.kind, '已接受监管核定税费');
+  equal(rows[0].values.kind, '核定税费');
   equal(rows[0].values.basis, 'SYN-DUTY-01/v1');
-  equal(rows[1].values.kind, '明确无需付款依据');
+  equal(rows[1].values.kind, '明确无需付款');
   equal(rows[1].values.basis, 'SYN-PROGRAM-01: no duty');
   notEqual(rows[0].key, rows[1].key);
 });
