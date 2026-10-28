@@ -1,7 +1,7 @@
 # 37 PS 收寄后服务处置决定没有模型：越过取消边界只记「待处置」，没有决定、没有下游请求
 
 Category: enhancement
-Status: in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-code37（代码最后一笔 __SHA__）。此前：in-progress——2026-10-27 会话 tops-20（idp-parcel-91）接手 tops-26 断在中途的「上线前必须」一组（冻结清单「六」），分支 claude-code37（续 tops-26 已有 worktree 半成品）。此前 needs-triage——建议 R3（不急）：越过取消边界的包裹今天答 `DISPOSITION_PENDING` 并停在那里，退运、拦截、改送、服务终止都没有决定面；首发若不启用收寄后处置，运营可走线下。2026-10-21 文档自洽 06 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc06。分级由协调方定稿。
+Status: in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-code37（代码最后一笔 3376e091c）。此前：in-progress——2026-10-27 会话 tops-20（idp-parcel-91）接手 tops-26 断在中途的「上线前必须」一组（冻结清单「六」），分支 claude-code37（续 tops-26 已有 worktree 半成品）。此前 needs-triage——建议 R3（不急）：越过取消边界的包裹今天答 `DISPOSITION_PENDING` 并停在那里，退运、拦截、改送、服务终止都没有决定面；首发若不启用收寄后处置，运营可走线下。2026-10-21 文档自洽 06 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc06。分级由协调方定稿。
 Blocked by: 无
 出处：[audit/ps-code.md](../audit/ps-code.md) 第 14 条顺带点出「UC-PS-006 的收寄后处置决定」未实现，审计未单列；文档自洽 06 修订 UC-PS-006 时确认，见其「给开发的交接」。
 
