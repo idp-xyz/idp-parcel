@@ -2,7 +2,7 @@ import { formatInstant } from '../moment';
 import { useState } from 'react';
 import { ConfirmDialog } from '@idpxyz/ui-primitives';
 import { pendingText } from '../../components/action-feedback';
-import { TechnicalDetails } from '../../components/states';
+import { TechnicalDetails } from '../../components/TechnicalDetails';
 import {
   cancelParcel,
   type ApiResult,

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { OperatorRefusalState, TechnicalDetails, UnconfiguredState } from '../../components/states';
+import { OperatorRefusalState, UnconfiguredState } from '../../components/states';
+import { TechnicalDetails } from '../../components/TechnicalDetails';
 import type { ApiResult } from './api';
 import { answerTechnicalRows, problemMessage } from './words';
 import { NoticeCard } from './controls';

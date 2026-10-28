@@ -1,7 +1,7 @@
 import { operatorRefusalMessage } from '../../auth/access-refusal';
 import type { ModuleInfo } from '../../navigation';
 import type { TemplateViewState } from '../../templates/state-slot';
-import type { TechnicalRow } from '../../components/states/technical-details';
+import type { TechnicalRow } from '../../components/TechnicalDetails';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import {
   type ApiResult,

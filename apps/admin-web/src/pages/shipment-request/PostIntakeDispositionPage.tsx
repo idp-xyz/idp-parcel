@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
 import { ReviewFlowTemplate, type DetailField, type ReviewDecisionOption } from '../../templates';
 import { ReloginButton } from '../../auth/ReloginButton';
-import { TechnicalDetails } from '../../components/states';
+import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { moduleInfoById } from '../../navigation';
 import { Field, inputClass, Section } from './controls';
 import { ParcelNo } from './refs';

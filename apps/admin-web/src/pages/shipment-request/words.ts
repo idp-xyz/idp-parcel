@@ -1,4 +1,4 @@
-import type { TechnicalRow } from '../../components/states/technical-details';
+import type { TechnicalRow } from '../../components/TechnicalDetails';
 import type { ApiResult } from './api';
 
 // 本区各写口页面给运营看的话。presentation.ts 的词表是用例原词(委托、未决、续办引用),委托查阅两页还在引它;
