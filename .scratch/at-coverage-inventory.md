@@ -20,11 +20,11 @@
 <!-- 总览两表：生成物，勿手改，由 tools/at-coverage-counts 从下面各分桶节的行数生成 -->
 | 桶 | 数量 |
 |---|---|
-| ① 已钉住 | 937 |
+| ① 已钉住 | 941 |
 | ② 机制候选 | 243 |
 | ③ 实例半边/闸门阻断 | 137 |
 | ④ 机制未落地 | 425 |
-| 合计 | 1742 |
+| 合计 | 1746 |
 
 | 前缀 | 总数 | ① | ② | ③ | ④ |
 |---|---|---|---|---|---|
@@ -35,7 +35,7 @@
 | PC | 70 | 56 | 14 | 0 | 0 |
 | PP | 16 | 16 | 0 | 0 | 0 |
 | PS | 174 | 145 | 24 | 2 | 3 |
-| SA | 216 | 106 | 91 | 19 | 0 |
+| SA | 220 | 110 | 91 | 19 | 0 |
 | TF | 348 | 279 | 59 | 7 | 3 |
 | VE | 223 | 89 | 0 | 15 | 119 |
 <!-- 总览两表完 -->
@@ -613,6 +613,10 @@
 | `AT-SA-218` | internal/settlementaccounting/application/confirm_charge_on_basis_test.go::TestABasisOnAConfirmingTenantConfirmsTheCharge、::TestABasisWithoutTheConfirmMomentIsOnlyRecorded、::TestNoFormedChargeRecordsNothing、::TestOnlyDependencyFailuresAreRetryable、::TestBothEndsSerializeOnTheParcelBeforeReadingTheOtherSide、::TestAConfirmationWhoseHandoffFailedIsRetryable；internal/settlementaccounting/adapters/parcelshipment/confirmation_basis_test.go::TestAFinalizedEffectiveDeliveryIsHandedToConfirmation、::TestConfirmationOnFinalOutcomeSortsLagFromBreakage；internal/settlementaccounting/adapters/postgres/charge_confirmation_basis_test.go::TestARecordedBasisMeetsTheConditionOnceAndKeepsTheFirstReference、::TestTheParcelConfirmationLockQueuesTheSameParcelOnly；cmd/parcel-dispatch/charge_confirmation_on_final_outcome_test.go::TestAFormedChargeIsConfirmedOnTheEffectiveDeliveryFinalInEitherOrder |
 | `AT-SA-219` | internal/settlementaccounting/application/confirm_charge_on_basis_test.go::TestAChargeFormedAfterTheFinalOutcomeIsConfirmedOnFormation、::TestFollowUpFailuresAreReturned、::TestBothEndsSerializeOnTheParcelBeforeReadingTheOtherSide；internal/settlementaccounting/adapters/parcelshipment/confirmation_basis_test.go::TestTheEffectiveDeliveryFinalViewOnlyAnswersAFinalizedEffectiveDelivery；internal/settlementaccounting/adapters/postgres/charge_confirmation_basis_test.go::TestTheParcelConfirmationLockQueuesTheSameParcelOnly；cmd/parcel-dispatch/charge_confirmation_on_final_outcome_test.go::TestAFormedChargeIsConfirmedOnTheEffectiveDeliveryFinalInEitherOrder |
 | `AT-SA-220` | internal/settlementaccounting/adapters/postgres/charge_confirmation_basis_test.go::TestTheConfirmationConditionRegisterSeparatesReplayFromConflict；internal/settlementaccounting/adapters/registrationjson/charge_confirmation_condition_test.go::TestTheChargeConfirmationConditionDocumentOnlyNamesABuiltInBasisKind |
+| `AT-SA-221` | cmd/parcel-api/assemble_settlement_decisions_test.go::TestTheChargeConfirmationFaceConfirmsThroughTheSettlementMoment；internal/settlementaccounting/adapters/http/settlement_decisions_test.go::TestTheChargeConfirmationFaceAuthenticatesItsOwnDecisionAndAnswersTheMomentGate；internal/accessidentity/adapters/postgres/settlement_decision_grant_test.go::TestTheSettlementDecisionKindsAreGrantedAndReadBackSeparately |
+| `AT-SA-222` | cmd/parcel-api/assemble_settlement_decisions_test.go::TestTheStatementPublicationFacePublishesAListedPeriod；internal/settlementaccounting/adapters/http/settlement_decisions_test.go::TestTheStatementPublicationFaceTakesThePublishedAtFromItsClock；internal/accessidentity/adapters/postgres/settlement_decision_grant_test.go::TestTheSettlementDecisionKindsAreGrantedAndReadBackSeparately |
+| `AT-SA-223` | cmd/parcel-api/assemble_settlement_decisions_test.go::TestTheStatementPublicationFacePublishesAListedPeriod；internal/settlementaccounting/adapters/http/query_settlement_charges_test.go::TestCustomerChargeQueryShowsTheAttributionDateAndTheStatementItIsOn |
+| `AT-SA-224` | internal/settlementaccounting/domain/statement_cycle_test.go::TestAStatementCycleNamesItsClosings、::TestAClosingClosesAtTheArrangementCutoff；internal/settlementaccounting/application/cut_off_statements_on_cycle_test.go::TestACycleCutRecordsEmptyClosingsAndComposesTheCommandFromTheCandidates、::TestACycleCutStopsWhereATenantValueIsMissing；internal/settlementaccounting/adapters/postgres/statement_cycle_test.go::TestAStatementCycleRegistersOnceAndTheLedgerReadsTheLastClosing；cmd/parcel-settlement-register/settlement_account_command_test.go::TestTheConditionAndCycleCommandsTranslateBeforeTheTransaction；cmd/parcel-dispatch/cycle_cut_test.go::TestTheDispatchBeatCutsADueCycleIntoAPublishedStatement |
 | `AT-TF-002` | internal/transportfulfillment/application/accept_regulatory_disposition_test.go::TestANodeOnlyCollaborationBuildsNoTransportObject |
 | `AT-TF-003` | internal/transportfulfillment/application/accept_regulatory_disposition_test.go::TestDetentionWithoutMovementAuthorityIsSupplementRequired |
 | `AT-TF-004` | internal/transportfulfillment/application/accept_regulatory_disposition_test.go::TestDetentionWithoutMovementAuthorityIsSupplementRequired、::TestAnIncompleteCollaborationItemIsSupplementRequiredNamingWhatIsMissing（事项本体缺动作、缺对象、缺起止责任各答带原因的待补充，ADR-0337） |
@@ -2063,3 +2067,5 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 
 2026-10-28 追记（票 docs-consistency/code/43，ADR-0337）：UC-TF-001 新立 `AT-TF-367`（承接口生产入口：授予按种类、首投落决定与回执意图、重放与冲突）、`AT-TF-368`（事项本体缺动作、缺对象、缺起止责任答带原因的待补充，承接对象不超出事项）、`AT-TF-370`（承接与旅程启动两口记提交操作者，只进审计），UC-TF-007 新立 `AT-TF-369`（旅程启动口生产入口，监管来路双链、非监管来路只入异常链）；`AT-TF-004` 补一条用例；传输面、编排、库面、授予往返与生产装配真库用例点名，四条入①，TF 加 4，②③④不变。总览计数未重算，由推送方重算。
 2026-10-28 追记（票 launch-wiring/04）：UC-NO-001 新立 `AT-NO-133`（节点监管协作承接与执行事实两口的生产入口：待补充一轮、补齐后下一轮、重放与冲突、承接范围内的事实首登与重放冲突越界、拒接事项），`AT-NO-134`（登记的现场节点与承接决定的节点对不上答未受理、准入范围未登记答 403），ADR-0338；真库面与授予往返、接入面、编排各用例点名，两条入①。总览计数未改，由推送方重算。
+
+2026-10-28 追记（票 product-strategy-boundary/22 第 2 笔，ADR-0339）：UC-SA-002 新立 `AT-SA-221`（运营确认口），UC-SA-003 新立 `AT-SA-222`–`224`（截单发布口、客户费用读口的归属日与所在对账单、到点截单），入①。
