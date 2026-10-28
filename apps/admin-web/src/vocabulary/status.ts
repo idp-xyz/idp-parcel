@@ -230,6 +230,44 @@ export const statusVocabulary: Record<string, StatusEntry> = {
   // —— 代收货款 · collection-remittance 回汇批次 ——
   COLLECTED: info('已归集'),
   HANDED_FOR_PAYMENT: good('已交付汇付'),
+
+  // —— 清关 · customs-compliance 的其余封闭集（清关单页、合规限制与税费页、口岸路径页、规则库页）——
+  IMPORT: muted('进口'),
+  EXPORT: muted('出口'),
+  // 受放行检查约束的动作四值，词取 CONTEXT 硬句逐词。
+  OUTBOUND_RELEASE: muted('出库'),
+  LOADING_DEPARTURE: muted('装载出发'),
+  CROSS_CUSTOMS_MOVEMENT: muted('跨关区移动'),
+  FINAL_DELIVERY: muted('交付'),
+  // 放行检查问的是哪一步动作。
+  DEPARTURE: muted('出发'),
+  HANDOVER: muted('交出'),
+  DELIVERY: muted('交付'),
+  // 跨关区判断。
+  NOT_ASKED: muted('未问'),
+  SAME_ZONE: muted('同关区'),
+  CROSSING: info('跨关区'),
+  UNDETERMINED: warn('未能判定'),
+  // 海关结果六层（监管接收、业务受理、过程决定、核定税费、放行结果、处置决定）。
+  REGULATORY_RECEIPT: info('海关已接收'),
+  BUSINESS_ACCEPTANCE: info('海关已受理'),
+  PROCESS_DECISION: info('海关过程决定'),
+  ASSESSED_DUTY: warn('核定税费'),
+  RELEASE_RESULT: good('放行结果'),
+  DISPOSITION_DECISION: bad('海关处置决定'),
+  // 税费付款的义务依据：明确无需付款是一条带依据的结论，不是「没有结果所以不用付」。
+  EXPLICITLY_NOT_REQUIRED: muted('明确无需付款'),
+  // 清关单的最新进展（页面按已有事实取最靠后的一层，见 pages/customs/record-rows.ts 的 caseProgress）。
+  CUSTOMS_PENDING_DECLARATION: warn('待申报'),
+  DECLARATION_PENDING_SEND: warn('待发送'),
+  DECLARATION_SENT: info('已发送'),
+  DECLARATION_SEND_FAILED: bad('发送失败'),
+  CUSTOMS_RELEASED: good('已放行'),
+  CUSTOMS_CASE_CLOSED: muted('已关案'),
+
+  // —— 扫描设备与试点治理的作业范围种类 ——
+  NODE: muted('网点'),
+  OFFSITE: muted('场外'),
 };
 
 /**

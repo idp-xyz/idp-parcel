@@ -85,9 +85,9 @@ function customerChargeTechnicalRows(row: CustomerChargeRecord) {
 
 function customerChargeColumns(names: PartyNames): ListColumn<CustomerChargeRecord>[] {
   return [
-    { id: 'parcel', header: '运单号', render: parcelCell },
-    { id: 'customer', header: '客户', render: (row) => customerCell(row, names) },
-    { id: 'fee-item', header: '费用项目', render: (row) => feeItemLabel(row.feeItem) },
+    { id: 'parcel', header: '运单号', className: 'whitespace-nowrap', render: parcelCell },
+    { id: 'customer', header: '客户', className: 'whitespace-nowrap', render: (row) => customerCell(row, names) },
+    { id: 'fee-item', header: '费用项目', className: 'whitespace-nowrap', render: (row) => feeItemLabel(row.feeItem) },
     {
       id: 'amount',
       header: '金额',
@@ -119,8 +119,8 @@ function customerChargeColumns(names: PartyNames): ListColumn<CustomerChargeReco
     {
       id: 'technical',
       header: '',
-      className: 'w-[1%] whitespace-nowrap align-top',
-      render: (row) => <TechnicalDetails rows={customerChargeTechnicalRows(row)} />,
+      className: 'align-top',
+      render: (row) => <TechnicalDetails rows={customerChargeTechnicalRows(row)} className="max-w-md" />,
     },
   ];
 }
@@ -215,7 +215,7 @@ const supplierExpectedCostColumns: ListColumn<SupplierExpectedCostRecord>[] = [
     // 本册不带供应商参与方编码，只带协议引用；协议号就是运营认供应商的字，原样作主字。
     render: (row) => <span className="font-mono text-xs text-idpxyz-textBright">{row.agreement}</span>,
   },
-  { id: 'fee-item', header: '费用项目', render: (row) => feeItemLabel(row.feeItem) },
+  { id: 'fee-item', header: '费用项目', className: 'whitespace-nowrap', render: (row) => feeItemLabel(row.feeItem) },
   {
     id: 'reason',
     header: '发生原因',
@@ -250,8 +250,8 @@ const supplierExpectedCostColumns: ListColumn<SupplierExpectedCostRecord>[] = [
   {
     id: 'technical',
     header: '',
-    className: 'w-[1%] whitespace-nowrap align-top',
-    render: (row) => <TechnicalDetails rows={supplierCostTechnicalRows(row)} />,
+    className: 'align-top',
+    render: (row) => <TechnicalDetails rows={supplierCostTechnicalRows(row)} className="max-w-md" />,
   },
 ];
 

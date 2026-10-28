@@ -66,9 +66,10 @@ function customerStatementColumns(accountOwners: Map<string, string>, names: Par
     {
       id: 'statement-number',
       header: '对账单号',
+      className: 'whitespace-nowrap',
       render: (row) => <span className="font-mono text-xs text-idpxyz-textBright">{row.statementNumber}</span>,
     },
-    { id: 'customer', header: '客户', render: (row) => statementCustomer(row, accountOwners, names) },
+    { id: 'customer', header: '客户', className: 'whitespace-nowrap', render: (row) => statementCustomer(row, accountOwners, names) },
     { id: 'period', header: '账期', className: 'font-mono text-xs', render: (row) => row.period },
     {
       id: 'total',
@@ -102,8 +103,8 @@ function customerStatementColumns(accountOwners: Map<string, string>, names: Par
     {
       id: 'technical',
       header: '',
-      className: 'w-[1%] whitespace-nowrap align-top',
-      render: (row) => <TechnicalDetails rows={statementTechnicalRows(row)} />,
+      className: 'align-top',
+      render: (row) => <TechnicalDetails rows={statementTechnicalRows(row)} className="max-w-md" />,
     },
   ];
 }
@@ -217,8 +218,8 @@ function supplierBillColumns(names: PartyNames): ListColumn<SupplierBillReceptio
     {
       id: 'technical',
       header: '',
-      className: 'w-[1%] whitespace-nowrap align-top',
-      render: (row) => <TechnicalDetails rows={receptionTechnicalRows(row)} />,
+      className: 'align-top',
+      render: (row) => <TechnicalDetails rows={receptionTechnicalRows(row)} className="max-w-md" />,
     },
   ];
 }

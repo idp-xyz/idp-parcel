@@ -57,8 +57,8 @@ function factTechnicalRows(row: ExternalFundsFactRecord) {
 }
 
 const columns: ListColumn<ExternalFundsFactRecord>[] = [
-  { id: 'fact', header: '流水号', render: (row) => <span className="font-mono text-xs text-idpxyz-textBright">{row.fact}</span> },
-  { id: 'source', header: '来源系统', className: 'font-mono text-xs', render: (row) => row.source },
+  { id: 'fact', header: '流水号', className: 'whitespace-nowrap', render: (row) => <span className="font-mono text-xs text-idpxyz-textBright">{row.fact}</span> },
+  { id: 'source', header: '来源系统', className: 'whitespace-nowrap font-mono text-xs', render: (row) => row.source },
   {
     id: 'kind',
     header: '种类',
@@ -99,8 +99,8 @@ const columns: ListColumn<ExternalFundsFactRecord>[] = [
   {
     id: 'technical',
     header: '',
-    className: 'w-[1%] whitespace-nowrap align-top',
-    render: (row) => <TechnicalDetails rows={factTechnicalRows(row)} />,
+    className: 'align-top',
+    render: (row) => <TechnicalDetails rows={factTechnicalRows(row)} className="max-w-md" />,
   },
 ];
 
