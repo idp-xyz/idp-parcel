@@ -202,7 +202,7 @@ func TestGateNotMetBlocksUnlessTheAuthorityAlreadyReleasedInFull(t *testing.T) {
 	assertFinding(t, findingOf(t, discrepant, domain.LoadingDeparture), domain.AdmissionUndecided, domain.CauseGateReleaseDiscrepancy)
 }
 
-// 外部放行不解内部限制；限制按动作时点判——动作之后才解除的限制，当时仍挡着。
+// 外部放行不自动解除限制；限制按动作时点判——动作之后才解除的限制，当时仍挡着。
 // Covers: AT-CC-418（折法半边，钉在装载出发那一道上）、AT-CC-419。
 func TestRestrictionInForceAtTheActionInstantBlocksDespiteAFullRelease(t *testing.T) {
 	blocked := newAdmissionCase(t).inUnit().gate(domain.LoadingDeparture, domain.GateReadingFormed, domain.GateMet).

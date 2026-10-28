@@ -77,6 +77,18 @@ func (double *restrictionViewDouble) ListByScope(
 	return nil, double.err
 }
 
+type internalRestrictionViewDouble struct {
+	asked []string
+	err   error
+}
+
+func (double *internalRestrictionViewDouble) ListInternalByScope(
+	_ context.Context, _ domain.TenantID, scope domain.DecisionScopeReference,
+) ([]domain.InternalRestriction, error) {
+	double.asked = append(double.asked, scope.String())
+	return nil, double.err
+}
+
 type releaseViewDouble struct {
 	releases []domain.ReleaseReading
 	err      error
@@ -125,6 +137,7 @@ type admissionFixture struct {
 	zones        *zoneViewDouble
 	scopes       *objectScopeViewDouble
 	restrictions *restrictionViewDouble
+	internal     *internalRestrictionViewDouble
 	conditions   *gateConditionViewDouble
 	dutyRules    *dutyRuleViewDouble
 	verification *currentDutyVerificationDouble
@@ -140,6 +153,7 @@ func newAdmissionFixture() *admissionFixture {
 		}},
 		scopes:       &objectScopeViewDouble{},
 		restrictions: &restrictionViewDouble{},
+		internal:     &internalRestrictionViewDouble{},
 		conditions:   &gateConditionViewDouble{configured: true},
 		dutyRules:    &dutyRuleViewDouble{rule: domain.DutyPaymentNotAPrecondition(), found: true},
 		verification: &currentDutyVerificationDouble{},
@@ -152,15 +166,16 @@ func newAdmissionFixture() *admissionFixture {
 func (fixture *admissionFixture) handler(t *testing.T) *application.JudgeActionAdmissionHandler {
 	t.Helper()
 	handler, err := application.NewJudgeActionAdmissionHandler(application.JudgeActionAdmissionDeps{
-		Zones:             fixture.zones,
-		Scopes:            fixture.scopes,
-		Restrictions:      fixture.restrictions,
-		Conditions:        fixture.conditions,
-		DutyRules:         fixture.dutyRules,
-		DutyVerifications: fixture.verification,
-		Releases:          fixture.releases,
-		Store:             fixture.store,
-		Clock:             fixture.clock,
+		Zones:                fixture.zones,
+		Scopes:               fixture.scopes,
+		Restrictions:         fixture.restrictions,
+		InternalRestrictions: fixture.internal,
+		Conditions:           fixture.conditions,
+		DutyRules:            fixture.dutyRules,
+		DutyVerifications:    fixture.verification,
+		Releases:             fixture.releases,
+		Store:                fixture.store,
+		Clock:                fixture.clock,
 	})
 	if err != nil {
 		t.Fatalf("构造准入编排：%v", err)
@@ -301,11 +316,12 @@ func TestEachUnreadableSourceStopsBeforeTheFold(t *testing.T) {
 		fail func(*testing.T, *admissionFixture)
 		want application.ActionAdmissionUnreadableReason
 	}{
-		"区域":   {func(_ *testing.T, f *admissionFixture) { f.zones.err = failure }, application.NodeZoneViewUnavailable},
-		"对象范围": {func(_ *testing.T, f *admissionFixture) { f.scopes.err = failure }, application.ObjectScopeViewUnavailable},
-		"限制":   {func(_ *testing.T, f *admissionFixture) { f.restrictions.err = failure }, application.RestrictionViewUnavailable},
-		"门禁目录": {func(_ *testing.T, f *admissionFixture) { f.conditions.err = failure }, application.AdmissionGateConditionsUnavailable},
-		"付款规则": {func(_ *testing.T, f *admissionFixture) { f.dutyRules.err = failure }, application.AdmissionDutyPaymentRuleUnavailable},
+		"区域":     {func(_ *testing.T, f *admissionFixture) { f.zones.err = failure }, application.NodeZoneViewUnavailable},
+		"对象范围":   {func(_ *testing.T, f *admissionFixture) { f.scopes.err = failure }, application.ObjectScopeViewUnavailable},
+		"限制":     {func(_ *testing.T, f *admissionFixture) { f.restrictions.err = failure }, application.RestrictionViewUnavailable},
+		"内部合规限制": {func(_ *testing.T, f *admissionFixture) { f.internal.err = failure }, application.InternalRestrictionViewUnavailable},
+		"门禁目录":   {func(_ *testing.T, f *admissionFixture) { f.conditions.err = failure }, application.AdmissionGateConditionsUnavailable},
+		"付款规则":   {func(_ *testing.T, f *admissionFixture) { f.dutyRules.err = failure }, application.AdmissionDutyPaymentRuleUnavailable},
 		"付款核对": {func(t *testing.T, f *admissionFixture) {
 			f.dutyRules.rule = acceptFullNoDeltaValid(t)
 			f.verification.err = failure

@@ -134,7 +134,7 @@ func TestAnInternalRestrictionNeedsASourceABasisAConditionAndExplicitCoverage(t 
 		"缺决定方式":  func(s *domain.InternalRestrictionSpec) { s.Mode = domain.DecisionModeInvalid },
 		"缺开始时间":  func(s *domain.InternalRestrictionSpec) { s.StartedAt = time.Time{} },
 		"没有覆盖项（不造全局冻结占位）": func(s *domain.InternalRestrictionSpec) { s.Coverage = nil },
-		"覆盖项缺范围": func(s *domain.InternalRestrictionSpec) { s.Coverage[0].Scope = domain.DecisionScopeReference{} },
+		"覆盖项缺范围":          func(s *domain.InternalRestrictionSpec) { s.Coverage[0].Scope = domain.DecisionScopeReference{} },
 		"覆盖项缺受限动作": func(s *domain.InternalRestrictionSpec) {
 			s.Coverage[0].Action = domain.GuardedActionInvalid
 		},
@@ -362,7 +362,7 @@ func TestADecisionIsRefusedWhereItDoesNotApply(t *testing.T) {
 		"同一覆盖项列两次": decisionSpec(t, "D-Y", domain.ReleaseCoverage, source, at,
 			key(t, "SYN-PCL-1", domain.OutboundRelease), key(t, "SYN-PCL-1", domain.OutboundRelease)),
 		"种类在词表外": decisionSpec(t, "D-Y", domain.RestrictionDecisionKindInvalid, source, at, key(t, "SYN-PCL-1", domain.OutboundRelease)),
-		"缺生效时间":   decisionSpec(t, "D-Y", domain.ReleaseCoverage, source, time.Time{}, key(t, "SYN-PCL-1", domain.OutboundRelease)),
+		"缺生效时间":  decisionSpec(t, "D-Y", domain.ReleaseCoverage, source, time.Time{}, key(t, "SYN-PCL-1", domain.OutboundRelease)),
 	} {
 		if _, err := domain.NewRestrictionDecision(spec); !errors.Is(err, domain.ErrInvalidRestrictionDecision) {
 			t.Errorf("%s：err = %v", name, err)

@@ -121,6 +121,8 @@ func admissionHandlerOn(t *testing.T, db *bentopg.DB) *application.JudgeActionAd
 	must(err)
 	restrictions, err := adapter.NewRestrictions(db)
 	must(err)
+	internalRestrictions, err := adapter.NewInternalRestrictions(db)
+	must(err)
 	gates, err := adapter.NewGateConditionView(db)
 	must(err)
 	duty, err := adapter.NewDutyPaymentReconciliation(db)
@@ -130,7 +132,7 @@ func admissionHandlerOn(t *testing.T, db *bentopg.DB) *application.JudgeActionAd
 	store, err := adapter.NewActionAdmissionJudgements(db)
 	must(err)
 	handler, err := application.NewJudgeActionAdmissionHandler(application.JudgeActionAdmissionDeps{
-		Zones: zones, Scopes: scopes, Restrictions: restrictions, Conditions: gates, DutyRules: gates,
+		Zones: zones, Scopes: scopes, Restrictions: restrictions, InternalRestrictions: internalRestrictions, Conditions: gates, DutyRules: gates,
 		DutyVerifications: duty, Releases: releases, Store: store, Clock: nodeZoneClock{},
 	})
 	must(err)

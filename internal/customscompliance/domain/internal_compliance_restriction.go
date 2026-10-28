@@ -245,19 +245,19 @@ func NewRestrictionDecision(spec RestrictionDecisionSpec) (RestrictionDecision, 
 	}, nil
 }
 
-func (decision RestrictionDecision) ID() RestrictionDecisionID      { return decision.id }
-func (decision RestrictionDecision) Kind() RestrictionDecisionKind  { return decision.kind }
-func (decision RestrictionDecision) Source() RestrictionSource      { return decision.source }
-func (decision RestrictionDecision) Evidence() RestrictionEvidence  { return decision.evidence }
-func (decision RestrictionDecision) DecidedBy() RestrictionDecider  { return decision.decidedBy }
+func (decision RestrictionDecision) ID() RestrictionDecisionID       { return decision.id }
+func (decision RestrictionDecision) Kind() RestrictionDecisionKind   { return decision.kind }
+func (decision RestrictionDecision) Source() RestrictionSource       { return decision.source }
+func (decision RestrictionDecision) Evidence() RestrictionEvidence   { return decision.evidence }
+func (decision RestrictionDecision) DecidedBy() RestrictionDecider   { return decision.decidedBy }
 func (decision RestrictionDecision) Authority() RestrictionAuthority { return decision.authority }
-func (decision RestrictionDecision) At() time.Time                  { return decision.at }
+func (decision RestrictionDecision) At() time.Time                   { return decision.at }
 
 func (decision RestrictionDecision) Covers() []CoverageKey {
 	return append([]CoverageKey(nil), decision.covers...)
 }
 
-func (decision RestrictionDecision) covers_(key CoverageKey) bool {
+func (decision RestrictionDecision) namesCoverage(key CoverageKey) bool {
 	for _, covered := range decision.covers {
 		if covered == key {
 			return true
@@ -279,7 +279,7 @@ func (decision RestrictionDecision) SameContentAs(other RestrictionDecision) boo
 		return false
 	}
 	for _, key := range decision.covers {
-		if !other.covers_(key) {
+		if !other.namesCoverage(key) {
 			return false
 		}
 	}
@@ -344,13 +344,15 @@ func EstablishInternalRestriction(spec InternalRestrictionSpec) (InternalRestric
 	}, nil
 }
 
-func (restriction InternalRestriction) ID() InternalRestrictionID             { return restriction.id }
-func (restriction InternalRestriction) Source() RestrictionSource             { return restriction.source }
-func (restriction InternalRestriction) Basis() RestrictionBasis               { return restriction.basis }
-func (restriction InternalRestriction) Mode() DecisionMode                    { return restriction.mode }
-func (restriction InternalRestriction) DecidedBy() RestrictionDecider         { return restriction.decidedBy }
-func (restriction InternalRestriction) Condition() RestrictionReleaseCondition { return restriction.condition }
-func (restriction InternalRestriction) StartedAt() time.Time                  { return restriction.startedAt }
+func (restriction InternalRestriction) ID() InternalRestrictionID     { return restriction.id }
+func (restriction InternalRestriction) Source() RestrictionSource     { return restriction.source }
+func (restriction InternalRestriction) Basis() RestrictionBasis       { return restriction.basis }
+func (restriction InternalRestriction) Mode() DecisionMode            { return restriction.mode }
+func (restriction InternalRestriction) DecidedBy() RestrictionDecider { return restriction.decidedBy }
+func (restriction InternalRestriction) Condition() RestrictionReleaseCondition {
+	return restriction.condition
+}
+func (restriction InternalRestriction) StartedAt() time.Time { return restriction.startedAt }
 
 // Coverage 交回覆盖项逐项开始时的状态（不含决定的影响）。
 func (restriction InternalRestriction) Coverage() []CoverageSpec {
@@ -382,7 +384,7 @@ type coverageItemState struct {
 func (restriction InternalRestriction) itemState(key CoverageKey) coverageItemState {
 	var state coverageItemState
 	for _, decision := range restriction.decisions {
-		if !decision.covers_(key) {
+		if !decision.namesCoverage(key) {
 			continue
 		}
 		switch decision.kind {
@@ -447,7 +449,7 @@ func (restriction InternalRestriction) standingAt(item CoverageSpec, at time.Tim
 	}
 	standing := item.Standing
 	for _, decision := range restriction.decisions {
-		if !decision.covers_(item.key()) || decision.at.After(at) {
+		if !decision.namesCoverage(item.key()) || decision.at.After(at) {
 			continue
 		}
 		switch decision.kind {
@@ -553,4 +555,25 @@ func JudgeInternalApplicability(
 		}
 	}
 	return judged, nil
+}
+
+// SameHeadAs 报告两份限制的建立内容（限制头与覆盖项集合，不含决定）是否同一份：同标识同内容是重放，异内容是冲突。
+func (restriction InternalRestriction) SameHeadAs(other InternalRestriction) bool {
+	if restriction.id != other.id ||
+		restriction.source != other.source ||
+		restriction.basis != other.basis ||
+		restriction.mode != other.mode ||
+		restriction.decidedBy != other.decidedBy ||
+		restriction.condition != other.condition ||
+		!restriction.startedAt.Equal(other.startedAt) ||
+		len(restriction.coverage) != len(other.coverage) {
+		return false
+	}
+	for _, item := range restriction.coverage {
+		held, ok := other.coverageItem(item.key())
+		if !ok || held.Standing != item.Standing {
+			return false
+		}
+	}
+	return true
 }

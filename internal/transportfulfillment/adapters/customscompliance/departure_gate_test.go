@@ -83,6 +83,8 @@ func newDepartureGateDB(t *testing.T) *departureGateDB {
 	must(err)
 	restrictions, err := ccpostgres.NewRestrictions(db)
 	must(err)
+	internalRestrictions, err := ccpostgres.NewInternalRestrictions(db)
+	must(err)
 	gates, err := ccpostgres.NewGateConditionView(db)
 	must(err)
 	duty, err := ccpostgres.NewDutyPaymentReconciliation(db)
@@ -92,7 +94,7 @@ func newDepartureGateDB(t *testing.T) *departureGateDB {
 	store, err := ccpostgres.NewActionAdmissionJudgements(db)
 	must(err)
 	handler, err := ccapp.NewJudgeActionAdmissionHandler(ccapp.JudgeActionAdmissionDeps{
-		Zones: zones, Scopes: scopes, Restrictions: restrictions, Conditions: gates, DutyRules: gates,
+		Zones: zones, Scopes: scopes, Restrictions: restrictions, InternalRestrictions: internalRestrictions, Conditions: gates, DutyRules: gates,
 		DutyVerifications: duty, Releases: releases, Store: store, Clock: fixedClock{at: departureGateAt.Add(time.Minute)},
 	})
 	must(err)

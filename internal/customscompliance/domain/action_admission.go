@@ -8,8 +8,9 @@ import (
 )
 
 // 本文件是「动作准入判断」的领域折叠（ADR-0206）：对一个对象、一次动作意图、一个动作时点，逐适用动作把
-// 三源——内部合规限制、放行门禁核对、外部放行结果——折成封闭答复。三源各自的判断仍在各自那里（限制适用性
-// 在 regulatory_restriction.go，门禁结论在 duty_release.go 的 FoldGateConclusion，放行结果由 UC-CC-006
+// 三源——限制（监管限制与内部合规限制两本册，ADR-0241、ADR-0334）、放行门禁核对、外部放行结果——折成封闭答复。
+// 三源各自的判断仍在各自那里（监管限制适用性在 regulatory_restriction.go，内部合规限制适用性在
+// internal_compliance_restriction.go，门禁结论在 duty_release.go 的 FoldGateConclusion，放行结果由 UC-CC-006
 // 接收）；这里只决定三者怎么合在一起说「这一步能不能走」，不重算任何一源。
 
 var (
@@ -18,7 +19,7 @@ var (
 )
 
 // AdmissionAnswer 是动作准入判断的封闭五格。取值次序即折叠时的压制次序（大者压小者）：阻断压过一切——
-// 外部放行不解内部限制、门禁满足不答放行；未配置压过未决——缺配置的那一格重投不会自己好，要人去配；
+// 外部放行不自动解除限制（监管限制要一份引用已接受监管结果的解除，内部合规限制要责任来源的解除决定）、门禁满足不答放行；未配置压过未决——缺配置的那一格重投不会自己好，要人去配；
 // 未决压过放行——还缺东西就不能说能走；放行压过不受门禁——有一道门过了，就不是「本就没有门」。
 type AdmissionAnswer uint8
 
@@ -74,6 +75,10 @@ const (
 	CauseReleasePartialOnly
 	CauseReleaseConditionalOnly
 	CauseGateReleaseDiscrepancy
+	// 内部合规限制的覆盖项在动作时点待确认或冲突：来源如实写下的业务状态，不阻断也不放行；续办不同（去确认来源，或去裁冲突），
+	// 所以是两种依据（ADR-0334 决定四）。
+	CauseInternalRestrictionUnconfirmed
+	CauseInternalRestrictionConflicting
 
 	// 未配置
 	CauseNodeZoneNotRegistered
@@ -82,7 +87,9 @@ const (
 	CauseDutyPaymentFindingBesideRule
 
 	// 阻断
+	// CauseRestrictionInForce 沿用旧词，专指监管限制：已记下的判断与消费方留存的依据字串不换标识（ADR-0334 决定四）。
 	CauseRestrictionInForce
+	CauseInternalRestrictionInForce
 	CauseGateUnmet
 	CauseGatePartiallyMet
 	CauseGateConflicting
@@ -98,12 +105,13 @@ func (cause AdmissionCause) Answer() AdmissionAnswer {
 		return AdmissionAdmitted
 	case CauseCustomsScopeUnresolved, CauseDeclarationUnitNotFormed,
 		CauseDutyVerificationAbsent, CauseDutyVerificationPending,
-		CauseReleasePartialOnly, CauseReleaseConditionalOnly, CauseGateReleaseDiscrepancy:
+		CauseReleasePartialOnly, CauseReleaseConditionalOnly, CauseGateReleaseDiscrepancy,
+		CauseInternalRestrictionUnconfirmed, CauseInternalRestrictionConflicting:
 		return AdmissionUndecided
 	case CauseNodeZoneNotRegistered, CauseGateCatalogNotRegistered,
 		CauseDutyPaymentRuleNotRegistered, CauseDutyPaymentFindingBesideRule:
 		return AdmissionNotConfigured
-	case CauseRestrictionInForce, CauseGateUnmet, CauseGatePartiallyMet,
+	case CauseRestrictionInForce, CauseInternalRestrictionInForce, CauseGateUnmet, CauseGatePartiallyMet,
 		CauseGateConflicting, CauseReleaseNotReceived:
 		return AdmissionBlocked
 	default:
@@ -141,6 +149,12 @@ func (cause AdmissionCause) String() string {
 		return "DUTY_PAYMENT_RULE_NOT_REGISTERED"
 	case CauseDutyPaymentFindingBesideRule:
 		return "DUTY_PAYMENT_FINDING_BESIDE_RULE"
+	case CauseInternalRestrictionUnconfirmed:
+		return "INTERNAL_RESTRICTION_UNCONFIRMED"
+	case CauseInternalRestrictionConflicting:
+		return "INTERNAL_RESTRICTION_CONFLICTING"
+	case CauseInternalRestrictionInForce:
+		return "INTERNAL_RESTRICTION_IN_FORCE"
 	case CauseRestrictionInForce:
 		return "RESTRICTION_IN_FORCE"
 	case CauseGateUnmet:
@@ -263,9 +277,12 @@ type ActionAdmissionInput struct {
 	TenantZonesInForce bool
 	Scope              ObjectCustomsScope
 	Restrictions       []RegulatoryRestriction
-	Gates              []GateReading
-	Releases           []ReleaseReading
-	JudgedAt           time.Time
+	// InternalRestrictions 是内部合规限制册上的限制（另一本册，不与 Restrictions 混用，ADR-0334）。空册不产生依据，
+	// 也不是「无内部限制」的结论。
+	InternalRestrictions []InternalRestriction
+	Gates                []GateReading
+	Releases             []ReleaseReading
+	JudgedAt             time.Time
 }
 
 // ActionAdmissionJudgement 是一次动作准入判断。类型上没有「放行结果」——准入答放行只说这一步此刻可走，
@@ -317,7 +334,8 @@ func (judgement ActionAdmissionJudgement) AsRecordedAt(judgedAt time.Time) Actio
 // JudgeActionAdmission 逐适用动作折三源，再把各动作压成整次答复（压制次序见 AdmissionAnswer）。
 //
 // 每个动作的折法：
-//   - 限制：对象自身与各当前单元上、动作时点有效且约束本动作的限制一律阻断——外部放行不解内部限制。
+//   - 限制：对象自身与各当前单元上，动作时点有效且约束本动作的限制（监管限制或内部合规限制）一律阻断——外部放行不自动解除
+//     限制；内部合规限制的覆盖项在动作时点待确认或冲突时答未决并指名那条限制，册上没有记录不产生依据（ADR-0334）。
 //   - 范围：对象不在任何案件与单元里时，跨区移动答未决（跨关务边界必须有案可依，等立案），其余受门禁动作
 //     答不受门禁（本上下文没有任何东西约束它）；已在案却未成单元的程序答未决。
 //   - 门禁 × 放行，逐单元：门禁未形成按停点归未配置或未决；不适用即不受门禁；满足时看动作时点前生效的放行
@@ -419,6 +437,11 @@ func (input ActionAdmissionInput) validateSources() error {
 			return ErrInvalidAdmissionInput
 		}
 	}
+	for _, restriction := range input.InternalRestrictions {
+		if !restriction.id.valid() {
+			return ErrInvalidAdmissionInput
+		}
+	}
 	for _, release := range input.Releases {
 		if release.Source == "" || !release.Release.kind.valid() || !release.Release.scope.valid() || release.OccurredAt.IsZero() {
 			return ErrInvalidAdmissionInput
@@ -427,12 +450,12 @@ func (input ActionAdmissionInput) validateSources() error {
 	return nil
 }
 
-// objectScope 是对象自身作为限制范围的写法：内部限制可以直接落在一个包裹上，不必经申报单元。
+// objectScope 是对象自身作为限制范围的写法：限制可以直接落在一个包裹上，不必经申报单元。
 func (input ActionAdmissionInput) objectScope() DecisionScopeReference {
 	return DecisionScopeReference{input.Object.requiredValue}
 }
 
-// restrictionBases 盘出动作时点有效、约束本动作的限制，按范围各成一条依据。
+// restrictionBases 盘出两本限制册对本动作的依据，按范围各成条目：监管限制有效、内部合规限制有效、冲突、待确认各一条。
 func (input ActionAdmissionInput) restrictionBases(action GuardedAction) ([]AdmissionBasis, error) {
 	scopes := []DecisionScopeReference{input.objectScope()}
 	for _, unit := range input.Scope.Units {
@@ -449,14 +472,34 @@ func (input ActionAdmissionInput) restrictionBases(action GuardedAction) ([]Admi
 		if err != nil {
 			return nil, err
 		}
-		if admissibility.Admissible() {
-			continue
+		if !admissibility.Admissible() {
+			sources := make([]string, 0, len(admissibility.blockedBy))
+			for _, id := range admissibility.blockedBy {
+				sources = append(sources, id.String())
+			}
+			bases = append(bases, newBasis(CauseRestrictionInForce, scope, CustomsProcedureReference{}, sources...))
 		}
-		sources := make([]string, 0, len(admissibility.blockedBy))
-		for _, id := range admissibility.blockedBy {
-			sources = append(sources, id.String())
+		internal, err := JudgeInternalApplicability(action, scope, input.InternalRestrictions, input.At)
+		if err != nil {
+			return nil, err
 		}
-		bases = append(bases, newBasis(CauseRestrictionInForce, scope, CustomsProcedureReference{}, sources...))
+		for _, grid := range []struct {
+			cause AdmissionCause
+			ids   []InternalRestrictionID
+		}{
+			{CauseInternalRestrictionInForce, internal.inForce},
+			{CauseInternalRestrictionConflicting, internal.conflicting},
+			{CauseInternalRestrictionUnconfirmed, internal.unconfirmed},
+		} {
+			if len(grid.ids) == 0 {
+				continue
+			}
+			sources := make([]string, 0, len(grid.ids))
+			for _, id := range grid.ids {
+				sources = append(sources, id.String())
+			}
+			bases = append(bases, newBasis(grid.cause, scope, CustomsProcedureReference{}, sources...))
+		}
 	}
 	return bases, nil
 }

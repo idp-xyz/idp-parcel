@@ -93,6 +93,10 @@ func departureGateCustomsView(db *bentopg.DB, clock systemClock) (*tfcustoms.Dep
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: reask customs restrictions: %w", err)
 	}
+	internalRestrictions, err := ccpostgres.NewInternalRestrictions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: reask customs internal restrictions: %w", err)
+	}
 	gates, err := ccpostgres.NewGateConditionView(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: reask customs gate condition view: %w", err)
@@ -110,15 +114,16 @@ func departureGateCustomsView(db *bentopg.DB, clock systemClock) (*tfcustoms.Dep
 		return nil, fmt.Errorf("parcel-dispatch: reask customs action admission judgements: %w", err)
 	}
 	judge, err := ccapplication.NewJudgeActionAdmissionHandler(ccapplication.JudgeActionAdmissionDeps{
-		Zones:             zoneView,
-		Scopes:            scopes,
-		Restrictions:      restrictions,
-		Conditions:        gates,
-		DutyRules:         gates,
-		DutyVerifications: dutyVerifications,
-		Releases:          releases,
-		Store:             judgements,
-		Clock:             clock,
+		Zones:                zoneView,
+		Scopes:               scopes,
+		Restrictions:         restrictions,
+		InternalRestrictions: internalRestrictions,
+		Conditions:           gates,
+		DutyRules:            gates,
+		DutyVerifications:    dutyVerifications,
+		Releases:             releases,
+		Store:                judgements,
+		Clock:                clock,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: reask customs action admission: %w", err)
