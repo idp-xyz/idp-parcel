@@ -17,12 +17,12 @@
 | partycommercial | 177 | 197 | 15 | 43 | 1 | 43 |
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 26 | 24 | 0 | 0 | 0 | 0 |
-| settlementaccounting | 246 | 196 | 41 | 72 | 13 | 11 |
+| settlementaccounting | 248 | 197 | 41 | 72 | 13 | 12 |
 | transportfulfillment | 307 | 316 | 56 | 62 | 16 | 56 |
 | visibilityexception | 133 | 133 | 13 | 33 | 8 | 13 |
-| **合计** | 1739 | 1752 | 233 | 398 | 69 | 238 |
+| **合计** | 1741 | 1753 | 233 | 398 | 69 | 239 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 264、测试 425。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 264、测试 426。
 
 ## 跨上下文消费缝：51 组，173 个生产文件
 
@@ -80,11 +80,11 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 10 |
 
-## 迁移：12 个模块共 350 份 SQL
+## 迁移：12 个模块共 352 份 SQL
 
 | 模块 | 份数 |
 |---|---|
-| access_identity | 34 |
+| access_identity | 35 |
 | collection_remittance | 4 |
 | customs_compliance | 29 |
 | network_routing | 32 |
@@ -93,11 +93,11 @@
 | parcel_shipment | 33 |
 | party_commercial | 42 |
 | pilot_governance | 8 |
-| settlement_accounting | 48 |
+| settlement_accounting | 49 |
 | transport_fulfillment | 51 |
 | visibility_exception | 32 |
 
-## 接线面：接入面端点 218 个，消费适配器 63 个生产文件，直投路由表 45 条
+## 接线面：接入面端点 220 个，消费适配器 63 个生产文件，直投路由表 45 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -112,10 +112,10 @@
 | parcelshipment | 21 |
 | partycommercial | 40 |
 | pilotgovernance | 1 |
-| settlementaccounting | 10 |
+| settlementaccounting | 12 |
 | transportfulfillment | 50 |
 | visibilityexception | 15 |
-| **合计** | 218 |
+| **合计** | 220 |
 
 消费适配器按 `internal/<消费方>/adapters/` 下 `inbox`、`adoptconsume`、`finalconsume`、`veconsume` 四类目录的生产文件数。它与上面的「跨上下文消费缝」是两种东西：那一栏数的是消费方为某个提供方写的防腐层，这一栏数的是接进程内直投信封的消费门。
 
