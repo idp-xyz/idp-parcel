@@ -17,7 +17,7 @@ import (
 
 // 封闭命令表：案件配置登记用例各对齐一个命令——就绪与授权各带撤销半边（撤销
 // 是状态推进不是删除）、解释规则按（辖区，法定生效起点）登记版本（换版即登记更晚
-// 起点的新版，前版终点随之落定）、义务与门禁各分目录与明细；随后是建案要求规则
+// 起点的新版，前版终点随之落定）、义务与门禁各分目录与明细（门禁里「税费付款」那一道登的是规则不是认定，另走 duty-payment-gate-rule）；随后是建案要求规则
 // （case-requirement），随 cc-case-requirement-rule-registry 01 并入本口；
 // 再是口岸目录与申报路径目录（票 admin-remainder-mechanism-batch/03），版本代数
 // 同解释规则——起点入键、终点在换版时落定；再是监管凭证、税费付款协作事项、税费
@@ -39,6 +39,7 @@ const (
 	commandObligationItem          = "obligation-item"
 	commandGateCatalog             = "gate-catalog"
 	commandGateFinding             = "gate-finding"
+	commandDutyPaymentGateRule     = "duty-payment-gate-rule"
 	commandCaseRequirement         = "case-requirement"
 	commandCandidatePort           = "candidate-port"
 	commandDeclarationPath         = "declaration-path"
@@ -53,7 +54,7 @@ var allCommands = []string{
 	commandAuthorityGrant, commandAuthorityRevoke,
 	commandInterpretationRule,
 	commandObligationCatalog, commandObligationItem,
-	commandGateCatalog, commandGateFinding,
+	commandGateCatalog, commandGateFinding, commandDutyPaymentGateRule,
 	commandCaseRequirement,
 	commandCandidatePort, commandDeclarationPath,
 	commandRegulatoryCredential, commandDutyCollaboration, commandDutyPaymentVerification,
@@ -170,6 +171,14 @@ func commandFor(command string, raw []byte) (dispatchFunc, error) {
 		}
 		return configured(func(ctx context.Context, registrar registrar) (application.CaseConfigurationOutcome, error) {
 			return registrar.configurations.RegisterGateFinding(ctx, translated)
+		}), nil
+	case commandDutyPaymentGateRule:
+		translated, err := registrationjson.DutyPaymentGateRuleFromJSON(raw)
+		if err != nil {
+			return nil, err
+		}
+		return configured(func(ctx context.Context, registrar registrar) (application.CaseConfigurationOutcome, error) {
+			return registrar.configurations.RegisterDutyPaymentGateRule(ctx, translated)
 		}), nil
 	case commandCaseRequirement:
 		translated, err := registrationjson.CaseRequirementFromJSON(raw)

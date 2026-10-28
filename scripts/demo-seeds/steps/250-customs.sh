@@ -13,6 +13,10 @@ echo "== 关务案件配置登记（customs-compliance：就绪/授权/规则/�
 "$BIN/parcel-customs-register" obligation-item -input "$SEEDS/customs/07-obligation-item-handed.json"
 "$BIN/parcel-customs-register" gate-catalog -input "$SEEDS/customs/08-gate-catalog.json"
 "$BIN/parcel-customs-register" gate-finding -input "$SEEDS/customs/09-gate-finding-met.json"
+# 「税费付款」那一道的规则行（票 launch-wiring/06）：演示租户在 SYN-PROC-CN-EXPORT 下取「不构成前置条件」——这是演示采用的取值（证据 S），
+# 不是产品默认，也不是任何真实程序的读法；真实租户的规则取值属租户上线时的实施，未登即答 DUTY_PAYMENT_GATE_RULE_NOT_CONFIGURED。
+# 与上面的目录、逐项认定同一把键，放行门禁核对（486 那一节授予）据此可答出结论。
+"$BIN/parcel-customs-register" duty-payment-gate-rule -input "$SEEDS/customs/32-duty-payment-gate-rule-not-a-precondition.json"
 # 第二份门禁只登目录、不登任何前置条件——0008 自注点名必须与「目录未登记」分得开的
 # 那一格：登记了空清单是「此动作在此边界本就不受门禁」（领域折为不适用），未登记才是
 # 无从复核。合规限制页据它展示两态各说各话（票 admin-web-page-wiring-frontier/06）。

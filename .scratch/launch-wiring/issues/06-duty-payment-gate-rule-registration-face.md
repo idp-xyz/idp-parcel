@@ -1,7 +1,7 @@
 # 06 「税费付款」门禁规则行没有生产登记面
 
 Category: enhancement
-Status: ready-for-agent——2026-10-28 会话 tops-20（idp-parcel-91）立：launch-wiring/03 作者报告；等 01–03 进 main 后开工（同在 customs-compliance）
+Status: in-progress（分支 claude-lw-duty）；此前：ready-for-agent——2026-10-28 会话 tops-20（idp-parcel-91）立：launch-wiring/03 作者报告；等 01–03 进 main 后开工（同在 customs-compliance）
 Blocked by: [01–03](./03-release-gate-verification-production-face.md)（同地盘，先进 main）
 
 ## 现象

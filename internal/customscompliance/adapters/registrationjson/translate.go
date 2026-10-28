@@ -384,6 +384,63 @@ func gateCatalogFromJSON(raw []byte, tenantSource tenantOf) (application.Registe
 	}, nil
 }
 
+type dutyPaymentGateRuleDocument struct {
+	TenantID         string   `json:"tenantId"`
+	ScopeRef         string   `json:"scopeRef"`
+	Action           string   `json:"action"`
+	BoundaryRef      string   `json:"boundaryRef"`
+	NotAPrecondition bool     `json:"notAPrecondition"`
+	AcceptCoverage   []string `json:"acceptCoverage"`
+	AcceptDelta      []string `json:"acceptDelta"`
+	AcceptValidity   []string `json:"acceptValidity"`
+}
+
+// DutyPaymentGateRuleFromJSON 译装门禁里「税费付款」那一道的规则登记。两形二选一：notAPrecondition 为真
+// 且三个接受集合都不写，或 notAPrecondition 缺省且三个集合各非空——两形互斥与集合形状由编排和领域构造把门，
+// 这里只做取值字面到领域枚举的翻译。取值字面同付款核对那一份（coverage / delta / validity 的封闭值），
+// 不另造一套；`PENDING` / `CONFLICTING` 能译出来，是为让领域构造去拒，而不是在这里静默丢掉。
+func DutyPaymentGateRuleFromJSON(raw []byte) (application.RegisterDutyPaymentGateRuleCommand, error) {
+	none := application.RegisterDutyPaymentGateRuleCommand{}
+	var document dutyPaymentGateRuleDocument
+	if err := decodeStrict(raw, &document); err != nil {
+		return none, fmt.Errorf("税费付款门禁规则登记输入不是本入口的形状：%w", err)
+	}
+	tenant, scope, action, boundary, err := gateKeyFrom(
+		document.TenantID, document.ScopeRef, document.Action, document.BoundaryRef)
+	if err != nil {
+		return none, err
+	}
+	command := application.RegisterDutyPaymentGateRuleCommand{
+		TenantID:         tenant,
+		Scope:            scope,
+		Action:           action,
+		Boundary:         boundary,
+		NotAPrecondition: document.NotAPrecondition,
+	}
+	for _, text := range document.AcceptCoverage {
+		member, err := dutyCoverageFrom(text)
+		if err != nil {
+			return none, err
+		}
+		command.AcceptCoverage = append(command.AcceptCoverage, member)
+	}
+	for _, text := range document.AcceptDelta {
+		member, err := dutyDeltaFrom(text)
+		if err != nil {
+			return none, err
+		}
+		command.AcceptDelta = append(command.AcceptDelta, member)
+	}
+	for _, text := range document.AcceptValidity {
+		member, err := dutyFactValidityFrom(text)
+		if err != nil {
+			return none, err
+		}
+		command.AcceptValidity = append(command.AcceptValidity, member)
+	}
+	return command, nil
+}
+
 type gateFindingDocument struct {
 	TenantID        string `json:"tenantId"`
 	ScopeRef        string `json:"scopeRef"`
