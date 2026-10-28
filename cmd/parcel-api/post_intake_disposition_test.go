@@ -509,3 +509,90 @@ func TestThePostIntakeDecisionRefusesToRunOutsideATransaction(t *testing.T) {
 		t.Fatalf("事务壳之内：留痕 %d 行、信封 %d 封, want 各 1", fixture.decisionRows(t), fixture.envelopes(t))
 	}
 }
+
+// Covers: AT-PS-174；ADR-0332 决定五、ADR-0295 决定三之一——被取消先后冲突解开决定认定依据不成立的取消，同样进等回应清单（来路 CANCELLATION_NOT_UPHELD），并能被一份决定回应；
+// 回应之后它从清单消失，不再被回应第二次。
+func TestACancellationNotUpheldWaitsForADispositionAndCanBeAnswered(t *testing.T) {
+	fixture := newPostIntakeE2E(t)
+	fixture.arrangeCrossed(t, "SYN-PARCEL-3", "cancel-key-pending")
+	tenant := mustValue(t, domain.NewTenantID, pidTenant)
+	parcel := mustValue(t, domain.NewDeclaredParcelID, "SYN-PARCEL-3")
+	cancelledAt := time.Date(2026, 10, 4, 9, 0, 0, 0, time.UTC)
+	cancellation, err := domain.DecideParcelCancellation(domain.ParcelCancellationSpec{
+		ID:          mustValue(t, domain.NewParcelCancellationID, "PCXL-3"),
+		Parcel:      parcel,
+		Requester:   mustValue(t, domain.NewCancellationRequesterReference, "customer-a"),
+		Authority:   mustValue(t, domain.NewCancellationAuthorityReference, "CANCEL-RULE/1"),
+		Reason:      mustValue(t, domain.NewCancellationReasonReference, "CHANGED_MIND"),
+		RequestedAt: cancelledAt,
+	}, domain.CurrentIntakeFact{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	boundaryAt := cancelledAt.Add(-time.Hour)
+	conflict, conflicted, err := domain.JudgeCancellationOrder(cancellation, domain.CancellationBoundaryFact{
+		Kind:       domain.NetworkIntakeBoundary,
+		Reference:  mustValue(t, domain.NewCancellationBoundaryReference, "NODE_INTAKE/v1"),
+		OccurredAt: boundaryAt,
+	})
+	if err != nil || !conflicted {
+		t.Fatalf("判冲突：%v %v", err, conflicted)
+	}
+	cancellations, err := pspostgres.NewParcelCancellations(fixture.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conflicts, err := pspostgres.NewCancellationOrderConflicts(fixture.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		if _, err := cancellations.Save(txCtx, psports.CancellationRecord{
+			Key: psports.CancellationRequestKey{
+				TenantID: tenant, RequestKey: mustValue(t, domain.NewSourceRequestKey, "cancel-key-3"), Parcel: parcel,
+			},
+			ContentDigest: "digest-cancel-3", Kind: psports.RecordParcelCancelled, Cancellation: cancellation,
+			DecidedAt: cancelledAt.Add(time.Minute),
+		}); err != nil {
+			return err
+		}
+		_, err := conflicts.Record(txCtx, psports.CancellationOrderConflictRecord{
+			TenantID: tenant, Conflict: conflict, DetectedAt: cancelledAt.Add(time.Hour),
+		})
+		return err
+	}); err != nil {
+		t.Fatalf("摆夹具：%v", err)
+	}
+	conflictDecision, err := buildCancellationOrderConflictDecision(fixture.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := conflictDecision.Handle(t.Context(), shipmentapp.DecideCancellationOrderConflictCommand{
+		Tenant:       tenant,
+		Parcel:       parcel,
+		BoundaryKind: domain.NetworkIntakeBoundary,
+		BoundaryRef:  mustValue(t, domain.NewCancellationBoundaryReference, "NODE_INTAKE/v1"),
+		Cancellation: mustValue(t, domain.NewParcelCancellationID, "PCXL-3"),
+		Kind:         domain.CancellationNotUpheld,
+		Decider:      mustValue(t, domain.NewCancellationOrderConflictDeciderReference, "https://id.syn.example#alice"),
+		Basis:        mustValue(t, domain.NewCancellationOrderConflictDecisionBasis, "SYN-BASIS"),
+	}); err != nil || result.Outcome() != shipmentapp.CancellationOrderConflictDecided {
+		t.Fatalf("认定取消依据不成立：%v %v", result.Outcome(), err)
+	}
+
+	request := httptest.NewRequest(http.MethodGet, pidListURL, nil)
+	request.Header.Set("Authorization", "Bearer "+pidDecider)
+	response := httptest.NewRecorder()
+	fixture.endpoints[pidListURL].ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"requestKey":"cancel-key-3"`) ||
+		!strings.Contains(response.Body.String(), "CANCELLATION_NOT_UPHELD") || !strings.Contains(response.Body.String(), `"pendingCount":2`) {
+		t.Fatalf("清单 = %d %s, want 含来路 CANCELLATION_NOT_UPHELD 的 cancel-key-3 与待处置那条，共 2", response.Code, response.Body.String())
+	}
+	status, raw := fixture.post(pidDecider, pidBody("SYN-PARCEL-3", 0, "RETURN", "cancel-key-3", ""))
+	if status != http.StatusCreated || pidAnswerOf(t, raw).Outcome != "DECIDED" {
+		t.Fatalf("回应被认定不成立的取消 = %d %s, want 201 DECIDED", status, raw)
+	}
+	if _, pending, _ := fixture.list(t, pidDecider); pending != 1 {
+		t.Fatalf("回应之后清单计数 = %d, want 1（待处置那条仍在）", pending)
+	}
+}
