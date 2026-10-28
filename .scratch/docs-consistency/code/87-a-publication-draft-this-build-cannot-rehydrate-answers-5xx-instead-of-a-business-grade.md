@@ -1,7 +1,7 @@
 # 87 本构建折不回来的发布载体答成 5xx，而不是业务格
 
 Category: bug
-Status: in-progress——2026-10-28 会话 tops-20（idp-parcel-91）接手 tops-26 断在进 main 前的这一张（作者与修订轮已完、评审无阻断），分支 claude-code87 待变基改号。此前 needs-triage——建议 R3：今天受影响的行为空（没有真实租户；演示种子不经载体发布价格规则），但答法违反 ADR-0022 与 ADR-0029，下一次规范化换号或正文合法集合收窄时同病还会复发。2026-10-25 协调方据票 [docs-consistency/code/25](./25-sell-volumetric-factor-and-amount-rounding-are-read-from-the-price-card.md) 隔离评审 N1 裁走 (b)（本票立、code/25 不改代码），作者会话代立（用户「你作为业务和系统专家自决」授权）。
+Status: in-progress——2026-10-28 作者完工待复核与进 main：已变基到 origin/main `0e8813657` 并改号 ADR-0333→ADR-0344，分支 claude-code87（代码最后一笔 `774d69986`，见文末「变基改号」）。此前：tops-20（idp-parcel-91）接手 tops-26 断在进 main 前的一张，作者与修订轮已完、评审无阻断。
 Blocked by: 无
 上下文：PC（参与方与商业），领域层载体重建与应用层载体编排，连带 PC 的 HTTP 载体端点与管理台载体流程。
 出处：code/25 隔离评审 N1。
@@ -62,7 +62,7 @@ S–M：领域一处改 `%w` 保链；三只编排各认一个哨兵；批准口
   - **HTTP**：载体响应多 `readable` 与 `unreadableCause`；批准与发布答复在读不回一格带 `status` 与 `cause`、不带摘要；单份读回答 200 加 `DRAFT_NOT_READABLE`（`draft` 只有库上事实，没有 `content`）；读取失败与行本身坏了仍 5xx。`cmd/parcel-api` 只改读口占位的签名（`unwired_orchestration.go`），未动 endpoints.go、main.go、endpoints_test.go、routes.go 与 `cmd/parcel-dispatch/routes.go`。
   - **用例**：领域（`publication_draft_unreadable_test.go`）、真库（列表与点读、体积系数、录入撞读不回行、坏行与重录）、编排、传输各层，另有生产装配真库一条（`cmd/parcel-api/assemble_publication_unreadable_draft_test.go`：真铸造、真操作者 Intake、真事务编排，行改成 `PCC-9` 后批准与发布答 200 加 `DRAFT_NOT_READABLE`、按同版本重录答 `DRAFT_REVISED`、之后读得回）。
 - `d9a974bca` 管理台（`pages/party/**`，未碰共享件）：类型多 `readable` / `unreadableCause`；批准与发布答复栏补 `DRAFT_NOT_READABLE` 的中文（`draftNotReadableWords`），发布答复栏显示状态与成因；待批准页状态旁标「本构建读不回」、计数摘要另报、检索认得；抽屉（`PendingDraftDrawer.tsx`）不摆批准与发布、不给规范化文档，`UnreadableNote` 按状态说恢复动作（`unreadableRecovery`）。纯逻辑 3 条 node:test。
-- `978b51a5c` 文档：ADR-0333（部分停用（收窄）ADR-0314 越权风险点 5 一句，被停原句逐字相同，ADR-0314 Status 注记与 Links 各加前向指针）；`CONTEXT.md`「待批准发布」词条补读不回一格；UC-PC-001 的 `AT-PC-068` 读失败一句改口径，新立 `AT-PC-071`（读不回的载体在读面与批准、发布上的答案）、`AT-PC-072`（录入撞上读不回行的落点）；AT 盘点两行加文末追记。
+- `978b51a5c` 文档：ADR-0344（部分停用（收窄）ADR-0314 越权风险点 5 一句，被停原句逐字相同，ADR-0314 Status 注记与 Links 各加前向指针）；`CONTEXT.md`「待批准发布」词条补读不回一格；UC-PC-001 的 `AT-PC-068` 读失败一句改口径，新立 `AT-PC-071`（读不回的载体在读面与批准、发布上的答案）、`AT-PC-072`（录入撞上读不回行的落点）；AT 盘点两行加文末追记。
 
 ### 代决（用户授权「你作为业务和系统专家自决」，协调方派单）
 
@@ -77,11 +77,11 @@ S–M：领域一处改 `%w` 保链；三只编排各认一个哨兵；批准口
 9. **列表带着读不回的行（位置按录入时刻不变），不单列数组、不跳过；每份多一格 `readable`。** 单份读回答 200 加 `DRAFT_NOT_READABLE`，`draft` 带事实、无 `content`。读不回行的 `canonicalization` 与 `contentDigest` 是列上原值。行本身坏了与存储读失败仍整次 5xx（ADR-0314 决定一不动）。
 10. **管理台：状态旁标记、抽屉不摆动作并按状态说恢复动作，不碰共享件。** 动作按钮按 `draftDecisions`（读不回一概不摆）；服务端仍是最后一道。
 11. **顺带给 `cmd/parcel-api` 加一条真库用例（票面「要裁的」三）：加。** 装配点的事务编排对「业务格不回滚、重录能换掉行」这件事有独立的证据价值。
-12. **ADR / AT / CONTEXT：** 用预留号 ADR-0333；AT 取 `AT-PC-071`、`AT-PC-072`（核过在途分支无占用）；`AT-PC-068` 的说法按新行为改，不挂票号。无迁移（读不回的行就在 0028 的表里）。
+12. **ADR / AT / CONTEXT：** 用预留号（原 ADR-0333，变基改号）ADR-0344；AT 取 `AT-PC-071`、`AT-PC-072`（核过在途分支无占用）；`AT-PC-068` 的说法按新行为改，不挂票号。无迁移（读不回的行就在 0028 的表里）。
 
 ### 越权风险点
 
-1. **对 ADR-0314 越权风险点 5 的收窄**（PC owner）：读不回的行不再让整页答 5xx；运维若靠「待批准列表 5xx」发现坏数据，这一类不再触发，改看 `readable:false` 的行与成因。已按部分停用走 ADR-0333。
+1. **对 ADR-0314 越权风险点 5 的收窄**（PC owner）：读不回的行不再让整页答 5xx；运维若靠「待批准列表 5xx」发现坏数据，这一类不再触发，改看 `readable:false` 的行与成因。已按部分停用走 ADR-0344。
 2. **读不回的边界是一张登记表加一个版本集合，不是错误类别**（PC owner）：以后新收紧一道会拒存量快照的构造门，要同笔登记，漏登的后果是那一类存量行答 5xx（偏安全的一侧）；同一规范化版本号下文档形状的变化表现为摘要对不上，也答 5xx（ADR-0014 要求形状变化换号）。
 3. **`已批准`的读不回载体只给「换版本号」**（PC owner、运维）：滚动发布窗口里旧构建实例读不回新构建写的行，新构建铺满后它自己就读得回，那时「换版本号」是过度建议；分辨窗口与永久读不回要知道各构建实例认得的规范化版本集合，不在本票。
 4. **`已发布`的读不回行答已发布时只核对摘要、不看正文**（PC owner）。
@@ -104,11 +104,19 @@ S–M：领域一处改 `%w` 保链；三只编排各认一个哨兵；批准口
 - **N1 分格边界太宽（最要紧）。** 评审在真库把待批准信用政策行的 `content_document` 改成缺正文 / `[]` / `"x"` / 未知 kind / 自称版本与列不一致 / 删必填格，五种全落「读不回」（200 业务格）；而「同版本重录」的修订条件只比摘要与壳，对它们不灵，代码与注释自相矛盾。修法：
   - **新边界。** 读不回只收两类：① 列上的规范化版本不在本构建支持集合里（`!supportedPublicationCanonicalization(spec.Canonicalization)`，不论文档长什么样）；② 折正文的拒因命中 `tightenedGateRefusals` 登记表（按哨兵认，不按文本；今天只有 `ErrVolumetricFactorOnPricePolicy`）。**仍 5xx（`ErrInvalidRehydratedPublicationDraft`）的**：非法 JSON 与形状不符、正文缺席、册名不认得（含未知 kind）、文档自称的规范化版本与列不一致（PCC-2 对 PCC-1 等）、必填格为空、封闭集集外词、时刻格式不对，加上原有的痕迹 / 壳 / 类别 / 摘要对不上。「必填格缺失」按判据裁：在任何构建下都不合法，是损坏，不进登记表。
   - **(4) 做了：`SubmitDraft` 的修订条件多比 `content_document IS DISTINCT FROM`。** 评估：摘要是文档的派生，读得回的行文档与摘要必然相配，重放的文档（jsonb 归一化后）逐位相同，所以正常行的重放 / 修订判定一字不变（`TestSubmittingAgainDistinguishesReplayRevisionAndFixedContent` 与新用例里的重放断言守着）；只有「文档与摘要对不上而摘要列、痕迹正常」的坏行会因此被同内容重录改好，对「一份内容只能被批准一次」与摘要绑定无影响（批准要读得回，坏行读不回；修订更新录入者与时刻，与任何一次修订相同）。已批准 / 已发布的坏行内容已固定，录入按错误交回，要查库。
-  - **注释与承诺对齐。** `SubmitDraft`、`ports.PublicationDraftRegistry`、领域 `ErrPublicationDraftNotReadable` / `RehydratePublicationDraft` 的注释改成同一口径；ADR-0333 决定一、三与候选与反方、风险点 2（改写）与 5（新增修订条件）、CONTEXT 词条、UC 的 `AT-PC-071` / `AT-PC-072` 行、管理台 `unreadableRecovery` 注释都限定到两类成因；ADR-0314 注记的适用场景同步。
+  - **注释与承诺对齐。** `SubmitDraft`、`ports.PublicationDraftRegistry`、领域 `ErrPublicationDraftNotReadable` / `RehydratePublicationDraft` 的注释改成同一口径；ADR-0344 决定一、三与候选与反方、风险点 2（改写）与 5（新增修订条件）、CONTEXT 词条、UC 的 `AT-PC-071` / `AT-PC-072` 行、管理台 `unreadableRecovery` 注释都限定到两类成因；ADR-0314 注记的适用场景同步。
   - **用例。** 领域：`TestADocumentFlawNoBuildAcceptsIsABrokenRowNotANotReadableOne`（八种文档瑕疵加集外方向词，均为行坏了）、`TestOnlyAnUnknownColumnVersionOrATightenedGateMakesARowNotReadable`、`TestABrokenRowIsStillRefusedAsBrokenNotAsNotReadable` 收紧；真库：`TestABrokenDraftRowStillFailsAndAPendingOneIsHealedByResubmittingTheSameContent`（八种坏文档点读 / 列表答 5xx，同内容重录答 `DRAFT_REVISED` 且读得回，重放仍 `DRAFT_REPLAYED`，已批准坏行录入按错误交回）、`TestAnUnknownColumnVersionIsNotReadableWhateverTheDocumentLooksLike`。
 - **N2 成因文字没被钉住。** HTTP 列表、单份读回、批准、发布四处断言成因正是领域成因（`unreadable.Cause().Error()`），不含哨兵那句英文（新增 `assertCauseIsTheDomainCause`）。
-- **N3 指针不对称。** ADR-0314 注记去掉「决定二的摘要绑定按口解」半句，Links 一条同改；ADR-0333 对决定二写成「不停用，依它的判序办」，不再用「按口解」。
-- **N4 「不交摘要」说法。** ADR-0333 候选与反方改写为「批准与发布的答复不带摘要，读面的事实照带列上摘要」，完成记录代决 3 / 8 同口径。
+- **N3 指针不对称。** ADR-0314 注记去掉「决定二的摘要绑定按口解」半句，Links 一条同改；ADR-0344 对决定二写成「不停用，依它的判序办」，不再用「按口解」。
+- **N4 「不交摘要」说法。** ADR-0344 候选与反方改写为「批准与发布的答复不带摘要，读面的事实照带列上摘要」，完成记录代决 3 / 8 同口径。
 - **N5 规范小项。** 测试注释「状态与痕迹照旧」、ADR 标题与 Status 的「摘要绑定照旧」、抽屉注释「上面的事实」、CONTEXT 词条「仍是技术失败」，以及本分支新增行里其余不必要的「仍」，都改成现行规则句。
 
 变异（备份 → 改 → 跑 → 拷回 → `cmp`）：N1-M1 折正文任何拒绝都收进读不回 → 领域、真库各 1 条红；N1-M2 改按 `ErrCanonicalizationUnsupported` 认（自称版本与列不一致混进来）→ 领域、真库红；N1-M3 去掉「列版本不认得」一类 → 领域 2 条、编排 3 条红；N1-M4 登记表清空 → 领域、真库体积系数用例红；N1-M5 修订条件去掉文档 → 真库「同内容重录改好坏行」红；N2-M6 / M7 / M8 列表 / 批准 / 发布的成因换成整个错误值的文字 → 传输用例红。
+
+### 变基改号（2026-10-28）
+
+- 起点：origin/main `0e8813657`；变基前 tip `644d43bf2`（落后约 124 笔）。
+- ADR 改号：ADR-0333 → **ADR-0344**（main 上 0333 已被 code/18 的节点协作待补充 ADR 占，origin/main 现到 0343，各 claude-* 分支最高 0343，0344 未被占）。文件已 `git mv`；ADR-0314 的索引注记与 Links、UC-PC-001、`.scratch/at-coverage-inventory.md` 追记、`owner-review.md` 里「code/87（ADR-0344）」与本票面同改；code/18 那份 ADR-0333 及其引用未动。代码与测试注释原本不带 ADR 号，无需改。AT-PC-071/072 在 main 上未被占，迁移与种子本票未涉及。
+- 冲突与解法：`.scratch/at-coverage-inventory.md`（两侧追记并存，main 现行内容保留再叠本票两行与追记）；ADR-0314 头部 Status（保留 main 上 idp-parcel-97 的 PC owner 复核结论，叠本票「部分停用」段，取修订轮后的适用场景措辞）与 Links 一条；本票 Status 行（取接手版再改写）。管理台 `PendingPublicationsPage.tsx` 等无冲突。
+- 自验（含 PG）：`go build ./...`、`go vet`（partycommercial、cmd/parcel-api）、`gofmt -l` 无输出；`go test -count=1 -p 1 ./internal/partycommercial/... ./cmd/parcel-api/... ./internal/architecture/... ./migrations/...` 全绿；`apps/admin-web` `tsc -b` 无错、`npm test` 809 通过。
+- 留给协调方：进 main 时重生成 `docs/adr/README.md`、AT 盘点计数与机制清点。
