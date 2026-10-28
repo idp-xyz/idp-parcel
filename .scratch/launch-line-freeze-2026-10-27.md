@@ -198,6 +198,7 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 - 2026-10-27｜动线上干线委托必须先于交给干线承运商的那次交接提交，反了段采用答 `SEGMENT_STARTED_BEFORE_COMMISSION`，只能另交一份业务时间更早的委托；动线脚本没写这条顺序｜[psb/05「预走」](./product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)｜R3（收口重走时写进动线脚本）
 - 2026-10-27｜交接登记答 `SOURCE_NOT_ACCEPTED` 时不带原因（例如 `HANDED_OVER` 带了 `basis`），登记方只能读码排查｜同上｜R3
 - 2026-10-27｜动线脚本「起 dispatch」一节仍说逐条投递失败不打日志，今天会打 `WARN` 并带失败码｜同上｜R3（收口重走时改脚本）
+- 2026-10-27｜订舱口与承运答复收下已过期的班次（种子显式班 `SYN-SCHED-SZX-SIN-DAILY/2026-10-21` 已在一周前），不核班次是否已发车；种子里写死日期的班次会随日历过期｜[psb/05「预走」](./product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)末尾的旁证一条｜R3
 
 ## 六、docs-consistency/code 队列的复核（2026-10-27，tops-26）
 

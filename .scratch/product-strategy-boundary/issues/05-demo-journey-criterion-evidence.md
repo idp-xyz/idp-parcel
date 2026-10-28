@@ -520,3 +520,5 @@ Claude Code 子代理做，只读代码、不改代码。worktree 分支 `claude
 - 干线委托必须在交给干线承运商**之前**提交。顺序反了，段采用答 `SEGMENT_STARTED_BEFORE_COMMISSION`。本轮另提交一份 `submittedAt` 早于那次交接的委托才采用上。动线脚本没写这条顺序。
 - 交接登记答 `SOURCE_NOT_ACCEPTED` 时不带原因。本轮载荷在 `HANDED_OVER` 上带了 `basis`（只给非交接裁决用），要读 `FormTransportHandover` 才查到。
 - 动线脚本「起 dispatch」一节说 dispatch 对逐条投递失败一行日志都不打，今天的 dispatch 会打 `WARN Delivery failed and was recorded for retry`，带失败码。
+
+**旁证（同钉、同时段的另一路）**：会话 tops-20 派的子代理在另一只一次性库 `walk1027b`（私有集成客户端发行方 5591，02:06Z–02:19Z，走完已清）上独立走了一遍，交接 `version` 全写 `v1`。结论与上面一致：主链、SELL、BUY（CNY 8500）、客户视图终局 `SHOWN` 都走通；关务旁路到 `REGISTERED_PENDING_SEND`；结算停在 `ESTIMATED`。多见到一处：订舱口收下了已过期的班次，已记入冻结清单「记录」。另有一处观察：出发与交进同一秒报时，投影没有 `DEPARTED`，隔 3 秒再报就有。这是连打命令造成的，不记。两路重复，是因为两个会话同时认领了「预走」。
