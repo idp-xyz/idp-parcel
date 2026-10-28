@@ -14,7 +14,8 @@ export interface OperatorBindingResponseBody {
  * undefined——顶栏作用域照旧显「由服务端按会话判定」，页头不显集团，不拿空串或猜的值顶上。
  */
 export function boundTenantOf(answer: ApiResult<OperatorBindingResponseBody> | null): string | undefined {
-  if (answer?.kind !== 'outcome' || answer.body.outcome !== 'OPERATOR_BINDING_RESOLVED') return undefined;
+  // 响应体是 JSON `null` 时成格的壳里没有正文，与「答复形状不对」同归「没拿到」，不在这里抛错（同款 heldGrantsOf）。
+  if (answer?.kind !== 'outcome' || answer.body?.outcome !== 'OPERATOR_BINDING_RESOLVED') return undefined;
   const tenant = typeof answer.body.tenantId === 'string' ? answer.body.tenantId.trim() : '';
   return tenant === '' ? undefined : tenant;
 }
