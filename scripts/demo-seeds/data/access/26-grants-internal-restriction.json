@@ -1,0 +1,23 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "grants": [
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-INTERNAL-RESTRICTION-ESTABLISHMENT-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "INTERNAL_RESTRICTION_ESTABLISHMENT",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-INTERNAL-RESTRICTION-ESTABLISHMENT-01"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-INTERNAL-RESTRICTION-DECISION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "INTERNAL_RESTRICTION_DECISION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-INTERNAL-RESTRICTION-DECISION-01"
+    }
+  ]
+}

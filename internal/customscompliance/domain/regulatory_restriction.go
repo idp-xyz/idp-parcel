@@ -43,6 +43,16 @@ func (action GuardedAction) String() string {
 	}
 }
 
+// ParseGuardedAction 按线上字面认受监管门禁约束的动作，大小写不折叠；不在封闭四值里的字面答 GuardedActionInvalid 与 false。
+func ParseGuardedAction(raw string) (GuardedAction, bool) {
+	for action := OutboundRelease; action <= FinalDelivery; action++ {
+		if action.String() == raw {
+			return action, true
+		}
+	}
+	return GuardedActionInvalid, false
+}
+
 // RestrictionID 是监管限制的标识。
 type RestrictionID struct{ requiredValue }
 

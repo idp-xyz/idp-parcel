@@ -139,6 +139,14 @@ const (
 	DecisionAlternateJourneyStart           DecisionKind = "ALTERNATE_JOURNEY_START"
 )
 
+// 内部合规限制的建立与决定（ADR-0334 决定七）：限制责任来源之下的运营人员形成一份内部合规限制，与对限制自己的覆盖项追加确认或解除决定，
+// 各成一种。能建立的不因此能解除——解除是限制责任来源的话，授予的粒度等于权力的粒度；也不与授权处置（AUTHORIZED_DISPOSITION）共用，那一种
+// 处置的是一份受限委托的去向，这两种改的是动作准入读到的限制册。谁持有是租户取值，未登记时没有人能建立或解除。
+const (
+	DecisionInternalRestrictionEstablishment DecisionKind = "INTERNAL_RESTRICTION_ESTABLISHMENT"
+	DecisionInternalRestrictionDecision      DecisionKind = "INTERNAL_RESTRICTION_DECISION"
+)
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -163,6 +171,7 @@ var decisionKinds = []DecisionKind{
 	DecisionPickupAttemptResultConfirmation, DecisionDeliveryAttemptResultConfirmation,
 	DecisionPostIntakeServiceDisposition,
 	DecisionRegulatoryDispositionAcceptance, DecisionAlternateJourneyStart,
+	DecisionInternalRestrictionEstablishment, DecisionInternalRestrictionDecision,
 }
 
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。
