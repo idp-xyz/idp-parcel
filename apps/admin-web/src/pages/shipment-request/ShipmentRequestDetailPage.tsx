@@ -30,6 +30,8 @@ import {
   type ShipmentRequestDetail,
   type ViewDetailResponseBody,
 } from './api';
+import { PrincipalRef } from '../../components/PrincipalRef';
+import { formatInstant } from '../moment';
 
 // 委托详情，对 GET /shipment-request-views?shipmentRequestId=… 真实端点取数。
 //
@@ -48,9 +50,9 @@ import {
 // 手册 Object Header 第二行：最后动过的时刻、提交方、修订——按读模型实有字段对应过去。
 function buildMeta(view: ShipmentRequestDetail): DetailMeta[] {
   return [
-    { label: '提交时间', value: <span className="font-mono">{view.submittedAt}</span> },
-    { label: '系统接收时间', value: <span className="font-mono">{view.receivedAt}</span> },
-    { label: '来源', value: <span className="font-mono">{view.source}</span> },
+    { label: '提交时间', value: <span className="font-mono">{formatInstant(view.submittedAt)}</span> },
+    { label: '系统接收时间', value: <span className="font-mono">{formatInstant(view.receivedAt)}</span> },
+    { label: '来源', value: <PrincipalRef value={view.source} /> },
     { label: '当前提交版本', value: <span className="font-mono">{view.submissionVersionId}</span> },
   ];
 }
@@ -73,14 +75,14 @@ function buildBasicFields(view: ShipmentRequestDetail): DetailField[] {
       value: withCode(requestStateLabels[view.state], view.state),
     },
     { label: '提交批次', value: <span className="font-mono">{view.batchId}</span> },
-    { label: '来源', value: <span className="font-mono">{view.source}</span> },
+    { label: '来源', value: <PrincipalRef value={view.source} /> },
     { label: '来源请求键', value: <span className="font-mono">{view.sourceRequestKey}</span> },
     { label: '当前提交版本', value: <span className="font-mono">{view.submissionVersionId}</span> },
     // 此前版本数是「同一委托边界内纠错/补充」的痕迹计数，0 表示首版即当前版。
     { label: '此前版本数', value: String(view.priorVersionCount) },
-    { label: '提交时间', value: <span className="font-mono">{view.submittedAt}</span> },
-    { label: '来源发生时间', value: <span className="font-mono">{view.occurredAt}</span> },
-    { label: '系统接收时间', value: <span className="font-mono">{view.receivedAt}</span> },
+    { label: '提交时间', value: <span className="font-mono">{formatInstant(view.submittedAt)}</span> },
+    { label: '来源发生时间', value: <span className="font-mono">{formatInstant(view.occurredAt)}</span> },
+    { label: '系统接收时间', value: <span className="font-mono">{formatInstant(view.receivedAt)}</span> },
   ];
 }
 
@@ -142,7 +144,7 @@ function buildSections(view: ShipmentRequestDetail): DetailSection[] {
             <FieldRow label="续办引用" value={view.acceptanceTask.lastAttemptContinuation} mono />
           )}
           {view.acceptanceTask.lastAttemptedAt !== undefined && (
-            <FieldRow label="最近处理时间" value={view.acceptanceTask.lastAttemptedAt} mono />
+            <FieldRow label="最近处理时间" value={formatInstant(view.acceptanceTask.lastAttemptedAt)} mono />
           )}
         </dl>
       ),
@@ -161,7 +163,7 @@ function buildSections(view: ShipmentRequestDetail): DetailSection[] {
             label="决定种类"
             value={withCode(decisionKindLabels[view.decision.kind], view.decision.kind)}
           />
-          <FieldRow label="决定时间" value={view.decision.decidedAt} mono />
+          <FieldRow label="决定时间" value={formatInstant(view.decision.decidedAt)} mono />
         </dl>
       ),
     });

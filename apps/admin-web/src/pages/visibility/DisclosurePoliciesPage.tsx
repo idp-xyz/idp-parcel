@@ -25,6 +25,7 @@ import {
   registrationTitles,
   visibilityCatalogueKindLabels,
 } from './presentation';
+import { shortPrincipalRef } from '../../components/principal-ref';
 
 // VE 目录拆三页,本页装**对外披露口径**那组:通知策略与披露策略(票
 // admin-web-page-wiring-frontier/02 的页面裁决),外加异常披露规则(票
@@ -139,7 +140,7 @@ function rowsOf(body: DisclosureListBody): PolicyRow[] {
           channel: record.channel,
           deadlineAfter: record.deadlineAfter,
           obligation: record.obligation,
-          approvedBy: record.approvedBy,
+          approvedBy: shortPrincipalRef(record.approvedBy),
         },
       }));
     case 'DISCLOSURE_POLICY':
@@ -155,7 +156,7 @@ function rowsOf(body: DisclosureListBody): PolicyRow[] {
             eta: disclosureCell(entry.eta),
             final: disclosureCell(entry.final),
             note: disclosureCell(entry.note),
-            approvedBy: catalogue.approvedBy,
+            approvedBy: shortPrincipalRef(catalogue.approvedBy),
           },
         })),
       );
@@ -174,7 +175,7 @@ function rowsOf(body: DisclosureListBody): PolicyRow[] {
             autoRelease: autoReleaseLabel(entry.autoRelease),
             // content 只在披露条件成立时在场(0023 成对约束),缺席由列渲染的「—」如实示出。
             ...(entry.content ? { content: entry.content } : {}),
-            approvedBy: catalogue.approvedBy,
+            approvedBy: shortPrincipalRef(catalogue.approvedBy),
           },
         })),
       );

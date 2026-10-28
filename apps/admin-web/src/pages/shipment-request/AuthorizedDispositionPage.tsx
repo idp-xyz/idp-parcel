@@ -26,6 +26,7 @@ import {
 } from './authorized-disposition';
 import { recordedJudgmentsBlock } from './recorded-judgments';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
+import { PrincipalRef } from '../../components/PrincipalRef';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['authorized-disposition'];
@@ -67,7 +68,7 @@ function caseDetailFields(body: AcceptanceReviewCaseResponseBody, entry: Authori
     { label: '客户账户', value: <span className="font-mono">{request.customerAccountId}</span> },
     {
       label: '来源',
-      value: <span className="font-mono">{`${request.source} / ${request.sourceRequestKey}`}</span>,
+      value: <span className="font-mono"><PrincipalRef value={request.source} />{` / ${request.sourceRequestKey}`}</span>,
     },
     { label: '委托状态', value: <span className="font-mono">{request.state}</span> },
     { label: '提交版本', value: <span className="font-mono">{request.submissionVersionId}</span> },

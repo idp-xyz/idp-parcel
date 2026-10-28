@@ -19,6 +19,7 @@ import {
   registrationTitles,
   visibilityCatalogueKindLabels,
 } from './presentation';
+import { shortPrincipalRef } from '../../components/principal-ref';
 
 // VE 六类目录拆三页,本页装**索赔前置**那组:索赔资格与索赔授权(票
 // admin-web-page-wiring-frontier/02 的页面裁决)。两册同答「谁、就什么可以提索赔」
@@ -86,7 +87,7 @@ function rowsOf(body: PrerequisiteListBody): CatalogueRow[] {
           version: record.version,
           // 覆盖种类是开放引用集,原词联排;登记入口要求至少一项,空集不会到场。
           coveredKinds: record.coveredKinds.join('、'),
-          approvedBy: record.approvedBy,
+          approvedBy: shortPrincipalRef(record.approvedBy),
         },
       }));
     case 'CLAIM_AUTHORIZATION':
@@ -96,7 +97,7 @@ function rowsOf(body: PrerequisiteListBody): CatalogueRow[] {
           customer: record.customer,
           version: record.version,
           applicants: applicantsCell(record.applicants),
-          approvedBy: record.approvedBy,
+          approvedBy: shortPrincipalRef(record.approvedBy),
         },
       }));
   }

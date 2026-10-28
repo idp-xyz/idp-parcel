@@ -25,3 +25,9 @@ Blocked by: 无
 - 引用短名：`components/principal-ref.ts`（`shortPrincipalRef`，主体 >16 字符截短加「…」，无 `#` 或 `#` 后为空原样）与 `components/PrincipalRef.tsx`（`title` 给全文）。接入：待发布草稿「录入者」、委托查阅「来源」、阶段准入页执行人 / 决定人、价卡草稿面板录入者 / 批准者、价卡目录批准责任方、参考序列登记责任方、收寄后处置请求详情的请求方 / 授权 / 处理人（该处是纯文本，无 title）。未动：登记依据（自由文本）、验收复核与关务页内嵌文本串。
 - 时区：`moment.ts` 新增 `resolveDisplayTimeZone`（`VITE_DISPLAY_TIME_ZONE` 合法则用，空取浏览器区，非法退回并 `console.warn`）；`main.tsx` 改走它；新增 `src/vite-env.d.ts` 声明该变量。原有 `formatInstant` 已是共享函数并带 `UTC+8` 标注。演示说明（demo-run README、talk-track 开机清单）改为起管理台时设该变量。
 - 判据：单测（引用 6 种形状、时区配置 / 未配置 / 非法）、`tsc -b`、全部单测 829 通过、`vite build` 通过。碰共享面 `components/*`，待非作者评审。
+
+## 评审修订（作者）
+
+- 引用：新增 `shortenEmbeddedPrincipalRefs`（文本里的 `https?://…#主体` 片段换短名，`标签@` 等保留）与 `PrincipalText`（title 给原文）；接入委托详情 / AuthorizedDisposition 的来源、关务提交授权的授权依据 / 就绪判断依据 / 提交授权依据 / 撤销人 / 放行授权、可见性三页批准人、订舱册提交人与取消人。收寄后处置的请求方 / 授权 / 处理人加 title。关务与可见性、订舱册是表格文本格，只显短名无 title（全文不在页上）。未接入：待发布草稿抽屉里录入者 / 批准者（抽屉就是全文处，且其测试断言原串）。
+- 时间：委托详情全部时间、委托列表提交时间（列与详情）、追踪投影 derivedAt、价卡目录与参考序列 registeredAt / lastReviewedAt、系列登记对照的 startsAt（含 `T` 才转，纯日期不动）、取消页 decidedAt、价卡导入面板 submittedAt 改走 `formatInstant`。`formedAt` 本就走 formatInstant，未改。价卡导入面板 `content.startsAt` 是业务日期，未动。
+- 自验：tsc -b、全部单测 832 通过、vite build 通过。

@@ -89,13 +89,13 @@ export function requestQueueRowOf(row: PostIntakeDispositionRequestRow): Request
 /** 请求上为空的字段说「当时没有保全」,不说没有请求方。 */
 const notPreserved = '未保全(先于保全落下的待处置记录)';
 
-export function requestDetailRows(row: PostIntakeDispositionRequestRow): { label: string; value: string; mono?: boolean }[] {
+export function requestDetailRows(row: PostIntakeDispositionRequestRow): { label: string; value: string; mono?: boolean; title?: string }[] {
   return [
     { label: '包裹', value: row.parcelId, mono: true },
     { label: '请求键', value: row.requestKey, mono: true },
     { label: '来源', value: row.origin },
-    { label: '请求方', value: row.requester ? shortPrincipalRef(row.requester) : notPreserved },
-    { label: '授权', value: row.authority ? shortPrincipalRef(row.authority) : notPreserved },
+    { label: '请求方', value: row.requester ? shortPrincipalRef(row.requester) : notPreserved, title: row.requester || undefined },
+    { label: '授权', value: row.authority ? shortPrincipalRef(row.authority) : notPreserved, title: row.authority || undefined },
     { label: '原因', value: row.reason || notPreserved },
     { label: '请求时间', value: row.requestedAt ? formatInstant(row.requestedAt) : notPreserved },
     { label: '取消边界前', value: row.intakeBefore || '—' },
@@ -239,6 +239,8 @@ export interface ManualItemLine {
   superseded: boolean;
   supersededText: string;
   resultText: string;
+  /** 结果行里处理人是短名，悬停给带全文的那一份。 */
+  resultTitle: string;
 }
 
 const outcomeLabels: Record<string, string> = { HANDLED: '已处理', UNABLE: '无法处理' };
@@ -260,6 +262,7 @@ export function manualItemLineOf(item: PostIntakeManualItemRow): ManualItemLine 
     resultText: item.result
       ? `${manualOutcomeLabel(item.result.outcome)} · ${item.result.note} · ${shortPrincipalRef(item.result.handledBy)} · ${formatInstant(item.result.handledAt)}`
       : '',
+    resultTitle: item.result ? `处理人 ${item.result.handledBy}` : '',
   };
 }
 

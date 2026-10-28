@@ -41,6 +41,7 @@ import {
   submissionRows,
   unitRows,
 } from './record-rows';
+import { shortenEmbeddedPrincipalRefs } from '../../components/principal-ref';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['customs-cases'];
@@ -404,7 +405,7 @@ const preconditionColumns: ListColumn<CatalogueRow>[] = [
 function trackState(record?: { revokedBy?: string; revokedAt?: string }): string {
   if (!record) return '未登记';
   if (record.revokedBy && record.revokedAt) {
-    return `已撤销：${record.revokedBy}（${formatInstant(record.revokedAt)}）`;
+    return `已撤销：${shortenEmbeddedPrincipalRefs(record.revokedBy)}（${formatInstant(record.revokedAt)}）`;
   }
   return '仍有效';
 }
@@ -429,10 +430,10 @@ function preconditionRows(
       key: `unit:${unit}`,
       values: {
         unit,
-        readinessBasis: pair.judgment?.basis ?? '—',
+        readinessBasis: shortenEmbeddedPrincipalRefs(pair.judgment?.basis ?? '—'),
         readinessAt: pair.judgment ? formatInstant(pair.judgment.judgedAt) : '—',
         readinessState: trackState(pair.judgment),
-        authorityRef: pair.authority?.authority ?? '—',
+        authorityRef: shortenEmbeddedPrincipalRefs(pair.authority?.authority ?? '—'),
         authorityAt: pair.authority ? formatInstant(pair.authority.grantedAt) : '—',
         authorityState: trackState(pair.authority),
       },

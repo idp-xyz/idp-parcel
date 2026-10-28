@@ -23,6 +23,7 @@ import {
   triageOutcomeLabels,
   visibilityCatalogueKindLabels,
 } from './presentation';
+import { shortPrincipalRef } from '../../components/principal-ref';
 
 // VE 目录拆三页,本页装**判断规则**那组:里程碑映射与分诊规则(票
 // admin-web-page-wiring-frontier/02 的页面裁决),外加冲突信号规则(票
@@ -112,7 +113,7 @@ function rowsOf(body: JudgmentListBody): RuleRow[] {
             source: labelOf(sourceContextLabels, entry.source),
             factKind: entry.factKind,
             milestone: entry.milestone,
-            approvedBy: catalogue.approvedBy,
+            approvedBy: shortPrincipalRef(catalogue.approvedBy),
           },
         })),
       );
@@ -126,7 +127,7 @@ function rowsOf(body: JudgmentListBody): RuleRow[] {
             signalKind: entry.signalKind,
             confidence: entry.confidence,
             outcome: labelOf(triageOutcomeLabels, entry.outcome),
-            approvedBy: catalogue.approvedBy,
+            approvedBy: shortPrincipalRef(catalogue.approvedBy),
           },
         })),
       );
@@ -138,7 +139,7 @@ function rowsOf(body: JudgmentListBody): RuleRow[] {
           signalKind: record.signalKind,
           version: record.version,
           confidence: record.confidence,
-          approvedBy: record.approvedBy,
+          approvedBy: shortPrincipalRef(record.approvedBy),
           registeredAt: formatInstant(record.registeredAt),
         },
       }));

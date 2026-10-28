@@ -28,6 +28,7 @@ import { CoverageSummaryBar } from './CoverageSummaryBar';
 import { visibleSeriesRows, type SeriesKey } from './catalogue-filter';
 import { correctionDraftOf, emptySeriesDraft } from './series-form';
 import { PrincipalRef } from '../../components/PrincipalRef';
+import { formatInstant } from '../moment';
 
 const info = moduleInfoById['reference-series'];
 
@@ -116,7 +117,7 @@ const columns: ListColumn<ReferenceSeriesRecord>[] = [
           {row.lastReviewDecision && row.lastReviewedAt ? (
             <div className="text-[11px] text-idpxyz-textMuted">
               最近：{labelOf(reviewDecisionLabels, row.lastReviewDecision)} ·{' '}
-              <span className="font-mono">{row.lastReviewedAt}</span>
+              <span className="font-mono">{formatInstant(row.lastReviewedAt)}</span>
             </div>
           ) : null}
         </div>
@@ -141,7 +142,7 @@ const columns: ListColumn<ReferenceSeriesRecord>[] = [
     id: 'registered',
     header: '登记时间',
     className: 'w-[180px]',
-    render: (row) => <span className="font-mono text-[12px]">{row.registeredAt}</span>,
+    render: (row) => <span className="font-mono text-[12px]">{formatInstant(row.registeredAt)}</span>,
   },
 ];
 

@@ -1,3 +1,4 @@
+import { formatInstant } from '../moment';
 import { useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
@@ -179,7 +180,7 @@ function DraftAnswer({ answer }: { answer: ApiResult<PriceCardDraftSubmissionBod
           <span className="font-mono">
             {body.draft.plan.id}@{body.draft.plan.version}
           </span>{' '}
-          · 录入者 <span className="font-mono">{body.draft.submitter}</span> · {body.draft.submittedAt}
+          · 录入者 <span className="font-mono">{body.draft.submitter}</span> · {formatInstant(body.draft.submittedAt)}
         </p>
       ) : (
         <p className="text-idpxyz-textMuted">这次没有写下册上的行。册上此刻是什么由草稿查阅口答。</p>

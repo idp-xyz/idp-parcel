@@ -16,3 +16,12 @@ export function shortPrincipalRef(ref: string): string {
   const chars = Array.from(subject);
   return chars.length > PRINCIPAL_SHORT_MAX ? `${chars.slice(0, PRINCIPAL_SHORT_MAX).join('')}…` : subject;
 }
+
+// 嵌在文本里的「发行方#主体」片段：以 http(s):// 起头的发行方，到 `#`，再到空白或常见分隔符为止。
+// 「授权类型@发行方#主体」这类复合串里，`标签@` 等其余文字原样保留。
+const embeddedRefPattern = /https?:\/\/[^\s#]+#[^\s,;，；、()（）|｜]+/g;
+
+/** 把文本里每个「发行方#主体」片段换成短名，其余文字不动；无片段原样。 */
+export function shortenEmbeddedPrincipalRefs(text: string): string {
+  return text.replace(embeddedRefPattern, (ref) => shortPrincipalRef(ref));
+}

@@ -13,6 +13,7 @@ import {
   type ProjectionListResponseBody,
   type TrackingProjectionRecord,
 } from './api';
+import { formatInstant } from '../moment';
 
 // 页面标题的唯一来源是 navigation 的 moduleInfoById,只读引用,不抄第二份。
 const info = moduleInfoById['tracking-projection'];
@@ -144,7 +145,7 @@ const columns: ListColumn<TrackingProjectionRow>[] = [
     id: 'derived-at',
     header: '派生时间',
     className: 'w-[210px]',
-    render: (row) => <span className="font-mono text-[12px]">{row.derivedAt}</span>,
+    render: (row) => <span className="font-mono text-[12px]">{formatInstant(row.derivedAt)}</span>,
   },
   {
     id: 'version',
