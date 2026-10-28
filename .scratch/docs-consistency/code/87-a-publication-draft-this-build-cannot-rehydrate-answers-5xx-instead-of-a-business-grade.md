@@ -1,7 +1,7 @@
 # 87 本构建折不回来的发布载体答成 5xx，而不是业务格
 
 Category: bug
-Status: needs-triage——建议 R3：今天受影响的行为空（没有真实租户；演示种子不经载体发布价格规则），但答法违反 ADR-0022 与 ADR-0029，下一次规范化换号或正文合法集合收窄时同病还会复发。2026-10-25 协调方据票 [docs-consistency/code/25](./25-sell-volumetric-factor-and-amount-rounding-are-read-from-the-price-card.md) 隔离评审 N1 裁走 (b)（本票立、code/25 不改代码），作者会话代立（用户「你作为业务和系统专家自决」授权）。
+Status: in-progress——2026-10-28 会话 tops-20（idp-parcel-91）接手 tops-26 断在进 main 前的这一张（作者与修订轮已完、评审无阻断），分支 claude-code87 待变基改号。此前 needs-triage——建议 R3：今天受影响的行为空（没有真实租户；演示种子不经载体发布价格规则），但答法违反 ADR-0022 与 ADR-0029，下一次规范化换号或正文合法集合收窄时同病还会复发。2026-10-25 协调方据票 [docs-consistency/code/25](./25-sell-volumetric-factor-and-amount-rounding-are-read-from-the-price-card.md) 隔离评审 N1 裁走 (b)（本票立、code/25 不改代码），作者会话代立（用户「你作为业务和系统专家自决」授权）。
 Blocked by: 无
 上下文：PC（参与方与商业），领域层载体重建与应用层载体编排，连带 PC 的 HTTP 载体端点与管理台载体流程。
 出处：code/25 隔离评审 N1。
