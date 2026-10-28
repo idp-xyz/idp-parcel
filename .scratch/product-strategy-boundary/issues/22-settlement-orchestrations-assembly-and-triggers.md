@@ -1,7 +1,7 @@
 # 22 结算其余编排的装配、入口与触发面
 
 Category: enhancement
-Status: in-progress——第 1 笔（确认）2026-10-28 进 main（`53c514602`，见文末「第 1 笔进 main 记录」）；第 2 笔（运营决定口）完工待评审，分支 claude-psb22（见文末「第 2 笔完成记录」）；第 3、4 笔待做。此前 ready-for-agent——2026-10-27 用户同意由冻结 R3 上调为「限量生产前必须」（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)「一之二」，理由引 PILOT-SCOPE）：费用确认、截单发布、供应商账单接收与审核及确认与截单的触发上调；费用调整、成本分摊、赔付金额仍冻结；排在 tops-26 名下 6 张 code 票进 main 之后，先 10 后 22。此前 ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-09-24 通道 2 立票（用户令通道 2 独立承接）；接单时按编排拆笔
+Status: in-progress——第 1 笔（确认）2026-10-28 进 main（`53c514602`，见文末「第 1 笔进 main 记录」）；第 2 笔（运营决定口与到点截单）2026-10-28 进 main（`383c1dad5`，见文末「第 2 笔进 main 记录」）；第 3、4 笔待做。此前 ready-for-agent——2026-10-27 用户同意由冻结 R3 上调为「限量生产前必须」（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)「一之二」，理由引 PILOT-SCOPE）：费用确认、截单发布、供应商账单接收与审核及确认与截单的触发上调；费用调整、成本分摊、赔付金额仍冻结；排在 tops-26 名下 6 张 code 票进 main 之后，先 10 后 22。此前 ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-09-24 通道 2 立票（用户令通道 2 独立承接）；接单时按编排拆笔
 Blocked by: 无；赔付金额文法与分摊形态归[票 12](./12-sa-amount-grammars-allocation-forms-and-accounting-connectors.md) 第 1、2 项，结算四口的登记册与读口归[票 16](./16-mechanism-gaps-without-a-ticket.md) 第 3 项
 地盘：`internal/settlementaccounting` 的入口与触发、`cmd/` 装配。
 出处：[票 05](./05-demo-journey-criterion-evidence.md) 格 20 的装配与触发面那一半。
@@ -111,3 +111,13 @@ Blocked by: 无；赔付金额文法与分摊形态归[票 12](./12-sa-amount-gr
 - **N16**（一笔判不出归属日让整户停截）：记进 ADR-0339 越权风险点 5。
 - **N17**（缺来源时点的费用被静默跳过）：记进越权风险点 6。
 - **N18**（时点门判停时，没登对账安排的户每拍报一条日志）：与 N10 同类，不另收。
+
+## 第 2 笔进 main 记录（2026-10-28）
+
+- **main**：`383c1dad5`。分支在 main `df7ecc710` 之上重放。重放时 `internal/accessidentity/operation_decision.go` 有一处冲突标记被误提交进了中间那一笔，已解开（两边都保留）；为了不让任何一笔带着坏标记，第 2 笔在 main 之上压成一笔 `9a578464f`，后面是三份生成物各一笔。
+- **改号**：ADR 号先后被 code/43（0337）、节点协作承接（0338）占用，改为 0339；迁移 `access_identity` 改为 0034，CHECK 以 main 上 0033 为底；`settlement_accounting/0049` 未撞。
+- **评审**：非作者隔离评审三轮，阻断清零（见上面三轮记录）。
+- **生成物**：`adr-index -check`、`at-coverage-counts -check` 都退 0；机制清点重生成之后 `git status --porcelain` 为空。
+- **全量真库**：`scripts/test-full.sh` 退 0，160 个包 ok、0 FAIL。
+- **种子**：`seed.sh` 灌一次性库 `psb22_seed2` 退 0，用完已删。
+- **推送**：`git push origin 383c1dad5:main`，`origin/main` 等于该 SHA。
