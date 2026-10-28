@@ -7,7 +7,8 @@ import { OperatorRefusalNote, OperatorRefusalState, UnconfiguredState } from './
 // 本文件钉的是接入那一格三态各自的字、码与出路（票 operator-channel/07）：只有「需要登录」有一颗按钮（重新登录），
 // 未配置与没有授予重试、重新登录都不会好，不给假出口。组件层能钉的理由同 section-error.test.ts。
 
-const buttons = (html: string): number => (html.match(/<button/g) ?? []).length;
+// 数的是出路按钮：技术详情折叠里每行值都是一颗复制按钮（components/CodeRef），那不是出路，先把 <details> 块剪掉再数。
+const buttons = (html: string): number => (html.replace(/<details[\s\S]*?<\/details>/g, '').match(/<button/g) ?? []).length;
 
 // Covers: 未配置那张卡的标题与码名照旧，没有按钮。
 test('未配置：标题与码名照旧，没有按钮', () => {

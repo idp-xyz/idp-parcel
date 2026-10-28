@@ -10,6 +10,7 @@ import { configureShipmentRequestApi } from './pages/shipment-request/api';
 import { configureVisibilityApi } from './pages/visibility/api';
 import { configureMasterDataApi } from './pages/catalogue-api';
 import { configureDisplayTimeZone, resolveDisplayTimeZone } from './pages/moment';
+import { configureVocabularyWarnings } from './vocabulary/status';
 
 // 前端一律带 /api 前缀发起，开发代理剥前缀转发（见 vite.config.ts 的裁决注释）。
 configureShipmentRequestApi({ basePrefix: '/api' });
@@ -22,6 +23,10 @@ configureBearerSource(accessTokenForRequest);
 configureDisplayTimeZone(
   resolveDisplayTimeZone(import.meta.env.VITE_DISPLAY_TIME_ZONE, Intl.DateTimeFormat().resolvedOptions().timeZone),
 );
+// 用语词典查不到的码只在开发模式告警（每码一次），生产不注入——词典本身不读环境，理由见 vocabulary/status.ts 文件头。
+if (import.meta.env.DEV) {
+  configureVocabularyWarnings((code) => console.warn(`用语词典没有「${code}」的中文，界面上原样显示了这个码；请补进 src/vocabulary/status.ts`));
+}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

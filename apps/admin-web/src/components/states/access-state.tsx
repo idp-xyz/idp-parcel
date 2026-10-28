@@ -9,7 +9,7 @@ import {
   operatorRefusalRecovery,
   type OperatorRefusalKind,
 } from '../../auth/access-refusal';
-import { TechnicalDetails, type TechnicalRow } from './technical-details';
+import { TechnicalDetails, type TechnicalRow } from '../TechnicalDetails';
 
 // 接入那一格的呈现（票 operator-channel/07）。原先只有一个「未配置」态，操作者渠道接上之后分成三态：渠道未配置、需要登录、
 // 没有授予（判据与续办在 auth/access-refusal.ts）。三态共用一张卡的形——图标、标题、说明、放行条件、技术详情——

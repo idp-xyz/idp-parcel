@@ -1,8 +1,11 @@
 import type { ReactNode } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
 import { useToast } from '@idpxyz/ui-theme-runtime';
-import { StatusBadgeFor, domainStatusTones, type DomainStatus } from '../../domain/status';
+import { domainStatusTones, type StatusTone as DomainStatusTone } from '../../domain/status';
 import { statusToneSurface } from '../../components/status-tone';
+import { CodeRef } from '../../components/CodeRef';
+import { StatusPill } from '../../components/StatusPill';
+import { toneFor, toneForLabel, type StatusTone } from '../../vocabulary/status';
 import { formatInstant } from '../catalogue-view';
 import type { ListColumn } from '../../templates';
 import { labelOf, partyNameUnknownNote } from './presentation';
@@ -12,27 +15,32 @@ import { labelOf, partyNameUnknownNote } from './presentation';
 // 只放呈现层的小件：不放取数、不放业务判读。
 
 /**
- * 状态格：码经词表译成词、词按 domain/status 的一词一色表着色。词表没收录的码（服务端新增一格时）原样示码、
- * 不猜色调——归进某个既有中文说法会让一种新答案冒充另一种。身份与关系各传各的词表（两册状态代数不同），
- * 色调同源于 domain/status；断言只桥接类型边界，词同源于 CONTEXT 原词。
+ * 状态格：词仍取本模块词表（身份与关系两册状态代数不同，各传各的），色调按码查用语词典（vocabulary/status.ts）——
+ * 改版第一步先把色调一处定义，词由本模块接词典的那张票换掉；这里是过渡桥，不是第二套词表。
  */
 export function statusBadge(table: Record<string, string>, code: string): ReactNode {
-  return statusWordBadge(labelOf(table, code));
+  return <StatusPill label={labelOf(table, code)} tone={toneFor(code)} />;
 }
+
+// domain/status 的五档色调落到用语词典的五档：行模型只交词、词还是 CONTEXT 原词时，先按旧表取色，不让这些格在接词典之前
+// 全变成灰。词典里有的词以词典为准。
+const legacyToneByDomainTone: Record<DomainStatusTone, StatusTone> = {
+  neutral: 'muted',
+  info: 'info',
+  warning: 'warn',
+  critical: 'bad',
+  positive: 'good',
+};
 
 /**
  * 同上，给已经译成词的格用：行模型（policy-rows、supplier-agreement-rows）为了能在 node:test 里跑，只交字符串、不碰组件库，
  * 徽章由页面在渲染那一层套上。
  */
 export function statusWordBadge(word: string): ReactNode {
-  // 不折行：窄列里徽章被挤成「已生 / 效」两行，比没有徽章还难读；列宽由表格按内容让出来。
-  return word in domainStatusTones ? (
-    <span className="whitespace-nowrap">
-      <StatusBadgeFor status={word as DomainStatus} />
-    </span>
-  ) : (
-    word
-  );
+  const fromDictionary = toneForLabel(word);
+  const legacy = (domainStatusTones as Record<string, DomainStatusTone>)[word];
+  const tone = fromDictionary !== 'muted' || legacy === undefined ? fromDictionary : legacyToneByDomainTone[legacy];
+  return <StatusPill label={word} tone={tone} />;
 }
 
 /** 行模型列表里 `status` 那一列换成徽章，其余列原样。 */
@@ -96,7 +104,7 @@ export function useCopyToClipboard() {
   };
 }
 
-/** 详情栏头部的引用签：点一下复制，与参照页同一手势。没有值就不摆。 */
+/** 详情栏头部的引用签：点一下复制，与参照页同一手势。没有值就不摆。件本体是全站共用的 CodeRef，这里只是带 toast 反馈的包装。 */
 export function RefChip({
   label,
   value,
@@ -109,17 +117,7 @@ export function RefChip({
   onCopy: (label: string, value: string) => void;
 }) {
   if (!value) return null;
-  return (
-    <button
-      type="button"
-      title={`${title}（点击复制）`}
-      onClick={() => onCopy(title, value)}
-      className="inline-flex max-w-full items-center gap-1 rounded border border-idpxyz-border bg-idpxyz-sidebar px-1.5 py-0.5 text-[12px] hover:border-idpxyz-accent"
-    >
-      <span className="shrink-0 whitespace-nowrap text-idpxyz-breadcrumb">{label}</span>
-      <span className="truncate font-mono text-idpxyz-text">{value}</span>
-    </button>
-  );
+  return <CodeRef label={label} value={value} title={title} onCopy={onCopy} />;
 }
 
 /** 详情栏事实条里的一格：标签在上、等宽值在下。 */

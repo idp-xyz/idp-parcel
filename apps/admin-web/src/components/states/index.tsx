@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
 import { AlertTriangle, RotateCw } from 'lucide-react';
 import { TrulyEmptyState } from '@idpxyz/ui-primitives';
-import { TechnicalDetails, type TechnicalRow } from './technical-details';
+import { TechnicalDetails, type TechnicalRow } from '../TechnicalDetails';
 
 export { SectionError, type SectionErrorProps } from './section-error';
-export { TechnicalDetails, httpRows, type TechnicalRow } from './technical-details';
+export { TechnicalDetails, httpRows, type TechnicalRow } from '../TechnicalDetails';
 export {
   OperatorRefusalNote,
   OperatorRefusalState,
