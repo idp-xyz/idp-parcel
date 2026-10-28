@@ -8,6 +8,12 @@
 
 ## 起、收
 
+**库名只用自己的**（建议 `demo_` 前缀）：`up.sh <库名> --reset` 会清空指名库的全部数据，别指别人的库。
+
+**关联只适用单会话顺序跑**：客户费用与供应商预期成本两册的行不带包裹号，脚本靠「提交前记下已有行、终局后取新出现的一行」关联到这一件；并发跑，或别的会话同时写同一个库，会认错行。
+
+不带 `--reset` 对已有库重跑 `up.sh`（先 `down.sh` 不删库）是幂等的：补余额用固定事实号与固定时刻，重放答 `200 EXISTING_FUNDS_FACT`、映射答 `EXISTING_MAPPING`，照常退 0。
+
 ```bash
 scripts/demo-seeds/demo-run/up.sh <库名> [--reset]   # 例：up.sh demo_a --reset
 scripts/demo-seeds/demo-run/down.sh [--drop-db]

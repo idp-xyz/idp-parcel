@@ -13,13 +13,13 @@ load_env
 amount="${1:-100000}"
 suffix="${2:-01}"
 fact="SYN-FUNDS-DEMO-TOPUP-${suffix}"
-occurred="$(now_utc)"
+# 时刻按后缀固定：同一后缀重放是逐字相同的载荷，登记口答已存在、映射 CLI 答已映射，up.sh 不带 --reset 重跑也幂等。
+occurred="2026-10-02T00:00:00Z"
 
 section "补演示账户余额（${fact}，${amount}）"
 tok="$(integration_token syn-integration-bank-01 syn-bank-secret)"
 body="$(pj factRef="$fact" sourceRef="SYN-FUNDS-SOURCE-DEMO-${suffix}" payerRef=SYN-PARTY-SHIPPER-01 kind=RECEIPT_CONFIRMED \
   currency=CNY "amountMinor:=${amount}" version=v1 occurredAt="${occurred}")"
-# 重放时 occurredAt 不同会被当作冲突：已做过就不再登。
 done_key="FUNDS_TOPUP_${suffix}_DONE"
 if [[ -n "${!done_key:-}" ]]; then
   printf '后缀 %s 已补过，跳过（要再补就换一个后缀）\n' "$suffix"
