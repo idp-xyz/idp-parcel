@@ -18,13 +18,13 @@
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 26 | 24 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 239 | 192 | 40 | 71 | 13 | 10 |
-| transportfulfillment | 305 | 316 | 56 | 62 | 16 | 56 |
+| transportfulfillment | 307 | 316 | 56 | 62 | 16 | 56 |
 | visibilityexception | 133 | 133 | 13 | 33 | 8 | 13 |
-| **合计** | 1725 | 1738 | 232 | 397 | 69 | 233 |
+| **合计** | 1727 | 1738 | 232 | 397 | 69 | 233 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 252、测试 412。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 254、测试 413。
 
-## 跨上下文消费缝：51 组，171 个生产文件
+## 跨上下文消费缝：51 组，172 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -70,7 +70,7 @@
 | transportfulfillment | customscompliance | 3 |
 | transportfulfillment | networkrouting | 2 |
 | transportfulfillment | nodeoperations | 2 |
-| transportfulfillment | parcelshipment | 2 |
+| transportfulfillment | parcelshipment | 3 |
 | transportfulfillment | partycommercial | 3 |
 | visibilityexception | accessidentity | 4 |
 | visibilityexception | customscompliance | 3 |
@@ -97,7 +97,7 @@
 | transport_fulfillment | 51 |
 | visibility_exception | 32 |
 
-## 接线面：接入面端点 210 个，消费适配器 62 个生产文件，直投路由表 44 条
+## 接线面：接入面端点 210 个，消费适配器 63 个生产文件，直投路由表 45 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -127,9 +127,9 @@
 | parcelpricing | 2 | 0 | 0 | 0 | 2 |
 | parcelshipment | 15 | 1 | 1 | 0 | 17 |
 | settlementaccounting | 8 | 0 | 0 | 0 | 8 |
-| transportfulfillment | 6 | 0 | 0 | 0 | 6 |
+| transportfulfillment | 7 | 0 | 0 | 0 | 7 |
 | visibilityexception | 18 | 0 | 0 | 2 | 20 |
-| **合计** | 58 | 1 | 1 | 2 | 62 |
+| **合计** | 59 | 1 | 1 | 2 | 63 |
 
 直投路由表按 `cmd/` 生产文件里登记的不同事件类型数（`routeLeg` 字面量的 `event` 与 `map[eventing.EventType]dispatch.Consumer` 字面量的键并认，同一事件类型扇出给几路只算一条），按事件类型常量所属的消费门包归属。路由表只随消费者一起长（ADR-0049 第三条），本表只报它此刻多长。
 
@@ -141,10 +141,10 @@
 | parcelpricing | 2 |
 | parcelshipment | 14 |
 | settlementaccounting | 4 |
-| transportfulfillment | 2 |
+| transportfulfillment | 3 |
 | visibilityexception | 14 |
 | （未归类） | 1 |
-| **合计** | 44 |
+| **合计** | 45 |
 
 ## 端口：声明 644 个；基线口径缺 44，精确口径缺 2
 
