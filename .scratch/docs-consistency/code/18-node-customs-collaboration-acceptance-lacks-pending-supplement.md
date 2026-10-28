@@ -1,7 +1,7 @@
 # 18 NO 节点监管协作承接决定缺「待补充」一格
 
 Category: bug
-Status: in-progress——2026-10-27 作者完工，待隔离评审与进 main，分支 claude-code18（代码最后一笔 4afedd064）。此前 in-progress——2026-10-27 会话 tops-20（idp-parcel-91）接手 tops-26 断在中途的「上线前必须」一组（冻结清单「六」），分支 claude-code18。此前 ready-for-agent——R3（不急）：承接编排 `application/accept_collaboration.go` 在 `cmd/` 下没有装配，今天无生产路径；接线之前必须先修，否则资料不足只能被说成拒接或部分承接。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
+Status: resolved——2026-10-28 进 main（`a13468d22`；全量 160 ok / 0 FAIL，种子退 0），见文末「进 main 记录」。此前 in-progress——2026-10-27 作者完工，待隔离评审与进 main，分支 claude-code18（代码最后一笔 4afedd064）。此前 in-progress——2026-10-27 会话 tops-20（idp-parcel-91）接手 tops-26 断在中途的「上线前必须」一组（冻结清单「六」），分支 claude-code18。此前 ready-for-agent——R3（不急）：承接编排 `application/accept_collaboration.go` 在 `cmd/` 下没有装配，今天无生产路径；接线之前必须先修，否则资料不足只能被说成拒接或部分承接。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
 Blocked by: 无
 出处：[audit/nr-no.md](../audit/nr-no.md) M5（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，现象仍在）。
 
@@ -55,3 +55,17 @@ S：加一格「待补充」，必须带缺口（缺哪几件）与补充入口�
 留给协调方：CC 侧消费 `node-operations.collaboration-acceptance.decided` 的一方（若有，在 customscompliance 地盘，我未碰）今后会收到待补充意图，载荷新增 `round`，读当前轮次决定即可。
 
 评审修订（隔离评审钉 `088d9fec2`）：轮次链是难逆转取舍，补 ADR-0333（会话代 NO owner 接受，待 owner 复核）；`internal/architecture/envelope_partition_gate_test.go` 对承接意图的例外理由改成轮次链下的现行理由，全仓「只决定一次」注释对上（`ports.go`、应用测试、迁移 0002 头注）。`AT-NO-002` 措辞按上改为整件待补充，不再称覆盖其 P2 半边。ADR 索引未重生成。
+
+## 评审记录（2026-10-28，隔离子代理，钉 `088d9fec2`）
+
+- Spec 轴阻断一条（程序）：待补充做成落库轮次链（主键扩到轮次、迁移 0024、事件 ID 带轮次）是难逆转取舍，缺 ADR。评审结论：做法与 NO CONTEXT、UC-NO-001 逐字一致，ADR-0265 只约束 TF，NO 与 TF 不对称是取舍不是矛盾；建议保留轮次链、补短 ADR。作者补 ADR-0333（`56b1e18b1`）。
+- 非阻断：`envelope_partition_gate_test.go` 对承接交接口的例外理由过期——作者同笔改；AT-NO-002「P1 已承接、P2 待补充」一轮里表达不了——完成记录改为如实措辞，ADR-0333 越权风险点 1；重放旧轮、并发补充、责任方未建模——写入 ADR-0333 越权风险点 2–4。Standards 轴无阻断。
+- 推送方复核修订轮：作者顺手改了已发布迁移 `node_operations/0002` 的头注；迁移按原文 sha256 校验（`migrations.checksumOf`），改注释会让已落库环境撞校验漂移，推送方撤回（`d94508854`）。其余修订读过，ADR-0333 内容与评审要求一致。
+
+## 进 main 记录（2026-10-28，推送方 tops-20 / idp-parcel-91）
+
+- 分支 `claude-code18` tip `d94508854` 作出处；在隔离树上 cherry-pick 到 main `94ef6908b`，无冲突。
+- 重生成 ADR 索引、AT 盘点计数与机制清点，有变化的各成一笔；两项 `-check` 退 0。
+- 全量 `scripts/test-full.sh`：160 ok / 0 FAIL。种子灌一次性库退 0，用后删库。
+- 推确切 SHA `a13468d22` 到 main。接线（`AcceptCollaborationHandler` 在 `cmd/` 下的装配）照票面不在本票，UC-NO-001 状态行如实。
+
