@@ -10,3 +10,5 @@
 | [04](./issues/04-node-collaboration-acceptance-production-face.md) | NO 监管协作承接编排无装配 | code/18、ADR-0333 |
 | [05](./issues/05-post-intake-disposition-request-consumers.md) | 收寄后服务处置请求信封无下游消费 | code/37、ADR-0332 |
 | [06](./issues/06-duty-payment-gate-rule-registration-face.md) | 「税费付款」门禁规则行没有生产登记面 | launch-wiring/03 作者报告 |
+| [07](./issues/07-confirmed-charge-does-not-convert-the-freeze-or-exposure.md) | 费用确认后冻结与信用暴露不转正式扣费、不释放（收口重走撞出，挡上线） | psb/05 收口重走停点三 |
+| [08](./issues/08-demo-seed-customs-gates-registered-on-the-wrong-scope.md) | 演示种子门禁目录与税费付款规则挂错范围、未覆盖各受守护动作 | psb/05 收口重走停点一 |

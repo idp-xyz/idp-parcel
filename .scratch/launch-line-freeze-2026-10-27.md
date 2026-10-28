@@ -27,6 +27,7 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 | 票 | 为什么挡 |
 |---|---|
 | [envelope-id-bounds/issues/01-remaining-envelope-ids-still-concatenate-instance-references.md](./envelope-id-bounds/issues/01-remaining-envelope-ids-still-concatenate-instance-references.md) | 运输履约各口的信封 ID 仍原样串接租户、委托、包裹等引用；真实租户的标识一长就入不了队，交接只留一条没人重发的续办引用，主链静默断开。其余各口已改指纹，门禁 `TestEveryEnvelopeIDIsMintedAsAFingerprint` 的例外清单登着去处，余下是照做的活。 **2026-10-27 已进 main（`c66b9f672`），resolved。** |
+| [launch-wiring/issues/07-confirmed-charge-does-not-convert-the-freeze-or-exposure.md](./launch-wiring/issues/07-confirmed-charge-does-not-convert-the-freeze-or-exposure.md) | 2026-10-28 收口重走撞出：费用确认后冻结与信用暴露不转正式扣费也不释放，占用只增不减；授信客户付清也回不来额度，发到一定件数后新委托全拒、无绕法。 |
 | [product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md](./product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) | 收口那一步：首个租户上线前的演练里把合成演示动线重走一遍，逐格确认不停在「未配置」。不是写代码，是演练。 |
 
 ## 一之二、限量生产前必须（2 张）
@@ -227,7 +228,7 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 - 2026-10-28｜收寄后处置的待人工处理清单与登记没有管理台页（只有 API）；`AT-PS-084` 监管退运转 UC-TF-001 未做｜launch-wiring/05（ADR-0341）｜R2（租户运营要在界面上处理时做）
 - 2026-10-28｜演示种子的门禁目录、前置满足与"税费付款"规则行挂在范围 `SYN-SCOPE-01`，而准入判断读门禁用申报单元的判断范围（`SYN-UNIT-CN-EXPORT-DEMO-01`）；每个受守护动作各要一行目录和一行规则行，种子只覆盖 `CROSS_CUSTOMS_MOVEMENT` 的规则与 `FINAL_DELIVERY` 的目录。按种子原样立案之后所有交出、出发、交付门禁读数都是`未决`；按单元范围补登后放行结果 `FULL` 使交出读数变 `ADMITTED`（机制通）｜[psb/05](./product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)「收口重走（钉 `d78fd1fbf`，2026-10-28）」停点一｜R2（首个租户上线演练前补种子；对真实租户是实施提醒；S）
 - 2026-10-28｜关案要案件有义务清单，清单按案号登、种子写死 `SYN-CASE-CN-SG-01`，运行时建案口铸的案号永远对不上，`POST /customs-case-closures` 答`未决` `OBLIGATION_INVENTORY_UNCONFIGURED`；只有受控 CLI 能补登，没有生产登记面，也没有建案时按案件要求规则形成清单的路径｜psb/05 收口重走停点二｜R2（真实租户每关一案要有人跑 CLI，量大前补；S–M）
-- 2026-10-28｜演示账户运营余额 20000、每件冻结 9600，第三件委托被拒 `AVAILABLE_BALANCE_INSUFFICIENT`；第一件终局、费用确认、对账单发布之后敞口 `EXP-0001` 仍占用，未见释放；没有追到该在哪一步释放｜psb/05 收口重走停点三；[psb/29](./product-strategy-boundary/issues/29-operational-balance-and-credit-standing-have-no-production-writer.md)｜R3（与票 29 一并看）
+- 2026-10-28｜演示账户运营余额 20000、每件冻结 9600，第三件委托被拒 `AVAILABLE_BALANCE_INSUFFICIENT`；第一件终局、费用确认、对账单发布之后敞口 `EXP-0001` 仍占用，未见释放；没有追到该在哪一步释放｜psb/05 收口重走停点三；[psb/29](./product-strategy-boundary/issues/29-operational-balance-and-credit-standing-have-no-production-writer.md)｜**协调方上调为挡上线**：费用确认、对账单发布都不碰冻结与信用暴露（SA CONTEXT「费用确认后将适用冻结转为正式扣费」未实现），授信客户付清也回不来额度，发到额度÷估价件数后新委托全拒、无绕法；转 [launch-wiring/07](./launch-wiring/issues/07-confirmed-charge-does-not-convert-the-freeze-or-exposure.md)
 - 2026-10-28｜内部合规限制建立口覆盖项缺 `standing` 时答 `200 NOT_ACCEPTED` 不带原因；限制没有读口（`GET /customs-internal-restrictions` 答 405），运营只能从准入读数间接看到｜psb/05 收口重走停点五（launch-wiring/01）｜R3
 
 ## 六、docs-consistency/code 队列的复核（2026-10-27，tops-26）
