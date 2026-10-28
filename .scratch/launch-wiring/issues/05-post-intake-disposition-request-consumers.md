@@ -1,7 +1,7 @@
 # 05 收寄后服务处置请求信封无下游消费
 
 Category: enhancement
-Status: in-progress——2026-10-28 作者完工第二阶段（按用户裁定做待人工处理项与登记口，见文末「第二阶段完成记录」），待隔离评审与进 main，分支 claude-lw-pid2（代码最后一笔见完成记录）。此前 in-progress——2026-10-28 用户裁定改做法（见文末「用户裁定（2026-10-28）」），分支 claude-lw-pid2。此前 in-progress——2026-10-28 TF 半边进 main（`ec3f0848f`；全量 160 ok / 0 FAIL，种子退 0），票不收口，见文末「收口条件」。此前 in-progress——2026-10-28 作者完工 TF 一半并按评审修订（见「评审修订」），余下需 NO、NR 所有者新模型，待协调方裁与隔离评审，分支 claude-lw-pid；此前：2026-10-28 会话 tops-20（idp-parcel-91）立并认领（用户「现在就接线」）
+Status: resolved——2026-10-28 第二阶段进 main（`837ceafb6`；全量 160 ok / 0 FAIL，种子退 0），收口条件（用户裁定一节）已满足，见文末「第二阶段进 main 记录」。此前 in-progress——2026-10-28 作者完工第二阶段（按用户裁定做待人工处理项与登记口，见文末「第二阶段完成记录」），待隔离评审与进 main，分支 claude-lw-pid2（代码最后一笔见完成记录）。此前 in-progress——2026-10-28 用户裁定改做法（见文末「用户裁定（2026-10-28）」），分支 claude-lw-pid2。此前 in-progress——2026-10-28 TF 半边进 main（`ec3f0848f`；全量 160 ok / 0 FAIL，种子退 0），票不收口，见文末「收口条件」。此前 in-progress——2026-10-28 作者完工 TF 一半并按评审修订（见「评审修订」），余下需 NO、NR 所有者新模型，待协调方裁与隔离评审，分支 claude-lw-pid；此前：2026-10-28 会话 tops-20（idp-parcel-91）立并认领（用户「现在就接线」）
 Blocked by: 无
 
 ## 做什么
@@ -121,3 +121,16 @@ NO 三项、NR 三项、TF 两项扣住，全需所有者先立模型（扣住�
 - 护栏：`TestTheActionsMarkedSystemExecutedAreExactlyTheOnesTheTransportAdapterExecutes` 钉住 `ExecutedBySystem` 为真的集合恰好等于 TF 适配器执行的集合（适配器导出 `HandledPostIntakeActions`），并核全集每个动作要么系统执行、要么在某去向的人工项里。
 - 清单与读回面每项加派生标志 `supersededByLaterDecision`（决定版本小于链尾版本），用例断言之；ADR-0341 越权风险点 4 补一句。
 - 迁移 `parcel_shipment/0034` 头注关于 CHECK 的说法改准；AT-PS-088 盘点行写明「非 TF 拒绝，而是人工项登记无法处理」。
+
+## 第二阶段评审记录（2026-10-28，隔离子代理）
+
+- 第一轮（钉 `789897626`）：实现无阻断；ADR-0332 请求表 11 格逐格核过，每格要么系统执行（TF 改送、退运另起旅程）要么进人工清单，无两头落空；项与决定、信封同笔落库，重放不重复。阻断三处均为基线落后撞号（ADR-0340、access_identity 0035 被 psb/22 占）。非阻断：缺「系统执行集合 = TF 适配器处理集合」护栏；清单不标被取代的项。
+- 第二轮（钉 `08a11a3df`，作者变基改号：ADR-0341、access_identity 0036，加护栏 `TestTheActionsMarkedSystemExecutedAreExactlyTheOnesTheTransportAdapterExecutes` 与 `supersededByLaterDecision`）：前三处清零；新撞一处——演示种子 access 34/35、governance 69/70 与 psb/22 第 4 笔同号。非阻断：`HandledPostIntakeActions()` 与处理方 `switch` 是并列两份，只改 `switch` 护栏看不出——记入冻结清单。
+- 推送方修订：种子数据文件改号为 access 36/37、governance 73/74，步骤 487 引用同改（`cdc2c0f60`）；灌种子实测退 0。完成记录里「access 34、35、governance 69、70」以此为准。
+
+## 第二阶段进 main 记录（2026-10-28，推送方 tops-20 / idp-parcel-91）
+
+- 分支 `claude-lw-pid2` tip `08a11a3df` 作出处；隔离树上 cherry-pick 到 main `207469515`，无冲突；加改号一笔。
+- 重生成 ADR 索引、AT 盘点计数与机制清点；两项 `-check` 退 0。全量 `scripts/test-full.sh` 160 ok / 0 FAIL；种子一次性库退 0。推确切 SHA `837ceafb6`。
+- 收口：清单与登记口生产可用、演示租户「退运」「拦截」两条由真库进程用例走通；`POST_INTAKE_SERVICE_DISPOSITION` 授予可发给真实租户。未做：管理台的清单与登记页；`AT-PS-084`（监管退运转 UC-TF-001）仍在④。
+
