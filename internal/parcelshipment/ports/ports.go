@@ -582,8 +582,9 @@ func (kind CancellationRecordKind) String() string {
 	}
 }
 
-// CancellationRecord 是一次取消判断留下的东西。`待处置`记录携带越过的收寄引用——
-// 处置决定属后续独立判断，这里只登记「取消不能回退、在等明确处置」。
+// CancellationRecord 是一次取消判断留下的东西。`待处置`记录携带越过的收寄引用，以及请求方、授权依据、原因和请求的业务时间——
+// 处置决定属后续独立判断（PostIntakeDispositions），这里登记「取消不能回退、在等明确处置」，并把决定人要回应的那次请求保全下来。
+// 请求方这四件在先于保全落下的待处置记录上为空。
 type CancellationRecord struct {
 	Key           CancellationRequestKey
 	ContentDigest string
@@ -591,7 +592,17 @@ type CancellationRecord struct {
 	Cancellation  domain.ParcelCancellation
 	IntakeVersion domain.SourceResultVersion
 	RefusalBasis  domain.CheckReason
-	DecidedAt     time.Time
+	// StopRequest 只在待处置记录上带。
+	StopRequest StopRequest
+	DecidedAt   time.Time
+}
+
+// StopRequest 是越界后被拒回退的那次取消请求本身：谁、凭哪条授权、为什么、在什么业务时间。
+type StopRequest struct {
+	Requester   domain.CancellationRequesterReference
+	Authority   domain.CancellationAuthorityReference
+	Reason      domain.CancellationReasonReference
+	RequestedAt time.Time
 }
 
 type CancellationSaveOutcome uint8

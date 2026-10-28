@@ -126,6 +126,11 @@ const (
 	DecisionDeliveryAttemptResultConfirmation DecisionKind = "DELIVERY_ATTEMPT_RESULT_CONFIRMATION"
 )
 
+// DecisionPostIntakeServiceDisposition 是收寄后服务处置（ADR-0336 决定二）：有权主体对一件越过取消边界的包裹形成继续、拦截、改送、退运或服务终止的处置决定，
+// 向各对象所有者提出范围化请求。它不与授权处置（AUTHORIZED_DISPOSITION）共用——授权处置是对一份受限委托去向的业务处置，这一种改的是一件已在网络手里的包裹
+// 的实物去向与后续服务，认错了会让包裹被扣、被退或被终止服务；也不与取消先后冲突的解开共用，那一种裁断的是取消与边界事实谁在先。谁持有是租户取值，未登记时没有人能决定。
+const DecisionPostIntakeServiceDisposition DecisionKind = "POST_INTAKE_SERVICE_DISPOSITION"
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -148,6 +153,7 @@ var decisionKinds = []DecisionKind{
 	DecisionControlReleaseRefusalHandling,
 	DecisionCancellationOrderConflictResolution,
 	DecisionPickupAttemptResultConfirmation, DecisionDeliveryAttemptResultConfirmation,
+	DecisionPostIntakeServiceDisposition,
 }
 
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。

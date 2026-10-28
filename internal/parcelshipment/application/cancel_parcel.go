@@ -352,13 +352,20 @@ func (handler *CancelParcelHandler) Handle(
 	}, intake)
 	if errors.Is(err, domain.ErrIntakeBoundaryCrossed) {
 		// 已收寄后只发「取消」消息：明确不能回退取消；没有收寄后服务处置决定时保持待处置
-		// （AT-PS-082）。越过的收寄版本随记录保全，处置判断由后续独立请求形成。
+		// （AT-PS-082）。越过的收寄版本与这次请求本身（请求方、授权依据、原因、业务时间）随记录保全，
+		// 处置判断由运营经收寄后服务处置决定面形成（PostIntakeDispositions）。
 		record := ports.CancellationRecord{
 			Key:           key,
 			ContentDigest: digest,
 			Kind:          ports.RecordDispositionPending,
 			IntakeVersion: started.Key.Version,
-			DecidedAt:     handler.deps.Clock.Now(),
+			StopRequest: ports.StopRequest{
+				Requester:   command.Requester,
+				Authority:   authority,
+				Reason:      command.Reason,
+				RequestedAt: command.RequestedAt,
+			},
+			DecidedAt: handler.deps.Clock.Now(),
 		}
 		return handler.commit(ctx, record)
 	}
