@@ -25,6 +25,7 @@ import { withStatusBadge } from './detail-primitives';
 import {
   supplierAgreementColumns,
   supplierAgreementRowsOf,
+  supplierAgreementTechnicalRows,
   type SupplierAgreementRow,
 } from './supplier-agreement-rows';
 import { SupplierAgreementPublicationForm } from './SupplierAgreementPublicationForm';
@@ -103,11 +104,11 @@ function SupplierAgreementCatalogue({
     <>
       <ListPageTemplate<SupplierAgreementRow>
         title={info.title}
-        description="供应商协议的各个版本：供应商、责任法人、采购方案、协议范围与有效区间。正文还没随发布登记的版本，「正文」列显示「未登记」。"
+        description="与承运商、代理等供应商签的协议：谁、按哪份采购价格表、有效到什么时候；要改条款就签新版本"
         search={{
           value: search,
           onChange: setSearch,
-          placeholder: '搜索协议、版本、范围、供应商或方案引用',
+          placeholder: '搜索协议、供应商或价格表',
         }}
         filterSummary={
           // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 份」会与状态区
@@ -139,15 +140,16 @@ function SupplierAgreementCatalogue({
         viewState={catalogueViewState(answer, rows.length, retry, {
           module: info,
           endpoint: 'GET /commercial-supplier-agreements',
-          emptyTitle: '当前租户尚无供应商协议版本',
-          emptyDescription: `还没有任何供应商协议；本页不会预置供应商或采购条件。${entryHint(mayWrite, '在「发布协议版本」签发布第一份。')}`,
+          emptyTitle: '还没有签订任何供应商协议',
+          emptyDescription: `找承运商、代理走货要先有协议。${entryHint(mayWrite, '在「签订协议」签签第一份。')}`,
         })}
       />
       <VersionDetailDrawer<SupplierAgreementRow>
         row={selected}
         columns={detailColumns}
         title={(row) => ({ objectId: row.source.objectId, version: row.source.version })}
-        subtitle={(row) => `供应商协议 · 适用范围 ${row.source.scope}`}
+        subtitle={(row) => `供应商协议 · ${row.values.contentRegistered === '已登记' ? '正文已登记' : row.values.contentRegistered}`}
+        technical={supplierAgreementTechnicalRows}
         status={(row) => row.source.status}
         history={(row) => versionHistoryOf(rows.map((candidate) => candidate.source), row.source)}
         currentVersion={(row) => row.source.version}
@@ -171,7 +173,7 @@ function SupplierAgreementCatalogue({
                 onStartNewVersion(row.source);
               }}
             >
-              发新版本
+              签新版本
             </Button>
             {closable.has(closureKeyOf(row.source)) ? (
               <Button
@@ -219,15 +221,15 @@ export function SupplierAgreementsPage() {
   const replaceGuard = useReplaceDraftGuard<SupplierAgreementRecord>(
     () => publicationGroup('SUPPLIER_AGREEMENT'),
     beginNewVersion,
-    '发布协议版本',
+    '签订协议',
   );
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       {replaceGuard.dialog}
       <KeepAliveTabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
-          <TabsTrigger value="catalogue">协议目录</TabsTrigger>
-          {mayWrite ? <TabsTrigger value="publish">发布协议版本</TabsTrigger> : null}
+          <TabsTrigger value="catalogue">协议</TabsTrigger>
+          {mayWrite ? <TabsTrigger value="publish">签订协议</TabsTrigger> : null}
         </TabsList>
         <KeepAliveTabsContent
           value="catalogue"

@@ -29,23 +29,31 @@ function col(id: string, header: string, mono = false): ListColumn<SupplierAgree
   };
 }
 
-// 壳的列在前、正文（0021）的列在后。范围与区间各出现两次，前缀「版本」「协议」照发布签的格名分清：壳上的
-// 是版本的（登记册逐列比对的项），正文里的是协议自己的，两样不是同一件事（SupplierAgreementPublicationForm
-// 版本壳一节的说明原话）。方向不上列：后端刻意不透，前端转写常量等于第二个口径。
+// 主列只留运营要看的：协议、供应商、我方公司主体、状态、采购价格表、协议有效期、正文登了没有。版本自己的范围与区间、
+// 发布与登记时间、协议适用范围是登记册逐列比对的项（SupplierAgreementPublicationForm 版本壳一节的说明原话），运营日常不看，
+// 收进详情抽屉底部的「技术详情」（supplierAgreementTechnicalRows）。方向不上列：后端刻意不透，前端转写常量等于第二个口径。
 export const supplierAgreementColumns: ListColumn<SupplierAgreementRow>[] = [
-  col('identity', '协议 / 版本', true),
-  col('scope', '版本适用范围', true),
-  col('status', '状态'),
-  col('effective', '版本有效区间', true),
-  col('publishedAt', '发布时间', true),
-  col('contentRegistered', '正文'),
+  col('identity', '协议', true),
   col('supplier', '供应商', true),
-  col('legalEntity', '责任法人', true),
-  col('purchasePlan', '采购方案引用', true),
-  col('agreementScope', '协议适用范围', true),
-  col('agreementEffective', '协议有效区间', true),
-  col('registeredAt', '登记时间', true),
+  col('legalEntity', '公司主体', true),
+  col('status', '状态'),
+  col('purchasePlan', '采购价格表', true),
+  col('agreementEffective', '协议有效期', true),
+  col('contentRegistered', '正文'),
 ];
+
+/** 详情抽屉「技术详情」里的行：版本壳的范围与区间、两处时间与协议适用范围。 */
+export function supplierAgreementTechnicalRows(row: SupplierAgreementRow): { label: string; value: string }[] {
+  return [
+    { label: '协议标识', value: row.source.objectId },
+    { label: '版本号', value: row.source.version },
+    { label: '版本适用范围', value: row.values.scope ?? '' },
+    { label: '版本有效区间', value: row.values.effective ?? '' },
+    { label: '发布时间', value: row.values.publishedAt ?? '' },
+    { label: '协议适用范围', value: row.values.agreementScope ?? '' },
+    { label: '正文登记时间', value: row.values.registeredAt ?? '' },
+  ];
+}
 
 // 后端 supplierAgreementBody 在正文在场时必然写满的键；agreementEffectiveEndsAt 不在其列——协议区间无上界是
 // 登记方说出的合法声明，不是键缺。

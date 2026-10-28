@@ -80,11 +80,10 @@ export function SupplierAgreementPublicationForm({ onPublished, start }: Supplie
             <h3 className="text-[13px] font-medium text-idpxyz-text">版本信息</h3>
             {/* 版本上的范围与区间是登记册逐列比对的项，与正文自己的范围与区间是两样；版本上不带指名引用，引用全在正文里。 */}
             <p className="text-[11px] text-idpxyz-textMuted">
-              这里的适用范围与有效区间属于<strong>版本</strong>
-              ，和下面协议正文自己的范围与区间分开填。供应商、责任法人与采购方案都在正文里填。
+              这里填的是这一版本自己的适用范围与有效期，和下面协议条款里的范围与有效期分开。供应商、公司主体与采购价格表在条款里填。
             </p>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="协议对象标识 *" path="objectId" problems={problems}>
+              <Field label="协议编号 *" path="objectId" problems={problems}>
                 <Input
                   value={draft.objectId}
                   disabled={locked}
@@ -110,7 +109,7 @@ export function SupplierAgreementPublicationForm({ onPublished, start }: Supplie
               </Field>
               <div />
               <WallTimeField
-                label="版本生效起点 *"
+                label="版本开始时间 *"
                 path="effectiveStartsAt"
                 problems={problems}
                 value={draft.effectiveStartsAt}
@@ -119,13 +118,13 @@ export function SupplierAgreementPublicationForm({ onPublished, start }: Supplie
                 onChange={(effectiveStartsAt) => patch({ effectiveStartsAt })}
               />
               <WallTimeField
-                label="版本生效止点"
+                label="版本结束时间"
                 path="effectiveEndsAt"
                 problems={problems}
                 value={draft.effectiveEndsAt}
                 locked={locked}
                 timeZone={timeZone}
-                note="留空即持续有效。"
+                note="留空即长期有效。"
                 onChange={(effectiveEndsAt) => patch({ effectiveEndsAt })}
               />
             </div>
@@ -141,12 +140,11 @@ export function SupplierAgreementPublicationForm({ onPublished, start }: Supplie
             </div>
             {/* 方向由领域钉死为 BUY，正文没有方向格；采购方案只传方案版本引用串，表单不读方案内容，方向与绑定换算归价格政策那册。 */}
             <p className="text-[11px] text-idpxyz-textMuted">
-              供应商协议约定的是<strong>采购</strong>
-              ，方向固定为买价，不用另填。采购方案从价卡目录选；方案的方向与换算在商业价格政策里约定，不在这里。
+              供应商协议约定的是我们向供应商采购，方向固定为买价，不用另填。采购价格表从价格表里选；换算方式在商业价格政策里约定。
             </p>
             <div className="grid grid-cols-2 gap-3">
               <ReferencePicker
-                label="供应商（业务参与方）*"
+                label="供应商 *"
                 path="supplierAgreement.supplier"
                 problems={problems}
                 value={draft.supplier}
@@ -158,7 +156,7 @@ export function SupplierAgreementPublicationForm({ onPublished, start }: Supplie
                 readFace="业务参与方册"
               />
               <ReferencePicker
-                label="责任法人（集团法人）*"
+                label="公司主体 *"
                 path="supplierAgreement.legalEntity"
                 problems={problems}
                 value={draft.legalEntity}
@@ -179,7 +177,7 @@ export function SupplierAgreementPublicationForm({ onPublished, start }: Supplie
                 />
               </Field>
               <ReferencePicker
-                label="采购定价方案（价卡目录）*"
+                label="采购价格表 *"
                 path="supplierAgreement.purchasePlan"
                 problems={problems}
                 value={draft.purchasePlan}
@@ -196,7 +194,7 @@ export function SupplierAgreementPublicationForm({ onPublished, start }: Supplie
                 readFace="价卡目录"
               />
               <WallTimeField
-                label="协议生效起点 *"
+                label="协议开始时间 *"
                 path="supplierAgreement.effectiveStartsAt"
                 problems={problems}
                 value={draft.agreementEffectiveStartsAt}
@@ -205,13 +203,13 @@ export function SupplierAgreementPublicationForm({ onPublished, start }: Supplie
                 onChange={(agreementEffectiveStartsAt) => patch({ agreementEffectiveStartsAt })}
               />
               <WallTimeField
-                label="协议生效止点"
+                label="协议结束时间"
                 path="supplierAgreement.effectiveEndsAt"
                 problems={problems}
                 value={draft.agreementEffectiveEndsAt}
                 locked={locked}
                 timeZone={timeZone}
-                note="留空即持续有效。"
+                note="留空即长期有效。"
                 onChange={(agreementEffectiveEndsAt) => patch({ agreementEffectiveEndsAt })}
               />
             </div>
