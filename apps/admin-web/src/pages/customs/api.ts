@@ -490,3 +490,193 @@ export const dutyUndecidedReasonLabels: Record<string, string> = {
   DUTY_OBLIGATION_BASIS_ABSENT:
     '义务依据缺席——既无已接受的监管核定税费,也无明确无需付款依据;缺少税费结果不能被解释为无需付款',
 };
+
+// —— 关务记录四口(customs-cases 页对象族签与门禁判断册签,票 demo-2026-10-30/01) ——
+// 形状以 internal/customscompliance/adapters/http/query_operations_records.go 为准,此处只做镜像不虚构。
+// 四口各立入口:分层保存的外部结果不能被一个端点的参数集串成「一个状态」。
+
+export interface CaseParcelBody {
+  parcel: string;
+  customer: string;
+  sourceRef: string;
+}
+
+export interface CaseRoleBody {
+  role: string;
+  party: string;
+  authority: string;
+}
+
+export interface DeclarationUnitBody {
+  unit: string;
+  procedure: string;
+  members: string[];
+  formedAt: string;
+  replacesUnit?: string;
+}
+
+/** 关闭记录只在案件已有关闭记录时在场;缺席即未关闭。 */
+export interface CaseClosureBody {
+  decidedBy: string;
+  cutoffAt: string;
+  verifiedAt: string;
+  closedAt: string;
+  itemCount: number;
+  reopenCount: number;
+}
+
+export interface CustomsCaseBody {
+  case: string;
+  jurisdiction: string;
+  direction: string;
+  procedure: string;
+  obligation: string;
+  establishedAt: string;
+  parcels: CaseParcelBody[];
+  roles: CaseRoleBody[];
+  units: DeclarationUnitBody[];
+  closure?: CaseClosureBody;
+}
+
+export interface CustomsCaseListResponseBody {
+  outcome: 'CUSTOMS_CASES_LISTED';
+  cases: CustomsCaseBody[];
+}
+
+export function listCustomsCases(): Promise<ApiResult<CustomsCaseListResponseBody>> {
+  return exchangeMasterData<CustomsCaseListResponseBody>('/customs-case-records');
+}
+
+export interface TechnicalReceiptBody {
+  source: string;
+  outcome: string;
+  occurredAt: string;
+  receivedAt: string;
+}
+
+export interface SendFactBody {
+  sentAt: string;
+  outcome: string;
+  channelMessage?: string;
+  responseRef?: string;
+}
+
+/** 尝试登记、发送事实、技术回执三件事分开上列;sentAt 缺席即尚未越过发送边界。 */
+export interface SubmissionAttemptBody {
+  sequence: number;
+  target: string;
+  result: string;
+  safeResend?: string;
+  sentAt?: string;
+  sendFact?: SendFactBody;
+  receipts: TechnicalReceiptBody[];
+}
+
+export interface SubmissionVersionBody {
+  version: string;
+  unit: string;
+  procedure: string;
+  contentDigest: string;
+  members: string[];
+  dossier: string;
+  roles: string;
+  readinessBasis: string;
+  authority: string;
+  fixedAt: string;
+  isCurrent: boolean;
+  correctedFrom?: string;
+  attempts: SubmissionAttemptBody[];
+}
+
+export interface SubmissionVersionListResponseBody {
+  outcome: 'SUBMISSION_VERSIONS_LISTED';
+  submissions: SubmissionVersionBody[];
+}
+
+export function listSubmissionVersions(): Promise<ApiResult<SubmissionVersionListResponseBody>> {
+  return exchangeMasterData<SubmissionVersionListResponseBody>('/customs-submission-records');
+}
+
+export interface ReleaseBody {
+  kind: string;
+  authority: string;
+  scope: string;
+  condition?: string;
+}
+
+/** unattributable 为真即归属不上任何提交版本:只留原始语义,不猜版本、不补造层次。 */
+export interface ExternalResultBody {
+  source: string;
+  layer?: string;
+  role?: string;
+  rawSemantics?: string;
+  rule?: string;
+  submissionVersion?: string;
+  claimedVersion?: string;
+  scope?: string;
+  unattributable: boolean;
+  layerConflict: boolean;
+  correctsSource?: string;
+  correctionInForce: boolean;
+  occurredAt?: string;
+  receivedAt?: string;
+  recordedAt: string;
+  release?: ReleaseBody;
+}
+
+export interface ExternalResultListResponseBody {
+  outcome: 'EXTERNAL_RESULTS_LISTED';
+  results: ExternalResultBody[];
+}
+
+export function listExternalResults(): Promise<ApiResult<ExternalResultListResponseBody>> {
+  return exchangeMasterData<ExternalResultListResponseBody>('/customs-external-result-records');
+}
+
+export interface AdmissionBasisBody {
+  cause: string;
+  scope?: string;
+  procedure?: string;
+  sources: string[];
+}
+
+export interface AdmissionFindingBody {
+  action: string;
+  answer: string;
+  bases: AdmissionBasisBody[];
+}
+
+export interface AdmissionZoneBody {
+  node: string;
+  zone?: string;
+  registered: boolean;
+}
+
+export interface AdmissionJudgementBody {
+  judgement: string;
+  object: string;
+  intent: string;
+  node: string;
+  onwardNode?: string;
+  actionAt: string;
+  crossZone: string;
+  answer: string;
+  zones: AdmissionZoneBody[];
+  findings: AdmissionFindingBody[];
+  judgedAt: string;
+}
+
+export interface AdmissionJudgementListResponseBody {
+  outcome: 'ACTION_ADMISSION_JUDGEMENTS_LISTED';
+  judgements: AdmissionJudgementBody[];
+}
+
+/** object 空串即不按对象过滤;非空按包裹或申报单元查,最近的判断在前。 */
+export function listAdmissionJudgements(
+  object: string,
+): Promise<ApiResult<AdmissionJudgementListResponseBody>> {
+  const query = object ? `?object=${encodeURIComponent(object)}` : '';
+  return exchangeMasterData<AdmissionJudgementListResponseBody>(
+    `/customs-action-admission-judgements${query}`,
+  );
+}

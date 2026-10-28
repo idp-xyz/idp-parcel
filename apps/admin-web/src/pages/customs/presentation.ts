@@ -241,3 +241,47 @@ export const dutyRegistrationSnapshotHints: Record<DutyRegistrationKind, string>
       '同三维换内容(含换程序、换资金版本)是新版本追加,不是冲突;资金事实与协作事项两道前置未齐时原名答回,等前置落册后重发同一份。',
   ),
 };
+
+// —— 关务记录四口的词表(票 demo-2026-10-30/01)。集外取值由 labelOf 原样回显,坏数据该露出来。
+
+// 提交尝试结果(迁移 0002/0025 的封闭四值):待发送一格是「已登记、外部发送还没开始」,不是已发送。
+export const attemptResultLabels: Record<string, string> = {
+  REGISTERED_PENDING_SEND: '已登记待发送',
+  ACKNOWLEDGED: '已确认',
+  FAILED: '失败',
+  PENDING_CONFIRMATION: '待确认',
+};
+
+// 技术回执只收明确的两种(迁移 0030)。技术成功只说明技术层结果。
+export const technicalReceiptLabels: Record<string, string> = {
+  ACKNOWLEDGED: '技术成功',
+  FAILED: '技术失败',
+};
+
+export const releaseKindLabels: Record<string, string> = {
+  FULL: '全部放行',
+  PARTIAL: '部分放行',
+  CONDITIONAL: '附条件放行',
+};
+
+// 动作准入判断的整次答复封闭五值(迁移 0024)。
+export const admissionAnswerLabels: Record<string, string> = {
+  NOT_GUARDED: '不受守护',
+  ADMITTED: '准入',
+  UNDECIDED: '未决',
+  NOT_CONFIGURED: '未配置',
+  BLOCKED: '拦截',
+};
+
+export const admissionIntentLabels: Record<string, string> = {
+  DEPARTURE: '出发',
+  HANDOVER: '交出',
+  DELIVERY: '交付',
+};
+
+export const crossZoneLabels: Record<string, string> = {
+  NOT_ASKED: '未问',
+  SAME_ZONE: '同区域',
+  CROSSING: '跨区域',
+  UNDETERMINED: '未能判定',
+};
