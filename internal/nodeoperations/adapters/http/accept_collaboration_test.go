@@ -35,13 +35,13 @@ type collaborationExecutionAuthenticator struct{}
 
 func (collaborationExecutionAuthenticator) AuthenticateCollaborationExecution(
 	_ context.Context, _, _, _, reference string,
-) (domain.TenantID, domain.NodeReference, error) {
+) (domain.TenantID, domain.NodeReference, string, error) {
 	tenant, err := domain.NewTenantID("SYN-TENANT-01")
 	if err != nil {
-		return domain.TenantID{}, domain.NodeReference{}, err
+		return domain.TenantID{}, domain.NodeReference{}, "", err
 	}
 	node, err := domain.NewNodeReference(reference)
-	return tenant, node, err
+	return tenant, node, "https://id.syn.example#SYN-DEVICE-OPERATOR", err
 }
 
 type recordingCollaboration struct {
@@ -86,7 +86,7 @@ func TestTheCollaborationAcceptanceIntakeTakesTheTenantFromTheEnvelopeAndClosesT
 	if err != nil {
 		t.Fatalf("valid acceptance: %v", err)
 	}
-	if command.TenantID.String() != "SYN-TENANT-01" || command.Decision != domain.CollaborationAccepted ||
+	if command.TenantID.String() != "SYN-TENANT-01" || command.Operator != "https://id.syn.example#SYN-OPERATOR" || command.Decision != domain.CollaborationAccepted ||
 		len(command.AcceptedActions) != 1 || command.AcceptedActions[0] != domain.UnsealAction {
 		t.Fatalf("command = %+v", command)
 	}
@@ -119,7 +119,7 @@ func TestTheCollaborationExecutionIntakeAuthenticatesBeforeReadingAndOnlyTakesAN
 	if err != nil {
 		t.Fatalf("valid execution: %v", err)
 	}
-	if command.Node.String() != "N1" || command.Action != domain.UnsealAction || command.TenantID.String() != "SYN-TENANT-01" {
+	if command.Node.String() != "N1" || command.Operator != "https://id.syn.example#SYN-DEVICE-OPERATOR" || command.Action != domain.UnsealAction || command.TenantID.String() != "SYN-TENANT-01" {
 		t.Fatalf("command = %+v", command)
 	}
 }

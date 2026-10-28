@@ -154,6 +154,14 @@ func TestTheNodeCollaborationFacesAcceptSupplementAndRecordExecutionAgainstAReal
 	countEvents := func(eventType string) int {
 		return countCollaborationRows(t, pool, `SELECT count(*) FROM `+migrate.SchemaBento+`.outbox WHERE event_type = $1`, eventType)
 	}
+	// 操作者作为操作证据落列：承接是首投的那一位（换人重放不改），事实是登记的操作者；回执里没有操作者。
+	if got := recordedOperator(t, pool, `SELECT decided_by FROM node_operations.collaboration_acceptance
+		 WHERE tenant_id = 'SYN-TENANT-01' AND item_ref = $1 AND round = 2`, item); got != firstOperatorRecorded {
+		t.Fatalf("承接决定人 = %q，want %q", got, firstOperatorRecorded)
+	}
+	if got := recordedOperator(t, pool, `SELECT recorded_by FROM node_operations.execution_fact WHERE tenant_id = 'SYN-TENANT-01'`); got != "https://id.syn.example/dex#SYN-OPERATOR-01" {
+		t.Fatalf("事实登记人 = %q", got)
+	}
 	if got := countEvents("node-operations.collaboration-acceptance.decided"); got != 3 {
 		t.Fatalf("承接意图 = %d，want 3（待补充一轮、承接一轮、拒接一条；重放不多入）", got)
 	}

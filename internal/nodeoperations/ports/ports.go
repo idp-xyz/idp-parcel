@@ -500,6 +500,9 @@ type CollaborationAcceptanceRecord struct {
 	ContentDigest string
 	Acceptance    domain.CollaborationAcceptance
 	RecordedAt    time.Time
+	// DecidedBy 是作出这次承接决定的操作者（「发行方#sub」），只进审计（ADR-0338 决定四）：不进内容摘要，重放与冲突、
+	// 任何门都不读它；读回的记录不带这一格。
+	DecidedBy string
 }
 
 type AcceptanceSaveOutcome uint8
@@ -544,6 +547,8 @@ type ExecutionFactRecord struct {
 	ContentDigest string
 	Fact          domain.NodeExecutionFact
 	RecordedAt    time.Time
+	// RecordedBy 是登记这条事实的操作者（「发行方#sub」），待遇同 CollaborationAcceptanceRecord.DecidedBy。
+	RecordedBy string
 }
 
 type ExecutionFactSaveOutcome uint8

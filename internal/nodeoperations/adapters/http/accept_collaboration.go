@@ -22,7 +22,7 @@ const OperatorDecisionNodeCollaborationAcceptance OperatorDecision = "NODE_COLLA
 
 // CollaborationExecutionAuthenticator 以作业事实登记能力面铸协作执行事实的信封并判这一种事实的准入范围，交回租户与节点。
 type CollaborationExecutionAuthenticator interface {
-	AuthenticateCollaborationExecution(ctx context.Context, bearerToken, deviceID, scopeKind, scopeReference string) (domain.TenantID, domain.NodeReference, error)
+	AuthenticateCollaborationExecution(ctx context.Context, bearerToken, deviceID, scopeKind, scopeReference string) (domain.TenantID, domain.NodeReference, string, error)
 }
 
 // CollaborationAcceptanceIntake 与 CollaborationExecutionIntake 各把一次已认证的请求译成命令。
@@ -125,6 +125,7 @@ func (intake *OperatorDecisionIntake) IntakeCollaborationAcceptance(ctx context.
 		Authority:     payload.Authority,
 		Basis:         strings.TrimSpace(payload.Basis),
 		DecidedAt:     *payload.DecidedAt,
+		Operator:      operator.Operator,
 	}
 	decision, ok := decisionKindsByName[payload.Decision]
 	if !ok {
@@ -180,7 +181,7 @@ func (intake *WorkFactCollaborationIntake) IntakeCollaborationExecution(ctx cont
 	if kind != "NODE" {
 		return none, fmt.Errorf("%w: a collaboration execution fact is recorded at a node; Parcel-Work-Scope-Kind must be NODE", ErrMalformedRequest)
 	}
-	tenant, node, err := intake.authenticator.AuthenticateCollaborationExecution(ctx, httpapi.BearerToken(request), device, kind, reference)
+	tenant, node, operator, err := intake.authenticator.AuthenticateCollaborationExecution(ctx, httpapi.BearerToken(request), device, kind, reference)
 	if err != nil {
 		return none, err
 	}
@@ -208,6 +209,7 @@ func (intake *WorkFactCollaborationIntake) IntakeCollaborationExecution(ctx cont
 		Action:      action,
 		Evidence:    payload.Evidence,
 		PerformedAt: *payload.PerformedAt,
+		Operator:    operator,
 	}, nil
 }
 
