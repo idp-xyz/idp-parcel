@@ -9,5 +9,6 @@
 | [01](./issues/01-customs-read-faces-and-case-page.md) | 关务读口与 customs-cases 页四个占位签做实，加门禁判断册读面 |
 | [02](./issues/02-post-intake-disposition-admin-page.md) | 收寄后处置管理台页（只缺前端） |
 | [03](./issues/03-demo-driver-script.md) | 演示驱动脚本：起环境、补余额、分段跑整条链 |
+| [04](./issues/04-operator-reference-and-time-display.md) | 管理台操作者引用长串改短名、显示时区可配置 |
 
 冻结规则照 [冻结清单](../launch-line-freeze-2026-10-27.md)：本目录是用户点名的演示准备，不另扩范围；新发现不挡演示的只记「五 → 记录」。
