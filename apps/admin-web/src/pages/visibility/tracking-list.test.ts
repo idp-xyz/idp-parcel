@@ -48,7 +48,7 @@ test('被同源同事实的后版指名为前身的条目不算当前有效；�
   );
 });
 
-test('进度按服务链顺序折成中文短语，缺的源不出现，连续同词只留一个', () => {
+test('进度按发生先后折成中文短语（同时刻按服务链），缺的源不出现，连续同词只留一个', () => {
   const row = trackingRowOf(
     record([
       entry({ source: 'CUSTOMS_COMPLIANCE', fact: 'C-1', kind: 'external-result-release-full' }),
@@ -60,6 +60,16 @@ test('进度按服务链顺序折成中文短语，缺的源不出现，连续�
   deepEqual(row.latestBySource.map((item) => item.source), ['NODE_OPERATIONS', 'TRANSPORT_FULFILLMENT', 'CUSTOMS_COMPLIANCE']);
   equal(row.supersededCount, 0);
   equal(row.currentCount, 3);
+
+  // 托运段的终局最后发生：按时间排它落在末尾，按服务链排会把「已完结」排到最前。
+  const late = trackingRowOf(
+    record([
+      entry({ source: 'PARCEL_SHIPMENT', fact: 'F-1', kind: 'final-outcome-adopted', occurredAt: '2026-10-28T20:00:00Z' }),
+      entry({ source: 'NODE_OPERATIONS', fact: 'N-1', kind: 'node-intake', occurredAt: '2026-10-28T10:00:00Z' }),
+      entry({ source: 'TRANSPORT_FULFILLMENT', fact: 'T-1', kind: 'effective-delivery', occurredAt: '2026-10-28T18:00:00Z' }),
+    ]),
+  );
+  deepEqual(progressPhrasesOf(late), ['已收寄', '已签收', '已完结']);
 });
 
 test('当前状态取最后一条已归类条目的里程碑经词典；一条都归不上就是未归类', () => {

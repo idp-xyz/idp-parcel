@@ -36,7 +36,10 @@ export interface TrackingRow {
   supersededCount: number;
   /** 当前有效条目数。 */
   currentCount: number;
-  /** 每源最后一条当前有效条目，按 sourceOrder 排。条目按业务发生时间自然排序由派生侧保证，本页不另立排序判据。 */
+  /**
+   * 每源最后一条当前有效条目，按业务发生时间先后排、同时刻按 sourceOrder——读起来是「这票货先后经过了什么」；托运段的
+   * 终局往往最后发生，按服务链排会把「已完结」排到最前。每源内部条目按业务发生时间自然排序由派生侧保证，本页不另立判据。
+   */
   latestBySource: ProjectionEntryRecord[];
 }
 
@@ -45,7 +48,9 @@ export function trackingRowOf(record: TrackingProjectionRecord): TrackingRow {
   const latest = new Map<string, ProjectionEntryRecord>();
   for (const entry of current) latest.set(entry.source, entry);
   const classified = current.filter((entry) => entry.milestone);
-  const ordered = [...latest.values()].sort((left, right) => rankOf(left.source) - rankOf(right.source));
+  const ordered = [...latest.values()].sort(
+    (left, right) => byInstant(left.occurredAt, right.occurredAt) || rankOf(left.source) - rankOf(right.source),
+  );
   return {
     parcelId: record.parcel,
     projectionVersion: record.version,
@@ -63,7 +68,7 @@ function rankOf(source: string): number {
   return index === -1 ? sourceOrder.length : index;
 }
 
-/** 「进度」一格：各源最后一步的中文短语，按服务链顺序；没有条目的源不出现。连续同词只留一个（节点「已收寄」与运输「已收寄」）。 */
+/** 「进度」一格：各源最后一步的中文短语，按发生先后；没有条目的源不出现。连续同词只留一个（节点「已收寄」与运输「已收寄」）。 */
 export function progressPhrasesOf(row: TrackingRow): string[] {
   const phrases: string[] = [];
   for (const entry of row.latestBySource) {
