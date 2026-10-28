@@ -115,6 +115,8 @@ export const statusVocabulary: Record<string, StatusEntry> = {
   'external-result-release-conditional': warn('附条件放行'),
   'transport-departed': info('已发出'),
   'transport-arrived': info('已到达'),
+  // 异常动线上客户拒收后形成退运的那条事实（演示租户四段动线之一）。
+  'exception-journey-return': warn('退运中'),
 
   // —— 清关 · customs-compliance ——
   FULL: good('全部放行'),
