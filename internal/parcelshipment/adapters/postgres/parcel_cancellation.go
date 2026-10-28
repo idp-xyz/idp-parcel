@@ -103,6 +103,14 @@ func (repository *ParcelCancellations) FindByKey(
 		if record.IntakeVersion, err = domain.NewSourceResultVersion(*crossedVersion); err != nil {
 			return ports.CancellationRecord{}, false, fmt.Errorf("find cancellation: %w", err)
 		}
+		// 请求方四件要么全在、要么全空（库内 CHECK 守）；全空是先于保全落下的记录。
+		if requester != nil && authority != nil && reason != nil && requestedAt != nil {
+			if record.StopRequest, err = rebuildStopRequest(cancelledColumns{
+				requester: *requester, authority: *authority, reason: *reason, requestedAt: *requestedAt,
+			}); err != nil {
+				return ports.CancellationRecord{}, false, fmt.Errorf("find cancellation: %w", err)
+			}
+		}
 	case ports.RecordCancellationRefused:
 		if refusalBasis == nil {
 			return ports.CancellationRecord{}, false, errors.New(
@@ -253,7 +261,25 @@ func cancellationColumns(record ports.CancellationRecord) (cancellationRowColumn
 			return cancellationRowColumns{}, errors.New("a pending record carries the crossed intake version")
 		}
 		crossed := record.IntakeVersion.String()
-		return cancellationRowColumns{crossedVersion: &crossed}, nil
+		columns := cancellationRowColumns{crossedVersion: &crossed}
+		request := record.StopRequest
+		if request.Requester.String() == "" && request.Authority.String() == "" &&
+			request.Reason.String() == "" && request.RequestedAt.IsZero() {
+			return columns, nil
+		}
+		if request.Requester.String() == "" || request.Authority.String() == "" ||
+			request.Reason.String() == "" || request.RequestedAt.IsZero() {
+			return cancellationRowColumns{}, errors.New("a pending record carries all of its stop request or none of it")
+		}
+		requester := request.Requester.String()
+		authority := request.Authority.String()
+		reason := request.Reason.String()
+		requestedAt := request.RequestedAt
+		columns.requester = &requester
+		columns.authority = &authority
+		columns.reason = &reason
+		columns.requestedAt = &requestedAt
+		return columns, nil
 	case ports.RecordCancellationRefused:
 		if record.RefusalBasis.String() == "" {
 			return cancellationRowColumns{}, errors.New("a refusal carries its basis")
@@ -303,6 +329,28 @@ func rebuildCancellation(
 		Reason:      reason,
 		RequestedAt: columns.requestedAt,
 	}, domain.CurrentIntakeFact{})
+}
+
+// rebuildStopRequest 把待处置记录里保全下来的请求四件重新过各自的构造器。
+func rebuildStopRequest(columns cancelledColumns) (ports.StopRequest, error) {
+	requester, err := domain.NewCancellationRequesterReference(columns.requester)
+	if err != nil {
+		return ports.StopRequest{}, err
+	}
+	authority, err := domain.NewCancellationAuthorityReference(columns.authority)
+	if err != nil {
+		return ports.StopRequest{}, err
+	}
+	reason, err := domain.NewCancellationReasonReference(columns.reason)
+	if err != nil {
+		return ports.StopRequest{}, err
+	}
+	return ports.StopRequest{
+		Requester:   requester,
+		Authority:   authority,
+		Reason:      reason,
+		RequestedAt: columns.requestedAt.UTC(),
+	}, nil
 }
 
 func cancellationKindFrom(raw string) (ports.CancellationRecordKind, error) {
