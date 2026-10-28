@@ -1,7 +1,7 @@
 # 05 收寄后服务处置请求信封无下游消费
 
 Category: enhancement
-Status: in-progress——2026-10-28 用户裁定改做法（见文末「用户裁定（2026-10-28）」），分支 claude-lw-pid2。此前 in-progress——2026-10-28 TF 半边进 main（`ec3f0848f`；全量 160 ok / 0 FAIL，种子退 0），票不收口，见文末「收口条件」。此前 in-progress——2026-10-28 作者完工 TF 一半并按评审修订（见「评审修订」），余下需 NO、NR 所有者新模型，待协调方裁与隔离评审，分支 claude-lw-pid；此前：2026-10-28 会话 tops-20（idp-parcel-91）立并认领（用户「现在就接线」）
+Status: in-progress——2026-10-28 作者完工第二阶段（按用户裁定做待人工处理项与登记口，见文末「第二阶段完成记录」），待隔离评审与进 main，分支 claude-lw-pid2（代码最后一笔见完成记录）。此前 in-progress——2026-10-28 用户裁定改做法（见文末「用户裁定（2026-10-28）」），分支 claude-lw-pid2。此前 in-progress——2026-10-28 TF 半边进 main（`ec3f0848f`；全量 160 ok / 0 FAIL，种子退 0），票不收口，见文末「收口条件」。此前 in-progress——2026-10-28 作者完工 TF 一半并按评审修订（见「评审修订」），余下需 NO、NR 所有者新模型，待协调方裁与隔离评审，分支 claude-lw-pid；此前：2026-10-28 会话 tops-20（idp-parcel-91）立并认领（用户「现在就接线」）
 Blocked by: 无
 
 ## 做什么
@@ -95,3 +95,21 @@ NO 三项、NR 三项、TF 两项扣住，全需所有者先立模型（扣住�
 - 新 ADR 部分停用 ADR-0332 里「每项由对象所有者自己承接」的口径。
 - 收口条件改为：上述清单与登记口生产可用、演示租户走通一个「退运」与一个「拦截」决定；之后 `POST_INTAKE_SERVICE_DISPOSITION` 授予可发给真实租户。原「收口条件」一节作废。
 
+## 第二阶段完成记录
+
+起点 `05909894d`。新 ADR [ADR-0340](../../../docs/adr/0340-system-executable-disposition-requests-run-in-the-owners-consumers-and-the-rest-become-manual-items-that-parcel-shipment-holds-and-operators-register-results-for.md)（部分停用 ADR-0332 决定四「不立承接结果读回面」一句，写法照 adr/README 顶部；PS CONTEXT 同笔改为现行）。
+
+**改了什么**
+- 待人工处理项归 PS 持有：决定形成时（`DecidePostIntakeDispositionHandler`）同笔落项，新迁移 `parcel_shipment/0034`（项、结果两表，主键含决定版本、所有者、动作；结果每项至多一份）。哪些动作系统执行是内置策略 `DispositionOwnerAction.ExecutedBySystem`（今天仅 TF 两个另起旅程动作）。
+- TF 消费者只认自己的两个动作，其余项忽略、信封照常发布；去掉 `ErrPostIntakeRequestUnhandledOwner` 与未决哨兵。拦截、服务终止的 TF 扣住进人工项。
+- 两个口：`GET /post-intake-disposition-manual-items`（未登记清单；`?parcel=` 读回该包裹全部项与结果）、`POST /post-intake-disposition-manual-item-results`（登记）。新决定种类 `POST_INTAKE_MANUAL_ITEM_HANDLING`，`access_identity/0035` 的 CHECK 取全集；操作者取自认证信封（发行方#sub）。重放答 200 `ALREADY_REGISTERED`，异内容答 409 `RESULT_CONFLICT` 且不覆盖，项查无/他租户答 404 统一不可见，系统执行的动作答 400。
+- 演示租户种子：新步骤 `487-access-post-intake-disposition.sh`，补 `POST_INTAKE_SERVICE_DISPOSITION` 与新种类的授予（access 34）、准入对照（35）、权威区间（governance 69、70）。
+- 测试：`TestAPostIntakeEnvelopeWithManualRequestsIsPublishedAndOnlyTheSystemExecutedOnesOpenJourneys` 取代原「未承接请求保持可见失败」用例；真库进程用例 `TestAReturnAndAnInterceptDecisionLeaveManualItemsThatOperatorsRegisterAndPSReadsBack`（退运决定经生产编排与派发一拍：退运旅程开出、NR/NO 两项进清单、TF 不进；拦截不开旅程、两项进清单；登记、重放、冲突、PS 读回、清单清空）；cmd/parcel-api 的 HTTP 用例（授权 403、201/200/409/404/400、他租户不可见、按包裹读回）；适配器无事务负向用例；领域单测。
+
+**判据对用例**：演示租户同形租户上「退运」与「拦截」各走通（证据 `S`）。`AT-PS-083`、`AT-PS-088` 由④移入①（088 的"无法处理"即承接拒绝的保留）；`AT-PS-084`（监管退运转 UC-TF-001）不在本票范围，仍在④。UC-PS-006 交接行与 PS CONTEXT 已改为现行。收口条件（用户裁定）：清单与登记口生产可用——已装配于 parcel-api；之后 `POST_INTAKE_SERVICE_DISPOSITION` 授予可发给真实租户（ADR-0340 之前的"不发给真实租户"约束作废）。
+
+**代决与越权风险点**：见 ADR-0340 越权风险点 1 至 4（策略集合、归 PS 持有、授予单立、登记不要求链尾且冲突不覆盖）。另：清单不过滤"已被后来的决定取代"的项，只给 `currentVersion` 由操作者判断（作者取舍）。
+
+**自验（含 PG）**：`go build ./...`、`go vet`、`gofmt -l` 无输出；带 PG DSN `go test -count=1 -p 1` 跑 `./internal/parcelshipment/...`、`./internal/accessidentity/...`、`./internal/transportfulfillment/...`、`./internal/architecture/...`、`./migrations/...`、`./cmd/parcel-dispatch/...`、`./cmd/parcel-api` 通过；种子灌一次性库退 0（三条新授予/对照/区间登记成功）。`adr-index -check`、`at-coverage-counts -check` 只报生成物过期。
+
+**留给协调方**：重生成 ADR 索引、AT 盘点计数、机制清点；管理台页（清单与登记）未做；`AT-PS-084` 仍待立票。

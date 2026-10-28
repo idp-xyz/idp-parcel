@@ -425,7 +425,9 @@
 | `AT-PS-080` | internal/parcelshipment/application/adopt_network_intake_test.go::TestTheCancellationBoundaryJudgesByBusinessTime；internal/parcelshipment/application/form_parcel_final_test.go::TestADeliveryOverAStandingCancellationIsNotAdopted（迟到的有效交付不采用为终局）；internal/parcelshipment/adapters/transportfulfillment/adopt_on_effective_delivery_test.go::TestFinalOutcomesMapToConsumptionSlots（有效交付一路入账半边）；cmd/parcel-dispatch/cancelled_parcel_delivery_final_test.go::TestAnEffectiveDeliveryOverAStandingCancellationIsConsumedAsARefusal；internal/parcelshipment/adapters/postgres/delivery_cancellation_race_test.go::TestACancellationAheadOfAnEffectiveDeliveryIsSeenByTheFinalAdoption（并发半边） |
 | `AT-PS-081` | internal/parcelshipment/application/adopt_network_intake_test.go::TestTheCancellationBoundaryJudgesByBusinessTime |
 | `AT-PS-082` | internal/parcelshipment/application/cancel_parcel_test.go::TestACrossedBoundaryTurnsIntoDispositionPending；internal/parcelshipment/domain/parcel_cancellation_test.go::TestACrossedIntakeBoundaryRefusesCancellation |
+| `AT-PS-083` | cmd/parcel-dispatch/post_intake_manual_items_test.go::TestAReturnAndAnInterceptDecisionLeaveManualItemsThatOperatorsRegisterAndPSReadsBack；cmd/parcel-dispatch/post_intake_disposition_journey_test.go::TestTheJourneyStartOnAPostIntakeDecisionIsIdempotentAndChainsOriginals、::TestAPostIntakeEnvelopeWithManualRequestsIsPublishedAndOnlyTheSystemExecutedOnesOpenJourneys |
 | `AT-PS-086` | internal/parcelshipment/application/cancel_parcel_test.go::TestAStandingFinalIsReturnedInsteadOfACancellation；cmd/parcel-api/assemble_cancellation_boundary_test.go::TestTheWiredCancellationStopsAtTheBoundaryFactsAgainstARealDatabase；internal/parcelshipment/adapters/postgres/cancellation_boundary_race_test.go::TestALabelServiceFinalAheadOfACancellationIsReturnedAsTheStandingFinal（并发半边）；internal/parcelshipment/adapters/postgres/delivery_cancellation_race_test.go::TestAnEffectiveDeliveryFinalAheadOfACancellationIsReturnedAsTheStandingFinal（有效交付终局先手，并发半边） |
+| `AT-PS-088` | cmd/parcel-api/post_intake_manual_items_test.go::TestRegisteringManualItemResultsIsAuthorizedIdempotentAndReadBackPerParcel；cmd/parcel-dispatch/post_intake_manual_items_test.go::TestAReturnAndAnInterceptDecisionLeaveManualItemsThatOperatorsRegisterAndPSReadsBack（无法处理也是承接结果，登记后 PS 读回） |
 | `AT-PS-090` | internal/parcelshipment/application/cancel_parcel_test.go::TestForeignProbesAndFailedIntentsStayDisciplined；internal/parcelshipment/application/request_lifecycle_gate_test.go::TestACancellationChecksTheTargetBelongsToTheEnvelopeAccount；cmd/parcel-api/customer_command_not_visible_test.go::TestCustomerCommandsNamingAnAbsentRequestAnswerNotFoundOnTheWiredOrchestrations；cmd/parcel-api/assemble_cancellation_lifecycle_test.go::TestTheWiredCancellationChecksTheTargetBelongsToTheEnvelopeAccountAgainstARealDatabase |
 | `AT-PS-091` | internal/parcelshipment/domain/final_outcome_test.go::TestAResponsibilityOutcomeDemandsBothDecisionAndExecution |
 | `AT-PS-092` | internal/customscompliance/domain/disposition_verification_test.go::TestVerificationDemandsFactsAndComparesProvidedQuantities |
@@ -1682,9 +1684,7 @@
 | `AT-CR-021` | 批次只收归集截点前已处于应付客户的本金（code/15） | UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md |
 | `AT-NO-022` | 包裹无当前有效路由（同 `AT-NO-031`：方向依据随对象下发、带有效区间，作业端判；ADR-0024、ADR-0251） | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
 | `AT-NO-031` | 包裹没有当前有效路由（方向依据随对象下发、带有效区间，作业端判；ADR-0024、ADR-0251） | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
-| `AT-PS-083` | 已收寄且普通退运决定、责任和路径齐备 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
 | `AT-PS-084` | 监管退运要求到达 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
-| `AT-PS-088` | 处置请求已发出但运输方拒绝承接 | UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md |
 | `AT-TF-054` | 封签连续的集运单元整体交接（成员随单元受控的派生规则未立，ADR-0263、票 demo-chain-gaps/80） | UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md |
 | `AT-TF-087` | 预占后节点新测量使体积增加（节点实测后的再准备未实现，票 demo-chain-gaps/44） | UC-TF-003-PREPARE-TRANSPORT-OPPORTUNITY.md |
 | `AT-TF-088` | 集运单元成员在舱单冻结前变化（节点实测后的再准备未实现，票 demo-chain-gaps/44） | UC-TF-003-PREPARE-TRANSPORT-OPPORTUNITY.md |
@@ -2073,3 +2073,5 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-10-28 追记（票 product-strategy-boundary/22 第 2 笔，ADR-0339）：UC-SA-002 新立 `AT-SA-221`（运营确认口），UC-SA-003 新立 `AT-SA-222`–`224`（截单发布口、客户费用读口的归属日与所在对账单、到点截单），入①。
 
 2026-10-28 追记（票 product-strategy-boundary/22 第 3 笔，ADR-0340）：UC-SA-004 新立 `AT-SA-225`（账单接收口）、`AT-SA-226`（审核口），入①。
+
+2026-10-28 追记（票 launch-wiring/05，ADR-0340）：`AT-PS-083`（退运决定形成并转 UC-TF-007，退运旅程开出）、`AT-PS-088`（处置请求的承接结果——人工项登记已处理或无法处理，PS 读回）由④移入①。`AT-PS-084`（监管退运转 UC-TF-001）仍在④：不在本票范围。总览计数未改，由推送方重算。
