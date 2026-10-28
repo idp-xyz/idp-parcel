@@ -21,6 +21,8 @@ export { AuthorizedDispositionPage } from './AuthorizedDispositionPage';
 // 释放拒收处理(未处理的释放未受理册行读 GET /control-release-refusals,核对后在结算侧释放与标记已处理
 // 两个动作打 POST /control-release-refusal-handlings;票 docs-consistency/code/95,ADR-0293)。
 export { ControlReleaseRefusalsPage } from './ControlReleaseRefusalsPage';
+// 收寄后处置(待决请求 → 处置决定 → 待人工处理项登记 → 按包裹读回;票 demo-2026-10-30/02,ADR-0332、ADR-0341)。
+export { PostIntakeDispositionPage } from './PostIntakeDispositionPage';
 export { configureShipmentRequestApi } from './api';
 export type {
   ApiResult,
