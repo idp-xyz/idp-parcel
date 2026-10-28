@@ -17,6 +17,21 @@ echo "== 关务案件配置登记（customs-compliance：就绪/授权/规则/�
 # 不是产品默认，也不是任何真实程序的读法；真实租户的规则取值属租户上线时的实施，未登即答 DUTY_PAYMENT_GATE_RULE_NOT_CONFIGURED。
 # 与上面的目录、逐项认定同一把键，放行门禁核对（486 那一节授予）据此可答出结论。
 "$BIN/parcel-customs-register" duty-payment-gate-rule -input "$SEEDS/customs/32-duty-payment-gate-rule-not-a-precondition.json"
+# 演示申报单元 SYN-UNIT-CN-EXPORT-DEMO-01 的门禁（票 launch-wiring/08）：动作准入判断读门禁用的是包裹所在申报单元的判断范围，
+# 不是上面 SYN-SCOPE-01 的商业范围，所以单元范围上要自己登一套——四个受守护动作（交出、出发、跨关务区域移动、交付）各一行目录，
+# 缺哪个该动作就答未配置；每个登了目录的动作还要各一行「税费付款」规则行，同取「不构成前置条件」。
+# 只有跨关务区域移动登前置满足（放行后才成立），其余三道目录无前置条件、折为此动作在此边界不受门禁。
+# 全部是演示租户的 S 级采用取值，不是产品默认；真实租户的目录、前置与规则取值属上线实施，未登即答未配置。
+# 上面 SYN-SCOPE-01 那几行保留：放行门禁核对的演示（486 节）按商业范围问，与这里是两把键。
+"$BIN/parcel-customs-register" gate-catalog -input "$SEEDS/customs/34-gate-catalog-unit-outbound-release.json"
+"$BIN/parcel-customs-register" gate-catalog -input "$SEEDS/customs/35-gate-catalog-unit-loading-departure.json"
+"$BIN/parcel-customs-register" gate-catalog -input "$SEEDS/customs/36-gate-catalog-unit-cross-customs-movement.json"
+"$BIN/parcel-customs-register" gate-catalog -input "$SEEDS/customs/37-gate-catalog-unit-final-delivery.json"
+"$BIN/parcel-customs-register" gate-finding -input "$SEEDS/customs/38-gate-finding-unit-cross-customs-movement-met.json"
+"$BIN/parcel-customs-register" duty-payment-gate-rule -input "$SEEDS/customs/39-duty-payment-gate-rule-unit-outbound-release.json"
+"$BIN/parcel-customs-register" duty-payment-gate-rule -input "$SEEDS/customs/40-duty-payment-gate-rule-unit-loading-departure.json"
+"$BIN/parcel-customs-register" duty-payment-gate-rule -input "$SEEDS/customs/41-duty-payment-gate-rule-unit-cross-customs-movement.json"
+"$BIN/parcel-customs-register" duty-payment-gate-rule -input "$SEEDS/customs/42-duty-payment-gate-rule-unit-final-delivery.json"
 # 第二份门禁只登目录、不登任何前置条件——0008 自注点名必须与「目录未登记」分得开的
 # 那一格：登记了空清单是「此动作在此边界本就不受门禁」（领域折为不适用），未登记才是
 # 无从复核。合规限制页据它展示两态各说各话（票 admin-web-page-wiring-frontier/06）。
