@@ -1,7 +1,7 @@
 # 22 结算其余编排的装配、入口与触发面
 
 Category: enhancement
-Status: in-progress——第 1 笔（确认）2026-10-28 进 main（`53c514602`，见文末「第 1 笔进 main 记录」）；第 2 笔（运营决定口与到点截单）2026-10-28 进 main（`383c1dad5`，见文末「第 2 笔进 main 记录」）；第 3 笔（供应商账单）完工待评审，分支 claude-psb22（见文末「第 3 笔完成记录」）；第 4 笔待做。此前 ready-for-agent——2026-10-27 用户同意由冻结 R3 上调为「限量生产前必须」（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)「一之二」，理由引 PILOT-SCOPE）：费用确认、截单发布、供应商账单接收与审核及确认与截单的触发上调；费用调整、成本分摊、赔付金额仍冻结；排在 tops-26 名下 6 张 code 票进 main 之后，先 10 后 22。此前 ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-09-24 通道 2 立票（用户令通道 2 独立承接）；接单时按编排拆笔
+Status: in-progress——第 1 笔（确认）2026-10-28 进 main（`53c514602`，见文末「第 1 笔进 main 记录」）；第 2 笔（运营决定口与到点截单）2026-10-28 进 main（`383c1dad5`，见文末「第 2 笔进 main 记录」）；第 3 笔（供应商账单）2026-10-28 进 main（`7405eb6c3`，见文末「第 3 笔进 main 记录」）；第 4 笔待做。此前 ready-for-agent——2026-10-27 用户同意由冻结 R3 上调为「限量生产前必须」（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)「一之二」，理由引 PILOT-SCOPE）：费用确认、截单发布、供应商账单接收与审核及确认与截单的触发上调；费用调整、成本分摊、赔付金额仍冻结；排在 tops-26 名下 6 张 code 票进 main 之后，先 10 后 22。此前 ready-for-human——2026-10-27 冻结到首个租户上线之后（[上线线与冻结清单](../../launch-line-freeze-2026-10-27.md)，分级 R3）：不挡上线，代理不认领；解冻看首个租户的真实使用或用户点名。此前 needs-triage——2026-09-24 通道 2 立票（用户令通道 2 独立承接）；接单时按编排拆笔
 Blocked by: 无；赔付金额文法与分摊形态归[票 12](./12-sa-amount-grammars-allocation-forms-and-accounting-connectors.md) 第 1、2 项，结算四口的登记册与读口归[票 16](./16-mechanism-gaps-without-a-ticket.md) 第 3 项
 地盘：`internal/settlementaccounting` 的入口与触发、`cmd/` 装配。
 出处：[票 05](./05-demo-journey-criterion-evidence.md) 格 20 的装配与触发面那一半。
@@ -149,3 +149,13 @@ Blocked by: 无；赔付金额文法与分摊形态归[票 12](./12-sa-amount-gr
 - **N20**：注释已改准；名字不认得改报 `ErrUnknownMatchClassification`。
 - **N21**：真库用例改成由另一位持同种授予的人重放，读回的操作证据仍是首次那一位。
 - **N22**：「超上限要升级，却没有终审的口」记进 ADR-0340 越权风险点 2。
+
+## 第 3 笔进 main 记录（2026-10-28）
+
+- **main**：`7405eb6c3`。分支在 main `05909894d` 之上重放，无冲突。提交依次为：实现 `e7750cecd`、评审修订 `e005cb7a2`，以及三份生成物各一笔（`21b593403`、`f3a9c6910`、`7405eb6c3`）。
+- **号码**：ADR-0340、`access_identity/0035`、`settlement_accounting/0050`、`AT-SA-225`–`226` 在 main 上都没被占。
+- **评审**：非作者隔离评审一轮，阻断 B5 已修。修法由正式用例覆盖，在推送的 tip 上跑过。
+- **生成物**：两个 `-check` 都退 0；机制清点重生成后 `git status --porcelain` 为空。
+- **全量真库**：`scripts/test-full.sh` 退 0，160 个包 ok、0 FAIL。
+- **种子**：灌一次性库 `psb22_seed3` 退 0，用完已删。
+- **推送**：`git push origin 7405eb6c3:main`，`origin/main` 等于该 SHA。
