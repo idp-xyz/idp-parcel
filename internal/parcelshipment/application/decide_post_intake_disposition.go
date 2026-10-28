@@ -98,7 +98,7 @@ type DecidePostIntakeDispositionDeps struct {
 	Dispositions ports.PostIntakeDispositions
 	Requests     ports.PostIntakeDispositionRequests
 	// Adoptions 只读责任起点：包裹有没有越过取消边界、越过的是哪一版，都以采用链为准，不信请求记录里当时记下的版本。
-	Adoptions     ports.IntakeAdoptionStore
+	Adoptions     ports.ResponsibilityStartView
 	Finals        ports.CurrentFinalView
 	Cancellations ports.ParcelCancellationView
 	Handoff       ports.PostIntakeDispositionHandoff
@@ -115,7 +115,7 @@ func NewDecidePostIntakeDispositionHandler(deps DecidePostIntakeDispositionDeps)
 	return &DecidePostIntakeDispositionHandler{deps: deps}
 }
 
-// Handle 对一件越过取消边界的包裹形成一份收寄后服务处置决定（ADR-0336 决定一至四）。
+// Handle 对一件越过取消边界的包裹形成一份收寄后服务处置决定（ADR-0332 决定一至四）。
 //
 // 锁序：包裹取消边界锁（ports.CancellationBoundaryLock，P）→ 读决定链、终局、责任起点、请求 → 追加决定 → 交信封。本编排不保存委托，不取接受链的作用域锁（S）与委托行锁
 // （R），一笔事务至多持一个 P 键，所以与取消、采用、终局判断、冲突解开各路之间、与持 S、R 的各路之间都不成环。调用方把整个 Handle 放进一笔事务：决定与信封同生共死，

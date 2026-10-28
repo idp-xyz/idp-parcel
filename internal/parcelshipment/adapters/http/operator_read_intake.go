@@ -23,10 +23,11 @@ type OperatorOperationsReadIntake struct {
 }
 
 var (
-	_ LabelTransactionQueryIntake          = (*OperatorOperationsReadIntake)(nil)
-	_ ChannelSelectionDecisionQueryIntake  = (*OperatorOperationsReadIntake)(nil)
-	_ ControlReleaseRefusalQueryIntake     = (*OperatorOperationsReadIntake)(nil)
-	_ CancellationOrderConflictQueryIntake = (*OperatorOperationsReadIntake)(nil)
+	_ LabelTransactionQueryIntake             = (*OperatorOperationsReadIntake)(nil)
+	_ ChannelSelectionDecisionQueryIntake     = (*OperatorOperationsReadIntake)(nil)
+	_ ControlReleaseRefusalQueryIntake        = (*OperatorOperationsReadIntake)(nil)
+	_ CancellationOrderConflictQueryIntake    = (*OperatorOperationsReadIntake)(nil)
+	_ PostIntakeDispositionRequestQueryIntake = (*OperatorOperationsReadIntake)(nil)
 )
 
 func NewOperatorOperationsReadIntake(authenticator OperatorOperationsReadAuthenticator) (*OperatorOperationsReadIntake, error) {
@@ -73,4 +74,13 @@ func (intake *OperatorOperationsReadIntake) IntakeCancellationOrderConflictQuery
 		return CancellationOrderConflictQuery{}, err
 	}
 	return CancellationOrderConflictQuery{Tenant: tenant, Limit: operatorOperationsReadLimit}, nil
+}
+
+// IntakePostIntakeDispositionRequestQuery 同上：租户只取自信封，页大小是这一渠道的产品策略（ADR-0332）。
+func (intake *OperatorOperationsReadIntake) IntakePostIntakeDispositionRequestQuery(ctx context.Context, request *http.Request) (PostIntakeDispositionRequestQuery, error) {
+	tenant, err := intake.authenticator.AuthenticateOperationsRead(ctx, httpapi.BearerToken(request))
+	if err != nil {
+		return PostIntakeDispositionRequestQuery{}, err
+	}
+	return PostIntakeDispositionRequestQuery{Tenant: tenant, Limit: operatorOperationsReadLimit}, nil
 }

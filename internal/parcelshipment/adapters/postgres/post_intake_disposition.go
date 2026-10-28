@@ -13,7 +13,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
-// PostIntakeDispositions 实现 ports.PostIntakeDispositions：收寄后服务处置决定的留痕（ADR-0336）。每个包裹一条线性的决定链，只追加，当前决定是链尾；
+// PostIntakeDispositions 实现 ports.PostIntakeDispositions：收寄后服务处置决定的留痕（ADR-0332）。每个包裹一条线性的决定链，只追加，当前决定是链尾；
 // 主键（租户，包裹，版本），租户条件进每条语句。
 type PostIntakeDispositions struct {
 	db *bentopg.DB
@@ -228,7 +228,7 @@ func scanDisposition(row dispositionScanner) (domain.PostIntakeDisposition, erro
 	return domain.DecidePostIntakeDisposition(spec)
 }
 
-// PostIntakeDispositionRequests 实现 ports.PostIntakeDispositionRequests：等收寄后服务处置决定回应的客户停止请求（ADR-0336 决定一）。请求有两个来路——
+// PostIntakeDispositionRequests 实现 ports.PostIntakeDispositionRequests：等收寄后服务处置决定回应的客户停止请求（ADR-0332 决定一）。请求有两个来路——
 // 越界待处置的取消记录，以及被取消先后冲突的解开决定认定依据不成立的取消（ADR-0295）；「已被回应」是有一份决定的 request_key 指名它，不是请求记录上的状态列。
 type PostIntakeDispositionRequests struct {
 	db *bentopg.DB

@@ -51,6 +51,8 @@ const (
 	OperatorDecisionControlReleaseRefusalHandling OperatorDecision = "CONTROL_RELEASE_REFUSAL_HANDLING"
 	// OperatorDecisionCancellationOrderConflictResolution 也与授权处置分开授予（ADR-0295 决定二）：这一种是对一件包裹上取消与边界事实谁在先的裁断。
 	OperatorDecisionCancellationOrderConflictResolution OperatorDecision = "CANCELLATION_ORDER_CONFLICT_RESOLUTION"
+	// OperatorDecisionPostIntakeServiceDisposition 同样单独授予（ADR-0332 决定二）：这一种改的是一件已在网络手里的包裹的实物去向与后续服务。
+	OperatorDecisionPostIntakeServiceDisposition OperatorDecision = "POST_INTAKE_SERVICE_DISPOSITION"
 )
 
 // OperatorIdentity 是一次运营决定出示认证出的身份：租户与提交操作者的引用（发行方 + sub）。
@@ -85,6 +87,7 @@ var (
 	_ ContinuedAttemptDecisionIntake          = (*OperatorDecisionIntake)(nil)
 	_ ControlReleaseRefusalHandlingIntake     = (*OperatorDecisionIntake)(nil)
 	_ CancellationOrderConflictDecisionIntake = (*OperatorDecisionIntake)(nil)
+	_ PostIntakeDispositionDecisionIntake     = (*OperatorDecisionIntake)(nil)
 )
 
 func NewOperatorDecisionIntake(
@@ -595,4 +598,71 @@ func decodeDecisionPayload(body io.Reader, target any) error {
 		return fmt.Errorf("%w: trailing content", ErrMalformedRequest)
 	}
 	return nil
+}
+
+type postIntakeDispositionDecisionPayload struct {
+	Parcel      string `json:"parcel"`
+	Supersedes  int    `json:"supersedes"`
+	Direction   string `json:"direction"`
+	RequestKey  string `json:"requestKey"`
+	Destination string `json:"destination"`
+	Basis       string `json:"basis"`
+}
+
+// IntakePostIntakeDispositionDecision 译收寄后服务处置决定（`/post-intake-disposition-decisions`）。租户取信封，决定人取认证出的操作者；包裹、去向、依据必填，
+// 前一版本（没决定过为 0）是决定人看到的链尾，请求键非空即回应那份请求、为空即运营发起，目的地只改送带。先认证后封闭解码；请求在册与否、包裹越没越界是应用编排的事，
+// 坏载荷与去向和目的地搭配不对在这里就答 400。
+func (intake *OperatorDecisionIntake) IntakePostIntakeDispositionDecision(ctx context.Context, request *http.Request) (application.DecidePostIntakeDispositionCommand, error) {
+	operator, err := intake.authenticator.AuthenticateOperatorDecision(ctx, httpapi.BearerToken(request), OperatorDecisionPostIntakeServiceDisposition)
+	if err != nil {
+		return application.DecidePostIntakeDispositionCommand{}, err
+	}
+	var payload postIntakeDispositionDecisionPayload
+	if err := decodeDecisionPayload(request.Body, &payload); err != nil {
+		return application.DecidePostIntakeDispositionCommand{}, err
+	}
+	parcel, err := domain.NewDeclaredParcelID(payload.Parcel)
+	if err != nil {
+		return application.DecidePostIntakeDispositionCommand{}, fmt.Errorf("%w: parcel: %v", ErrMalformedRequest, err)
+	}
+	if payload.Supersedes < 0 {
+		return application.DecidePostIntakeDispositionCommand{}, fmt.Errorf("%w: supersedes: must not be negative", ErrMalformedRequest)
+	}
+	direction, err := domain.ParsePostIntakeDispositionDirection(payload.Direction)
+	if err != nil {
+		return application.DecidePostIntakeDispositionCommand{}, fmt.Errorf("%w: direction: %v", ErrMalformedRequest, err)
+	}
+	var requestKey domain.SourceRequestKey
+	if payload.RequestKey != "" {
+		if requestKey, err = domain.NewSourceRequestKey(payload.RequestKey); err != nil {
+			return application.DecidePostIntakeDispositionCommand{}, fmt.Errorf("%w: requestKey: %v", ErrMalformedRequest, err)
+		}
+	}
+	var destination domain.PostIntakeDispositionDestination
+	if payload.Destination != "" {
+		if destination, err = domain.NewPostIntakeDispositionDestination(payload.Destination); err != nil {
+			return application.DecidePostIntakeDispositionCommand{}, fmt.Errorf("%w: destination: %v", ErrMalformedRequest, err)
+		}
+	}
+	if err := domain.PostIntakeDispositionShapeError(direction, destination.String() != ""); err != nil {
+		return application.DecidePostIntakeDispositionCommand{}, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
+	}
+	basis, err := domain.NewPostIntakeDispositionBasis(payload.Basis)
+	if err != nil {
+		return application.DecidePostIntakeDispositionCommand{}, fmt.Errorf("%w: basis: %v", ErrMalformedRequest, err)
+	}
+	decider, err := domain.NewPostIntakeDispositionDeciderReference(operator.Operator)
+	if err != nil {
+		return application.DecidePostIntakeDispositionCommand{}, fmt.Errorf("parcel shipment http: decider: %w", err)
+	}
+	return application.DecidePostIntakeDispositionCommand{
+		Tenant:      operator.Tenant,
+		Parcel:      parcel,
+		Supersedes:  payload.Supersedes,
+		Direction:   direction,
+		RequestKey:  requestKey,
+		Destination: destination,
+		Decider:     decider,
+		Basis:       basis,
+	}, nil
 }

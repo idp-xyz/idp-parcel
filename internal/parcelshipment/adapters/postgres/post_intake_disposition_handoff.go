@@ -16,7 +16,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 )
 
-// postIntakeDispositionEventType 是「收寄后服务处置决定已形成」意图的事件类型（ADR-0336 决定四）。消费侧（运输履约等对象所有者）各写各的字面，导入本常量等于让消费方
+// postIntakeDispositionEventType 是「收寄后服务处置决定已形成」意图的事件类型（ADR-0332 决定四）。消费侧（运输履约等对象所有者）各写各的字面，导入本常量等于让消费方
 // 依赖提供方的内部形状。
 const postIntakeDispositionEventType = "parcel-shipment.post-intake-disposition.decided"
 
