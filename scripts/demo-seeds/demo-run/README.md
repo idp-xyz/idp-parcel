@@ -1,5 +1,9 @@
 # 演示驱动脚本（`demo-run/`）
 
+## 共享发行方
+
+`up.sh` 对已在跑的演示发行方 5556、5558 不重建（只探测 `/keys`，缺哪只才跑 compose）。若确需重建，必须从主检出 `/home/tops/workspace/idp-parcel` 跑 `docker compose -f scripts/demo-seeds/operator-channel/compose.yaml up -d`：挂载的绝对路径进配置哈希，换一棵 worktree 去跑会把容器改挂到那棵树上。重建会作废所有会话手里的令牌，先通知再动。
+
 票 `demo-2026-10-30/03`。把首家客户演示要点的动线做成可重复跑的分段脚本，不再现场逐条敲 curl。**仅限本机隔离环境**，全部是 `SYN-` 合成值，证据只记 `S`。
 
 ## 起、收
@@ -41,17 +45,19 @@ scripts/demo-seeds/demo-run/down.sh [--drop-db]
 | `10` 班次、预占、交接、订舱 | `transport-fulfillment-review` | 班次、运力池（已预占）、权威交接结果、订舱区、交付证明 |
 | `10` BUY 成本、SELL 费用 | `charges-billing` | 客户费用 `CONFIRMED`、供应商预期成本 CNY 8500 |
 | `10` 终局 | `tracking-projection` | 最新里程碑 `EFFECTIVE_DELIVERY`、投影版本 |
-| `10` 客户视图 | 无（管理台没有） | 终端那行输出；`disclosure-policies` 页可当旁证 |
-| `20` 立案、授权 | `customs-cases` | 「就绪与授权」「关闭义务」签（其余四签是占位） |
-| `20` 申报发送、放行结果、交出读数 | 无页面 | 只看终端输出（尝试 `REGISTERED_PENDING_SEND`、技术判断 `ACKNOWLEDGED`、读数 `ADMITTED`） |
+| `10` 客户视图 | 无页面 | 终端那行输出（首方客户令牌读 `/v1/customer-tracking-view`）；`disclosure-policies` 页可当旁证 |
+| `20` 立案、授权、申报单元、资料快照 | `customs-cases` | 「关务案件」「申报单元」「资料快照」「就绪与授权」「关闭义务」签 |
+| `20` 申报发送、技术回执 | `customs-cases`「提交版本」签 | 提交尝试（`REGISTERED_PENDING_SEND`）、发送事实、技术回执（`ACKNOWLEDGED`） |
+| `20` 放行结果 | `customs-cases`「监管结果与放行」签 | 放行结果 `FULL` |
+| `20` 交出读数 | `customs-cases`「门禁判断册」签 | 按**包裹号**查（传申报单元号得空册）；交给干线承运商那次读数 `ADMITTED` |
 | `20` 放行门禁核对 | `customs-restrictions`「门禁核对」签 | 门禁目录与前置认定 `MET` |
 | `30` 费用确认 | `charges-billing` | 客户费用册阶段、确认依据 |
 | `30` 对账单 | `reconciliation` | 客户对账单册（账户、期间、合计、行数）、供应商账单接收册（匹配数） |
-| `30` 审核应付 | 无页面 | 只看终端输出 |
-| `40` 甲 退运、待人工清单 | 无页面 | 终端输出（审计 4.4–4.6，前端缺） |
+| `30` 审核应付、冻结/暴露/余额 | 无页面 | 只看终端输出 |
+| `40` 甲 退运决定、待人工清单 | `post-intake-disposition`（导航「收寄后处置决定」） | 待决请求、五向决定、待人工处理项清单、逐项登记、按包裹读回；决定与登记也可以直接在这页上点，脚本路径保留 |
 | `40` 乙 撤回、取消 | `shipment-request-inquiry` | 看委托状态；管理台上的撤回、取消页必 401（操作者令牌，冻结），所以现场用终端 |
 
-**管理台读不到的几处**（审计块 B）：冻结与信用暴露、运营余额、申报发送与回执、放行结果、动作准入读数、关案记录、内部合规限制。演示这些用终端输出讲。
+**管理台仍读不到的几处**：冻结与信用暴露、运营余额、审核应付、客户轨迹视图（首方客户令牌）。演示这些用终端输出讲。
 
 ## 不做
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 段四·异常（票 demo-2026-10-30/03），两件事，各用自己的包裹：
 #   甲 收寄后处置：一件新包裹走到收寄，运营发起退运决定（RETURN）→ 待人工处理清单列 NR、NO 两项 → 登记 HANDLED、UNABLE →
-#      原样重登 ALREADY_REGISTERED → 读回两项带结果与处理人、未登记清单清空。（管理台没有这一页，只有终端，见 README。）
+#      原样重登 ALREADY_REGISTERED → 读回两项带结果与处理人、未登记清单清空。（管理台 `post-intake-disposition` 页也能点，见 README。）
 #   乙 客户渠道命令：walk-customer-command-faces.sh 现提两份委托，走补充、撤回、修订、索赔、取消各一次成立一次重放，
 #      外加两条反例（管理台的撤回、取消页发的是同一批口但带操作者令牌，必 401，所以现场用终端）。
 # 乙会再现提两份委托（各占一次冻结余额）。证据只记 S。
