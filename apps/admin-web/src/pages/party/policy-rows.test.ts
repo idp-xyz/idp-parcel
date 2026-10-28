@@ -47,7 +47,7 @@ test('信用政策是第七本册：chip 词表与列集都有它', () => {
   equal(policyKindLabels.CREDIT_POLICY, '信用政策');
   deepEqual(
     kindColumns.CREDIT_POLICY.map((column) => column.header),
-    ['政策对象 / 版本', '责任法人', '授权层级', '费用类型', '额度', '有效区间', '登记时间'],
+    ['政策', '公司主体', '授权层级', '费用类型', '额度', '有效期', '登记时间'],
   );
 });
 
@@ -94,13 +94,13 @@ test('接受前财务控制策略册：chip 词表、列集与「谁喂它」都
   deepEqual(
     kindColumns.PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY.map((column) => column.header),
     [
-      '策略对象 / 版本',
+      '策略',
       '适用范围',
       '状态',
       '正文',
       '共同通过条件',
       '控制项(顺序. 种类@费用范围 → 失败处置;责任)',
-      '有效区间',
+      '有效期',
       '发布时间',
     ],
   );
@@ -190,16 +190,16 @@ test('客户服务规则册：chip 词表、列集与「谁喂它」都有它，
   deepEqual(
     kindColumns.CUSTOMER_SERVICE_RULE.map((column) => column.header),
     [
-      '规则对象 / 版本',
+      '规则',
       '适用范围',
       '状态',
       '正文',
-      '适用对象（服务产品或客户合同）',
+      '适用对象',
       '责任方',
       '规则范围',
       '索赔期限(种类 · 起算事件 · 天数 · 日历)',
       '最低材料(索赔类型:材料清单)',
-      '有效区间',
+      '有效期',
       '发布时间',
     ],
   );
@@ -440,7 +440,7 @@ const pricePolicies: CommercialPolicyListResponseBody = {
 test('商业价格政策册多一列口径：两段各显自己的真话，历史体积系数标不参与计价，没口径的行列为「未登记」而不是空', () => {
   deepEqual(
     kindColumns.PRICE_POLICY.map((column) => column.header),
-    ['政策对象 / 版本', '政策方向', '定价方案引用', '方案方向', '绑定转换', '适用范围', '计价口径（税务;汇率）', '有效区间', '登记时间'],
+    ['政策', '政策方向', '价格表', '方案方向', '绑定转换', '适用范围', '计价口径（税务;汇率）', '有效期', '登记时间'],
   );
   const [withFx, plain, bare] = rowsOf(pricePolicies);
   equal(withFx.key, 'price:price-fx@v1');

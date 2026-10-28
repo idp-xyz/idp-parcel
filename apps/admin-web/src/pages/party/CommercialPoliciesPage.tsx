@@ -172,7 +172,7 @@ function PolicyRegisters({
         search={{
           value: search,
           onChange: setSearch,
-          placeholder: '搜索政策对象、范围或引用',
+          placeholder: '搜索规则、对象或引用',
         }}
         filterSummary={
           // 计数只在拿到业务答案后显示，未配置态不报「0 条」（与 pricing 两页同一守卫）。
@@ -211,15 +211,20 @@ function PolicyRegisters({
         viewState={catalogueViewState(answer, rows.length, retry, {
           module: info,
           endpoint: `GET /commercial-policies?kind=${kind}`,
-          emptyTitle: `当前租户尚无${policyKindLabels[kind]}`,
-          emptyDescription: '这本册还没有任何版本；本页不会替你生成默认政策。',
+          emptyTitle: `还没有任何${policyKindLabels[kind]}`,
+          emptyDescription: '这本册还是空的；在「发布新版本」签发布第一版。',
         })}
       />
       <VersionDetailDrawer<PolicyRow>
         row={selected}
         columns={detailColumns}
         title={(row) => ({ objectId: row.version?.objectId ?? row.key, version: row.version?.version ?? '' })}
-        subtitle={(row) => `${policyKindLabels[kind]}${row.source && 'scope' in row.source.record ? ` · 适用范围 ${row.source.record.scope}` : ''}`}
+        subtitle={(row) => policyKindLabels[kind]}
+        technical={(row) => [
+          { label: '对象标识', value: row.version?.objectId ?? '' },
+          { label: '版本号', value: row.version?.version ?? '' },
+          { label: '适用范围', value: row.source && 'scope' in row.source.record ? String(row.source.record.scope ?? '') : '' },
+        ]}
         status={(row) => row.version?.status}
         history={(row) => (row.source ? versionHistoryOf(historyPool, row.source.record) : [])}
         currentVersion={(row) => row.version?.version ?? ''}
@@ -499,7 +504,7 @@ export function CommercialPoliciesPage() {
         className="flex-1 flex flex-col overflow-hidden gap-0"
       >
         <TabsList className="px-4 shrink-0">
-          <TabsTrigger value="registers">政策册</TabsTrigger>
+          <TabsTrigger value="registers">规则</TabsTrigger>
           {mayWrite ? <TabsTrigger value="publish">发布新版本</TabsTrigger> : null}
           {mayWrite ? <TabsTrigger value="json">JSON 发布（高级）</TabsTrigger> : null}
         </TabsList>
