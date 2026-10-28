@@ -61,7 +61,7 @@ func (view *ObligationInventoryView) LoadObligationItems(
 	}
 
 	rows, err := querier.Query(ctx,
-		`SELECT obligation, scope, item_state, basis, handed_to
+		`SELECT obligation, scope, item_state, basis, handed_to, conflicts_with
 		   FROM customs_compliance.closure_obligation_item
 		  WHERE tenant_id = $1
 		    AND case_ref = $2
@@ -80,8 +80,9 @@ func (view *ObligationInventoryView) LoadObligationItems(
 		var (
 			obligation, scope, stateText, basis string
 			handedTo                            *string
+			conflictsWith                       []string
 		)
-		if err := rows.Scan(&obligation, &scope, &stateText, &basis, &handedTo); err != nil {
+		if err := rows.Scan(&obligation, &scope, &stateText, &basis, &handedTo, &conflictsWith); err != nil {
 			return nil, false, fmt.Errorf("load obligation items: %w", err)
 		}
 		state, err := obligationItemStateOf(stateText)
@@ -97,6 +98,7 @@ func (view *ObligationInventoryView) LoadObligationItems(
 		if handedTo != nil {
 			item.HandedTo = *handedTo
 		}
+		item.ConflictsWith = conflictsWith
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -105,7 +107,7 @@ func (view *ObligationInventoryView) LoadObligationItems(
 	return items, true, nil
 }
 
-// obligationItemStateOf 把库里的封闭三值译回领域取值。default 报错不吸收：多出来的
+// obligationItemStateOf 把库里的封闭四值译回领域取值。default 报错不吸收：多出来的
 // 取值只可能来自库被旁路写入，静默当作`未解决`会让一份不该关的案件看起来只差一步。
 func obligationItemStateOf(raw string) (domain.ObligationItemState, error) {
 	switch raw {
@@ -115,6 +117,8 @@ func obligationItemStateOf(raw string) (domain.ObligationItemState, error) {
 		return domain.ObligationHandedOver, nil
 	case "UNRESOLVED":
 		return domain.ObligationUnresolved, nil
+	case "CONFLICT":
+		return domain.ObligationConflict, nil
 	default:
 		return domain.ObligationItemStateInvalid,
 			fmt.Errorf("unknown obligation item state %q", raw)

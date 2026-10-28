@@ -248,15 +248,17 @@ func ObligationCatalogFromJSON(raw []byte) (application.RegisterObligationCatalo
 }
 
 type obligationItemDocument struct {
-	TenantID     string     `json:"tenantId"`
-	CaseRef      string     `json:"caseRef"`
-	Obligation   string     `json:"obligation"`
-	Scope        string     `json:"scope"`
-	State        string     `json:"state"`
-	Basis        string     `json:"basis"`
-	HandedTo     string     `json:"handedTo"`
-	AppliesFrom  time.Time  `json:"appliesFrom"`
-	AppliesUntil *time.Time `json:"appliesUntil"`
+	TenantID   string `json:"tenantId"`
+	CaseRef    string `json:"caseRef"`
+	Obligation string `json:"obligation"`
+	Scope      string `json:"scope"`
+	State      string `json:"state"`
+	Basis      string `json:"basis"`
+	HandedTo   string `json:"handedTo"`
+	// conflictsWith 只属冲突项：相互矛盾的事实引用。
+	ConflictsWith []string   `json:"conflictsWith"`
+	AppliesFrom   time.Time  `json:"appliesFrom"`
+	AppliesUntil  *time.Time `json:"appliesUntil"`
 }
 
 // ObligationItemFromJSON 译装一项关闭义务及其适用区间。
@@ -297,16 +299,36 @@ func ObligationItemFromJSON(raw []byte) (application.RegisterObligationItemComma
 	if state != domain.ObligationHandedOver && handedTo != "" {
 		return none, fmt.Errorf("义务项登记的 handedTo 只属承接项——state=%s 不携带承接对象", state)
 	}
+	// 冲突依据同样双向核：冲突项至少两份互不相同的事实引用，非冲突项不带（库 CHECK 同句）。
+	conflictsWith := make([]string, 0, len(document.ConflictsWith))
+	for _, ref := range document.ConflictsWith {
+		conflictsWith = append(conflictsWith, strings.TrimSpace(ref))
+	}
+	if state == domain.ObligationConflict {
+		distinct := map[string]bool{}
+		for _, ref := range conflictsWith {
+			if ref == "" {
+				return none, fmt.Errorf("义务项登记的 conflictsWith 含空引用")
+			}
+			distinct[ref] = true
+		}
+		if len(distinct) < 2 {
+			return none, fmt.Errorf("义务项登记缺 conflictsWith——冲突项必须指名至少两份相互矛盾的事实")
+		}
+	} else if len(conflictsWith) != 0 {
+		return none, fmt.Errorf("义务项登记的 conflictsWith 只属冲突项——state=%s 不携带冲突依据", state)
+	}
 	return application.RegisterObligationItemCommand{
 		TenantID: tenant,
 		CaseRef:  caseRef,
 		Registration: ports.ObligationRegistration{
 			Item: domain.ClosureObligationItem{
-				Obligation: document.Obligation,
-				Scope:      document.Scope,
-				State:      state,
-				Basis:      document.Basis,
-				HandedTo:   document.HandedTo,
+				Obligation:    document.Obligation,
+				Scope:         document.Scope,
+				State:         state,
+				Basis:         document.Basis,
+				HandedTo:      document.HandedTo,
+				ConflictsWith: conflictsWith,
 			},
 			AppliesFrom:  document.AppliesFrom,
 			AppliesUntil: timeOf(document.AppliesUntil),
@@ -902,9 +924,11 @@ func obligationItemStateFrom(raw string) (domain.ObligationItemState, error) {
 		return domain.ObligationHandedOver, nil
 	case "UNRESOLVED":
 		return domain.ObligationUnresolved, nil
+	case "CONFLICT":
+		return domain.ObligationConflict, nil
 	default:
 		return domain.ObligationItemStateInvalid, fmt.Errorf(
-			"state=%q 不在封闭三值（CONCLUDED / HANDED_OVER / UNRESOLVED）", raw)
+			"state=%q 不在封闭四值（CONCLUDED / HANDED_OVER / UNRESOLVED / CONFLICT）", raw)
 	}
 }
 
