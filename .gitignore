@@ -79,3 +79,6 @@ apps/*/dist/
 # 不入版本控制；这两份此前误入库，现转为本地忽略。
 /.cursor/idp-mcp.settings.json
 /.cursor/rules/idp-mcp-messenger.mdc
+
+# 演示驱动脚本的运行态：二进制、进程日志、PID、环境与状态文件（scripts/demo-seeds/demo-run）
+/scripts/demo-seeds/demo-run/.run/
