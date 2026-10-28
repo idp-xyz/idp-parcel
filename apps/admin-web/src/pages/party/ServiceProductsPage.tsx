@@ -34,9 +34,8 @@ import {
   type VersionFacts,
   type VersionStatusFilter,
 } from './version-groups';
-import { statusBadge } from './detail-primitives';
+import { StatusPill } from '../../components/StatusPill';
 import {
-  commercialStatusLabels,
   labelOf,
   problemNote,
   registrationSnapshotHints,
@@ -61,41 +60,36 @@ const productFacts = (row: ServiceProductRecord): VersionFacts => ({
 });
 
 const columns: ListColumn<ServiceProductRecord>[] = [
+  // 主列只留运营要看的：产品与版本、形态、状态、交付条件、有效期；适用范围与各标识进详情抽屉的「技术详情」。
   {
     id: 'product',
-    header: '服务产品 / 版本',
+    header: '服务产品',
     render: (row) => (
-      <div className="min-w-48">
+      <div className="min-w-40">
         <p className="font-mono font-medium text-idpxyz-text">{row.objectId}</p>
-        <p className="mt-0.5 font-mono text-xs text-idpxyz-textMuted">{row.version}</p>
+        <p className="mt-0.5 text-xs text-idpxyz-textMuted">版本 {row.version}</p>
       </div>
     ),
   },
   {
     id: 'form',
     header: '服务形态',
-    render: (row) => (row.form ? labelOf(serviceFormLabels, row.form) : '—'),
-  },
-  {
-    id: 'scope',
-    header: '适用范围',
-    className: 'font-mono text-xs',
-    render: (row) => row.scope,
+    render: (row) => (row.form ? labelOf(serviceFormLabels, row.form) : <span className="text-idpxyz-textMuted">未登记</span>),
   },
   {
     id: 'status',
     header: '状态',
-    render: (row) => statusBadge(commercialStatusLabels, row.status),
+    render: (row) => <StatusPill code={row.status} />,
   },
   {
     id: 'delivery-conditions',
-    header: '交付条件（产品层）',
+    header: '交付条件',
     className: 'min-w-64',
     render: (row) => <DeliveryConditionsCell conditions={row.deliveryConditions} />,
   },
   {
     id: 'effective',
-    header: '有效区间',
+    header: '有效期',
     className: 'min-w-64 font-mono text-xs',
     render: (row) => formatRange(row.effectiveStartsAt, row.effectiveEndsAt),
   },
@@ -167,11 +161,11 @@ function ServiceProductVersionsTable({
       <ListPageTemplate<ServiceProductRecord>
         title={info.title}
         // 渠道账号的业务使用授权还没有读口，本页不为它留列。
-        description="服务产品的各个版本与交付条件。产品对应哪些渠道，看「渠道产品目录」页。"
+        description="我们对外卖的服务产品及其版本、形态与交付条件；要改条款就发新版本。产品能走哪些渠道，看「渠道产品」页"
         search={{
           value: search,
           onChange: setSearch,
-          placeholder: '搜索服务产品、版本或适用范围',
+          placeholder: '搜索服务产品或版本',
         }}
         filterSummary={
           // 计数只在拿到业务答案后显示,未配置态不报「0 个版本」(与 pricing 两页同一守卫)。
@@ -202,10 +196,10 @@ function ServiceProductVersionsTable({
         viewState={catalogueViewState(answer, products.length, retry, {
           module: info,
           endpoint: 'GET /commercial-service-products',
-          emptyTitle: '当前租户尚无服务产品版本',
-          emptyDescription: `还没有发布任何服务产品。${entryHint(
+          emptyTitle: '还没有发布任何服务产品',
+          emptyDescription: `合同、价格与接单规则都要挂在服务产品上。${entryHint(
             mayWrite,
-            '在「发布版本」签发布第一个版本；「登记服务形态」签只给已有版本补形态，不产生新版本。',
+            '在「新增产品版本」签发布第一个版本；「登记服务形态」签只给已有版本补形态。',
           )}`,
         })}
       />
@@ -213,7 +207,13 @@ function ServiceProductVersionsTable({
         row={selected}
         columns={columns}
         title={(row) => ({ objectId: row.objectId, version: row.version })}
-        subtitle={(row) => `服务产品 · 适用范围 ${row.scope}`}
+        subtitle={(row) => `服务产品 · ${row.form ? labelOf(serviceFormLabels, row.form) : '形态未登记'}`}
+        technical={(row) => [
+          { label: '产品标识', value: row.objectId },
+          { label: '版本号', value: row.version },
+          { label: '适用范围', value: row.scope },
+          { label: '服务形态码', value: row.form ?? '' },
+        ]}
         status={(row) => row.status}
         history={(row) => versionHistoryOf(products, row)}
         currentVersion={(row) => row.version}
@@ -295,7 +295,7 @@ export function ServiceProductsPage() {
       <KeepAliveTabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="versions">服务产品</TabsTrigger>
-          {mayWrite ? <TabsTrigger value="publish">发布版本</TabsTrigger> : null}
+          {mayWrite ? <TabsTrigger value="publish">新增产品版本</TabsTrigger> : null}
           {mayWrite ? <TabsTrigger value="register">登记服务形态</TabsTrigger> : null}
         </TabsList>
         <KeepAliveTabsContent

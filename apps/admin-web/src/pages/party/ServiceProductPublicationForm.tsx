@@ -61,7 +61,7 @@ export function ServiceProductPublicationForm({ onPublished, start }: ServicePro
   return (
     <PublicationDraftFlow
       kind="SERVICE_PRODUCT"
-      title="发布服务产品版本"
+      title="新增服务产品版本"
       assemblePayload={() => serviceProductPayloadOf(draft, timeZone)}
       fieldPaths={serviceProductFieldPaths(draft)}
       localProblems={serviceProductLocalProblems(draft, timeZone)}
@@ -152,16 +152,15 @@ function ServiceProductFields({
     <div className="flex flex-col gap-4">
       {/* 本册载荷是版本壳加一节可缺的正文；哪几格立不住由预览逐格答，表单不自判。 */}
       <p className="text-xs text-idpxyz-textMuted">
-        这里发布服务产品的<strong>版本信息</strong>
-        ，供合同、接单规则包、价格政策引用。产品属性在「登记服务形态」签登记，渠道映射在渠道产品目录页登记，都不在这里。除版本信息外，只能另带下面一节产品层交付条件，可不填。
+        这里发布服务产品的一个版本，供合同、接单规则与价格政策引用。服务形态在「登记服务形态」签登记，能走哪些渠道在「渠道产品」页登记。交付条件可以不填。
       </p>
 
       <div className="grid grid-cols-2 gap-3">
-        {field('objectId', '对象标识 *', '服务产品的对象标识')}
-        {field('version', '版本号 *', '同一产品下不重复；改内容要用新的版本号')}
-        {field('scope', '范围引用 *', '商业范围引用')}
-        {moment('effectiveStartsAt', '生效起点 *')}
-        {moment('effectiveEndsAt', '生效止点', '留空即持续有效。')}
+        {field('objectId', '产品编号 *', '如 PROD-CN-SG-EXPRESS')}
+        {field('version', '版本号 *', '如 v1；改条款就用下一个版本号')}
+        {field('scope', '适用范围 *', '这个产品管哪些业务，按公司约定的写法填')}
+        {moment('effectiveStartsAt', '开始时间 *')}
+        {moment('effectiveEndsAt', '结束时间', '留空即长期有效。')}
       </div>
       {form.versionNote}
 

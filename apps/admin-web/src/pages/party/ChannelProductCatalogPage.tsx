@@ -20,7 +20,7 @@ import { KeepAliveTabs, KeepAliveTabsContent } from './keep-alive-tabs';
 import { RefLink } from './RefLink';
 import { VersionDetailDrawer } from './VersionDetailDrawer';
 import { mappingHistoryOf } from './mapping-history';
-import { problemNote, registrationSnapshotHints, registrationTitles } from './presentation';
+import { problemNote, registrationSnapshotHints, registrationTitles, updateOrdinalLabel } from './presentation';
 import { useMayWriteRegistry } from '../use-operator-grants';
 import { entryHint } from '../operator-grants';
 
@@ -31,20 +31,11 @@ const info = moduleInfoById['channel-product-catalog'];
 // 骨架期这里列过渠道服务方与商业适用性——渠道产品目录身份正文不在本上下文预造
 // （ADR-0072：渠道本体等 PAR-INT-01 的接入证据），映射册只持标识引用，接线时按
 // 「不以空列伪装已实现」撤下，渠道本体列随渠道接入另立。
+// 主列只留运营要看的：服务产品、能走的渠道、有效期、登记时间；映射标识、修订号与登记依据进详情抽屉的「技术详情」。
 const columns: ListColumn<ProductChannelMappingRecord>[] = [
   {
-    id: 'mapping',
-    header: '映射标识 / 修订',
-    render: (row) => (
-      <div className="min-w-40">
-        <p className="font-mono font-medium text-idpxyz-text">{row.mappingId}</p>
-        <p className="mt-0.5 font-mono text-xs text-idpxyz-textMuted">r{row.revision}</p>
-      </div>
-    ),
-  },
-  {
     id: 'product',
-    header: '服务产品版本',
+    header: '服务产品',
     render: (row) => (
       <div className="min-w-44">
         <p>
@@ -56,7 +47,7 @@ const columns: ListColumn<ProductChannelMappingRecord>[] = [
   },
   {
     id: 'channels',
-    header: '渠道产品引用',
+    header: '可走的渠道',
     // 空数组是显式登记的“未配置”声明（该产品尚无可用渠道候选），如实显示这句话
     // 而不是留白——留白读起来像数据缺件，而这格恰恰是登记者说出的内容。
     render: (row) =>
@@ -67,18 +58,12 @@ const columns: ListColumn<ProductChannelMappingRecord>[] = [
           ))}
         </div>
       ) : (
-        <span className="text-idpxyz-textMuted">未配置（尚无可用渠道候选）</span>
+        <span className="text-idpxyz-textMuted">未配置：这个产品还没有可用渠道</span>
       ),
   },
   {
-    id: 'basis',
-    header: '登记依据',
-    className: 'font-mono text-xs',
-    render: (row) => row.basis,
-  },
-  {
     id: 'effective',
-    header: '有效区间',
+    header: '有效期',
     className: 'min-w-64 font-mono text-xs',
     render: (row) => formatRange(row.effectiveStartsAt, row.effectiveEndsAt),
   },
@@ -164,16 +149,16 @@ function ProductChannelMappingTable() {
       <ListPageTemplate<ProductChannelMappingRecord>
         title={info.title}
         // 渠道本体还没有读口，渠道只能按标识显示。
-        description="每个服务产品版本可以走哪些渠道；每条映射显示最新一笔登记修订，渠道暂以标识显示。"
+        description="每个服务产品能走哪些渠道平台的产品；下单择优只在这些渠道里选"
         search={{
           value: search,
           onChange: setSearch,
-          placeholder: '搜索映射、服务产品或渠道引用',
+          placeholder: '搜索服务产品或渠道',
         }}
         filterSummary={
           // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 笔」会与状态区
           // 「这不是目录为空」直接矛盾（README 列表页上列通则第六条）。
-          answer?.kind === 'outcome' ? `当前返回 ${mappings.length} 笔映射` : undefined
+          answer?.kind === 'outcome' ? `共 ${mappings.length} 个产品的渠道设置` : undefined
         }
         columns={columns}
         rows={visibleMappings}
@@ -185,15 +170,21 @@ function ProductChannelMappingTable() {
         viewState={catalogueViewState(answer, mappings.length, retry, {
           module: info,
           endpoint: 'GET /commercial-product-channel-mappings',
-          emptyTitle: '当前租户尚无产品—渠道映射登记',
-          emptyDescription: `还没有登记任何产品—渠道映射；本页不会预置映射或渠道候选。${entryHint(mayWrite, '在「登记映射」签登记第一条。')}`,
+          emptyTitle: '还没有给任何产品设置渠道',
+          emptyDescription: `产品没有可走的渠道，渠道择优就无从选起。${entryHint(mayWrite, '在「设置产品渠道」签登记第一条。')}`,
         })}
       />
       <VersionDetailDrawer<ProductChannelMappingRecord>
         row={selected}
         columns={columns}
-        title={(row) => ({ objectId: row.mappingId, version: `第 ${row.revision} 修订` })}
-        subtitle={(row) => `产品—渠道映射 · 服务产品 ${row.productObjectId} ${row.productVersionLabel}`}
+        title={(row) => ({ objectId: row.productObjectId, version: row.productVersionLabel })}
+        subtitle={(row) => `产品渠道设置 · ${updateOrdinalLabel(row.revision)}`}
+        technical={(row) => [
+          { label: '映射标识', value: row.mappingId },
+          { label: '修订号', value: String(row.revision) },
+          { label: '产品标识', value: row.productObjectId },
+          { label: '登记依据', value: row.basis },
+        ]}
         history={() => (chain ? mappingHistoryOf(chain) : [])}
         currentVersion={(row) => String(row.revision)}
         onSelectVersion={(version) => setRevisionNo(Number(version))}
@@ -225,8 +216,8 @@ export function ChannelProductCatalogPage() {
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <KeepAliveTabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
-          <TabsTrigger value="catalog">渠道产品目录</TabsTrigger>
-          {mayWrite ? <TabsTrigger value="register">登记映射</TabsTrigger> : null}
+          <TabsTrigger value="catalog">产品与渠道</TabsTrigger>
+          {mayWrite ? <TabsTrigger value="register">设置产品渠道</TabsTrigger> : null}
         </TabsList>
         <KeepAliveTabsContent
           value="catalog"
