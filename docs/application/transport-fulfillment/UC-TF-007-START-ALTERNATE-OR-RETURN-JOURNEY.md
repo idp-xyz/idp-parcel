@@ -1,6 +1,6 @@
 # UC-TF-007 启动备用伙伴或普通退运旅程
 
-状态：旅程启动的领域与编排已在、没有生产入口，见「给开发的交接」；真实备用伙伴、授权、退运路径、责任和生产适用范围待提供
+状态：旅程启动已有生产入口（运营决定能力面「替代或退运旅程启动」一种，ADR-0337），见「给开发的交接」；真实备用伙伴、授权、退运路径、责任和生产适用范围待提供
 
 ## 目标与边界
 
@@ -131,6 +131,7 @@
 | `AT-TF-078` | 只有拒收事实，没有退运决定 | 保留拒收和当前控制，不启动退运 |
 | `AT-TF-079` | 普通退运决定、路径和责任齐备 | 建立新路由/旅程并关联原旅程 |
 | `AT-TF-080` | 监管退运决定到达本用例 | 转 `UC-TF-001`，不得用普通退运绕过监管范围 |
+| `AT-TF-369` | 授权业务角色持「替代或退运旅程启动」授予，经启动口提交一条旅程 | 授予按决定种类认证，与承接的授予不通；首投落一条旅程（201 `JOURNEY_STARTED`），监管来路同笔入处置执行与异常链两份意图、非监管来路只入异常链；另一位操作者原样再投答已有旅程（200 `EXISTING_JOURNEY`）、不多入意图；同一处置换旅程身份再投答来源冲突；目的与来路取值不在封闭集合里是坏报文 |
 | `AT-TF-081` | 该租户没有登记退运路径、责任或伙伴（退运路径未纳入生产） | 答待补充或`未配置`，不启动真实外部动作、不发送真实外部指令；演示租户以 `SYN-` 数据走通的结果记 `S`（[ADR-0146](../../adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)、[ADR-0150](../../adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md)） |
 | `AT-TF-082` | 新伙伴只接受部分对象 | 逐对象形成部分结果，其他对象保留原控制和续办 |
 | `AT-TF-083` | 同一采用决定重复提交 | 返回原新旅程，不重复订舱或外部委托 |
@@ -147,6 +148,6 @@
 
 | 规则 | 现状 | 去处 |
 |---|---|---|
-| 授权决定启动新旅程（`AT-TF-076`、`AT-TF-079`、`AT-TF-083`） | `application.StartAlternateJourneyHandler` 与旅程册已在，读旅程的一侧也已接上（全程追踪投影消费旅程启动信封，实际履约发生项按旅程册挂旅程，UC-TF-005 `AT-TF-252`）；启动口在 `cmd/` 下没有接线，生产上没有写入旅程的入口 | 票 [docs-consistency/code/43](../../../.scratch/docs-consistency/code/43-regulatory-disposition-acceptance-and-alternate-journey-have-no-production-face.md) |
+| 授权决定启动新旅程（`AT-TF-076`、`AT-TF-079`、`AT-TF-083`） | 启动口 `POST /transport-fulfillment-alternate-journey-starts` 已接线（`AT-TF-369`），旅程启动人只进审计（UC-TF-001 `AT-TF-370`）；读旅程的一侧早已接上（UC-TF-005 `AT-TF-252`）。监管来路的旅程不核承接决定，见 ADR-0337 越权风险点 3 | TF owner 复核后另票 |
 
 完成本用例只证明受控备用或退运旅程能够安全启动，并能把原旅程与新旅程的成本来源分别交给结算。包裹最终服务结果仍由 [`UC-PS-004`](../parcel-shipment/UC-PS-004-FORM-PARCEL-FINAL-SERVICE-OUTCOME.md) 依据有效责任结果形成。
