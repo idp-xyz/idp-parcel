@@ -1,7 +1,7 @@
 # 04 管理台的操作者引用长串与显示时区
 
 Category: enhancement
-Status: 作者完工待评审——分支 claude-demo-ui（用户「都要修」；tops-20 立）
+Status: resolved——2026-10-28 进 main（前端切片碰共享面 `components/*`，非作者评审两轮：首轮钉 `e542dbae8` 阻断两条——动线上委托详情「来源」、关务嵌入式「标签@发行方#主体」仍显长串，委托列表/详情、追踪等时间不走 `formatInstant`；作者修订 `59d8e1f46` 后复核阻断清零。推送方在重放 tip 上复跑 `tsc -b`、单测、`vite build` 通过）。非阻断余项（不在动线：接受前复核来源、价卡导入录入者、参考序列登记人、改路与初始路由决定人、关案决定人、`DeliveryHandoverNotesSection` 的 `formedAt`、模板预览）照冻结清单不另立票。此前 作者完工待评审——分支 claude-demo-ui（用户「都要修」；tops-20 立）
 Blocked by: 无
 
 ## 现象
