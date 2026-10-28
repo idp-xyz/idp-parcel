@@ -1,7 +1,7 @@
 # 87 本构建折不回来的发布载体答成 5xx，而不是业务格
 
 Category: bug
-Status: in-progress——2026-10-28 作者完工待复核与进 main：已变基到 origin/main `0e8813657` 并改号 ADR-0333→ADR-0344，分支 claude-code87（代码最后一笔 `774d69986`，见文末「变基改号」）。此前：tops-20（idp-parcel-91）接手 tops-26 断在进 main 前的一张，作者与修订轮已完、评审无阻断。
+Status: in-progress——2026-10-28 作者完工待复核与进 main：已变基到 origin/main `0e8813657` 并改号 ADR-0333→ADR-0344，分支 claude-code87（代码最后一笔 `495d28687`，见文末「变基改号」）。此前：tops-20（idp-parcel-91）接手 tops-26 断在进 main 前的一张，作者与修订轮已完、评审无阻断。
 Blocked by: 无
 上下文：PC（参与方与商业），领域层载体重建与应用层载体编排，连带 PC 的 HTTP 载体端点与管理台载体流程。
 出处：code/25 隔离评审 N1。
