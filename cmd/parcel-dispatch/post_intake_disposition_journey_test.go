@@ -7,6 +7,8 @@ import (
 
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	tfinbox "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/inbox"
+
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
@@ -18,6 +20,7 @@ const postIntakeParcel = "SYN-PARCEL-PID-01"
 func handOffPostIntakeDisposition(
 	t *testing.T,
 	fixture *synVerticalFixture,
+	parcel string,
 	version int,
 	direction psdomain.PostIntakeDispositionDirection,
 	destination string,
@@ -34,7 +37,7 @@ func handOffPostIntakeDisposition(
 	}
 	spec := psdomain.PostIntakeDispositionSpec{
 		Tenant:              fixture.identity.TenantID(),
-		Parcel:              mustPS(t, psdomain.NewDeclaredParcelID, postIntakeParcel),
+		Parcel:              mustPS(t, psdomain.NewDeclaredParcelID, parcel),
 		Version:             version,
 		Supersedes:          version - 1,
 		Direction:           direction,
@@ -79,48 +82,97 @@ func (fixture *synVerticalFixture) journeyOf(t *testing.T, journey string) (orig
 	return original, purpose, basisKind
 }
 
-// Covers: AT-PS-083 的运输履约一半（其余所有者的承接未接）；ADR-0332 决定四、请求表；UC-TF-007——PS 的退运决定经信封在派发进程里落成一条运输履约退运旅程，依据指名链上这一版；
-// 重投不开第二条；链上下一版改送指向前一条旅程为原旅程；拦截对运输履约的请求（不再安排向前移动）没有对应模型，入账、不开旅程。
-func TestAPostIntakeReturnDecisionStartsATransportFulfillmentReturnJourney(t *testing.T) {
+// postIntakeProcessing 取生产装配的处理方，供直接调 Handle 的用例；事务由用例自己开（消费门里它在 inbox 事务内跑）。
+func (fixture *synVerticalFixture) postIntakeProcessing(t *testing.T) interface {
+	HandleDecidedPostIntakeDisposition(context.Context, tfinbox.DecidedPostIntakeDisposition) error
+} {
+	t.Helper()
+	store, err := outbox.NewStore(fixture.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	processing, err := startJourneyOnPostIntakeDispositionProcessing(fixture.db, store, systemClock{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return processing
+}
+
+func tfOnlyDecision(tenant, parcel string, version int, action string, at time.Time) tfinbox.DecidedPostIntakeDisposition {
+	return tfinbox.DecidedPostIntakeDisposition{
+		TenantID: tenant, Parcel: parcel, DecisionVersion: version, Direction: "RETURN",
+		BasisKind:      "SERVICE_DISPOSITION",
+		BasisReference: "POST_INTAKE_DISPOSITION/" + parcel + "/" + string(rune('0'+version)),
+		DecidedAt:      at,
+		Requests:       []tfinbox.PostIntakeDispositionOwnerRequest{{Owner: "TRANSPORT_FULFILLMENT", Action: action}},
+	}
+}
+
+// Covers: AT-PS-083 的运输履约一半（其余所有者的承接未接）；ADR-0332 决定四、请求表；UC-TF-007——处理方直接调两次是幂等的：同一份只开一条旅程、
+// 只交一份异常链意图；下一版的原旅程取前一条旅程；原旅程不把自己当原旅程。
+func TestTheJourneyStartOnAPostIntakeDecisionIsIdempotentAndChainsOriginals(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
+	processing := fixture.postIntakeProcessing(t)
+	tenant := fixture.identity.TenantID().String()
 	base := time.Now().UTC().Add(-time.Hour)
+	handle := func(decided tfinbox.DecidedPostIntakeDisposition) {
+		t.Helper()
+		mustWithinTX(t, fixture.transactor, t.Context(), func(txCtx context.Context) error {
+			return processing.HandleDecidedPostIntakeDisposition(txCtx, decided)
+		})
+	}
 
-	handOffPostIntakeDisposition(t, fixture, 1, psdomain.PostIntakeReturn, "", base)
-	fixture.dispatchUntilQuiet(t)
-
+	first := tfOnlyDecision(tenant, postIntakeParcel, 1, "START_RETURN_JOURNEY", base)
+	handle(first)
+	handle(first)
+	if n := fixture.countSQL(t, `SELECT count(*) FROM transport_fulfillment.alternate_journey`); n != 1 {
+		t.Fatalf("同一份决定调两次之后旅程 %d 条, want 1", n)
+	}
+	if n := fixture.countSQL(t, `SELECT count(*) FROM bento.outbox WHERE event_type = 'transport-fulfillment.exception-journey.recorded'`); n != 1 {
+		t.Fatalf("异常链意图 %d 份, want 1", n)
+	}
 	original, purpose, basisKind := fixture.journeyOf(t, "JRN/"+postIntakeParcel+"/PID-1")
 	if original != "JRN/"+postIntakeParcel || purpose != "RETURN" || basisKind != "SERVICE_DISPOSITION" {
 		t.Fatalf("退运旅程 = 原 %q 目的 %q 依据种类 %q", original, purpose, basisKind)
 	}
-	if n := fixture.countSQL(t, `SELECT count(*) FROM transport_fulfillment.alternate_journey WHERE basis = 'POST_INTAKE_DISPOSITION/`+postIntakeParcel+`/1'`); n != 1 {
-		t.Fatalf("依据指名第 1 版的旅程 %d 条, want 1", n)
-	}
-	if n := fixture.countSQL(t, `SELECT count(*) FROM bento.outbox WHERE event_type = 'transport-fulfillment.exception-journey.recorded'`); n != 1 {
-		t.Fatalf("异常链意图 %d 份, want 1——非监管来路只交异常链", n)
-	}
 
-	// 重投：把同一封信的 inbox 账之外的路径再走一遍——同一个版本再入队一次是同一个信封 ID，不会再有第二条旅程。
-	handOffPostIntakeDisposition(t, fixture, 1, psdomain.PostIntakeReturn, "", base)
-	fixture.dispatchUntilQuiet(t)
-	if n := fixture.countSQL(t, `SELECT count(*) FROM transport_fulfillment.alternate_journey`); n != 1 {
-		t.Fatalf("重投之后旅程 %d 条, want 1", n)
-	}
-
-	// 下一版：改送，原旅程取退运旅程（决定那一刻对象走的那一趟）。
-	handOffPostIntakeDisposition(t, fixture, 2, psdomain.PostIntakeRedirect, "SYN-DEST-02", base.Add(time.Minute))
-	fixture.dispatchUntilQuiet(t)
+	handle(tfOnlyDecision(tenant, postIntakeParcel, 2, "START_ALTERNATE_JOURNEY", base.Add(time.Minute)))
 	original, purpose, _ = fixture.journeyOf(t, "JRN/"+postIntakeParcel+"/PID-2")
 	if original != "JRN/"+postIntakeParcel+"/PID-1" || purpose != "ALTERNATE" {
 		t.Fatalf("改送旅程 = 原 %q 目的 %q, want 原为退运旅程、目的 ALTERNATE", original, purpose)
 	}
+}
 
-	// 拦截：运输履约只被请求「不再安排向前移动」，不开旅程，信封照常入账。
-	handOffPostIntakeDisposition(t, fixture, 3, psdomain.PostIntakeIntercept, "", base.Add(2*time.Minute))
-	fixture.dispatchUntilQuiet(t)
-	if n := fixture.countSQL(t, `SELECT count(*) FROM transport_fulfillment.alternate_journey`); n != 2 {
-		t.Fatalf("拦截之后旅程 %d 条, want 2", n)
+// Covers: ADR-0332 决定四；评审修订——信封里有今天没人承接的请求项（NO、NR 各项，TF 的扣住）时整封答未决、不开旅程，信封留在可见的失败状态，不被标成已发布；
+// `继续` 不请求任何所有者，照常入账。
+func TestAPostIntakeDecisionWithAnUnhandledRequestStaysVisiblyFailed(t *testing.T) {
+	fixture := newSYNVerticalFixture(t)
+	base := time.Now().UTC().Add(-time.Hour)
+
+	directions := []struct {
+		parcel    string
+		direction psdomain.PostIntakeDispositionDirection
+		dest      string
+	}{
+		{"SYN-PARCEL-PID-RET", psdomain.PostIntakeReturn, ""},
+		{"SYN-PARCEL-PID-RED", psdomain.PostIntakeRedirect, "SYN-DEST-02"},
+		{"SYN-PARCEL-PID-INT", psdomain.PostIntakeIntercept, ""},
+		{"SYN-PARCEL-PID-TER", psdomain.PostIntakeTerminateService, ""},
 	}
-	if n := fixture.countSQL(t, `SELECT count(*) FROM bento.outbox WHERE event_type = 'parcel-shipment.post-intake-disposition.decided' AND failure_code IS NOT NULL`); n != 0 {
-		t.Fatalf("处置信封失败 %d 封, want 0", n)
+	for _, d := range directions {
+		handOffPostIntakeDisposition(t, fixture, d.parcel, 1, d.direction, d.dest, base)
+	}
+	handOffPostIntakeDisposition(t, fixture, "SYN-PARCEL-PID-CON", 1, psdomain.PostIntakeContinue, "", base)
+	fixture.dispatchUntilQuiet(t)
+
+	const eventType = "parcel-shipment.post-intake-disposition.decided"
+	if n := fixture.countSQL(t, `SELECT count(*) FROM bento.outbox WHERE event_type = '`+eventType+`' AND failure_code = 'dispatch.consumer_undecided'`); n != len(directions) {
+		t.Fatalf("可见失败的处置信封 %d 封, want %d——四个有未承接请求的去向各一封", n, len(directions))
+	}
+	if n := fixture.countSQL(t, `SELECT count(*) FROM bento.outbox WHERE event_type = '`+eventType+`' AND failure_code IS NULL`); n != 1 {
+		t.Fatalf("无失败码的处置信封 %d 封, want 1——只有继续", n)
+	}
+	if n := fixture.countSQL(t, `SELECT count(*) FROM transport_fulfillment.alternate_journey`); n != 0 {
+		t.Fatalf("旅程 %d 条, want 0——整封未决不开旅程", n)
 	}
 }
