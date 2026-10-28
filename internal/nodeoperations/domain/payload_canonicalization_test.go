@@ -24,6 +24,7 @@ func TestAcceptancePayloadRoundTripsAsNOC1(t *testing.T) {
 		"BASIS-1",
 		[]string{"UNIT-B", "UNIT-A"},
 		[]domain.CollaborationActionKind{domain.UnsealAction, domain.IsolateAction},
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -299,5 +300,25 @@ func TestAnIncompleteOrUnknownDeliverySourceIsRefused(t *testing.T) {
 	later := strings.Replace(refusalSourceDocumentNRS2, `"shape":"NRS-2"`, `"shape":"NRS-3"`, 1)
 	if _, err := domain.ParseDeliverySource([]byte(later)); err == nil {
 		t.Fatal("认不出的形状版本被读成了已知的版本")
+	}
+}
+
+// 待补充的缺口进文档且先排序；其余三值的文档不带 gaps 字段（上面的字面量即证），已存摘要不失配。
+func TestPendingSupplementPayloadCarriesSortedGaps(t *testing.T) {
+	document, _, err := domain.CanonicalizeAcceptancePayload(
+		domain.CollaborationPendingSupplement,
+		"NODE-1",
+		"AUTH-1",
+		"",
+		nil,
+		nil,
+		[]domain.SupplementGapKind{domain.MissingAuthorityGap, domain.MissingObjectGap},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = `{"canonicalization":"NOC-1","face":"ACCEPT_COLLABORATION","decision":"PENDING_SUPPLEMENT","node":"NODE-1","authority":"AUTH-1","basis":"","accepted_units":null,"accepted_actions":[],"gaps":["AUTHORITY","OBJECT"]}`
+	if string(document) != want {
+		t.Fatalf("document = %s", document)
 	}
 }

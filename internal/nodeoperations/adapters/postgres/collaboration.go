@@ -40,19 +40,23 @@ func (repository *CollaborationAcceptances) FindByKey(
 	var (
 		nodeRef, decisionName, authority, digest string
 		basis                                    *string
-		unitsJSON, actionsJSON                   []byte
+		unitsJSON, actionsJSON, gapsJSON         []byte
+		round                                    int
 		decidedAt, recordedAt                    time.Time
 	)
+	// 取当前轮次：待补充之后的新决定是更高一轮，旧轮原样留在表里。
 	err = querier.QueryRow(ctx,
-		`SELECT node_ref, decision, authority, basis, accepted_units, accepted_actions,
-		        decided_at, content_digest, recorded_at
+		`SELECT node_ref, decision, authority, basis, accepted_units, accepted_actions, gaps,
+		        round, decided_at, content_digest, recorded_at
 		   FROM node_operations.collaboration_acceptance
 		  WHERE tenant_id = $1
-		    AND item_ref = $2`,
+		    AND item_ref = $2
+		  ORDER BY round DESC
+		  LIMIT 1`,
 		key.TenantID.String(),
 		key.Item.String(),
-	).Scan(&nodeRef, &decisionName, &authority, &basis, &unitsJSON, &actionsJSON,
-		&decidedAt, &digest, &recordedAt)
+	).Scan(&nodeRef, &decisionName, &authority, &basis, &unitsJSON, &actionsJSON, &gapsJSON,
+		&round, &decidedAt, &digest, &recordedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.CollaborationAcceptanceRecord{}, false, nil
 	}
@@ -60,19 +64,20 @@ func (repository *CollaborationAcceptances) FindByKey(
 		return ports.CollaborationAcceptanceRecord{}, false, fmt.Errorf("find collaboration acceptance: %w", err)
 	}
 
-	acceptance, err := rebuildAcceptance(key.TenantID, key.Item, nodeRef, decisionName, authority, basis, unitsJSON, actionsJSON, decidedAt)
+	acceptance, err := rebuildAcceptance(key.TenantID, key.Item, nodeRef, decisionName, authority, basis, unitsJSON, actionsJSON, gapsJSON, decidedAt)
 	if err != nil {
 		return ports.CollaborationAcceptanceRecord{}, false, fmt.Errorf("find collaboration acceptance: %w", err)
 	}
 	return ports.CollaborationAcceptanceRecord{
 		Key:           key,
+		Round:         round,
 		ContentDigest: digest,
 		Acceptance:    acceptance,
 		RecordedAt:    recordedAt.UTC(),
 	}, true, nil
 }
 
-// Save 写下一次承接决定。同（租户+事项）已有记录时答`已有决定`——业务答案不是错误
+// Save 写下一次承接决定。同（租户+事项+轮次）已有记录时答`已有决定`——业务答案不是错误
 // （ADR-0031）；用 ON CONFLICT DO NOTHING 而不是捕 23505：撞键的 INSERT 会把整个事务
 // 打进中止态，而编排拿到`已有决定`还要在同一个事务里读回原决定作答。
 func (repository *CollaborationAcceptances) Save(
@@ -101,6 +106,18 @@ func (repository *CollaborationAcceptances) Save(
 		return ports.AcceptanceSaveOutcomeInvalid, fmt.Errorf("save collaboration acceptance: %w", err)
 	}
 
+	if record.Round < 1 {
+		return ports.AcceptanceSaveOutcomeInvalid, fmt.Errorf("save collaboration acceptance: round starts at 1")
+	}
+	gaps := make([]string, 0, len(record.Acceptance.Gaps()))
+	for _, gap := range record.Acceptance.Gaps() {
+		gaps = append(gaps, gap.String())
+	}
+	gapsJSON, err := json.Marshal(gaps)
+	if err != nil {
+		return ports.AcceptanceSaveOutcomeInvalid, fmt.Errorf("save collaboration acceptance: %w", err)
+	}
+
 	var basis *string
 	if value, present := record.Acceptance.Basis(); present {
 		raw := value.String()
@@ -109,18 +126,20 @@ func (repository *CollaborationAcceptances) Save(
 
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO node_operations.collaboration_acceptance
-			(tenant_id, item_ref, node_ref, decision, authority, basis,
-			 accepted_units, accepted_actions, decided_at, content_digest, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			(tenant_id, item_ref, round, node_ref, decision, authority, basis,
+			 accepted_units, accepted_actions, gaps, decided_at, content_digest, recorded_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Item.String(),
+		record.Round,
 		record.Acceptance.Node().String(),
 		record.Acceptance.Decision().String(),
 		record.Acceptance.Authority().String(),
 		basis,
 		unitsJSON,
 		actionsJSON,
+		gapsJSON,
 		record.Acceptance.DecidedAt().UTC(),
 		record.ContentDigest,
 		record.RecordedAt.UTC(),
@@ -139,7 +158,7 @@ func rebuildAcceptance(
 	item domain.CollaborationItemReference,
 	nodeRef, decisionName, authority string,
 	basis *string,
-	unitsJSON, actionsJSON []byte,
+	unitsJSON, actionsJSON, gapsJSON []byte,
 	decidedAt time.Time,
 ) (domain.CollaborationAcceptance, error) {
 	node, err := domain.NewNodeReference(nodeRef)
@@ -181,6 +200,19 @@ func rebuildAcceptance(
 		actions = append(actions, action)
 	}
 
+	var gapNames []string
+	if err := json.Unmarshal(gapsJSON, &gapNames); err != nil {
+		return domain.CollaborationAcceptance{}, err
+	}
+	gaps := make([]domain.SupplementGapKind, 0, len(gapNames))
+	for _, raw := range gapNames {
+		gap, err := supplementGapFrom(raw)
+		if err != nil {
+			return domain.CollaborationAcceptance{}, err
+		}
+		gaps = append(gaps, gap)
+	}
+
 	spec := domain.CollaborationAcceptanceSpec{
 		TenantID:        tenant,
 		Node:            node,
@@ -189,6 +221,7 @@ func rebuildAcceptance(
 		AcceptedUnits:   units,
 		AcceptedActions: actions,
 		Authority:       authorityRef,
+		Gaps:            gaps,
 		DecidedAt:       decidedAt,
 	}
 	if basis != nil {
@@ -209,9 +242,23 @@ func acceptanceDecisionFrom(raw string) (domain.AcceptanceDecisionKind, error) {
 		return domain.CollaborationDeclined, nil
 	case domain.CollaborationPartiallyAccepted.String():
 		return domain.CollaborationPartiallyAccepted, nil
+	case domain.CollaborationPendingSupplement.String():
+		return domain.CollaborationPendingSupplement, nil
 	default:
 		return 0, fmt.Errorf("unknown acceptance decision %q", raw)
 	}
+}
+
+func supplementGapFrom(raw string) (domain.SupplementGapKind, error) {
+	for _, gap := range []domain.SupplementGapKind{
+		domain.MissingObjectGap, domain.MissingActionGap, domain.MissingNodeGap,
+		domain.MissingAuthorityGap, domain.MissingWorkConditionGap,
+	} {
+		if raw == gap.String() {
+			return gap, nil
+		}
+	}
+	return 0, fmt.Errorf("unknown supplement gap %q", raw)
 }
 
 func collaborationActionFrom(raw string) (domain.CollaborationActionKind, error) {

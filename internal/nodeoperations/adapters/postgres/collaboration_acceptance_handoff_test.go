@@ -72,7 +72,7 @@ func acceptanceIntent(t *testing.T, tenant, item string) ports.CollaborationAcce
 }
 
 func acceptanceEventID(tenant, item string) string {
-	return string(outboxintent.FingerprintEventID("collaboration-acceptance", tenant, item))
+	return string(outboxintent.FingerprintEventID("collaboration-acceptance", tenant, item, "1"))
 }
 
 func TestCollaborationAcceptanceIntentCommitsAtomicallyWithTheDecision(t *testing.T) {

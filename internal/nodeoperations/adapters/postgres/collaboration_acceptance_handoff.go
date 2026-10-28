@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"go.idp.xyz/idp-bento-go/eventing"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -48,18 +49,20 @@ var _ ports.CollaborationAcceptanceHandoff = (*OutboxCollaborationAcceptanceHand
 type collaborationAcceptancePayload struct {
 	TenantID string `json:"tenantId"`
 	ItemRef  string `json:"itemRef"`
+	// Round 区分同一事项的待补充与其后的新决定：下游按幂等键读当前轮次，每一轮各有自己的意图。
+	Round int `json:"round"`
 }
 
 // collaborationAcceptanceEventIDPort 是本口指纹 ID 的口名前缀。
 const collaborationAcceptanceEventIDPort = "collaboration-acceptance"
 
-func collaborationAcceptanceEventID(key ports.CollaborationAcceptanceKey) string {
+func collaborationAcceptanceEventID(key ports.CollaborationAcceptanceKey, round int) string {
 	return string(outboxintent.FingerprintEventID(collaborationAcceptanceEventIDPort,
-		key.TenantID.String(), key.Item.String()))
+		key.TenantID.String(), key.Item.String(), strconv.Itoa(round)))
 }
 
-// HandOffCollaborationAcceptance 把一份意图入队。信封 ID 取承接幂等键——意图由
-// （租户+事项）认领（ADR-0043）。键缺席是装配缺陷，响亮报错不入队。
+// HandOffCollaborationAcceptance 把一份意图入队。信封 ID 取承接幂等键与轮次——意图由
+// （租户+事项+轮次）认领（ADR-0043）。键缺席是装配缺陷，响亮报错不入队。
 func (handoff *OutboxCollaborationAcceptanceHandoff) HandOffCollaborationAcceptance(
 	ctx context.Context,
 	intent ports.CollaborationAcceptanceHandoffIntent,
@@ -68,17 +71,21 @@ func (handoff *OutboxCollaborationAcceptanceHandoff) HandOffCollaborationAccepta
 	if key.TenantID.String() == "" || key.Item.String() == "" {
 		return fmt.Errorf("hand off collaboration acceptance: acceptance key is required")
 	}
+	if intent.Record.Round < 1 {
+		return fmt.Errorf("hand off collaboration acceptance: round starts at 1")
+	}
 
 	payload, err := json.Marshal(collaborationAcceptancePayload{
 		TenantID: key.TenantID.String(),
 		ItemRef:  key.Item.String(),
+		Round:    intent.Record.Round,
 	})
 	if err != nil {
 		return fmt.Errorf("hand off collaboration acceptance: %w", err)
 	}
 
 	now := handoff.clock.Now().UTC()
-	eventID := collaborationAcceptanceEventID(key)
+	eventID := collaborationAcceptanceEventID(key, intent.Record.Round)
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
 		ID:           eventing.EventID(eventID),

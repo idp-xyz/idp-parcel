@@ -54,7 +54,7 @@ func (double *acceptanceStoreDouble) Save(
 	if double.saveErr != nil {
 		return ports.AcceptanceSaveOutcome(0), double.saveErr
 	}
-	if _, exists := double.records[acceptanceKey(record.Key)]; exists || double.raceOnSave {
+	if current, exists := double.records[acceptanceKey(record.Key)]; (exists && current.Round >= record.Round) || double.raceOnSave {
 		return ports.AcceptanceAlreadyDecided, nil
 	}
 	double.records[acceptanceKey(record.Key)] = record
@@ -536,4 +536,80 @@ func TestCollaborationAssemblyRefusesMissingDependencies(t *testing.T) {
 			}
 		})
 	}
+}
+
+// 待补充不形成承接：记下带缺口的决定、没有可执行的范围；补充到位后的决定是下一轮的新决定、
+// 回指它，原待补充不被改写，也不算冲突。点名 `AT-NO-003`「缺少明确对象……形成待补充，不创建
+// 任务或执行事实」。
+func TestAPendingSupplementIsFollowedByANewDecisionThatPointsBack(t *testing.T) {
+	fixture := newCollabFixture(t)
+	pending := acceptCommand(t)
+	pending.Decision = domain.CollaborationPendingSupplement
+	pending.AcceptedUnits = nil
+	pending.AcceptedActions = nil
+	pending.Gaps = []domain.SupplementGapKind{domain.MissingAuthorityGap}
+
+	first, err := fixture.handler.Accept(context.Background(), pending)
+	if err != nil {
+		t.Fatalf("accept pending: %v", err)
+	}
+	if first.Outcome() != application.CollaborationPendingSupplement {
+		t.Fatalf("outcome = %q, want PENDING_SUPPLEMENT", first.Outcome())
+	}
+	if record, _ := first.Acceptance(); record.Round != 1 || len(record.Acceptance.Gaps()) != 1 {
+		t.Fatalf("round = %d gaps = %v", record.Round, record.Acceptance.Gaps())
+	}
+
+	t.Run("a replay is the existing decision", func(t *testing.T) {
+		replay, err := fixture.handler.Accept(context.Background(), pending)
+		if err != nil || replay.Outcome() != application.CollaborationExistingDecision {
+			t.Fatalf("outcome = %q err = %v", replay.Outcome(), err)
+		}
+	})
+
+	t.Run("nothing is executable while pending", func(t *testing.T) {
+		result, err := fixture.handler.RecordExecution(context.Background(), executeCommand(t))
+		if err != nil || result.Outcome() != application.ExecutionOnPendingSupplement {
+			t.Fatalf("outcome = %q err = %v", result.Outcome(), err)
+		}
+		if fixture.facts.saves != 0 {
+			t.Fatal("待补充的事项上落了执行事实")
+		}
+	})
+
+	t.Run("the supplemented decision is a new round, not a conflict", func(t *testing.T) {
+		result, err := fixture.handler.Accept(context.Background(), acceptCommand(t))
+		if err != nil {
+			t.Fatalf("accept supplemented: %v", err)
+		}
+		if result.Outcome() != application.CollaborationDecided {
+			t.Fatalf("outcome = %q, want COLLABORATION_DECIDED", result.Outcome())
+		}
+		record, _ := result.Acceptance()
+		if record.Round != 2 || record.Acceptance.Decision() != domain.CollaborationAccepted {
+			t.Fatalf("round = %d decision = %v", record.Round, record.Acceptance.Decision())
+		}
+		if len(fixture.acknowledge.intents) != 3 {
+			t.Fatalf("intents = %d, want 3（待补充、其重放、其后的新决定各交一份）", len(fixture.acknowledge.intents))
+		}
+	})
+
+	t.Run("execution is judged against the new decision", func(t *testing.T) {
+		result, err := fixture.handler.RecordExecution(context.Background(), executeCommand(t))
+		if err != nil || result.Outcome() != application.ExecutionRecorded {
+			t.Fatalf("outcome = %q err = %v", result.Outcome(), err)
+		}
+	})
+
+	t.Run("a decided item is not reopened", func(t *testing.T) {
+		again := acceptCommand(t)
+		again.Decision = domain.CollaborationPendingSupplement
+		again.AcceptedUnits = nil
+		again.AcceptedActions = nil
+		again.Gaps = []domain.SupplementGapKind{domain.MissingObjectGap}
+		result, err := fixture.handler.Accept(context.Background(), again)
+		if err != nil || result.Outcome() != application.CollaborationDecisionConflict {
+			t.Fatalf("outcome = %q err = %v", result.Outcome(), err)
+		}
+	})
 }
