@@ -1,7 +1,7 @@
 # 07 费用确认后冻结与信用暴露不转正式扣费、不释放
 
 Category: bug
-Status: in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-lw-occ（代码最后一笔 8158554a8）。此前：in-progress——2026-10-28 会话 tops-20（idp-parcel-91）立并认领：psb/05 收口重走停点三，协调方按冻结清单「上线线」口径上调为挡上线；分支 claude-lw-occ
+Status: resolved——2026-10-28 进 main（`6e1ac2ddb`；全量 162 ok / 0 FAIL，种子退 0），见文末「进 main 记录」。此前 in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-lw-occ（代码最后一笔 8158554a8）。此前：in-progress——2026-10-28 会话 tops-20（idp-parcel-91）立并认领：psb/05 收口重走停点三，协调方按冻结清单「上线线」口径上调为挡上线；分支 claude-lw-occ
 Blocked by: 无
 
 ## 现象
@@ -55,3 +55,14 @@ SA CONTEXT：「冻结后必须转为正式扣费或显式释放」「费用确�
 
 ### 评审修订（2026-10-28）
 按隔离评审：票面完成判据与「做什么」第 1 条订正；ADR-0343 越权风险点补三句；SA CONTEXT 补首次确认建行半句（CONTEXT 里原无「无行即余额不可用」专句，补在费用确认那条）；新增真库用例 `TestAMultiParcelRequestKeepsTheOtherParcelsShareUntilItsOwnChargeIsConfirmed`。
+
+## 评审记录（2026-10-28，隔离子代理，钉 `9883fea9b`）
+
+- 两轴无阻断。「正式扣费 = 转入已确认未结」是 CONTEXT 算式原意（`Available()` = 入账 + 授信额度 − 冻结 − 已确认未结；确认时再扣入账会让核销扣两遍），票面原判据「预付 N+1 件不再被拒」错，作者已改。认领路径与 PS「按保存的那一份认领」一致；多件委托按包裹份额转出，不整份转走；转出与确认同事务、转出册防二转。
+- 作者自报缺口评定：已接受委托下某件包裹取消或失败、其份额无释放触发口——不挡上线（非回归、只让可用额偏保守、不当天撞），但无人工绕法，记入冻结清单 R2；确认后调整未挂重算——不挡，下次映射、核销或确认时自愈。
+- 非阻断（作者已在 `573943c48` 补）：非 SELL 费用认不到包裹、`POSTED_BALANCE` 基数租户建行后额度为 0、账不平时确认整笔回滚——写进 ADR-0343 越权风险点；SA CONTEXT 补首次确认建行半句；补多包裹同请求真库用例。ADR 索引由推送方重生成。推送方读过修订 diff（只动文档与一条用例，不动迁移）。
+
+## 进 main 记录（2026-10-28，推送方 tops-20 / idp-parcel-91）
+
+- 分支 `claude-lw-occ` tip `573943c48` 作出处；隔离树 cherry-pick 到 main，无冲突；重生成 ADR 索引、AT 盘点计数与机制清点，两项 `-check` 退 0；全量 `scripts/test-full.sh` 162 ok / 0 FAIL；种子一次性库退 0；推确切 SHA `6e1ac2ddb`。
+

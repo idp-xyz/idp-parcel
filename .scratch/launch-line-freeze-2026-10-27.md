@@ -230,6 +230,7 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 - 2026-10-28｜关案要案件有义务清单，清单按案号登、种子写死 `SYN-CASE-CN-SG-01`，运行时建案口铸的案号永远对不上，`POST /customs-case-closures` 答`未决` `OBLIGATION_INVENTORY_UNCONFIGURED`；只有受控 CLI 能补登，没有生产登记面，也没有建案时按案件要求规则形成清单的路径｜psb/05 收口重走停点二｜R2（真实租户每关一案要有人跑 CLI，量大前补；S–M）
 - 2026-10-28｜演示账户运营余额 20000、每件冻结 9600，第三件委托被拒 `AVAILABLE_BALANCE_INSUFFICIENT`；第一件终局、费用确认、对账单发布之后敞口 `EXP-0001` 仍占用，未见释放；没有追到该在哪一步释放｜psb/05 收口重走停点三；[psb/29](./product-strategy-boundary/issues/29-operational-balance-and-credit-standing-have-no-production-writer.md)｜**协调方上调为挡上线**：费用确认、对账单发布都不碰冻结与信用暴露（SA CONTEXT「费用确认后将适用冻结转为正式扣费」未实现），授信客户付清也回不来额度，发到额度÷估价件数后新委托全拒、无绕法；转 [launch-wiring/07](./launch-wiring/issues/07-confirmed-charge-does-not-convert-the-freeze-or-exposure.md)
 - 2026-10-28｜内部合规限制建立口覆盖项缺 `standing` 时答 `200 NOT_ACCEPTED` 不带原因；限制没有读口（`GET /customs-internal-restrictions` 答 405），运营只能从准入读数间接看到｜psb/05 收口重走停点五（launch-wiring/01）｜R3
+- 2026-10-28｜已接受委托下某件包裹取消或失败时，它在冻结或暴露账本上的份额没有释放触发口，一直占着（ADR-0343 决定八；ADR-0290「已接受的委托绝不放」要按包裹粒度修订）；只让可用额偏保守，无人工绕法｜launch-wiring/07 评审｜R2（中等：SA 按包裹份额部分释放 + PS 取消/失败终局触发）
 
 ## 六、docs-consistency/code 队列的复核（2026-10-27，tops-26）
 
