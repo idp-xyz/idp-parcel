@@ -8,6 +8,8 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 
 > 计数更正（同日）：上面 111 张只扫了 `issues/` 目录下的票，漏了票面直接放在 `docs-consistency/code/` 下的那一队。那一队由 tops-26 复核，见「六」：必须解决 6 张、冻结 18 张、在途做完为止 4 张。合起来：上线前必须 8 张、冻结 119 张、在途 4 张。
 
+
+> 上调（2026-10-27 同日）：psb/05 预走之后，用户同意把 product-strategy-boundary/10、/22 由 R3 移进「一之二、限量生产前必须」，冻结由 101 张减为 99 张，R3 由 60 张减为 58 张；上面「取证基线」那句计数照原样保留，是当时的取证。
 ## 上线线
 
 可以给第一家客户看，指三条同时成立：
@@ -27,7 +29,22 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 | [envelope-id-bounds/issues/01-remaining-envelope-ids-still-concatenate-instance-references.md](./envelope-id-bounds/issues/01-remaining-envelope-ids-still-concatenate-instance-references.md) | 运输履约各口的信封 ID 仍原样串接租户、委托、包裹等引用；真实租户的标识一长就入不了队，交接只留一条没人重发的续办引用，主链静默断开。其余各口已改指纹，门禁 `TestEveryEnvelopeIDIsMintedAsAFingerprint` 的例外清单登着去处，余下是照做的活。 **2026-10-27 已进 main（`c66b9f672`），resolved。** |
 | [product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md](./product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) | 收口那一步：首个租户上线前的演练里把合成演示动线重走一遍，逐格确认不停在「未配置」。不是写代码，是演练。 |
 
-## 二、冻结（101 张）
+## 一之二、限量生产前必须（2 张）
+
+2026-10-27 用户同意（会话提议：「不挡上线线，但改成进限量生产前必须做，现在就排期」，用户答「需要」）。起因是 [psb/05「预走」](./product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)：主链走到终局，停在这两处。
+
+**为什么不在「一」里**：上线线是「可以给第一家客户看」，演示动线不缺这两格。**为什么不是 R3**：[PILOT-SCOPE](../docs/product/PILOT-SCOPE.md) 把两件都写成首发必须用真实对象验证——「首发必须以真实试点包裹验证正常关务申报链路，包括适用的申报就绪、授权提交、提交尝试、技术回执……」与「首发必须使用一个真实账期验证客户运营应收、供应商预期成本、供应商真实账单主张、对账单……的正常闭环」。第一票真实申报、第一个真实账期一到就撞，产品里没有路可走，属「上线当天就撞且无绕法」，只是时点在限量生产。两张都只做机制与产品策略半边，用 `SYN-` 数据对合成对端走通、证据记 `S`；真实服务商通道、账期都是租户取值，留空答`未配置`。
+
+绕法（只撑演示与影子阶段，不撑正式验收）：申报由运营线下发出、报关服务商照常经集成客户端回传结果（预走实测归属得上申报版本）；结算按预估客户费用线下出账。
+
+| 票 | 这次上调的范围 | 留在冻结里的 |
+|---|---|---|
+| [product-strategy-boundary/issues/10-cc-declaration-channel-and-public-regulatory-reference-configuration.md](./product-strategy-boundary/issues/10-cc-declaration-channel-and-public-regulatory-reference-configuration.md) | 第 1 项申报发送通道：至少一种连接器形态对合成报关服务商跑通「授权确认 → 提交尝试 → 技术回执」，技术回执按 ADR-0242 归提交尝试 | 第 2–7 项（参考配置样板与待核各项） |
+| [product-strategy-boundary/issues/22-settlement-orchestrations-assembly-and-triggers.md](./product-strategy-boundary/issues/22-settlement-orchestrations-assembly-and-triggers.md) | 费用确认、截单发布、供应商账单接收与审核的装配与入口，以及确认与截单的内置触发 | 费用调整（先裁票面「要裁的」第 3 项）、成本分摊、赔付金额（首发只做受控模拟） |
+
+排期：等 tops-26 名下的 6 张 code 票进 main 后先做 10（量小，与那批同在 customs-compliance），再做 22。解冻条件即本节，不再看「首个租户撞上」。
+
+## 二、冻结（99 张）
 
 - 票面 Status 改为 `ready-for-human——2026-10-27 冻结到首个租户上线之后……`，保留「此前…」链；代理不认领，分诊扫描不再重读。`ready-for-human` 不进 `scripts/owner-review-queue.ps1` 的「等 owner 拍板」一节，冻结不给你添待裁项。
 - 草稿（`draft`）与已是 `ready-for-human` 的几张票面不动，以本表为准。
@@ -69,7 +86,7 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 | [no-consolidation-fact-provenance/issues/02-concurrent-same-source-writes-can-commit-the-losers-unit-update.md](./no-consolidation-fact-provenance/issues/02-concurrent-same-source-writes-can-commit-the-losers-unit-update.md) | 同源并发异内容，输家的单元更新照样提交 |
 | [product-strategy-boundary/issues/35-built-in-customs-case-trigger-from-acceptance.md](./product-strategy-boundary/issues/35-built-in-customs-case-trigger-from-acceptance.md) | 关务立案只有运营手工口，无内置派生 |
 
-### R3：不急（60 张）
+### R3：不急（58 张）
 
 | 票 | 一句话（2026-10-26 分诊） |
 |---|---|
@@ -125,11 +142,9 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 | [product-strategy-boundary/issues/07-pc-authorization-coordinates-and-role-models.md](./product-strategy-boundary/issues/07-pc-authorization-coordinates-and-role-models.md) | 产品策略伞票，含未装配路径与参考配置 |
 | [product-strategy-boundary/issues/08-no-current-valid-measurement-derivation.md](./product-strategy-boundary/issues/08-no-current-valid-measurement-derivation.md) | 产品策略伞票，含未装配路径与参考配置 |
 | [product-strategy-boundary/issues/09-tf-fulfillment-judgment-methods-and-connectors.md](./product-strategy-boundary/issues/09-tf-fulfillment-judgment-methods-and-connectors.md) | 产品策略伞票，含未装配路径与参考配置 |
-| [product-strategy-boundary/issues/10-cc-declaration-channel-and-public-regulatory-reference-configuration.md](./product-strategy-boundary/issues/10-cc-declaration-channel-and-public-regulatory-reference-configuration.md) | 产品策略伞票，含未装配路径与参考配置 |
 | [product-strategy-boundary/issues/11-ve-eta-triage-disclosure-methods-and-notification-connector.md](./product-strategy-boundary/issues/11-ve-eta-triage-disclosure-methods-and-notification-connector.md) | 产品策略伞票，含未装配路径与参考配置 |
 | [product-strategy-boundary/issues/13-pg-hard-risk-detection-and-evidence-storage-connector.md](./product-strategy-boundary/issues/13-pg-hard-risk-detection-and-evidence-storage-connector.md) | 产品策略伞票，含未装配路径与参考配置 |
 | [product-strategy-boundary/issues/14-pp-postal-prefix-granularity-and-public-unit-reference-configuration.md](./product-strategy-boundary/issues/14-pp-postal-prefix-granularity-and-public-unit-reference-configuration.md) | 产品策略伞票，含未装配路径与参考配置 |
-| [product-strategy-boundary/issues/22-settlement-orchestrations-assembly-and-triggers.md](./product-strategy-boundary/issues/22-settlement-orchestrations-assembly-and-triggers.md) | 结算余项触发/节点作证/关务授权其余格 |
 | [product-strategy-boundary/issues/33-intake-qualification-node-authority-has-no-registration-path.md](./product-strategy-boundary/issues/33-intake-qualification-node-authority-has-no-registration-path.md) | 结算余项触发/节点作证/关务授权其余格 |
 | [product-strategy-boundary/issues/36-submission-authorization-business-role-face-remainder.md](./product-strategy-boundary/issues/36-submission-authorization-business-role-face-remainder.md) | 结算余项触发/节点作证/关务授权其余格 |
 | [ve-008-late-account-rederive/issues/04-ops-replay-endpoint-blocked-on-par-int-01.md](./ve-008-late-account-rederive/issues/04-ops-replay-endpoint-blocked-on-par-int-01.md) | 读面、文档词条、运维重放口 |

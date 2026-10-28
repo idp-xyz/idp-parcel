@@ -508,10 +508,10 @@ Claude Code 子代理做，只读代码、不改代码。worktree 分支 `claude
 - **客户视图**：首方令牌按包裹号查答 `200 CURRENT_VIEW`，里程碑 `SHOWN`、终局 `SHOWN`、ETA `PENDING_CONFIRMATION`、说明 `NOT_DISCLOSED`（10-19 那轮答 `403`，票 demo-chain-gaps/96 已修）。
 - **关务旁路**：立案 `201 ESTABLISHED`；演示申报单元提交授权确认 `201`；申报提交 `201 DECLARATION_SUBMITTED`，尝试结果 `REGISTERED_PENDING_SEND`。报关服务商回 `RELEASE_RESULT`（`FULL`），答 `201 RESULT_RECORDED`；库上那一行归属到所提交的申报版本，按 `SYN-IR-CN-RELEASE-02` 解释，`release_outcome` 落一行 `FULL`。
 
-**停点（都已有去处，都冻结）**：
+**停点（都已有去处；同日用户同意两张由冻结 R3 上调为「限量生产前必须」，见冻结清单「一之二」）**：
 
-1. 结算确认与截单：`buildSettlementOrchestrations` 在 `cmd/parcel-api` 里构造完就丢弃，没有入口、没有驱动。客户费用停在 `ESTIMATED`，对账单与经营结果两册空。去处：[22](./22-settlement-orchestrations-assembly-and-triggers.md)（冻结 R3）。
-2. 申报发送：尝试停在 `REGISTERED_PENDING_SEND`，没有发送通道。去处：[10](./10-cc-declaration-channel-and-public-regulatory-reference-configuration.md)（冻结）。
+1. 结算确认与截单：`buildSettlementOrchestrations` 在 `cmd/parcel-api` 里构造完就丢弃，没有入口、没有驱动。客户费用停在 `ESTIMATED`，对账单与经营结果两册空。去处：[22](./22-settlement-orchestrations-assembly-and-triggers.md)。
+2. 申报发送：尝试停在 `REGISTERED_PENDING_SEND`，没有发送通道。去处：[10](./10-cc-declaration-channel-and-public-regulatory-reference-configuration.md) 第 1 项。
 
 **没走到、收口时要走的一格**：放行之后交出与出发门禁能不能从 `UNDECIDED` 变成放行，这一轮没取到。本轮先交接后立案，放行回来时包裹已交付，事后再问答 `NO_OBJECT_UNDER_CONTROL`。收口重走时顺序要改成：收寄 → 立案、授权、提交、放行 → 再交给干线；要用的放行门禁核对正是在途的 code/34。
 
