@@ -1,7 +1,7 @@
 # 05 第四条判据的动线取证：逐步列出停在`未配置`的每一格
 
 Category: task
-Status: in-progress——2026-10-28 会话 tops-20（idp-parcel-91）认领收口重走（用户「完成最后一项吧」），钉当时 main。此前 ready-for-agent——收口那一步（第 3 步重走动线）已不被 02、03、04 挡；排期已代决：安排在首个租户上线前的演练里重走，见文末「代决（2026-10-26）」。此前 ready-for-agent（盘点半 2026-09-24 通道 2 交付，见文末「盘点（钉 `64b37f27`）」；收口即第 3 步 Blocked by 02、03、04）
+Status: resolved——2026-10-28 收口：「收口重走（钉 `d78fd1fbf`）」主链、关务放行、结算与新接各口走通，其两处绕法由 launch-wiring/08、07 修掉后「补走（钉 `da577c6db`）」零绕法走通；第四条判据成立（证据记 `S`），申报发送（票 10）为已知冻结格。此前 in-progress——2026-10-28 会话 tops-20（idp-parcel-91）认领收口重走（用户「完成最后一项吧」），钉当时 main。此前 ready-for-agent——收口那一步（第 3 步重走动线）已不被 02、03、04 挡；排期已代决：安排在首个租户上线前的演练里重走，见文末「代决（2026-10-26）」。此前 ready-for-agent（盘点半 2026-09-24 通道 2 交付，见文末「盘点（钉 `64b37f27`）」；收口即第 3 步 Blocked by 02、03、04）
 Blocked by: 无（02、03 早已 resolved；04 于 2026-10-26 收口）
 地盘：[合成演示动线](../../../docs/design/synthetic-demo-journey-script.md)与本目录票面。
 出处：[ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定五第四条、越权风险点 2。
