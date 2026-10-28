@@ -22,6 +22,7 @@ import {
   technicalReceiptLabels,
 } from './presentation';
 import type { RegisterRow } from './register-rows';
+import { shortenEmbeddedPrincipalRefs } from '../../components/principal-ref';
 
 const dash = '—';
 
@@ -119,7 +120,7 @@ export function submissionRows(
         version: version.version,
         unit: version.unit,
         procedure: version.procedure,
-        authority: version.authority,
+        authority: shortenEmbeddedPrincipalRefs(version.authority),
         current: version.isCurrent ? '当前版' : '已被更正取代',
         attempts: version.attempts.map(attemptLabel).join('\n') || '尚无提交尝试',
         receipts: version.attempts.map(receiptLabel).join('\n') || dash,
@@ -143,7 +144,7 @@ export function externalResultRows(results: ExternalResultBody[]): RegisterRow[]
         : (result.submissionVersion ?? dash),
       semantics: result.rawSemantics || dash,
       release: result.release
-        ? `${labelOf(releaseKindLabels, result.release.kind)}｜${result.release.authority}｜范围 ${result.release.scope}` +
+        ? `${labelOf(releaseKindLabels, result.release.kind)}｜${shortenEmbeddedPrincipalRefs(result.release.authority)}｜范围 ${result.release.scope}` +
           (result.release.condition ? `｜条件 ${result.release.condition}` : '')
         : dash,
       flags:

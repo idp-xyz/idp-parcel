@@ -115,7 +115,7 @@ export function PostIntakeDispositionPage() {
   };
 
   const detailFields: DetailField[] | undefined = selected
-    ? requestDetailRows(selected).map((r) => ({ label: r.label, value: r.mono ? <span className="font-mono">{r.value}</span> : r.value }))
+    ? requestDetailRows(selected).map((r) => ({ label: r.label, value: r.mono || r.title ? <span className={r.mono ? 'font-mono' : undefined} title={r.title}>{r.value}</span> : r.value }))
     : undefined;
 
   return (
@@ -275,7 +275,7 @@ function ManualItemsSection({ mayRegister, reloadKey }: { mayRegister: boolean; 
                   <div className="font-mono text-[12px] text-idpxyz-textBright">{line.title}</div>
                   <div className="text-[12px] text-idpxyz-text">{line.detail}</div>
                   {line.superseded && <div className="text-[11px] text-idpxyz-accent">{line.supersededText}</div>}
-                  <div className="text-[11px] text-idpxyz-textMuted">{line.resultText ? `结果:${line.resultText}` : '尚未登记结果'}</div>
+                  <div className="text-[11px] text-idpxyz-textMuted" title={line.resultTitle || undefined}>{line.resultText ? `结果:${line.resultText}` : '尚未登记结果'}</div>
                 </button>
                 {active && !item.result && (
                   mayRegister ? (

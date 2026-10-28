@@ -29,6 +29,7 @@ import {
 } from './api';
 import { ShipmentRequestDetailPage } from './ShipmentRequestDetailPage';
 import { PrincipalRef } from '../../components/PrincipalRef';
+import { formatInstant } from '../moment';
 
 // 页面标题的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['shipment-request-inquiry'];
@@ -98,7 +99,7 @@ const columns: ListColumn<ShipmentRequestSummary>[] = [
     id: 'submitted-at',
     header: '提交时间',
     className: 'w-[210px]',
-    render: (row) => <span className="font-mono text-[12px]">{row.submittedAt}</span>,
+    render: (row) => <span className="font-mono text-[12px]">{formatInstant(row.submittedAt)}</span>,
   },
 ];
 
@@ -164,7 +165,7 @@ function inspectorOf(row: ShipmentRequestSummary): InspectorContent {
       {
         kind: 'audit',
         fields: presentFields([
-          { label: '提交时间', value: row.submittedAt, mono: true },
+          { label: '提交时间', value: formatInstant(row.submittedAt), mono: true },
           { label: '提交版本', value: row.submissionVersionId, mono: true },
         ]),
       },

@@ -1,3 +1,4 @@
+import { formatInstant } from '../moment';
 import { useState } from 'react';
 import { ConfirmDialog } from '@idpxyz/ui-primitives';
 import { pendingText } from '../../components/action-feedback';
@@ -335,7 +336,7 @@ function CancellationOutcomeCard({
         {body.cancellationId ? (
           <DetailRow label="取消决定标识" value={body.cancellationId} mono />
         ) : null}
-        {body.decidedAt ? <DetailRow label="判断时间" value={body.decidedAt} mono /> : null}
+        {body.decidedAt ? <DetailRow label="判断时间" value={formatInstant(body.decidedAt)} mono /> : null}
         {body.intakeVersion ? (
           <DetailRow label="越过的收寄版本" value={body.intakeVersion} mono />
         ) : null}

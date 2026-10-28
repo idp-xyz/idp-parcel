@@ -19,6 +19,7 @@ import {
   type PriceCardRecord,
 } from './api';
 import { PrincipalRef } from '../../components/PrincipalRef';
+import { formatInstant } from '../moment';
 
 const info = moduleInfoById['price-card-catalog'];
 
@@ -112,7 +113,7 @@ const columns: ListColumn<PriceCardRecord>[] = [
     id: 'registered',
     header: '登记时间',
     className: 'w-[180px]',
-    render: (row) => <span className="font-mono text-[12px]">{row.registeredAt}</span>,
+    render: (row) => <span className="font-mono text-[12px]">{formatInstant(row.registeredAt)}</span>,
   },
 ];
 

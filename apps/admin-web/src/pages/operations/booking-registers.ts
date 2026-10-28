@@ -11,6 +11,7 @@ import type {
   BookingRequestRecord,
   TransportFulfillmentRegistry,
 } from './records-api';
+import { shortenEmbeddedPrincipalRefs } from '../../components/principal-ref';
 
 export interface BookingRegisterRow {
   key: string;
@@ -72,8 +73,8 @@ export function bookingRowOf(record: BookingRequestRecord): BookingRegisterRow {
       currentAnsweredAt: current ? formatInstant(current.decidedAt) : '',
       // 取消时刻单列，不并进状态词；缺席即没有取消。
       cancelledAt: record.cancelledAt ? formatInstant(record.cancelledAt) : '',
-      submittedBy: record.submittedBy ?? '',
-      cancelledBy: record.cancelledBy ?? '',
+      submittedBy: shortenEmbeddedPrincipalRefs(record.submittedBy ?? ''),
+      cancelledBy: shortenEmbeddedPrincipalRefs(record.cancelledBy ?? ''),
       answerCount: String(record.answers.length),
       answers: record.answers.map(answerLineOf).join('\n'),
     },

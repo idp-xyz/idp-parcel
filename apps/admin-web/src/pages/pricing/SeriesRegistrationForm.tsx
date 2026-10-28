@@ -33,6 +33,7 @@ import {
   type SeriesDraft,
   type SeriesKindDraft,
 } from './series-form';
+import { formatInstant } from '../moment';
 
 /**
  * 参考序列的逐字段登记表单，带提交前预览（票 pricing-reference-series-operations/08；
@@ -524,7 +525,7 @@ function ComparisonBody({ comparison }: { comparison: NonNullable<SeriesPreviewR
             <tbody>
               {comparison.changes.map((change) => (
                 <tr key={change.startsAt}>
-                  <td className="pr-2 font-mono">{change.startsAt}</td>
+                  <td className="pr-2 font-mono">{change.startsAt.includes('T') ? formatInstant(change.startsAt) : change.startsAt}</td>
                   <td className="pr-2">{changeLabel(change)}</td>
                   <td className="pr-2 font-mono">{periodText(change.base)}</td>
                   <td className="pr-2 font-mono">{periodText(change.proposed)}</td>
