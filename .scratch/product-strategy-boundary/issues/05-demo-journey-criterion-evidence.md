@@ -489,3 +489,34 @@ Claude Code 子代理做，只读代码、不改代码。worktree 分支 `claude
 
 - **重走动线安排在首个租户上线前的演练里做，现在不做。** 自 2026-10-19 最后一次重走以来，main 上又落了一批会改动线停点的票（出发门禁补问、交接更正进段、零额评价、运营决定记操作者等）；现在重走一次，演练前还得再走一次。重走要起整套演示进程，成本高，合并成一次更划算。
 - **重走时**：照本票「做什么」第 3 步，按动线从建产品走到终局与结算，结果写回动线脚本「这条动线什么时候会变」一节。
+
+## 预走（钉 `d1ccc7de3`，2026-10-27）
+
+用户 2026-10-27 选「先预走一遍演示动线」。Claude Code 会话做，只读不改代码与种子。这一轮不收口：tops-26 名下上线前必须的 6 张 code 票（27、37、43、18、03、34）还在途，收口那一次照上面「代决」在演练里重走。
+
+**环境**：一次性库 `walk1027`（`idp-parcel-postgres-gate`），检出 `d1ccc7de3`，`seed.sh` 原样灌入，退 0。两只演示发行方用 compose 原样起（5556、5558）。这一轮共享的集成客户端发行方认得合成货主系统、合成干线承运商与合成报关服务商三端，不用另起私有 Dex。`parcel-api`（:19127）照「前置」设齐三族发行方、治理自授权与两个隔离开关；`parcel-dispatch` 的七个变量照「前置」。取证时段 02:06Z–02:17Z（10-28 UTC）。实测只记 `S`。走完已停进程、删库、删检出；发行方容器留着。
+
+**结论**：实物主链、SELL、BUY 与客户视图从首方提交一路走到包裹终局 `EFFECTIVE_DELIVERY`。关务旁路走到放行结果归属与解释。停在两处冻结格：结算确认与截单、申报发送。
+
+- **提交与受理**：`submit-one-shipment.sh` 答 `201 SUBMITTED`（`SHR-YGRPAXTF426RDW6JEYY6CV542Y`，包裹 `DPCL-OJ3DC74VBJJ2RR7E34YYK6QX44`），dispatch 推成`已接受`。初始路由 `PUBLISHED`。
+- **运输准备**：`#1`–`#3` 三段都答 `OPPORTUNITY_PREPARED`（10-19 那轮 `#2`、`#3` 答 `NO_CURRENT_OPPORTUNITY`，票 demo-chain-gaps/98 的周期安排已补上）。
+- **预报、收寄、SELL**：带预报收寄答 `201 INTAKE_FORMED`、`VERIFIED`。预估客户费用一笔 `ESTIMATED` CNY 9600。
+- **自营段**：班次登记带两池 `201`。SHA 交出 `201`、读数 `NOT_GUARDED`；出发问询与报出发读数逐字相同；交进深圳口岸 `201`、`PARTICIPATION_ENDED`。
+- **干线**：交给干线承运商（另起 `scope`）`201`，读数 `UNDECIDED`（跨关务区域、无案，同 10-19）。委托 `v3` `201`，订舱 `201`，承运答复（集成客户端）`201 BOOKING_ANSWERED`，交进新加坡枢纽 `201`。
+- **BUY**：段采用之后实际履约发生项形成，BUY 请求、评价、供应商预期成本依次形成：一行 CNY 8500，`/settlement-charges?registry=supplier-expected-cost` 读得到。10-19 那轮停在 `ZONE_UNRESOLVED`，这一轮没有撞上。
+- **末端与终局**：尾程交接（`#4`、`FINAL_DELIVERY`）`201`，派送任务随信封形成，窗口即 `#4` 的窗口。派送尝试 `201`，有效交付 `201`、`NOT_GUARDED`。PS 终局一行，`final-outcome.formed` `PUBLISHED`。
+- **客户视图**：首方令牌按包裹号查答 `200 CURRENT_VIEW`，里程碑 `SHOWN`、终局 `SHOWN`、ETA `PENDING_CONFIRMATION`、说明 `NOT_DISCLOSED`（10-19 那轮答 `403`，票 demo-chain-gaps/96 已修）。
+- **关务旁路**：立案 `201 ESTABLISHED`；演示申报单元提交授权确认 `201`；申报提交 `201 DECLARATION_SUBMITTED`，尝试结果 `REGISTERED_PENDING_SEND`。报关服务商回 `RELEASE_RESULT`（`FULL`），答 `201 RESULT_RECORDED`；库上那一行归属到所提交的申报版本，按 `SYN-IR-CN-RELEASE-02` 解释，`release_outcome` 落一行 `FULL`。
+
+**停点（都已有去处，都冻结）**：
+
+1. 结算确认与截单：`buildSettlementOrchestrations` 在 `cmd/parcel-api` 里构造完就丢弃，没有入口、没有驱动。客户费用停在 `ESTIMATED`，对账单与经营结果两册空。去处：[22](./22-settlement-orchestrations-assembly-and-triggers.md)（冻结 R3）。
+2. 申报发送：尝试停在 `REGISTERED_PENDING_SEND`，没有发送通道。去处：[10](./10-cc-declaration-channel-and-public-regulatory-reference-configuration.md)（冻结）。
+
+**没走到、收口时要走的一格**：放行之后交出与出发门禁能不能从 `UNDECIDED` 变成放行，这一轮没取到。本轮先交接后立案，放行回来时包裹已交付，事后再问答 `NO_OBJECT_UNDER_CONTROL`。收口重走时顺序要改成：收寄 → 立案、授权、提交、放行 → 再交给干线；要用的放行门禁核对正是在途的 code/34。
+
+**走法上的三处**（不挡上线，已记入[冻结清单「记录」](../../launch-line-freeze-2026-10-27.md)）：
+
+- 干线委托必须在交给干线承运商**之前**提交。顺序反了，段采用答 `SEGMENT_STARTED_BEFORE_COMMISSION`。本轮另提交一份 `submittedAt` 早于那次交接的委托才采用上。动线脚本没写这条顺序。
+- 交接登记答 `SOURCE_NOT_ACCEPTED` 时不带原因。本轮载荷在 `HANDED_OVER` 上带了 `basis`（只给非交接裁决用），要读 `FormTransportHandover` 才查到。
+- 动线脚本「起 dispatch」一节说 dispatch 对逐条投递失败一行日志都不打，今天的 dispatch 会打 `WARN Delivery failed and was recorded for retry`，带失败码。

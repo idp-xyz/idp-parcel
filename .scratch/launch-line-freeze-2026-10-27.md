@@ -195,6 +195,9 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 - 2026-10-27｜SA 把同一笔银行回款用不同引用采用两次并各认作代收本金时，代收与清分防不住：同一指令第二条到账能登记但移位撞 `UNDERFUNDED`，两条各有渠道报告的不同指令都能移位、待清分合计 2×；残留是 SA 采用口的来源身份去重｜docs-consistency/code/54 评审（ADR-0330 越权风险点 3）｜R3（不是本票新增，COD 不在试点范围）
 - 2026-10-27｜`internal/architecture/partition_subject_registry_test.go` 文件头说「ID 与分区键同表达式的那些口，分区空间就是信封 ID 空间」，对运输履约 disposition_execution、exception_journey、offsite_pickup、regulatory_acceptance 与 transport_commission 已不严格成立（ID 是指纹，分区键是可读串）；同源门禁按语法剥单参调用，仍判同源，例外照留｜envelope-id-bounds/01 运输履约半边评审｜R3
 - 2026-10-27｜disposition_execution 与 exception_journey 同键同事务入队，没有同事务不相撞用例（靠口名不同，代码上已成立）｜同上｜R3
+- 2026-10-27｜动线上干线委托必须先于交给干线承运商的那次交接提交，反了段采用答 `SEGMENT_STARTED_BEFORE_COMMISSION`，只能另交一份业务时间更早的委托；动线脚本没写这条顺序｜[psb/05「预走」](./product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)｜R3（收口重走时写进动线脚本）
+- 2026-10-27｜交接登记答 `SOURCE_NOT_ACCEPTED` 时不带原因（例如 `HANDED_OVER` 带了 `basis`），登记方只能读码排查｜同上｜R3
+- 2026-10-27｜动线脚本「起 dispatch」一节仍说逐条投递失败不打日志，今天会打 `WARN` 并带失败码｜同上｜R3（收口重走时改脚本）
 
 ## 六、docs-consistency/code 队列的复核（2026-10-27，tops-26）
 
