@@ -1,7 +1,7 @@
 # 04 NO 监管协作承接编排无装配
 
 Category: enhancement
-Status: in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-lw-no（代码最后一笔 3c7a26bb1）。此前 in-progress——2026-10-28 会话 tops-20（idp-parcel-91）立并认领（用户「现在就接线」），分支 claude-lw-no
+Status: in-progress——2026-10-28 作者完工，待进 main，分支 claude-lw-no（代码最后一笔 6923b87a5，含评审修订）。此前 in-progress——2026-10-28 会话 tops-20（idp-parcel-91）立并认领（用户「现在就接线」），分支 claude-lw-no
 Blocked by: 无
 
 ## 做什么
@@ -21,3 +21,7 @@ Blocked by: 无
 - 判据对用例：承接、部分承接、待补充、拒接四格与待补充后下一轮——真库用例 `TestTheNodeCollaborationFacesAcceptSupplementAndRecordExecutionAgainstARealDatabase` 覆盖待补充（201 第 1 轮）、补齐后下一轮（201 第 2 轮，库里两轮并存）、拒接，部分承接在编排单测 `TestOneDecisionPerCollaborationItem` 一侧；待补充事项上登记执行事实被拒（`ITEM_PENDING_SUPPLEMENT`、库里零事实）为真库断言。
 - 自验（含 PG）：`go build ./...`、`go vet`、`gofmt -l` 无输出；`go test -count=1 -p 1 ./cmd/parcel-api/... ./internal/architecture/... ./migrations/... ./internal/accessidentity/... ./internal/nodeoperations/...` 全绿；种子灌一次性库退 0（已删库）；`at-coverage-counts -check` 只报生成物过期。
 - 留给协调方：（1）进 main 时重生成 ADR 索引、AT 盘点计数、机制清点；（2）与 claude-lw-cc 撞了号：CC 取了迁移 0030、种子 access 26/27、governance 63/64、step 483，本票让位到 0031、28/29、65/66、484；0031 的 CHECK 全集已含 CC 的两个词，CC 若再改词表需同步；（3）不挡上线的发现：关务一侧无协作事项读口与承接/执行意图的消费者（承接意图 `node-operations.collaboration-acceptance.decided` 随决定入 Outbox 但无人消费），冻结清单应记一行。
+
+## 评审修订
+
+隔离评审（钉 `d60e058eb`）两轴无阻断，协调方要求补三项，已做：（1）access_identity 0031 取号不改，头注只讲本迁移加了什么；（2）操作者落库：NO 迁移 `0025` 给承接册加可空 `decided_by`、执行事实册加可空 `recorded_by`，端点从认证信封取「发行方#sub」写入，不进摘要、不回填、读回不带；真库用例断言两列落的操作者；ADR-0338 决定四与越权风险点 2 改现行；（3）ADR-0338 Consequences 补两份意图无订阅者、`dispatch.no_subscriber` 是认下的代价（同 ADR-0202 决定六先例）。自验同前：build、vet、gofmt、含 PG 的受影响包测试全绿。
