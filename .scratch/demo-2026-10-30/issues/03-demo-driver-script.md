@@ -1,7 +1,7 @@
 # 03 演示驱动脚本
 
 Category: task
-Status: in-progress——2026-10-28 作者完工，待协调方复核与进 main，分支 claude-demo-drv（最后一笔见下方完成记录）
+Status: resolved——2026-10-28 进 main（`e22b64ce9`；全量 162 ok / 0 FAIL，种子退 0）。评审（隔离子代理，钉 `8a35a6a8a`）无阻断：破坏面只限指名库与本目录 `.run/` 进程、拒 `postgres`/`template*`、不重建已在跑的共享发行方、补余额走生产口；S1（不带 --reset 重 up 撞补款冲突）、S2、M1 由作者在 `76a04054b` 修订并实测。此前 in-progress——2026-10-28 作者完工，待协调方复核与进 main，分支 claude-demo-drv（最后一笔见下方完成记录）
 此前：in-progress——2026-10-28 tops-20（idp-parcel-91）立并认领，分支 claude-demo-drv
 Blocked by: 无
 
