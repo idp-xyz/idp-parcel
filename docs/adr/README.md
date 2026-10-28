@@ -320,6 +320,7 @@
 - 〔代决·待 TF owner 复核〕[ADR-0337：监管运输处置承接与替代/退运旅程启动各是一种运营决定——承接口核提交方抄录的协作事项本体并答带原因的待补充，两口都记提交操作者](./0337-a-regulatory-disposition-acceptance-and-an-alternate-journey-start-are-two-operation-decisions-and-the-acceptance-checks-the-item-body-it-is-handed.md)｜**入口**：承接编排与旅程启动编排都已实现却没有生产入口。**取法**：两口各挂操作者渠道「运营决定」能力面的一种决定（监管运输处置承接、替代或退运旅程启动），按 ADR-0151 定族判据；承接口核载荷里据关务协作事项抄录的载运对象、移动动作、起止责任，缺则答待补充并指名缺哪一项（ADR-0265 决定四）；两口都把提交操作者作为操作证据记在决定记录上，只进审计。
 - 〔代决·待 NO owner 复核〕[ADR-0338：节点监管协作承接是一种运营决定，执行事实是作业事实登记面上的一种事实——登记的现场节点必须就是承接决定里的节点](./0338-node-collaboration-acceptance-is-an-operation-decision-and-the-execution-fact-is-a-work-fact-recorded-by-the-acceptors-node.md)｜**入口**：承接编排与执行事实登记编排已实现（含 ADR-0333 的待补充轮次）却没有生产入口。**取法**：承接决定与执行事实都把操作者记在记录上（只进审计）；承接决定挂操作者渠道「运营决定」能力面的一种（节点监管协作承接）；执行事实挂「作业事实登记」能力面、判自己那一种事实（节点监管协作执行）的准入范围；执行事实登记的现场节点须与承接决定里的节点一致。
 - 〔代决·待 SA owner 复核〕[ADR-0339：费用补拍确认与客户对账单发布是两种运营决定；登了对账周期的账户在每个截止日关上之后自动截单](./0339-charge-confirmation-and-statement-publication-are-operator-decisions-and-a-registered-statement-cycle-cuts-on-its-closing-dates.md)｜**入口**：确认与截单编排已装在 parcel-api，却没有任何口能调到；截单的触发策略没定。**取法**：开两个运营决定口，各一种授予；另立对账周期册，登了周期的账户由 dispatch 在每个截止日关上之后自动截单；客户费用读口多透出归属日与所在对账单，供人列清单。
+- 〔代决·待 SA owner 复核〕[ADR-0340：供应商账单接收与审核应付是两种运营决定，各自记下点它的那个人](./0340-supplier-bill-reception-and-audit-are-two-operator-decisions-and-each-records-the-operator.md)｜**入口**：供应商账单的接收编排与审核（它的 `Audit`）已装在 parcel-api，没有任何口能调到；UC-SA-004 要求接收与审核分别授权、审计记下审核人与决定人，审核应付上的 `auditor_ref` 却是审核授权册登的那一方。**取法**：开两个运营决定口，各一种授予；两份命令带操作证据，落在接收行与应付行上，只作审计。
 <!-- 已接受决策列表完 -->
 
 ## 已被取代决策
