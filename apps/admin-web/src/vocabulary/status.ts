@@ -342,6 +342,22 @@ export const statusVocabulary: Record<string, StatusEntry> = {
   EXTERNAL_FUNDS_FACT: muted('外部收付款'),
   EXTERNAL_FUNDS_FACT_ADOPTION: muted('收付款登记'),
   CLAIM_SUBMISSION: muted('索赔提交'),
+  // —— 接受判断(复核、授权处置页的已记录判断)· parcel-shipment ——
+  REACHABLE: good('可送达'),
+  UNREACHABLE: bad('不可送达'),
+  INSUFFICIENT_EVIDENCE: warn('依据不足'),
+  NOT_APPLICABLE: muted('不适用'),
+  SATISFIED: good('已通过'),
+  RESTRICTED: warn('受限'),
+  ALL_CONTROLS_PASS: good('全部通过'),
+  CREDIT_EXPOSED: warn('信用敞口'),
+  PREPAID_FREEZE: info('预付冻结'),
+  CREDIT_CHECK: info('信用检查'),
+  CREDIT_LIMIT_EXCEEDED: bad('超出信用额度'),
+  RECORDED: good('已记录'),
+  FORMED: good('已形成'),
+  ALREADY_COMPLETED: muted('已有记录'),
+  COMMERCIAL_BASIS_UNAVAILABLE: warn('商务依据暂不可用'),
 };
 
 /**
@@ -396,6 +412,15 @@ export const scopedStatusVocabulary: Record<string, Record<string, StatusEntry>>
     LENGTH: muted('长度'),
     VOLUME: muted('体积'),
     COUNT: muted('件数'),
+  // 接受前财务控制的结果:HELD 是占用已成立,不是查验。
+  'financial-control': { HELD: good('已占用'), RESTRICTED: warn('受限'), NOT_APPLICABLE: muted('不适用'), CREDIT_EXPOSED: warn('信用敞口') },
+  // 接受判断任务停在哪一步等谁(ResumePath):词说「等谁」,不说分诊结论。
+  'resume-path': {
+    MANUAL_REVIEW: warn('等人工复核'),
+    AUTHORIZED_DISPOSITION: warn('等授权处置'),
+    CUSTOMER_SUPPLEMENT: warn('等客户补充'),
+    INTERNAL_RETRY: info('系统重试中'),
+    OPERATOR_REGISTRATION: warn('等运营登记'),
   },
 };
 

@@ -1,6 +1,7 @@
-import { operatorRefusalSentence, type OperatorRefusalKind } from '../../auth/access-refusal';
 import type { ModuleInfo } from '../../navigation';
 import type { TemplateViewState } from '../../templates/state-slot';
+import type { TechnicalRow } from '../../components/TechnicalDetails';
+import { labelFor } from '../../vocabulary/status';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import type {
   ApiResult,
@@ -10,15 +11,13 @@ import type {
   AuthorizedDispositionResponseBody,
   RestrictedControlItemRecord,
 } from './api';
-import {
-  authorizedDispositionOutcomeViews,
-  controlFailureDispositionLabels,
-  dispositionChoiceLabels,
-  withCode,
-} from './presentation';
+import { authorizedDispositionOutcomeViews, controlFailureDispositionLabels, dispositionChoiceLabels } from './presentation';
+import { shipmentNoOf } from './ref-no';
+import { commandNoteOf, type OperatorNote } from './words';
 
 // 授权处置页的呈现逻辑,与页面组件分开住:这一层没有 React,测试能直接钉三态与决定集
-// (票 sa-preacceptance-policy-view/05)。页面组件只做取数与摆放。
+// (票 sa-preacceptance-policy-view/05)。页面组件只做取数与摆放。屏上说运营的话:码经词典译,
+// 标识与版本进技术详情。
 
 /** 决定集里的一格。页面组件按 id 配图标;这里不带图标,才能在没有 React 的测试里钉它。 */
 export interface DispositionChoiceOption {
@@ -38,9 +37,10 @@ export const dispositionChoiceOptions: readonly DispositionChoiceOption[] = [
 
 export interface DispositionQueueRow {
   id: string;
+  /** 屏上的运单号(去前缀)。 */
   title: string;
   subtitle: string;
-  /** 队列行右侧的状态字:受限项数;受限项为空数组时改说坏数据征兆。 */
+  /** 队列行右侧的状态字:受限项数;受限项为空数组时改说数据异常。 */
   statusText: string;
   /**
    * 停在等处置的委托不该没有受限项——读面对这一格给的是空数组而不是 null,正是为了让它可观察。
@@ -54,92 +54,60 @@ export function dispositionQueueRowOf(entry: AuthorizedDispositionQueueEntry): D
   const count = entry.restrictedItems.length;
   return {
     id: entry.shipmentRequestId,
-    title: entry.shipmentRequestId,
-    subtitle: `${entry.customerAccountId} · ${entry.declaredParcelCount} 件 · 版本 ${entry.submissionVersionId}`,
-    statusText: count === 0 ? '受限项为空(坏数据征兆)' : `${count} 项受限`,
+    title: shipmentNoOf(entry.shipmentRequestId),
+    subtitle: `客户 ${entry.customerAccountId} · ${entry.declaredParcelCount} 件`,
+    statusText: count === 0 ? '没有受限项(数据异常)' : `${count} 项未通过`,
     badData: count === 0,
     meta: formatInstant(entry.submittedAt),
   };
 }
 
 /**
- * 一项受限控制的一行文案。种类、受限原因、失败处置、责任引用一律原词直显;失败处置另附 PC CONTEXT
- * 的中文。两格采用引用没有就不写——没采用过就是没采用过,写「无」会把「读过了,答案是没有」与
- * 「采用之前记下的」并成一句。
+ * 一项受限控制的一行文案:哪项检查没过、为什么、策略说不过时怎么办、责任在谁。种类与原因经词典译;
+ * 两格采用引用没有就不写——没采用过就是没采用过,写「无」会把「读过了,答案是没有」与「采用之前记下的」并成一句。
  */
 export function restrictedItemText(item: RestrictedControlItemRecord): string {
-  const parts = [`${item.kind} · 第 ${item.order} 项`];
-  if (item.basis) parts.push(`受限原因 ${item.basis}`);
+  const parts = [labelFor(item.kind)];
+  if (item.basis) parts.push(labelFor(item.basis));
   if (item.failureDisposition) {
-    parts.push(
-      `失败处置 ${withCode(controlFailureDispositionLabels[item.failureDisposition], item.failureDisposition)}`,
-    );
+    parts.push(`不通过时${controlFailureDispositionLabels[item.failureDisposition] ?? item.failureDisposition}`);
   }
-  if (item.responsibility) parts.push(`责任 ${item.responsibility}`);
+  if (item.responsibility) parts.push(`责任方 ${item.responsibility}`);
   return parts.join(' · ');
 }
 
-/**
- * 处置命令口的一次答复。渠道未配置是今天的预期答案,不是故障,因此单列一格(与复核页同形);需要登录与
- * 没有授予同理,`refused` 多带那一格,页面据它在「需要登录」时接一颗重新登录。
- */
-export type DispositionCommandNote =
-  | { tone: 'unconfigured'; text: string }
-  | { tone: 'refused'; kind: OperatorRefusalKind; text: string }
-  | { tone: 'outcome'; text: string }
-  | { tone: 'problem'; text: string };
-
-export function dispositionCommandNoteOf(
-  label: string,
-  answer: ApiResult<AuthorizedDispositionResponseBody>,
-): DispositionCommandNote {
-  switch (answer.kind) {
-    case 'outcome':
-      return { tone: 'outcome', text: dispositionOutcomeText(label, answer.body) };
-    case 'unconfigured':
-      // 命令面挂字面量 UnconfiguredIntake(ADR-0085 / ADR-0055):如实说渠道未配置,不退化成「稍后重试」,
-      // 也不造开发用采信身份把它绕过去——处置人与授权依据要由已认证的操作员身份翻译得出。
-      return {
-        tone: 'unconfigured',
-        text: `「${label}」未执行:接入渠道尚未配置(HTTP 403 ACCESS_CHANNEL_NOT_CONFIGURED)。处置人与授权依据要由已认证的操作员身份翻译得出(PAR-INT-01),页面不代签,也不替任何角色决定去向。`,
-      };
-    case 'loginRequired':
-    case 'notGranted':
-      return { tone: 'refused', kind: answer.kind, text: operatorRefusalSentence(answer.kind, `「${label}」未执行`) };
-    case 'callerProblem':
-      return { tone: 'problem', text: `「${label}」被拒(HTTP ${answer.status}):${answer.code}` };
-    case 'noAnswer':
-      return {
-        tone: 'problem',
-        text: `「${label}」服务端未形成答案(HTTP ${answer.status}):${answer.code}`,
-      };
-    default:
-      return { tone: 'problem', text: `「${label}」未送达:${answer.message}` };
-  }
+/** 受限项的原码与顺序,进技术详情。 */
+export function restrictedItemTechnicalRows(items: readonly RestrictedControlItemRecord[]): TechnicalRow[] {
+  return items.map((item, index) => ({
+    label: `受限项 ${index + 1}`,
+    value: [item.kind, `#${item.order}`, item.basis ?? '', item.failureDisposition ?? '', item.responsibility ?? ''].filter(Boolean).join(' · '),
+  }));
 }
 
-// 每一格 outcome 都是形成了的业务答案,按词表呈现;随附凭据有才显:去向(原词与中文并列)、之后的
-// 委托状态、既有决定、当前版本、补偿续办引用、释放未受理待人处理(ADR-0282 决定二,处置照样成立)。
-function dispositionOutcomeText(label: string, body: AuthorizedDispositionResponseBody): string {
+export type DispositionCommandNote = OperatorNote;
+
+export function dispositionCommandNoteOf(label: string, answer: ApiResult<AuthorizedDispositionResponseBody>): DispositionCommandNote {
+  return commandNoteOf(label, answer, (body) => dispositionOutcomeText(body), (body) => body.outcome);
+}
+
+// 每一格 outcome 都是形成了的业务答案,按词表呈现;随附凭据有才显:去向、之后的运单状态、既有决定、
+// 释放未受理待人处理(ADR-0282 决定二,处置照样成立)。当前版本与补偿续办引用是标识,进技术详情。
+function dispositionOutcomeText(body: AuthorizedDispositionResponseBody): string {
   const view = authorizedDispositionOutcomeViews[body.outcome];
-  const parts = [`「${label}」结果:${withCode(view?.label, body.outcome)}`];
-  if (body.dispositionChoice) {
-    parts.push(`去向 ${withCode(dispositionChoiceLabels[body.dispositionChoice], body.dispositionChoice)}`);
-  }
-  if (body.requestState) parts.push(`委托状态 ${body.requestState}`);
-  if (body.decisionKind) parts.push(`既有决定 ${body.decisionKind}`);
-  if (body.currentVersion) parts.push(`当前版本 ${body.currentVersion}`);
-  if (body.compensationReference) parts.push(`补偿续办 ${body.compensationReference}`);
-  if (body.controlReleaseNotAccepted) parts.push('随附释放结算确定不受理,已记入释放未受理册待人处理');
+  const parts = [view?.label ?? '已处理'];
+  if (body.dispositionChoice) parts.push(`去向:${dispositionChoiceLabels[body.dispositionChoice]}`);
+  if (body.requestState) parts.push(`运单现在${labelFor(body.requestState)}`);
+  if (body.decisionKind) parts.push(`已有决定:${labelFor(body.decisionKind)}`);
+  if (body.compensationReference) parts.push('占用的资金还没释放完,系统会继续处理');
+  if (body.controlReleaseNotAccepted) parts.push('占用的资金结算侧没有受理释放,已转到「释放拒收处理」等人处理');
   const head = parts.join(' · ');
   return view ? `${head}——${view.note}` : head;
 }
 
-/** 空队列的措辞:空是答案。进队列的条件取 ADR-0132 决定一原句,不另造第二种说法。 */
+/** 空队列的措辞:空是答案。 */
 export const dispositionQueueEmptyState = {
-  title: '当前作用域没有等待授权处置的委托',
-  description:
-    '读取入口已配置,队列为空——只有接受前财务控制按共同通过条件不成立、且全部受限控制项在策略正文里登记的失败处置都是进入授权处置时,委托才停在等待授权处置;空队列是答案,不是缺陷。',
+  title: '没有等待授权处置的运单',
+  description: '受理前的付款控制没通过、而策略要求由有权的人决定去向时,运单才会停在这里;现在没有积压。',
 } as const;
 
 export function dispositionQueueViewState(

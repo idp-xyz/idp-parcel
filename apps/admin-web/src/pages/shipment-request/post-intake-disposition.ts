@@ -1,4 +1,3 @@
-import { operatorRefusalMessage } from '../../auth/access-refusal';
 import type { ModuleInfo } from '../../navigation';
 import type { TemplateViewState } from '../../templates/state-slot';
 import type { TechnicalRow } from '../../components/TechnicalDetails';
@@ -18,6 +17,9 @@ import {
 } from './api';
 import { shortPrincipalRef } from '../../components/principal-ref';
 import { parcelNoOf } from './ref-no';
+import { commandNoteOf, type OperatorNote } from './words';
+
+export type { OperatorNote };
 
 // 货物处置页(UC-PS-006 的收寄后服务处置决定;ADR-0332、ADR-0341)的呈现逻辑,与页面组件分开住:
 // 这一层没有 React,测试能直接钉去向集、草案形状、各格结果与空态措辞。
@@ -203,63 +205,15 @@ export function decisionDraftOf(
   return draft;
 }
 
-/**
- * 写动作之后给操作员看的一句话。正文只说业务上怎么回事、下一步做什么;状态码与结果码收进 technical,
- * 由页面放进「技术详情」折叠区——报障或对日志时展开就有原名。
- */
-export type OperatorNote =
-  | { tone: 'unconfigured'; text: string; technical: TechnicalRow[] }
-  | { tone: 'refused'; kind: 'loginRequired' | 'notGranted'; text: string; technical: TechnicalRow[] }
-  | { tone: 'outcome'; text: string; technical: TechnicalRow[] }
-  | { tone: 'problem'; text: string; technical: TechnicalRow[] };
-
-const noteRows = (status: number | undefined, code: string): TechnicalRow[] => [
-  { label: 'HTTP 状态', value: status === undefined ? '' : String(status) },
-  { label: '结果码', value: code },
-];
-
-/** 命令口的共同答复格:非业务答案的几格两类命令同形,业务答案由 outcomeText 按各自词表出。 */
-function commandNoteOf<Body>(
-  label: string,
-  answer: ApiResult<Body>,
-  outcomeText: (body: Body, status: number) => string,
-  outcomeCode: (body: Body) => string,
-  notVisibleCode: string,
-): OperatorNote {
-  switch (answer.kind) {
-    case 'outcome':
-      return { tone: 'outcome', text: outcomeText(answer.body, answer.status), technical: noteRows(answer.status, outcomeCode(answer.body)) };
-    case 'unconfigured':
-      return {
-        tone: 'unconfigured',
-        text: `「${label}」没有执行:这台管理台还没接上操作者登录渠道,请部署的人配置后再试。`,
-        technical: noteRows(403, 'ACCESS_CHANNEL_NOT_CONFIGURED'),
-      };
-    case 'loginRequired':
-    case 'notGranted':
-      return {
-        tone: 'refused',
-        kind: answer.kind,
-        text: operatorRefusalMessage(answer.kind, `「${label}」没有执行`),
-        technical: noteRows(answer.kind === 'loginRequired' ? 401 : 403, answer.kind === 'loginRequired' ? 'OPERATOR_CREDENTIAL_REJECTED' : 'OPERATOR_NOT_GRANTED'),
-      };
-    case 'callerProblem':
-      if (answer.code === notVisibleCode) {
-        return { tone: 'problem', text: `「${label}」没有执行:清单上已经没有这一笔,可能刚被别人处理了。请刷新清单再看。`, technical: noteRows(answer.status, answer.code) };
-      }
-      if (answer.status === 409) {
-        return { tone: 'problem', text: `「${label}」没有写入:这一项刚被别人登记成了另一个结果。已刷新,以现在显示的结果为准。`, technical: noteRows(answer.status, answer.code) };
-      }
-      return { tone: 'problem', text: `「${label}」没有被受理,请检查填写内容后再试。`, technical: noteRows(answer.status, answer.code) };
-    case 'noAnswer':
-      return { tone: 'problem', text: `「${label}」这次没有处理成功,可以稍后再试;重试不会重复登记。`, technical: noteRows(answer.status, answer.code) };
-    default:
-      return { tone: 'problem', text: `「${label}」没有送到服务器,请检查网络后再试。`, technical: [{ label: '错误', value: answer.message }] };
-  }
-}
-
 export const REQUEST_NOT_VISIBLE = 'POST_INTAKE_DISPOSITION_REQUEST_NOT_VISIBLE';
 export const MANUAL_ITEM_NOT_VISIBLE = 'POST_INTAKE_MANUAL_ITEM_NOT_VISIBLE';
+
+/** 本页认得的两种 4xx:册上已没有这一笔(统一不可见),与先被登记成了另一个结果(409)。 */
+const notVisibleProblem = (label: string, notVisibleCode: string) => (problem: { status: number; code: string }): string | undefined => {
+  if (problem.code === notVisibleCode) return `「${label}」没有执行:清单上已经没有这一笔,可能刚被别人处理了。请刷新清单再看。`;
+  if (problem.status === 409) return `「${label}」没有写入:这一项刚被别人登记成了另一个结果。已刷新,以现在显示的结果为准。`;
+  return undefined;
+};
 
 /** 每一格 outcome 都是形成了的业务答案(ADR-0022),按词表呈现,不画成故障。 */
 function decisionOutcomeText(label: string, body: PostIntakeDispositionDecisionResponseBody): string {
@@ -287,7 +241,7 @@ function decisionOutcomeText(label: string, body: PostIntakeDispositionDecisionR
 }
 
 export function decisionNoteOf(label: string, answer: ApiResult<PostIntakeDispositionDecisionResponseBody>): OperatorNote {
-  return commandNoteOf(label, answer, (body) => decisionOutcomeText(label, body), (body) => body.outcome, REQUEST_NOT_VISIBLE);
+  return commandNoteOf(label, answer, (body) => decisionOutcomeText(label, body), (body) => body.outcome, notVisibleProblem(label, REQUEST_NOT_VISIBLE));
 }
 
 /** 决定落下(DECIDED)或已有同样的决定后,这份请求不再等回应,清单要重读;其余各格清单不变。 */
@@ -385,7 +339,7 @@ export function manualResultNoteOf(label: string, answer: ApiResult<PostIntakeMa
       return `这一项此前已登记过同样的结果,这次没有再记。${now}`;
     },
     (body) => body.outcome,
-    MANUAL_ITEM_NOT_VISIBLE,
+    notVisibleProblem(label, MANUAL_ITEM_NOT_VISIBLE),
   );
 }
 
