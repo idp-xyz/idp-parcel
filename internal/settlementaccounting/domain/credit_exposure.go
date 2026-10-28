@@ -137,6 +137,9 @@ const (
 	ExposureRecorded
 	ExposureReleased
 	ExposureRestricted
+	// ExposureConverted 是暴露已全部转入已确认未结：原金额不再占暴露额度（占额度的改由已确认未结承担）。部分转出时仍是
+	// ExposureRecorded，占着的额度少了已转出的那截（ExposedMinor）。
+	ExposureConverted
 )
 
 func (status ExposureStatus) String() string {
@@ -147,6 +150,8 @@ func (status ExposureStatus) String() string {
 		return "RELEASED"
 	case ExposureRestricted:
 		return "RESTRICTED"
+	case ExposureConverted:
+		return "CONVERTED"
 	default:
 		return ""
 	}
@@ -166,6 +171,9 @@ type CreditExposure struct {
 	releasedAt  time.Time
 	reason      RestrictionReason
 	policy      CreditPolicyReference
+	// convertedMinor 与 convertedAt 的含义同 FundsFreeze：已转入已确认未结的金额与最近一次转出的时刻，原金额不改写。
+	convertedMinor int64
+	convertedAt    time.Time
 }
 
 func (exposure CreditExposure) ExposureID() ExposureID {
@@ -194,6 +202,24 @@ func (exposure CreditExposure) ReleasedAt() time.Time {
 
 func (exposure CreditExposure) Reason() RestrictionReason {
 	return exposure.reason
+}
+
+// ConvertedMinor 是已转入已确认未结的金额。
+func (exposure CreditExposure) ConvertedMinor() int64 {
+	return exposure.convertedMinor
+}
+
+// ConvertedAt 是最近一次转出的时刻；从未转出为零值。
+func (exposure CreditExposure) ConvertedAt() time.Time {
+	return exposure.convertedAt
+}
+
+// RemainingMinor 是这笔暴露此刻还占着的额度：记录中时是原金额减已转出，其余状态不占。
+func (exposure CreditExposure) RemainingMinor() int64 {
+	if exposure.status != ExposureRecorded {
+		return 0
+	}
+	return exposure.amountMinor - exposure.convertedMinor
 }
 
 // Policy 是这次暴露据以判额度的信用政策版本。它取自形成时那份状况快照，重放交回原暴露时
@@ -290,13 +316,34 @@ func (ledger *CreditExposureLedger) restricted(
 	}, nil
 }
 
-// Release 把一笔已记录暴露放开。重复释放返回与首次相同的答案，包括原释放时间。
+// Convert 把一笔记录中的暴露按金额转入已确认未结：转出的部分不再占暴露额度，改由已确认未结在信用状况里承担。
+// 与 FreezeLedger.Convert 同一份纪律，但是另一本账上的另一份实现（ADR-0047 两轨不借用）。
+func (ledger *CreditExposureLedger) Convert(requestID ControlRequestID, minor int64, convertedAt time.Time) (CreditExposure, error) {
+	exposureID, found := ledger.byRequest[requestID]
+	if !found {
+		return CreditExposure{}, ErrExposureNotFound
+	}
+	exposure := ledger.byExposure[exposureID]
+	if minor <= 0 || convertedAt.IsZero() || convertedAt.Before(exposure.exposedAt) ||
+		exposure.status != ExposureRecorded || minor > exposure.RemainingMinor() {
+		return CreditExposure{}, ErrInvalidConversion
+	}
+	exposure.convertedMinor += minor
+	exposure.convertedAt = convertedAt.UTC()
+	if exposure.convertedMinor == exposure.amountMinor {
+		exposure.status = ExposureConverted
+	}
+	ledger.byExposure[exposureID] = exposure
+	return exposure, nil
+}
+
+// Release 把一笔已记录暴露放开。重复释放返回与首次相同的答案，包括原释放时间。已转满的暴露没有可放的东西，原样交回。
 func (ledger *CreditExposureLedger) Release(exposureID ExposureID, releasedAt time.Time) (CreditExposure, error) {
 	exposure, found := ledger.byExposure[exposureID]
 	if !found {
 		return CreditExposure{}, ErrExposureNotFound
 	}
-	if exposure.status == ExposureReleased {
+	if exposure.status == ExposureReleased || exposure.status == ExposureConverted {
 		return exposure, nil
 	}
 	if releasedAt.IsZero() || releasedAt.Before(exposure.exposedAt) {
@@ -315,9 +362,7 @@ func (ledger *CreditExposureLedger) Release(exposureID ExposureID, releasedAt ti
 func (ledger *CreditExposureLedger) ExposedMinor() int64 {
 	total := int64(0)
 	for _, exposure := range ledger.byExposure {
-		if exposure.status == ExposureRecorded {
-			total += exposure.amountMinor
-		}
+		total += exposure.RemainingMinor()
 	}
 	return total
 }

@@ -138,7 +138,8 @@ func (handler *ReleasePreAcceptanceControlHandler) Handle(
 		// 已释放的再请求一次只交回原释放，不回写：这一册上没有要推进的行，Save 走一遍整册只是逐行撞键、一行不改，
 		// 白白锁一遍整个作用域的行。
 		result.outcome, result.freeze, result.hasFreeze = ControlReleased, freeze, true
-	} else if found {
+	} else if found && freeze.Status() != domain.FreezeConverted {
+		// 已转满的冻结不在此列：它已是正式扣费，没有可放的东西，按`无可释放`答（费用确认转出的口见 ConvertOccupationOnChargeConfirmationHandler）。
 		released, err := ledger.Release(freeze.FreezeID(), handler.clock.Now())
 		if err != nil {
 			// 刚找到的冻结释放不了，只剩编程错误或时钟异常（释放时刻早于冻结时刻）。两者都
@@ -161,7 +162,7 @@ func (handler *ReleasePreAcceptanceControlHandler) Handle(
 	if exposure, found := exposureLedger.FindByRequest(command.RequestID); found && exposure.Status() == domain.ExposureReleased {
 		// 理由同冻结那本：已释放即交回原释放，不整册回写。
 		result.outcome, result.exposure, result.hasExposure = ControlReleased, exposure, true
-	} else if found {
+	} else if found && exposure.Status() != domain.ExposureConverted {
 		released, err := exposureLedger.Release(exposure.ExposureID(), handler.clock.Now())
 		if err != nil {
 			return ReleasePreAcceptanceControlResult{}, fmt.Errorf("release exposure: %w", err)

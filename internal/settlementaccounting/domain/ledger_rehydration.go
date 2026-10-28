@@ -35,7 +35,7 @@ func (exposure CreditExposure) Association() BusinessAssociationReference {
 }
 
 // Entries 按内部编号序交回账本里的全部冻结。`业务限制`从不入账本，所以这里只有
-// HELD/RELEASED 两态。
+// HELD/RELEASED/CONVERTED 三态。
 func (ledger *FreezeLedger) Entries() []FundsFreeze {
 	entries := make([]FundsFreeze, 0, len(ledger.byFreeze))
 	for _, freeze := range ledger.byFreeze {
@@ -88,6 +88,9 @@ type RehydrateFundsFreezeSpec struct {
 	FrozenAt    time.Time
 	ReleasedAt  time.Time
 	Digest      string
+	// ConvertedMinor 与 ConvertedAt 是已转为正式扣费的金额与最近一次转出的时刻；从未转出为 0 与零值。
+	ConvertedMinor int64
+	ConvertedAt    time.Time
 }
 
 // RehydrateFreezeLedger 从库里读到的产物重建冻结账本。
@@ -108,10 +111,20 @@ func RehydrateFreezeLedger(specs []RehydrateFundsFreezeSpec) (*FreezeLedger, err
 		); err != nil {
 			return nil, err
 		}
+		if err := validRehydratedConversion(spec.AmountMinor, spec.ConvertedMinor, spec.ConvertedAt, spec.FrozenAt); err != nil {
+			return nil, err
+		}
 		switch spec.Status {
 		case FreezeHeld:
 			if !spec.ReleasedAt.IsZero() {
 				return nil, rehydratedLedgerRefusal("HELD 的冻结带着释放时间")
+			}
+			if spec.ConvertedMinor == spec.AmountMinor {
+				return nil, rehydratedLedgerRefusal("HELD 的冻结已转满")
+			}
+		case FreezeConverted:
+			if !spec.ReleasedAt.IsZero() || spec.ConvertedMinor != spec.AmountMinor {
+				return nil, rehydratedLedgerRefusal("CONVERTED 的冻结带着释放时间或没转满")
 			}
 		case FreezeReleased:
 			if spec.ReleasedAt.IsZero() || spec.ReleasedAt.Before(spec.FrozenAt) {
@@ -137,6 +150,9 @@ func RehydrateFreezeLedger(specs []RehydrateFundsFreezeSpec) (*FreezeLedger, err
 			status:      spec.Status,
 			frozenAt:    spec.FrozenAt.UTC(),
 			releasedAt:  spec.ReleasedAt.UTC(),
+
+			convertedMinor: spec.ConvertedMinor,
+			convertedAt:    spec.ConvertedAt.UTC(),
 		}
 		ledger.byRequest[spec.RequestID] = freezeID
 		ledger.digests[spec.RequestID] = spec.Digest
@@ -161,6 +177,9 @@ type RehydrateCreditExposureSpec struct {
 	ReleasedAt  time.Time
 	Digest      string
 	Policy      CreditPolicyReference
+	// ConvertedMinor 与 ConvertedAt 同冻结那一份：已转入已确认未结的金额与最近一次转出的时刻。
+	ConvertedMinor int64
+	ConvertedAt    time.Time
 }
 
 // RehydrateCreditExposureLedger 从库里读到的产物重建信用暴露账本。代数与冻结账本
@@ -178,10 +197,20 @@ func RehydrateCreditExposureLedger(specs []RehydrateCreditExposureSpec) (*Credit
 		); err != nil {
 			return nil, err
 		}
+		if err := validRehydratedConversion(spec.AmountMinor, spec.ConvertedMinor, spec.ConvertedAt, spec.ExposedAt); err != nil {
+			return nil, err
+		}
 		switch spec.Status {
 		case ExposureRecorded:
 			if !spec.ReleasedAt.IsZero() {
 				return nil, rehydratedLedgerRefusal("RECORDED 的暴露带着释放时间")
+			}
+			if spec.ConvertedMinor == spec.AmountMinor {
+				return nil, rehydratedLedgerRefusal("RECORDED 的暴露已转满")
+			}
+		case ExposureConverted:
+			if !spec.ReleasedAt.IsZero() || spec.ConvertedMinor != spec.AmountMinor {
+				return nil, rehydratedLedgerRefusal("CONVERTED 的暴露带着释放时间或没转满")
 			}
 		case ExposureReleased:
 			if spec.ReleasedAt.IsZero() || spec.ReleasedAt.Before(spec.ExposedAt) {
@@ -208,6 +237,9 @@ func RehydrateCreditExposureLedger(specs []RehydrateCreditExposureSpec) (*Credit
 			exposedAt:   spec.ExposedAt.UTC(),
 			releasedAt:  spec.ReleasedAt.UTC(),
 			policy:      spec.Policy,
+
+			convertedMinor: spec.ConvertedMinor,
+			convertedAt:    spec.ConvertedAt.UTC(),
 		}
 		ledger.byRequest[spec.RequestID] = exposureID
 		ledger.digests[spec.RequestID] = spec.Digest
@@ -237,6 +269,20 @@ func validRehydratedEntry(
 	}
 	if strings.TrimSpace(digest) == "" {
 		return rehydratedLedgerRefusal("幂等指纹缺失——丢了它，同身份异内容的冲突判定退化成全部放行")
+	}
+	return nil
+}
+
+// validRehydratedConversion 核转出两格的互相印证：转出金额在 0 到原金额之间；有转出才有转出时刻，且不早于占用发生。
+func validRehydratedConversion(amountMinor, convertedMinor int64, convertedAt, occurredAt time.Time) error {
+	if convertedMinor < 0 || convertedMinor > amountMinor {
+		return rehydratedLedgerRefusal("转出金额不在 0 与原金额之间")
+	}
+	if (convertedMinor == 0) != convertedAt.IsZero() {
+		return rehydratedLedgerRefusal("转出金额与转出时刻不同在或同缺")
+	}
+	if !convertedAt.IsZero() && convertedAt.Before(occurredAt) {
+		return rehydratedLedgerRefusal("转出时刻早于占用发生")
 	}
 	return nil
 }

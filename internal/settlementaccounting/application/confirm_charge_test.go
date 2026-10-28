@@ -154,6 +154,24 @@ func (double *confirmationHandoffDouble) HandOffChargeConfirmation(
 	return nil
 }
 
+// occupationConversionDouble 记下每次占用收口调用；err 非空时让收口失败。
+type occupationConversionDouble struct {
+	charges []domain.CustomerChargeID
+	err     error
+}
+
+func (double *occupationConversionDouble) ConvertOnConfirmation(
+	_ context.Context,
+	_ domain.TenantID,
+	charge domain.CustomerCharge,
+) error {
+	if double.err != nil {
+		return double.err
+	}
+	double.charges = append(double.charges, charge.ID())
+	return nil
+}
+
 type confirmClock struct{ at time.Time }
 
 func (clock confirmClock) Now() time.Time { return clock.at }
@@ -165,6 +183,7 @@ type confirmFixture struct {
 	conditions   *conditionViewDouble
 	facts        *factsViewDouble
 	handoff      *confirmationHandoffDouble
+	occupation   *occupationConversionDouble
 	handler      *application.ConfirmChargeHandler
 }
 
@@ -177,6 +196,7 @@ func newConfirmFixture(t *testing.T) *confirmFixture {
 		conditions:   &conditionViewDouble{configured: true, met: true},
 		facts:        &factsViewDouble{configured: true, facts: registeredFacts(t)},
 		handoff:      &confirmationHandoffDouble{},
+		occupation:   &occupationConversionDouble{},
 	}
 	handler, err := application.NewConfirmChargeHandler(application.ConfirmChargeDeps{
 		Charges:      fixture.store,
@@ -184,6 +204,7 @@ func newConfirmFixture(t *testing.T) *confirmFixture {
 		Facts:        fixture.facts,
 		Attributions: newAttributionJudge(t, fixture.forms, fixture.arrangements),
 		Downstream:   fixture.handoff,
+		Occupation:   fixture.occupation,
 		Clock:        confirmClock{at: chargeConfirmedAt},
 	})
 	if err != nil {
@@ -268,6 +289,37 @@ func TestAMetConditionConfirmsWithoutTouchingTheAmount(t *testing.T) {
 	}
 	if len(fixture.handoff.intents) != 1 {
 		t.Fatalf("intents = %d, want 1", len(fixture.handoff.intents))
+	}
+	if len(fixture.occupation.charges) != 1 || fixture.occupation.charges[0] != charge.ID() {
+		t.Fatalf("occupation conversions = %v, want exactly the confirmed charge", fixture.occupation.charges)
+	}
+}
+
+// Covers: SA CONTEXT「费用确认后将适用冻结转为正式扣费」——占用收口失败时确认编排以错误交回（调用方事务整笔回滚），
+// 不翻成未决：费用已写下，翻成未决会把「确认了、占用还挂着」提交出去；意图也不发。
+func TestAFailedOccupationConversionFailsTheConfirmationInsteadOfLeavingItHalfDone(t *testing.T) {
+	fixture := newConfirmFixture(t)
+	fixture.occupation.err = errors.New("ledger down")
+
+	if _, err := fixture.handler.Handle(context.Background(), confirmCommand(t)); err == nil {
+		t.Fatal("占用收口失败却答了结果——事务会带着半截确认提交")
+	}
+	if len(fixture.handoff.intents) != 0 {
+		t.Fatalf("intents = %d, want 0（收口没成，意图不发）", len(fixture.handoff.intents))
+	}
+}
+
+// 重放读回已确认时也走一遍收口：它以包裹为单位幂等，让确认当时尚未收口的存量费用在重放里补上。
+func TestAReplayedConfirmationRunsTheOccupationConversionAgain(t *testing.T) {
+	fixture := newConfirmFixture(t)
+	command := confirmCommand(t)
+	for range 2 {
+		if _, err := fixture.handler.Handle(context.Background(), command); err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+	}
+	if len(fixture.occupation.charges) != 2 {
+		t.Fatalf("occupation conversions = %d, want 2（首确一次、重放一次，幂等归收口自己）", len(fixture.occupation.charges))
 	}
 }
 

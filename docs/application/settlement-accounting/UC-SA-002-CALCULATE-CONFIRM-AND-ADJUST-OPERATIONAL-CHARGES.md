@@ -236,5 +236,6 @@
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
 | 接受前财务控制：估价采用与 SELL 计费时点采用同户一份计价范围 | 两只登记编排各写各的册、互不读，同一户可以登两个范围 | [code/62](../../../.scratch/docs-consistency/code/62-the-estimate-and-billing-moment-adoptions-may-register-different-pricing-scopes.md) |
+| 已接受委托下某件包裹取消或失败时，释放它在接受前占用里的份额（CONTEXT「取消或失败时显式释放」的包裹粒度） | 转出册与账本已能表达部分转出、余额可放；但 `parcel-shipment` 在委托已接受之后不再请求释放占用，没有触发口，该份额一直占着 | [ADR-0343](../../adr/0343-a-confirmed-charge-converts-its-parcels-pre-acceptance-occupation-in-the-confirming-transaction.md) 决定八 |
 
 完成本用例只证明纯计价评价、财务采用、费用生命周期和接受前财务控制能够保持独立、可追溯和追加式；客户对账、供应商审核、真实收付款和经营结果分别由其他 PN-07 用例形成。

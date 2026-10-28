@@ -121,14 +121,32 @@ func (result ConfirmChargeResult) ConfirmationHandoffReference() string {
 	return result.handoff
 }
 
+// OccupationConversion 是确认编排在费用定格之后要同笔做的占用收口（ADR-0343）：这笔费用对应的接受前冻结与信用暴露转为
+// 正式扣费，该作用域的入账余额与已确认未结按账重算。返回错误即调用方事务整笔回滚——费用确认与占用收口同生同灭。
+// 实现是 ConvertOccupationOnChargeConfirmationHandler。
+type OccupationConversion interface {
+	ConvertOnConfirmation(ctx context.Context, tenant domain.TenantID, charge domain.CustomerCharge) error
+}
+
+// ConvertOnConfirmation 让占用收口编排满足 OccupationConversion：确认编排只关心收口成没成，转出多少留给测试与留痕读 Handle。
+func (handler *ConvertOccupationOnChargeConfirmationHandler) ConvertOnConfirmation(
+	ctx context.Context,
+	tenant domain.TenantID,
+	charge domain.CustomerCharge,
+) error {
+	_, err := handler.Handle(ctx, tenant, charge)
+	return err
+}
+
 // ConfirmChargeDeps 是确认编排的依赖。Attributions 是归属日判定本体：确认同笔判归属日，判法与截单时当场判
-// 的是同一份（ADR-0269 决定三）。
+// 的是同一份（ADR-0269 决定三）。Occupation 在费用定格（含重放读回已确认）之后收口接受前占用。
 type ConfirmChargeDeps struct {
 	Charges      ports.CustomerChargeStore
 	Conditions   ports.ConfirmationConditionView
 	Facts        ports.ConfirmedChargeFactsView
 	Attributions *JudgeChargeAttributionHandler
 	Downstream   ports.ChargeConfirmationHandoff
+	Occupation   OccupationConversion
 	Clock        ports.Clock
 }
 
@@ -139,7 +157,7 @@ type ConfirmChargeHandler struct {
 // NewConfirmChargeHandler 在装配时核齐依赖：缺件在这里报，不等到确认那一刻才撞空指针。
 func NewConfirmChargeHandler(deps ConfirmChargeDeps) (*ConfirmChargeHandler, error) {
 	if deps.Charges == nil || deps.Conditions == nil || deps.Facts == nil || deps.Attributions == nil ||
-		deps.Downstream == nil || deps.Clock == nil {
+		deps.Downstream == nil || deps.Occupation == nil || deps.Clock == nil {
 		return nil, fmt.Errorf("%w: confirm charge", ErrNilDependency)
 	}
 	return &ConfirmChargeHandler{deps: deps}, nil
@@ -169,7 +187,11 @@ func (handler *ConfirmChargeHandler) Handle(
 		return ConfirmChargeResult{outcome: ConfirmNotAccepted}, nil
 	}
 	if charge.Stage() == domain.ChargeConfirmed {
-		// 已确认费用重复提交：返回原确认，不二确、不换依据（幂等）。
+		// 已确认费用重复提交：返回原确认，不二确、不换依据（幂等）。占用收口也重走一遍：它以包裹为单位幂等，已转出的
+		// 不再转，只让确认当时尚未收口的存量费用在重放里补上。
+		if err := handler.deps.Occupation.ConvertOnConfirmation(ctx, command.TenantID, charge); err != nil {
+			return ConfirmChargeResult{}, fmt.Errorf("convert occupation on replayed confirmation: %w", err)
+		}
 		return handler.alreadyConfirmed(ctx, command.TenantID, charge), nil
 	}
 
@@ -229,6 +251,10 @@ func (handler *ConfirmChargeHandler) Handle(
 	}
 	switch saved {
 	case ports.ChargeSaved:
+		// 占用收口与费用定格同一笔：失败不翻成未决（费用已写下，翻了就提交出「确认了、占用还挂着」），而是错误交回让事务回滚。
+		if err := handler.deps.Occupation.ConvertOnConfirmation(ctx, command.TenantID, confirmed); err != nil {
+			return ConfirmChargeResult{}, fmt.Errorf("convert occupation on confirmation: %w", err)
+		}
 		result := ConfirmChargeResult{outcome: ChargeConfirmedOutcome, charge: confirmed, hasCharge: true}
 		result.handoff = handler.handOff(ctx, command.TenantID, confirmed)
 		return result, nil
@@ -237,6 +263,9 @@ func (handler *ConfirmChargeHandler) Handle(
 		winner, found, err := handler.deps.Charges.FindByID(ctx, command.TenantID, chargeID)
 		if err != nil || !found {
 			return chargeStoreUndecided(command.ChargeID), nil
+		}
+		if err := handler.deps.Occupation.ConvertOnConfirmation(ctx, command.TenantID, winner); err != nil {
+			return ConfirmChargeResult{}, fmt.Errorf("convert occupation on replayed confirmation: %w", err)
 		}
 		return handler.alreadyConfirmed(ctx, command.TenantID, winner), nil
 	default:

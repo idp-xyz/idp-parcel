@@ -201,7 +201,7 @@ func NewCreditStandings(db *bentopg.DB, exposures *CreditExposureLedgers) (*Cred
 var _ ports.CreditStandingView = (*CreditStandings)(nil)
 
 // LoadCreditStanding 取一个账期作用域当前的信用状况：额度与逾期来自登记，已占用
-// 暴露由暴露账本当场求和。
+// 暴露由暴露账本当场求和，再加该作用域的已确认未结（费用确认后暴露转入它，核销让它下降）。
 func (repository *CreditStandings) LoadCreditStanding(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -238,7 +238,27 @@ func (repository *CreditStandings) LoadCreditStanding(
 		return domain.CreditStanding{}, fmt.Errorf("load credit standing: %w", err)
 	}
 
-	standing, err := domain.NewCreditStanding(scope, limit, ledger.ExposedMinor(), overdue)
+	// 已确认未结与暴露一起占额度（ADR-0343 决定三）：费用确认把暴露转出之后，占额度的改由已确认未结承担，它随核销下降、
+	// 额度随之恢复。未登记运营余额的作用域没有已确认未结，如实按 0 算——那不是「未登记即不可用」的那一格：信用状况
+	// 自己的行已经在上面核过。读这一格与读暴露账本在同一事务视图里，不会读到暴露已转出、未结还没进的中间态。
+	var unsettled int64
+	err = querier.QueryRow(ctx,
+		`SELECT unsettled_minor
+		   FROM settlement_accounting.operational_balance
+		  WHERE tenant_id = $1
+		    AND legal_entity = $2
+		    AND account_id = $3
+		    AND currency = $4`,
+		tenant.String(),
+		scope.LegalEntity().String(),
+		scope.Account().String(),
+		scope.Currency().String(),
+	).Scan(&unsettled)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return domain.CreditStanding{}, fmt.Errorf("load credit standing: %w", err)
+	}
+
+	standing, err := domain.NewCreditStanding(scope, limit, ledger.ExposedMinor()+unsettled, overdue)
 	if err != nil {
 		return domain.CreditStanding{}, fmt.Errorf("load credit standing: %w", err)
 	}

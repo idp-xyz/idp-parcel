@@ -487,7 +487,8 @@ func controlItemFor(
 		}
 		kind = psdomain.PrepaidFreezeControlItem
 		switch freeze.Status() {
-		case sadomain.FreezeHeld:
+		case sadomain.FreezeHeld, sadomain.FreezeConverted:
+			// 已转为正式扣费的冻结是占用成立之后的后续状态：重放一次施加交回的是原冻结，不翻成未通过。
 		case sadomain.FreezeRestricted:
 			restricted, reason = true, freeze.Reason().String()
 		case sadomain.FreezeReleased:
@@ -505,7 +506,7 @@ func controlItemFor(
 		}
 		kind = psdomain.CreditCheckControlItem
 		switch exposure.Status() {
-		case sadomain.ExposureRecorded:
+		case sadomain.ExposureRecorded, sadomain.ExposureConverted:
 		case sadomain.ExposureRestricted:
 			restricted, reason = true, exposure.Reason().String()
 		case sadomain.ExposureReleased:
