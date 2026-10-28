@@ -1,7 +1,7 @@
 # 08 演示种子的门禁目录与「税费付款」规则挂错范围、未覆盖各受守护动作
 
 Category: task
-Status: in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-lw-seed（最后一笔见下方提交）。此前：in-progress——2026-10-28 会话 tops-20（idp-parcel-91）立并认领：psb/05 收口重走停点一；分支 claude-lw-seed
+Status: resolved——2026-10-28 进 main（`23d4ad7e2`；全量 160 ok / 0 FAIL，种子退 0），见文末「进 main 记录」。此前 in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-lw-seed（最后一笔见下方提交）。此前：in-progress——2026-10-28 会话 tops-20（idp-parcel-91）立并认领：psb/05 收口重走停点一；分支 claude-lw-seed
 Blocked by: 无
 
 ## 现象
@@ -25,3 +25,12 @@ psb/05「收口重走（钉 `d78fd1fbf`，2026-10-28）」停点一：种子的�
 - 自验（含 PG，证据只记 `S`）：一次性库 `seed08`，`seed.sh` 退 0。起 `parcel-api`、`parcel-dispatch`（前置照动线），不补登任何行：提交 `201 SUBMITTED`；dispatch 接受；预报后收寄 `201 INTAKE_FORMED`；`declare-one-parcel.sh` 立案 `ESTABLISHED`、授权确认、提交 `DECLARATION_SUBMITTED`；报关服务商令牌 `RELEASE_RESULT`/`FULL`，范围取单元，答 `201 RESULT_RECORDED`；放行门禁核对（单元范围、`CROSS_CUSTOMS_MOVEMENT`）`201 RECORDED`、`MET`、前置 `SYN-PRE-EXPORT-DECL-RELEASED`；同范围另三个动作核对各 `201`、`NOT_APPLICABLE`（不再是目录未登）；干线委托 `v3` `201 COMMISSION_SUBMITTED`；深圳口岸交给干线承运商 `201 HANDOVER_REGISTERED`，`gateReading.answer` 为 **`ADMITTED`**；判断册里 `OUTBOUND_RELEASE` 为 `NOT_GUARDED`/`GATE_NOT_APPLICABLE`、`CROSS_CUSTOMS_MOVEMENT` 为 `ADMITTED`/`RELEASED_IN_FULL`、来源是那条放行结果。走完已停进程、删库、清令牌与二进制。`go test -count=1 -p 1 ./cmd/parcel-customs-register/... ./cmd/parcel-dispatch/... ./cmd/parcel-api/...` 通过。没有测试按路径读 `data/customs`（票面那条 grep 无命中），故读种子的用例按 `demo-seeds` 的几处一并跑。
 - 没实打：出发、有效交付两个动作的读数没在进程上走（那两道目录与规则行在位，核对口答`不适用`为证）；订舱与承运答复、SHA→SZX 自营段没走（与本票判据无关，装配不依赖）。
 - 留给协调方：无新增停点。
+
+## 评审记录（2026-10-28，隔离子代理，钉 `ad33cadd0`）
+
+两轴无阻断。对照 `gateFor`：门禁读数按（动作，单元范围，单元程序）匹配，新种子的范围与边界正是它；四个受守护动作是 `GuardedAction` 全集。只有 `CROSS_CUSTOMS_MOVEMENT` 登前置满足，其余三道空目录折为不适用，与 `DetermineGuardedActions` 一致——跨区动作放行前答 `RELEASE_NOT_RECEIVED`、收到 `FULL` 后 `ADMITTED`，没有掩盖本该有的门禁。种子号 34 起不撞（33 被 `claude-psb10` 占）。评审灌一次性库实测退 0，单元范围目录与规则各四行。非阻断：README「十一册 41 份」是计数，`claude-psb10` 进 main 后会变；`claude-psb10` 也改 `250-customs.sh`，合并时留意；动线文档那句带种子号范围的历史叙述会变旧。
+
+## 进 main 记录（2026-10-28，推送方 tops-20 / idp-parcel-91）
+
+- 分支 `claude-lw-seed` tip `ad33cadd0` 作出处；隔离树 cherry-pick 到 main，无冲突；生成物无变化；全量 160 ok / 0 FAIL；种子一次性库退 0；推确切 SHA `23d4ad7e2`。
+
