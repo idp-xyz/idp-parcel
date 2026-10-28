@@ -524,3 +524,64 @@ Claude Code 子代理做，只读代码、不改代码。worktree 分支 `claude
 - 动线脚本「起 dispatch」一节说 dispatch 对逐条投递失败一行日志都不打，今天的 dispatch 会打 `WARN Delivery failed and was recorded for retry`，带失败码。
 
 **旁证（同钉、同时段的另一路）**：会话 tops-20 派的子代理在另一只一次性库 `walk1027b`（私有集成客户端发行方 5591，02:06Z–02:19Z，走完已清）上独立走了一遍，交接 `version` 全写 `v1`。结论与上面一致：主链、SELL、BUY（CNY 8500）、客户视图终局 `SHOWN` 都走通；关务旁路到 `REGISTERED_PENDING_SEND`；结算停在 `ESTIMATED`。多见到一处：订舱口收下了已过期的班次，已记入冻结清单「记录」。另有一处观察：出发与交进同一秒报时，投影没有 `DEPARTED`，隔 3 秒再报就有。这是连打命令造成的，不记。两路重复，是因为两个会话同时认领了「预走」。
+
+## 收口重走（钉 `d78fd1fbf`，2026-10-28）
+
+用户 2026-10-28「完成最后一项吧」，会话 `tops-20` 派的 Claude Code 子代理做，只读代码、不改代码与种子。检出 `d78fd1fbf`（当时的 main，worktree 分支）。这是上面「代决」说的那次收口重走，上一节「预走」留下的两处没走到都补走了：关务放行之后交出门禁变不变、结算确认到对账单。
+
+**环境。** 一次性库 `walk1028`（55432 上 `idp-parcel-postgres-gate`），`seed.sh` 原样灌入，退 0。操作者发行方与集成客户端发行方用 compose 起的共享那两只（5556、5558）；这一轮共享的集成客户端发行方没有答 `invalid_client`，合成报关服务商与合成干线承运商的令牌都取得到，不用另起私有的。`parcel-api`（:19128）照动线「前置」设齐三族发行方、治理自授权与两个隔离开关；`parcel-dispatch` 七个变量照「前置」，拍间隔 2s。取证时段 06:52Z–07:13Z。实测只记 `S`。走完已停进程、删库、删二进制与令牌；没有起私有容器。下文凡"绕法"都是在这只一次性库上做的补登，逐条标出，未改仓内任何种子文件。
+
+**结论**：主链、关务放行、结算到对账单与供应商应付、客户视图终局、新接的五口，都走到了；申报发送仍是冻结格，其余停点都不挡上线。
+
+- 主链：提交、受理、初始路由、运输准备、预报收寄、自营段、干线、尾程、有效交付，到 PS 终局 `EFFECTIVE_DELIVERY`；BUY 供应商预期成本 CNY 8500。
+- **关务放行之后交出门禁从`未决`变`放行`——机制走通，演示种子上走不通。** 按种子原样，一立案交出门禁读数处处是 `UNDECIDED`，原因是种子登的门禁目录挂在 `SYN-SCOPE-01`，而准入判断读门禁看的是申报单元的判断范围 `SYN-UNIT-CN-EXPORT-DEMO-01`（停点一）。在一次性库上把门禁目录、前置满足与"税费付款"规则行按单元范围补登（绕法）后，放行结果 `RELEASE_RESULT`/`FULL` 一到，交给干线承运商的读数就是 `ADMITTED`，依据是 `RELEASED_IN_FULL` 且指向那条放行结果。
+- 结算：客户费用终局后自动 `CONFIRMED`；运营发布口发出对账单；供应商账单接收、审核成应付。不再停在 `ESTIMATED`。
+- 新接的口：内部合规限制、关案、节点协作承接与执行事实、收寄后处置（退运）都打到了；关案要补登义务清单才答出结论（停点二），内部合规限制建立口缺一格会答`未受理`（停点五）。
+
+### 逐段
+
+- **提交与受理**：`submit-one-shipment.sh` 答 `201 SUBMITTED`（委托 `SHR-NLZMKKV7C734F2I3Z6I66H6MQ4`，包裹 `DPCL-YW76S33ZPRJR7HOGTHR2XX6JWE`，包裹参考 `SYN-PCLREF-20261028T065238Z`），dispatch 下一拍成`已接受`；初始路由 `ROUTE_FORMED`，计划 `RPV-000000000001` 四段，`#4` 种类 `DELIVERY`。
+- **运输准备**：`#1`–`#3` 三段都答 `OPPORTUNITY_PREPARED`，选中 `SYN-SCHED-SHA-SZX-EXPRESS-2000/2026-10-28`、`SYN-SCHED-SZX-SIN-EXPRESS-1600/2026-10-29`、`SYN-SCHED-SIN-LM-SHUTTLE-0330/2026-10-30`。
+- **预报、收寄**：`submit-one-pre-advice.sh` 签出预报，带它收寄答 `201 INTAKE_FORMED`、`VERIFIED`。SELL 形成预估客户费用 CNY 9600。
+- **关务（先于任何交接）**：`declare-one-parcel.sh`——立案 `201 ESTABLISHED`（`CASE-7QIWNW3PQMP5D2FONZYCO3WAYQ`）、授权确认、申报提交 `201 DECLARATION_SUBMITTED`，首次尝试 `REGISTERED_PENDING_SEND`。随后报关服务商令牌打 `POST /customs/external-results`（`RELEASE_RESULT`、`release.kind` `FULL`，`claimedVersion` 取提交版本，`scope` 取单元）答 `201 RESULT_RECORDED`，`release_outcome` 落一行 `FULL`。
+- **放行门禁核对（launch-wiring/03）**：`POST /customs-release-gate-verifications`，范围 `SYN-SCOPE-01`、动作 `CROSS_CUSTOMS_MOVEMENT`、边界 `SYN-PROC-CN-EXPORT` 答 `201 RECORDED`、结论 `MET`、前置 `SYN-PRE-EXPORT-DECL-RELEASED`（launch-wiring/06 种的"税费付款"规则行在位，不再答 `DUTY_PAYMENT_GATE_RULE_NOT_CONFIGURED`）。换成单元范围 `SYN-UNIT-CN-EXPORT-DEMO-01` 按种子原样答 `200 UNDECIDED` / `GATE_CATALOG_NOT_CONFIGURED`（停点一）。
+- **自营段 SHA→SZX**：登班次 `201`，两池各预占 `201`，装载分配 `201`（重量行写 2）。交出 `201`、问询 `200`、出发 `201`、交进深圳口岸 `201`/`PARTICIPATION_ENDED`。这一段的读数在立案之后不再是 `NOT_GUARDED`，而是 `UNDECIDED`（停点一）；没有立案的包裹仍是 `NOT_GUARDED`。
+- **干线 SZX→SIN（顺序：放行 → 委托 → 订舱 → 交给干线）**：干线委托 `v3` `201`，订舱 `201`，承运答复（合成干线承运商令牌）`201 BOOKING_ANSWERED`；交给干线承运商 `201`；段采用 `201 COMMISSION_ADOPTED`（委托先于交接，没撞 `SEGMENT_STARTED_BEFORE_COMMISSION`）；交进新加坡枢纽 `201`。每次交接的 `scope` 与 `version` 各不相同，没有重测票 111 的同版本串情形。
+- **BUY**：实际履约发生项自动形成，`/settlement-charges?registry=supplier-expected-cost` 读到一行 CNY 8500，协议 `SYN-SUPPLIER-TRUNK-CN-SG-01/v3`。
+- **末端与终局**：尾程交接（`#4`、`FINAL_DELIVERY`）`201`，派送任务随信封形成，窗口即 `#4`；派送尝试 `201`（计划窗口取派送任务的窗口）；有效交付 `201`（读数 `UNDECIDED`，同停点一）；PS 终局一行；投影含 `final-outcome-adopted`。
+- **客户视图**：首方令牌 `GET /v1/customer-tracking-view?parcel=<包裹号>` 答 `200 CURRENT_VIEW`，新版本回指前版，里程碑与终局 `SHOWN`、ETA `PENDING_CONFIRMATION`、说明 `NOT_DISCLOSED`。
+- **结算（psb/22）**：
+  1. 终局之后客户费用 `SELLCC-…` 自动 `CONFIRMED`，确认依据 `final-outcome/<包裹>/EFFECTIVE_DELIVERY/DRV-000000000001`，归属日 2026-10-28；
+  2. 运营确认口对已确认的补拍答 `200 ALREADY_CONFIRMED`；
+  3. 运营发布口列这一笔、报合计 9600 答 `201 STATEMENT_PUBLISHED`，`customer-statement` 册多一行（行数 1、合计 9600），费用上 `billedOn` 回指该单。到点自动截单要等上海 18:00，本轮是上海当地 15 点，没等（预走时同）；
+  4. 供应商账单接收口照 BUY 预期成本录一份答 `201 BILL_RECEIVED`（逐行裁决 `MATCHED`），`supplier-bill-reception` 册 `matchCount` 1、`auditAuthorityConfigured` 真；审核口答 `201 PAYABLE_FORMED`，金额 8500 CNY；
+  5. `operating-result` 册仍空（经营结果要成本分摊，不在票 22 范围，冻结清单照旧冻结）。
+- **新接的口**：
+  - **关案（launch-wiring/02）**：对立案的那件请求关闭，按种子原样答 `200 UNDECIDED` / `OBLIGATION_INVENTORY_UNCONFIGURED`（停点二）。按案件号补登义务清单与种子里那项"已结论"的义务（绕法，受控 CLI）后答 `201 CLOSED`，再登种子里"已移交"那项后再请求答 `200 ALREADY_CLOSED`。没走到 `BLOCKED`，"已移交"项是否挡关闭本轮没测（它登在关闭之后）。
+  - **节点协作承接与执行事实（launch-wiring/04）**：深圳口岸承接决定 `ACCEPTED` 答 `201 COLLABORATION_DECIDED`（第 1 轮）；同节点设备登执行事实答 `201 EXECUTION_RECORDED`；事项未承接时登执行事实答 `200 SOURCE_NOT_ACCEPTED`。`PENDING_SUPPLEMENT` 的承接决定我两次答 `400 MALFORMED_REQUEST`，载荷对不上形状，没有追到哪一格，待补充轮次这一路本轮**未走通也未证伪**，票面真库用例已证。
+  - **内部合规限制（launch-wiring/01）**：另交一件包裹（第二件，见"停点"三、四）收寄、立案、放行后，在单元 `…-DEMO-02` 的 `LOADING_DEPARTURE` 上建立限制：载荷覆盖项缺 `standing` 答 `200 NOT_ACCEPTED`（不带原因，停点五）；写 `standing` `IN_FORCE` 后答 `201 ESTABLISHED`，随后出发前问询读数 `BLOCKED`；解除（`kind` `RELEASE`）答 `201 DECIDED`，问询读数回到 `NOT_GUARDED`。限制没有读口（`GET /customs-internal-restrictions` 答 `405`）。
+  - **收寄后处置（launch-wiring/05，ADR-0341）**：第三件包裹收寄后，运营发起 `POST /post-intake-disposition-decisions`（`direction` `RETURN`）答 `201 DECIDED`，三项所有者请求：NR `PLAN_RETURN_ROUTE`、NO `LOAD_FOR_RETURN`、TF `START_RETURN_JOURNEY`。TF 退运旅程开出（`transport_fulfillment.alternate_journey` 一行，用途 `RETURN`，依据 `POST_INTAKE_DISPOSITION/<包裹>/1`，成员为该包裹）；待人工处理清单列出 NR、NO 两项；登记结果 `HANDLED`、`UNABLE` 各答 `201 REGISTERED`，原样重登答 `200 ALREADY_REGISTERED`；`?parcel=` 读回两项带结果与处理人，未登记清单清空。
+- **关务放行 → 交出门禁变放行（第二件包裹，单元 `…-DEMO-02`）**：先补登该单元的门禁目录（`CROSS_CUSTOMS_MOVEMENT`、`OUTBOUND_RELEASE`、`LOADING_DEPARTURE` 三道）、前置满足与三道各自的"税费付款"规则行（绕法）；收寄、立案、授权、申报提交、放行结果 `FULL`、放行门禁核对（`MET`）。SHA 段问询与出发读数 `NOT_GUARDED`；深圳口岸交进后，交给干线承运商答 `201`，**读数 `ADMITTED`**（`OUTBOUND_RELEASE` 为 `NOT_GUARDED`/`GATE_NOT_APPLICABLE`，`CROSS_CUSTOMS_MOVEMENT` 为 `ADMITTED`/`RELEASED_IN_FULL`，来源是那条放行结果）。第一件包裹在同样的放行之后交给干线承运商，`CROSS_CUSTOMS_MOVEMENT` 一道同样 `ADMITTED`，被缺目录的 `OUTBOUND_RELEASE` 一道拖成整体 `UNDECIDED`（停点一的实证）。
+- **已知没有订阅者的信封**：落 `ABANDONED` / `dispatch.no_subscriber`，品类含客户视图已发布、可达性判断、放行门禁核对已记录、关案已记录、节点协作承接已决定、节点执行事实已记录、对账单已发布、费用确认已形成、供应商账单已接收、审核应付已形成、干线委托已提交、治理停权与复权已记录；与票 22、launch-wiring 04、02、03 完成记录里认下的无订阅者同类。
+- **dispatch 日志**：每次投递失败有 `WARN Delivery failed and was recorded for retry`，带 `eventType` 与 `subject`；全程没有 `ERROR`；`parcel-api` 没有 `ERROR`。
+
+### 停点
+
+一至六都已有去处，**没有挡上线的**。
+
+1. **演示种子的门禁目录与申报单元的判断范围对不上，立案之后所有交出门禁读数都是`未决`**——种子（演示租户取值），不挡。
+   - 现象：种子 250 节把门禁目录、前置满足与"税费付款"规则行登在范围 `SYN-SCOPE-01`；`declare-one-parcel.sh` 用的演示申报单元是 `SYN-UNIT-CN-EXPORT-DEMO-01`，动作准入判断读门禁是按单元的判断范围，于是 `action_admission_judgement` 落 `GATE_CATALOG_NOT_REGISTERED`（范围 `SYN-UNIT-CN-EXPORT-DEMO-01`），读数 `UNDECIDED`。在补登之后又暴露第二层：每个受守护的动作（`OUTBOUND_RELEASE`、`LOADING_DEPARTURE`、`CROSS_CUSTOMS_MOVEMENT`、`FINAL_DELIVERY`）各要一行门禁目录和各自一行"税费付款"规则行；缺哪个，该动作答 `NOT_CONFIGURED`（`DUTY_PAYMENT_RULE_NOT_REGISTERED`），整体读数仍 `UNDECIDED`。种子 32 只给 `CROSS_CUSTOMS_MOVEMENT` 登了规则行，15 只给 `FINAL_DELIVERY` 登了目录。
+   - 证据：实测——`action_admission_judgement` 的 `findings`；补登后（绕法）第二件包裹交给干线承运商读数 `ADMITTED`。机制本身通了。
+   - 归类：机制与产品策略已做完，缺的是演示租户的取值（租户取值半边）；对真实租户是"门禁目录每个申报单元范围、每个受守护动作各登一对行"的上线实施提醒。去处：冻结清单「五 → 记录」一行，演练前补种子。不立票。
+2. **关案要求这个案件有义务清单，而种子的清单挂在固定案号上，运行时立的案件永远没有**——不挡（有绕法）。
+   - 现象：`POST /customs-case-closures` 对任何运行时立的案件答 `UNDECIDED` / `OBLIGATION_INVENTORY_UNCONFIGURED`：清单与义务项是按案号登的（种子里写死 `SYN-CASE-CN-SG-01`），案号由建案口铸，登记只有受控 CLI，没有生产登记面，也没有建案时按案件要求规则形成清单的路径。
+   - 绕法：按铸出的案号用受控 CLI 登清单与义务项，之后答 `CLOSED`。
+   - 去处：冻结清单「五 → 记录」一行；真实租户每关一案要有人跑一次 CLI，量大前要补生产登记面或建案时形成。不立票。
+3. **演示账户运营余额只够两件在途，第三件委托被拒`AVAILABLE_BALANCE_INSUFFICIENT`；交付终局、费用确认、对账单发布都不释放已占用的敞口**——不挡（已知"运营余额没有生产写入方"，票 29）。
+   - 现象：种子运营余额 20000，每件冻结 9600。第一件终局、费用已确认、对账单已发布之后，`credit_exposure` 的 `EXP-0001` 仍是占用状态；第三件提交被 `RESTRICTED`、委托 `REJECTED`。本轮用直写库把余额改大（探针性绕法）以便继续。
+   - 没有追到敞口该在哪一步释放或转入应收，这里只记现象。去处：冻结清单「五 → 记录」一行，与票 29 一并看。
+4. **演示动线脚本一库一件**——脚本，不挡。`declare-one-parcel.sh` 写死申报单元与义务引用，同库第二件包裹立案答 `200 SCOPE_CONFLICT`（案件范围含义务引用），提交答 `SOURCE_CONFLICT`。第二件需要换单元与义务引用（本轮用 `…-DEMO-02` 与 `SYN-OBL-CN-EXPORT-02`，单元就绪与门禁行用受控 CLI 补登）。脚本头注已写单元只有一个，不新记。
+5. **内部合规限制建立口缺 `standing` 答`未受理`且不带原因，限制没有读口**——不挡。覆盖项 `standing` 在线格上标 `omitempty`，缺了领域层才拒，口上答 `200 NOT_ACCEPTED`，调用方只能对着源码找；与冻结清单"记录"里"交接登记答 `SOURCE_NOT_ACCEPTED` 不带原因"同类。限制读口（`GET /customs-internal-restrictions` `405`）：运营只能从准入读数间接看到限制，无法列出在力限制。去处：冻结清单一行。
+6. **申报发送通道（票 10 第 1 项）**——已知冻结格，`REGISTERED_PENDING_SEND` 照记，不算新停点。经营结果册空同理，归成本分摊（票 22 范围外、冻结清单）。
+
+**没走到**：节点协作承接的"待补充"轮次（我的载荷两次 400，没追）；到点自动截单（等上海 18:00，dispatch 真库用例已证）。
