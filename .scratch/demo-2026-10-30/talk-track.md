@@ -24,7 +24,7 @@
 
 | 演示者做什么 | 客户看到什么 | 一句话讲点 |
 |---|---|---|
-| 终端：`20-customs.sh`（约 45 秒，**现场跑**；每库只能一次） | 立案、授权确认、申报提交 `REGISTERED_PENDING_SEND` → 经通道发给合成报关服务商 → 技术回执 `ACKNOWLEDGED` → 放行结果 `RESULT_RECORDED` → 放行门禁核对 `MET` → 深圳口岸交给干线承运商 `gateReading.answer=ADMITTED` | 关务是主链旁路：放行之前跨关务区域的交出会被门禁拦住，放行事实在先才准入 |
+| 终端：`20-customs.sh`（约 45 秒；2026-10-28 已在 `demo_live` 预热，**现场不再跑**——每库只能一次，现场打开输出存档 `/home/tops/workspace/demo-2026-10-30-customs-output.txt` 逐行讲；门禁判断册按该文件末行的包裹号查） | 立案、授权确认、申报提交 `REGISTERED_PENDING_SEND` → 经通道发给合成报关服务商 → 技术回执 `ACKNOWLEDGED` → 放行结果 `RESULT_RECORDED` → 放行门禁核对 `MET` → 深圳口岸交给干线承运商 `gateReading.answer=ADMITTED` | 关务是主链旁路：放行之前跨关务区域的交出会被门禁拦住，放行事实在先才准入 |
 | 「关务案件与申报」→「关务案件」「申报单元」 | 案件（出口、监管程序、关联包裹、`未关闭`）；申报单元与对象范围 | 案件按监管程序分开建；申报单元不是委托、不是总单 |
 | 同页「资料快照」「提交版本」 | 资料快照摘要；提交版本 `当前版`，提交尝试「已登记待发送 → 发送事实已确认」，技术回执「技术成功」，监管接收/业务受理「尚无结果」 | 提交、发送、技术回执、监管接收、业务受理、放行各是一层，各占一列；技术成功不等于放行 |
 | 同页「监管结果与放行」 | 放行结果「全部放行」，范围是演示申报单元 | 放行事实带范围与条件 |
@@ -78,7 +78,7 @@
 ## 演示当天开机清单（2026-10-30）
 
 1. **提前 60 分钟**：确认共享发行方在跑（`curl -sf http://127.0.0.1:5556/dex/keys`、`5558`），**不要重建**。`scripts/demo-seeds/demo-run/up.sh <当天库名> --reset`（库名用自己的，如 `demo_live`）。
-2. **预热**：`10-main-chain.sh`、`30-settlement.sh`；`40-exceptions.sh` 可以预热也可以现场跑。`20-customs.sh` **留到现场**。
+2. **预热**：`10-main-chain.sh`、`30-settlement.sh`；`40-exceptions.sh` 可以预热也可以现场跑。`20-customs.sh` 也预热（现场跑一旦中途失败，同库不能重跑，只能 `--reset` 后全部重新预热）；输出存档到一个文件，现场打开讲。2026-10-28 已在工作树 `/home/tops/workspace/idp-parcel-demo-live`（tag `demo-2026-10-30`）、库 `demo_live` 上预热完 10、30、40、45、20，`parcel-api`、`parcel-dispatch`、管理台常驻；当天先确认 `curl -s localhost:5173` 与 `curl -s 127.0.0.1:19080/healthz` 都答 200，停了就在该工作树重跑 `up.sh demo_live --reset` 并重新预热。
    - **时间窗**：`30` 不限时段（对账单发布取费用行上服务端定的归属日；彩排时上海 18:01 失败的那一处已修，修后在上海 18:26 实跑通过）。
    - 想在页上演示收寄后处置决定，预热时另备一件「收寄后被客户取消」的包裹（见第四块前提）。
 3. **起管理台**：`cd apps/admin-web`，`PATH=$HOME/.local/node22/bin:$PATH VITE_DISPLAY_TIME_ZONE=Asia/Shanghai PARCEL_API_TARGET=http://127.0.0.1:19080 pnpm dev`；浏览器开 `http://localhost:5173`（不是 127.0.0.1），配置员 `syn-operator-config-01@syn-tenant-01.example.invalid` / `syn-demo-password` 登录。
