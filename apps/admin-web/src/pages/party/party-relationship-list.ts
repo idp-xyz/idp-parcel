@@ -29,8 +29,8 @@ export interface PartyRelationshipFilter {
   attentionOnly: boolean;
 }
 
-/** 表头可排的五列。 */
-export type PartyRelationshipSortKey = 'relationship' | 'holder' | 'counterparty' | 'effective-start' | 'registered-at';
+/** 表头可排的四列。登记时间不上列（默认排序按生效起，不需要它解释「为什么这一条在最上面」），也就不按它排。 */
+export type PartyRelationshipSortKey = 'relationship' | 'holder' | 'counterparty' | 'effective-start';
 
 /**
  * 默认生效起新→旧（票 09 裁决 1，判据同票 01 裁决 2：运营配置员最常看「刚登进去的那条」——关系册上「刚登进去」最贴近
@@ -127,8 +127,6 @@ function comparatorOf(
       return (left, right) => byString(left.counterpartyId, right.counterpartyId);
     case 'effective-start':
       return (left, right) => byInstant(left.effectiveStartsAt, right.effectiveStartsAt);
-    case 'registered-at':
-      return (left, right) => byInstant(left.registeredAt, right.registeredAt);
     default:
       return null;
   }

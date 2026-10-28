@@ -127,7 +127,8 @@ test('授权交付方显中文显示名、按它筛得出行', () => {
   deepEqual(ids(filterPartyRelationships([...rows, delivery], { ...all, role: 'AUTHORIZED_DELIVERING_PARTY' })), ['SYN-REL-05']);
 });
 
-// Covers: 默认按生效起新→旧（票 09 裁决 1 同判据）；五列各按其键，方向随 dir；双方按标识排；排序不改原数组；认不得的键原样交回。
+// Covers: 默认按生效起新→旧（票 09 裁决 1 同判据）；四列各按其键，方向随 dir；双方按标识排；排序不改原数组；认不得的键（含不上列的
+// 登记时间）原样交回。
 test('表头排序各按其键与方向，且不改原数组', () => {
   const before = ids(rows);
   deepEqual(defaultPartyRelationshipSort, { key: 'effective-start', dir: -1 });
@@ -136,7 +137,7 @@ test('表头排序各按其键与方向，且不改原数组', () => {
   deepEqual(ids(sortPartyRelationships(rows, { key: 'relationship', dir: -1 })), ['SYN-REL-04', 'SYN-REL-03', 'SYN-REL-02', 'SYN-REL-01']);
   deepEqual(ids(sortPartyRelationships(rows, { key: 'holder', dir: 1 })), ['SYN-REL-02', 'SYN-REL-01', 'SYN-REL-03', 'SYN-REL-04']);
   deepEqual(ids(sortPartyRelationships(rows, { key: 'counterparty', dir: -1 })), ['SYN-REL-03', 'SYN-REL-01', 'SYN-REL-02', 'SYN-REL-04']);
-  deepEqual(ids(sortPartyRelationships(rows, { key: 'registered-at', dir: -1 })), ['SYN-REL-03', 'SYN-REL-01', 'SYN-REL-04', 'SYN-REL-02']);
+  deepEqual(ids(sortPartyRelationships(rows, { key: 'registered-at', dir: -1 })), before);
   deepEqual(ids(sortPartyRelationships(rows, { key: 'no-such-column', dir: 1 })), before);
   deepEqual(ids(rows), before);
 });

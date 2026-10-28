@@ -27,7 +27,7 @@ import {
 import { useBoundTenant } from '../use-operator-binding';
 import { useVisited } from './keep-alive-tabs';
 import { identityStatusLabels, labelOf, partyRoleLabels, relationshipStatusLabels } from './presentation';
-import { EffectiveShareBar, Instant, InstantRange, UnknownPartyName, filterSelectClass, statusBadge } from './detail-primitives';
+import { EffectiveShareBar, Instant, UnknownPartyName, filterSelectClass, statusBadge } from './detail-primitives';
 import { useRegisterList } from './register-list';
 import { BusinessPartyRegistrationForm } from './BusinessPartyRegistrationForm';
 import { PartyRelationshipRegistrationForm } from './PartyRelationshipRegistrationForm';
@@ -120,9 +120,8 @@ const identityColumns: WorkbenchColumn<BusinessPartyRecord>[] = [
     key: 'party-name',
     header: '名称',
     sortKey: 'party-name',
-    // 详情栏开着时收起：名称在栏头副题上；留着会在窄列里逐字折行。
-    hideWhenDetailOpen: true,
-    render: (row) => <span className="text-idpxyz-textBright">{row.partyName}</span>,
+    // 详情栏开着时名称留在列表里（逐行翻时要靠它认行），给个下限宽度，免得在窄列里逐字折行。
+    render: (row) => <div className="min-w-36 text-idpxyz-textBright">{row.partyName}</div>,
   },
   {
     key: 'status',
@@ -142,6 +141,8 @@ const identityColumns: WorkbenchColumn<BusinessPartyRecord>[] = [
     key: 'effective-from',
     header: '生效时点',
     sortKey: 'effective-from',
+    // 详情栏开着时收起：时点在栏的事实条上；留标识 / 名称 / 状态三列认行。
+    hideWhenDetailOpen: true,
     // 已登记即还没到生效时点，配一个琥珀色时钟而不是把时刻标成琥珀色：琥珀色字落在选中行底色上不足 4.5:1
     // （票 group-legal-entities-uiux/08 评审），图标是非文字，门槛 3:1。
     render: (row) => (
@@ -172,39 +173,51 @@ const identityColumns: WorkbenchColumn<BusinessPartyRecord>[] = [
   },
 ];
 
-// 参与方格：名称在上、标识在下；名称转写不到是写入门失败才会出现的悬空引用，如实标出，不补占位文本。
+// 参与方格：名称在上、标识在下，两行都截断、悬停给全文；名称转写不到是写入门失败才会出现的悬空引用，如实标出，不补占位文本。
+// 宽度夹在一个区间里：不设上限，长标识会把整表撑到 1280 宽放不下；不设下限，窄栏里会逐字折行。
 function PartyCell({ id, name, nameKnown }: { id: string; name: string | undefined; nameKnown: boolean }) {
   return (
-    <div className="min-w-0">
-      <div className="truncate text-idpxyz-textBright">{nameKnown ? name : <UnknownPartyName />}</div>
-      <div className="font-mono text-[12px] text-idpxyz-breadcrumb">{id}</div>
+    <div className="min-w-32 max-w-36">
+      <div className="truncate text-idpxyz-textBright" title={nameKnown ? name : undefined}>
+        {nameKnown ? name : <UnknownPartyName />}
+      </div>
+      <div className="truncate font-mono text-[12px] text-idpxyz-breadcrumb" title={id}>
+        {id}
+      </div>
     </div>
   );
 }
 
-// 关系册的列。骨架期的「方向」列撤下：方向由持有方 → 相对方的两列次序表达（CONTEXT：方向由「哪一方对哪一方持有该角色」
-// 表达），单设一列没有第二份事实可载。终止时点与后继是状态格的内容：撤销或到期只影响生效边界后的新决定，看这格的人
-// 需要知道边界在哪、被谁替代；终止依据归详情栏。
+// 关系册的列。列数按 1280 宽、详情栏关着时整表不被截断来定（票 group-legal-entities-uiux/10 的要求）：依据与登记时间不上列
+// （依据是栏头的引用签；默认排序按生效起，不需要登记时间来解释「为什么这一条在最上面」），适用范围折进关系标识格的第二行。
+// 骨架期的「方向」列撤下：方向由持有方 → 相对方的两列次序表达（CONTEXT：方向由「哪一方对哪一方持有该角色」表达），单设一列
+// 没有第二份事实可载。终止时点与后继是状态格的内容：撤销或到期只影响生效边界后的新决定，看这格的人需要知道边界在哪、
+// 被谁替代；终止依据归详情栏。
 const relationshipColumns: WorkbenchColumn<PartyRelationshipRecord>[] = [
   {
     key: 'relationship',
     header: '关系标识',
     sortKey: 'relationship',
     render: (row) => (
-      <div className="flex min-w-0 items-center gap-1.5">
-        <span
-          className={`h-1.5 w-1.5 shrink-0 rounded-full ${relationshipStatusDotClass[row.status] ?? 'bg-idpxyz-textMuted'} ${
-            partyRelationshipNeedsAttention(row) ? 'animate-pulse' : ''
-          }`}
-          aria-hidden="true"
-        />
-        <span className="truncate font-mono font-medium text-[color:var(--ds-text-link-hover)]" title={row.relationshipId}>
-          {row.relationshipId}
-        </span>
-        <span className="shrink-0 font-mono text-[12px] text-idpxyz-breadcrumb">r{row.revision}</span>
-        {partyRelationshipNeedsAttention(row) && (
-          <AlertTriangle className={`h-3 w-3 shrink-0 ${statusToneText.warning}`} aria-label="待查" />
-        )}
+      <div className="max-w-44">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span
+            className={`h-1.5 w-1.5 shrink-0 rounded-full ${relationshipStatusDotClass[row.status] ?? 'bg-idpxyz-textMuted'} ${
+              partyRelationshipNeedsAttention(row) ? 'animate-pulse' : ''
+            }`}
+            aria-hidden="true"
+          />
+          <span className="min-w-0 truncate font-mono font-medium text-[color:var(--ds-text-link-hover)]" title={row.relationshipId}>
+            {row.relationshipId}
+          </span>
+          <span className="shrink-0 font-mono text-[12px] text-idpxyz-breadcrumb">r{row.revision}</span>
+          {partyRelationshipNeedsAttention(row) && (
+            <AlertTriangle className={`h-3 w-3 shrink-0 ${statusToneText.warning}`} aria-label="待查" />
+          )}
+        </div>
+        <div className="truncate pl-3 font-mono text-[12px] text-idpxyz-breadcrumb" title={`适用范围 ${row.scope}`}>
+          {row.scope}
+        </div>
       </div>
     ),
   },
@@ -223,13 +236,16 @@ const relationshipColumns: WorkbenchColumn<PartyRelationshipRecord>[] = [
   {
     key: 'role',
     header: '角色',
+    // 详情栏开着时收起：角色在栏头的徽章上。
+    hideWhenDetailOpen: true,
     render: (row) => <span className="whitespace-nowrap text-idpxyz-text">{labelOf(partyRoleLabels, row.role)}</span>,
   },
   {
     key: 'status',
     header: '状态',
+    // 终止时点那一行任其折成两行：整格不折行会在有终止行的册上把这一列撑到两百像素。
     render: (row) => (
-      <div className="flex flex-col items-start gap-1 whitespace-nowrap">
+      <div className="flex flex-col items-start gap-1">
         {statusBadge(relationshipStatusLabels, row.status)}
         {row.endedAt ? (
           <span className="font-mono text-[12px] text-idpxyz-breadcrumb">
@@ -244,35 +260,16 @@ const relationshipColumns: WorkbenchColumn<PartyRelationshipRecord>[] = [
     key: 'validity',
     header: '有效区间',
     sortKey: 'effective-start',
-    // 详情栏开着时收起：两端在栏的事实条上；这一格最宽，留着会把角色与状态挤出列表栏。
+    // 详情栏开着时收起：两端在栏的事实条上；这一格最宽，留着会把双方与状态挤出列表栏。
     hideWhenDetailOpen: true,
+    // 起止各占一行：排成一行要两百多像素，是整表在 1280 宽放不下的那一截。无终点说「持续有效」（CONTEXT 口径）。
     render: (row) => (
-      <span className="whitespace-nowrap font-mono text-idpxyz-text">
-        <InstantRange from={row.effectiveStartsAt} to={row.effectiveEndsAt} />
-      </span>
-    ),
-  },
-  {
-    key: 'scope',
-    header: '适用范围',
-    hideWhenDetailOpen: true,
-    render: (row) => <span className="font-mono text-idpxyz-breadcrumb">{row.scope}</span>,
-  },
-  {
-    key: 'basis',
-    header: '依据',
-    hideWhenDetailOpen: true,
-    render: (row) => <span className="font-mono text-idpxyz-breadcrumb">{row.basis}</span>,
-  },
-  {
-    key: 'registered-at',
-    header: '登记时间',
-    sortKey: 'registered-at',
-    hideWhenDetailOpen: true,
-    render: (row) => (
-      <span className="font-mono text-idpxyz-breadcrumb">
-        <Instant value={row.registeredAt} />
-      </span>
+      <div className="flex flex-col whitespace-nowrap font-mono text-idpxyz-text">
+        <span>
+          <Instant value={row.effectiveStartsAt} />
+        </span>
+        <span className="text-idpxyz-breadcrumb">→ {row.effectiveEndsAt ? <Instant value={row.effectiveEndsAt} /> : '持续有效'}</span>
+      </div>
     ),
   },
 ];
