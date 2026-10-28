@@ -1,7 +1,7 @@
 # 27 CC 准入代码把监管限制叫作内部合规限制；内部合规限制没有模型
 
 Category: enhancement
-Status: in-progress——2026-10-27 作者完工，待隔离评审与进 main，分支 claude-code27（代码最后一笔 d32a3bf3a）。此前：in-progress——2026-10-27 会话 tops-20（idp-parcel-91）接手 tops-26 断在中途的「上线前必须」一组（冻结清单「六」），分支 claude-code27（续 tops-26 已有分支与 worktree 半成品）。此前 ready-for-agent——R3（不急）：限制册在生产上没有写入（`ManageRestrictionHandler` 未装配，ADR-0206 越权风险点 1），内部合规限制没有任何入口，今天没有生产路径；**UC-CC-011 接线之前必须先做第 2 项**，否则内部合规限制要么被塞进 `RegulatoryRestriction`（让监管限制可以不凭监管结果解除），要么挡不住动作。R3 只说缺陷本身今天不出事；内部合规限制的模型是首发范围要求的实现缺口（PILOT-SCOPE 要求验证内部合规限制、关务专项基线切片 1 含它），不因 R3 而移出首发。2026-10-21 文档自洽 03 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc03。
+Status: resolved——2026-10-28 进 main（`282af38da`，与 code/37 同批；全量 `scripts/test-full.sh` 160 ok / 0 FAIL，种子灌一次性库退 0），见文末「进 main 记录」。此前 in-progress——2026-10-27 作者完工，待隔离评审与进 main，分支 claude-code27（代码最后一笔 d32a3bf3a）。此前：in-progress——2026-10-27 会话 tops-20（idp-parcel-91）接手 tops-26 断在中途的「上线前必须」一组（冻结清单「六」），分支 claude-code27（续 tops-26 已有分支与 worktree 半成品）。此前 ready-for-agent——R3（不急）：限制册在生产上没有写入（`ManageRestrictionHandler` 未装配，ADR-0206 越权风险点 1），内部合规限制没有任何入口，今天没有生产路径；**UC-CC-011 接线之前必须先做第 2 项**，否则内部合规限制要么被塞进 `RegulatoryRestriction`（让监管限制可以不凭监管结果解除），要么挡不住动作。R3 只说缺陷本身今天不出事；内部合规限制的模型是首发范围要求的实现缺口（PILOT-SCOPE 要求验证内部合规限制、关务专项基线切片 1 含它），不因 R3 而移出首发。2026-10-21 文档自洽 03 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc03。
 Blocked by: 无（裁向已由 [ADR-0241](../../../docs/adr/0241-action-admission-restrictions-are-regulatory-or-internal-and-only-regulatory-restrictions-exist-today.md) 定）
 出处：[audit/cc.md](../audit/cc.md) H3（B，审计钉 `6b0074d0`；2026-10-21 按 main `205eb254` 复核，现象仍在）；[02 的完成记录](../issues/02-code-defects-from-the-audit.md)「其余条件性 B 类」一句把它交给修订票 03 裁后按裁向立票。
 
@@ -42,3 +42,15 @@ CC CONTEXT 与 ADR-0206 把动作准入的限制一源写作「内部合规限�
 - 自验（含 PG，DSN 55432）：`go build ./...`、`go vet`、`gofmt -l` 无输出；`go test -count=1 -p 1` 通过 `./internal/customscompliance/...`、`./cmd/parcel-api`、`./cmd/parcel-dispatch`、`./cmd/parcel-customs-register`、`./internal/architecture/...`、`./migrations/...`、`./internal/transportfulfillment/adapters/customscompliance`。`at-coverage-counts -check` 只报生成物过期。
 - 过程里被门禁逼出的两处：`pbc08` 写口无事务负向证据（补 `TestInternalRestrictionWritesRefuseToRunOutsideATransaction`）；类型可达性棘轮（`InternalApplicability`、`RestrictionApplicability` 入基线，理由是等 UC-CC-003/009/010 接线）。
 - 留给协调方：进 main 时重生成 ADR 索引与 AT 盘点计数；ADR-0241 的 Status 与 Links 前向指针已在文档提交里，进 main 前评审核一眼；未做（均不挡上线、已在 ADR-0334 风险点里）：生产写入入口、决定方授权核验、下游（就绪、门禁核对、关闭）读内部合规限制。
+
+## 评审记录（2026-10-28，隔离子代理，钉 `03daa7979`）
+
+两轴无阻断。Spec 轴非阻断四条：ADR 索引与 AT 计数待推送方重生成（已做）；ADR-0334 决定五把「无内部限制」改称「册上无记录」，对已接受记录的作用里没列这条措辞差（记入冻结清单）；测试 `Covers:` 点名的 AT-CC-339、340、342、352–357 盘点是否另有登记未逐条核（记入冻结清单）；类型可达性基线新增两行理由站得住。Standards 轴非阻断：`judge_action_admission.go` 头注一句未折行，不改。评审带 PG 跑过 customscompliance、architecture、cmd 与 TF 的 CC 适配器测试。
+
+## 进 main 记录（2026-10-28，推送方 tops-20 / idp-parcel-91）
+
+- 分支 `claude-code27` tip `03daa7979` 作出处；在隔离树上与 code/37 一起重放到 main `f1cccc964`（psb/22 第 1 笔之后），无冲突。
+- 重放后的 tip 上重生成 ADR 索引、AT 盘点总览计数与机制清点，各成一笔；`adr-index -check`、`at-coverage-counts -check` 退 0。
+- 全量 `scripts/test-full.sh`（专用一次性 PG，`-count=1`）：160 ok / 0 FAIL。种子 `scripts/demo-seeds/seed.sh` 灌一次性库 `seed2737` 退 0，用后删库。
+- 推确切 SHA `282af38da` 到 main。
+

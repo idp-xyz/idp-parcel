@@ -214,6 +214,10 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 - 2026-10-27｜交接登记答 `SOURCE_NOT_ACCEPTED` 时不带原因（例如 `HANDED_OVER` 带了 `basis`），登记方只能读码排查｜同上｜R3
 - 2026-10-27｜动线脚本「起 dispatch」一节仍说逐条投递失败不打日志，今天会打 `WARN` 并带失败码｜同上｜R3（收口重走时改脚本）
 - 2026-10-27｜订舱口与承运答复收下已过期的班次（种子显式班 `SYN-SCHED-SZX-SIN-DAILY/2026-10-21` 已在一周前），不核班次是否已发车；种子里写死日期的班次会随日历过期｜[psb/05「预走」](./product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)末尾的旁证一条｜R3
+- 2026-10-28｜内部合规限制在生产上只有读口：形成与解除的写入编排 `ManageInternalRestrictionHandler` 没有端点，租户今天建不出内部合规限制，PILOT-SCOPE「验证内部合规限制与外部监管扣留独立存在」在租户上走不到｜docs-consistency/code/27（ADR-0334 决定七、越权风险点 1）｜待用户定是否上调
+- 2026-10-28｜收寄后服务处置决定落库并发范围化请求信封，但 TF、NO、NR 都还不消费它，决定做出后包裹不会被拦截、改送或退运；管理台页与演示租户授予种子也没有｜docs-consistency/code/37（ADR-0332；AT-PS-083、084、088 留在④）｜待用户定是否上调
+- 2026-10-28｜ADR-0334 把四格的「无内部限制」改称「册上无记录」，CC CONTEXT 与 ADR-0241 决定一仍用旧词，0334「对已接受记录的作用」没列这条｜code/27 评审｜R3
+- 2026-10-28｜CC 测试 `Covers:` 点名 AT-CC-339、340、342、352–357，盘点里是否已登未核｜code/27 评审｜R3（归 docs-consistency/10）
 
 ## 六、docs-consistency/code 队列的复核（2026-10-27，tops-26）
 

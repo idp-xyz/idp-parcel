@@ -1,7 +1,7 @@
 # 37 PS 收寄后服务处置决定没有模型：越过取消边界只记「待处置」，没有决定、没有下游请求
 
 Category: enhancement
-Status: in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-code37（代码最后一笔 3376e091c）。此前：in-progress——2026-10-27 会话 tops-20（idp-parcel-91）接手 tops-26 断在中途的「上线前必须」一组（冻结清单「六」），分支 claude-code37（续 tops-26 已有 worktree 半成品）。此前 needs-triage——建议 R3（不急）：越过取消边界的包裹今天答 `DISPOSITION_PENDING` 并停在那里，退运、拦截、改送、服务终止都没有决定面；首发若不启用收寄后处置，运营可走线下。2026-10-21 文档自洽 06 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc06。分级由协调方定稿。
+Status: resolved——2026-10-28 进 main（`282af38da`，与 code/27 同批；全量 `scripts/test-full.sh` 160 ok / 0 FAIL，种子灌一次性库退 0），见文末「进 main 记录」。此前 in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-code37（代码最后一笔 3376e091c）。此前：in-progress——2026-10-27 会话 tops-20（idp-parcel-91）接手 tops-26 断在中途的「上线前必须」一组（冻结清单「六」），分支 claude-code37（续 tops-26 已有 worktree 半成品）。此前 needs-triage——建议 R3（不急）：越过取消边界的包裹今天答 `DISPOSITION_PENDING` 并停在那里，退运、拦截、改送、服务终止都没有决定面；首发若不启用收寄后处置，运营可走线下。2026-10-21 文档自洽 06 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc06。分级由协调方定稿。
 Blocked by: 无
 出处：[audit/ps-code.md](../audit/ps-code.md) 第 14 条顺带点出「UC-PS-006 的收寄后处置决定」未实现，审计未单列；文档自洽 06 修订 UC-PS-006 时确认，见其「给开发的交接」。
 
@@ -54,3 +54,15 @@ L：领域对象与只追加登记、授权端口、命令口与操作者或客�
 4. `cmd/parcel-dispatch` 未改。
 
 **评审修订**（2026-10-28，隔离评审钉 `d034d4641`）：补 `TestACancellationNotUpheldWaitsForADispositionAndCanBeAnswered`（带 PG：被认定依据不成立的取消进清单、来路 `CANCELLATION_NOT_UPHELD`，并能被一份决定回应），`AT-PS-174` 名实相符；PS CONTEXT「收寄后服务处置决定」词条与取消边界一条的「或其他」改为五向封闭、指 ADR-0332，UC-PS-006 无同样措辞。
+
+## 评审记录（2026-10-28，隔离子代理，钉 `d034d4641`）
+
+两轴无阻断。Spec 轴非阻断：AT-PS-174 的「被认定依据不成立的取消」来路缺用例——作者在同分支补 `TestACancellationNotUpheldWaitsForADispositionAndCanBeAnswered`（`6037d457f`）；PS CONTEXT 词条仍写「或其他」而 ADR-0332 决定三已封闭五向——作者同笔改 CONTEXT 两处；决定行无单独授权列，与取消冲突决定表同形，不改；AT-PS-083、084、088 留在④，如实。修订后的用例在推送方的全量里随 `cmd/parcel-api` 通过。
+
+## 进 main 记录（2026-10-28，推送方 tops-20 / idp-parcel-91）
+
+- 分支 `claude-code37` tip `6037d457f` 作出处；在隔离树上与 code/27 一起重放到 main `f1cccc964`（psb/22 第 1 笔之后），无冲突。
+- 重放后的 tip 上重生成 ADR 索引、AT 盘点总览计数与机制清点，各成一笔；`adr-index -check`、`at-coverage-counts -check` 退 0。
+- 全量 `scripts/test-full.sh`（专用一次性 PG，`-count=1`）：160 ok / 0 FAIL。种子 `scripts/demo-seeds/seed.sh` 灌一次性库 `seed2737` 退 0，用后删库。
+- 推确切 SHA `282af38da` 到 main。
+
