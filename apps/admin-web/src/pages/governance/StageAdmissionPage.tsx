@@ -30,6 +30,7 @@ import {
   type TakeoverRecord,
 } from './api';
 import { PrincipalRef } from '../../components/PrincipalRef';
+import { labelFor } from '../../vocabulary/status';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['stage-admission'];
@@ -72,6 +73,11 @@ function registryTable<Row>(
 }
 
 const cellClass = 'font-mono text-xs';
+
+/** 能力与事实种类是封闭码时经词典译成一线的词；带「/」的是租户自定义引用，不是码，原样显示。 */
+function kindLabel(code: string): string {
+  return code.includes('/') ? code : labelFor(code);
+}
 
 // 空册文案四册同句：读取入口已配置是本态与未配置态的分界（ADR-0077 Decision 四）。
 const emptyRegisterNote = '还没有登记。登记由管理员用命令行工具完成，本页只看。';
@@ -195,8 +201,8 @@ export function StageAdmissionPage() {
         (row) => (
           <TableRow key={`${row.objectScope}:${row.capability}:${row.factKind}:${row.fromAt}`}>
             <TableCell className={cellClass}>{row.objectScope}</TableCell>
-            <TableCell className={cellClass}>{row.capability}</TableCell>
-            <TableCell className={cellClass}>{row.factKind}</TableCell>
+            <TableCell className="whitespace-nowrap text-xs">{kindLabel(row.capability)}</TableCell>
+            <TableCell className="whitespace-nowrap text-xs">{kindLabel(row.factKind)}</TableCell>
             <TableCell className={cellClass}>{row.authority}</TableCell>
             <TableCell className={cellClass}>{formatRange(row.fromAt, row.toAt)}</TableCell>
             <TableCell className={cellClass}>{formatInstant(row.insertedAt)}</TableCell>
@@ -280,8 +286,8 @@ export function StageAdmissionPage() {
             key={`${row.objectScope}:${row.capability}:${row.factKind}:${row.authority}:${row.fromAt}`}
           >
             <TableCell className={cellClass}>{row.objectScope}</TableCell>
-            <TableCell className={cellClass}>{row.capability}</TableCell>
-            <TableCell className={cellClass}>{row.factKind}</TableCell>
+            <TableCell className="whitespace-nowrap text-xs">{kindLabel(row.capability)}</TableCell>
+            <TableCell className="whitespace-nowrap text-xs">{kindLabel(row.factKind)}</TableCell>
             <TableCell className={cellClass}>{row.authority}</TableCell>
             <TableCell className={cellClass}>{formatRange(row.fromAt, row.toAt)}</TableCell>
             <TableCell className={cellClass}>{row.stopEvidence}</TableCell>
