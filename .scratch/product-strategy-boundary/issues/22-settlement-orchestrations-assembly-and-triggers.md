@@ -162,7 +162,7 @@ Blocked by: 无；赔付金额文法与分摊形态归[票 12](./12-sa-amount-gr
 
 ## 第 4 笔完成记录（分支 claude-psb22，基于 main `24213a96d`）
 
-- **种子**：新增步骤 `scripts/demo-seeds/steps/510-settlement-confirmation-and-statement.sh`，排在 `500-settlement` 之后，依赖那里登的结算账户与费用项目映射。数据见 `data/settlement/11`–`20`、`data/access/24`、`25`、`data/governance/69`–`72`；README 组成表 `data/settlement/` 一行同步。这些都是演示租户经参考配置采用的取值，只记 `S`。
+- **种子**：新增步骤 `scripts/demo-seeds/steps/510-settlement-confirmation-and-statement.sh`，排在 `500-settlement` 之后，依赖那里登的结算账户与费用项目映射。数据见 `data/settlement/11`–`20`、`data/access/34`、`35`、`data/governance/69`–`72`；README 组成表 `data/settlement/` 一行同步。这些都是演示租户经参考配置采用的取值，只记 `S`。
 - **重走**（一次性库 `psb22_seed4`，`seed.sh` 原样灌入退 0；分支上编出的 `parcel-api` 与 `parcel-dispatch` 照动线「前置」起；实测只记 `S`；走完已停进程、删库）：
   1. 首方提交成`已接受`；收寄之后 SELL 形成预估客户费用 CNY 9600，七项确认事实同笔登上（账户 `SYN-SETTLEMENT-ACCOUNT-01`、合同依据 `SYN-CONTRACT-01`、计费范围 `SYN-SCOPE-01`、来源事实为收寄采用键）。
   2. 自营段、干线（先提交委托再交给承运商，段采用答 201）、尾程交接、派送任务、派送尝试、有效交付都答 201；BUY 形成供应商预期成本 CNY 8500。
@@ -170,5 +170,12 @@ Blocked by: 无；赔付金额文法与分摊形态归[票 12](./12-sa-amount-gr
   4. 运营发布口列这一笔、报合计 9600，答 `201 STATEMENT_PUBLISHED`；客户费用读口随之透出 `attributionDate` 与 `billedOn`。到点截单要等这一天在上海 18:00 关上之后，本轮没等，由 dispatch 真库用例证过。
   5. 供应商账单接收口照 BUY 那一版预期成本录一份账单，答 `201 BILL_RECEIVED`；审核口答 `201 PAYABLE_FORMED`，金额 8500，`auditor_ref` 为 `SYN-AUDITOR-SETTLEMENT-01`，操作证据是配置员。
 - **如实记下的几处**：
-  - 费用确认信封 `settlement-accounting.charge-confirmation.formed` 落 `ABANDONED` / `dispatch.no_subscriber`：产品里还没有消费方订阅它，与动线上那几封已知无订阅者的信封同类。
+  - 费用确认信封 `settlement-accounting.charge-confirmation.formed` 实测落 `ABANDONED` / `dispatch.no_subscriber`：产品里还没有消费方订阅它，与动线上那几封已知无订阅者的信封同类。同类的还有对账单已发布、供应商账单已接收、审核应付已形成三封（`settlement-accounting.statement.published`、`.supplier-bill.received`、`.supplier-bill.payable-audited`），全仓都没有订阅方；本轮实测时对账单那一封还在 `PENDING`，重投烧完会落同一格。
   - 派送尝试的计划窗口要照派送任务的窗口写，写成别的答不带原因的 `SOURCE_NOT_ACCEPTED`，属冻结清单「记录」里已有的同类。
+
+**第 4 笔评审**（钉 `5d4d78571`，非作者隔离评审）：可合入，无阻断。评审在一次性库上真灌了一次种子，退 0。建议都已收：
+
+- **N23**：`data/access` 序号与 main 上的撞了，已改为 `34`、`35`。
+- **N24**：完成记录里点名了另外三封无订阅者的信封。
+- **N25**：README「操作者渠道」一节补了四种结算决定一段。
+- **N26**：README 写明了应付账户结算政策那一格引干线供应商协议，是演示简化。

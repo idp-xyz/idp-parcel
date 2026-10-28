@@ -29,5 +29,5 @@ echo "== 费用确认、到点截单与供应商账单审核的演示租户取�
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/70-authority-interval-operation-decision-statement-publication.json"
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/71-authority-interval-operation-decision-supplier-bill-reception.json"
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/72-authority-interval-operation-decision-supplier-bill-audit.json"
-"$BIN/parcel-access-register" operator-grant -input "$SEEDS/access/24-grants-settlement-decisions.json"
-"$BIN/parcel-access-register" admission-scope-mapping-register -input "$SEEDS/access/25-admission-scope-mappings-settlement-decisions.json"
+"$BIN/parcel-access-register" operator-grant -input "$SEEDS/access/34-grants-settlement-decisions.json"
+"$BIN/parcel-access-register" admission-scope-mapping-register -input "$SEEDS/access/35-admission-scope-mappings-settlement-decisions.json"
