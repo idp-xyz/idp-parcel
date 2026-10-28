@@ -222,6 +222,7 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 - 2026-10-28｜NO 承接（`AcceptCollaborationHandler`）、CC 关案（`CloseCustomsCaseHandler`）、CC 放行门禁核对（`VerifyReleaseGateHandler`）照各票面只补了模型与答法，`cmd/` 下仍无装配，生产走不到｜docs-consistency/code/18、03、34｜待用户定是否上调
 - 2026-10-28｜TF 旅程启动口对监管来路的旅程不核有对应承接决定、成员不核在已承接对象内，持 `ALTERNATE_JOURNEY_START` 授予者可绕过承接开监管来路旅程（与 UC-TF-007「不能经本用例绕过」相抵；操作者落 `started_by`）｜docs-consistency/code/43 评审（ADR-0337 越权风险点 3）｜R2（租户把该授予发给多人前补；S–M）
 - 2026-10-28｜TF 承接口的协作事项由运营人员抄录进载荷，是持授予者的断言而非读回事实，当前有效性无来源可核；关务一侧记住在等补的事项、消费承接回执两半未建｜docs-consistency/code/43（ADR-0337 越权风险点 1、2）｜R3（CC 出协作事项读口时撤下抄录四格）
+- 2026-10-28｜收寄后服务处置：TF 半边已接，但信封含 NO（扣住、退运装载）、NR（重新规划、释放）、TF 扣住任一项即整封答未决、不开旅程；三处所有者都没有模型；未决烧尽预算落 `ABANDONED` 后无重驱机制；`POST_INTAKE_SERVICE_DISPOSITION` 授予不得发给真实租户（仅文档约束）｜[launch-wiring/05](./launch-wiring/issues/05-post-intake-disposition-request-consumers.md)「收口条件」｜待用户定（三处所有者新模型，比接线大一个量级）
 
 ## 六、docs-consistency/code 队列的复核（2026-10-27，tops-26）
 
