@@ -1,7 +1,7 @@
 # 34 CC 放行门禁核对在读回的认定折不出结论时答「未受理」
 
 Category: bug
-Status: in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-code0334（代码最后一笔 1d2d457b9）。此前 in-progress——2026-10-27 会话 tops-20（idp-parcel-91）接手 tops-26 断在中途的「上线前必须」一组（冻结清单「六」），分支 claude-code34。此前 ready-for-agent——R3（不急）：放行门禁核对编排 `VerifyReleaseGateHandler` 在 `cmd/` 下没有装配，今天没有生产路径；动作准入同一情形已答读不动。接线之前修。2026-10-21 文档自洽 03 第二轮评审立（协调方裁定为代码问题，用户「你作为业务和系统专家自决」授权），分支 claude-dc03。
+Status: resolved——2026-10-28 进 main（`b59215776`，code/03 与 code/34 同批；全量 160 ok / 0 FAIL，种子退 0），见文末「进 main 记录」。此前 in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-code0334（代码最后一笔 1d2d457b9）。此前 in-progress——2026-10-27 会话 tops-20（idp-parcel-91）接手 tops-26 断在中途的「上线前必须」一组（冻结清单「六」），分支 claude-code34。此前 ready-for-agent——R3（不急）：放行门禁核对编排 `VerifyReleaseGateHandler` 在 `cmd/` 下没有装配，今天没有生产路径；动作准入同一情形已答读不动。接线之前修。2026-10-21 文档自洽 03 第二轮评审立（协调方裁定为代码问题，用户「你作为业务和系统专家自决」授权），分支 claude-dc03。
 Blocked by: 无
 出处：文档自洽 03 第二轮隔离评审（UC-CC-009 首发结果码对照补 `NOT_ACCEPTED` 两路时发现）。
 
@@ -47,3 +47,15 @@ UC-CC-009「未受理」只指请求不能合法关联：已对上。接线：�
 
 ### 留给协调方
 - 无新发现。`.scratch/docs-consistency/issues/03-cc-docs.md` 等处对 code/34 的历史引用未动。
+
+## 评审记录（2026-10-28，隔离子代理，钉 `2da1e325b`）
+
+两轴无阻断（与 code/03 同一评审）。Spec 轴：`foldRefused` 改答 `UNDECIDED`+`GATE_CONDITION_VIEW_UNAVAILABLE`，码已在 ADR-0243 封闭码表与 UC-CC-009 对照里，与动作准入 AT-CC-424 同一答法，ADR-0029 同格成立；UC-CC-009 改的两行与代码一致；测试断言未决、不落册、不发意图。非阻断：复用该码后运维分不出读口故障与册上认定坏，作者已列代决。Standards 轴无。
+
+## 进 main 记录（2026-10-28，推送方 tops-20 / idp-parcel-91）
+
+- 分支 `claude-code0334` tip `2da1e325b` 作出处；在隔离树上 cherry-pick 到 main `1e328bc17`，无冲突。
+- 重生成 ADR 索引、AT 盘点计数与机制清点，有变化的各成一笔；两项 `-check` 退 0。
+- 全量 `scripts/test-full.sh`：160 ok / 0 FAIL。种子灌一次性库退 0，用后删库。
+- 推确切 SHA `b59215776` 到 main。编排在 `cmd/` 下的装配照票面不在本票。
+

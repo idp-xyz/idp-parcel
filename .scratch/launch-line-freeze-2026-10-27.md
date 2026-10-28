@@ -218,6 +218,8 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 - 2026-10-28｜收寄后服务处置决定落库并发范围化请求信封，但 TF、NO、NR 都还不消费它，决定做出后包裹不会被拦截、改送或退运；管理台页与演示租户授予种子也没有｜docs-consistency/code/37（ADR-0332；AT-PS-083、084、088 留在④）｜待用户定是否上调
 - 2026-10-28｜ADR-0334 把四格的「无内部限制」改称「册上无记录」，CC CONTEXT 与 ADR-0241 决定一仍用旧词，0334「对已接受记录的作用」没列这条｜code/27 评审｜R3
 - 2026-10-28｜CC 测试 `Covers:` 点名 AT-CC-339、340、342、352–357，盘点里是否已登未核｜code/27 评审｜R3（归 docs-consistency/10）
+- 2026-10-28｜CC 关闭依据项的冲突依据：领域层 `conflictBasisMatches` 不 trim，译装层与库 CHECK 会 trim，空白引用三处口径不一（进库被 CHECK 拒，不静默写错）｜docs-consistency/code/03 评审｜R3
+- 2026-10-28｜NO 承接（`AcceptCollaborationHandler`）、CC 关案（`CloseCustomsCaseHandler`）、CC 放行门禁核对（`VerifyReleaseGateHandler`）照各票面只补了模型与答法，`cmd/` 下仍无装配，生产走不到｜docs-consistency/code/18、03、34｜待用户定是否上调
 
 ## 六、docs-consistency/code 队列的复核（2026-10-27，tops-26）
 

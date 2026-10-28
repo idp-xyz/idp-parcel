@@ -1,7 +1,7 @@
 # 03 CC 关闭依据项只有三值，缺「冲突」
 
 Category: bug
-Status: in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-code0334（代码最后一笔 ee74961e1）。此前 in-progress——2026-10-27 会话 tops-20（idp-parcel-91）接手 tops-26 断在中途的「上线前必须」一组（冻结清单「六」），分支 claude-code03。此前 ready-for-agent——R3（不急）：关案编排 `CloseCustomsCaseHandler` 在 `cmd/` 下没有装配，今天没有生产路径；接线之前必须先修，否则冲突项会被迫读成未解决或已终结。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
+Status: resolved——2026-10-28 进 main（`b59215776`，code/03 与 code/34 同批；全量 160 ok / 0 FAIL，种子退 0），见文末「进 main 记录」。此前 in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-code0334（代码最后一笔 ee74961e1）。此前 in-progress——2026-10-27 会话 tops-20（idp-parcel-91）接手 tops-26 断在中途的「上线前必须」一组（冻结清单「六」），分支 claude-code03。此前 ready-for-agent——R3（不急）：关案编排 `CloseCustomsCaseHandler` 在 `cmd/` 下没有装配，今天没有生产路径；接线之前必须先修，否则冲突项会被迫读成未解决或已终结。2026-10-21 文档自洽 02 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc02。
 Blocked by: 无
 出处：[audit/cc.md](../audit/cc.md) M8（审计钉 `6b0074d0`；2026-10-21 按 main `67438a0f` 复核，现象仍在）。
 
@@ -61,3 +61,15 @@ UC-CC-010「每个关闭依据项只能采用已终结、已移交、未解决�
 
 ### 留给协调方
 - 无新发现需立票。
+
+## 评审记录（2026-10-28，隔离子代理，钉 `2da1e325b`）
+
+两轴无阻断（与 code/34 同一评审）。Spec 轴：四值与「任一未解决或冲突项都阻止关闭」对上；迁移 0029 DROP/ADD 0008 的约束名成立，存量行无需回填；关闭记录快照带冲突依据不与已存摘要失配；没新增 AT、`Covers:` 引 CONTEXT 规则句合规；冲突依据「至少两份互不相同的事实引用」无 CONTEXT/ADR 出处，属机制层结构约束、不是租户取值，作者已标为代决（124 解冻时只换 `conflicts_with` 一列）。Standards 轴非阻断：领域层 `conflictBasisMatches` 不 trim，译装层与库 CHECK 会 trim，三处口径不一（进库时被 CHECK 拒，不静默写错）——记入冻结清单。已发布迁移无改动。
+
+## 进 main 记录（2026-10-28，推送方 tops-20 / idp-parcel-91）
+
+- 分支 `claude-code0334` tip `2da1e325b` 作出处；在隔离树上 cherry-pick 到 main `1e328bc17`，无冲突。
+- 重生成 ADR 索引、AT 盘点计数与机制清点，有变化的各成一笔；两项 `-check` 退 0。
+- 全量 `scripts/test-full.sh`：160 ok / 0 FAIL。种子灌一次性库退 0，用后删库。
+- 推确切 SHA `b59215776` 到 main。编排在 `cmd/` 下的装配照票面不在本票。
+
