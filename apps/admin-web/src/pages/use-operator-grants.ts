@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { exchangeMasterData } from './catalogue-api';
-import { heldGrantsOf, mayWriteRegistry, type HeldGrants, type OperatorGrantsResponseBody } from './operator-grants';
+import { heldGrantsOf, mayMakeDecision, mayWriteRegistry, type HeldGrants, type OperatorGrantsResponseBody } from './operator-grants';
 
 // 一页加载只问一次：各页的写入口都要这同一个答案，而操作者换授予要整页重载才重新问（授予在铸造那一刻取，
 // 令牌之外没有会话态）。在途与答出的都记在模块级，各页同时挂载也只发一次请求；答出的值留着，后挂载的页第一帧就拿到，
@@ -37,4 +37,19 @@ export function useMayWriteRegistry(): boolean {
     };
   }, []);
   return mayWriteRegistry(held);
+}
+
+/** 某一种运营决定的写入口摆不摆。答出之前与答不出时是 true（ADR-0315）：只有明确知道没有那一种授予才收起。 */
+export function useMayMakeDecision(decision: string): boolean {
+  const [held, setHeld] = useState<HeldGrants | undefined>(settled);
+  useEffect(() => {
+    let cancelled = false;
+    void loadHeldGrants().then((next) => {
+      if (!cancelled) setHeld(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return mayMakeDecision(held, decision);
 }

@@ -28,6 +28,7 @@ import {
   Network,
   PackageOpen,
   PackageSearch,
+  PackageCheck,
   PackageX,
   Radar,
   Receipt,
@@ -120,6 +121,8 @@ export const navigationSections: NavigationSection[] = [
       // 消费它的面单交易；对象引用里的映射本体在主数据区的渠道产品目录页，这里只透引用。
       { id: 'channel-selection-decisions', label: '渠道择优决定', icon: 'channel-selection-decisions' },
       { id: 'cancel-parcel', label: '取消与收寄后处置', icon: 'cancel-parcel' },
+      // 收寄后处置的运营一侧：客户渠道的取消签在上一页，这里是有权主体形成处置决定、登记待人工处理项（ADR-0332、ADR-0341）。
+      { id: 'post-intake-disposition', label: '收寄后处置决定', icon: 'post-intake-disposition' },
     ],
   },
   {
@@ -203,6 +206,7 @@ export const sidebarIconMap: Record<string, ElementType> = {
   'label-transactions': Ticket,
   'channel-selection-decisions': Split,
   'cancel-parcel': PackageX,
+  'post-intake-disposition': PackageCheck,
   'party-contracts': Handshake,
   'service-products': Boxes,
   'channel-product-catalog': PackageOpen,
@@ -299,6 +303,12 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
     owner: '小包托运（parcel-shipment）',
     source:
       'docs/adr/0282-a-control-release-the-provider-refuses-is-registered-for-handling-instead-of-compensated.md 决定二（释放未受理册）；docs/adr/0293-a-refused-control-release-is-handled-by-releasing-at-settlement-or-marking-handled-and-the-handling-resumes-the-acceptance-chain.md',
+  },
+  'post-intake-disposition': {
+    title: '收寄后处置决定',
+    owner: '小包托运（parcel-shipment）',
+    source:
+      'docs/application/parcel-shipment/UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md；docs/adr/0332-a-post-intake-service-disposition-is-an-append-only-per-parcel-decision-chain-that-asks-object-owners-for-scoped-requests-through-an-outbox-envelope.md；docs/adr/0341-system-executable-disposition-requests-run-in-the-owners-consumers-and-the-rest-become-manual-items-that-parcel-shipment-holds-and-operators-register-results-for.md',
   },
   'label-transactions': {
     title: '面单交易',

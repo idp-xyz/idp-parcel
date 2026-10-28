@@ -31,6 +31,17 @@ export function heldGrantsOf(answer: ApiResult<OperatorGrantsResponseBody> | nul
   return { faces: new Set(grants), decisions: new Set(decisions) };
 }
 
+/** 收寄后服务处置决定的授予（运营决定一族），原词取自 accessidentity.DecisionPostIntakeServiceDisposition。 */
+export const postIntakeDispositionDecision = 'POST_INTAKE_SERVICE_DISPOSITION';
+
+/** 待人工处理项登记的授予，与处置决定分开授予（ADR-0341 决定三），原词取自 accessidentity.DecisionPostIntakeManualItemHandling。 */
+export const postIntakeManualItemDecision = 'POST_INTAKE_MANUAL_ITEM_HANDLING';
+
+/** 运营决定入口摆不摆：同登记入口，明确知道没有那一种运营决定授予才收起，不知道就摆。 */
+export function mayMakeDecision(held: HeldGrants | undefined, decision: string): boolean {
+  return held === undefined || held.decisions.has(decision);
+}
+
 /** 登记与发布入口摆不摆：明确知道没有登记册配置写授予才收起，不知道就摆。 */
 export function mayWriteRegistry(held: HeldGrants | undefined): boolean {
   return held === undefined || held.faces.has(registryWriteFace);

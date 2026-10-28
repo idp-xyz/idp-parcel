@@ -635,6 +635,98 @@ export interface ControlReleaseRefusalHandlingDraft {
   basis: string;
 }
 
+
+// ---- 收寄后处置(UC-PS-006;ADR-0332、ADR-0341) ----
+// 四个端点的响应形状镜像 internal/parcelshipment/adapters/http 的
+// query_post_intake_disposition_requests.go、decide_post_intake_disposition.go、post_intake_manual_items.go。
+
+export type PostIntakeDirection = 'CONTINUE' | 'INTERCEPT' | 'REDIRECT' | 'RETURN' | 'TERMINATE_SERVICE';
+
+/** 等回应的停止请求。请求方、授权、原因与请求时间在先于保全落下的待处置记录上为空。 */
+export interface PostIntakeDispositionRequestRow {
+  requestKey: string;
+  parcelId: string;
+  origin: string;
+  intakeBefore?: string;
+  cancellation?: string;
+  requester?: string;
+  authority?: string;
+  reason?: string;
+  requestedAt?: string;
+  recordedAt: string;
+  currentVersion: number;
+}
+
+export interface PostIntakeDispositionRequestsResponseBody {
+  outcome: 'POST_INTAKE_DISPOSITION_REQUESTS_LISTED';
+  pendingCount: number;
+  truncated: boolean;
+  requests: PostIntakeDispositionRequestRow[];
+}
+
+export interface PostIntakeDispositionDecisionDraft {
+  parcel: string;
+  supersedes: number;
+  direction: PostIntakeDirection;
+  requestKey?: string;
+  destination?: string;
+  basis: string;
+}
+
+export interface PostIntakeDispositionDecisionRecord {
+  version: number;
+  supersedes: number;
+  direction: string;
+  source: string;
+  requestKey?: string;
+  destination?: string;
+  responsibilityStart: string;
+  decidedAt: string;
+  ownerRequests: { owner: string; action: string }[];
+}
+
+export interface PostIntakeDispositionDecisionResponseBody {
+  outcome: string;
+  finalBasis?: string;
+  decision?: PostIntakeDispositionDecisionRecord;
+}
+
+export type ManualItemOutcome = 'HANDLED' | 'UNABLE';
+
+export interface PostIntakeManualItemRow {
+  parcelId: string;
+  decisionVersion: number;
+  owner: string;
+  action: string;
+  direction: string;
+  destination?: string;
+  decidedAt: string;
+  currentVersion: number;
+  supersededByLaterDecision: boolean;
+  result?: { outcome: string; note: string; handledBy: string; handledAt: string };
+}
+
+export interface PostIntakeManualItemsResponseBody {
+  outcome: 'POST_INTAKE_MANUAL_ITEMS_LISTED';
+  pendingCount: number;
+  truncated: boolean;
+  items: PostIntakeManualItemRow[];
+}
+
+export interface PostIntakeManualItemResultDraft {
+  parcel: string;
+  decisionVersion: number;
+  owner: string;
+  action: string;
+  outcome: ManualItemOutcome;
+  note: string;
+}
+
+export interface PostIntakeManualItemResultResponseBody {
+  outcome: string;
+  item?: PostIntakeManualItemRow;
+}
+
 // ---- 调用结果 ----
 
 export type ApiResult<Body> =
@@ -714,6 +806,28 @@ export function handleControlReleaseRefusal(
   draft: ControlReleaseRefusalHandlingDraft,
 ): Promise<ApiResult<ControlReleaseRefusalHandlingResponseBody>> {
   return post<ControlReleaseRefusalHandlingResponseBody>('/control-release-refusal-handlings', draft);
+}
+
+export function listPostIntakeDispositionRequests(): Promise<ApiResult<PostIntakeDispositionRequestsResponseBody>> {
+  return exchange<PostIntakeDispositionRequestsResponseBody>('/post-intake-disposition-requests', { method: 'GET' });
+}
+
+export function decidePostIntakeDisposition(
+  draft: PostIntakeDispositionDecisionDraft,
+): Promise<ApiResult<PostIntakeDispositionDecisionResponseBody>> {
+  return post<PostIntakeDispositionDecisionResponseBody>('/post-intake-disposition-decisions', draft);
+}
+
+/** 不带包裹上列本租户尚未登记结果的项;带包裹读回这件包裹名下全部项连同结果。 */
+export function listPostIntakeManualItems(parcel?: string): Promise<ApiResult<PostIntakeManualItemsResponseBody>> {
+  const query = parcel ? `?parcel=${encodeURIComponent(parcel)}` : '';
+  return exchange<PostIntakeManualItemsResponseBody>(`/post-intake-disposition-manual-items${query}`, { method: 'GET' });
+}
+
+export function registerPostIntakeManualItemResult(
+  draft: PostIntakeManualItemResultDraft,
+): Promise<ApiResult<PostIntakeManualItemResultResponseBody>> {
+  return post<PostIntakeManualItemResultResponseBody>('/post-intake-disposition-manual-item-results', draft);
 }
 
 export function listLabelTransactions(): Promise<ApiResult<LabelTransactionsListResponseBody>> {
