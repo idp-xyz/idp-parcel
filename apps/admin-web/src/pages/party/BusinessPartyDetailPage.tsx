@@ -18,14 +18,15 @@ import {
   type BusinessPartyRevisionListResponseBody,
   type PartyRelationshipListResponseBody,
 } from './api';
-import { identityStatusLabels, updateOrdinalLabel } from './presentation';
-import { TechnicalDetails } from './TechnicalDetails';
+import { updateOrdinalLabel } from './presentation';
+import { TechnicalDetails } from '../../components/TechnicalDetails';
+import { StatusPill } from '../../components/StatusPill';
 import { businessPartyRevisionHistoryNote, businessPartyRevisionTimeline } from './business-party-revisions';
 import { BusinessPartyBanners, BusinessPartyMoreMenu, businessPartyHasBanners } from './BusinessPartyHeaderParts';
 import { LegalEntityLifecycle } from './LegalEntityHeaderParts';
 import { PartyOverviewSection } from './PartyOverviewSection';
 import { RevisionHistorySection, type RevisionHistoryRegister } from './RevisionHistorySection';
-import { Instant, statusBadge } from './detail-primitives';
+import { Instant } from './detail-primitives';
 import { useMayWriteRegistry } from '../use-operator-grants';
 import { entryHint } from '../operator-grants';
 
@@ -82,7 +83,7 @@ function buildBasicFields(row: BusinessPartyRecord): DetailField[] {
             { label: '参与方标识', value: row.partyId },
             { label: '当前修订号', value: String(row.revision) },
             { label: '登记依据', value: row.basis },
-            { label: '停用依据', value: row.deactivationBasis },
+            { label: '停用依据', value: row.deactivationBasis ?? '' },
             { label: '租户', value: row.tenantId },
           ]}
         />
@@ -149,7 +150,7 @@ export function BusinessPartyDetailPage({
     <DetailPageTemplate
       title={info.title}
       identifier={row?.partyName ?? partyId}
-      status={row ? statusBadge(identityStatusLabels, row.status) : undefined}
+      status={row ? <StatusPill code={row.status} /> : undefined}
       headerActions={
         <>
           {row ? <BusinessPartyMoreMenu row={row} /> : null}

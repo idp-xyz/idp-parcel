@@ -3,14 +3,15 @@ import { IdCard, Network, X } from 'lucide-react';
 import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import type { ApiResult } from '../catalogue-api';
 import type { BusinessPartyRecord, PartyRelationshipListResponseBody } from './api';
-import { identityStatusLabels, labelOf, partyRoleLabels, partyTypeFallbackLabel, updateOrdinalLabel } from './presentation';
-import { TechnicalDetails } from './TechnicalDetails';
+import { labelOf, partyRoleLabels, partyTypeFallbackLabel, updateOrdinalLabel } from './presentation';
+import { TechnicalDetails } from '../../components/TechnicalDetails';
+import { StatusPill } from '../../components/StatusPill';
 import { BusinessPartyBanners, BusinessPartyMoreMenu } from './BusinessPartyHeaderParts';
 import { LegalEntityLifecycle } from './LegalEntityHeaderParts';
 import { PartyOverviewSection } from './PartyOverviewSection';
 import { businessPartyRevisionHistory } from './BusinessPartyDetailPage';
 import { RevisionHistorySection } from './RevisionHistorySection';
-import { DetailRow, Fact, FactStrip, Instant, statusBadge } from './detail-primitives';
+import { DetailRow, Fact, FactStrip, Instant } from './detail-primitives';
 
 type PanelTab = 'overview' | 'identity';
 
@@ -59,7 +60,7 @@ export function BusinessPartyDetailPanel({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="truncate text-[16px] font-semibold text-idpxyz-textBright">{row.partyName}</h2>
-              {statusBadge(identityStatusLabels, row.status)}
+              <StatusPill code={row.status} />
             </div>
             {/* 类型按持有的角色称呼；一个角色都没有就说「往来单位」，不留空。 */}
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
@@ -149,7 +150,7 @@ export function BusinessPartyDetailPanel({
                 { label: '参与方标识', value: row.partyId },
                 { label: '当前修订号', value: String(row.revision) },
                 { label: '登记依据', value: row.basis },
-                { label: '停用依据', value: row.deactivationBasis },
+                { label: '停用依据', value: row.deactivationBasis ?? '' },
                 { label: '租户', value: row.tenantId },
               ]}
             />

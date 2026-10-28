@@ -26,8 +26,9 @@ import {
 } from './api';
 import { useBoundTenant } from '../use-operator-binding';
 import { useVisited } from './keep-alive-tabs';
-import { identityStatusLabels, labelOf, partyRoleLabels, partyTypeLabel, relationshipStatusLabels } from './presentation';
-import { Instant, UnknownPartyName, filterSelectClass, statusBadge } from './detail-primitives';
+import { StatusPill } from '../../components/StatusPill';
+import { labelOf, partyRoleLabels, partyTypeLabel } from './presentation';
+import { Instant, UnknownPartyName, filterSelectClass } from './detail-primitives';
 import { useRegisterList } from './register-list';
 import { BusinessPartyRegistrationForm } from './BusinessPartyRegistrationForm';
 import { PartyRelationshipRegistrationForm } from './PartyRelationshipRegistrationForm';
@@ -131,7 +132,7 @@ function identityColumnsOf(roles: PartyRoleIndex): WorkbenchColumn<BusinessParty
       header: '状态',
       render: (row) => (
         <div className="flex flex-col items-start gap-1 whitespace-nowrap">
-          {statusBadge(identityStatusLabels, row.status)}
+          <StatusPill code={row.status} />
           {row.deactivatedAt ? (
             <span className="font-mono text-[12px] text-idpxyz-breadcrumb">
               自 <Instant value={row.deactivatedAt} />
@@ -221,7 +222,7 @@ const relationshipColumns: WorkbenchColumn<PartyRelationshipRecord>[] = [
     // 终止时点那一行任其折成两行：整格不折行会在有终止行的册上把这一列撑到两百像素。
     render: (row) => (
       <div className="flex flex-col items-start gap-1">
-        {statusBadge(relationshipStatusLabels, row.status)}
+        <StatusPill code={row.status} />
         {row.endedAt ? (
           <span className="font-mono text-[12px] text-idpxyz-breadcrumb">
             自 <Instant value={row.endedAt} />

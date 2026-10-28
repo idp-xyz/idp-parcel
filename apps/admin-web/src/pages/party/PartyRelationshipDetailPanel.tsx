@@ -1,11 +1,12 @@
 import { X } from 'lucide-react';
 import { Button } from '@idpxyz/ui-primitives';
 import type { PartyRelationshipRecord } from './api';
-import { labelOf, partyRoleLabels, relationshipStatusLabels, updateOrdinalLabel } from './presentation';
-import { TechnicalDetails } from './TechnicalDetails';
+import { labelOf, partyRoleLabels, updateOrdinalLabel } from './presentation';
+import { TechnicalDetails } from '../../components/TechnicalDetails';
+import { StatusPill } from '../../components/StatusPill';
 import { PartyRelationshipBanners, PartyRelationshipMoreMenu } from './BusinessPartyHeaderParts';
 import { PartyRelationshipEndActions } from './PartyRelationshipEndActions';
-import { DetailRow, Fact, FactStrip, Instant, UnknownPartyName, statusBadge } from './detail-primitives';
+import { DetailRow, Fact, FactStrip, Instant, UnknownPartyName } from './detail-primitives';
 import { useMayWriteRegistry } from '../use-operator-grants';
 
 /**
@@ -42,7 +43,7 @@ export function PartyRelationshipDetailPanel({
               <span className="rounded bg-idpxyz-hover px-1.5 py-0.5 text-[12px] font-medium text-idpxyz-breadcrumb">
                 {labelOf(partyRoleLabels, row.role)}
               </span>
-              {statusBadge(relationshipStatusLabels, row.status)}
+              <StatusPill code={row.status} />
             </div>
             {/* 方向由「持有方对相对方持有该角色」表达（CONTEXT）；给人读就是一句「甲是乙的客户」，不另起方向格。 */}
             <p className="mt-0.5 text-[13px] text-idpxyz-text">
@@ -100,7 +101,7 @@ export function PartyRelationshipDetailPanel({
             { label: '相对方标识', value: row.counterpartyId },
             { label: '适用范围', value: row.scope },
             { label: '登记依据', value: row.basis },
-            { label: '后继关系', value: row.successorId },
+            { label: '后继关系', value: row.successorId ?? '' },
             { label: '租户', value: row.tenantId },
           ]}
         />

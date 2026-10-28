@@ -1,6 +1,7 @@
 // 参与方与商业目录查阅词表。kind 取值与传输层封闭集同词;中文取 CONTEXT 原词。
 
 import type { CommercialPolicyKind, CommercialRegistrationKind } from './api';
+import { labelFor } from '../../vocabulary/status';
 
 // 服务形态封闭集今天两格。LABEL_CHANNEL_SERVICE 此前在这里列过又被撤下,因为那时服务端
 // 产生不出来:domain.ServiceProductForm 只认 NETWORK_SERVICE,填进快照会被受理门拒绝。
@@ -13,14 +14,13 @@ export const serviceFormLabels: Record<string, string> = {
   LABEL_CHANNEL_SERVICE: '面单渠道服务',
 };
 
-export const commercialStatusLabels: Record<string, string> = {
-  DRAFT: '草稿',
-  PUBLISHED: '已发布',
-  EFFECTIVE: '已生效',
-  EXPIRED: '已到期',
-  RETIRED: '已退役',
-  SUPERSEDED: '已替代',
-};
+// 状态词表都是用语词典（vocabulary/status.ts）的薄包装：词与色调只在词典一处定义，这里只留本册会出现的码，让筛选项、
+// 类型派生与 codeFilterOptions 有一张封闭的键表可用。
+export const commercialStatusLabels: Record<string, string> = statusTable(['DRAFT', 'PUBLISHED', 'EFFECTIVE', 'EXPIRED', 'RETIRED', 'SUPERSEDED']);
+
+function statusTable<Code extends string>(codes: readonly Code[]): Record<Code, string> {
+  return Object.fromEntries(codes.map((code) => [code, labelFor(code)])) as Record<Code, string>;
+}
 
 export const policyKindLabels: Record<CommercialPolicyKind, string> = {
   ACCEPTANCE_RULE_PACKAGE: '接单规则包',
@@ -170,25 +170,14 @@ export const cancellationPartyLabels: Record<string, string> = {
 // 参与方身份生命周期封闭三格(domain IdentityStatus)。与 commercialStatusLabels 分表:
 // 身份状态按时点导出,商业对象状态是发布生命周期,同词 EFFECTIVE 在两套代数里含义
 // 不同,并表会让一套的封闭性替另一套背书。
-// REGISTERED 上屏说「待生效」而不是 CONTEXT 原词「已登记」：运营看这格要知道的是「还没开始算」，「已登记」只说明进了册、
-// 读不出它还没起作用（改版方案第四节用语词典）。码不变，只换显示词。
-export const identityStatusLabels = {
-  REGISTERED: '待生效',
-  EFFECTIVE: '已生效',
-  DEACTIVATED: '已停用',
-} as const satisfies Record<string, string>;
+// 词取词典（REGISTERED 上屏是「待生效」，理由在 vocabulary/status.ts）；这里只定本册的三格键。
+export const identityStatusLabels = statusTable(['REGISTERED', 'EFFECTIVE', 'DEACTIVATED'] as const);
 
 export type IdentityStatusCode = keyof typeof identityStatusLabels;
 
 // 参与方关系生命周期封闭五格(domain RelationshipStatus),中文取 CONTEXT 原词。
-// CANDIDATE 上屏说「待确认」：登了但没有批准事实，等的是确认；「候选关系」是 CONTEXT 词，运营读不出下一步是什么。
-export const relationshipStatusLabels = {
-  CANDIDATE: '待确认',
-  EFFECTIVE: '已生效',
-  EXPIRED: '已到期',
-  REVOKED: '已撤销',
-  SUPERSEDED: '已替代',
-} as const satisfies Record<string, string>;
+// 词取词典（CANDIDATE 上屏是「待确认」）；这里只定本册的五格键。
+export const relationshipStatusLabels = statusTable(['CANDIDATE', 'EFFECTIVE', 'EXPIRED', 'REVOKED', 'SUPERSEDED'] as const);
 
 export type RelationshipStatusCode = keyof typeof relationshipStatusLabels;
 
