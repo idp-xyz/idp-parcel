@@ -1,7 +1,7 @@
 # 43 TF 监管运输处置承接与备用/退运旅程启动没有生产入口
 
 Category: enhancement
-Status: in-progress——2026-10-27 会话 tops-20（idp-parcel-91）接手 tops-26 断在中途的「上线前必须」一组（冻结清单「六」），分支 claude-code43。此前 needs-triage——R3（不急）：两条用例在首发主链之外（监管退运、备用伙伴切换、普通退运都按受控异常走），今天生产上没有人能走到这两口；后果是 UC-TF-001、UC-TF-007 的结果契约与 AT 只在领域与编排测试里成立。2026-10-21 文档自洽 08 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc08。
+Status: in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-code43（代码最后一笔 fd46dd609）。此前 in-progress——2026-10-27 会话 tops-20（idp-parcel-91）接手 tops-26 断在中途的「上线前必须」一组（冻结清单「六」），分支 claude-code43。此前 needs-triage——R3（不急）：两条用例在首发主链之外（监管退运、备用伙伴切换、普通退运都按受控异常走），今天生产上没有人能走到这两口；后果是 UC-TF-001、UC-TF-007 的结果契约与 AT 只在领域与编排测试里成立。2026-10-21 文档自洽 08 立（用户「你作为业务和系统专家自决」授权），分支 claude-dc08。
 Blocked by: 无
 出处：[audit/tf.md](../audit/tf.md) M15（UC 状态行过时、UC-TF-007 没有端点）与 L8（承接「待补充」，裁定见 [ADR-0265](../../../docs/adr/0265-a-regulatory-disposition-supplement-required-is-an-answer-not-a-recorded-decision.md)）；文档侧见 [08](../issues/08-tf-docs.md)。
 
@@ -34,3 +34,47 @@ M–L：两口命令面、装配、授予种类、协作事项读口（CC 一侧
 
 - 两口归哪一族、几种决定（见「三类」产品策略一条）。
 - 关务协作事项交进来的形态：关务推一封信封，还是本上下文按事项引用去读。
+
+## 完成记录（2026-10-28，Claude Code 作者子代理，会话 tops-20 派单，分支 `claude-code43`）
+
+起点：`origin/main` `2afdd0b1e`，中途重放到 `282af38da`（含 code/37、code/27、psb22 已进 main 的部分）。
+
+| 提交 | 内容 |
+|---|---|
+| WIP 一笔 | 底层：端口记录加操作者格、TF 迁移 0056、适配器读写、承接核对与旅程启动带操作者、tfhttp 载荷与端点、授予种类与迁移 access_identity/0029 |
+| `fd46dd609` | `cmd/parcel-api` 装配与端点特性文件、各层用例、演示种子一节、ADR-0337、ADR-0265 前向指针、UC-TF-001/007 现行化、`AT-TF-367`–`370` 与 AT 盘点 |
+| 完成记录那一笔 | 本节与 Status |
+
+### 做了什么
+
+- 两口接上生产入口，各挂「运营决定」能力面一种决定：`POST /transport-fulfillment-regulatory-disposition-acceptances`（`REGULATORY_DISPOSITION_ACCEPTANCE`）、`POST /transport-fulfillment-alternate-journey-starts`（`ALTERNATE_JOURNEY_START`）。事务壳对`未决`整笔回滚；承接回执与旅程双链意图同笔入 Outbox。
+- 承接口核协作事项本体：载荷带 `itemObjects`、`movementAction`、`origin`、`destination`，缺动作、缺对象、缺起止责任答带原因的待补充（加上领域门的缺移动授权共四值），承接对象不得超出事项指名的对象；动作与起止都空仍是纯节点动作。
+- 两口都记提交操作者（TF 迁移 0056 的 `decided_by`、`started_by`），待遇照 ADR-0303。
+- 演示租户授予、准入对照、权威区间一节（`steps/482`，数据 access 24/25、governance 61/62），灌一次性库验过。
+
+### 代决与越权风险点（ADR-0337 文末同号）
+
+1. **事项本体由提交方抄录，不读关务**（要裁的第二问）。关务一侧没有协作事项聚合、读口或出站信封，两种形态都无对端；抄录是持授予者的断言，不是读回的事实。待 TF、CC owner。
+2. **当前有效性不核**，没有来源。
+3. **旅程启动口不核监管来路旅程有对应承接决定**，成员也不核在已承接对象内；最小补法是按依据引用查承接册。本票未做，待 TF owner 另定。
+4. 关务一侧记住等补事项、消费承接回执两半仍未建（ADR-0265 越权风险点 1、4）。
+5. 两种决定分开授予（要裁的第一问）；owner 若要合并为一种须新记录。
+6. 取号：ADR-0337、access_identity 0029、TF 0056、种子 24/25/61/62/482 取自 `282af38da` 后的下一个空号。
+
+### 判据 → 用例
+
+| 判据 | 用例 |
+|---|---|
+| 承接口生产入口、授予、落决定与回执意图、重放、冲突（`AT-TF-367`） | `cmd/parcel-api/assemble_regulatory_disposition_and_alternate_journey_test.go::TestTheRegulatoryDispositionAcceptanceFaceRecordsTheDecisionAndItsOperatorAgainstARealDatabase`；传输面 `adapters/http/regulatory_disposition_and_alternate_journey_test.go`；授予往返 `accessidentity/adapters/postgres/regulatory_disposition_and_alternate_journey_grant_test.go` |
+| 待补充带原因、承接不超出事项（`AT-TF-368`） | `application/accept_regulatory_disposition_test.go::TestAnIncompleteCollaborationItemIsSupplementRequiredNamingWhatIsMissing`、`::TestAnAcceptanceCannotWidenTheItemsObjectScope`；真库同上一条 |
+| 旅程启动口生产入口（`AT-TF-369`） | `cmd/parcel-api/...::TestTheAlternateJourneyStartFaceRecordsTheJourneyAndItsOperatorAgainstARealDatabase` |
+| 操作者只进审计（`AT-TF-370`） | 两条编排用例、`adapters/postgres/regulatory_and_journey_operator_evidence_test.go`、两条真库用例 |
+
+### 自验
+
+含 PG（`127.0.0.1:55432`）：`go build ./...`；`go vet` 受影响包；`gofmt -l` 无输出；`go test -count=1 -p 1` 跑 `./internal/transportfulfillment/...`、`./internal/accessidentity/...`、`./internal/architecture/...`、`./migrations/...`、`./cmd/...` 全绿；种子灌一次性库（建库、`seed.sh`、删库）零报错，两种授予读回。`go run ./tools/adr-index -check`、`at-coverage-counts -check` 只报生成物过期。
+
+### 留给协调方
+
+- 进 main 时重生成 ADR 索引与 AT 盘点计数；ADR-0337、迁移 0029/0056 与种子 482 号如被并行分支占用由推送方重排。
+- 越权风险点 3（监管来路旅程不核承接决定）是否挡上线，请协调方记入冻结清单：持旅程启动授予者可开监管来路旅程，流向关务处置执行链。
