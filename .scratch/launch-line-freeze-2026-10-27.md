@@ -176,10 +176,10 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 
 ### 记录
 
-- 2026-10-27｜五步发布流程里批准遇到「已变更」后，再点批准仍带旧摘要、继续得「已变更」，只能「重新开始」或去「待批准发布」页处理｜`apps/admin-web/src/pages/party/PublicationDraftFlow.tsx`；[owner 复核清单](./party-commercial-uiux-backend/owner-review.md)｜R3
-- 2026-10-27｜查阅员的登记与发布页签被收起后，空态与说明文字仍写「在「登记」签登记第一个」之类指向被收起页签的话｜[party-commercial-uiux-backend/04](./party-commercial-uiux-backend/issues/04-operator-grants-self-read-and-write-entries-hidden.md)「已知」｜R3
+- 2026-10-27｜五步发布流程里批准遇到「已变更」后，再点批准仍带旧摘要、继续得「已变更」，只能「重新开始」或去「待批准发布」页处理｜`apps/admin-web/src/pages/party/PublicationDraftFlow.tsx`；[owner 复核清单](./party-commercial-uiux-backend/owner-review.md)｜R3｜**已修**（2026-10-27 用户点名，main `5924a3df6`：答已变更的那一口按钮收回，区里摆「去「待批准发布」页核对」与「用表单上这份重新存为待批准」两条续办）
+- 2026-10-27｜查阅员的登记与发布页签被收起后，空态与说明文字仍写「在「登记」签登记第一个」之类指向被收起页签的话｜[party-commercial-uiux-backend/04](./party-commercial-uiux-backend/issues/04-operator-grants-self-read-and-write-entries-hidden.md)「已知」｜R3｜**已修**（2026-10-27 用户点名，main `619a757d0`：八处空态与说明经 `entryHint` 跟着入口走，收起时改说谁能用）
 - 2026-10-27｜授予自查读口只被参与方与商业区用；计价、网络、关务、结算等区的写入口仍对查阅员摆出｜ADR-0315 越权风险点 5｜R3
-- 2026-10-27｜`boundTenantOf`（`apps/admin-web/src/pages/operator-binding.ts`）对 JSON `null` 响应体会抛错，同款的 `heldGrantsOf` 已防｜party-commercial-uiux-backend/04 评审意见｜R3
+- 2026-10-27｜`boundTenantOf`（`apps/admin-web/src/pages/operator-binding.ts`）对 JSON `null` 响应体会抛错，同款的 `heldGrantsOf` 已防｜party-commercial-uiux-backend/04 评审意见｜R3｜**已修**（2026-10-27 用户点名，main `1a2724d72`）
 - 2026-10-27｜发布载荷的逐格问题多数领域错误仍答兜底码 `INVALID`，受控批文口与各 JSON 镜像登记口的问题不带码｜ADR-0316 越权风险点 2｜R3
 - 2026-10-27｜已接受订舱在订舱已被运输开始消耗（申请不晚于委托开始）时既不能改答也取消不了（`CancelBooking` 答运输已开始）｜docs-consistency/code/02 的注释订正与评审（ADR-0204 决定三）｜R3
 - 2026-10-27｜认定取消依据不成立后，对同一包裹的终局做同种更正重派生，可见性投影里暂有两份已采用终局（业务时间不同，不立分叉信号，不卡死）；要闭合须让终局记录带形成时的代次｜docs-consistency/code/76 的 ADR-0295 越权风险点 15｜R3（只在登记了该决定种类授予的租户上可达）
