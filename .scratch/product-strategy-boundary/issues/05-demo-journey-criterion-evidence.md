@@ -638,3 +638,20 @@ Claude Code 子代理做，只读代码、不改代码。worktree 分支 `claude
 3. **同日演示重走的"一库一件"**——脚本，不挡。`declare-one-parcel.sh` 写死申报单元与义务引用，第二件关务专项包裹要换单元；本节第二、第四件走普通件，没碰这条。已知，不新记。
 
 没有走到：授信下对账单发布 + 核销（见停点 2）；非零差额的占用转出（确认额不等于估价，由 07 票真库用例证）。
+
+## 发送追记（引 PSB/10 实走，2026-10-28）
+
+上一节「补走」照派单把申报发送当作冻结格，申报停在 `REGISTERED_PENDING_SEND`，没起合成报关服务商。会话 `tops-20` 提了两种补法，用户选了追记：发送这一段不重走，引会话 `idp-parcel-94` 在票 product-strategy-boundary/10 第 1 项进 main 前做的实走（[ADR-0342](../../../docs/adr/0342-a-declaration-is-sent-by-a-dispatch-consumer-through-a-registered-channel-and-crossing-the-send-boundary-is-an-appended-send-fact.md)），只记 `S`。
+
+**钉与可比性。** 那次实走的树是 PSB/10 的分支 rebase 到 `489db2936` 之后的状态，发送路径与 main `f79042e1b` 相同；只有 `send-one-declaration.sh` 末行的打印是实走之后才修的。从 `f79042e1b` 到上一节的钉 `da577c6db`，发送路径没有改过：CC 包、parcel-dispatch 的申报发送装配、回执接收口、合成服务商与两只脚本、步骤 `461`、CC 迁移都没动。这段区间里 dispatch 只改了 `assemble_charge_confirmation.go` 一个文件（launch-wiring/07）。
+
+**环境。** 一次性库（55432 上，`seed.sh` 原样灌入退 0，步骤 `461` 答 `declaration-channel: REGISTERED`），合成报关服务商 `declaration-broker` 听 `127.0.0.1:19180`，`parcel-api`（:19280，三族发行方加隔离读写租户）与 `parcel-dispatch`（照动线「前置」的七个变量）。走完停了进程、删了库。
+
+**逐段。**
+- `submit-one-shipment.sh` 提交，委托 `SHR-ACSPNPGIK6ZFHIGCACW3AFSRZY`、包裹 `DPCL-TIAUAGZCGOFRLRE35ILRGTDNLQ`；dispatch 接受之后，`declare-one-parcel.sh` 依次立案（`CASE-7HIM4SWXOEA5U5XLSKZZGZPFEA`）、确认授权、提交，得提交版本 `DECLV-CMFTIFGG4VO66HSYRD5DVTVACQ`，首次尝试 `REGISTERED_PENDING_SEND`。
+- dispatch 下一拍把提交版本形成信封投到申报发送：服务商日志记下收到这一版，幂等键 `SYN-TENANT-01/DECLV-CMFTIFGG4VO66HSYRD5DVTVACQ/1`，答 `ACCEPTED`、消息号 `SYN-MSG-FAB6EC0A5EA62613`。`submission_send_fact` 一行：`ACKNOWLEDGED`，带这个消息号，摘要 `HTTP 200`。
+- `send-one-declaration.sh` 用合成报关服务商那台集成客户端，把异步技术回执送到 `POST /customs/technical-receipts`，关联回尝试 `DECLV-CMFTIFGG4VO66HSYRD5DVTVACQ/1`，当前技术判断 `ACKNOWLEDGED`。首跑回执已经记下，只是脚本末行打印崩了；之后两次重送都答 `EXISTING_RECEIPT`，`technical_receipt` 只有一行，`occurred_at` 落了库。
+- 尝试行仍是 `REGISTERED_PENDING_SEND`：照 ADR-0342 决定二，越过发送边界另记一笔发送事实，尝试的登记不改。
+
+**结论。** 动线上「授权确认 → 提交尝试 → 技术回执」这一段走通，不需要绕法。上一节补走没起服务商，那次的发送应是：dispatch 记「确知没发出去」，在 `MAX_ATTEMPTS` 次重投之后放弃这一封，尝试停在`已登记待发送`。这与 ADR-0342 越权风险点 2 记的那一格相同，不是新停点。之后照动线重走时，先 `go run ./scripts/demo-seeds/declaration-broker` 起服务商，再接 `send-one-declaration.sh`（[README](../../../scripts/demo-seeds/README.md)「发送归 dispatch」那一段）。
+
