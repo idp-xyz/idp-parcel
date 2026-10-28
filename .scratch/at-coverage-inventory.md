@@ -20,11 +20,11 @@
 <!-- 总览两表：生成物，勿手改，由 tools/at-coverage-counts 从下面各分桶节的行数生成 -->
 | 桶 | 数量 |
 |---|---|
-| ① 已钉住 | 941 |
+| ① 已钉住 | 943 |
 | ② 机制候选 | 243 |
 | ③ 实例半边/闸门阻断 | 137 |
 | ④ 机制未落地 | 425 |
-| 合计 | 1746 |
+| 合计 | 1748 |
 
 | 前缀 | 总数 | ① | ② | ③ | ④ |
 |---|---|---|---|---|---|
@@ -35,7 +35,7 @@
 | PC | 70 | 56 | 14 | 0 | 0 |
 | PP | 16 | 16 | 0 | 0 | 0 |
 | PS | 174 | 145 | 24 | 2 | 3 |
-| SA | 220 | 110 | 91 | 19 | 0 |
+| SA | 222 | 112 | 91 | 19 | 0 |
 | TF | 348 | 279 | 59 | 7 | 3 |
 | VE | 223 | 89 | 0 | 15 | 119 |
 <!-- 总览两表完 -->
@@ -617,6 +617,8 @@
 | `AT-SA-222` | cmd/parcel-api/assemble_settlement_decisions_test.go::TestTheStatementPublicationFacePublishesAListedPeriod；internal/settlementaccounting/adapters/http/settlement_decisions_test.go::TestTheStatementPublicationFaceTakesThePublishedAtFromItsClock；internal/accessidentity/adapters/postgres/settlement_decision_grant_test.go::TestTheSettlementDecisionKindsAreGrantedAndReadBackSeparately |
 | `AT-SA-223` | cmd/parcel-api/assemble_settlement_decisions_test.go::TestTheStatementPublicationFacePublishesAListedPeriod；internal/settlementaccounting/adapters/http/query_settlement_charges_test.go::TestCustomerChargeQueryShowsTheAttributionDateAndTheStatementItIsOn |
 | `AT-SA-224` | internal/settlementaccounting/domain/statement_cycle_test.go::TestAStatementCycleNamesItsClosings、::TestAClosingClosesAtTheArrangementCutoff；internal/settlementaccounting/application/cut_off_statements_on_cycle_test.go::TestACycleCutRecordsEmptyClosingsAndComposesTheCommandFromTheCandidates、::TestACycleCutStopsWhereATenantValueIsMissing；internal/settlementaccounting/adapters/postgres/statement_cycle_test.go::TestAStatementCycleRegistersOnceAndTheLedgerReadsTheLastClosing；cmd/parcel-settlement-register/settlement_account_command_test.go::TestTheConditionAndCycleCommandsTranslateBeforeTheTransaction；cmd/parcel-dispatch/cycle_cut_test.go::TestTheDispatchBeatCutsADueCycleIntoAPublishedStatement |
+| `AT-SA-225` | cmd/parcel-api/assemble_supplier_bill_decisions_test.go::TestTheSupplierBillReceptionFaceReceivesAndRecordsTheClerk、::TestAnUnconfiguredAuditAuthorityIsAnAnswer；internal/settlementaccounting/adapters/http/supplier_bill_decisions_test.go::TestTheSupplierBillReceptionIntakeTranslatesTheBillAndRecordsTheClerk；internal/settlementaccounting/application/receive_supplier_bill_test.go（two directives on one line are not accepted）；internal/accessidentity/adapters/postgres/settlement_decision_grant_test.go::TestTheSettlementDecisionKindsAreGrantedAndReadBackSeparately |
+| `AT-SA-226` | cmd/parcel-api/assemble_supplier_bill_decisions_test.go::TestTheSupplierBillAuditFaceFormsAPayableAndRecordsTheAuditor、::TestAnUnconfiguredAuditAuthorityIsAnAnswer；internal/settlementaccounting/adapters/http/supplier_bill_decisions_test.go::TestTheSupplierBillAuditIntakeAuthenticatesItsOwnDecision；internal/accessidentity/adapters/postgres/settlement_decision_grant_test.go::TestTheSettlementDecisionKindsAreGrantedAndReadBackSeparately |
 | `AT-TF-002` | internal/transportfulfillment/application/accept_regulatory_disposition_test.go::TestANodeOnlyCollaborationBuildsNoTransportObject |
 | `AT-TF-003` | internal/transportfulfillment/application/accept_regulatory_disposition_test.go::TestDetentionWithoutMovementAuthorityIsSupplementRequired |
 | `AT-TF-004` | internal/transportfulfillment/application/accept_regulatory_disposition_test.go::TestDetentionWithoutMovementAuthorityIsSupplementRequired、::TestAnIncompleteCollaborationItemIsSupplementRequiredNamingWhatIsMissing（事项本体缺动作、缺对象、缺起止责任各答带原因的待补充，ADR-0337） |
@@ -2069,3 +2071,5 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-10-28 追记（票 launch-wiring/04）：UC-NO-001 新立 `AT-NO-133`（节点监管协作承接与执行事实两口的生产入口：待补充一轮、补齐后下一轮、重放与冲突、承接范围内的事实首登与重放冲突越界、拒接事项），`AT-NO-134`（登记的现场节点与承接决定的节点对不上答未受理、准入范围未登记答 403），ADR-0338；真库面与授予往返、接入面、编排各用例点名，两条入①。总览计数未改，由推送方重算。
 
 2026-10-28 追记（票 product-strategy-boundary/22 第 2 笔，ADR-0339）：UC-SA-002 新立 `AT-SA-221`（运营确认口），UC-SA-003 新立 `AT-SA-222`–`224`（截单发布口、客户费用读口的归属日与所在对账单、到点截单），入①。
+
+2026-10-28 追记（票 product-strategy-boundary/22 第 3 笔，ADR-0340）：UC-SA-004 新立 `AT-SA-225`（账单接收口）、`AT-SA-226`（审核口），入①。
