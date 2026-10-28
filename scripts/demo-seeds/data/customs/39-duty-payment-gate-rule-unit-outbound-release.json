@@ -1,0 +1,7 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "scopeRef": "SYN-UNIT-CN-EXPORT-DEMO-01",
+  "action": "OUTBOUND_RELEASE",
+  "boundaryRef": "SYN-PROC-CN-EXPORT",
+  "notAPrecondition": true
+}

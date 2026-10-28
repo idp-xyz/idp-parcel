@@ -1,0 +1,7 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "scopeRef": "SYN-UNIT-CN-EXPORT-DEMO-01",
+  "action": "LOADING_DEPARTURE",
+  "boundaryRef": "SYN-PROC-CN-EXPORT",
+  "registeredAt": "2026-01-05T05:21:00Z"
+}

@@ -1,7 +1,7 @@
 # 08 演示种子的门禁目录与「税费付款」规则挂错范围、未覆盖各受守护动作
 
 Category: task
-Status: in-progress——2026-10-28 会话 tops-20（idp-parcel-91）立并认领：psb/05 收口重走停点一；分支 claude-lw-seed
+Status: in-progress——2026-10-28 作者完工，待隔离评审与进 main，分支 claude-lw-seed（最后一笔见下方提交）。此前：in-progress——2026-10-28 会话 tops-20（idp-parcel-91）立并认领：psb/05 收口重走停点一；分支 claude-lw-seed
 Blocked by: 无
 
 ## 现象
@@ -15,3 +15,13 @@ psb/05「收口重走（钉 `d78fd1fbf`，2026-10-28）」停点一：种子的�
 ## 完成判据
 
 - 按种子原样（不补登）走关务专项包裹，放行后交出读数不再是`未决`。
+
+
+## 完成记录
+
+- 起点：origin/main `489db2936`。
+- 改了什么：`scripts/demo-seeds/data/customs/34`–`42` 九份新种子，`steps/250-customs.sh` 紧随 SYN-SCOPE-01 那几行登记，注释写明理由与「演示租户 S 级采用，非产品默认」。范围是演示申报单元 `SYN-UNIT-CN-EXPORT-DEMO-01`、边界 `SYN-PROC-CN-EXPORT`：四个受守护动作（`OUTBOUND_RELEASE`、`LOADING_DEPARTURE`、`CROSS_CUSTOMS_MOVEMENT`、`FINAL_DELIVERY`）各一行门禁目录（`34`–`37`），`CROSS_CUSTOMS_MOVEMENT` 一行前置满足 `SYN-PRE-EXPORT-DECL-RELEASED`/`MET`（`38`），四道各一行「税费付款」规则行取「不构成前置条件」（`39`–`42`）。`SYN-SCOPE-01` 上原有的 `08`、`09`、`15`、`32` 保留不动（放行门禁核对演示按商业范围问）。种子 README 与动线文档「收口重走」那条说法同改。未改 Go 代码。号：`33` 已被分支 `claude-psb10` 占用，故从 `34` 起。
+- 代决：(1) 只有跨关务区域移动登前置满足，其余三道只登目录，折为`不适用`（与票 05 重走里第二件包裹的读数一致）；(2) 第二个演示单元 `…-DEMO-02` 不预登（动线脚本一库一件，停点四另记）。
+- 自验（含 PG，证据只记 `S`）：一次性库 `seed08`，`seed.sh` 退 0。起 `parcel-api`、`parcel-dispatch`（前置照动线），不补登任何行：提交 `201 SUBMITTED`；dispatch 接受；预报后收寄 `201 INTAKE_FORMED`；`declare-one-parcel.sh` 立案 `ESTABLISHED`、授权确认、提交 `DECLARATION_SUBMITTED`；报关服务商令牌 `RELEASE_RESULT`/`FULL`，范围取单元，答 `201 RESULT_RECORDED`；放行门禁核对（单元范围、`CROSS_CUSTOMS_MOVEMENT`）`201 RECORDED`、`MET`、前置 `SYN-PRE-EXPORT-DECL-RELEASED`；同范围另三个动作核对各 `201`、`NOT_APPLICABLE`（不再是目录未登）；干线委托 `v3` `201 COMMISSION_SUBMITTED`；深圳口岸交给干线承运商 `201 HANDOVER_REGISTERED`，`gateReading.answer` 为 **`ADMITTED`**；判断册里 `OUTBOUND_RELEASE` 为 `NOT_GUARDED`/`GATE_NOT_APPLICABLE`、`CROSS_CUSTOMS_MOVEMENT` 为 `ADMITTED`/`RELEASED_IN_FULL`、来源是那条放行结果。走完已停进程、删库、清令牌与二进制。`go test -count=1 -p 1 ./cmd/parcel-customs-register/... ./cmd/parcel-dispatch/... ./cmd/parcel-api/...` 通过。没有测试按路径读 `data/customs`（票面那条 grep 无命中），故读种子的用例按 `demo-seeds` 的几处一并跑。
+- 没实打：出发、有效交付两个动作的读数没在进程上走（那两道目录与规则行在位，核对口答`不适用`为证）；订舱与承运答复、SHA→SZX 自营段没走（与本票判据无关，装配不依赖）。
+- 留给协调方：无新增停点。
