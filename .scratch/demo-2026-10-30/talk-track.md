@@ -81,8 +81,8 @@
 2. **预热**：`10-main-chain.sh`、`30-settlement.sh`；`40-exceptions.sh` 可以预热也可以现场跑。`20-customs.sh` **留到现场**。
    - **时间窗**：`30` 不限时段（对账单发布取费用行上服务端定的归属日；彩排时上海 18:01 失败的那一处已修，修后在上海 18:26 实跑通过）。
    - 想在页上演示收寄后处置决定，预热时另备一件「收寄后被客户取消」的包裹（见第四块前提）。
-3. **起管理台**：`cd apps/admin-web`，`PATH=$HOME/.local/node22/bin:$PATH PARCEL_API_TARGET=http://127.0.0.1:19080 pnpm dev`；浏览器开 `http://localhost:5173`（不是 127.0.0.1），配置员 `syn-operator-config-01@syn-tenant-01.example.invalid` / `syn-demo-password` 登录。
+3. **起管理台**：`cd apps/admin-web`，`PATH=$HOME/.local/node22/bin:$PATH VITE_DISPLAY_TIME_ZONE=Asia/Shanghai PARCEL_API_TARGET=http://127.0.0.1:19080 pnpm dev`；浏览器开 `http://localhost:5173`（不是 127.0.0.1），配置员 `syn-operator-config-01@syn-tenant-01.example.invalid` / `syn-demo-password` 登录。
 4. **按顺序开好标签页**（同一窗口内用左侧导航切，管理台本身是多标签工作区）：委托查阅、路由计划与改路、节点作业查阅、运输履约查阅、全程追踪、关务案件与申报、合规限制与监管税费、费用与计费、对账单、收寄后处置决定、索赔与追偿。
 5. **别刷新、别新开浏览器标签**：令牌只在内存，F5 或新标签都要重新登录（发行方会话还在时只是跳一下，但现场会闪一次登录页）。被踢回登录页就点「前往发行方登录」，不要慌。
-6. **时区**：页面时间按浏览器所在机器的时区显示（彩排机是 UTC-4）。给国内客户看，演示机系统时区先设为上海。
+6. **时区**：起管理台时已设 `VITE_DISPLAY_TIME_ZONE=Asia/Shanghai`（第 3 步命令里），页面时间按上海显示并带 `UTC+8` 标注；不用改演示机系统时区。终端脚本输出的时间仍是服务端 UTC。
 7. **收场**：停管理台；`down.sh`（要删库加 `--drop-db`）。

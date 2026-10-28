@@ -27,6 +27,7 @@ import { SeriesRegistrationForm } from './SeriesRegistrationForm';
 import { CoverageSummaryBar } from './CoverageSummaryBar';
 import { visibleSeriesRows, type SeriesKey } from './catalogue-filter';
 import { correctionDraftOf, emptySeriesDraft } from './series-form';
+import { PrincipalRef } from '../../components/PrincipalRef';
 
 const info = moduleInfoById['reference-series'];
 
@@ -135,7 +136,7 @@ const columns: ListColumn<ReferenceSeriesRecord>[] = [
       </div>
     ),
   },
-  { id: 'registrant', header: '登记责任方', render: (row) => row.registrant },
+  { id: 'registrant', header: '登记责任方', render: (row) => <PrincipalRef value={row.registrant} /> },
   {
     id: 'registered',
     header: '登记时间',

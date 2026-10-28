@@ -12,6 +12,7 @@ import { draftSearchText, pendingCountSummary, pendingRowsOf, type PendingDraftR
 import { labelOf } from './presentation';
 import { draftStatusLabels, listOpenPublicationDrafts, type PublicationDraftListResponseBody } from './publication-draft-api';
 import { publicationKindLabels } from './publication-summary';
+import { PrincipalRef } from '../../components/PrincipalRef';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['pending-publications'];
@@ -59,11 +60,9 @@ const columns: ListColumn<PendingDraftRow>[] = [
     id: 'submitter',
     header: '录入者',
     className: 'font-mono text-[12px]',
-    // 操作者主体引用是「发行方#主体」的长串，列里截断，全串悬停与详情里都有。
+    // 操作者主体引用是「发行方#主体」的长串，列里显短名，全串悬停与详情里都有。
     render: (row) => (
-      <span className="block max-w-[16rem] truncate" title={row.source.submitter}>
-        {row.source.submitter}
-      </span>
+      <PrincipalRef value={row.source.submitter} />
     ),
   },
   {

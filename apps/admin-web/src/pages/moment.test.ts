@@ -2,6 +2,8 @@ import { test, afterEach } from 'node:test';
 import { equal } from 'node:assert/strict';
 import {
   configureDisplayTimeZone,
+  currentDisplayTimeZone,
+  resolveDisplayTimeZone,
   formatInstant,
   formatRange,
   wallTimeToRfc3339,
@@ -63,4 +65,20 @@ test('墙钟时刻按时区换成 RFC 3339 UTC', () => {
   equal(wallTimeToRfc3339('', 'UTC'), null);
   equal(wallTimeToRfc3339('2026-13-45T99:99', 'UTC'), null);
   equal(wallTimeToRfc3339('yesterday', 'UTC'), null);
+});
+
+// Covers: 呈现时区取构建配置；未配置按浏览器区；非法 IANA 名退回浏览器区并告警恰一次。
+test('呈现时区的解析：配置、未配置、非法值', () => {
+  const warnings: string[] = [];
+  const warn = (message: string) => warnings.push(message);
+  equal(resolveDisplayTimeZone('Asia/Shanghai', 'America/New_York', warn), 'Asia/Shanghai');
+  equal(resolveDisplayTimeZone(undefined, 'America/New_York', warn), 'America/New_York');
+  equal(resolveDisplayTimeZone('  ', 'America/New_York', warn), 'America/New_York');
+  equal(warnings.length, 0);
+  equal(resolveDisplayTimeZone('Mars/Olympus', 'America/New_York', warn), 'America/New_York');
+  equal(warnings.length, 1);
+  const before = currentDisplayTimeZone();
+  configureDisplayTimeZone('Asia/Shanghai');
+  equal(formatInstant('2026-10-30T00:00:00Z'), '2026-10-30 08:00:00 UTC+8');
+  configureDisplayTimeZone(before);
 });

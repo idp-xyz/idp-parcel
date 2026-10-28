@@ -29,6 +29,7 @@ import {
   type TakeoverListResponseBody,
   type TakeoverRecord,
 } from './api';
+import { PrincipalRef } from '../../components/PrincipalRef';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['stage-admission'];
@@ -223,7 +224,7 @@ export function StageAdmissionPage() {
             <TableCell className={cellClass}>{row.triggerSource}</TableCell>
             <TableCell className={cellClass}>{row.basis}</TableCell>
             <TableCell className={cellClass}>{row.evidence}</TableCell>
-            <TableCell className={cellClass}>{row.executedBy}</TableCell>
+            <TableCell className={cellClass}><PrincipalRef value={row.executedBy} /></TableCell>
             <TableCell className={cellClass}>{formatInstant(row.occurredAt)}</TableCell>
             <TableCell className={cellClass}>{formatInstant(row.effectiveAt)}</TableCell>
             <TableCell className="text-xs">{row.inTransitNote}</TableCell>
@@ -246,7 +247,7 @@ export function StageAdmissionPage() {
             <TableCell className={cellClass}>{row.releaseEvidence}</TableCell>
             <TableCell className={cellClass}>{row.consistencyCheck}</TableCell>
             <TableCell className={cellClass}>{formatInstant(row.inventoryTakenAt)}</TableCell>
-            <TableCell className={cellClass}>{row.decidedBy}</TableCell>
+            <TableCell className={cellClass}><PrincipalRef value={row.decidedBy} /></TableCell>
             <TableCell className={cellClass}>{formatInstant(row.decidedAt)}</TableCell>
             <TableCell className={cellClass}>{formatInstant(row.effectiveAt)}</TableCell>
           </TableRow>

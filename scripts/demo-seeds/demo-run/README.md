@@ -42,7 +42,7 @@ scripts/demo-seeds/demo-run/down.sh [--drop-db]
 
 ## 每段结果在管理台哪页看
 
-页面 id 即 `#/<id>`；表依据 [`ui-coverage-audit.md`](../../../.scratch/demo-2026-10-30/ui-coverage-audit.md)，审计写明哪些页没有读面。管理台本地起法与登录见 `apps/admin-web/README.md`（dev 服务器从 WSL 起，`PARCEL_API_TARGET=http://127.0.0.1:19080`，用配置员 `syn-operator-config-01@syn-tenant-01.example.invalid` 登录）。
+页面 id 即 `#/<id>`；表依据 [`ui-coverage-audit.md`](../../../.scratch/demo-2026-10-30/ui-coverage-audit.md)，审计写明哪些页没有读面。管理台本地起法与登录见 `apps/admin-web/README.md`（dev 服务器从 WSL 起，`PARCEL_API_TARGET=http://127.0.0.1:19080`，用配置员 `syn-operator-config-01@syn-tenant-01.example.invalid` 登录；起管理台时设 `VITE_DISPLAY_TIME_ZONE=Asia/Shanghai`，页面时间才按上海显示并带 `UTC+8` 标注，未设则按浏览器所在时区）。
 
 | 段 | 看哪页 | 看什么 |
 |---|---|---|

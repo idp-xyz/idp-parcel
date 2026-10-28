@@ -18,6 +18,7 @@ import {
   type PriceCardListResponseBody,
   type PriceCardRecord,
 } from './api';
+import { PrincipalRef } from '../../components/PrincipalRef';
 
 const info = moduleInfoById['price-card-catalog'];
 
@@ -106,7 +107,7 @@ const columns: ListColumn<PriceCardRecord>[] = [
       </span>
     ),
   },
-  { id: 'approver', header: '发布批准责任方', render: (row) => row.publicationApprover },
+  { id: 'approver', header: '发布批准责任方', render: (row) => <PrincipalRef value={row.publicationApprover} /> },
   {
     id: 'registered',
     header: '登记时间',
