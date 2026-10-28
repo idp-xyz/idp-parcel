@@ -1,0 +1,23 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "grants": [
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-POST-INTAKE-SERVICE-DISPOSITION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "POST_INTAKE_SERVICE_DISPOSITION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-POST-INTAKE-SERVICE-DISPOSITION-01"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-POST-INTAKE-MANUAL-ITEM-HANDLING-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "POST_INTAKE_MANUAL_ITEM_HANDLING",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-POST-INTAKE-MANUAL-ITEM-HANDLING-01"
+    }
+  ]
+}

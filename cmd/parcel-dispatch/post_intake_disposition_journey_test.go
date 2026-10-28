@@ -108,7 +108,7 @@ func tfOnlyDecision(tenant, parcel string, version int, action string, at time.T
 	}
 }
 
-// Covers: AT-PS-083 的运输履约一半（其余所有者的承接未接）；ADR-0332 决定四、请求表；UC-TF-007——处理方直接调两次是幂等的：同一份只开一条旅程、
+// Covers: AT-PS-083 的运输履约一半（其余所有者的请求项是待人工处理项，ADR-0340）；ADR-0332 决定四、请求表；UC-TF-007——处理方直接调两次是幂等的：同一份只开一条旅程、
 // 只交一份异常链意图；下一版的原旅程取前一条旅程；原旅程不把自己当原旅程。
 func TestTheJourneyStartOnAPostIntakeDecisionIsIdempotentAndChainsOriginals(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
@@ -143,36 +143,45 @@ func TestTheJourneyStartOnAPostIntakeDecisionIsIdempotentAndChainsOriginals(t *t
 	}
 }
 
-// Covers: ADR-0332 决定四；评审修订——信封里有今天没人承接的请求项（NO、NR 各项，TF 的扣住）时整封答未决、不开旅程，信封留在可见的失败状态，不被标成已发布；
-// `继续` 不请求任何所有者，照常入账。
-func TestAPostIntakeDecisionWithAnUnhandledRequestStaysVisiblyFailed(t *testing.T) {
+// Covers: ADR-0340 决定二、四——信封里含系统不执行的请求项（NO、NR 各项，TF 的扣住）不再让整封答未决：TF 两个「另起旅程」动作照开旅程，其余项由 PS 在决定形成时
+// 落成待人工处理项，信封照常发布；拦截、服务终止、继续不开旅程，信封也不留失败码。
+func TestAPostIntakeEnvelopeWithManualRequestsIsPublishedAndOnlyTheSystemExecutedOnesOpenJourneys(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
 	base := time.Now().UTC().Add(-time.Hour)
 
-	directions := []struct {
+	parcels := []struct {
 		parcel    string
 		direction psdomain.PostIntakeDispositionDirection
 		dest      string
+		journeys  int
 	}{
-		{"SYN-PARCEL-PID-RET", psdomain.PostIntakeReturn, ""},
-		{"SYN-PARCEL-PID-RED", psdomain.PostIntakeRedirect, "SYN-DEST-02"},
-		{"SYN-PARCEL-PID-INT", psdomain.PostIntakeIntercept, ""},
-		{"SYN-PARCEL-PID-TER", psdomain.PostIntakeTerminateService, ""},
+		{"SYN-PARCEL-PID-RET", psdomain.PostIntakeReturn, "", 1},
+		{"SYN-PARCEL-PID-RED", psdomain.PostIntakeRedirect, "SYN-DEST-02", 1},
+		{"SYN-PARCEL-PID-INT", psdomain.PostIntakeIntercept, "", 0},
+		{"SYN-PARCEL-PID-TER", psdomain.PostIntakeTerminateService, "", 0},
+		{"SYN-PARCEL-PID-CON", psdomain.PostIntakeContinue, "", 0},
 	}
-	for _, d := range directions {
-		handOffPostIntakeDisposition(t, fixture, d.parcel, 1, d.direction, d.dest, base)
+	opened := 0
+	for _, p := range parcels {
+		handOffPostIntakeDisposition(t, fixture, p.parcel, 1, p.direction, p.dest, base)
+		opened += p.journeys
 	}
-	handOffPostIntakeDisposition(t, fixture, "SYN-PARCEL-PID-CON", 1, psdomain.PostIntakeContinue, "", base)
 	fixture.dispatchUntilQuiet(t)
 
 	const eventType = "parcel-shipment.post-intake-disposition.decided"
-	if n := fixture.countSQL(t, `SELECT count(*) FROM bento.outbox WHERE event_type = '`+eventType+`' AND failure_code = 'dispatch.consumer_undecided'`); n != len(directions) {
-		t.Fatalf("可见失败的处置信封 %d 封, want %d——四个有未承接请求的去向各一封", n, len(directions))
+	if n := fixture.countSQL(t, `SELECT count(*) FROM bento.outbox WHERE event_type = '`+eventType+`' AND failure_code IS NOT NULL`); n != 0 {
+		t.Fatalf("带失败码的处置信封 %d 封, want 0——含人工项的信封也照常发布", n)
 	}
-	if n := fixture.countSQL(t, `SELECT count(*) FROM bento.outbox WHERE event_type = '`+eventType+`' AND failure_code IS NULL`); n != 1 {
-		t.Fatalf("无失败码的处置信封 %d 封, want 1——只有继续", n)
+	if n := fixture.countSQL(t, `SELECT count(*) FROM bento.outbox WHERE event_type = '`+eventType+`' AND failure_code IS NULL`); n != len(parcels) {
+		t.Fatalf("无失败码的处置信封 %d 封, want %d", n, len(parcels))
 	}
-	if n := fixture.countSQL(t, `SELECT count(*) FROM transport_fulfillment.alternate_journey`); n != 0 {
-		t.Fatalf("旅程 %d 条, want 0——整封未决不开旅程", n)
+	if n := fixture.countSQL(t, `SELECT count(*) FROM transport_fulfillment.alternate_journey`); n != opened {
+		t.Fatalf("旅程 %d 条, want %d——只有退运与改送各开一条", n, opened)
+	}
+	for _, p := range parcels {
+		want := p.journeys
+		if n := fixture.countSQL(t, `SELECT count(*) FROM transport_fulfillment.alternate_journey WHERE journey_id = 'JRN/`+p.parcel+`/PID-1'`); n != want {
+			t.Fatalf("%s 的旅程 %d 条, want %d", p.parcel, n, want)
+		}
 	}
 }

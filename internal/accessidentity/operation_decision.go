@@ -176,6 +176,11 @@ const (
 	DecisionSupplierBillAudit     DecisionKind = "SUPPLIER_BILL_AUDIT"
 )
 
+// DecisionPostIntakeManualItemHandling 是待人工处理项的处理结果登记（ADR-0340 决定三）：运营人员对收寄后服务处置决定留下的一项人工请求项登记「已处理」
+// 或「无法处理」。它与收寄后服务处置（POST_INTAKE_SERVICE_DISPOSITION）分开授予——形成决定的人与在现场办完这些事的人通常不是同一批，登记的结果还是
+// 其后各方读回承接情况的依据。谁持有是租户取值，未登记时没有人能登记。
+const DecisionPostIntakeManualItemHandling DecisionKind = "POST_INTAKE_MANUAL_ITEM_HANDLING"
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -206,6 +211,7 @@ var decisionKinds = []DecisionKind{
 	DecisionNodeCollaborationAcceptance,
 	DecisionChargeConfirmation, DecisionStatementPublication,
 	DecisionSupplierBillReception, DecisionSupplierBillAudit,
+	DecisionPostIntakeManualItemHandling,
 }
 
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。

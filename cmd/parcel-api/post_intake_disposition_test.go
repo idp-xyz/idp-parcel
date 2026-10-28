@@ -29,16 +29,19 @@ import (
 // 取消边界锁与事务壳），只有令牌核验方与准入范围是替身。夹具全为合成（S 级）。
 
 const (
-	pidTenant      = "SYN-TENANT-1"
-	pidDecider     = "SYN-DECIDER-CODE37-A"
-	pidDeciderB    = "SYN-DECIDER-CODE37-B"
-	pidOtherGrant  = "SYN-OTHERGRANT-CODE37"
-	pidForeigner   = "SYN-FOREIGNER-CODE37"
-	pidForeignTen  = "SYN-TENANT-FOREIGN"
-	pidDecisionURL = "/post-intake-disposition-decisions"
-	pidListURL     = "/post-intake-disposition-requests"
-	pidEventType   = "parcel-shipment.post-intake-disposition.decided"
-	pidIntakeAt    = "2026-10-04T08:00:00Z"
+	pidTenant     = "SYN-TENANT-1"
+	pidDecider    = "SYN-DECIDER-CODE37-A"
+	pidDeciderB   = "SYN-DECIDER-CODE37-B"
+	pidOtherGrant = "SYN-OTHERGRANT-CODE37"
+	pidForeigner  = "SYN-FOREIGNER-CODE37"
+	pidHandler    = "SYN-HANDLER-LW05"
+	// pidForeignHandler 持有他租户的处理结果登记授予，用来证明跨租户同号的项不可见。
+	pidForeignHandler = "SYN-FOREIGN-HANDLER-LW05"
+	pidForeignTen     = "SYN-TENANT-FOREIGN"
+	pidDecisionURL    = "/post-intake-disposition-decisions"
+	pidListURL        = "/post-intake-disposition-requests"
+	pidEventType      = "parcel-shipment.post-intake-disposition.decided"
+	pidIntakeAt       = "2026-10-04T08:00:00Z"
 )
 
 type postIntakeE2E struct {
@@ -73,6 +76,8 @@ func newPostIntakeE2E(t *testing.T) *postIntakeE2E {
 	registerOperatorIn(t, db, operators, pidTenant, pidDeciderB, interval, accessidentity.DecisionPostIntakeServiceDisposition)
 	registerOperatorIn(t, db, operators, pidTenant, pidOtherGrant, interval, accessidentity.DecisionAuthorizedDisposition, accessidentity.DecisionCancellationOrderConflictResolution)
 	registerOperatorIn(t, db, operators, pidForeignTen, pidForeigner, interval, accessidentity.DecisionPostIntakeServiceDisposition)
+	registerOperatorIn(t, db, operators, pidTenant, pidHandler, interval, accessidentity.DecisionPostIntakeManualItemHandling)
+	registerOperatorIn(t, db, operators, pidForeignTen, pidForeignHandler, interval, accessidentity.DecisionPostIntakeManualItemHandling)
 	registerOperationsReader(t, db, operators, pidTenant, pidDecider)
 	registerOperationsReader(t, db, operators, pidForeignTen, pidForeigner)
 	minter, err := buildOperatorMinter(tokenSubjectVerifier{}, operators, admitAll{})
@@ -101,10 +106,25 @@ func newPostIntakeE2E(t *testing.T) *postIntakeE2E {
 	}
 	fixture := &postIntakeE2E{db: db, pool: pool, endpoints: map[string]http.Handler{}}
 	fixture.inner = decision.(transactionalPostIntakeDisposition)
+	registration, err := buildPostIntakeManualItemResult(db)
+	if err != nil {
+		t.Fatalf("装配登记编排：%v", err)
+	}
+	manualItems, err := pspostgres.NewPostIntakeManualItems(db)
+	if err != nil {
+		t.Fatal(err)
+	}
 	channels := endpointChannels{operatorDecisions: decisions, operatorRegistries: registries}
 	for _, feature := range endpointRegistry {
 		if feature.wiringKey == any((*postIntakeDispositionWiring)(nil)) {
 			for _, endpoint := range feature.mountWith(channels, postIntakeDispositionWiring{decision: decision, requests: requests}) {
+				fixture.endpoints[endpoint.Pattern] = endpoint.Handler
+			}
+		}
+	}
+	for _, feature := range endpointRegistry {
+		if feature.wiringKey == any((*postIntakeManualItemWiring)(nil)) {
+			for _, endpoint := range feature.mountWith(channels, postIntakeManualItemWiring{registration: registration, items: manualItems}) {
 				fixture.endpoints[endpoint.Pattern] = endpoint.Handler
 			}
 		}

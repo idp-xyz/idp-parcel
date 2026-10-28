@@ -1,0 +1,21 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "mappings": [
+    {
+      "mappingId": "SYN-MAP-OD-POST-INTAKE-SERVICE-DISPOSITION-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "POST_INTAKE_SERVICE_DISPOSITION",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    },
+    {
+      "mappingId": "SYN-MAP-OD-POST-INTAKE-MANUAL-ITEM-HANDLING-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "POST_INTAKE_MANUAL_ITEM_HANDLING",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    }
+  ]
+}
