@@ -1,7 +1,7 @@
 -- 「运营决定」能力面加一种决定：关务案件关闭（UC-CC-010；票 launch-wiring/02）。与 accessidentity.DecisionCustomsCaseClosure 同笔放开
 -- （0001 头注那条约定）。本迁移不种任何行：谁被授予关案是租户取值。
 --
--- 只重建决定种类这一条 CHECK。全集取此前各份重建的并集（以 0030 那一份为底），再加本份一个词。迁移不按编号先后施加，本份可能晚于编号更大
+-- 只重建决定种类这一条 CHECK。全集取此前各份重建的并集（以 0030 那一份为底，并入另一条分支 0031 加的 NODE_COLLABORATION_ACCEPTANCE），再加本份一个词。迁移不按编号先后施加，本份可能晚于编号更大
 -- 的一份施加，只列本份基线上的全集会把后来的词删掉、让它们的授予登不进；之后谁再重建这条 CHECK，都取此前各份的并集。
 
 ALTER TABLE access_identity.operator_grant
@@ -33,5 +33,5 @@ ALTER TABLE access_identity.operator_grant
             'POST_INTAKE_SERVICE_DISPOSITION',
             'REGULATORY_DISPOSITION_ACCEPTANCE', 'ALTERNATE_JOURNEY_START',
             'INTERNAL_RESTRICTION_ESTABLISHMENT', 'INTERNAL_RESTRICTION_DECISION',
-            'CUSTOMS_CASE_CLOSURE'
+            'NODE_COLLABORATION_ACCEPTANCE', 'CUSTOMS_CASE_CLOSURE'
         ));

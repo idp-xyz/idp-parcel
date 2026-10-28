@@ -19,10 +19,10 @@ Blocked by: 无
 
 ### 改了什么
 - 触发方照 UC-CC-010「关闭触发：有权角色请求关闭」选**运营命令口**，不是派发消费者（`cmd/parcel-dispatch` 不动）。
-- accessidentity：运营决定加 `CUSTOMS_CASE_CLOSURE`；迁移 `access_identity/0031`（取 0030 全集再加一词；取号时 origin/main 到 0029、`origin/claude-lw-pid` 也只到 0029）。
+- accessidentity：运营决定加 `CUSTOMS_CASE_CLOSURE`；迁移 `access_identity/0032`（取 0030 全集并入 `origin/claude-lw-no` 在 0031 加的 `NODE_COLLABORATION_ACCEPTANCE`，再加一词）。首版取的 0031 与 NO 分支撞了，后改取更大的 0032；0031 在本分支空着，等 NO 分支进来补上。
 - customshttp（新文件 `case_closure_endpoint.go`）：`POST /customs-case-closures`，Intake 挂在既有 `OperatorDecisionIntake` 上，租户与决定人取认证信封，载荷只有案件与业务截点且封闭；被阻答 200 `BLOCKED` 带 `blockingItems`（未解决项与 code/03 的冲突项，冲突项带冲突依据）。
 - parcel-api（新文件）：`endpoints_case_closure.go`、`assemble_case_closure.go`、未接线占位。缝全接真：`ObligationInventoryView`、`CaseClosures`、`OutboxCaseClosureHandoff`、系统时钟；事务壳复用 `customsDecisionTransaction`，关闭记录与关闭意图同笔，未决整笔回滚。共享装配文件零改动。
-- 演示种子：access 28/29、governance 65、步骤 484。
+- 演示种子：access 30/31、governance 67、步骤 485（首版取 28/29、65、484，与 NO 分支撞，后改）。
 
 ### 代决与越权风险点
 1. 授予与建案分开（关务 CONTEXT「关闭决定角色不由管理员或通用关务角色代替」）；受控重开是另一种权力（原关闭责任来源约束），本票不接，仍无生产入口。
