@@ -152,6 +152,11 @@ const (
 // 不因此能关案。受控重开是另一种权力（原关闭责任来源约束），不在这一种里。谁持有是租户取值，未登记时没有人能关案。
 const DecisionCustomsCaseClosure DecisionKind = "CUSTOMS_CASE_CLOSURE"
 
+// DecisionReleaseGateVerification 是放行门禁核对（UC-CC-009）：有权角色对一个申报范围、一个拟执行动作和一个监管边界请求形成放行门禁核对，
+// 落册并向下游发意图。门禁满足不生成放行，所以它与关务建案、申报提交、关案都不共用——UC-CC-009 要求税费结果接收、付款核对、门禁核对与
+// 外部放行接收分别授权，持其中一种不因此取得另一种。谁持有是租户取值，未登记时没有人能请求核对。
+const DecisionReleaseGateVerification DecisionKind = "RELEASE_GATE_VERIFICATION"
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -178,6 +183,7 @@ var decisionKinds = []DecisionKind{
 	DecisionRegulatoryDispositionAcceptance, DecisionAlternateJourneyStart,
 	DecisionInternalRestrictionEstablishment, DecisionInternalRestrictionDecision,
 	DecisionCustomsCaseClosure,
+	DecisionReleaseGateVerification,
 }
 
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。
