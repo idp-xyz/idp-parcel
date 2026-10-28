@@ -51,10 +51,10 @@ export function SavedViewsPage() {
 
   const columns: ListColumn<SavedView>[] = [
     { id: 'name', header: '名称', render: (row) => row.name },
-    { id: 'module', header: '模块', render: (row) => moduleTitleOf(row.moduleId) },
+    { id: 'module', header: '页面', render: (row) => moduleTitleOf(row.moduleId) },
     {
       id: 'saved-at',
-      header: '保存时刻',
+      header: '保存时间',
       className: 'w-[180px]',
       render: (row) => <InstantCell value={row.savedAt} />,
     },
@@ -92,7 +92,7 @@ export function SavedViewsPage() {
     <>
       <ListPageTemplate<SavedView>
         title={info.title}
-        description="各列表页存在这台浏览器里的筛选态，起了名字、可设为该模块的默认视图；只存本机，换机、换浏览器不带，不上服务端。行点回到那张列表页并把视图 id 带在地址上——列表页那头读它的位今天还未接通。"
+        description="存下来的筛选条件，点一下回到那张列表；可设为该页面的默认视图。只记在本机，换电脑不带。"
         moduleId="saved-views"
         search={{ value: keyword, onChange: setKeyword, placeholder: '搜索视图名称' }}
         filters={<ModuleChips moduleIds={savedViewModuleIds(list)} value={moduleId} onChange={setModuleId} />}
@@ -107,8 +107,8 @@ export function SavedViewsPage() {
           list.length === 0
             ? {
                 kind: 'empty',
-                title: '这台浏览器还没有保存过视图',
-                description: '列表页过滤条上的「保存当前视图」位今天还未接通；接通后存下的筛选态会列在这里。',
+                title: '还没有保存过视图',
+                description: '在列表页筛好条件后点「保存视图」，存下的视图会列在这里。',
               }
             : { kind: 'ready' }
         }

@@ -62,7 +62,11 @@ function recordColumns(spec: ColumnSpec[], tech?: [label: string, key: string][]
         .join(' ') || undefined,
     render: (row) =>
       column.pillCode ? (
-        row.values[column.pillCode] ? <StatusPill code={row.values[column.pillCode]} label={row.values[column.id]} /> : (row.values[column.id] ?? '—')
+        row.values[column.pillCode] ? (
+          <StatusPill code={row.values[column.pillCode]} label={column.pillCode === column.id ? undefined : row.values[column.id]} />
+        ) : (
+          (row.values[column.id] ?? '—')
+        )
       ) : (
         (row.values[column.id] ?? '—')
       ),
@@ -73,7 +77,7 @@ function recordColumns(spec: ColumnSpec[], tech?: [label: string, key: string][]
       header: '',
       className: 'align-top',
       render: (row) => (
-        <TechnicalDetails rows={technicalRows(tech.map(([label, key]) => ({ label, value: row.values[key] })))} className="max-w-md" />
+        <TechnicalDetails rows={technicalRows(tech.map(([label, key]) => ({ label, value: row.values[key] })))} className="max-w-md open:min-w-[18rem]" />
       ),
     });
   }
@@ -464,7 +468,7 @@ const preconditionColumns: ListColumn<CatalogueRow>[] = [
           { label: '就绪依据', value: row.values.readinessBasis },
           { label: '授权依据', value: row.values.authorityRef },
         ])}
-        className="max-w-md"
+        className="max-w-md open:min-w-[18rem]"
       />
     ),
   },
@@ -570,7 +574,7 @@ const closureColumns: ListColumn<CatalogueRow>[] = [
           { label: '截止', value: row.values.appliesUntil },
           { label: '清单登记时间', value: row.values.registeredAt },
         ])}
-        className="max-w-md"
+        className="max-w-md open:min-w-[18rem]"
       />
     ),
   },
@@ -662,7 +666,7 @@ const credentialColumns: ListColumn<RegisterRow>[] = [
           { label: '登记时间', value: row.values.registeredAt },
           { label: '登记人', value: row.values.registeredBy },
         ])}
-        className="max-w-md"
+        className="max-w-md open:min-w-[18rem]"
       />
     ),
   },

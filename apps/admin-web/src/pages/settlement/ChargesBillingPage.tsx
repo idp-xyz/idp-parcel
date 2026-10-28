@@ -120,7 +120,7 @@ function customerChargeColumns(names: PartyNames): ListColumn<CustomerChargeReco
       id: 'technical',
       header: '',
       className: 'align-top',
-      render: (row) => <TechnicalDetails rows={customerChargeTechnicalRows(row)} className="max-w-md" />,
+      render: (row) => <TechnicalDetails rows={customerChargeTechnicalRows(row)} className="max-w-md open:min-w-[18rem]" />,
     },
   ];
 }
@@ -251,7 +251,7 @@ const supplierExpectedCostColumns: ListColumn<SupplierExpectedCostRecord>[] = [
     id: 'technical',
     header: '',
     className: 'align-top',
-    render: (row) => <TechnicalDetails rows={supplierCostTechnicalRows(row)} className="max-w-md" />,
+    render: (row) => <TechnicalDetails rows={supplierCostTechnicalRows(row)} className="max-w-md open:min-w-[18rem]" />,
   },
 ];
 

@@ -4,24 +4,18 @@ import { catalogueViewState } from '../catalogue-view';
 import type { ApiResult } from '../catalogue-api';
 import type { WorkDeviceListResponseBody } from './api';
 
-/** 册上的原词。集外取值原样显示，不代折成已知格。 */
-export const workDeviceStatusLabels: Record<string, string> = {
-  REGISTERED: '登记',
-  DEACTIVATED: '停用',
-};
+import { labelFor } from '../../vocabulary/status';
 
-/** 作业范围种类的原词（ADR-0149 决定二：节点、场外作业范围）。 */
-export const workScopeKindLabels: Record<string, string> = {
-  NODE: '节点',
-  OFFSITE: '场外作业范围',
-};
+/** 设备状态经词典的 work-device 分册译：REGISTERED 对设备是「在用」，不是等生效。 */
+export const WORK_DEVICE_SCOPE = 'work-device';
 
-export function labelOf(labels: Record<string, string>, value: string): string {
-  return labels[value] ?? value;
+export function workDeviceStatusLabel(status: string): string {
+  return labelFor(status, WORK_DEVICE_SCOPE);
 }
 
+/** 作业范围一格：网点 / 场外加引用（ADR-0149 决定二：节点、场外作业范围）。种类码经词典译。 */
 export function workScopeText(kind: string, reference: string): string {
-  return `${labelOf(workScopeKindLabels, kind)} ${reference}`;
+  return `${labelFor(kind)} ${reference}`;
 }
 
 export function workDeviceViewState(
@@ -33,8 +27,7 @@ export function workDeviceViewState(
   return catalogueViewState(answer, rowCount, retry, {
     module,
     endpoint: 'GET /work-devices',
-    emptyTitle: '当前租户的作业设备册是空的',
-    emptyDescription:
-      '空列表是册上没有已登记设备，不是渠道未配置。登记与停用走受控登记口，本页不登记、不停用。',
+    emptyTitle: '还没有登记扫描设备',
+    emptyDescription: '网点和场外作业用的扫描设备登记后在这里出现；登记与停用由管理员用登记工具完成，本页只看。',
   });
 }

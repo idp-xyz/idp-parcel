@@ -104,7 +104,7 @@ function customerStatementColumns(accountOwners: Map<string, string>, names: Par
       id: 'technical',
       header: '',
       className: 'align-top',
-      render: (row) => <TechnicalDetails rows={statementTechnicalRows(row)} className="max-w-md" />,
+      render: (row) => <TechnicalDetails rows={statementTechnicalRows(row)} className="max-w-md open:min-w-[18rem]" />,
     },
   ];
 }
@@ -219,7 +219,7 @@ function supplierBillColumns(names: PartyNames): ListColumn<SupplierBillReceptio
       id: 'technical',
       header: '',
       className: 'align-top',
-      render: (row) => <TechnicalDetails rows={receptionTechnicalRows(row)} className="max-w-md" />,
+      render: (row) => <TechnicalDetails rows={receptionTechnicalRows(row)} className="max-w-md open:min-w-[18rem]" />,
     },
   ];
 }

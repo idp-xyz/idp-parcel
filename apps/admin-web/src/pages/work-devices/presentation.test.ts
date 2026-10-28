@@ -1,21 +1,15 @@
 import { test } from 'node:test';
 import { equal } from 'node:assert/strict';
 import { moduleInfoById } from '../../navigation';
-import {
-  labelOf,
-  workDeviceStatusLabels,
-  workDeviceViewState,
-  workScopeKindLabels,
-  workScopeText,
-} from './presentation';
+import { workDeviceStatusLabel, workDeviceViewState, workScopeText } from './presentation';
 
-test('状态与作业范围用册上的原词，集外取值原样显示', () => {
-  equal(labelOf(workDeviceStatusLabels, 'REGISTERED'), '登记');
-  equal(labelOf(workDeviceStatusLabels, 'DEACTIVATED'), '停用');
-  equal(labelOf(workDeviceStatusLabels, 'ONLINE'), 'ONLINE');
-  equal(workScopeText('NODE', 'SYN-NODE-SZX-01'), '节点 SYN-NODE-SZX-01');
-  equal(workScopeText('OFFSITE', 'SYN-OFFSITE-SZX-01'), '场外作业范围 SYN-OFFSITE-SZX-01');
-  equal(labelOf(workScopeKindLabels, 'SITE'), 'SITE');
+test('状态与作业范围经词典译成一线的词，集外取值原样显示', () => {
+  equal(workDeviceStatusLabel('REGISTERED'), '在用');
+  equal(workDeviceStatusLabel('DEACTIVATED'), '已停用');
+  equal(workDeviceStatusLabel('ONLINE'), 'ONLINE');
+  equal(workScopeText('NODE', 'SYN-NODE-SZX-01'), '网点 SYN-NODE-SZX-01');
+  equal(workScopeText('OFFSITE', 'SYN-OFFSITE-SZX-01'), '场外 SYN-OFFSITE-SZX-01');
+  equal(workScopeText('SITE', 'X'), 'SITE X');
 });
 
 test('空册是空列表，不是渠道未配置', () => {
@@ -27,7 +21,7 @@ test('空册是空列表，不是渠道未配置', () => {
   );
   equal(state.kind, 'empty');
   if (state.kind === 'empty') {
-    equal(state.title, '当前租户的作业设备册是空的');
+    equal(state.title, '还没有登记扫描设备');
   }
 });
 

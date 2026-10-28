@@ -72,7 +72,7 @@ function techCol(pairs: [label: string, key: string][]): ListColumn<GateRow> {
     id: 'technical',
     header: '',
     className: 'align-top',
-    render: (row) => <TechnicalDetails rows={technicalRows(pairs.map(([label, key]) => ({ label, value: row.values[key] })))} className="max-w-md" />,
+    render: (row) => <TechnicalDetails rows={technicalRows(pairs.map(([label, key]) => ({ label, value: row.values[key] })))} className="max-w-md open:min-w-[18rem]" />,
   };
 }
 

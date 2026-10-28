@@ -100,7 +100,7 @@ const columns: ListColumn<ExternalFundsFactRecord>[] = [
     id: 'technical',
     header: '',
     className: 'align-top',
-    render: (row) => <TechnicalDetails rows={factTechnicalRows(row)} className="max-w-md" />,
+    render: (row) => <TechnicalDetails rows={factTechnicalRows(row)} className="max-w-md open:min-w-[18rem]" />,
   },
 ];
 

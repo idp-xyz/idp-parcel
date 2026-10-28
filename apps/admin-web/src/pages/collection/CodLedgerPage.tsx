@@ -35,12 +35,6 @@ function ledgerTechnicalRows(row: CodSubledgerRecord) {
     // 「已开立但从未记账」与「记账相抵为零」在全零余额上长着同一张脸，笔数是唯一分得开两态的照实转写。
     { label: '记账笔数', value: String(row.postingCount) },
     { label: '已抵扣', value: formatMoney(row.balances.offsetApplied, row.currency) },
-    {
-      label: '回汇批次',
-      value: row.remittanceBatches
-        .map((batch) => `${batch.batch}：${labelFor(batch.state)}，归集至 ${formatInstant(batch.collectedThrough)}，形成于 ${formatInstant(batch.formedAt)}`)
-        .join('；') || undefined,
-    },
     { label: '开立时间', value: formatInstant(row.openedAt) },
   ]);
 }
@@ -92,7 +86,7 @@ function columns(names: PartyNames): ListColumn<CodSubledgerRecord>[] {
       id: 'technical',
       header: '',
       className: 'align-top',
-      render: (row) => <TechnicalDetails rows={ledgerTechnicalRows(row)} className="max-w-md" />,
+      render: (row) => <TechnicalDetails rows={ledgerTechnicalRows(row)} className="max-w-md open:min-w-[18rem]" />,
     },
   ];
 }

@@ -33,7 +33,7 @@ const columns: ListColumn<RecentObject>[] = [
   },
   {
     id: 'module',
-    header: '模块',
+    header: '页面',
     render: (row) => moduleTitleOf(row.moduleId),
   },
   {
@@ -65,7 +65,7 @@ export function RecentObjectsPage() {
     <>
       <ListPageTemplate<RecentObject>
         title={info.title}
-        description="你在这台浏览器里打开过的对象地址，最近的在前；只存本机，换机、换浏览器不带，不上服务端。标题从模块名与对象标识拼出，不是对象名称。"
+        description="你在这台电脑上最近打开过的运单、客户等对象，点一下回到它；只记在本机，换电脑不带。"
         moduleId="recent-objects"
         headerActions={
           <Button
@@ -90,8 +90,8 @@ export function RecentObjectsPage() {
           list.length === 0
             ? {
                 kind: 'empty',
-                title: '这台浏览器还没有打开过对象',
-                description: '从列表页进到某个对象的详情后，它的地址会记在这里。',
+                title: '最近还没有打开过对象',
+                description: '从列表进到某个运单、客户的详情后，它会记在这里。',
               }
             : { kind: 'ready' }
         }
@@ -99,7 +99,7 @@ export function RecentObjectsPage() {
       <ConfirmDialog
         renderFooter={confirmDialogFooter}
         open={confirmingClear}
-        title="清空最近对象"
+        title="清空最近打开"
         message={`将删除这台浏览器上的 ${list.length} 条打开历史。删的只是历史记录，对象本身不受影响。`}
         confirmLabel="清空"
         cancelLabel="取消"

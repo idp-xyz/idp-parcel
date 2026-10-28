@@ -74,8 +74,7 @@ function registryTable<Row>(
 const cellClass = 'font-mono text-xs';
 
 // 空册文案四册同句：读取入口已配置是本态与未配置态的分界（ADR-0077 Decision 四）。
-const emptyRegisterNote =
-  '登记册为空：读取入口已配置，尚无登记。登记走 parcel-governance-register 受控 CLI，本页不预置数据。';
+const emptyRegisterNote = '还没有登记。登记由管理员用命令行工具完成，本页只看。';
 
 /** 查阅仍未开的那一格：说的是查阅分批，不是数据缺件。 */
 function secondBatchNote(text: string) {
@@ -148,7 +147,7 @@ export function StageAdmissionPage() {
     viewState = {
       kind: 'unconfigured',
       title: '访问通道尚未配置',
-      description: `登记册读取入口（GET /governance-registers）当前不可用；这不是「登记册为空」。`,
+      description: '治理登记的读取入口当前不可用；这不是「还没有登记」。',
       facts: {
         owner: info.owner,
         source: info.source,
@@ -162,17 +161,14 @@ export function StageAdmissionPage() {
       failed.kind === 'transport'
         ? {
             kind: 'error',
-            title: '无法连接治理登记册读取服务',
+            title: '暂时读不到治理登记',
             description: failed.message,
             onRetry: retry,
           }
         : {
             kind: 'error',
-            title:
-              failed.kind === 'noAnswer'
-                ? `服务端未形成答案（HTTP ${failed.status}）`
-                : `调用方式问题（HTTP ${failed.status}）`,
-            description: `服务端问题码：${failed.code}。重试将重新查询四册。`,
+            title: failed.kind === 'noAnswer' ? '系统暂时没能读出治理登记' : '读取方式有问题',
+            description: failed.kind === 'noAnswer' ? '请稍后重试，重试会重新读取四本登记。' : `请刷新页面后重试；仍然不行请联系系统管理员（错误码 ${failed.code}）。`,
             onRetry: failed.kind === 'noAnswer' ? retry : undefined,
           };
   } else if (answers.some((answer) => answer === null)) {
@@ -191,12 +187,11 @@ export function StageAdmissionPage() {
   const sections: DetailSection[] = [
     {
       id: 'authority-intervals',
-      title: '生产权威区间',
-      description:
-        '某类对象的某项能力、某种事实，当下由哪条线在写生产；到期时点缺席即开放区间（当前权威），不编造「无限远」时刻。',
+      title: '谁在写生产',
+      description: '哪类对象的哪项能力、哪种事实，眼下由哪条线在生产上写；没有截止时间就是现行。',
       content: registryTable<AuthorityIntervalRecord>(
         intervals,
-        ['对象作用域', '能力', '事实种类', '生产权威', '生效区间', '登记时间'],
+        ['对象范围', '能力', '事实种类', '由谁写', '生效期间', '登记时间'],
         (row) => (
           <TableRow key={`${row.objectScope}:${row.capability}:${row.factKind}:${row.fromAt}`}>
             <TableCell className={cellClass}>{row.objectScope}</TableCell>
@@ -212,11 +207,11 @@ export function StageAdmissionPage() {
     },
     {
       id: 'suspensions',
-      title: '暂停决定',
-      description: '停下来永远安全：暂停立即生效，在途件的处置说明照登原文。',
+      title: '暂停',
+      description: '暂停立即生效；在途货物怎么处理照登原文。',
       content: registryTable<SuspensionRecord>(
         suspensions,
-        ['暂停标识', '作用域', '触发来源', '依据', '证据引用', '执行人', '发生时点', '生效时点', '在途处置'],
+        ['暂停编号', '范围', '触发来源', '依据', '证据', '执行人', '发生时间', '生效时间', '在途货物怎么办'],
         (row) => (
           <TableRow key={row.suspensionId}>
             <TableCell className={cellClass}>{row.suspensionId}</TableCell>
@@ -235,12 +230,11 @@ export function StageAdmissionPage() {
     },
     {
       id: 'resumptions',
-      title: '恢复决定',
-      description:
-        '恢复必须有放行证据与一致性核对；盘点明细属详情读法，本格列引用与时点。',
+      title: '恢复',
+      description: '恢复要有放行证据和一致性核对；盘点明细另看，这里列引用与时间。',
       content: registryTable<ResumptionRecord>(
         resumptions,
-        ['暂停标识', '放行证据', '一致性核对', '盘点时点', '决定人', '决定时点', '生效时点'],
+        ['暂停编号', '放行证据', '一致性核对', '盘点时间', '决定人', '决定时间', '生效时间'],
         (row) => (
           <TableRow key={`${row.suspensionId}:${row.decidedAt}`}>
             <TableCell className={cellClass}>{row.suspensionId}</TableCell>
@@ -258,31 +252,28 @@ export function StageAdmissionPage() {
     {
       id: 'stage-review',
       title: '阶段评审',
-      content: secondBatchNote(
-        '查阅口仍未开。阶段评审的登记命令已是 parcel-governance-register stage-review；本页不列表、不造数。这格说的是查阅分批，不是数据缺件。',
-      ),
+      content: secondBatchNote('阶段评审的查看还没有接通；登记已可用命令行工具完成。这里不列表、不造数。'),
     },
     {
       id: 'takeover',
-      title: '对象级接管',
-      description:
-        '原权威停止写入之后，指定范围由新权威承接。盘点明细住 jsonb，本格列停写证据、区间与时点。登记走 parcel-governance-register takeover，本页不写、不预置行。',
+      title: '接管',
+      description: '原来那条线停写之后，指定范围由新的一条线接着写。这里列停写证据、期间与时间；盘点明细另看。',
       content: registryTable<TakeoverRecord>(
         takeovers,
         [
-          '对象作用域',
+          '对象范围',
           '能力',
           '事实种类',
-          '生产权威',
-          '生效区间',
+          '由谁写',
+          '生效期间',
           '停写证据',
           '已接受事实',
           '外部未决',
           '实际控制',
           '责任',
           '下一步',
-          '盘点时点',
-          '生效时点',
+          '盘点时间',
+          '生效时间',
         ],
         (row) => (
           <TableRow
@@ -310,22 +301,15 @@ export function StageAdmissionPage() {
 
   return (
     <DetailPageTemplate
-      title={info.title}
-      description={`本页登记的是产品实例级治理事实，不按租户隔离（ADR-0083）`}
-      basicTitle="登记面"
+      title="试点治理"
+      description="试点阶段的四本登记：谁在写生产、暂停、恢复、接管；整个系统一本，不分公司"
+      basicTitle="概况"
       basicFields={[
-        {
-          label: '作用域',
-          value: '产品实例级：本产品此刻拿什么去评审、谁在写生产；无租户维（ADR-0083）',
-        },
-        {
-          label: '登记口',
-          value: 'parcel-governance-register 受控 CLI；本页只读，不设登记与决定动作',
-        },
-        { label: '权威区间', value: `${intervals.length} 行` },
-        { label: '暂停决定', value: `${suspensions.length} 行` },
-        { label: '恢复决定', value: `${resumptions.length} 行` },
-        { label: '对象级接管', value: `${takeovers.length} 行` },
+        { label: '登记方式', value: '由管理员用命令行工具登记；本页只看' },
+        { label: '谁在写生产', value: `${intervals.length} 条` },
+        { label: '暂停', value: `${suspensions.length} 条` },
+        { label: '恢复', value: `${resumptions.length} 条` },
+        { label: '接管', value: `${takeovers.length} 条` },
       ]}
       sections={sections}
       viewState={viewState}

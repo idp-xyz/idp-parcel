@@ -8,15 +8,16 @@ import {
   type WorkDeviceListResponseBody,
   type WorkDeviceRecord,
 } from './api';
-import { labelOf, workDeviceStatusLabels, workDeviceViewState, workScopeText } from './presentation';
+import { StatusPill } from '../../components/StatusPill';
+import { WORK_DEVICE_SCOPE, workDeviceViewState, workScopeText } from './presentation';
 
 const info = moduleInfoById['work-devices'];
 
 const columns: ListColumn<WorkDeviceRecord>[] = [
   {
     id: 'device',
-    header: '设备标识',
-    className: 'font-mono',
+    header: '设备号',
+    className: 'whitespace-nowrap font-mono text-xs',
     render: (row) => row.deviceId,
   },
   {
@@ -27,12 +28,13 @@ const columns: ListColumn<WorkDeviceRecord>[] = [
   {
     id: 'status',
     header: '状态',
-    render: (row) => labelOf(workDeviceStatusLabels, row.status),
+    align: 'center',
+    render: (row) => <StatusPill code={row.status} scope={WORK_DEVICE_SCOPE} />,
   },
   {
     id: 'deactivated-at',
-    header: '停用时刻',
-    className: 'font-mono text-[12px]',
+    header: '停用时间',
+    className: 'whitespace-nowrap font-mono text-xs',
     render: (row) => (row.deactivatedAt ? formatInstant(row.deactivatedAt) : ''),
   },
 ];
@@ -71,14 +73,11 @@ export function WorkDeviceCataloguePage() {
   return (
     <ListPageTemplate<WorkDeviceRecord>
       moduleId="work-devices"
-      title={info.title}
-      description={`只查阅已登记的设备行。登记与停用走受控登记口，本页不登记、不停用。`}
-      search={{
-        value: search,
-        onChange: setSearch,
-        placeholder: '搜索设备标识 / 作业范围',
-      }}
-      filterSummary={answer?.kind === 'outcome' ? `当前返回 ${devices.length} 台设备` : undefined}
+      title="扫描设备"
+      description="网点和场外作业在用的扫描设备，以及各自归哪个作业范围"
+      search={{ value: search, onChange: setSearch, placeholder: '搜设备号、作业范围' }}
+      filterSummary={answer?.kind === 'outcome' ? `${devices.length} 台 · 已停用 ${devices.filter((row) => row.status === 'DEACTIVATED').length} 台` : undefined}
+      emptyRowsNote="没有匹配的设备"
       columns={columns}
       rows={visible}
       rowKey={(row) => row.deviceId}

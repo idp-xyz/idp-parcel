@@ -87,7 +87,7 @@ const operatingResultColumns: ListColumn<OperatingResultRecord>[] = [
     id: 'technical',
     header: '',
     className: 'align-top',
-    render: (row) => <TechnicalDetails rows={resultTechnicalRows(row)} className="max-w-md" />,
+    render: (row) => <TechnicalDetails rows={resultTechnicalRows(row)} className="max-w-md open:min-w-[18rem]" />,
   },
 ];
 
@@ -192,7 +192,7 @@ const costAllocationColumns: ListColumn<CostAllocationRecord>[] = [
     id: 'technical',
     header: '',
     className: 'align-top',
-    render: (row) => <TechnicalDetails rows={allocationTechnicalRows(row)} className="max-w-md" />,
+    render: (row) => <TechnicalDetails rows={allocationTechnicalRows(row)} className="max-w-md open:min-w-[18rem]" />,
   },
 ];
 
